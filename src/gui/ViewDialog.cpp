@@ -1,0 +1,2370 @@
+/*
+ * Stellarium
+ * Copyright (C) 2008 Fabien Chereau
+ * Copyright (C) 2012 Timothy Reaves
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA  02110-1335, USA.
+*/
+
+
+#include "ViewDialog.hpp"
+#include "NomenclatureMgr.hpp"
+#include "SeparatorListWidgetItem.hpp"
+#include "SporadicMeteorMgr.hpp"
+#include "ui_viewDialog.h"
+#include <QMessageBox>
+#include "AddRemoveLandscapesDialog.hpp"
+#include "AtmosphereDialog.hpp"
+#include "SkylightDialog.hpp"
+#include "TonemappingDialog.hpp"
+#include "GreatRedSpotDialog.hpp"
+#include "ConfigureDSOColorsDialog.hpp"
+#include "ConfigureOrbitColorsDialog.hpp"
+#include "StelApp.hpp"
+#include "StelCore.hpp"
+#include "StelModule.hpp"
+#include "StelMainView.hpp"
+#include "LandscapeMgr.hpp"
+#include "StelSkyCultureMgr.hpp"
+#include "ConstellationMgr.hpp"
+#include "StelFileMgr.hpp"
+#include "StelProjector.hpp"
+#include "StelModuleMgr.hpp"
+#include "SolarSystem.hpp"
+#include "Planet.hpp"
+#include "NebulaMgr.hpp"
+#include "AsterismMgr.hpp"
+#include "StelStyle.hpp"
+#include "StelGuiBase.hpp"
+#include "StelGui.hpp"
+#include "HipsMgr.hpp"
+#include "StelActionMgr.hpp"
+#include "StelPropertyMgr.hpp"
+#include "StelHips.hpp"
+#include "StelMovementMgr.hpp"
+#include "StelSpeechMgr.hpp"
+#include <QDebug>
+#include <QFrame>
+#include <QFile>
+#include <QFileInfo>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QTimer>
+#include <QDialog>
+#include <QStringList>
+#include <QJsonArray>
+
+struct Page
+{
+	enum
+	{
+		Sky,
+		SSO,
+		DSO,
+		Markings,
+		Landscape,
+		SkyCultureMap,
+		Surveys,
+
+		COUNT
+	};
+};
+
+struct HipsRole
+{
+	enum
+	{
+		URL = Qt::UserRole,
+		PlanetEnglishName,
+		ItemType,
+		SurveyType,
+	};
+};
+
+struct HipsItemType
+{
+	enum
+	{
+		Survey, // The HiPS itself
+		Planet, // The item representing a planet and containing groups of surveys
+		Group,  // Group of planetary surveys: albedo+normals+horizons
+	};
+};
+
+ViewDialog::ViewDialog(QObject* parent) : StelDialog("View", parent)
+	, addRemoveLandscapesDialog(nullptr)
+	, atmosphereDialog(nullptr)
+	, skylightDialog(nullptr)
+	, tonemappingDialog(nullptr)
+	, greatRedSpotDialog(nullptr)
+	, configureDSOColorsDialog(nullptr)
+	, configureOrbitColorsDialog(nullptr)
+{
+	ui = new Ui_viewDialogForm;	
+	// This connection should be made here, rather than in createDialogContent, because otherwise it
+	// won't be possible to open the dialog for the first time by right-clicking the HiPS button.
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	connect(qobject_cast<HipsMgr*>(hipsmgr), &HipsMgr::toggleDialog, this, &ViewDialog::toggleHipsDialog);
+}
+
+ViewDialog::~ViewDialog()
+{
+	delete ui;
+	ui=nullptr;
+	delete addRemoveLandscapesDialog;
+	addRemoveLandscapesDialog = nullptr;
+	delete atmosphereDialog;
+	atmosphereDialog = nullptr;
+	delete skylightDialog;
+	skylightDialog = nullptr;
+	delete tonemappingDialog;
+	tonemappingDialog = nullptr;
+	delete greatRedSpotDialog;
+	greatRedSpotDialog = nullptr;
+	delete configureDSOColorsDialog;
+	configureDSOColorsDialog = nullptr;
+	delete configureOrbitColorsDialog;
+	configureOrbitColorsDialog = nullptr;
+}
+
+void ViewDialog::retranslate()
+{
+	if (dialog)
+	{
+		static StelSkyCultureMgr *scMgr = GETSTELMODULE(StelSkyCultureMgr);
+
+		ui->retranslateUi(dialog);
+		updateZhrDescription(StelApp::getInstance().getModule("SporadicMeteorMgr")->property("zhr").toInt());
+		populateLists();
+		ui->skyCultureMapGraphicsView->translatePolygons();
+		populateToolTips();
+		populatePlanetMagnitudeAlgorithmsList();
+		populatePlanetMagnitudeAlgorithmDescription();
+		populateCulturalCombo(ui->zodiacLabelComboBox, scMgr->getZodiacLabelStyle());
+		populateCulturalCombo(ui->lunarSystemLabelComboBox, scMgr->getLunarSystemLabelStyle());
+		ui->lightPollutionWidget->retranslate();
+
+		populateHipsGroups();
+		clearHips();
+		updateHips();
+
+		//Hack to shrink the tabs to optimal size after language change
+		//by causing the list items to be laid out again.
+		updateTabBarListWidgetWidth();
+	}
+}
+
+void ViewDialog::styleChanged(const QString &style)
+{
+	StelDialog::styleChanged(style);
+	if (dialog)
+	{
+		populateLists();
+		populateToolTips();
+		populatePlanetMagnitudeAlgorithmsList();
+		populatePlanetMagnitudeAlgorithmDescription();
+		populateHipsGroups();
+	}
+}
+
+void ViewDialog::connectGroupBox(QGroupBox* groupBox, const QString& actionId)
+{
+	StelAction* action = StelApp::getInstance().getStelActionManager()->findAction(actionId);
+	Q_ASSERT(action);
+	groupBox->setChecked(action->isChecked());
+	connect(action,   &StelAction::toggled, groupBox, &QGroupBox::setChecked);
+	connect(groupBox, &QGroupBox::toggled, action, &StelAction::setChecked);
+}
+
+void ViewDialog::createDialogContent()
+{
+	ui->setupUi(dialog);
+	Q_ASSERT(ui->stackedWidget->count() == Page::COUNT);
+	dialog->installEventFilter(this);
+
+	StelApp *app = &StelApp::getInstance();
+	connect(app, &StelApp::languageChanged, this, &ViewDialog::retranslate);
+	// Set the Sky tab activated by default
+	ui->stackedWidget->setCurrentIndex(Page::Sky);
+	ui->stackListWidget->setCurrentRow(Page::Sky);
+	connect(ui->stackListWidget, &QListWidget::currentItemChanged, this, &ViewDialog::changePage);
+	// Kinetic scrolling
+	kineticScrollingList << ui->projectionListWidget << ui->culturesListWidget << ui->skyCultureTextBrowser << ui->landscapesListWidget
+			     << ui->landscapeTextBrowser << ui->surveysTreeWidget << ui->surveysTextBrowser;
+	StelGui* gui= dynamic_cast<StelGui*>(StelApp::getInstance().getGui());
+	if (gui)
+	{
+		enableKineticScrolling(gui->getFlagUseKineticScrolling());
+		connect(gui, &StelGui::flagUseKineticScrollingChanged, this, &ViewDialog::enableKineticScrolling);
+	}
+	connect(ui->titleBar, &TitleBar::closeClicked, this, &StelDialog::close);
+	connect(ui->titleBar, &TitleBar::movedTo,      this, &ViewDialog::handleMovedTo);
+
+	populateLists();
+	populateToolTips();
+
+	ui->currentFovSpinBox->setMinimum(app->getCore()->getMovementMgr()->getMinFov(), true);
+	ui->currentFovSpinBox->setMaximum(360.0, true);
+	ui->currentFovSpinBox->setWrapping(false);
+	setDisplayFormatForSpins(app->getFlagShowDecimalDegrees());
+
+	// TODOs after properties merge:
+	// Jupiter's GRS should become property, and recheck the other "from trunk" entries.
+	connect(ui->culturesListWidget, &QListWidget::currentTextChanged, this, [this](const QString &text) {
+		int beginTime = ui->culturesListWidget->currentItem()->data(Qt::UserRole).toInt(); // Qt::UserRole = beginTime
+		ui->skyCultureMapGraphicsView->selectCulture(text, beginTime);
+	});
+	connect(ui->culturesListWidget,        &QListWidget::currentTextChanged,            &StelApp::getInstance().getSkyCultureMgr(), &StelSkyCultureMgr::setCurrentSkyCultureNameI18);
+	connect(ui->skyCultureMapGraphicsView, &SkyCultureMapGraphicsView::cultureSelected, &StelApp::getInstance().getSkyCultureMgr(), &StelSkyCultureMgr::setCurrentSkyCultureNameI18);
+	connect(&StelApp::getInstance().getSkyCultureMgr(), &StelSkyCultureMgr::currentSkyCultureIDChanged, this, &ViewDialog::skyCultureChanged);
+
+	// skyCulture list search bar
+	connect(ui->culturesListSearchLineEdit, &QLineEdit::textChanged, this, &ViewDialog::filterSkyCultures);
+
+	// Connect and initialize checkboxes and other widgets
+	SolarSystem* ssmgr = GETSTELMODULE(SolarSystem);
+	Q_ASSERT(ssmgr);
+	// Stars section
+	connectGroupBox(ui->starGroupBox, "actionShow_Stars");
+	connectDoubleProperty(ui->starScaleRadiusDoubleSpinBox,"StelSkyDrawer.absoluteStarScale");
+	connectDoubleProperty(ui->starRelativeScaleDoubleSpinBox, "StelSkyDrawer.relativeStarScale");
+	connectBoolProperty(ui->starTwinkleCheckBox, "StelSkyDrawer.flagStarTwinkle");
+	connectBoolProperty(ui->starTwinkleWithoutAtmosphereCheckBox, "StelSkyDrawer.flagForcedTwinkle");
+	connectDoubleProperty(ui->starTwinkleAmountDoubleSpinBox, "StelSkyDrawer.twinkleAmount");
+	connectBoolProperty(ui->starLimitMagnitudeCheckBox,"StelSkyDrawer.flagStarMagnitudeLimit");
+	connectDoubleProperty(ui->starLimitMagnitudeDoubleSpinBox, "StelSkyDrawer.customStarMagLimit");
+	connectBoolProperty(ui->spikyStarsCheckBox, "StelSkyDrawer.flagStarSpiky");
+	connectCheckBox(ui->starLabelCheckBox, "actionShow_Stars_Labels");
+	connectDoubleProperty(ui->starsLabelsHorizontalSlider,"StarMgr.labelsAmount",0.0,10.0);
+	connectBoolProperty(ui->checkBoxAdditionalNamesStars, "StarMgr.flagAdditionalNamesDisplayed");
+	connectBoolProperty(ui->checkBoxStarDesignationsOnlyUsage, "StarMgr.flagDesignationLabels");
+	connectBoolProperty(ui->dblStarsDesignationsCheckBox, "StarMgr.flagDblStarsDesignation");
+	connectBoolProperty(ui->varStarsDesignationsCheckBox, "StarMgr.flagVarStarsDesignation");
+	connectBoolProperty(ui->hipDesignationsCheckBox, "StarMgr.flagHIPDesignation");
+
+	// Sky section
+	connectBoolProperty(ui->milkyWayCheckBox, "MilkyWay.flagMilkyWayDisplayed");
+	connectDoubleProperty(ui->milkyWayBrightnessDoubleSpinBox, "MilkyWay.intensity");
+	connectDoubleProperty(ui->milkyWaySaturationDoubleSpinBox, "MilkyWay.saturation");
+	connectBoolProperty(ui->zodiacalLightCheckBox, "ZodiacalLight.flagZodiacalLightDisplayed");
+	connectDoubleProperty(ui->zodiacalLightBrightnessDoubleSpinBox, "ZodiacalLight.intensity");
+	connectBoolProperty(ui->adaptationCheckbox, "StelSkyDrawer.flagLuminanceAdaptation");
+	connectDoubleProperty(ui->twilightAltitudeDoubleSpinBox, "SpecificTimeMgr.twilightAltitude");
+
+	LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+	Q_ASSERT(lmgr);
+	// Light pollution
+	ui->lightPollutionWidget->setup();
+
+	// atmosphere details
+	connect(ui->pushButtonAtmosphereDetails, &QToolButton::clicked, this, &ViewDialog::showAtmosphereDialog);
+	// This has to be manually enabled by the user
+	StelPropertyMgr* propMgr = StelApp::getInstance().getStelPropertyManager();
+	if (propMgr->getProperty("Skylight.flagGuiPublic")->getValue().toBool())
+		connect(ui->pushButtonSkylightDetails, &QToolButton::clicked, this, &ViewDialog::showSkylightDialog);
+	else
+		ui->pushButtonSkylightDetails->hide();
+	// tonemapping details
+	connect(ui->tonemappingPushButton, &QToolButton::clicked, this, &ViewDialog::showTonemappingDialog);
+
+	// Planets section
+	connectGroupBox(ui->planetsGroupBox, "actionShow_Planets");
+	connectCheckBox(ui->planetMarkerCheckBox, "actionShow_Planets_Hints");
+	connectCheckBox(ui->planetOrbitCheckBox, "actionShow_Planets_Orbits");
+	connectBoolProperty(ui->planetIsolatedOrbitCheckBox, "SolarSystem.flagIsolatedOrbits");
+	connectBoolProperty(ui->planetOrbitMajorPlanetsCheckBox, "SolarSystem.flagPlanetsOrbits");
+	connectBoolProperty(ui->planetOrbitOnlyCheckBox, "SolarSystem.flagPlanetsOrbitsOnly");
+	connectBoolProperty(ui->planetOrbitsMoonCheckBox, "SolarSystem.flagOrbitsWithMoons");
+	connectBoolProperty(ui->planetOrbitPermanentCheckBox, "SolarSystem.flagPermanentOrbits");
+	connectIntProperty(ui->planetOrbitsThicknessSpinBox, "SolarSystem.orbitsThickness");
+	connect(ui->pushButtonOrbitColors, &QToolButton::clicked, this, &ViewDialog::showConfigureOrbitColorsDialog);
+	populateOrbitsControls(ssmgr->getFlagOrbits());
+	connect(ssmgr,&SolarSystem::flagOrbitsChanged, this, &ViewDialog::populateOrbitsControls);
+	connectBoolProperty(ui->planetLightSpeedCheckBox, "SolarSystem.flagLightTravelTime");
+	connectBoolProperty(ui->planetUseObjModelsCheckBox, "SolarSystem.flagUseObjModels");
+	connectBoolProperty(ui->planetShowObjSelfShadowsCheckBox, "SolarSystem.flagShowObjSelfShadows");
+	ui->planetShowObjSelfShadowsCheckBox->setEnabled(ssmgr->getFlagUseObjModels());
+	connect(ssmgr,&SolarSystem::flagUseObjModelsChanged,ui->planetShowObjSelfShadowsCheckBox, &QCheckBox::setEnabled);
+	connectBoolProperty(ui->planetLimitMagnitudeCheckBox,"StelSkyDrawer.flagPlanetMagnitudeLimit");
+	connectDoubleProperty(ui->planetLimitMagnitudeDoubleSpinBox,"StelSkyDrawer.customPlanetMagLimit");
+	connectBoolProperty(ui->planetScaleMoonCheckBox, "SolarSystem.flagMoonScale");
+	connectDoubleProperty(ui->moonScaleFactor,"SolarSystem.moonScale");
+	connectBoolProperty(ui->moonScaleDynamicCheckBox, "SolarSystem.flagDynamicMoonScale");
+	connectDoubleProperty(ui->moonScaleMinFovSpinBox, "SolarSystem.moonScaleMinFov");
+	connectDoubleProperty(ui->moonScaleMaxFovSpinBox, "SolarSystem.moonScaleMaxFov");
+
+	// Keep minFov strictly below maxFov by updating each spinbox's limit when the other changes.
+	connect(ui->moonScaleMinFovSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double val) {
+		ui->moonScaleMaxFovSpinBox->setMinimum(val + 1.0);
+	});
+	connect(ui->moonScaleMaxFovSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double val) {
+		ui->moonScaleMinFovSpinBox->setMaximum(val - 1.0);
+	});
+
+	// Grey out dynamic Moon controls when Moon scaling is disabled.
+	auto updateMoonDynamicControlsState = [this]() {
+		const bool moonScaleOn = ui->planetScaleMoonCheckBox->isChecked();
+		const bool dynamicOn   = moonScaleOn && ui->moonScaleDynamicCheckBox->isChecked();
+		ui->moonScaleDynamicCheckBox->setEnabled(moonScaleOn);
+		ui->moonScaleMinFovLabel->setEnabled(dynamicOn);
+		ui->moonScaleMinFovSpinBox->setEnabled(dynamicOn);
+		ui->moonScaleMaxFovLabel->setEnabled(dynamicOn);
+		ui->moonScaleMaxFovSpinBox->setEnabled(dynamicOn);
+	};
+	connect(ui->planetScaleMoonCheckBox,  &QCheckBox::toggled, this, updateMoonDynamicControlsState);
+	connect(ui->moonScaleDynamicCheckBox, &QCheckBox::toggled, this, updateMoonDynamicControlsState);
+	updateMoonDynamicControlsState();
+	connectBoolProperty(ui->planetScaleMinorBodyCheckBox, "SolarSystem.flagMinorBodyScale");
+	connectDoubleProperty(ui->minorBodyScaleFactor,"SolarSystem.minorBodyScale");
+	connectBoolProperty(ui->planetScalePlanetsCheckBox, "SolarSystem.flagPlanetScale");
+	connectDoubleProperty(ui->planetScaleFactor,"SolarSystem.planetScale");
+	connectBoolProperty(ui->planetScaleSunCheckBox, "SolarSystem.flagSunScale");
+	connectDoubleProperty(ui->sunScaleFactor,"SolarSystem.sunScale");
+	connectCheckBox(ui->planetLabelCheckBox, "actionShow_Planets_Labels");
+	connectCheckBox(ui->planetNomenclatureCheckBox, "actionShow_Planets_Nomenclature");
+	connectDoubleProperty(ui->planetsLabelsHorizontalSlider, "SolarSystem.labelsAmount",0.0,10.0);	
+	connectCheckBox(ui->planetNomenclatureCheckBox, "actionShow_Planets_Nomenclature");
+	ui->planetNomenclatureColor->setup("NomenclatureMgr.nomenclatureColor", "color/planet_nomenclature_color");
+	connectBoolProperty(ui->outlineCratersCheckBox, "NomenclatureMgr.flagOutlineCraters");
+	ui->planetLabelColor->setup("SolarSystem.labelsColor", "color/planet_names_color");
+	ui->planetTrailsColor->setup("SolarSystem.trailsColor", "color/object_trails_color");
+	connectBoolProperty(ui->planetTrailsCheckBox, "SolarSystem.trailsDisplayed");
+	connectIntProperty(ui->planetTrailsThicknessSpinBox, "SolarSystem.trailsThickness");	
+	connectBoolProperty(ui->planetIsolatedTrailsCheckBox, "SolarSystem.flagIsolatedTrails");
+	connectIntProperty(ui->planetIsolatedTrailsSpinBox, "SolarSystem.numberIsolatedTrails");
+	connectIntProperty(ui->trailsDurationSpinBox, "SolarSystem.maxTrailTimeExtent");
+	connectBoolProperty(ui->drawMoonHaloCheckBox, "SolarSystem.flagDrawMoonHalo");
+	connectBoolProperty(ui->minorPlanetMarkersCheckBox, "SolarSystem.flagMarkers");
+	connectDoubleProperty(ui->minorPlanetMarkerMagThresholdSpinBox, "SolarSystem.markerMagThreshold");
+	connectBoolProperty(ui->drawSunGlareCheckBox, "SolarSystem.flagDrawSunHalo");
+	connectBoolProperty(ui->drawSunCoronaCheckBox, "SolarSystem.flagPermanentSolarCorona");
+	connectBoolProperty(ui->shadowEnlargementDanjonCheckBox, "SolarSystem.earthShadowEnlargementDanjon");
+	populateTrailsControls(ssmgr->getFlagTrails());
+	connect(ssmgr,&SolarSystem::trailsDisplayedChanged, this, &ViewDialog::populateTrailsControls);
+
+	connectBoolProperty(ui->hidePlanetNomenclatureCheckBox, "NomenclatureMgr.flagHideLocalNomenclature");
+	connectBoolProperty(ui->showTerminatorNomenclatureOnlyCheckBox, "NomenclatureMgr.flagShowTerminatorZoneOnly");
+	connectIntProperty(ui->terminatorMinAltSpinbox, "NomenclatureMgr.terminatorMinAltitude");
+	connectIntProperty(ui->terminatorMaxAltSpinbox, "NomenclatureMgr.terminatorMaxAltitude");
+	connectBoolProperty(ui->showSpecialNomenclatureOnlyCheckBox, "NomenclatureMgr.specialNomenclatureOnlyDisplayed");
+	StelModule* mnmgr = StelApp::getInstance().getModule("NomenclatureMgr");
+	populateNomenclatureControls(mnmgr->property("flagShowNomenclature").toBool());
+	connect(static_cast<NomenclatureMgr*>(mnmgr), &NomenclatureMgr::flagShowNomenclatureChanged, this, &ViewDialog::populateNomenclatureControls);
+
+	populatePlanetMagnitudeAlgorithmsList();
+	int idx = ui->planetMagnitudeAlgorithmComboBox->findData(Planet::getApparentMagnitudeAlgorithm(), Qt::UserRole, Qt::MatchCaseSensitive);
+	if (idx==-1)
+	{
+		// Use Mallama&Hilton_2018 as default
+		idx = ui->planetMagnitudeAlgorithmComboBox->findData(Planet::MallamaHilton_2018, Qt::UserRole, Qt::MatchCaseSensitive);
+	}
+	ui->planetMagnitudeAlgorithmComboBox->setCurrentIndex(idx);
+	connect(ui->planetMagnitudeAlgorithmComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &ViewDialog::setPlanetMagnitudeAlgorithm);
+	populatePlanetMagnitudeAlgorithmDescription();
+
+	// GreatRedSpot (Jupiter)
+	connect(ui->pushButtonGrsDetails, &QPushButton::clicked, this, &ViewDialog::showGreatRedSpotDialog);
+
+	// Link Solar System Editor button if available...
+	StelModule *sse=StelApp::getInstance().getModuleMgr().getModule("SolarSystemEditor", true);
+	if (sse)
+		connect(ui->pushButtonSSE, &QPushButton::clicked, sse, [=]{sse->configureGui(true);});
+	else
+		ui->pushButtonSSE->hide();
+
+	// Shooting stars section
+	SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr);
+	Q_ASSERT(mmgr);
+	connectIntProperty(ui->zhrSpinBox, "SporadicMeteorMgr.zhr");
+	connectIntProperty(ui->zhrSlider, "SporadicMeteorMgr.zhr", ui->zhrSlider->minimum(), ui->zhrSlider->maximum());
+	updateZhrDescription(mmgr->property("zhr").toInt());
+	connect(mmgr, &SporadicMeteorMgr::zhrChanged, this, &ViewDialog::updateZhrDescription);
+
+	// DSO tab contents
+	NebulaMgr* nmgr = GETSTELMODULE(NebulaMgr);
+	updateSelectedCatalogsCheckBoxes();
+	connect(nmgr, &NebulaMgr::catalogFiltersChanged, this, &ViewDialog::updateSelectedCatalogsCheckBoxes);
+	connect(ui->selectAllCatalogs,       &QPushButton::clicked, nmgr, &NebulaMgr::selectAllCatalogs);
+	connect(ui->selectStandardCatalogs,  &QPushButton::clicked, nmgr, &NebulaMgr::selectStandardCatalogs);
+	connect(ui->selectPreferredCatalogs, &QPushButton::clicked, nmgr, &NebulaMgr::loadCatalogFilters);
+	connect(ui->storePreferredCatalogs,  &QPushButton::clicked, nmgr, &NebulaMgr::storeCatalogFilters);
+	connect(ui->selectNoneCatalogs,      &QPushButton::clicked, nmgr, &NebulaMgr::selectNoneCatalogs);
+	connect(ui->buttonGroupDisplayedDSOCatalogs, qOverload<QAbstractButton*>(&QButtonGroup::buttonClicked), this, &ViewDialog::setSelectedCatalogsFromCheckBoxes);
+	updateSelectedTypesCheckBoxes();
+	connect(nmgr, &NebulaMgr::typeFiltersChanged, this, &ViewDialog::updateSelectedTypesCheckBoxes);
+	connect(ui->buttonGroupDisplayedDSOTypes, qOverload<QAbstractButton*>(&QButtonGroup::buttonClicked), this, &ViewDialog::setSelectedTypesFromCheckBoxes);
+	connectGroupBox(ui->groupBoxDSOTypeFilters,"actionSet_Nebula_TypeFilterUsage");
+	// DSO Labels section
+	connectGroupBox(ui->groupBoxDSOLabelsAndMarkers, "actionShow_Nebulas");
+	connectDoubleProperty(ui->nebulasLabelsHorizontalSlider, "NebulaMgr.labelsAmount",0.0,10.0);
+	connectDoubleProperty(ui->nebulasHintsHorizontalSlider, "NebulaMgr.hintsAmount",0.0,10.0);
+	connectDoubleProperty(ui->hintsBrightnessDoubleSpinBox, "NebulaMgr.hintsBrightness");
+	connectDoubleProperty(ui->labelsBrightnessDoubleSpinBox, "NebulaMgr.labelsBrightness");
+	connectBoolProperty(ui->checkBoxDesignationsOnlyUsage, "NebulaMgr.flagDesignationLabels");
+	connectBoolProperty(ui->checkBoxProportionalHints, "NebulaMgr.hintsProportional");
+	connectBoolProperty(ui->checkBoxOutlines, "NebulaMgr.flagOutlinesDisplayed");
+	connectBoolProperty(ui->checkBoxSurfaceBrightnessUsage, "NebulaMgr.flagSurfaceBrightnessUsage");
+	connectBoolProperty(ui->nebulaLimitMagnitudeCheckBox,"StelSkyDrawer.flagNebulaMagnitudeLimit");
+	connectBoolProperty(ui->checkBoxAdditionalNamesDSO, "NebulaMgr.flagAdditionalNamesDisplayed");
+	connectBoolProperty(ui->checkBoxShowOnlyNamedDSO, "NebulaMgr.flagShowOnlyNamedDSO");
+	connectDoubleProperty(ui->nebulaLimitMagnitudeDoubleSpinBox,"StelSkyDrawer.customNebulaMagLimit");
+	connectBoolProperty(ui->nebulaLimitSizeCheckBox, "NebulaMgr.flagUseSizeLimits");
+	connectDoubleProperty(ui->nebulaLimitSizeMinDoubleSpinBox, "NebulaMgr.minSizeLimit");
+	connectDoubleProperty(ui->nebulaLimitSizeMaxDoubleSpinBox, "NebulaMgr.maxSizeLimit");
+	connect(ui->pushButtonConfigureDSOColors, &QPushButton::clicked, this, &ViewDialog::showConfigureDSOColorsDialog);
+
+	// Landscape section
+	connectCheckBox(ui->showGroundCheckBox, "actionShow_Ground");
+	connectCheckBox(ui->showFogCheckBox, "actionShow_Fog");
+	connectCheckBox(ui->atmosphereCheckBox, "actionShow_Atmosphere");
+	connectCheckBox(ui->landscapeIlluminationCheckBox, "actionShow_LandscapeIllumination");
+	connectCheckBox(ui->landscapeLabelsCheckBox, "actionShow_LandscapeLabels");
+
+	connectBoolProperty(ui->landscapeLocationCheckBox, "LandscapeMgr.flagLandscapeSetsLocation");
+	ui->labelsColorButton->setup("LandscapeMgr.labelColor", "landscape/label_color");
+	ui->polygonColorButton->setup("LandscapeMgr.polyLineColor", "landscape/polyline_color");
+	connectIntProperty(ui->landscapeLabelsFontSizeSpinBox, "LandscapeMgr.labelFontSize");
+	connectIntProperty(ui->landscapeLabelsAngleSpinBox, "LandscapeMgr.labelAngle");
+
+	connectBoolProperty(ui->landscapeBrightnessCheckBox,"LandscapeMgr.flagLandscapeUseMinimalBrightness");
+	connect(lmgr, &LandscapeMgr::flagLandscapeUseMinimalBrightnessChanged, ui->localLandscapeBrightnessCheckBox, &QCheckBox::setEnabled);
+	connect(lmgr, &LandscapeMgr::flagLandscapeUseMinimalBrightnessChanged, ui->landscapeBrightnessSpinBox, &QDoubleSpinBox::setEnabled);
+	ui->localLandscapeBrightnessCheckBox->setEnabled(lmgr->property("flagLandscapeUseMinimalBrightness").toBool());
+	ui->landscapeBrightnessSpinBox->setEnabled(lmgr->property("flagLandscapeUseMinimalBrightness").toBool());
+	connectDoubleProperty(ui->landscapeBrightnessSpinBox,"LandscapeMgr.defaultMinimalBrightness");
+	connectBoolProperty(ui->landscapeTransparencyCheckBox,"LandscapeMgr.flagLandscapeUseTransparency");
+	connectDoubleProperty(ui->landscapeTransparencySpinBox,"LandscapeMgr.landscapeTransparency");
+	connectBoolProperty(ui->localLandscapeBrightnessCheckBox,"LandscapeMgr.flagLandscapeSetsMinimalBrightness");
+	connectBoolProperty(ui->landscapePolylineCheckBox, "LandscapeMgr.flagPolyLineDisplayedOnly");
+	connectIntProperty(ui->landscapePolylineThicknessSpinBox, "LandscapeMgr.polyLineThickness");
+	connect(ui->landscapesListWidget, &QListWidget::currentItemChanged, this, [=](QListWidgetItem *newItem, QListWidgetItem *oldItem){
+		Q_UNUSED(oldItem)
+		GETSTELMODULE(LandscapeMgr)->setCurrentLandscapeName(newItem->data(Qt::UserRole).toString());
+	});
+	connect(lmgr, &LandscapeMgr::currentLandscapeChanged, this, &ViewDialog::landscapeChanged);
+	connect(ui->useAsDefaultLandscapeCheckBox, &QCheckBox::clicked, this, &ViewDialog::setCurrentLandscapeAsDefault);
+	connect(lmgr, &LandscapeMgr::defaultLandscapeChanged, this, &ViewDialog::updateDefaultLandscape);
+	updateDefaultLandscape();
+	connect(lmgr, &LandscapeMgr::landscapesChanged, this, &ViewDialog::populateLists);
+	connect(ui->pushButtonAddRemoveLandscapes, &QPushButton::clicked, this, &ViewDialog::showAddRemoveLandscapesDialog);
+	// Connect grid spacing combo box
+	connect(ui->gridSpacingComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &ViewDialog::gridSpacingChanged);
+	updateGridSpacingComboBox();
+
+	// Grid and lines
+	connectGroupBox(ui->celestialSphereGroupBox,              "actionShow_Gridlines");
+	connectCheckBox(ui->showEquatorLineCheckBox,              "actionShow_Equator_Line");
+	connectCheckBox(ui->showEquatorJ2000LineCheckBox,         "actionShow_Equator_J2000_Line");
+	connectCheckBox(ui->showFixedEquatorLineCheckBox,         "actionShow_Fixed_Equator_Line");
+	connectCheckBox(ui->showEclipticLineJ2000CheckBox,        "actionShow_Ecliptic_J2000_Line");
+	connectCheckBox(ui->showEclipticLineOfDateCheckBox,       "actionShow_Ecliptic_Line");
+	connectCheckBox(ui->showInvariablePlaneCheckBox,          "actionShow_Invariable_Plane_Line");
+	connectCheckBox(ui->showSolarEquatorCheckBox,             "actionShow_Solar_Equator_Line");
+	connectCheckBox(ui->showMeridianLineCheckBox,             "actionShow_Meridian_Line");
+	connectCheckBox(ui->showLongitudeLineCheckBox,            "actionShow_Longitude_Line");
+	connectCheckBox(ui->showQuadratureLineCheckBox,           "actionShow_Quadrature_Line");
+	connectCheckBox(ui->showHorizonLineCheckBox,              "actionShow_Horizon_Line");
+	connectCheckBox(ui->showEquatorialGridCheckBox,	          "actionShow_Equatorial_Grid");
+	connectCheckBox(ui->showFixedEquatorialGridCheckBox,      "actionShow_Fixed_Equatorial_Grid");
+	connectCheckBox(ui->showGalacticGridCheckBox,             "actionShow_Galactic_Grid");
+	connectCheckBox(ui->showGalacticEquatorLineCheckBox,      "actionShow_Galactic_Equator_Line");
+	connectCheckBox(ui->showSupergalacticGridCheckBox,        "actionShow_Supergalactic_Grid");
+	connectCheckBox(ui->showSupergalacticEquatorLineCheckBox, "actionShow_Supergalactic_Equator_Line");
+	connectCheckBox(ui->showAzimuthalGridCheckBox,            "actionShow_Azimuthal_Grid");
+	connectCheckBox(ui->showEquatorialJ2000GridCheckBox,      "actionShow_Equatorial_J2000_Grid");
+	connectCheckBox(ui->showEclipticGridJ2000CheckBox,        "actionShow_Ecliptic_J2000_Grid");
+	connectCheckBox(ui->showEclipticGridOfDateCheckBox,       "actionShow_Ecliptic_Grid");
+	connectCheckBox(ui->showCardinalPointsCheckBox,           "actionShow_Cardinal_Points");
+	connectCheckBox(ui->showOrdinal8WRPointsCheckBox,         "actionShow_Intercardinal_Points");
+	connectCheckBox(ui->showOrdinal16WRPointsCheckBox,        "actionShow_Secondary_Intercardinal_Points");
+	connectCheckBox(ui->showOrdinal32WRPointsCheckBox,        "actionShow_Tertiary_Intercardinal_Points");
+	connectCheckBox(ui->showCompassMarksCheckBox,             "actionShow_Compass_Marks");
+	connectCheckBox(ui->showPrecessionCirclesCheckBox,        "actionShow_Precession_Circles");
+	connectCheckBox(ui->showPrimeVerticalLineCheckBox,        "actionShow_Prime_Vertical_Line");
+	connectCheckBox(ui->showCurrentVerticalLineCheckBox,      "actionShow_Current_Vertical_Line");
+	connectCheckBox(ui->showColuresLineCheckBox,              "actionShow_Colure_Lines");
+	connectCheckBox(ui->showCircumpolarCirclesCheckBox,       "actionShow_Circumpolar_Circles");
+	connectCheckBox(ui->showUmbraCheckBox,                    "actionShow_Umbra_Circle");
+	connectCheckBox(ui->showUmbraCenterCheckBox,              "actionShow_Umbra_Center_Point");
+	connectCheckBox(ui->showPenumbraCheckBox,                 "actionShow_Penumbra_Circle");
+	connectCheckBox(ui->showCelestialJ2000PolesCheckBox,      "actionShow_Celestial_J2000_Poles");
+	connectCheckBox(ui->showCelestialPolesCheckBox,           "actionShow_Celestial_Poles");
+	connectCheckBox(ui->showZenithNadirCheckBox,              "actionShow_Zenith_Nadir");
+	connectCheckBox(ui->showEclipticJ2000PolesCheckBox,       "actionShow_Ecliptic_J2000_Poles");
+	connectCheckBox(ui->showEclipticPolesCheckBox,            "actionShow_Ecliptic_Poles");
+	connectCheckBox(ui->showGalacticPolesCheckBox,            "actionShow_Galactic_Poles");
+	connectCheckBox(ui->showGalacticCenterCheckBox,           "actionShow_Galactic_Center");
+	connectCheckBox(ui->showSupergalacticPolesCheckBox,       "actionShow_Supergalactic_Poles");
+	connectCheckBox(ui->showEquinoxJ2000PointsCheckBox,       "actionShow_Equinox_J2000_Points");
+	connectCheckBox(ui->showEquinoxPointsCheckBox,            "actionShow_Equinox_Points");
+	connectCheckBox(ui->showSolsticeJ2000PointsCheckBox,      "actionShow_Solstice_J2000_Points");
+	connectCheckBox(ui->showSolsticePointsCheckBox,           "actionShow_Solstice_Points");
+	connectCheckBox(ui->showAntisolarPointCheckBox,           "actionShow_Antisolar_Point");
+	connectCheckBox(ui->showApexPointsCheckBox,               "actionShow_Apex_Points");
+	connectCheckBox(ui->showFOVCenterMarkerCheckBox,          "actionShow_FOV_Center_Marker");
+	connectCheckBox(ui->showFOVCircularMarkerCheckBox,        "actionShow_FOV_Circular_Marker");
+	connectCheckBox(ui->showFOVRectangularMarkerCheckBox,     "actionShow_FOV_Rectangular_Marker");
+	connectDoubleProperty(ui->fovCircularMarkerSizeDoubleSpinBox,             "SpecialMarkersMgr.fovCircularMarkerSize");
+	connectDoubleProperty(ui->fovRectangularMarkerWidthDoubleSpinBox,         "SpecialMarkersMgr.fovRectangularMarkerWidth");
+	connectDoubleProperty(ui->fovRectangularMarkerHeightDoubleSpinBox,        "SpecialMarkersMgr.fovRectangularMarkerHeight");
+	connectDoubleProperty(ui->fovRectangularMarkerRotationAngleDoubleSpinBox, "SpecialMarkersMgr.fovRectangularMarkerRotationAngle");
+	// The thickness of lines
+	connectIntProperty(ui->lineThicknessSpinBox,                "GridLinesMgr.lineThickness");
+	connectIntProperty(ui->partThicknessSpinBox,                "GridLinesMgr.partThickness");
+	connectIntProperty(ui->pointSizeSpinBox,	            "GridLinesMgr.pointSize");
+	connectBoolProperty(ui->equatorPartsCheckBox,               "GridLinesMgr.equatorPartsDisplayed");
+	connectBoolProperty(ui->equatorJ2000PartsCheckBox,          "GridLinesMgr.equatorJ2000PartsDisplayed");
+	connectBoolProperty(ui->fixedEquatorPartsCheckBox,          "GridLinesMgr.fixedEquatorPartsDisplayed");
+	connectBoolProperty(ui->eclipticPartsCheckBox,              "GridLinesMgr.eclipticPartsDisplayed");
+	connectBoolProperty(ui->eclipticJ2000PartsCheckBox,         "GridLinesMgr.eclipticJ2000PartsDisplayed");
+	connectBoolProperty(ui->solarEquatorPartsCheckBox,          "GridLinesMgr.solarEquatorPartsDisplayed");
+	connectBoolProperty(ui->longitudePartsCheckBox,             "GridLinesMgr.longitudePartsDisplayed");
+	connectBoolProperty(ui->horizonPartsCheckBox,               "GridLinesMgr.horizonPartsDisplayed");
+	connectBoolProperty(ui->meridianPartsCheckBox,              "GridLinesMgr.meridianPartsDisplayed");
+	connectBoolProperty(ui->primeVerticalPartsCheckBox,         "GridLinesMgr.primeVerticalPartsDisplayed");
+	connectBoolProperty(ui->currentVerticalPartsCheckBox,       "GridLinesMgr.currentVerticalPartsDisplayed");
+	connectBoolProperty(ui->colurePartsCheckBox,                "GridLinesMgr.colurePartsDisplayed");
+	connectBoolProperty(ui->precessionPartsCheckBox,            "GridLinesMgr.precessionPartsDisplayed");
+	connectBoolProperty(ui->galacticEquatorPartsCheckBox,       "GridLinesMgr.galacticEquatorPartsDisplayed");
+	connectBoolProperty(ui->supergalacticEquatorPartsCheckBox,  "GridLinesMgr.supergalacticEquatorPartsDisplayed");
+	connectBoolProperty(ui->equatorLabelsCheckBox,              "GridLinesMgr.equatorPartsLabeled");
+	connectBoolProperty(ui->equatorJ2000LabelsCheckBox,         "GridLinesMgr.equatorJ2000PartsLabeled");
+	connectBoolProperty(ui->fixedEquatorLabelsCheckBox,         "GridLinesMgr.fixedEquatorPartsLabeled");
+	connectBoolProperty(ui->eclipticLabelsCheckBox,             "GridLinesMgr.eclipticPartsLabeled");
+	connectBoolProperty(ui->withSolarTicksCheckbox,             "GridLinesMgr.eclipticDatesLabeled");
+	connectBoolProperty(ui->eclipticJ2000LabelsCheckBox,        "GridLinesMgr.eclipticJ2000PartsLabeled");
+	connectBoolProperty(ui->solarEquatorLabelsCheckBox,         "GridLinesMgr.solarEquatorPartsLabeled");
+	connectBoolProperty(ui->longitudeLabelsCheckBox,            "GridLinesMgr.longitudePartsLabeled");
+	connectBoolProperty(ui->horizonLabelsCheckBox,              "GridLinesMgr.horizonPartsLabeled");
+	connectBoolProperty(ui->meridianLabelsCheckBox,             "GridLinesMgr.meridianPartsLabeled");
+	connectBoolProperty(ui->primeVerticalLabelsCheckBox,        "GridLinesMgr.primeVerticalPartsLabeled");
+	connectBoolProperty(ui->currentVerticalLabelsCheckBox,      "GridLinesMgr.currentVerticalPartsLabeled");
+	connectBoolProperty(ui->colureLabelsCheckBox,               "GridLinesMgr.colurePartsLabeled");
+	connectBoolProperty(ui->precessionLabelsCheckBox,           "GridLinesMgr.precessionPartsLabeled");
+	connectBoolProperty(ui->galacticEquatorLabelsCheckBox,      "GridLinesMgr.galacticEquatorPartsLabeled");
+	connectBoolProperty(ui->supergalacticEquatorLabelsCheckBox, "GridLinesMgr.supergalacticEquatorPartsLabeled");
+
+	ui->colorEclipticGridJ2000       ->setup("GridLinesMgr.eclipticJ2000GridColor",         "color/ecliptical_J2000_color");
+	ui->colorEclipticGridOfDate      ->setup("GridLinesMgr.eclipticGridColor",              "color/ecliptical_color");
+	ui->colorEquatorialJ2000Grid     ->setup("GridLinesMgr.equatorJ2000GridColor",          "color/equatorial_J2000_color");
+	ui->colorEquatorialGrid          ->setup("GridLinesMgr.equatorGridColor",               "color/equatorial_color");
+	ui->colorFixedEquatorialGrid     ->setup("GridLinesMgr.fixedEquatorGridColor",          "color/fixed_equatorial_color");
+	ui->colorGalacticGrid            ->setup("GridLinesMgr.galacticGridColor",              "color/galactic_color");
+	ui->colorSupergalacticGrid       ->setup("GridLinesMgr.supergalacticGridColor",         "color/supergalactic_color");
+	ui->colorAzimuthalGrid           ->setup("GridLinesMgr.azimuthalGridColor",             "color/azimuthal_color");
+	ui->colorEclipticLineJ2000       ->setup("GridLinesMgr.eclipticJ2000LineColor",         "color/ecliptic_J2000_color");
+	ui->colorEclipticLineOfDate      ->setup("GridLinesMgr.eclipticLineColor",              "color/ecliptic_color");
+	ui->colorInvariablePlane         ->setup("GridLinesMgr.invariablePlaneLineColor",       "color/invariable_plane_color");
+	ui->colorSolarEquatorLine        ->setup("GridLinesMgr.solarEquatorLineColor",          "color/solar_equator_color");
+	ui->colorEquatorJ2000Line        ->setup("GridLinesMgr.equatorJ2000LineColor",          "color/equator_J2000_color");
+	ui->colorEquatorLine             ->setup("GridLinesMgr.equatorLineColor",               "color/equator_color");
+	ui->colorFixedEquatorLine        ->setup("GridLinesMgr.fixedEquatorLineColor",          "color/fixed_equator_color");
+	ui->colorGalacticEquatorLine     ->setup("GridLinesMgr.galacticEquatorLineColor",       "color/galactic_equator_color");
+	ui->colorSupergalacticEquatorLine->setup("GridLinesMgr.supergalacticEquatorLineColor",  "color/supergalactic_equator_color");
+	ui->colorHorizonLine             ->setup("GridLinesMgr.horizonLineColor",               "color/horizon_color");
+	ui->colorLongitudeLine           ->setup("GridLinesMgr.longitudeLineColor",             "color/oc_longitude_color");
+	ui->colorQuadratureLine          ->setup("GridLinesMgr.quadratureLineColor",            "color/quadrature_color");
+	ui->colorColuresLine             ->setup("GridLinesMgr.colureLinesColor",               "color/colures_color");
+	ui->colorCircumpolarCircles      ->setup("GridLinesMgr.circumpolarCirclesColor",        "color/circumpolar_circles_color");
+	ui->colorUmbraCircle             ->setup("GridLinesMgr.umbraCircleColor",               "color/umbra_circle_color");
+	ui->colorPenumbraCircle          ->setup("GridLinesMgr.penumbraCircleColor",            "color/penumbra_circle_color");
+	ui->colorPrecessionCircles       ->setup("GridLinesMgr.precessionCirclesColor",         "color/precession_circles_color");
+	ui->colorPrimeVerticalLine       ->setup("GridLinesMgr.primeVerticalLineColor",         "color/prime_vertical_color");
+	ui->colorCurrentVerticalLine     ->setup("GridLinesMgr.currentVerticalLineColor",       "color/current_vertical_color");
+	ui->colorMeridianLine            ->setup("GridLinesMgr.meridianLineColor",              "color/meridian_color");
+	ui->colorCelestialJ2000Poles     ->setup("GridLinesMgr.celestialJ2000PolesColor",       "color/celestial_J2000_poles_color");
+	ui->colorCelestialPoles          ->setup("GridLinesMgr.celestialPolesColor",            "color/celestial_poles_color");
+	ui->colorZenithNadir             ->setup("GridLinesMgr.zenithNadirColor",               "color/zenith_nadir_color");
+	ui->colorEclipticJ2000Poles      ->setup("GridLinesMgr.eclipticJ2000PolesColor",        "color/ecliptic_J2000_poles_color");
+	ui->colorEclipticPoles           ->setup("GridLinesMgr.eclipticPolesColor",             "color/ecliptic_poles_color");
+	ui->colorGalacticPoles           ->setup("GridLinesMgr.galacticPolesColor",             "color/galactic_poles_color");
+	ui->colorGalacticCenter          ->setup("GridLinesMgr.galacticCenterColor",            "color/galactic_center_color");
+	ui->colorSupergalacticPoles      ->setup("GridLinesMgr.supergalacticPolesColor",        "color/supergalactic_poles_color");
+	ui->colorEquinoxJ2000Points      ->setup("GridLinesMgr.equinoxJ2000PointsColor",        "color/equinox_J2000_points_color");
+	ui->colorEquinoxPoints           ->setup("GridLinesMgr.equinoxPointsColor",             "color/equinox_points_color");
+	ui->colorSolsticeJ2000Points     ->setup("GridLinesMgr.solsticeJ2000PointsColor",       "color/solstice_J2000_points_color");
+	ui->colorSolsticePoints          ->setup("GridLinesMgr.solsticePointsColor",            "color/solstice_points_color");
+	ui->colorAntisolarPoint          ->setup("GridLinesMgr.antisolarPointColor",            "color/antisolar_point_color");
+	ui->colorApexPoints              ->setup("GridLinesMgr.apexPointsColor",                "color/apex_points_color");
+	ui->colorFOVCenterMarker         ->setup("SpecialMarkersMgr.fovCenterMarkerColor",      "color/fov_center_marker_color");
+	ui->colorFOVCircularMarker       ->setup("SpecialMarkersMgr.fovCircularMarkerColor",    "color/fov_circular_marker_color");
+	ui->colorFOVRectangularMarker    ->setup("SpecialMarkersMgr.fovRectangularMarkerColor", "color/fov_rectangular_marker_color");
+	ui->colorCardinalPoints          ->setup("LandscapeMgr.cardinalPointsColor",            "color/cardinal_color");
+	ui->colorCompassMarks            ->setup("SpecialMarkersMgr.compassMarksColor",         "color/compass_marks_color");
+
+#if (QT_VERSION<QT_VERSION_CHECK(6,7,0))
+	connect(ui->showCardinalPointsCheckBox,    &QCheckBox::stateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+	connect(ui->showOrdinal8WRPointsCheckBox,  &QCheckBox::stateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+	connect(ui->showOrdinal16WRPointsCheckBox, &QCheckBox::stateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+#else
+	connect(ui->showCardinalPointsCheckBox,    &QCheckBox::checkStateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+	connect(ui->showOrdinal8WRPointsCheckBox,  &QCheckBox::checkStateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+	connect(ui->showOrdinal16WRPointsCheckBox, &QCheckBox::checkStateChanged, this, &ViewDialog::setSelectedCardinalCheckBoxes);
+#endif
+	setSelectedCardinalCheckBoxes();
+
+	// Projection
+	connect(ui->projectionListWidget, &QListWidget::currentTextChanged, this, &ViewDialog::changeProjection);
+	connect(StelApp::getInstance().getCore(), &StelCore::currentProjectionTypeChanged, this, &ViewDialog::projectionChanged);
+	connect(app, &StelApp::flagShowDecimalDegreesChanged, this, &ViewDialog::setDisplayFormatForSpins);
+	connectDoubleProperty(ui->viewportOffsetSpinBox, "StelMovementMgr.viewportVerticalOffsetTarget");
+	connectDoubleProperty(ui->userMaxFovSpinBox, "StelMovementMgr.userMaxFov");
+	connectDoubleProperty(ui->currentFovSpinBox, "StelMovementMgr.currentFov");
+
+	// Sky Culture
+	connect(ui->useAsDefaultSkyCultureCheckBox, &QCheckBox::clicked, this, &ViewDialog::setCurrentCultureAsDefault);
+	connect(&StelApp::getInstance().getSkyCultureMgr(), &StelSkyCultureMgr::defaultSkyCultureIDChanged,
+	        this, &ViewDialog::updateDefaultSkyCulture);
+	updateDefaultSkyCulture();
+	connect(&StelApp::getInstance().getSkyCultureMgr(), &StelSkyCultureMgr::skyCultureListChanged, this, &ViewDialog::updateSkyCultureGUI);
+
+	initSkyCultureTime();
+
+	connect(ui->skyCultureTimeSlider, &QSlider::valueChanged, this, &ViewDialog::updateSkyCultureTimeValue);
+	connect(ui->skyCultureCurrentTimeSpinBox, qOverload<int>(&QSpinBox::valueChanged), this, &ViewDialog::updateSkyCultureTimeValue);
+	connect(ui->skyCultureMapGraphicsView, &SkyCultureMapGraphicsView::timeValueChanged, this, &ViewDialog::updateSkyCultureTimeValue);
+
+	connect(ui->skyCultureMinTimeSpinBox, qOverload<int>(&QSpinBox::valueChanged), this, &ViewDialog::changeMinTime);
+	connect(ui->skyCultureMaxTimeSpinBox, qOverload<int>(&QSpinBox::valueChanged), this, &ViewDialog::changeMaxTime);
+
+	connect(ui->applyTimeOnListCheckBox, &QCheckBox::toggled, this, &ViewDialog::filterSkyCultures);
+	connect(ui->useLocationForRotationCheckBox, &QCheckBox::toggled, this, &ViewDialog::initiateSkyCultureMapRotation);
+	connect(StelApp::getInstance().getCore(), &StelCore::locationChanged, this, &ViewDialog::initiateSkyCultureMapRotation);
+
+
+	configureSkyCultureCheckboxes();
+	StelSkyCultureMgr *scMgr=GETSTELMODULE(StelSkyCultureMgr);
+	connect(scMgr, &StelSkyCultureMgr::screenLabelStyleChanged, this, &ViewDialog::configureSkyCultureCheckboxes);
+	connect(scMgr, &StelSkyCultureMgr::infoLabelStyleChanged, this, &ViewDialog::configureSkyCultureCheckboxes);
+
+	connect(ui->infoLabelNativeCheckBox           , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelPronounceCheckBox        , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelTransliterationCheckBox  , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelTranslationCheckBox      , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelIPACheckBox              , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelBynameCheckBox           , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+	connect(ui->infoLabelModernCheckBox           , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureInfoStyleFromCheckboxes);
+
+	connect(ui->screenLabelNativeCheckBox         , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelPronounceCheckBox      , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelTransliterationCheckBox, &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelTranslationCheckBox    , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelIPACheckBox            , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelBynameCheckBox         , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+	connect(ui->screenLabelModernCheckBox         , &QCheckBox::clicked, this, &ViewDialog::updateSkyCultureScreenStyleFromCheckboxes);
+
+	connectBoolProperty(ui->abbreviatedNamesCheckBox,               "StelSkyCultureMgr.flagUseAbbreviatedNames");
+	connectCheckBox(ui->showConstellationLinesCheckBox,             "actionShow_Constellation_Lines");
+	connectIntProperty(ui->constellationLineThicknessSpinBox,       "ConstellationMgr.constellationLineThickness");
+	connectCheckBox(ui->showConstellationLabelsCheckBox,            "actionShow_Constellation_Labels");
+	connectCheckBox(ui->showConstellationBoundariesCheckBox,        "actionShow_Constellation_Boundaries");
+	connectIntProperty(ui->constellationBoundariesThicknessSpinBox,	"ConstellationMgr.boundariesThickness");
+	connectCheckBox(ui->showConstellationArtCheckBox,               "actionShow_Constellation_Art");
+	connectDoubleProperty(ui->constellationArtBrightnessSpinBox,    "ConstellationMgr.artIntensity");
+
+	// fade duration
+	connectDoubleProperty(ui->artFadeDurationDoubleSpinBox,           "ConstellationMgr.artFadeDuration");
+	connectDoubleProperty(ui->boundariesFadeDurationDoubleSpinBox,    "ConstellationMgr.boundariesFadeDuration");
+	connectDoubleProperty(ui->linesFadeDurationDoubleSpinBox,         "ConstellationMgr.linesFadeDuration");
+	connectDoubleProperty(ui->namesFadeDurationDoubleSpinBox,         "ConstellationMgr.namesFadeDuration");
+	connectDoubleProperty(ui->asterismNamesFadeDurationDoubleSpinBox, "AsterismMgr.namesFadeDuration");
+	connectDoubleProperty(ui->asterismLinesFadeDurationDoubleSpinBox, "AsterismMgr.linesFadeDuration");
+	connectDoubleProperty(ui->rayHelpersFadeDurationDoubleSpinBox,    "AsterismMgr.rayHelpersFadeDuration");
+
+	ui->colorConstellationBoundaries->setup("ConstellationMgr.boundariesColor", "color/const_boundary_color");
+	ui->colorConstellationLabels    ->setup("ConstellationMgr.namesColor",      "color/const_names_color");
+	ui->colorConstellationLines     ->setup("ConstellationMgr.linesColor",      "color/const_lines_color");
+
+	connectCheckBox(ui->showAsterismLinesCheckBox,          "actionShow_Asterism_Lines");
+	connectIntProperty(ui->asterismLineThicknessSpinBox,    "AsterismMgr.asterismLineThickness");
+	connectCheckBox(ui->showAsterismLabelsCheckBox,         "actionShow_Asterism_Labels");
+	connectCheckBox(ui->showRayHelpersCheckBox,             "actionShow_Ray_Helpers");
+	connectIntProperty(ui->rayHelperThicknessSpinBox,       "AsterismMgr.rayHelperThickness");
+
+	connectBoolProperty(ui->selectSingleConstellationCheckBox, "ConstellationMgr.isolateSelected");
+	connectBoolProperty(ui->constellationPickCheckBox,         "ConstellationMgr.flagConstellationPick");
+
+	ui->colorAsterismLabels->setup("AsterismMgr.namesColor",      "color/asterism_names_color");
+	ui->colorAsterismLines ->setup("AsterismMgr.linesColor",      "color/asterism_lines_color");
+	ui->colorRayHelpers    ->setup("AsterismMgr.rayHelpersColor", "color/rayhelper_lines_color");
+
+	QSettings *conf=StelApp::getInstance().getSettings();
+	if (conf->value("gui/skyculture_enable_hulls", "false").toBool())
+	{
+		connectCheckBox(ui->constellationHullsCheckBox,                          "actionShow_Constellation_Hulls");
+		ui->constellationHullsColorButton                               ->setup("ConstellationMgr.hullsColor",  "color/const_hulls_color");
+		connectIntProperty(ui->constellationHullsThicknessSpinBox,              "ConstellationMgr.hullsThickness");
+		connectDoubleProperty(ui->constellationHullsFadeDurationDoubleSpinBox,  "ConstellationMgr.hullsFadeDuration");
+	}
+	else
+	{
+		ui->constellationHullsCheckBox->hide();
+		ui->constellationHullsColorButton->hide();
+		ui->constellationHullsThicknessSpinBox->hide();
+		ui->constellationHullsFadeDurationDoubleSpinBox->hide();
+	}
+
+	connectBoolProperty(ui->zodiacCheckBox, "ConstellationMgr.zodiacDisplayed");
+	connectBoolProperty(ui->lunarSystemCheckBox, "ConstellationMgr.lunarSystemDisplayed");
+	ui->zodiacColorButton->setup("ConstellationMgr.zodiacColor", "color/skyculture_zodiac_color");
+	ui->lunarSystemColorButton->setup("ConstellationMgr.lunarSystemColor", "color/skyculture_lunarsystem_color");
+
+	connectIntProperty(ui->zodiacThicknessSpinBox,	                "ConstellationMgr.zodiacThickness");
+	connectIntProperty(ui->lunarSystemThicknessSpinBox,	        "ConstellationMgr.lunarSystemThickness");
+	connectDoubleProperty(ui->zodiacFadeDurationDoubleSpinBox,      "ConstellationMgr.zodiacFadeDuration");
+	connectDoubleProperty(ui->lunarSystemFadeDurationDoubleSpinBox, "ConstellationMgr.lunarSystemFadeDuration");
+
+	connect(ui->zodiacLabelComboBox,      qOverload<int>(&QComboBox::currentIndexChanged), this, &ViewDialog::setZodiacLabelStyle);
+	connect(ui->lunarSystemLabelComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &ViewDialog::setLunarSystemLabelStyle);
+
+	// Font selection
+	connectIntProperty(ui->constellationsFontSizeSpinBox, "ConstellationMgr.fontSize");
+	connectIntProperty(ui->asterismsFontSizeSpinBox,      "AsterismMgr.fontSize");
+
+	// Hips mgr.
+	populateHipsGroups();
+	StelModule *hipsmgr = StelApp::getInstance().getModule("HipsMgr");	
+	// HiPS updates may be very frequent when we are getting a list of
+	// surveys, we don't want to update the widget on each of them, so the
+	// timer is used to delay the update a bit.
+	hipsUpdateTimer.setInterval(50);
+	hipsUpdateTimer.setSingleShot(true);
+	connect(&hipsUpdateTimer, &QTimer::timeout, this, &ViewDialog::updateHips);
+	connect(qobject_cast<HipsMgr*>(hipsmgr), &HipsMgr::surveysChanged, this,
+	        [this]{ if(!hipsUpdateTimer.isActive()) hipsUpdateTimer.start(); });
+
+	connect(ui->surveyTypeComboBox, qOverload<int>(&QComboBox::currentIndexChanged), this, &ViewDialog::updateHips);
+	connect(ui->stackListWidget, &QListWidget::currentItemChanged, this, &ViewDialog::updateHips);
+	connect(ui->surveysTreeWidget, &QTreeWidget::currentItemChanged, this, &ViewDialog::updateHipsText, Qt::QueuedConnection);
+	connect(ui->surveysTreeWidget, &QTreeWidget::currentItemChanged, this, &ViewDialog::updateHipsControls, Qt::QueuedConnection);
+	connect(ui->surveysTreeWidget, &QTreeWidget::itemChanged, this, &ViewDialog::hipsListItemChanged);
+	connect(ui->surveysFilter, &QLineEdit::textChanged, this, &ViewDialog::filterSurveys);
+	connect(ui->listOnlyEnabledSurveys, &QCheckBox::toggled, this, &ViewDialog::filterSurveys);
+	connect(ui->hipsGammaDoubleSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsSaturationDoubleSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsBrightnessDoubleSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsContrastDoubleSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsOpacityDoubleSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsColorChannelComboBox, qOverload<int>(&QComboBox::currentIndexChanged),
+	        this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsInvertedColorsCheckBox, &QCheckBox::toggled, this, &ViewDialog::hipsDisplaySettingsChanged);
+	connect(ui->hipsResetPushButton, &QPushButton::clicked, this, &ViewDialog::resetSelectedHipsDisplaySettings);
+	connect(ui->hipsResetAllPushButton, &QPushButton::clicked, this, &ViewDialog::resetAllHipsDisplaySettings);
+	connectBoolProperty(ui->hipsAtmosphericExtinctionCheckBox, "HipsMgr.flagShowAtmosphericExtinction");
+	updateHips();
+
+	updateTabBarListWidgetWidth();
+
+	connect((dynamic_cast<StelGui*>(StelApp::getInstance().getGui())), &StelGui::htmlStyleChanged, this, [=](const QString &style){
+		ui->surveysTextBrowser->document()->setDefaultStyleSheet(style);
+		ui->projectionTextBrowser->document()->setDefaultStyleSheet(style);
+		ui->landscapeTextBrowser->document()->setDefaultStyleSheet(style);
+		ui->skyCultureTextBrowser->document()->setDefaultStyleSheet(style);
+	});
+
+	// Connect narration buttons. We might need to prepare the texts, though.
+	if (GETSTELMODULE(StelSpeechMgr)->enabled())
+	{
+		connect(ui->pushButtonLandscapes_say, &QPushButton::clicked, this, [](){
+			static LandscapeMgr *lmgr=GETSTELMODULE(LandscapeMgr);
+
+			QString pureContent=lmgr->getDescription();
+			static const QRegularExpression htmlbegin("<.*>");
+			static const QRegularExpression htmlend("</.*>");
+			static const QRegularExpression htmlendH("</[Hh][1-4]>");
+			static const QRegularExpression html1("<.*/>");
+			QString stripped=pureContent.replace(htmlendH, ". . . ").remove(html1).remove(htmlend).remove(htmlbegin);
+
+			GETSTELMODULE(StelSpeechMgr)->say(stripped);});
+		connect(ui->pushButtonLandscapes_stop, &QPushButton::clicked, this, [](){
+			GETSTELMODULE(StelSpeechMgr)->stop();});
+		connect(ui->pushButtonSkyculture_say, &QPushButton::clicked, this, [](){
+			StelApp& app = StelApp::getInstance();
+			QString md = app.getSkyCultureMgr().getCurrentSkyCultureNarration();
+			qDebug() << "MD as received: " << md;
+
+			GETSTELMODULE(StelSpeechMgr)->say(md);
+		});
+		connect(ui->pushButtonSkyculture_stop, &QPushButton::clicked, this, [](){
+			GETSTELMODULE(StelSpeechMgr)->stop();});
+	}
+	else
+	{
+		const auto wList = QList<QWidget*>({ui->pushButtonLandscapes_say, ui->pushButtonLandscapes_stop,
+						    ui->pushButtonSkyculture_say, ui->pushButtonSkyculture_stop});
+		for (auto w: wList)
+			w->hide();
+	}
+}
+
+bool ViewDialog::eventFilter(QObject* object, QEvent* event)
+{
+	if (object != dialog || event->type() != QEvent::KeyPress)
+		return false;
+	const auto keyEvent = static_cast<QKeyEvent*>(event);
+	if (keyEvent->key() == Qt::Key_Enter || keyEvent->key() == Qt::Key_Return)
+		return true; // Prevent these keys pressing buttons when focus is not on the buttons
+	return false;
+}
+
+void ViewDialog::setDisplayFormatForSpins(bool flagDecimalDegrees)
+{
+	int places = 0;
+	AngleSpinBox::DisplayFormat format = AngleSpinBox::DMSSymbols;
+	if (flagDecimalDegrees)
+	{
+		places = 5;
+		format = AngleSpinBox::DecimalDeg;
+	}
+	ui->currentFovSpinBox->setDecimals(places);
+	ui->currentFovSpinBox->setDisplayFormat(format);
+}
+
+void ViewDialog::populateOrbitsControls(bool flag)
+{
+	ui->planetIsolatedOrbitCheckBox->setEnabled(flag);
+	ui->planetOrbitMajorPlanetsCheckBox->setEnabled(flag);
+	ui->planetOrbitOnlyCheckBox->setEnabled(flag);
+	ui->planetOrbitsMoonCheckBox->setEnabled(flag);
+	ui->planetOrbitPermanentCheckBox->setEnabled(flag);
+	ui->planetOrbitsThicknessSpinBox->setEnabled(flag);
+	ui->pushButtonOrbitColors->setEnabled(flag);
+}
+
+void ViewDialog::populateTrailsControls(bool flag)
+{
+	ui->planetIsolatedTrailsCheckBox->setEnabled(flag);
+	ui->planetIsolatedTrailsSpinBox->setEnabled(flag);
+	ui->planetTrailsThicknessSpinBox->setEnabled(flag);
+}
+
+void ViewDialog::populateNomenclatureControls(bool flag)
+{
+	ui->hidePlanetNomenclatureCheckBox->setEnabled(flag);
+	ui->showSpecialNomenclatureOnlyCheckBox->setEnabled(flag);
+	ui->outlineCratersCheckBox->setEnabled(flag);
+	ui->showTerminatorNomenclatureOnlyCheckBox->setEnabled(flag);
+	ui->terminatorMinAltSpinbox->setEnabled(flag);
+	ui->terminatorMaxAltSpinbox->setEnabled(flag);
+	ui->labelTerminator->setEnabled(flag);
+}
+
+// Heuristic function to decide in which group to put a survey.
+static QString getHipsType(const HipsSurveyP hips)
+{
+	if (!hips->isPlanetarySurvey())
+		return "dss";
+	const auto type = hips->getType();
+	if (type == "planet" || type == "planet-normal" || type == "planet-horizon")
+		return "sol";
+	return "other";
+}
+
+void ViewDialog::updateHipsText()
+{
+	const auto currentItem = ui->surveysTreeWidget->currentItem();
+	if (!currentItem)
+	{
+		ui->surveysTextBrowser->setText("");
+		return;
+	}
+
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	const auto url = currentItem->data(0, HipsRole::URL).toString();
+	const auto hips = hipsmgr->getSurveyByUrl(url);
+	if (!hips)
+	{
+		ui->surveysTextBrowser->setText("");
+		return;
+	}
+	QJsonObject props = hips->property("properties").toJsonObject();
+	QString html = QString("<h1>%1</h1>\n").arg(props["obs_title"].toString());
+	if (props.contains("obs_copyright") && props.contains("obs_copyright_url"))
+	{
+		html += QString("<p>Copyright <a href='%2'>%1</a></p>\n")
+				.arg(props["obs_copyright"].toString(), props["obs_copyright_url"].toString());
+	}
+	html += QString("<p>%1</p>\n").arg(props["obs_description"].toString());
+	html += "<h2>" + q_("properties") + "</h2>\n<ul>\n";
+	for (auto iter = props.constBegin(); iter != props.constEnd(); iter++)
+	{
+		html += QString("<li><b>%1</b> %2</li>\n").arg(iter.key(), iter.value().toString());
+	}
+	html += "</ul>\n";
+	const auto gui = dynamic_cast<StelGui*>(StelApp::getInstance().getGui());
+	if (gui)
+		ui->surveysTextBrowser->document()->setDefaultStyleSheet(QString(gui->getStelStyle().htmlStyleSheet));
+	ui->surveysTextBrowser->setHtml(html);
+}
+
+HipsSurveyP ViewDialog::currentSkyHips() const
+{
+	const auto currentItem = ui->surveysTreeWidget->currentItem();
+	if (!currentItem || currentItem->data(0, HipsRole::ItemType).toInt() != HipsItemType::Survey)
+		return HipsSurveyP(Q_NULLPTR);
+
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	const auto hips = hipsmgr->getSurveyByUrl(currentItem->data(0, HipsRole::URL).toString());
+	if (!hips || hips->isPlanetarySurvey())
+		return HipsSurveyP(Q_NULLPTR);
+	return hips;
+}
+
+void ViewDialog::updateHipsControls()
+{
+	const auto hips = currentSkyHips();
+	bool hasSkySurvey = false;
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	const QList<HipsSurveyP> hipslist = hipsmgr->property("surveys").value<QList<HipsSurveyP>>();
+	for (auto &survey: hipslist)
+	{
+		if (!survey->isPlanetarySurvey())
+		{
+			hasSkySurvey = true;
+			break;
+		}
+	}
+
+	const QSignalBlocker gammaBlocker(ui->hipsGammaDoubleSpinBox);
+	const QSignalBlocker saturationBlocker(ui->hipsSaturationDoubleSpinBox);
+	const QSignalBlocker brightnessBlocker(ui->hipsBrightnessDoubleSpinBox);
+	const QSignalBlocker contrastBlocker(ui->hipsContrastDoubleSpinBox);
+	const QSignalBlocker opacityBlocker(ui->hipsOpacityDoubleSpinBox);
+	const QSignalBlocker colorChannelBlocker(ui->hipsColorChannelComboBox);
+	const QSignalBlocker invertedColorsBlocker(ui->hipsInvertedColorsCheckBox);
+
+	ui->hipsGammaDoubleSpinBox->setValue(hips ? hips->getGamma() : 1.);
+	ui->hipsSaturationDoubleSpinBox->setValue(hips ? hips->getSaturation() : 1.);
+	ui->hipsBrightnessDoubleSpinBox->setValue(hips ? hips->getBrightness() : 1.);
+	ui->hipsContrastDoubleSpinBox->setValue(hips ? hips->getContrast() : 1.);
+	ui->hipsOpacityDoubleSpinBox->setValue(hips ? hips->getOpacity() : 1.);
+	ui->hipsColorChannelComboBox->setCurrentIndex(hips ? hips->getColorChannel() : HipsSurvey::ColorChannelRgb);
+	ui->hipsInvertedColorsCheckBox->setChecked(hips ? hips->getInvertedColors() : false);
+
+	const bool enableSelectedControls = static_cast<bool>(hips);
+	ui->hipsSettingsGroupBox->setEnabled(enableSelectedControls || hasSkySurvey);
+	ui->hipsGammaLabel->setEnabled(enableSelectedControls);
+	ui->hipsGammaDoubleSpinBox->setEnabled(enableSelectedControls);
+	ui->hipsSaturationLabel->setEnabled(enableSelectedControls);
+	ui->hipsSaturationDoubleSpinBox->setEnabled(enableSelectedControls);
+	ui->hipsBrightnessLabel->setEnabled(enableSelectedControls);
+	ui->hipsBrightnessDoubleSpinBox->setEnabled(enableSelectedControls);
+	ui->hipsContrastLabel->setEnabled(enableSelectedControls);
+	ui->hipsContrastDoubleSpinBox->setEnabled(enableSelectedControls);
+	ui->hipsOpacityLabel->setEnabled(enableSelectedControls);
+	ui->hipsOpacityDoubleSpinBox->setEnabled(enableSelectedControls);
+	ui->hipsColorChannelLabel->setEnabled(enableSelectedControls);
+	ui->hipsColorChannelComboBox->setEnabled(enableSelectedControls);
+	ui->hipsInvertedColorsCheckBox->setEnabled(enableSelectedControls);
+	ui->hipsResetPushButton->setEnabled(enableSelectedControls);
+	ui->hipsResetAllPushButton->setEnabled(hasSkySurvey);
+}
+
+void ViewDialog::hipsDisplaySettingsChanged()
+{
+	const auto hips = currentSkyHips();
+	if (!hips)
+		return;
+
+	hips->setDisplaySettings(static_cast<float>(ui->hipsGammaDoubleSpinBox->value()),
+	                         static_cast<float>(ui->hipsSaturationDoubleSpinBox->value()),
+	                         static_cast<float>(ui->hipsBrightnessDoubleSpinBox->value()),
+	                         static_cast<float>(ui->hipsContrastDoubleSpinBox->value()),
+	                         static_cast<float>(ui->hipsOpacityDoubleSpinBox->value()),
+	                         ui->hipsColorChannelComboBox->currentIndex(),
+	                         ui->hipsInvertedColorsCheckBox->isChecked());
+}
+
+void ViewDialog::resetSelectedHipsDisplaySettings()
+{
+	const auto hips = currentSkyHips();
+	if (!hips)
+		return;
+	hips->resetDisplaySettings();
+	updateHipsControls();
+}
+
+void ViewDialog::resetAllHipsDisplaySettings()
+{
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	const QList<HipsSurveyP> hipslist = hipsmgr->property("surveys").value<QList<HipsSurveyP>>();
+	for (auto &hips: hipslist)
+	{
+		if (!hips->isPlanetarySurvey())
+			hips->resetDisplaySettings();
+	}
+	updateHipsControls();
+}
+
+void ViewDialog::clearHips()
+{
+	ui->surveysTreeWidget->clear();
+	planetarySurveys.clear();
+	surveysInTheList.clear();
+	selectedSurveyType.clear();
+	updateHipsControls();
+}
+
+void ViewDialog::updateHips()
+{
+	if (!ui->page_surveys->isVisible()) return;
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+	QMetaObject::invokeMethod(hipsmgr, "loadSources");
+
+	QComboBox* typeComboBox = ui->surveyTypeComboBox;
+	auto selectedType = typeComboBox->itemData(typeComboBox->currentIndex()).toString();
+	if (selectedType.isNull())
+		selectedType = "dss";
+
+	// Update survey list.
+	auto*const l = ui->surveysTreeWidget;
+
+	if (!hipsmgr->property("loaded").toBool())
+	{
+		clearHips();
+		new QTreeWidgetItem(l, {q_("Loading...")});
+		return;
+	}
+
+	l->blockSignals(true);
+	if (selectedSurveyType != selectedType)
+	{
+		clearHips();
+		selectedSurveyType = selectedType;
+	}
+	const QList<HipsSurveyP> hipslist = hipsmgr->property("surveys").value<QList<HipsSurveyP>>();
+
+	const bool selectedIsPlanetary = selectedType == "sol";
+	l->setRootIsDecorated(selectedIsPlanetary);
+
+	const auto& solarSys = GETSTELMODULE(SolarSystem);
+	for (auto &hips: hipslist)
+	{
+		if (getHipsType(hips) != selectedType)
+			continue;
+		QString url = hips->property("url").toString();
+		QJsonObject properties = hips->property("properties").toJsonObject();
+		QString title = properties["obs_title"].toString();
+		if (title.isEmpty() || url.isEmpty())
+			continue;
+
+		// Don't add the survey if it's already present
+		const auto surveyItemIt = surveysInTheList.find(url);
+		if (surveyItemIt != surveysInTheList.end())
+			continue;
+
+		QTreeWidgetItem* surveyItem = nullptr;
+		if (selectedIsPlanetary)
+		{
+			const auto& frame = hips->getFrame();
+			const auto& englishName = hips->frameToPlanetName(frame);
+			const auto& group = hips->getGroup();
+			auto& planetData = planetarySurveys[englishName];
+			if(!planetData.planetItem)
+			{
+				const auto& planet = solarSys->searchByEnglishName(englishName);
+				if (!planet)
+				{
+					qWarning().nospace() << "Found a planetary survey with unknown frame: "
+					                     << frame << ". Skipping it.";
+					continue;
+				}
+				planetData.planetItem = new QTreeWidgetItem(l, {planet->getNameI18n()});
+				planetData.planetItem->setData(0, HipsRole::ItemType, HipsItemType::Planet);
+				planetData.planetItem->setData(0, HipsRole::PlanetEnglishName, englishName);
+			}
+			QTreeWidgetItem*& groupItem = planetData.groupsMap[group];
+			if (!groupItem)
+			{
+				groupItem = new QTreeWidgetItem(planetData.planetItem, {group});
+				groupItem->setData(0, HipsRole::ItemType, HipsItemType::Group);
+				groupItem->setFlags(groupItem->flags() | Qt::ItemIsUserCheckable);
+				groupItem->setCheckState(0, hips->property("visible").toBool() ? Qt::Checked : Qt::Unchecked);
+			}
+			static const QHash<QString, QString> typeNames = {
+				{L1S("planet"),         q_("Albedo")},
+				{L1S("planet-normal"),  q_("Normal map")},
+				{L1S("planet-horizon"), q_("Horizon map")},
+			};
+			const auto type = hips->getType();
+			QString typeName = type;
+			if (const auto it = typeNames.find(type); it != typeNames.end())
+				typeName = it.value();
+
+			// Set the first survey of each type as checked by default
+			auto checkState = Qt::Checked;
+			const bool newHipsVisible = hips->property("visible").toBool();
+			if (newHipsVisible)
+			{
+				// The group is also enabled if the survey being added is visible
+				groupItem->setCheckState(0, Qt::Checked);
+			}
+			for (int n = 0; n < groupItem->childCount(); ++n)
+			{
+				const auto oldHipsItem = groupItem->child(n);
+				Q_ASSERT(oldHipsItem->data(0, HipsRole::ItemType).toInt() == HipsItemType::Survey);
+
+				if (oldHipsItem->data(0, HipsRole::SurveyType).toString() != type)
+					continue;
+				bool oldHipsItemChecked = oldHipsItem->checkState(0) == Qt::Checked;
+				if (newHipsVisible && oldHipsItemChecked)
+				{
+					const auto url = oldHipsItem->data(0, HipsRole::URL).toString();
+					const auto oldHips = hipsmgr->getSurveyByUrl(url);
+					Q_ASSERT(oldHips);
+					if (oldHips && !oldHips->property("visible").toBool())
+					{
+						checkState = Qt::Checked;
+						oldHipsItem->setCheckState(0, Qt::Unchecked);
+						oldHipsItemChecked = false;
+					}
+				}
+				if (!newHipsVisible && oldHipsItemChecked)
+				{
+					// A checked survey already exists, don't check the new one
+					checkState = Qt::Unchecked;
+					break;
+				}
+			}
+
+			surveyItem = new QTreeWidgetItem(groupItem, {title, typeName});
+			surveyItem->setFlags(surveyItem->flags() | Qt::ItemIsUserCheckable);
+			surveyItem->setCheckState(0, checkState);
+		}
+		else
+		{
+			surveyItem = new QTreeWidgetItem(l, {title});
+			surveyItem->setFlags(surveyItem->flags() | Qt::ItemIsUserCheckable);
+			surveyItem->setCheckState(0, hips->property("visible").toBool() ? Qt::Checked
+			                                                                : Qt::Unchecked);
+		}
+
+		surveysInTheList[url] = surveyItem;
+		surveyItem->setData(0, HipsRole::ItemType, HipsItemType::Survey);
+		surveyItem->setData(0, HipsRole::URL, url);
+		surveyItem->setData(0, HipsRole::SurveyType, hips->getType());
+		disconnect(hips.data(), nullptr, this, nullptr);
+		connect(hips.data(), &HipsSurvey::statusChanged, this, &ViewDialog::updateHipsText);
+	}
+	l->sortItems(0, Qt::AscendingOrder);
+	if (const auto currentItem = l->currentItem())
+		l->scrollToItem(currentItem);
+
+	l->blockSignals(false);
+	filterSurveys();
+	updateHipsControls();
+}
+
+void ViewDialog::populateHipsGroups()
+{
+	// Update the groups combobox.
+	QComboBox* typeComboBox = ui->surveyTypeComboBox;
+	int index = typeComboBox->currentIndex();
+	QVariant selectedType = typeComboBox->itemData(index);
+	if (selectedType.isNull())
+		selectedType = "dss";
+	typeComboBox->clear();
+	typeComboBox->addItem(q_("Deep Sky"), "dss");
+	typeComboBox->addItem(q_("Solar System"), "sol");
+	index = typeComboBox->findData(selectedType, Qt::UserRole, Qt::MatchCaseSensitive);
+	typeComboBox->setCurrentIndex(index);
+}
+
+void ViewDialog::toggleHipsDialog()
+{
+	if (visible())
+	{
+		if (ui->stackListWidget->currentRow() == Page::Surveys)
+		{
+			setVisible(false);
+		}
+		else
+		{
+			ui->stackListWidget->setCurrentRow(Page::Surveys);
+			// Force it to become active and bring it to the top
+			setVisible(false);
+			setVisible(true);
+		}
+	}
+	else
+	{
+		setVisible(true);
+		ui->stackListWidget->setCurrentRow(Page::Surveys);
+	}
+}
+
+void ViewDialog::updateSurveyFilteredState(QTreeWidgetItem& item, const QString& filterPattern) const
+{
+	const QString text = item.text(0).simplified();
+	bool show = filterPattern.isEmpty() || text.contains(filterPattern, Qt::CaseInsensitive);
+	if (ui->listOnlyEnabledSurveys->isChecked())
+	{
+		switch (item.data(0, HipsRole::ItemType).toInt())
+		{
+		case HipsItemType::Survey:
+		{
+			if (item.checkState(0) != Qt::Checked)
+				show = false;
+			break;
+		}
+		case HipsItemType::Planet:
+		{
+			bool planetHasEnabledGroup = false;
+			for (int n = 0; n < item.childCount(); ++n)
+			{
+				const auto groupItem = item.child(n);
+				Q_ASSERT(groupItem->data(0, HipsRole::ItemType).toInt() == HipsItemType::Group);
+				if (groupItem->checkState(0) == Qt::Checked)
+				{
+					planetHasEnabledGroup = true;
+					break;
+				}
+			}
+			if (!planetHasEnabledGroup)
+				show = false;
+			break;
+		}
+		default:
+			break;
+		}
+	}
+	item.setHidden(!show);
+}
+
+void ViewDialog::filterSurveys()
+{
+	const QString pattern = ui->surveysFilter->text().simplified();
+	const auto& list = *ui->surveysTreeWidget;
+	for (int row = 0; row < list.topLevelItemCount(); ++row)
+	{
+		auto& item = *list.topLevelItem(row);
+		updateSurveyFilteredState(item, pattern);
+	}
+}
+
+void ViewDialog::hipsListItemChanged(QTreeWidgetItem* item)
+{
+	auto*const l = item->treeWidget();
+	l->blockSignals(true);
+	const auto hipsmgr = qobject_cast<HipsMgr*>(StelApp::getInstance().getModule("HipsMgr"));
+
+	switch (item->data(0, HipsRole::ItemType).toInt())
+	{
+	case HipsItemType::Survey:
+	{
+		const auto url = item->data(0, HipsRole::URL).toString();
+		if (const auto group = item->parent())
+		{
+			Q_ASSERT(group->data(0, HipsRole::ItemType).toInt() == HipsItemType::Group);
+			for (int n = 0; n < group->childCount(); ++n)
+			{
+				const auto surveyItem = group->child(n);
+				Q_ASSERT(surveyItem->data(0, HipsRole::ItemType).toInt() == HipsItemType::Survey);
+				if (surveyItem == item) continue;
+				// Only consider surveys of the same type
+				if (surveyItem->data(0, HipsRole::SurveyType) != item->data(0, HipsRole::SurveyType))
+					continue;
+				if (surveyItem->checkState(0) == Qt::Checked)
+				{
+					surveyItem->setCheckState(0, Qt::Unchecked);
+				}
+			}
+			hipsListItemChanged(group);
+		}
+		else
+		{
+			const auto hips = hipsmgr->getSurveyByUrl(url);
+			Q_ASSERT(hips);
+			if (item->checkState(0) == Qt::Checked)
+			{
+				l->setCurrentItem(item);
+				hips->setProperty("visible", true);
+			}
+			else
+			{
+				hips->setProperty("visible", false);
+			}
+		}
+		break;
+	}
+	case HipsItemType::Group:
+	{
+		const auto planetItem = item->parent();
+		Q_ASSERT(planetItem);
+		Q_ASSERT(planetItem->data(0, HipsRole::ItemType).toInt() == HipsItemType::Planet);
+		// First, uncheck all the sibling groups except the one we're enabling
+		if (item->checkState(0) == Qt::Checked)
+		{
+			for (int n = 0; n < planetItem->childCount(); ++n)
+			{
+				const auto groupItem = planetItem->child(n);
+				Q_ASSERT(groupItem->data(0, HipsRole::ItemType).toInt() == HipsItemType::Group);
+				if (groupItem == item) continue;
+				if (groupItem->checkState(0) == Qt::Checked)
+				{
+					groupItem->setCheckState(0, Qt::Unchecked);
+					hipsListItemChanged(groupItem);
+				}
+			}
+		}
+		updateSurveyFilteredState(*planetItem, ui->surveysFilter->text().simplified());
+
+		// Now configure the survey chosen
+		HipsSurveyP colors;
+		HipsSurveyP normals;
+		HipsSurveyP horizons;
+		for (int n = 0; n < item->childCount(); ++n)
+		{
+			const auto child = item->child(n);
+			const auto url = child->data(0, HipsRole::URL).toString();
+			const auto hips = hipsmgr->getSurveyByUrl(url);
+			Q_ASSERT(hips);
+			const auto type = hips->getType();
+			if (child->checkState(0) != Qt::Checked)
+			{
+				if (type == L1S("planet"))
+					hips->setProperty("visible", false);
+				continue;
+			}
+			if (type == L1S("planet"))
+				colors = hips;
+			else if (type == L1S("planet-normal"))
+				normals = hips;
+			else if (type == L1S("planet-horizon"))
+				horizons = hips;
+		}
+		if (item->checkState(0) == Qt::Checked)
+		{
+			if (!colors)
+			{
+				QMessageBox::critical(&StelMainView::getInstance(), q_("No albedo map"),
+				                      q_("This group of surveys doesn't have an albedo "
+				                         "map. Can't display it."));
+				return;
+			}
+			colors->setProperty("visible", true);
+			const auto solarSys = qobject_cast<SolarSystem*>(StelApp::getInstance().getModule("SolarSystem"));
+			solarSys->enableSurvey(colors, normals, horizons);
+		}
+		else
+		{
+			if (colors) colors->setProperty("visible", false);
+		}
+		break;
+	}
+	case HipsItemType::Planet:
+	{
+		break;
+	}
+	}
+
+	l->blockSignals(false);
+}
+
+void ViewDialog::updateTabBarListWidgetWidth()
+{
+	ui->stackListWidget->setWrapping(false);
+	// Update list item sizes after translation
+	ui->stackListWidget->adjustSize();
+	QAbstractItemModel* model = ui->stackListWidget->model();
+	if (!model)
+		return;
+
+	// stackListWidget->font() does not work properly!
+	// It has a incorrect fontSize in the first loading, which produces the bug#995107.
+	QFont font=QGuiApplication::font();
+	font.setPixelSize(14);
+	font.setWeight(QFont::Bold);
+	QFontMetrics fontMetrics(font);
+	int iconSize = ui->stackListWidget->iconSize().width();
+	int width = 0;
+	for (int row = 0; row < model->rowCount(); row++)
+	{
+		int textWidth = fontMetrics.boundingRect(ui->stackListWidget->item(row)->text()).width();
+		width += iconSize > textWidth ? iconSize : textWidth; // use the wider one
+		width += 24; // margin - 12px left and 12px right
+	}
+	// Hack to force the window to be resized...
+	ui->stackListWidget->setMinimumWidth(width);
+	ui->stackListWidget->updateGeometry();
+}
+
+void ViewDialog::setSelectedCardinalCheckBoxes()
+{
+	StelPropertyMgr* propMgr = StelApp::getInstance().getStelPropertyManager();
+	bool cardinals = propMgr->getProperty("LandscapeMgr.cardinalPointsDisplayed")->getValue().toBool();
+	bool ordinals = propMgr->getProperty("LandscapeMgr.ordinalPointsDisplayed")->getValue().toBool();
+	bool secondary = propMgr->getProperty("LandscapeMgr.ordinal16WRPointsDisplayed")->getValue().toBool();
+	ui->showOrdinal8WRPointsCheckBox->setEnabled(cardinals);
+	ui->showOrdinal16WRPointsCheckBox->setEnabled(cardinals && ordinals);
+	ui->showOrdinal32WRPointsCheckBox->setEnabled(cardinals && ordinals && secondary);
+}
+
+void ViewDialog::setSelectedCatalogsFromCheckBoxes()
+{
+	Nebula::CatalogGroup flags(Nebula::CatNone);
+	if (ui->checkBoxNGC->isChecked())
+		flags |= Nebula::CatNGC;
+	if (ui->checkBoxIC->isChecked())
+		flags |= Nebula::CatIC;
+	if (ui->checkBoxM->isChecked())
+		flags |= Nebula::CatM;
+	if (ui->checkBoxC->isChecked())
+		flags |= Nebula::CatC;
+	if (ui->checkBoxB->isChecked())
+		flags |= Nebula::CatB;
+	if (ui->checkBoxSh2->isChecked())
+		flags |= Nebula::CatSh2;
+	if (ui->checkBoxVdB->isChecked())
+		flags |= Nebula::CatVdB;
+	if (ui->checkBoxRCW->isChecked())
+		flags |= Nebula::CatRCW;
+	if (ui->checkBoxLBN->isChecked())
+		flags |= Nebula::CatLBN;
+	if (ui->checkBoxLDN->isChecked())
+		flags |= Nebula::CatLDN;
+	if (ui->checkBoxCr->isChecked())
+		flags |= Nebula::CatCr;
+	if (ui->checkBoxMel->isChecked())
+		flags |= Nebula::CatMel;
+	if (ui->checkBoxCed->isChecked())
+		flags |= Nebula::CatCed;
+	if (ui->checkBoxPGC->isChecked())
+		flags |= Nebula::CatPGC;
+	if (ui->checkBoxUGC->isChecked())
+		flags |= Nebula::CatUGC;
+	if (ui->checkBoxArp->isChecked())
+		flags |= Nebula::CatArp;
+	if (ui->checkBoxVV->isChecked())
+		flags |= Nebula::CatVV;
+	if (ui->checkBoxPK->isChecked())
+		flags |= Nebula::CatPK;
+	if (ui->checkBoxPNG->isChecked())
+		flags |= Nebula::CatPNG;
+	if (ui->checkBoxSNRG->isChecked())
+		flags |= Nebula::CatSNRG;
+	if (ui->checkBoxACO->isChecked())
+		flags |= Nebula::CatACO;
+	if (ui->checkBoxHCG->isChecked())
+		flags |= Nebula::CatHCG;	
+	if (ui->checkBoxESO->isChecked())
+		flags |= Nebula::CatESO;
+	if (ui->checkBoxVdBH->isChecked())
+		flags |= Nebula::CatVdBH;
+	if (ui->checkBoxDWB->isChecked())
+		flags |= Nebula::CatDWB;
+	if (ui->checkBoxTr->isChecked())
+		flags |= Nebula::CatTr;
+	if (ui->checkBoxSt->isChecked())
+		flags |= Nebula::CatSt;
+	if (ui->checkBoxRu->isChecked())
+		flags |= Nebula::CatRu;
+	if (ui->checkBoxVdBHa->isChecked())
+		flags |= Nebula::CatVdBHa;
+	if (ui->checkBoxOther->isChecked())
+		flags |= Nebula::CatOther;
+
+	GETSTELMODULE(NebulaMgr)->setCatalogFilters(flags);
+}
+
+void ViewDialog::setSelectedTypesFromCheckBoxes()
+{
+	Nebula::TypeGroup flags(Nebula::TypeNone);
+	if (ui->checkBoxGalaxiesType->isChecked())
+		flags |= Nebula::TypeGalaxies;
+	if (ui->checkBoxActiveGalaxiesType->isChecked())
+		flags |= Nebula::TypeActiveGalaxies;
+	if (ui->checkBoxInteractingGalaxiesType->isChecked())
+		flags |= Nebula::TypeInteractingGalaxies;
+	if (ui->checkBoxOpenStarClustersType->isChecked())
+		flags |= Nebula::TypeOpenStarClusters;
+	if (ui->checkBoxGlobularStarClustersType->isChecked())
+		flags |= Nebula::TypeGlobularStarClusters;
+	if (ui->checkBoxBrightNebulaeType->isChecked())
+		flags |= Nebula::TypeBrightNebulae;
+	if (ui->checkBoxDarkNebulaeType->isChecked())
+		flags |= Nebula::TypeDarkNebulae;
+	if (ui->checkBoxPlanetaryNebulaeType->isChecked())
+		flags |= Nebula::TypePlanetaryNebulae;
+	if (ui->checkBoxHydrogenRegionsType->isChecked())
+		flags |= Nebula::TypeHydrogenRegions;
+	if (ui->checkBoxSupernovaRemnantsType->isChecked())
+		flags |= Nebula::TypeSupernovaRemnants;
+	if (ui->checkBoxGalaxyClustersType->isChecked())
+		flags |= Nebula::TypeGalaxyClusters;
+	if (ui->checkBoxOtherType->isChecked())
+		flags |= Nebula::TypeOther;
+
+	GETSTELMODULE(NebulaMgr)->setTypeFilters(flags);
+
+	StelApp::immediateSave("dso_type_filters/flag_show_galaxies",             flags.testFlag(Nebula::TypeGalaxies));
+	StelApp::immediateSave("dso_type_filters/flag_show_active_galaxies",      flags.testFlag(Nebula::TypeActiveGalaxies));
+	StelApp::immediateSave("dso_type_filters/flag_show_interacting_galaxies", flags.testFlag(Nebula::TypeInteractingGalaxies));
+	StelApp::immediateSave("dso_type_filters/flag_show_open_clusters",        flags.testFlag(Nebula::TypeOpenStarClusters));
+	StelApp::immediateSave("dso_type_filters/flag_show_globular_clusters",    flags.testFlag(Nebula::TypeGlobularStarClusters));
+	StelApp::immediateSave("dso_type_filters/flag_show_bright_nebulae",       flags.testFlag(Nebula::TypeBrightNebulae));
+	StelApp::immediateSave("dso_type_filters/flag_show_dark_nebulae",         flags.testFlag(Nebula::TypeDarkNebulae));
+	StelApp::immediateSave("dso_type_filters/flag_show_planetary_nebulae",    flags.testFlag(Nebula::TypePlanetaryNebulae));
+	StelApp::immediateSave("dso_type_filters/flag_show_hydrogen_regions",     flags.testFlag(Nebula::TypeHydrogenRegions));
+	StelApp::immediateSave("dso_type_filters/flag_show_supernova_remnants",   flags.testFlag(Nebula::TypeSupernovaRemnants));
+	StelApp::immediateSave("dso_type_filters/flag_show_galaxy_clusters",      flags.testFlag(Nebula::TypeGalaxyClusters));
+	StelApp::immediateSave("dso_type_filters/flag_show_other",                flags.testFlag(Nebula::TypeOther));
+}
+
+void ViewDialog::updateSelectedCatalogsCheckBoxes()
+{
+	const Nebula::CatalogGroup flags = static_cast<Nebula::CatalogGroup>(GETSTELMODULE(NebulaMgr)->getCatalogFilters());
+	ui->checkBoxNGC->setChecked(flags & Nebula::CatNGC);
+	ui->checkBoxIC->setChecked(flags & Nebula::CatIC);
+	ui->checkBoxM->setChecked(flags & Nebula::CatM);
+	ui->checkBoxC->setChecked(flags & Nebula::CatC);
+	ui->checkBoxB->setChecked(flags & Nebula::CatB);
+	ui->checkBoxSh2->setChecked(flags & Nebula::CatSh2);
+	ui->checkBoxVdB->setChecked(flags & Nebula::CatVdB);
+	ui->checkBoxRCW->setChecked(flags & Nebula::CatRCW);
+	ui->checkBoxLDN->setChecked(flags & Nebula::CatLDN);
+	ui->checkBoxLBN->setChecked(flags & Nebula::CatLBN);
+	ui->checkBoxCr->setChecked(flags & Nebula::CatCr);
+	ui->checkBoxMel->setChecked(flags & Nebula::CatMel);
+	ui->checkBoxCed->setChecked(flags & Nebula::CatCed);
+	ui->checkBoxPGC->setChecked(flags & Nebula::CatPGC);
+	ui->checkBoxUGC->setChecked(flags & Nebula::CatUGC);
+	ui->checkBoxArp->setChecked(flags & Nebula::CatArp);
+	ui->checkBoxVV->setChecked(flags & Nebula::CatVV);
+	ui->checkBoxPK->setChecked(flags & Nebula::CatPK);
+	ui->checkBoxPNG->setChecked(flags & Nebula::CatPNG);
+	ui->checkBoxSNRG->setChecked(flags & Nebula::CatSNRG);
+	ui->checkBoxACO->setChecked(flags & Nebula::CatACO);
+	ui->checkBoxHCG->setChecked(flags & Nebula::CatHCG);	
+	ui->checkBoxESO->setChecked(flags & Nebula::CatESO);
+	ui->checkBoxVdBH->setChecked(flags & Nebula::CatVdBH);
+	ui->checkBoxDWB->setChecked(flags & Nebula::CatDWB);
+	ui->checkBoxTr->setChecked(flags & Nebula::CatTr);
+	ui->checkBoxSt->setChecked(flags & Nebula::CatSt);
+	ui->checkBoxRu->setChecked(flags & Nebula::CatRu);
+	ui->checkBoxVdBHa->setChecked(flags & Nebula::CatVdBHa);
+	ui->checkBoxOther->setChecked(flags & Nebula::CatOther);	
+}
+
+void ViewDialog::updateSelectedTypesCheckBoxes()
+{
+	const Nebula::TypeGroup flags = static_cast<Nebula::TypeGroup>(GETSTELMODULE(NebulaMgr)->getTypeFilters());
+	ui->checkBoxGalaxiesType->setChecked(flags & Nebula::TypeGalaxies);
+	ui->checkBoxActiveGalaxiesType->setChecked(flags & Nebula::TypeActiveGalaxies);
+	ui->checkBoxInteractingGalaxiesType->setChecked(flags & Nebula::TypeInteractingGalaxies);
+	ui->checkBoxOpenStarClustersType->setChecked(flags & Nebula::TypeOpenStarClusters);
+	ui->checkBoxGlobularStarClustersType->setChecked(flags & Nebula::TypeGlobularStarClusters);
+	ui->checkBoxBrightNebulaeType->setChecked(flags & Nebula::TypeBrightNebulae);
+	ui->checkBoxDarkNebulaeType->setChecked(flags & Nebula::TypeDarkNebulae);
+	ui->checkBoxPlanetaryNebulaeType->setChecked(flags & Nebula::TypePlanetaryNebulae);
+	ui->checkBoxHydrogenRegionsType->setChecked(flags & Nebula::TypeHydrogenRegions);
+	ui->checkBoxSupernovaRemnantsType->setChecked(flags & Nebula::TypeSupernovaRemnants);
+	ui->checkBoxGalaxyClustersType->setChecked(flags & Nebula::TypeGalaxyClusters);
+	ui->checkBoxOtherType->setChecked(flags & Nebula::TypeOther);
+}
+
+void ViewDialog::populateToolTips()
+{
+	ui->planetUseObjModelsCheckBox->setToolTip(QString("<p>%1</p>").arg(q_("Uses a polygonal 3D model for some selected subplanetary objects (small moons, asteroids, comets) instead of a spherical approximation")));
+	ui->planetShowObjSelfShadowsCheckBox->setToolTip(QString("<p>%1</p>").arg(q_("Use a &quot;shadow map&quot; to simulate self-shadows of non-convex solar system objects. May reduce shadow penumbra quality on some objects.")));
+
+	QString degree = QChar(0x00B0);
+	ui->fovCircularMarkerSizeDoubleSpinBox->setSuffix(degree);
+	ui->fovRectangularMarkerHeightDoubleSpinBox->setSuffix(degree);
+	ui->fovRectangularMarkerWidthDoubleSpinBox->setSuffix(degree);
+	ui->fovRectangularMarkerRotationAngleDoubleSpinBox->setSuffix(degree);
+
+	// TRANSLATORS: duration in seconds
+	QString seconds = qc_("s", "duration, suffix");
+	ui->artFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->linesFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->namesFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->boundariesFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->constellationHullsFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->asterismLinesFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->asterismNamesFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->rayHelpersFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->zodiacFadeDurationDoubleSpinBox->setSuffix(seconds);
+	ui->lunarSystemFadeDurationDoubleSpinBox->setSuffix(seconds);
+	
+	QString px = qc_("px", "pixels");
+	ui->lineThicknessSpinBox->setSuffix(QString(" %1").arg(px));
+	ui->partThicknessSpinBox->setSuffix(QString(" %1").arg(px));
+	ui->pointSizeSpinBox->setSuffix(QString(" %1").arg(px));
+}
+
+void ViewDialog::populateLists()
+{
+	// Fill the culture list widget from the available list
+	StelApp& app = StelApp::getInstance();
+	QListWidget* l = ui->culturesListWidget;
+	l->blockSignals(true);
+	l->clear();
+
+	const QMultiMap<QString, QString> &cultureRegionMap = app.getSkyCultureMgr().getSkyCultureRegionMapI18();
+	const QMap<QString, QPair<int, int>> &cultureTimeLimitMap = app.getSkyCultureMgr().getSkyCultureTimeLimitMapI18();
+
+	// remove duplicates in list of occuring regions (optional)
+	QVector<QString> occuringRegions = cultureRegionMap.values().toVector();
+	std::sort(occuringRegions.begin(), occuringRegions.end());
+	occuringRegions.resize(std::distance(occuringRegions.begin(), std::unique(occuringRegions.begin(), occuringRegions.end())));
+
+	QStringList sortedOccuringRegions;
+	for (const auto& region : sortedRegions)
+	{
+		if (occuringRegions.contains(region))
+		{
+			sortedOccuringRegions.append(region);
+		}
+	}
+
+	// add regions to list as custom QListWidgetItem
+	for (const auto &region : sortedOccuringRegions)
+	{
+		l->addItem(new SeparatorListWidgetItem(q_(region), region));
+	}
+	// oops... the list of regions has unknown region - let's add "other" region for these sky cultures
+	if (occuringRegions.size() > sortedOccuringRegions.size())
+	{
+		l->addItem(new SeparatorListWidgetItem(q_("Other"), "Other"));
+	}
+
+	// find the earliest beginTime of all cultures (needed in initSkyCultureTime)
+	// ---> evaluate it here so we don't need to iterate over all cultures multiple times
+	int globalBeginTime = QDateTime::currentDateTime().date().year();
+#if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
+	QMultiMapIterator<QString, QString> cultureRegionIt(cultureRegionMap);
+#else
+	QMapIterator<QString, QString> cultureRegionIt(cultureRegionMap);
+#endif
+	cultureRegionIt.toBack();
+	while (cultureRegionIt.hasPrevious())
+	{
+		cultureRegionIt.previous();
+
+		QListWidgetItem* item = new QListWidgetItem(cultureRegionIt.key());
+		item->setData(Qt::UserRole, cultureTimeLimitMap.value(cultureRegionIt.key()).first); // beginTime
+		item->setData(Qt::UserRole + 1, cultureTimeLimitMap.value(cultureRegionIt.key()).second); // endTime
+
+		if (cultureTimeLimitMap.value(cultureRegionIt.key()).first < globalBeginTime)
+		{
+			globalBeginTime = cultureTimeLimitMap.value(cultureRegionIt.key()).first;
+		}
+
+		// When region is unknown (non UN-geoscheme), insert item under "other" separator,
+		// otherwise insert item under respective region separator
+		// When region is unknown (non UN-geoscheme), insert item under "other" separator,
+		// otherwise insert item under respective region separator
+		// Use regionKey() for matching instead of translated text to avoid CJK substring issues
+		SeparatorListWidgetItem* targetSeparator = nullptr;
+		for (int i = 0; i < l->count(); ++i)
+		{
+			SeparatorListWidgetItem* sep = dynamic_cast<SeparatorListWidgetItem*>(l->item(i));
+			if (sep && sep->regionKey() == cultureRegionIt.value())
+			{
+				targetSeparator = sep;
+				break;
+			}
+		}
+		if (!targetSeparator)
+		{
+			// Fallback: look for "Other" separator
+			for (int i = 0; i < l->count(); ++i)
+			{
+				SeparatorListWidgetItem* sep = dynamic_cast<SeparatorListWidgetItem*>(l->item(i));
+				if (sep && sep->regionKey() == "Other")
+				{
+					targetSeparator = sep;
+					break;
+				}
+			}
+		}
+		if (targetSeparator)
+		{
+			l->insertItem(l->row(targetSeparator) + 1, item);
+		}
+		else
+		{
+			// Fallback: append to end if no separator found
+			l->addItem(item);
+		}
+	}
+
+	ui->skyCultureCurrentTimeSpinBox->setMinimum(globalBeginTime);
+	l->setCurrentItem(l->findItems(app.getSkyCultureMgr().getCurrentSkyCultureNameI18(), Qt::MatchExactly).at(0));    
+	l->blockSignals(false);
+
+	updateSkyCultureText();
+
+	const StelCore* core = app.getCore();
+	StelGui* gui = dynamic_cast<StelGui*>(app.getGui());
+
+	// Fill the projection list
+	l = ui->projectionListWidget;
+	l->blockSignals(true);
+	l->clear();	
+	const QStringList mappings = core->getAllProjectionTypeKeys();
+	for (const auto& s : mappings)
+	{
+		l->addItem(core->projectionTypeKeyToNameI18n(s));
+	}
+	l->setCurrentItem(l->findItems(core->getCurrentProjectionNameI18n(), Qt::MatchExactly).at(0));
+	l->blockSignals(false);
+	if (gui)
+		ui->projectionTextBrowser->document()->setDefaultStyleSheet(QString(gui->getStelStyle().htmlStyleSheet));
+	ui->projectionTextBrowser->setHtml(core->getProjection(StelCore::FrameJ2000)->getHtmlSummary());	
+
+	// Fill the landscape list
+	l = ui->landscapesListWidget;
+	l->blockSignals(true);
+	l->clear();
+	StelModule* lmgr = app.getModule("LandscapeMgr");
+	QStringList landscapeList = lmgr->property("allLandscapeNames").toStringList();
+	for (const auto& landscapeName : std::as_const(landscapeList))
+	{
+		QString label = q_(landscapeName);
+		QListWidgetItem* item = new QListWidgetItem(label);
+		item->setData(Qt::UserRole, landscapeName);
+		l->addItem(item);
+	}
+	l->sortItems(); // they may have been translated!
+	QString selectedLandscapeName = lmgr->property("currentLandscapeName").toString();
+	for (int i = 0; i < l->count(); i++)
+	{
+		if (l->item(i)->data(Qt::UserRole).toString() == selectedLandscapeName)
+		{
+			l->setCurrentRow(i);
+			break;
+		}
+	}
+	l->blockSignals(false);	
+	QStringList searchPaths;
+	searchPaths << StelFileMgr::findFile("landscapes/" + lmgr->property("currentLandscapeID").toString());
+
+	ui->landscapeTextBrowser->setSearchPaths(searchPaths);
+	if (gui)
+		ui->landscapeTextBrowser->document()->setDefaultStyleSheet(QString(gui->getStelStyle().htmlStyleSheet));	
+	ui->landscapeTextBrowser->setHtml(lmgr->property("currentLandscapeHtmlDescription").toString());	
+	updateDefaultLandscape();
+}
+
+void ViewDialog::configureSkyCultureCheckboxes()
+{
+	static StelSkyCultureMgr *scMgr     = GETSTELMODULE(StelSkyCultureMgr);
+	StelObject::CulturalDisplayStyle infoStyle   = scMgr->getInfoLabelStyle();
+	StelObject::CulturalDisplayStyle screenStyle = scMgr->getScreenLabelStyle();
+	StelObject::CulturalDisplayStyle zodiacStyle = scMgr->getZodiacLabelStyle();
+	StelObject::CulturalDisplayStyle lunarStyle  = scMgr->getLunarSystemLabelStyle();
+	static ConstellationMgr *cMgr       = GETSTELMODULE(ConstellationMgr);
+	const bool hasZodiac=cMgr->hasZodiac();
+	const bool hasLunarSystem=cMgr->hasLunarSystem();
+
+	ui->infoLabelNativeCheckBox           ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Native));
+	ui->infoLabelPronounceCheckBox        ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Pronounce));
+	ui->infoLabelTransliterationCheckBox  ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Translit));
+	ui->infoLabelTranslationCheckBox      ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Translated));
+	ui->infoLabelIPACheckBox              ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::IPA));
+	ui->infoLabelBynameCheckBox           ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Byname));
+	ui->infoLabelModernCheckBox           ->setChecked(int(infoStyle)   & int(StelObject::CulturalDisplayStyle::Modern));
+	ui->screenLabelNativeCheckBox         ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Native));
+	ui->screenLabelPronounceCheckBox      ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Pronounce));
+	ui->screenLabelTransliterationCheckBox->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Translit));
+	ui->screenLabelTranslationCheckBox    ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Translated));
+	ui->screenLabelIPACheckBox            ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::IPA));
+	ui->screenLabelBynameCheckBox         ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Byname));
+	ui->screenLabelModernCheckBox         ->setChecked(int(screenStyle) & int(StelObject::CulturalDisplayStyle::Modern));
+
+	populateCulturalCombo(ui->zodiacLabelComboBox, zodiacStyle);
+	populateCulturalCombo(ui->lunarSystemLabelComboBox, lunarStyle);
+
+	ui->zodiacCheckBox->setEnabled(hasZodiac);
+	ui->zodiacLabelComboBox->setEnabled(hasZodiac);
+	ui->zodiacColorButton->setEnabled(hasZodiac);
+	ui->zodiacFadeDurationDoubleSpinBox->setEnabled(hasZodiac);
+	ui->zodiacThicknessSpinBox->setEnabled(hasZodiac);
+	ui->lunarSystemCheckBox->setEnabled(hasLunarSystem);
+	ui->lunarSystemLabelComboBox->setEnabled(hasLunarSystem);
+	ui->lunarSystemColorButton->setEnabled(hasLunarSystem);
+	ui->lunarSystemFadeDurationDoubleSpinBox->setEnabled(hasLunarSystem);
+	ui->lunarSystemThicknessSpinBox->setEnabled(hasLunarSystem);
+}
+
+void ViewDialog::updateSkyCultureInfoStyleFromCheckboxes()
+{
+	static StelSkyCultureMgr *scMgr       = GETSTELMODULE(StelSkyCultureMgr);
+
+	scMgr->setInfoLabelStyle(static_cast<StelObject::CulturalDisplayStyle>(
+				int(ui->infoLabelBynameCheckBox         ->isChecked()) << 6 |
+				int(ui->infoLabelNativeCheckBox         ->isChecked()) << 5 |
+				int(ui->infoLabelPronounceCheckBox      ->isChecked()) << 4 |
+				int(ui->infoLabelTransliterationCheckBox->isChecked()) << 3 |
+				int(ui->infoLabelTranslationCheckBox    ->isChecked()) << 2 |
+				int(ui->infoLabelIPACheckBox            ->isChecked()) << 1 |
+				int(ui->infoLabelModernCheckBox         ->isChecked())
+				));
+}
+
+void ViewDialog::updateSkyCultureScreenStyleFromCheckboxes()
+{
+	static StelSkyCultureMgr *scMgr       = GETSTELMODULE(StelSkyCultureMgr);
+
+	scMgr->setScreenLabelStyle(static_cast<StelObject::CulturalDisplayStyle>(
+				int(ui->screenLabelBynameCheckBox         ->isChecked()) << 6 |
+				int(ui->screenLabelNativeCheckBox         ->isChecked()) << 5 |
+				int(ui->screenLabelPronounceCheckBox      ->isChecked()) << 4 |
+				int(ui->screenLabelTransliterationCheckBox->isChecked()) << 3 |
+				int(ui->screenLabelTranslationCheckBox    ->isChecked()) << 2 |
+				int(ui->screenLabelIPACheckBox            ->isChecked()) << 1 |
+				int(ui->screenLabelModernCheckBox         ->isChecked())
+				));
+}
+
+void ViewDialog::populateCulturalCombo(QComboBox *combo, StelObject::CulturalDisplayStyle style)
+{
+//Save the current selection to be restored later
+combo->blockSignals(true);
+//int index = combo->currentIndex();
+//QVariant selectedStyle = combo->itemData(index);
+combo->clear();
+//Allow only single-style for space reasons, and store the key as user data.
+combo->addItem(qc_("native",          "cultural style"), QVariant::fromValue(StelObject::CulturalDisplayStyle::Native));
+combo->addItem(qc_("transliteration", "cultural style"), QVariant::fromValue(StelObject::CulturalDisplayStyle::Pronounce));
+combo->addItem(qc_("sci. translit.",  "cultural style"), QVariant::fromValue(StelObject::CulturalDisplayStyle::Translit));
+combo->addItem(qc_("translated",      "cultural style"), QVariant::fromValue(StelObject::CulturalDisplayStyle::Translated));
+//Restore the selection
+int index = combo->findData(QVariant::fromValue(style), Qt::UserRole, Qt::MatchCaseSensitive);
+combo->setCurrentIndex(index);
+combo->blockSignals(false);
+}
+
+// called from the ZodiacDisplayStyle combo. int is the newly selected index.
+void ViewDialog::setZodiacLabelStyle(int index)
+{
+	static StelSkyCultureMgr *scMgr       = GETSTELMODULE(StelSkyCultureMgr);
+
+	QComboBox *combo=static_cast<QComboBox *>(sender());
+	QVariant selectedStyle = combo->itemData(index);
+	StelObject::CulturalDisplayStyle style=selectedStyle.value<StelObject::CulturalDisplayStyle>();
+	scMgr->setZodiacLabelStyle(style);
+}
+
+void ViewDialog::setLunarSystemLabelStyle(int index)
+{
+	static StelSkyCultureMgr *scMgr       = GETSTELMODULE(StelSkyCultureMgr);
+
+	QComboBox *combo=static_cast<QComboBox *>(sender());
+	QVariant selectedStyle = combo->itemData(index);
+	StelObject::CulturalDisplayStyle style=selectedStyle.value<StelObject::CulturalDisplayStyle>();
+	scMgr->setLunarSystemLabelStyle(style);
+}
+
+void ViewDialog::skyCultureChanged()
+{
+	QListWidget* l = ui->culturesListWidget;
+
+	l->blockSignals(true); // block signals needed so the currentTextChanged signals doesnt loop with the selectCulture slot
+	l->setCurrentItem(l->findItems(StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureNameI18(), Qt::MatchExactly).at(0));
+	l->blockSignals(false);
+
+	updateSkyCultureText();
+	updateDefaultSkyCulture();
+	configureSkyCultureCheckboxes();
+}
+
+// fill the description text window, not the names in the sky.
+void ViewDialog::updateSkyCultureText()
+{
+	StelApp& app = StelApp::getInstance();
+	QString skyCultureId = app.getSkyCultureMgr().getCurrentSkyCultureID();
+	QString html = app.getSkyCultureMgr().getCurrentSkyCultureHtmlDescription();
+
+	QStringList searchPaths;
+	searchPaths << StelFileMgr::findFile("skycultures/" + skyCultureId);
+
+	ui->skyCultureTextBrowser->setSearchPaths(searchPaths);
+	StelGui* gui = dynamic_cast<StelGui*>(app.getGui());
+	if (gui)
+		ui->skyCultureTextBrowser->document()->setDefaultStyleSheet(QString(gui->getStelStyle().htmlStyleSheet));
+	ui->skyCultureTextBrowser->setHtml(html);	
+}
+
+void ViewDialog::changeProjection(const QString& projectionNameI18n)
+{
+	StelCore* core = StelApp::getInstance().getCore();
+	core->setCurrentProjectionTypeKey(core->projectionNameI18nToTypeKey(projectionNameI18n));
+}
+
+void ViewDialog::projectionChanged()
+{
+	StelCore* core = StelApp::getInstance().getCore();
+	QListWidget* l = ui->projectionListWidget;
+	l->setCurrentItem(l->findItems(core->getCurrentProjectionNameI18n(), Qt::MatchExactly).at(0),QItemSelectionModel::SelectCurrent);
+	ui->projectionTextBrowser->setHtml(core->getProjection(StelCore::FrameJ2000)->getHtmlSummary());
+	ui->currentFovSpinBox->setMaximum(core->getProjection(StelCore::FrameJ2000)->getMaxFov(), true);
+}
+
+void ViewDialog::landscapeChanged(QString id, QString name)
+{
+	StelModule* lmgr = StelApp::getInstance().getModule("LandscapeMgr");
+	for (int i = 0; i < ui->landscapesListWidget->count(); i++)
+	{
+		if (ui->landscapesListWidget->item(i)->data(Qt::UserRole).toString() == name)
+		{
+			ui->landscapesListWidget->setCurrentRow(i, QItemSelectionModel::SelectCurrent);
+			break;
+		}
+	}
+
+	QStringList searchPaths;
+	searchPaths << StelFileMgr::findFile("landscapes/" + id);
+
+	ui->landscapeTextBrowser->setSearchPaths(searchPaths);
+	ui->landscapeTextBrowser->setHtml(lmgr->property("currentLandscapeHtmlDescription").toString());
+	updateDefaultLandscape();
+	// Reset values that might have changed.
+	ui->showFogCheckBox->setChecked(lmgr->property("fogDisplayed").toBool());
+}
+
+void ViewDialog::showAddRemoveLandscapesDialog()
+{
+	if(addRemoveLandscapesDialog == nullptr)
+		addRemoveLandscapesDialog = new AddRemoveLandscapesDialog();
+
+	addRemoveLandscapesDialog->setVisible(true);
+}
+
+void ViewDialog::showAtmosphereDialog()
+{
+	if(atmosphereDialog == nullptr)
+		atmosphereDialog = new AtmosphereDialog();
+
+	atmosphereDialog->setVisible(true);
+}
+
+void ViewDialog::showSkylightDialog()
+{
+    if(skylightDialog == nullptr)
+	skylightDialog = new SkylightDialog();
+
+    skylightDialog->setVisible(true);
+}
+
+void ViewDialog::showTonemappingDialog()
+{
+    if(tonemappingDialog == nullptr)
+	tonemappingDialog = new TonemappingDialog();
+
+    tonemappingDialog->setVisible(true);
+}
+
+void ViewDialog::showGreatRedSpotDialog()
+{
+	if(greatRedSpotDialog == nullptr)
+		greatRedSpotDialog = new GreatRedSpotDialog();
+
+	greatRedSpotDialog->setVisible(true);
+}
+
+void ViewDialog::showConfigureDSOColorsDialog()
+{
+	if(configureDSOColorsDialog == nullptr)
+		configureDSOColorsDialog = new ConfigureDSOColorsDialog();
+
+	configureDSOColorsDialog->setVisible(true);
+}
+
+void ViewDialog::showConfigureOrbitColorsDialog()
+{
+	if(configureOrbitColorsDialog == nullptr)
+		configureOrbitColorsDialog = new ConfigureOrbitColorsDialog();
+
+	configureOrbitColorsDialog->setVisible(true);
+}
+
+void ViewDialog::updateZhrDescription(int zhr)
+{
+	// GZ changed to small regions instead of hard "case" to better see a manual setting.
+	if (zhr==0)
+		ui->zhrLabel->setText("<small><i>"+q_("No shooting stars")+"</i></small>");
+	else if (zhr<=10)
+		ui->zhrLabel->setText("<small><i>"+q_("Normal rate")+"</i></small>");
+	else if ((zhr>=20) && (zhr<=30)) // was 25
+		ui->zhrLabel->setText("<small><i>"+q_("Standard Orionids rate")+"</i></small>");
+	else if ((zhr>=90) && (zhr<=110)) // was 100
+		ui->zhrLabel->setText("<small><i>"+q_("Standard Perseids rate")+"</i></small>");
+	else if ((zhr>=111) && (zhr<=132)) // was 120
+		ui->zhrLabel->setText("<small><i>"+q_("Standard Geminids rate")+"</i></small>");
+	else if ((zhr>=180) && (zhr<=220)) // was 200
+		ui->zhrLabel->setText("<small><i>"+q_("Exceptional Perseid rate")+"</i></small>");
+	else if ((zhr>=900) && (zhr<=1100)) // was 1000
+		ui->zhrLabel->setText("<small><i>"+q_("Meteor storm rate")+"</i></small>");
+	else if ((zhr>=5400) && (zhr<=6600)) // was 6000
+		ui->zhrLabel->setText("<small><i>"+q_("Exceptional Draconid rate")+"</i></small>");
+	else if ((zhr>=9000) && (zhr<=11000)) // was 10000
+		ui->zhrLabel->setText("<small><i>"+q_("Exceptional Leonid rate")+"</i></small>");
+	else if ((zhr>=130000) && (zhr<=160000)) // was 144000
+		ui->zhrLabel->setText("<small><i>"+q_("Very high rate (1966 Leonids)")+"</i></small>");
+	else if (zhr>=230000) // was 240000
+		ui->zhrLabel->setText("<small><i>"+q_("Highest rate ever (1833 Leonids)")+"</i></small>");
+	else
+		ui->zhrLabel->setText("");
+}
+
+void ViewDialog::setCurrentLandscapeAsDefault(void)
+{
+	StelModule* lmgr = StelApp::getInstance().getModule("LandscapeMgr");
+	Q_ASSERT(lmgr);
+	lmgr->setProperty("defaultLandscapeID", lmgr->property("currentLandscapeID"));
+}
+
+void ViewDialog::setCurrentCultureAsDefault(void)
+{
+	StelApp::getInstance().getSkyCultureMgr().setDefaultSkyCultureID(StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID());
+}
+
+void ViewDialog::updateDefaultSkyCulture()
+{
+	// set Labels to the Min / Max time of the current selected culture (UserRole == beginTime, UserRole + 1 == endTime)
+	QString endTimeString = ui->culturesListWidget->currentItem()->data(Qt::UserRole + 1).toString();
+	ui->selectedCultureMinTimeValueLabel->setText(ui->culturesListWidget->currentItem()->data(Qt::UserRole).toString());
+	ui->selectedCultureMaxTimeValueLabel->setText(endTimeString == "9146" ? "∞" : endTimeString);
+
+	// Check that the useAsDefaultSkyCultureCheckBox needs to be updated
+	bool b = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID()==StelApp::getInstance().getSkyCultureMgr().getDefaultSkyCultureID();
+	ui->useAsDefaultSkyCultureCheckBox->setChecked(b);
+	ui->useAsDefaultSkyCultureCheckBox->setEnabled(!b);
+
+	// Check that ray helpers and asterism lines are defined
+	b = GETSTELMODULE(AsterismMgr)->isLinesDefined();
+	ui->showAsterismLinesCheckBox->setEnabled(b);
+	ui->showAsterismLabelsCheckBox->setEnabled(b);
+	ui->asterismLineThicknessSpinBox->setEnabled(b);
+	ui->colorAsterismLines->setEnabled(b);
+	ui->colorAsterismLabels->setEnabled(b);
+	ui->showRayHelpersCheckBox->setEnabled(b);
+	ui->rayHelperThicknessSpinBox->setEnabled(b);
+	ui->colorRayHelpers->setEnabled(b);
+	ui->asterismsFontSizeSpinBox->setEnabled(b);
+}
+
+void ViewDialog::updateDefaultLandscape()
+{
+	StelModule* lmgr = StelApp::getInstance().getModule("LandscapeMgr");
+	Q_ASSERT(lmgr);
+	bool isDefault = lmgr->property("currentLandscapeID") == lmgr->property("defaultLandscapeID");
+	ui->useAsDefaultLandscapeCheckBox->setChecked(isDefault);
+	ui->useAsDefaultLandscapeCheckBox->setEnabled(!isDefault);
+}
+
+void ViewDialog::changePage(QListWidgetItem *current, QListWidgetItem *previous)
+{
+	if (!current)
+		current = previous;
+	ui->stackedWidget->setCurrentIndex(ui->stackListWidget->row(current));
+}
+
+void ViewDialog::initSkyCultureTime()
+{
+	int minYear = ui->skyCultureCurrentTimeSpinBox->minimum();
+	int maxYear = QDateTime::currentDateTime().date().year();
+	int currentYear = maxYear;
+
+	// set properties of involved components
+	ui->skyCultureMinTimeSpinBox->setMinimum(minYear);
+	ui->skyCultureMinTimeSpinBox->setMaximum(maxYear);
+	ui->skyCultureMinTimeSpinBox->setValue(minYear);
+
+	ui->skyCultureMaxTimeSpinBox->setMinimum(minYear);
+	ui->skyCultureMaxTimeSpinBox->setMaximum(maxYear);
+	ui->skyCultureMaxTimeSpinBox->setValue(maxYear);
+
+	ui->skyCultureTimeSlider->setMinimum(minYear);
+	ui->skyCultureTimeSlider->setMaximum(maxYear);
+
+	ui->skyCultureCurrentTimeSpinBox->setMaximum(maxYear);
+
+	// reuse function to set Value of timeSlider, currentTimeSpinBox and MapGraphicsView
+	updateSkyCultureTimeValue(currentYear);
+}
+
+void ViewDialog::updateSkyCultureTimeValue(int year)
+{
+	// set timeSlider, currentTimeSpinBox and MapGraphicsView Value to year (block Signals to prevent unwanted functions calls through previous connection)
+	ui->skyCultureTimeSlider->blockSignals(true);
+	ui->skyCultureCurrentTimeSpinBox->blockSignals(true);
+
+	ui->skyCultureTimeSlider->setValue(year);
+	ui->skyCultureCurrentTimeSpinBox->setValue(year);
+
+	ui->skyCultureTimeSlider->blockSignals(false);
+	ui->skyCultureCurrentTimeSpinBox->blockSignals(false);
+
+	ui->skyCultureMapGraphicsView->updateTime(year);
+}
+
+void ViewDialog::changeMinTime(int minYear)
+{
+	int maxYear = ui->skyCultureMaxTimeSpinBox->value();
+
+	if (minYear <= maxYear)
+	{
+		updateSkyCultureTimeRange(minYear, maxYear);
+	}
+	else
+	{
+		ui->skyCultureMinTimeSpinBox->blockSignals(true);
+		ui->skyCultureMinTimeSpinBox->setValue(maxYear);
+		ui->skyCultureMinTimeSpinBox->blockSignals(false);
+
+		updateSkyCultureTimeRange(maxYear, maxYear);
+	}
+}
+
+void ViewDialog::changeMaxTime(int maxYear)
+{
+	int minYear = ui->skyCultureMinTimeSpinBox->value();
+
+	if (maxYear >= minYear)
+	{
+		updateSkyCultureTimeRange(minYear, maxYear);
+	}
+	else
+	{
+		ui->skyCultureMaxTimeSpinBox->blockSignals(true);
+		ui->skyCultureMaxTimeSpinBox->setValue(minYear);
+		ui->skyCultureMaxTimeSpinBox->blockSignals(false);
+
+		updateSkyCultureTimeRange(minYear, minYear);
+	}
+}
+
+void ViewDialog::updateSkyCultureTimeRange(int minYear, int maxYear)
+{
+	// set the new limits for the timeSlider and currentTimeSpinBox component
+	// in case of new min > value --> value is automatically increased by the component
+	// (the connection between valueChanged (SIGNAL) and updateSkyCultureTimeValue (SLOT) takes care of the other components value)
+	ui->skyCultureTimeSlider->setMinimum(minYear);
+	ui->skyCultureTimeSlider->setMaximum(maxYear);
+
+	ui->skyCultureCurrentTimeSpinBox->setMinimum(minYear);
+	ui->skyCultureCurrentTimeSpinBox->setMaximum(maxYear);
+
+	// filter the list accordingly (if checkbox is ticked)
+	if (ui->applyTimeOnListCheckBox->isChecked())
+	{
+		filterSkyCultures();
+	}
+}
+
+void ViewDialog::filterSkyCultures()
+{
+	// take filter string from the search bar and strip away all diacritics / ligatures
+	const QString filter = ui->culturesListSearchLineEdit->text();
+	QString strippedFilter = "";
+	for (const auto &letter : filter)
+	{
+		int index = specialCharString.indexOf(letter);
+		if (index < 0)
+		{
+			strippedFilter.append(letter);
+		}
+		else
+		{
+			strippedFilter.append(normalCharList[index]);
+		}
+	}
+
+	int minYear = ui->skyCultureMinTimeSpinBox->value();
+	int maxYear = ui->skyCultureMaxTimeSpinBox->value();
+
+	bool applyTimeFilter = ui->applyTimeOnListCheckBox->isChecked();
+	// assume all cultureItems associated with a region are hidden --> hide regions (separatorItems) if no culture is visible
+	bool allHidden = true;
+
+	// reverse iteration --> hide / show all items of a region first so that the visibility of the region can be set correctly
+	for (int row = ui->culturesListWidget->count() - 1; row >= 0; row--)
+	{
+		QListWidgetItem* item = ui->culturesListWidget->item(row);
+		if (item->type() == 1318) // type value for SeparatorListWidgetItem
+		{
+			item->setHidden(allHidden);
+			allHidden = true;
+		}
+		else
+		{
+			// hide items if they do not match the (stripped) filter string
+			const QString target = item->text();
+			QString strippedTarget = "";
+			for (const auto &letter : target)
+			{
+				int index = specialCharString.indexOf(letter);
+				if (index < 0)
+				{
+					strippedTarget.append(letter);
+				}
+				else
+				{
+					strippedTarget.append(normalCharList[index]);
+				}
+			}
+
+			// check wether the filter string appears in the target string
+			if (strippedTarget.contains(strippedFilter, Qt::CaseInsensitive))
+			{
+				item->setHidden(false);
+			}
+			else
+			{
+				item->setHidden(true);
+			}
+
+			// if checkBox is ticked ---> apply additional filter operation
+			if (applyTimeFilter)
+			{
+				// hide items that are not within the time limits (UserRole = beginTime, UserRole + 1 = endTime)
+				if (item->data(Qt::UserRole).toInt() > maxYear || item->data(Qt::UserRole + 1).toInt() < minYear)
+				{
+					item->setHidden(true);
+				}
+			}
+
+			if (!item->isHidden())
+			{
+				allHidden = false;
+			}
+		}
+	}
+}
+
+void ViewDialog::initiateSkyCultureMapRotation()
+{
+	ui->skyCultureMapGraphicsView->rotateMap(ui->useLocationForRotationCheckBox->isChecked());
+}
+
+void ViewDialog::updateSkyCultureGUI()
+{
+	// update respectve ViewDialog elements after exporting a skyculture with SCM
+	ui->skyCultureMapGraphicsView->reloadMap();
+	populateLists();
+
+	int minYear = ui->skyCultureCurrentTimeSpinBox->minimum();
+	ui->skyCultureMinTimeSpinBox->setMinimum(minYear);
+	ui->skyCultureMinTimeSpinBox->setValue(minYear);
+	ui->skyCultureMaxTimeSpinBox->setMinimum(minYear);
+	ui->skyCultureTimeSlider->setMinimum(minYear);
+}
+
+void ViewDialog::populatePlanetMagnitudeAlgorithmsList()
+{
+	Q_ASSERT(ui->planetMagnitudeAlgorithmComboBox);
+	QComboBox* algorithms = ui->planetMagnitudeAlgorithmComboBox;
+	//Save the current selection to be restored later
+	algorithms->blockSignals(true);
+	int index = algorithms->currentIndex();
+	QVariant selectedAlgorithmId = algorithms->itemData(index);
+	algorithms->clear();
+	//For each algorithm, display the localized name and store the key as user data.
+	algorithms->addItem(qc_("G. Müller (1893)",              "magnitude algorithm"), Planet::Mueller_1893);
+	algorithms->addItem(qc_("Astronomical Almanac (1984)",   "magnitude algorithm"), Planet::AstronomicalAlmanac_1984);
+	algorithms->addItem(qc_("Explanatory Supplement (1992)", "magnitude algorithm"), Planet::ExplanatorySupplement_1992);
+	algorithms->addItem(qc_("Explanatory Supplement (2013)", "magnitude algorithm"), Planet::ExplanatorySupplement_2013);
+	algorithms->addItem(qc_("Mallama & Hilton (2018)",       "magnitude algorithm"), Planet::MallamaHilton_2018);
+	algorithms->addItem(qc_("Generic",                       "magnitude algorithm"), Planet::Generic);
+	//Restore the selection
+	index = algorithms->findData(selectedAlgorithmId, Qt::UserRole, Qt::MatchCaseSensitive);
+	algorithms->setCurrentIndex(index);
+	//algorithms->model()->sort(0);
+	algorithms->blockSignals(false);
+}
+
+void ViewDialog::setPlanetMagnitudeAlgorithm(int algorithmID)
+{
+	Planet::ApparentMagnitudeAlgorithm newAlgorithm = static_cast<Planet::ApparentMagnitudeAlgorithm>(ui->planetMagnitudeAlgorithmComboBox->itemData(algorithmID).toInt());
+
+	GETSTELMODULE(SolarSystem)->setApparentMagnitudeAlgorithmOnEarth(newAlgorithm);
+	populatePlanetMagnitudeAlgorithmDescription();
+}
+
+void ViewDialog::populatePlanetMagnitudeAlgorithmDescription()
+{
+	int currentAlgorithm = ui->planetMagnitudeAlgorithmComboBox->findData(Planet::getApparentMagnitudeAlgorithm(), Qt::UserRole, Qt::MatchCaseSensitive);
+	if (currentAlgorithm==-1) // Use Mallama&Hilton 2018 as default
+		currentAlgorithm = ui->planetMagnitudeAlgorithmComboBox->findData(Planet::MallamaHilton_2018, Qt::UserRole, Qt::MatchCaseSensitive);
+
+	const QMap<int, QString>planetMagnitudeAlgorithmMap = {
+		{ Planet::AstronomicalAlmanac_1984, q_("The algorithm was used in the <em>Astronomical Almanac</em> (1984 and later) and gives V (instrumental) magnitudes (allegedly from D.L. Harris).") },
+		{ Planet::Mueller_1893, q_("The algorithm is based on visual observations 1877-1891 by G. Müller and was still republished in the <em>Explanatory Supplement to the Astronomical Ephemeris</em> (1961).") },
+		{ Planet::ExplanatorySupplement_1992, q_("The algorithm was published in the 2nd edition of the <em>Explanatory Supplement to the Astronomical Almanac</em> (1992).") },
+		{ Planet::ExplanatorySupplement_2013, q_("The algorithm was published in the 3rd edition of the <em>Explanatory Supplement to the Astronomical Almanac</em> (2013).") },
+		{ Planet::MallamaHilton_2018, q_("The algorithm was published by A. Mallama & J. L. Hilton: <em>Computing apparent planetary magnitudes for the Astronomical Almanac.</em> Astronomy&Computing 25 (2018) 10-24.") }
+	};
+
+	QString info = planetMagnitudeAlgorithmMap.value(currentAlgorithm, q_("Visual magnitude based on phase angle and albedo."));
+	ui->planetMagnitudeAlgorithmDescription->setText(QString("<small>%1</small>").arg(info));
+}
+void ViewDialog::gridSpacingChanged(int index)
+{
+	GridLinesMgr* gridMgr = GETSTELMODULE(GridLinesMgr);
+
+	// Map combo box index to multiplier values
+	// Index 0 = Fine (2.0x), Index 1 = Normal (1.0x), Index 2 = Coarse (0.5x)
+	double multiplier = 1.0;
+	switch(index)
+	{
+		case 0: // Fine
+			multiplier = 2.0;
+			break;
+		case 1: // Normal
+			multiplier = 1.0;
+			break;
+		case 2: // Coarse
+			multiplier = 0.5;
+			break;
+		default:
+			multiplier = 1.0;
+	}
+
+	gridMgr->setGridSpacingMultiplier(multiplier);
+
+	// Save to settings
+	QSettings* conf = StelApp::getInstance().getSettings();
+	conf->setValue("viewing/grid_spacing_multiplier", multiplier);
+}
+
+
+void ViewDialog::updateGridSpacingComboBox()
+{
+	GridLinesMgr* gridMgr = GETSTELMODULE(GridLinesMgr);
+	double multiplier = gridMgr->getGridSpacingMultiplier();
+
+	// Set the appropriate index based on multiplier
+	int index = 1; // Default to Normal
+	if (multiplier >= 1.8) // Close to 4.0
+		index = 0; // Fine
+	else if (multiplier <= 0.7) // Close to 0.5
+		index = 2; // Coarse
+	else
+		index = 1; // Normal
+
+	// Block signals to avoid triggering the slot
+	ui->gridSpacingComboBox->blockSignals(true);
+	ui->gridSpacingComboBox->setCurrentIndex(index);
+	ui->gridSpacingComboBox->blockSignals(false);
+}

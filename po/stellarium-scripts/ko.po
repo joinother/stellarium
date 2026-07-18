@@ -1,0 +1,1690 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Stellarium's team
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# cardinot <mcardinot@gmail.com>, 2022
+# ilsubyeega <ilsubyeega@gmail.com>, 2022
+# Shin-JaeHeon <shinjaeheon520614@gmail.com>, 2022
+# 김 지훈 <kjhbrian2006@gmail.com>, 2022
+# Steven Oh <stevenoh0908@gmail.com>, 2022
+# ks k, 2022
+# ysjbserver <ysjbserver@naver.com>, 2023
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
+"POT-Creation-Date: 2025-12-01 14:32+0700\n"
+"PO-Revision-Date: 2022-10-05 14:25+0000\n"
+"Last-Translator: ysjbserver <ysjbserver@naver.com>, 2023\n"
+"Language-Team: Korean (https://app.transifex.com/stellarium/teams/80998/ko/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ko\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: scripts/analemma.ssc:17
+msgid "Analemma"
+msgstr "아날렘마"
+
+#: scripts/analemma.ssc:41
+msgid "Week"
+msgstr "주"
+
+#: scripts/analemma.ssc:47
+msgid "Near winter solstice"
+msgstr "동지점 근처"
+
+#: scripts/analemma.ssc:51
+msgid "Near summer solstice"
+msgstr "하지점 근처"
+
+#: scripts/analemma.ssc:55 scripts/martian_analemma.ssc:48
+#: scripts/saturnian_analemma.ssc:48 scripts/uranian_analemma.ssc:48
+msgid "Yearly path of the Sun"
+msgstr "태양의 연간 이동 경로"
+
+#: scripts/bennett.ssc:47
+msgid "The Jack Bennett Catalog of Southern Deep-Sky Objects"
+msgstr "잭 베넷의 남방 심우주 천체 목록"
+
+#: scripts/bennett.ssc:48 scripts/best_ngc.ssc:27 scripts/binosky.ssc:20
+msgid "objects in all"
+msgstr "전체 천체"
+
+#: scripts/best_ngc.ssc:26
+msgid "Best objects in the New General Catalog"
+msgstr "신판일반목록(NGC)의 최고의 천체들"
+
+#: scripts/best_ngc.ssc:42
+msgid "Object #"
+msgstr "천체 #"
+
+#: scripts/binocular_highlights.ssc:12
+msgid "Chapter 1"
+msgstr "1장"
+
+#: scripts/binocular_highlights.ssc:12
+msgid "December to February"
+msgstr "12월 ~ 2월"
+
+#: scripts/binocular_highlights.ssc:13
+msgid "Kemble's Cascade"
+msgstr "켐블의 폭포"
+
+#: scripts/binocular_highlights.ssc:13
+msgid "Kemble's Cascade is visible even in light-polluted skies"
+msgstr "켐블의 폭포는 광공해로 뒤덮인 하늘에서도 볼 수 있습니다"
+
+#: scripts/binocular_highlights.ssc:14
+msgid "The Glorious Double Cluster"
+msgstr "영광스러운 이중 성단"
+
+#: scripts/binocular_highlights.ssc:14
+msgid "NGC 884 and NGC 869"
+msgstr "NGC 884와 NGC 869"
+
+#: scripts/binocular_highlights.ssc:15
+msgid "The Alpha Persei Association"
+msgstr "페르세우스자리 알파 성협"
+
+#: scripts/binocular_highlights.ssc:16
+msgid "M34: A True Binocular Cluster"
+msgstr "M34: 진정한 쌍안경 성단"
+
+#: scripts/binocular_highlights.ssc:17
+msgid "Watching the Demon Star"
+msgstr "악마의 별을 보기"
+
+#: scripts/binocular_highlights.ssc:18
+msgid "The Pleiades"
+msgstr "플레이아데스"
+
+#: scripts/binocular_highlights.ssc:19
+msgid "Corralling the Hyades"
+msgstr "히아데스 울타리"
+
+#: scripts/binocular_highlights.ssc:20
+msgid "NGC 1647: The Crab Cluster"
+msgstr "NGC 1647: 게 성단"
+
+#: scripts/binocular_highlights.ssc:21
+msgid "Messier's Number One"
+msgstr "메시에 1"
+
+#: scripts/binocular_highlights.ssc:22
+msgid "Auriga's Messier Clusters"
+msgstr "양자리의 메시에 성단"
+
+#: scripts/binocular_highlights.ssc:22
+msgid "M36 and M38"
+msgstr "M36과 M38"
+
+#: scripts/binocular_highlights.ssc:23
+msgid "Another Double Cluster"
+msgstr "또 다른 이중 성단"
+
+#: scripts/binocular_highlights.ssc:23
+msgid "M35 and NGC 2158"
+msgstr "M35와 NGC 2158"
+
+#: scripts/binocular_highlights.ssc:24
+msgid "Golden Betelgeuse"
+msgstr "황금 베텔게우스"
+
+#: scripts/binocular_highlights.ssc:25
+msgid "Orion Extras"
+msgstr "오리온 엑스트라들"
+
+#: scripts/binocular_highlights.ssc:26
+msgid "Orion's Sword"
+msgstr "오리온의 검"
+
+#: scripts/binocular_highlights.ssc:26
+msgid "NGC 1981, M42, M43 and Struve 747"
+msgstr "NGC 1981, M42, M43 그리고 스트루브 747"
+
+#: scripts/binocular_highlights.ssc:27
+msgid "The Overlooked Open Cluster: M41"
+msgstr "간과된 산개성단: M41"
+
+#: scripts/binocular_highlights.ssc:28
+msgid "M50 in a Stream of Starlight"
+msgstr "별빛의 흐름 속 M50"
+
+#: scripts/binocular_highlights.ssc:29
+msgid "M46 and M47: A Celestial Odd Couple"
+msgstr "M46 그리고 M47: 하늘의 이상한 커플"
+
+#: scripts/binocular_highlights.ssc:30
+msgid "Collinders in Canis Minor"
+msgstr "작은개자리의 콜린더"
+
+#: scripts/binocular_highlights.ssc:30
+msgid "Cr 132 and Cr 140"
+msgstr "Cr 132와 Cr 140"
+
+#: scripts/binocular_highlights.ssc:31
+msgid "Two Southern Delights"
+msgstr "남쪽의 두 기쁨"
+
+#: scripts/binocular_highlights.ssc:31
+msgid "NGC 2477 and NGC 2451"
+msgstr "NGC 2477과 NGC 2451"
+
+#: scripts/binocular_highlights.ssc:32
+msgid "Chapter 2"
+msgstr "2장"
+
+#: scripts/binocular_highlights.ssc:32
+msgid "March to May"
+msgstr "3월 ~ 5월"
+
+#: scripts/binocular_highlights.ssc:33
+msgid "The Engagement Ring"
+msgstr "약혼 반지"
+
+#: scripts/binocular_highlights.ssc:34
+msgid "The Power of Power"
+msgstr "힘의 힘"
+
+#: scripts/binocular_highlights.ssc:34
+msgid "M81 and M82"
+msgstr "M81과 M82"
+
+#: scripts/binocular_highlights.ssc:35
+msgid "M101 in the Mind's Eye"
+msgstr "마음의 눈 속의 M101"
+
+#: scripts/binocular_highlights.ssc:36
+msgid "A Star-Hop to M51"
+msgstr "M51쪽으로 스타 홉 "
+
+#: scripts/binocular_highlights.ssc:37
+msgid "Galaxy Season"
+msgstr "은하 계절"
+
+#: scripts/binocular_highlights.ssc:38
+msgid "Steady on Galaxy M94"
+msgstr "M94 은하에 고정"
+
+#: scripts/binocular_highlights.ssc:39
+msgid "Globular Cluster M3"
+msgstr "구상성단 M3"
+
+#: scripts/binocular_highlights.ssc:40
+msgid "In and Around Melotte 111"
+msgstr "멜롯 111 (머리털자리 성단) 안과 주변"
+
+#: scripts/binocular_highlights.ssc:41
+msgid "A Trio of Doubles in Bootes"
+msgstr "목동자리의 삼중 쌍성"
+
+#: scripts/binocular_highlights.ssc:42
+msgid "R Cor Bor's Vanishing Act"
+msgstr "북쪽왕관자리 R의 사라지는 현상"
+
+#: scripts/binocular_highlights.ssc:43
+msgid "Two Doubles in Cancer"
+msgstr "게자리 이중 이중성"
+
+#: scripts/binocular_highlights.ssc:43
+msgid "Rho and Iota Cancri"
+msgstr "로와 게자리 이오타 별"
+
+#: scripts/binocular_highlights.ssc:44
+msgid "The Beehive Cluster"
+msgstr "벌집 성단"
+
+#: scripts/binocular_highlights.ssc:45
+msgid "A Visit to NGC 2903"
+msgstr "NGC 2903 방문"
+
+#: scripts/binocular_highlights.ssc:46 scripts/binocular_highlights.ssc:47
+msgid "A Pair of Leo Doubles"
+msgstr "한 쌍의 사자자리 쌍성"
+
+#: scripts/binocular_highlights.ssc:46
+msgid "Tau Leonis"
+msgstr "사자자리 타우"
+
+#: scripts/binocular_highlights.ssc:47
+msgid "Alpha Leonis (Regulus)"
+msgstr "사자자리 알파 (레귤러스)"
+
+#: scripts/binocular_highlights.ssc:48
+msgid "Star Cluster M48 in Hydra"
+msgstr "바다뱀자리의 성단 M48"
+
+#: scripts/binocular_highlights.ssc:49
+msgid "U Hydra"
+msgstr "바다뱀자리 U"
+
+#: scripts/binocular_highlights.ssc:49
+msgid "Carbon star"
+msgstr "탄소별"
+
+#: scripts/binocular_highlights.ssc:50
+msgid "V Hydra"
+msgstr "히드라 V"
+
+#: scripts/binocular_highlights.ssc:50
+msgid ""
+"It has been ranging from magnitude 6 to 10 with a period of about 550 days."
+msgstr "이는 6등급에서 10등까지 오르락내리락거리며 약 550일 동안 지속되었습니다."
+
+#: scripts/binocular_highlights.ssc:51
+msgid "M104 and the Great Beyond"
+msgstr "M104과 그 너머"
+
+#: scripts/binocular_highlights.ssc:52
+msgid "Ancient Globular M5"
+msgstr "고대 구상성단 M5"
+
+#: scripts/binocular_highlights.ssc:53
+msgid "Magnificent Omega Centauri"
+msgstr "웅장한 오메가 센타우리"
+
+#: scripts/binocular_highlights.ssc:54
+msgid "Chapter 3"
+msgstr "3장"
+
+#: scripts/binocular_highlights.ssc:54
+msgid "June to August"
+msgstr "6월부터 8월까지"
+
+#: scripts/binocular_highlights.ssc:55
+msgid "Resolving Nu Draconis"
+msgstr "용자리 누 분리"
+
+#: scripts/binocular_highlights.ssc:55
+msgid "Nu Draconis's components are separated by 62\""
+msgstr "용용자리 누는 62\"만큼 분리되어 있습니다"
+
+#: scripts/binocular_highlights.ssc:56
+msgid "The Great Hercules Cluster"
+msgstr "허큘레스 대성단"
+
+#: scripts/binocular_highlights.ssc:57
+msgid "Double Delight Albireo"
+msgstr "알비레오 이중성"
+
+#: scripts/binocular_highlights.ssc:57
+msgid "Albireo's components are separated by 35\""
+msgstr "알비레오는 35\"만큼 분리되어 있습니다"
+
+#: scripts/binocular_highlights.ssc:58
+msgid "A Colorful Cygnus Triple"
+msgstr "알록달록한 3쌍 백조자리"
+
+#: scripts/binocular_highlights.ssc:58
+msgid "Omicron1, Omicron2 and 30 Cygni"
+msgstr "오미크론1, 오미크론2, 30 백조자리"
+
+#: scripts/binocular_highlights.ssc:59 scripts/binocular_highlights.ssc:60
+#: scripts/binocular_highlights.ssc:61
+msgid "Three Cygnus Doubles"
+msgstr "백조자리의 쌍성 3개"
+
+#: scripts/binocular_highlights.ssc:59
+msgid "Mu Cygni (Its stars are separated by a generous 198\")"
+msgstr "백조자리 뮤 (넉넉히 198''만큼 분리되어 있습니다)"
+
+#: scripts/binocular_highlights.ssc:60
+msgid "79 Cygni (Its stars are separated by 150\")"
+msgstr "백조자리 79 (150''만큼 분리되어 있습니다)"
+
+#: scripts/binocular_highlights.ssc:61
+msgid "61 Cygni (Its stars are separated by 31\")"
+msgstr "백조자리 61 (31''만큼 분리되어 있습니다)"
+
+#: scripts/binocular_highlights.ssc:62
+msgid "Open Cluster M39 in Cygnus"
+msgstr "백조자리의 산개성단 M39"
+
+#: scripts/binocular_highlights.ssc:63
+msgid "The Road to the Cocoon"
+msgstr "고치쪽으로 가는 길"
+
+#: scripts/binocular_highlights.ssc:63
+msgid "IC 5146, B168 and M39"
+msgstr "IC 5146, B168, M39"
+
+#: scripts/binocular_highlights.ssc:64
+msgid "Summer's Other Triangle"
+msgstr "여름의 또 다른 삼각형"
+
+#: scripts/binocular_highlights.ssc:64
+msgid "Epsilon, Zeta and Alpha Lyrae"
+msgstr "엡실론, 제타, 알파 거문고자리"
+
+#: scripts/binocular_highlights.ssc:65
+msgid "M57 and Expectations"
+msgstr "M57과 예상"
+
+#: scripts/binocular_highlights.ssc:65
+msgid "Difficult deep-sky object for tests your observing skills..."
+msgstr "관측 능력을 시험할 만한 어려운 심우주 천체들.."
+
+#: scripts/binocular_highlights.ssc:66
+msgid "Splendid Sagitta"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:66
+msgid "M71 between Gamma and Delta Sagittae"
+msgstr "궁수자리 감마와 델타 사이의 M71"
+
+#: scripts/binocular_highlights.ssc:67
+msgid "M27 in Vulpecula"
+msgstr "여우자리의 M27"
+
+#: scripts/binocular_highlights.ssc:68
+msgid "A Milky Way Surprise"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:68
+msgid "Brocchi's Cluster (Cr 399) or Coathanger"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:69
+msgid "Barnard's \"E\""
+msgstr "버나드의 \"E\""
+
+#: scripts/binocular_highlights.ssc:69
+msgid "B143 near Altair"
+msgstr "알타이르 근처 B143"
+
+#: scripts/binocular_highlights.ssc:70
+msgid "M11 in Scutum"
+msgstr "방패자리의 M11"
+
+#: scripts/binocular_highlights.ssc:70
+msgid "Also known as the Wild Duck Cluster"
+msgstr "야생 오리 성단으로도 알려져 있음"
+
+#: scripts/binocular_highlights.ssc:71
+msgid "IC 4756 in Serpens"
+msgstr "뱀자리의 IC 4756"
+
+#: scripts/binocular_highlights.ssc:72
+msgid "Three Star Clusters in Ophiuchus"
+msgstr "뱀주인자리의 성단 3개"
+
+#: scripts/binocular_highlights.ssc:73
+msgid "IC 4665 in Ophiuchus"
+msgstr "뱀주인자리의 IC 4665"
+
+#: scripts/binocular_highlights.ssc:74
+msgid "A Pair of Ophiuchus Globulars"
+msgstr "뱀주인자리의 구상성단 쌍"
+
+#: scripts/binocular_highlights.ssc:74
+msgid "M10 and M12"
+msgstr "M10과 M12"
+
+#: scripts/binocular_highlights.ssc:75
+msgid "Rho Ophiuchi"
+msgstr "뱀주인자리 로"
+
+#: scripts/binocular_highlights.ssc:75
+msgid "Rho itself is a pretty triple star"
+msgstr "로 자체가 예쁜 삼중성입니다"
+
+#: scripts/binocular_highlights.ssc:76
+msgid "A Solar Twin"
+msgstr "태양의 쌍둥이"
+
+#: scripts/binocular_highlights.ssc:76
+msgid "18 Scorpii"
+msgstr "전갈자리 18"
+
+#: scripts/binocular_highlights.ssc:77
+msgid "A Double for Steady Hands"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:77
+msgid "Nu Scorpii components are separated by 41\""
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:78
+msgid "Globular Cluster Season"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:78
+msgid "M4 and M80"
+msgstr "M4와 M80"
+
+#: scripts/binocular_highlights.ssc:79
+msgid "A Gorgeous Duo"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:79
+msgid "M6 and M7"
+msgstr "M6과 M7"
+
+#: scripts/binocular_highlights.ssc:80
+msgid "A False Comet"
+msgstr "가짜 헤성"
+
+#: scripts/binocular_highlights.ssc:80
+msgid "Cr 316, NGC 6231 and NGC 6242"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:81
+msgid "Summer Star Cloud"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:82
+msgid "Milky Way Messiers"
+msgstr "은하수 메시에 천체들"
+
+#: scripts/binocular_highlights.ssc:82
+msgid "M16, M17 and M18"
+msgstr "M16, M17과 M18"
+
+#: scripts/binocular_highlights.ssc:83
+msgid "The Lagoon Nebula"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:84
+msgid "M22: A Gem of a Globular"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:84
+msgid "M22 and M28"
+msgstr "M22와 M28"
+
+#: scripts/binocular_highlights.ssc:85
+msgid "A Lonesome Messier"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:86
+msgid "Chapter 4"
+msgstr "4장"
+
+#: scripts/binocular_highlights.ssc:86
+msgid "September to November"
+msgstr "9월부터 11월까지"
+
+#: scripts/binocular_highlights.ssc:87
+msgid "Two Lacerta Clusters"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:87
+msgid "NGC 7209 and NGC 7243"
+msgstr "NGC 7209와 NGC 7243"
+
+#: scripts/binocular_highlights.ssc:88
+msgid "NGC 6939 and NGC 6946"
+msgstr "NGC 6939와 NGC 6946"
+
+#: scripts/binocular_highlights.ssc:89
+msgid "Magnificent Mu Cephei"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:89
+msgid "A semiregular variable star"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:90
+msgid "Watching Delta Cephei"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:90
+msgid "Well-known variable star and striking double also"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:91
+msgid "M52 in Cassiopeia"
+msgstr "카시오페이아 M52"
+
+#: scripts/binocular_highlights.ssc:92
+msgid "Galactic Cluster NGC 7789"
+msgstr "은하단 NGC 7789"
+
+#: scripts/binocular_highlights.ssc:93
+msgid "The E.T. Cluster"
+msgstr "E.T.성단"
+
+#: scripts/binocular_highlights.ssc:94
+msgid "Open Cluster M103"
+msgstr "M103 산개성단"
+
+#: scripts/binocular_highlights.ssc:95
+msgid "Magnificent M31"
+msgstr "웅장한 M31"
+
+#: scripts/binocular_highlights.ssc:96
+msgid "Andromeda's Companions"
+msgstr "안드로메다의 동반 은하"
+
+#: scripts/binocular_highlights.ssc:96
+msgid "M32 and M110"
+msgstr "M32와 M110"
+
+#: scripts/binocular_highlights.ssc:97
+msgid "Ancient Cluster NGC 752"
+msgstr "고대 성단 NGC 752"
+
+#: scripts/binocular_highlights.ssc:98
+msgid "Triangulum's Treasure"
+msgstr "삼각형자리의 보물"
+
+#: scripts/binocular_highlights.ssc:99
+msgid "TX Piscium"
+msgstr "물고기자리 TX"
+
+#: scripts/binocular_highlights.ssc:99
+msgid "Carbon star, which varies slightly from magnitude 4.8 to 5.2"
+msgstr "탄소별로, 등급이 4.8에서 5.2 사이로 변화함"
+
+#: scripts/binocular_highlights.ssc:100
+msgid "A Farewell to Summer"
+msgstr "여름에게로의 작별 인사"
+
+#: scripts/binocular_highlights.ssc:101
+msgid "Messier 2 Shining Through"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:102
+msgid "The Ghostly Helix Nebula"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:103
+msgid "Challenging NGC 253 and NGC 288"
+msgstr ""
+
+#: scripts/binocular_highlights.ssc:125
+msgid "Binocular Highlights"
+msgstr "쌍안경으로 보기 좋은 천체들"
+
+#: scripts/binocular_highlights.ssc:126
+msgid "Look through the Meade 10x50 TravelView Binocular"
+msgstr ""
+
+#: scripts/binosky.ssc:19
+msgid "Binosky: Deep Sky Objects for Binoculars"
+msgstr "쌍안천: 쌍안경으로 보는 심우주 천체"
+
+#: scripts/double_stars.ssc:28
+msgid "Asterope (21 Tauri and 22 Tauri)"
+msgstr "아스테로페 (황소자리 21과 황소자리 22)"
+
+#: scripts/double_stars.ssc:28
+msgid "2.5 arcminutes (SE)"
+msgstr "2.5 각분 (남동)"
+
+#: scripts/double_stars.ssc:28
+msgid ""
+"Extremely difficult because of their faintness, separation, and nearby "
+"bright stars"
+msgstr "어두운 밝기, 분리, 주변의 밝은 별로 인해 관측이 매우 어려움"
+
+#: scripts/double_stars.ssc:29
+msgid "Atlas and Pleione (27 Tauri and 28 Tauri)"
+msgstr "아틀라스와 플레이오네 (황소자리 27과 황소자리 28)"
+
+#: scripts/double_stars.ssc:29
+msgid "5 arcminutes (N)"
+msgstr "5 각분 (북)"
+
+#: scripts/double_stars.ssc:29 scripts/double_stars.ssc:35
+#: scripts/double_stars.ssc:41 scripts/double_stars.ssc:43
+msgid "Moderately difficult"
+msgstr "어느 정도 어려움"
+
+#: scripts/double_stars.ssc:30
+msgid "θ Tauri"
+msgstr "황소자리 θ"
+
+#: scripts/double_stars.ssc:30
+msgid "5.6 arcminutes (NNW)"
+msgstr "5.6 각분 (북북서)"
+
+#: scripts/double_stars.ssc:30 scripts/double_stars.ssc:42
+#: scripts/double_stars.ssc:47
+msgid "Showcase naked-eye double!"
+msgstr "대표적인 맨눈 이중성!"
+
+#: scripts/double_stars.ssc:31
+msgid "δ Tauri"
+msgstr "황소자리 δ"
+
+#: scripts/double_stars.ssc:31
+msgid "δ1-δ2: 17.6 arcseconds (ESE); δ1-δ3: 43.25 arcseconds (NE)"
+msgstr "δ1-δ2: 17.6 각초 (동남동); δ1-δ3: 43.25 각초 (북동)"
+
+#: scripts/double_stars.ssc:31
+msgid "Easy naked-eye triple"
+msgstr "눈으로 보기 쉬운 삼중성"
+
+#: scripts/double_stars.ssc:32
+msgid "θ Orionis"
+msgstr "오리온자리 θ"
+
+#: scripts/double_stars.ssc:32
+msgid "2.24 arcminutes (NW)"
+msgstr "2.24 각분 (북서)"
+
+#: scripts/double_stars.ssc:32
+msgid "Very difficult because of stars and nebulosity in the area"
+msgstr "주변 별과 성운으로 인해 관측이 어려움"
+
+#: scripts/double_stars.ssc:33
+msgid "42 and 45 Orionis"
+msgstr "오리온자리 42와 45"
+
+#: scripts/double_stars.ssc:33
+msgid "4.2 arcminutes (ESE)"
+msgstr "4.2 각분 (동남동)"
+
+#: scripts/double_stars.ssc:33 scripts/double_stars.ssc:34
+msgid "Moderately difficult optical double"
+msgstr "어느 정도 보기 어려운 겉보기 이중성"
+
+#: scripts/double_stars.ssc:34
+msgid "ι Orionis"
+msgstr "오리온자리 ι"
+
+#: scripts/double_stars.ssc:34
+msgid "8 arcminutes (SW)"
+msgstr "8 각분 (남서)"
+
+#: scripts/double_stars.ssc:35
+msgid "ζ Corvi"
+msgstr "까마귀자리 ζ"
+
+#: scripts/double_stars.ssc:35
+msgid "5.85 arcminutes (WNW)"
+msgstr "5.85 (서북서)"
+
+#: scripts/double_stars.ssc:36
+msgid "Mizar and Alcor"
+msgstr "미자르와 알코르"
+
+#: scripts/double_stars.ssc:36
+msgid "11.8 arcminutes (ENE)"
+msgstr "11.8 각분 (동북동)"
+
+#: scripts/double_stars.ssc:36 scripts/double_stars.ssc:44
+#: scripts/double_stars.ssc:45
+msgid "Easy naked-eye double"
+msgstr "눈으로 보기 쉬운 이중성"
+
+#: scripts/double_stars.ssc:37
+msgid "Zubenelgenubi"
+msgstr "주벤알게누비"
+
+#: scripts/double_stars.ssc:37
+msgid "3.83 arcminutes (NW)"
+msgstr "3.83 각분 (북서)"
+
+#: scripts/double_stars.ssc:37
+msgid "Very difficult because of the magnitude difference"
+msgstr "등급 차이로 인해 관측이 어려움"
+
+#: scripts/double_stars.ssc:38
+msgid "ω Scorpii"
+msgstr "전갈자리 ω"
+
+#: scripts/double_stars.ssc:38
+msgid "14.6 arcminutes (SSE)"
+msgstr "14.6 각분 (남남동)"
+
+#: scripts/double_stars.ssc:38
+msgid "Easy optical double"
+msgstr "보기 쉬운 겉보기 이중성"
+
+#: scripts/double_stars.ssc:39
+msgid "λ and υ Scorpii"
+msgstr "전갈자리 λ와 υ"
+
+#: scripts/double_stars.ssc:39
+msgid "36 arcminutes (WSW)"
+msgstr "36 각분 (서남서)"
+
+#: scripts/double_stars.ssc:39
+msgid "Easy double"
+msgstr "보기 쉬운 이중성"
+
+#: scripts/double_stars.ssc:40
+msgid "μ Scorpii"
+msgstr "전갈자리 μ"
+
+#: scripts/double_stars.ssc:40
+msgid "5.8 arcminutes (ENE)"
+msgstr "5.8 각분 (동북동)"
+
+#: scripts/double_stars.ssc:40
+msgid "Showcase double!"
+msgstr "대표적인 이중성!"
+
+#: scripts/double_stars.ssc:41
+msgid "ζ Scorpii"
+msgstr "전갈자리 ζ"
+
+#: scripts/double_stars.ssc:41
+msgid "6.5 arcminutes (W)"
+msgstr "6.5 각분 (서)"
+
+#: scripts/double_stars.ssc:42
+msgid "ε Lyrae"
+msgstr "거문고자리 ε"
+
+#: scripts/double_stars.ssc:42
+msgid "3.5 arcminutes (N)"
+msgstr "3.5 각분 (북)"
+
+#: scripts/double_stars.ssc:43
+msgid "δ Lyrae"
+msgstr "거문고자리 δ"
+
+#: scripts/double_stars.ssc:43
+msgid "10.3 arcminutes (WNW)"
+msgstr "10.3 각분 (서북서)"
+
+#: scripts/double_stars.ssc:44
+msgid "ν Sagittarii"
+msgstr "궁수자리 ν"
+
+#: scripts/double_stars.ssc:44
+msgid "13.9 arcminutes (ENE)"
+msgstr "13.9 각분 (동북동)"
+
+#: scripts/double_stars.ssc:45
+msgid "ο1 and ο2 Cygni"
+msgstr "백조자리 ο1과 ο2"
+
+#: scripts/double_stars.ssc:45
+msgid "61.3 arcminutes (NNE)"
+msgstr "61.3 각분 (북북동)"
+
+#: scripts/double_stars.ssc:46
+msgid "ο1 Cygni (ο1 Cygni, 30 Cyg and HD 192579)"
+msgstr "백조자리 ο1 (백조자리 ο1, 백조자리 30, HD 192579)"
+
+#: scripts/double_stars.ssc:46
+msgid "5.6 arcminutes (NW)"
+msgstr "5.6 각분 (북서)"
+
+#: scripts/double_stars.ssc:46
+msgid "Moderately difficult optical triple star"
+msgstr "어느 정도 보기 어려운 겉보기 삼중성"
+
+#: scripts/double_stars.ssc:47
+msgid "Algedi"
+msgstr "알게디"
+
+#: scripts/double_stars.ssc:47
+msgid "6.3 arcminutes (WNW)"
+msgstr "6.4 각분 (서북서)"
+
+#: scripts/double_stars.ssc:78
+msgid "Separation:"
+msgstr "분리:"
+
+#: scripts/martian_analemma.ssc:17
+msgid "Martian analemma"
+msgstr "화성에서의 아날렘마"
+
+#: scripts/martian_analemma.ssc:42
+msgid "Sol"
+msgstr "태양"
+
+#: scripts/morsels_1.ssc:15 scripts/morsels_1.ssc:16 scripts/morsels_1.ssc:18
+#: scripts/morsels_1.ssc:22 scripts/morsels_1.ssc:23 scripts/morsels_1.ssc:29
+#: scripts/morsels_1.ssc:30 scripts/morsels_1.ssc:34 scripts/morsels_1.ssc:36
+#: scripts/morsels_1.ssc:38 scripts/morsels_1.ssc:43
+msgid "Shadows from Io, Ganymede and Callisto"
+msgstr "이오, 가니메데, 칼리스토의 그림자"
+
+#: scripts/morsels_1.ssc:17 scripts/morsels_1.ssc:19 scripts/morsels_1.ssc:20
+#: scripts/morsels_1.ssc:21 scripts/morsels_1.ssc:25 scripts/morsels_1.ssc:26
+#: scripts/morsels_1.ssc:27 scripts/morsels_1.ssc:28 scripts/morsels_1.ssc:31
+#: scripts/morsels_1.ssc:33 scripts/morsels_1.ssc:35 scripts/morsels_1.ssc:37
+#: scripts/morsels_1.ssc:39 scripts/morsels_1.ssc:41 scripts/morsels_1.ssc:42
+#: scripts/morsels_1.ssc:44 scripts/morsels_1.ssc:45 scripts/morsels_1.ssc:46
+msgid "Shadows from Io, Europe and Callisto"
+msgstr "이오, 유로파, 칼리스토의 그림자"
+
+#: scripts/morsels_1.ssc:24 scripts/morsels_1.ssc:32 scripts/morsels_1.ssc:40
+msgid "Shadows from Europe, Ganymede and Callisto"
+msgstr "유로파, 가니메데, 칼리스토의 그림자"
+
+#: scripts/morsels_1.ssc:60
+msgid "Triple shadow phenomena of the satellites of Jupiter"
+msgstr "목성의 위성의 삼중 그림자 현상"
+
+#: scripts/morsels_1.ssc:62 scripts/morsels_2.ssc:78 scripts/morsels_3.ssc:52
+#: scripts/morsels_4.ssc:70
+msgid "phenomena in all"
+msgstr "전체 현상"
+
+#: scripts/morsels_1.ssc:77 scripts/morsels_2.ssc:98 scripts/morsels_3.ssc:62
+#: scripts/morsels_4.ssc:81
+msgid "Event #"
+msgstr "사건 #"
+
+#: scripts/morsels_1.ssc:78 scripts/morsels_2.ssc:99 scripts/morsels_3.ssc:63
+#: scripts/morsels_4.ssc:82
+msgid "Date:"
+msgstr "날짜:"
+
+#: scripts/morsels_1.ssc:79
+msgid "Time:"
+msgstr "시각:"
+
+#: scripts/morsels_2.ssc:76
+msgid "Jupiter without Galilean satellites"
+msgstr "갈릴레이 위성을 제외한 목성"
+
+#: scripts/morsels_2.ssc:100
+msgid "Limits of the disappearance:"
+msgstr ""
+
+#: scripts/morsels_3.ssc:50
+msgid "Occultations of bright stars by planets"
+msgstr "행성에 의한 밝은 별의 엄폐"
+
+#: scripts/morsels_4.ssc:68
+msgid "Mutual occultations of planets"
+msgstr "행성 간의 엄폐"
+
+#: scripts/supernova.ssc:23
+msgid "Europe, Uraniborg."
+msgstr "유럽 우라니보르크"
+
+#: scripts/supernova.ssc:31
+msgid "Evening of 20 October 1572"
+msgstr "1572년 10월 20일 저녁"
+
+#: scripts/supernova.ssc:40
+msgid "Constellation Cassiopeia"
+msgstr "카시오페이아자리"
+
+#: scripts/supernova.ssc:61
+msgid "5 days later..."
+msgstr "5일 후..."
+
+#: scripts/supernova.ssc:67
+msgid "Next 3 days..."
+msgstr "이후 3일..."
+
+#: scripts/supernova.ssc:73
+msgid "New star! But people have not seen it yet..."
+msgstr "신성! 하지만 아직 발견하지 못했습니다..."
+
+#: scripts/supernova.ssc:78
+msgid "Evening of 31 October 1572"
+msgstr "1572년 10월 31일 저녁"
+
+#: scripts/supernova.ssc:86
+msgid "Evening of "
+msgstr "1572년 11월"
+
+#: scripts/supernova.ssc:86
+msgid " November 1572"
+msgstr " 저녁"
+
+#: scripts/supernova.ssc:93
+msgid "Hooray! First observations in Korea and Europe."
+msgstr "한국과 유럽에서 최초 관측!"
+
+#: scripts/supernova.ssc:101
+msgid "First observations in China."
+msgstr "중국에서의 최초 관측."
+
+#: scripts/supernova.ssc:109
+msgid ""
+"The clouds are gone and Tycho Brahe the first time watching a new star!"
+msgstr "구름이 사라져 튀코 브라헤가 처음으로 신성을 관측했습니다!"
+
+#: scripts/supernova.ssc:118
+msgid "Next 60 days..."
+msgstr "이후 60일..."
+
+#: scripts/supernova.ssc:129
+msgid "Next other 40 days..."
+msgstr "이후 40일..."
+
+#: scripts/supernova.ssc:150
+msgid "The Historical supernovae plugin is not loaded!"
+msgstr "역사적인 초신성 플러그인이 불러와지지 않았습니다!"
+
+#: scripts/h400_tour.ssc:16
+msgid "The Herschel 400 Catalogue"
+msgstr "허셜 400 목록"
+
+#: scripts/h400_tour.ssc:17
+msgid ""
+"The Herschel 400 is a subset of John Herschel's General Catalogue of Nebulae"
+" and Clusters"
+msgstr ""
+
+#: scripts/h400_tour.ssc:18
+msgid ""
+"published in 1864 of 5,000 objects, and hence also of the New General "
+"Catalogue."
+msgstr ""
+
+#: scripts/h400_tour.ssc:19
+msgid "Vital statistics:"
+msgstr ""
+
+#: scripts/h400_tour.ssc:20
+msgid "* The catalogue contains 400 objects"
+msgstr ""
+
+#: scripts/h400_tour.ssc:21
+msgid "* All objects are from the NGC"
+msgstr ""
+
+#: scripts/h400_tour.ssc:22
+msgid "* All visible in mid northern latitudes"
+msgstr ""
+
+#: scripts/h400_tour.ssc:23
+msgid "* All visible in 150 mm (6\") or larger telescopes"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:12
+msgid "PZ Cassiopeiae"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:13
+msgid ""
+"PZ Cas is located in a region with heavy dust extinction.\n"
+"The quoted size is the average size parameter, the true\n"
+"value is from 1,340-1,940."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:14
+msgid "VX Sagittarii"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:15
+msgid ""
+"VX Sgr is a pulsating variable with a large visual range\n"
+"and varies significantly in size."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:16
+msgid "VV Cephei A"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:17
+msgid ""
+"VV Cep A is a highly distorted star in a binary system,\n"
+"losing mass to its B-type companion VV Cephei B for at least\n"
+"part of its orbit."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:18
+msgid "RW Cephei"
+msgstr "세페우스자리 RW"
+
+#: scripts/largest_known_stars.ssc:19
+msgid ""
+"RW Cep is variable both in brightness (by at least a factor\n"
+"of 3) and spectral type (observed from G8 to M), thus\n"
+"probably also in diameter."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:20
+msgid "VY Canis Majoris"
+msgstr "큰개자리 VY"
+
+#: scripts/largest_known_stars.ssc:21
+msgid ""
+"Once thought to be a red hypergiant star so large that it\n"
+"contradicted stellar evolutionary theory, improved measurements\n"
+"and estimates have brought it down to size."
+msgstr "발견 당시 항성 진화 이론에 반할 정도로 큰 적색초거성으로 여겨졌지만, 관측 기술의 발전에 따라 추정 크기가 감소하였습니다."
+
+#: scripts/largest_known_stars.ssc:22
+msgid "AH Scorpii"
+msgstr "전갈자리 AH"
+
+#: scripts/largest_known_stars.ssc:23
+msgid ""
+"AH Sco is variable by nearly 3 magnitudes in the visual range,\n"
+"and an estimated 20% in total luminosity. The variation in diameter\n"
+"is not clear because the temperature also varies."
+msgstr ""
+"전갈자리 AH는 겉보기등급으로 3등급, 광도로 20% 가량 변광이 일어나는 별로, 온도 또한 변하기 때문에 지름이 얼마나 변하는지는 "
+"확실하지 않습니다."
+
+#: scripts/largest_known_stars.ssc:24
+msgid "V766 Centauri A"
+msgstr "센타우루스자리 A V766"
+
+#: scripts/largest_known_stars.ssc:25
+msgid ""
+"V766 Centauri A is a highly distorted star in a close binary system,\n"
+"losing mass to the secondary."
+msgstr ""
+"센타우루스자리 A V766은 두 별이 매우 가까이 붙어 있어 심하게 교란된 쌍성으로, 주성이 동반성에게 질량을 잃고 있습니다."
+
+#: scripts/largest_known_stars.ssc:26
+msgid "KW Sagittarii"
+msgstr "궁수자리 KW"
+
+#: scripts/largest_known_stars.ssc:27
+msgid "BC Cygni"
+msgstr "백조자리 BC"
+
+#: scripts/largest_known_stars.ssc:28
+msgid "RT Carinae"
+msgstr "용골자리 RT"
+
+#: scripts/largest_known_stars.ssc:29
+msgid "Betelgeuse"
+msgstr "베텔게우스"
+
+#: scripts/largest_known_stars.ssc:30
+msgid "Ninth brightest star in the night sky."
+msgstr "밤하늘에서 아홉 번째로 밝은 별입니다."
+
+#: scripts/largest_known_stars.ssc:31
+msgid "Mu Cephei (Herschel's \"Garnet Star\")"
+msgstr "세페우스자리 뮤 (허셜의 \"석류의 별\")"
+
+#: scripts/largest_known_stars.ssc:32
+msgid "S Persei"
+msgstr "페르세우스자리 S"
+
+#: scripts/largest_known_stars.ssc:33
+msgid "In the Perseus Double Cluster."
+msgstr "페르세우스자리 이중성단 안에 있습니다."
+
+#: scripts/largest_known_stars.ssc:34
+msgid "RW Cygni"
+msgstr "백조자리 RW"
+
+#: scripts/largest_known_stars.ssc:35
+msgid "Antares A"
+msgstr "안타레스 A"
+
+#: scripts/largest_known_stars.ssc:36
+msgid "Theta Muscae"
+msgstr "파리자리 세타"
+
+#: scripts/largest_known_stars.ssc:37
+msgid "V1749 Cygni"
+msgstr "백조자리 V1749"
+
+#: scripts/largest_known_stars.ssc:38
+msgid "TZ Cassiopeiae"
+msgstr "카시오페이아자리 TZ"
+
+#: scripts/largest_known_stars.ssc:39
+msgid "IX Carinae"
+msgstr "용골자리 IX"
+
+#: scripts/largest_known_stars.ssc:40
+msgid "TV Geminorum"
+msgstr "쌍둥이자리 TV"
+
+#: scripts/largest_known_stars.ssc:41
+msgid "T Cephei"
+msgstr "세페우스자리 T"
+
+#: scripts/largest_known_stars.ssc:42
+msgid "V382 Carinae"
+msgstr "용골자리 V382"
+
+#: scripts/largest_known_stars.ssc:43 scripts/largest_known_stars.ssc:45
+msgid "Yellow hypergiant, one of the rarest types of star."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:44
+msgid "V509 Cassiopeiae"
+msgstr "카시오페이아자리 V509"
+
+#: scripts/largest_known_stars.ssc:46
+msgid "CE Tauri (\"Ruby Star\")"
+msgstr "황소자리 CE (루비 별)"
+
+#: scripts/largest_known_stars.ssc:47
+msgid ""
+"Can be occulted by the Moon, allowing accurate determination\n"
+"of its apparent diameter."
+msgstr "달에 의한 엄폐가 일어나, 겉보기 지름을 정확하게 측정할 수 있습니다."
+
+#: scripts/largest_known_stars.ssc:48
+msgid "R Leporis (\"Hind's Crimson Star\")"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:49
+msgid "One of the largest carbon stars existent in the Milky Way Galaxy."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:50
+msgid "Alpha Herculis (\"Ras Algethi\")"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:51
+msgid "Rho Cassiopeiae"
+msgstr "카시오페이아자리 로"
+
+#: scripts/largest_known_stars.ssc:52
+msgid "A yellow hypergiant, one of the rarest types of a star."
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:53
+msgid "Mira A (Omicron Ceti)"
+msgstr "미라 A (고래자리 오미크론)"
+
+#: scripts/largest_known_stars.ssc:54
+msgid "Prototype Mira variable"
+msgstr "원시 미라형 변광성"
+
+#: scripts/largest_known_stars.ssc:55
+msgid "R Doradus"
+msgstr "황새치자리 R"
+
+#: scripts/largest_known_stars.ssc:56
+msgid "Star with the second largest apparent size after the Sun."
+msgstr "태양에 이어 겉보기 크기가 두 번째로 큰 항성입니다."
+
+#: scripts/largest_known_stars.ssc:57
+msgid "La Superba (Y Canum Venaticorum)"
+msgstr ""
+
+#: scripts/largest_known_stars.ssc:58
+msgid "One of the coolest and reddest known stars."
+msgstr "발견된 항성 중 가장 차갑고 붉은 항성에 속합니다."
+
+#: scripts/largest_known_stars.ssc:59
+msgid "Deneb (Alpha Cygni)"
+msgstr "데네브 (백조자리 알파)"
+
+#: scripts/largest_known_stars.ssc:60
+msgid "19th brightest star in the night sky."
+msgstr "밤하늘에서 열아홉 번째로 밝은 별입니다."
+
+#: scripts/largest_known_stars.ssc:61
+msgid "Rigel A (Beta Orionis A)"
+msgstr "리겔 A (오리온자리 베타 A)"
+
+#: scripts/largest_known_stars.ssc:62
+msgid "Seventh brightest star in the night sky."
+msgstr "밤하늘에서 일곱 번째로 밝은 별입니다."
+
+#: scripts/largest_known_stars.ssc:63
+msgid "Canopus (Alpha Carinae)"
+msgstr "카노푸스 (용골자리 알파)"
+
+#: scripts/largest_known_stars.ssc:64
+msgid "Second brightest star in the night sky."
+msgstr "밤하늘에서 두 번째로 밝은 별입니다."
+
+#: scripts/largest_known_stars.ssc:65
+msgid "Aldebaran (Alpha Tauri)"
+msgstr "알데바란 (황소자리 알파)"
+
+#: scripts/largest_known_stars.ssc:66
+msgid "VV Cephei B"
+msgstr "세페우스자리 VV B"
+
+#: scripts/largest_known_stars.ssc:67
+msgid "The B-type main sequence companion of VV Cephei A."
+msgstr "세페우스자리 VV A의 동반성으로, B형 주계열성입니다."
+
+#: scripts/largest_known_stars.ssc:92
+msgid "Solar radii"
+msgstr "태양 반지름"
+
+#: scripts/constellations_tour.ssc:32
+#: scripts/modern_constellations_tour.ssc:32
+msgid "Press Ctrl+T to un-hide the toolbar"
+msgstr "툴바를 숨기려면 Ctrl과 T를 같이 누르세요."
+
+#: scripts/triple_sunrise_and_sunsets.ssc:17
+msgid "Location: Mercury, 0N, 90E"
+msgstr "위치: 수성, 0N, 90E"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:51
+msgid "Just Before Sunrise....."
+msgstr "일출 직전..."
+
+#: scripts/triple_sunrise_and_sunsets.ssc:54
+msgid "Surface of Mercury"
+msgstr "수성의 표면"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:57
+msgid "Day"
+msgstr "일"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:92
+msgid "Sunrise #1"
+msgstr "일출 #1"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:120
+msgid "Retro"
+msgstr "역행"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:141
+msgid "Sunset #1"
+msgstr "일몰 #1"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:159
+msgid "Sunrise #2"
+msgstr "일출 #2"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:173
+msgid "Later in the afternoon"
+msgstr "늦은 오후"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:205
+msgid "Sunset #2"
+msgstr "일몰 #2"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:225
+msgid "Sunrise #3"
+msgstr "일출 #3"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:244
+msgid "Sunset #3"
+msgstr "일몰 #3"
+
+#: scripts/saturnian_analemma.ssc:17
+msgid "Saturnian analemma"
+msgstr "토성에서의 아날렘마"
+
+#: scripts/saturnian_analemma.ssc:42 scripts/uranian_analemma.ssc:42
+msgid "Solar day"
+msgstr "태양일"
+
+#: scripts/uranian_analemma.ssc:17
+msgid "Uranian analemma"
+msgstr "천왕성에서의 아날렘마"
+
+#: scripts/messier_marathon.ssc:18
+msgid "Messier Marathon"
+msgstr "메시에 마라톤"
+
+#: scripts/messier_marathon.ssc:85
+msgid "Difficulty is 0"
+msgstr "난이도 0"
+
+#: scripts/messier_marathon.ssc:86
+msgid "Very diffuse, very dark, very difficult"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:87
+msgid "Easier than M74, small"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:88
+msgid "Visible to the naked eye, no difficulty"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:89
+msgid "More difficult than M110 to verify, small"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:90
+msgid "In the west of M31, it is easy to detect"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:91
+msgid "Diffuse, great, brighter"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:92
+msgid "Small, easy to locate, not as horror as imagined"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:93
+msgid "Difficult to locate, easy to detect and verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:94
+msgid "Small, easy to locate, don't confuse with NGC663"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:95
+msgid "Large, scattered, easy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:96
+msgid "Fuzzy, easy to find, accompanied by a small star"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:97
+msgid "Visible to the naked eye, better than M31"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:98
+msgid "Very close to M42, not easy to see the fuzzy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:99
+msgid "Small, dark, few stars around"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:100
+msgid "Easy to locate, easy to detect in a good transparency."
+msgstr ""
+
+#: scripts/messier_marathon.ssc:101
+msgid "Visible to the naked eye, easier"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:102 scripts/messier_marathon.ssc:154
+#: scripts/messier_marathon.ssc:175
+msgid "Easy to locate and verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:103 scripts/messier_marathon.ssc:104
+msgid "Large, scattered"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:105
+msgid "Bright, easy to verify, difficult to locate"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:106
+msgid "Large, difficult to locate, easy to confuse with NGC2506"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:107
+msgid "Easy, more scattered"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:108
+msgid "Easy, fuzzy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:109
+msgid "Easy, scattered"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:110
+msgid "Easy, large, scattered"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:111
+msgid "Very close to M96 and M105"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:112
+msgid "Easy to locate and verify, assist to verify M95 and M105"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:113
+msgid "Dark"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:114
+msgid "Very close, it’s like M81 and M82"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:115
+msgid "There is NGC3628 nearby, don't think you have found a new comet"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:116
+msgid "Like the darkened M33, require a high sky conditions"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:117
+msgid "Difficult to locate, 4 stars of the inverted 7 shape beside"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:118
+msgid "Easy, you can see the companion galaxy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:119
+msgid "Easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:120
+msgid "Not easy to locate, small, slightly dark"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:121
+msgid "Not easy to locate, bright"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:122
+msgid "Not easy to locate, no bright stars nearby"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:123
+msgid "Easy to locate"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:124
+msgid "Beside M60, it is easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:125
+msgid "It’s an easier one"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:126
+msgid "As bright as M85, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:127
+msgid "Dark, hard to look"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:128
+msgid "Easy to detect than M89, easy to locate"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:129
+msgid "Easy to locate, detect once"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:130
+msgid "There is an NGC4438 near M84 and M86, don't make a mistake"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:131
+msgid "M84 are together, closer to NGC4438"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:132
+msgid "Just above M90, almost like M90"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:133
+msgid "Look hard"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:134
+msgid "This bunch of things in the Virgo Cluster is not easy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:135
+msgid "M99 is easier to verify than M98"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:136
+msgid "First find M100 and then find M98 and M99"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:137
+msgid "Far away, but very bright, easy to find"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:138
+msgid "Small, not easy to locate, a little difficult"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:139
+msgid "Not easy to locate, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:140
+msgid "Easy to locate and verify, small"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:141
+msgid "Easy to verify, a star 5 magnitude nearby"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:142
+msgid "Visible to the naked eye, big, bright"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:143
+msgid "Bright and big in the galaxies, not hard to find"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:144
+msgid "Bright, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:145
+msgid "Easy to verify in a right location"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:146
+msgid "Famous, like the shoulder pole star"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:147
+msgid "It may be easier to locate from the Dragon"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:148
+msgid "Small, 20 times or more is still easy to detect"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:149
+msgid "More difficult than M57, not easy to locate, very small"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:150
+msgid "Easy, small, looks like a cluster of stars 7-8 magnitude"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:151
+msgid "Larger than imagined, very scattered, not easy to locate"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:152
+msgid "Find M71 first, then find M27, and will be easier to locate"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:153
+msgid "Easy to locate, easy to verify in 50 binos"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:155
+msgid "Bright, like M13, easy to find"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:156
+msgid "Detect it with M12, brighter than M12"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:157
+msgid "Difficult to locate, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:158
+msgid "Small, not easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:159
+msgid "Bright, big, don't forget to detect NGC6144 nearby"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:160
+msgid "Not easy to verify at low power, easy at high power"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:161
+msgid "Follow the line of M4 and Antares, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:162
+msgid "Looking down from M19, darker than M19, but easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:163
+msgid "Easy to locate, bright, and almost like M13"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:164
+msgid "Easy to locate M26 by M11"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:165
+msgid "Easy"
+msgstr "쉬운"
+
+#: scripts/messier_marathon.ssc:166 scripts/messier_marathon.ssc:179
+msgid "Difficult to locate, bright, easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:167
+msgid "Beside M81, vertical to each other"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:168
+msgid "Large, a little fuzzy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:168
+msgid "Beside M20"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:169
+msgid "It’s not hard to see the diffuse nebula"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:170
+msgid "Visible to the naked eye, extremely easy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:171
+msgid "Big, easy"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:171
+msgid "Easy to locate and verify, bright"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:172
+msgid "M13 second"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:173
+msgid "Too big, scattered, not easy to verify"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:174
+msgid "Bigger than M6"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:176
+msgid "Brighter than imagined, can be detected with 60 binos"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:177
+msgid "Darker than M97, long strips, look hard"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:178
+msgid "Easy to verify with more than 20 times binos"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:180
+msgid "In the morning light, it looks too hard, dark"
+msgstr ""
+
+#: scripts/messier_marathon.ssc:289
+msgid "cannot be seen now"
+msgstr "지금 볼 수 없음"

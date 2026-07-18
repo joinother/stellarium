@@ -1,0 +1,95 @@
+# Translators:
+# cardinot <mcardinot@gmail.com>, 2022
+# Alexander V. Wolf <alex.v.wolf@gmail.com>, 2022
+# Rale Rale, 2026
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: 2026-04-05 19:12+0700\n"
+"PO-Revision-Date: 2022-10-21 17:42+0000\n"
+"Last-Translator: Rale Rale, 2026\n"
+"Language-Team: Serbian (https://app.transifex.com/stellarium/teams/80998/sr/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: sr\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#. (itstool) path: component/name
+#: org.stellarium.Stellarium.appdata.xml:8
+msgid "Stellarium"
+msgstr "Стеларијум"
+
+#. (itstool) path: component/summary
+#: org.stellarium.Stellarium.appdata.xml:9
+msgid "Desktop Planetarium"
+msgstr "Планетаријум на радној површини"
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:11
+msgid ""
+"Stellarium renders 3D photo-realistic skies in real time with OpenGL. It "
+"displays stars, constellations, planets and nebulae, and has many other "
+"features including multiple panoramic landscapes, fog, light pollution "
+"simulation and a built-in scripting engine."
+msgstr ""
+"Стеларијум приказује 3д реалистичне фотографије неба у стварном времену "
+"користећи ОпенГЛ. Приказује звезде, сазвежђа, планете, маглине...  Садржи и "
+"много других могућности као што су промена пејзажа, додавање магле, приказ "
+"светлосног загађења, као и уграђени метод за прављење скрипти — програмчића "
+"који објашњавају неку природну појаву или приказују одређени део неба."
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:12
+msgid ""
+"Stellarium comes with a star catalogue of about 600 thousand stars and it is"
+" possible to download extra catalogues with up to 220 million stars."
+msgstr ""
+"Стеларијум садржи каталог са око 600 хиљада звезда, а могуће је преузети и "
+"додатни каталог који садржи до 220 милиона звезда."
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:13
+msgid ""
+"Stellarium has multiple sky cultures - see the constellations from the "
+"traditions of Polynesian, Inuit, Navajo, Korean, Greek and Chinese "
+"astronomers, as well as the traditional Western or official modern "
+"constellations."
+msgstr ""
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:14
+msgid ""
+"It is also possible to visit other planets in the solar system - see what "
+"the sky looked like to the Apollo astronauts, or what the rings of Saturn "
+"looks like from Titan."
+msgstr ""
+"Такође је могуће посетити остале планете Сунчевог система. Можете погледати "
+"како је небо изгледало астронаутима мисије Аполо, или како Сатурнови "
+"прстенови изгледају са Титана."
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:17
+msgid "astronomy"
+msgstr ""
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:18
+msgid "planetarium"
+msgstr ""
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:19
+msgid "sky"
+msgstr "небо"
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:20
+msgid "universe"
+msgstr ""
+
+#. (itstool) path: component/developer_name
+#: org.stellarium.Stellarium.appdata.xml:144
+msgid "Stellarium team"
+msgstr ""

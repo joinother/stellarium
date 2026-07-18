@@ -1,0 +1,169 @@
+//
+// Name: Messier Objects Tour
+// License: Public Domain
+// Author: C. Gaudion FRAS, Bridgend Astronomical Society
+// Version: 20251114
+// Description: A tour of Messier Objects
+
+
+// Build list of Messier object names
+
+var messier = new Array();
+
+for(var i=1;i<=110;i++) 
+{
+    messier.push("M" + i); 
+}
+// Note actual array index starts from zero!
+
+// messierText array contains Type, Constellation, When Viewable
+
+var messierText = [
+"[M1] Supernova remnant - Taurus - Winter",
+"[M2] Globular Cluster - Aquarius - Autumn / Early Winter",
+"[M3] Globular Cluster - Canes Venatici - Early Spring",
+"[M4] Globular Cluster - Scorpio - Mid-Summer",
+"[M5] Globular Cluster - Serpens Caput - Mid-Summer",
+"[M6] Open Cluster - Scorpius - Mid-Summer",
+"[M7] Open Cluster - Scorpius - Mid-Summer",
+"[M8] Lagoon Nebula - Sagittarius - Late Summer",
+"[M9] Globular Cluster - Ophiucus - Mid-Summer",
+"[M10] Globular Cluster - Ophiucus - Mid-Summer",
+"[M11] Open Cluster - Scutum - Late Summer",
+"[M12] Globular Cluster - Ophiucus - Mid-Summer",
+"[M13] Globular Cluster - Hercules - Mid-Summer",
+"[M14] Globular Cluster - Ophiucus - Mid-Summer",
+"[M15] Globular Cluster - Pegasus - Autumn / Early Winter",
+"[M16] Open Cluster - Serpens Claudia - Late Summer",
+"[M17] Diffuse Nebula - Sagittarius - Late Summer",
+"[M18] Open Cluster - Sagittarius - Late Summer",
+"[M19] Globular Cluster - Ophiucus - Mid-Summer",
+"[M20] Trifid Nebula - Sagittarius - Late Summer",
+"[M21] Open Cluster - Sagittarius - Late Summer",
+"[M22] Globular Cluster - Sagittarius - Late Summer",
+"[M23] Open Cluster - Sagittarius - Late Summer",
+"[M24] Star Cloud - Sagittarius - Late Summer",
+"[M25] Open Cluster - Sagittarius - Late Summer",
+"[M26] Open Cluster - Scutum - Late Summer",
+"[M27] Planetary Nebula - Vulpecula - Autumn / Early Winter",
+"[M28] Globular Cluster - Sagittarius - Late Summer",
+"[M29] Open Cluster - Cygnus - Autumn / Early Winter",
+"[M30] Globular Cluster - Capricornus - Autumn / Early Winter",
+"[M31] Spiral Galaxy - Andromeda - Winter",
+"[M32] Elliptical Galaxy - Andromeda - Winter",
+"[M33] Spiral Galaxy - Triangulum - Winter",
+"[M34] Open Cluster - Perseus - Winter",
+"[M35] Open Cluster - Gemini - Winter",
+"[M36] Open Cluster - Auriga - Winter",
+"[M37] Open Cluster - Auriga - Winter",
+"[M38] Open Cluster - Auriga - Winter",
+"[M39] Open Cluster - Cygnus - Autumn / Early Winter",
+"[M40] Double Star - Ursa Major - Early Spring",
+"[M41] Open Cluster - Canis Major - Winter",
+"[M42] Diffuse Nebula - Orion - Winter",
+"[M43] Diffuse Nebula - Orion - Winter",
+"[M44] Open Cluster - Cancer - Early Spring",
+"[M45] Open Cluster - Taurus - Winter",
+"[M46] Open Cluster - Puppis - Winter",
+"[M47] Open Cluster - Puppis - Winter",
+"[M48] Open Cluster - Hydra - Early Spring",
+"[M49] Elliptical Galaxy - Virgo - Late Spring",
+"[M50] Open Cluster - Monocerus - Winter",
+"[M51] Spiral Galaxy - Ursa Major - Early Spring",
+"[M52] Open Cluster - Cassiopea - Winter",
+"[M53] Globular Cluster - Coma Berenices - Late Spring",
+"[M54] Globular Cluster - Sagittarius - Late Summer",
+"[M55] Globular Cluster - Sagittarius - Late Summer",
+"[M56] Globular Cluster - Lyra - Autumn / Early Winter",
+"[M57] Planetary Nebula - Lyra - Autumn / Early Winter",
+"[M58] Spiral Galaxy - Virgo - Late Spring",
+"[M59] Elliptical Galaxy - Virgo - Late Spring",
+"[M60] Elliptical Galaxy - Virgo - Late Spring",
+"[M61] Spiral Galaxy - Virgo - Late Spring",
+"[M62] Globular Cluster - Ophiucus - Mid-Summer",
+"[M63] Spiral Galaxy - Canes Venatici - Early Spring",
+"[M64] Spiral Galaxy - Coma Berenices - Late Spring",
+"[M65] Spiral Galaxy - Leo - Early Spring",
+"[M66] Spiral Galaxy - Leo - Early Spring",
+"[M67] Open Cluster - Cancer - Early Spring",
+"[M68] Globular Cluster - Hydra - Late Spring",
+"[M69] Globular Cluster - Sagittarius - Late Summer",
+"[M70] Globular Cluster - Sagittarius - Late Summer",
+"[M71] Globular Cluster - Sagitta - Autumn / Early Winter",
+"[M72] Globular Cluster - Aquarius - Autumn / Early Winter",
+"[M73] Asterism - Aquarius - Autumn / Early Winter",
+"[M74] Spiral Galaxy - Pisces - Autumn / Early Winter",
+"[M75] Globular Cluster - Sagittarius - Late Summer",
+"[M76] Planetary Nebula - Perseus - Winter",
+"[M77] Spiral Galaxy - Cetus - Autumn / Early Winter",
+"[M78] Diffuse Nebula - Orion - Winter",
+"[M79] Globular Cluster - Lepus - Winter",
+"[M80] Globular Cluster - Scorpius - Mid-Summer",
+"[M81] Spiral Galaxy - Ursa Major - Early Spring",
+"[M82] Irregular Galaxy - Ursa Major - Late Spring",
+"[M83] Spiral Galaxy - Hydra - Mid-Summer",
+"[M84] Lenticular (S0) Galaxy - Virgo - Late Spring",
+"[M85] Lenticular (S0) Galaxy - Coma Berenices - Late Spring",
+"[M86] Lenticular (S0) Galaxy - Virgo - Late Spring",
+"[M87] Elliptical Galaxy - Virgo - Late Spring",
+"[M88] Spiral Galaxy - Coma Berenices - Late Spring",
+"[M89] Elliptical Galaxy - Virgo - Late Spring",
+"[M90] Spiral Galaxy - Virgo - Late Spring",
+"[M91] Spiral Galaxy - Coma Berenices - Late Spring",
+"[M92] Globular Cluster - Hercules - Mid-Summer",
+"[M93] Open Cluster - Puppis - Winter",
+"[M94] Spiral Galaxy - Canes Venatici - Early Spring",
+"[M95] Spiral Galaxy - Leo - Early Spring",
+"[M96] Spiral Galaxy - Leo - Early Spring",
+"[M97] Planetary Nebula - Ursa Major - Late Spring",
+"[M98] Spiral Galaxy - Coma Berenices - Late Spring",
+"[M99] Spiral Galaxy - Coma Berenices - Autumn / Early Winter",
+"[M100] Spiral Galaxy - Coma Berenices - Late Spring",
+"[M101] Spiral Galaxy - Ursa Major - Early Spring",
+"[M102] Lenticular (S0) Galaxy - Draco - Mid-Summer",
+"[M103] Open Cluster - Cassiopeia - Winter",
+"[M104] Spiral Galaxy - Virgo - Late Spring",
+"[M105] Elliptical Galaxy - Leo - Early Spring",
+"[M106] Spiral Galaxy - Ursa Major - Early Spring",
+"[M107] Globular Cluster - Ophiucus - Mid-Summer",
+"[M108] Spiral Galaxy - Ursa Major - Early Spring",
+"[M109] Spiral Galaxy - Ursa Major - Early Spring",
+"[M110] Elliptical Galaxy - Andromeda - Winter"
+]
+
+
+core.clear("deepspace");
+ConstellationMgr.setFlagIsolateSelected(true);
+
+LabelMgr.labelScreen("Bridgend Astronomical Society - Stellarium Messier Object Tour v20251114",250,50,true,30,"#ffffff");
+core.wait(5);
+LabelMgr.labelScreen("Note: Not all objects may be visible from your location!",250,100,true,30,"#ffffff");
+core.wait(5);
+LabelMgr.labelScreen("In addition to Stellarium data this shows Object Type - Constellation - Season Viewable",250,150,true,30,"#ffffff");
+core.wait(5);
+LabelMgr.deleteAllLabels();
+
+for (i=0; i<messier.length; i++)
+{
+	objName = messier[i];
+	core.selectObjectByName(objName, true);
+//	core.setSelectedObjectInfo('ShortInfo');
+
+	StelMovementMgr.autoZoomIn(6);
+	core.wait(4);
+	
+	LabelMgr.labelScreen(messierText[i],600,100,true,30,"#ffffff");
+    core.wait(10);
+    LabelMgr.deleteAllLabels();
+	
+	StelMovementMgr.zoomTo(40,8);
+	core.wait(5);
+
+}
+
+LabelMgr.labelScreen("Stellarium Messier Object End of Tour",200,200,true,30,"#ffffff");
+core.wait(6);
+
+core.clear("natural");
+core.setSelectedObjectInfo('AllInfo');
+LabelMgr.deleteAllLabels();

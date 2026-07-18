@@ -1,0 +1,450 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% THIS FILE HAS BEEN MODIFIED FOR USE IN STELLARIUM
+% The Legrand Orange Book
+% Structural Definitions File
+% Version 2.1.1 (14/07/16)
+%
+% Original author:
+% Mathias Legrand (legrand.mathias@gmail.com) with modifications by:
+% Vel (vel@latextemplates.com)
+% Alexander Wolf (alex.v.wolf@gmail.com)
+% Georg Zotti (georg.zotti@univie.ac.at)
+% 
+% This file has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% License:
+% CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/)
+%
+% Adapted 2025/11 by Georg Zotti for Legrand Orange Book class version 3.1. 
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%	VARIOUS REQUIRED PACKAGES AND CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\usepackage{longtable}
+\usepackage{tabularx}
+%\usepackage{tabu} % tabu makes problems with htlatex, sorry.
+\usepackage{gensymb}
+\usepackage[english]{babel} % English language/hyphenation
+
+\usepackage{enumitem} % Customize lists
+\setlist{nolistsep} % Reduce spacing between bullet points and numbered lists
+
+\usepackage{booktabs} % Required for nicer horizontal rules in tables
+
+%\usepackage{xcolor} % Required for specifying colors by name
+\definecolor{ocre}{RGB}{51,153,255} % Define the color used for highlighting throughout the book (ignore name 'ocre' coming from book template)
+\definecolor{light-gray}{gray}{0.90}
+
+\usepackage{listings}
+\usepackage{rotating} % Allow sidewaysfigure
+\usepackage{fancyvrb}% provides \VerbatimFootnotes
+
+
+%----------------------------------------------------------------------------------------
+%	NEW COMMANDS AND ADDITIONS
+%----------------------------------------------------------------------------------------
+
+% Emergency definition as this is not in MiKTeX.
+\makeatletter
+%\DeclareRobustCommand*
+\providecommand\textsubscript[1]{%
+  \@textsubscript{\selectfont#1}}
+\def\@textsubscript#1{%
+  {\m@th\ensuremath{_{\mbox{\fontsize\sf@size\z@#1}}}}}
+\makeatother
+
+
+%% GZ: some typesetting macros given here once are better than immediate formatting.
+
+%% File names. 
+\newcommand{\file}[1]{\texttt{#1}}
+%% Parameters for some programs. Only tt seems meaningful.
+\newcommand{\parameter}[1]{\texttt{#1}}
+%% Map keys.
+\newcommand{\keymap}[1]{\texttt{#1}}
+%% console commands, CLI arguments, etc.
+\newcommand{\command}[1]{\texttt{#1}}
+%% Names of 3rd-party software products like Photoshop, Sketchup etc. Not for OS names, they are too common. 
+%% The footnotesize is required for a better size match.
+\ifpdf
+\newcommand{\program}[1]{\textsf{\textbf{\footnotesize #1}}}
+\else
+\newcommand{\program}[1]{\textsf{\textbf{#1}}}
+\fi
+\newcommand{\var}[1]{\texttt{#1}} %% variable name
+
+%% Color boxes for config.ini 
+\newcommand{\ccbox}[2][none]{\setlength{\fboxsep}{0mm}\ifthenelse{\equal{#1}{box}}
+{#2\quad\fbox{\colorbox[rgb]{#2}{\makebox(10,10){}}}}
+{#2\quad\colorbox[rgb]{#2}{\makebox(10,10){}}}
+}
+%% Color boxes for descriptions
+\newcommand{\ccboxdsc}[1]{\colorbox[rgb]{#1}{\makebox(4,4){}}}
+
+% show small icon in-line. Lower by #2. Optional #1 is scale of icon. Use 0.45 for dialog icons, 0.75 for lower bar buttons.
+% Note that it's not possible to use \baselineskip. In Tabular environments this seems to be 0.
+% htlatex apparently has issues with the raisebox. Just draw a box around the icon.
+\ifpdf
+\newcommand{\guibutton[3]}[0.45]{\raisebox{-#2mm}{\fbox{\includegraphics[scale=#1]{#3}}}}
+\else
+\newcommand{\guibutton[3]}[0.45]{\fbox{\includegraphics[scale=#1]{#3}}}
+\fi
+% Will become a boxed text, representing a GUI button label.
+%\newcommand{\button}[1]{\fbox{\textbf{\textsf{\scriptsize #1}}}}
+% V1.0: Better use menu
+\newcommand{\button}[1]{\menu{#1}}
+\newcommand{\checkbox}[1]{\menu{\CheckedBox\  #1}}
+%% Person names. In some places they have been italicised, in others bold. Make them appear the same with this, and add them to the index.
+%% Names should be given with First names and surnames like \name[Johann]{Bayer}. The index will be built sorted by entry surnames.
+%% Unfortunately, these cause problems (Ugly rendering, and Stack size exceeded) with tex4ht. But we don't have an index in the HTML version, so just ignore.
+\ifhtlatex
+\newcommand{\name}[2][]{\textbf{#2}}
+\newcommand{\indexterm}[2][]{\emph{#2}}
+\else
+\newcommand{\name}[2][]{%
+	\ifthenelse{\equal{#1}{}}{\textsc{#2}\index{#2}}%
+	                         {\textsc{#1 #2}\index{#2, #1}}}
+%% Some new term that is presented here with emphasis and also goes immediately to the index. 
+%% If you want to have a different argument for the index command, use an optional first argument here. (E.g. different capitalisation, or index structuring, ...)
+%\newcommand{\indexterm}[1]{\emph{#2}\index{#2}}
+\newcommand{\indexterm}[2][]{%
+	\ifthenelse{\equal{#1}{}}{\emph{#2}\index{#2}}{\emph{#2}\index{#1}}}
+\fi	
+	
+	
+	
+	
+%% This will avoid overshooting of the margin notes out of the page.
+\setlength{\marginparwidth}{0.6\marginparwidth}
+%% A command to show the version number when a feature was introduced in the margin.
+%% Inside, give ONLY the version number like \newFeature{0.21.2}
+%% TODO Decide on formatting etc.
+%% Starting with the 1.0 release, we suppress marginpar notes of new features for version hints starting with 0. 
+\usepackage{xstring}
+\newcommand{\newFeature}[1]{%
+\IfBeginWith{\StelVersion}{0}%
+        {\marginpar{\centering{\small v #1}}}%
+        {\IfBeginWith{#1}{0}%
+                {}% Gobble content of 0.x numbers
+                {\marginpar{\centering{\small v #1}}}}}
+
+%% A few units. Add what you need in the same style here.
+\newcommand{\m}{\ensuremath{\,\mathrm{m}}}
+\newcommand{\cm}{\ensuremath{\,\mathrm{cm}}}
+\newcommand{\mm}{\ensuremath{\,\mathrm{mm}}}
+\newcommand{\km}{\ensuremath{\,\mathrm{km}}}
+\newcommand{\um}{\ensuremath{\,\mathrm{\mu m}}}
+\newcommand{\AU}{\ensuremath{\,\mathrm{AU}}}
+\newcommand{\LY}{\ensuremath{\,\mathrm{LY}}}
+\newcommand{\pc}{\ensuremath{\,\mathrm{pc}}}
+\newcommand{\kpc}{\ensuremath{\,\mathrm{kpc}}}
+\newcommand{\Mpc}{\ensuremath{\,\mathrm{Mpc}}}
+\newcommand{\Hz}{\ensuremath{\,\mathrm{Hz}}}
+\newcommand{\MHz}{\ensuremath{\,\mathrm{MHz}}}
+\newcommand{\mJy}{\ensuremath{\,\mathrm{mJy}}}
+\newcommand{\kg}{\ensuremath{\,\mathrm{kg}}}
+\newcommand{\g}{\ensuremath{\,\mathrm{g}}}
+\newcommand{\px}{\ensuremath{\,\mathrm{px}}} % pixels
+\newcommand{\cy}{\ensuremath{\,\mathrm{cy}}} % century
+\newcommand{\cdpmQ}{\ensuremath{\,\mathrm{cd}/\mathrm{m}^2}} % candela
+
+
+% Define JavaScript for script listings
+% Taken from https://tex.stackexchange.com/questions/89574/language-option-supported-in-listings
+%\definecolor{lightgray}{rgb}{.9,.9,.9}
+\definecolor{darkgray}{rgb}{.4,.4,.4}
+%\definecolor{purple}{rgb}{0.65, 0.12, 0.82}
+\lstdefinelanguage{JavaScript}{
+   basicstyle=\fontfamily{pcr}\selectfont,
+%  keywords={break, case, catch, continue, debugger, default, delete, do, else, false, finally, for, function, if, in, instanceof, new, null, return, switch, this, throw, true, try, typeof, var, void, while, with},
+% The following includes TypeScript
+  keywords={abstract, any, as, boolean, break, case, catch, class, console, 
+    const, continue, debugger, declare, default, delete, do, else, enum, export, 
+    extends, false, finally, for, from, function, get, if, implements, import, in, 
+    infer, instanceof, interface, keyof, let, module, namespace, never, new, null, 
+    number, object, package, private, protected, public, readonly, require, return, 
+    set, static, string, super, switch, symbol, this, throw, true, try, type, typeof, 
+    undefined, unique, unknown, var, void, while, with, yield},
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]',
+  morestring=[b]",
+  keepspaces=true,%
+  showstringspaces=false,
+  escapeinside={(*}{*)},%
+  keywords=[2]{class, export, boolean, throw, implements, import, this},
+  keywordstyle=\color{green!40!black}\bfseries, % or blue in the example.
+  keywordstyle=[2]\color{darkgray}\bfseries,
+  identifierstyle=\color{blue},
+  commentstyle=\color{purple!40!black}\ttfamily,
+  stringstyle=\color{orange}\ttfamily,
+  sensitive=true
+}
+
+% https://gist.github.com/ed-cooper/1927af4ccac39b083440d436d018d253
+\definecolor{jdelim}{RGB}{20,105,176}
+\definecolor{jnumb}{RGB}{106, 10, 32}
+\definecolor{jstring}{rgb}{0.08,0.08,0.08}
+
+\lstdefinelanguage{json}{
+    %numbers=left,
+    %numberstyle=\small,
+    frame=single,
+    rulecolor=\color{black},
+    showspaces=false,
+    showtabs=false,
+	tabsize=4,
+    breaklines=true,
+    postbreak=\raisebox{0ex}[0ex][0ex]{\ensuremath{\color{gray}\hookrightarrow\space}},
+    breakatwhitespace=true,
+    basicstyle=\ttfamily\small,
+    upquote=true,
+    morestring=[b]",
+    stringstyle=\color{jstring},
+	literate=
+     *{0}{{{\color{jnumb}0}}}{1}
+      {1}{{{\color{jnumb}1}}}{1}
+      {2}{{{\color{jnumb}2}}}{1}
+      {3}{{{\color{jnumb}3}}}{1}
+      {4}{{{\color{jnumb}4}}}{1}
+      {5}{{{\color{jnumb}5}}}{1}
+      {6}{{{\color{jnumb}6}}}{1}
+      {7}{{{\color{jnumb}7}}}{1}
+      {8}{{{\color{jnumb}8}}}{1}
+      {9}{{{\color{jnumb}9}}}{1}
+      {\{}{{{\color{jdelim}{\{}}}}{1}
+      {\}}{{{\color{jdelim}{\}}}}}{1}
+      {[}{{{\color{jdelim}{[}}}}{1}
+      {]}{{{\color{jdelim}{]}}}}{1}
+	  ,
+}
+% The "literate" above can define rules for string translation. If started with an asterisk, only characters outside strings are replaced. 
+% Unfortunately, listings cannot show higher UTF8 chars with diacritics. The Samoan Skycultures example had to be reduced to 
+% showing non-diacritic letters. A translation like this would be possible, but only if the asterix was given up, then coloring numbers in the strings. 
+%     {iIi}{i'i}{3}
+
+
+% It seems the lstenvironments are much too complicated or need big efforts for decorating in HTML/CSS. Just replace by something simpler.
+% We must repeat the same definitions with small and scriptsize (executed in PDF only), and later remove the optional size argument. 							 
+\ifhtlatex
+\DefineVerbatimEnvironment{commands}{Verbatim}{numbers=left,numbersep=2mm,frame=lines,framerule=1pt}
+\DefineVerbatimEnvironment{commandsScr}{Verbatim}{numbers=left,numbersep=2mm,frame=lines,framerule=1pt}
+\DefineVerbatimEnvironment{configfile}{Verbatim}{frame=single}
+\DefineVerbatimEnvironment{configfileScr}{Verbatim}{frame=single}
+\DefineVerbatimEnvironment{script}{Verbatim}{numbers=left,frame=single}
+\else
+\lstnewenvironment{commands}[1][\small]{\lstset{language=sh,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                     backgroundcolor=\color{black!5},frame=leftline,rulecolor=\color{blue},framerule=1pt}%
+                             }{}%
+\lstnewenvironment{commandsScr}[1][\scriptsize]{\lstset{language=sh,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                     backgroundcolor=\color{black!5},frame=leftline,rulecolor=\color{blue},framerule=1pt}%
+                             }{}%
+\lstnewenvironment{configfile}[1][\small]{\lstset{language=sh,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                   backgroundcolor=\color{black!5},frame=shadowbox,rulecolor=\color{blue},framerule=1pt}%
+                             }{}%
+\lstnewenvironment{configfileScr}[1][\scriptsize]{\lstset{language=sh,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                   backgroundcolor=\color{black!5},frame=shadowbox,rulecolor=\color{blue},framerule=1pt}%
+                             }{}%
+% The solution for escaping accented characters is from https://tex.stackexchange.com/a/24532
+\lstnewenvironment{jsonfile}[1][\small]{\lstset{inputencoding=utf8,escapeinside={\%(*}{*)},language=json,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                   backgroundcolor=\color{black!5},frame=shadowbox,rulecolor=\color{blue},framerule=1pt}%
+                             }{}%
+% Shows an HTML one-liner
+\lstnewenvironment{htmlbit}[1][\small]{\lstset{inputencoding=utf8,language=html,basicstyle=\ttfamily#1,showstringspaces=false,%
+                                   backgroundcolor=\color{black!5}}%
+                             }{}%
+\lstnewenvironment{script}{\lstset{language=JavaScript,                   
+                               backgroundcolor=\color{black!5},%
+                               frame=leftline,%
+                               rulecolor=\color{blue},%
+                               framerule=1pt}%
+                         }{}%
+\fi
+%% Allow chapter authors where this seems appropriate.
+%% From http://tex.stackexchange.com/questions/156862/displaying-author-for-each-chapter-in-book
+\usepackage{suffix}
+
+\newcommand\chapterauthor[1]{\authortoc{#1}\printchapterauthor{#1}}
+\WithSuffix\newcommand\chapterauthor*[1]{\printchapterauthor{#1}}
+
+\newcommand\sectionauthor[1]{\authortoc{#1}\printsectionauthor{#1}}
+\WithSuffix\newcommand\sectionauthor*[1]{\printsectionauthor{#1}}
+
+\makeatletter
+\ifhtlatex
+\newcommand{\printchapterauthor}[1]{%
+  {\parindent0pt\vspace*{-5pt}%
+  \linespread{1.1}\large#1%
+  \par\nobreak\vspace*{35pt}}
+  \@afterheading%
+}
+\newcommand{\authortoc}[1]{%
+  \addtocontents{toc}{\vskip-10pt}%
+  \addtocontents{toc}{%
+    \protect\contentsline{chapter}%
+    {\hskip1.3em\mdseries\protect\scriptsize#1}{}{}}
+  \addtocontents{toc}{\vskip5pt}%
+}
+\newcommand{\printsectionauthor}[1]{%
+  {\parindent0pt\vspace*{-5pt}%
+  \linespread{1.1}\large#1%
+  \par\nobreak\vspace*{15pt}}
+  \@afterheading%
+}
+\else
+\newcommand{\printchapterauthor}[1]{%
+  {\parindent0pt\vspace*{-5pt}%
+  \linespread{1.1}\large\scshape#1%
+  \par\nobreak\vspace*{35pt}}
+  \@afterheading%
+}
+\newcommand{\authortoc}[1]{%
+  \addtocontents{toc}{\vskip-10pt}%
+  \addtocontents{toc}{%
+    \protect\contentsline{chapter}%
+    {\hskip1.3em\mdseries\scshape\protect\scriptsize#1}{}{}}
+  \addtocontents{toc}{\vskip5pt}%
+}
+\newcommand{\printsectionauthor}[1]{%
+  {\parindent0pt\vspace*{-5pt}%
+  \linespread{1.1}\large\scshape#1%
+  \par\nobreak\vspace*{15pt}}
+  \@afterheading%
+}
+\fi
+\makeatother
+
+%----------------------------------------------------------------------------------------
+%	FONTS (ADDITIONS)
+%----------------------------------------------------------------------------------------
+
+\usepackage{footmisc} % As of 2025, this is only needed in older systems (Ubuntu 20.04, not 22.04). Can probably be removed. 
+\usepackage{newunicodechar} % Must be loaded after [utf8]inputenc
+\newunicodechar{°}{\degree}
+% Taken from https://tex.stackexchange.com/a/424538
+\newunicodechar{ʻ}{\raisebox{\dimexpr\fontcharht\font`A-\height}{\scalebox{0.8}{`}}}
+% It seems Ubuntu on Windows10 has a bit outdated utf8 inputenc? https://tex.stackexchange.com/questions/13067/utf8x-vs-utf8-inputenc
+% But all is OK in TeXLive2017.
+%\newunicodechar{ē}{\=e}
+%\newunicodechar{ū}{\=u}
+
+%----------------------------------------------------------------------------------------
+%	BIBLIOGRAPHY AND INDEX
+%----------------------------------------------------------------------------------------
+
+\usepackage{csquotes} % recommended when using biblatex and babel
+%\usepackage[style=numeric,citestyle=numeric,sorting=nyt,sortcites=true,autopunct=true,autolang=hyphen,hyperref=true,abbreviate=false,backref=true,backend=biber]{biblatex}
+%% TODO2025: Reactivate in class file
+%\usepackage[style=authoryear-comp,citestyle=authoryear,natbib=true,sorting=nyt,sortcites=true,autopunct=true,autolang=hyphen,hyperref=true,abbreviate=false,backref=true,backend=biber]{biblatex}
+\addbibresource{guide.bib} % BibTeX bibliography file
+%\defbibheading{bibempty}{}
+% This command prints >>title (name, year)<< for more extensive citations.
+\newcommand{\citetp}[1]{\citetitle{#1} \citep{#1}}
+% NOTE on citations: we have several options, provided with the natbib compatibility interface.
+% \citet  --> Zotti and Wolf (2017)
+% \citep  --> (Zotti and Wolf, 2017)
+% \cite   --> Zotti and Wolf, 2017
+% \citetp --> Stellarium User Guide (Zotti and Wolf, 2017)
+
+
+%----------------------------------------------------------------------------------------
+%	PAGE HEADERS (ADDITIONS)
+%----------------------------------------------------------------------------------------
+
+%% SUG tweaks:
+\addtolength{\headheight}{2.75pt} % Increase the spacing around the header slightly
+\renewcommand{\footrulewidth}{0pt} % Removes the rule in the footer
+
+
+%----------------------------------------------------------------------------------------
+%	DEFINITION OF COLORED BOXES (ADDITIONS)
+%----------------------------------------------------------------------------------------
+%
+% GZ: Config box
+\newmdenv[skipabove=7pt,
+skipbelow=7pt,
+rightline=false,
+leftline=true,
+topline=false,
+bottomline=false,
+backgroundcolor=black!5,
+linecolor=ocre,
+innerleftmargin=5pt,
+innerrightmargin=5pt,
+innertopmargin=5pt,
+innerbottommargin=5pt,
+leftmargin=0cm,
+rightmargin=0cm,
+linewidth=1pt]{wBox}
+%
+%
+%% Creates an environment for each type of theorem and assigns it a theorem text style from the "Theorem Styles" section above and a colored box from above
+\newenvironment{config}{\begin{wBox}}{\end{wBox}}
+
+
+\usepackage{marvosym}% For the Zodiac symbols, \Aries etc.
+\usepackage{wasysym}% For \diameter etc.
+
+%\newenvironment{commands}{\begin{wBox}\begin{Verbatim}}{\end{Verbatim}\end{wBox}}
+%\DefineVerbatimEnvironment{commands}{\begin{wBox}\begin{Verbatim}}{\end{Verbatim}\end{wBox}}
+%\lstnewenvironment{commands}{\begin{wBox}\lstset{basicstyle=\ttfamily}\begin{lstlisting}}{\end{lstlisting}\end{wBox}}
+
+%% This can be used to verify general page layout with the command \layout given later.
+%% \usepackage{layout}
+
+\usepackage{MnSymbol} % for black triangles and box symbols. See LaTeX symbols PDF.
+
+
+\ifpdf
+ \usepackage[os=win]{menukeys}% For the menu, keycaps, etc. 
+ %\usepackage{keystroke} % Prettier?
+ %% Keypress buttons. This is just a font change now, but can be a boxed key or such.
+ % Prefer using menukeys.
+ \newcommand{\key}[1]{\keys{#1}}
+ \newcommand{\keyPageUp}{\keys{Page\,\arrowkeyup\,}}
+ \newcommand{\keyPageDown}{\keys{Page\,\arrowkeydown\,}}
+\else
+ %TODO redefine \menu properly!
+ \newcommand{\key}[1]{\fbox{\textbf{\textsf{\small #1}}} }
+ \newcommand{\keys}[1]{\fbox{\textbf{\textsf{\small #1}}} }
+ \newcommand{\keyPageUp}{\keys{Page\,$\uparrow$\,} }
+ \newcommand{\keyPageDown}{\keys{Page\,$\downarrow$\,} }
+ \newcommand{\arrowkeyleft}{\keys{$\leftarrow$} }
+ \newcommand{\arrowkeyright}{\keys{$\rightarrow$} }
+ \newcommand{\arrowkeydown}{\keys{$\downarrow$} }
+ \newcommand{\arrowkeyup}{\keys{$\uparrow$} }
+ \newcommand{\Space}{Space}
+ \newcommand{\ctrl}{Ctrl}
+ \newcommand{\cmdmac}{Command}
+ \newcommand{\Alt}{Alt}
+ \newcommand{\tab}{$\rightleftharpoons$}
+ \newcommand{\shift}{$\Uparrow$}
+ \newcommand{\return}{$\hookleftarrow$}
+ \newcommand{\menu}[1]{\fbox{\textsf #1} }
+\fi
+
+\renewcommand{\topfraction}{0.9}
+
+%----------------------------------------------------------------------------------------
+%	HYPERLINKS IN THE DOCUMENTS. These packages should be last, else some PDF bookmarks fail!
+%----------------------------------------------------------------------------------------
+
+% Redefines to create commas between footnote marks. Does not always work, though, and causes missing PDF links. TODO: Fix this! 
+% https://tex.stackexchange.com/questions/554074/what-is-the-correct-way-to-have-commas-between-footnotes-and-prevent-footnote
+% \let\oldFootnote\footnote
+% \let\oldFootref\footref
+% \newcommand\nextToken\relax
+% \renewcommand\footnote[1]{%
+%     \oldFootnote{#1}\futurelet\nextToken\isFootnoteOrFootref}
+% \renewcommand\footref[1]{%
+%     \oldFootref{#1}\futurelet\nextToken\isFootnoteOrFootref}
+% \newcommand\isFootnoteOrFootref{%
+%     \ifx\footnote\nextToken\textsuperscript{,}\fi%
+% 	\ifx\footref\nextToken\textsuperscript{,}\fi}
+
+%\usepackage[dont-mess-around]{fnpct}
+

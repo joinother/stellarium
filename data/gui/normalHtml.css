@@ -1,0 +1,30 @@
+a {
+	color: rgb(162, 140, 66);
+}
+
+/* style for tables with nomenclature (first usage in Tongan sky culture) */
+table {
+        margin: 3px auto;
+        border-color: black;
+        border-style: solid;
+        border-width: 1px;
+        border-collapse: collapse;
+}
+
+table tr td, table tr th {
+        padding: 3px;
+}
+
+table.layout, table.layout tr td, table.layout tr th {
+        margin: 0;
+        padding: 0 5px 0 0;
+        border-style: none;
+        border-color: transparent;
+        border-width: 0px;
+}
+
+.img_and_caption {
+	font-style: italic;
+	margin-right: 3%;
+	margin-left: 3%;
+}

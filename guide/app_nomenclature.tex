@@ -1,0 +1,420 @@
+% Status info:
+% A. Wolf	2017
+% 20171029 AW: A first version of text
+% 20171210 GZ: small changes for finalization.
+% 20220105 GZ: Add info on coordinate systems 
+% 20220404 AW: Add chart of landform types
+
+\chapter{Planetary nomenclature}
+\label{ch:Nomenclature}
+
+Planetary nomenclature\newFeature{0.17.0}, like terrestrial nomenclature, 
+is a system of uniquely identifying features on the surface of a planet or 
+natural satellite so that the features can be easily located, described, and discussed. 
+Since the invention of the telescope, astronomers have given names to the surface 
+features they have discerned, especially on the Moon and Mars. To standardize planetary 
+nomenclature, the International Astronomical Union (IAU)\index{IAU} was assigned in 1919 the task 
+of selecting official names for features on solar system bodies\footnote{History of 
+Planetary Nomenclature -- \url{https://planetarynames.wr.usgs.gov/Page/History}}.
+
+\begin{figure}[ht]
+\centering\includegraphics[width=\textwidth]{stellarium-nomenclature.jpg}
+\caption{Feature nomenclature of the Moon.}
+\label{fig:Nomenclature:Moon}
+\end{figure}
+
+Since version 0.17.0 Stellarium supports planetary nomenclature, which allows using the 
+planetarium for educational and informative purposes on the one hand, and as tool for 
+recognition and targeting of the planetary features for advanced amateurs on the other 
+hand, avoiding the need for additional cartographic software in the field. 
+
+All planetary nomenclature items are stored in a dedicated internal format, 
+and all names are translatable to provide better understanding of those names 
+by average users and newbies -- for example in schools or universities.  
+Of course all nomenclature items are available for finding in the Search Tool 
+after enabling the display of nomenclature (this feature is rather costly in terms of 
+computing power and therefore is by default disabled in the GUI).
+
+\emph{The information in sections \ref{sec:Nomenclature:ApprovingNames}--\ref{sec:Nomenclature:DescriptorTerms}, 
+included here for reference, has been taken from the ``Gazetteer of Planetary Nomenclature'' website 
+by the International Astronomical Union (IAU)\index{IAU} Working Group for Planetary System Nomenclature 
+(WGPSN)}\footnote{\url{https://planetarynames.wr.usgs.gov}, visited on 2022-04-04}.
+
+\section{Format of nomenclature data file}
+\label{sec:Nomenclature:format}
+
+File \file{data/nomenclature.fab} is a plain text file in UTF-8 encoding and has a very simple data format: 
+\begin{itemize}
+\item One item per line;
+\item Each item contains seven elements with white space (``space'' or ``tab'' character) as delimiter.
+\end{itemize}
+File \file{data/nomenclature.dat} is a zipped \file{data/nomenclature.fab} file and used to minimize time of loading the data and reduce size of the installation package.
+
+\begin{center}
+\begin{tabularx}{\textwidth}{l|l|X}\toprule
+\emph{Item}                              & \emph{Type} & \emph{Comment}\\\midrule
+planet name                              & string  & English name of the planet, moon or minor body carrying the named feature\\%\midrule
+ID of planetary feature                  & integer & unique integer, equal to Feature ID obtained from Gazetteer of Planetary Nomenclature\\%\midrule
+translatable name of planetary feature   & string  & English name, containing context data for translators\\%\midrule
+type of planetary feature                & string  & 2-char code (see \emph{designation} column in table in section \ref{sec:Nomenclature:DescriptorTerms})\\%\midrule
+center latitude of planetary feature     & float   & decimal degrees\\%\midrule
+center longitude of planetary feature    & float   & decimal degrees\\%\midrule
+size of planetary feature                & float   & kilometers\\\bottomrule
+\end{tabularx}
+\end{center}
+
+\noindent Example:
+\begin{configfile}
+Vesta 15201 _("Caesonia","crater") AA 31.20117 249.93457 104.23
+\end{configfile}
+
+\section{Planetary Coordinate Systems}
+\label{sec:Nomenclature:CoordinateSystems}
+
+When we observe the Moon or another planet from Earth (or actually
+from anywhere), we can see only about half of the surface of the
+spheroid body at any time. Foreshortening further prevents us from
+observing surface features along the planet's visible limb. Therefore
+it is important to know the coordinates of the center of the apparent
+disk, given by the \indexterm{central meridian} and latitude. In
+addition, we can also compute the \indexterm{subsolar point}, where
+the sun is visible in the zenith, and which provides the center of the
+illuminated hemisphere. This is not the center of the visible disk! A
+part of the illuminated hemisphere is generally on the far side of the
+planet.
+
+The north pole of the planets is the pole of rotation directed towards
+the north of the invariable plane (near the ecliptic) of the Solar
+system. Most planets are rotating in the same sense as they are moving
+around the sun. This is called
+\indexterm[rotation,prograde]{prograde}. Seen from the north side of
+the ecliptic, they rotate counterclockwise. Only a few objects, most
+notable Venus, are rotating clockwise, i.e.,
+\indexterm[rotation,retrograde]{retrograde}.
+
+For historical reasons, there are several ways to count
+longitudes. Just like the terrestrial zero meridian has been defined
+as that one running through Greenwich observatory\footnote{In earlier
+  times, at least each seafaring nation had its own zero meridian,
+  usually running through an official observatory.}, the zero meridian
+on rocky bodies like the Moon or Mars is usually defined by some
+surface feature like a small crater. For the gas planets, the rotation
+of the magnetic field is usually given to define the central
+meridian. Starting from this central meridian, we can count longitudes
+in both directions. For the Moon, which shows always (almost, see
+\ref{sec:Concepts:PlanetCoordinates}) the same side towards Earth, we
+count western and eastern longitudes from the central meridian towards
+the trailing or leading edge of its daily motion,
+respectively. (Seeing the Moon through an unguided telescope, we first
+see the eastern longitudes from $\approx 90^\circ$ to $0^\circ$, then
+the western longitudes from $0^\circ$ to $\approx 90^\circ$.)
+Alternatively we can count the western longitudes as negative. The
+counting continues to the (invisible) far side of the Moon where one
+meridian has an Eastern longitude of $+180^\circ=-180^\circ$.
+
+For other objects, historically, Mars was the first planet to be
+mapped with cartographic coordinates. Its rotational period of just
+over 24.5 hours allows to follow its rotation and observe only a
+slight change in appearance every day. It appeared natural to count
+the central meridian so that central longitude increased as time
+passed. Just like on Earth, as time passes, increasingly western
+longitudes receive sunlight and also become visible. Therefore these
+\indexterm[coordinates,planetographic]{planetographic} longitudes are
+counted towards the west on planets with prograde rotation.  On
+planets with retrograde rotation like Venus, these longitudes are
+counted eastward.
+
+In contrast, current convention on Earth is to count geographic
+longitudes eastward.
+
+The information about coordinates for center and subsolar points in
+the information displayed for a planet is counted in this
+planetographic sense.
+
+Another convention are
+\indexterm[coordinates,planetocentric]{planetocentric coordinates}
+where longitudes are always counted positively towards the east. East
+is defined as going counterclockwise as seen from the north pole,
+which is itself defined as the one pole more closely aligned with
+Earth's north pole. The latest maps and data for Mars are using
+planetocentric data, i.e., eastern longitudes.
+
+For clarity, therefore coordinates are often explicitly written with ``E'' and
+``W'' instead of signed numbers.
+
+
+Another difference between planetographic and planetocentric
+coordinates is that the latter model the planet as simple sphere,
+ignoring the (usually small) flattening of the planet bodies.
+
+The surface coordinate systems defined by the WGPSN\footnote{IAU
+  Working Group for Planetary System Nomenclature --
+  \url{https://planetarynames.wr.usgs.gov/}} and used in Stellarium
+follows are shown in table
+\ref{tab:Nomenclature:coordinates}\footnote{\url{https://planetarynames.wr.usgs.gov/TargetCoordinates},
+  visited Jan.5, 2022}. However, given that the WGPSN publishes their
+data only with planetocentric latitudes, Stellarium provides planetocentric latitudes
+in the information panel for surface features.
+
+\begin{table}
+\begin{tabular}{lll>{$}r<{$}@{\ldots}>{$}l<{$} l}
+Target     &\multicolumn{4}{c}{Coordinate Systems}&Control Networks\\
+  \hline
+Amalthea   & Planetographic & +West &    0 & +360 &                       \\
+Ariel      & Planetocentric & +East &    0 & +360 &                       \\
+Callisto   & Planetographic & +West &    0 & +360 &                       \\
+Charon     & Planetocentric & +East &    0 & +360 & Charon                \\
+Deimos     & Planetographic & +West &    0 & +360 &                       \\
+Dione      & Planetographic & +West &    0 & +360 &                       \\
+Enceladus  & Planetographic & +West &    0 & +360 &                       \\
+Epimetheus & Planetographic & +West &    0 & +360 &                       \\
+Europa     & Planetographic & +West &    0 & +360 &                       \\
+Ganymede   & Planetographic & +West &    0 & +360 &                       \\
+Hyperion   & Planetographic & +West &    0 & +360 &                       \\
+Iapetus    & Planetographic & +West &    0 & +360 &                       \\
+Io         & Planetographic & +West &    0 & +360 & Voyager/Galileo SSI   \\
+Janus      & Planetographic & +West &    0 & +360 &                       \\
+Mars       & Planetocentric & +East &    0 & +360 & MDIM 2.1              \\ % current as of Stellarium 0.21.3
+Mercury    & Planetographic & +West &    0 & +360 & MESSENGER Team        \\
+Mimas      & Planetographic & +West &    0 & +360 &                       \\
+Miranda    & Planetocentric & +East &    0 & +360 &                       \\
+Moon       & Planetographic & +East & -180 & +180 & LOLA 2011, ULCN 2005  \\
+Oberon     & Planetocentric & +East &    0 & +360 &                       \\
+Phobos     & Planetographic & +West &    0 & +360 &                       \\
+Phoebe     & Planetographic & +West &    0 & +360 &                       \\
+Pluto      & Planetocentric & +East &    0 & +360 & Pluto                 \\
+Proteus    & Planetographic & +West &    0 & +360 &                       \\
+Puck       & Planetocentric & +East &    0 & +360 &                       \\
+Rhea       & Planetographic & +West &    0 & +360 &                       \\
+Tethys     & Planetographic & +West &    0 & +360 &                       \\
+Thebe      & Planetographic & +West &    0 & +360 &                       \\
+Titan      & Planetographic & +West &    0 & +360 &                       \\
+Titania    & Planetocentric & +East &    0 & +360 &                       \\
+Triton     & Planetographic & +East &    0 & +360 &                       \\
+Umbriel    & Planetocentric & +East &    0 & +360 &                       \\
+Venus      & Planetocentric & +East &    0 & +360 &
+\end{tabular}
+  \caption{Coordinate systems used by the WGPSN}
+  \label{tab:Nomenclature:coordinates}
+\end{table}
+
+
+\section{How names are approved by the IAU}
+\label{sec:Nomenclature:ApprovingNames}\index{IAU}
+When images are first obtained of the surface of a planet or satellite, a theme for naming features is chosen 
+and a few important features are named, usually by members of the appropriate IAU task group (a commonly 
+accepted planet-naming group). Later, as higher resolution images and maps become available, additional 
+features are named at the request of investigators mapping or describing specific surfaces, features, 
+or geologic formations. Anyone may suggest that a specific name be considered by a task group. 
+If the members of the task group agree that the name is appropriate, it can be retained for use 
+when there is a request from a member of the scientific community that a specific feature be named. 
+Names successfully reviewed by a task group are submitted to the IAU Working Group for Planetary System 
+Nomenclature (WGPSN). 
+Upon successful review by the members of the WGPSN, names are considered provisionally approved and can be 
+used on maps and in publications as long as the provisional status is clearly stated. 
+Provisional names are then presented for adoption to the IAU's General Assembly, which met triennially in the past, 
+and which now adopts nomenclature for planetary surface features as required. A name is not considered to be 
+official -- that is, ``adopted'' -- until the General Assembly has given its approval.
+
+\section{IAU rules and conventions}
+\label{sec:Nomenclature:RulesAndConventions}\index{IAU}
+Names adopted by the IAU must follow various rules and conventions established and amended through the years by the Union. These include:
+\begin{enumerate}
+\item Nomenclature is a tool and the first consideration should be to make it simple, clear, and unambiguous.
+\item In general, official names will not be given to features whose longest dimensions are less than 100 meters, 
+      although exceptions may be made for smaller features having exceptional scientific interest.
+\item The number of names chosen for each body should be kept to a minimum. Features should be 
+      named only when they have special scientific interest, and when the naming of such features is useful 
+	  to the scientific and cartographic communities at large.
+\item Duplication of the same surface feature name on two or more bodies, and of the same name for satellites 
+      and minor planets, is discouraged. Duplications may be allowed when names are especially appropriate and 
+	  the chances for confusion are very small.
+\item Individual names chosen for each body should be expressed in the language of origin. 
+      Transliteration for various alphabets should be given, but there will be no translation from one language to another.
+\item Where possible, the themes established in early solar system nomenclature should be used and expanded on.
+\item Solar system nomenclature should be international in its choice of names. 
+      Recommendations submitted to the IAU national committees will be considered, but final selection of the names 
+	  is the responsibility of the International Astronomical Union. 
+	  Where appropriate, the WGPSN strongly supports an equitable selection of names from ethnic groups, 
+	  countries, and gender on each map; however, a higher percentage of names from the country planning a 
+	  landing is allowed on landing site maps.
+\item No names having political, military or religious significance may be used, except for names of political figures prior to the 19th century.
+\item Commemoration of persons on planetary bodies should not normally be a goal in itself, 
+      but may be employed in special circumstances and is reserved for persons of high and enduring international standing. 
+	  Persons being so honored must have been deceased for at least three years, before a proposal may be submitted.
+\item When more than one spelling of a name is extant, the spelling preferred by the person, or used in an authoritative reference, should be used. 
+      Diacritical marks are a necessary part of a name and will be used.
+\item Ring and ring-gap nomenclature and names for newly discovered satellites are developed in joint deliberation 
+      between WGPSN and IAU Commission X2. Names will not be assigned to satellites until their orbital elements are 
+	  reasonably well known or definite features have been identified on them.
+\item Accessible and authoritative sources, including Internet sources, are required for adopted names. 
+      Wikipedia is not sufficient as a source, but may be useful for identifying appropriate sources.
+\end{enumerate}
+
+\noindent In addition to these general rules, each task group develops additional conventions as it formulates an interesting 
+and meaningful nomenclature for individual planetary bodies. Most of these conventions are self evident from study of the appendixes that follow.
+
+\section{Naming conventions}
+\label{sec:Nomenclature:NamingConventions}\index{IAU}
+Names for all planetary features include a descriptor term, with a few exceptions. For craters, the descriptor term is implicit. 
+Some features named on Io and Triton do not carry a descriptor term because they are ephemeral.
+
+In general, the naming convention for a feature type remains the same regardless of its size. 
+Exceptions to this rule are channels (valles) on Mars and Venus, and craters on the Moon, Mars, and Venus; 
+naming conventions for these features differ according to size. 
+The categories for naming features on each planet or satellite (and the exceptions) are listed in 
+Categories for Naming Features on Planets and Satellites\footnote{%
+   Surface Feature Categories -- \url{https://planetarynames.wr.usgs.gov/Page/Categories}}. 
+One feature classification, regio, was originally used on early maps of the Moon and Mercury (drawn from telescopic observations) 
+to describe vague albedo features. It is now also used to delineate a broad geographic region.
+
+Named features on bodies so small that coordinates have not yet been determined are identified on drawings or images 
+of the body that are included in the IAU Transactions volume of the year when the names were adopted. 
+Satellite rings and gaps in the rings are named for scientists who have studied these features; 
+drawings that show these names are also included in the pertinent Transactions volume. 
+Names for atmospheric features are informal at present; a formal system will be chosen in the future.
+
+The boundaries of many large features (such as terrae, regiones, planitiae, and plana) are not topographically or geomorphically distinct; 
+the coordinates of these features are identified from an arbitrarily chosen center point. 
+Boundaries (and thus coordinates) may be determined more accurately from geochemical and geophysical data obtained by future missions.
+
+During active missions, small surface features are often given informal names. 
+These may include landing sites, spacecraft impact sites, and small topographic features, such as craters, hills, and rocks. 
+Such names will not be given official status by the IAU, except as provided for by Rule 2 above. 
+As for the larger objects, official names for any such small features would have to conform to established IAU rules and categories.
+
+When a satellite has been discovered through the efforts of a large scientific team, 
+the list of individual team members may be too long to include all contributors. 
+In such cases, credit for the discovery will go to the science team.
+
+\newpage
+\section{Descriptor terms (feature types)}
+\label{sec:Nomenclature:DescriptorTerms}
+Descriptor terms are intended to represent morphological characteristics, not geological origin. 
+The WGPSN does not endorse any specific scientific hypotheses when assigning descriptors.
+
+\begin{longtable}{l|c|p{72mm}}\toprule
+\emph{Feature}        & \emph{Designation} & \emph{Description}\\\midrule
+Albedo Feature        & AL & Geographic area distinguished by amount of reflected light\\%\midrule
+Arcus, arcūs          & AR & Arc-shaped feature\\%\midrule
+Astrum, astra         & AS & Radial-patterned features on Venus \\\midrule
+Catena, catenae       & CA & Chain of craters \\%\midrule
+Cavus, cavi           & CB & Hollows, irregular steep-sided depressions usually in arrays or clusters\\%\midrule
+Chaos, chaoses        & CH & Distinctive area of broken terrain\\%\midrule
+Chasma, chasmata      & CM & A deep, elongated, steep-sided depression\\%\midrule
+Collis, colles        & CO & Small hills or knobs\\%\midrule
+Corona, coronae       & CR & Ovoid-shaped feature\\%\midrule   
+Crater, craters       & AA & A circular depression\\\midrule
+Dorsum, dorsa         & DO & Ridge\\\midrule
+Eruptive center       & ER & Active volcanic centers on Io\\\midrule
+Facula, faculae       & FA & Bright spot\\%\midrule
+Farrum, farra         & FR & Pancake-like structure, or a row of such structures\\%\midrule
+Flexus, flexūs        & FE & A very low curvilinear ridge with a scalloped pattern\\%\midrule   
+Fluctus, fluctūs      & FL & Flow terrain\\%\midrule
+Flumen, flumina       & FM & Channel on Titan that might carry liquid\\%\midrule
+Fossa, fossae         & FO & Long, narrow depression\\%\midrule
+Fretum, freta         & FT & Strait, a narrow passage of liquid connecting two larger areas of liquid\\\midrule
+Insula, insulae       & IN & Island (islands), an isolated land area (or group of such areas) surrounded by, 
+                             or nearly surrounded by, a liquid area (sea or lake)\\\midrule
+Labes, labēs          & LA & Landslide\\%\midrule   
+Labyrinthus, labyrinthi & LB & Complex of intersecting valleys or ridges\\%\midrule
+Lacuna, lacunae       & LU & Irregularly shaped depression on Titan having the appearance of a dry lake bed\\%\midrule
+Lacus, lacūs          & LC & ``Lake'' or small plain; on Titan, a ``lake'' or small, 
+                             dark plain with discrete, sharp boundaries\\%\midrule
+Landing site name     & LF & Lunar features at or near Apollo landing sites\\%\midrule
+Large ringed feature  & LG & Cryptic ringed features\\%\midrule
+Lenticula, lenticulae & LE & Small dark spots on Europa\\%\midrule   
+Linea, lineae         & LI & A dark or bright elongate marking, may be curved or straight\\%\midrule
+Lingula, lingulae     & LN & Extension of plateau having rounded lobate or tongue-like boundaries\\\midrule
+Macula, maculae       & MA & Dark spot, may be irregular\\%\midrule
+Mare, maria           & ME & ``Sea''; on the Moon, low albedo, relatively smooth plain, generally of large extent; 
+                             on Mars, dark albedo areas of no known geological significance; 
+                             on Titan, large expanses of dark materials thought to be liquid hydrocarbons\\%\midrule
+Mensa, mensae         & MN & A flat-topped prominence with cliff-like edges\\%\midrule
+Mons, montes          & MO & Mountain\\\midrule   
+Oceanus, oceani       & OC & A very large dark area on the moon\\\midrule
+Palus, paludes        & PA & ``Swamp''; small plain\\%\midrule
+Patera, paterae       & PE & An irregular crater, or a complex one with scalloped edges\\%\midrule
+Planitia, planitiae   & PL & Low plain\\%\midrule
+Planum, plana         & PM & Plateau or high plain\\%\midrule
+Plume, plumes         & PU & Cryo-volcanic features on Triton\\%\midrule   
+Promontorium, promontoria & PR & ``Cape''; headland promontoria\\\midrule
+Regio, regiones       & RE & A large area marked by reflectivity or color distinctions from adjacent areas, 
+                             or a broad geographic region\\%\midrule
+Reticulum, reticula   & RT & Reticular (netlike) pattern on Venus\\%\midrule
+Rima, rimae           & RI & Fissure\\%\midrule
+Rupes, rupēs          & RU & Scarp\\\midrule
+Satellite Feature     & SF & A feature that shares the name of an associated feature. 
+                             For example, on the Moon the craters referred to as ``Lettered Craters'' 
+							 are classified in the gazetteer as ``Satellite Features''\\%\midrule   
+Saxum, saxa           & SA & Boulder or rock\\%\midrule
+Scopulus, scopuli     & SC & Lobate or irregular scarp\\%\midrule
+Serpens, serpentes    & SE & Sinuous feature with segments of positive and negative relief along its length\\%\midrule
+Sinus, sinūs          & SI & ``Bay''; small plain; on Titan, bays within seas or lakes of liquid hydrocarbons\\%\midrule
+Sulcus, sulci         & SU & Subparallel furrows and ridges\\\midrule
+Terra, terrae         & TA & Extensive land mass\\%\midrule
+Tessera, tesserae     & TE & Tile-like, polygonal terrain\\%\midrule   
+Tholus, tholi         & TH & Small domical mountain or hill\\\midrule
+Unda, undae           & UN & Dunes\\\midrule
+Vallis, valles        & VA & Valley\\%\midrule
+Vastitas, vastitates  & VS & Extensive plain\\%\midrule
+Virga, virgae         & VI & A streak or stripe of color\\\bottomrule
+\end{longtable}
+
+\subsection{Chart of landform types}
+\label{sec:Nomenclature:DescriptorTerms:Chart}
+
+The graphical examples of some landform types were taken from a 
+chart of landform types created in 1979 by Anne Gifford, then at the Air and Space Museum, Smithsonian Institution, Washington, D.C.
+\footnote{\url{https://planetarynames.wr.usgs.gov/images/Farouk_drawings_composite.pdf}}
+
+\begin{longtable}{p{45mm}|p{45mm}|p{45mm}}\toprule
+\begin{center}\textbf{Lacus} [LC] and \textbf{Mare} [ME]\end{center} & \begin{center}\textbf{Oceanus} [OC] and \textbf{Palus} [PA]\end{center} & \begin{center}\textbf{Planitia} [PL] and \textbf{Planum} [PM]\end{center} \\
+\includegraphics[width=45mm]{toponomy_lacus_mare.jpg}  & \includegraphics[width=45mm]{toponomy_oceanus_palus.jpg} & \includegraphics[width=45mm]{toponomy_planitia_planum.jpg} \\
+``lake'' (small irregular patch of dark, smooth material of the Moon) and ``sea'' (large, often circular, region of dark smooth material of the Moon) & ``ocean'' (vast, irregular, dark, smooth region -- Oceanus Procellarum only) and ``swamp'' (small irregular area, on the Moon a mixture of mare and highland material) & low plain or large level expanse of lowlands and high plain or a plateau \\\midrule
+\begin{center}\textbf{Catena} [CA]\end{center} & \begin{center}\textbf{Cavus} [CB]\end{center} & \begin{center}\textbf{Chaos} [CH]\end{center} \\
+\includegraphics[width=45mm]{toponomy_catena.jpg} & 
+\includegraphics[width=45mm]{toponomy_cavus.jpg} & 
+\includegraphics[width=45mm]{toponomy_chaos.jpg} \\
+chain; a string of closely spaced depressions & cavities; irregular steep-sided depressions usually in clusters & chaos; area of distinctive broken or jumped terrain \\\midrule
+\begin{center}\textbf{Chasma} [CM]\end{center} & \begin{center}\textbf{Crater} [AA]\end{center} & \begin{center}\textbf{Dorsum} [DO]\end{center} \\
+\includegraphics[width=45mm]{toponomy_chasma.jpg} & 
+\includegraphics[width=45mm]{toponomy_crater.jpg} & 
+\includegraphics[width=45mm]{toponomy_dorsum.jpg} \\
+chasm; steep-walled trough; large canyon & crater; any roughly circular depression resulting from impact or volcanic activity & ridge; elongate raised structure; wrinkle ridge \\\midrule
+\begin{center}\textbf{Fossa} [FO]\end{center} & \begin{center}\textbf{Labyrinthus} [LB]\end{center} & \begin{center}\textbf{Mensa} [MN]\end{center} \\
+\includegraphics[width=45mm]{toponomy_fossa.jpg} & 
+\includegraphics[width=45mm]{toponomy_labyrinthus.jpg} & 
+\includegraphics[width=45mm]{toponomy_mensa.jpg} \\
+ditch; narrow linear trench (on the Moon called Rima) & labyrinth; an expanse of intersecting  canyon-like troughs & mesa; flat-topped elevation with steep walls \\\midrule
+\begin{center}\textbf{Mons} [MO]\end{center} & \begin{center}\textbf{Patera} [PE]\end{center} & \begin{center}\textbf{Promontorium} [PR]\end{center} \\
+\includegraphics[width=45mm]{toponomy_mons.jpg} & 
+\includegraphics[width=45mm]{toponomy_patera.jpg} & 
+\includegraphics[width=45mm]{toponomy_promontorium.jpg} \\
+mountain & ``saucer''; shallow, complex crater with scalloped walls & promontory; extension of lunar mountains into mare \\\midrule
+\begin{center}\textbf{Rima} [RI]\end{center} & \begin{center}\textbf{Rupes} [RU]\end{center} & \begin{center}\textbf{Scopulus} [SC]\end{center} \\ 
+\includegraphics[width=45mm]{toponomy_rima.jpg} & 
+\includegraphics[width=45mm]{toponomy_rupes.jpg} & 
+\includegraphics[width=45mm]{toponomy_scopulus.jpg} \\
+channel; long narrow valley, fissure or channel on the Moon & linear scarp of cliff face & cliff; lobate or highly irregular scarp \\\midrule
+\begin{center}\textbf{Sinus} [SI]\end{center} & \begin{center}\textbf{Sulcus} [SU]\end{center} & \begin{center}\textbf{Terra} [TA]\end{center} \\
+\includegraphics[width=45mm]{toponomy_sinus.jpg} & 
+\includegraphics[width=45mm]{toponomy_sulcus.jpg} & 
+\includegraphics[width=45mm]{toponomy_terra.jpg} \\
+``bay''; semi-enclosed dark area opening into a mare on the Moon & complex area of sub-parallel furrows and ridges & uplands or highlands \\\midrule
+\begin{center}\textbf{Tholus} [TH]\end{center} & \begin{center}\textbf{Vallis} [VA]\end{center} & \begin{center}\textbf{Vastitas} [VS]\end{center}  \\
+\includegraphics[width=45mm]{toponomy_tholus.jpg} & 
+\includegraphics[width=45mm]{toponomy_vallis.jpg} & 
+\includegraphics[width=45mm]{toponomy_vastitas.jpg} \\
+dome; isolated domical mountain or hill & valley; canyon-like, often sinuous trough & ``wasteland''; extensive plains of lowlands, only on Mars \\\bottomrule
+\end{longtable}
+
+\section*{Author and Acknowledgement}
+\label{sec:Nomenclature:Acknowledgments}
+The nomenclature feature has been implemented by Teresa Huertas Roldán supported by the ``ESA Summer of Code in Space 2017'' programme.
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "guide"
+%%% End: 
+

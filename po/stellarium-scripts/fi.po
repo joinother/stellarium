@@ -1,0 +1,1714 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Stellarium's team
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# cardinot <mcardinot@gmail.com>, 2022
+# Veikko Mäkelä, 2022
+# Tmsteipainen <tmsteipainen1@gmail.com>, 2022
+# Ilpo Kantonen, 2022
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
+"POT-Creation-Date: 2025-12-01 14:32+0700\n"
+"PO-Revision-Date: 2022-10-05 14:25+0000\n"
+"Last-Translator: Ilpo Kantonen, 2022\n"
+"Language-Team: Finnish (https://app.transifex.com/stellarium/teams/80998/fi/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fi\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: scripts/analemma.ssc:17
+msgid "Analemma"
+msgstr "Analemma"
+
+#: scripts/analemma.ssc:41
+msgid "Week"
+msgstr "Viikko"
+
+#: scripts/analemma.ssc:47
+msgid "Near winter solstice"
+msgstr "Talvipäivänseisauksen lähellä"
+
+#: scripts/analemma.ssc:51
+msgid "Near summer solstice"
+msgstr "Kesäpäivänseisauksen lähellä"
+
+#: scripts/analemma.ssc:55 scripts/martian_analemma.ssc:48
+#: scripts/saturnian_analemma.ssc:48 scripts/uranian_analemma.ssc:48
+msgid "Yearly path of the Sun"
+msgstr "Auringon vuosipolku"
+
+#: scripts/bennett.ssc:47
+msgid "The Jack Bennett Catalog of Southern Deep-Sky Objects"
+msgstr "Jack Bennettin eteläisen syvän taivaan kohteiden luettelo"
+
+#: scripts/bennett.ssc:48 scripts/best_ngc.ssc:27 scripts/binosky.ssc:20
+msgid "objects in all"
+msgstr "kohteita kaikkialla"
+
+#: scripts/best_ngc.ssc:26
+msgid "Best objects in the New General Catalog"
+msgstr "Parhaat kohteet New General Catalog -luettelossa"
+
+#: scripts/best_ngc.ssc:42
+msgid "Object #"
+msgstr "Kohde #"
+
+#: scripts/binocular_highlights.ssc:12
+msgid "Chapter 1"
+msgstr "Luku 1"
+
+#: scripts/binocular_highlights.ssc:12
+msgid "December to February"
+msgstr "Joulukuusta helmikuuhun"
+
+#: scripts/binocular_highlights.ssc:13
+msgid "Kemble's Cascade"
+msgstr "Kemblen putous"
+
+#: scripts/binocular_highlights.ssc:13
+msgid "Kemble's Cascade is visible even in light-polluted skies"
+msgstr "Kemblen putous näkyy jopa valosaasteisella taivaalla"
+
+#: scripts/binocular_highlights.ssc:14
+msgid "The Glorious Double Cluster"
+msgstr "Loistava Kaksoistähtijoukko"
+
+#: scripts/binocular_highlights.ssc:14
+msgid "NGC 884 and NGC 869"
+msgstr "NGC 884 ja NGC 869"
+
+#: scripts/binocular_highlights.ssc:15
+msgid "The Alpha Persei Association"
+msgstr "Alfa Persein assosiaatio"
+
+#: scripts/binocular_highlights.ssc:16
+msgid "M34: A True Binocular Cluster"
+msgstr "M34: Todellinen tähtijoukko kiikarille"
+
+#: scripts/binocular_highlights.ssc:17
+msgid "Watching the Demon Star"
+msgstr "Katsotaan Paholaistähteä"
+
+#: scripts/binocular_highlights.ssc:18
+msgid "The Pleiades"
+msgstr "Plejadit"
+
+#: scripts/binocular_highlights.ssc:19
+msgid "Corralling the Hyades"
+msgstr "Hyadien asettamista"
+
+#: scripts/binocular_highlights.ssc:20
+msgid "NGC 1647: The Crab Cluster"
+msgstr "NGC 1647: Rapujoukko"
+
+#: scripts/binocular_highlights.ssc:21
+msgid "Messier's Number One"
+msgstr "Messier ykkönen"
+
+#: scripts/binocular_highlights.ssc:22
+msgid "Auriga's Messier Clusters"
+msgstr "Ajomiehen Messier-joukot"
+
+#: scripts/binocular_highlights.ssc:22
+msgid "M36 and M38"
+msgstr "M36 ja M38"
+
+#: scripts/binocular_highlights.ssc:23
+msgid "Another Double Cluster"
+msgstr "Toinen kaksoistähtijoukko"
+
+#: scripts/binocular_highlights.ssc:23
+msgid "M35 and NGC 2158"
+msgstr "M35 ja NGC 2158"
+
+#: scripts/binocular_highlights.ssc:24
+msgid "Golden Betelgeuse"
+msgstr "Kultainen Betelgeuze"
+
+#: scripts/binocular_highlights.ssc:25
+msgid "Orion Extras"
+msgstr "Orionin lisät"
+
+#: scripts/binocular_highlights.ssc:26
+msgid "Orion's Sword"
+msgstr "Orionin miekka"
+
+#: scripts/binocular_highlights.ssc:26
+msgid "NGC 1981, M42, M43 and Struve 747"
+msgstr "NGC 1981, M42, M43 ja Struve 747"
+
+#: scripts/binocular_highlights.ssc:27
+msgid "The Overlooked Open Cluster: M41"
+msgstr "Ylenkatsottu avoin tähtijoukko: M41"
+
+#: scripts/binocular_highlights.ssc:28
+msgid "M50 in a Stream of Starlight"
+msgstr "M50 tähtivalon virrassa"
+
+#: scripts/binocular_highlights.ssc:29
+msgid "M46 and M47: A Celestial Odd Couple"
+msgstr "M46 ja M47: Outo taivaallinen pari"
+
+#: scripts/binocular_highlights.ssc:30
+msgid "Collinders in Canis Minor"
+msgstr "Collinderit Pienessä koirassa"
+
+#: scripts/binocular_highlights.ssc:30
+msgid "Cr 132 and Cr 140"
+msgstr "Cr 132 ja Cr 140"
+
+#: scripts/binocular_highlights.ssc:31
+msgid "Two Southern Delights"
+msgstr "Kaksi eteläistä herkkupalaa"
+
+#: scripts/binocular_highlights.ssc:31
+msgid "NGC 2477 and NGC 2451"
+msgstr "NGC 2477 ja NGC 2451"
+
+#: scripts/binocular_highlights.ssc:32
+msgid "Chapter 2"
+msgstr "Luku 2"
+
+#: scripts/binocular_highlights.ssc:32
+msgid "March to May"
+msgstr "Maaliskuusta toukokuuhun"
+
+#: scripts/binocular_highlights.ssc:33
+msgid "The Engagement Ring"
+msgstr "Kihlasormus"
+
+#: scripts/binocular_highlights.ssc:34
+msgid "The Power of Power"
+msgstr "Voiman voima"
+
+#: scripts/binocular_highlights.ssc:34
+msgid "M81 and M82"
+msgstr "M81 ja M82"
+
+#: scripts/binocular_highlights.ssc:35
+msgid "M101 in the Mind's Eye"
+msgstr "M101 sielun silmin"
+
+#: scripts/binocular_highlights.ssc:36
+msgid "A Star-Hop to M51"
+msgstr "Tähtihyppy M51:een"
+
+#: scripts/binocular_highlights.ssc:37
+msgid "Galaxy Season"
+msgstr "Galaksien kausi"
+
+#: scripts/binocular_highlights.ssc:38
+msgid "Steady on Galaxy M94"
+msgstr "Valmiina M94-galaksissa"
+
+#: scripts/binocular_highlights.ssc:39
+msgid "Globular Cluster M3"
+msgstr "Pallomainen tähtijoukko M3"
+
+#: scripts/binocular_highlights.ssc:40
+msgid "In and Around Melotte 111"
+msgstr "Melotte 111:een ja ympäri"
+
+#: scripts/binocular_highlights.ssc:41
+msgid "A Trio of Doubles in Bootes"
+msgstr "Parien kolmikko Karhunvartijassa"
+
+#: scripts/binocular_highlights.ssc:42
+msgid "R Cor Bor's Vanishing Act"
+msgstr "R Coronae Borealiksen katoamistemppu"
+
+#: scripts/binocular_highlights.ssc:43
+msgid "Two Doubles in Cancer"
+msgstr "Kaksi paria Kravussa"
+
+#: scripts/binocular_highlights.ssc:43
+msgid "Rho and Iota Cancri"
+msgstr "Rho ja lota Krapu"
+
+#: scripts/binocular_highlights.ssc:44
+msgid "The Beehive Cluster"
+msgstr "Mehiläispesäjoukko"
+
+#: scripts/binocular_highlights.ssc:45
+msgid "A Visit to NGC 2903"
+msgstr "Vierailu NGC 2903:een"
+
+#: scripts/binocular_highlights.ssc:46 scripts/binocular_highlights.ssc:47
+msgid "A Pair of Leo Doubles"
+msgstr "Leijonan pari kaksoistähteä "
+
+#: scripts/binocular_highlights.ssc:46
+msgid "Tau Leonis"
+msgstr "Tau Leijonan"
+
+#: scripts/binocular_highlights.ssc:47
+msgid "Alpha Leonis (Regulus)"
+msgstr "Alfa Leijonan (Regulus)"
+
+#: scripts/binocular_highlights.ssc:48
+msgid "Star Cluster M48 in Hydra"
+msgstr "Tähtijoukko M48 Vesikäärmeessä"
+
+#: scripts/binocular_highlights.ssc:49
+msgid "U Hydra"
+msgstr "U Vesikäärme"
+
+#: scripts/binocular_highlights.ssc:49
+msgid "Carbon star"
+msgstr "Hiilitähti"
+
+#: scripts/binocular_highlights.ssc:50
+msgid "V Hydra"
+msgstr "V Vesikäärme"
+
+#: scripts/binocular_highlights.ssc:50
+msgid ""
+"It has been ranging from magnitude 6 to 10 with a period of about 550 days."
+msgstr "Se on vaihdellut välillä 6 - 10 magnitudia 550 päivän jaksossa."
+
+#: scripts/binocular_highlights.ssc:51
+msgid "M104 and the Great Beyond"
+msgstr "M104 ja Great Beyond"
+
+#: scripts/binocular_highlights.ssc:52
+msgid "Ancient Globular M5"
+msgstr "Muinainen pallomainen M5"
+
+#: scripts/binocular_highlights.ssc:53
+msgid "Magnificent Omega Centauri"
+msgstr "Upea Omega Kentauri"
+
+#: scripts/binocular_highlights.ssc:54
+msgid "Chapter 3"
+msgstr "Luku 3"
+
+#: scripts/binocular_highlights.ssc:54
+msgid "June to August"
+msgstr "Kesäkuusta elokuuhun"
+
+#: scripts/binocular_highlights.ssc:55
+msgid "Resolving Nu Draconis"
+msgstr "Selvitetään Nu Draconista"
+
+#: scripts/binocular_highlights.ssc:55
+msgid "Nu Draconis's components are separated by 62\""
+msgstr "Nu Draconisin komponentit on erotettu toisistaan 62\""
+
+#: scripts/binocular_highlights.ssc:56
+msgid "The Great Hercules Cluster"
+msgstr "Herkuleen suuri pallomainen tähtijoukko"
+
+#: scripts/binocular_highlights.ssc:57
+msgid "Double Delight Albireo"
+msgstr "Kaksinkertinan ilahduttava Albireo"
+
+#: scripts/binocular_highlights.ssc:57
+msgid "Albireo's components are separated by 35\""
+msgstr "Albireon komponentit on erotettu toisistaan 35\""
+
+#: scripts/binocular_highlights.ssc:58
+msgid "A Colorful Cygnus Triple"
+msgstr "Joutsenen värikäs kolmikko"
+
+#: scripts/binocular_highlights.ssc:58
+msgid "Omicron1, Omicron2 and 30 Cygni"
+msgstr "Omicron1, Omicron2 ja 30 Cygni"
+
+#: scripts/binocular_highlights.ssc:59 scripts/binocular_highlights.ssc:60
+#: scripts/binocular_highlights.ssc:61
+msgid "Three Cygnus Doubles"
+msgstr "Kolme Joutsenen kaksoistähteä"
+
+#: scripts/binocular_highlights.ssc:59
+msgid "Mu Cygni (Its stars are separated by a generous 198\")"
+msgstr "Mu Joutsenen (Sen tähtien ero on reilut 198\")"
+
+#: scripts/binocular_highlights.ssc:60
+msgid "79 Cygni (Its stars are separated by 150\")"
+msgstr "79Joutsenen (Sen tähtien ero 150\")"
+
+#: scripts/binocular_highlights.ssc:61
+msgid "61 Cygni (Its stars are separated by 31\")"
+msgstr "61 Joutsenen (Sen tähtien ero 31\")"
+
+#: scripts/binocular_highlights.ssc:62
+msgid "Open Cluster M39 in Cygnus"
+msgstr "Avoin tähtijoukko M39 Joutsenessa"
+
+#: scripts/binocular_highlights.ssc:63
+msgid "The Road to the Cocoon"
+msgstr "Tie Cocooniin"
+
+#: scripts/binocular_highlights.ssc:63
+msgid "IC 5146, B168 and M39"
+msgstr "IC 5146, B168 ja M39"
+
+#: scripts/binocular_highlights.ssc:64
+msgid "Summer's Other Triangle"
+msgstr "Toinen kesäkolmio"
+
+#: scripts/binocular_highlights.ssc:64
+msgid "Epsilon, Zeta and Alpha Lyrae"
+msgstr "Epsilon, Zeta ja Alpha Lyrae"
+
+#: scripts/binocular_highlights.ssc:65
+msgid "M57 and Expectations"
+msgstr "M57 ja odotukset"
+
+#: scripts/binocular_highlights.ssc:65
+msgid "Difficult deep-sky object for tests your observing skills..."
+msgstr "Vaikea syvän taivaan kohde havaintotaitojesi testaamiseen"
+
+#: scripts/binocular_highlights.ssc:66
+msgid "Splendid Sagitta"
+msgstr "Loistava Nuoli"
+
+#: scripts/binocular_highlights.ssc:66
+msgid "M71 between Gamma and Delta Sagittae"
+msgstr "M71 Gammanja Delta Sagittaen välillä"
+
+#: scripts/binocular_highlights.ssc:67
+msgid "M27 in Vulpecula"
+msgstr "M27 Ketussa"
+
+#: scripts/binocular_highlights.ssc:68
+msgid "A Milky Way Surprise"
+msgstr "Linnunradan yllätys"
+
+#: scripts/binocular_highlights.ssc:68
+msgid "Brocchi's Cluster (Cr 399) or Coathanger"
+msgstr "Brocchin joukko (Cr 399) eli Vaateripustin"
+
+#: scripts/binocular_highlights.ssc:69
+msgid "Barnard's \"E\""
+msgstr "Barnardin \"E\""
+
+#: scripts/binocular_highlights.ssc:69
+msgid "B143 near Altair"
+msgstr "B143 lähellä Altairia"
+
+#: scripts/binocular_highlights.ssc:70
+msgid "M11 in Scutum"
+msgstr "M11 Kilvessä"
+
+#: scripts/binocular_highlights.ssc:70
+msgid "Also known as the Wild Duck Cluster"
+msgstr "Tunnetaan myös nimellä Villi ankkajoukko"
+
+#: scripts/binocular_highlights.ssc:71
+msgid "IC 4756 in Serpens"
+msgstr "IC 4756 Käärmeessä"
+
+#: scripts/binocular_highlights.ssc:72
+msgid "Three Star Clusters in Ophiuchus"
+msgstr "Kolme tähtijoukkoa Käärmeenkantajassa"
+
+#: scripts/binocular_highlights.ssc:73
+msgid "IC 4665 in Ophiuchus"
+msgstr "IC 4665 Käärmeenkantajassa"
+
+#: scripts/binocular_highlights.ssc:74
+msgid "A Pair of Ophiuchus Globulars"
+msgstr "Käärmeenkantajan pallomaisten pari"
+
+#: scripts/binocular_highlights.ssc:74
+msgid "M10 and M12"
+msgstr "M10 ja M12"
+
+#: scripts/binocular_highlights.ssc:75
+msgid "Rho Ophiuchi"
+msgstr "Rho Ophiuchi"
+
+#: scripts/binocular_highlights.ssc:75
+msgid "Rho itself is a pretty triple star"
+msgstr "Rho itsessään on melkoinen kolmoistähti"
+
+#: scripts/binocular_highlights.ssc:76
+msgid "A Solar Twin"
+msgstr "Auringon kaksonen"
+
+#: scripts/binocular_highlights.ssc:76
+msgid "18 Scorpii"
+msgstr "18 Skorpionin"
+
+#: scripts/binocular_highlights.ssc:77
+msgid "A Double for Steady Hands"
+msgstr "Kaksoistähti vakaille käsille"
+
+#: scripts/binocular_highlights.ssc:77
+msgid "Nu Scorpii components are separated by 41\""
+msgstr "Nu Scorpii -komponentit on erotettu toisistaan 41\""
+
+#: scripts/binocular_highlights.ssc:78
+msgid "Globular Cluster Season"
+msgstr "Pallomaisten tähtijoukkojen kausi"
+
+#: scripts/binocular_highlights.ssc:78
+msgid "M4 and M80"
+msgstr "M4 ja M80"
+
+#: scripts/binocular_highlights.ssc:79
+msgid "A Gorgeous Duo"
+msgstr "Upea Duo"
+
+#: scripts/binocular_highlights.ssc:79
+msgid "M6 and M7"
+msgstr "M6 ja M7"
+
+#: scripts/binocular_highlights.ssc:80
+msgid "A False Comet"
+msgstr "Väärä komeetta"
+
+#: scripts/binocular_highlights.ssc:80
+msgid "Cr 316, NGC 6231 and NGC 6242"
+msgstr "Cr 316, NGC 6231 ja NGC 6242"
+
+#: scripts/binocular_highlights.ssc:81
+msgid "Summer Star Cloud"
+msgstr "Kesätähtipilvi"
+
+#: scripts/binocular_highlights.ssc:82
+msgid "Milky Way Messiers"
+msgstr "Linnunradan Messierit"
+
+#: scripts/binocular_highlights.ssc:82
+msgid "M16, M17 and M18"
+msgstr "M16, M17 ja M18"
+
+#: scripts/binocular_highlights.ssc:83
+msgid "The Lagoon Nebula"
+msgstr "Lagguunisumu"
+
+#: scripts/binocular_highlights.ssc:84
+msgid "M22: A Gem of a Globular"
+msgstr "M22: Pallomainen helmi"
+
+#: scripts/binocular_highlights.ssc:84
+msgid "M22 and M28"
+msgstr "M22 ja M28"
+
+#: scripts/binocular_highlights.ssc:85
+msgid "A Lonesome Messier"
+msgstr "Yksinäinen Messier"
+
+#: scripts/binocular_highlights.ssc:86
+msgid "Chapter 4"
+msgstr "Luku 4"
+
+#: scripts/binocular_highlights.ssc:86
+msgid "September to November"
+msgstr "Syyskuusta marraskuuhun"
+
+#: scripts/binocular_highlights.ssc:87
+msgid "Two Lacerta Clusters"
+msgstr "Kaksi Sisiliskon joukkoa"
+
+#: scripts/binocular_highlights.ssc:87
+msgid "NGC 7209 and NGC 7243"
+msgstr "NGC 7209 ja NGC 7243"
+
+#: scripts/binocular_highlights.ssc:88
+msgid "NGC 6939 and NGC 6946"
+msgstr "NGC 6939 ja NGC 6946"
+
+#: scripts/binocular_highlights.ssc:89
+msgid "Magnificent Mu Cephei"
+msgstr "Suurenmoinen Mu Cephei"
+
+#: scripts/binocular_highlights.ssc:89
+msgid "A semiregular variable star"
+msgstr "Puolisäännöllinen muuttuva tähti"
+
+#: scripts/binocular_highlights.ssc:90
+msgid "Watching Delta Cephei"
+msgstr "Katsotaan Delta Cephei "
+
+#: scripts/binocular_highlights.ssc:90
+msgid "Well-known variable star and striking double also"
+msgstr "Tunnettu muuttuva tähti ja myös huomiota herättävä kaksoistähti"
+
+#: scripts/binocular_highlights.ssc:91
+msgid "M52 in Cassiopeia"
+msgstr "M52 Kassiopeiassa"
+
+#: scripts/binocular_highlights.ssc:92
+msgid "Galactic Cluster NGC 7789"
+msgstr "Galaktinen joukko NGC 7789"
+
+#: scripts/binocular_highlights.ssc:93
+msgid "The E.T. Cluster"
+msgstr "E.T.-joukko"
+
+#: scripts/binocular_highlights.ssc:94
+msgid "Open Cluster M103"
+msgstr "Avoin tähtijoukko M103"
+
+#: scripts/binocular_highlights.ssc:95
+msgid "Magnificent M31"
+msgstr "Suurenmoinen M31"
+
+#: scripts/binocular_highlights.ssc:96
+msgid "Andromeda's Companions"
+msgstr "Andromedan seuralaiset"
+
+#: scripts/binocular_highlights.ssc:96
+msgid "M32 and M110"
+msgstr "M32 ja M110"
+
+#: scripts/binocular_highlights.ssc:97
+msgid "Ancient Cluster NGC 752"
+msgstr "Muinainen joukko NGC 752"
+
+#: scripts/binocular_highlights.ssc:98
+msgid "Triangulum's Treasure"
+msgstr "Triangulumin aarre"
+
+#: scripts/binocular_highlights.ssc:99
+msgid "TX Piscium"
+msgstr "TX Kalojen"
+
+#: scripts/binocular_highlights.ssc:99
+msgid "Carbon star, which varies slightly from magnitude 4.8 to 5.2"
+msgstr "Hillitähti, joka vaihtelee vähäisesti välillä 4.8 - 5.2 magnitudia"
+
+#: scripts/binocular_highlights.ssc:100
+msgid "A Farewell to Summer"
+msgstr "Jäähyväiset kesälle"
+
+#: scripts/binocular_highlights.ssc:101
+msgid "Messier 2 Shining Through"
+msgstr "Messier 2 loistaa läpi"
+
+#: scripts/binocular_highlights.ssc:102
+msgid "The Ghostly Helix Nebula"
+msgstr "Aavemainen Helix-sumu"
+
+#: scripts/binocular_highlights.ssc:103
+msgid "Challenging NGC 253 and NGC 288"
+msgstr "Haastava NGC 253 ja NGC 288"
+
+#: scripts/binocular_highlights.ssc:125
+msgid "Binocular Highlights"
+msgstr "Kiikarikohteita"
+
+#: scripts/binocular_highlights.ssc:126
+msgid "Look through the Meade 10x50 TravelView Binocular"
+msgstr "Katso Meade 10x50 TravelView -kiikarien läpi"
+
+#: scripts/binosky.ssc:19
+msgid "Binosky: Deep Sky Objects for Binoculars"
+msgstr "Kiikaritaivas: Syvän taivaan kohteita kiikareille"
+
+#: scripts/double_stars.ssc:28
+msgid "Asterope (21 Tauri and 22 Tauri)"
+msgstr "Asterope (21 Tauri ja 22 Tauri)"
+
+#: scripts/double_stars.ssc:28
+msgid "2.5 arcminutes (SE)"
+msgstr "2,5 kaariminuuttia (lounaaseen)"
+
+#: scripts/double_stars.ssc:28
+msgid ""
+"Extremely difficult because of their faintness, separation, and nearby "
+"bright stars"
+msgstr ""
+"Erittäin vaikea himmeiyden, kulmaeron ja lähellä olevien kirkkaiden tähtien "
+"vuoksi"
+
+#: scripts/double_stars.ssc:29
+msgid "Atlas and Pleione (27 Tauri and 28 Tauri)"
+msgstr "Atlas ja Pleione (27 Tauri ja 28 Tauri)"
+
+#: scripts/double_stars.ssc:29
+msgid "5 arcminutes (N)"
+msgstr "5 kaariminuuttia (pohjoiseen)"
+
+#: scripts/double_stars.ssc:29 scripts/double_stars.ssc:35
+#: scripts/double_stars.ssc:41 scripts/double_stars.ssc:43
+msgid "Moderately difficult"
+msgstr "Melko vaikea"
+
+#: scripts/double_stars.ssc:30
+msgid "θ Tauri"
+msgstr "θ Härän"
+
+#: scripts/double_stars.ssc:30
+msgid "5.6 arcminutes (NNW)"
+msgstr "5,6 kaariminuuttia (pohjoisluoteeseen)"
+
+#: scripts/double_stars.ssc:30 scripts/double_stars.ssc:42
+#: scripts/double_stars.ssc:47
+msgid "Showcase naked-eye double!"
+msgstr "Näytekappale paljain silmin -kaksoistähdestä!"
+
+#: scripts/double_stars.ssc:31
+msgid "δ Tauri"
+msgstr "δ Härän"
+
+#: scripts/double_stars.ssc:31
+msgid "δ1-δ2: 17.6 arcseconds (ESE); δ1-δ3: 43.25 arcseconds (NE)"
+msgstr ""
+"δ1-δ2: 17,6 kaarisekuntia (itäkaakkoon); δ1-δ3: 43,25 kaarisekuntia "
+"(koilliseen)"
+
+#: scripts/double_stars.ssc:31
+msgid "Easy naked-eye triple"
+msgstr "Helppo paljain silmin -kolmikko"
+
+#: scripts/double_stars.ssc:32
+msgid "θ Orionis"
+msgstr "θ Orionin"
+
+#: scripts/double_stars.ssc:32
+msgid "2.24 arcminutes (NW)"
+msgstr "2,24 kaariminuttia (luoteeseen)"
+
+#: scripts/double_stars.ssc:32
+msgid "Very difficult because of stars and nebulosity in the area"
+msgstr "Hyvin vaikea alueella olevien tähtien ja sumuaineksen vuoksi"
+
+#: scripts/double_stars.ssc:33
+msgid "42 and 45 Orionis"
+msgstr "42 ja 45 Orionin"
+
+#: scripts/double_stars.ssc:33
+msgid "4.2 arcminutes (ESE)"
+msgstr "4,2 kaariminuuttia (itäkaakkoon)"
+
+#: scripts/double_stars.ssc:33 scripts/double_stars.ssc:34
+msgid "Moderately difficult optical double"
+msgstr "Melko vaikea optinen kaksoiståhti"
+
+#: scripts/double_stars.ssc:34
+msgid "ι Orionis"
+msgstr "ι Orionin"
+
+#: scripts/double_stars.ssc:34
+msgid "8 arcminutes (SW)"
+msgstr "8 kaariminuuttia (lounaaseen)"
+
+#: scripts/double_stars.ssc:35
+msgid "ζ Corvi"
+msgstr "ζ Korpin"
+
+#: scripts/double_stars.ssc:35
+msgid "5.85 arcminutes (WNW)"
+msgstr "5,85 kaariminuuttia (länsiluoteeseen)"
+
+#: scripts/double_stars.ssc:36
+msgid "Mizar and Alcor"
+msgstr "Mizar ja Alcor"
+
+#: scripts/double_stars.ssc:36
+msgid "11.8 arcminutes (ENE)"
+msgstr "11,8 kaariminuuttia (itäkoilliseen)"
+
+#: scripts/double_stars.ssc:36 scripts/double_stars.ssc:44
+#: scripts/double_stars.ssc:45
+msgid "Easy naked-eye double"
+msgstr "Helppo paljain silmin -kaksoistähti"
+
+#: scripts/double_stars.ssc:37
+msgid "Zubenelgenubi"
+msgstr "Zubenelgenubi"
+
+#: scripts/double_stars.ssc:37
+msgid "3.83 arcminutes (NW)"
+msgstr "3.83 kaariminuttia (luoteeseen)"
+
+#: scripts/double_stars.ssc:37
+msgid "Very difficult because of the magnitude difference"
+msgstr "Erittäin vaikeaa magnitudieron takia"
+
+#: scripts/double_stars.ssc:38
+msgid "ω Scorpii"
+msgstr "ω Skorpionin"
+
+#: scripts/double_stars.ssc:38
+msgid "14.6 arcminutes (SSE)"
+msgstr "14.6 arcm-minuuttia (SSE)"
+
+#: scripts/double_stars.ssc:38
+msgid "Easy optical double"
+msgstr "Helppo optinen tupla"
+
+#: scripts/double_stars.ssc:39
+msgid "λ and υ Scorpii"
+msgstr "λ ja υ Skorpionin"
+
+#: scripts/double_stars.ssc:39
+msgid "36 arcminutes (WSW)"
+msgstr "36 arc-minuuttia (WSW)"
+
+#: scripts/double_stars.ssc:39
+msgid "Easy double"
+msgstr "Helppo kaksoistähti"
+
+#: scripts/double_stars.ssc:40
+msgid "μ Scorpii"
+msgstr "μ Skorpionin"
+
+#: scripts/double_stars.ssc:40
+msgid "5.8 arcminutes (ENE)"
+msgstr "5.8 arc-minuuttia (ENE)"
+
+#: scripts/double_stars.ssc:40
+msgid "Showcase double!"
+msgstr "Näyttö kaksinkertaisena!"
+
+#: scripts/double_stars.ssc:41
+msgid "ζ Scorpii"
+msgstr "ζ Skorpionin"
+
+#: scripts/double_stars.ssc:41
+msgid "6.5 arcminutes (W)"
+msgstr "6.5 arc-minuuttia (W)"
+
+#: scripts/double_stars.ssc:42
+msgid "ε Lyrae"
+msgstr "ε Lyyran"
+
+#: scripts/double_stars.ssc:42
+msgid "3.5 arcminutes (N)"
+msgstr "3.5 arc-minuuttia (N)"
+
+#: scripts/double_stars.ssc:43
+msgid "δ Lyrae"
+msgstr "δ Lyyran"
+
+#: scripts/double_stars.ssc:43
+msgid "10.3 arcminutes (WNW)"
+msgstr "10.3 arc-minuuttia (WNW)"
+
+#: scripts/double_stars.ssc:44
+msgid "ν Sagittarii"
+msgstr "ν Jousimiehen"
+
+#: scripts/double_stars.ssc:44
+msgid "13.9 arcminutes (ENE)"
+msgstr "13.9 arc-minuuttia (ENE)"
+
+#: scripts/double_stars.ssc:45
+msgid "ο1 and ο2 Cygni"
+msgstr "ο1 ja ο2 Joutsen"
+
+#: scripts/double_stars.ssc:45
+msgid "61.3 arcminutes (NNE)"
+msgstr "61.3 arc-minuuttia (NNE)"
+
+#: scripts/double_stars.ssc:46
+msgid "ο1 Cygni (ο1 Cygni, 30 Cyg and HD 192579)"
+msgstr "ο1 Joutsen (ο1 Joutsen, 30 Joutsen and HD 192579)"
+
+#: scripts/double_stars.ssc:46
+msgid "5.6 arcminutes (NW)"
+msgstr "5.6 arc-minuuttia (NW)"
+
+#: scripts/double_stars.ssc:46
+msgid "Moderately difficult optical triple star"
+msgstr "Kohtalaisen vaikea optinen kolmitähti"
+
+#: scripts/double_stars.ssc:47
+msgid "Algedi"
+msgstr "Algedi"
+
+#: scripts/double_stars.ssc:47
+msgid "6.3 arcminutes (WNW)"
+msgstr "6.3 arc-minuuttia (WNW)"
+
+#: scripts/double_stars.ssc:78
+msgid "Separation:"
+msgstr "Erottaminen:"
+
+#: scripts/martian_analemma.ssc:17
+msgid "Martian analemma"
+msgstr "Marsin analemma"
+
+#: scripts/martian_analemma.ssc:42
+msgid "Sol"
+msgstr "Aurinko"
+
+#: scripts/morsels_1.ssc:15 scripts/morsels_1.ssc:16 scripts/morsels_1.ssc:18
+#: scripts/morsels_1.ssc:22 scripts/morsels_1.ssc:23 scripts/morsels_1.ssc:29
+#: scripts/morsels_1.ssc:30 scripts/morsels_1.ssc:34 scripts/morsels_1.ssc:36
+#: scripts/morsels_1.ssc:38 scripts/morsels_1.ssc:43
+msgid "Shadows from Io, Ganymede and Callisto"
+msgstr "Varjot Iosta, Ganymedestä ja Kallistosta"
+
+#: scripts/morsels_1.ssc:17 scripts/morsels_1.ssc:19 scripts/morsels_1.ssc:20
+#: scripts/morsels_1.ssc:21 scripts/morsels_1.ssc:25 scripts/morsels_1.ssc:26
+#: scripts/morsels_1.ssc:27 scripts/morsels_1.ssc:28 scripts/morsels_1.ssc:31
+#: scripts/morsels_1.ssc:33 scripts/morsels_1.ssc:35 scripts/morsels_1.ssc:37
+#: scripts/morsels_1.ssc:39 scripts/morsels_1.ssc:41 scripts/morsels_1.ssc:42
+#: scripts/morsels_1.ssc:44 scripts/morsels_1.ssc:45 scripts/morsels_1.ssc:46
+msgid "Shadows from Io, Europe and Callisto"
+msgstr "Varjot Iosta, Europesta ja Kallistosta"
+
+#: scripts/morsels_1.ssc:24 scripts/morsels_1.ssc:32 scripts/morsels_1.ssc:40
+msgid "Shadows from Europe, Ganymede and Callisto"
+msgstr "Varjot Europesta, Ganymedesta ja Kallistosta"
+
+#: scripts/morsels_1.ssc:60
+msgid "Triple shadow phenomena of the satellites of Jupiter"
+msgstr "Jupiterin satelliittien kolminkertaiset varjoilmiöt"
+
+#: scripts/morsels_1.ssc:62 scripts/morsels_2.ssc:78 scripts/morsels_3.ssc:52
+#: scripts/morsels_4.ssc:70
+msgid "phenomena in all"
+msgstr "ilmiöitä kaikessa"
+
+#: scripts/morsels_1.ssc:77 scripts/morsels_2.ssc:98 scripts/morsels_3.ssc:62
+#: scripts/morsels_4.ssc:81
+msgid "Event #"
+msgstr "Tapahtuma #"
+
+#: scripts/morsels_1.ssc:78 scripts/morsels_2.ssc:99 scripts/morsels_3.ssc:63
+#: scripts/morsels_4.ssc:82
+msgid "Date:"
+msgstr "Päivämäärä:"
+
+#: scripts/morsels_1.ssc:79
+msgid "Time:"
+msgstr "Aika:"
+
+#: scripts/morsels_2.ssc:76
+msgid "Jupiter without Galilean satellites"
+msgstr "Jupiter ilman Galilein kuita"
+
+#: scripts/morsels_2.ssc:100
+msgid "Limits of the disappearance:"
+msgstr "Katoamisen rajoitukset:"
+
+#: scripts/morsels_3.ssc:50
+msgid "Occultations of bright stars by planets"
+msgstr "Planeettojen aiheuttamia kirkkaiden tähtien tähdenpettoja"
+
+#: scripts/morsels_4.ssc:68
+msgid "Mutual occultations of planets"
+msgstr "Planeettojen keskinäisiä ylikulkuja"
+
+#: scripts/supernova.ssc:23
+msgid "Europe, Uraniborg."
+msgstr "Eurooppa, Uraniborg."
+
+#: scripts/supernova.ssc:31
+msgid "Evening of 20 October 1572"
+msgstr "Ilta 20 lokakuuta 1572"
+
+#: scripts/supernova.ssc:40
+msgid "Constellation Cassiopeia"
+msgstr "Kassiopeian tähdistö"
+
+#: scripts/supernova.ssc:61
+msgid "5 days later..."
+msgstr "5 päivää myöhemmin..."
+
+#: scripts/supernova.ssc:67
+msgid "Next 3 days..."
+msgstr "Seuraavat 3 päivää..."
+
+#: scripts/supernova.ssc:73
+msgid "New star! But people have not seen it yet..."
+msgstr "Uusi tähti! Mutta ihmiset eivät ole vielä nähneet sitä..."
+
+#: scripts/supernova.ssc:78
+msgid "Evening of 31 October 1572"
+msgstr "Ilta 31. lokakuuta 1572"
+
+#: scripts/supernova.ssc:86
+msgid "Evening of "
+msgstr "Ilta"
+
+#: scripts/supernova.ssc:86
+msgid " November 1572"
+msgstr "Marraskuu 1572"
+
+#: scripts/supernova.ssc:93
+msgid "Hooray! First observations in Korea and Europe."
+msgstr "Hurraa! Ensimmäiset havainnot Koreassa ja Euroopassa."
+
+#: scripts/supernova.ssc:101
+msgid "First observations in China."
+msgstr "Ensimmäiset havainnot Kiinassa."
+
+#: scripts/supernova.ssc:109
+msgid ""
+"The clouds are gone and Tycho Brahe the first time watching a new star!"
+msgstr ""
+"Pilvet ovat poissa ja Tycho Brahe ensimmäistä kertaa katsomassa uutta "
+"tähteä!"
+
+#: scripts/supernova.ssc:118
+msgid "Next 60 days..."
+msgstr "Seuraavat 60 päivää..."
+
+#: scripts/supernova.ssc:129
+msgid "Next other 40 days..."
+msgstr "Seuraavat muut 40 päivää..."
+
+#: scripts/supernova.ssc:150
+msgid "The Historical supernovae plugin is not loaded!"
+msgstr "Historical supernovae -laajennusta ei ole ladattu!"
+
+#: scripts/h400_tour.ssc:16
+msgid "The Herschel 400 Catalogue"
+msgstr "Herschel 400 Luettelo"
+
+#: scripts/h400_tour.ssc:17
+msgid ""
+"The Herschel 400 is a subset of John Herschel's General Catalogue of Nebulae"
+" and Clusters"
+msgstr ""
+"Herschel 400 on osa John Herschelin yleisestä sumu- ja klusteriluettelosta"
+
+#: scripts/h400_tour.ssc:18
+msgid ""
+"published in 1864 of 5,000 objects, and hence also of the New General "
+"Catalogue."
+msgstr ""
+"julkaistiin vuonna 1864 5 000 esineestä ja siten myös New General Catalogue "
+"-luettelosta."
+
+#: scripts/h400_tour.ssc:19
+msgid "Vital statistics:"
+msgstr "Vital tilastot:"
+
+#: scripts/h400_tour.ssc:20
+msgid "* The catalogue contains 400 objects"
+msgstr "* Luettelossa on 400 kohdetta"
+
+#: scripts/h400_tour.ssc:21
+msgid "* All objects are from the NGC"
+msgstr "* Kaikki kohteet ovat lähteestä NGC"
+
+#: scripts/h400_tour.ssc:22
+msgid "* All visible in mid northern latitudes"
+msgstr "* Kaikki näkyvät pohjoisilla leveysasteilla"
+
+#: scripts/h400_tour.ssc:23
+msgid "* All visible in 150 mm (6\") or larger telescopes"
+msgstr "* Kaikki näkyvät 150 mm:n (6\") tai sitä suuremmissa teleskoopeissa"
+
+#: scripts/largest_known_stars.ssc:12
+msgid "PZ Cassiopeiae"
+msgstr "PZ Kassiopeia"
+
+#: scripts/largest_known_stars.ssc:13
+msgid ""
+"PZ Cas is located in a region with heavy dust extinction.\n"
+"The quoted size is the average size parameter, the true\n"
+"value is from 1,340-1,940."
+msgstr ""
+"PZ Kassiopeia sijaitsee alueella, jossa pölysammutetaan voimakkaasti.\n"
+"Mainittu koko on keskikokoparametri, totta\n"
+"arvo on 1340-1940."
+
+#: scripts/largest_known_stars.ssc:14
+msgid "VX Sagittarii"
+msgstr "VX Jousimies"
+
+#: scripts/largest_known_stars.ssc:15
+msgid ""
+"VX Sgr is a pulsating variable with a large visual range\n"
+"and varies significantly in size."
+msgstr ""
+"VX Jousimies on laajalla näköalueella vaihtelevasti sykkivä\n"
+"ja sen koko vaihtelee huomattavasti."
+
+#: scripts/largest_known_stars.ssc:16
+msgid "VV Cephei A"
+msgstr "VV Kefeus A"
+
+#: scripts/largest_known_stars.ssc:17
+msgid ""
+"VV Cep A is a highly distorted star in a binary system,\n"
+"losing mass to its B-type companion VV Cephei B for at least\n"
+"part of its orbit."
+msgstr ""
+"VV Kefeus A on erittäin vääristynyt tähti binäärijärjestelmässä,\n"
+"menettää massaa B-tyypin kumppanilleen VV Kefeus B:lle ainakin\n"
+"osa sen kiertorataa."
+
+#: scripts/largest_known_stars.ssc:18
+msgid "RW Cephei"
+msgstr "RW Kefeus"
+
+#: scripts/largest_known_stars.ssc:19
+msgid ""
+"RW Cep is variable both in brightness (by at least a factor\n"
+"of 3) and spectral type (observed from G8 to M), thus\n"
+"probably also in diameter."
+msgstr ""
+"RW Kefeus on vaihteleva sekä kirkkaus (ainakin kertoimella 3)\n"
+"ja spektrityyppi (havaittu G8:sta M:ään), siis luultavasti myös halkaisijaltaan."
+
+#: scripts/largest_known_stars.ssc:20
+msgid "VY Canis Majoris"
+msgstr "VY Iso koira"
+
+#: scripts/largest_known_stars.ssc:21
+msgid ""
+"Once thought to be a red hypergiant star so large that it\n"
+"contradicted stellar evolutionary theory, improved measurements\n"
+"and estimates have brought it down to size."
+msgstr ""
+"Kerran sitä pidettiin punaisena hyperjättiläisenä ja niin suurena tähtenä, että se\n"
+"on ristiriitainen tähtien evoluutioteorian kanssa. Parannetut mittaukset\n"
+"ja arviot ovat pienentäneet sen kokoa."
+
+#: scripts/largest_known_stars.ssc:22
+msgid "AH Scorpii"
+msgstr "AH Skorpioni"
+
+#: scripts/largest_known_stars.ssc:23
+msgid ""
+"AH Sco is variable by nearly 3 magnitudes in the visual range,\n"
+"and an estimated 20% in total luminosity. The variation in diameter\n"
+"is not clear because the temperature also varies."
+msgstr ""
+"AH Skorpioni vaihtelee lähes 3 magnitudia näköalueella,\n"
+"ja arviolta 20 % kokonaisvalovoimasta. Halkaisijan vaihtelu\n"
+"ei ole selvää, koska myös lämpötila vaihtelee."
+
+#: scripts/largest_known_stars.ssc:24
+msgid "V766 Centauri A"
+msgstr "V766 Kentauri A"
+
+#: scripts/largest_known_stars.ssc:25
+msgid ""
+"V766 Centauri A is a highly distorted star in a close binary system,\n"
+"losing mass to the secondary."
+msgstr ""
+"V766 Kentauri A on erittäin vääristynyt tähti läheisessä binäärijärjestelmässä,\n"
+"menettää massaa toissijaiseksi."
+
+#: scripts/largest_known_stars.ssc:26
+msgid "KW Sagittarii"
+msgstr "KW Jousimies"
+
+#: scripts/largest_known_stars.ssc:27
+msgid "BC Cygni"
+msgstr "BC Joutsen"
+
+#: scripts/largest_known_stars.ssc:28
+msgid "RT Carinae"
+msgstr "RT Köli"
+
+#: scripts/largest_known_stars.ssc:29
+msgid "Betelgeuse"
+msgstr "Betelgeuse"
+
+#: scripts/largest_known_stars.ssc:30
+msgid "Ninth brightest star in the night sky."
+msgstr "Yötaivaan yhdeksänneksi kirkkain tähti."
+
+#: scripts/largest_known_stars.ssc:31
+msgid "Mu Cephei (Herschel's \"Garnet Star\")"
+msgstr "Mu Cephei (Herschelin \"Granaattitähti\")"
+
+#: scripts/largest_known_stars.ssc:32
+msgid "S Persei"
+msgstr "S Perseus"
+
+#: scripts/largest_known_stars.ssc:33
+msgid "In the Perseus Double Cluster."
+msgstr "Perseuksen kaksoisklusterissa"
+
+#: scripts/largest_known_stars.ssc:34
+msgid "RW Cygni"
+msgstr "RW Joutsen"
+
+#: scripts/largest_known_stars.ssc:35
+msgid "Antares A"
+msgstr "Antares A"
+
+#: scripts/largest_known_stars.ssc:36
+msgid "Theta Muscae"
+msgstr "Theta Muscae"
+
+#: scripts/largest_known_stars.ssc:37
+msgid "V1749 Cygni"
+msgstr "V1749 Joutsen"
+
+#: scripts/largest_known_stars.ssc:38
+msgid "TZ Cassiopeiae"
+msgstr "TZ Kassiopeia"
+
+#: scripts/largest_known_stars.ssc:39
+msgid "IX Carinae"
+msgstr "IX Köli"
+
+#: scripts/largest_known_stars.ssc:40
+msgid "TV Geminorum"
+msgstr "TV Kaksoset"
+
+#: scripts/largest_known_stars.ssc:41
+msgid "T Cephei"
+msgstr "T Kefeus"
+
+#: scripts/largest_known_stars.ssc:42
+msgid "V382 Carinae"
+msgstr "V382 Köli"
+
+#: scripts/largest_known_stars.ssc:43 scripts/largest_known_stars.ssc:45
+msgid "Yellow hypergiant, one of the rarest types of star."
+msgstr "Keltainen hyperjättiläinen, yksi harvinaisimmista tähtityypeistä."
+
+#: scripts/largest_known_stars.ssc:44
+msgid "V509 Cassiopeiae"
+msgstr "V509 Kassiopeia"
+
+#: scripts/largest_known_stars.ssc:46
+msgid "CE Tauri (\"Ruby Star\")"
+msgstr "CE Härkä (\"Rubiinitähti\")"
+
+#: scripts/largest_known_stars.ssc:47
+msgid ""
+"Can be occulted by the Moon, allowing accurate determination\n"
+"of its apparent diameter."
+msgstr ""
+"Kuu voi peittää sen, mikä mahdollistaa tarkan määrityksen\n"
+"sen näennäishalkaisijasta."
+
+#: scripts/largest_known_stars.ssc:48
+msgid "R Leporis (\"Hind's Crimson Star\")"
+msgstr "R Jänis (\"Hindin Crimson -tähti\")"
+
+#: scripts/largest_known_stars.ssc:49
+msgid "One of the largest carbon stars existent in the Milky Way Galaxy."
+msgstr "Yksi suurimmista Linnunradan galaksissa olevista hiilitähdistä."
+
+#: scripts/largest_known_stars.ssc:50
+msgid "Alpha Herculis (\"Ras Algethi\")"
+msgstr "Alpha Herculis (\"Ras Algethi\")"
+
+#: scripts/largest_known_stars.ssc:51
+msgid "Rho Cassiopeiae"
+msgstr "Rho Cassiopeiae"
+
+#: scripts/largest_known_stars.ssc:52
+msgid "A yellow hypergiant, one of the rarest types of a star."
+msgstr "Keltainen hyperjättiläinen, yksi harvinaisimmista tähtityypeistä."
+
+#: scripts/largest_known_stars.ssc:53
+msgid "Mira A (Omicron Ceti)"
+msgstr "Mira A (Omicron Ceti)"
+
+#: scripts/largest_known_stars.ssc:54
+msgid "Prototype Mira variable"
+msgstr "Prototyyppi muuttuvasta Mirasta"
+
+#: scripts/largest_known_stars.ssc:55
+msgid "R Doradus"
+msgstr "R Kultakala"
+
+#: scripts/largest_known_stars.ssc:56
+msgid "Star with the second largest apparent size after the Sun."
+msgstr "Tähti, jonka näkyvä koko on toiseksi suurin Auringon jälkeen."
+
+#: scripts/largest_known_stars.ssc:57
+msgid "La Superba (Y Canum Venaticorum)"
+msgstr "La Superba (Y Canum Venaticorum)"
+
+#: scripts/largest_known_stars.ssc:58
+msgid "One of the coolest and reddest known stars."
+msgstr "Yksi tyylikkäimmistä ja punaisimmista tunnetuista tähdistä."
+
+#: scripts/largest_known_stars.ssc:59
+msgid "Deneb (Alpha Cygni)"
+msgstr "Deneb (Alpha Cygni)"
+
+#: scripts/largest_known_stars.ssc:60
+msgid "19th brightest star in the night sky."
+msgstr "19. kirkkain tähti yötaivaalla."
+
+#: scripts/largest_known_stars.ssc:61
+msgid "Rigel A (Beta Orionis A)"
+msgstr "Rigel A (Beta Orionis A)"
+
+#: scripts/largest_known_stars.ssc:62
+msgid "Seventh brightest star in the night sky."
+msgstr "Seitsemänneksi kirkkain tähti yötaivaalla."
+
+#: scripts/largest_known_stars.ssc:63
+msgid "Canopus (Alpha Carinae)"
+msgstr "Canopus (Alpha Köli)"
+
+#: scripts/largest_known_stars.ssc:64
+msgid "Second brightest star in the night sky."
+msgstr "Toiseksi kirkkain tähti yötaivaalla."
+
+#: scripts/largest_known_stars.ssc:65
+msgid "Aldebaran (Alpha Tauri)"
+msgstr "Aldebaran (Alpha Härkä)"
+
+#: scripts/largest_known_stars.ssc:66
+msgid "VV Cephei B"
+msgstr "VV Cephei B"
+
+#: scripts/largest_known_stars.ssc:67
+msgid "The B-type main sequence companion of VV Cephei A."
+msgstr "VV Cephei A:n B-tyypin pääsekvenssikumppani."
+
+#: scripts/largest_known_stars.ssc:92
+msgid "Solar radii"
+msgstr "Auringon säteet"
+
+#: scripts/constellations_tour.ssc:32
+#: scripts/modern_constellations_tour.ssc:32
+msgid "Press Ctrl+T to un-hide the toolbar"
+msgstr "Poista työkalurivin piilottaminen painamalla Ctrl+T"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:17
+msgid "Location: Mercury, 0N, 90E"
+msgstr "Sijainti: Merkurius, 0N, 90E"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:51
+msgid "Just Before Sunrise....."
+msgstr "Juuri ennen auringonnousua....."
+
+#: scripts/triple_sunrise_and_sunsets.ssc:54
+msgid "Surface of Mercury"
+msgstr "Merkuriuksen pinta"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:57
+msgid "Day"
+msgstr "Päivä"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:92
+msgid "Sunrise #1"
+msgstr "Auringonnousu #1"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:120
+msgid "Retro"
+msgstr "Retro"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:141
+msgid "Sunset #1"
+msgstr "Auringonlasku #1"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:159
+msgid "Sunrise #2"
+msgstr "Auringonnousu #2"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:173
+msgid "Later in the afternoon"
+msgstr "Myöhemmin iltapäivällä"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:205
+msgid "Sunset #2"
+msgstr "Auringonlasku #2"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:225
+msgid "Sunrise #3"
+msgstr "Auringonnousu #3"
+
+#: scripts/triple_sunrise_and_sunsets.ssc:244
+msgid "Sunset #3"
+msgstr "Auringonlasku #3"
+
+#: scripts/saturnian_analemma.ssc:17
+msgid "Saturnian analemma"
+msgstr "Satunuksen analemma"
+
+#: scripts/saturnian_analemma.ssc:42 scripts/uranian_analemma.ssc:42
+msgid "Solar day"
+msgstr "Aurinkovuorokausi"
+
+#: scripts/uranian_analemma.ssc:17
+msgid "Uranian analemma"
+msgstr "Uranuksen analemma"
+
+#: scripts/messier_marathon.ssc:18
+msgid "Messier Marathon"
+msgstr "Messier-maratoni"
+
+#: scripts/messier_marathon.ssc:85
+msgid "Difficulty is 0"
+msgstr "Vaikeus on 0"
+
+#: scripts/messier_marathon.ssc:86
+msgid "Very diffuse, very dark, very difficult"
+msgstr "Erittäin hajanainen, hyvin tumma, erittäin vaikea"
+
+#: scripts/messier_marathon.ssc:87
+msgid "Easier than M74, small"
+msgstr "Helpompi kuin M74, pieni"
+
+#: scripts/messier_marathon.ssc:88
+msgid "Visible to the naked eye, no difficulty"
+msgstr "Näkyy paljaalla silmällä, ei vaikeuksia"
+
+#: scripts/messier_marathon.ssc:89
+msgid "More difficult than M110 to verify, small"
+msgstr "Vaikeampi kuin M110 tarkistaa, pieni"
+
+#: scripts/messier_marathon.ssc:90
+msgid "In the west of M31, it is easy to detect"
+msgstr "M31:n länsiosassa se on helppo havaita"
+
+#: scripts/messier_marathon.ssc:91
+msgid "Diffuse, great, brighter"
+msgstr "Hajanainen, upea, kirkkaampi"
+
+#: scripts/messier_marathon.ssc:92
+msgid "Small, easy to locate, not as horror as imagined"
+msgstr "Pieni, helppo paikantaa, ei niin kauhea kuin kuvitellaan"
+
+#: scripts/messier_marathon.ssc:93
+msgid "Difficult to locate, easy to detect and verify"
+msgstr "Vaikea paikantaa, helppo havaita ja tarkistaa"
+
+#: scripts/messier_marathon.ssc:94
+msgid "Small, easy to locate, don't confuse with NGC663"
+msgstr "Pieni, helppo paikantaa, älä sekoita NGC663:een"
+
+#: scripts/messier_marathon.ssc:95
+msgid "Large, scattered, easy"
+msgstr "Iso, hajallaan, helppo"
+
+#: scripts/messier_marathon.ssc:96
+msgid "Fuzzy, easy to find, accompanied by a small star"
+msgstr "Sumea, helppo löytää, mukana pieni tähti"
+
+#: scripts/messier_marathon.ssc:97
+msgid "Visible to the naked eye, better than M31"
+msgstr "Näkyy paljaalla silmällä, parempi kuin M31"
+
+#: scripts/messier_marathon.ssc:98
+msgid "Very close to M42, not easy to see the fuzzy"
+msgstr "Hyvin lähellä M42:ta, sumeaa ei ole helppo nähdä"
+
+#: scripts/messier_marathon.ssc:99
+msgid "Small, dark, few stars around"
+msgstr "Pieni, tumma, muutama tähti ympärillä"
+
+#: scripts/messier_marathon.ssc:100
+msgid "Easy to locate, easy to detect in a good transparency."
+msgstr "Helppo paikantaa, helppo havaita hyvällä läpinäkyvyydellä."
+
+#: scripts/messier_marathon.ssc:101
+msgid "Visible to the naked eye, easier"
+msgstr "Näkyy paljaalla silmällä, helpompi"
+
+#: scripts/messier_marathon.ssc:102 scripts/messier_marathon.ssc:154
+#: scripts/messier_marathon.ssc:175
+msgid "Easy to locate and verify"
+msgstr "Helppo paikantaa ja tarkistaa"
+
+#: scripts/messier_marathon.ssc:103 scripts/messier_marathon.ssc:104
+msgid "Large, scattered"
+msgstr "Iso, hajallaan"
+
+#: scripts/messier_marathon.ssc:105
+msgid "Bright, easy to verify, difficult to locate"
+msgstr "Kirkas, helppo tarkistaa, vaikea paikantaa"
+
+#: scripts/messier_marathon.ssc:106
+msgid "Large, difficult to locate, easy to confuse with NGC2506"
+msgstr "Suuri, vaikea paikantaa, helppo sekoittaa NGC2506:een"
+
+#: scripts/messier_marathon.ssc:107
+msgid "Easy, more scattered"
+msgstr "Helppo, hajanainen"
+
+#: scripts/messier_marathon.ssc:108
+msgid "Easy, fuzzy"
+msgstr "Helppo, sumeaa"
+
+#: scripts/messier_marathon.ssc:109
+msgid "Easy, scattered"
+msgstr "Helppo, hajallaan"
+
+#: scripts/messier_marathon.ssc:110
+msgid "Easy, large, scattered"
+msgstr "Helppo, iso, hajallaan"
+
+#: scripts/messier_marathon.ssc:111
+msgid "Very close to M96 and M105"
+msgstr "Hyvin lähellä M96:ta ja M105:tä"
+
+#: scripts/messier_marathon.ssc:112
+msgid "Easy to locate and verify, assist to verify M95 and M105"
+msgstr "Helppo paikantaa ja tarkistaa, auttaa M95:n ja M105:n tarkistamisessa"
+
+#: scripts/messier_marathon.ssc:113
+msgid "Dark"
+msgstr "Tumma"
+
+#: scripts/messier_marathon.ssc:114
+msgid "Very close, it’s like M81 and M82"
+msgstr "Hyvin lähellä, se on kuin M81 ja M82"
+
+#: scripts/messier_marathon.ssc:115
+msgid "There is NGC3628 nearby, don't think you have found a new comet"
+msgstr "Lähistöllä on NGC3628, älä usko, että olet löytänyt uuden komeetan"
+
+#: scripts/messier_marathon.ssc:116
+msgid "Like the darkened M33, require a high sky conditions"
+msgstr "Kuten pimennetty M33, vaativat hyvät taivaan olosuhteet"
+
+#: scripts/messier_marathon.ssc:117
+msgid "Difficult to locate, 4 stars of the inverted 7 shape beside"
+msgstr "Vaikea paikantaa, 4 käänteistä 7-muodon tähteä vieressä"
+
+#: scripts/messier_marathon.ssc:118
+msgid "Easy, you can see the companion galaxy"
+msgstr "Helppoa, voit nähdä seuralaisen galaksin"
+
+#: scripts/messier_marathon.ssc:119
+msgid "Easy to verify"
+msgstr "Helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:120
+msgid "Not easy to locate, small, slightly dark"
+msgstr "Ei helppo löytää, pieni, hieman tumma"
+
+#: scripts/messier_marathon.ssc:121
+msgid "Not easy to locate, bright"
+msgstr "Ei helppo löytää, kirkas"
+
+#: scripts/messier_marathon.ssc:122
+msgid "Not easy to locate, no bright stars nearby"
+msgstr "Ei helppo paikantaa, ei kirkkaita tähtiä lähellä"
+
+#: scripts/messier_marathon.ssc:123
+msgid "Easy to locate"
+msgstr "Helppo paikantaa"
+
+#: scripts/messier_marathon.ssc:124
+msgid "Beside M60, it is easy to verify"
+msgstr "M60:n lisäksi se on helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:125
+msgid "It’s an easier one"
+msgstr "Se on helpompi"
+
+#: scripts/messier_marathon.ssc:126
+msgid "As bright as M85, easy to verify"
+msgstr "Yhtä kirkas kuin M85, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:127
+msgid "Dark, hard to look"
+msgstr "Tumma, vaikea katsoa"
+
+#: scripts/messier_marathon.ssc:128
+msgid "Easy to detect than M89, easy to locate"
+msgstr "Helppo havaita kuin M89, helppo paikantaa"
+
+#: scripts/messier_marathon.ssc:129
+msgid "Easy to locate, detect once"
+msgstr "Helppo paikantaa, havaita kerran"
+
+#: scripts/messier_marathon.ssc:130
+msgid "There is an NGC4438 near M84 and M86, don't make a mistake"
+msgstr "M84:n ja M86:n lähellä on NGC4438, älä tee virhettä"
+
+#: scripts/messier_marathon.ssc:131
+msgid "M84 are together, closer to NGC4438"
+msgstr "M84 ovat yhdessä, lähempänä NGC4438:aa"
+
+#: scripts/messier_marathon.ssc:132
+msgid "Just above M90, almost like M90"
+msgstr "Hieman M90 yläpuolella, melkein kuin M90"
+
+#: scripts/messier_marathon.ssc:133
+msgid "Look hard"
+msgstr "Vaikeasti katsottavissa"
+
+#: scripts/messier_marathon.ssc:134
+msgid "This bunch of things in the Virgo Cluster is not easy"
+msgstr "Tämä joukko asioita Neitsyt-klusterissa ei ole helppoa"
+
+#: scripts/messier_marathon.ssc:135
+msgid "M99 is easier to verify than M98"
+msgstr "M99 on helpompi varmistaa kuin M98"
+
+#: scripts/messier_marathon.ssc:136
+msgid "First find M100 and then find M98 and M99"
+msgstr "Etsi ensin M100 ja sitten M98 ja M99"
+
+#: scripts/messier_marathon.ssc:137
+msgid "Far away, but very bright, easy to find"
+msgstr "Kaukana, mutta erittäin valoisa, helppo löytää"
+
+#: scripts/messier_marathon.ssc:138
+msgid "Small, not easy to locate, a little difficult"
+msgstr "Pieni, ei helppo löytää, hieman vaikea"
+
+#: scripts/messier_marathon.ssc:139
+msgid "Not easy to locate, easy to verify"
+msgstr "Ei helppo löytää, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:140
+msgid "Easy to locate and verify, small"
+msgstr "Helppo paikantaa ja tarkistaa, pieni"
+
+#: scripts/messier_marathon.ssc:141
+msgid "Easy to verify, a star 5 magnitude nearby"
+msgstr "Helppo tarkistaa, tähti 5 magnitudia lähellä"
+
+#: scripts/messier_marathon.ssc:142
+msgid "Visible to the naked eye, big, bright"
+msgstr "Paljaalla silmällä näkyvä, iso, kirkas"
+
+#: scripts/messier_marathon.ssc:143
+msgid "Bright and big in the galaxies, not hard to find"
+msgstr "Kirkas ja suuri galakseissa, ei vaikea löytää"
+
+#: scripts/messier_marathon.ssc:144
+msgid "Bright, easy to verify"
+msgstr "Kirkas, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:145
+msgid "Easy to verify in a right location"
+msgstr "Helppo tarkistaa oikeassa paikassa"
+
+#: scripts/messier_marathon.ssc:146
+msgid "Famous, like the shoulder pole star"
+msgstr "Kuuluisa, kuten olkapään napatähti"
+
+#: scripts/messier_marathon.ssc:147
+msgid "It may be easier to locate from the Dragon"
+msgstr "Se voi olla helpompi paikantaa lohikäärmeestä"
+
+#: scripts/messier_marathon.ssc:148
+msgid "Small, 20 times or more is still easy to detect"
+msgstr "Pieni, 20 kertaa tai enemmän, on silti helppo havaita"
+
+#: scripts/messier_marathon.ssc:149
+msgid "More difficult than M57, not easy to locate, very small"
+msgstr "Vaikeampi kuin M57, ei helppo paikantaa, hyvin pieni"
+
+#: scripts/messier_marathon.ssc:150
+msgid "Easy, small, looks like a cluster of stars 7-8 magnitude"
+msgstr "Helppo, pieni, näyttää tähtijoukolta 7-8 magnitudia"
+
+#: scripts/messier_marathon.ssc:151
+msgid "Larger than imagined, very scattered, not easy to locate"
+msgstr "Suurempi kuin kuvitellaan, hyvin hajallaan, ei helppo paikantaa"
+
+#: scripts/messier_marathon.ssc:152
+msgid "Find M71 first, then find M27, and will be easier to locate"
+msgstr "Etsi ensin M71 ja sitten M27, niin se on helpompi paikantaa"
+
+#: scripts/messier_marathon.ssc:153
+msgid "Easy to locate, easy to verify in 50 binos"
+msgstr "Helppo paikantaa, helppo tarkistaa 50 millimetrin kiikareilla"
+
+#: scripts/messier_marathon.ssc:155
+msgid "Bright, like M13, easy to find"
+msgstr "Kirkas, kuten M13, helppo löytää"
+
+#: scripts/messier_marathon.ssc:156
+msgid "Detect it with M12, brighter than M12"
+msgstr "Tunnista se M12:lla, kirkkaammalla kuin M12"
+
+#: scripts/messier_marathon.ssc:157
+msgid "Difficult to locate, easy to verify"
+msgstr "Vaikea paikantaa, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:158
+msgid "Small, not easy to verify"
+msgstr "Pieni, ei helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:159
+msgid "Bright, big, don't forget to detect NGC6144 nearby"
+msgstr "Kirkas, iso, älä unohda havaita NGC6144 lähistöltä"
+
+#: scripts/messier_marathon.ssc:160
+msgid "Not easy to verify at low power, easy at high power"
+msgstr "Ei helppo tarkistaa pienellä teholla, helppo suurella teholla"
+
+#: scripts/messier_marathon.ssc:161
+msgid "Follow the line of M4 and Antares, easy to verify"
+msgstr "Seuraa M4:n ja Antaresin linjaa, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:162
+msgid "Looking down from M19, darker than M19, but easy to verify"
+msgstr ""
+"M19:stä alaspäin katsottuna, tummempi kuin M19, mutta helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:163
+msgid "Easy to locate, bright, and almost like M13"
+msgstr "Helppo paikantaa, kirkas ja melkein kuin M13"
+
+#: scripts/messier_marathon.ssc:164
+msgid "Easy to locate M26 by M11"
+msgstr "Helppo paikantaa M26:llä ja M11 eli Villihanhella"
+
+#: scripts/messier_marathon.ssc:165
+msgid "Easy"
+msgstr "Helppo"
+
+#: scripts/messier_marathon.ssc:166 scripts/messier_marathon.ssc:179
+msgid "Difficult to locate, bright, easy to verify"
+msgstr "Vaikea paikantaa, kirkas, helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:167
+msgid "Beside M81, vertical to each other"
+msgstr "M81:n vieressä, pystysuorassa toisiinsa nähden"
+
+#: scripts/messier_marathon.ssc:168
+msgid "Large, a little fuzzy"
+msgstr "Iso, hieman sumea"
+
+#: scripts/messier_marathon.ssc:168
+msgid "Beside M20"
+msgstr "M20:n vieressä"
+
+#: scripts/messier_marathon.ssc:169
+msgid "It’s not hard to see the diffuse nebula"
+msgstr "Hajasumua ei ole vaikea nähdä"
+
+#: scripts/messier_marathon.ssc:170
+msgid "Visible to the naked eye, extremely easy"
+msgstr "Näkyy paljaalla silmällä, erittäin helppo"
+
+#: scripts/messier_marathon.ssc:171
+msgid "Big, easy"
+msgstr "Iso, helppo"
+
+#: scripts/messier_marathon.ssc:171
+msgid "Easy to locate and verify, bright"
+msgstr "Helppo paikantaa ja tarkistaa, kirkas"
+
+#: scripts/messier_marathon.ssc:172
+msgid "M13 second"
+msgstr "M13 toinen"
+
+#: scripts/messier_marathon.ssc:173
+msgid "Too big, scattered, not easy to verify"
+msgstr "Liian suuri, hajallaan, ei helppo tarkistaa"
+
+#: scripts/messier_marathon.ssc:174
+msgid "Bigger than M6"
+msgstr "Suurempi kuin M6"
+
+#: scripts/messier_marathon.ssc:176
+msgid "Brighter than imagined, can be detected with 60 binos"
+msgstr "Kirkkaampi kuin kuvitellaan, voidaan havaita 60 millin kiikareilla"
+
+#: scripts/messier_marathon.ssc:177
+msgid "Darker than M97, long strips, look hard"
+msgstr "Tummempi kuin M97, pitkät nauhat, näyttävät kovalta"
+
+#: scripts/messier_marathon.ssc:178
+msgid "Easy to verify with more than 20 times binos"
+msgstr "Helppo tarkistaa yli 20-kertaisilla kiikareilla"
+
+#: scripts/messier_marathon.ssc:180
+msgid "In the morning light, it looks too hard, dark"
+msgstr "Aamuvalossa se näyttää liian vaikealta, pimeältä"
+
+#: scripts/messier_marathon.ssc:289
+msgid "cannot be seen now"
+msgstr "ei voida nähdä nyt"

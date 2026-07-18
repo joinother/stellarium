@@ -1,0 +1,1024 @@
+% Status info:
+% M. Gates	2006-2009
+% A. Wolf	2011-2015
+% ArdWar	2012
+% B. Gerdes	2013
+% TODO insert further additions from wiki?
+% Content OK for 0.15+.
+% GZ: typo&grammar check 20160329
+
+\chapter{Files and Directories}
+\label{sec:FilesAndDirectories}
+
+\section{Directories}
+\label{sec:Directories}
+
+Stellarium has many data files containing such things as star catalogue
+data, nebula images, button icons, font files and configuration files.
+When Stellarium looks for a file, it looks in two places. First, it
+looks in the \indexterm{user directory}\footnote{also called \indexterm{user data directory}} for the account which is running
+Stellarium. If the file is not found there, Stellarium looks in the
+\indexterm{installation directory}\footnote{The installation directory was
+  referred to as the config root directory in previous versions of this
+  guide}. Thus it is possible for Stellarium to be installed by an
+administrative user and yet have a writable configuration file for
+non-administrative users. Another benefit of this method is on
+multi-user systems: Stellarium can be installed by the administrator,
+and different users can maintain their own configuration and other files
+in their personal user accounts.
+
+In addition to the main search path, Stellarium saves some files in
+other locations, for example screens shots and recorded scripts.
+
+The locations of the user directory, installation directory,
+\indexterm{screenshot save directory} and \indexterm{script save directory} vary
+according to the operating system and installation options used. The
+following sections describe the locations for various operating systems.
+
+\subsection{Windows}
+\label{sec:FilesAndDirectories:Windows}
+
+\begin{description}
+\item[installation directory] By default this is
+  \file{C:\textbackslash{}Program\ Files\textbackslash{}Stellarium\textbackslash{}},
+  although this can be adjusted during the installation process.
+\item[user directory] This is the Stellarium sub-folder in the
+  Application Data folder for the user account which is used to run
+  Stellarium. Depending on the version of Windows and its configuration,
+  this could be any of the following (each of these is tried, if it
+  fails, the next in the list if tried).
+
+\begin{commands}
+%APPDATA%\Stellarium\
+%USERPROFILE%\Stellarium\
+%HOMEDRIVE%\%HOMEPATH%\Stellarium\
+%HOME%\Stellarium\
+Stellarium's installation directory
+\end{commands}
+
+Thus, on a typical Windows Vista/7/10 system with user ``Bob
+Dobbs'', the user directory will be:
+
+\begin{commands}
+C:\Users\Bob Dobbs\AppData\Roaming\Stellarium\
+\end{commands}
+
+The user data directory is unfortunately hidden by default. To make it accessible in the Windows file
+explorer, open an \program{Explorer} window and select \menu{Organize... > Folder and
+search options}. Make sure folders marked as hidden are now 
+displayed. Also, deselect the checkbox to ``hide known file name
+endings''.\footnote{This is a very confusing default setting and in fact
+  a security risk: Consider you receive an email with some file
+  \file{funny.png.exe} attached. Your explorer displays this as
+  \file{funny.png}. You double-click it, expecting to open some image
+  browser with a funny image. However, you start some unknown program
+  instead, and running this \file{.exe} executable program may turn
+  out to be anything but funny!}
+
+\item[screenshot save directory] Screenshots will be saved to the
+  \file{Pictures/Stellarium} directory, although this can be changed in the GUI 
+  (see section~\ref{sec:gui:configuration:tools}) or with a command line option (see
+  section~\ref{sec:CommandLineOptions}).
+\end{description}
+
+\subsection{macOS}
+\label{sec:FilesAndDirectories:macOS}
+
+\begin{description}
+\item[installation directory] This is found inside the application
+  bundle, \file{Stellarium.app}. See \emph{The Anatomy of macOS App 
+  Bundles}\footnote{\url{https://www.maketecheasier.com/anatomy-macos-app-bundles/}}
+  or \emph{Bundle Programming Guide}\footnote{\url{https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/Introduction/Introduction.html}} 
+  for more information.
+\item[user directory] This is the sub-directory 
+  \file{\textasciitilde{}/Library/Application\ Support/Stellarium} of the user's home
+  directory.
+\item[screenshot save directory] Screenshots are saved to the user's
+  Desktop.
+\end{description}
+
+\subsection{Linux}
+\label{sec:FilesAndDirectories:Linux}
+
+\begin{description}
+\item[installation directory] This is in the
+  \file{share/stellarium} sub-directory of the installation prefix,
+  i.e., usually \file{/usr/share/stellarium}.
+\item[user directory] This is the \file{.stellarium} sub-directory of
+  user's home directory, i.e.,
+  \file{\textasciitilde{}/.stellarium/}. This is a hidden folder, so
+  if you are using a graphical file browser, you may want to change
+  its settings to ``display hidden folders''.
+\item[screenshot save directory] Screenshots are saved to the user's
+  home directory.
+\end{description}
+
+\subsection{*BSD/Solaris/OpenIndiana}
+\label{sec:FilesAndDirectories:UNIX}
+
+\begin{description}
+\item[installation directory] This is in the
+  \file{share/stellarium} sub-directory of the installation prefix,
+  i.e., usually \file{/usr/local/share/stellarium/}.
+\item[user directory] This is the \file{.stellarium} sub-directory of
+  user's home directory, i.e.,
+  \file{\textasciitilde{}/.stellarium/}. This is a hidden folder, so
+  if you are using a graphical file browser, you may want to change
+  its settings to ``display hidden folders''.
+\item[screenshot save directory] Screenshots are saved to the user's
+  home directory.
+\end{description}
+
+\subsection{Haiku}
+\label{sec:FilesAndDirectories:Haiku}
+
+\begin{description}
+\item[installation directory] This is in the
+  \file{/boot/system/data/stellarium/} sub-directory.
+\item[user directory] This is in the user's home directory, i.e., 
+  \file{\textasciitilde{}/config/settings/Stellarium/} 
+  or the sub-directory \file{/boot/home/config/settings/Stellarium/}.
+\item[screenshot save directory] Screenshots are saved to the user's
+  home directory.
+\end{description}
+
+
+\subsection{Customized Location}
+\label{sec:FilesAndDirectories:Custom}
+
+Some users\newFeature{0.19.0} may prefer non-standard locations for
+their own data, for example when the Windows \file{C:} drive (which
+usually contains user data), or the Linux \file{/home} partition has
+become too small to hold tens of high-resolution landscapes or
+detailed 3D sceneries. You can move the entire directory elsewhere and
+use an environment variable \texttt{STEL\_USERDIR} that contains the
+pathname.
+
+\section{Directory Structure}
+\label{sec:FilesAndDirectories:DirectoryStructure}
+
+Within the \emph{installation directory} and \emph{user directory}
+defined in section~\ref{sec:Directories}, files are arranged in the
+following sub-directories.
+
+\begin{description}
+\item[\file{landscapes/}] contains data files and textures used for
+  Stellarium's various landscapes. Each landscape has its own
+  sub-directory. The name of this sub-directory is called the
+  \emph{landscape ID}, which is used to specify the default landscape in
+  the main configuration file, or in script commands.
+\item[\file{skycultures/}] contains constellations, common star names and
+  constellation artwork for Stellarium's many sky cultures. Each culture
+  has its own sub-directory in the \file{skycultures} directory.
+\item[\file{scripts/}] contains your own scripts. These can be used to create
+  complex demonstrations (see ch.~\ref{ch:scripting}). 
+\item[\file{nebulae/}] contains data and image files for nebula textures.
+  In the future Stellarium may be able to support multiple sets of nebula
+  images and switch between them at runtime. This feature is not
+  implemented for version~\StelVersion, although the directory structure is in
+  place -- each set of nebula textures has its own sub-directory in the
+  nebulae directory.
+  %% TODO: Update this if no longer valid.
+\item[\file{stars/}] contains Stellarium's star catalogues. In the
+  future Stellarium may be able to support multiple star catalogues
+  and switch between them at runtime. This feature is not implemented
+  for version~\StelVersion, although the directory structure is in
+  place -- each star catalogue has its own sub-directory in the stars
+  directory.
+  %% TODO: Update this if no longer valid. 
+\item[\file{data/}] contains miscellaneous data files including fonts,
+  solar system data, city locations, etc.
+\item[\file{textures/}] contains miscellaneous texture files, such as the
+  graphics for the toolbar buttons, planet texture maps, etc.
+\item[\file{ephem/}] (optional) may contain data files for planetary
+  ephemerides DE430, DE431, DE440 and DE441 (see~\ref{sec:ExtraData:ephemerides}).
+\end{description}
+
+If any file exists in both the installation directory and user
+directory, the version in the user directory will be used. Thus it is
+possible to override settings which are part of the main Stellarium
+installation by copying the relevant file to the user area and modifying
+it there.
+
+It is recommended to add new landscapes or sky cultures by creating the relevant files
+and directories within the user directory, leaving the installation
+directory unchanged. In this manner different users on a multi-user
+system can customise Stellarium without affecting the other users, and 
+updating Stellarium will not risk the loss of your own data. 
+
+
+\section{The Logfile}
+\label{sec:LogFile}
+
+Stellarium reports various events and confirmations to a \indexterm{logfile}, \file{log.txt}, 
+in the \emph{user directory}. This has the same content as you can see on the console 
+on Linux when you start Stellarium on the command line. Normally you don't need to bother with its contents, 
+however, if Stellarium behaves unexpectedly, crashes, or shows other problems, a quick look into this 
+file may help to identify the problem. Also when you report a problem to the developers in the hope 
+that they (we) can 'fix' anything, this logfile is an essential ingredient to your report. 
+The logfile can also be displayed within the program: press \key{F1} to call the help panel, and select the Logfile tab. 
+
+
+\section{The Main Configuration File}
+\label{sec:ConfigurationFile}
+
+The main \indexterm{configuration file} is read each time Stellarium starts, and
+settings such as the observer's location and display preferences are
+taken from it. Ideally this mechanism should be totally transparent to
+the user -- anything that is configurable should be configured ``in''
+the program GUI. However, at time of writing Stellarium isn't quite
+complete in this respect, despite improvements in each version. Some
+settings, esp.\ color values for some lines, grids, etc.\ can only be
+changed by directly editing the configuration file.\footnote{Color
+  values can be edited interactively by the Text User Interface plugin
+  (see~\ref{sec:plugins:TextUserInterface}).} This section describes
+some of the settings a user may wish to modify in this way, and how to
+do it.
+
+The name of the configuration file is
+\file{config.ini}\footnote{It is possible to specify a different name
+  for the main configuration file using the \texttt{-\/-config-file}
+  command line option. See section~\ref{sec:CommandLineOptions} Command 
+  Line Options for details.}.
+If the configuration file does not exist in the \emph{user directory}
+when Stellarium is started (e.g., the first time the user starts the
+program), one will be created with default values for all settings
+(refer to section~\ref{sec:FilesAndDirectories} Files and
+Directories for the location of the user directory on your operating
+system).
+
+
+The configuration file is a regular text file, so all you need to edit
+it is a text editor like \program{Notepad} on Windows, \program{Text Edit} on
+the Mac, or \program{nano}/\program{vi}/\program{gedit}/\program{emacs}/\program{leafpad} etc.\ on Linux.
+
+%The following sub-sections contain details on how to make commonly used
+%modifications to the configuration file. 
+A complete list of configuration file options and values may be found
+in appendix~\ref{sec:config.ini}.
+
+
+\section{Getting Extra Data}
+\label{sec:ExtraData}
+
+\subsection{More Stars}
+\label{sec:ExtraData:stars}
+Stellarium is packaged with over 600 thousand stars in the normal
+program download, but much larger star catalogues may be downloaded
+in the \emph{Tools} tab of the \emph{Configuration} dialog (\guibutton[0.25]{2}{btd_config.png} or
+\key{F2}).
+
+\subsection{More Deep-Sky Objects}
+\label{sec:ExtraData:DSOs}
+
+\noindent\newFeature{0.16.1}Stellarium is packaged with over 94 thousand deep-sky 
+objects\footnote{Over 83 thousand deep-sky objects in version 0.16.0.} in the normal
+program download (the \emph{standard edition} of Stellarium DSO catalog\footnote{The first 
+number in the version of Stellarium DSO catalog means version of catalog structure, 
+and the second number means version of data.}, see section \ref{sec:dso:catalog}), 
+but an \emph{extended edition} of DSO catalog with over one million objects (up to $20.0^m$ for galaxies) may be downloaded
+from Stellarium's Github website\footnote{\url{https://github.com/Stellarium/stellarium-data/releases/tag/dso-3.23}}:
+
+\noindent\begin{tabular}{lllr}
+\toprule
+\emph{Version; Edition} & \emph{Filename} & \emph{MD5 hash} & \emph{Size}\\\midrule
+3.23; extended & \file{catalog-3.23.dat} & \texttt{56dfcdcedc3bfc18ce730984ab039308} & 28MB\\\bottomrule
+\end{tabular}
+
+The file can be placed in a folder named \file{nebulae/default} inside the \emph{user directory}
+(see section~\ref{sec:FilesAndDirectories:DirectoryStructure}).
+
+\subsection{Alternative Planet Ephemerides: DE430, DE431, DE440, DE441}
+\label{sec:ExtraData:ephemerides}
+
+\noindent\newFeature{0.15.0}By default, Stellarium uses the \indexterm{VSOP87} planetary theory,
+an analytical solution which is able to deliver planetary positions
+for any input date~\citep{1988A&A...202..309B}. However, its use is recommended only for the year
+range $-4000\ldots+8000$. Outside this range, it seems to be usable
+for a few more millennia without too great errors, but with degrading accuracy. 
+Likewise for the moon, Stellarium by default uses ELP~2000-82B~\citep{1982CeMec..26...63C, 1983A&A...124...50C, ELP2000-82B}.
+
+Since v0.15.0 you can install extra data files which allow access to the
+numerical integration runs \indexterm{DE430} and \indexterm{DE431} \citep{DE43x},
+and meanwhile also \newFeature{0.21.2} \indexterm{DE440} and \indexterm{DE441} \citep{DE44x},
+from NASA's Jet Propulsion Laboratory (JPL). The data files have to be
+downloaded separately, and most users will likely not need them. DE430 and DE440
+provide highly accurate data for the years $+1550\ldots+2650$, while
+DE431 and DE441 covers years $-13000\ldots+17000$, which allows e.g.\ 
+archaeoastronomical research on Mesolithic landscapes. (But see Appendix~\ref{ch:Accuracy}!) Outside these
+year ranges, positional computation falls back to VSOP87.
+
+Some current approximations may still lead to numerical data which differ slightly from best possible ephemerides.  
+Please at least compare with JPL Horizons\footnote{\url{https://ssd.jpl.nasa.gov/horizons.cgi}} for dependable results.
+
+To enable use of these data, download the files from
+JPL\footnote{\url{https://ssd.jpl.nasa.gov/ftp/eph/planets/Linux/} (Also
+  download from this directory if you are not running Linux!)}:
+
+\noindent\begin{tabular}{lllr}
+\toprule
+\emph{Ephemeris}&\emph{Filename}& \emph{MD5 hash}& \emph{Size}\\\midrule
+DE430& \file{linux\_p1550p2650.430}  &\texttt{707c4262533d52d59abaaaa5e69c5738}& 97.5\,MB\\
+DE431& \file{lnxm13000p17000.431}    &\texttt{fad0f432ae18c330f9e14915fbf8960a}& 2.59\,GB\\
+DE440& \file{linux\_p1550p2650.440}  &\texttt{9dc8a9cefd32b0090002407847e718ba}& 97.5\,MB\\
+DE441& \file{linux\_m13000p17000.441}&\texttt{4e3b924463d17b68ec9c4a18240300cd}& 2.59\,GB\\\bottomrule
+\end{tabular}
+
+
+The files can be placed in a folder named \file{ephem} inside either
+the \emph{installation directory} or the \emph{user directory}
+(see \ref{sec:FilesAndDirectories:DirectoryStructure}). Alternatively,
+if you have them already stored elsewhere, you may add the path to
+\file{config.ini} like:
+\begin{configfile}
+[astro]
+de430_path = C:/Astrodata/JPL_DE43x/linux_p1550p2650.430
+de431_path = C:/Astrodata/JPL_DE43x/lnxm13000p17000.431
+de440_path = C:/Astrodata/JPL_DE44x/linux_p1550p2650.440
+de441_path = C:/Astrodata/JPL_DE44x/linux_m13000p17000.441
+\end{configfile}
+
+For fast access avoid storing them on a network drive or USB pendrive!
+
+You activate use of either ephemeris in the \emph{Configuration} panel
+(\key{F2}). If you activate more than one, preference will be given
+for DE440 over DE441 if the simulation time allows it. Only if DE44x
+are not enabled, DE430 is given preference over DE431 if simulation
+time allows it.  Outside of the valid times, VSOP87 will always be
+used.
+
+\paragraph{Acknowledgement}
+The optional use of DE430/431 has been supported by the ESA Summer of
+Code in Space 2015 initiative.
+
+\subsection{GPS Position}
+\label{sec:ExtraData:GPS}
+
+\noindent In the \emph{Location} panel (see
+section~\ref{sec:gui:location}) you can receive your location from a
+\indexterm{GPS} device.  \newFeature{0.16/0.18.1} The exact way to receive
+GPS location depends on your operating system. 
+
+\subsubsection{GPSD (Linux, macOS only)}
+\label{sec:ExtraData:GPS:GPSD}
+
+On Linux, Mac-OS X and other Unixoid platforms, Stellarium preferably
+should not connect directly to a GPS USB device, serial device,
+bluetooth device, etc., but use a connection to the \program{gpsd}
+daemon running on a computer in your network which provides GPS
+services concurrently for any interested application. In most cases,
+this will be a \program{gpsd} running on your localhost, receiving
+data from some GPS device plugged in via USB.
+Please follow instructions by the \program{gpsd}
+authors\footnote{\url{https://gpsd.gitlab.io/gpsd/index.html}} to properly
+configure this system daemon.  A few hints:
+\begin{itemize}
+\item On Ubuntu 16.04 and likely other systems, USB hotplug devices
+  are handled by the \program{udev} daemon which detects newly
+  plugged-in devices and creates device files in the \file{/dev}
+  directory. Unfortunately, most GPS devices use the Prolific 2303
+  chipset in their serial-to-USB converter and are identified as
+  such, without other unique information like serial numbers. 
+  This chipset is also used in other Serial-to-USB converter
+  cables, and to avoid conflicts the according rule has been disabled
+  by the release managers of Ubuntu.  In
+  \file{/lib/udev/60-gpsd.rules}, find the commented line and
+  re-activate it.
+
+\item If you have such an USB GPS mouse and USB-to-serial converters
+  for other purposes like for your telescope control, you must solve
+  the ``\program{udev} crisis'' in some other way to get
+  \program{gpsd} running. You may be able to find some property in
+  your device to uniquely identify this device and write an
+  \program{udev} rule to create the symlink in \file{/dev/gps0} to
+  which \program{gpsd} can then connect.
+
+\item You can also connect to another computer which runs
+  \program{gpsd}. This could be a little Raspberry Pi computer which
+  happens to be in your WiFi to allow localisation and time service.
+ To configure this, you must manually edit
+  \file{config.ini}. Find the \texttt{[gui]} section and edit
+\begin{configfile}
+[gui]
+# These values are used on non-Windows systems 
+# supporting GPSD
+gpsd_hostname   = localhost
+gpsd_port       = 2947 
+\end{configfile}
+Also, \program{gpsd} must be started with the \texttt{-G} parameter to
+enable this.
+\item Even your smartphone can be used as GPS data
+  source\footnote{Thanks to user Caysho for this hint.}: Apps like
+  \program{BlueNMEA} can provide these data for \program{gpsd}, but
+  you must make sure to configure hostname/IP Address and port number
+  correctly, for example
+  \begin{commands}
+ sudo gpsd -n -D8 -S 1001 tcp://192.168.1.101:4352
+  \end{commands}
+which means
+\begin{description}
+\item[-n] to start without a device connection
+\item[-D8] maximum debug level. When it works, use what suits you
+\item[-S 1001] provide service on port 1001
+\item[tcp] Use this address:port combination to receive data from (IP of
+  your smartphone, port shown on \program{BlueNMEA} screen).
+\end{description}
+\item In case you really don't want to use the \program{gpsd}, you can
+  use a directly connected device, see below. This is however not
+  recommended when you have \program{gpsd} available.
+\end{itemize}
+
+
+\subsubsection{NMEA Device}
+\label{sec:ExtraData:GPS:NMEA}
+
+This mode is primarily for Windows users, but also for Linux and Mac
+users who don't want to use \program{gpsd}.
+
+Virtually all GPS receivers are able to emit the standardized
+\indexterm{NMEA}-0183 messages which encode time, position, speed,
+satellite information and other data.  The standard originally
+required connection settings of 4800\,baud, 8 bit, no parity, one stop
+bit (8N1), however some devices come with faster transfer.
+
+Compatible devices today are connected on a ``virtual COM port'' via
+USB. Unfortunately the COM number seems to depend on the USB plug
+where you attach the receiver.  You can identify the port name (COM3,
+COM4, \ldots) in the Windows system configuration (Device Manager) or
+with the software that came with your device.\footnote{On Linux, this
+  may read \file{/dev/ttyUSB0}, \file{/dev/gps0} or similar.}
+
+If this is the only serial device, Stellarium should automatically
+connect to it regardless of configuration entries.  If you
+have a device with non-standard baudrate or several serial devices on
+serial ports (e.g., your telescope?), you must find out which serial port is
+used by the GPS device and manually edit \file{config.ini}.  Find
+the \texttt{[gui]} section and edit
+\begin{configfile}
+[gui]
+# These values are used on Windows primarily.
+gps_interface     = COM3
+gps_baudrate      = 4800
+\end{configfile}
+From now on, always use the same USB plug configuration to connect GPS
+and telescope.\footnote{Again, for Linux the port number is defined in
+  order of hotplugging by \program{udev}. You should develop an
+  \program{udev} rule which adds a unique name and use this. In this
+  case, you may also need to add your user to the \texttt{dialout}
+  group (or whichever group owns your serial port).  Better yet, use
+  \program{gpsd} (see above).}
+
+If GPS lookup fails, see section~\ref{sec:Environment:Logfile} to enable more diagnostic messages in the logfile.
+
+\paragraph{Bluetooth GPS} Most smartphones provide GPS and Bluetooth
+hardware. You can install a virtual COM port in your Windows Bluetooth
+settings and use a smartphone app like \program{Share
+  GPS}\footnote{\url{https://play.google.com/store/apps/details?id=com.jillybunch.shareGPS}}
+to provide the NMEA strings.
+
+\paragraph{Windows location service} On Windows devices, you can get your location
+using the Windows location service. The result depends on available
+hardware and other settings, e.g. real GPS sensor or network and WiFi
+detection.\footnote{\url{https://support.microsoft.com/en-us/windows/windows-location-service-and-privacy-3a8eee0a-5b0b-dc07-eede-2a5ca1c49088}}
+
+
+\subsection{Modernized MESA3D libraries (Software OpenGL on Windows)}
+\label{sec:ExtraData:Mesa}
+
+Stellarium uses hardware-accelerated OpenGL for rendering. On very old Windows systems without dedicated graphics hardware, 
+or in special circumstances like virtual machines, hardware accelerated graphics may not be available, 
+and the \program{Mesa3D} software implementation of OpenGL is used. This can also be forced by the command-line option \command{-\/-mesa-mode}. 
+Rendering the graphics without hardware acceleration is of course much slower than accelerated graphics, but it's surely better than nothing.
+
+Qt's default Mesa library (Mesa 11) provides support for OpenGL~3.0 only. This prevents users of all versions from applying dithering in Mesa mode. 
+Also the \program{ShowMySky} skylight model (see section~\ref{sec:skylight:ShowMySky}) is then not available.
+
+We have replaced\newFeature{23.4} this by a version of Mesa~20 compiled by Federico Dossena\footnote{\url{https://fdossena.com/?p=mesa/index.frag}} which appears to be even a bit faster.
+
+The \program{Mesa3D} project \footnote{\url{https://www.mesa3d.org/}} meanwhile (2023) provides at least OpenGL~4.5. 
+If you wish to use more ``up to date'' precompiled binaries and have Administrator privileges on your Windows system, 
+you can replace this library using the following steps to install unofficial builds\footnote{\url{https://github.com/pal1000/mesa-dist-win/}}. 
+Note however that after this upgrade, the program runs with considerably ($\approx$35\%?) lower framerate. 
+You must decide whether this is really beneficial in your situation. The libraries don't provide any additional graphics features that Stellarium makes use of.
+
+\begin{itemize}
+\item Download the latest ``release-msvc'' package as you need from \url{https://github.com/pal1000/mesa-dist-win/releases} and unpack it somewhere.
+\item Copy \file{(x86|x64)/{libglapi.dll,libgallium\_wgl.dll,opengl32.dll}} to where the executable \file{stellarium.exe} is.
+\item Delete the existing \file{opengl32sw.dll}
+\item Rename the just-copied \file{opengl32.dll} to \file{opengl32sw.dll}.
+\end{itemize}
+
+\noindent Now running Stellarium in Mesa mode (with link from program menu or command line) should report to provide OpenGL~4.5.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\chapter{Advanced Options}
+%\label{command-line-options}
+
+\section{Command Line Options} 
+\label{sec:CommandLineOptions}
+
+Stellarium's behaviour can be modified by providing parameters to the
+program when it is called via the command line. See table for a full list:
+
+\begin{longtable}{l|c|p{68mm}}\toprule
+\emph{Option}         & \emph{Option Parameter} & \emph{Description}\\\midrule
+-\/-help or -h        & {[}none{]}       & Print a quick command line help message, and exit. \\\midrule
+-\/-version or -v     & {[}none{]}       & Print the program name and version information, and exit. \\\midrule
+-\/-config-file or -c & config file name & Specify the configuration file name. The default value is \file{config.ini}.
+
+                                           The parameter can be a full path (which will be used verbatim) or a partial path.
+
+                                           Partial paths will be searched for inside the regular search paths
+                                           unless they start with a ``\file{.}'', which may be used to explicitly
+                                           specify a file in the current directory or similar.
+
+                                           For example, using the option \texttt{-c\ my\_config.ini} would resolve to the file 
+                                           \file{\textless{}user\ directory\textgreater{}/my\_config.ini} whereas 
+                                           \file{-c\ ./my\_config.ini} can be used to explicitly point to the file
+                                           \file{my\_config.ini} in the current working directory.\\
+-\/-log-file or -l   & log file name     & Specify the log file name. The default value is \file{log.txt}.
+
+                                           The value of parameter can be a simple filename or absolute path to the log file. 
+
+                                           When a path is specified like \texttt{-l\ my\_log.txt}, the file will be written 
+                                           to \file{\textless{}user\ directory\textgreater{}/my\_log.txt}. When a path is 
+                                           specified like \texttt{-l\ /home/user/stellarium.log} \file{/home/user/stellarium.log}\\\midrule
+-\/-restore-defaults &  [none]    & Stellarium will start with the default configuration. 
+                                    Note: The old configuration file will be overwritten. \\\midrule
+-\/-user-dir         & path       & Specify the user data directory. \\
+-\/-screenshot-dir   & path       & Specify the directory to which screenshots will be saved. \\\midrule
+-\/-full-screen      & yes or no  & Overrides the full screen setting in the config file. \\\midrule
+-\/-home-planet      & planet     & Specify observer planet (English name). \\
+-\/-latitude         & latitude   & Specify latitude, e.g. 41.1 or +53d58'16.6" \footnote{\label{FN:escapes}You may have to escape the minute/second characters, like +53d58\textbackslash{}'16.6\textbackslash{}"}\\
+-\/-longitude        & longitude  & Specify longitude, e.g. 16.2 or -1d4'27.48" \footref{FN:escapes}\\
+-\/-altitude         & altitude   & Specify observer altitude in meters. \\\midrule
+-\/-list-landscapes  & {[}none{]} & Print a list of available landscape IDs and exit. \\
+-\/-landscape        & landscape ID & Start using landscape whose ID matches the passed parameter (dir name of landscape). \\\midrule
+-\/-sky-date         & date       & The initial date in \texttt{yyyymmdd} format. \\
+-\/-sky-time         & time       & The initial time in \texttt{hh:mm:ss} format. \\\midrule
+-\/-startup-script   & script name & The name of a script to run after the program has started. [\file{startup.ssc}] \\\midrule
+-\/-fov              & angle (degrees) & The initial vertical field of view in degrees. \\\midrule
+-\/-scale-gui        & scale factor & Scaling the GUI according to scale factor\\
+-\/-gui-css style    & name       & Use \file{name.css} to define GUI style\\\midrule
+-\/-projection-type  & ptype      & The initial projection type: one of  \\
+                     &            & \texttt{ProjectionPerspective  ProjectionEqualArea  ProjectionStereographic   ProjectionFisheye}\\
+					 &            & \texttt{ProjectionCylinder ProjectionCylinderFill  ProjectionMercator  ProjectionMiller ProjectionOrthographic  ProjectionHammer ProjectionSinusoidal  } \\\midrule
+-\/-spout  or -S     & all or sky & Act as Spout sender (See section \ref{sec:CommandLineOptions:Special:Spout}).%
+                                    \footnote{\label{FN:WinOnly}On Windows only}\textsuperscript{,}\footnote{This function requires running in OpenGL mode.}\\
+-\/-spout-name       & name       & Use \texttt{name} as name of the Spout sender. Default name: \texttt{Stellarium}.\footref{FN:WinOnly}\\\midrule									
+-\/-dump-opengl-details or -d     & {[}none{]} & Dump information about OpenGL support to logfile. 
+                                                 Use this is you have graphics problems and want to send a bug report. \\\midrule
+-\/-angle-mode or -a & {[}none{]} & Use ANGLE as OpenGL ES2 rendering engine (autodetect Direct3D version).\footref{FN:WinOnly}\textsuperscript{,}\footnote{\label{FN:Qt5only}Qt5-based Stellarium versions only}\\
+-\/-angle-d3d9 or -9 & {[}none{]} & Force use Direct3D 9 for ANGLE OpenGL ES2 rendering engine.\footref{FN:WinOnly}\textsuperscript{,}\footref{FN:Qt5only}\\
+-\/-angle-d3d11      & {[}none{]} & Force use Direct3D 11 for ANGLE OpenGL ES2 rendering engine.\footref{FN:WinOnly}\textsuperscript{,}\footref{FN:Qt5only}\\
+-\/-angle-warp       & {[}none{]} & Force use the Direct3D 11 software rasterizer for ANGLE OpenGL ES2 rendering engine.\footref{FN:WinOnly}\textsuperscript{,}\footref{FN:Qt5only}\\
+-\/-mesa-mode or -m  & {[}none{]} & Use MESA as software OpenGL rendering engine.\footref{FN:WinOnly}\\
+-\/-single-buffer    & {[}none{]} & Use single-buffering. This reportedly avoids screen blanking problems with some Intel GPUs. \\
+-\/-opengl-compat or -C & {[}none{]} & Request OpenGL 3.3 Compatibility Profile. Might fix graphics problems in some driver configurations.\\
+-\/-low-graphics or -L & {[}none{]} & Force low-graphics mode. May be useful on old GPUs that do support OpenGL 3.3 but perform too slowly.\\\midrule
+-\/-no-audio         & {[}none{]} & Disable sound output (avoids initialisation problems on Virtual Machines or special builds).\\\midrule
+-\/-no-screensaver   & {[}none{]} & Disable screensaver and auto-sleep when in fullscreen mode (Windows only).\\\midrule
+\bottomrule
+\end{longtable}
+
+\noindent \newFeature{0.15} If you want to avoid adding the same
+switch every time when you start Stellarium from the command line, you
+can also set an environment variable \file{STEL\_OPTS} with your
+default options. 
+
+Calling the respective options on the command line overrides settings from environment variables (apart from \texttt{STEL\_OPTS}).
+
+\subsection{Examples}
+\label{sec:CommandLineOptions:Examples}
+
+\begin{itemize}
+\item To start Stellarium using the configuration file
+  \file{configuration\_one.ini} situated in the user directory (use either of
+  these):
+
+\begin{commands}
+stellarium --config-file=configuration_one.ini
+stellarium -c configuration_one.ini
+\end{commands}
+
+\item To list the available landscapes, and then start using the
+  landscape with the ID ``ocean''
+\begin{commands}
+stellarium --list-landscapes 
+stellarium --landscape=ocean
+\end{commands}
+\end{itemize}
+
+%% GZ found in 2015, but worked in 2024:
+\noindent Note that console output (like \command{-\/-list-landscapes}) may not be possible on some Windows systems. 
+
+%\section{Advanced Options}
+%\label{sec:CommandLineOptions:Special}
+%
+%In addition to some troubleshooting options (see section \ref{sec:GettingStarted:Running:Troubleshooting}), 
+%there are also a few options mostly geared to advanced users.
+
+
+
+\section{Environment Variables}
+\label{sec:Environment}
+
+Some command-line options or settings can be set permanently by storing them into
+environment variables. How to set them depends on the respective
+operating system. 
+
+\begin{description}
+\item[Windows]
+Press the start menu, search for ``environment variable''. Use the command to change user variables. 
+After setting, you can call Stellarium via its menu entry or desktop links. 
+
+This may be especially helpful on Windows systems with older graphics
+cards which may not fully be compatible with OpenGL. Here we recommend
+you either use the program links using the ANGLE-related options, or
+you can set the environment variable once and forget about the
+problems.
+
+\item[Linux, macOS]
+You will usually set such variables at the end of your \file{\textasciitilde{}/.bashrc} file. 
+Open this with a text editor and add, near the end, 
+\begin{configfile}
+export STEL_OPTS="-platform xcb --single-buffer"
+\end{configfile}
+This forces use of the X11 platform plugin which may work better than \texttt{wayland} on older systems.
+\end{description}
+
+
+\noindent These environment variables are important:
+
+\begin{description}
+\item[{STEL\_OPTS}] may contain a default commandline with options in the syntax of the table above. Also some Qt settings can only be tweaked with this.
+For example, Windows users of international keyboards with \key{Alt Gr} key may want to use
+\begin{commands}[\scriptsize]
+STEL_OPTS=-platform windows:altgr,fontengine=freetype --single-buffer
+\end{commands}
+The \texttt{-platform} parameter is part of Qt. Its second argument, \texttt{fontengine}, selects a different font engine (i.e., some fonts may look better with it). 
+The other argument, \texttt{-\,-single-buffer}, is a setting that influences Stellarium (see table above).
+\item[{STEL\_USERDIR}] may contain the path to a user data directory
+  deviating from the default (see section \ref{sec:Directories}).
+\item[{QT\_OPENGL}]\footref{FN:WinOnly} May be one of \texttt{desktop} (native OpenGL for your GPU, recommended),
+  \texttt{angle}\footref{FN:Qt5only} or \texttt{software}. The last activates pure software rendering using the MESA OpenGL library. Note that command line options take precedence over this environment variable.
+\item[{QT\_ANGLE\_PLATFORM}]\footref{FN:WinOnly}\textsuperscript{,}\footref{FN:Qt5only} May be one of \texttt{d3d9} (DirectX~9) or \texttt{d3d11} (DirectX~11),
+  or \texttt{warp} for another software-only solution. Note that command line options take precedence over this environment variable.
+\end{description}
+
+\subsection{Logfile tweaks}
+\label{sec:Environment:Logfile}
+
+Qt based programs can write log files where status messages of varying severity can be 
+written\footnote{\scriptsize{\url{https://doc.qt.io/qt-6/qloggingcategory.html}, \url{https://doc.qt.io/qt-6/debug.html}}}. There are categories 
+\texttt{debug} (usually only of developer interest), 
+\texttt{info} (informational), 
+\texttt{warning} (something unexpected), 
+\texttt{critical} (usually connected to some real failure) and 
+\texttt{fatal} (program fails (usually exits) here).
+The amount of logging messages can be tuned by setting the environment variable \texttt{QT\_LOGGING\_RULES}. 
+For example, to remove all \texttt{debug} messages, set it to \texttt{*.debug=false;}. 
+To remove even the \texttt{info} messages, add \texttt{*.info=false;}. (Close each rule, also the last, with semicolon!)
+If you experience operating trouble, make sure you allow all messages, i.e., set these entries shown here to \texttt{true} (or delete the variable).
+
+Some modules\newFeature{25.4} can be individually finetuned with respect to the amount of logging.  
+Most users won't ever want to see the ugly details, so \texttt{debug} is deactivated by default for: 
+\begin{description}
+\item[\texttt{stel.GPS}] GPS related issues.
+\item[\texttt{stel.LocIP}] IP-based location queries.
+\item[\texttt{stel.Texture}] Texture handling.
+\item[\texttt{stel.Atmosphere}] Atmosphere related messages.
+\item[\texttt{stel.Scripting}] scripting related messages.
+\item[\texttt{stel.Media}] Multimedia related messages.
+\item[\texttt{stel.HiPS}] HiPS related messages.
+\item[\texttt{stel.Properties}] StelProperty related messages.
+\end{description}
+
+If you suspect issues with some features on your computer, add those entries as shown above, e.g., to hunt down issues with a GPS device:
+\begin{configfile}
+QT_LOGGING_RULES=*.debug=false;stel.GPS.debug=true;
+\end{configfile}
+or if you are developing scripts and videos don't play, try if this helps:
+\begin{configfile}
+QT_LOGGING_RULES=*.debug=false;stel.Media.debug=true;
+\end{configfile}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{GUI Customizations}
+
+Some users have difficulties to read Stellarium's rather dark user
+interface. Some screens may be too dark, or environments too
+bright. 
+
+\subsection{Panel transparency}
+\label{sec:CommandLineOptions:Special:PanelTransparency}
+The GUI panels are semitransparent by design. If this impedes your ability to read them, you can 
+make them fully opaque with an entry to \file{config.ini}.
+\begin{configfile}
+[gui]
+flag_use_window_transparency=false
+\end{configfile}
+
+\subsection{Button brightness}
+\label{sec:CommandLineOptions:Special:ButtonBrightness}
+If you only want a bit brighter buttons,\newFeature{24.4} these can be tweaked separately in \file{config.ini}.
+\begin{configfile}
+[gui]
+pixmaps_brightness=1.25
+\end{configfile}
+The value is clamped to [1\ldots1.8] to avoid making active and inactive buttons equally bright.
+
+\subsection{Text shadow}
+\label{sec:CommandLineOptions:Special:TextShadow}
+Some users complain the infotext is badly visible when there are trees or the Milky Way in the background.\newFeature{24.4} This can also be mitigated in \file{config.ini}.
+\begin{configfile}
+[gui]
+flag_info_shadow=true
+\end{configfile}
+
+
+\subsection{User interface colors}
+\label{sec:CommandLineOptions:Special:CSS}
+Others users still find the GUI too bright, and they would prefer a
+real ``dark mode''. To allow this, you can create and load your own alternative style files.
+
+The appearance of the windows, buttons etc.\ is governed by a CSS
+(Cascaded Style Sheet) file. It certainly requires some knowledge and
+guessing to edit your own, but there is enough general help on CSS available
+online. You can find the CSS files in Stellarium's Github site%
+\footnote{\url{https://github.com/Stellarium/stellarium/blob/stellarium-stable/data/gui/normalStyle.css} and
+  \url{https://github.com/Stellarium/stellarium/blob/stellarium-stable/data/gui/normalHtml.css}}.
+
+
+Copy them into your user directory
+and rename to e.g. \file{myOwnGreatStyle.css}. Edit numbers, but do
+not change the item names! Then you can either launch Stellarium with
+the added command line option like
+\begin{commands}
+  stellarium --gui-css myOwnGreatStyle
+\end{commands}
+or you could also use the scripting option (see chapter~\ref{ch:scripting}):
+\begin{script}
+  core.setGuiStyle("MyOwnGreatStyle");
+\end{script}
+To go back to Stellarium's default, just use
+\begin{script}
+  core.setGuiStyle("default");
+\end{script}
+
+If link colors in text panels are now difficult to read, copy
+\file{normalHtml.css} from Github to your own 
+\file{MyOwnGreatStyleHtml.css} and modify to your taste.
+
+Note that, as Stellarium evolves, these files also may change from
+version to version. We cannot give any guarantees that one customized
+file will work without adaptation on later or earlier versions of Stellarium.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Spout}\newFeature{0.15.1} 
+\label{sec:CommandLineOptions:Special:Spout}
+Apart from stand-alone use, Stellarium can be used as multimedia source in larger installations, in museums or science exhibitions. 
+\program{Spout}\footnote{\url{https://spout.zeal.co/}} is a technology which enables use of Stellarium's 
+output window as texture in DirectX applications on Windows. Simply start Stellarium with 
+the \texttt{-\/-spout=sky} command line option. (Currently \program{Spout} output is limited to the main window 
+without GUI panels, but this may change in future versions.) 
+Your master application must obviously embed a \program{Spout} receiver. 
+The default name of the \program{Spout} sender is \texttt{Stellarium}. If you need more than one instance of Stellarium acting as source, 
+you can use option \texttt{-\/-spout-name=StelSpout2} in addition to create another \program{Spout} sender without a name conflict. 
+In such cases, it may be useful to also have separate user data directories and use option \texttt{-\/-user-dir}. 
+
+This mode does not work in ANGLE mode and requires reasonably modern graphics hardware with the \texttt{WGL\_NV\_DX\_interop} 
+driver extension running in OpenGL mode. Some Nvidia GPUs work without this extension listed explicitly. 
+On a notebook with Nvidia Optimus technology, make sure to launch Stellarium \emph{and} \program{SpoutReceiver} 
+(or your target application) on the Nvidia hardware. 
+For permanent setting, use the Nvidia configuration dialog to configure Stellarium and the target application explicitly to run always on the Nvidia card.
+
+Note that Spout use disables any multisampling setting (see Appendix~\ref{sec:config.ini:video}). 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Show effects} 
+\label{sec:CommandLineOptions:Special:Show}
+
+\subsection{Sky Background}
+\label{sec:CommandLineOptions:Special:ColoredBackground}
+
+Stellarium is sometimes used for entertainment or artistic music performances. 
+From this community a request was placed to allow a non-black background. We can do that, but you must revert the color yourself.
+Setting a background color is not available in the usual GUI to avoid inadvertent changes that later confuse users. 
+You can play with the sky background in the Text User Interface (see section \ref{sec:plugins:TUI:commands}, feature 5.26). 
+In \file{config.ini}, it is stored in
+
+\begin{configfile}
+[color]
+sky_background_color  = 0.000000,0.000000,0.000000
+\end{configfile}
+
+\subsection{Star Trails}
+\label{sec:CommandLineOptions:Special:StarTrails}
+
+One of the oldest\newFeature{26.2}  and previously simplest techniques from the time of film-based night photography is the recording 
+of Earth's rotation by long-time exposure with an untracked camera. 
+This will, for example, identify the Polar Star as just not quite on the north celestial pole, but else show thousands of circular star trails. 
+While an exposure time of many hours is possible under dark skies, when the sky is too bright by remaining twilight or light pollution, 
+the exposure time meanwhile is often limited to minutes, else the picture is just flooded with unwanted background. 
+
+Stellarium can be made to simulate such images by a somewhat ``dirty trick'': Usually the image area is cleared between frames, 
+then the Milky Way, stars, Zodiacal light, grids, planets, atmosphere, landscape etc., and finally GUI panels are rendered into the scene. 
+By not clearing the image area, we can just add up everything that is rendered on-screen, like in a long-time exposure. 
+However, just as cars, airplanes, satellites or people with flashlights can ruin your awesome star trail photo, 
+some elements usually visible in Stellarium's sky would also create unwanted views. 
+Image a celestial grid or the Milky Way rotating with the sky, and twilight stacking all up and flooding the long-time exposure. 
+The trick implemented in this special mode draws one frame in ``normal'' mode, and then suppresses those elements and other details 
+which cause only smeared images like screen labels. A moderately long ``exposure'' can therefore still successfully show constellations or star labels.  
+
+This is an option probably only used by instructors or presenters and therefore not preconfigured for beginners. 
+To make use of it, you must assign a keyboard shortcut to the action ``Toggle star trails''
+found in the ``Display Options'' key shortcut actions (see \ref{sec:gui:help:hotkeys}). 
+While the mode is on, tapping \key{Ctrl} resets the trails. 
+It can make a nice ending scene in a presentation: show a moderately slow moving sky, and activate it.  
+The sky will fill with curves, hopefully impressing your audience. 
+You can also utilize it when talking about the problem of satellite constellations now destroying the sky. (Use realistic view, not icons, for satellites.) 
+Here your time speed should not be too fast, else satellites will just show up as dot chain. 
+
+Note that screenshots have to be made with system means while this mode is running. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\iffalse
+
+%% NOTE: We cannot provide accurate documentation on this topic at this time. 
+%% Ubuntu (and maybe other Debian-based distributions) could install Piper in a virtual environment, but how would this be setup system-wide at startup?
+%% Other distributions may differ. 
+
+
+\section{Advanced Text To Speech output}
+\label{sec:CommandLineOptions:Special:TTS-Piper}
+
+While speech output on Windows is not bad, the default voices on Linux leave room for improvement. 
+We can improve this by configuring better voices with \program{speech-dispatcher}. 
+One viable solution uses \program{Piper}\footnote{\url{https://github.com/OHF-Voice/piper1-gpl}}. 
+We stick to official documentation.\footnote{\url{https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/CLI.md}}
+
+\begin{commands}
+pip install piper-tts
+\end{commands}
+
+List voices with:
+
+\begin{commands}
+python3 -m piper.download_voices
+\end{commands}
+
+Choose a voice (\url{https://rhasspy.github.io/piper-samples/}) and download. For example:
+
+\begin{commands}
+python3 -m piper.download_voices en_US-lessac-medium
+\end{commands}
+
+This will download to the current directory. Override with \texttt{--data-dir <DIR>}
+
+Piper runs a web server which allows integration to \program{speechd}.
+
+\fi
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Spherical Mirror Mode for Planetarium Use}
+\label{sec:CommandLineOptions:SphericalMirror}
+\sectionauthor*{immersive-theatres.com}
+
+With Stellarium it’s very easy to project the sky on a dome and create your own planetarium.
+
+\subsection{360° Projection}
+You can use either a very expensive fisheye lens projector -- or a standard projector with a spherical mirror.
+Not only is spherical mirror projection less expensive, 
+but it produces a higher resolution image on the dome\footnote{\url{https://domeclub.com/#PxComp}},
+and it's very easy to upgrade the projector.
+
+A planetarium spherical mirror is curved like a security mirror (convex safety mirror) -- with the important
+difference that its `first surface', i.e., the reflective silver, is not protected by a transparent acrylic or
+polycarbonate layer. This allows light to be reflected without being refracted. Spherical mirrors are therefore
+very delicate and should never be touched with fingers or wiped with a cloth. A powerful dust blower is all
+you need to keep it clean.
+
+There are two types of spherical mirror projection boxes: compact `Newtonians' (spherical mirror with an
+additional small mirror)\footnote{\url{https://www.eplanetarium.com/projector_newtonian.php}}; 
+or full-length boxes (spherical mirror only)\footnote{\url{https://myplanetarium.com/projection-dome-system}}. 
+The former take up less space in the planetarium (but a little less light reaches the dome); 
+whereas the latter produce a slightly brighter image (but require more space in the planetarium).
+
+Although commercial projection boxes are quite expensive (mainly due to the cost of the first-surface spherical mirror); 
+it's quite easy to build your 
+own\footnote{\url{https://docs.worldwidetelescope.org/diy-planetarium-dome/1/dome/#setting-up-the-projector-and-mirrors}} 
+-- and you can use a cheap convex safety mirror for testing before investing in a first-surface mirror.
+
+\subsection{Projector Specifications}
+A major challenge with digital planetariums (360° cinemas) is the cross-reflection of light on the dome. 
+This is why projector \emph{contrast ratio} and \emph{colour saturation} are more important than brightness (lumens). 
+Light `bouncing' around the dome causes the planetarium image to `wash out' (lose colour) -- 
+so the higher the projector colour saturation, the better. 
+Similarly, the higher the contrast ratio, the sharper and crisper the planetarium image will be, especially the night sky.
+
+4K projectors are now very affordable, allowing you to deliver the same high-quality visuals in your small
+dome as large planetariums!
+
+\subsection{Computer Configuration}
+The best way to operate a planetarium is with a dual display arrangement, i.e., 
+computer screen as the primary (main) display, and projector as the secondary (extended) display.
+
+This way the Stellarium remote control window, desktop shortcuts, other applications, etc., will only be visible
+to you. The audience will only see what you want them to see. To ensure there’s always something nice on
+the dome (even with no application open), use a high-resolution image of stars as your desktop wallpaper.
+
+To function as a planetarium, Stellarium should be configured to open in full screen mode on the extended
+display (see below).
+
+\subsection{System Configuration}
+To minimise image distortion at the back of the dome, it’s worth carrying out the slightly complex
+\program{Meshmapper} configuration\footnote{\url{https://paulbourke.net/dome/meshmapper}}. 
+This creates a custom distortion file for your specific system (i.e., your dome
+diameter, stand height, spherical mirror dimensions); 
+and the image improvement will be remarkable\footnote{\url{https://domeclub.com/images/Meshmapper-1152w.jpg}}. 
+This custom distortion file (‘warp mesh data file’) can then be used with dome applications like Stellarium.
+
+\subsection{Stellarium Configuration}
+To enable planetarium spherical mirror projection, the \file{config.ini} file needs to include the following:
+
+\begin{configfile}
+[navigation]
+init_fov = 180
+[projection]
+type = ProjectionFisheye
+auto_zoom_out_resets_direction = true
+[video]
+fullscreen = true
+viewport_effect = sphericMirrorDistorter
+screen_number = 1
+[spheric_mirror]
+distorter_max_fov = 180
+dome_radius = 5.0 (note: regardless of your actual dome radius)
+image_distance_div_height = 2.67
+mirror_position_x = 0
+mirror_position_y = 5
+mirror_position_z = 0
+mirror_radius = 0.37 (regardless of your actual mirror radius)
+\end{configfile}
+
+Stellarium also has built-in options to help you project the best possible planetarium night sky.
+In a planetarium, removing the Stellarium atmosphere results in a much darker (and more beautiful) night sky.
+Yet without the atmosphere, the stars stop twinkling and meteors (shooting stars) disappear -- which is correct
+for the real sky, but not what you may desire in the planetarium. To maintain twinkling and meteors even without
+the atmosphere, manually add the following lines to the \file{config.ini} file:
+
+\begin{configfile}
+[stars]
+flag_forced_twinkle = true
+[astro]
+flag_forced_meteor_activity = true
+\end{configfile}
+
+Another useful configuration for planetariums is to completely hide the vertical and horizontal toolbars on the
+dome:
+\begin{configfile}
+[gui]
+flag_show_gui = false
+\end{configfile}
+
+The following are also recommended (adjust the values to your preference):
+\begin{configfile}
+[viewing]
+flag_moon_scaled = true
+moon_scale = 8.00
+[astro]
+meteor_zhr = 3000
+[landscape]
+flag_fog = false
+[stars]
+absolute_scale = 6.00
+flag_star_twinkle = 1.00
+flag_star_spiky = false
+relative_scale = 0.70
+star_twinkle_amount = 0.50
+\end{configfile}
+
+
+\subsection{Further notes}
+This feature is rarely used by the current developers and cannot be tested on standard hardware. 
+See ongoing discussion on Github\footnote{\url{https://github.com/Stellarium/stellarium/issues/1914} and \\
+\url{https://github.com/Stellarium/stellarium/issues/3535}} and get involved.
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "guide"
+%%% End: 
+

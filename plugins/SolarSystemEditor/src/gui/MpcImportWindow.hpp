@@ -1,0 +1,153 @@
+/*
+ * Solar System editor plug-in for Stellarium
+ *
+ * Copyright (C) 2010-2011 Bogdan Marinov
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA  02110-1335, USA.
+ */
+
+#ifndef MPCIMPORTWINDOW_HPP
+#define MPCIMPORTWINDOW_HPP
+
+#include <QObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QStandardItemModel>
+#include <QSortFilterProxyModel>
+#include "StelDialog.hpp"
+
+#include "SolarSystemEditor.hpp"
+
+class Ui_mpcImportWindow;
+
+/*! \brief Window for importing orbital elements from the Minor Planet Center.
+  \author Bogdan Marinov
+*/
+class MpcImportWindow : public StelDialog
+{
+	Q_OBJECT
+public:
+	enum ImportType {
+	                 MpcComets,
+	                 MpcMinorPlanets
+	                 };
+
+	MpcImportWindow();
+	~MpcImportWindow() override;
+
+public slots:
+	void retranslate() override;
+
+signals:
+	void objectsImported();
+
+private slots:
+	//Radio buttons for type
+	void switchImportType(bool checked);
+
+	//File
+	void selectFile();
+
+	//Download
+	void pasteClipboardURL();
+	void bookmarkSelected(int bookmarkIndex);
+
+	//Buttons for the list tab
+	void acquireObjectData();
+	void abortDownload();
+
+	//Online search
+	void sendQuery();
+	void sendQueryToUrl(QUrl url);
+	void abortQuery();
+	void updateCountdown();
+	void resetNotFound();
+
+	//Network
+	void updateDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
+	void updateQueryProgress(qint64 bytesReceived, qint64 bytesTotal);
+	void downloadComplete(QNetworkReply * reply);
+	void receiveQueryReply(QNetworkReply * reply);
+	void readQueryReply(QNetworkReply * reply);
+
+	//! Marks (checks) all items in the results lists
+	void markAll();
+	//! Unmarks (unchecks) all items in the results lists
+	void unmarkAll();
+
+	//! process the marked items
+	void addObjects();
+	void discardObjects();
+
+	//! resets the dialog to the state it should be in immediately after createDialogContent();.
+	void resetDialog();
+
+private:
+	SolarSystemEditor * ssoManager;
+	QList<SsoElements> candidatesForAddition;
+	QList<SsoElements> candidatesForUpdate;
+	QStandardItemModel * candidateObjectsModel;
+	QSortFilterProxyModel * filterProxyModel;
+
+	ImportType importType;
+	
+	void updateTexts();
+
+	//! wrapper for the single object function to allow multiple formats.
+	SsoElements readElementsFromString(const QString &elements);
+	//! wrapper for the file function to allow multiple formats
+	QList<SsoElements> readElementsFromFile(ImportType type, const QString &filePath);
+
+	void populateBookmarksList();
+
+	//! Load list dialog with acquired objects and separate existing from new objects
+	void populateCandidateObjects(QList<SsoElements>);
+	void enableInterface(bool enable);
+
+	//Downloading
+	QNetworkAccessManager * networkManager;
+	QNetworkReply * downloadReply;
+	QNetworkReply * queryReply;
+	class StelProgressController * downloadProgressBar;
+	class StelProgressController * queryProgressBar;
+	void startDownload(const QString &url);
+	void deleteDownloadProgressBar();
+	void deleteQueryProgressBar();
+
+	typedef QHash<QString,QString> Bookmarks;
+	QHash<ImportType, Bookmarks> bookmarks;
+	void loadBookmarks();
+	void loadBookmarksGroup(const QVariantMap &source, Bookmarks & bookmarkGroup);
+	void saveBookmarks();
+	void saveBookmarksGroup(Bookmarks & bookmarkGroup, QVariantMap & output);
+
+	//Online search
+	QString query;
+	int countdown;
+	QTimer * countdownTimer;
+	void startCountdown();
+	void resetCountdown();
+
+	//! Set the check state of the currently displayed items.
+	//! Note that depending on the search/filter string, these may be
+	//! not all available items.
+	void setCheckState(Qt::CheckState state);
+
+protected:
+	void createDialogContent() override;
+	Ui_mpcImportWindow * ui;
+};
+
+#endif // MPCIMPORTWINDOW_HPP

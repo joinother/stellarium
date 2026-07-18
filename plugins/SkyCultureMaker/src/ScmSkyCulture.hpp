@@ -1,0 +1,180 @@
+/*
+ * Sky Culture Maker plug-in for Stellarium
+ *
+ * Copyright (C) 2025 Vincent Gerlach
+ * Copyright (C) 2025 Luca-Philipp Grumbach
+ * Copyright (C) 2025 Fabian Hofer
+ * Copyright (C) 2025 Mher Mnatsakanyan
+ * Copyright (C) 2025 Richard Hofmann
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef SCM_SKYCULTURE_HPP
+#define SCM_SKYCULTURE_HPP
+
+#include "ScmConstellation.hpp"
+#include "types/ScmCulturalName.hpp"
+#include "StelCore.hpp"
+#include "StelSkyCultureMgr.hpp"
+#include "types/Classification.hpp"
+#include "types/CulturePolygon.hpp"
+#include "types/ConstellationLine.hpp"
+#include "types/Description.hpp"
+#include "types/License.hpp"
+#include <memory>
+#include <vector>
+#include <QFile>
+#include <QJsonObject>
+#include <QList>
+#include <QMap>
+#include <QObject>
+#include <QString>
+
+namespace scm
+{
+
+class ScmSkyCulture
+{
+public:
+	/// Sets the id of the sky culture
+	void setId(const QString &id);
+
+	/**
+	 * @brief Gets the id of the sky culture.
+	 */
+	const QString &getId() const;
+
+	/// Sets the start time of the sky culture
+	void setBeginTime(int beginTime);
+
+	/// Sets the end time of the sky culture
+	void setEndTime(int endTime);
+
+	/// Sets whether to show common names in addition to the culture-specific ones
+	void setFallbackToInternationalNames(bool fallback);
+
+	/// Adds a constellation to the sky culture
+	ScmConstellation &addConstellation(const QString &id, 
+									   const std::vector<ConstellationLine> &lines, 
+									   const bool isDarkConstellation);
+
+	/// Adds a location to the sky culture
+	void addLocation(const scm::CulturePolygon &polygon);
+
+	/// Removes a constellation from the sky culture by its ID
+	void removeConstellation(const QString &id);
+
+	/// Removes a location from the sky culture by its ID
+	void removeLocation(int id);
+
+	/// Gets a constellation from the sky culture by its ID
+	ScmConstellation *getConstellation(const QString &id);
+
+	/// Returns a pointer to the constellations of the sky culture
+	/// Constellations are held as unique pointers, so the addresses
+	/// of the constellation objects remain valid even if the vector is modified.
+	std::vector<std::unique_ptr<ScmConstellation>> *getConstellations();
+
+	/**
+	* @brief Returns the sky culture as a JSON object
+	*
+	* @param mergeLines Whether to merge the lines of the constellations into polylines where possible.
+	*/
+	QJsonObject toJson(const bool mergeLines) const;
+
+	/**
+	* @brief Returns the territory of the sky culture as a (Geo)JSON object
+	*/
+	QJsonObject getTerritoryGeoJson() const;
+
+	/**
+	* @brief Draws the sky culture.
+	*/
+	void draw(StelCore *core) const;
+
+	/**
+	 * @brief Sets the description of the sky culture.
+	 * @param description The description to set.
+	 */
+	void setDescription(const scm::Description &description);
+
+	/**
+	 * @brief Sets the cultural names of stars, planets DSOs of the sky culture.
+	 * The map key is the object identifier (e.g. "HIP 1234", "NAME Venus", "M 31").
+	 * @param culturalNames Map of cultural names to set.
+	 */
+	void setCulturalNames(const QMap<QString, QList<ScmCulturalName>> &culturalNames);
+
+	/**
+	 * @brief Saves the current sky culture description as markdown text.
+	 * @param file The file to save the description to.
+	 * @return true if the description was saved successfully, false otherwise.
+	 */
+	bool saveDescriptionAsMarkdown(QFile &file);
+
+	/**
+	 * @brief Saves all illustrations to the directory. No subdirectory is saved.
+	 * 
+	 * @param directory The directory the illustrations are saved in.
+	 * @return true Successful saved.
+	 * @return false Failed to save.
+	 */
+	bool saveIllustrations(const QString &directory);
+
+	/**
+	* @brief Checks whether the polygons of locations overlap and merges them if necessary.
+	*/
+	void mergeLocations();
+
+private:
+	/// Sky culture identifier
+	QString id;
+
+	/// Whether to show common names in addition to the culture-specific ones
+	bool fallbackToInternationalNames = false;
+
+	/// The constellations of the sky culture
+	std::vector<std::unique_ptr<ScmConstellation>> constellations;
+
+	/// The description of the sky culture
+	scm::Description description;
+
+	/// The cultural names of stars, planets DSOs of the sky culture.
+	/// Key: object identifier (e.g. "HIP 1234", "NAME Venus", "M 31").
+	QMap<QString, QList<ScmCulturalName>> culturalNames;
+
+	/// The geographical location (as polygons) of the sky culture
+	QList<CulturePolygon> locations;
+
+	/// The earliest year associated with a territory of the sky culture
+	int beginTime;
+
+	/// The latest year associated with a territory of the sky culture
+	int endTime;
+
+	/**
+	 * @brief Evaluates which action shoud be taken after a merge operation and updates the respective location.
+	 *
+	 * @param idx The current index of the respective polygon in locations.
+	 * @param mergeBeginTime The beginTime of the new polygon that was created in the merge process.
+	 * @param mergeEndTime The endTime of the new polygon that was created in the merge process.
+	 * @return True if a deletion was performed, false otherwise.
+	 */
+	bool updateLocationAfterMerge(int idx, int mergeBeginTime, int mergeEndTime);
+};
+
+} // namespace scm
+
+#endif // SCM_SKYCULTURE_HPP

@@ -1,0 +1,1027 @@
+%% Part of Stellarium User Guide
+%% Status: 2015-12-30 Some parts collected from wiki.
+%%         2016-04-05 GZ changed to have 1 chapter per plugin for a better structure. This file may be split up later. 
+%%         2016-04-16 split plugin part to topical chapters.
+
+\chapter{Interface Extensions}
+\label{ch:plugins:Interfaces}
+
+Most users will soon be familiar with the usual user interface. A few
+plugins are available which extend the regular user interface with a
+few small additions which are presented first.  However, some
+applications and installations of Stellarium require completely
+different user interfaces. Mostly, these serve to avoid showing the
+user interface panels to an audience, be that in your astronomy club
+presentations, a domed planetarium or in a museum installation.
+
+
+\section{Angle Measure Plugin}
+\label{sec:plugins:AngleMeasure}
+
+\begin{quotation}\small
+\noindent\emph{goes misty eyed}\\ 
+I recall measuring the size of the Cassini Division when I was a student.
+It was not the high academic glamor one might expect\ldots It was cloudy\ldots
+It was rainy\ldots The observatory lab had some old scopes set up at one
+end, pointing at a \emph{photograph} of Saturn at the other end of the
+lab. We measured. We calculated. We wished we were in Hawaii. A picture
+is worth a thousand words.
+\end{quotation}
+
+\begin{figure}[th]\centering
+	\includegraphics[width=.55\textwidth]{AngleMeasure-plugin.jpg}
+	\caption{Interface of Angle Measure plugin}
+	\label{fig:AngleMeasure}
+\end{figure}
+
+\noindent The Angle Measure plugin is a small tool which is used to measure the
+angular distance between two points on the sky. 
+
+
+%\subsection{Using the plugin}
+%\label{sec:plugins:AngleMeasure:using}
+
+\begin{enumerate}
+\item Enable the tool by clicking the tool-bar button
+  \guibutton{0.6}{bt_anglemeasure_Off.png}, or by pressing
+  \key{\ctrl+A}. A message will appear at the bottom of the screen to
+  tell you that the tool is active.
+\item Drag a line from the first point to the second point using the
+  left mouse button.
+\item To measure to a different endpoint, click the right mouse button.
+\item To deactivate the angle measure tool, press the tool-bar button
+  again, or press \key{\ctrl+A} on the keyboard.
+\end{enumerate}
+
+\noindent In the configuration dialog, you can configure if you want to have
+distances given on the rotating sphere, or in horizontal
+(alt-azimuthal) coordinates. You can also link one point to the
+resting horizon, the other to the sky and observe how angles change.
+You can choose where to display the measurement.
+
+When option % \newFeature{1.0}
+``Allow snap to selected object'' is activated the process of measurement is changed:
+\begin{itemize}
+ \item The left mouse button is not used for angle measurement, so you
+   can pan the screen and left-click to select an object as usual.
+ \item To draw the angle dimension line, you can drag with the right
+   mouse button.
+ \item A right click moves the end of the angle line that is closest
+   to the mouse pointer.
+ \item If an object is selected, right-clicking will snap the end of
+   the protractor line (closest to the mouse pointer) to the selected
+   object.
+ \item Double-click the right mouse button to capture the end of the
+   line. Another double click with the right mouse button removes the
+   angle measuring line.
+ \item Which end of the protractor line is chosen depends on the
+   position of the mouse pointer in relation to the two ends of the
+   line. The end of the line that is closer to the mouse pointer is
+   moved and defined as the new end point. The end of the line farther
+   from the mouse pointer is not moved and is defined as the new
+   starting point.
+\end{itemize}
+
+\newpage
+\section{Equation of Time Plugin}
+\label{sec:plugins:EquationOfTime}
+
+%% The figure just reproduces most of the text. I (GZ) regard it not so necessary. 
+%\begin{figure}[h]
+%\includegraphics[width=\textwidth]{EquationOfTime-plugin.jpg}
+%\caption{Interface of Equation of Time plugin}
+%\label{fig:EqOfTime}
+%\end{figure}
+
+\begin{figure}[h]\centering
+\ifpdf
+\includegraphics[width=.42\textwidth]{GZ_analemma_p1000}
+\includegraphics[width=.42\textwidth]{GZ_analemma_p2000}
+\else
+\includegraphics[width=.42\textwidth]{GZ_analemma_p1000.png}
+\includegraphics[width=.42\textwidth]{GZ_analemma_p2000.png}
+\fi
+\caption{Figure-8 plots for Equation of Time, for years 1000 (left)
+  and 2000 (right). These plots, often found on sundials, link solar
+  declination (vertical axis) and its deviation at mean noon from the
+  meridian, in minutes. Labeled dots indicate when the sun entered the
+  respective Zodiacal sign (30\degree section of the
+  ecliptic). Figures by Georg Zotti.}
+\label{fig:EqOfTime}
+\end{figure}
+
+
+\noindent The Equation of Time plugin shows the solution of the equation of time. % (Fig.~\ref{fig:EqOfTime}).
+This describes the discrepancy between two kinds of
+solar time:
+\begin{description}
+\item[Apparent solar time] directly tracks the motion of the sun. Most sundials show this time.
+\item[Mean solar time] tracks a fictitious ``mean'' sun with noons 24 hours apart. 
+\end{description}
+
+There is no universally accepted definition of the sign of the
+equation of time. Some publications show it as positive when a sundial
+is ahead of a clock; others when the clock is ahead of the sundial. In
+the English-speaking world, the former usage is the more common, but
+is not always followed. Anyone who makes use of a published table or
+graph should first check its sign usage.
+
+If enabled (see section~\ref{sec:Plugins:EnablingPlugins}), click on
+the Equation of Time button \guibutton{0.6}{bt_EquationOfTime_72dpi.png}
+on the bottom toolbar to display the value for the equation of time on
+top of the screen.
+
+
+\subsection{Section \big[EquationOfTime\big] in config.ini file}
+%\label{sec:plugins:EquationOfTime:configuration}
+
+You can edit \file{config.ini} file by yourself for changes of the
+settings for the Equation of Time plugin -- just make it carefully!
+
+\noindent%
+\begin{tabularx}{\textwidth}{l|l|X}\toprule
+\emph{ID}            & \emph{Type} & \emph{Description}\\\midrule
+enable\_at\_startup        & bool  & Display solution of the equation of time at startup of Stellarium\\%\midrule
+flag\_use\_ms\_format      & bool  & Set format for the displayed solution -- minutes and seconds or decimal minutes\\%\midrule
+flag\_use\_inverted\_value & bool  & Change sign of the equation of time \\%\midrule
+flag\_show\_button         & bool  & Show the tool's button on the bottom toolbar\\%\midrule
+text\_color                & R,G,B & Font color for the displayed solution of the equation of time\\%\midrule
+font\_size                 & int   & Font size for the displayed solution of the equation of time \\\bottomrule
+\end{tabularx}
+
+\newpage
+
+\section{Pointer Coordinates Plugin}
+\label{sec:plugins:PointerCoordinates}
+
+
+\begin{figure}[th]\centering
+\includegraphics[width=.55\textwidth]{PointerCoordinates-plugin.jpg}
+\caption{Interface of Pointer Coordinates plugin}
+\label{fig:PointerCoordinates}
+\end{figure}
+
+\noindent The Pointer Coordinates plugin shows the coordinates of the mouse pointer.
+If enabled, click on the plugin button \guibutton{0.6}{bt_PointerCoordinates_Off.png} on the bottom toolbar to display the coordinates of the mouse pointer.
+
+\subsection{Section \big[PointerCoordinates\big] in config.ini file}
+%\label{sec:plugins:PointerCoordinates:configuration}
+
+You can edit \file{config.ini} file by yourself for changes of the
+settings for the Pointer Coordinates plugin -- just make it carefully!
+
+\begin{longtable}{l|l|p{83mm}}\toprule
+\emph{ID}              & \emph{Type} & \emph{Description}\\\midrule
+enable\_at\_startup         & bool   & Enable displaying mouse pointer coordinates at program startup\\%\midrule
+flag\_show\_button          & bool   & Show the plugin's tool button on the bottom toolbar\\%\midrule
+text\_color                 & R,G,B  & Color for coordinates text of the mouse pointer \\%\midrule
+font\_size                  & int    & Font size for the displayed mouse pointer coordinates  \\%\midrule
+current\_displaying\_place  & string & Specifies the place of displaying coordinates of the mouse pointer. 
+                                       \textit{Possible values}: \keymap{TopRight}, \keymap{TopCenter}, 
+									   \keymap{RightBottomCorner}, \keymap{Custom}. 
+									   \textit{Default value}: \keymap{TopRight}. \\%\midrule
+custom\_coordinates        & int,int & Specifies the screen coordinates of the custom place for displaying coordinates of the mouse pointer \\%\midrule
+current\_coordinate\_system & string & Specifies the coordinate system. \textit{Possible values}: 
+                                       \keymap{RaDecJ2000}, \keymap{RaDec}, \keymap{HourAngle}, \keymap{Ecliptic}, 
+									   \keymap{AltAzi}, \keymap{Galactic}. 
+									   \textit{Default value}: \keymap{RaDecJ2000}. \\%\midrule
+flag\_show\_constellation  & bool    & Add the 3-letter IAU\index{IAU} abbreviation for the constellation of the 
+                                       mouse pointer location \citep{1987PASP...99..695R}.\\%\midrule
+flag\_show\_crossed\_lines & bool    & Show crossed lines under mouse cursor.\\\bottomrule
+\end{longtable}
+
+
+
+
+\newpage
+
+\section{Time Navigator Plugin}
+\label{sec:plugins:TimeNavigator}
+ 
+\begin{figure}[th]\centering
+\includegraphics[height=74mm]{TimeNavigatorplugin_tab1.jpg}
+%\hfill
+\includegraphics[height=74mm]{TimeNavigatorplugin_tab2.jpg}
+%\hfill
+\includegraphics[height=74mm]{TimeNavigatorplugin_tab3.jpg}
+
+\caption{Interface of Time Navigator plugin: Time Steps tab (left), Specific Time tab (center), and Planetary Events (right)}
+\label{fig:TimeNavigator}
+\end{figure}
+ 
+\noindent The Time Navigator plugin brings a convenient GUI to many different
+astronomical time steps and allows addition or subtraction of one (1)
+unit of any of these periods interactively.
+If enabled (see section~\ref{sec:Plugins:EnablingPlugins}), click on
+the plugin button \guibutton{0.6}{bt_TimeNavigator_Off.png} on the
+bottom toolbar to open the plugin window.
+ 
+The first tab \menu{Time Steps} shows step buttons for different
+definitions of days, months and years, and even longer cycles such as
+the Saros. The second tab \menu{Specific Time} shows buttons to jump
+to the previous, current or next event of the selected object, e.g.\
+its meridian transit, as well as buttons for specific twilight moments.
+
+
+%\newpage
+
+The third tab \menu{Planetary Events} shows step buttons for some interesting
+planetary events, such as oppositions for outer planets and greatest elongations
+for inner planets. For the Moon, the four phases (new, first quarter, full, last quarter)
+and times for apogee and perigee are shown, as well as times for Earth aphelion 
+and perihelion. Clicking any of these buttons sets the time to that of the event.
+
+%\begin{figure}[th]\centering
+%\includegraphics[width=.6\textwidth]{TimeNavigatorplugin_tab3.jpg}
+%\caption{The Planetary Events tab}
+%\label{fig:TimeNavigator:PEvents}
+%\end{figure}
+ 
+\newpage
+
+\section{Text User Interface Plugin}
+\label{sec:plugins:TextUserInterface}
+
+%\url{http://porpoisehead.net/images/plugin-tui.jpg}
+
+This plugin re-implements the ``TUI'' of the pre-0.10 versions of
+Stellarium, an unobtrusive menu used primarily by planetarium system
+operators to change settings, run scripts and so on.
+
+\subsection{Using the Text User Interface}
+\label{sec:plugins:TUI:using}
+
+\begin{enumerate}
+\item Activate the text menu using the \key{\Alt+T} key.\footnote{This
+    used to be hard-coded to \key{M} before version 0.15, but
+    \key{\Alt+T} is better to remember as it runs parallel with
+    \key{\ctrl+T} for switching the GUI panels, and frees up \key{M}
+    for the Milky Way. The \key{\Alt+T} keybinding is hard-coded, i.e.,
+    cannot be reconfigured by the user, and should not be used for
+    another function.}
+\item
+  Navigate the menu using the cursors keys.
+\item
+  To edit a value, press the right cursor until the value you wish to
+  change it highlighted with \textgreater{} and \textless{} marks, e.g.\
+  \textgreater{}3.142\textless{}. Then press the cursor keys \keys{\arrowkeyup} and \keys{\arrowkeydown} to
+  change the value. You may also type in a new value with the other keys
+  on the keyboard.
+\end{enumerate}
+
+%% List complete as of 2016-04-26. 
+
+\subsection{TUI Commands}
+\label{sec:plugins:TUI:commands}
+\begin{longtable}{l|p{45mm}|p{85mm}}
+\toprule
+1   & Location & (menu group)\\%\midrule
+1.1 & Latitude & Set the latitude of the observer in degrees\\%\midrule
+1.2 & Longitude & Set the longitude of the observer in degrees\\%\midrule
+1.3 & Altitude & Set the altitude of the observer in meters\\%\midrule
+1.4 & Solar System Body & Select the solar system body on which the observer is\\\midrule
+2   & Set Time & (menu group)\\%\midrule
+2.1 & Current date/time & Set the time and date for which Stellarium will generate the view\\%\midrule
+%2.2 & Set Time Zone & Set the time zone. Zones are split into continent or region, and then by city or province\\\midrule
+%2.3 & Days keys & The setting ``Calendar'' makes the \key{-}, \key{=}, \key{[}, \key{]} keys change the date value by calendar days (multiples of 24 hours). 
+%                  The setting ``Sidereal day'' changes these keys to change the date by sidereal days\\\midrule
+2.2 & Set Time Zone & (disabled in 0.15)\\
+2.3 & Days keys & (disabled in 0.15)\\
+2.4 & Startup date/time preset & Select the time which Stellarium starts with (if the ``Sky Time At Start-up'' setting is ``Preset Time''\\%\midrule
+2.5 & Startup date and time & The setting ``system'' sets Stellarium's time to the computer clock when Stellarium runs. 
+                                 The setting ``preset'' selects a time set in menu item ``2.4 - Startup date/time preset''\\%\midrule
+2.6 & Date Display Format & Change how Stellarium formats date values. ``system\_default'' takes the format from the computer settings, 
+                            or it is possible to select ``yyyymmdd'', ``ddmmyyyy'' or ``mmddyyyy'' modes\\%\midrule
+2.7 & Time Display Format & Change how Stellarium formats time values. ``system\_default'' takes the format from the computer settings, 
+                            or it is possible to select ``24h'' or ``12h'' clock modes\\\midrule
+3    & General      & (menu group)\\%\midrule
+3.1  & Sky Culture  & Select the sky culture to use (changes constellation lines, names, artwork)\\%\midrule
+3.2  & Sky Language & Change the language used to describe objects in the sky\\%\midrule
+3.3  & App Language & Change the application language (used in GUIs) \\\midrule
+4    & Stars          & (menu group)\\%\midrule
+4.1  & Show stars     & Turn on/off star rendering\\%\midrule
+4.2  & Relative Scale & Change the relative brightness of the stars. Larger values make bright stars much larger.\\%\midrule
+4.3  & Absolute Scale & Change the absolute brightness of the stars. Large values show more stars. Leave at 1 for realistic views. \\%\midrule
+4.4  & Twinkle        & Sets how strong the star twinkling effect is - zero is off, the higher the value the more the stars will twinkle.\\%\midrule
+4.5  & Mag limit      & Sets a custom magnitude cutoff for stars\\
+4.6  & Use mag limit  & Activates this magnitude limit \\
+4.7  & Spiky stars    & Use pointed star figures \\
+4.8  & Labels and Markers & configures the amount of labels \\
+4.9  & Show additional star names  & \\
+4.10 & Use designations for screen labels & \\\midrule
+5    & Colors                      & (menu group) change color/brightness of the\ldots\\%\midrule
+5.1  & Constellation lines         & constellation lines\\%\midrule
+5.2  & Constellation labels        & labels used to name stars\\%\midrule
+5.3  & Art brightness              & constellation art\\%\midrule
+5.4  & Constellation boundaries    & constellation boundary lines\\%\midrule
+5.5  & Cardinal points             & cardinal points markers\\%\midrule
+5.6  & Planet labels               & labels for planets\\%\midrule
+5.7  & Planet orbits               & orbital guide lines for planets\\%\midrule
+5.8  & Planet trails               & planet trails lines\\%\midrule
+5.9  & Meridian Line               & meridian line\\%\midrule
+5.10 & Azimuthal Grid              & lines and labels for the azimuthal grid\\%\midrule
+5.11 & Equatorial Grid             & lines and labels for the equatorial grid\\%\midrule
+5.12 & Equatorial J2000 Grid       & lines and labels for the equatorial J2000.0 grid\\%\midrule
+5.13 & Equator Line                & equator line\\%\midrule
+5.14 & Ecliptic Line               & ecliptic line\\%\midrule
+5.15 & Ecliptic Line (J2000)       & J2000 ecliptic line\\%\midrule
+5.16 & Nebula names                & labels for nebulae\\%\midrule
+5.17 & Nebula hints                & circles  used to mark positions of unspecified nebulae\\%\midrule
+5.18 & Galaxy hints                & ellipses used to mark positions of galaxies\\%\midrule
+5.19 & Bright nebula hints         & squares  used to mark positions of bright nebulae\\%\midrule
+5.20 & Dark nebula hints           & squares  used to mark positions of dark nebulae\\%\midrule
+5.21 & Clusters hints              & symbols  used to mark positions of clusters\\%\midrule
+5.22 & Horizon line                & horizon line\\%\midrule
+5.23 & Galactic grid               & galactic grid\\%\midrule
+5.24 & Galactic equator line       & galactic equator line\\%\midrule
+5.25 & Opposition/conjunction longitude line  & opposition/conjunction line\\
+5.26 & Sky background              & sky background. Note that anything but black is only useful for artistic works.\\\midrule
+6    & Effects & (menu group)\\%\midrule
+6.1  & Light Pollution & Changes the intensity of the light pollution (see Appendix~\ref{ch:BortleScale} Bortle Scale index)\\%\midrule
+6.2  & Landscape       & Select the landscape which Stellarium draws when ground drawing is enabled. Press \key{\return} to activate.\\%\midrule
+6.3  & Setting Landscape Sets Location & If ``Yes'' then changing the landscape will move the observer location to the location for that landscape (if one is known). 
+                                         Setting this to ``No'' means the observer location is not modified when the landscape is changed.\\%\midrule
+6.4  & Auto zoom out returns to initial \ldots view & Changes the behavior when zooming out from a selected object.
+                                                      When set to ``Off'', selected object will stay in center.
+                                                      When set to ``On'', view will return to startup view. \\%\midrule
+6.5  & Zoom Duration              & Sets the time for zoom operations to take (in seconds)\\%\midrule
+6.6  & Milky Way intensity        & Changes the brightness of the Milky Way\\%\midrule
+6.6  & Milky Way saturation       & Changes the saturation of the Milky Way\\%\midrule
+6.7  & Zodiacal light intensity   & Changes the brightness of the Zodiacal light\\\midrule
+%6.6 & Nebula label frequency     & Changes the magnitude limit for labelling of nebulae\\\midrule
+%6.6 & Nebula label frequency     & (not active) \\\midrule
+%6.8 & Cursor Timeout             & Sets the number of seconds of mouse inactivity before the cursor vanishes\\\midrule
+7    & Scripts                    & (menu group)\\%\midrule
+7.1  & Run local script           & Run a script from the scripts sub-directory of the User Directory or Installation Directory 
+                                   (see section~\ref{sec:FilesAndDirectories} (Files and Directories))\\%\midrule
+7.1  & Stop running script        & Stop execution of a currently running script \\\midrule
+%7.2 & CD/DVD Script              & Run a script from a CD or DVD (only used in planetarium set-ups)\\\midrule
+8    & Administration             & (menu group)\\%\midrule
+8.1  & Load default configuration & Reset all settings according to the main configuration file\\%\midrule
+8.2  & Save current configuration & Save the current settings to the main configuration file\\%\midrule
+8.3  & Shutdown                   & Emits a command configured in \\\midrule
+\end{longtable}
+
+
+\subsection{Section \big[tui\big] in config.ini file}
+%\label{sec:plugins:TUI:configuration}
+
+The section in \file{config.ini} for this plugin is named only \texttt{[tui]} for historical reasons. As always, be careful when editing!
+
+\noindent%
+\begin{tabularx}{\textwidth}{l|l|X}\toprule
+\emph{ID}                   & \emph{Type} & \emph{Description}\\\midrule
+tui\_font\_color                  & R,G,B & Font color for TUI text \\%\midrule
+tui\_font\_size                   & int   & Font size for the TUI \\%\midrule
+flag\_show\_gravity\_ui           & bool  & Bend menu text around the screen center. 
+                                            May be useful in planetarium setups, and should then be used together with ``Disc viewport'' 
+                                            in the configuration menu (see~\ref{sec:gui:configuration:tools}). \\%\midrule
+flag\_show\_tui\_datetime         & bool  & Show date and time in lower center.\\%\midrule
+flag\_show\_tui\_short\_obj\_info & bool  & Show some object info in lower right, or (in planetarium setups with 
+                                            ``Disc viewport'' active,) wrapped along the outer circle border. \\%\midrule
+admin\_shutdown\_cmd              & string & executable command to shutdown your system. 
+                                            Best used on Linux or Mac systems. E.g.\ \command{shutdown -h now}\\\bottomrule
+\end{tabularx}
+
+
+
+\newpage
+\section{Remote Control Plugin}
+\label{sec:plugin:RemoteControl}
+
+The Remote Control plugin enables the user to control Stellarium through an external web 
+interface using a standard web browser like Firefox or Chrome, instead of using 
+the main GUI. This works on the same computer Stellarium runs as well as over 
+the network. Even more, multiple ``remote controls'' can access the same 
+Stellarium instance at the same time, without getting in the way of each other. 
+Apart from system configuration options, most of the functionality the main interface 
+provides is available through it \citep{Zotti-etal:SEAC2016}. 
+
+The plugin may be most useful for presentation scenarios, hiding the GUI from the 
+audience and allowing the presenter to change settings on a separate monitor 
+without showing distracting dialog windows. It also allows to start and stop 
+scripts remotely. 
+
+Because the web interface can be customized (or completely 
+replaced) with some knowledge of HTML, CSS and JavaScript, another possibility 
+is a kiosk mode, where untrusted users can execute a variety of predefined 
+actions (like starting recorded tours) without having access to all Stellarium 
+settings. The web API can also be accessed directly (without using a browser 
+and the HTML interface), allowing control of Stellarium with external programs 
+and scripts using HTTP calls like with the tools \file{wget} and \file{curl}.
+
+This plugin allows also interfacing other programs with Stellarium. 
+
+\subsection{Using the plugin}
+\label{sec:plugins:RemoteControl:using}
+
+\begin{figure}[h]
+\centering\includegraphics[width=\columnwidth]{remote_web.png}
+\caption{The default remote control web interface}
+\label{fig:plugins:RemoteControl:using}
+\end{figure}
+
+After enabling the plugin, you can set it up through the configuration dialog. 
+You can configure it to start the web server automatically whenever Stellarium starts 
+or manually start/stop the server using the ``Server enabled'' checkbox or the 
+button \guibutton{0.6}{remote.png} in the toolbar.
+
+The plugin starts an HTTP server on the specified port. The default port is 
+8090, so you should reach the remote control after enabling it by starting 
+a web browser on the same computer and entering \url{http://localhost:8090} in the 
+address bar. When trying to access the remote control from another computer, 
+you need the IP address or the hostname of the server on which Stellarium runs. 
+On a small tablet, you may want to use \url{http://myserver:8090/tablet7in.html} instead.
+
+The plugin shows the locally detected address, but depending on your network or 
+if you need external access you might need to use a different one 
+--- contact your network administrator if you need help with that.
+
+\subsubsection{Password}
+The access to the remote control may optionally be restricted with a simple 
+password.
+
+\textbf{Warning:} \emph{currently no network encryption is used, meaning that 
+an attacker having access to your network can easily find out the password by 
+waiting for a user entering it. Access from the Internet to the 
+plugin should generally be restricted, except if countermeasures such as VPN 
+usage are taken! If you are in a home network using NAT (network access 
+translation), this should be enough for basic security except if port 
+forwarding or a DMZ is configured.}
+
+\subsubsection{CORS}
+The Web API also supports Cross-Origin Resource Sharing (CORS). By enabling CORS,
+compatible websites and web apps can be used to control your Stellarium server.
+
+Enable CORS by checking the ``Enable CORS for the following origin'' option in the
+configuration dialog. Then, enter the URL of the website you'd like to use to control
+Stellarium -- e.g.\ \url{https://telescopius.com}. Specify ``*'' to let any website
+take control. Do this at your own risk.
+
+
+\subsection{Remote Control Web Interface}
+\label{sec:plugins:RemoteControl:webinterface}
+
+
+If you are familiar with the main Stellarium interface, you should easily find 
+your way around the web interface. 
+The remote control automatically uses the same language as set in the main program. 
+Tabs at the top allow access to different settings and controls. 
+
+\begin{description}
+\item[Main] Contains the time controls and most of the buttons of the 
+main bottom toolbar. An additional control allows moving the view like when 
+dragging the mouse or using the arrow keys in Stellarium, and a slider enables 
+the changing of the field of view. There are also buttons to quickly execute 
+time jumps using the commonly used astronomical time intervals.
+\item[Selection] Allows searching and selecting objects like in \autoref{sec:gui:search}. 
+SIMBAD search is also supported. Quick select buttons are available for the 
+primary solar system objects. It also displays the information text for current 
+selection.
+\item[Sky] Settings related to the sky display as shown in the ``View'' dialog 
+as shown in \autoref{sec:gui:view:sky}.
+\item[DSO] The deep-sky object catalog, filter and display settings like in 
+\autoref{sec:gui:view:markings}.
+\item[Landscape] Changing and configuring the background landscape, see 
+\autoref{sec:gui:view:landscape}
+\item[Actions and scripts] Lists all registered actions, and allows starting 
+and stopping of scripts (\autoref{ch:scripting}). If there is no button for the 
+action you want in another tab, you can find all actions which can be 
+configured as a keyboard shortcut (\autoref{sec:gui:configuration}) here.
+\item[Location] Allows changing the location, like in 
+\autoref{sec:gui:location}. Custom location saving is currently not 
+supported.
+\item[Projection] Switch the projection method used, like \autoref{sec:gui:view:markings}.
+\end{description}
+
+\subsection{Remote Control API}
+\label{sec:plugins:RemoteControl:API}
+
+Apart from retrieving quick object info in your browser with e.g.\ \url{http://localhost:8090/api/objects/info?format=json&name=Sun},
+you can access a running instance of Stellarium with various programming languages. A few examples:
+
+\subsubsection{Commandline}
+\label{sec:plugins:RemoteControl:API:CLI}
+
+It is possible to send commands via command line, e.g.:
+
+\begin{commandsScr}
+curl -d "x=1&y=0.3" http://localhost:8090/api/main/move
+wget --post-data "id=show.ssc" http://stella:8090/api/scripts/run -O /dev/null
+curl -d "id=myScript.ssc" http://localhost:8090/api/scripts/run
+curl -d "id=LandscapeMgr.fogDisplayed&value=false" \ 
+      http://localhost:8090/api/stelproperty/set
+\end{commandsScr}
+This allows triggering automatic show setups for museums etc.\ via  some centralized schedulers like \command{cron}.
+
+% TODO: List all available commands with examples here?
+To get a complete pretty-printed list of properties and actions, use:
+\begin{commandsScr}
+curl -G -d "propId=-2&actionId=-2" http://localhost:8090/api/main/status | \
+     python -m json.tool 
+\end{commandsScr} 
+
+\subsubsection{Node.js}
+\label{sec:plugins:RemoteControl:API:node.js}
+
+If you want to use \program{node.js} to build your own interface app, you may find the following example helpful.%
+\footnote{Thanks to user FogoVoar}
+It sets the view direction in one of 3 coordinate systems, depending on the argument:
+
+\begin{commandsScr}
+    "j2000" : "[x,y,z]",
+    "jNow"  : "[x,y,z]",
+    "altAz" : "[x,y,z]"
+\end{commandsScr}
+
+\noindent The vector $[x, y, z]$ should be a normalized vector (unit length), derived from 
+either J2000.0 or current equatorial coordinates $(\alpha, \delta)$, 
+or from alt-azimuthal coordinates $(\mathit{Az}, \mathit{alt})$ which are however always counted from south ($[1,0,0]$) towards east ($[0,1,0]$), 
+with the azimuth $\mathit{Az}'$ counted from South towards East, $\mathit{Az}'=180-\mathit{Az}$.
+
+\begin{minipage}{0.3\textwidth}
+\begin{align*}
+x & = & \cos(\delta)*\cos(\alpha)\\
+y & = & \cos(\delta)*\sin(\alpha)\\
+z & = & \sin(\delta)
+\end{align*}
+\end{minipage}\hspace{1cm}
+\begin{minipage}{0.3\textwidth}
+\begin{align*}
+x & = & \cos(\mathit{alt})*\cos(\mathit{Az}')\\
+y & = & \cos(\mathit{alt})*\sin(\mathit{Az}')\\
+z & = & \sin(\mathit{alt}) 
+\end{align*}
+\end{minipage}
+	
+\begin{commandsScr}
+const url = 'http://192.168.xxx.xxx:8090/api/main/view?j2000=[0.5,0.3,0.2]';
+fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => {
+    response.text().then(text => console.log('Raw response:', text));
+    return response.json();
+  })
+\end{commandsScr}
+
+\subsubsection{Python}
+\label{sec:plugins:RemoteControl:API:Python}
+
+An example for time control:
+\begin{commandsScr}
+import requests
+STELLARIUM_URL='http://192.168.1.100:8090/api/main'
+def set_time(julian_day,timerate):
+    url = f"{STELLARIUM_URL}/time"
+    data = "time="+str(julian_day)+"&timerate="+str(timerate)
+    print(f"Request URL: {url}")
+    print(f"Request Data: {data}")
+    try:
+        response = requests.post(url, data=data)
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response Content: {response.text}")
+        response.raise_for_status()
+        if response.text.strip() == "ok":
+            return {"status": "success", "message": "Time set successfully"}
+        else:
+            return {"status": "error", "message": response.text}
+    except requests.exceptions.RequestException as e:
+        print(f"Error setting time: {e}")
+        return {"status": "error", "message": str(e)}
+\end{commandsScr}
+
+  
+\subsection{Developer information}
+\label{sec:plugins:RemoteControl:developer}
+
+If you are a developer and would like to add functionality to the Remote 
+Control API, customize the web interface or access the API through another 
+program, further information can be found in the plugin's 
+developer documentation\footnote{\url{https://stellarium.org/doc/head/remoteControlDoc.html}}.
+
+\subsection{Acknowledgements}
+
+This plugin was created by Florian Schaukowitsch in the 2015 campaign of the 
+\emph{ESA Summer of Code in Space}\footnote{\url{https://socis.esa.int/}} programme. 
+
+If you are using this plugin in your scientific publications, please cite \citet{Zotti-etal:SEAC2016}.
+
+\newpage
+\section{Remote Sync Plugin}
+\label{sec:plugin:RemoteSync}
+
+The Remote Sync plugin\newFeature{0.16.0} enables setups which connect several instances of
+Stellarium running on a network. This may be useful in installations where one
+presenter wants to allow a larger audience to follow the actions on several
+dim screens (e.g., when you need to avoid a projector's bright light in a 
+public observatory). The actions 
+performed on a ``master'' instance, which acts as a server, are automatically 
+replicated on all connected clients. These clients may run on the same device 
+the server runs, or may access the server over a network.
+
+The plugin is still quite experimental, but is provided for testing and developing purposes.
+You can configure it through the standard plugin settings dialog 
+(\autoref{fig:plugins:RemoteSync:settings}). One Stellarium instance
+can either run in the server mode or connect to an existing server as a client.
+A custom TCP protocol is used for the connection. The port used by the server is
+configurable, and the clients must know the IP address or host name and the port
+of the server.
+
+\begin{figure}[htb]
+	\centering\includegraphics[width=\columnwidth]{remotesync_settings.png}
+	\caption{RemoteSync settings window}
+	\label{fig:plugins:RemoteSync:settings}
+\end{figure}
+
+Alternatively, you may start the plugin through command line arguments. This is
+useful for automated setups or when multiple instances are running on the same
+computer. To start the instance as a server, use the
+\texttt{-{}-syncMode=server} argument with the optional \texttt{-{}-syncPort}
+parameter to specify the port to listen on. To start a client instance, use
+\texttt{-{}-syncMode=client} and use \texttt{-{}-syncHost} and
+\texttt{-{}-syncPort} to specify the server to connect to.
+
+In the settings window, you can also specify what should happen when the client 
+loses the connection to its server, and what to do when the server quits 
+normally. You can choose between 
+\begin{description}
+\item[Do nothing:] connection is lost and will not be re-established. Stellarium client keeps running 
+     in whatever state it was, waiting for keyboard/mouse interaction. 
+\item[Try reconnecting:] Assume Stellarium is switched off on the server
+      but may come back online again, or assume some temporary network problem. 
+	  Stellarium client just keeps running in whatever state it was, but tries to reconnect.
+\item[Quit:] Assume the server always runs until switched off at the end of operating hours. 
+      This is intended for pure client screens without keyboards. When the server  
+	  is shut down, assume this is the end of the day, and exit Stellarium. An enclosing run script 
+	  can then shutdown the client computer before power is switched off with some main switch. 
+\end{description}
+By default, the following things are synchronized:
+\begin{itemize}
+	\item simulation time
+	\item viewer location
+	\item the selected object
+	\item view direction
+	\item current field of view
+	\item all StelProperty-based settings except for GUI-related properties. 
+	This includes almost all settings visible in the configuration dialogs such 
+	as projection type, sky and view options, landscape settings, line colors, etc.
+\end{itemize}
+
+\noindent Because there is currently no full time synchronization implemented, for the best
+results all client computers should make sure their system clocks are set as
+close as possible to the server computer's clock (preferably a few milliseconds
+difference at most). This can be done for example by using an NTP server.\footnote{
+Instructions on how to use the public NTP server pool for the most common
+operating systems can be found at \url{https://www.pool.ntp.org/en/use.html}.} 
+If all your Stellarium instances run on the same device, this is of course not 
+necessary.
+
+\begin{figure}[ht]
+	\centering\includegraphics[width=0.8\columnwidth]{remotesync_client.png}
+	\caption{RemoteSync client settings window}
+	\label{fig:plugins:RemoteSync:client}
+\end{figure}
+
+It is also possible to exclude some state from being synchronized. On each
+client, the client configuration GUI (\autoref{fig:plugins:RemoteSync:client}) allows to
+disable specific settings from being synchronized on this client. 
+
+The lower part of this dialog allows you to 
+fine-tune which named StelProperties (which hold parts of the internal program state) 
+should be excluded from synchronization. 
+The configuration dialog lists all available properties which usually have easy to understand 
+names on the left side. Highlight one or more properties which you don't want synchronized 
+and press the arrow button to move them to the list of excluded properties.
+
+For historic reasons there are two kinds of Properties: Actions 
+(Boolean switches, for which also hotkeys can be assigned) and (genuine) StelProperties. 
+The latter have names indicating which module they belong to and may have other data types (numbers, colors, \ldots). 
+Note that the actions frequently are just alias names of Boolean StelProperties, 
+so in order to inhibit a certain property from being synchronized, you must find both entries.
+
+Properties of plugins will only be visible when the respective plugin has been enabled. 
+When a plugin has been disabled, its properties may vanish from the stored list of non-synchronized properties.
+
+Each client can have different settings. This could allow installations with several screens
+where on one screen you show the constellation figures, another screen shows the
+distribution of deep-sky objects in the same frame, and a third screen may show
+a close-up view of the currently centered object. Or just show several sky cultures, 
+or show the sky at different locations, \ldots. 
+
+The names of all available StelProperties from which you might want to select a few to exclude  
+from synchronisation can also be found with a little scripting (see chapter ~\ref{ch:scripting}). 
+Open the script console \key{F12} and enter the following call:
+\begin{script}
+core.output(core.getPropertyList());
+\end{script}
+Run the script and inspect the output tab. It may take a little guesswork to select the right names, 
+but the general structure of property names like 
+\texttt{<Module>.<Property>} should help you to find your way around.
+
+\subsection{Developer notes}
+
+Usually the synchronisation fails if you attempt to use different
+versions of Stellarium. You can override this behaviour
+\newFeature{0.21.2} with an entry in the respective section of
+\file{config.ini}:
+
+\begin{configfile}[\scriptsize]
+  [RemoteSync]
+  allowVersionMismatch = true
+\end{configfile}
+
+\subsection{Finetuning}
+
+This plugin makes use of the QLoggingCategory infrastructure. By default it is very verbose and prints each transmitted property to the logfile.
+To reduce verbosity when it works, configure an environment variable with these entries (Note the closing semicolon!):
+\begin{commands}[\scriptsize]
+QT_LOGGING_RULES="stel.plugin.remoteSync.debug=true;
+		  stel.plugin.remoteSync.client.debug=false;
+		  stel.plugin.remoteSync.protocol.debug=false;"
+\end{commands}
+
+The final parts may be \texttt{debug|info|warning|critical = true|false}. Default: \texttt{true}.
+
+
+\subsection*{Author and Acknowledgements}
+
+This plugin was created mostly by Florian Schaukowitsch in the 2015-16 campaigns of the 
+\emph{ESA Summer of Code in Space}\footnote{\url{https://socis.esa.int/}} programme. 
+
+% \newpage
+% \section{D-Bus Interface}
+% \label{sec:plugin:DBus}
+% 
+% [This may come as user documentation from SoCiS2020 (?) work]
+
+\newpage
+\section{OnlineQueries Plugin}
+\label{sec:plugins:OnlineQueries}
+
+Stellarium includes and provides lots of information about many kinds
+of objects. However, there are scientific websites which provide even
+more specialized information about particular objects. This plugin 
+\newFeature{0.21.1}\citep{Zotti-etal:SEAC2021} allows online access to several websites on a
+variety of special topics. To retrieve information, select the
+first tab and press the respective button labeled with the information source. 
+The result is displayed in a browser view\footnote{%
+  For technical reasons, on some platforms the
+  result is displayed in the system's default web browser.  On some
+  other platforms, e.g. Windows/WSL with Ubuntu or some ARM computers, the
+  web view fails to work properly.  On these platforms you should
+  manually edit \file{config.ini} and set the
+  \texttt{disable\_webview} entry in the config file.}.
+
+\begin{description}
+\item[Wikipedia] The free online encyclopedia provides information
+  about many bright stars, the planets, moons and many asteroids, as
+  well as many deep-sky objects. The lookup is based on the English
+  proper name.
+\item[AAVSO] The \indexterm{International Variable Star
+  Index}\footnote{\url{https://www.aavso.org/vsx/}} of the
+  \indexterm{American Association of Variable Star Observers} (AAVSO)
+  provides data about variable stars.
+\item[GCVS] The \indexterm{General Catalogue of Variable
+  Stars}\footnote{\url{http://www.sai.msu.su/gcvs/}} of the Sternberg
+  Astronomical Institute and the Institute of Astronomy of the Russian
+  Academy of Sciences in Moscow.
+\item[ASE] The \indexterm{All Skies Encyclopaedia}%
+  \footnote{\url{https://ase.exopla.net/index.php/All_Skies_Encyclopaedia}} 
+  of the IAU Working Group on Star Names (WGSN) which collates and collects 
+  the data on cultural names of stars and constellations in order to preserve 
+  their heritage and distribute the knowledge about them beyond their culture of origin.
+\end{description}
+
+In addition, you can configure up to three further websites. These
+must provide some public website which takes a query for a Hipparcos
+star number or object name.  
+
+Regardless of the current program language, the result is always
+presented in English or the language of the respective website.
+
+% \paragraph{Note:}
+
+\subsection{Section \big[OnlineQueries\big] in config.ini file}
+%\label{sec:plugins:OnlineQueries:configuration}
+
+You can edit the \file{config.ini} file to change settings of the
+OnlineQueries plugin.  The only strings you should need to touch are
+the \texttt{customN\_\ldots} entries ($\mathtt{N}\in \left\{ 1, 2,
+3\right\}$). The placeholder \texttt{\%1} will be filled by either the
+Hipparcos number (if the respective \texttt{customN\_use\_hip} is
+\texttt{true}) or by the first English name used in Stellarium. The
+\texttt{customN\_use\_hip} should be \texttt{true} to use a star's
+Hipparcos number, or \texttt{false} to use the English name as key.
+
+
+\begin{center}
+{\small
+\begin{tabular}{l|l|l}\toprule
+\emph{ID} & \emph{Type} & \emph{Default}\\\midrule
+aavso\_hip\_url      &string & (don't override)\\ % https://www.aavso.org/vsx/index.php?view=api.object\&ident=HIP\%1 \\
+aavso\_oid\_url      &string & (don't override)\\ % https://www.aavso.org/vsx/index.php?view=detail.top\&oid=\%1      \\
+ase\_url             &string & (don't override)\\ % https://ase.exopla.net/index.php/\%1 \\
+gcvs\_url            &string & (don't override)\\ % http://www.sai.msu.su/gcvs/cgi-bin/ident.cgi?cat=Hip+\&num=\%1    \\
+wikipedia\_url       &string & (don't override)\\ % https://en.wikipedia.org/wiki/\%1 \\
+\midrule
+custom1\_url         &string & \\
+custom2\_url         &string & \\
+custom3\_url         &string & \\
+custom1\_use\_hip    &boolean& true \\
+custom2\_use\_hip    &boolean& true \\
+custom3\_use\_hip    &boolean& true \\\midrule
+disable\_webview     &boolean&false \\
+\bottomrule
+\end{tabular}
+}
+\end{center}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+\input{plg_skyculturemaker}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newpage
+
+\section{Solar System Editor Plugin}
+\label{sec:plugins:SolarSystemEditor}
+
+Stellarium stores its data (orbital elements and other details) about
+solar system objects (planets, their moons, minor bodies) in two files.  
+File \file{data/ssystem\_major.ini} in the installation directory contains data for the planets and their moons, and should never be touched by users.
+File \file{data/ssystem\_minor.ini} contains data for minor bodies, i.e., planetoids and comets.
+The file will be taken from the user data directory if it also exists there, which means that users can add minor planets or comets as they become observable by editing this file.
+
+The orbits of minor bodies (minor planets and comets) are specified with \indexterm[orbital elements, osculating]{orbital elements} for 
+\indexterm{Kepler orbits} (after \name[Johannes]{Kepler} (1572--1630) who found the true shape of the orbit 
+of a small body around a large one being a conic section, i.e., circle, ellipse, parabola or hyperbola). These elements 
+describe the instantaneous shape and orientation of the object's orbit around the Sun at a particular time 
+called the \indexterm{epoch}.  
+We compute positions from these \indexterm[orbital elements, osculating]{osculating elements} of minor body orbits, but the result is only valid for 
+a moderately short timespan around the epoch, because the major planets can exert noticeable gravitational perturbations 
+on the objects when they come close, and so these orbital elements, which are mere snapshots in time, need to be updated on a regular basis. 
+Stellarium does not perform numerical integration that could work out the orbital changes automatically, 
+and so the element file needs to be modified to compute positions further away from the orbit's epoch. 
+See Appendix~\ref{sec:ssystem.ini} for more details, 
+and see e.g.\ \citet{Meeus:Morsels4} for a discussion of a few interesting examples of orbital development.
+When you go out hunting for asteroids and comets, this plugin is for you.
+
+This plugin provides access to the Minor Planet Center (MPC\footnote{\url{https://www.minorplanetcenter.net}}) server where the latest Solar System information can be found. When this plugin is
+loaded (see section~\ref{sec:Plugins:EnablingPlugins}) and you open the configuration dialog, the first tab allows to import, export or reset your \file{ssystem\_minor.ini}, 
+and also to load extra data for minor bodies in Stellarium's \file{.ini} format. 
+For example, the installation directory contains a file \file{ssystem\_1000comets.ini} which contains 
+data for over 1000 historical comets. Currently it is not possible to select only a few from that, 
+so try loading this only on a reasonably fast computer, and think about deleting comets again (or resetting the file) when you don't require them.
+
+\begin{figure}[tbh]\centering
+	\includegraphics[width=.75\textwidth]{SolarSystemEditor-plugin-conffile.png}
+	\caption{Interface of Solar System Editor plugin: Configuration file tab}
+	\label{fig:SolarSystemEditor:ConfigurationFile}
+\end{figure}
+
+The second tab lists all currently loaded minor bodies (see figure~\ref{fig:SolarSystemEditor:SolarSystem}).  It is recommended
+to remove old entries of yesteryear's comets if you don't need them any
+longer. Just select one or more objects and press \button{Remove}.
+If you have a very weak computer, you may want to reduce the number of
+minor bodies to just a handful to improve performance.
+
+\begin{figure}[tbh]\centering
+	\includegraphics[width=.75\textwidth]{SolarSystemEditor-plugin-solsys.png}
+	\caption{Interface of Solar System Editor plugin: Solar System tab}
+	\label{fig:SolarSystemEditor:SolarSystem}
+\end{figure}
+
+On this tab, you also find the option to connect to the MPC and download current orbital elements, 
+or load a text file in the format provided by MPC (see figures \ref{fig:SolarSystemEditor:ImportData:InitialView} and \ref{fig:SolarSystemEditor:ImportData:FinalView}). 
+
+\begin{figure}[tbph]\centering
+\includegraphics[width=.7\textwidth,trim=0 40 0 0,clip]{SolarSystemEditor-plugin-import.png}
+\caption{Interface of Solar System Editor plugin: Import data dialog}
+\label{fig:SolarSystemEditor:ImportData:InitialView}
+\end{figure}
+
+Once MPC data has been downloaded, the user can select objects for updating the user's \file{ssystem\_minor.ini}.
+
+\begin{figure}[tbph]\centering
+\includegraphics[width=.7\textwidth]{SolarSystemEditor-plugin-import2.png}
+\caption{Interface of Solar System Editor plugin: Import data dialog --- view after downloading and parsing the MPC data.}
+\label{fig:SolarSystemEditor:ImportData:FinalView}
+\end{figure}
+
+\newpage
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\clearpage
+
+\section{Nebula Textures Plugin}
+\label{sec:plugins:NebulaTextures}
+
+The Nebula Textures plugin allows users to customize deep-sky object (DSO) textures, precisely 
+rendering them in Stellarium like default textures. Astronomy amateurs can use it to create 
+a collection of their own astrophotography, visual-like sketches, paintings, and even more in 
+Stellarium. It also serves as a simple client for Astrometry.net, enabling blind-solving and precise 
+positioning of astronomical images. The plugin's full functionality includes online plate-solving 
+and positioning of astronomical images, as well as the management and rendering of custom textures.
+
+\subsection{Online Solving and Texture Management}
+Instructions for integrating astrophotography images via online plate solving.
+\begin{enumerate}
+    \item \textbf{Prepare an Image}: Prepare a processed rectangular bitmap file of a deep-sky object, 
+	in a format that supports both Astrometry analysis and rendering, such as PNG, JPG, TIF, or GIF. 
+	You should adjust the image background brightness to suit Stellarium 
+	by referencing the nebulae images in the Stellarium \file{nebulae/default} directory. Typical 
+	astrophotography images with TAN projections are fine, but avoid images with high field distortion. 
+	If the image's FOV is too large, it is recommended to manually split it into multiple sub-images beforehand. 
+	\textbf{\textcolor{red}{Ensure that the image is not flipped horizontally or vertically!!!}} 
+	It’s recommended to use a descriptive ID or nickname as the filename. 
+	While Nova Astrometry does not strictly limit image size, keeping it below 20 MP 
+	ensures efficient plate solving.
+
+    \item \textbf{Open Image}: By default, the plugin opens the ``Solve and Add'' page. Click the \button{Open File} 
+	button to select an image file or paste the file path into the ``Image Filepath'' text box.
+
+    \item \textbf{Enter API Key}: Paste your Astrometry API key into the corresponding text box (password 
+	mode by default). If you don’t have one, click \href{https://nova.astrometry.net/api_help}{\textcolor{blue}{\underline{Astrometry API key}}} to obtain it 
+	after registering or logging in. Check \checkbox{Remember me} to store the key for future use.
+
+    \item \textbf{Upload and Solve}: Click \button{Online Solve} to begin uploading and solving the image. Ensure system 
+	proxies are disabled to avoid errors. The solving process may take seconds to minutes, 
+	depending on the Astrometry.net server. If you need to stop the solving process, click the \button{Cancel} button.
+
+    \item \textbf{View Solving Results}: After successful solving, the image's center and corners' J2000 
+	equatorial coordinates (in decimal degrees) will be displayed.
+
+    \item \textbf{Optional Testing}:
+    \begin{itemize}
+        \item Click \button{Goto Center} to locate the texture's center.
+        \item Use \button{Test this texture} to preview the texture. If it overlaps with default textures, you should check \button{Disable default textures} to avoid visual conflicts. 
+		The \button{Test this texture} button will toggle between ``Test this texture'' and ``Stop test'' to start and stop the rendering process. 
+		Remember to click \button{Stop Test} afterward to restore the rendering of the default nebula textures! 
+        \item When testing is active, modifying the coordinate spinboxes (including using the mouse wheel) will immediately update and redraw the texture in real-time, enabling an interactive experience for fine-tuning alignment.
+        \item For images solved via Astrometry.net, if manual coordinate adjustments deviate too much, \button{Reset} will appear. Click it to reset the coordinates back to the original astrometric solution.
+        \item The dropdown menu is used to adjust texture brightness, with three options: \textbf{Bright}, \textbf{Normal}, and \textbf{Dark}. 
+		The default \textbf{Normal} setting is suitable for most cases.
+        \item You can repeatedly press the \texttt{s} key in the main view to toggle star visibility and verify whether the image is aligned accurately.
+    \end{itemize}
+
+    \item \textbf{Add Texture to Storage}: Click \button{Add the Texture to Custom Storage} to permanently save 
+	the texture. The original image will be copied to Stellarium's plugin folder in the user 
+	directory. After adding a texture, you should restart Stellarium to fully integrate the texture into the module.
+
+    \item \textbf{Display Settings}: After restarting Stellarium, switch to the \button{Custom Textures} page of the 
+	plugin to manage your custom textures. Options include \button{Show Custom Textures} (showing/hiding textures), \button{Avoid Area Conflict} (avoiding 
+	overlaps with default textures), and \button{Reload} (reloading custom textures).
+
+    \item \textbf{Locate a Texture}: Double-clicking a texture item in the list will center the view on that texture.
+
+    \item \textbf{Remove a Texture}: To remove a texture, switch to the \button{Custom Textures} page, select it in 
+	the list view and click \button{Remove selected item in Custom Textures}. The configuration file 
+	will update, and the corresponding image file in the plugin folder will be deleted. However, 
+	Stellarium may continue rendering the texture until it is restarted.
+\end{enumerate}
+
+\subsection{Manual Texture Addition)}
+Instructions for adding manual textures (e.g., sketches, paintings). The process is similar to the one above, but performing online solving is not required:
+\begin{itemize}
+    \item Open the image file. Stars in non-astrophotographic images may not align precisely with the 
+	software's stars, so it is recommended to use the texture without stars (de-star it).
+    \item Input the J2000 equatorial coordinates (in decimal degrees) for the image corners, aligning 
+	with the bitmap display.
+    \item If needed, use an astrophotography image with a similar field of view (FOV) to obtain 
+	approximate corner coordinates via online solving first. Alternatively, enable Digitized 
+	Sky Survey layers in Stellarium (Disable constellation lines, illustrations, grids, and other 
+	unrelated elements to approximate a realistic effect), adjust the field of view and rotation 
+	to match the texture, and capture a screenshot for solving. After obtaining the solved 
+	coordinates, replace the image path with the texture path.
+    \item Then, debug and render the texture, adjusting coordinates until the texture stars align 
+	accurately with Stellarium stars. Finally, add the texture to the custom storage.
+\end{itemize}
+
+\subsection{Notes}
+\begin{enumerate}
+    \item All uploaded images are automatically assigned a \textbf{CC BY-NC-ND 3.0} license by Astrometry.net 
+	and are not publicly visible by default. Avoid excessive uploads to prevent server 
+	congestion or issues with your API key.
+    \item After adding a texture, you must restart Stellarium to fully integrate the texture into the 
+	module. The same applies when deleting a texture.
+    \item To back up your texture library or share it with others, copy the plugin folder from your user 
+	config directory. You can find the exact plugin storage path in the ``About'' section of the plugin GUI. For Windows systems, this path is usually something like:
+    \begin{quote}
+    \texttt{\%APPDATA\%\textbackslash Stellarium\textbackslash modules\textbackslash NebulaTextures}
+    \end{quote}
+    You can then share this folder with others, and they can place it in the same directory on 
+	their system to use the custom textures.
+\end{enumerate}
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "guide"
+%%% End: 
+

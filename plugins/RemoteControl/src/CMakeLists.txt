@@ -1,0 +1,95 @@
+INCLUDE_DIRECTORIES(. gui qtwebapp)
+LINK_DIRECTORIES(${CMAKE_BINARY_DIR}/src)
+
+SET(QtWebApp_SRCS
+  qtwebapp/httpserver/httpconnectionhandler.cpp
+  qtwebapp/httpserver/httpconnectionhandler.h
+  qtwebapp/httpserver/httpconnectionhandlerpool.cpp
+  qtwebapp/httpserver/httpconnectionhandlerpool.h
+  qtwebapp/httpserver/httpcookie.cpp
+  qtwebapp/httpserver/httpcookie.h
+  qtwebapp/httpserver/httpglobal.cpp
+  qtwebapp/httpserver/httpglobal.h
+  qtwebapp/httpserver/httplistener.cpp
+  qtwebapp/httpserver/httplistener.h
+  qtwebapp/httpserver/httprequest.cpp
+  qtwebapp/httpserver/httprequest.h
+  qtwebapp/httpserver/httprequesthandler.cpp
+  qtwebapp/httpserver/httprequesthandler.h
+  qtwebapp/httpserver/httpresponse.cpp
+  qtwebapp/httpserver/httpresponse.h
+  qtwebapp/httpserver/staticfilecontroller.cpp
+  qtwebapp/httpserver/staticfilecontroller.h
+  
+  qtwebapp/templateengine/template.cpp
+  qtwebapp/templateengine/template.h
+  qtwebapp/templateengine/templateglobal.h
+)
+
+SET(RemoteControl_SRCS
+  AbstractAPIService.hpp
+  AbstractAPIService.cpp
+  APIController.hpp
+  APIController.cpp
+  MainService.hpp
+  MainService.cpp
+  ObjectService.hpp
+  ObjectService.cpp
+  LocationService.hpp
+  LocationService.cpp
+  LocationSearchService.hpp
+  LocationSearchService.cpp
+  RemoteControl.hpp
+  RemoteControl.cpp
+  RequestHandler.hpp
+  RequestHandler.cpp
+  ScriptService.hpp
+  ScriptService.cpp
+  SimbadService.hpp
+  SimbadService.cpp
+  StelActionService.hpp
+  StelActionService.cpp
+  StelPropertyService.hpp
+  StelPropertyService.cpp
+  ViewService.hpp
+  ViewService.cpp
+  ../include/RemoteControlServiceInterface.hpp # added here just so that it shows up in Qt creator
+)
+IF (STELLARIUM_GUI_MODE STREQUAL "Standard")
+LIST(APPEND RemoteControl_SRCS
+  gui/RemoteControlDialog.hpp
+  gui/RemoteControlDialog.cpp
+)
+
+SET(RemoteControl_UIS
+  gui/remoteControlDialog.ui
+)
+ENDIF(STELLARIUM_GUI_MODE STREQUAL "Standard")
+
+################# compiles resources files ############
+SET(RemoteControl_RES ../RemoteControl.qrc)
+
+IF (${QT_VERSION_MAJOR} EQUAL "5")
+     IF (STELLARIUM_GUI_MODE STREQUAL "Standard")
+          QT5_WRAP_UI(RemoteControl_UIS_H ${RemoteControl_UIS})
+     ENDIF()
+     QT5_ADD_RESOURCES(RemoteControl_RES_CXX ${RemoteControl_RES})
+ELSE()
+     IF (STELLARIUM_GUI_MODE STREQUAL "Standard")
+          QT_WRAP_UI(RemoteControl_UIS_H ${RemoteControl_UIS})
+     ENDIF()
+     QT_ADD_RESOURCES(RemoteControl_RES_CXX ${RemoteControl_RES})
+ENDIF()
+
+ADD_LIBRARY(RemoteControl-static STATIC ${RemoteControl_SRCS} ${RemoteControl_RES_CXX} ${RemoteControl_UIS_H} ${QtWebApp_SRCS})
+TARGET_INCLUDE_DIRECTORIES(RemoteControl-static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+TARGET_LINK_LIBRARIES(RemoteControl-static Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::OpenGL)
+IF(ENABLE_SCRIPT_QML)
+TARGET_LINK_LIBRARIES(RemoteControl-static Qt${QT_VERSION_MAJOR}::Qml)
+ENDIF()
+# The library target "RemoteControl-static" has a default OUTPUT_NAME of "RemoteControl-static", so change it.
+SET_TARGET_PROPERTIES(RemoteControl-static PROPERTIES OUTPUT_NAME "RemoteControl")
+SET_TARGET_PROPERTIES(RemoteControl-static PROPERTIES COMPILE_FLAGS "-DQT_STATICPLUGIN")
+ADD_DEPENDENCIES(AllStaticPlugins RemoteControl-static)
+
+SET_TARGET_PROPERTIES(RemoteControl-static PROPERTIES FOLDER "plugins/RemoteControl")

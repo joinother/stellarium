@@ -1,0 +1,857 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>archaeoLinesDialog</class>
+ <widget class="QWidget" name="archaeoLinesDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>535</width>
+    <height>393</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>ArchaeoLines Configuration</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout_2">
+   <property name="spacing">
+    <number>0</number>
+   </property>
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
+   <item>
+    <widget class="TitleBar" name="titleBar">
+     <property name="title">
+      <string>ArchaeoLines Plug-in Configuration</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <property name="currentIndex">
+      <number>0</number>
+     </property>
+     <property name="documentMode">
+      <bool>false</bool>
+     </property>
+     <widget class="QWidget" name="settingsTab">
+      <attribute name="title">
+       <string>ArchaeoLines</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <layout class="QGridLayout" name="gridLayout">
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="crossquarterCheckBox">
+           <property name="text">
+            <string>Crossquarter Lines</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="3">
+          <widget class="QComboBox" name="currentPlanetComboBox">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>150</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="currentIndex">
+            <number>0</number>
+           </property>
+           <item>
+            <property name="text">
+             <string>Current Planet: None</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Current Planet: Mercury</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Current Planet: Venus</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Current Planet: Mars</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Current Planet: Jupiter</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>Current Planet: Saturn</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="6" column="2">
+          <widget class="QSpinBox" name="lineWidthSpinBox">
+           <property name="prefix">
+            <string/>
+           </property>
+           <property name="minimum">
+            <number>1</number>
+           </property>
+           <property name="maximum">
+            <number>8</number>
+           </property>
+           <property name="value">
+            <number>1</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="ColorButton" name="selectedObjectAzimuthColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="3">
+          <widget class="QCheckBox" name="currentSunCheckBox">
+           <property name="text">
+            <string>Current Sun</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QCheckBox" name="currentMoonCheckBox">
+           <property name="text">
+            <string>Current Moon</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QCheckBox" name="majorStandstillCheckBox">
+           <property name="text">
+            <string>Major Lunar Standstill lines</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QCheckBox" name="minorStandstillCheckBox">
+           <property name="text">
+            <string>Minor Lunar Standstill lines</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="ColorButton" name="currentMoonColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="equinoxCheckBox">
+           <property name="text">
+            <string>Equinox line (Equator)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="2">
+          <widget class="ColorButton" name="selectedObjectColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QCheckBox" name="polarCirclesCheckBox">
+           <property name="text">
+            <string>Polar Circles</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="ColorButton" name="equinoxColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="3">
+          <widget class="QCheckBox" name="selectedObjectHourAngleCheckBox">
+           <property name="text">
+            <string>Selected Object Hour Angle</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="ColorButton" name="currentSunColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QCheckBox" name="selectedObjectCheckBox">
+           <property name="text">
+            <string>Selected Object</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="ColorButton" name="crossquarterColorToolButton">
+           <property name="toolTip">
+            <string>Change color</string>
+           </property>
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="ColorButton" name="minorStandstillColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2">
+          <widget class="ColorButton" name="currentPlanetColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="2">
+          <widget class="ColorButton" name="selectedObjectHourAngleColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="3">
+          <widget class="QLabel" name="lineWidthLabel">
+           <property name="text">
+            <string>Line thickness</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QCheckBox" name="zenithPassageCheckBox">
+           <property name="text">
+            <string>Declination of Zenith passage</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="ColorButton" name="solsticesColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QCheckBox" name="solsticesCheckBox">
+           <property name="text">
+            <string>Solstice Lines</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="0">
+          <widget class="ColorButton" name="majorStandstillColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="3">
+          <widget class="QCheckBox" name="selectedObjectAzimuthCheckBox">
+           <property name="text">
+            <string>Selected Object Azimuth</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QCheckBox" name="nadirPassageCheckBox">
+           <property name="text">
+            <string>Declination of Nadir passage</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="0">
+          <widget class="ColorButton" name="nadirPassageColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="ColorButton" name="zenithPassageColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="ColorButton" name="polarCirclesColorToolButton">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>120</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_7">
+         <item>
+          <widget class="QPushButton" name="restoreDefaultsButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="text">
+            <string>Restore defaults</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="customLinesTab">
+      <attribute name="title">
+       <string>Custom Lines</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <layout class="QGridLayout" name="gridLayout_2">
+         <item row="1" column="1">
+          <widget class="QLabel" name="geographicLocation1LongitudeLabel">
+           <property name="text">
+            <string>Longitude</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="5">
+          <widget class="QPushButton" name="customDeclination1PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="0">
+          <widget class="ColorButton" name="customDeclination2ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="2">
+          <widget class="AngleSpinBox" name="customAzimuth2DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QCheckBox" name="geographicLocation1CheckBox">
+           <property name="text">
+            <string>Geographic Location 1</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="2" colspan="3">
+          <widget class="QLineEdit" name="geographicLocation2LineEdit">
+           <property name="toolTip">
+            <string>Enter a label (location name) for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="3" colspan="2">
+          <widget class="QLineEdit" name="customAzimuth2LineEdit">
+           <property name="toolTip">
+            <string>Enter a label for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="5">
+          <widget class="QPushButton" name="customDeclination2PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="5">
+          <widget class="QPushButton" name="customAzimuth2PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="3">
+          <widget class="QLabel" name="geographicLocation2LatitudeLabel">
+           <property name="text">
+            <string>Latitude</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="2">
+          <widget class="AngleSpinBox" name="customDeclination2DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="0">
+          <widget class="ColorButton" name="customDeclination1ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="2">
+          <widget class="AngleSpinBox" name="geographicLocation2LongitudeDoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QCheckBox" name="geographicLocation2CheckBox">
+           <property name="text">
+            <string>Geographic Location 2</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="3" colspan="2">
+          <widget class="QLineEdit" name="customAzimuth1LineEdit">
+           <property name="toolTip">
+            <string>Enter a label for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="3" colspan="2">
+          <widget class="QLineEdit" name="customDeclination2LineEdit"/>
+         </item>
+         <item row="5" column="0">
+          <widget class="ColorButton" name="customAzimuth2ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2" colspan="3">
+          <widget class="QLineEdit" name="geographicLocation1LineEdit">
+           <property name="toolTip">
+            <string>Enter a label (location name) for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="1">
+          <widget class="QCheckBox" name="customDeclination1CheckBox">
+           <property name="text">
+            <string>Custom Declination 1</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="ColorButton" name="geographicLocation1ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="5">
+          <widget class="QPushButton" name="customAzimuth1PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="4">
+          <widget class="AngleSpinBox" name="geographicLocation1LatitudeDoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QCheckBox" name="customAzimuth1CheckBox">
+           <property name="toolTip">
+            <string>Always counted from North</string>
+           </property>
+           <property name="text">
+            <string>Custom Azimuth 1</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="5">
+          <widget class="QPushButton" name="geographicLocation2PickPushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Select from location list</string>
+           </property>
+           <property name="text">
+            <string>Pick...</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="5">
+          <widget class="QPushButton" name="geographicLocation1PickPushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Select from location list</string>
+           </property>
+           <property name="text">
+            <string>Pick...</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="ColorButton" name="customAzimuth1ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLabel" name="geographicLocation1LatitudeLabel">
+           <property name="text">
+            <string>Latitude</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="ColorButton" name="geographicLocation2ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="AngleSpinBox" name="geographicLocation1LongitudeDoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLabel" name="geographicLocation2LongitudeLabel">
+           <property name="text">
+            <string>Longitude</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="9" column="1">
+          <widget class="QCheckBox" name="customDeclination2CheckBox">
+           <property name="text">
+            <string>Custom Declination 2</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="2">
+          <widget class="AngleSpinBox" name="customAzimuth1DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="3" colspan="2">
+          <widget class="QLineEdit" name="customDeclination1LineEdit"/>
+         </item>
+         <item row="3" column="4">
+          <widget class="AngleSpinBox" name="geographicLocation2LatitudeDoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QCheckBox" name="customAzimuth2CheckBox">
+           <property name="toolTip">
+            <string>Always counted from North</string>
+           </property>
+           <property name="text">
+            <string>Custom Azimuth 2</string>
+           </property>
+          </widget>
+         </item>
+         <item row="8" column="2">
+          <widget class="AngleSpinBox" name="customDeclination1DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QCheckBox" name="customAltitude1CheckBox">
+           <property name="text">
+            <string>Custom Altitude 1</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QCheckBox" name="customAltitude2CheckBox">
+           <property name="text">
+            <string>Custom Altitude 2</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="2">
+          <widget class="AngleSpinBox" name="customAltitude1DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="2">
+          <widget class="AngleSpinBox" name="customAltitude2DoubleSpinBox">
+           <property name="alignment">
+            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="3" colspan="2">
+          <widget class="QLineEdit" name="customAltitude1LineEdit">
+           <property name="toolTip">
+            <string>Enter a label for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="3" colspan="2">
+          <widget class="QLineEdit" name="customAltitude2LineEdit">
+           <property name="toolTip">
+            <string>Enter a label for this line</string>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="5">
+          <widget class="QPushButton" name="customAltitude1PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="5">
+          <widget class="QPushButton" name="customAltitude2PushButton">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>From selected object (if any)</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="../../ArchaeoLines.qrc">
+             <normaloff>:/archaeoLines/textures/telescope.png</normaloff>:/archaeoLines/textures/telescope.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="ColorButton" name="customAltitude1ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="0">
+          <widget class="ColorButton" name="customAltitude2ColorToolButton">
+           <property name="text">
+            <string notr="true"/>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="restoreDefaultsButtonCL">
+         <property name="text">
+          <string>Restore default settings</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="aboutTab">
+      <attribute name="title">
+       <string comment="tab in plugin windows">About</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_11">
+       <property name="spacing">
+        <number>9</number>
+       </property>
+       <item>
+        <widget class="QTextBrowser" name="aboutTextBrowser">
+         <property name="openExternalLinks">
+          <bool>true</bool>
+         </property>
+         <property name="openLinks">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>TitleBar</class>
+   <extends>QFrame</extends>
+   <header>Dialog.hpp</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>AngleSpinBox</class>
+   <extends>QSpinBox</extends>
+   <header>AngleSpinBox.hpp</header>
+  </customwidget>
+  <customwidget>
+   <class>ColorButton</class>
+   <extends>QToolButton</extends>
+   <header>gui/ColorButton.hpp</header>
+  </customwidget>
+ </customwidgets>
+ <resources>
+  <include location="../../ArchaeoLines.qrc"/>
+ </resources>
+ <connections/>
+</ui>

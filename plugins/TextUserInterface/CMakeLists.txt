@@ -1,0 +1,12 @@
+# This is the cmake config file for the Text User Interface plugin
+# Further: Use program version number. (Static plugin, why bother?)
+SET(TEXT_USER_INTERFACE_VERSION "${VERSION}")
+
+ADD_DEFINITIONS(-DTUI_PLUGIN_VERSION="${TEXT_USER_INTERFACE_VERSION}")
+ADD_DEFINITIONS(-DTUI_PLUGIN_LICENSE="GNU GPLv2 or later")
+
+ADD_SUBDIRECTORY( src )
+
+IF(ENABLE_SCRIPT_QML)
+     FIND_PACKAGE(Qt${QT_VERSION_MAJOR}Qml REQUIRED)
+ENDIF(ENABLE_SCRIPT_QML)

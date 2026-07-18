@@ -1,0 +1,302 @@
+/*
+ * Sky Culture Maker plug-in for Stellarium
+ *
+ * Copyright (C) 2025 Vincent Gerlach
+ * Copyright (C) 2025 Luca-Philipp Grumbach
+ * Copyright (C) 2025 Fabian Hofer
+ * Copyright (C) 2025 Mher Mnatsakanyan
+ * Copyright (C) 2025 Richard Hofmann
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "ScmConstellation.hpp"
+#include "ConstellationMgr.hpp"
+#include <QDir>
+#include <QFileInfo>
+
+scm::ScmConstellation::ScmConstellation(const QString &id, const std::vector<ConstellationLine> &lines,
+                                        const bool isDarkConstellation)
+	: id(id)
+	, lines(lines)
+	, isDarkConstellation(isDarkConstellation)
+{
+	ConstellationMgr *constMgr = GETSTELMODULE(ConstellationMgr);
+
+	// Initial values
+	constellationLineThickness = constMgr->getConstellationLineThickness();
+	constellationNameFont.setPixelSize(constMgr->getFontSize());
+	defaultConstellationLineColor = constMgr->getLinesColor();
+	defaultConstellationNameColor = constMgr->getLabelsColor();
+
+	// Connections
+	QObject::connect(constMgr, &ConstellationMgr::constellationLineThicknessChanged,
+	                 [this](int v) { constellationLineThickness = v; });
+	QObject::connect(constMgr, &ConstellationMgr::fontSizeChanged,
+	                 [this](int v) { constellationNameFont.setPixelSize(v); });
+	QObject::connect(constMgr, &ConstellationMgr::linesColorChanged,
+	                 [this](const Vec3f &c) { defaultConstellationLineColor = c; });
+	QObject::connect(constMgr, &ConstellationMgr::namesColorChanged,
+	                 [this](const Vec3f &c) { defaultConstellationNameColor = c; });
+
+	updateTextPosition();
+}
+
+QString scm::ScmConstellation::getId() const
+{
+	return id;
+}
+
+void scm::ScmConstellation::setCulturalName(const ScmCulturalName &culturalName)
+{
+	ScmConstellation::culturalName = culturalName;
+}
+
+const scm::ScmCulturalName &scm::ScmConstellation::getCulturalName() const
+{
+	return culturalName;
+}
+
+void scm::ScmConstellation::setArtwork(const ScmConstellationArtwork &artwork)
+{
+	ScmConstellation::artwork = artwork;
+}
+
+const scm::ScmConstellationArtwork &scm::ScmConstellation::getArtwork() const
+{
+	return artwork;
+}
+
+void scm::ScmConstellation::setLines(const std::vector<ConstellationLine> &lines)
+{
+	scm::ScmConstellation::lines = lines;
+	updateTextPosition();
+}
+
+const std::vector<scm::ConstellationLine> &scm::ScmConstellation::getLines() const
+{
+	return lines;
+}
+
+void scm::ScmConstellation::draw(StelCore *core) const
+{
+	StelPainter painter(core->getProjection(drawFrame));
+	drawArtwork(core, painter);
+	drawLines(painter, defaultConstellationLineColor);
+	drawName(core, painter, defaultConstellationNameColor);
+}
+
+void scm::ScmConstellation::drawLines(StelPainter &sPainter, const Vec3f &lineColor) const
+{
+	// set up painter
+	sPainter.setBlending(true);
+	sPainter.setLineSmooth(true);
+	sPainter.setFont(constellationNameFont);
+	sPainter.setColor(lineColor, 1.0f);
+	const float scale = sPainter.getProjector()->getScreenScale();
+	if (constellationLineThickness > 1 || scale > 1.f)
+	{
+		sPainter.setLineWidth(constellationLineThickness * scale);
+	}
+
+	// draw lines
+	for (const ConstellationLine &line : lines)
+	{
+		sPainter.drawGreatCircleArc(line.start.coordinate, line.end.coordinate);
+	}
+
+	// restore line properties
+	if (constellationLineThickness > 1 || scale > 1.f)
+	{
+		sPainter.setLineWidth(1); // restore thickness
+	}
+	sPainter.setLineSmooth(false);
+}
+
+void scm::ScmConstellation::drawName(StelCore *core, StelPainter &sPainter, const Vec3f &nameColor) const
+{
+	sPainter.setBlending(true);
+
+	Vec3d velocityObserver(0.);
+	if (core->getUseAberration())
+	{
+		velocityObserver = core->getAberrationVec(core->getJDE());
+	}
+
+	Vec3d namePose = XYZname;
+	namePose += velocityObserver;
+	namePose.normalize();
+
+	Vec3d XYname;
+	if (!sPainter.getProjector()->projectCheck(XYZname, XYname))
+	{
+		return;
+	}
+
+	sPainter.setColor(nameColor, 1.0f);
+	sPainter.drawText(static_cast<float>(XYname[0]), static_cast<float>(XYname[1]), culturalName.translated, 0.,
+	                  -sPainter.getFontMetrics().boundingRect(culturalName.translated).width() / 2, 0, false);
+}
+
+void scm::ScmConstellation::drawArtwork(StelCore *core, StelPainter &sPainter) const
+{
+	artwork.draw(core, sPainter);
+}
+
+QJsonObject scm::ScmConstellation::toJson(const QString &skyCultureId, const bool mergeLines) const
+{
+	QJsonObject json;
+
+	// Assemble lines object
+	QJsonArray linesArray;
+
+	if (!isDarkConstellation)
+	{
+		// not a dark constellation, so we can add stars
+		for (const auto &line : lines)
+		{
+			linesArray.append(line.starsToJson());
+		}
+	}
+	else
+	{
+		// dark constellation, so only add coordinates
+		for (const auto &line : lines)
+		{
+			linesArray.append(line.coordinatesToJson());
+		}
+	}
+
+	if (mergeLines)
+	{
+		mergeLinesIntoPolylines(linesArray);
+	}
+
+	json["id"]    = "CON " + skyCultureId + " " + id;
+	json["lines"] = linesArray;
+	if (artwork.getHasArt() && !artworkPath.isEmpty())
+	{
+		QFileInfo fileInfo(artworkPath);
+		// the '/' separator is default in all sky cultures
+		json["image"] = artwork.toJson("illustrations/" + fileInfo.fileName());
+	}
+
+	json["common_name"] = culturalName.toJson();
+
+	return json;
+}
+
+bool scm::ScmConstellation::saveArtwork(const QString &directory)
+{
+	if (!artwork.getHasArt())
+	{
+		qWarning() << "SkyCultureMaker: The artwork of the constellation " << id << " has no art.";
+		return true; // Not an error just a warning
+	}
+
+	QString filename = id.split(" ").back(); // Last part of id as usually used as the illustrations name
+	QString filepath = directory + QDir::separator() + filename + ".png"; // Write every illustrations as png
+	artworkPath      = filepath;
+	return artwork.save(filepath);
+}
+
+void scm::ScmConstellation::updateTextPosition()
+{
+	XYZname.set(0., 0., 0.);
+	for (const ConstellationLine &line : lines)
+	{
+		XYZname += line.end.coordinate;
+		XYZname += line.start.coordinate;
+	}
+	XYZname.normalize();
+}
+
+void scm::ScmConstellation::mergeLinesIntoPolylines(QJsonArray &lines) const
+{
+	if (lines.size() < 2)
+	{
+		// Nothing to merge
+		return;
+	}
+
+	// Step 1: merge line ends with other line starts
+	for (int growableLineIdx = 0; growableLineIdx < lines.size(); ++growableLineIdx)
+	{
+		QJsonArray growableLine = lines.at(growableLineIdx).toArray();
+
+		// Look for a line that starts where the growableLine ends
+		for (int attachableLineIdx = growableLineIdx + 1; attachableLineIdx < lines.size(); ++attachableLineIdx)
+		{
+			QJsonArray attachableLine = lines.at(attachableLineIdx).toArray();
+
+			// Merge attachableLine into growableLine
+			if (growableLine.last() == attachableLine.first())
+			{
+				// Append all points from attachableLine except the first (which is duplicate)
+				attachableLine.removeFirst();
+				for (QJsonValue attachableLinePoint : attachableLine)
+				{
+					growableLine.append(attachableLinePoint);
+				}
+				
+				// Update the merged lines array
+				lines[growableLineIdx] = growableLine;
+				lines.removeAt(attachableLineIdx);
+
+				// Recheck the merged line
+				--growableLineIdx;
+				// Reset j to growableLineIdx + 1 to continue merging
+				attachableLineIdx = growableLineIdx + 1;
+				break;
+			}
+		}
+	}
+
+	// Step 2: merge line starts with other line ends
+	for (int growableLineIdx = 0; growableLineIdx < lines.size(); ++growableLineIdx)
+	{
+		QJsonArray growableLine = lines.at(growableLineIdx).toArray();
+
+		// Look for a line that ends where the growableLine starts
+		for (int attachableLineIdx = growableLineIdx + 1; attachableLineIdx < lines.size(); ++attachableLineIdx)
+		{
+			QJsonArray attachableLine = lines.at(attachableLineIdx).toArray();
+
+			if (growableLine.first() == attachableLine.last())
+			{
+				QJsonArray newGrowableLine;
+				// Prepend all points from attachableLine except the last (which is duplicate)
+				attachableLine.removeLast();
+				for (QJsonValue attachableLinePoint : attachableLine)
+				{
+					newGrowableLine.append(attachableLinePoint);
+				}
+				for (QJsonValue growableLinePoint : growableLine)
+				{
+					newGrowableLine.append(growableLinePoint);
+				}
+				growableLine = newGrowableLine;
+
+				lines[growableLineIdx] = growableLine;
+				lines.removeAt(attachableLineIdx);
+
+				// Recheck the merged line
+				--growableLineIdx;
+				// Reset j to growableLineIdx + 1 to continue merging
+				attachableLineIdx = growableLineIdx + 1;
+				break;
+			}
+		}
+	}
+}

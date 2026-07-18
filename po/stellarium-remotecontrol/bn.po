@@ -1,0 +1,1129 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Stellarium's team
+# This file is distributed under the same license as the stellarium-remotecontrol package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# Alexander V. Wolf <alex.v.wolf@gmail.com>, 2022
+# cardinot <mcardinot@gmail.com>, 2025
+# Tanmoy Saha <t4saha@gmail.com>, 2026
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: stellarium-remotecontrol\n"
+"Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
+"POT-Creation-Date: 2026-06-09 22:17+0700\n"
+"PO-Revision-Date: 2022-10-05 14:25+0000\n"
+"Last-Translator: Tanmoy Saha <t4saha@gmail.com>, 2026\n"
+"Language-Team: Bengali (https://app.transifex.com/stellarium/teams/80998/bn/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: bn\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: plugins/RemoteControl/webroot/js/api/actions.js:60
+msgid "Could not retrieve action list"
+msgstr "কার্য তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/actions.js:88
+msgid "Action '%1' not accepted by server: "
+msgstr "'%1' কার্যটি সার্ভার সমর্থন করে না : "
+
+#: plugins/RemoteControl/webroot/js/api/actions.js:95
+msgid "Error sending action '%1' to server: "
+msgstr "'%1' কার্যটি সার্ভারে পাঠানো যায় নি : "
+
+#: plugins/RemoteControl/webroot/js/api/location.js:33
+#: plugins/RemoteControl/webroot/js/api/location.js:61
+#: plugins/RemoteControl/webroot/js/api/search.js:381
+msgid "Error performing search"
+msgstr "অনুসন্ধান করার সময় ত্রুটি দেখা দিয়েছে"
+
+#: plugins/RemoteControl/webroot/js/api/location.js:125
+msgid "Could not retrieve country list"
+msgstr "স্থানের তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/location.js:138
+msgid "Could not retrieve planet list"
+msgstr "গ্রহের তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/properties.js:28
+msgid "Could not retrieve property list"
+msgstr "বৈশিষ্ট্য সংক্রান্ত তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/properties.js:89
+#: plugins/RemoteControl/webroot/js/api/properties.js:110
+msgid "Property '%1' not accepted by server: "
+msgstr "'%1' বৈশিষ্ট্যটি সার্ভার সমর্থন করে না : "
+
+#: plugins/RemoteControl/webroot/js/api/properties.js:96
+msgid "Error sending property '%1' to server: "
+msgstr "'%1' বৈশিষ্ট্যটি সার্ভারে পাঠানো যায় নি : "
+
+#: plugins/RemoteControl/webroot/js/api/remotecontrol.js:197
+msgid "Error sending command to server: "
+msgstr "সার্ভারে নির্দেশটি পাঠানো যায় নি : "
+
+#: plugins/RemoteControl/webroot/js/api/scripts.js:27
+msgid "Could not retrieve script list"
+msgstr "কার্যলিপির তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:35
+msgid "querying"
+msgstr "অনুসন্ধান করা হচ্ছে"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:44
+msgid "Error (%1)"
+msgstr "ত্রুটি (%1)"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:60
+msgid "Error performing Simbad lookup"
+msgstr "SIMBAD তালিকায় অনুসন্ধানে ত্রুটি"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:291
+msgid "Error loading object types"
+msgstr "জ্যোতিষ্কের ধরনের তালিকাটি যোগ করা যাচ্ছে না"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:324
+msgid "Error getting object list"
+msgstr "জ্যোতিষ্ক তালিকাটি পাওয়া যাচ্ছে না"
+
+#: plugins/RemoteControl/webroot/js/api/search.js:393
+msgid "waiting"
+msgstr "অপেক্ষা করুন"
+
+#: plugins/RemoteControl/webroot/js/api/viewoptions.js:38
+msgid "Could not retrieve projection list"
+msgstr "অভিক্ষেপন তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/api/viewoptions.js:51
+#: plugins/RemoteControl/webroot/js/api/viewoptions.js:64
+msgid "Could not retrieve landscape list"
+msgstr "ভূমিরূপ সংক্রান্ত তালিকাটি পাওয়া যায় নি"
+
+#: plugins/RemoteControl/webroot/js/plugins/scenery3d.js:22
+#: plugins/RemoteControl/webroot/js/ui/scripts.js:242 index.html:1184
+#: index.html:1260 tablet7in.html:1261 tablet7in.html:1330
+msgid "-none-"
+msgstr "-কিছু না-"
+
+#: plugins/RemoteControl/webroot/js/plugins/scenery3d.js:28
+msgid "(Currently loading: %1)"
+msgstr "(%1 ভূমিরূপটি গঠন করা হচ্ছে)"
+
+#: plugins/RemoteControl/webroot/js/plugins/scenery3d.js:71
+msgid "Could not retrieve Scenery3d list"
+msgstr "ত্রিমাতৃক ভূমিরূপগুলির তালিকা পাওয়া যাচ্ছে না"
+
+#: plugins/RemoteControl/webroot/js/ui/actions.js:170 tablet7in.html:1242
+msgid "Search actions..."
+msgstr ""
+
+#: plugins/RemoteControl/webroot/js/ui/actions.js:217
+#: plugins/RemoteControl/webroot/js/ui/actions.js:257
+msgid "on"
+msgstr "চালু"
+
+#: plugins/RemoteControl/webroot/js/ui/actions.js:217
+#: plugins/RemoteControl/webroot/js/ui/actions.js:257
+msgid "off"
+msgstr "বন্ধ"
+
+#: plugins/RemoteControl/webroot/js/ui/combobox.js:58
+msgid "Show All Items"
+msgstr "পুরো তালিকাটি দেখুন"
+
+#: plugins/RemoteControl/webroot/js/ui/combobox.js:124
+msgid "Input did not match any item"
+msgstr "তালিকায় এই নামে কিছু নেই"
+
+#: plugins/RemoteControl/webroot/js/ui/search.js:132
+msgid "No items available for this culture"
+msgstr ""
+
+#: plugins/RemoteControl/webroot/js/ui/search.js:432
+msgid "No current selection"
+msgstr "কিছু না"
+
+#: index.html:7 tablet7in.html:7
+msgid "Stellarium remote control plugin"
+msgstr "স্টেলারিয়াম দূর সঞ্চালন সরঞ্জাম"
+
+#: index.html:20 tablet7in.html:21
+msgid "Please wait, loading"
+msgstr "অপেক্ষা করুন, চালু হচ্ছে"
+
+#: index.html:29 tablet7in.html:30
+msgid "Stellarium remote control"
+msgstr "স্টেলারিয়াম দূর সঞ্চালন"
+
+#: index.html:33 tablet7in.html:34
+msgid "Main controls"
+msgstr "মূল নিয়ন্ত্রন বিভাগ"
+
+#: index.html:36 tablet7in.html:41
+msgid "DSO"
+msgstr "মহাজাগতিক জ্যোতিষ্ক"
+
+#: index.html:39 tablet7in.html:44
+msgid "Statistics & Analysis"
+msgstr ""
+
+#: index.html:40
+msgid "Actions and scripts"
+msgstr "কার্য ও কার্যলিপি"
+
+#: index.html:43 tablet7in.html:49
+msgid "Scenery3d"
+msgstr "ত্রিমাতৃক ভূমিরূপ"
+
+#: index.html:44 index.html:1301 tablet7in.html:50 tablet7in.html:1370
+msgid "Gamepad Controller"
+msgstr ""
+
+#: index.html:83
+msgid "Pause"
+msgstr "থামান"
+
+#: index.html:88 tablet7in.html:188
+msgid "Time jumps"
+msgstr "সময় পরিবর্তন"
+
+#: index.html:92 tablet7in.html:192
+msgid "Solar hour"
+msgstr "ঘন্টা (ঘড়ি অনুসারে)"
+
+#: index.html:97 tablet7in.html:197
+msgid "10 Calendar years"
+msgstr ""
+
+#: index.html:98 tablet7in.html:198
+msgid "100 Calendar years"
+msgstr ""
+
+#: index.html:102 tablet7in.html:202
+msgid "Sidereal century"
+msgstr "শতাব্দী (বার্ষিক গতি অনুসারে)"
+
+#: index.html:111 tablet7in.html:211
+msgid "Anomalistic century"
+msgstr "শতাব্দী (চাঁদের দূরত্ব নির্ভর)"
+
+#: index.html:115 tablet7in.html:215
+msgid "Mean tropical century"
+msgstr "শতাব্দী (সূর্যায়ণ অনুসারে)"
+
+#: index.html:119 tablet7in.html:219
+msgid "Julian century"
+msgstr "জুলিয়ান শতাব্দী"
+
+#: index.html:133 tablet7in.html:106
+msgid "View towards horizon at Azimuth"
+msgstr "দিগংশ বরাবর দিগন্তের দিকে দেখুন"
+
+#: index.html:154 tablet7in.html:128
+msgid "Vertical View offset"
+msgstr "উলম্ব দৃষ্টিক্ষেত্র"
+
+#: index.html:224 tablet7in.html:239
+msgid "Enter search term. Use TAB to navigate results."
+msgstr "জ্যোতিষ্কের নাম লিখুন । ফলাফল বেছে নিতে TAB চাপুন ।"
+
+#: index.html:225 tablet7in.html:240
+msgid "Select and focus"
+msgstr "নির্বাচন করে দৃশ্যপটের মাঝে আনুন"
+
+#: index.html:250 tablet7in.html:268
+msgid "Select current item"
+msgstr ""
+
+#: index.html:254 tablet7in.html:272
+msgid "Selection mode"
+msgstr "চিহ্নিত করুন"
+
+#: index.html:254 tablet7in.html:272
+msgid "Center on object"
+msgstr "ও মাঝে আনুন"
+
+#: index.html:254 tablet7in.html:272
+msgid "Center and zoom to object"
+msgstr "ও মাঝে এনে কাছ থেকে দেখুন"
+
+#: index.html:254 tablet7in.html:272
+msgid "Just mark the object"
+msgstr "শুধুমাত্র"
+
+#: index.html:256 tablet7in.html:274
+msgid "Quick select"
+msgstr "চটজলদি বাছাই"
+
+#: index.html:260 tablet7in.html:278
+msgid "Pluto"
+msgstr "প্লুটো"
+
+#: index.html:266 tablet7in.html:307
+msgid "Current selection"
+msgstr "নির্বাচিত জ্যোতিষ্ক"
+
+#: index.html:284 tablet7in.html:335
+msgid "Milky Way brightness:"
+msgstr "ছায়াপথের উজ্জ্বলতা : "
+
+#: index.html:295 tablet7in.html:354
+msgid "Dbl. stars"
+msgstr ""
+
+#: index.html:296 tablet7in.html:355
+msgid "Var. stars"
+msgstr ""
+
+#: index.html:297 tablet7in.html:356
+msgid "HIP"
+msgstr ""
+
+#: index.html:300 tablet7in.html:360
+msgid "Digitized Sky Survey"
+msgstr "ডিজিটাল মহাকাশ নিরীক্ষা"
+
+#: index.html:301 tablet7in.html:361
+msgid "HiPS Survey"
+msgstr "মহাকাশ নিরীক্ষা"
+
+#: index.html:310 tablet7in.html:372
+msgid "Include nutation"
+msgstr "অক্ষবিচলন প্রভাব"
+
+#: index.html:312 tablet7in.html:374
+msgid "Include parallax"
+msgstr ""
+
+#: index.html:317 tablet7in.html:379
+msgid "Include aberration"
+msgstr "আলোর অপেরণ প্রভাব"
+
+#: index.html:325 tablet7in.html:393
+msgid "Show planet markers"
+msgstr "অবস্থান"
+
+#: index.html:326 tablet7in.html:394
+msgid "Show planet orbits"
+msgstr "কক্ষপথ"
+
+#: index.html:327 tablet7in.html:395
+msgid "Show planet orbits only"
+msgstr "শুধু গ্রহদের কক্ষপথ"
+
+#: index.html:328 tablet7in.html:396
+msgid "Show orbit for selected planet"
+msgstr "পছন্দসই জ্যোতিষ্কের কক্ষপথ"
+
+#: index.html:329 tablet7in.html:397
+msgid "Show planet trails"
+msgstr "গমনপথ"
+
+#: index.html:330 tablet7in.html:398
+msgid "Show trail only for selected planet"
+msgstr "পছন্দসই জ্যোতিষ্কের গমনপথ"
+
+#: index.html:335 tablet7in.html:402
+msgid "Scale Moon:"
+msgstr "বিবর্ধিত চাঁদ :"
+
+#: index.html:336 tablet7in.html:406
+msgid "Scale Sun:"
+msgstr "বিবর্ধিত সূর্য :"
+
+#: index.html:337 tablet7in.html:410
+msgid "Scale Planets:"
+msgstr "গ্রহের বিবর্ধণ :"
+
+#: index.html:338 tablet7in.html:414
+msgid "Scale minor bodies:"
+msgstr "বিবর্ধিত গ্রহাণু :"
+
+#: index.html:343
+msgid "Mark minor bodies:"
+msgstr ""
+
+#: index.html:371 tablet7in.html:446
+msgid "Bortle class:"
+msgstr ""
+
+#: index.html:388 tablet7in.html:463
+msgid "Extinction Coefficient:"
+msgstr "বিলুপ্তিকরণ গুনাঙ্ক :"
+
+#: index.html:389 tablet7in.html:464
+msgid "Only extinction/refraction, no blue skylight"
+msgstr ""
+
+#: index.html:389 tablet7in.html:465
+msgid "Suppress scattering"
+msgstr ""
+
+#: index.html:393 tablet7in.html:470
+msgid "Shooting Stars"
+msgstr "উল্কাপাত"
+
+#: index.html:394 tablet7in.html:471
+msgid "ZHR:"
+msgstr "হার :"
+
+#: index.html:441 tablet7in.html:523
+msgid ""
+"Instantaneous circles of earth´s axis on its motion around ecliptical poles."
+" Displayed on Earth only."
+msgstr ""
+"মেরুর বৃত্তাকার সঞ্চারপথ যা পৃথিবীর অক্ষের দোলন জনিত প্রভাবের ফলে উৎপন্ন হয় "
+"(লাট্টুর মত ঘুর্ণনের কারণে) ।"
+
+#: index.html:458 tablet7in.html:540
+msgid "Center"
+msgstr "মাঝবরাবর"
+
+#: index.html:474 tablet7in.html:558
+msgid "Solstices"
+msgstr "সূর্যায়ণ"
+
+#: index.html:475 tablet7in.html:559
+msgid "Crossquarters"
+msgstr "মরশুমি সূচনা রেখা"
+
+#: index.html:476 tablet7in.html:560
+msgid "Major Standstill"
+msgstr "সর্বোচ্চ চন্দ্রায়ণ"
+
+#: index.html:477 tablet7in.html:561
+msgid "Minor Standstill"
+msgstr "সর্বনিম্ন চন্দ্রায়ণ"
+
+#: index.html:481 tablet7in.html:566
+msgid "Line width:"
+msgstr ""
+
+#: index.html:491 tablet7in.html:576
+msgid "Current Planet:"
+msgstr "পছন্দসই গ্রহ :"
+
+#: index.html:532 tablet7in.html:616
+msgid "Catalogue of Reflection Nebulae (Van den Bergh, 1966)"
+msgstr "প্রতিফলিত নীহারিকার তালিকা (ভ্যান ডেন বার্গ, ১৯৬৬)"
+
+#: index.html:579 tablet7in.html:634
+msgid ""
+"Catalogue of southern stars embedded in nebulosity (van den Bergh+, 1975)"
+msgstr ""
+"দক্ষিন গোলার্ধের নীহারিকাযুক্ত নক্ষত্র তালিকা (ভ্যান ডেন বার্গ+, ১৯৭৫)"
+
+#: index.html:617
+msgid "Objects without identifier"
+msgstr "কোনো তালিকাভুক্ত নয়"
+
+#: index.html:635
+msgid "Open Star clusters"
+msgstr "মুক্ত তারকাগুচ্ছ"
+
+#: index.html:636 tablet7in.html:702
+msgid "Globular Star clusters"
+msgstr "গোলকাকার তারকাগুচ্ছ"
+
+#: index.html:642 tablet7in.html:708
+msgid "Bright Nebulae"
+msgstr "উজ্জ্বল নীহারিকা"
+
+#: index.html:643 tablet7in.html:709
+msgid "Dark Nebulae"
+msgstr "কৃষ্ণবর্ণ নীহারিকা"
+
+#: index.html:644 tablet7in.html:710
+msgid "Planetary Nebulae"
+msgstr "গ্রহরূপী নীহারিকা"
+
+#: index.html:654 tablet7in.html:720
+msgid "Labels and markers"
+msgstr "নাম এবং চিহ্ন"
+
+#: index.html:672 tablet7in.html:739
+msgid "Limit angular size (arcmin):"
+msgstr "আকার অনুসারে (আর্কমিনিট) প্রদর্শন :"
+
+#: index.html:685 tablet7in.html:753
+msgid "Use associated planet and position"
+msgstr "সংযুক্ত ঠিকানা ব্যবহার"
+
+#: index.html:695 tablet7in.html:761
+msgid "Show landscape labels"
+msgstr "ভূমিরূপের বিভিন্ন অংশের নাম"
+
+#: index.html:696 tablet7in.html:762
+msgid "Show illumination"
+msgstr "দীপন স্তর"
+
+#: index.html:701 tablet7in.html:768
+msgid "Current landscape"
+msgstr "ব্যবহৃত ভূমিরূপ"
+
+#: index.html:717 tablet7in.html:783
+msgid "Current sky culture"
+msgstr "ব্যবহৃত সংস্কৃতি"
+
+#: index.html:723 index.html:980 tablet7in.html:789 tablet7in.html:1045
+msgid "Loading sky cultures..."
+msgstr ""
+
+#: index.html:732 index.html:998 index.html:1018 tablet7in.html:798
+#: tablet7in.html:1063 tablet7in.html:1083
+msgid "Zodiac Signs"
+msgstr ""
+
+#: index.html:733 index.html:1002 index.html:1019 tablet7in.html:799
+#: tablet7in.html:1067 tablet7in.html:1084
+msgid "Lunar Mansions"
+msgstr ""
+
+#: index.html:734 tablet7in.html:800
+msgid "Notable Stars"
+msgstr ""
+
+#: index.html:740 tablet7in.html:806
+msgid "Click on any constellation to highlight and isolate it"
+msgstr ""
+
+#: index.html:742 tablet7in.html:808
+msgid "Select a sky culture to view constellations"
+msgstr ""
+
+#: index.html:748 tablet7in.html:814
+msgid "Traditional star patterns within constellations"
+msgstr ""
+
+#: index.html:750 tablet7in.html:816
+msgid "No asterisms available"
+msgstr ""
+
+#: index.html:756 tablet7in.html:822
+msgid "The 12 signs of the zodiac"
+msgstr ""
+
+#: index.html:758 tablet7in.html:824
+msgid "No zodiac data available"
+msgstr ""
+
+#: index.html:764 tablet7in.html:830
+msgid "Traditional lunar stations (mansions)"
+msgstr ""
+
+#: index.html:766 tablet7in.html:832
+msgid "No lunar mansions data available"
+msgstr ""
+
+#: index.html:772 tablet7in.html:838
+msgid "Named stars with cultural significance"
+msgstr ""
+
+#: index.html:774 tablet7in.html:840
+msgid "No star name data available"
+msgstr ""
+
+#: index.html:798 tablet7in.html:864
+msgid "Label constellations with font size"
+msgstr ""
+
+#: index.html:812 tablet7in.html:878
+msgid "Show lines with thickness"
+msgstr "কল্পরেখার বেধ :"
+
+#: index.html:826 tablet7in.html:892
+msgid "Label asterisms with font size"
+msgstr ""
+
+#: index.html:840 tablet7in.html:906
+msgid "Show asterisms with thickness"
+msgstr "নক্ষত্রপুঞ্জের রেখার বেধ"
+
+#: index.html:854 tablet7in.html:920
+msgid "Show ray helpers with thickness"
+msgstr "অনুসন্ধান সহায়ক রেখার বেধ"
+
+#: index.html:868 tablet7in.html:934
+msgid "Show art in brightness"
+msgstr "কল্পচিত্রের উজ্জ্বল্যতা :"
+
+#: index.html:882 tablet7in.html:948
+msgid "Show boundaries with thickness"
+msgstr "সীমারেখার বেধ"
+
+#: index.html:896 tablet7in.html:962
+msgid "Show zodiac with thickness"
+msgstr ""
+
+#: index.html:910 tablet7in.html:976
+msgid "Show lunar stations/mansions with thickness"
+msgstr ""
+
+#: index.html:927 tablet7in.html:993
+msgid "Short labels"
+msgstr ""
+
+#: index.html:932 tablet7in.html:998
+msgid "Constellation selection isolated"
+msgstr "একটি করে তারামন্ডল নির্বাচন"
+
+#: index.html:937 tablet7in.html:1003
+msgid "Only last selected"
+msgstr ""
+
+#: index.html:954 tablet7in.html:1019
+msgid "Culture Data Inspector"
+msgstr ""
+
+#: index.html:956 tablet7in.html:1021
+msgid ""
+"This inspector displays the complete, unfiltered dataset extracted directly "
+"from the culture's"
+msgstr ""
+
+#: index.html:958 tablet7in.html:1023
+msgid "file. Use this view to:"
+msgstr ""
+
+#: index.html:960 tablet7in.html:1025
+msgid "Verify exact constellation and asterism counts (including ray helpers)"
+msgstr ""
+
+#: index.html:961 tablet7in.html:1026
+msgid "Inspect raw IDs, native names, pronunciations, and IPA values"
+msgstr ""
+
+#: index.html:962 tablet7in.html:1027
+msgid "Cross-reference star IDs (HIP, NGC, etc.) with their cultural names"
+msgstr ""
+
+#: index.html:963 tablet7in.html:1028
+msgid "Export complete datasets to CSV/JSON for external analysis"
+msgstr ""
+
+#: index.html:964 tablet7in.html:1029
+msgid "Search across all fields to quickly locate specific entries"
+msgstr ""
+
+#: index.html:967 tablet7in.html:1032
+msgid ""
+"Each row is interactive — click to select and navigate to the object in "
+"Stellarium."
+msgstr ""
+
+#: index.html:976 tablet7in.html:1041
+msgid "Select Sky Culture"
+msgstr ""
+
+#: index.html:994 tablet7in.html:1059
+msgid "Ray Helpers"
+msgstr ""
+
+#: index.html:1006 tablet7in.html:1071
+msgid "Named Objects"
+msgstr ""
+
+#: index.html:1020 tablet7in.html:1085
+msgid "Notable Stars & Objects"
+msgstr ""
+
+#: index.html:1027 tablet7in.html:1092
+msgid ""
+"Search constellations... (click row to isolate at 60° FOV) | ESC to reset"
+msgstr ""
+
+#: index.html:1034 tablet7in.html:1099
+msgid ""
+"Complete constellation definitions from index.json. Click any row to isolate"
+" and highlight in Stellarium."
+msgstr ""
+
+#: index.html:1041 index.html:1072 tablet7in.html:1106 tablet7in.html:1137
+msgid "ID"
+msgstr ""
+
+#: index.html:1043 index.html:1074 index.html:1095 index.html:1117
+#: index.html:1150 tablet7in.html:1108 tablet7in.html:1139 tablet7in.html:1160
+#: tablet7in.html:1182 tablet7in.html:1215
+msgid "English Name"
+msgstr "অনুবাদ"
+
+#: index.html:1044 index.html:1075 index.html:1096 index.html:1118
+#: index.html:1151 tablet7in.html:1109 tablet7in.html:1140 tablet7in.html:1161
+#: tablet7in.html:1183 tablet7in.html:1216
+msgid "Translation"
+msgstr ""
+
+#: index.html:1047 index.html:1078 tablet7in.html:1112 tablet7in.html:1143
+msgid "Star IDs"
+msgstr ""
+
+#: index.html:1058 tablet7in.html:1123
+msgid "Search asterisms... (click row to center at 30° FOV) | ESC to reset"
+msgstr ""
+
+#: index.html:1065 tablet7in.html:1130
+msgid ""
+"All asterisms from index.json (ray helpers are excluded from this list). "
+"Click any row to center view."
+msgstr ""
+
+#: index.html:1104 tablet7in.html:1169
+msgid ""
+"Zodiac signs defined in this culture. Click to center on the constellation."
+msgstr ""
+
+#: index.html:1126 tablet7in.html:1191
+msgid ""
+"Lunar mansions (stations) defined in this culture. Click to center view."
+msgstr ""
+
+#: index.html:1133 tablet7in.html:1198
+msgid ""
+"Search stars & objects... (click row to center at 15° FOV) | ESC to reset"
+msgstr ""
+
+#: index.html:1140 tablet7in.html:1205
+msgid ""
+"All named celestial objects (stars, planets, deep-sky) defined in this "
+"culture's common_names section."
+msgstr ""
+
+#: index.html:1147 tablet7in.html:1212
+msgid "Original ID"
+msgstr ""
+
+#: index.html:1184 tablet7in.html:1261
+msgid "Active script:"
+msgstr "সক্রিয় কার্যলিপি"
+
+#: index.html:1189 tablet7in.html:1266
+msgid "Run selected script"
+msgstr "কার্যলিপি চালান"
+
+#: index.html:1190 tablet7in.html:1267
+msgid "Stop current script"
+msgstr "কার্যলিপি বন্ধ করুন"
+
+#: index.html:1191 tablet7in.html:1268
+msgid "Reset to natural sky appearance (South, 40°, FOV 90°)"
+msgstr ""
+
+#: index.html:1200 tablet7in.html:45 tablet7in.html:1240
+msgid "Actions"
+msgstr "কার্য তালিকা"
+
+#: index.html:1203 tablet7in.html:1243
+msgid "Run/toggle action"
+msgstr "কার্য সম্পাদনা করুন"
+
+#: index.html:1217 tablet7in.html:1294
+msgid "Planet map"
+msgstr "মানচিত্র"
+
+#: index.html:1218 tablet7in.html:1295
+msgid "Planet map pointer"
+msgstr "মানচিত্রে স্থান নির্দেশক"
+
+#: index.html:1222 tablet7in.html:1299
+msgid "Type to search location"
+msgstr "স্থানের নাম লিখুন"
+
+#: index.html:1258 tablet7in.html:1328
+msgid "Interaction"
+msgstr "ব্যবহার"
+
+#: index.html:1259 tablet7in.html:1329
+msgid "Current scene:"
+msgstr "ব্যবহৃত ভূমিরূপ"
+
+#: index.html:1262 tablet7in.html:1332
+msgid "View controls"
+msgstr "অভিমুখ পরিবর্তন"
+
+#: index.html:1268 tablet7in.html:1338
+msgid "Movement controls"
+msgstr "চলন নিয়ন্ত্রন"
+
+#: index.html:1280 tablet7in.html:1350
+msgid "Torchlight"
+msgstr "টর্চ লাইট"
+
+#: index.html:1287 tablet7in.html:1357
+msgid "Scene selection"
+msgstr "ভূমিরূপ তালিকা"
+
+#: index.html:1291 tablet7in.html:1361
+msgid "Load selected scene"
+msgstr "নির্বাচিত ভূমিরূপটি ব্যবহার করুন"
+
+#: index.html:1304 tablet7in.html:1373
+msgid "Scan"
+msgstr ""
+
+#: index.html:1311 tablet7in.html:1380
+msgid "Controller Settings"
+msgstr ""
+
+#: index.html:1314 tablet7in.html:1383
+msgid "Active Device:"
+msgstr ""
+
+#: index.html:1316 tablet7in.html:1385
+msgid "No devices connected"
+msgstr ""
+
+#: index.html:1322 tablet7in.html:1391
+msgid "Device:"
+msgstr ""
+
+#: index.html:1330 tablet7in.html:1399
+msgid "Vendor:"
+msgstr ""
+
+#: index.html:1334 tablet7in.html:1403
+msgid "Device ID:"
+msgstr ""
+
+#: index.html:1338 tablet7in.html:1407
+msgid "Buttons/Axes:"
+msgstr ""
+
+#: index.html:1344 tablet7in.html:1413
+msgid "Joystick Preview"
+msgstr ""
+
+#: index.html:1350 tablet7in.html:1419
+msgid "Left Stick"
+msgstr ""
+
+#: index.html:1351 tablet7in.html:1420
+msgid "View movement"
+msgstr ""
+
+#: index.html:1354 tablet7in.html:1423
+msgid "Direction:"
+msgstr ""
+
+#: index.html:1355 tablet7in.html:1424
+msgid "centered"
+msgstr ""
+
+#: index.html:1360 tablet7in.html:1429
+msgid "Invert X"
+msgstr ""
+
+#: index.html:1364 index.html:1383 tablet7in.html:1433 tablet7in.html:1452
+msgid "Invert Y"
+msgstr ""
+
+#: index.html:1373 tablet7in.html:1442
+msgid "Right Stick"
+msgstr ""
+
+#: index.html:1374 tablet7in.html:1443
+msgid "Continuous zoom"
+msgstr ""
+
+#: index.html:1377 tablet7in.html:1446
+msgid "Current FOV:"
+msgstr ""
+
+#: index.html:1392 tablet7in.html:1461
+msgid "Joystick Calibration"
+msgstr ""
+
+#: index.html:1394 tablet7in.html:1463
+msgid "Calibrate"
+msgstr ""
+
+#: index.html:1400 tablet7in.html:1469
+msgid ""
+"Move joysticks in circles to calibrate center position. Press any button to "
+"finish."
+msgstr ""
+
+#: index.html:1409 tablet7in.html:1478
+msgid "Test Vibration"
+msgstr ""
+
+#: index.html:1410 tablet7in.html:1479
+msgid "Manual test (uses full intensity)"
+msgstr ""
+
+#: index.html:1415 tablet7in.html:1484
+msgid "Vibration Feedback"
+msgstr ""
+
+#: index.html:1416 tablet7in.html:1485
+msgid "works in Chrome/Edge"
+msgstr ""
+
+#: index.html:1422 tablet7in.html:1491
+msgid "Vibration Intensity:"
+msgstr ""
+
+#: index.html:1431 tablet7in.html:1500
+msgid "Sensitivity:"
+msgstr ""
+
+#: index.html:1440 tablet7in.html:1509
+msgid "Deadzone:"
+msgstr ""
+
+#: index.html:1449 tablet7in.html:1518
+msgid "Zoom Speed:"
+msgstr ""
+
+#: index.html:1458 tablet7in.html:1527
+msgid "Movement Speed:"
+msgstr ""
+
+#: index.html:1468 tablet7in.html:1537
+msgid "Button Customization"
+msgstr ""
+
+#: index.html:1475 tablet7in.html:1544
+msgid ""
+"Each connected controller has its own independent profile. Select a device "
+"from 'Active Device' to customize."
+msgstr ""
+
+#: index.html:1479 tablet7in.html:1548
+msgid "Reset Mappings"
+msgstr ""
+
+#: index.html:1480 tablet7in.html:1549
+msgid "Save Mappings"
+msgstr ""
+
+#: index.html:1481 tablet7in.html:1550
+msgid "Export Profile"
+msgstr ""
+
+#: index.html:1482 tablet7in.html:1551
+msgid "Import Profile"
+msgstr ""
+
+#: index.html:1485 tablet7in.html:1554
+msgid ""
+"Profiles are saved per device and can be exported/imported for backup or "
+"sharing"
+msgstr ""
+
+#: index.html:1492 tablet7in.html:1561
+msgid "Live Input Monitor"
+msgstr ""
+
+#: index.html:1493 tablet7in.html:1562
+msgid ""
+"Real-time raw values from the browser's Gamepad API. Buttons show press "
+"state, Axes show visual meter. Use this panel to verify button and axis "
+"mappings."
+msgstr ""
+
+#: index.html:1499 tablet7in.html:1568
+msgid "Buttons"
+msgstr ""
+
+#: index.html:1501 index.html:1508 index.html:1516 tablet7in.html:1570
+#: tablet7in.html:1577 tablet7in.html:1585
+msgid "Waiting for controller input..."
+msgstr ""
+
+#: index.html:1506 tablet7in.html:1575
+msgid "Axes"
+msgstr ""
+
+#: index.html:1514 tablet7in.html:1583
+msgid "Device Information"
+msgstr ""
+
+#: index.html:1519 tablet7in.html:1588
+msgid "Understanding Raw Values"
+msgstr ""
+
+#: index.html:1520 tablet7in.html:1589
+msgid "Buttons: Range 0.0 (not pressed) to 1.0 (green = fully pressed)."
+msgstr ""
+
+#: index.html:1521 tablet7in.html:1590
+msgid ""
+"Axes: -1.0 to 1.0 with visual meter Center position is 0.0. Triggers (L2/R2)"
+" show gradual values."
+msgstr ""
+
+#: index.html:1522 tablet7in.html:1591
+msgid ""
+"Note: Different browsers may report the same physical button on different "
+"indices. Use this panel to identify the correct mapping for your setup."
+msgstr ""
+
+#: index.html:1552 tablet7in.html:1620
+msgid "No response from server"
+msgstr "সার্ভার থেকে কোনো প্রতিক্রিয়া পাওয়া যাচ্ছে না"
+
+#: index.html:1553 tablet7in.html:1621
+msgid "No response from server for %1 seconds. Is Stellarium still running?"
+msgstr ""
+"%1 সেকেন্ড ধরে সার্ভারের সাথে যোগাযোগ নেই । স্টেলারিয়াম কি চালু করা আছে ?"
+
+#: tablet7in.html:35
+msgid "Time Jump"
+msgstr "সময় পরিবর্তন"
+
+#: tablet7in.html:40
+msgid "Grids"
+msgstr "স্থানাঙ্ক ব্যবস্থা"
+
+#: tablet7in.html:102
+msgid "Up/Left"
+msgstr "উপরে/বামে"
+
+#: tablet7in.html:102
+msgid "Up"
+msgstr "উপরে"
+
+#: tablet7in.html:102
+msgid "Up/Right"
+msgstr "উপরে/ডাইনে"
+
+#: tablet7in.html:102
+msgid "Left"
+msgstr "বামে"
+
+#: tablet7in.html:102
+msgid "Focus on selected object"
+msgstr "নির্বাচিত জ্যোতিষ্কটি দৃশ্যপটের মাঝে আনুন"
+
+#: tablet7in.html:102
+msgid "Focus on selection"
+msgstr "নির্বাচিত জ্যোতিষ্কটি দৃশ্যপটের মাঝে আনুন"
+
+#: tablet7in.html:102
+msgid "Right"
+msgstr "ডাইনে"
+
+#: tablet7in.html:102
+msgid "Down/Left"
+msgstr "নিচে/বামে"
+
+#: tablet7in.html:102
+msgid "Down"
+msgstr "নিচে"
+
+#: tablet7in.html:102
+msgid "Down/Right"
+msgstr "নিচে/ডাইনে"
+
+#: tablet7in.html:279
+msgid "Sirius"
+msgstr "সিরিয়াস (লুব্ধক)"
+
+#: tablet7in.html:280
+msgid "Arcturus"
+msgstr "আর্কটুরাস (স্বাতী)"
+
+#: tablet7in.html:281
+msgid "Capella"
+msgstr "ক্যাপেলা (ব্রহ্মহৃদয়)"
+
+#: tablet7in.html:282
+msgid "Vega"
+msgstr "ভেগা (অভিজিত্‍)"
+
+#: tablet7in.html:283
+msgid "Deneb"
+msgstr "ডেনেব"
+
+#: tablet7in.html:284
+msgid "Altair"
+msgstr "আলটেয়ার (শ্রবণা)"
+
+#: tablet7in.html:285
+msgid "Andromeda Galaxy"
+msgstr "অ্যান্ড্রোমিডা নক্ষত্রলোক"
+
+#: tablet7in.html:286
+msgid "Hercules Cluster"
+msgstr "হার্কিউলিস তারকাগুচ্ছ"
+
+#: tablet7in.html:287
+msgid "Orion Nebula"
+msgstr "কালপুরুষ নীহারিকা"
+
+#: tablet7in.html:288
+msgid "Eta Carinae Nebula"
+msgstr "ইটা ক্যারিনা নীহারিকা"
+
+#: tablet7in.html:289
+msgid "47 Tucanae Cluster"
+msgstr "৪৭ টাউকান তারকাগুচ্ছ"
+
+#: tablet7in.html:290
+msgid "Aries"
+msgstr "ভেড়া (মেষ)"
+
+#: tablet7in.html:291
+msgid "Taurus"
+msgstr "ষাঁড় (বৃষ)"
+
+#: tablet7in.html:292
+msgid "Gemini"
+msgstr "যময (মিথুন)"
+
+#: tablet7in.html:293
+msgid "Cancer"
+msgstr "কাঁকড়া (কর্কট)"
+
+#: tablet7in.html:294
+msgid "Leo"
+msgstr "সিংহ"
+
+#: tablet7in.html:295
+msgid "Virgo"
+msgstr "কুমারী (কন্যা)"
+
+#: tablet7in.html:296
+msgid "Libra"
+msgstr "দাঁড়িপাল্লা (তুলা)"
+
+#: tablet7in.html:297
+msgid "Scorpius"
+msgstr "কাঁকড়া বিছে (বৃশ্চিক)"
+
+#: tablet7in.html:298
+msgid "Sagittarius"
+msgstr "তীরন্দাজ (ধনু)"
+
+#: tablet7in.html:299
+msgid "Capricornus"
+msgstr "সামুদ্রিক ছাগল (মকর)"
+
+#: tablet7in.html:300
+msgid "Aquarius"
+msgstr "জল বাহক (কুম্ভ)"
+
+#: tablet7in.html:301
+msgid "Pisces"
+msgstr "মাছ (মীন)"
+
+#: tablet7in.html:1279
+msgid "Favorites"
+msgstr "প্রিয়"
+
+#: tablet7in.html:1281
+msgid "Show 1"
+msgstr "১ নং টি দেখুন"
+
+#: tablet7in.html:1282
+msgid "Remove Labels and Images"
+msgstr "নাম ও চিত্রগুলি মুছুন"
+
+#: tablet7in.html:1282
+msgid "Cleanup Screen"
+msgstr "পরিষ্কার করুন"

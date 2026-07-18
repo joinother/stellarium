@@ -1,0 +1,280 @@
+#
+# Implementation of Continuous Integration process for linux and macOS by Github actions (with extra additionals...)
+# See https://github.com/actions/runner-images
+#
+name: "CI"
+
+on:
+  push:
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [master]
+
+env:
+  parallel_processes: 4 # A good default counts is: available Threads
+
+jobs:
+  # CI on Linux (Qt5)
+  ci-linux-qt5:
+    name: "Linux (amd64; qt5)"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt remove php* -y
+        sudo apt update
+        # using force-overwrite due to
+        # https://github.com/actions/virtual-environments/issues/2703
+        #sudo ACCEPT_EULA=Y apt upgrade -o Dpkg::Options::="--force-overwrite" --yes
+        sudo apt install -y qtbase5-private-dev qtscript5-dev libqt5svg5-dev qttools5-dev-tools qttools5-dev libqt5opengl5-dev qtmultimedia5-dev \
+                            libqt5multimedia5-plugins libqt5serialport5 libqt5serialport5-dev qtpositioning5-dev libgps-dev libqt5positioning5 \
+                            libqt5positioning5-plugins qtwebengine5-dev libqt5charts5-dev zlib1g-dev libgl1-mesa-dev libdrm-dev cmake libexiv2-dev \
+                            libnlopt-cxx-dev libmd4c-dev libmd4c-html0-dev
+
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DSTELLARIUM_RELEASE_BUILD=Off \
+              -DENABLE_TESTING=On \
+              "${{ github.workspace }}"
+
+    - name: Compile
+      working-directory: build
+      run: make -j ${{env.parallel_processes}}
+
+    - name: Run unit tests
+      uses: coactions/setup-xvfb@v1
+      with:
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # CI on Linux (Qt6)
+  ci-linux-qt6:
+    name: "Linux (amd64; qt6)"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt remove php* -y
+        sudo apt update
+        # using force-overwrite due to
+        # https://github.com/actions/virtual-environments/issues/2703
+        #sudo ACCEPT_EULA=Y apt upgrade -o Dpkg::Options::="--force-overwrite" --yes
+        sudo apt install -y qt6-base-private-dev qt6-multimedia-dev qt6-positioning-dev qt6-tools-dev qt6-tools-dev-tools qt6-base-dev-tools \
+                            qt6-qpa-plugins qt6-image-formats-plugins qt6-l10n-tools qt6-webengine-dev qt6-webengine-dev-tools libqt6charts6-dev \
+                            libqt6charts6 libqt6opengl6-dev libqt6positioning6-plugins libqt6serialport6-dev qt6-base-dev libqt6webenginecore6-bin \
+                            libqt6webengine6-data libexiv2-dev libnlopt-cxx-dev zlib1g-dev libgl1-mesa-dev libdrm-dev libglx-dev libxkbcommon-x11-dev \
+                            libgps-dev libmd4c-dev libmd4c-html0-dev cmake gettext libgettextpo-dev libtidy-dev libunarr-dev qt6-svg-dev libqt6svgwidgets6 \
+                            libqt6texttospeech6 qt6-speech-dev qt6-speech-speechd-plugin qt6-speech-flite-plugin \
+                            flite speech-dispatcher speech-dispatcher-flite speech-dispatcher-espeak-ng
+
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DSTELLARIUM_RELEASE_BUILD=Off \
+              -DENABLE_TESTING=On \
+              -DSCM_SHOULD_ENABLE_CONVERTER=On \
+              "${{ github.workspace }}"
+
+    - name: Compile
+      working-directory: build
+      run: make -j ${{env.parallel_processes}}
+
+    - name: Run unit tests
+      uses: coactions/setup-xvfb@v1
+      with:
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # CI on Linux (Qt6)
+  ci-linux-qt6-pch:
+    name: "Linux (amd64; qt6; core)"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt remove php* -y
+        sudo apt update
+        # using force-overwrite due to
+        # https://github.com/actions/virtual-environments/issues/2703
+        #sudo ACCEPT_EULA=Y apt upgrade -o Dpkg::Options::="--force-overwrite" --yes
+        sudo apt install -y qt6-base-private-dev qt6-multimedia-dev qt6-positioning-dev qt6-tools-dev qt6-tools-dev-tools qt6-base-dev-tools qt6-qpa-plugins \
+                            qt6-image-formats-plugins qt6-l10n-tools qt6-webengine-dev qt6-webengine-dev-tools libqt6charts6-dev libqt6charts6 libqt6opengl6-dev \
+                            libqt6positioning6-plugins libqt6serialport6-dev qt6-base-dev libqt6webenginecore6-bin libqt6webengine6-data libexiv2-dev libnlopt-cxx-dev \
+                            zlib1g-dev libgl1-mesa-dev libdrm-dev libglx-dev libxkbcommon-x11-dev libgps-dev libmd4c-dev libmd4c-html0-dev qt6-svg-dev libqt6svgwidgets6 \
+                            libqt6texttospeech6 qt6-speech-dev qt6-speech-speechd-plugin qt6-speech-flite-plugin \
+                            flite speech-dispatcher speech-dispatcher-flite speech-dispatcher-espeak-ng
+
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSTELLARIUM_RELEASE_BUILD=Off -DENABLE_TESTING=On -DENABLE_PCH=Off -DENABLE_NLS=Off -DENABLE_SHOWMYSKY=Off \
+              -DENABLE_GPS=Off -DENABLE_LIBGPS=Off -DENABLE_MEDIA=Off -DENABLE_XLSX=Off -DENABLE_SCRIPTING=Off -DENABLE_QTWEBENGINE=Off -DUSE_PLUGIN_ANGLEMEASURE=Off \
+              -DUSE_PLUGIN_ARCHAEOLINES=Off -DUSE_PLUGIN_CALENDARS=Off -DUSE_PLUGIN_EQUATIONOFTIME=Off -DUSE_PLUGIN_EXOPLANETS=Off -DUSE_PLUGIN_METEORSHOWERS=Off \
+              -DUSE_PLUGIN_LENSDISTORTIONESTIMATOR=Off -DUSE_PLUGIN_NEBULATEXTURES=Off -DUSE_PLUGIN_NAVSTARS=Off -DUSE_PLUGIN_NOVAE=Off -DUSE_PLUGIN_OBSERVABILITY=Off \
+              -DUSE_PLUGIN_OCULARS=Off -DUSE_PLUGIN_ONLINEQUERIES=Off -DUSE_PLUGIN_POINTERCOORDINATES=Off -DUSE_PLUGIN_PULSARS=Off -DUSE_PLUGIN_QUASARS=Off \
+              -DUSE_PLUGIN_REMOTECONTROL=Off -DUSE_PLUGIN_REMOTESYNC=Off -DUSE_PLUGIN_SATELLITES=Off -DUSE_PLUGIN_SCENERY3D=Off -DUSE_PLUGIN_SOLARSYSTEMEDITOR=Off \
+              -DUSE_PLUGIN_SUPERNOVAE=Off -DUSE_PLUGIN_TELESCOPECONTROL=Off -DUSE_PLUGIN_TEXTUSERINTERFACE=Off -DUSE_PLUGIN_SKYCULTUREMAKER=Off \
+              "${{ github.workspace }}"
+
+    - name: Compile
+      working-directory: build
+      run: make -j ${{env.parallel_processes}}
+
+    - name: Run unit tests
+      uses: coactions/setup-xvfb@v1
+      with:
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # CI on Linux (Qt6)
+  ci-linux-qt6-nogui:
+    name: "Linux (amd64; qt6; no GUI)"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    steps:
+    - name: Install dependencies
+      run: |
+        sudo apt remove php* -y
+        sudo apt update
+        # using force-overwrite due to
+        # https://github.com/actions/virtual-environments/issues/2703
+        #sudo ACCEPT_EULA=Y apt upgrade -o Dpkg::Options::="--force-overwrite" --yes
+        sudo apt install -y qt6-base-private-dev qt6-multimedia-dev qt6-positioning-dev qt6-tools-dev qt6-tools-dev-tools qt6-base-dev-tools qt6-qpa-plugins \
+                            qt6-image-formats-plugins qt6-l10n-tools qt6-webengine-dev qt6-webengine-dev-tools libqt6charts6-dev libqt6charts6 libqt6opengl6-dev \
+                            libqt6positioning6-plugins libqt6serialport6-dev qt6-base-dev libqt6webenginecore6-bin libqt6webengine6-data libexiv2-dev libnlopt-cxx-dev \
+                            zlib1g-dev libgl1-mesa-dev libdrm-dev libglx-dev libxkbcommon-x11-dev libgps-dev libmd4c-dev libmd4c-html0-dev qt6-svg-dev libqt6svgwidgets6 \
+                            libqt6texttospeech6 qt6-speech-dev qt6-speech-speechd-plugin qt6-speech-flite-plugin \
+                            flite speech-dispatcher speech-dispatcher-flite speech-dispatcher-espeak-ng
+
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSTELLARIUM_RELEASE_BUILD=Off -DENABLE_TESTING=On -DSTELLARIUM_GUI_MODE=None "${{ github.workspace }}"
+
+    - name: Compile
+      working-directory: build
+      run: make -j ${{env.parallel_processes}}
+
+    - name: Run unit tests
+      uses: coactions/setup-xvfb@v1
+      with:
+        working-directory: build
+        run: ctest --output-on-failure
+
+  # CI on macOS (Qt6)
+  ci-macos-silicon-qt6:
+    name: "macOS (arm64; qt6)"
+    runs-on: macos-26
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    # @TODO Enable gpsd on macOS instance for CI testing
+    # @BODY At the moment after installing gpsd (brew install gpsd) library can be found by cmake, but not headers! Apparently we should add some magic for environment variables or something else on macOS Catalina to make headers available for cmake/make
+    steps:
+    - name: Install dependencies
+      env:
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        HOMEBREW_NO_ANALYTICS: 1
+        HOMEBREW_NO_AUTO_UPDATE: 1
+        HOMEBREW_NO_INSTALL_CLEANUP: 1
+        PYTHONSTRICTEXTENSIONBUILD: 1
+      run: |
+        # brew update
+        # brew upgrade
+        brew install qt@6 nlopt exiv2 tidy-html5
+
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        export PATH="/opt/homebrew/opt/qt@6/bin:$PATH"
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_PREFIX_PATH="/opt/homebrew" \
+              -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+              -DSTELLARIUM_RELEASE_BUILD=Off \
+              -DENABLE_TESTING=On \
+              -DSCM_SHOULD_ENABLE_CONVERTER=On \
+              "${{ github.workspace }}"
+
+    - name: Compile
+      working-directory: build
+      run: make -j ${{env.parallel_processes}}
+
+    - name: Run unit tests
+      uses: coactions/setup-xvfb@v1
+      with:
+        working-directory: build
+        run: ctest --output-on-failure
+
+ # CI on Windows (Qt6)
+  ci-windows-qt6:
+    name: "Windows (x86_64; qt6)"
+    runs-on: windows-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.actor, 'transifex')"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        aqtversion: '==3.3.*'
+        version: '6.8.3'
+        host: 'windows'
+        target: 'desktop'
+        cache: true
+        arch: 'win64_msvc2022_64'
+        modules: 'qtcharts qtimageformats qtlocation qtmultimedia qtpositioning qtscxml qtsensors qtserialbus qtserialport qtvirtualkeyboard qtwebchannel qtwebengine qtwebsockets qtwebview debug_info qt5compat qtquicktimeline qtshadertools qtspeech'
+
+    # Packages should be automatically downloaded using vcpkg through the toolchain
+    - name: Configure CMake
+      env:
+        CMAKE_PREFIX_PATH: ${{env.QT_ROOT_DIR}}
+      # Choose CMakeLists.text from a specific source directory with -S.
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: |
+        cmake -B build -S "${{ github.workspace }}" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DSTELLARIUM_RELEASE_BUILD=Off -DENABLE_TESTING=On -DCMAKE_INSTALL_PREFIX=stellarium-bin -DSCM_SHOULD_ENABLE_CONVERTER=OFF -G "Visual Studio 18 2026" -A x64
+
+    - name: Build
+      # Build your program with the given configuration
+      run: |
+        cmake --build build --config RelWithDebInfo -j ${{env.parallel_processes}} --target install
+
+#    - name: Run unit tests
+#      run: |
+#        cd ${{ github.workspace }}\build
+#        ctest --output-on-failure -C RelWithDebInfo

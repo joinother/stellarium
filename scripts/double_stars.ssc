@@ -1,0 +1,99 @@
+//
+// Name: 20 Fun Naked-Eye Double Stars
+// Author: Alexander Wolf
+// License: Public Domain
+// Version: 1.4
+// Description: This script helps you make an excursion around 20 fun double stars. The list has been collected by Jerry Lodriguss and published in Sky & Telescope 09/2014. Data taken from his website, http://www.astropix.com/doubles/
+//
+
+include("i18n.inc");
+
+function showConstellation(cName, aFOV)
+{
+	core.selectObjectByName(cName, true);
+	StelMovementMgr.autoZoomIn(5);
+	core.wait(1);
+	StelMovementMgr.zoomTo(aFOV,3);
+	core.wait(1);
+	ConstellationMgr.setFlagArt(true);
+	core.wait(5);
+	ConstellationMgr.setFlagArt(false);
+}
+
+var constellation = new Array("Taurus", "Orion", "Corvus", "Ursa Major", "Libra", "Scorpius", "Lyra", "Sagittarius", "Cygnus", "Capricornus");
+var aFOV = new Array(40, 50, 20, 60, 25, 32, 20, 50, 40, 40);
+var dblstars = new Array(4, 3, 1, 1, 1, 4, 2, 1, 2, 1);
+
+// RA, DE, FOV, Name, Info, Note
+var doublestar = [["03h45m59.63s", "+24d32m28.6s", 1.0, tr("Asterope (21 Tauri and 22 Tauri)"), tr("2.5 arcminutes (SE)"), tr("Extremely difficult because of their faintness, separation, and nearby bright stars")],
+		  ["03h49m11.03s", "+24d05m48.2s", 1.0, tr("Atlas and Pleione (27 Tauri and 28 Tauri)"), tr("5 arcminutes (N)"), tr("Moderately difficult")],
+		  ["04h28m38.82s", "+15d55m14.3s", 1.5, tr("θ Tauri"), tr("5.6 arcminutes (NNW)"), tr("Showcase naked-eye double!")],
+		  ["04h23m33.39s", "+17d29m46.2s", 2.0, tr("δ Tauri"), tr("δ1-δ2: 17.6 arcseconds (ESE); δ1-δ3: 43.25 arcseconds (NE)"), tr("Easy naked-eye triple")],
+		  ["05h35m16.71s", "-05d23m03.5s", 0.1, tr("θ Orionis"), tr("2.24 arcminutes (NW)"), tr("Very difficult because of stars and nebulosity in the area")],
+		  ["05h35m30.71s", "-04d50m35.8s", 0.4, tr("42 and 45 Orionis"), tr("4.2 arcminutes (ESE)"), tr("Moderately difficult optical double")],
+		  ["05h35m14.00s", "-05d57m27.4s", 0.2, tr("ι Orionis"), tr("8 arcminutes (SW)"), tr("Moderately difficult optical double")],
+		  ["12h20m20.49s", "-22d11m28.5s", 1.0, tr("ζ Corvi"), tr("5.85 arcminutes (WNW)"), tr("Moderately difficult")],
+		  ["13h24m32.98s", "+54d57m40.7s", 1.5, tr("Mizar and Alcor"), tr("11.8 arcminutes (ENE)"), tr("Easy naked-eye double")],
+		  ["14h50m44.93s", "-16d00m57.5s", 1.0, tr("Zubenelgenubi"), tr("3.83 arcminutes (NW)"), tr("Very difficult because of the magnitude difference")],
+		  ["16h07m06.08s", "-20d45m43.6s", 1.8, tr("ω Scorpii"), tr("14.6 arcminutes (SSE)"), tr("Easy optical double")],
+		  ["17h32m05.57s", "-37d12m47.4s", 1.3, tr("λ and υ Scorpii"), tr("36 arcminutes (WSW)"), tr("Easy double")],
+		  ["16h52m04.81s", "-38d01m55.0s", 0.8, tr("μ Scorpii"), tr("5.8 arcminutes (ENE)"), tr("Showcase double!")],
+		  ["16h54m15.33s", "-42d21m44.9s", 0.8, tr("ζ Scorpii"), tr("6.5 arcminutes (W)"), tr("Moderately difficult")],
+		  ["18h44m22.05s", "+39d38m47.1s", 0.5, tr("ε Lyrae"), tr("3.5 arcminutes (N)"), tr("Showcase naked-eye double!")],
+		  ["18h54m04.41s", "+36d56m35.0s", 0.7, tr("δ Lyrae"), tr("10.3 arcminutes (WNW)"), tr("Moderately difficult")],
+		  ["18h54m38.58s", "-22d42m25.2s", 2.0, tr("ν Sagittarii"), tr("13.9 arcminutes (ENE)"), tr("Easy naked-eye double")],
+		  ["20h14m37.19s", "+47d12m14.7s", 3.0, tr("ο1 and ο2 Cygni"), tr("61.3 arcminutes (NNE)"), tr("Easy naked-eye double")],
+		  ["20h13m30.87s", "+46d46m40.2s", 1.0, tr("ο1 Cygni (ο1 Cygni, 30 Cyg and HD 192579)"), tr("5.6 arcminutes (NW)"), tr("Moderately difficult optical triple star")],
+		  ["20h17m51.31s", "-12d31m18.1s", 1.3, tr("Algedi"), tr("6.3 arcminutes (WNW)"), tr("Showcase naked-eye double!")]
+		 ];
+
+var color="#00AAFF";
+var relscale = StelSkyDrawer.getRelativeStarScale();
+var absscale = StelSkyDrawer.getAbsoluteStarScale();
+
+core.clear("starchart");
+GridLinesMgr.setFlagEquatorGrid(false);
+StelMovementMgr.setFlagTracking(true);
+core.setGuiVisible(false);
+ConstellationMgr.setFlagArt(false);
+ConstellationMgr.setFlagBoundaries(true);
+ConstellationMgr.setFlagLines(true);
+ConstellationMgr.setFlagLabels(true);
+core.wait(3);
+
+var shift = 0;
+for (i=0; i<constellation.length; i++)
+{
+	showConstellation(constellation[i], aFOV[i]);
+
+	StelSkyDrawer.setRelativeStarScale(0.5);
+	StelSkyDrawer.setAbsoluteStarScale(2.0);
+
+	for (j=shift; j<(shift+dblstars[i]); j++)
+	{
+		core.moveToRaDecJ2000(doublestar[j][0], doublestar[j][1]);
+		StelMovementMgr.zoomTo(doublestar[j][2], 3);
+		
+		var dsname = LabelMgr.labelScreen("#" + (j+1) + " - " + doublestar[j][3], 20, 20, false, 30, color);
+		var dsinfo = LabelMgr.labelScreen(tr("Separation:") + " " + doublestar[j][4], 20, 60, false, 20, color);
+		var dsnote = LabelMgr.labelScreen(doublestar[j][5], 20, 90, false, 20, color);
+
+		LabelMgr.setLabelShow(dsname, true);
+		LabelMgr.setLabelShow(dsinfo, true);
+		LabelMgr.setLabelShow(dsnote, true);
+
+		core.wait(5);
+
+		LabelMgr.setLabelShow(dsname, false);
+		LabelMgr.setLabelShow(dsinfo, false);
+		LabelMgr.setLabelShow(dsnote, false);
+	}
+	
+	shift+=dblstars[i];
+	core.wait(1);
+	StelSkyDrawer.setRelativeStarScale(relscale);
+	StelSkyDrawer.setAbsoluteStarScale(absscale);
+}
+core.clear("natural");
+core.setGuiVisible(true);
+core.goHome();

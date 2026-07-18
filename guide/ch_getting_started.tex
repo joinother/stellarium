@@ -1,0 +1,268 @@
+% Status info:
+% M. Gates	2006-2009
+% A. Wolf	2011-2015
+% Lee Carré	2011
+% ArdWar	2012
+% MisterE	2013
+% B. Gerdes	2013
+% G. Zotti	2014-2016
+% Additions inserted from wiki 2015-12-26
+% GZ checked grammar and structure, added ANGLE details and Troubleshooting.
+% Content OK for 0.15+.
+% TODO: Fix a few TODOs noted below.
+
+
+\chapter{Getting Started}
+\label{ch:GettingStarted}
+
+\section{System Requirements}
+\label{sec:GettingStarted:SystemRequirements}
+
+Stellarium has been seen to run on most systems where Qt5 is
+available, from tiny ARM computers like the Raspberry Pi~2/3/4
+or Odroid C1 to big museum installations with multiple projectors 
+and planetaria with fish-eye projectors. 
+The most important hardware requirement is a contemporary graphics subsystem.
+
+
+\subsection{Minimum}
+\begin{itemize}
+\item Linux/Unix; Windows 7 and later; macOS 10.15 and later\footnote{Windows 10 and macOS 11.0 is minimal for Qt6-based Stellarium.}
+\item 3D graphics capabilities which support OpenGL 3.0 (2008
+  GeForce 8xxx and later, ATI/AMD Radeon HD-2xxx and later; Intel HD
+  graphics (Core-i 2xxx and later)) or OpenGL ES 2.0
+  (e.g., ARM SBCs like Raspberry Pi~2/3/4). On Windows, some older cards
+  may be supported via ANGLE when they support DirectX9.
+\item Screen resolution $1024\times768$\footnote{On Linux, an $800\times600$ screen can still be used by scaling the desktop e.g.\ to $1200\times900$:
+  \begin{commands}
+    xrandr --output HDMI-1 --scale 1.5x1.5
+  \end{commands}
+  To reset after running Stellarium, run
+  \begin{commands}
+    xrandr --output HDMI-1 --scale 1x1
+  \end{commands}}
+\item 512 MB RAM
+\item 250 MB free on disk
+\item Keyboard
+\end{itemize}
+
+\subsection{Recommended}
+\begin{itemize}
+\item Linux/Unix; Windows 10 and later; macOS 11.0 and later
+\item 3D graphics card which supports OpenGL 3.3 or higher
+\item FullHD ($1920\times1080$ or $1920\times1200$) or larger screen.\footnote{HiDPI screens may work, but show occasional platform-dependent issues.}
+\item 1 GB RAM or more
+\item 1.5 GB free on disk (About 3GB extra required for the optional DE430/DE431 files).
+\item Keyboard and mouse or equivalent device (e.g.\ touchpad)
+\item A dark room for realistic rendering --- details like the Milky Way, Zodiacal Light 
+      or star twinkling can't be seen in a bright room.
+\end{itemize}
+
+
+\section{Downloading}
+\label{sec:GettingStarted:Downloading}
+
+Download the correct package for your operating system directly from the main page, \newline \url{https://stellarium.org}.
+An archive of all available versions is available at our GitHub page --- \url{https://github.com/Stellarium/stellarium/releases}.
+
+\section{Installation}\index{Installation}
+\label{sec:GettingStarted:Installation}
+
+\subsection{Windows}
+\label{sec:GettingStarted:Installation:Windows}
+
+\begin{enumerate}
+\item Double click on the installer file you downloaded:
+\begin{itemize}
+\item \file{stellarium-\StelVersion-qt6-win64.exe} for 64-bit Windows 10 and later.
+\item \file{stellarium-\StelVersion-qt6-arm64.exe} for Windows 10 and later on ARM64 device.
+\item \file{stellarium-\StelVersion-qt5-win64.exe} for 64-bit Windows 7 and later.
+\end{itemize}
+\item Follow the on-screen instructions.
+\end{enumerate}
+
+\subsubsection{Unattended Install/Uninstall}
+The installation program allows for unattended installation (e.g., for lab setups) 
+following official documentation\footnote{\url{https://documentation.help/Inno-Setup/topic_setupcmdline.htm}}.
+
+You can uninstall the program like any other program from the Applications list in the system control panel. 
+The uninstaller asks if you want to remove (delete) all your Stellarium user data. Be sure to answer NO when you plan to re-use landscapes, 3D sceneries and the like. 
+For unattended uninstallation in larger setups, also the uninstaller can be called with additional options, which will keep the user data.
+\begin{commandsScr}
+"C:\Program Files[ (x86)]\Stellarium\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES
+\end{commandsScr}
+
+\subsection{macOS}
+\label{sec:GettingStarted:Installation:macOS}
+
+\begin{enumerate}
+\item Locate the downloaded \file{Stellarium} file in
+  Finder (Stellarium will be automatic unpack from archive by operating system after downloading).
+\item
+  Drag \file{Stellarium} to the Applications folder.
+\end{enumerate}
+
+\subsection{Linux}
+\label{sec:GettingStarted:Installation:Linux}
+
+Check if your distribution has a package for Stellarium already --- if
+so you're probably best off using it. If not, you can download and build
+the source.
+
+For Ubuntu Linux we provide a package repository with the latest stable
+releases. Open a terminal and type:
+
+\begin{commands}
+sudo add-apt-repository ppa:stellarium/stellarium-releases
+sudo apt-get update
+sudo apt-get install stellarium
+\end{commands}
+
+You can also download and run universal binary packages for linux systems:  \emph{flat}\footnote{\url{https://flathub.org/apps/details/org.stellarium.Stellarium}} or \emph{snap}\footnote{\url{https://snapcraft.io/stellarium-daily}}.
+
+\subsubsection{Raspberry Pi 2/3/4}
+These tiny ARM-based computers are very popular for small and energy-efficient applications like controlling push-to Dobsonians. 
+Stellarium requires Mesa~17 or later, available in the current Raspbian OS. 
+To set up a Raspberry Pi~2 or 3 with Raspbian Buster for use with Stellarium, activate the OpenGL driver in 
+\program{raspi-config}. The latest Raspberry Pi 4 comes with this driver by default and can even drive two HiDPI screens.
+
+You must build Stellarium from sources. Please follow instructions from the wiki\footnote{\url{https://github.com/Stellarium/stellarium/wiki/Raspberry-Pi}}.
+
+For Ubuntu 16.04 LTS, follow instructions\footnote{\url{https://ubuntu-mate.community/t/tutorial-activate-opengl-driver-for-ubuntu-mate-16-04/7094}}. 
+	
+Note that as of December 2019 the 3D planets do not work on Raspberry Pi 2/3, and DSS or HiPS surveys seem to cause issues after a while.
+
+\subsection{*BSD/Solaris/OpenIndiana}
+\label{sec:GettingStarted:Installation:UNIX}
+
+Check if your operating system has a package or port for Stellarium already --- 
+if so you're probably best off using it. If not, you can download and build
+the source.
+
+\subsection{Haiku}
+\label{sec:GettingStarted:Installation:Haiku}
+
+Please use \textbf{HaikuDepot} or open \textbf{Terminal} and type:
+\begin{commands}
+pkgman install stellarium
+\end{commands}
+to install the Stellarium.
+
+\section{Running Stellarium}
+\label{sec:GettingStarted:Running}
+
+\subsection{Windows}
+\label{sec:GettingStarted:Running:Windows}
+
+The Stellarium installer creates a whole list of items in the
+\textbf{Start Menu} under the \textbf{Programs/Stellarium}
+section. The list evolves over time, not all entries listed here 
+may be installed on your system. Select one of these to run Stellarium:
+\begin{description}
+\item[Stellarium] OpenGL version. This is the most efficient for
+  modern PCs and should be used when you have installed appropriate
+  OpenGL drivers. Note that some graphics cards are ``blacklisted'' by
+  Qt to immediately run via ANGLE (Direct3D), you cannot force OpenGL in this
+  case. This should not bother you.
+\item[Stellarium (ANGLE mode)] Uses Direct3D translation of the OpenGL
+  rendering via ANGLE library.  Forces Direct3D version~9.\footnote{\label{FN:0-Qt5-only}Stellarium series 0.* and Qt5-based builds only}
+\item[Stellarium (ANGLE WARP mode)] Uses DirectX3D~11 software
+    rendering via ANGLE library. This should work on any PC without
+    dedicated graphics card.\footref{FN:0-Qt5-only}
+\item[Stellarium (MESA mode)] Uses software rendering via MESA
+  library. This should work on any PC without dedicated graphics card.
+  % TODO This note may be obsolete before 0.15 is out when MESA works again.
+  % However on some systems this also fails, it is unclear
+  % why\footnote{This was the emergency fallback solution for the 0.13
+  % series. We have reports that 0.13.2-MESA works on a system where
+  % 0.14 does not.}
+\item[Stellarium (200\%)] On some systems with 4k screens, Stellarium appears too small. 
+This link forces an upscaling. 
+
+If for some reason Stellarium's dialogs and buttons appear too large, and you want to scale them down, 
+edit the link and change the scaling parameter. 
+\end{description}
+On startup, a diagnostic check is performed to test whether the
+graphics hardware is capable of running. If all is fine, you will see
+nothing of it.  Else you may see an error panel informing you that
+your computer is not capable of running Stellarium (``No OpenGL~2
+found''), or a warning that there is only OpenGL~2.1 support. The
+latter means you will be able to see some graphics, but depending on
+the type of issue you will have some bad graphics. For example, on an
+Intel GMA4500 there is only a minor issue in Night Mode, while on
+other systems we had reports of missing planets or even crashes as
+soon as a planet comes into view. If you see this, try running in
+Direct3D~9 or MESA mode, or upgrade your system. The warning, once
+ignored, will not show again.
+
+When you have found a mode that works on your system, you can delete
+the other links.
+
+\subsection{macOS}
+\label{sec:GettingStarted:Running:macOS}
+
+Double click on the \emph{Stellarium} application.  Add it to your
+\textbf{Dock} for quick access.
+
+\subsection{Linux}
+\label{sec:GettingStarted:Running:Linux}
+
+If your distribution had a package you'll probably already have an
+item in the \textbf{GNOME} or \textbf{KDE} application menus. If not, just open a
+terminal and type \texttt{stellarium}.
+
+\subsection{*BSD/Solaris/OpenIndiana}
+\label{sec:GettingStarted:Running:UNIX}
+
+If your operating system had a package or port you'll probably 
+already have an item in the \textbf{GNOME} or \textbf{KDE} application menus. 
+If not, just open a terminal and type \texttt{stellarium}.
+
+\subsection{Haiku}
+\label{sec:GettingStarted:Running:Haiku}
+
+If you had installed a package you'll already have an
+item in the \textbf{Applications} menus.
+
+\section{Script Launch}
+\label{sec:GettingStarted:Scripting}
+
+Stellarium can be automated in the sense that a sequence of commands can be executed written in a variant of JavaScript. (See chapter~\ref{ch:scripting}.)
+
+Stellarium scripting files use the filename extension \file{.ssc} and are registered during installation so that usually 
+a double click in your file explorer should start Stellarium and run this script. 
+If you want to run a script whenever you start Stellarium, add your commands into a script \file{startup.ssc}. 
+To run an arbitrary script from the command line, see section~\ref{sec:CommandLineOptions}. 
+
+\section{Troubleshooting}
+\label{sec:GettingStarted:Running:Troubleshooting}
+
+Stellarium writes startup and other diagnostic messages into a
+logfile. Please see section~\ref{sec:LogFile} where this
+file is located on your system. This file is \emph{essential} in case when
+you feel you need to report a problem with your system which has not
+been found before.
+
+At startup also\newFeature{0.20.0} a few pop-up windows may appear
+with information about possible troubles or warnings to make those
+messages more visible for users.
+
+On some Intel UHD systems %\newFeature{1.0}
+users may see the screen blanking when Stellarium is working --- the startup of the program with \textbf{-\/-single-buffer} parameter can help here. 
+The same option also helps when on an Nvidia system tooltips don't appear in fullscreen mode. 
+
+On some older or weak systems, the option \textbf{-\/-low-graphics} may be required. 
+This forcefully disables advanced graphics features of OpenGL~3.3 which otherwise would slow down or cause other issues on such systems.  
+
+If you don't succeed in running Stellarium, please see the online
+forum\footnote{\url{https://github.com/Stellarium/stellarium}}.  It includes
+FAQ (Frequently Asked Questions, also Frequently Answered
+Questions)\index{FAQ} and a general question section which may include
+further hints. Please make sure you have read and understood the FAQ
+before asking the same questions again.
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-PDF-mode: t
+%%% TeX-master: "guide"
+%%% End: 

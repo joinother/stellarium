@@ -1,0 +1,304 @@
+%% Stellarium user guide.
+%% State: 2015-12 wiki->Guide. Was called Precision, but this is wrong.
+%% 2016-04 GZ Typofixes, made proper chapter from this. 
+%% TODO: (GZ) I am not sure about the 1-arcsecond accuracy of VSOP! More should be written with due diligence.
+%% 2016-07-28 GZ Extended chapter with more than just VSOP notes.
+%% 2017-12-10 GZ Extended with more warnings for "ignorant historians".
+%% 2021-07-13 GZ Extended with numerical comparison results
+%\chapterimage{chapter-t1-bg} % Chapter heading image
+
+
+\chapter{Accuracy}
+\label{ch:Accuracy}
+
+Stellarium originally was developed to present a beautiful simulation
+of the night sky, mostly to understand what is visible in the sky when
+you leave your house, i.e., for present times. To save computation
+time, some concessions were made in astronomical accuracy by using
+simplified models which seemed acceptable at that time which was also
+close to the standard epoch of J2000.0. However, time is progressing,
+precession becomes noticeable when pointing telescopes to J2000.0 coordinates, and some 
+users also started to overstress Stellarium's capabilities to simulate the
+historical sky of many centuries in the past, and found --- or even
+worse: did not find, but simply published --- the resulting
+inconsistencies and errors.  Unfortunately, celestial motions are
+indeed more complicated than a simple clockwork, and the process of
+retrofitting detailed and accurate models which started around v0.11.0
+(in 2011) has only recently (2021) \newFeature{0.21.2} come to a
+state where we as developers are beginning to be satisfied. Now, after
+implementation of annual aberration, Stellarium appears to deviate
+from reference solutions in the present time only by fractions of
+arcseconds, and by a few arcseconds in the remote past.  Greater
+accuracy, including relativistic effects or the deflection of light by
+the Solar gravity field, may still be required for critical
+observations of stellar occultations by asteroids, grazing
+occultations of stars by the Moon or similar things. Stellarium does
+not compute these effects, and is definitely not usable for detailed
+planning of your spacecraft missions to the planets.
+There are more specialized programs for these topics, please use them.
+
+Therefore, when using Stellarium for scientific work like eclipse
+simulation to illustrate records found in Cuneiform tablets, always
+also use some other reference to compare, and of course specify the
+program version you used for your work. (Use at least version 25.1
+of Stellarium, which introduced the much improved star catalog!)  
+You can of course contact us if you bring a solid background
+in fundamental astronomy and are willing and able to help improving
+Stellarium's accuracy even further!
+
+\section{Date Range}
+\label{sec:Accuracy:DateRange}
+
+The calendar dates are limited to a very wide interval of years, 
+\newFeature{25.3}$-200,000\ldots+200,000$\footnote{Before version 25.3, the date range was $-100,000\ldots+100,000$.}. 
+If you want to observe the other planets, this is way beyond what current ephemeris models are able to show, 
+as explained in section~\ref{sec:Accuracy:Planets}! 
+Observe for example the Moon: you will find that it seems to run 
+on a polar orbit around +78.000 and even retrograde on a highly elongated orbit a few millennia after that. 
+A quick check in -180.000 places it in a highly elongated orbit beyond Jupiter 
+that takes it through the solar system at up to more than 10\% the speed of light.
+This is obvious nonsense, caused by excessively extrapolating mathematical models in inappropriate ways. 
+
+The extended date range is only useful to visualize the effect of stellar proper motions and the wobbling 
+motion of Earth's axis known as precession. All other components of Stellarium have not made for this extended date range.
+
+\section{Stellar Astrometry}
+\label{sec:Accuracy:Astrometry}
+
+Even though you can follow movements of stars on the sky for tens of thousands of years, 
+please note that the precision of these predictions are limited by the precision of the data we have at 
+the present time provided by Hipparcos for bright stars and Gaia.\newFeature{25.1} Most of the stars brighter than magnitude 10.5 
+have 3D position and 3D velocity data (i.e., 6D astrometry) in our star catalogs, thus their 6D astrometry are computed 
+at any epoch by assuming linear motion with constant velocity. These calculation provides arcseconds level accuracy
+of stellar position, arcseconds per year level accuracy of proper motions, arcseconds level accuracy of parallax and km/s 
+level accuracy of radial velocity in the previous and next tens of thousands of years. For stars fainter than magnitude 10.5 but brighter
+than magnitude 16.75, 2D computation is performed such that RA/DEC positions are computed from RA/DEC proper motions separately and assume
+constant proper motion. For stars fainter than magnitude 16.75, no astrometry propagation is performed hence their RA/DEC stay constant at any epoch.
+
+The study of \citet{deLorenzis:2018} emphasized sky position errors with bright high proper motion stars like Arcturus, 
+Dubhe, Sirius, Toliman and Vega which deviate noticeably from their correct locations even at around 2500BC with Stellarium 
+0.17.0 released on 21 Dec 2017. The star catalogs and astrometry propagation algorithms have been significantly improved since Stellarium 25.1, which has 
+solved the problem outlined in the study. 
+
+% From Github PR#4500:
+A quick estimate: For Barnard's Star which is nearby and moving fast, the sky position uncertainty on the sky 
+would be $\approx0.05^\circ$ (200000~mas) at year 200,000 using Gaia DR3 astrometries and associated uncertainies. 
+The 2015 DR3 sky position uncertainty is $\approx 0.04$~mas.
+
+\section{Planetary Positions}
+\label{sec:Accuracy:Planets}
+
+Stellarium uses by default the widespread VSOP87 theory~\citep{1988A&A...202..309B} %\footnote{\url{http://vizier.cfa.harvard.edu/viz-bin/ftp-index?/ftp/cats/VI/81}}
+to calculate the positions of the planets over time.
+This is an analytical ephemeris modeled to match the numerical
+integration run DE200 from NASA JPL, which by itself gives positions for 1850\ldots2050. 
+Its use is recommended for the years $-4000\ldots+8000$. You can observe the sun leaving the ``ecliptic
+of date'' and running on the ``ecliptic J2000'' outside this date
+range. This is obviously a mathematical trick to keep
+continuity. Still, positions may be somewhat useful outside this
+range, but don't expect anything reliable 50,000 years in the past! 
+
+The optionally usable JPL DE431 and DE441 (see \ref{sec:ExtraData:ephemerides}) deliver planet positions strictly for
+the year range -13000\ldots+17000 only, and nothing outside, but likely with higher accuracy. 
+Outside of this range, positions from VSOP87 will be shown again.
+
+As far as Stellarium is concerned, the user should bear in mind the
+limits of the VSOP87 and other models (Table~\ref{tab:Accuracy:Planets}).
+Accuracy values for VSOP87 are heliocentric as given by \citet{1988A&A...202..309B}.
+
+\begin{table}[tb]
+\begin{tabularx}{\textwidth}{X|l|X}
+\toprule
+\emph{Object(s)} & \emph{Method} & \emph{Notes}\tabularnewline
+\midrule
+Mercury, Venus, Earth-Moon barycenter, Mars & VSOP87 & Accuracy is 1 arc-second from 2000 B.C. -- 6000 A.D. \\%\midrule
+Jupiter, Saturn                             & VSOP87 & Accuracy is 1 arc-second from 0 A.D. -- 4000 A.D.    \\%\midrule
+Uranus, Neptune                             & VSOP87 & Accuracy is 1 arc-second from 4000 B.C. -- 8000 A.D. \\%\midrule
+Pluto                                       & ?      & Pluto's position is valid only from 1885 A.D. -- 2099 A.D.\\%\midrule
+Earth's Moon                                & ELP2000-82B & Fit against JPL DE200, which provides date range 1850--2050. 
+                                                            Positions should be usable for some (unspecified) longer interval. \\%\midrule
+Galilean satellites                         & L2     & Valid from 500 A.D. -- 3500 A.D.\\ 
+\bottomrule
+\end{tabularx}
+\caption{Orbit-centric accuracy of used algorithms}
+\label{tab:Accuracy:Planets}
+\end{table}
+
+\section{Minor Bodies}
+\label{sec:Accuracy:MinorBodies}
+
+Positions for the Minor Bodies (Dwarf Planets, Asteroids, Comets) are
+computed with standard algorithms found in astronomical text
+books. The generally used method of orbital elements allows computing
+the positions of the respective object on an undisturbed Kepler orbit
+around the sun. However, gravitational, and in the case of comets,
+non-gravitational (outgassing) disturbances slowly change these
+orbital elements. Therefore an \emph{epoch} is given for such
+elements, and computation of positions for times far from this epoch
+will lead to positional errors. Therefore, when searching for
+asteroids or comets, always update your orbital elements (See section~\ref{sec:plugins:SolarSystemEditor}), 
+and use elements with an epoch as close to your time of observation as
+possible! Stellarium does not simulate gravitational perturbances and
+orbital changes of minor bodies passing major planets.
+
+\section{Precession and Nutation}
+\label{sec:Accuracy:Precession}
+
+Since v0.14.0, Stellarium computes the orientation of earth's axis
+according to the IAU2006 Precession in a long-time variant developed
+by \citet{2011AA:Vondrak, 2012AA:Vondrak}, and IAU2000B Nutation~\citep{Nutation:IAU2000B}.
+This also now allows proper depiction of the changes in ecliptic obliquity
+and display of ``instantaneous precession circles'' around the
+ecliptic poles. These circles are indeed varying according to
+ecliptical obliquity. Nutation is only computed for about 6000 years
+around J2000.0. Nobody could have observed it before 1609, and it is
+unclear for how long this model is applicable.
+
+\section{Planet Axes}
+\label{sec:Accuracy:PlanetAxes}
+
+Where available, Stellarium uses \newFeature{0.21} axis orientation
+and rotation data from the \indexterm{IAU} Working Group on
+Cartographic Coordinates and Rotational Elements (\indexterm{WGCCRE}).
+Orientation for some small moons is still simplified and
+based on the model originally available. (See section~\ref{sec:ssystem.ini:Planet})
+
+\section{Eclipses}
+\label{sec:Accuracy:Eclipses}
+
+The moon's motion is very complicated, and eclipse computations can be
+tricky.  One aspect which every student of history, prehistory and
+archaeology should know, but as it seems not every does, is at least a
+basic understanding of the irregular slow-down of earth's rotation
+known as $\Delta T$ (see section~\ref{sec:Concepts:DeltaT}).
+
+Eclipse records on cuneiform tablets go back to the 8th century BC, some Chinese 
+records go back a bit further. Experts on Earth rotation have provided models 
+for $\Delta T$ based on such observations. These are usually given as parabolic fit, 
+with some recommended time span. Extrapolating parabolic fits to erratic curves too far into the past is dangerous, 
+pointless and inevitably leads to errors or invalid results. Models differ by many hours (exceeding a whole day!)
+when applied too far in the past. This means, there was certainly an eclipse, and latitude will be OK, 
+but you cannot say which longitude the eclipse was covering. The probability to have seen a total 
+eclipse at a certain interesting location will be very small and should by itself not be used as positive argument 
+for any reasonable statement. This is not a problem of Stellarium, 
+but of current knowledge. To repeat, you may find a solar eclipse in the 6th millennium BC, 
+but you cannot even be sure which side of Earth could have observed it!
+
+\textbf{WANTED:} A model for $\Delta T$ that works in the Mesolithic! 
+
+\section{The Calendar}
+\label{sec:Accuracy:Calendar}
+
+Stellarium follows the widely accepted convention that dates before the Gregorian calendar 
+reform are given in the Julian calendar, introduced by \name[Julius]{Caesar} in 46~BC. 
+This calendar introduces a leap day every fourth year, which is a bit too much. 
+If you want to show summer solstice in the year $-2500$, you will notice it is not on June 21st. 
+This is not an error of Stellarium -- the Gregorian reform had a reason! In prehistoric times, 
+it may be more useful to work with solar ecliptic longitudes. For example, summer solstice is
+when the Sun is at $\lambda=90\degree$.
+
+\name[Julius]{Caesar} introduced a Solar calendar to the Roman empire
+in 46~BC but was assassinated in March 44~BC=$-43$ (see below).  His
+simple 4-year leap rule was then misapplied by the high priests of
+Rome by adding a leap day every third year.  \name{Augustus} fixed the
+calendar by omitting a few leap days, and only 8~AD was the first
+correctly applied leap year as we know them \citep[\S186,
+  \S189]{Ginzel:ChronologieII}. Be careful if you are working in
+Augustean and earlier times in the Roman world, maybe even related to
+named dates in the pre-Julian Roman calendar: Stellarium, also its
+Calendars plugin (see section \ref{sec:plugin:Calendars}), does not
+model these issues!
+
+
+Some authors (esp.\ for Mesoamerican dates) give dates in the
+proleptic Gregorian calendar (which means that they apply the Gregorian
+leap year rules before 1582). This is a convention, they may of course
+do that, but you must do the conversion to the Julian calendar to
+visualize the sky with Stellarium.  If they also give Julian Day
+numbers (JD), you can use them with Stellarium as JD numbers are
+independent from calendar systems. Otherwise, you can utilize the Calendars
+plugin (see section \ref{sec:plugin:Calendars}).
+
+Some users have noted and expressed confusion about a difference of one between dates given as BC (or BCE) versus
+Stellarium's negative years.  
+Note that historical chronology does not know a year Zero! (Try to write this date in Roman numbers!)  
+Year AD~1 (1~CE) was preceded by year 1~BC (1~BCE). 
+Astronomers want to simplify computations and therefore use a year $0$ (equivalent to 1~BC). 
+It is simple: 1~BC=$0$, 2~BC=$-1$, \ldots 100~BC=$-99$ (Fig.~\ref{fig:Accuracy:Calendar}). 
+Stellarium is an astronomy program and uses astronomical counting. 
+Other programs may behave differently in this respect, 
+e.g.\ may even use negative signs to indicate years BC. 
+However, the Calendars plugin (see section \ref{sec:plugin:Calendars}) 
+even allows displaying both counting systems.
+
+\begin{figure}[htb]\centering\small
+  \begin{tabular}{l|ccccccccc}
+    & \multicolumn{4}{r}{$\Longleftarrow$ negative}&
+    \multicolumn{1}{c}{0}&
+    \multicolumn{4}{l}{positive $\Longrightarrow$}\\
+    Astronomical & \ldots & -3   & -2   & -1   & 0                        & 1    & 2    & 3    & \ldots\\\hline
+    Historical   & \ldots & 4~BC & 3~BC & 2~BC &\multicolumn{1}{c||}{1~BC}& AD~1 & AD~2 & AD~3 & \ldots\\
+    & \multicolumn{5}{r||}{$\Longleftarrow$ Before Christ}&
+      \multicolumn{4}{l}{After Christ $\Longrightarrow$}
+  \end{tabular}
+  \caption{Counting years around the beginning of the Common Era.}
+  \label{fig:Accuracy:Calendar}
+\end{figure}
+  
+
+\section{Comparison to Reference Data}
+\label{sec:Accuracy:JPLcomparison}
+
+Tables~\ref{tab:accuracy:UT} and \ref{tab:accuracy:TT} \newFeature{0.21.2}
+provide comparison data between JPL
+Horizons\footnote{\url{https://ssd.jpl.nasa.gov/horizons.cgi}} and
+Stellarium. The JPL data were fetched in July 2021 by our
+attentive user Atque. These are apparent geocentric coordinates
+provided by JPL's solutions DE440/DE441 in J2000.0 equatorial
+coordinates, including JPL's corrections for nutation, light time,
+aberration, light deflection in the Solar gravity field, and other
+relativistic effects. The right part provides the respective values
+computed by Stellarium from DE440/DE441 files, with the current state of corrections for
+nutation, light time and aberration. The $\Delta T$ model was set to
+``JPL Horizons'', but when using DE* files a slightly different model
+specialized to the DE ephemeris is used\footnote{For experts: The value
+  for secular acceleration of the Moon in ELP2000-82B, $\dot{n}=-23.8946$,
+  is replaced by $\dot{n}=-25.8$.}, resulting in differences in the effective 
+  value of $\Delta T$.  Among the causes for differences we must take into account:
+\begin{itemize}
+\item Stellarium does not provide corrections for diurnal aberration (should not matter for geocentric positions)
+\item Stellarium does not provide corrections for light deflection in the Sun's gravitational field
+%\item Stellarium provides nutation only for 6000 years around J2000.0. It is undocumented for how long the underlying model is valid.
+\item JPL Horizons uses slightly different models than Stellarium for precession and nutation\footnote{\url{https://ssd.jpl.nasa.gov/?horizons_doc#specific_quantities}}
+\end{itemize}
+The first item should not make a difference. The next two may cause
+differences in the range of a few arcseconds. The apparent drift that
+we can observe in the remote past may stem from different assumptions
+regarding $\Delta T$ (see \ref{sec:Concepts:DeltaT}) or from other
+reasons yet to be identified. Competent help welcome!
+
+\noindent
+\colorbox{light-gray}{\fbox{\parbox[t]{0.975\linewidth}{
+\begin{center}WANTED\end{center}
+
+If you can trace down hitherto unknown reasons for remaining inaccuracies and either provide a fix or a decisive hint to us,  
+we can offer a reward in the EUR200--500 range from our donation fund. We, the developers, will judge and evaluate relevance, legal recourse is excluded.\\
+
+}}}
+
+
+
+\scriptsize
+\input{tab_accuracy.tex}
+\input{tab_accuracy_tt.tex}
+\normalsize
+
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-PDF-mode: t
+%%% TeX-master: "guide"
+%%% End: 
+

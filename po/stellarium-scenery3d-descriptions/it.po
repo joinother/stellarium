@@ -1,0 +1,341 @@
+# SOME DESCRIPTIVE TITLE
+# Copyright (C) YEAR Stellarium's team
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# cardinot <mcardinot@gmail.com>, 2022
+# Andrea Reguitti <andreareguitti@gmail.com>, 2022
+# Luigi Ghia <luigi.ghia@gmail.com>, 2022
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
+"POT-Creation-Date: 2023-11-28 13:04+0700\n"
+"PO-Revision-Date: 2022-10-05 17:03+0000\n"
+"Last-Translator: Luigi Ghia <luigi.ghia@gmail.com>, 2022\n"
+"Language-Team: Italian (https://app.transifex.com/stellarium/teams/80998/it/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: it\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
+
+#. type: Content of: <h2>
+#: ../../scenery3d/Testscene/description.en.utf8:1
+msgid "Testscene"
+msgstr "Scena di prova"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:3
+msgid ""
+"This scene is mostly useful as testbed for your own developments. You should"
+" make a copy of the scene folder and modify at will, try material settings "
+"or some other details to find out how this plugin behaves. Then build and "
+"present your own work!"
+msgstr ""
+"Questa scena è utile, per lo più, come banco di prova per i tuoi sviluppi. "
+"Dovresti fare una copia della cartella della scena e modificarla a tuo "
+"piacimento, provare le impostazioni del materiale o altri dettagli per "
+"scoprire come si comporta questo plugin. Quindi costruisci e presenta il tuo"
+" lavoro!"
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Testscene/description.en.utf8:8
+msgid "Coordinate and orientation tests"
+msgstr "Test sulla gestione delle coordinate e l'orientamento"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:10
+msgid ""
+"The pillars shown here, as seen from the structure's center, provide an "
+"approximate view (not hi-precision!) to solstice/equinox sunrise/sunset "
+"positions in central European latitudes. The central pillars provide an "
+"east-west-line. The survey coordinate grid visible on the floor does not "
+"align with geographic north.  A rotation of -4.2 deg (test for meridian "
+"convergence) must be compensated, i.e., while the central pillars must "
+"absolutely and always point west-east, the grid lines hit the northern "
+"horizon slightly (4.2 deg) left of north!"
+msgstr ""
+"I pilastri qui ben visibili sono visti dal centro della struttura e "
+"forniscono una vista approssimativa (non ad alta precisione!) delle "
+"posizioni di alba/tramonto ai solstizi/equinozio alle latitudini dell'Europa"
+" centrale. I pilastri centrali forniscono un allineamento lungo la linea "
+"est-ovest. La griglia delle coordinate topografiche visibili sul pavimento "
+"non è allineata con il nord geografico. Una rotazione di compensazione di "
+"-4,2 gradi (test di convergenza del meridiano) deve essere applicata, cioè, "
+"mentre i pilastri centrali devono assolutamente e sempre puntare lungo la "
+"linea ovest-est, le linee della griglia attraversano leggermente l'orizzonte"
+" nord  spostate di 4,2 gradi a sinistra!"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:19
+msgid ""
+"Walkaround ground coordinates (Ctrl-R, T) should display the coordinates "
+"visible along the south and west border of the ground."
+msgstr ""
+"Le coordinate perimetrali del terreno (Ctrl-R, T) dovrebbero visualizzare le"
+" coordinate lungo il confine sud e ovest del terreno stesso."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Testscene/description.en.utf8:23
+msgid "Material test"
+msgstr "Test sul materiale"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:25
+msgid ""
+"This model is also used for testing the plugin's graphical capabilities. You"
+" can play with material parameters to create funny effects like "
+"semitransparent or glow-in-the-dark brick spheres."
+msgstr ""
+"Questo modello viene utilizzato anche per testare le capacità grafiche del "
+"plugin. Puoi giocare con i parametri dei materiali per creare effetti "
+"divertenti come sfere di mattoni semitrasparenti o che si illuminano al "
+"buio."
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:29
+msgid ""
+"To test temporal features, the pillars and spheres are visible only from the"
+" years 2000 until 2020.  Edit the material file to change that!"
+msgstr ""
+"Per testare le caratteristiche temporali, i pilastri e le sfere sono "
+"visibili solo dagli anni 2000 fino al 2020. Modifica il file materiale per "
+"cambiarlo!"
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Testscene/description.en.utf8:32
+#: ../../scenery3d/Sterngarten/description.en.utf8:56
+msgid "Model"
+msgstr "Modello"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Testscene/description.en.utf8:33
+msgid ""
+"Testscene for Stellarium/scenery3d development. Export from SU8-Kerkythea-"
+"KT2OBJ."
+msgstr ""
+"Scena di prova per lo sviluppo di Stellarium/scenario3d. Esporta da "
+"SU8-Kerkythea-KT2OBJ."
+
+#. type: Content of: <h2>
+#: ../../scenery3d/Sterngarten/description.en.utf8:1
+msgid "Vienna Sterngarten"
+msgstr "Vienna Sterngarten"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:3
+msgid ""
+"Sterngarten (\"Star Garden\") is an open-air planetarium in the south-west "
+"of Vienna, demonstrating the solar year."
+msgstr ""
+"Sterngarten (\"Giardino delle stelle\") è un planetario all'aperto nell zona"
+" sud-ovest di Vienna, che mostra l'anno solare."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Sterngarten/description.en.utf8:7
+msgid "Idea"
+msgstr "Idea"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:9
+msgid ""
+"Univ.Prof.Dr.Oswald Thomas (1882 Kronstadt - 1963 Vienna). Founder, "
+"Astronomical Bureau (1907) and Austrian Astronomical Society (1924). "
+"Director of first Vienna Planetarium (1927) and Urania observatory."
+msgstr ""
+"Univ.Prof.Dr.Oswald Thomas (1882 Kronstadt - 1963 Vienna). Fondatore "
+"dell'Ufficio Astronomico (1907) e della Società Astronomica Austriaca "
+"(1924). Direttore del primo Planetario di Vienna (1927) e dell'Osservatorio "
+"Urania."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Sterngarten/description.en.utf8:14
+msgid "Construction"
+msgstr "Costruzione"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:16
+msgid ""
+"The Sterngarten was developed by Thomas' student and successor in the "
+"Astronomical Bureau Prof. Hermann Mucke (1935-2019) with his collaborators."
+"  Mucke was also secretary of the Austrian Astronomical Society from "
+"1963-2018, director of Vienna planetarium 1963-2001 and Vienna Urania public"
+" observatory from 1971-2001. For more than 60 years, Mucke and the Society "
+"published the \"Österreichischer Himmelskalender\" (Austrian Celestial "
+"Calendar)  and the monthly journal \"Der Sternenbote\" (The Starry "
+"Messenger)."
+msgstr ""
+"Lo Sterngarten è stato sviluppato dallo studente e successore di Thomas "
+"nell'Ufficio Astronomico, il Prof. Hermann Mucke (1935-2019) con i suoi "
+"collaboratori. Mucke è stato anche segretario della Società Astronomica "
+"Austriaca dal 1963 al 2018, direttore del planetario di Vienna dal 1963 al "
+"2001 e dell'Osservatorio pubblico di Vienna Urania dal 1971 al 2001. Per più"
+" di 60 anni, Mucke e la Società hanno pubblicato l'\"Österreichischer "
+"Himmelskalender\" (Calendario Celeste Austriaco) e la rivista mensile \"Der "
+"Sternenbote\" (Il Messaggero delle Stelle)."
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:22
+msgid ""
+"It was built 1997-2001 by the Austrian Astronomical Society, supported by "
+"public and private sponsors."
+msgstr ""
+"È stato costruito tra il 1997 e il 2001 dalla Società Astronomica Austriaca,"
+" supportata da sponsor pubblici e privati."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Sterngarten/description.en.utf8:24
+msgid "Purpose"
+msgstr "Scopo"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:26
+msgid ""
+"Improvement of basic astronomical knowledge in the general public. "
+"Witnessing celestial facts and changes with the unaided eye, optionally with"
+" a field glass, is offered by our installation, situated in the extreme "
+"southwest of Vienna; always open privately for everybody free of charge. "
+"Frequently guided tours."
+msgstr ""
+"Miglioramento delle conoscenze astronomiche di base nel grande pubblico. La "
+"nostra installazione, situata nell'estremo sud-ovest di Vienna, offre la "
+"prova di eventi e modifiche celesti sia ad occhio nudo che con un binocolo; "
+"sempre aperto in privato per tutti e gratuitamente. Frequenti visite "
+"guidate."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Sterngarten/description.en.utf8:32
+msgid "Components"
+msgstr "Componenti"
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:35
+msgid ""
+"Pyramid with platform 7x7m. Seen from 1.5m above Center Plate all angles "
+"fit."
+msgstr ""
+"Piramide con piattaforma 7x7m. Visto da 1,5 m sopra la Piastra Centrale, "
+"adattabile a tutti gli angoli."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:36
+msgid "Horizon Railing, representing the mathematical horizon."
+msgstr "Ringhiera Orizzontale, che rappresenta l'orizzonte matematico."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:37
+msgid ""
+"Surrounding Steps; 200 seats. Entrance by staircase and wheelchair ramp."
+msgstr ""
+"Gradini circostanti; 200 posti. Ingresso tramite scala e rampa per "
+"diversamente abili."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:38
+msgid ""
+"Pillars for sunrise and sunset at beginning of the seasons.  Pillar "
+"positions are right on the azimuths of equinoxes and solstices.  Arms "
+"indicate horizon and shifting effect due to refraction.  (Observation of "
+"rising/setting on the mathematical horizon is not possible in the field due "
+"to vegetation and landscape)."
+msgstr ""
+"Pilastri per l'alba e il tramonto all'inizio delle stagioni. Le posizioni "
+"dei pilastri sono proprio sugli azimut di equinozi e solstizi. Le braccia "
+"indicano l'orizzonte e l'effetto di spostamento dovuto alla rifrazione. "
+"(L'osservazione del sorgere/tramontare sull'orizzonte matematico non è "
+"possibile a causa della vegetazione e del paesaggio non orizzontale)."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:42
+msgid ""
+"South Pillar, marked (10&deg;/10&deg; altitude); Transit marks for sun at "
+"seasons' beginning."
+msgstr ""
+"Pilastro Sud, segnato (10&grad;/10&grad; di altezza); Tacche del transito "
+"del Sole all'inizio delle stagioni."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:43
+msgid ""
+"North Pillar, marked (10&deg;/10&deg; altitude); on top Shadow Disc with "
+"central hole: North celestial Pole."
+msgstr ""
+"Pilastro Nord, segnato (10&grad;/10&grag; di altezza); in alto Disco d'Ombra"
+" con foro centrale: Polo Nord celeste."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:44
+msgid ""
+"Bent Analemma, divided. Spring and summer dates on the horizontal part, "
+"autumn and winter dates on the ascending one, marked (10&deg;/10&deg;) solar"
+" longitude, with zodiacal signs. Ascending part serves as polar gnomon for "
+"the"
+msgstr ""
+"Analemma piegato, diviso. Date primaverili ed estive nella parte "
+"orizzontale, date autunnali e invernali in quella ascendente, segnate "
+"(10&grad;/10&grad;) di longitudine solare, con segni zodiacali. La parte "
+"ascendente funge da gnomone polare per l'"
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:45
+msgid "Sundial, full hours Vh to VIIh marked."
+msgstr "Orologio solare, ore intere segnate da V a VII."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:46
+msgid "Information panels."
+msgstr "Pannelli informativi."
+
+#. type: Content of: <h4>
+#: ../../scenery3d/Sterngarten/description.en.utf8:49
+msgid "Further Information"
+msgstr "Ulteriori informazioni"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:50
+msgid "Websites in German only."
+msgstr "Siti web solo in tedesco."
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:52
+msgid ""
+"Österreichischer Astronomischer Verein: <a "
+"href=\"https://www.astroverein.at\">https://www.astroverein.at</a>"
+msgstr ""
+"Associazione Astronomica Austriaca: <a "
+"href=\"https://www.astroverein.at\">https://www.astroverein.at</a>"
+
+#. type: Content of: <ul><li>
+#: ../../scenery3d/Sterngarten/description.en.utf8:53
+msgid ""
+"German Wikipedia article on the <a "
+"href=\"https://de.wikipedia.org/wiki/Sterngarten\">Sterngarten</a>"
+msgstr ""
+"Articolo di Wikipedia in tedesco su <a "
+"href=\"https://de.wikipedia.org/wiki/Sterngarten\">Sterngarten</a>"
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:57
+msgid ""
+"Created by Georg Zotti following plans by H. Mucke; Like countless amateur "
+"and professional astronomers in Austria, Zotti was introduced to astronomy "
+"by Mucke in his primary school days. Mucke's spirit will remain alive in the"
+" Sterngarten."
+msgstr ""
+"Creato da Georg Zotti su progetto di H. Mucke; Come innumerevoli astronomi "
+"dilettanti e professionisti in Austria, Zotti è stato introdotto "
+"all'astronomia da Mucke ai tempi della scuola elementare. Lo spirito di "
+"Mucke rimarrà vivo nello Sterngarten."
+
+#. type: Content of: <p>
+#: ../../scenery3d/Sterngarten/description.en.utf8:60
+msgid ""
+"Model created in 2010 with Google Sketchup 8, exported from Google Sketchup "
+"8.0.14346."
+msgstr ""
+"Modello creato nel 2010 con Google Sketchup 8, esportato da Google Sketchup "
+"8.0.14346."

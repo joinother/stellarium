@@ -1,0 +1,57 @@
+# Translators:
+# Ali Azadegan <sel3ulba@yahoo.com>, 2023
+# king world, 2025
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: Stellarium desktop file translation\n"
+"Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
+"POT-Creation-Date: 2025-03-23 18:49+0700\n"
+"PO-Revision-Date: 2022-10-21 17:46+0000\n"
+"Last-Translator: king world, 2025\n"
+"Language-Team: Persian (https://app.transifex.com/stellarium/teams/80998/fa/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fa\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Stellarium"
+msgstr "Stellarium"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "GenericName"
+msgid "Desktop planetarium"
+msgstr "کیهان‌ نمای رومیزی"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Comment"
+msgid "Planetarium"
+msgstr "آسمان‌نما"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Open in window"
+msgstr "باز کردن در حالت پنجره"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Open in fullscreen"
+msgstr "باز کردن در حالت تمام‌صفحه"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Open with QPA platform XCB"
+msgstr "باز کردن در سکوی QPA با XCB"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Open with QPA platform theme XCB"
+msgstr "باز کردن در سکوی QPAبا قالب XCB"
+
+#: ../../data/org.stellarium.Stellarium.desktop
+msgctxt "Name"
+msgid "Open in debug mode"
+msgstr "بازکردن در حالت اشکال زدایی"

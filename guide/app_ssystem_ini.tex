@@ -1,0 +1,959 @@
+%% Part of Stellarium User Guide
+%% Status:
+%% 2016-05-16 GZ new file. This file and its handling is so complicated, it deserves proper docs.
+%% 2017-06-18 GZ for v0.16.0 we have split the config file. Adapted docs.
+%% TODO: document the more obscure entries. Add links to the respective chapters.
+
+%\chapterimage{chapter-t1-bg} % Chapter heading image
+
+\section{Solar System Configuration Files}
+\label{sec:ssystem.ini}
+
+The files\footnote{Before v0.16, there was a single file, \file{ssystem.ini}, with slightly different rules.}
+ \file{ssystem\_major.ini} and  \file{ssystem\_minor.ini}  
+(in the \file{data/} subdirectory of the program directory, 
+contain orbital and rotational data from which Stellarium configures the Solar
+System objects. 
+
+The minor bodies can be modified by placing a privately modified 
+copy of \file{ssystem\_minor.ini} into your own
+\file{data/} directory (see Chapter~\ref{sec:FilesAndDirectories}). 
+You can edit the file either manually or with the Solar System Editor plugin (see
+Section~\ref{sec:plugins:SolarSystemEditor}). The private user file is automatically created by the Solar System Editor plugin.
+
+
+%Deprecated parameters are marked by gray background. 
+%Possible new parameters are marked by yellow background.
+%% GZ This is no longer true. Reactivate somehow? 
+
+Each object's data are described in its own section which is typically
+named after the object name. Some section names (e.g.\ those using
+diacriticals, spaces or other problematic characters) appear a bit mangled.
+
+We list here examples for the major planets, larger moons with special
+coordinate functions, minor moons with generic orbital elements, minor
+planets and comets with elliptical and parabolic orbit elements.
+
+All elements are stored in alphabetic order in the files, however it
+makes more sense to present the elements in another sequence which
+better reflects the meaning. The actual order of the objects in the
+files, and order of entries inside an object section, is irrelevant,
+but in case of duplicate entries the later entry is used.
+
+\subsection{File ssystem\_major.ini}
+\label{sec:ssystem.ini:major}
+
+
+\subsubsection{Planet section}
+\label{sec:ssystem.ini:Planet}
+
+Example:
+\begin{configfile}
+[jupiter]
+name=Jupiter
+type=planet
+coord_func=jupiter_special
+orbit_Period=4331.87
+
+atmosphere=1
+albedo=0.51
+color=1., 0.983, 0.934
+absolute_magnitude=-9.40
+
+radius=71492
+oblateness=0.064874
+tex_map=jupiter.png #texture courtesy of Bj\xf6rn J\xf3nsson
+
+# deprecated rotational elements
+rot_equator_ascending_node=-22.203
+rot_obliquity=2.222461
+rot_periode=9.92491
+rot_rotation_offset=-1 # use JupiterGRS patch
+
+# WGCCRE rotational elements
+rot_pole_ra=268.056595
+rot_pole_ra1=-0.006499
+rot_pole_de=64.495303
+rot_pole_de1=0.002413
+rot_pole_w0=284.95
+rot_pole_w1=870.5360000
+
+\end{configfile}
+
+
+where 
+\begin{description}
+\item[name] English name of the planet. May appear translated. 
+\item[type] Mandatory for planets: \value{planet}
+\item[parent]=Sun. The body which this object is running around. Default: \texttt{Sun}
+\item[coord\_func] The planet positions are all computed with a dedicated function (VSOP87 or DE43x). 
+\item[orbit\_Period] number of (earth) days for how
+  long the orbit should be made visible. Typically Stellarium shows
+  one orbit line. The orbit slowly drifts, however.
+
+\item[atmosphere] (0 or 1) flag to indicate whether observer locations should enable atmosphere drawing.
+
+\item[radius] Equator radius, km.
+\item[oblateness] Flattening of the polar diameter. ($1-r_{pole}/r_{eq}$)
+\item[albedo] total albedo (reflectivity) of the planet. Used for ``generic''
+  magnitude computation, but the major planets usually have dedicated
+  magnitude formulas, so the value is not evaluated unless you are
+  observing from a location outside Earth.
+\item[color] Used to colorize halo. At least one of the components should be 1.
+\item[tex\_map] File name of texture map in \file{textures} folder.
+\item[halo] Should be true to draw a halo (simple light disk) when object too small to draw a sphere. Default: \texttt{true}
+\end{description}
+
+\paragraph{Elements for the Physical Ephemeris}
+
+Where known, Stellarium can properly model axis rotation with the
+\texttt{rot\_\ldots} entries in the element sets.  Versions prior to
+0.21 had rotational elements defined with respect to the equator of
+the parent object. While writing this documentation the origin and
+accuracy of this model is unfortunately untraceable.  However, the IAU
+Working Group on Cartographic Coordinates and Rotational Elements
+(WGCCRE) and modern sources like \citet{ESAA:2013} use rotational
+elements with respect to the ICRF (see section
+\ref{sec:Concepts:Equatorial}). Therefore, starting with version 0.21,\newFeature{0.21}
+Stellarium uses these more modern data and can now also show axes with
+precessional or other motions. Data for some planet moons are
+unfortunately still not available in this WGCCRE format, and therefore
+the old format can still be used, but should not be used for new
+entries.
+
+\begin{description}
+\item[rot\_equator\_ascending\_node] \emph{deprecated}
+\item[rot\_obliquity] \emph{deprecated}
+\item[rot\_rotation\_offset] \emph{deprecated} longitude of prime
+  meridian. For Planets, this used to be counted from the ascending
+  node of the equator over the ecliptical plane at J2000.0. For moons,
+  it is the longitude of the prime meridian counted from the ascending
+  node of the moon's equator over the planet equator.  A special value
+  here indicates special treatment for the Great Red Spot.
+\item[rot\_periode] \emph{deprecated} Duration of one sidereal rotation, in earth hours.
+
+\item[rot\_pole\_ra]  constant of axis right ascension in ICRF, degrees
+\item[rot\_pole\_ra1] change per century of axis right ascension in ICRF, degrees
+\item[rot\_pole\_de] constant of axis declination in ICRF, degrees
+\item[rot\_pole\_de1] change per century of axis declination in ICRF, degrees
+\item[rot\_pole\_w0] longitude of the prime meridian counted from the
+  ascending node of the objects's equator through the ICRF equator, degrees
+\item[rot\_pole\_w1] change per day of axis rotation, degrees
+\end{description}
+
+\noindent In many cases, the attitude/rotation formulae for the North (or
+``positive'') pole $(\alpha_0, \delta_0)$ are given like
+\begin{eqnarray}
+  \label{eq:PlanetOrientation}
+  \alpha_0 &=& \mathtt{rot\_pole\_ra} + T * \mathtt{rot\_pole\_ra1}\\
+  \delta_0 &=& \mathtt{rot\_pole\_de} + T * \mathtt{rot\_pole\_de1}\\
+  W        &=& \mathtt{rot\_pole\_w0} + d * \mathtt{rot\_pole\_w1}
+\end{eqnarray}
+
+\noindent These cases are fully covered by the data in
+\file{ssystem\_major.ini}. Corrections for solar system objects given
+by \citet{ESAA:2013, WGCCRE2009, WGCCRE2009:corr, WGCCRE2015,
+  WGCCRE2015:corr} have been implemented in the program.
+
+
+\subsubsection{Moon section}
+\label{sec:ssystem.ini:Moon}
+
+All planet moons are defined only in \file{ssystem\_major.ini}.
+
+Moons are special in that they orbit another planet. Therefore, the
+rotational elements used to be specified relative to the equatorial
+plane of the parent planet, and \texttt{orbit\_SemiMajorAxis} are
+specified in kilometers.  However, \newFeature{0.21} as for the
+planets (see section \ref{sec:ssystem.ini:Planet} above), current
+\indexterm{IAU} reference material gives axis orientation with right
+ascension and declination values for the pole in ICRF coordinates,
+with some of them in motion. So again, if one of the
+\texttt{rot\_pole\_...} values exist, we assume the current
+standard, but keep the old elements available until we find new data.
+For more complicated motion, again some special functions
+are applied.
+
+%% TODO: CHANGE THIS WHEN AXES HAVE BEEN REMADE!
+\newpage
+\begin{configfile}
+[amalthea]
+name=Amalthea
+type=moon
+parent=Jupiter
+iau_moon_number=JV
+
+orbit_AscendingNode=141.5521520794674
+orbit_Eccentricity=0.006175744402949701
+orbit_Epoch=2454619.50000
+orbit_Inclination=0.3864576103404582
+orbit_LongOfPericenter=245.4222355150120000
+orbit_MeanLongitude=224.7924893552550000
+orbit_Period=0.5016370462116355
+orbit_SemiMajorAxis=181994.8658358799
+
+absolute_magnitude=7.4
+albedo=0.09
+color=1., 0.627, 0.492
+radius=83.5
+tex_map=amalthea.png
+model=j5amalthea_MLfix.obj
+
+
+rot_equator_ascending_node=213.7
+rot_obliquity=15.5
+# rot_periode=12.039289109079252
+rot_rotation_offset=235.50
+rot_pole_ra=268.05
+rot_pole_ra1=-0.009
+rot_pole_de=64.49
+rot_pole_de1=0.003
+rot_pole_w0=231.67
+rot_pole_w1=722.6314560
+\end{configfile}
+
+where
+\begin{description}
+  \item[name] English name of planet moon. No number, just the name. May be translated.
+  \item[type] \texttt{moon}
+
+  \item[parent] English name of planet or parent body.
+  \item[iau\_moon\_number] a short label (string) consisting of the planet's initial and the moon's Roman number in order of discovery.\newFeature{0.16.1}
+
+  \item[coord\_func] Must be \texttt{kepler\_orbit} (default, can be left away) for moons with orbital elements given, or \texttt{<name>\_special} for 
+  \item[orbit\_AscendingNode] $\Omega$
+  \item[orbit\_Eccentricity] $e$
+  \item[orbit\_Epoch] 
+  \item[orbit\_Inclination] $i$ [degrees]
+  \item[orbit\_LongOfPericenter] 
+  \item[orbit\_MeanLongitude]
+  \item[orbit\_Period] [days]
+  \item[orbit\_SemiMajorAxis] $a$ [km]
+
+  \item[radius] Equator radius, km.
+  \item[oblateness] Flattening of the polar
+    diameter. ($1-r_{pole}/r_{eq}$) Bodies with non-ellipsoid shape,
+    e.g. tri-axial geometry, cannot be modelled with this simple
+    approach, but a 3D solid model can be shown, see below.
+    
+  \item[albedo] total reflectivity [0..1]
+  \item[color] for drawing halo (default: 1,1,1)
+  \item[halo] [=true|false] to draw a simple diffuse dot when zoomed out. Default: \texttt{true}
+  \item[tex\_map] name of spherical texture map. Many moons have been mapped by visiting spacecraft! For many other moons, Stellarium applies an inverted Lunar texture image.
+  \item[model] \newFeature{0.16.0}(optional) name of a 3D model for a non-spherical body in the \file{model} subdirectory of the program directory. 
+
+  \item[rot\_equator\_ascending\_node] \emph{deprecated}
+  \item[rot\_obliquity] \emph{deprecated}
+  \item[rot\_rotation\_offset] \emph{deprecated} longitude of prime meridian at J2000.0. 
+  \item[rot\_periode]  \emph{deprecated}  Duration of one sidereal rotation, in earth hours. For moons in bound rotation 
+       (which always show one face towards their parent planet), it is best to omit this value: it defaults to \texttt{orbit\_Period * 24}. 
+
+  \item[rot\_pole\_ra]  constant of axis right ascension in ICRF, degrees
+  \item[rot\_pole\_ra1] change per century of axis right ascension in ICRF, degrees
+  \item[rot\_pole\_de] constant of axis declination in ICRF, degrees
+  \item[rot\_pole\_de1] change per century of axis declination in ICRF, degrees
+  \item[rot\_pole\_w0] longitude of the prime meridian counted from the
+    ascending node of the objects's equator through the ICRF equator, degrees
+  \item[rot\_pole\_w1] change per day of axis rotation, degrees  
+\end{description}
+
+
+
+\subsubsection{Observers}
+\label{sec:ssystem.ini:Observers}
+
+Stellarium is great for excursions to the surface of any object with
+known orbital elements.  Configuring a viewpoint away from a planet
+requires a special kind of location.
+
+\paragraph{Solar System Observer}
+\label{sec:ssystem.ini:SolarSystemObserver}
+
+The Solar System Observer has
+been provided in earlier versions as a neutral view location high above the North pole of
+the Solar System. Meanwhile \newFeature{0.19.2} the location can be changed by keyboard interaction. See section \ref{sec:gui:location:observers}.
+\begin{configfile}
+[solar_system_observer]
+name=Solar System Observer
+parent=Sun
+halo=false
+hidden=true
+orbit_SemiMajorAxis=30
+type=observer
+\end{configfile}
+Note that it is \texttt{hidden} and has no \texttt{halo}. 
+The observer is attached to the Sun, therefore the value for distance \texttt{orbit\_SemiMajorAxis} is given in AU.
+
+\paragraph{Planet Observers}
+\label{sec:ssystem.ini:PlanetObserver}
+
+There are other ``observer'' locations for all planets\newFeature{0.19.2} which have moons: Earth, Mars, Jupiter, Saturn, Uranus, and Neptune.
+For example:
+\begin{configfile}
+[earth_observer]
+name=Earth Observer
+parent=Earth
+halo=false
+hidden=true
+orbit_SemiMajorAxis=149600000
+type=observer
+\end{configfile}
+
+The distance \texttt{orbit\_semiMajorAxis} has been preconfigured \newFeature{23.1} with a
+distance that gives a good view of the planet with its moons. 
+Like for moons, the units are \km\ from the planet. 
+
+\subsection{File ssystem\_minor.ini}
+\label{sec:ssystem.ini:minor}
+
+Orbital elements for minor bodies are always given for a particular
+\indexterm{equinox} like J2000.0 (which indicates the coordinate
+reference system) and \indexterm{epoch} (date). The other planets pull
+on the objects and change their orbits, most usually leading to the
+objects appearing too early or too late in their orbits, but also
+changing the other orbital elements. In addition, outgassing events of
+comets can act like jet propulsion and change orbits in unpredictable
+ways.  It is heavily recommended to update the orbital elements on a
+regular basis ($2\times$/year?), or at least before you go out and are
+actually observing minor bodies.  Use the Solar System Editor plugin
+for this task (section~\ref{sec:plugins:SolarSystemEditor}).
+
+You may find element sets for different equinoxes, like B1950.0. These
+have to be converted to equinox J2000.0 data before being useful in
+Stellarium. The conversion is outside Stellarium's scope.
+
+\begin{description}
+\item[coord\_func] is \texttt{kepler\_orbit} by
+  default\newFeature{0.20}. For compatibility and interoperability
+  with older versions we will keep the old default of
+  \texttt{comet\_orbit} for some longer time.\footnote{Previous
+    editions used the name \texttt{comet\_orbit}. Now the
+    \texttt{coord\_func} line can be left away, defaulting to
+    \texttt{kepler\_orbit}.}
+\item[parent] defaults to \texttt{Sun} and can be omitted.
+
+\item[orbit\_Epoch] JDE when these elements are valid. Defaults to
+  2451545.0 = the J2000.0 standard epoch.
+
+\item[orbit\_good] can be given in days to limit computation of the
+  object to the time range
+  $\mathtt{epoch}\pm\mathtt{orbit\_good}$. If\newFeature{0.21.3}
+  specified as \texttt{0} there is no check for out-of-range dates. If
+  specified as \texttt{-1}, half the orbital period is used. The main
+  purpose of this parameter is to avoid an element clash or the
+  inadvertent use of outdated comet orbit elements when a periodic
+  comet reappears.
+
+\item[orbit\_ArgOfPericenter] $\omega$ [degrees]
+\item[orbit\_AscendingNode] $\Omega$  [degrees]
+\item[orbit\_Eccentricity] $e=0$ circular, $0<e<1$ elliptic, $e=1$ parabolic, $e>1$ hyperbolic
+\item[orbit\_Inclination] $i$ [degrees] inclination against J2000 ecliptic
+\item[orbit\_SemiMajorAxis] $a$ [AU]
+\end{description}
+The other parameters are like those for the major planets. 
+
+\subsubsection{Minor Planet section}
+\label{sec:ssystem.ini:MinorPlanet}
+
+\begin{configfile}
+[4vesta]
+type=asteroid  
+minor_planet_number=4
+name=Vesta
+
+coord_func=comet_orbit
+parent=Sun
+orbit_Epoch=2457000.5
+orbit_MeanAnomaly=20.86389
+orbit_MeanMotion=0.27154465
+
+orbit_ArgOfPericenter=151.19843
+orbit_AscendingNode=103.85141
+orbit_Eccentricity=0.0887401
+orbit_Inclination=7.14043
+orbit_SemiMajorAxis=2.3617933
+orbit_good=1325.46
+
+color=1., 1., 1.
+halo=true
+oblateness=0.0
+
+albedo=0.423
+radius=280
+absolute_magnitude=3.2
+slope_parameter=0.32
+tex_map=vesta.png
+model=4vesta_21_MLfix.obj
+\end{configfile}
+
+\begin{description}
+\item[type] can be \texttt{asteroid, dwarf planet, cubewano,
+  plutino, scattered disc object, Oort cloud object}. With the
+exception of Pluto (which is included in \file{ssystem\_major.ini} and cannot be changed), 
+all positions for minor bodies are computed with the orbiting elements given in this way. 
+\end{description}
+
+Minor planets further specify
+\begin{description}
+\item[orbit\_Epoch], JDE when these elements are valid. Defaults to J2000.0, i.e., 2451545.0. 
+\item[orbit\_MeanAnomaly] $M$ mean anomaly, degrees. 
+\item[orbit\_MeanMotion] $n$ mean motion [degrees/day].
+\end{description}
+
+Visual magnitude is modelled from
+\begin{description}
+\item[absolute\_magnitude] $H$
+\item[slope\_parameter] $G$.
+\end{description}
+
+Elements for rotational axis may be given just like for planets when
+they are known. It is recommended to use the modern specification
+(elements \texttt{rot\_pole\_...}).
+
+\begin{description}
+\item[model]
+A few asteroids have been visited by spacecraft, \newFeature{0.16.0}
+and for many other asteroids visual observations of stellar occultations 
+by asteroids and light curve measurements have enabled researchers to derive 
+3D shape models of asteroids. If a model is available in the \file{models} 
+subdirectory of the program directory, this can be configured with a \texttt{model} entry.
+\end{description}
+
+
+\subsubsection{Comet section}
+\label{sec:ssystem.ini:Comet}
+
+Comets are tiny, and their outgassing and close approaches to the
+major planets cause fast changes in their orbital elements, so that
+each apparition should be specified with a dedicated section in
+\file{ssystem\_minor.ini}.
+
+\paragraph{Naming schemes}
+Over just the past decades, the naming of comets has changed considerably. 
+Starting in the 19th century, comets are usually named after their discoverer(s). 
+In addition, they are given a catalog number. 
+Traditionally, comets observations published by scientific organisations were sorted and labelled with Roman numerals after date of perihelion. 
+When scientific communication became faster, comet discoveries were circulated by telegraphs, and a preliminary immediate labelling by sequence of discovery was used. 
+After the year was over, the comet received again the Roman number indicating the position in the sequence of perihelon dates in that year. 
+
+In 1994, a new scheme has been introduced\footnote{\url{https://minorplanetcenter.net/iau/lists/CometResolution.html}}: 
+When a comets is discovered, the discovery date governs a unique label: 
+The 12 months of the year are split into half-months, for which 24 of the 26 letters of the alphabet are used (I and Z are omitted). 
+After the letter, discoveries are enumerated in sequence. 
+A letter before this number indicates what kind of comet the element set describes: \textbf{C} indicates a regular comet, 
+\textbf{P} a periodic (recurring) comet, \textbf{D} is defunct (lost). \textbf{X} is one for which no reliable orbital elements can be given. 
+\textbf{I} labels an interstellar object (an object on an orbit, or more accurately, a hyperbolic trajectory which only swings around the Sun one time).
+After a return, periodic comets receive a serial number before the P.
+
+This new scheme is also applied for old comets. However, for the sake of compatibility with older literature, 
+Stellarium can use several optional entries in addition to the name:\newFeature{23.2}
+\begin{description}
+\item[name] 1P/Halley (First periodic comet, named after \name[Edmund]{Halley}, the astronomer who identified its recurrent nature)
+\item[iau\_designation] 1982 U1 (First comet discovered in 2nd half of October 1982)
+\item[discovery\_code] 1982i (9th comet discovered in 1982)
+\item[perihelion\_code] 1986 III (Third comet to go through perihelion in 1986)
+\end{description}
+
+There is unfortunately divergent information about use of the new IAU discovery code for periodical comets like 1P/Halley. 
+Some lists provide such codes for previous observations, while others use the modern code for Halley's own observation (P/1682 Q1) for every apparition, 
+in which case identification of the proper apparition from just the name becomes impossible. 
+IAU simply uses a periodic number with P and optional name (for comet Halley, ``1P/Halley''. Almost all periodic comets have names) to identify such a recurring object. 
+While this can be used for predicted future passages through the inner Solar system, 
+there cannot be a modern ``discovery code'' based label when the comet was at least in theory followed through aphelion.
+But also this format, using only periodic number, prevents disambiguation between apparitions. 
+To make life simpler for us, we prefer to use a name entry like ``1P/Halley (1986)'' with year of perihel passage in brackets. 
+A numbered comet may come without a discoverer name. In this case it is just shown with perihel year like ``396P (2019)''.
+The ini file should include a periodic number in front of the P in the name, however some data files are incomplete. 
+Unnumbered comets follow the new IAU code, e.g., ``C/1996 B2 (Hyakutake)''. 
+You can also provided separate \texttt{name} and \texttt{iau\_designation} entries, in which case they will be combined. 
+
+
+Most other elements are similar to minor planets. But note the specification of
+\begin{description}
+\item[orbit\_PericenterDistance] $q$ [AU]
+\item[orbit\_TimeAtPericenter] $T$  JDE of closest approach to the Sun
+\item[orbit\_Epoch] JDE when these elements are valid (optional).
+\end{description}
+which is more typical for comets which may have no orbital period when
+they are on parabolic or hyperbolic orbits. Frequently orbital
+elements are given for a date very close to perihelion so that the
+perihel date $T$ is used wherever 
+\texttt{orbit\_Epoch} is not given. However, this assumption does not always hold,
+so we\newFeature{0.21.3} recommend to state \texttt{orbit\_Epoch} explicitly.
+
+\begin{description}
+\item[ref] Reference, e.g.\ some MPC Circular (optional). \newFeature{0.21.3} May be used in future versions.
+\end{description}
+
+\paragraph{Comet magnitudes}
+Like for minor planets, visual magnitude is modelled from
+\begin{description}
+\item[absolute\_magnitude] $H$
+\item[slope\_parameter] $G$
+\end{description}
+but with a modified expression:
+%
+\begin{equation}
+  \label{eq:comet_magnitudes}
+  \mathrm{mag}=H+5\cdot\log\Delta + 2.5\cdot G \cdot\log r
+\end{equation}
+
+The term \texttt{slope\_parameter} may be a misnomer in case of
+comets. From the literature \citep{AstronomicalAlgorithms:1998} (equation 33.13) we find
+\begin{equation}
+  \label{eq:comet_magnitudes_Meeus}
+  \mathrm{mag}=g+5\log\Delta + \kappa\log r
+\end{equation}
+from which $\kappa=2.5\cdot G$. In any case, $\kappa$ is typically [5\ldots15] and specific for each comet. The standard value for $G$ is 4 (therefore $\kappa=10$).
+
+Estimating and predicting comet magnitudes is very difficult, and values for $H$ and $G$ often differ between data sources 
+like the Minor Planetary Center\footnote{\url{https://www.minorplanetcenter.net/data}} and NASA/JPL Horizon\footnote{\url{https://ssd.jpl.nasa.gov/horizons/}}. 
+When you think some comet magnitude is off, consider searching for other sources than MPC\footnote{One interesting website is \url{http://www.aerith.net/index.html} 
+which provides magnitude predictions in terms of \ref{eq:comet_magnitudes_Meeus} for current comets, sometimes even in intervals from perihel date as comets evolve. 
+Just extract $\mathtt{absolute\_magnitude}=g$ and $\mathtt{slope\_parameter}=\kappa/2.5$.}.
+
+You can finetune the appearance of the comet, both when zooming in all the way to the core, or how the tails are represented. 
+\begin{description}
+\item[albedo] (default: 0.075) is used to set the brightness for rendering the body, if you are close enough. 
+\item[model] Some comets have been visited by spacecraft so that shape models of their cores 
+	may be available and can be configured with this entry.\newFeature{0.16.0}
+\item[outgas\_intensity] (default:0.1) Intensity of a pseudo-outgas effect on the core, based on an inverse exponential Lambert shading, with the light at the viewing position.
+\item[outgas\_falloff] (default:0.1)  Exponent for falloff of outgas effect, should probably stay $< 1$.
+\item[dust\_brightnessfactor] (default: 1.5) brightness of dust tail relative to the gas tail.
+\item[dust\_lengthfactor] (default: 0.4) length of dust tail relative to the gas tail.
+\item[dust\_widthfactor] (default: 1.5) width of dust tail relative to the gas tail.
+\end{description}
+Some historical depictions show huge comets. If painted correctly, you can try to recreate such paintings.
+
+A large number of elements for historical comets is provided in the
+file \file{ssystem\_1000comets.ini} in the installation directory. You
+can copy\&paste what you need into your
+\file{ssystem\_minor.ini} or add all with the Solar System Editor plugin (section~\ref{sec:plugins:SolarSystemEditor}). 
+
+
+With a clever combination of elements and \texttt{orbit\_good}
+entries, \newFeature{0.21.3} it is possible to specify several sets of
+orbital elements for different epochs of one apparition.
+
+\paragraph{Periodic Comet}
+\label{sec:ssystem.ini:Comet:Periodic}
+
+\begin{configfile}
+[1phalley]
+type=comet  
+name=1P/Halley
+iau_designation=1982 U1
+discovery_code=1982i
+perihelion_code=1986 III
+
+orbit_ArgOfPericenter=111.7154
+orbit_AscendingNode=58.8583
+orbit_Eccentricity=0.968004
+orbit_Inclination=162.2453
+orbit_PericenterDistance=0.57136
+orbit_TimeAtPericenter=2446463.12979167
+orbit_good=780
+
+color=1.0, 1.0, 1.0
+dust_brightnessfactor=1.5
+dust_lengthfactor=0.4
+dust_widthfactor=1.5
+
+albedo=0.1
+radius=5
+absolute_magnitude=5.5
+slope_parameter=3.2
+model=1682q1halley_MLfix.obj [optional]
+\end{configfile}
+
+Note a rather short duration of
+\texttt{orbit\_good}, which means the comet is only displayed 780 days
+before and after perihelion. (Actually, before and after
+\texttt{orbit\_Epoch}, but this is not given explicitly, so it
+defaults to \texttt{orbit\_TimeAtPericenter}.)
+
+
+\paragraph{Parabolic/Hyperbolic Comet}
+\label{sec:ssystem.ini:Comet:Parabolic}
+
+\begin{configfile}
+[c2013us10%28catalina%29]
+type=comet
+name=Catalina
+iau_designation=C/2013 US10
+
+orbit_ArgOfPericenter=340.3533
+orbit_AscendingNode=186.141
+orbit_Eccentricity=1.000372
+orbit_Inclination=148.8766
+orbit_PericenterDistance=0.822958
+orbit_TimeAtPericenter=2457342.20748843
+orbit_good=1000
+
+...
+
+absolute_magnitude=4.4
+slope_parameter=4
+\end{configfile}
+
+This has basically the same format. Note that eccentricity is larger than 1,
+this means the comet is following a slightly hyperbolic
+orbit. Stellarium shows data for this comet for almost 3 years
+(\texttt{orbit\_good=1000} days) from the epoch (defaults to pericenter time).
+
+
+\subsection{JPL Horizons}
+\label{sec:ssystem.ini:JPLHorizons}
+
+
+The \indexterm{JPL Horizons}\footnote{\url{https://ssd.jpl.nasa.gov/horizons/}} on-line solar system data and ephemeris computation service provides access to key solar system data and 
+flexible production of highly accurate ephemerides for solar system objects (Late 2023: 1,334,683 asteroids, 3,904 comets, 290 planetary satellites {includes satellites of Earth and dwarf planet Pluto}, 
+8 planets, the Sun, L1, L2, select spacecraft, and system barycenters). Horizons is provided by the Solar System Dynamics Group of the Jet Propulsion Laboratory.
+
+\subsubsection{How to manually look up a body}
+
+A comet discovered in early 2023, C/2023 A3 (Tsuchinshan-ATLAS), may become bright in October 2024. 
+Let's find out its orbital elements for the most interesting time! 
+
+We use the Horizons web interface to look up the body we are interested in and find its orbital elements. 
+The Horizons web interface will display something like this:\vspace{\baselineskip}
+
+\fbox{\begin{tabular}{rcl}
+  1&               & Ephemeris Type: \button{Osculating Orbital Elements}\\
+  2& \button{Edit} & Target Body: C/2023 A3 (Tsuchinshan-ATLAS)\\
+  3& \button{Edit} & Coordinate Center: Sun (body center) [500@10]\\
+  4& \button{Edit} & Time Specification: Start=2024-07-03 TDB, Stop=2024-12-02, Step=5 (days)\\
+  5& \button{Edit} & Table Settings: \emph{custom}\\
+  \multicolumn{3}{l}{\button{Generate Ephemeris}}
+\end{tabular}}\vspace{\baselineskip}
+
+\begin{enumerate}
+\item Ephemeris Type \emph{must} be set to \button{Osculating Orbital Elements}.
+\item Target Body is the body you want to add to Stellarium. Click \button{Edit} to look it up.
+\item Center should be set to  Sun for all heliocentric trajectories.
+\item Time Specification: Use a short interval or discrete dates near the time you are most interested. The returned JDE date (Julian Day number) will be used as epoch in Stellarium.
+\item Table Settings: We must \button{Edit} and select Output units: \button{au and days} to create data compatible with the appropriate fields in \file{ssystem\_minor.ini}
+\end{enumerate}
+
+\noindent The result begins with listing osculating elements for a certain epoch in the past and its own initial conditions and settings. 
+Horizons then applies numerical integration and simulates the movement and gravitational interaction between all its solar system objects, including our comet. 
+Then, for each requested time, orbital elements are listed. Here you could see the slight changes these elements undergo over weeks. 
+However, in Stellarium, we can only use one particular element set and show the comet's movement under the assumption that these elements do not change. 
+When we have read it will be brightest in October, let's take this section. The first number is the date (JDE) where these elements are valid, 
+i.\,e., the element epoch.
+
+\begin{configfile}[\scriptsize]
+2460584.500000000 = A.D. 2024-Oct-01 00:00:00.0000 TDB 
+ EC= 1.000086779013436E+00 QR= 3.914011809348247E-01 IN= 1.391089312570287E+02
+ OM= 2.156049287759364E+01 W = 3.084955943429219E+02 Tp=  2460581.248532149941
+ N = 3.253815615607083E-06 MA= 1.057967686457091E-05 TA= 1.819722055160837E+01
+ A =-4.510320703532996E+03 AD= 9.999999999999998E+99 PR= 9.999999999999998E+99
+\end{configfile}
+Below you also find the keys:
+
+\begin{configfile}
+   Symbol meaning:
+
+    JDTDB    Julian Day Number, Barycentric Dynamical Time
+      EC     Eccentricity, e
+      QR     Periapsis distance, q (km)
+      IN     Inclination w.r.t X-Y plane, i (degrees)
+      OM     Longitude of Ascending Node, OMEGA, (degrees)
+      W      Argument of Perifocus, w (degrees)
+      Tp     Time of periapsis (Julian Day Number)
+      N      Mean motion, n (degrees/sec)
+      MA     Mean anomaly, M (degrees)
+      TA     True anomaly, nu (degrees)
+      A      Semi-major axis, a (km)
+      AD     Apoapsis distance (km)
+      PR     Sidereal orbit period (sec)
+\end{configfile} 
+ 
+\noindent Now we can add an entry into our \file{ssystems\_minor.ini}. 
+We can leave the exponential writing style (trailing ``E+02'' etc.) 
+or convert to the more human-readable as shown here. 
+Symbols \texttt{M1} and \texttt{k1} are given only in the top list of initial elements. 
+The symbols in brackets refer to the above table, do not enter those!
+
+\begin{configfile}[\scriptsize]
+[c2023A3(tsuchinshanatlas)]
+iau_designation                = C/2023 A3
+name                           = C/2023 A3 (Tsuchinshan-ATLAS)
+type                           = comet
+orbit_Epoch                    = 2460584.5
+orbit_ArgOfPericenter          = (W)      308.4955943429219
+orbit_AscendingNode            = (OM)      21.56049287759364
+orbit_Eccentricity             = (EC)       1.000086779013436
+orbit_Inclination              = (IN)     139.1089312570287
+orbit_PericenterDistance       = (QR)       0.3914011809348247
+orbit_TimeAtPericenter         = (Tp) 2460581.248532149941
+absolute_magnitude             = (M1)       6.1
+slope_parameter                = (k1/2.5)   3.4
+orbit_good                     = 1000
+discovery                      = 2023-01-09 [Not given by JPL Horizons]
+ref                            = JPL Horizons: JPL#25
+\end{configfile}
+
+\noindent JPL Horizons can also deliver osculating elements for a number of interplanetary spacecraft. 
+To visualize them, you should assign \texttt{type=interstellar object} 
+(to make the orbit line stand out a bit more than with \texttt{asteroid}) 
+and invent your own magnitude, e.g., \texttt{absolute\_magnitude=0} or even brighter, to make them visible. 
+Obviously, the shown trajectory is valid only around the given epoch and changes significantly whenever a spacecraft 
+encounters a larger solar system object or when operators fire its engines. An Example for the Voyager~2 spacecraft may look like:
+
+\begin{configfile}[\scriptsize]
+[voyager2]
+name                           = Voyager 2 (after Neptune)
+iau_designation                = Voyager 2
+type                           = interstellar object
+orbit_ArgOfPericenter          = 1.300872388863244E+02
+orbit_AscendingNode            = 1.017840511971174E+02
+orbit_Eccentricity             = 6.294338891686261E+00
+orbit_Epoch                    = 2460554.5               [Sept 1, 2024]
+orbit_Inclination              = 7.895342038400214E+01
+orbit_PericenterDistance       = 2.130818195968974E+01
+orbit_TimeAtPericenter         = 2445446.868665616959
+orbit_good                     = 12797
+ref                            = JPL Horizons 
+absolute_magnitude             = 0
+slope_parameter                = 4
+\end{configfile}
+
+\noindent The displayed trajectory should start at Voyager~2's encounter with Neptune on August 18, 1989 (JD 2447757.5). 
+The value of \texttt{orbit\_good=} ($2460554.5-2447757.5 = $) \texttt{12797} fulfills this idea. 
+
+\subsubsection{How to check and update moons orbital elements}
+\label{sec:ssystem.ini:MoonsOrbitalElements}
+\sectionauthor*{Stefan Schöfegger}
+
+If not handled by dedicated orbital functions, moons orbiting planets are modelled in Stellarium using Keplerian orbits. While this
+approach is computationally efficient, it does not account for gravitational perturbations
+caused by other planets and the Sun. Over longer time spans these perturbations cause the
+predicted positions to drift noticeably from the true positions, so the orbital elements
+need to be refreshed periodically.
+
+Two Python scripts are provided to support this process. Both scripts require as their first
+argument the path to \texttt{ssystem\_major.ini}.
+
+The scripts require the Python libraries \texttt{requests} and \texttt{matplotlib}, which
+can be installed via:
+\begin{commands}
+pip3 install requests matplotlib
+\end{commands}
+
+\paragraph{Comparing positions against JPL Horizons}
+
+
+\texttt{compare\_ssystem\_major\_JPL.py} queries the JPL Horizons system for reference
+positions and compares them with the positions currently computed by Stellarium. It
+produces a PDF report containing one angular-error plot per object as well as a summary
+on the last pages. In addition, a CSV-formatted summary is printed to the console.
+
+\texttt{compare\_ssystem\_major\_JPL.py} requires a running instance of Stellarium with
+the \textbf{Remote Control Plugin} enabled and active.
+
+For maximum positional accuracy when comparing, the following options can be set in
+Stellarium before running the script:
+\begin{itemize}
+  \item Geocentric coordinates: \textit{Tools:} uncheck \textit{Topocentric coordinates}
+  \item Apparent coordinates (equinox of date)
+  \item TT timescale: \textit{Time:} \textit{Time correction} $\rightarrow$ \textit{Without correction}
+\end{itemize}
+However, for the sole purpose of assessing moon orbital parameters -- for example with a
+maximum allowed error of 2\,arcmin -- these settings are not required.
+
+\begin{commands}
+python3 compare_ssystem_major_JPL.py [options] <file> [object]
+
+positional arguments:
+  file        Path to ssystem_major.ini
+  object      Optional: compare only this named object
+
+options:
+  --years     Time range in years (default: 2)
+  --step      Step size in days (default: 7)
+  --out       Output PDF filename (default: ssystem_compare.pdf)
+  --stellarium  Stellarium base URL (default: http://localhost:8090)
+  --delay     Seconds to wait after setting Stellarium time
+              (default: 0.05)
+  --max-error Warn if maximum angular error exceeds this value in
+              arcminutes
+
+# Examples:
+python3 compare_ssystem_major_JPL.py ./ssystem_major.ini
+python3 compare_ssystem_major_JPL.py ./ssystem_major.ini himalia
+python3 compare_ssystem_major_JPL.py ./ssystem_major.ini --years 1\
+  --out compare.pdf
+\end{commands}
+
+If no object name is given, all objects defined in \texttt{ssystem\_major.ini} are
+evaluated. The \texttt{--max-error} option can be used to flag objects whose maximum
+error exceeds a chosen threshold, making it easy to identify moons that require updated
+elements.
+
+\paragraph{Fetching updated orbital elements from JPL Horizons}
+
+\texttt{fetch\_ssystem\_major.py} retrieves updated orbital elements from JPL Horizons
+and prints a modified version of \texttt{ssystem\_major.ini} to the console. Only the
+orbital parameters are updated; all other entries remain unchanged. The output can be
+reviewed and then manually merged into \texttt{ssystem\_major.ini}.
+
+\begin{commands}
+python3 fetch_ssystem_major.py [options] <file> [object]
+
+positional arguments:
+  file        Path to ssystem_major.ini
+  object      Optional: update only one named object
+
+# Example:
+python3 fetch_ssystem_major.py ./ssystem_major.ini himalia
+\end{commands}
+
+Again, omitting the object name causes all objects in the file to be updated.
+
+Always review the updated elements carefully before committing them. Freshly fetched
+parameters are valid near the current epoch but may not improve long-term accuracy for
+all objects equally.
+
+Note that the newly fetched elements are fitted to the current epoch. Deviations will
+therefore still appear over time, both in the past and in the future, and will be visible
+in a subsequent comparison run. These residual errors should, however, be smaller than
+those produced by the previously stored orbital elements for current time.
+
+\paragraph{Recommended workflow}
+
+\begin{enumerate}
+  \item Run \texttt{compare\_ssystem\_major\_JPL.py} over the full object list and inspect
+        the resulting PDF to identify moons with large angular errors.
+  \item For each problematic moon, run \texttt{fetch\_ssystem\_major.py} with the object
+        name to fetch updated elements from JPL Horizons.
+  \item Run \texttt{compare\_ssystem\_major\_JPL.py} again for the same object to verify
+        that the new elements reduce the error. Comparing the before and after plots
+        provides a clear picture of the improvement.
+  \item Repeat as needed for additional objects.
+\end{enumerate}
+
+
+\subsection{Multiple Epochs for Minor Planets}
+\label{sec:ssystem.ini:MultiEpoch}
+\indexterm[asteroid!multi-epoch ephemeris]{}
+\indexterm[JPL Horizons!multi-epoch script]{}
+ 
+As described in section~\ref{sec:ssystem.ini:minor}, asteroid orbital
+elements in \file{ssystem\_minor.ini} are valid only near their epoch.
+Gravitational perturbations, mainly from Jupiter, cause the elements to
+drift over the years, so positions computed far from the epoch become
+increasingly inaccurate.
+ 
+For those interested in tracking accurate asteroid positions over many
+decades or centuries, an optional extended ephemeris file can be
+provided.  When a file named \file{asteroid\_elements.json} is present
+in the user \file{data/} directory (see
+chapter~\ref{sec:FilesAndDirectories}), Stellarium loads a table of
+orbital snapshots for each asteroid listed in it.  At any simulated
+date, the snapshot nearest in time is selected and used as the basis for
+position computation.  If the file is absent, all asteroids fall back to
+their standard single-epoch orbit from \file{ssystem\_minor.ini}
+without any change in behaviour.
+ 
+Note that an asteroid must already be present in
+\file{ssystem\_minor.ini} for the extended data to take effect.  The
+JSON file provides additional orbital snapshots for existing entries; it
+cannot be used to introduce new asteroids.
+ 
+\subsubsection{Generating the orbital elements file}
+\label{sec:ssystem.ini:MultiEpoch:Script}
+ 
+A Python script, \file{fetch\_asteroid\_elements.py}, is provided in
+the \file{util/} folder of the installation directory.  It queries the
+\indexterm{JPL Horizons} web service for osculating orbital elements at
+regular intervals across a chosen time window and writes the results to
+\file{asteroid\_ephemeris.json}.  Python~3 and the \texttt{requests}
+library (\texttt{pip install requests}) are required.
+ 
+The script is run from the command line.  Without any arguments it
+fetches the first 500 numbered asteroids at 6-month intervals across a
+200-year window centred on 2026, which produces a file of approximately
+52\,MB in around 20 minutes:
+ 
+\begin{commands}
+python3 fetch_asteroid_elements.py
+\end{commands}
+ 
+\noindent If the run is interrupted it can be resumed without losing
+progress; the script saves its output every ten asteroids and skips
+entries that are already present in the output file:
+ 
+\begin{commands}
+python3 fetch_asteroid_elements.py --start-at 247
+\end{commands}
+ 
+\noindent The time window, epoch density, and target asteroids can all
+be controlled with command-line options.  The most useful ones are
+listed below.
+ 
+\begin{description}
+\item[\texttt{--count} \textit{N}] Fetch the first \textit{N}
+  consecutively numbered asteroids, starting from~1 (or from
+  \texttt{--start-at}).  Default: \texttt{500}.
+ 
+\item[\texttt{--numbers} \textit{N,N,...}] Fetch a specific,
+  comma-separated list of asteroid numbers instead of a sequential
+  range.  Useful for targeting a particular set of objects, such as the
+  343 asteroids used in the JPL DE431 planetary ephemeris.  Overrides
+  \texttt{--count} and \texttt{--start-at}.  Example:
+  \texttt{--numbers 1,2,3,4,433}.
+ 
+\item[\texttt{--span} \textit{YEARS}] Total width of the time window in
+  years, centred on \texttt{--center}.  Default: \texttt{200}.
+ 
+\item[\texttt{--center} \textit{YEAR}] Midpoint year of the time
+  window.  Fractional years are accepted.  Shifting the centre toward
+  the past improves coverage of historical events; shifting it toward
+  the future is better for long-range planning.  Default: \texttt{2026}.
+ 
+\item[\texttt{--epochs} \textit{N}] Number of orbital snapshots per
+  asteroid spread evenly across the time window.  More snapshots give
+  smoother and more accurate positions when the simulation date is far
+  from the nearest snapshot, at the cost of a larger file and a longer
+  download.  Together with \texttt{--span} this determines the interval
+  between snapshots: $\mathit{interval} = \mathit{span} /
+  (\mathit{epochs} - 1)$.  Default: \texttt{400}
+  (${\approx}$6-month intervals over 200 years).
+ 
+\item[\texttt{--out} \textit{FILE}] Output filename.  Default:
+  \texttt{asteroid\_elements.json}.
+ 
+\item[\texttt{--delay} \textit{SECS}] Pause between consecutive
+  Horizons requests, in seconds.  Increase this value if the server
+  returns rate-limit errors.  Default: \texttt{0.6}.
+\end{description}
+ 
+\noindent JPL Horizons caps the number of requested dates per query at
+80.  The script splits larger epoch lists into batches of~80
+automatically, so any value of \texttt{--epochs} is supported.
+ 
+\paragraph{Examples}
+ 
+Fetch the five historically significant early-discovered asteroids and
+Eros with 6-month intervals spanning the years 1800--2100:
+\begin{commands}
+python3 fetch_asteroid_elements.py \
+    --numbers 1,2,3,4,433 \
+    --epochs 600 --span 300 --center 1950
+\end{commands}
+ 
+\noindent Fetch 1000 asteroids at yearly intervals over 200 years,
+saving to a custom filename:
+\begin{commands}
+python3 fetch_asteroid_elements.py \
+    --count 1000 --epochs 200 --out my_ephemeris.json
+\end{commands}
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-PDF-mode: t
+%%% TeX-master: "guide"
+%%% End: 
+

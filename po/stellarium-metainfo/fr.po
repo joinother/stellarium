@@ -1,0 +1,100 @@
+# Translators:
+# cardinot <mcardinot@gmail.com>, 2022
+# Nicolas Martignoni, 2025
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: 2026-04-05 19:12+0700\n"
+"PO-Revision-Date: 2022-10-21 17:42+0000\n"
+"Last-Translator: Nicolas Martignoni, 2025\n"
+"Language-Team: French (https://app.transifex.com/stellarium/teams/80998/fr/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fr\n"
+"Plural-Forms: nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
+
+#. (itstool) path: component/name
+#: org.stellarium.Stellarium.appdata.xml:8
+msgid "Stellarium"
+msgstr "Stellarium"
+
+#. (itstool) path: component/summary
+#: org.stellarium.Stellarium.appdata.xml:9
+msgid "Desktop Planetarium"
+msgstr "Planétarium de bureau"
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:11
+msgid ""
+"Stellarium renders 3D photo-realistic skies in real time with OpenGL. It "
+"displays stars, constellations, planets and nebulae, and has many other "
+"features including multiple panoramic landscapes, fog, light pollution "
+"simulation and a built-in scripting engine."
+msgstr ""
+"Stellarium présente le ciel en temps réel et en 3D de manière photoréaliste "
+"au moyen de OpenGL. Il permet d'afficher les étoiles, les constellations, "
+"les planètes et les nébuleuses. De nombreuses autres fonctionnalités sont "
+"disponibles, parmi lesquels l'utilisation de nombreux paysages panoramiques,"
+" la simulation du brouillard et de la pollution lumineuse. Un moteur de "
+"scripts est également proposé."
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:12
+msgid ""
+"Stellarium comes with a star catalogue of about 600 thousand stars and it is"
+" possible to download extra catalogues with up to 220 million stars."
+msgstr ""
+"Stellarium est livré avec un catalogue d'environ 600 milliers étoiles. Des "
+"catalogues supplémentaires comportant jusqu'à 220 millions d'étoiles peuvent"
+" être téléchargés."
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:13
+msgid ""
+"Stellarium has multiple sky cultures - see the constellations from the "
+"traditions of Polynesian, Inuit, Navajo, Korean, Greek and Chinese "
+"astronomers, as well as the traditional Western or official modern "
+"constellations."
+msgstr ""
+"Stellarium propose l'affichage de constellations de plusieurs cultures, "
+"issues des traditions d'astronomes de Polynésie, Inuit, Navajo, de Corée, "
+"Lakota, Grecs et de Chine, ainsi que les constellations traditionnelles de "
+"la culture occidentale et les constellations modernes officielles."
+
+#. (itstool) path: description/p
+#: org.stellarium.Stellarium.appdata.xml:14
+msgid ""
+"It is also possible to visit other planets in the solar system - see what "
+"the sky looked like to the Apollo astronauts, or what the rings of Saturn "
+"looks like from Titan."
+msgstr ""
+"Il est également possible de visiter d'autres corps célestes du système "
+"solaire, par exemple pour voir le ciel comme les astronautes du programme "
+"Apollo ou observer les anneaux de Saturne depuis Titan."
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:17
+msgid "astronomy"
+msgstr "astronomie"
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:18
+msgid "planetarium"
+msgstr "planétarium"
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:19
+msgid "sky"
+msgstr "ciel"
+
+#. (itstool) path: keywords/keyword
+#: org.stellarium.Stellarium.appdata.xml:20
+msgid "universe"
+msgstr "univers"
+
+#. (itstool) path: component/developer_name
+#: org.stellarium.Stellarium.appdata.xml:144
+msgid "Stellarium team"
+msgstr "Équipe Stellarium"

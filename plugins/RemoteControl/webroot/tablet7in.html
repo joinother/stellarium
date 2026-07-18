@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <!-- Apply "Responsive design" -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title><?= tr("Stellarium remote control plugin")?></title>
+  <link type="text/css" rel="stylesheet" href="/external/jquery-ui.css"/>
+  <link type="text/css" rel="stylesheet" href="style.css" />
+  <link type="text/css" rel="stylesheet" href="style_tablet7in.css" />
+	<link type="text/css" rel="stylesheet" href="gamepad.css" />
+  <!-- Stellarium uses require.js to provide a controlled module environment -->
+  <script data-main="js/main" src="js/require.js" type="text/javascript"></script>
+</head>
+<body>
+  <!-- initial loading overlay -->
+  <div id="loadoverlay" class="ui-widget-overlay">
+    <div class="loadwrapper">
+      <div class="loadinner textcenter">
+        <img src="images/stellariumlarge.png" alt="Stellarium logo" class="display-block margin-auto"/>
+        <div class="margin-auto"><?= tr("Please wait, loading")?></div>
+        <noscript><p class="ui-state-error">This remote control requires JavaScript and a reasonably modern browser.<br/>For further information, here are <a href="http://www.enable-javascript.com/" target="_blank">
+         instructions how to enable JavaScript in your web browser</a></p></noscript>
+       </div>
+     </div>
+   </div>
+   <div id="wrapper" class="ui-corner-all ui-widget-content">
+    <header>
+      <img src="images/stellarium.png" alt="Stellarium logo"/>
+      <h1><?= tr("Stellarium remote control")?></h1>
+    </header>
+    <div id="tabs">
+      <ul>
+        <li><a href="#tab_main"><?= tr("Main controls")?></a></li>
+        <li><a href="#tab_timejump"><?= tr("Time Jump")?></a></li>
+        <li><a href="#tab_selection"><?= tr("Selection")?></a></li>
+        <li><a href="#tab_view_stars"><?= tr("Stars")?></a></li>
+        <li><a href="#tab_view_planets"><?= tr("Planets")?></a></li>
+        <li><a href="#tab_view_atm"><?= tr("Atmosphere")?></a></li>
+        <li><a href="#tab_view_grids"><?= tr("Grids")?></a></li>
+        <li><a href="#tab_dso"><?= tr("DSO")?></a></li>
+        <li><a href="#tab_landscape"><?= tr("Landscape")?></a></li>
+        <li><a href="#tab_skyculture"><?= tr("Sky Culture")?></a></li>
+				<li><a href="#tab_skyculture_stats"><?= tr("Statistics & Analysis")?></a></li>
+        <li><a href="#tab_actions"><?= tr("Actions")?></a></li>
+        <li><a href="#tab_scripts"><?= tr("Scripts")?></a></li>
+        <li><a href="#tab_location"><?= tr("Location")?></a></li>
+        <li><a href="#tab_projection"><?= tr("Projection")?></a></li>
+        <li class="stelplugin" data-plugin="Scenery3d"><a href="#tab_scenery3d"><?= tr("Scenery3d")?></a></li>
+				<li><a href="#tab_gamepad"><?= tr("Gamepad Controller")?></a></li>
+      </ul>
+      <div id="tab_main">
+        <div class="flex">
+          <!-- part of ui/time.js -->
+          <section id="time" class="block flex-noshrink">
+            <header><h2><?= tr("Time")?></h2></header>
+            <div id="timewidget">
+              <ul>
+                <li><a href="#time_local"><?= tr("Date and Time")?></a></li>
+                <li><a href="#time_jday"><?= tr("Julian Day")?></a></li>
+              </ul>
+              <!-- GZ attribute readonly prevents the tablet virtual keyboard from coming up! We just need it for the year... -->
+              <div id="time_local" class="timetab">
+                <p class="timedisplay">
+                  <input id="date_year" class="spinner" data-type="date" data-field="year" data-min="-100000" data-max="100000"/>
+                  -
+                  <input id="date_month" class="spinner" data-type="date" data-field="month" data-min="0" data-max="13" readonly="readonly"/>
+                  -
+                  <input id="date_day" class="spinner" data-type="date" data-field="day" data-min="0" data-max="32" readonly="readonly"/>
+                </p>
+                <p class="timedisplay">
+                  <input id="time_hour" class="spinner" data-type="time" data-field="hour" data-min="-1" data-max="24" readonly="readonly"/>
+                  :
+                  <input id="time_minute" class="spinner" data-type="time" data-field="minute" data-min="-1" data-max="60" readonly="readonly"/>
+                  :
+                  <input id="time_second" class="spinner" data-type="time" data-field="second" data-min="-1" data-max="60" readonly="readonly"/>
+                </p>
+              </div>
+              <div id="time_jday" class="timetab">
+                <div>
+                  <p class="timedisplay"><label for="input_jd">JD: </label><input id="input_jd" class="spinner" data-min="-100000000" data-max="100000000" data-step="0.00001"/></p>
+                  <p class="timedisplay"><label for="input_mjd">MJD: </label><input id="input_mjd" class="spinner" data-min="-100000000" data-max="100000000" data-step="0.00001"/></p>
+                </div>
+              </div>
+            </div>
+            <p class="textcenter">&Delta;T = <span id="deltat"></span></p>
+            <div id="mainbuttons">
+              <ul id="timecontrols" class="ui-corner-all ui-widget-content button32list">
+                <li title="Decrease time speed"><button id="bt_timerewind" class="icon32 btTimeRewind"></button></li><li title="Pause"><button id="bt_timeplaypause" class="icon32 btTimeRealtime"></button></li><li title="Set time to now"><button id="bt_timenow" class="icon32 btTimeNow"></button></li><li title="Increase time speed"><button id="bt_timeforward" class="icon32 btTimeForward"></button></li>
+              </ul>
+            </div>
+          </section>
+
+          <!-- part of ui/viewcontrol.js -->
+          <section id="view" class="block textcenter">
+            <header><h2><?= tr("View")?></h2></header>
+			<div class="joystickcontainer inline-block">
+                <div class="joystick" data-joyurl="/api/main/move" data-joymax="5"></div>
+            </div>
+			<!-- OLD VERSION -->
+            <!--div id="view_controls" class="ui-corner-all ui-widget-content">
+              <div id="view_upleft" class="joybutton"><?= tr("Up/Left")?></div><div id="view_up" class="joybutton"><?= tr("Up")?></div><div id="view_upright" class="joybutton"><?= tr("Up/Right")?></div><div id="view_left" class="joybutton"><?= tr("Left")?></div><div id="view_center" class="joybutton" title='<?= tr("Focus on selected object")?>'><?= tr("Focus on selection")?></div><div id="view_right" class="joybutton"><?= tr("Right")?></div><div id="view_downleft" class="joybutton"><?= tr("Down/Left")?></div><div id="view_down" class="joybutton"><?= tr("Down")?></div><div id="view_downright" class="joybutton"><?= tr("Down/Right")?></div>
+            </div-->
+            <div class="flex">
+        	<section class="block flex flex-column">
+        	 <header><h2><?= tr("View towards horizon at Azimuth")?></h2></header>
+             <div><table><tr>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 0., 3.)">0&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 30., 3.)">30&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 60., 3.)">60&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 90., 3.)">90&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 120., 3.)">120&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 150., 3.)">150&deg;</button></td></tr><tr>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 180., 3.)">180&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 210., 3.)">210&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 240., 3.)">240&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 270., 3.)">270&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 300., 3.)">300&deg;</button></td>
+                 <td><button type="button" class="stelssc" value="core.moveToAltAzi(0., 330., 3.)">330&deg;</button></td></tr>
+                 </table>
+            </div>
+           </section>
+           </div>
+
+             <div class="flex-expand">
+             <!-- It would be more intuitive to have this slider in vertical orientation.  -->
+             <div id="view_offset" class="slider stelproperty flex-expand" data-prop="StelMovementMgr.viewportVerticalOffsetTarget" data-min="-50" data-max="50" data-step="1"></div>
+             <?= tr("Vertical View offset")?>: <span class="stelproperty" style="margin-left: 5px; min-width: 48px;" data-prop="StelMovementMgr.viewportVerticalOffsetTarget" data-numberformat="n0"></span>
+             <!-- GZ Add a few buttons with defined values to set here -->
+             <table><tr>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,-50., 3.)">-50%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,-40., 3.)">-40%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,-30., 3.)">-30%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,-20., 3.)">-20%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,-10., 3.)">-10%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,0., 3.)">0%</button></td>
+             <td><button type="button" class="stelssc" value="StelMovementMgr.moveViewport(0.,20., 3.)">20%</button></td>
+             <!--button type="button" class="stelproperty" title='<?= tr("Reset")?>' name="StelMovementMgr.viewportVerticalOffsetTarget" value="0"><?= tr("Reset")?></button-->
+             </tr></table>
+            </div>
+            <div id="view_wrapper">
+              <div id="view_fov"></div>
+              <p title='<?= tr("Field of view")?>'><?= tr("FOV")?>: <span id="view_fov_text"></span></p>
+
+              <div id="view_fovbuttons" class="ui-corner-all ui-widget-content">
+              <table>
+               <tr><!-- as a matter of taste: fovbutton is faster, but required special operation. stelssc can be configured more elegantly, but may be blocked during script execution!
+                <td><button type="button" class="fovbutton" value="0.1">0.1&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="1">1&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="5">5&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="10">10&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="20">20&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="30">30&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(40, 3)">40&deg;</button></td></tr><tr>
+                <td><button type="button" class="fovbutton" value="50">50&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="60">60&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="90">90&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="120">120&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="150">150&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="180">180&deg;</button></td>
+                <td><button type="button" class="fovbutton" value="230">230&deg;</button></td> -->
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(0.1,3)">0.1&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(1,3)">1&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(5,3)">5&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(10,3)">10&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(20,3)">20&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(30,3)">30&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(40,3)">40&deg;</button></td></tr><tr>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(50,3)">50&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(60,3)">60&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(90,3)">90&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(120,3)">120&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(150,3)">150&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(180,3)">180&deg;</button></td>
+                <td><button type="button" class="stelssc" value="StelMovementMgr.zoomTo(230,4)">230&deg;</button></td>
+               </tr>
+              </table>
+              </div>
+              <p><?= tr("Projection")?>: <span class="stelproperty" data-prop="StelCore.currentProjectionNameI18n"></span></p>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div id="tab_timejump">
+        <div class="flex">
+          <!-- part of ui/time.js -->
+          <section id="timejump" class="block">
+            <header><h2><?= tr("Time jumps")?></h2></header>
+            <div id="timejumplist">
+              <!-- buttons get created using JS code -->
+              <ul>
+                <li data-next="actionAdd_Solar_Hour" data-prev="actionSubtract_Solar_Hour"><?= tr("Solar hour")?></li>
+                <li data-next="actionAdd_Solar_Day" data-prev="actionSubtract_Solar_Day"><?= tr("Solar day")?></li>
+                <li data-next="actionAdd_Solar_Week" data-prev="actionSubtract_Solar_Week"><?= tr("Solar week")?></li>
+
+                <li data-next="actionAdd_Calendar_Year"    data-prev="actionSubtract_Calendar_Year">   <?= tr("Calendar year")?></li>
+                <li data-next="actionAdd_Calendar_Decade"  data-prev="actionSubtract_Calendar_Decade"> <?= tr("10 Calendar years")?></li>
+                <li data-next="actionAdd_Calendar_Century" data-prev="actionSubtract_Calendar_Century"><?= tr("100 Calendar years")?></li>
+
+                <li data-next="actionAdd_Sidereal_Day" data-prev="actionSubtract_Sidereal_Day"><?= tr("Sidereal day")?></li>
+                <li data-next="actionAdd_Sidereal_Year" data-prev="actionSubtract_Sidereal_Year"><?= tr("Sidereal year")?></li>
+                <li data-next="actionAdd_Sidereal_Century" data-prev="actionSubtract_Sidereal_Century"><?= tr("Sidereal century")?></li>
+
+                <li data-next="actionAdd_Synodic_Month" data-prev="actionSubtract_Synodic_Month"><?= tr("Synodic month")?></li>
+                <li data-next="actionAdd_Draconic_Month" data-prev="actionSubtract_Draconic_Month"><?= tr("Draconic month")?></li>
+                <li data-next="actionAdd_Draconic_Year" data-prev="actionSubtract_Draconic_Year"><?= tr("Draconic year")?></li>
+              </ul>
+              <ul>
+                <li data-next="actionAdd_Anomalistic_Month" data-prev="actionSubtract_Anomalistic_Month"><?= tr("Anomalistic month")?></li>
+                <li data-next="actionAdd_Anomalistic_Year" data-prev="actionSubtract_Anomalistic_Year"><?= tr("Anomalistic year")?></li>
+                <li data-next="actionAdd_Anomalistic_Century" data-prev="actionSubtract_Anomalistic_Century"><?= tr("Anomalistic century")?></li>
+
+                <li data-next="actionAdd_Mean_Tropical_Month" data-prev="actionSubtract_Mean_Tropical_Month"><?= tr("Mean tropical month")?></li>
+                <li data-next="actionAdd_Mean_Tropical_Year" data-prev="actionSubtract_Mean_Tropical_Year"><?= tr("Mean tropical year")?></li>
+                <li data-next="actionAdd_Mean_Tropical_Century" data-prev="actionSubtract_Mean_Tropical_Century"><?= tr("Mean tropical century")?></li>
+
+                <li data-next="actionAdd_Tropical_Year" data-prev="actionSubtract_Tropical_Year"><?= tr("Tropical year")?></li>
+                <li data-next="actionAdd_Julian_Year" data-prev="actionSubtract_Julian_Year"><?= tr("Julian year")?></li>
+                <li data-next="actionAdd_Julian_Century" data-prev="actionSubtract_Julian_Century"><?= tr("Julian century")?></li>
+
+                <li data-next="actionAdd_Gaussian_Year" data-prev="actionSubtract_Gaussian_Year"><?= tr("Gaussian year")?></li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div id="tab_selection">
+        <div class="flex flex-wrap">
+          <!-- part of ui/search.js -->
+          <section id="search" class="block">
+            <header><h2><?= tr("Search")?></h2></header>
+            <div id="srch_tabs">
+              <ul>
+                <li><a href="#srch_tab_object"><?= tr("Object")?></a></li>
+                <li><a href="#srch_tab_list"><?= tr("Lists")?></a></li>
+              </ul>
+              <div id="srch_tab_object">
+                <form class="flex">
+                  <input id="srch_input" class="flex-expand" type="text" placeholder='<?= tr("Enter search term. Use TAB to navigate results.")?>' autocomplete="off"/>
+                  <button id="srch_button" type="submit"><?= tr("Select and focus")?></button>
+                </form>
+                <div>
+                  <div id="srch_results"></div>
+                </div>
+                <p id="srch_simbad_text">Simbad: <span id="srch_simbad"><?= tr("idle")?></span>
+                </p>
+                <div id="srch_greek">
+                  <div>
+                    <button>&alpha;</button><button>&beta;</button><button>&gamma;</button><button>&delta;</button><button>&epsilon;</button><button>&zeta;</button><button>&eta;</button><button>&theta;</button>
+                  </div>
+                  <div>
+                    <button>&iota;</button><button>&kappa;</button><button>&lambda;</button><button>&mu;</button><button>&nu;</button><button>&xi;</button><button>&omicron;</button><button>&pi;</button>
+                  </div>
+                  <div>
+                    <button>&rho;</button><button>&sigma;</button><button>&tau;</button><button>&upsilon;</button><button>&phi;</button><button>&chi;</button><button>&psi;</button><button>&omega;</button>
+                  </div>
+                </div>
+              </div>
+              <div id="srch_tab_list">
+                <div class="flex flex-column" style="height: 100%">
+                  <div class="flex">
+                    <select id="srch_list_objecttype" class="flex-expand"></select>
+                    <input id="srch_list_english" type="checkbox" /><label for="srch_list_english"><?= tr("names in English")?></label>
+                  </div>
+                  <select id="srch_list_objectlist" class="scrollselect flex-expand" size="10"></select>
+                </div>
+                <div id="srch_button">
+                  <button value=""><?= tr("Select current item")?></button>
+                </div>
+              </div>
+            </div>
+            <p><label class="bold"><?= tr("Selection mode")?><select id="select_SelectionMode" class="selectmenu inline-block valign-middle"><option value="center"><?= tr("Center on object")?></option><option value="zoom"><?= tr("Center and zoom to object")?></option><option value="mark"><?= tr("Just mark the object")?></option></select></label></p>
+            <div id="quickselect">
+              <h2><?= tr("Quick select")?></h2>
+              <ul class="ui-corner-all ui-widget-content buttonlist">
+                <!-- to add a new quick select button, simply add a new button with the english name of the object as value -->
+                <!-- try not to add whitespace between li items (inline-block layout ugliness) -->
+                <li><button title='<?= tr("Sun")?>' value="Sun">&#x2609;</button></li><li><button title='<?= tr("Mercury")?>' value="Mercury">&#x263F;</button></li><li><button title='<?= tr("Venus")?>' value="Venus">&#x2640;</button></li><li><button title='<?= tr("Earth")?>' value="Earth">&#x2641;</button></li><li><button title='<?= tr("Moon")?>' value="Moon">&#x263D;</button></li><li><button title='<?= tr("Mars")?>' value="Mars">&#x2642;</button></li><li><button title='<?= tr("Jupiter")?>' value="Jupiter">&#x2643;</button></li><li><button title='<?= tr("Saturn")?>' value="Saturn">&#x2644;</button></li><li><button title='<?= tr("Uranus")?>' value="Uranus">&#x2645;</button></li><li><button title='<?= tr("Neptune")?>' value="Neptune">&#x2646;</button></li><li><button title='<?= tr("Pluto")?>' value="Pluto">&#x2647;</button></li><br/>
+                <li><button title='<?= tr("Sirius")?>' value="Sirius">Sirius</button></li>
+                <li><button title='<?= tr("Arcturus")?>' value="Arcturus">Arctur</button></li>
+                <li><button title='<?= tr("Capella")?>' value="Capella">Capella</button></li>
+                <li><button title='<?= tr("Vega")?>' value="Vega">Vega</button></li>
+                <li><button title='<?= tr("Deneb")?>' value="Deneb">Deneb</button></li>
+                <li><button title='<?= tr("Altair")?>' value="Altair">Altair</button></li>
+                <li><button title='<?= tr("Andromeda Galaxy")?>' value="M31">M31</button></li>
+                <li><button title='<?= tr("Hercules Cluster")?>' value="M13">M13</button></li>
+                <li><button title='<?= tr("Orion Nebula")?>' value="M42">M42</button></li>
+                <li><button title='<?= tr("Eta Carinae Nebula")?>' value="C92">&eta;Car</button></li>
+                <li><button title='<?= tr("47 Tucanae Cluster")?>' value="47 Tuc">47 Tuc</button></li>
+                <li><button title='<?= tr("Aries")?>' value="Aries">Ari</button></li>
+                <li><button title='<?= tr("Taurus")?>' value="Taurus">Tau</button></li>
+                <li><button title='<?= tr("Gemini")?>' value="Gemini">Gem</button></li>
+                <li><button title='<?= tr("Cancer")?>' value="Cancer">Cnc</button></li>
+                <li><button title='<?= tr("Leo")?>' value="Leo">Leo</button></li>
+                <li><button title='<?= tr("Virgo")?>' value="Virgo">Vir</button></li>
+                <li><button title='<?= tr("Libra")?>' value="Libra">Lib</button></li>
+                <li><button title='<?= tr("Scorpius")?>' value="Scorpius">Sco</button></li>
+                <li><button title='<?= tr("Sagittarius")?>' value="Sagittarius">Sgr</button></li>
+                <li><button title='<?= tr("Capricornus")?>' value="Capricornus">Cap</button></li>
+                <li><button title='<?= tr("Aquarius")?>' value="Aquarius">Aqr</button></li>
+                <li><button title='<?= tr("Pisces")?>' value="Pisces">Psc</button></li>
+              </ul>
+            </div>
+          </section>
+          <!-- part of ui/mainui.js -->
+          <section id="selection" class="block flex-expand">
+            <header><h2><?= tr("Current selection")?></h2><button id="select_clearButton" class="jquerybutton" style="margin-left: 10px;" value=""><?= tr("Clear selection")?></button></header>
+            <span id="sel_infostring"></span>
+          </section>
+        </div>
+      </div>
+      <!-- handled by ui/viewoptions.js -->
+      <div id="tab_view_stars">
+        <div class="flex flex-wrap">
+          <div id="vo_stars" class="smallblock blocklabel">
+            <h3><input class="stelaction" name="actionShow_Stars" type="checkbox"/><?= tr("Stars")?></h3>
+			  <table>
+              <tr><td><label for="stars_absoluteScale"><?= tr("Absolute scale:")?></label></td>
+			      <td><span class="stelproperty" data-prop="StelSkyDrawer.absoluteStarScale" data-numberformat="n1"></span></td>
+				  <td><div id="stars_absoluteScale" class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.absoluteStarScale" data-min="0" data-max="9" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td><label for="stars_relativeScale"><?= tr("Relative scale:")?></label></td>
+			      <td><span class="stelproperty" data-prop="StelSkyDrawer.relativeStarScale" data-numberformat="n1"></span></td>
+				  <td><div id="stars_relativeScale" class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.relativeStarScale" data-min="0.25" data-max="5" data-step="0.05" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td><label><input class="stelproperty" name="StelSkyDrawer.flagStarTwinkle" type="checkbox"/><?= tr("Twinkle:")?></label></td>
+			      <td><span class="stelproperty" data-prop="StelSkyDrawer.twinkleAmount" data-numberformat="n1"></span></td>
+				  <td><div class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.twinkleAmount" data-min="0" data-max="1.5" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td><label><input class="stelproperty" name="StelSkyDrawer.flagStarMagnitudeLimit" type="checkbox"/><?= tr("Limit magnitude:")?></label></td>
+			      <td><span class="stelproperty" data-prop="StelSkyDrawer.customStarMagLimit" data-numberformat="n1"></span></td>
+				  <td><div class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.customStarMagLimit" data-min="0" data-max="21" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+			  <tr><td><label><input class="stelproperty" name="StelSkyDrawer.flagStarSpiky" type="checkbox"/><?= tr("Spiky stars")?></label></td></tr>
+              <tr><td><label for="stars_milkywayintensity"><input class="stelproperty" name="MilkyWay.flagMilkyWayDisplayed" type="checkbox"/><?= tr("Milky Way brightness:")?></label></td>
+			      <td><span class="stelproperty" data-prop="MilkyWay.intensity" data-numberformat="n1"></span></td>
+				  <td><div id="stars_milkywayintensity" class="slider stelproperty flex-expand" data-prop="MilkyWay.intensity" data-min="0" data-max="10" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td><label for="stars_milkywaysaturation"><?= tr("Milky Way saturation:")?></td>
+			      <td><span class="stelproperty" data-prop="MilkyWay.saturation" data-numberformat="n1"></span></td>
+				  <td><div id="stars_milkywaysaturation" class="slider stelproperty flex-expand" data-prop="MilkyWay.saturation" data-min="0" data-max="1" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td><label for="stars_zodiacintensity"><input class="stelproperty" name="ZodiacalLight.flagZodiacalLightDisplayed" type="checkbox"/><?= tr("Zodiacal Light brightness:")?></label></td>
+			      <td><span class="stelproperty" data-prop="ZodiacalLight.intensity" data-numberformat="n1"></span></td>
+				  <td><div id="stars_zodiacintensity" class="slider stelproperty flex-expand" data-prop="ZodiacalLight.intensity" data-min="0" data-max="10" data-step="0.1" data-numberformat="n2"></div></td>
+			  </tr>
+              <tr><td colspan="3"><label><input class="stelproperty" name="StelSkyDrawer.flagLuminanceAdaptation" type="checkbox"/><?= tr("Dynamic eye adaptation")?></label></td></tr>
+              <tr><td colspan="2"><label><input type="checkbox" class="stelproperty" name="StarMgr.flagLabelsDisplayed"/><?= tr("Labels and Markers")?></label></td>
+			       <td><div class="slider stelproperty flex-expand" data-prop="StarMgr.labelsAmount" data-min="0" data-max="10" data-step="0.1"></div></td>
+			  </tr>
+			  
+              <tr><td colspan="3"><label><input class="stelproperty" name="StarMgr.flagAdditionalNamesDisplayed" type="checkbox"/><?= tr("Show additional star names")?></label></td></tr>
+              <tr><td colspan="3"><label><input class="stelproperty" name="StarMgr.flagDesignationLabels" type="checkbox"/><?= tr("Use designations for screen labels")?></label></td></tr>
+              <tr><td><label><input class="stelproperty" name="StarMgr.flagDblStarsDesignation" type="checkbox"/><?= tr("Dbl. stars")?></label></td>
+                  <td><label><input class="stelproperty" name="StarMgr.flagVarStarsDesignation" type="checkbox"/><?= tr("Var. stars")?></label></td>
+                  <td><label><input class="stelproperty" name="StarMgr.flagHIPDesignation" type="checkbox"/><?= tr("HIP")?></label></td></tr>
+
+			  
+			  
+			  <tr><td colspan="3"><label><input class="stelproperty" name="ToastMgr.surveyDisplayed" type="checkbox"/><?= tr("Digitized Sky Survey")?></label></td></tr>
+			  <tr><td colspan="3"><label><input class="stelproperty" name="HipsMgr.flagShow" type="checkbox"/><?= tr("HiPS Survey")?></label></td></tr>
+
+			  </table>
+            <div class="stelplugin" data-plugin="NavStars">
+                   <label><input type="checkbox" class="stelaction" name="actionShow_NavStars"/><?= tr("Navigational Stars")?></label>
+            </div>
+            <div class="stelplugin" data-plugin="ExoPlanets">
+                   <label><input type="checkbox" class="stelaction" name="actionShow_Exoplanets"/><?= tr("Exoplanets")?></label>
+            </div>
+			
+			<label><input class="stelproperty" name="StelCore.flagUseTopocentricCoordinates" type="checkbox"/><?= tr("Topocentric coordinates")?></label>
+			<label><input class="stelproperty" name="StelCore.flagUseNutation" type="checkbox"/><?= tr("Include nutation")?></label>
+			<div class="flex flex-baseline">
+			   <label><input class="stelproperty" name="StelCore.flagUseParallax" type="checkbox"/><?= tr("Include parallax")?></label>&nbsp;
+			   <span class="stelproperty" data-prop="StelCore.parallaxFactor" data-numberformat="n0"></span>
+			   <div class="slider stelproperty flex-expand" data-prop="StelCore.parallaxFactor" data-min="1" data-max="100000" data-step="1"></div>
+			</div>
+			<div class="flex flex-baseline">
+			   <label><input class="stelproperty" name="StelCore.flagUseAberration" type="checkbox"/><?= tr("Include aberration")?></label>&nbsp;
+			   <span class="stelproperty" data-prop="StelCore.aberrationFactor" data-numberformat="n1"></span>
+			   <div class="slider stelproperty flex-expand" data-prop="StelCore.aberrationFactor" data-min="0" data-max="5" data-step="0.1"></div>
+			</div>
+
+			
+			
+          </div>
+        </div>
+      </div>
+      <div id="tab_view_planets">
+        <div class="flex flex-wrap">
+          <div class="smallblock blocklabel">
+            <h3><input type="checkbox" class="stelaction" name="actionShow_Planets" /><?= tr("Solar System objects")?></h3>
+            <label><input type="checkbox" class="stelaction" name="actionShow_Planets_Hints" /><?= tr("Show planet markers")?></label>
+            <label><input type="checkbox" class="stelaction" name="actionShow_Planets_Orbits" /><?= tr("Show planet orbits")?></label>
+			<label><input class="stelproperty" name="SolarSystem.flagPlanetsOrbitsOnly" type="checkbox"/><?= tr("Show planet orbits only")?></label>
+            <label><input class="stelproperty" name="SolarSystem.flagIsolatedOrbits" type="checkbox"/><?= tr("Show orbit for selected planet")?></label>
+            <label><input class="stelproperty" name="SolarSystem.trailsDisplayed" type="checkbox"/><?= tr("Show planet trails")?></label>
+            <label><input class="stelproperty" name="SolarSystem.flagIsolatedTrails" type="checkbox"/><?= tr("Show trail only for selected planet")?></label>
+            <label><input class="stelproperty" name="SolarSystem.flagLightTravelTime" type="checkbox"/><?= tr("Simulate light speed")?></label>
+			
+			<table>
+				<tr><td><label><input class="stelproperty" name="SolarSystem.flagMoonScale" type="checkbox"/><?= tr("Scale Moon:")?></label></td>
+				    <td>x<span class="stelproperty" data-prop="SolarSystem.moonScale" data-numberformat="n1"></span></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="SolarSystem.moonScale" data-min="1" data-max="100" data-step="0.1"></div></td>
+				</tr>
+				<tr><td><label><input class="stelproperty" name="SolarSystem.flagSunScale" type="checkbox"/><?= tr("Scale Sun:")?></label></td>
+				    <td>x<span class="stelproperty" data-prop="SolarSystem.sunScale" data-numberformat="n1"></span></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="SolarSystem.sunScale" data-min="1" data-max="20" data-step="0.5"></div></td>
+				</tr>
+				<tr><td><label><input class="stelproperty" name="SolarSystem.flagPlanetScale" type="checkbox"/><?= tr("Scale Planets:")?></label></td>
+				    <td>x<span class="stelproperty" data-prop="SolarSystem.planetScale" data-numberformat="n0"></span></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="SolarSystem.planetScale" data-min="1" data-max="1000" data-step="1"></div></td>
+				</tr>
+				<tr><td><label><input class="stelproperty" name="SolarSystem.flagMinorBodyScale" type="checkbox"/><?= tr("Scale minor bodies:")?></label></td>
+				    <td>x<span class="stelproperty" data-prop="SolarSystem.minorBodyScale" data-numberformat="n1"></span></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="SolarSystem.minorBodyScale" data-min="1" data-max="1000" data-step="0.5"></div></td>
+				</tr>
+				<tr><td><label><input class="stelproperty" name="StelSkyDrawer.flagPlanetMagnitudeLimit" type="checkbox"/><?= tr("Limit magnitude:")?></label></td>
+				    <td><span class="stelproperty" data-prop="StelSkyDrawer.customPlanetMagLimit" data-numberformat="n1"></span></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.customPlanetMagLimit" data-min="0" data-max="22" data-step="0.1"></div>
+				</tr>
+				<tr><td colspan="2"><label><input type="checkbox" class="stelaction" name="actionShow_Planets_Labels"/><?= tr("Labels and Markers")?></label></td>
+				    <td><div class="slider stelproperty flex-expand" data-prop="SolarSystem.labelsAmount" data-min="0" data-max="10" data-step="0.1"></div></td>
+			</table>
+            <label><input class="stelproperty" name="LandscapeMgr.flagLandscapeAutoSelection" type="checkbox"/><?= tr("Auto-select landscapes")?></label>
+            <label><input class="stelproperty" name="LandscapeMgr.flagEnvironmentAutoEnabling" type="checkbox"/><?= tr("Auto-enable atmosphere")?></label>
+            <label><input class="stelproperty" name="NomenclatureMgr.flagShowNomenclature" type="checkbox"/><?= tr("Show planetary nomenclature")?></label>
+            <label><input class="stelproperty" name="NomenclatureMgr.flagHideLocalNomenclature" type="checkbox"/><?= tr("Hide nomenclature on the celestial body of observer")?></label>
+			<table><tr>
+            <td><label><input class="stelproperty" name="NomenclatureMgr.flagShowTerminatorZoneOnly" type="checkbox"/><?= tr("Only for Solar elevation")?></label></td> 
+			<td><input id="terminator_min" class="spinner stelproperty" name="NomenclatureMgr.terminatorMinAltitude" data-min="-90" data-max="20" data-step="1" data-numberformat="n0"/></td><td>...</td>
+			<td><input id="terminator_max" class="spinner stelproperty" name="NomenclatureMgr.terminatorMaxAltitude" data-min="0" data-max="90" data-step="1" data-numberformat="n0"/></td>
+			</tr></table>
+            <label><input class="stelproperty" name="NomenclatureMgr.specialNomenclatureOnlyDisplayed" type="checkbox"/><?= tr("Show special nomenclature points only")?> </label>
+            <label><input class="stelproperty" name="SolarSystem.flagUseObjModels" type="checkbox"/><?= tr("Use more accurate 3D models (where available)")?></label>
+            <label><input class="stelproperty" name="SolarSystem.flagShowObjSelfShadows" type="checkbox"/><?= tr("Simulate self-shadowing")?></label>
+          </div>
+        </div>
+      </div>
+      <div id="tab_view_atm">
+        <div class="flex flex-wrap">
+          <div class="smallblock">
+            <h3><label><input type="checkbox" class="stelaction valign-middle" name="actionShow_Atmosphere"/><?= tr("Atmosphere")?></label></h3>
+            <label><input type="checkbox" class="stelaction" name="actionShow_LightPollutionFromDatabase" /><?= tr("Light pollution data from locations database")?></label>
+            <div class="table">
+              <label><?= tr("Bortle class:")?> 
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(1)" title='<?= tr("excellent dark-sky site")?>'>1</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(2)" title='<?= tr("typical truly dark site")?>'>2</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(3)" title='<?= tr("rural sky")?>'>3</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(4)" title='<?= tr("rural/suburban transition")?>'>4</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(5)" title='<?= tr("suburban sky")?>'>5</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(6)" title='<?= tr("bright suburban sky")?>'>6</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(7)" title='<?= tr("suburban/urban transition")?>'>7</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(8)" title='<?= tr("city sky")?>'>8</button>
+                 <button type="button" class="stelssc" value="core.setBortleScaleIndex(9)" title='<?= tr("inner-city sky")?>'>9</button>
+              </label>
+            </div>
+            <div id="vo_refraction" class="innerblock">
+              <h3><?= tr("Refraction Settings")?></h3>
+              <table>
+                <tr><td><label for="atmosphere_pressure"><?= tr("Pressure (mbar):")?></label></td><td><input id="atmosphere_pressure" class="spinner stelproperty" name="StelSkyDrawer.atmospherePressure" data-min="0" data-max="1500" data-step="1" data-numberformat="n2" readonly="readonly"/></td></tr>
+                <tr><td><label for="atmosphere_temperature"><?= tr("Temperature (C):")?></label></td><td><input id="atmosphere_temperature" class="spinner stelproperty" name="StelSkyDrawer.atmosphereTemperature" data-min="-100" data-max="100" data-step="1" data-numberformat="n1" readonly="readonly"/></td></tr>
+                <tr><td><label for="atmosphere_extinction"><?= tr("Extinction Coefficient:")?></label></td><td><input id="atmosphere_extinction" class="spinner stelproperty" name="StelSkyDrawer.extinctionCoefficient" data-min="0" data-max="3" data-step="0.01" data-numberformat="n2" readonly="readonly"/></td></tr>
+				<tr><td><label title='<?= tr("Only extinction/refraction, no blue skylight")?>'>
+				               <input type="checkbox" class="stelproperty" name="LandscapeMgr.atmosphereNoScatter"/><?= tr("Suppress scattering")?></label></td></tr>
+              </table>
+
+            </div>
+            <div class="innerblock flex flex-baseline">
+              <h3><?= tr("Shooting Stars")?></h3>
+              <label><?= tr("ZHR:")?></label>
+              <div class="slider stelproperty flex-expand" data-prop="SporadicMeteorMgr.zhr" data-min="0" data-max="240000" data-step="1"></div>
+              <span class="stelproperty" style="margin-left: 5px; min-width: 48px;" data-prop="SporadicMeteorMgr.zhr"></span>
+              <div class="stelplugin" data-plugin="MeteorShowers">
+                   <label><input type="checkbox" class="stelaction" name="actionShow_MeteorShowers"/><?= tr("Meteor Showers")?></label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="tab_view_grids">
+        <div class="flex flex-wrap">
+          <div class="smallblock flex">
+            <h3><input type="checkbox" class="stelaction" name="actionShow_Gridlines" /><?= tr("Celestial Sphere")?></h3>
+            <div id="vo_markers_boxes" class="innerblock">
+              <div class="inline-block blocklabel">
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equatorial_J2000_Grid" /><?= tr("Equatorial grid (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equatorial_Grid" /><?= tr("Equatorial grid (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Fixed_Equatorial_Grid" /><?= tr("Fixed Equatorial grid")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_J2000_Grid" /><?= tr("Ecliptic grid (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_Grid" /><?= tr("Ecliptic grid (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Azimuthal_Grid" /><?= tr("Azimuthal grid")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Galactic_Grid" /><?= tr("Galactic grid")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Supergalactic_Grid" /><?= tr("Supergalactic grid")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equinox_J2000_Points" /><?= tr("Equinoxes (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equinox_Points" /><?= tr("Equinoxes (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Solstice_J2000_Points" /><?= tr("Solstices (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Solstice_Points" /><?= tr("Solstices (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Apex_Points" /><?= tr("Apex points")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Galactic_Center" /><?= tr("Galactic center and anticenter")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Cardinal_Points" /><?= tr("Cardinal points")?>
+				       <input type="checkbox" class="stelaction" name="actionShow_Intercardinal_Points" />8 
+					   <input type="checkbox" class="stelaction" name="actionShow_Secondary_Intercardinal_Points" />16
+					   <input type="checkbox" class="stelaction" name="actionShow_Tertiary_Intercardinal_Points" />32</label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Compass_Marks"/><?= tr("Compass marks")?></label>
+              </div>
+              <div class="inline-block blocklabel">
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equator_J2000_Line" /><?= tr("Equator (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Equator_Line" /><?= tr("Equator (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Fixed_Equator_Line" /><?= tr("Fixed Equator")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_J2000_Line" /><?= tr("Ecliptic (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_Line" /><?= tr("Ecliptic (of date)")?>
+				       <input type="checkbox" class="stelproperty" name="GridLinesMgr.eclipticDatesLabeled" /><?= tr("with Solar Dates")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Horizon_Line" /><?= tr("Horizon")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Galactic_Equator_Line" /><?= tr("Galactic equator")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Supergalactic_Equator_Line" /><?= tr("Supergalactic equator")?></label>
+				<label title='<?= tr("Opposition/conjunction longitude line - the line of ecliptic longitude which passes through both ecliptic poles, the Sun and opposition point.")?>'>
+                       <input type="checkbox" class="stelaction" name="actionShow_Longitude_Line" /><?= tr("O./C. longitude")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Solar_Equator_Line" /><?= tr("Projected Solar Equator")?></label>				
+                <label><input type="checkbox" class="stelaction" name="actionShow_Meridian_Line" /><?= tr("Meridian")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Current_Vertical_Line" /><?= tr("Altitude")?></label>
+                <label title='<?= tr("Show colures (great circles through poles and solstices/equinoxes).")?>'><input type="checkbox" class="stelaction" name="actionShow_Colure_Lines" /><?= tr("Colures")?></label>
+                <label title='<?= tr("Instantaneous circles of earth´s axis on its motion around ecliptical poles. Displayed on Earth only.")?>'>
+                       <input type="checkbox" class="stelaction" name="actionShow_Precession_Circles" /><?= tr("Precession circles")?></label>				
+			    <label title='<?= tr("Show Prime (East-West) Vertical.")?>'><input type="checkbox" class="stelaction" name="actionShow_Prime_Vertical_Line" /><?= tr("Prime Vertical")?></label>
+              </div>
+			  <div class="inline-block blocklabel">
+                <label><input type="checkbox" class="stelaction" name="actionShow_Celestial_J2000_Poles" /><?= tr("Celestial poles (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Celestial_Poles" /><?= tr("Celestial poles (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Circumpolar_Circles" /><?= tr("Circumpolar circles")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_J2000_Poles" /><?= tr("Ecliptic poles (J2000)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Ecliptic_Poles" /><?= tr("Ecliptic poles (of date)")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Zenith_Nadir" /><?= tr("Zenith and Nadir")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Galactic_Poles" /><?= tr("Galactic poles")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Supergalactic_Poles" /><?= tr("Supergalactic poles")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Quadrature_Line" /><?= tr("Quadrature circle")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Antisolar_Point" /><?= tr("Antisolar point")?></label>
+				
+				<label><input type="checkbox" class="stelaction" name="actionShow_Umbra_Circle" /><?= tr("Earth umbra")?>
+				       <input type="checkbox" class="stelaction" name="actionShow_Umbra_Center_Point" /><?= tr("Center")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Penumbra_Circle" /><?= tr("Earth penumbra")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_Invariable_Plane_Line" /><?= tr("Invariable plane of the Solar system")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_FOV_Center_Marker" /><?= tr("Center of FOV")?></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_FOV_Circular_Marker" /><?= tr("Circular FOV")?>
+				       <input id="FOV_circle_diameter" class="spinner stelproperty" name="SpecialMarkersMgr.fovCircularMarkerSize" data-min="0.1" data-max="28" data-step="0.1" data-numberformat="n2"/></label>
+                <label><input type="checkbox" class="stelaction" name="actionShow_FOV_Rectangular_Marker" /><?= tr("Rectangular FOV")?>
+				       <input id="FOV_box_width"  class="spinner stelproperty" name="SpecialMarkersMgr.fovRectangularMarkerWidth" data-min="0.1" data-max="180" data-step="0.1" data-numberformat="n2"/>
+				       <input id="FOV_box_height" class="spinner stelproperty" name="SpecialMarkersMgr.fovRectangularMarkerHeight" data-min="0.1" data-max="180" data-step="0.1" data-numberformat="n2"/>
+				       <input id="FOV_box_angle"  class="spinner stelproperty" name="SpecialMarkersMgr.fovRectangularMarkerRotationAngle" data-min="-90" data-max="90" data-step="1" data-numberformat="n1"/></label>
+
+              </div>
+            </div>
+          </div>
+          <div id="vo_archaeolines" class="smallblock flex stelplugin" data-plugin="ArchaeoLines">
+            <h3><label><input type="checkbox" class="stelproperty valign-middle" name="ArchaeoLines.enabled"/><?= tr("ArchaeoLines")?></label></h3>
+            <div class="inline-block blocklabel">
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowEquinox"/><?= tr("Equinox")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowSolstices"/><?= tr("Solstices")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCrossquarters"/><?= tr("Crossquarters")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowMajorStandstills"/><?= tr("Major Standstill")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowMinorStandstills"/><?= tr("Minor Standstill")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowPolarCircles"/><?= tr("Polar Circles")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowZenithPassage"/><?= tr("Zenith Passage")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowNadirPassage"/><?= tr("Nadir Passage")?></label>
+			  
+			  <label><?= tr("Line width:")?>
+			      <span class="stelproperty" data-prop="ArchaeoLines.lineWidth" data-numberformat="n0"></span>
+				  <!--div class="slider stelproperty flex-expand" data-prop="ArchaeoLines.lineWidth" data-min="1" data-max="8" data-step="1" data-numberformat="n0"></div--></label>
+			  
+            </div>
+            <div class="inline-block blocklabel">
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCurrentSun"/><?= tr("Current Sun")?></label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCurrentMoon"/><?= tr("Current Moon")?></label>
+            <!-- automatic selectmenu generation and stelproperty binding -->
+            <!-- the selectmenu is styled in the css because we can't really add classes here -->
+            <label class="display-block" for="select_ArchaeoLines_enumShowCurrentPlanet"><?= tr("Current Planet:")?></label>
+            <select id="select_ArchaeoLines_enumShowCurrentPlanet" class="selectmenu stelproperty display-block" name="ArchaeoLines.enumShowCurrentPlanet">
+              <option value="0"><?= tr("None")?></option>
+              <option value="1"><?= tr("Mercury")?></option>
+              <option value="2"><?= tr("Venus")?></option>
+              <option value="3"><?= tr("Mars")?></option>
+              <option value="4"><?= tr("Jupiter")?></option>
+              <option value="5"><?= tr("Saturn")?></option>
+            </select>
+			<label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowSelectedObject"/><?= tr("Selected Object")?></label>
+			<label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowSelectedObjectAzimuth"/><?= tr("Selected Object Azimuth")?></label>
+			<label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowSelectedObjectHourAngle"/><?= tr("Selected Object Hour Angle")?></label>
+			<label><br/></label>
+			<label><div class="slider stelproperty flex-expand" data-prop="ArchaeoLines.lineWidth" data-min="1" data-max="8" data-step="1" data-numberformat="n0"></div></label>
+            </div>
+			<div class="inline-block blocklabel">
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowGeographicLocation1"/><?= tr("Geographic Location 1")?> (<span class="stelproperty" data-prop="ArchaeoLines.geographicLocation1Label"></span>)</label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowGeographicLocation2"/><?= tr("Geographic Location 2")?> (<span class="stelproperty" data-prop="ArchaeoLines.geographicLocation2Label"></span>)</label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomAzimuth1"/><?= tr("Custom Azimuth 1")?> (<span class="stelproperty" data-prop="ArchaeoLines.customAzimuth1" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customAzimuth1Label"></span>)</label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomAzimuth2"/><?= tr("Custom Azimuth 2")?> (<span class="stelproperty" data-prop="ArchaeoLines.customAzimuth2" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customAzimuth2Label"></span>)</label>
+                <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomAltitude1"/><?= tr("Custom Altitude 1")?> (<span class="stelproperty" data-prop="ArchaeoLines.customAltitude1" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customAltitude1Label"></span>)</label>
+                <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomAltitude2"/><?= tr("Custom Altitude 2")?> (<span class="stelproperty" data-prop="ArchaeoLines.customAltitude2" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customAltitude2Label"></span>)</label>
+				<label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomDeclination1"/><?= tr("Custom Declination 1")?> (<span class="stelproperty" data-prop="ArchaeoLines.customDeclination1" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customDeclination1Label"></span>)</label>
+              <label><input type="checkbox" class="stelproperty" name="ArchaeoLines.flagShowCustomDeclination2"/><?= tr("Custom Declination 2")?> (<span class="stelproperty" data-prop="ArchaeoLines.customDeclination2" data-numberformat="n1"></span>&deg;=<span class="stelproperty" data-prop="ArchaeoLines.customDeclination2Label"></span>)</label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="tab_dso">
+        <div class="flex flex-wrap">
+          <div id="vo_dsocatalog" class="smallblock">
+            <h3><?= tr("Display objects from catalogs")?></h3>
+            <!-- give the checkboxes the flag values -->
+            <div class="inline-block blocklabel">
+              <label title='<?= tr("Messier Catalogue")?>'>
+                <input type="checkbox" value="0x0004" />M
+              </label>
+              <label title='<?= tr("Index Catalogue of Nebulae and Clusters of Stars")?>'>
+                <input type="checkbox" value="0x0002" />IC
+              </label>
+              <label title='<?= tr("Catalogue of Reflection Nebulae (Van den Bergh, 1966)")?>'>
+                <input type="checkbox" value="0x0200" />VdB
+              </label>
+              <label title="<?= tr("Lynds' Catalogue of Dark Nebulae (Lynds, 1962)")?>">
+                <input type="checkbox" value="0x0080" />LDN
+              </label>
+              <label title='<?= tr("Principal Galaxy Catalog")?>'>
+                <input type="checkbox" value="0x1000" />PGC
+              </label>
+              <label title='<?= tr("Atlas of Peculiar Galaxies (Arp, 1966)")?>'>
+                <input type="checkbox" value="0x8000" />Arp
+              </label>
+              <label title='<?= tr("The Strasbourg-ESO Catalogue of Galactic Planetary Nebulae (Acker+, 1992)")?>'>
+                <input type="checkbox" value="0x40000" />PN G
+              </label>
+              <label title='<?= tr("Hickson Compact Group (Hickson+, 1982)")?>'>
+                <input type="checkbox" value="0x200000" />HCG
+              </label>
+              <label title='<?= tr("Catalogue of southern stars embedded in nebulosity (van den Bergh+, 1975)")?>'>
+                <input type="checkbox" value="0x800000" />VdBH
+              </label>
+            </div>
+            <div class="inline-block blocklabel">
+              <label title='<?= tr("Caldwell Catalogue")?>'>
+                <input type="checkbox" value="0x0008" />C
+              </label>
+              <label title="<?= tr("Barnard's Catalogue of 349 Dark Objects in the Sky (Barnard, 1927)")?>">
+                <input type="checkbox" value="0x0010" />B
+              </label>
+              <label title='<?= tr("A catalogue of Hα-emission regions in the southern Milky Way (Rodgers+, 1960)")?>'>
+                <input type="checkbox" value="0x0100" />RCW
+              </label>
+              <label title='<?= tr("Catalog of Open Galactic Clusters (Collinder, 1931)")?>'>
+                <input type="checkbox" value="0x0400" />Cr
+              </label>
+              <label title='<?= tr("The Uppsala General Catalogue of Galaxies")?>'>
+                <input type="checkbox" value="0x2000" />UGC
+              </label>
+              <label title='<?= tr("The Catalogue of Interacting Galaxies (Vorontsov-Velyaminov+, 2001)")?>'>
+                <input type="checkbox" value="0x10000" />VV
+              </label>
+              <label title='<?= tr("A catalogue of Galactic supernova remnants (Green, 2014)")?>'>
+                <input type="checkbox" value="0x80000" />SNR G
+              </label>
+              <label title='<?= tr("A Catalog of Rich Clusters of Galaxies (Abell+, 1989)")?>'>
+                <input type="checkbox" value="0x100000" />Abell
+              </label>
+              <label title='<?= tr("Catalogue and distances of optically visible H II regions (Dickel+, 1969)")?>'>
+                <input type="checkbox" value="0x1000000" />DWB
+              </label>
+            </div>
+            <div class="inline-block blocklabel">
+              <label title='<?= tr("New General Catalogue of Nebulae and Clusters of Stars")?>'>
+                <input type="checkbox" value="0x0001" />NGC
+              </label>
+              <label title='<?= tr("Catalogue of HII Regions (Sharpless, 1959)")?>'>
+                <input type="checkbox" value="0x0020" />SH 2
+              </label>
+              <label title="<?= tr("Lynds' Catalogue of Bright Nebulae (Lynds, 1965)")?>">
+                <input type="checkbox" value="0x0040" />LBN
+              </label>
+              <label title='<?= tr("A Catalogue of Star Clusters shown on Franklin-Adams Chart Plates (Melotte, 1915)")?>'>
+                <input type="checkbox" value="0x0800" />Mel
+              </label>
+              <label title='<?= tr("Catalog of bright diffuse Galactic nebulae (Cederblad, 1946)")?>'>
+                <input type="checkbox" value="0x4000" />Ced
+              </label>
+              <label title='<?= tr("The Catalogue of Galactic Planetary Nebulae (Kohoutek, 2001)")?>'>
+                <input type="checkbox" value="0x20000" />PK
+              </label>
+              <label title='<?= tr("ESO/Uppsala Survey of the ESO(B) Atlas (Lauberts, 1982)")?>'>
+                <input type="checkbox" value="0x400000" />ESO
+              </label>
+              <label title='<?= tr("ESO/Uppsala Survey of the ESO(B) Atlas (Lauberts, 1982)")?>'>
+                <input type="checkbox" value="0x2000000" /><?= tr("Other")?>
+              </label>
+            </div>
+          </div>
+          <div id="vo_dsotype" class="smallblock">
+            <h3><label><input id="vo_dsotypefiltercheckbox" type="checkbox" class="stelaction valign-middle" name="actionSet_Nebula_TypeFilterUsage"/><?= tr("Filter by type")?></label></h3>
+            <div class="inline-block blocklabel">
+              <label><input type="checkbox" value="0x001"/><?= tr("Galaxies")?></label>
+              <label><input type="checkbox" value="0x002"/><?= tr("Active galaxies")?></label>
+              <label><input type="checkbox" value="0x004"/><?= tr("Interacting galaxies")?></label>
+              <label><input type="checkbox" value="0x400"/><?= tr("Clusters of galaxies")?></label>
+              <label><input type="checkbox" value="0x008"/><?= tr("Open star clusters")?></label>
+              <label><input type="checkbox" value="0x010"/><?= tr("Globular Star clusters")?></label>
+              <div class="stelplugin" data-plugin="Quasars">
+                   <label><input type="checkbox" class="stelaction" name="actionShow_Quasars"/><?= tr("Quasars")?></label>
+              </div>
+            </div>
+            <div class="inline-block blocklabel">
+              <label><input type="checkbox" value="0x040"/><?= tr("Bright Nebulae")?></label>
+              <label><input type="checkbox" value="0x080"/><?= tr("Dark Nebulae")?></label>
+              <label><input type="checkbox" value="0x100"/><?= tr("Planetary Nebulae")?></label>
+              <label><input type="checkbox" value="0x200"/><?= tr("Supernova remnants")?></label>
+              <label><input type="checkbox" value="0x020"/><?= tr("Hydrogen regions")?></label>
+              <div class="stelplugin" data-plugin="Pulsars">
+                   <label><input type="checkbox" class="stelaction" name="actionShow_Pulsars"/><?= tr("Pulsars")?></label>
+              </div>
+              <label><input type="checkbox" value="0x200"/><?= tr("Other")?></label>
+            </div>
+          </div>
+          <div id="vo_dsolabels" class="smallblock blocklabel">
+            <h4><label><input class="stelaction" type="checkbox" name="actionShow_Nebulas" /><?= tr("Labels and markers")?></label></h4>
+            <div class="flex flex-baseline">
+              <label><?= tr("Labels")?></label><div class="slider stelproperty flex-expand" data-prop="NebulaMgr.labelsAmount" data-min="0" data-max="10" data-step="0.1"></div>
+            </div>
+            <div class="flex flex-baseline">
+              <label><?= tr("Hints")?></label><div class="slider stelproperty flex-expand" data-prop="NebulaMgr.hintsAmount" data-min="0" data-max="10" data-step="0.1"></div>
+            </div>
+            <label><input class="stelproperty" name="NebulaMgr.flagDesignationLabels" type="checkbox"/><?= tr("Use designations for screen labels")?></label>
+            <label><input class="stelproperty" name="NebulaMgr.flagOutlinesDisplayed" type="checkbox"/><?= tr("Use outlines for big deep-sky objects")?></label>
+            <label><input class="stelproperty" name="NebulaMgr.hintsProportional" type="checkbox"/><?= tr("Use proportional hints")?></label>
+            <label><input class="stelproperty" name="NebulaMgr.flagSurfaceBrightnessUsage" type="checkbox"/><?= tr("Use surface brightness")?></label>
+            <label><input class="stelproperty" name="NebulaMgr.flagAdditionalNamesDisplayed" type="checkbox"/><?= tr("Use additional names of DSO")?></label>
+			<div class="table">
+			<div class="flex flex-baseline">
+               <label><input class="stelproperty" name="StelSkyDrawer.flagNebulaMagnitudeLimit" type="checkbox"/><?= tr("Limit magnitude:")?>
+			          <span class="stelproperty" data-prop="StelSkyDrawer.customNebulaMagLimit" data-numberformat="n2"/> -- </label>
+					  <div class="slider stelproperty flex-expand" data-prop="StelSkyDrawer.customNebulaMagLimit" data-min="3" data-max="21" data-step="0.25" data-numberformat="n2"></div>
+			</div><br/>
+			<div class="flex flex-baseline">
+			<label><input class="stelproperty" name="NebulaMgr.flagUseSizeLimits" type="checkbox"/><?= tr("Limit angular size (arcmin):")?></label>
+					<input class="spinner stelproperty" name="NebulaMgr.minSizeLimit" data-min="1" data-max="600" data-step="1" data-numberformat="n2"/>
+					<input class="spinner stelproperty" name="NebulaMgr.maxSizeLimit" data-min="1" data-max="1200" data-step="1" data-numberformat="n2"/>
+			</div>
+			</div>
+          </div>
+        </div>
+      </div>
+      <!-- also handled by ui/viewoptions.js -->
+      <div id="tab_landscape">
+        <div class="smallblock">
+          <h3><?= tr("Options")?></h3>
+          <div class="inline-block blocklabel">
+            <label><input type="checkbox" class="stelaction" name="actionShow_Ground" /><?= tr("Show ground")?></label>
+            <label><input type="checkbox" class="stelproperty" name="LandscapeMgr.flagLandscapeSetsLocation"/><?= tr("Use associated planet and position")?></label>
+            <label><input type="checkbox" class="stelaction" name="actionShow_Fog" /><?= tr("Show fog")?></label>
+            <div class="flex flex-baseline">
+              <label><input type="checkbox" class="stelproperty" name="LandscapeMgr.flagLandscapeUseMinimalBrightness"/><?= tr("Minimal brightness:")?></label>
+              <input id="landscape_defaultMinimalBrightness" class="flex-expand spinner stelproperty" name="LandscapeMgr.defaultMinimalBrightness" data-min="0" data-max="1" data-step="0.01" data-numberformat="n2" readonly="readonly"/>
+            </div>
+          </div>
+          <div class="inline-block blocklabel">
+            <label><input type="checkbox" class="stelaction" name="actionShow_LandscapeLabels" /><?= tr("Show landscape labels")?></label>
+            <label><input type="checkbox" class="stelaction" name="actionShow_LandscapeIllumination" /><?= tr("Show illumination")?></label>
+            <label/> <!-- empty label to move the next down a line -->
+            <label><input id="landscape_flagLandscapeSetsMinimalBrightness" type="checkbox" class="stelproperty" name="LandscapeMgr.flagLandscapeSetsMinimalBrightness"/><?= tr("from landscape, if given")?></label>
+          </div>
+        </div>
+        <div class="smallblock flex landscapeblock">
+          <h3><?= tr("Current landscape")?></h3>
+          <select id="vo_landscapelist" class="scrollselect stelproperty" name="LandscapeMgr.currentLandscapeID" size="5">
+          </select>
+          <iframe id="vo_landscapeinfo" class="flex-expand" src="/api/view/landscapedescription/"></iframe>
+        </div>
+      </div>
+      <!-- also handled by ui/viewoptions.js -->
+			<div id="tab_skyculture">
+					<div class="flex flex-wrap" style="gap: 10px;">
+							
+							<!-- LEFT PANEL: Culture Selector and Patterns -->
+							<div class="skyculture-panel" style="flex: 1 1 100%; max-width: 100%;">
+									
+									<!-- Section Header with Culture Count -->
+									<h3>
+											<?= tr("Current sky culture")?>
+											<span id="skyculture-culture-count" class="pattern-count"></span>
+									</h3>
+									
+									<!-- Culture Buttons Container -->
+									<div id="skyculture-buttons-container" class="skyculture-buttons-container">
+											<div class="loading-placeholder"><?= tr("Loading sky cultures...")?></div>
+									</div>
+									
+									<!-- HORIZONTAL PATTERNS TABS - 6 Tab Navigation -->
+									<div id="skyculture-patterns-tabs" class="skyculture-patterns-tabs" style="margin-top: 20px;">
+											
+											<ul>
+													<li><a href="#patterns-tab-constellations"><?= tr("Constellations")?> <span id="constellations-count" class="pattern-count"></span></a></li>
+													<li><a href="#patterns-tab-asterisms"><?= tr("Asterisms")?> <span id="asterisms-count" class="pattern-count"></span></a></li>
+													<li><a href="#patterns-tab-zodiac"><?= tr("Zodiac Signs")?> <span id="zodiac-count" class="pattern-count"></span></a></li>
+													<li><a href="#patterns-tab-lunar"><?= tr("Lunar Mansions")?> <span id="lunar-count" class="pattern-count"></span></a></li>
+													<li><a href="#patterns-tab-stars"><?= tr("Notable Stars")?> <span id="stars-count" class="pattern-count"></span></a></li>
+													<li><a href="#patterns-tab-description"><?= tr("Description")?></a></li>
+											</ul>
+											
+											<!-- Constellations Tab -->
+											<div id="patterns-tab-constellations" class="patterns-tab-content">
+													<p class="patterns-note"><?= tr("Click on any constellation to highlight and isolate it")?></p>
+													<div id="constellations-buttons-container" class="patterns-buttons-container">
+															<div class="loading-placeholder"><?= tr("Select a sky culture to view constellations")?></div>
+													</div>
+											</div>
+											
+											<!-- Asterisms Tab -->
+											<div id="patterns-tab-asterisms" class="patterns-tab-content">
+													<p class="patterns-note"><?= tr("Traditional star patterns within constellations")?></p>
+													<div id="asterisms-buttons-container" class="patterns-buttons-container">
+															<div class="loading-placeholder"><?= tr("No asterisms available")?></div>
+													</div>
+											</div>
+											
+											<!-- Zodiac Tab -->
+											<div id="patterns-tab-zodiac" class="patterns-tab-content">
+													<p class="patterns-note"><?= tr("The 12 signs of the zodiac")?></p>
+													<div id="zodiac-buttons-container" class="patterns-buttons-container">
+															<div class="loading-placeholder"><?= tr("No zodiac data available")?></div>
+													</div>
+											</div>
+											
+											<!-- Lunar Mansions Tab -->
+											<div id="patterns-tab-lunar" class="patterns-tab-content">
+													<p class="patterns-note"><?= tr("Traditional lunar stations (mansions)")?></p>
+													<div id="lunar-buttons-container" class="patterns-buttons-container">
+															<div class="loading-placeholder"><?= tr("No lunar mansions data available")?></div>
+													</div>
+											</div>
+											
+											<!-- Notable Stars Tab -->
+											<div id="patterns-tab-stars" class="patterns-tab-content">
+													<p class="patterns-note"><?= tr("Named stars with cultural significance")?></p>
+													<div id="stars-buttons-container" class="patterns-buttons-container">
+															<div class="loading-placeholder"><?= tr("No star name data available")?></div>
+													</div>
+											</div>
+											
+											<!-- Description Tab with iframe -->
+											<div id="patterns-tab-description" class="patterns-tab-content">
+													<iframe id="vo_skycultureinfo" class="skyculture-info-frame" src="/api/view/skyculturedescription/"></iframe>
+											</div>
+											
+									</div><!-- END #skyculture-patterns-tabs -->
+									
+							</div><!-- END .skyculture-panel -->
+							
+							<!-- RIGHT PANEL: Sky Culture Options -->
+							<div class="skyculture-options-panel">
+									
+									<h3><?= tr("Options")?></h3>
+									
+									<div class="options-grid">
+											
+											<!-- 1. Constellation Labels -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.namesDisplayed" />
+															<span><?= tr("Label constellations with font size")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.fontSize" data-numberformat="n0"></span>
+															<div id="constellation-fontsize" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.fontSize" data-min="8" data-max="40" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 2. Constellation Lines -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.linesDisplayed" />
+															<span><?= tr("Show lines with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.constellationLineThickness" data-numberformat="n0"></span>
+															<div id="constellation-linethickness" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.constellationLineThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 3. Asterism Labels -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="AsterismMgr.namesDisplayed" />
+															<span><?= tr("Label asterisms with font size")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="AsterismMgr.fontSize" data-numberformat="n0"></span>
+															<div id="asterism-fontsize" class="slider stelproperty" 
+																	 data-prop="AsterismMgr.fontSize" data-min="8" data-max="40" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 4. Asterism Lines -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="AsterismMgr.linesDisplayed" />
+															<span><?= tr("Show asterisms with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="AsterismMgr.asterismLineThickness" data-numberformat="n0"></span>
+															<div id="asterism-linethickness" class="slider stelproperty" 
+																	 data-prop="AsterismMgr.asterismLineThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 5. Ray Helpers -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="AsterismMgr.rayHelpersDisplayed" />
+															<span><?= tr("Show ray helpers with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="AsterismMgr.rayHelperThickness" data-numberformat="n0"></span>
+															<div id="rayhelper-thickness" class="slider stelproperty" 
+																	 data-prop="AsterismMgr.rayHelperThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 6. Constellation Art -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.artDisplayed" />
+															<span><?= tr("Show art in brightness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.artIntensity" data-numberformat="n2"></span>
+															<div id="art-intensity" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.artIntensity" data-min="0" data-max="1" 
+																	 data-step="0.05" data-numberformat="n2"></div>
+													</div>
+											</div>
+											
+											<!-- 7. Constellation Boundaries -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.boundariesDisplayed" />
+															<span><?= tr("Show boundaries with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.boundariesThickness" data-numberformat="n0"></span>
+															<div id="boundaries-thickness" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.boundariesThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 8. Zodiac -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.zodiacDisplayed" />
+															<span><?= tr("Show zodiac with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.zodiacThickness" data-numberformat="n0"></span>
+															<div id="zodiac-thickness" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.zodiacThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+											<!-- 9. Lunar System -->
+											<div class="option-item">
+													<label class="option-label">
+															<input type="checkbox" class="stelproperty" name="ConstellationMgr.lunarSystemDisplayed" />
+															<span><?= tr("Show lunar stations/mansions with thickness")?></span>
+													</label>
+													<div class="option-controls">
+															<span class="stelproperty" data-prop="ConstellationMgr.lunarSystemThickness" data-numberformat="n0"></span>
+															<div id="lunar-thickness" class="slider stelproperty" 
+																	 data-prop="ConstellationMgr.lunarSystemThickness" data-min="1" data-max="5" 
+																	 data-step="1" data-numberformat="n0"></div>
+													</div>
+											</div>
+											
+									</div><!-- END .options-grid -->
+									
+									<!-- Additional Options -->
+									<div class="skyculture-additional-options">
+											
+											<label class="option-label">
+													<input type="checkbox" class="stelproperty" name="StelSkyCultureMgr.flagUseAbbreviatedNames" />
+													<span><?= tr("Short labels")?></span>
+											</label>
+											
+											<label class="option-label">
+													<input type="checkbox" class="stelproperty" name="ConstellationMgr.isolateSelected" />
+													<span><?= tr("Constellation selection isolated")?></span>
+											</label>
+											
+											<label class="option-label">
+													<input type="checkbox" class="stelproperty" name="ConstellationMgr.flagConstellationPick" />
+													<span><?= tr("Only last selected")?></span>
+											</label>
+											
+									</div>
+									
+							</div><!-- END .skyculture-options-panel -->
+							
+					</div>
+			</div><!-- END #tab_skyculture -->
+			<!-- TAB: Culture Data Inspector (Raw index.json Explorer) -->
+			<div id="tab_skyculture_stats">
+					<div class="flex flex-wrap" style="gap: 20px;">
+							
+							<!-- Info Bar - What is this section? -->
+							<div class="stats-bar stats-info-bar" style="width: 100%;">
+									<div class="stat-item" style="flex: 1; background: rgba(0, 0, 0, 0.15);">
+											<span class="stat-label" style="display: block; margin-bottom: 8px; color: #DCDBDA; font-size: 13px;"><?= tr("Culture Data Inspector")?></span>
+											<span class="stat-description" style="color: #B4B7B0; font-size: 11px; line-height: 1.6;">
+													<?= tr("This inspector displays the complete, unfiltered dataset extracted directly from the culture's")?> 
+													<code style="background: #2A2C2E; padding: 2px 5px; border-radius: 3px;">index.json</code> 
+													<?= tr("file. Use this view to:")?>
+													<ul style="margin: 8px 0 0 20px; padding: 0; color: #B4B7B0; font-size: 11px;">
+															<li><?= tr("Verify exact constellation and asterism counts (including ray helpers)")?></li>
+															<li><?= tr("Inspect raw IDs, native names, pronunciations, and IPA values")?></li>
+															<li><?= tr("Cross-reference star IDs (HIP, NGC, etc.) with their cultural names")?></li>
+															<li><?= tr("Export complete datasets to CSV/JSON for external analysis")?></li>
+															<li><?= tr("Search across all fields to quickly locate specific entries")?></li>
+													</ul>
+													<span style="display: block; margin-top: 8px; color: #8A8C8E; font-style: italic;">
+															<?= tr("Each row is interactive — click to select and navigate to the object in Stellarium.")?>
+													</span>
+											</span>
+									</div>
+							</div>
+
+							<!-- Culture Selector Panel -->
+							<div class="culture-selector-panel" style="width: 100%;">
+									<h3>
+											<?= tr("Select Sky Culture")?>
+											<span id="skyculture-stats-count" class="pattern-count"></span>
+									</h3>
+									<div id="skyculture-stats-buttons" class="skyculture-buttons-grid">
+											<div class="loading-placeholder"><?= tr("Loading sky cultures...")?></div>
+									</div>
+									
+									<!-- Total Summary Bar -->
+									<div class="stats-bar" style="width: 100%; justify-content: space-around; margin-top: 15px;">
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Constellations")?>:</span>
+													<span class="stat-value" id="stats-total-constellations">0</span>
+											</div>
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Asterisms")?>:</span>
+													<span class="stat-value" id="stats-total-asterisms">0</span>
+											</div>
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Ray Helpers")?>:</span>
+													<span class="stat-value" id="stats-total-ray-helpers">0</span>
+											</div>
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Zodiac Signs")?>:</span>
+													<span class="stat-value" id="stats-total-zodiac">0</span>
+											</div>
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Lunar Mansions")?>:</span>
+													<span class="stat-value" id="stats-total-lunar">0</span>
+											</div>
+											<div class="stat-item">
+													<span class="stat-label"><?= tr("Named Objects")?>:</span>
+													<span class="stat-value" id="stats-total-stars">0</span>
+											</div>
+									</div>
+							</div>
+							
+							<!-- Data Tables Tabs -->
+							<div id="skyculture-stats-tabs" class="skyculture-patterns-tabs" style="width: 100%;">
+									
+									<ul>
+											<li><a href="#stats-tab-constellations"><?= tr("Constellations")?> <span id="constellations-stats-count" class="pattern-count"></span></a></li>
+											<li><a href="#stats-tab-asterisms"><?= tr("Asterisms")?> <span id="asterisms-stats-count" class="pattern-count"></span></a></li>
+											<li><a href="#stats-tab-zodiac"><?= tr("Zodiac Signs")?> <span id="zodiac-stats-count" class="pattern-count"></span></a></li>
+											<li><a href="#stats-tab-lunar"><?= tr("Lunar Mansions")?> <span id="lunar-stats-count" class="pattern-count"></span></a></li>
+											<li><a href="#stats-tab-stars"><?= tr("Notable Stars & Objects")?> <span id="stars-stats-count" class="pattern-count"></span></a></li>
+											<li><a href="#stats-tab-description"><?= tr("Description")?></a></li>
+									</ul>
+									
+									<!-- Constellations Table -->
+									<div id="stats-tab-constellations" class="tab-content">
+											<div class="table-header">
+													<input type="text" class="search-box" id="search-constellations-stats" placeholder="<?= tr("Search constellations... (click row to isolate at 60° FOV) | ESC to reset")?>">
+													<div class="export-buttons">
+															<button class="export-btn" id="export-constellations-csv">CSV</button>
+															<button class="export-btn" id="export-constellations-json">JSON</button>
+													</div>
+											</div>
+											<p style="margin: 5px 0 10px 0; font-size: 10px; color: #8A8C8E;">
+													<?= tr("Complete constellation definitions from index.json. Click any row to isolate and highlight in Stellarium.")?>
+											</p>
+											<div class="table-container">
+													<table class="stats-table">
+															<thead>
+																	<tr>
+																			<th>#</th>
+																			<th><?= tr("ID")?></th>
+																			<th><?= tr("Native")?></th>
+																			<th><?= tr("English Name")?></th>
+																			<th><?= tr("Translation")?></th>
+																			<th><?= tr("Pronounce")?></th>
+																			<th><?= tr("Stars")?></th>
+																			<th><?= tr("Star IDs")?></th>
+																	</tr>
+															</thead>
+															<tbody id="constellations-stats-body"></tbody>
+													</table>
+											</div>
+									</div>
+									
+									<!-- Asterisms Table -->
+									<div id="stats-tab-asterisms" class="tab-content">
+											<div class="table-header">
+													<input type="text" class="search-box" id="search-asterisms-stats" placeholder="<?= tr("Search asterisms... (click row to center at 30° FOV) | ESC to reset")?>">
+													<div class="export-buttons">
+															<button class="export-btn" id="export-asterisms-csv">CSV</button>
+															<button class="export-btn" id="export-asterisms-json">JSON</button>
+													</div>
+											</div>
+											<p style="margin: 5px 0 10px 0; font-size: 10px; color: #8A8C8E;">
+													<?= tr("All asterisms from index.json (ray helpers are excluded from this list). Click any row to center view.")?>
+											</p>
+											<div class="table-container">
+													<table class="stats-table">
+															<thead>
+																	<tr>
+																			<th>#</th>
+																			<th><?= tr("ID")?></th>
+																			<th><?= tr("Native")?></th>
+																			<th><?= tr("English Name")?></th>
+																			<th><?= tr("Translation")?></th>
+																			<th><?= tr("Pronounce")?></th>
+																			<th><?= tr("Stars")?></th>
+																			<th><?= tr("Star IDs")?></th>
+																	</tr>
+															</thead>
+															<tbody id="asterisms-stats-body"></tbody>
+													</table>
+											</div>
+									</div>
+									
+									<!-- Zodiac Table -->
+									<div id="stats-tab-zodiac" class="tab-content">
+											<div class="table-container">
+													<table class="stats-table">
+															<thead>
+																	<tr>
+																			<th>#</th>
+																			<th><?= tr("Symbol")?></th>
+																			<th><?= tr("Native")?></th>
+																			<th><?= tr("English Name")?></th>
+																			<th><?= tr("Translation")?></th>
+																			<th><?= tr("Pronounce")?></th>
+																	</tr>
+															</thead>
+															<tbody id="zodiac-stats-body"></tbody>
+													</table>
+											</div>
+											<p style="margin: 10px 0 0 0; font-size: 10px; color: #8A8C8E;">
+													<?= tr("Zodiac signs defined in this culture. Click to center on the constellation.")?>
+											</p>
+									</div>
+									
+									<!-- Lunar Mansions Table -->
+									<div id="stats-tab-lunar" class="tab-content">
+											<div class="table-container">
+													<table class="stats-table">
+															<thead>
+																	<tr>
+																			<th>#</th>
+																			<th><?= tr("Symbol")?></th>
+																			<th><?= tr("Native")?></th>
+																			<th><?= tr("English Name")?></th>
+																			<th><?= tr("Translation")?></th>
+																			<th><?= tr("Pronounce")?></th>
+																	</tr>
+															</thead>
+															<tbody id="lunar-stats-body"></tbody>
+													</table>
+											</div>
+											<p style="margin: 10px 0 0 0; font-size: 10px; color: #8A8C8E;">
+													<?= tr("Lunar mansions (stations) defined in this culture. Click to center view.")?>
+											</p>
+									</div>
+									
+									<!-- Notable Stars & Objects Table -->
+									<div id="stats-tab-stars" class="tab-content">
+											<div class="table-header">
+													<input type="text" class="search-box" id="search-stars-stats" placeholder="<?= tr("Search stars & objects... (click row to center at 15° FOV) | ESC to reset")?>">
+													<div class="export-buttons">
+															<button class="export-btn" id="export-stars-csv">CSV</button>
+															<button class="export-btn" id="export-stars-json">JSON</button>
+													</div>
+											</div>
+											<p style="margin: 5px 0 10px 0; font-size: 10px; color: #8A8C8E;">
+													<?= tr("All named celestial objects (stars, planets, deep-sky) defined in this culture's common_names section.")?>
+											</p>
+											<div class="table-container">
+													<table class="stats-table">
+															<thead>
+																	<tr>
+																			<th>#</th>
+																			<th><?= tr("Original ID")?></th>
+																			<th><?= tr("Type")?></th>
+																			<th><?= tr("Native")?></th>
+																			<th><?= tr("English Name")?></th>
+																			<th><?= tr("Translation")?></th>
+																			<th><?= tr("Pronounce")?></th>
+																			<th>IPA</th>
+																	</tr>
+															</thead>
+															<tbody id="stars-stats-body"></tbody>
+													</table>
+											</div>
+									</div>
+									
+									<!-- Description Tab -->
+									<div id="stats-tab-description" class="tab-content">
+											<iframe id="stats-vo-skycultureinfo" class="skyculture-info-frame" src="/api/view/skyculturedescription/"></iframe>
+									</div>
+									
+							</div><!-- END #skyculture-stats-tabs -->
+							
+					</div>
+			</div><!-- END #tab_skyculture_stats -->
+			
+			<!-- handled by ui/actions.js -->
+			<div id="tab_actions">
+				<div class="flex">
+					<section id="stelaction" class="block flex flex-column">
+						<header><h2><?= tr("Actions")?></h2></header>
+						<div class="action-search-container" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+							<input type="text" id="action-search-input" class="action-search-input" placeholder='<?= tr("Search actions...") ?>' style="flex: 1; min-width: 150px;" />
+							<button id="bt_doaction" disabled="disabled"><?= tr("Run/toggle action")?></button>
+						</div>
+						<select id="actionlist" class="scrollselect flex-expand" size="10">
+						</select>
+					</section>
+				</div>
+			</div>
+      <div id="tab_scripts">
+        <div class="flex">
+									<!-- SCRIPTS SECTION - Enhanced with Visual Indicators, Icons, and Reset View	-->
+					<section id="scripts" class="block flex flex-expand">
+							<header><h2><?= tr("Scripts")?></h2></header>
+							<div class="flex flex-column">
+									<!-- Script Selection List -->
+									<select id="scriptlist" class="scrollselect flex-expand" size="10"></select>
+									
+									<!-- Active Script Display -->
+									<div class="active-script-display">
+											<?= tr("Active script:")?> <span id="activescript"><?= tr("-none-")?></span>
+									</div>
+									
+									<!-- Script Control Buttons with Icons -->
+									<div class="script-controls">
+											<button id="bt_runscript" class="script-control-btn icon32" disabled="disabled" title="<?= tr("Run selected script")?>"></button>
+											<button id="bt_stopscript" class="script-control-btn icon32" disabled="disabled" title="<?= tr("Stop current script")?>"></button>
+											<button id="bt_script_resetview" class="script-control-btn icon32" title="<?= tr("Reset to natural sky appearance (South, 40°, FOV 90°)")?>"></button>
+									</div>
+							</div>
+							
+							<!-- Script Information IFrame - Gets pulsing border when script is running -->
+							<iframe id="scriptinfo" class="flex-expand"></iframe>
+					</section>
+        </div>
+        <!-- Here you can configure a few buttons for your most used shows. Just copy/paste the button definition example lines. -->
+        <!--div class="flex">
+        	<section class="block flex flex-column">
+        	 <header><h2><?= tr("Favorites")?></h2></header>
+             <div>
+                 <button type="button" class="stelaction"  title='<?= tr("Show 1")?>'  name="actionScript/show_1.ssc">Show 1</button>
+                 <button type="button" class="stelaction"  title='<?= tr("Remove Labels and Images")?>'  name="actionScript/cleanupLabelsAndInserts.ssc"><?= tr("Cleanup Screen")?></button>
+            </div>
+           </section>
+        </div-->
+
+      </div>
+      <!-- handled by ui/location.js -->
+      <div id="tab_location">
+        <section id="location" class="inline-block smallblock">
+          <h3><?= tr("Location")?></h3>
+          <div>
+            <div id="loc_map">
+              <img id="loc_mapimg" src="images/world.png" alt='<?= tr("Planet map")?>'/>
+              <img id="loc_mappointer" src="images/map-pointeur.png" alt='<?= tr("Planet map pointer")?>'/>
+            </div>
+            <div id="loc_searchlist" class="flex flex-column" >
+              <select id="loc_list" size="10"></select>
+              <input id="loc_search" placeholder='<?= tr("Type to search location")?>' autocomplete="off"/>
+            </div>
+          </div>
+          <div id="loc_inputs">
+            <div>
+              <p><label for="loc_latitude"><?= tr("Latitude:")?></label><input id="loc_latitude"/></p>
+              <p><label for="loc_longitude"><?= tr("Longitude:")?></label><input id="loc_longitude"/></p>
+              <p><label for="loc_altitude"><?= tr("Elevation:")?></label><input id="loc_altitude"/></p>
+            </div>
+            <div>
+              <p><label for="loc_name"><?= tr("Name/City:")?></label><input id="loc_name" type="text"/></p>
+              <p><label for="loc_region"><?= tr("Region:")?></label><select id="loc_region"></select></p>
+              <p><label for="loc_planet"><?= tr("Planet:")?></label><select id="loc_planet"></select></p>
+            </div>
+          </div>
+        </section>
+      </div>
+      <!-- also handled by ui/viewoptions.js -->
+      <div id="tab_projection">
+        <div class="smallblock flex landscapeblock">
+          <h3><?= tr("Projection")?></h3>
+          <select id="vo_projectionlist" class="scrollselect stelproperty" name="StelCore.currentProjectionTypeKey" size="5">
+          </select>
+          <iframe id="vo_projectioninfo" class="flex-expand" src="/api/view/projectiondescription"></iframe>
+        </div>
+      </div>
+	  <div id="tab_scenery3d" class="stelplugin" data-plugin="Scenery3d" data-pluginjs="plugins/scenery3d">
+          <div class="flex">
+              <div class="smallblock">
+                  <h3><?= tr("Interaction")?></h3>
+                  <p class="margin-none"><?= tr("Current scene:")?></p>
+                  <p id="s3d_curscene" class="bold margin-none"><?= tr("-none-")?></p>
+                  <div class="innerblock inline-block">
+                      <h3><?= tr("View controls")?></h3>
+                      <div class="joystickcontainer">
+                          <div class="joystick" data-joyurl="/api/main/move" data-joymax="5"></div>
+                      </div>
+                  </div>
+                  <div class="innerblock inline-block">
+                      <h3><?= tr("Movement controls")?></h3>
+                      <div class="joystickcontainer">
+                          <div class="joystick" data-joyurl="/api/scenery3d/move" data-joymax="50"></div>
+                      </div>
+                  </div>
+              </div>
+              <div class="smallblock flex-expand">
+                  <h3><?= tr("Options")?></h3>
+                  <div class="inline-block blocklabel">
+                      <label><input type="checkbox" class="stelproperty" name="Scenery3d.enableScene" /><?= tr("Toggle 3D landscape")?></label>
+                      <label><input type="checkbox" class="stelproperty" name="Scenery3d.enableLocationInfo" /><?= tr("Toggle location text")?></label>
+                      <label><input type="checkbox" class="stelproperty" name="Scenery3d.enableShadows"/><?= tr("Toggle shadows")?></label>
+                      <label><input type="checkbox" class="stelproperty" name="Scenery3d.enableTorchLight"/><?= tr("Torchlight")?></label>
+                      <p><div class="flex flex-baseline"><label><?= tr("Torch strength:")?></label><span class="stelproperty" data-prop="Scenery3d.torchStrength" data-numberformat="n2"></span><div class="slider stelproperty flex-expand" data-prop="Scenery3d.torchStrength" data-min="0.01" data-max="1" data-step="0.01"></div></div></p>
+                      <p><div class="flex flex-baseline"><label><?= tr("Torch range:")?></label><span class="stelproperty" data-prop="Scenery3d.torchRange"data-numberformat="n0"></span><div class="slider stelproperty flex-expand" data-prop="Scenery3d.torchRange" data-min="0" data-max="100" data-step="1"></div></div></p>
+                  </div>
+              </div>
+          </div>
+          <div class="smallblock flex landscapeblock">
+            <h3><?= tr("Scene selection")?></h3>
+            <div class="flex flex-column">
+            <select id="s3d_list" class="scrollselect flex-expand" size="5">
+            </select>
+            <button id="s3d_load" class="jquerybutton"><?= tr("Load selected scene")?></button>
+            </div>
+            <iframe id="s3d_info" class="flex-expand">No scene selected</iframe>
+          </div>
+      </div>
+			<!-- Gamepad Controller Section - Built on W3C Gamepad API/gpcontroller.js module v2.6.0 -->
+			<div id="tab_gamepad">
+					<section id="gp-controller" class="block">
+							<header>
+									<h2><?= tr("Gamepad Controller")?></h2>
+									<div id="gp-status" class="controller-status inline-block" style="margin-left: 20px;">
+											<span id="gp-connection-status">🔴 <?= tr("Disconnected")?></span>
+											<button id="gp-connect" class="jquerybutton" style="margin-left: 10px;"><?= tr("Scan")?></button>
+									</div>
+							</header>
+							
+							<div class="flex flex-wrap" style="gap: 20px;">
+									<!-- Controller Settings Panel -->
+									<div class="controller-settings-panel">
+											<h3><?= tr("Controller Settings")?></h3>                
+											<!-- Device Selector -->
+											<div class="device-selector-row">
+													<label><?= tr("Active Device:")?></label>
+													<select id="gp-device-selector">
+															<option value=""><?= tr("No devices connected")?></option>
+													</select>
+											</div>                
+											<!-- Device Information -->
+									<div class="device-info-card">
+											<div class="device-info-row">
+													<span class="device-info-label"><?= tr("Device:")?></span>
+													<span class="device-info-value" id="gp-device-name">-</span>
+											</div>
+											<div class="device-info-row">
+													<span class="device-info-label"><?= tr("Model:")?></span>
+													<span class="device-info-value" id="gp-device-model">-</span>
+											</div>
+											<div class="device-info-row">
+													<span class="device-info-label"><?= tr("Vendor:")?></span>
+													<span class="device-info-value" id="gp-device-vendor">-</span>
+											</div>
+											<div class="device-info-row">
+													<span class="device-info-label"><?= tr("Device ID:")?></span>
+													<span class="device-info-value" id="gp-device-id" style="font-size: 10px;">-</span>
+											</div>
+											<div class="device-info-row">
+													<span class="device-info-label"><?= tr("Buttons/Axes:")?></span>
+													<span class="device-info-value" id="gp-button-axis-count" style="font-size: 10px;">- / -</span>
+											</div>
+									</div>								
+									<!-- Joystick Preview -->	
+									<div class="joystick-preview-wrapper">
+											<h4><?= tr("Joystick Preview")?></h4>
+											<div class="joystick-preview-container">
+													<!-- Left Stick Section -->
+													<div class="joystick-preview">
+															<canvas id="gp-left-stick-canvas" width="100" height="100"></canvas>
+															<div class="stick-label">
+																	<strong><?= tr("Left Stick")?></strong>
+																	<small><?= tr("View movement")?></small>
+															</div>
+															<div class="joystick-info">
+																	<span class="info-label"><?= tr("Direction:")?></span>
+																	<span class="info-value" id="gp-current-direction"><?= tr("centered")?></span>
+															</div>
+															<div class="stick-options">
+																	<label class="option-item">
+																			<input type="checkbox" id="gp-invert-x" />
+																			<span><?= tr("Invert X")?></span>
+																	</label>
+																	<label class="option-item">
+																			<input type="checkbox" id="gp-invert-y" />
+																			<span><?= tr("Invert Y")?></span>
+																	</label>
+															</div>
+													</div>
+													
+													<!-- Right Stick Section -->
+													<div class="joystick-preview">
+															<canvas id="gp-right-stick-canvas" width="100" height="100"></canvas>
+															<div class="stick-label">
+																	<strong><?= tr("Right Stick")?></strong>
+																	<small><?= tr("Continuous zoom")?></small>
+															</div>
+															<div class="joystick-info">
+																	<span class="info-label"><?= tr("Current FOV:")?></span>
+																	<span class="info-value" id="gp-current-fov">60°</span>
+															</div>
+															<div class="stick-options">
+																	<label class="option-item">
+																			<input type="checkbox" id="zoom-invert-y" />
+																			<span><?= tr("Invert Y")?></span>
+																	</label>
+															</div>
+													</div>
+											</div>
+									</div>									
+											<!-- Calibration Section -->
+											<div class="calibration-section">
+													<div class="calibration-header">
+															<h4><?= tr("Joystick Calibration")?></h4>
+															<div class="calibration-buttons">
+																	<button id="gp-calibrate" class="calibration-btn"><?= tr("Calibrate")?></button>
+																	<button id="gp-reset-calibration" class="calibration-btn"><?= tr("Reset")?></button>
+															</div>
+													</div>
+													<div id="gp-calibration-values" class="calibration-status"></div>
+													<p class="note" style="margin-top: 5px; font-size: 10px; color: #aaa;">
+															<?= tr("Move joysticks in circles to calibrate center position. Press any button to finish.")?>
+													</p>
+											</div>									
+									<!-- Control Settings -->
+									<div class="control-slider-group">
+											<!-- Checkbox Group -->
+											<div class="checkbox-group">
+													<!-- Manual Test Button -->
+													<div class="checkbox-item" style="margin-top: 5px; margin-bottom: 15px;">
+															<button id="gp-test-vibration" class="test-vibration-btn"><?= tr("Test Vibration")?></button>
+															<span class="help-text" style="margin-left: 10px;"><?= tr("Manual test (uses full intensity)")?></span>
+													</div>
+													
+													<div class="checkbox-item">
+															<input type="checkbox" id="gp-vibration-feedback" />
+															<label for="gp-vibration-feedback"><?= tr("Vibration Feedback")?></label>
+															<span class="help-text">(<?= tr("works in Chrome/Edge")?>)</span>
+													</div>
+											</div>
+											
+											<!-- Vibration Intensity Slider (visible only when feedback enabled) -->
+											<div class="slider-row" id="gp-vibration-intensity-row" style="display: none;">
+													<span class="slider-label"><?= tr("Vibration Intensity:")?></span>
+													<div class="slider-container">
+															<div id="gp-vibration-intensity" class="slider"></div>
+													</div>
+													<span id="gp-vibration-intensity-value" class="slider-value">0.5</span>
+											</div>
+											
+											<!-- Sensitivity Slider -->
+											<div class="slider-row">
+													<span class="slider-label"><?= tr("Sensitivity:")?></span>
+													<div class="slider-container">
+															<div id="gp-sensitivity" class="slider"></div>
+													</div>
+													<span id="gp-sensitivity-value" class="slider-value">1.0</span>
+											</div>
+											
+											<!-- Deadzone Slider -->
+											<div class="slider-row">
+													<span class="slider-label"><?= tr("Deadzone:")?></span>
+													<div class="slider-container">
+															<div id="gp-deadzone" class="slider"></div>
+													</div>
+													<span id="gp-deadzone-value" class="slider-value">0.15</span>
+											</div>
+											
+											<!-- Zoom Speed Slider -->
+											<div class="slider-row">
+													<span class="slider-label"><?= tr("Zoom Speed:")?></span>
+													<div class="slider-container">
+															<div id="gp-zoom-speed" class="slider"></div>
+													</div>
+													<span id="gp-zoom-speed-value" class="slider-value">0.05</span>
+											</div>
+											
+											<!-- Movement Speed Slider -->
+											<div class="slider-row">
+													<span class="slider-label"><?= tr("Movement Speed:")?></span>
+													<div class="slider-container">
+															<div id="gp-movement-speed" class="slider"></div>
+													</div>
+													<span id="gp-movement-speed-value" class="slider-value">5.0</span>
+											</div>
+									</div>           
+								 </div>            
+									<!-- Button Customization Panel -->
+									<div class="button-customization-panel">
+											<h3><?= tr("Button Customization")?></h3>
+											
+											<div id="gp-button-customization" class="button-customization-container">
+													<!-- Populated by JavaScript -->
+											</div>											
+										
+											<div class="customization-note">													
+													<?= tr("Each connected controller has its own independent profile. Select a device from 'Active Device' to customize.")?>
+											</div>
+											
+											<div class="action-buttons">
+													<button id="gp-reset-mappings" class="action-btn reset"><?= tr("Reset Mappings")?></button>
+													<button id="gp-save-mappings" class="action-btn save"><?= tr("Save Mappings")?></button>
+													<button id="gp-export-profile" class="action-btn export"><?= tr("Export Profile")?></button>
+													<button id="gp-import-profile" class="action-btn import"><?= tr("Import Profile")?></button>
+											</div>
+											<p class="note" style="margin-top: 10px; font-size: 10px; color: #aaa; text-align: center;">
+													<?= tr("Profiles are saved per device and can be exported/imported for backup or sharing")?>
+											</p>
+									</div>
+							</div>							
+							<!-- Live Input Panel - Updated Structure -->
+							<div id="gp-live-input" class="live-input-panel">
+									<div class="live-input-header">
+											<h4><?= tr("Live Input Monitor")?></h4>
+											<p><?= tr("Real-time raw values from the browser's Gamepad API. Buttons show press state, Axes show visual meter. Use this panel to verify button and axis mappings.")?></p>
+									</div>
+									<div class="live-input-content">
+											<div class="live-input-two-columns">
+													<!-- Buttons Column - 4 column grid -->
+													<div class="live-input-column">
+															<h5><?= tr("Buttons")?> <span style="font-size:8px;">(4-column grid)</span></h5>
+															<div id="gp-buttons-container" class="live-input-grid-buttons">
+																	<div class="loading-placeholder"><?= tr("Waiting for controller input...")?></div>
+															</div>
+													</div>													
+													<!-- Axes Column - with visual meter -->
+													<div class="live-input-column">
+															<h5><?= tr("Axes")?> <span style="font-size:8px;">(visual meter)</span></h5>
+															<div id="gp-axes-container" class="live-input-grid-axes">
+																	<div class="loading-placeholder"><?= tr("Waiting for controller input...")?></div>
+															</div>
+													</div>
+											</div>											
+											<!-- Device Information Section -->
+											<div class="live-info-section">
+													<h5><?= tr("Device Information")?></h5>
+													<div id="gp-device-info-live">
+															<div class="loading-placeholder"><?= tr("Waiting for controller input...")?></div>
+													</div>
+													<div class="info-note-live">
+															<h4><?= tr("Understanding Raw Values")?></h4>
+															<?= tr("Buttons: Range 0.0 (not pressed) to 1.0 (green = fully pressed).")?><br>
+															<?= tr("Axes: -1.0 to 1.0 with visual meter Center position is 0.0. Triggers (L2/R2) show gradual values.")?><br>
+															<?= tr("Note: Different browsers may report the same physical button on different indices. Use this panel to identify the correct mapping for your setup.")?>
+													</div>
+											</div>
+									</div>
+							</div>
+					</section>
+			</div>
+    </div>
+    <!-- main buttons under the tabs -->
+    <ul class="ui-corner-all ui-widget-content button32list margin-vertical">
+      <li title="<?= tr("Constellation lines")?>"><button class="stelaction icon32 btConstellationLines" name="actionShow_Constellation_Lines"></button></li>
+      <li title="<?= tr("Constellation boundaries")?>"><button class="stelaction icon32 btConstellationBoundaries" name="actionShow_Constellation_Boundaries"></button></li>
+      <li title="<?= tr("Constellation labels")?>"><button class="stelaction icon32 btConstellationLabels" name="actionShow_Constellation_Labels"></button></li>
+      <li title="<?= tr("Constellation art")?>"><button class="stelaction icon32 btConstellationArt" name="actionShow_Constellation_Art"></button></li>
+      <li title="<?= tr("Equatorial grid")?>"><button class="stelaction icon32 btEquatorialGrid" name="actionShow_Equatorial_Grid"></button></li>
+      <li title="<?= tr("Azimuthal grid")?>"><button class="stelaction icon32 btAzimuthalGrid" name="actionShow_Azimuthal_Grid"></button></li>
+      <li title="<?= tr("Ground")?>"><button class="stelaction icon32 btGround" name="actionShow_Ground"></button></li>
+      <li title="<?= tr("Cardinal points")?>"><button class="stelaction icon32 btCardinalPoints" name="actionShow_Cardinal_Points"></button></li>
+      <li title="<?= tr("Atmosphere")?>"><button class="stelaction icon32 btAtmosphere" name="actionShow_Atmosphere"></button></li>
+      <li title="<?= tr("Deep-sky objects")?>"><button class="stelaction icon32 btNebula" name="actionShow_Nebulas"></button></li>
+      <li title="<?= tr("Planet labels")?>"><button class="stelaction icon32 btPlanets" name="actionShow_Planets_Labels"></button></li>
+      <li title="<?= tr("Switch between equatorial and azimuthal mount")?>"><button class="stelaction icon32 btEquatorialMount" name="actionSwitch_Equatorial_Mount"></button></li>
+      <li title="<?= tr("Center on selected object")?>"><button class="stelaction icon32 btGotoSelectedObject" name="actionSet_Tracking"></button></li>
+      <li title="<?= tr("Night mode")?>"><button class="stelaction icon32 btNightView" name="actionShow_Night_Mode"></button></li>
+      <li title="<?= tr("Full-screen mode")?>"><button class="stelaction icon32 btFullScreen" name="actionSet_Full_Screen_Global"></button></li>
+      <li title="<?= tr("Go to home")?>"><button class="stelaction icon32 btGotoHome" name="actionGo_Home_Global"></button></li>
+    </ul>
+  </div>
+  <!-- handled by mainui.js -->
+  <div id="noresponse" title='<?= tr("No response from server")?>'>
+    <p><span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 20px 0;"></span><?= tr("No response from server for %1 seconds. Is Stellarium still running?","<span id='noresponsetime'>0</span>")?></p>
+  </div>
+  <div id="loadindicator"></div>
+</body>
+</html>

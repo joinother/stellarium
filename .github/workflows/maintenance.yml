@@ -1,0 +1,63 @@
+#
+# Various maintenance operations
+#
+name: "Maintenance"
+on:
+  # So that PRs touching the same files as the push are updated
+  push:
+  # So that the `dirtyLabel` is removed if conflicts are resolve
+  # We recommend `pull_request_target` so that github secrets are available.
+  # In `pull_request` we wouldn't be able to change labels of fork PRs
+  pull_request_target:
+    types: [synchronize]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  #
+  # See https://github.com/marketplace/actions/label-conflicting-pull-requests
+  #
+  check-conflicts:
+    name: "Check conflicts"
+    runs-on: ubuntu-latest
+    if: "!contains(github.actor, 'transifex')"
+    steps:
+      - name: Check if PRs are dirty
+        uses: eps1lon/actions-label-merge-conflict@v3
+        with:
+          dirtyLabel: "has conflicts"
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          commentOnDirty: "This pull request has conflicts, please resolve those before we can evaluate the pull request."
+          commentOnClean: "Conflicts have been resolved. A maintainer will review the pull request shortly."
+
+  #
+  # See https://github.com/marketplace/actions/check-crlf
+  #
+  check-crlf:
+    name: "Check CRLF line endings"
+    runs-on: ubuntu-latest
+    if: "!contains(github.actor, 'transifex')"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Check CRLF line endings
+        uses: erclu/check-crlf@master
+
+  check-json:
+    name: "Linting JSON"
+    runs-on: ubuntu-latest
+    if: "!contains(github.actor, 'transifex')"
+    steps:
+      - name: Install JSON linter
+        run: |
+          sudo apt remove php* -y
+          sudo apt update
+          sudo apt install -y jsonlint python3-demjson
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Linting JSON/GeoJSON
+        run: find ${{github.workspace}}/{src,plugins,nebulae,skycultures} -iname '*.*json' -exec jsonlint -S {} +
+        

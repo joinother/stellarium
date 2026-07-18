@@ -1,0 +1,45 @@
+// Name: Zodiac
+// Author: Matthew Gates
+// License: Public Domain
+// Version: 1.3
+// Description: This script displays the constellations of the Zodiac.
+//              That means the constellations which lie along the line which
+//              the Sun traces across the celestial sphere over the course
+//              of a year.
+//              Label style is forced to be 'Native,Translated,Modern' regardless of user setting,
+//              unless environment variable STEL_SCRIPT_OBEY_SKYCULTURE_STYLE evaluates true.
+//              It ends with changes in skyculture (if not disabled by env. var.), labeling style,
+//              and shows constellation figures, boundaries and ecliptic.
+
+var obey_skyculture_preference = (core.getEnv("STEL_SCRIPT_OBEY_SKYCULTURE_STYLE") == "1");
+
+var constellations = new Array("Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpius", "Ophiuchus", "Sagittarius", "Capricornus", "Aquarius", "Pisces");
+
+ConstellationMgr.deselectConstellations();
+core.clear("deepspace");
+core.setSkyCulture("modern");
+if (!obey_skyculture_preference)
+	StelSkyCultureMgr.setScreenLabelStyle("Native,Translated,Modern");
+core.wait(1);
+
+core.setDate("2006:03:14T21:21:32");
+core.moveToRaDec("17h 53m 0s", "66d 25m 0s");
+StelMovementMgr.zoomTo(210, 5);
+core.wait(5);
+
+ConstellationMgr.setFlagIsolateSelected(true);
+ConstellationMgr.setFlagArt(true);
+ConstellationMgr.setFlagLabels(true);
+ConstellationMgr.setArtIntensity(0.6);
+
+for(i=0; i<constellations.length; i++)
+{
+	core.selectObjectByName(constellations[i], false);
+	core.wait(0.6);
+}
+
+core.wait(1);
+ConstellationMgr.setFlagBoundaries(true);
+core.wait(1);
+GridLinesMgr.setFlagEclipticLine(true);
+

@@ -1,0 +1,243 @@
+version: '{branch}-{build}'
+# build Configuration
+configuration: Release
+# clone directory
+clone_folder: c:\stellarium
+# set clone depth
+clone_depth: 10
+# Do not build feature branch with open Pull Requests
+skip_branch_with_pr: true
+# Do not build on tags
+skip_tags: true
+# Skipping commits
+skip_commits:
+  message: /(GHA|skip)/
+  author: /transifex/
+  files:
+    - guide/*
+# Maximum number of concurrent jobs for the project
+max_jobs: 5
+# environment variables
+environment:
+  gettextSrcURL: https://github.com/Stellarium/stellarium-data/releases/download/qt-5.6/gettext-0.23.1.tar.xz
+  gettextSrcBaseName: gettext-0.23.1
+  gettextURL: https://github.com/vslavik/gettext-tools-windows/releases/download/v0.23.1/gettext-tools-windows-0.23.1.zip
+  gettextBaseName: gettext-tools-windows-0.23.1
+  tidyURL: https://github.com/htacg/tidy-html5/releases/download/5.8.0/tidy-5.8.0-win64.zip
+  tidyBaseName: tidy-5.8.0-win64
+  matrix:
+# While testing, deactivate 2 builds that we know to be OK.  
+  - BUILD_NAME: Win64 Qt6.9
+    APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+    VSPATH: C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC\bin
+    QT_VERSION_MAJOR: 6
+    QT_BASEDIR: C:\Qt\6.9\msvc2022_64
+    CMAKE_GENERATOR: Visual Studio 17 2022
+    CMAKE_ARGS: -A x64 -DSCM_SHOULD_ENABLE_CONVERTER=ON
+    exiv2url: https://github.com/Exiv2/exiv2/releases/download/v0.28.0/exiv2-0.28.0-2019msvc64.zip
+    exiv2baseName: exiv2-0.28.0-2019msvc64
+    scConverterEnabled: true
+  - BUILD_NAME: Win64 Qt5.12
+    APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+    VSPATH: C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\SDK\ScopeCppSDK\VC\bin
+    QT_VERSION_MAJOR: 5
+    QT_BASEDIR: C:\Qt\5.12\msvc2017_64
+    CMAKE_GENERATOR: Visual Studio 15 2017
+    CMAKE_ARGS: -A x64 -DENABLE_XLSX=Off
+    cmakeURL: https://github.com/Kitware/CMake/releases/download/v3.18.6/cmake-3.18.6-win64-x64.zip
+    cmakeBaseName: cmake-3.18.6-win64-x64
+    exiv2url: https://github.com/10110111/exiv2/releases/download/ver0.28.0-final/exiv2-0.28.0-2017msvc64.zip
+    exiv2baseName: exiv2-0.28.0-2017msvc64
+    scConverterEnabled: false
+    # The Qt5.15 CI has issues around memory use in translation tools. 
+#  - BUILD_NAME: Win64 Qt5.15
+#    APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+#    VSPATH: C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC\bin
+#    QT_VERSION_MAJOR: 5
+#    QT_BASEDIR: C:\Qt\5.15\msvc2019_64
+#    CMAKE_GENERATOR: Visual Studio 17 2022
+#    CMAKE_ARGS: -A x64
+#    exiv2url: https://github.com/Exiv2/exiv2/releases/download/v0.28.0/exiv2-0.28.0-2019msvc64.zip
+#    exiv2baseName: exiv2-0.28.0-2019msvc64
+#    scConverterEnabled: false
+    # TODO: This is not yet properly supported, or some config switch is missing. We postpone Qt6.9-based AppVeyor builds for Win/Arm64 to post-26.1.
+#  - BUILD_NAME: Arm64 Qt6.9
+#    APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+#    VSPATH: C:\Program Files\Microsoft Visual Studio\2022\Community\SDK\ScopeCppSDK\vc15\VC\bin
+#    QT_VERSION_MAJOR: 6
+#    QT_BASEDIR: C:\Qt\6.9\msvc2022_arm64
+#    CMAKE_GENERATOR: Visual Studio 17 2022
+#    # While tesing appveyor, disable all plugins and extras to minimize build time..
+#    CMAKE_ARGS: -A ARM64 -DSTELLARIUM_BUILD_ARM64=ON -DQT_HOST_PATH=C:/Qt/6.9/msvc2022_64 -DQt6LinguistTools_DIR=C:/Qt/6.9/msvc2022_64/lib/cmake/Qt6LinguistTools -DENABLE_QTWEBENGINE=OFF -DQT_ENABLE_VERBOSE_DEPLOYMENT=ON -DQMAKESPEC=C:/Qt/6.9/msvc2022_arm64/mkspecs -DUSE_PLUGIN_ANGLEMEASURE=OFF -DUSE_PLUGIN_ARCHAEOLINES=OFF -DUSE_PLUGIN_EQUATIONOFTIME=OFF -DUSE_PLUGIN_CALENDARS=OFF -DUSE_PLUGIN_EXOPLANETS=OFF -DUSE_PLUGIN_METEORSHOWERS=OFF -DUSE_PLUGIN_MOSAICCAMERA=OFF -DUSE_PLUGIN_NAVSTARS=OFF -DUSE_PLUGIN_NOVAE=OFF -DUSE_PLUGIN_NEBULATEXTURES=OFF -DUSE_PLUGIN_LENSDISTORTIONESTIMATOR=OFF -DUSE_PLUGIN_SOLARSYSTEMEDITOR=OFF -DUSE_PLUGIN_OBSERVABILITY=OFF -DUSE_PLUGIN_OCULARS=OFF -DUSE_PLUGIN_ONLINEQUERIES=OFF -DUSE_PLUGIN_POINTERCOORDINATES=OFF -DUSE_PLUGIN_PULSARS=OFF -DUSE_PLUGIN_QUASARS=OFF -DUSE_PLUGIN_REMOTECONTROL=OFF -DUSE_PLUGIN_REMOTESYNC=OFF -DUSE_PLUGIN_SATELLITES=OFF -DUSE_PLUGIN_SCENERY3D=OFF -DUSE_PLUGIN_SKYCULTUREMAKER=OFF -DUSE_PLUGIN_SUPERNOVAE=OFF -DUSE_PLUGIN_TELESCOPECONTROL=OFF -DUSE_PLUGIN_TEXTUSERINTERFACE=OFF -DENABLE_SHOWMYSKY=OFF -DENABLE_SPEECH=OFF -DENABLE_TESTING=OFF -DENABLE_SCRIPT_CONSOLE=OFF -DENABLE_SPOUT=OFF -DENABLE_XLSX=OFF -DENABLE_NLS=OFF
+#    scConverterEnabled: false
+    # Qt6.5 for Win/Arm64 is missing QtWebEngine. (Introduced in Qt6.10 only).
+  - BUILD_NAME: Arm64 Qt6.5
+    APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+    QT_VERSION_MAJOR: 6
+    QT_BASEDIR: C:\Qt\6.5\msvc2019_arm64
+    CMAKE_GENERATOR: Visual Studio 17 2022
+    CMAKE_ARGS: -A ARM64 -DSTELLARIUM_BUILD_ARM64=ON -DQT_HOST_PATH=C:/Qt/6.5/msvc2019_64 -DQt6LinguistTools_DIR=C:/Qt/6.5/msvc2019_64/lib/cmake/Qt6LinguistTools -DENABLE_QTWEBENGINE=OFF
+    scConverterEnabled: false
+
+before_build:
+  # push a few Artifacts created by windeploy to the AppVeyor result page for inspection (log, err files)?
+  - set DEBUG_WINDEPLOYQT=false
+  - set PUBLISH_BINARY=false
+  - set USE_MESA=false
+  - set USE_EXT_LIBSSL=false
+  - set USE_EXT_LIBGLES=false
+  - set SIGNING=false
+  - set INSTALL_CONVERTER=false
+  - set INSTALL_CONVERTER_DEPS=false
+  - set INNSPATH=C:\Program Files (x86)\Inno Setup 5;C:\Program Files (x86)\Inno Setup 6
+  - set PATH=%VSPATH%;%QT_BASEDIR%;%QT_BASEDIR%\bin;c:\%exiv2baseName%\bin;%INNSPATH%;c:\%gettextBaseName%\bin;c:\%tidyBaseName%\bin;c:\skyculture-converter;%PATH%
+
+## We no longer build 32bit stuff
+#  - ps: if($env:QT_BASEDIR.contains('_64') -or $env:QT_BASEDIR.contains('arm64')) { $env:BITS=64 } else { $env:BITS=32 }
+#  - ps: if($env:QT_BASEDIR.contains('_64')) { $env:PKGARCH="x64" } else { $env:PKGARCH="x86" }
+  - ps:  $env:BITS=64 
+  - ps: if($env:QT_BASEDIR.contains('arm64')) { $env:PKGARCH="arm64" } else { $env:PKGARCH="x64" }    
+  - ps: if($env:QT_VERSION_MAJOR -eq "6") { $env:SSL="OpenSSL-" } else { $env:SSL="OpenSSL-1-" }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-next") { $env:PUBLISH_BINARY = 'true' }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-stable") { $env:PUBLISH_BINARY = 'true' }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-oldstable") { $env:PUBLISH_BINARY = 'true' }
+  - ps: if($env:APPVEYOR_REPO_COMMIT_MESSAGE.contains('[publish]')) { $env:PUBLISH_BINARY = 'true' }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-next" -or $env:APPVEYOR_REPO_COMMIT_MESSAGE.contains('[publish]')) { $env:USE_EXTRA_EXE = 'true' } else { $env:USE_EXTRA_EXE = 'false' }
+  - ps: if($env:PUBLISH_BINARY -eq "true" -and $env:QT_VERSION_MAJOR -eq "5" -and $env:BUILD_NAME.contains('Win')) { $env:USE_EXT_LIBGLES = 'true' }
+  - ps: if($env:PUBLISH_BINARY -eq "true" -and $env:BUILD_NAME.contains('Win')) { $env:USE_EXT_LIBSSL = 'true' }
+  - ps: if($env:PUBLISH_BINARY -eq "true" -and $env:BUILD_NAME.contains('Win')) { $env:USE_MESA = 'true' }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-stable" -and $env:QT_VERSION_MAJOR -eq "6") { $env:SIGNING = 'true' }
+  - ps: if($env:APPVEYOR_REPO_BRANCH -eq "stellarium-oldstable" -and $env:QT_VERSION_MAJOR -eq "5") { $env:SIGNING = 'true' }
+  - ps: if($env:CMAKE_ARGS.contains('SCM_SHOULD_ENABLE_CONVERTER')) { $env:INSTALL_CONVERTER_DEPS = 'true' }
+  - ps: if($env:PUBLISH_BINARY -eq 'true' -and $env:scConverterEnabled -eq 'true') { $env:INSTALL_CONVERTER = 'true' }
+  - ps: if($env:PUBLISH_BINARY -eq "true" -and $env:APPVEYOR_REPO_COMMIT_MESSAGE.contains('[signing]')) { $env:SIGNING = 'true' }
+  - ps: if($env:SIGNING -eq "true") { $env:USE_EXTRA_EXE = 'false' }
+
+  - ps: if($env:exiv2url -ne $null) { appveyor DownloadFile $env:exiv2url -FileName c:\$env:exiv2baseName.zip }
+  - ps: if($env:exiv2url -ne $null) { 7z e c:\$env:exiv2baseName.zip -spf -oc:\ }
+  - ps: if($env:cmakeURL -ne $null) { appveyor DownloadFile $env:cmakeURL -FileName c:\$env:cmakeBaseName.zip }
+  - ps: if($env:cmakeURL -ne $null) { 7z e c:\$env:cmakeBaseName.zip -spf -oc:\ }
+  - ps: if($env:cmakeURL -ne $null) { $env:PATH="c:\$env:cmakeBaseName\bin;$env:PATH" }
+
+  - if [%PUBLISH_BINARY%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-data/releases/download/guide/guide.pdf -FileName c:\stellarium\guide\guide.pdf
+
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { appveyor DownloadFile $env:gettextURL -FileName c:\$env:gettextBaseName.zip }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { 7z e c:\$env:gettextBaseName.zip -spf -oc:\$env:gettextBaseName }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { mkdir c:\$env:gettextBaseName\include }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { appveyor DownloadFile $env:gettextSrcURL -FileName c:\$env:gettextSrcBaseName.tar.xz }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { 7z e c:\$env:gettextSrcBaseName.tar.xz -spf -oc:\ }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { 7z e c:\$env:gettextSrcBaseName.tar -spf -oc:\ }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { (cat c:\$env:gettextSrcBaseName\gettext-tools\libgettextpo\gettext-po.in.h) -replace "extern ([^()]*);","extern __declspec (dllimport) `$1;" > c:\$env:gettextBaseName\include\gettext-po.h }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { echo EXPORTS > libgettextpo.def }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { cp c:\$env:gettextBaseName\bin\libgettextpo-0.dll c:\$env:gettextBaseName\bin\libgettextpo.dll }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { (dumpbin /EXPORTS c:\$env:gettextBaseName\bin\libgettextpo.dll) -match "^.*\b(po_.*)$" -replace "^.*\b(po_.*)$","`$1" >> libgettextpo.def }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { lib /def:libgettextpo.def /out:c:\$env:gettextBaseName\lib\libgettextpo.lib }
+
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { appveyor DownloadFile $env:tidyURL -FileName c:\$env:tidyBaseName.zip }
+  - ps: if($env:INSTALL_CONVERTER_DEPS -eq "true") { 7z e c:\$env:tidyBaseName.zip -spf -oc:\ }
+
+#  - if [%INSTALL_CONVERTER%]==[true] git clone -q --depth=2 https://github.com/Stellarium/stellarium-skyculture-converter c:\skyculture-converter
+#  - if [%INSTALL_CONVERTER%]==[true] mkdir c:\skyculture-converter\build
+#  - if [%INSTALL_CONVERTER%]==[true] cd c:\skyculture-converter\build
+#  - if [%INSTALL_CONVERTER%]==[true] git show --summary
+#  - if [%INSTALL_CONVERTER%]==[true] cmake -DCMAKE_PREFIX_PATH=c:\%gettextBaseName%;c:\%tidyBaseName% -DCMAKE_INSTALL_PREFIX=c:\sc-converter -G "%CMAKE_GENERATOR%" %CMAKE_ARGS% ..
+#  - if [%INSTALL_CONVERTER%]==[true] cmake --build . --config %configuration% --target install -- /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+
+  - cd c:\stellarium
+  - mkdir build && cd build
+  - if [%PUBLISH_BINARY%]==[true] cmake -DCMAKE_PREFIX_PATH=c:\%exiv2baseName%;c:\%gettextBaseName%;c:\%tidyBaseName% -DENABLE_MEDIA=On -DCMAKE_INSTALL_PREFIX=c:\stellarium-package -G "%CMAKE_GENERATOR%" %CMAKE_ARGS% ..
+  - if [%PUBLISH_BINARY%]==[false] cmake -DCMAKE_PREFIX_PATH=c:\%exiv2baseName%;c:\%gettextBaseName%;c:\%tidyBaseName% -DENABLE_MEDIA=On -DENABLE_TESTING=On -DENABLE_NLS=Off -DCMAKE_INSTALL_PREFIX=c:\stellarium-package -G "%CMAKE_GENERATOR%" %CMAKE_ARGS% ..
+
+build:
+  project: c:\stellarium\build\Stellarium.sln
+  parallel: true
+  verbosity: minimal
+
+test_script:
+  - ps: if($env:PUBLISH_BINARY -eq "false" -and $env:BUILD_NAME.contains("Win")) { ctest --output-on-failure }
+
+after_test:
+  ## A few comments and diagnostics useful for upgrading win/Arm64 build to Qt6.8 or higher.
+  # Where are we?
+  #- echo %cd%
+  # save current working dir before changing elsewhere
+  #- set after_test_dir=%cd%
+  # windeployqt complains about path element missing. Unable to read \mkspecs\qconfig.pri: The system cannot find the path specified.
+  #- path  
+  # Unsure: set path for host or target arch?
+  #- set PATH=C:\Qt\6.9\msvc2022_64\bin;%PATH%
+  #- set PATH=C:\Qt\6.9\msvc2022_arm64\bin;%PATH%
+  # CAVEAT: problem in next line? TODO: Change the following line so that windeployqt actually copies the arm dlls!
+  - if [%PUBLISH_BINARY%]==[true] cmake --build c:\stellarium\build\ --config %configuration% --target install
+  # Where are we after cmake build?
+  #- echo %cd%
+  - if [%DEBUG_WINDEPLOYQT%]==[true] cd c:\stellarium\build\
+  # what is pushed?
+  #- if [%DEBUG_WINDEPLOYQT%]==[true] dir /s windeployqt.*
+  # Make a few diagnostic files available when debugging
+  - if [%DEBUG_WINDEPLOYQT%]==[true] for %%i in (windeployqt.*) do appveyor PushArtifact %%i  
+  # Alternative while investigating the Arm64 cross-compile issue
+  #- if [%DEBUG_WINDEPLOYQT%]==[true] for %%i in (windeployqt.* c:\stellarium\build\Stellarium.sln) do appveyor PushArtifact %%i
+  #- echo %cd%
+  #- cd %after_test_dir%
+  #- echo %cd%
+  #- echo " we should be back"  
+  #- echo "Checking that qconfig.pri exists in the expected places"
+  #- dir C:\Qt\6.9\msvc2022_64\mkspecs\qconfig.pri
+  #- type C:\Qt\6.9\msvc2022_64\mkspecs\qconfig.pri
+  #- dir C:\Qt\6.9\msvc2022_arm64\mkspecs\qconfig.pri
+  #- type C:\Qt\6.9\msvc2022_arm64\mkspecs\qconfig.pri
+  - if [%INSTALL_CONVERTER%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-skyculture-converter/releases/download/v0.0.1/stellarium-skyculture-converter-0.0.1-win64.zip -FileName c:\sc-converter.zip
+  - if [%INSTALL_CONVERTER%]==[true] 7z e c:\sc-converter.zip -aoa -oc:\sc-converter
+  - if [%INSTALL_CONVERTER%]==[true] copy c:\sc-converter\lib*.dll c:\stellarium-package\bin\
+  - if [%INSTALL_CONVERTER%]==[true] copy c:\sc-converter\tidy.dll c:\stellarium-package\bin\
+  - if [%INSTALL_CONVERTER%]==[true] copy c:\sc-converter\skyculture-converter.exe c:\stellarium-package\bin\
+  - if [%INSTALL_CONVERTER%]==[true] copy c:\sc-converter\Qt6Xml.dll c:\stellarium-package\qtstuff\
+#  - if [%INSTALL_CONVERTER%]==[true] copy c:\%gettextBaseName%\bin\libgettextpo-0.dll c:\stellarium-package\bin\libgettextpo.dll
+#  - if [%INSTALL_CONVERTER%]==[true] copy c:\%gettextBaseName%\bin\libintl-8.dll c:\stellarium-package\bin\
+#  - if [%INSTALL_CONVERTER%]==[true] copy c:\%gettextBaseName%\bin\libiconv-2.dll c:\stellarium-package\bin\
+#  - if [%INSTALL_CONVERTER%]==[true] copy c:\%tidyBaseName%\bin\tidy.dll c:\stellarium-package\bin\
+#  - if [%INSTALL_CONVERTER%]==[true] copy c:\sc-converter\Qt6Xml.dll c:\stellarium-package\qtstuff\
+  - if [%USE_EXT_LIBGLES%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-data/releases/download/qt-5.6/libGLES-Win%BITS%.zip -FileName c:\stellarium\build\libGLES.zip
+  - if [%USE_EXT_LIBGLES%]==[true] 7z e c:\stellarium\build\libGLES.zip -aoa -oc:\stellarium-package\qtstuff
+  - if [%USE_MESA%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-data/releases/download/mesa-win-20.1.8/opengl32sw-%PKGARCH%.dll -FileName c:\stellarium-package\qtstuff\opengl32sw.dll
+  - if [%USE_EXT_LIBSSL%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-data/releases/download/qt-5.6/%SSL%Win%BITS%.zip -FileName c:\stellarium-OpenSSL.zip
+  - if [%USE_EXT_LIBSSL%]==[true] 7z e c:\stellarium-OpenSSL.zip -aoa -oc:\stellarium-package\qtstuff\
+#  - if [%PUBLISH_BINARY%]==[true] appveyor DownloadFile https://github.com/Stellarium/stellarium-data/releases/download/translations/translations.zip -FileName c:\translations.zip
+#  - if [%PUBLISH_BINARY%]==[true] 7z e c:\translations.zip -spf -oc:\stellarium-package\share\stellarium\
+  - if [%PUBLISH_BINARY%]==[true] if NOT [%exiv2url%] == [] copy c:\%exiv2baseName%\bin\exiv2.dll c:\stellarium-package\bin\
+  # DEBUG: find if there is anything in qtstuff... 
+  # It appears that for Arm64 there is no directory qtstuff. This may cause issues later. Let's create it. But being empty, it still causes an error. Add a dummy file.
+  #- if not exist c:\stellarium-package\qtstuff mkdir c:\stellarium-package\qtstuff
+  #- echo "This is just to make Inno work." > c:\stellarium-package\qtstuff\dummy.txt
+  # Check the following output: Is there a compiled program to find? Feed it to windeployqt below...
+  #- echo %cd%
+  #- dir /s 
+  #- echo "======== ANOTHER DIR LISTING"
+  #- dir /s c:\stellarium-package\qtstuff\
+  # In case the first windeployqt from cmake has now worked, we don't need the second run which again failed because of path errors.
+  # Manually run windeployqt again for ARM builds? TBD: give location of Arm libraries?
+  # - ps: if($env:QT_BASEDIR.contains('arm64')) { C:\Qt\6.9\msvc2022_64\bin\windeployqt.exe --no-translations --compiler-runtime --verbose 2 --qtpaths C:\Qt\6.9\msvc2022_arm64\bin\qtpaths.bat --dir c:\stellarium-package\qtstuff\ c:\stellarium-package\bin\stellarium.exe}
+  #- echo "The qtstuff directory should include Qt6 dll libraries, not just the dummy file "
+  #- dir /s c:\stellarium-package\qtstuff\
+  - if [%PUBLISH_BINARY%]==[true] cmake --build c:\stellarium\build\ --config %configuration% --target stellarium-installer
+  - if [%USE_EXTRA_EXE%]==[true] cmake --build c:\stellarium\build\ --config %configuration% --target stellarium-patch-installer
+  - if [%PUBLISH_BINARY%]==[true] cd c:\stellarium\installers
+  - if [%PUBLISH_BINARY%]==[true] for %%i in (*.exe) do appveyor PushArtifact %%i
+
+# deployment
+deploy:
+- provider: Webhook
+  url: https://app.signpath.io/API/v1/a6a9173a-feb5-41ae-8973-8ca75af5e233/Integrations/AppVeyor?ProjectKey=stellarium&SigningPolicyKey=release-signing
+  authorization:
+    secure: k9Hka8MA6UONiSbKZeAv5koMEljPXgEZ7o1FbvEHRlPFFHMGzQcS6MQsvy53VxeTpG4Kw98FU0VXusbXoKLzug==
+  on:
+    SIGNING: true
+
+notifications:
+- provider: Email
+  to:
+  - alex.v.wolf@gmail.com
+  on_build_success: false
+  on_build_failure: true
+  on_build_status_changed: true
