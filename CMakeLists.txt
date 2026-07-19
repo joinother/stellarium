@@ -629,7 +629,7 @@ IF(${QT_VERSION} VERSION_LESS MINIMAL_QT_VERSION)
 ELSE()
      MESSAGE(STATUS "Found Qt${QT_VERSION_MAJOR}: ${QMAKE_LOCATION} (found suitable version ${QT_VERSION})")
 ENDIF()
-FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts Positioning REQUIRED)
+FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts REQUIRED)
 IF(Qt6_FOUND)
      FIND_PACKAGE(Qt6 REQUIRED COMPONENTS SvgWidgets)
 ELSEIF(Qt5_FOUND)
@@ -640,7 +640,7 @@ SET(USE_BUNDLED_QTCOMPRESS 1 CACHE BOOL "Use bundled version of qtcompress")
 # https://code.qt.io/cgit/qt/qtreleasenotes.git/about/qt/6.10.0/release-note.md
 # > ad7b94e163a: User projects must now call find_package(Qt6 COMPONENTS FooPrivate) to make use of the Qt6::FooPrivate target.
 # For the case of Qt5 this condition evaluates to false.
-IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10 AND NOT USE_BUNDLED_QTCOMPRESS)
+IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10)
      FIND_PACKAGE(Qt6 COMPONENTS GuiPrivate REQUIRED)
 ENDIF()
 IF(USE_PLUGIN_TELESCOPECONTROL OR ENABLE_GPS)

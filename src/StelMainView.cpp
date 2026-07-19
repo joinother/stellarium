@@ -36,6 +36,7 @@
 
 #include <QDebug>
 #include <QDir>
+#include <QOpenGLFunctions>
 #include <QOpenGLWidget>
 #include <QApplication>
 #include <QGuiApplication>
@@ -101,6 +102,10 @@ public:
 		setAttribute(Qt::WA_OpaquePaintEvent);
 		setAttribute(Qt::WA_AcceptTouchEvents);
 		setAttribute(Qt::WA_TouchPadAcceptSingleTouchEvents);
+#if defined(__OHOS__)
+		setAttribute(Qt::WA_AlwaysStackOnTop);
+		qInfo() << "Using always-on-top QOpenGLWidget on OpenHarmony.";
+#endif
 		setAutoFillBackground(false);
 	}
 
@@ -670,7 +675,11 @@ StelMainView::StelMainView(QSettings* settings)
 	initTitleI18n();
 	setObjectName("MainView");
 
+#if defined(__OHOS__)
+	setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+#else
 	setViewportUpdateMode(QGraphicsView::NoViewportUpdate);
+#endif
 	setFrameShape(QFrame::NoFrame);
 	setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -2063,4 +2072,3 @@ void StelMainView::disableScreensaver(bool fullscreen)
 		}
 	}
 }
-

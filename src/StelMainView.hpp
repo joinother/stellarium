@@ -94,7 +94,6 @@ public:
 	//! Start the main initialization of Stellarium
 	void init();
 	void deinit();
-
 	//! Set the application title for the current language.
 	//! This is useful for e.g. chinese.
 	void initTitleI18n();

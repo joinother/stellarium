@@ -173,6 +173,11 @@ public:
 
 void SplashScreen::present(const double sizeRatio)
 {
+#if defined(__OHOS__)
+	Q_UNUSED(sizeRatio)
+	qInfo() << "Skipping splash screen on OpenHarmony.";
+	return;
+#else
 	OpenGLContextPresever preserver;
 
 	Q_ASSERT(!instance);
@@ -182,10 +187,14 @@ void SplashScreen::present(const double sizeRatio)
 #if !defined(Q_OS_ANDROID)
 	instance->ensureFirstPaint();
 #endif
+#endif
 }
 
 void SplashScreen::showMessage(QString const& message)
 {
+	if (!instance)
+		return;
+
 	OpenGLContextPresever contextPreserver;
 	Q_ASSERT(instance);
 	instance->showMessage(message, Qt::AlignLeft|Qt::AlignBottom, Qt::white);
@@ -193,6 +202,9 @@ void SplashScreen::showMessage(QString const& message)
 
 void SplashScreen::finish(QWidget* mainWindow)
 {
+	if (!instance)
+		return;
+
 	OpenGLContextPresever contextPreserver;
 	Q_ASSERT(instance);
 	instance->hide();
@@ -203,6 +215,9 @@ void SplashScreen::finish(QWidget* mainWindow)
 
 void SplashScreen::clearMessage()
 {
+	if (!instance)
+		return;
+
 	OpenGLContextPresever contextPreserver;
 	Q_ASSERT(instance);
 	instance->clearMessage();

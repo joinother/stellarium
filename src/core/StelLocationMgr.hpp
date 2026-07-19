@@ -25,7 +25,15 @@
 #include <QMetaType>
 #include <QMap>
 #include <QImage>
+#ifdef ENABLE_GPS
 #include <QtPositioning/QGeoPositionInfoSource>
+#endif
+#ifndef ENABLE_GPS
+// OHOS 移植：关闭 GPS / QtPositioning 后该模块不存在。头文件中以指针/引用
+// 形式出现的成员与方法签名仅需前向声明即可，无需完整定义。
+class QGeoPositionInfo;
+class QGeoPositionInfoSource;
+#endif
 #include <QLoggingCategory>
 #include "VecMath.hpp"
 
@@ -195,11 +203,11 @@ private slots:
 	//! uwes-ufo's so-far Windows-only extension of the button
 	void positionUpdated(QGeoPositionInfo gpsPos);
 	//#endif
-#endif
 	/// MAYBE NOT NEEDED AFTER ALL:
 	//! Use QLocation services to get location from OS (via IP, Wifi, ...)
 	//! Needs permissions.
 	void positionUpdatedFromOS(const QGeoPositionInfo &info);
+#endif
 
 private:
 	void loadRegions();
