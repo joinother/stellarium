@@ -5,6 +5,8 @@ import { sensor } from '@kit.SensorServiceKit'
 import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
+interface LangOption { code: string; name: string }
+
 interface HierCity {
   n: string
   la: number
@@ -88,6 +90,16 @@ struct WindowNativeNode {
   @State private selectedStatus: string = '等待选择'
   @State private selectedInfo: string = '轻点星图中的天体，或在搜索里输入名称。'
   @State private timeRateText: string = '1x'
+  @State private manualYear: number = 2026
+  @State private manualMonth: number = 7
+  @State private manualDay: number = 20
+  @State private manualHour: number = 23
+  @State private manualMinute: number = 0
+  @State private selectedLanguage: string = 'zh_CN'
+  @State private equatorialMount: boolean = false
+  @State private nightMode: boolean = false
+  @State private pickedDate: Date = new Date()
+  @State private pickedTime: Date = new Date()
   @State private observationTimeText: string = '--'
   @State private locationText: string = '--'
   @State private coordinateText: string = '--'
@@ -305,6 +317,64 @@ struct WindowNativeNode {
     this.flashHint((hours > 0 ? '+' : '') + hours.toString() + ' 小时')
   }
 
+  private dateToJD(year: number, month: number, day: number, hour: number, minute: number): number {
+    if (month <= 2) {
+      year -= 1
+      month += 12
+    }
+    const A = Math.floor(year / 100)
+    const B = 2 - A + Math.floor(A / 4)
+    const jdDay = Math.floor(365.25 * (year + 4716)) + Math.floor(30.6001 * (month + 1)) + day + B - 1524.5
+    return jdDay + hour / 24.0 + minute / 1440.0
+  }
+
+  private applyManualTime(): void {
+    const jd = this.dateToJD(this.manualYear, this.manualMonth, this.manualDay, this.manualHour, this.manualMinute)
+    const result = this.callNative('setJD', jd.toFixed(6))
+    if (result.ok === true) {
+      this.refreshState()
+      this.flashHint('已设定为 ' + this.manualYear + '-' + String(this.manualMonth).padStart(2, '0') + '-' + String(this.manualDay).padStart(2, '0') + ' ' + String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
+    }
+  }
+
+  private setLanguage(lang: string): void {
+    const result = this.callNative('setLanguage', lang)
+    if (result.ok === true) {
+      this.selectedLanguage = lang
+      this.flashHint(lang === 'zh_CN' ? '已切换为中文' : 'Switched to English')
+      this.refreshState()
+    }
+  }
+
+  private syncManualTimeFromState(): void {
+    const result = this.callNative('getState', '')
+    if (result.jd !== undefined) {
+      const jd = result.jd as number
+      const z = Math.floor(jd + 0.5)
+      const f = jd + 0.5 - z
+      let A = z
+      if (z >= 2299161) {
+        const alpha = Math.floor((z - 1867216.25) / 36524.25)
+        A = z + 1 + alpha - Math.floor(alpha / 4)
+      }
+      const B = A + 1524
+      const C = Math.floor((B - 122.1) / 365.25)
+      const D = Math.floor(365.25 * C)
+      const E = Math.floor((B - D) / 30.6001)
+      const day = B - D - Math.floor(30.6001 * E)
+      const month = E < 14 ? E - 1 : E - 13
+      const year = month > 2 ? C - 4716 : C - 4715
+      const dayFraction = f * 24
+      const hour = Math.floor(dayFraction)
+      const minute = Math.floor((dayFraction - hour) * 60)
+      this.manualYear = year
+      this.manualMonth = month
+      this.manualDay = day
+      this.manualHour = hour
+      this.manualMinute = minute
+    }
+  }
+
   private flashHint(text: string): void {
     this.actionHint = text
     if (this.hintTimer !== 0) {
@@ -424,7 +494,11 @@ struct WindowNativeNode {
     this.applySelectedObject(result)
     this.activePanel = 'object'
     this.panelVisible = true
-    this.flashHint('搜索 ' + query)
+    if (result.ok === true) {
+      this.flashHint('已找到: ' + query)
+    } else {
+      this.flashHint('搜索: ' + query)
+    }
   }
 
   private refreshSelectedObject(): void {
@@ -634,9 +708,9 @@ struct WindowNativeNode {
     Button(label)
       .height(28)
       .fontSize(11)
-      .fontColor(this.locationPickMode === mode ? '#0B182B' : '#DCE7F7')
-      .backgroundColor(this.locationPickMode === mode ? '#DFF7FF' : 'rgba(255, 255, 255, 0.10)')
-      .border({ width: 1, color: this.locationPickMode === mode ? 'rgba(159, 232, 255, 0.70)' : 'rgba(255, 255, 255, 0.08)' })
+      .fontColor(this.locationPickMode === mode ? '#FF317AF7' : '#99FFFFFF')
+      .backgroundColor(this.locationPickMode === mode ? '#FF317AF7' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.locationPickMode === mode ? 'rgba(49, 122, 247, 0.50)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(14)
       .margin({ right: 8 })
       .onClick(() => {
@@ -655,8 +729,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#0B182B' : '#DCE7F7')
-                .backgroundColor(selected === item ? '#DFF7FF' : '#16223C')
+                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -667,8 +741,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#0B182B' : '#DCE7F7')
-                .backgroundColor(selected === item ? '#DFF7FF' : '#16223C')
+                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -679,8 +753,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#0B182B' : '#DCE7F7')
-                .backgroundColor(selected === item ? '#DFF7FF' : '#16223C')
+                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -893,6 +967,12 @@ struct WindowNativeNode {
       this.touchStartedOnUi = this.isUiPoint(x, y)
       hilog.info(0x0000, 'StellariumArkUI', 'overlay touch down ' + Math.round(x).toString() + ',' + Math.round(y).toString() + ' ui=' + (this.touchStartedOnUi ? '1' : '0') + ' sky=' + this.skyWidth.toString() + 'x' + this.skyHeight.toString())
     }
+    if (this.uiLocked && this.touchStartedOnUi) {
+      if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+        this.touchStartedOnUi = false
+      }
+      return
+    }
     if (this.touchStartedOnUi) {
       if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
         this.handleUiTap(x, y)
@@ -1062,9 +1142,9 @@ struct WindowNativeNode {
           .width(120)
           .height(120)
           .borderRadius(60)
-          .backgroundColor('rgba(159, 232, 255, 0.06)')
-          .border({ width: 1, color: 'rgba(159, 232, 255, 0.16)' })
-          .shadow({ radius: 42, color: 'rgba(159, 232, 255, 0.18)', offsetX: 0, offsetY: 0 })
+          .backgroundColor('rgba(49, 122, 247, 0.10)')
+          .border({ width: 1, color: 'rgba(49, 122, 247, 0.08)' })
+          .shadow({ radius: 42, color: 'rgba(49, 122, 247, 0.20)', offsetX: 0, offsetY: 0 })
           .align(Alignment.Center)
           .hitTestBehavior(HitTestMode.None)
           .zIndex(4)
@@ -1098,10 +1178,10 @@ struct WindowNativeNode {
           Text(this.actionHint)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#0B182B')
+            .fontColor('#FF317AF7')
         }
           .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-          .backgroundColor('#DFF7FF')
+          .backgroundColor('#FF317AF7')
           .borderRadius(18)
           .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
           .hitTestBehavior(HitTestMode.None)
@@ -1191,21 +1271,21 @@ struct WindowNativeNode {
       Text('Stellarium')
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .maxLines(1)
-      Text('NOW')
-        .fontSize(10)
-        .fontColor('#9FE8FF')
+      Text('LIVE')
+        .fontSize(9)
+        .fontColor('#FF317AF7')
         .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-        .backgroundColor('rgba(88, 204, 255, 0.16)')
-        .borderRadius(10)
+        .backgroundColor('rgba(49, 122, 247, 0.08)')
+        .borderRadius(12)
         .margin({ left: 8 })
     }
       .height(38)
       .padding({ left: 14, right: 12 })
-      .backgroundColor('rgba(18, 26, 42, 0.46)')
+      .backgroundColor('rgba(25, 26, 28, 0.72)')
       .backdropBlur(22)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.18)' })
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(19)
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.24)', offsetX: 0, offsetY: 8 })
       .hitTestBehavior(HitTestMode.None)
@@ -1217,13 +1297,13 @@ struct WindowNativeNode {
       Text(label)
         .fontSize(30)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
     }
       .width(56)
       .height(56)
-      .backgroundColor('rgba(18, 26, 42, 0.52)')
+      .backgroundColor('rgba(25, 26, 28, 0.72)')
       .backdropBlur(26)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.20)' })
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(28)
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
       // 手势由外层 Stack.onClick 统一处理
@@ -1245,9 +1325,9 @@ struct WindowNativeNode {
   }
     .width(58)
         .height(this.railHeight())
-      .backgroundColor('rgba(18, 26, 42, 0.44)')
+      .backgroundColor('rgba(25, 26, 28, 0.72)')
       .backdropBlur(26)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.17)' })
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(29)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
   }
@@ -1263,9 +1343,9 @@ struct WindowNativeNode {
       .width('92%')
       .padding({ left: 8, right: 8 })
       .justifyContent(FlexAlign.SpaceBetween)
-      .backgroundColor('rgba(18, 26, 42, 0.54)')
+      .backgroundColor('rgba(25, 26, 28, 0.78)')
       .backdropBlur(26)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.17)' })
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(33)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 14 })
       .alignSelf(ItemAlign.Center)
@@ -1277,7 +1357,7 @@ struct WindowNativeNode {
       Text(item.icon)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#0B182B' : '#F4F8FF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#E5FFFFFF')
         .lineHeight(44)
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -1286,14 +1366,14 @@ struct WindowNativeNode {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#DFF7FF' : 'rgba(255, 255, 255, 0.10)')
-      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(159, 232, 255, 0.70)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(49, 122, 247, 0.50)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0 })
       .shadow({
         radius: this.activePanel === item.panel && this.panelVisible ? 18 : 0,
-        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(159, 232, 255, 0.36)' : 'rgba(0, 0, 0, 0)',
+        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(49, 122, 247, 0.40)' : 'rgba(0, 0, 0, 0)',
         offsetX: 0,
         offsetY: 6
       })
@@ -1307,20 +1387,20 @@ struct WindowNativeNode {
       Text(item.icon)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#0B182B' : '#F4F8FF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#E5FFFFFF')
         .lineHeight(18)
         .textAlign(TextAlign.Center)
         .width('100%')
       Text(item.label)
         .fontSize(10)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#0B182B' : '#C8D4EA')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#99FFFFFF')
         .margin({ top: 2 })
     }
       .width(54)
       .height(52)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#DFF7FF' : Color.Transparent)
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : Color.Transparent)
       .borderRadius(26)
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0 })
       .animation({ duration: 180, curve: Curve.EaseOut })
@@ -1347,10 +1427,10 @@ struct WindowNativeNode {
       .width(336)
       .constraintSize({ maxHeight: 660 })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
-      .backgroundColor('rgba(18, 26, 42, 0.50)')
+      .backgroundColor('rgba(25, 26, 28, 0.78)')
       .backdropBlur(30)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.20)' })
-      .borderRadius(24)
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
       .animation({ duration: 220, curve: Curve.EaseOut })
@@ -1373,10 +1453,10 @@ struct WindowNativeNode {
       .width('92%')
       .constraintSize({ minHeight: 156, maxHeight: 560 })
       .padding({ top: 10, left: 16, right: 16, bottom: 14 })
-      .backgroundColor('rgba(18, 26, 42, 0.56)')
+      .backgroundColor('rgba(25, 26, 28, 0.78)')
       .backdropBlur(30)
-      .border({ width: 1, color: 'rgba(214, 238, 255, 0.20)' })
-      .borderRadius(24)
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(32)
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .alignSelf(ItemAlign.Center)
@@ -1401,10 +1481,10 @@ struct WindowNativeNode {
         Text(this.panelTitle())
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#F4F8FF')
+          .fontColor('#E5FFFFFF')
         Text(this.panelSubtitle())
           .fontSize(11)
-          .fontColor('#9AA9C2')
+          .fontColor('#66FFFFFF')
           .margin({ top: 3 })
       }
       Blank()
@@ -1422,14 +1502,14 @@ struct WindowNativeNode {
       Text(label)
         .fontSize(18)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#D6E2FF')
+        .fontColor('#99FFFFFF')
     }
       .width(36)
       .height(36)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor('rgba(255, 255, 255, 0.10)')
-      .border({ width: 1, color: 'rgba(255, 255, 255, 0.10)' })
+      .backgroundColor('rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: 'rgba(255, 255, 255, 0.06)' })
       .borderRadius(18)
       .onClick(action)
   }
@@ -1439,31 +1519,31 @@ struct WindowNativeNode {
     if (this.activePanel === 'object') {
       // 名称/类型/状态/追踪需要直接绑定 @State，避免 @Builder 参数按值捕获导致不刷新
       Row() {
-        Text('名称').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.selectedName).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('名称').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.selectedName).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('类型').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.selectedType).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('类型').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.selectedType).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('状态').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.selectedStatus).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('状态').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.selectedStatus).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('追踪').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.trackingText).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('追踪').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Text(this.selectedInfo)
         .fontSize(12)
-        .fontColor('#C8D4EA')
+        .fontColor('#99FFFFFF')
         .lineHeight(18)
         .width('100%')
         .maxLines(8)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 10, right: 10, top: 9, bottom: 9 })
-        .backgroundColor('rgba(159, 232, 255, 0.06)')
-        .border({ width: 1, color: 'rgba(159, 232, 255, 0.14)' })
+        .backgroundColor('rgba(49, 122, 247, 0.10)')
+        .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
         .borderRadius(14)
         .margin({ top: 8, bottom: 8 })
 	      this.quickChips(['刷新', '居中', '取消追踪'])
@@ -1474,19 +1554,75 @@ struct WindowNativeNode {
       this.infoRow('模式', this.timeRateText === '暂停' ? '暂停' : '运行')
       this.quickChips(['现在', '后退', '暂停', '前进'])
       this.quickChips(['+12h', '-12h'])
+      // 滚动选择日期
+      Row() {
+        Text('选择日期').fontSize(13).fontColor('#66FFFFFF').width(72)
+        Button(this.manualYear + '年' + this.manualMonth + '月' + this.manualDay + '日')
+          .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .borderRadius(8).height(36).layoutWeight(1)
+          .onClick(() => {
+            this.pickedDate = new Date(this.manualYear, this.manualMonth - 1, this.manualDay)
+            DatePickerDialog.show({
+              start: new Date('1900-01-01'),
+              end: new Date('2100-12-31'),
+              selected: this.pickedDate,
+              onAccept: (value: DatePickerResult) => {
+                this.manualYear = value.year ?? this.manualYear
+                this.manualMonth = (value.month ?? (this.manualMonth - 1)) + 1
+                this.manualDay = value.day ?? this.manualDay
+              },
+              onCancel: () => {}
+            })
+          })
+      }
+      .height(40).width('100%').padding({ left: 10, right: 10 })
+      .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
+      // 滚动选择时间
+      Row() {
+        Text('选择时间').fontSize(13).fontColor('#66FFFFFF').width(72)
+        Button(String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
+          .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .borderRadius(8).height(36).layoutWeight(1)
+          .onClick(() => {
+            this.pickedTime = new Date(2000, 0, 1, this.manualHour, this.manualMinute)
+            TimePickerDialog.show({
+              selected: this.pickedTime,
+              onAccept: (value: TimePickerResult) => {
+                this.manualHour = value.hour ?? this.manualHour
+                this.manualMinute = value.minute ?? this.manualMinute
+              },
+              onCancel: () => {}
+            })
+          })
+      }
+      .height(40).width('100%').padding({ left: 10, right: 10 })
+      .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
+      // 应用按钮
+      Button('应用设定时间')
+        .fontSize(14).fontColor('#FFFFFFFF').backgroundColor('#FF317AF7')
+        .borderRadius(12).height(40).width('100%').margin({ top: 4 })
+        .onClick(() => { this.applyManualTime() })
+      Button('同步星图当前时间')
+        .fontSize(13).fontColor('#66FFFFFF').backgroundColor('rgba(255,255,255,0.06)')
+        .borderRadius(8).height(36).width('100%').margin({ top: 2 })
+        .onClick(() => {
+          this.syncManualTimeFromState()
+          this.flashHint('已从星图同步时间')
+        })
+
 	    } else if (this.activePanel === 'place') {
       Row() {
-        Text('位置').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.locationText).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('位置').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.locationText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('坐标').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.coordinateText).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.coordinateText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('海拔').fontSize(12).fontColor('#9AA9C2').width(72)
-        Text(this.altitudeText).fontSize(14).fontColor('#F4F8FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.045)').borderRadius(10).margin({ bottom: 4 })
+        Text('海拔').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       this.locationPickerPanel()
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
@@ -1512,10 +1648,10 @@ struct WindowNativeNode {
       this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
       this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
     } else if (this.activePanel === 'search') {
-      TextInput({ text: this.searchText, placeholder: '搜索天体，例如 Moon / Mars / Vega' })
+      TextInput({ text: this.searchText, placeholder: '搜索天体名称' })
         .height(44)
         .fontSize(15)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .placeholderColor('#8EA0BD')
         .backgroundColor('rgba(255, 255, 255, 0.12)')
         .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
@@ -1527,6 +1663,14 @@ struct WindowNativeNode {
           this.searchObject(this.searchText)
         })
       this.quickChips(['Moon', 'Mars', 'Jupiter'])
+      // 天体分类快捷搜索
+      Row() {
+        Text('天体分类').fontSize(12).fontColor('#66FFFFFF').width(72)
+      }
+      .height(6).width('100%').margin({ top: 2 })
+      this.quickChips(['Sun', 'Mercury', 'Venus', 'Saturn'])
+      this.quickChips(['Sirius', 'Vega', 'Betelgeuse', 'Polaris'])
+      this.quickChips(['M31', 'M42', 'M45', 'NGC 2244'])
     } else {
       this.infoRow('显示', this.isExpandedLayout ? '宽屏布局' : '触屏布局')
       this.infoRow('渲染', 'Stellarium Core')
@@ -1535,8 +1679,60 @@ struct WindowNativeNode {
       this.infoRow('灵敏度', this.gyroscopeSensitivityText)
       this.gyroscopeRow()
       this.lx200Panel()
+      this.languageRow()
       this.lockRow()
       this.infoRow('封装', '单 HAP')
+      // 方向快捷查看
+      Row() {
+        Text('方向查看').fontSize(12).fontColor('#66FFFFFF').width(72)
+      }
+      .height(6).width('100%').margin({ top: 2 })
+      Row() {
+        this.quickChips(['东', '南', '西', '北', '天顶', '北天极'])
+      }
+      .width('100%')
+      // FOV 快捷切换
+      Row() {
+        Text('视场角').fontSize(12).fontColor('#66FFFFFF').width(72)
+      }
+      .height(6).width('100%').margin({ top: 2 })
+      Row() {
+        this.quickChips(['1°', '2°', '5°', '10°', '20°', '45°', '60°', '90°', '180°'])
+      }
+      .width('100%')
+      // 天球投影切换
+      Row() {
+        Text('坐标模式').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.equatorialMount ? '赤道坐标' : '地平坐标')
+          .fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.equatorialMount })
+          .onChange((isOn: boolean) => {
+            this.equatorialMount = isOn
+            this.triggerAction('actionSwitch_Equatorial_Mount')
+            this.refreshState()
+            this.flashHint(isOn ? '赤道坐标' : '地平坐标')
+          })
+      }
+      .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ top: 4, bottom: 4 })
+      // 截图+夜间模式
+      Row() {
+        Button('截图保存')
+          .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .borderRadius(12).height(36).layoutWeight(1)
+          .onClick(() => {
+            const result = this.callNative('saveScreenShot', '')
+            if (result.ok === true) { this.flashHint('截图已保存') }
+          })
+        Button(this.nightMode ? '🌙 夜间模式' : '☀️ 日间模式')
+          .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .borderRadius(12).height(36).layoutWeight(1).margin({ left: 8 })
+          .onClick(() => {
+            this.nightMode = !this.nightMode
+            this.triggerAction('actionShow_Night_Mode')
+            this.flashHint(this.nightMode ? '夜间模式' : '日间模式')
+          })
+      }
+      .width('100%').margin({ top: 4, bottom: 4 })
       this.quickChips(['刷新', '现在'])
     }
   }
@@ -1547,14 +1743,14 @@ struct WindowNativeNode {
       Text('LX200 GoTo')
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .width('100%')
       TextInput({ text: this.lx200Host, placeholder: '主机，例如 192.168.1.50' })
         .height(38)
         .fontSize(13)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.10)')
+        .backgroundColor('rgba(255, 255, 255, 0.06)')
         .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
         .borderRadius(12)
         .margin({ top: 8 })
@@ -1564,9 +1760,9 @@ struct WindowNativeNode {
       TextInput({ text: this.lx200Port, placeholder: '端口，例如 4030' })
         .height(38)
         .fontSize(13)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.10)')
+        .backgroundColor('rgba(255, 255, 255, 0.06)')
         .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
         .borderRadius(12)
         .margin({ top: 8 })
@@ -1577,8 +1773,8 @@ struct WindowNativeNode {
         Button('GoTo')
           .height(32)
           .fontSize(12)
-          .fontColor('#0B182B')
-          .backgroundColor('#DFF7FF')
+          .fontColor('#FFFFFFFF')
+          .backgroundColor('#FF317AF7')
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1587,9 +1783,9 @@ struct WindowNativeNode {
         Button('Sync')
           .height(32)
           .fontSize(12)
-          .fontColor('#DFF7FF')
-          .backgroundColor('rgba(159, 232, 255, 0.14)')
-          .border({ width: 1, color: 'rgba(159, 232, 255, 0.24)' })
+          .fontColor('#FF317AF7')
+          .backgroundColor('rgba(49, 122, 247, 0.15)')
+          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1610,7 +1806,7 @@ struct WindowNativeNode {
         .margin({ top: 10 })
       Text(this.lx200Status)
         .fontSize(11)
-        .fontColor('#9AA9C2')
+        .fontColor('#66FFFFFF')
         .width('100%')
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1618,8 +1814,8 @@ struct WindowNativeNode {
     }
       .width('100%')
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .backgroundColor('rgba(159, 232, 255, 0.06)')
-      .border({ width: 1, color: 'rgba(159, 232, 255, 0.14)' })
+      .backgroundColor('rgba(49, 122, 247, 0.10)')
+      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
 	      .borderRadius(14)
 	      .margin({ top: 8, bottom: 8 })
 		  }
@@ -1631,13 +1827,13 @@ struct WindowNativeNode {
         Text('观测位置')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#F4F8FF')
+          .fontColor('#E5FFFFFF')
           .layoutWeight(1)
         Button('自动定位')
           .height(30)
           .fontSize(11)
-          .fontColor('#0B182B')
-          .backgroundColor('#DFF7FF')
+          .fontColor('#FFFFFFFF')
+          .backgroundColor('#FF317AF7')
           .borderRadius(15)
           .onClick(() => {
             this.useDeviceLocation()
@@ -1656,9 +1852,9 @@ struct WindowNativeNode {
         TextInput({ text: this.locationPickerName, placeholder: '位置名称' })
           .height(36)
           .fontSize(13)
-          .fontColor('#F4F8FF')
+          .fontColor('#E5FFFFFF')
           .placeholderColor('#8EA0BD')
-          .backgroundColor('rgba(255, 255, 255, 0.10)')
+          .backgroundColor('rgba(255, 255, 255, 0.06)')
           .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
           .borderRadius(12)
           .margin({ top: 10 })
@@ -1672,15 +1868,15 @@ struct WindowNativeNode {
             .objectFit(ImageFit.Fill)
           Text('N')
             .fontSize(10)
-            .fontColor('#C8D4EA')
+            .fontColor('#99FFFFFF')
             .position({ x: 8, y: 6 })
           Text('S')
             .fontSize(10)
-            .fontColor('#C8D4EA')
+            .fontColor('#99FFFFFF')
             .position({ x: 8, y: this.mapRenderHeight - 20 })
           Text('⌖')
             .fontSize(18)
-            .fontColor('#DFF7FF')
+            .fontColor('#FF317AF7')
             .textShadow({ radius: 8, color: 'rgba(159, 232, 255, 0.75)', offsetX: 0, offsetY: 0 })
             .position({ x: this.pickerPinX(), y: this.pickerPinY() })
         }
@@ -1700,7 +1896,7 @@ struct WindowNativeNode {
           })
         Text(this.pickerCoordinateText())
           .fontSize(12)
-          .fontColor('#C8D4EA')
+          .fontColor('#99FFFFFF')
           .width('100%')
           .margin({ top: 8 })
       } else {
@@ -1714,7 +1910,7 @@ struct WindowNativeNode {
             .height(196)
           Text(this.pickerCoordinateText())
             .fontSize(12)
-            .fontColor('#C8D4EA')
+            .fontColor('#99FFFFFF')
             .width('100%')
             .margin({ top: 8 })
         }
@@ -1725,9 +1921,9 @@ struct WindowNativeNode {
       TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: '海拔 m' })
         .height(34)
         .fontSize(12)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.10)')
+        .backgroundColor('rgba(255, 255, 255, 0.06)')
         .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
         .borderRadius(12)
         .margin({ top: 8 })
@@ -1741,8 +1937,8 @@ struct WindowNativeNode {
         Button('应用')
           .height(32)
           .fontSize(12)
-          .fontColor('#0B182B')
-          .backgroundColor('#DFF7FF')
+          .fontColor('#FFFFFFFF')
+          .backgroundColor('#FF317AF7')
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1750,7 +1946,7 @@ struct WindowNativeNode {
           })
         Text(this.locationPickerStatus)
           .fontSize(11)
-          .fontColor('#9AA9C2')
+          .fontColor('#66FFFFFF')
           .layoutWeight(1)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1760,8 +1956,8 @@ struct WindowNativeNode {
     }
       .width('100%')
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .backgroundColor('rgba(159, 232, 255, 0.06)')
-      .border({ width: 1, color: 'rgba(159, 232, 255, 0.14)' })
+      .backgroundColor('rgba(49, 122, 247, 0.10)')
+      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
       .borderRadius(14)
       .margin({ top: 8, bottom: 8 })
   }
@@ -1776,7 +1972,7 @@ struct WindowNativeNode {
 	          .layoutWeight(1)
 	        Text(this.lx200Host + ':' + this.lx200Port)
 	          .fontSize(12)
-	          .fontColor('#C8D4EA')
+	          .fontColor('#99FFFFFF')
 	          .maxLines(1)
 	          .textOverflow({ overflow: TextOverflow.Ellipsis })
 	      }
@@ -1785,8 +1981,8 @@ struct WindowNativeNode {
 	        Button('GoTo')
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#0B182B')
-	          .backgroundColor('#DFF7FF')
+	          .fontColor('#FFFFFFFF')
+	          .backgroundColor('#FF317AF7')
 	          .borderRadius(16)
 	          .margin({ right: 8 })
 	          .onClick(() => {
@@ -1795,9 +1991,9 @@ struct WindowNativeNode {
 	        Button('Sync')
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#DFF7FF')
-	          .backgroundColor('rgba(159, 232, 255, 0.14)')
-	          .border({ width: 1, color: 'rgba(159, 232, 255, 0.24)' })
+	          .fontColor('#FF317AF7')
+	          .backgroundColor('rgba(49, 122, 247, 0.15)')
+	          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
 	          .borderRadius(16)
 	          .margin({ right: 8 })
 	          .onClick(() => {
@@ -1818,7 +2014,7 @@ struct WindowNativeNode {
 	        .margin({ top: 8 })
 	      Text(this.lx200Status)
 	        .fontSize(11)
-	        .fontColor('#9AA9C2')
+	        .fontColor('#66FFFFFF')
 	        .width('100%')
 	        .maxLines(2)
 	        .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1826,8 +2022,8 @@ struct WindowNativeNode {
 	    }
 	      .width('100%')
 	      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-	      .backgroundColor('rgba(159, 232, 255, 0.06)')
-	      .border({ width: 1, color: 'rgba(159, 232, 255, 0.14)' })
+	      .backgroundColor('rgba(49, 122, 247, 0.10)')
+	      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
 	      .borderRadius(14)
 	      .margin({ top: 8, bottom: 8 })
 	  }
@@ -1837,12 +2033,12 @@ struct WindowNativeNode {
     Row() {
       Text('锁定界面位置')
         .fontSize(14)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.uiLocked })
         .width(46)
         .height(28)
-        .selectedColor('#9FE8FF')
+        .selectedColor('#FF317AF7')
         .onChange((value: boolean) => {
           this.uiLocked = value
           this.flashHint(value ? '界面已锁定' : '可拖动面板')
@@ -1853,16 +2049,68 @@ struct WindowNativeNode {
   }
 
   @Builder
+  languageRow() {
+    Row() {
+      Text('界面语言')
+        .fontSize(14)
+        .fontColor('#E5FFFFFF')
+        .width(72)
+      Scroll() {
+        Row({ space: 6 }) {
+          ForEach([
+            { code: 'zh_CN', name: '简体中文' },
+            { code: 'zh_HK', name: '繁體(港)' },
+            { code: 'zh_TW', name: '繁體(台)' },
+            { code: 'ja', name: '日本語' },
+            { code: 'ko', name: '한국어' },
+            { code: 'de', name: 'Deutsch' },
+            { code: 'fr', name: 'Français' },
+            { code: 'es', name: 'Español' },
+            { code: 'pt_BR', name: 'Português' },
+            { code: 'ru', name: 'Русский' },
+            { code: 'uk', name: 'Українська' },
+            { code: 'it', name: 'Italiano' },
+            { code: 'nl', name: 'Nederlands' },
+            { code: 'pl', name: 'Polski' },
+            { code: 'sv', name: 'Svenska' },
+            { code: 'cs', name: 'Čeština' },
+            { code: 'tr', name: 'Türkçe' },
+            { code: 'ar', name: 'العربية' },
+            { code: 'hi', name: 'हिन्दी' },
+            { code: 'th', name: 'ไทย' },
+            { code: 'vi', name: 'Tiếng Việt' },
+            { code: 'en', name: 'English' },
+          ], (lang: LangOption) => {
+            Text(lang.name)
+              .fontSize(12)
+              .fontColor(this.selectedLanguage === lang.code ? '#FF317AF7' : '#66FFFFFF')
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .backgroundColor(this.selectedLanguage === lang.code ? '#FF317AF7' : 'rgba(255,255,255,0.06)')
+              .borderRadius(8)
+              .onClick(() => { this.setLanguage(lang.code) })
+          }, (lang: LangOption) => lang.code)
+        }
+        .padding({ left: 4, right: 4 })
+      }
+      .layoutWeight(1)
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+    }
+    .height(40)
+    .width('100%')
+  }
+
+  @Builder
 	  gyroscopeRow() {
     Row() {
       Text('转动设备浏览星空')
         .fontSize(14)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.gyroscopeEnabled })
         .width(46)
         .height(28)
-        .selectedColor('#9FE8FF')
+        .selectedColor('#FF317AF7')
         .onChange((value: boolean) => {
           this.toggleGyroscope(value)
           this.flashHint(value ? '已开启陀螺仪' : '已关闭陀螺仪')
@@ -1878,12 +2126,12 @@ struct WindowNativeNode {
       ForEach(labels, (label: string) => {
         Button(label)
           .fontSize(12)
-          .fontColor('#DFF7FF')
+          .fontColor('#FF317AF7')
           .fontWeight(FontWeight.Medium)
           .height(32)
           .padding({ left: 14, right: 14 })
-          .backgroundColor('rgba(159, 232, 255, 0.14)')
-          .border({ width: 1, color: 'rgba(159, 232, 255, 0.24)' })
+          .backgroundColor('rgba(49, 122, 247, 0.15)')
+          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
           .borderRadius(16)
           .margin({ right: 8 })
           .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 5 })
@@ -1934,6 +2182,41 @@ struct WindowNativeNode {
       this.setLocation('Shanghai', 31.2304, 121.4737, 4)
     } else if (label === '深圳') {
       this.setLocation('Shenzhen', 22.5431, 114.0579, 40)
+    // 搜索面板天体快捷搜索
+    } else if (['Sun', 'Mercury', 'Venus', 'Saturn', 'Sirius', 'Vega', 'Betelgeuse', 'Polaris', 'M31', 'M42', 'M45', 'NGC 2244'].includes(label)) {
+      this.searchObject(label)
+    // 方向快捷查看
+    } else if (label === '东') {
+      this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint('朝东')
+    } else if (label === '南') {
+      this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint('朝南')
+    } else if (label === '西') {
+      this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint('朝西')
+    } else if (label === '北') {
+      this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint('朝北')
+    } else if (label === '天顶') {
+      this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint('天顶')
+    } else if (label === '北天极') {
+      this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint('北天极')
+    // FOV 快捷切换（actionSet_FOV 索引: 0=0.5°, 1=180°, 2=90°, 3=60°, 4=45°, 5=20°, 6=10°, 7=5°, 8=2°, 9=1°）
+    } else if (label === '1°') {
+      this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint('FOV 1°')
+    } else if (label === '2°') {
+      this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint('FOV 2°')
+    } else if (label === '5°') {
+      this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint('FOV 5°')
+    } else if (label === '10°') {
+      this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint('FOV 10°')
+    } else if (label === '20°') {
+      this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint('FOV 20°')
+    } else if (label === '45°') {
+      this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint('FOV 45°')
+    } else if (label === '60°') {
+      this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint('FOV 60°')
+    } else if (label === '90°') {
+      this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint('FOV 90°')
+    } else if (label === '180°') {
+      this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint('FOV 180°')
     }
   }
 
@@ -1942,11 +2225,11 @@ struct WindowNativeNode {
     Row() {
       Text(label)
         .fontSize(12)
-        .fontColor('#9AA9C2')
+        .fontColor('#66FFFFFF')
         .width(72)
       Text(value)
         .fontSize(14)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .layoutWeight(1)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1954,8 +2237,8 @@ struct WindowNativeNode {
       .height(34)
       .width('100%')
       .padding({ left: 10, right: 10 })
-      .backgroundColor('rgba(255, 255, 255, 0.045)')
-      .borderRadius(10)
+      .backgroundColor('rgba(255, 255, 255, 0.04)')
+      .borderRadius(12)
       .margin({ bottom: 4 })
   }
 
@@ -1964,12 +2247,12 @@ struct WindowNativeNode {
     Row() {
       Text(label)
         .fontSize(14)
-        .fontColor('#F4F8FF')
+        .fontColor('#E5FFFFFF')
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: enabled })
         .width(46)
         .height(28)
-        .selectedColor('#9FE8FF')
+        .selectedColor('#FF317AF7')
         .onChange((value: boolean) => {
           this.setLayer(actionId, value)
           this.flashHint((value ? '已显示 ' : '已隐藏 ') + label)
@@ -1978,8 +2261,8 @@ struct WindowNativeNode {
       .height(42)
       .width('100%')
       .padding({ left: 10, right: 8 })
-      .backgroundColor(enabled ? 'rgba(159, 232, 255, 0.10)' : 'rgba(255, 255, 255, 0.045)')
-      .border({ width: 1, color: enabled ? 'rgba(159, 232, 255, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
+      .backgroundColor(enabled ? 'rgba(49, 122, 247, 0.10)' : 'rgba(255, 255, 255, 0.04)')
+      .border({ width: 1, color: enabled ? 'rgba(49, 122, 247, 0.20)' : 'rgba(255, 255, 255, 0.05)' })
       .borderRadius(12)
       .margin({ bottom: 6 })
       .animation({ duration: 160, curve: Curve.EaseOut })
