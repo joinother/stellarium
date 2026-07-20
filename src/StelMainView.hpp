@@ -94,6 +94,10 @@ public:
 	//! Start the main initialization of Stellarium
 	void init();
 	void deinit();
+#if defined(__OHOS__)
+	void startOhosRenderPump();
+	void renderOhosFrameNow();
+#endif
 	//! Set the application title for the current language.
 	//! This is useful for e.g. chinese.
 	void initTitleI18n();
@@ -311,6 +315,9 @@ private slots:
 private:
 	//! The graphics scene notifies us when a draw finished, so that we can queue the next one
 	void drawEnded();
+#if defined(__OHOS__)
+	void requestOhosSceneRepaint();
+#endif
 	//! provide extended OpenGL diagnostics in logfile.
 	void dumpOpenGLdiagnostics() const;
 	//! Startup diagnostics, providing test for various circumstances of bad OS/OpenGL driver combinations
@@ -357,6 +364,9 @@ private:
 	QTimer* cursorTimeoutTimer;
 
 	double lastEventTimeSec;
+#if defined(__OHOS__)
+	double lastOhosRenderTimeSec;
+#endif
 
 	//! The minimum desired frame rate in frame per second.
 	float minfps;

@@ -33,12 +33,23 @@
 #include "StelOpenGL.hpp"
 #include "StelOpenGLArray.hpp"
 #include "StelProjector.hpp"
+#include "StelModuleMgr.hpp"
+#include "StelMovementMgr.hpp"
+#include "StelObject.hpp"
+#include "StelObjectMgr.hpp"
+#include "StelObserver.hpp"
 
+#include <QByteArray>
+#include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QJsonDocument>
+#include <cstdio>
+#include <QJsonObject>
 #include <QOpenGLFunctions>
 #include <QOpenGLWidget>
 #include <QApplication>
+#include <QTcpSocket>
 #include <QGuiApplication>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsAnchorLayout>
@@ -55,6 +66,7 @@
 #include <QtPlugin>
 #include <QThread>
 #include <QTimer>
+#include <QVariantMap>
 #include <QWidget>
 #include <QWindow>
 #include <QMessageBox>
@@ -76,7 +88,13 @@
 
 Q_LOGGING_CATEGORY(mainview, "stel.MainView")
 
+#include <algorithm>
+#include <cmath>
 #include <clocale>
+#if defined(__OHOS__)
+#include <dlfcn.h>
+#include <hilog/log.h>
+#endif
 
 #ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY
 # define GL_MAX_TEXTURE_MAX_ANISOTROPY 0x84FF
@@ -84,6 +102,797 @@ Q_LOGGING_CATEGORY(mainview, "stel.MainView")
 
 // Initialize static variables
 StelMainView* StelMainView::singleton = Q_NULLPTR;
+
+#if defined(__OHOS__)
+namespace
+{
+using OhosSubmitFrameFunc = void (*)(const unsigned char*, int, int);
+constexpr int OHOS_INTERACTIVE_RENDER_INTERVAL_MS = 33;
+constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 125;
+
+void ohosMark(const char* message)
+{
+	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "%{public}s", message);
+}
+
+int currentOhosRenderIntervalMs()
+{
+	if (!StelApp::isInitialized())
+		return OHOS_IDLE_RENDER_INTERVAL_MS;
+	return StelMainView::getInstance().needsMaxFPS() ? OHOS_INTERACTIVE_RENDER_INTERVAL_MS : OHOS_IDLE_RENDER_INTERVAL_MS;
+}
+
+void markOhosInteraction()
+{
+	if (StelApp::isInitialized())
+		StelMainView::getInstance().thereWasAnEvent();
+}
+
+QString formatLx200Ra(int totalSeconds)
+{
+	totalSeconds %= 86400;
+	if (totalSeconds < 0)
+		totalSeconds += 86400;
+	return QString("%1:%2:%3")
+		.arg(totalSeconds / 3600, 2, 10, QChar('0'))
+		.arg((totalSeconds / 60) % 60, 2, 10, QChar('0'))
+		.arg(totalSeconds % 60, 2, 10, QChar('0'));
+}
+
+QString formatLx200Dec(int totalArcSeconds)
+{
+	const QChar sign = totalArcSeconds < 0 ? QChar('-') : QChar('+');
+	int value = std::abs(totalArcSeconds);
+	return QString("%1%2%3%4:%5")
+		.arg(sign)
+		.arg(value / 3600, 2, 10, QChar('0'))
+		.arg(QChar(0xDF))
+		.arg((value / 60) % 60, 2, 10, QChar('0'))
+		.arg(value % 60, 2, 10, QChar('0'));
+}
+
+QJsonObject sendLx200Commands(const QString& host, quint16 port, const QStringList& commands)
+{
+	QJsonObject result;
+	result["ok"] = false;
+	result["host"] = host;
+	result["port"] = int(port);
+
+	QTcpSocket socket;
+	socket.connectToHost(host, port);
+	if (!socket.waitForConnected(900))
+	{
+		result["error"] = "LX200 TCP connect failed: " + socket.errorString();
+		return result;
+	}
+
+	QStringList replies;
+	for (const QString& command : commands)
+	{
+		const QByteArray payload = command.toLatin1();
+		if (socket.write(payload) != payload.size() || !socket.waitForBytesWritten(600))
+		{
+			result["error"] = "LX200 TCP write failed: " + socket.errorString();
+			result["command"] = command;
+			return result;
+		}
+
+		if (command == "#:Q#")
+			continue;
+
+		QByteArray reply;
+			const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 900;
+		while (QDateTime::currentMSecsSinceEpoch() < deadline)
+		{
+			if (socket.waitForReadyRead(250))
+			{
+				reply += socket.readAll();
+				if (reply.contains('#') || (!reply.isEmpty() && command == ":MS#"))
+					break;
+			}
+		}
+		if (reply.isEmpty())
+		{
+			result["error"] = "LX200 TCP command timed out";
+			result["command"] = command;
+			return result;
+		}
+		replies << QString::fromLatin1(reply);
+	}
+
+	result["ok"] = true;
+	result["replies"] = replies.join("|");
+	result["sent"] = commands.join("|");
+	return result;
+}
+
+QJsonObject selectedObjectJ2000Json(Vec3d* positionOut = nullptr)
+{
+	QJsonObject result;
+	result["ok"] = false;
+
+	StelCore* core = StelApp::getInstance().getCore();
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (!core || !objectMgr || objectMgr->getSelectedObject().isEmpty())
+	{
+		result["error"] = "no selected object";
+		return result;
+	}
+
+	const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+	Vec3d position = object->getJ2000EquatorialPos(core);
+	position.normalize();
+	if (positionOut)
+		*positionOut = position;
+
+	const double raSigned = std::atan2(position[1], position[0]);
+	const double ra = raSigned >= 0.0 ? raSigned : raSigned + 2.0 * M_PI;
+	const double dec = std::atan2(position[2], std::sqrt(position[0] * position[0] + position[1] * position[1]));
+	result["ok"] = true;
+	result["name"] = object->getNameI18n();
+	result["englishName"] = object->getEnglishName();
+	result["raHours"] = ra * 12.0 / M_PI;
+	result["decDegrees"] = dec * 180.0 / M_PI;
+	return result;
+}
+
+QJsonObject lx200GotoSelected(const QString& payload, bool sync)
+{
+	const QStringList parts = payload.split('|');
+	if (parts.size() < 2)
+	{
+		QJsonObject result;
+		result["ok"] = false;
+		result["error"] = "expects host|port";
+		return result;
+	}
+
+	bool okPort = false;
+	const QString host = parts[0].trimmed();
+	const int portInt = parts[1].toInt(&okPort);
+	if (host.isEmpty() || !okPort || portInt <= 0 || portInt > 65535)
+	{
+		QJsonObject result;
+		result["ok"] = false;
+		result["error"] = "invalid LX200 endpoint";
+		return result;
+	}
+
+	Vec3d position;
+	QJsonObject objectResult = selectedObjectJ2000Json(&position);
+	if (objectResult["ok"] != true)
+		return objectResult;
+
+	const double raSigned = std::atan2(position[1], position[0]);
+	const double ra = raSigned >= 0.0 ? raSigned : raSigned + 2.0 * M_PI;
+	const double dec = std::atan2(position[2], std::sqrt(position[0] * position[0] + position[1] * position[1]));
+	int raSeconds = int(std::floor(0.5 + ra * 43200.0 / M_PI));
+	if (raSeconds >= 86400)
+		raSeconds -= 86400;
+	const int decArcSeconds = int(std::floor(0.5 + dec * 648000.0 / M_PI));
+
+	const QStringList commands = {
+		"#:Q#",
+		":Sr" + formatLx200Ra(raSeconds) + "#",
+		":Sd" + formatLx200Dec(decArcSeconds) + "#",
+		sync ? ":CM#" : ":MS#"
+	};
+
+	QJsonObject result = sendLx200Commands(host, quint16(portInt), commands);
+	result["target"] = objectResult["name"].toString().isEmpty() ? objectResult["englishName"].toString() : objectResult["name"].toString();
+	result["ra"] = formatLx200Ra(raSeconds);
+	result["dec"] = formatLx200Dec(decArcSeconds);
+	result["mode"] = sync ? "sync" : "goto";
+	return result;
+}
+
+void submitOhosFramebuffer(QOpenGLFunctions* gl)
+{
+	static int paintCounter = 0;
+	static int observedFrames = 0;
+	static int submittedFrames = 0;
+	if (paintCounter == 0)
+		ohosMark("StelRootItem paint reached");
+	++paintCounter;
+
+	static bool resolved = false;
+	static OhosSubmitFrameFunc submitFrame = nullptr;
+	if (!resolved)
+	{
+		resolved = true;
+		void* entryHandle = dlopen("libentry.so", RTLD_NOW | RTLD_NOLOAD);
+		if (!entryHandle)
+			entryHandle = dlopen("libentry.so", RTLD_NOW);
+		submitFrame = reinterpret_cast<OhosSubmitFrameFunc>(entryHandle ? dlsym(entryHandle, "StellariumEntry_submitFrame")
+													: dlsym(RTLD_DEFAULT, "StellariumEntry_submitFrame"));
+		qInfo() << "OpenHarmony native frame bridge" << (submitFrame ? "resolved." : "not found.");
+		ohosMark(submitFrame ? "frame bridge resolved" : "frame bridge not found");
+	}
+	if (!submitFrame)
+		return;
+
+	GLint viewport[4] = {0, 0, 0, 0};
+	gl->glGetIntegerv(GL_VIEWPORT, viewport);
+	const int width = viewport[2];
+	const int height = viewport[3];
+	static bool loggedViewport = false;
+	if (!loggedViewport)
+	{
+		loggedViewport = true;
+		OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "framebuffer viewport %{public}dx%{public}d", width, height);
+	}
+	if (width <= 0 || height <= 0)
+		return;
+
+	QByteArray pixels;
+	pixels.resize(width * height * 4);
+	gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	gl->glReadPixels(viewport[0], viewport[1], width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	const GLenum error = gl->glGetError();
+	if (error != GL_NO_ERROR)
+	{
+		qWarning() << "OpenHarmony framebuffer readback failed:" << Qt::hex << error;
+		return;
+	}
+
+	const unsigned char* rgba = reinterpret_cast<const unsigned char*>(pixels.constData());
+	++observedFrames;
+	if (submittedFrames == 0)
+	{
+		const int pixelCount = width * height;
+		int maxChannel = 0;
+		int litPixels = 0;
+		int strongPixels = 0;
+		unsigned long long luminanceSum = 0;
+		for (int i = 0; i < pixelCount; ++i)
+		{
+			const int index = i * 4;
+			const int brightest = std::max({int(rgba[index]), int(rgba[index + 1]), int(rgba[index + 2])});
+			maxChannel = std::max(maxChannel, brightest);
+			luminanceSum += brightest;
+			if (brightest > 18)
+				++litPixels;
+			if (brightest > 64)
+				++strongPixels;
+		}
+		if (observedFrames <= 4)
+		{
+			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
+						 "frame stats n=%{public}d max=%{public}d lit=%{public}d strong=%{public}d avg=%{public}llu",
+						 observedFrames, maxChannel, litPixels, strongPixels, luminanceSum / static_cast<unsigned long long>(pixelCount));
+		}
+		if (maxChannel < 24 || (litPixels < 128 && strongPixels < 8))
+			return;
+	}
+
+	submitFrame(rgba, width, height);
+	++submittedFrames;
+	if (submittedFrames == 1)
+	{
+		qInfo() << "Submitted first Stellarium framebuffer to OpenHarmony native surface:" << width << "x" << height;
+		ohosMark("submitted first Stellarium framebuffer");
+	}
+}
+
+QString runOhosCommandOnQtThread(const std::function<QJsonObject()>& command)
+{
+	QJsonObject result;
+	if (!qApp)
+	{
+		result["ok"] = false;
+		result["error"] = "qApp not ready";
+		return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+	}
+
+	auto run = [&]() {
+		if (!StelApp::isInitialized())
+		{
+			result["ok"] = false;
+			result["error"] = "Stellarium not initialized";
+			return;
+		}
+		result = command();
+	};
+
+	if (QThread::currentThread() == qApp->thread())
+		run();
+	else
+		QMetaObject::invokeMethod(qApp, run, Qt::BlockingQueuedConnection);
+
+	return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
+QJsonObject selectedObjectJson(StelCore* core = nullptr)
+{
+	QJsonObject result;
+	result["ok"] = true;
+
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (!objectMgr || objectMgr->getSelectedObject().isEmpty())
+	{
+		result["found"] = false;
+		return result;
+	}
+
+	const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+	const QVariantMap info = StelObjectMgr::getObjectInfo(object);
+	result = QJsonObject::fromVariantMap(info);
+	result["ok"] = true;
+	result["found"] = true;
+	result["name"] = object->getNameI18n();
+	result["englishName"] = object->getEnglishName();
+	result["type"] = object->getObjectTypeI18n();
+	if (core)
+	{
+		const QString info = object->getInfoString(core, StelObject::ShortInfo |
+			StelObject::Magnitude | StelObject::AltAzi | StelObject::Distance |
+			StelObject::Size | StelObject::PlainText).simplified();
+		if (!info.isEmpty())
+			result["info"] = info;
+	}
+	return result;
+}
+
+QJsonObject currentStateJson()
+{
+	QJsonObject result;
+	result["ok"] = true;
+
+	StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
+	StelCore* core = StelApp::getInstance().getCore();
+	StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+
+	if (core)
+	{
+		const StelLocation& location = core->getCurrentLocation();
+		result["timeRate"] = core->getTimeRate();
+		result["jd"] = core->getJD();
+		result["timeText"] = StelUtils::julianDayToISO8601String(core->getJD() + core->getUTCOffset(core->getJD()) / 24.0);
+		result["locationName"] = location.name;
+		result["locationRegion"] = location.region;
+		result["planetName"] = location.planetName;
+		result["latitude"] = location.getLatitude();
+		result["longitude"] = location.getLongitude();
+		result["altitude"] = location.altitude;
+	}
+
+	if (movementMgr)
+	{
+		result["fov"] = movementMgr->getCurrentFov();
+		result["tracking"] = movementMgr->getFlagTracking();
+	}
+
+	if (actionMgr)
+	{
+		const QStringList ids = {
+			"actionShow_Stars",
+			"actionShow_Stars_Labels",
+			"actionShow_Planets",
+			"actionShow_Planets_Labels",
+			"actionShow_Planets_Orbits",
+			"actionShow_Planets_Hints",
+			"actionShow_Nebulas",
+			"actionShow_MilkyWay",
+			"actionShow_Ground",
+			"actionShow_Constellation_Lines",
+			"actionShow_Constellation_Labels",
+			"actionShow_Constellation_Boundaries",
+			"actionShow_Constellation_Art",
+			"actionShow_Atmosphere",
+			"actionShow_Cardinal_Points",
+			"actionShow_Azimuthal_Grid",
+			"actionShow_Equatorial_Grid",
+			"actionShow_Equatorial_J2000_Grid",
+			"actionShow_Ecliptic_Grid",
+			"actionShow_Meridian_Line",
+			"actionShow_Horizon_Line"
+		};
+		for (const QString& id : ids)
+		{
+			StelAction* action = actionMgr->findAction(id);
+			if (action && action->isCheckable())
+				result[id] = action->isChecked();
+		}
+	}
+
+	return result;
+}
+}
+
+extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
+{
+	static QByteArray response;
+	const QString commandName = QString::fromUtf8(command ? command : "");
+	const QString arg = QString::fromUtf8(payload ? payload : "");
+	qInfo() << "[StellariumOhos] command received:" << commandName << arg;
+
+	const QString json = runOhosCommandOnQtThread([&]() -> QJsonObject {
+		QJsonObject result;
+		result["ok"] = false;
+		qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
+
+		StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
+		StelCore* core = StelApp::getInstance().getCore();
+		StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+		StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+
+		if (commandName == "triggerAction" || commandName == "setActionChecked" || commandName == "getActionState")
+		{
+			StelAction* action = actionMgr ? actionMgr->findAction(arg.section('|', 0, 0)) : nullptr;
+			if (!action)
+			{
+				result["error"] = "action not found";
+				result["id"] = arg.section('|', 0, 0);
+				return result;
+			}
+
+			if (commandName == "triggerAction")
+			{
+				action->trigger();
+				markOhosInteraction();
+			}
+			else if (commandName == "setActionChecked")
+			{
+				if (!action->isCheckable())
+				{
+					result["error"] = "action is not checkable";
+					result["id"] = action->getId();
+					return result;
+				}
+				action->setChecked(arg.section('|', 1, 1) == "1" || arg.section('|', 1, 1).toLower() == "true");
+				markOhosInteraction();
+			}
+
+			result["ok"] = true;
+			result["id"] = action->getId();
+			result["checkable"] = action->isCheckable();
+			result["checked"] = action->isCheckable() ? action->isChecked() : false;
+			return result;
+		}
+
+		if (commandName == "searchObject")
+		{
+			if (!objectMgr)
+			{
+				result["error"] = "object manager not found";
+				return result;
+			}
+
+			const QString query = arg.trimmed();
+			bool found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
+			if (found && movementMgr && !objectMgr->getSelectedObject().isEmpty())
+			{
+				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
+				movementMgr->setFlagTracking(true);
+			}
+			markOhosInteraction();
+
+			result = selectedObjectJson(core);
+			result["ok"] = true;
+			result["found"] = found;
+			result["query"] = query;
+			return result;
+		}
+
+		if (commandName == "selectAt")
+		{
+			if (!objectMgr || !core)
+			{
+				result["error"] = "selection manager not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 2)
+			{
+				result["error"] = "selectAt expects x|y or x|y|height";
+				return result;
+			}
+			bool okX = false;
+			bool okY = false;
+			const int x = parts[0].toInt(&okX);
+			const int y = parts[1].toInt(&okY);
+			bool okW = false, okH = false;
+			int skyW = 1440, skyH = 960;
+			if (parts.size() >= 4)
+			{
+				skyW = parts[2].toInt(&okW);
+				skyH = parts[3].toInt(&okH);
+			}
+			bool found = false;
+
+		if (okX && okY)
+		{
+			const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+			const Vec4i vp = prj->getViewport();
+			const double scaleX = (okW && skyW > 0) ? (double)vp[2] / (double)skyW : (double)vp[2] / 1440.0;
+			const double scaleY = (okH && skyH > 0) ? (double)vp[3] / (double)skyH : (double)vp[3] / 960.0;
+			const int sx = qRound(x * scaleX);
+			// Touch Y comes from top-left (screen); Stellarium's projector unProject expects
+			// Y from bottom-left (GL convention). Desktop path flips via (height-1-y); do the same
+			// here, otherwise taps in the top half select objects in the bottom half and vice versa.
+			const int syTop = qRound(y * scaleY);
+			const int sy = vp[3] - 1 - syTop;
+			qInfo() << "[StellariumOhos][selectAt] tap" << x << y << "sky" << skyW << skyH
+					<< "viewport" << vp[2] << vp[3] << "->stel" << sx << sy;
+			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
+						 "selectAt tapX=%{public}d tapY=%{public}d skyW=%{public}d skyH=%{public}d vpW=%{public}d vpH=%{public}d sx=%{public}d syTop=%{public}d syGL=%{public}d",
+						 x, y, skyW, skyH, vp[2], vp[3], sx, syTop, sy);
+			found = objectMgr->findAndSelect(core, sx, sy);
+			qInfo() << "[StellariumOhos][selectAt] found" << found;
+			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
+						 "selectAt found=%{public}d", found ? 1 : 0);
+		}
+
+		markOhosInteraction();
+		result = selectedObjectJson(core);
+		result["ok"] = true;
+		result["found"] = found;
+		result["tapX"] = x;
+		result["tapY"] = y;
+		return result;
+		}
+
+		if (commandName == "dragView")
+		{
+			const QStringList parts = arg.split('|');
+			if (parts.size() != 4)
+			{
+				result["error"] = "dragView expects x1|y1|x2|y2";
+				return result;
+			}
+			bool okX1 = false;
+			bool okY1 = false;
+			bool okX2 = false;
+			bool okY2 = false;
+			const int x1 = parts[0].toInt(&okX1);
+			const int y1 = parts[1].toInt(&okY1);
+			const int x2 = parts[2].toInt(&okX2);
+			const int y2 = parts[3].toInt(&okY2);
+			if (!okX1 || !okY1 || !okX2 || !okY2)
+			{
+				result["error"] = "invalid dragView payload";
+				return result;
+			}
+			movementMgr->dragView(x1, y1, x2, y2);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["fov"] = movementMgr->getCurrentFov();
+			return result;
+		}
+
+		if (commandName == "panBy")
+		{
+			if (!movementMgr)
+			{
+				result["error"] = "movement manager not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() != 4)
+			{
+				result["error"] = "panBy expects dx|dy|width|height";
+				return result;
+			}
+			bool okDx = false;
+			bool okDy = false;
+			bool okWidth = false;
+			bool okHeight = false;
+			const double dx = parts[0].toDouble(&okDx);
+			const double dy = parts[1].toDouble(&okDy);
+			const double width = parts[2].toDouble(&okWidth);
+			const double height = parts[3].toDouble(&okHeight);
+			if (!okDx || !okDy || !okWidth || !okHeight || width <= 0.0 || height <= 0.0)
+			{
+				result["error"] = "invalid panBy payload";
+				return result;
+			}
+			const double fovRad = movementMgr->getCurrentFov() * M_PI / 180.0;
+			movementMgr->panView(-dx / width * fovRad, dy / height * fovRad);
+			movementMgr->setFlagTracking(false);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["fov"] = movementMgr->getCurrentFov();
+			return result;
+		}
+
+		if (commandName == "zoomBy")
+		{
+			if (!movementMgr)
+			{
+				result["error"] = "movement manager not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			bool okScale = false;
+			const double scale = parts.value(0).toDouble(&okScale);
+			const bool started = parts.value(1) == "1" || parts.value(1).toLower() == "true";
+			if (!okScale || scale <= 0.0)
+			{
+				result["error"] = "invalid zoom scale";
+				return result;
+			}
+			movementMgr->handlePinch(scale, started);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["fov"] = movementMgr->getCurrentFov();
+			return result;
+		}
+
+		if (commandName == "getSelectedObjectInfo")
+			return selectedObjectJson(core);
+
+		if (commandName == "moveToSelected")
+		{
+			if (objectMgr && movementMgr && !objectMgr->getSelectedObject().isEmpty())
+			{
+				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
+				movementMgr->setFlagTracking(true);
+				result = selectedObjectJson(core);
+				result["ok"] = true;
+				markOhosInteraction();
+				return result;
+			}
+			result["error"] = "no selected object";
+			return result;
+		}
+
+		if (commandName == "setTracking")
+		{
+			if (!movementMgr)
+			{
+				result["error"] = "movement manager not ready";
+				return result;
+			}
+			const bool enabled = arg == "1" || arg.toLower() == "true";
+			movementMgr->setFlagTracking(enabled);
+			markOhosInteraction();
+			result = currentStateJson();
+			return result;
+		}
+
+		if (commandName == "setLocation")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 4)
+			{
+				result["error"] = "setLocation expects name|lat|lon|alt";
+				return result;
+			}
+			bool okLat = false;
+			bool okLon = false;
+			bool okAlt = false;
+			const double lat = parts[1].toDouble(&okLat);
+			const double lon = parts[2].toDouble(&okLon);
+			const int alt = parts[3].toInt(&okAlt);
+			if (!okLat || !okLon || !okAlt)
+			{
+				result["error"] = "invalid location payload";
+				return result;
+			}
+
+			StelLocation location;
+			location.name = parts[0].trimmed().isEmpty() ? QStringLiteral("Custom") : parts[0].trimmed();
+			location.region = QStringLiteral("User");
+			location.planetName = QStringLiteral("Earth");
+			location.setLatitude(static_cast<float>(lat));
+			location.setLongitude(static_cast<float>(lon));
+			location.altitude = alt;
+			location.role = QChar('X');
+			location.ianaTimeZone = QStringLiteral("system_default");
+			core->moveObserverTo(location, 0.0, 0.0);
+			markOhosInteraction();
+			result = currentStateJson();
+			return result;
+		}
+
+		if (commandName == "setTimeRate")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			bool okRate = false;
+			const double rate = arg.toDouble(&okRate);
+			if (!okRate)
+			{
+				result["error"] = "invalid time rate";
+				return result;
+			}
+			core->setTimeRate(rate);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["timeRate"] = core->getTimeRate();
+			return result;
+		}
+
+		if (commandName == "advanceTime")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			bool okH = false;
+			const double hours = arg.toDouble(&okH);
+			if (!okH)
+			{
+				result["error"] = "advanceTime expects hours";
+				return result;
+			}
+			core->setJD(core->getJD() + hours / 24.0);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["jd"] = core->getJD();
+			return result;
+		}
+
+		if (commandName == "zoomStep")
+		{
+			if (!movementMgr)
+			{
+				result["error"] = "movement manager not ready";
+				return result;
+			}
+			bool okF = false;
+			const double factor = arg.toDouble(&okF);
+			if (!okF || factor <= 0.0)
+			{
+				result["error"] = "zoomStep expects positive factor";
+				return result;
+			}
+			double aim = movementMgr->getCurrentFov() * factor;
+			if (aim < 0.001) aim = 0.001;
+			if (aim > 360.0) aim = 360.0;
+			movementMgr->zoomTo(aim, 0.4f);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["fov"] = aim;
+			return result;
+		}
+
+		if (commandName == "getState")
+			return currentStateJson();
+
+		if (commandName == "telescopeLx200GotoSelected")
+			return lx200GotoSelected(arg, false);
+
+		if (commandName == "telescopeLx200SyncSelected")
+			return lx200GotoSelected(arg, true);
+
+		if (commandName == "telescopeLx200Abort")
+		{
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 2)
+			{
+				result["error"] = "expects host|port";
+				return result;
+			}
+			bool okPort = false;
+			const QString host = parts[0].trimmed();
+			const int portInt = parts[1].toInt(&okPort);
+			if (host.isEmpty() || !okPort || portInt <= 0 || portInt > 65535)
+			{
+				result["error"] = "invalid LX200 endpoint";
+				return result;
+			}
+			return sendLx200Commands(host, quint16(portInt), {"#:Q#"});
+		}
+
+		result["error"] = "unknown command";
+		result["command"] = commandName;
+		return result;
+	});
+
+	response = json.toUtf8();
+	return response.constData();
+}
+#endif
 
 class StelGLWidget : public QOpenGLWidget
 {
@@ -365,14 +1174,20 @@ public:
 	StelRootItem(StelMainView* mainView, QGraphicsItem* parent = Q_NULLPTR)
 		: QGraphicsObject(parent),
 		  mainView(mainView),
+#if defined(__OHOS__)
+		  ohosPinchActive(false),
+		  ohosPinchStartDistance(0.0),
+#endif
 		  skyBackgroundColor(0.f,0.f,0.f)
 	{
 		setFlags(QGraphicsItem::ItemClipsToShape | QGraphicsItem::ItemClipsChildrenToShape | QGraphicsItem::ItemIsFocusable);
 
 		setAcceptHoverEvents(true);
 
-#ifdef Q_OS_WIN
+#if defined(Q_OS_WIN) || defined(__OHOS__)
 		setAcceptTouchEvents(true);
+#endif
+#ifdef Q_OS_WIN
 		grabGesture(Qt::PinchGesture);
 #endif
 		setAcceptedMouseButtons(Qt::LeftButton | Qt::RightButton | Qt::MiddleButton);
@@ -400,6 +1215,76 @@ public:
 
 
 protected:
+#if defined(__OHOS__)
+	bool event(QEvent* event) override
+	{
+		switch (event->type())
+		{
+			case QEvent::TouchBegin:
+			case QEvent::TouchUpdate:
+			case QEvent::TouchEnd:
+			{
+				QTouchEvent* touchEvent = static_cast<QTouchEvent*>(event);
+				const auto touchPoints = touchEvent->points();
+				if (touchPoints.isEmpty())
+					break;
+
+				if (event->type() == QEvent::TouchEnd && ohosPinchActive)
+				{
+					ohosPinchActive = false;
+					event->accept();
+					mainView->thereWasAnEvent();
+					return true;
+				}
+
+				if (touchPoints.size() >= 2)
+				{
+					const QPointF firstPos = touchPoints.at(0).position();
+					const QPointF secondPos = touchPoints.at(1).position();
+					const double distance = std::hypot(secondPos.x() - firstPos.x(), secondPos.y() - firstPos.y());
+					if (distance > 1.0)
+					{
+						const bool started = event->type() == QEvent::TouchBegin || !ohosPinchActive;
+						if (started)
+						{
+							ohosPinchActive = true;
+							ohosPinchStartDistance = distance;
+						}
+						StelApp::getInstance().handlePinch(distance / ohosPinchStartDistance, started);
+						event->accept();
+						mainView->thereWasAnEvent();
+						return true;
+					}
+				}
+
+				const QPointF itemPos = touchPoints.first().position();
+				QPointF stelPos = itemPos;
+
+				if (event->type() == QEvent::TouchUpdate)
+				{
+					const bool accepted = StelApp::getInstance().handleMove(stelPos.x(), stelPos.y(), Qt::LeftButton);
+					event->setAccepted(accepted);
+					if (accepted)
+						mainView->thereWasAnEvent();
+					return accepted;
+				}
+
+				const QEvent::Type mouseType = (event->type() == QEvent::TouchBegin) ? QEvent::MouseButtonPress : QEvent::MouseButtonRelease;
+				const Qt::MouseButtons buttons = (mouseType == QEvent::MouseButtonPress) ? Qt::LeftButton : Qt::NoButton;
+				QMouseEvent mouseEvent(mouseType, stelPos, stelPos, Qt::LeftButton, buttons, touchEvent->modifiers());
+				StelApp::getInstance().handleClick(&mouseEvent);
+				event->setAccepted(mouseEvent.isAccepted());
+				if (mouseEvent.isAccepted())
+					mainView->thereWasAnEvent();
+				return mouseEvent.isAccepted();
+			}
+			default:
+				break;
+		}
+		return QGraphicsObject::event(event);
+	}
+#endif
+
 	void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) override
 	{
 		Q_UNUSED(option)
@@ -433,6 +1318,9 @@ protected:
 		//update and draw
 		app.update(dt); // may also issue GL calls
 		app.draw();
+#if defined(__OHOS__)
+		submitOhosFramebuffer(QOpenGLContext::currentContext()->functions());
+#endif
 		painter->endNativePainting();
 
 		mainView->drawEnded();
@@ -592,6 +1480,10 @@ private:
 	QRectF rect;
 	double previousPaintTime;
 	StelMainView* mainView;
+#if defined(__OHOS__)
+	bool ohosPinchActive;
+	double ohosPinchStartDistance;
+#endif
 	Vec3f skyBackgroundColor;           //! color which is used to initialize the frame. Should be black, but for some applications e.g. dark blue may be preferred.
 };
 
@@ -642,12 +1534,18 @@ StelMainView::StelMainView(QSettings* settings)
 	  screenShotDir(""),
 	  flagCursorTimeout(false),
 	  lastEventTimeSec(0.0),
+#if defined(__OHOS__)
+	  lastOhosRenderTimeSec(0.0),
+#endif
 	  minfps(1.f),
 	  maxfps(10000.f),
 	  minTimeBetweenFrames(5),
 	  fpsTimer(nullptr),
 	  screensaverInhibitorTimer(nullptr)
 {
+#if defined(__OHOS__)
+	ohosMark("StelMainView constructor entered");
+#endif
 	setAttribute(Qt::WA_OpaquePaintEvent);
 	setAttribute(Qt::WA_AcceptTouchEvents);
 	setAttribute(Qt::WA_TouchPadAcceptSingleTouchEvents);
@@ -705,6 +1603,9 @@ StelMainView::StelMainView(QSettings* settings)
 	QSurfaceFormat glFormat = getDesiredGLFormat(configuration);
 	glWidget = new StelGLWidget(glFormat, this);
 	setViewport(glWidget);
+#if defined(__OHOS__)
+	ohosMark("StelMainView viewport glWidget installed");
+#endif
 
 	stelScene = new StelGraphicsScene(this);
 	setScene(stelScene);
@@ -723,6 +1624,9 @@ StelMainView::StelMainView(QSettings* settings)
 	//setMouseTracking(true);
 
     setRenderHint(QPainter::Antialiasing);
+#if defined(__OHOS__)
+	ohosMark("StelMainView constructor finished");
+#endif
 }
 
 void StelMainView::resizeEvent(QResizeEvent* event)
@@ -994,6 +1898,12 @@ void StelMainView::init()
 	StelPainter::initGLShaders();
 
 	guiItem = new StelGuiItem(size(), rootItem);
+#if defined(__OHOS__)
+	guiItem->setVisible(false);
+	guiItem->setEnabled(false);
+	guiItem->setAcceptedMouseButtons(Qt::NoButton);
+	ohosMark("Desktop Qt GUI disabled for OpenHarmony ArkUI shell");
+#endif
 	scene()->addItem(rootItem);
 	//set the default focus to the sky
 	focusSky();
@@ -1497,6 +2407,63 @@ void StelMainView::deinit()
 	stelApp = Q_NULLPTR;
 }
 
+#if defined(__OHOS__)
+void StelMainView::startOhosRenderPump()
+{
+	ohosMark("startOhosRenderPump entered");
+	updateQueued = false;
+	fpsTimer->setInterval(currentOhosRenderIntervalMs());
+	renderOhosFrameNow();
+	fpsTimer->start();
+	qWarning() << "Started OpenHarmony render pump.";
+}
+
+void StelMainView::renderOhosFrameNow()
+{
+	if (!stelApp || !glWidget || !glWidget->context() || !StelApp::isInitialized())
+	{
+		requestOhosSceneRepaint();
+		return;
+	}
+
+	glWidget->makeCurrent();
+	QOpenGLContext* currentContext = QOpenGLContext::currentContext();
+	if (!currentContext)
+		return;
+
+	QOpenGLFunctions* gl = currentContext->functions();
+	const double now = StelApp::getTotalRunTime();
+	double dt = lastOhosRenderTimeSec > 0.0 ? now - lastOhosRenderTimeSec : 0.0;
+	if (dt < 0.0 || dt > 0.25)
+		dt = currentOhosRenderIntervalMs() / 1000.0;
+	lastOhosRenderTimeSec = now;
+
+	const double pixelRatio = glWidget->devicePixelRatioF();
+	const int width = qMax(1, int(glWidget->width() * pixelRatio));
+	const int height = qMax(1, int(glWidget->height() * pixelRatio));
+
+	StelApp& app = StelApp::getInstance();
+	app.setDevicePixelsPerPixel(devicePixelRatioF());
+	gl->glBindFramebuffer(GL_FRAMEBUFFER, glWidget->defaultFramebufferObject());
+	gl->glViewport(0, 0, width, height);
+
+	app.update(dt);
+	app.draw();
+	submitOhosFramebuffer(gl);
+}
+
+void StelMainView::requestOhosSceneRepaint()
+{
+	updateQueued = false;
+	if (rootItem)
+		rootItem->update();
+	if (stelScene)
+		stelScene->invalidate(stelScene->sceneRect(), QGraphicsScene::AllLayers);
+	if (glWidget)
+		glWidget->repaint();
+}
+#endif
+
 // Update the translated title
 void StelMainView::initTitleI18n()
 {
@@ -1536,7 +2503,11 @@ void StelMainView::drawEnded()
 {
 	updateQueued = false;
 
+#if defined(__OHOS__)
+	const int requiredFpsInterval = currentOhosRenderIntervalMs();
+#else
 	const int requiredFpsInterval = qRound(1000.f / getDesiredFps());
+#endif
 #ifndef Q_OS_MACOS
 	if(fpsTimer->interval() != requiredFpsInterval)
 		fpsTimer->setInterval(requiredFpsInterval);
@@ -1591,10 +2562,21 @@ void StelMainView::hideCursor()
 
 void StelMainView::fpsTimerUpdate()
 {
+#if defined(__OHOS__)
+	const int requiredFpsInterval = currentOhosRenderIntervalMs();
+	if (fpsTimer->interval() != requiredFpsInterval)
+		fpsTimer->setInterval(requiredFpsInterval);
+	renderOhosFrameNow();
+	return;
+#endif
 	if(!updateQueued)
 	{
 		updateQueued = true;
+#if defined(__OHOS__)
+		glWidget->repaint();
+#else
 		QTimer::singleShot(0, glWidget, qOverload<>(&StelGLWidget::update));
+#endif
 	}
 }
 
@@ -1613,6 +2595,11 @@ void StelMainView::contextDestroyed()
 void StelMainView::thereWasAnEvent()
 {
 	lastEventTimeSec = StelApp::getTotalRunTime();
+#if defined(__OHOS__)
+	updateQueued = false;
+	if (fpsTimer && fpsTimer->interval() != OHOS_INTERACTIVE_RENDER_INTERVAL_MS)
+		fpsTimer->setInterval(OHOS_INTERACTIVE_RENDER_INTERVAL_MS);
+#endif
 }
 
 bool StelMainView::needsMaxFPS() const

@@ -205,6 +205,10 @@ public slots:
 	//! @param deltaAlt change in altitude angle in radians
 	void panView(const double deltaAz, const double deltaAlt);
 
+	//! Make the first screen position correspond to the second.
+	//! Useful for touch adapters that need the same drag semantics as mouse navigation.
+	void dragView(int x1, int y1, int x2, int y2);
+
 	//! Set automove duration in seconds
 	//! @param f the number of seconds it takes for an auto-move operation to complete.
 	void setAutoMoveDuration(float f) {autoMoveDuration = f;}
@@ -519,9 +523,6 @@ private:
 	void updateVisionVector(double deltaTime);
 	void updateAutoZoom(double deltaTime); // Update autoZoom if activated
 
-	//! Make the first screen position correspond to the second (useful for mouse dragging and also time dragging.)
-	void dragView(int x1, int y1, int x2, int y2);
-
 	bool flagLockEquPos;     // Define if the equatorial position is locked
 	bool flagTracking;       // Define if the selected object is followed
 	bool flagInhibitAllAutomoves; // Required for special installations: If true, there is no automatic centering etc.
@@ -638,4 +639,3 @@ private:
 };
 
 #endif // STELMOVEMENTMGR_HPP
-

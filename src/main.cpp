@@ -513,6 +513,9 @@ int main(int argc, char **argv)
 	}
 
 	mainWin.show();
+#if defined(__OHOS__)
+	mainWin.startOhosRenderPump();
+#endif
 	SplashScreen::finish(&mainWin);
 	qDebug() << "Max thread count (Global Pool): " << QThreadPool::globalInstance()->maxThreadCount();
 	// Share available cores with the TextureLoader and other jobs

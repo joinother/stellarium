@@ -73,3 +73,26 @@
   - 创建 `KNOWN-ISSUES.md`
   - 准备上传 GitHub
 - **修改原因：** 用户要求统一管理、规范工作流、方便跨 Agent 接手
+
+---
+
+## [2026-07-20] TRAE - 修复按钮点击 + 面板滚动 + Toggle 防跳动 + 面板右移 + 锁定功能
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **修复按钮点击**：给 `verticalRail` 中每个按钮的 `Stack` 显式添加 `.width(44).height(44)`，解决 `onClick` 无法触发的问题
+  2. **修复面板滚动**：移除面板外层 `Stack` 的 `.hitTestBehavior(HitTestMode.Block)`，恢复 `Scroll` 内部手势识别
+  3. **修复 Toggle 跳动**：在 `handleSkyTouch` 的 Down 处理中加入 `isUiPoint` 检查；完善 `isUiPoint` 增加工具栏按钮区域判定；Up 处理保留面板区域跳过逻辑
+  4. **面板右移**：`floatingPanel` 从居中改为右对齐 `position({ x: skyWidth - 392, y: 28 })`
+  5. **锁定功能**：添加 `@State uiLocked` + `panelOffsetX/Y` + `lockRow()` Toggle，可在设置面板中锁定/解锁界面位置
+  6. **重构 expandedShell**：按 WorkBuddy 方案分层 — 底层空 `Stack + Block + onTouch(handleSkyTouch)` 负责星图触摸，上层 `Stack + Transparent` 放 UI 元素，面板在最上层
+  7. **panelTop() 修正**：从 `270` 改为 `28`，使面板顶部对齐
+- **修改原因：** 用户反馈：按钮点不了、面板滑不动、Toggle 点完星图乱跳、设置面板应在右侧
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：**
+  - 图层面板可正常上下滑动 ✅
+  - 所有侧边栏按钮可点击并打开对应面板 ✅
+  - 点击设置面板内 Toggle 星图不跳动 ✅
+  - 面板显示在右侧 ✅
+  - 应用无 ANR ✅
+- **备注：** 学习了 WorkBuddy 历史版本的触摸分层方案；`Blank()` 在 Stack 内会导致 ANR，已替换为空 `Stack()`
