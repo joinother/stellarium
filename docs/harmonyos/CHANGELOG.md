@@ -96,3 +96,17 @@
   - 面板显示在右侧 ✅
   - 应用无 ANR ✅
 - **备注：** 学习了 WorkBuddy 历史版本的触摸分层方案；`Blank()` 在 Stack 内会导致 ANR，已替换为空 `Stack()`
+
+---
+
+## [2026-07-20] TRAE - 修复自动定位应用 + 排查自动时间同步
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **修复自动定位不应用**：`useDeviceLocation()` 获取设备位置后，自动调用 `applyPickerLocation()` 将位置同步到星图，不再需要用户手动点"应用"
+  2. **排查自动时间同步**：确认 C++ 层 `StelCore` 构造函数中已调用 `setTimeNow()`，配置文件 `startup_time_mode=Actual`，启动时自动同步系统时间；ArkUI 层过早调用 Native 命令会导致 ANR，故不在 ArkUI 层重复实现
+  3. **回滚不安全的自动时间同步尝试**：移除了 `aboutToAppear` 和 `onAreaChange` 中调用 `triggerAction('actionReturn_To_Current_Time')` 的代码（会导致应用 ANR）
+- **修改原因：** 用户反馈无法自动定位并应用现在位置、不能自动设定星图时间
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 应用启动正常，无 ANR，按钮点击和面板滚动正常 ✅
+- **备注：** 自动时间同步已在 C++ 层实现，ArkUI 层不应重复调用
