@@ -803,11 +803,16 @@ struct WindowNativeNode {
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
       // 左侧工具栏按钮区域（宽屏布局）
-      if (x >= 0 && x <= 64 && y >= this.railTop() && y <= this.railTop() + this.railHeight()) {
-        return true
-      }
-      // 缩放按钮区域
-      if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
+      if (x >= 0 && x <= 50) {
+        const buttonTop = Math.max(0, this.skyHeight - 724) + 30
+        const step = 104
+        for (let i = 0; i < this.actions.length; i++) {
+          const bTop = buttonTop + i * step
+          if (y >= bTop && y <= bTop + 88) {
+            return true
+          }
+        }
+      } else if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
       }
       // 浮动面板区域
@@ -834,7 +839,7 @@ struct WindowNativeNode {
 	        return true
 	      }
 	    }
-	    if (this.isExpandedLayout && x >= 0 && x <= 64) {
+	    if (this.isExpandedLayout && x >= 0 && x <= 50) {
       const buttonTop = Math.max(0, this.skyHeight - 724) + 30
       const step = 104
       const index = Math.floor((y - buttonTop) / step)
