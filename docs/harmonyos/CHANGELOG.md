@@ -165,3 +165,25 @@
 - **构建结果：** 未验证
 - **验证结果：** 未验证
 - **备注：** 依赖 C++ 侧实现 `saveScreenShot` 命令及 `actionLook_*`/`actionSet_FOV_*`/`actionSwitch_Equatorial_Mount`/`actionToggle_Night_Mode` 等 action
+
+---
+
+## [2026-07-21] TRAE - 修复 action ID + 搜索天体 + 22语言 + libs恢复 + 完整HAP打包
+
+- **修改文件：**
+  - `build/.../MainWindowNativeNode.ets` — 修复 action ID、搜索天体处理、22语言选择器、锁定修复
+  - `build/.../entry/libs/arm64-v8a/` — 通过 harmonydeployqt 恢复 .so 文件（48个）
+  - `build/.../rawfile/stellarium/translations/` — 32语言 x 2域名 = 64个 .qm 文件
+  - `src/core/StelFileMgr.cpp` — getLocaleDir() 添加 __OHOS__ 条件（需重编 .so）
+- **修改内容：**
+  1. 修复所有 action ID 错误（grep C++ 源码验证）：actionLook_East→actionLook_Towards_East, actionSet_FOV_1°→actionSet_FOV_9(索引映射), actionToggle_Night_Mode→actionShow_Night_Mode
+  2. 搜索分类天体处理：handleChipClick 新增 Sun/Mercury/Venus/Saturn/Sirius/Vega/Betelgeuse/Polaris/M31/M42/M45/NGC2244 → searchObject
+  3. 语言选择器扩展：2语言→22语言（zh_CN/zh_HK/ja/ko/de/fr/es/pt_BR/ru/uk/it/nl/pl/sv/cs/tr/ar/hi/th/vi/en），水平滚动
+  4. 锁定功能修复：handleOverlayTouch 添加 if (this.uiLocked) return true
+  5. 搜索反馈：searchObject 成功后显示"已找到: xxx"
+  6. 恢复 libstellarium.so：通过 harmonydeployqt --no-build 生成完整 libs/（48个.so），HAP 1.2MB→263MB
+- **修改原因：** 用户反馈功能全部无效、搜索分类没反应、语言太少、锁定功能是假的
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** HAP 263MB 包含完整 .so 链；安装启动成功，星图正常渲染
+- **待验证：** FOV切换、语言切换（需重编.so）、夜间模式、截图
+- **备注：** 不要删除 entry/libs/ 目录！.so 只能通过 harmonydeployqt 重新生成。C++ 修改需要 Qt OHOS 交叉编译。

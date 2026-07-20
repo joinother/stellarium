@@ -458,7 +458,7 @@ void StelFileMgr::setObsListDir(const QString& newDir)
 
 QString StelFileMgr::getLocaleDir()
 {
-#ifdef ENABLE_NLS
+#if defined(ENABLE_NLS) || defined(__OHOS__)
 	// (SS) 2025-10-19: allow Vsual Studio builds to find the translations path directory
 	// while keeping the original logic for other platforms/build systems.
 	QFileInfo localePath = QFileInfo(getInstallationDir() + "/translations");
