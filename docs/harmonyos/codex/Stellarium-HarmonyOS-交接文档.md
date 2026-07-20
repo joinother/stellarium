@@ -4,6 +4,8 @@
 项目路径：`/Users/jiexuanyang/stellarium-src`  
 HarmonyOS 工程路径：`/Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos`
 
+> 状态更新：本文记录的是 `89d0750` 之前的故障交接状态。用户已在 `89d075087614b62e40e9ddfbdb27778e9c8829aa` 规范化并推进修复。当前状态请优先读同目录下的 `Stellarium-HarmonyOS-当前工作整理-89d0750.md`，以及仓库内 `/Users/jiexuanyang/stellarium-src/docs/harmonyos/AGENTS.md`、`CHANGELOG.md`、`KNOWN-ISSUES.md`。
+
 ## 当前目标
 
 把 Stellarium 开源核心移植成一个在 DevEco HarmonyOS 模拟器/Pad 上基本可用的单 HAP 应用。当前已经能启动并渲染星图，但触摸 UI、目标详情、横竖屏适配和整体体验还没有达到可发布状态。
