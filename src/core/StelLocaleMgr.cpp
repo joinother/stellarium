@@ -49,7 +49,7 @@ void StelLocaleMgr::init()
 	QSettings* conf = StelApp::getInstance().getSettings();
 	Q_ASSERT(conf);
 
-#ifdef ENABLE_NLS
+#if defined(ENABLE_NLS) || defined(__OHOS__)
 	setAppLanguage(conf->value("localization/app_locale", "system").toString(), false);
 #else
 	setAppLanguage("en", false);

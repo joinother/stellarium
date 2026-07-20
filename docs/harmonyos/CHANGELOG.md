@@ -128,3 +128,26 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 时间面板正常打开，手动时间输入 UI 显示正确 ✅
 - **备注：** 自动定位"定位不可用"是模拟器预期行为（无 GPS 硬件），真机可正常使用
+
+---
+
+## [2026-07-20] TRAE - 时间滚动选择器 + 星星中文化 + 语言选择器 + 搜索分类
+
+- **修改文件：**
+  - `src/StelMainView.cpp` — 新增 `setLanguage` 命令桥
+  - `src/core/StelLocaleMgr.cpp` — OHOS 平台启用 NLS 支持
+  - `build/.../MainWindowNativeNode.ets` — 时间UI重构、语言选择器、搜索分类
+  - `build/.../rawfile/stellarium/translations/` — 编译中文翻译文件 .qm
+  - `build/.../rawfile/stellarium/data/default_cfg.ini` — 默认语言改为 zh_CN
+- **修改内容：**
+  1. **时间UI改为滚动选择器**：用 `DatePickerDialog` 和 `TimePickerDialog` 替换文本输入框，解决文字被边框切除问题
+  2. **星星名称中文化**：编译 `zh_CN.po` → `.qm` 翻译文件并打包；修改 `StelLocaleMgr` 在 OHOS 上启用 NLS；设置默认 `app_locale = zh_CN`
+  3. **语言选择器**：设置面板新增"界面语言"行，支持中文/English 切换；C++ 侧新增 `setLanguage` 命令调用 `StelLocaleMgr::setAppLanguage()`
+  4. **搜索分类**：搜索面板新增"天体分类"快捷搜索，按行星/恒星/深空天体分类显示
+- **修改原因：** 用户反馈时间UI太烂文字被切、星星名称是英文、需要语言选择、搜索需要分类
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：**
+  - 时间面板滚动选择器正常显示，文字完整 ✅
+  - 界面完全中文化（设置/搜索/时间/详情面板）✅
+  - 语言选择器显示中文/English，中文高亮 ✅
+  - 搜索分类显示行星/恒星/深空天体 ✅

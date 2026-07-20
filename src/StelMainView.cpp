@@ -853,6 +853,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "setLanguage")
+		{
+			StelLocaleMgr& localeMgr = StelApp::getInstance().getLocaleMgr();
+			localeMgr.setAppLanguage(arg);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["appLanguage"] = localeMgr.getAppLanguage();
+			result["skyLanguage"] = localeMgr.getSkyLanguage();
+			return result;
+		}
+
 		if (commandName == "zoomStep")
 		{
 			if (!movementMgr)
