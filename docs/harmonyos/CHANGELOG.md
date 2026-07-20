@@ -151,3 +151,17 @@
   - 界面完全中文化（设置/搜索/时间/详情面板）✅
   - 语言选择器显示中文/English，中文高亮 ✅
   - 搜索分类显示行星/恒星/深空天体 ✅
+
+---
+
+## [2026-07-21] TRAE - 设置面板添加 P0 功能（方向/FOV/坐标切换/截图/夜间模式）
+
+- **修改文件：** `build/.../MainWindowNativeNode.ets`
+- **修改内容：**
+  1. 新增 `@State equatorialMount` 和 `@State nightMode` 状态变量
+  2. 设置面板添加：方向快捷查看（东/南/西/北/天顶/北天极）、FOV 快捷切换（1°~120°）、坐标模式 Toggle（地平/赤道）、截图保存按钮、夜间模式开关
+  3. `handleChip()` 方法新增 13 个 case 分支处理方向和 FOV chip 点击
+- **修改原因：** 增强设置面板功能，提供常用天文操作快捷入口
+- **构建结果：** 未验证
+- **验证结果：** 未验证
+- **备注：** 依赖 C++ 侧实现 `saveScreenShot` 命令及 `actionLook_*`/`actionSet_FOV_*`/`actionSwitch_Equatorial_Mount`/`actionToggle_Night_Mode` 等 action
