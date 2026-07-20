@@ -79,7 +79,7 @@ interface StellariumBridgeResponse {
 @Component
 struct WindowNativeNode {
   @State private createInfo: WindowNativeNodeCreateInfo | undefined = undefined
-  @State private isExpandedLayout: boolean = false
+  @State private isExpandedLayout: boolean = true
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = true
   @State private searchText: string = ''
@@ -131,6 +131,9 @@ struct WindowNativeNode {
   @State private gyroscopeEnabled: boolean = false
   @State private gyroscopeStatus: string = '关闭'
   @State private gyroscopeSensitivityText: string = '标准'
+  @State private uiLocked: boolean = true
+  @State private panelOffsetX: number = 0
+  @State private panelOffsetY: number = 0
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -154,6 +157,11 @@ struct WindowNativeNode {
   private readonly gyroSensitivity: number = 180
   private gyroCallback: ((data: sensor.GyroscopeResponse) => void) | undefined = undefined
   private dragLogCount: number = 0
+  private panelDragging: boolean = false
+  private panelDragStartX: number = 0
+  private panelDragStartY: number = 0
+  private panelDragStartOffsetX: number = 0
+  private panelDragStartOffsetY: number = 0
 
   private readonly actions: ShellAction[] = [
     { label: '搜索', icon: '搜', panel: 'search' },
@@ -535,7 +543,8 @@ struct WindowNativeNode {
         timeoutMs: 5000
       })
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
-      this.setPickerLocation('当前位置', current.latitude, current.longitude, altitude, '已获取设备位置，点应用同步星图')
+      this.setPickerLocation('当前位置', current.latitude, current.longitude, altitude, '已获取设备位置，自动同步到星图')
+      this.applyPickerLocation()
       this.locationPickMode = 'map'
       this.hierContinent = ''
       this.hierRegion = ''
@@ -701,7 +710,7 @@ struct WindowNativeNode {
 
   private panelTop(): number {
     // 实测浮层面板顶缘(标题区)约 270vp
-    return 270
+    return 28
   }
 
   private railTop(): number {
@@ -714,10 +723,15 @@ struct WindowNativeNode {
 
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
-      // 仅缩放按钮与浮动面板区域视为 UI；左侧工具栏竖条的空白处允许穿透到星图选星
+      // 左侧工具栏按钮区域（宽屏布局）
+      if (x >= 0 && x <= 64 && y >= this.railTop() && y <= this.railTop() + this.railHeight()) {
+        return true
+      }
+      // 缩放按钮区域
       if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
       }
+      // 浮动面板区域
       if (this.panelVisible && x >= this.panelLeft() && x <= this.panelRight() && y >= this.panelTop() && y <= this.panelTop() + 900) {
         return true
       }
@@ -896,9 +910,14 @@ struct WindowNativeNode {
     }
 
     if (event.type === TouchType.Down) {
+      const downX = this.touchWindowX(points[0])
+      const downY = this.touchWindowY(points[0])
+      if (this.isUiPoint(downX, downY)) {
+        return
+      }
       this.skyTouchActive = true
-      this.touchStartX = this.touchWindowX(points[0])
-      this.touchStartY = this.touchWindowY(points[0])
+      this.touchStartX = downX
+      this.touchStartY = downY
       this.touchLastX = this.touchStartX
       this.touchLastY = this.touchStartY
       this.touchMoved = false
@@ -971,6 +990,16 @@ struct WindowNativeNode {
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       const x = this.touchWindowX(points[0])
       const y = this.touchWindowY(points[0])
+      if (this.panelVisible) {
+        const pl = this.panelLeft()
+        const pr = this.panelRight()
+        const pt = this.panelTop()
+        if (x >= pl && x <= pr && y >= pt && y <= pt + 900) {
+          this.skyTouchActive = false
+          this.skyTouchFeedback = false
+          return
+        }
+      }
       if (this.nativeDragActive) {
         this.callNative('dragView',
           Math.round(this.touchLastX).toString() + '|' +
@@ -1042,7 +1071,7 @@ struct WindowNativeNode {
           .animation({ duration: 180, curve: Curve.EaseOut })
       }
 
-      this.harmonyShell()
+        this.expandedShell()
     }
       .width('100%')
       .height('100%')
@@ -1091,53 +1120,36 @@ struct WindowNativeNode {
   @Builder
   expandedShell() {
     Stack() {
-      // 底层：星图触摸区（Blank 必须放在 Column/Row/Flex 中）
-      Column() {
-        Blank()
-          .width('100%')
-          .height('100%')
+      Stack() { this.observerBadge() }
+        .position({ x: 22, y: 28 })
+        .hitTestBehavior(HitTestMode.None)
+      Stack() { this.verticalRail() }
+        .position({ x: 0, y: this.railTop() })
+      Stack() { this.zoomButton('+') }
+        .position({ x: 92, y: this.skyHeight - 220 })
+        .hitTestBehavior(HitTestMode.Block)
+        .onClick(() => {
+          this.zoomStep(0.5)
+          this.flashHint('放大视野')
+        })
+      Stack() { this.zoomButton('\u2212') }
+        .position({ x: 92, y: this.skyHeight - 150 })
+        .onClick(() => {
+          this.zoomStep(2.0)
+          this.flashHint('缩小视野')
+        })
+      if (this.panelVisible) {
+        Stack() { this.floatingPanel() }
+          .position({ x: this.skyWidth - 392 + this.panelOffsetX, y: 28 + this.panelOffsetY })
       }
+    }
       .width('100%')
       .height('100%')
-      .hitTestBehavior(HitTestMode.Block)
+      .zIndex(1)
+      .hitTestBehavior(HitTestMode.Transparent)
       .onTouch((event: TouchEvent) => {
         this.handleSkyTouch(event)
       })
-
-      // 上层：左侧 UI 栏（Transparent 让空白区域穿透到底层 Column，按钮自身 Block 拦截点击）
-      Stack() {
-        Stack() { this.observerBadge() }
-          .position({ x: 22, y: 28 })
-          .hitTestBehavior(HitTestMode.None)
-        Stack() { this.verticalRail() }
-          .position({ x: 0, y: this.railTop() })
-        Stack() { this.zoomButton('+') }
-          .position({ x: 92, y: this.skyHeight - 220 })
-          .hitTestBehavior(HitTestMode.Block)
-          .onClick(() => {
-            this.zoomStep(0.5)
-            this.flashHint('放大视野')
-          })
-        Stack() { this.zoomButton('\u2212') }
-          .position({ x: 92, y: this.skyHeight - 150 })
-          .hitTestBehavior(HitTestMode.Block)
-          .onClick(() => {
-            this.zoomStep(2.0)
-            this.flashHint('缩小视野')
-          })
-      }
-      .width(174)
-      .height('100%')
-      .hitTestBehavior(HitTestMode.Transparent)
-
-      // 浮动面板（默认 Default，内部组件自己的 onClick/onChange 正常工作）
-      if (this.panelVisible) {
-        this.floatingPanel()
-      }
-    }
-    .width('100%')
-    .height('100%')
-    .zIndex(1)
   }
 
   @Builder
@@ -1222,8 +1234,9 @@ struct WindowNativeNode {
   Stack() {
     ForEach(this.actions, (item: ShellAction, idx: number) => {
         Stack() { this.iconButton(item) }
+          .width(44)
+          .height(44)
           .position({ x: 7, y: idx * 104 })
-          .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             this.setPanel(item.panel)
             this.flashHint('打开' + item.label + '面板')
@@ -1256,7 +1269,6 @@ struct WindowNativeNode {
       .borderRadius(33)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 14 })
       .alignSelf(ItemAlign.Center)
-      .hitTestBehavior(HitTestMode.Block)
   }
 
   @Builder
@@ -1341,7 +1353,6 @@ struct WindowNativeNode {
       .borderRadius(24)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
-      .alignSelf(ItemAlign.Center)
       .animation({ duration: 220, curve: Curve.EaseOut })
   }
 
@@ -1524,6 +1535,7 @@ struct WindowNativeNode {
       this.infoRow('灵敏度', this.gyroscopeSensitivityText)
       this.gyroscopeRow()
       this.lx200Panel()
+      this.lockRow()
       this.infoRow('封装', '单 HAP')
       this.quickChips(['刷新', '现在'])
     }
@@ -1821,6 +1833,26 @@ struct WindowNativeNode {
 	  }
 
 	  @Builder
+  lockRow() {
+    Row() {
+      Text('锁定界面位置')
+        .fontSize(14)
+        .fontColor('#F4F8FF')
+        .layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: this.uiLocked })
+        .width(46)
+        .height(28)
+        .selectedColor('#9FE8FF')
+        .onChange((value: boolean) => {
+          this.uiLocked = value
+          this.flashHint(value ? '界面已锁定' : '可拖动面板')
+        })
+    }
+      .height(40)
+      .width('100%')
+  }
+
+  @Builder
 	  gyroscopeRow() {
     Row() {
       Text('转动设备浏览星空')
