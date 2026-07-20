@@ -1,0 +1,7 @@
+07-20 16:31:01.818 15217 15217 I A00000/StellariumArkUI: overlay touch down 300,480 ui=0 sky=1440x960
+07-20 16:31:01.818 15217 15217 I A00000/StellariumArkUI: sky touch down
+07-20 16:31:01.937 15217 15217 I A00000/StellariumArkUI: selectAt payload: 300|480|1440|960
+07-20 16:31:01.937 15217 15217 I A00000/StellariumEntryGL: Stellarium command selectAt
+07-20 16:31:01.962 15217 15327 W A00000/StellariumCpp: selectAt tapX=300 tapY=480 skyW=1440 skyH=960 vpW=2880 vpH=1920 sx=600 sy=960
+07-20 16:31:01.967 15217 15327 W A00000/StellariumCpp: selectAt found=0
+07-20 16:31:01.967 15217 15217 I A00000/StellariumArkUI: selectAt result: {"found":false,"ok":true,"tapX":300,"tapY":480}

@@ -1,0 +1,54 @@
+{
+  // ===========================================================================
+  // module.json5 —— 鸿蒙应用模块配置（API 23 / DevEco 6.1）
+  // 入口 ability 由 Qt for HarmonyOS（harmonydeployqt）启动，
+  // srcEntry 指向 Qt 打包后生成的 Ability 入口（占位路径，构建后由工具填充）。
+  // ===========================================================================
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "StellariumPocAbility",
+    "deviceType": [
+      "phone",
+      "tablet",
+      "2in1"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "StellariumPocAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ts",
+        "description": "$string:ability_desc",
+        "icon": "$media:icon",
+        "label": "$string:ability_label",
+        "startWindowIcon": "$media:icon",
+        "startWindowBackground": "$color:start_window_background",
+        "launchType": "standard",
+        "orientation": "unspecified",
+        "backgroundModes": []
+      }
+    ],
+    "requestPermissions": [
+      {
+        // 为后续"指哪看哪"传感器预留（当前 PoC 未使用）
+        "name": "ohos.permission.ACCELEROMETER",
+        "reason": "$string:perm_accel_reason",
+        "usedScene": {
+          "abilities": ["StellariumPocAbility"],
+          "when": "always"
+        }
+      },
+      {
+        "name": "ohos.permission.GYROSCOPE",
+        "reason": "$string:perm_gyro_reason",
+        "usedScene": {
+          "abilities": ["StellariumPocAbility"],
+          "when": "always"
+        }
+      }
+    ]
+  }
+}

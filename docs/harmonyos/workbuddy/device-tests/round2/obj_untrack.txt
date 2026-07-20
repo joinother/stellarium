@@ -1,0 +1,3 @@
+07-20 16:30:39.377 15217 15217 I A00000/StellariumArkUI: overlay touch down 1267,587 ui=1 sky=1440x960
+07-20 16:30:39.668 15217 15217 I A00000/StellariumEntryGL: Stellarium command setTracking
+07-20 16:30:39.698 15217 15217 I A00000/StellariumEntryGL: Stellarium command getState

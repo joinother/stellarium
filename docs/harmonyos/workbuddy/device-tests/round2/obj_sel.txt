@@ -1,0 +1,4 @@
+07-20 16:30:24.161 15217 15217 I A00000/StellariumArkUI: overlay touch down 29,292 ui=1 sky=1440x960
+07-20 16:30:24.265 15217 15217 I A00000/StellariumArkUI: setPanel search
+07-20 16:30:25.345 15217 15217 I A00000/StellariumArkUI: overlay touch down 1130,533 ui=1 sky=1440x960
+07-20 16:30:25.449 15217 15217 I A00000/StellariumEntryGL: Stellarium command searchObject

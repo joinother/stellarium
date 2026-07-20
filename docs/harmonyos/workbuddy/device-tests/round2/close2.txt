@@ -1,0 +1,1 @@
+07-20 16:30:11.853 15217 15217 I A00000/StellariumArkUI: overlay touch down 1379,303 ui=1 sky=1440x960

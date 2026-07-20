@@ -1,0 +1,35 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ada7c00..29453b8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -629,7 +629,7 @@ IF(${QT_VERSION} VERSION_LESS MINIMAL_QT_VERSION)
+ ELSE()
+      MESSAGE(STATUS "Found Qt${QT_VERSION_MAJOR}: ${QMAKE_LOCATION} (found suitable version ${QT_VERSION})")
+ ENDIF()
+-FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts Positioning REQUIRED)
++FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts REQUIRED)
+ IF(Qt6_FOUND)
+      FIND_PACKAGE(Qt6 REQUIRED COMPONENTS SvgWidgets)
+ ELSEIF(Qt5_FOUND)
+@@ -640,7 +640,7 @@ SET(USE_BUNDLED_QTCOMPRESS 1 CACHE BOOL "Use bundled version of qtcompress")
+ # https://code.qt.io/cgit/qt/qtreleasenotes.git/about/qt/6.10.0/release-note.md
+ # > ad7b94e163a: User projects must now call find_package(Qt6 COMPONENTS FooPrivate) to make use of the Qt6::FooPrivate target.
+ # For the case of Qt5 this condition evaluates to false.
+-IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10 AND NOT USE_BUNDLED_QTCOMPRESS)
++IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10)
+      FIND_PACKAGE(Qt6 COMPONENTS GuiPrivate REQUIRED)
+ ENDIF()
+ IF(USE_PLUGIN_TELESCOPECONTROL OR ENABLE_GPS)
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e307814..be637b7 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -511,7 +511,7 @@ IF(WIN32 AND ENABLE_WINDOWS_EXE_ICON)
+ ENDIF()
+ 
+ # Setup Qt5/6 dependencies
+-SET(STELLARIUM_QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::OpenGL Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Gui ${STEL_GLES_LIBS} Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Svg Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Positioning)
++SET(STELLARIUM_QT_LIBRARIES Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::OpenGL Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Gui ${STEL_GLES_LIBS} Qt${QT_VERSION_MAJOR}::Network Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Svg Qt${QT_VERSION_MAJOR}::Charts)
+ 
+ IF(Qt6_FOUND)
+      # Qt6 needs SvgWidgets, for Qt5 it's included in Svg

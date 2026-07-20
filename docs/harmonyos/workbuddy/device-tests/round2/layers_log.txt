@@ -1,0 +1,12 @@
+07-20 16:28:16.846  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: start alarm recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:28:16.849 15217 15217 I A00000/StellariumArkUI: overlay touch down 29,604 ui=1 sky=1440x960
+07-20 16:28:16.947  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: refresh recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:28:16.948   127 15031 I C02d66/XPERF_SERVICE: [NotifyToXperf]: XperfServiceServer_NotifyToXperf domainId:6 eventId:0 msg:#TYPE:LAST_UP#TIME:1784536096948#BUNDLE_NAME:org.qtproject.example.stellarium#PID:15217
+07-20 16:28:16.949 15217 15217 I A00000/StellariumArkUI: setPanel layers
+07-20 16:28:16.964 15217 15217 I A00000/StellariumEntryGL: Stellarium command getState
+07-20 16:28:18.235 15217 15217 I A00000/StellariumArkUI: overlay touch down 1339,356 ui=1 sky=1440x960
+07-20 16:28:18.235  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: start alarm recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:28:18.337  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: refresh recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:28:18.337   127 15031 I C02d66/XPERF_SERVICE: [NotifyToXperf]: XperfServiceServer_NotifyToXperf domainId:6 eventId:0 msg:#TYPE:LAST_UP#TIME:1784536098337#BUNDLE_NAME:org.qtproject.example.stellarium#PID:15217
+07-20 16:28:18.338 15217 15217 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+07-20 16:28:18.339 15217 15217 I A00000/StellariumEntryGL: Stellarium command getState

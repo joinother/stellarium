@@ -1,0 +1,4 @@
+07-20 16:28:52.611 15217 15217 I A00000/StellariumArkUI: overlay touch down 29,500 ui=1 sky=1440x960
+07-20 16:28:52.715 15217 15217 I A00000/StellariumArkUI: setPanel place
+07-20 16:28:52.734 15217 15217 I A00000/StellariumEntryGL: Stellarium command getState
+07-20 16:28:54.003 15217 15217 I A00000/StellariumArkUI: overlay touch down 1347,483 ui=1 sky=1440x960

@@ -1,0 +1,6 @@
+07-20 16:27:46.393 15217 15217 I A00000/StellariumArkUI: overlay touch down 1130,533 ui=1 sky=1440x960
+07-20 16:27:46.393  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: start alarm recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:27:46.494  1858  1858 I A01b09/RECENT: RecentDockRefreshAlarm: refresh recent dock: QAbility/org.qtproject.example.stellarium/entry/0(persistentId: 475)(containerId: 204)
+07-20 16:27:46.500   127 15031 I C02d66/XPERF_SERVICE: [NotifyToXperf]: XperfServiceServer_NotifyToXperf domainId:6 eventId:0 msg:#TYPE:LAST_UP#TIME:1784536066500#BUNDLE_NAME:org.qtproject.example.stellarium#PID:15217
+07-20 16:27:46.501 15217 15217 I A00000/StellariumEntryGL: Stellarium command bridge resolved
+07-20 16:27:46.501 15217 15217 I A00000/StellariumEntryGL: Stellarium command searchObject

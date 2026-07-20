@@ -1,0 +1,2 @@
+07-20 16:30:27.475 15217 15217 I A00000/StellariumArkUI: overlay touch down 1192,587 ui=1 sky=1440x960
+07-20 16:30:27.580 15217 15217 I A00000/StellariumEntryGL: Stellarium command moveToSelected

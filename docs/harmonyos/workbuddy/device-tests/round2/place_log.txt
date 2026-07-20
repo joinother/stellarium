@@ -1,0 +1,15 @@
+07-20 16:28:54.556   289 15071 I C01710/BUNDLE_ACTIVE: [bundle_active_app_state_obsever.cpp(OnAbilityStateChanged):61]OnAblityStateChanged userid is 100, bundle name is org.qtproject.example.stellarium, uid is 20020066, event is 2, timestamp is 85003408
+07-20 16:28:54.557   741   741 I C01406/RSUniRenderVisitor: OcclusionInfo [SCBGestureBack26, 7980049236188, 0], [SCBGestureNavBar17, 7980049236165, 0], [SCBGestureTopBar16, 7980049236160, 0], [permissionSubWindowForHost1784536134427, 65657165053955, 0], [stellarium0, 65356517343234, 0], [BackgroundBlurView2, 7980049235975, 0], [SCBDesktop6, 7980049235987, 0], [SCBWallpaper5, 7980049235978, 0], 
+07-20 16:28:54.563   289  9353 I C01731/SUSPEND_MSG: [a92abbdc46896bb] 20020066_org.qtproject.example.stellarium_15217, state:2
+07-20 16:28:54.563   289  9350 I C01706/ueaServer-IntelliSenseServer: [a92abadc4689649] Get app info:15217 20020066 org.qtproject.example.stellarium 2
+07-20 16:28:54.563   251   967 I C02801/AppStateObserver: [|39]Process state change app name:org.qtproject.example.stellarium, uid:20020066, state:2
+07-20 16:28:54.563  1207  1329 I C01560/WifiFrameWork: OnForegroundApplicationChanged bundleName: org.qtproject.example.stellarium, uid: 20020066, state: 2, isFocused: 0
+07-20 16:28:54.565   313 15728 I C015b5/NetMgrEnhanced: uid=2******6, pid=15217, state=2, bundleName=org.qtproject.example.stellarium, isFocused =0.
+07-20 16:28:54.566  1207  1328 I C01560/WifiFrameWork: OnForegroundApplicationChanged bundleName: org.qtproject.example.stellarium, uid: 20020066, state: 2, isFocused: 0
+07-20 16:28:54.568  1858  1858 I A0001b/AA: RecentlyUseController --> buildRecentlyUseInfo {"bundleName":"org.qtproject.example.stellarium","moduleName":"entry","abilityName":"QAbility","pid":15217,"uid":20020066,"state":2,"abilityType":1,"isAtomicService":false,"callerBundleName":""}
+07-20 16:28:54.569  1858  1858 I A01a00/SYS_UI: PhoneAppManager: ability[org.qtproject.example.stellarium|undefined|QAbility] state change to 2
+07-20 16:28:54.570   313 22985 I C015b5/NetMgrEnhanced: uid:20020066, pid:15217, state:2, isFocused:0, org.qtproject.example.stellarium
+07-20 16:28:54.724   750   780 I C01120/BMS: icon rdb get resource icon start -n org.qtproject.example.stellarium -i 0 -f 1
+07-20 16:28:54.725 15287 15287 I A05612/ASP: [SPC][PermissionDialog][Model]: appInfo label: stellarium, appIndex: 0.
+07-20 16:28:54.725 15287 15287 I A05612/ASP: [SPC][PermissionDialog][Model]: appName: stellarium.
+07-20 16:28:54.827 15287 15287 I A05612/ASP: [SPC][DEFAULT][ProxyPreciseLocationManger]: updateStatusCacheMap permissionStatus: {"bundleName":"org.qtproject.example.stellarium","uid":20020066,"installTime":1784530925566,"switchStatus":true,"appIndex":0,"isDeleted":0}
