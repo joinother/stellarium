@@ -295,6 +295,11 @@ struct WindowNativeNode {
     }
   }
 
+  private stopTracking(): void {
+    const result = this.callNative('setTracking', '0')
+    if (result.ok === true) { this.trackingText = '关闭' }
+  }
+
   private setTimeRate(rate: number): void {
     const result = this.callNative('setTimeRate', rate.toString())
     if (result.ok === true && result.timeRate !== undefined) {
@@ -708,9 +713,9 @@ struct WindowNativeNode {
     Button(label)
       .height(28)
       .fontSize(11)
-      .fontColor(this.locationPickMode === mode ? '#FF317AF7' : '#99FFFFFF')
-      .backgroundColor(this.locationPickMode === mode ? '#FF317AF7' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.locationPickMode === mode ? 'rgba(49, 122, 247, 0.50)' : 'rgba(255, 255, 255, 0.08)' })
+      .fontColor(this.locationPickMode === mode ? '#FFFFFFFF' : '#99FFFFFF')
+      .backgroundColor(this.locationPickMode === mode ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.locationPickMode === mode ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(14)
       .margin({ right: 8 })
       .onClick(() => {
@@ -729,8 +734,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
-                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
+                .fontColor(selected === item ? '#FFFFFFFF' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#5B93BF' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -741,8 +746,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
-                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
+                .fontColor(selected === item ? '#FFFFFFFF' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#5B93BF' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -753,8 +758,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#FF317AF7' : '#99FFFFFF')
-                .backgroundColor(selected === item ? '#FF317AF7' : '#16223C')
+                .fontColor(selected === item ? '#FFFFFFFF' : '#99FFFFFF')
+                .backgroundColor(selected === item ? '#5B93BF' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -1142,9 +1147,9 @@ struct WindowNativeNode {
           .width(120)
           .height(120)
           .borderRadius(60)
-          .backgroundColor('rgba(49, 122, 247, 0.10)')
-          .border({ width: 1, color: 'rgba(49, 122, 247, 0.08)' })
-          .shadow({ radius: 42, color: 'rgba(49, 122, 247, 0.20)', offsetX: 0, offsetY: 0 })
+          .backgroundColor('rgba(107, 163, 214, 0.12)')
+          .border({ width: 1, color: 'rgba(107, 163, 214, 0.10)' })
+          .shadow({ radius: 42, color: 'rgba(107, 163, 214, 0.18)', offsetX: 0, offsetY: 0 })
           .align(Alignment.Center)
           .hitTestBehavior(HitTestMode.None)
           .zIndex(4)
@@ -1178,10 +1183,10 @@ struct WindowNativeNode {
           Text(this.actionHint)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#FF317AF7')
+            .fontColor('#5B93BF')
         }
           .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-          .backgroundColor('#FF317AF7')
+          .backgroundColor('#5B93BF')
           .borderRadius(18)
           .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
           .hitTestBehavior(HitTestMode.None)
@@ -1275,9 +1280,9 @@ struct WindowNativeNode {
         .maxLines(1)
       Text('LIVE')
         .fontSize(9)
-        .fontColor('#FF317AF7')
+        .fontColor('#5B93BF')
         .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-        .backgroundColor('rgba(49, 122, 247, 0.08)')
+        .backgroundColor('rgba(107, 163, 214, 0.10)')
         .borderRadius(12)
         .margin({ left: 8 })
     }
@@ -1357,7 +1362,7 @@ struct WindowNativeNode {
       Text(item.icon)
         .fontSize(15)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#E5FFFFFF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
         .lineHeight(44)
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -1366,14 +1371,14 @@ struct WindowNativeNode {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(49, 122, 247, 0.50)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0 })
       .shadow({
         radius: this.activePanel === item.panel && this.panelVisible ? 18 : 0,
-        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(49, 122, 247, 0.40)' : 'rgba(0, 0, 0, 0)',
+        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0)',
         offsetX: 0,
         offsetY: 6
       })
@@ -1387,20 +1392,20 @@ struct WindowNativeNode {
       Text(item.icon)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#E5FFFFFF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
         .lineHeight(18)
         .textAlign(TextAlign.Center)
         .width('100%')
       Text(item.label)
         .fontSize(10)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : '#99FFFFFF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#99FFFFFF')
         .margin({ top: 2 })
     }
       .width(54)
       .height(52)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#FF317AF7' : Color.Transparent)
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : Color.Transparent)
       .borderRadius(26)
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0 })
       .animation({ duration: 180, curve: Curve.EaseOut })
@@ -1542,8 +1547,8 @@ struct WindowNativeNode {
         .maxLines(8)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .padding({ left: 10, right: 10, top: 9, bottom: 9 })
-        .backgroundColor('rgba(49, 122, 247, 0.10)')
-        .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
+        .backgroundColor('rgba(107, 163, 214, 0.12)')
+        .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
         .borderRadius(14)
         .margin({ top: 8, bottom: 8 })
 	      this.quickChips(['刷新', '居中', '取消追踪'])
@@ -1599,7 +1604,7 @@ struct WindowNativeNode {
       .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
       // 应用按钮
       Button('应用设定时间')
-        .fontSize(14).fontColor('#FFFFFFFF').backgroundColor('#FF317AF7')
+        .fontSize(14).fontColor('#FFFFFFFF').backgroundColor('#5B93BF')
         .borderRadius(12).height(40).width('100%').margin({ top: 4 })
         .onClick(() => { this.applyManualTime() })
       Button('同步星图当前时间')
@@ -1774,7 +1779,7 @@ struct WindowNativeNode {
           .height(32)
           .fontSize(12)
           .fontColor('#FFFFFFFF')
-          .backgroundColor('#FF317AF7')
+          .backgroundColor('#5B93BF')
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1783,9 +1788,9 @@ struct WindowNativeNode {
         Button('Sync')
           .height(32)
           .fontSize(12)
-          .fontColor('#FF317AF7')
-          .backgroundColor('rgba(49, 122, 247, 0.15)')
-          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
+          .fontColor('#5B93BF')
+          .backgroundColor('rgba(107, 163, 214, 0.20)')
+          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1814,8 +1819,8 @@ struct WindowNativeNode {
     }
       .width('100%')
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .backgroundColor('rgba(49, 122, 247, 0.10)')
-      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
+      .backgroundColor('rgba(107, 163, 214, 0.12)')
+      .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
 	      .borderRadius(14)
 	      .margin({ top: 8, bottom: 8 })
 		  }
@@ -1833,7 +1838,7 @@ struct WindowNativeNode {
           .height(30)
           .fontSize(11)
           .fontColor('#FFFFFFFF')
-          .backgroundColor('#FF317AF7')
+          .backgroundColor('#5B93BF')
           .borderRadius(15)
           .onClick(() => {
             this.useDeviceLocation()
@@ -1876,7 +1881,7 @@ struct WindowNativeNode {
             .position({ x: 8, y: this.mapRenderHeight - 20 })
           Text('⌖')
             .fontSize(18)
-            .fontColor('#FF317AF7')
+            .fontColor('#5B93BF')
             .textShadow({ radius: 8, color: 'rgba(159, 232, 255, 0.75)', offsetX: 0, offsetY: 0 })
             .position({ x: this.pickerPinX(), y: this.pickerPinY() })
         }
@@ -1938,7 +1943,7 @@ struct WindowNativeNode {
           .height(32)
           .fontSize(12)
           .fontColor('#FFFFFFFF')
-          .backgroundColor('#FF317AF7')
+          .backgroundColor('#5B93BF')
           .borderRadius(16)
           .margin({ right: 8 })
           .onClick(() => {
@@ -1956,8 +1961,8 @@ struct WindowNativeNode {
     }
       .width('100%')
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-      .backgroundColor('rgba(49, 122, 247, 0.10)')
-      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
+      .backgroundColor('rgba(107, 163, 214, 0.12)')
+      .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
       .borderRadius(14)
       .margin({ top: 8, bottom: 8 })
   }
@@ -1982,7 +1987,7 @@ struct WindowNativeNode {
 	          .height(32)
 	          .fontSize(12)
 	          .fontColor('#FFFFFFFF')
-	          .backgroundColor('#FF317AF7')
+	          .backgroundColor('#5B93BF')
 	          .borderRadius(16)
 	          .margin({ right: 8 })
 	          .onClick(() => {
@@ -1991,9 +1996,9 @@ struct WindowNativeNode {
 	        Button('Sync')
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#FF317AF7')
-	          .backgroundColor('rgba(49, 122, 247, 0.15)')
-	          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
+	          .fontColor('#5B93BF')
+	          .backgroundColor('rgba(107, 163, 214, 0.20)')
+	          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
 	          .borderRadius(16)
 	          .margin({ right: 8 })
 	          .onClick(() => {
@@ -2022,8 +2027,8 @@ struct WindowNativeNode {
 	    }
 	      .width('100%')
 	      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
-	      .backgroundColor('rgba(49, 122, 247, 0.10)')
-	      .border({ width: 1, color: 'rgba(49, 122, 247, 0.15)' })
+	      .backgroundColor('rgba(107, 163, 214, 0.12)')
+	      .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
 	      .borderRadius(14)
 	      .margin({ top: 8, bottom: 8 })
 	  }
@@ -2038,7 +2043,7 @@ struct WindowNativeNode {
       Toggle({ type: ToggleType.Switch, isOn: this.uiLocked })
         .width(46)
         .height(28)
-        .selectedColor('#FF317AF7')
+        .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
           this.uiLocked = value
           this.flashHint(value ? '界面已锁定' : '可拖动面板')
@@ -2083,9 +2088,9 @@ struct WindowNativeNode {
           ], (lang: LangOption) => {
             Text(lang.name)
               .fontSize(12)
-              .fontColor(this.selectedLanguage === lang.code ? '#FF317AF7' : '#66FFFFFF')
+              .fontColor(this.selectedLanguage === lang.code ? '#5B93BF' : '#66FFFFFF')
               .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .backgroundColor(this.selectedLanguage === lang.code ? '#FF317AF7' : 'rgba(255,255,255,0.06)')
+              .backgroundColor(this.selectedLanguage === lang.code ? '#5B93BF' : 'rgba(255,255,255,0.06)')
               .borderRadius(8)
               .onClick(() => { this.setLanguage(lang.code) })
           }, (lang: LangOption) => lang.code)
@@ -2110,7 +2115,7 @@ struct WindowNativeNode {
       Toggle({ type: ToggleType.Switch, isOn: this.gyroscopeEnabled })
         .width(46)
         .height(28)
-        .selectedColor('#FF317AF7')
+        .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
           this.toggleGyroscope(value)
           this.flashHint(value ? '已开启陀螺仪' : '已关闭陀螺仪')
@@ -2126,12 +2131,12 @@ struct WindowNativeNode {
       ForEach(labels, (label: string) => {
         Button(label)
           .fontSize(12)
-          .fontColor('#FF317AF7')
+          .fontColor('#5B93BF')
           .fontWeight(FontWeight.Medium)
           .height(32)
           .padding({ left: 14, right: 14 })
-          .backgroundColor('rgba(49, 122, 247, 0.15)')
-          .border({ width: 1, color: 'rgba(49, 122, 247, 0.30)' })
+          .backgroundColor('rgba(107, 163, 214, 0.20)')
+          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
           .borderRadius(16)
           .margin({ right: 8 })
           .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 5 })
@@ -2187,36 +2192,36 @@ struct WindowNativeNode {
       this.searchObject(label)
     // 方向快捷查看
     } else if (label === '东') {
-      this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint('朝东')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint('朝东')
     } else if (label === '南') {
-      this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint('朝南')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint('朝南')
     } else if (label === '西') {
-      this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint('朝西')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint('朝西')
     } else if (label === '北') {
-      this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint('朝北')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint('朝北')
     } else if (label === '天顶') {
-      this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint('天顶')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint('天顶')
     } else if (label === '北天极') {
-      this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint('北天极')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint('北天极')
     // FOV 快捷切换（actionSet_FOV 索引: 0=0.5°, 1=180°, 2=90°, 3=60°, 4=45°, 5=20°, 6=10°, 7=5°, 8=2°, 9=1°）
     } else if (label === '1°') {
-      this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint('FOV 1°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint('FOV 1°')
     } else if (label === '2°') {
-      this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint('FOV 2°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint('FOV 2°')
     } else if (label === '5°') {
-      this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint('FOV 5°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint('FOV 5°')
     } else if (label === '10°') {
-      this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint('FOV 10°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint('FOV 10°')
     } else if (label === '20°') {
-      this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint('FOV 20°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint('FOV 20°')
     } else if (label === '45°') {
-      this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint('FOV 45°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint('FOV 45°')
     } else if (label === '60°') {
-      this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint('FOV 60°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint('FOV 60°')
     } else if (label === '90°') {
-      this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint('FOV 90°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint('FOV 90°')
     } else if (label === '180°') {
-      this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint('FOV 180°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint('FOV 180°')
     }
   }
 
@@ -2252,7 +2257,7 @@ struct WindowNativeNode {
       Toggle({ type: ToggleType.Switch, isOn: enabled })
         .width(46)
         .height(28)
-        .selectedColor('#FF317AF7')
+        .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
           this.setLayer(actionId, value)
           this.flashHint((value ? '已显示 ' : '已隐藏 ') + label)
@@ -2261,8 +2266,8 @@ struct WindowNativeNode {
       .height(42)
       .width('100%')
       .padding({ left: 10, right: 8 })
-      .backgroundColor(enabled ? 'rgba(49, 122, 247, 0.10)' : 'rgba(255, 255, 255, 0.04)')
-      .border({ width: 1, color: enabled ? 'rgba(49, 122, 247, 0.20)' : 'rgba(255, 255, 255, 0.05)' })
+      .backgroundColor(enabled ? 'rgba(107, 163, 214, 0.12)' : 'rgba(255, 255, 255, 0.04)')
+      .border({ width: 1, color: enabled ? 'rgba(107, 163, 214, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
       .borderRadius(12)
       .margin({ bottom: 6 })
       .animation({ duration: 160, curve: Curve.EaseOut })
