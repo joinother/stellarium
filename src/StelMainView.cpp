@@ -832,6 +832,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "setJD")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			bool okJD = false;
+			const double jd = arg.toDouble(&okJD);
+			if (!okJD)
+			{
+				result["error"] = "setJD expects a Julian Day number";
+				return result;
+			}
+			core->setJD(jd);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["jd"] = core->getJD();
+			return result;
+		}
+
 		if (commandName == "zoomStep")
 		{
 			if (!movementMgr)

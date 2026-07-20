@@ -110,3 +110,21 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 应用启动正常，无 ANR，按钮点击和面板滚动正常 ✅
 - **备注：** 自动时间同步已在 C++ 层实现，ArkUI 层不应重复调用
+
+---
+
+## [2026-07-20] TRAE - 手动设定星图时间 + C++ setJD 命令
+
+- **修改文件：**
+  - `src/StelMainView.cpp` — 新增 `setJD` 命令桥，支持通过 Julian Day Number 设置星图绝对时间
+  - `build/.../MainWindowNativeNode.ets` — 时间面板新增手动输入日期时间的 UI 和逻辑
+- **修改内容：**
+  1. **C++ setJD 命令**：接收 Julian Day 字符串参数，调用 `core->setJD(jd)` 设置星图时间
+  2. **手动时间 UI**：时间面板底部添加年/月/日/时/分输入框 + "应用"按钮，点击后计算 JD 并通过 `setJD` 命令同步到星图
+  3. **同步当前时间按钮**：从星图当前 JD 反向解析为年月日时分，填充到输入框
+  4. **JD↔Gregorian 转换**：在 ArkUI 侧实现了 `dateToJD()` 和 JD 到 Gregorian 的反向转换算法
+  5. **状态变量**：新增 `manualYear/Month/Day/Hour/Minute` 五个 @State 变量
+- **修改原因：** 用户需要手动设定星图时间（查看特定日期的星空）
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 时间面板正常打开，手动时间输入 UI 显示正确 ✅
+- **备注：** 自动定位"定位不可用"是模拟器预期行为（无 GPS 硬件），真机可正常使用
