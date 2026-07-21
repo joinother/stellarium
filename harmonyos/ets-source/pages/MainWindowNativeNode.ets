@@ -224,9 +224,27 @@ struct WindowNativeNode {
       this.skyCultures = cultureResult.items as string[]
       this.currentSkyCulture = cultureResult.current as string
     }
+    // 加载保存的设置
+    const settings = AppStorage.get<string>("stellariumSettings")
+    if (settings) {
+      try {
+        const s = JSON.parse(settings) as Record<string, boolean | string>
+        if (s.nightMode !== undefined) { this.nightMode = s.nightMode as boolean; this.triggerAction("actionShow_Night_Mode") }
+        if (s.equatorialMount !== undefined) { this.equatorialMount = s.equatorialMount as boolean; this.triggerAction("actionSwitch_Equatorial_Mount") }
+        if (s.gyroscopeEnabled !== undefined) { this.gyroscopeEnabled = s.gyroscopeEnabled as boolean }
+        if (s.gyroscopeSensitivityText !== undefined) { this.gyroscopeSensitivityText = s.gyroscopeSensitivityText as string }
+      } catch (e) { }
+    }
   }
 
   aboutToDisappear(): void {
+    // 保存设置
+    AppStorage.setOrCreate("stellariumSettings", JSON.stringify({
+      nightMode: this.nightMode,
+      equatorialMount: this.equatorialMount,
+      gyroscopeEnabled: this.gyroscopeEnabled,
+      gyroscopeSensitivityText: this.gyroscopeSensitivityText
+    }))
     this.stopGyroscope(false)
   }
 
