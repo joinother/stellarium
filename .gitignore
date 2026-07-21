@@ -81,3 +81,8 @@ PCH-*
 *_GZ*
 GZ_*
 *.awk
+
+# === HarmonyOS 移植：签名密钥不进仓库 ===
+# 私钥/证书/授权文件一律放仓库外（如 ~/stellarium-signing/），
+# 由本地 DevEco 自动签名或自建 CA 生成，禁止提交。
+docs/harmonyos/signing/
