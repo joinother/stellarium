@@ -38,6 +38,7 @@
 #include "StelObject.hpp"
 #include "StelObjectMgr.hpp"
 #include "StelObserver.hpp"
+#include "StelLocaleMgr.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -47,6 +48,7 @@
 #include <cstdio>
 #include <QJsonObject>
 #include <QOpenGLFunctions>
+#include <QJsonArray>
 #include <QOpenGLWidget>
 #include <QApplication>
 #include <QTcpSocket>
