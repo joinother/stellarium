@@ -314,6 +314,17 @@ struct WindowNativeNode {
   @State private planets: boolean = true
   @State private planetOrbits: boolean = false
   @State private planetHints: boolean = false
+  @State private planetTrails: boolean = false
+  @State private enlargeMoon: boolean = false
+  @State private eclipticLine: boolean = true
+  @State private galacticGrid: boolean = false
+  @State private galacticEquator: boolean = false
+  @State private lightPollution: boolean = false
+  @State private dsoTextures: boolean = true
+  @State private asteroidLines: boolean = false
+  @State private asteroidLabels: boolean = false
+  @State private zodiacalLight: boolean = false
+  @State private fogEffect: boolean = false
   @State private nebulae: boolean = false
   @State private milkyWay: boolean = true
   @State private ground: boolean = true
@@ -2107,9 +2118,71 @@ struct WindowNativeNode {
       this.infoRow($r('app.string.i0056'), this.timeRateText === '暂停' ? '暂停' : '运行')
       this.quickChips(['现在', '后退', '暂停', '前进'])
       this.quickChips(['+12h', '-12h'])
+      // 天文事件快捷跳转
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 8, bottom: 4 })
+      Row() {
+        Text('天体事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      }
+      .height(18).width('100%')
+      Row({ space: 6 }) {
+        Button('下次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_Rising') })
+        Button('下次落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_Setting') })
+        Button('下次中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_Transit') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      Row({ space: 6 }) {
+        Button('今日升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionToday_Rising') })
+        Button('今日落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionToday_Setting') })
+        Button('今日中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionToday_Transit') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      Row({ space: 6 }) {
+        Button('下次晨光').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_MorningTwilight') })
+        Button('下次昏影').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_EveningTwilight') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      // 二分二至快捷跳转
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 6, bottom: 4 })
+      Row() {
+        Text('节气').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      }
+      .height(18).width('100%')
+      Row({ space: 6 }) {
+        Button('春分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_March_Equinox') })
+        Button('夏至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_June_Solstice') })
+        Button('秋分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_September_Equinox') })
+        Button('冬至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.triggerAction('actionNext_December_Solstice') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 滚动选择日期
       Row() {
-        Text($r('app.string.i0012')).fontSize(13).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0012')).fontSize(13).fontColor(this.nmSub()).width(72)
         Button(this.manualYear + '年' + this.manualMonth + '月' + this.manualDay + '日')
           .fontSize(14).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(8).height(36).layoutWeight(1)
@@ -2132,9 +2205,9 @@ struct WindowNativeNode {
       .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
       // 滚动选择时间
       Row() {
-        Text($r('app.string.i0013')).fontSize(13).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0013')).fontSize(13).fontColor(this.nmSub()).width(72)
         Button(String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
-          .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .fontSize(14).fontColor(this.nmText()).backgroundColor(this.nmInput())
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedTime = new Date(2000, 0, 1, this.manualHour, this.manualMinute)
@@ -2180,19 +2253,19 @@ struct WindowNativeNode {
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
       // 基础天体
-      Text($r('app.string.i0017')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 4, bottom: 2 })
+      Text($r('app.string.i0017')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 })
       this.switchRow($r('app.string.i0104'), this.stars, 'actionShow_Stars')
       this.switchRow($r('app.string.i0103'), this.planets, 'actionShow_Planets')
       this.switchRow($r('app.string.i0107'), this.nebulae, 'actionShow_Nebulas')
       this.switchRow('银河', this.milkyWay, 'actionShow_MilkyWay')
       // 星座
-      Text($r('app.string.i0010')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0010')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
       this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
       this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
       this.switchRow('星座艺术图', this.constellationArt, 'actionShow_Constellation_Art')
       // 坐标网格
-      Text($r('app.string.i0018')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0018')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
       this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
       this.switchRow('赤道 J2000', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
@@ -2200,16 +2273,43 @@ struct WindowNativeNode {
       this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
       this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
       // 地面与大气
-      Text($r('app.string.i0019')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0019')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('地面', this.ground, 'actionShow_Ground')
       this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
       this.switchRow('方位基点', this.cardinalPoints, 'actionShow_Cardinal_Points')
       // 标记与轨道
-      Text($r('app.string.i0020')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0020')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
       this.switchRow('行星名', this.planetLabels, 'actionShow_Planets_Labels')
       this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
       this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
+      this.switchRow('行星轨迹', this.planetTrails, 'actionShow_Planets_Trails')
+      this.switchRow('放大月球', this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
+      // 特殊线
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 6, bottom: 4 })
+      Row() {
+        Text('特殊线条').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      }
+      .height(18).width('100%')
+      this.switchRow('黄道线', this.eclipticLine, 'actionShow_Ecliptic_Line')
+      this.switchRow('银道', this.galacticEquator, 'actionShow_Galactic_Equator_Line')
+      this.switchRow('银道网格', this.galacticGrid, 'actionShow_Galactic_Grid')
+      // 大气与光害
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 6, bottom: 4 })
+      Row() {
+        Text('大气光害').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      }
+      .height(18).width('100%')
+      this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
+      this.switchRow('光污染', this.lightPollution, 'actionShow_LightPollutionFromDatabase')
+      this.switchRow('黄道光', this.zodiacalLight, 'actionShow_Zodiacal_Light')
+      this.switchRow('深空背景', this.dsoTextures, 'actionShow_DSO_Textures')
     } else if (this.activePanel === 'search') {
       TextInput({ text: this.searchText, placeholder: $r('app.string.i0063') })
         .height(44)
