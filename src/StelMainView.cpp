@@ -55,6 +55,7 @@
 #include <QTcpSocket>
 #include <QGuiApplication>
 #include <QMutex>
+#include <QWaitCondition>
 #include <QHash>
 #include <QSet>
 #include <QGraphicsSceneMouseEvent>
@@ -451,35 +452,61 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 		return QString::fromUtf8(QJsonDocument(command()).toJson(QJsonDocument::Compact));
 	}
 
-	// Off the Qt thread (ArkUI/JS): the command is enqueued below
-	// for the render pump to drain on the Qt main thread every frame.
-	// We never block the ArkUI thread and never rely on the Qt event
-	// loop pumping (OHOS Qt may drive rendering via a native vsync
-	// callback instead of the Qt event loop, so a QueuedConnection
-	// is not guaranteed to run). See the unified enqueue below.
-
-	// Unified off-thread path: enqueue the command for the render pump
-	// to drain on the Qt main thread every frame (ohosDrainCommandQueue,
-	// called from renderOhosFrameNow). In-flight guard prevents
-	// duplicate enqueues; the result is cached so the ArkUI retry loop
-	// (callNativeWhenReady) picks it up on the next call. Fire-and-forget
-	// commands (setLanguage, triggerAction) take effect on the next
-	// drained frame regardless of the return value.
-	// Unified off-thread path: the render pump (renderOhosFrameNow)
-	// drains s_ohosCmdQueue on the Qt main thread every frame. We
-	// never block the ArkUI thread and never rely on the Qt event
-	// loop pumping. Once a command has been drained its result is
-	// cached, so the ArkUI retry loop (callNativeWhenReady)
-	// receives ok:true on the next call and stops retrying.
-	// Fire-and-forget commands (setLanguage, triggerAction) take
-	// effect on the next drained frame regardless of the value.
+	// Off-thread path (ArkUI/JS thread): NEVER block here. The OHOS render
+	// pump (renderOhosFrameNow -> ohosDrainCommandQueue, which executes the
+	// queued commands on the Qt main thread) is driven from the SAME
+	// ArkUI/vsync thread this N-API call arrives on. Blocking this thread
+	// therefore stalls the render pump so the drain never runs -> the command
+	// times out forever and frames freeze after the first one (verified in
+	// hilog: 1.5s-cadence retries, zero "ohosDrainCommandQueue ran"). So we
+	// enqueue and return "pending" immediately; the ArkUI side polls again
+	// (callNativeWhenReady / interactive retry) and picks up the FRESH result.
+	//
+	// We deliberately do NOT keep a permanent per-key cache: interactive
+	// commands (selectAt, searchObject, getSelectedObjectInfo, moveToSelected,
+	// listMatchingObjects) must recompute on every logical request, else a
+	// stale first result is replayed forever ("tap twice to select", dead
+	// search box). Mechanism = CONSUME-ON-READ result store keyed by cmd|arg:
+	//   ready    -> take() the result (erase it) and return it; a later
+	//               identical request re-enqueues and recomputes fresh.
+	//   in-flight-> return pending (avoid duplicate enqueue).
+	//   new      -> mark in-flight, enqueue, return pending.
+	// Core still bootstrapping: return pending without touching the queue.
+	if (!StelApp::isInitialized())
 	{
-		QMutexLocker lock(&s_ohosCmdMutex);
-		if (s_ohosCmdCache.contains(key))
-			return QString::fromUtf8(QJsonDocument(s_ohosCmdCache.value(key)).toJson(QJsonDocument::Compact));
+		result["ok"] = false;
+		result["error"] = "pending";
+		result["pending"] = true;
+		return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+	}
+	// Fire-and-forget view commands (zoomBy / dragView / panBy) are called
+	// rapidly, never polled for a result, and often repeat with identical
+	// args. Routing them through the consume-on-read store would let a stale
+	// cached result be returned on the next identical call WITHOUT executing
+	// (execute/skip/execute...). So bypass the store: always enqueue a fresh
+	// execution and return pending; the caller ignores the return value.
+	{
+		const QString cmdName = key.section('|', 0, 0);
+		if (cmdName == "zoomBy" || cmdName == "dragView" || cmdName == "panBy")
+		{
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_ohosCmdQueue.append([command]() { command(); });
+			result["ok"] = false;
+			result["error"] = "pending";
+			result["pending"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
 	}
 	{
-		QMutexLocker lock(&s_ohosCmdMutex);
+		QMutexLocker qlock(&s_ohosCmdQueueMutex);
+		auto it = s_ohosCmdCache.find(key);
+		if (it != s_ohosCmdCache.end())
+		{
+			QJsonObject r = it.value();
+			s_ohosCmdCache.erase(it);        // consume-on-read: fresh next time
+			s_ohosCmdInflight.remove(key);
+			return QString::fromUtf8(QJsonDocument(r).toJson(QJsonDocument::Compact));
+		}
 		if (s_ohosCmdInflight.contains(key))
 		{
 			result["ok"] = false;
@@ -488,16 +515,17 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 		}
 		s_ohosCmdInflight.insert(key);
+		// Bound the store: fire-and-forget commands (zoomBy, dragView, ...) never
+		// have their result consumed, so cap growth defensively.
+		if (s_ohosCmdCache.size() > 128)
+			s_ohosCmdCache.clear();
+		s_ohosCmdQueue.append([key, command]() {
+			QJsonObject r = command();
+			QMutexLocker l(&s_ohosCmdQueueMutex);
+			s_ohosCmdCache.insert(key, r);
+			s_ohosCmdInflight.remove(key);
+		});
 	}
-	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohos cmd enqueue %{public}s", key.toUtf8().constData());
-	QMutexLocker lock(&s_ohosCmdQueueMutex);
-	s_ohosCmdQueue.append([key, command]() {
-		QJsonObject r = command();
-		QMutexLocker lock(&s_ohosCmdMutex);
-		s_ohosCmdInflight.remove(key);
-		s_ohosCmdCache.insert(key, r);
-	});
-
 	result["ok"] = false;
 	result["error"] = "pending";
 	result["pending"] = true;

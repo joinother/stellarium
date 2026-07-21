@@ -39,6 +39,7 @@ interface ShellAction {
 
 interface StellariumBridgeResponse {
   ok?: boolean
+  pending?: boolean
   found?: boolean
   error?: string
   name?: string
@@ -60,6 +61,10 @@ interface StellariumBridgeResponse {
   target?: string
   ra?: string
   dec?: string
+  magnitude?: number
+  azimuth?: number
+  constellation?: string
+  distance?: string
   replies?: string
   sent?: string
   mode?: string
@@ -106,6 +111,11 @@ struct WindowNativeNode {
   @State private selectedType: string = '轻点天体或搜索'
   @State private selectedStatus: string = '等待选择'
   @State private selectedInfo: string = '轻点星图中的天体，或在搜索里输入名称。'
+  @State private selectedMagnitude: string = ''
+  @State private selectedCoordEq: string = ''
+  @State private selectedCoordAlt: string = ''
+  @State private selectedConstellation: string = ''
+  @State private selectedDistance: string = ''
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
@@ -305,22 +315,28 @@ struct WindowNativeNode {
   // At startup the ArkUI thread may call the bridge before Qt has finished
   // bootstrapping; those calls return ok:false and are retried on a short
   // backoff instead of crashing the process.
-  private callNativeWhenReady(name: string, payload: string = '', onOk?: (r: StellariumBridgeResponse) => void, attempt: number = 0): void {
+  private callNativeWhenReady(name: string, payload: string = '', onOk?: (r: StellariumBridgeResponse) => void, attempt: number = 0, intervalMs: number = 200, maxAttempts: number = 60): void {
     const r = this.callNative(name, payload)
     if (r.ok === true) {
       if (onOk) onOk(r)
       return
     }
-    if (attempt < 60) {
-      setTimeout(() => this.callNativeWhenReady(name, payload, onOk, attempt + 1), 200)
+    if (attempt < maxAttempts) {
+      setTimeout(() => this.callNativeWhenReady(name, payload, onOk, attempt + 1, intervalMs, maxAttempts), intervalMs)
     }
   }
 
+  // Interactive commands (tap-select, search, get-info, move-to) run on the
+  // OHOS render pump one frame later and are delivered via a consume-on-read
+  // store on the C++ side, so the first call returns {pending}. Poll fast
+  // (50ms x 40 = 2s) so a single tap/search resolves without a visible delay
+  // and WITHOUT blocking the render thread. onOk receives the FRESH result.
+  private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void): void {
+    this.callNativeWhenReady(name, payload, onOk, 0, 50, 40)
+  }
+
   private refreshState(): void {
-    const result = this.callNative('getState')
-    if (result.ok !== true) {
-      return
-    }
+    this.callInteractive('getState', '', (result) => {
     this.stars = result.actionShow_Stars === true
     this.planets = result.actionShow_Planets === true
     this.planetOrbits = result.actionShow_Planets_Orbits === true
@@ -366,28 +382,30 @@ struct WindowNativeNode {
     if (result.tracking !== undefined) {
       this.trackingText = result.tracking ? '开启' : '关闭'
     }
+    })
   }
 
   private setLayer(actionId: string, enabled: boolean): void {
-    const result = this.callNative('setActionChecked', actionId + '|' + (enabled ? '1' : '0'))
-    if (result.ok === true) {
+    this.callInteractive('setActionChecked', actionId + '|' + (enabled ? '1' : '0'), () => {
       this.refreshState()
-    }
+    })
   }
 
   private triggerAction(actionId: string): void {
-    const result = this.callNative('triggerAction', actionId)
-    if (result.ok === true) {
+    this.callInteractive('triggerAction', actionId, () => {
       this.refreshState()
-    }
+    })
   }
 
   private fetchSuggestions(prefix: string): void {
     if (prefix.length < 1) { this.searchSuggestions = []; return }
-    const result = this.callNative('listMatchingObjects', prefix + '|10')
-    if (result.ok === true && Array.isArray(result.items)) {
-      this.searchSuggestions = result.items as string[]
-    }
+    this.callInteractive('listMatchingObjects', prefix + '|10', (result) => {
+      // Only apply if the query prefix is still current (user may have typed more).
+      if (this.searchText.trim() !== prefix) { return }
+      if (Array.isArray(result.items)) {
+        this.searchSuggestions = result.items as string[]
+      }
+    })
   }
 
   private loadCategoryObjects(category: string): void {
@@ -403,48 +421,42 @@ struct WindowNativeNode {
       'messier': 'NebulaMgr:100',
     }
     const moduleId = moduleIdMap[category] || ''
-    const result = this.callNative('listObjects', moduleId)
-    if (result.ok === true && Array.isArray(result.items)) {
-      const items = result.items as string[]
-      this.categoryObjects = []
-      for (let i = 0; i < Math.min(items.length, 20); i++) {
-        this.categoryObjects.push({ name: items[i] })
+    this.callInteractive('listObjects', moduleId, (result) => {
+      if (Array.isArray(result.items)) {
+        const items = result.items as string[]
+        this.categoryObjects = []
+        for (let i = 0; i < Math.min(items.length, 20); i++) {
+          this.categoryObjects.push({ name: items[i] })
+        }
       }
-    }
+    })
   }
 
   private stopTracking(): void {
-    const result = this.callNative('setTracking', '0')
-    if (result.ok === true) { this.trackingText = '关闭' }
+    this.callInteractive('setTracking', '0', () => { this.trackingText = '关闭' })
   }
 
   private setSkyCulture(name: string): void {
-    const result = this.callNative("setSkyCulture", name)
-    if (result.ok === true) {
+    this.callInteractive('setSkyCulture', name, () => {
       this.currentSkyCulture = name
       this.flashHint("星图文化: " + name)
-    }
+    })
   }
 
   private setTimeRate(rate: number): void {
-    const result = this.callNative('setTimeRate', rate.toString())
-    if (result.ok === true && result.timeRate !== undefined) {
-      this.timeRateText = this.formatRate(result.timeRate)
-    }
+    this.callInteractive('setTimeRate', rate.toString(), (result) => {
+      if (result.timeRate !== undefined) {
+        this.timeRateText = this.formatRate(result.timeRate)
+      }
+    })
   }
 
   private zoomStep(factor: number): void {
-    const result = this.callNative('zoomStep', factor.toString())
-    if (result.ok === true) {
-      this.refreshState()
-    }
+    this.callInteractive('zoomStep', factor.toString(), () => { this.refreshState() })
   }
 
   private advanceTime(hours: number): void {
-    const result = this.callNative('advanceTime', hours.toString())
-    if (result.ok === true) {
-      this.refreshState()
-    }
+    this.callInteractive('advanceTime', hours.toString(), () => { this.refreshState() })
     this.flashHint((hours > 0 ? '+' : '') + hours.toString() + ' 小时')
   }
 
@@ -461,11 +473,10 @@ struct WindowNativeNode {
 
   private applyManualTime(): void {
     const jd = this.dateToJD(this.manualYear, this.manualMonth, this.manualDay, this.manualHour, this.manualMinute)
-    const result = this.callNative('setJD', jd.toFixed(6))
-    if (result.ok === true) {
+    this.callInteractive('setJD', jd.toFixed(6), () => {
       this.refreshState()
       this.flashHint('已设定为 ' + this.manualYear + '-' + String(this.manualMonth).padStart(2, '0') + '-' + String(this.manualDay).padStart(2, '0') + ' ' + String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
-    }
+    })
   }
 
   private setLanguage(lang: string): void {
@@ -483,7 +494,7 @@ struct WindowNativeNode {
   }
 
   private syncManualTimeFromState(): void {
-    const result = this.callNative('getState', '')
+    this.callInteractive('getState', '', (result) => {
     if (result.jd !== undefined) {
       const jd = result.jd as number
       const z = Math.floor(jd + 0.5)
@@ -509,6 +520,7 @@ struct WindowNativeNode {
       this.manualHour = hour
       this.manualMinute = minute
     }
+    })
   }
 
   private flashHint(text: string): void {
@@ -538,16 +550,17 @@ struct WindowNativeNode {
   }
 
   private lx200GotoSelected(): void {
-    this.applyLx200Result(this.callNative('telescopeLx200GotoSelected', this.lx200Payload()))
+    this.callInteractive('telescopeLx200GotoSelected', this.lx200Payload(), (r) => this.applyLx200Result(r))
   }
 
   private lx200SyncSelected(): void {
-    this.applyLx200Result(this.callNative('telescopeLx200SyncSelected', this.lx200Payload()))
+    this.callInteractive('telescopeLx200SyncSelected', this.lx200Payload(), (r) => this.applyLx200Result(r))
   }
 
   private lx200Abort(): void {
-    const result = this.callNative('telescopeLx200Abort', this.lx200Payload())
-    this.lx200Status = result.ok === true ? '已发送停止指令' : (result.error ? result.error : '停止失败')
+    this.callInteractive('telescopeLx200Abort', this.lx200Payload(), (result) => {
+      this.lx200Status = result.ok === true ? '已发送停止指令' : (result.error ? result.error : '停止失败')
+    })
   }
 
   private toggleGyroscope(enabled: boolean): void {
@@ -614,10 +627,13 @@ struct WindowNativeNode {
 
     const clampedDx = Math.max(-18, Math.min(18, dx))
     const clampedDy = Math.max(-18, Math.min(18, dy))
+    // panBy is high-frequency & fire-and-forget: it is drained on the next
+    // render frame, so DON'T wrap it in a retry loop (would flood). A first
+    // call returns {pending} which here simply means "enqueued/working".
     const result = this.callNative('panBy', clampedDx.toString() + '|' + clampedDy.toString() + '|' + this.skyWidth.toString() + '|' + this.skyHeight.toString())
     this.gyroEventCount += 1
     if (this.gyroEventCount % 12 === 0) {
-      this.gyroscopeStatus = result.ok === true ? '工作中' : (result.error ? result.error : 'Core 未就绪')
+      this.gyroscopeStatus = (result.ok === true || result.pending === true) ? '工作中' : (result.error ? result.error : 'Core 未就绪')
     }
   }
 
@@ -626,23 +642,25 @@ struct WindowNativeNode {
     if (query.length === 0) {
       return
     }
-    const result = this.callNative('searchObject', query)
-    this.applySelectedObject(result)
     this.activePanel = 'object'
     this.panelVisible = true
-    if (result.ok === true) {
-      this.flashHint('已找到: ' + query)
-    } else {
-      this.flashHint('搜索: ' + query)
-    }
+    this.flashHint('搜索: ' + query)
+    this.callInteractive('searchObject', query, (result) => {
+      this.applySelectedObject(result)
+      if (result.found === true) {
+        this.flashHint('已找到: ' + query)
+      } else {
+        this.flashHint('未找到: ' + query)
+      }
+    })
   }
 
   private refreshSelectedObject(): void {
-    this.applySelectedObject(this.callNative('getSelectedObjectInfo'))
+    this.callInteractive('getSelectedObjectInfo', '', (r) => this.applySelectedObject(r))
   }
 
   private moveToSelectedObject(): void {
-    this.applySelectedObject(this.callNative('moveToSelected'))
+    this.callInteractive('moveToSelected', '', (r) => this.applySelectedObject(r))
   }
 
   private applySelectedObject(result: StellariumBridgeResponse): void {
@@ -654,11 +672,27 @@ struct WindowNativeNode {
       this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '已选择')
       this.selectedType = result.type && result.type.length > 0 ? result.type : '天体'
       this.selectedStatus = '已选中'
-      this.selectedInfo = result.info && result.info.length > 0 ? result.info : '已选中目标，Core 暂未返回更多说明。'
+      this.selectedMagnitude = (typeof result.magnitude === 'number') ? (result.magnitude as number).toFixed(2) : ''
+      const ra: string = result.ra ? result.ra : ''
+      const dec: string = result.dec ? result.dec : ''
+      this.selectedCoordEq = (ra.length > 0 || dec.length > 0) ? (ra + '  ' + dec).trim() : ''
+      const hasAlt: boolean = typeof result.altitude === 'number'
+      const hasAz: boolean = typeof result.azimuth === 'number'
+      this.selectedCoordAlt = (hasAlt || hasAz)
+        ? ('高度 ' + (hasAlt ? (result.altitude as number).toFixed(1) : '--') + '°   方位 ' + (hasAz ? (result.azimuth as number).toFixed(1) : '--') + '°')
+        : ''
+      this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
+      this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
+      this.selectedInfo = ''
     } else {
       this.selectedName = '未找到'
       this.selectedType = result.query && result.query.length > 0 ? result.query : '无选中对象'
       this.selectedStatus = result.query && result.query.length > 0 ? '可尝试英文名' : '未命中'
+      this.selectedMagnitude = ''
+      this.selectedCoordEq = ''
+      this.selectedCoordAlt = ''
+      this.selectedConstellation = ''
+      this.selectedDistance = ''
       this.selectedInfo = '当前点击位置没有命中可选天体。可以放大后再点，或用搜索选择目标。'
     }
   }
@@ -785,15 +819,14 @@ struct WindowNativeNode {
   }
 
   private setLocation(name: string, latitude: number, longitude: number, altitude: number): void {
-    const result = this.callNative('setLocation', name + '|' + latitude.toString() + '|' + longitude.toString() + '|' + altitude.toString())
-    if (result.ok === true) {
+    this.callInteractive('setLocation', name + '|' + latitude.toString() + '|' + longitude.toString() + '|' + altitude.toString(), () => {
       this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
       this.locationText = name + ' · Earth'
       this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
       this.altitudeText = altitude.toFixed(0) + ' m'
       this.refreshState()
       this.flashHint('位置：' + name)
-    }
+    })
   }
 
   private hierContinents(): Array<string> {
@@ -1031,7 +1064,7 @@ struct WindowNativeNode {
       if (y >= 560 && y <= 615) {
         if (x >= 1095 && x < 1160) { this.refreshSelectedObject(); this.refreshState(); return true }
         if (x >= 1160 && x < 1225) { this.moveToSelectedObject(); return true }
-        if (x >= 1225 && x <= 1310) { const result = this.callNative('setTracking', '0'); if (result.ok === true) { this.refreshState() } return true }
+        if (x >= 1225 && x <= 1310) { this.callInteractive('setTracking', '0', () => { this.refreshState() }); return true }
       }
       if (y >= 630 && y <= 690) {
         if (x >= 1095 && x < 1175) { this.lx200GotoSelected(); return true }
@@ -1178,16 +1211,17 @@ struct WindowNativeNode {
       } else if (!this.touchMoved && !this.pinchActive) {
         const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
-        const result = this.callNative('selectAt', payload)
-        hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
-        this.applySelectedObject(result)
-        if (result.found === true) {
-          this.flashHint('已选中 ' + this.selectedName)
-        } else {
-          this.flashHint('这里没有天体')
-        }
         this.activePanel = 'object'
         this.panelVisible = true
+        this.callInteractive('selectAt', payload, (result) => {
+          hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
+          this.applySelectedObject(result)
+          if (result.found === true) {
+            this.flashHint('已选中 ' + this.selectedName)
+          } else {
+            this.flashHint('这里没有天体')
+          }
+        })
       }
       this.pinchActive = false
       this.nativeDragActive = false
@@ -1650,18 +1684,25 @@ struct WindowNativeNode {
         Text('追踪').fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
-      Text(this.selectedInfo)
-        .fontSize(12)
-        .fontColor('#99FFFFFF')
-        .lineHeight(18)
-        .width('100%')
-        .maxLines(8)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .padding({ left: 10, right: 10, top: 9, bottom: 9 })
-        .backgroundColor('rgba(107, 163, 214, 0.12)')
-        .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
-        .borderRadius(14)
-        .margin({ top: 8, bottom: 8 })
+      if (this.selectedMagnitude.length > 0) { this.infoRow('星等', this.selectedMagnitude) }
+      if (this.selectedCoordEq.length > 0) { this.infoRow('赤道坐标', this.selectedCoordEq) }
+      if (this.selectedCoordAlt.length > 0) { this.infoRow('地平坐标', this.selectedCoordAlt) }
+      if (this.selectedConstellation.length > 0) { this.infoRow('星座', this.selectedConstellation) }
+      if (this.selectedDistance.length > 0) { this.infoRow('距离', this.selectedDistance) }
+      if (this.selectedInfo.length > 0) {
+        Text(this.selectedInfo)
+          .fontSize(12)
+          .fontColor('#99FFFFFF')
+          .lineHeight(18)
+          .width('100%')
+          .maxLines(4)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .padding({ left: 10, right: 10, top: 9, bottom: 9 })
+          .backgroundColor('rgba(107, 163, 214, 0.12)')
+          .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
+          .borderRadius(14)
+          .margin({ top: 8, bottom: 8 })
+      }
       Row() {
         Button(this.observingList.includes(this.selectedName) ? "已从列表" : "加入观测列表")
           .fontSize(13).fontColor("#E5FFFFFF").backgroundColor("rgba(107,163,214,0.25)")
@@ -1936,8 +1977,7 @@ struct WindowNativeNode {
           .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(12).height(36).layoutWeight(1)
           .onClick(() => {
-            const result = this.callNative('saveScreenShot', '')
-            if (result.ok === true) { this.flashHint('截图已保存') }
+            this.callInteractive('saveScreenShot', '', () => { this.flashHint('截图已保存') })
           })
         Button(this.nightMode ? '🌙 夜间模式' : '☀️ 日间模式')
           .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
@@ -2441,10 +2481,7 @@ struct WindowNativeNode {
     } else if (label === '居中' || label === '追踪') {
       this.moveToSelectedObject()
     } else if (label === '取消追踪') {
-      const result = this.callNative('setTracking', '0')
-      if (result.ok === true) {
-        this.refreshState()
-      }
+      this.callInteractive('setTracking', '0', () => { this.refreshState() })
     } else if (label === '现在') {
       this.triggerAction('actionReturn_To_Current_Time')
       this.setTimeRate(0.000011574074074073)

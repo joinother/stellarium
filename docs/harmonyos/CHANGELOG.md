@@ -6,6 +6,28 @@
 
 
 
+## [2026-07-21] WorkBuddy - 修复交互命令 stale-cache 回归（单次点击选中 + 搜索框 + 结构化详情）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（`runOhosCommandOnQtThread` off-thread 分支重写；`s_ohosCmdCache` 改为 consume-on-read 结果仓库 + `s_ohosCmdInflight` 防重入；`zoomBy`/`dragView`/`panBy` fire-and-forget 快速通道）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（新增 `callInteractive()`；把 `selectAt`/`searchObject`/`getSelectedObjectInfo`/`listMatchingObjects`/`listObjects`/动作/时间/位置/截图/刷新状态等全部改为非阻塞回调；天体详情面板结构化行布局）
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`（与 `harmonyos/ets-source/...` 保持同步）
+- **修改内容：**
+  1. C++ 命令桥改为**非阻塞**：off-thread 调用立即返回 `{pending: true}`，命令由 `renderOhosFrameNow()` → `ohosDrainCommandQueue()` 在 Qt 主线程每帧执行，结果写入 consume-on-read 仓库；下次同一 key 请求必须重新入队 → 交互命令永远拿到**新鲜结果**。
+  2. 废除 0.5 引入的 permanent key cache，消除"双击才选中""搜索按钮无效"的根因。
+  3. 高频 fire-and-forget 视图命令（`zoomBy`/`dragView`/`panBy`）绕过仓库直接入队，避免未消费结果污染下次调用。
+  4. ArkUI 新增 `callInteractive()` 以 50ms×40 次轮询直到 `ok:true`；所有依赖返回值的命令改为回调处理，保证单 tap 即可更新 UI。
+  5. 天体详情面板从单块 `Text(this.selectedInfo)` 改为 `infoRow` 行：名称、类型、状态、追踪、星等、赤道坐标、地平坐标、星座、距离。
+- **修改原因（真实根因）：** P0 #0.5 的永久缓存对 startup 命令有效（`callNativeWhenReady` 会重试直到命中缓存），但交互命令只做单次 `callNative`，导致首次调用只能拿到 pending、结果永远留在缓存里被下一次不同请求触发 → 卫星/星星点不到、搜索不反应、需要双击、详情是一团话。
+- **构建结果：** `cmake --build . --parallel` 重编 `libstellarium.so` 成功（md5 `2845a13c65942d9d2014c795da7df535`）；`assembleHap` BUILD SUCCESSFUL（275MB，已签名）；未跑 `harmonydeployqt`。
+- **验证结果（2026-07-21，模拟器 127.0.0.1:5555）：**
+  - 启动无 SIGABRT，启动命令重试仅 19 次后停止（`ohosDrainCommandQueue ran n=2/1`），首帧真实星场 `frame stats lit=296883`。
+  - 单次模拟 tap（700,250）→ 150ms 内拿到 `selectAt` 结果：`OCC 988` / 双星 / 星等 5.62 / 高度 30.8° / 方位 152.5° / 星座 Sgr；**一次点击即选中**。
+  - 截图 `/tmp/stel_sel.jpeg` 验证：星场选中标记 + 右侧面板结构化展示全部字段，无文本 blob。
+- **备注：** 对应 KNOWN-ISSUES P0 #0.6（本轮新增）。本次修复证明：在 OHOS 渲染泵与 N-API 命令桥共享同一线程的前提下，**任何阻塞该线程的尝试都会让渲染泵与命令排空同时停滞**；必须保持非阻塞 + 异步结果投递。
+
+---
+
 ## [2026-07-21] WorkBuddy - 修复启动命令跨线程投递死锁（渲染泵驱动的命令队列）
 
 - **修改文件：** `src/StelMainView.cpp`（仅此一处；`libstellarium.so` 重编）
