@@ -552,6 +552,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "saveScreenShot")
+		{
+			StelMainView::getInstance().saveScreenShot();
+			result["ok"] = true;
+			result["message"] = "screenshot saved";
+			return result;
+		}
+
 		if (commandName == "searchObject")
 		{
 			if (!objectMgr)
