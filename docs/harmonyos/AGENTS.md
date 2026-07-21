@@ -53,6 +53,7 @@ docs/harmonyos/
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
 ├── SIGNING-GUIDE.md           ← HAP 构建、手动签名、安装排错说明
+├── DEBUGGING-GUIDE.md         ← DevEco/模拟器/Qt/ArkUI 实战调试经验
 ├── DEVECO-COLLAB.md           ← DevEco Code 协作指南（外包鸿蒙重活、省 token）
 ├── skills/                    ← ArkTS 开发 Skill 参考库（来自 DevEco Code）
 │   ├── arkts-error-fixes/     ← 21 种 ArkTS 编译错误修复方案（66 文件）
@@ -72,10 +73,7 @@ docs/harmonyos/
 │   ├── ets-source/            ← ArkUI/ETS 源码
 │   ├── cpp-source/            ← C++ Native 源码
 │   └── *.json5                ← 构建配置
-└── signing/                   ← 签名证书和配置
-    ├── stellarium-app-keypair.p12
-    ├── stellarium-app-cert-chain.cer
-    └── stellarium-ca-release-profile.p7b
+└── signing/                   ← 历史遗留路径；签名私钥/profile 清洗后不要再提交到 git
 ```
 
 ### 2.3 CHANGELOG.md 格式
@@ -249,7 +247,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 ## 7. 注意事项
 
 1. **不要修改 build 目录下的文件后忘记同步到 `harmonyos/`**
-2. **HAP 文件不要上传到 git（太大），只上传签名证书和配置**
+2. **HAP、签名私钥、profile、真实密码都不要上传到 git**；签名材料只放本机私有目录或私下交付
 3. **不要推送到上游 `Stellarium/stellarium`**，推送到你自己的 fork
 4. **ArkTS 限制：** `@Builder` 内不能有 `const/let` 赋值；属性链式调用必须在容器组件 `}` 之后；`Blank()` 只能放在 `Column/Row/Flex` 中
 5. **坐标单位：** `onAreaChange` 返回 vp；`TouchObject.windowX/Y` 是 vp；C++ 侧 `selectAt` 需要 vp

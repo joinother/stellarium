@@ -8,10 +8,10 @@
 
 这个项目目前用的是一套**本地调试/预览用 release 签名材料**，不是上架 AppGallery 的正式商业签名。
 
-签名材料在仓库内：
+签名材料曾经放在仓库内的如下路径。**安全清理后不要再依赖仓库内路径**，应由项目负责人通过私有渠道提供到本机目录，例如 `/private/tmp/stellarium-oh-signing/` 或 `~/stellarium-signing/`：
 
 ```text
-docs/harmonyos/signing/
+docs/harmonyos/signing/       # legacy path, do not commit again
 ├── stellarium-app-keypair.p12
 ├── stellarium-app-cert-chain.cer
 ├── stellarium-ca-release-profile.p7b
@@ -32,7 +32,7 @@ profile type: release
 profile uuid: stellarium-openharmony-release-20260719-ca-signed
 ```
 
-不要把实际 keystore/key 密码提交到 GitHub。WorkBuddy 在本机运行前，从项目负责人处拿到本地预览签名密码，然后设置：
+不要把实际 keystore/key 密码或 `.p12/.p7b` 私有签名材料提交到 GitHub。WorkBuddy 在本机运行前，从项目负责人处拿到本地预览签名密码和签名材料，然后设置：
 
 ```sh
 export STELLARIUM_SIGNING_PASSWORD='<local signing password>'
@@ -60,7 +60,7 @@ install sign info inconsistent
 
 Codex 已在本机模拟器 `127.0.0.1:5555` 重新实测：
 
-- 使用 `docs/harmonyos/signing/` 里的 `stellarium-app-keypair.p12` + `stellarium-app-cert-chain.cer` + `stellarium-ca-release-profile.p7b`
+- 使用同一套 `stellarium-app-keypair.p12` + `stellarium-app-cert-chain.cer` + `stellarium-ca-release-profile.p7b`
 - 对当前 `entry-default-unsigned.hap` 手动 `sign-app`
 - `verify-app` 通过
 - `hdc install -r` 安装成功
@@ -109,22 +109,22 @@ DevEco Studio：
 
 ## 2. 第一次准备签名材料
 
-如果 `/private/tmp/stellarium-oh-signing` 不存在，从仓库复制一份：
+如果 `/private/tmp/stellarium-oh-signing` 不存在，从项目负责人私下提供的签名材料目录复制一份。下面用 `~/stellarium-signing` 举例：
 
 ```sh
 mkdir -p /private/tmp/stellarium-oh-signing
 
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-app-keypair.p12 \
+cp ~/stellarium-signing/stellarium-app-keypair.p12 \
   /private/tmp/stellarium-oh-signing/stellarium-app-keypair.p12
 
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-app-cert-chain.cer \
+cp ~/stellarium-signing/stellarium-app-cert-chain.cer \
   /private/tmp/stellarium-oh-signing/stellarium-app-cert-chain.cer
 
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-ca-release-profile.p7b \
+cp ~/stellarium-signing/stellarium-ca-release-profile.p7b \
   /private/tmp/stellarium-oh-signing/stellarium-ca-release-profile.p7b
 ```
 
-也可以直接在签名命令里引用 `docs/harmonyos/signing/` 下的文件；我保留 `/private/tmp/stellarium-oh-signing` 是为了和之前测试命令一致。
+不要在签名命令里引用 git 仓库内的签名目录；清洗历史后该目录不应再存在于公开仓库。
 
 ## 3. 构建 unsigned HAP
 
@@ -318,9 +318,9 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
 
 mkdir -p /private/tmp/stellarium-oh-signing
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-app-keypair.p12 /private/tmp/stellarium-oh-signing/
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-app-cert-chain.cer /private/tmp/stellarium-oh-signing/
-cp /Users/jiexuanyang/stellarium-src/docs/harmonyos/signing/stellarium-ca-release-profile.p7b /private/tmp/stellarium-oh-signing/
+cp ~/stellarium-signing/stellarium-app-keypair.p12 /private/tmp/stellarium-oh-signing/
+cp ~/stellarium-signing/stellarium-app-cert-chain.cer /private/tmp/stellarium-oh-signing/
+cp ~/stellarium-signing/stellarium-ca-release-profile.p7b /private/tmp/stellarium-oh-signing/
 
 /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java \
   -jar /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar \

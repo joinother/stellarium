@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-07-22] Codex - 补充 DevEco / Qt / ArkUI 调试经验手册
+
+- **修改文件：** `docs/harmonyos/DEBUGGING-GUIDE.md`, `docs/harmonyos/AGENTS.md`, `docs/harmonyos/SIGNING-GUIDE.md`
+- **修改内容：** 新增接手者调试手册，记录 DevEco/hvigor/hdc 使用方式、为什么 HAP 必须签名、签名安全注意、Qt 启动 SIGABRT、命令投递死锁、黑屏、触摸失效、交互缓存、拖动卡顿、详情刷新、旋转适配等实战排查经验；在 AGENTS 文档索引中加入该文件。
+- **修改原因：** 用户要求把 Codex 的实际调试经验写下来，方便 WorkBuddy/后续 Agent 接手时复现问题、判断层级、避免重复踩坑。
+- **构建结果：** 未构建（仅文档）。
+- **验证结果：** 文档检查通过；未改应用代码。
+- **备注：** 文档明确提醒：签名材料/真实密码不应入仓；`.gitignore` 不能清除已经进入 git 历史的敏感文件。
+
+---
+
 
 
 ## [2026-07-21] WorkBuddy - 选中天体后"目标详情"坐标实时刷新（地层快照 + @Builder 参数按值捕获双重冻结）
