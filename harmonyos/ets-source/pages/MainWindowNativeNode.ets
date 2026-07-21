@@ -348,6 +348,28 @@ struct WindowNativeNode {
   @State private umbraCircle: boolean = false
   @State private penumbraCircle: boolean = false
   @State private compassMarks: boolean = false
+  @State private primeVerticalLine: boolean = false
+  @State private currentVerticalLine: boolean = false
+  @State private colureLines: boolean = false
+  @State private circumpolarCircles: boolean = false
+  @State private eclipticJ2000Grid: boolean = false
+  @State private equatorialJ2000Grid: boolean = false
+  @State private supergalacticGrid: boolean = false
+  @State private longitudeLine: boolean = false
+  @State private quadratureLine: boolean = false
+  @State private precessionCircles: boolean = false
+  @State private eclipticJ2000Poles: boolean = false
+  @State private equinoxJ2000Pts: boolean = false
+  @State private solsticeJ2000Pts: boolean = false
+  @State private galacticCenter: boolean = false
+  @State private supergalacticPoles: boolean = false
+  @State private apexPoints: boolean = false
+  @State private umbraCenter: boolean = false
+  @State private zenithNadir: boolean = false
+  @State private invariantPlaneLine: boolean = false
+  @State private solarEquatorLine: boolean = false
+  @State private fixedEquatorLine: boolean = false
+  @State private fixedEquatorialGrid: boolean = false
   @State private fovMarker: boolean = false
   @State private intercardinalPts: boolean = false
   @State private landscapeIllum: boolean = false
@@ -377,7 +399,6 @@ struct WindowNativeNode {
   @State private cardinalPoints: boolean = true
   @State private azimuthGrid: boolean = false
   @State private equatorialGrid: boolean = false
-  @State private equatorialJ2000Grid: boolean = false
   @State private eclipticGrid: boolean = false
   @State private meridianLine: boolean = false
   @State private horizonLine: boolean = false
@@ -3707,6 +3728,52 @@ struct WindowNativeNode {
         this.switchRow('罗盘标记', this.compassMarks, 'actionShow_Compass_Marks')
         this.switchRow('FOV标记', this.fovMarker, 'actionShow_FOV_Center_Marker')
         this.switchRow('中间方位', this.intercardinalPts, 'actionShow_Intercardinal_Points')
+        // 更多标记线
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('更多线条').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('垂直圈', this.primeVerticalLine, 'actionShow_Prime_Vertical_Line')
+        this.switchRow('当前垂直', this.currentVerticalLine, 'actionShow_Current_Vertical_Line')
+        this.switchRow('分至圈', this.colureLines, 'actionShow_Colure_Lines')
+        this.switchRow('进动圈', this.precessionCircles, 'actionShow_Precession_Circles')
+        this.switchRow('拱极圈', this.circumpolarCircles, 'actionShow_Circumpolar_Circles')
+        this.switchRow('不变平面', this.invariantPlaneLine, 'actionShow_Invariable_Plane_Line')
+        this.switchRow('太阳赤道', this.solarEquatorLine, 'actionShow_Solar_Equator_Line')
+        // 更多网格
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('更多网格').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('J2000赤道网', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
+        this.switchRow('J2000黄道网', this.eclipticJ2000Grid, 'actionShow_Ecliptic_J2000_Grid')
+        this.switchRow('黄道网格', this.eclipticGrid, 'actionShow_Ecliptic_Grid')
+        this.switchRow('超银道网', this.supergalacticGrid, 'actionShow_Supergalactic_Grid')
+        this.switchRow('固定赤道网', this.fixedEquatorialGrid, 'actionShow_Fixed_Equatorial_Grid')
+        this.switchRow('固定赤道线', this.fixedEquatorLine, 'actionShow_Fixed_Equator_Line')
+        // 更多点标记
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('更多点标记').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('天顶/天底', this.zenithNadir, 'actionShow_Zenith_Nadir')
+        this.switchRow('J2000天极', this.eclipticJ2000Poles, 'actionShow_Celestial_J2000_Poles')
+        this.switchRow('J2000黄极', this.eclipticJ2000Poles, 'actionShow_Ecliptic_J2000_Poles')
+        this.switchRow('J2000分点', this.equinoxJ2000Pts, 'actionShow_Equinox_J2000_Points')
+        this.switchRow('J2000至点', this.solsticeJ2000Pts, 'actionShow_Solstice_J2000_Points')
+        this.switchRow('银心/银反', this.galacticCenter, 'actionShow_Galactic_Center')
+        this.switchRow('超银极', this.supergalacticPoles, 'actionShow_Supergalactic_Poles')
+        this.switchRow('顶点', this.apexPoints, 'actionShow_Apex_Points')
+        this.switchRow('本影中心', this.umbraCenter, 'actionShow_Umbra_Center_Point')
+        this.switchRow('经度线', this.longitudeLine, 'actionShow_Longitude_Line')
+        this.switchRow('方照线', this.quadratureLine, 'actionShow_Quadrature_Line')
+
       }
       .width('100%')
     }
