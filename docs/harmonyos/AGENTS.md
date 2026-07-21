@@ -44,6 +44,30 @@ OpenGL ES → XComponent → Framebuffer
 | 修复 Bug | 读 `KNOWN-ISSUES.md` 选任务 | 标记已修复，更新 `CHANGELOG.md` |
 | 更换 Agent | 读全部文档 | 无需额外动作 |
 
+`### 2.2 Git Commit 规范
+
+所有 AI 和开发者在提交时必须遵守以下格式：
+
+```
+<type>(<scope>): <简短中文描述>
+
+<可选: 详细说明>
+
+[TRAE] <AI名称> | [WorkBuddy] | [DevEco] | [Manual]
+```
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| type | feat/fix/docs/refactor/test/chore | feat |
+| scope | ohos/cpp/i18n/security | ohos |
+| 描述 | 简洁中文，不超过 50 字 | 修复启动画面不自动消失 |
+| 署名行 | 标明提交者身份 | [TRAE] session-xxx |
+
+**注意事项：**
+- commit message 中不要使用 Unicode 转义（如 \\u2212），直接使用 UTF-8 字符
+- 中文标点用全角（，。）不用半角（,.）
+- git config 使用实际姓名和邮箱，不要留 'jiexuanyang@...local'
+
 ### 2.2 文档结构
 
 ```
