@@ -113,6 +113,7 @@ struct WindowNativeNode {
   @State private manualHour: number = 23
   @State private manualMinute: number = 0
   @State private selectedLanguage: string = 'zh_CN'
+  @State private bridgeSyncStarted: boolean = false
   @State private equatorialMount: boolean = false
   @State private nightMode: boolean = false
   @State private pickedDate: Date = new Date()
@@ -220,11 +221,21 @@ struct WindowNativeNode {
         this.observingList = []
       }
     }
-    const cultureResult = this.callNative("getSkyCultures", "")
-    if (cultureResult.ok === true && Array.isArray(cultureResult.items)) {
-      this.skyCultures = cultureResult.items as string[]
-      this.currentSkyCulture = cultureResult.current as string
-    }
+    this.startupBridgeSync()
+  }
+
+  // 启动期的命令桥同步（取星文化列表 + 设中文 + 套用保存设置）。
+  // 关键：ArkUI 的 setTimeout 重试链在冷启动期对本线程不可靠地不 fire，
+  // 所以这里只“发一次”请求，真正重试交给 onAreaChange（布局硬回调，稳定触发）。
+  private startupBridgeSync(): void {
+    if (this.bridgeSyncStarted) { return }
+    this.bridgeSyncStarted = true
+    this.callNativeWhenReady("getSkyCultures", "", (r) => {
+      if (r.ok === true && Array.isArray(r.items)) {
+        this.skyCultures = r.items as string[]
+        this.currentSkyCulture = r.current as string
+      }
+    })
     // 加载保存的设置
     const settings = AppStorage.get<string>("stellariumSettings")
     if (settings) {
@@ -287,6 +298,21 @@ struct WindowNativeNode {
       return JSON.parse(command(name, payload)) as StellariumBridgeResponse
     } catch (err) {
       return { ok: false, error: 'bridge parse failed' }
+    }
+  }
+
+  // Retry a native command until the Stellarium core is initialized.
+  // At startup the ArkUI thread may call the bridge before Qt has finished
+  // bootstrapping; those calls return ok:false and are retried on a short
+  // backoff instead of crashing the process.
+  private callNativeWhenReady(name: string, payload: string = '', onOk?: (r: StellariumBridgeResponse) => void, attempt: number = 0): void {
+    const r = this.callNative(name, payload)
+    if (r.ok === true) {
+      if (onOk) onOk(r)
+      return
+    }
+    if (attempt < 60) {
+      setTimeout(() => this.callNativeWhenReady(name, payload, onOk, attempt + 1), 200)
     }
   }
 
@@ -443,12 +469,17 @@ struct WindowNativeNode {
   }
 
   private setLanguage(lang: string): void {
-    const result = this.callNative('setLanguage', lang)
-    if (result.ok === true) {
-      this.selectedLanguage = lang
-      this.flashHint(lang === 'zh_CN' ? '已切换为中文' : 'Switched to English')
-      this.refreshState()
+    const attemptSet = (attempt: number): void => {
+      const result = this.callNative('setLanguage', lang)
+      if (result.ok === true) {
+        this.selectedLanguage = lang
+        this.flashHint(lang === 'zh_CN' ? '已切换为中文' : 'Switched to English')
+        this.refreshState()
+      } else if (attempt < 60) {
+        setTimeout(() => attemptSet(attempt + 1), 200)
+      }
     }
+    attemptSet(0)
   }
 
   private syncManualTimeFromState(): void {
@@ -1237,6 +1268,9 @@ struct WindowNativeNode {
       .height('100%')
       .backgroundColor(Color.Black)
       .onAreaChange((oldArea: Area, newArea: Area) => {
+        // 布局硬回调：稳定触发。冷启动期 ArkUI setTimeout 重试不可靠，
+        // 这里借 onAreaChange 反复尝试把启动命令送到 Qt 线程。
+        this.startupBridgeSync()
         this.skyWidth = Number(newArea.width) > 1 ? Number(newArea.width) : 1
         this.skyHeight = Number(newArea.height) > 1 ? Number(newArea.height) : 1
         this.isExpandedLayout = this.skyWidth >= 900

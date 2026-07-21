@@ -54,6 +54,9 @@
 #include <QApplication>
 #include <QTcpSocket>
 #include <QGuiApplication>
+#include <QMutex>
+#include <QHash>
+#include <QSet>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsAnchorLayout>
 #include <QGraphicsWidget>
@@ -377,7 +380,54 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	}
 }
 
-QString runOhosCommandOnQtThread(const std::function<QJsonObject()>& command)
+// OHOS command marshaling between the ArkUI/JS thread and the Qt main
+// thread. During Qt's bootstrap the ArkUI thread may call commands
+// before the Qt main event loop is pumping; a blocking cross-thread
+// call there deadlocks the ArkUI thread (and previously aborted the
+// process inside makeQtThreadWithMainFuncLauncher). So we marshal
+// non-blockingly while bootstrapping, cache the result, and switch to a
+// safe blocking marshal once the loop is running.
+static QMutex s_ohosCmdMutex;
+static bool s_qtLoopRunning = false;
+static QSet<QString> s_ohosCmdInflight;
+static QHash<QString, QJsonObject> s_ohosCmdCache;
+
+// Cross-thread command queue drained by the OHOS render pump
+// (renderOhosFrameNow) on the Qt main thread every frame. OHOS Qt may
+// drive rendering via a native vsync callback rather than the Qt event
+// loop, so QMetaObject::invokeMethod(..., QueuedConnection) is not
+// guaranteed to be pumped; we hand commands to the pump instead.
+static QMutex s_ohosCmdQueueMutex;
+static QList<std::function<void()>> s_ohosCmdQueue;
+static void markQtLoopRunning();
+
+static void ohosDrainCommandQueue()
+{
+	if (!StelApp::isInitialized())
+		return; // keep queued for the next frame
+	if (!qApp || QThread::currentThread() != qApp->thread())
+		return; // not on the Qt main thread; the render pump will call us there
+	QList<std::function<void()>> batch;
+	{
+		QMutexLocker lock(&s_ohosCmdQueueMutex);
+		if (s_ohosCmdQueue.isEmpty())
+			return;
+		batch = s_ohosCmdQueue;
+		s_ohosCmdQueue.clear();
+	}
+	markQtLoopRunning();
+	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
+	for (auto& fn : batch)
+		fn();
+}
+
+static void markQtLoopRunning()
+{
+	QMutexLocker lock(&s_ohosCmdMutex);
+	s_qtLoopRunning = true;
+}
+
+QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonObject()>& command)
 {
 	QJsonObject result;
 	if (!qApp)
@@ -387,21 +437,70 @@ QString runOhosCommandOnQtThread(const std::function<QJsonObject()>& command)
 		return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 	}
 
-	auto run = [&]() {
+	// On the Qt main thread: simply run it. Reaching here also means the
+	// event loop is pumping, so mark it as running.
+	if (QThread::currentThread() == qApp->thread())
+	{
+		markQtLoopRunning();
 		if (!StelApp::isInitialized())
 		{
 			result["ok"] = false;
-			result["error"] = "Stellarium not initialized";
-			return;
+			result["error"] = "StellApp not initialized";
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 		}
-		result = command();
-	};
+		return QString::fromUtf8(QJsonDocument(command()).toJson(QJsonDocument::Compact));
+	}
 
-	if (QThread::currentThread() == qApp->thread())
-		run();
-	else
-		QMetaObject::invokeMethod(qApp, run, Qt::BlockingQueuedConnection);
+	// Off the Qt thread (ArkUI/JS): the command is enqueued below
+	// for the render pump to drain on the Qt main thread every frame.
+	// We never block the ArkUI thread and never rely on the Qt event
+	// loop pumping (OHOS Qt may drive rendering via a native vsync
+	// callback instead of the Qt event loop, so a QueuedConnection
+	// is not guaranteed to run). See the unified enqueue below.
 
+	// Unified off-thread path: enqueue the command for the render pump
+	// to drain on the Qt main thread every frame (ohosDrainCommandQueue,
+	// called from renderOhosFrameNow). In-flight guard prevents
+	// duplicate enqueues; the result is cached so the ArkUI retry loop
+	// (callNativeWhenReady) picks it up on the next call. Fire-and-forget
+	// commands (setLanguage, triggerAction) take effect on the next
+	// drained frame regardless of the return value.
+	// Unified off-thread path: the render pump (renderOhosFrameNow)
+	// drains s_ohosCmdQueue on the Qt main thread every frame. We
+	// never block the ArkUI thread and never rely on the Qt event
+	// loop pumping. Once a command has been drained its result is
+	// cached, so the ArkUI retry loop (callNativeWhenReady)
+	// receives ok:true on the next call and stops retrying.
+	// Fire-and-forget commands (setLanguage, triggerAction) take
+	// effect on the next drained frame regardless of the value.
+	{
+		QMutexLocker lock(&s_ohosCmdMutex);
+		if (s_ohosCmdCache.contains(key))
+			return QString::fromUtf8(QJsonDocument(s_ohosCmdCache.value(key)).toJson(QJsonDocument::Compact));
+	}
+	{
+		QMutexLocker lock(&s_ohosCmdMutex);
+		if (s_ohosCmdInflight.contains(key))
+		{
+			result["ok"] = false;
+			result["error"] = "pending";
+			result["pending"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		s_ohosCmdInflight.insert(key);
+	}
+	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohos cmd enqueue %{public}s", key.toUtf8().constData());
+	QMutexLocker lock(&s_ohosCmdQueueMutex);
+	s_ohosCmdQueue.append([key, command]() {
+		QJsonObject r = command();
+		QMutexLocker lock(&s_ohosCmdMutex);
+		s_ohosCmdInflight.remove(key);
+		s_ohosCmdCache.insert(key, r);
+	});
+
+	result["ok"] = false;
+	result["error"] = "pending";
+	result["pending"] = true;
 	return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
@@ -550,7 +649,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	const QString arg = QString::fromUtf8(payload ? payload : "");
 	qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
-	const QString json = runOhosCommandOnQtThread([&]() -> QJsonObject {
+	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
 		result["ok"] = false;
 		qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
@@ -2555,6 +2654,7 @@ void StelMainView::deinit()
 void StelMainView::startOhosRenderPump()
 {
 	ohosMark("startOhosRenderPump entered");
+	markQtLoopRunning();
 	updateQueued = false;
 	fpsTimer->setInterval(currentOhosRenderIntervalMs());
 	renderOhosFrameNow();
@@ -2564,6 +2664,7 @@ void StelMainView::startOhosRenderPump()
 
 void StelMainView::renderOhosFrameNow()
 {
+	ohosDrainCommandQueue();
 	if (!stelApp || !glWidget || !glWidget->context() || !StelApp::isInitialized())
 	{
 		requestOhosSceneRepaint();

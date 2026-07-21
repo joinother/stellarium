@@ -547,12 +547,27 @@ StellariumCommandFunc resolveStellariumCommand()
     if (resolved)
         return command;
 
-    resolved = true;
+    // IMPORTANT: never trigger the *initial* load of libstellarium.so from
+    // the ArkUI/JS thread. libstellarium.so is the application binary that
+    // contains Stellarium's Qt main() entry point; it is loaded and launched
+    // by the Qt-for-OHOS plugin (libqohos.so) on the dedicated Qt main
+    // thread when the QAbility starts the Qt application. Loading it
+    // prematurely here (from the ArkUI UI thread) races Qt's own bootstrap
+    // inside makeQtThreadWithMainFuncLauncher and aborts the process with
+    // "Qt API was likely used before Qt initialization. Aborting."
+    // So we only *look up* an already-loaded library (RTLD_NOLOAD). If it
+    // is not loaded yet, return null and let the ArkUI side retry until Qt
+    // is up.
     void* handle = dlopen("libstellarium.so", RTLD_NOW | RTLD_NOLOAD);
-    if (!handle)
-        handle = dlopen("libstellarium.so", RTLD_NOW);
-    command = reinterpret_cast<StellariumCommandFunc>(handle ? dlsym(handle, "StellariumOhos_command")
-                                                             : dlsym(RTLD_DEFAULT, "StellariumOhos_command"));
+    if (!handle) {
+        OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "Stellarium command bridge not loaded yet (Qt core not started)");
+        return nullptr;
+    }
+
+    command = reinterpret_cast<StellariumCommandFunc>(dlsym(handle, "StellariumOhos_command"));
+    if (command)
+        resolved = true;
     OH_LOG_Print(LOG_APP, command ? LOG_INFO : LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
                  command ? "Stellarium command bridge resolved" : "Stellarium command bridge not found");
     return command;

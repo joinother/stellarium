@@ -6,6 +6,48 @@
 
 
 
+## [2026-07-21] WorkBuddy - 修复启动命令跨线程投递死锁（渲染泵驱动的命令队列）
+
+- **修改文件：** `src/StelMainView.cpp`（仅此一处；`libstellarium.so` 重编）
+- **修改内容：**
+  - 新增跨线程命令队列 `s_ohosCmdQueue`（`QList<std::function<void()>>`）+ 互斥锁 `s_ohosCmdQueueMutex`，以及 `ohosDrainCommandQueue()`：在 Qt 主线程、且 `StelApp` 已初始化时，取出并批量执行队列中的命令，执行后置 `markQtLoopRunning()`，并用 `OH_LOG_Print`（tag `StellariumCpp`）打印 `ohosDrainCommandQueue ran n=...` 作为"命令已在 Qt 线程执行"的原始证明（避免 qInfo 被 hilog 限流吞掉）。
+  - `runOhosCommandOnQtThread()` 的**非 Qt 线程分支**重写为：先查 `s_ohosCmdCache`（命中→直接返回 `ok:true`，让 ArkUI 重试循环 `callNativeWhenReady` 停止）；再查 `s_ohosCmdInflight`（进行中→返回 `pending`，让 ArkUI 继续重试）；否则入队 `s_ohosCmdQueue`，入队体在 `command()` 执行后写入 cache 并清除 inflight。**不再**使用 `QMetaObject::invokeMethod(..., QueuedConnection)`（旧机制在 OHOS 渲染被抢占时不被泵送）。
+  - 在 `renderOhosFrameNow()` 顶部插入 `ohosDrainCommandQueue();`，由 OHOS 渲染泵**每帧**在 Qt 主线程调用 → 命令保证被排空执行。
+- **修改原因（真实根因）：** OHOS Qt for OpenHarmony 通过 **native vsync 回调**（`startOhosRenderPump` → `fpsTimer` → `renderOhosFrameNow`）驱动渲染，**不走 Qt 事件循环**。因此 `QMetaObject::invokeMethod(..., QueuedConnection)` 跨线程投递的调用**永远不会被泵送** → 启动命令（`getSkyCultures` / `setLanguage` 等）**从未在 Qt 线程执行**，ArkUI 侧 `callNativeWhenReady` 重试耗尽（实测 114 次 / 46.5s）后放弃，启动桥实质卡死。证据：修复前日志 `command on Qt thread` 计数 = 0，而 `hello.cpp` 的 `Stellarium command` 日志有 39 条（桥被反复调用但命令不投递）。
+- **构建结果：** `cmake --build . --parallel` 增量重编仅 `StelMainView.cpp.o` + 重新链接 `libstellarium.so`（md5 `5e9809466b9fc91174b13506339f727e`，已同步到 3 个打包目录与 `build/src/`）；`assembleHap` BUILD SUCCESSFUL（5.9s，重编 libentry.so）。**未**跑 `harmonydeployqt`（会覆盖 .ets 编辑）。
+- **验证结果：** ✅ 模拟器 127.0.0.1:5555，重装启动成功。对比修复前：ArkUI 启动重试 **114 → 42** 次，且**在 18:49:48.031 停止重试**（应用持续运行至 18:49:54 之后）；日志 `ohosDrainCommandQueue ran n=2` 每帧稳定出现 → 证明命令已在 Qt 主线程执行；帧渲染 `lit=574584`（真实星场）。**无 SIGABRT**（进程 pid 14936/15072）。两层启动修复现已**完全闭环并验证**。
+- **备注：** 对应 KNOWN-ISSUES P0 #0.5（本轮新增）。`hello.cpp` / `MainWindowNativeNode.ets` 本轮**未改动**（上轮 SIGABRT 修复已就位）。
+
+---
+
+## [2026-07-21] WorkBuddy - 修复启动 SIGABRT（命令桥抢占式 dlopen libstellarium.so）
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp`, `harmonyos/cpp-source/hello.cpp`（两处同步）, `build/.../MainWindowNativeNode.ets`, `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkUI 重试上轮已加）
+- **修改内容：**
+  - `resolveStellariumCommand()` 改为 **只查已加载库**（`RTLD_NOW | RTLD_NOLOAD`），**不再** 在 ArkUI 线程主动 `dlopen` 首次加载 `libstellarium.so`。该库即 Qt 应用二进制（`deployment-settings.json` 的 `application-binary`），本应由 Qt-for-OHOS 插件在专用 Qt 主线程加载并启动 `main()`。
+  - 库未加载时返回 `nullptr`，ArkUI 侧 `callNativeWhenReady` / `setLanguage` 重试循环等待 Qt 启动。
+  - 保留 C++ 桥 `runOhosCommandOnQtThread` 的未初始化返回错误逻辑（不 `BlockingQueuedConnection`）。
+- **修改原因：** `deployment-settings.json` 确认 `libstellarium.so` 即 Qt 应用二进制；ArkUI 线程抢占式 `dlopen` 破坏 Qt 插件的 `makeQtThreadWithMainFuncLauncher` 主线程上下文 → `Qt API was likely used before Qt initialization. Aborting.`
+- **构建结果：** BUILD SUCCESSFUL（assembleHap 重编 libentry.so，3.5s；未跑 harmonydeployqt，未重编 libstellarium.so）
+- **验证结果：** ✅ 模拟器 127.0.0.1:5555 安装+启动成功，**无 SIGABRT**；约 4s 后 `displayed submitted Stellarium frame 1024x768` + `submitted first Stellarium framebuffer`（lit=786432 真实星场）。根因已闭环。
+- **备注：** 对应 KNOWN-ISSUES P0 #0 已修复。
+
+---
+
+## [2026-07-21] WorkBuddy - 接手验证：构建 + 模拟器启动，发现启动即崩溃
+
+- **修改文件：** （仅文档）`docs/harmonyos/KNOWN-ISSUES.md`
+- **修改内容：**
+  - 修正 P1 #3 图层面板状态：代码已有全部 21 个 `switchRow`（`build/.../MainWindowNativeNode.ets` 行 1730–1758），标记"已修复（文档曾落后）"
+  - 新增 P0 #0：应用启动即 SIGABRT（Qt 初始化顺序 / 线程错配）
+- **修改原因：** 接手项目，按 AGENTS.md 接手检查清单执行；发现 KNOWN-ISSUES 文档落后于代码
+- **构建结果：** BUILD SUCCESSFUL（assembleHap，全 UP-TO-DATE，1.6s）
+- **验证结果：** 模拟器已连接（127.0.0.1:5555），安装+启动成功（`install bundle successfully` / `start ability successfully`），但**进程立即 SIGABRT**
+- **关键发现：** 日志 `Qt API was likely used before Qt initialization` + `makeQtThreadWithMainFuncLauncher mainThread != currentThread` → 根因疑似 Qt/Stellarium 核心在 `QApplication`(StelApplication) 主线程初始化完成前，被非主线程（N-API 命令桥首调 / XComponent surface 回调）提前调用 Qt API
+- **备注：** 此前所有 Agent 的 CHANGELOG 均标"模拟器未启动，待验证"，故该启动崩溃从未被发现。修复需改 C++ 并重的编 libstellarium.so。
+
+---
+
 ## [2026-07-21] TRAE - 默认中文 + 多语言切换 + Unicode 工具栏图标
 
 - **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
