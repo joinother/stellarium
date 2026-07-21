@@ -1168,8 +1168,8 @@ struct WindowNativeNode {
     Button(label)
       .height(28)
       .fontSize(11)
-      .fontColor(this.locationPickMode === mode ? '#FFFFFFFF' : '#99FFFFFF')
-      .backgroundColor(this.locationPickMode === mode ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
+      .fontColor(this.locationPickMode === mode ? this.nmText() : this.nmSub())
+      .backgroundColor(this.locationPickMode === mode ? this.nmAccent() : this.nmBg())
       .border({ width: 1, color: this.locationPickMode === mode ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(14)
       .margin({ right: 8 })
@@ -1189,8 +1189,8 @@ struct WindowNativeNode {
                 .padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .width('100%')
                 .fontSize(12)
-                .fontColor(selected === item ? '#FFFFFFFF' : '#99FFFFFF')
-                .backgroundColor(selected === item ? '#5B93BF' : '#16223C')
+                .fontColor(selected === item ? this.nmText() : this.nmSub())
+                .backgroundColor(selected === item ? this.nmAccent() : this.nightMode ? 'rgba(100, 30, 15, 0.40)' : '#16223C')
                 .borderRadius(8)
                 .stateEffect(false)
                 .onClick(() => onSelect(item))
@@ -1556,7 +1556,7 @@ struct WindowNativeNode {
           .width(120)
           .height(120)
           .borderRadius(60)
-          .backgroundColor('rgba(107, 163, 214, 0.12)')
+          .backgroundColor(this.nightMode ? 'rgba(180, 40, 20, 0.15)' : 'rgba(107, 163, 214, 0.12)')
           .border({ width: 1, color: 'rgba(107, 163, 214, 0.10)' })
           .shadow({ radius: 42, color: 'rgba(107, 163, 214, 0.18)', offsetX: 0, offsetY: 0 })
           .align(Alignment.Center)
@@ -1746,7 +1746,7 @@ struct WindowNativeNode {
     Stack() {
       Image(this.getIcon(icon, false))
         .width(28).height(28)
-        .fillColor('#E5FFFFFF')
+        .fillColor(this.nmText())
     }
       .width(56)
       .height(56)
@@ -1809,6 +1809,32 @@ struct WindowNativeNode {
       .alignSelf(ItemAlign.Center)
   }
 
+  // 夜间模式颜色方案
+  private nm(): string {
+    return this.nightMode ? 'rgba(180, 40, 20, 0.30)' : 'rgba(11, 17, 38, 0.85)'
+  }
+  private nmText(): string {
+    return this.nightMode ? '#FF6644' : '#E5FFFFFF'
+  }
+  private nmSub(): string {
+    return this.nightMode ? '#CC5533' : '#66FFFFFF'
+  }
+  private nmAccent(): string {
+    return this.nightMode ? '#FF5533' : '#5B93BF'
+  }
+  private nmBg(): string {
+    return this.nightMode ? 'rgba(180, 40, 20, 0.12)' : 'rgba(255,255,255,0.04)'
+  }
+  private nmBorder(): string {
+    return this.nightMode ? 'rgba(200, 60, 30, 0.20)' : 'rgba(255,255,255,0.08)'
+  }
+  private nmInput(): string {
+    return this.nightMode ? 'rgba(120, 30, 15, 0.50)' : 'rgba(255,255,255,0.06)'
+  }
+  private nmInputBorder(): string {
+    return this.nightMode ? 'rgba(200, 60, 30, 0.25)' : 'rgba(214, 238, 255, 0.14)'
+  }
+
   private getIcon(icon: string, isActive: boolean): Resource {
     const map: Record<string, Resource> = {
       'search': $r('app.media.ic_search'),
@@ -1827,7 +1853,7 @@ struct WindowNativeNode {
     Column() {
       Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
         .width(22).height(22)
-        .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
+        .fillColor(this.activePanel === item.panel && this.panelVisible ? this.nmAccent() : this.nmText())
     }
       .width(44)
       .height(44)
@@ -2051,7 +2077,7 @@ struct WindowNativeNode {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .padding({ left: 10, right: 10, top: 9, bottom: 9 })
           .backgroundColor('rgba(107, 163, 214, 0.12)')
-          .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
+          .border({ width: 1, color: this.nmBorder() })
           .borderRadius(14)
           .margin({ top: 8, bottom: 8 })
       }
@@ -2085,7 +2111,7 @@ struct WindowNativeNode {
       Row() {
         Text($r('app.string.i0012')).fontSize(13).fontColor('#66FFFFFF').width(72)
         Button(this.manualYear + '年' + this.manualMonth + '月' + this.manualDay + '日')
-          .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+          .fontSize(14).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedDate = new Date(this.manualYear, this.manualMonth - 1, this.manualDay)
@@ -2130,7 +2156,7 @@ struct WindowNativeNode {
         .borderRadius(12).height(40).width('100%').margin({ top: 4 })
         .onClick(() => { this.applyManualTime() })
       Button($r('app.string.i0047'))
-        .fontSize(13).fontColor('#66FFFFFF').backgroundColor('rgba(255,255,255,0.06)')
+        .fontSize(13).fontColor('#66FFFFFF').backgroundColor(this.nmBorder())
         .borderRadius(8).height(36).width('100%').margin({ top: 2 })
         .onClick(() => {
           this.syncManualTimeFromState()
@@ -2353,7 +2379,7 @@ struct WindowNativeNode {
             this.flashHint(isOn ? $r('app.string.i0008') : $r('app.string.i0009'))
           })
       }
-      .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ top: 4, bottom: 4 })
+      .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12).margin({ top: 4, bottom: 4 })
       // 截图+夜间模式
       Row() {
         Button($r('app.string.i0048'))
@@ -2492,7 +2518,7 @@ struct WindowNativeNode {
         .fontColor('#E5FFFFFF')
         .placeholderColor('#8EA0BD')
         .backgroundColor('rgba(255, 255, 255, 0.06)')
-        .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
+        .border({ width: 1, color: this.nmInputBorder() })
         .borderRadius(12)
         .margin({ top: 8 })
         .onChange((value: string) => {
@@ -2596,8 +2622,8 @@ struct WindowNativeNode {
           .height(36)
           .fontSize(13)
           .fontColor('#E5FFFFFF')
-          .placeholderColor('#8EA0BD')
-          .backgroundColor('rgba(255, 255, 255, 0.06)')
+          .placeholderColor(this.nmSub())
+          .backgroundColor(this.nmInput())
           .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
           .borderRadius(12)
           .margin({ top: 10 })
@@ -2977,7 +3003,7 @@ struct WindowNativeNode {
       .height(34)
       .width('100%')
       .padding({ left: 10, right: 10 })
-      .backgroundColor('rgba(255, 255, 255, 0.04)')
+      .backgroundColor(this.nmBg())
       .borderRadius(12)
       .margin({ bottom: 4 })
   }
