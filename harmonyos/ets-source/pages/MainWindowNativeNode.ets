@@ -976,60 +976,8 @@ struct WindowNativeNode {
       return false
     }
 
-    if (this.activePanel === 'layers') {
-      const actions: string[] = [
-        'actionShow_Stars',
-        'actionShow_Planets',
-        'actionShow_Nebulas',
-        'actionShow_MilkyWay',
-        'actionShow_Ground',
-        'actionShow_Constellation_Lines',
-        'actionShow_Constellation_Labels',
-        'actionShow_Constellation_Boundaries',
-        'actionShow_Constellation_Art',
-        'actionShow_Atmosphere',
-        'actionShow_Cardinal_Points',
-        'actionShow_Azimuthal_Grid',
-        'actionShow_Equatorial_Grid',
-        'actionShow_Equatorial_J2000_Grid',
-        'actionShow_Ecliptic_Grid',
-        'actionShow_Meridian_Line',
-        'actionShow_Horizon_Line',
-        'actionShow_Planets_Labels',
-        'actionShow_Planets_Orbits',
-        'actionShow_Planets_Hints',
-        'actionShow_Stars_Labels'
-      ]
-      const values: boolean[] = [
-        this.stars,
-        this.planets,
-        this.nebulae,
-        this.milkyWay,
-        this.ground,
-        this.constellationLines,
-        this.constellationLabels,
-        this.constellationBoundaries,
-        this.constellationArt,
-        this.atmosphere,
-        this.cardinalPoints,
-        this.azimuthGrid,
-        this.equatorialGrid,
-        this.equatorialJ2000Grid,
-        this.eclipticGrid,
-        this.meridianLine,
-        this.horizonLine,
-        this.planetLabels,
-        this.planetOrbits,
-        this.planetHints,
-        this.starLabels
-      ]
-      // 实测每行中心 y(vp)=356+i*48, 行高约 48vp
-      const row = Math.floor((y - 332) / 48)
-      if (row >= 0 && row < actions.length && y >= 332 + row * 48 && y <= 380 + row * 48) {
-        this.setLayer(actions[row], !values[row])
-        return true
-      }
-    }
+    // Layer toggles are handled by Toggle.onChange in switchRow Builder
+    // Hardcoded coordinates removed - layout changed with grouped sections
 
     if (this.activePanel === 'search') {
       if (y >= 505 && y <= 562) {
