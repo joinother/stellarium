@@ -100,7 +100,7 @@ OpenHarmony/HarmonyOS 的 HAP 不是一个普通 zip 包。安装时 Bundle Mana
 1. 轮换本地预览签名材料和密码。
 2. 用 `git filter-repo` 或等价工具从历史中清理私钥/密码。
 3. 强推前通知所有协作者重新基于新历史同步。
-4. 清理后不要再把 `docs/harmonyos/signing/*.p12`、`.p7b`、真实密码提交；签名材料放仓库外，例如 `~/stellarium-signing/` 或 `/private/tmp/stellarium-oh-signing/`。
+4. 清理后不要再把 `docs/harmonyos/signing/*.p12`、`.p7b`、真实密码提交；签名材料放仓库外，例如 `~/stellarium-signing/`（旧 `stellarium-app-keypair.p12` 已销毁，见 SIGNING-GUIDE 安全通告）。
 
 只改 `.gitignore` 不等于从 Git 历史或远程移除了已跟踪文件。
 

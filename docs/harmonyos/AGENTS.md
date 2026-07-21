@@ -153,7 +153,7 @@ docs/harmonyos/
 | `.../entry/src/main/ets/pages/MainWindowNativeNode.ets` | **最核心的 ArkUI 文件** |
 | `.../entry/src/main/cpp/hello.cpp` | Native 命令桥 |
 | `/Users/jiexuanyang/stellarium-src/src/StelMainView.cpp` | C++ 渲染/命令核心 |
-| `/private/tmp/stellarium-oh-signing/` | 签名文件和已签名 HAP |
+| `~/stellarium-signing/` | 新签名材料（仓库外，PEM 格式；旧 `stellarium-app-keypair.p12` 已销毁，详见 SIGNING-GUIDE 安全通告） |
 
 ---
 
@@ -174,18 +174,22 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
 ### 4.2 签名 HAP
 
 ```bash
+> **注意（2026-07-22 校正）：** 下面命令仅作形态参考。**旧 `stellarium-app-keypair.p12` 已销毁**；新密钥为 PEM 格式（`~/stellarium-signing/app.key` 等），尚未合成 p12 keystore，故本命令不能直接跑通。项目日常用 **DevEco 自动签名**（`entry-default-signed.hap`），手动流程见 `SIGNING-GUIDE.md` 第 4 节。
+
+```bash
 /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java \
   -jar /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar \
   sign-app -mode localSign \
   -keyAlias stellarium-app-key -keyPwd "$STELLARIUM_SIGNING_PASSWORD" \
-  -appCertFile /private/tmp/stellarium-oh-signing/stellarium-app-cert-chain.cer \
-  -profileFile /private/tmp/stellarium-oh-signing/stellarium-ca-release-profile.p7b \
+  -appCertFile ~/stellarium-signing/app-chain.pem \
+  -profileFile ~/stellarium-signing/app-debug.p7b \
   -inFile /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-unsigned.hap \
   -signAlg SHA256withECDSA \
-  -keystoreFile /private/tmp/stellarium-oh-signing/stellarium-app-keypair.p12 \
+  -keystoreFile ~/stellarium-signing/app.key \
   -keystorePwd "$STELLARIUM_SIGNING_PASSWORD" \
-  -outFile /private/tmp/stellarium-oh-signing/stellarium-latest-signed.hap \
+  -outFile ~/stellarium-signing/stellarium-latest-signed.hap \
   -compatibleVersion 24 -signCode 1
+```
 ```
 
 ### 4.3 安装启动
@@ -195,7 +199,7 @@ HDC="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains
 
 $HDC tconn 127.0.0.1:5555
 $HDC -t 127.0.0.1:5555 shell bm uninstall -n org.qtproject.example.stellarium
-$HDC -t 127.0.0.1:5555 install -r /private/tmp/stellarium-oh-signing/stellarium-latest-signed.hap
+$HDC -t 127.0.0.1:5555 install -r /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
 $HDC -t 127.0.0.1:5555 shell hilog -r
 $HDC -t 127.0.0.1:5555 shell aa start -b org.qtproject.example.stellarium -a QAbility
 ```
