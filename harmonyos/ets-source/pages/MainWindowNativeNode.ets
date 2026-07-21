@@ -17,11 +17,33 @@ interface HierCity {
 
 interface CatOption {
   code: string
-  label: string
+  label: ResourceStr
 }
 
 interface NameItem {
   name: string
+  zh?: string
+}
+
+// 天体中文别名表：用于把 Stellarium 核心返回的拉丁/英文名（Jupiter、M31、Orion…）
+// 映射成中文显示，并支撑中文/拼音模糊搜索。py 为拼音（无声调），用于「muxing」「jup」这类输入命中。
+interface AliasEntry {
+  zh: string
+  py: string
+  en: string
+  type: string
+}
+
+// 搜索建议项：zh 用于显示，en 用于真正发给核心检索（核心只认英文/标准标识）。
+interface SearchSug {
+  zh: string
+  en: string
+}
+
+interface AliasHit {
+  zh: string
+  en: string
+  score: number
 }
 
 interface WindowNativeNodeCreateInfo {
@@ -32,10 +54,142 @@ interface WindowNativeNodeCreateInfo {
 }
 
 interface ShellAction {
-  label: string
+  label: ResourceStr
   icon: string
   panel: string
 }
+
+// 常用天体中文别名表（行星/太阳/月亮 + 亮星 + 著名深空 + 常见星座）。
+// 核心默认返回拉丁/英文名，这里把它们翻成中文显示；同时用 en/py 做模糊匹配。
+const ALIAS_LIST: AliasEntry[] = [
+  // 行星 / 太阳 / 月亮
+  { zh: '水星', py: 'shuixing', en: 'Mercury', type: 'planet' },
+  { zh: '金星', py: 'jinxing', en: 'Venus', type: 'planet' },
+  { zh: '地球', py: 'diqiu', en: 'Earth', type: 'planet' },
+  { zh: '火星', py: 'huoxing', en: 'Mars', type: 'planet' },
+  { zh: '木星', py: 'muxing', en: 'Jupiter', type: 'planet' },
+  { zh: '土星', py: 'tuxing', en: 'Saturn', type: 'planet' },
+  { zh: '天王星', py: 'tianwangxing', en: 'Uranus', type: 'planet' },
+  { zh: '海王星', py: 'haiwangxing', en: 'Neptune', type: 'planet' },
+  { zh: '冥王星', py: 'mingwangxing', en: 'Pluto', type: 'planet' },
+  { zh: '太阳', py: 'taiyang', en: 'Sun', type: 'star' },
+  { zh: '月球', py: 'yueqiu', en: 'Moon', type: 'moon' },
+  // 亮星
+  { zh: '天狼星', py: 'tianlangxing', en: 'Sirius', type: 'star' },
+  { zh: '老人星', py: 'laorenxing', en: 'Canopus', type: 'star' },
+  { zh: '大角星', py: 'dajiaoxing', en: 'Arcturus', type: 'star' },
+  { zh: '织女星', py: 'zhinvxing', en: 'Vega', type: 'star' },
+  { zh: '五车二', py: 'wucheer', en: 'Capella', type: 'star' },
+  { zh: '参宿七', py: 'shenxiuqi', en: 'Rigel', type: 'star' },
+  { zh: '南河三', py: 'nanhesan', en: 'Procyon', type: 'star' },
+  { zh: '水委一', py: 'shuiweiyi', en: 'Achernar', type: 'star' },
+  { zh: '参宿四', py: 'shenxiusi', en: 'Betelgeuse', type: 'star' },
+  { zh: '马腹一', py: 'mafuyi', en: 'Hadar', type: 'star' },
+  { zh: '牛郎星', py: 'niulangxing', en: 'Altair', type: 'star' },
+  { zh: '十字架二', py: 'shizijiaer', en: 'Acrux', type: 'star' },
+  { zh: '毕宿五', py: 'bixuwu', en: 'Aldebaran', type: 'star' },
+  { zh: '心宿二', py: 'xinxuer', en: 'Antares', type: 'star' },
+  { zh: '角宿一', py: 'jiaoxuyi', en: 'Spica', type: 'star' },
+  { zh: '北河三', py: 'beihesan', en: 'Pollux', type: 'star' },
+  { zh: '北落师门', py: 'beiluoshimen', en: 'Fomalhaut', type: 'star' },
+  { zh: '天津四', py: 'tianjinsi', en: 'Deneb', type: 'star' },
+  { zh: '轩辕十四', py: 'xuanyuanshisi', en: 'Regulus', type: 'star' },
+  { zh: '北河二', py: 'beiheer', en: 'Castor', type: 'star' },
+  { zh: '参宿五', py: 'shenxiuwu', en: 'Bellatrix', type: 'star' },
+  { zh: '十字架三', py: 'shizijiasan', en: 'Mimosa', type: 'star' },
+  { zh: '参宿一', py: 'shenxiuyi', en: 'Alnilam', type: 'star' },
+  { zh: '参宿三', py: 'shenxiusan', en: 'Alnitak', type: 'star' },
+  { zh: '天枢', py: 'tianshu', en: 'Dubhe', type: 'star' },
+  { zh: '天璇', py: 'tianxuan', en: 'Merak', type: 'star' },
+  { zh: '天玑', py: 'tianji', en: 'Phecda', type: 'star' },
+  { zh: '天权', py: 'tianquan', en: 'Megrez', type: 'star' },
+  { zh: '玉衡', py: 'yuheng', en: 'Alioth', type: 'star' },
+  { zh: '开阳', py: 'kaiyang', en: 'Mizar', type: 'star' },
+  { zh: '摇光', py: 'yaoguang', en: 'Alkaid', type: 'star' },
+  { zh: '北极星', py: 'beijixing', en: 'Polaris', type: 'star' },
+  { zh: '娄宿三', py: 'louxisan', en: 'Hamal', type: 'star' },
+  { zh: '大陵五', py: 'dalingwu', en: 'Algol', type: 'star' },
+  { zh: '五车三', py: 'wuchesan', en: 'Menkalinan', type: 'star' },
+  { zh: '壁宿一', py: 'bixuyi', en: 'Algenib', type: 'star' },
+  { zh: '奎宿九', py: 'kuixiujiu', en: 'Mirach', type: 'star' },
+  { zh: '天船三', py: 'tianchuansan', en: 'Mirfak', type: 'star' },
+  { zh: '北极二', py: 'beijier', en: 'Kochab', type: 'star' },
+  // 著名深空
+  { zh: '仙女座星系', py: 'xianvzuoyinxing', en: 'M31', type: 'galaxy' },
+  { zh: 'M32', py: '', en: 'M32', type: 'galaxy' },
+  { zh: 'M110', py: '', en: 'M110', type: 'galaxy' },
+  { zh: '三角座星系', py: 'sanjiiaozuoyinxing', en: 'M33', type: 'galaxy' },
+  { zh: '猎户座大星云', py: 'liehuzuodaxingyun', en: 'M42', type: 'nebula' },
+  { zh: 'M43', py: '', en: 'M43', type: 'nebula' },
+  { zh: '昴星团', py: 'maoxingtuan', en: 'M45', type: 'cluster' },
+  { zh: '蟹状星云', py: 'xiezhuangxingyun', en: 'M1', type: 'nebula' },
+  { zh: '礁湖星云', py: 'jiaohuxingyun', en: 'M8', type: 'nebula' },
+  { zh: '武仙座球状星团', py: 'wuxianzuoqiuzhuangxingtuan', en: 'M13', type: 'cluster' },
+  { zh: '哑铃星云', py: 'yalingxingyun', en: 'M27', type: 'nebula' },
+  { zh: '涡状星系', py: 'wozhuangyinxing', en: 'M51', type: 'galaxy' },
+  { zh: '指环星云', py: 'zhihuanxingyun', en: 'M57', type: 'nebula' },
+  { zh: '波德星系', py: 'bodeyinxing', en: 'M81', type: 'galaxy' },
+  { zh: '雪茄星系', py: 'xuejiayinxing', en: 'M82', type: 'galaxy' },
+  { zh: '草帽星系', py: 'caomaoyinxing', en: 'M104', type: 'galaxy' },
+  { zh: '北美洲星云', py: 'beimeizhouxingyun', en: 'NGC 7000', type: 'nebula' },
+  { zh: '玫瑰星云', py: 'meiguixingyun', en: 'NGC 2244', type: 'nebula' },
+  { zh: '双星团', py: 'shuangxingtuan', en: 'Double Cluster', type: 'cluster' },
+  { zh: '蜂巢星团', py: 'fengchaoxingtuan', en: 'M44', type: 'cluster' },
+  { zh: '野鸭星团', py: 'yeyaxingtuan', en: 'M11', type: 'cluster' },
+  { zh: '马头星云', py: 'matouxingyun', en: 'IC 434', type: 'nebula' },
+  { zh: '加州星云', py: 'jiazhouxingyun', en: 'NGC 1499', type: 'nebula' },
+  // 常见星座
+  { zh: '仙女座', py: '', en: 'Andromeda', type: 'constellation' },
+  { zh: '宝瓶座', py: '', en: 'Aquarius', type: 'constellation' },
+  { zh: '天鹰座', py: '', en: 'Aquila', type: 'constellation' },
+  { zh: '白羊座', py: '', en: 'Aries', type: 'constellation' },
+  { zh: '御夫座', py: '', en: 'Auriga', type: 'constellation' },
+  { zh: '牧夫座', py: '', en: 'Boötes', type: 'constellation' },
+  { zh: '巨蟹座', py: '', en: 'Cancer', type: 'constellation' },
+  { zh: '猎犬座', py: '', en: 'Canes Venatici', type: 'constellation' },
+  { zh: '大犬座', py: '', en: 'Canis Major', type: 'constellation' },
+  { zh: '小犬座', py: '', en: 'Canis Minor', type: 'constellation' },
+  { zh: '摩羯座', py: '', en: 'Capricornus', type: 'constellation' },
+  { zh: '船底座', py: '', en: 'Carina', type: 'constellation' },
+  { zh: '仙后座', py: '', en: 'Cassiopeia', type: 'constellation' },
+  { zh: '半人马座', py: '', en: 'Centaurus', type: 'constellation' },
+  { zh: '仙王座', py: '', en: 'Cepheus', type: 'constellation' },
+  { zh: '鲸鱼座', py: '', en: 'Cetus', type: 'constellation' },
+  { zh: '后发座', py: '', en: 'Coma Berenices', type: 'constellation' },
+  { zh: '北冕座', py: '', en: 'Corona Borealis', type: 'constellation' },
+  { zh: '乌鸦座', py: '', en: 'Corvus', type: 'constellation' },
+  { zh: '巨爵座', py: '', en: 'Crater', type: 'constellation' },
+  { zh: '天鹅座', py: '', en: 'Cygnus', type: 'constellation' },
+  { zh: '海豚座', py: '', en: 'Delphinus', type: 'constellation' },
+  { zh: '天龙座', py: '', en: 'Draco', type: 'constellation' },
+  { zh: '波江座', py: '', en: 'Eridanus', type: 'constellation' },
+  { zh: '双子座', py: '', en: 'Gemini', type: 'constellation' },
+  { zh: '天鹤座', py: '', en: 'Grus', type: 'constellation' },
+  { zh: '武仙座', py: '', en: 'Hercules', type: 'constellation' },
+  { zh: '长蛇座', py: '', en: 'Hydra', type: 'constellation' },
+  { zh: '狮子座', py: '', en: 'Leo', type: 'constellation' },
+  { zh: '小狮座', py: '', en: 'Leo Minor', type: 'constellation' },
+  { zh: '天兔座', py: '', en: 'Lepus', type: 'constellation' },
+  { zh: '天秤座', py: '', en: 'Libra', type: 'constellation' },
+  { zh: '天琴座', py: '', en: 'Lyra', type: 'constellation' },
+  { zh: '麒麟座', py: '', en: 'Monoceros', type: 'constellation' },
+  { zh: '蛇夫座', py: '', en: 'Ophiuchus', type: 'constellation' },
+  { zh: '猎户座', py: '', en: 'Orion', type: 'constellation' },
+  { zh: '飞马座', py: '', en: 'Pegasus', type: 'constellation' },
+  { zh: '英仙座', py: '', en: 'Perseus', type: 'constellation' },
+  { zh: '凤凰座', py: '', en: 'Phoenix', type: 'constellation' },
+  { zh: '双鱼座', py: '', en: 'Pisces', type: 'constellation' },
+  { zh: '南鱼座', py: '', en: 'Piscis Austrinus', type: 'constellation' },
+  { zh: '人马座', py: '', en: 'Sagittarius', type: 'constellation' },
+  { zh: '天蝎座', py: '', en: 'Scorpius', type: 'constellation' },
+  { zh: '巨蛇座', py: '', en: 'Serpens', type: 'constellation' },
+  { zh: '金牛座', py: '', en: 'Taurus', type: 'constellation' },
+  { zh: '三角座', py: '', en: 'Triangulum', type: 'constellation' },
+  { zh: '大熊座', py: '', en: 'Ursa Major', type: 'constellation' },
+  { zh: '小熊座', py: '', en: 'Ursa Minor', type: 'constellation' },
+  { zh: '室女座', py: '', en: 'Virgo', type: 'constellation' },
+  { zh: '狐狸座', py: '', en: 'Vulpecula', type: 'constellation' },
+]
 
 interface StellariumBridgeResponse {
   ok?: boolean
@@ -105,7 +259,7 @@ struct WindowNativeNode {
   @State private panelVisible: boolean = true
   @State private searchText: string = ''
   @State private selectedName: string = '未选择'
-  @State private searchSuggestions: string[] = []
+  @State private searchSuggestions: SearchSug[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
   @State private selectedType: string = '轻点天体或搜索'
@@ -184,7 +338,7 @@ struct WindowNativeNode {
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
   @State private lx200Status: string = '未连接'
-  @State private actionHint: string = ''
+  @State private actionHint: ResourceStr = ''
 
   private hintTimer: number = 0
   // 目标详情自动刷新：选中天体后每秒重新拉一次坐标，让“地平坐标”随地球自转实时变化。
@@ -216,12 +370,12 @@ struct WindowNativeNode {
   private panelDragStartOffsetY: number = 0
 
   private readonly actions: ShellAction[] = [
-    { label: '搜索', icon: '⌕', panel: 'search' },
-    { label: '时间', icon: '◴', panel: 'time' },
-    { label: '位置', icon: '◎', panel: 'place' },
-    { label: '图层', icon: '▦', panel: 'layers' },
-    { label: '详情', icon: 'ⓘ', panel: 'object' },
-    { label: '设置', icon: '⚙', panel: 'settings' }
+    { label: $r('app.string.i0099'), icon: '⌕', panel: 'search' },
+    { label: $r('app.string.i0054'), icon: '◴', panel: 'time' },
+    { label: $r('app.string.i0014'), icon: '◎', panel: 'place' },
+    { label: $r('app.string.i0100'), icon: '▦', panel: 'layers' },
+    { label: $r('app.string.i0101'), icon: 'ⓘ', panel: 'object' },
+    { label: $r('app.string.i0102'), icon: '⚙', panel: 'settings' }
   ]
 
   aboutToAppear(): void {
@@ -406,12 +560,23 @@ struct WindowNativeNode {
 
   private fetchSuggestions(prefix: string): void {
     if (prefix.length < 1) { this.searchSuggestions = []; return }
-    this.callInteractive('listMatchingObjects', prefix + '|10', (result) => {
+    // 核心最多取 30 条（核心允许 1..50）；同时把中文/拼音别名命中的天体合并进建议。
+    this.callInteractive('listMatchingObjects', prefix + '|30', (result) => {
       // Only apply if the query prefix is still current (user may have typed more).
       if (this.searchText.trim() !== prefix) { return }
+      const map: Record<string, SearchSug> = {}
       if (Array.isArray(result.items)) {
-        this.searchSuggestions = result.items as string[]
+        for (const it of result.items as string[]) {
+          if (!map[it]) { map[it] = { zh: this.zhNameOf(it), en: it } }
+        }
       }
+      // 别名模糊命中（中文/拼音/英文子串），补足核心只做“词首前缀”的不足。
+      for (const a of this.aliasHits(prefix)) {
+        if (!map[a.en]) { map[a.en] = { zh: a.zh, en: a.en } }
+      }
+      const arr = Object.keys(map).map((k) => map[k])
+      arr.sort((x, y) => x.zh.localeCompare(y.zh, 'zh'))
+      this.searchSuggestions = arr.slice(0, 30)
     })
   }
 
@@ -433,7 +598,7 @@ struct WindowNativeNode {
         const items = result.items as string[]
         this.categoryObjects = []
         for (let i = 0; i < Math.min(items.length, 20); i++) {
-          this.categoryObjects.push({ name: items[i] })
+          this.categoryObjects.push({ name: items[i], zh: this.zhNameOf(items[i]) })
         }
       }
     })
@@ -446,7 +611,7 @@ struct WindowNativeNode {
   private setSkyCulture(name: string): void {
     this.callInteractive('setSkyCulture', name, () => {
       this.currentSkyCulture = name
-      this.flashHint("星图文化: " + name)
+      this.flashHint($r('app.string.i0068', name))
     })
   }
 
@@ -464,7 +629,7 @@ struct WindowNativeNode {
 
   private advanceTime(hours: number): void {
     this.callInteractive('advanceTime', hours.toString(), () => { this.refreshState() })
-    this.flashHint((hours > 0 ? '+' : '') + hours.toString() + ' 小时')
+    this.flashHint((hours > 0 ? $r('app.string.i0044') : '') + hours.toString() + ' 小时')
   }
 
   private dateToJD(year: number, month: number, day: number, hour: number, minute: number): number {
@@ -482,7 +647,7 @@ struct WindowNativeNode {
     const jd = this.dateToJD(this.manualYear, this.manualMonth, this.manualDay, this.manualHour, this.manualMinute)
     this.callInteractive('setJD', jd.toFixed(6), () => {
       this.refreshState()
-      this.flashHint('已设定为 ' + this.manualYear + '-' + String(this.manualMonth).padStart(2, '0') + '-' + String(this.manualDay).padStart(2, '0') + ' ' + String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
+      this.flashHint($r('app.string.i0069', this.manualYear + '-' + String(this.manualMonth).padStart(2, '0') + '-' + String(this.manualDay).padStart(2, '0') + ' ' + String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0')))
     })
   }
 
@@ -530,7 +695,7 @@ struct WindowNativeNode {
     })
   }
 
-  private flashHint(text: string): void {
+  private flashHint(text: ResourceStr): void {
     this.actionHint = text
     if (this.hintTimer !== 0) {
       clearTimeout(this.hintTimer)
@@ -547,7 +712,7 @@ struct WindowNativeNode {
   private applyLx200Result(result: StellariumBridgeResponse): void {
     if (result.ok === true) {
       const target = result.target && result.target.length > 0 ? result.target : '选中目标'
-      const mode = result.mode === 'sync' ? '同步' : 'GoTo'
+      const mode = result.mode === 'sync' ? '同步' : $r('app.string.i0049')
       const coord = result.ra && result.dec ? ' · ' + result.ra + ' / ' + result.dec : ''
       this.lx200Status = mode + ' 已发送：' + target + coord
     } else {
@@ -651,13 +816,13 @@ struct WindowNativeNode {
     }
     this.activePanel = 'object'
     this.panelVisible = true
-    this.flashHint('搜索: ' + query)
+    this.flashHint($r('app.string.i0070', query))
     this.callInteractive('searchObject', query, (result) => {
       this.applySelectedObject(result)
       if (result.found === true) {
-        this.flashHint('已找到: ' + query)
+        this.flashHint($r('app.string.i0071', query))
       } else {
-        this.flashHint('未找到: ' + query)
+        this.flashHint($r('app.string.i0072', query))
       }
     })
   }
@@ -705,6 +870,61 @@ struct WindowNativeNode {
     if (m >= 60) { m -= 60; d += 1 }
     if (m < 0) { m += 60; d -= 1 }
     return d + '°' + (m < 10 ? '0' + m : m.toString()) + '\''
+  }
+
+  // 把核心返回的拉丁/英文名映射成中文显示；已是中文的保持；无别名则原样返回。
+  private zhNameOf(raw: string): string {
+    if (!raw || raw.length === 0) { return raw }
+    if (/[一-鿿]/.test(raw)) { return raw }
+    const q = raw.toLowerCase()
+    for (let i = 0; i < ALIAS_LIST.length; i++) {
+      if (ALIAS_LIST[i].en.toLowerCase() === q) { return ALIAS_LIST[i].zh }
+    }
+    return raw
+  }
+
+  // 反向：把中文/英文标签翻回核心能识别的英文标识（供搜索/点击使用）。
+  private enNameOf(label: string): string {
+    if (!label || label.length === 0) { return label }
+    for (let i = 0; i < ALIAS_LIST.length; i++) {
+      if (ALIAS_LIST[i].zh === label) { return ALIAS_LIST[i].en }
+    }
+    return label
+  }
+
+  // 天体类型本地化（Planet→行星…）；未知则原样。
+  private zhType(type: string): ResourceStr {
+    const map: Record<string, ResourceStr> = {
+      'Planet': $r('app.string.i0103'), 'Star': $r('app.string.i0104'), 'Nebula': $r('app.string.i0107'), 'Galaxy': $r('app.string.i0105'),
+      'Asteroid': '小行星', 'Comet': '彗星', 'Satellite': '卫星', 'Moon': '卫星/月球',
+      'Sun': '恒星(太阳)', 'Quasar': '类星体', 'Pulsar': '脉冲星', 'Cluster': $r('app.string.i0106'),
+      'Open cluster': '疏散星团', 'Globular cluster': '球状星团', 'Planetary nebula': '行星状星云',
+      'Interstellar object': '星际天体', 'Minor planet': '小行星',
+    }
+    return map[type] ?? type
+  }
+
+  // 中文/拼音/英文模糊匹配别名，返回可点的建议（zh 显示，en 检索）。
+  private aliasHits(input: string): Array<SearchSug> {
+    const q = (input || '').trim().toLowerCase()
+    if (q.length === 0) { return [] }
+    const out: Array<AliasHit> = []
+    const seen: Record<string, boolean> = {}
+    for (let i = 0; i < ALIAS_LIST.length; i++) {
+      const a = ALIAS_LIST[i]
+      let score = -1
+      if (a.en.toLowerCase() === q) { score = 0 }
+      else if (a.en.toLowerCase().startsWith(q)) { score = 1 }
+      else if (a.zh.indexOf(input.trim()) >= 0) { score = 1 }
+      else if (a.py && a.py.toLowerCase().indexOf(q) >= 0) { score = 2 }
+      else if (a.en.toLowerCase().indexOf(q) >= 0) { score = 3 }
+      if (score >= 0 && !seen[a.en]) {
+        seen[a.en] = true
+        out.push({ zh: a.zh, en: a.en, score: score })
+      }
+    }
+    out.sort((x, y) => x.score - y.score)
+    return out.slice(0, 12).map((o) => ({ zh: o.zh, en: o.en }))
   }
 
   private applySelectedObject(result: StellariumBridgeResponse): void {
@@ -870,7 +1090,7 @@ struct WindowNativeNode {
       this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
       this.altitudeText = altitude.toFixed(0) + ' m'
       this.refreshState()
-      this.flashHint('位置：' + name)
+      this.flashHint($r('app.string.i0073', name))
     })
   }
 
@@ -1262,9 +1482,9 @@ struct WindowNativeNode {
           hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
           this.applySelectedObject(result)
           if (result.found === true) {
-            this.flashHint('已选中 ' + this.selectedName)
+            this.flashHint($r('app.string.i0074', this.selectedName))
           } else {
-            this.flashHint('这里没有天体')
+            this.flashHint($r('app.string.i0075'))
           }
         })
       }
@@ -1339,7 +1559,7 @@ struct WindowNativeNode {
           Text("Stellarium")
             .fontSize(32).fontWeight(FontWeight.Bold).fontColor("#E5FFFFFF")
             .margin({ bottom: 12 })
-          Text("点击任意处进入星图")
+          Text($r('app.string.i0001'))
             .fontSize(14).fontColor("#99FFFFFF")
             .margin({ bottom: 24 })
           LoadingProgress()
@@ -1412,18 +1632,18 @@ struct WindowNativeNode {
         .hitTestBehavior(HitTestMode.None)
       Stack() { this.verticalRail() }
         .position({ x: 0, y: this.railTop() })
-      Stack() { this.zoomButton('+') }
+      Stack() { this.zoomButton($r('app.string.i0044')) }
         .position({ x: 92, y: this.skyHeight - 220 })
         .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
           this.zoomStep(0.5)
-          this.flashHint('放大视野')
+          this.flashHint($r('app.string.i0076'))
         })
-      Stack() { this.zoomButton('\u2212') }
+      Stack() { this.zoomButton($r('app.string.i0045')) }
         .position({ x: 92, y: this.skyHeight - 150 })
         .onClick(() => {
           this.zoomStep(2.0)
-          this.flashHint('缩小视野')
+          this.flashHint($r('app.string.i0077'))
         })
       if (this.panelVisible) {
         Stack() { this.floatingPanel() }
@@ -1477,7 +1697,7 @@ struct WindowNativeNode {
         .fontWeight(FontWeight.Medium)
         .fontColor('#E5FFFFFF')
         .maxLines(1)
-      Text('LIVE')
+      Text($r('app.string.i0002'))
         .fontSize(9)
         .fontColor('#5B93BF')
         .padding({ left: 8, right: 8, top: 3, bottom: 3 })
@@ -1496,7 +1716,7 @@ struct WindowNativeNode {
   }
 
   @Builder
-  zoomButton(label: string) {
+  zoomButton(label: ResourceStr) {
     Stack() {
       Text(label)
         .fontSize(30)
@@ -1523,7 +1743,7 @@ struct WindowNativeNode {
           .position({ x: 7, y: idx * 104 })
           .onClick(() => {
             this.setPanel(item.panel)
-            this.flashHint('打开' + item.label + '面板')
+            this.flashHint($r('app.string.i0078', item.label + '面板'))
           })
     }, (item: ShellAction) => item.panel)
   }
@@ -1610,7 +1830,7 @@ struct WindowNativeNode {
       .animation({ duration: 180, curve: Curve.EaseOut })
       .onClick(() => {
         this.setPanel(item.panel)
-        this.flashHint('打开' + item.label + '面板')
+        this.flashHint($r('app.string.i0078', item.label + '面板'))
       })
       // 手势由原生组件处理，避免与天空触摸层冲突
   }
@@ -1701,7 +1921,7 @@ struct WindowNativeNode {
   }
 
   @Builder
-  smallRoundButton(label: string, action: () => void) {
+  smallRoundButton(label: ResourceStr, action: () => void) {
     Row() {
       Text(label)
         .fontSize(18)
@@ -1723,49 +1943,49 @@ struct WindowNativeNode {
     if (this.activePanel === 'object') {
       // 名称/类型/状态/追踪需要直接绑定 @State，避免 @Builder 参数按值捕获导致不刷新
       Row() {
-        Text('名称').fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.selectedName).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text($r('app.string.i0003')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.zhNameOf(this.selectedName)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('类型').fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.selectedType).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text($r('app.string.i0004')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.zhType(this.selectedType)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('状态').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0005')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.selectedStatus).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('追踪').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0006')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       // 直接绑定 @State（不要经 infoRow 的 @Builder 参数，参数按值捕获会导致不刷新，详见上方注释）
       if (this.selectedMagnitude.length > 0) {
         Row() {
-          Text('星等').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0007')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedMagnitude).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       }
       if (this.selectedCoordEq.length > 0) {
         Row() {
-          Text('赤道坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0008')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedCoordEq).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       }
       if (this.selectedCoordAlt.length > 0) {
         Row() {
-          Text('地平坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0009')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedCoordAlt).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       }
       if (this.selectedConstellation.length > 0) {
         Row() {
-          Text('星座').fontSize(12).fontColor('#66FFFFFF').width(72)
-          Text(this.selectedConstellation).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text($r('app.string.i0010')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.zhNameOf(this.selectedConstellation)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       }
       if (this.selectedDistance.length > 0) {
         Row() {
-          Text('距离').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0011')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedDistance).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       }
@@ -1791,10 +2011,10 @@ struct WindowNativeNode {
             const idx = this.observingList.indexOf(this.selectedName)
             if (idx >= 0) {
               this.observingList.splice(idx, 1)
-              this.flashHint("已从观测列表移除")
+              this.flashHint($r('app.string.i0079'))
             } else {
               this.observingList.push(this.selectedName)
-              this.flashHint("已加入观测列表")
+              this.flashHint($r('app.string.i0080'))
             }
             AppStorage.setOrCreate("observingList", JSON.stringify(this.observingList))
           })
@@ -1803,14 +2023,14 @@ struct WindowNativeNode {
 	      this.quickChips(['刷新', '居中', '取消追踪'])
 	      this.lx200ObjectControls()
     } else if (this.activePanel === 'time') {
-      this.infoRow('时间', this.observationTimeText)
-      this.infoRow('速度', this.timeRateText)
-      this.infoRow('模式', this.timeRateText === '暂停' ? '暂停' : '运行')
+      this.infoRow($r('app.string.i0054'), this.observationTimeText)
+      this.infoRow($r('app.string.i0055'), this.timeRateText)
+      this.infoRow($r('app.string.i0056'), this.timeRateText === '暂停' ? '暂停' : '运行')
       this.quickChips(['现在', '后退', '暂停', '前进'])
       this.quickChips(['+12h', '-12h'])
       // 滚动选择日期
       Row() {
-        Text('选择日期').fontSize(13).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0012')).fontSize(13).fontColor('#66FFFFFF').width(72)
         Button(this.manualYear + '年' + this.manualMonth + '月' + this.manualDay + '日')
           .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(8).height(36).layoutWeight(1)
@@ -1833,7 +2053,7 @@ struct WindowNativeNode {
       .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
       // 滚动选择时间
       Row() {
-        Text('选择时间').fontSize(13).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0013')).fontSize(13).fontColor('#66FFFFFF').width(72)
         Button(String(this.manualHour).padStart(2, '0') + ':' + String(this.manualMinute).padStart(2, '0'))
           .fontSize(14).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(8).height(36).layoutWeight(1)
@@ -1852,48 +2072,48 @@ struct WindowNativeNode {
       .height(40).width('100%').padding({ left: 10, right: 10 })
       .backgroundColor('rgba(255,255,255,0.045)').borderRadius(12).margin({ top: 4, bottom: 4 })
       // 应用按钮
-      Button('应用设定时间')
+      Button($r('app.string.i0046'))
         .fontSize(14).fontColor('#FFFFFFFF').backgroundColor('#5B93BF')
         .borderRadius(12).height(40).width('100%').margin({ top: 4 })
         .onClick(() => { this.applyManualTime() })
-      Button('同步星图当前时间')
+      Button($r('app.string.i0047'))
         .fontSize(13).fontColor('#66FFFFFF').backgroundColor('rgba(255,255,255,0.06)')
         .borderRadius(8).height(36).width('100%').margin({ top: 2 })
         .onClick(() => {
           this.syncManualTimeFromState()
-          this.flashHint('已从星图同步时间')
+          this.flashHint($r('app.string.i0081'))
         })
 
 	    } else if (this.activePanel === 'place') {
       Row() {
-        Text('位置').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0014')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.locationText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0015')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.coordinateText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       Row() {
-        Text('海拔').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0016')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
       this.locationPickerPanel()
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
       // 基础天体
-      Text('基础天体').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 4, bottom: 2 })
-      this.switchRow('恒星', this.stars, 'actionShow_Stars')
-      this.switchRow('行星', this.planets, 'actionShow_Planets')
-      this.switchRow('星云', this.nebulae, 'actionShow_Nebulas')
+      Text($r('app.string.i0017')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 4, bottom: 2 })
+      this.switchRow($r('app.string.i0104'), this.stars, 'actionShow_Stars')
+      this.switchRow($r('app.string.i0103'), this.planets, 'actionShow_Planets')
+      this.switchRow($r('app.string.i0107'), this.nebulae, 'actionShow_Nebulas')
       this.switchRow('银河', this.milkyWay, 'actionShow_MilkyWay')
       // 星座
-      Text('星座').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0010')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
       this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
       this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
       this.switchRow('星座艺术图', this.constellationArt, 'actionShow_Constellation_Art')
       // 坐标网格
-      Text('坐标网格').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0018')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
       this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
       this.switchRow('赤道 J2000', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
@@ -1901,18 +2121,18 @@ struct WindowNativeNode {
       this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
       this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
       // 地面与大气
-      Text('地面与大气').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0019')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('地面', this.ground, 'actionShow_Ground')
       this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
       this.switchRow('方位基点', this.cardinalPoints, 'actionShow_Cardinal_Points')
       // 标记与轨道
-      Text('标记与轨道').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      Text($r('app.string.i0020')).fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
       this.switchRow('行星名', this.planetLabels, 'actionShow_Planets_Labels')
       this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
       this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
     } else if (this.activePanel === 'search') {
-      TextInput({ text: this.searchText, placeholder: '搜索天体名称' })
+      TextInput({ text: this.searchText, placeholder: $r('app.string.i0063') })
         .height(44)
         .fontSize(15)
         .fontColor('#E5FFFFFF')
@@ -1931,31 +2151,31 @@ struct WindowNativeNode {
       if (this.searchSuggestions.length > 0) {
         Scroll() {
           Row({ space: 4 }) {
-            ForEach(this.searchSuggestions, (name: string) => {
-              Text(name)
+            ForEach(this.searchSuggestions, (s: SearchSug) => {
+              Text(s.zh + (s.zh !== s.en ? '  ' + s.en : ''))
                 .fontSize(12).fontColor('#E5FFFFFF')
                 .padding({ left: 10, right: 10, top: 4, bottom: 4 })
                 .backgroundColor('rgba(107,163,214,0.20)')
                 .borderRadius(8)
                 .onClick(() => {
-                  this.searchObject(name)
+                  this.searchObject(s.en)
                   this.searchSuggestions = []
                 })
-            }, (name: string) => name)
+            }, (s: SearchSug) => s.en)
           }.padding({ left: 4, right: 4 })
         }.width('100%').height(36).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
       }
       // 天体分类浏览（按分类 tab 切换，点击加载该分类天体列表）
       Row() {
-        Text('天体分类').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0021')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Row({ space: 4 }) {
           ForEach([
-            { code: 'planet', label: '行星' },
-            { code: 'star', label: '恒星' },
-            { code: 'galaxy', label: '星系' },
-            { code: 'cluster', label: '星团' },
-            { code: 'nebula', label: '星云' },
-            { code: 'messier', label: 'M天体' },
+            { code: 'planet', label: $r('app.string.i0103') },
+            { code: 'star', label: $r('app.string.i0104') },
+            { code: 'galaxy', label: $r('app.string.i0105') },
+            { code: 'cluster', label: $r('app.string.i0106') },
+            { code: 'nebula', label: $r('app.string.i0107') },
+            { code: 'messier', label: $r('app.string.i0108') },
           ] as CatOption[], (cat: CatOption) => {
             Text(cat.label)
               .fontSize(11).fontColor(this.searchCategory === cat.code ? '#FFFFFFFF' : '#99FFFFFF')
@@ -1971,12 +2191,12 @@ struct WindowNativeNode {
       Scroll() {
         Row({ space: 6 }) {
           ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
-            { name: 'Moon' } as NameItem, { name: 'Mars' } as NameItem, { name: 'Jupiter' } as NameItem, { name: 'Saturn' } as NameItem,
-            { name: 'Sirius' } as NameItem, { name: 'Vega' } as NameItem, { name: 'Betelgeuse' } as NameItem, { name: 'Polaris' } as NameItem,
-            { name: 'M31' } as NameItem, { name: 'M42' } as NameItem, { name: 'M45' } as NameItem, { name: 'M13' } as NameItem,
-            { name: 'M8' } as NameItem, { name: 'NGC 7000' } as NameItem, { name: 'Double Cluster' } as NameItem,
+            { name: 'Moon', zh: '月球' } as NameItem, { name: 'Mars', zh: '火星' } as NameItem, { name: 'Jupiter', zh: '木星' } as NameItem, { name: 'Saturn', zh: '土星' } as NameItem,
+            { name: 'Sirius', zh: '天狼星' } as NameItem, { name: 'Vega', zh: '织女星' } as NameItem, { name: 'Betelgeuse', zh: '参宿四' } as NameItem, { name: 'Polaris', zh: '北极星' } as NameItem,
+            { name: 'M31', zh: '仙女座星系' } as NameItem, { name: 'M42', zh: '猎户座大星云' } as NameItem, { name: 'M45', zh: '昴星团' } as NameItem, { name: 'M13', zh: '武仙座球状星团' } as NameItem,
+            { name: 'M8', zh: '礁湖星云' } as NameItem, { name: 'NGC 7000', zh: '北美洲星云' } as NameItem, { name: 'Double Cluster', zh: '双星团' } as NameItem,
           ] as NameItem[], (item: NameItem) => {
-            Text(item.name ?? '')
+            Text(item.zh ?? item.name ?? '')
               .fontSize(11).fontColor('#E5FFFFFF')
               .padding({ left: 10, right: 10, top: 3, bottom: 3 })
               .backgroundColor('rgba(107,163,214,0.20)')
@@ -1986,11 +2206,11 @@ struct WindowNativeNode {
         }.padding({ left: 4, right: 4 })
       }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
     } else {
-      this.infoRow('显示', this.isExpandedLayout ? '宽屏布局' : '触屏布局')
-      this.infoRow('渲染', 'Stellarium Core')
-      this.infoRow('视场', this.fovText)
-      this.infoRow('陀螺仪', this.gyroscopeStatus)
-      this.infoRow('灵敏度', this.gyroscopeSensitivityText)
+      this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? '宽屏布局' : '触屏布局')
+      this.infoRow($r('app.string.i0058'), 'Stellarium Core')
+      this.infoRow($r('app.string.i0059'), this.fovText)
+      this.infoRow($r('app.string.i0060'), this.gyroscopeStatus)
+      this.infoRow($r('app.string.i0061'), this.gyroscopeSensitivityText)
       this.gyroscopeRow()
       this.lx200Panel()
       this.languageRow()
@@ -1998,39 +2218,39 @@ struct WindowNativeNode {
       // 观测列表
       if (this.observingList.length > 0) {
         Row() {
-          Text("观测列表").fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text($r('app.string.i0022')).fontSize(12).fontColor("#66FFFFFF").width(72)
           Text(this.observingList.length + " 个天体").fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
         Scroll() {
           Row({ space: 6 }) {
             ForEach(this.observingList, (name: string) => {
-              Text(name)
+              Text(this.zhNameOf(name))
                 .fontSize(11).fontColor("#E5FFFFFF")
                 .padding({ left: 10, right: 10, top: 3, bottom: 3 })
                 .backgroundColor("rgba(107,163,214,0.20)")
                 .borderRadius(8)
                 .onClick(() => {
                   this.searchObject(name)
-                  this.flashHint("正在导航到 " + name)
+                  this.flashHint($r('app.string.i0082', name))
                 })
             }, (name: string) => name)
           }.padding({ left: 4, right: 4 })
         }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
       }
-      this.infoRow('封装', '单 HAP')
+      this.infoRow($r('app.string.i0062'), '单 HAP')
       // 方向快捷查看
       Row() {
-        Text('方向查看').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0023')).fontSize(12).fontColor('#66FFFFFF').width(72)
       }
       .height(6).width('100%').margin({ top: 2 })
       Row() {
-        this.quickChips(['东', '南', '西', '北', '天顶', '北天极'])
+        this.quickChips(['东', '南', '西', '北', $r('app.string.i0088'), $r('app.string.i0089')])
       }
       .width('100%')
       // FOV 快捷切换
       Row() {
-        Text('视场角').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0024')).fontSize(12).fontColor('#66FFFFFF').width(72)
       }
       .height(6).width('100%').margin({ top: 2 })
       Row() {
@@ -2039,25 +2259,25 @@ struct WindowNativeNode {
       .width('100%')
       // 天球投影切换
       Row() {
-        Text('坐标模式').fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.equatorialMount ? '赤道坐标' : '地平坐标')
+        Text($r('app.string.i0025')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(this.equatorialMount ? $r('app.string.i0008') : $r('app.string.i0009'))
           .fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.equatorialMount })
           .onChange((isOn: boolean) => {
             this.equatorialMount = isOn
             this.triggerAction('actionSwitch_Equatorial_Mount')
             this.refreshState()
-            this.flashHint(isOn ? '赤道坐标' : '地平坐标')
+            this.flashHint(isOn ? $r('app.string.i0008') : $r('app.string.i0009'))
           })
       }
       .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ top: 4, bottom: 4 })
       // 截图+夜间模式
       Row() {
-        Button('截图保存')
+        Button($r('app.string.i0048'))
           .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(12).height(36).layoutWeight(1)
           .onClick(() => {
-            this.callInteractive('saveScreenShot', '', () => { this.flashHint('截图已保存') })
+            this.callInteractive('saveScreenShot', '', () => { this.flashHint($r('app.string.i0083')) })
           })
         Button(this.nightMode ? '🌙 夜间模式' : '☀️ 日间模式')
           .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
@@ -2072,50 +2292,50 @@ struct WindowNativeNode {
       this.quickChips(['刷新', '现在'])
       // 帮助说明
       Row() {
-        Text("手势操作").fontSize(12).fontColor("#66FFFFFF").width(72)
+        Text($r('app.string.i0026')).fontSize(12).fontColor("#66FFFFFF").width(72)
       }
       .height(6).width("100%").margin({ top: 2 })
-      Text("单指拖动: 旋转星空  双指捏合: 缩放视场  单击: 选星  长按: 连续拖动")
+      Text($r('app.string.i0027'))
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 })
-      Text("左栏按钮: 搜/时/位/层/详/设  底栏: 方向/视场/模式切换")
+      Text($r('app.string.i0028'))
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 }).margin({ top: 2 })
       // 语言选择
       Row() {
-        Text("界面语言").fontSize(12).fontColor("#66FFFFFF").width(72)
-        Text(this.selectedLanguage === 'zh_CN' ? '中文' :
+        Text($r('app.string.i0029')).fontSize(12).fontColor("#66FFFFFF").width(72)
+        Text(this.selectedLanguage === 'zh_CN' ? $r('app.string.i0030') :
              this.selectedLanguage === 'zh_TW' ? '繁体中文' :
-             this.selectedLanguage === 'en' ? 'English' :
-             this.selectedLanguage === 'ja' ? '日本語' :
-             this.selectedLanguage === 'ko' ? '한국어' : this.selectedLanguage)
+             this.selectedLanguage === 'en' ? $r('app.string.i0032') :
+             this.selectedLanguage === 'ja' ? $r('app.string.i0033') :
+             this.selectedLanguage === 'ko' ? $r('app.string.i0034') : this.selectedLanguage)
           .fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
       }
       .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Text("中文")
+        Text($r('app.string.i0030'))
           .fontSize(11).fontColor(this.selectedLanguage === 'zh_CN' ? "#FFFFFFFF" : "#99FFFFFF")
           .padding({ left: 10, right: 10, top: 3, bottom: 3 })
           .backgroundColor(this.selectedLanguage === 'zh_CN' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
           .borderRadius(8)
           .onClick(() => this.setLanguage('zh_CN'))
-        Text("繁中")
+        Text($r('app.string.i0031'))
           .fontSize(11).fontColor(this.selectedLanguage === 'zh_TW' ? "#FFFFFFFF" : "#99FFFFFF")
           .padding({ left: 10, right: 10, top: 3, bottom: 3 })
           .backgroundColor(this.selectedLanguage === 'zh_TW' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
           .borderRadius(8)
           .onClick(() => this.setLanguage('zh_TW'))
-        Text("English")
+        Text($r('app.string.i0032'))
           .fontSize(11).fontColor(this.selectedLanguage === 'en' ? "#FFFFFFFF" : "#99FFFFFF")
           .padding({ left: 10, right: 10, top: 3, bottom: 3 })
           .backgroundColor(this.selectedLanguage === 'en' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
           .borderRadius(8)
           .onClick(() => this.setLanguage('en'))
-        Text("日本語")
+        Text($r('app.string.i0033'))
           .fontSize(11).fontColor(this.selectedLanguage === 'ja' ? "#FFFFFFFF" : "#99FFFFFF")
           .padding({ left: 10, right: 10, top: 3, bottom: 3 })
           .backgroundColor(this.selectedLanguage === 'ja' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
           .borderRadius(8)
           .onClick(() => this.setLanguage('ja'))
-        Text("한국어")
+        Text($r('app.string.i0034'))
           .fontSize(11).fontColor(this.selectedLanguage === 'ko' ? "#FFFFFFFF" : "#99FFFFFF")
           .padding({ left: 10, right: 10, top: 3, bottom: 3 })
           .backgroundColor(this.selectedLanguage === 'ko' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
@@ -2125,7 +2345,7 @@ struct WindowNativeNode {
       // 星图文化选择
       if (this.skyCultures.length > 0) {
         Row() {
-          Text("星图文化").fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text($r('app.string.i0035')).fontSize(12).fontColor("#66FFFFFF").width(72)
           Text(this.currentSkyCulture).fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
@@ -2148,12 +2368,12 @@ struct WindowNativeNode {
   @Builder
 	  lx200Panel() {
 	    Column() {
-      Text('LX200 GoTo')
+      Text($r('app.string.i0036'))
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
         .fontColor('#E5FFFFFF')
         .width('100%')
-      TextInput({ text: this.lx200Host, placeholder: '主机，例如 192.168.1.50' })
+      TextInput({ text: this.lx200Host, placeholder: $r('app.string.i0064') })
         .height(38)
         .fontSize(13)
         .fontColor('#E5FFFFFF')
@@ -2165,7 +2385,7 @@ struct WindowNativeNode {
         .onChange((value: string) => {
           this.lx200Host = value
         })
-      TextInput({ text: this.lx200Port, placeholder: '端口，例如 4030' })
+      TextInput({ text: this.lx200Port, placeholder: $r('app.string.i0065') })
         .height(38)
         .fontSize(13)
         .fontColor('#E5FFFFFF')
@@ -2178,7 +2398,7 @@ struct WindowNativeNode {
           this.lx200Port = value
         })
       Row() {
-        Button('GoTo')
+        Button($r('app.string.i0049'))
           .height(32)
           .fontSize(12)
           .fontColor('#FFFFFFFF')
@@ -2188,7 +2408,7 @@ struct WindowNativeNode {
           .onClick(() => {
             this.lx200GotoSelected()
           })
-        Button('Sync')
+        Button($r('app.string.i0050'))
           .height(32)
           .fontSize(12)
           .fontColor('#5B93BF')
@@ -2199,7 +2419,7 @@ struct WindowNativeNode {
           .onClick(() => {
             this.lx200SyncSelected()
           })
-        Button('停止')
+        Button($r('app.string.i0051'))
           .height(32)
           .fontSize(12)
           .fontColor('#FFD9D9')
@@ -2232,12 +2452,12 @@ struct WindowNativeNode {
   locationPickerPanel() {
     Column() {
       Row() {
-        Text('观测位置')
+        Text($r('app.string.i0037'))
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
           .layoutWeight(1)
-        Button('自动定位')
+        Button($r('app.string.i0052'))
           .height(30)
           .fontSize(11)
           .fontColor('#FFFFFFFF')
@@ -2257,7 +2477,7 @@ struct WindowNativeNode {
         .margin({ top: 10 })
 
       if (this.locationPickMode === 'map') {
-        TextInput({ text: this.locationPickerName, placeholder: '位置名称' })
+        TextInput({ text: this.locationPickerName, placeholder: $r('app.string.i0066') })
           .height(36)
           .fontSize(13)
           .fontColor('#E5FFFFFF')
@@ -2282,7 +2502,7 @@ struct WindowNativeNode {
             .fontSize(10)
             .fontColor('#99FFFFFF')
             .position({ x: 8, y: this.mapRenderHeight - 20 })
-          Text('⌖')
+          Text($r('app.string.i0040'))
             .fontSize(18)
             .fontColor('#5B93BF')
             .textShadow({ radius: 8, color: 'rgba(159, 232, 255, 0.75)', offsetX: 0, offsetY: 0 })
@@ -2326,7 +2546,7 @@ struct WindowNativeNode {
           .margin({ top: 10 })
       }
 
-      TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: '海拔 m' })
+      TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: $r('app.string.i0067') })
         .height(34)
         .fontSize(12)
         .fontColor('#E5FFFFFF')
@@ -2342,7 +2562,7 @@ struct WindowNativeNode {
           }
         })
       Row() {
-        Button('应用')
+        Button($r('app.string.i0053'))
           .height(32)
           .fontSize(12)
           .fontColor('#FFFFFFFF')
@@ -2374,7 +2594,7 @@ struct WindowNativeNode {
 	  lx200ObjectControls() {
 	    Column() {
 	      Row() {
-	        Text('望远镜')
+	        Text($r('app.string.i0041'))
 	          .fontSize(12)
 	          .fontColor('#8EA0BD')
 	          .layoutWeight(1)
@@ -2386,7 +2606,7 @@ struct WindowNativeNode {
 	      }
 	        .width('100%')
 	      Row() {
-	        Button('GoTo')
+	        Button($r('app.string.i0049'))
 	          .height(32)
 	          .fontSize(12)
 	          .fontColor('#FFFFFFFF')
@@ -2396,7 +2616,7 @@ struct WindowNativeNode {
 	          .onClick(() => {
 	            this.lx200GotoSelected()
 	          })
-	        Button('Sync')
+	        Button($r('app.string.i0050'))
 	          .height(32)
 	          .fontSize(12)
 	          .fontColor('#5B93BF')
@@ -2407,7 +2627,7 @@ struct WindowNativeNode {
 	          .onClick(() => {
 	            this.lx200SyncSelected()
 	          })
-	        Button('停止')
+	        Button($r('app.string.i0051'))
 	          .height(32)
 	          .fontSize(12)
 	          .fontColor('#FFD9D9')
@@ -2439,7 +2659,7 @@ struct WindowNativeNode {
 	  @Builder
   lockRow() {
     Row() {
-      Text('锁定界面位置')
+      Text($r('app.string.i0042'))
         .fontSize(14)
         .fontColor('#E5FFFFFF')
         .layoutWeight(1)
@@ -2459,7 +2679,7 @@ struct WindowNativeNode {
   @Builder
   languageRow() {
     Row() {
-      Text('界面语言')
+      Text($r('app.string.i0029'))
         .fontSize(14)
         .fontColor('#E5FFFFFF')
         .width(72)
@@ -2469,8 +2689,8 @@ struct WindowNativeNode {
             { code: 'zh_CN', name: '简体中文' },
             { code: 'zh_HK', name: '繁體(港)' },
             { code: 'zh_TW', name: '繁體(台)' },
-            { code: 'ja', name: '日本語' },
-            { code: 'ko', name: '한국어' },
+            { code: 'ja', name: $r('app.string.i0033') },
+            { code: 'ko', name: $r('app.string.i0034') },
             { code: 'de', name: 'Deutsch' },
             { code: 'fr', name: 'Français' },
             { code: 'es', name: 'Español' },
@@ -2487,7 +2707,7 @@ struct WindowNativeNode {
             { code: 'hi', name: 'हिन्दी' },
             { code: 'th', name: 'ไทย' },
             { code: 'vi', name: 'Tiếng Việt' },
-            { code: 'en', name: 'English' },
+            { code: 'en', name: $r('app.string.i0032') },
           ], (lang: LangOption) => {
             Text(lang.name)
               .fontSize(12)
@@ -2511,7 +2731,7 @@ struct WindowNativeNode {
   @Builder
 	  gyroscopeRow() {
     Row() {
-      Text('转动设备浏览星空')
+      Text($r('app.string.i0043'))
         .fontSize(14)
         .fontColor('#E5FFFFFF')
         .layoutWeight(1)
@@ -2529,7 +2749,7 @@ struct WindowNativeNode {
   }
 
   @Builder
-  quickChips(labels: string[]) {
+  quickChips(labels: ResourceStr[]) {
     Row() {
       ForEach(labels, (label: string) => {
         Button(label)
@@ -2555,6 +2775,7 @@ struct WindowNativeNode {
   }
 
   private handleChip(label: string): void {
+    const en = this.enNameOf(label)
     if (label === '刷新') {
       this.refreshSelectedObject()
       this.refreshState()
@@ -2575,11 +2796,11 @@ struct WindowNativeNode {
       this.advanceTime(12)
     } else if (label === '-12h') {
       this.advanceTime(-12)
-    } else if (label === 'Moon') {
+    } else if (en === 'Moon') {
       this.searchObject('Moon')
-    } else if (label === 'Mars') {
+    } else if (en === 'Mars') {
       this.searchObject('Mars')
-    } else if (label === 'Jupiter') {
+    } else if (en === 'Jupiter') {
       this.searchObject('Jupiter')
     } else if (label === '北京') {
       this.setLocation('Beijing', 39.9042, 116.4074, 44)
@@ -2587,46 +2808,46 @@ struct WindowNativeNode {
       this.setLocation('Shanghai', 31.2304, 121.4737, 4)
     } else if (label === '深圳') {
       this.setLocation('Shenzhen', 22.5431, 114.0579, 40)
-    // 搜索面板天体快捷搜索
-    } else if (['Sun', 'Mercury', 'Venus', 'Saturn', 'Sirius', 'Vega', 'Betelgeuse', 'Polaris', 'M31', 'M42', 'M45', 'NGC 2244'].includes(label)) {
-      this.searchObject(label)
+    // 搜索面板天体快捷搜索（中英文标签都认）
+    } else if (['Sun', 'Mercury', 'Venus', 'Saturn', 'Sirius', 'Vega', 'Betelgeuse', 'Polaris', 'M31', 'M42', 'M45', 'NGC 2244'].includes(en)) {
+      this.searchObject(en)
     // 方向快捷查看
     } else if (label === '东') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint('朝东')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint($r('app.string.i0084'))
     } else if (label === '南') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint('朝南')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint($r('app.string.i0085'))
     } else if (label === '西') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint('朝西')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint($r('app.string.i0086'))
     } else if (label === '北') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint('朝北')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint($r('app.string.i0087'))
     } else if (label === '天顶') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint('天顶')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint($r('app.string.i0088'))
     } else if (label === '北天极') {
-      this.stopTracking(); this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint('北天极')
+      this.stopTracking(); this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint($r('app.string.i0089'))
     // FOV 快捷切换（actionSet_FOV 索引: 0=0.5°, 1=180°, 2=90°, 3=60°, 4=45°, 5=20°, 6=10°, 7=5°, 8=2°, 9=1°）
     } else if (label === '1°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint('FOV 1°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint($r('app.string.i0090'))
     } else if (label === '2°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint('FOV 2°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint($r('app.string.i0091'))
     } else if (label === '5°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint('FOV 5°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint($r('app.string.i0092'))
     } else if (label === '10°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint('FOV 10°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint($r('app.string.i0093'))
     } else if (label === '20°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint('FOV 20°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint($r('app.string.i0094'))
     } else if (label === '45°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint('FOV 45°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint($r('app.string.i0095'))
     } else if (label === '60°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint('FOV 60°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint($r('app.string.i0096'))
     } else if (label === '90°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint('FOV 90°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint($r('app.string.i0097'))
     } else if (label === '180°') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint('FOV 180°')
+      this.stopTracking(); this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint($r('app.string.i0098'))
     }
   }
 
   @Builder
-  infoRow(label: string, value: string) {
+  infoRow(label: ResourceStr, value: string) {
     Row() {
       Text(label)
         .fontSize(12)
@@ -2648,7 +2869,7 @@ struct WindowNativeNode {
   }
 
   @Builder
-  switchRow(label: string, enabled: boolean, actionId: string) {
+  switchRow(label: ResourceStr, enabled: boolean, actionId: string) {
     Row() {
       Text(label)
         .fontSize(14)
@@ -2673,26 +2894,26 @@ struct WindowNativeNode {
       .animation({ duration: 160, curve: Curve.EaseOut })
   }
 
-  private panelTitle(): string {
+  private panelTitle(): ResourceStr {
     if (this.activePanel === 'search') {
-      return '搜索'
+      return $r('app.string.i0099')
     }
     if (this.activePanel === 'time') {
-      return '时间'
+      return $r('app.string.i0054')
     }
     if (this.activePanel === 'place') {
-      return '位置'
+      return $r('app.string.i0014')
     }
     if (this.activePanel === 'layers') {
-      return '图层'
+      return $r('app.string.i0100')
     }
     if (this.activePanel === 'settings') {
-      return '设置'
+      return $r('app.string.i0102')
     }
     return '目标详情'
   }
 
-  private panelSubtitle(): string {
+  private panelSubtitle(): ResourceStr {
     if (this.activePanel === 'search') {
       return '快速定位天体'
     }

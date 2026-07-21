@@ -1,0 +1,456 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "QAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "QAbility_label",
+      "value": "stellarium"
+    },
+    {
+      "name": "qt_permission_reason_read_pasteboard",
+      "value": "Used to read clipboard contents."
+    },
+    {
+      "name": "stellarium_permission_reason_location",
+      "value": "Used to match the sky map with your observing location."
+    },
+    {
+      "name": "i0001",
+      "value": "Tap anywhere to enter the sky"
+    },
+    {
+      "name": "i0002",
+      "value": "LIVE"
+    },
+    {
+      "name": "i0003",
+      "value": "Name"
+    },
+    {
+      "name": "i0004",
+      "value": "Type"
+    },
+    {
+      "name": "i0005",
+      "value": "Status"
+    },
+    {
+      "name": "i0006",
+      "value": "Tracking"
+    },
+    {
+      "name": "i0007",
+      "value": "Magnitude"
+    },
+    {
+      "name": "i0008",
+      "value": "Equatorial"
+    },
+    {
+      "name": "i0009",
+      "value": "Horizontal"
+    },
+    {
+      "name": "i0010",
+      "value": "Constellation"
+    },
+    {
+      "name": "i0011",
+      "value": "Distance"
+    },
+    {
+      "name": "i0012",
+      "value": "Select date"
+    },
+    {
+      "name": "i0013",
+      "value": "Select time"
+    },
+    {
+      "name": "i0014",
+      "value": "Place"
+    },
+    {
+      "name": "i0015",
+      "value": "Coordinates"
+    },
+    {
+      "name": "i0016",
+      "value": "Altitude"
+    },
+    {
+      "name": "i0017",
+      "value": "Base objects"
+    },
+    {
+      "name": "i0018",
+      "value": "Coordinate grid"
+    },
+    {
+      "name": "i0019",
+      "value": "Ground & atmosphere"
+    },
+    {
+      "name": "i0020",
+      "value": "Markers & orbits"
+    },
+    {
+      "name": "i0021",
+      "value": "Object category"
+    },
+    {
+      "name": "i0022",
+      "value": "Observation list"
+    },
+    {
+      "name": "i0023",
+      "value": "View direction"
+    },
+    {
+      "name": "i0024",
+      "value": "Field of view"
+    },
+    {
+      "name": "i0025",
+      "value": "Coordinate mode"
+    },
+    {
+      "name": "i0026",
+      "value": "Gestures"
+    },
+    {
+      "name": "i0027",
+      "value": "1-finger drag: rotate · pinch: zoom · tap: select · long-press: drag"
+    },
+    {
+      "name": "i0028",
+      "value": "Left: search/time/place/layer/detail/settings · Bottom: direction/FOV/mode"
+    },
+    {
+      "name": "i0029",
+      "value": "Language"
+    },
+    {
+      "name": "i0030",
+      "value": "中文"
+    },
+    {
+      "name": "i0031",
+      "value": "繁體(港)"
+    },
+    {
+      "name": "i0032",
+      "value": "English"
+    },
+    {
+      "name": "i0033",
+      "value": "日本語"
+    },
+    {
+      "name": "i0034",
+      "value": "한국어"
+    },
+    {
+      "name": "i0035",
+      "value": "Sky culture"
+    },
+    {
+      "name": "i0036",
+      "value": "LX200 GoTo"
+    },
+    {
+      "name": "i0037",
+      "value": "Observation location"
+    },
+    {
+      "name": "i0038",
+      "value": "N"
+    },
+    {
+      "name": "i0039",
+      "value": "S"
+    },
+    {
+      "name": "i0040",
+      "value": "⌖"
+    },
+    {
+      "name": "i0041",
+      "value": "Telescope"
+    },
+    {
+      "name": "i0042",
+      "value": "Lock UI position"
+    },
+    {
+      "name": "i0043",
+      "value": "Tilt device to browse"
+    },
+    {
+      "name": "i0044",
+      "value": "+"
+    },
+    {
+      "name": "i0045",
+      "value": "\\u2212"
+    },
+    {
+      "name": "i0046",
+      "value": "Apply time"
+    },
+    {
+      "name": "i0047",
+      "value": "Sync to sky time"
+    },
+    {
+      "name": "i0048",
+      "value": "Save screenshot"
+    },
+    {
+      "name": "i0049",
+      "value": "GoTo"
+    },
+    {
+      "name": "i0050",
+      "value": "Sync"
+    },
+    {
+      "name": "i0051",
+      "value": "Stop"
+    },
+    {
+      "name": "i0052",
+      "value": "Auto-locate"
+    },
+    {
+      "name": "i0053",
+      "value": "Apply"
+    },
+    {
+      "name": "i0054",
+      "value": "Time"
+    },
+    {
+      "name": "i0055",
+      "value": "Rate"
+    },
+    {
+      "name": "i0056",
+      "value": "Mode"
+    },
+    {
+      "name": "i0057",
+      "value": "Display"
+    },
+    {
+      "name": "i0058",
+      "value": "Renderer"
+    },
+    {
+      "name": "i0059",
+      "value": "FOV"
+    },
+    {
+      "name": "i0060",
+      "value": "Gyroscope"
+    },
+    {
+      "name": "i0061",
+      "value": "Sensitivity"
+    },
+    {
+      "name": "i0062",
+      "value": "Package"
+    },
+    {
+      "name": "i0063",
+      "value": "Search objects"
+    },
+    {
+      "name": "i0064",
+      "value": "Host, e.g. 192.168.1.50"
+    },
+    {
+      "name": "i0065",
+      "value": "Port, e.g. 4030"
+    },
+    {
+      "name": "i0066",
+      "value": "Location name"
+    },
+    {
+      "name": "i0067",
+      "value": "Altitude m"
+    },
+    {
+      "name": "i0068",
+      "value": "Sky culture: %s"
+    },
+    {
+      "name": "i0069",
+      "value": "Set to %s"
+    },
+    {
+      "name": "i0070",
+      "value": "Search: %s"
+    },
+    {
+      "name": "i0071",
+      "value": "Found: %s"
+    },
+    {
+      "name": "i0072",
+      "value": "Not found: %s"
+    },
+    {
+      "name": "i0073",
+      "value": "Location: %s"
+    },
+    {
+      "name": "i0074",
+      "value": "Selected: %s"
+    },
+    {
+      "name": "i0075",
+      "value": "No object here"
+    },
+    {
+      "name": "i0076",
+      "value": "Zoom in"
+    },
+    {
+      "name": "i0077",
+      "value": "Zoom out"
+    },
+    {
+      "name": "i0078",
+      "value": "Open %s panel"
+    },
+    {
+      "name": "i0079",
+      "value": "Removed from list"
+    },
+    {
+      "name": "i0080",
+      "value": "Added to list"
+    },
+    {
+      "name": "i0081",
+      "value": "Synced from sky"
+    },
+    {
+      "name": "i0082",
+      "value": "Navigating to %s"
+    },
+    {
+      "name": "i0083",
+      "value": "Screenshot saved"
+    },
+    {
+      "name": "i0084",
+      "value": "East"
+    },
+    {
+      "name": "i0085",
+      "value": "South"
+    },
+    {
+      "name": "i0086",
+      "value": "West"
+    },
+    {
+      "name": "i0087",
+      "value": "North"
+    },
+    {
+      "name": "i0088",
+      "value": "Zenith"
+    },
+    {
+      "name": "i0089",
+      "value": "North celestial pole"
+    },
+    {
+      "name": "i0090",
+      "value": "FOV 1°"
+    },
+    {
+      "name": "i0091",
+      "value": "FOV 2°"
+    },
+    {
+      "name": "i0092",
+      "value": "FOV 5°"
+    },
+    {
+      "name": "i0093",
+      "value": "FOV 10°"
+    },
+    {
+      "name": "i0094",
+      "value": "FOV 20°"
+    },
+    {
+      "name": "i0095",
+      "value": "FOV 45°"
+    },
+    {
+      "name": "i0096",
+      "value": "FOV 60°"
+    },
+    {
+      "name": "i0097",
+      "value": "FOV 90°"
+    },
+    {
+      "name": "i0098",
+      "value": "FOV 180°"
+    },
+    {
+      "name": "i0099",
+      "value": "Search"
+    },
+    {
+      "name": "i0100",
+      "value": "Layers"
+    },
+    {
+      "name": "i0101",
+      "value": "Details"
+    },
+    {
+      "name": "i0102",
+      "value": "Settings"
+    },
+    {
+      "name": "i0103",
+      "value": "Planets"
+    },
+    {
+      "name": "i0104",
+      "value": "Stars"
+    },
+    {
+      "name": "i0105",
+      "value": "Galaxies"
+    },
+    {
+      "name": "i0106",
+      "value": "Clusters"
+    },
+    {
+      "name": "i0107",
+      "value": "Nebulae"
+    },
+    {
+      "name": "i0108",
+      "value": "Messier"
+    }
+  ]
+}
