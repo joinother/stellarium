@@ -53,6 +53,11 @@ interface WindowNativeNodeCreateInfo {
   onDisAppear: () => void
 }
 
+interface TabItem {
+  label: string
+  id: number
+}
+
 interface ShellAction {
   label: ResourceStr
   icon: string
@@ -324,6 +329,42 @@ struct WindowNativeNode {
   @State private asteroidLines: boolean = false
   @State private asteroidLabels: boolean = false
   @State private zodiacalLight: boolean = false
+  @State private viewTab: number = 0  // View面板子标签索引
+  @State private configTab: number = 0  // Configuration面板子标签索引
+  @State private astroTab: number = 0   // 天文计算面板子标签索引
+  @State private nightViewTab: number = 0
+  @State private meteors: boolean = false
+  @State private dsoLabels: boolean = true
+  @State private equatorLine: boolean = false
+  @State private supergalacticEq: boolean = false
+  @State private eclJ2000Line: boolean = false
+  @State private equJ2000Line: boolean = false
+  @State private celestialPoles: boolean = false
+  @State private eclipticPoles: boolean = false
+  @State private galacticPoles: boolean = false
+  @State private equinoxPoints: boolean = false
+  @State private solsticePoints: boolean = false
+  @State private antisolarPoint: boolean = false
+  @State private umbraCircle: boolean = false
+  @State private penumbraCircle: boolean = false
+  @State private compassMarks: boolean = false
+  @State private fovMarker: boolean = false
+  @State private intercardinalPts: boolean = false
+  @State private landscapeIllum: boolean = false
+  @State private landscapeLabels: boolean = false
+  @State private zodiac: boolean = false
+  @State private lunarSystem: boolean = false
+  @State private asterismLines: boolean = false
+  @State private asterismLabels: boolean = false
+  @State private hipsSurveys: boolean = false
+  @State private toastSurvey: boolean = false
+  @State private landscapeTransp: number = 0
+  @State private milkyWayBright: number = 3
+  @State private infoLevel: number = 1
+  // 新增面板控制
+  @State private showConfigPanel: boolean = false
+  @State private showAstroPanel: boolean = false
+  @State private showHelpPanel: boolean = false
   @State private fogEffect: boolean = false
   @State private nebulae: boolean = false
   @State private milkyWay: boolean = true
@@ -2252,64 +2293,32 @@ struct WindowNativeNode {
       this.locationPickerPanel()
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
-      // 基础天体
-      Text($r('app.string.i0017')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 })
-      this.switchRow($r('app.string.i0104'), this.stars, 'actionShow_Stars')
-      this.switchRow($r('app.string.i0103'), this.planets, 'actionShow_Planets')
-      this.switchRow($r('app.string.i0107'), this.nebulae, 'actionShow_Nebulas')
-      this.switchRow('银河', this.milkyWay, 'actionShow_MilkyWay')
-      // 星座
-      Text($r('app.string.i0010')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
-      this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
-      this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
-      this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
-      this.switchRow('星座艺术图', this.constellationArt, 'actionShow_Constellation_Art')
-      // 坐标网格
-      Text($r('app.string.i0018')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
-      this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
-      this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
-      this.switchRow('赤道 J2000', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
-      this.switchRow('黄道网格', this.eclipticGrid, 'actionShow_Ecliptic_Grid')
-      this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
-      this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
-      // 地面与大气
-      Text($r('app.string.i0019')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
-      this.switchRow('地面', this.ground, 'actionShow_Ground')
-      this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
-      this.switchRow('方位基点', this.cardinalPoints, 'actionShow_Cardinal_Points')
-      // 标记与轨道
-      Text($r('app.string.i0020')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 8, bottom: 2 })
-      this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
-      this.switchRow('行星名', this.planetLabels, 'actionShow_Planets_Labels')
-      this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
-      this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
-      this.switchRow('行星轨迹', this.planetTrails, 'actionShow_Planets_Trails')
-      this.switchRow('放大月球', this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
-      // 特殊线
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.nmBorder())
-        .margin({ top: 6, bottom: 4 })
-      Row() {
-        Text('特殊线条').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      this.viewTabs()
+      Scroll() {
+        Column({ space: 0 }) {
+          if (this.viewTab === 0) {
+            this.viewSkyTab()
+          } else if (this.viewTab === 1) {
+            this.viewSSOTab()
+          } else if (this.viewTab === 2) {
+            this.viewDSOTab()
+          } else if (this.viewTab === 3) {
+            this.viewMarkingsTab()
+          } else if (this.viewTab === 4) {
+            this.viewLandscapeTab()
+          } else if (this.viewTab === 5) {
+            this.viewSkyCultureTab()
+          } else {
+            this.viewSurveysTab()
+          }
+        }
+        .width('100%')
       }
-      .height(18).width('100%')
-      this.switchRow('黄道线', this.eclipticLine, 'actionShow_Ecliptic_Line')
-      this.switchRow('银道', this.galacticEquator, 'actionShow_Galactic_Equator_Line')
-      this.switchRow('银道网格', this.galacticGrid, 'actionShow_Galactic_Grid')
-      // 大气与光害
-      Row()
-        .width('100%').height(0.5)
-        .backgroundColor(this.nmBorder())
-        .margin({ top: 6, bottom: 4 })
-      Row() {
-        Text('大气光害').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
-      }
-      .height(18).width('100%')
-      this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
-      this.switchRow('光污染', this.lightPollution, 'actionShow_LightPollutionFromDatabase')
-      this.switchRow('黄道光', this.zodiacalLight, 'actionShow_Zodiacal_Light')
-      this.switchRow('深空背景', this.dsoTextures, 'actionShow_DSO_Textures')
+      .width('100%')
+      .layoutWeight(1)
+      .scrollBar(BarState.Auto)
+      .scrollBarWidth(4)
+      .scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'search') {
       TextInput({ text: this.searchText, placeholder: $r('app.string.i0063') })
         .height(44)
@@ -3171,4 +3180,217 @@ struct WindowNativeNode {
     }
     return '点击星空后显示'
   }
+
+  // View 面板标签页选择器
+  @Builder viewTabs() {
+    Row({ space: 2 }) {
+      ForEach([
+        { label: '天空', id: 0 },
+        { label: '太阳系', id: 1 },
+        { label: '深空', id: 2 },
+        { label: '标记', id: 3 },
+        { label: '地景', id: 4 },
+        { label: '文化', id: 5 },
+        { label: '巡天', id: 6 },
+      ] as TabItem[], (tab: TabItem) => {
+        Text(tab.label)
+          .fontSize(10)
+          .fontColor(this.viewTab === tab.id ? this.nmText() : this.nmSub())
+          .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+          .backgroundColor(this.viewTab === tab.id ? this.nmAccent() : this.nmBg())
+          .borderRadius(6)
+          .onClick(() => { this.viewTab = tab.id })
+      }, (tab: TabItem, index: number) => tab.id.toString())
+    }
+    .width('100%')
+    .padding({ left: 2, right: 2 })
+    .margin({ top: 4, bottom: 8 })
+  }
+
+  // View 面板 Sky 标签页内容
+  @Builder viewSkyTab() {
+    this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
+    this.switchRow('地面', this.ground, 'actionShow_Ground')
+    this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
+    this.switchRow('流星', this.meteors, 'actionShow_Meteors')
+    // 银河亮度
+    Row() {
+      Text('银河亮度').fontSize(12).fontColor(this.nmSub()).width(72)
+      Row({ space: 6 }) {
+        Button('-').fontSize(12).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(8).width(36).height(28)
+          .onClick(() => { if (this.milkyWayBright > 0) this.milkyWayBright-- })
+        Text(this.milkyWayBright.toString()).fontSize(14).fontColor(this.nmText()).width(24).textAlign(TextAlign.Center)
+        Button('+').fontSize(12).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(8).width(36).height(28)
+          .onClick(() => { if (this.milkyWayBright < 6) this.milkyWayBright++ })
+      }
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+    // 光污染
+    Row() {
+      Text('光污染').fontSize(12).fontColor(this.nmSub()).width(72)
+      Button('减少').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        .borderRadius(8).height(26).padding({ left: 8, right: 8 })
+        .onClick(() => { this.triggerAction('actionShow_LightPollutionReduce') })
+      Button('增加').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        .borderRadius(8).height(26).padding({ left: 8, right: 8 })
+        .onClick(() => { this.triggerAction('actionShow_LightPollutionIncrease') })
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+    this.switchRow('夜间模式', this.nightMode, 'actionShow_Night_Mode')
+    this.switchRow('星空水平翻转', this.flipHoriz, 'actionHorizontal_Flip')
+    this.switchRow('星空垂直翻转', this.flipVert, 'actionVertical_Flip')
+  }
+
+  // View 面板 SSO 标签页内容
+  @Builder viewSSOTab() {
+    this.switchRow('行星标签', this.planets, 'actionShow_Planets')
+    this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
+    this.switchRow('行星轨迹', this.planetTrails, 'actionShow_Planets_Trails')
+    this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
+    this.switchRow('放大月球', this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
+    this.switchRow('放大行星', false, 'actionShow_Planets_EnlargePlanets')
+    this.switchRow('放大太阳', false, 'actionShow_Planets_EnlargeSun')
+    this.switchRow('小天体标记', false, 'actionShow_Planets_ShowMinorBodyMarkers')
+    this.switchRow('命名标签', false, 'actionShow_Planets_Nomenclature')
+    Row() {
+      Text('轨迹重置').fontSize(12).fontColor(this.nmSub()).width(72)
+      Button('重置').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+        .onClick(() => { this.triggerAction('actionShow_Planets_Trails_Reset') })
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+  }
+
+  // View 面板 DSO 标签页内容
+  @Builder viewDSOTab() {
+    this.switchRow('深空天体', this.nebulae, 'actionShow_Nebulas')
+    this.switchRow('深空标签', this.dsoLabels, 'actionShow_Nebulas')
+    this.switchRow('深空背景图', this.dsoTextures, 'actionShow_DSO_Textures')
+    Row() {
+      Text('重载背景').fontSize(12).fontColor(this.nmSub()).width(72)
+      Button('重载').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+        .onClick(() => { this.triggerAction('actionShow_DSO_Textures_Reload') })
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+    Row()
+      .width('100%').height(0.5)
+      .backgroundColor(this.nmBorder())
+      .margin({ top: 6, bottom: 4 })
+    Row() {
+      Text('星表过滤（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+    }
+    .height(18).width('100%')
+  }
+
+  // View 面板 Markings 标签页内容
+  @Builder viewMarkingsTab() {
+    Scroll() {
+      Column({ space: 0 }) {
+        // 基础网格
+        Text('基础网格').fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 }).padding({ left: 2 })
+        this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
+        this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
+        // 特殊线
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('特殊线').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('赤道线', this.equatorLine, 'actionShow_Equator_Line')
+        this.switchRow('黄道线', this.eclipticLine, 'actionShow_Ecliptic_Line')
+        this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
+        this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
+        this.switchRow('银道线', this.galacticEquator, 'actionShow_Galactic_Equator_Line')
+        this.switchRow('超银道', this.supergalacticEq, 'actionShow_Supergalactic_Equator_Line')
+        this.switchRow('银道网格', this.galacticGrid, 'actionShow_Galactic_Grid')
+        // J2000 线
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('J2000 基准').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('J2000 赤道', this.equJ2000Line, 'actionShow_Equator_J2000_Line')
+        this.switchRow('J2000 黄道', this.eclJ2000Line, 'actionShow_Ecliptic_J2000_Line')
+        // 点标记
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('点标记').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('天极', this.celestialPoles, 'actionShow_Celestial_Poles')
+        this.switchRow('黄极', this.eclipticPoles, 'actionShow_Ecliptic_Poles')
+        this.switchRow('银极', this.galacticPoles, 'actionShow_Galactic_Poles')
+        this.switchRow('分点', this.equinoxPoints, 'actionShow_Equinox_Points')
+        this.switchRow('至点', this.solsticePoints, 'actionShow_Solstice_Points')
+        this.switchRow('反日点', this.antisolarPoint, 'actionShow_Antisolar_Point')
+        this.switchRow('本影圈', this.umbraCircle, 'actionShow_Umbra_Circle')
+        this.switchRow('半影圈', this.penumbraCircle, 'actionShow_Penumbra_Circle')
+        // 辅助标记
+        Row()
+          .width('100%').height(0.5)
+          .backgroundColor(this.nmBorder())
+          .margin({ top: 6, bottom: 4 })
+        Text('辅助标记').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+          .height(18).width('100%')
+        this.switchRow('罗盘标记', this.compassMarks, 'actionShow_Compass_Marks')
+        this.switchRow('FOV标记', this.fovMarker, 'actionShow_FOV_Center_Marker')
+        this.switchRow('中间方位', this.intercardinalPts, 'actionShow_Intercardinal_Points')
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .scrollBar(BarState.Auto)
+    .scrollBarWidth(4)
+    .scrollBarColor('#33FFFFFF')
+  }
+
+  // View 面板 Landscape 标签页内容
+  @Builder viewLandscapeTab() {
+    this.switchRow('地面', this.ground, 'actionShow_Ground')
+    this.switchRow('景观照明', this.landscapeIllum, 'actionShow_LandscapeIllumination')
+    this.switchRow('景观标签', this.landscapeLabels, 'actionShow_LandscapeLabels')
+    this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
+    Row() {
+      Text('地景列表（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+    }.height(18).width('100%').margin({ top: 6 })
+    Row() {
+      Text('透明度').fontSize(12).fontColor(this.nmSub()).width(72)
+      Text(this.landscapeTransp + '%').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
+      Slider({ value: this.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
+        .width('40%')
+        .blockColor(this.nmAccent())
+        .trackColor(this.nmBg())
+        .selectedColor(this.nmAccent())
+        .showSteps(false)
+        .onChange((val: number) => { this.landscapeTransp = Math.round(val) })
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+  }
+
+  // View 面板 Sky Culture 标签页内容
+  @Builder viewSkyCultureTab() {
+    this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
+    this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
+    this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
+    this.switchRow('星座艺术', this.constellationArt, 'actionShow_Constellation_Art')
+    this.switchRow('黄道十二宫', this.zodiac, 'actionShow_Zodiac')
+    this.switchRow('月宿', this.lunarSystem, 'actionShow_LunarSystem')
+    this.switchRow('星群线', this.asterismLines, 'actionShow_Asterism_Lines')
+    this.switchRow('星群标签', this.asterismLabels, 'actionShow_Asterism_Labels')
+    Row() {
+      Text('天区文化列表（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+    }.height(18).width('100%').margin({ top: 6 })
+  }
+
+  // View 面板 Surveys 标签页内容
+  @Builder viewSurveysTab() {
+    this.switchRow('HiPS 巡天', this.hipsSurveys, 'actionShow_Hips_Surveys')
+    this.switchRow('TOAST 巡天', this.toastSurvey, 'actionShow_Toast_Survey')
+    Row() {
+      Text('注意：在线巡天需要网络连接').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+    }.height(18).width('100%').margin({ top: 8 })
+  }
+
 }
