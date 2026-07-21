@@ -224,7 +224,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 ## 7. 注意事项
 
-1. **不要修改 build 目录下的文件后忘记同步到 `docs/harmonyos/harmonyos-project/`**
+1. **不要修改 build 目录下的文件后忘记同步到 `harmonyos/`**
 2. **HAP 文件不要上传到 git（太大），只上传签名证书和配置**
 3. **不要推送到上游 `Stellarium/stellarium`**，推送到你自己的 fork
 4. **ArkTS 限制：** `@Builder` 内不能有 `const/let` 赋值；属性链式调用必须在容器组件 `}` 之后；`Blank()` 只能放在 `Column/Row/Flex` 中
