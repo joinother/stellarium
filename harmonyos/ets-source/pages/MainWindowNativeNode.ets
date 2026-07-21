@@ -260,6 +260,7 @@ struct WindowNativeNode {
   @State private searchText: string = ''
   @State private selectedName: string = '未选择'
   @State private searchSuggestions: SearchSug[] = []
+  @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
   @State private selectedType: string = '轻点天体或搜索'
@@ -389,6 +390,14 @@ struct WindowNativeNode {
         this.observingList = JSON.parse(stored) as string[]
       } catch (e) {
         this.observingList = []
+      }
+    }
+    const storedHistory = AppStorage.get<string>("searchHistory")
+    if (storedHistory) {
+      try {
+        this.searchHistory = JSON.parse(storedHistory) as string[]
+      } catch (e) {
+        this.searchHistory = []
       }
     }
     this.startupBridgeSync()
@@ -819,6 +828,11 @@ struct WindowNativeNode {
     this.activePanel = 'object'
     this.panelVisible = true
     this.flashHint($r('app.string.i0070', query))
+    // 保存搜索历史（去重，最多保留 20 条）
+    const hist = this.searchHistory.filter(h => h !== query)
+    hist.unshift(query)
+    this.searchHistory = hist.slice(0, 20)
+    AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
     this.callInteractive('searchObject', query, (result) => {
       this.applySelectedObject(result)
       if (result.found === true) {
@@ -949,7 +963,10 @@ struct WindowNativeNode {
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
-      this.selectedInfo = ''
+      // 尝试从本地别名表补充中文简介
+      const dispName = this.selectedName
+      const alias = ALIAS_LIST.find(a => a.en === dispName || a.zh === dispName)
+      this.selectedInfo = alias ? alias.zh + ' (' + alias.en + ')' : ''
       this.startDetailAutoRefresh()
     } else {
       this.selectedName = '未找到'
@@ -2149,6 +2166,28 @@ struct WindowNativeNode {
         .onSubmit(() => {
           this.searchObject(this.searchText)
         })
+      // 搜索历史（无输入时显示，可点击复用）
+      if (this.searchText.length === 0 && this.searchHistory.length > 0) {
+        Row() {
+          Text('搜索历史').fontSize(11).fontColor('#66FFFFFF').margin({ right: 8 })
+          Text('清除').fontSize(11).fontColor('#4488FF').onClick(() => {
+            this.searchHistory = []
+            AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
+          })
+        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 8, bottom: 4 })
+        Scroll() {
+          Row() {
+            ForEach(this.searchHistory, (item: string) => {
+              Text(item).fontSize(13).fontColor('#CCFFFFFF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .backgroundColor('rgba(255, 255, 255, 0.08)').borderRadius(16).margin({ right: 6, bottom: 6 })
+                .onClick(() => {
+                  this.searchText = item
+                  this.searchObject(item)
+                })
+            })
+          }.padding({ left: 10 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').height(42)
+      }
       // 搜索建议列表（输入时自动补全）
       if (this.searchSuggestions.length > 0) {
         Scroll() {
