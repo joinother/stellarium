@@ -15,6 +15,15 @@ interface HierCity {
   p: number
 }
 
+interface CatOption {
+  code: string
+  label: string
+}
+
+interface NameItem {
+  name: string
+}
+
 interface WindowNativeNodeCreateInfo {
   xComponentId: string
   onAppear: () => void
@@ -75,6 +84,10 @@ interface StellariumBridgeResponse {
   actionShow_Horizon_Line?: boolean
   actionShow_Planets_Labels?: boolean
   actionShow_Stars_Labels?: boolean
+  items?: string[] | Object[]
+  count?: number
+  prefix?: string
+  moduleId?: string
 }
 
 @Entry
@@ -86,6 +99,9 @@ struct WindowNativeNode {
   @State private panelVisible: boolean = true
   @State private searchText: string = ''
   @State private selectedName: string = '未选择'
+  @State private searchSuggestions: string[] = []
+  @State private searchCategory: string = 'planet'
+  @State private categoryObjects: NameItem[] = []
   @State private selectedType: string = '轻点天体或搜索'
   @State private selectedStatus: string = '等待选择'
   @State private selectedInfo: string = '轻点星图中的天体，或在搜索里输入名称。'
@@ -119,6 +135,8 @@ struct WindowNativeNode {
   @State private trackingText: string = '关闭'
   @State private skyWidth: number = 1
   @State private skyHeight: number = 1
+  @State private panelWidth: number = 336
+  @State private panelMaxHeight: number = 660
   @State private stars: boolean = true
   @State private planets: boolean = true
   @State private planetOrbits: boolean = false
@@ -292,6 +310,37 @@ struct WindowNativeNode {
     const result = this.callNative('triggerAction', actionId)
     if (result.ok === true) {
       this.refreshState()
+    }
+  }
+
+  private fetchSuggestions(prefix: string): void {
+    if (prefix.length < 1) { this.searchSuggestions = []; return }
+    const result = this.callNative('listMatchingObjects', prefix + '|10')
+    if (result.ok === true && Array.isArray(result.items)) {
+      this.searchSuggestions = result.items as string[]
+    }
+  }
+
+  private loadCategoryObjects(category: string): void {
+    this.searchCategory = category
+    const moduleIdMap: Record<string, string> = {
+      'planet': 'SolarSystem:planet',
+      'moon': 'SolarSystem:moon',
+      'star': 'StarMgr:0',
+      'variable': 'StarMgr:3',
+      'galaxy': 'NebulaMgr:0',
+      'cluster': 'NebulaMgr:5',
+      'nebula': 'NebulaMgr:10',
+      'messier': 'NebulaMgr:100',
+    }
+    const moduleId = moduleIdMap[category] || ''
+    const result = this.callNative('listObjects', moduleId)
+    if (result.ok === true && Array.isArray(result.items)) {
+      const items = result.items as string[]
+      this.categoryObjects = []
+      for (let i = 0; i < Math.min(items.length, 20); i++) {
+        this.categoryObjects.push({ name: items[i] })
+      }
     }
   }
 
@@ -821,7 +870,7 @@ struct WindowNativeNode {
       }
       return false
     }
-    if (this.panelVisible && y >= this.skyHeight - 430) {
+    if (this.panelVisible && y >= this.skyHeight - this.panelMaxHeight) {
       return true
     }
     return y >= this.skyHeight - 80
@@ -1170,6 +1219,8 @@ struct WindowNativeNode {
         this.skyWidth = Number(newArea.width) > 1 ? Number(newArea.width) : 1
         this.skyHeight = Number(newArea.height) > 1 ? Number(newArea.height) : 1
         this.isExpandedLayout = this.skyWidth >= 900
+        this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)
+        this.panelMaxHeight = Math.min(this.skyHeight * 0.78, 700)
         hilog.info(0x0000, "StellariumArkUI", "onAreaChange w=%{public}s h=%{public}s expanded=%{public}s", this.skyWidth.toString(), this.skyHeight.toString(), this.isExpandedLayout.toString())
       })
   }
@@ -1434,8 +1485,8 @@ struct WindowNativeNode {
         .width('100%')
         .layoutWeight(1)
     }
-      .width(336)
-      .constraintSize({ maxHeight: 660 })
+      .width(this.panelWidth)
+      .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor('rgba(25, 26, 28, 0.78)')
       .backdropBlur(30)
@@ -1642,15 +1693,24 @@ struct WindowNativeNode {
       this.switchRow('银河', this.milkyWay, 'actionShow_MilkyWay')
       this.switchRow('地面', this.ground, 'actionShow_Ground')
       this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
-      this.switchRow('星座名', this.constellationLabels, 'actionShow_Constellation_Labels')
-      this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
-      this.switchRow('星座图绘', this.constellationArt, 'actionShow_Constellation_Art')
-      this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
-      this.switchRow('方位点', this.cardinalPoints, 'actionShow_Cardinal_Points')
-      this.switchRow('地平网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
-      this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
-      this.switchRow('J2000网格', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
-      this.switchRow('黄道网格', this.eclipticGrid, 'actionShow_Ecliptic_Grid')
+      // 搜索建议列表（输入时自动补全）
+      if (this.searchSuggestions.length > 0) {
+        Scroll() {
+          Row({ space: 4 }) {
+            ForEach(this.searchSuggestions, (name: string) => {
+              Text(name)
+                .fontSize(12).fontColor('#E5FFFFFF')
+                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                .backgroundColor('rgba(107,163,214,0.20)')
+                .borderRadius(8)
+                .onClick(() => {
+                  this.searchObject(name)
+                  this.searchSuggestions = []
+                })
+            }, (name: string) => name)
+          }.padding({ left: 4, right: 4 })
+        }.width('100%').height(36).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+      }
       this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
       this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
       this.switchRow('行星名', this.planetLabels, 'actionShow_Planets_Labels')
@@ -1668,19 +1728,69 @@ struct WindowNativeNode {
         .borderRadius(22)
         .onChange((value: string) => {
           this.searchText = value
+          this.fetchSuggestions(value)
         })
         .onSubmit(() => {
           this.searchObject(this.searchText)
         })
-      this.quickChips(['Moon', 'Mars', 'Jupiter'])
-      // 天体分类快捷搜索
+      // 搜索建议列表（输入时自动补全）
+      if (this.searchSuggestions.length > 0) {
+        Scroll() {
+          Row({ space: 4 }) {
+            ForEach(this.searchSuggestions, (name: string) => {
+              Text(name)
+                .fontSize(12).fontColor('#E5FFFFFF')
+                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+                .backgroundColor('rgba(107,163,214,0.20)')
+                .borderRadius(8)
+                .onClick(() => {
+                  this.searchObject(name)
+                  this.searchSuggestions = []
+                })
+            }, (name: string) => name)
+          }.padding({ left: 4, right: 4 })
+        }.width('100%').height(36).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+      }
+      // 天体分类浏览（按分类 tab 切换，点击加载该分类天体列表）
       Row() {
         Text('天体分类').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Row({ space: 4 }) {
+          ForEach([
+            { code: 'planet', label: '行星' },
+            { code: 'star', label: '恒星' },
+            { code: 'galaxy', label: '星系' },
+            { code: 'cluster', label: '星团' },
+            { code: 'nebula', label: '星云' },
+            { code: 'messier', label: 'M天体' },
+          ] as CatOption[], (cat: CatOption) => {
+            Text(cat.label)
+              .fontSize(11).fontColor(this.searchCategory === cat.code ? '#FFFFFFFF' : '#99FFFFFF')
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .backgroundColor(this.searchCategory === cat.code ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
+              .borderRadius(8)
+              .onClick(() => this.loadCategoryObjects(cat.code))
+          }, (cat: CatOption) => cat.code)
+        }.layoutWeight(1)
       }
-      .height(6).width('100%').margin({ top: 2 })
-      this.quickChips(['Sun', 'Mercury', 'Venus', 'Saturn'])
-      this.quickChips(['Sirius', 'Vega', 'Betelgeuse', 'Polaris'])
-      this.quickChips(['M31', 'M42', 'M45', 'NGC 2244'])
+      .height(32).width('100%')
+      // 分类天体列表（fallback: listObjects 不可用时显示预设常用天体）
+      Scroll() {
+        Row({ space: 6 }) {
+          ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
+            { name: 'Moon' } as NameItem, { name: 'Mars' } as NameItem, { name: 'Jupiter' } as NameItem, { name: 'Saturn' } as NameItem,
+            { name: 'Sirius' } as NameItem, { name: 'Vega' } as NameItem, { name: 'Betelgeuse' } as NameItem, { name: 'Polaris' } as NameItem,
+            { name: 'M31' } as NameItem, { name: 'M42' } as NameItem, { name: 'M45' } as NameItem, { name: 'M13' } as NameItem,
+            { name: 'M8' } as NameItem, { name: 'NGC 7000' } as NameItem, { name: 'Double Cluster' } as NameItem,
+          ] as NameItem[], (item: NameItem) => {
+            Text(item.name ?? '')
+              .fontSize(11).fontColor('#E5FFFFFF')
+              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+              .backgroundColor('rgba(107,163,214,0.20)')
+              .borderRadius(8)
+              .onClick(() => this.searchObject(item.name ?? ''))
+          }, (item: NameItem) => item.name)
+        }.padding({ left: 4, right: 4 })
+      }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
     } else {
       this.infoRow('显示', this.isExpandedLayout ? '宽屏布局' : '触屏布局')
       this.infoRow('渲染', 'Stellarium Core')
