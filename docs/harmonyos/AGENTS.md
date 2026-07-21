@@ -52,6 +52,7 @@ docs/harmonyos/
 ├── HANDOFF.md                 ← 项目交接文档（给新 Agent 的快速入门）
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
+├── SIGNING-GUIDE.md           ← HAP 构建、手动签名、安装排错说明
 ├── DEVECO-COLLAB.md           ← DevEco Code 协作指南（外包鸿蒙重活、省 token）
 ├── skills/                    ← ArkTS 开发 Skill 参考库（来自 DevEco Code）
 │   ├── arkts-error-fixes/     ← 21 种 ArkTS 编译错误修复方案（66 文件）
@@ -178,13 +179,13 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
 /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java \
   -jar /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar \
   sign-app -mode localSign \
-  -keyAlias stellarium-app-key -keyPwd 123456 \
+  -keyAlias stellarium-app-key -keyPwd "$STELLARIUM_SIGNING_PASSWORD" \
   -appCertFile /private/tmp/stellarium-oh-signing/stellarium-app-cert-chain.cer \
   -profileFile /private/tmp/stellarium-oh-signing/stellarium-ca-release-profile.p7b \
   -inFile /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-unsigned.hap \
   -signAlg SHA256withECDSA \
   -keystoreFile /private/tmp/stellarium-oh-signing/stellarium-app-keypair.p12 \
-  -keystorePwd 123456 \
+  -keystorePwd "$STELLARIUM_SIGNING_PASSWORD" \
   -outFile /private/tmp/stellarium-oh-signing/stellarium-latest-signed.hap \
   -compatibleVersion 24 -signCode 1
 ```

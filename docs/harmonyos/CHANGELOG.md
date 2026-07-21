@@ -350,3 +350,25 @@
 - **验证结果：** HAP 263MB 包含完整 .so 链；安装启动成功，星图正常渲染
 - **待验证：** FOV切换、语言切换（需重编.so）、夜间模式、截图
 - **备注：** 不要删除 entry/libs/ 目录！.so 只能通过 harmonydeployqt 重新生成。C++ 修改需要 Qt OHOS 交叉编译。
+
+---
+
+## [2026-07-21] Codex - 补充 HAP 签名与安装说明书
+
+- **修改文件：**
+  - `docs/harmonyos/SIGNING-GUIDE.md`
+  - `docs/harmonyos/AGENTS.md`
+- **修改内容：**
+  1. 记录 `hvigorw assembleHap` 生成 unsigned HAP 的路径
+  2. 说明为什么不要直接依赖 hvigor 默认 signed HAP，而要用 `hap-sign-tool.jar sign-app` 对 `entry-default-unsigned.hap` 手动重签
+  3. 记录当前本地签名材料位置、keyAlias、profile、bundleName，并用环境变量占位符代替实际密码
+  4. 增加从仓库 `docs/harmonyos/signing/` 复制签名材料到 `/private/tmp/stellarium-oh-signing` 的步骤
+  5. 补充安装、启动、`install sign info inconsistent`、`NODE_HOME`、`OHOS_BASE_SDK_HOME`、`SDK management mode has changed` 等排错说明
+- **修改原因：** 用户要求把 Codex 当时的签名/构建流程写成 WorkBuddy 可照着跑的使用说明
+- **构建结果：** 未构建（纯文档修改）
+- **验证结果：**
+  - 已用项目签名链对当前 `entry-default-unsigned.hap` 手动签名，生成 `/private/tmp/stellarium-oh-signing/stellarium-codex-resigned.hap`
+  - `hap-sign-tool.jar verify-app` 通过，日志显示 `profile type is: release`、`verify codesign success`、`verify-app success`
+  - `hdc install -r` 到模拟器 `127.0.0.1:5555` 成功
+  - `aa start -b org.qtproject.example.stellarium -a QAbility` 启动成功，`hilog` 中出现 `StellariumArkUI` / `selectAt result`
+- **备注：** 这套签名是本地预览/调试用途，不是正式商店分发凭据。WorkBuddy 关于“模拟器只认 debug profile，项目 release profile 命令行必装不上”的判断在当前环境下不成立；`build-profile.json5` 中 DevEco/Hvigor 签名材料字段不应当作普通 keystore 明文密码使用。

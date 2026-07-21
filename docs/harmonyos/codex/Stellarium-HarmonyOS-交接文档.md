@@ -215,13 +215,13 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
 /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java \
   -jar /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar \
   sign-app -mode localSign \
-  -keyAlias stellarium-app-key -keyPwd 123456 \
+  -keyAlias stellarium-app-key -keyPwd "$STELLARIUM_SIGNING_PASSWORD" \
   -appCertFile /private/tmp/stellarium-oh-signing/stellarium-app-cert-chain.cer \
   -profileFile /private/tmp/stellarium-oh-signing/stellarium-ca-release-profile.p7b \
   -inFile /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-unsigned.hap \
   -signAlg SHA256withECDSA \
   -keystoreFile /private/tmp/stellarium-oh-signing/stellarium-app-keypair.p12 \
-  -keystorePwd 123456 \
+  -keystorePwd "$STELLARIUM_SIGNING_PASSWORD" \
   -outFile /private/tmp/stellarium-oh-signing/stellarium-ui-fix-signed.hap \
   -compatibleVersion 24 -signCode 1
 ```
