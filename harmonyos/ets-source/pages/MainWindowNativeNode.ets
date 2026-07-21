@@ -430,7 +430,10 @@ struct WindowNativeNode {
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
-    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' }
+    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
+      { icon: 'settings', label: '配置', panel: 'config' },
+      { icon: 'search', label: '计算', panel: 'astro' },
+      { icon: 'info', label: '帮助', panel: 'help' }
   ]
 
   aboutToAppear(): void {
@@ -2415,6 +2418,200 @@ struct WindowNativeNode {
           }, (item: NameItem) => item.name)
         }.padding({ left: 4, right: 4 })
       }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+    } else if (this.activePanel === 'config') {
+      // Configuration 面板
+      Row({ space: 2 }) {
+        ForEach([
+          { label: '主设置', id: 0 },
+          { label: '信息', id: 1 },
+          { label: '附加', id: 2 },
+          { label: '时间', id: 3 },
+          { label: '工具', id: 4 },
+          { label: '脚本', id: 5 },
+          { label: '插件', id: 6 },
+        ] as TabItem[], (tab: TabItem) => {
+          Text(tab.label)
+            .fontSize(10)
+            .fontColor(this.configTab === tab.id ? this.nmText() : this.nmSub())
+            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .backgroundColor(this.configTab === tab.id ? this.nmAccent() : this.nmBg())
+            .borderRadius(6)
+            .onClick(() => { this.configTab = tab.id })
+        }, (tab: TabItem, index: number) => tab.id.toString())
+      }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
+      Scroll() {
+        Column({ space: 0 }) {
+          if (this.configTab === 0) {
+            // Main
+            this.languageRow()
+            Row() {
+              Text('星空文化').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            this.lockRow()
+            this.infoRow('版本', 'Stellarium 26.2 for HarmonyOS')
+          } else if (this.configTab === 1) {
+            // Information
+            Row() {
+              Text('信息级别').fontSize(12).fontColor(this.nmSub()).width(72)
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            Row({ space: 6 }) {
+              Button('全部').fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 0 ? this.nmAccent() : this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.infoLevel = 0; this.triggerAction('actionDisplayInfo_All') })
+              Button('默认').fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 1 ? this.nmAccent() : this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.infoLevel = 1; this.triggerAction('actionDisplayInfo_Default') })
+              Button('简短').fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 2 ? this.nmAccent() : this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.infoLevel = 2; this.triggerAction('actionDisplayInfo_Short') })
+              Button('无').fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 3 ? this.nmAccent() : this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.infoLevel = 3; this.triggerAction('actionDisplayInfo_None') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+          } else if (this.configTab === 2) {
+            // Extras
+            this.infoRow('应用', 'Stellarium for HarmonyOS')
+            this.infoRow('平台', 'OpenHarmony / HarmonyOS NEXT')
+          } else if (this.configTab === 3) {
+            // Time
+            this.infoRow('时间格式', '24 小时制')
+            this.infoRow('日期格式', 'YYYY-MM-DD')
+            this.infoRow('历法', '格里高利历')
+            Row() {
+              Text('（需C++桥接切换）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+            }.height(18).width('100%').margin({ top: 4 })
+          } else if (this.configTab === 4) {
+            // Tools
+            Row() {
+              Text('截图保存').fontSize(12).fontColor(this.nmSub()).width(72)
+              Button('保存').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            this.infoRow('截图格式', 'PNG')
+            this.infoRow('渲染帧率', '需C++桥接')
+          } else if (this.configTab === 5) {
+            // Scripts
+            Row() {
+              Text('脚本播放').fontSize(12).fontColor(this.nmSub()).width(72)
+              Button('停止').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                .onClick(() => { this.triggerAction('actionStop_Script') })
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            Row() {
+              Text('脚本列表').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          } else {
+            // Plugins
+            Row() {
+              Text('插件管理').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
+            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          }
+        }.width('100%')
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'astro') {
+      // 天文计算窗口
+      Row({ space: 2 }) {
+        ForEach([
+          { label: '位置', id: 0 },
+          { label: '星历', id: 1 },
+          { label: '升降', id: 2 },
+          { label: '天象', id: 3 },
+          { label: '图表', id: 4 },
+          { label: '今晚', id: 5 },
+          { label: '行星', id: 6 },
+          { label: '日食', id: 7 },
+          { label: '年历', id: 8 },
+        ] as TabItem[], (tab: TabItem) => {
+          Text(tab.label)
+            .fontSize(10)
+            .fontColor(this.astroTab === tab.id ? this.nmText() : this.nmSub())
+            .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+            .backgroundColor(this.astroTab === tab.id ? this.nmAccent() : this.nmBg())
+            .borderRadius(6)
+            .onClick(() => { this.astroTab = tab.id })
+        }, (tab: TabItem, index: number) => tab.id.toString())
+      }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
+      Scroll() {
+        Column({ space: 0 }) {
+          if (this.astroTab === 0) {
+            Text('天体位置表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
+            this.infoRow('数据', '选中天体的坐标、星等、角径等')
+          } else if (this.astroTab === 1) {
+            Text('星历表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
+          } else if (this.astroTab === 2) {
+            Text('升起/中天/落下').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
+            Row({ space: 6 }) {
+              Button('下次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.triggerAction('actionNext_Rising') })
+              Button('下次中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.triggerAction('actionNext_Transit') })
+              Button('下次落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.triggerAction('actionNext_Setting') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+          } else if (this.astroTab === 3) {
+            Text('天象计算').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接（合/冲/距角等）')
+          } else if (this.astroTab === 4) {
+            Text('高度/方位角图表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接（折线图渲染）')
+          } else if (this.astroTab === 5) {
+            Text('今晚可见').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接 WUT（30+分类）')
+          } else if (this.astroTab === 6) {
+            Text('行星计算器').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接（距离/周期/速度）')
+          } else if (this.astroTab === 7) {
+            Text('日月食').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接（日食/月食/凌日表）')
+          } else {
+            Text('年历').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            this.infoRow('状态', '需C++桥接（四季/日出日落/晨昏蒙影）')
+          }
+        }.width('100%')
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'help') {
+      // Help 面板
+      Scroll() {
+        Column({ space: 8 }) {
+          Text('关于').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4 })
+          Text('Stellarium for HarmonyOS').fontSize(11).fontColor(this.nmSub()).width('100%')
+          Text('基于 Stellarium 26.2 C++ 核心的社区移植版').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('渲染引擎：OpenGL ES via XComponent').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('ArkTS-N-API-C-C++ 桥接架构').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text('快捷操作').fontSize(13).fontColor(this.nmText()).width('100%')
+          Text('单指拖动：平移视角').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('双指捏合：缩放').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('单击天体：选中并显示信息').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('长按天体：追踪').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text('功能面板').fontSize(13).fontColor(this.nmText()).width('100%')
+          Text('View：显示选项（天空/太阳系/深空/标记/地景/文化/巡天）').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('Search：搜索天体').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('Time：时间控制（天文事件/节气跳转）').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('Location：位置选择（GPS/地图/城市）').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('Config：应用配置').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text('AstroCalc：天文计算').fontSize(10).fontColor('#66FFFFFF').width('100%')
+        }
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? '宽屏布局' : '触屏布局')
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -3156,6 +3353,15 @@ struct WindowNativeNode {
     if (this.activePanel === 'layers') {
       return $r('app.string.i0100')
     }
+    if (this.activePanel === 'config') {
+      return '配置'
+    }
+    if (this.activePanel === 'astro') {
+      return '天文计算'
+    }
+    if (this.activePanel === 'help') {
+      return '帮助'
+    }
     if (this.activePanel === 'settings') {
       return $r('app.string.i0102')
     }
@@ -3174,6 +3380,15 @@ struct WindowNativeNode {
     }
     if (this.activePanel === 'layers') {
       return '显示内容开关'
+    }
+    if (this.activePanel === 'config') {
+      return '应用设置与配置'
+    }
+    if (this.activePanel === 'astro') {
+      return '位置/星历/升降/天象/图表'
+    }
+    if (this.activePanel === 'help') {
+      return '关于与操作说明'
     }
     if (this.activePanel === 'settings') {
       return '显示与控制'
