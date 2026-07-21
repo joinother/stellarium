@@ -1903,6 +1903,15 @@ struct WindowNativeNode {
       }
       .width('100%').margin({ top: 4, bottom: 4 })
       this.quickChips(['刷新', '现在'])
+      // 帮助说明
+      Row() {
+        Text("手势操作").fontSize(12).fontColor("#66FFFFFF").width(72)
+      }
+      .height(6).width("100%").margin({ top: 2 })
+      Text("单指拖动: 旋转星空  双指捏合: 缩放视场  单击: 选星  长按: 连续拖动")
+        .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 })
+      Text("左栏按钮: 搜/时/位/层/详/设  底栏: 方向/视场/模式切换")
+        .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 }).margin({ top: 2 })
     }
   }
 
