@@ -1777,36 +1777,37 @@ struct WindowNativeNode {
       this.locationPickerPanel()
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
+      // 基础天体
+      Text('基础天体').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 4, bottom: 2 })
       this.switchRow('恒星', this.stars, 'actionShow_Stars')
       this.switchRow('行星', this.planets, 'actionShow_Planets')
       this.switchRow('星云', this.nebulae, 'actionShow_Nebulas')
       this.switchRow('银河', this.milkyWay, 'actionShow_MilkyWay')
-      this.switchRow('地面', this.ground, 'actionShow_Ground')
+      // 星座
+      Text('星座').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
       this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
-      // 搜索建议列表（输入时自动补全）
-      if (this.searchSuggestions.length > 0) {
-        Scroll() {
-          Row({ space: 4 }) {
-            ForEach(this.searchSuggestions, (name: string) => {
-              Text(name)
-                .fontSize(12).fontColor('#E5FFFFFF')
-                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                .backgroundColor('rgba(107,163,214,0.20)')
-                .borderRadius(8)
-                .onClick(() => {
-                  this.searchObject(name)
-                  this.searchSuggestions = []
-                })
-            }, (name: string) => name)
-          }.padding({ left: 4, right: 4 })
-        }.width('100%').height(36).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-      }
+      this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
+      this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
+      this.switchRow('星座艺术图', this.constellationArt, 'actionShow_Constellation_Art')
+      // 坐标网格
+      Text('坐标网格').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
+      this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
+      this.switchRow('赤道 J2000', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
+      this.switchRow('黄道网格', this.eclipticGrid, 'actionShow_Ecliptic_Grid')
       this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
       this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
+      // 地面与大气
+      Text('地面与大气').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      this.switchRow('地面', this.ground, 'actionShow_Ground')
+      this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
+      this.switchRow('方位基点', this.cardinalPoints, 'actionShow_Cardinal_Points')
+      // 标记与轨道
+      Text('标记与轨道').fontSize(11).fontColor('#66FFFFFF').width('100%').margin({ top: 8, bottom: 2 })
+      this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
       this.switchRow('行星名', this.planetLabels, 'actionShow_Planets_Labels')
       this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
       this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
-      this.switchRow('恒星名', this.starLabels, 'actionShow_Stars_Labels')
     } else if (this.activePanel === 'search') {
       TextInput({ text: this.searchText, placeholder: '搜索天体名称' })
         .height(44)
