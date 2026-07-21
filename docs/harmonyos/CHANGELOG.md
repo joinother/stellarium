@@ -6,6 +6,22 @@
 
 
 
+## [2026-07-21] TRAE - 默认中文 + 多语言切换 + Unicode 工具栏图标
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  - aboutToAppear 中自动调用 setLanguage('zh_CN')，默认显示中文星名
+  - 设置面板新增语言选择器（中文/繁中/English/日本語/한국어）
+  - 语言选择持久化到 AppStorage，重启后恢复
+  - 工具栏文字图标替换为 Unicode 符号（⌕◴◎▦ⓘ⚙），单色可控
+  - 新增 scripts/check-ohos.sh 提交前检查脚本
+- **修改原因：** project_memory 硬性要求星体名称中文显示 + 多语言切换
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 待安装验证
+- **备注：** 翻译文件 .qm 已打包在 rawfile/stellarium/translations/ 中
+
+---
+
 ## [2026-07-21] TRAE - 天体详情面板结构化展示（亮度/高度角/方位角/距离/星座/赤经/赤纬）
 
 - **修改文件：** `src/StelMainView.cpp`, `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `harmonyos/ets-source/pages/MainWindowNativeNode.ets`

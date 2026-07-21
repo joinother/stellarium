@@ -234,8 +234,14 @@ struct WindowNativeNode {
         if (s.equatorialMount !== undefined) { this.equatorialMount = s.equatorialMount as boolean; this.triggerAction("actionSwitch_Equatorial_Mount") }
         if (s.gyroscopeEnabled !== undefined) { this.gyroscopeEnabled = s.gyroscopeEnabled as boolean }
         if (s.gyroscopeSensitivityText !== undefined) { this.gyroscopeSensitivityText = s.gyroscopeSensitivityText as string }
+        if (s.selectedLanguage !== undefined) {
+          const lang = s.selectedLanguage as string
+          if (lang !== this.selectedLanguage) { this.setLanguage(lang) }
+        }
       } catch (e) { }
     }
+    // 默认语言设置为中文
+    this.setLanguage('zh_CN')
   }
 
   aboutToDisappear(): void {
@@ -244,7 +250,8 @@ struct WindowNativeNode {
       nightMode: this.nightMode,
       equatorialMount: this.equatorialMount,
       gyroscopeEnabled: this.gyroscopeEnabled,
-      gyroscopeSensitivityText: this.gyroscopeSensitivityText
+      gyroscopeSensitivityText: this.gyroscopeSensitivityText,
+      selectedLanguage: this.selectedLanguage
     }))
     this.stopGyroscope(false)
   }
@@ -1969,6 +1976,49 @@ struct WindowNativeNode {
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 })
       Text("左栏按钮: 搜/时/位/层/详/设  底栏: 方向/视场/模式切换")
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 }).margin({ top: 2 })
+      // 语言选择
+      Row() {
+        Text("界面语言").fontSize(12).fontColor("#66FFFFFF").width(72)
+        Text(this.selectedLanguage === 'zh_CN' ? '中文' :
+             this.selectedLanguage === 'zh_TW' ? '繁体中文' :
+             this.selectedLanguage === 'en' ? 'English' :
+             this.selectedLanguage === 'ja' ? '日本語' :
+             this.selectedLanguage === 'ko' ? '한국어' : this.selectedLanguage)
+          .fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
+      }
+      .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
+      Row({ space: 6 }) {
+        Text("中文")
+          .fontSize(11).fontColor(this.selectedLanguage === 'zh_CN' ? "#FFFFFFFF" : "#99FFFFFF")
+          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+          .backgroundColor(this.selectedLanguage === 'zh_CN' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+          .borderRadius(8)
+          .onClick(() => this.setLanguage('zh_CN'))
+        Text("繁中")
+          .fontSize(11).fontColor(this.selectedLanguage === 'zh_TW' ? "#FFFFFFFF" : "#99FFFFFF")
+          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+          .backgroundColor(this.selectedLanguage === 'zh_TW' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+          .borderRadius(8)
+          .onClick(() => this.setLanguage('zh_TW'))
+        Text("English")
+          .fontSize(11).fontColor(this.selectedLanguage === 'en' ? "#FFFFFFFF" : "#99FFFFFF")
+          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+          .backgroundColor(this.selectedLanguage === 'en' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+          .borderRadius(8)
+          .onClick(() => this.setLanguage('en'))
+        Text("日本語")
+          .fontSize(11).fontColor(this.selectedLanguage === 'ja' ? "#FFFFFFFF" : "#99FFFFFF")
+          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+          .backgroundColor(this.selectedLanguage === 'ja' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+          .borderRadius(8)
+          .onClick(() => this.setLanguage('ja'))
+        Text("한국어")
+          .fontSize(11).fontColor(this.selectedLanguage === 'ko' ? "#FFFFFFFF" : "#99FFFFFF")
+          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+          .backgroundColor(this.selectedLanguage === 'ko' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+          .borderRadius(8)
+          .onClick(() => this.setLanguage('ko'))
+      }.padding({ left: 4, right: 4 }).margin({ bottom: 8 })
       // 星图文化选择
       if (this.skyCultures.length > 0) {
         Row() {
