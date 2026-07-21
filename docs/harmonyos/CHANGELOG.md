@@ -4,6 +4,21 @@
 
 ---
 
+
+## [2026-07-21] TRAE - 天体分类搜索 UI + 编译修复
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `docs/harmonyos/harmonyos-project/ets-source/pages/MainWindowNativeNode.ets`, `src/StelMainView.cpp`
+- **修改内容：**
+  - 添加 CatOption/NameItem 接口，修复所有 ArkTS 类型错误（bracket notation → dot notation，object → 具体类型）
+  - 修复 stopTracking() 方法体被误放到 loadCategoryObjects() 内部的结构错误
+  - 在 StellariumBridgeResponse 接口添加 items/count/prefix/moduleId 属性
+  - 移除 Row 上的 .scrollable()（Row 不支持），改用 layoutWeight(1)
+  - C++ 侧添加 listMatchingObjects/listObjects 命令桥（需 Qt OHOS 重新编译才生效）
+  - 搜索面板添加分类 tab（行星/恒星/星系/星团/星云/M天体）+ 预设 fallback 列表
+- **修改原因：** 用户反馈天体分类查找功能不可用，冷门天体无法通过分类浏览找到
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 编译通过，模拟器未启动（待下次验证）
+- **备注：** listMatchingObjects/listObjects 命令需要重新编译 libstellarium.so 才能使用。当前 fallback 模式下显示预设的常用天体名称。
 ## [2026-07-19] Codex - 项目初始化和核心移植
 
 - **修改文件：** `src/StelMainView.cpp`, `src/StelMainView.hpp`, `src/main.cpp`, `src/core/StelMovementMgr.hpp`, `src/CMakeLists.txt`, `build/libstellarium-harmonyos/` (整个 HarmonyOS 工程)

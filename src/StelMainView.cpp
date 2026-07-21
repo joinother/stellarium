@@ -574,6 +574,45 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+	if (commandName == "listMatchingObjects")
+	{
+		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
+		QString prefix = arg.trimmed();
+		int maxItems = 10;
+		int sep = prefix.indexOf('|');
+		if (sep > 0) {
+			bool ok = false;
+			int n = prefix.mid(sep + 1).toInt(&ok);
+			if (ok && n > 0 && n <= 50) { maxItems = n; }
+			prefix = prefix.left(sep);
+		}
+		const auto list = objectMgr->listMatchingObjects(prefix, maxItems, true);
+		QJsonArray items;
+		for (const auto& pair : list) { items.append(pair.first); }
+		result["ok"] = true; result["items"] = items;
+		result["count"] = items.size(); result["prefix"] = prefix;
+		return result;
+	}
+
+	if (commandName == "listObjects")
+	{
+		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
+		QString moduleId = arg.trimmed();
+		bool inEnglish = true;
+		int sep = moduleId.indexOf('|');
+		if (sep > 0) {
+			QString lang = moduleId.mid(sep + 1).trimmed().toLower();
+			inEnglish = (lang != "false" && lang != "0");
+			moduleId = moduleId.left(sep);
+		}
+		const auto list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
+		QJsonArray items;
+		for (const auto& pair : list) { items.append(pair.first); }
+		result["ok"] = true; result["items"] = items;
+		result["count"] = items.size(); result["moduleId"] = moduleId;
+		return result;
+	}
+
 		if (commandName == "selectAt")
 		{
 			if (!objectMgr || !core)
