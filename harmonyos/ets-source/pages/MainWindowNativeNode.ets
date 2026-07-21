@@ -137,6 +137,7 @@ struct WindowNativeNode {
   @State private skyHeight: number = 1
   @State private panelWidth: number = 336
   @State private panelMaxHeight: number = 660
+  @State private observingList: string[] = []
   @State private stars: boolean = true
   @State private planets: boolean = true
   @State private planetOrbits: boolean = false
@@ -206,6 +207,14 @@ struct WindowNativeNode {
     const localStorage = this.getUIContext().getSharedLocalStorage()
     if (localStorage) {
       this.createInfo = localStorage.get<WindowNativeNodeCreateInfo>('createInfo')
+    }
+    const stored = AppStorage.get<string>("observingList")
+    if (stored) {
+      try {
+        this.observingList = JSON.parse(stored) as string[]
+      } catch (e) {
+        this.observingList = []
+      }
     }
   }
 
@@ -1607,6 +1616,23 @@ struct WindowNativeNode {
         .border({ width: 1, color: 'rgba(107, 163, 214, 0.20)' })
         .borderRadius(14)
         .margin({ top: 8, bottom: 8 })
+      Row() {
+        Button(this.observingList.includes(this.selectedName) ? "已从列表" : "加入观测列表")
+          .fontSize(13).fontColor("#E5FFFFFF").backgroundColor("rgba(107,163,214,0.25)")
+          .borderRadius(12).height(36).layoutWeight(1)
+          .onClick(() => {
+            const idx = this.observingList.indexOf(this.selectedName)
+            if (idx >= 0) {
+              this.observingList.splice(idx, 1)
+              this.flashHint("已从观测列表移除")
+            } else {
+              this.observingList.push(this.selectedName)
+              this.flashHint("已加入观测列表")
+            }
+            AppStorage.setOrCreate("observingList", JSON.stringify(this.observingList))
+          })
+      }
+      .width("100%").margin({ top: 4, bottom: 4 })
 	      this.quickChips(['刷新', '居中', '取消追踪'])
 	      this.lx200ObjectControls()
     } else if (this.activePanel === 'time') {
@@ -1801,6 +1827,29 @@ struct WindowNativeNode {
       this.lx200Panel()
       this.languageRow()
       this.lockRow()
+      // 观测列表
+      if (this.observingList.length > 0) {
+        Row() {
+          Text("观测列表").fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text(this.observingList.length + " 个天体").fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
+        }
+        .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
+        Scroll() {
+          Row({ space: 6 }) {
+            ForEach(this.observingList, (name: string) => {
+              Text(name)
+                .fontSize(11).fontColor("#E5FFFFFF")
+                .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+                .backgroundColor("rgba(107,163,214,0.20)")
+                .borderRadius(8)
+                .onClick(() => {
+                  this.searchObject(name)
+                  this.flashHint("正在导航到 " + name)
+                })
+            }, (name: string) => name)
+          }.padding({ left: 4, right: 4 })
+        }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+      }
       this.infoRow('封装', '单 HAP')
       // 方向快捷查看
       Row() {
