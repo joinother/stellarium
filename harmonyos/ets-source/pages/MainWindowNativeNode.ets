@@ -1080,8 +1080,13 @@ struct WindowNativeNode {
       this.hierRegion = ''
       this.hierCity = ''
     } catch (err) {
-      this.locationPickerStatus = '定位不可用，可拖动地图手动选择'
-      hilog.warn(0x0000, 'StellariumArkUI', 'device location failed')
+      hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', JSON.stringify(err))
+      // 模拟器通常无 GPS，自动回退到上次保存的位置
+      if (this.locationPickerLatitude === 0 && this.locationPickerLongitude === 0) {
+        this.setPickerLocation('北京', 39.9, 116.4, 43, '模拟器无 GPS，已使用默认位置（北京）')
+      } else {
+        this.locationPickerStatus = 'GPS 不可用，已保留当前位置'
+      }
     }
   }
 
@@ -2357,8 +2362,11 @@ struct WindowNativeNode {
           .onClick(() => {
             this.callInteractive('saveScreenShot', '', () => { this.flashHint($r('app.string.i0083')) })
           })
-        Button(this.nightMode ? '🌙 夜间模式' : '☀️ 日间模式')
-          .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+        Row() {
+            Image($r(this.nightMode ? 'app.media.ic_moon' : 'app.media.ic_sun')).width(16).height(16).fillColor('#E5FFFFFF')
+            Text(this.nightMode ? '夜间模式' : '日间模式').fontSize(12).fontColor('#E5FFFFFF').margin({ left: 4 })
+          }
+          .padding({ left: 10, right: 10 }).backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(12).height(36).layoutWeight(1).margin({ left: 8 })
           .onClick(() => {
             this.nightMode = !this.nightMode
@@ -2370,17 +2378,23 @@ struct WindowNativeNode {
       // 星空翻转
       Row() {
         Text('星空翻转').fontSize(12).fontColor('#66FFFFFF').width(72)
-        Button(this.flipVert ? '⇅ 南天在上' : '⇅ 北天在上')
-          .fontSize(12).fontColor('#E5FFFFFF').backgroundColor(this.flipVert ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
+        Row() {
+              Image($r('app.media.ic_layers')).width(14).height(14).fillColor('#E5FFFFFF')
+              Text(this.flipVert ? '南天在上' : '北天在上').fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
+            }
+          .padding({ left: 8, right: 8 }).backgroundColor(this.flipVert ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
           .borderRadius(12).height(32).layoutWeight(1)
           .onClick(() => {
             this.flipVert = !this.flipVert
             this.triggerAction('actionVertical_Flip')
             this.flashHint(this.flipVert ? '南天在上' : '北天在上')
           })
-        Button(this.flipHoriz ? '⇄ 镜像' : '⇄ 正常')
-          .fontSize(12).fontColor('#E5FFFFFF').backgroundColor(this.flipHoriz ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
-          .borderRadius(12).height(32).layoutWeight(1).margin({ left: 6 })
+        Row() {
+              Image($r('app.media.ic_refresh')).width(14).height(14).fillColor('#E5FFFFFF')
+              Text(this.flipHoriz ? '已镜像' : '正常').fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
+            }
+          .padding({ left: 8, right: 8 }).backgroundColor(this.flipHoriz ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
+          .padding({ left: 8, right: 8 }).borderRadius(12).height(32).layoutWeight(1).margin({ left: 6 }).justifyContent(FlexAlign.Center)
           .onClick(() => {
             this.flipHoriz = !this.flipHoriz
             this.triggerAction('actionHorizontal_Flip')
@@ -2556,10 +2570,12 @@ struct WindowNativeNode {
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
           .layoutWeight(1)
-        Button($r('app.string.i0052'))
+        Row() {
+            Image($r('app.media.ic_location')).width(14).height(14).fillColor('#FFFFFFFF')
+            Text($r('app.string.i0052')).fontSize(11).fontColor('#FFFFFFFF').margin({ left: 4 })
+          }
           .height(30)
-          .fontSize(11)
-          .fontColor('#FFFFFFFF')
+          .padding({ left: 12, right: 12 })
           .backgroundColor('#5B93BF')
           .borderRadius(15)
           .onClick(() => {
@@ -2593,14 +2609,11 @@ struct WindowNativeNode {
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Fill)
-          Text('N')
-            .fontSize(10)
-            .fontColor('#99FFFFFF')
-            .position({ x: 8, y: 6 })
-          Text('S')
-            .fontSize(10)
-            .fontColor('#99FFFFFF')
-            .position({ x: 8, y: this.mapRenderHeight - 20 })
+          // 经纬度刻度
+          Text('N').fontSize(9).fontColor('#66FFFFFF').position({ x: 6, y: 4 })
+          Text('S').fontSize(9).fontColor('#66FFFFFF').position({ x: 6, y: this.mapRenderHeight - 16 })
+          Text('90°W').fontSize(8).fontColor('#446688FF').position({ x: 4, y: Math.round(this.mapRenderHeight / 2) - 4 })
+          Text('90°E').fontSize(8).fontColor('#446688FF').position({ x: this.mapRenderWidth - 32, y: Math.round(this.mapRenderHeight / 2) - 4 })
           Text($r('app.string.i0040'))
             .fontSize(18)
             .fontColor('#5B93BF')
@@ -2661,10 +2674,12 @@ struct WindowNativeNode {
           }
         })
       Row() {
-        Button($r('app.string.i0053'))
+        Row() {
+            Image($r('app.media.ic_globe')).width(14).height(14).fillColor('#FFFFFFFF')
+            Text($r('app.string.i0053')).fontSize(12).fontColor('#FFFFFFFF').margin({ left: 4 })
+          }
           .height(32)
-          .fontSize(12)
-          .fontColor('#FFFFFFFF')
+          .padding({ left: 14, right: 14 })
           .backgroundColor('#5B93BF')
           .borderRadius(16)
           .margin({ right: 8 })
