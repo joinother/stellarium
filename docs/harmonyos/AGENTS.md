@@ -1,6 +1,6 @@
 # Stellarium HarmonyOS 移植 — Agent 协作工作流
 
-> **最后更新：2026-07-20**
+> **最后更新：2026-07-21**
 > **当前分支：** `openharmony-preview-v1`
 > **当前状态：** 能构建、安装、启动；横屏 UI 正常；星图触摸/选星可用；触摸事件已修复但仍有边缘死区问题
 
@@ -52,6 +52,7 @@ docs/harmonyos/
 ├── HANDOFF.md                 ← 项目交接文档（给新 Agent 的快速入门）
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
+├── DEVECO-COLLAB.md           ← DevEco Code 协作指南（外包鸿蒙重活、省 token）
 ├── codex/                     ← Codex Agent 的工作记录
 │   ├── Stellarium-HarmonyOS-交接文档.md
 │   └── ohos_patch/            ← Codex 编写的补丁代码
@@ -107,6 +108,23 @@ docs/harmonyos/
 2. 在 `KNOWN-ISSUES.md` 标记当前正在处理的问题（标注"进行中"）
 3. 如果代码改了一半导致编译失败，**立即回滚**（`git checkout .`），不要留半成品
 4. 如果代码改了一半但逻辑正确，在 `CHANGELOG.md` 精确记录改了哪些行、下一步该做什么
+
+---
+
+## 2.6 DevEco Code 协作（省 token 必看）
+
+本项目已集成 DevEco Code 的 5 个 skill（arkts-error-fixes / arkts-grammar-standards / arkts-runtime-fix / deveco-create-project / harmonyos-deveco-bridge），TRAE 可直接调用。
+
+**遇到以下场景时，优先走 DevEco Code 协作路径：**
+
+| 场景 | 推荐路径 | 原因 |
+|---|---|---|
+| ArkTS 编译报错 | 先查本地 skill，复杂错误用 `deveco run` 外包 | 免费 GLM-5.1 扛 token，省约 200 倍 |
+| 运行时崩溃/白屏 | 查 arkts-runtime-fix，或 `deveco run` 分析 hilog | 它有内置 faultlog 解析脚本 |
+| 鸿蒙 UI 规范咨询 | `deveco run` 外包 | 内置鸿蒙知识库比联网搜准 |
+| 编译 / 部署 / 截屏 | 直接用 `hvigorw` / `hdc` 命令 | 零 token，纯命令行 |
+
+**详细指南见 [DEVECO-COLLAB.md](DEVECO-COLLAB.md)。**
 
 ---
 
