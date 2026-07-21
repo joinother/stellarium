@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-07-22] Codex - 当前 HEAD 安全止血：移除签名材料跟踪并遮蔽 DevEco 签名字段
+
+- **修改文件：** `docs/harmonyos/signing/`（从 git 索引移除，保留本机文件）, `harmonyos/build-profile.json5`, `docs/harmonyos/CHANGELOG.md`
+- **修改内容：** 停止跟踪仓库内 HarmonyOS 签名证书/profile/private key 目录；将 `harmonyos/build-profile.json5` 中的 DevEco signing password 字段替换为 `***REMOVED_ROTATED***`。
+- **修改原因：** WorkBuddy 指出远程 HEAD/历史曾包含签名材料和明文字段；普通 HEAD 先止血，历史清洗仍需用 `git filter-repo` 等工具另行执行并强推。
+- **构建结果：** 未构建（安全/文档变更）。
+- **验证结果：** 本机签名材料仍保留在工作区目录；`git ls-tree HEAD docs/harmonyos/signing` 应为空。
+- **备注：** `.gitignore` 只能阻止未来误提交，不能清除历史；对外仓库如已公开，仍应轮换材料并清洗历史。
+
+---
+
 ## [2026-07-22] Codex - 补充 DevEco / Qt / ArkUI 调试经验手册
 
 - **修改文件：** `docs/harmonyos/DEBUGGING-GUIDE.md`, `docs/harmonyos/AGENTS.md`, `docs/harmonyos/SIGNING-GUIDE.md`
