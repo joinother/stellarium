@@ -5,6 +5,18 @@
 ---
 
 
+## [2026-07-21] TRAE - 重新编译 libstellarium.so + C++ 头文件修复
+
+- **修改文件：** `src/StelMainView.cpp`
+- **修改内容：**
+  - 添加 `#include <QJsonArray>` 和 `#include "StelLocaleMgr.hpp"` 修复编译错误
+  - 使用 Qt OHOS 交叉编译工具链重新编译 libstellarium.so
+  - 新的 .so 包含 listMatchingObjects/listObjects/setLanguage 命令桥
+- **修改原因：** C++ 新增命令后缺少必要头文件，导致编译失败
+- **构建结果：** BUILD SUCCESSFUL（CMake + hvigor 均通过）
+- **验证结果：** 模拟器未启动，待验证分类搜索是否加载真实天体数据
+- **备注：** .so 文件通过 harmonydeployqt 重新部署到 entry/libs/
+
 ## [2026-07-21] TRAE - 天体分类搜索 UI + 编译修复
 
 - **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `docs/harmonyos/harmonyos-project/ets-source/pages/MainWindowNativeNode.ets`, `src/StelMainView.cpp`
