@@ -418,15 +418,56 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr)
 	}
 
 	const StelObjectP object = objectMgr->getSelectedObject().constFirst();
-	const QVariantMap info = StelObjectMgr::getObjectInfo(object);
-	result = QJsonObject::fromVariantMap(info);
-	result["ok"] = true;
 	result["found"] = true;
 	result["name"] = object->getNameI18n();
 	result["englishName"] = object->getEnglishName();
 	result["type"] = object->getObjectTypeI18n();
+
 	if (core)
 	{
+		const QVariantMap m = object->getInfoMap(core);
+
+		// Normalized magnitude (visual, no extinction)
+		if (m.contains("vmag"))
+			result["magnitude"] = m["vmag"].toDouble();
+
+		// Normalized altitude / azimuth (apparent, degrees)
+		if (m.contains("altitude"))
+			result["altitude"] = m["altitude"].toDouble();
+		if (m.contains("azimuth"))
+			result["azimuth"] = m["azimuth"].toDouble();
+
+		// Normalized RA / Dec (formatted strings for display)
+		if (m.contains("ra"))
+		{
+			double ra = m["ra"].toDouble();
+			if (ra < 0) ra += 360.;
+			result["ra"] = StelUtils::radToHmsStr(ra * M_PI / 180.);
+		}
+		if (m.contains("dec"))
+			result["dec"] = StelUtils::radToDmsStr(m["dec"].toDouble() * M_PI / 180., true);
+
+		// Constellation (IAU abbreviation, full name via i18n if available)
+		if (m.contains("iauConstellation"))
+		{
+			QString abbrev = m["iauConstellation"].toString();
+			result["constellation"] = abbrev;
+		}
+
+		// Distance (in AU for solar system, else light-years or parsecs if available)
+		if (m.contains("distance"))
+		{
+			double distAu = m["distance"].toDouble();
+			if (distAu > 0)
+			{
+				if (distAu < 1000.)
+					result["distance"] = QString::number(distAu, 'f', 4) + " AU";
+				else
+					result["distance"] = QString::number(distAu / 63241.077, 'f', 2) + " ly";
+			}
+		}
+
+		// Plain-text summary info
 		const QString info = object->getInfoString(core, StelObject::ShortInfo |
 			StelObject::Magnitude | StelObject::AltAzi | StelObject::Distance |
 			StelObject::Size | StelObject::PlainText).simplified();

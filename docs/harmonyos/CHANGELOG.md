@@ -5,6 +5,29 @@
 ---
 
 
+
+## [2026-07-21] TRAE - 天体详情面板结构化展示（亮度/高度角/方位角/距离/星座/赤经/赤纬）
+
+- **修改文件：** `src/StelMainView.cpp`, `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`, `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  - C++ 侧重写 `selectedObjectJson()`，从 `object->getInfoMap(core)` 提取并标准化字段：
+    - `vmag` → `magnitude` (视星等, number)
+    - `altitude` / `azimuth` → 保持不变 (视高度角/方位角, 度数, number)
+    - `ra` → 格式化为 HMS 字符串 (如 "12h 30m 15s")
+    - `dec` → 格式化为 DMS 字符串 (如 "+45° 30' 20\"")
+    - `iauConstellation` → `constellation` (IAU 星座缩写)
+    - `distance` → 格式化为 AU 或 ly 字符串
+  - 保留原有的 `info` 纯文本字段作为补充
+  - ArkTS 侧新增 7 个 @State 变量 + 7 行 infoRow 结构化展示
+  - `StellariumBridgeResponse` 接口新增 magnitude/azimuth/distance/constellation/ra/dec 字段
+  - Qt OHOS 交叉编译重新编译 libstellarium.so
+  - harmonydeployqt 重新部署 entry/libs/ (33 个 .so)
+- **修改原因：** 之前详情面板只有纯文本 info 字段，用户无法快速查看关键天体参数
+- **构建结果：** BUILD SUCCESSFUL（CMake + hvigor 均通过）
+- **验证结果：** 模拟器未启动，待验证
+- **备注：** 字段全部为可选，未选中天体或该天体无此字段时显示 '--'
+
+---
 ## [2026-07-21] TRAE - 重新编译 libstellarium.so + C++ 头文件修复
 
 - **修改文件：** `src/StelMainView.cpp`
