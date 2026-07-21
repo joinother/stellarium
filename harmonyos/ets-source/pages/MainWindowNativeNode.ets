@@ -404,6 +404,8 @@ struct WindowNativeNode {
       if (r.ok === true && Array.isArray(r.items)) {
         this.skyCultures = r.items as string[]
         this.currentSkyCulture = r.current as string
+        // Qt 初始化成功，自动关闭启动画面
+        if (this.isLoading) { this.isLoading = false }
       }
     })
     // 加载保存的设置
