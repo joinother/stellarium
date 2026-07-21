@@ -88,6 +88,7 @@ interface StellariumBridgeResponse {
   count?: number
   prefix?: string
   moduleId?: string
+  current?: string
 }
 
 @Entry
@@ -139,6 +140,8 @@ struct WindowNativeNode {
   @State private panelMaxHeight: number = 660
   @State private observingList: string[] = []
   @State private stars: boolean = true
+  @State private skyCultures: string[] = []
+  @State private currentSkyCulture: string = ""
   @State private planets: boolean = true
   @State private planetOrbits: boolean = false
   @State private planetHints: boolean = false
@@ -215,6 +218,11 @@ struct WindowNativeNode {
       } catch (e) {
         this.observingList = []
       }
+    }
+    const cultureResult = this.callNative("getSkyCultures", "")
+    if (cultureResult.ok === true && Array.isArray(cultureResult.items)) {
+      this.skyCultures = cultureResult.items as string[]
+      this.currentSkyCulture = cultureResult.current as string
     }
   }
 
@@ -356,6 +364,14 @@ struct WindowNativeNode {
   private stopTracking(): void {
     const result = this.callNative('setTracking', '0')
     if (result.ok === true) { this.trackingText = '关闭' }
+  }
+
+  private setSkyCulture(name: string): void {
+    const result = this.callNative("setSkyCulture", name)
+    if (result.ok === true) {
+      this.currentSkyCulture = name
+      this.flashHint("星图文化: " + name)
+    }
   }
 
   private setTimeRate(rate: number): void {
@@ -1912,6 +1928,26 @@ struct WindowNativeNode {
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 })
       Text("左栏按钮: 搜/时/位/层/详/设  底栏: 方向/视场/模式切换")
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 }).margin({ top: 2 })
+      // 星图文化选择
+      if (this.skyCultures.length > 0) {
+        Row() {
+          Text("星图文化").fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text(this.currentSkyCulture).fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
+        Scroll() {
+          Row({ space: 6 }) {
+            ForEach(this.skyCultures, (culture: string) => {
+              Text(culture)
+                .fontSize(11).fontColor(this.currentSkyCulture === culture ? "#FFFFFFFF" : "#99FFFFFF")
+                .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+                .backgroundColor(this.currentSkyCulture === culture ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+                .borderRadius(8)
+                .onClick(() => this.setSkyCulture(culture))
+            }, (culture: string) => culture)
+          }.padding({ left: 4, right: 4 })
+        }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+      }
     }
   }
 

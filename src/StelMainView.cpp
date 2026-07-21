@@ -39,6 +39,7 @@
 #include "StelObjectMgr.hpp"
 #include "StelObserver.hpp"
 #include "StelLocaleMgr.hpp"
+#include "StelSkyCultureMgr.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -620,6 +621,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		for (const auto& pair : list) { items.append(pair.first); }
 		result["ok"] = true; result["items"] = items;
 		result["count"] = items.size(); result["moduleId"] = moduleId;
+		return result;
+	}
+
+	if (commandName == "getSkyCultures")
+	{
+		StelSkyCultureMgr* skyCultureMgr = GETSTELMODULE(StelSkyCultureMgr);
+		if (!skyCultureMgr) { result["error"] = "sky culture manager not found"; return result; }
+		QJsonArray items;
+		for (const QString& name : skyCultureMgr->getSkyCultureListI18()) { items.append(name); }
+		result["ok"] = true; result["items"] = items;
+		result["current"] = skyCultureMgr->getCurrentSkyCultureNameI18();
+		return result;
+	}
+
+	if (commandName == "setSkyCulture")
+	{
+		StelSkyCultureMgr* skyCultureMgr = GETSTELMODULE(StelSkyCultureMgr);
+		if (!skyCultureMgr) { result["error"] = "sky culture manager not found"; return result; }
+		bool ok = skyCultureMgr->setCurrentSkyCultureNameI18(arg.trimmed());
+		result["ok"] = ok;
+		result["culture"] = arg.trimmed();
 		return result;
 	}
 
