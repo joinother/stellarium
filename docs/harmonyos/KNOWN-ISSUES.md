@@ -110,7 +110,17 @@
 
 ## P2 - 中优先级
 
-### 4. UI 风格改进（持续进行）
+### 4. 翻译文件加载失败（星名不随语言切换变化）
+
+**现象：** 切换到繁中/法文/德文等语言后，星图上的行星/恒星名称仍显示简体中文。
+
+**根因：** `StelFileMgr::init()` 搜索路径中没有 `__OHOS__` 分支。C++ 运行时无法找到 rawfile 目录中的 .qm 翻译文件。`installDir` 依赖 `INSTALL_DATADIR="."` 编译时定义，在模拟器上碰巧找到 data/ 但找不到 translations/ 子目录。
+
+**修复方案：** 在 `src/core/StelFileMgr.cpp` 的 `init()` 中添加 `__OHOS__` 搜索路径分支，指向 HarmonyOS rawfile 资源路径。修改后需重新编译 .so。
+
+**涉及文件：** `src/core/StelFileMgr.cpp`
+
+### 5. UI 风格改进（持续进行）
 
 - **状态：** 部分完成
 - **已完成：** 品牌色优化、Unicode 图标、响应式面板、结构化详情

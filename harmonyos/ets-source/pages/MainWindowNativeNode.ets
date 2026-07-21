@@ -1760,11 +1760,20 @@ struct WindowNativeNode {
         Stack() { this.iconButton(item) }
           .width(44)
           .height(44)
-          .position({ x: 7, y: idx * 104 })
+          .position({ x: 7, y: idx * 58 })
           .onClick(() => {
             this.setPanel(item.panel)
             this.flashHint($r('app.string.i0078', item.label + '面板'))
           })
+        // 分隔线（最后一个按钮不加）
+        if (idx < this.actions.length - 1) {
+          Row()
+            .width(22)
+            .height(0.5)
+            .backgroundColor('rgba(255,255,255,0.08)')
+            .position({ x: 18, y: idx * 58 + 50 })
+            .hitTestBehavior(HitTestMode.None)
+        }
     }, (item: ShellAction) => item.panel)
   }
     .width(58)
@@ -1953,70 +1962,79 @@ struct WindowNativeNode {
   smallRoundButton(label: ResourceStr, action: () => void) {
     Row() {
       Text(label)
-        .fontSize(18)
-        .fontWeight(FontWeight.Medium)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
         .fontColor('#99FFFFFF')
     }
-      .width(36)
-      .height(36)
+      .width(32)
+      .height(32)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
       .backgroundColor('rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: 'rgba(255, 255, 255, 0.06)' })
-      .borderRadius(18)
+      .borderRadius(16)
       .onClick(action)
   }
 
   @Builder
   panelContent() {
     if (this.activePanel === 'object') {
-      // 名称/类型/状态/追踪需要直接绑定 @State，避免 @Builder 参数按值捕获导致不刷新
+      if (this.selectedName.length === 0) {
+        Column() {
+          Text('点击天空中的天体').fontSize(14).fontColor('#66FFFFFF').margin({ top: 20 })
+          Text('或使用搜索功能查找').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+        }.width('100%').height(100).justifyContent(FlexAlign.Center)
+      } else {
+      // 天体名称突出显示
       Row() {
-        Text($r('app.string.i0003')).fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.zhNameOf(this.selectedName)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        Text(this.zhNameOf(this.selectedName))
+          .fontSize(20).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF').layoutWeight(1)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.width('100%').padding({ left: 4, right: 4, top: 2, bottom: 4 }).margin({ bottom: 2 })
+      // 类型标签
       Row() {
-        Text($r('app.string.i0004')).fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.zhType(this.selectedType)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
-      Row() {
-        Text($r('app.string.i0005')).fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.selectedStatus).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
-      Row() {
-        Text($r('app.string.i0006')).fontSize(12).fontColor('#66FFFFFF').width(72)
-        Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        Text(this.zhType(this.selectedType))
+          .fontSize(11).fontColor('#5B93BF')
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .backgroundColor('rgba(91, 147, 191, 0.15)').borderRadius(6)
+        Blank()
+        Text(this.selectedStatus)
+          .fontSize(11).fontColor('#66FFFFFF')
+        if (this.trackingText.length > 0) {
+          Text(this.trackingText)
+            .fontSize(11).fontColor('#66BBFFAA')
+        }
+      }.width('100%').padding({ left: 4, right: 4 }).height(20).margin({ bottom: 8 })
+
       // 直接绑定 @State（不要经 infoRow 的 @Builder 参数，参数按值捕获会导致不刷新，详见上方注释）
       if (this.selectedMagnitude.length > 0) {
         Row() {
           Text($r('app.string.i0007')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedMagnitude).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedCoordEq.length > 0) {
         Row() {
           Text($r('app.string.i0008')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedCoordEq).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedCoordAlt.length > 0) {
         Row() {
           Text($r('app.string.i0009')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedCoordAlt).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedConstellation.length > 0) {
         Row() {
           Text($r('app.string.i0010')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.zhNameOf(this.selectedConstellation)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedDistance.length > 0) {
         Row() {
           Text($r('app.string.i0011')).fontSize(12).fontColor('#66FFFFFF').width(72)
           Text(this.selectedDistance).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+        }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedInfo.length > 0) {
         Text(this.selectedInfo)
@@ -2051,6 +2069,7 @@ struct WindowNativeNode {
       .width("100%").margin({ top: 4, bottom: 4 })
 	      this.quickChips(['刷新', '居中', '取消追踪'])
 	      this.lx200ObjectControls()
+      } // end object selectedName else
     } else if (this.activePanel === 'time') {
       this.infoRow($r('app.string.i0054'), this.observationTimeText)
       this.infoRow($r('app.string.i0055'), this.timeRateText)
@@ -2117,15 +2136,15 @@ struct WindowNativeNode {
       Row() {
         Text($r('app.string.i0014')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.locationText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
         Text($r('app.string.i0015')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.coordinateText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
         Text($r('app.string.i0016')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }.height(28).width('100%').padding({ left: 10, right: 10 })
       this.locationPickerPanel()
       this.quickChips(['北京', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
@@ -2290,20 +2309,28 @@ struct WindowNativeNode {
         }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
       }
       this.infoRow($r('app.string.i0062'), '单 HAP')
-      // 方向快捷查看
+      // 分区：方向
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor('rgba(255,255,255,0.06)')
+        .margin({ top: 8, bottom: 4 })
       Row() {
-        Text($r('app.string.i0023')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text('方向控制').fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
       }
-      .height(6).width('100%').margin({ top: 2 })
+      .height(18).width('100%')
       Row() {
         this.quickChips(['东', '南', '西', '北', $r('app.string.i0088'), $r('app.string.i0089')])
       }
       .width('100%')
-      // FOV 快捷切换
+      // 分区：视场
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor('rgba(255,255,255,0.06)')
+        .margin({ top: 8, bottom: 4 })
       Row() {
-        Text($r('app.string.i0024')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text('视场角').fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
       }
-      .height(6).width('100%').margin({ top: 2 })
+      .height(18).width('100%')
       Row() {
         this.quickChips(['1°', '2°', '5°', '10°', '20°', '45°', '60°', '90°', '180°'])
       }
