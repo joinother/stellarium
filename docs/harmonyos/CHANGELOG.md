@@ -4,6 +4,30 @@
 
 ---
 
+## [2026-07-22] TRAE - 启动画面自动消失 + 缩小按钮渲染修复 + 图层面板补全 + 项目记忆更新
+
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（启动画面自动 dismiss + 图层面板 21 开关 5 分组 + 移除硬编码触摸坐标）
+  - `build/.../resources/{base,zh_CN,en_US}/element/string.json`（i0045 负号 Unicode 修复）
+  - `docs/harmonyos/AGENTS.md`（新增 Git Commit 规范章节）
+- **修改内容：**
+  1. **启动画面自动消失：** `isLoading` 原设计为"点击任意处进入星图"，但 hdc shell 无法模拟触摸，导致命令行无法跳过启动画面。在 `startupBridgeSync` 的 `getSkyCultures` 成功回调中增加 `if (this.isLoading) { this.isLoading = false }`，Qt 初始化完成后自动关闭启动画面。
+  2. **缩小按钮渲染修复：** `string.json` 中 `i0045` 值为字面文本 `\u2212`（JSON 解析后变成原始文本），在 56x56vp 按钮中折行显示为 `\u2` 和 `212`。改为实际 Unicode 字符 U+2212（减号）。
+  3. **图层面板从 12 开关扩展为 21 开关：** 新增 9 个缺失的图层开关（星座标签/边界/艺术图、大气、方位基点、4 种坐标网格），分 5 组展示（基础天体/星座/坐标网格/地面与大气/标记与轨道），每组有分组标题。
+  4. **移除图层面板硬编码触摸坐标：** 原 `handleUiTap` 中用 `y-332/48` 计算行号，新增分组标题后完全失效。移除该段代码，改为依赖 Toggle.onChange 回调（已验证可靠）。
+  5. **AGENTS.md 新增 Git Commit 规范：** 要求 `type(scope): 中文描述` + 署名行，禁止 Unicode 转义。
+- **修改原因：** 启动画面阻塞命令行自动化测试；缩小按钮显示乱码；图层面板功能不完整。
+- **构建结果：** `assembleHap` BUILD SUCCESSFUL，DevEco 自动签名通过。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 启动画面自动消失，星空渲染正常
+  - 工具栏 6 个 Unicode 图标正确显示
+  - 缩小按钮显示正确减号（不再有乱码）
+  - 详情面板结构化信息完整，中文显示正确
+  - 触摸事件正确路由（sky touch down/drag）
+  - 无 SIGABRT，无崩溃
+
+---
+
 ## [2026-07-22] Codex - 当前 HEAD 安全止血：移除签名材料跟踪并遮蔽 DevEco 签名字段
 
 - **修改文件：** `docs/harmonyos/signing/`（从 git 索引移除，保留本机文件）, `harmonyos/build-profile.json5`, `docs/harmonyos/CHANGELOG.md`
