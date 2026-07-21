@@ -281,6 +281,8 @@ struct WindowNativeNode {
   @State private bridgeSyncStarted: boolean = false
   @State private equatorialMount: boolean = false
   @State private nightMode: boolean = false
+  @State private flipVert: boolean = false
+  @State private flipHoriz: boolean = false
   @State private pickedDate: Date = new Date()
   @State private pickedTime: Date = new Date()
   @State private observationTimeText: string = '--'
@@ -371,12 +373,12 @@ struct WindowNativeNode {
   private panelDragStartOffsetY: number = 0
 
   private readonly actions: ShellAction[] = [
-    { label: $r('app.string.i0099'), icon: '⌕', panel: 'search' },
-    { label: $r('app.string.i0054'), icon: '◴', panel: 'time' },
-    { label: $r('app.string.i0014'), icon: '◎', panel: 'place' },
-    { label: $r('app.string.i0100'), icon: '▦', panel: 'layers' },
-    { label: $r('app.string.i0101'), icon: 'ⓘ', panel: 'object' },
-    { label: $r('app.string.i0102'), icon: '⚙', panel: 'settings' }
+    { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
+    { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
+    { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
+    { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
+    { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
+    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' }
   ]
 
   aboutToAppear(): void {
@@ -1651,14 +1653,14 @@ struct WindowNativeNode {
         .hitTestBehavior(HitTestMode.None)
       Stack() { this.verticalRail() }
         .position({ x: 0, y: this.railTop() })
-      Stack() { this.zoomButton($r('app.string.i0044')) }
+      Stack() { this.zoomButton('zoom_in') }
         .position({ x: 92, y: this.skyHeight - 220 })
         .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
           this.zoomStep(0.5)
           this.flashHint($r('app.string.i0076'))
         })
-      Stack() { this.zoomButton($r('app.string.i0045')) }
+      Stack() { this.zoomButton('zoom_out') }
         .position({ x: 92, y: this.skyHeight - 150 })
         .onClick(() => {
           this.zoomStep(2.0)
@@ -1735,12 +1737,11 @@ struct WindowNativeNode {
   }
 
   @Builder
-  zoomButton(label: ResourceStr) {
+  zoomButton(icon: string) {
     Stack() {
-      Text(label)
-        .fontSize(30)
-        .fontWeight(FontWeight.Medium)
-        .fontColor('#E5FFFFFF')
+      Image(this.getIcon(icon, false))
+        .width(28).height(28)
+        .fillColor('#E5FFFFFF')
     }
       .width(56)
       .height(56)
@@ -1794,16 +1795,25 @@ struct WindowNativeNode {
       .alignSelf(ItemAlign.Center)
   }
 
+  private getIcon(icon: string, isActive: boolean): Resource {
+    const map: Record<string, Resource> = {
+      'search': $r('app.media.ic_search'),
+      'clock': $r('app.media.ic_clock'),
+      'location': $r('app.media.ic_location'),
+      'layers': $r('app.media.ic_layers'),
+      'info': $r('app.media.ic_info'),
+      'settings': $r('app.media.ic_settings'),
+      'zoom_in': $r('app.media.ic_zoom_in'),
+      'zoom_out': $r('app.media.ic_zoom_out'),
+    }
+    return map[icon] || $r('app.media.ic_search')
+  }
   @Builder
   iconButton(item: ShellAction) {
     Column() {
-      Text(item.icon)
-        .fontSize(15)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
-        .lineHeight(44)
-        .textAlign(TextAlign.Center)
-        .width('100%')
+      Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+        .width(22).height(22)
+        .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
     }
       .width(44)
       .height(44)
@@ -2330,6 +2340,27 @@ struct WindowNativeNode {
           })
       }
       .width('100%').margin({ top: 4, bottom: 4 })
+      // 星空翻转
+      Row() {
+        Text('星空翻转').fontSize(12).fontColor('#66FFFFFF').width(72)
+        Button(this.flipVert ? '⇅ 南天在上' : '⇅ 北天在上')
+          .fontSize(12).fontColor('#E5FFFFFF').backgroundColor(this.flipVert ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
+          .borderRadius(12).height(32).layoutWeight(1)
+          .onClick(() => {
+            this.flipVert = !this.flipVert
+            this.triggerAction('actionVertical_Flip')
+            this.flashHint(this.flipVert ? '南天在上' : '北天在上')
+          })
+        Button(this.flipHoriz ? '⇄ 镜像' : '⇄ 正常')
+          .fontSize(12).fontColor('#E5FFFFFF').backgroundColor(this.flipHoriz ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
+          .borderRadius(12).height(32).layoutWeight(1).margin({ left: 6 })
+          .onClick(() => {
+            this.flipHoriz = !this.flipHoriz
+            this.triggerAction('actionHorizontal_Flip')
+            this.flashHint(this.flipHoriz ? '已镜像' : '正常')
+          })
+      }
+      .width('100%').padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 4 })
       this.quickChips(['刷新', '现在'])
       // 帮助说明
       Row() {
