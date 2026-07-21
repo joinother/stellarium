@@ -7,8 +7,8 @@
 #   - Qt 6.12.0 Beta2, target harmonyos_arm64_v8a
 #   - 需 DevEco Studio 6.1.0 + SDK API 23
 #   - 渲染走 OpenGL ES 3.2（Qt 6.12 自动检测 Desktop OpenGL 或 OpenGL ES）
-#   - Qt for HarmonyOS 不支持 WebEngine/Positioning/SerialPort/VirtualKeyboard/
-#     TextToSpeech/旧 Qt OpenGL 模块，但支持 Qt Quick/QML、Qt Gui OpenGL、Qt Sensors
+#   - Qt 6.12.0 for HarmonyOS 不支持 WebEngine/Positioning/SerialPort/
+#     VirtualKeyboard/TextToSpeech（已确认：Qt Installer 无对应包，lib/ 无 .so）
 #
 # 约定：Qt for HarmonyOS 上可执行需按 QPA/启动约定产出 SHARED 库（.so），
 #       再由 harmonydeployqt 包装成鸿蒙应用包。因此本工程产出 .so 并导出 main。
