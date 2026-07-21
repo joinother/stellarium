@@ -46,6 +46,8 @@
 
 ### 4. 面板尺寸硬编码，横竖屏切换可能错位
 
+- **状态：** 已修复（改为响应式：panelWidth = min(max(skyWidth * 0.28, 280), 400)，panelMaxHeight = min(skyHeight * 0.78, 700)）
+
 - **状态：** 待改进
 - **现象：** expanded panel 宽 336vp、maxHeight 430vp 等硬编码值，旋转后可能溢出
 - **修复方向：** 改为响应式尺寸（基于 skyWidth/skyHeight 的百分比）
