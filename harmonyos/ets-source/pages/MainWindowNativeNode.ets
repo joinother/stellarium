@@ -141,6 +141,7 @@ struct WindowNativeNode {
   @State private observingList: string[] = []
   @State private stars: boolean = true
   @State private skyCultures: string[] = []
+  @State private isLoading: boolean = true
   @State private currentSkyCulture: string = ""
   @State private planets: boolean = true
   @State private planetOrbits: boolean = false
@@ -1254,6 +1255,28 @@ struct WindowNativeNode {
       }
 
         this.expandedShell()
+
+      // 启动画面
+      if (this.isLoading) {
+        Column() {
+          Text("Stellarium")
+            .fontSize(32).fontWeight(FontWeight.Bold).fontColor("#E5FFFFFF")
+            .margin({ bottom: 12 })
+          Text("点击任意处进入星图")
+            .fontSize(14).fontColor("#99FFFFFF")
+            .margin({ bottom: 24 })
+          LoadingProgress()
+            .width(36).height(36)
+            .color("#5B93BF")
+        }
+        .width("100%").height("100%")
+        .backgroundColor("#000000")
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .zIndex(100)
+        .onClick(() => { this.isLoading = false })
+        .animation({ duration: 400, curve: Curve.EaseOut })
+      }
     }
       .width('100%')
       .height('100%')
