@@ -6,6 +6,26 @@
 
 
 
+## [2026-07-21] WorkBuddy - 修复全屏 UI 父 onTouch 抑制子组件 onClick（工具栏/搜索框/面板按钮全失效）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（根 `build()` 插入平级兄弟画布触摸层；`expandedShell` 父容器移除 `onTouch`；`iconButton`/`dockButton` 回退默认命中模式）+ 同步 `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. 把 `onTouch(handleSkyTouch)` 从全屏 UI 父容器 `expandedShell` **下移**到 `build()` 根 `Stack` 下的一个**平级兄弟 `Stack`**（`.width('100%').height('100%').hitTestBehavior(Transparent).onTouch(handleSkyTouch)`），与已验证的 `compactShell`（onTouch 挂在独立 `Blank` 而非全屏 UI 父）一致。
+  2. 全屏父 `expandedShell` 仅保留 `Transparent`、**不再挂 onTouch** → 子孙（toolbar/面板按钮）的 `onClick` 恢复；空白区域仍穿透到下方兄弟画布触摸层。
+  3. 曾给 `iconButton`/`dockButton` 容器加 `HitTestMode.Block` 双保险，但 `Block` 使容器自身不响应命中、反令自身 `onClick` 永不触发 → 已**回退**为默认模式（兄弟画布层已正确承接天空触摸）。
+- **修改原因（真实根因）：** `expandedShell` 全屏父 `Stack` 挂 `onTouch(handleSkyTouch)` + `Transparent` 会**拦截所有子孙 `onClick`**：点工具栏/搜索框/面板按钮时事件被父容器当作画布触摸吞掉（日志实证：点 ⌕ 触发 `sky touch down` → `selectAt` 选中 63 Sgr，而 `setPanel` 从未出现）。这是与 P0 #0.6 缓存 bug **相互独立**的第二层根因——#0.6 只修了"结果新鲜度"，没修"点击根本不触发"。
+- **构建结果：** `assembleHap` BUILD SUCCESSFUL（~6s，重编译 `.ets`；仅动 ArkUI 层，未重编 C++ / `libstellarium.so`，未跑 `harmonydeployqt`）。
+- **验证结果（2026-07-21，模拟器 127.0.0.1:5555）：**
+  - 启动无 SIGABRT；`expanded=true` / `bridge resolved` / `displayed submitted Stellarium frame` 均出现。
+  - **6 个工具栏按钮全部触发 `setPanel`**：search / time / place / layers / object / settings（日志各出现）。
+  - **搜索框可输入**：`uitest uiInput text Jupiter` → `TextInput text='Jupiter'`，实时弹出候选（Jupiter I/II/III/IV/IX 及行星本体）。
+  - **搜索→选中→结构化刷新**：点候选 `Jupiter` → `searchObject`（50ms 轮询 3 次）+ 右侧面板 名称=木星/类型=行星/星等=-1.79/赤道坐标=8h28m23.4s +19°33'03.2"（无文本 blob）。
+  - **天空点选仍可用（无回归）**：点空天空逻辑 (720,480) → `sky touch down at 720,480` → `selectAt found=1`（选中 木星）。
+  - **详情面板动作按钮可用**：`刷新` → `getSelectedObjectInfo`（轮询 3 次）；`居中`/`追踪`/`加入观测列表` 均有真实 `onClick`。
+- **备注：** 与 P0 #0.6 同源（均为"交互不可点"反馈）但根因不同：#0.6 是 C++ 缓存永久命中拿不到新结果；本条目是 ArkUI 命中测试层级错误致 `onClick` 根本不触发。两者叠加才是用户看到的"按钮全死 + 输不进字 + 点不到星"。本修复只动 `.ets`。
+
+---
+
 ## [2026-07-21] WorkBuddy - 修复交互命令 stale-cache 回归（单次点击选中 + 搜索框 + 结构化详情）
 
 - **修改文件：**

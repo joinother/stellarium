@@ -1274,7 +1274,19 @@ struct WindowNativeNode {
           .animation({ duration: 180, curve: Curve.EaseOut })
       }
 
-        this.expandedShell()
+        // 画布触摸层：与 toolbar/panel 平级（都是 1234 根 Stack 的子），
+      // 承接 selectAt/onTouch。关键：不能挂在 1352 全屏 UI 父上，
+      // 否则会抑制其子组件（toolbar/面板按钮）的 onClick。
+      // 参考已验证的 compactShell：onTouch 挂在独立 Blank 上而非全屏 UI 父。
+      Stack() { }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+        .onTouch((event: TouchEvent) => {
+          this.handleSkyTouch(event)
+        })
+
+      this.expandedShell()
 
       // 启动画面
       if (this.isLoading) {
@@ -1377,10 +1389,7 @@ struct WindowNativeNode {
       .height('100%')
       .zIndex(1)
       .hitTestBehavior(HitTestMode.Transparent)
-      .onTouch((event: TouchEvent) => {
-        this.handleSkyTouch(event)
-      })
-  }
+    }
 
   @Builder
   compactShell() {
