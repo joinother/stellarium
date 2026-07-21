@@ -187,6 +187,12 @@ struct WindowNativeNode {
   @State private actionHint: string = ''
 
   private hintTimer: number = 0
+  // 目标详情自动刷新：选中天体后每秒重新拉一次坐标，让“地平坐标”随地球自转实时变化。
+  // detailTimer 为 setInterval 句柄；detailRefreshing 防重入；detailRefreshGuard 是兜底定时器，
+  // 因为 callNativeWhenReady 在放弃轮询时【不】回调 onOk，必须靠它复位，否则会卡死不再刷新。
+  private detailTimer: number = 0
+  private detailRefreshing: boolean = false
+  private detailRefreshGuard: number = 0
   private touchStartX: number = 0
   private touchStartY: number = 0
   private touchLastX: number = 0
@@ -275,6 +281,7 @@ struct WindowNativeNode {
       selectedLanguage: this.selectedLanguage
     }))
     this.stopGyroscope(false)
+    this.stopDetailAutoRefresh()
   }
 
   private setPanel(panel: string): void {
@@ -655,12 +662,49 @@ struct WindowNativeNode {
     })
   }
 
+  // 拉取当前选中天体的信息并刷新详情面板。
+  // 加防重入：避免自动刷新(1Hz)与手动“刷新”按钮重叠，导致 consume-on-read 结果被互相冲掉。
+  // callNativeWhenReady 放弃轮询时不会回调，所以配 detailRefreshGuard 兜底复位，防止永久卡死。
   private refreshSelectedObject(): void {
-    this.callInteractive('getSelectedObjectInfo', '', (r) => this.applySelectedObject(r))
+    if (this.detailRefreshing) { return }
+    this.detailRefreshing = true
+    if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard) }
+    this.detailRefreshGuard = setTimeout(() => { this.detailRefreshing = false }, 2500) as number
+    this.callInteractive('getSelectedObjectInfo', '', (r) => {
+      this.detailRefreshing = false
+      if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
+      this.applySelectedObject(r)
+    })
+  }
+
+  // 启动“详情自动刷新”：仅在【目标详情面板打开 + 有已选中天体】时才拉数据，避免无谓的桥调用。
+  private startDetailAutoRefresh(): void {
+    if (this.detailTimer !== 0) { return }
+    this.detailTimer = setInterval(() => {
+      if (this.activePanel === 'object' && this.panelVisible && this.selectedStatus === '已选中') {
+        this.refreshSelectedObject()
+      }
+    }, 1000) as number
+  }
+
+  private stopDetailAutoRefresh(): void {
+    if (this.detailTimer !== 0) { clearInterval(this.detailTimer); this.detailTimer = 0 }
+    if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
+    this.detailRefreshing = false
   }
 
   private moveToSelectedObject(): void {
     this.callInteractive('moveToSelected', '', (r) => this.applySelectedObject(r))
+  }
+
+  // 把角度格式化为「度°分'」，提高地平坐标的可见变化粒度
+  // （地球自转约 15′/分钟，用分作单位几秒即可看出目标在动）
+  private fmtDegMin(deg: number): string {
+    let d = Math.floor(deg)
+    let m = Math.round((deg - d) * 60)
+    if (m >= 60) { m -= 60; d += 1 }
+    if (m < 0) { m += 60; d -= 1 }
+    return d + '°' + (m < 10 ? '0' + m : m.toString()) + '\''
   }
 
   private applySelectedObject(result: StellariumBridgeResponse): void {
@@ -679,11 +723,12 @@ struct WindowNativeNode {
       const hasAlt: boolean = typeof result.altitude === 'number'
       const hasAz: boolean = typeof result.azimuth === 'number'
       this.selectedCoordAlt = (hasAlt || hasAz)
-        ? ('高度 ' + (hasAlt ? (result.altitude as number).toFixed(1) : '--') + '°   方位 ' + (hasAz ? (result.azimuth as number).toFixed(1) : '--') + '°')
+        ? ('高度 ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '   方位 ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
       this.selectedInfo = ''
+      this.startDetailAutoRefresh()
     } else {
       this.selectedName = '未找到'
       this.selectedType = result.query && result.query.length > 0 ? result.query : '无选中对象'
@@ -1693,11 +1738,37 @@ struct WindowNativeNode {
         Text('追踪').fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
-      if (this.selectedMagnitude.length > 0) { this.infoRow('星等', this.selectedMagnitude) }
-      if (this.selectedCoordEq.length > 0) { this.infoRow('赤道坐标', this.selectedCoordEq) }
-      if (this.selectedCoordAlt.length > 0) { this.infoRow('地平坐标', this.selectedCoordAlt) }
-      if (this.selectedConstellation.length > 0) { this.infoRow('星座', this.selectedConstellation) }
-      if (this.selectedDistance.length > 0) { this.infoRow('距离', this.selectedDistance) }
+      // 直接绑定 @State（不要经 infoRow 的 @Builder 参数，参数按值捕获会导致不刷新，详见上方注释）
+      if (this.selectedMagnitude.length > 0) {
+        Row() {
+          Text('星等').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.selectedMagnitude).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }
+      if (this.selectedCoordEq.length > 0) {
+        Row() {
+          Text('赤道坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.selectedCoordEq).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }
+      if (this.selectedCoordAlt.length > 0) {
+        Row() {
+          Text('地平坐标').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.selectedCoordAlt).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }
+      if (this.selectedConstellation.length > 0) {
+        Row() {
+          Text('星座').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.selectedConstellation).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }
+      if (this.selectedDistance.length > 0) {
+        Row() {
+          Text('距离').fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text(this.selectedDistance).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
+      }
       if (this.selectedInfo.length > 0) {
         Text(this.selectedInfo)
           .fontSize(12)

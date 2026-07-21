@@ -6,6 +6,19 @@
 
 
 
+## [2026-07-21] WorkBuddy - 选中天体后"目标详情"坐标实时刷新（地层快照 + @Builder 参数按值捕获双重冻结）
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（新增自动刷新定时器 + `fmtDegMin` 弧长分 + 5 个坐标行改直接绑定 @State）+ 同步 `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **数据层（之前是快照）：** 选中成功（`applySelectedObject` found）时调 `startDetailAutoRefresh()` 启动 `setInterval(1s)`；仅当【目标详情面板打开 + 有已选中天体】才拉 `getSelectedObjectInfo`，把结果写回 `selectedCoordAlt` 等 @State。配 `detailRefreshing` 防重入 + `detailRefreshGuard`（`setTimeout` 2.5s 兜底复位，因为 `callNativeWhenReady` 放弃轮询时【不】回调 onOk，不兜底会卡死不再刷新）。
+  2. **显示层（真正"看着不动"的根因）：** 5 个坐标行（星等/赤道坐标/地平坐标/星座/距离）原本经 `this.infoRow(label, this.selectedCoordAlt)` 传参，`infoRow` 是 `@Builder`，**参数按值捕获** → `@State` 变了传进去的值不跟新，整行冻在首次渲染。改为与名称/类型/状态/追踪同款**直接绑定** `Text(this.selectedCoordAlt)`。
+  3. **精度：** `selectedCoordAlt` 改为 `fmtDegMin` 以「度°分'」显示（地球自转约 15′/分钟），原 `toFixed(1)` 的 0.1° 精度要 24 秒才够变 1 格，扫一眼像冻结。
+- **修改原因（真实根因）：** 用户反馈"选中后目标详情都不变"。两层叠加：①面板是选中瞬间的快照，之后不重读（P0 #0.7 已修点击，但没修刷新）；②即使加了刷新，`infoRow` 的 `@Builder` 参数按值捕获使显示不跟 @State 走——日志实证 `selectedCoordAlt` 每秒都在变（方位 320°55'→56'），但屏幕/布局抓取永远是首值。恒星的赤道坐标（赤经/赤纬）按定义不随地球自转变，本就"不动"，属正常。
+- **构建结果：** `assembleHap` BUILD SUCCESSFUL（~6s，仅重编译 `.ets`；未动 C++ / `libstellarium.so`）。
+- **验证结果（模拟器 127.0.0.1:5555）：** 选木星后布局抓取 地平坐标 T1=`高度 -25°17' 方位 321°40'`、T2（12s 后）=`高度 -25°15' 方位 321°42'`，方位/高度均肉眼可见地变化；`getSelectedObjectInfo` 每秒触发一次；启动无 SIGABRT。
+
+---
+
 ## [2026-07-21] WorkBuddy - 修复全屏 UI 父 onTouch 抑制子组件 onClick（工具栏/搜索框/面板按钮全失效）
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（根 `build()` 插入平级兄弟画布触摸层；`expandedShell` 父容器移除 `onTouch`；`iconButton`/`dockButton` 回退默认命中模式）+ 同步 `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
