@@ -57,13 +57,9 @@ interface StellariumBridgeResponse {
   latitude?: number
   longitude?: number
   altitude?: number
-  magnitude?: number
-  azimuth?: number
-  distance?: string
-  constellation?: string
+  target?: string
   ra?: string
   dec?: string
-  target?: string
   replies?: string
   sent?: string
   mode?: string
@@ -110,13 +106,6 @@ struct WindowNativeNode {
   @State private selectedType: string = '轻点天体或搜索'
   @State private selectedStatus: string = '等待选择'
   @State private selectedInfo: string = '轻点星图中的天体，或在搜索里输入名称。'
-  @State private selectedMagnitude: string = '--'
-  @State private selectedAltitude: string = '--'
-  @State private selectedAzimuth: string = '--'
-  @State private selectedDistance: string = '--'
-  @State private selectedConstellation: string = '--'
-  @State private selectedRa: string = '--'
-  @State private selectedDec: string = '--'
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
@@ -210,12 +199,12 @@ struct WindowNativeNode {
   private panelDragStartOffsetY: number = 0
 
   private readonly actions: ShellAction[] = [
-    { label: '搜索', icon: '搜', panel: 'search' },
-    { label: '时间', icon: '时', panel: 'time' },
-    { label: '位置', icon: '位', panel: 'place' },
-    { label: '图层', icon: '层', panel: 'layers' },
-    { label: '详情', icon: '详', panel: 'object' },
-    { label: '设置', icon: '设', panel: 'settings' }
+    { label: '搜索', icon: '⌕', panel: 'search' },
+    { label: '时间', icon: '◴', panel: 'time' },
+    { label: '位置', icon: '◎', panel: 'place' },
+    { label: '图层', icon: '▦', panel: 'layers' },
+    { label: '详情', icon: 'ⓘ', panel: 'object' },
+    { label: '设置', icon: '⚙', panel: 'settings' }
   ]
 
   aboutToAppear(): void {
@@ -624,29 +613,15 @@ struct WindowNativeNode {
       return
     }
     if (result.found === true) {
-      this.selectedName = result.name && (result.name as string).length > 0 ? result.name as string : (result.englishName ? result.englishName as string : '已选择')
-      this.selectedType = result.type && (result.type as string).length > 0 ? result.type as string : '天体'
+      this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '已选择')
+      this.selectedType = result.type && result.type.length > 0 ? result.type : '天体'
       this.selectedStatus = '已选中'
-      this.selectedInfo = result.info && (result.info as string).length > 0 ? result.info as string : '已选中目标，Core 暂未返回更多说明。'
-      this.selectedMagnitude = result.magnitude !== undefined ? (result.magnitude as number).toFixed(2) : '--'
-      this.selectedAltitude = result.altitude !== undefined ? (result.altitude as number).toFixed(1) + '°' : '--'
-      this.selectedAzimuth = result.azimuth !== undefined ? (result.azimuth as number).toFixed(1) + '°' : '--'
-      this.selectedDistance = result.distance !== undefined ? (result.distance as string) : '--'
-      this.selectedConstellation = result.constellation !== undefined ? (result.constellation as string) : '--'
-      this.selectedRa = result.ra !== undefined ? (result.ra as string) : '--'
-      this.selectedDec = result.dec !== undefined ? (result.dec as string) : '--'
+      this.selectedInfo = result.info && result.info.length > 0 ? result.info : '已选中目标，Core 暂未返回更多说明。'
     } else {
       this.selectedName = '未找到'
-      this.selectedType = result.query && (result.query as string).length > 0 ? result.query as string : '无选中对象'
-      this.selectedStatus = result.query && (result.query as string).length > 0 ? '可尝试英文名' : '未命中'
+      this.selectedType = result.query && result.query.length > 0 ? result.query : '无选中对象'
+      this.selectedStatus = result.query && result.query.length > 0 ? '可尝试英文名' : '未命中'
       this.selectedInfo = '当前点击位置没有命中可选天体。可以放大后再点，或用搜索选择目标。'
-      this.selectedMagnitude = '--'
-      this.selectedAltitude = '--'
-      this.selectedAzimuth = '--'
-      this.selectedDistance = '--'
-      this.selectedConstellation = '--'
-      this.selectedRa = '--'
-      this.selectedDec = '--'
     }
   }
 
@@ -1686,13 +1661,6 @@ struct WindowNativeNode {
         Text('追踪').fontSize(12).fontColor('#66FFFFFF').width(72)
         Text(this.trackingText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(34).width('100%').padding({ left: 10, right: 10 }).backgroundColor('rgba(255, 255, 255, 0.04)').borderRadius(12).margin({ bottom: 4 })
-      this.infoRow('亮度', this.selectedMagnitude)
-      this.infoRow('高度角', this.selectedAltitude)
-      this.infoRow('方位角', this.selectedAzimuth)
-      this.infoRow('距离', this.selectedDistance)
-      this.infoRow('星座', this.selectedConstellation)
-      this.infoRow('赤经', this.selectedRa)
-      this.infoRow('赤纬', this.selectedDec)
       Text(this.selectedInfo)
         .fontSize(12)
         .fontColor('#99FFFFFF')
