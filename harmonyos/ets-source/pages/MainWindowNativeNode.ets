@@ -1750,6 +1750,25 @@ struct WindowNativeNode {
         .width('100%')
         .padding({ left: 16, right: 16, top: 16 })
 
+      // 缩放按钮（右上角）
+      Row() {
+        Button('+').fontSize(18).fontColor(this.nmText()).backgroundColor('rgba(25, 26, 28, 0.72)')
+          .backdropBlur(26).width(40).height(40).borderRadius(20)
+          .border({ width: 0.5, color: 'rgba(255,255,255,0.08)' })
+          .shadow({ radius: 16, color: 'rgba(0,0,0,0.30)', offsetY: 4 })
+          .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
+        Button('-').fontSize(18).fontColor(this.nmText()).backgroundColor('rgba(25, 26, 28, 0.72)')
+          .backdropBlur(26).width(40).height(40).borderRadius(20)
+          .border({ width: 0.5, color: 'rgba(255,255,255,0.08)' })
+          .shadow({ radius: 16, color: 'rgba(0,0,0,0.30)', offsetY: 4 })
+          .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .padding({ right: 16 })
+      .margin({ bottom: -20 })
+      .zIndex(2)
+
       Blank()
         .width('100%')
         .layoutWeight(1)
@@ -2224,6 +2243,75 @@ struct WindowNativeNode {
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_December_Solstice') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      // 天文时间单位跳转
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 6, bottom: 4 })
+      Row() {
+        Text('天文时间').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      }
+      .height(18).width('100%')
+      // 恒星时间
+      Row({ space: 4 }) {
+        Button('+恒星日').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Sidereal_Day') })
+        Button('-恒星日').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Sidereal_Day') })
+        Button('+恒星年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Sidereal_Year') })
+        Button('-恒星年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Sidereal_Year') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      // 月周期
+      Row({ space: 4 }) {
+        Button('+朔望月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Synodic_Month') })
+        Button('-朔望月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Synodic_Month') })
+        Button('+沙罗周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Saros') })
+        Button('-沙罗周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Saros') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      // 回归年/儒略年
+      Row({ space: 4 }) {
+        Button('+回归年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Tropical_Year') })
+        Button('-回归年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Tropical_Year') })
+        Button('+儒略年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Julian_Year') })
+        Button('-儒略年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Julian_Year') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+      // 日历月/年
+      Row({ space: 4 }) {
+        Button('+月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Calendar_Month') })
+        Button('-月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Calendar_Month') })
+        Button('+年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionAdd_Calendar_Year') })
+        Button('-年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(14).height(26).padding({ left: 8, right: 8 })
+          .onClick(() => { this.triggerAction('actionSubtract_Calendar_Year') })
+      }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 滚动选择日期
       Row() {
         Text($r('app.string.i0012')).fontSize(13).fontColor(this.nmSub()).width(72)
@@ -2327,8 +2415,8 @@ struct WindowNativeNode {
         .height(44)
         .fontSize(15)
         .fontColor('#E5FFFFFF')
-        .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.12)')
+        .placeholderColor(this.nmSub())
+        .backgroundColor(this.nmInput())
         .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
         .borderRadius(22)
         .onChange((value: string) => {
@@ -2341,7 +2429,7 @@ struct WindowNativeNode {
       // 搜索历史（无输入时显示，可点击复用）
       if (this.searchText.length === 0 && this.searchHistory.length > 0) {
         Row() {
-          Text('搜索历史').fontSize(11).fontColor('#66FFFFFF').margin({ right: 8 })
+          Text('搜索历史').fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
           Text('清除').fontSize(11).fontColor('#4488FF').onClick(() => {
             this.searchHistory = []
             AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
@@ -2350,8 +2438,8 @@ struct WindowNativeNode {
         Scroll() {
           Row() {
             ForEach(this.searchHistory, (item: string) => {
-              Text(item).fontSize(13).fontColor('#CCFFFFFF').padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                .backgroundColor('rgba(255, 255, 255, 0.08)').borderRadius(16).margin({ right: 6, bottom: 6 })
+              Text(item).fontSize(13).fontColor(this.nmText()).padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .backgroundColor(this.nmBg()).borderRadius(16).margin({ right: 6, bottom: 6 })
                 .onClick(() => {
                   this.searchText = item
                   this.searchObject(item)
@@ -2366,9 +2454,9 @@ struct WindowNativeNode {
           Row({ space: 4 }) {
             ForEach(this.searchSuggestions, (s: SearchSug) => {
               Text(s.zh + (s.zh !== s.en ? '  ' + s.en : ''))
-                .fontSize(12).fontColor('#E5FFFFFF')
+                .fontSize(12).fontColor(this.nmText())
                 .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                .backgroundColor('rgba(107,163,214,0.20)')
+                .backgroundColor(this.nmBg())
                 .borderRadius(8)
                 .onClick(() => {
                   this.searchObject(s.en)
@@ -2380,7 +2468,7 @@ struct WindowNativeNode {
       }
       // 天体分类浏览（按分类 tab 切换，点击加载该分类天体列表）
       Row() {
-        Text($r('app.string.i0021')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text(('app.string.i0021')).fontSize(12).fontColor(this.nmSub()).width(72)
         Row({ space: 4 }) {
           ForEach([
             { code: 'planet', label: $r('app.string.i0103') },
@@ -2391,9 +2479,9 @@ struct WindowNativeNode {
             { code: 'messier', label: $r('app.string.i0108') },
           ] as CatOption[], (cat: CatOption) => {
             Text(cat.label)
-              .fontSize(11).fontColor(this.searchCategory === cat.code ? '#FFFFFFFF' : '#99FFFFFF')
+              .fontSize(11).fontColor(this.searchCategory === cat.code ? this.nmText() : this.nmSub())
               .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-              .backgroundColor(this.searchCategory === cat.code ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
+              .backgroundColor(this.searchCategory === cat.code ? this.nmAccent() : this.nmBg())
               .borderRadius(8)
               .onClick(() => this.loadCategoryObjects(cat.code))
           }, (cat: CatOption) => cat.code)
@@ -2410,9 +2498,9 @@ struct WindowNativeNode {
             { name: 'M8', zh: '礁湖星云' } as NameItem, { name: 'NGC 7000', zh: '北美洲星云' } as NameItem, { name: 'Double Cluster', zh: '双星团' } as NameItem,
           ] as NameItem[], (item: NameItem) => {
             Text(item.zh ?? item.name ?? '')
-              .fontSize(11).fontColor('#E5FFFFFF')
+              .fontSize(11).fontColor(this.nmText())
               .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-              .backgroundColor('rgba(107,163,214,0.20)')
+              .backgroundColor(this.nmBg())
               .borderRadius(8)
               .onClick(() => this.searchObject(item.name ?? ''))
           }, (item: NameItem) => item.name)
