@@ -53,6 +53,11 @@ docs/harmonyos/
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
 ├── DEVECO-COLLAB.md           ← DevEco Code 协作指南（外包鸿蒙重活、省 token）
+├── skills/                    ← ArkTS 开发 Skill 参考库（来自 DevEco Code）
+│   ├── arkts-error-fixes/     ← 21 种 ArkTS 编译错误修复方案（66 文件）
+│   ├── arkts-grammar-standards/ ← ArkTS 语法规范、TS→ArkTS 改写（9 文件）
+│   ├── arkts-runtime-fix/     ← 运行时崩溃/faultlog/hilog 诊断（30 文件）
+│   └── harmonyos-deveco-bridge/ ← TRAE↔DevEco Code 协调（1 文件）
 ├── codex/                     ← Codex Agent 的工作记录
 │   ├── Stellarium-HarmonyOS-交接文档.md
 │   └── ohos_patch/            ← Codex 编写的补丁代码
