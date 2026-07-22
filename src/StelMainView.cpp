@@ -1976,6 +1976,109 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2k ==========
+		// getMountMode / setMountMode — equatorial vs alt-az mount
+		if (commandName == "getMountMode")
+		{
+			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+			QString modeName;
+			switch (mvmgr->getMountMode()) {
+				case StelMovementMgr::MountAltAzimuthal: modeName = "alt-az"; break;
+				case StelMovementMgr::MountEquinoxEquatorial: modeName = "equatorial"; break;
+				case StelMovementMgr::MountGalactic: modeName = "galactic"; break;
+				case StelMovementMgr::MountSupergalactic: modeName = "supergalactic"; break;
+				default: modeName = "alt-az"; break;
+			}
+			result["ok"] = true;
+			result["mode"] = modeName;
+			result["equatorial"] = mvmgr->getEquatorialMount();
+			return result;
+		}
+
+		if (commandName == "setMountMode")
+		{
+			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+			if (payload == "equatorial" || payload == "1") {
+				mvmgr->setMountMode(StelMovementMgr::MountEquinoxEquatorial);
+			} else if (payload == "galactic") {
+				mvmgr->setMountMode(StelMovementMgr::MountGalactic);
+			} else if (payload == "supergalactic") {
+				mvmgr->setMountMode(StelMovementMgr::MountSupergalactic);
+			} else {
+				mvmgr->setMountMode(StelMovementMgr::MountAltAzimuthal);
+			}
+			result["ok"] = true;
+			return result;
+		}
+
+		// moveToAltAz — point view to specific altitude/azimuth
+		if (commandName == "moveToAltAz")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				bool ok1, ok2;
+				double az = parts[0].toDouble(&ok1);
+				double alt = parts[1].toDouble(&ok2);
+				if (ok1 && ok2) {
+					float duration = parts.size() > 2 ? parts[2].toFloat() : 1.0f;
+					StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+					Vec3d aim;
+					aim[0] = cos(alt * M_PI/180.) * cos(az * M_PI/180.);
+					aim[1] = cos(alt * M_PI/180.) * sin(az * M_PI/180.);
+					aim[2] = sin(alt * M_PI/180.);
+					mvmgr->moveToAltAzi(aim, Vec3d(0., 0., 1.), duration);
+					result["ok"] = true;
+				} else {
+					result["ok"] = false;
+					result["error"] = "invalid az/alt";
+				}
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: az|alt[|duration]";
+			}
+			return result;
+		}
+
+		// getViewDirection — current view direction as alt/az
+		if (commandName == "getViewDirection")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			Vec3d viewDir = core->getMovementMgr()->getViewDirectionJ2000();
+			// Convert J2000 to alt/az
+			Vec3d altAz = core->j2000ToAltAz(viewDir, StelCore::RefractionAuto);
+			double az = atan2(altAz[1], altAz[0]) * 180. / M_PI;
+			double alt = asin(altAz[2]) * 180. / M_PI;
+			if (az < 0) az += 360.;
+			result["ok"] = true;
+			result["azimuth"] = az;
+			result["altitude"] = alt;
+			return result;
+		}
+
+		// getAutoMoveDuration / setAutoMoveDuration — animation speed
+		if (commandName == "getAutoMoveDuration")
+		{
+			result["ok"] = true;
+			result["duration"] = StelApp::getInstance().getCore()->getMovementMgr()->getAutoMoveDuration();
+			return result;
+		}
+
+		if (commandName == "setAutoMoveDuration")
+		{
+			bool ok;
+			float duration = payload.toFloat(&ok);
+			if (ok && duration > 0.0f) {
+				StelApp::getInstance().getCore()->getMovementMgr()->setAutoMoveDuration(duration);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid duration";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2k ==========
+
 		// ========== End Phase 2j ==========
 
 		// ========== End Phase 2i ==========
