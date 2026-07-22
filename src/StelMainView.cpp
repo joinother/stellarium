@@ -2199,6 +2199,110 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2n ==========
+		// getGridFlags — get all grid/line display flags
+		if (commandName == "getGridFlags")
+		{
+			GridLinesMgr* gmgr = StelApp::getInstance().getCore()->getGridLinesMgr();
+			QJsonObject flags;
+			flags["azimuthalGrid"] = gmgr->getFlagAzimuthalGrid();
+			flags["equatorGrid"] = gmgr->getFlagEquatorGrid();
+			flags["eclipticGrid"] = gmgr->getFlagEclipticGrid();
+			flags["equatorLine"] = gmgr->getFlagEquatorLine();
+			flags["eclipticLine"] = gmgr->getFlagEclipticLine();
+			flags["meridianLine"] = gmgr->getFlagMeridianLine();
+			flags["horizonLine"] = gmgr->getFlagHorizonLine();
+			flags["zenithNadir"] = gmgr->getFlagZenithNadir();
+			flags["cardinalPoints"] = gmgr->getFlagCardinalPoints();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		// setGridFlag — toggle a single grid/line display
+		if (commandName == "setGridFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				GridLinesMgr* gmgr = StelApp::getInstance().getCore()->getGridLinesMgr();
+				if (flagName == "azimuthalGrid") gmgr->setFlagAzimuthalGrid(state);
+				else if (flagName == "equatorGrid") gmgr->setFlagEquatorGrid(state);
+				else if (flagName == "eclipticGrid") gmgr->setFlagEclipticGrid(state);
+				else if (flagName == "equatorLine") gmgr->setFlagEquatorLine(state);
+				else if (flagName == "eclipticLine") gmgr->setFlagEclipticLine(state);
+				else if (flagName == "meridianLine") gmgr->setFlagMeridianLine(state);
+				else if (flagName == "horizonLine") gmgr->setFlagHorizonLine(state);
+				else if (flagName == "zenithNadir") gmgr->setFlagZenithNadir(state);
+				else if (flagName == "cardinalPoints") gmgr->setFlagCardinalPoints(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown grid flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// getFOV / setFOV — field of view in degrees
+		if (commandName == "getFOV")
+		{
+			result["ok"] = true;
+			result["fov"] = StelApp::getInstance().getCore()->getMovementMgr()->getCurrentFov();
+			return result;
+		}
+
+		if (commandName == "setFOV")
+		{
+			bool ok;
+			double fov = payload.toDouble(&ok);
+			if (ok && fov > 0.0 && fov <= 360.0) {
+				StelApp::getInstance().getCore()->getMovementMgr()->zoomTo(fov, 0.5f);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid FOV (0-360)";
+			}
+			return result;
+		}
+
+		// getTracking / setTracking — auto-tracking state
+		if (commandName == "getTracking")
+		{
+			result["ok"] = true;
+			result["tracking"] = StelApp::getInstance().getCore()->getMovementMgr()->getFlagTracking();
+			return result;
+		}
+
+		if (commandName == "setTracking")
+		{
+			StelApp::getInstance().getCore()->getMovementMgr()->setFlagTracking(payload == "1" || payload == "true");
+			result["ok"] = true;
+			return result;
+		}
+
+		// getAutoZoom / setAutoZoom — auto-zoom on selection
+		if (commandName == "getAutoZoom")
+		{
+			result["ok"] = true;
+			result["autoZoom"] = StelApp::getInstance().getCore()->getMovementMgr()->getFlagAutoZoom();
+			return result;
+		}
+
+		if (commandName == "setAutoZoom")
+		{
+			StelApp::getInstance().getCore()->getMovementMgr()->setFlagAutoZoom(payload == "1" || payload == "true");
+			result["ok"] = true;
+			return result;
+		}
+
+		// ========== End Phase 2n ==========
+
 		// ========== End Phase 2m ==========
 
 		// ========== End Phase 2l ==========
