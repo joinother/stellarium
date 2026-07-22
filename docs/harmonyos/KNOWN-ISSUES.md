@@ -86,6 +86,34 @@
 
 ---
 
+### 0.8 宽屏右侧 floatingPanel 容器 Block 模式吞掉子组件 Toggle/按钮点击（夜间模式/赤道仪模式开关、面板 × 关闭无响应）— 【2026-07-22 WorkBuddy 已修复并验证】
+
+- **状态：** ✅ 已修复并验证（2026-07-22，紧接 P0 #0.7 之后）
+- **现象（修复前）：** #0.7 修复了全屏父容器 `onTouch` 吞点击的问题，工具栏图标/搜索框/详情面板动作按钮恢复可用；但**右侧浮动面板 `floatingPanel` 内部的开关与按钮仍然点不动**——这是用户原始反馈"右边菜单里的按钮点击都没效果"的**剩余部分**。具体表现：
+  1. 设置面板的"夜间模式"Toggle 拨不动，天空不切夜色调。
+  2. "赤道仪模式"Toggle 拨不动。
+  3. 面板右上角 `×` 关闭按钮点不关面板。
+  4. **对照证据：** 同屏的 `zoom_in`/`zoom_out` 按钮（也是一个 `Stack` + `.hitTestBehavior(HitTestMode.Block)`，但该 Stack **自己挂了 onClick**）能正常触发 → 说明不是"全部按钮死"，而是**特定容器结构**的问题。
+- **真实根因（已验证）：** `expandedShell()` 里包装 `floatingPanel()` 的容器 `Stack({ alignContent: Alignment.TopStart }) { this.floatingPanel() }` 同时满足两个致命条件：
+  1. **缺少显式尺寸**：该 `Stack` 只靠 `position({x,y})` 定位、**没有 `.width()/.height()`**，命中区域退化为内容最小包围盒，面板实际渲染区与可命中区不一致，部分点击落在命中区外。
+  2. **`hitTestBehavior(HitTestMode.Block)` 且容器自身无 onClick/onTouch**：`HitTestMode.Block` 的语义是"容器自身消费触摸事件、不再向下派发给子孙"。当容器自己没有 `onClick`/`onTouch` 时，它**把触摸事件吞掉**，导致内部的 `Toggle`（靠 `onChange`）和 `×` 关闭 `Button`（靠 `onClick`）**根本收不到事件**——这正是 #0.7 note #3 里总结的"Block 会使容器自身不响应命中（仅子组件响应）"的反面教训：此处 Block 在**无自身回调的父容器**上，连子组件都不响应了。
+  - 对比：`zoom_in` 按钮的 Block Stack **自己有 onClick**，所以 Block 只挡住更深层、不影响它自身回调；而面板容器 Block 且无回调，子组件被一并屏蔽。
+- **修复（已验证有效）：**
+  1. 给面板容器 `Stack` 显式补 `.width(this.panelWidth).height(this.panelMaxHeight)`，让命中区域与渲染区完全对齐。
+  2. 将面板容器 `hitTestBehavior` 从 `HitTestMode.Block` → `HitTestMode.Transparent`：`Transparent` 会让事件**穿透到子组件**（子 `Toggle`/`Button` 正常触发 `onChange`/`onClick`），同时继续向下穿透到兄弟画布触摸层（天空 `selectAt` 不回归）。
+- **验证结果（2026-07-22，模拟器 127.0.0.1:5555）：**
+  - 启动正常，无 SIGABRT；`expanded=true` / `bridge resolved` / `displayed submitted Stellarium frame` 均出现。
+  - **"夜间模式"Toggle 可开关**：拨开后天空切换为夜间红调（截图 `/tmp/stel_v2_night.jpeg` 确认）。
+  - **"赤道仪模式"Toggle 可开关**：拨开后面板状态文字同步为开启。
+  - **面板 `×` 关闭按钮生效**：点击后面板收起，`panelVisible` 置 false。
+  - **天空点选无回归**：点击空天空仍触发 `selectAt` 选中天体（兄弟画布触摸层承接正常，截图 `/tmp/stel_v2_sky.jpeg` 确认）。
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（面板 `Stack` 补 `.width/.height` + `Block`→`Transparent`，行 ~1786–1792）
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`（与前者保持同步）
+- **备注：** 本条目与 #0.7 同源（都是命中测试层级错误），但粒度更细：#0.7 修的是**全屏父容器挂 onTouch 吞子孙**；本条目修的是**面板自身容器 Block 无回调吞子孙**。两者修复后，用户"右边菜单按钮全失效"的反馈才被**完整**闭环。关键区别记忆点：**`HitTestMode.Block` 只在容器自身有 onClick/onTouch 时才安全；无回调的父容器用 Block 会连带屏蔽子组件，必须改用 `Transparent`。**
+
+---
+
 ## P1 - 高优先级
 
 ### 1. 边缘区域选星被 UI 死区吞掉
@@ -161,4 +189,4 @@
 
 ---
 
-> **最后更新：** 2026-07-21
+> **最后更新：** 2026-07-22
