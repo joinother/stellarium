@@ -2301,6 +2301,74 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2o ==========
+		// getLimitMagnitude / setLimitMagnitude — star visibility limit
+		if (commandName == "getLimitMagnitude")
+		{
+			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+			result["ok"] = true;
+			result["limitMagnitude"] = drawer->getLimitMagnitude();
+			result["customStarMagLimit"] = drawer->getCustomStarMagLimit();
+			result["flagNebulaMagLimit"] = drawer->getFlagNebulaMagnitudeLimit();
+			result["customNebulaMagLimit"] = drawer->getCustomNebulaMagnitudeLimit();
+			return result;
+		}
+
+		if (commandName == "setLimitMagnitude")
+		{
+			bool ok;
+			double mag = payload.toDouble(&ok);
+			if (ok) {
+				StelApp::getInstance().getCore()->getSkyDrawer()->setCustomStarMagLimit(mag);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid magnitude";
+			}
+			return result;
+		}
+
+		// getMilkyWayIntensity / setMilkyWayIntensity
+		if (commandName == "getMilkyWayIntensity")
+		{
+			result["ok"] = true;
+			result["intensity"] = StelApp::getInstance().getCore()->getMilkyWay()->getIntensity();
+			return result;
+		}
+
+		if (commandName == "setMilkyWayIntensity")
+		{
+			bool ok;
+			double intensity = payload.toDouble(&ok);
+			if (ok && intensity >= 0.0) {
+				StelApp::getInstance().getCore()->getMilkyWay()->setIntensity(intensity);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid intensity";
+			}
+			return result;
+		}
+
+		// getAtmosphereIntensity / setAtmosphereIntensity
+		if (commandName == "getAtmosphereIntensity")
+		{
+			result["ok"] = true;
+			result["intensity"] = StelApp::getInstance().getCore()->getSkyDrawer()->getAtmosphereFadeDuration();
+			return result;
+		}
+
+		// getAppVersion — simple version string
+		if (commandName == "getAppVersion")
+		{
+			result["ok"] = true;
+			result["version"] = StelApp::getInstance().getApplicationVersion();
+			result["qtVersion"] = QT_VERSION_STR;
+			return result;
+		}
+
+		// ========== End Phase 2o ==========
+
 		// ========== End Phase 2n ==========
 
 		// ========== End Phase 2m ==========
