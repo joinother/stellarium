@@ -58,7 +58,7 @@ struct WindowNativeNode {
   @State private mapRenderWidth: number = 280
   @State private mapRenderHeight: number = 150
   @State private fovText: string = '--'
-  @State private trackingText: string = '关闭'
+  @State private trackingText: string = 'Off'
   @State private skyWidth: number = 1
   @State private skyHeight: number = 1
   @State private panelWidth: number = 336
@@ -175,8 +175,8 @@ struct WindowNativeNode {
   @State private planetLabels: boolean = false
   @State private starLabels: boolean = false
   @State private gyroscopeEnabled: boolean = false
-  @State private gyroscopeStatus: string = '关闭'
-  @State private gyroscopeSensitivityText: string = '标准'
+  @State private gyroscopeStatus: string = 'Off'
+  @State private gyroscopeSensitivityText: string = 'Standard'
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
@@ -646,7 +646,7 @@ private loadPlanetPositions(): void {
   }
 
   private stopTracking(): void {
-    this.callInteractive('setTracking', '0', () => { this.trackingText = '关闭' })
+    this.callInteractive('setTracking', '0', () => { this.trackingText = 'Off' })
   }
 
   private setSkyCulture(name: string): void {
@@ -670,7 +670,7 @@ private loadPlanetPositions(): void {
 
   private advanceTime(hours: number): void {
     this.callInteractive('advanceTime', hours.toString(), () => { this.refreshState() })
-    this.flashHint((hours > 0 ? $r('app.string.i0044') : '') + hours.toString() + ' 小时')
+    this.flashHint((hours > 0 ? $r('app.string.i0044') : '') + hours.toString() + ' h')
   }
 
   private dateToJD(year: number, month: number, day: number, hour: number, minute: number): number {
@@ -697,7 +697,7 @@ private loadPlanetPositions(): void {
       const result = this.callNative('setLanguage', lang)
       if (result.ok === true) {
         this.selectedLanguage = lang
-        this.flashHint(lang === 'zh_CN' ? '已切换为中文' : 'Switched to English')
+        this.flashHint(lang === 'zh_CN' ? 'Switched to Chinese' : 'Switched to English')
         this.refreshState()
       } else if (attempt < 60) {
         setTimeout(() => attemptSet(attempt + 1), 200)
@@ -752,12 +752,12 @@ private loadPlanetPositions(): void {
 
   private applyLx200Result(result: StellariumBridgeResponse): void {
     if (result.ok === true) {
-      const target = result.target && result.target.length > 0 ? result.target : '选中目标'
-      const mode = result.mode === 'sync' ? '同步' : $r('app.string.i0049')
+      const target = result.target && result.target.length > 0 ? result.target : 'Selected target'
+      const mode = result.mode === 'sync' ? 'Sync' : $r('app.string.i0049')
       const coord = result.ra && result.dec ? ' · ' + result.ra + ' / ' + result.dec : ''
-      this.lx200Status = mode + ' 已发送：' + target + coord
+      this.lx200Status = mode + ' sent: ' + target + coord
     } else {
-      const message = result.error === 'no selected object' ? '请先点选或搜索一个目标' : result.error
+      const message = result.error === 'no selected object' ? 'Please select or search a target first' : result.error
       this.lx200Status = message ? message : 'LX200 命令失败'
     }
   }
@@ -772,7 +772,7 @@ private loadPlanetPositions(): void {
 
   private lx200Abort(): void {
     this.callInteractive('telescopeLx200Abort', this.lx200Payload(), (result) => {
-      this.lx200Status = result.ok === true ? '已发送停止指令' : (result.error ? result.error : '停止失败')
+      this.lx200Status = result.ok === true ? 'Stop command sent' : (result.error ? result.error : 'Stop failed')
     })
   }
 
@@ -798,10 +798,10 @@ private loadPlanetPositions(): void {
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
       this.gyroscopeEnabled = true
-      this.gyroscopeStatus = '监听中'
+      this.gyroscopeStatus = 'Listening'
     } catch (error) {
       this.gyroscopeEnabled = false
-      this.gyroscopeStatus = '不可用'
+      this.gyroscopeStatus = 'Unavailable'
     }
   }
 
@@ -846,7 +846,7 @@ private loadPlanetPositions(): void {
     const result = this.callNative('panBy', clampedDx.toString() + '|' + clampedDy.toString() + '|' + this.skyWidth.toString() + '|' + this.skyHeight.toString())
     this.gyroEventCount += 1
     if (this.gyroEventCount % 12 === 0) {
-      this.gyroscopeStatus = (result.ok === true || result.pending === true) ? '工作中' : (result.error ? result.error : 'Core 未就绪')
+      this.gyroscopeStatus = (result.ok === true || result.pending === true) ? 'Working' : (result.error ? result.error : 'Core not ready')
     }
   }
 
@@ -892,7 +892,7 @@ private loadPlanetPositions(): void {
   private startDetailAutoRefresh(): void {
     if (this.detailTimer !== 0) { return }
     this.detailTimer = setInterval(() => {
-      if (this.activePanel === 'object' && this.panelVisible && this.selectedStatus === '已选中') {
+      if (this.activePanel === 'object' && this.panelVisible && this.selectedStatus === 'Selected') {
         this.refreshSelectedObject()
       }
     }, 1000) as number
@@ -942,10 +942,10 @@ private loadPlanetPositions(): void {
   private zhType(type: string): ResourceStr {
     const map: Record<string, ResourceStr> = {
       'Planet': $r('app.string.i0103'), 'Star': $r('app.string.i0104'), 'Nebula': $r('app.string.i0107'), 'Galaxy': $r('app.string.i0105'),
-      'Asteroid': '小行星', 'Comet': '彗星', 'Satellite': '卫星', 'Moon': '卫星/月球',
-      'Sun': '恒星(太阳)', 'Quasar': '类星体', 'Pulsar': '脉冲星', 'Cluster': $r('app.string.i0106'),
-      'Open cluster': '疏散星团', 'Globular cluster': '球状星团', 'Planetary nebula': '行星状星云',
-      'Interstellar object': '星际天体', 'Minor planet': '小行星',
+      'Asteroid': 'Asteroid', 'Comet': 'Comet', 'Satellite': 'Satellite', 'Moon': 'Satellite/Moon',
+      'Sun': 'Star (Sun)', 'Quasar': 'Quasar', 'Pulsar': 'Pulsar', 'Cluster': $r('app.string.i0106'),
+      'Open cluster': 'Open cluster', 'Globular cluster': 'Globular cluster', 'Planetary nebula': 'Planetary nebula',
+      'Interstellar object': 'Interstellar object', 'Minor planet': 'Asteroid',
     }
     return map[type] ?? type
   }
@@ -980,7 +980,7 @@ private loadPlanetPositions(): void {
     }
     if (result.found === true) {
       this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '已选择')
-      this.selectedType = result.type && result.type.length > 0 ? result.type : '天体'
+      this.selectedType = result.type && result.type.length > 0 ? result.type : 'Object'
       this.selectedStatus = 'Selected'
       this.selectedMagnitude = (typeof result.magnitude === 'number') ? (result.magnitude as number).toFixed(2) : ''
       const ra: string = result.ra ? result.ra : ''
@@ -989,7 +989,7 @@ private loadPlanetPositions(): void {
       const hasAlt: boolean = typeof result.altitude === 'number'
       const hasAz: boolean = typeof result.azimuth === 'number'
       this.selectedCoordAlt = (hasAlt || hasAz)
-        ? ('高度 ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '   方位 ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
+        ? ('Alt ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '   Az ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
@@ -1000,7 +1000,7 @@ private loadPlanetPositions(): void {
       this.startDetailAutoRefresh()
     } else {
       this.selectedName = 'Not found'
-      this.selectedType = result.query && result.query.length > 0 ? result.query : '无选中对象'
+      this.selectedType = result.query && result.query.length > 0 ? result.query : 'No selection'
       this.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
       this.selectedMagnitude = ''
       this.selectedCoordEq = ''
@@ -1057,7 +1057,7 @@ private loadPlanetPositions(): void {
     const height = this.mapRenderHeight
     const latitude = 90 - this.clamp(y, 0, height) / height * 180
     const longitude = this.clamp(x, 0, width) / width * 360 - 180
-    this.setPickerLocation('地图选择', latitude, longitude, this.locationPickerAltitude, '已选择地图位置，点应用同步星图')
+    this.setPickerLocation('Map select', latitude, longitude, this.locationPickerAltitude, 'Map position selected, tap apply to sync')
   }
 
   private pickerCoordinateText(): string {
@@ -1084,7 +1084,7 @@ private loadPlanetPositions(): void {
   }
 
   private async useDeviceLocation(): Promise<void> {
-    this.locationPickerStatus = '正在请求定位权限'
+    this.locationPickerStatus = 'Requesting location permission'
     try {
       const context = getContext(this) as common.UIAbilityContext
       const atManager = abilityAccessCtrl.createAtManager()
@@ -1093,7 +1093,7 @@ private loadPlanetPositions(): void {
         'ohos.permission.LOCATION'
       ]
       await atManager.requestPermissionsFromUser(context, permissions)
-      this.locationPickerStatus = '正在获取当前位置'
+      this.locationPickerStatus = 'Getting current location'
       const current = await geoLocationManager.getCurrentLocation({
         priority: geoLocationManager.LocationRequestPriority.ACCURACY,
         scenario: geoLocationManager.LocationRequestScenario.DAILY_LIFE_SERVICE,
@@ -1101,7 +1101,7 @@ private loadPlanetPositions(): void {
         timeoutMs: 5000
       })
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
-      this.setPickerLocation('当前位置', current.latitude, current.longitude, altitude, '已获取设备位置，自动同步到星图')
+      this.setPickerLocation('Current location', current.latitude, current.longitude, altitude, 'Device location obtained, auto-synced')
       this.applyPickerLocation()
       this.locationPickMode = 'map'
       this.hierContinent = ''
@@ -1111,7 +1111,7 @@ private loadPlanetPositions(): void {
       hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', JSON.stringify(err))
       // 模拟器通常无 GPS，自动回退到上次保存的位置
       if (this.locationPickerLatitude === 0 && this.locationPickerLongitude === 0) {
-        this.setPickerLocation('北京', 39.9, 116.4, 43, '模拟器无 GPS，已使用默认位置（北京）')
+        this.setPickerLocation('Beijing', 39.9, 116.4, 43, 'No GPS in simulator, using default (Beijing)')
       } else {
         this.locationPickerStatus = 'GPS 不可用，已保留当前位置'
       }
@@ -1142,7 +1142,7 @@ private loadPlanetPositions(): void {
     this.callInteractive('setLocationByName', name, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
         // C++ resolved the location
-        this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
+        this.setPickerLocation(name, latitude, longitude, altitude, 'Synced to sky')
         this.locationText = name + ' · Earth'
         this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
         this.altitudeText = altitude.toFixed(0) + ' m'
@@ -1152,7 +1152,7 @@ private loadPlanetPositions(): void {
         // Fallback to triggerAction for custom coordinates
         this.triggerAction('actionSet_Location_Country_Code')
         this.triggerAction('actionSet_Location_' + name.replace(/ /g, '_'))
-        this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
+        this.setPickerLocation(name, latitude, longitude, altitude, 'Synced to sky')
         this.locationText = name + ' · Earth'
         this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
         this.altitudeText = altitude.toFixed(0) + ' m'
@@ -2429,7 +2429,7 @@ private loadPlanetPositions(): void {
         Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       this.locationPickerPanel()
-      this.quickChips(['北京', '上海', '深圳'])
+      this.quickChips(['Beijing', '上海', '深圳'])
 	    } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {
@@ -3625,7 +3625,7 @@ private loadPlanetPositions(): void {
       this.searchObject('Mars')
     } else if (en === 'Jupiter') {
       this.searchObject('Jupiter')
-    } else if (label === '北京') {
+    } else if (label === 'Beijing') {
       this.setLocation('Beijing', 39.9042, 116.4074, 44)
     } else if (label === '上海') {
       this.setLocation('Shanghai', 31.2304, 121.4737, 4)
