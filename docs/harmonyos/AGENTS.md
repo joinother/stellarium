@@ -260,6 +260,23 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 | `getSelectedObject` | 获取选中对象 | - |
 | `panBy` | 陀螺仪平移 | x\|y |
 | `lx200Command` | LX200 协议 | command |
+| `getLandscapeList` | 地景列表 | - |
+| `setLandscape` | 切换地景 | id |
+| `setLandscapeTransparency` | 地景透明度 | 0.0-1.0 |
+| `getScriptList` | 脚本列表 | - |
+| `playScript` / `stopScript` / `pauseScript` / `resumeScript` | 脚本控制 | name |
+| `getLoadedModuleNames` | 已加载模块 | - |
+| `getRTS` | 选中天体升起/中天/落下 | - |
+| `getAlmanac` | 太阳/月球年历+月相 | - |
+| `getObjectPositions` | 行星位置表 | - |
+| `getSkyCultureList` | 天区文化列表 | - |
+| `setSkyCulture` | 切换天区文化 | id |
+| `getPluginList` | 插件列表 | - |
+| `loadPlugin` / `unloadPlugin` | 插件加载/卸载 | name |
+| `getConfigString` / `setConfigString` | 配置读写 | key[=val] |
+| `getObjectInfo` | 选中天体详细信息 | - |
+| `getConstellationInfo` | 当前星座 | - |
+| `getStarCount` | 可见星数 | - |
 
 ---
 
