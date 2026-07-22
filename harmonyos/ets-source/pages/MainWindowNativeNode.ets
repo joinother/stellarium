@@ -1686,11 +1686,10 @@ private loadPlanetPositions(): void {
 
       // 画布触摸层：Transparent onTouch 处理天空 selectAt/drag，
       // handleSkyTouch 内部通过坐标计算处理侧边栏点击。
-      // zIndex=4 高于 UI 层(3)，Transparent 允许下层 Block 子组件响应。
+      // 声明顺序先于 expandedShell，Transparent 允许事件传递给兄弟组件的 Block 子组件
       Stack() { }
         .width('100%')
         .height('100%')
-        .zIndex(4)
         .hitTestBehavior(HitTestMode.Transparent)
         .onTouch((event: TouchEvent) => {
           this.handleSkyTouch(event)
@@ -1799,6 +1798,7 @@ private loadPlanetPositions(): void {
       .width('100%')
       .height('100%')
       .zIndex(1)
+      .hitTestBehavior(HitTestMode.Transparent)
     }
 
   @Builder
