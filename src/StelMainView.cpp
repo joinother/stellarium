@@ -1664,6 +1664,67 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2g ==========
+		// getPlanetPositions — get all solar system planet positions
+		if (commandName == "getPlanetPositions")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			const SolarSystem* ss = GETSTELMODULE(SolarSystem);
+			QStringList planetNames = QStringList()
+				<< "Sun" << "Moon" << "Mercury" << "Venus" << "Earth" << "Mars"
+				<< "Jupiter" << "Saturn" << "Uranus" << "Neptune" << "Pluto";
+			QJsonArray planets;
+			for (const QString& name : planetNames) {
+				StelObjectP obj = ss->searchByName(name);
+				if (obj) {
+					QJsonObject p;
+					Vec3d pos = obj->getJ2000EquatorialPos(core);
+					double ra = std::atan2(pos[1], pos[0]) * 180.0 / M_PI;
+					double dec = std::asin(pos[2] / pos.length()) * 180.0 / M_PI;
+					double mag = obj->getVMagnitude(core);
+					double dist = obj->getDistance() / AU;
+					Vec3d altaz;
+					core->getHEMatrix(StelCore::FrameAltAz).multiply(pos, altaz);
+					double alt = std::asin(altaz[2] / altaz.length()) * 180.0 / M_PI;
+					double az = std::atan2(altaz[0], altaz[1]) * 180.0 / M_PI;
+					p["name"] = name;
+					p["ra"] = (ra < 0) ? ra + 360 : ra;
+					p["dec"] = dec;
+					p["magnitude"] = mag;
+					p["distanceAU"] = dist;
+					p["altitude"] = alt;
+					p["azimuth"] = (az < 0) ? az + 360 : az;
+					planets.append(p);
+				}
+			}
+			result["ok"] = true;
+			result["planets"] = planets;
+			return result;
+		}
+
+		// getSkyCultureList — get available sky cultures
+		if (commandName == "getSkyCultureList")
+		{
+			QStringList cultures = StelApp::getInstance().getSkyCultureMgr().getSkyCultureList();
+			QStringList displayNames;
+			for (const QString& id : cultures) {
+				displayNames.append(StelApp::getInstance().getSkyCultureMgr().getSkyCultureNameEnglish(id));
+			}
+			QJsonArray list;
+			for (int i = 0; i < cultures.size(); i++) {
+				QJsonObject item;
+				item["id"] = cultures[i];
+				item["name"] = displayNames[i];
+				list.append(item);
+			}
+			result["ok"] = true;
+			result["skyCultures"] = list;
+			result["current"] = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
+			return result;
+		}
+
+		// ========== End Phase 2g ==========
+
 		// ========== End Phase 2f ==========
 
 		// ========== End Phase 2e ==========
