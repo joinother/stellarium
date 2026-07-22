@@ -2698,6 +2698,81 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2t ==========
+		// getStarFlags / setStarFlag — star display control
+		if (commandName == "getStarFlags")
+		{
+			StarMgr* smgr = GETSTELMODULE(StarMgr);
+			QJsonObject flags;
+			flags["stars"] = smgr->getFlagStars();
+			flags["labels"] = smgr->getFlagLabels();
+			flags["labelsAmount"] = smgr->getLabelsAmount();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setStarFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				StarMgr* smgr = GETSTELMODULE(StarMgr);
+				if (flagName == "stars") smgr->setFlagStars(state);
+				else if (flagName == "labels") smgr->setFlagLabels(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown star flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// setStarLabelsAmount — star label density (0-10)
+		if (commandName == "setStarLabelsAmount")
+		{
+			bool ok;
+			double amount = payload.toDouble(&ok);
+			if (ok && amount >= 0.0 && amount <= 10.0) {
+				GETSTELMODULE(StarMgr)->setLabelsAmount(amount);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "amount must be 0-10";
+			}
+			return result;
+		}
+
+		// getAppState — comprehensive application state summary
+		if (commandName == "getAppState")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			StelMovementMgr* mvmgr = core->getMovementMgr();
+			StelSkyDrawer* drawer = core->getSkyDrawer();
+			result["ok"] = true;
+			result["jd"] = core->getJD();
+			result["timeRate"] = core->getTimeRate();
+			result["fov"] = mvmgr->getCurrentFov();
+			result["tracking"] = mvmgr->getFlagTracking();
+			result["location"] = core->getCurrentLocation().name;
+			result["lat"] = core->getCurrentLocation().latitude;
+			result["lon"] = core->getCurrentLocation().longitude;
+			result["limitMagnitude"] = drawer->getLimitMagnitude();
+			result["starScale"] = drawer->getRelativeStarScale();
+			result["projection"] = core->getCurrentProjectionTypeKey();
+			result["fps"] = StelApp::getInstance().getFps();
+			result["language"] = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+			return result;
+		}
+
+		// ========== End Phase 2t ==========
+
 		// ========== End Phase 2s ==========
 
 		// ========== End Phase 2r ==========
