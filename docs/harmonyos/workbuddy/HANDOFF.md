@@ -156,7 +156,7 @@ openssl → 系统自带（`openssl` / /usr/bin/openssl）
 
 ### 当前状态
 - **HEAD**: `b912e87cee` (i18n 全量完成)
-- **C++ 桥接**: Phase 2 (12 cmd) + Phase 2b (8 cmd) + Phase 2c (3 cmd) = 23 个桥接命令
+- **C++ 桥接**: Phase 2 (12 cmd) + Phase 2b (8 cmd) + Phase 2c (3 cmd) = 35 个桥接命令
 - **libstellarium.so**: 已重新编译，包含全部 23 个命令
 - **ArkTS UI**: ~4200 行 MainWindowNativeNode.ets，10 个面板全部实现
 - **i18n**: ~235 个字符串资源键（base/zh_CN/en_US 三 locale）

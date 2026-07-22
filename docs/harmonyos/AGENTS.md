@@ -280,6 +280,12 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 | `getDSOCounts` | 可见深空天体分类计数 | - |
 | `setTimeToJD` | 设置模拟时间为指定 JD | jd |
 | `getSimulationTime` | 获取当前 JD/时间速率 | - |
+| `setLocationByName` | 按城市名设置位置 | city name |
+| `setLocationCoords` | 按经纬度设置位置 | lat,lon[,alt] |
+| `getSelectedType` | 选中天体类型/名称 | - |
+| `getFieldOfView` | 获取当前 FOV+中心方位 | - |
+| `setFieldOfView` | 设置 FOV (0.1-360°) | degrees |
+| `getConstellationList` | 所有星座英文名列表 | - |
 
 ---
 
