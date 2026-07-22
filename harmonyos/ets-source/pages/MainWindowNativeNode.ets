@@ -1292,22 +1292,23 @@ private loadPlanetPositions(): void {
   }
 
   private railTop(): number {
-    return Math.max(0, this.skyHeight - 724) + 30
+    // Rail always starts near top of screen (fixed position)
+    return 28
   }
 
   private railHeight(): number {
-    return this.actions.length * 104
+    return this.actions.length * 58 + 20
   }
 
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
-      // 左侧工具栏按钮区域（宽屏布局）
-      if (x >= 0 && x <= 50) {
-        const buttonTop = Math.max(0, this.skyHeight - 724) + 30
-        const step = 104
+      // 左侧工具栏按钮区域（宽屏布局，从顶部开始排列）
+      if (x >= 0 && x <= 58) {
+        const railTop = 28
+        const step = 58
         for (let i = 0; i < this.actions.length; i++) {
-          const bTop = buttonTop + i * step
-          if (y >= bTop && y <= bTop + 88) {
+          const bTop = railTop + i * step
+          if (y >= bTop && y <= bTop + 44) {
             return true
           }
         }
@@ -1338,11 +1339,11 @@ private loadPlanetPositions(): void {
 	        return true
 	      }
 	    }
-	    if (this.isExpandedLayout && x >= 0 && x <= 50) {
-      const buttonTop = Math.max(0, this.skyHeight - 724) + 30
-      const step = 104
-      const index = Math.floor((y - buttonTop) / step)
-      const withinButton = index >= 0 && index < this.actions.length && y >= buttonTop + index * step && y <= buttonTop + index * step + 88
+	    if (this.isExpandedLayout && x >= 0 && x <= 58) {
+      const railTop = 28
+      const step = 58
+      const index = Math.floor((y - railTop) / step)
+      const withinButton = index >= 0 && index < this.actions.length && y >= railTop + index * step && y <= railTop + index * step + 44
       if (withinButton) {
         this.setPanel(this.actions[index].panel)
         return true
@@ -1450,6 +1451,18 @@ private loadPlanetPositions(): void {
       const downX = this.touchWindowX(points[0])
       const downY = this.touchWindowY(points[0])
       if (this.isUiPoint(downX, downY)) {
+        // Handle sidebar button clicks since XComponent swallows onClick events
+        if (downX >= 0 && downX <= 58) {
+          const railTop = 28
+          const step = 58
+          for (let i = 0; i < this.actions.length; i++) {
+            const bTop = railTop + i * step
+            if (downY >= bTop && downY <= bTop + 44) {
+              this.setPanel(this.actions[i].panel)
+              return
+            }
+          }
+        }
         return
       }
       this.skyTouchActive = true
@@ -1527,6 +1540,10 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       const x = this.touchWindowX(points[0])
       const y = this.touchWindowY(points[0])
+      // If touch started on a UI element (sidebar/panel), do not trigger selectAt
+      if (this.isUiPoint(x, y)) {
+        return
+      }
       if (this.panelVisible) {
         const pl = this.panelLeft()
         const pr = this.panelRight()
@@ -1702,7 +1719,9 @@ private loadPlanetPositions(): void {
         .hitTestBehavior(HitTestMode.None)
       Stack() { this.verticalRail() }
         .position({ x: 0, y: this.railTop() })
+        .hitTestBehavior(HitTestMode.Block)
       Stack() { this.zoomButton('zoom_in') }
+        .hitTestBehavior(HitTestMode.Block)
         .position({ x: 92, y: this.skyHeight - 220 })
         .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
@@ -1718,6 +1737,7 @@ private loadPlanetPositions(): void {
       if (this.panelVisible) {
         Stack() { this.floatingPanel() }
           .position({ x: this.skyWidth - 392 + this.panelOffsetX, y: 28 + this.panelOffsetY })
+          .hitTestBehavior(HitTestMode.Block)
       }
     }
       .width('100%')
@@ -1824,6 +1844,7 @@ private loadPlanetPositions(): void {
           .height(44)
           .position({ x: 7, y: idx * 58 })
           .onClick(() => {
+            hilog.info(0x0000, 'StellariumArkUI', 'rail onClick: panel=' + item.panel + ' x=' + '30' + ' activePanel=' + this.activePanel)
             this.setPanel(item.panel)
             this.flashHint($r('app.string.i0078', item.label + '面板'))
           })
