@@ -1318,7 +1318,7 @@ private loadPlanetPositions(): void {
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
       // 左侧工具栏按钮区域（宽屏布局，从顶部开始排列）
-      if (x >= 0 && x <= 58) {
+      if (x >= 4 && x <= 62) {
         const railTop = 28
         const step = 58
         for (let i = 0; i < this.actions.length; i++) {
@@ -1354,7 +1354,7 @@ private loadPlanetPositions(): void {
 	        return true
 	      }
 	    }
-	    if (this.isExpandedLayout && x >= 0 && x <= 58) {
+	    if (this.isExpandedLayout && x >= 4 && x <= 62) {
       const railTop = 28
       const step = 58
       const index = Math.floor((y - railTop) / step)
@@ -1470,6 +1470,7 @@ private loadPlanetPositions(): void {
         const pl = this.panelLeft()
         const pr = this.panelRight()
         const pt = this.panelTop()
+        // Panel header drag detection
         if (downX >= pl && downX <= pr && downY >= pt && downY <= pt + 48) {
           this.panelDragging = true
           this.panelDragStartX = downX
@@ -1478,13 +1479,19 @@ private loadPlanetPositions(): void {
           this.panelDragStartOffsetY = this.panelOffsetY
           return
         }
+        // Block ALL touches within the panel area (including toggle switches)
+        if (downX >= pl && downX <= pr && downY >= pt && downY <= pt + this.panelMaxHeight + 56) {
+          this.touchStartedOnUi = true
+          return
+        }
       }
       if (this.isUiPoint(downX, downY)) {
         this.touchStartedOnUi = true
         // Handle sidebar button clicks since XComponent swallows onClick events
-        if (downX >= 0 && downX <= 58) {
+        if (downX >= 4 && downX <= 62) {
           const railTop = 28
           const step = 58
+          // Sidebar offset x=4
           for (let i = 0; i < this.actions.length; i++) {
             const bTop = railTop + i * step
             if (downY >= bTop && downY <= bTop + 44) {
@@ -1670,19 +1677,24 @@ private loadPlanetPositions(): void {
           .animation({ duration: 180, curve: Curve.EaseOut })
       }
 
-        // 画布触摸层：与 toolbar/panel 平级（都是 1234 根 Stack 的子），
-      // 承接 selectAt/onTouch。关键：不能挂在 1352 全屏 UI 父上，
-      // 否则会抑制其子组件（toolbar/面板按钮）的 onClick。
-      // 参考已验证的 compactShell：onTouch 挂在独立 Blank 上而非全屏 UI 父。
+
+      if (this.isExpandedLayout) {
+        this.expandedShell()
+      } else {
+        this.compactShell()
+      }
+
+      // 画布触摸层：Transparent onTouch 处理天空 selectAt/drag，
+      // handleSkyTouch 内部通过坐标计算处理侧边栏点击。
+      // zIndex=4 高于 UI 层(3)，Transparent 允许下层 Block 子组件响应。
       Stack() { }
         .width('100%')
         .height('100%')
+        .zIndex(4)
         .hitTestBehavior(HitTestMode.Transparent)
         .onTouch((event: TouchEvent) => {
           this.handleSkyTouch(event)
         })
-
-      this.expandedShell()
 
       // 启动画面
       if (this.isLoading) {
@@ -1752,17 +1764,17 @@ private loadPlanetPositions(): void {
       .width('100%')
       .height('100%')
       .zIndex(3)
-      .hitTestBehavior(HitTestMode.Transparent)
+      .hitTestBehavior(HitTestMode.None)
   }
 
   @Builder
   expandedShell() {
     Stack() {
       Stack() { this.observerBadge() }
-        .position({ x: 22, y: 28 })
+        .position({ x: 70, y: 28 })
         .hitTestBehavior(HitTestMode.None)
       Stack() { this.verticalRail() }
-        .position({ x: 0, y: this.railTop() })
+        .position({ x: 4, y: this.railTop() })
         .hitTestBehavior(HitTestMode.Block)
       Stack() { this.zoomButton('zoom_in') }
         .hitTestBehavior(HitTestMode.Block)
@@ -1787,7 +1799,6 @@ private loadPlanetPositions(): void {
       .width('100%')
       .height('100%')
       .zIndex(1)
-      .hitTestBehavior(HitTestMode.Transparent)
     }
 
   @Builder
@@ -1832,7 +1843,7 @@ private loadPlanetPositions(): void {
     }
       .width('100%')
       .height('100%')
-      .padding({ bottom: 14 })
+      .padding({ bottom: 14, left: 4, right: 4 })
       .zIndex(1)
   }
 
