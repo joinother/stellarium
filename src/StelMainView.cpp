@@ -40,6 +40,9 @@
 #include "StelObserver.hpp"
 #include "StelLocaleMgr.hpp"
 #include "StelSkyCultureMgr.hpp"
+#include "LandscapeMgr.hpp"
+#include "StelScriptMgr.hpp"
+#include "SolarSystem.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -1154,6 +1157,201 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			return sendLx200Commands(host, quint16(portInt), {"#:Q#"});
 		}
+
+		// ========== Phase 2: New bridge commands ==========
+
+		// getLandscapeList
+		if (commandName == "getLandscapeList")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			QStringList ids = lmgr->getAllLandscapeIDs();
+			QStringList names = lmgr->getAllLandscapeNames();
+			QJsonArray items;
+			for (int i = 0; i < ids.size(); ++i)
+			{
+				QJsonObject item;
+				item["id"] = ids[i];
+				item["name"] = (i < names.size()) ? names[i] : ids[i];
+				items.append(item);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			result["current"] = lmgr->getCurrentLandscapeID();
+			return result;
+		}
+
+		// setLandscape
+		if (commandName == "setLandscape")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			bool ok = lmgr->setCurrentLandscapeID(arg);
+			result["ok"] = ok;
+			result["current"] = lmgr->getCurrentLandscapeID();
+			return result;
+		}
+
+		// setLandscapeTransparency
+		if (commandName == "setLandscapeTransparency")
+		{
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			bool convOk = false;
+			double val = arg.toDouble(&convOk);
+			if (convOk && val >= 0.0 && val <= 1.0)
+			{
+				lmgr->setLandscapeTransparency(val);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "expects 0.0..1.0";
+			}
+			return result;
+		}
+
+		// getScriptList
+		if (commandName == "getScriptList")
+		{
+			StelScriptMgr* smgr = StelApp::getInstance().getScriptMgr();
+			QStringList scripts = smgr->getScriptList();
+			QJsonArray items;
+			for (const QString& s : scripts)
+			{
+				items.append(s);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			return result;
+		}
+
+		// playScript
+		if (commandName == "playScript")
+		{
+			StelScriptMgr* smgr = StelApp::getInstance().getScriptMgr();
+			smgr->playScript(arg);
+			result["ok"] = true;
+			return result;
+		}
+
+		// stopScript
+		if (commandName == "stopScript")
+		{
+			StelApp::getInstance().getScriptMgr()->stopScript();
+			result["ok"] = true;
+			return result;
+		}
+
+		// pauseScript
+		if (commandName == "pauseScript")
+		{
+			StelApp::getInstance().getScriptMgr()->pauseScript();
+			result["ok"] = true;
+			return result;
+		}
+
+		// resumeScript
+		if (commandName == "resumeScript")
+		{
+			StelApp::getInstance().getScriptMgr()->resumeScript();
+			result["ok"] = true;
+			return result;
+		}
+
+		// getLoadedModuleNames
+		if (commandName == "getLoadedModuleNames")
+		{
+			const QList<StelModule*> modules = StelApp::getInstance().getModuleMgr().getAllModules();
+			QJsonArray items;
+			for (const StelModule* m : modules)
+			{
+				items.append(m->objectName());
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			return result;
+		}
+
+		// getRTS — Rise/Transit/Set for selected object
+		if (commandName == "getRTS")
+		{
+			StelObjectMgr* omgr = GETSTELMODULE(StelObjectMgr);
+			const QList<StelObjectP> sel = omgr->getSelectedObject();
+			if (sel.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			const StelCore* core = StelApp::getInstance().getCore();
+			QString name = sel[0]->getNameI18n();
+			double nextRise = sel[0]->getNextRise(core->getJD());
+			double nextTransit = sel[0]->getNextTransit(core->getJD());
+			double nextSet = sel[0]->getNextSet(core->getJD());
+			QJsonObject rts;
+			rts["name"] = name;
+			rts["nextRiseJD"] = nextRise;
+			rts["nextTransitJD"] = nextTransit;
+			rts["nextSetJD"] = nextSet;
+			rts["currentJD"] = core->getJD();
+			result["ok"] = true;
+			result["rts"] = rts;
+			return result;
+		}
+
+		// getAlmanac — sun/moon rise/set/transit
+		if (commandName == "getAlmanac")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			PlanetP sun = ssys->getSun();
+			PlanetP moon = ssys->getMoon();
+			QJsonObject alm;
+			alm["currentJD"] = core->getJD();
+			if (sun)
+			{
+				alm["sunNextRise"] = sun->getNextRise(core->getJD());
+				alm["sunNextSet"] = sun->getNextSet(core->getJD());
+				alm["sunNextTransit"] = sun->getNextTransit(core->getJD());
+			}
+			if (moon)
+			{
+				alm["moonNextRise"] = moon->getNextRise(core->getJD());
+				alm["moonNextSet"] = moon->getNextSet(core->getJD());
+				alm["moonNextTransit"] = moon->getNextTransit(core->getJD());
+				alm["moonPhase"] = moon->getPhase(core->getJD());
+			}
+			result["ok"] = true;
+			result["almanac"] = alm;
+			return result;
+		}
+
+		// getObjectPositions — all planet positions
+		if (commandName == "getObjectPositions")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			QStringList planetNames = ssys->getAllPlanetEnglishNames();
+			QJsonArray items;
+			for (const QString& pn : planetNames)
+			{
+				PlanetP p = ssys->searchByName(pn);
+				if (!p) continue;
+				QJsonObject obj;
+				Vec3d altaz = core->altAzFromEquatorial(p->getEquinoxEquatorialPos(core->getJD()), core->getJD());
+				obj["name"] = p->getNameI18n();
+				obj["englishName"] = p->getEnglishName();
+				Vec3d eq = p->getEquinoxEquatorialPos(core->getJD());
+				obj["ra"] = StelUtils::radToHmsStr(eq[0]/M_PI*12.0);
+				obj["dec"] = StelUtils::radToDmsStr(eq[1]/M_PI*180.0);
+				obj["altitude"] = altaz[2] * 180.0 / M_PI;
+				obj["azimuth"] = std::fmod(altaz[0] * 180.0 / M_PI + 360.0, 360.0);
+				obj["magnitude"] = p->getVMagnitude(core->getJD());
+				items.append(obj);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			return result;
+		}
+
+		// ========== End Phase 2 ==========
 
 		result["error"] = "unknown command";
 		result["command"] = commandName;
