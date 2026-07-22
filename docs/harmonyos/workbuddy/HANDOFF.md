@@ -149,3 +149,54 @@ openssl → 系统自带（`openssl` / /usr/bin/openssl）
 3. **如果手动修复**：打开 DevEco Studio，Project Structure → Signing → 取消 "自动生成签名" 再重新勾选 → 保存 → `hvigorw assembleHap` → `hdc install` → `hdc shell aa start -b org.qtproject.example.stellarium -a QAbility` → `hilog -x | grep -i stel`
 4. **App 跑起来后**：用 `uitest dumpLayout -p /data/local/tmp/x.json -b org.qtproject.example.stellarium -m false -i` 抓布局 → `hdc file recv` → 用 `extract_layout.py` 分析 → 逐项验证星空、点星、面板、搜索、按钮、i18n
 5. **改 C++ 后**：`cmake --build . --parallel` → 把新 `libstellarium.so` 同步到 `entry/libs/arm64-v8a/` → `assembleHap`（不要 harmonydeployqt）
+
+---
+
+## 最新更新 (2026-07-22 TRAE)
+
+### 当前状态
+- **HEAD**: `b912e87cee` (i18n 全量完成)
+- **C++ 桥接**: Phase 2 (12 cmd) + Phase 2b (8 cmd) + Phase 2c (3 cmd) = 23 个桥接命令
+- **libstellarium.so**: 已重新编译，包含全部 23 个命令
+- **ArkTS UI**: ~4200 行 MainWindowNativeNode.ets，10 个面板全部实现
+- **i18n**: ~235 个字符串资源键（base/zh_CN/en_US 三 locale）
+- **Tab 标签**: 保持硬编码中文（ArkTS $r() 返回 Resource，不兼容 string 类型）
+
+### 桥接命令清单
+| 命令 | 参数 | 功能 |
+|------|------|------|
+| getLandscapeList | - | 地景列表 (id/name) |
+| setLandscape | id | 切换地景 |
+| setLandscapeTransparency | 0.0-1.0 | 地景透明度 |
+| getScriptList | - | 脚本列表 |
+| playScript/stopScript/pauseScript/resumeScript | name | 脚本控制 |
+| getLoadedModuleNames | - | 已加载模块 |
+| getRTS | - | 选中天体升起/中天/落下时间 |
+| getAlmanac | - | 太阳/月球年历 (月相) |
+| getObjectPositions | - | 行星位置表 (alt/az/mag) |
+| getSkyCultureList | - | 天区文化列表 |
+| setSkyCulture | id | 切换天区文化 |
+| getPluginList | - | 插件列表 (loaded/startup) |
+| loadPlugin/unloadPlugin | name | 插件加载/卸载 |
+| getConfigString/setConfigString | key[=val] | 配置读写 |
+| getObjectInfo | - | 选中天体详细信息 |
+| getConstellationInfo | - | 当前星座 |
+| getStarCount | - | 可见星数 |
+
+### 面板功能概览
+- **Search**: 搜索天体、历史记录、热门搜索、搜索结果列表
+- **Time**: 日期时间选择、天文事件跳转（升起/落下/中天/晨光/昏影）、节气跳转、23 种天文时间单位、暂停/加速/后退/前进
+- **Detail**: 选中天体详情（名称/类型/RA/Dec/Alt/Az/距离/星等/星座）、上一选中、居中、取消追踪、观测列表
+- **Location**: GPS 定位（回退北京）、世界城市列表、经纬度/海拔输入、自定义位置
+- **Layers** (View): 7 tab — Sky/SSO/DSO/Markings/Landscape/SkyCulture/Surveys，~70+ toggle
+- **Settings**: 快捷设置（夜间模式/赤道仪/陀螺仪/时间控制）
+- **Config**: 7 tab — Main/Info/Extras/Time/Tools/Scripts/Plugins
+- **AstroCalc**: 9 tab — Position/Ephemeris/RTS/Phenomena/Charts/WUT/Planet/Eclipse/Almanac
+- **Help**: 关于/快捷操作/功能面板说明
+
+### 已知限制
+1. Tab 标签无法 i18n（ArkTS 限制 $r() → Resource 类型）
+2. AstroCalc 星历表/天象/图表/日食等 tab 仅有 triggerAction 按钮，无真实数据计算（需桌面版 AstroCalcDialog 的 C++ 逻辑移植）
+3. DSO 星表过滤需要 NebulaMgr 位掩码 API，暂未桥接
+4. 地景不随视角自动隐去（P2 KNOWN-ISSUE）
+5. 模拟器 GPS 不可用（已回退到北京坐标）
