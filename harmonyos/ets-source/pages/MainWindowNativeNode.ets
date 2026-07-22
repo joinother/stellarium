@@ -2564,9 +2564,9 @@ private loadPlanetPositions(): void {
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
           Row() {
-            Text('FOV').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text($r('app.string.s0760')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.currentFovText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-            Button('Refresh').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Button($r('app.string.s0761')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(8).height(24).padding({ left: 8, right: 8 })
               .onClick(() => { this.loadFov() })
           }.height(34).width('100%').padding({ left: 10, right: 10 })
@@ -2658,7 +2658,7 @@ private loadPlanetPositions(): void {
       }
       // 天体分类浏览（按分类 tab 切换，点击加载该分类天体列表）
       Row() {
-        Text(('app.string.i0021')).fontSize(12).fontColor(this.nmSub()).width(72)
+        Text($r('app.string.i0021')).fontSize(12).fontColor(this.nmSub()).width(72)
         Row({ space: 4 }) {
           ForEach([
             { code: 'planet', label: $r('app.string.i0103') },
