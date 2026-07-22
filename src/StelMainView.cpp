@@ -1794,6 +1794,130 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2i ==========
+		// getFPS — get current rendering frame rate
+		if (commandName == "getFPS")
+		{
+			result["ok"] = true;
+			result["fps"] = StelApp::getInstance().getFps();
+			return result;
+		}
+
+		// getDitheringMode / setDitheringMode — control color dithering
+		if (commandName == "getDitheringMode")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			DitheringMode mode = core->getDitheringMode();
+			QString modeName;
+			switch (mode) {
+				case DitheringMode::Disabled: modeName = "Disabled"; break;
+				case DitheringMode::Color565: modeName = "Color565"; break;
+				case DitheringMode::Color666: modeName = "Color666"; break;
+				case DitheringMode::Color888: modeName = "Color888"; break;
+				default: modeName = "Color888"; break;
+			}
+			result["ok"] = true;
+			result["mode"] = modeName;
+			return result;
+		}
+
+		if (commandName == "setDitheringMode")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			core->setDitheringMode(payload);
+			result["ok"] = true;
+			return result;
+		}
+
+		// getLightPollution / setLightPollution — sky brightness / light pollution
+		if (commandName == "getLightPollution")
+		{
+			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+			double lum = drawer->getLightPollutionLuminance();
+			result["ok"] = true;
+			result["luminance"] = lum;
+			result["bortleScale"] = StelCore::luminanceToBortleScaleIndex(static_cast<float>(lum));
+			result["mpsas"] = StelCore::luminanceToMPSAS(static_cast<float>(lum));
+			return result;
+		}
+
+		if (commandName == "setLightPollution")
+		{
+			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+			bool ok;
+			double lum = payload.toDouble(&ok);
+			if (ok && lum >= 0.0) {
+				drawer->setLightPollutionLuminance(lum);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid luminance value";
+			}
+			return result;
+		}
+
+		// setBortleScale — set light pollution by Bortle scale index (1-9)
+		if (commandName == "setBortleScale")
+		{
+			bool ok;
+			int index = payload.toInt(&ok);
+			if (ok && index >= 1 && index <= 9) {
+				float lum = StelCore::bortleScaleIndexToLuminance(index);
+				StelApp::getInstance().getCore()->getSkyDrawer()->setLightPollutionLuminance(lum);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "Bortle scale must be 1-9";
+			}
+			return result;
+		}
+
+		// getStarScale / setStarScale — relative star scale
+		if (commandName == "getStarScale")
+		{
+			result["ok"] = true;
+			result["scale"] = StelApp::getInstance().getCore()->getSkyDrawer()->getRelativeStarScale();
+			return result;
+		}
+
+		if (commandName == "setStarScale")
+		{
+			bool ok;
+			double scale = payload.toDouble(&ok);
+			if (ok && scale > 0.0) {
+				StelApp::getInstance().getCore()->getSkyDrawer()->setRelativeStarScale(scale);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid scale";
+			}
+			return result;
+		}
+
+		// getAbsoluteStarScale / setAbsoluteStarScale
+		if (commandName == "getAbsoluteStarScale")
+		{
+			result["ok"] = true;
+			result["scale"] = StelApp::getInstance().getCore()->getSkyDrawer()->getAbsoluteStarScale();
+			return result;
+		}
+
+		if (commandName == "setAbsoluteStarScale")
+		{
+			bool ok;
+			double scale = payload.toDouble(&ok);
+			if (ok && scale > 0.0) {
+				StelApp::getInstance().getCore()->getSkyDrawer()->setAbsoluteStarScale(scale);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid scale";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2i ==========
+
 		// ========== End Phase 2h ==========
 
 		// ========== End Phase 2g ==========
