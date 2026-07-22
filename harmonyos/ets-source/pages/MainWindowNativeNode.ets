@@ -1272,7 +1272,7 @@ private loadPlanetPositions(): void {
 
   private formatRate(rate: number): string {
     if (rate === 0) {
-      return '暂停'
+      return 'undefined'
     }
     if (Math.abs(rate - 0.000011574074074074073) < 0.0000001) {
       return '1x'
@@ -1280,7 +1280,7 @@ private loadPlanetPositions(): void {
     if (rate > 0) {
       return rate.toFixed(6)
     }
-    return '反向'
+    return 'undefined'
   }
 
   private formatDegrees(value: number, positive: string, negative: string): string {
@@ -3055,17 +3055,17 @@ private loadPlanetPositions(): void {
                 .backgroundColor(this.nmBorder())
                 .margin({ top: 4, bottom: 4 })
               Text($r('app.string.s0370')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
-              this.infoRow('升起', this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
-              this.infoRow('中天', this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
-              this.infoRow('落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
+              this.infoRow($r('app.string.s0700'), this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
+              this.infoRow($r('app.string.s0701'), this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
+              this.infoRow($r('app.string.s0702'), this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
               Row()
                 .width('100%').height(0.5)
                 .backgroundColor(this.nmBorder())
                 .margin({ top: 4, bottom: 4 })
               Text($r('app.string.s0371')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
-              this.infoRow('升起', this.jdToDateStr(this.rtsData.get('prevRiseJD') ?? '0'))
-              this.infoRow('中天', this.jdToDateStr(this.rtsData.get('prevTransitJD') ?? '0'))
-              this.infoRow('落下', this.jdToDateStr(this.rtsData.get('prevSetJD') ?? '0'))
+              this.infoRow($r('app.string.s0700'), this.jdToDateStr(this.rtsData.get('prevRiseJD') ?? '0'))
+              this.infoRow($r('app.string.s0701'), this.jdToDateStr(this.rtsData.get('prevTransitJD') ?? '0'))
+              this.infoRow($r('app.string.s0702'), this.jdToDateStr(this.rtsData.get('prevSetJD') ?? '0'))
             }
             Row({ space: 6 }) {
               Button($r('app.string.i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -3138,7 +3138,7 @@ private loadPlanetPositions(): void {
               Text($r('app.string.s0372')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow($r('app.string.s0365'), this.jdToDateStr(this.almanacData.get('sunNextRise') ?? '0'))
               this.infoRow($r('app.string.s0366'), this.jdToDateStr(this.almanacData.get('sunNextSet') ?? '0'))
-              this.infoRow('中天', this.jdToDateStr(this.almanacData.get('sunNextTransit') ?? '0'))
+              this.infoRow($r('app.string.s0701'), this.jdToDateStr(this.almanacData.get('sunNextTransit') ?? '0'))
               Row()
                 .width('100%').height(0.5)
                 .backgroundColor(this.nmBorder())
@@ -3146,7 +3146,7 @@ private loadPlanetPositions(): void {
               Text($r('app.string.s0373')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow($r('app.string.s0367'), this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
               this.infoRow($r('app.string.s0368'), this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
-              this.infoRow('中天', this.jdToDateStr(this.almanacData.get('moonNextTransit') ?? '0'))
+              this.infoRow($r('app.string.s0701'), this.jdToDateStr(this.almanacData.get('moonNextTransit') ?? '0'))
               this.infoRow($r('app.string.s0369'), (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
             }
           }
@@ -3927,46 +3927,46 @@ private loadPlanetPositions(): void {
       return $r('app.string.i0100')
     }
     if (this.activePanel === 'config') {
-      return '配置'
+      return 'undefined'
     }
     if (this.activePanel === 'astro') {
-      return '天文计算'
+      return 'undefined'
     }
     if (this.activePanel === 'help') {
-      return '帮助'
+      return 'undefined'
     }
     if (this.activePanel === 'settings') {
       return $r('app.string.i0102')
     }
-    return '目标详情'
+    return 'undefined'
   }
 
   private panelSubtitle(): ResourceStr {
     if (this.activePanel === 'search') {
-      return '快速定位天体'
+      return 'undefined'
     }
     if (this.activePanel === 'time') {
-      return '调整观测时间'
+      return 'undefined'
     }
     if (this.activePanel === 'place') {
-      return '观测点与定位'
+      return 'undefined'
     }
     if (this.activePanel === 'layers') {
-      return '显示内容开关'
+      return 'undefined'
     }
     if (this.activePanel === 'config') {
-      return '应用设置与配置'
+      return 'undefined'
     }
     if (this.activePanel === 'astro') {
-      return '位置/星历/升降/天象/图表'
+      return 'undefined'
     }
     if (this.activePanel === 'help') {
-      return '关于与操作说明'
+      return 'undefined'
     }
     if (this.activePanel === 'settings') {
-      return '显示与控制'
+      return 'undefined'
     }
-    return '点击星空后显示'
+    return 'undefined'
   }
 
   // View 面板标签页选择器
@@ -4202,7 +4202,7 @@ private loadPlanetPositions(): void {
             }
           }
           .height(32).width('100%').padding({ left: 12, right: 12 })
-          .backgroundColor(this.currentLandscapeId === item.id ? this.nmBg() : 'rgba(0,0,0,0)')
+          .backgroundColor(this.currentLandscapeId === item.id ? 'rgba(80,140,200,0.18)' : 'rgba(0,0,0,0)')
           .borderRadius(4)
           .onClick(() => { this.selectLandscape(item.id, item.name) })
         }, (item: LandscapeItem, index: number) => item.id)
@@ -4253,7 +4253,7 @@ private loadPlanetPositions(): void {
             }
           }
           .height(30).width('100%').padding({ left: 10, right: 10 })
-          .backgroundColor(sc.id === this.currentSkyCultureId ? this.nmAccent() : this.nmBg())
+          .backgroundColor(sc.id === this.currentSkyCultureId ? 'rgba(80,140,200,0.18)' : 'rgba(0,0,0,0)')
           .borderRadius(4)
           .onClick(() => { this.selectSkyCulture(sc.id) })
         }, (sc: SkyCultureItem) => sc.id)

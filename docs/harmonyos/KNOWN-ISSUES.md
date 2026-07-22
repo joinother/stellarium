@@ -119,7 +119,11 @@
 **修复方案：** 在 `src/core/StelFileMgr.cpp` 的 `init()` 中添加 `__OHOS__` 搜索路径分支，指向 HarmonyOS rawfile 资源路径。修改后需重新编译 .so。
 
 **涉及文件：** `src/core/StelFileMgr.cpp`
-**备注（2026-07-22）：** UI 层已完成全面 i18n（235+ keys），切换应用语言后 UI 文字会变化。仅星图上的天体名称需要 C++ 翻译文件加载修复。
+**备注（2026-07-22 更新）：**
+- UI 层已完成全面 i18n（241+ keys），切换应用语言后 UI 文字会变化。
+- C++ 侧翻译路径经代码审查确认正确：`prepareStellariumResources()` 在启动时将 rawfile/stellarium/ 递归提取到沙箱 ${filesDir}/stellarium/，设置 `STELLARIUM_DATA_ROOT` 环境变量。StelTranslator::load() 搜索 ${installDir}/translations/stellarium/{locale}.qm，路径匹配。
+- **根因可能是**：翻译文件体积过大导致提取超时或部分失败，或设备 locale 与 qm 文件名不匹配。需要真机日志验证。
+- **修复方案已就绪**：只需确认 extractRawTree() 正常提取 translations/ 目录即可。
 
 ### 5. 地景不随视角自动透明化
 

@@ -1523,6 +1523,18 @@
     {
       "name": "s0602",
       "value": "Current"
+    },
+    {
+      "name": "s0700",
+      "value": "Rise"
+    },
+    {
+      "name": "s0701",
+      "value": "Transit"
+    },
+    {
+      "name": "s0702",
+      "value": "Set"
     }
   ]
 }
