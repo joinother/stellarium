@@ -2771,6 +2771,77 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2u ==========
+		// getAtmosphereFlags / setAtmosphereFlag
+		if (commandName == "getAtmosphereFlags")
+		{
+			LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+			QJsonObject flags;
+			flags["atmosphere"] = lmgr->getFlagAtmosphere();
+			flags["fog"] = lmgr->getFlagFog();
+			flags["landscape"] = lmgr->getFlagLandscape();
+			flags["cardinals"] = lmgr->getFlagCardinalsPoints();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setAtmosphereFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+				if (flagName == "atmosphere") lmgr->setFlagAtmosphere(state);
+				else if (flagName == "fog") lmgr->setFlagFog(state);
+				else if (flagName == "landscape") lmgr->setFlagLandscape(state);
+				else if (flagName == "cardinals") lmgr->setFlagCardinalsPoints(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown atmosphere flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// getLandscapeOpacity / setLandscapeOpacity
+		if (commandName == "getLandscapeOpacity")
+		{
+			result["ok"] = true;
+			result["opacity"] = StelApp::getInstance().getLandscapeMgr()->getLandscapeTransparency();
+			return result;
+		}
+
+		if (commandName == "setLandscapeOpacity")
+		{
+			bool ok;
+			double opacity = payload.toDouble(&ok);
+			if (ok && opacity >= 0.0 && opacity <= 1.0) {
+				StelApp::getInstance().getLandscapeMgr()->setLandscapeTransparency(opacity);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "opacity must be 0-1";
+			}
+			return result;
+		}
+
+		// getAtmosphereBrightness — atmospheric brightness factor
+		if (commandName == "getAtmosphereBrightness")
+		{
+			result["ok"] = true;
+			result["brightness"] = StelApp::getInstance().getSkyDrawer()->getAtmosphereFadeDuration();
+			return result;
+		}
+
+		// ========== End Phase 2u ==========
+
 		// ========== End Phase 2t ==========
 
 		// ========== End Phase 2s ==========
