@@ -140,6 +140,10 @@ struct WindowNativeNode {
   @State private rtsData: Map<string, string> = new Map()
   @State private almanacData: Map<string, string> = new Map()
   @State private objectInfo: Map<string, string> = new Map()
+  @State private dsoTotalCount: number = 0
+  @State private dsoGalaxies: number = 0
+  @State private dsoClusters: number = 0
+  @State private dsoNebulae: number = 0
   @State private planetPositions: Array<PlanetPosition> = []
   @State private skyCultureList: Array<SkyCultureItem> = []
   @State private currentSkyCultureId: string = ''
@@ -525,7 +529,20 @@ struct WindowNativeNode {
   }
 
   
-  private loadObjectInfo(): void {
+  
+  private loadDSOCounts(): void {
+    this.callInteractive('getDSOCounts', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.dsoCounts !== undefined) {
+        const d = r.dsoCounts as Object;
+        this.dsoTotalCount = (d['total'] as number) ?? 0;
+        this.dsoGalaxies = (d['galaxies'] as number) ?? 0;
+        this.dsoClusters = (d['clusters'] as number) ?? 0;
+        this.dsoNebulae = (d['nebulae'] as number) ?? 0;
+      }
+    })
+  }
+
+private loadObjectInfo(): void {
     this.callInteractive('getObjectInfo', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.objectInfoData !== undefined) {
         const obj = r.objectInfoData as Object;
@@ -3779,9 +3796,18 @@ private loadPlanetPositions(): void {
       .backgroundColor(this.nmBorder())
       .margin({ top: 6, bottom: 4 })
     Row() {
-      Text($r('app.string.i0214')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+            Text($r('app.string.i0214')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
     }
     .height(18).width('100%')
+    Row({ space: 12 }) {
+      Text('Total: ' + this.dsoTotalCount).fontSize(10).fontColor(this.nmSub())
+      Text('G: ' + this.dsoGalaxies).fontSize(10).fontColor(this.nmSub())
+      Text('C: ' + this.dsoClusters).fontSize(10).fontColor(this.nmSub())
+      Text('N: ' + this.dsoNebulae).fontSize(10).fontColor(this.nmSub())
+    }.height(22).width('100%').padding({ left: 10, right: 10 }).margin({ top: 4 })
+    Button('Refresh counts').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+      .borderRadius(8).height(26).padding({ left: 10, right: 10 })
+      .onClick(() => { this.loadDSOCounts() })
   }
 
   // View 面板 Markings 标签页内容

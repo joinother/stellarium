@@ -41,6 +41,7 @@
 #include "StelLocaleMgr.hpp"
 #include "StelSkyCultureMgr.hpp"
 #include "LandscapeMgr.hpp"
+#include "NebulaMgr.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 
@@ -1498,6 +1499,61 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["counts"] = counts;
 			return result;
 		}
+
+				// ========== Phase 2d ==========
+		// getDSOCounts — count visible DSO objects by type
+		if (commandName == "getDSOCounts")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			const NebulaMgr* nm = &core->getNebulaMgr();
+			QJsonObject counts;
+			// Count all DSO currently displayed
+			const QList<StelObjectP>& allDSO = nm->searchAround(core->getAltAzToEquinoxEquatorial(Vec3d(0,0,1)), 180.0, core);
+			int total = 0;
+			int galaxies = 0, clusters = 0, nebulae = 0, other = 0;
+			for (const auto& obj : allDSO) {
+				total++;
+				QString type = obj->getType();
+				if (type.contains("galaxy") || type.contains("Galaxy")) galaxies++;
+				else if (type.contains("cluster") || type.contains("Cluster") || type.contains("open") || type.contains("globular")) clusters++;
+				else if (type.contains("nebula") || type.contains("Nebula") || type.contains("diffuse") || type.contains("planetary")) nebulae++;
+				else other++;
+			}
+			counts["total"] = total;
+			counts["galaxies"] = galaxies;
+			counts["clusters"] = clusters;
+			counts["nebulae"] = nebulae;
+			counts["other"] = other;
+			counts["typeFilter"] = nm->getTypeFilters();
+			result["ok"] = true;
+			result["counts"] = counts;
+			return result;
+		}
+
+		// setTimeToJD — set simulation time to Julian Day
+		if (commandName == "setTimeToJD")
+		{
+			double jd = param.toDouble();
+			StelCore* core = StelApp::getInstance().getCore();
+			core->setJD(jd);
+			core->setTimeRate(0.0);
+			result["ok"] = true;
+			result["jd"] = jd;
+			return result;
+		}
+
+		// getSimulationTime — get current JD and time rate
+		if (commandName == "getSimulationTime")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["jd"] = core->getJD();
+			result["jdOfToday"] = core->getJDOfToday();
+			result["timeRate"] = core->getTimeRate();
+			return result;
+		}
+
+		// ========== End Phase 2d ==========
 
 		// ========== End Phase 2c ==========
 

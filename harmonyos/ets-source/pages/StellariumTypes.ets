@@ -286,4 +286,6 @@ export interface StellariumBridgeResponse {
   rts?: Object
   almanac?: Object
   objectInfoData?: Object
+  dsoCounts?: Object
+  simTime?: Object
 }
