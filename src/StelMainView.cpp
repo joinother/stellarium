@@ -2452,6 +2452,121 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2q ==========
+		// getSolarSystemFlags / setSolarSystemFlag
+		if (commandName == "getSolarSystemFlags")
+		{
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			QJsonObject flags;
+			flags["labels"] = ssys->getFlagLabels();
+			flags["trails"] = ssys->getFlagTrails();
+			flags["hints"] = ssys->getFlagHints();
+			flags["pointer"] = ssys->getFlagPointer();
+			flags["orbits"] = ssys->getFlagOrbits();
+			flags["orbitsWithMoons"] = ssys->getFlagOrbitsWithMoons();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setSolarSystemFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+				if (flagName == "labels") ssys->setFlagLabels(state);
+				else if (flagName == "trails") ssys->setFlagTrails(state);
+				else if (flagName == "hints") ssys->setFlagHints(state);
+				else if (flagName == "pointer") ssys->setFlagPointer(state);
+				else if (flagName == "orbits") ssys->setFlagOrbits(state);
+				else if (flagName == "orbitsWithMoons") ssys->setFlagOrbitsWithMoons(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown solar system flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// getNebulaFlags / setNebulaFlag
+		if (commandName == "getNebulaFlags")
+		{
+			NebulaMgr* nbmgr = GETSTELMODULE(NebulaMgr);
+			QJsonObject flags;
+			flags["show"] = nbmgr->getFlagShow();
+			flags["hints"] = nbmgr->getFlagHints();
+			flags["typeFilters"] = nbmgr->getTypeFilters();
+			flags["showOnlyNamed"] = nbmgr->getFlagShowOnlyNamedDSO();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setNebulaFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				NebulaMgr* nbmgr = GETSTELMODULE(NebulaMgr);
+				if (flagName == "show") nbmgr->setFlagShow(state);
+				else if (flagName == "hints") nbmgr->setFlagHints(state);
+				else if (flagName == "showOnlyNamed") nbmgr->setFlagShowOnlyNamedDSO(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown nebula flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// getMilkyWayFlags / setMilkyWayFlag
+		if (commandName == "getMilkyWayFlags")
+		{
+			MilkyWay* mw = GETSTELMODULE(MilkyWay);
+			QJsonObject flags;
+			flags["show"] = mw->getFlagShow();
+			flags["intensity"] = mw->getIntensity();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setMilkyWayFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				MilkyWay* mw = GETSTELMODULE(MilkyWay);
+				if (flagName == "show") mw->setFlagShow(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown milky way flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2q ==========
+
 		// ========== End Phase 2p ==========
 
 		// ========== End Phase 2o ==========
