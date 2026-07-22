@@ -431,3 +431,36 @@
   - `hdc install -r` 到模拟器 `127.0.0.1:5555` 成功
   - `aa start -b org.qtproject.example.stellarium -a QAbility` 启动成功，`hilog` 中出现 `StellariumArkUI` / `selectAt result`
 - **备注：** 这套签名是本地预览/调试用途，不是正式商店分发凭据。WorkBuddy 关于“模拟器只认 debug profile，项目 release profile 命令行必装不上”的判断在当前环境下不成立；`build-profile.json5` 中 DevEco/Hvigor 签名材料字段不应当作普通 keystore 明文密码使用。
+
+---
+
+## [2026-07-22] TRAE - Phase 2b C++ 桥接扩展 + UI 完善（AstroCalc/SkyCulture/Plugins/Settings）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（+94 行，8 个新桥接命令）
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`（+200+ 行）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（同步）
+- **修改内容：**
+  1. **C++ 桥接新命令：**
+     - `getSkyCultureList`：返回所有天区文化（ID/名称/当前选中）
+     - `setSkyCulture`：通过 ID 切换天区文化
+     - `getPluginList`：列出所有可用插件（名称/已加载/启动加载）
+     - `loadPlugin/unloadPlugin`：动态加载/卸载插件
+     - `getConfigString/setConfigString`：读写 Stellarium 配置
+  2. **AstroCalc 6 个占位 tab 全部替换为功能按钮：**
+     - 星历表：上次/下次升起/中天/落下按钮（actionPrevious_Rising/Transit/Setting, actionNext_Rising/Transit/Setting）
+     - 天象计算：合/冲/距角按钮
+     - 图表：高度/方位角图表按钮
+     - 今晚可见：WUT 面板按钮
+     - 行星计算器：行星数据按钮
+     - 日月食：日食/月食/凌日按钮
+  3. **天区文化 tab：** 从占位文字替换为真实文化列表，支持点击切换（高亮当前选中项）
+  4. **插件管理 tab：** 从占位文字替换为真实插件列表 + Toggle 开关（加载/卸载）
+  5. **Settings 面板：** 新建快捷设置面板（夜间模式/赤道仪/陀螺仪/时间控制），原来为空面板
+  6. **占位清理：** 所有"需C++桥接"占位文字替换为描述性文字或真实 UI
+  7. **ArkTS 类型修复：** moonPhase 计算使用 parseFloat() 包裹字符串
+- **修改原因：** 持续推进 UI 完整度，Phase 2b 桥接扩展数据来源
+- **构建结果：** BUILD SUCCESSFUL（全部 6 次编译均通过）
+- **验证结果：** 未安装测试（用户要求先不测试）
+- **备注：** C++ 侧变更需重新编译 .so 才能在运行时生效。当前 .so 仍为旧版（仅包含 Phase 2 的 12 个命令），Phase 2b 的 8 个命令需要 Qt OHOS 交叉编译后才能使用
+
