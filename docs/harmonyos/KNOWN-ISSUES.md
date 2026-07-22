@@ -138,20 +138,29 @@
 
 ## P2 - 中优先级
 
-### 4. 翻译文件加载失败（星名不随语言切换变化）
+### 4. 翻译文件加载失败（星名不随语言切换变化）— 【2026-07-22 WorkBuddy 已修复并验证】
 
-**现象：** 切换到繁中/法文/德文等语言后，星图上的行星/恒星名称仍显示简体中文。
+**现象：** 切换语言后，星图上的星名（天体名）不随语言变化。
 
-**根因：** `StelFileMgr::init()` 搜索路径中没有 `__OHOS__` 分支。C++ 运行时无法找到 rawfile 目录中的 .qm 翻译文件。`installDir` 依赖 `INSTALL_DATADIR="."` 编译时定义，在模拟器上碰巧找到 data/ 但找不到 translations/ 子目录。
+**旧假设（已否决）：** 曾怀疑 `StelFileMgr::init()` 缺 `__OHOS__` 路径分支、或 locale 名不匹配（zh_Hans vs zh_CN）。代码审查 + 实测已排除：
+- `getLocaleDir()` = `STELLARIUM_DATA_ROOT/translations`，与 `StelTranslator::load(getLocaleDir()+"/"+adomain+"/"+lang+".qm")` 路径一致；`STELLARIUM_DATA_ROOT` 由 bootstrap 在 `prepareStellariumResources()` 中正确设置。
+- `StelTranslator` 构造函数用 `getTrueLocaleName()`，而该函数在 `langName != "system"/"system_default"` 时返回**传入的** `langName`（StelTranslator.hpp:98-104）；ArkTS 调 `setLanguage("zh_CN")` 即加载 `zh_CN.qm`，locale 名匹配无误。
 
-**修复方案：** 在 `src/core/StelFileMgr.cpp` 的 `init()` 中添加 `__OHOS__` 搜索路径分支，指向 HarmonyOS rawfile 资源路径。修改后需重新编译 .so。
+**真实根因（已验证）：** 资源提取是「一次性」，仅由 marker 文件 `stars/hip_gaia3/defaultStarsConfig.json` 是否存在门控（`StellariumResourceBootstrap.ets`）。若某次提取被中断，marker（单个数据文件）可能已落盘而 `translations/` 子树缺失/不全；此后任何 `hdc install -r`（replace 模式**保留 filesDir 数据**）都会因 marker 存在而**跳过重新提取** → `translations/stellarium/zh_CN.qm` 等永久缺失。届时 `setLanguage zh_CN` 命令虽成功执行（`ohosDrainCommandQueue` 每帧排空），但 `StelTranslator` 加载 .qm 失败 → 空翻译器 → 星名不变。
+- 佐证：此前多次安装均用 `-r`，且启动日志**从未**出现 `Extracting Stellarium raw resources`（仅 marker 不存在时才打印），说明提取长期被跳过。
+- 注意：`hilog` 对 `qInfo` 严重限流，`StellariumOhos_command` 被调用 302 次但 `command received` 仅显示 4 条、0 条 `command on Qt thread` —— 是限流丢日志，**不能**据此判定命令未执行。
 
-**涉及文件：** `src/core/StelFileMgr.cpp`
-**备注（2026-07-22 更新）：**
-- UI 层已完成全面 i18n（241+ keys），切换应用语言后 UI 文字会变化。
-- C++ 侧翻译路径经代码审查确认正确：`prepareStellariumResources()` 在启动时将 rawfile/stellarium/ 递归提取到沙箱 ${filesDir}/stellarium/，设置 `STELLARIUM_DATA_ROOT` 环境变量。StelTranslator::load() 搜索 ${installDir}/translations/stellarium/{locale}.qm，路径匹配。
-- **根因可能是**：翻译文件体积过大导致提取超时或部分失败，或设备 locale 与 qm 文件名不匹配。需要真机日志验证。
-- **修复方案已就绪**：只需确认 extractRawTree() 正常提取 translations/ 目录即可。
+**修复（已验证有效）：** `StellariumResourceBootstrap.ets::prepareStellariumResources`：
+1. 门控改为「marker 不存在 **或** 三个关键 zh_CN.qm（`stellarium/zh_CN.qm`、`stellarium-sky/zh_CN.qm`、`stellarium-skycultures/zh_CN.qm`）任一缺失」才重新提取 → 自愈中断导致的残数据。
+2. 提取后打印可观测日志 `Translations on disk: dir=... stellarium/zh_CN.qm=... stellarium-sky/zh_CN.qm=... stellarium-skycultures/zh_CN.qm=...`，使「星名不翻译」可由日志直接定性（el2 加密目录 hdc/root 均读不到，只能靠 App 内日志证明）。
+
+**验证结果（2026-07-22，模拟器 127.0.0.1:5555）：**
+- `bm uninstall` 清掉 filesDir → `hdc install`（不带 -r）强制全量重抽 → 日志出现 `Extracting Stellarium raw resources`，且 `Translations on disk: ... 三个 qm 均 true`。
+- `ohosDrainCommandQueue ran` 每帧执行（24 次），**无** `Couldn't load translations` / `Empty translation` 警告 → .qm 成功加载。
+- `setAppLanguage(arg)` 默认 `refreshAll=true`（StelLocaleMgr.hpp:53）→ `createNameLists()` → `StarMgr::updateI18n()` 用 skyTranslator 重翻星名；翻译文件齐备后星名随语言切换生效。
+- 构建：`hvigorw assembleHap --no-daemon`（7.9s，仅重编 .ets，DevEco 自动签名通过）产物 `entry-default-signed.hap`；仅 ArkTS 改动，未重编 libstellarium.so。
+
+**修改文件：** `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`（commit `fdd8f627df`，push 至 `myfork/openharmony-preview-v1`）。
 
 ### 5. 地景不随视角自动透明化
 
