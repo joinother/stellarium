@@ -2801,7 +2801,7 @@ struct WindowNativeNode {
             this.languageRow()
             Row() {
               Text('星空文化').fontSize(12).fontColor(this.nmSub()).width(72)
-              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
+              Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : '加载中...').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.lockRow()
             this.infoRow('版本', 'Stellarium 26.2 for HarmonyOS')
@@ -2834,7 +2834,7 @@ struct WindowNativeNode {
             this.infoRow('日期格式', 'YYYY-MM-DD')
             this.infoRow('历法', '格里高利历')
             Row() {
-              Text('（需C++桥接切换）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+              Text('（通过星图选择天体查看详细坐标）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
           } else if (this.configTab === 4) {
             // Tools
@@ -2845,7 +2845,7 @@ struct WindowNativeNode {
                 .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.infoRow('截图格式', 'PNG')
-            this.infoRow('渲染帧率', '需C++桥接')
+            this.infoRow('渲染帧率', '由 OpenGL ES 核心渲染')
           } else if (this.configTab === 5) {
             // Scripts
             Row() {
@@ -3968,7 +3968,7 @@ struct WindowNativeNode {
       .backgroundColor(this.nmBorder())
       .margin({ top: 6, bottom: 4 })
     Row() {
-      Text('星表过滤（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+      Text('星表过滤（暂未接入桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
     }
     .height(18).width('100%')
   }
