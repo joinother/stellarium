@@ -2972,12 +2972,19 @@ struct WindowNativeNode {
             Button($r('app.string.i0241')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadPlanetPositions() })
+            Row() {
+              Text('名称').fontSize(10).fontColor(this.nmSub()).width(60)
+              Text('高度°').fontSize(10).fontColor(this.nmSub()).width(50)
+              Text('方位°').fontSize(10).fontColor(this.nmSub()).width(50)
+              Text('星等').fontSize(10).fontColor(this.nmSub()).width(40)
+            }.height(20).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 2 })
             Scroll() {
               Column({ space: 2 }) {
                 ForEach(this.planetPositions, (p: PlanetPosition) => {
                   Row() {
-                    Text(p.name).fontSize(11).fontColor(this.nmText()).width(50)
-                    Text(p.altitude + '°').fontSize(10).fontColor(this.nmSub()).width(50)
+                    Text(p.name).fontSize(11).fontColor(this.nmText()).width(60)
+                    Text(p.altitude.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
+                    Text(p.azimuth.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
                     Text(p.magnitude.toFixed(1)).fontSize(10).fontColor(this.nmSub()).width(40)
                   }
                   .height(28).width('100%').padding({ left: 8, right: 8 })
@@ -2986,7 +2993,7 @@ struct WindowNativeNode {
                 }, (p: PlanetPosition, index: number) => p.name)
               }
             }
-            .width('100%').height(240).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+            .width('100%').height(220).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else if (this.astroTab === 1) {
             Text($r('app.string.i0126')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Text($r('app.string.i0167')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
@@ -3017,11 +3024,24 @@ struct WindowNativeNode {
             Button($r('app.string.i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
-            if (Object.keys(this.rtsData).length > 0) {
+            if (this.rtsData.size > 0) {
               this.infoRow('天体', this.rtsData.get('name') ?? 'N/A')
-              this.infoRow('下次升起', this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
-              this.infoRow('下次中天', this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
-              this.infoRow('下次落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
+              Row()
+                .width('100%').height(0.5)
+                .backgroundColor(this.nmBorder())
+                .margin({ top: 4, bottom: 4 })
+              Text('下次事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              this.infoRow('升起', this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
+              this.infoRow('中天', this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
+              this.infoRow('落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
+              Row()
+                .width('100%').height(0.5)
+                .backgroundColor(this.nmBorder())
+                .margin({ top: 4, bottom: 4 })
+              Text('上次事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              this.infoRow('升起', this.jdToDateStr(this.rtsData.get('prevRiseJD') ?? '0'))
+              this.infoRow('中天', this.jdToDateStr(this.rtsData.get('prevTransitJD') ?? '0'))
+              this.infoRow('落下', this.jdToDateStr(this.rtsData.get('prevSetJD') ?? '0'))
             }
             Row({ space: 6 }) {
               Button($r('app.string.i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -3090,11 +3110,19 @@ struct WindowNativeNode {
             Button($r('app.string.i0240')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadAlmanac() })
-            if (Object.keys(this.almanacData).length > 0) {
+            if (this.almanacData.size > 0) {
+              Text('太阳').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow('日出', this.jdToDateStr(this.almanacData.get('sunNextRise') ?? '0'))
               this.infoRow('日落', this.jdToDateStr(this.almanacData.get('sunNextSet') ?? '0'))
+              this.infoRow('中天', this.jdToDateStr(this.almanacData.get('sunNextTransit') ?? '0'))
+              Row()
+                .width('100%').height(0.5)
+                .backgroundColor(this.nmBorder())
+                .margin({ top: 4, bottom: 4 })
+              Text('月球').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow('月出', this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
               this.infoRow('月落', this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
+              this.infoRow('中天', this.jdToDateStr(this.almanacData.get('moonNextTransit') ?? '0'))
               this.infoRow('月相', (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
             }
           }
