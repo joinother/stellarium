@@ -2840,6 +2840,73 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2v ==========
+		// getProjectionInfo — current projection details
+		if (commandName == "getProjectionInfo")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["currentKey"] = core->getCurrentProjectionTypeKey();
+			result["allKeys"] = QJsonArray::fromStringList(core->getAllProjectionTypeKeys());
+			result["viewportWidth"] = core->getViewportWidth();
+			result["viewportHeight"] = core->getViewportHeight();
+			return result;
+		}
+
+		// getViewportSize — screen viewport dimensions
+		if (commandName == "getViewportSize")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["width"] = core->getViewportWidth();
+			result["height"] = core->getViewportHeight();
+			return result;
+		}
+
+		// getTimeInfo — detailed time information
+		if (commandName == "getTimeInfo")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			StelLocaleMgr& locale = StelApp::getInstance().getLocaleMgr();
+			result["ok"] = true;
+			result["jd"] = core->getJD();
+			result["jde"] = core->getJDE();
+			result["timeRate"] = core->getTimeRate();
+			result["isTimeNow"] = core->getIsTimeNow();
+			result["iso"] = StelUtils::julianDayToISO8601String(core->getJD());
+			result["utcOffset"] = core->getCurrentLocation().getStdLongitude();
+			return result;
+		}
+
+		// getLocationList — search locations by name prefix
+		if (commandName == "getLocationList")
+		{
+			QString prefix = payload.toLower();
+			const StelLocationMgr& locMgr = StelApp::getInstance().getLocationMgr();
+			QJsonArray list;
+			int count = 0;
+			for (const auto& loc : locMgr.getAll()) {
+				if (loc.name.toLower().startsWith(prefix) || loc.englishName.toLower().startsWith(prefix)) {
+					QJsonObject item;
+					item["name"] = loc.name;
+					item["englishName"] = loc.englishName;
+					item["lat"] = loc.latitude;
+					item["lon"] = loc.longitude;
+					item["alt"] = loc.altitude;
+					item["country"] = loc.country;
+					item["planet"] = loc.planetName;
+					list.append(item);
+					if (++count >= 20) break;
+				}
+			}
+			result["ok"] = true;
+			result["locations"] = list;
+			result["count"] = count;
+			return result;
+		}
+
+		// ========== End Phase 2v ==========
+
 		// ========== End Phase 2u ==========
 
 		// ========== End Phase 2t ==========
