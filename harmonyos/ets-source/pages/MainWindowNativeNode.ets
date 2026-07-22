@@ -442,13 +442,18 @@ struct WindowNativeNode {
   }
 
   private setLayer(actionId: string, enabled: boolean): void {
-    this.callInteractive('setActionChecked', actionId + '|' + (enabled ? '1' : '0'), () => {
+    hilog.info(0x0000, 'StellariumArkUI', 'setLayer send %{public}s|%{public}s', actionId, enabled ? '1' : '0')
+    this.callInteractive('setActionChecked', actionId + '|' + (enabled ? '1' : '0'), (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'setLayer %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
     })
   }
 
   private triggerAction(actionId: string): void {
-    this.callInteractive('triggerAction', actionId, () => {
+    hilog.info(0x0000, 'StellariumArkUI', 'triggerAction send %{public}s', actionId)
+    this.flashHint('指令已发送')
+    this.callInteractive('triggerAction', actionId, (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'triggerAction %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
     })
   }
@@ -1779,9 +1784,11 @@ private loadPlanetPositions(): void {
           this.flashHint($r('app.string.i0077'))
         })
       if (this.panelVisible) {
-        Stack() { this.floatingPanel() }
-          .position({ x: this.skyWidth - 392 + this.panelOffsetX, y: 28 + this.panelOffsetY })
-          .hitTestBehavior(HitTestMode.Block)
+        Stack({ alignContent: Alignment.TopStart }) { this.floatingPanel() }
+          .width(this.panelWidth)
+          .height(this.panelMaxHeight)
+          .position({ x: this.skyWidth - this.panelWidth + this.panelOffsetX, y: 28 + this.panelOffsetY })
+          .hitTestBehavior(HitTestMode.Transparent)
       }
     }
       .width('100%')

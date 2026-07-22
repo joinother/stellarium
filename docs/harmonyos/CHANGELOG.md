@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-07-22] WorkBuddy - 修复宽屏布局右侧面板 Toggle/按钮点击无响应
+
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. 给 `expandedShell()` 中承载 `floatingPanel()` 的 `Stack` 显式添加 `.width(this.panelWidth)` + `.height(this.panelMaxHeight)`，使其在宽屏布局下拥有真实命中区域（之前仅设置 `.position()` 且无尺寸，导致 ArkUI  hit-test 无法正确分发到面板内部组件）。
+  2. 将同一面板容器的 `.hitTestBehavior(HitTestMode.Block)` 改为 `.hitTestBehavior(HitTestMode.Transparent)`，让面板区域的触摸事件能穿透到内部的 `Toggle`/`Button` 子组件触发 `onChange`/`onClick`，同时透明属性保证事件也能继续下传到平级兄弟画布触摸层处理天空拖拽/选星。
+  3. 两处 `.ets` 源文件保持同步。
+- **修改原因：** 用户在模拟器 2880×1920 宽屏下调试时反馈"右边菜单里的按钮点击都没效果"。根因是面板容器虽然视觉渲染正常，但命中区域缺失 + `Block` 模式消费了触摸事件而未正确分发给子组件。
+- **构建结果：** `assembleHap` BUILD SUCCESSFUL（8.2s，重编 `.ets`；未重编 C++ / `libstellarium.so`）；DevEco 自动签名通过。
+- **验证结果（2026-07-22，模拟器 127.0.0.1:5555）：**
+  - 启动无 SIGABRT，星空正常渲染。
+  - 点击设置图标打开右侧面板 → "夜间模式" Toggle 开启，天空立即切换为夜间模式；"赤道仪模式" Toggle 开启，星图方向切换。
+  - 点击面板右上角 `×` → 面板关闭。
+  - 点击空旷天空 → 仍能选中天体并显示选择标记（`selectAt` 无回归）。
+
 ## [2026-07-22] TRAE - 触摸架构修复 + LIVE 汉化 + 差距分析文档
 
 - **修改文件：**
