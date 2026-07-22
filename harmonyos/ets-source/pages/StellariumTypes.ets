@@ -1,7 +1,7 @@
 // Auto-extracted from MainWindowNativeNode.ets — shared types & constants
 // Do NOT add @Component or @Builder here; this file is import-only.
 
-export interface LangOption { code: string; name: string }
+export interface LangOption { code: string; name: ResourceStr }
 
 export interface HierCity {
   n: string
@@ -18,7 +18,7 @@ export interface CatOption {
 
 export interface NameItem {
   name: string
-  zh?: string
+  zh?: ResourceStr
 }
 
 // 天体中文别名表：用于把 Stellarium 核心返回的拉丁/英文名（Jupiter、M31、Orion…）

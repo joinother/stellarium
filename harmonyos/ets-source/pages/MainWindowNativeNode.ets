@@ -1014,15 +1014,15 @@ private loadPlanetPositions(): void {
       this.selectedInfo = alias ? alias.zh + ' (' + alias.en + ')' : ''
       this.startDetailAutoRefresh()
     } else {
-      this.selectedName = 'Not found'
-      this.selectedType = result.query && result.query.length > 0 ? result.query : 'No selection'
-      this.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
+      this.selectedName = ''
+      this.selectedType = result.query && result.query.length > 0 ? result.query : ''
+      this.selectedStatus = result.query && result.query.length > 0 ? '' : ''
       this.selectedMagnitude = ''
       this.selectedCoordEq = ''
       this.selectedCoordAlt = ''
       this.selectedConstellation = ''
       this.selectedDistance = ''
-      this.selectedInfo = 'No selectable object at tap position. Zoom in or use search.'
+      this.selectedInfo = ''
     }
   }
 
@@ -2682,10 +2682,10 @@ private loadPlanetPositions(): void {
       Scroll() {
         Row({ space: 6 }) {
           ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
-            { name: 'Moon', zh: '月球' } as NameItem, { name: 'Mars', zh: '火星' } as NameItem, { name: 'Jupiter', zh: '木星' } as NameItem, { name: 'Saturn', zh: '土星' } as NameItem,
-            { name: 'Sirius', zh: '天狼星' } as NameItem, { name: 'Vega', zh: '织女星' } as NameItem, { name: 'Betelgeuse', zh: '参宿四' } as NameItem, { name: 'Polaris', zh: '北极星' } as NameItem,
-            { name: 'M31', zh: '仙女座星系' } as NameItem, { name: 'M42', zh: '猎户座大星云' } as NameItem, { name: 'M45', zh: '昴星团' } as NameItem, { name: 'M13', zh: '武仙座球状星团' } as NameItem,
-            { name: 'M8', zh: '礁湖星云' } as NameItem, { name: 'NGC 7000', zh: '北美洲星云' } as NameItem, { name: 'Double Cluster', zh: '双星团' } as NameItem,
+            { name: 'Moon', zh: $r('app.string.s0770') } as NameItem, { name: 'Mars', zh: $r('app.string.s0771') } as NameItem, { name: 'Jupiter', zh: $r('app.string.s0772') } as NameItem, { name: 'Saturn', zh: $r('app.string.s0773') } as NameItem,
+            { name: 'Sirius', zh: $r('app.string.s0774') } as NameItem, { name: 'Vega', zh: $r('app.string.s0775') } as NameItem, { name: 'Betelgeuse', zh: $r('app.string.s0776') } as NameItem, { name: 'Polaris', zh: $r('app.string.s0777') } as NameItem,
+            { name: 'M31', zh: $r('app.string.s0778') } as NameItem, { name: 'M42', zh: $r('app.string.s0779') } as NameItem, { name: 'M45', zh: $r('app.string.s0780') } as NameItem, { name: 'M13', zh: $r('app.string.s0781') } as NameItem,
+            { name: 'M8', zh: $r('app.string.s0782') } as NameItem, { name: 'NGC 7000', zh: $r('app.string.s0783') } as NameItem, { name: 'Double Cluster', zh: $r('app.string.s0784') } as NameItem,
           ] as NameItem[], (item: NameItem) => {
             Text(item.zh ?? item.name ?? '')
               .fontSize(11).fontColor(this.nmText())
@@ -3572,9 +3572,9 @@ private loadPlanetPositions(): void {
       Scroll() {
         Row({ space: 6 }) {
           ForEach([
-            { code: 'zh_CN', name: '简体中文' },
-            { code: 'zh_HK', name: '繁體(港)' },
-            { code: 'zh_TW', name: '繁體(台)' },
+            { code: 'zh_CN', name: $r('app.string.s0790') },
+            { code: 'zh_HK', name: $r('app.string.s0791') },
+            { code: 'zh_TW', name: $r('app.string.s0792') },
             { code: 'ja', name: $r('app.string.i0033') },
             { code: 'ko', name: $r('app.string.i0034') },
             { code: 'de', name: 'Deutsch' },
