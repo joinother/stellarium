@@ -1553,6 +1553,71 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2e ==========
+		// setLocationByName — move observer to a named location
+		if (commandName == "setLocationByName")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			StelLocationMgr& locMgr = core->getLocationMgr();
+			StelLocation loc = locMgr.locationForName(param);
+			if (loc.isValid()) {
+				core->moveObserverTo(loc);
+				result["ok"] = true;
+				result["name"] = loc.name;
+				result["latitude"] = loc.getLatitude();
+				result["longitude"] = loc.getLongitude();
+				result["altitude"] = loc.altitude;
+			} else {
+				result["ok"] = false;
+				result["error"] = "location not found: " + param;
+			}
+			return result;
+		}
+
+		// setLocationCoords — move observer to lat/lon/alt
+		if (commandName == "setLocationCoords")
+		{
+			QStringList parts = param.split(",");
+			if (parts.size() >= 2) {
+				double lat = parts[0].toDouble();
+				double lon = parts[1].toDouble();
+				double alt = parts.size() >= 3 ? parts[2].toDouble() : 0.0;
+				StelCore* core = StelApp::getInstance().getCore();
+				StelLocation loc;
+				loc.latitude = lat;
+				loc.longitude = lon;
+				loc.altitude = alt;
+				loc.name = QString("Custom %1,%2").arg(lat).arg(lon);
+				core->moveObserverTo(loc);
+				result["ok"] = true;
+				result["latitude"] = lat;
+				result["longitude"] = lon;
+				result["altitude"] = alt;
+			} else {
+				result["ok"] = false;
+				result["error"] = "expected lat,lon[,alt]";
+			}
+			return result;
+		}
+
+		// getSelectedObjectInfo — full info for selected object (alias for existing)
+		if (commandName == "getSelectedType")
+		{
+			const QList<StelObjectP>& sel = StelApp::getInstance().getCore()->getSelectedObject();
+			if (sel.empty()) {
+				result["ok"] = false;
+				result["error"] = "no selection";
+				return result;
+			}
+			result["ok"] = true;
+			result["type"] = sel[0]->getType();
+			result["englishName"] = sel[0]->getEnglishName();
+			result["nameI18"] = sel[0]->getNameI18n();
+			return result;
+		}
+
+		// ========== End Phase 2e ==========
+
 		// ========== End Phase 2d ==========
 
 		// ========== End Phase 2c ==========
