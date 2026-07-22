@@ -210,12 +210,12 @@ struct WindowNativeNode {
   private pinchActive: boolean = false
   private nativeDragActive: boolean = false
   private lastDragCommandMs: number = 0
-  private touchStartedOnUi: boolean = false
   private gyroLastTimeMs: number = 0
   private gyroEventCount: number = 0
   private readonly gyroSensitivity: number = 180
   private gyroCallback: ((data: sensor.GyroscopeResponse) => void) | undefined = undefined
   private dragLogCount: number = 0
+  private touchStartedOnUi: boolean = false
   private panelDragging: boolean = false
   private panelDragStartX: number = 0
   private panelDragStartY: number = 0
@@ -1481,6 +1481,7 @@ private loadPlanetPositions(): void {
         }
       }
       if (this.isUiPoint(downX, downY)) {
+        this.touchStartedOnUi = true
         // Handle sidebar button clicks since XComponent swallows onClick events
         if (downX >= 0 && downX <= 58) {
           const railTop = 28
@@ -1542,6 +1543,7 @@ private loadPlanetPositions(): void {
 
       // Panel drag handling
       if (this.panelDragging) {
+        this.touchStartedOnUi = false
         this.panelOffsetX = this.panelDragStartOffsetX + (x - this.panelDragStartX)
         this.panelOffsetY = this.panelDragStartOffsetY + (y - this.panelDragStartY)
         return
@@ -1583,7 +1585,8 @@ private loadPlanetPositions(): void {
         return
       }
       // If touch started on a UI element (sidebar/panel), do not trigger selectAt
-      if (this.isUiPoint(x, y)) {
+      if (this.touchStartedOnUi || this.isUiPoint(x, y)) {
+        this.touchStartedOnUi = false
         return
       }
       if (this.panelVisible) {
