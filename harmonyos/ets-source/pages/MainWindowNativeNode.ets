@@ -5,7 +5,7 @@ import { sensor } from '@kit.SensorServiceKit'
 import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
-import { ALIAS_LIST, StellariumBridgeResponse, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 
 @Entry
 @Component
@@ -1465,7 +1465,6 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Down) {
       const downX = this.touchWindowX(points[0])
       const downY = this.touchWindowY(points[0])
-      this.flashHint('Touch: x=' + downX + ' y=' + downY + ' sky=' + this.skyWidth + 'x' + this.skyHeight + ' rail=' + this.railTop())
       // Panel header drag detection (before isUiPoint sidebar check)
       if (this.panelVisible) {
         const pl = this.panelLeft()
@@ -2216,7 +2215,7 @@ private loadPlanetPositions(): void {
           })
       }
       .width("100%").margin({ top: 4, bottom: 4 })
-	      this.quickChips([$r('app.string.s0721'), $r('app.string.s0741'), $r('app.string.s0742')])
+	      this.quickChips([{ id: 'refresh', label: $r('app.string.s0721') }, { id: 'center', label: $r('app.string.s0741') }, { id: 'untrack', label: $r('app.string.s0742') }])
       Row({ space: 6 }) {
         Button($r('app.string.i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
@@ -2227,9 +2226,9 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow($r('app.string.i0054'), this.observationTimeText)
       this.infoRow($r('app.string.i0055'), this.timeRateText)
-      this.infoRow($r('app.string.i0056'), this.timeRateText === 'Paused' ? 'Paused' : 'Running')
-      this.quickChips(['Now', 'Back', 'Pause', 'Forward'])
-      this.quickChips(['+12h', '-12h'])
+      this.infoRow($r('app.string.i0056'), this.timeRateText === 'Paused' ? $r('app.string.s0756') : $r('app.string.s0757'))
+      this.quickChips([{ id: 'now', label: $r('app.string.s0754') }, { id: 'back', label: $r('app.string.s0755') }, { id: 'pause', label: $r('app.string.s0756') }, { id: 'forward', label: $r('app.string.s0757') }])
+      this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
       Row()
         .width('100%').height(0.5)
@@ -2493,7 +2492,7 @@ private loadPlanetPositions(): void {
         Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       this.locationPickerPanel()
-      this.quickChips(['Beijing', '上海', '深圳'])
+      this.quickChips([{ id: 'Beijing', label: 'Beijing' }, { id: 'Shanghai', label: $r('app.string.s0758') }, { id: 'Shenzhen', label: $r('app.string.s0759') }])
 	    } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {
@@ -2593,7 +2592,7 @@ private loadPlanetPositions(): void {
       // 快选行星
       if (this.searchText.length === 0) {
         Row() {
-          Text('Planets').fontSize(10).fontColor(this.nmSub()).width(52)
+          Text($r('app.string.s0743')).fontSize(10).fontColor(this.nmSub()).width(52)
           Scroll() {
             Row({ space: 4 }) {
               ForEach(['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'], (p: string) => {
@@ -2605,7 +2604,7 @@ private loadPlanetPositions(): void {
           }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
         }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
         Row() {
-          Text('Stars').fontSize(10).fontColor(this.nmSub()).width(52)
+          Text($r('app.string.s0744')).fontSize(10).fontColor(this.nmSub()).width(52)
           Scroll() {
             Row({ space: 4 }) {
               ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
@@ -2948,15 +2947,15 @@ private loadPlanetPositions(): void {
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionShow_AstroCalc_Next_Elongation') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
-            Text('Tonight').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 6, bottom: 2 })
+            Text($r('app.string.s0745')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 6, bottom: 2 })
             Row({ space: 6 }) {
-              Button('Sunset+1h').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.s0751')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionSet_Time_1_Hour_Forward') })
-              Button('Midnight').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.s0752')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionSet_Time_Now') })
-              Button('Sunrise-1h').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.s0753')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionSet_Time_1_Hour_Backward') })
             }.width('100%').padding({ left: 4, right: 4 })
@@ -3097,7 +3096,7 @@ private loadPlanetPositions(): void {
       }
       .height(18).width('100%')
       Row() {
-        this.quickChips(['东', '南', '西', '北', $r('app.string.i0088'), $r('app.string.i0089')])
+        this.quickChips([{ id: 'east', label: $r('app.string.s0725') }, { id: 'south', label: $r('app.string.s0726') }, { id: 'west', label: $r('app.string.s0727') }, { id: 'north', label: $r('app.string.s0728') }, { id: 'zenith', label: $r('app.string.i0088') }, { id: 'ncp', label: $r('app.string.i0089') }])
       }
       .width('100%')
       // 分区：视场
@@ -3110,7 +3109,7 @@ private loadPlanetPositions(): void {
       }
       .height(18).width('100%')
       Row() {
-        this.quickChips(['1°', '2°', '5°', '10°', '20°', '45°', '60°', '90°', '180°'])
+        this.quickChips([{ id: 'fov1', label: '1°' }, { id: 'fov2', label: '2°' }, { id: 'fov5', label: '5°' }, { id: 'fov10', label: '10°' }, { id: 'fov20', label: '20°' }, { id: 'fov45', label: '45°' }, { id: 'fov60', label: '60°' }, { id: 'fov90', label: '90°' }, { id: 'fov180', label: '180°' }])
       }
       .width('100%')
       // 天球投影切换
@@ -3171,11 +3170,11 @@ private loadPlanetPositions(): void {
           .onClick(() => {
             this.flipHoriz = !this.flipHoriz
             this.triggerAction('actionHorizontal_Flip')
-            this.flashHint(this.flipHoriz ? '已镜像' : '正常')
+            this.flashHint(this.flipHoriz ? $r('app.string.s0711') : $r('app.string.s0712'))
           })
       }
       .width('100%').padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 4 })
-      this.quickChips(['刷新', '现在'])
+      this.quickChips([{ id: 'refresh', label: $r('app.string.s0721') }, { id: 'now', label: $r('app.string.s0754') }])
       // 帮助说明
       Row() {
         Text($r('app.string.i0026')).fontSize(12).fontColor("#66FFFFFF").width(72)
@@ -3636,10 +3635,10 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  quickChips(labels: ResourceStr[]) {
+  quickChips(items: ChipItem[]) {
     Row() {
-      ForEach(labels, (label: string) => {
-        Button(label)
+      ForEach(items, (item: ChipItem) => {
+        Button(item.label)
           .fontSize(12)
           .fontColor('#5B93BF')
           .fontWeight(FontWeight.Medium)
@@ -3652,83 +3651,80 @@ private loadPlanetPositions(): void {
           .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 5 })
           .animation({ duration: 160, curve: Curve.EaseOut })
           .onClick(() => {
-            this.handleChip(label)
-            this.flashHint(label)
+            this.handleChip(item.id)
           })
-      }, (label: string) => label)
+      }, (item: ChipItem) => item.id)
     }
       .width('100%')
       .margin({ top: 12 })
   }
 
-  private handleChip(label: string): void {
-    const en = this.enNameOf(label)
-    if (label === '刷新') {
+  private handleChip(id: string): void {
+    if (id === 'refresh') {
       this.refreshSelectedObject()
       this.refreshState()
-    } else if (label === '居中' || label === '追踪') {
+    } else if (id === 'center' || id === 'track') {
       this.moveToSelectedObject()
-    } else if (label === '取消追踪') {
+    } else if (id === 'untrack') {
       this.callInteractive('setTracking', '0', () => { this.refreshState() })
-    } else if (label === '现在') {
+    } else if (id === 'now') {
       this.triggerAction('actionReturn_To_Current_Time')
       this.setTimeRate(0.000011574074074073)
-    } else if (label === '后退') {
+    } else if (id === 'back') {
       this.triggerAction('actionDecrease_Time_Speed')
-    } else if (label === '暂停') {
+    } else if (id === 'pause') {
       this.setTimeRate(0)
-    } else if (label === '前进') {
+    } else if (id === 'forward') {
       this.triggerAction('actionIncrease_Time_Speed')
-    } else if (label === '+12h') {
+    } else if (id === '+12h') {
       this.advanceTime(12)
-    } else if (label === '-12h') {
+    } else if (id === '-12h') {
       this.advanceTime(-12)
-    } else if (en === 'Moon') {
+    } else if (id === 'Moon') {
       this.searchObject('Moon')
-    } else if (en === 'Mars') {
+    } else if (id === 'Mars') {
       this.searchObject('Mars')
-    } else if (en === 'Jupiter') {
+    } else if (id === 'Jupiter') {
       this.searchObject('Jupiter')
-    } else if (label === 'Beijing') {
+    } else if (id === 'Beijing') {
       this.setLocation('Beijing', 39.9042, 116.4074, 44)
-    } else if (label === '上海') {
+    } else if (id === 'Shanghai') {
       this.setLocation('Shanghai', 31.2304, 121.4737, 4)
-    } else if (label === '深圳') {
+    } else if (id === 'Shenzhen') {
       this.setLocation('Shenzhen', 22.5431, 114.0579, 40)
-    // 搜索面板天体快捷搜索（中英文标签都认）
-    } else if (['Sun', 'Mercury', 'Venus', 'Saturn', 'Sirius', 'Vega', 'Betelgeuse', 'Polaris', 'M31', 'M42', 'M45', 'NGC 2244'].includes(en)) {
-      this.searchObject(en)
+    } else if (id === 'Sun' || id === 'Mercury' || id === 'Venus' || id === 'Saturn' || id === 'Sirius' || id === 'Vega' || id === 'Betelgeuse' || id === 'Polaris' || id === 'M31' || id === 'M42' || id === 'M45' || id === 'NGC 2244') {
+      this.searchObject(id)
     // 方向快捷查看
-    } else if (label === '东') {
+    } else if (id === 'east') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_East'); this.refreshState(); this.flashHint($r('app.string.i0084'))
-    } else if (label === '南') {
+    } else if (id === 'south') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_South'); this.refreshState(); this.flashHint($r('app.string.i0085'))
-    } else if (label === '西') {
+    } else if (id === 'west') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_West'); this.refreshState(); this.flashHint($r('app.string.i0086'))
-    } else if (label === '北') {
+    } else if (id === 'north') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_North'); this.refreshState(); this.flashHint($r('app.string.i0087'))
-    } else if (label === '天顶') {
+    } else if (id === 'zenith') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_Zenith'); this.refreshState(); this.flashHint($r('app.string.i0088'))
-    } else if (label === '北天极') {
+    } else if (id === 'ncp') {
       this.stopTracking(); this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint($r('app.string.i0089'))
     // FOV 快捷切换（actionSet_FOV 索引: 0=0.5°, 1=180°, 2=90°, 3=60°, 4=45°, 5=20°, 6=10°, 7=5°, 8=2°, 9=1°）
-    } else if (label === '1°') {
+    } else if (id === 'fov1') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint($r('app.string.i0090'))
-    } else if (label === '2°') {
+    } else if (id === 'fov2') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint($r('app.string.i0091'))
-    } else if (label === '5°') {
+    } else if (id === 'fov5') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint($r('app.string.i0092'))
-    } else if (label === '10°') {
+    } else if (id === 'fov10') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint($r('app.string.i0093'))
-    } else if (label === '20°') {
+    } else if (id === 'fov20') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint($r('app.string.i0094'))
-    } else if (label === '45°') {
+    } else if (id === 'fov45') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint($r('app.string.i0095'))
-    } else if (label === '60°') {
+    } else if (id === 'fov60') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint($r('app.string.i0096'))
-    } else if (label === '90°') {
+    } else if (id === 'fov90') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint($r('app.string.i0097'))
-    } else if (label === '180°') {
+    } else if (id === 'fov180') {
       this.stopTracking(); this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint($r('app.string.i0098'))
     }
   }
@@ -3920,7 +3916,7 @@ private loadPlanetPositions(): void {
       Text('C: ' + this.dsoClusters).fontSize(10).fontColor(this.nmSub())
       Text('N: ' + this.dsoNebulae).fontSize(10).fontColor(this.nmSub())
     }.height(22).width('100%').padding({ left: 10, right: 10 }).margin({ top: 4 })
-    Button('Refresh counts').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+    Button($r('app.string.s0746')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
       .borderRadius(8).height(26).padding({ left: 10, right: 10 })
       .onClick(() => { this.loadDSOCounts() })
   }

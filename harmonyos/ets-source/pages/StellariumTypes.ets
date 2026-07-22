@@ -49,6 +49,11 @@ export interface WindowNativeNodeCreateInfo {
   onDisAppear: () => void
 }
 
+export interface ChipItem {
+  id: string
+  label: ResourceStr
+}
+
 export interface TabItem {
   label: ResourceStr
   id: number
