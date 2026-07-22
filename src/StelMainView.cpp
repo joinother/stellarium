@@ -2077,6 +2077,76 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2l ==========
+		// getFlagGravityLabels / setFlagGravityLabels — gravity label mode
+		if (commandName == "getFlagGravityLabels")
+		{
+			result["ok"] = true;
+			result["enabled"] = StelApp::getInstance().getCore()->getFlagGravityLabels();
+			return result;
+		}
+
+		if (commandName == "setFlagGravityLabels")
+		{
+			StelApp::getInstance().getCore()->setFlagGravityLabels(payload == "1" || payload == "true");
+			result["ok"] = true;
+			return result;
+		}
+
+		// getFlagClearSky / setFlagClearSky — clear sky mode
+		if (commandName == "getFlagClearSky")
+		{
+			result["ok"] = true;
+			result["enabled"] = StelApp::getInstance().getCore()->getFlagClearSky();
+			return result;
+		}
+
+		if (commandName == "setFlagClearSky")
+		{
+			StelApp::getInstance().getCore()->setFlagClearSky(payload == "1" || payload == "true");
+			result["ok"] = true;
+			return result;
+		}
+
+		// getSkyCultureInfo — current sky culture details
+		if (commandName == "getSkyCultureInfo")
+		{
+			StelSkyCultureMgr* scm = &StelApp::getInstance().getSkyCultureMgr();
+			result["ok"] = true;
+			result["id"] = scm->getCurrentSkyCultureID();
+			result["name"] = scm->getCurrentSkyCultureNameI18();
+			result["englishName"] = scm->getCurrentSkyCultureEnglishName();
+			return result;
+		}
+
+		// getIsDaylight — whether sun is up (for adaptive UI)
+		if (commandName == "getIsDaylight")
+		{
+			result["ok"] = true;
+			result["brightDaylight"] = StelApp::getInstance().getCore()->isBrightDaylight();
+			return result;
+		}
+
+		// getBasicInfo — app metadata
+		if (commandName == "getBasicInfo")
+		{
+			result["ok"] = true;
+			result["version"] = StelApp::getInstance().getApplicationVersion();
+			result["dataDir"] = StelFileMgr::getUserDir();
+			result["locale"] = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+			result["skyLanguage"] = StelApp::getInstance().getLocaleMgr().getSkyLanguage();
+			result["jd"] = StelApp::getInstance().getCore()->getJD();
+			StelLocation loc = StelApp::getInstance().getCore()->getCurrentLocation();
+			result["location"] = loc.name;
+			result["latitude"] = loc.latitude;
+			result["longitude"] = loc.longitude;
+			result["altitude"] = loc.altitude;
+			result["planetName"] = loc.planetName;
+			return result;
+		}
+
+		// ========== End Phase 2l ==========
+
 		// ========== End Phase 2k ==========
 
 		// ========== End Phase 2j ==========

@@ -773,7 +773,7 @@ private loadPlanetPositions(): void {
       this.lx200Status = mode + ' sent: ' + target + coord
     } else {
       const message = result.error === 'no selected object' ? 'Please select or search a target first' : result.error
-      this.lx200Status = message ? message : 'LX200 命令失败'
+      this.lx200Status = message ? message : 'Disconnected'
     }
   }
 
@@ -830,7 +830,7 @@ private loadPlanetPositions(): void {
     this.gyroLastTimeMs = 0
     this.gyroscopeEnabled = false
     if (updateStatus) {
-      this.gyroscopeStatus = '关闭'
+      this.gyroscopeStatus = 'Off'
     }
   }
 
@@ -994,7 +994,7 @@ private loadPlanetPositions(): void {
       return
     }
     if (result.found === true) {
-      this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '已选择')
+      this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
       this.selectedType = result.type && result.type.length > 0 ? result.type : 'Object'
       this.selectedStatus = 'Selected'
       this.selectedMagnitude = (typeof result.magnitude === 'number') ? (result.magnitude as number).toFixed(2) : ''
@@ -3143,7 +3143,7 @@ private loadPlanetPositions(): void {
           .onClick(() => {
             this.nightMode = !this.nightMode
             this.triggerAction('actionShow_Night_Mode')
-            this.flashHint(this.nightMode ? '夜间模式' : '日间模式')
+            this.flashHint(this.nightMode ? $r('app.string.s0707') : $r('app.string.s0708'))
           })
       }
       .width('100%').margin({ top: 4, bottom: 4 })
