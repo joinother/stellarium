@@ -260,3 +260,64 @@ $HDC -t 127.0.0.1:5555 shell aa start -b org.qtproject.example.stellarium -a QAb
 - 不要把实际 keystore/key 密码写进 GitHub 文档或提交信息。
 - 不要尝试改 HAP 里的签名/profile 文件；签名块由 `hap-sign-tool.jar sign-app` 生成。
 - 每次修改构建/签名流程后，更新 `docs/harmonyos/CHANGELOG.md`。
+
+---
+
+## 9. TRAE Agent 实际签名流程（2026-07-22 验证）
+
+### 9.1 我是怎么签名的
+
+**我完全依赖 DevEco 自动签名，没有手动执行 hap-sign-tool。** 流程如下：
+
+1. **签名材料来源：** DevEco Studio 在首次打开项目时自动生成了签名材料，存放在：
+   ```
+   /Users/jiexuanyang/.ohos/config/openharmony/
+   ├── default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.cer    # 应用证书
+   ├── default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.p12    # 密钥库
+   ├── default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.p7b    # debug profile
+   └── material/{ac,ce,fd}/ ...                                                    # CA 证书链
+   ```
+
+2. **build-profile.json5 配置：** 项目已配置好签名引用，指向上述文件。这个文件已提交到 GitHub，包含密码和路径（DevEco 自动签名的标准做法，debug 签名，本地开发用途）。
+
+3. **构建时自动签名：** hvigorw assembleHap 的最后一个步骤 SignHap 会读取 build-profile.json5 中的签名配置，自动对 HAP 签名。产物名 entry-default-signed.hap。
+
+4. **我的完整构建+安装命令（一条龙）：**
+   ```sh
+   # 第一步：构建（自动签名）
+   cd /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos
+   env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
+     JAVA_HOME=/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home \
+     OHOS_BASE_SDK_HOME=/Users/jiexuanyang/Library/OpenHarmony/Sdk \
+     PATH=/Applications/DevEco-Studio.app/Contents/tools/node/bin:\
+     /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin:\
+     /usr/bin:/bin:/usr/sbin:/sbin \
+     /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
+
+   # 第二步：安装到模拟器
+   HDC="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc"
+   $HDC -t 127.0.0.1:5555 force-stop org.qtproject.example.stellarium
+   $HDC -t 127.0.0.1:5555 shell bm uninstall -n org.qtproject.example.stellarium
+   $HDC -t 127.0.0.1:5555 install -r \
+     /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
+
+   # 第三步：启动并测试
+   $HDC -t 127.0.0.1:5555 shell hilog -r
+   $HDC -t 127.0.0.1:5555 shell aa start -b org.qtproject.example.stellarium -a QAbility
+   ```
+
+### 9.2 真机安装失败的原因
+
+连接的真机 7LZBB26323200303 是 Release 版本（const.ohos.releasetype=Release），不接受 debug 签名的 HAP。要安装到这台设备，需要：
+
+1. **开启开发者模式：** 设置 → 关于手机 → 连续点击版本号 7 次
+2. **获取 release profile：** 在 AppGallery Connect 上注册应用，生成 release 类型的 .p7b
+3. **或用 DevEco Studio 直接 Run 到真机：** DevEco 会自动处理签名
+
+### 9.3 给 WorkBuddy 的建议
+
+- **日常开发用模拟器**，DevEco 自动签名直接可用，不需要手动签名
+- **签名材料在 ~/.ohos/config/openharmony/ 目录下**，由 DevEco 管理，不要手动删除
+- **build-profile.json5 已包含签名配置**，直接构建就行
+- **如果要重新生成签名材料：** DevEco Studio → File → Project Structure → Signing Configs → 勾选 "Automatically generate signature"
+- **安装失败时先卸载再装：** $HDC shell bm uninstall -n org.qtproject.example.stellarium
