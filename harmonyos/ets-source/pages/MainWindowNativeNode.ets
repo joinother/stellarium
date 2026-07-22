@@ -1451,6 +1451,20 @@ private loadPlanetPositions(): void {
       const downX = this.touchWindowX(points[0])
       const downY = this.touchWindowY(points[0])
       this.flashHint('Touch: x=' + downX + ' y=' + downY + ' sky=' + this.skyWidth + 'x' + this.skyHeight + ' rail=' + this.railTop())
+      // Panel header drag detection (before isUiPoint sidebar check)
+      if (this.panelVisible) {
+        const pl = this.panelLeft()
+        const pr = this.panelRight()
+        const pt = this.panelTop()
+        if (downX >= pl && downX <= pr && downY >= pt && downY <= pt + 48) {
+          this.panelDragging = true
+          this.panelDragStartX = downX
+          this.panelDragStartY = downY
+          this.panelDragStartOffsetX = this.panelOffsetX
+          this.panelDragStartOffsetY = this.panelOffsetY
+          return
+        }
+      }
       if (this.isUiPoint(downX, downY)) {
         // Handle sidebar button clicks since XComponent swallows onClick events
         if (downX >= 0 && downX <= 58) {
@@ -1511,6 +1525,13 @@ private loadPlanetPositions(): void {
         return
       }
 
+      // Panel drag handling
+      if (this.panelDragging) {
+        this.panelOffsetX = this.panelDragStartOffsetX + (x - this.panelDragStartX)
+        this.panelOffsetY = this.panelDragStartOffsetY + (y - this.panelDragStartY)
+        return
+      }
+
       const totalMove = this.distance(x, y, this.touchStartX, this.touchStartY)
       // 阈值放宽到 16vp:uitest/mock 注入的触摸常有几像素位移,
       // 4vp 会把"轻点"误判成"拖动",导致 selectAt 不触发。
@@ -1541,6 +1562,11 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       const x = this.touchWindowX(points[0])
       const y = this.touchWindowY(points[0])
+      // End panel drag
+      if (this.panelDragging) {
+        this.panelDragging = false
+        return
+      }
       // If touch started on a UI element (sidebar/panel), do not trigger selectAt
       if (this.isUiPoint(x, y)) {
         return
