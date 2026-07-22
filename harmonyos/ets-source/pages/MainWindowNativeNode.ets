@@ -493,9 +493,9 @@ struct WindowNativeNode {
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
-      { icon: 'settings', label: '配置', panel: 'config' },
-      { icon: 'search', label: '计算', panel: 'astro' },
-      { icon: 'info', label: '帮助', panel: 'help' }
+      { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
+      { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
+      { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
   ]
 
   aboutToAppear(): void {
@@ -1954,15 +1954,9 @@ struct WindowNativeNode {
 
       // 缩放按钮（右上角）
       Row() {
-        Button('+').fontSize(18).fontColor(this.nmText()).backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(26).width(40).height(40).borderRadius(20)
-          .border({ width: 0.5, color: 'rgba(255,255,255,0.08)' })
-          .shadow({ radius: 16, color: 'rgba(0,0,0,0.30)', offsetY: 4 })
+        Stack() { this.zoomButton('zoom_in') }
           .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
-        Button('-').fontSize(18).fontColor(this.nmText()).backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(26).width(40).height(40).borderRadius(20)
-          .border({ width: 0.5, color: 'rgba(255,255,255,0.08)' })
-          .shadow({ radius: 16, color: 'rgba(0,0,0,0.30)', offsetY: 4 })
+        Stack() { this.zoomButton('zoom_out') }
           .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
       }
       .width('100%')

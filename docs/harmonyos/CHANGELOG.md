@@ -464,3 +464,16 @@
 - **验证结果：** 未安装测试（用户要求先不测试）
 - **备注：** C++ 侧变更需重新编译 .so 才能在运行时生效。当前 .so 仍为旧版（仅包含 Phase 2 的 12 个命令），Phase 2b 的 8 个命令需要 Qt OHOS 交叉编译后才能使用
 
+
+## [2026-07-22] TRAE - C++ .so 重编（Phase 2b 命令生效）
+
+- **修改文件：** `src/StelMainView.cpp`（已编译）
+- **修改内容：**
+  1. 使用 `make -j src/CMakeFiles/stelMain.dir/StelMainView.cpp.o && make -j src/libstelMain.a && make -j src/libstellarium.so` 重新编译
+  2. 使用 `harmonydeployqt` 重新部署 libs/ 到 entry/libs/arm64-v8a/
+  3. HAP 编译通过，新的 .so 已打包
+- **修改原因：** Phase 2b 的 8 个新 C++ 桥接命令需要在运行时生效
+- **构建结果：** BUILD SUCCESSFUL（C++ .so + HAP 均通过）
+- **验证结果：** 未安装测试（用户要求先不测试）
+- **备注：** libstellarium.so 已更新（约 40MB），包含 getSkyCultureList/setSkyCulture/getPluginList/loadPlugin/unloadPlugin/getConfigString/setConfigString
+
