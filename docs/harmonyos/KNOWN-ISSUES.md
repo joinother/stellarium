@@ -136,6 +136,32 @@
 
 ---
 
+### 4. Phase 2 命令桥从未编译（幻觉 API）— 【2026-07-22 已修复并验证】
+
+- **状态：** ✅ 已修复并验证（2026-07-22）
+- **现象（修复前）：** `libstellarium.so` 无法编译。`src/StelMainView.cpp` 中整个 Phase 2 命令桥（约 23 个提交、命令分发 ~696–3117 行）**从未针对真实 Stellarium API 编译过**——每个命令都调用了不存在或签名错误的幻觉 API。提交历史里有代码，但一编译就爆几十个错误。
+- **真实根因（已验证）：**
+  1. **命令桥被关在匿名 namespace 外**：文件第 124 行 `namespace {` 开启后**从未闭合**，导致后续所有代码（含 `StelMainView` 类定义）被错误嵌套，编译器报大量"私有成员"式误错，根因其实是少了一个 `}`。
+  2. **`payload` 捕获错误**：命令分发 lambda 捕获的是 `QString arg`，但 Phase 2 命令直接用了 C 入口参数 `const char* payload`（未捕获）→ 把 C 字符串当 QString 用，编译失败。
+  3. **约 40 处 API 签名不匹配**：`GETSTELMODULE(X)->` 误用 `.`、`getStelObjectMgr()->` 应为 `.`、虚构的 `setDateFormatForLanguage`/`getCustomStarMagLimit`/`getSkyCultureEnglishName`(私有)/`getStdLongitude`/`loc.englishName`/`loc.country`/`drawEnded`(私有) 等；`getApplicationVersion` 实属 `StelUtils::`、`getCurrentDeltaTAlgorithmDescription` 真实存在、`malloc_usable_size` 在 OHOS 未定义等。真实接口逐个 grep 头文件确认后修正。
+- **修复（已验证有效）：**
+  1. 闭合匿名 namespace（在 `#endif` 前补 `} // anonymous namespace`）。
+  2. `payload` → `arg`（46 处裸标识符替换，跳过字符串字面量）。
+  3. 全量对齐真实 API：LandscapeMgr/MilkyWay 经 `GETSTELMODULE` 取指针、SkyDrawer/StelApp 取引用、Viewport 经 `getProjection()->`、位置经 `getLatitude()/getLongitude()` 等。新增 `StelMainView::ohosDrawEnded()` 公开包装（因 `drawEnded()` 私有）。
+  4. `harmonyos/ets-source/pages/StellariumTypes.ets` 的 `StellariumBridgeResponse` 补 `meteors`/`dsoLabels`/`autoZoomResets` 三个可选布尔字段，修复 ArkTS 报 `Property does not exist` 的编译错误（此三开关此前在 C++ 桥是 dead 的，修复后真正可用）。
+- **验证结果（2026-07-22）：**
+  - `cmake --build .` 链接 `libstellarium.so`：**0 错误**（修复前几十个）。
+  - `hvigorw assembleHap --no-daemon` 重新打包并**自动签名**通过（此前因 ArkTS 类型缺失失败于 `CompileArkTS`）。
+  - 产物 `entry-default-signed.hap` 内嵌 `libs/arm64-v8a/libstellarium.so` 的 BuildID=`d404de18b5fd6deed2f4297fff43dfedd834225c`，即本次修复构建（已 stripped）。
+- **修改文件：**
+  - `src/StelMainView.cpp`（命令桥全量 API 对齐 + namespace 闭合 + payload→arg）
+  - `src/StelMainView.hpp`（新增 `ohosDrawEnded()` 公开包装）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（`StellariumBridgeResponse` 补字段）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（本段未改，仅保持与 build 副本同步）
+- **备注：** 此修复解锁了此前完全不可用的命令子集（含 `meteors`/`dsoLabels`/`autoZoomResets` 三个 dead 开关）。真机/模拟器上的行为验证（命令是否真正改变渲染/状态）仍需按 P1 #3 的"待验证"项在设备上确认；CLI 签名 HAP 无法装进本地 Device Simulator（需 DevEco GUI Run 的 debug `.p7b`），故设备验证需真机或 GUI。
+
+---
+
 ## P2 - 中优先级
 
 ### 4. 翻译文件加载失败（星名不随语言切换变化）— 【2026-07-22 WorkBuddy 已修复并验证】

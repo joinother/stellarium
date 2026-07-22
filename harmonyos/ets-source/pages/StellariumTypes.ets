@@ -291,6 +291,9 @@ export interface StellariumBridgeResponse {
   actionShow_Planets_Nomenclature?: boolean
   actionShow_Fog?: boolean
   actionShow_Meteors?: boolean
+  meteors?: boolean
+  dsoLabels?: boolean
+  autoZoomResets?: boolean
   actionShow_Night_Mode?: boolean
   actionHorizontal_Flip?: boolean
   actionVertical_Flip?: boolean

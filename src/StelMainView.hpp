@@ -67,6 +67,8 @@ class StelMainView : public QGraphicsView
 	Q_PROPERTY(int maxFps	                   READ getMaxFps                     WRITE setMaxFps                     NOTIFY maxFpsChanged)
 	Q_PROPERTY(int minTimeBetweenFrames        READ getMinTimeBetweenFrames       WRITE setMinTimeBetweenFrames       NOTIFY minTimeBetweenFramesChanged)
 public:
+	//! OHOS: public wrapper so the command bridge can request a scene repaint end.
+	void ohosDrawEnded() { drawEnded(); }
 #if QT_CONFIG(opengles2)
 	using PFNGLMINSAMPLESHADINGPROC = PFNGLMINSAMPLESHADINGOESPROC;
 #endif

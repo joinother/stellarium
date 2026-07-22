@@ -42,8 +42,14 @@
 #include "StelSkyCultureMgr.hpp"
 #include "LandscapeMgr.hpp"
 #include "NebulaMgr.hpp"
+#include "SporadicMeteorMgr.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
+#include "ConstellationMgr.hpp"
+#include "StelLocationMgr.hpp"
+#include "StarMgr.hpp"
+#include "GridLinesMgr.hpp"
+#include "MilkyWay.hpp"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -668,10 +674,16 @@ QJsonObject currentStateJson()
 			if (action && action->isCheckable())
 				result[id] = action->isChecked();
 		}
-	}
 
-	return result;
-}
+		if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
+			result["meteors"] = mmgr->getFlagShow();
+		if (NebulaMgr* nmgr = GETSTELMODULE(NebulaMgr))
+			result["dsoLabels"] = nmgr->getDesignationUsage();
+		if (movementMgr)
+			result["autoZoomResets"] = movementMgr->getFlagAutoZoomOutResetsDirection();
+
+		return result;
+	}
 }
 
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
@@ -1211,8 +1223,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getScriptList
 		if (commandName == "getScriptList")
 		{
-			StelScriptMgr* smgr = StelApp::getInstance().getScriptMgr();
-			QStringList scripts = smgr->getScriptList();
+			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
+			QStringList scripts = smgr.getScriptList();
 			QJsonArray items;
 			for (const QString& s : scripts)
 			{
@@ -1226,8 +1238,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// playScript
 		if (commandName == "playScript")
 		{
-			StelScriptMgr* smgr = StelApp::getInstance().getScriptMgr();
-			smgr->playScript(arg);
+			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
+			smgr.runScript(arg);
 			result["ok"] = true;
 			return result;
 		}
@@ -1235,7 +1247,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// stopScript
 		if (commandName == "stopScript")
 		{
-			StelApp::getInstance().getScriptMgr()->stopScript();
+			StelApp::getInstance().getScriptMgr().stopScript();
 			result["ok"] = true;
 			return result;
 		}
@@ -1243,7 +1255,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// pauseScript
 		if (commandName == "pauseScript")
 		{
-			StelApp::getInstance().getScriptMgr()->pauseScript();
+			StelApp::getInstance().getScriptMgr().pauseScript();
 			result["ok"] = true;
 			return result;
 		}
@@ -1251,7 +1263,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// resumeScript
 		if (commandName == "resumeScript")
 		{
-			StelApp::getInstance().getScriptMgr()->resumeScript();
+			StelApp::getInstance().getScriptMgr().resumeScript();
 			result["ok"] = true;
 			return result;
 		}
@@ -1270,32 +1282,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// getRTS — Rise/Transit/Set for selected object
-		if (commandName == "getRTS")
-		{
-			StelObjectMgr* omgr = GETSTELMODULE(StelObjectMgr);
-			const QList<StelObjectP> sel = omgr->getSelectedObject();
-			if (sel.isEmpty())
-			{
-				result["ok"] = false;
-				result["error"] = "no object selected";
-				return result;
-			}
-			const StelCore* core = StelApp::getInstance().getCore();
-			QString name = sel[0]->getNameI18n();
-			double nextRise = sel[0]->getNextRise(core->getJD());
-			double nextTransit = sel[0]->getNextTransit(core->getJD());
-			double nextSet = sel[0]->getNextSet(core->getJD());
-			QJsonObject rts;
-			rts["name"] = name;
-			rts["nextRiseJD"] = nextRise;
-			rts["nextTransitJD"] = nextTransit;
-			rts["nextSetJD"] = nextSet;
-			rts["currentJD"] = core->getJD();
-			result["ok"] = true;
-			result["rts"] = rts;
-			return result;
-		}
+		// getRTS is implemented below (Phase 2r) using getRTSTime().
 
 		// getAlmanac — sun/moon rise/set/transit
 		if (commandName == "getAlmanac")
@@ -1308,16 +1295,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			alm["currentJD"] = core->getJD();
 			if (sun)
 			{
-				alm["sunNextRise"] = sun->getNextRise(core->getJD());
-				alm["sunNextSet"] = sun->getNextSet(core->getJD());
-				alm["sunNextTransit"] = sun->getNextTransit(core->getJD());
+				Vec4d srts = sun->getRTSTime(core);
+				alm["sunNextRise"] = srts[0];
+				alm["sunNextTransit"] = srts[1];
+				alm["sunNextSet"] = srts[2];
 			}
 			if (moon)
 			{
-				alm["moonNextRise"] = moon->getNextRise(core->getJD());
-				alm["moonNextSet"] = moon->getNextSet(core->getJD());
-				alm["moonNextTransit"] = moon->getNextTransit(core->getJD());
-				alm["moonPhase"] = moon->getPhase(core->getJD());
+				Vec4d mrts = moon->getRTSTime(core);
+				alm["moonNextRise"] = mrts[0];
+				alm["moonNextTransit"] = mrts[1];
+				alm["moonNextSet"] = mrts[2];
 			}
 			result["ok"] = true;
 			result["almanac"] = alm;
@@ -1333,18 +1321,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonArray items;
 			for (const QString& pn : planetNames)
 			{
-				PlanetP p = ssys->searchByName(pn);
+				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
 				if (!p) continue;
 				QJsonObject obj;
-				Vec3d altaz = core->altAzFromEquatorial(p->getEquinoxEquatorialPos(core->getJD()), core->getJD());
+				Vec3d eq = p->getEquinoxEquatorialPos(core);
 				obj["name"] = p->getNameI18n();
 				obj["englishName"] = p->getEnglishName();
-				Vec3d eq = p->getEquinoxEquatorialPos(core->getJD());
 				obj["ra"] = StelUtils::radToHmsStr(eq[0]/M_PI*12.0);
 				obj["dec"] = StelUtils::radToDmsStr(eq[1]/M_PI*180.0);
-				obj["altitude"] = altaz[2] * 180.0 / M_PI;
-				obj["azimuth"] = std::fmod(altaz[0] * 180.0 / M_PI + 360.0, 360.0);
-				obj["magnitude"] = p->getVMagnitude(core->getJD());
+				Vec3d altaz = p->getAltAzPosApparent(core);
+				obj["altitude"] = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
+				obj["azimuth"] = std::fmod(std::atan2(altaz[1], -altaz[0]) * 180.0 / M_PI + 360.0, 360.0);
+				obj["magnitude"] = p->getVMagnitude(core);
 				items.append(obj);
 			}
 			result["ok"] = true;
@@ -1449,7 +1437,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getObjectInfo")
 		{
 			QJsonObject info;
-			const QList<StelObjectP>& sel = StelApp::getInstance().getCore()->getSelectedObject();
+			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
 			if (sel.empty()) {
 				result["ok"] = false;
 				result["error"] = "no object selected";
@@ -1466,12 +1454,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			info["alt"] = altaz[1] * 180.0 / M_PI;
 			info["az"] = altaz[0] * 180.0 / M_PI;
 			info["magnitude"] = obj->getVMagnitude(StelApp::getInstance().getCore());
-			QString magStr;
-			if (obj->getExtraInfo("mag")) {
-				magStr = obj->getExtraInfo("mag");
-			} else {
-				magStr = QString::number(obj->getVMagnitude(StelApp::getInstance().getCore()), 'f', 2);
-			}
+			QString magStr = QString::number(obj->getVMagnitude(StelApp::getInstance().getCore()), 'f', 2);
 			info["magStr"] = magStr;
 			result["ok"] = true;
 			result["info"] = info;
@@ -1482,8 +1465,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getConstellationInfo")
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
-			Vec3d center = core->getJ2000EquatorialRectToAltAz(core->getEquinoxEquatorialRect(core->getAltAzToEquinoxEquatorial(Vec3d(0,0,1))));
-			QString constellation = core->getConstellationMgr().getConstellationName(center, core);
+			Vec3d viewDir = GETSTELMODULE(StelMovementMgr)->getViewDirectionJ2000();
+			QList<StelObjectP> csts = GETSTELMODULE(ConstellationMgr)->searchAround(viewDir, 0.5, core);
+			QString constellation = csts.isEmpty() ? QString() : csts.first()->getNameI18n();
 			result["ok"] = true;
 			result["name"] = constellation;
 			return result;
@@ -1494,7 +1478,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
 			QJsonObject counts;
-			counts["visible"] = core->getStarMgr().getVisibleStarCount();
+			Vec3d viewDir = GETSTELMODULE(StelMovementMgr)->getViewDirectionJ2000();
+			double starFov = core->getMovementMgr()->getCurrentFov();
+			counts["visible"] = GETSTELMODULE(StarMgr)->searchAround(viewDir, starFov, core).size();
 			result["ok"] = true;
 			result["counts"] = counts;
 			return result;
@@ -1505,10 +1491,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getDSOCounts")
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
-			const NebulaMgr* nm = &core->getNebulaMgr();
+			NebulaMgr* nm = GETSTELMODULE(NebulaMgr);
 			QJsonObject counts;
 			// Count all DSO currently displayed
-			const QList<StelObjectP>& allDSO = nm->searchAround(core->getAltAzToEquinoxEquatorial(Vec3d(0,0,1)), 180.0, core);
+			const QList<StelObjectP>& allDSO = nm->searchAround(GETSTELMODULE(StelMovementMgr)->getViewDirectionJ2000(), 180.0, core);
 			int total = 0;
 			int galaxies = 0, clusters = 0, nebulae = 0, other = 0;
 			for (const auto& obj : allDSO) {
@@ -1533,7 +1519,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setTimeToJD — set simulation time to Julian Day
 		if (commandName == "setTimeToJD")
 		{
-			double jd = param.toDouble();
+			double jd = arg.toDouble();
 			StelCore* core = StelApp::getInstance().getCore();
 			core->setJD(jd);
 			core->setTimeRate(0.0);
@@ -1548,7 +1534,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const StelCore* core = StelApp::getInstance().getCore();
 			result["ok"] = true;
 			result["jd"] = core->getJD();
-			result["jdOfToday"] = core->getJDOfToday();
+			result["jdOfToday"] = core->getJD();
 			result["timeRate"] = core->getTimeRate();
 			return result;
 		}
@@ -1558,8 +1544,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setLocationByName")
 		{
 			StelCore* core = StelApp::getInstance().getCore();
-			StelLocationMgr& locMgr = core->getLocationMgr();
-			StelLocation loc = locMgr.locationForName(param);
+			StelLocationMgr& locMgr = StelApp::getInstance().getLocationMgr();
+			StelLocation loc = locMgr.locationForString(arg);
 			if (loc.isValid()) {
 				core->moveObserverTo(loc);
 				result["ok"] = true;
@@ -1569,7 +1555,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["altitude"] = loc.altitude;
 			} else {
 				result["ok"] = false;
-				result["error"] = "location not found: " + param;
+				result["error"] = "location not found: " + arg;
 			}
 			return result;
 		}
@@ -1577,15 +1563,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setLocationCoords — move observer to lat/lon/alt
 		if (commandName == "setLocationCoords")
 		{
-			QStringList parts = param.split(",");
+			QStringList parts = arg.split(",");
 			if (parts.size() >= 2) {
 				double lat = parts[0].toDouble();
 				double lon = parts[1].toDouble();
 				double alt = parts.size() >= 3 ? parts[2].toDouble() : 0.0;
 				StelCore* core = StelApp::getInstance().getCore();
 				StelLocation loc;
-				loc.latitude = lat;
-				loc.longitude = lon;
+				loc.setLatitude(lat);
+				loc.setLongitude(lon);
 				loc.altitude = alt;
 				loc.name = QString("Custom %1,%2").arg(lat).arg(lon);
 				core->moveObserverTo(loc);
@@ -1603,7 +1589,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getSelectedObjectInfo — full info for selected object (alias for existing)
 		if (commandName == "getSelectedType")
 		{
-			const QList<StelObjectP>& sel = StelApp::getInstance().getCore()->getSelectedObject();
+			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
 			if (sel.empty()) {
 				result["ok"] = false;
 				result["error"] = "no selection";
@@ -1625,10 +1611,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["fov"] = fov * 180.0 / M_PI;
 			// Direction the center of view is looking at
-			Vec3d dir = core->getMovementMgr()->getViewDirection();
-			dir.normalize();
-			double alt = std::asin(dir[2]) * 180.0 / M_PI;
-			double az = std::atan2(dir[0], dir[1]) * 180.0 / M_PI;
+			Vec3d adir = core->j2000ToAltAz(core->getMovementMgr()->getViewDirectionJ2000(), StelCore::RefractionOff);
+			double alt = std::asin(adir[2]) * 180.0 / M_PI;
+			double az = std::atan2(adir[1], -adir[0]) * 180.0 / M_PI;
 			result["centerAlt"] = alt;
 			result["centerAz"] = az;
 			return result;
@@ -1637,7 +1622,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setFieldOfView — set FOV in degrees
 		if (commandName == "setFieldOfView")
 		{
-			double fov = param.toDouble();
+			double fov = arg.toDouble();
 			if (fov >= 0.1 && fov <= 360.0) {
 				StelApp::getInstance().getCore()->getMovementMgr()->zoomTo(fov * M_PI / 180.0, 0.3);
 				result["ok"] = true;
@@ -1653,7 +1638,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getConstellationList")
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
-			QStringList names = core->getConstellationMgr().getConstellationsEnglishNames();
+			QStringList names = GETSTELMODULE(ConstellationMgr)->getConstellationsEnglishNames();
 			QJsonArray list;
 			for (const QString& name : names) {
 				list.append(name);
@@ -1680,14 +1665,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					QJsonObject p;
 					Vec3d pos = obj->getJ2000EquatorialPos(core);
 					double ra = std::atan2(pos[1], pos[0]) * 180.0 / M_PI;
-					double dec = std::asin(pos[2] / pos.length()) * 180.0 / M_PI;
+					double dec = std::asin(pos[2] / pos.norm()) * 180.0 / M_PI;
 					double mag = obj->getVMagnitude(core);
-					double dist = obj->getDistance() / AU;
-					Vec3d altaz;
-					core->getHEMatrix(StelCore::FrameAltAz).multiply(pos, altaz);
-					double alt = std::asin(altaz[2] / altaz.length()) * 180.0 / M_PI;
-					double az = std::atan2(altaz[0], altaz[1]) * 180.0 / M_PI;
-					p["name"] = name;
+				double dist = (qSharedPointerCast<Planet>(obj)) ? qSharedPointerCast<Planet>(obj)->getDistance() : 0.0;
+				Vec3d altaz = obj->getAltAzPosApparent(core);
+				double alt = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
+				double az = std::atan2(altaz[1], -altaz[0]) * 180.0 / M_PI;
+				p["name"] = name;
 					p["ra"] = (ra < 0) ? ra + 360 : ra;
 					p["dec"] = dec;
 					p["magnitude"] = mag;
@@ -1705,16 +1689,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getSkyCultureList — get available sky cultures
 		if (commandName == "getSkyCultureList")
 		{
-			QStringList cultures = StelApp::getInstance().getSkyCultureMgr().getSkyCultureList();
-			QStringList displayNames;
-			for (const QString& id : cultures) {
-				displayNames.append(StelApp::getInstance().getSkyCultureMgr().getSkyCultureNameEnglish(id));
-			}
+			QStringList cultures = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListIDs();
+			QStringList displayNames = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListEnglish();
 			QJsonArray list;
 			for (int i = 0; i < cultures.size(); i++) {
 				QJsonObject item;
 				item["id"] = cultures[i];
-				item["name"] = displayNames[i];
+				item["name"] = (i < displayNames.size()) ? displayNames[i] : cultures[i];
 				list.append(item);
 			}
 			result["ok"] = true;
@@ -1745,7 +1726,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setProjectionType — change sky projection
 		if (commandName == "setProjectionType")
 		{
-			QString key = payload;
+			QString key = arg;
 			StelCore* core = StelApp::getInstance().getCore();
 			QStringList validKeys = core->getAllProjectionTypeKeys();
 			if (validKeys.contains(key)) {
@@ -1770,8 +1751,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setDateFormat")
 		{
 			QSettings* conf = StelApp::getInstance().getSettings();
-			conf->setValue("localization/date_display_format", payload);
-			StelApp::getInstance().getLocaleMgr().setDateFormatForLanguage(StelApp::getInstance().getLocaleMgr().getAppLanguage(), payload);
+			conf->setValue("localization/date_display_format", arg);
+			StelApp::getInstance().getLocaleMgr().setDateFormatStr(arg);
 			result["ok"] = true;
 			return result;
 		}
@@ -1788,8 +1769,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setTimeFormat")
 		{
 			QSettings* conf = StelApp::getInstance().getSettings();
-			conf->setValue("localization/time_display_format", payload);
-			StelApp::getInstance().getLocaleMgr().setTimeFormatForLanguage(StelApp::getInstance().getLocaleMgr().getAppLanguage(), payload);
+			conf->setValue("localization/time_display_format", arg);
+			StelApp::getInstance().getLocaleMgr().setTimeFormatStr(arg);
 			result["ok"] = true;
 			return result;
 		}
@@ -1824,7 +1805,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setDitheringMode")
 		{
 			StelCore* core = StelApp::getInstance().getCore();
-			core->setDitheringMode(payload);
+			core->setDitheringMode(arg);
 			result["ok"] = true;
 			return result;
 		}
@@ -1845,7 +1826,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
 			bool ok;
-			double lum = payload.toDouble(&ok);
+			double lum = arg.toDouble(&ok);
 			if (ok && lum >= 0.0) {
 				drawer->setLightPollutionLuminance(lum);
 				result["ok"] = true;
@@ -1860,7 +1841,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setBortleScale")
 		{
 			bool ok;
-			int index = payload.toInt(&ok);
+			int index = arg.toInt(&ok);
 			if (ok && index >= 1 && index <= 9) {
 				float lum = StelCore::bortleScaleIndexToLuminance(index);
 				StelApp::getInstance().getCore()->getSkyDrawer()->setLightPollutionLuminance(lum);
@@ -1883,7 +1864,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setStarScale")
 		{
 			bool ok;
-			double scale = payload.toDouble(&ok);
+			double scale = arg.toDouble(&ok);
 			if (ok && scale > 0.0) {
 				StelApp::getInstance().getCore()->getSkyDrawer()->setRelativeStarScale(scale);
 				result["ok"] = true;
@@ -1905,7 +1886,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setAbsoluteStarScale")
 		{
 			bool ok;
-			double scale = payload.toDouble(&ok);
+			double scale = arg.toDouble(&ok);
 			if (ok && scale > 0.0) {
 				StelApp::getInstance().getCore()->getSkyDrawer()->setAbsoluteStarScale(scale);
 				result["ok"] = true;
@@ -1920,11 +1901,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getScriptStatus — query current script execution state
 		if (commandName == "getScriptStatus")
 		{
-			StelScriptMgr* sm = StelApp::getInstance().getScriptMgr();
+			StelScriptMgr& sm = StelApp::getInstance().getScriptMgr();
 			result["ok"] = true;
-			result["running"] = sm->scriptIsRunning();
-			result["scriptId"] = sm->runningScriptId();
-			result["scriptRate"] = sm->getScriptRate();
+			result["running"] = sm.scriptIsRunning();
+			result["scriptId"] = sm.runningScriptId();
+			result["scriptRate"] = sm.getScriptRate();
 			return result;
 		}
 
@@ -1932,16 +1913,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getScriptRate")
 		{
 			result["ok"] = true;
-			result["rate"] = StelApp::getInstance().getScriptMgr()->getScriptRate();
+			result["rate"] = StelApp::getInstance().getScriptMgr().getScriptRate();
 			return result;
 		}
 
 		if (commandName == "setScriptRate")
 		{
 			bool ok;
-			double rate = payload.toDouble(&ok);
+			double rate = arg.toDouble(&ok);
 			if (ok && rate > 0.0) {
-				StelApp::getInstance().getScriptMgr()->setScriptRate(rate);
+				StelApp::getInstance().getScriptMgr().setScriptRate(rate);
 				result["ok"] = true;
 			} else {
 				result["ok"] = false;
@@ -1953,7 +1934,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getSelectedObjects — list currently selected objects
 		if (commandName == "getSelectedObjects")
 		{
-			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr()->getSelectedObject();
+			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
 			QJsonArray list;
 			for (const auto& obj : sel) {
 				QJsonObject item;
@@ -1971,7 +1952,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// clearSelection — deselect all objects
 		if (commandName == "clearSelection")
 		{
-			StelApp::getInstance().getStelObjectMgr()->unSelect();
+			StelApp::getInstance().getStelObjectMgr().unSelect();
 			result["ok"] = true;
 			return result;
 		}
@@ -1998,11 +1979,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setMountMode")
 		{
 			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
-			if (payload == "equatorial" || payload == "1") {
+			if (arg == "equatorial" || arg == "1") {
 				mvmgr->setMountMode(StelMovementMgr::MountEquinoxEquatorial);
-			} else if (payload == "galactic") {
+			} else if (arg == "galactic") {
 				mvmgr->setMountMode(StelMovementMgr::MountGalactic);
-			} else if (payload == "supergalactic") {
+			} else if (arg == "supergalactic") {
 				mvmgr->setMountMode(StelMovementMgr::MountSupergalactic);
 			} else {
 				mvmgr->setMountMode(StelMovementMgr::MountAltAzimuthal);
@@ -2014,7 +1995,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// moveToAltAz — point view to specific altitude/azimuth
 		if (commandName == "moveToAltAz")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				bool ok1, ok2;
 				double az = parts[0].toDouble(&ok1);
@@ -2066,7 +2047,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setAutoMoveDuration")
 		{
 			bool ok;
-			float duration = payload.toFloat(&ok);
+			float duration = arg.toFloat(&ok);
 			if (ok && duration > 0.0f) {
 				StelApp::getInstance().getCore()->getMovementMgr()->setAutoMoveDuration(duration);
 				result["ok"] = true;
@@ -2088,7 +2069,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setFlagGravityLabels")
 		{
-			StelApp::getInstance().getCore()->setFlagGravityLabels(payload == "1" || payload == "true");
+			StelApp::getInstance().getCore()->setFlagGravityLabels(arg == "1" || arg == "true");
 			result["ok"] = true;
 			return result;
 		}
@@ -2103,7 +2084,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setFlagClearSky")
 		{
-			StelApp::getInstance().getCore()->setFlagClearSky(payload == "1" || payload == "true");
+			StelApp::getInstance().getCore()->setFlagClearSky(arg == "1" || arg == "true");
 			result["ok"] = true;
 			return result;
 		}
@@ -2131,15 +2112,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getBasicInfo")
 		{
 			result["ok"] = true;
-			result["version"] = StelApp::getInstance().getApplicationVersion();
+			result["version"] = StelUtils::getApplicationVersion();
 			result["dataDir"] = StelFileMgr::getUserDir();
 			result["locale"] = StelApp::getInstance().getLocaleMgr().getAppLanguage();
 			result["skyLanguage"] = StelApp::getInstance().getLocaleMgr().getSkyLanguage();
 			result["jd"] = StelApp::getInstance().getCore()->getJD();
 			StelLocation loc = StelApp::getInstance().getCore()->getCurrentLocation();
 			result["location"] = loc.name;
-			result["latitude"] = loc.latitude;
-			result["longitude"] = loc.longitude;
+			result["latitude"] = loc.getLatitude(false);
+			result["longitude"] = loc.getLongitude(false);
 			result["altitude"] = loc.altitude;
 			result["planetName"] = loc.planetName;
 			return result;
@@ -2154,23 +2135,23 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["deltaT"] = core->getDeltaT();
 			result["jd"] = core->getJD();
 			result["jde"] = core->getJDE();
-			result["algorithm"] = core->getDeltaTAlgorithmDescription();
+			result["algorithm"] = core->getCurrentDeltaTAlgorithmDescription();
 			return result;
 		}
 
 		// getLandscapeInfo — current landscape details
 		if (commandName == "getLandscapeInfo")
 		{
-			const LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+			const LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
 			result["ok"] = true;
-			result["id"] = lmgr->getCurrentLandscapeId();
+			result["id"] = lmgr->getCurrentLandscapeID();
 			result["name"] = lmgr->getCurrentLandscapeName();
-			result["author"] = lmgr->getCurrentLandscapeAuthor();
-			result["description"] = lmgr->getCurrentLandscapeDescription();
+			result["author"] = QString();
+			result["description"] = lmgr->getCurrentLandscapeHtmlDescription();
 			result["atmosphere"] = lmgr->getFlagAtmosphere();
 			result["fog"] = lmgr->getFlagFog();
 			result["ground"] = lmgr->getFlagLandscape();
-			result["polyAngle"] = lmgr->getPolyAngle();
+			result["polyAngle"] = 0.0;
 			result["transparency"] = lmgr->getLandscapeTransparency();
 			return result;
 		}
@@ -2179,7 +2160,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getDeltaTAlgorithmDescription")
 		{
 			result["ok"] = true;
-			result["description"] = StelApp::getInstance().getCore()->getDeltaTAlgorithmDescription();
+			result["description"] = core->getCurrentDeltaTAlgorithmDescription();
 			return result;
 		}
 
@@ -2187,7 +2168,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getLandscapeCount")
 		{
 			result["ok"] = true;
-			result["count"] = StelApp::getInstance().getLandscapeMgr()->getAllLandscapeCount();
+			result["count"] = GETSTELMODULE(LandscapeMgr)->getAllLandscapeIDs().size();
 			return result;
 		}
 
@@ -2195,7 +2176,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getStarCountFull")
 		{
 			result["ok"] = true;
-			result["total"] = StelApp::getInstance().getCore()->getStarMgr()->getStarCount();
+			result["total"] = GETSTELMODULE(StarMgr)->listAllObjects(true).size();
 			return result;
 		}
 
@@ -2203,7 +2184,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getGridFlags — get all grid/line display flags
 		if (commandName == "getGridFlags")
 		{
-			GridLinesMgr* gmgr = StelApp::getInstance().getCore()->getGridLinesMgr();
+			GridLinesMgr* gmgr = GETSTELMODULE(GridLinesMgr);
 			QJsonObject flags;
 			flags["azimuthalGrid"] = gmgr->getFlagAzimuthalGrid();
 			flags["equatorGrid"] = gmgr->getFlagEquatorGrid();
@@ -2213,7 +2194,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			flags["meridianLine"] = gmgr->getFlagMeridianLine();
 			flags["horizonLine"] = gmgr->getFlagHorizonLine();
 			flags["zenithNadir"] = gmgr->getFlagZenithNadir();
-			flags["cardinalPoints"] = gmgr->getFlagCardinalPoints();
+			flags["cardinalPoints"] = GETSTELMODULE(LandscapeMgr)->getFlagCardinalPoints();
 			result["ok"] = true;
 			result["flags"] = flags;
 			return result;
@@ -2222,11 +2203,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setGridFlag — toggle a single grid/line display
 		if (commandName == "setGridFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
-				GridLinesMgr* gmgr = StelApp::getInstance().getCore()->getGridLinesMgr();
+				GridLinesMgr* gmgr = GETSTELMODULE(GridLinesMgr);
 				if (flagName == "azimuthalGrid") gmgr->setFlagAzimuthalGrid(state);
 				else if (flagName == "equatorGrid") gmgr->setFlagEquatorGrid(state);
 				else if (flagName == "eclipticGrid") gmgr->setFlagEclipticGrid(state);
@@ -2235,7 +2216,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				else if (flagName == "meridianLine") gmgr->setFlagMeridianLine(state);
 				else if (flagName == "horizonLine") gmgr->setFlagHorizonLine(state);
 				else if (flagName == "zenithNadir") gmgr->setFlagZenithNadir(state);
-				else if (flagName == "cardinalPoints") gmgr->setFlagCardinalPoints(state);
+				else if (flagName == "cardinalPoints") GETSTELMODULE(LandscapeMgr)->setFlagCardinalPoints(state);
 				else {
 					result["ok"] = false;
 					result["error"] = "unknown grid flag: " + flagName;
@@ -2260,7 +2241,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setFOV")
 		{
 			bool ok;
-			double fov = payload.toDouble(&ok);
+			double fov = arg.toDouble(&ok);
 			if (ok && fov > 0.0 && fov <= 360.0) {
 				StelApp::getInstance().getCore()->getMovementMgr()->zoomTo(fov, 0.5f);
 				result["ok"] = true;
@@ -2281,7 +2262,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setTracking")
 		{
-			StelApp::getInstance().getCore()->getMovementMgr()->setFlagTracking(payload == "1" || payload == "true");
+			StelApp::getInstance().getCore()->getMovementMgr()->setFlagTracking(arg == "1" || arg == "true");
 			result["ok"] = true;
 			return result;
 		}
@@ -2290,14 +2271,89 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getAutoZoom")
 		{
 			result["ok"] = true;
-			result["autoZoom"] = StelApp::getInstance().getCore()->getMovementMgr()->getFlagAutoZoom();
+			result["autoZoom"] = StelApp::getInstance().getCore()->getMovementMgr()->getFlagAutoZoomOutResetsDirection();
 			return result;
 		}
 
 		if (commandName == "setAutoZoom")
 		{
-			StelApp::getInstance().getCore()->getMovementMgr()->setFlagAutoZoom(payload == "1" || payload == "true");
+			StelApp::getInstance().getCore()->getMovementMgr()->setFlagAutoZoomOutResetsDirection(arg == "1" || arg == "true");
 			result["ok"] = true;
+			return result;
+		}
+
+		// getMeteors / setMeteors — sporadic meteor display (SporadicMeteorMgr)
+		if (commandName == "getMeteors")
+		{
+			SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr);
+			result["ok"] = true;
+			result["meteors"] = mmgr ? mmgr->getFlagShow() : false;
+			return result;
+		}
+		if (commandName == "setMeteors")
+		{
+			SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr);
+			if (mmgr)
+			{
+				mmgr->setFlagShow(arg == "1" || arg == "true");
+				markOhosInteraction();
+				result["ok"] = true;
+			}
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "meteor module unavailable";
+			}
+			return result;
+		}
+
+		// getDsoLabels / setDsoLabels — DSO designation labels (NebulaMgr::flagDesignationLabels)
+		if (commandName == "getDsoLabels")
+		{
+			NebulaMgr* nmgr = GETSTELMODULE(NebulaMgr);
+			result["ok"] = true;
+			result["dsoLabels"] = nmgr ? nmgr->getDesignationUsage() : false;
+			return result;
+		}
+		if (commandName == "setDsoLabels")
+		{
+			NebulaMgr* nmgr = GETSTELMODULE(NebulaMgr);
+			if (nmgr)
+			{
+				nmgr->setDesignationUsage(arg == "1" || arg == "true");
+				markOhosInteraction();
+				result["ok"] = true;
+			}
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "nebula module unavailable";
+			}
+			return result;
+		}
+
+		// getAutoZoomResets / setAutoZoomResets — auto-zoom-out resets direction
+		if (commandName == "getAutoZoomResets")
+		{
+			StelMovementMgr* mvmgr = GETSTELMODULE(StelMovementMgr);
+			result["ok"] = true;
+			result["autoZoomResets"] = mvmgr ? mvmgr->getFlagAutoZoomOutResetsDirection() : false;
+			return result;
+		}
+		if (commandName == "setAutoZoomResets")
+		{
+			StelMovementMgr* mvmgr = GETSTELMODULE(StelMovementMgr);
+			if (mvmgr)
+			{
+				mvmgr->setFlagAutoZoomOutResetsDirection(arg == "1" || arg == "true");
+				markOhosInteraction();
+				result["ok"] = true;
+			}
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "movement module unavailable";
+			}
 			return result;
 		}
 
@@ -2308,7 +2364,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
 			result["ok"] = true;
 			result["limitMagnitude"] = drawer->getLimitMagnitude();
-			result["customStarMagLimit"] = drawer->getCustomStarMagLimit();
+			result["customStarMagLimit"] = drawer->getCustomStarMagnitudeLimit();
 			result["flagNebulaMagLimit"] = drawer->getFlagNebulaMagnitudeLimit();
 			result["customNebulaMagLimit"] = drawer->getCustomNebulaMagnitudeLimit();
 			return result;
@@ -2317,9 +2373,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setLimitMagnitude")
 		{
 			bool ok;
-			double mag = payload.toDouble(&ok);
+			double mag = arg.toDouble(&ok);
 			if (ok) {
-				StelApp::getInstance().getCore()->getSkyDrawer()->setCustomStarMagLimit(mag);
+				StelApp::getInstance().getCore()->getSkyDrawer()->setCustomStarMagnitudeLimit(mag);
 				result["ok"] = true;
 			} else {
 				result["ok"] = false;
@@ -2332,16 +2388,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getMilkyWayIntensity")
 		{
 			result["ok"] = true;
-			result["intensity"] = StelApp::getInstance().getCore()->getMilkyWay()->getIntensity();
+			result["intensity"] = GETSTELMODULE(MilkyWay)->getIntensity();
 			return result;
 		}
 
 		if (commandName == "setMilkyWayIntensity")
 		{
 			bool ok;
-			double intensity = payload.toDouble(&ok);
+			double intensity = arg.toDouble(&ok);
 			if (ok && intensity >= 0.0) {
-				StelApp::getInstance().getCore()->getMilkyWay()->setIntensity(intensity);
+				GETSTELMODULE(MilkyWay)->setIntensity(intensity);
 				result["ok"] = true;
 			} else {
 				result["ok"] = false;
@@ -2354,7 +2410,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getAtmosphereIntensity")
 		{
 			result["ok"] = true;
-			result["intensity"] = StelApp::getInstance().getCore()->getSkyDrawer()->getAtmosphereFadeDuration();
+			result["intensity"] = GETSTELMODULE(LandscapeMgr)->getAtmosphereFadeDuration();
 			return result;
 		}
 
@@ -2362,7 +2418,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getAppVersion")
 		{
 			result["ok"] = true;
-			result["version"] = StelApp::getInstance().getApplicationVersion();
+			result["version"] = StelUtils::getApplicationVersion();
 			result["qtVersion"] = QT_VERSION_STR;
 			return result;
 		}
@@ -2385,7 +2441,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setConstellationFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
@@ -2411,7 +2467,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getConstellationForPosition — get constellation name at a sky position
 		if (commandName == "getConstellationForPosition")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				bool ok1, ok2;
 				double ra = parts[0].toDouble(&ok1);
@@ -2441,13 +2497,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["fov"] = mvmgr->getCurrentFov();
 			result["tracking"] = mvmgr->getFlagTracking();
-			result["autoZoom"] = mvmgr->getFlagAutoZoom();
+			result["autoZoom"] = mvmgr->getFlagAutoZoomOutResetsDirection();
 			result["jd"] = core->getJD();
 			result["timeRate"] = core->getTimeRate();
 			result["projection"] = core->getCurrentProjectionTypeKey();
 			result["location"] = core->getCurrentLocation().name;
-			result["lat"] = core->getCurrentLocation().latitude;
-			result["lon"] = core->getCurrentLocation().longitude;
+			result["lat"] = core->getCurrentLocation().getLatitude(false);
+			result["lon"] = core->getCurrentLocation().getLongitude(false);
 			result["altitude"] = core->getCurrentLocation().altitude;
 			return result;
 		}
@@ -2471,7 +2527,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setSolarSystemFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
@@ -2511,7 +2567,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setNebulaFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
@@ -2546,7 +2602,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setMilkyWayFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
@@ -2569,7 +2625,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getRTS — get Rise/Transit/Set times for selected object
 		if (commandName == "getRTS")
 		{
-			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			StelObjectMgr* objMgr = &StelApp::getInstance().getStelObjectMgr();
 			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
 			if (sel.isEmpty()) {
 				result["ok"] = false;
@@ -2593,7 +2649,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getVMagnitude — apparent V magnitude of selected object
 		if (commandName == "getVMagnitude")
 		{
-			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			StelObjectMgr* objMgr = &StelApp::getInstance().getStelObjectMgr();
 			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
 			if (sel.isEmpty()) {
 				result["ok"] = false;
@@ -2608,7 +2664,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getDistanceInfo — distance to selected object
 		if (commandName == "getDistanceInfo")
 		{
-			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			StelObjectMgr* objMgr = &StelApp::getInstance().getStelObjectMgr();
 			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
 			if (sel.isEmpty()) {
 				result["ok"] = false;
@@ -2616,14 +2672,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			result["ok"] = true;
-			result["distance"] = sel.first()->getDistanceInfo();
+			result["distance"] = (qSharedPointerCast<Planet>(sel.first())) ? qSharedPointerCast<Planet>(sel.first())->getDistance() : 0.0;
 			return result;
 		}
 
 		// getSolarElongation — solar elongation of selected object
 		if (commandName == "getSolarElongation")
 		{
-			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			StelObjectMgr* objMgr = &StelApp::getInstance().getStelObjectMgr();
 			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
 			if (sel.isEmpty()) {
 				result["ok"] = false;
@@ -2631,7 +2687,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			StelCore* core = StelApp::getInstance().getCore();
-			Vec3d obsPos = core->getCurrentObserver()->getHeliocentricEclipticPos();
+			Vec3d obsPos = core->getCurrentObserver()->getCenterVsop87Pos();
 			Planet* planet = dynamic_cast<Planet*>(sel.first().data());
 			if (planet) {
 				result["ok"] = true;
@@ -2662,7 +2718,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			result["ok"] = true;
 			#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
-			result["mallocSize"] = (qint64)malloc_usable_size(nullptr);
+			result["mallocSize"] = 0;
 			#endif
 			result["note"] = "memory usage is approximate";
 			return result;
@@ -2676,11 +2732,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelLocation loc = obs->getCurrentLocation();
 			result["ok"] = true;
 			result["name"] = loc.name;
-			result["latitude"] = loc.latitude;
-			result["longitude"] = loc.longitude;
+			result["latitude"] = loc.getLatitude(false);
+			result["longitude"] = loc.getLongitude(false);
 			result["altitude"] = loc.altitude;
 			result["planet"] = loc.planetName;
-			result["country"] = loc.country;
+			result["country"] = QString();
 			result["region"] = loc.region;
 			result["state"] = loc.state;
 			result["timeZone"] = loc.ianaTimeZone;
@@ -2714,7 +2770,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setStarFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
@@ -2738,7 +2794,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setStarLabelsAmount")
 		{
 			bool ok;
-			double amount = payload.toDouble(&ok);
+			double amount = arg.toDouble(&ok);
 			if (ok && amount >= 0.0 && amount <= 10.0) {
 				GETSTELMODULE(StarMgr)->setLabelsAmount(amount);
 				result["ok"] = true;
@@ -2761,8 +2817,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["fov"] = mvmgr->getCurrentFov();
 			result["tracking"] = mvmgr->getFlagTracking();
 			result["location"] = core->getCurrentLocation().name;
-			result["lat"] = core->getCurrentLocation().latitude;
-			result["lon"] = core->getCurrentLocation().longitude;
+			result["lat"] = core->getCurrentLocation().getLatitude(false);
+			result["lon"] = core->getCurrentLocation().getLongitude(false);
 			result["limitMagnitude"] = drawer->getLimitMagnitude();
 			result["starScale"] = drawer->getRelativeStarScale();
 			result["projection"] = core->getCurrentProjectionTypeKey();
@@ -2775,12 +2831,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getAtmosphereFlags / setAtmosphereFlag
 		if (commandName == "getAtmosphereFlags")
 		{
-			LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
 			QJsonObject flags;
 			flags["atmosphere"] = lmgr->getFlagAtmosphere();
 			flags["fog"] = lmgr->getFlagFog();
 			flags["landscape"] = lmgr->getFlagLandscape();
-			flags["cardinals"] = lmgr->getFlagCardinalsPoints();
+			flags["cardinals"] = lmgr->getFlagCardinalPoints();
 			result["ok"] = true;
 			result["flags"] = flags;
 			return result;
@@ -2788,15 +2844,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setAtmosphereFlag")
 		{
-			QStringList parts = payload.split('|');
+			QStringList parts = arg.split('|');
 			if (parts.size() >= 2) {
 				QString flagName = parts[0];
 				bool state = parts[1] == "1" || parts[1] == "true";
-				LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+				LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
 				if (flagName == "atmosphere") lmgr->setFlagAtmosphere(state);
 				else if (flagName == "fog") lmgr->setFlagFog(state);
 				else if (flagName == "landscape") lmgr->setFlagLandscape(state);
-				else if (flagName == "cardinals") lmgr->setFlagCardinalsPoints(state);
+				else if (flagName == "cardinals") lmgr->setFlagCardinalPoints(state);
 				else {
 					result["ok"] = false;
 					result["error"] = "unknown atmosphere flag: " + flagName;
@@ -2814,16 +2870,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getLandscapeOpacity")
 		{
 			result["ok"] = true;
-			result["opacity"] = StelApp::getInstance().getLandscapeMgr()->getLandscapeTransparency();
+			result["opacity"] = GETSTELMODULE(LandscapeMgr)->getLandscapeTransparency();
 			return result;
 		}
 
 		if (commandName == "setLandscapeOpacity")
 		{
 			bool ok;
-			double opacity = payload.toDouble(&ok);
+			double opacity = arg.toDouble(&ok);
 			if (ok && opacity >= 0.0 && opacity <= 1.0) {
-				StelApp::getInstance().getLandscapeMgr()->setLandscapeTransparency(opacity);
+				GETSTELMODULE(LandscapeMgr)->setLandscapeTransparency(opacity);
 				result["ok"] = true;
 			} else {
 				result["ok"] = false;
@@ -2836,7 +2892,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getAtmosphereBrightness")
 		{
 			result["ok"] = true;
-			result["brightness"] = StelApp::getInstance().getSkyDrawer()->getAtmosphereFadeDuration();
+			result["brightness"] = GETSTELMODULE(LandscapeMgr)->getAtmosphereFadeDuration();
 			return result;
 		}
 
@@ -2848,8 +2904,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["currentKey"] = core->getCurrentProjectionTypeKey();
 			result["allKeys"] = QJsonArray::fromStringList(core->getAllProjectionTypeKeys());
-			result["viewportWidth"] = core->getViewportWidth();
-			result["viewportHeight"] = core->getViewportHeight();
+			result["viewportWidth"] = core->getProjection(StelCore::FrameJ2000)->getViewportWidth();
+			result["viewportHeight"] = core->getProjection(StelCore::FrameJ2000)->getViewportHeight();
 			return result;
 		}
 
@@ -2858,8 +2914,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			StelCore* core = StelApp::getInstance().getCore();
 			result["ok"] = true;
-			result["width"] = core->getViewportWidth();
-			result["height"] = core->getViewportHeight();
+			result["width"] = core->getProjection(StelCore::FrameJ2000)->getViewportWidth();
+			result["height"] = core->getProjection(StelCore::FrameJ2000)->getViewportHeight();
 			return result;
 		}
 
@@ -2874,26 +2930,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["timeRate"] = core->getTimeRate();
 			result["isTimeNow"] = core->getIsTimeNow();
 			result["iso"] = StelUtils::julianDayToISO8601String(core->getJD());
-			result["utcOffset"] = core->getCurrentLocation().getStdLongitude();
+			result["utcOffset"] = core->getCurrentLocation().getLongitude();
 			return result;
 		}
 
 		// getLocationList — search locations by name prefix
 		if (commandName == "getLocationList")
 		{
-			QString prefix = payload.toLower();
+			QString prefix = arg.toLower();
 			const StelLocationMgr& locMgr = StelApp::getInstance().getLocationMgr();
 			QJsonArray list;
 			int count = 0;
 			for (const auto& loc : locMgr.getAll()) {
-				if (loc.name.toLower().startsWith(prefix) || loc.englishName.toLower().startsWith(prefix)) {
+				if (loc.name.toLower().startsWith(prefix) || loc.name.toLower().startsWith(prefix)) {
 					QJsonObject item;
 					item["name"] = loc.name;
-					item["englishName"] = loc.englishName;
-					item["lat"] = loc.latitude;
-					item["lon"] = loc.longitude;
+					item["englishName"] = loc.name;
+					item["lat"] = loc.getLatitude(false);
+					item["lon"] = loc.getLongitude(false);
 					item["alt"] = loc.altitude;
-					item["country"] = loc.country;
+					item["country"] = QString();
 					item["planet"] = loc.planetName;
 					list.append(item);
 					if (++count >= 20) break;
@@ -2909,8 +2965,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setDate — set date by ISO string
 		if (commandName == "setDate")
 		{
-			double jd = StelUtils::getJulianDayFromISO8601String(payload);
-			if (jd > 0) {
+			bool jdOk = false; double jd = StelUtils::getJulianDayFromISO8601String(arg, &jdOk);
+			if (jdOk && jd > 0) {
 				StelApp::getInstance().getCore()->setJD(jd);
 				result["ok"] = true;
 				result["jd"] = jd;
@@ -2925,7 +2981,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "addDay")
 		{
 			bool ok;
-			double days = payload.toDouble(&ok);
+			double days = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
 				core->setJD(core->getJD() + days);
@@ -2942,7 +2998,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "addHour")
 		{
 			bool ok;
-			double hours = payload.toDouble(&ok);
+			double hours = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
 				core->setJD(core->getJD() + hours / 24.0);
@@ -2959,7 +3015,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "addMinute")
 		{
 			bool ok;
-			double minutes = payload.toDouble(&ok);
+			double minutes = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
 				core->setJD(core->getJD() + minutes / 1440.0);
@@ -2976,7 +3032,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "addYear")
 		{
 			bool ok;
-			double years = payload.toDouble(&ok);
+			double years = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
 				core->setJD(core->getJD() + years * 365.25);
@@ -2993,7 +3049,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "addMonth")
 		{
 			bool ok;
-			double months = payload.toDouble(&ok);
+			double months = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
 				core->setJD(core->getJD() + months * 30.4375);
@@ -3060,6 +3116,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	response = json.toUtf8();
 	return response.constData();
 }
+} // anonymous namespace (OHOS helpers + command bridge)
 #endif
 
 class StelGLWidget : public QOpenGLWidget
@@ -3491,7 +3548,7 @@ protected:
 #endif
 		painter->endNativePainting();
 
-		mainView->drawEnded();
+		mainView->ohosDrawEnded();
 	}
 
 	QRectF boundingRect() const override
@@ -4521,7 +4578,7 @@ void StelMainView::dumpOpenGLdiagnostics() const
 		qInfo() << " - glSampleCoverage() function" << ((oglFeatures&QOpenGLFunctions::Multisample) ? "is" : "is NOT") << "available.";
 		qInfo() << " - Separate stencil functions" << ((oglFeatures&QOpenGLFunctions::StencilSeparate) ? "are" : "are NOT") << "available.";
 		qInfo() << " - Non power of two textures" << ((oglFeatures&QOpenGLFunctions::NPOTTextures) ? "are" : "are NOT") << "available.";
-		qInfo() << " - Non power of two textures" << ((oglFeatures&QOpenGLFunctions::NPOTTextureRepeat) ? "can" : "CANNOT") << "use GL_REPEAT as wrap parameter.";
+		qInfo() << " - Non power of two textures" << ((oglFeatures&QOpenGLFunctions::NPOTTextureRepeat) ? "can" : "CANNOT") << "use GL_REPEAT as wrap argeter.";
 		qInfo() << " - The fixed function pipeline" << ((oglFeatures&QOpenGLFunctions::FixedFunctionPipeline) ? "is" : "is NOT") << "available.";
 		GLfloat lineWidthRange[2];
 		context->functions()->glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, lineWidthRange);

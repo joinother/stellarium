@@ -91,6 +91,7 @@ struct WindowNativeNode {
   @State private nightViewTab: number = 0
   @State private meteors: boolean = false
   @State private dsoLabels: boolean = true
+  @State private autoZoomResets: boolean = false
   @State private equatorLine: boolean = false
   @State private supergalacticEq: boolean = false
   @State private eclJ2000Line: boolean = false
@@ -403,14 +404,15 @@ struct WindowNativeNode {
     this.horizonLine = result.actionShow_Horizon_Line === true
     this.planetLabels = result.actionShow_Planets_Labels === true
     this.starLabels = result.actionShow_Stars_Labels === true
-    this.dsoLabels = result.actionShow_DSO_Labels === true
+    this.dsoLabels = result.dsoLabels === true
     this.dsoTextures = result.actionShow_DSO_Textures === true
     this.enlargePlanets = result.actionShow_Planets_EnlargePlanets === true
     this.enlargeSun = result.actionShow_Planets_EnlargeSun === true
     this.minorBodyMarkers = result.actionShow_Planets_ShowMinorBodyMarkers === true
     this.planetNomenclature = result.actionShow_Planets_Nomenclature === true
     this.fogEffect = result.actionShow_Fog === true
-    this.meteors = result.actionShow_Meteors === true
+    this.meteors = result.meteors === true
+    this.autoZoomResets = result.autoZoomResets === true
     this.nightMode = result.actionShow_Night_Mode === true
     this.flipHoriz = result.actionHorizontal_Flip === true
     this.flipVert = result.actionVertical_Flip === true
@@ -445,6 +447,37 @@ struct WindowNativeNode {
     hilog.info(0x0000, 'StellariumArkUI', 'setLayer send %{public}s|%{public}s', actionId, enabled ? '1' : '0')
     this.callInteractive('setActionChecked', actionId + '|' + (enabled ? '1' : '0'), (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'setLayer %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
+      this.refreshState()
+    })
+  }
+
+  // Routed bridge flag: calls a named bridge command (e.g. setMeteors) with "1"/"0"
+  private setBridgeFlag(cmd: string, enabled: boolean): void {
+    hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag send %{public}s|%{public}s', cmd, enabled ? '1' : '0')
+    this.callInteractive(cmd, enabled ? '1' : '0', (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag %{public}s ok=%{public}s err=%{public}s', cmd, r.ok === true ? '1' : '0', r.error ?? '')
+      this.refreshState()
+    })
+  }
+
+  private adjustTime(hours: number): void {
+    this.callInteractive('advanceTime', hours.toString(), (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'adjustTime %{public}d ok=%{public}s', hours, r.ok === true ? '1' : '0')
+      this.refreshState()
+    })
+  }
+
+  private setTimeNow(): void {
+    const jd = Date.now() / 86400000.0 + 2440587.5
+    this.callInteractive('setJD', jd.toString(), (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'setTimeNow ok=%{public}s', r.ok === true ? '1' : '0')
+      this.refreshState()
+    })
+  }
+
+  private setFovPreset(deg: number): void {
+    this.callInteractive('setFOV', deg.toString(), (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'setFovPreset %{public}d ok=%{public}s', deg, r.ok === true ? '1' : '0')
       this.refreshState()
     })
   }
@@ -1172,9 +1205,10 @@ private loadPlanetPositions(): void {
         this.refreshState()
         this.flashHint($r('app.string.i0073', name))
       } else {
-        // Fallback to triggerAction for custom coordinates
-        this.triggerAction('actionSet_Location_Country_Code')
-        this.triggerAction('actionSet_Location_' + name.replace(/ /g, '_'))
+        // Fallback: push custom coordinates directly through the setLocation bridge
+        this.callInteractive('setLocation', `${name}|${latitude}|${longitude}|${altitude}`, (r2: StellariumBridgeResponse) => {
+          hilog.info(0x0000, 'StellariumArkUI', 'fallback setLocation ok=%{public}s', r2.ok === true ? '1' : '0')
+        })
         this.setPickerLocation(name, latitude, longitude, altitude, 'Synced to sky')
         this.locationText = name + ' · Earth'
         this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
@@ -2534,7 +2568,7 @@ private loadPlanetPositions(): void {
           Text($r('app.string.i0114')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow($r('app.string.s0300'), this.nightMode, 'actionShow_Night_Mode')
           this.switchRow($r('app.string.s0301'), this.equatorialMount, 'actionSwitch_Equatorial_Mount')
-          this.switchRow($r('app.string.s0302'), this.ground, 'actionSet_Auto_zoom_out_resets_direction')
+          this.switchRow($r('app.string.s0302'), this.autoZoomResets, 'setAutoZoomResets', 'setAutoZoomResets')
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
@@ -2946,25 +2980,25 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button($r('app.string.i0253')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Next_Conjunction') })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
               Button($r('app.string.i0254')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Next_Opposition') })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
               Button($r('app.string.i0255')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Next_Elongation') })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
             Text($r('app.string.s0745')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 6, bottom: 2 })
             Row({ space: 6 }) {
               Button($r('app.string.s0751')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionSet_Time_1_Hour_Forward') })
+                .onClick(() => { this.adjustTime(1) })
               Button($r('app.string.s0752')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionSet_Time_Now') })
+                .onClick(() => { this.setTimeNow() })
               Button($r('app.string.s0753')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionSet_Time_1_Hour_Backward') })
+                .onClick(() => { this.adjustTime(-1) })
             }.width('100%').padding({ left: 4, right: 4 })
           } else if (this.astroTab === 4) {
             Text($r('app.string.i0129')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
@@ -2972,17 +3006,17 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button($r('app.string.i0256')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_AlitudeVsTime_Graph') })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
               Button($r('app.string.i0257')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_AzimuthVsTime_Graph') })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 5) {
             Text($r('app.string.i0130')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Text($r('app.string.i0170')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Button($r('app.string.i0242')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-              .onClick(() => { this.triggerAction('actionShow_WUT') })
+              .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
           } else if (this.astroTab === 6) {
             Text($r('app.string.i0131')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Text($r('app.string.i0171')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
@@ -3716,23 +3750,23 @@ private loadPlanetPositions(): void {
       this.stopTracking(); this.triggerAction('actionLook_Towards_NCP'); this.refreshState(); this.flashHint($r('app.string.i0089'))
     // FOV 快捷切换（actionSet_FOV 索引: 0=0.5°, 1=180°, 2=90°, 3=60°, 4=45°, 5=20°, 6=10°, 7=5°, 8=2°, 9=1°）
     } else if (id === 'fov1') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_9'); this.refreshState(); this.flashHint($r('app.string.i0090'))
+      this.stopTracking(); this.setFovPreset(1); this.refreshState(); this.flashHint($r('app.string.i0090'))
     } else if (id === 'fov2') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_8'); this.refreshState(); this.flashHint($r('app.string.i0091'))
+      this.stopTracking(); this.setFovPreset(2); this.refreshState(); this.flashHint($r('app.string.i0091'))
     } else if (id === 'fov5') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_7'); this.refreshState(); this.flashHint($r('app.string.i0092'))
+      this.stopTracking(); this.setFovPreset(5); this.refreshState(); this.flashHint($r('app.string.i0092'))
     } else if (id === 'fov10') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_6'); this.refreshState(); this.flashHint($r('app.string.i0093'))
+      this.stopTracking(); this.setFovPreset(10); this.refreshState(); this.flashHint($r('app.string.i0093'))
     } else if (id === 'fov20') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_5'); this.refreshState(); this.flashHint($r('app.string.i0094'))
+      this.stopTracking(); this.setFovPreset(20); this.refreshState(); this.flashHint($r('app.string.i0094'))
     } else if (id === 'fov45') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_4'); this.refreshState(); this.flashHint($r('app.string.i0095'))
+      this.stopTracking(); this.setFovPreset(45); this.refreshState(); this.flashHint($r('app.string.i0095'))
     } else if (id === 'fov60') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_3'); this.refreshState(); this.flashHint($r('app.string.i0096'))
+      this.stopTracking(); this.setFovPreset(60); this.refreshState(); this.flashHint($r('app.string.i0096'))
     } else if (id === 'fov90') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_2'); this.refreshState(); this.flashHint($r('app.string.i0097'))
+      this.stopTracking(); this.setFovPreset(90); this.refreshState(); this.flashHint($r('app.string.i0097'))
     } else if (id === 'fov180') {
-      this.stopTracking(); this.triggerAction('actionSet_FOV_1'); this.refreshState(); this.flashHint($r('app.string.i0098'))
+      this.stopTracking(); this.setFovPreset(180); this.refreshState(); this.flashHint($r('app.string.i0098'))
     }
   }
 
@@ -3759,7 +3793,7 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  switchRow(label: ResourceStr, enabled: boolean, actionId: string) {
+  switchRow(label: ResourceStr, enabled: boolean, actionId: string, cmd?: string) {
     Row() {
       Text(label)
         .fontSize(14)
@@ -3770,7 +3804,11 @@ private loadPlanetPositions(): void {
         .height(28)
         .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
-          this.setLayer(actionId, value)
+          if (cmd) {
+            this.setBridgeFlag(cmd, value)
+          } else {
+            this.setLayer(actionId, value)
+          }
           this.flashHint((value ? '已显示 ' : '已隐藏 ') + label)
         })
     }
@@ -3850,7 +3888,7 @@ private loadPlanetPositions(): void {
     this.switchRow($r('app.string.s0305'), this.atmosphere, 'actionShow_Atmosphere')
     this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
     this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
-    this.switchRow($r('app.string.s0308'), this.meteors, 'actionShow_Meteors')
+    this.switchRow($r('app.string.s0308'), this.meteors, 'setMeteors', 'setMeteors')
     // 银河亮度
     Row() {
       Text($r('app.string.i0212')).fontSize(12).fontColor(this.nmSub()).width(72)
@@ -3901,7 +3939,7 @@ private loadPlanetPositions(): void {
   // View 面板 DSO 标签页内容
   @Builder viewDSOTab() {
     this.switchRow($r('app.string.s0320'), this.nebulae, 'actionShow_Nebulas')
-    this.switchRow($r('app.string.s0321'), this.dsoLabels, 'actionShow_DSO_Labels')
+    this.switchRow($r('app.string.s0321'), this.dsoLabels, 'setDsoLabels', 'setDsoLabels')
     this.switchRow($r('app.string.s0322'), this.dsoTextures, 'actionShow_DSO_Textures')
     Row() {
       Text($r('app.string.i0220')).fontSize(12).fontColor(this.nmSub()).width(72)
