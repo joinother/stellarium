@@ -15,14 +15,14 @@ struct WindowNativeNode {
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = true
   @State private searchText: string = ''
-  @State private selectedName: string = 'Not selected'
+  @State private selectedName: string = ''
   @State private searchSuggestions: SearchSug[] = []
   @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
-  @State private selectedType: string = 'Tap sky or search'
-  @State private selectedStatus: string = 'Waiting'
-  @State private selectedInfo: string = 'Tap a celestial object in the sky, or enter a name in search.'
+  @State private selectedType: string = ''
+  @State private selectedStatus: string = ''
+  @State private selectedInfo: string = ''
   @State private selectedMagnitude: string = ''
   @State private selectedCoordEq: string = ''
   @State private selectedCoordAlt: string = ''
@@ -190,7 +190,7 @@ struct WindowNativeNode {
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
-  @State private lx200Status: string = 'Disconnected'
+  @State private lx200Status: string = ''
   @State private actionHint: ResourceStr = ''
 
   private hintTimer: number = 0
