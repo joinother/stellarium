@@ -768,7 +768,7 @@ private loadPlanetPositions(): void {
   private applyLx200Result(result: StellariumBridgeResponse): void {
     if (result.ok === true) {
       const target = result.target && result.target.length > 0 ? result.target : 'Selected target'
-      const mode = result.mode === 'sync' ? 'Sync' : $r('app.string.i0049')
+      const mode = result.mode === 'sync' ? $r('app.string.s0740') : $r('app.string.i0049')
       const coord = result.ra && result.dec ? ' · ' + result.ra + ' / ' + result.dec : ''
       this.lx200Status = mode + ' sent: ' + target + coord
     } else {
@@ -2200,7 +2200,7 @@ private loadPlanetPositions(): void {
           .margin({ top: 8, bottom: 8 })
       }
       Row() {
-        Button(this.observingList.includes(this.selectedName) ? "In list" : "Add to list")
+        Button(this.observingList.includes(this.selectedName) ? $r('app.string.s0739') : $r('app.string.s0738'))
           .fontSize(13).fontColor("#E5FFFFFF").backgroundColor("rgba(107,163,214,0.25)")
           .borderRadius(12).height(36).layoutWeight(1)
           .onClick(() => {
@@ -2216,7 +2216,7 @@ private loadPlanetPositions(): void {
           })
       }
       .width("100%").margin({ top: 4, bottom: 4 })
-	      this.quickChips(['Refresh', 'Center', 'Untrack'])
+	      this.quickChips([$r('app.string.s0721'), $r('app.string.s0741'), $r('app.string.s0742')])
       Row({ space: 6 }) {
         Button($r('app.string.i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
