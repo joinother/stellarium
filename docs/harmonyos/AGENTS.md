@@ -277,6 +277,9 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 | `getObjectInfo` | 选中天体详细信息 | - |
 | `getConstellationInfo` | 当前星座 | - |
 | `getStarCount` | 可见星数 | - |
+| `getDSOCounts` | 可见深空天体分类计数 | - |
+| `setTimeToJD` | 设置模拟时间为指定 JD | jd |
+| `getSimulationTime` | 获取当前 JD/时间速率 | - |
 
 ---
 
