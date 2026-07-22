@@ -2145,6 +2145,62 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2m ==========
+		// getDeltaT — current ΔT value (seconds)
+		if (commandName == "getDeltaT")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["deltaT"] = core->getDeltaT();
+			result["jd"] = core->getJD();
+			result["jde"] = core->getJDE();
+			result["algorithm"] = core->getDeltaTAlgorithmDescription();
+			return result;
+		}
+
+		// getLandscapeInfo — current landscape details
+		if (commandName == "getLandscapeInfo")
+		{
+			const LandscapeMgr* lmgr = StelApp::getInstance().getLandscapeMgr();
+			result["ok"] = true;
+			result["id"] = lmgr->getCurrentLandscapeId();
+			result["name"] = lmgr->getCurrentLandscapeName();
+			result["author"] = lmgr->getCurrentLandscapeAuthor();
+			result["description"] = lmgr->getCurrentLandscapeDescription();
+			result["atmosphere"] = lmgr->getFlagAtmosphere();
+			result["fog"] = lmgr->getFlagFog();
+			result["ground"] = lmgr->getFlagLandscape();
+			result["polyAngle"] = lmgr->getPolyAngle();
+			result["transparency"] = lmgr->getLandscapeTransparency();
+			return result;
+		}
+
+		// getDeltaTAlgorithmDescription — get deltaT algorithm name
+		if (commandName == "getDeltaTAlgorithmDescription")
+		{
+			result["ok"] = true;
+			result["description"] = StelApp::getInstance().getCore()->getDeltaTAlgorithmDescription();
+			return result;
+		}
+
+		// getLandscapeCount — total number of available landscapes
+		if (commandName == "getLandscapeCount")
+		{
+			result["ok"] = true;
+			result["count"] = StelApp::getInstance().getLandscapeMgr()->getAllLandscapeCount();
+			return result;
+		}
+
+		// getStarCount — total number of stars loaded
+		if (commandName == "getStarCountFull")
+		{
+			result["ok"] = true;
+			result["total"] = StelApp::getInstance().getCore()->getStarMgr()->getStarCount();
+			return result;
+		}
+
+		// ========== End Phase 2m ==========
+
 		// ========== End Phase 2l ==========
 
 		// ========== End Phase 2k ==========
