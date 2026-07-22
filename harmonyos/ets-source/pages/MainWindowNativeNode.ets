@@ -2725,7 +2725,7 @@ private loadPlanetPositions(): void {
             this.languageRow()
             Row() {
               Text($r('app.string.i0119')).fontSize(12).fontColor(this.nmSub()).width(72)
-              Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : '加载中...').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+              Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : $r('app.string.s0729')).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.lockRow()
             this.infoRow($r('app.string.s0350'), 'Stellarium 26.2 for HarmonyOS')
@@ -2754,9 +2754,9 @@ private loadPlanetPositions(): void {
             this.infoRow($r('app.string.s0352'), 'OpenHarmony / HarmonyOS NEXT')
           } else if (this.configTab === 3) {
             // Time
-            this.infoRow($r('app.string.s0353'), '24 小时制')
+            this.infoRow($r('app.string.s0353'), $r('app.string.s0730'))
             this.infoRow($r('app.string.s0354'), 'YYYY-MM-DD')
-            this.infoRow($r('app.string.s0355'), '格里高利历')
+            this.infoRow($r('app.string.s0355'), $r('app.string.s0731'))
             Row() {
               Text($r('app.string.i0223')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
@@ -2769,7 +2769,7 @@ private loadPlanetPositions(): void {
                 .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.infoRow($r('app.string.s0356'), 'PNG')
-            this.infoRow($r('app.string.s0357'), '由 OpenGL ES 核心渲染')
+            this.infoRow($r('app.string.s0357'), $r('app.string.s0732'))
           } else if (this.configTab === 5) {
             // Scripts
             Row() {
