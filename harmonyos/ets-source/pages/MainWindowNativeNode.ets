@@ -1223,7 +1223,7 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  locationModeChip(mode: string, label: string) {
+  locationModeChip(mode: string, label: ResourceStr) {
     Button(label)
       .height(28)
       .fontSize(11)
@@ -2698,13 +2698,13 @@ private loadPlanetPositions(): void {
       // Configuration 面板
       Row({ space: 2 }) {
         ForEach([
-          { label: '主设置', id: 0 },
-          { label: '信息', id: 1 },
-          { label: '附加', id: 2 },
-          { label: '时间', id: 3 },
-          { label: '工具', id: 4 },
-          { label: '脚本', id: 5 },
-          { label: '插件', id: 6 },
+          { label: $r('app.string.c0000'), id: 0 },
+          { label: $r('app.string.c0001'), id: 1 },
+          { label: $r('app.string.c0002'), id: 2 },
+          { label: $r('app.string.c0003'), id: 3 },
+          { label: $r('app.string.c0004'), id: 4 },
+          { label: $r('app.string.c0005'), id: 5 },
+          { label: $r('app.string.c0006'), id: 6 },
         ] as TabItem[], (tab: TabItem) => {
           Text(tab.label)
             .fontSize(10)
@@ -2823,15 +2823,15 @@ private loadPlanetPositions(): void {
       // 天文计算窗口
       Row({ space: 2 }) {
         ForEach([
-          { label: '位置', id: 0 },
-          { label: '星历', id: 1 },
-          { label: '升降', id: 2 },
-          { label: '天象', id: 3 },
-          { label: '图表', id: 4 },
-          { label: '今晚', id: 5 },
-          { label: '行星', id: 6 },
-          { label: '日食', id: 7 },
-          { label: '年历', id: 8 },
+          { label: $r('app.string.a0000'), id: 0 },
+          { label: $r('app.string.a0001'), id: 1 },
+          { label: $r('app.string.a0002'), id: 2 },
+          { label: $r('app.string.a0003'), id: 3 },
+          { label: $r('app.string.a0004'), id: 4 },
+          { label: $r('app.string.a0005'), id: 5 },
+          { label: $r('app.string.a0006'), id: 6 },
+          { label: $r('app.string.a0007'), id: 7 },
+          { label: $r('app.string.a0008'), id: 8 },
         ] as TabItem[], (tab: TabItem) => {
           Text(tab.label)
             .fontSize(10)
@@ -3051,7 +3051,7 @@ private loadPlanetPositions(): void {
         .padding({ left: 4, right: 4 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
-      this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? '宽屏布局' : '触屏布局')
+      this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
       this.infoRow($r('app.string.i0059'), this.fovText)
       this.infoRow($r('app.string.i0060'), this.gyroscopeStatus)
@@ -3064,7 +3064,7 @@ private loadPlanetPositions(): void {
       if (this.observingList.length > 0) {
         Row() {
           Text($r('app.string.i0022')).fontSize(12).fontColor("#66FFFFFF").width(72)
-          Text(this.observingList.length + " 个天体").fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
+          Text(this.observingList.length + ' objects').fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
         Scroll() {
@@ -3083,7 +3083,7 @@ private loadPlanetPositions(): void {
           }.padding({ left: 4, right: 4 })
         }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
       }
-      this.infoRow($r('app.string.i0062'), '单 HAP')
+      this.infoRow($r('app.string.i0062'), $r('app.string.s0706'))
       // 分区：方向
       Row()
         .width('100%').height(0.5)
@@ -3134,7 +3134,7 @@ private loadPlanetPositions(): void {
           })
         Row() {
             Image($r(this.nightMode ? 'app.media.ic_moon' : 'app.media.ic_sun')).width(16).height(16).fillColor('#E5FFFFFF')
-            Text(this.nightMode ? '夜间模式' : '日间模式').fontSize(12).fontColor('#E5FFFFFF').margin({ left: 4 })
+            Text(this.nightMode ? $r('app.string.s0707') : $r('app.string.s0708')).fontSize(12).fontColor('#E5FFFFFF').margin({ left: 4 })
           }
           .padding({ left: 10, right: 10 }).backgroundColor('rgba(255,255,255,0.08)')
           .borderRadius(12).height(36).layoutWeight(1).margin({ left: 8 })
@@ -3150,7 +3150,7 @@ private loadPlanetPositions(): void {
         Text($r('app.string.i0277')).fontSize(12).fontColor('#66FFFFFF').width(72)
         Row() {
               Image($r('app.media.ic_layers')).width(14).height(14).fillColor('#E5FFFFFF')
-              Text(this.flipVert ? '南天在上' : '北天在上').fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
+              Text(this.flipVert ? $r('app.string.s0709') : $r('app.string.s0710')).fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
             }
           .padding({ left: 8, right: 8 }).backgroundColor(this.flipVert ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
           .borderRadius(12).height(32).layoutWeight(1)
@@ -3161,7 +3161,7 @@ private loadPlanetPositions(): void {
           })
         Row() {
               Image($r('app.media.ic_refresh')).width(14).height(14).fillColor('#E5FFFFFF')
-              Text(this.flipHoriz ? '已镜像' : '正常').fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
+              Text(this.flipHoriz ? $r('app.string.s0711') : $r('app.string.s0712')).fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
             }
           .padding({ left: 8, right: 8 }).backgroundColor(this.flipHoriz ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.08)')
           .padding({ left: 8, right: 8 }).borderRadius(12).height(32).layoutWeight(1).margin({ left: 6 }).justifyContent(FlexAlign.Center)
@@ -3186,7 +3186,7 @@ private loadPlanetPositions(): void {
       Row() {
         Text($r('app.string.i0029')).fontSize(12).fontColor("#66FFFFFF").width(72)
         Text(this.selectedLanguage === 'zh_CN' ? $r('app.string.i0030') :
-             this.selectedLanguage === 'zh_TW' ? '繁体中文' :
+             this.selectedLanguage === 'zh_TW' ? $r('app.string.s0713') :
              this.selectedLanguage === 'en' ? $r('app.string.i0032') :
              this.selectedLanguage === 'ja' ? $r('app.string.i0033') :
              this.selectedLanguage === 'ko' ? $r('app.string.i0034') : this.selectedLanguage)
@@ -3355,8 +3355,8 @@ private loadPlanetPositions(): void {
         .width('100%')
 
       Row() {
-        this.locationModeChip('map', '地图选点')
-        this.locationModeChip('hierarchy', '按地区选')
+        this.locationModeChip('map', $r('app.string.s0715'))
+        this.locationModeChip('hierarchy', $r('app.string.s0716'))
       }
         .width('100%')
         .margin({ top: 10 })
@@ -3372,7 +3372,7 @@ private loadPlanetPositions(): void {
           .borderRadius(12)
           .margin({ top: 10 })
           .onChange((value: string) => {
-            this.locationPickerName = value.length > 0 ? value : '自定义位置'
+            this.locationPickerName = value.length > 0 ? value : 'Custom'
           })
         Stack() {
           Image($rawfile('worldmap.jpg'))
@@ -3553,7 +3553,7 @@ private loadPlanetPositions(): void {
         .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
           this.uiLocked = value
-          this.flashHint(value ? '界面已锁定' : '可拖动面板')
+          this.flashHint(value ? $r('app.string.s0717') : $r('app.string.s0718'))
         })
     }
       .height(40)
@@ -3625,7 +3625,7 @@ private loadPlanetPositions(): void {
         .selectedColor('#5B93BF')
         .onChange((value: boolean) => {
           this.toggleGyroscope(value)
-          this.flashHint(value ? '已开启陀螺仪' : '已关闭陀螺仪')
+          this.flashHint(value ? $r('app.string.s0719') : $r('app.string.s0720'))
         })
     }
       .height(40)
@@ -3731,7 +3731,7 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  infoRow(label: ResourceStr, value: string) {
+  infoRow(label: ResourceStr, value: ResourceStr) {
     Row() {
       Text(label)
         .fontSize(12)
@@ -3814,13 +3814,13 @@ private loadPlanetPositions(): void {
   @Builder viewTabs() {
     Row({ space: 2 }) {
       ForEach([
-        { label: '天空', id: 0 },
-        { label: '太阳系', id: 1 },
-        { label: '深空', id: 2 },
-        { label: '标记', id: 3 },
-        { label: '地景', id: 4 },
-        { label: '文化', id: 5 },
-        { label: '巡天', id: 6 },
+        { label: $r('app.string.v0000'), id: 0 },
+        { label: $r('app.string.v0001'), id: 1 },
+        { label: $r('app.string.v0002'), id: 2 },
+        { label: $r('app.string.v0003'), id: 3 },
+        { label: $r('app.string.v0004'), id: 4 },
+        { label: $r('app.string.v0005'), id: 5 },
+        { label: $r('app.string.v0006'), id: 6 },
       ] as TabItem[], (tab: TabItem) => {
         Text(tab.label)
           .fontSize(10)

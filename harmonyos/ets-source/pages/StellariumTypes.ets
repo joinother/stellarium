@@ -50,7 +50,7 @@ export interface WindowNativeNodeCreateInfo {
 }
 
 export interface TabItem {
-  label: string
+  label: ResourceStr
   id: number
 }
 
