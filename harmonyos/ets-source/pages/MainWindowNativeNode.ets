@@ -1129,13 +1129,26 @@ private loadPlanetPositions(): void {
   }
 
   private setLocation(name: string, latitude: number, longitude: number, altitude: number): void {
-    this.callInteractive('setLocation', name + '|' + latitude.toString() + '|' + longitude.toString() + '|' + altitude.toString(), () => {
-      this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
-      this.locationText = name + ' · Earth'
-      this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
-      this.altitudeText = altitude.toFixed(0) + ' m'
-      this.refreshState()
-      this.flashHint($r('app.string.i0073', name))
+    // Try direct C++ bridge first for known cities
+    this.callInteractive('setLocationByName', name, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        // C++ resolved the location
+        this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
+        this.locationText = name + ' · Earth'
+        this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
+        this.altitudeText = altitude.toFixed(0) + ' m'
+        this.refreshState()
+        this.flashHint($r('app.string.i0073', name))
+      } else {
+        // Fallback to triggerAction for custom coordinates
+        this.triggerAction('actionSet_Location_Country_Code')
+        this.triggerAction('actionSet_Location_' + name.replace(/ /g, '_'))
+        this.setPickerLocation(name, latitude, longitude, altitude, '已同步到星图')
+        this.locationText = name + ' · Earth'
+        this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
+        this.altitudeText = altitude.toFixed(0) + ' m'
+        this.refreshState()
+      }
     })
   }
 
