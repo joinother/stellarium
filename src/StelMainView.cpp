@@ -1443,6 +1443,64 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2c ==========
+		// getObjectInfo — get detailed info for currently selected object
+		if (commandName == "getObjectInfo")
+		{
+			QJsonObject info;
+			const QList<StelObjectP>& sel = StelApp::getInstance().getCore()->getSelectedObject();
+			if (sel.empty()) {
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			const StelObjectP& obj = sel[0];
+			Vec3d altaz = obj->getAltAzPosApparent(StelApp::getInstance().getCore());
+			Vec3d radec = obj->getEquinoxEquatorialPos(StelApp::getInstance().getCore());
+			info["name"] = obj->getEnglishName();
+			info["nameI18"] = obj->getNameI18n();
+			info["type"] = obj->getType();
+			info["ra"] = radec[0] * 180.0 / M_PI;
+			info["dec"] = radec[1] * 180.0 / M_PI;
+			info["alt"] = altaz[1] * 180.0 / M_PI;
+			info["az"] = altaz[0] * 180.0 / M_PI;
+			info["magnitude"] = obj->getVMagnitude(StelApp::getInstance().getCore());
+			QString magStr;
+			if (obj->getExtraInfo("mag")) {
+				magStr = obj->getExtraInfo("mag");
+			} else {
+				magStr = QString::number(obj->getVMagnitude(StelApp::getInstance().getCore()), 'f', 2);
+			}
+			info["magStr"] = magStr;
+			result["ok"] = true;
+			result["info"] = info;
+			return result;
+		}
+
+		// getConstellationInfo — get current constellation at center
+		if (commandName == "getConstellationInfo")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			Vec3d center = core->getJ2000EquatorialRectToAltAz(core->getEquinoxEquatorialRect(core->getAltAzToEquinoxEquatorial(Vec3d(0,0,1))));
+			QString constellation = core->getConstellationMgr().getConstellationName(center, core);
+			result["ok"] = true;
+			result["name"] = constellation;
+			return result;
+		}
+
+		// getStarCount — number of visible stars by magnitude
+		if (commandName == "getStarCount")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			QJsonObject counts;
+			counts["visible"] = core->getStarMgr().getVisibleStarCount();
+			result["ok"] = true;
+			result["counts"] = counts;
+			return result;
+		}
+
+		// ========== End Phase 2c ==========
+
 		// ========== End Phase 2b ==========
 
 		// ========== End Phase 2 ==========

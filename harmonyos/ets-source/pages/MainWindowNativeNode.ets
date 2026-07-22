@@ -69,6 +69,16 @@ interface PlanetPosition {
   azimuth: number
   magnitude: number
 }
+interface ObjectInfo {
+  name: string
+  nameI18: string
+  type: string
+  ra: number
+  dec: number
+  alt: number
+  az: number
+  magnitude: number
+}
 
 interface SkyCultureItem {
   id: string
@@ -279,6 +289,7 @@ interface StellariumBridgeResponse {
   current?: string
   rts?: Object
   almanac?: Object
+  info?: Object
 }
 
 @Entry
@@ -413,6 +424,7 @@ struct WindowNativeNode {
   @State private moduleList: string[] = []
   @State private rtsData: Map<string, string> = new Map()
   @State private almanacData: Map<string, string> = new Map()
+  @State private objectInfo: Map<string, string> = new Map()
   @State private planetPositions: Array<PlanetPosition> = []
   @State private skyCultureList: Array<SkyCultureItem> = []
   @State private currentSkyCultureId: string = ''
@@ -797,7 +809,25 @@ struct WindowNativeNode {
     }
   }
 
-  private loadPlanetPositions(): void {
+  
+  private loadObjectInfo(): void {
+    this.callInteractive('getObjectInfo', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.info !== undefined) {
+        const obj = r.info as Object;
+        const m = new Map<string, string>();
+        if (obj['name'] !== undefined) m.set('name', obj['name'] as string);
+        if (obj['nameI18'] !== undefined) m.set('nameI18', obj['nameI18'] as string);
+        if (obj['type'] !== undefined) m.set('type', obj['type'] as string);
+        if (obj['ra'] !== undefined) m.set('ra', (obj['ra'] as number).toFixed(4));
+        if (obj['dec'] !== undefined) m.set('dec', (obj['dec'] as number).toFixed(4));
+        if (obj['alt'] !== undefined) m.set('alt', (obj['alt'] as number).toFixed(2));
+        if (obj['az'] !== undefined) m.set('az', (obj['az'] as number).toFixed(2));
+        if (obj['magnitude'] !== undefined) m.set('magnitude', (obj['magnitude'] as number).toFixed(2));
+        this.objectInfo = m;
+      }
+    })
+  }
+private loadPlanetPositions(): void {
     this.callInteractive('getObjectPositions', '', (r) => {
       if (r.ok === true && Array.isArray(r.items)) {
         this.planetPositions = (r.items as Array<PlanetPosition>).map((p: PlanetPosition) => ({
@@ -2678,15 +2708,15 @@ struct WindowNativeNode {
       Scroll() {
         Column({ space: 0 }) {
           Text($r('app.string.i0114')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-          this.switchRow('夜间模式', this.nightMode, 'actionShow_Night_Mode')
-          this.switchRow('赤道仪模式', this.equatorialMount, 'actionSwitch_Equatorial_Mount')
-          this.switchRow('地平线自动重置', this.ground, 'actionSet_Auto_zoom_out_resets_direction')
+          this.switchRow($r('app.string.s0300'), this.nightMode, 'actionShow_Night_Mode')
+          this.switchRow($r('app.string.s0301'), this.equatorialMount, 'actionSwitch_Equatorial_Mount')
+          this.switchRow($r('app.string.s0302'), this.ground, 'actionSet_Auto_zoom_out_resets_direction')
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
           Text($r('app.string.i0115')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-          this.switchRow('陀螺仪', this.gyroscopeEnabled, '')
+          this.switchRow($r('app.string.s0303'), this.gyroscopeEnabled, '')
           Row() {
             Text($r('app.string.i0230')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.gyroscopeSensitivityText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
@@ -2696,7 +2726,7 @@ struct WindowNativeNode {
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
           Text($r('app.string.i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-          this.switchRow('当前日期时间', this.liveMode, '')
+          this.switchRow($r('app.string.s0304'), this.liveMode, '')
           Row() {
             Text($r('app.string.i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
@@ -2842,7 +2872,7 @@ struct WindowNativeNode {
               Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : '加载中...').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.lockRow()
-            this.infoRow('版本', 'Stellarium 26.2 for HarmonyOS')
+            this.infoRow($r('app.string.s0350'), 'Stellarium 26.2 for HarmonyOS')
           } else if (this.configTab === 1) {
             // Information
             Row() {
@@ -2864,13 +2894,13 @@ struct WindowNativeNode {
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
           } else if (this.configTab === 2) {
             // Extras
-            this.infoRow('应用', 'Stellarium for HarmonyOS')
-            this.infoRow('平台', 'OpenHarmony / HarmonyOS NEXT')
+            this.infoRow($r('app.string.s0351'), 'Stellarium for HarmonyOS')
+            this.infoRow($r('app.string.s0352'), 'OpenHarmony / HarmonyOS NEXT')
           } else if (this.configTab === 3) {
             // Time
-            this.infoRow('时间格式', '24 小时制')
-            this.infoRow('日期格式', 'YYYY-MM-DD')
-            this.infoRow('历法', '格里高利历')
+            this.infoRow($r('app.string.s0353'), '24 小时制')
+            this.infoRow($r('app.string.s0354'), 'YYYY-MM-DD')
+            this.infoRow($r('app.string.s0355'), '格里高利历')
             Row() {
               Text($r('app.string.i0223')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
@@ -2882,8 +2912,8 @@ struct WindowNativeNode {
                 .borderRadius(8).height(28).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            this.infoRow('截图格式', 'PNG')
-            this.infoRow('渲染帧率', '由 OpenGL ES 核心渲染')
+            this.infoRow($r('app.string.s0356'), 'PNG')
+            this.infoRow($r('app.string.s0357'), '由 OpenGL ES 核心渲染')
           } else if (this.configTab === 5) {
             // Scripts
             Row() {
@@ -2967,10 +2997,10 @@ struct WindowNativeNode {
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadPlanetPositions() })
             Row() {
-              Text('名称').fontSize(10).fontColor(this.nmSub()).width(60)
-              Text('高度°').fontSize(10).fontColor(this.nmSub()).width(50)
-              Text('方位°').fontSize(10).fontColor(this.nmSub()).width(50)
-              Text('星等').fontSize(10).fontColor(this.nmSub()).width(40)
+              Text($r('app.string.s0374')).fontSize(10).fontColor(this.nmSub()).width(60)
+              Text($r('app.string.s0375')).fontSize(10).fontColor(this.nmSub()).width(50)
+              Text($r('app.string.s0376')).fontSize(10).fontColor(this.nmSub()).width(50)
+              Text($r('app.string.s0377')).fontSize(10).fontColor(this.nmSub()).width(40)
             }.height(20).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 2 })
             Scroll() {
               Column({ space: 2 }) {
@@ -3019,12 +3049,12 @@ struct WindowNativeNode {
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
             if (this.rtsData.size > 0) {
-              this.infoRow('天体', this.rtsData.get('name') ?? 'N/A')
+              this.infoRow($r('app.string.s0358'), this.rtsData.get('name') ?? 'N/A')
               Row()
                 .width('100%').height(0.5)
                 .backgroundColor(this.nmBorder())
                 .margin({ top: 4, bottom: 4 })
-              Text('下次事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              Text($r('app.string.s0370')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow('升起', this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
               this.infoRow('中天', this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
               this.infoRow('落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
@@ -3032,7 +3062,7 @@ struct WindowNativeNode {
                 .width('100%').height(0.5)
                 .backgroundColor(this.nmBorder())
                 .margin({ top: 4, bottom: 4 })
-              Text('上次事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              Text($r('app.string.s0371')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
               this.infoRow('升起', this.jdToDateStr(this.rtsData.get('prevRiseJD') ?? '0'))
               this.infoRow('中天', this.jdToDateStr(this.rtsData.get('prevTransitJD') ?? '0'))
               this.infoRow('落下', this.jdToDateStr(this.rtsData.get('prevSetJD') ?? '0'))
@@ -3105,19 +3135,19 @@ struct WindowNativeNode {
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadAlmanac() })
             if (this.almanacData.size > 0) {
-              Text('太阳').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
-              this.infoRow('日出', this.jdToDateStr(this.almanacData.get('sunNextRise') ?? '0'))
-              this.infoRow('日落', this.jdToDateStr(this.almanacData.get('sunNextSet') ?? '0'))
+              Text($r('app.string.s0372')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              this.infoRow($r('app.string.s0365'), this.jdToDateStr(this.almanacData.get('sunNextRise') ?? '0'))
+              this.infoRow($r('app.string.s0366'), this.jdToDateStr(this.almanacData.get('sunNextSet') ?? '0'))
               this.infoRow('中天', this.jdToDateStr(this.almanacData.get('sunNextTransit') ?? '0'))
               Row()
                 .width('100%').height(0.5)
                 .backgroundColor(this.nmBorder())
                 .margin({ top: 4, bottom: 4 })
-              Text('月球').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
-              this.infoRow('月出', this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
-              this.infoRow('月落', this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
+              Text($r('app.string.s0373')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              this.infoRow($r('app.string.s0367'), this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
+              this.infoRow($r('app.string.s0368'), this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
               this.infoRow('中天', this.jdToDateStr(this.almanacData.get('moonNextTransit') ?? '0'))
-              this.infoRow('月相', (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
+              this.infoRow($r('app.string.s0369'), (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
             }
           }
         }.width('100%')
@@ -3967,10 +3997,10 @@ struct WindowNativeNode {
 
   // View 面板 Sky 标签页内容
   @Builder viewSkyTab() {
-    this.switchRow('大气', this.atmosphere, 'actionShow_Atmosphere')
-    this.switchRow('地面', this.ground, 'actionShow_Ground')
-    this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
-    this.switchRow('流星', this.meteors, 'actionShow_Meteors')
+    this.switchRow($r('app.string.s0305'), this.atmosphere, 'actionShow_Atmosphere')
+    this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
+    this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
+    this.switchRow($r('app.string.s0308'), this.meteors, 'actionShow_Meteors')
     // 银河亮度
     Row() {
       Text($r('app.string.i0212')).fontSize(12).fontColor(this.nmSub()).width(72)
@@ -3994,22 +4024,22 @@ struct WindowNativeNode {
         .borderRadius(8).height(26).padding({ left: 8, right: 8 })
         .onClick(() => { this.triggerAction('actionShow_LightPollutionIncrease') })
     }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-    this.switchRow('夜间模式', this.nightMode, 'actionShow_Night_Mode')
-    this.switchRow('星空水平翻转', this.flipHoriz, 'actionHorizontal_Flip')
-    this.switchRow('星空垂直翻转', this.flipVert, 'actionVertical_Flip')
+    this.switchRow($r('app.string.s0300'), this.nightMode, 'actionShow_Night_Mode')
+    this.switchRow($r('app.string.s0309'), this.flipHoriz, 'actionHorizontal_Flip')
+    this.switchRow($r('app.string.s0310'), this.flipVert, 'actionVertical_Flip')
   }
 
   // View 面板 SSO 标签页内容
   @Builder viewSSOTab() {
-    this.switchRow('行星标签', this.planets, 'actionShow_Planets')
-    this.switchRow('行星轨道', this.planetOrbits, 'actionShow_Planets_Orbits')
-    this.switchRow('行星轨迹', this.planetTrails, 'actionShow_Planets_Trails')
-    this.switchRow('行星标记', this.planetHints, 'actionShow_Planets_Hints')
-    this.switchRow('放大月球', this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
-    this.switchRow('放大行星', false, 'actionShow_Planets_EnlargePlanets')
-    this.switchRow('放大太阳', false, 'actionShow_Planets_EnlargeSun')
-    this.switchRow('小天体标记', false, 'actionShow_Planets_ShowMinorBodyMarkers')
-    this.switchRow('命名标签', false, 'actionShow_Planets_Nomenclature')
+    this.switchRow($r('app.string.s0311'), this.planets, 'actionShow_Planets')
+    this.switchRow($r('app.string.s0312'), this.planetOrbits, 'actionShow_Planets_Orbits')
+    this.switchRow($r('app.string.s0313'), this.planetTrails, 'actionShow_Planets_Trails')
+    this.switchRow($r('app.string.s0314'), this.planetHints, 'actionShow_Planets_Hints')
+    this.switchRow($r('app.string.s0315'), this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
+    this.switchRow($r('app.string.s0316'), false, 'actionShow_Planets_EnlargePlanets')
+    this.switchRow($r('app.string.s0317'), false, 'actionShow_Planets_EnlargeSun')
+    this.switchRow($r('app.string.s0318'), false, 'actionShow_Planets_ShowMinorBodyMarkers')
+    this.switchRow($r('app.string.s0319'), false, 'actionShow_Planets_Nomenclature')
     Row() {
       Text($r('app.string.i0281')).fontSize(12).fontColor(this.nmSub()).width(72)
       Button($r('app.string.i0282')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -4020,9 +4050,9 @@ struct WindowNativeNode {
 
   // View 面板 DSO 标签页内容
   @Builder viewDSOTab() {
-    this.switchRow('深空天体', this.nebulae, 'actionShow_Nebulas')
-    this.switchRow('深空标签', this.dsoLabels, 'actionShow_Nebulas')
-    this.switchRow('深空背景图', this.dsoTextures, 'actionShow_DSO_Textures')
+    this.switchRow($r('app.string.s0320'), this.nebulae, 'actionShow_Nebulas')
+    this.switchRow($r('app.string.s0321'), this.dsoLabels, 'actionShow_Nebulas')
+    this.switchRow($r('app.string.s0322'), this.dsoTextures, 'actionShow_DSO_Textures')
     Row() {
       Text($r('app.string.i0220')).fontSize(12).fontColor(this.nmSub()).width(72)
       Button($r('app.string.i0283')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -4045,8 +4075,8 @@ struct WindowNativeNode {
       Column({ space: 0 }) {
         // 基础网格
         Text($r('app.string.i0197')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 }).padding({ left: 2 })
-        this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
-        this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
+        this.switchRow($r('app.string.s0323'), this.equatorialGrid, 'actionShow_Equatorial_Grid')
+        this.switchRow($r('app.string.s0324'), this.azimuthGrid, 'actionShow_Azimuthal_Grid')
         // 特殊线
         Row()
           .width('100%').height(0.5)
@@ -4054,13 +4084,13 @@ struct WindowNativeNode {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0198')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('赤道线', this.equatorLine, 'actionShow_Equator_Line')
-        this.switchRow('黄道线', this.eclipticLine, 'actionShow_Ecliptic_Line')
-        this.switchRow('子午线', this.meridianLine, 'actionShow_Meridian_Line')
-        this.switchRow('地平线', this.horizonLine, 'actionShow_Horizon_Line')
-        this.switchRow('银道线', this.galacticEquator, 'actionShow_Galactic_Equator_Line')
-        this.switchRow('超银道', this.supergalacticEq, 'actionShow_Supergalactic_Equator_Line')
-        this.switchRow('银道网格', this.galacticGrid, 'actionShow_Galactic_Grid')
+        this.switchRow($r('app.string.s0325'), this.equatorLine, 'actionShow_Equator_Line')
+        this.switchRow($r('app.string.s0326'), this.eclipticLine, 'actionShow_Ecliptic_Line')
+        this.switchRow($r('app.string.s0327'), this.meridianLine, 'actionShow_Meridian_Line')
+        this.switchRow($r('app.string.s0328'), this.horizonLine, 'actionShow_Horizon_Line')
+        this.switchRow($r('app.string.s0329'), this.galacticEquator, 'actionShow_Galactic_Equator_Line')
+        this.switchRow($r('app.string.s0330'), this.supergalacticEq, 'actionShow_Supergalactic_Equator_Line')
+        this.switchRow($r('app.string.s0331'), this.galacticGrid, 'actionShow_Galactic_Grid')
         // J2000 线
         Row()
           .width('100%').height(0.5)
@@ -4068,8 +4098,8 @@ struct WindowNativeNode {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0199')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('J2000 赤道', this.equJ2000Line, 'actionShow_Equator_J2000_Line')
-        this.switchRow('J2000 黄道', this.eclJ2000Line, 'actionShow_Ecliptic_J2000_Line')
+        this.switchRow($r('app.string.s0332'), this.equJ2000Line, 'actionShow_Equator_J2000_Line')
+        this.switchRow($r('app.string.s0333'), this.eclJ2000Line, 'actionShow_Ecliptic_J2000_Line')
         // 点标记
         Row()
           .width('100%').height(0.5)
@@ -4077,14 +4107,14 @@ struct WindowNativeNode {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0200')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('天极', this.celestialPoles, 'actionShow_Celestial_Poles')
-        this.switchRow('黄极', this.eclipticPoles, 'actionShow_Ecliptic_Poles')
-        this.switchRow('银极', this.galacticPoles, 'actionShow_Galactic_Poles')
-        this.switchRow('分点', this.equinoxPoints, 'actionShow_Equinox_Points')
-        this.switchRow('至点', this.solsticePoints, 'actionShow_Solstice_Points')
-        this.switchRow('反日点', this.antisolarPoint, 'actionShow_Antisolar_Point')
-        this.switchRow('本影圈', this.umbraCircle, 'actionShow_Umbra_Circle')
-        this.switchRow('半影圈', this.penumbraCircle, 'actionShow_Penumbra_Circle')
+        this.switchRow($r('app.string.s0334'), this.celestialPoles, 'actionShow_Celestial_Poles')
+        this.switchRow($r('app.string.s0335'), this.eclipticPoles, 'actionShow_Ecliptic_Poles')
+        this.switchRow($r('app.string.s0336'), this.galacticPoles, 'actionShow_Galactic_Poles')
+        this.switchRow($r('app.string.s0337'), this.equinoxPoints, 'actionShow_Equinox_Points')
+        this.switchRow($r('app.string.s0338'), this.solsticePoints, 'actionShow_Solstice_Points')
+        this.switchRow($r('app.string.s0339'), this.antisolarPoint, 'actionShow_Antisolar_Point')
+        this.switchRow($r('app.string.s0340'), this.umbraCircle, 'actionShow_Umbra_Circle')
+        this.switchRow($r('app.string.s0341'), this.penumbraCircle, 'actionShow_Penumbra_Circle')
         // 辅助标记
         Row()
           .width('100%').height(0.5)
@@ -4092,9 +4122,9 @@ struct WindowNativeNode {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0284')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('罗盘标记', this.compassMarks, 'actionShow_Compass_Marks')
-        this.switchRow('FOV标记', this.fovMarker, 'actionShow_FOV_Center_Marker')
-        this.switchRow('中间方位', this.intercardinalPts, 'actionShow_Intercardinal_Points')
+        this.switchRow($r('app.string.s0342'), this.compassMarks, 'actionShow_Compass_Marks')
+        this.switchRow($r('app.string.s0343'), this.fovMarker, 'actionShow_FOV_Center_Marker')
+        this.switchRow($r('app.string.s0344'), this.intercardinalPts, 'actionShow_Intercardinal_Points')
         // 更多标记线
         Row()
           .width('100%').height(0.5)
@@ -4102,10 +4132,10 @@ struct WindowNativeNode {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0285')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('垂直圈', this.primeVerticalLine, 'actionShow_Prime_Vertical_Line')
-        this.switchRow('当前垂直', this.currentVerticalLine, 'actionShow_Current_Vertical_Line')
-        this.switchRow('分至圈', this.colureLines, 'actionShow_Colure_Lines')
-        this.switchRow('进动圈', this.precessionCircles, 'actionShow_Precession_Circles')
+        this.switchRow($r('app.string.s0345'), this.primeVerticalLine, 'actionShow_Prime_Vertical_Line')
+        this.switchRow($r('app.string.s0346'), this.currentVerticalLine, 'actionShow_Current_Vertical_Line')
+        this.switchRow($r('app.string.s0347'), this.colureLines, 'actionShow_Colure_Lines')
+        this.switchRow($r('app.string.s0348'), this.precessionCircles, 'actionShow_Precession_Circles')
         this.switchRow('拱极圈', this.circumpolarCircles, 'actionShow_Circumpolar_Circles')
         this.switchRow('不变平面', this.invariantPlaneLine, 'actionShow_Invariable_Plane_Line')
         this.switchRow('太阳赤道', this.solarEquatorLine, 'actionShow_Solar_Equator_Line')
@@ -4153,10 +4183,10 @@ struct WindowNativeNode {
 
   // View 面板 Landscape 标签页内容
   @Builder viewLandscapeTab() {
-    this.switchRow('地面', this.ground, 'actionShow_Ground')
+    this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
     this.switchRow('景观照明', this.landscapeIllum, 'actionShow_LandscapeIllumination')
     this.switchRow('景观标签', this.landscapeLabels, 'actionShow_LandscapeLabels')
-    this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
+    this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
     Row() {
       Text($r('app.string.i0288')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 6 })

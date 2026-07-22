@@ -1027,6 +1027,370 @@
     {
       "name": "i0289",
       "value": "Transparency"
+    },
+    {
+      "name": "s0300",
+      "value": "Night mode"
+    },
+    {
+      "name": "s0301",
+      "value": "Equatorial mount"
+    },
+    {
+      "name": "s0302",
+      "value": "Auto horizon reset"
+    },
+    {
+      "name": "s0303",
+      "value": "Gyroscope"
+    },
+    {
+      "name": "s0304",
+      "value": "Live mode"
+    },
+    {
+      "name": "s0305",
+      "value": "Atmosphere"
+    },
+    {
+      "name": "s0306",
+      "value": "Ground"
+    },
+    {
+      "name": "s0307",
+      "value": "Fog"
+    },
+    {
+      "name": "s0308",
+      "value": "Meteors"
+    },
+    {
+      "name": "s0309",
+      "value": "Flip horizontal"
+    },
+    {
+      "name": "s0310",
+      "value": "Flip vertical"
+    },
+    {
+      "name": "s0311",
+      "value": "Planet labels"
+    },
+    {
+      "name": "s0312",
+      "value": "Planet orbits"
+    },
+    {
+      "name": "s0313",
+      "value": "Planet trails"
+    },
+    {
+      "name": "s0314",
+      "value": "Planet markers"
+    },
+    {
+      "name": "s0315",
+      "value": "Enlarge Moon"
+    },
+    {
+      "name": "s0316",
+      "value": "Enlarge planets"
+    },
+    {
+      "name": "s0317",
+      "value": "Enlarge Sun"
+    },
+    {
+      "name": "s0318",
+      "value": "Minor bodies"
+    },
+    {
+      "name": "s0319",
+      "value": "Nomenclature"
+    },
+    {
+      "name": "s0320",
+      "value": "Deep sky"
+    },
+    {
+      "name": "s0321",
+      "value": "DSO labels"
+    },
+    {
+      "name": "s0322",
+      "value": "DSO textures"
+    },
+    {
+      "name": "s0323",
+      "value": "Equatorial grid"
+    },
+    {
+      "name": "s0324",
+      "value": "Azimuthal grid"
+    },
+    {
+      "name": "s0325",
+      "value": "Equator line"
+    },
+    {
+      "name": "s0326",
+      "value": "Ecliptic line"
+    },
+    {
+      "name": "s0327",
+      "value": "Meridian line"
+    },
+    {
+      "name": "s0328",
+      "value": "Horizon line"
+    },
+    {
+      "name": "s0329",
+      "value": "Galactic equator"
+    },
+    {
+      "name": "s0330",
+      "value": "Supergalactic eq."
+    },
+    {
+      "name": "s0331",
+      "value": "Galactic grid"
+    },
+    {
+      "name": "s0332",
+      "value": "J2000 equator"
+    },
+    {
+      "name": "s0333",
+      "value": "J2000 ecliptic"
+    },
+    {
+      "name": "s0334",
+      "value": "Celestial poles"
+    },
+    {
+      "name": "s0335",
+      "value": "Ecliptic poles"
+    },
+    {
+      "name": "s0336",
+      "value": "Galactic poles"
+    },
+    {
+      "name": "s0337",
+      "value": "Equinoxes"
+    },
+    {
+      "name": "s0338",
+      "value": "Solstices"
+    },
+    {
+      "name": "s0339",
+      "value": "Antisolar point"
+    },
+    {
+      "name": "s0340",
+      "value": "Umbra circle"
+    },
+    {
+      "name": "s0341",
+      "value": "Penumbra circle"
+    },
+    {
+      "name": "s0342",
+      "value": "Compass marks"
+    },
+    {
+      "name": "s0343",
+      "value": "FOV marker"
+    },
+    {
+      "name": "s0344",
+      "value": "Intercardinal"
+    },
+    {
+      "name": "s0345",
+      "value": "Prime vertical"
+    },
+    {
+      "name": "s0346",
+      "value": "Current vertical"
+    },
+    {
+      "name": "s0347",
+      "value": "Colure lines"
+    },
+    {
+      "name": "s0348",
+      "value": "Precession circles"
+    },
+    {
+      "name": "s0350",
+      "value": "Version"
+    },
+    {
+      "name": "s0351",
+      "value": "App"
+    },
+    {
+      "name": "s0352",
+      "value": "Platform"
+    },
+    {
+      "name": "s0353",
+      "value": "Time format"
+    },
+    {
+      "name": "s0354",
+      "value": "Date format"
+    },
+    {
+      "name": "s0355",
+      "value": "Calendar"
+    },
+    {
+      "name": "s0356",
+      "value": "Screenshot format"
+    },
+    {
+      "name": "s0357",
+      "value": "Render FPS"
+    },
+    {
+      "name": "s0358",
+      "value": "Object"
+    },
+    {
+      "name": "s0365",
+      "value": "Sunrise"
+    },
+    {
+      "name": "s0366",
+      "value": "Sunset"
+    },
+    {
+      "name": "s0367",
+      "value": "Moonrise"
+    },
+    {
+      "name": "s0368",
+      "value": "Moonset"
+    },
+    {
+      "name": "s0369",
+      "value": "Moon phase"
+    },
+    {
+      "name": "s0370",
+      "value": "Next events"
+    },
+    {
+      "name": "s0371",
+      "value": "Previous events"
+    },
+    {
+      "name": "s0372",
+      "value": "Sun"
+    },
+    {
+      "name": "s0373",
+      "value": "Moon"
+    },
+    {
+      "name": "s0374",
+      "value": "Name"
+    },
+    {
+      "name": "s0375",
+      "value": "Alt°"
+    },
+    {
+      "name": "s0376",
+      "value": "Az°"
+    },
+    {
+      "name": "s0377",
+      "value": "Mag"
+    },
+    {
+      "name": "s0378",
+      "value": "Sky"
+    },
+    {
+      "name": "s0379",
+      "value": "Solar"
+    },
+    {
+      "name": "s0380",
+      "value": "DSO"
+    },
+    {
+      "name": "s0381",
+      "value": "Marks"
+    },
+    {
+      "name": "s0382",
+      "value": "Land."
+    },
+    {
+      "name": "s0383",
+      "value": "Culture"
+    },
+    {
+      "name": "s0384",
+      "value": "Survey"
+    },
+    {
+      "name": "s0385",
+      "value": "Main"
+    },
+    {
+      "name": "s0386",
+      "value": "Info"
+    },
+    {
+      "name": "s0387",
+      "value": "Extras"
+    },
+    {
+      "name": "s0388",
+      "value": "Time"
+    },
+    {
+      "name": "s0389",
+      "value": "Tools"
+    },
+    {
+      "name": "s0390",
+      "value": "Scripts"
+    },
+    {
+      "name": "s0391",
+      "value": "Plugins"
+    },
+    {
+      "name": "s0392",
+      "value": "Pos."
+    },
+    {
+      "name": "s0395",
+      "value": "Phenom."
+    },
+    {
+      "name": "s0396",
+      "value": "Charts"
+    },
+    {
+      "name": "s0397",
+      "value": "WUT"
+    },
+    {
+      "name": "s0398",
+      "value": "Planet"
+    },
+    {
+      "name": "s0400",
+      "value": "Almanac"
     }
   ]
 }
