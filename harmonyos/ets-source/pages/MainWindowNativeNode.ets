@@ -2136,7 +2136,7 @@ private loadPlanetPositions(): void {
           .margin({ top: 8, bottom: 8 })
       }
       Row() {
-        Button(this.observingList.includes(this.selectedName) ? "已从列表" : "加入观测列表")
+        Button(this.observingList.includes(this.selectedName) ? "In list" : "Add to list")
           .fontSize(13).fontColor("#E5FFFFFF").backgroundColor("rgba(107,163,214,0.25)")
           .borderRadius(12).height(36).layoutWeight(1)
           .onClick(() => {
@@ -2152,7 +2152,7 @@ private loadPlanetPositions(): void {
           })
       }
       .width("100%").margin({ top: 4, bottom: 4 })
-	      this.quickChips(['刷新', '居中', '取消追踪'])
+	      this.quickChips(['Refresh', 'Center', 'Untrack'])
       Row({ space: 6 }) {
         Button($r('app.string.i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
@@ -2163,8 +2163,8 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow($r('app.string.i0054'), this.observationTimeText)
       this.infoRow($r('app.string.i0055'), this.timeRateText)
-      this.infoRow($r('app.string.i0056'), this.timeRateText === '暂停' ? '暂停' : '运行')
-      this.quickChips(['现在', '后退', '暂停', '前进'])
+      this.infoRow($r('app.string.i0056'), this.timeRateText === 'Paused' ? 'Paused' : 'Running')
+      this.quickChips(['Now', 'Back', 'Pause', 'Forward'])
       this.quickChips(['+12h', '-12h'])
       // 天文事件快捷跳转
       Row()
