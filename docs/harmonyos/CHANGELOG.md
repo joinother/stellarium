@@ -2,6 +2,25 @@
 
 > 格式说明：每次修改追加一条记录。新 Agent 接手时先读这个文件。
 
+
+---
+
+## [2026-07-22] TRAE - 触摸架构修复 + LIVE 汉化 + 差距分析文档
+
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（触摸架构恢复到 924dbfdf60）
+  - `harmonyos/ets-source/resources/zh_CN/element/string.json`（i0002 LIVE→实时）
+  - `harmonyos/resources/zh_CN/element/string.json`（i0002 LIVE→实时）
+  - `docs/harmonyos/GAP-ANALYSIS.md`（新增与桌面版差距分析）
+- **修改内容：**
+  1. **触摸架构修复：** 经过多个旧版本回溯测试（cba74ba74a, 684786e10d, 924dbfdf60），确认正确的触摸架构为 expandedShell zIndex(1) Transparent > overlay zIndex(0) Transparent。已恢复到 924dbfdf60 版本（与 684786e10d 触摸代码完全一致，差异仅 8 处 i18n 字符串替换）。
+  2. **LIVE 汉化：** zh_CN 资源中 i0002 从 "LIVE" 改为 "实时"。
+  3. **差距分析文档：** 新增 GAP-ANALYSIS.md，记录 C++ 桥接命令 140+ 个（覆盖率约 85%）、ArkUI 面板 9 个 47 Toggle（约 80%）、确认缺失项（书签/卫星/录制/轨迹/配置导入/翻译异常）及 Phase 3 路线图。
+- **验证结果：**
+  - 模拟器 uinput 测试：侧边栏 9 按钮全通过、天空 selectAt/dragView 正常
+  - Toggle onChange：uinput 注入触摸不触发（面板 Block 消费触摸但 onChange 不回调），需 DevEco 模拟器 GUI 鼠标点击或真机验证
+  - 真机安装：Release 设备需要 release 签名，当前 debug 签名无法安装
+
 ## [2026-07-22] TRAE - 时间面板添加"上次"事件按钮 + 更多天文时间单位 + 详情面板上一选中按钮
 
 - **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
