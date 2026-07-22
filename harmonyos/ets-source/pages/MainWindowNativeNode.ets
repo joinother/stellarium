@@ -4198,7 +4198,7 @@ private loadPlanetPositions(): void {
               .fontColor(this.currentLandscapeId === item.id ? this.nmAccent() : this.nmText())
               .layoutWeight(1)
             if (this.currentLandscapeId === item.id) {
-              Text('当前').fontSize(9).fontColor(this.nmAccent()).margin({ right: 8 })
+              Text($r('app.string.s0602')).fontSize(9).fontColor(this.nmAccent()).margin({ right: 8 })
             }
           }
           .height(32).width('100%').padding({ left: 12, right: 12 })
@@ -4264,8 +4264,8 @@ private loadPlanetPositions(): void {
 
   // View 面板 Surveys 标签页内容
   @Builder viewSurveysTab() {
-    this.switchRow('HiPS 巡天', this.hipsSurveys, 'actionShow_Hips_Surveys')
-    this.switchRow('TOAST 巡天', this.toastSurvey, 'actionShow_Toast_Survey')
+    this.switchRow($r('app.string.s0600'), this.hipsSurveys, 'actionShow_Hips_Surveys')
+    this.switchRow($r('app.string.s0601'), this.toastSurvey, 'actionShow_Toast_Survey')
     Row() {
       Text($r('app.string.i0215')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 8 })
