@@ -179,6 +179,7 @@ struct WindowNativeNode {
   @State private gyroscopeSensitivityText: string = '标准'
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
+  @State private currentFovText: string = '--'
   @State private uiLocked: boolean = true
   @State private panelOffsetX: number = 0
   @State private panelOffsetY: number = 0
@@ -530,7 +531,15 @@ struct WindowNativeNode {
 
   
   
-  private loadDSOCounts(): void {
+    private loadFov(): void {
+    this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && typeof r.fov === 'number') {
+        this.currentFovText = (r.fov as number).toFixed(1) + '°'
+      }
+    })
+  }
+
+private loadDSOCounts(): void {
     this.callInteractive('getDSOCounts', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.dsoCounts !== undefined) {
         const d = r.dsoCounts as Object;
@@ -2487,6 +2496,17 @@ private loadPlanetPositions(): void {
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
               .onClick(() => { this.triggerAction('actionIncrease_Time_Speed') })
           }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
+          Row() {
+            Text('FOV').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text(this.currentFovText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+            Button('Refresh').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(8).height(24).padding({ left: 8, right: 8 })
+              .onClick(() => { this.loadFov() })
+          }.height(34).width('100%').padding({ left: 10, right: 10 })
         }.width('100%')
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
