@@ -2287,8 +2287,8 @@ struct WindowNativeNode {
     if (this.activePanel === 'object') {
       if (this.selectedName.length === 0) {
         Column() {
-          Text('点击天空中的天体').fontSize(14).fontColor('#66FFFFFF').margin({ top: 20 })
-          Text('或使用搜索功能查找').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+          Text($r('app.string.i0109')).fontSize(14).fontColor('#66FFFFFF').margin({ top: 20 })
+          Text($r('app.string.i0110')).fontSize(12).fontColor('#446688FF').margin({ top: 6 })
         }.width('100%').height(100).justifyContent(FlexAlign.Center)
       } else {
       // 天体名称突出显示
@@ -2376,7 +2376,7 @@ struct WindowNativeNode {
       .width("100%").margin({ top: 4, bottom: 4 })
 	      this.quickChips(['刷新', '居中', '取消追踪'])
       Row({ space: 6 }) {
-        Button('上一选中').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionGoto_ReSelect_Last_Selected_Object') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4, bottom: 4 })
@@ -2394,55 +2394,55 @@ struct WindowNativeNode {
         .backgroundColor(this.nmBorder())
         .margin({ top: 8, bottom: 4 })
       Row() {
-        Text('天体事件').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0111')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
       }
       .height(18).width('100%')
       Row({ space: 6 }) {
-        Button('下次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_Rising') })
-        Button('下次落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0147')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_Setting') })
-        Button('下次中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0148')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_Transit') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Button('今日升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0149')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionToday_Rising') })
-        Button('今日落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0150')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionToday_Setting') })
-        Button('今日中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0151')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionToday_Transit') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Button('上次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0152')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_Rising') })
-        Button('上次落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0153')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_Setting') })
-        Button('上次中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0154')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_Transit') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Button('下次晨光').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0155')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_MorningTwilight') })
-        Button('下次昏影').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0156')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_EveningTwilight') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Button('上次晨光').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0157')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_MorningTwilight') })
-        Button('上次昏影').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0158')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_EveningTwilight') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
@@ -2452,34 +2452,34 @@ struct WindowNativeNode {
         .backgroundColor(this.nmBorder())
         .margin({ top: 6, bottom: 4 })
       Row() {
-        Text('节气').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0112')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
       }
       .height(18).width('100%')
       Row({ space: 6 }) {
-        Button('春分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0159')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_March_Equinox') })
-        Button('夏至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0160')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_June_Solstice') })
-        Button('秋分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0161')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_September_Equinox') })
-        Button('冬至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0162')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionNext_December_Solstice') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 6 }) {
-        Button('上次春分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0163')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_March_Equinox') })
-        Button('上次夏至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0164')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_June_Solstice') })
-        Button('上次秋分').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0165')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_September_Equinox') })
-        Button('上次冬至').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0166')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionPrevious_December_Solstice') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
@@ -2489,95 +2489,95 @@ struct WindowNativeNode {
         .backgroundColor(this.nmBorder())
         .margin({ top: 6, bottom: 4 })
       Row() {
-        Text('天文时间').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0113')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
       }
       .height(18).width('100%')
       // 恒星时间
       Row({ space: 4 }) {
-        Button('+恒星日').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0173')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Sidereal_Day') })
-        Button('-恒星日').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0174')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Sidereal_Day') })
-        Button('+恒星年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0175')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Sidereal_Year') })
-        Button('-恒星年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0176')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Sidereal_Year') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 月周期
       Row({ space: 4 }) {
-        Button('+朔望月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0177')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Synodic_Month') })
-        Button('-朔望月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0178')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Synodic_Month') })
-        Button('+沙罗周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0179')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Saros') })
-        Button('-沙罗周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0180')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Saros') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 回归年/儒略年
       Row({ space: 4 }) {
-        Button('+回归年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0181')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Tropical_Year') })
-        Button('-回归年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0182')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Tropical_Year') })
-        Button('+儒略年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0183')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Julian_Year') })
-        Button('-儒略年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0184')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Julian_Year') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 日历月/年
       Row({ space: 4 }) {
-        Button('+月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0185')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Calendar_Month') })
-        Button('-月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0186')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Calendar_Month') })
-        Button('+年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0187')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Calendar_Year') })
-        Button('-年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0188')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionSubtract_Calendar_Year') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       // 更多周期
       Row({ space: 4 }) {
-        Button('+近点月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0189')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Anomalistic_Month') })
-        Button('+交点月').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0190')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Draconic_Month') })
-        Button('+默冬周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0191')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Metonic_Cycle') })
-        Button('+不周期').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0192')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Inex') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
       Row({ space: 4 }) {
-        Button('+高斯年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0193')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Gaussian_Year') })
-        Button('+10年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0194')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Calendar_Decade') })
-        Button('+100年').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0195')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Calendar_Century') })
-        Button('+儒略世纪').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button($r('app.string.i0196')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(14).height(26).padding({ left: 8, right: 8 })
           .onClick(() => { this.triggerAction('actionAdd_Julian_Century') })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
@@ -2683,7 +2683,7 @@ struct WindowNativeNode {
       // 快捷设置面板
       Scroll() {
         Column({ space: 0 }) {
-          Text('显示').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Text($r('app.string.i0114')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow('夜间模式', this.nightMode, 'actionShow_Night_Mode')
           this.switchRow('赤道仪模式', this.equatorialMount, 'actionSwitch_Equatorial_Mount')
           this.switchRow('地平线自动重置', this.ground, 'actionSet_Auto_zoom_out_resets_direction')
@@ -2691,24 +2691,24 @@ struct WindowNativeNode {
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
-          Text('控制').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Text($r('app.string.i0115')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow('陀螺仪', this.gyroscopeEnabled, '')
           Row() {
-            Text('陀螺仪灵敏度').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text($r('app.string.i0230')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.gyroscopeSensitivityText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
-          Text('时间控制').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Text($r('app.string.i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow('当前日期时间', this.liveMode, '')
           Row() {
-            Text('时间倍率').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text($r('app.string.i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
           Row({ space: 6 }) {
-            Button('暂停').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Button($r('app.string.i0142')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
               .onClick(() => { this.triggerAction('actionDecrease_Time_Speed') })
             Button('实时').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
@@ -2740,8 +2740,8 @@ struct WindowNativeNode {
       // 搜索历史（无输入时显示，可点击复用）
       if (this.searchText.length === 0 && this.searchHistory.length > 0) {
         Row() {
-          Text('搜索历史').fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
-          Text('清除').fontSize(11).fontColor('#4488FF').onClick(() => {
+          Text($r('app.string.i0117')).fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
+          Text($r('app.string.i0118')).fontSize(11).fontColor('#4488FF').onClick(() => {
             this.searchHistory = []
             AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
           })
@@ -2844,7 +2844,7 @@ struct WindowNativeNode {
             // Main
             this.languageRow()
             Row() {
-              Text('星空文化').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text($r('app.string.i0119')).fontSize(12).fontColor(this.nmSub()).width(72)
               Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : '加载中...').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             this.lockRow()
@@ -2852,7 +2852,7 @@ struct WindowNativeNode {
           } else if (this.configTab === 1) {
             // Information
             Row() {
-              Text('信息级别').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text($r('app.string.i0120')).fontSize(12).fontColor(this.nmSub()).width(72)
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             Row({ space: 6 }) {
               Button('全部').fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 0 ? this.nmAccent() : this.nmBg())
@@ -2878,12 +2878,12 @@ struct WindowNativeNode {
             this.infoRow('日期格式', 'YYYY-MM-DD')
             this.infoRow('历法', '格里高利历')
             Row() {
-              Text('（通过星图选择天体查看详细坐标）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+              Text($r('app.string.i0223')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
           } else if (this.configTab === 4) {
             // Tools
             Row() {
-              Text('截图保存').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text($r('app.string.i0121')).fontSize(12).fontColor(this.nmSub()).width(72)
               Button('保存').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(8).height(28).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
@@ -2893,13 +2893,13 @@ struct WindowNativeNode {
           } else if (this.configTab === 5) {
             // Scripts
             Row() {
-              Text('脚本播放').fontSize(12).fontColor(this.nmSub()).width(72)
+              Text($r('app.string.i0122')).fontSize(12).fontColor(this.nmSub()).width(72)
               Button('停止').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(8).height(28).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionStop_Script') })
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             Row() {
-              Text('脚本列表').fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4 })
+              Text($r('app.string.i0123')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4 })
             }.height(18).width('100%')
             Scroll() {
               Column({ space: 2 }) {
@@ -2917,8 +2917,8 @@ struct WindowNativeNode {
             .width('100%').height(200).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else {
             // Plugins
-            Text('插件管理').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Button('刷新插件').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0124')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Button($r('app.string.i0244')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadPluginList() })
             Scroll() {
@@ -2968,8 +2968,8 @@ struct WindowNativeNode {
       Scroll() {
         Column({ space: 0 }) {
           if (this.astroTab === 0) {
-            Text('天体位置表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Button('刷新位置').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0125')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Button($r('app.string.i0241')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadPlanetPositions() })
             Scroll() {
@@ -2988,33 +2988,33 @@ struct WindowNativeNode {
             }
             .width('100%').height(240).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else if (this.astroTab === 1) {
-            Text('星历表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('选中天体后可查看其星历数据').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Text($r('app.string.i0126')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0167')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
-              Button('上次升起').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0152')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionPrevious_Rising') })
-              Button('上次中天').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0154')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionPrevious_Transit') })
-              Button('上次落下').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0153')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionPrevious_Setting') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
             Row({ space: 6 }) {
-              Button('下次升起').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+              Button($r('app.string.i0146')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionNext_Rising') })
-              Button('下次中天').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+              Button($r('app.string.i0148')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionNext_Transit') })
-              Button('下次落下').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+              Button($r('app.string.i0147')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
                 .onClick(() => { this.triggerAction('actionNext_Setting') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
           } else if (this.astroTab === 2) {
-            Text('升起/中天/落下').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Button('加载数据').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0127')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Button($r('app.string.i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
             if (Object.keys(this.rtsData).length > 0) {
@@ -3024,19 +3024,19 @@ struct WindowNativeNode {
               this.infoRow('下次落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
             }
             Row({ space: 6 }) {
-              Button('下次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionNext_Rising') })
-              Button('下次中天').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0148')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionNext_Transit') })
-              Button('下次落下').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              Button($r('app.string.i0147')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.triggerAction('actionNext_Setting') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 3) {
-            Text('天象计算').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('查看行星合、冲、距角等天文现象').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Text($r('app.string.i0128')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0168')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
               Button('合').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
@@ -3049,8 +3049,8 @@ struct WindowNativeNode {
                 .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 4) {
-            Text('高度/方位角图表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('显示选中天体的高度角和方位角随时间变化图表').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Text($r('app.string.i0129')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0169')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
               Button('Alt图表').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
@@ -3060,20 +3060,20 @@ struct WindowNativeNode {
                 .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 5) {
-            Text('今晚可见').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('列出今晚可见的行星、深空天体和流星雨').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
-            Button('打开WUT面板').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0130')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0170')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Button($r('app.string.i0242')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.triggerAction('actionShow_WUT') })
           } else if (this.astroTab === 6) {
-            Text('行星计算器').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('查看行星距离、公转周期和轨道速度等数据').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
-            Button('打开行星计算器').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0131')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0171')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Button($r('app.string.i0243')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
           } else if (this.astroTab === 7) {
-            Text('日月食').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text('查看日食、月食和行星凌日预报').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Text($r('app.string.i0132')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Text($r('app.string.i0172')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
               Button('日食').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 8, right: 8 })
@@ -3086,8 +3086,8 @@ struct WindowNativeNode {
                 .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else {
-            Text('年历').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Button('加载年历').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            Text($r('app.string.i0133')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Button($r('app.string.i0240')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadAlmanac() })
             if (Object.keys(this.almanacData).length > 0) {
@@ -3104,7 +3104,7 @@ struct WindowNativeNode {
       // Help 面板
       Scroll() {
         Column({ space: 8 }) {
-          Text('关于').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4 })
+          Text($r('app.string.i0216')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4 })
           Text('Stellarium for HarmonyOS').fontSize(11).fontColor(this.nmSub()).width('100%')
           Text('基于 Stellarium 26.2 C++ 核心的社区移植版').fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text('渲染引擎：OpenGL ES via XComponent').fontSize(10).fontColor('#66FFFFFF').width('100%')
@@ -3113,7 +3113,7 @@ struct WindowNativeNode {
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 8, bottom: 4 })
-          Text('快捷操作').fontSize(13).fontColor(this.nmText()).width('100%')
+          Text($r('app.string.i0217')).fontSize(13).fontColor(this.nmText()).width('100%')
           Text('单指拖动：平移视角').fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text('双指捏合：缩放').fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text('单击天体：选中并显示信息').fontSize(10).fontColor('#66FFFFFF').width('100%')
@@ -3122,7 +3122,7 @@ struct WindowNativeNode {
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 8, bottom: 4 })
-          Text('功能面板').fontSize(13).fontColor(this.nmText()).width('100%')
+          Text($r('app.string.i0218')).fontSize(13).fontColor(this.nmText()).width('100%')
           Text('View：显示选项（天空/太阳系/深空/标记/地景/文化/巡天）').fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text('Search：搜索天体').fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text('Time：时间控制（天文事件/节气跳转）').fontSize(10).fontColor('#66FFFFFF').width('100%')
@@ -3951,7 +3951,7 @@ struct WindowNativeNode {
     this.switchRow('流星', this.meteors, 'actionShow_Meteors')
     // 银河亮度
     Row() {
-      Text('银河亮度').fontSize(12).fontColor(this.nmSub()).width(72)
+      Text($r('app.string.i0212')).fontSize(12).fontColor(this.nmSub()).width(72)
       Row({ space: 6 }) {
         Button('-').fontSize(12).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(8).width(36).height(28)
@@ -4002,7 +4002,7 @@ struct WindowNativeNode {
     this.switchRow('深空标签', this.dsoLabels, 'actionShow_Nebulas')
     this.switchRow('深空背景图', this.dsoTextures, 'actionShow_DSO_Textures')
     Row() {
-      Text('重载背景').fontSize(12).fontColor(this.nmSub()).width(72)
+      Text($r('app.string.i0220')).fontSize(12).fontColor(this.nmSub()).width(72)
       Button('重载').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
         .borderRadius(8).height(28).padding({ left: 10, right: 10 })
         .onClick(() => { this.triggerAction('actionShow_DSO_Textures_Reload') })
@@ -4012,7 +4012,7 @@ struct WindowNativeNode {
       .backgroundColor(this.nmBorder())
       .margin({ top: 6, bottom: 4 })
     Row() {
-      Text('星表过滤（暂未接入桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+      Text($r('app.string.i0214')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
     }
     .height(18).width('100%')
   }
@@ -4022,7 +4022,7 @@ struct WindowNativeNode {
     Scroll() {
       Column({ space: 0 }) {
         // 基础网格
-        Text('基础网格').fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 }).padding({ left: 2 })
+        Text($r('app.string.i0197')).fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4, bottom: 2 }).padding({ left: 2 })
         this.switchRow('赤道网格', this.equatorialGrid, 'actionShow_Equatorial_Grid')
         this.switchRow('方位网格', this.azimuthGrid, 'actionShow_Azimuthal_Grid')
         // 特殊线
@@ -4030,7 +4030,7 @@ struct WindowNativeNode {
           .width('100%').height(0.5)
           .backgroundColor(this.nmBorder())
           .margin({ top: 6, bottom: 4 })
-        Text('特殊线').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0198')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
         this.switchRow('赤道线', this.equatorLine, 'actionShow_Equator_Line')
         this.switchRow('黄道线', this.eclipticLine, 'actionShow_Ecliptic_Line')
@@ -4044,7 +4044,7 @@ struct WindowNativeNode {
           .width('100%').height(0.5)
           .backgroundColor(this.nmBorder())
           .margin({ top: 6, bottom: 4 })
-        Text('J2000 基准').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0199')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
         this.switchRow('J2000 赤道', this.equJ2000Line, 'actionShow_Equator_J2000_Line')
         this.switchRow('J2000 黄道', this.eclJ2000Line, 'actionShow_Ecliptic_J2000_Line')
@@ -4053,7 +4053,7 @@ struct WindowNativeNode {
           .width('100%').height(0.5)
           .backgroundColor(this.nmBorder())
           .margin({ top: 6, bottom: 4 })
-        Text('点标记').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+        Text($r('app.string.i0200')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
         this.switchRow('天极', this.celestialPoles, 'actionShow_Celestial_Poles')
         this.switchRow('黄极', this.eclipticPoles, 'actionShow_Ecliptic_Poles')
@@ -4189,7 +4189,7 @@ struct WindowNativeNode {
       .backgroundColor(this.nmBorder())
       .margin({ top: 6, bottom: 4 })
     Row() {
-      Text('天区文化').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+      Text($r('app.string.i0213')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
     }.height(18).width('100%')
     Scroll() {
       Column({ space: 2 }) {
@@ -4215,7 +4215,7 @@ struct WindowNativeNode {
     this.switchRow('HiPS 巡天', this.hipsSurveys, 'actionShow_Hips_Surveys')
     this.switchRow('TOAST 巡天', this.toastSurvey, 'actionShow_Toast_Survey')
     Row() {
-      Text('注意：在线巡天需要网络连接').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+      Text($r('app.string.i0215')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 8 })
   }
 
