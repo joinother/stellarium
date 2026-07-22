@@ -78,11 +78,36 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
 export function prepareStellariumResources(appContext: common.ApplicationContext): string {
   const installRoot = `${appContext.filesDir}/stellarium`;
   const markerPath = `${installRoot}/${MARKER}`;
+  const translationsDir = `${installRoot}/translations`;
+  // Star/UI names live in these per-domain .qm files. The one-time extraction
+  // is gated only by the marker file; if a previous run was interrupted, the
+  // marker can exist while the translations tree is missing/partial. Without
+  // this extra check, localization silently never works and no error is raised.
+  const keyQmStellarium = `${translationsDir}/stellarium/zh_CN.qm`;
+  const keyQmSky = `${translationsDir}/stellarium-sky/zh_CN.qm`;
+  const keyQmSkyCultures = `${translationsDir}/stellarium-skycultures/zh_CN.qm`;
 
-  if (!exists(markerPath)) {
+  let needExtract = !exists(markerPath);
+  if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but translations incomplete ` +
+      `(stellarium=${exists(keyQmStellarium)} sky=${exists(keyQmSky)} ` +
+      `skycultures=${exists(keyQmSkyCultures)}); forcing re-extract`);
+    needExtract = true;
+  }
+
+  if (needExtract) {
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
   }
+
+  // Observable proof that localization data is on disk, so "star names don't
+  // translate" can be diagnosed from logs instead of being invisible.
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `Translations on disk: dir=${exists(translationsDir)} ` +
+    `stellarium/zh_CN.qm=${exists(keyQmStellarium)} ` +
+    `stellarium-sky/zh_CN.qm=${exists(keyQmSky)} ` +
+    `stellarium-skycultures/zh_CN.qm=${exists(keyQmSkyCultures)}`);
 
   const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);
