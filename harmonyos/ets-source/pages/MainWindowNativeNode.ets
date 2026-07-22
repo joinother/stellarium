@@ -1450,6 +1450,7 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Down) {
       const downX = this.touchWindowX(points[0])
       const downY = this.touchWindowY(points[0])
+      this.flashHint('Touch: x=' + downX + ' y=' + downY + ' sky=' + this.skyWidth + 'x' + this.skyHeight + ' rail=' + this.railTop())
       if (this.isUiPoint(downX, downY)) {
         // Handle sidebar button clicks since XComponent swallows onClick events
         if (downX >= 0 && downX <= 58) {
@@ -1844,7 +1845,6 @@ private loadPlanetPositions(): void {
           .height(44)
           .position({ x: 7, y: idx * 58 })
           .onClick(() => {
-            hilog.info(0x0000, 'StellariumArkUI', 'rail onClick: panel=' + item.panel + ' x=' + '30' + ' activePanel=' + this.activePanel)
             this.setPanel(item.panel)
             this.flashHint($r('app.string.i0078', item.label + '面板'))
           })
