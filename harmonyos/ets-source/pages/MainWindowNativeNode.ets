@@ -1108,12 +1108,15 @@ private loadPlanetPositions(): void {
       this.hierRegion = ''
       this.hierCity = ''
     } catch (err) {
-      hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', JSON.stringify(err))
-      // 模拟器通常无 GPS，自动回退到上次保存的位置
+      const errMsg: string = err instanceof Error ? err.message : JSON.stringify(err)
+      hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', errMsg)
+      // Simulator usually has no GPS; fall back to saved or default location
       if (this.locationPickerLatitude === 0 && this.locationPickerLongitude === 0) {
         this.setPickerLocation('Beijing', 39.9, 116.4, 43, 'No GPS in simulator, using default (Beijing)')
+        this.applyPickerLocation()
       } else {
-        this.locationPickerStatus = 'GPS 不可用，已保留当前位置'
+        this.locationPickerStatus = 'GPS unavailable, keeping current position'
+        this.applyPickerLocation()
       }
     }
   }
@@ -2082,12 +2085,8 @@ private loadPlanetPositions(): void {
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .backgroundColor('rgba(91, 147, 191, 0.15)').borderRadius(6)
         Blank()
-        Text(this.selectedStatus)
+        Text(this.selectedStatus === 'Selected' ? this.trackingText : this.selectedStatus)
           .fontSize(11).fontColor('#66FFFFFF')
-        if (this.trackingText.length > 0) {
-          Text(this.trackingText)
-            .fontSize(11).fontColor('#66BBFFAA')
-        }
       }.width('100%').padding({ left: 4, right: 4 }).height(20).margin({ bottom: 8 })
 
       // 直接绑定 @State（不要经 infoRow 的 @Builder 参数，参数按值捕获会导致不刷新，详见上方注释）
@@ -3731,46 +3730,22 @@ private loadPlanetPositions(): void {
       return $r('app.string.i0100')
     }
     if (this.activePanel === 'config') {
-      return 'Paused'
+      return $r('app.string.i0273')
     }
     if (this.activePanel === 'astro') {
-      return 'Paused'
+      return $r('app.string.i0274')
     }
     if (this.activePanel === 'help') {
-      return 'Paused'
+      return $r('app.string.i0217')
     }
     if (this.activePanel === 'settings') {
       return $r('app.string.i0102')
     }
-    return 'Paused'
+    return $r('app.string.i0101')
   }
 
-  private panelSubtitle(): ResourceStr {
-    if (this.activePanel === 'search') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'time') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'place') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'layers') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'config') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'astro') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'help') {
-      return 'Paused'
-    }
-    if (this.activePanel === 'settings') {
-      return 'Paused'
-    }
-    return 'Paused'
+  private panelSubtitle(): string {
+    return this.timeRateText
   }
 
   // View 面板标签页选择器
