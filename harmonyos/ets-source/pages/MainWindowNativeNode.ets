@@ -58,6 +58,18 @@ interface TabItem {
   id: number
 }
 
+interface LandscapeItem {
+  id: string
+  name: string
+}
+
+interface PlanetPosition {
+  name: string
+  altitude: number
+  azimuth: number
+  magnitude: number
+}
+
 interface ShellAction {
   label: ResourceStr
   icon: string
@@ -253,6 +265,8 @@ interface StellariumBridgeResponse {
   prefix?: string
   moduleId?: string
   current?: string
+  rts?: Object
+  almanac?: Object
 }
 
 @Entry
@@ -380,6 +394,16 @@ struct WindowNativeNode {
   @State private asterismLabels: boolean = false
   @State private hipsSurveys: boolean = false
   @State private toastSurvey: boolean = false
+  // 桥接数据
+  @State private landscapeList: Array<LandscapeItem> = []
+  @State private currentLandscapeId: string = ''
+  @State private scriptList: string[] = []
+  @State private moduleList: string[] = []
+  @State private rtsData: Map<string, string> = new Map()
+  @State private almanacData: Map<string, string> = new Map()
+  @State private planetPositions: Array<PlanetPosition> = []
+  @State private landscapeDetailOpen: boolean = false
+  @State private selectedLandscapeName: string = ''
   @State private landscapeTransp: number = 0
   @State private milkyWayBright: number = 3
   @State private infoLevel: number = 1
@@ -493,6 +517,22 @@ struct WindowNativeNode {
         this.currentSkyCulture = r.current as string
         // Qt 初始化成功，自动关闭启动画面
         if (this.isLoading) { this.isLoading = false }
+      }
+    })
+    this.callNativeWhenReady("getLandscapeList", "", (r) => {
+      if (r.ok === true && Array.isArray(r.items)) {
+        this.landscapeList = r.items as Array<LandscapeItem>
+        this.currentLandscapeId = r.current as string
+      }
+    })
+    this.callNativeWhenReady("getScriptList", "", (r) => {
+      if (r.ok === true && Array.isArray(r.items)) {
+        this.scriptList = r.items as string[]
+      }
+    })
+    this.callNativeWhenReady("getLoadedModuleNames", "", (r) => {
+      if (r.ok === true && Array.isArray(r.items)) {
+        this.moduleList = r.items as string[]
       }
     })
     // 加载保存的设置
@@ -645,6 +685,71 @@ struct WindowNativeNode {
     this.callInteractive('triggerAction', actionId, () => {
       this.refreshState()
     })
+  }
+
+  private jdToDateStr(jd: string): string {
+    const numJd = parseFloat(jd);
+    if (numJd <= 0) return 'N/A'
+    const date = new Date((numJd - 2440587.5) * 86400000)
+    const h = Math.floor((numJd - Math.floor(numJd)) * 24)
+    const m = Math.floor(((numJd - Math.floor(numJd)) * 24 - h) * 60)
+    return date.getMonth() + 1 + '/' + date.getDate() + ' ' + h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0')
+  }
+
+  private loadRTS(): void {
+    this.callInteractive('getRTS', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.rts !== undefined) {
+        const rv: Object = r.rts as Object
+        this.rtsData.set('name', rv['name'] !== undefined ? rv['name'] as string : 'N/A')
+        this.rtsData.set('nextRiseJD', rv['nextRiseJD'] !== undefined ? String(rv['nextRiseJD']) : '0')
+        this.rtsData.set('nextTransitJD', rv['nextTransitJD'] !== undefined ? String(rv['nextTransitJD']) : '0')
+        this.rtsData.set('nextSetJD', rv['nextSetJD'] !== undefined ? String(rv['nextSetJD']) : '0')
+      }
+    })
+  }
+
+  private loadAlmanac(): void {
+    this.callInteractive('getAlmanac', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.almanac !== undefined) {
+        const av: Object = r.almanac as Object
+        this.almanacData.set('sunNextRise', av['sunNextRise'] !== undefined ? String(av['sunNextRise']) : '0')
+        this.almanacData.set('sunNextSet', av['sunNextSet'] !== undefined ? String(av['sunNextSet']) : '0')
+        this.almanacData.set('moonNextRise', av['moonNextRise'] !== undefined ? String(av['moonNextRise']) : '0')
+        this.almanacData.set('moonNextSet', av['moonNextSet'] !== undefined ? String(av['moonNextSet']) : '0')
+        this.almanacData.set('moonPhase', av['moonPhase'] !== undefined ? String(av['moonPhase']) : '0')
+      }
+    })
+  }
+
+  private loadPlanetPositions(): void {
+    this.callInteractive('getObjectPositions', '', (r) => {
+      if (r.ok === true && Array.isArray(r.items)) {
+        this.planetPositions = (r.items as Array<PlanetPosition>).map((p: PlanetPosition) => ({
+          name: p.name,
+          altitude: Math.round(p.altitude * 10) / 10,
+          azimuth: Math.round(p.azimuth * 10) / 10,
+          magnitude: Math.round(p.magnitude * 100) / 100,
+        }))
+      }
+    })
+  }
+
+  private selectLandscape(id: string, name: string): void {
+    this.callInteractive('setLandscape', id, () => {
+      this.currentLandscapeId = id
+      this.selectedLandscapeName = name
+      this.landscapeDetailOpen = false
+      this.refreshState()
+    })
+  }
+
+  private changeLandscapeTransparency(val: number): void {
+    const v = (val / 100).toFixed(2)
+    this.callInteractive('setLandscapeTransparency', v, () => {})
+  }
+
+  private playScriptByName(filename: string): void {
+    this.callInteractive('playScript', filename, () => {})
   }
 
   private fetchSuggestions(prefix: string): void {
@@ -2676,9 +2781,22 @@ struct WindowNativeNode {
                 .onClick(() => { this.triggerAction('actionStop_Script') })
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
             Row() {
-              Text('脚本列表').fontSize(12).fontColor(this.nmSub()).width(72)
-              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+              Text('脚本列表').fontSize(11).fontColor(this.nmSub()).width('100%').margin({ top: 4 })
+            }.height(18).width('100%')
+            Scroll() {
+              Column({ space: 2 }) {
+                ForEach(this.scriptList, (s: string) => {
+                  Row() {
+                    Text(s).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                  }
+                  .height(30).width('100%').padding({ left: 12, right: 12 })
+                  .backgroundColor(this.nmBg())
+                  .borderRadius(4)
+                  .onClick(() => { this.playScriptByName(s) })
+                }, (s: string, index: number) => s)
+              }
+            }
+            .width('100%').height(200).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else {
             // Plugins
             Row() {
@@ -2715,14 +2833,38 @@ struct WindowNativeNode {
         Column({ space: 0 }) {
           if (this.astroTab === 0) {
             Text('天体位置表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
-            this.infoRow('数据', '选中天体的坐标、星等、角径等')
+            Button('刷新位置').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.loadPlanetPositions() })
+            Scroll() {
+              Column({ space: 2 }) {
+                ForEach(this.planetPositions, (p: PlanetPosition) => {
+                  Row() {
+                    Text(p.name).fontSize(11).fontColor(this.nmText()).width(50)
+                    Text(p.altitude + '°').fontSize(10).fontColor(this.nmSub()).width(50)
+                    Text(p.magnitude.toFixed(1)).fontSize(10).fontColor(this.nmSub()).width(40)
+                  }
+                  .height(28).width('100%').padding({ left: 8, right: 8 })
+                  .backgroundColor(this.nmBg())
+                  .borderRadius(4)
+                }, (p: PlanetPosition, index: number) => p.name)
+              }
+            }
+            .width('100%').height(240).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else if (this.astroTab === 1) {
             Text('星历表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             this.infoRow('状态', '需C++桥接 AstroCalcDialog')
           } else if (this.astroTab === 2) {
             Text('升起/中天/落下').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
+            Button('加载数据').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.loadRTS() })
+            if (Object.keys(this.rtsData).length > 0) {
+              this.infoRow('天体', this.rtsData.get('name') ?? 'N/A')
+              this.infoRow('下次升起', this.jdToDateStr(this.rtsData.get('nextRiseJD') ?? '0'))
+              this.infoRow('下次中天', this.jdToDateStr(this.rtsData.get('nextTransitJD') ?? '0'))
+              this.infoRow('下次落下', this.jdToDateStr(this.rtsData.get('nextSetJD') ?? '0'))
+            }
             Row({ space: 6 }) {
               Button('下次升起').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
@@ -2751,7 +2893,16 @@ struct WindowNativeNode {
             this.infoRow('状态', '需C++桥接（日食/月食/凌日表）')
           } else {
             Text('年历').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接（四季/日出日落/晨昏蒙影）')
+            Button('加载年历').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.loadAlmanac() })
+            if (Object.keys(this.almanacData).length > 0) {
+              this.infoRow('日出', this.jdToDateStr(this.almanacData.get('sunNextRise') ?? '0'))
+              this.infoRow('日落', this.jdToDateStr(this.almanacData.get('sunNextSet') ?? '0'))
+              this.infoRow('月出', this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
+              this.infoRow('月落', this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
+              this.infoRow('月相', (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
+            }
           }
         }.width('100%')
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -3791,8 +3942,31 @@ struct WindowNativeNode {
     this.switchRow('景观标签', this.landscapeLabels, 'actionShow_LandscapeLabels')
     this.switchRow('雾效果', this.fogEffect, 'actionShow_Fog')
     Row() {
-      Text('地景列表（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+      Text('地景列表').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 6 })
+    Scroll() {
+      Column({ space: 2 }) {
+        ForEach(this.landscapeList, (item: LandscapeItem) => {
+          Row() {
+            Text(item.name).fontSize(11)
+              .fontColor(this.currentLandscapeId === item.id ? this.nmAccent() : this.nmText())
+              .layoutWeight(1)
+            if (this.currentLandscapeId === item.id) {
+              Text('当前').fontSize(9).fontColor(this.nmAccent()).margin({ right: 8 })
+            }
+          }
+          .height(32).width('100%').padding({ left: 12, right: 12 })
+          .backgroundColor(this.currentLandscapeId === item.id ? this.nmBg() : 'rgba(0,0,0,0)')
+          .borderRadius(4)
+          .onClick(() => { this.selectLandscape(item.id, item.name) })
+        }, (item: LandscapeItem, index: number) => item.id)
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+    .scrollBar(BarState.Auto)
+    .scrollBarWidth(4)
+    .scrollBarColor('#33FFFFFF')
     Row() {
       Text('透明度').fontSize(12).fontColor(this.nmSub()).width(72)
       Text(this.landscapeTransp + '%').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })

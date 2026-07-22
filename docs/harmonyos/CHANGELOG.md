@@ -2,6 +2,19 @@
 
 > 格式说明：每次修改追加一条记录。新 Agent 接手时先读这个文件。
 
+## [2026-07-22] TRAE - 时间面板添加"上次"事件按钮 + 更多天文时间单位 + 详情面板上一选中按钮
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **时间面板"上次"升起/落下/中天按钮：** 在"今日升起/今日落下/今日中天"按钮行后新增一行"上次升起/上次落下/上次中天"按钮（actionPrevious_Rising / actionPrevious_Setting / actionPrevious_Transit）。
+  2. **时间面板"上次"晨光/昏影按钮：** 在"下次晨光/下次昏影"按钮行后新增一行"上次晨光/上次昏影"按钮（actionPrevious_MorningTwilight / actionPrevious_EveningTwilight）。
+  3. **时间面板"上次"二分二至按钮：** 在"春分/夏至/秋分/冬至"按钮行后新增一行"上次春分/上次夏至/上次秋分/上次冬至"按钮（actionPrevious_March_Equinox / actionPrevious_June_Solstice / actionPrevious_September_Equinox / actionPrevious_December_Solstice）。
+  4. **更多天文时间单位：** 在"日历月/日历年"行后新增两行按钮 -- 近点月/交点月/默冬周期/不周期，以及高斯年/10年/100年/儒略世纪。
+  5. **详情面板"上一选中"按钮：** 在 quickChips(刷新,居中,取消追踪) 后新增"上一选中"按钮（actionGoto_ReSelect_Last_Selected_Object）。
+- **修改原因：** 补全天文事件按钮功能，提供更多时间跳转快捷操作。
+- **构建结果：** 未构建（仅 UI 按钮层修改）。
+- **验证结果：** 未验证。
+
 ---
 
 ## [2026-07-22] TRAE - 启动画面自动消失 + 缩小按钮渲染修复 + 图层面板补全 + 项目记忆更新
