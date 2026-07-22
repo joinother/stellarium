@@ -446,6 +446,8 @@ struct WindowNativeNode {
   @State private gyroscopeEnabled: boolean = false
   @State private gyroscopeStatus: string = '关闭'
   @State private gyroscopeSensitivityText: string = '标准'
+  @State private liveMode: boolean = true
+  @State private timeScale: string = '1x'
   @State private uiLocked: boolean = true
   @State private panelOffsetX: number = 0
   @State private panelOffsetY: number = 0
@@ -2677,6 +2679,48 @@ struct WindowNativeNode {
       .scrollBar(BarState.Auto)
       .scrollBarWidth(4)
       .scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'settings') {
+      // 快捷设置面板
+      Scroll() {
+        Column({ space: 0 }) {
+          Text('显示').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          this.switchRow('夜间模式', this.nightMode, 'actionShow_Night_Mode')
+          this.switchRow('赤道仪模式', this.equatorialMount, 'actionSwitch_Equatorial_Mount')
+          this.switchRow('地平线自动重置', this.ground, 'actionSet_Auto_zoom_out_resets_direction')
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
+          Text('控制').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          this.switchRow('陀螺仪', this.gyroscopeEnabled, '')
+          Row() {
+            Text('陀螺仪灵敏度').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text(this.gyroscopeSensitivityText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+          }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
+          Text('时间控制').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          this.switchRow('当前日期时间', this.liveMode, '')
+          Row() {
+            Text('时间倍率').fontSize(12).fontColor(this.nmSub()).width(72)
+            Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+          }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Row({ space: 6 }) {
+            Button('暂停').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+              .onClick(() => { this.triggerAction('actionDecrease_Time_Speed') })
+            Button('实时').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+              .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+              .onClick(() => { this.setTimeRate(1) })
+            Button('加速').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+              .onClick(() => { this.triggerAction('actionIncrease_Time_Speed') })
+          }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+        }.width('100%')
+      }
+      .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'search') {
       TextInput({ text: this.searchText, placeholder: $r('app.string.i0063') })
         .height(44)
