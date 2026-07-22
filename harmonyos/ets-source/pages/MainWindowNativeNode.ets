@@ -69,6 +69,10 @@ struct WindowNativeNode {
   @State private isLoading: boolean = true
   @State private currentSkyCulture: string = ""
   @State private planets: boolean = true
+  @State private enlargePlanets: boolean = false
+  @State private enlargeSun: boolean = false
+  @State private minorBodyMarkers: boolean = false
+  @State private planetNomenclature: boolean = false
   @State private planetOrbits: boolean = false
   @State private planetHints: boolean = false
   @State private planetTrails: boolean = false
@@ -399,6 +403,17 @@ struct WindowNativeNode {
     this.horizonLine = result.actionShow_Horizon_Line === true
     this.planetLabels = result.actionShow_Planets_Labels === true
     this.starLabels = result.actionShow_Stars_Labels === true
+    this.dsoLabels = result.actionShow_DSO_Labels === true
+    this.dsoTextures = result.actionShow_DSO_Textures === true
+    this.enlargePlanets = result.actionShow_Planets_EnlargePlanets === true
+    this.enlargeSun = result.actionShow_Planets_EnlargeSun === true
+    this.minorBodyMarkers = result.actionShow_Planets_ShowMinorBodyMarkers === true
+    this.planetNomenclature = result.actionShow_Planets_Nomenclature === true
+    this.fogEffect = result.actionShow_Fog === true
+    this.meteors = result.actionShow_Meteors === true
+    this.nightMode = result.actionShow_Night_Mode === true
+    this.flipHoriz = result.actionHorizontal_Flip === true
+    this.flipVert = result.actionVertical_Flip === true
     if (result.timeRate !== undefined) {
       this.timeRateText = this.formatRate(result.timeRate)
     }
@@ -3823,6 +3838,9 @@ private loadPlanetPositions(): void {
 
   // View 面板 Sky 标签页内容
   @Builder viewSkyTab() {
+    this.switchRow($r('app.string.s0530'), this.stars, 'actionShow_Stars')
+    this.switchRow($r('app.string.s0531'), this.milkyWay, 'actionShow_MilkyWay')
+    this.switchRow($r('app.string.s0532'), this.starLabels, 'actionShow_Stars_Labels')
     this.switchRow($r('app.string.s0305'), this.atmosphere, 'actionShow_Atmosphere')
     this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
     this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
@@ -3862,10 +3880,10 @@ private loadPlanetPositions(): void {
     this.switchRow($r('app.string.s0313'), this.planetTrails, 'actionShow_Planets_Trails')
     this.switchRow($r('app.string.s0314'), this.planetHints, 'actionShow_Planets_Hints')
     this.switchRow($r('app.string.s0315'), this.enlargeMoon, 'actionShow_Planets_EnlargeMoon')
-    this.switchRow($r('app.string.s0316'), false, 'actionShow_Planets_EnlargePlanets')
-    this.switchRow($r('app.string.s0317'), false, 'actionShow_Planets_EnlargeSun')
-    this.switchRow($r('app.string.s0318'), false, 'actionShow_Planets_ShowMinorBodyMarkers')
-    this.switchRow($r('app.string.s0319'), false, 'actionShow_Planets_Nomenclature')
+    this.switchRow($r('app.string.s0316'), this.enlargePlanets, 'actionShow_Planets_EnlargePlanets')
+    this.switchRow($r('app.string.s0317'), this.enlargeSun, 'actionShow_Planets_EnlargeSun')
+    this.switchRow($r('app.string.s0318'), this.minorBodyMarkers, 'actionShow_Planets_ShowMinorBodyMarkers')
+    this.switchRow($r('app.string.s0319'), this.planetNomenclature, 'actionShow_Planets_Nomenclature')
     Row() {
       Text($r('app.string.i0281')).fontSize(12).fontColor(this.nmSub()).width(72)
       Button($r('app.string.i0282')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -3877,7 +3895,7 @@ private loadPlanetPositions(): void {
   // View 面板 DSO 标签页内容
   @Builder viewDSOTab() {
     this.switchRow($r('app.string.s0320'), this.nebulae, 'actionShow_Nebulas')
-    this.switchRow($r('app.string.s0321'), this.dsoLabels, 'actionShow_Nebulas')
+    this.switchRow($r('app.string.s0321'), this.dsoLabels, 'actionShow_DSO_Labels')
     this.switchRow($r('app.string.s0322'), this.dsoTextures, 'actionShow_DSO_Textures')
     Row() {
       Text($r('app.string.i0220')).fontSize(12).fontColor(this.nmSub()).width(72)

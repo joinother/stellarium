@@ -278,6 +278,17 @@ export interface StellariumBridgeResponse {
   actionShow_Horizon_Line?: boolean
   actionShow_Planets_Labels?: boolean
   actionShow_Stars_Labels?: boolean
+  actionShow_DSO_Labels?: boolean
+  actionShow_DSO_Textures?: boolean
+  actionShow_Planets_EnlargePlanets?: boolean
+  actionShow_Planets_EnlargeSun?: boolean
+  actionShow_Planets_ShowMinorBodyMarkers?: boolean
+  actionShow_Planets_Nomenclature?: boolean
+  actionShow_Fog?: boolean
+  actionShow_Meteors?: boolean
+  actionShow_Night_Mode?: boolean
+  actionHorizontal_Flip?: boolean
+  actionVertical_Flip?: boolean
   items?: string[] | Object[]
   count?: number
   prefix?: string
