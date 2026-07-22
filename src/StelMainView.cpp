@@ -1916,6 +1916,68 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2j ==========
+		// getScriptStatus — query current script execution state
+		if (commandName == "getScriptStatus")
+		{
+			StelScriptMgr* sm = StelApp::getInstance().getScriptMgr();
+			result["ok"] = true;
+			result["running"] = sm->scriptIsRunning();
+			result["scriptId"] = sm->runningScriptId();
+			result["scriptRate"] = sm->getScriptRate();
+			return result;
+		}
+
+		// getScriptRate / setScriptRate — script execution speed multiplier
+		if (commandName == "getScriptRate")
+		{
+			result["ok"] = true;
+			result["rate"] = StelApp::getInstance().getScriptMgr()->getScriptRate();
+			return result;
+		}
+
+		if (commandName == "setScriptRate")
+		{
+			bool ok;
+			double rate = payload.toDouble(&ok);
+			if (ok && rate > 0.0) {
+				StelApp::getInstance().getScriptMgr()->setScriptRate(rate);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid rate";
+			}
+			return result;
+		}
+
+		// getSelectedObjects — list currently selected objects
+		if (commandName == "getSelectedObjects")
+		{
+			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr()->getSelectedObject();
+			QJsonArray list;
+			for (const auto& obj : sel) {
+				QJsonObject item;
+				item["name"] = obj->getNameI18n();
+				item["type"] = obj->getType();
+				item["designation"] = obj->getEnglishName();
+				list.append(item);
+			}
+			result["ok"] = true;
+			result["objects"] = list;
+			result["count"] = sel.size();
+			return result;
+		}
+
+		// clearSelection — deselect all objects
+		if (commandName == "clearSelection")
+		{
+			StelApp::getInstance().getStelObjectMgr()->unSelect();
+			result["ok"] = true;
+			return result;
+		}
+
+		// ========== End Phase 2j ==========
+
 		// ========== End Phase 2i ==========
 
 		// ========== End Phase 2h ==========
