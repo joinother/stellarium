@@ -15,14 +15,14 @@ struct WindowNativeNode {
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = true
   @State private searchText: string = ''
-  @State private selectedName: string = '未选择'
+  @State private selectedName: string = 'Not selected'
   @State private searchSuggestions: SearchSug[] = []
   @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
-  @State private selectedType: string = '轻点天体或搜索'
-  @State private selectedStatus: string = '等待选择'
-  @State private selectedInfo: string = '轻点星图中的天体，或在搜索里输入名称。'
+  @State private selectedType: string = 'Tap sky or search'
+  @State private selectedStatus: string = 'Waiting'
+  @State private selectedInfo: string = 'Tap a celestial object in the sky, or enter a name in search.'
   @State private selectedMagnitude: string = ''
   @State private selectedCoordEq: string = ''
   @State private selectedCoordAlt: string = ''
@@ -46,11 +46,11 @@ struct WindowNativeNode {
   @State private locationText: string = '--'
   @State private coordinateText: string = '--'
   @State private altitudeText: string = '--'
-  @State private locationPickerName: string = '自定义位置'
+  @State private locationPickerName: string = 'Custom location'
   @State private locationPickerLatitude: number = 39.9042
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
-  @State private locationPickerStatus: string = '拖动地图或使用自动定位'
+  @State private locationPickerStatus: string = 'Drag map or use auto location'
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -186,7 +186,7 @@ struct WindowNativeNode {
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
-  @State private lx200Status: string = '未连接'
+  @State private lx200Status: string = 'Disconnected'
   @State private actionHint: ResourceStr = ''
 
   private hintTimer: number = 0
@@ -421,7 +421,7 @@ struct WindowNativeNode {
       this.fovText = result.fov.toFixed(1) + '°'
     }
     if (result.tracking !== undefined) {
-      this.trackingText = result.tracking ? '开启' : '关闭'
+      this.trackingText = result.tracking ? 'On' : 'Off'
     }
     })
   }
@@ -440,7 +440,7 @@ struct WindowNativeNode {
 
   private jdToDateStr(jd: string): string {
     const numJd = parseFloat(jd);
-    if (numJd <= 0) return 'N/A'
+    if (numJd <= 0) return '--'
     const date = new Date((numJd - 2440587.5) * 86400000)
     const h = Math.floor((numJd - Math.floor(numJd)) * 24)
     const m = Math.floor(((numJd - Math.floor(numJd)) * 24 - h) * 60)
@@ -2526,6 +2526,33 @@ private loadPlanetPositions(): void {
         .onSubmit(() => {
           this.searchObject(this.searchText)
         })
+      // 快选行星
+      if (this.searchText.length === 0) {
+        Row() {
+          Text('Planets').fontSize(10).fontColor(this.nmSub()).width(52)
+          Scroll() {
+            Row({ space: 4 }) {
+              ForEach(['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'], (p: string) => {
+                Text(p).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                  .backgroundColor(this.nmBg()).borderRadius(12)
+                  .onClick(() => { this.searchText = p; this.searchObject(p) })
+              })
+            }.padding({ left: 2 })
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
+        Row() {
+          Text('Stars').fontSize(10).fontColor(this.nmSub()).width(52)
+          Scroll() {
+            Row({ space: 4 }) {
+              ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
+                Text(s).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                  .backgroundColor(this.nmBg()).borderRadius(12)
+                  .onClick(() => { this.searchText = s; this.searchObject(s) })
+              })
+            }.padding({ left: 2 })
+          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 4 })
+      }
       // 搜索历史（无输入时显示，可点击复用）
       if (this.searchText.length === 0 && this.searchHistory.length > 0) {
         Row() {
