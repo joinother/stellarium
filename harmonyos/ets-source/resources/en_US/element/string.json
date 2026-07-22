@@ -1391,6 +1391,126 @@
     {
       "name": "s0400",
       "value": "Almanac"
+    },
+    {
+      "name": "s0500",
+      "value": "Circumpolar"
+    },
+    {
+      "name": "s0501",
+      "value": "Invariant plane"
+    },
+    {
+      "name": "s0502",
+      "value": "Solar equator"
+    },
+    {
+      "name": "s0503",
+      "value": "J2000 eq. grid"
+    },
+    {
+      "name": "s0504",
+      "value": "J2000 ecl. grid"
+    },
+    {
+      "name": "s0505",
+      "value": "Ecliptic grid"
+    },
+    {
+      "name": "s0506",
+      "value": "Supergal. grid"
+    },
+    {
+      "name": "s0507",
+      "value": "Fixed eq. grid"
+    },
+    {
+      "name": "s0508",
+      "value": "Fixed equator"
+    },
+    {
+      "name": "s0509",
+      "value": "Zenith/Nadir"
+    },
+    {
+      "name": "s0510",
+      "value": "J2000 poles"
+    },
+    {
+      "name": "s0511",
+      "value": "J2000 ecl. poles"
+    },
+    {
+      "name": "s0512",
+      "value": "J2000 equinoxes"
+    },
+    {
+      "name": "s0513",
+      "value": "J2000 solstices"
+    },
+    {
+      "name": "s0514",
+      "value": "Gal. center"
+    },
+    {
+      "name": "s0515",
+      "value": "Supergal. poles"
+    },
+    {
+      "name": "s0516",
+      "value": "Apex points"
+    },
+    {
+      "name": "s0517",
+      "value": "Umbra center"
+    },
+    {
+      "name": "s0518",
+      "value": "Longitude line"
+    },
+    {
+      "name": "s0519",
+      "value": "Quadrature line"
+    },
+    {
+      "name": "s0520",
+      "value": "Landscape illum."
+    },
+    {
+      "name": "s0521",
+      "value": "Landscape labels"
+    },
+    {
+      "name": "s0522",
+      "value": "Constellation lines"
+    },
+    {
+      "name": "s0523",
+      "value": "Constellation labels"
+    },
+    {
+      "name": "s0524",
+      "value": "Constellation bounds"
+    },
+    {
+      "name": "s0525",
+      "value": "Constellation art"
+    },
+    {
+      "name": "s0526",
+      "value": "Zodiac"
+    },
+    {
+      "name": "s0527",
+      "value": "Lunar mansions"
+    },
+    {
+      "name": "s0528",
+      "value": "Asterism lines"
+    },
+    {
+      "name": "s0529",
+      "value": "Asterism labels"
     }
   ]
 }

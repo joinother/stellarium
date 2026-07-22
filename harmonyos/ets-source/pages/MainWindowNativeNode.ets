@@ -289,7 +289,7 @@ interface StellariumBridgeResponse {
   current?: string
   rts?: Object
   almanac?: Object
-  info?: Object
+  objectInfoData?: Object
 }
 
 @Entry
@@ -812,8 +812,8 @@ struct WindowNativeNode {
   
   private loadObjectInfo(): void {
     this.callInteractive('getObjectInfo', '', (r: StellariumBridgeResponse) => {
-      if (r.ok === true && r.info !== undefined) {
-        const obj = r.info as Object;
+      if (r.ok === true && r.objectInfoData !== undefined) {
+        const obj = r.objectInfoData as Object;
         const m = new Map<string, string>();
         if (obj['name'] !== undefined) m.set('name', obj['name'] as string);
         if (obj['nameI18'] !== undefined) m.set('nameI18', obj['nameI18'] as string);
@@ -4136,9 +4136,9 @@ private loadPlanetPositions(): void {
         this.switchRow($r('app.string.s0346'), this.currentVerticalLine, 'actionShow_Current_Vertical_Line')
         this.switchRow($r('app.string.s0347'), this.colureLines, 'actionShow_Colure_Lines')
         this.switchRow($r('app.string.s0348'), this.precessionCircles, 'actionShow_Precession_Circles')
-        this.switchRow('拱极圈', this.circumpolarCircles, 'actionShow_Circumpolar_Circles')
-        this.switchRow('不变平面', this.invariantPlaneLine, 'actionShow_Invariable_Plane_Line')
-        this.switchRow('太阳赤道', this.solarEquatorLine, 'actionShow_Solar_Equator_Line')
+        this.switchRow($r('app.string.s0500'), this.circumpolarCircles, 'actionShow_Circumpolar_Circles')
+        this.switchRow($r('app.string.s0501'), this.invariantPlaneLine, 'actionShow_Invariable_Plane_Line')
+        this.switchRow($r('app.string.s0502'), this.solarEquatorLine, 'actionShow_Solar_Equator_Line')
         // 更多网格
         Row()
           .width('100%').height(0.5)
@@ -4146,12 +4146,12 @@ private loadPlanetPositions(): void {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0286')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('J2000赤道网', this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
-        this.switchRow('J2000黄道网', this.eclipticJ2000Grid, 'actionShow_Ecliptic_J2000_Grid')
-        this.switchRow('黄道网格', this.eclipticGrid, 'actionShow_Ecliptic_Grid')
-        this.switchRow('超银道网', this.supergalacticGrid, 'actionShow_Supergalactic_Grid')
-        this.switchRow('固定赤道网', this.fixedEquatorialGrid, 'actionShow_Fixed_Equatorial_Grid')
-        this.switchRow('固定赤道线', this.fixedEquatorLine, 'actionShow_Fixed_Equator_Line')
+        this.switchRow($r('app.string.s0503'), this.equatorialJ2000Grid, 'actionShow_Equatorial_J2000_Grid')
+        this.switchRow($r('app.string.s0504'), this.eclipticJ2000Grid, 'actionShow_Ecliptic_J2000_Grid')
+        this.switchRow($r('app.string.s0505'), this.eclipticGrid, 'actionShow_Ecliptic_Grid')
+        this.switchRow($r('app.string.s0506'), this.supergalacticGrid, 'actionShow_Supergalactic_Grid')
+        this.switchRow($r('app.string.s0507'), this.fixedEquatorialGrid, 'actionShow_Fixed_Equatorial_Grid')
+        this.switchRow($r('app.string.s0508'), this.fixedEquatorLine, 'actionShow_Fixed_Equator_Line')
         // 更多点标记
         Row()
           .width('100%').height(0.5)
@@ -4159,17 +4159,17 @@ private loadPlanetPositions(): void {
           .margin({ top: 6, bottom: 4 })
         Text($r('app.string.i0287')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
           .height(18).width('100%')
-        this.switchRow('天顶/天底', this.zenithNadir, 'actionShow_Zenith_Nadir')
-        this.switchRow('J2000天极', this.eclipticJ2000Poles, 'actionShow_Celestial_J2000_Poles')
-        this.switchRow('J2000黄极', this.eclipticJ2000Poles, 'actionShow_Ecliptic_J2000_Poles')
-        this.switchRow('J2000分点', this.equinoxJ2000Pts, 'actionShow_Equinox_J2000_Points')
-        this.switchRow('J2000至点', this.solsticeJ2000Pts, 'actionShow_Solstice_J2000_Points')
-        this.switchRow('银心/银反', this.galacticCenter, 'actionShow_Galactic_Center')
-        this.switchRow('超银极', this.supergalacticPoles, 'actionShow_Supergalactic_Poles')
-        this.switchRow('顶点', this.apexPoints, 'actionShow_Apex_Points')
-        this.switchRow('本影中心', this.umbraCenter, 'actionShow_Umbra_Center_Point')
-        this.switchRow('经度线', this.longitudeLine, 'actionShow_Longitude_Line')
-        this.switchRow('方照线', this.quadratureLine, 'actionShow_Quadrature_Line')
+        this.switchRow($r('app.string.s0509'), this.zenithNadir, 'actionShow_Zenith_Nadir')
+        this.switchRow($r('app.string.s0510'), this.eclipticJ2000Poles, 'actionShow_Celestial_J2000_Poles')
+        this.switchRow($r('app.string.s0511'), this.eclipticJ2000Poles, 'actionShow_Ecliptic_J2000_Poles')
+        this.switchRow($r('app.string.s0512'), this.equinoxJ2000Pts, 'actionShow_Equinox_J2000_Points')
+        this.switchRow($r('app.string.s0513'), this.solsticeJ2000Pts, 'actionShow_Solstice_J2000_Points')
+        this.switchRow($r('app.string.s0514'), this.galacticCenter, 'actionShow_Galactic_Center')
+        this.switchRow($r('app.string.s0515'), this.supergalacticPoles, 'actionShow_Supergalactic_Poles')
+        this.switchRow($r('app.string.s0516'), this.apexPoints, 'actionShow_Apex_Points')
+        this.switchRow($r('app.string.s0517'), this.umbraCenter, 'actionShow_Umbra_Center_Point')
+        this.switchRow($r('app.string.s0518'), this.longitudeLine, 'actionShow_Longitude_Line')
+        this.switchRow($r('app.string.s0519'), this.quadratureLine, 'actionShow_Quadrature_Line')
 
       }
       .width('100%')
@@ -4184,8 +4184,8 @@ private loadPlanetPositions(): void {
   // View 面板 Landscape 标签页内容
   @Builder viewLandscapeTab() {
     this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
-    this.switchRow('景观照明', this.landscapeIllum, 'actionShow_LandscapeIllumination')
-    this.switchRow('景观标签', this.landscapeLabels, 'actionShow_LandscapeLabels')
+    this.switchRow($r('app.string.s0520'), this.landscapeIllum, 'actionShow_LandscapeIllumination')
+    this.switchRow($r('app.string.s0521'), this.landscapeLabels, 'actionShow_LandscapeLabels')
     this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
     Row() {
       Text($r('app.string.i0288')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
@@ -4228,14 +4228,14 @@ private loadPlanetPositions(): void {
 
   // View 面板 Sky Culture 标签页内容
   @Builder viewSkyCultureTab() {
-    this.switchRow('星座线', this.constellationLines, 'actionShow_Constellation_Lines')
-    this.switchRow('星座标签', this.constellationLabels, 'actionShow_Constellation_Labels')
-    this.switchRow('星座边界', this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
-    this.switchRow('星座艺术', this.constellationArt, 'actionShow_Constellation_Art')
-    this.switchRow('黄道十二宫', this.zodiac, 'actionShow_Zodiac')
-    this.switchRow('月宿', this.lunarSystem, 'actionShow_LunarSystem')
-    this.switchRow('星群线', this.asterismLines, 'actionShow_Asterism_Lines')
-    this.switchRow('星群标签', this.asterismLabels, 'actionShow_Asterism_Labels')
+    this.switchRow($r('app.string.s0522'), this.constellationLines, 'actionShow_Constellation_Lines')
+    this.switchRow($r('app.string.s0523'), this.constellationLabels, 'actionShow_Constellation_Labels')
+    this.switchRow($r('app.string.s0524'), this.constellationBoundaries, 'actionShow_Constellation_Boundaries')
+    this.switchRow($r('app.string.s0525'), this.constellationArt, 'actionShow_Constellation_Art')
+    this.switchRow($r('app.string.s0526'), this.zodiac, 'actionShow_Zodiac')
+    this.switchRow($r('app.string.s0527'), this.lunarSystem, 'actionShow_LunarSystem')
+    this.switchRow($r('app.string.s0528'), this.asterismLines, 'actionShow_Asterism_Lines')
+    this.switchRow($r('app.string.s0529'), this.asterismLabels, 'actionShow_Asterism_Labels')
     Row()
       .width('100%').height(0.5)
       .backgroundColor(this.nmBorder())
