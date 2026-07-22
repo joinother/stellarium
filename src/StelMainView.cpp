@@ -2905,6 +2905,109 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2w ==========
+		// setDate — set date by ISO string
+		if (commandName == "setDate")
+		{
+			double jd = StelUtils::getJulianDayFromISO8601String(payload);
+			if (jd > 0) {
+				StelApp::getInstance().getCore()->setJD(jd);
+				result["ok"] = true;
+				result["jd"] = jd;
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid ISO date";
+			}
+			return result;
+		}
+
+		// addDay — add/subtract days from current time
+		if (commandName == "addDay")
+		{
+			bool ok;
+			double days = payload.toDouble(&ok);
+			if (ok) {
+				StelCore* core = StelApp::getInstance().getCore();
+				core->setJD(core->getJD() + days);
+				result["ok"] = true;
+				result["jd"] = core->getJD();
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid days";
+			}
+			return result;
+		}
+
+		// addHour — add/subtract hours from current time
+		if (commandName == "addHour")
+		{
+			bool ok;
+			double hours = payload.toDouble(&ok);
+			if (ok) {
+				StelCore* core = StelApp::getInstance().getCore();
+				core->setJD(core->getJD() + hours / 24.0);
+				result["ok"] = true;
+				result["jd"] = core->getJD();
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid hours";
+			}
+			return result;
+		}
+
+		// addMinute — add/subtract minutes from current time
+		if (commandName == "addMinute")
+		{
+			bool ok;
+			double minutes = payload.toDouble(&ok);
+			if (ok) {
+				StelCore* core = StelApp::getInstance().getCore();
+				core->setJD(core->getJD() + minutes / 1440.0);
+				result["ok"] = true;
+				result["jd"] = core->getJD();
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid minutes";
+			}
+			return result;
+		}
+
+		// addYear — add/subtract years from current time
+		if (commandName == "addYear")
+		{
+			bool ok;
+			double years = payload.toDouble(&ok);
+			if (ok) {
+				StelCore* core = StelApp::getInstance().getCore();
+				core->setJD(core->getJD() + years * 365.25);
+				result["ok"] = true;
+				result["jd"] = core->getJD();
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid years";
+			}
+			return result;
+		}
+
+		// addMonth — add/subtract months from current time
+		if (commandName == "addMonth")
+		{
+			bool ok;
+			double months = payload.toDouble(&ok);
+			if (ok) {
+				StelCore* core = StelApp::getInstance().getCore();
+				core->setJD(core->getJD() + months * 30.4375);
+				result["ok"] = true;
+				result["jd"] = core->getJD();
+			} else {
+				result["ok"] = false;
+				result["error"] = "invalid months";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2w ==========
+
 		// ========== End Phase 2v ==========
 
 		// ========== End Phase 2u ==========
