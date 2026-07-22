@@ -2645,6 +2645,61 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2s ==========
+		// getScreenInfo — screen dimensions and DPI
+		if (commandName == "getScreenInfo")
+		{
+			result["ok"] = true;
+			result["width"] = QGuiApplication::primaryScreen()->size().width();
+			result["height"] = QGuiApplication::primaryScreen()->size().height();
+			result["dpi"] = QGuiApplication::primaryScreen()->logicalDotsPerInch();
+			result["devicePixelRatio"] = QGuiApplication::primaryScreen()->devicePixelRatio();
+			return result;
+		}
+
+		// getMemoryUsage — approximate memory usage
+		if (commandName == "getMemoryUsage")
+		{
+			result["ok"] = true;
+			#if QT_VERSION >= QT_VERSION_CHECK(5, 12, 0)
+			result["mallocSize"] = (qint64)malloc_usable_size(nullptr);
+			#endif
+			result["note"] = "memory usage is approximate";
+			return result;
+		}
+
+		// getObserverInfo — current observer details
+		if (commandName == "getObserverInfo")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			const StelObserver* obs = core->getCurrentObserver();
+			StelLocation loc = obs->getCurrentLocation();
+			result["ok"] = true;
+			result["name"] = loc.name;
+			result["latitude"] = loc.latitude;
+			result["longitude"] = loc.longitude;
+			result["altitude"] = loc.altitude;
+			result["planet"] = loc.planetName;
+			result["country"] = loc.country;
+			result["region"] = loc.region;
+			result["state"] = loc.state;
+			result["timeZone"] = loc.ianaTimeZone;
+			return result;
+		}
+
+		// getDateTimeLocal — local date/time string
+		if (commandName == "getDateTimeLocal")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["iso"] = StelUtils::julianDayToISO8601String(core->getJD());
+			result["jd"] = core->getJD();
+			result["jde"] = core->getJDE();
+			return result;
+		}
+
+		// ========== End Phase 2s ==========
+
 		// ========== End Phase 2r ==========
 
 		// ========== End Phase 2q ==========
