@@ -1616,6 +1616,56 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2f ==========
+		// getFieldOfView — get current FOV and projection info
+		if (commandName == "getFieldOfView")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			double fov = core->getMovementMgr()->getCurrentFov();
+			result["ok"] = true;
+			result["fov"] = fov * 180.0 / M_PI;
+			// Direction the center of view is looking at
+			Vec3d dir = core->getMovementMgr()->getViewDirection();
+			dir.normalize();
+			double alt = std::asin(dir[2]) * 180.0 / M_PI;
+			double az = std::atan2(dir[0], dir[1]) * 180.0 / M_PI;
+			result["centerAlt"] = alt;
+			result["centerAz"] = az;
+			return result;
+		}
+
+		// setFieldOfView — set FOV in degrees
+		if (commandName == "setFieldOfView")
+		{
+			double fov = param.toDouble();
+			if (fov >= 0.1 && fov <= 360.0) {
+				StelApp::getInstance().getCore()->getMovementMgr()->zoomTo(fov * M_PI / 180.0, 0.3);
+				result["ok"] = true;
+				result["fov"] = fov;
+			} else {
+				result["ok"] = false;
+				result["error"] = "FOV must be between 0.1 and 360 degrees";
+			}
+			return result;
+		}
+
+		// getConstellationList — get all visible constellation names
+		if (commandName == "getConstellationList")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			QStringList names = core->getConstellationMgr().getConstellationsEnglishNames();
+			QJsonArray list;
+			for (const QString& name : names) {
+				list.append(name);
+			}
+			result["ok"] = true;
+			result["constellations"] = list;
+			result["total"] = names.size();
+			return result;
+		}
+
+		// ========== End Phase 2f ==========
+
 		// ========== End Phase 2e ==========
 
 		// ========== End Phase 2d ==========

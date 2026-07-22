@@ -966,13 +966,13 @@ private loadPlanetPositions(): void {
 
   private applySelectedObject(result: StellariumBridgeResponse): void {
     if (result.ok !== true) {
-      this.selectedStatus = result.error ? result.error : 'Core 未就绪'
+      this.selectedStatus = result.error ? result.error : 'Core not ready'
       return
     }
     if (result.found === true) {
       this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '已选择')
       this.selectedType = result.type && result.type.length > 0 ? result.type : '天体'
-      this.selectedStatus = '已选中'
+      this.selectedStatus = 'Selected'
       this.selectedMagnitude = (typeof result.magnitude === 'number') ? (result.magnitude as number).toFixed(2) : ''
       const ra: string = result.ra ? result.ra : ''
       const dec: string = result.dec ? result.dec : ''
@@ -990,21 +990,21 @@ private loadPlanetPositions(): void {
       this.selectedInfo = alias ? alias.zh + ' (' + alias.en + ')' : ''
       this.startDetailAutoRefresh()
     } else {
-      this.selectedName = '未找到'
+      this.selectedName = 'Not found'
       this.selectedType = result.query && result.query.length > 0 ? result.query : '无选中对象'
-      this.selectedStatus = result.query && result.query.length > 0 ? '可尝试英文名' : '未命中'
+      this.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
       this.selectedMagnitude = ''
       this.selectedCoordEq = ''
       this.selectedCoordAlt = ''
       this.selectedConstellation = ''
       this.selectedDistance = ''
-      this.selectedInfo = '当前点击位置没有命中可选天体。可以放大后再点，或用搜索选择目标。'
+      this.selectedInfo = 'No selectable object at tap position. Zoom in or use search.'
     }
   }
 
   private formatRate(rate: number): string {
     if (rate === 0) {
-      return 'undefined'
+      return 'Paused'
     }
     if (Math.abs(rate - 0.000011574074074074073) < 0.0000001) {
       return '1x'
@@ -1012,7 +1012,7 @@ private loadPlanetPositions(): void {
     if (rate > 0) {
       return rate.toFixed(6)
     }
-    return 'undefined'
+    return 'Paused'
   }
 
   private formatDegrees(value: number, positive: string, negative: string): string {
@@ -3684,46 +3684,46 @@ private loadPlanetPositions(): void {
       return $r('app.string.i0100')
     }
     if (this.activePanel === 'config') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'astro') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'help') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'settings') {
       return $r('app.string.i0102')
     }
-    return 'undefined'
+    return 'Paused'
   }
 
   private panelSubtitle(): ResourceStr {
     if (this.activePanel === 'search') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'time') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'place') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'layers') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'config') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'astro') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'help') {
-      return 'undefined'
+      return 'Paused'
     }
     if (this.activePanel === 'settings') {
-      return 'undefined'
+      return 'Paused'
     }
-    return 'undefined'
+    return 'Paused'
   }
 
   // View 面板标签页选择器
