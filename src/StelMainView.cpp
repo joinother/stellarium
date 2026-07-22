@@ -2565,6 +2565,88 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2r ==========
+		// getRTS — get Rise/Transit/Set times for selected object
+		if (commandName == "getRTS")
+		{
+			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
+			if (sel.isEmpty()) {
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			StelCore* core = StelApp::getInstance().getCore();
+			Vec4d rts = sel.first()->getRTSTime(core);
+			result["ok"] = true;
+			result["riseJD"] = rts[0];
+			result["transitJD"] = rts[1];
+			result["setJD"] = rts[2];
+			result["status"] = (int)rts[3];
+			// Convert to local time strings
+			if (rts[0] > 0) result["rise"] = StelUtils::julianDayToISO8601String(rts[0]);
+			if (rts[1] > 0) result["transit"] = StelUtils::julianDayToISO8601String(rts[1]);
+			if (rts[2] > 0) result["set"] = StelUtils::julianDayToISO8601String(rts[2]);
+			return result;
+		}
+
+		// getVMagnitude — apparent V magnitude of selected object
+		if (commandName == "getVMagnitude")
+		{
+			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
+			if (sel.isEmpty()) {
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			result["ok"] = true;
+			result["vMagnitude"] = sel.first()->getVMagnitude(StelApp::getInstance().getCore());
+			return result;
+		}
+
+		// getDistanceInfo — distance to selected object
+		if (commandName == "getDistanceInfo")
+		{
+			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
+			if (sel.isEmpty()) {
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			result["ok"] = true;
+			result["distance"] = sel.first()->getDistanceInfo();
+			return result;
+		}
+
+		// getSolarElongation — solar elongation of selected object
+		if (commandName == "getSolarElongation")
+		{
+			StelObjectMgr* objMgr = StelApp::getInstance().getStelObjectMgr();
+			const QList<StelObjectP>& sel = objMgr->getSelectedObject();
+			if (sel.isEmpty()) {
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			StelCore* core = StelApp::getInstance().getCore();
+			Vec3d obsPos = core->getCurrentObserver()->getHeliocentricEclipticPos();
+			Planet* planet = dynamic_cast<Planet*>(sel.first().data());
+			if (planet) {
+				result["ok"] = true;
+				result["elongation"] = planet->getElongation(obsPos);
+				result["phaseAngle"] = planet->getPhaseAngle(obsPos);
+				result["phase"] = planet->getPhase(obsPos);
+			} else {
+				result["ok"] = false;
+				result["error"] = "not a planet";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2r ==========
+
 		// ========== End Phase 2q ==========
 
 		// ========== End Phase 2p ==========
