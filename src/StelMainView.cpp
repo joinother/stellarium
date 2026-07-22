@@ -2367,6 +2367,93 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2p ==========
+		// getConstellationFlags / setConstellationFlag — constellation display control
+		if (commandName == "getConstellationFlags")
+		{
+			ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+			QJsonObject flags;
+			flags["lines"] = cmgr->getFlagLines();
+			flags["boundaries"] = cmgr->getFlagBoundaries();
+			flags["art"] = cmgr->getFlagArt();
+			flags["labels"] = cmgr->getFlagLabels();
+			flags["isolateSelected"] = cmgr->getFlagIsolateSelected();
+			result["ok"] = true;
+			result["flags"] = flags;
+			return result;
+		}
+
+		if (commandName == "setConstellationFlag")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				QString flagName = parts[0];
+				bool state = parts[1] == "1" || parts[1] == "true";
+				ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+				if (flagName == "lines") cmgr->setFlagLines(state);
+				else if (flagName == "boundaries") cmgr->setFlagBoundaries(state);
+				else if (flagName == "art") cmgr->setFlagArt(state);
+				else if (flagName == "labels") cmgr->setFlagLabels(state);
+				else if (flagName == "isolateSelected") cmgr->setFlagIsolateSelected(state);
+				else {
+					result["ok"] = false;
+					result["error"] = "unknown constellation flag: " + flagName;
+					return result;
+				}
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: flagName|state";
+			}
+			return result;
+		}
+
+		// getConstellationForPosition — get constellation name at a sky position
+		if (commandName == "getConstellationForPosition")
+		{
+			QStringList parts = payload.split('|');
+			if (parts.size() >= 2) {
+				bool ok1, ok2;
+				double ra = parts[0].toDouble(&ok1);
+				double dec = parts[1].toDouble(&ok2);
+				if (ok1 && ok2) {
+					Vec3d pos;
+					StelUtils::spheToRect(ra * M_PI/180., dec * M_PI/180., pos);
+					QString cname = StelApp::getInstance().getCore()->getIAUConstellation(pos);
+					result["ok"] = true;
+					result["constellation"] = cname;
+				} else {
+					result["ok"] = false;
+					result["error"] = "invalid ra/dec";
+				}
+			} else {
+				result["ok"] = false;
+				result["error"] = "usage: ra|dec";
+			}
+			return result;
+		}
+
+		// getCurrentViewInfo — comprehensive view state
+		if (commandName == "getCurrentViewInfo")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			StelMovementMgr* mvmgr = core->getMovementMgr();
+			result["ok"] = true;
+			result["fov"] = mvmgr->getCurrentFov();
+			result["tracking"] = mvmgr->getFlagTracking();
+			result["autoZoom"] = mvmgr->getFlagAutoZoom();
+			result["jd"] = core->getJD();
+			result["timeRate"] = core->getTimeRate();
+			result["projection"] = core->getCurrentProjectionTypeKey();
+			result["location"] = core->getCurrentLocation().name;
+			result["lat"] = core->getCurrentLocation().latitude;
+			result["lon"] = core->getCurrentLocation().longitude;
+			result["altitude"] = core->getCurrentLocation().altitude;
+			return result;
+		}
+
+		// ========== End Phase 2p ==========
+
 		// ========== End Phase 2o ==========
 
 		// ========== End Phase 2n ==========
