@@ -1351,6 +1351,100 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2b ==========
+		// getSkyCultureList
+		if (commandName == "getSkyCultureList")
+		{
+			QStringList ids = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListIDs();
+			QStringList names = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListI18();
+			QString current = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
+			QJsonArray items;
+			for (int i = 0; i < ids.size(); i++)
+			{
+				QJsonObject obj;
+				obj["id"] = ids[i];
+				obj["name"] = names[i];
+				items.append(obj);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			result["current"] = current;
+			return result;
+		}
+
+		// setSkyCulture
+		if (commandName == "setSkyCulture")
+		{
+			QString id = arg.trimmed();
+			bool ok = StelApp::getInstance().getSkyCultureMgr().setCurrentSkyCultureID(id);
+			result["ok"] = ok;
+			if (!ok) result["error"] = "failed to set sky culture: " + id;
+			return result;
+		}
+
+		// getPluginList — list all available plugins with loaded status
+		if (commandName == "getPluginList")
+		{
+			QList<StelModuleMgr::PluginDescriptor> plugins = StelApp::getInstance().getModuleMgr().getPluginsList();
+			QJsonArray items;
+			for (const auto& pd : plugins)
+			{
+				QJsonObject obj;
+				obj["id"] = pd.info.id;
+				obj["name"] = pd.info.displayedName;
+				obj["loaded"] = pd.loaded;
+				obj["loadAtStartup"] = pd.loadAtStartup;
+				items.append(obj);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			return result;
+		}
+
+		// loadPlugin / unloadPlugin
+		if (commandName == "loadPlugin")
+		{
+			QString pname = arg.trimmed();
+			bool ok = StelApp::getInstance().getModuleMgr().loadPlugin(pname) != nullptr;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "failed to load plugin: " + pname;
+			return result;
+		}
+		if (commandName == "unloadPlugin")
+		{
+			QString pname = arg.trimmed();
+			StelApp::getInstance().getModuleMgr().unloadModule(pname);
+			result["ok"] = true;
+			return result;
+		}
+
+		// getConfigString / setConfigString — read/write Stellarium config
+		if (commandName == "getConfigString")
+		{
+			QString key = arg.trimmed();
+			QString val = StelApp::getInstance().getSettings()->value(key).toString();
+			result["ok"] = true;
+			result["value"] = val;
+			return result;
+		}
+		if (commandName == "setConfigString")
+		{
+			QStringList parts = arg.split("=", Qt::SkipEmptyParts);
+			if (parts.size() >= 2)
+			{
+				QString key = parts[0].trimmed();
+				QString val = parts.mid(1).join("=").trimmed();
+				StelApp::getInstance().getSettings()->setValue(key, val);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "format: key=value";
+			}
+			return result;
+		}
+
+		// ========== End Phase 2b ==========
+
 		// ========== End Phase 2 ==========
 
 		result["error"] = "unknown command";

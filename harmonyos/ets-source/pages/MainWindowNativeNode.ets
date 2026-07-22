@@ -70,6 +70,18 @@ interface PlanetPosition {
   magnitude: number
 }
 
+interface SkyCultureItem {
+  id: string
+  name: string
+}
+
+interface PluginItem {
+  id: string
+  name: string
+  loaded: boolean
+  loadAtStartup: boolean
+}
+
 interface ShellAction {
   label: ResourceStr
   icon: string
@@ -402,6 +414,9 @@ struct WindowNativeNode {
   @State private rtsData: Map<string, string> = new Map()
   @State private almanacData: Map<string, string> = new Map()
   @State private planetPositions: Array<PlanetPosition> = []
+  @State private skyCultureList: Array<SkyCultureItem> = []
+  @State private currentSkyCultureId: string = ''
+  @State private pluginList: Array<PluginItem> = []
   @State private landscapeDetailOpen: boolean = false
   @State private selectedLandscapeName: string = ''
   @State private landscapeTransp: number = 0
@@ -535,6 +550,8 @@ struct WindowNativeNode {
         this.moduleList = r.items as string[]
       }
     })
+    this.loadSkyCultureList()
+    this.loadPluginList()
     // 加载保存的设置
     const settings = AppStorage.get<string>("stellariumSettings")
     if (settings) {
@@ -719,6 +736,63 @@ struct WindowNativeNode {
         this.almanacData.set('moonPhase', av['moonPhase'] !== undefined ? String(av['moonPhase']) : '0')
       }
     })
+  }
+
+  private loadSkyCultureList(): void {
+    this.callInteractive('getSkyCultureList', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.items !== undefined && Array.isArray(r.items)) {
+        const arr = r.items as Array<Object>;
+        const list: Array<SkyCultureItem> = [];
+        for (let i = 0; i < arr.length; i++) {
+          const obj = arr[i];
+          const id = obj['id'] !== undefined ? obj['id'] as string : '';
+          const name = obj['name'] !== undefined ? obj['name'] as string : id;
+          list.push({ id: id, name: name });
+        }
+        this.skyCultureList = list;
+        if (r.current !== undefined) {
+          this.currentSkyCultureId = r.current as string;
+        }
+      }
+    })
+  }
+
+  private selectSkyCulture(id: string): void {
+    this.callInteractive('setSkyCulture', id, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.currentSkyCultureId = id;
+      }
+    })
+  }
+
+  private loadPluginList(): void {
+    this.callInteractive('getPluginList', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.items !== undefined && Array.isArray(r.items)) {
+        const arr = r.items as Array<Object>;
+        const list: Array<PluginItem> = [];
+        for (let i = 0; i < arr.length; i++) {
+          const obj = arr[i];
+          const id = obj['id'] !== undefined ? obj['id'] as string : '';
+          const name = obj['name'] !== undefined ? obj['name'] as string : id;
+          const loaded = obj['loaded'] !== undefined ? obj['loaded'] as boolean : false;
+          const startup = obj['loadAtStartup'] !== undefined ? obj['loadAtStartup'] as boolean : false;
+          list.push({ id: id, name: name, loaded: loaded, loadAtStartup: startup });
+        }
+        this.pluginList = list;
+      }
+    })
+  }
+
+  private togglePlugin(id: string, currentlyLoaded: boolean): void {
+    if (currentlyLoaded) {
+      this.callInteractive('unloadPlugin', id, (_r: StellariumBridgeResponse) => {
+        this.loadPluginList();
+      })
+    } else {
+      this.callInteractive('loadPlugin', id, (_r: StellariumBridgeResponse) => {
+        this.loadPluginList();
+      })
+    }
   }
 
   private loadPlanetPositions(): void {
@@ -2799,10 +2873,28 @@ struct WindowNativeNode {
             .width('100%').height(200).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else {
             // Plugins
-            Row() {
-              Text('插件管理').fontSize(12).fontColor(this.nmSub()).width(72)
-              Text('需C++桥接').fontSize(11).fontColor('#446688FF').layoutWeight(1)
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            Text('插件管理').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+            Button('刷新插件').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.loadPluginList() })
+            Scroll() {
+              Column({ space: 2 }) {
+                ForEach(this.pluginList, (pl: PluginItem) => {
+                  Row() {
+                    Text(pl.name).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                    Toggle({ type: ToggleType.Switch, isOn: pl.loaded })
+                      .width(40).height(22)
+                      .onChange((val: boolean) => {
+                        this.togglePlugin(pl.id, !val)
+                      })
+                  }
+                  .height(36).width('100%').padding({ left: 10, right: 10 })
+                  .backgroundColor(this.nmBg())
+                  .borderRadius(4)
+                }, (pl: PluginItem) => pl.id)
+              }
+            }
+            .width('100%').height(260).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           }
         }.width('100%')
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -2853,7 +2945,29 @@ struct WindowNativeNode {
             .width('100%').height(240).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else if (this.astroTab === 1) {
             Text('星历表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接 AstroCalcDialog')
+            Text('选中天体后可查看其星历数据').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Row({ space: 6 }) {
+              Button('上次升起').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionPrevious_Rising') })
+              Button('上次中天').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionPrevious_Transit') })
+              Button('上次落下').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionPrevious_Setting') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+            Row({ space: 6 }) {
+              Button('下次升起').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionNext_Rising') })
+              Button('下次中天').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionNext_Transit') })
+              Button('下次落下').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionNext_Setting') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
           } else if (this.astroTab === 2) {
             Text('升起/中天/落下').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Button('加载数据').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -2878,19 +2992,55 @@ struct WindowNativeNode {
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 3) {
             Text('天象计算').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接（合/冲/距角等）')
+            Text('查看行星合、冲、距角等天文现象').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Row({ space: 6 }) {
+              Button('合').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+              Button('冲').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+              Button('距角').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 4) {
             Text('高度/方位角图表').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接（折线图渲染）')
+            Text('显示选中天体的高度角和方位角随时间变化图表').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Row({ space: 6 }) {
+              Button('Alt图表').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+              Button('Az图表').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 5) {
             Text('今晚可见').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接 WUT（30+分类）')
+            Text('列出今晚可见的行星、深空天体和流星雨').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Button('打开WUT面板').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.triggerAction('actionShow_WUT') })
           } else if (this.astroTab === 6) {
             Text('行星计算器').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接（距离/周期/速度）')
+            Text('查看行星距离、公转周期和轨道速度等数据').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Button('打开行星计算器').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
           } else if (this.astroTab === 7) {
             Text('日月食').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            this.infoRow('状态', '需C++桥接（日食/月食/凌日表）')
+            Text('查看日食、月食和行星凌日预报').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+            Row({ space: 6 }) {
+              Button('日食').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+              Button('月食').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+              Button('凌日').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
+                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else {
             Text('年历').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Button('加载年历').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -3990,9 +4140,30 @@ struct WindowNativeNode {
     this.switchRow('月宿', this.lunarSystem, 'actionShow_LunarSystem')
     this.switchRow('星群线', this.asterismLines, 'actionShow_Asterism_Lines')
     this.switchRow('星群标签', this.asterismLabels, 'actionShow_Asterism_Labels')
+    Row()
+      .width('100%').height(0.5)
+      .backgroundColor(this.nmBorder())
+      .margin({ top: 6, bottom: 4 })
     Row() {
-      Text('天区文化列表（需C++桥接）').fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
-    }.height(18).width('100%').margin({ top: 6 })
+      Text('天区文化').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
+    }.height(18).width('100%')
+    Scroll() {
+      Column({ space: 2 }) {
+        ForEach(this.skyCultureList, (sc: SkyCultureItem) => {
+          Row() {
+            Text(sc.name).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+            if (sc.id === this.currentSkyCultureId) {
+              Text('✓').fontSize(11).fontColor(this.nmAccent()).width(16)
+            }
+          }
+          .height(30).width('100%').padding({ left: 10, right: 10 })
+          .backgroundColor(sc.id === this.currentSkyCultureId ? this.nmAccent() : this.nmBg())
+          .borderRadius(4)
+          .onClick(() => { this.selectSkyCulture(sc.id) })
+        }, (sc: SkyCultureItem) => sc.id)
+      }
+    }
+    .width('100%').height(200).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
   }
 
   // View 面板 Surveys 标签页内容
