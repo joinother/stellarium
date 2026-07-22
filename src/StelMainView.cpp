@@ -1723,6 +1723,79 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+				// ========== Phase 2h ==========
+		// getProjectionList — get all available projection types
+		if (commandName == "getProjectionList")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			QStringList keys = core->getAllProjectionTypeKeys();
+			QJsonArray list;
+			for (const QString& key : keys) {
+				QJsonObject item;
+				item["key"] = key;
+				item["name"] = core->projectionTypeKeyToNameI18n(key);
+				list.append(item);
+			}
+			result["ok"] = true;
+			result["projections"] = list;
+			result["current"] = core->getCurrentProjectionTypeKey();
+			return result;
+		}
+
+		// setProjectionType — change sky projection
+		if (commandName == "setProjectionType")
+		{
+			QString key = payload;
+			StelCore* core = StelApp::getInstance().getCore();
+			QStringList validKeys = core->getAllProjectionTypeKeys();
+			if (validKeys.contains(key)) {
+				core->setCurrentProjectionTypeKey(key);
+				result["ok"] = true;
+			} else {
+				result["ok"] = false;
+				result["error"] = "unknown projection type: " + key;
+			}
+			return result;
+		}
+
+		// getDateFormat / setDateFormat — date display format
+		if (commandName == "getDateFormat")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			result["ok"] = true;
+			result["format"] = conf->value("localization/date_display_format", "yyyymmdd").toString();
+			return result;
+		}
+
+		if (commandName == "setDateFormat")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			conf->setValue("localization/date_display_format", payload);
+			StelApp::getInstance().getLocaleMgr().setDateFormatForLanguage(StelApp::getInstance().getLocaleMgr().getAppLanguage(), payload);
+			result["ok"] = true;
+			return result;
+		}
+
+		// getTimeFormat / setTimeFormat — time display format
+		if (commandName == "getTimeFormat")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			result["ok"] = true;
+			result["format"] = conf->value("localization/time_display_format", "24h").toString();
+			return result;
+		}
+
+		if (commandName == "setTimeFormat")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			conf->setValue("localization/time_display_format", payload);
+			StelApp::getInstance().getLocaleMgr().setTimeFormatForLanguage(StelApp::getInstance().getLocaleMgr().getAppLanguage(), payload);
+			result["ok"] = true;
+			return result;
+		}
+
+		// ========== End Phase 2h ==========
+
 		// ========== End Phase 2g ==========
 
 		// ========== End Phase 2f ==========
