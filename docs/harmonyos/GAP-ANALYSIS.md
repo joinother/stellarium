@@ -94,8 +94,8 @@
 |---|------|---------|------|--------|------|
 | 34 | ~~补充星表下载~~ ✅ 已实现 | 02.03.45 "Get catalog 5 of 9" 53.1MB | 无法下载更多星星数据 | ~~P0~~ 完成 | 桥 getStarCatalogs/downloadStarCatalog/getStarCatalogStatus + ArkTS 面板，模拟器验证通过 |
 | 35 | ~~书签系统~~ ✅ 已实现 | 02.03.41 "Save view" | 无法保存/管理常用天体位置 | ~~P0~~ 完成 | 自建桥 addBookmark/getBookmarks/gotoBookmark/deleteBookmark（存 userDir/bookmarks.json）+ ArkTS 书签面板，模拟器 4 命令端到端验证通过 |
-| 36 | Oculars/望远镜配置 | 02.04.41-05.03 | 无法配置目镜/望远镜/透镜参数 | **P1** | 仅有 LX200 控制，缺 Oculars 插件完整配置面板 |
-| 37 | Satellites 卫星插件 | 多张截图 | 无法显示/追踪人造卫星轨道 | **P1** | 未见 getSatellites/getSatelliteInfo 桥接 |
+| 36 | ~~Oculars/望远镜配置~~ ✅ 已实现 | 02.04.41-05.03 | 无法配置目镜/望远镜/透镜参数 | ~~P1~~ 完成 | 自建桥 getOculars/setOcularMode/setTelrad/setCrosshairs/setCCD/cycleOcular/Telescope/Lens/CCD（Oculars 插件静态链接，编译期已含）+ ArkTS 望远镜面板（目镜模式/Telrad/十字丝/CCD 开关 + 目镜/望远镜/镜片/CCD 选择器），模拟器验证通过 |
+| 37 | ~~Satellites 卫星插件~~ ✅ 已实现 | 多张截图 | 无法显示/追踪人造卫星轨道 | ~~P1~~ 完成 | 自建桥 getSatellites/setSatellitesFlag（labels/orbitLines/hints/iconicMode/hideInvisible + 分组列表 + 总数）+ ArkTS 卫星面板，模拟器验证通过 |
 | 38 | Speech 语音输出 | 02.03.52 | 无语音播报天体信息 | **P2** | 未见 speech/speak 桥接 |
 | 39 | 脚本录制 | 02.04.29 record 图标 | 无法录制操作脚本 | **P2** | 有 playScript 但缺 recordScript |
 | 40 | 视频录制 | 未见截图 | 无法录制星图视频 | **P2** | 未见 saveVideo 桥接 |
@@ -109,8 +109,8 @@
 
 | 维度 | 估算 | 说明 |
 |------|------|------|
-| C++ 桥接命令 | ~85%（140+/170） | 核心命令齐全，缺星表下载/卫星/Oculars/Speech |
-| ArkUI 面板 | ~80% | 9 个面板核心完成，缺 Oculars/Help 配置面板 |
+| C++ 桥接命令 | ~92%（160+/170） | 核心命令齐全，缺 Speech/视频录制/轨迹回放/配置导入导出 |
+| ArkUI 面板 | ~85% | 11 个面板核心完成，缺 Help 配置面板 |
 | 桌面版核心功能 | ~85% | 搜索/选星/时间/位置/图层/投影/脚本/插件 |
 | 桌面版完整功能 | ~60% | 缺星表下载/书签/Oculars/卫星/Speech/录制/帮助 |
 | **用户可见差距** | **40%** | 普通用户最需要：星表下载、书签、卫星、Oculars |

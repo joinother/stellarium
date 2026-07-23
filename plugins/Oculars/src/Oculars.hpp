@@ -201,6 +201,16 @@ public slots:
 	void selectLensAtIndex(int index);           //!< index in the range -1:lenses.count(), else call is ignored
 	int getSelectedLensIndex() const {return selectedLensIndex; }
 
+	// OHOS bridge helpers: expose configured hardware lists for the mobile UI.
+	QStringList getOcularNames() const { QStringList r; for (int i=0;i<oculars.size();++i) r.append(oculars.at(i)->name()); return r; }
+	QStringList getTelescopeNames() const { QStringList r; for (int i=0;i<telescopes.size();++i) r.append(telescopes.at(i)->name()); return r; }
+	QStringList getLensNames() const { QStringList r; for (int i=0;i<lenses.size();++i) r.append(lenses.at(i)->getName()); return r; }
+	QStringList getCCDNames() const { QStringList r; for (int i=0;i<ccds.size();++i) r.append(ccds.at(i)->name()); return r; }
+	int getOcularCount() const { return oculars.size(); }
+	int getTelescopeCount() const { return telescopes.size(); }
+	int getLensCount() const { return lenses.size(); }
+	int getCCDCount() const { return ccds.size(); }
+
 	//! Toggles the sensor frame overlay.
 	void toggleCCD(bool show);
 	//! Toggles the sensor frame overlay (overloaded for blind switching).

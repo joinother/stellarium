@@ -57,6 +57,45 @@ interface BookmarksResponse extends StellariumBridgeResponse {
   count?: number
 }
 
+// 望远镜/目镜配置（Oculars 插件桥）
+interface OcularsData {
+  ocularMode: boolean
+  telrad: boolean
+  crosshairs: boolean
+  ccd: boolean
+  ocularIndex: number
+  telescopeIndex: number
+  lensIndex: number
+  ccdIndex: number
+  ocularNames: string[]
+  telescopeNames: string[]
+  lensNames: string[]
+  ccdNames: string[]
+}
+interface OcularsResponse extends StellariumBridgeResponse {
+  oculars?: OcularsData
+}
+
+// 卫星（Satellites 插件桥）
+interface SatellitesData {
+  groups: string[]
+  labels: boolean
+  orbitLines: boolean
+  hints: boolean
+  iconicMode: boolean
+  hideInvisible: boolean
+  count: number
+}
+interface SatellitesResponse extends StellariumBridgeResponse {
+  satellites?: SatellitesData
+}
+
+// 望远镜配置选择器的展示数据（非响应式，@Builder 内实时读取 @State）
+class OcularSelInfo {
+  name: string = ''
+  countText: string = ''
+}
+
 @Entry
 @Component
 struct WindowNativeNode {
@@ -249,6 +288,27 @@ struct WindowNativeNode {
   @State private bookmarkList: BookmarkItem[] = []
   @State private bookmarkLoading: boolean = false
   @State private newBookmarkName: string = ''
+  // 望远镜/目镜配置（Oculars）
+  @State private ocularMode: boolean = false
+  @State private telradOn: boolean = false
+  @State private crosshairsOn: boolean = false
+  @State private ccdOn: boolean = false
+  @State private ocularNames: string[] = []
+  @State private telescopeNames: string[] = []
+  @State private lensNames: string[] = []
+  @State private ccdNames: string[] = []
+  @State private ocularIndex: number = -1
+  @State private telescopeIndex: number = -1
+  @State private lensIndex: number = -1
+  @State private ccdIndex: number = -1
+  // 卫星（Satellites）
+  @State private satGroups: string[] = []
+  @State private satLabels: boolean = false
+  @State private satOrbitLines: boolean = false
+  @State private satHints: boolean = false
+  @State private satIconicMode: boolean = false
+  @State private satHideInvisible: boolean = false
+  @State private satCount: number = 0
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -324,6 +384,8 @@ struct WindowNativeNode {
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
     { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
     { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
+    { label: '望远镜', icon: 'telescope', panel: 'oculars' },
+    { label: '卫星', icon: 'satellite', panel: 'satellites' },
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
@@ -521,6 +583,10 @@ struct WindowNativeNode {
       if (this.catalogList.length === 0) this.loadStarCatalogs()
     } else if (panel === 'bookmarks') {
       this.loadBookmarks()
+    } else if (panel === 'oculars') {
+      this.loadOculars()
+    } else if (panel === 'satellites') {
+      this.loadSatellites()
     }
   }
 
@@ -691,6 +757,84 @@ struct WindowNativeNode {
         this.loadBookmarks()
       }
     })
+  }
+
+  // ===== 望远镜/目镜配置（Oculars 插件桥）=====
+  private loadOculars(): void {
+    this.callNativeWhenReady('getOculars', '', (r: StellariumBridgeResponse) => {
+      const resp = r as OcularsResponse
+      const o = resp.oculars
+      if (!o) { return }
+      this.ocularMode = o.ocularMode
+      this.telradOn = o.telrad
+      this.crosshairsOn = o.crosshairs
+      this.ccdOn = o.ccd
+      this.ocularNames = o.ocularNames
+      this.telescopeNames = o.telescopeNames
+      this.lensNames = o.lensNames
+      this.ccdNames = o.ccdNames
+      this.ocularIndex = o.ocularIndex
+      this.telescopeIndex = o.telescopeIndex
+      this.lensIndex = o.lensIndex
+      this.ccdIndex = o.ccdIndex
+    })
+  }
+
+  private setOcularMode(v: boolean): void {
+    this.ocularMode = v
+    this.callNativeWhenReady('setOcularMode', v ? '1' : '0', () => { this.loadOculars() })
+  }
+  private setTelrad(v: boolean): void {
+    this.telradOn = v
+    this.callNativeWhenReady('setTelrad', v ? '1' : '0', () => { this.loadOculars() })
+  }
+  private setCrosshairs(v: boolean): void {
+    this.crosshairsOn = v
+    this.callNativeWhenReady('setCrosshairs', v ? '1' : '0', () => { this.loadOculars() })
+  }
+  private setCCD(v: boolean): void {
+    this.ccdOn = v
+    this.callNativeWhenReady('setCCD', v ? '1' : '0', () => { this.loadOculars() })
+  }
+  private cycleOcular(kind: string, dir: string): void {
+    this.callNativeWhenReady('cycle' + kind, dir, () => { this.loadOculars() })
+  }
+  private ocularSelInfo(kind: string): OcularSelInfo {
+    const info = new OcularSelInfo()
+    let names: string[] = []
+    let idx: number = -1
+    if (kind == 'Ocular') { names = this.ocularNames; idx = this.ocularIndex }
+    else if (kind == 'Telescope') { names = this.telescopeNames; idx = this.telescopeIndex }
+    else if (kind == 'Lens') { names = this.lensNames; idx = this.lensIndex }
+    else { names = this.ccdNames; idx = this.ccdIndex }
+    if (idx >= 0 && idx < names.length) { info.name = names[idx] }
+    else { info.name = '（无）' }
+    info.countText = (idx < 0 ? '—' : (idx + 1).toString()) + ' / ' + names.length.toString()
+    return info
+  }
+
+  // ===== 卫星（Satellites 插件桥）=====
+  private loadSatellites(): void {
+    this.callNativeWhenReady('getSatellites', '', (r: StellariumBridgeResponse) => {
+      const resp = r as SatellitesResponse
+      const s = resp.satellites
+      if (!s) { return }
+      this.satGroups = s.groups
+      this.satLabels = s.labels
+      this.satOrbitLines = s.orbitLines
+      this.satHints = s.hints
+      this.satIconicMode = s.iconicMode
+      this.satHideInvisible = s.hideInvisible
+      this.satCount = s.count
+    })
+  }
+  private setSatelliteFlag(name: string, v: boolean): void {
+    if (name == 'labels') { this.satLabels = v }
+    else if (name == 'orbitLines') { this.satOrbitLines = v }
+    else if (name == 'hints') { this.satHints = v }
+    else if (name == 'iconicMode') { this.satIconicMode = v }
+    else if (name == 'hideInvisible') { this.satHideInvisible = v }
+    this.callNativeWhenReady('setSatellitesFlag', name + ':' + (v ? '1' : '0'), () => { this.loadSatellites() })
   }
 
   private refreshState(): void {
@@ -2379,10 +2523,35 @@ private loadPlanetPositions(): void {
       'settings': $r('app.media.ic_settings'),
       'catalogs': $r('app.media.ic_list'),
       'bookmarks': $r('app.media.ic_bookmark'),
+      'telescope': $r('app.media.ic_telescope'),
+      'satellite': $r('app.media.ic_satellite'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
     return map[icon] || $r('app.media.ic_search')
+  }
+  @Builder
+  ocularSelector(kind: string, label: string) {
+    Column({ space: 4 }) {
+      Text(label).fontSize(12).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
+      Row() {
+        Button('‹')
+          .fontSize(18).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(255,255,255,0.08)').borderRadius(12).width(40).height(36)
+          .onClick(() => { this.cycleOcular(kind, 'prev') })
+        Column() {
+          Text(this.ocularSelInfo(kind).name)
+            .fontSize(13).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.ocularSelInfo(kind).countText)
+            .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+        }.alignItems(HorizontalAlign.Center).layoutWeight(1)
+        Button('›')
+          .fontSize(18).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(255,255,255,0.08)').borderRadius(12).width(40).height(36)
+          .onClick(() => { this.cycleOcular(kind, 'next') })
+      }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+    }.width('100%')
   }
   @Builder
   iconButton(item: ShellAction) {
@@ -3594,6 +3763,79 @@ private loadPlanetPositions(): void {
           }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
         }
       }.width('100%').layoutWeight(1)
+    } else if (this.activePanel === 'oculars') {
+      // 望远镜/目镜配置：目镜模式 + Telrad/十字丝/CCD 开关 + 配置选择器
+      Scroll() {
+        Column({ space: 10 }) {
+          Row() {
+            Text('目镜模式（望远镜视野）').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.ocularMode })
+              .onChange((isOn: boolean) => { this.setOcularMode(isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('Telrad 寻星镜').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.telradOn })
+              .onChange((isOn: boolean) => { this.setTelrad(isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('十字丝').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.crosshairsOn })
+              .onChange((isOn: boolean) => { this.setCrosshairs(isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('CCD 取景框').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.ccdOn })
+              .onChange((isOn: boolean) => { this.setCCD(isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          this.ocularSelector('Ocular', '目镜')
+          this.ocularSelector('Telescope', '望远镜')
+          this.ocularSelector('Lens', '镜片')
+          this.ocularSelector('CCD', 'CCD')
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'satellites') {
+      // 卫星：全局显示开关 + 分组列表
+      Scroll() {
+        Column({ space: 10 }) {
+          Row() {
+            Text('卫星总数').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Text(this.satCount.toString()).fontSize(13).fontColor('#66FFFFFF')
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('显示标签').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.satLabels })
+              .onChange((isOn: boolean) => { this.setSatelliteFlag('labels', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('显示轨道线').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.satOrbitLines })
+              .onChange((isOn: boolean) => { this.setSatelliteFlag('orbitLines', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('显示提示点').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.satHints })
+              .onChange((isOn: boolean) => { this.setSatelliteFlag('hints', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('图标模式').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.satIconicMode })
+              .onChange((isOn: boolean) => { this.setSatelliteFlag('iconicMode', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('隐藏不可见卫星').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.satHideInvisible })
+              .onChange((isOn: boolean) => { this.setSatelliteFlag('hideInvisible', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          if (this.satGroups.length > 0) {
+            Text('卫星分组').fontSize(12).fontColor('#66FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
+            ForEach(this.satGroups, (g: string) => {
+              Row() {
+                Text(g).fontSize(13).fontColor('#E5FFFFFF')
+              }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+            }, (g: string) => g)
+          }
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -4363,6 +4605,12 @@ private loadPlanetPositions(): void {
     }
     if (this.activePanel === 'bookmarks') {
       return '书签'
+    }
+    if (this.activePanel === 'oculars') {
+      return '望远镜'
+    }
+    if (this.activePanel === 'satellites') {
+      return '卫星'
     }
     return $r('app.string.i0101')
   }

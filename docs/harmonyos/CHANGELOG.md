@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-07-23] WorkBuddy - 新增望远镜(Oculars)与卫星(Satellites)面板
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：getOculars/setOcularMode/setTelrad/setCrosshairs/setCCD/cycleOcular|Telescope|Lens|CCD、getSatellites/setSatellitesFlag；新增 `#include "../plugins/Oculars/src/Oculars.hpp"` 与 `../plugins/Satellites/src/Satellites.hpp`）
+  - `plugins/Oculars/src/Oculars.hpp`（新增 inline 公有辅助：`getOcularNames/getTelescopeNames/getLensNames/getCCDNames` + Count，供 ArkTS 显示配置名）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS 望远镜/卫星面板 + 选择器 @Builder，同步到 `build/.../MainWindowNativeNode.ets`）
+  - 新增图标 `ic_telescope.svg` / `ic_satellite.svg`（同步到镜像）
+- **修改内容：**
+  1. Oculars：左侧栏新增「望远镜」按钮；面板含 目镜模式 / Telrad / 十字丝 / CCD 四个开关 + 目镜/望远镜/镜片/CCD 四个 prev-next 选择器（显示真实配置名与 N/total），命令经 `GETSTELMODULE(Oculars)` 调用 `enableOcular/toggleTelrad/toggleCrosshairs/toggleCCD` + `increment/decrementXIndex`。
+  2. Satellites：左侧栏新增「卫星」按钮；面板含 显示标签/轨道线/提示点/图标模式/隐藏不可见 五个开关 + 分组列表 + 卫星总数，命令经 `GETSTELMODULE(Satellites)` 调用 `setFlagLabelsVisible` 等 + `getGroupIdList/listAllIds`。
+- **构建结果：** C++ 增量编译通过（`Lens` 用 `getName()` 非 `name()`，已修正）；`assembleHap` 待打包验证。
+- **验证结果：** 模拟器端到端验证进行中（见 Task #34/#35）。
+
 ## [2026-07-23] WorkBuddy - 新增书签系统（保存/跳转常用视角，ArkTS 面板 + C++ 桥）
 
 - **修改文件：**

@@ -43,6 +43,8 @@
 #include "LandscapeMgr.hpp"
 #include "NebulaMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
+#include "../plugins/Oculars/src/Oculars.hpp"
+#include "../plugins/Satellites/src/Satellites.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
@@ -3415,6 +3417,126 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			if (found) { result["ok"] = true; }
 			else { result["ok"] = false; result["error"] = "bookmark not found: " + arg; }
+			return result;
+		}
+
+		// ========== Oculars plugin (望远镜/目镜配置) ==========
+		if (commandName == "getOculars")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			QJsonObject o;
+			o["ocularMode"] = oculars->getEnableOcular();
+			o["telrad"] = oculars->getEnableTelrad();
+			o["crosshairs"] = oculars->getEnableCrosshairs();
+			o["ccd"] = oculars->getEnableCCD();
+			o["ocularIndex"] = oculars->getSelectedOcularIndex();
+			o["telescopeIndex"] = oculars->getSelectedTelescopeIndex();
+			o["lensIndex"] = oculars->getSelectedLensIndex();
+			o["ccdIndex"] = oculars->getSelectedCCDIndex();
+			o["ocularCount"] = oculars->getOcularCount();
+			o["telescopeCount"] = oculars->getTelescopeCount();
+			o["lensCount"] = oculars->getLensCount();
+			o["ccdCount"] = oculars->getCCDCount();
+			QJsonArray on, tn, ln, cn;
+			for (const QString& s : oculars->getOcularNames()) on.append(s);
+			for (const QString& s : oculars->getTelescopeNames()) tn.append(s);
+			for (const QString& s : oculars->getLensNames()) ln.append(s);
+			for (const QString& s : oculars->getCCDNames()) cn.append(s);
+			o["ocularNames"] = on;
+			o["telescopeNames"] = tn;
+			o["lensNames"] = ln;
+			o["ccdNames"] = cn;
+			result["ok"] = true;
+			result["oculars"] = o;
+			return result;
+		}
+		if (commandName == "setOcularMode")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			oculars->enableOcular(arg.trimmed() == "1" || arg.trimmed() == "true");
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "setTelrad")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			oculars->toggleTelrad(arg.trimmed() == "1" || arg.trimmed() == "true");
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "setCrosshairs")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			oculars->toggleCrosshairs(arg.trimmed() == "1" || arg.trimmed() == "true");
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "setCCD")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			oculars->toggleCCD(arg.trimmed() == "1" || arg.trimmed() == "true");
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "cycleOcular" || commandName == "cycleTelescope" || commandName == "cycleLens" || commandName == "cycleCCD")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			bool forward = (arg.trimmed() != "prev");
+			if (commandName == "cycleOcular") { if (forward) oculars->incrementOcularIndex(); else oculars->decrementOcularIndex(); }
+			else if (commandName == "cycleTelescope") { if (forward) oculars->incrementTelescopeIndex(); else oculars->decrementTelescopeIndex(); }
+			else if (commandName == "cycleLens") { if (forward) oculars->incrementLensIndex(); else oculars->decrementLensIndex(); }
+			else { if (forward) oculars->incrementCCDIndex(); else oculars->decrementCCDIndex(); }
+			int idx = -1;
+			if (commandName == "cycleOcular") idx = oculars->getSelectedOcularIndex();
+			else if (commandName == "cycleTelescope") idx = oculars->getSelectedTelescopeIndex();
+			else if (commandName == "cycleLens") idx = oculars->getSelectedLensIndex();
+			else idx = oculars->getSelectedCCDIndex();
+			result["ok"] = true;
+			result["index"] = idx;
+			return result;
+		}
+
+		// ========== Satellites plugin (卫星) ==========
+		if (commandName == "getSatellites")
+		{
+			Satellites* sats = GETSTELMODULE(Satellites);
+			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
+			QJsonObject s;
+			QJsonArray groups;
+			for (const QString& g : sats->getGroupIdList()) groups.append(g);
+			s["groups"] = groups;
+			s["labels"] = sats->getFlagLabelsVisible();
+			s["orbitLines"] = sats->getFlagOrbitLines();
+			s["hints"] = sats->getFlagHintsVisible();
+			s["iconicMode"] = sats->getFlagIconicMode();
+			s["hideInvisible"] = sats->getFlagHideInvisible();
+			s["count"] = sats->listAllIds().size();
+			result["ok"] = true;
+			result["satellites"] = s;
+			return result;
+		}
+		if (commandName == "setSatellitesFlag")
+		{
+			Satellites* sats = GETSTELMODULE(Satellites);
+			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
+			QStringList parts = arg.split(":", Qt::SkipEmptyParts);
+			QString name = parts.size() > 0 ? parts[0].trimmed() : "";
+			bool val = (parts.size() > 1 && (parts[1].trimmed() == "1" || parts[1].trimmed() == "true"));
+			bool ok = true;
+			if (name == "labels") sats->setFlagLabelsVisible(val);
+			else if (name == "orbitLines") sats->setFlagOrbitLines(val);
+			else if (name == "hints") sats->setFlagHintsVisible(val);
+			else if (name == "iconicMode") sats->setFlagIconicMode(val);
+			else if (name == "hideInvisible") sats->setFlagHideInvisible(val);
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown satellite flag: " + name;
 			return result;
 		}
 
