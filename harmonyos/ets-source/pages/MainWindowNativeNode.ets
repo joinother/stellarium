@@ -4505,7 +4505,7 @@ private loadPlanetPositions(): void {
         .trackColor(this.nmBg())
         .selectedColor(this.nmAccent())
         .showSteps(false)
-        .onChange((val: number) => { this.landscapeTransp = Math.round(val) })
+        .onChange((val: number) => { this.landscapeTransp = Math.round(val); this.changeLandscapeTransparency(val) })
     }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
   }
 

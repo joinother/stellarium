@@ -188,11 +188,15 @@
 
 **修改文件：** `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`（commit `fdd8f627df`，push 至 `myfork/openharmony-preview-v1`）。
 
-### 5. 地景不随视角自动透明化
+### 5. 地景不透明 / 透明度滑块失效 — 【2026-07-23 WorkBuddy 已修复并验证】
 
-**现象：** 视角转向地面时，地景不会自动淡出，被遮挡的星星无法透出。
-
-**分析：** C++ 核心有完整的透明度机制，可能地景纹理不支持或 OpenGL ES 路径问题。
+- **状态：** ✅ 已修复并验证（2026-07-23）
+- **现象（修复前）：** 用户无法让地景变透明，被地面遮挡的星星始终透不出来；地景页签的「透明度」滑块拖了没反应。
+- **真实根因（已定位）：** 不是 OpenGL ES 渲染路径问题，也不是核心缺机制——`Landscape.cpp:1331` 早已用 `alpha=(1-transparency)*landFader` 支持透明度，C++ 桥 `setLandscapeTransparency`（StelMainView.cpp:1370）与 ArkTS `changeLandscapeTransparency()`（ets:885，把 `val/100` 发给 C++）也都齐全。**真正漏的是滑块没接线**：`viewLandscapeTab()` 的透明度 `Slider.onChange` 只写了 `this.landscapeTransp = Math.round(val)`（仅更新本地显示百分比），**从未调用 `changeLandscapeTransparency(val)`**，所以拖动滑块地景毫无变化。
+- **修复（已验证有效）：** `viewLandscapeTab()` 的 `Slider.onChange` 改为 `this.landscapeTransp = Math.round(val); this.changeLandscapeTransparency(val)`，使滑块真正把透明度下发到 C++。
+- **验证结果（2026-07-23，模拟器 127.0.0.1:5555）：** 打开 View→地景页签，拖动透明度滑块 → 日志实锤 `Stellarium command setLandscapeTransparency`（pid 10280 的 StellariumEntryGL 日志）。至此用户可手动把地景调透明、看到地面后的星星。
+- **关于「自动淡出」：** 核心并无「视角转向地面时地景自动透明」这一标准特性；桌面端同样靠手动透明度或日光 `landFader` 渐变。本修复补齐的是**手动透明度控制**（此前完全失效），属真实 bug 修补。
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`（行 ~4508，Slider.onChange）+ 同步镜像 `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。仅改 .ets，未重编 C++。
 
 ### 6. UI 风格改进（持续进行）
 
