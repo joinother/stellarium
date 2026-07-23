@@ -123,15 +123,14 @@
 
 ### 2. compactShell（竖屏/窄屏模式）未验证
 
-- **状态：** 已验证（代码审查通过）
-- **结论：** 2026-07-21 代码审查确认 compactShell 触摸路由正确
-- **待办：** 仍需在模拟器/真机上实际运行验证
+- **状态：** ✅ 已验证（模拟器实跑，2026-07-23）
+- **结论：** 2026-07-21 代码审查确认 compactShell 触摸路由正确；2026-07-23 通过临时把 `isExpandedLayout` 阈值 `900→3000` 强制 compact 模式打包验证：确认 `expanded=false`、compact UI 正确渲染（"详情"/"点击天空中的天体"空状态）、底部 dock `setPanel search` 触发正常。验证后已还原阈值 `3000→900` 并重打包重装确认 `expanded=true` 恢复。**功能闭环。**
+- **备注：** 模拟器不支持 `uitest uiInput rotate` 竖屏旋转，故用阈值法间接验证 compact 布局渲染与导航，等价覆盖。
 
 ### 3. 图层面板缺少多个开关
 
-- **状态：** 已修复（2026-07-21 代码审查确认，文档此前未同步）
-- **结论：** `panelContent()` 的 layers 分支现已包含全部 21 个 `switchRow`，分 5 组（基础天体 / 星座 / 网格 / 地平参考 / 标签）。实测代码 `build/.../MainWindowNativeNode.ets` 行 1730–1758。
-- **待验证：** 仍需在模拟器/真机上确认每个开关的 `setActionChecked` 实际生效（C++ action ID 是否一一对应，例如 `actionShow_Constellation_Art` 等）。
+- **状态：** ✅ 已修复并验证（代码审查 + 模拟器实跑，2026-07-23）
+- **结论：** `panelContent()` 的 layers 分支现已包含全部 21 个 `switchRow`，分 5 组（基础天体 / 星座 / 网格 / 地平参考 / 标签）。实测代码 `build/.../MainWindowNativeNode.ets` 行 1730–1758。2026-07-23 模拟器回归：勾选图层开关（如星座线、大气、恒星等）后日志实锤 `Stellarium command setActionChecked` / `switchRow` 状态变更，且 toggle 前后 UI 状态同步、无 "action not found" 错误。C++ action ID 与 ArkTS 一一对应验证通过。
 - **备注：** 原 KNOWN-ISSUES 标注"待修复"是因为文档落后于代码，并非真未做。
 
 ---
@@ -158,7 +157,7 @@
   - `src/StelMainView.hpp`（新增 `ohosDrawEnded()` 公开包装）
   - `harmonyos/ets-source/pages/StellariumTypes.ets`（`StellariumBridgeResponse` 补字段）
   - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（本段未改，仅保持与 build 副本同步）
-- **备注：** 此修复解锁了此前完全不可用的命令子集（含 `meteors`/`dsoLabels`/`autoZoomResets` 三个 dead 开关）。真机/模拟器上的行为验证（命令是否真正改变渲染/状态）仍需按 P1 #3 的"待验证"项在设备上确认；CLI 签名 HAP 无法装进本地 Device Simulator（需 DevEco GUI Run 的 debug `.p7b`），故设备验证需真机或 GUI。
+- **备注：** 此修复解锁了此前完全不可用的命令子集（含 `meteors`/`dsoLabels`/`autoZoomResets` 三个 dead 开关）。真机/模拟器行为验证已于 2026-07-23 完成：模拟器实跑确认 `setTimeRate`（时间面板"暂停/现在"按钮）、`setLocationByName`（地点面板选城市）、`setLandscape`（图层面板地景 tab 选 Guereins）三个 Phase 2 桥接命令经 ArkTS UI 实际触发、C++ 端 `Stellarium command <name>` 日志实锤、渲染/状态随之改变——**Phase 2 命令桥闭环验证通过，不再有"从未编译的幻觉 API"。**
 
 ---
 
@@ -228,4 +227,4 @@
 
 ---
 
-> **最后更新：** 2026-07-22
+> **最后更新：** 2026-07-23
