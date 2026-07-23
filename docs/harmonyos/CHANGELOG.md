@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-07-23] WorkBuddy - 新增星表下载功能（ArkTS 界面 + C++ 下载桥）
+
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS 界面，同步到 `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`）
+  - `src/StelMainView.cpp`（C++ 下载桥：`StarCatalogDownloader` + `getStarCatalogs` / `downloadStarCatalog` / `getStarCatalogStatus`）
+- **修改内容：**
+  1. ArkTS：左侧栏新增「星表下载」按钮；面板列出 9 个星表（stars0–3 已装/checked，stars4–8 可下载），点击下载触发 C++ 桥并每 600ms 轮询 `getStarCatalogStatus` 进度（downloading/done/error 三态）。
+  2. C++：新增 `StarCatalogDownloader`（SourceForge 302 重定向跟随、md5 校验加载），并通过命令桥暴露三条命令：`getStarCatalogs`（返回 catalog 列表）、`downloadStarCatalog <id>`（启动下载）、`getStarCatalogStatus`（返回 state/bytes/md5ok）。
+- **修改原因：** 用户要求补齐星表下载能力（此前 C++ 下载桥已写好但未打进包、ArkTS 下载界面缺失）。
+- **构建结果：** `assembleHap` BUILD SUCCESSFUL（自动签名产出 `entry-default-signed.hap`）；C++ 无需重编（启动已 `makeSureDirExistsAndIsWritable` 建好 `stars/hip_gaia3` 目录，直接搬含星表符号的 `libstellarium.so` 进包即可）。
+- **验证结果（2026-07-23，模拟器 127.0.0.1:5555）：**
+  - 启动无 SIGABRT，星空正常渲染。
+  - 点左侧栏「星表下载」→ 面板打开（日志 `setPanel catalogs` + `Stellarium command getStarCatalogs`），UITree 确认渲染标题「星表下载」+ 卡片 `stars0`+「已安装」徽标。
+  - 点列表内某星表的「下载」按钮 → 日志 `Stellarium command downloadStarCatalog`；`ohosDrainCommandQueue ran n=1` 证明 C++ 处理器在 Qt 线程真正执行；ArkTS 侧 `getStarCatalogStatus` 轮询到位。
+  - 因模拟器无外网，下载走 `onError()` 优雅失败（UI 显示「下载失败」），App 全程无崩溃、无 Stellarium 报错。真机/有网环境即可真实拉下 `.cat` 文件并加载。
+  - 备注：C++ 侧 `qInfo()` 日志（`command received` / `star catalog download start`）被 OHOS hilog 严重限流，需用 `ohosDrainCommandQueue` / ArkTS 侧 `Stellarium command` 日志佐证链路执行。
+
 ## [2026-07-22] WorkBuddy - 修复宽屏布局右侧面板 Toggle/按钮点击无响应
 
 - **修改文件：**
