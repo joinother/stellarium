@@ -7,6 +7,38 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 
+// 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
+interface StarCatalogItem {
+  id: string
+  name: string
+  size: string
+  key: string
+  fileName: string
+  url: string
+  html: string
+  checked: boolean
+}
+interface StarCatalogRaw {
+  id?: string
+  name?: string
+  size?: string
+  key?: string
+  fileName?: string
+  url?: string
+  html?: string
+  checked?: boolean | string | number
+}
+interface StarCatalogsResponse extends StellariumBridgeResponse {
+  catalogs?: StarCatalogRaw[]
+}
+interface StarCatalogStatusResponse extends StellariumBridgeResponse {
+  id?: string
+  state?: string
+  bytes?: number
+  error?: string
+  md5ok?: boolean
+}
+
 @Entry
 @Component
 struct WindowNativeNode {
@@ -187,8 +219,15 @@ struct WindowNativeNode {
   @State private currentFovText: string = '--'
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
+  @State private railPinned: boolean = false
+  @State private railCollapsed: boolean = false
   @State private panelOffsetX: number = 0
   @State private panelOffsetY: number = 0
+  @State private catalogList: StarCatalogItem[] = []
+  @State private catalogLoading: boolean = false
+  @State private catalogBusy: boolean = false
+  @State private catalogDownloadingId: string = ''
+  @State private catalogMsg: string = ''
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -204,9 +243,12 @@ struct WindowNativeNode {
     }
     this.panelIdleOpacity = 1.0
     this.panelIdleTimer = setTimeout(() => {
-      this.panelIdleOpacity = 0.65
+      // 空闲→右侧面板果冻状半透明；钉住(uiLocked)时不淡出
+      if (!this.uiLocked) {
+        this.panelIdleOpacity = 0.3
+      }
       this.panelIdleTimer = -1
-    }, 3000)
+    }, 3500)
   }
 
   private sidebarAutoCollapseTimer: number = -1
@@ -215,10 +257,11 @@ struct WindowNativeNode {
     if (this.sidebarAutoCollapseTimer >= 0) {
       clearTimeout(this.sidebarAutoCollapseTimer)
     }
-    if (!this.uiLocked) {
+    // 空闲→左侧栏向左收起（仅留把手）；钉住(railPinned)时不收起
+    this.railCollapsed = false
+    if (!this.railPinned) {
       this.sidebarAutoCollapseTimer = setTimeout(() => {
-        this.panelVisible = false
-        this.activePanel = ''
+        this.railCollapsed = true
         this.sidebarAutoCollapseTimer = -1
       }, 5000)
     }
@@ -258,12 +301,13 @@ struct WindowNativeNode {
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
+    { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
   ]
 
-  private SELFTEST: boolean = true  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
+  private SELFTEST: boolean = false  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
 
   private readonly SELFTEST_ACTION_IDS: string[] = [
     "actionHorizontal_Flip",
@@ -451,6 +495,8 @@ struct WindowNativeNode {
       this.refreshSelectedObject()
     } else if (panel === 'layers' || panel === 'time' || panel === 'place' || panel === 'settings') {
       this.refreshState()
+    } else if (panel === 'catalogs') {
+      if (this.catalogList.length === 0) this.loadStarCatalogs()
     }
   }
 
@@ -499,6 +545,79 @@ struct WindowNativeNode {
   // and WITHOUT blocking the render thread. onOk receives the FRESH result.
   private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void): void {
     this.callNativeWhenReady(name, payload, onOk, 0, 50, 40)
+  }
+
+  // ===== 星表下载（C++ 桥：getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）=====
+  private loadStarCatalogs(): void {
+    this.catalogLoading = true
+    this.callNativeWhenReady('getStarCatalogs', '', (r: StellariumBridgeResponse) => {
+      const resp = r as StarCatalogsResponse
+      const list = resp.catalogs ?? []
+      this.catalogList = list.map((c: StarCatalogRaw) => ({
+        id: c.id ?? '',
+        name: c.name ?? (c.id ?? '星表'),
+        size: c.size ?? '',
+        key: c.key ?? '',
+        fileName: c.fileName ?? '',
+        url: c.url ?? '',
+        html: c.html ?? '',
+        checked: c.checked === true || c.checked === 'true' || c.checked === 1,
+      }))
+      this.catalogLoading = false
+    })
+  }
+
+  private startCatalogDownload(id: string): void {
+    if (this.catalogBusy) {
+      this.flashHint('已有星表正在下载')
+      return
+    }
+    this.catalogBusy = true
+    this.catalogDownloadingId = id
+    this.catalogMsg = '开始下载 ' + id + ' …'
+    this.flashHint('开始下载 ' + id)
+    const r = this.callNative('downloadStarCatalog', id)
+    if (!r || !r.ok) {
+      this.catalogBusy = false
+      this.catalogDownloadingId = ''
+      this.catalogMsg = '下载启动失败'
+      this.flashHint('下载启动失败')
+      return
+    }
+    this.pollCatalogStatus(id)
+  }
+
+  private pollCatalogStatus(id: string): void {
+    const timer = setInterval(() => {
+      const r = this.callNative('getStarCatalogStatus', '') as StarCatalogStatusResponse
+      if (!r || !r.ok) {
+        clearInterval(timer)
+        this.catalogBusy = false
+        this.catalogDownloadingId = ''
+        return
+      }
+      const state = r.state ?? 'downloading'
+      const bytes = r.bytes ?? 0
+      if (state === 'done') {
+        clearInterval(timer)
+        const md5ok = r.md5ok === true
+        this.catalogMsg = md5ok ? ('「' + id + '」下载完成并已加载') : ('「' + id + '」下载完成，校验未通过')
+        this.flashHint(this.catalogMsg)
+        this.catalogBusy = false
+        this.catalogDownloadingId = ''
+        this.loadStarCatalogs()
+      } else if (state === 'error') {
+        clearInterval(timer)
+        const err = r.error ?? '未知错误'
+        this.catalogMsg = '下载失败：' + err
+        this.flashHint('下载失败：' + err)
+        this.catalogBusy = false
+        this.catalogDownloadingId = ''
+      } else {
+        const mb = (bytes / (1024 * 1024)).toFixed(1)
+        this.catalogMsg = '下载中 ' + id + '：' + mb + ' MB'
+      }
+    }, 600)
   }
 
   private refreshState(): void {
@@ -1452,17 +1571,16 @@ private loadPlanetPositions(): void {
   }
 
   private panelLeft(): number {
-    // 实测浮层面板左缘(vp)；面板宽 336, 右侧留 24
-    return this.skyWidth - 360
+    // 跟随面板真实位置（含拖动偏移），避免点面板却漏成星图拖拽
+    return this.skyWidth - this.panelWidth + this.panelOffsetX
   }
 
   private panelRight(): number {
-    return this.skyWidth - 24
+    return this.panelLeft() + this.panelWidth
   }
 
   private panelTop(): number {
-    // 实测浮层面板顶缘(标题区)约 270vp
-    return 28
+    return 28 + this.panelOffsetY
   }
 
   private railTop(): number {
@@ -1477,7 +1595,7 @@ private loadPlanetPositions(): void {
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
       // 左侧工具栏按钮区域（宽屏布局，从顶部开始排列）
-      if (x >= 0 && x <= 58) {
+      if (!this.railCollapsed && x >= 0 && x <= 58) {
         const railTop = 28
         const step = 58
         for (let i = 0; i < this.actions.length; i++) {
@@ -1489,9 +1607,14 @@ private loadPlanetPositions(): void {
       } else if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
       }
-      // 浮动面板区域
-      if (this.panelVisible && x >= this.panelLeft() && x <= this.panelRight() && y >= this.panelTop() && y <= this.panelTop() + 900) {
-        return true
+      // 浮动面板区域（含 30vp 余量，覆盖圆角/边距，杜绝点面板却拖星图）
+      if (this.panelVisible) {
+        const pl = this.panelLeft()
+        const pr = this.panelRight()
+        const pt = this.panelTop()
+        if (x >= pl - 30 && x <= pr + 30 && y >= pt - 30 && y <= pt + this.panelMaxHeight + 30) {
+          return true
+        }
       }
       return false
     }
@@ -1552,6 +1675,7 @@ private loadPlanetPositions(): void {
       return false
     }
     this.resetSidebarAutoCollapse()
+    this.resetPanelIdle()
 
     // Layer toggles are handled by Toggle.onChange in switchRow Builder
     // Hardcoded coordinates removed - layout changed with grouped sections
@@ -1598,15 +1722,12 @@ private loadPlanetPositions(): void {
     }
     const x = this.touchWindowX(points[0])
     const y = this.touchWindowY(points[0])
+    // 任意触摸都算“正在使用”，重置空闲计时（停手 3.5s 后面板果冻淡出、5s 后左侧栏收起）
+    this.resetPanelIdle()
+    this.resetSidebarAutoCollapse()
     if (event.type === TouchType.Down) {
       this.touchStartedOnUi = this.isUiPoint(x, y)
       hilog.info(0x0000, 'StellariumArkUI', 'overlay touch down ' + Math.round(x).toString() + ',' + Math.round(y).toString() + ' ui=' + (this.touchStartedOnUi ? '1' : '0') + ' sky=' + this.skyWidth.toString() + 'x' + this.skyHeight.toString())
-    }
-    if (this.uiLocked && this.touchStartedOnUi) {
-      if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-        this.touchStartedOnUi = false
-      }
-      return
     }
     if (this.touchStartedOnUi) {
       if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
@@ -1923,7 +2044,7 @@ private loadPlanetPositions(): void {
       Stack() { this.observerBadge() }
         .position({ x: 22, y: 28 })
         .hitTestBehavior(HitTestMode.None)
-      Stack() { this.verticalRail() }
+      Stack() { this.railShell() }
         .position({ x: 0, y: this.railTop() })
         .hitTestBehavior(HitTestMode.Block)
       Stack() { this.zoomButton('zoom_in') }
@@ -2065,6 +2186,21 @@ private loadPlanetPositions(): void {
             .hitTestBehavior(HitTestMode.None)
         }
     }, (item: ShellAction) => item.panel)
+        // 钉住按钮：固定左侧栏，空闲不收起
+        Stack({ alignContent: Alignment.Center }) {
+          Text(this.railPinned ? "\uD83D\uDCCC" : "\uD83D\uDCCC")
+            .fontSize(16)
+            .fontColor(this.railPinned ? "#FFD700" : "#66FFFFFF")
+        }
+          .width(44)
+          .height(36)
+          .borderRadius(18)
+          .backgroundColor(this.railPinned ? "rgba(255, 215, 0, 0.15)" : "rgba(255, 255, 255, 0.06)")
+          .position({ x: 7, y: this.actions.length * 58 + 8 })
+          .onClick(() => {
+            this.railPinned = !this.railPinned
+            this.flashHint(this.railPinned ? $r('app.string.s0717') : $r('app.string.s0718'))
+          })
   }
     .width(58)
         .height(this.railHeight())
@@ -2073,6 +2209,46 @@ private loadPlanetPositions(): void {
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(29)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
+      .opacity(this.railPinned ? 1.0 : this.panelIdleOpacity)
+      .scale({ x: (!this.railPinned && this.panelIdleOpacity < 1) ? 0.94 : 1.0, y: (!this.railPinned && this.panelIdleOpacity < 1) ? 0.94 : 1.0 })
+      .animation({ duration: 420, curve: Curve.Friction })
+  }
+
+  // 左侧栏外壳：承载收起动画与常驻把手
+  @Builder
+  railShell() {
+    Stack() {
+      // 轨道内容：空闲且未钉住时向左滑出，仅留把手
+      Stack() { this.verticalRail() }
+        .translate({ x: this.railCollapsed && !this.railPinned ? -64 : 0 })
+        .animation({ duration: 360, curve: Curve.Friction })
+      // 收起后的把手：点一下重新展开
+      if (this.railCollapsed && !this.railPinned) {
+        Stack() {
+          Column() {
+            Text("\u203A")
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor('#E5FFFFFF')
+          }
+            .width(26)
+            .height(56)
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .backgroundColor('rgba(25, 26, 28, 0.72)')
+            .backdropBlur(20)
+            .borderRadius(14)
+            .shadow({ radius: 18, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
+        }
+          .position({ x: 0, y: this.railHeight() / 2 })
+          .onClick(() => {
+            this.railCollapsed = false
+            this.resetPanelIdle()
+            this.flashHint($r('app.string.i0078', '侧栏'))
+          })
+          .hitTestBehavior(HitTestMode.Block)
+      }
+    }
   }
 
   @Builder
@@ -2128,6 +2304,7 @@ private loadPlanetPositions(): void {
       'layers': $r('app.media.ic_layers'),
       'info': $r('app.media.ic_info'),
       'settings': $r('app.media.ic_settings'),
+      'catalogs': $r('app.media.ic_list'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
@@ -2211,8 +2388,9 @@ private loadPlanetPositions(): void {
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
-      .animation({ duration: 220, curve: Curve.EaseOut })
+      .scale({ x: this.panelIdleOpacity < 1 ? 0.96 : 1.0, y: this.panelIdleOpacity < 1 ? 0.96 : 1.0 })
       .opacity(this.panelIdleOpacity)
+      .animation({ duration: 420, curve: Curve.Friction })
   }
 
   @Builder
@@ -2239,8 +2417,9 @@ private loadPlanetPositions(): void {
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .alignSelf(ItemAlign.Center)
-      .animation({ duration: 220, curve: Curve.EaseOut })
+      .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity)
+      .animation({ duration: 420, curve: Curve.Friction })
   }
 
   @Builder
@@ -3234,6 +3413,59 @@ private loadPlanetPositions(): void {
         .width('100%')
         .padding({ left: 4, right: 4 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'catalogs') {
+      // 星表下载面板
+      if (this.catalogLoading) {
+        Column() {
+          Text('正在获取星表列表…').fontSize(13).fontColor('#66FFFFFF')
+        }.width('100%').height(120).justifyContent(FlexAlign.Center)
+      } else if (this.catalogList.length === 0) {
+        Column() {
+          Text('暂无可下载的星表').fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
+          Text('当前版本可能已包含全部星表').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+        }.width('100%').height(120).justifyContent(FlexAlign.Center)
+      } else {
+        Scroll() {
+          Column({ space: 8 }) {
+            ForEach(this.catalogList, (c: StarCatalogItem) => {
+              Column({ space: 4 }) {
+                Row() {
+                  Column() {
+                    Text(c.name)
+                      .fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                    if (c.size.length > 0) {
+                      Text('大小 ' + c.size)
+                        .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+                    }
+                  }.layoutWeight(1)
+                  if (c.checked) {
+                    Text('已安装')
+                      .fontSize(11).fontColor('#5B93BF')
+                      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                      .backgroundColor('rgba(91,147,191,0.15)').borderRadius(8)
+                  } else {
+                    Button(this.catalogBusy && this.catalogDownloadingId === c.id ? '下载中' : '下载')
+                      .fontSize(12).fontColor('#E5FFFFFF')
+                      .backgroundColor(this.catalogBusy ? 'rgba(255,255,255,0.10)' : 'rgba(107,163,214,0.35)')
+                      .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+                      .enabled(!this.catalogBusy)
+                      .onClick(() => { this.startCatalogDownload(c.id) })
+                  }
+                }.width('100%')
+                if (this.catalogBusy && this.catalogDownloadingId === c.id && this.catalogMsg.length > 0) {
+                  Text(this.catalogMsg).fontSize(11).fontColor('#99FFFFFF').width('100%')
+                }
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('rgba(255,255,255,0.04)')
+              .borderRadius(12)
+              .border({ width: 1, color: this.nmBorder() })
+            }, (c: StarCatalogItem) => c.id)
+          }.width('100%').padding({ left: 2, right: 2 })
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+      }
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -3997,6 +4229,9 @@ private loadPlanetPositions(): void {
     }
     if (this.activePanel === 'settings') {
       return $r('app.string.i0102')
+    }
+    if (this.activePanel === 'catalogs') {
+      return '星表下载'
     }
     return $r('app.string.i0101')
   }

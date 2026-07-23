@@ -51,6 +51,11 @@
 #include "GridLinesMgr.hpp"
 #include "MilkyWay.hpp"
 
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QFile>
+
 #include <QByteArray>
 #include <QDateTime>
 #include <QDebug>
@@ -686,6 +691,112 @@ QJsonObject currentStateJson()
 	}
 }
 
+namespace {
+// OHOS 星表下载器：把 ConfigurationDialog 里耦合 UI 的下载逻辑抽成不依赖界面的版本，
+// 通过 N-API 命令桥触发；进度由 ArkTS 侧轮询 getStarCatalogStatus 获取（桥是请求-响应模式，无 C++→ArkTS 推送）。
+struct StarCatalogDownloader
+{
+	QPointer<QNetworkReply> reply;
+	QFile* file = nullptr;
+	QVariantMap target;
+	QString id;
+	qint64 bytes = 0;
+	bool done = false;
+	bool error = false;
+	QString errorStr;
+	bool md5ok = false;
+
+	void connectReply(QNetworkReply* r)
+	{
+		QObject::connect(r, &QNetworkReply::readyRead, [this, r]() {
+			if (!file) return;
+			qint64 sz = r->bytesAvailable();
+			bytes += sz;
+			file->write(r->read(sz));
+		});
+		QObject::connect(r, &QNetworkReply::finished, [this]() { onFinished(); });
+		QObject::connect(r, QOverload<QNetworkReply::NetworkError>::of(&QNetworkReply::errorOccurred),
+		                 [this](QNetworkReply::NetworkError) { onError(); });
+	}
+
+	void start(const QString& catalogId)
+	{
+		reset();
+		StarMgr* sm = GETSTELMODULE(StarMgr);
+		if (!sm) { error = true; errorStr = "no StarMgr"; done = true; return; }
+		QVariantMap found;
+		for (const QVariant& v : sm->getCatalogsDescription())
+		{
+			QVariantMap m = v.toMap();
+			if (m.value("id").toString() == catalogId) { found = m; break; }
+		}
+		if (found.isEmpty()) { error = true; errorStr = "catalog not found: " + catalogId; done = true; return; }
+		target = found; id = catalogId;
+		QString fileName = found.value("fileName").toString();
+		QString path = StelFileMgr::getUserDir() + "/stars/hip_gaia3/" + fileName;
+		file = new QFile(path);
+		if (!file->open(QIODevice::WriteOnly)) {
+			qWarning() << "[StellariumOhos] cannot open star catalog file:" << QDir::toNativeSeparators(path);
+			error = true; errorStr = "cannot open file: " + path; done = true;
+			delete file; file = nullptr; return;
+		}
+		QNetworkRequest req(found.value("url").toString());
+		req.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+		req.setAttribute(QNetworkRequest::RedirectionTargetAttribute, false);
+		req.setRawHeader("User-Agent", StelUtils::getUserAgentString().toLatin1());
+		reply = StelApp::getInstance().getNetworkAccessManager()->get(req);
+		reply->setReadBufferSize(1024*1024*2);
+		connectReply(reply);
+		qInfo() << "[StellariumOhos] star catalog download start:" << catalogId << found.value("url").toString();
+	}
+
+	void onFinished()
+	{
+		if (!reply) return;
+		if (reply->error() != QNetworkReply::NoError) { onError(); return; }
+		QVariant redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
+		if (!redirect.isNull())
+		{
+			// SourceForge 的 /download URL 会 302 跳转到 CDN，跟随重定向。
+			QNetworkRequest req(redirect.toUrl());
+			req.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+			req.setAttribute(QNetworkRequest::RedirectionTargetAttribute, false);
+			req.setRawHeader("User-Agent", StelUtils::getUserAgentString().toLatin1());
+			QNetworkReply* old = reply;
+			reply = StelApp::getInstance().getNetworkAccessManager()->get(req);
+			reply->setReadBufferSize(1024*1024*2);
+			connectReply(reply);
+			old->deleteLater();
+			return;
+		}
+		if (file) { file->close(); file->deleteLater(); file = nullptr; }
+		StarMgr* sm = GETSTELMODULE(StarMgr);
+		if (sm) md5ok = sm->checkAndLoadCatalog(target, true);
+		done = true;
+		qInfo() << "[StellariumOhos] star catalog download finished:" << id << "md5ok=" << md5ok;
+		if (reply) { reply->deleteLater(); reply = nullptr; }
+	}
+
+	void onError()
+	{
+		error = true;
+		errorStr = reply ? reply->errorString() : QString("unknown");
+		done = true;
+		qWarning() << "[StellariumOhos] star catalog download error:" << id << errorStr;
+		if (file) { file->close(); file->deleteLater(); file = nullptr; }
+		if (reply) { reply->deleteLater(); reply = nullptr; }
+	}
+
+	void reset()
+	{
+		if (file) { file->close(); delete file; file = nullptr; }
+		if (reply) { reply->deleteLater(); reply = nullptr; }
+		bytes = 0; done = false; error = false; errorStr.clear(); md5ok = false; target.clear(); id.clear();
+	}
+};
+static StarCatalogDownloader g_starDownloader;
+}
+
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
 {
 	static QByteArray response;
@@ -733,11 +844,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["id"] = action->getId();
 			result["checkable"] = action->isCheckable();
-			result["checked"] = action->isCheckable() ? action->isChecked() : false;
-			return result;
-		}
+		result["checked"] = action->isCheckable() ? action->isChecked() : false;
+		return result;
+	}
 
-		if (commandName == "saveScreenShot")
+	if (commandName == "selftestActions")
+	{
+		QStringList ids = arg.split('|', Qt::SkipEmptyParts);
+		QStringList missingIds;
+		for (const QString& id : ids)
+		{
+			StelAction* a = actionMgr ? actionMgr->findAction(id) : nullptr;
+			if (!a) missingIds.append(id);
+		}
+		result["ok"] = true;
+		result["total"] = ids.size();
+		result["missing"] = missingIds.size();
+		qInfo() << "[StellariumOhos] selftest_summary total=" << ids.size() << "missing=" << missingIds.size();
+		for (const QString& m : missingIds)
+			qInfo() << "[StellariumOhos] selftest_missing" << m;
+		return result;
+	}
+
+	if (commandName == "getStarCatalogs")
+	{
+		StarMgr* sm = GETSTELMODULE(StarMgr);
+		QJsonArray arr;
+		if (sm)
+		{
+			for (const QVariant& v : sm->getCatalogsDescription())
+				arr.append(QJsonObject::fromVariantMap(v.toMap()));
+		}
+		result["ok"] = true;
+		result["catalogs"] = arr;
+		return result;
+	}
+
+	if (commandName == "downloadStarCatalog")
+	{
+		g_starDownloader.start(arg);
+		result["ok"] = true;
+		result["started"] = true;
+		result["id"] = arg;
+		return result;
+	}
+
+	if (commandName == "getStarCatalogStatus")
+	{
+		result["ok"] = true;
+		result["id"] = g_starDownloader.id;
+		result["state"] = g_starDownloader.done ? (g_starDownloader.error ? QString("error") : QString("done")) : QString("downloading");
+		result["bytes"] = (qint64)g_starDownloader.bytes;
+		result["error"] = g_starDownloader.errorStr;
+		result["md5ok"] = g_starDownloader.md5ok;
+		return result;
+	}
+
+	if (commandName == "saveScreenShot")
 		{
 			StelMainView::getInstance().saveScreenShot();
 			result["ok"] = true;
