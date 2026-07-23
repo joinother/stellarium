@@ -5,6 +5,19 @@
 
 ---
 
+## [2026-07-23] WorkBuddy - 新增书签系统（保存/跳转常用视角，ArkTS 面板 + C++ 桥）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 书签桥）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS 面板，同步到 `build/.../MainWindowNativeNode.ets`）
+  - 新增图标 `.../resources/base/media/ic_bookmark.svg`（同步到镜像）
+- **修改内容：**
+  1. C++：因核心无 BookmarkMgr，自建轻量桥——`BookmarkItem` 结构 + `bookmarksLoad/Save`（持久化到 `userDir/bookmarks.json`），命令桥新增 4 条：`addBookmark <name>`（存当前 J2000 视方向单位向量 + FOV + 选中天体 EnglishName）、`getBookmarks`（返回 items 列表）、`deleteBookmark <id>`、`gotoBookmark <id>`（`setViewDirectionJ2000` + `setFov` 恢复视角）。均在 Qt 线程执行（`runOhosCommandOnQtThread`）。
+  2. ArkTS：左侧栏新增「书签」按钮（新图标 `ic_bookmark`）；面板含「名称输入 + 保存当前视图」+ 书签列表（点标题跳转、点删除移除），方法 `loadBookmarks/addCurrentBookmark/gotoBookmark/deleteBookmark`。
+- **修改原因：** 补齐 GAP-ANALYSIS P0 #35「书签系统」，让用户保存/快速回到常用天体视角。
+- **构建结果：** C++ 增量编译通过（`getObjectName()` 不存在，改用 `getEnglishName()`）；`assembleHap` BUILD SUCCESSFUL（ArkTS 零错误）。
+- **验证结果（2026-07-23，模拟器 127.0.0.1:5555，`/tmp/verify_bookmarks.py`）：** 打开书签面板 → 保存当前视图 → 列表出现书签行（副标题「FOV 60.0°」）→ 点击跳转 → 删除，hilog 实锤 4 条命令全部触发：`Stellarium command addBookmark / getBookmarks / gotoBookmark / deleteBookmark`，**ALL PASS**。
+
 ## [2026-07-23] WorkBuddy - 新增星表下载功能（ArkTS 界面 + C++ 下载桥）
 
 - **修改文件：**

@@ -795,6 +795,75 @@ struct StarCatalogDownloader
 	}
 };
 static StarCatalogDownloader g_starDownloader;
+
+// ---- Bookmarks store (OHOS bridge) ----
+// 保存当前视图（J2000 视方向单位向量 + 视场 + 选中天体名）到 userDir/bookmarks.json
+struct BookmarkItem
+{
+	QString id;
+	QString name;
+	double vx = 0, vy = 0, vz = 1;   // view direction (J2000 equatorial, unit vector)
+	double fov = 60;
+	QString object;                 // selected object display name (optional)
+};
+static QList<BookmarkItem> g_bookmarks;
+static bool g_bookmarksLoaded = false;
+
+static QString bookmarksPath()
+{
+	return StelFileMgr::getUserDir() + "/bookmarks.json";
+}
+
+static void bookmarksLoad()
+{
+	g_bookmarks.clear();
+	QFile f(bookmarksPath());
+	if (f.open(QIODevice::ReadOnly))
+	{
+		const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+		f.close();
+		if (doc.isArray())
+		{
+			for (const QJsonValue& v : doc.array())
+			{
+				const QJsonObject o = v.toObject();
+				BookmarkItem it;
+				it.id = o.value("id").toString();
+				it.name = o.value("name").toString();
+				it.vx = o.value("vx").toDouble();
+				it.vy = o.value("vy").toDouble();
+				it.vz = o.value("vz").toDouble();
+				it.fov = o.value("fov").toDouble();
+				it.object = o.value("object").toString();
+				g_bookmarks.append(it);
+			}
+		}
+	}
+	g_bookmarksLoaded = true;
+}
+
+static void bookmarksSave()
+{
+	QJsonArray arr;
+	for (const BookmarkItem& it : g_bookmarks)
+	{
+		QJsonObject o;
+		o["id"] = it.id;
+		o["name"] = it.name;
+		o["vx"] = it.vx;
+		o["vy"] = it.vy;
+		o["vz"] = it.vz;
+		o["fov"] = it.fov;
+		o["object"] = it.object;
+		arr.append(o);
+	}
+	QFile f(bookmarksPath());
+	if (f.open(QIODevice::WriteOnly))
+	{
+		f.write(QJsonDocument(arr).toJson());
+		f.close();
+	}
+}
 }
 
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
@@ -3270,6 +3339,84 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// ========== End Phase 2b ==========
 
 		// ========== End Phase 2 ==========
+
+		// ---- Bookmarks (OHOS bridge) ----
+		if (commandName == "addBookmark")
+		{
+			if (!g_bookmarksLoaded) bookmarksLoad();
+			BookmarkItem it;
+			it.id = QString("bm_%1").arg(QDateTime::currentMSecsSinceEpoch());
+			it.name = arg.isEmpty() ? QString("书签") : arg;
+			if (movementMgr)
+			{
+				const Vec3d d = movementMgr->getViewDirectionJ2000();
+				it.vx = d[0]; it.vy = d[1]; it.vz = d[2];
+				it.fov = movementMgr->getCurrentFov();
+			}
+			if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+			{
+				StelObjectP obj = objectMgr->getSelectedObject().first();
+				it.object = obj->getEnglishName();
+			}
+			g_bookmarks.append(it);
+			bookmarksSave();
+			result["ok"] = true;
+			result["id"] = it.id;
+			result["name"] = it.name;
+			return result;
+		}
+
+		if (commandName == "getBookmarks")
+		{
+			if (!g_bookmarksLoaded) bookmarksLoad();
+			QJsonArray items;
+			for (const BookmarkItem& it : g_bookmarks)
+			{
+				QJsonObject o;
+				o["id"] = it.id;
+				o["name"] = it.name;
+				o["fov"] = it.fov;
+				o["object"] = it.object;
+				o["vx"] = it.vx; o["vy"] = it.vy; o["vz"] = it.vz;
+				items.append(o);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			result["count"] = g_bookmarks.size();
+			return result;
+		}
+
+		if (commandName == "deleteBookmark")
+		{
+			if (!g_bookmarksLoaded) bookmarksLoad();
+			const int removed = g_bookmarks.removeIf([&](const BookmarkItem& it) { return it.id == arg; });
+			bookmarksSave();
+			result["ok"] = true;
+			result["removed"] = removed;
+			return result;
+		}
+
+		if (commandName == "gotoBookmark")
+		{
+			if (!g_bookmarksLoaded) bookmarksLoad();
+			bool found = false;
+			for (const BookmarkItem& it : g_bookmarks)
+			{
+				if (it.id == arg)
+				{
+					if (movementMgr)
+					{
+						movementMgr->setViewDirectionJ2000(Vec3d(it.vx, it.vy, it.vz));
+						movementMgr->setFov(it.fov);
+					}
+					found = true;
+					break;
+				}
+			}
+			if (found) { result["ok"] = true; }
+			else { result["ok"] = false; result["error"] = "bookmark not found: " + arg; }
+			return result;
+		}
 
 		result["error"] = "unknown command";
 		result["command"] = commandName;

@@ -92,8 +92,8 @@
 
 | # | 功能 | 截图证据 | 影响 | 优先级 | 说明 |
 |---|------|---------|------|--------|------|
-| 34 | **补充星表下载** | 02.03.45 "Get catalog 5 of 9" 53.1MB | 无法下载更多星星数据 | **P0** | 桌面版支持下载 9 个额外星表（至 12 等），鸿蒙端未见 downloadCatalog bridge |
-| 35 | 书签系统 | 02.03.41 "Save view" | 无法保存/管理常用天体位置 | **P0** | 未见 saveBookmark/addBookmark 桥接 |
+| 34 | ~~补充星表下载~~ ✅ 已实现 | 02.03.45 "Get catalog 5 of 9" 53.1MB | 无法下载更多星星数据 | ~~P0~~ 完成 | 桥 getStarCatalogs/downloadStarCatalog/getStarCatalogStatus + ArkTS 面板，模拟器验证通过 |
+| 35 | ~~书签系统~~ ✅ 已实现 | 02.03.41 "Save view" | 无法保存/管理常用天体位置 | ~~P0~~ 完成 | 自建桥 addBookmark/getBookmarks/gotoBookmark/deleteBookmark（存 userDir/bookmarks.json）+ ArkTS 书签面板，模拟器 4 命令端到端验证通过 |
 | 36 | Oculars/望远镜配置 | 02.04.41-05.03 | 无法配置目镜/望远镜/透镜参数 | **P1** | 仅有 LX200 控制，缺 Oculars 插件完整配置面板 |
 | 37 | Satellites 卫星插件 | 多张截图 | 无法显示/追踪人造卫星轨道 | **P1** | 未见 getSatellites/getSatelliteInfo 桥接 |
 | 38 | Speech 语音输出 | 02.03.52 | 无语音播报天体信息 | **P2** | 未见 speech/speak 桥接 |

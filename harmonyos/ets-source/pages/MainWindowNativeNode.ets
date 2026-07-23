@@ -39,6 +39,24 @@ interface StarCatalogStatusResponse extends StellariumBridgeResponse {
   md5ok?: boolean
 }
 
+// 书签（C++ 桥 addBookmark / getBookmarks / deleteBookmark / gotoBookmark）
+interface BookmarkItem {
+  id: string
+  name: string
+  fov: number
+  object: string
+}
+interface BookmarkRaw {
+  id?: string
+  name?: string
+  fov?: number
+  object?: string
+}
+interface BookmarksResponse extends StellariumBridgeResponse {
+  items?: BookmarkRaw[]
+  count?: number
+}
+
 @Entry
 @Component
 struct WindowNativeNode {
@@ -228,6 +246,9 @@ struct WindowNativeNode {
   @State private catalogBusy: boolean = false
   @State private catalogDownloadingId: string = ''
   @State private catalogMsg: string = ''
+  @State private bookmarkList: BookmarkItem[] = []
+  @State private bookmarkLoading: boolean = false
+  @State private newBookmarkName: string = ''
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -302,6 +323,7 @@ struct WindowNativeNode {
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
     { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
+    { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
@@ -497,6 +519,8 @@ struct WindowNativeNode {
       this.refreshState()
     } else if (panel === 'catalogs') {
       if (this.catalogList.length === 0) this.loadStarCatalogs()
+    } else if (panel === 'bookmarks') {
+      this.loadBookmarks()
     }
   }
 
@@ -618,6 +642,55 @@ struct WindowNativeNode {
         this.catalogMsg = '下载中 ' + id + '：' + mb + ' MB'
       }
     }, 600)
+  }
+
+  // ===== 书签（C++ 桥：addBookmark / getBookmarks / deleteBookmark / gotoBookmark）=====
+  private loadBookmarks(): void {
+    this.bookmarkLoading = true
+    this.callNativeWhenReady('getBookmarks', '', (r: StellariumBridgeResponse) => {
+      const resp = r as BookmarksResponse
+      const list = resp.items ?? []
+      this.bookmarkList = list.map((b: BookmarkRaw) => ({
+        id: b.id ?? '',
+        name: b.name ?? '书签',
+        fov: b.fov ?? 60,
+        object: b.object ?? '',
+      }))
+      this.bookmarkLoading = false
+    })
+  }
+
+  // 保存当前视图为书签。C++ 端读取当前 J2000 视方向 + 视场 + 选中天体，名称由 payload 传入。
+  private addCurrentBookmark(): void {
+    const name = this.newBookmarkName.trim()
+    this.callNativeWhenReady('addBookmark', name, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.newBookmarkName = ''
+        this.flashHint('已保存书签')
+        this.loadBookmarks()
+      } else {
+        this.flashHint('保存书签失败')
+      }
+    })
+  }
+
+  private gotoBookmark(id: string): void {
+    this.callInteractive('gotoBookmark', id, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.flashHint('已跳转')
+      } else {
+        this.flashHint('跳转失败')
+      }
+    })
+  }
+
+  private deleteBookmark(id: string): void {
+    this.callNativeWhenReady('deleteBookmark', id, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.flashHint('已删除书签')
+        this.loadBookmarks()
+      }
+    })
   }
 
   private refreshState(): void {
@@ -2305,6 +2378,7 @@ private loadPlanetPositions(): void {
       'info': $r('app.media.ic_info'),
       'settings': $r('app.media.ic_settings'),
       'catalogs': $r('app.media.ic_list'),
+      'bookmarks': $r('app.media.ic_bookmark'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
@@ -3466,6 +3540,60 @@ private loadPlanetPositions(): void {
           }.width('100%').padding({ left: 2, right: 2 })
         }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
       }
+    } else if (this.activePanel === 'bookmarks') {
+      // 书签面板：保存当前视图 + 已存书签列表（点击跳转 / 删除）
+      Column({ space: 10 }) {
+        Row({ space: 8 }) {
+          TextInput({ text: this.newBookmarkName, placeholder: '书签名称（可空）' })
+            .fontSize(13).fontColor('#E5FFFFFF').placeholderColor('#66FFFFFF')
+            .backgroundColor('rgba(255,255,255,0.06)').borderRadius(10)
+            .height(36).layoutWeight(1).padding({ left: 10, right: 10 })
+            .onChange((v: string) => { this.newBookmarkName = v })
+          Button('保存当前视图')
+            .fontSize(12).fontColor('#E5FFFFFF')
+            .backgroundColor('rgba(107,163,214,0.35)')
+            .borderRadius(14).height(36).padding({ left: 14, right: 14 })
+            .onClick(() => { this.addCurrentBookmark() })
+        }.width('100%')
+        if (this.bookmarkLoading) {
+          Column() {
+            Text('正在加载书签…').fontSize(13).fontColor('#66FFFFFF')
+          }.width('100%').height(80).justifyContent(FlexAlign.Center)
+        } else if (this.bookmarkList.length === 0) {
+          Column() {
+            Text('还没有书签').fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
+            Text('调整好视角后点「保存当前视图」').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+          }.width('100%').height(100).justifyContent(FlexAlign.Center)
+        } else {
+          Scroll() {
+            Column({ space: 8 }) {
+              ForEach(this.bookmarkList, (b: BookmarkItem) => {
+                Row() {
+                  Column() {
+                    Text(b.name)
+                      .fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    Text((b.object.length > 0 ? (b.object + ' · ') : '') + 'FOV ' + b.fov.toFixed(1) + '°')
+                      .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+                    .onClick(() => { this.gotoBookmark(b.id) })
+                  Button('删除')
+                    .fontSize(12).fontColor('#E5FFFFFF')
+                    .backgroundColor('rgba(255,255,255,0.10)')
+                    .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+                    .onClick(() => { this.deleteBookmark(b.id) })
+                }
+                .width('100%')
+                .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                .backgroundColor('rgba(255,255,255,0.04)')
+                .borderRadius(12)
+                .border({ width: 1, color: this.nmBorder() })
+              }, (b: BookmarkItem) => b.id)
+            }.width('100%').padding({ left: 2, right: 2 })
+          }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+        }
+      }.width('100%').layoutWeight(1)
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -4232,6 +4360,9 @@ private loadPlanetPositions(): void {
     }
     if (this.activePanel === 'catalogs') {
       return '星表下载'
+    }
+    if (this.activePanel === 'bookmarks') {
+      return '书签'
     }
     return $r('app.string.i0101')
   }
