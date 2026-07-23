@@ -185,7 +185,8 @@ struct WindowNativeNode {
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
-  @State private uiLocked: boolean = true
+  @State private uiLocked: boolean = false
+  @State private panelIdleOpacity: number = 1.0
   @State private panelOffsetX: number = 0
   @State private panelOffsetY: number = 0
   @State private skyTouchFeedback: boolean = false
@@ -195,6 +196,33 @@ struct WindowNativeNode {
   @State private actionHint: ResourceStr = ''
 
   private hintTimer: number = 0
+  private panelIdleTimer: number = -1
+
+  private resetPanelIdle(): void {
+    if (this.panelIdleTimer >= 0) {
+      clearTimeout(this.panelIdleTimer)
+    }
+    this.panelIdleOpacity = 1.0
+    this.panelIdleTimer = setTimeout(() => {
+      this.panelIdleOpacity = 0.65
+      this.panelIdleTimer = -1
+    }, 3000)
+  }
+
+  private sidebarAutoCollapseTimer: number = -1
+
+  private resetSidebarAutoCollapse(): void {
+    if (this.sidebarAutoCollapseTimer >= 0) {
+      clearTimeout(this.sidebarAutoCollapseTimer)
+    }
+    if (!this.uiLocked) {
+      this.sidebarAutoCollapseTimer = setTimeout(() => {
+        this.panelVisible = false
+        this.activePanel = ''
+        this.sidebarAutoCollapseTimer = -1
+      }, 5000)
+    }
+  }
   // 目标详情自动刷新：选中天体后每秒重新拉一次坐标，让“地平坐标”随地球自转实时变化。
   // detailTimer 为 setInterval 句柄；detailRefreshing 防重入；detailRefreshGuard 是兜底定时器，
   // 因为 callNativeWhenReady 在放弃轮询时【不】回调 onOk，必须靠它复位，否则会卡死不再刷新。
@@ -233,6 +261,90 @@ struct WindowNativeNode {
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
+  ]
+
+  private SELFTEST: boolean = true  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
+
+  private readonly SELFTEST_ACTION_IDS: string[] = [
+    "actionHorizontal_Flip",
+    "actionShow_Antisolar_Point",
+    "actionShow_Apex_Points",
+    "actionShow_Asterism_Labels",
+    "actionShow_Asterism_Lines",
+    "actionShow_Atmosphere",
+    "actionShow_Azimuthal_Grid",
+    "actionShow_Celestial_J2000_Poles",
+    "actionShow_Celestial_Poles",
+    "actionShow_Circumpolar_Circles",
+    "actionShow_Colure_Lines",
+    "actionShow_Compass_Marks",
+    "actionShow_Constellation_Art",
+    "actionShow_Constellation_Boundaries",
+    "actionShow_Constellation_Labels",
+    "actionShow_Constellation_Lines",
+    "actionShow_Current_Vertical_Line",
+    "actionShow_DSO_Textures",
+    "actionShow_Ecliptic_Grid",
+    "actionShow_Ecliptic_J2000_Grid",
+    "actionShow_Ecliptic_J2000_Line",
+    "actionShow_Ecliptic_J2000_Poles",
+    "actionShow_Ecliptic_Line",
+    "actionShow_Ecliptic_Poles",
+    "actionShow_Equator_J2000_Line",
+    "actionShow_Equator_Line",
+    "actionShow_Equatorial_Grid",
+    "actionShow_Equatorial_J2000_Grid",
+    "actionShow_Equinox_J2000_Points",
+    "actionShow_Equinox_Points",
+    "actionShow_FOV_Center_Marker",
+    "actionShow_Fixed_Equator_Line",
+    "actionShow_Fixed_Equatorial_Grid",
+    "actionShow_Fog",
+    "actionShow_Galactic_Center",
+    "actionShow_Galactic_Equator_Line",
+    "actionShow_Galactic_Grid",
+    "actionShow_Galactic_Poles",
+    "actionShow_Ground",
+    "actionShow_Hips_Surveys",
+    "actionShow_Horizon_Line",
+    "actionShow_Intercardinal_Points",
+    "actionShow_Invariable_Plane_Line",
+    "actionShow_LandscapeIllumination",
+    "actionShow_LandscapeLabels",
+    "actionShow_Longitude_Line",
+    "actionShow_LunarSystem",
+    "actionShow_Meridian_Line",
+    "actionShow_MilkyWay",
+    "actionShow_Nebulas",
+    "actionShow_Night_Mode",
+    "actionShow_Penumbra_Circle",
+    "actionShow_Planets",
+    "actionShow_Planets_EnlargeMoon",
+    "actionShow_Planets_EnlargePlanets",
+    "actionShow_Planets_EnlargeSun",
+    "actionShow_Planets_Hints",
+    "actionShow_Planets_Nomenclature",
+    "actionShow_Planets_Orbits",
+    "actionShow_Planets_ShowMinorBodyMarkers",
+    "actionShow_Planets_Trails",
+    "actionShow_Precession_Circles",
+    "actionShow_Prime_Vertical_Line",
+    "actionShow_Quadrature_Line",
+    "actionShow_Solar_Equator_Line",
+    "actionShow_Solstice_J2000_Points",
+    "actionShow_Solstice_Points",
+    "actionShow_Stars",
+    "actionShow_Stars_Labels",
+    "actionShow_Supergalactic_Equator_Line",
+    "actionShow_Supergalactic_Grid",
+    "actionShow_Supergalactic_Poles",
+    "actionShow_Toast_Survey",
+    "actionShow_Umbra_Center_Point",
+    "actionShow_Umbra_Circle",
+    "actionShow_Zenith_Nadir",
+    "actionShow_Zodiac",
+    "actionSwitch_Equatorial_Mount",
+    "actionVertical_Flip"
   ]
 
   aboutToAppear(): void {
@@ -308,6 +420,7 @@ struct WindowNativeNode {
     }
     // 默认语言设置为中文
     this.setLanguage('zh_CN')
+    if (this.SELFTEST) { this.selfTestAllActions() }
   }
 
   aboutToDisappear(): void {
@@ -330,6 +443,10 @@ struct WindowNativeNode {
       this.activePanel = panel
       this.panelVisible = nextVisible
     })
+    if (nextVisible) {
+      this.resetPanelIdle()
+      this.resetSidebarAutoCollapse()
+    }
     if (panel === 'object') {
       this.refreshSelectedObject()
     } else if (panel === 'layers' || panel === 'time' || panel === 'place' || panel === 'settings') {
@@ -338,6 +455,9 @@ struct WindowNativeNode {
   }
 
   private closePanel(): void {
+    if (this.uiLocked) {
+      return
+    }
     this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
       this.panelVisible = false
     })
@@ -1422,13 +1542,16 @@ private loadPlanetPositions(): void {
     const top = this.panelTop()
     const right = this.panelRight()
     if (x >= right - 60 && x <= right && y >= top && y <= top + 60) {
-      this.panelVisible = false
+      if (!this.uiLocked) {
+        this.panelVisible = false
+      }
       return true
     }
 
     if (x < left || x > right || y < top || y > top + 900) {
       return false
     }
+    this.resetSidebarAutoCollapse()
 
     // Layer toggles are handled by Toggle.onChange in switchRow Builder
     // Hardcoded coordinates removed - layout changed with grouped sections
@@ -1718,7 +1841,7 @@ private loadPlanetPositions(): void {
         .height('100%')
         .hitTestBehavior(HitTestMode.Transparent)
         .onTouch((event: TouchEvent) => {
-          this.handleSkyTouch(event)
+          this.handleOverlayTouch(event)
         })
 
       this.expandedShell()
@@ -2089,6 +2212,7 @@ private loadPlanetPositions(): void {
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
       .animation({ duration: 220, curve: Curve.EaseOut })
+      .opacity(this.panelIdleOpacity)
   }
 
   @Builder
@@ -2116,6 +2240,7 @@ private loadPlanetPositions(): void {
       .margin({ bottom: 10 })
       .alignSelf(ItemAlign.Center)
       .animation({ duration: 220, curve: Curve.EaseOut })
+      .opacity(this.panelIdleOpacity)
   }
 
   @Builder
@@ -2143,6 +2268,22 @@ private loadPlanetPositions(): void {
           .margin({ top: 3 })
       }
       Blank()
+      Row() {
+        Text(this.uiLocked ? "\U0001F4CC" : "\U0001F4CC")
+          .fontSize(16)
+          .fontColor(this.uiLocked ? "#FFD700" : "#66FFFFFF")
+      }
+      .width(36)
+      .height(36)
+      .borderRadius(18)
+      .backgroundColor(this.uiLocked ? "rgba(255, 215, 0, 0.15)" : "rgba(255, 255, 255, 0.06)")
+      .justifyContent(FlexAlign.Center)
+      .alignItems(VerticalAlign.Center)
+      .onClick(() => {
+        this.uiLocked = !this.uiLocked
+        this.flashHint(this.uiLocked ? $r('app.string.s0717') : $r('app.string.s0718'))
+      })
+      .margin({ right: 6 })
       this.smallRoundButton('×', () => {
         this.closePanel()
       })
@@ -3790,6 +3931,16 @@ private loadPlanetPositions(): void {
       .backgroundColor(this.nmBg())
       .borderRadius(12)
       .margin({ bottom: 4 })
+  }
+
+  private selfTestAllActions(): void {
+    hilog.info(0x0000, 'StellariumArkUI', 'selftest send %{public}d ids', this.SELFTEST_ACTION_IDS.length)
+    // 引擎核心(StelApp)在启动早期尚未就绪，命令会先返回 pending 不入队；
+    // 用更长重试窗口(100ms x 120 = 12s)撑过初始化，确保真正跑到 C++ 自检。
+    this.callNativeWhenReady('selftestActions', this.SELFTEST_ACTION_IDS.join('|'), (r: StellariumBridgeResponse) => {
+      // 把整包响应(含 total/missing)打在一行里，避免被启动期日志冲掉
+      hilog.info(0x0000, 'StellariumArkUI', 'selftest done %{public}s', JSON.stringify(r))
+    }, 0, 100, 120)
   }
 
   @Builder
