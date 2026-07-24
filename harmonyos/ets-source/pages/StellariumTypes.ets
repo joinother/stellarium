@@ -322,6 +322,7 @@ export interface StellariumBridgeResponse {
   fps?: number
   duration?: number
   planets?: string[]
+  tonight?: TonightEvents
 }
 
 export interface SessionSnapshot {
@@ -331,4 +332,49 @@ export interface SessionSnapshot {
   location?: object
   selected?: string
   flags?: object
+}
+
+// 今夜天文事件聚合（getTonightEvents 返回）
+export interface TonightMoon {
+  phaseName?: string
+  illumination?: number
+  age?: number
+  rise?: string
+  transit?: string
+  set?: string
+}
+export interface TonightSun {
+  rise?: string
+  transit?: string
+  set?: string
+  astroTwilightEnd?: string
+  astroTwilightStart?: string
+  darkWindowHours?: number
+}
+export interface TonightPlanet {
+  name?: string
+  englishName?: string
+  rise?: string
+  transit?: string
+  set?: string
+  magnitude?: number
+  altitude?: number
+  visible?: boolean
+}
+export interface TonightShower {
+  name?: string
+  zhr?: number
+  status?: string
+}
+export interface TonightSatellites {
+  count?: number
+  enabled?: boolean
+}
+export interface TonightEvents {
+  date?: string
+  moon?: TonightMoon
+  sun?: TonightSun
+  planets?: Array<TonightPlanet>
+  meteorShowers?: Array<TonightShower>
+  satellites?: TonightSatellites
 }

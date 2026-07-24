@@ -5,6 +5,17 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 今夜天文事件面板（能力 C：今晚看什么）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `getTonightEvents` 聚合命令——月相/月龄/照亮率与月升落、太阳升落与天文暮光暗夜窗口、7 大行星升落/星等/地平线可见性、活跃流星雨（ZHR/状态）、卫星概况；本地时间用 `core->getUTCOffset(jd)` 换算）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（新增 `TonightEvents`/`TonightMoon`/`TonightSun`/`TonightPlanet`/`TonightShower`/`TonightSatellites` 具名接口——拆自内联对象字面量类型，规避 ArkTS `arkts-no-obj-literals-as-types`）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（位置面板新增「今夜天文事件」区：@State 状态、`@Builder tonightEventsSection()` + `tonightCard()`、`refreshTonight()` 经 `callNativeWhenReady('getTonightEvents')` 拉取并格式化、`fmtIso()` 裁本地时间；「刷新今晚天象」按钮触发）
+  - `docs/harmonyos/GAP-ANALYSIS.md`（面板完成度表新增「今夜天文事件」行，天文计算命令数 ~5→~6）
+- **修改内容：** 把"今晚值得一看"聚合到一个侧栏面板入口：月相（中文名/照亮率/月龄/升落）、太阳与天文暮光暗夜窗口、7 大行星升落时刻+星等+✓可见/✗地平线下、活跃流星雨（ZHR≈）、卫星概况。为后续接入小艺 AI query 铺垫数据源。
+- **构建结果：** C++ 增量编译通过；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：** 打开位置面板 → 滚动至「今夜天文事件」区 → 点「刷新今晚天象」→ ArkTS hilog 确认 `Stellarium command getTonightEvents` 分发、回调 `ok=1 tn=Y`；面板渲染 hint「已更新 · 07-24 20:27」与月相/太阳/行星/卫星卡片（例：盈凸月 照亮 78% · 月龄 10.1 天；金星 星等 -4.2 · ✓可见）。端到端链路完整跑通。
+
 ## [2026-07-24] WorkBuddy - 虚拟指星笔手表陀螺仪模式 + 多设备接续（无缝流转，#48/#49）
 
 - **修改文件：**

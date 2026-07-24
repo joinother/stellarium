@@ -20,7 +20,7 @@
 | 插件/脚本 | ~11 | loadPlugin, unloadPlugin, playScript, stopScript |
 | 投影/FOV/语言 | ~10 | setProjectionType, setFOV, setLanguage, setDateFormat |
 | 星座/文化 | ~7 | setSkyCulture, getConstellationList, getConstellationInfo |
-| 天文计算 | ~5 | getRTS, getAlmanac, getObjectPositions, getDistanceInfo |
+| 天文计算 | ~6 | getRTS, getAlmanac, getObjectPositions, getDistanceInfo, getTonightEvents（今夜天文事件聚合） |
 | LX200 望远镜 | ~3 | telescopeLx200GotoSelected, SyncSelected, Abort |
 | 地景/大气 | ~15 | getLandscapeList, setLandscape, setLightPollution, setBortleScale |
 | 配置/状态 | ~5 | getConfigString, setConfigString, getDeltaT, setMountMode |
@@ -45,6 +45,7 @@
 | 卫星 | 11 | 完成（5 开关 + 分组 + 总数） | 5 |
 | 流星雨 | 12 | 完成（4 开关） | 4 |
 | 帮助 | 13 | 完成（关于/日志/配置导入导出） | 0 |
+| 今夜天文事件 | 14 | 完成（月相/行星升落星等/活跃流星雨/暗夜窗口/卫星概况） | 0 |
 
 ## 三、桌面版截图功能逐项对比
 

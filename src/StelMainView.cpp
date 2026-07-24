@@ -47,6 +47,8 @@
 #include "../plugins/Oculars/src/Oculars.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
+#include "../plugins/MeteorShowers/src/MeteorShower.hpp"
+#include "../plugins/MeteorShowers/src/MeteorShowers.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
@@ -4110,6 +4112,138 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else ok = false;
 			result["ok"] = ok;
 			if (!ok) result["error"] = "unknown meteor showers flag: " + name;
+			return result;
+		}
+
+		// getTonightEvents — 聚合"今晚看什么"：月相、日月升落与天文暮光、
+		// 主要行星升落/星等/可见性、活跃流星雨、卫星概况。供 ArkTS 今夜天文事件面板。
+		if (commandName == "getTonightEvents")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+
+			auto fmtLocal = [&](double jd) -> QString {
+				if (jd <= 0) return QString();
+				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+			};
+			auto moonPhaseNameZh = [](double age) -> QString {
+				if (age < 1.0 || age > 28.5) return QStringLiteral("新月");
+				if (age < 6.4) return QStringLiteral("蛾眉月");
+				if (age < 8.4) return QStringLiteral("上弦月");
+				if (age < 13.9) return QStringLiteral("盈凸月");
+				if (age < 15.9) return QStringLiteral("满月");
+				if (age < 21.4) return QStringLiteral("亏凸月");
+				if (age < 23.4) return QStringLiteral("下弦月");
+				return QStringLiteral("残月");
+			};
+
+			QJsonObject out;
+
+			// 月相
+			QJsonObject moonObj;
+			PlanetP moon = ssys->getMoon();
+			if (moon)
+			{
+				QVariantMap mim = moon->getInfoMap(core);
+				double age = mim.value("age", 0).toDouble();
+				double illum = mim.value("illumination", 0).toDouble();
+				moonObj["phaseName"] = moonPhaseNameZh(age);
+				moonObj["illumination"] = illum;
+				moonObj["age"] = age;
+				Vec4d mrts = moon->getRTSTime(core);
+				moonObj["rise"] = fmtLocal(mrts[0]);
+				moonObj["transit"] = fmtLocal(mrts[1]);
+				moonObj["set"] = fmtLocal(mrts[2]);
+			}
+			out["moon"] = moonObj;
+
+			// 太阳与天文暮光
+			QJsonObject sunObj;
+			PlanetP sun = ssys->getSun();
+			if (sun)
+			{
+				Vec4d srts = sun->getRTSTime(core);
+				sunObj["rise"] = fmtLocal(srts[0]);
+				sunObj["transit"] = fmtLocal(srts[1]);
+				sunObj["set"] = fmtLocal(srts[2]);
+				Vec4d astro = sun->getRTSTime(core, -18.0);
+				sunObj["astroTwilightEnd"] = fmtLocal(astro[2]);
+				sunObj["astroTwilightStart"] = fmtLocal(astro[0]);
+				if (astro[2] > 0 && astro[0] > astro[2])
+					sunObj["darkWindowHours"] = (astro[0] - astro[2]) * 24.0;
+			}
+			out["sun"] = sunObj;
+
+			// 主要行星升落 + 星等 + 当前可见性
+			QJsonArray planets;
+			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars"
+												   << "Jupiter" << "Saturn" << "Uranus" << "Neptune";
+			for (const QString& pn : planetNames)
+			{
+				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
+				if (!p) continue;
+				QJsonObject po;
+				po["name"] = p->getNameI18n();
+				po["englishName"] = pn;
+				Vec4d rts = p->getRTSTime(core);
+				po["rise"] = fmtLocal(rts[0]);
+				po["transit"] = fmtLocal(rts[1]);
+				po["set"] = fmtLocal(rts[2]);
+				po["magnitude"] = p->getVMagnitude(core);
+				Vec3d altaz = p->getAltAzPosApparent(core);
+				double alt = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
+				po["altitude"] = alt;
+				po["visible"] = alt > 0;
+				planets.append(po);
+			}
+			out["planets"] = planets;
+
+			// 活跃流星雨
+			QJsonArray showers;
+			MeteorShowersMgr* msMgr = GETSTELMODULE(MeteorShowersMgr);
+			if (msMgr && msMgr->getEnablePlugin())
+			{
+				MeteorShowers* msColl = msMgr->getMeteorShowers();
+				if (msColl)
+				{
+					QVector<QPair<QString, StelObjectP>> all = msColl->listAllObjects(false);
+					for (const auto& pr : all)
+					{
+						MeteorShowerP sh = qSharedPointerCast<MeteorShower>(pr.second);
+						if (!sh) continue;
+						MeteorShower::Status st = sh->getStatus();
+						if (st == MeteorShower::ACTIVE_CONFIRMED || st == MeteorShower::ACTIVE_GENERIC)
+						{
+							QJsonObject so;
+							so["name"] = sh->getNameI18n();
+							so["zhr"] = sh->getZHR();
+							so["status"] = (st == MeteorShower::ACTIVE_CONFIRMED) ? "confirmed" : "generic";
+							showers.append(so);
+						}
+					}
+				}
+			}
+			out["meteorShowers"] = showers;
+
+			// 卫星概况
+			QJsonObject satObj;
+			Satellites* sats = GETSTELMODULE(Satellites);
+			if (sats)
+			{
+				satObj["count"] = sats->listAllIds().size();
+				satObj["enabled"] = true;
+			}
+			else
+			{
+				satObj["enabled"] = false;
+				satObj["count"] = 0;
+			}
+			out["satellites"] = satObj;
+
+			out["date"] = fmtLocal(core->getJD());
+
+			result["ok"] = true;
+			result["tonight"] = out;
 			return result;
 		}
 

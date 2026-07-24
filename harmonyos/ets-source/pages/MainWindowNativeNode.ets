@@ -5,7 +5,7 @@ import { sensor } from '@kit.SensorServiceKit'
 import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
-import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 
 // 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
 interface StarCatalogItem {
@@ -204,6 +204,14 @@ struct WindowNativeNode {
   @State private sessionExportSig: string = ''
   @State private sessionHint: string = ''
   @State private canUseDistributed: boolean = false
+  @State private tonightDate: string = ''
+  @State private tonightMoon: string = ''
+  @State private tonightSun: string = ''
+  @State private tonightDark: string = ''
+  @State private tonightPlanets: string[] = []
+  @State private tonightShowers: string[] = []
+  @State private tonightSats: string = ''
+  @State private tonightHint: string = ''
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -2245,6 +2253,67 @@ private loadPlanetPositions(): void {
     }.width('100%').padding({ left: 10, right: 10 })
   }
 
+  @Builder tonightEventsSection() {
+    Column({ space: 8 }) {
+      Text('今夜天文事件').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
+      Text('聚合今晚值得一看的天象：月相、行星升落与星等、活跃流星雨、卫星概况与暗夜窗口。')
+        .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      Button('刷新今晚天象')
+        .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+        .borderRadius(10).height(34).width('100%')
+        .onClick(() => { this.refreshTonight() })
+      if (this.tonightHint !== '') {
+        Text(this.tonightHint).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
+      }
+      if (this.tonightDate !== '') {
+        this.tonightCard('🌙 月相', [this.tonightMoon])
+        this.tonightCard('☀️ 太阳 / 暗夜窗口', [this.tonightSun, this.tonightDark])
+        this.tonightCard('🪐 行星', this.tonightPlanets)
+        if (this.tonightShowers.length > 0) this.tonightCard('☄️ 活跃流星雨', this.tonightShowers)
+        this.tonightCard('🛰️ 卫星', [this.tonightSats])
+      }
+    }.width('100%').padding({ left: 10, right: 10 })
+  }
+
+  @Builder tonightCard(title: string, lines: string[]) {
+    Column({ space: 4 }) {
+      Text(title).fontSize(12).fontColor('#FFE9B0').width('100%')
+      ForEach(lines, (ln: string) => {
+        Text(ln).fontSize(11).fontColor('#DDDDDD').width('100%')
+      }, (ln: string) => ln)
+    }.width('100%').padding(8).backgroundColor('#1A2330').borderRadius(8).margin({ top: 4 })
+  }
+
+  private refreshTonight(): void {
+    this.callNativeWhenReady('getTonightEvents', '', (r: StellariumBridgeResponse) => {
+      if (!r.ok || !r.tonight) { this.flashHint('获取失败'); return }
+      const t = r.tonight as TonightEvents
+      this.tonightDate = this.fmtIso(t.date ?? '')
+      this.tonightMoon = '月相：' + (t.moon?.phaseName ?? '未知') + '（照亮 ' + Math.round(t.moon?.illumination ?? 0) + '% · 月龄 ' + (t.moon?.age ?? 0).toFixed(1) + ' 天）\n'
+        + '  升 ' + this.fmtIso(t.moon?.rise ?? '') + ' · 中天 ' + this.fmtIso(t.moon?.transit ?? '') + ' · 落 ' + this.fmtIso(t.moon?.set ?? '')
+      this.tonightSun = '升 ' + this.fmtIso(t.sun?.rise ?? '') + ' · 中天 ' + this.fmtIso(t.sun?.transit ?? '') + ' · 落 ' + this.fmtIso(t.sun?.set ?? '')
+      this.tonightDark = '天文暮光结束 ' + this.fmtIso(t.sun?.astroTwilightEnd ?? '') + ' → 晨光 ' + this.fmtIso(t.sun?.astroTwilightStart ?? '')
+        + (t.sun?.darkWindowHours !== undefined ? ('（暗夜约 ' + t.sun.darkWindowHours.toFixed(1) + ' 小时）') : '')
+      this.tonightPlanets = (t.planets ?? []).map((p) => {
+        const vis = p.visible === true ? '✓可见' : '✗地平线下'
+        return (p.name ?? '') + '：升 ' + this.fmtIso(p.rise ?? '') + ' · 中天 ' + this.fmtIso(p.transit ?? '') + ' · 落 ' + this.fmtIso(p.set ?? '')
+          + ' · 星等 ' + (p.magnitude ?? 0).toFixed(1) + ' · ' + vis
+      })
+      this.tonightShowers = (t.meteorShowers ?? []).map((s) => (s.name ?? '') + '：ZHR≈' + (s.zhr ?? 0) + (s.status === 'confirmed' ? '（已确认）' : '（通用）'))
+      this.tonightSats = ((t.satellites?.enabled ?? false) ? ('已加载 ' + (t.satellites?.count ?? 0) + ' 颗') : '未启用') + '（过境预报需更多数据）'
+      this.tonightHint = '已更新 · ' + this.fmtIso(t.date ?? '')
+      this.flashHint('已刷新今晚天象')
+    })
+  }
+
+  private fmtIso(iso: string): string {
+    if (!iso || iso.length < 16) return '--'
+    const parts = iso.split('T')
+    const d = parts[0] ?? ''
+    const t = parts[1] ?? ''
+    return (d.length >= 10 ? d.slice(5) : d) + ' ' + (t.length >= 8 ? t.slice(0, 5) : t)
+  }
+
   private sessionSignature(r: StellariumBridgeResponse): string {
     const v = r.viewJ2000
     const vr: number[] = (v && v.length === 3) ? v.map((x: number) => Math.round(x * 1e4) / 1e4) : [0, 0, 0]
@@ -3751,6 +3820,7 @@ private loadPlanetPositions(): void {
       this.pointingTestSection()
       this.watchGyroSection()
       this.continuationSection()
+      this.tonightEventsSection()
     } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {
