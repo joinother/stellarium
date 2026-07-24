@@ -192,6 +192,9 @@ struct WindowNativeNode {
   @State private locationPickerStatus: string = 'Drag map or use auto location'
   @State private observerPlanet: string = 'Earth'
   @State private planetList: string[] = []
+  @State private pointAlt: string = '45'
+  @State private pointAz: string = '180'
+  @State private pointResult: string = ''
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -2056,6 +2059,67 @@ private loadPlanetPositions(): void {
     }.width('100%').padding({ left: 10, right: 10 })
   }
 
+  // 虚拟指星笔（多设备联动）目标端测试入口：输入高度角/方位角，调 pointAtSky
+  // 把星图中心转到该方向并选中那颗星。手表/分布式未来只是另一种触发方式。
+  @Builder
+  pointingTestSection() {
+    Column({ space: 8 }) {
+      Text('虚拟指星笔测试').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
+      Text('输入指向（高度角/方位角），星图会转到该方向并选中那颗星 —— 这是手表/多屏联动的目标端逻辑').fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      Row({ space: 8 }) {
+        TextInput({ text: this.pointAlt, placeholder: '高度角°' })
+          .width('50%').height(36).backgroundColor(this.nmBorder()).fontSize(13)
+          .onChange((v: string) => { this.pointAlt = v })
+        TextInput({ text: this.pointAz, placeholder: '方位角°' })
+          .width('50%').height(36).backgroundColor(this.nmBorder()).fontSize(13)
+          .onChange((v: string) => { this.pointAz = v })
+      }.width('100%')
+      // 把结果放在按钮上方，避免被 Scroll 底部遮挡而看不到即时反馈
+      if (this.pointResult !== '') {
+        Text(this.pointResult).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2 })
+      }
+      Row({ space: 8 }) {
+        Button('指向并选中')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.pointAtSkyTest() })
+        Button('示例：天顶')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.nmBorder())
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.pointAlt = '89'; this.pointAz = '180'; this.pointAtSkyTest() })
+      }.width('100%').margin({ top: 4 })
+    }.width('100%').padding({ left: 10, right: 10 })
+  }
+
+  private pointAtSkyTest(): void {
+    const alt = this.pointAlt.trim()
+    const az = this.pointAz.trim()
+    this.callNativeWhenReady('pointAtSky', alt + '|' + az, (r: StellariumBridgeResponse) => {
+      if (!r.ok) {
+        this.pointResult = '指星笔命令未响应'
+        this.flashHint('指星笔命令未响应')
+        return
+      }
+      this.pointResult = '已指向 高度角' + alt + '° 方位角' + az + '°（星图下一帧转过去并选中中心星）'
+      this.flashHint('星图已转向 ' + alt + '°/' + az + '°')
+      // 等一帧让 pointAtSky 完成中心选中，再读选中天体
+      setTimeout(() => {
+        this.callNativeWhenReady('getSelectedObjectInfo', '', (r2: StellariumBridgeResponse) => {
+          if (!r2.ok) return
+          if (r2.found) {
+            const nm = (r2.name !== undefined && r2.name !== null) ? String(r2.name) : '未知'
+            const tp = (r2.type !== undefined && r2.type !== null) ? String(r2.type) : ''
+            this.pointResult = '指向命中：' + nm + '（' + tp + '）'
+            this.flashHint('指向命中：' + nm)
+          } else {
+            this.pointResult = '指向方向：' + alt + '°/' + az + '° 该处暂无可选中天体'
+            this.flashHint('该处暂无可选中天体')
+          }
+        })
+      }, 400)
+    })
+  }
+
   private hierContinents(): Array<string> {
     return Object.keys(LOCATION_HIERARCHY)
   }
@@ -3488,6 +3552,7 @@ private loadPlanetPositions(): void {
       this.locationPickerPanel()
       this.quickChips([{ id: 'Beijing', label: 'Beijing' }, { id: 'Shanghai', label: $r('app.string.s0758') }, { id: 'Shenzhen', label: $r('app.string.s0759') }])
       this.observerPlanetSection()
+      this.pointingTestSection()
     } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {

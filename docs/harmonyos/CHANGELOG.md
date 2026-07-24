@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 虚拟指星笔目标端（多设备联动：手表/多屏指哪显哪，#48）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `pointAtSky` 命令；新增 `s_pendingPointSelect` 静态标志 + `ohosProcessPendingPointSelect()` 在下一帧 `app.update(dt)` 后于屏幕中心 `findAndSelect`；`getSelectedObjectInfo` 复用既有 `selectedObjectJson()`）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：位置面板新增「虚拟指星笔测试」区，含高度角/方位角输入、「指向并选中」与「示例：天顶」按钮、结果回显 + `flashHint` 即时提示）
+  - `docs/harmonyos/GAP-ANALYSIS.md`（新增 #48 已实现条目，更新完成度估算）
+- **修改内容：**
+  1. 根因：远期规划要求手表可虚拟出「指星笔」，指向某方向后其他鸿蒙屏幕（手机/平板/智慧屏）同步显示对应星星。这是多设备联动的「目标端收口」——无论触发端是手表、小艺语音还是面板输入，最终都归一化为 `pointAtSky <alt>|<az>`。
+  2. C++ `pointAtSky`：解析高度角/方位角（度），按 Stellarium 约定 `spheToRect(M_PI-az, alt)` 构建 AltAz 单位向量，经 `altAzToJ2000(..., RefractionOff)` 转到 J2000，调 `StelMovementMgr::setViewDirectionJ2000` 把星图中心切到该方向；因投影在 `app.update(dt)` 才刷新，故把 `findAndSelect` 延迟到下一帧 `ohosProcessPendingPointSelect()` 执行，避免用旧投影选错位置。
+  3. ArkTS：位置面板新增「虚拟指星笔测试」区。先调 `pointAtSky`，400ms 后再调 `getSelectedObjectInfo` 读取选中天体名称与类型，更新 `pointResult` 并触发 `flashHint` 即时提示；结果文本放在按钮上方，避免面板 `Scroll` 底部遮挡。示例「天顶」预设 89°/180°。
+- **构建结果：** 沿用上一轮已编译的 `build/src/libstellarium.so`（C++ 无变更，无需重编 C++）；`assembleHap` 需重新编译 ArkTS。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 打开位置面板 → 滚动至「虚拟指星笔测试」区 → 点「示例：天顶」。
+  - hilog 实锤链路：`Stellarium command pointAtSky` → `ohosDrainCommandQueue ran n=1`（C++ 在 Qt 主线程执行方向切换）→ 400ms 后 `Stellarium command getSelectedObjectInfo` 两次（pending + consume）→ 返回 `found=false`。
+  - 首次点击后结果文本被面板 `Scroll` 底部遮挡；向上滑动面板后可见结果文本 `指向方向：89°/180° 该处暂无可选中天体`，证明回调与 UI 状态更新完全正常，仅验证时未滚动视口。
+  - 修复 UX：结果文本移到按钮上方 + `flashHint` 即时提示，后续无需手动滚动即可看到反馈。
+
+---
+
 ## [2026-07-24] WorkBuddy - 放大时地景淡出（FOV 放大→地面逐渐淡出消失，露出地平线下星空，#47）
 
 - **修改文件：**

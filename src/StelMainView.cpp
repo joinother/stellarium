@@ -425,6 +425,11 @@ static QList<std::function<void()>> s_ohosCmdQueue;
 // occluded by an opaque landscape. Driven every frame from renderOhosFrameNow().
 static bool s_landscapeFadeWithZoom = true;
 static float s_landscapeFadeSmooth = 0.f;
+// Virtual pointing-stick target: after pointAtSky centers the view on a sky
+// direction, select whatever object sits at screen-center on the NEXT frame
+// (the projector is only refreshed during app.update, so a same-frame
+// findAndSelect would use the stale, pre-move projection).
+static bool s_pendingPointSelect = false;
 static void markQtLoopRunning();
 
 static void ohosDrainCommandQueue()
@@ -480,6 +485,30 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	if (useTransp)
 		lmgr->setFlagLandscapeUseTransparency(true);
 	lmgr->setLandscapeTransparency(static_cast<double>(cur));
+}
+
+// Called once per frame AFTER app.update(dt) (so the projector reflects the
+// just-applied view direction). If pointAtSky recentered the view on a sky
+// direction, select whatever object now sits at screen-center.
+static void ohosProcessPendingPointSelect()
+{
+	if (!s_pendingPointSelect)
+		return;
+	s_pendingPointSelect = false;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelObjectMgr* omgr = GETSTELMODULE(StelObjectMgr);
+	if (!core || !omgr)
+		return;
+	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+	if (!prj)
+		return;
+	const Vec4i vp = prj->getViewport();
+	const int cx = vp[2] / 2;
+	const int cy = vp[3] / 2;
+	omgr->findAndSelect(core, cx, cy);
 }
 
 static void markQtLoopRunning()
@@ -1609,23 +1638,68 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// setLandscapeUseTransparency — manually enable/disable landscape transparency.
-		// Takes manual control, which also disables the FOV-based auto-fade.
-		if (commandName == "setLandscapeUseTransparency")
+	// setLandscapeUseTransparency — manually enable/disable landscape transparency.
+	// Takes manual control, which also disables the FOV-based auto-fade.
+	if (commandName == "setLandscapeUseTransparency")
+	{
+		bool convOk = false;
+		int v = arg.toInt(&convOk);
+		LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+		if (lmgr)
 		{
-			bool convOk = false;
-			int v = arg.toInt(&convOk);
-			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
-			if (lmgr)
+			lmgr->setFlagLandscapeUseTransparency(v != 0);
+			s_landscapeFadeWithZoom = false;
+			s_landscapeFadeSmooth = 0.f;
+			result["ok"] = true;
+		} else {
+			result["ok"] = false;
+			result["error"] = "LandscapeMgr missing";
+		}
+		return result;
+	}
+
+		// pointAtSky — virtual pointing-stick target side.
+		// arg: "<alt>|<az>" in degrees (apparent horizontal coords). The view is
+		// recentered on that sky direction; on the next rendered frame the object
+		// at screen-center is selected and becomes the current selection (so the
+		// UI / other device can read it via getSelectedObjectInfo). This is the
+		// "你指到哪，其他屏幕就显示到对应的星星" 收口逻辑 —— 手表/分布式只是另一种
+		// 触发方式，最终都归一化到这条命令。
+		if (commandName == "pointAtSky")
+		{
+			if (!core || !movementMgr)
 			{
-				lmgr->setFlagLandscapeUseTransparency(v != 0);
-				s_landscapeFadeWithZoom = false;
-				s_landscapeFadeSmooth = 0.f;
-				result["ok"] = true;
-			} else {
-				result["ok"] = false;
-				result["error"] = "LandscapeMgr missing";
+				result["error"] = "core/movement not ready";
+				return result;
 			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 2)
+			{
+				result["error"] = "pointAtSky expects alt|az";
+				return result;
+			}
+			bool okAlt = false, okAz = false;
+			const double altDeg = parts[0].toDouble(&okAlt);
+			const double azDeg = parts[1].toDouble(&okAz);
+			if (!okAlt || !okAz)
+			{
+				result["error"] = "alt/az not numeric";
+				return result;
+			}
+			const double altRad = altDeg * M_PI / 180.0;
+			const double azRad = azDeg * M_PI / 180.0;
+			// Build the AltAz-frame unit vector using Stellarium's convention
+			// (spheToRect(longitude=M_PI-az, latitude=alt, v)).
+			Vec3d altAzVec;
+			StelUtils::spheToRect(M_PI - azRad, altRad, altAzVec);
+			const Vec3d j2000 = core->altAzToJ2000(altAzVec, StelCore::RefractionOff);
+			movementMgr->setViewDirectionJ2000(j2000);
+			// Defer the center-selection to the next frame (projection refresh).
+			s_pendingPointSelect = true;
+			result["ok"] = true;
+			result["alt"] = altDeg;
+			result["az"] = azDeg;
+			result["j2000"] = QString("[%1,%2,%3]").arg(j2000[0],0,'f',4).arg(j2000[1],0,'f',4).arg(j2000[2],0,'f',4);
 			return result;
 		}
 
@@ -5672,6 +5746,7 @@ void StelMainView::renderOhosFrameNow()
 	gl->glViewport(0, 0, width, height);
 
 	app.update(dt);
+	ohosProcessPendingPointSelect();
 	app.draw();
 	submitOhosFramebuffer(gl);
 }
