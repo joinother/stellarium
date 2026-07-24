@@ -399,6 +399,8 @@ struct WindowNativeNode {
   @State private configImportText: string = ''
   @State private configImportMsg: string = ''
   @State private skyTouchFeedback: boolean = false
+  @State private skyTouchX: number = 0   // 触摸点窗口坐标(px)，供反馈圈跟随手指
+  @State private skyTouchY: number = 0
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
   @State private lx200Status: string = ''
@@ -2717,6 +2719,8 @@ private loadPlanetPositions(): void {
       this.lastDragCommandMs = 0
       this.dragLogCount = 0
       this.skyTouchFeedback = true
+      this.skyTouchX = downX
+      this.skyTouchY = downY
       hilog.info(0x0000, 'StellariumArkUI', 'sky touch down at ' + Math.round(this.touchStartX).toString() + ',' + Math.round(this.touchStartY).toString() + ' sky=' + this.skyWidth.toString() + 'x' + this.skyHeight.toString())
       if (points.length >= 2) {
         this.pinchStartDistance = this.distance(
@@ -2735,6 +2739,10 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Move) {
       const x = this.touchWindowX(points[0])
       const y = this.touchWindowY(points[0])
+      if (this.skyTouchFeedback) {
+        this.skyTouchX = x
+        this.skyTouchY = y
+      }
       if (points.length >= 2) {
         this.nativeDragActive = false
         const currentDistance = this.distance(
@@ -2875,10 +2883,10 @@ private loadPlanetPositions(): void {
           .backgroundColor(this.nightMode ? 'rgba(180, 40, 20, 0.15)' : 'rgba(107, 163, 214, 0.12)')
           .border({ width: 1, color: 'rgba(107, 163, 214, 0.10)' })
           .shadow({ radius: 42, color: 'rgba(107, 163, 214, 0.18)', offsetX: 0, offsetY: 0 })
-          .align(Alignment.Center)
+          .position({ x: px2vp(this.skyTouchX) - 60, y: px2vp(this.skyTouchY) - 60 })
           .hitTestBehavior(HitTestMode.None)
           .zIndex(4)
-          .animation({ duration: 180, curve: Curve.EaseOut })
+          .animation({ duration: 120, curve: Curve.EaseOut })
       }
 
         // 画布触摸层：与 toolbar/panel 平级（都是 1234 根 Stack 的子），

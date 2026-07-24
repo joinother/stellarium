@@ -5,6 +5,18 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 触摸反馈圈改为跟随手指
+
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **改动：**
+  - 新增 `@State skyTouchX` / `skyTouchY` 记录触摸窗口坐标（px）。
+  - `TouchType.Down` 时把反馈圈初始位置设为按下的点；`TouchType.Move` 时持续更新坐标。
+  - 渲染反馈圈时由 `.align(Alignment.Center)`（写死屏幕中央）改为 `.position({ x: px2vp(skyTouchX) - 60, y: px2vp(skyTouchY) - 60 })`，使淡蓝圈跟随手指移动；动画时长由 180ms 缩短为 120ms 以提升跟手感。
+- **验证：** 模拟器 127.0.0.1:5555 按住非中心点 (700,600 px) 截图，淡蓝圈出现在对应位置（左上方），不再固定于屏幕中央。
+
+---
+
 ## [2026-07-24] WorkBuddy - 今夜天文事件面板（能力 C：今晚看什么）
 
 - **修改文件：**
