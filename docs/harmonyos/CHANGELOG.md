@@ -5,6 +5,24 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 视频录制（帧序列方案，#40）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `startVideoRecording` / `stopVideoRecording` / `getVideoRecordingState` 命令；新增 `VideoRecorder` 结构、`g_videoRecorder` 单例、`videoCaptureFrame()`、`videosDir()`、`countVideoFrames()`；用 `QTimer` 按设定 fps 定时调用 `saveScreenShot` 输出 `frame_*.jpg`）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（`StellariumBridgeResponse` 新增 `dir`/`frameCount`/`diskFrames`/`recording`/`maxFrames`/`fps`/`duration` 字段）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：「脚本」面板内新增视频录制区：帧率/时长 `TextInput` + 开始/停止 `Button`（按 `videoRecording` 切换文案与颜色）+ 实时「已抓 N / M 帧」状态 + 存放目录显示；新增 `startVideoRecording`/`stopVideoRecording`/`loadVideoRecordingState` 方法及对应 `@State`；`setPanel` 的 scripts 分支补充 `loadVideoRecordingState`）
+- **修改内容：**
+  1. 务实方案：OpenHarmony 基础 SDK（API 24）不含视频编码器，无法做真正视频编码，故采用「定时截图帧序列」——按设定帧率连续抓取星图画面，存为 `userDir/videos/<时间戳>/frame_00001.jpg` 等一连串图片，用户可后续用 ffmpeg 等工具合成视频。
+  2. C++ 侧：`startVideoRecording` 建目录、按 `fps×duration` 设 `maxFrames`、建/启 `QTimer`（interval=1000/fps）；`videoCaptureFrame` 每帧调用 `saveScreenShot(prefix, dir, true)`；`stopVideoRecording` 停 timer 并扫描目录返回真实落盘帧数 `diskFrames`；`getVideoRecordingState` 返回录制状态与目录。
+  3. ArkTS 侧：开始/停止按钮切换、状态行实时显示已抓帧数、停止后回显「已抓 N / N 帧」并提示目录；面板内增加「视频录制（帧序列）」说明段，解释为何是帧序列。
+- **构建结果：** C++ 增量编译通过（`[100%] Built target stellarium`）；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 打开「脚本」面板 → 滚动至视频录制区 → 设 fps=1、时长=5s → 点「开始录制」→ 显示「● 录制中 / 已抓 0 / 5 帧」。
+  - 等待 6 秒 → 点「停止录制」→ 回显「已停止，共 5 帧已保存」、状态「已抓 5 / 5 帧」（该帧数由 C++ 扫描真实目录得到，确为落盘文件数）。
+  - 注：帧文件写在 app 私有 `el2` 沙箱（`/data/storage/el2/base/files/.stellarium/videos/<时间戳>/`），`hdc shell` 因系统沙箱隔离无法直接 `ls`/拉取，但 C++ 在 app 上下文内扫描确认 5 个 `frame_*.jpg` 已落盘。
+
+---
+
 ## [2026-07-24] WorkBuddy - 脚本录制与回放（#39）
 
 - **修改文件：**

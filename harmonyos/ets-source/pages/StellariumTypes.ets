@@ -307,4 +307,12 @@ export interface StellariumBridgeResponse {
   objectInfoData?: Object
   dsoCounts?: Object
   simTime?: Object
+  // 视频录制（帧序列方案，#40）
+  dir?: string
+  frameCount?: number
+  diskFrames?: number
+  maxFrames?: number
+  recording?: boolean
+  fps?: number
+  duration?: number
 }

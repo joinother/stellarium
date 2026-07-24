@@ -911,6 +911,57 @@ static QList<RecordingItem> recordingsList()
 	return out;
 }
 
+// ---- Video frames recorder (OHOS bridge) ----
+// 当前 OpenHarmony 基础 SDK 不含视频编码器，因此先实现“帧序列录制”：
+// 按设定 fps 定时调用 saveScreenShot，保存到 userDir/videos/<timestamp>/frame_*.jpg。
+// 用户可在外部把这些帧合成为真正视频。
+struct VideoRecorder
+{
+	bool recording = false;
+	QString dir;
+	int fps = 1;
+	int frameCount = 0;
+	int maxFrames = 0;
+	QTimer* timer = nullptr;
+};
+static VideoRecorder g_videoRecorder;
+
+static void videoCaptureFrame()
+{
+	if (!g_videoRecorder.recording)
+		return;
+	if (g_videoRecorder.frameCount >= g_videoRecorder.maxFrames)
+	{
+		g_videoRecorder.recording = false;
+		if (g_videoRecorder.timer)
+			g_videoRecorder.timer->stop();
+		return;
+	}
+	QString prefix = QString("frame_%1").arg(g_videoRecorder.frameCount++, 5, 10, QChar('0'));
+	StelMainView::getInstance().saveScreenShot(prefix, g_videoRecorder.dir, true);
+}
+
+static QString videosDir()
+{
+	QString dir = StelFileMgr::getUserDir() + "/videos";
+	QDir d(dir);
+	if (!d.exists())
+		d.mkpath(dir);
+	return dir;
+}
+
+// 统计某视频目录下已生成的 frame_*.jpg 数量（用于上报真实落盘帧数）。
+static int countVideoFrames(const QString& dir)
+{
+	QDir d(dir);
+	if (!d.exists())
+		return 0;
+	int n = 0;
+	QStringList entries = d.entryList(QStringList() << "frame_*.jpg" << "frame_*.jpeg" << "frame_*.png", QDir::Files);
+	n = entries.size();
+	return n;
+}
+
 }
 
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
@@ -3839,6 +3890,71 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = removed;
 			if (!removed)
 				result["error"] = "cannot remove";
+			return result;
+		}
+
+		// ===== 视频帧序列录制（#40，基础 SDK 无视频编码器，先输出帧图）=====
+		if (commandName == "startVideoRecording")
+		{
+			QStringList parts = arg.split('|', Qt::SkipEmptyParts);
+			int fps = parts.size() > 0 ? parts[0].toInt() : 1;
+			int duration = parts.size() > 1 ? parts[1].toInt() : 5;
+			if (fps < 1) fps = 1;
+			if (fps > 30) fps = 30;
+			if (duration < 1) duration = 1;
+			if (duration > 60) duration = 60;
+			if (g_videoRecorder.recording)
+			{
+				result["ok"] = false;
+				result["error"] = "already recording";
+				return result;
+			}
+			QString dir = videosDir() + "/" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+			QDir d(dir);
+			if (!d.exists())
+				d.mkpath(dir);
+			g_videoRecorder.recording = true;
+			g_videoRecorder.dir = dir;
+			g_videoRecorder.fps = fps;
+			g_videoRecorder.frameCount = 0;
+			g_videoRecorder.maxFrames = fps * duration;
+			if (!g_videoRecorder.timer)
+			{
+				g_videoRecorder.timer = new QTimer(&StelMainView::getInstance());
+				QObject::connect(g_videoRecorder.timer, &QTimer::timeout, videoCaptureFrame);
+			}
+			g_videoRecorder.timer->setInterval(qMax(50, 1000 / fps));
+			g_videoRecorder.timer->start();
+			result["ok"] = true;
+			result["dir"] = dir;
+			result["fps"] = fps;
+			result["duration"] = duration;
+			result["maxFrames"] = g_videoRecorder.maxFrames;
+			return result;
+		}
+
+		if (commandName == "stopVideoRecording")
+		{
+			g_videoRecorder.recording = false;
+			if (g_videoRecorder.timer)
+				g_videoRecorder.timer->stop();
+			int disk = countVideoFrames(g_videoRecorder.dir);
+			result["ok"] = true;
+			result["dir"] = g_videoRecorder.dir;
+			result["frameCount"] = g_videoRecorder.frameCount;
+			result["diskFrames"] = disk;
+			result["fps"] = g_videoRecorder.fps;
+			return result;
+		}
+
+		if (commandName == "getVideoRecordingState")
+		{
+			result["ok"] = true;
+			result["recording"] = g_videoRecorder.recording;
+			result["dir"] = g_videoRecorder.dir;
+			result["frameCount"] = g_videoRecorder.frameCount;
+			result["maxFrames"] = g_videoRecorder.maxFrames;
+			result["fps"] = g_videoRecorder.fps;
 			return result;
 		}
 

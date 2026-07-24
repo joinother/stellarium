@@ -389,6 +389,13 @@ struct WindowNativeNode {
   @State private recordMsg: string = ''
   @State private recordings: Array<RecordingEntry> = []
   @State private replaying: boolean = false
+  // ===== 视频帧序列录制（#40）=====
+  @State private videoRecording: boolean = false
+  @State private videoDir: string = ''
+  @State private videoFrameCount: number = 0
+  @State private videoMaxFrames: number = 0
+  @State private videoFps: string = '1'
+  @State private videoDuration: string = '5'
   private lastRecordKey: string = ''
   private lastRecordTime: number = 0
 
@@ -672,6 +679,7 @@ struct WindowNativeNode {
       this.loadAboutInfo()
     } else if (panel === 'scripts') {
       this.loadRecordings()
+      this.loadVideoRecordingState()
     }
   }
 
@@ -939,6 +947,45 @@ struct WindowNativeNode {
       } else {
         this.flashHint('删除失败')
       }
+    })
+  }
+
+  // ===== 视频帧序列录制（#40，基础 SDK 缺视频编码器，先输出帧图）=====
+  private startVideoRecording(): void {
+    const fps = parseInt(this.videoFps, 10) || 1
+    const duration = parseInt(this.videoDuration, 10) || 5
+    this.callInteractive('startVideoRecording', fps + '|' + duration, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.videoRecording = true
+        this.videoDir = r.dir as string ?? ''
+        this.videoFrameCount = 0
+        this.videoMaxFrames = r.maxFrames as number ?? 0
+        this.flashHint('开始录制视频帧序列：' + fps + ' fps × ' + duration + ' s')
+      } else {
+        this.flashHint('开始录制失败：' + (r.error ?? '未知错误'))
+      }
+    })
+  }
+
+  private stopVideoRecording(): void {
+    this.callInteractive('stopVideoRecording', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.videoRecording = false
+        this.videoFrameCount = (r.diskFrames as number) ?? (r.frameCount as number) ?? 0
+        this.videoDir = r.dir as string ?? ''
+        this.flashHint('已停止，共 ' + this.videoFrameCount + ' 帧已保存')
+      } else {
+        this.flashHint('停止录制失败')
+      }
+    })
+  }
+
+  private loadVideoRecordingState(): void {
+    this.callInteractive('getVideoRecordingState', '', (r: StellariumBridgeResponse) => {
+      this.videoRecording = r.recording === true
+      this.videoDir = r.dir as string ?? ''
+      this.videoFrameCount = r.frameCount as number ?? 0
+      this.videoMaxFrames = r.maxFrames as number ?? 0
     })
   }
 
@@ -4284,6 +4331,47 @@ private loadPlanetPositions(): void {
             }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 })
               .backgroundColor(this.nmBg()).borderRadius(12)
           }, (item: RecordingEntry, idx: number) => item.file)
+
+          // ===== 视频录制（帧序列方案，#40）=====
+          Row().width('100%').height(0.5).backgroundColor(this.nmBorder()).margin({ top: 6, bottom: 6 })
+          Text('视频录制（帧序列）').fontSize(13).fontColor(this.nmText()).width('100%').padding({ left: 6 })
+          Text('基础版系统不含视频编码器，这里用「定时截图」代替：按设定的帧率连续抓取星图画面，存成 frame_00001.jpg 等一连串图片，放在本机 videos/ 目录下。你可以用第三方工具（如 ffmpeg）把这些图片合成真正的视频。')
+            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 })
+
+          Row({ space: 8 }) {
+            Column({ space: 2 }) {
+              Text('帧率 (fps)').fontSize(10).fontColor('#99FFFFFF')
+              TextInput({ placeholder: '1', text: this.videoFps })
+                .fontSize(12).fontColor(this.nmText())
+                .backgroundColor(this.nmBg()).borderRadius(8).width(72).height(34)
+                .onChange((v: string) => { this.videoFps = v })
+            }.width(72)
+            Column({ space: 2 }) {
+              Text('时长 (秒)').fontSize(10).fontColor('#99FFFFFF')
+              TextInput({ placeholder: '5', text: this.videoDuration })
+                .fontSize(12).fontColor(this.nmText())
+                .backgroundColor(this.nmBg()).borderRadius(8).width(72).height(34)
+                .onChange((v: string) => { this.videoDuration = v })
+            }.width(72)
+            Button(this.videoRecording ? '停止录制' : '开始录制')
+              .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.videoRecording ? '#C0392B' : '#2E7D32')
+              .borderRadius(10).height(36).layoutWeight(1).padding({ left: 16, right: 16 })
+              .onClick(() => { this.videoRecording ? this.stopVideoRecording() : this.startVideoRecording() })
+          }.width('100%').padding({ left: 6, right: 6 })
+
+          if (this.videoRecording || this.videoFrameCount > 0) {
+            Row({ space: 10 }) {
+              if (this.videoRecording) {
+                Text('● 录制中').fontSize(12).fontColor('#FF6B6B')
+              }
+              Text('已抓 ' + this.videoFrameCount + ' / ' + this.videoMaxFrames + ' 帧')
+                .fontSize(11).fontColor('#99FFFFFF')
+            }.width('100%').padding({ left: 6, right: 6 })
+          }
+          if (this.videoDir.length > 0) {
+            Text('存放目录：' + this.videoDir)
+              .fontSize(10).fontColor('#66FFFFFF').width('100%').padding({ left: 6, right: 6 })
+          }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
