@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 帮助(Help)面板增强：关于 / 运行日志 / 配置导入导出
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `getLog`/`getAboutInfo`/`exportConfig`/`importConfig`；新增 `#include "StelLogger.hpp"`）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS 帮助面板：「关于」区块、「运行日志」区块含查看/刷新/收起、「配置导入导出」区块含导出查看 + TextArea 导入 + 结果反馈）
+- **修改内容：**
+  1. 关于：读取版本号、Qt 版本、用户目录、配置文件路径、日志文件路径。
+  2. 运行日志：调用 `StelLogger::getLog()` 获取日志尾部并渲染，支持刷新与收起。
+  3. 配置导入导出：`exportConfig` 先 `sync()` 再读取 `config.ini` 全文；`importConfig` 按 `[section]` + `key=value` 逐条写入 QSettings 并 `sync()`，返回 applied 计数。
+  4. UI 调整：「导入配置」按钮与「导出查看」并排置于标题行，避免被滚动区域切出可视区；导入后清空输入框并显示「已导入 N 项配置」。
+- **构建结果：** C++ 增量编译通过；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：** 帮助面板打开触发 `getAboutInfo` 并正确显示版本/路径；点「查看日志」触发 `getLog` 并渲染日志内容；点「导出查看」渲染 `config.ini` 全文；通过 TextArea 粘贴 `[section]\nkey=value` 后点「导入配置」，导出内容中出现对应新键，导入生效。
+
+---
+
 ## [2026-07-24] WorkBuddy - 两侧 UI 常驻（按钮不再自动消失）+ 新增流星雨(MeteorShowers)面板
 
 - **背景：** 用户反馈"两边的按钮不触摸就消失，且消失太快"。此前左侧工具栏空闲 5s 整条滑走、右侧面板空闲 3.5s 淡到 30%（看着像消失），且"钉住/锁定"默认关闭。

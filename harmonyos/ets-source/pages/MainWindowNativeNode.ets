@@ -100,6 +100,25 @@ interface MeteorShowersData {
 interface MeteorShowersResponse extends StellariumBridgeResponse {
   meteorShowers?: MeteorShowersData
 }
+interface LogResponse extends StellariumBridgeResponse {
+  log?: string
+  totalChars?: number
+  logFile?: string
+}
+interface AboutResponse extends StellariumBridgeResponse {
+  version?: string
+  qtVersion?: string
+  userDir?: string
+  configFile?: string
+  logFile?: string
+}
+interface ExportConfigResponse extends StellariumBridgeResponse {
+  content?: string
+  configFile?: string
+}
+interface ImportConfigResponse extends StellariumBridgeResponse {
+  applied?: number
+}
 
 // 望远镜配置选择器的展示数据（非响应式，@Builder 内实时读取 @State）
 class OcularSelInfo {
@@ -325,6 +344,17 @@ struct WindowNativeNode {
   @State private msLabels: boolean = false
   @State private msActiveOnly: boolean = false
   @State private msMarker: boolean = false
+  // 帮助面板：关于/日志/配置导入导出
+  @State private aboutVersion: string = ''
+  @State private aboutQt: string = ''
+  @State private aboutUserDir: string = ''
+  @State private aboutConfigFile: string = ''
+  @State private logText: string = ''
+  @State private logVisible: boolean = false
+  @State private configExportText: string = ''
+  @State private configExportVisible: boolean = false
+  @State private configImportText: string = ''
+  @State private configImportMsg: string = ''
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -606,6 +636,8 @@ struct WindowNativeNode {
       this.loadSatellites()
     } else if (panel === 'meteorshowers') {
       this.loadMeteorShowers()
+    } else if (panel === 'help') {
+      this.loadAboutInfo()
     }
   }
 
@@ -874,6 +906,53 @@ struct WindowNativeNode {
     else if (name == 'activeOnly') { this.msActiveOnly = v }
     else if (name == 'marker') { this.msMarker = v }
     this.callNativeWhenReady('setMeteorShowersFlag', name + ':' + (v ? '1' : '0'), () => { this.loadMeteorShowers() })
+  }
+
+  // ===== 帮助面板：关于 / 日志 / 配置导入导出 =====
+  private loadAboutInfo(): void {
+    this.callNativeWhenReady('getAboutInfo', '', (r: StellariumBridgeResponse) => {
+      const resp = r as AboutResponse
+      this.aboutVersion = resp.version ?? ''
+      this.aboutQt = resp.qtVersion ?? ''
+      this.aboutUserDir = resp.userDir ?? ''
+      this.aboutConfigFile = resp.configFile ?? ''
+    })
+  }
+
+  private loadLog(): void {
+    this.callNativeWhenReady('getLog', '6000', (r: StellariumBridgeResponse) => {
+      const resp = r as LogResponse
+      this.logText = resp.log ?? ''
+      this.logVisible = true
+    })
+  }
+
+  private exportConfig(): void {
+    this.callNativeWhenReady('exportConfig', '', (r: StellariumBridgeResponse) => {
+      const resp = r as ExportConfigResponse
+      this.configExportText = resp.content ?? ''
+      this.configExportVisible = true
+      this.flashHint('已导出配置（' + this.configExportText.length + ' 字符）')
+    })
+  }
+
+  private importConfig(): void {
+    const text = this.configImportText.trim()
+    if (text.length === 0) {
+      this.flashHint('请先粘贴 config.ini 内容')
+      return
+    }
+    this.configImportMsg = '正在导入…'
+    this.callNativeWhenReady('importConfig', text, (r: StellariumBridgeResponse) => {
+      const resp = r as ImportConfigResponse
+      if (resp.ok === true) {
+        this.configImportText = ''
+        this.configImportMsg = '已导入 ' + (resp.applied ?? 0) + ' 项配置'
+        this.flashHint(this.configImportMsg)
+      } else {
+        this.configImportMsg = '导入失败：' + (resp.error ?? '未知错误')
+      }
+    })
   }
 
   private refreshState(): void {
@@ -3692,6 +3771,91 @@ private loadPlanetPositions(): void {
           Text($r('app.string.i0272')).fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text($r('app.string.i0273')).fontSize(10).fontColor('#66FFFFFF').width('100%')
           Text($r('app.string.i0274')).fontSize(10).fontColor('#66FFFFFF').width('100%')
+          // ===== 关于 =====
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text('关于').fontSize(13).fontColor(this.nmText()).width('100%')
+          if (this.aboutVersion.length > 0) {
+            Text('Stellarium ' + this.aboutVersion + ' · Qt ' + this.aboutQt).fontSize(10).fontColor('#66FFFFFF').width('100%')
+            Text('用户目录: ' + this.aboutUserDir).fontSize(9).fontColor('#66FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('配置文件: ' + this.aboutConfigFile).fontSize(9).fontColor('#66FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+          } else {
+            Text('加载中…').fontSize(10).fontColor('#66FFFFFF').width('100%')
+          }
+          // ===== 日志 =====
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Row({ space: 8 }) {
+            Text('运行日志').fontSize(13).fontColor(this.nmText()).layoutWeight(1)
+            Button(this.logVisible ? '刷新' : '查看日志')
+              .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+              .onClick(() => { this.loadLog() })
+            if (this.logVisible) {
+              Button('收起')
+                .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                .onClick(() => { this.logVisible = false })
+            }
+          }.width('100%')
+          if (this.logVisible) {
+            Scroll() {
+              Text(this.logText.length > 0 ? this.logText : '（日志为空）')
+                .fontSize(9).fontColor('#99FFFFFF').width('100%')
+                .fontFamily('monospace')
+            }
+            .width('100%').height(180)
+            .backgroundColor(this.nmBg()).borderRadius(8)
+            .padding(8)
+            .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+          }
+          // ===== 配置导入导出 =====
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Row({ space: 8 }) {
+            Text('配置导入导出').fontSize(13).fontColor(this.nmText()).layoutWeight(1)
+            Button('导入配置')
+              .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+              .onClick(() => { this.importConfig() })
+            Button('导出查看')
+              .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+              .onClick(() => { this.exportConfig() })
+            if (this.configExportVisible) {
+              Button('收起')
+                .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                .onClick(() => { this.configExportVisible = false })
+            }
+          }.width('100%')
+          if (this.configExportVisible) {
+            Scroll() {
+              Text(this.configExportText.length > 0 ? this.configExportText : '（配置为空）')
+                .fontSize(9).fontColor('#99FFFFFF').width('100%')
+                .fontFamily('monospace')
+            }
+            .width('100%').height(160)
+            .backgroundColor(this.nmBg()).borderRadius(8)
+            .padding(8)
+            .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+          }
+          TextArea({ placeholder: '粘贴 config.ini 内容后点上方「导入配置」（支持 [section] 与 key=value 行）', text: this.configImportText })
+            .fontSize(10).fontColor(this.nmText())
+            .placeholderFont({ size: 10 }).placeholderColor('#44FFFFFF')
+            .backgroundColor(this.nmBg()).borderRadius(8)
+            .width('100%').height(72)
+            .onChange((v: string) => { this.configImportText = v })
+          Text(this.configImportMsg.length > 0 ? this.configImportMsg : ' ')
+            .fontSize(10).fontColor('#FFAA00').width('100%').height(16)
+          Text('提示：导入仅覆盖文本中出现的键，导入后部分设置需重启应用生效。')
+            .fontSize(9).fontColor('#44FFFFFF').width('100%').margin({ bottom: 8 })
         }
         .width('100%')
         .padding({ left: 4, right: 4 })

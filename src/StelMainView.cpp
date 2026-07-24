@@ -23,6 +23,7 @@
 #include "StelApp.hpp"
 #include "StelCore.hpp"
 #include "StelFileMgr.hpp"
+#include "StelLogger.hpp"
 #include "StelProjector.hpp"
 #include "StelPainter.hpp"
 #include "StelGui.hpp"
@@ -3568,6 +3569,82 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else ok = false;
 			result["ok"] = ok;
 			if (!ok) result["error"] = "unknown meteor showers flag: " + name;
+			return result;
+		}
+
+		// ========== Help/日志 与 配置导入导出 ==========
+		// getLog — 返回应用日志尾部（arg=最大字符数，默认 8000）
+		if (commandName == "getLog")
+		{
+			int maxChars = arg.trimmed().isEmpty() ? 8000 : arg.trimmed().toInt();
+			if (maxChars <= 0) maxChars = 8000;
+			const QString& full = StelLogger::getLog();
+			QString tail = full.length() > maxChars ? full.right(maxChars) : full;
+			result["ok"] = true;
+			result["log"] = tail;
+			result["totalChars"] = full.length();
+			result["logFile"] = StelLogger::getLogFileName();
+			return result;
+		}
+		// getAboutInfo — 版本/构建/路径信息（About 页数据源）
+		if (commandName == "getAboutInfo")
+		{
+			result["ok"] = true;
+			result["version"] = StelUtils::getApplicationVersion();
+			result["qtVersion"] = QT_VERSION_STR;
+			result["userDir"] = StelFileMgr::getUserDir();
+			result["configFile"] = StelApp::getInstance().getSettings()->fileName();
+			result["logFile"] = StelLogger::getLogFileName();
+			return result;
+		}
+		// exportConfig — 导出 config.ini 全文（先 sync 落盘再读）
+		if (commandName == "exportConfig")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			conf->sync();
+			QFile f(conf->fileName());
+			if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+			{
+				result["ok"] = false;
+				result["error"] = "cannot read config: " + conf->fileName();
+				return result;
+			}
+			QString content = QString::fromUtf8(f.readAll());
+			f.close();
+			result["ok"] = true;
+			result["content"] = content;
+			result["configFile"] = conf->fileName();
+			return result;
+		}
+		// importConfig — 导入 ini 文本：按 [section] + key=value 逐条写入并 sync
+		if (commandName == "importConfig")
+		{
+			QSettings* conf = StelApp::getInstance().getSettings();
+			QString section;
+			int applied = 0;
+			const QStringList lines = arg.split('\n');
+			for (const QString& rawLine : lines)
+			{
+				QString line = rawLine.trimmed();
+				if (line.isEmpty() || line.startsWith('#') || line.startsWith(';'))
+					continue;
+				if (line.startsWith('[') && line.endsWith(']'))
+				{
+					section = line.mid(1, line.length() - 2).trimmed();
+					continue;
+				}
+				int eq = line.indexOf('=');
+				if (eq <= 0)
+					continue;
+				QString key = line.left(eq).trimmed();
+				QString val = line.mid(eq + 1).trimmed();
+				QString fullKey = section.isEmpty() ? key : section + "/" + key;
+				conf->setValue(fullKey, val);
+				applied++;
+			}
+			conf->sync();
+			result["ok"] = true;
+			result["applied"] = applied;
 			return result;
 		}
 
