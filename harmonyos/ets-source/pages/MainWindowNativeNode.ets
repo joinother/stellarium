@@ -119,6 +119,9 @@ interface ExportConfigResponse extends StellariumBridgeResponse {
 interface ImportConfigResponse extends StellariumBridgeResponse {
   applied?: number
 }
+interface SpokenTextResponse extends StellariumBridgeResponse {
+  text?: string
+}
 
 // 望远镜配置选择器的展示数据（非响应式，@Builder 内实时读取 @State）
 class OcularSelInfo {
@@ -360,6 +363,7 @@ struct WindowNativeNode {
   @State private lx200Port: string = '4030'
   @State private lx200Status: string = ''
   @State private actionHint: ResourceStr = ''
+  @State private speechStatus: string = ''
 
   private hintTimer: number = 0
   private panelIdleTimer: number = -1
@@ -952,6 +956,24 @@ struct WindowNativeNode {
       } else {
         this.configImportMsg = '导入失败：' + (resp.error ?? '未知错误')
       }
+    })
+  }
+
+  // ===== 朗读 / 语音播报 =====
+  // 说明：当前构建基于 OpenHarmony 基础 SDK（API 24），其 kit 列表不含
+  // @kit.CoreSpeechKit（语音合成仅存在于华为 HarmonyOS 的 HMS SDK），因此
+  // 无法在此环境做真正的 TTS 音频播报。这里保留 C++ 侧生成的"可读中文描述"
+  // （getObjectSpokenText 命令），点按按钮即在面板中显示该文本，验证命令通道，
+  // 待切换到含 CoreSpeechKit 的 SDK 后即可接真实语音合成。
+  private speakSelectedObject(): void {
+    this.callNativeWhenReady('getObjectSpokenText', '', (r: StellariumBridgeResponse) => {
+      const resp = r as SpokenTextResponse
+      if (resp.ok !== true || !resp.text) {
+        this.flashHint('未选中天体，无法生成朗读文本')
+        return
+      }
+      this.speechStatus = resp.text
+      this.flashHint('已生成朗读文本（当前 SDK 未集成语音合成）')
     })
   }
 
@@ -2943,7 +2965,13 @@ private loadPlanetPositions(): void {
         Button($r('app.string.i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionGoto_ReSelect_Last_Selected_Object') })
+        Button('朗读文本').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+          .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+          .onClick(() => { this.speakSelectedObject() })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4, bottom: 4 })
+      if (this.speechStatus.length > 0) {
+        Text(this.speechStatus).fontSize(10).fontColor('#FFAA00').width('100%').padding({ left: 4, right: 4 })
+      }
 	      this.lx200ObjectControls()
       } // end object selectedName else
     } else if (this.activePanel === 'time') {
@@ -3410,11 +3438,11 @@ private loadPlanetPositions(): void {
             { name: 'M31', zh: '仙女座星系' } as NameItem, { name: 'M42', zh: '猎户座大星云' } as NameItem, { name: 'M45', zh: '昴星团' } as NameItem, { name: 'M13', zh: '武仙座球状星团' } as NameItem,
             { name: 'M8', zh: '礁湖星云' } as NameItem, { name: 'NGC 7000', zh: '北美洲星云' } as NameItem, { name: 'Double Cluster', zh: '双星团' } as NameItem,
           ] as NameItem[], (item: NameItem) => {
-            Text(item.zh ?? item.name ?? '')
+            Button(item.zh ?? item.name ?? '')
               .fontSize(11).fontColor(this.nmText())
               .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-              .backgroundColor(this.nmBg())
-              .borderRadius(8)
+              .backgroundColor(this.nmBg()).borderRadius(8)
+              .height(24)
               .onClick(() => this.searchObject(item.name ?? ''))
           }, (item: NameItem) => item.name)
         }.padding({ left: 4, right: 4 })

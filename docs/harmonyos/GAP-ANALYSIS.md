@@ -101,7 +101,7 @@
 | 35 | ~~书签系统~~ ✅ 已实现 | 02.03.41 "Save view" | 无法保存/管理常用天体位置 | ~~P0~~ 完成 | 自建桥 addBookmark/getBookmarks/gotoBookmark/deleteBookmark（存 userDir/bookmarks.json）+ ArkTS 书签面板，模拟器 4 命令端到端验证通过 |
 | 36 | ~~Oculars/望远镜配置~~ ✅ 已实现 | 02.04.41-05.03 | 无法配置目镜/望远镜/透镜参数 | ~~P1~~ 完成 | 自建桥 getOculars/setOcularMode/setTelrad/setCrosshairs/setCCD/cycleOcular/Telescope/Lens/CCD（Oculars 插件静态链接，编译期已含）+ ArkTS 望远镜面板（目镜模式/Telrad/十字丝/CCD 开关 + 目镜/望远镜/镜片/CCD 选择器），模拟器验证通过 |
 | 37 | ~~Satellites 卫星插件~~ ✅ 已实现 | 多张截图 | 无法显示/追踪人造卫星轨道 | ~~P1~~ 完成 | 自建桥 getSatellites/setSatellitesFlag（labels/orbitLines/hints/iconicMode/hideInvisible + 分组列表 + 总数）+ ArkTS 卫星面板，模拟器验证通过 |
-| 38 | Speech 语音输出 | 02.03.52 | 无语音播报天体信息 | **P2** | 未见 speech/speak 桥接 |
+| 38 | Speech 语音输出 | 02.03.52 | 无语音播报天体信息 | **P2** | 🟡 部分实现：新增 `getObjectSpokenText` 桥 + 对象面板「朗读文本」按钮，可生成并显示中文描述文本；但当前 OpenHarmony 基础 SDK 不含 `@kit.CoreSpeechKit`，无法播放音频 TTS |
 | 39 | 脚本录制 | 02.04.29 record 图标 | 无法录制操作脚本 | **P2** | 有 playScript 但缺 recordScript |
 | 40 | 视频录制 | 未见截图 | 无法录制星图视频 | **P2** | 未见 saveVideo 桥接 |
 | 41 | ~~Help 帮助面板~~ ✅ 已实现 | 02.04.29-35 | 缺快捷键/About/Log 查看 | ~~P2~~ 完成 | 新增 getLog/getAboutInfo/exportConfig/importConfig 桥 + ArkTS 帮助面板（关于/运行日志/配置导入导出），模拟器验证通过 |
@@ -109,18 +109,16 @@
 | 43 | ~~配置导入导出~~ ✅ 已实现 | 02.03.41 | 无法迁移桌面配置 | ~~P2~~ 完成 | 与 #41 合并实现：exportConfig 读取 config.ini 全文，importConfig 按 [section]+key=value 写入并 sync |
 | 44 | 高级选择工具 | 未见截图 | 桌面端支持区域选择，当前仅 selectAt | **P3** | |
 | 45 | 天文摄影模拟 | 未见截图 | 无法模拟长曝光效果 | **P3** | |
-| 44 | 高级选择工具 | 未见截图 | 桌面端支持区域选择，当前仅 selectAt | **P3** | |
-| 45 | 天文摄影模拟 | 未见截图 | 无法模拟长曝光效果 | **P3** | |
 
 ## 四、完成度估算
 
 | 维度 | 估算 | 说明 |
 |------|------|------|
-| C++ 桥接命令 | ~94%（165+/175） | 核心命令齐全，缺 Speech/脚本录制/视频录制/轨迹回放 |
-| ArkUI 面板 | ~90% | 12 个面板核心完成，帮助面板已补齐 |
-| 桌面版核心功能 | ~88% | 搜索/选星/时间/位置/图层/投影/脚本/插件/帮助 |
-| 桌面版完整功能 | ~68% | 缺 Speech/脚本录制/视频录制/轨迹回放/高级选择/天文摄影 |
-| **用户可见差距** | **32%** | 普通用户最需要：星表下载、书签、卫星、Oculars、帮助已补齐 |
+| C++ 桥接命令 | ~95%（166+/175） | 核心命令齐全，Speech 命令已加；仍缺脚本录制/视频录制/轨迹回放专用命令 |
+| ArkUI 面板 | ~90% | 13 个面板核心完成，帮助面板已补齐 |
+| 桌面版核心功能 | ~89% | 搜索/选星/时间/位置/图层/投影/脚本/插件/帮助/朗读文本 |
+| 桌面版完整功能 | ~70% | Speech 部分实现（文本预览✅，音频 TTS 受 OpenHarmony SDK 限制），仍缺脚本录制/视频录制/轨迹回放/高级选择/天文摄影 |
+| **用户可见差距** | **30%** | 普通用户最需要：星表下载、书签、卫星、Oculars、帮助已补齐 |
 
 ## 五、Phase 3 建议路线
 

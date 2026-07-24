@@ -209,6 +209,17 @@
 - **已实现核心功能：** 渲染、搜索（+历史+热门）、时间（+23 种天文时间单位）、位置（+GPS+城市列表）、图层（70+ toggle，7 tab）、详情（自动刷新+RA/Dec/Alt/Az）、方向/FOV、多语言（235+ i18n keys）、星图文化（真实列表切换）、观测列表、脚本（播放/暂停/停止）、插件（动态加载/卸载）、AstroCalc（9 tab，RTS/年历/行星位置数据桥接）、截图、陀螺仪、LX200、启动画面、Settings 快捷面板、Help 面板、night mode 色彩适配
 - **仍缺失：** 书签系统、视频录制、天体轨迹回放、配置导入导出、DSO 星表过滤、完整 AstroCalc 数据计算（星历表/天象/日食需要桌面 AstroCalcDialog 逻辑）、Satellites 插件
 
+### 7. Speech 语音播报缺音频 TTS（受 SDK 限制）
+
+- **状态：** 🟡 部分实现，音频播放受 SDK 限制
+- **现象：** 对象面板已新增「朗读文本」按钮，可生成并显示选中天体中文描述；但无法播放语音音频。
+- **根因：** 当前工程基于 OpenHarmony 基础 SDK（API 24），其 `ets/kits/` 列表不含 `@kit.CoreSpeechKit`。`@kit.CoreSpeechKit`（Text-to-Speech 语音合成）只在华为 HMS SDK（`/Applications/DevEco-Studio.app/Contents/sdk/default/hms/ets/kits/`）中存在。OpenHarmony 构建无法引入 HMS kit，因此没有可用的系统 TTS 引擎。
+- **已实现部分：**
+  - C++ 桥 `getObjectSpokenText`：返回「名称、类型、星座、视星等、高度、方位、距离」组成的中文句子。
+  - ArkTS 对象面板「朗读文本」按钮：调用命令并在面板中显示句子，验证命令 round-trip。
+- **待补齐（切换 SDK 后）：** 将返回的 `text` 交给 `@kit.CoreSpeechKit.textToSpeech.speak()` 播放。
+- **验证：** 模拟器选中月球后点「朗读文本」，显示「月，类型 卫星，视星等 -11.30，高度 2 度，方位 东南，距离 0.0027 天文单位」。
+
 ---
 
 ## P3 - 低优先级

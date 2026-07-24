@@ -5,6 +5,21 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 朗读/语音播报(Speech) + 搜索候选可点击
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `getObjectSpokenText` 命令，生成选中天体中文描述）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：对象面板新增「朗读文本」按钮；搜索面板底部常用天体候选从 Text 改为 Button 以支持 uitest/辅助点击）
+- **修改内容：**
+  1. `getObjectSpokenText`：读取选中天体名称、类型、所属星座、视星等、地平高度/方位（使用 `getInfoMap` 与面板同源）、距离，拼接成一句中文描述。
+  2. 对象面板新增「朗读文本」按钮，点按后调用 `getObjectSpokenText` 并在面板中显示生成的描述文本。
+  3. 搜索面板「分类天体列表」中的预设常用天体（月球/火星/木星/土星/天狼星/织女星/参宿四/…）由 `Text` 改为 `Button`，既保留原有样式，又让 uitest 和辅助功能可以真实点中。
+- **已知限制：** 当前工程基于 OpenHarmony 基础 SDK（API 24），其 kit 列表不含 `@kit.CoreSpeechKit`（语音合成只在华为 HMS SDK 中存在），因此目前只能生成并显示朗读文本，无法播放音频。待切换到含 CoreSpeechKit 的 SDK 后，可将同一文本交给 `textToSpeech.speak()` 播放。
+- **构建结果：** C++ 增量编译通过；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：** 搜索面板点「月球」选中后，对象面板点「朗读文本」，正确显示「月，类型 卫星，视星等 -11.30，高度 2 度，方位 东南，距离 0.0027 天文单位」。
+
+---
+
 ## [2026-07-24] WorkBuddy - 帮助(Help)面板增强：关于 / 运行日志 / 配置导入导出
 
 - **修改文件：**

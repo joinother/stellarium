@@ -1697,6 +1697,74 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// getObjectSpokenText — plain-language Chinese description of the
+		// currently selected object, intended for Text-To-Speech playback.
+		if (commandName == "getObjectSpokenText")
+		{
+			QJsonObject out;
+			const QList<StelObjectP>& sel = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
+			if (sel.empty())
+			{
+				out["ok"] = false;
+				out["error"] = "no object selected";
+				return out;
+			}
+			const StelObjectP& obj = sel[0];
+			const StelCore* core = StelApp::getInstance().getCore();
+
+			auto azToCompass = [](double az) -> QString {
+				const QString dirs[8] = { "正北", "东北", "正东", "东南", "正南", "西南", "正西", "西北" };
+				int idx = qRound(az / 45.0) % 8;
+				if (idx < 0) idx += 8;
+				return dirs[idx];
+			};
+
+			QString name = obj->getNameI18n();
+			QString typeI18 = obj->getObjectTypeI18n();
+			double mag = obj->getVMagnitude(core);
+
+			// Use getInfoMap for altitude/azimuth/distance (same source as the
+			// object info panel) because getAltAzPosApparent returns a direction
+			// vector, not angles.
+			const QVariantMap m = obj->getInfoMap(core);
+			double alt = m.value("altitude", 0.0).toDouble();
+			double az = m.value("azimuth", 0.0).toDouble();
+
+			QString spoken = name;
+			if (!typeI18.isEmpty())
+				spoken += QString("，类型 %1").arg(typeI18);
+
+			// Constellation the object belongs to (consistent with panel display)
+			Vec3d posJ2000 = obj->getJ2000EquatorialPos(core);
+			QList<StelObjectP> csts = GETSTELMODULE(ConstellationMgr)->searchAround(posJ2000, 0.5, core);
+			if (!csts.isEmpty())
+				spoken += QString("，位于 %1").arg(csts.first()->getNameI18n());
+
+			spoken += QString("，视星等 %1").arg(QString::number(mag, 'f', 2));
+
+			spoken += QString("，高度 %1 度，方位 %2")
+					  .arg(QString::number(alt, 'f', 0))
+					  .arg(azToCompass(az));
+
+			if (m.contains("distance"))
+			{
+				double distAu = m["distance"].toDouble();
+				if (distAu > 0)
+				{
+					if (distAu < 0.01)
+						spoken += QString("，距离 %1 天文单位").arg(QString::number(distAu, 'f', 4));
+					else if (distAu < 1000.)
+						spoken += QString("，距离 %1 天文单位").arg(QString::number(distAu, 'f', 2));
+					else
+						spoken += QString("，距离 %1 光年").arg(QString::number(distAu / 63241.077, 'f', 1));
+				}
+			}
+
+			out["ok"] = true;
+			out["text"] = spoken;
+			return out;
+		}
+
 		// getConstellationInfo — get current constellation at center
 		if (commandName == "getConstellationInfo")
 		{
