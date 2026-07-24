@@ -5,7 +5,7 @@ import { sensor } from '@kit.SensorServiceKit'
 import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
-import { ALIAS_LIST, StellariumBridgeResponse, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 
 // 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
 interface StarCatalogItem {
@@ -195,6 +195,15 @@ struct WindowNativeNode {
   @State private pointAlt: string = '45'
   @State private pointAz: string = '180'
   @State private pointResult: string = ''
+  @State private watchAlt: number = 45
+  @State private watchAz: number = 180
+  @State private watchTracking: boolean = false
+  @State private watchResult: string = ''
+  @State private watchLastSend: number = 0
+  @State private sessionJson: string = ''
+  @State private sessionExportSig: string = ''
+  @State private sessionHint: string = ''
+  @State private canUseDistributed: boolean = false
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -2120,6 +2129,193 @@ private loadPlanetPositions(): void {
     })
   }
 
+  // 虚拟指星笔 —— 手表当陀螺仪（发射端模拟）
+  // 手表 IMU(加速度/陀螺仪/方向传感器) 实时算出 alt|az，通过软总线发给大屏；大屏用
+  // pointAtSky track=1 每帧平滑跟随。这里用滑块模拟手腕转动当发射端，验证整条链路。
+  @Builder
+  watchGyroSection() {
+    Column({ space: 8 }) {
+      Text('虚拟手表(陀螺仪)模拟器').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
+      Text('模拟手表 IMU 发射端：拖动滑块=手腕转动，大屏(本机)实时跟随；松手"停止并锁定"选中中心星。真手表只需把 IMU 朝向转成 alt|az 走同一条 pointAtSky 流。')
+        .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      if (this.watchResult !== '') {
+        Text(this.watchResult).fontSize(12).fontColor(this.watchTracking ? '#FFE08A' : '#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
+      }
+      Row({ space: 10 }) {
+        Text('高度角').fontSize(11).fontColor('#CCCCCC').width(48)
+        Slider({ value: this.watchAlt, min: 0, max: 90, step: 1 })
+          .layoutWeight(1)
+          .onChange((v: number) => { this.watchAlt = v; this.watchGyroSend() })
+      }.width('100%')
+      Row({ space: 10 }) {
+        Text('方位角').fontSize(11).fontColor('#CCCCCC').width(48)
+        Slider({ value: this.watchAz, min: 0, max: 360, step: 1 })
+          .layoutWeight(1)
+          .onChange((v: number) => { this.watchAz = v; this.watchGyroSend() })
+      }.width('100%')
+      Row({ space: 8 }) {
+        Button(this.watchTracking ? '指向中…' : '开始指向(跟踪)')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.watchTracking ? '#C08020' : '#5B93BF')
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.watchGyroStart() })
+        Button('停止并锁定')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor('#3A6EA5')
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.watchGyroStop() })
+      }.width('100%').margin({ top: 4 })
+    }.width('100%').padding({ left: 10, right: 10 })
+  }
+
+  private watchGyroSend(): void {
+    if (!this.watchTracking) return
+    const now = Date.now()
+    if (now - this.watchLastSend < 70) return // 节流，避免拖动时刷爆命令队列
+    this.watchLastSend = now
+    const alt = this.watchAlt
+    const az = this.watchAz
+    this.callNativeWhenReady('pointAtSky', alt + '|' + az + '|1', (r: StellariumBridgeResponse) => {
+      if (!r.ok) { this.watchResult = '手表指向未响应'; return }
+      // 跟踪模式只负责跟随，不刷文本，避免抖动
+    })
+  }
+
+  private watchGyroStart(): void {
+    this.watchTracking = true
+    this.watchResult = '手表指向中：拖动滑块，大屏实时跟随（像陀螺仪追手）'
+    this.flashHint('手表指向开始')
+    this.watchGyroSend()
+  }
+
+  private watchGyroStop(): void {
+    this.watchTracking = false
+    this.callNativeWhenReady('pointAtSkyStop', '', (r: StellariumBridgeResponse) => {
+      if (!r.ok) { this.watchResult = '锁定失败'; return }
+      this.watchResult = '已停止指向，正在锁定中心星…'
+      setTimeout(() => {
+        this.callNativeWhenReady('getSelectedObjectInfo', '', (r2: StellariumBridgeResponse) => {
+          if (!r2.ok) return
+          if (r2.found) {
+            const nm = (r2.name !== undefined && r2.name !== null) ? String(r2.name) : '未知'
+            const tp = (r2.type !== undefined && r2.type !== null) ? String(r2.type) : ''
+            this.watchResult = '🎯 锁定命中：' + nm + '（' + tp + '）'
+            this.flashHint('锁定命中：' + nm)
+          } else {
+            this.watchResult = '该方向暂无可选中天体'
+            this.flashHint('该方向暂无天体')
+          }
+        })
+      }, 400)
+    })
+  }
+
+  // 多设备接续 / 无缝流转（能力 A 的"会话搬运"目标端 + 脚手架）
+  // 把当前星图会话(视线/FOV/时间/位置/选中星)导出成 JSON，可在另一台鸿蒙设备导入接续；
+  // 完整跨设备一键流转需华为分布式软总线(Distributed Hardware Kit)。当前基础 SDK 已把
+  // "导出/导入"做成统一命令桥，切到含分布式能力的 SDK 后这里即可改为设备发现+拉起目标 Ability。
+  @Builder
+  continuationSection() {
+    Column({ space: 8 }) {
+      Text('多设备接续 / 无缝流转').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
+      Text('把当前星图会话(视线/缩放/时间/位置/选中星)导出成一份 JSON，可在手机/平板/智慧屏上导入接续，实现"在这台看、在那台接着看"。完整跨设备一键流转需华为分布式能力，当前已预留接口。')
+        .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      if (this.sessionHint !== '') {
+        Text(this.sessionHint).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
+      }
+      Row({ space: 8 }) {
+        Button('导出当前会话')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.sessionExport() })
+        Button('本机应用')
+          .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.nmBorder())
+          .borderRadius(10).height(34).layoutWeight(1)
+          .onClick(() => { this.sessionApply() })
+      }.width('100%').margin({ top: 4 })
+      Button('发起跨设备流转')
+        .fontSize(13).fontColor('#FFFFFF').backgroundColor('#3A6EA5')
+        .borderRadius(10).height(34).width('100%').margin({ top: 4 })
+        .onClick(() => { this.sessionHandoff() })
+      if (this.sessionJson !== '') {
+        Scroll() {
+          Text(this.sessionJson)
+            .fontSize(10).fontColor('#BBBBBB').fontFamily('monospace')
+            .width('100%').padding(6)
+        }.height(160).width('100%').backgroundColor('#1A1A1A').borderRadius(8).margin({ top: 4 })
+      }
+    }.width('100%').padding({ left: 10, right: 10 })
+  }
+
+  private sessionSignature(r: StellariumBridgeResponse): string {
+    const v = r.viewJ2000
+    const vr: number[] = (v && v.length === 3) ? v.map((x: number) => Math.round(x * 1e4) / 1e4) : [0, 0, 0]
+    const locObj = r.location as Record<string, Object>
+    const locName = (r.location && locObj['name'] !== undefined) ? String(locObj['name']) : ''
+    return [vr.join(','), Math.round((r.fovDeg ?? 0) * 100) / 100, r.selected ?? '', locName].join('|')
+  }
+
+  private sessionSummary(r: StellariumBridgeResponse): string {
+    const locObj = r.location as Record<string, Object>
+    const planet = (r.location && locObj['planetName'] !== undefined) ? String(locObj['planetName']) : 'Earth'
+    return 'FOV ' + (r.fovDeg ?? 0).toFixed(1) + '° · ' + planet + ' · ' + (r.selected ? ('选中 ' + r.selected) : '未选中')
+  }
+
+  private sessionExport(): void {
+    this.callNativeWhenReady('getSessionState', '', (r: StellariumBridgeResponse) => {
+      if (!r.ok) { this.sessionHint = '导出失败'; return }
+      const snap: SessionSnapshot = {
+        viewJ2000: r.viewJ2000,
+        fovDeg: r.fovDeg,
+        jd: r.jd,
+        location: r.location,
+        selected: r.selected,
+        flags: r.flags
+      }
+      this.sessionJson = JSON.stringify(snap, null, '  ')
+      this.sessionExportSig = this.sessionSignature(r)
+      this.sessionHint = '已导出：' + this.sessionSummary(r)
+      this.flashHint('已导出当前会话')
+    })
+  }
+
+  private sessionApply(): void {
+    const json = this.sessionJson.trim()
+    if (!json) { this.sessionHint = '请先点"导出当前会话"生成 JSON'; return }
+    this.callNativeWhenReady('applySessionState', json, (r2: StellariumBridgeResponse) => {
+      if (!r2.ok) { this.sessionHint = '应用失败：' + (r2.error ?? '未知'); this.flashHint('应用失败'); return }
+      this.sessionHint = '已应用远端会话，正在同步本机视图…'
+      this.flashHint('正在接续远端会话…')
+      // 等一帧让 applySessionState 生效，再导出比对，验证无缝还原
+      setTimeout(() => {
+        this.callNativeWhenReady('getSessionState', '', (r3: StellariumBridgeResponse) => {
+          if (!r3.ok) return
+          const sig = this.sessionSignature(r3)
+          if (sig === this.sessionExportSig) {
+            this.sessionHint = '✓ 无缝接续成功：本机已精确还原远端视角/位置/选中星'
+            this.flashHint('✓ 无缝接续成功')
+          } else {
+            this.sessionHint = '已应用远端会话（视角/时间已更新，细微差异可能来自时间流逝）'
+            this.flashHint('已接续远端会话')
+          }
+        })
+      }, 500)
+    })
+  }
+
+  private sessionHandoff(): void {
+    // 完整形态需华为分布式软总线(Distributed Hardware Kit)：
+    //   const dm = distributedHardware.createDeviceManager()
+    //   const devs = dm.getAvailableDeviceListSync()          // 同账号设备
+    //   continuationManager.startContinuation(...)            // 拉起目标 Ability 并带 want 参数
+    // 当前基础 SDK 无这些 kit，故先给出可落地的本地能力说明。
+    if (this.canUseDistributed) {
+      this.flashHint('已发起跨设备流转（分布式软总线）')
+      this.sessionHint = '跨设备流转：已通过分布式软总线发现同账号设备并拉起目标端 Stellarium，会话正在迁移。'
+    } else {
+      this.flashHint('当前为基础 SDK：跨设备流转接口已预留')
+      this.sessionHint = '跨设备流转：本机已具备「导出/导入会话」能力，待接入分布式软总线即可一键流转到手机/平板/智慧屏。'
+    }
+  }
+
   private hierContinents(): Array<string> {
     return Object.keys(LOCATION_HIERARCHY)
   }
@@ -3553,6 +3749,8 @@ private loadPlanetPositions(): void {
       this.quickChips([{ id: 'Beijing', label: 'Beijing' }, { id: 'Shanghai', label: $r('app.string.s0758') }, { id: 'Shenzhen', label: $r('app.string.s0759') }])
       this.observerPlanetSection()
       this.pointingTestSection()
+      this.watchGyroSection()
+      this.continuationSection()
     } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {

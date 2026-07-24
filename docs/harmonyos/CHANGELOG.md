@@ -5,6 +5,26 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 虚拟指星笔手表陀螺仪模式 + 多设备接续（无缝流转，#48/#49）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：扩展 `pointAtSky <alt>|<az>[|<track>]` 支持 track=1 手表陀螺仪跟随模式；新增 `pointAtSkyStop` 结束跟踪并锁定中心星；新增 `ohosUpdatePointTracking()` 在 `renderOhosFrameNow()` 中 `app.update(dt)` 前每帧平滑插值逼近目标方向；新增 `getSessionState` / `applySessionState` 导出/导入完整星图会话状态）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：位置面板新增「虚拟手表(陀螺仪)模拟器」区，含高度角/方位角滑块、「开始指向(跟踪)」/「停止并锁定」按钮、即时回显 + `flashHint`；新增「多设备接续 / 无缝流转」区，含导出当前会话 JSON、本机应用、发起跨设备流转按钮）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（扩展 `StellariumBridgeResponse` 与新增 `SessionSnapshot` 接口，承载会话状态字段）
+  - `docs/harmonyos/GAP-ANALYSIS.md`（更新 #48 条目，新增 #49 多设备接续条目，更新完成度估算）
+- **修改内容：**
+  1. 手表陀螺仪模式：用户明确「虚拟指星笔」就是手表代替陀螺仪，手腕转来转去，大屏/平板实时显示当前指向。C++ 端把 `pointAtSky` 从"一次啪过去"升级为 track=1 持续跟随模式——每次收到 alt|az 只更新目标方向，渲染循环每帧用 `cur + (target - cur) * 0.18` 平滑逼近，星图像真陀螺仪一样追着手腕动；`pointAtSkyStop` 停止跟踪并在下一帧选中屏幕中心天体。
+  2. 发射端模拟：位置面板新增「虚拟手表(陀螺仪)模拟器」区，用滑块模拟手表 IMU 输出 alt|az，拖动时 70ms 节流发送 `pointAtSky alt|az|1`，大屏实时跟随；点「停止并锁定」调用 `pointAtSkyStop` 并读取 `getSelectedObjectInfo` 显示命中天体。真手表端未来只需把 IMU 朝向转成同样格式经软总线发送。
+  3. 多设备接续：新增 `getSessionState` 导出当前会话（J2000 视线/FOV/时间 JD/观测者经纬高与星球/选中天体/关键图层 flag），`applySessionState` 在本机或目标设备还原这些状态，实现「在这台看、在那台接着看」。完整一键跨设备拉起待华为分布式软总线 SDK 接入，当前命令桥与 UI 已预留接口。
+- **构建结果：** C++ 增量编译通过（`[100%] Built target stellarium`）；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 打开位置面板 → 滚动至「虚拟手表(陀螺仪)模拟器」区。
+  - 点「示例：天顶」定基准 → 星图转向天顶。
+  - 点「开始指向(跟踪)」→ hilog 出现 `Stellarium command pointAtSky`，按钮变橙并显示「手表指向中：拖动滑块，大屏实时跟随（像陀螺仪追手）」；约 1.5s 后星图从跟到天顶平滑转到 alt45°/az180° 区域（月亮出现在画面中），证明跟踪跟随生效。
+  - 点「停止并锁定」→ hilog 出现 `Stellarium command pointAtSkyStop` → `getSelectedObjectInfo`，面板回显 `🎯 锁定命中：(28) Bellona（小行星）`，星图中心出现红色选择框，端到端链路完整跑通。
+
+---
+
 ## [2026-07-24] WorkBuddy - 虚拟指星笔目标端（多设备联动：手表/多屏指哪显哪，#48）
 
 - **修改文件：**

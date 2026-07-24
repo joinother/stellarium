@@ -301,6 +301,12 @@ export interface StellariumBridgeResponse {
   count?: number
   prefix?: string
   moduleId?: string
+  // ---- 无缝流转 / 会话状态 (getSessionState / applySessionState) ----
+  viewJ2000?: number[]
+  fovDeg?: number
+  location?: object
+  selected?: string
+  flags?: object
   current?: string
   rts?: Object
   almanac?: Object
@@ -316,4 +322,13 @@ export interface StellariumBridgeResponse {
   fps?: number
   duration?: number
   planets?: string[]
+}
+
+export interface SessionSnapshot {
+  viewJ2000?: number[]
+  fovDeg?: number
+  jd?: number
+  location?: object
+  selected?: string
+  flags?: object
 }

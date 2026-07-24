@@ -430,6 +430,13 @@ static float s_landscapeFadeSmooth = 0.f;
 // (the projector is only refreshed during app.update, so a same-frame
 // findAndSelect would use the stale, pre-move projection).
 static bool s_pendingPointSelect = false;
+// Virtual pointing-stick: smooth "gyroscope follow" tracking. When a watch (or
+// any orientation source) streams alt|az with track=1, we remember the target
+// J2000 direction and ease the view toward it every frame, so the on-screen sky
+// follows the user's hand like a real gyroscope-equipped pointing stick.
+static bool s_pointTracking = false;
+static Vec3d s_trackTargetJ2000(0.0, 0.0, 1.0);
+static const double s_trackLerpK = 0.18; // fraction of remaining angle per frame
 static void markQtLoopRunning();
 
 static void ohosDrainCommandQueue()
@@ -509,6 +516,32 @@ static void ohosProcessPendingPointSelect()
 	const int cx = vp[2] / 2;
 	const int cy = vp[3] / 2;
 	omgr->findAndSelect(core, cx, cy);
+}
+
+// Called every frame BEFORE app.update(dt) while a watch/gyro source is
+// streaming orientations (track=1). Eases the current view direction toward the
+// latest target so the sky visually follows the user's hand (gyroscope feel).
+static void ohosUpdatePointTracking()
+{
+	if (!s_pointTracking)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelMovementMgr* mvmgr = core ? core->getMovementMgr() : nullptr;
+	if (!core || !mvmgr)
+		return;
+	Vec3d cur = mvmgr->getViewDirectionJ2000();
+	Vec3d next = cur + (s_trackTargetJ2000 - cur) * s_trackLerpK;
+	if (next.normSquared() < 1e-9)
+	{
+		// cur and target are nearly antipodal; just snap.
+		mvmgr->setViewDirectionJ2000(s_trackTargetJ2000);
+		return;
+	}
+	next.normalize();
+	mvmgr->setViewDirectionJ2000(next);
 }
 
 static void markQtLoopRunning()
@@ -1659,12 +1692,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	}
 
 		// pointAtSky — virtual pointing-stick target side.
-		// arg: "<alt>|<az>" in degrees (apparent horizontal coords). The view is
-		// recentered on that sky direction; on the next rendered frame the object
-		// at screen-center is selected and becomes the current selection (so the
-		// UI / other device can read it via getSelectedObjectInfo). This is the
-		// "你指到哪，其他屏幕就显示到对应的星星" 收口逻辑 —— 手表/分布式只是另一种
-		// 触发方式，最终都归一化到这条命令。
+		// arg: "<alt>|<az>[|<track>]" in degrees (apparent horizontal coords).
+		//  - track omitted / "0": one-shot. Recenters the view on that sky
+		//    direction immediately and selects the object at screen-center on the
+		//    next frame.
+		//  - track "1": continuous "watch gyro" mode. Remembers the target J2000
+		//    direction; ohosUpdatePointTracking() eases the view toward it every
+		//    frame so the sky follows the user's hand. No selection yet (view is
+		//    still moving). The watch streams many of these as it rotates.
+		// This is the "你指到哪，其他屏幕就显示到对应的星星" 收口逻辑 —— 手表/分布式
+		// 只是另一种触发方式，最终都归一化到这条命令。
 		if (commandName == "pointAtSky")
 		{
 			if (!core || !movementMgr)
@@ -1675,7 +1712,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QStringList parts = arg.split('|');
 			if (parts.size() < 2)
 			{
-				result["error"] = "pointAtSky expects alt|az";
+				result["error"] = "pointAtSky expects alt|az[|track]";
 				return result;
 			}
 			bool okAlt = false, okAz = false;
@@ -1693,6 +1730,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d altAzVec;
 			StelUtils::spheToRect(M_PI - azRad, altRad, altAzVec);
 			const Vec3d j2000 = core->altAzToJ2000(altAzVec, StelCore::RefractionOff);
+			const bool track = (parts.size() >= 3 && parts[2] == "1");
+			if (track)
+			{
+				// Continuous watch-gyro follow: just update the target; the
+				// per-frame easing does the visible motion.
+				s_trackTargetJ2000 = j2000;
+				s_pointTracking = true;
+				result["ok"] = true;
+				result["tracking"] = true;
+				result["alt"] = altDeg;
+				result["az"] = azDeg;
+				return result;
+			}
+			// One-shot: snap now and select center next frame.
+			s_pointTracking = false;
 			movementMgr->setViewDirectionJ2000(j2000);
 			// Defer the center-selection to the next frame (projection refresh).
 			s_pendingPointSelect = true;
@@ -1700,6 +1752,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["alt"] = altDeg;
 			result["az"] = azDeg;
 			result["j2000"] = QString("[%1,%2,%3]").arg(j2000[0],0,'f',4).arg(j2000[1],0,'f',4).arg(j2000[2],0,'f',4);
+			return result;
+		}
+
+		// pointAtSkyStop — end "watch gyro" tracking and lock onto whatever is now
+		// at screen-center (the star the user's hand is finally pointing at).
+		if (commandName == "pointAtSkyStop")
+		{
+			s_pointTracking = false;
+			s_pendingPointSelect = true;
+			result["ok"] = true;
 			return result;
 		}
 
@@ -3799,12 +3861,109 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					break;
 				}
 			}
-			if (found) { result["ok"] = true; }
-			else { result["ok"] = false; result["error"] = "bookmark not found: " + arg; }
+		if (found) { result["ok"] = true; }
+		else { result["ok"] = false; result["error"] = "bookmark not found: " + arg; }
+		return result;
+	}
+
+		// ========== Session continuation (无缝流转 / 跨设备接续) ==========
+		// getSessionState — export the full current session so it can be handed off
+		// to another device (seamless continuation). Returns ok:true plus the view
+		// J2000 vector, FOV (deg), JD, observer location, selected object and key flags.
+		if (commandName == "getSessionState")
+		{
+			if (!core || !movementMgr) { result["error"] = "core/movement not ready"; return result; }
+			const Vec3d d = movementMgr->getViewDirectionJ2000();
+			result["ok"] = true;
+			QJsonArray v;
+			v.append(d[0]); v.append(d[1]); v.append(d[2]);
+			result["viewJ2000"] = v;
+			result["fovDeg"] = movementMgr->getCurrentFov() * 180.0 / M_PI;
+			result["jd"] = core->getJD();
+			const StelLocation& loc = core->getCurrentLocation();
+			QJsonObject lo;
+			lo["name"] = loc.name;
+			lo["planetName"] = loc.planetName;
+			lo["latitude"] = loc.getLatitude();
+			lo["longitude"] = loc.getLongitude();
+			lo["altitude"] = loc.altitude;
+			lo["ianaTimeZone"] = loc.ianaTimeZone;
+			result["location"] = lo;
+			QString selName;
+			if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+				selName = objectMgr->getSelectedObject().first()->getEnglishName();
+			result["selected"] = selName;
+			QJsonObject fl;
+			LandscapeMgr* lm = GETSTELMODULE(LandscapeMgr);
+			if (lm) { fl["atmosphere"] = lm->getFlagAtmosphere(); fl["fog"] = lm->getFlagFog(); fl["landscape"] = lm->getFlagLandscape(); fl["cardinals"] = lm->getFlagCardinalPoints(); }
+			ConstellationMgr* cm = GETSTELMODULE(ConstellationMgr);
+			if (cm) { fl["constLines"] = cm->getFlagLines(); fl["constLabels"] = cm->getFlagLabels(); }
+			fl["tracking"] = movementMgr->getFlagTracking();
+			if (SporadicMeteorMgr* mm = GETSTELMODULE(SporadicMeteorMgr)) fl["meteors"] = mm->getFlagShow();
+			result["flags"] = fl;
 			return result;
 		}
 
-		// ========== Oculars plugin (望远镜/目镜配置) ==========
+		// applySessionState — import a session produced by getSessionState on another
+		// device and restore view / FOV / time / location / selection. This is the
+		// target end of 无缝流转: a source device exports, transfers the JSON over the
+		// (future) distributed soft-bus, and the target device applies it to continue.
+		if (commandName == "applySessionState")
+		{
+			if (!core || !movementMgr) { result["ok"] = false; result["error"] = "core/movement not ready"; return result; }
+			const QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			if (doc.isNull() || !doc.isObject()) { result["ok"] = false; result["error"] = "applySessionState expects JSON"; return result; }
+			const QJsonObject s = doc.object();
+			if (s.contains("jd") && s["jd"].isDouble()) core->setJD(s["jd"].toDouble());
+			if (s.contains("location") && s["location"].isObject())
+			{
+				const QJsonObject lo = s["location"].toObject();
+				const QString planet = lo["planetName"].toString();
+				if (!planet.isEmpty())
+				{
+					StelLocation loc;
+					loc.name = lo["name"].toString(planet + " surface");
+					loc.planetName = planet;
+					loc.setLatitude(static_cast<float>(lo["latitude"].toDouble()));
+					loc.setLongitude(static_cast<float>(lo["longitude"].toDouble()));
+					loc.altitude = lo["altitude"].toInt();
+					loc.role = QChar('X');
+					loc.ianaTimeZone = lo["ianaTimeZone"].toString(QStringLiteral("system_default"));
+					QString landscapeID;
+					if (planet == "Moon") landscapeID = "moon";
+					else if (planet == "Mars") landscapeID = "mars";
+					else if (planet == "Jupiter") landscapeID = "jupiter";
+					else if (planet == "Saturn") landscapeID = "saturn";
+					else if (planet == "Uranus") landscapeID = "uranus";
+					else if (planet == "Neptune") landscapeID = "neptune";
+					else if (planet == "Sun") landscapeID = "sun";
+					else if (planet == "Earth") landscapeID = "garching";
+					core->moveObserverTo(loc, 0.0, 0.0, landscapeID);
+				}
+			}
+			// view vector must be restored AFTER moveObserverTo (which can re-aim)
+			if (s.contains("viewJ2000") && s["viewJ2000"].isArray())
+			{
+				const QJsonArray v = s["viewJ2000"].toArray();
+				if (v.size() == 3)
+					movementMgr->setViewDirectionJ2000(Vec3d(v[0].toDouble(), v[1].toDouble(), v[2].toDouble()));
+			}
+			if (s.contains("fovDeg") && s["fovDeg"].isDouble())
+				movementMgr->setFov(s["fovDeg"].toDouble() * M_PI / 180.0);
+			if (s.contains("selected") && objectMgr)
+			{
+				const QString sel = s["selected"].toString();
+				if (!sel.isEmpty())
+					objectMgr->findAndSelect(sel);
+				else
+					objectMgr->unSelect();
+			}
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
+	// ========== Oculars plugin (望远镜/目镜配置) ==========
 		if (commandName == "getOculars")
 		{
 			Oculars* oculars = GETSTELMODULE(Oculars);
@@ -5745,6 +5904,7 @@ void StelMainView::renderOhosFrameNow()
 	gl->glBindFramebuffer(GL_FRAMEBUFFER, glWidget->defaultFramebufferObject());
 	gl->glViewport(0, 0, width, height);
 
+	ohosUpdatePointTracking();
 	app.update(dt);
 	ohosProcessPendingPointSelect();
 	app.draw();
