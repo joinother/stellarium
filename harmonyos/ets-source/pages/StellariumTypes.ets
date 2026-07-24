@@ -315,4 +315,5 @@ export interface StellariumBridgeResponse {
   recording?: boolean
   fps?: number
   duration?: number
+  planets?: string[]
 }

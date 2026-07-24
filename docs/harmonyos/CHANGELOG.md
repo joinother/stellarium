@@ -5,6 +5,24 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 切换观测星球（把观测者放到火星/月球等，#46）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `getObserverPlanetList` / `setObserverPlanet`；复用 `SolarSystem::getAllPlanetEnglishNames()` 与 `StelCore::moveObserverTo(loc, 0, 0, landscapeID)`）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（`StellariumBridgeResponse` 新增 `planets?: string[]` 字段；`error?: string` 此前已由语音/视频功能加过，本轮修正了重复定义）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：位置面板新增「观测星球」分区 + `loadPlanetList`/`setObserverPlanet`/`observerPlanetSection` 方法 + `setPanel` 的 place 分支触发 `loadPlanetList` + `refreshState` 回显 `planetName`）
+- **修改内容：**
+  1. C++ `getObserverPlanetList`：返回 `SolarSystem::getAllPlanetEnglishNames()`（所有可站立天体，含地球/月球/各大行星/彗星/矮行星）。
+  2. C++ `setObserverPlanet <planetName[|lat|lon|alt]>`：构造 `StelLocation`（设 `planetName`），映射到对应地景 ID（Moon→moon、Mars→mars、Jupiter→jupiter、Saturn→saturn、Uranus→uranus、Neptune→neptune、Sun→sun、Earth→garching），调用 `core->moveObserverTo(loc, 0, 0, landscapeID)`。Stellarium 核心在切换星球时发 `targetLocationChanged` 信号，`LandscapeMgr::onTargetLocationChanged` 会自动把地景切到该 ID（前提是 ID 在 `getAllLandscapeIDs()` 内，这些地景均已打包进 rawfile）。天空与地景据此整体重算。
+  3. ArkTS：位置面板（place）新增「观测星球」分区——标题 + 说明 + 「当前观测星球：XXX」回显 + 可站立星球按钮（Flex 换行）+「回到地球」按钮；打开面板自动拉取并过滤星球列表（只保留有专属地景的 8 个：Earth/Moon/Mars/Jupiter/Saturn/Uranus/Neptune/Sun，避免 `getAllPlanetEnglishNames` 返回的大量彗星/矮行星刷屏）；点选即调 `setObserverPlanet` 并回显。
+- **构建结果：** C++ 增量编译通过（`[100%] Built target stellarium`，仅 5 warnings）；ArkTS 首轮打包报 17 个编译错误——根因是 `observerPlanetSection()` 写成 `private ... : void` 普通方法却内嵌组件语法（ArkTS 不允许），且 `StellariumBridgeResponse` 的 `error` 字段被我重复定义；修正为 `@Builder` 方法 + 删去重复 `error` 后 `assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 打开位置面板 → 「观测星球」分区渲染（标题/说明/当前星球/8 个星球按钮/回到地球）。
+  - 点「Mars」→ 面板回显「当前观测星球：Mars」；hilog 实锤 `Stellarium command setObserverPlanet` 触发 + `ohosDrainCommandQueue ran n=1`（命令在 Qt 主线程真正执行 `moveObserverTo(loc,0,0,'mars')`）。
+  - **像素级铁证**：Mars 截图 vs Earth 截图，地面/地平线区（下 40%）平均绝对差异 **125.93/255**、全图 **105.21/255** —— 星空与地景均被整体重算，正是原版「设定到不同星球，地景和天空都会变」的行为。
+
+---
+
 ## [2026-07-24] WorkBuddy - 视频录制（帧序列方案，#40）
 
 - **修改文件：**

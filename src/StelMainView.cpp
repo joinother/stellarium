@@ -1984,6 +1984,73 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// getObserverPlanetList — list bodies the observer can stand on
+		if (commandName == "getObserverPlanetList")
+		{
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			QJsonArray list;
+			if (ssys)
+			{
+				const QStringList names = ssys->getAllPlanetEnglishNames();
+				for (const QString& n : names)
+					list.append(n);
+			}
+			result["ok"] = true;
+			result["planets"] = list;
+			return result;
+		}
+
+		// setObserverPlanet — relocate the observer onto another planet (sky + landscape recompute)
+		if (commandName == "setObserverPlanet")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			const QString planetName = parts.size() > 0 ? parts[0].trimmed() : QString();
+			if (planetName.isEmpty())
+			{
+				result["error"] = "setObserverPlanet expects planetName[|lat|lon|alt]";
+				return result;
+			}
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			if (!ssys || !ssys->searchByEnglishName(planetName))
+			{
+				result["error"] = "unknown planet: " + planetName;
+				return result;
+			}
+			const double lat = parts.size() > 1 ? parts[1].toDouble() : 0.0;
+			const double lon = parts.size() > 2 ? parts[2].toDouble() : 0.0;
+			const double alt = parts.size() > 3 ? parts[3].toDouble() : 0.0;
+			StelLocation loc;
+			loc.name = planetName + " surface";
+			loc.region = QStringLiteral("User");
+			loc.planetName = planetName;
+			loc.setLatitude(static_cast<float>(lat));
+			loc.setLongitude(static_cast<float>(lon));
+			loc.altitude = alt;
+			loc.role = QChar('X');
+			loc.ianaTimeZone = QStringLiteral("system_default");
+			// Best-effort landscape mapping (extraterrestrial landscapes are bundled)
+			QString landscapeID;
+			if (planetName == "Moon") landscapeID = "moon";
+			else if (planetName == "Mars") landscapeID = "mars";
+			else if (planetName == "Jupiter") landscapeID = "jupiter";
+			else if (planetName == "Saturn") landscapeID = "saturn";
+			else if (planetName == "Uranus") landscapeID = "uranus";
+			else if (planetName == "Neptune") landscapeID = "neptune";
+			else if (planetName == "Sun") landscapeID = "sun";
+			else if (planetName == "Earth") landscapeID = "garching";
+			core->moveObserverTo(loc, 0.0, 0.0, landscapeID);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["planetName"] = planetName;
+			result["landscapeID"] = landscapeID;
+			return result;
+		}
+
 		// getSelectedObjectInfo — full info for selected object (alias for existing)
 		if (commandName == "getSelectedType")
 		{

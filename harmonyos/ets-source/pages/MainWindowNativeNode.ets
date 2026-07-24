@@ -190,6 +190,8 @@ struct WindowNativeNode {
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
   @State private locationPickerStatus: string = 'Drag map or use auto location'
+  @State private observerPlanet: string = 'Earth'
+  @State private planetList: string[] = []
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -663,8 +665,11 @@ struct WindowNativeNode {
     }
     if (panel === 'object') {
       this.refreshSelectedObject()
-    } else if (panel === 'layers' || panel === 'time' || panel === 'place' || panel === 'settings') {
+    } else if (panel === 'layers' || panel === 'time' || panel === 'settings') {
       this.refreshState()
+    } else if (panel === 'place') {
+      this.refreshState()
+      this.loadPlanetList()
     } else if (panel === 'catalogs') {
       if (this.catalogList.length === 0) this.loadStarCatalogs()
     } else if (panel === 'bookmarks') {
@@ -1203,6 +1208,9 @@ struct WindowNativeNode {
       }
       if (result.altitude !== undefined) {
         this.altitudeText = result.altitude.toFixed(0) + ' m'
+      }
+      if (result.planetName !== undefined && result.planetName.length > 0) {
+        this.observerPlanet = result.planetName
       }
     }
     if (result.fov !== undefined) {
@@ -1987,6 +1995,56 @@ private loadPlanetPositions(): void {
         this.refreshState()
       }
     })
+  }
+
+  private loadPlanetList(): void {
+    this.callInteractive('getObserverPlanetList', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.planets) {
+        // 只保留"有专属地景、能站着看天+换地景"的星球；getAllPlanetEnglishNames
+        // 还会返回大量彗星/矮行星，列出来既冗长又无对应地景，对切星球毫无意义。
+        const standable = ['Earth', 'Moon', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Sun']
+        const all = r.planets as string[]
+        this.planetList = standable.filter((s) => all.indexOf(s) >= 0)
+      }
+    })
+  }
+
+  private setObserverPlanet(name: string): void {
+    this.callInteractive('setObserverPlanet', name, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.observerPlanet = name
+        this.refreshState()
+        this.flashHint('已切换观测星球：' + name)
+      } else {
+        this.flashHint('切换失败：' + (r.error ?? 'unknown'))
+      }
+    })
+  }
+
+  @Builder
+  observerPlanetSection() {
+    Column({ space: 8 }) {
+      Text('观测星球').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
+      Text('切换后星空与地景会按该星球视角重算').fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      Text('当前观测星球：' + this.observerPlanet).fontSize(12).fontColor('#E5FFFFFF').width('100%')
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(this.planetList, (p: string) => {
+          Button(p)
+            .fontSize(12)
+            .fontColor(this.observerPlanet === p ? '#FFFFFF' : '#CCFFFFFF')
+            .backgroundColor(this.observerPlanet === p ? '#5B93BF' : this.nmBorder())
+            .borderRadius(16)
+            .height(32)
+            .margin({ right: 8, bottom: 8 })
+            .padding({ left: 14, right: 14 })
+            .onClick(() => { this.setObserverPlanet(p) })
+        }, (p: string) => p)
+      }.width('100%')
+      Button('回到地球')
+        .fontSize(13).fontColor('#FFFFFF').backgroundColor('#2E7D32')
+        .borderRadius(10).height(34).width('100%').margin({ top: 6 })
+        .onClick(() => { this.setObserverPlanet('Earth') })
+    }.width('100%').padding({ left: 10, right: 10 })
   }
 
   private hierContinents(): Array<string> {
@@ -3420,7 +3478,8 @@ private loadPlanetPositions(): void {
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       this.locationPickerPanel()
       this.quickChips([{ id: 'Beijing', label: 'Beijing' }, { id: 'Shanghai', label: $r('app.string.s0758') }, { id: 'Shenzhen', label: $r('app.string.s0759') }])
-	    } else if (this.activePanel === 'layers') {
+      this.observerPlanetSection()
+    } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {
         Column({ space: 0 }) {

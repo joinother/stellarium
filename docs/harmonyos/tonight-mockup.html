@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stellarium 鸿蒙 · 今夜星图 / 天象日历 界面原型</title>
+<style>
+  :root{
+    --bg:#070b18; --panel:#0e1530; --card:#16204a; --card2:#1b2752;
+    --line:#26345f; --txt:#e8eefc; --sub:#8fa6d8; --good:#39d98a; --warn:#f5b454;
+    --accent:#5b8dff; --dim:#5b6b95;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    padding:28px 16px 48px;}
+  h1{font-size:18px;font-weight:600;text-align:center;margin:0 0 4px}
+  .lead{text-align:center;color:var(--sub);font-size:13px;margin:0 0 26px}
+  .wrap{display:flex;gap:28px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  .phone{width:320px;background:var(--panel);border:1px solid var(--line);border-radius:28px;
+    padding:14px 14px 18px;box-shadow:0 10px 40px rgba(0,0,0,.45)}
+  .ph-head{padding:10px 8px 12px}
+  .loc{font-size:11px;color:var(--sub)}
+  .title{font-size:19px;font-weight:600;margin:2px 0 8px}
+  .summary{font-size:11px;color:var(--good);background:rgba(57,217,138,.08);
+    border:1px solid rgba(57,217,138,.25);border-radius:10px;padding:7px 9px;line-height:1.5}
+  .sec{margin-top:14px}
+  .sec-t{font-size:12px;color:var(--sub);margin:0 0 8px;padding-left:2px;letter-spacing:.5px}
+  .cards{display:flex;gap:8px;overflow:hidden}
+  .pcard{flex:0 0 116px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 10px}
+  .pname{font-size:13px;font-weight:600}
+  .palt{font-size:10px;color:var(--accent);margin:2px 0 6px}
+  .rt{font-size:10px;color:var(--sub);line-height:1.7}
+  .rt b{color:var(--txt);font-weight:500}
+  .timeline{position:relative;height:42px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;margin-top:6px}
+  .band{position:absolute;top:0;bottom:0;background:rgba(57,217,138,.28);
+    border-left:2px solid var(--good);border-right:2px solid var(--good)}
+  .tick{position:absolute;top:-2px;bottom:-2px;width:1px;background:var(--dim)}
+  .tlab{position:absolute;top:46px;font-size:9px;color:var(--sub);transform:translateX(-50%)}
+  .row{display:flex;justify-content:space-between;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:9px 11px;margin-top:8px;font-size:12px}
+  .row .dim{color:var(--sub);font-size:11px}
+  .pill{font-size:10px;color:var(--good);border:1px solid rgba(57,217,138,.3);
+    border-radius:20px;padding:2px 8px}
+  .ds{display:flex;gap:8px}
+  .ds .pcard{flex:1}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:6px}
+  .gcell{aspect-ratio:1;border-radius:7px;background:var(--card);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--sub)}
+  .gcell.m{color:var(--txt)}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--warn);margin:3px auto 0}
+  .ev{display:flex;gap:10px;align-items:flex-start;margin-top:9px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+  .ev .d{flex:0 0 38px;text-align:center}
+  .ev .d b{font-size:15px;display:block}
+  .ev .d span{font-size:9px;color:var(--sub)}
+  .ev .t b{font-size:13px}
+  .ev .t div{font-size:11px;color:var(--sub);margin-top:2px}
+  .legend{text-align:center;color:var(--dim);font-size:11px;margin-top:30px;line-height:1.7}
+</style>
+</head>
+<body>
+  <h1>Stellarium 鸿蒙 · 界面原型（Sky Guide 范式）</h1>
+  <p class="lead">参考 Sky Guide 的"今夜 / 天象日历"体验，基于现有桥命令聚合设计</p>
+
+  <div class="wrap">
+
+    <!-- 手机 1：今夜星图 -->
+    <div class="phone">
+      <div class="ph-head">
+        <div class="loc">北京 · 周五 7/24 · 暗夜 Bortle 4</div>
+        <div class="title">今夜星图</div>
+        <div class="summary">月相 78% · 最佳窗口 21:10–23:40 · 今夜可见 4 颗行星</div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">行星今夜</div>
+        <div class="cards">
+          <div class="pcard">
+            <div class="pname">水星</div>
+            <div class="palt">最大高度 18°</div>
+            <div class="rt">升 <b>19:42</b><br>中 <b>22:15</b><br>落 <b>00:48</b></div>
+          </div>
+          <div class="pcard">
+            <div class="pname">火星</div>
+            <div class="palt">整夜可见</div>
+            <div class="rt">升 <b>21:30</b><br>中 <b>02:10</b><br>落 <b>06:50</b></div>
+          </div>
+          <div class="pcard">
+            <div class="pname">木星</div>
+            <div class="palt">最大高度 55°</div>
+            <div class="rt">升 <b>20:15</b><br>中 <b>01:20</b><br>落 <b>06:25</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">观星窗口</div>
+        <div class="timeline">
+          <div class="tick" style="left:22%"></div>
+          <div class="tick" style="left:40%"></div>
+          <div class="tick" style="left:72%"></div>
+          <div class="band" style="left:40%;width:32%"></div>
+        </div>
+        <div class="tlab" style="left:22%">日落</div>
+        <div class="tlab" style="left:40%">暮光尽</div>
+        <div class="tlab" style="left:72%">月出</div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">卫星过境（今夜 Top3）</div>
+        <div class="row"><span>国际空间站 ISS</span><span class="dim">22:41–22:47 · -2.1</span></div>
+        <div class="row"><span>哈勃望远镜</span><span class="dim">23:55–00:02 · 1.4</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">深空精选</div>
+        <div class="ds">
+          <div class="pcard"><div class="pname">M13</div><div class="rt">武仙座球状星团<br>高度 <b>60°</b> · 东南</div></div>
+          <div class="pcard"><div class="pname">M31</div><div class="rt">仙女座星系<br>高度 <b>45°</b> · 东</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 手机 2：天象日历 -->
+    <div class="phone">
+      <div class="ph-head">
+        <div class="loc">地点过滤 · 仅显示本地可见</div>
+        <div class="title">天象日历</div>
+        <div class="summary">2026 年 7 月 · 3 项重点天象</div>
+      </div>
+
+      <div class="sec">
+        <div class="grid">
+          <div class="gcell">一</div><div class="gcell">二</div><div class="gcell">三</div>
+          <div class="gcell">四</div><div class="gcell">五</div><div class="gcell">六</div><div class="gcell">日</div>
+          <div class="gcell">1</div><div class="gcell">2</div><div class="gcell">3</div><div class="gcell">4</div>
+          <div class="gcell">5</div><div class="gcell">6</div><div class="gcell">7</div>
+          <div class="gcell">8</div><div class="gcell">9</div><div class="gcell">10</div><div class="gcell">11</div>
+          <div class="gcell m">12<div class="dot"></div></div><div class="gcell">13</div><div class="gcell">14</div>
+          <div class="gcell">15</div><div class="gcell">16</div><div class="gcell">17</div><div class="gcell">18</div>
+          <div class="gcell">19</div><div class="gcell m">20<div class="dot"></div></div><div class="gcell">21</div><div class="gcell">22</div>
+          <div class="gcell">23</div><div class="gcell">24</div><div class="gcell">25</div><div class="gcell">26</div>
+          <div class="gcell">27</div><div class="gcell m">28<div class="dot"></div></div><div class="gcell">29</div><div class="gcell">30</div><div class="gcell">31</div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">近期事件</div>
+        <div class="ev">
+          <div class="d"><b>12</b><span>7月</span></div>
+          <div class="t"><b>英仙座流星雨极大</b><div>天顶每时约 100 颗 · 后半夜辐射点升高</div></div>
+        </div>
+        <div class="ev">
+          <div class="d"><b>20</b><span>7月</span></div>
+          <div class="t"><b>火星合月</b><div>黄昏西方低空 · 角距约 3°</div></div>
+        </div>
+        <div class="ev">
+          <div class="d"><b>28</b><span>7月</span></div>
+          <div class="t"><b>月偏食</b><div>02:30–04:10 · 食分 0.36（示例）</div></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">提示</div>
+        <div class="row"><span>时间旅行预览</span><span class="pill">slider 内嵌</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="legend">
+    原型说明：所有数据均来自已实现的桥命令（getAlmanac / getRTS / getSatellites / meteors）。<br>
+    新增「今夜」面板为 P0，纯 UI 聚合；「天象日历」为 P1。深色为 App 实际观感，非工具主题。
+  </p>
+</body>
+</html>
