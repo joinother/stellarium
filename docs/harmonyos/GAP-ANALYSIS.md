@@ -102,7 +102,7 @@
 | 36 | ~~Oculars/望远镜配置~~ ✅ 已实现 | 02.04.41-05.03 | 无法配置目镜/望远镜/透镜参数 | ~~P1~~ 完成 | 自建桥 getOculars/setOcularMode/setTelrad/setCrosshairs/setCCD/cycleOcular/Telescope/Lens/CCD（Oculars 插件静态链接，编译期已含）+ ArkTS 望远镜面板（目镜模式/Telrad/十字丝/CCD 开关 + 目镜/望远镜/镜片/CCD 选择器），模拟器验证通过 |
 | 37 | ~~Satellites 卫星插件~~ ✅ 已实现 | 多张截图 | 无法显示/追踪人造卫星轨道 | ~~P1~~ 完成 | 自建桥 getSatellites/setSatellitesFlag（labels/orbitLines/hints/iconicMode/hideInvisible + 分组列表 + 总数）+ ArkTS 卫星面板，模拟器验证通过 |
 | 38 | Speech 语音输出 | 02.03.52 | 无语音播报天体信息 | **P2** | 🟡 部分实现：新增 `getObjectSpokenText` 桥 + 对象面板「朗读文本」按钮，可生成并显示中文描述文本；但当前 OpenHarmony 基础 SDK 不含 `@kit.CoreSpeechKit`，无法播放音频 TTS |
-| 39 | 脚本录制 | 02.04.29 record 图标 | 无法录制操作脚本 | **P2** | 有 playScript 但缺 recordScript |
+| 39 | ~~脚本录制~~ ✅ 已实现 | 02.04.29 record 图标 | 无法录制操作脚本 | ~~P2~~ 完成 | 新增 `listRecordings`/`saveRecording`/`loadRecording`/`deleteRecording` 桥 + ArkTS「脚本」面板；可录制、保存、回放、删除命令序列；模拟器端到端验证通过 |
 | 40 | 视频录制 | 未见截图 | 无法录制星图视频 | **P2** | 未见 saveVideo 桥接 |
 | 41 | ~~Help 帮助面板~~ ✅ 已实现 | 02.04.29-35 | 缺快捷键/About/Log 查看 | ~~P2~~ 完成 | 新增 getLog/getAboutInfo/exportConfig/importConfig 桥 + ArkTS 帮助面板（关于/运行日志/配置导入导出），模拟器验证通过 |
 | 42 | 天体轨迹回放 | 未见截图 | 无法回放行星/卫星轨迹 | **P2** | 未见轨迹管理桥接 |
@@ -114,11 +114,11 @@
 
 | 维度 | 估算 | 说明 |
 |------|------|------|
-| C++ 桥接命令 | ~95%（166+/175） | 核心命令齐全，Speech 命令已加；仍缺脚本录制/视频录制/轨迹回放专用命令 |
-| ArkUI 面板 | ~90% | 13 个面板核心完成，帮助面板已补齐 |
-| 桌面版核心功能 | ~89% | 搜索/选星/时间/位置/图层/投影/脚本/插件/帮助/朗读文本 |
-| 桌面版完整功能 | ~70% | Speech 部分实现（文本预览✅，音频 TTS 受 OpenHarmony SDK 限制），仍缺脚本录制/视频录制/轨迹回放/高级选择/天文摄影 |
-| **用户可见差距** | **30%** | 普通用户最需要：星表下载、书签、卫星、Oculars、帮助已补齐 |
+| C++ 桥接命令 | ~95%（170+/178） | 核心命令齐全，Speech/脚本录制命令已加；仍缺视频录制/轨迹回放专用命令 |
+| ArkUI 面板 | ~92% | 14 个面板核心完成，脚本面板已补齐 |
+| 桌面版核心功能 | ~91% | 搜索/选星/时间/位置/图层/投影/脚本/插件/帮助/朗读文本/脚本录制 |
+| 桌面版完整功能 | ~72% | Speech 部分实现（文本预览✅，音频 TTS 受 SDK 限制），脚本录制已完整，仍缺视频录制/轨迹回放/高级选择/天文摄影 |
+| **用户可见差距** | **28%** | 普通用户最需要：星表下载、书签、卫星、Oculars、帮助、脚本录制已补齐 |
 
 ## 五、Phase 3 建议路线
 

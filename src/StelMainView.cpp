@@ -868,6 +868,49 @@ static void bookmarksSave()
 		f.close();
 	}
 }
+
+// ---- Script recordings store (OHOS bridge) ----
+// 把 ArkTS 侧录制的命令序列（searchObject / setTimeRate / ...）持久化到
+// userDir/recordings/<name>.json，供「脚本录制 / 回放」面板保存与重放。
+struct RecordingItem
+{
+	QString file;    // 文件名（不含目录），如 20260723-203000.json
+	QString name;    // 显示名
+	QString created; // 创建时间字符串
+	int count = 0;   // 命令条数
+};
+static QString recordingsDir()
+{
+	QString dir = StelFileMgr::getUserDir() + "/recordings";
+	QDir d(dir);
+	if (!d.exists())
+		d.mkpath(dir);
+	return dir;
+}
+static QList<RecordingItem> recordingsList()
+{
+	QList<RecordingItem> out;
+	QDir dir(recordingsDir());
+	const QStringList files = dir.entryList(QStringList() << "*.json", QDir::Files, QDir::Time);
+	for (const QString& f : files)
+	{
+		RecordingItem it;
+		it.file = f;
+		QFile file(dir.filePath(f));
+		if (file.open(QIODevice::ReadOnly))
+		{
+			const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+			file.close();
+			const QJsonObject o = doc.object();
+			it.name = o.value("name").toString(f);
+			it.created = o.value("created").toString("");
+			it.count = o.value("commands").toArray().size();
+		}
+		out.append(it);
+	}
+	return out;
+}
+
 }
 
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
@@ -3713,6 +3756,89 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			conf->sync();
 			result["ok"] = true;
 			result["applied"] = applied;
+			return result;
+		}
+
+		// ===== 脚本录制 / 回放（#39）=====
+		if (commandName == "listRecordings")
+		{
+			QJsonArray items;
+			for (const RecordingItem& it : recordingsList())
+			{
+				QJsonObject o;
+				o["file"] = it.file;
+				o["name"] = it.name;
+				o["created"] = it.created;
+				o["count"] = it.count;
+				items.append(o);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			return result;
+		}
+
+		if (commandName == "saveRecording")
+		{
+			// payload: name|jsonText
+			QString name = arg.section('|', 0, 0).trimmed();
+			QString jsonText = arg.mid(arg.indexOf('|') + 1);
+			if (name.isEmpty())
+				name = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+			QString file = name;
+			file.replace('/', '_').replace('\\', '_').replace(':', '_').replace(' ', '_');
+			if (!file.endsWith(".json"))
+				file += ".json";
+			QFile f(recordingsDir() + "/" + file);
+			if (!f.open(QIODevice::WriteOnly))
+			{
+				result["ok"] = false;
+				result["error"] = "cannot open file";
+				return result;
+			}
+			// 包裹成标准结构：{name, created, commands:[{c,p}]}
+			QJsonObject root;
+			root["name"] = name;
+			root["created"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+			QJsonDocument incoming = QJsonDocument::fromJson(jsonText.toUtf8());
+			if (incoming.isArray())
+				root["commands"] = incoming.array();
+			else if (incoming.isObject() && incoming.object().contains("commands"))
+				root["commands"] = incoming.object().value("commands");
+			else
+				root["commands"] = QJsonArray();
+			f.write(QJsonDocument(root).toJson());
+			f.close();
+			result["ok"] = true;
+			result["file"] = file;
+			result["name"] = name;
+			return result;
+		}
+
+		if (commandName == "loadRecording")
+		{
+			// payload: file
+			QFile f(recordingsDir() + "/" + arg);
+			if (!f.open(QIODevice::ReadOnly))
+			{
+				result["ok"] = false;
+				result["error"] = "not found";
+				return result;
+			}
+			const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+			f.close();
+			result["ok"] = true;
+			result["name"] = doc.object().value("name").toString(arg);
+			result["commands"] = doc.object().value("commands").toArray();
+			return result;
+		}
+
+		if (commandName == "deleteRecording")
+		{
+			QFile f(recordingsDir() + "/" + arg);
+			bool removed = f.remove();
+			result["ok"] = removed;
+			if (!removed)
+				result["error"] = "cannot remove";
 			return result;
 		}
 

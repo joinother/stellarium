@@ -122,6 +122,23 @@ interface ImportConfigResponse extends StellariumBridgeResponse {
 interface SpokenTextResponse extends StellariumBridgeResponse {
   text?: string
 }
+interface RecordCmd {
+  c: string
+  p: string
+}
+interface RecordingEntry {
+  file: string
+  name: string
+  created: string
+  count: number
+}
+interface RecordingsResponse extends StellariumBridgeResponse {
+  items?: Array<RecordingEntry>
+}
+interface RecordingDetailResponse extends StellariumBridgeResponse {
+  name?: string
+  commands?: Array<RecordCmd>
+}
 
 // 望远镜配置选择器的展示数据（非响应式，@Builder 内实时读取 @State）
 class OcularSelInfo {
@@ -364,6 +381,16 @@ struct WindowNativeNode {
   @State private lx200Status: string = ''
   @State private actionHint: ResourceStr = ''
   @State private speechStatus: string = ''
+  // ===== 脚本录制 / 回放（#39）=====
+  @State private recording: boolean = false
+  @State private recordBuffer: Array<RecordCmd> = []
+  @State private recordCount: number = 0
+  @State private recordName: string = ''
+  @State private recordMsg: string = ''
+  @State private recordings: Array<RecordingEntry> = []
+  @State private replaying: boolean = false
+  private lastRecordKey: string = ''
+  private lastRecordTime: number = 0
 
   private hintTimer: number = 0
   private panelIdleTimer: number = -1
@@ -437,6 +464,7 @@ struct WindowNativeNode {
     { label: '望远镜', icon: 'telescope', panel: 'oculars' },
     { label: '卫星', icon: 'satellite', panel: 'satellites' },
     { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
+    { label: '脚本', icon: 'script', panel: 'scripts' },
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
@@ -642,6 +670,8 @@ struct WindowNativeNode {
       this.loadMeteorShowers()
     } else if (panel === 'help') {
       this.loadAboutInfo()
+    } else if (panel === 'scripts') {
+      this.loadRecordings()
     }
   }
 
@@ -662,10 +692,30 @@ struct WindowNativeNode {
 
   private callNative(name: string, payload: string = ''): StellariumBridgeResponse {
     try {
-      return JSON.parse(command(name, payload)) as StellariumBridgeResponse
+      const r = JSON.parse(command(name, payload)) as StellariumBridgeResponse
+      // 录制：仅在录制开启、非回放、且命令可录制时记录，并对短时重试用去重窗口避免重复。
+      if (this.recording && !this.replaying && this.isRecordable(name)) {
+        const key = name + '|' + payload
+        const now = Date.now()
+        if (key !== this.lastRecordKey || (now - this.lastRecordTime) > 400) {
+          this.recordBuffer.push({ c: name, p: payload })
+          this.recordCount = this.recordBuffer.length
+          this.lastRecordKey = key
+          this.lastRecordTime = now
+        }
+      }
+      return r
     } catch (err) {
       return { ok: false, error: 'bridge parse failed' }
     }
+  }
+
+  // 过滤掉只读查询与连续视图命令，以及录制自身的管理命令。
+  private isRecordable(name: string): boolean {
+    if (name.startsWith('get') || name.startsWith('list') || name.startsWith('is') || name.startsWith('selftest'))
+      return false
+    const skip = ['dragView', 'panBy', 'zoomBy', 'saveRecording', 'loadRecording', 'listRecordings', 'deleteRecording', 'startRecording', 'stopRecording']
+    return !skip.includes(name)
   }
 
   // Retry a native command until the Stellarium core is initialized.
@@ -810,6 +860,84 @@ struct WindowNativeNode {
       if (r.ok === true) {
         this.flashHint('已删除书签')
         this.loadBookmarks()
+      }
+    })
+  }
+
+  // ===== 脚本录制 / 回放（#39）=====
+  private startRecording(): void {
+    this.recording = true
+    this.recordBuffer = []
+    this.recordCount = 0
+    this.recordMsg = '录制中…'
+    this.lastRecordKey = ''
+    this.lastRecordTime = 0
+    this.flashHint('开始录制：接下来的操作会被记录')
+  }
+
+  private stopRecording(): void {
+    this.recording = false
+    this.recordCount = this.recordBuffer.length
+    this.recordMsg = this.recordCount > 0 ? '已停止，可保存' : '已停止（没有可保存的操作）'
+    this.flashHint(this.recordMsg)
+  }
+
+  private saveCurrentRecording(): void {
+    if (this.recordBuffer.length === 0) {
+      this.recordMsg = '没有可保存的操作，请先开始录制'
+      this.flashHint(this.recordMsg)
+      return
+    }
+    const safeName = this.recordName.trim().replace(/\|/g, '_').replace(/\n/g, ' ')
+    const payload = safeName + '|' + JSON.stringify(this.recordBuffer)
+    this.callInteractive('saveRecording', payload, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.recordMsg = '已保存：' + (r.name ?? this.recordName)
+        this.flashHint(this.recordMsg)
+        this.recordBuffer = []
+        this.recordCount = 0
+        this.recordName = ''
+        this.loadRecordings()
+      } else {
+        this.recordMsg = '保存失败：' + (r.error ?? '未知错误')
+        this.flashHint(this.recordMsg)
+      }
+    })
+  }
+
+  private loadRecordings(): void {
+    this.callInteractive('listRecordings', '', (r: StellariumBridgeResponse) => {
+      const resp = r as RecordingsResponse
+      this.recordings = resp.items ?? []
+    })
+  }
+
+  private playRecording(file: string): void {
+    this.callInteractive('loadRecording', file, (r: StellariumBridgeResponse) => {
+      const resp = r as RecordingDetailResponse
+      const cmds = resp.commands ?? []
+      if (cmds.length === 0) {
+        this.flashHint('该录制为空')
+        return
+      }
+      this.replaying = true
+      this.flashHint('正在回放 ' + cmds.length + ' 条命令…')
+      // 逐条重发命令；callNativeWhenReady 会等核心就绪后执行，避免启动时序问题。
+      for (const cmd of cmds) {
+        this.callNativeWhenReady(cmd.c, cmd.p)
+      }
+      // 短暂延时后解除回放标记，避免误录回放命令。
+      setTimeout(() => { this.replaying = false }, 600 + cmds.length * 30)
+    })
+  }
+
+  private deleteRecording(file: string): void {
+    this.callInteractive('deleteRecording', file, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.flashHint('已删除录制')
+        this.loadRecordings()
+      } else {
+        this.flashHint('删除失败')
       }
     })
   }
@@ -2666,6 +2794,7 @@ private loadPlanetPositions(): void {
       'telescope': $r('app.media.ic_telescope'),
       'satellite': $r('app.media.ic_satellite'),
       'meteor': $r('app.media.ic_meteor'),
+      'script': $r('app.media.ic_list'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
@@ -4096,6 +4225,67 @@ private loadPlanetPositions(): void {
             .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'scripts') {
+      // 脚本录制 / 回放（#39）
+      Scroll() {
+        Column({ space: 10 }) {
+          Text('脚本录制与回放').fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 4 })
+          Text('点击「开始录制」后，你在星图上的操作（搜索、选星、时间、图层开关等）会被记录；停止后可保存，并在本机随时一键重放。')
+            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 })
+
+          Row({ space: 10 }) {
+            Button(this.recording ? '停止录制' : '开始录制')
+              .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.recording ? '#C0392B' : '#2E7D32')
+              .borderRadius(10).height(36).padding({ left: 16, right: 16 })
+              .onClick(() => { this.recording ? this.stopRecording() : this.startRecording() })
+            if (this.recording) {
+              Text('● 录制中').fontSize(12).fontColor('#FF6B6B')
+            }
+          }.width('100%').padding({ left: 6, right: 6 })
+
+          Text('已记录 ' + this.recordCount + ' 条命令' + (this.recordMsg.length > 0 ? ' · ' + this.recordMsg : ''))
+            .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 6, right: 6 })
+
+          Row({ space: 8 }) {
+            TextInput({ placeholder: '给这段录制起个名', text: this.recordName })
+              .fontSize(12).fontColor(this.nmText())
+              .backgroundColor(this.nmBg()).borderRadius(8).layoutWeight(1).height(36)
+              .onChange((v: string) => { this.recordName = v })
+            Button('保存录制')
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor(this.recordCount > 0 ? '#5B93BF' : '#555555')
+              .borderRadius(8).height(36).padding({ left: 12, right: 12 })
+              .enabled(this.recordCount > 0)
+              .onClick(() => { this.saveCurrentRecording() })
+          }.width('100%').padding({ left: 6, right: 6 })
+
+          Row().width('100%').height(0.5).backgroundColor(this.nmBorder()).margin({ top: 6, bottom: 6 })
+
+          Text('已保存的录制').fontSize(13).fontColor(this.nmText()).width('100%').padding({ left: 6 })
+          if (this.recordings.length === 0) {
+            Text('（暂无，录制并保存后会出现在这里）').fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 6 })
+          }
+          ForEach(this.recordings, (rec: RecordingEntry, idx: number) => {
+            Column({ space: 4 }) {
+              Row({ space: 8 }) {
+                Column() {
+                  Text(rec.name).fontSize(13).fontColor(this.nmText()).width('100%')
+                  Text((rec.created.length > 0 ? rec.created + ' · ' : '') + rec.count + ' 条命令')
+                    .fontSize(10).fontColor('#66FFFFFF').width('100%')
+                }.layoutWeight(1)
+                Button('回放')
+                  .fontSize(11).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+                  .borderRadius(8).height(30).padding({ left: 12, right: 12 })
+                  .onClick(() => { this.playRecording(rec.file) })
+                Button('删除')
+                  .fontSize(11).fontColor('#FFFFFF').backgroundColor('#C0392B')
+                  .borderRadius(8).height(30).padding({ left: 12, right: 12 })
+                  .onClick(() => { this.deleteRecording(rec.file) })
+              }.width('100%')
+            }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 })
+              .backgroundColor(this.nmBg()).borderRadius(12)
+          }, (item: RecordingEntry, idx: number) => item.file)
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -4874,6 +5064,9 @@ private loadPlanetPositions(): void {
     }
     if (this.activePanel === 'meteorshowers') {
       return '流星雨'
+    }
+    if (this.activePanel === 'scripts') {
+      return '脚本'
     }
     return $r('app.string.i0101')
   }

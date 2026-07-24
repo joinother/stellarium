@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 脚本录制与回放（#39）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `listRecordings` / `saveRecording` / `loadRecording` / `deleteRecording` 命令；新增 `RecordingItem` 与 `recordingsDir`/`recordingsList` 文件存储辅助，用于持久化脚本录制）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS：新增 `scripts` 面板；新增开始/停止录制、保存、列表、回放、删除；在 `callNative` 中记录可录制的命令；回放时设置标记避免误录）
+- **修改内容：**
+  1. 录制：在 `callNative` 中过滤掉只读查询（`get*`/`list*`/`is*`/`selftest`）和连续视图命令（`dragView`/`panBy`/`zoomBy`），把其余用户操作（`searchObject`、`setActionChecked`、`triggerAction`、时间/位置命令等）记录到缓冲区。
+  2. 持久化：停止后保存到 `userDir/recordings/<timestamp>.json`（标准结构 `{name, created, commands:[{c,p}]}`）。
+  3. 回放：从 JSON 读取命令列表，逐条通过 `callNativeWhenReady` 重新下发，复用既有命令桥。回放期间 `replaying=true`，避免把回放命令再次写入录制。
+  4. 删除：调用 `deleteRecording` 移除文件并刷新列表。
+  5. 新增左栏 `脚本` 面板，含录制/停止、保存、已保存录制列表（回放/删除按钮）以及状态提示。
+- **构建结果：** C++ 增量编译通过；`assembleHap` BUILD SUCCESSFUL。
+- **验证结果（模拟器 127.0.0.1:5555）：**
+  - 打开「脚本」面板 → 开始录制 → 搜索面板点「月球」选中 → 停止录制 → 保存录制 → 列表中出现 `2026-07-24 14:34:28 · 1 条命令`。
+  - 切换到木星后，点该录制「回放」→ 重新选中并跳回月球（对象面板显示「月」）。
+  - 点「删除」→ 列表回到空状态（「暂无…」）。
+
+---
+
 ## [2026-07-24] WorkBuddy - 朗读/语音播报(Speech) + 搜索候选可点击
 
 - **修改文件：**
