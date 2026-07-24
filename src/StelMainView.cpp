@@ -45,6 +45,7 @@
 #include "SporadicMeteorMgr.hpp"
 #include "../plugins/Oculars/src/Oculars.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
+#include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
@@ -3537,6 +3538,36 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else ok = false;
 			result["ok"] = ok;
 			if (!ok) result["error"] = "unknown satellite flag: " + name;
+			return result;
+		}
+		if (commandName == "getMeteorShowers")
+		{
+			MeteorShowersMgr* ms = GETSTELMODULE(MeteorShowersMgr);
+			if (!ms) { result["ok"] = false; result["error"] = "MeteorShowers plugin not loaded"; return result; }
+			QJsonObject m;
+			m["enabled"] = ms->getEnablePlugin();
+			m["labels"] = ms->getEnableLabels();
+			m["activeOnly"] = ms->getActiveRadiantOnly();
+			m["marker"] = ms->getEnableMarker();
+			result["ok"] = true;
+			result["meteorShowers"] = m;
+			return result;
+		}
+		if (commandName == "setMeteorShowersFlag")
+		{
+			MeteorShowersMgr* ms = GETSTELMODULE(MeteorShowersMgr);
+			if (!ms) { result["ok"] = false; result["error"] = "MeteorShowers plugin not loaded"; return result; }
+			QStringList parts = arg.split(":", Qt::SkipEmptyParts);
+			QString name = parts.size() > 0 ? parts[0].trimmed() : "";
+			bool val = (parts.size() > 1 && (parts[1].trimmed() == "1" || parts[1].trimmed() == "true"));
+			bool ok = true;
+			if (name == "enabled") ms->setEnablePlugin(val);
+			else if (name == "labels") ms->setEnableLabels(val);
+			else if (name == "activeOnly") ms->setActiveRadiantOnly(val);
+			else if (name == "marker") ms->setEnableMarker(val);
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown meteor showers flag: " + name;
 			return result;
 		}
 

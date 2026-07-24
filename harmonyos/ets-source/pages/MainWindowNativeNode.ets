@@ -90,6 +90,17 @@ interface SatellitesResponse extends StellariumBridgeResponse {
   satellites?: SatellitesData
 }
 
+// 流星雨（MeteorShowers 插件桥）
+interface MeteorShowersData {
+  enabled: boolean
+  labels: boolean
+  activeOnly: boolean
+  marker: boolean
+}
+interface MeteorShowersResponse extends StellariumBridgeResponse {
+  meteorShowers?: MeteorShowersData
+}
+
 // 望远镜配置选择器的展示数据（非响应式，@Builder 内实时读取 @State）
 class OcularSelInfo {
   name: string = ''
@@ -276,7 +287,7 @@ struct WindowNativeNode {
   @State private currentFovText: string = '--'
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
-  @State private railPinned: boolean = false
+  @State private railPinned: boolean = true
   @State private railCollapsed: boolean = false
   @State private panelOffsetX: number = 0
   @State private panelOffsetY: number = 0
@@ -309,6 +320,11 @@ struct WindowNativeNode {
   @State private satIconicMode: boolean = false
   @State private satHideInvisible: boolean = false
   @State private satCount: number = 0
+  // 流星雨（MeteorShowers）
+  @State private msEnabled: boolean = false
+  @State private msLabels: boolean = false
+  @State private msActiveOnly: boolean = false
+  @State private msMarker: boolean = false
   @State private skyTouchFeedback: boolean = false
   @State private lx200Host: string = '127.0.0.1'
   @State private lx200Port: string = '4030'
@@ -324,12 +340,12 @@ struct WindowNativeNode {
     }
     this.panelIdleOpacity = 1.0
     this.panelIdleTimer = setTimeout(() => {
-      // 空闲→右侧面板果冻状半透明；钉住(uiLocked)时不淡出
+      // 空闲→右侧面板轻微变淡（仍清晰可见，按钮不消失）；钉住(uiLocked)时完全不淡出
       if (!this.uiLocked) {
-        this.panelIdleOpacity = 0.3
+        this.panelIdleOpacity = 0.85
       }
       this.panelIdleTimer = -1
-    }, 3500)
+    }, 10000)
   }
 
   private sidebarAutoCollapseTimer: number = -1
@@ -344,7 +360,7 @@ struct WindowNativeNode {
       this.sidebarAutoCollapseTimer = setTimeout(() => {
         this.railCollapsed = true
         this.sidebarAutoCollapseTimer = -1
-      }, 5000)
+      }, 10000)
     }
   }
   // 目标详情自动刷新：选中天体后每秒重新拉一次坐标，让“地平坐标”随地球自转实时变化。
@@ -386,6 +402,7 @@ struct WindowNativeNode {
     { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
     { label: '望远镜', icon: 'telescope', panel: 'oculars' },
     { label: '卫星', icon: 'satellite', panel: 'satellites' },
+    { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
       { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
       { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
       { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
@@ -587,6 +604,8 @@ struct WindowNativeNode {
       this.loadOculars()
     } else if (panel === 'satellites') {
       this.loadSatellites()
+    } else if (panel === 'meteorshowers') {
+      this.loadMeteorShowers()
     }
   }
 
@@ -835,6 +854,26 @@ struct WindowNativeNode {
     else if (name == 'iconicMode') { this.satIconicMode = v }
     else if (name == 'hideInvisible') { this.satHideInvisible = v }
     this.callNativeWhenReady('setSatellitesFlag', name + ':' + (v ? '1' : '0'), () => { this.loadSatellites() })
+  }
+
+  // ===== 流星雨（MeteorShowers 插件桥）=====
+  private loadMeteorShowers(): void {
+    this.callNativeWhenReady('getMeteorShowers', '', (r: StellariumBridgeResponse) => {
+      const resp = r as MeteorShowersResponse
+      const m = resp.meteorShowers
+      if (!m) { return }
+      this.msEnabled = m.enabled
+      this.msLabels = m.labels
+      this.msActiveOnly = m.activeOnly
+      this.msMarker = m.marker
+    })
+  }
+  private setMeteorShowersFlag(name: string, v: boolean): void {
+    if (name == 'enabled') { this.msEnabled = v }
+    else if (name == 'labels') { this.msLabels = v }
+    else if (name == 'activeOnly') { this.msActiveOnly = v }
+    else if (name == 'marker') { this.msMarker = v }
+    this.callNativeWhenReady('setMeteorShowersFlag', name + ':' + (v ? '1' : '0'), () => { this.loadMeteorShowers() })
   }
 
   private refreshState(): void {
@@ -2525,6 +2564,7 @@ private loadPlanetPositions(): void {
       'bookmarks': $r('app.media.ic_bookmark'),
       'telescope': $r('app.media.ic_telescope'),
       'satellite': $r('app.media.ic_satellite'),
+      'meteor': $r('app.media.ic_meteor'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
@@ -3836,6 +3876,34 @@ private loadPlanetPositions(): void {
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'meteorshowers') {
+      // 流星雨：插件总开关 + 标签/仅活跃/标记开关
+      Scroll() {
+        Column({ space: 10 }) {
+          Row() {
+            Text('启用流星雨插件').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.msEnabled })
+              .onChange((isOn: boolean) => { this.setMeteorShowersFlag('enabled', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('显示辐射点标签').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.msLabels })
+              .onChange((isOn: boolean) => { this.setMeteorShowersFlag('labels', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('仅显示活跃流星雨').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.msActiveOnly })
+              .onChange((isOn: boolean) => { this.setMeteorShowersFlag('activeOnly', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text('显示辐射点标记').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.msMarker })
+              .onChange((isOn: boolean) => { this.setMeteorShowersFlag('marker', isOn) })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Text('辐射点为流星雨在天球上看似发散的中心点；活跃流星雨随日期变化，可结合时间面板跳转到极大日观察。')
+            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else {
       this.infoRow($r('app.string.i0057'), this.isExpandedLayout ? $r('app.string.s0703') : $r('app.string.s0704'))
       this.infoRow($r('app.string.i0058'), 'Stellarium Core')
@@ -4611,6 +4679,9 @@ private loadPlanetPositions(): void {
     }
     if (this.activePanel === 'satellites') {
       return '卫星'
+    }
+    if (this.activePanel === 'meteorshowers') {
+      return '流星雨'
     }
     return $r('app.string.i0101')
   }

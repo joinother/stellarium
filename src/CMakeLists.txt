@@ -640,7 +640,9 @@ TARGET_INCLUDE_DIRECTORIES(stelMain PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/Oculars/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/Oculars/src/gui"
     "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/Satellites/src"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/Satellites/src/gui")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/Satellites/src/gui"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/MeteorShowers/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/MeteorShowers/src/gui")
 
 SET_TARGET_PROPERTIES(stellarium PROPERTIES ENABLE_EXPORTS TRUE)
 

@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 两侧 UI 常驻（按钮不再自动消失）+ 新增流星雨(MeteorShowers)面板
+
+- **背景：** 用户反馈"两边的按钮不触摸就消失，且消失太快"。此前左侧工具栏空闲 5s 整条滑走、右侧面板空闲 3.5s 淡到 30%（看着像消失），且"钉住/锁定"默认关闭。
+- **UI 常驻修复（`MainWindowNativeNode.ets`）：**
+  - `railPinned` 默认改为 `true` —— 左侧工具栏默认常驻，不再自动滑走（用户仍可点 📌 取消钉住以省地方）。
+  - 右侧面板空闲淡出：目标透明度 `0.3 → 0.85`（仍清晰可见、按钮不消失），触发时间 `3500ms → 10000ms`。
+  - 左栏收起兜底时间 `5000ms → 10000ms`（仅在手动取消钉住后生效，更温和）。
+  - 模拟器实测：静置 13s 不触摸，左栏 13 个按钮仍全部在位（滑出屏幕节点=0）。
+- **新增流星雨(MeteorShowers)面板：**
+  - `src/StelMainView.cpp`（C++ 桥：getMeteorShowers/setMeteorShowersFlag(enabled/labels/activeOnly/marker)；新增 `#include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"`）
+  - `src/CMakeLists.txt`（新增 MeteorShowers 插件 include 路径）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（ArkTS 流星雨面板：4 个全局开关 + 说明）
+  - 新增图标 `ic_meteor.svg`（同步到镜像）
+  - 模拟器实测：面板渲染 4 开关，`getMeteorShowers` + `setMeteorShowersFlag` 命令 round-trip 通过。
+
+---
+
 ## [2026-07-23] WorkBuddy - 新增望远镜(Oculars)与卫星(Satellites)面板
 
 - **修改文件：**
