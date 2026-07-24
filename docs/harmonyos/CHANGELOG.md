@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-07-24] WorkBuddy - 放大时地景淡出（FOV 放大→地面逐渐淡出消失，露出地平线下星空，#47）
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ 桥：新增 `setLandscapeFadeWithZoom` / `setLandscapeUseTransparency` 命令；新增 `s_landscapeFadeWithZoom` / `s_landscapeFadeSmooth` 静态状态 + `ohosUpdateLandscapeFadeWithZoom()` 每帧驱动；在 `renderOhosFrameNow()` 中 `ohosDrainCommandQueue()` 之后调用）
+  - `src/core/modules/LandscapeMgr.cpp`（`draw()` 中把 `Landscape::setTransparency(getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0)` 抽出独立块，逻辑不变）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（图层面板「地景」新增「放大时地景淡出」开关 + `setLandscapeFadeWithZoom` 方法 + 手动透明度滑块自动关淡出）
+- **修改内容：**
+  1. 根因：桌面版 Stellarium 看向地面放大时，地景贴图会随 FOV 缩小逐渐淡出直至完全透明，露出地平线下的星空；上游 OHOS 移植无此逻辑，导致放大时地面贴图一直不透明、遮挡下半球的星空视野。
+  2. 自实现：每帧由 `ohosUpdateLandscapeFadeWithZoom()` 读取 `StelMovementMgr::getCurrentFov()`，在 `fadeStart=60°`（地面完全不透明）→ `fadeEnd=10°`（地面完全透明）之间算目标透明度，用 `rate=0.12` 平滑跟随，调用 `LandscapeMgr::setLandscapeTransparency(cur)`（复用引擎自身透明度通道，地面绘制 alpha = `(1-transparency)·landFader.getInterstate()`，故 `cur→1` 即地面全透明）。`cur>0.002` 时才开 `setFlagLandscapeUseTransparency(true)`。
+  3. 开关：`setLandscapeFadeWithZoom` 默认开；关掉时复位 `transparency=0` 并清淡出状态。手动拖「透明度」滑块会走 `setLandscapeUseTransparency`，自动关闭 FOV 淡出（手动接管）。
+- **构建结果：** C++ 增量编译通过（`[100%] Built target stellarium`，仅 warnings）；`assembleHap` BUILD SUCCESSFUL。HAP 内 .so 经 `llvm-strip` 剥离后体积 36MB（与构建产物同源，仅去调试符号）。
+- **验证结果（模拟器 127.0.0.1:5555，地平线视角）：**
+  - 用 `uitest swipe 1440 600 1440 1450` 把视角压向地平线（否则看向天顶时地面不在画面内，会误判"淡出无效"）。
+  - 宽 FOV（默认 60° 左右）：截图可见绿色地面 + 地平线树木，地面不透明。
+  - 连点左下角放大按钮（240,1536）×14 把 FOV 降到 10° 以下：地面完全消失，只剩天空 —— **放大时地景淡出生效**。
+  - 两级原生日志（`StellariumCpp` 的 `fade fov=...` 来自我的函数、`lmgr_draw flag=1 ... pushed=1.000` 来自 `LandscapeMgr::draw`）端到端证明 FOV→透明度链路正确。
+
+---
+
 ## [2026-07-24] WorkBuddy - 切换观测星球（把观测者放到火星/月球等，#46）
 
 - **修改文件：**

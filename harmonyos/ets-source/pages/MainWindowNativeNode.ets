@@ -297,6 +297,7 @@ struct WindowNativeNode {
   @State private landscapeDetailOpen: boolean = false
   @State private selectedLandscapeName: string = ''
   @State private landscapeTransp: number = 0
+  @State private landscapeFadeWithZoom: boolean = true
   @State private milkyWayBright: number = 3
   @State private infoLevel: number = 1
   // 新增面板控制
@@ -1422,8 +1423,16 @@ private loadPlanetPositions(): void {
     })
   }
 
+  private setLandscapeFadeWithZoom(isOn: boolean): void {
+    this.landscapeFadeWithZoom = isOn
+    this.callInteractive('setLandscapeFadeWithZoom', isOn ? '1' : '0', () => {})
+  }
+
   private changeLandscapeTransparency(val: number): void {
     const v = (val / 100).toFixed(2)
+    // manual transparency takes over: enable transparency and disable the auto-fade
+    this.callInteractive('setLandscapeUseTransparency', '1', () => {})
+    this.callInteractive('setLandscapeFadeWithZoom', '0', () => {})
     this.callInteractive('setLandscapeTransparency', v, () => {})
   }
 
@@ -5452,6 +5461,14 @@ private loadPlanetPositions(): void {
     this.switchRow($r('app.string.s0520'), this.landscapeIllum, 'actionShow_LandscapeIllumination')
     this.switchRow($r('app.string.s0521'), this.landscapeLabels, 'actionShow_LandscapeLabels')
     this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
+    Row() {
+      Column() {
+        Text('放大时地景淡出').fontSize(13).fontColor('#E5FFFFFF')
+        Text('放大看地面时地面渐隐，露出地平线下的星空').fontSize(11).fontColor('#99FFFFFF').margin({ top: 2 })
+      }.layoutWeight(1)
+      Toggle({ type: ToggleType.Switch, isOn: this.landscapeFadeWithZoom })
+        .onChange((isOn: boolean) => { this.setLandscapeFadeWithZoom(isOn) })
+    }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12).margin({ top: 6 })
     Row() {
       Text($r('app.string.i0288')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 6 })

@@ -419,6 +419,12 @@ static QHash<QString, QJsonObject> s_ohosCmdCache;
 // guaranteed to be pumped; we hand commands to the pump instead.
 static QMutex s_ohosCmdQueueMutex;
 static QList<std::function<void()>> s_ohosCmdQueue;
+// FOV-based landscape auto-fade (port feature). When the observer zooms in
+// (narrow FOV, e.g. looking down at the ground), the ground texture gradually
+// becomes transparent so the lower-hemisphere sky is revealed instead of being
+// occluded by an opaque landscape. Driven every frame from renderOhosFrameNow().
+static bool s_landscapeFadeWithZoom = true;
+static float s_landscapeFadeSmooth = 0.f;
 static void markQtLoopRunning();
 
 static void ohosDrainCommandQueue()
@@ -439,6 +445,41 @@ static void ohosDrainCommandQueue()
 	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
 	for (auto& fn : batch)
 		fn();
+}
+
+// Gradually fade the landscape as the observer zooms in (narrow FOV), so the
+// ground no longer occludes the lower-hemisphere sky. Reuses the engine's own
+// transparency path: LandscapeMgr applies (1 - transparency) * landFader as the
+// ground alpha, so pushing transparency -> 1 makes the ground fully see-through.
+static void ohosUpdateLandscapeFadeWithZoom()
+{
+	if (!s_landscapeFadeWithZoom)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+	if (!core || !lmgr)
+		return;
+	StelMovementMgr* mvmgr = core->getMovementMgr();
+	if (!mvmgr)
+		return;
+	const double fov = mvmgr->getCurrentFov();   // degrees
+	const double fadeStart = 60.0;              // >= this FOV: ground fully opaque
+	const double fadeEnd   = 10.0;              // <= this FOV: ground fully transparent
+	double target;
+	if (fov >= fadeStart)     target = 0.0;
+	else if (fov <= fadeEnd)  target = 1.0;
+	else                      target = (fadeStart - fov) / (fadeStart - fadeEnd);
+	// Smooth toward the target so the fade is gradual, not a hard pop.
+	const float rate = 0.12f;
+	float cur = s_landscapeFadeSmooth + (static_cast<float>(target) - s_landscapeFadeSmooth) * rate;
+	s_landscapeFadeSmooth = cur;
+	const bool useTransp = cur > 0.002f;
+	if (useTransp)
+		lmgr->setFlagLandscapeUseTransparency(true);
+	lmgr->setLandscapeTransparency(static_cast<double>(cur));
 }
 
 static void markQtLoopRunning()
@@ -1544,13 +1585,51 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				lmgr->setLandscapeTransparency(val);
 				result["ok"] = true;
 			} else {
+			result["ok"] = false;
+			result["error"] = "expects 0.0..1.0";
+		}
+		return result;
+	}
+
+		// setLandscapeFadeWithZoom — toggle the port's FOV-based ground auto-fade
+		if (commandName == "setLandscapeFadeWithZoom")
+		{
+			bool convOk = false;
+			int v = arg.toInt(&convOk);
+			s_landscapeFadeWithZoom = (v != 0);
+			if (!s_landscapeFadeWithZoom)
+			{
+				// user wants a fixed (opaque) ground: cancel any fade state
+				LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+				if (lmgr) { lmgr->setFlagLandscapeUseTransparency(false); lmgr->setLandscapeTransparency(0.0); }
+				s_landscapeFadeSmooth = 0.f;
+			}
+			result["ok"] = true;
+			result["enabled"] = s_landscapeFadeWithZoom;
+			return result;
+		}
+
+		// setLandscapeUseTransparency — manually enable/disable landscape transparency.
+		// Takes manual control, which also disables the FOV-based auto-fade.
+		if (commandName == "setLandscapeUseTransparency")
+		{
+			bool convOk = false;
+			int v = arg.toInt(&convOk);
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			if (lmgr)
+			{
+				lmgr->setFlagLandscapeUseTransparency(v != 0);
+				s_landscapeFadeWithZoom = false;
+				s_landscapeFadeSmooth = 0.f;
+				result["ok"] = true;
+			} else {
 				result["ok"] = false;
-				result["error"] = "expects 0.0..1.0";
+				result["error"] = "LandscapeMgr missing";
 			}
 			return result;
 		}
 
-		// getScriptList
+	// getScriptList
 		if (commandName == "getScriptList")
 		{
 			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
@@ -2480,10 +2559,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 			} else {
 				result["ok"] = false;
-				result["error"] = "usage: az|alt[|duration]";
-			}
-			return result;
+			result["error"] = "usage: az|alt[|duration]";
 		}
+		return result;
+	}
 
 		// getViewDirection — current view direction as alt/az
 		if (commandName == "getViewDirection")
@@ -5564,6 +5643,7 @@ void StelMainView::startOhosRenderPump()
 void StelMainView::renderOhosFrameNow()
 {
 	ohosDrainCommandQueue();
+	ohosUpdateLandscapeFadeWithZoom();
 	if (!stelApp || !glWidget || !glWidget->context() || !StelApp::isInitialized())
 	{
 		requestOhosSceneRepaint();

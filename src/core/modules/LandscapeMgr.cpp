@@ -695,7 +695,10 @@ void LandscapeMgr::draw(StelCore* core)
 	}
 
 	// Draw the landscape
-	Landscape::setTransparency( getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0);
+	{
+		const double pushed = getFlagLandscapeUseTransparency() ? landscapeTransparency : 0.0;
+		Landscape::setTransparency(pushed);
+	}
 
 	if (oldLandscape)
 	{
