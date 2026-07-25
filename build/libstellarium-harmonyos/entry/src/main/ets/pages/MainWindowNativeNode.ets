@@ -216,6 +216,10 @@ struct WindowNativeNode {
   @State private selectedPhase: string = ''
   @State private selectedElongation: string = ''
   @State private selectedRich: string = ''
+  @State private audioVolume: number = 0.7
+  @State private sessionExportText: string = ''
+  @State private sessionImportText: string = ''
+  @State private sessionImportMsg: string = ''
   // 程序化音乐：默认开（打开应用即播放），可静音并持久化
   @State private musicEnabled: boolean = false
   private lastMusicToggle: number = 0
@@ -594,9 +598,11 @@ struct WindowNativeNode {
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
+    { label: I18n.t('pinned_search'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
+    { label: I18n.t('pinned_obs_list'), icon: 'observe', panel: 'observing' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' }
   ]
   // 低频入口：收进抽屉（点侧栏底部九宫格按钮展开），图标全部专属不重复
@@ -610,7 +616,8 @@ struct WindowNativeNode {
     { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
-    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' },
+    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
   // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
   private readonly actions: ShellAction[] = [
@@ -628,7 +635,8 @@ struct WindowNativeNode {
     { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
-    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' },
+    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
   @State private drawerOpen: boolean = false
 
@@ -921,6 +929,10 @@ struct WindowNativeNode {
       this.loadSatellites()
     } else if (panel === 'meteorshowers') {
       this.loadMeteorShowers()
+    } else if (panel === 'observing') {
+      // observing list is state-driven, no async load needed
+    } else if (panel === 'audio') {
+      // audio panel is state-driven
     } else if (panel === 'help') {
       this.loadAboutInfo()
     } else if (panel === 'scripts') {
@@ -4453,7 +4465,7 @@ private loadPlanetPositions(): void {
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
       'unlock': $r('app.media.ic_unlock'),
-      'forward': $r('app.media.ic_forward'),
+      'observe': $r('app.media.ic_list'), 'audio': $r('app.media.ic_audio'), 'forward': $r('app.media.ic_forward'),
     }
     return map[icon] || $r('app.media.ic_search')
   }
@@ -6524,6 +6536,136 @@ private loadPlanetPositions(): void {
           if (this.videoDir.length > 0) {
             Text('存放目录：' + this.videoDir)
               .fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 6, right: 6 })
+          }
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'observing') {
+      // 观测列表独立面板
+      Scroll() {
+        Column({ space: 8 }) {
+          Row({ space: 8 }) {
+            Text(I18n.t('panel_observing_list')).fontSize(15).fontColor(this.nmText()).layoutWeight(1)
+            if (this.observingList.length > 0) {
+              Button(I18n.t('clear_all')).fontSize(11).fontColor('#FF6B6B').backgroundColor('rgba(255,107,107,0.12)')
+                .borderRadius(16).height(26).padding({ left: 10, right: 10 })
+                .onClick(() => {
+                  this.observingList = []
+                  AppStorage.setOrCreate('observingList', JSON.stringify(this.observingList))
+                  this.flashHint($r('app.string.i0302'))
+                })
+            }
+          }.width('100%').padding({ left: 4, right: 4 })
+          if (this.observingList.length === 0) {
+            Column() {
+              Text(I18n.t('obs_list_empty')).fontSize(13).fontColor('#99FFFFFF').margin({ top: 12 })
+              Text($r('app.string.i0110')).fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
+            }.width('100%').height(140).justifyContent(FlexAlign.Center)
+          } else {
+            ForEach(this.observingList, (name: string) => {
+              Row({ space: 8 }) {
+                Column({ space: 2 }) {
+                  Text(this.zhNameOf(name)).fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Button($r('app.string.i0134')).fontSize(11).fontColor('#5B93BF').backgroundColor('rgba(91,147,191,0.18)')
+                  .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                  .onClick(() => { this.searchObject(name) })
+                Text('x').fontSize(13).fontColor('rgba(255,255,255,0.4)')
+                  .width(28).height(28).textAlign(TextAlign.Center)
+                  .onClick(() => {
+                    const idx = this.observingList.indexOf(name)
+                    if (idx >= 0) {
+                      this.observingList.splice(idx, 1)
+                      AppStorage.setOrCreate('observingList', JSON.stringify(this.observingList))
+                    }
+                  })
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('rgba(255,255,255,0.04)')
+              .borderRadius(12)
+              .border({ width: 1, color: this.nmBorder() })
+            }, (name: string) => name)
+          }
+        }.width('100%').padding({ left: 4, right: 4 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'audio') {
+      // 音频控制面板
+      Scroll() {
+        Column({ space: 10 }) {
+          Text(I18n.t('panel_audio_ctrl')).fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 4 })
+          Row() {
+            Text(I18n.t('audio_toggle')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.musicEnabled })
+              .onChange((isOn: boolean) => {
+                this.musicEnabled = isOn
+                const engine = AudioEngine.getInstance()
+                if (isOn) { engine.start().then(() => { engine.setMuted(false) }) } else { engine.setMuted(true) }
+                this.persistMusicEnabled()
+                this.flashHint(isOn ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
+              })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text(I18n.t('audio_volume')).fontSize(13).fontColor('#E5FFFFFF').width(72)
+            Text(Math.round(this.audioVolume * 100) + '%').fontSize(13).fontColor(this.nmText()).margin({ right: 8 })
+            Slider({ value: this.audioVolume, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet })
+              .width('40%')
+              .blockColor(this.nmAccent())
+              .trackColor(this.nmBg())
+              .selectedColor(this.nmAccent())
+              .showSteps(false)
+              .onChange((val: number) => {
+                this.audioVolume = val
+                AudioEngine.getInstance().setVolume(val)
+              })
+          }.height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text(I18n.t('angle_measure')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Button(I18n.t('angle_measure'))
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+              .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+              .onClick(() => { this.triggerAction('actionShow_Angle_Measure') })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Text(I18n.t('angle_measure_hint')).fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 10, right: 10 })
+          Row() {
+            Text($r('app.string.i0121')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Button($r('app.string.i0251'))
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+              .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+              .onClick(() => {
+                this.triggerAction('actionSave_Screenshot_Global')
+                this.flashHint(I18n.t('screenshot_saved'))
+              })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text(I18n.t('session_export')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 4 })
+          Button(I18n.t('session_export'))
+            .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+            .borderRadius(14).height(32).width('100%').padding({ left: 14, right: 14 })
+            .onClick(() => { this.sessionExport() })
+          Text(I18n.t('session_hint')).fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+          if (this.sessionExportText.length > 0) {
+            Scroll() {
+              Text(this.sessionExportText).fontSize(9).fontColor('#99FFFFFF').width('100%').fontFamily('monospace')
+            }.width('100%').height(100).backgroundColor(this.nmBg()).borderRadius(8).padding(8)
+              .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+          }
+          Text(I18n.t('session_import')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 8, bottom: 4 })
+          TextArea({ placeholder: 'Paste session JSON here', text: this.sessionImportText })
+            .fontSize(10).fontColor(this.nmText())
+            .placeholderColor('#8CFFFFFF')
+            .backgroundColor(this.nmBg()).borderRadius(8)
+            .width('100%').height(72)
+            .onChange((v: string) => { this.sessionImportText = v })
+          Button(I18n.t('session_import'))
+            .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+            .borderRadius(14).height(32).width('100%').padding({ left: 14, right: 14 })
+            .onClick(() => { this.sessionApply() })
+          if (this.sessionImportMsg.length > 0) {
+            Text(this.sessionImportMsg).fontSize(10).fontColor('#FFAA00').width('100%')
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
