@@ -342,7 +342,13 @@ struct WindowNativeNode {
   @State private umbraCenter: boolean = false
   @State private zenithNadir: boolean = false
   // 竖直视角限位：默认开。开启后手动上下拖只会在 天顶(+90°)↔天底(-90°) 之间，不会翻过头把天倒过来。
+  // 卡在天顶↔天底：默认开。开启后上下滑只改高度角（到天顶/天底就停，不翻转），
+  // 左右滑只改方位角——即使手指在屏幕偏左/偏右处竖直滑，画面也绝不会旋转。
   @State private verticalClamp: boolean = true
+  // 锁定视角：开启后上下左右都不能拖动，但捏合缩放仍然可用。
+  @State private viewLock: boolean = false
+  // 画面防弯曲：限制最大视场角(100°)，不能缩到"整个天空变成一个球"，地平线保持基本平直。
+  @State private flatHorizon: boolean = true
   @State private invariantPlaneLine: boolean = false
   @State private solarEquatorLine: boolean = false
   @State private fixedEquatorLine: boolean = false
@@ -760,9 +766,13 @@ struct WindowNativeNode {
     }
     // 默认语言设置为中文
     this.setLanguage('zh_CN')
-    // 竖直视角限位默认开启：手动上下拖只会在 天顶(+90°)↔天底(-90°) 之间，不会翻过头把天倒过来
+    // 卡在天顶↔天底 默认开启：上下滑到天顶/天底就停（不翻转），且竖直滑动绝不会引起旋转
     this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
       if (r.ok === true) { this.verticalClamp = true }
+    })
+    // 画面防弯曲 默认开启：最大视场角限制在 100°，不会缩成"一个球"，地平线基本平直
+    this.callNativeWhenReady("setFlatHorizon", "1", (r: StellariumBridgeResponse) => {
+      if (r.ok === true) { this.flatHorizon = true }
     })
     // 默认显示天顶/天底参考圈（满足“加载时就能看到天顶和天底两个圈”）
     this.callNativeWhenReady("setActionChecked", "actionShow_Zenith_Nadir|1", (r: StellariumBridgeResponse) => {
@@ -1381,10 +1391,22 @@ struct WindowNativeNode {
   // Routed bridge flag: calls a named bridge command (e.g. setMeteors) with "1"/"0"
   private setBridgeFlag(cmd: string, enabled: boolean): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag send %{public}s|%{public}s', cmd, enabled ? '1' : '0')
+    // 同步本地 @State：否则面板关闭重开后 Toggle 会显示旧值，再点一次就把状态发反了
+    this.syncBridgeFlagState(cmd, enabled)
     this.callInteractive(cmd, enabled ? '1' : '0', (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag %{public}s ok=%{public}s err=%{public}s', cmd, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
     })
+  }
+
+  // 把 cmd 型开关的最新值写回对应的本地 @State，保证 Toggle 重建时显示正确
+  private syncBridgeFlagState(cmd: string, enabled: boolean): void {
+    if (cmd === 'setViewLock') { this.viewLock = enabled }
+    else if (cmd === 'setVerticalClamp') { this.verticalClamp = enabled }
+    else if (cmd === 'setFlatHorizon') { this.flatHorizon = enabled }
+    else if (cmd === 'setMeteors') { this.meteors = enabled }
+    else if (cmd === 'setDsoLabels') { this.dsoLabels = enabled }
+    else if (cmd === 'setAutoZoomResets') { this.autoZoomResets = enabled }
   }
 
   private adjustTime(hours: number): void {
@@ -4442,7 +4464,9 @@ private loadPlanetPositions(): void {
             .margin({ top: 6, bottom: 4 })
           Text($r('app.string.i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow($r('app.string.s0304'), this.liveMode, '')
-          this.switchRow('锁定竖直视角（天顶↔天底）', this.verticalClamp, '', 'setVerticalClamp')
+          this.switchRow('锁定视角（禁止拖动，可缩放）', this.viewLock, '', 'setViewLock')
+          this.switchRow('卡在天顶↔天底（防翻转/防旋转）', this.verticalClamp, '', 'setVerticalClamp')
+          this.switchRow('画面防弯曲（限制最大视场）', this.flatHorizon, '', 'setFlatHorizon')
           Row() {
             Text($r('app.string.i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
