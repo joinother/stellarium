@@ -5,6 +5,24 @@
 
 ---
 
+## [2026-07-25] WorkBuddy - UI 统一与弹性转场
+
+- **图标统一重绘：** 全部 31 个 SVG 图标（`ic_search` / `ic_layers` / `ic_grid` / `ic_satellite` / `ic_telescope` 等）改为实心 `fill="#FFFFFF"` 路径。
+  - 根因：OHOS ArkTS `Image.fillColor(...)` 只能着色 SVG 的 `fill` 属性，对 `stroke="currentColor" fill="none"` 的描边图标无效，导致图标在深色面板上显示为黑色/不可见。
+  - 现在所有图标在左侧功能栏、抽屉、面板内均可正确显示为白色/蓝色，填充完整。
+- **暗色对比度提升：** 修正 `MainWindowNativeNode.ets` 中低对比度配色。
+  - 激活图标按钮改为白色图标 + 蓝色背景。
+  - 调亮次级文字 `#66FFFFFF` → `#99FFFFFF`、半透明蓝色 `#446688FF` → `#CC8FB6FF`、标题蓝 `#5B93BF` → `#7FB3DC`。
+  - 面板标题、抽屉标签、空态提示文字均更清晰可见。
+- **弹性/灵动动画：** 引入 `curves.springMotion(...)` 与 `clickEffect({ level: ClickEffectLevel.LIGHT })`。
+  - 面板打开/关闭（`setPanel` / `closePanel`）从生硬 `Curve.EaseOut` 改为弹簧曲线。
+  - 右侧面板/浮动详情窗滑入使用更大位移（`x: 64`）+ 弹簧，形成一镜到底的连续感。
+  - 左侧功能按钮、`more` 按钮、缩放按钮、小圆按钮增加按下状态 `stateStyles` + 弹簧缩放，并带 `clickEffect` 触觉反馈。
+  - 抽屉滑入、浮动详情窗展开、面板空闲透明度变化均使用 `springMotion`。
+- **模拟器验证（127.0.0.1:5555）：** `assembleHap` BUILD SUCCESSFUL（仅既有 deprecation 警告）；重新安装后启动正常。截图确认左侧 rail 图标全部可见、激活态蓝色高亮正确；图层面板文字/开关对比度良好；更多功能抽屉图标 + 标签清晰。
+
+---
+
 ## [2026-07-25] WorkBuddy - 视角控制三件套：防旋转 / 锁定 / 防弯曲
 
 - **彻底解决"竖直滑动导致画面旋转"：** `src/StelMainView.cpp`
