@@ -1,6 +1,6 @@
 # Stellarium HarmonyOS 移植 — Agent 协作工作流
 
-> **最后更新：2026-07-21**
+> **最后更新：2026-07-20**
 > **当前分支：** `openharmony-preview-v1`
 > **当前状态：** 能构建、安装、启动；横屏 UI 正常；星图触摸/选星可用；触摸事件已修复但仍有边缘死区问题
 
@@ -44,30 +44,6 @@ OpenGL ES → XComponent → Framebuffer
 | 修复 Bug | 读 `KNOWN-ISSUES.md` 选任务 | 标记已修复，更新 `CHANGELOG.md` |
 | 更换 Agent | 读全部文档 | 无需额外动作 |
 
-`### 2.2 Git Commit 规范
-
-所有 AI 和开发者在提交时必须遵守以下格式：
-
-```
-<type>(<scope>): <简短中文描述>
-
-<可选: 详细说明>
-
-[TRAE] <AI名称> | [WorkBuddy] | [DevEco] | [Manual]
-```
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| type | feat/fix/docs/refactor/test/chore | feat |
-| scope | ohos/cpp/i18n/security | ohos |
-| 描述 | 简洁中文，不超过 50 字 | 修复启动画面不自动消失 |
-| 署名行 | 标明提交者身份 | [TRAE] session-xxx |
-
-**注意事项：**
-- commit message 中不要使用 Unicode 转义（如 \\u2212），直接使用 UTF-8 字符
-- 中文标点用全角（，。）不用半角（,.）
-- git config 使用实际姓名和邮箱，不要留 'jiexuanyang@...local'
-
 ### 2.2 文档结构
 
 ```
@@ -76,14 +52,6 @@ docs/harmonyos/
 ├── HANDOFF.md                 ← 项目交接文档（给新 Agent 的快速入门）
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
-├── SIGNING-GUIDE.md           ← HAP 构建、手动签名、安装排错说明
-├── DEBUGGING-GUIDE.md         ← DevEco/模拟器/Qt/ArkUI 实战调试经验
-├── DEVECO-COLLAB.md           ← DevEco Code 协作指南（外包鸿蒙重活、省 token）
-├── skills/                    ← ArkTS 开发 Skill 参考库（来自 DevEco Code）
-│   ├── arkts-error-fixes/     ← 21 种 ArkTS 编译错误修复方案（66 文件）
-│   ├── arkts-grammar-standards/ ← ArkTS 语法规范、TS→ArkTS 改写（9 文件）
-│   ├── arkts-runtime-fix/     ← 运行时崩溃/faultlog/hilog 诊断（30 文件）
-│   └── harmonyos-deveco-bridge/ ← TRAE↔DevEco Code 协调（1 文件）
 ├── codex/                     ← Codex Agent 的工作记录
 │   ├── Stellarium-HarmonyOS-交接文档.md
 │   └── ohos_patch/            ← Codex 编写的补丁代码
@@ -97,7 +65,10 @@ docs/harmonyos/
 │   ├── ets-source/            ← ArkUI/ETS 源码
 │   ├── cpp-source/            ← C++ Native 源码
 │   └── *.json5                ← 构建配置
-└── signing/                   ← 历史遗留路径；签名私钥/profile 清洗后不要再提交到 git
+└── signing/                   ← 签名证书和配置
+    ├── stellarium-app-keypair.p12
+    ├── stellarium-app-cert-chain.cer
+    └── stellarium-ca-release-profile.p7b
 ```
 
 ### 2.3 CHANGELOG.md 格式
@@ -139,23 +110,6 @@ docs/harmonyos/
 
 ---
 
-## 2.6 DevEco Code 协作（省 token 必看）
-
-本项目已集成 DevEco Code 的 5 个 skill（arkts-error-fixes / arkts-grammar-standards / arkts-runtime-fix / deveco-create-project / harmonyos-deveco-bridge），TRAE 可直接调用。
-
-**遇到以下场景时，优先走 DevEco Code 协作路径：**
-
-| 场景 | 推荐路径 | 原因 |
-|---|---|---|
-| ArkTS 编译报错 | 先查本地 skill，复杂错误用 `deveco run` 外包 | 免费 GLM-5.1 扛 token，省约 200 倍 |
-| 运行时崩溃/白屏 | 查 arkts-runtime-fix，或 `deveco run` 分析 hilog | 它有内置 faultlog 解析脚本 |
-| 鸿蒙 UI 规范咨询 | `deveco run` 外包 | 内置鸿蒙知识库比联网搜准 |
-| 编译 / 部署 / 截屏 | 直接用 `hvigorw` / `hdc` 命令 | 零 token，纯命令行 |
-
-**详细指南见 [DEVECO-COLLAB.md](DEVECO-COLLAB.md)。**
-
----
-
 ## 3. 环境要求
 
 ### 3.1 开发环境
@@ -177,13 +131,27 @@ docs/harmonyos/
 | `.../entry/src/main/ets/pages/MainWindowNativeNode.ets` | **最核心的 ArkUI 文件** |
 | `.../entry/src/main/cpp/hello.cpp` | Native 命令桥 |
 | `/Users/jiexuanyang/stellarium-src/src/StelMainView.cpp` | C++ 渲染/命令核心 |
-| `~/stellarium-signing/` | 新签名材料（仓库外，PEM 格式；旧 `stellarium-app-keypair.p12` 已销毁，详见 SIGNING-GUIDE 安全通告） |
+| `/private/tmp/stellarium-oh-signing/` | 签名文件和已签名 HAP |
+| `/Users/jiexuanyang/Qt/6.12.0/macos/bin/harmonydeployqt` | Qt OHOS 部署工具（生成 libs/） |
+| `/Users/jiexuanyang/stellarium-src/build/src/stellarium-harmony-deployment-settings.json` | Qt OHOS 部署配置 |
+| `/Users/jiexuanyang/stellarium-src/build/src/libstellarium.so` | 预编译的 Stellarium 引擎库 |
+| `.../entry/libs/arm64-v8a/` | Native .so 文件目录（**不要删除！** 不在 git 中） |
 
 ---
 
 ## 4. 构建命令
 
-### 4.1 构建 HAP
+### 4.1 确保 entry/libs/ 存在（首次或 .so 丢失时）
+
+```bash
+# 使用 harmonydeployqt 生成 libs/（不覆盖 ETS 源码）
+/Users/jiexuanyang/Qt/6.12.0/macos/bin/harmonydeployqt \
+  --input /Users/jiexuanyang/stellarium-src/build/src/stellarium-harmony-deployment-settings.json \
+  --output /tmp/harmony-test --no-build
+cp -r /tmp/harmony-test/entry/libs /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/libs
+```
+
+### 4.2 构建 HAP
 
 ```bash
 cd /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos
@@ -195,40 +163,37 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
 ```
 
-### 4.2 签名 HAP
-
-```bash
-> **注意（2026-07-22 校正）：** 下面命令仅作形态参考。**旧 `stellarium-app-keypair.p12` 已销毁**；新密钥为 PEM 格式（`~/stellarium-signing/app.key` 等），尚未合成 p12 keystore，故本命令不能直接跑通。项目日常用 **DevEco 自动签名**（`entry-default-signed.hap`），手动流程见 `SIGNING-GUIDE.md` 第 4 节。
+### 4.3 签名 HAP（如果 hvigor 未自动签名）
 
 ```bash
 /Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin/java \
   -jar /Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/lib/hap-sign-tool.jar \
   sign-app -mode localSign \
-  -keyAlias stellarium-app-key -keyPwd "$STELLARIUM_SIGNING_PASSWORD" \
-  -appCertFile ~/stellarium-signing/app-chain.pem \
-  -profileFile ~/stellarium-signing/app-debug.p7b \
+  -keyAlias stellarium-app-key -keyPwd 123456 \
+  -appCertFile /private/tmp/stellarium-oh-signing/stellarium-app-cert-chain.cer \
+  -profileFile /private/tmp/stellarium-oh-signing/stellarium-ca-release-profile.p7b \
   -inFile /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-unsigned.hap \
   -signAlg SHA256withECDSA \
-  -keystoreFile ~/stellarium-signing/app.key \
-  -keystorePwd "$STELLARIUM_SIGNING_PASSWORD" \
-  -outFile ~/stellarium-signing/stellarium-latest-signed.hap \
+  -keystoreFile /private/tmp/stellarium-oh-signing/stellarium-app-keypair.p12 \
+  -keystorePwd 123456 \
+  -outFile /private/tmp/stellarium-oh-signing/stellarium-latest-signed.hap \
   -compatibleVersion 24 -signCode 1
 ```
-```
 
-### 4.3 安装启动
+### 4.4 安装启动
 
 ```bash
 HDC="/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc"
+HAP="/Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap"
 
 $HDC tconn 127.0.0.1:5555
 $HDC -t 127.0.0.1:5555 shell bm uninstall -n org.qtproject.example.stellarium
-$HDC -t 127.0.0.1:5555 install -r /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
+$HDC -t 127.0.0.1:5555 install -r "$HAP"
 $HDC -t 127.0.0.1:5555 shell hilog -r
 $HDC -t 127.0.0.1:5555 shell aa start -b org.qtproject.example.stellarium -a QAbility
 ```
 
-### 4.4 调试命令
+### 4.5 调试命令
 
 ```bash
 # 拉日志
@@ -246,46 +211,249 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 ## 5. 已实现的命令桥
 
+> 命令按功能分类；每条命令一行。`setActionChecked` 可映射任意 action 名称，以下仅列主要类别。
+
+### 基础交互
+
 | 命令 | 功能 | 参数 |
 |------|------|------|
 | `searchObject` | 搜索天体 | 名称 |
 | `selectAt` | 点击选星 | x\|y\|skyW\|skyH |
 | `dragView` | 拖动星图 | dx\|dy |
+| `panBy` | 陀螺仪平移 | x\|y |
 | `zoomBy` | 缩放 | factor |
 | `zoomStep` | 步进缩放 | factor |
+
+### 对象查询
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getSelectedObjectInfo` | 选中天体详细信息 | - |
+| `getObjectInfo` | 指定天体详细信息 | 名称 |
+| `getRTS` | 选中天体升起/中天/落下 | - |
+| `getObjectPositions` | 行星位置表 | - |
+| `listMatchingObjects` | 模糊匹配天体列表 | pattern |
+| `listObjects` | 枚举天体（指定类型） | type |
+
+### 状态查询
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getState` | 获取全局状态 | - |
+| `getAppVersion` | 应用版本 | - |
+| `getFPS` | 帧率 | - |
+| `getObserverInfo` | 观测者经纬度/海拔 | - |
+| `getScreenInfo` | 屏幕尺寸/DPI | - |
+| `getSimTime` | 当前模拟时间 | - |
+| `getSimulationTime` | 当前 JD/时间速率 | - |
+| `getStarCount` | 可见星数 | - |
+| `getDSOCounts` | 可见深空天体分类计数 | - |
+| `getAlmanac` | 太阳/月球年历+月相 | - |
+
+### 时间控制
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
 | `setTimeRate` | 时间速率 | rate |
+| `advanceTime` | 快进指定秒数 | seconds |
+| `setJD` | 设置 Julian Date | jd |
+| `setDate` | 设置日期时间 | YYYY-MM-DDThh:mm |
+| `setTimeToJD` | 设置模拟时间为指定 JD | jd |
+
+### 位置/观测
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
 | `setLocation` | 设置位置 | lat\|lng\|alt\|name |
-| `setActionChecked` | 图层开关 | name\|checked |
-| `getState` | 获取状态 | - |
-| `getSelectedObject` | 获取选中对象 | - |
-| `panBy` | 陀螺仪平移 | x\|y |
-| `lx200Command` | LX200 协议 | command |
+| `setLocationByName` | 按城市名设置位置 | city name |
+| `setLocationCoords` | 按经纬度设置位置 | lat,lon[,alt] |
+| `moveToSelected` | 移动视角到选中天体 | - |
+
+### 显示控制（图层开关）
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `setActionChecked` | 通用图层开关 | name\|checked |
+| `setGridFlag` | 网格线 | checked |
+| `setMilkyWayFlag` | 银河 | checked |
+| `setSolarSystemFlag` | 太阳系 | checked |
+| `setStarFlag` | 恒星 | checked |
+| `setNebulaFlag` | 星云 | checked |
+| `setAtmosphereFlag` | 大气层 | checked |
+| `setLandscapeFlag` | 地景 | checked |
+| `setCardinalsFlag` | 方位标 | checked |
+| `setAsterismFlag` | 星宿连线 | checked |
+| `setDeepSkyFlag` | 深空天体标签 | checked |
+
+> 其他图层（星座线、星座标签、行星标签等）均通过 `setActionChecked(action_name, checked)` 控制，action 名称须与 C++ `StelActionMgr` 一致。
+
+### 投影/FOV
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `setProjectionType` | 投影方式 | name |
+| `setFOV` | 设置视场角 | degrees |
+| `getFieldOfView` | 获取当前 FOV | - |
+| `setFieldOfView` | 设置 FOV (0.1-360°) | degrees |
+
+### 星座/文化
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `setSkyCulture` | 切换天区文化 | id |
+| `getSkyCultureList` | 天区文化列表 | - |
+| `getConstellationList` | 所有星座英文名列表 | - |
+| `getConstellationInfo` | 当前星座信息 | - |
+
+### 书签
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `addBookmark` | 添加书签 | name\|ra\|dec\|fov |
+| `getBookmarks` | 书签列表 | - |
+| `gotoBookmark` | 跳转书签 | name |
+| `deleteBookmark` | 删除书签 | name |
+
+### 星表下载
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getStarCatalogs` | 可用星表列表 | - |
+| `downloadStarCatalog` | 下载星表 | id |
+| `getStarCatalogStatus` | 星表下载进度 | - |
+
+### 卫星
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getSatellites` | 可见卫星列表 | - |
+| `setSatellitesFlag` | 卫星图层开关 | checked |
+
+### 流星雨
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getMeteorShowers` | 流星雨列表 | - |
+| `setMeteorShowersFlag` | 流星雨图层开关 | checked |
+
+### 望远镜（Oculars 插件）
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getOculars` | 目镜列表 | - |
+| `setOcularMode` | 目镜模式开关 | checked |
+| `setTelrad` | Telrad 叠加 | checked |
+| `setCrosshairs` | 十字丝 | checked |
+| `setCCD` | CCD 叠加 | checked |
+
+### 脚本
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `playScript` | 播放脚本 | name |
+| `stopScript` | 停止脚本 | - |
+| `pauseScript` | 暂停脚本 | - |
+| `resumeScript` | 恢复脚本 | - |
+| `listRecordings` | 录制列表 | - |
+| `saveRecording` | 保存录制 | name |
+| `loadRecording` | 加载录制 | name |
+| `deleteRecording` | 删除录制 | name |
+
+### 视频
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `startVideoRecording` | 开始视频录制 | path |
+| `stopVideoRecording` | 停止视频录制 | - |
+| `getVideoRecordingState` | 录制状态 | - |
+
+### 配置
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getConfigString` | 读取配置 | key |
+| `setConfigString` | 写入配置 | key=val |
+| `exportConfig` | 导出配置 | path |
+| `importConfig` | 导入配置 | path |
+
+### LX200 / 望远镜控制
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `telescopeLx200GotoSelected` | LX200 转到选中天体 | - |
+| `telescopeLx200SyncSelected` | LX200 同步选中天体 | - |
+| `telescopeLx200Abort` | LX200 中止 | - |
+| `lx200Command` | LX200 原始命令 | command |
+
+### 地景/大气
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
 | `getLandscapeList` | 地景列表 | - |
 | `setLandscape` | 切换地景 | id |
 | `setLandscapeTransparency` | 地景透明度 | 0.0-1.0 |
-| `getScriptList` | 脚本列表 | - |
-| `playScript` / `stopScript` / `pauseScript` / `resumeScript` | 脚本控制 | name |
-| `getLoadedModuleNames` | 已加载模块 | - |
-| `getRTS` | 选中天体升起/中天/落下 | - |
-| `getAlmanac` | 太阳/月球年历+月相 | - |
-| `getObjectPositions` | 行星位置表 | - |
-| `getSkyCultureList` | 天区文化列表 | - |
-| `setSkyCulture` | 切换天区文化 | id |
+| `setLightPollution` | 光污染等级 | level |
+| `setBortleScale` | Bortle 等级 (1-9) | level |
+
+### 音频
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `setAudioEnabled` | 音频开关 | checked |
+| `setAudioVolume` | 音频音量 | 0.0-1.0 |
+
+### 多设备同步
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getSessionState` | 获取会话状态 JSON | - |
+| `applySessionState` | 应用会话状态 | json |
+
+### 指星笔
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `pointAtSky` | 指星笔指向 (RA/Dec) | ra\|dec |
+| `pointAtSkyStop` | 关闭指星笔 | - |
+
+### 视角控制
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `setVerticalClamp` | 垂直角度钳制 | degrees |
+| `setViewLock` | 锁定视角 | checked |
+| `setFlatHorizon` | 平地平线模式 | checked |
+
+### 天象
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getTonightEvents` | 今夜天象（月出/月落/升/中天等） | - |
+
+### 插件
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
 | `getPluginList` | 插件列表 | - |
-| `loadPlugin` / `unloadPlugin` | 插件加载/卸载 | name |
-| `getConfigString` / `setConfigString` | 配置读写 | key[=val] |
-| `getObjectInfo` | 选中天体详细信息 | - |
-| `getConstellationInfo` | 当前星座 | - |
-| `getStarCount` | 可见星数 | - |
-| `getDSOCounts` | 可见深空天体分类计数 | - |
-| `setTimeToJD` | 设置模拟时间为指定 JD | jd |
-| `getSimulationTime` | 获取当前 JD/时间速率 | - |
-| `setLocationByName` | 按城市名设置位置 | city name |
-| `setLocationCoords` | 按经纬度设置位置 | lat,lon[,alt] |
-| `getSelectedType` | 选中天体类型/名称 | - |
-| `getFieldOfView` | 获取当前 FOV+中心方位 | - |
-| `setFieldOfView` | 设置 FOV (0.1-360°) | degrees |
-| `getConstellationList` | 所有星座英文名列表 | - |
+| `loadPlugin` | 加载插件 | name |
+| `unloadPlugin` | 卸载插件 | name |
+
+### 语音/帮助
+
+| 命令 | 功能 | 参数 |
+|------|------|------|
+| `getObjectSpokenText` | 选中天体语音描述文本 | - |
+| `getLog` | 应用日志 | lines |
+| `getAboutInfo` | 关于信息（版本/许可/作者） | - |
+
+### 兼容旧名（保留但不推荐）
+
+| 旧命令 | 等价新命令 | 说明 |
+|--------|------------|------|
+| `getSelectedObject` | `getSelectedObjectInfo` | 旧版别名 |
+| `getSelectedType` | `getSelectedObjectInfo` | 仅返回类型 |
+| `getLoadedModuleNames` | `getPluginList` | 旧版别名 |
+| `getScriptList` | - | 脚本列表已整合到脚本命令中 |
 
 ---
 
@@ -300,8 +468,11 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 ## 7. 注意事项
 
-1. **不要修改 build 目录下的文件后忘记同步到 `harmonyos/`**
-2. **HAP、签名私钥、profile、真实密码都不要上传到 git**；签名材料只放本机私有目录或私下交付
+1. **不要修改 build 目录下的文件后忘记同步到 `docs/harmonyos/harmonyos-project/`**
+2. **HAP 文件不要上传到 git（太大），只上传签名证书和配置**
 3. **不要推送到上游 `Stellarium/stellarium`**，推送到你自己的 fork
-4. **ArkTS 限制：** `@Builder` 内不能有 `const/let` 赋值；属性链式调用必须在容器组件 `}` 之后；`Blank()` 只能放在 `Column/Row/Flex` 中
-5. **坐标单位：** `onAreaChange` 返回 vp；`TouchObject.windowX/Y` 是 vp；C++ 侧 `selectAt` 需要 vp
+4. **`entry/libs/` 目录不要删除！** 其中 .so 文件不在 git 中，丢失后只能通过 `harmonydeployqt` 重新生成
+5. **hvigor 只构建 ArkTS + 打包资源**，不编译 `libstellarium.so`。C++ 源码修改需要 Qt OHOS 交叉编译才能生效
+6. **ArkTS 限制：** `@Builder` 内不能有 `const/let` 赋值；属性链式调用必须在容器组件 `}` 之后；`Blank()` 只能放在 `Column/Row/Flex` 中
+7. **坐标单位：** `onAreaChange` 返回 vp；`TouchObject.windowX/Y` 是 vp；C++ 侧 `selectAt` 需要 vp
+8. **action ID 必须与 C++ 源码一致**，不能凭记忆编造。修改前必须 grep C++ 源码验证
