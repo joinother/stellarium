@@ -992,3 +992,20 @@
 - **构建/验证：** HAP 重包用 `assembleHap --no-daemon`（规避 WorkBuddy safe-delete shim 的 00308018 报错）；模拟器 127.0.0.1:5555 卸载重装并运行；i18n 回归测试 PASS。
 - **待办/限制：** ① 罗盘中文需用户在截图里肉眼确认（模型不能读图）；② 外壳按系统语言渲染，需在设备系统设置里切换语言才能预览 ja/ko/zh_TW，无法用 hdc 脚本化；③ 自动定位要真正获取到坐标需设备开启定位或物理 GPS（模拟器无），本会话仅验证代码路径+优雅回退。
 
+
+## [2026-07-25] TRAE Agent - UI布局重构：搜索栏 + 滑动详情卡片 + 面板颜色修复
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. 修复"惨白"面板颜色：panelIdleGlass 从 `rgba(255,255,255,0.18)` 改为 `rgba(10,14,26,0.55)`，backdropBlur 从 30 提升到 45，边框改为钴蓝色 `rgba(91,147,191,0.18)`
+  2. 新增 `centerSearchBar()` Builder：顶部居中搜索栏，带搜索图标、输入框、清除按钮，深蓝毛玻璃背景 `rgba(12,16,28,0.72)` + backdropBlur(35)
+  3. 新增 `bottomDetailCard()` Builder：左下角三栏水平滑动详情卡片，使用 Swiper 组件
+     - 第一栏：基本信息（星等、距离、大小、星座）
+     - 第二栏：坐标信息（赤道坐标、地平坐标、升/中天/落）
+     - 第三栏：补充信息（相位、距角、富文本）+ 操作按钮（居中/跟踪）
+  4. 新增状态变量 `bottomCardIndex`、`centerSearchText`
+  5. expandedShell/compactShell 中将原 `objInfoFloat()` 浮动窗口替换为顶部搜索栏 + 底部滑动卡片
+- **修改原因：** 用户要求将中间长条改为搜索栏，原详情移到左下角做成滑动样式（一栏/二栏/三栏）；面板"惨白惨白不好看"
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 已安装启动，搜索栏在顶部居中显示，面板深蓝色不再惨白。底部详情卡片在选中天体后显示（需选星验证三栏滑动）
+- **备注：** 原 `objInfoFloat()` Builder 保留未删除，仍被 `handleInfoWinTap` 引用。如不再需要可后续清理
