@@ -259,6 +259,13 @@ export interface StellariumBridgeResponse {
   azimuth?: number
   constellation?: string
   distance?: string
+  // 富化后的天体详情字段（selectedObjectJson 扩展）
+  size?: string
+  rise?: string
+  set?: string
+  transit?: string
+  phase?: number
+  elongation?: number
   replies?: string
   sent?: string
   mode?: string

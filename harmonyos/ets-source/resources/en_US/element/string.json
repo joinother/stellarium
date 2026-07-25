@@ -1536,5 +1536,8 @@
       "name": "s0702",
       "value": "Set"
     }
-  ]
+  ,
+  { "name": "i0290", "value": "Angular size" },
+  { "name": "i0291", "value": "Phase" }
+]
 }

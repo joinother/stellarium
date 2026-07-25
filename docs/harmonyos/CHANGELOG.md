@@ -5,6 +5,22 @@
 
 ---
 
+## [2026-07-25] WorkBuddy - 选中天体弹独立浮动详情窗（富信息 + 默认收起 + 不打扰当前菜单）
+
+- **背景（用户反馈）：** ① 原版点选星体后展示的详情很丰富（几乎占半屏），移植版只有寥寥几行；② 无论在哪个菜单，点选星体都会强行弹到右栏"详情"面板，打断正在进行的操作；③ 希望平时收起、需要时展开。
+- **修改文件：**
+  - `src/StelMainView.cpp`（`selectedObjectJson` 补充 size/rise/set/transit/phase/elongation 字段）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（新增 @State 字段、`applySelectedObject`、`@Builder objInfoFloat`、两处挂载；并把"选中→弹右栏详情"改为"仅弹独立浮动窗"）
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（`StellariumBridgeResponse` 新增 size/rise/set/transit/phase/elongation 可选字段）
+  - `harmonyos/ets-source/resources/{base,zh_CN,en_US,ja,ko,zh_TW}/element/string.json`（新增 i0290 角直径/Angular size、i0291 相位/Phase）
+- **改动：**
+  - C++：在 `selectedObjectJson()` 中把星体 `getInfoMap` 的角直径(size-dms)、升起/中天/落下(rise/set/transit)、相位(phase→%)、距角(elongation→°) 带上，富信息源头补齐。
+  - ArkTS：选中逻辑彻底解耦——`searchObject()` 与星图点击命中后**不再** `activePanel='object'`/`panelVisible=true`，改为仅置 `infoWinVisible=true`（独立浮动窗）。当前所在菜单（搜索/时间/图层…）完全不受打扰。
+  - 新增 `objInfoFloat()` 浮动窗：默认收起，仅显示 名称/类型 + ▸ 展开箭头 + ✕ 关闭；展开后 Scroll 展示 星等/赤道坐标/地平坐标/星座/距离/**角直径**/升起/中天/落下/**相位**/距角 + 原文简介块，「居中」「跟踪」按钮常驻在滚动区**下方**（字段再多也不被挤出）。玻璃拟态卡片，挂在 `expandedShell()` 与 `compactShell()` 两处。
+  - 触摸交互走 overlay 总线（本工程 XComponent 会吞掉组件自身 `onClick`，所有 UI 点击都经 `handleOverlayTouch→handleUiTap` 派发）：在 `isUiPoint()` 把浮动窗区域标记为 UI 点（避免被当成星图点击触发重新选星而关窗），并新增 `handleInfoWinTap(x,y)` 按坐标派发——头部切换展开/收起、右上 ✕ 关闭、底部按钮行 左"居中"(moveToSelected)/右"跟踪"(toggleTracking)；`objInfoFloat` 内部不再挂无效的 `onClick`。
+  - 自动刷新修复：原 `startDetailAutoRefresh()` 每次 1 秒轮询都调 `applySelectedObject` 把 `infoWinExpanded` 重置为 false，导致一展开就被收起、甚至瞬时未命中就关窗。现已区分"用户主动选中"与"后台刷新"——`applySelectedObject(r, fromRefresh=true)` 在刷新时不重置展开态、也不因瞬时未命中关窗；只有换了一个**新天体**才默认收起。
+- **验证（模拟器 127.0.0.1:5555）：** 在搜索菜单点选 Mars → 浮动窗出现在顶部中央（"火星/行星/▸/✕"），**搜索面板保持打开未被打断**；点头部展开 → 出现 角直径/相位/升起/中天/落下/距角 等富字段；**等待 3 秒（跨 1 秒自动刷新）后富字段仍在**（展开态保留、不再闪退式收起/关窗）；底部「居中」「跟踪」按钮可见且可点（点"跟踪"→ 标签翻为"取消跟踪"，窗口不闪退）；点 ✕ 窗口关闭。收起态默认、展开见富信息、选星不扰菜单三项需求全部满足。
+
 ## [2026-07-25] WorkBuddy - 星图罗盘方位汉化为东南西北
 
 - 根因：星图方位点（`Cardinals` 类，`src/core/modules/LandscapeMgr.cpp`）标签是硬编码英文 N/S/E/W，**未走翻译系统**（`updateI18n()` 虽用 `qc_("N","compass direction")` 但上游中文 .ts 根本没翻译该上下文），故中文环境下仍显示字母。

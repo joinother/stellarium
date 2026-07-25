@@ -718,6 +718,26 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr)
 			}
 		}
 
+		// Angular size (DSO / planets / Moon), formatted string
+		if (m.contains("size-dms"))
+			result["size"] = m["size-dms"].toString();
+
+		// Rise / Set / Transit (local time strings; "---" when not applicable)
+		if (m.contains("rise"))
+			result["rise"] = m["rise"].toString();
+		if (m.contains("set"))
+			result["set"] = m["set"].toString();
+		if (m.contains("transit"))
+			result["transit"] = m["transit"].toString();
+
+		// Phase (0..1 for solar-system bodies) -> percent
+		if (m.contains("phase"))
+			result["phase"] = m["phase"].toDouble() * 100.0;
+
+		// Elongation (radians) -> degrees
+		if (m.contains("elongation"))
+			result["elongation"] = m["elongation"].toDouble() * 180.0 / M_PI;
+
 		// Plain-text summary info
 		const QString info = object->getInfoString(core, StelObject::ShortInfo |
 			StelObject::Magnitude | StelObject::AltAzi | StelObject::Distance |

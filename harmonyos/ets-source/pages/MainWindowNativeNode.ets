@@ -174,6 +174,16 @@ struct WindowNativeNode {
   @State private selectedCoordAlt: string = ''
   @State private selectedConstellation: string = ''
   @State private selectedDistance: string = ''
+  // 富化的天体详情（独立浮动窗口，不切换当前菜单；默认收起，可展开）
+  @State private infoWinVisible: boolean = false
+  @State private infoWinExpanded: boolean = false
+  @State private selectedSize: string = ''
+  @State private selectedRise: string = ''
+  @State private selectedSet: string = ''
+  @State private selectedTransit: string = ''
+  @State private selectedPhase: string = ''
+  @State private selectedElongation: string = ''
+  @State private selectedRich: string = ''
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
@@ -1777,8 +1787,6 @@ private loadPlanetPositions(): void {
     if (query.length === 0) {
       return
     }
-    this.activePanel = 'object'
-    this.panelVisible = true
     this.flashHint($r('app.string.i0070', query))
     // 保存搜索历史（去重，最多保留 20 条）
     const hist = this.searchHistory.filter(h => h !== query)
@@ -1806,7 +1814,7 @@ private loadPlanetPositions(): void {
     this.callInteractive('getSelectedObjectInfo', '', (r) => {
       this.detailRefreshing = false
       if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
-      this.applySelectedObject(r)
+      this.applySelectedObject(r, true)
     })
   }
 
@@ -1814,7 +1822,7 @@ private loadPlanetPositions(): void {
   private startDetailAutoRefresh(): void {
     if (this.detailTimer !== 0) { return }
     this.detailTimer = setInterval(() => {
-      if (this.activePanel === 'object' && this.panelVisible && this.selectedStatus === 'Selected') {
+      if (this.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWinVisible)) {
         this.refreshSelectedObject()
       }
     }, 1000) as number
@@ -1895,14 +1903,19 @@ private loadPlanetPositions(): void {
     return out.slice(0, 12).map((o) => ({ zh: o.zh, en: o.en }))
   }
 
-  private applySelectedObject(result: StellariumBridgeResponse): void {
+  // fromRefresh=true 时来自“详情自动刷新”等后台轮询：仅刷新数值，绝不重置展开态、也绝不因瞬时未命中而关窗。
+  private applySelectedObject(result: StellariumBridgeResponse, fromRefresh: boolean = false): void {
     if (result.ok !== true) {
       this.selectedStatus = result.error ? result.error : 'Core not ready'
       return
     }
     if (result.found === true) {
-      this.selectedName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
-      this.selectedType = result.type && result.type.length > 0 ? result.type : 'Object'
+      const incomingName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
+      const incomingType = result.type && result.type.length > 0 ? result.type : 'Object'
+      // 仅在“换了一个新天体”时才收起详情（保留用户已展开的偏好）；同一目标的周期性刷新不重置展开态
+      const isNewSelection = (this.selectedName !== incomingName) || (this.selectedType !== incomingType) || (!this.infoWinVisible)
+      this.selectedName = incomingName
+      this.selectedType = incomingType
       this.selectedStatus = 'Selected'
       this.selectedMagnitude = (typeof result.magnitude === 'number') ? (result.magnitude as number).toFixed(2) : ''
       const ra: string = result.ra ? result.ra : ''
@@ -1915,12 +1928,24 @@ private loadPlanetPositions(): void {
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
+      this.selectedSize = result.size && result.size.length > 0 ? result.size : ''
+      this.selectedRise = result.rise && result.rise.length > 0 ? result.rise : ''
+      this.selectedSet = result.set && result.set.length > 0 ? result.set : ''
+      this.selectedTransit = result.transit && result.transit.length > 0 ? result.transit : ''
+      this.selectedPhase = (typeof result.phase === 'number') ? (result.phase as number).toFixed(0) + '%' : ''
+      this.selectedElongation = (typeof result.elongation === 'number') ? (result.elongation as number).toFixed(1) + '°' : ''
+      this.selectedRich = result.info && result.info.length > 0 ? result.info : ''
+      // 选中成功后弹出独立浮动详情窗口（新目标默认收起，不打扰当前菜单；同一目标刷新时保留展开态）
+      this.infoWinVisible = true
+      if (isNewSelection) { this.infoWinExpanded = false }
       // 尝试从本地别名表补充中文简介
       const dispName = this.selectedName
       const alias = ALIAS_LIST.find(a => a.en === dispName || a.zh === dispName)
       this.selectedInfo = alias ? alias.zh + ' (' + alias.en + ')' : ''
       this.startDetailAutoRefresh()
     } else {
+      // 后台刷新瞬时未命中（天体临时不可见等）时不关窗、不清数据，避免闪退式收起
+      if (fromRefresh) { return }
       this.selectedName = 'Not found'
       this.selectedType = result.query && result.query.length > 0 ? result.query : 'No selection'
       this.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
@@ -1929,6 +1954,14 @@ private loadPlanetPositions(): void {
       this.selectedCoordAlt = ''
       this.selectedConstellation = ''
       this.selectedDistance = ''
+      this.selectedSize = ''
+      this.selectedRise = ''
+      this.selectedSet = ''
+      this.selectedTransit = ''
+      this.selectedPhase = ''
+      this.selectedElongation = ''
+      this.selectedRich = ''
+      this.infoWinVisible = false
       this.selectedInfo = 'No selectable object at tap position. Zoom in or use search.'
     }
   }
@@ -2647,6 +2680,25 @@ private loadPlanetPositions(): void {
   }
 
   private isUiPoint(x: number, y: number): boolean {
+    // 选中天体的独立浮动详情窗：其区域内一律视为 UI 点，否则会被当成星图点击触发重新选星而关窗
+    if (this.infoWinVisible) {
+      let wl: number = 0
+      let wt: number = 0
+      let wr: number = 0
+      if (this.isExpandedLayout) {
+        wl = this.infoWinLeft()
+        wt = this.EDGE_MARGIN
+        wr = wl + this.infoWinWidth()
+      } else {
+        wl = 16
+        wt = 60
+        wr = wl + (this.skyWidth - 32)
+      }
+      const wh = wt + (this.infoWinExpanded ? (54 + this.infoWinDetailH() + 64) : 58)
+      if (x >= wl - 8 && x <= wr + 8 && y >= wt - 8 && y <= wh + 8) {
+        return true
+      }
+    }
     if (this.isExpandedLayout) {
       // 左侧工具栏区域（宽屏布局：常用入口 + 抽屉按钮 + 钉住按钮整条轨道）
       if (!this.railCollapsed && x >= this.EDGE_MARGIN && x <= this.EDGE_MARGIN + 58) {
@@ -2677,8 +2729,10 @@ private loadPlanetPositions(): void {
     return y >= this.skyHeight - 80
   }
 
-	  private handleUiTap(x: number, y: number): boolean {
-	    // zoom +/- buttons (expanded layout, bottom-left)
+  private handleUiTap(x: number, y: number): boolean {
+    // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
+    if (this.handleInfoWinTap(x, y)) { return true }
+    // zoom +/- buttons (expanded layout, bottom-left)
 	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148) {
 	      if (y >= this.skyHeight - 224 && y <= this.skyHeight - 160) {
 	        this.zoomStep(0.5)
@@ -2982,8 +3036,6 @@ private loadPlanetPositions(): void {
       } else if (!this.touchMoved && !this.pinchActive) {
         const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
-        this.activePanel = 'object'
-        this.panelVisible = true
         this.callInteractive('selectAt', payload, (result) => {
           hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
           this.applySelectedObject(result)
@@ -3180,6 +3232,14 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 32, y: 0 }).animation({ duration: 160, curve: Curve.EaseIn }))
           ))
       }
+      // 选中天体的独立浮动详情窗口：独立于右侧菜单，不干扰当前操作
+      if (this.infoWinVisible) {
+        Stack() { this.objInfoFloat() }
+          .position({ x: this.infoWinLeft(), y: this.EDGE_MARGIN })
+          .width(this.infoWinWidth())
+          .zIndex(50)
+          .hitTestBehavior(HitTestMode.Block)
+      }
     }
       .width('100%')
       .height('100%')
@@ -3226,11 +3286,156 @@ private loadPlanetPositions(): void {
       }
 
       this.bottomDock()
+
+      // 选中天体的独立浮动详情窗口（紧凑布局：顶部居中，不干扰当前操作）
+      if (this.infoWinVisible) {
+        Stack() { this.objInfoFloat() }
+          .position({ x: 16, y: 60 })
+          .width(this.skyWidth - 32)
+          .zIndex(50)
+          .hitTestBehavior(HitTestMode.Block)
+      }
     }
       .width('100%')
       .height('100%')
       .padding({ bottom: 14 })
       .zIndex(1)
+  }
+
+  // ---- 选中天体的独立浮动详情窗口 ----
+  // 默认收起（仅一行概要），点头部展开为可滚动的富详情卡（约半屏）。
+  // 它独立于右侧菜单面板（activePanel），选中天体时不再强制切换菜单，
+  // 因此不会打扰用户正在进行的操作。
+  private infoWinLeft(): number {
+    const availLeft = this.EDGE_MARGIN + 64
+    const availRight = this.skyWidth - this.panelWidth - this.EDGE_MARGIN
+    const band = availRight - availLeft
+    const w = Math.min(band, 560)
+    return availLeft + (band - w) / 2
+  }
+  private infoWinWidth(): number {
+    const availLeft = this.EDGE_MARGIN + 64
+    const availRight = this.skyWidth - this.panelWidth - this.EDGE_MARGIN
+    const band = availRight - availLeft
+    return Math.min(band, 560)
+  }
+  private infoWinDetailH(): number {
+    return Math.min(this.skyHeight * 0.42, 400)
+  }
+  private toggleTracking(): void {
+    const want = this.trackingText !== 'On'
+    this.callInteractive('setTracking', want ? '1' : '0', () => {
+      this.trackingText = want ? 'On' : 'Off'
+      this.refreshState()
+    })
+  }
+
+  // 浮动详情窗的触摸交互统一走 overlay 的 handleUiTap（XComponent 会吞掉组件自身的 onClick），
+  // 这里按坐标派发：头部切换展开/收起、右上 ✕ 关闭、展开后底部按钮行 居中/跟踪。
+  private handleInfoWinTap(x: number, y: number): boolean {
+    if (!this.infoWinVisible) { return false }
+    let wl: number = 0
+    let wt: number = 0
+    let wr: number = 0
+    if (this.isExpandedLayout) {
+      wl = this.infoWinLeft(); wt = this.EDGE_MARGIN; wr = wl + this.infoWinWidth()
+    } else {
+      wl = 16; wt = 60; wr = wl + (this.skyWidth - 32)
+    }
+    if (x < wl - 8 || x > wr + 8 || y < wt - 8) { return false }
+    const headerH = 54
+    if (y <= wt + headerH) {
+      const closeW = 40
+      if (x >= wr - closeW) {
+        this.infoWinVisible = false
+      } else {
+        this.infoWinExpanded = !this.infoWinExpanded
+      }
+      return true
+    }
+    // 展开态：底部按钮行（左 居中 / 右 跟踪），主体其余区域仅消费触摸、不穿透到星图
+    if (this.infoWinExpanded) {
+      const bodyTop = wt + headerH + 1
+      const bodyBottom = wt + headerH + this.infoWinDetailH() + 64
+      if (y > bodyTop && y <= bodyBottom) {
+        const mid = wl + (wr - wl) / 2
+        if (x < mid) {
+          this.moveToSelectedObject()
+        } else {
+          this.toggleTracking()
+        }
+      }
+      return true
+    }
+    return true
+  }
+
+  @Builder
+  objInfoFloat() {
+    Column() {
+      // 头部：点名称/类型/箭头展开收起；✕ 关闭（不影响当前菜单）
+      Row() {
+        Image(this.getIcon('info', false))
+          .width(18).height(18).fillColor('#5B93BF').margin({ right: 8 })
+        Text(this.zhNameOf(this.selectedName))
+          .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF')
+          .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.zhType(this.selectedType))
+          .fontSize(10).fontColor('#5B93BF')
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .backgroundColor('rgba(91,147,191,0.15)').borderRadius(6)
+        Text(this.infoWinExpanded ? '▾' : '▸')
+          .fontSize(14).fontColor('#99FFFFFF').padding({ left: 8, right: 4 })
+        Text('✕')
+          .fontSize(13).fontColor('#99FFFFFF').padding({ left: 6, right: 4 })
+      }
+      .width('100%').padding({ left: 12, right: 10, top: 10, bottom: 10 })
+
+      if (this.infoWinExpanded) {
+        Divider().color(this.nmBorder()).margin({ left: 8, right: 8 })
+        Scroll() {
+          Column() {
+            if (this.selectedMagnitude.length > 0) { this.infoRow($r('app.string.i0007'), this.selectedMagnitude) }
+            if (this.selectedCoordEq.length > 0) { this.infoRow($r('app.string.i0008'), this.selectedCoordEq) }
+            if (this.selectedCoordAlt.length > 0) { this.infoRow($r('app.string.i0009'), this.selectedCoordAlt) }
+            if (this.selectedConstellation.length > 0) { this.infoRow($r('app.string.i0010'), this.zhNameOf(this.selectedConstellation)) }
+            if (this.selectedDistance.length > 0) { this.infoRow($r('app.string.i0011'), this.selectedDistance) }
+            if (this.selectedSize.length > 0) { this.infoRow($r('app.string.i0290'), this.selectedSize) }
+            if (this.selectedRise.length > 0) { this.infoRow($r('app.string.s0700'), this.selectedRise) }
+            if (this.selectedSet.length > 0) { this.infoRow($r('app.string.s0702'), this.selectedSet) }
+            if (this.selectedTransit.length > 0) { this.infoRow($r('app.string.s0701'), this.selectedTransit) }
+            if (this.selectedPhase.length > 0) { this.infoRow($r('app.string.i0291'), this.selectedPhase) }
+            if (this.selectedElongation.length > 0) { this.infoRow($r('app.string.i0255'), this.selectedElongation) }
+            if (this.selectedRich.length > 0) {
+              Text(this.selectedRich)
+                .fontSize(12).fontColor('#99FFFFFF').lineHeight(18)
+                .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
+                .backgroundColor('rgba(107,163,214,0.10)')
+                .border({ width: 1, color: this.nmBorder() }).borderRadius(12)
+                .margin({ top: 6, bottom: 6 })
+            }
+          }.width('100%')
+        }
+        .scrollable(ScrollDirection.Vertical)
+        .width('100%')
+        .height(this.infoWinDetailH())
+        // 操作按钮常驻在滚动区下方，字段再多也不会被挤出可视区
+        Row({ space: 8 }) {
+          Button('居中')
+            .fontSize(12).fontColor('#E5FFFFFF')
+            .backgroundColor('rgba(107,163,214,0.25)').borderRadius(12).height(34).layoutWeight(1)
+          Button(this.trackingText === 'On' ? '取消跟踪' : '跟踪')
+            .fontSize(12).fontColor('#E5FFFFFF')
+            .backgroundColor('rgba(107,163,214,0.25)').borderRadius(12).height(34).layoutWeight(1)
+        }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 8 })
+      }
+    }
+      .width('100%')
+      .backgroundColor('rgba(20,21,23,0.92)')
+      .backdropBlur(26)
+      .border({ width: 1, color: this.nmBorder() })
+      .borderRadius(16)
+      .shadow({ radius: 24, color: 'rgba(0,0,0,0.35)', offsetX: 0, offsetY: 10 })
   }
 
   @Builder
