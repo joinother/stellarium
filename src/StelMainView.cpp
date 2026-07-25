@@ -421,10 +421,12 @@ static QHash<QString, QJsonObject> s_ohosCmdCache;
 // guaranteed to be pumped; we hand commands to the pump instead.
 static QMutex s_ohosCmdQueueMutex;
 static QList<std::function<void()>> s_ohosCmdQueue;
-// FOV-based landscape auto-fade (port feature). When the observer zooms in
-// (narrow FOV, e.g. looking down at the ground), the ground texture gradually
-// becomes transparent so the lower-hemisphere sky is revealed instead of being
-// occluded by an opaque landscape. Driven every frame from renderOhosFrameNow().
+// View-altitude-based landscape auto-fade (port feature). When the observer
+// TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
+// ground texture gradually becomes transparent so the lower-hemisphere sky is
+// revealed instead of being occluded by an opaque landscape. Capped so the
+// ground stays faintly visible (never fully invisible). Driven every frame
+// from renderOhosFrameNow().
 static bool s_landscapeFadeWithZoom = true;
 static float s_landscapeFadeSmooth = 0.f;
 // Virtual pointing-stick target: after pointAtSky centers the view on a sky
@@ -478,10 +480,14 @@ static void ohosDrainCommandQueue()
 		fn();
 }
 
-// Gradually fade the landscape as the observer zooms in (narrow FOV), so the
-// ground no longer occludes the lower-hemisphere sky. Reuses the engine's own
-// transparency path: LandscapeMgr applies (1 - transparency) * landFader as the
-// ground alpha, so pushing transparency -> 1 makes the ground fully see-through.
+// Gradually fade the landscape as the observer TILTS THE VIEW DOWN toward the
+// ground (lower view-center altitude), so the ground no longer occludes the
+// lower-hemisphere sky while looking down. Driven by the VIEW DIRECTION
+// (altitude of the screen-center), NOT by zoom/FOV.
+// Reuses the engine's own transparency path: LandscapeMgr applies
+// (1 - transparency) * landFader as the ground alpha, so pushing transparency
+// toward s_landscapeFadeMax keeps the ground very see-through but still visible
+// (never fully invisible).
 static void ohosUpdateLandscapeFadeWithZoom()
 {
 	if (!s_landscapeFadeWithZoom)
@@ -496,19 +502,31 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	StelMovementMgr* mvmgr = core->getMovementMgr();
 	if (!mvmgr)
 		return;
-	const double fov = mvmgr->getCurrentFov();   // degrees
-	const double fadeStart = 60.0;              // >= this FOV: ground fully opaque
-	const double fadeEnd   = 10.0;              // <= this FOV: ground fully transparent
-	double target;
-	if (fov >= fadeStart)     target = 0.0;
-	else if (fov <= fadeEnd)  target = 1.0;
-	else                      target = (fadeStart - fov) / (fadeStart - fadeEnd);
-	// Smooth toward the target so the fade is gradual, not a hard pop.
-	const float rate = 0.12f;
+	// Altitude (degrees) of the direction the camera points at screen-center.
+	// +90 = straight up, 0 = horizon, -90 = straight down at the ground.
+	const Vec3d vdir = mvmgr->getViewDirectionJ2000();
+	Vec3d altAz = core->j2000ToAltAz(vdir, StelCore::RefractionOff);
+	double altRad = 0.0, aziRad = 0.0;
+	StelUtils::rectToSphe(&aziRad, &altRad, altAz);
+	const double altView = altRad * 180.0 / M_PI;
+
+	// Fade window expressed in view altitude:
+	//   altView >= fadeStartAlt -> ground fully opaque
+	//   altView <= fadeEndAlt   -> ground at s_landscapeFadeMax (very transparent, but still visible)
+	// In between the ground fades gradually as you pull the view toward the ground.
+	const double fadeStartAlt = 15.0;    // looking up / near horizon: opaque
+	const double fadeEndAlt   = -60.0;   // looking down at the ground: very transparent
+	const double maxTransp    = 0.85;    // cap so the ground never disappears entirely
+	double t = (fadeStartAlt - altView) / (fadeStartAlt - fadeEndAlt);
+	if (t < 0.0) t = 0.0;
+	if (t > 1.0) t = 1.0;
+	const double target = t * maxTransp;
+	// Smooth toward the target so the fade is gradual (slow trailing follow),
+	// not a hard pop, while you are dragging the view.
+	const float rate = 0.10f;
 	float cur = s_landscapeFadeSmooth + (static_cast<float>(target) - s_landscapeFadeSmooth) * rate;
 	s_landscapeFadeSmooth = cur;
-	const bool useTransp = cur > 0.002f;
-	if (useTransp)
+	if (cur > 0.002f)
 		lmgr->setFlagLandscapeUseTransparency(true);
 	lmgr->setLandscapeTransparency(static_cast<double>(cur));
 }
