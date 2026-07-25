@@ -5,6 +5,15 @@
 
 ---
 
+## [2026-07-25] WorkBuddy - 星图罗盘方位汉化为东南西北
+
+- 根因：星图方位点（`Cardinals` 类，`src/core/modules/LandscapeMgr.cpp`）标签是硬编码英文 N/S/E/W，**未走翻译系统**（`updateI18n()` 虽用 `qc_("N","compass direction")` 但上游中文 .ts 根本没翻译该上下文），故中文环境下仍显示字母。
+- 修复：`Cardinals::updateI18n()` 在语言以 `zh` 开头时直接注入汉字方位表（北/南/东/西/东北/东南/西南/西北 + 16/32 向），其余语言仍走 `qc_()` 翻译。
+- 验证：重编 libstellarium.so（含"北"字节）；HAP 内 .so 确认含"北"；启动日志 `Translations on disk: stellarium/zh_CN.qm=true` 且 `setLanguage` 触发 → 中文分支生效。
+- 已知缺口：UI 语言切换器提供 zh_TW/ja/ko，但 `harmonyos/ets-source/resources/` 仅有 zh_CN 与 en_US 的 string.json，另三语言无资源会回退英文。
+
+---
+
 ## [2026-07-25] WorkBuddy - UI 留边、移除常驻标、今晚天象点击跳转
 
 - **背景（用户反馈）：** ① 侧栏与浮动面板仍紧贴屏幕边框；② 左上角常驻 "Stellarium" 小标遮挡星图；③ 今晚天象面板只能看不能跳，希望点击卡片自动跳到天象发生时刻并锁定主角与卫星。

@@ -286,6 +286,21 @@ void Cardinals::draw(const StelCore* core, double latitude) const
 // Translate cardinal labels with gettext to current sky language and update font for the language
 void Cardinals::updateI18n()
 {
+	// 中文环境直接注入汉字方位（上游中文翻译未含罗盘方向上下文）
+	const QString lang = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+	if (lang.startsWith("zh", Qt::CaseInsensitive)) {
+		labels = {
+			{ dN,  "北" },        { dS,  "南" },        { dE,  "东" },        { dW,  "西" },
+			{ dNE, "东北" },      { dSE, "东南" },      { dSW, "西南" },      { dNW, "西北" },
+			{ dNNE, "北东北" },   { dENE, "东东北" },   { dESE, "东东南" },   { dSSE, "南东南" },
+			{ dSSW, "南西南" },   { dWSW, "西西南" },   { dWNW, "西西北" },   { dNNW, "北西北" },
+			{ dNbE, "北偏东" },   { dNEbN, "东北偏北" }, { dNEbE, "东北偏东" }, { dEbN, "东偏北" },
+			{ dEbS, "东偏南" },   { dSEbE, "东南偏东" }, { dSEbS, "东南偏南" }, { dSbE, "南偏东" },
+			{ dSbW, "南偏西" },   { dSWbS, "西南偏南" }, { dSWbW, "西南偏西" }, { dWbS, "西偏南" },
+			{ dWbN, "西偏北" },   { dNWbW, "西北偏西" }, { dNWbN, "西北偏北" }, { dNbW, "北偏西" }
+		};
+		return;
+	}
 	labels = {
 		// TRANSLATORS: North
 		{ dN,	qc_("N",   "compass direction") },
