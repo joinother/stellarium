@@ -203,6 +203,7 @@ struct WindowNativeNode {
   @State private selectedCoordAlt: string = ''
   @State private selectedConstellation: string = ''
   @State private selectedDistance: string = ''
+  @State private visibleConstellations: string = ''
   // 富化的天体详情（独立浮动窗口，不切换当前菜单；默认收起，可展开）
   @State private infoWinVisible: boolean = false
   @State private infoWinExpanded: boolean = false
@@ -411,6 +412,7 @@ struct WindowNativeNode {
   @State private selectedLandscapeName: string = ''
   @State private landscapeTransp: number = 0
   @State private landscapeFadeWithZoom: boolean = true
+  @State private bortleScale: number = 3
   @State private milkyWayBright: number = 3
   @State private starMagLimit: number = 6.0
   @State private infoLevel: number = 1
@@ -5560,6 +5562,24 @@ private loadPlanetPositions(): void {
         }.padding({ left: 4, right: 4 })
       }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
 
+      // 今夜星座快速导航（15 个常见星座，点击搜索定位）
+      Row() {
+        Text(I18n.t('constellation_chips_title')).fontSize(10).fontColor(this.nmSub()).width(52)
+        Scroll() {
+          Row({ space: 4 }) {
+            ForEach([
+              'Orion', 'Ursa Major', 'Cassiopeia', 'Scorpius', 'Leo',
+              'Gemini', 'Taurus', 'Cygnus', 'Lyra', 'Aquila',
+              'Sagittarius', 'Virgo', 'Canis Major', 'Andromeda', 'Pegasus'
+            ] as string[], (c: string) => {
+              Text(this.zhNameOf(c)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor(this.nmBg()).borderRadius(12)
+                .onClick(() => { this.searchText = c; this.searchObject(c) })
+            }, (c: string) => c)
+          }.padding({ left: 2 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+      }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
+
       // RA/Dec 坐标跳转
       Row() {
         Text($r('app.string.s_coord_input')).fontSize(12).fontColor(this.nmSub()).width(72)
@@ -7807,6 +7827,20 @@ private loadPlanetPositions(): void {
         .selectedColor(this.nmAccent())
         .showSteps(false)
         .onChange((val: number) => { this.landscapeTransp = Math.round(val); this.changeLandscapeTransparency(val) })
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+    Row() {
+      Text($r('app.string.i0316')).fontSize(12).fontColor(this.nmSub()).width(72)
+      Text('Bortle ' + this.bortleScale).fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
+      Slider({ value: this.bortleScale, min: 1, max: 9, step: 1, style: SliderStyle.OutSet })
+        .width('40%')
+        .blockColor(this.nmAccent())
+        .trackColor(this.nmBg())
+        .selectedColor(this.nmAccent())
+        .showSteps(false)
+        .onChange((val: number) => {
+          this.bortleScale = Math.round(val)
+          this.callInteractive('setBortleScale', this.bortleScale.toString(), () => {})
+        })
     }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
   }
 

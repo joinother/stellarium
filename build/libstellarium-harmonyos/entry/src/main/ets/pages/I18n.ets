@@ -300,6 +300,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'nav_meteor_showers': { 'en': 'Meteor Showers', 'zh_CN': '流星雨', 'ja': '流星群', 'ko': '유성우', 'fr': 'Pluies de météores', 'de': 'Meteorschauer', 'es': 'Lluvias de meteoros', 'ru': 'Метеорные потоки' },
   'nav_satellites': { 'en': 'Satellites', 'zh_CN': '卫星', 'ja': '衛星', 'ko': '위성', 'fr': 'Satellites', 'de': 'Satelliten', 'es': 'Satélites', 'ru': 'Спутники' },
   'ui_constellation': { 'en': 'Constellation', 'zh_CN': '星座', 'ja': '星座', 'ko': '별자리', 'fr': 'Constellation', 'de': 'Sternbild', 'es': 'Constelación', 'ru': 'Созвездие' },
+  'constellation_chips_title': { 'en': 'Constellations', 'zh_CN': '星座导航', 'ja': '星座', 'ko': '별자리', 'fr': 'Constellations', 'de': 'Sternbilder', 'es': 'Constelaciones', 'ru': 'Созвездия' },
   'ui_distance': { 'en': 'Distance', 'zh_CN': '距离', 'ja': '距離', 'ko': '거리', 'fr': 'Distance', 'de': 'Entfernung', 'es': 'Distancia', 'ru': 'Расстояние' },
   'ui_elongation': { 'en': 'Elongation', 'zh_CN': '距角', 'ja': '離角', 'ko': '이각', 'fr': 'Élongation', 'de': 'Elongation', 'es': 'Elongación', 'ru': 'Элонгация' },
   'ui_equatorial_coord': { 'en': 'Equatorial Coord', 'zh_CN': '赤道坐标', 'ja': '赤道座標', 'ko': '적도좌표', 'fr': 'Coord. équatoriales', 'de': 'Äquatorialkoord.', 'es': 'Coord. ecuatoriales', 'ru': 'Экв. коорд.' },

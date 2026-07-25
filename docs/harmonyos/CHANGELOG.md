@@ -1,3 +1,17 @@
+## [2026-07-26] TRAE - 修复 string.json JSON 解析错误
+
+- **修改文件：**
+  - `build/.../resources/base/element/string.json`
+  - `build/.../resources/en_US/element/string.json`
+  - `build/.../resources/zh_CN/element/string.json`
+  - `build/.../resources/ja/element/string.json`
+  - `build/.../resources/ko/element/string.json`
+- **修改内容：** 移除 i0315 条目后的多余逗号（`},,` -> `},`），修复 JSON 语法错误
+- **修改原因：** 构建报错 "Failed to parse the JSON file: incorrect format"
+- **构建结果：** JSON 验证全部通过（6 个语言文件均 OK）
+- **验证结果：** python3 json.load 验证通过
+- **备注：** zh_TW 无此错误，无需修改
+
 ## [2026-07-26] TRAE - UI 功能补齐与音频增强（第二轮综合更新）
 
 - **修改文件：**
