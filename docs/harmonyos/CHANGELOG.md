@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-07-25] WorkBuddy - UI 留边、移除常驻标、今晚天象点击跳转
+
+- **背景（用户反馈）：** ① 侧栏与浮动面板仍紧贴屏幕边框；② 左上角常驻 "Stellarium" 小标遮挡星图；③ 今晚天象面板只能看不能跳，希望点击卡片自动跳到天象发生时刻并锁定主角与卫星。
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+  - `harmonyos/ets-source/pages/StellariumTypes.ets`（`TonightMoon/TonightSun/TonightPlanet/TonightShower` 新增 JD 字段）
+  - `src/StelMainView.cpp`（`getTonightEvents` 返回各天象的 JD 时间：`moon.transitJd` / `sun.astroTwilightEndJd` / `planet.transitJd` / `shower.primeJd`）
+- **改动：**
+  - 新增 `EDGE_MARGIN = 44`(vp，≈0.7cm) 安全留白：侧栏从 x=0 右移、浮动面板右/上内缩、缩放按钮同步右移；`railTop()`/`panelTop()` 与三处触摸命中判定（`isUiPoint`/`handleUiTap`/`handleOverlayTouch`）全部改用该常量，杜绝点 UI 误拖星图。
+  - 移除 `expandedShell` 里左上角常驻 `observerBadge()`（仅保留面板内的版本）。
+  - 今晚天象卡片改为可点击（`tonightCard` 新增 `jd`/`lock` 参数 + 按压高亮）：点击 → `setJD(jd)` 跳到天象时刻 → `searchObject(lock)` 锁定主角（月球/太阳/各行星/流星雨）并居中跟随；`frameSatellite()` 在视角过窄时自动拉远以把卫星(月球)收入视野。
+  - 行星改为逐颗独立卡片，每颗可单独跳转其"中天"时刻。
+  - 保留每次进入自动刷新行为。
+- **验证（模拟器 127.0.0.1:5555）：** 待打包后回归。
+
+---
+
 ## [2026-07-25] WorkBuddy - 侧边栏改版：常用固定 + 抽屉收纳，图标去重，补齐动画
 
 - **背景（用户反馈）：** 左侧菜单栏 15 个入口全部竖排、快占满整屏；4 组图标重复（图层=高级配置、时间=天文计算、天体信息=帮助、星表下载=脚本共用图标）；提示气泡文字色与背景色相同看不清；缺少面板/抽屉动画。

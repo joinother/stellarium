@@ -4121,6 +4121,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			StelCore* core = StelApp::getInstance().getCore();
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			// 暗夜开始时刻（天文暮光结束），供流星雨等事件的跳转时间基准
+			double darkStartJd = 0;
 
 			auto fmtLocal = [&](double jd) -> QString {
 				if (jd <= 0) return QString();
@@ -4154,6 +4156,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				moonObj["rise"] = fmtLocal(mrts[0]);
 				moonObj["transit"] = fmtLocal(mrts[1]);
 				moonObj["set"] = fmtLocal(mrts[2]);
+				moonObj["transitJd"] = mrts[1];
 			}
 			out["moon"] = moonObj;
 
@@ -4169,8 +4172,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				Vec4d astro = sun->getRTSTime(core, -18.0);
 				sunObj["astroTwilightEnd"] = fmtLocal(astro[2]);
 				sunObj["astroTwilightStart"] = fmtLocal(astro[0]);
+				sunObj["astroTwilightEndJd"] = astro[2];
 				if (astro[2] > 0 && astro[0] > astro[2])
 					sunObj["darkWindowHours"] = (astro[0] - astro[2]) * 24.0;
+				darkStartJd = astro[2];
 			}
 			out["sun"] = sunObj;
 
@@ -4190,6 +4195,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				po["transit"] = fmtLocal(rts[1]);
 				po["set"] = fmtLocal(rts[2]);
 				po["magnitude"] = p->getVMagnitude(core);
+				po["transitJd"] = rts[1];
 				Vec3d altaz = p->getAltAzPosApparent(core);
 				double alt = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
 				po["altitude"] = alt;
@@ -4218,6 +4224,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 							so["name"] = sh->getNameI18n();
 							so["zhr"] = sh->getZHR();
 							so["status"] = (st == MeteorShower::ACTIVE_CONFIRMED) ? "confirmed" : "generic";
+							// 跳转基准：暗夜开始后约 6 小时（辐射点升高的观测窗口）
+							so["primeJd"] = darkStartJd > 0 ? darkStartJd + 0.25 : core->getJD();
 							showers.append(so);
 						}
 					}

@@ -342,6 +342,7 @@ export interface TonightMoon {
   rise?: string
   transit?: string
   set?: string
+  transitJd?: number
 }
 export interface TonightSun {
   rise?: string
@@ -349,6 +350,7 @@ export interface TonightSun {
   set?: string
   astroTwilightEnd?: string
   astroTwilightStart?: string
+  astroTwilightEndJd?: number
   darkWindowHours?: number
 }
 export interface TonightPlanet {
@@ -357,6 +359,7 @@ export interface TonightPlanet {
   rise?: string
   transit?: string
   set?: string
+  transitJd?: number
   magnitude?: number
   altitude?: number
   visible?: boolean
@@ -365,6 +368,7 @@ export interface TonightShower {
   name?: string
   zhr?: number
   status?: string
+  primeJd?: number
 }
 export interface TonightSatellites {
   count?: number

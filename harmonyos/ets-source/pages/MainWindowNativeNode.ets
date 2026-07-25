@@ -7,6 +7,13 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 
+interface TonightPlanetRow {
+  name: string
+  line: string
+  jd: number
+  lock: string
+}
+
 // 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
 interface StarCatalogItem {
   id: string
@@ -212,6 +219,11 @@ struct WindowNativeNode {
   @State private tonightShowers: string[] = []
   @State private tonightSats: string = ''
   @State private tonightHint: string = ''
+  // 今晚天象点击跳转用：各卡片对应的事件时刻(JD)与锁定对象
+  @State private tonightMoonJd: number = 0
+  @State private tonightSunJd: number = 0
+  @State private tonightShowerJd: number = 0
+  @State private tonightPlanetRows: TonightPlanetRow[] = []
   @State private locationPickMode: string = 'map'
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
@@ -224,6 +236,8 @@ struct WindowNativeNode {
   @State private skyHeight: number = 1
   @State private panelWidth: number = 336
   @State private panelMaxHeight: number = 660
+  // 离屏幕边框的安全留白(vp)：约 0.7cm，避免 UI 贴边
+  private readonly EDGE_MARGIN: number = 44
   @State private observingList: string[] = []
   @State private stars: boolean = true
   @State private skyCultures: string[] = []
@@ -705,6 +719,10 @@ struct WindowNativeNode {
       this.activePanel = panel
       this.panelVisible = nextVisible
     })
+    // 打开「位置」面板时自动刷新今晚天象（用户要求每次进入都自动刷新）
+    if (panel === 'place' && nextVisible) {
+      this.refreshTonight()
+    }
     if (nextVisible) {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
@@ -2281,7 +2299,7 @@ private loadPlanetPositions(): void {
   @Builder tonightEventsSection() {
     Column({ space: 8 }) {
       Text('今夜天文事件').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 10, bottom: 2 })
-      Text('聚合今晚值得一看的天象：月相、行星升落与星等、活跃流星雨、卫星概况与暗夜窗口。')
+      Text('点击任意卡片，自动跳到该天象的发生时刻，并锁定主角与卫星(月球)。')
         .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
       Button('刷新今晚天象')
         .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
@@ -2291,22 +2309,32 @@ private loadPlanetPositions(): void {
         Text(this.tonightHint).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
       }
       if (this.tonightDate !== '') {
-        this.tonightCard('🌙 月相', [this.tonightMoon])
-        this.tonightCard('☀️ 太阳 / 暗夜窗口', [this.tonightSun, this.tonightDark])
-        this.tonightCard('🪐 行星', this.tonightPlanets)
-        if (this.tonightShowers.length > 0) this.tonightCard('☄️ 活跃流星雨', this.tonightShowers)
+        this.tonightCard('🌙 月相', [this.tonightMoon], this.tonightMoonJd, 'Moon')
+        this.tonightCard('☀️ 太阳 / 暗夜窗口', [this.tonightSun, this.tonightDark], this.tonightSunJd, 'Moon')
+        ForEach(this.tonightPlanetRows, (row: TonightPlanetRow) => {
+          this.tonightCard('🪐 ' + row.name, [row.line], row.jd, row.lock)
+        }, (row: TonightPlanetRow) => row.name)
+        if (this.tonightShowers.length > 0) this.tonightCard('☄️ 活跃流星雨', this.tonightShowers, this.tonightShowerJd, 'Moon')
         this.tonightCard('🛰️ 卫星', [this.tonightSats])
       }
     }.width('100%').padding({ left: 10, right: 10 })
   }
 
-  @Builder tonightCard(title: string, lines: string[]) {
+  @Builder tonightCard(title: string, lines: string[], jd?: number, lock?: string) {
     Column({ space: 4 }) {
       Text(title).fontSize(12).fontColor('#FFE9B0').width('100%')
       ForEach(lines, (ln: string) => {
         Text(ln).fontSize(11).fontColor('#DDDDDD').width('100%')
       }, (ln: string) => ln)
     }.width('100%').padding(8).backgroundColor('#1A2330').borderRadius(8).margin({ top: 4 })
+      .stateStyles({
+        pressed: { backgroundColor: '#27384A' }
+      })
+      .onClick(() => {
+        if (jd !== undefined && jd > 0 && lock) {
+          this.gotoTonightEvent(jd, lock, title)
+        }
+      })
   }
 
   private refreshTonight(): void {
@@ -2319,15 +2347,50 @@ private loadPlanetPositions(): void {
       this.tonightSun = '升 ' + this.fmtIso(t.sun?.rise ?? '') + ' · 中天 ' + this.fmtIso(t.sun?.transit ?? '') + ' · 落 ' + this.fmtIso(t.sun?.set ?? '')
       this.tonightDark = '天文暮光结束 ' + this.fmtIso(t.sun?.astroTwilightEnd ?? '') + ' → 晨光 ' + this.fmtIso(t.sun?.astroTwilightStart ?? '')
         + (t.sun?.darkWindowHours !== undefined ? ('（暗夜约 ' + t.sun.darkWindowHours.toFixed(1) + ' 小时）') : '')
-      this.tonightPlanets = (t.planets ?? []).map((p) => {
+      this.tonightPlanetRows = (t.planets ?? []).map((p) => {
         const vis = p.visible === true ? '✓可见' : '✗地平线下'
-        return (p.name ?? '') + '：升 ' + this.fmtIso(p.rise ?? '') + ' · 中天 ' + this.fmtIso(p.transit ?? '') + ' · 落 ' + this.fmtIso(p.set ?? '')
-          + ' · 星等 ' + (p.magnitude ?? 0).toFixed(1) + ' · ' + vis
+        return {
+          name: p.name ?? (p.englishName ?? ''),
+          line: '升 ' + this.fmtIso(p.rise ?? '') + ' · 中天 ' + this.fmtIso(p.transit ?? '') + ' · 落 ' + this.fmtIso(p.set ?? '')
+            + ' · 星等 ' + (p.magnitude ?? 0).toFixed(1) + ' · ' + vis,
+          jd: p.transitJd ?? 0,
+          lock: p.englishName ?? (p.name ?? '')
+        }
       })
       this.tonightShowers = (t.meteorShowers ?? []).map((s) => (s.name ?? '') + '：ZHR≈' + (s.zhr ?? 0) + (s.status === 'confirmed' ? '（已确认）' : '（通用）'))
       this.tonightSats = ((t.satellites?.enabled ?? false) ? ('已加载 ' + (t.satellites?.count ?? 0) + ' 颗') : '未启用') + '（过境预报需更多数据）'
+      // 点击跳转的时间基准
+      this.tonightMoonJd = t.moon?.transitJd ?? 0
+      this.tonightSunJd = t.sun?.astroTwilightEndJd ?? 0
+      this.tonightShowerJd = (t.meteorShowers && t.meteorShowers.length > 0) ? (t.meteorShowers[0].primeJd ?? this.tonightSunJd) : this.tonightSunJd
       this.tonightHint = '已更新 · ' + this.fmtIso(t.date ?? '')
-      this.flashHint('已刷新今晚天象')
+      this.flashHint('已刷新今晚天象 · 点击卡片可跳转')
+    })
+  }
+
+  // 点击今晚天象卡片：跳到事件发生时刻，并锁定主角(lock)、框入卫星(月球)
+  private gotoTonightEvent(jd: number, lock: string, title: string): void {
+    const label = title.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g, '')
+    this.flashHint('跳转中…')
+    this.callNativeWhenReady('setJD', jd.toString(), () => {
+      this.callNativeWhenReady('searchObject', lock, (r2: StellariumBridgeResponse) => {
+        this.frameSatellite()
+        const found = r2.found === true
+        this.flashHint(found
+          ? ('已跳至『' + label + '』时刻，锁定『' + lock + '』并框入月球(卫星)')
+          : ('已跳至『' + label + '』时刻，但未找到『' + lock + '』'))
+      })
+    })
+  }
+
+  // 跳转后若视角过窄，适当拉远以便把卫星(月球)一并收入视野
+  private frameSatellite(): void {
+    this.callNativeWhenReady('getSessionState', '', (r: StellariumBridgeResponse) => {
+      const fov = (r.fovDeg ?? 0)
+      if (fov > 0 && fov < 12) {
+        const target = 16
+        this.callNativeWhenReady('zoomBy', (target / fov).toFixed(3) + '|0')
+      }
     })
   }
 
@@ -2533,12 +2596,12 @@ private loadPlanetPositions(): void {
   }
 
   private panelTop(): number {
-    return 28 + this.panelOffsetY
+    return this.EDGE_MARGIN + this.panelOffsetY
   }
 
   private railTop(): number {
-    // Rail always starts near top of screen (fixed position)
-    return 28
+    // Rail always starts near top of screen with a safe edge margin
+    return this.EDGE_MARGIN
   }
 
   private railHeight(): number {
@@ -2567,15 +2630,15 @@ private loadPlanetPositions(): void {
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
       // 左侧工具栏区域（宽屏布局：常用入口 + 抽屉按钮 + 钉住按钮整条轨道）
-      if (!this.railCollapsed && x >= 0 && x <= 58) {
+      if (!this.railCollapsed && x >= this.EDGE_MARGIN && x <= this.EDGE_MARGIN + 58) {
         if (y >= this.railTop() && y <= this.railTop() + this.railHeight()) {
           return true
         }
-      } else if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
+      } else if (x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
       }
       // 低频功能抽屉区域（展开时）
-      if (this.drawerOpen && x >= 66 && x <= 242 && y >= this.railTop() && y <= this.railTop() + 40 + this.drawerActions.length * 46 + 14) {
+      if (this.drawerOpen && x >= this.EDGE_MARGIN + 58 && x <= this.EDGE_MARGIN + 58 + 176 && y >= this.railTop() && y <= this.railTop() + 40 + this.drawerActions.length * 46 + 14) {
         return true
       }
       // 浮动面板区域（含 30vp 余量，覆盖圆角/边距，杜绝点面板却拖星图）
@@ -2597,7 +2660,7 @@ private loadPlanetPositions(): void {
 
 	  private handleUiTap(x: number, y: number): boolean {
 	    // zoom +/- buttons (expanded layout, bottom-left)
-	    if (this.isExpandedLayout && x >= 92 && x <= 148) {
+	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148) {
 	      if (y >= this.skyHeight - 224 && y <= this.skyHeight - 160) {
 	        this.zoomStep(0.5)
 	        return true
@@ -2607,8 +2670,8 @@ private loadPlanetPositions(): void {
 	        return true
 	      }
 	    }
-	    if (this.isExpandedLayout && x >= 0 && x <= 58) {
-      const railTop = 28
+	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN && x <= this.EDGE_MARGIN + 58) {
+      const railTop = this.railTop()
       const step = 58
       // 常用固定入口
       const index = Math.floor((y - railTop) / step)
@@ -2626,7 +2689,7 @@ private loadPlanetPositions(): void {
 	    }
 
 	    // 低频功能抽屉项（展开时）
-	    if (this.isExpandedLayout && this.drawerOpen && x >= 66 && x <= 242) {
+	    if (this.isExpandedLayout && this.drawerOpen && x >= this.EDGE_MARGIN + 58 && x <= this.EDGE_MARGIN + 58 + 176) {
 	      const itemsTop = this.railTop() + 38
 	      const dIdx = Math.floor((y - itemsTop) / 46)
 	      if (dIdx >= 0 && dIdx < this.drawerActions.length) {
@@ -2753,8 +2816,8 @@ private loadPlanetPositions(): void {
       if (this.isUiPoint(downX, downY)) {
         this.touchStartedOnUi = true
         // Handle sidebar button clicks since XComponent swallows onClick events
-        if (downX >= 0 && downX <= 58) {
-          const railTop = 28
+        if (downX >= this.EDGE_MARGIN && downX <= this.EDGE_MARGIN + 58) {
+          const railTop = this.railTop()
           const step = 58
           // 常用固定入口
           for (let i = 0; i < this.pinnedActions.length; i++) {
@@ -2772,7 +2835,7 @@ private loadPlanetPositions(): void {
           }
         }
         // 抽屉项点击（抽屉展开时）
-        if (this.drawerOpen && downX >= 66 && downX <= 242) {
+        if (this.drawerOpen && downX >= this.EDGE_MARGIN + 58 && downX <= this.EDGE_MARGIN + 58 + 176) {
           const itemsTop = this.railTop() + 38   // 抽屉容器顶部 padding + 标题高度
           const idx = Math.floor((downY - itemsTop) / 46)
           if (idx >= 0 && idx < this.drawerActions.length) {
@@ -3059,29 +3122,27 @@ private loadPlanetPositions(): void {
   @Builder
   expandedShell() {
     Stack() {
-      Stack() { this.observerBadge() }
-        .position({ x: 22, y: 28 })
-        .hitTestBehavior(HitTestMode.None)
+      // 左上角 Stellarium 常驻标已移除，避免遮挡星图
       Stack() { this.railShell() }
-        .position({ x: 0, y: this.railTop() })
+        .position({ x: this.EDGE_MARGIN, y: this.railTop() })
         .hitTestBehavior(HitTestMode.Block)
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.drawerOpen) {
         Stack() { this.actionDrawer() }
-          .position({ x: 66, y: this.railTop() })
+          .position({ x: this.EDGE_MARGIN + 58, y: this.railTop() })
           .hitTestBehavior(HitTestMode.Block)
           .zIndex(6)
       }
       Stack() { this.zoomButton('zoom_in') }
         .hitTestBehavior(HitTestMode.Block)
-        .position({ x: 92, y: this.skyHeight - 220 })
+        .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 220 })
         .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
           this.zoomStep(0.5)
           this.flashHint($r('app.string.i0076'))
         })
       Stack() { this.zoomButton('zoom_out') }
-        .position({ x: 92, y: this.skyHeight - 150 })
+        .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 150 })
         .onClick(() => {
           this.zoomStep(2.0)
           this.flashHint($r('app.string.i0077'))
@@ -3090,7 +3151,7 @@ private loadPlanetPositions(): void {
         Stack({ alignContent: Alignment.TopStart }) { this.floatingPanel() }
           .width(this.panelWidth)
           .height(this.panelMaxHeight)
-          .position({ x: this.skyWidth - this.panelWidth + this.panelOffsetX, y: 28 + this.panelOffsetY })
+          .position({ x: this.skyWidth - this.panelWidth - this.EDGE_MARGIN + this.panelOffsetX, y: this.EDGE_MARGIN + this.panelOffsetY })
           .hitTestBehavior(HitTestMode.Transparent)
           // 面板滑入滑出动画：从右侧滑入 + 淡入
           .transition(TransitionEffect.asymmetric(
