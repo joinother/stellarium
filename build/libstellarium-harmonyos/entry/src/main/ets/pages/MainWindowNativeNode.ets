@@ -411,6 +411,7 @@ struct WindowNativeNode {
   @State private landscapeTransp: number = 0
   @State private landscapeFadeWithZoom: boolean = true
   @State private milkyWayBright: number = 3
+  @State private starMagLimit: number = 6.0
   @State private infoLevel: number = 1
   @State private useMetricUnits: boolean = true
   // 新增面板控制
@@ -440,6 +441,7 @@ struct WindowNativeNode {
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
+  @State private fovSliderValue: number = 60
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
   @State private panelIdleGlass: boolean = false
@@ -811,6 +813,13 @@ struct WindowNativeNode {
     this.callNativeWhenReady('getConfigString', 'astronomy/flag_use_km_for_distance', (r) => {
       if (r.ok) {
         this.useMetricUnits = r.value === 'true'
+      }
+    })
+    // 初始化星等限制
+    this.callNativeWhenReady('getConfigString', 'astro/StarMagLimit', (r) => {
+      if (r.ok && r.value) {
+        const v = parseFloat(r.value)
+        if (!isNaN(v)) { this.starMagLimit = v }
       }
     })
     // 加载保存的设置
@@ -1546,6 +1555,8 @@ struct WindowNativeNode {
     }
     if (result.fov !== undefined) {
       this.fovText = result.fov.toFixed(1) + '°'
+      this.fovSliderValue = Math.round(result.fov)
+      this.currentFovText = result.fov.toFixed(1) + '°'
     }
     if (result.tracking !== undefined) {
       this.trackingText = result.tracking ? 'On' : 'Off'
@@ -1710,7 +1721,14 @@ struct WindowNativeNode {
     this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && typeof r.fov === 'number') {
         this.currentFovText = (r.fov as number).toFixed(1) + '°'
+        this.fovSliderValue = Math.round(r.fov as number)
       }
+    })
+  }
+
+  private changeFovBySlider(val: number): void {
+    this.callInteractive('setFOV', Math.round(val).toString(), (r: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI', 'changeFovBySlider %{public}d ok=%{public}s', Math.round(val), r.ok === true ? '1' : '0')
     })
   }
 
@@ -5247,13 +5265,18 @@ private loadPlanetPositions(): void {
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
+          Text(I18n.t('set_fov_slider')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           Row() {
-            Text($r('app.string.s0760')).fontSize(12).fontColor(this.nmSub()).width(72)
-            Text(this.currentFovText).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-            Button($r('app.string.s0761')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-              .borderRadius(8).height(24).padding({ left: 8, right: 8 })
-              .onClick(() => { this.loadFov() })
-          }.height(34).width('100%').padding({ left: 10, right: 10 })
+            Text(I18n.t('set_fov_slider')).fontSize(12).fontColor(this.nmSub()).width(72)
+            Text(this.fovSliderValue + '°').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
+            Slider({ value: this.fovSliderValue, min: 1, max: 180, step: 1, style: SliderStyle.OutSet })
+              .width('40%')
+              .blockColor(this.nmAccent())
+              .trackColor(this.nmBg())
+              .selectedColor(this.nmAccent())
+              .showSteps(false)
+              .onChange((val: number) => { this.fovSliderValue = Math.round(val); this.changeFovBySlider(val) })
+          }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
@@ -7393,6 +7416,29 @@ private loadPlanetPositions(): void {
     this.switchRow($r('app.string.s0530'), this.stars, 'actionShow_Stars')
     this.switchRow($r('app.string.s0531'), this.milkyWay, 'actionShow_MilkyWay')
     this.switchRow($r('app.string.s0532'), this.starLabels, 'actionShow_Stars_Labels')
+    // 星等限制
+    Row() {
+      Text($r('app.string.i0300')).fontSize(12).fontColor(this.nmSub()).width(72)
+      Slider({
+        value: this.starMagLimit,
+        min: 1.0,
+        max: 12.0,
+        step: 0.5,
+        style: SliderStyle.OutSet
+      })
+        .blockColor('#5B93BF')
+        .trackColor('rgba(255,255,255,0.08)')
+        .selectedColor('#5B93BF')
+        .showSteps(false)
+        .showTips(false)
+        .layoutWeight(1)
+        .onChange((value: number) => {
+          this.starMagLimit = value
+          this.callInteractive('setConfigString', 'astro/StarMagLimit=' + value.toFixed(1), () => {})
+          this.callInteractive('setConfigString', 'astro/flag_star_mag_limit=true', () => {})
+        })
+      Text(this.starMagLimit.toFixed(1)).fontSize(12).fontColor(this.nmText()).width(28).textAlign(TextAlign.End)
+    }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
     this.switchRow($r('app.string.s0305'), this.atmosphere, 'actionShow_Atmosphere')
     this.switchRow($r('app.string.s0306'), this.ground, 'actionShow_Ground')
     this.switchRow($r('app.string.s0307'), this.fogEffect, 'actionShow_Fog')
