@@ -219,7 +219,7 @@ struct WindowNativeNode {
   @State private locationText: string = '--'
   @State private coordinateText: string = '--'
   @State private altitudeText: string = '--'
-  @State private locationPickerName: string = '自定义位置'
+  @State private locationPickerName: string = I18n.t('custom_location')
   @State private locationPickerLatitude: number = 39.9042
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
@@ -450,6 +450,7 @@ struct WindowNativeNode {
   @State private ccdIndex: number = -1
   // 卫星（Satellites）
   @State private satGroups: string[] = []
+  @State private activeSatGroup: string = ''
   @State private satLabels: boolean = false
   @State private satOrbitLines: boolean = false
   @State private satHints: boolean = false
@@ -574,30 +575,30 @@ struct WindowNativeNode {
   // 低频入口：收进抽屉（点侧栏底部九宫格按钮展开），图标全部专属不重复
   private readonly drawerActions: ShellAction[] = [
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
-    { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
-    { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
-    { label: '望远镜', icon: 'telescope', panel: 'oculars' },
-    { label: '卫星', icon: 'satellite', panel: 'satellites' },
-    { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
-    { label: '脚本', icon: 'script', panel: 'scripts' },
+    { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
+    { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
+    { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
+    { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
+    { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
+    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
     { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
   ]
   // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
   private readonly actions: ShellAction[] = [
-    { label: $r('app.string.i0104'), icon: 'search', panel: 'catalogs' },
+    { label: $r('app.string.i0104'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
-    { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
-    { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
-    { label: '望远镜', icon: 'telescope', panel: 'oculars' },
-    { label: '卫星', icon: 'satellite', panel: 'satellites' },
-    { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
-    { label: '脚本', icon: 'script', panel: 'scripts' },
+    { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
+    { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
+    { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
+    { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
+    { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
+    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
     { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
@@ -801,10 +802,11 @@ struct WindowNativeNode {
     this.callNativeWhenReady("setActionChecked", "actionShow_Zenith_Nadir|1", (r: StellariumBridgeResponse) => {
       if (r.ok === true) { this.zenithNadir = true }
     })
-    // 启动自动获取位置：等核心就绪后触发一次；无 GPS（如模拟器）会回退到已保存/默认位置，不崩溃
-    this.callNativeWhenReady("getState", "", () => {
-      this.triggerAutoLocate()
-    })
+    // 启动时不再自动获取位置（避免首次启动弹出系统定位权限弹窗）
+    // 用户点击"自动定位"按钮时才触发定位请求
+    // this.callNativeWhenReady("getState", "", () => {
+    //   this.triggerAutoLocate()
+    // })
     if (this.SELFTEST) { this.selfTestAllActions() }
   }
 
@@ -955,7 +957,7 @@ struct WindowNativeNode {
       const list = resp.catalogs ?? []
       this.catalogList = list.map((c: StarCatalogRaw) => ({
         id: c.id ?? '',
-        name: c.name ?? (c.id ?? '星表'),
+        name: c.name ?? (c.id ?? I18n.t('catalog_fallback')),
         size: c.size ?? '',
         key: c.key ?? '',
         fileName: c.fileName ?? '',
@@ -1028,7 +1030,7 @@ struct WindowNativeNode {
       const list = resp.items ?? []
       this.bookmarkList = list.map((b: BookmarkRaw) => ({
         id: b.id ?? '',
-        name: b.name ?? '书签',
+        name: b.name ?? I18n.t('bookmark_fallback'),
         fov: b.fov ?? 60,
         object: b.object ?? '',
       }))
@@ -1991,31 +1993,11 @@ private loadPlanetPositions(): void {
     }
     return label
   }
-
-  // 天体类型本地化（Planet→行星…）；未知则原样。
+  // 天体类型本地化（Planet→行星…）；未知则原样。委托给 I18n.objectType()。
   private zhType(type: string): ResourceStr {
-    const map: Record<string, ResourceStr> = {
-      // 太阳系天体
-      'Planet': $r('app.string.i0103'), 'Moon': '月球', 'Sun': '太阳',
-      'Satellite': '人造卫星', 'Artificial satellite': '人造卫星', 'Interplanetary probe': '行星际探测器',
-      'Asteroid': '小行星', 'Minor planet': '小行星', 'Comet': '彗星', 'Interstellar object': '星际天体',
-      'Rocket body': '火箭残骸',
-      // 恒星与恒星类
-      'Star': $r('app.string.i0104'), 'Double star': '双星', 'Binary star': '双星', 'Variable star': '变星',
-      'Variable Star': '变星', 'Pulsar': '脉冲星', 'Quasar': '类星体',
-      // 深空天体
-      'Nebula': $r('app.string.i0107'), 'Galaxy': $r('app.string.i0105'), 'Cluster': $r('app.string.i0106'),
-      'Open cluster': '疏散星团', 'Globular cluster': '球状星团', 'Planetary nebula': '行星状星云',
-      'Dark Nebula': '暗星云', 'Bright nebula': '亮星云', 'Star cluster': '星团',
-      'Supernova': '超新星', 'Supernova remnant': '超新星遗迹', 'Molecular cloud': '分子云',
-      'Deep-sky object': '深空天体',
-      // 其他（原版分类里的“非单一天体”类别，做兜底中文）
-      'Constellation': '星座', 'Asterism': '星组', 'Meteor shower': '流星雨', 'Observatory': '天文台',
-      'Object': '天体',
-      // 错误/空状态兜底
-      'No selection': '未选择', 'No match': '无匹配结果', 'Not found': '未找到', 'Core not ready': '核心未就绪',
-    }
-    return map[type] ?? type
+    const translated = I18n.objectType(type)
+    if (translated === type) { return type }
+    return translated
   }
 
   // 中文/拼音/英文模糊匹配别名，返回可点的建议（zh 显示，en 检索）。
@@ -2110,7 +2092,7 @@ private loadPlanetPositions(): void {
 
   private formatRate(rate: number): string {
     if (rate === 0) {
-      return '已暂停'
+      return I18n.t('msg_paused')
     }
     if (Math.abs(rate - 0.000011574074074074073) < 0.0000001) {
       return '1x'
@@ -2118,7 +2100,7 @@ private loadPlanetPositions(): void {
     if (rate > 0) {
       return rate.toFixed(6)
     }
-    return '已暂停'
+    return I18n.t('msg_paused')
   }
 
   private formatDegrees(value: number, positive: string, negative: string): string {
@@ -3357,6 +3339,15 @@ private loadPlanetPositions(): void {
             this.splashOpacity = 1
           })
         })
+      }
+      // 夜间红滤镜覆盖层（Stellarium 经典功能：保护暗适应视力）
+      if (this.nightMode) {
+        Stack()
+          .width('100%')
+          .height('100%')
+          .backgroundColor('rgba(255, 20, 0, 0.22)')
+          .hitTestBehavior(HitTestMode.Transparent)
+          .zIndex(99)
       }
     }
       .width('100%')
@@ -4739,7 +4730,7 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow($r('app.string.i0054'), this.observationTimeText)
       this.infoRow($r('app.string.i0055'), this.timeRateText)
-      this.infoRow($r('app.string.i0056'), this.timeRateText === '已暂停' ? $r('app.string.s0756') : $r('app.string.s0757'))
+      this.infoRow($r('app.string.i0056'), this.timeRateText === I18n.t('msg_paused') ? $r('app.string.s0756') : $r('app.string.s0757'))
       this.quickChips([{ id: 'now', label: $r('app.string.s0754') }, { id: 'back', label: $r('app.string.s0755') }, { id: 'pause', label: $r('app.string.s0756') }, { id: 'forward', label: $r('app.string.s0757') }])
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
@@ -5062,9 +5053,9 @@ private loadPlanetPositions(): void {
             .margin({ top: 6, bottom: 4 })
           Text($r('app.string.i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow($r('app.string.s0304'), this.liveMode, '')
-          this.switchRow('锁定视角（禁止拖动，可缩放）', this.viewLock, '', 'setViewLock')
-          this.switchRow('卡在天顶↔天底（防翻转/防旋转）', this.verticalClamp, '', 'setVerticalClamp')
-          this.switchRow('画面防弯曲（限制最大视场）', this.flatHorizon, '', 'setFlatHorizon')
+          this.switchRow(I18n.t('set_lock_view'), this.viewLock, '', 'setViewLock')
+          this.switchRow(I18n.t('set_vert_clamp'), this.verticalClamp, '', 'setVerticalClamp')
+          this.switchRow(I18n.t('set_flat_horizon'), this.flatHorizon, '', 'setFlatHorizon')
           Row() {
             Text($r('app.string.i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
@@ -5129,7 +5120,7 @@ private loadPlanetPositions(): void {
           Scroll() {
             Row({ space: 4 }) {
               ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
-                Text(s).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                Text(this.zhNameOf(s)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                   .backgroundColor(this.nmBg()).borderRadius(12)
                   .onClick(() => { this.searchText = s; this.searchObject(s) })
               })
@@ -5845,8 +5836,20 @@ private loadPlanetPositions(): void {
             Text($r('app.string.c_satellite_groups')).fontSize(12).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
             ForEach(this.satGroups, (g: string) => {
               Row() {
-                Text(this.satGroupZh(g)).fontSize(13).fontColor('#E5FFFFFF')
-              }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+                Text(this.satGroupZh(g)).fontSize(13).fontColor(this.activeSatGroup === g ? '#FF6644' : '#E5FFFFFF')
+                if (this.activeSatGroup === g) {
+                  Text(' ✓').fontSize(13).fontColor('#FF6644')
+                }
+              }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.activeSatGroup === g ? 'rgba(180, 40, 20, 0.25)' : this.nmBg()).borderRadius(12)
+              .onClick(() => {
+                if (this.activeSatGroup === g) {
+                  this.activeSatGroup = ''
+                  this.callNativeWhenReady('setSatellitesFlag', 'groupFilter:', () => { this.loadSatellites() })
+                } else {
+                  this.activeSatGroup = g
+                  this.callNativeWhenReady('setSatellitesFlag', 'groupFilter:' + g, () => { this.loadSatellites() })
+                }
+              })
               .transition(TransitionEffect.asymmetric(
                 TransitionEffect.OPACITY.animation({ duration: 300, curve: curves.springMotion(0.5, 1.0) })
                   .combine(TransitionEffect.translate({ y: 10 }).animation({ duration: 320, curve: curves.springMotion(0.5, 1.0) })),
@@ -5881,7 +5884,7 @@ private loadPlanetPositions(): void {
             Toggle({ type: ToggleType.Switch, isOn: this.msMarker })
               .onChange((isOn: boolean) => { this.setMeteorShowersFlag('marker', isOn) })
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
-          Text('辐射点为流星雨在天球上看似发散的中心点；活跃流星雨随日期变化，可结合时间面板跳转到极大日观察。')
+          Text(I18n.t('meteor_radiant_desc'))
             .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -6285,7 +6288,7 @@ private loadPlanetPositions(): void {
           .borderRadius(12)
           .margin({ top: 10 })
           .onChange((value: string) => {
-            this.locationPickerName = value.length > 0 ? value : '自定义位置'
+            this.locationPickerName = value.length > 0 ? value : I18n.t('custom_location')
           })
         Stack() {
           Image($rawfile('worldmap.jpg'))

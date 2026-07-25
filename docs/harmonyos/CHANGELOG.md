@@ -2,6 +2,41 @@
 
 > 格式说明：每次修改追加一条记录。新 Agent 接手时先读这个文件。
 
+## [2026-07-26] TRAE - 星表预置(offline) + ResourceBootstrap增量更新 + 定位权限修复 + I18n默认语言修复
+
+- **修改文件：**
+  - `build/.../rawfile/stellarium/stars/hip_gaia3/stars_4_1v0_6.cat`（新增，53MB）
+  - `build/.../rawfile/stellarium/stars/hip_gaia3/defaultStarsConfig.json`（stars_4 checked→true）
+  - `stars/hip_gaia3/defaultStarsConfig.json`（同步）
+  - `build/.../ets/qability/StellariumResourceBootstrap.ets`（增量提取逻辑）
+  - `build/.../ets/pages/I18n.ets`（默认语言→zh_CN）
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（禁用启动自动定位）
+  - 源码快照同步
+
+- **修改内容：**
+  1. **预置 stars_4 星表到 rawfile**：从 SourceForge 下载 stars_4_1v0_6.cat（53MB，MD5匹配），放入 rawfile/stellarium/stars/hip_gaia3/，将 defaultStarsConfig.json 中 stars_4 的 checked 改为 true。首次安装时 StellariumResourceBootstrap.ets 会自动提取到沙箱，StelMgr::loadData() 启动时直接加载，星等覆盖 10.5-12.0（约 170 万颗星）。
+  2. **ResourceBootstrap 增量更新**：添加 stars_4_1v0_6.cat 缺失检测，如果 marker 存在但 stars_4 缺失，只增量提取该文件（避免全量重提取）。
+  3. **禁用启动自动定位**：注释掉 `triggerAutoLocate()` 的启动时调用，改为用户点击"自动定位"按钮时才触发系统定位权限弹窗。
+  4. **I18n 默认语言修复**：`I18n.lang` 默认值从 `'en'` 改为 `'zh_CN'`，修复 drawer button 面板标题在首次渲染时显示英文的问题。
+
+- **修改原因：**
+  - 用户要求离线打包星表（免联网、免备案）
+  - 用户反馈启动即弹定位权限弹窗，影响体验
+  - 用户反馈面板标题（Star Catalogs等）显示英文
+
+- **构建结果：** BUILD SUCCESSFUL（12.7s）
+- **HAP 大小：** 456MB（含 stars_4，+53MB）
+- **验证结果：**
+  - 首次安装触发完整 rawfile 提取（含 stars_4）
+  - STELLARIUM_DATA_ROOT 正确设置
+  - 启动无定位权限弹窗 ✅
+  - 星图正常渲染 ✅
+- **备注：** stars_5~8 仍需联网下载，暂不预置（文件过大：245MB~1830MB）。卫星 TLE 保持在线更新模式。
+
+---
+
+
+
 
 
 ---

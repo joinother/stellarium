@@ -91,6 +91,8 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // missing from a previously extracted build, the toggles report success but
   // draw nothing — force a re-extract so the device actually has the data.
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
+  // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
+  const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
 
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
@@ -110,6 +112,15 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   if (needExtract) {
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
+  } else if (!exists(stars4Cat)) {
+    // Incremental: only extract the missing stars_4 catalog file
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but stars_4 catalog missing (${stars4Cat}); extracting incrementally`);
+    try {
+      writeRawFile(appContext, `stars/hip_gaia3/stars_4_1v0_6.cat`, stars4Cat);
+    } catch (err) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to extract stars_4: ${JSON.stringify(err)}`);
+    }
   }
 
   // Observable proof that localization data is on disk, so "star names don't

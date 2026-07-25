@@ -321,6 +321,26 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'msg_no_selection_for_tts': { 'en': 'No object selected, cannot generate speech text', 'zh_CN': '未选中天体，无法生成朗读文本', 'ja': '天体未選択、音声テキストを生成できません', 'ko': '선택된 천체 없음, 음성 텍스트를 생성할 수 없습니다', 'fr': 'Aucun objet sélectionné, impossible de générer le texte vocal', 'de': 'Kein Objekt ausgewählt, Sprachtext kann nicht generiert werden', 'es': 'Sin objeto seleccionado, no se puede generar texto de voz', 'ru': 'Объект не выбран, невозможно создать текст речи' },
   'msg_paste_config_first': { 'en': 'Please paste config.ini content first', 'zh_CN': '请先粘贴 config.ini 内容', 'ja': '先にconfig.iniの内容を貼り付けてください', 'ko': '먼저 config.ini 내용을 붙여넣으세요', 'fr': 'Veuillez d’abord coller le contenu de config.ini', 'de': 'Bitte zuerst config.ini Inhalt einfügen', 'es': 'Primero pegue el contenido de config.ini', 'ru': 'Сначала вставьте содержимое config.ini' },
   'msg_watch_pointing_started': { 'en': 'Watch pointing started', 'zh_CN': '手表指向开始', 'ja': '時計のポイント開始', 'ko': '시계 포인팅 시작', 'fr': 'Pointage de la montre commencé', 'de': 'Uhr-Zeigen gestartet', 'es': 'Apuntado de reloj iniciado', 'ru': 'Наведение с часов начато' },
+  'set_lock_view': { 'en': 'Lock view (drag disabled, zoom OK)', 'zh_CN': '锁定视角（禁止拖动，可缩放）', 'ja': '表示ロック（ドラッグ禁止、ズームOK）', 'ko': '보기 잠금（드래그 금지, 줌 가능）', 'fr': 'Verrouiller la vue (glisser désactivé, zoom OK)', 'de': 'Ansicht sperren (Ziehen deaktiviert, Zoom OK)', 'es': 'Bloquear vista (arrastre desactivado, zoom OK)', 'ru': 'Заблокировать вид (перемещение отключено, масштаб ОК)' },
+  'set_vert_clamp': { 'en': 'Clamp to zenith/nadir', 'zh_CN': '卡在天顶↔天底（防翻转/防旋转）', 'ja': '天頂/天底で制限（反転・回転防止）', 'ko': '천정/천저에서 고정（반전/회전 방지）', 'fr': 'Limiter au zénith/nadir', 'de': 'Am Zenit/Nadir begrenzen', 'es': 'Limitar al cenit/nadir', 'ru': 'Ограничить зенитом/надиром' },
+  'set_flat_horizon': { 'en': 'Limit max FOV (flat horizon)', 'zh_CN': '画面防弯曲（限制最大视场）', 'ja': '最大視野角を制限（地平線を平らに）', 'ko': '최대 시야각 제한（수평선 유지）', 'fr': 'Limiter le FOV max (horizon plat)', 'de': 'Max. FOV begrenzen (flacher Horizont)', 'es': 'Limitar FOV max (horizonte plano)', 'ru': 'Ограничить макс. FOV (плоский горизонт)' },
+  'custom_location': { 'en': 'Custom Location', 'zh_CN': '自定义位置', 'ja': 'カスタム位置', 'ko': '사용자 지정 위치', 'fr': 'Position personnalisée', 'de': 'Benutzerdefinierter Standort', 'es': 'Ubicación personalizada', 'ru': 'Пользовательское местоположение' },
+  'panel_catalogs': { 'en': 'Star Catalogs', 'zh_CN': '星表下载', 'ja': '星表ダウンロード', 'ko': '성표 다운로드', 'fr': 'Téléchargement de catalogues', 'de': 'Sternkataloge', 'es': 'Catálogos de estrellas', 'ru': 'Загрузка каталогов' },
+  'panel_bookmarks': { 'en': 'Bookmarks', 'zh_CN': '书签', 'ja': 'ブックマーク', 'ko': '북마크', 'fr': 'Signets', 'de': 'Lesezeichen', 'es': 'Marcadores', 'ru': 'Закладки' },
+  'panel_oculars': { 'en': 'Telescopes', 'zh_CN': '望远镜', 'ja': '望遠鏡', 'ko': '망원경', 'fr': 'Télescopes', 'de': 'Teleskope', 'es': 'Telescopios', 'ru': 'Телескопы' },
+  'panel_satellites': { 'en': 'Satellites', 'zh_CN': '卫星', 'ja': '衛星', 'ko': '위성', 'fr': 'Satellites', 'de': 'Satelliten', 'es': 'Satélites', 'ru': 'Спутники' },
+  'panel_meteorshowers': { 'en': 'Meteor Showers', 'zh_CN': '流星雨', 'ja': '流星群', 'ko': '유성우', 'fr': 'Pluies de météores', 'de': 'Meteorschauer', 'es': 'Lluvias de meteoros', 'ru': 'Метеорные потоки' },
+  'panel_scripts': { 'en': 'Scripts', 'zh_CN': '脚本', 'ja': 'スクリプト', 'ko': '스크립트', 'fr': 'Scripts', 'de': 'Skripte', 'es': 'Scripts', 'ru': 'Скрипты' },
+  'catalog_fallback': { 'en': 'Star Catalog', 'zh_CN': '星表', 'ja': '星表', 'ko': '성표', 'fr': 'Catalogue d\'étoiles', 'de': 'Sternkatalog', 'es': 'Catálogo de estrellas', 'ru': 'Каталог звёзд' },
+  'bookmark_fallback': { 'en': 'Bookmark', 'zh_CN': '书签', 'ja': 'ブックマーク', 'ko': '북마크', 'fr': 'Signet', 'de': 'Lesezeichen', 'es': 'Marcador', 'ru': 'Закладка' },
+  'meteor_radiant_desc': { 'en': 'Radiant is the center point on the celestial sphere where meteors appear to diverge.', 'zh_CN': '辐射点为流星雨在天球上看似发散的中心点；活跃流星雨随日期变化，可结合时间面板跳转到极大日观察。', 'ja': '放射点は天球上で流星が発散するように見える中心点です。活動中の流星群は日付により変化し、時間パネルで極大日にジャンプして観察できます。', 'ko': '방사점은 유성이 발산하는 것처럼 보이는 천구상의 중심점입니다. 활성 유성우는 날짜에 따라 변하며, 시간 패널에서 극대일로 이동하여 관찰할 수 있습니다.', 'fr': 'Le radiant est le point central de la sphère céleste d\'où les météores semblent diverger.', 'de': 'Der Radiant ist der Mittelpunkt auf der Himmelskugel, von dem Meteore zu divergieren scheinen.', 'es': 'El radiante es el punto central en la esfera celeste donde los meteoros parecen divergir.', 'ru': 'Радиант - центральная точка на небесной сфере, откуда кажутся летящими метеоры.' },
+  'no_selectable': { 'en': 'No selectable objects here. Zoom in or use search.', 'zh_CN': '当前位置没有可选天体，请放大或使用搜索', 'ja': 'ここに選択可能な天体がありません。ズームインまたは検索を使用してください。', 'ko': '여기에 선택 가능한 천체가 없습니다. 확대하거나 검색을 사용하세요.', 'fr': 'Aucun objet sélectionnable ici. Zoomez ou utilisez la recherche.', 'de': 'Hier keine auswählbaren Objekte. Vergrößern oder Suche verwenden.', 'es': 'No hay objetos seleccionables aquí. Acerque o use la búsqueda.', 'ru': 'Здесь нет выбираемых объектов. Увеличьте или используйте поиск.' },
+  'map_selected': { 'en': 'Map Selection', 'zh_CN': '地图选点', 'ja': 'マップ選択', 'ko': '지도 선택', 'fr': 'Sélection sur la carte', 'de': 'Kartenauswahl', 'es': 'Selección en mapa', 'ru': 'Выбор на карте' },
+  'current_location': { 'en': 'Current Location', 'zh_CN': '当前位置', 'ja': '現在地', 'ko': '현재 위치', 'fr': 'Position actuelle', 'de': 'Aktueller Standort', 'es': 'Ubicación actual', 'ru': 'Текущее местоположение' },
+  'observer_switched': { 'en': 'Switched observer: ', 'zh_CN': '已切换观测星球：', 'ja': '観測惑星切替：', 'ko': '관측 행성 전환: ', 'fr': 'Planète d\'observation changée : ', 'de': 'Beobachtungsplanet gewechselt: ', 'es': 'Planeta de observación cambiado: ', 'ru': 'Планета наблюдения переключена: ' },
+  'switch_fail': { 'en': 'Switch failed: ', 'zh_CN': '切换失败：', 'ja': '切替失敗：', 'ko': '전환 실패: ', 'fr': 'Échec du changement : ', 'de': 'Wechsel fehlgeschlagen: ', 'es': 'Error al cambiar: ', 'ru': 'Ошибка переключения: ' },
+  'unknown': { 'en': 'unknown', 'zh_CN': '未知', 'ja': '不明', 'ko': '알 수 없음', 'fr': 'Inconnu', 'de': 'Unbekannt', 'es': 'Desconocido', 'ru': 'Неизвестно' },
+  'no_object': { 'en': '(none)', 'zh_CN': '（无）', 'ja': '（なし）', 'ko': '(없음)', 'fr': '(aucun)', 'de': '(keine)', 'es': '(ninguno)', 'ru': '(нет)' }
 }
 
 
@@ -329,7 +349,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
 // ═══════════════════════════════════════════════════════════════
 
 export class I18n {
-  private static lang: LangCode = 'en'
+  private static lang: LangCode = 'zh_CN'
 
   // 设置当前语言（同时通知 AppStorage 触发 UI 重渲染）
   static setLanguage(lang: LangCode): void {
