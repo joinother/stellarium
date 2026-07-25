@@ -87,12 +87,23 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const keyQmSky = `${translationsDir}/stellarium-sky/zh_CN.qm`;
   const keyQmSkyCultures = `${translationsDir}/stellarium-skycultures/zh_CN.qm`;
 
+  // Constellation lines / art are driven by skyculture data. If it was
+  // missing from a previously extracted build, the toggles report success but
+  // draw nothing — force a re-extract so the device actually has the data.
+  const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
+
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but translations incomplete ` +
       `(stellarium=${exists(keyQmStellarium)} sky=${exists(keyQmSky)} ` +
       `skycultures=${exists(keyQmSkyCultures)}); forcing re-extract`);
+    needExtract = true;
+  }
+  if (!needExtract && !exists(skycultureMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but skyculture data missing ` +
+      `(${skycultureMarker}); forcing re-extract`);
     needExtract = true;
   }
 

@@ -352,8 +352,12 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	if (width <= 0 || height <= 0)
 		return;
 
-	QByteArray pixels;
-	pixels.resize(width * height * 4);
+	// 复用静态像素缓冲区，避免每帧分配/释放 ~22MB 导致堆碎片化和长期卡顿。
+	// 只在缓冲区不够大时才 grow（QByteArray::resize 不会自动收缩）。
+	static QByteArray pixels;
+	const int neededSize = width * height * 4;
+	if (pixels.size() < neededSize)
+		pixels.resize(neededSize);
 	gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
 	gl->glReadPixels(viewport[0], viewport[1], width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 	const GLenum error = gl->glGetError();
@@ -475,7 +479,9 @@ static void ohosDrainCommandQueue()
 		s_ohosCmdQueue.clear();
 	}
 	markQtLoopRunning();
-	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
+	// 只在批量大时才打日志，避免每帧一条 WARN 日志造成 IO 开销
+	if (batch.size() > 1)
+		OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
 	for (auto& fn : batch)
 		fn();
 }
@@ -691,6 +697,43 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
+// 由光谱型（如 "A1V"）估算有效温度(K)，供 ArkTS 音乐引擎把"越热音越高"映射成音高。
+// 仅做音乐用途的近似：按光谱型字母取该型代表温度，再用亚型号数字微调。
+static int ohosTemperatureFromSpType(const QString& sp)
+{
+	if (sp.isEmpty())
+		return 0;
+	const QChar c = sp.at(0).toUpper();
+	int base = 0;
+	switch (c.unicode())
+	{
+		case 'O': base = 30000; break;
+		case 'B': base = 20000; break;
+		case 'A': base = 8750;  break;
+		case 'F': base = 6750;  break;
+		case 'G': base = 5600;  break;
+		case 'K': base = 4450;  break;
+		case 'M': base = 3500;  break;
+		case 'L': base = 2200;  break;
+		case 'T': base = 1400;  break;
+		case 'W': base = 50000; break; // Wolf-Rayet：极热
+		case 'C': base = 4200;  break; // 碳星
+		case 'S': base = 3200;  break; // S 型星
+		default:  base = 0;     break;
+	}
+	if (base > 0 && sp.length() > 1)
+	{
+		const int digit = sp.at(1).digitValue();
+		if (digit >= 0 && digit <= 9)
+		{
+			// 亚型号 0 最热、9 最冷：在本型带宽内做轻微线性降温
+			const double width = base * 0.16;
+			base = int(base - width * 0.5 + width * (digit / 9.0));
+		}
+	}
+	return base;
+}
+
 QJsonObject selectedObjectJson(StelCore* core = nullptr)
 {
 	QJsonObject result;
@@ -738,6 +781,19 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr)
 		{
 			QString abbrev = m["iauConstellation"].toString();
 			result["constellation"] = abbrev;
+		}
+
+		// 音乐引擎所需：英文类型(便于分支) + 光谱型 + 推算温度(越热音越高)
+		QString ohosType = object->getObjectType();
+		if (!ohosType.isEmpty())
+			result["objectType"] = ohosType;
+		if (m.contains("spectral-class"))
+		{
+			const QString sp = m["spectral-class"].toString();
+			result["spType"] = sp;
+			const int tk = ohosTemperatureFromSpType(sp);
+			if (tk > 0)
+				result["temperatureK"] = tk;
 		}
 
 		// Distance (in AU for solar system, else light-years or parsecs if available)
@@ -1129,7 +1185,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	static QByteArray response;
 	const QString commandName = QString::fromUtf8(command ? command : "");
 	const QString arg = QString::fromUtf8(payload ? payload : "");
-	qInfo() << "[StellariumOhos] command received:" << commandName << arg;
+	// 高频命令（dragView/zoomBy/panBy）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
+	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy")
+		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
 	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
@@ -1305,7 +1363,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		QJsonArray items;
 		for (const QString& name : skyCultureMgr->getSkyCultureListI18()) { items.append(name); }
 		result["ok"] = true; result["items"] = items;
+		result["count"] = items.size();
 		result["current"] = skyCultureMgr->getCurrentSkyCultureNameI18();
+		result["currentId"] = skyCultureMgr->getCurrentSkyCultureID();
+		result["installDir"] = StelFileMgr::getInstallationDir();
+		result["userDir"] = StelFileMgr::getUserDir();
+		QJsonArray searchPaths;
+		for (const QString& p : StelFileMgr::getSearchPaths()) { searchPaths.append(p); }
+		result["searchPaths"] = searchPaths;
+		result["skyculturesModernIndex"] = StelFileMgr::findFile("skycultures/modern/index.json");
 		return result;
 	}
 

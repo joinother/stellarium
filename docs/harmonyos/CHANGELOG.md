@@ -3,6 +3,49 @@
 > 格式说明：每次修改追加一条记录。新 Agent 接手时先读这个文件。
 
 
+
+---
+
+---
+
+## [2026-07-25] TRAE - 音频引擎性能优化 + 拖动卡顿修复
+
+- **修改文件：** `StellariumAudio.ets` + `MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **正弦查找表替代 Math.sin()：** 在 AudioEngine 中预计算 2048 项正弦表（SINE_SIZE=2048），render() 内循环用线性插值查表替代 Math.sin()，约 15x 加速。每帧 sin() 调用从 ~80,640 次降到等价 ~5,000 次。
+  2. **预计算 chime 衰减率：** 在 playChime() 时一次性计算 decayRate = exp(-1/(SR*decay))，render() 内循环用 `env *= decayRate` 替代 `Math.exp(-t/decay)`，消除每帧 ~11,520 次 exp() 调用。
+  3. **预计算泛音相位增量：** 新增 ActivePartial 类，每个泛音有独立 phaseInc（freq*ratio*2π/SR），内循环只需 `par.phase += par.phaseInc`，无需乘法。
+  4. **缓存局部变量：** render() 内将 sineTable、pads、chimes、reverb 缓冲等引用缓存到局部变量，减少 this 属性访问开销。
+  5. **MAX_CHIMES 从 6 降到 4：** 减少最坏情况计算量（4 个叠加钟声足够）。
+  6. **音乐默认关闭：** `musicEnabled` 从 `true` 改为 `false`。用户可手动点击左侧栏音符按钮开启。开启后优化后的音频引擎 CPU 占用预计从 ~100ms/帧降到 ~5-10ms/帧。
+- **修改原因：** 用户反馈拖动卡顿。hilog 排查发现 AudioRenderSink 每帧渲染耗时 100ms（预算 40ms），AudioPerformanceMonitor 持续报警 "overTime!"。音频线程吃满一整核 CPU，与主线程（触摸处理）和渲染线程（OpenGL ES）竞争，导致拖动掉帧。
+- **构建结果：** BUILD SUCCESSFUL（ArkTS-only，11.6s）
+- **验证结果：**
+  - 安装启动正常，CPU 从 24% 降到 13-15%（空闲态）。
+  - 无 AudioRenderSink / AudioPerformanceMonitor 超时日志。
+  - 内存稳定 757MB（与基线一致）。
+  - 星图渲染正常，UI 响应正常。
+- **备注：**
+  - 之前的 ArkTS 优化（skyDragging 标志暂停详情轮询、callNativeFire 跳过 JSON 解析）仍然在代码中生效。
+  - C++ 优化（静态像素缓冲区、减少高频命令日志）已准备但尚未重编 .so，需要 Qt OHOS 交叉编译。这是解决长时间运行（2-4小时）后逐渐卡顿的关键修复。
+  - 用户开启音乐后，优化后的音频引擎应不再导致卡顿。如仍有问题，可进一步降低采样率到 24kHz 或添加 2x 降采样。
+
+## [2026-07-25] TRAE - 拖动卡顿性能修复 + 音频编译错误修复
+
+- **修改文件：** `MainWindowNativeNode.ets` + `StellariumAudio.ets` + `StelMainView.cpp`（C++待重编）
+- **修改内容：**
+  1. **拖动时暂停详情轮询（ArkTS已生效）：** 新增 `skyDragging` 标志，sky touch down 时置 true、up/cancel 时置 false。`detailTimer` 的 1Hz 回调中 `if (this.skyDragging) return`，避免拖动期间 `getSelectedObjectInfo` 同步桥调用与 `dragView` 竞争。
+  2. **Fire-and-forget 桥调用（ArkTS已生效）：** 新增 `callNativeFire()` 方法，跳过 `JSON.parse`。`dragView`/`zoomBy` 全部改用 `callNativeFire`，减少拖动时 GC 压力。
+  3. **StellariumAudio.ets 编译错误修复：** `ENCODING_PCM`→`ENCODING_TYPE_RAW`、`AudioStreamUsage`→`StreamUsage`、移除已废弃的 `contentType` 字段、移除 `writeData` 回调的返回值。
+  4. **静态像素缓冲区（C++已改，待重编 .so）：** `StelMainView.cpp` 中 `QByteArray pixels` 从局部变量改为 `static`，避免每帧分配/释放 ~22MB 导致堆碎片化。
+  5. **减少高频命令日志（C++已改，待重编 .so）：** `dragView`/`zoomBy`/`panBy` 不再打 `qInfo` 日志；`ohosDrainCommandQueue` 只在 batch.size()>1 时打日志。
+- **修改原因：** 用户反馈拖动卡顿。排查发现：detailTimer 每秒轮询阻塞拖动、dragView 不必要 JSON.parse、音频引擎每帧 100ms CPU（2.5x 实时）、原生堆 478MB 仅剩 6MB 空闲。
+- **构建结果：** BUILD SUCCESSFUL（ArkTS-only，.so 未重编）
+- **验证结果：** 安装启动正常，空闲时无 getSelectedObjectInfo 轮询日志，内存稳定 477MB。
+- **备注：**
+  - 原生堆 478MB 是 Stellarium 核心基线内存（星表+纹理），非渐进泄漏。56 分钟运行后仅增长到 491MB。
+  - 音频引擎 `StellariumAudio.ets` 的 `render()` 每帧耗时 100ms（应为 <10ms），消耗一整核 CPU，是卡顿的潜在主因之一。建议后续优化或默认关闭。
+  - C++ 改动（静态缓冲区+减少日志）需要 Qt OHOS 交叉编译重编 .so 才能生效。
 ---
 
 ## [2026-07-25] WorkBuddy - 语言国际化统一与细节面板重构

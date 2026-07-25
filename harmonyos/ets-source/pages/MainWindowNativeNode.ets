@@ -7,6 +7,7 @@ import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
+import { AudioEngine } from './StellariumAudio'
 
 interface TonightPlanetRow {
   name: string
@@ -193,6 +194,9 @@ struct WindowNativeNode {
   @State private selectedPhase: string = ''
   @State private selectedElongation: string = ''
   @State private selectedRich: string = ''
+  // 程序化音乐：默认开（打开应用即播放），可静音并持久化
+  @State private musicEnabled: boolean = true
+  private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
@@ -415,6 +419,7 @@ struct WindowNativeNode {
   @State private currentFovText: string = '--'
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
+  @State private panelIdleGlass: boolean = false
   @State private railPinned: boolean = true
   @State private railCollapsed: boolean = false
   @State private panelOffsetX: number = 0
@@ -498,10 +503,12 @@ struct WindowNativeNode {
       clearTimeout(this.panelIdleTimer)
     }
     this.panelIdleOpacity = 1.0
+    this.panelIdleGlass = false
     this.panelIdleTimer = setTimeout(() => {
-      // 空闲→右侧面板轻微变淡（仍清晰可见，按钮不消失）；钉住(uiLocked)时完全不淡出
+      // 空闲→右侧面板变成浅色朦胧毛玻璃，后面的星空仍隐约可见；钉住(uiLocked)时保持原样
       if (!this.uiLocked) {
-        this.panelIdleOpacity = 0.85
+        this.panelIdleOpacity = 0.88
+        this.panelIdleGlass = true
       }
       this.panelIdleTimer = -1
     }, 10000)
@@ -538,6 +545,7 @@ struct WindowNativeNode {
   private pinchActive: boolean = false
   private nativeDragActive: boolean = false
   private lastDragCommandMs: number = 0
+  private skyDragging: boolean = false
   private gyroLastTimeMs: number = 0
   private gyroEventCount: number = 0
   private readonly gyroSensitivity: number = 180
@@ -549,6 +557,9 @@ struct WindowNativeNode {
   private panelDragStartY: number = 0
   private panelDragStartOffsetX: number = 0
   private panelDragStartOffsetY: number = 0
+
+  // 左侧栏布局常量
+  private readonly RAIL_TOP_PAD: number = 10
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
@@ -763,7 +774,12 @@ struct WindowNativeNode {
           const lang = s.selectedLanguage as string
           if (lang !== this.selectedLanguage) { this.setLanguage(lang) }
         }
+        if (s.musicEnabled !== undefined) { this.musicEnabled = s.musicEnabled as boolean }
       } catch (e) { }
+    }
+    // 打开应用即播放程序化音乐（用户没关过的前提下）
+    if (this.musicEnabled) {
+      AudioEngine.getInstance().start()
     }
     // 默认语言设置为中文
     this.setLanguage('zh_CN')
@@ -801,7 +817,8 @@ struct WindowNativeNode {
       equatorialMount: this.equatorialMount,
       gyroscopeEnabled: this.gyroscopeEnabled,
       gyroscopeSensitivityText: this.gyroscopeSensitivityText,
-      selectedLanguage: this.selectedLanguage
+      selectedLanguage: this.selectedLanguage,
+      musicEnabled: this.musicEnabled
     }))
     this.stopGyroscope(false)
     this.stopDetailAutoRefresh()
@@ -879,6 +896,16 @@ struct WindowNativeNode {
       return r
     } catch (err) {
       return { ok: false, error: 'bridge parse failed' }
+    }
+  }
+
+  // Fire-and-forget: 调用 C++ 桥但不解析返回的 JSON，减少拖动时的 GC 压力。
+  // 用于 dragView / zoomBy / panBy 等不需要返回值的连续命令。
+  private callNativeFire(name: string, payload: string = ''): void {
+    try {
+      command(name, payload)
+    } catch (err) {
+      // 忽略：拖动期间不需要错误处理
     }
   }
 
@@ -1901,10 +1928,11 @@ private loadPlanetPositions(): void {
     })
   }
 
-  // 启动“详情自动刷新”：仅在【目标详情面板打开 + 有已选中天体】时才拉数据，避免无谓的桥调用。
+  // 启动“详情自动刷新”：仅在【目标详情面板打开 + 有已选中天体 + 未在拖动星图】时才拉数据，避免无谓的桥调用。
   private startDetailAutoRefresh(): void {
     if (this.detailTimer !== 0) { return }
     this.detailTimer = setInterval(() => {
+      if (this.skyDragging) { return }
       if (this.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWinVisible)) {
         this.refreshSelectedObject()
       }
@@ -2041,6 +2069,10 @@ private loadPlanetPositions(): void {
       const dispName = this.selectedName
       const alias = ALIAS_LIST.find(a => a.en === dispName || a.zh === dispName)
       this.selectedInfo = alias ? alias.zh : ''
+      // 换了新天体 → 按它的"性格"响一声（模仿 Sky Guide 的叮）
+      if (isNewSelection) {
+        AudioEngine.getInstance().chimeForSelection(result)
+      }
       this.startDetailAutoRefresh()
     } else {
       // 后台刷新瞬时未命中（天体临时不可见等）时不关窗、不清数据，避免闪退式收起
@@ -2756,8 +2788,8 @@ private loadPlanetPositions(): void {
   }
 
   private railHeight(): number {
-    // 常用区 + 分隔线 + 抽屉按钮 + 钉住按钮
-    return this.pinnedActions.length * 58 + 60 + 36 + 14
+    // 常用区 + 分隔线 + 抽屉按钮 + 收起按钮 + 音乐按钮 + 顶部内边距
+    return this.pinnedActions.length * 58 + 112 + 44 + 14 + this.RAIL_TOP_PAD
   }
 
   // 点击侧栏入口：打开对应面板并收起抽屉
@@ -2856,6 +2888,18 @@ private loadPlanetPositions(): void {
       const moreTop = railTop + this.pinnedActions.length * step + 8
       if (y >= moreTop && y <= moreTop + 44) {
         this.toggleDrawer()
+        return true
+      }
+      // 收起页面按钮（原钉子位置）：把右侧浮动面板收回到左侧栏
+      const collapseTop = railTop + this.pinnedActions.length * step + 60
+      if (y >= collapseTop && y <= collapseTop + 44) {
+        this.closePanel()
+        return true
+      }
+      // 音乐开关按钮：和收起按钮同列，再往下 52vp
+      const musicTop = railTop + this.pinnedActions.length * step + 112
+      if (y >= musicTop && y <= musicTop + 44) {
+        this.toggleMusic()
         return true
       }
 	    }
@@ -3005,6 +3049,18 @@ private loadPlanetPositions(): void {
             this.toggleDrawer()
             return
           }
+          // 收起页面按钮
+          const collapseTop = railTop + this.pinnedActions.length * step + 60
+          if (downY >= collapseTop && downY <= collapseTop + 44) {
+            this.closePanel()
+            return
+          }
+          // 音乐开关按钮
+          const musicTop = railTop + this.pinnedActions.length * step + 112
+          if (downY >= musicTop && downY <= musicTop + 44) {
+            this.toggleMusic()
+            return
+          }
         }
         // 抽屉项点击（抽屉展开时）
         if (this.drawerOpen && downX >= this.EDGE_MARGIN + 58 && downX <= this.EDGE_MARGIN + 58 + 176) {
@@ -3018,6 +3074,7 @@ private loadPlanetPositions(): void {
         return
       }
       this.skyTouchActive = true
+      this.skyDragging = true
       this.touchStartX = downX
       this.touchStartY = downY
       this.touchLastX = this.touchStartX
@@ -3036,7 +3093,7 @@ private loadPlanetPositions(): void {
           this.touchWindowX(points[0]), this.touchWindowY(points[0]),
           this.touchWindowX(points[1]), this.touchWindowY(points[1]))
         this.pinchActive = true
-        this.callNative('zoomBy', '1|1')
+        this.callNativeFire('zoomBy', '1|1')
       }
       return
     }
@@ -3059,10 +3116,10 @@ private loadPlanetPositions(): void {
         if (!this.pinchActive || this.pinchStartDistance <= 1) {
           this.pinchStartDistance = currentDistance
           this.pinchActive = true
-          this.callNative('zoomBy', '1|1')
+          this.callNativeFire('zoomBy', '1|1')
         } else {
           const scale = currentDistance / this.pinchStartDistance
-          this.callNative('zoomBy', scale.toString() + '|0')
+          this.callNativeFire('zoomBy', scale.toString() + '|0')
         }
         this.touchMoved = true
         return
@@ -3090,7 +3147,7 @@ private loadPlanetPositions(): void {
             hilog.info(0x0000, 'StellariumArkUI', 'dragView from ArkUI')
             this.dragLogCount += 1
           }
-          this.callNative('dragView',
+          this.callNativeFire('dragView',
             Math.round(this.touchLastX).toString() + '|' +
             Math.round(this.touchLastY).toString() + '|' +
             Math.round(x).toString() + '|' +
@@ -3127,7 +3184,7 @@ private loadPlanetPositions(): void {
         }
       }
       if (this.nativeDragActive) {
-        this.callNative('dragView',
+        this.callNativeFire('dragView',
           Math.round(this.touchLastX).toString() + '|' +
           Math.round(this.touchLastY).toString() + '|' +
           Math.round(x).toString() + '|' +
@@ -3149,6 +3206,7 @@ private loadPlanetPositions(): void {
       this.nativeDragActive = false
       this.skyTouchActive = false
       this.skyTouchFeedback = false
+      this.skyDragging = false
     }
   }
 
@@ -3642,7 +3700,7 @@ private loadPlanetPositions(): void {
         Stack() { this.iconButton(item) }
           .width(44)
           .height(44)
-          .position({ x: 7, y: idx * 58 })
+          .position({ x: 7, y: this.RAIL_TOP_PAD + idx * 58 })
           .onClick(() => {
             this.onRailTap(item.panel)
           })
@@ -3652,37 +3710,38 @@ private loadPlanetPositions(): void {
       .width(26)
       .height(0.5)
       .backgroundColor('rgba(255,255,255,0.12)')
-      .position({ x: 16, y: this.pinnedActions.length * 58 + 1 })
+      .position({ x: 16, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 1 })
       .hitTestBehavior(HitTestMode.None)
     // 更多（抽屉）按钮：展开/收起低频功能抽屉
     Stack() { this.moreButton() }
       .width(44)
       .height(44)
-      .position({ x: 7, y: this.pinnedActions.length * 58 + 8 })
+      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 8 })
       .onClick(() => {
         this.toggleDrawer()
       })
-        // 钉住按钮：固定左侧栏，空闲不收起
-        Stack({ alignContent: Alignment.Center }) {
-          Text("\uD83D\uDCCC")
-            .fontSize(16)
-            .fontColor(this.railPinned ? "#FFD700" : "#99FFFFFF")
-        }
-          .width(44)
-          .height(36)
-          .borderRadius(18)
-          .backgroundColor(this.railPinned ? "rgba(255, 215, 0, 0.15)" : "rgba(255, 255, 255, 0.06)")
-          .position({ x: 7, y: this.pinnedActions.length * 58 + 60 })
-          .onClick(() => {
-            this.railPinned = !this.railPinned
-            this.flashHint(this.railPinned ? $r('app.string.s0717') : $r('app.string.s0718'))
-          })
+    // 收起页面按钮：把右侧浮动面板收到左侧栏（桌边）
+    Stack() { this.collapseButton() }
+      .width(44)
+      .height(44)
+      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 60 })
+      .onClick(() => {
+        this.closePanel()
+      })
+    // 音乐开关：打开应用即播空灵底噪，点新星体叮一声；可随时静音
+    Stack() { this.musicButton() }
+      .width(44)
+      .height(44)
+      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 112 })
+      .onClick(() => {
+        this.toggleMusic()
+      })
   }
     .width(58)
         .height(this.railHeight())
-      .backgroundColor('rgba(25, 26, 28, 0.72)')
+      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.14)' : 'rgba(25, 26, 28, 0.72)')
       .backdropBlur(26)
-      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.20)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(29)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .opacity(this.railPinned ? 1.0 : this.panelIdleOpacity)
@@ -3928,6 +3987,7 @@ private loadPlanetPositions(): void {
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
       'unlock': $r('app.media.ic_unlock'),
+      'forward': $r('app.media.ic_forward'),
     }
     return map[icon] || $r('app.media.ic_search')
   }
@@ -3987,6 +4047,36 @@ private loadPlanetPositions(): void {
       // 手势由外层 Stack.onClick 统一处理
   }
 
+  // 收起当前页面按钮：把右侧浮动面板收回到左侧栏
+  @Builder
+  collapseButton() {
+    Column() {
+      Image(this.getIcon('forward', false))
+        .width(22)
+        .height(22)
+        .fillColor(this.panelVisible ? '#FFFFFF' : this.nmText())
+        .rotate({ angle: 180 })
+        .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+    }
+      .width(44)
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.panelVisible ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.panelVisible ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(22)
+      .margin({ top: 4, bottom: 4 })
+      .scale({ x: this.panelVisible ? 1.08 : 1.0, y: this.panelVisible ? 1.08 : 1.0 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+  }
+
   // 「更多」九宫格按钮：展开低频功能抽屉
   @Builder
   moreButton() {
@@ -4014,6 +4104,62 @@ private loadPlanetPositions(): void {
         }
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+  }
+
+  // 音乐开关按钮（左侧栏底部）：开着时音符亮起，静音时变暗
+  @Builder
+  musicButton() {
+    Column() {
+      Text(this.musicEnabled ? '♪' : '♪')
+        .fontSize(22)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.musicEnabled ? '#7FD0FF' : '#5A6270')
+        .opacity(this.musicEnabled ? 1.0 : 0.5)
+        .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+    }
+      .width(44)
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(22)
+      .margin({ top: 4, bottom: 4 })
+      .scale({ x: this.musicEnabled ? 1.06 : 1.0, y: this.musicEnabled ? 1.06 : 1.0 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+  }
+
+  // 切换音乐开关（带 350ms 防抖，避免坐标命中与 onClick 双触发导致来回跳）
+  private toggleMusic(): void {
+    const now = Date.now()
+    if (now - this.lastMusicToggle < 350) { return }
+    this.lastMusicToggle = now
+    this.musicEnabled = !this.musicEnabled
+    const engine = AudioEngine.getInstance()
+    if (this.musicEnabled) {
+      engine.start().then(() => { engine.setMuted(false) })
+    } else {
+      engine.setMuted(true)
+    }
+    this.persistMusicEnabled()
+    this.flashHint(this.musicEnabled ? '音乐：开 ♪' : '音乐：静音')
+  }
+
+  private persistMusicEnabled(): void {
+    let obj: Record<string, boolean | string> = {}
+    const cur = AppStorage.get<string>('stellariumSettings')
+    if (cur) {
+      try { obj = JSON.parse(cur) as Record<string, boolean | string> } catch (e) { }
+    }
+    obj['musicEnabled'] = this.musicEnabled
+    AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
   }
 
   // 低频功能抽屉：从侧栏右侧滑出，图标 + 名称，一行一项
@@ -4115,9 +4261,9 @@ private loadPlanetPositions(): void {
       .width(this.panelWidth)
       .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
-      .backgroundColor('rgba(25, 26, 28, 0.78)')
+      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.18)' : 'rgba(25, 26, 28, 0.78)')
       .backdropBlur(30)
-      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
@@ -4143,9 +4289,9 @@ private loadPlanetPositions(): void {
       .width('92%')
       .constraintSize({ minHeight: 156, maxHeight: 560 })
       .padding({ top: 10, left: 16, right: 16, bottom: 14 })
-      .backgroundColor('rgba(25, 26, 28, 0.78)')
+      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.18)' : 'rgba(25, 26, 28, 0.78)')
       .backdropBlur(30)
-      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(32)
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
@@ -4197,6 +4343,13 @@ private loadPlanetPositions(): void {
         this.flashHint(this.uiLocked ? $r('app.string.s0717') : $r('app.string.s0718'))
       })
       .margin({ right: 6 })
+      Stack() { this.collapseButton() }
+        .width(36)
+        .height(36)
+        .margin({ right: 6 })
+        .onClick(() => {
+          this.closePanel()
+        })
       this.smallRoundButton('×', () => {
         this.closePanel()
       })

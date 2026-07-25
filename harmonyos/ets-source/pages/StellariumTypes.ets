@@ -258,6 +258,10 @@ export interface StellariumBridgeResponse {
   magnitude?: number
   azimuth?: number
   constellation?: string
+  // 音乐引擎用：英文类型(便于分支) / 光谱型 / 推算温度(越热音越高)
+  objectType?: string
+  spType?: string
+  temperatureK?: number
   distance?: string
   // 富化后的天体详情字段（selectedObjectJson 扩展）
   size?: string
