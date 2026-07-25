@@ -1569,6 +1569,9 @@ struct WindowNativeNode {
     this.callInteractive('setActionChecked', actionId + '|' + (enabled ? '1' : '0'), (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'setLayer %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
+      // 夜间模式和赤道仪模式切换时立即持久化，避免应用被杀死后丢失
+      if (actionId === 'actionShow_Night_Mode') { this.persistNightMode() }
+      if (actionId === 'actionSwitch_Equatorial_Mount') { this.persistEquatorialMount() }
     })
   }
 
@@ -4591,6 +4594,26 @@ private loadPlanetPositions(): void {
       try { obj = JSON.parse(cur) as Record<string, boolean | string> } catch (e) { }
     }
     obj['musicEnabled'] = this.musicEnabled
+    AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
+  }
+
+  private persistNightMode(): void {
+    let obj: Record<string, boolean | string> = {}
+    const cur = AppStorage.get<string>('stellariumSettings')
+    if (cur) {
+      try { obj = JSON.parse(cur) as Record<string, boolean | string> } catch (e) { }
+    }
+    obj['nightMode'] = this.nightMode
+    AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
+  }
+
+  private persistEquatorialMount(): void {
+    let obj: Record<string, boolean | string> = {}
+    const cur = AppStorage.get<string>('stellariumSettings')
+    if (cur) {
+      try { obj = JSON.parse(cur) as Record<string, boolean | string> } catch (e) { }
+    }
+    obj['equatorialMount'] = this.equatorialMount
     AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
   }
 
