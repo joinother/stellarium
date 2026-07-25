@@ -77,6 +77,7 @@ interface BookmarksResponse extends StellariumBridgeResponse {
 }
 
 const BOOKMARK_STORE: string = 'stellarium_bookmarks'
+const SEARCH_HISTORY_STORE: string = 'stellarium_search_history'
 
 
 // 望远镜/目镜配置（Oculars 插件桥）
@@ -766,14 +767,7 @@ struct WindowNativeNode {
         this.observingList = []
       }
     }
-    const storedHistory = AppStorage.get<string>("searchHistory")
-    if (storedHistory) {
-      try {
-        this.searchHistory = JSON.parse(storedHistory) as string[]
-      } catch (e) {
-        this.searchHistory = []
-      }
-    }
+    this.loadSearchHistoryFromStorage()
     this.loadBookmarksFromStorage()
     this.startupBridgeSync()
   }
@@ -1108,6 +1102,32 @@ struct WindowNativeNode {
       }
     } catch (e) {
       hilog.warn(0xD002, 'Stellarium', 'load bookmarks failed: %{public}s', String(e))
+    }
+  }
+
+  private async saveSearchHistoryToStorage(): Promise<void> {
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext
+      const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
+      const jsonStr: string = JSON.stringify(this.searchHistory)
+      await store.put('history', jsonStr)
+      await store.flush()
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'save search history failed: %{public}s', String(e))
+    }
+  }
+
+  private async loadSearchHistoryFromStorage(): Promise<void> {
+    try {
+      const ctx = getContext(this) as common.UIAbilityContext
+      const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
+      const jsonStr: string = (await store.get('history', '[]')) as string
+      const parsed: string[] = JSON.parse(jsonStr)
+      if (parsed.length > 0) {
+        this.searchHistory = parsed.slice(0, 20)
+      }
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'load search history failed: %{public}s', String(e))
     }
   }
 
@@ -2074,7 +2094,7 @@ private loadPlanetPositions(): void {
     const hist = this.searchHistory.filter(h => h !== query)
     hist.unshift(query)
     this.searchHistory = hist.slice(0, 20)
-    AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
+    this.saveSearchHistoryToStorage()
     this.callInteractive('searchObject', query, (result) => {
       this.applySelectedObject(result)
       if (result.found === true) {
@@ -5455,7 +5475,7 @@ private loadPlanetPositions(): void {
           Text($r('app.string.i0117')).fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
           Text($r('app.string.i0118')).fontSize(11).fontColor('#6FA8FF').onClick(() => {
             this.searchHistory = []
-            AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
+            this.saveSearchHistoryToStorage()
           })
         }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 8, bottom: 4 })
         Scroll() {
@@ -5927,6 +5947,38 @@ private loadPlanetPositions(): void {
           Text($r('app.string.i0262')).fontSize(10).fontColor('#99FFFFFF').width('100%')
           Text($r('app.string.i0263')).fontSize(10).fontColor('#99FFFFFF').width('100%')
           Text($r('app.string.i0264')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          // ===== 手势指南 =====
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text($r('app.string.i0310')).fontSize(13).fontColor(this.nmText()).width('100%')
+          Row({ space: 10 }) {
+            Text('DRAG').fontSize(8).fontColor(this.nmAccent()).fontWeight(FontWeight.Bold).width(36).height(20)
+              .textAlign(TextAlign.Center).borderRadius(4).backgroundColor(this.nmBg())
+            Text($r('app.string.i0311')).fontSize(10).fontColor('#99FFFFFF').layoutWeight(1)
+          }.width('100%').padding({ left: 4, right: 4 }).alignItems(VerticalAlign.Center)
+          Row({ space: 10 }) {
+            Text('PINCH').fontSize(8).fontColor(this.nmAccent()).fontWeight(FontWeight.Bold).width(36).height(20)
+              .textAlign(TextAlign.Center).borderRadius(4).backgroundColor(this.nmBg())
+            Text($r('app.string.i0312')).fontSize(10).fontColor('#99FFFFFF').layoutWeight(1)
+          }.width('100%').padding({ left: 4, right: 4 }).alignItems(VerticalAlign.Center)
+          Row({ space: 10 }) {
+            Text('TAP').fontSize(8).fontColor(this.nmAccent()).fontWeight(FontWeight.Bold).width(36).height(20)
+              .textAlign(TextAlign.Center).borderRadius(4).backgroundColor(this.nmBg())
+            Text($r('app.string.i0313')).fontSize(10).fontColor('#99FFFFFF').layoutWeight(1)
+          }.width('100%').padding({ left: 4, right: 4 }).alignItems(VerticalAlign.Center)
+          Row({ space: 10 }) {
+            Text('2FD').fontSize(8).fontColor(this.nmAccent()).fontWeight(FontWeight.Bold).width(36).height(20)
+              .textAlign(TextAlign.Center).borderRadius(4).backgroundColor(this.nmBg())
+            Text($r('app.string.i0314')).fontSize(10).fontColor('#99FFFFFF').layoutWeight(1)
+          }.width('100%').padding({ left: 4, right: 4 }).alignItems(VerticalAlign.Center)
+          Row({ space: 10 }) {
+            Text('HOLD').fontSize(8).fontColor(this.nmAccent()).fontWeight(FontWeight.Bold).width(36).height(20)
+              .textAlign(TextAlign.Center).borderRadius(4).backgroundColor(this.nmBg())
+            Text($r('app.string.i0315')).fontSize(10).fontColor('#99FFFFFF').layoutWeight(1)
+          }.width('100%').padding({ left: 4, right: 4 }).alignItems(VerticalAlign.Center)
+          // ===== 快捷操作 =====
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
