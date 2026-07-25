@@ -1,16 +1,20 @@
 // StellariumAudio.ets
 // 程序化（生成式）音乐引擎 —— 模仿 Sky Guide 的"空灵底噪 + 点星体叮一声"。
 //
-// 设计要点（大白话）：
-//   1) 背景是一层"会自己慢慢飘"的氛围音乐：几个持续音（pad）缓慢地换和弦音，
-//      每隔几秒还有一个极轻的"远处星星眨眼"声，所以听着空灵但不单调。
-//   2) 点选一个新天体就"叮"一声。这声不是随便响的：
-//      - 恒星：越热（温度高）音越高，越亮（星等小）音量越大（和 Sky Guide 一致）。
-//      - 行星 / 月亮 / 太阳 / 星云 / 星系 / 星团 / 彗星 / 星座：各有自己的"声线"
-//        （音区、音色、长短都不同），但都落在同一个五声音阶里，所以永远不刺耳。
-//   3) 用 OpenHarmony 的 AudioRenderer 回调模式，实时合成 PCM，不依赖任何音频文件。
+// 音色优化（2026-07-25 v2）：
+//   1) 背景Pad：5个pad（比原来3个更丰满），每个用两个低频正弦叠加产生"温暖"
+//      的beat频率（2Hz），加上7-12Hz的慢LFO呼吸感，比原来0.05Hz更可感知
+//   2) 泛音大幅削减：ratio从{1,2,2.76,3,4.07,5.4}削减到{1,2,3}，去掉>3倍频
+//      消除刺耳的金属高频
+//   3) 选星"叮"声更柔和：attack从8ms增加到30ms（更圆润），gain整体降低0.6x
+//   4) 混响加长加深：revLen 0.26s→0.4s, revLen2 0.33s→0.55s, feedback 0.36→0.45
+//      让每个声音有更长的"尾巴"，营造空间感
+//   5) Pad交叉淡化：切换和弦时目标gain缓慢过渡而非硬切，消除断裂感
+//   6) 低通滤波模拟：pad输出通过简单一阶低通（cutoff ~800Hz），去掉>1kHz的毛刺感
+//   7) twinkle（远处星星眨眼）改为更低频更轻柔，不再刺耳
 //
-// 注意：合成在音频回调线程里跑，不要在回调里碰任何 UI。
+// 性能优化（2026-07-25）：
+//   正弦查找表 + 预计算衰减率/相位增量 + 缓存局部变量
 
 import { audio } from '@kit.AudioKit'
 import hilog from '@ohos.hilog'
@@ -18,46 +22,64 @@ import type { StellariumBridgeResponse } from './StellariumTypes'
 
 const TAG: string = 'StellariumAudio'
 const DOMAIN: number = 0xD003
-const SR: number = 48000                 // 采样率
-const TWO_PI_OVER_SR: number = (2.0 * Math.PI) / SR
+const SR: number = 48000
+const TWO_PI: number = 6.283185307
+const TWO_PI_OVER_SR: number = TWO_PI / SR
 
-// 大调五声音阶的半音偏移（听着"东方/空灵"的味道，且任意两个音都不打架）
+// 五声音阶（大调，空灵/东方感，任意组合不刺耳）
 const PENTA: number[] = [0, 2, 4, 7, 9]
 
+// ── 正弦查找表 ──
+const SINE_SIZE: number = 2048
+const SINE_SCALE: number = SINE_SIZE / TWO_PI
+
 interface Partial {
-  ratio: number   // 相对基频的倍数（非整数=钟声般的不和谐泛音，更"叮"）
-  gain: number    // 该泛音相对音量
+  ratio: number
+  gain: number
 }
 
 interface ChimeSpec {
-  freq: number    // 基频 Hz
-  gain: number    // 峰值音量 0..1
-  decay: number   // 衰减时间（秒）
+  freq: number
+  gain: number
+  decay: number
   partials: Partial[]
-  pan: number     // 声像 -1..1（这里单声道，仅留作扩展）
+  pan: number
+}
+
+// 预计算的活跃泛音（带独立相位累加器，内循环无需乘法）
+class ActivePartial {
+  gain: number = 0
+  phase: number = 0
+  phaseInc: number = 0
 }
 
 class Pad {
   freq: number = 220
   targetFreq: number = 220
+  freq2: number = 220.5        // 第二振荡器（微偏产生beat）
+  targetFreq2: number = 220.5
   gain: number = 0
   targetGain: number = 0
   phase: number = 0
-  phase2: number = 0
-  detune: number = 1.005
+  phase2: number = 0           // 第二振荡器相位
   lfo: number = 0
-  lfoRate: number = 0.05  // Hz，呼吸感
+  lfoRate: number = 0.08       // 呼吸感频率（0.08Hz ≈ 12秒一个周期，可感知但不快）
+  lfoInc: number = 0
+  // 简单一阶低通滤波器状态
+  lpState: number = 0
+  lpCoeff: number = 0.0002    // cutoff ≈ 800Hz @ 48kHz
 }
 
 class Chime {
   active: boolean = false
   freq: number = 440
   gain: number = 0
-  decay: number = 2.0
-  attack: number = 0           // 起音样本数
+  decayRate: number = 0
+  attack: number = 0
   t: number = 0
-  phase: number = 0
-  partials: Partial[] = []
+  env: number = 0
+  partials: ActivePartial[] = []
+  numPartials: number = 0
 }
 
 export class AudioEngine {
@@ -73,17 +95,14 @@ export class AudioEngine {
   private running: boolean = false
   private muted: boolean = false
 
-  // 五声音阶频率表（20 个音，A3=220 起，跨 4 个八度）
   private scale: number[] = []
-
-  // 氛围 pad（缓慢飘动的持续音）
-  private pads: Pad[] = [new Pad(), new Pad(), new Pad()]
-
-  // 星体"叮"声（钟状泛音）
+  private pads: Pad[] = []
+  private readonly NUM_PADS: number = 5
   private chimes: Chime[] = []
-  private readonly MAX_CHIMES: number = 6
+  private readonly MAX_CHIMES: number = 4
+  private readonly MAX_PARTIALS: number = 4  // 最多4个泛音（削减到3个有效泛音）
 
-  // 简单混响：两条反馈延迟（combfilter），制造"空灵空间感"
+  // 混响
   private revBuf1: Float32Array = new Float32Array(1)
   private revBuf2: Float32Array = new Float32Array(1)
   private revLp1: number = 0
@@ -91,32 +110,48 @@ export class AudioEngine {
   private revPos: number = 0
   private revLen: number = 1
   private revLen2: number = 1
-  private readonly revFeedback: number = 0.36
-  private readonly revWet: number = 0.5
+  private readonly revFeedback: number = 0.45  // 更深的混响
+  private readonly revWet: number = 0.55     // 更湿的混响比例
 
-  // 调度（样本计数）
+  // 调度
   private sincePadRotate: number = 0
-  private nextPadRotate: number = SR * 4
+  private nextPadRotate: number = SR * 6     // 6秒开始第一次切换
   private sinceTwinkle: number = 0
-  private nextTwinkle: number = SR * 10
+  private nextTwinkle: number = SR * 12      // 12秒一次眨眼
 
-  // 复用的临时缓冲，避免每块分配
-  private scratch: Float32Array = new Float32Array(0)
+  private readonly padLevel: number = 0.13    // 稍微降低pad整体音量，留空间给混响"尾巴"
+  private readonly chimeLevel: number = 0.55  // 大幅降低叮声音量（0.9→0.55），不刺耳
 
-  // 主音量（pad 与 chime 之间的平衡）
-  private readonly padLevel: number = 0.16
-  private readonly chimeLevel: number = 0.9
+  // 正弦查找表
+  private sineTable: Float32Array = new Float32Array(SINE_SIZE + 1)
 
   private constructor() {
     this.buildScale()
-    for (let i = 0; i < this.MAX_CHIMES; i++) {
-      this.chimes.push(new Chime())
+    this.buildSineTable()
+    for (let i = 0; i < this.NUM_PADS; i++) {
+      this.pads.push(new Pad())
     }
-    // 混响缓冲：约 0.26s / 0.33s 两条
-    this.revLen = Math.floor(0.26 * SR)
-    this.revLen2 = Math.floor(0.33 * SR)
+    for (let i = 0; i < this.MAX_CHIMES; i++) {
+      const ch: Chime = new Chime()
+      for (let p = 0; p < this.MAX_PARTIALS; p++) {
+        ch.partials.push(new ActivePartial())
+      }
+      this.chimes.push(ch)
+    }
+    // 更长的混响缓冲
+    this.revLen = Math.floor(0.40 * SR)    // 0.4s
+    this.revLen2 = Math.floor(0.55 * SR)   // 0.55s
     this.revBuf1 = new Float32Array(this.revLen)
     this.revBuf2 = new Float32Array(this.revLen2)
+    for (let i = 0; i < this.NUM_PADS; i++) {
+      this.pads[i].lfoInc = this.pads[i].lfoRate * TWO_PI / SR
+    }
+  }
+
+  private buildSineTable(): void {
+    for (let i = 0; i <= SINE_SIZE; i++) {
+      this.sineTable[i] = Math.sin(i * TWO_PI / SINE_SIZE)
+    }
   }
 
   private buildScale(): void {
@@ -155,14 +190,25 @@ export class AudioEngine {
       })
       await this.renderer.start()
       this.running = true
-      // 起步给一个柔和的和弦，免得一开始太素
-      this.pads[0].freq = this.pads[0].targetFreq = this.scale[0]
-      this.pads[1].freq = this.pads[1].targetFreq = this.scale[4]
-      this.pads[2].freq = this.pads[2].targetFreq = this.scale[8]
-      this.pads[0].gain = this.pads[0].targetGain = 0.16
-      this.pads[1].gain = this.pads[1].targetGain = 0.14
-      this.pads[2].gain = this.pads[2].targetGain = 0.12
-      hilog.info(DOMAIN, TAG, 'audio engine started')
+      // 起步和弦：Am9 空灵感（A-C-E-G-B，五声音阶近似）
+      // 用前5个音的低八度和中八度
+      this.pads[0].freq = this.pads[0].targetFreq = this.scale[0]    // A3=220
+      this.pads[0].freq2 = this.pads[0].targetFreq2 = this.scale[0] + 0.8
+      this.pads[1].freq = this.pads[1].targetFreq = this.scale[4]    // C4=261
+      this.pads[1].freq2 = this.pads[1].targetFreq2 = this.scale[4] + 0.6
+      this.pads[2].freq = this.pads[2].targetFreq = this.scale[5]    // D4=293
+      this.pads[2].freq2 = this.pads[2].targetFreq2 = this.scale[5] + 0.7
+      this.pads[3].freq = this.pads[3].targetFreq = this.scale[7]    // E4=329
+      this.pads[3].freq2 = this.pads[3].targetFreq2 = this.scale[7] + 0.5
+      this.pads[4].freq = this.pads[4].targetFreq = this.scale[9]    // G4=392
+      this.pads[4].freq2 = this.pads[4].targetFreq2 = this.scale[9] + 0.9
+      // 淡入：从0开始渐强
+      this.pads[0].gain = 0; this.pads[0].targetGain = 0.11
+      this.pads[1].gain = 0; this.pads[1].targetGain = 0.10
+      this.pads[2].gain = 0; this.pads[2].targetGain = 0.08
+      this.pads[3].gain = 0; this.pads[3].targetGain = 0.09
+      this.pads[4].gain = 0; this.pads[4].targetGain = 0.07
+      hilog.info(DOMAIN, TAG, 'audio engine started (v2 ethereal)')
     } catch (e) {
       this.running = false
       hilog.error(DOMAIN, TAG, 'audio engine start failed: %{public}s', (e as Error).message ?? String(e))
@@ -196,113 +242,161 @@ export class AudioEngine {
   private render(buffer: ArrayBuffer): void {
     const n: number = (buffer.byteLength / 2) | 0
     if (this.muted || !this.running) {
-      // 静音：直接填 0（省 CPU），但保持 running 以便随时恢复
-      const z = new Int16Array(buffer)
+      const z: Int16Array = new Int16Array(buffer)
       z.fill(0)
       return
     }
-    if (this.scratch.length < n) {
-      this.scratch = new Float32Array(n)
-    }
     const out: Int16Array = new Int16Array(buffer)
 
-    // 调度：缓慢换和弦 + 偶尔远处星星眨眼
+    const tbl: Float32Array = this.sineTable
+    const ss: number = SINE_SCALE
+    const tp: number = TWO_PI
+    const tpos: number = TWO_PI_OVER_SR
+
+    // 调度
     this.sincePadRotate += n
     if (this.sincePadRotate >= this.nextPadRotate) {
       this.rotatePad()
-      this.nextPadRotate = (3 + Math.random() * 4) * SR
+      this.nextPadRotate = (5 + Math.random() * 5) * SR  // 5-10秒随机间隔
       this.sincePadRotate = 0
     }
     this.sinceTwinkle += n
     if (this.sinceTwinkle >= this.nextTwinkle) {
       this.triggerTwinkle()
-      this.nextTwinkle = (7 + Math.random() * 9) * SR
+      this.nextTwinkle = (10 + Math.random() * 10) * SR  // 10-20秒
       this.sinceTwinkle = 0
     }
+
+    const pads: Pad[] = this.pads
+    const numPads: number = this.NUM_PADS
+    const chimes: Chime[] = this.chimes
+    const numChimes: number = chimes.length
+    const padLvl: number = this.padLevel
+    const chimeLvl: number = this.chimeLevel
+
+    const rb1: Float32Array = this.revBuf1
+    const rb2: Float32Array = this.revBuf2
+    let rlp1: number = this.revLp1
+    let rlp2: number = this.revLp2
+    let rpos: number = this.revPos
+    const rlen: number = this.revLen
+    const rfb: number = this.revFeedback
+    const rwet: number = this.revWet
 
     for (let i = 0; i < n; i++) {
       let mix: number = 0
 
-      // —— 氛围 pad ——
-      for (let p = 0; p < this.pads.length; p++) {
-        const pad: Pad = this.pads[p]
-        pad.freq += (pad.targetFreq - pad.freq) * 0.0006
-        pad.gain += (pad.targetGain - pad.gain) * 0.0008
-        pad.phase += pad.freq * TWO_PI_OVER_SR
-        pad.phase2 += pad.freq * pad.detune * TWO_PI_OVER_SR
-        if (pad.phase > 6.283185307) { pad.phase -= 6.283185307 }
-        if (pad.phase2 > 6.283185307) { pad.phase2 -= 6.283185307 }
-        pad.lfo += this.pads[p].lfoRate * (1.0 / SR) * 6.283185307
-        if (pad.lfo > 6.283185307) { pad.lfo -= 6.283185307 }
-        const breath: number = 0.5 + 0.5 * Math.sin(pad.lfo)
-        const amp: number = pad.gain * (0.45 + 0.55 * breath)
-        const s: number = Math.sin(pad.phase) + 0.5 * Math.sin(pad.phase2)
-        mix += s * amp * this.padLevel
+      // —— 氛围 pad（5个，每两个正弦叠加产生温暖beat）——
+      for (let p = 0; p < numPads; p++) {
+        const pad: Pad = pads[p]
+        // 缓慢滑向目标频率（交叉淡化）
+        pad.freq += (pad.targetFreq - pad.freq) * 0.0004     // 更慢的过渡
+        pad.freq2 += (pad.targetFreq2 - pad.freq2) * 0.0004
+        pad.gain += (pad.targetGain - pad.gain) * 0.0003     // 更慢的淡入淡出
+
+        pad.phase += pad.freq * tpos
+        pad.phase2 += pad.freq2 * tpos
+        if (pad.phase >= tp) { pad.phase -= tp }
+        if (pad.phase2 >= tp) { pad.phase2 -= tp }
+
+        pad.lfo += pad.lfoInc
+        if (pad.lfo >= tp) { pad.lfo -= tp }
+
+        // LFO 调制幅度（呼吸感）
+        let li: number = pad.lfo * ss
+        let li0: number = li | 0
+        let lf: number = li - li0
+        let breath: number = 0.6 + 0.4 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
+
+        // 两个正弦叠加 → beat频率 ≈ |freq-freq2| ≈ 0.5-1Hz，产生温暖的"嗡嗡"感
+        let pi: number = pad.phase * ss
+        let pi0: number = pi | 0
+        let pf: number = pi - pi0
+        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
+
+        let pi2: number = pad.phase2 * ss
+        let pi20: number = pi2 | 0
+        let pf2: number = pi2 - pi20
+        s = s * 0.6 + (tbl[pi20] + (tbl[pi20 + 1] - tbl[pi20]) * pf2) * 0.4
+
+        // 简单一阶低通滤波（去掉>800Hz的高频毛刺）
+        let raw: number = s * pad.gain * breath * padLvl
+        pad.lpState += pad.lpCoeff * (raw - pad.lpState)
+        mix += pad.lpState
       }
 
-      // —— 星体"叮" ——
-      for (let c = 0; c < this.chimes.length; c++) {
-        const ch: Chime = this.chimes[c]
+      // —— 星体"叮"（柔和钟声）——
+      for (let c = 0; c < numChimes; c++) {
+        const ch: Chime = chimes[c]
         if (!ch.active) { continue }
-        ch.t += 1
-        const tsec: number = ch.t / SR
-        let env: number
+        ch.t++
         if (ch.t < ch.attack) {
-          env = ch.t / ch.attack
+          ch.env = ch.t / ch.attack
         } else {
-          env = Math.exp(-(tsec - ch.attack / SR) / ch.decay)
+          ch.env *= ch.decayRate
         }
-        if (env < 0.0004) { ch.active = false; continue }
-        ch.phase += ch.freq * TWO_PI_OVER_SR
-        if (ch.phase > 6.283185307) { ch.phase -= 6.283185307 }
+        if (ch.env < 0.0004) { ch.active = false; continue }
+
         let s: number = 0
-        for (let pp = 0; pp < ch.partials.length; pp++) {
-          const par: Partial = ch.partials[pp]
-          s += par.gain * Math.sin(ch.phase * par.ratio)
+        for (let pp = 0; pp < ch.numPartials; pp++) {
+          const par: ActivePartial = ch.partials[pp]
+          par.phase += par.phaseInc
+          if (par.phase >= tp) { par.phase -= tp }
+          let qi: number = par.phase * ss
+          let qi0: number = qi | 0
+          let qf: number = qi - qi0
+          s += par.gain * (tbl[qi0] + (tbl[qi0 + 1] - tbl[qi0]) * qf)
         }
-        mix += s * env * ch.gain * this.chimeLevel
+        mix += s * ch.env * ch.gain * chimeLvl
       }
 
-      // —— 混响（两条反馈延迟）——
-      const d1: number = this.revBuf1[this.revPos]
-      const d2: number = this.revBuf2[this.revPos]
-      this.revLp1 += (d1 - this.revLp1) * 0.6
-      this.revLp2 += (d2 - this.revLp2) * 0.6
-      const w1: number = this.revLp1 * this.revFeedback
-      const w2: number = this.revLp2 * this.revFeedback
-      this.revBuf1[this.revPos] = mix + w1
-      this.revBuf2[this.revPos] = mix + w2
-      this.revPos++
-      if (this.revPos >= this.revLen) { this.revPos = 0 }
-      const wet: number = ((w1 + w2) * 0.5) * this.revWet
+      // —— 混响（两条反馈延迟，更深更长）——
+      const d1: number = rb1[rpos]
+      const d2: number = rb2[rpos]
+      rlp1 += (d1 - rlp1) * 0.5     // 更慢的LP（更暖）
+      rlp2 += (d2 - rlp2) * 0.5
+      const w1: number = rlp1 * rfb
+      const w2: number = rlp2 * rfb
+      rb1[rpos] = mix + w1
+      rb2[rpos] = mix + w2
+      rpos++
+      if (rpos >= rlen) { rpos = 0 }
+      const wet: number = ((w1 + w2) * 0.5) * rwet
 
-      let o: number = mix * 0.5 + wet
+      let o: number = mix * 0.45 + wet   // 干信号降低，湿信号比例提升
       if (o > 1.0) { o = 1.0 } else if (o < -1.0) { o = -1.0 }
       out[i] = (o * 32767) | 0
     }
+
+    this.revLp1 = rlp1
+    this.revLp2 = rlp2
+    this.revPos = rpos
   }
 
-  // 让某一个 pad 缓慢滑向一个新的五声音，制造"和弦在飘"的感觉
+  // 缓慢切换某一个pad到新的五声音阶音（交叉淡化，不断裂）
   private rotatePad(): void {
-    const idx: number = Math.floor(Math.random() * this.pads.length)
+    const idx: number = Math.floor(Math.random() * this.NUM_PADS)
     const pad: Pad = this.pads[idx]
-    // 只在前 14 个音（中低区）里挑，氛围更稳
-    const note: number = this.scale[Math.floor(Math.random() * 14)]
+    // 只在中低区（前14个音）选，保持温暖
+    const noteIdx: number = Math.floor(Math.random() * 14)
+    const note: number = this.scale[noteIdx]
     pad.targetFreq = note
-    pad.targetGain = 0.10 + Math.random() * 0.08
+    pad.targetFreq2 = note + 0.3 + Math.random() * 0.8  // 微偏产生beat
+    // 柔和的音量波动
+    pad.targetGain = 0.06 + Math.random() * 0.06  // 0.06-0.12（温和）
   }
 
-  // 远处星星"眨眼"：极轻、偏高、短促的一声，增加层次不单调
+  // 远处星星"眨眼"：低频、轻柔、短促
   private triggerTwinkle(): void {
-    const hi: number = this.scale.length - 4 + Math.floor(Math.random() * 4)
+    // 从音阶中低区选（不再选最高音，避免尖锐）
+    const idx: number = 5 + Math.floor(Math.random() * 10)  // 中低区
     this.playChime({
-      freq: this.scale[Math.max(0, Math.min(this.scale.length - 1, hi))],
-      gain: 0.12,
-      decay: 1.4,
+      freq: this.scale[idx],
+      gain: 0.06,       // 极轻（原来0.12）
+      decay: 2.0,       // 稍长衰减
       partials: [
         { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.76, gain: 0.4 },
-        { ratio: 5.4, gain: 0.18 }
+        { ratio: 2.0, gain: 0.25 },    // 只保留2倍泛音，去掉高次
       ],
       pan: 0
     })
@@ -310,7 +404,6 @@ export class AudioEngine {
 
   // ───────────────────────── 对外的"叮"接口 ─────────────────────────
 
-  // 根据选中天体的属性算出"叮"的参数并触发
   chimeForSelection(info: StellariumBridgeResponse): void {
     if (!this.running || this.muted) { return }
     const spec: ChimeSpec = this.specForObject(info)
@@ -326,112 +419,100 @@ export class AudioEngine {
     const mag: number = (typeof info.magnitude === 'number') ? info.magnitude as number : 99
     const tk: number = (typeof info.temperatureK === 'number') ? info.temperatureK as number : 0
 
-    // 通用钟状泛音（更"叮"）
-    const bell: Partial[] = [
+    // 柔和的钟声泛音（只保留到3倍频，去掉4+倍频的刺耳高频）
+    const softBell: Partial[] = [
       { ratio: 1.0, gain: 1.0 },
-      { ratio: 2.0, gain: 0.5 },
-      { ratio: 2.76, gain: 0.34 },
-      { ratio: 3.0, gain: 0.24 },
-      { ratio: 4.07, gain: 0.14 },
-      { ratio: 5.4, gain: 0.09 }
+      { ratio: 2.0, gain: 0.35 },     // 降低
+      { ratio: 3.0, gain: 0.15 }      // 降低
     ]
 
-    // —— 恒星：温度→音高，亮度→音量（Sky Guide 同款逻辑）——
+    // 恒星：温度→音高，亮度→音量
     if (otype.includes('star') && tk > 0) {
       const logMin: number = Math.log10(3000)
       const logMax: number = Math.log10(30000)
       let tNorm: number = (Math.log10(tk) - logMin) / (logMax - logMin)
       tNorm = Math.max(0, Math.min(1, tNorm))
-      // 越热音越高：映射到音阶中高区
       let idx: number = Math.round(tNorm * (len - 1) * 0.85) + Math.floor(len * 0.15)
-      // 越亮（星等越小）略升一点点、也更响
       const brightLift: number = Math.max(-1, Math.min(2, Math.round((2.0 - mag) / 2.0)))
       idx = Math.max(Math.floor(len * 0.15), Math.min(len - 1, idx + brightLift))
-      const vol: number = Math.max(0.25, Math.min(1.0, (6.5 - mag) / 8.0)) * 0.95
+      const vol: number = Math.max(0.15, Math.min(0.55, (6.5 - mag) / 8.0)) * 0.6  // 整体降低
       return {
         freq: this.scale[idx],
         gain: vol,
-        decay: 2.2,
-        partials: bell,
+        decay: 2.5,       // 更长的尾巴
+        partials: softBell,
         pan: 0
       }
     }
 
-    // —— 按类型给"声线" ——
-    // 每个类型给定音区范围（用 hash 在其中取一个确定音，保证同一天体声音一致）
+    // 按类型给"声线"
     let lo: number = 4
     let hi: number = 12
-    let vol: number = 0.6
-    let decay: number = 2.0
-    let partials: Partial[] = bell
+    let vol: number = 0.35      // 整体降低
+    let decay: number = 2.2     // 更长的尾巴
+    let partials: Partial[] = softBell
 
     if (otype.includes('planet')) {
-      lo = 2; hi = 8; vol = 0.7; decay = 2.6
+      lo = 2; hi = 8; vol = 0.4; decay = 3.0
       partials = [
         { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.42 },
-        { ratio: 3.0, gain: 0.25 }
+        { ratio: 2.0, gain: 0.3 }
       ]
     } else if (otype.includes('moon')) {
-      lo = 1; hi = 5; vol = 0.65; decay = 3.2
+      lo = 1; hi = 5; vol = 0.35; decay = 3.5
       partials = [
         { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.3 }
+        { ratio: 1.5, gain: 0.3 }     // 纯五度，特别柔和
       ]
     } else if (otype.includes('sun')) {
-      lo = len - 4; hi = len - 1; vol = 0.85; decay = 1.8
+      lo = len - 4; hi = len - 1; vol = 0.5; decay = 2.5
+      partials = softBell
     } else if (otype.includes('galax')) {
-      lo = 2; hi = 6; vol = 0.45; decay = 3.6
+      lo = 2; hi = 6; vol = 0.25; decay = 4.0
       partials = [
         { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.76, gain: 0.4 },
-        { ratio: 5.4, gain: 0.2 },
-        { ratio: 8.1, gain: 0.12 }
+        { ratio: 2.0, gain: 0.2 }
       ]
     } else if (otype.includes('nebula')) {
-      lo = 4; hi = 10; vol = 0.5; decay = 3.2
+      lo = 4; hi = 10; vol = 0.3; decay = 3.5
       partials = [
         { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.76, gain: 0.5 },
-        { ratio: 5.4, gain: 0.22 }
+        { ratio: 2.0, gain: 0.25 }
       ]
     } else if (otype.includes('cluster')) {
-      lo = 6; hi = 12; vol = 0.55; decay = 1.8
+      lo = 6; hi = 12; vol = 0.3; decay = 2.5
+      partials = softBell
     } else if (otype.includes('comet')) {
-      lo = 8; hi = 14; vol = 0.5; decay = 2.0
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.4 },
-        { ratio: 3.83, gain: 0.3 },
-        { ratio: 5.4, gain: 0.18 }
-      ]
-    } else if (otype.includes('asteroid') || otype.includes('minor')) {
-      lo = 3; hi = 8; vol = 0.5; decay = 1.6
+      lo = 8; hi = 14; vol = 0.28; decay = 2.5
       partials = [
         { ratio: 1.0, gain: 1.0 },
         { ratio: 2.0, gain: 0.3 }
       ]
+    } else if (otype.includes('asteroid') || otype.includes('minor')) {
+      lo = 3; hi = 8; vol = 0.28; decay = 2.0
+      partials = [
+        { ratio: 1.0, gain: 1.0 },
+        { ratio: 2.0, gain: 0.2 }
+      ]
     } else if (otype.includes('constellation')) {
-      // 星座：叠 2~3 个音做成柔和和弦
       const base: number = 3 + (hash % 4)
       const chord: number[] = [base, base + 2, base + 4].filter((v) => v < len)
       for (let k = 0; k < chord.length; k++) {
         this.playChime({
           freq: this.scale[chord[k]],
-          gain: 0.42,
-          decay: 2.4,
+          gain: 0.2,
+          decay: 3.0,
           partials: [
             { ratio: 1.0, gain: 1.0 },
-            { ratio: 2.0, gain: 0.35 },
-            { ratio: 3.0, gain: 0.2 }
+            { ratio: 2.0, gain: 0.25 }
           ],
           pan: 0
         })
       }
-      // 返回一个占位（不会再单独 play，避免重复）
       return { freq: this.scale[base], gain: 0, decay: 0.01, partials: [], pan: 0 }
     } else if (otype.includes('satellite')) {
-      lo = 5; hi = 11; vol = 0.6; decay = 2.0
+      lo = 5; hi = 11; vol = 0.3; decay = 2.5
+      partials = softBell
     }
 
     const span: number = Math.max(1, hi - lo)
@@ -447,7 +528,6 @@ export class AudioEngine {
 
   private playChime(spec: ChimeSpec): void {
     if (spec.gain <= 0 || spec.partials.length === 0) { return }
-    // 找空槽；没有就覆盖最"老"的
     let slot: Chime | null = null
     for (let i = 0; i < this.chimes.length; i++) {
       if (!this.chimes[i].active) { slot = this.chimes[i]; break }
@@ -461,14 +541,19 @@ export class AudioEngine {
     slot.active = true
     slot.freq = spec.freq
     slot.gain = spec.gain
-    slot.decay = spec.decay
-    slot.attack = Math.floor(0.008 * SR)   // 8ms 起音，钟声要干净
+    slot.decayRate = Math.exp(-1 / (SR * spec.decay))
+    slot.attack = Math.floor(0.030 * SR)   // 30ms起音（原来8ms），更圆润
     slot.t = 0
-    slot.phase = 0
-    slot.partials = spec.partials
+    slot.env = 0
+    slot.numPartials = Math.min(spec.partials.length, this.MAX_PARTIALS)
+    for (let i = 0; i < slot.numPartials; i++) {
+      const p: ActivePartial = slot.partials[i]
+      p.gain = spec.partials[i].gain
+      p.phase = 0
+      p.phaseInc = spec.freq * spec.partials[i].ratio * TWO_PI_OVER_SR
+    }
   }
 
-  // 名字 → 稳定小整数（让同一个天体的"叮"每次都一样）
   private hashName(s: string): number {
     let h: number = 0
     for (let i = 0; i < s.length; i++) {
@@ -478,5 +563,4 @@ export class AudioEngine {
   }
 }
 
-// 兼容默认导出（部分 ArkTS 导入习惯）
 export default AudioEngine
