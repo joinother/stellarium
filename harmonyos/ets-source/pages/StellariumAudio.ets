@@ -1,7 +1,10 @@
 // StellariumAudio.ets
 // 程序化（生成式）音乐引擎 —— 模仿 Sky Guide 的"空灵底噪 + 点星体叮一声"。
 //
-// 音色优化（2026-07-25 v2）：
+// 音色优化（2026-07-26 v3）：
+//   性能：Drone数组→独立属性、展开内循环、pad 5→3
+//   音色：drone sub-bass + 和弦层提供浑厚持续主音
+
 //   1) 背景Pad：5个pad（比原来3个更丰满），每个用两个低频正弦叠加产生"温暖"
 //      的beat频率（2Hz），加上7-12Hz的慢LFO呼吸感，比原来0.05Hz更可感知
 //   2) 泛音大幅削减：ratio从{1,2,2.76,3,4.07,5.4}削减到{1,2,3}，去掉>3倍频
@@ -70,6 +73,34 @@ class Pad {
   lpCoeff: number = 0.0002    // cutoff ≈ 800Hz @ 48kHz
 }
 
+// 浑厚主音 drone：持续低频 + 慢速和弦变化
+// 优化：用独立属性替代数组，消除内循环数组访问
+class Drone {
+  freq: number = 55           // sub-bass 频率（A1=55Hz）
+  targetFreq: number = 55
+  phase: number = 0
+  phase2: number = 0          // 第二振荡器（五度上方）
+  freq2: number = 82.5        // E2=82.5Hz（纯五度）
+  targetFreq2: number = 82.5
+  gain: number = 0
+  targetGain: number = 0.18   // drone 比 pads 更响
+  // 和弦层：3个中频泛音（独立属性，避免数组访问开销）
+  harmPhase0: number = 0
+  harmPhase1: number = 0
+  harmPhase2: number = 0
+  harmFreq0: number = 220
+  harmFreq1: number = 277
+  harmFreq2: number = 330
+  targetHarmFreq0: number = 220
+  targetHarmFreq1: number = 277
+  targetHarmFreq2: number = 330
+  harmGain0: number = 0.06
+  harmGain1: number = 0.05
+  harmGain2: number = 0.04
+  lpState: number = 0
+  lpCoeff: number = 0.0008    // cutoff ~2kHz，保留中频
+}
+
 class Chime {
   active: boolean = false
   freq: number = 440
@@ -97,10 +128,24 @@ export class AudioEngine {
 
   private scale: number[] = []
   private pads: Pad[] = []
-  private readonly NUM_PADS: number = 5
+  private readonly NUM_PADS: number = 3
   private chimes: Chime[] = []
   private readonly MAX_CHIMES: number = 4
   private readonly MAX_PARTIALS: number = 4  // 最多4个泛音（削减到3个有效泛音）
+  private drone: Drone = new Drone()
+
+  // 和弦进行：5组和弦，每 8-12 秒切换一次
+  // 每组 [root, third, fifth] 对应五声音阶中的音
+  private readonly chordProgression: number[][] = [
+    [0, 4, 7],    // Am: A-C-E
+    [2, 5, 9],    // C: C-D-G
+    [4, 7, 12],   // Em: E-G-B(高八度)
+    [0, 5, 7],    // sus4: A-D-E
+    [2, 4, 9],    // Cmaj7: C-E-G
+  ]
+  private chordIndex: number = 0
+  private sinceChordChange: number = 0
+  private nextChordChange: number = 0
 
   // 混响
   private revBuf1: Float32Array = new Float32Array(1)
@@ -119,7 +164,7 @@ export class AudioEngine {
   private sinceTwinkle: number = 0
   private nextTwinkle: number = SR * 12      // 12秒一次眨眼
 
-  private readonly padLevel: number = 0.13    // 稍微降低pad整体音量，留空间给混响"尾巴"
+  private readonly padLevel: number = 0.18    // 提升 pad 音量，让背景更丰满
   private readonly chimeLevel: number = 0.55  // 大幅降低叮声音量（0.9→0.55），不刺耳
 
   // 正弦查找表
@@ -146,6 +191,23 @@ export class AudioEngine {
     for (let i = 0; i < this.NUM_PADS; i++) {
       this.pads[i].lfoInc = this.pads[i].lfoRate * TWO_PI / SR
     }
+    // 初始化 drone
+    this.drone.lpCoeff = 0.0008
+    this.nextChordChange = SR * 10  // 10秒后第一次换和弦
+    this.applyChord(0)
+  }
+
+  // 应用和弦：更新 drone 的目标和弦频率
+  private applyChord(idx: number): void {
+    const chord = this.chordProgression[idx % this.chordProgression.length]
+    const len = this.scale.length
+    // sub-bass: 和弦根音的低两个八度
+    this.drone.targetFreq = this.scale[Math.min(chord[0], len - 1)] * 0.25
+    this.drone.targetFreq2 = this.scale[Math.min(chord[2], len - 1)] * 0.25
+    // 和弦层：3个中频泛音（独立属性赋值）
+    this.drone.targetHarmFreq0 = this.scale[Math.min(chord[0], len - 1)]
+    this.drone.targetHarmFreq1 = this.scale[Math.min(chord[1], len - 1)]
+    this.drone.targetHarmFreq2 = this.scale[Math.min(chord[2], len - 1)]
   }
 
   private buildSineTable(): void {
@@ -196,18 +258,14 @@ export class AudioEngine {
       this.pads[0].freq2 = this.pads[0].targetFreq2 = this.scale[0] + 0.8
       this.pads[1].freq = this.pads[1].targetFreq = this.scale[4]    // C4=261
       this.pads[1].freq2 = this.pads[1].targetFreq2 = this.scale[4] + 0.6
-      this.pads[2].freq = this.pads[2].targetFreq = this.scale[5]    // D4=293
-      this.pads[2].freq2 = this.pads[2].targetFreq2 = this.scale[5] + 0.7
-      this.pads[3].freq = this.pads[3].targetFreq = this.scale[7]    // E4=329
-      this.pads[3].freq2 = this.pads[3].targetFreq2 = this.scale[7] + 0.5
-      this.pads[4].freq = this.pads[4].targetFreq = this.scale[9]    // G4=392
-      this.pads[4].freq2 = this.pads[4].targetFreq2 = this.scale[9] + 0.9
-      // 淡入：从0开始渐强
-      this.pads[0].gain = 0; this.pads[0].targetGain = 0.11
-      this.pads[1].gain = 0; this.pads[1].targetGain = 0.10
-      this.pads[2].gain = 0; this.pads[2].targetGain = 0.08
-      this.pads[3].gain = 0; this.pads[3].targetGain = 0.09
-      this.pads[4].gain = 0; this.pads[4].targetGain = 0.07
+      this.pads[2].freq = this.pads[2].targetFreq = this.scale[7]    // E4=329
+      this.pads[2].freq2 = this.pads[2].targetFreq2 = this.scale[7] + 0.5
+      // 淡入：从0开始渐强（3个pad，音量略提升补偿数量减少）
+      this.pads[0].gain = 0; this.pads[0].targetGain = 0.16
+      this.pads[1].gain = 0; this.pads[1].targetGain = 0.14
+      this.pads[2].gain = 0; this.pads[2].targetGain = 0.12
+      // drone 淡入
+      this.drone.gain = 0; this.drone.targetGain = 0.20
       hilog.info(DOMAIN, TAG, 'audio engine started (v2 ethereal)')
     } catch (e) {
       this.running = false
@@ -265,6 +323,14 @@ export class AudioEngine {
       this.triggerTwinkle()
       this.nextTwinkle = (10 + Math.random() * 10) * SR  // 10-20秒
       this.sinceTwinkle = 0
+    }
+    // 和弦变化调度（8-12秒切换）
+    this.sinceChordChange += n
+    if (this.sinceChordChange >= this.nextChordChange) {
+      this.chordIndex = (this.chordIndex + 1) % this.chordProgression.length
+      this.applyChord(this.chordIndex)
+      this.nextChordChange = (8 + Math.random() * 4) * SR  // 8-12秒
+      this.sinceChordChange = 0
     }
 
     const pads: Pad[] = this.pads
@@ -324,6 +390,54 @@ export class AudioEngine {
         pad.lpState += pad.lpCoeff * (raw - pad.lpState)
         mix += pad.lpState
       }
+
+      // —— 浑厚主音 drone（sub-bass + 和弦层，展开循环优化）——
+      const dr: Drone = this.drone
+      // 缓慢滑向目标和弦（独立属性，无数组访问）
+      dr.freq += (dr.targetFreq - dr.freq) * 0.0003
+      dr.freq2 += (dr.targetFreq2 - dr.freq2) * 0.0003
+      dr.gain += (dr.targetGain - dr.gain) * 0.0002
+      dr.harmFreq0 += (dr.targetHarmFreq0 - dr.harmFreq0) * 0.0003
+      dr.harmFreq1 += (dr.targetHarmFreq1 - dr.harmFreq1) * 0.0003
+      dr.harmFreq2 += (dr.targetHarmFreq2 - dr.harmFreq2) * 0.0003
+
+      // sub-bass: 两个低频正弦叠加（根音 + 五度）
+      dr.phase += dr.freq * tpos
+      if (dr.phase >= tp) { dr.phase -= tp }
+      dr.phase2 += dr.freq2 * tpos
+      if (dr.phase2 >= tp) { dr.phase2 -= tp }
+      let di: number = dr.phase * ss
+      let di0: number = di | 0
+      let df: number = di - di0
+      let bass: number = tbl[di0] + (tbl[di0 + 1] - tbl[di0]) * df
+      let di2: number = dr.phase2 * ss
+      let di20: number = di2 | 0
+      let df2: number = di2 - di20
+      bass = bass * 0.7 + (tbl[di20] + (tbl[di20 + 1] - tbl[di20]) * df2) * 0.3
+
+      // 和弦层：3个中频正弦（展开循环，独立属性）
+      dr.harmPhase0 += dr.harmFreq0 * tpos
+      if (dr.harmPhase0 >= tp) { dr.harmPhase0 -= tp }
+      let ci0n: number = (dr.harmPhase0 * ss) | 0
+      let cf0n: number = dr.harmPhase0 * ss - ci0n
+      let chord: number = dr.harmGain0 * (tbl[ci0n] + (tbl[ci0n + 1] - tbl[ci0n]) * cf0n)
+
+      dr.harmPhase1 += dr.harmFreq1 * tpos
+      if (dr.harmPhase1 >= tp) { dr.harmPhase1 -= tp }
+      let ci1n: number = (dr.harmPhase1 * ss) | 0
+      let cf1n: number = dr.harmPhase1 * ss - ci1n
+      chord += dr.harmGain1 * (tbl[ci1n] + (tbl[ci1n + 1] - tbl[ci1n]) * cf1n)
+
+      dr.harmPhase2 += dr.harmFreq2 * tpos
+      if (dr.harmPhase2 >= tp) { dr.harmPhase2 -= tp }
+      let ci2n: number = (dr.harmPhase2 * ss) | 0
+      let cf2n: number = dr.harmPhase2 * ss - ci2n
+      chord += dr.harmGain2 * (tbl[ci2n] + (tbl[ci2n + 1] - tbl[ci2n]) * cf2n)
+
+      // drone 总输出（低通滤波后混合）
+      let droneOut: number = (bass * 0.6 + chord * 0.4) * dr.gain
+      dr.lpState += dr.lpCoeff * (droneOut - dr.lpState)
+      mix += dr.lpState
 
       // —— 星体"叮"（柔和钟声）——
       for (let c = 0; c < numChimes; c++) {
@@ -419,109 +533,349 @@ export class AudioEngine {
     const mag: number = (typeof info.magnitude === 'number') ? info.magnitude as number : 99
     const tk: number = (typeof info.temperatureK === 'number') ? info.temperatureK as number : 0
 
-    // 柔和的钟声泛音（只保留到3倍频，去掉4+倍频的刺耳高频）
-    const softBell: Partial[] = [
-      { ratio: 1.0, gain: 1.0 },
-      { ratio: 2.0, gain: 0.35 },     // 降低
-      { ratio: 3.0, gain: 0.15 }      // 降低
-    ]
-
-    // 恒星：温度→音高，亮度→音量
-    if (otype.includes('star') && tk > 0) {
+    // ── 恒星：温度→音高，亮度→音量+衰减 ──
+    // 蓝热恒星(>20000K)：高音、明亮、短衰减
+    // 红冷恒星(<4000K)：低音、温暖、长衰减
+    // 极暗恒星(>6mag)：极轻、极远、超长衰减+重混响
+    if (otype.includes('star') && !otype.includes('cluster') && !otype.includes('nebula')) {
       const logMin: number = Math.log10(3000)
       const logMax: number = Math.log10(30000)
       let tNorm: number = (Math.log10(tk) - logMin) / (logMax - logMin)
       tNorm = Math.max(0, Math.min(1, tNorm))
-      let idx: number = Math.round(tNorm * (len - 1) * 0.85) + Math.floor(len * 0.15)
+      let idx: number = Math.round(tNorm * (len - 1) * 0.7) + Math.floor(len * 0.2)
       const brightLift: number = Math.max(-1, Math.min(2, Math.round((2.0 - mag) / 2.0)))
-      idx = Math.max(Math.floor(len * 0.15), Math.min(len - 1, idx + brightLift))
-      const vol: number = Math.max(0.15, Math.min(0.55, (6.5 - mag) / 8.0)) * 0.6  // 整体降低
+      idx = Math.max(Math.floor(len * 0.2), Math.min(len - 1, idx + brightLift))
+
+      // 极暗恒星：更远、更轻、更长尾
+      if (mag > 5.0) {
+        return {
+          freq: this.scale[idx],
+          gain: 0.12,
+          decay: 5.0,
+          partials: [
+            { ratio: 1.0, gain: 1.0 },
+            { ratio: 2.0, gain: 0.15 }
+          ],
+          pan: 0
+        }
+      }
+      // 普通恒星
+      const vol: number = Math.max(0.15, Math.min(0.5, (6.5 - mag) / 8.0)) * 0.55
+      const decay: number = tk > 15000 ? 1.8 : 3.5  // 热星短衰减，冷星长衰减
       return {
         freq: this.scale[idx],
         gain: vol,
-        decay: 2.5,       // 更长的尾巴
-        partials: softBell,
+        decay: decay,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.3 },
+          { ratio: 3.0, gain: tk > 10000 ? 0.12 : 0.05 }
+        ],
         pan: 0
       }
     }
 
-    // 按类型给"声线"
-    let lo: number = 4
-    let hi: number = 12
-    let vol: number = 0.35      // 整体降低
-    let decay: number = 2.2     // 更长的尾巴
-    let partials: Partial[] = softBell
-
+    // ── 行星：深沉、温暖、中长衰减 ──
     if (otype.includes('planet')) {
-      lo = 2; hi = 8; vol = 0.4; decay = 3.0
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.3 }
-      ]
-    } else if (otype.includes('moon')) {
-      lo = 1; hi = 5; vol = 0.35; decay = 3.5
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 1.5, gain: 0.3 }     // 纯五度，特别柔和
-      ]
-    } else if (otype.includes('sun')) {
-      lo = len - 4; hi = len - 1; vol = 0.5; decay = 2.5
-      partials = softBell
-    } else if (otype.includes('galax')) {
-      lo = 2; hi = 6; vol = 0.25; decay = 4.0
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.2 }
-      ]
-    } else if (otype.includes('nebula')) {
-      lo = 4; hi = 10; vol = 0.3; decay = 3.5
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.25 }
-      ]
-    } else if (otype.includes('cluster')) {
-      lo = 6; hi = 12; vol = 0.3; decay = 2.5
-      partials = softBell
-    } else if (otype.includes('comet')) {
-      lo = 8; hi = 14; vol = 0.28; decay = 2.5
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.3 }
-      ]
-    } else if (otype.includes('asteroid') || otype.includes('minor')) {
-      lo = 3; hi = 8; vol = 0.28; decay = 2.0
-      partials = [
-        { ratio: 1.0, gain: 1.0 },
-        { ratio: 2.0, gain: 0.2 }
-      ]
-    } else if (otype.includes('constellation')) {
+      return {
+        freq: this.scale[2 + (hash % 5)],
+        gain: 0.38,
+        decay: 3.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.28 },
+          { ratio: 1.5, gain: 0.15 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 月球：最低音、纯音、超长衰减 ──
+    if (otype.includes('moon')) {
+      return {
+        freq: this.scale[0 + (hash % 3)],
+        gain: 0.32,
+        decay: 4.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 1.5, gain: 0.25 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 太阳：明亮、饱满、全泛音 ──
+    if (otype === 'star' && name.toLowerCase().includes('sun')) {
+      return {
+        freq: this.scale[len - 3],
+        gain: 0.48,
+        decay: 2.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.35 },
+          { ratio: 3.0, gain: 0.18 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 星系：极深沉、嗡鸣感、超长衰减 ──
+    if (otype.includes('galax') || otype.includes('quasar')) {
+      const isQuasar: boolean = otype.includes('quasar')
+      // 星系播两个音叠加（低音drone + 中音）
+      this.playChime({
+        freq: this.scale[1 + (hash % 3)],
+        gain: 0.18,
+        decay: 5.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.12 }
+        ],
+        pan: 0
+      })
+      return {
+        freq: this.scale[4 + (hash % 4)],
+        gain: isQuasar ? 0.28 : 0.22,
+        decay: 4.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.15 },
+          { ratio: 3.0, gain: isQuasar ? 0.2 : 0.08 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 发射星云（如玫瑰星云）：温暖流动感 + 高频微闪 ──
+    if (otype.includes('emission nebula') || otype.includes('hii')) {
+      // 先播一个低中音pad-like
+      this.playChime({
+        freq: this.scale[5 + (hash % 4)],
+        gain: 0.15,
+        decay: 4.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.2 }
+        ],
+        pan: 0
+      })
+      return {
+        freq: this.scale[10 + (hash % 4)],
+        gain: 0.26,
+        decay: 3.8,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.3 },
+          { ratio: 3.0, gain: 0.12 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 行星状星云：明亮、环状回响感 ──
+    if (otype.includes('planetary nebula')) {
+      return {
+        freq: this.scale[12 + (hash % 4)],
+        gain: 0.3,
+        decay: 3.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.35 },
+          { ratio: 3.0, gain: 0.15 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 暗星云：低沉、闷、短衰减 ──
+    if (otype.includes('dark nebula')) {
+      return {
+        freq: this.scale[0 + (hash % 3)],
+        gain: 0.22,
+        decay: 2.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.08 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 反射星云：柔和、中高音、轻柔 ──
+    if (otype.includes('reflection nebula')) {
+      return {
+        freq: this.scale[10 + (hash % 5)],
+        gain: 0.24,
+        decay: 3.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.22 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 超新星遗迹：尖锐爆发 + 长尾 ──
+    if (otype.includes('supernova')) {
+      return {
+        freq: this.scale[14 + (hash % 3)],
+        gain: 0.35,
+        decay: 1.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.4 },
+          { ratio: 3.0, gain: 0.2 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 一般星云（其他类型） ──
+    if (otype.includes('nebula')) {
+      return {
+        freq: this.scale[6 + (hash % 6)],
+        gain: 0.26,
+        decay: 3.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.22 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 疏散星团：多颗亮星闪烁感 ──
+    if (otype.includes('open') || otype.includes('association')) {
+      const base: number = 8 + (hash % 4)
+      this.playChime({
+        freq: this.scale[base + 2],
+        gain: 0.15,
+        decay: 2.0,
+        partials: [{ ratio: 1.0, gain: 1.0 }, { ratio: 2.0, gain: 0.2 }],
+        pan: 0
+      })
+      return {
+        freq: this.scale[base],
+        gain: 0.28,
+        decay: 2.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.25 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 球状星团：密集和弦 ──
+    if (otype.includes('globular')) {
+      const base: number = 5 + (hash % 3)
+      const chord: number[] = [base, base + 2, base + 4]
+      for (let k = 0; k < chord.length; k++) {
+        if (chord[k] < len) {
+          this.playChime({
+            freq: this.scale[chord[k]],
+            gain: 0.14,
+            decay: 3.0,
+            partials: [{ ratio: 1.0, gain: 1.0 }, { ratio: 2.0, gain: 0.15 }],
+            pan: 0
+          })
+        }
+      }
+      return { freq: this.scale[base], gain: 0, decay: 0.01, partials: [], pan: 0 }
+    }
+
+    // ── 一般星团 ──
+    if (otype.includes('cluster')) {
+      return {
+        freq: this.scale[8 + (hash % 5)],
+        gain: 0.28,
+        decay: 2.5,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.25 },
+          { ratio: 3.0, gain: 0.1 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 彗星：上升扫频感（高音+快衰减） ──
+    if (otype.includes('comet')) {
+      return {
+        freq: this.scale[12 + (hash % 3)],
+        gain: 0.26,
+        decay: 2.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.3 },
+          { ratio: 3.0, gain: 0.15 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 小行星：短促、断奏、中低音 ──
+    if (otype.includes('asteroid') || otype.includes('minor') || otype.includes('plut')) {
+      return {
+        freq: this.scale[3 + (hash % 5)],
+        gain: 0.26,
+        decay: 1.2,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.18 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 星座：三音和弦 ──
+    if (otype.includes('constellation')) {
       const base: number = 3 + (hash % 4)
       const chord: number[] = [base, base + 2, base + 4].filter((v) => v < len)
       for (let k = 0; k < chord.length; k++) {
         this.playChime({
           freq: this.scale[chord[k]],
-          gain: 0.2,
+          gain: 0.18,
           decay: 3.0,
           partials: [
             { ratio: 1.0, gain: 1.0 },
-            { ratio: 2.0, gain: 0.25 }
+            { ratio: 2.0, gain: 0.22 }
           ],
           pan: 0
         })
       }
       return { freq: this.scale[base], gain: 0, decay: 0.01, partials: [], pan: 0 }
-    } else if (otype.includes('satellite')) {
-      lo = 5; hi = 11; vol = 0.3; decay = 2.5
-      partials = softBell
     }
 
+    // ── 人造卫星（如 ISS）：电子金属ping声、高音、快衰减 ──
+    if (otype.includes('artificial') || otype.includes('satellite')) {
+      return {
+        freq: this.scale[15 + (hash % 3)],
+        gain: 0.3,
+        decay: 1.0,
+        partials: [
+          { ratio: 1.0, gain: 1.0 },
+          { ratio: 2.0, gain: 0.4 },
+          { ratio: 3.0, gain: 0.2 },
+          { ratio: 4.0, gain: 0.1 }
+        ],
+        pan: 0
+      }
+    }
+
+    // ── 默认：温和中音 ──
+    const lo: number = 4
+    const hi: number = 12
     const span: number = Math.max(1, hi - lo)
     const idx: number = lo + (hash % span)
     return {
       freq: this.scale[Math.max(0, Math.min(len - 1, idx))],
-      gain: vol,
-      decay: decay,
-      partials: partials,
+      gain: 0.3,
+      decay: 2.5,
+      partials: [
+        { ratio: 1.0, gain: 1.0 },
+        { ratio: 2.0, gain: 0.25 }
+      ],
       pan: 0
     }
   }

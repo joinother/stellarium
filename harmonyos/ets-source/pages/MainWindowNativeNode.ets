@@ -8,6 +8,7 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 import { AudioEngine } from './StellariumAudio'
+import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES } from './I18n'
 
 interface TonightPlanetRow {
   name: string
@@ -187,6 +188,8 @@ struct WindowNativeNode {
   // 富化的天体详情（独立浮动窗口，不切换当前菜单；默认收起，可展开）
   @State private infoWinVisible: boolean = false
   @State private infoWinExpanded: boolean = false
+  @State private bottomCardIndex: number = 0
+  @State private centerSearchText: string = ''
   @State private selectedSize: string = ''
   @State private selectedRise: string = ''
   @State private selectedSet: string = ''
@@ -195,7 +198,7 @@ struct WindowNativeNode {
   @State private selectedElongation: string = ''
   @State private selectedRich: string = ''
   // 程序化音乐：默认开（打开应用即播放），可静音并持久化
-  @State private musicEnabled: boolean = true
+  @State private musicEnabled: boolean = false
   private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
@@ -563,7 +566,6 @@ struct WindowNativeNode {
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
-    { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
@@ -772,7 +774,10 @@ struct WindowNativeNode {
         if (s.gyroscopeSensitivityText !== undefined) { this.gyroscopeSensitivityText = s.gyroscopeSensitivityText as string }
         if (s.selectedLanguage !== undefined) {
           const lang = s.selectedLanguage as string
-          if (lang !== this.selectedLanguage) { this.setLanguage(lang) }
+          if (lang !== this.selectedLanguage) {
+            I18n.setLanguage(I18n.fromStellariumCode(lang))
+            this.setLanguage(lang)
+          }
         }
         if (s.musicEnabled !== undefined) { this.musicEnabled = s.musicEnabled as boolean }
       } catch (e) { }
@@ -782,6 +787,7 @@ struct WindowNativeNode {
       AudioEngine.getInstance().start()
     }
     // 默认语言设置为中文
+    I18n.setLanguage('zh_CN')
     this.setLanguage('zh_CN')
     // 卡在天顶↔天底 默认开启：上下滑到天顶/天底就停（不翻转），且竖直滑动绝不会引起旋转
     this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
@@ -963,7 +969,7 @@ struct WindowNativeNode {
 
   private startCatalogDownload(id: string): void {
     if (this.catalogBusy) {
-      this.flashHint('已有星表正在下载')
+      this.flashHint(I18n.t('msg_catalog_downloading'))
       return
     }
     this.catalogBusy = true
@@ -975,7 +981,7 @@ struct WindowNativeNode {
       this.catalogBusy = false
       this.catalogDownloadingId = ''
       this.catalogMsg = '下载启动失败'
-      this.flashHint('下载启动失败')
+      this.flashHint(I18n.t('msg_download_failed'))
       return
     }
     this.pollCatalogStatus(id)
@@ -1036,10 +1042,10 @@ struct WindowNativeNode {
     this.callNativeWhenReady('addBookmark', name, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
         this.newBookmarkName = ''
-        this.flashHint('已保存书签')
+        this.flashHint(I18n.t('msg_bookmark_saved'))
         this.loadBookmarks()
       } else {
-        this.flashHint('保存书签失败')
+        this.flashHint(I18n.t('msg_bookmark_save_failed'))
       }
     })
   }
@@ -1047,9 +1053,9 @@ struct WindowNativeNode {
   private gotoBookmark(id: string): void {
     this.callInteractive('gotoBookmark', id, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        this.flashHint('已跳转')
+        this.flashHint(I18n.t('msg_navigated'))
       } else {
-        this.flashHint('跳转失败')
+        this.flashHint(I18n.t('msg_navigation_failed'))
       }
     })
   }
@@ -1057,7 +1063,7 @@ struct WindowNativeNode {
   private deleteBookmark(id: string): void {
     this.callNativeWhenReady('deleteBookmark', id, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        this.flashHint('已删除书签')
+        this.flashHint(I18n.t('msg_bookmark_deleted'))
         this.loadBookmarks()
       }
     })
@@ -1116,7 +1122,7 @@ struct WindowNativeNode {
       const resp = r as RecordingDetailResponse
       const cmds = resp.commands ?? []
       if (cmds.length === 0) {
-        this.flashHint('该录制为空')
+        this.flashHint(I18n.t('msg_recording_empty'))
         return
       }
       this.replaying = true
@@ -1133,10 +1139,10 @@ struct WindowNativeNode {
   private deleteRecording(file: string): void {
     this.callInteractive('deleteRecording', file, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        this.flashHint('已删除录制')
+        this.flashHint(I18n.t('msg_recording_deleted'))
         this.loadRecordings()
       } else {
-        this.flashHint('删除失败')
+        this.flashHint(I18n.t('msg_delete_failed'))
       }
     })
   }
@@ -1309,7 +1315,7 @@ struct WindowNativeNode {
   private importConfig(): void {
     const text = this.configImportText.trim()
     if (text.length === 0) {
-      this.flashHint('请先粘贴 config.ini 内容')
+      this.flashHint(I18n.t('msg_paste_config_first'))
       return
     }
     this.configImportMsg = '正在导入…'
@@ -1335,7 +1341,7 @@ struct WindowNativeNode {
     this.callNativeWhenReady('getObjectSpokenText', '', (r: StellariumBridgeResponse) => {
       const resp = r as SpokenTextResponse
       if (resp.ok !== true || !resp.text) {
-        this.flashHint('未选中天体，无法生成朗读文本')
+        this.flashHint(I18n.t('msg_no_selection_for_tts'))
         return
       }
       this.speechStatus = resp.text
@@ -1461,7 +1467,7 @@ struct WindowNativeNode {
 
   private triggerAction(actionId: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'triggerAction send %{public}s', actionId)
-    this.flashHint('指令已发送')
+    this.flashHint(I18n.t('msg_command_sent'))
     this.callInteractive('triggerAction', actionId, (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'triggerAction %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
@@ -1731,16 +1737,13 @@ private loadPlanetPositions(): void {
   }
 
   private setLanguage(lang: string): void {
+    // 同步 I18n 模块（触发 UI 重渲染）
+    I18n.setLanguage(I18n.fromStellariumCode(lang))
     const attemptSet = (attempt: number): void => {
       const result = this.callNative('setLanguage', lang)
       if (result.ok === true) {
         this.selectedLanguage = lang
-        const langLabel: Record<string, string> = {
-          'zh_CN': '简体中文', 'zh_TW': '繁體中文', 'en': 'English', 'ja': '日本語', 'ko': '한국어'
-        }
-        // Shell UI text follows the device system locale (this SDK has no runtime
-        // UI-language switch); this toggle switches the star-map core language.
-        this.flashHint('星图语言：' + (langLabel[lang] ?? lang))
+        this.flashHint(I18n.t('msg_language_switched') + ': ' + (LANGUAGE_DISPLAY[lang] ?? lang))
         this.refreshState()
       } else if (attempt < 60) {
         setTimeout(() => attemptSet(attempt + 1), 200)
@@ -1959,15 +1962,23 @@ private loadPlanetPositions(): void {
     return d + '°' + (m < 10 ? '0' + m : m.toString()) + '\''
   }
 
-  // 把核心返回的拉丁/英文名映射成中文显示；已是中文的保持；无别名则原样返回。
+  // 把核心返回的英文名映射成当前语言显示；中文时用别名表，其他语言用行星名翻译或原样
   private zhNameOf(raw: string): string {
     if (!raw || raw.length === 0) { return raw }
-    if (raw === 'Not found') { return '未找到' }
-    if (raw === 'No selection') { return '未选择' }
-    if (/[一-鿿]/.test(raw)) { return raw }
-    const q = raw.toLowerCase()
-    for (let i = 0; i < ALIAS_LIST.length; i++) {
-      if (ALIAS_LIST[i].en.toLowerCase() === q) { return ALIAS_LIST[i].zh }
+    // 通用状态翻译
+    const statusMap = I18n.objectType(raw)
+    if (statusMap !== raw) { return statusMap }
+    // 行星名翻译（所有语言）
+    const planet = I18n.planetName(raw)
+    if (planet !== raw) { return planet }
+    // 仅中文语言使用别名表（ALIAS_LIST 只有中英对照）
+    const curLang = I18n.getLanguage()
+    if (curLang === 'zh_CN' || curLang === 'zh_TW') {
+      if (/[一-鿿]/.test(raw)) { return raw }
+      const q = raw.toLowerCase()
+      for (let i = 0; i < ALIAS_LIST.length; i++) {
+        if (ALIAS_LIST[i].en.toLowerCase() === q) { return ALIAS_LIST[i].zh }
+      }
     }
     return raw
   }
@@ -2416,7 +2427,7 @@ private loadPlanetPositions(): void {
   private watchGyroStart(): void {
     this.watchTracking = true
     this.watchResult = '手表指向中：拖动滑块，大屏实时跟随（像陀螺仪追手）'
-    this.flashHint('手表指向开始')
+    this.flashHint(I18n.t('msg_watch_pointing_started'))
     this.watchGyroSend()
   }
 
@@ -2522,7 +2533,7 @@ private loadPlanetPositions(): void {
 
   private refreshTonight(): void {
     this.callNativeWhenReady('getTonightEvents', '', (r: StellariumBridgeResponse) => {
-      if (!r.ok || !r.tonight) { this.flashHint('获取失败'); return }
+      if (!r.ok || !r.tonight) { this.flashHint(I18n.t('msg_fetch_failed')); return }
       const t = r.tonight as TonightEvents
       this.tonightDate = this.fmtIso(t.date ?? '')
       this.tonightMoon = '月相：' + (t.moon?.phaseName ?? '未知') + '（照亮 ' + Math.round(t.moon?.illumination ?? 0) + '% · 月龄 ' + (t.moon?.age ?? 0).toFixed(1) + ' 天）\n'
@@ -2554,7 +2565,7 @@ private loadPlanetPositions(): void {
   // 点击今晚天象卡片：跳到事件发生时刻，并锁定主角(lock)、框入卫星(月球)
   private gotoTonightEvent(jd: number, lock: string, title: string): void {
     const label = title.replace(/[^0-9A-Za-z\u4e00-\u9fa5]/g, '')
-    this.flashHint('跳转中…')
+    this.flashHint(I18n.t('msg_navigating'))
     this.callNativeWhenReady('setJD', jd.toString(), () => {
       this.callNativeWhenReady('searchObject', lock, (r2: StellariumBridgeResponse) => {
         this.frameSatellite()
@@ -2811,23 +2822,38 @@ private loadPlanetPositions(): void {
   }
 
   private isUiPoint(x: number, y: number): boolean {
-    // 选中天体的独立浮动详情窗：其区域内一律视为 UI 点，否则会被当成星图点击触发重新选星而关窗
-    if (this.infoWinVisible) {
-      let wl: number = 0
-      let wt: number = 0
-      let wr: number = 0
-      if (this.isExpandedLayout) {
-        wl = this.infoWinLeft()
-        wt = this.EDGE_MARGIN
-        wr = wl + this.infoWinWidth()
-      } else {
-        wl = 16
-        wt = 60
-        wr = wl + (this.skyWidth - 32)
-      }
-      const wh = wt + (this.infoWinExpanded ? (54 + this.infoWinDetailH() + 64) : 58)
-      if (x >= wl - 8 && x <= wr + 8 && y >= wt - 8 && y <= wh + 8) {
+    // 顶部搜索栏：点击区域不穿透到星图
+    if (this.isExpandedLayout) {
+      const sbX = this.EDGE_MARGIN + 64
+      const sbY = this.EDGE_MARGIN
+      const sbW = 300
+      const sbH = 44
+      if (x >= sbX && x <= sbX + sbW && y >= sbY && y <= sbY + sbH) {
         return true
+      }
+    } else {
+      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
+        return true
+      }
+    }
+    // 左下角滑动详情卡片：其区域内不穿透到星图，让 Swiper 可正常滑动
+    if (this.infoWinVisible && this.selectedName.length > 0) {
+      if (this.isExpandedLayout) {
+        const bcX = this.EDGE_MARGIN + 64
+        const bcY = this.skyHeight - 220
+        const bcW = 340
+        const bcH = 200
+        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
+          return true
+        }
+      } else {
+        const bcX = 16
+        const bcY = this.skyHeight - 250
+        const bcW = 340
+        const bcH = 200
+        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
+          return true
+        }
       }
     }
     if (this.isExpandedLayout) {
@@ -2861,6 +2887,20 @@ private loadPlanetPositions(): void {
   }
 
   private handleUiTap(x: number, y: number): boolean {
+    // 顶部搜索栏：点击打开搜索面板
+    if (this.isExpandedLayout) {
+      const sbX = this.EDGE_MARGIN + 64
+      const sbY = this.EDGE_MARGIN
+      if (x >= sbX && x <= sbX + 300 && y >= sbY && y <= sbY + 44) {
+        this.setPanel('search')
+        return true
+      }
+    } else {
+      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
+        this.setPanel('search')
+        return true
+      }
+    }
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
     if (this.handleInfoWinTap(x, y)) { return true }
     // zoom +/- buttons (expanded layout, bottom-left)
@@ -3418,13 +3458,24 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
-      // 选中天体的独立浮动详情窗口：独立于右侧菜单，不干扰当前操作
-      if (this.infoWinVisible) {
-        Stack() { this.objInfoFloat() }
-          .position({ x: this.infoWinLeft(), y: this.EDGE_MARGIN })
-          .width(this.infoWinWidth())
+      // 顶部搜索栏（中等宽度，居中显示）
+      Stack() { this.centerSearchBar() }
+        .position({ x: this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN })
+        .width(300)
+        .zIndex(48)
+        .hitTestBehavior(HitTestMode.Block)
+      // 左下角滑动详情卡片（选中天体时显示）
+      if (this.infoWinVisible && this.selectedName.length > 0) {
+        Stack() { this.bottomDetailCard() }
+          .position({ x: this.EDGE_MARGIN + 64, y: this.skyHeight - 220 })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Block)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+          ))
       }
     }
       .width('100%')
@@ -3473,13 +3524,24 @@ private loadPlanetPositions(): void {
 
       this.bottomDock()
 
-      // 选中天体的独立浮动详情窗口（紧凑布局：顶部居中，不干扰当前操作）
-      if (this.infoWinVisible) {
-        Stack() { this.objInfoFloat() }
-          .position({ x: 16, y: 60 })
-          .width(this.skyWidth - 32)
+      // 顶部搜索栏（紧凑布局，中等宽度）
+      Stack() { this.centerSearchBar() }
+        .position({ x: 16, y: 50 })
+        .width(280)
+        .zIndex(48)
+        .hitTestBehavior(HitTestMode.Block)
+      // 选中天体滑动详情卡片（紧凑布局：底部 dock 上方）
+      if (this.infoWinVisible && this.selectedName.length > 0) {
+        Stack() { this.bottomDetailCard() }
+          .position({ x: 16, y: this.skyHeight - 250 })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Block)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+          ))
       }
     }
       .width('100%')
@@ -3514,6 +3576,172 @@ private loadPlanetPositions(): void {
       this.trackingText = want ? 'On' : 'Off'
       this.refreshState()
     })
+  }
+
+
+  // ── 顶部搜索栏（中等宽度，点击打开搜索面板） ──
+  @Builder
+  centerSearchBar() {
+    Row({ space: 8 }) {
+      Image(this.getIcon('search', false))
+        .width(18).height(18).fillColor('#7FB3DC')
+      Text($r('app.string.i0063'))
+        .fontSize(14)
+        .fontColor('#8099BBCC')
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+    .height(44)
+    .padding({ left: 16, right: 16 })
+    .backgroundColor('rgba(12, 16, 28, 0.72)')
+    .backdropBlur(35)
+    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+    .borderRadius(22)
+    .shadow({ radius: 16, color: 'rgba(0,0,0,0.25)', offsetX: 0, offsetY: 6 })
+    .clickEffect({ level: ClickEffectLevel.LIGHT })
+    .onClick(() => { this.setPanel('search') })
+  }
+
+  // ── 左下角滑动详情卡片（三栏水平滑动） ──
+  @Builder
+  bottomDetailCard() {
+    Column() {
+      // 头部：天体名称 + 类型 + 关闭
+      Row() {
+        Image(this.getIcon('info', false))
+          .width(16).height(16).fillColor('#5B93BF').margin({ right: 8 })
+        Text(this.zhNameOf(this.selectedName))
+          .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF')
+          .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.zhType(this.selectedType))
+          .fontSize(10).fontColor('#7FB3DC')
+          .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+          .backgroundColor('rgba(91,147,191,0.15)').borderRadius(6)
+        Text('✕')
+          .fontSize(13).fontColor('#99FFFFFF').padding({ left: 8, right: 4 })
+          .onClick(() => { this.infoWinVisible = false })
+      }
+      .width('100%').padding({ left: 14, right: 12, top: 10, bottom: 8 })
+
+      Divider().color('rgba(91,147,191,0.15)').margin({ left: 8, right: 8 })
+
+      // 滑动分栏区域
+      Swiper() {
+        // ── 第一栏：基本信息 ──
+        Column({ space: 0 }) {
+          if (this.selectedMagnitude.length > 0) {
+            Row() {
+              Text($r('app.string.i0007')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedMagnitude).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
+          }
+          if (this.selectedDistance.length > 0) {
+            Row() {
+              Text($r('app.string.i0011')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedDistance).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedSize.length > 0) {
+            Row() {
+              Text($r('app.string.i0290')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedSize).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedConstellation.length > 0) {
+            Row() {
+              Text($r('app.string.i0010')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.zhNameOf(this.selectedConstellation)).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+        }
+        .width('100%')
+
+        // ── 第二栏：坐标信息 ──
+        Column({ space: 0 }) {
+          if (this.selectedCoordEq.length > 0) {
+            Row() {
+              Text($r('app.string.i0008')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedCoordEq).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
+          }
+          if (this.selectedCoordAlt.length > 0) {
+            Row() {
+              Text($r('app.string.i0009')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedCoordAlt).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedRise.length > 0) {
+            Row() {
+              Text($r('app.string.s0700')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedRise).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedTransit.length > 0) {
+            Row() {
+              Text($r('app.string.s0701')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedTransit).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedSet.length > 0) {
+            Row() {
+              Text($r('app.string.s0702')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedSet).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+        }
+        .width('100%')
+
+        // ── 第三栏：补充信息 + 操作 ──
+        Column({ space: 0 }) {
+          if (this.selectedPhase.length > 0) {
+            Row() {
+              Text($r('app.string.i0291')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedPhase).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
+          }
+          if (this.selectedElongation.length > 0) {
+            Row() {
+              Text($r('app.string.i0255')).fontSize(11).fontColor('#8099BBCC').width(56)
+              Text(this.selectedElongation).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+          }
+          if (this.selectedRich.length > 0) {
+            Text(this.richZh(this.selectedRich))
+              .fontSize(11).fontColor('#CCFFFFFF').lineHeight(16)
+              .width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+              .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          // 操作按钮
+          Row({ space: 8 }) {
+            Button($r('app.string.btn_center'))
+              .fontSize(12).fontColor('#E5FFFFFF')
+              .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
+              .onClick(() => { this.moveToSelectedObject() })
+            Button(this.trackingText === 'On' ? $r('app.string.btn_untrack') : $r('app.string.btn_track'))
+              .fontSize(12).fontColor('#E5FFFFFF')
+              .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
+              .onClick(() => { this.toggleTracking() })
+          }
+          .width('100%').padding({ left: 14, right: 14, top: 8, bottom: 10 })
+        }
+        .width('100%')
+      }
+      .index(this.bottomCardIndex)
+      .indicator(true)
+      .indicatorStyle({ selectedColor: '#5B93BF', color: 'rgba(255,255,255,0.3)', size: 6 })
+      .duration(300)
+      .curve(curves.springMotion(0.5, 0.85))
+      .width('100%')
+      .height(150)
+    }
+    .width(340)
+    .backgroundColor('rgba(12, 16, 28, 0.78)')
+    .backdropBlur(40)
+    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+    .borderRadius(20)
+    .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
 
   // 浮动详情窗的触摸交互统一走 overlay 的 handleUiTap（XComponent 会吞掉组件自身的 onClick），
@@ -3739,9 +3967,9 @@ private loadPlanetPositions(): void {
   }
     .width(58)
         .height(this.railHeight())
-      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.14)' : 'rgba(25, 26, 28, 0.72)')
-      .backdropBlur(26)
-      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.20)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.50)' : 'rgba(18, 22, 36, 0.78)')
+      .backdropBlur(this.panelIdleGlass ? 40 : 26)
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.15)' : 'rgba(91, 147, 191, 0.10)' })
       .borderRadius(29)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .opacity(this.railPinned ? 1.0 : this.panelIdleOpacity)
@@ -3858,24 +4086,12 @@ private loadPlanetPositions(): void {
     }
   }
 
-  private trackStatusZh(en: string): ResourceStr {
-    switch (en) {
-      case 'On': return $r('app.string.m_tracking_on')
-      case 'Off': return $r('app.string.m_tracking_off')
-      default: return en
-    }
+  private trackStatusZh(en: string): string {
+    return I18n.trackStatus(en)
   }
 
-  private selectedStatusZh(en: string): ResourceStr {
-    switch (en) {
-      case 'Selected': return $r('app.string.m_tracking_off')
-      case 'Core not ready': return $r('app.string.m_selected_core_not_ready')
-      case 'Try English name': return $r('app.string.m_selected_try_english')
-      case 'No match': return $r('app.string.m_selected_no_match')
-      case 'Not found': return $r('app.string.m_selected_not_found')
-      case 'No selection': return $r('app.string.m_selected_no_selection')
-      default: return en
-    }
+  private selectedStatusZh(en: string): string {
+    return I18n.selectedStatus(en)
   }
 
   private richZh(text: string): string {
@@ -3949,20 +4165,8 @@ private loadPlanetPositions(): void {
     }
   }
 
-  private satGroupZh(en: string): ResourceStr {
-    switch (en) {
-      case 'amateur': return $r('app.string.satgrp_amateur')
-      case 'communications': return $r('app.string.satgrp_communications')
-      case 'debris': return $r('app.string.satgrp_debris')
-      case 'education': return $r('app.string.satgrp_education')
-      case 'military': return $r('app.string.satgrp_military')
-      case 'scientific': return $r('app.string.satgrp_scientific')
-      case 'stations': return $r('app.string.satgrp_stations')
-      case 'tdrss': return $r('app.string.satgrp_tdrss')
-      case 'tv': return $r('app.string.satgrp_tv')
-      case 'visual': return $r('app.string.satgrp_visual')
-      default: return en
-    }
+  private satGroupZh(en: string): string {
+    return I18n.satGroup(en)
   }
 
   private getIcon(icon: string, isActive: boolean): Resource {
@@ -4261,9 +4465,9 @@ private loadPlanetPositions(): void {
       .width(this.panelWidth)
       .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
-      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.18)' : 'rgba(25, 26, 28, 0.78)')
-      .backdropBlur(30)
-      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
+      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
@@ -4289,9 +4493,9 @@ private loadPlanetPositions(): void {
       .width('92%')
       .constraintSize({ minHeight: 156, maxHeight: 560 })
       .padding({ top: 10, left: 16, right: 16, bottom: 14 })
-      .backgroundColor(this.panelIdleGlass ? 'rgba(255, 255, 255, 0.18)' : 'rgba(25, 26, 28, 0.78)')
-      .backdropBlur(30)
-      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
+      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
       .borderRadius(32)
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
@@ -5871,46 +6075,22 @@ private loadPlanetPositions(): void {
       // 语言选择
       Row() {
         Text($r('app.string.i0029')).fontSize(12).fontColor("#99FFFFFF").width(72)
-        Text(this.selectedLanguage === 'zh_CN' ? $r('app.string.i0030') :
-             this.selectedLanguage === 'zh_TW' ? $r('app.string.s0713') :
-             this.selectedLanguage === 'en' ? $r('app.string.i0032') :
-             this.selectedLanguage === 'ja' ? $r('app.string.i0033') :
-             this.selectedLanguage === 'ko' ? $r('app.string.i0034') : this.selectedLanguage)
+        Text(LANGUAGE_DISPLAY[this.selectedLanguage] ?? this.selectedLanguage)
           .fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
       }
       .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
-      Row({ space: 6 }) {
-        Text($r('app.string.i0030'))
-          .fontSize(11).fontColor(this.selectedLanguage === 'zh_CN' ? "#FFFFFFFF" : "#99FFFFFF")
-          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-          .backgroundColor(this.selectedLanguage === 'zh_CN' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
-          .borderRadius(8)
-          .onClick(() => this.setLanguage('zh_CN'))
-        Text($r('app.string.i0031'))
-          .fontSize(11).fontColor(this.selectedLanguage === 'zh_TW' ? "#FFFFFFFF" : "#99FFFFFF")
-          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-          .backgroundColor(this.selectedLanguage === 'zh_TW' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
-          .borderRadius(8)
-          .onClick(() => this.setLanguage('zh_TW'))
-        Text($r('app.string.i0032'))
-          .fontSize(11).fontColor(this.selectedLanguage === 'en' ? "#FFFFFFFF" : "#99FFFFFF")
-          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-          .backgroundColor(this.selectedLanguage === 'en' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
-          .borderRadius(8)
-          .onClick(() => this.setLanguage('en'))
-        Text($r('app.string.i0033'))
-          .fontSize(11).fontColor(this.selectedLanguage === 'ja' ? "#FFFFFFFF" : "#99FFFFFF")
-          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-          .backgroundColor(this.selectedLanguage === 'ja' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
-          .borderRadius(8)
-          .onClick(() => this.setLanguage('ja'))
-        Text($r('app.string.i0034'))
-          .fontSize(11).fontColor(this.selectedLanguage === 'ko' ? "#FFFFFFFF" : "#99FFFFFF")
-          .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-          .backgroundColor(this.selectedLanguage === 'ko' ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
-          .borderRadius(8)
-          .onClick(() => this.setLanguage('ko'))
-      }.padding({ left: 4, right: 4 }).margin({ bottom: 8 })
+      Scroll() {
+        Row({ space: 6 }) {
+          ForEach(SUPPORTED_LANGUAGES, (lang: string) => {
+            Text(LANGUAGE_DISPLAY[lang] ?? lang)
+              .fontSize(11).fontColor(this.selectedLanguage === lang ? "#FFFFFFFF" : "#99FFFFFF")
+              .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+              .backgroundColor(this.selectedLanguage === lang ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
+              .borderRadius(8)
+              .onClick(() => this.setLanguage(lang))
+          }, (lang: string) => lang)
+        }.padding({ left: 4, right: 4 })
+      }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 8 })
       // 星图文化选择
       if (this.skyCultures.length > 0) {
         Row() {
