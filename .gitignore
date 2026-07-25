@@ -86,3 +86,6 @@ GZ_*
 # 私钥/证书/授权文件一律放仓库外（如 ~/stellarium-signing/），
 # 由本地 DevEco 自动签名或自建 CA 生成，禁止提交。
 docs/harmonyos/signing/
+
+# === HarmonyOS 移植：hvigor 本地产物目录 ===
+.hvigor/

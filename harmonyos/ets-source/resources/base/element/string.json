@@ -946,27 +946,27 @@
     },
     {
       "name": "i0269",
-      "value": "View：显示选项（天空/太阳系/深空/标记/地景/文化/巡天）"
+      "value": "显示选项（天空/太阳系/深空/标记/地景/文化/巡天）"
     },
     {
       "name": "i0270",
-      "value": "Search：搜索天体"
+      "value": "搜索天体"
     },
     {
       "name": "i0271",
-      "value": "Time：时间控制（天文事件/节气跳转）"
+      "value": "时间控制（天文事件/节气跳转）"
     },
     {
       "name": "i0272",
-      "value": "Location：位置选择（GPS/地图/城市）"
+      "value": "位置选择（GPS/地图/城市）"
     },
     {
       "name": "i0273",
-      "value": "Config：应用配置"
+      "value": "应用配置"
     },
     {
       "name": "i0274",
-      "value": "AstroCalc：天文计算"
+      "value": "天文计算"
     },
     {
       "name": "i0275",
@@ -1535,9 +1535,1182 @@
     {
       "name": "s0702",
       "value": "落下"
+    },
+    {
+      "name": "i0290",
+      "value": "角直径"
+    },
+    {
+      "name": "i0291",
+      "value": "相位"
+    },
+    {
+      "name": "p_catalogs",
+      "value": "星表下载"
+    },
+    {
+      "name": "p_bookmarks",
+      "value": "书签"
+    },
+    {
+      "name": "p_oculars",
+      "value": "望远镜"
+    },
+    {
+      "name": "p_satellites",
+      "value": "卫星"
+    },
+    {
+      "name": "p_meteors",
+      "value": "流星雨"
+    },
+    {
+      "name": "p_scripts",
+      "value": "脚本"
+    },
+    {
+      "name": "p_plugins",
+      "value": "插件管理"
+    },
+    {
+      "name": "p_place",
+      "value": "位置"
+    },
+    {
+      "name": "p_search",
+      "value": "搜索"
+    },
+    {
+      "name": "p_time",
+      "value": "时间"
+    },
+    {
+      "name": "p_layers",
+      "value": "图层"
+    },
+    {
+      "name": "p_settings",
+      "value": "设置"
+    },
+    {
+      "name": "p_astro",
+      "value": "天文计算"
+    },
+    {
+      "name": "p_help",
+      "value": "快捷操作"
+    },
+    {
+      "name": "pl_sun",
+      "value": "太阳"
+    },
+    {
+      "name": "pl_moon",
+      "value": "月球"
+    },
+    {
+      "name": "pl_mercury",
+      "value": "水星"
+    },
+    {
+      "name": "pl_venus",
+      "value": "金星"
+    },
+    {
+      "name": "pl_earth",
+      "value": "地球"
+    },
+    {
+      "name": "pl_mars",
+      "value": "火星"
+    },
+    {
+      "name": "pl_jupiter",
+      "value": "木星"
+    },
+    {
+      "name": "pl_saturn",
+      "value": "土星"
+    },
+    {
+      "name": "pl_uranus",
+      "value": "天王星"
+    },
+    {
+      "name": "pl_neptune",
+      "value": "海王星"
+    },
+    {
+      "name": "city_beijing",
+      "value": "北京"
+    },
+    {
+      "name": "city_shanghai",
+      "value": "上海"
+    },
+    {
+      "name": "city_shenzhen",
+      "value": "深圳"
+    },
+    {
+      "name": "city_guangzhou",
+      "value": "广州"
+    },
+    {
+      "name": "sens_standard",
+      "value": "标准"
+    },
+    {
+      "name": "sens_fast",
+      "value": "快速"
+    },
+    {
+      "name": "sens_slow",
+      "value": "慢速"
+    },
+    {
+      "name": "m_gps_unavailable",
+      "value": "GPS 不可用，已保持当前位置"
+    },
+    {
+      "name": "m_gps_sim_default",
+      "value": "模拟器无 GPS，使用默认位置（北京）"
+    },
+    {
+      "name": "m_no_selection",
+      "value": "未选择天体"
+    },
+    {
+      "name": "m_planet_switch_hint",
+      "value": "切换后星空与地景会按该星球视角重算"
+    },
+    {
+      "name": "m_current_planet",
+      "value": "当前观测星球"
+    },
+    {
+      "name": "btn_center",
+      "value": "居中"
+    },
+    {
+      "name": "btn_track",
+      "value": "跟踪"
+    },
+    {
+      "name": "btn_untrack",
+      "value": "取消跟踪"
+    },
+    {
+      "name": "btn_apply",
+      "value": "应用"
+    },
+    {
+      "name": "btn_auto_locate",
+      "value": "自动定位"
+    },
+    {
+      "name": "btn_back_to_earth",
+      "value": "回到地球"
+    },
+    {
+      "name": "btn_refresh",
+      "value": "刷新"
+    },
+    {
+      "name": "btn_close",
+      "value": "关闭"
+    },
+    {
+      "name": "btn_add_to_list",
+      "value": "添加到列表"
+    },
+    {
+      "name": "btn_cancel_track",
+      "value": "取消跟踪"
+    },
+    {
+      "name": "btn_point",
+      "value": "指向"
+    },
+    {
+      "name": "btn_sync",
+      "value": "同步"
+    },
+    {
+      "name": "btn_stop",
+      "value": "停止"
+    },
+    {
+      "name": "c_detail",
+      "value": "详细说明"
+    },
+    {
+      "name": "c_config_file",
+      "value": "配置文件"
+    },
+    {
+      "name": "c_empty_config",
+      "value": "（配置为空）"
+    },
+    {
+      "name": "c_import_hint",
+      "value": "粘贴 config.ini 内容后点上方「导入配置」（支持 [section] 与 key=value 行）"
+    },
+    {
+      "name": "c_plugin_refresh",
+      "value": "刷新插件"
+    },
+    {
+      "name": "c_landscape_list",
+      "value": "地景列表"
+    },
+    {
+      "name": "c_transparency",
+      "value": "透明度"
+    },
+    {
+      "name": "c_satellite_groups",
+      "value": "卫星分组"
+    },
+    {
+      "name": "c_total_count",
+      "value": "总数"
+    },
+    {
+      "name": "c_show_labels",
+      "value": "显示标签"
+    },
+    {
+      "name": "c_show_orbits",
+      "value": "显示轨道线"
+    },
+    {
+      "name": "c_show_hints",
+      "value": "显示提示点"
+    },
+    {
+      "name": "c_icon_mode",
+      "value": "图标模式"
+    },
+    {
+      "name": "c_hide_invisible",
+      "value": "隐藏不可见卫星"
+    },
+    {
+      "name": "c_current",
+      "value": "当前"
+    },
+    {
+      "name": "plugin_angle_measure",
+      "value": "角度测量"
+    },
+    {
+      "name": "plugin_archaeolines",
+      "value": "考古线"
+    },
+    {
+      "name": "plugin_calendars",
+      "value": "历法"
+    },
+    {
+      "name": "plugin_equation_of_time",
+      "value": "时间方程"
+    },
+    {
+      "name": "plugin_exoplanets",
+      "value": "系外行星"
+    },
+    {
+      "name": "plugin_lens_distortion",
+      "value": "镜头畸变估计"
+    },
+    {
+      "name": "plugin_meteor_showers",
+      "value": "流星雨"
+    },
+    {
+      "name": "plugin_novae",
+      "value": "新星"
+    },
+    {
+      "name": "plugin_pulsars",
+      "value": "脉冲星"
+    },
+    {
+      "name": "plugin_quasars",
+      "value": "类星体"
+    },
+    {
+      "name": "plugin_satellites",
+      "value": "人造卫星"
+    },
+    {
+      "name": "plugin_solar_system_editor",
+      "value": "太阳系编辑器"
+    },
+    {
+      "name": "plugin_supernovae",
+      "value": "超新星"
+    },
+    {
+      "name": "plugin_text_user_interface",
+      "value": "文本界面"
+    },
+    {
+      "name": "plugin_time_zone",
+      "value": "时区"
+    },
+    {
+      "name": "plugin_voculars",
+      "value": "虚拟目镜"
+    },
+    {
+      "name": "plugin_observability",
+      "value": "可观测性"
+    },
+    {
+      "name": "plugin_remote_control",
+      "value": "远程控制"
+    },
+    {
+      "name": "plugin_screenshots",
+      "value": "截图工具"
+    },
+    {
+      "name": "plugin_skycultures",
+      "value": "星空文化"
+    },
+    {
+      "name": "land_garching",
+      "value": "加兴"
+    },
+    {
+      "name": "land_geneva",
+      "value": "日内瓦"
+    },
+    {
+      "name": "land_guereins",
+      "value": "盖兰"
+    },
+    {
+      "name": "land_grossmugl",
+      "value": "格罗斯穆格尔"
+    },
+    {
+      "name": "land_hurricane",
+      "value": "飓风"
+    },
+    {
+      "name": "land_jupiter",
+      "value": "木星表面"
+    },
+    {
+      "name": "land_mars",
+      "value": "火星表面"
+    },
+    {
+      "name": "land_moon",
+      "value": "月球表面"
+    },
+    {
+      "name": "land_armintxe",
+      "value": "阿尔明特克斯洞穴"
+    },
+    {
+      "name": "land_zero",
+      "value": "零度地平线"
+    },
+    {
+      "name": "land_guereins_0_0",
+      "value": "盖兰（零度）"
+    },
+    {
+      "name": "land_ocean",
+      "value": "海洋"
+    },
+    {
+      "name": "satgrp_amateur",
+      "value": "业余"
+    },
+    {
+      "name": "satgrp_communications",
+      "value": "通信"
+    },
+    {
+      "name": "satgrp_debris",
+      "value": "碎片"
+    },
+    {
+      "name": "satgrp_education",
+      "value": "教育"
+    },
+    {
+      "name": "satgrp_military",
+      "value": "军事"
+    },
+    {
+      "name": "satgrp_scientific",
+      "value": "科学"
+    },
+    {
+      "name": "satgrp_stations",
+      "value": "空间站"
+    },
+    {
+      "name": "satgrp_tdrss",
+      "value": "数据中继"
+    },
+    {
+      "name": "satgrp_tv",
+      "value": "电视"
+    },
+    {
+      "name": "satgrp_visual",
+      "value": "可见"
+    },
+    {
+      "name": "satgrp_unknown",
+      "value": "未分类"
+    },
+    {
+      "name": "c_observing_planet",
+      "value": "观测星球"
+    },
+    {
+      "name": "c_user_dir",
+      "value": "用户目录"
+    },
+    {
+      "name": "c_config_import_hint",
+      "value": "粘贴 config.ini 内容后点上方「导入配置」（支持 [section] 与 key=value 行）"
+    },
+    {
+      "name": "c_config_import_export",
+      "value": "配置导入导出"
+    },
+    {
+      "name": "c_config_import_tip",
+      "value": "提示：导入仅覆盖文本中出现的键，导入后部分设置需重启应用生效。"
+    },
+    {
+      "name": "c_about",
+      "value": "关于"
+    },
+    {
+      "name": "c_runtime_logs",
+      "value": "运行日志"
+    },
+    {
+      "name": "c_loading",
+      "value": "加载中…"
+    },
+    {
+      "name": "c_loading_bookmarks",
+      "value": "正在加载书签…"
+    },
+    {
+      "name": "c_loading_catalogs",
+      "value": "正在获取星表列表…"
+    },
+    {
+      "name": "c_bookmark_name_hint",
+      "value": "书签名称（可空）"
+    },
+    {
+      "name": "c_no_bookmarks",
+      "value": "还没有书签"
+    },
+    {
+      "name": "c_save_view_hint",
+      "value": "调整好视角后点「保存当前视图」"
+    },
+    {
+      "name": "c_installed",
+      "value": "已安装"
+    },
+    {
+      "name": "c_no_catalogs",
+      "value": "暂无可下载的星表"
+    },
+    {
+      "name": "c_all_catalogs_included",
+      "value": "当前版本可能已包含全部星表"
+    },
+    {
+      "name": "c_pointing_test",
+      "value": "虚拟指星笔测试"
+    },
+    {
+      "name": "c_altitude_deg",
+      "value": "高度角°"
+    },
+    {
+      "name": "c_azimuth_deg",
+      "value": "方位角°"
+    },
+    {
+      "name": "c_altitude",
+      "value": "高度角"
+    },
+    {
+      "name": "c_azimuth",
+      "value": "方位角"
+    },
+    {
+      "name": "c_watch_gyro_sim",
+      "value": "虚拟手表（陀螺仪）模拟器"
+    },
+    {
+      "name": "c_continuation",
+      "value": "多设备接续 / 无缝流转"
+    },
+    {
+      "name": "c_tonight_events",
+      "value": "今夜天文事件"
+    },
+    {
+      "name": "c_script_record",
+      "value": "脚本录制与回放"
+    },
+    {
+      "name": "c_recording",
+      "value": "● 录制中"
+    },
+    {
+      "name": "c_saved_recordings",
+      "value": "已保存的录制"
+    },
+    {
+      "name": "c_no_recordings",
+      "value": "（暂无，录制并保存后会出现在这里）"
+    },
+    {
+      "name": "c_video_frames",
+      "value": "视频录制（帧序列）"
+    },
+    {
+      "name": "c_fps",
+      "value": "帧率 (fps)"
+    },
+    {
+      "name": "c_duration_sec",
+      "value": "时长 (秒)"
+    },
+    {
+      "name": "c_captured",
+      "value": "已抓"
+    },
+    {
+      "name": "c_frames",
+      "value": "帧"
+    },
+    {
+      "name": "c_record_name_hint",
+      "value": "给这段录制起个名"
+    },
+    {
+      "name": "c_more_functions",
+      "value": "更多功能"
+    },
+    {
+      "name": "c_enable_meteor_plugin",
+      "value": "启用流星雨插件"
+    },
+    {
+      "name": "c_show_radiant_labels",
+      "value": "显示辐射点标签"
+    },
+    {
+      "name": "c_active_only",
+      "value": "仅显示活跃流星雨"
+    },
+    {
+      "name": "c_show_radiant_markers",
+      "value": "显示辐射点标记"
+    },
+    {
+      "name": "c_ocular_mode",
+      "value": "目镜模式（望远镜视野）"
+    },
+    {
+      "name": "c_telrad",
+      "value": "Telrad 寻星镜"
+    },
+    {
+      "name": "c_crosshair",
+      "value": "十字丝"
+    },
+    {
+      "name": "c_ccd_frame",
+      "value": "CCD 取景框"
+    },
+    {
+      "name": "m_pointing_test_desc",
+      "value": "输入指向（高度角/方位角），星图会转到该方向并选中那颗星 —— 这是手表/多屏联动的目标端逻辑"
+    },
+    {
+      "name": "m_watch_gyro_desc",
+      "value": "模拟手表 IMU 发射端：拖动滑块=手腕转动，大屏(本机)实时跟随；松手\"停止并锁定\"选中中心星。真手表只需把 IMU 朝向转成 alt|az 走同一条 pointAtSky 流。"
+    },
+    {
+      "name": "m_continuation_desc",
+      "value": "把当前星图会话（视线/缩放/时间/位置/选中星）导出成一份 JSON，可在手机/平板/智慧屏上导入接续，实现\"在这台看、在那台接着看\"。完整跨设备一键流转需华为分布式能力，当前已预留接口。"
+    },
+    {
+      "name": "m_tonight_events_hint",
+      "value": "点击任意卡片，自动跳到该天象的发生时刻，并锁定主角与卫星（月球）。"
+    },
+    {
+      "name": "m_script_record_desc",
+      "value": "点击「开始录制」后，你在星图上的操作（搜索、选星、时间、图层开关等）会被记录；停止后可保存，并在本机随时一键重放。"
+    },
+    {
+      "name": "m_video_frames_desc",
+      "value": "基础版系统不含视频编码器，这里用「定时截图」代替：按设定的帧率连续抓取星图画面，存成 frame_00001.jpg 等一连串图片，放在本机 videos/ 目录下。你可以用第三方工具（如 ffmpeg）把这些图片合成真正的视频。"
+    },
+    {
+      "name": "m_no_bookmarks",
+      "value": "还没有书签"
+    },
+    {
+      "name": "m_save_view_hint",
+      "value": "调整好视角后点「保存当前视图」"
+    },
+    {
+      "name": "m_no_catalogs",
+      "value": "暂无可下载的星表"
+    },
+    {
+      "name": "m_all_catalogs_included",
+      "value": "当前版本可能已包含全部星表"
+    },
+    {
+      "name": "btn_import_config",
+      "value": "导入配置"
+    },
+    {
+      "name": "btn_export_view",
+      "value": "导出查看"
+    },
+    {
+      "name": "btn_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "btn_save_current_view",
+      "value": "保存当前视图"
+    },
+    {
+      "name": "btn_delete",
+      "value": "删除"
+    },
+    {
+      "name": "btn_point_select",
+      "value": "指向并选中"
+    },
+    {
+      "name": "btn_example_zenith",
+      "value": "示例：天顶"
+    },
+    {
+      "name": "btn_stop_lock",
+      "value": "停止并锁定"
+    },
+    {
+      "name": "btn_export_session",
+      "value": "导出当前会话"
+    },
+    {
+      "name": "btn_apply_local",
+      "value": "本机应用"
+    },
+    {
+      "name": "btn_start_continuation",
+      "value": "发起跨设备流转"
+    },
+    {
+      "name": "btn_refresh_tonight",
+      "value": "刷新今晚天象"
+    },
+    {
+      "name": "btn_save_record",
+      "value": "保存录制"
+    },
+    {
+      "name": "btn_playback",
+      "value": "回放"
+    },
+    {
+      "name": "btn_prev",
+      "value": "‹"
+    },
+    {
+      "name": "btn_next",
+      "value": "›"
+    },
+    {
+      "name": "a0000",
+      "value": "天体位置"
+    },
+    {
+      "name": "a0001",
+      "value": "星历"
+    },
+    {
+      "name": "a0002",
+      "value": "升落"
+    },
+    {
+      "name": "a0003",
+      "value": "天象"
+    },
+    {
+      "name": "a0004",
+      "value": "图表"
+    },
+    {
+      "name": "a0005",
+      "value": "今晚"
+    },
+    {
+      "name": "a0006",
+      "value": "行星"
+    },
+    {
+      "name": "a0007",
+      "value": "日月食"
+    },
+    {
+      "name": "a0008",
+      "value": "年历"
+    },
+    {
+      "name": "c0000",
+      "value": "主设置"
+    },
+    {
+      "name": "c0001",
+      "value": "信息"
+    },
+    {
+      "name": "c0002",
+      "value": "附加"
+    },
+    {
+      "name": "c0003",
+      "value": "时间"
+    },
+    {
+      "name": "c0004",
+      "value": "工具"
+    },
+    {
+      "name": "c0005",
+      "value": "脚本"
+    },
+    {
+      "name": "c0006",
+      "value": "插件"
+    },
+    {
+      "name": "m_config_import_tip",
+      "value": "提示：导入仅覆盖文本中出现的键，导入后部分设置需重启应用生效。"
+    },
+    {
+      "name": "m_no_recordings",
+      "value": "（暂无，录制并保存后会出现在这里）"
+    },
+    {
+      "name": "s0530",
+      "value": "恒星时角"
+    },
+    {
+      "name": "s0531",
+      "value": "时区"
+    },
+    {
+      "name": "s0532",
+      "value": "本地时间"
+    },
+    {
+      "name": "s0703",
+      "value": "展开"
+    },
+    {
+      "name": "s0704",
+      "value": "紧凑"
+    },
+    {
+      "name": "s0706",
+      "value": "ArkTS + C++"
+    },
+    {
+      "name": "s0707",
+      "value": "高"
+    },
+    {
+      "name": "s0708",
+      "value": "中"
+    },
+    {
+      "name": "s0709",
+      "value": "低"
+    },
+    {
+      "name": "s0710",
+      "value": "关闭"
+    },
+    {
+      "name": "s0711",
+      "value": "开启"
+    },
+    {
+      "name": "s0712",
+      "value": "自动"
+    },
+    {
+      "name": "s0713",
+      "value": "手动"
+    },
+    {
+      "name": "s0715",
+      "value": "复制"
+    },
+    {
+      "name": "s0716",
+      "value": "清除"
+    },
+    {
+      "name": "s0717",
+      "value": "界面已锁定"
+    },
+    {
+      "name": "s0718",
+      "value": "界面已解锁"
+    },
+    {
+      "name": "s0719",
+      "value": "已复制"
+    },
+    {
+      "name": "s0720",
+      "value": "已清除"
+    },
+    {
+      "name": "s0721",
+      "value": "已重置"
+    },
+    {
+      "name": "s0725",
+      "value": "主机"
+    },
+    {
+      "name": "s0726",
+      "value": "端口"
+    },
+    {
+      "name": "s0727",
+      "value": "连接"
+    },
+    {
+      "name": "s0728",
+      "value": "断开"
+    },
+    {
+      "name": "s0729",
+      "value": "状态"
+    },
+    {
+      "name": "s0730",
+      "value": "系统默认"
+    },
+    {
+      "name": "s0731",
+      "value": "公历"
+    },
+    {
+      "name": "s0732",
+      "value": "跟随屏幕"
+    },
+    {
+      "name": "s0738",
+      "value": "12小时制"
+    },
+    {
+      "name": "s0739",
+      "value": "24小时制"
+    },
+    {
+      "name": "s0740",
+      "value": "ISO"
+    },
+    {
+      "name": "s0741",
+      "value": "本地"
+    },
+    {
+      "name": "s0742",
+      "value": "UTC"
+    },
+    {
+      "name": "s0743",
+      "value": "行星"
+    },
+    {
+      "name": "s0744",
+      "value": "亮星"
+    },
+    {
+      "name": "s0745",
+      "value": "深空"
+    },
+    {
+      "name": "s0746",
+      "value": "流星雨"
+    },
+    {
+      "name": "s0751",
+      "value": "展开"
+    },
+    {
+      "name": "s0752",
+      "value": "收起"
+    },
+    {
+      "name": "s0753",
+      "value": "清空"
+    },
+    {
+      "name": "s0754",
+      "value": "现在"
+    },
+    {
+      "name": "s0755",
+      "value": "后退"
+    },
+    {
+      "name": "s0756",
+      "value": "暂停"
+    },
+    {
+      "name": "s0757",
+      "value": "运行"
+    },
+    {
+      "name": "s0760",
+      "value": "当前视场"
+    },
+    {
+      "name": "s0761",
+      "value": "加载视场"
+    },
+    {
+      "name": "v0000",
+      "value": "天空"
+    },
+    {
+      "name": "v0001",
+      "value": "太阳系"
+    },
+    {
+      "name": "v0002",
+      "value": "深空"
+    },
+    {
+      "name": "v0003",
+      "value": "标记"
+    },
+    {
+      "name": "v0004",
+      "value": "地景"
+    },
+    {
+      "name": "v0005",
+      "value": "文化"
+    },
+    {
+      "name": "v0006",
+      "value": "巡天"
+    },
+    {
+      "name": "m_drag_map_hint",
+      "value": "拖动地图或点击自动定位"
+    },
+    {
+      "name": "m_req_location_perm",
+      "value": "正在请求定位权限…"
+    },
+    {
+      "name": "m_getting_location",
+      "value": "正在获取当前位置…"
+    },
+    {
+      "name": "m_synced_to_sky",
+      "value": "已同步到星空"
+    },
+    {
+      "name": "m_device_loc_synced",
+      "value": "已获取设备位置并自动同步"
+    },
+    {
+      "name": "m_map_selected",
+      "value": "已选取地图位置，点击应用同步"
+    },
+    {
+      "name": "m_telescope_idle",
+      "value": "未连接望远镜"
+    },
+    {
+      "name": "m_telescope_goto_sent",
+      "value": "已发送转向命令"
+    },
+    {
+      "name": "m_telescope_sync_sent",
+      "value": "已发送同步命令"
+    },
+    {
+      "name": "m_telescope_stop_sent",
+      "value": "已发送停止命令"
+    },
+    {
+      "name": "m_telescope_stop_failed",
+      "value": "停止命令发送失败"
+    },
+    {
+      "name": "m_telescope_select_target",
+      "value": "请先选择或搜索目标"
+    },
+    {
+      "name": "m_telescope_disconnected",
+      "value": "望远镜连接已断开"
+    },
+    {
+      "name": "m_telescope_mode_goto",
+      "value": "转向"
+    },
+    {
+      "name": "m_telescope_mode_sync",
+      "value": "同步"
+    },
+    {
+      "name": "m_telescope_target_default",
+      "value": "当前目标"
+    },
+    {
+      "name": "m_gyro_off",
+      "value": "已关闭"
+    },
+    {
+      "name": "m_gyro_listening",
+      "value": "正在监听"
+    },
+    {
+      "name": "m_gyro_unavailable",
+      "value": "陀螺仪不可用"
+    },
+    {
+      "name": "m_gyro_working",
+      "value": "工作中"
+    },
+    {
+      "name": "m_gyro_core_not_ready",
+      "value": "星图核心未就绪"
+    },
+    {
+      "name": "m_tracking_on",
+      "value": "跟踪中"
+    },
+    {
+      "name": "m_tracking_off",
+      "value": "未跟踪"
+    },
+    {
+      "name": "m_selected_core_not_ready",
+      "value": "星图核心未就绪"
+    },
+    {
+      "name": "m_selected_try_english",
+      "value": "尝试使用英文名称搜索"
+    },
+    {
+      "name": "m_selected_no_match",
+      "value": "无匹配结果"
+    },
+    {
+      "name": "m_selected_not_found",
+      "value": "未找到"
+    },
+    {
+      "name": "m_selected_no_selection",
+      "value": "未选择"
+    },
+    {
+      "name": "m_tap_no_object",
+      "value": "当前位置没有可选天体，请放大或使用搜索"
+    },
+    {
+      "name": "m_rate_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "rich_eclipsing_binary_system",
+      "value": "食双星系统"
+    },
+    {
+      "name": "rich_double_star",
+      "value": "双星"
+    },
+    {
+      "name": "rich_binary_star",
+      "value": "双星"
+    },
+    {
+      "name": "rich_variable_star",
+      "value": "变星"
+    },
+    {
+      "name": "rich_open_cluster",
+      "value": "疏散星团"
+    },
+    {
+      "name": "rich_globular_cluster",
+      "value": "球状星团"
+    },
+    {
+      "name": "rich_spiral_galaxy",
+      "value": "螺旋星系"
+    },
+    {
+      "name": "rich_elliptical_galaxy",
+      "value": "椭圆星系"
+    },
+    {
+      "name": "rich_planetary_nebula",
+      "value": "行星状星云"
+    },
+    {
+      "name": "rich_supernova_remnant",
+      "value": "超新星遗迹"
+    },
+    {
+      "name": "rich_emission_nebula",
+      "value": "发射星云"
+    },
+    {
+      "name": "rich_reflection_nebula",
+      "value": "反射星云"
+    },
+    {
+      "name": "rich_galaxy",
+      "value": "星系"
+    },
+    {
+      "name": "rich_nebula",
+      "value": "星云"
+    },
+    {
+      "name": "rich_cluster",
+      "value": "星团"
     }
-  ,
-  { "name": "i0290", "value": "角直径" },
-  { "name": "i0291", "value": "相位" }
-]
+  ]
 }
