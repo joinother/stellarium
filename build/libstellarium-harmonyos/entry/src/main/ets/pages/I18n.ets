@@ -326,6 +326,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'set_vert_clamp': { 'en': 'Clamp to zenith/nadir', 'zh_CN': '卡在天顶↔天底（防翻转/防旋转）', 'ja': '天頂/天底で制限（反転・回転防止）', 'ko': '천정/천저에서 고정（반전/회전 방지）', 'fr': 'Limiter au zénith/nadir', 'de': 'Am Zenit/Nadir begrenzen', 'es': 'Limitar al cenit/nadir', 'ru': 'Ограничить зенитом/надиром' },
   'set_flat_horizon': { 'en': 'Limit max FOV (flat horizon)', 'zh_CN': '画面防弯曲（限制最大视场）', 'ja': '最大視野角を制限（地平線を平らに）', 'ko': '최대 시야각 제한（수평선 유지）', 'fr': 'Limiter le FOV max (horizon plat)', 'de': 'Max. FOV begrenzen (flacher Horizont)', 'es': 'Limitar FOV max (horizonte plano)', 'ru': 'Ограничить макс. FOV (плоский горизонт)' },
   'set_fov_slider': { 'en': 'Field of View', 'zh_CN': '视场角', 'ja': '視野角', 'ko': '시야각', 'fr': 'Champ de vue', 'de': 'Sichtfeld', 'es': 'Campo de visión', 'ru': 'Поле зрения' },
+  'set_projection': { 'en': 'Projection', 'zh_CN': '投影方式', 'ja': '投影法', 'ko': '투영 방식', 'fr': 'Projection', 'de': 'Projektion', 'es': 'Proyección', 'ru': 'Проекция' },
   'set_language': { 'en': 'Language', 'zh_CN': '语言', 'ja': '言語', 'ko': '언어', 'fr': 'Langue', 'de': 'Sprache', 'es': 'Idioma', 'ru': 'Язык' },
   'set_sky_culture': { 'en': 'Sky Culture', 'zh_CN': '星空文化', 'ja': '星空文化', 'ko': '별자리 문화', 'fr': 'Culture du ciel', 'de': 'Himmelskultur', 'es': 'Cultura del cielo', 'ru': 'Культура неба' },
   'set_distance_units': { 'en': 'Distance Units', 'zh_CN': '距离单位', 'ja': '距離単位', 'ko': '거리 단위', 'fr': 'Unités de distance', 'de': 'Entfernungseinheiten', 'es': 'Unidades de distancia', 'ru': 'Единицы расстояния' },

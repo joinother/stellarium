@@ -442,6 +442,7 @@ struct WindowNativeNode {
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
   @State private fovSliderValue: number = 60
+  @State private currentProjection: string = 'Perspective'
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
   @State private panelIdleGlass: boolean = false
@@ -1618,6 +1619,14 @@ struct WindowNativeNode {
     })
   }
 
+
+  private setProjection(name: string): void {
+    this.callInteractive('setProjectionType', name, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.currentProjection = name
+      }
+    })
+  }
   private triggerAction(actionId: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'triggerAction send %{public}s', actionId)
     this.flashHint(I18n.t('msg_command_sent'))
@@ -5304,6 +5313,27 @@ private loadPlanetPositions(): void {
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
+          Text(I18n.t('set_projection')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Row() {
+            Text(I18n.t('set_projection')).fontSize(12).fontColor(this.nmSub()).width(72)
+            Text(this.currentProjection).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+          }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Scroll() {
+            Row({ space: 6 }) {
+              ForEach(['Perspective', 'Stereographic', 'Fisheye', 'HammerAitoff', 'Mercator', 'Orthographic'], (name: string) => {
+                Text(name)
+                  .fontSize(11).fontColor(this.currentProjection === name ? '#FFFFFFFF' : '#99FFFFFF')
+                  .padding({ left: 10, right: 10, top: 3, bottom: 3 })
+                  .backgroundColor(this.currentProjection === name ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
+                  .borderRadius(8)
+                  .onClick(() => { this.setProjection(name) })
+              }, (name: string) => name)
+            }.padding({ left: 4, right: 4 })
+          }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
           Text(I18n.t('set_language')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           Row() {
             Text($r('app.string.i0029')).fontSize(12).fontColor(this.nmSub()).width(72)
@@ -6468,22 +6498,42 @@ private loadPlanetPositions(): void {
       // 观测列表
       if (this.observingList.length > 0) {
         Row() {
-          Text($r('app.string.i0022')).fontSize(12).fontColor("#99FFFFFF").width(72)
-          Text(this.observingList.length + ' objects').fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
+          Text($r('app.string.i0022') + ' (' + this.observingList.length + ')')
+            .fontSize(12).fontColor("#99FFFFFF")
+          Text('').layoutWeight(1)
+          Button($r('app.string.i0301'))
+            .fontSize(11).fontColor("#FF6B6B").backgroundColor("rgba(255,107,107,0.12)")
+            .borderRadius(16).height(26).padding({ left: 10, right: 10 })
+            .onClick(() => {
+              this.observingList = []
+              AppStorage.setOrCreate("observingList", JSON.stringify(this.observingList))
+              this.flashHint($r('app.string.i0302'))
+            })
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
         Scroll() {
           Row({ space: 6 }) {
             ForEach(this.observingList, (name: string) => {
-              Text(this.zhNameOf(name))
-                .fontSize(11).fontColor("#E5FFFFFF")
-                .padding({ left: 10, right: 10, top: 3, bottom: 3 })
-                .backgroundColor("rgba(107,163,214,0.20)")
-                .borderRadius(8)
-                .onClick(() => {
-                  this.searchObject(name)
-                  this.flashHint($r('app.string.i0082', name))
-                })
+              Row({ space: 4 }) {
+                Text(this.zhNameOf(name))
+                  .fontSize(11).fontColor("#E5FFFFFF")
+                Text('x')
+                  .fontSize(9).fontColor("rgba(255,255,255,0.4)")
+                  .onClick(() => {
+                    const idx = this.observingList.indexOf(name)
+                    if (idx >= 0) {
+                      this.observingList.splice(idx, 1)
+                      AppStorage.setOrCreate("observingList", JSON.stringify(this.observingList))
+                    }
+                  })
+              }
+              .padding({ left: 10, right: 6, top: 3, bottom: 3 })
+              .backgroundColor("rgba(107,163,214,0.20)")
+              .borderRadius(8)
+              .onClick(() => {
+                this.searchObject(name)
+                this.flashHint($r('app.string.i0082', name))
+              })
             }, (name: string) => name)
           }.padding({ left: 4, right: 4 })
         }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
