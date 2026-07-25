@@ -2,6 +2,7 @@ import { command } from 'libentry.so'
 import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { sensor } from '@kit.SensorServiceKit'
+import { curves } from '@kit.ArkUI'
 import hilog from '@ohos.hilog'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
@@ -809,7 +810,7 @@ struct WindowNativeNode {
   private setPanel(panel: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = this.activePanel === panel ? !this.panelVisible : true
-    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+    this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
       this.panelVisible = nextVisible
     })
@@ -850,7 +851,7 @@ struct WindowNativeNode {
     if (this.uiLocked) {
       return
     }
-    this.getUIContext().animateTo({ duration: 160, curve: Curve.EaseOut }, () => {
+    this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
   }
@@ -3237,7 +3238,7 @@ private loadPlanetPositions(): void {
               .opacity(this.splashIn ? 1 : 0)
               .animation({ duration: 600, curve: Curve.EaseOut, delay: 300 })
             Text("正在唤醒星空…")
-              .fontSize(12).fontColor("#66FFFFFF")
+              .fontSize(12).fontColor("#99FFFFFF")
               .margin({ top: 14 })
               .opacity(this.splashIn ? 1 : 0)
               .animation({ duration: 600, curve: Curve.EaseOut, delay: 400 })
@@ -3348,12 +3349,12 @@ private loadPlanetPositions(): void {
           .height(this.panelMaxHeight)
           .position({ x: this.skyWidth - this.panelWidth - this.EDGE_MARGIN + this.panelOffsetX, y: this.EDGE_MARGIN + this.panelOffsetY })
           .hitTestBehavior(HitTestMode.Transparent)
-          // 面板滑入滑出动画：从右侧滑入 + 淡入
+          // 面板滑入滑出动画：从右侧滑入 + 淡入（一镜到底的连续弹簧滑动）
           .transition(TransitionEffect.asymmetric(
-            TransitionEffect.OPACITY.animation({ duration: 240, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: 48, y: 0 }).animation({ duration: 280, curve: Curve.Friction })),
-            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
-              .combine(TransitionEffect.translate({ x: 32, y: 0 }).animation({ duration: 160, curve: Curve.EaseIn }))
+            TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 64, y: 0 }).animation({ duration: 460, curve: curves.springMotion(0.55, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
       // 选中天体的独立浮动详情窗口：独立于右侧菜单，不干扰当前操作
@@ -3505,7 +3506,7 @@ private loadPlanetPositions(): void {
           .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF')
           .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(this.zhType(this.selectedType))
-          .fontSize(10).fontColor('#5B93BF')
+          .fontSize(10).fontColor('#7FB3DC')
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .backgroundColor('rgba(91,147,191,0.15)').borderRadius(6)
         Text(this.infoWinExpanded ? '▾' : '▸')
@@ -3514,6 +3515,7 @@ private loadPlanetPositions(): void {
           .fontSize(13).fontColor('#99FFFFFF').padding({ left: 6, right: 4 })
       }
       .width('100%').padding({ left: 12, right: 10, top: 10, bottom: 10 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
 
       if (this.infoWinExpanded) {
         Divider().color(this.nmBorder()).margin({ left: 8, right: 8 })
@@ -3543,6 +3545,11 @@ private loadPlanetPositions(): void {
         .scrollable(ScrollDirection.Vertical)
         .width('100%')
         .height(this.infoWinDetailH())
+        .transition(TransitionEffect.asymmetric(
+          TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })
+            .combine(TransitionEffect.translate({ x: 0, y: -10 }).animation({ duration: 260, curve: curves.springMotion(0.5, 0.85) })),
+          TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+        ))
         // 操作按钮常驻在滚动区下方，字段再多也不会被挤出可视区
         Row({ space: 8 }) {
           Button('居中')
@@ -3560,6 +3567,12 @@ private loadPlanetPositions(): void {
       .border({ width: 1, color: this.nmBorder() })
       .borderRadius(16)
       .shadow({ radius: 24, color: 'rgba(0,0,0,0.35)', offsetX: 0, offsetY: 10 })
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: 24, y: 0 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+        TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+          .combine(TransitionEffect.translate({ x: 16, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
+      ))
   }
 
   @Builder
@@ -3572,7 +3585,7 @@ private loadPlanetPositions(): void {
         .maxLines(1)
       Text($r('app.string.i0002'))
         .fontSize(9)
-        .fontColor('#5B93BF')
+        .fontColor('#7FB3DC')
         .padding({ left: 8, right: 8, top: 3, bottom: 3 })
         .backgroundColor('rgba(107, 163, 214, 0.10)')
         .borderRadius(12)
@@ -3602,6 +3615,14 @@ private loadPlanetPositions(): void {
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(28)
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 240, curve: curves.springMotion(0.42, 0.85) })
       // 手势由外层 Stack.onClick 统一处理
   }
 
@@ -3637,7 +3658,7 @@ private loadPlanetPositions(): void {
         Stack({ alignContent: Alignment.Center }) {
           Text("\uD83D\uDCCC")
             .fontSize(16)
-            .fontColor(this.railPinned ? "#FFD700" : "#66FFFFFF")
+            .fontColor(this.railPinned ? "#FFD700" : "#99FFFFFF")
         }
           .width(44)
           .height(36)
@@ -3726,7 +3747,7 @@ private loadPlanetPositions(): void {
     return this.nightMode ? '#FF6644' : '#E5FFFFFF'
   }
   private nmSub(): string {
-    return this.nightMode ? '#CC5533' : '#66FFFFFF'
+    return this.nightMode ? '#CC5533' : '#99FFFFFF'
   }
   private nmAccent(): string {
     return this.nightMode ? '#FF5533' : '#5B93BF'
@@ -3770,7 +3791,7 @@ private loadPlanetPositions(): void {
   @Builder
   ocularSelector(kind: string, label: string) {
     Column({ space: 4 }) {
-      Text(label).fontSize(12).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
+      Text(label).fontSize(12).fontColor('#99FFFFFF').width('100%').padding({ left: 2 })
       Row() {
         Button('‹')
           .fontSize(18).fontColor('#E5FFFFFF')
@@ -3781,7 +3802,7 @@ private loadPlanetPositions(): void {
             .fontSize(13).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.ocularSelInfo(kind).countText)
-            .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+            .fontSize(11).fontColor('#99FFFFFF').margin({ top: 2 })
         }.alignItems(HorizontalAlign.Center).layoutWeight(1)
         Button('›')
           .fontSize(18).fontColor('#E5FFFFFF')
@@ -3795,7 +3816,7 @@ private loadPlanetPositions(): void {
     Column() {
       Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
         .width(22).height(22)
-        .fillColor(this.activePanel === item.panel && this.panelVisible ? this.nmAccent() : this.nmText())
+        .fillColor(this.activePanel === item.panel && this.panelVisible ? '#FFFFFF' : this.nmText())
     }
       .width(44)
       .height(44)
@@ -3812,7 +3833,14 @@ private loadPlanetPositions(): void {
         offsetX: 0,
         offsetY: 6
       })
-      .animation({ duration: 180, curve: Curve.EaseOut })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
       // 手势由外层 Stack.onClick 统一处理
   }
 
@@ -3824,7 +3852,7 @@ private loadPlanetPositions(): void {
         .width(22).height(22)
         .fillColor(this.drawerOpen ? '#FFFFFF' : this.nmText())
         .rotate({ angle: this.drawerOpen ? 45 : 0 })
-        .animation({ duration: 240, curve: Curve.EaseOut })
+        .animation({ duration: 360, curve: curves.springMotion(0.5, 0.8) })
     }
       .width(44)
       .height(44)
@@ -3835,7 +3863,14 @@ private loadPlanetPositions(): void {
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.drawerOpen ? 1.08 : 1.0, y: this.drawerOpen ? 1.08 : 1.0 })
-      .animation({ duration: 200, curve: Curve.EaseOut })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
   }
 
   // 低频功能抽屉：从侧栏右侧滑出，图标 + 名称，一行一项
@@ -3878,9 +3913,9 @@ private loadPlanetPositions(): void {
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.40)', offsetX: 6, offsetY: 10 })
       .transition(TransitionEffect.asymmetric(
         TransitionEffect.OPACITY.animation({ duration: 240, curve: Curve.EaseOut })
-          .combine(TransitionEffect.translate({ x: -24, y: 0 }).animation({ duration: 260, curve: Curve.Friction })),
+          .combine(TransitionEffect.translate({ x: -40, y: 0 }).animation({ duration: 420, curve: curves.springMotion(0.5, 0.82) })),
         TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
-          .combine(TransitionEffect.translate({ x: -16, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
+          .combine(TransitionEffect.translate({ x: -24, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
       ))
   }
 
@@ -3890,13 +3925,13 @@ private loadPlanetPositions(): void {
       Text(item.icon)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#E5FFFFFF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#FFFFFF' : '#E5FFFFFF')
         .lineHeight(18)
         .textAlign(TextAlign.Center)
         .width('100%')
       Text(item.label)
         .fontSize(10)
-        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#99FFFFFF')
+        .fontColor(this.activePanel === item.panel && this.panelVisible ? '#F0FFFFFF' : '#99FFFFFF')
         .margin({ top: 2 })
     }
       .width(54)
@@ -3906,7 +3941,14 @@ private loadPlanetPositions(): void {
       .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : Color.Transparent)
       .borderRadius(26)
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.06 : 1.0 })
-      .animation({ duration: 180, curve: Curve.EaseOut })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.92, y: 0.92 })
+          .backgroundColor('rgba(255, 255, 255, 0.10)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
       .onClick(() => {
         this.setPanel(item.panel)
         this.flashHint($r('app.string.i0078', item.label + '面板'))
@@ -3936,9 +3978,9 @@ private loadPlanetPositions(): void {
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
       .margin({ top: 28, bottom: 28 })
-      .scale({ x: this.panelIdleOpacity < 1 ? 0.96 : 1.0, y: this.panelIdleOpacity < 1 ? 0.96 : 1.0 })
+      .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity)
-      .animation({ duration: 420, curve: Curve.Friction })
+      .animation({ duration: 480, curve: curves.springMotion(0.5, 0.92) })
   }
 
   @Builder
@@ -3965,9 +4007,9 @@ private loadPlanetPositions(): void {
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .alignSelf(ItemAlign.Center)
-      .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
+      .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
       .opacity(this.panelIdleOpacity)
-      .animation({ duration: 420, curve: Curve.Friction })
+      .animation({ duration: 480, curve: curves.springMotion(0.5, 0.92) })
   }
 
   @Builder
@@ -3991,14 +4033,14 @@ private loadPlanetPositions(): void {
           .fontColor('#E5FFFFFF')
         Text(this.panelSubtitle())
           .fontSize(11)
-          .fontColor('#66FFFFFF')
+          .fontColor('#99FFFFFF')
           .margin({ top: 3 })
       }
       Blank()
       Row() {
         Text(this.uiLocked ? "\U0001F4CC" : "\U0001F4CC")
           .fontSize(16)
-          .fontColor(this.uiLocked ? "#FFD700" : "#66FFFFFF")
+          .fontColor(this.uiLocked ? "#FFD700" : "#99FFFFFF")
       }
       .width(36)
       .height(36)
@@ -4033,6 +4075,14 @@ private loadPlanetPositions(): void {
       .alignItems(VerticalAlign.Center)
       .backgroundColor('rgba(255, 255, 255, 0.06)')
       .borderRadius(16)
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.14)')
+        }
+      })
+      .animation({ duration: 220, curve: curves.springMotion(0.4, 0.85) })
       .onClick(action)
   }
 
@@ -4041,8 +4091,8 @@ private loadPlanetPositions(): void {
     if (this.activePanel === 'object') {
       if (this.selectedName.length === 0) {
         Column() {
-          Text($r('app.string.i0109')).fontSize(14).fontColor('#66FFFFFF').margin({ top: 20 })
-          Text($r('app.string.i0110')).fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+          Text($r('app.string.i0109')).fontSize(14).fontColor('#99FFFFFF').margin({ top: 20 })
+          Text($r('app.string.i0110')).fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
         }.width('100%').height(100).justifyContent(FlexAlign.Center)
       } else {
       // 天体名称突出显示
@@ -4054,42 +4104,42 @@ private loadPlanetPositions(): void {
       // 类型标签
       Row() {
         Text(this.zhType(this.selectedType))
-          .fontSize(11).fontColor('#5B93BF')
+          .fontSize(11).fontColor('#7FB3DC')
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .backgroundColor('rgba(91, 147, 191, 0.15)').borderRadius(6)
         Blank()
         Text(this.selectedStatus === 'Selected' ? this.trackingText : this.selectedStatus)
-          .fontSize(11).fontColor('#66FFFFFF')
+          .fontSize(11).fontColor('#99FFFFFF')
       }.width('100%').padding({ left: 4, right: 4 }).height(20).margin({ bottom: 8 })
 
       // 直接绑定 @State（不要经 infoRow 的 @Builder 参数，参数按值捕获会导致不刷新，详见上方注释）
       if (this.selectedMagnitude.length > 0) {
         Row() {
-          Text($r('app.string.i0007')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0007')).fontSize(12).fontColor('#99FFFFFF').width(72)
           Text(this.selectedMagnitude).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedCoordEq.length > 0) {
         Row() {
-          Text($r('app.string.i0008')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0008')).fontSize(12).fontColor('#99FFFFFF').width(72)
           Text(this.selectedCoordEq).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedCoordAlt.length > 0) {
         Row() {
-          Text($r('app.string.i0009')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0009')).fontSize(12).fontColor('#99FFFFFF').width(72)
           Text(this.selectedCoordAlt).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedConstellation.length > 0) {
         Row() {
-          Text($r('app.string.i0010')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0010')).fontSize(12).fontColor('#99FFFFFF').width(72)
           Text(this.zhNameOf(this.selectedConstellation)).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
       if (this.selectedDistance.length > 0) {
         Row() {
-          Text($r('app.string.i0011')).fontSize(12).fontColor('#66FFFFFF').width(72)
+          Text($r('app.string.i0011')).fontSize(12).fontColor('#99FFFFFF').width(72)
           Text(this.selectedDistance).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.height(28).width('100%').padding({ left: 10, right: 10 })
       }
@@ -4386,7 +4436,7 @@ private loadPlanetPositions(): void {
         .borderRadius(12).height(40).width('100%').margin({ top: 4 })
         .onClick(() => { this.applyManualTime() })
       Button($r('app.string.i0047'))
-        .fontSize(13).fontColor('#66FFFFFF').backgroundColor(this.nmBorder())
+        .fontSize(13).fontColor('#99FFFFFF').backgroundColor(this.nmBorder())
         .borderRadius(8).height(36).width('100%').margin({ top: 2 })
         .onClick(() => {
           this.syncManualTimeFromState()
@@ -4395,15 +4445,15 @@ private loadPlanetPositions(): void {
 
 	    } else if (this.activePanel === 'place') {
       Row() {
-        Text($r('app.string.i0014')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0014')).fontSize(12).fontColor('#99FFFFFF').width(72)
         Text(this.locationText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
-        Text($r('app.string.i0015')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0015')).fontSize(12).fontColor('#99FFFFFF').width(72)
         Text(this.coordinateText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
-        Text($r('app.string.i0016')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0016')).fontSize(12).fontColor('#99FFFFFF').width(72)
         Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       this.locationPickerPanel()
@@ -4543,7 +4593,7 @@ private loadPlanetPositions(): void {
       if (this.searchText.length === 0 && this.searchHistory.length > 0) {
         Row() {
           Text($r('app.string.i0117')).fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
-          Text($r('app.string.i0118')).fontSize(11).fontColor('#4488FF').onClick(() => {
+          Text($r('app.string.i0118')).fontSize(11).fontColor('#6FA8FF').onClick(() => {
             this.searchHistory = []
             AppStorage.setOrCreate('searchHistory', JSON.stringify(this.searchHistory))
           })
@@ -4680,7 +4730,7 @@ private loadPlanetPositions(): void {
             this.infoRow($r('app.string.s0354'), 'YYYY-MM-DD')
             this.infoRow($r('app.string.s0355'), $r('app.string.s0731'))
             Row() {
-              Text($r('app.string.i0223')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+              Text($r('app.string.i0223')).fontSize(10).fontColor('#CC8FB6FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
           } else if (this.configTab === 4) {
             // Tools
@@ -4948,29 +4998,29 @@ private loadPlanetPositions(): void {
         Column({ space: 8 }) {
           Text($r('app.string.i0216')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4 })
           Text($r('app.string.i0261')).fontSize(11).fontColor(this.nmSub()).width('100%')
-          Text($r('app.string.i0262')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0263')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0264')).fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text($r('app.string.i0262')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0263')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0264')).fontSize(10).fontColor('#99FFFFFF').width('100%')
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 8, bottom: 4 })
           Text($r('app.string.i0217')).fontSize(13).fontColor(this.nmText()).width('100%')
-          Text($r('app.string.i0265')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0266')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0267')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0268')).fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text($r('app.string.i0265')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0266')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0267')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0268')).fontSize(10).fontColor('#99FFFFFF').width('100%')
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
             .margin({ top: 8, bottom: 4 })
           Text($r('app.string.i0218')).fontSize(13).fontColor(this.nmText()).width('100%')
-          Text($r('app.string.i0269')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0270')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0271')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0272')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0273')).fontSize(10).fontColor('#66FFFFFF').width('100%')
-          Text($r('app.string.i0274')).fontSize(10).fontColor('#66FFFFFF').width('100%')
+          Text($r('app.string.i0269')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0270')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0271')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0272')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0273')).fontSize(10).fontColor('#99FFFFFF').width('100%')
+          Text($r('app.string.i0274')).fontSize(10).fontColor('#99FFFFFF').width('100%')
           // ===== 关于 =====
           Row()
             .width('100%').height(0.5)
@@ -4978,11 +5028,11 @@ private loadPlanetPositions(): void {
             .margin({ top: 8, bottom: 4 })
           Text('关于').fontSize(13).fontColor(this.nmText()).width('100%')
           if (this.aboutVersion.length > 0) {
-            Text('Stellarium ' + this.aboutVersion + ' · Qt ' + this.aboutQt).fontSize(10).fontColor('#66FFFFFF').width('100%')
-            Text('用户目录: ' + this.aboutUserDir).fontSize(9).fontColor('#66FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('配置文件: ' + this.aboutConfigFile).fontSize(9).fontColor('#66FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('Stellarium ' + this.aboutVersion + ' · Qt ' + this.aboutQt).fontSize(10).fontColor('#99FFFFFF').width('100%')
+            Text('用户目录: ' + this.aboutUserDir).fontSize(9).fontColor('#99FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('配置文件: ' + this.aboutConfigFile).fontSize(9).fontColor('#99FFFFFF').width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
           } else {
-            Text('加载中…').fontSize(10).fontColor('#66FFFFFF').width('100%')
+            Text('加载中…').fontSize(10).fontColor('#99FFFFFF').width('100%')
           }
           // ===== 日志 =====
           Row()
@@ -5048,14 +5098,14 @@ private loadPlanetPositions(): void {
           }
           TextArea({ placeholder: '粘贴 config.ini 内容后点上方「导入配置」（支持 [section] 与 key=value 行）', text: this.configImportText })
             .fontSize(10).fontColor(this.nmText())
-            .placeholderFont({ size: 10 }).placeholderColor('#44FFFFFF')
+            .placeholderFont({ size: 10 }).placeholderColor('#8CFFFFFF')
             .backgroundColor(this.nmBg()).borderRadius(8)
             .width('100%').height(72)
             .onChange((v: string) => { this.configImportText = v })
           Text(this.configImportMsg.length > 0 ? this.configImportMsg : ' ')
             .fontSize(10).fontColor('#FFAA00').width('100%').height(16)
           Text('提示：导入仅覆盖文本中出现的键，导入后部分设置需重启应用生效。')
-            .fontSize(9).fontColor('#44FFFFFF').width('100%').margin({ bottom: 8 })
+            .fontSize(9).fontColor('#8CFFFFFF').width('100%').margin({ bottom: 8 })
         }
         .width('100%')
         .padding({ left: 4, right: 4 })
@@ -5064,12 +5114,12 @@ private loadPlanetPositions(): void {
       // 星表下载面板
       if (this.catalogLoading) {
         Column() {
-          Text('正在获取星表列表…').fontSize(13).fontColor('#66FFFFFF')
+          Text('正在获取星表列表…').fontSize(13).fontColor('#99FFFFFF')
         }.width('100%').height(120).justifyContent(FlexAlign.Center)
       } else if (this.catalogList.length === 0) {
         Column() {
           Text('暂无可下载的星表').fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
-          Text('当前版本可能已包含全部星表').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+          Text('当前版本可能已包含全部星表').fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
         }.width('100%').height(120).justifyContent(FlexAlign.Center)
       } else {
         Scroll() {
@@ -5083,12 +5133,12 @@ private loadPlanetPositions(): void {
                       .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
                     if (c.size.length > 0) {
                       Text('大小 ' + c.size)
-                        .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+                        .fontSize(11).fontColor('#99FFFFFF').margin({ top: 2 })
                     }
                   }.layoutWeight(1)
                   if (c.checked) {
                     Text('已安装')
-                      .fontSize(11).fontColor('#5B93BF')
+                      .fontSize(11).fontColor('#7FB3DC')
                       .padding({ left: 8, right: 8, top: 3, bottom: 3 })
                       .backgroundColor('rgba(91,147,191,0.15)').borderRadius(8)
                   } else {
@@ -5118,7 +5168,7 @@ private loadPlanetPositions(): void {
       Column({ space: 10 }) {
         Row({ space: 8 }) {
           TextInput({ text: this.newBookmarkName, placeholder: '书签名称（可空）' })
-            .fontSize(13).fontColor('#E5FFFFFF').placeholderColor('#66FFFFFF')
+            .fontSize(13).fontColor('#E5FFFFFF').placeholderColor('#99FFFFFF')
             .backgroundColor('rgba(255,255,255,0.06)').borderRadius(10)
             .height(36).layoutWeight(1).padding({ left: 10, right: 10 })
             .onChange((v: string) => { this.newBookmarkName = v })
@@ -5130,12 +5180,12 @@ private loadPlanetPositions(): void {
         }.width('100%')
         if (this.bookmarkLoading) {
           Column() {
-            Text('正在加载书签…').fontSize(13).fontColor('#66FFFFFF')
+            Text('正在加载书签…').fontSize(13).fontColor('#99FFFFFF')
           }.width('100%').height(80).justifyContent(FlexAlign.Center)
         } else if (this.bookmarkList.length === 0) {
           Column() {
             Text('还没有书签').fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
-            Text('调整好视角后点「保存当前视图」').fontSize(12).fontColor('#446688FF').margin({ top: 6 })
+            Text('调整好视角后点「保存当前视图」').fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
           }.width('100%').height(100).justifyContent(FlexAlign.Center)
         } else {
           Scroll() {
@@ -5147,7 +5197,7 @@ private loadPlanetPositions(): void {
                       .fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
                       .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                     Text((b.object.length > 0 ? (b.object + ' · ') : '') + 'FOV ' + b.fov.toFixed(1) + '°')
-                      .fontSize(11).fontColor('#66FFFFFF').margin({ top: 2 })
+                      .fontSize(11).fontColor('#99FFFFFF').margin({ top: 2 })
                       .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                     .onClick(() => { this.gotoBookmark(b.id) })
@@ -5203,7 +5253,7 @@ private loadPlanetPositions(): void {
         Column({ space: 10 }) {
           Row() {
             Text('卫星总数').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            Text(this.satCount.toString()).fontSize(13).fontColor('#66FFFFFF')
+            Text(this.satCount.toString()).fontSize(13).fontColor('#99FFFFFF')
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
           Row() {
             Text('显示标签').fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
@@ -5231,7 +5281,7 @@ private loadPlanetPositions(): void {
               .onChange((isOn: boolean) => { this.setSatelliteFlag('hideInvisible', isOn) })
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
           if (this.satGroups.length > 0) {
-            Text('卫星分组').fontSize(12).fontColor('#66FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
+            Text('卫星分组').fontSize(12).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
             ForEach(this.satGroups, (g: string) => {
               Row() {
                 Text(g).fontSize(13).fontColor('#E5FFFFFF')
@@ -5265,7 +5315,7 @@ private loadPlanetPositions(): void {
               .onChange((isOn: boolean) => { this.setMeteorShowersFlag('marker', isOn) })
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
           Text('辐射点为流星雨在天球上看似发散的中心点；活跃流星雨随日期变化，可结合时间面板跳转到极大日观察。')
-            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
+            .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'scripts') {
@@ -5274,7 +5324,7 @@ private loadPlanetPositions(): void {
         Column({ space: 10 }) {
           Text('脚本录制与回放').fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 4 })
           Text('点击「开始录制」后，你在星图上的操作（搜索、选星、时间、图层开关等）会被记录；停止后可保存，并在本机随时一键重放。')
-            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 })
+            .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 })
 
           Row({ space: 10 }) {
             Button(this.recording ? '停止录制' : '开始录制')
@@ -5305,7 +5355,7 @@ private loadPlanetPositions(): void {
 
           Text('已保存的录制').fontSize(13).fontColor(this.nmText()).width('100%').padding({ left: 6 })
           if (this.recordings.length === 0) {
-            Text('（暂无，录制并保存后会出现在这里）').fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 6 })
+            Text('（暂无，录制并保存后会出现在这里）').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 6 })
           }
           ForEach(this.recordings, (rec: RecordingEntry, idx: number) => {
             Column({ space: 4 }) {
@@ -5313,7 +5363,7 @@ private loadPlanetPositions(): void {
                 Column() {
                   Text(rec.name).fontSize(13).fontColor(this.nmText()).width('100%')
                   Text((rec.created.length > 0 ? rec.created + ' · ' : '') + rec.count + ' 条命令')
-                    .fontSize(10).fontColor('#66FFFFFF').width('100%')
+                    .fontSize(10).fontColor('#99FFFFFF').width('100%')
                 }.layoutWeight(1)
                 Button('回放')
                   .fontSize(11).fontColor('#FFFFFF').backgroundColor('#5B93BF')
@@ -5332,7 +5382,7 @@ private loadPlanetPositions(): void {
           Row().width('100%').height(0.5).backgroundColor(this.nmBorder()).margin({ top: 6, bottom: 6 })
           Text('视频录制（帧序列）').fontSize(13).fontColor(this.nmText()).width('100%').padding({ left: 6 })
           Text('基础版系统不含视频编码器，这里用「定时截图」代替：按设定的帧率连续抓取星图画面，存成 frame_00001.jpg 等一连串图片，放在本机 videos/ 目录下。你可以用第三方工具（如 ffmpeg）把这些图片合成真正的视频。')
-            .fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 4, right: 4 })
+            .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 })
 
           Row({ space: 8 }) {
             Column({ space: 2 }) {
@@ -5366,7 +5416,7 @@ private loadPlanetPositions(): void {
           }
           if (this.videoDir.length > 0) {
             Text('存放目录：' + this.videoDir)
-              .fontSize(10).fontColor('#66FFFFFF').width('100%').padding({ left: 6, right: 6 })
+              .fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 6, right: 6 })
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -5383,7 +5433,7 @@ private loadPlanetPositions(): void {
       // 观测列表
       if (this.observingList.length > 0) {
         Row() {
-          Text($r('app.string.i0022')).fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text($r('app.string.i0022')).fontSize(12).fontColor("#99FFFFFF").width(72)
           Text(this.observingList.length + ' objects').fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1)
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
@@ -5410,7 +5460,7 @@ private loadPlanetPositions(): void {
         .backgroundColor('rgba(255,255,255,0.06)')
         .margin({ top: 8, bottom: 4 })
       Row() {
-        Text($r('app.string.i0275')).fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
+        Text($r('app.string.i0275')).fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 })
       }
       .height(18).width('100%')
       Row() {
@@ -5423,7 +5473,7 @@ private loadPlanetPositions(): void {
         .backgroundColor('rgba(255,255,255,0.06)')
         .margin({ top: 8, bottom: 4 })
       Row() {
-        Text($r('app.string.i0276')).fontSize(11).fontColor('#66FFFFFF').width('100%').padding({ left: 2 })
+        Text($r('app.string.i0276')).fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 })
       }
       .height(18).width('100%')
       Row() {
@@ -5432,7 +5482,7 @@ private loadPlanetPositions(): void {
       .width('100%')
       // 天球投影切换
       Row() {
-        Text($r('app.string.i0025')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0025')).fontSize(12).fontColor('#99FFFFFF').width(72)
         Text(this.equatorialMount ? $r('app.string.i0008') : $r('app.string.i0009'))
           .fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.equatorialMount })
@@ -5467,7 +5517,7 @@ private loadPlanetPositions(): void {
       .width('100%').margin({ top: 4, bottom: 4 })
       // 星空翻转
       Row() {
-        Text($r('app.string.i0277')).fontSize(12).fontColor('#66FFFFFF').width(72)
+        Text($r('app.string.i0277')).fontSize(12).fontColor('#99FFFFFF').width(72)
         Row() {
               Image($r('app.media.ic_layers')).width(14).height(14).fillColor('#E5FFFFFF')
               Text(this.flipVert ? $r('app.string.s0709') : $r('app.string.s0710')).fontSize(11).fontColor('#E5FFFFFF').margin({ left: 3 })
@@ -5495,7 +5545,7 @@ private loadPlanetPositions(): void {
       this.quickChips([{ id: 'refresh', label: $r('app.string.s0721') }, { id: 'now', label: $r('app.string.s0754') }])
       // 帮助说明
       Row() {
-        Text($r('app.string.i0026')).fontSize(12).fontColor("#66FFFFFF").width(72)
+        Text($r('app.string.i0026')).fontSize(12).fontColor("#99FFFFFF").width(72)
       }
       .height(6).width("100%").margin({ top: 2 })
       Text($r('app.string.i0027'))
@@ -5504,7 +5554,7 @@ private loadPlanetPositions(): void {
         .fontSize(11).fontColor("#99FFFFFF").width("100%").padding({ left: 4, right: 4 }).margin({ top: 2 })
       // 语言选择
       Row() {
-        Text($r('app.string.i0029')).fontSize(12).fontColor("#66FFFFFF").width(72)
+        Text($r('app.string.i0029')).fontSize(12).fontColor("#99FFFFFF").width(72)
         Text(this.selectedLanguage === 'zh_CN' ? $r('app.string.i0030') :
              this.selectedLanguage === 'zh_TW' ? $r('app.string.s0713') :
              this.selectedLanguage === 'en' ? $r('app.string.i0032') :
@@ -5548,7 +5598,7 @@ private loadPlanetPositions(): void {
       // 星图文化选择
       if (this.skyCultures.length > 0) {
         Row() {
-          Text($r('app.string.i0035')).fontSize(12).fontColor("#66FFFFFF").width(72)
+          Text($r('app.string.i0035')).fontSize(12).fontColor("#99FFFFFF").width(72)
           Text(this.currentSkyCulture).fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .height(34).width("100%").padding({ left: 10, right: 10 }).backgroundColor("rgba(255, 255, 255, 0.04)").borderRadius(12).margin({ bottom: 4 })
@@ -5614,7 +5664,7 @@ private loadPlanetPositions(): void {
         Button($r('app.string.i0050'))
           .height(32)
           .fontSize(12)
-          .fontColor('#5B93BF')
+          .fontColor('#7FB3DC')
           .backgroundColor('rgba(107, 163, 214, 0.20)')
           .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
           .borderRadius(16)
@@ -5637,7 +5687,7 @@ private loadPlanetPositions(): void {
         .margin({ top: 10 })
       Text(this.lx200Status)
         .fontSize(11)
-        .fontColor('#66FFFFFF')
+        .fontColor('#99FFFFFF')
         .width('100%')
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -5700,13 +5750,13 @@ private loadPlanetPositions(): void {
             .height('100%')
             .objectFit(ImageFit.Fill)
           // 经纬度刻度
-          Text('N').fontSize(9).fontColor('#66FFFFFF').position({ x: 6, y: 4 })
-          Text('S').fontSize(9).fontColor('#66FFFFFF').position({ x: 6, y: this.mapRenderHeight - 16 })
-          Text('90°W').fontSize(8).fontColor('#446688FF').position({ x: 4, y: Math.round(this.mapRenderHeight / 2) - 4 })
-          Text('90°E').fontSize(8).fontColor('#446688FF').position({ x: this.mapRenderWidth - 32, y: Math.round(this.mapRenderHeight / 2) - 4 })
+          Text('N').fontSize(9).fontColor('#99FFFFFF').position({ x: 6, y: 4 })
+          Text('S').fontSize(9).fontColor('#99FFFFFF').position({ x: 6, y: this.mapRenderHeight - 16 })
+          Text('90°W').fontSize(8).fontColor('#CC8FB6FF').position({ x: 4, y: Math.round(this.mapRenderHeight / 2) - 4 })
+          Text('90°E').fontSize(8).fontColor('#CC8FB6FF').position({ x: this.mapRenderWidth - 32, y: Math.round(this.mapRenderHeight / 2) - 4 })
           Text($r('app.string.i0040'))
             .fontSize(18)
-            .fontColor('#5B93BF')
+            .fontColor('#7FB3DC')
             .textShadow({ radius: 8, color: 'rgba(159, 232, 255, 0.75)', offsetX: 0, offsetY: 0 })
             .position({ x: this.pickerPinX(), y: this.pickerPinY() })
         }
@@ -5778,7 +5828,7 @@ private loadPlanetPositions(): void {
           })
         Text(this.locationPickerStatus)
           .fontSize(11)
-          .fontColor('#66FFFFFF')
+          .fontColor('#99FFFFFF')
           .layoutWeight(1)
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -5823,7 +5873,7 @@ private loadPlanetPositions(): void {
 	        Button($r('app.string.i0050'))
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#5B93BF')
+	          .fontColor('#7FB3DC')
 	          .backgroundColor('rgba(107, 163, 214, 0.20)')
 	          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
 	          .borderRadius(16)
@@ -5846,7 +5896,7 @@ private loadPlanetPositions(): void {
 	        .margin({ top: 8 })
 	      Text(this.lx200Status)
 	        .fontSize(11)
-	        .fontColor('#66FFFFFF')
+	        .fontColor('#99FFFFFF')
 	        .width('100%')
 	        .maxLines(2)
 	        .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -5915,7 +5965,7 @@ private loadPlanetPositions(): void {
           ], (lang: LangOption) => {
             Text(lang.name)
               .fontSize(12)
-              .fontColor(this.selectedLanguage === lang.code ? '#5B93BF' : '#66FFFFFF')
+              .fontColor(this.selectedLanguage === lang.code ? '#5B93BF' : '#99FFFFFF')
               .padding({ left: 8, right: 8, top: 3, bottom: 3 })
               .backgroundColor(this.selectedLanguage === lang.code ? '#5B93BF' : 'rgba(255,255,255,0.06)')
               .borderRadius(8)
@@ -5958,7 +6008,7 @@ private loadPlanetPositions(): void {
       ForEach(items, (item: ChipItem) => {
         Button(item.label)
           .fontSize(12)
-          .fontColor('#5B93BF')
+          .fontColor('#7FB3DC')
           .fontWeight(FontWeight.Medium)
           .height(32)
           .padding({ left: 14, right: 14 })
@@ -6052,7 +6102,7 @@ private loadPlanetPositions(): void {
     Row() {
       Text(label)
         .fontSize(12)
-        .fontColor('#66FFFFFF')
+        .fontColor('#99FFFFFF')
         .width(72)
       Text(value)
         .fontSize(14)
@@ -6106,7 +6156,8 @@ private loadPlanetPositions(): void {
       .border({ width: 1, color: enabled ? 'rgba(107, 163, 214, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
       .borderRadius(12)
       .margin({ bottom: 6 })
-      .animation({ duration: 160, curve: Curve.EaseOut })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .animation({ duration: 200, curve: curves.springMotion(0.45, 0.9) })
   }
 
   private panelTitle(): ResourceStr {
@@ -6257,7 +6308,7 @@ private loadPlanetPositions(): void {
       .backgroundColor(this.nmBorder())
       .margin({ top: 6, bottom: 4 })
     Row() {
-            Text($r('app.string.i0214')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+            Text($r('app.string.i0214')).fontSize(10).fontColor('#CC8FB6FF').width('100%').padding({ left: 2 })
     }
     .height(18).width('100%')
     Row({ space: 12 }) {
@@ -6477,7 +6528,7 @@ private loadPlanetPositions(): void {
     this.switchRow($r('app.string.s0600'), this.hipsSurveys, 'actionShow_Hips_Surveys')
     this.switchRow($r('app.string.s0601'), this.toastSurvey, 'actionShow_Toast_Survey')
     Row() {
-      Text($r('app.string.i0215')).fontSize(10).fontColor('#446688FF').width('100%').padding({ left: 2 })
+      Text($r('app.string.i0215')).fontSize(10).fontColor('#CC8FB6FF').width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 8 })
   }
 
