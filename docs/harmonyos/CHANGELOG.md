@@ -800,3 +800,20 @@
 - **验证结果：** 未安装测试（用户要求先不测试）
 - **备注：** libstellarium.so 已更新（约 40MB），包含 getSkyCultureList/setSkyCulture/getPluginList/loadPlugin/unloadPlugin/getConfigString/setConfigString
 
+---
+
+## [2026-07-25] 汉化补全 + 启动自动定位 + 多语言回归测试
+
+- **修改文件：**
+  - `harmonyos/ets-source/resources/ja/element/string.json`（新增，384 条）
+  - `harmonyos/ets-source/resources/ko/element/string.json`（新增，384 条）
+  - `harmonyos/ets-source/resources/zh_TW/element/string.json`（新增，384 条）
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（语言切换提示 + 启动自动定位）
+  - `scripts/i18n_regression_test.py`（新增回归测试）
+- **一、罗盘方位汉化（复核+打包验证）：** `src/core/modules/LandscapeMgr.cpp` 的 `Cardinals::updateI18n()` 在中文环境下注入汉字方位表（北/南/东/西…+32 向）。本会话重编 .so（已含"北"字节）、重新打包安装，启动日志确认语言=zh 时中文分支生效，截图供肉眼确认。
+- **二、补齐 ja/ko/zh_TW 外壳多语言：** 新建三套完整 string.json（各 384 条，键集与 base 一致），HAP 已确认包含。重要限制：本 SDK 无运行时切换外壳语言的 API（无 `i18n.setAppLanguage`/`setPreferredLanguage`，`getApplicationContext` 未导出），外壳语言跟随**设备系统语言**；应用内"语言"按钮仅切换星图（C++ .qm）语言。分发到日/韩/繁中地区时，把设备系统语言设为对应语言即自动生效。语言切换提示改为显示所选语言名（如"星图语言：日本語"）。
+- **三、启动自动获取位置：** `startupBridgeSync()` 在核心就绪后自动调用 `useDeviceLocation()`（仅一次，带 `autoLocateStarted` 守卫）。无 GPS / 定位开关关闭时回退到已保存/默认（北京）位置，不崩溃。已验证启动日志触发 `auto-locate on startup` 且优雅回退（模拟器定位开关关闭 → 捕获错误 → 回退北京）。
+- **四、多语言回归测试：** `scripts/i18n_regression_test.py` 静态校验 6 套资源键集一致、值非空，并可扫描 HAP 确认 5 种 UI 语言均已打包。当前 PASS。
+- **构建/验证：** HAP 重包用 `assembleHap --no-daemon`（规避 WorkBuddy safe-delete shim 的 00308018 报错）；模拟器 127.0.0.1:5555 卸载重装并运行；i18n 回归测试 PASS。
+- **待办/限制：** ① 罗盘中文需用户在截图里肉眼确认（模型不能读图）；② 外壳按系统语言渲染，需在设备系统设置里切换语言才能预览 ja/ko/zh_TW，无法用 hdc 脚本化；③ 自动定位要真正获取到坐标需设备开启定位或物理 GPS（模拟器无），本会话仅验证代码路径+优雅回退。
+

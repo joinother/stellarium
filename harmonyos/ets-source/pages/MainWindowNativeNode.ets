@@ -182,6 +182,7 @@ struct WindowNativeNode {
   @State private manualMinute: number = 0
   @State private selectedLanguage: string = 'zh_CN'
   @State private bridgeSyncStarted: boolean = false
+  private autoLocateStarted: boolean = false
   @State private equatorialMount: boolean = false
   @State private nightMode: boolean = false
   @State private flipVert: boolean = false
@@ -696,7 +697,19 @@ struct WindowNativeNode {
     }
     // 默认语言设置为中文
     this.setLanguage('zh_CN')
+    // 启动自动获取位置：等核心就绪后触发一次；无 GPS（如模拟器）会回退到已保存/默认位置，不崩溃
+    this.callNativeWhenReady("getState", "", () => {
+      this.triggerAutoLocate()
+    })
     if (this.SELFTEST) { this.selfTestAllActions() }
+  }
+
+  // 启动期自动定位（只触发一次）。GPS 可用时更新为真实位置，不可用时回退到已保存/默认位置。
+  private triggerAutoLocate(): void {
+    if (this.autoLocateStarted) { return }
+    this.autoLocateStarted = true
+    hilog.info(0x0000, 'StellariumArkUI', 'auto-locate on startup -> useDeviceLocation()')
+    this.useDeviceLocation()
   }
 
   aboutToDisappear(): void {
@@ -1601,7 +1614,12 @@ private loadPlanetPositions(): void {
       const result = this.callNative('setLanguage', lang)
       if (result.ok === true) {
         this.selectedLanguage = lang
-        this.flashHint(lang === 'zh_CN' ? 'Switched to Chinese' : 'Switched to English')
+        const langLabel: Record<string, string> = {
+          'zh_CN': '简体中文', 'zh_TW': '繁體中文', 'en': 'English', 'ja': '日本語', 'ko': '한국어'
+        }
+        // Shell UI text follows the device system locale (this SDK has no runtime
+        // UI-language switch); this toggle switches the star-map core language.
+        this.flashHint('星图语言：' + (langLabel[lang] ?? lang))
         this.refreshState()
       } else if (attempt < 60) {
         setTimeout(() => attemptSet(attempt + 1), 200)
@@ -1988,6 +2006,7 @@ private loadPlanetPositions(): void {
   }
 
   private async useDeviceLocation(): Promise<void> {
+    hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.locationPickerStatus = 'Requesting location permission'
     try {
       const context = getContext(this) as common.UIAbilityContext
