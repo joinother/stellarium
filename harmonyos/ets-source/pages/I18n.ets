@@ -15,6 +15,9 @@
 export type LangCode = 'en' | 'zh_CN' | 'zh_TW' | 'ja' | 'ko' | 'fr' | 'de' | 'es' | 'ru' | 'pt' | 'it' | 'nl' | 'pl' | 'tr' | 'ar' | 'hi' | 'th' | 'vi' | 'id' | 'uk' | 'sv'
 
 // 支持的语言列表（用于设置面板显示）
+// ── 恒星翻译表（供外部直接引用的快捷列表）──
+export const BRIGHT_STARS: string[] = ['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris']
+
 export const SUPPORTED_LANGUAGES: string[] = [
   'en', 'zh_CN', 'zh_TW', 'ja', 'ko', 'fr', 'de', 'es', 'ru',
   'pt', 'it', 'nl', 'pl', 'tr', 'ar', 'hi', 'th', 'vi', 'id', 'uk', 'sv'
@@ -112,9 +115,51 @@ const SAT_GROUPS: Record<string, Record<string, string>> = {
   'tv': { 'en': 'TV', 'zh_CN': '电视', 'ja': 'テレビ', 'ko': 'TV', 'fr': 'TV', 'de': 'TV', 'es': 'TV', 'ru': 'ТВ' },
   'visual': { 'en': 'Visual', 'zh_CN': '可视', 'ja': '可視', 'ko': '가시', 'fr': 'Visuel', 'de': 'Visuell', 'es': 'Visual', 'ru': 'Видимые' },
   'weather': { 'en': 'Weather', 'zh_CN': '气象', 'ja': '気象', 'ko': '기상', 'fr': 'Météo', 'de': 'Wetter', 'es': 'Meteorología', 'ru': 'Метеорологические' },
+  'beidou': { 'en': 'BeiDou', 'zh_CN': '北斗', 'ja': '北斗', 'ko': '베이더우', 'fr': 'BeiDou', 'de': 'BeiDou', 'es': 'BeiDou', 'ru': 'Бэйдоу' },
+  'cosmos': { 'en': 'Cosmos', 'zh_CN': '宇宙', 'ja': 'コスモス', 'ko': '코스모스', 'fr': 'Cosmos', 'de': 'Kosmos', 'es': 'Cosmos', 'ru': 'Космос' },
+  'earth resources': { 'en': 'Earth Resources', 'zh_CN': '地球资源', 'ja': '地球観測', 'ko': '지구 자원', 'fr': 'Ressources terrestres', 'de': 'Erdressourcen', 'es': 'Recursos terrestres', 'ru': 'Ресурсы Земли' },
+  'galileo': { 'en': 'Galileo', 'zh_CN': '伽利略', 'ja': 'ガリレオ', 'ko': '갈릴레오', 'fr': 'Galileo', 'de': 'Galileo', 'es': 'Galileo', 'ru': 'Галилео' },
+  'geo': { 'en': 'GEO', 'zh_CN': '地球同步轨道', 'ja': '静止軌道', 'ko': '정지궤도', 'fr': 'GEO', 'de': 'GEO', 'es': 'GEO', 'ru': 'ГЕО' },
+  'geostationary': { 'en': 'Geostationary', 'zh_CN': '地球静止轨道', 'ja': '静止軌道', 'ko': '정지궤도', 'fr': 'Géostationnaire', 'de': 'Geostationär', 'es': 'Geoestacionario', 'ru': 'Геостационарные' },
+  'glo-ops': { 'en': 'GLO-OPS', 'zh_CN': '格洛纳斯运营', 'ja': 'GLONASS運用', 'ko': 'GLONASS 운영', 'fr': 'GLO-OPS', 'de': 'GLO-OPS', 'es': 'GLO-OPS', 'ru': 'ГЛОНАСС-ОПС' },
+  'glonass': { 'en': 'GLONASS', 'zh_CN': '格洛纳斯', 'ja': 'GLONASS', 'ko': 'GLONASS', 'fr': 'GLONASS', 'de': 'GLONASS', 'es': 'GLONASS', 'ru': 'ГЛОНАСС' },
+  'gnss': { 'en': 'GNSS', 'zh_CN': '全球导航卫星系统', 'ja': '測位衛星', 'ko': '위성항법시스템', 'fr': 'GNSS', 'de': 'GNSS', 'es': 'GNSS', 'ru': 'ГНСС' },
+  'gonets': { 'en': 'Gonets', 'zh_CN': '戈涅斯', 'ja': 'ゴネツ', 'ko': '고네츠', 'fr': 'Gonets', 'de': 'Gonets', 'es': 'Gonets', 'ru': 'Гонец' },
+  'gps': { 'en': 'GPS', 'zh_CN': 'GPS', 'ja': 'GPS', 'ko': 'GPS', 'fr': 'GPS', 'de': 'GPS', 'es': 'GPS', 'ru': 'GPS' },
+  'gps-ops': { 'en': 'GPS-OPS', 'zh_CN': 'GPS运营', 'ja': 'GPS運用', 'ko': 'GPS 운영', 'fr': 'GPS-OPS', 'de': 'GPS-OPS', 'es': 'GPS-OPS', 'ru': 'GPS-ОПС' },
+  'iridium-next': { 'en': 'Iridium NEXT', 'zh_CN': '铱星NEXT', 'ja': 'Iridium-NEXT', 'ko': 'Iridium-NEXT', 'fr': 'Iridium-NEXT', 'de': 'Iridium-NEXT', 'es': 'Iridium-NEXT', 'ru': 'Иридиум-NEXT' },
+  'irnss': { 'en': 'IRNSS', 'zh_CN': '印度区域导航', 'ja': 'インド区域航法', 'ko': '인도 지역항법', 'fr': 'IRNSS', 'de': 'IRNSS', 'es': 'IRNSS', 'ru': 'IRNSS' },
+  'last-30-days': { 'en': 'Last 30 Days', 'zh_CN': '近30天', 'ja': '過去30日間', 'ko': '최근 30일', 'fr': '30 derniers jours', 'de': 'Letzte 30 Tage', 'es': 'Últimos 30 días', 'ru': 'За 30 дней' },
+  'leo': { 'en': 'LEO', 'zh_CN': '低轨卫星', 'ja': '低軌道', 'ko': '저궤도', 'fr': 'LEO', 'de': 'LEO', 'es': 'LEO', 'ru': 'НСО' },
+  'meo': { 'en': 'MEO', 'zh_CN': '中轨卫星', 'ja': '中軌道', 'ko': '중궤도', 'fr': 'MEO', 'de': 'MEO', 'es': 'MEO', 'ru': 'СПО' },
+  'resource': { 'en': 'Resource', 'zh_CN': '资源', 'ja': '資源', 'ko': '자원', 'fr': 'Ressource', 'de': 'Ressource', 'es': 'Recurso', 'ru': 'Ресурс' },
+  'space-station': { 'en': 'Space Station', 'zh_CN': '空间站', 'ja': '宇宙ステーション', 'ko': '우주정거장', 'fr': 'Station spatiale', 'de': 'Raumstation', 'es': 'Estación espacial', 'ru': 'Космическая станция' },
+  'tracking': { 'en': 'Tracking', 'zh_CN': '跟踪', 'ja': '追跡', 'ko': '추적', 'fr': 'Suivi', 'de': 'Verfolgung', 'es': 'Seguimiento', 'ru': 'Слежение' },
 }
 
 // 插件名称翻译表
+// 恒星名称翻译表（搜索面板快捷按钮用）
+const STAR_NAMES: Record<string, Record<string, string>> = {
+  'Achernar': { 'en': 'Achernar', 'zh_CN': '水委一', 'ja': 'アケルナル', 'ko': '아케르나르', 'fr': 'Achernar', 'de': 'Achernar', 'es': 'Achernar', 'ru': 'Ахернар' },
+  'Aldebaran': { 'en': 'Aldebaran', 'zh_CN': '毕宿五', 'ja': 'アルデバラン', 'ko': '알데바란', 'fr': 'Aldébaran', 'de': 'Aldebaran', 'es': 'Aldebarán', 'ru': 'Альдебаран' },
+  'Altair': { 'en': 'Altair', 'zh_CN': '牛郎星', 'ja': 'アルタイル', 'ko': '알타이르', 'fr': 'Altaïr', 'de': 'Altair', 'es': 'Altair', 'ru': 'Альтаир' },
+  'Antares': { 'en': 'Antares', 'zh_CN': '心宿二', 'ja': 'アンタレス', 'ko': '안타레스', 'fr': 'Antarès', 'de': 'Antares', 'es': 'Antares', 'ru': 'Антарес' },
+  'Arcturus': { 'en': 'Arcturus', 'zh_CN': '大角星', 'ja': 'アークトゥルス', 'ko': '아크투루스', 'fr': 'Arcturus', 'de': 'Arcturus', 'es': 'Arcturus', 'ru': 'Арктур' },
+  'Betelgeuse': { 'en': 'Betelgeuse', 'zh_CN': '参宿四', 'ja': 'ベテルギウス', 'ko': '베텔기우스', 'fr': 'Bételgeuse', 'de': 'Beteigeuze', 'es': 'Betelgeuse', 'ru': 'Бетельгейзе' },
+  'Canopus': { 'en': 'Canopus', 'zh_CN': '老人星', 'ja': 'カノプス', 'ko': '카노푸스', 'fr': 'Canope', 'de': 'Canopus', 'es': 'Canopus', 'ru': 'Канопус' },
+  'Capella': { 'en': 'Capella', 'zh_CN': '五车二', 'ja': 'カペラ', 'ko': '카펠라', 'fr': 'Capella', 'de': 'Capella', 'es': 'Capella', 'ru': 'Капелла' },
+  'Deneb': { 'en': 'Deneb', 'zh_CN': '天津四', 'ja': 'デネブ', 'ko': '데네브', 'fr': 'Deneb', 'de': 'Deneb', 'es': 'Deneb', 'ru': 'Денеб' },
+  'Fomalhaut': { 'en': 'Fomalhaut', 'zh_CN': '北落师门', 'ja': 'フォマルハウト', 'ko': '포말하우트', 'fr': 'Fomalhaut', 'de': 'Fomalhaut', 'es': 'Fomalhaut', 'ru': 'Фомальгаут' },
+  'Polaris': { 'en': 'Polaris', 'zh_CN': '北极星', 'ja': 'ポラリス', 'ko': '폴라리스', 'fr': 'Polaris', 'de': 'Polaris', 'es': 'Polaris', 'ru': 'Полярная звезда' },
+  'Pollux': { 'en': 'Pollux', 'zh_CN': '北河三', 'ja': 'ポルックス', 'ko': '폴룩스', 'fr': 'Pollux', 'de': 'Pollux', 'es': 'Pólux', 'ru': 'Поллукс' },
+  'Procyon': { 'en': 'Procyon', 'zh_CN': '南河三', 'ja': 'プロキオン', 'ko': '프로키온', 'fr': 'Procyon', 'de': 'Prokyon', 'es': 'Próción', 'ru': 'Прохион' },
+  'Regulus': { 'en': 'Regulus', 'zh_CN': '轩辕十四', 'ja': 'レグルス', 'ko': '레굴루스', 'fr': 'Régulus', 'de': 'Regulus', 'es': 'Regulo', 'ru': 'Регул' },
+  'Rigel': { 'en': 'Rigel', 'zh_CN': '参宿七', 'ja': 'リゲル', 'ko': '리겔', 'fr': 'Rigel', 'de': 'Rigel', 'es': 'Rigel', 'ru': 'Ригель' },
+  'Sirius': { 'en': 'Sirius', 'zh_CN': '天狼星', 'ja': 'シリウス', 'ko': '시리우스', 'fr': 'Sirius', 'de': 'Sirius', 'es': 'Sirio', 'ru': 'Сириус' },
+  'Spica': { 'en': 'Spica', 'zh_CN': '角宿一', 'ja': 'スピカ', 'ko': '스피카', 'fr': 'Spica', 'de': 'Spica', 'es': 'Espiga', 'ru': 'Спика' },
+  'Vega': { 'en': 'Vega', 'zh_CN': '织女星', 'ja': 'ベガ', 'ko': '베가', 'fr': 'Véga', 'de': 'Wega', 'es': 'Vega', 'ru': 'Вега' },
+}
+
 const PLUGIN_NAMES: Record<string, Record<string, string>> = {
   'Angle Measure': { 'en': 'Angle Measure', 'zh_CN': '角度测量', 'ja': '角度測定', 'ko': '각도 측정', 'fr': 'Mesure d\'angle', 'de': 'Winkelmessung', 'es': 'Medida de ángulo', 'ru': 'Измерение углов' },
   'ArchaeoLines': { 'en': 'ArchaeoLines', 'zh_CN': '考古线', 'ja': 'アーケオライン', 'ko': '고고학 선', 'fr': 'Lignes archéologiques', 'de': 'Archäo-Linien', 'es': 'Líneas arqueológicas', 'ru': 'Археолинии' },
@@ -246,6 +291,8 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'msg_transit_forecast': { 'en': '(transit forecast needs more data)', 'zh_CN': '（过境预报需更多数据）', 'ja': '（通過予報にはより多くのデータが必要）', 'ko': '(통과 예보는 더 많은 데이터 필요)', 'fr': '(prévision de transit nécessite plus de données)', 'de': '(Transitvorhersage benötigt mehr Daten)', 'es': '(previsión de tránsito necesita más datos)', 'ru': '(прогноз транзита требует больше данных)' },
   'msg_tts_generated': { 'en': 'Speech text generated (TTS not available in current SDK)', 'zh_CN': '已生成朗读文本（当前 SDK 未集成语音合成）', 'ja': '音声テキスト生成済み（現在のSDKには音声合成なし）', 'ko': '음성 텍스트 생성됨 (현재 SDK에 음성 합성 없음)', 'fr': 'Texte vocal généré (TTS non disponible)', 'de': 'Sprachtext generiert (TTS nicht verfügbar)', 'es': 'Texto de voz generado (TTS no disponible)', 'ru': 'Текст речи сгенерирован (TTS недоступен)' },
   'msg_unknown': { 'en': 'Unknown', 'zh_CN': '未知', 'ja': '不明', 'ko': '알 수 없음', 'fr': 'Inconnu', 'de': 'Unbekannt', 'es': 'Desconocido', 'ru': 'Неизвестно' },
+  'msg_hidden': { 'en': 'Hidden', 'zh_CN': '已隐藏', 'ja': '非表示', 'ko': '숨김', 'fr': 'Masqué', 'de': 'Ausgeblendet', 'es': 'Oculto', 'ru': 'Скрыто' },
+  'msg_shown': { 'en': 'Shown', 'zh_CN': '已显示', 'ja': '表示', 'ko': '표시', 'fr': 'Affiché', 'de': 'Angezeigt', 'es': 'Mostrado', 'ru': 'Отображено' },
   'msg_unknown_error': { 'en': 'Unknown error', 'zh_CN': '未知错误', 'ja': '不明なエラー', 'ko': '알 수 없는 오류', 'fr': 'Erreur inconnue', 'de': 'Unbekannter Fehler', 'es': 'Error desconocido', 'ru': 'Неизвестная ошибка' },
   'msg_updated': { 'en': 'Updated', 'zh_CN': '已更新', 'ja': '更新済み', 'ko': '갱신됨', 'fr': 'Mis à jour', 'de': 'Aktualisiert', 'es': 'Actualizado', 'ru': 'Обновлено' },
   'msg_video_recording_started': { 'en': 'Started video frame sequence', 'zh_CN': '开始录制视频帧序列', 'ja': '動画フレーム録画開始', 'ko': '비디오 프레임 녹화 시작', 'fr': 'Séquence vidéo commencée', 'de': 'Video-Sequenz gestartet', 'es': 'Secuencia de video iniciada', 'ru': 'Начата запись видеопоследовательности' },
@@ -387,6 +434,13 @@ export class I18n {
   // 选中状态翻译
   static selectedStatus(en: string): string {
     const entry = SELECTED_STATUS[en]
+    if (!entry) return en
+    return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // 恒星名称翻译
+  static starName(en: string): string {
+    const entry = STAR_NAMES[en]
     if (!entry) return en
     return entry[I18n.lang] ?? entry['en'] ?? en
   }

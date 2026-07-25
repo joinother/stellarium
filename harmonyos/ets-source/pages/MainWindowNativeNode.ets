@@ -8,7 +8,7 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
 import { AudioEngine } from './StellariumAudio'
-import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES } from './I18n'
+import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS } from './I18n'
 
 interface TonightPlanetRow {
   name: string
@@ -586,7 +586,7 @@ struct WindowNativeNode {
   ]
   // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
   private readonly actions: ShellAction[] = [
-    { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
+    { label: $r('app.string.i0104'), icon: 'search', panel: 'catalogs' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
@@ -2897,8 +2897,7 @@ private loadPlanetPositions(): void {
       }
     } else {
       if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
-        this.setPanel('search')
-        return true
+        return true  // 搜索框是TextInput，阻止穿透到星图
       }
     }
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
@@ -3464,6 +3463,38 @@ private loadPlanetPositions(): void {
         .width(300)
         .zIndex(48)
         .hitTestBehavior(HitTestMode.Block)
+      // 搜索建议下拉列表（搜索框正下方）
+      if (this.searchText.length > 0 && this.searchSuggestions.length > 0) {
+        Scroll() {
+          Column({ space: 4 }) {
+            ForEach(this.searchSuggestions, (s: SearchSug) => {
+              Row({ space: 8 }) {
+                Text(s.zh)
+                  .fontSize(13).fontColor('#E5FFFFFF')
+                  .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(s.en)
+                  .fontSize(11).fontColor('#99FFFFFF')
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .backgroundColor('rgba(12, 16, 28, 0.85)')
+              .backdropBlur(25)
+              .borderRadius(10)
+              .onClick(() => {
+                this.searchObject(s.en)
+                this.searchSuggestions = []
+              })
+            }, (s: SearchSug) => s.en)
+          }
+          .padding({ top: 4, bottom: 4 })
+        }
+        .width(300).height(200)
+        .position({ x: this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN + 48 })
+        .zIndex(49)
+        .hitTestBehavior(HitTestMode.Block)
+        .scrollBar(BarState.Auto)
+        .scrollBarWidth(3)
+      }
       // 左下角滑动详情卡片（选中天体时显示）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
@@ -3585,12 +3616,30 @@ private loadPlanetPositions(): void {
     Row({ space: 8 }) {
       Image(this.getIcon('search', false))
         .width(18).height(18).fillColor('#7FB3DC')
-      Text($r('app.string.i0063'))
+      TextInput({ text: this.searchText, placeholder: $r('app.string.i0063') })
         .fontSize(14)
-        .fontColor('#8099BBCC')
+        .fontColor('#E5FFFFFF')
+        .placeholderColor('#8099BBCC')
+        .placeholderFont({ size: 14 })
         .layoutWeight(1)
         .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .caretStyle({ color: '#5B93BF' })
+        .borderColor(Color.Transparent)
+        .backgroundColor(Color.Transparent)
+        .onChange((value: string) => {
+          this.searchText = value
+          if (value.length > 0) {
+            this.searchSuggestions = this.aliasHits(value)
+          } else {
+            this.searchSuggestions = []
+          }
+        })
+        .onSubmit(() => {
+          if (this.searchText.length > 0) {
+            this.searchObject(this.searchText)
+            this.searchSuggestions = []
+          }
+        })
     }
     .width('100%')
     .height(44)
@@ -3600,8 +3649,6 @@ private loadPlanetPositions(): void {
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(22)
     .shadow({ radius: 16, color: 'rgba(0,0,0,0.25)', offsetX: 0, offsetY: 6 })
-    .clickEffect({ level: ClickEffectLevel.LIGHT })
-    .onClick(() => { this.setPanel('search') })
   }
 
   // ── 左下角滑动详情卡片（三栏水平滑动） ──
@@ -6639,7 +6686,7 @@ private loadPlanetPositions(): void {
           } else {
             this.setLayer(actionId, value)
           }
-          this.flashHint((value ? '已显示 ' : '已隐藏 ') + label)
+          this.flashHint(I18n.t(value ? 'msg_shown' : 'msg_hidden'))
         })
     }
       .height(42)
