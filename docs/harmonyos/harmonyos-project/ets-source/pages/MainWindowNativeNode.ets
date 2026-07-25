@@ -565,7 +565,6 @@ struct WindowNativeNode {
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
-    { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
@@ -3420,10 +3419,10 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
-      // 顶部居中搜索栏（始终显示）
+      // 顶部搜索栏（中等宽度，居中显示）
       Stack() { this.centerSearchBar() }
         .position({ x: this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN })
-        .width(this.skyWidth - this.EDGE_MARGIN * 2 - 64 - (this.panelVisible ? this.panelWidth + this.EDGE_MARGIN : 0))
+        .width(300)
         .zIndex(48)
         .hitTestBehavior(HitTestMode.Block)
       // 左下角滑动详情卡片（选中天体时显示）
@@ -3486,10 +3485,10 @@ private loadPlanetPositions(): void {
 
       this.bottomDock()
 
-      // 顶部搜索栏（紧凑布局）
+      // 顶部搜索栏（紧凑布局，中等宽度）
       Stack() { this.centerSearchBar() }
         .position({ x: 16, y: 50 })
-        .width(this.skyWidth - 32)
+        .width(280)
         .zIndex(48)
         .hitTestBehavior(HitTestMode.Block)
       // 选中天体滑动详情卡片（紧凑布局：底部 dock 上方）
@@ -3541,41 +3540,29 @@ private loadPlanetPositions(): void {
   }
 
 
-  // ── 顶部居中搜索栏 ──
+  // ── 顶部搜索栏（中等宽度，点击打开搜索面板） ──
   @Builder
   centerSearchBar() {
     Row({ space: 8 }) {
       Image(this.getIcon('search', false))
         .width(18).height(18).fillColor('#7FB3DC')
-      TextInput({ text: this.centerSearchText, placeholder: $r('app.string.i0063') })
-        .layoutWeight(1)
-        .height(36)
+      Text($r('app.string.i0063'))
         .fontSize(14)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor('#8099BBCC')
-        .backgroundColor('rgba(0,0,0,0)')
-        .borderRadius(0)
-        .onChange((val: string) => { this.centerSearchText = val })
-        .onSubmit(() => {
-          if (this.centerSearchText.trim().length > 0) {
-            this.searchObject(this.centerSearchText.trim())
-            this.centerSearchText = ''
-          }
-        })
-      if (this.centerSearchText.length > 0) {
-        Text('✕')
-          .fontSize(14).fontColor('#8099BBCC')
-          .onClick(() => { this.centerSearchText = '' })
-      }
+        .fontColor('#8099BBCC')
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .width('100%')
-    .height(48)
+    .height(44)
     .padding({ left: 16, right: 16 })
     .backgroundColor('rgba(12, 16, 28, 0.72)')
     .backdropBlur(35)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
-    .borderRadius(24)
+    .borderRadius(22)
     .shadow({ radius: 16, color: 'rgba(0,0,0,0.25)', offsetX: 0, offsetY: 6 })
+    .clickEffect({ level: ClickEffectLevel.LIGHT })
+    .onClick(() => { this.setPanel('search') })
   }
 
   // ── 左下角滑动详情卡片（三栏水平滑动） ──
