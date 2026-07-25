@@ -4646,6 +4646,9 @@ private loadPlanetPositions(): void {
               .padding({ left: 8, right: 8, top: 3, bottom: 3 })
               .backgroundColor(this.searchCategory === cat.code ? this.nmAccent() : this.nmBg())
               .borderRadius(8)
+              .scale({ x: this.searchCategory === cat.code ? 1.06 : 1.0, y: this.searchCategory === cat.code ? 1.06 : 1.0 })
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .animation({ duration: 220, curve: curves.springMotion(0.5, 1.0) })
               .onClick(() => this.loadCategoryObjects(cat.code))
           }, (cat: CatOption) => cat.code)
         }.layoutWeight(1)
@@ -4665,8 +4668,15 @@ private loadPlanetPositions(): void {
               .padding({ left: 10, right: 10, top: 3, bottom: 3 })
               .backgroundColor(this.nmBg()).borderRadius(8)
               .height(24)
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 260, curve: curves.springMotion(0.5, 1.0) })
+                  .combine(TransitionEffect.translate({ x: -12 }).animation({ duration: 280, curve: curves.springMotion(0.5, 1.0) })),
+                TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+                  .combine(TransitionEffect.translate({ x: 12 }).animation({ duration: 180, curve: Curve.EaseIn }))
+              ))
               .onClick(() => this.searchObject(item.name ?? ''))
-          }, (item: NameItem) => item.name)
+          }, (item: NameItem) => this.searchCategory + '/' + item.name)
         }.padding({ left: 4, right: 4 })
       }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
     } else if (this.activePanel === 'config') {
@@ -4687,6 +4697,9 @@ private loadPlanetPositions(): void {
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
             .backgroundColor(this.configTab === tab.id ? this.nmAccent() : this.nmBg())
             .borderRadius(6)
+            .scale({ x: this.configTab === tab.id ? 1.06 : 1.0, y: this.configTab === tab.id ? 1.06 : 1.0 })
+            .clickEffect({ level: ClickEffectLevel.LIGHT })
+            .animation({ duration: 220, curve: curves.springMotion(0.5, 1.0) })
             .onClick(() => { this.configTab = tab.id })
         }, (tab: TabItem, index: number) => tab.id.toString())
       }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
@@ -5286,6 +5299,12 @@ private loadPlanetPositions(): void {
               Row() {
                 Text(g).fontSize(13).fontColor('#E5FFFFFF')
               }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 300, curve: curves.springMotion(0.5, 1.0) })
+                  .combine(TransitionEffect.translate({ y: 10 }).animation({ duration: 320, curve: curves.springMotion(0.5, 1.0) })),
+                TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseIn })
+                  .combine(TransitionEffect.translate({ y: 8 }).animation({ duration: 200, curve: Curve.EaseIn }))
+              ))
             }, (g: string) => g)
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
@@ -6140,6 +6159,7 @@ private loadPlanetPositions(): void {
         .width(46)
         .height(28)
         .selectedColor('#5B93BF')
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onChange((value: boolean) => {
           if (cmd) {
             this.setBridgeFlag(cmd, value)
@@ -6156,7 +6176,6 @@ private loadPlanetPositions(): void {
       .border({ width: 1, color: enabled ? 'rgba(107, 163, 214, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
       .borderRadius(12)
       .margin({ bottom: 6 })
-      .clickEffect({ level: ClickEffectLevel.LIGHT })
       .animation({ duration: 200, curve: curves.springMotion(0.45, 0.9) })
   }
 
