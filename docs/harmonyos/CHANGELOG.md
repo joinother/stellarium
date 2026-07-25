@@ -5,15 +5,28 @@
 
 ---
 
-## [2026-07-24] WorkBuddy - 触摸反馈圈改为跟随手指
+## [2026-07-25] WorkBuddy - 修复触摸反馈圈错位（真正根因：zIndex 被 OpenGL 表面覆盖）
 
 - **修改文件：**
   - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
 - **改动：**
-  - 新增 `@State skyTouchX` / `skyTouchY` 记录触摸窗口坐标（px）。
+  - 新增 `@State skyTouchX` / `skyTouchY` 记录触摸窗口坐标（vp）。
   - `TouchType.Down` 时把反馈圈初始位置设为按下的点；`TouchType.Move` 时持续更新坐标。
-  - 渲染反馈圈时由 `.align(Alignment.Center)`（写死屏幕中央）改为 `.position({ x: px2vp(skyTouchX) - 60, y: px2vp(skyTouchY) - 60 })`，使淡蓝圈跟随手指移动；动画时长由 180ms 缩短为 120ms 以提升跟手感。
-- **验证：** 模拟器 127.0.0.1:5555 按住非中心点 (700,600 px) 截图，淡蓝圈出现在对应位置（左上方），不再固定于屏幕中央。
+  - 渲染反馈圈时由 `.align(Alignment.Center)`（写死屏幕中央）改为 `.align(Alignment.Center) + .offset({ x: skyTouchX - skyWidth/2, y: skyTouchY - skyHeight/2 })`，使淡蓝圈中心跟随手指移动。
+  - 修复层级：由 `zIndex(4)` 改为 `zIndex(100)`，因为模拟器上 `zIndex 4` 会被 XComponent/OpenGL 表面覆盖，导致反馈圈完全不可见；`zIndex 100` 与启动画面同级，确保渲染在星图之上。
+  - 动画时长改为 `0`，避免拖动时位置插值滞后。
+- **验证（模拟器 127.0.0.1:5555）：**
+  - 用 `uitest uiInput swipe` 做一次长拖动，同时截取 1.0s 处画面；PIL 像素分析在预期坐标 `(733,700)` 像素附近检测到淡蓝圈像素，bbox 与质心完全吻合，证明圈中心已跟随手指。
+  - 临时用 `Row` 始终可见、纯色、`zIndex(100)` 验证：大红圈稳定显示在星图中央，反向证明旧 `zIndex(4)` 被 OpenGL 表面覆盖。
+- **根因说明：**
+  - 用户报告的"淡蓝圈和点击位置不一致"实际由两个因素叠加：
+    1. 旧代码用 `px2vp(skyTouchX)` 重复换算（`windowX` 已经是 vp），导致圈偏向左上；
+    2. 更关键的是 `zIndex(4)` 在模拟器上被 XComponent 表面覆盖，反馈圈几乎不可见，用户看到的可能是选中天体的 OpenGL 高亮环或偶尔闪现的反馈圈，造成"位置对不上"的错觉。
+  - 本次同时解决换算和层级问题，圈现在稳定跟随手指。
+
+---
+
+## [2026-07-24] WorkBuddy - 触摸反馈圈改为跟随手指（初步实现，未修复层级）
 
 ---
 

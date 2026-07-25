@@ -2883,10 +2883,11 @@ private loadPlanetPositions(): void {
           .backgroundColor(this.nightMode ? 'rgba(180, 40, 20, 0.15)' : 'rgba(107, 163, 214, 0.12)')
           .border({ width: 1, color: 'rgba(107, 163, 214, 0.10)' })
           .shadow({ radius: 42, color: 'rgba(107, 163, 214, 0.18)', offsetX: 0, offsetY: 0 })
-          .position({ x: px2vp(this.skyTouchX) - 60, y: px2vp(this.skyTouchY) - 60 })
+          .align(Alignment.Center)
+          .offset({ x: this.skyTouchX - this.skyWidth / 2, y: this.skyTouchY - this.skyHeight / 2 })
           .hitTestBehavior(HitTestMode.None)
-          .zIndex(4)
-          .animation({ duration: 120, curve: Curve.EaseOut })
+          .zIndex(100)
+          .animation({ duration: 0, curve: Curve.Linear })
       }
 
         // 画布触摸层：与 toolbar/panel 平级（都是 1234 根 Stack 的子），
