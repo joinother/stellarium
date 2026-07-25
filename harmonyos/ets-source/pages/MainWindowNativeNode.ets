@@ -14,6 +14,14 @@ interface TonightPlanetRow {
   lock: string
 }
 
+// 启动动画里的星点（百分比坐标 + 半径vp + 是否亮星，用于交错闪烁）
+interface StarDot {
+  xPct: number
+  yPct: number
+  r: number
+  bright: boolean
+}
+
 // 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
 interface StarCatalogItem {
   id: string
@@ -249,10 +257,34 @@ struct WindowNativeNode {
   @State private panelMaxHeight: number = 660
   // 离屏幕边框的安全留白(vp)：约 0.7cm，避免 UI 贴边
   private readonly EDGE_MARGIN: number = 44
+  // 启动动画星空（百分比坐标，自适应各种屏幕尺寸）
+  private readonly splashStars: StarDot[] = [
+    { xPct: 8, yPct: 12, r: 1.5, bright: true }, { xPct: 17, yPct: 28, r: 1, bright: false },
+    { xPct: 26, yPct: 9, r: 2, bright: true }, { xPct: 33, yPct: 22, r: 1, bright: false },
+    { xPct: 41, yPct: 14, r: 1.5, bright: true }, { xPct: 49, yPct: 30, r: 1, bright: false },
+    { xPct: 57, yPct: 11, r: 2, bright: true }, { xPct: 64, yPct: 25, r: 1, bright: false },
+    { xPct: 72, yPct: 16, r: 1.5, bright: true }, { xPct: 80, yPct: 9, r: 1, bright: false },
+    { xPct: 88, yPct: 23, r: 2, bright: true }, { xPct: 93, yPct: 14, r: 1, bright: false },
+    { xPct: 12, yPct: 42, r: 1, bright: false }, { xPct: 23, yPct: 55, r: 1.5, bright: true },
+    { xPct: 35, yPct: 48, r: 1, bright: false }, { xPct: 46, yPct: 60, r: 2, bright: true },
+    { xPct: 54, yPct: 44, r: 1, bright: false }, { xPct: 63, yPct: 53, r: 1.5, bright: true },
+    { xPct: 73, yPct: 47, r: 1, bright: false }, { xPct: 84, yPct: 58, r: 2, bright: true },
+    { xPct: 91, yPct: 49, r: 1, bright: false }, { xPct: 15, yPct: 70, r: 1.5, bright: true },
+    { xPct: 28, yPct: 82, r: 1, bright: false }, { xPct: 38, yPct: 73, r: 2, bright: true },
+    { xPct: 50, yPct: 86, r: 1, bright: false }, { xPct: 60, yPct: 76, r: 1.5, bright: true },
+    { xPct: 70, yPct: 84, r: 1, bright: false }, { xPct: 82, yPct: 72, r: 2, bright: true },
+    { xPct: 90, yPct: 83, r: 1, bright: false }, { xPct: 6, yPct: 64, r: 1, bright: false },
+  ]
   @State private observingList: string[] = []
   @State private stars: boolean = true
   @State private skyCultures: string[] = []
   @State private isLoading: boolean = true
+  // 启动动画：星空淡入 + 核心就绪后整体淡出
+  @State private splashGone: boolean = false
+  @State private splashOpacity: number = 0
+  @State private splashIn: boolean = false
+  @State private twPhase: boolean = false
+  private twTimer: number = 0
   @State private currentSkyCulture: string = ""
   @State private planets: boolean = true
   @State private enlargePlanets: boolean = false
@@ -636,6 +668,25 @@ struct WindowNativeNode {
     "actionVertical_Flip"
   ]
 
+  // 启动动画：星空淡出并卸载（核心就绪或用户点击跳过时调用）
+  private dismissSplash(): void {
+    if (this.splashGone) { return }
+    this.isLoading = false
+    this.getUIContext().animateTo({ duration: 650, curve: Curve.EaseInOut, onFinish: () => { this.splashGone = true; this.stopTwinkle() } }, () => {
+      this.splashOpacity = 0
+    })
+  }
+
+  // 星空交错闪烁：每 1 秒翻转一次相位，让亮星/暗星交替明暗
+  private startTwinkle(): void {
+    if (this.twTimer !== 0) { return }
+    this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 1000)
+  }
+
+  private stopTwinkle(): void {
+    if (this.twTimer !== 0) { clearInterval(this.twTimer); this.twTimer = 0 }
+  }
+
   aboutToAppear(): void {
     const localStorage = this.getUIContext().getSharedLocalStorage()
     if (localStorage) {
@@ -670,8 +721,8 @@ struct WindowNativeNode {
       if (r.ok === true && Array.isArray(r.items)) {
         this.skyCultures = r.items as string[]
         this.currentSkyCulture = r.current as string
-        // Qt 初始化成功，自动关闭启动画面
-        if (this.isLoading) { this.isLoading = false }
+        // Qt 初始化成功，自动关闭启动画面（星空淡出）
+        this.dismissSplash()
       }
     })
     this.callNativeWhenReady("getLandscapeList", "", (r) => {
@@ -1881,11 +1932,23 @@ private loadPlanetPositions(): void {
   // 天体类型本地化（Planet→行星…）；未知则原样。
   private zhType(type: string): ResourceStr {
     const map: Record<string, ResourceStr> = {
-      'Planet': $r('app.string.i0103'), 'Star': $r('app.string.i0104'), 'Nebula': $r('app.string.i0107'), 'Galaxy': $r('app.string.i0105'),
-      'Asteroid': 'Asteroid', 'Comet': 'Comet', 'Satellite': 'Satellite', 'Moon': 'Satellite/Moon',
-      'Sun': 'Star (Sun)', 'Quasar': 'Quasar', 'Pulsar': 'Pulsar', 'Cluster': $r('app.string.i0106'),
-      'Open cluster': 'Open cluster', 'Globular cluster': 'Globular cluster', 'Planetary nebula': 'Planetary nebula',
-      'Interstellar object': 'Interstellar object', 'Minor planet': 'Asteroid',
+      // 太阳系天体
+      'Planet': $r('app.string.i0103'), 'Moon': '月球', 'Sun': '太阳',
+      'Satellite': '人造卫星', 'Artificial satellite': '人造卫星', 'Interplanetary probe': '行星际探测器',
+      'Asteroid': '小行星', 'Minor planet': '小行星', 'Comet': '彗星', 'Interstellar object': '星际天体',
+      'Rocket body': '火箭残骸',
+      // 恒星与恒星类
+      'Star': $r('app.string.i0104'), 'Double star': '双星', 'Binary star': '双星', 'Variable star': '变星',
+      'Variable Star': '变星', 'Pulsar': '脉冲星', 'Quasar': '类星体',
+      // 深空天体
+      'Nebula': $r('app.string.i0107'), 'Galaxy': $r('app.string.i0105'), 'Cluster': $r('app.string.i0106'),
+      'Open cluster': '疏散星团', 'Globular cluster': '球状星团', 'Planetary nebula': '行星状星云',
+      'Dark Nebula': '暗星云', 'Bright nebula': '亮星云', 'Star cluster': '星团',
+      'Supernova': '超新星', 'Supernova remnant': '超新星遗迹', 'Molecular cloud': '分子云',
+      'Deep-sky object': '深空天体',
+      // 其他（原版分类里的“非单一天体”类别，做兜底中文）
+      'Constellation': '星座', 'Asterism': '星组', 'Meteor shower': '流星雨', 'Observatory': '天文台',
+      'Object': '天体',
     }
     return map[type] ?? type
   }
@@ -3122,26 +3185,55 @@ private loadPlanetPositions(): void {
 
       this.expandedShell()
 
-      // 启动画面
-      if (this.isLoading) {
-        Column() {
-          Text("Stellarium")
-            .fontSize(32).fontWeight(FontWeight.Bold).fontColor("#E5FFFFFF")
-            .margin({ bottom: 12 })
-          Text($r('app.string.i0001'))
-            .fontSize(14).fontColor("#99FFFFFF")
-            .margin({ bottom: 24 })
-          LoadingProgress()
-            .width(36).height(36)
-            .color("#5B93BF")
+      // 启动动画：星空淡入 + 核心就绪后整体淡出（不阻挡首帧交互太久）
+      if (!this.splashGone) {
+        Stack() {
+          // 星空背景：亮星/暗星交错闪烁
+          ForEach(this.splashStars, (s: StarDot) => {
+            Circle({ width: s.r, height: s.r })
+              .fill("#FFFFFFFF")
+              .opacity(s.bright ? (this.twPhase ? 0.95 : 0.45) : (this.twPhase ? 0.4 : 0.18))
+              .position({ x: s.xPct + '%', y: s.yPct + '%' })
+              .animation({ duration: 1000, curve: Curve.EaseInOut })
+          }, (s: StarDot, idx: number) => 'star' + idx)
+          // 中央内容：标题 + 副标题 + 加载指示
+          Column() {
+            Text("Stellarium")
+              .fontSize(34).fontWeight(FontWeight.Bold).fontColor("#E5FFFFFF").letterSpacing(2)
+              .opacity(this.splashIn ? 1 : 0)
+              .translate({ y: this.splashIn ? 0 : 16 })
+              .animation({ duration: 600, curve: Curve.EaseOut })
+              .margin({ bottom: 10 })
+            Text($r('app.string.i0001'))
+              .fontSize(14).fontColor("#99FFFFFF")
+              .opacity(this.splashIn ? 1 : 0)
+              .animation({ duration: 600, curve: Curve.EaseOut, delay: 150 })
+              .margin({ bottom: 26 })
+            LoadingProgress()
+              .width(38).height(38)
+              .color("#5B93BF")
+              .opacity(this.splashIn ? 1 : 0)
+              .animation({ duration: 600, curve: Curve.EaseOut, delay: 300 })
+            Text("正在唤醒星空…")
+              .fontSize(12).fontColor("#66FFFFFF")
+              .margin({ top: 14 })
+              .opacity(this.splashIn ? 1 : 0)
+              .animation({ duration: 600, curve: Curve.EaseOut, delay: 400 })
+          }
+          .align(Alignment.Center)
         }
         .width("100%").height("100%")
-        .backgroundColor("#000000")
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
+        .backgroundColor("#05070F")
+        .opacity(this.splashOpacity)
         .zIndex(100)
-        .onClick(() => { this.isLoading = false })
-        .animation({ duration: 400, curve: Curve.EaseOut })
+        .onClick(() => { this.dismissSplash() })
+        .onAppear(() => {
+          this.startTwinkle()
+          this.getUIContext().animateTo({ duration: 700, curve: Curve.EaseOut }, () => {
+            this.splashIn = true
+            this.splashOpacity = 1
+          })
+        })
       }
     }
       .width('100%')
