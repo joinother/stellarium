@@ -439,7 +439,60 @@ static bool s_pendingPointSelect = false;
 static bool s_pointTracking = false;
 static Vec3d s_trackTargetJ2000(0.0, 0.0, 1.0);
 static const double s_trackLerpK = 0.18; // fraction of remaining angle per frame
+// Vertical pan limiter: when ON, manual drags (dragView/panView) are clamped so
+// the view altitude stays within [-(90-eps), +(90-eps)] — i.e. you can pan from
+// the zenith (straight up) to the nadir (straight down) but never flip past
+// either, which would otherwise roll the sky upside-down and feel unnatural.
+// Default ON (matches the mobile app's "natural sky" behaviour). Tracking,
+// pointAtSky and explicit setViewDirection commands bypass this clamp.
+static bool s_verticalClamp = true;
+static const double s_clampMaxAltDeg = 89.5; // leave a small margin so azimuth stays well-defined
 static void markQtLoopRunning();
+
+// After a manual pan (dragView / panView) clamps the view altitude to the
+// natural sky range [-(90-eps), +(90-eps)] when s_verticalClamp is ON. We work
+// purely on the alt/az unit vector's z component (sin(altitude)), so no azimuth
+// convention is assumed and the azimuth is preserved exactly. Tracking,
+// pointAtSky and explicit setViewDirection commands call straight into
+// setViewDirectionJ2000 and never pass through here, so they are unaffected.
+// When s_verticalClamp is ON, holds the manual-pan view altitude within
+// [-(90-eps), +(90-eps)] so you can reach the zenith/nadir but never flip past
+// them (which would roll the sky upside-down). Works purely on the alt/az unit
+// vector's z component, so azimuth is preserved exactly and no convention is
+// assumed. Tracking, pointAtSky and explicit setViewDirection commands call
+// straight into setViewDirectionJ2000 and never pass through here.
+static void clampViewAltitude(StelMovementMgr* mvmgr, StelCore* core)
+{
+	if (!s_verticalClamp || !mvmgr || !core)
+		return;
+	Vec3d viewJ2000 = mvmgr->getViewDirectionJ2000();
+	Vec3d altaz = core->j2000ToAltAz(viewJ2000, StelCore::RefractionOff);
+	if (altaz.normSquared() < 1e-12)
+		return;
+	altaz.normalize();
+	const double sinMax = std::sin(s_clampMaxAltDeg * M_PI / 180.0);
+	double z = altaz[2];
+	if (z <= sinMax && z >= -sinMax)
+		return; // already inside the allowed band
+	z = z > 0 ? sinMax : -sinMax;
+	const double oldXY = std::sqrt(altaz[0] * altaz[0] + altaz[1] * altaz[1]);
+	const double newXY = std::sqrt(std::max(0.0, 1.0 - z * z));
+	if (oldXY > 1e-6)
+	{
+		const double k = newXY / oldXY;
+		altaz[0] *= k;
+		altaz[1] *= k;
+	}
+	else
+	{
+		// Exactly at the pole: azimuth is undefined, keep x/y at zero.
+		altaz[0] = 0.0;
+		altaz[1] = 0.0;
+	}
+	altaz[2] = z;
+	Vec3d j2000 = core->altAzToJ2000(altaz, StelCore::RefractionOff);
+	mvmgr->setViewDirectionJ2000(j2000);
+}
 
 static void ohosDrainCommandQueue()
 {
@@ -1364,6 +1417,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			movementMgr->dragView(x1, y1, x2, y2);
+			clampViewAltitude(movementMgr, core);
 			markOhosInteraction();
 			result["ok"] = true;
 			result["fov"] = movementMgr->getCurrentFov();
@@ -1398,6 +1452,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			const double fovRad = movementMgr->getCurrentFov() * M_PI / 180.0;
 			movementMgr->panView(-dx / width * fovRad, dy / height * fovRad);
+			clampViewAltitude(movementMgr, core);
 			movementMgr->setFlagTracking(false);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -1457,6 +1512,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			movementMgr->setFlagTracking(enabled);
 			markOhosInteraction();
 			result = currentStateJson();
+			return result;
+		}
+
+		if (commandName == "setVerticalClamp")
+		{
+			s_verticalClamp = (arg == "1" || arg.toLower() == "true");
+			result["ok"] = true;
+			result["verticalClamp"] = s_verticalClamp;
 			return result;
 		}
 

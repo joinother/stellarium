@@ -309,6 +309,8 @@ struct WindowNativeNode {
   @State private apexPoints: boolean = false
   @State private umbraCenter: boolean = false
   @State private zenithNadir: boolean = false
+  // 竖直视角限位：默认开。开启后手动上下拖只会在 天顶(+90°)↔天底(-90°) 之间，不会翻过头把天倒过来。
+  @State private verticalClamp: boolean = true
   @State private invariantPlaneLine: boolean = false
   @State private solarEquatorLine: boolean = false
   @State private fixedEquatorLine: boolean = false
@@ -707,6 +709,14 @@ struct WindowNativeNode {
     }
     // 默认语言设置为中文
     this.setLanguage('zh_CN')
+    // 竖直视角限位默认开启：手动上下拖只会在 天顶(+90°)↔天底(-90°) 之间，不会翻过头把天倒过来
+    this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
+      if (r.ok === true) { this.verticalClamp = true }
+    })
+    // 默认显示天顶/天底参考圈（满足“加载时就能看到天顶和天底两个圈”）
+    this.callNativeWhenReady("setActionChecked", "actionShow_Zenith_Nadir|1", (r: StellariumBridgeResponse) => {
+      if (r.ok === true) { this.zenithNadir = true }
+    })
     // 启动自动获取位置：等核心就绪后触发一次；无 GPS（如模拟器）会回退到已保存/默认位置，不崩溃
     this.callNativeWhenReady("getState", "", () => {
       this.triggerAutoLocate()
@@ -4340,6 +4350,7 @@ private loadPlanetPositions(): void {
             .margin({ top: 6, bottom: 4 })
           Text($r('app.string.i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow($r('app.string.s0304'), this.liveMode, '')
+          this.switchRow('锁定竖直视角（天顶↔天底）', this.verticalClamp, '', 'setVerticalClamp')
           Row() {
             Text($r('app.string.i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
