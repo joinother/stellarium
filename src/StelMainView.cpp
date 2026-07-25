@@ -1957,6 +1957,44 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// gotoRADec - jump the view to a specific RA/Dec (J2000 equatorial coordinates).
+		// arg: "<ra_hours>|<dec_degrees>" where ra is in hours (0-24) and dec in degrees (-90 to +90).
+		// Recenters the view on that sky direction and selects the nearest object on the next frame.
+		if (commandName == "gotoRADec")
+		{
+			if (!core || !movementMgr)
+			{
+				result["error"] = "core/movement not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 2)
+			{
+				result["error"] = "gotoRADec expects ra_hours|dec_degrees";
+				return result;
+			}
+			bool okRA = false, okDec = false;
+			const double raHours = parts[0].toDouble(&okRA);
+			const double decDeg = parts[1].toDouble(&okDec);
+			if (!okRA || !okDec)
+			{
+				result["error"] = "ra/dec not numeric";
+				return result;
+			}
+			// Convert RA (hours) to radians, Dec (degrees) to radians
+			const double raRad = raHours * M_PI / 12.0;  // hours -> radians (24h = 2*pi)
+			const double decRad = decDeg * M_PI / 180.0; // degrees -> radians
+			Vec3d j2000;
+			StelUtils::spheToRect(raRad, decRad, j2000);
+			movementMgr->setViewDirectionJ2000(j2000);
+			s_pendingPointSelect = true;
+			result["ok"] = true;
+			result["ra"] = raHours;
+			result["dec"] = decDeg;
+			return result;
+		}
+
+
 	// getScriptList
 		if (commandName == "getScriptList")
 		{
@@ -4285,6 +4323,45 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			m["marker"] = ms->getEnableMarker();
 			result["ok"] = true;
 			result["meteorShowers"] = m;
+			// Active shower list with details
+			QJsonArray showerList;
+			MeteorShowers* msColl = ms->getMeteorShowers();
+			if (msColl)
+			{
+				QVector<QPair<QString, StelObjectP>> all = msColl->listAllObjects(false);
+				for (const auto& pr : all)
+				{
+					MeteorShowerP sh = qSharedPointerCast<MeteorShower>(pr.second);
+					if (!sh) continue;
+					MeteorShower::Status st = sh->getStatus();
+					if (st == MeteorShower::ACTIVE_CONFIRMED || st == MeteorShower::ACTIVE_GENERIC)
+					{
+						QVariantMap infoMap = sh->getInfoMap(core);
+						QJsonObject so;
+						so["name"] = sh->getNameI18n();
+						so["englishName"] = sh->getEnglishName();
+						so["zhr"] = sh->getZHR();
+						so["status"] = (st == MeteorShower::ACTIVE_CONFIRMED) ? "confirmed" : "generic";
+						so["speed"] = infoMap.value("speed", 0).toInt();
+						so["popIdx"] = infoMap.value("pop-idx", 0).toFloat();
+						so["parent"] = infoMap.value("parent", "").toString();
+						// Solar longitude -> approximate date
+						double peakSolLong = 0;
+						int actYear = 0;
+						MeteorShower::Activity act = sh->hasGenericShower(0, false);
+						double currentSolLong = StelUtils::getSolarLongitude(core->getJD());
+						act = sh->hasGenericShower(currentSolLong, false);
+						if (act.year > 0) actYear = act.year;
+						if (act.peak > 0) {
+							so["peakDate"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.peak, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
+							so["activeStart"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.start, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
+							so["activeEnd"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.finish, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
+						}
+						showerList.append(so);
+					}
+				}
+			}
+			result["showerList"] = showerList;
 			return result;
 		}
 		if (commandName == "setMeteorShowersFlag")

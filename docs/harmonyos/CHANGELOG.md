@@ -1,3 +1,28 @@
+## [2026-07-26] TRAE - 流星雨面板增强：活跃流星雨列表
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（C++ getMeteorShowers 命令增强）
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（界面 + 状态 + 接口）
+  - `build/.../ets/pages/I18n.ets`（新增 9 条多语言翻译）
+
+- **修改内容：**
+  1. **C++ getMeteorShowers 增强**：在返回标志的基础上，新增 showerList 数组，包含每个活跃流星雨的 name、englishName、zhr、status、speed、popIdx、parent、peakDate、activeStart、activeEnd 字段。
+  2. **ETS 接口更新**：新增 MeteorShowerItem 接口，MeteorShowersResponse 新增 showerList 字段。
+  3. **loadMeteorShowers() 增强**：解析 showerList 数组到 msShowerList 状态变量。
+  4. **面板 UI 增强**：在现有 4 个 Toggle 开关之后，新增「活跃流星雨」区域，每个流星雨以卡片形式展示：
+     - 名称（金色标题）+ ZHR 标签 + 状态徽章（Confirmed/Generic）
+     - 极大日期
+     - 活跃日期范围
+     - 速度 + 母体天体
+     - 点击卡片可搜索并定位辐射点
+  5. **I18n 翻译**：新增 meteor_active_showers、meteor_peak、meteor_zhr_label、meteor_speed、meteor_parent、meteor_active_range、meteor_no_active、meteor_pop_idx 共 8 条翻译。
+
+- **修改原因：** 原流星雨面板仅有 Toggle 开关，无法查看当前活跃流星雨的详细信息。
+
+- **构建结果：** 未验证（C++ 需重新编译 libstellarium.so 后才生效）
+- **验证结果：** 未验证
+- **备注：** C++ 侧修改需要 Qt OHOS 交叉编译生成新的 libstellarium.so，仅 hvigor 构建 HAP 不会包含此改动。
+
 # 修改日志
 
 > 格式说明：每次修改追加一条记录。新 Agent 接手时先读这个文件。
