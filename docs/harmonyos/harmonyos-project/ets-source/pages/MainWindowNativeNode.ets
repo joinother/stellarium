@@ -2812,23 +2812,38 @@ private loadPlanetPositions(): void {
   }
 
   private isUiPoint(x: number, y: number): boolean {
-    // 选中天体的独立浮动详情窗：其区域内一律视为 UI 点，否则会被当成星图点击触发重新选星而关窗
-    if (this.infoWinVisible) {
-      let wl: number = 0
-      let wt: number = 0
-      let wr: number = 0
-      if (this.isExpandedLayout) {
-        wl = this.infoWinLeft()
-        wt = this.EDGE_MARGIN
-        wr = wl + this.infoWinWidth()
-      } else {
-        wl = 16
-        wt = 60
-        wr = wl + (this.skyWidth - 32)
-      }
-      const wh = wt + (this.infoWinExpanded ? (54 + this.infoWinDetailH() + 64) : 58)
-      if (x >= wl - 8 && x <= wr + 8 && y >= wt - 8 && y <= wh + 8) {
+    // 顶部搜索栏：点击区域不穿透到星图
+    if (this.isExpandedLayout) {
+      const sbX = this.EDGE_MARGIN + 64
+      const sbY = this.EDGE_MARGIN
+      const sbW = 300
+      const sbH = 44
+      if (x >= sbX && x <= sbX + sbW && y >= sbY && y <= sbY + sbH) {
         return true
+      }
+    } else {
+      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
+        return true
+      }
+    }
+    // 左下角滑动详情卡片：其区域内不穿透到星图，让 Swiper 可正常滑动
+    if (this.infoWinVisible && this.selectedName.length > 0) {
+      if (this.isExpandedLayout) {
+        const bcX = this.EDGE_MARGIN + 64
+        const bcY = this.skyHeight - 220
+        const bcW = 340
+        const bcH = 200
+        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
+          return true
+        }
+      } else {
+        const bcX = 16
+        const bcY = this.skyHeight - 250
+        const bcW = 340
+        const bcH = 200
+        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
+          return true
+        }
       }
     }
     if (this.isExpandedLayout) {
@@ -2862,6 +2877,20 @@ private loadPlanetPositions(): void {
   }
 
   private handleUiTap(x: number, y: number): boolean {
+    // 顶部搜索栏：点击打开搜索面板
+    if (this.isExpandedLayout) {
+      const sbX = this.EDGE_MARGIN + 64
+      const sbY = this.EDGE_MARGIN
+      if (x >= sbX && x <= sbX + 300 && y >= sbY && y <= sbY + 44) {
+        this.setPanel('search')
+        return true
+      }
+    } else {
+      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
+        this.setPanel('search')
+        return true
+      }
+    }
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
     if (this.handleInfoWinTap(x, y)) { return true }
     // zoom +/- buttons (expanded layout, bottom-left)
