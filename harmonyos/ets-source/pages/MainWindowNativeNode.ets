@@ -484,23 +484,46 @@ struct WindowNativeNode {
   private panelDragStartOffsetX: number = 0
   private panelDragStartOffsetY: number = 0
 
-  private readonly actions: ShellAction[] = [
+  // 常用入口：直接固定在左侧栏（观星高频操作）
+  private readonly pinnedActions: ShellAction[] = [
     { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
+    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' }
+  ]
+  // 低频入口：收进抽屉（点侧栏底部九宫格按钮展开），图标全部专属不重复
+  private readonly drawerActions: ShellAction[] = [
     { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
-    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
     { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
     { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
     { label: '望远镜', icon: 'telescope', panel: 'oculars' },
     { label: '卫星', icon: 'satellite', panel: 'satellites' },
     { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
     { label: '脚本', icon: 'script', panel: 'scripts' },
-      { icon: 'layers', label: $r('app.string.i0273'), panel: 'config' },
-      { icon: 'clock', label: $r('app.string.i0274'), panel: 'astro' },
-      { icon: 'info', label: $r('app.string.i0217'), panel: 'help' }
+    { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
+    { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
   ]
+  // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
+  private readonly actions: ShellAction[] = [
+    { label: $r('app.string.i0099'), icon: 'search', panel: 'search' },
+    { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
+    { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
+    { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
+    { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' },
+    { label: $r('app.string.i0101'), icon: 'info', panel: 'object' },
+    { label: '星表下载', icon: 'catalogs', panel: 'catalogs' },
+    { label: '书签', icon: 'bookmarks', panel: 'bookmarks' },
+    { label: '望远镜', icon: 'telescope', panel: 'oculars' },
+    { label: '卫星', icon: 'satellite', panel: 'satellites' },
+    { label: '流星雨', icon: 'meteor', panel: 'meteorshowers' },
+    { label: '脚本', icon: 'script', panel: 'scripts' },
+    { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
+    { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
+  ]
+  @State private drawerOpen: boolean = false
 
   private SELFTEST: boolean = false  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
 
@@ -2519,22 +2542,40 @@ private loadPlanetPositions(): void {
   }
 
   private railHeight(): number {
-    return this.actions.length * 58 + 20
+    // 常用区 + 分隔线 + 抽屉按钮 + 钉住按钮
+    return this.pinnedActions.length * 58 + 60 + 36 + 14
+  }
+
+  // 点击侧栏入口：打开对应面板并收起抽屉
+  private onRailTap(panel: string): void {
+    this.setPanel(panel)
+    if (this.drawerOpen) {
+      this.getUIContext().animateTo({ duration: 240, curve: Curve.Friction }, () => {
+        this.drawerOpen = false
+      })
+    }
+  }
+
+  private toggleDrawer(): void {
+    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, () => {
+      this.drawerOpen = !this.drawerOpen
+    })
+    this.resetPanelIdle()
+    this.resetSidebarAutoCollapse()
   }
 
   private isUiPoint(x: number, y: number): boolean {
     if (this.isExpandedLayout) {
-      // 左侧工具栏按钮区域（宽屏布局，从顶部开始排列）
+      // 左侧工具栏区域（宽屏布局：常用入口 + 抽屉按钮 + 钉住按钮整条轨道）
       if (!this.railCollapsed && x >= 0 && x <= 58) {
-        const railTop = 28
-        const step = 58
-        for (let i = 0; i < this.actions.length; i++) {
-          const bTop = railTop + i * step
-          if (y >= bTop && y <= bTop + 44) {
-            return true
-          }
+        if (y >= this.railTop() && y <= this.railTop() + this.railHeight()) {
+          return true
         }
       } else if (x >= 92 && x <= 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
+        return true
+      }
+      // 低频功能抽屉区域（展开时）
+      if (this.drawerOpen && x >= 66 && x <= 242 && y >= this.railTop() && y <= this.railTop() + 40 + this.drawerActions.length * 46 + 14) {
         return true
       }
       // 浮动面板区域（含 30vp 余量，覆盖圆角/边距，杜绝点面板却拖星图）
@@ -2569,20 +2610,37 @@ private loadPlanetPositions(): void {
 	    if (this.isExpandedLayout && x >= 0 && x <= 58) {
       const railTop = 28
       const step = 58
+      // 常用固定入口
       const index = Math.floor((y - railTop) / step)
-      const withinButton = index >= 0 && index < this.actions.length && y >= railTop + index * step && y <= railTop + index * step + 44
+      const withinButton = index >= 0 && index < this.pinnedActions.length && y >= railTop + index * step && y <= railTop + index * step + 44
       if (withinButton) {
-        this.setPanel(this.actions[index].panel)
+        this.onRailTap(this.pinnedActions[index].panel)
+        return true
+      }
+      // 「更多」抽屉按钮
+      const moreTop = railTop + this.pinnedActions.length * step + 8
+      if (y >= moreTop && y <= moreTop + 44) {
+        this.toggleDrawer()
         return true
       }
 	    }
 
+	    // 低频功能抽屉项（展开时）
+	    if (this.isExpandedLayout && this.drawerOpen && x >= 66 && x <= 242) {
+	      const itemsTop = this.railTop() + 38
+	      const dIdx = Math.floor((y - itemsTop) / 46)
+	      if (dIdx >= 0 && dIdx < this.drawerActions.length) {
+	        this.onRailTap(this.drawerActions[dIdx].panel)
+	        return true
+	      }
+	    }
+
 	    if (!this.isExpandedLayout && y >= this.skyHeight - 128) {
 	      const start = this.skyWidth * 0.04
-	      const itemWidth = this.skyWidth * 0.92 / (this.actions.length - 1)
+	      const itemWidth = this.skyWidth * 0.92 / (this.pinnedActions.length - 1)
 	      const index = Math.floor((x - start) / itemWidth)
-	      if (index >= 0 && index < this.actions.length) {
-	        this.setPanel(this.actions[index].panel)
+	      if (index >= 0 && index < this.pinnedActions.length) {
+	        this.setPanel(this.pinnedActions[index].panel)
 	        return true
 	      }
 	    }
@@ -2698,12 +2756,28 @@ private loadPlanetPositions(): void {
         if (downX >= 0 && downX <= 58) {
           const railTop = 28
           const step = 58
-          for (let i = 0; i < this.actions.length; i++) {
+          // 常用固定入口
+          for (let i = 0; i < this.pinnedActions.length; i++) {
             const bTop = railTop + i * step
             if (downY >= bTop && downY <= bTop + 44) {
-              this.setPanel(this.actions[i].panel)
+              this.onRailTap(this.pinnedActions[i].panel)
               return
             }
+          }
+          // 「更多」抽屉按钮
+          const moreTop = railTop + this.pinnedActions.length * step + 8
+          if (downY >= moreTop && downY <= moreTop + 44) {
+            this.toggleDrawer()
+            return
+          }
+        }
+        // 抽屉项点击（抽屉展开时）
+        if (this.drawerOpen && downX >= 66 && downX <= 242) {
+          const itemsTop = this.railTop() + 38   // 抽屉容器顶部 padding + 标题高度
+          const idx = Math.floor((downY - itemsTop) / 46)
+          if (idx >= 0 && idx < this.drawerActions.length) {
+            this.onRailTap(this.drawerActions[idx].panel)
+            return
           }
         }
         return
@@ -2956,17 +3030,24 @@ private loadPlanetPositions(): void {
           Text(this.actionHint)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#5B93BF')
+            .fontColor('#FFFFFF')
+            .padding({ left: 16, right: 16, top: 9, bottom: 9 })
+            .backgroundColor('rgba(91, 147, 191, 0.92)')
+            .borderRadius(18)
+            .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
         }
-          .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-          .backgroundColor('#5B93BF')
-          .borderRadius(18)
-          .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
           .hitTestBehavior(HitTestMode.None)
           .position({ x: 0, y: 16 })
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .zIndex(20)
+          // 提示气泡：下滑淡入、上浮淡出
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: -12 }).animation({ duration: 220, curve: Curve.Friction })),
+            TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: -8 }).animation({ duration: 220, curve: Curve.EaseIn }))
+          ))
       }
       }
       .width('100%')
@@ -2984,6 +3065,13 @@ private loadPlanetPositions(): void {
       Stack() { this.railShell() }
         .position({ x: 0, y: this.railTop() })
         .hitTestBehavior(HitTestMode.Block)
+      // 低频功能抽屉：贴着侧栏右侧滑出
+      if (this.drawerOpen) {
+        Stack() { this.actionDrawer() }
+          .position({ x: 66, y: this.railTop() })
+          .hitTestBehavior(HitTestMode.Block)
+          .zIndex(6)
+      }
       Stack() { this.zoomButton('zoom_in') }
         .hitTestBehavior(HitTestMode.Block)
         .position({ x: 92, y: this.skyHeight - 220 })
@@ -3004,6 +3092,13 @@ private loadPlanetPositions(): void {
           .height(this.panelMaxHeight)
           .position({ x: this.skyWidth - this.panelWidth + this.panelOffsetX, y: 28 + this.panelOffsetY })
           .hitTestBehavior(HitTestMode.Transparent)
+          // 面板滑入滑出动画：从右侧滑入 + 淡入
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 240, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 48, y: 0 }).animation({ duration: 280, curve: Curve.Friction })),
+            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 32, y: 0 }).animation({ duration: 160, curve: Curve.EaseIn }))
+          ))
       }
     }
       .width('100%')
@@ -3104,28 +3199,34 @@ private loadPlanetPositions(): void {
   @Builder
   verticalRail() {
   Stack() {
-    ForEach(this.actions, (item: ShellAction, idx: number) => {
+    // 常用入口（高频操作直接固定）
+    ForEach(this.pinnedActions, (item: ShellAction, idx: number) => {
         Stack() { this.iconButton(item) }
           .width(44)
           .height(44)
           .position({ x: 7, y: idx * 58 })
           .onClick(() => {
-            this.setPanel(item.panel)
-            this.flashHint($r('app.string.i0078', item.label + '面板'))
+            this.onRailTap(item.panel)
           })
-        // 分隔线（最后一个按钮不加）
-        if (idx < this.actions.length - 1) {
-          Row()
-            .width(22)
-            .height(0.5)
-            .backgroundColor('rgba(255,255,255,0.08)')
-            .position({ x: 18, y: idx * 58 + 50 })
-            .hitTestBehavior(HitTestMode.None)
-        }
     }, (item: ShellAction) => item.panel)
+    // 分隔线：常用区与抽屉按钮之间
+    Row()
+      .width(26)
+      .height(0.5)
+      .backgroundColor('rgba(255,255,255,0.12)')
+      .position({ x: 16, y: this.pinnedActions.length * 58 + 1 })
+      .hitTestBehavior(HitTestMode.None)
+    // 更多（抽屉）按钮：展开/收起低频功能抽屉
+    Stack() { this.moreButton() }
+      .width(44)
+      .height(44)
+      .position({ x: 7, y: this.pinnedActions.length * 58 + 8 })
+      .onClick(() => {
+        this.toggleDrawer()
+      })
         // 钉住按钮：固定左侧栏，空闲不收起
         Stack({ alignContent: Alignment.Center }) {
-          Text(this.railPinned ? "\uD83D\uDCCC" : "\uD83D\uDCCC")
+          Text("\uD83D\uDCCC")
             .fontSize(16)
             .fontColor(this.railPinned ? "#FFD700" : "#66FFFFFF")
         }
@@ -3133,7 +3234,7 @@ private loadPlanetPositions(): void {
           .height(36)
           .borderRadius(18)
           .backgroundColor(this.railPinned ? "rgba(255, 215, 0, 0.15)" : "rgba(255, 255, 255, 0.06)")
-          .position({ x: 7, y: this.actions.length * 58 + 8 })
+          .position({ x: 7, y: this.pinnedActions.length * 58 + 60 })
           .onClick(() => {
             this.railPinned = !this.railPinned
             this.flashHint(this.railPinned ? $r('app.string.s0717') : $r('app.string.s0718'))
@@ -3191,7 +3292,8 @@ private loadPlanetPositions(): void {
   @Builder
   bottomDock() {
     Row() {
-      ForEach(this.actions, (item: ShellAction) => {
+      // 窄屏底栏同样只放常用入口，其余入口在展开面板里可达
+      ForEach(this.pinnedActions, (item: ShellAction) => {
         this.dockButton(item)
       }, (item: ShellAction) => item.panel)
     }
@@ -3241,12 +3343,16 @@ private loadPlanetPositions(): void {
       'layers': $r('app.media.ic_layers'),
       'info': $r('app.media.ic_info'),
       'settings': $r('app.media.ic_settings'),
-      'catalogs': $r('app.media.ic_list'),
+      'catalogs': $r('app.media.ic_download'),
       'bookmarks': $r('app.media.ic_bookmark'),
       'telescope': $r('app.media.ic_telescope'),
       'satellite': $r('app.media.ic_satellite'),
       'meteor': $r('app.media.ic_meteor'),
-      'script': $r('app.media.ic_list'),
+      'script': $r('app.media.ic_code'),
+      'tune': $r('app.media.ic_tune'),
+      'orbit': $r('app.media.ic_orbit'),
+      'help': $r('app.media.ic_help'),
+      'grid': $r('app.media.ic_grid'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
     }
@@ -3299,6 +3405,74 @@ private loadPlanetPositions(): void {
       })
       .animation({ duration: 180, curve: Curve.EaseOut })
       // 手势由外层 Stack.onClick 统一处理
+  }
+
+  // 「更多」九宫格按钮：展开低频功能抽屉
+  @Builder
+  moreButton() {
+    Column() {
+      Image(this.getIcon('grid', false))
+        .width(22).height(22)
+        .fillColor(this.drawerOpen ? '#FFFFFF' : this.nmText())
+        .rotate({ angle: this.drawerOpen ? 45 : 0 })
+        .animation({ duration: 240, curve: Curve.EaseOut })
+    }
+      .width(44)
+      .height(44)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.drawerOpen ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(22)
+      .margin({ top: 4, bottom: 4 })
+      .scale({ x: this.drawerOpen ? 1.08 : 1.0, y: this.drawerOpen ? 1.08 : 1.0 })
+      .animation({ duration: 200, curve: Curve.EaseOut })
+  }
+
+  // 低频功能抽屉：从侧栏右侧滑出，图标 + 名称，一行一项
+  @Builder
+  actionDrawer() {
+    Column({ space: 2 }) {
+      Text('更多功能')
+        .fontSize(12)
+        .fontColor(this.nmSub())
+        .width('100%')
+        .padding({ left: 14, top: 10, bottom: 4 })
+      ForEach(this.drawerActions, (item: ShellAction) => {
+        Row({ space: 12 }) {
+          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+            .width(20).height(20)
+            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+          Text(item.label)
+            .fontSize(14)
+            .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+        }
+          .width('100%')
+          .height(44)
+          .padding({ left: 14, right: 12 })
+          .borderRadius(12)
+          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(0,0,0,0)')
+          .onClick(() => {
+            this.onRailTap(item.panel)
+          })
+      }, (item: ShellAction) => item.panel)
+    }
+      .width(176)
+      .padding({ top: 4, bottom: 10, left: 6, right: 6 })
+      .backgroundColor('rgba(25, 26, 28, 0.86)')
+      .backdropBlur(30)
+      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.10)' })
+      .borderRadius(20)
+      .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.40)', offsetX: 6, offsetY: 10 })
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.animation({ duration: 240, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: -24, y: 0 }).animation({ duration: 260, curve: Curve.Friction })),
+        TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+          .combine(TransitionEffect.translate({ x: -16, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
+      ))
   }
 
   @Builder

@@ -5,6 +5,28 @@
 
 ---
 
+## [2026-07-25] WorkBuddy - 侧边栏改版：常用固定 + 抽屉收纳，图标去重，补齐动画
+
+- **背景（用户反馈）：** 左侧菜单栏 15 个入口全部竖排、快占满整屏；4 组图标重复（图层=高级配置、时间=天文计算、天体信息=帮助、星表下载=脚本共用图标）；提示气泡文字色与背景色相同看不清；缺少面板/抽屉动画。
+- **修改文件：**
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+  - `harmonyos/ets-source/resources/base/media/`：新增 6 个 Feather 风格 SVG 图标 `ic_tune`(高级配置滑杆) `ic_orbit`(天文计算轨道) `ic_help`(帮助问号) `ic_code`(脚本代码) `ic_download`(星表下载) `ic_grid`(更多九宫格)。
+- **改动：**
+  - `actions` 拆为 `pinnedActions`（常用 5：搜索/时间/位置/图层/设置，固定在侧栏）+ `drawerActions`（低频 10：天体信息/星表下载/书签/望远镜/卫星/流星雨/脚本/高级配置/天文计算/帮助，收进抽屉）。原 `actions` 全量数组保留供面板渲染遍历。
+  - 侧栏底部新增「更多」九宫格按钮（`moreButton()`，激活时旋转 45° + 高亮），点击展开 `actionDrawer()` 抽屉：176vp 宽玻璃拟态卡片、图标+中文名一行一项，从侧栏右侧滑入（`TransitionEffect.translate + OPACITY`），点任意项打开面板并自动收起。
+  - 侧栏高度由 ~890vp 缩短为 ~460vp（`railHeight()` 按 pinned 数量计算）。
+  - 动画补齐：抽屉展开/收起 260ms Friction；浮动面板从右侧滑入 280ms（`transition` asymmetric）；提示气泡下滑淡入/上浮淡出；「更多」按钮旋转缩放反馈。
+  - 修复提示气泡 bug：文字 `#5B93BF` 配背景 `#5B93BF` 同色不可读 → 白字 + 半透明蓝底。
+  - 触摸分发三处同步适配新布局：`handleOverlayTouch` 手动命中（rail 6 钮 + 抽屉项 46vp 行高）、`handleUiTap`、`isUiPoint`（含抽屉区域，防止点抽屉误拖星图）。
+  - 窄屏 `bottomDock` 同样只放常用 5 项。
+- **验证（模拟器 127.0.0.1:5555）：**
+  - UI 树确认左侧栏图标恰好 6 个（y 100~696px），不再占满全屏。
+  - 点九宫格 (58,696)px → 抽屉展开，dump 到「更多功能」标题 + 星表下载/书签/望远镜/卫星/流星雨/脚本/AstroCalc 等全部条目。
+  - 点抽屉「书签」→ hilog `setPanel bookmarks`，书签面板打开，抽屉自动收起。
+  - 点固定按钮 (58,332)px → hilog `setPanel place`，位置面板正常。
+
+---
+
 ## [2026-07-25] WorkBuddy - 修复触摸反馈圈错位（真正根因：zIndex 被 OpenGL 表面覆盖）
 
 - **修改文件：**
