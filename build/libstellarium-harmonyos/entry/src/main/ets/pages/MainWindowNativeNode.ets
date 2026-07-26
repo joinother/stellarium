@@ -2217,6 +2217,9 @@ private loadPlanetPositions(): void {
     // 通用状态翻译
     const statusMap = I18n.objectType(raw)
     if (statusMap !== raw) { return statusMap }
+    // 星座缩写翻译（Sco→天蝎座等）
+    const constName = I18n.constellationAbbr(raw)
+    if (constName !== raw) { return constName }
     // 行星名翻译（所有语言）
     const planet = I18n.planetName(raw)
     if (planet !== raw) { return planet }
@@ -3481,7 +3484,7 @@ private loadPlanetPositions(): void {
     // 左下角滑动详情卡片：其区域内不穿透到星图，让 Swiper 可正常滑动
     if (this.infoWinVisible && this.selectedName.length > 0) {
       if (this.isExpandedLayout) {
-        const bcX = this.EDGE_MARGIN + 64
+        const bcX = this.EDGE_MARGIN + 160
         const bcY = this.skyHeight - 220
         const bcW = 340
         const bcH = 200
@@ -4093,12 +4096,12 @@ private loadPlanetPositions(): void {
       // 左上角 Stellarium 常驻标已移除，避免遮挡星图
       Stack() { this.railShell() }
         .position({ x: this.EDGE_MARGIN, y: this.railTop() })
-        .hitTestBehavior(HitTestMode.Transparent)
+        .hitTestBehavior(HitTestMode.Block)
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.drawerOpen) {
         Stack() { this.actionDrawer() }
           .position({ x: this.EDGE_MARGIN + 58, y: this.railTop() })
-          .hitTestBehavior(HitTestMode.Transparent)
+          .hitTestBehavior(HitTestMode.Block)
           .zIndex(6)
       }
       Stack() { this.zoomButton('zoom_in') }
@@ -4170,7 +4173,7 @@ private loadPlanetPositions(): void {
       // 左下角滑动详情卡片（选中天体时显示）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: this.EDGE_MARGIN + 64, y: this.skyHeight - 220 })
+          .position({ x: this.EDGE_MARGIN + 160, y: this.skyHeight - 220 })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Block)
           .transition(TransitionEffect.asymmetric(

@@ -241,6 +241,7 @@ const RICH_PHRASES: Record<string, Record<string, string>> = {
   'spiral galaxy': { 'en': 'spiral galaxy', 'zh_CN': '螺旋星系', 'ja': '渦巻銀河', 'ko': '나선은하', 'fr': 'galaxie spirale', 'de': 'Spiralgalaxie', 'es': 'galaxia espiral', 'ru': 'спиральная галактика' },
   'supernova remnant': { 'en': 'supernova remnant', 'zh_CN': '超新星遗迹', 'ja': '超新星残骸', 'ko': '초신성잔해', 'fr': 'reste de supernova', 'de': 'Supernovaüberrest', 'es': 'resto de supernova', 'ru': 'остаток сверхновой' },
   'variable star': { 'en': 'variable star', 'zh_CN': '变星', 'ja': '変光星', 'ko': '변광성', 'fr': 'étoile variable', 'de': 'veränderlicher Stern', 'es': 'estrella variable', 'ru': 'переменная звезда' },
+  'pulsating variable star': { 'en': 'pulsating variable star', 'zh_CN': '脉动变星', 'ja': '脈動変光星', 'ko': '맥동변광성', 'fr': 'étoile variable pulsante', 'de': 'pulsationsveränderlicher Stern', 'es': 'estrella variable pulsante', 'ru': 'пульсирующая переменная звезда' },
 }
 
 // UI 字符串翻译表（硬编码的 UI 文本 → 各语言）
@@ -1170,6 +1171,100 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
 // I18n 主类
 // ═══════════════════════════════════════════════════════════════
 
+
+// IAU constellation abbreviations (3-letter) → full name in each language
+const CONSTELLATION_ABBR: Record<string, Record<string, string>> = {
+  'And': { 'en': 'Andromeda', 'zh_CN': '仙女座', 'ja': 'アンドロメダ座', 'ko': '안드로메다자리', 'fr': 'Andromède', 'de': 'Andromeda', 'es': 'Andrómeda', 'ru': 'Андромеда' },
+  'Ant': { 'en': 'Antlia', 'zh_CN': '唧筒座', 'ja': 'ポンプ座', 'ko': '펌프자리', 'fr': 'Antlia', 'de': 'Antlia (Pumpe)', 'es': 'Antlia', 'ru': 'Насос' },
+  'Aps': { 'en': 'Apus', 'zh_CN': '天燕座', 'ja': 'ふうちょう座', 'ko': '극락조자리', 'fr': 'Apus', 'de': 'Apus (Paradiesvogel)', 'es': 'Apus', 'ru': 'Райская птица' },
+  'Aqr': { 'en': 'Aquarius', 'zh_CN': '宝瓶座', 'ja': 'みずがめ座', 'ko': '물병자리', 'fr': 'Verseau', 'de': 'Wassermann', 'es': 'Acuario', 'ru': 'Водолей' },
+  'Aql': { 'en': 'Aquila', 'zh_CN': '天鹰座', 'ja': 'わし座', 'ko': '독수리자리', 'fr': 'Aigle', 'de': 'Adler', 'es': 'Águila', 'ru': 'Орёл' },
+  'Ara': { 'en': 'Ara', 'zh_CN': '天坛座', 'ja': 'さいだん座', 'ko': '제단자리', 'fr': 'Autel', 'de': 'Ara (Altar)', 'es': 'Ara', 'ru': 'Жертвенник' },
+  'Ari': { 'en': 'Aries', 'zh_CN': '白羊座', 'ja': 'おひつじ座', 'ko': '양자리', 'fr': 'Bélier', 'de': 'Widder', 'es': 'Aries', 'ru': 'Овен' },
+  'Aur': { 'en': 'Auriga', 'zh_CN': '御夫座', 'ja': 'ぎょしゃ座', 'ko': '마차부자리', 'fr': 'Cocher', 'de': 'Auriga (Fuhrmann)', 'es': 'Auriga', 'ru': 'Возничий' },
+  'Boo': { 'en': 'Boötes', 'zh_CN': '牧夫座', 'ja': 'うしかい座', 'ko': '목자자리', 'fr': 'Bouvier', 'de': 'Bärenhüter', 'es': 'Boyero', 'ru': 'Волопас' },
+  'Cae': { 'en': 'Caelum', 'zh_CN': '雕具座', 'ja': 'ちょうこくぐ座', 'ko': '조각가자리', 'fr': 'Burin', 'de': 'Caelum (Meißel)', 'es': 'Caelum', 'ru': 'Резец' },
+  'Cam': { 'en': 'Camelopardalis', 'zh_CN': '鹿豹座', 'ja': 'きりん座', 'ko': '기린자리', 'fr': 'Caméléon', 'de': 'Giraffe', 'es': 'Jirafa', 'ru': 'Жираф' },
+  'Cnc': { 'en': 'Cancer', 'zh_CN': '巨蟹座', 'ja': 'かに座', 'ko': '게자리', 'fr': 'Cancer', 'de': 'Krebs', 'es': 'Cáncer', 'ru': 'Рак' },
+  'CVn': { 'en': 'Canes Venatici', 'zh_CN': '猎犬座', 'ja': 'りょうけん座', 'ko': '사냥개자리', 'fr': 'Chiens de chasse', 'de': 'Jagdhunde', 'es': 'Lebreles', 'ru': 'Гончие псы' },
+  'CMa': { 'en': 'Canis Major', 'zh_CN': '大犬座', 'ja': 'おおいぬ座', 'ko': '큰개자리', 'fr': 'Grand Chien', 'de': 'Großer Hund', 'es': 'Can Mayor', 'ru': 'Большой пёс' },
+  'CMi': { 'en': 'Canis Minor', 'zh_CN': '小犬座', 'ja': 'こいぬ座', 'ko': '작은개자리', 'fr': 'Petit Chien', 'de': 'Kleiner Hund', 'es': 'Can Menor', 'ru': 'Малый пёс' },
+  'Cap': { 'en': 'Capricornus', 'zh_CN': '摩羯座', 'ja': 'やぎ座', 'ko': '염소자리', 'fr': 'Capricorne', 'de': 'Steinbock', 'es': 'Capricornio', 'ru': 'Козерог' },
+  'Car': { 'en': 'Carina', 'zh_CN': '船底座', 'ja': 'りゅうこつ座', 'ko': '용골자리', 'fr': 'Carène', 'de': 'Carina (Kiel)', 'es': 'Carina', 'ru': 'Киль' },
+  'Cas': { 'en': 'Cassiopeia', 'zh_CN': '仙后座', 'ja': 'カシオペヤ座', 'ko': '카시오페아자리', 'fr': 'Cassiopée', 'de': 'Kassiopeia', 'es': 'Casiopea', 'ru': 'Кассиопея' },
+  'Cen': { 'en': 'Centaurus', 'zh_CN': '半人马座', 'ja': 'ケンタウルス座', 'ko': '켄타우루스자리', 'fr': 'Centaure', 'de': 'Centaurus', 'es': 'Centauro', 'ru': 'Кентавр' },
+  'Cep': { 'en': 'Cepheus', 'zh_CN': '仙王座', 'ja': 'ケフェウス座', 'ko': '케페우스자리', 'fr': 'Céphée', 'de': 'Kepheus', 'es': 'Cefeo', 'ru': 'Цефей' },
+  'Cet': { 'en': 'Cetus', 'zh_CN': '鲸鱼座', 'ja': 'くじら座', 'ko': '고래자리', 'fr': 'Baleine', 'de': 'Walfisch', 'es': 'Cetus', 'ru': 'Кит' },
+  'Cha': { 'en': 'Chamaeleon', 'zh_CN': '蝘蜓座', 'ja': 'カメレオン座', 'ko': '카멜레온자리', 'fr': 'Caméléon', 'de': 'Chamäleon', 'es': 'Camaleón', 'ru': 'Хамелеон' },
+  'Cir': { 'en': 'Circinus', 'zh_CN': '圆规座', 'ja': 'コンパス座', 'ko': '컴퍼스자리', 'fr': 'Compas', 'de': 'Zirkel', 'es': 'Circinus', 'ru': 'Циркуль' },
+  'Col': { 'en': 'Columba', 'zh_CN': '天鸽座', 'ja': 'はと座', 'ko': '비둘기자리', 'fr': 'Colombe', 'de': 'Taube', 'es': 'Columba', 'ru': 'Голубь' },
+  'Com': { 'en': 'Coma Berenices', 'zh_CN': '后发座', 'ja': 'かみのけ座', 'ko': '머리털자리', 'fr': 'Chevelure de Bérénice', 'de': 'Haar der Berenike', 'es': 'Cabellera', 'ru': 'Волосы Вероники' },
+  'CrA': { 'en': 'Corona Australis', 'zh_CN': '南冕座', 'ja': 'みなみじゅうじ座', 'ko': '남쪽왕관자리', 'fr': 'Couronne australe', 'de': 'Südliche Krone', 'es': 'Corona Austral', 'ru': 'Южная корона' },
+  'CrB': { 'en': 'Corona Borealis', 'zh_CN': '北冕座', 'ja': 'かんむり座', 'ko': '왕관자리', 'fr': 'Couronne boréale', 'de': 'Nördliche Krone', 'es': 'Corona Boreal', 'ru': 'Северная корона' },
+  'Crv': { 'en': 'Corvus', 'zh_CN': '乌鸦座', 'ja': 'からす座', 'ko': '까마귀자리', 'fr': 'Corbeau', 'de': 'Rabe', 'es': 'Cuervo', 'ru': 'Ворон' },
+  'Crt': { 'en': 'Crater', 'zh_CN': '巨爵座', 'ja': 'コップ座', 'ko': '잔자리', 'fr': 'Coupe', 'de': 'Becher', 'es': 'Crater', 'ru': 'Чаша' },
+  'Cru': { 'en': 'Crux', 'zh_CN': '南十字座', 'ja': '南十字座', 'ko': '남십자자리', 'fr': 'Croix du Sud', 'de': 'Kreuz des Südens', 'es': 'Cruz del Sur', 'ru': 'Южный крест' },
+  'Cygn': { 'en': 'Cygnus', 'zh_CN': '天鹅座', 'ja': 'はくちょう座', 'ko': '고니자리', 'fr': 'Cygne', 'de': 'Schwan', 'es': 'Cisne', 'ru': 'Лебедь' },
+  'Del': { 'en': 'Delphinus', 'zh_CN': '海豚座', 'ja': 'いるか座', 'ko': '돌고래자리', 'fr': 'Dauphin', 'de': 'Delphin', 'es': 'Delfín', 'ru': 'Дельфин' },
+  'Dor': { 'en': 'Dorado', 'zh_CN': '剑鱼座', 'ja': 'かじき座', 'ko': '돛새치자리', 'fr': 'Dorade', 'de': 'Dorado (Schwertfisch)', 'es': 'Dorado', 'ru': 'Золотая рыба' },
+  'Dra': { 'en': 'Draco', 'zh_CN': '天龙座', 'ja': 'りゅう座', 'ko': '용자리', 'fr': 'Dragon', 'de': 'Drache', 'es': 'Dragón', 'ru': 'Дракон' },
+  'Equ': { 'en': 'Equuleus', 'zh_CN': '小马座', 'ja': 'こうま座', 'ko': '조랑말자리', 'fr': 'Petit Cheval', 'de': 'Füllen', 'es': 'Equuleus', 'ru': 'Малый конь' },
+  'Eri': { 'en': 'Eridanus', 'zh_CN': '波江座', 'ja': 'エリダヌス座', 'ko': '에리다누스자리', 'fr': 'Éridan', 'de': 'Eridanus', 'es': 'Eridano', 'ru': 'Эридан' },
+  'For': { 'en': 'Fornax', 'zh_CN': '天炉座', 'ja': 'ろ座', 'ko': '화로자리', 'fr': 'Fourneau', 'de': 'Ofen', 'es': 'Horno', 'ru': 'Печь' },
+  'Gem': { 'en': 'Gemini', 'zh_CN': '双子座', 'ja': 'ふたご座', 'ko': '쌍둥이자리', 'fr': 'Gémeaux', 'de': 'Zwillinge', 'es': 'Géminis', 'ru': 'Близнецы' },
+  'Gru': { 'en': 'Grus', 'zh_CN': '天鹤座', 'ja': 'つる座', 'ko': '두루미자리', 'fr': 'Grue', 'de': 'Kranich', 'es': 'Grus', 'ru': 'Журавль' },
+  'Her': { 'en': 'Hercules', 'zh_CN': '武仙座', 'ja': 'ヘルクレス座', 'ko': '허큘레스자리', 'fr': 'Hercule', 'de': 'Herkules', 'es': 'Hércules', 'ru': 'Геркулес' },
+  'Hor': { 'en': 'Horologium', 'zh_CN': '时钟座', 'ja': 'とけい座', 'ko': '시계자리', 'fr': 'Horloge', 'de': 'Uhr', 'es': 'Reloj', 'ru': 'Часы' },
+  'Hya': { 'en': 'Hydra', 'zh_CN': '长蛇座', 'ja': 'うみへび座', 'ko': '바다뱀자리', 'fr': 'Hydre', 'de': 'Wasserschlange', 'es': 'Hidra', 'ru': 'Гидра' },
+  'Hyi': { 'en': 'Hydrus', 'zh_CN': '水蛇座', 'ja': 'みずへび座', 'ko': '물뱀자리', 'fr': 'Hydre mâle', 'de': 'Kleine Wasserschlange', 'es': 'Hydrus', 'ru': 'Южная гидра' },
+  'Ind': { 'en': 'Indus', 'zh_CN': '印第安座', 'ja': 'インディアン座', 'ko': '인디언자리', 'fr': 'Indien', 'de': 'Indianer', 'es': 'Indio', 'ru': 'Индеец' },
+  'Lac': { 'en': 'Lacerta', 'zh_CN': '蝎虎座', 'ja': 'とかげ座', 'ko': '도마뱀자리', 'fr': 'Lézard', 'de': 'Eidechse', 'es': 'Lagarto', 'ru': 'Ящерица' },
+  'Leo': { 'en': 'Leo', 'zh_CN': '狮子座', 'ja': 'しし座', 'ko': '사자자리', 'fr': 'Lion', 'de': 'Löwe', 'es': 'Leo', 'ru': 'Лев' },
+  'LMi': { 'en': 'Leo Minor', 'zh_CN': '小狮座', 'ja': 'こじし座', 'ko': '작은사자자리', 'fr': 'Petit Lion', 'de': 'Kleiner Löwe', 'es': 'Leo Menor', 'ru': 'Малый лев' },
+  'Lep': { 'en': 'Lepus', 'zh_CN': '天兔座', 'ja': 'うさぎ座', 'ko': '토끼자리', 'fr': 'Lièvre', 'de': 'Hase', 'es': 'Liebre', 'ru': 'Заяц' },
+  'Lib': { 'en': 'Libra', 'zh_CN': '天秤座', 'ja': 'てんびん座', 'ko': '천칭자리', 'fr': 'Balance', 'de': 'Waage', 'es': 'Libra', 'ru': 'Весы' },
+  'Lup': { 'en': 'Lupus', 'zh_CN': '豺狼座', 'ja': 'おおかみ座', 'ko': '이리자리', 'fr': 'Loup', 'de': 'Wolf', 'es': 'Lobo', 'ru': 'Волк' },
+  'Lyn': { 'en': 'Lynx', 'zh_CN': '天猫座', 'ja': 'やまねこ座', 'ko': '스라소니자리', 'fr': 'Lynx', 'de': 'Luchs', 'es': 'Lince', 'ru': 'Рысь' },
+  'Lyr': { 'en': 'Lyra', 'zh_CN': '天琴座', 'ja': 'こと座', 'ko': '거문고자리', 'fr': 'Lyre', 'de': 'Leier', 'es': 'Lira', 'ru': 'Лира' },
+  'Men': { 'en': 'Mensa', 'zh_CN': '山案座', 'ja': 'テーブルさん座', 'ko': '탁자자리', 'fr': 'Table', 'de': 'Tafelberg', 'es': 'Mensa', 'ru': 'Столовая гора' },
+  'Mic': { 'en': 'Microscopium', 'zh_CN': '显微镜座', 'ja': 'けんびきょう座', 'ko': '현미경자리', 'fr': 'Microscope', 'de': 'Mikroskop', 'es': 'Microscopio', 'ru': 'Микроскоп' },
+  'Mon': { 'en': 'Monoceros', 'zh_CN': '麒麟座', 'ja': 'いっかくじゅう座', 'ko': '외뿔소자리', 'fr': 'Licorne', 'de': 'Einhorn', 'es': 'Monoceros', 'ru': 'Единорог' },
+  'Mus': { 'en': 'Musca', 'zh_CN': '苍蝇座', 'ja': 'はえ座', 'ko': '파리자리', 'fr': 'Mouche', 'de': 'Fliege', 'es': 'Mosca', 'ru': 'Муха' },
+  'Norm': { 'en': 'Norma', 'zh_CN': '矩尺座', 'ja': 'じょうぎ座', 'ko': '자자리', 'fr': 'Règle', 'de': 'Winkelmass', 'es': 'Norma', 'ru': 'Наугольник' },
+  'Oct': { 'en': 'Octans', 'zh_CN': '南极座', 'ja': 'はちぶんぎ座', 'ko': '팔분의자리', 'fr': 'Octant', 'de': 'Oktant', 'es': 'Octans', 'ru': 'Октант' },
+  'Oph': { 'en': 'Ophiuchus', 'zh_CN': '蛇夫座', 'ja': 'へびつかい座', 'ko': '뱀주인자리', 'fr': 'Ophiuchus', 'de': 'Schlangenträger', 'es': 'Ofiuco', 'ru': 'Змееносец' },
+  'Ori': { 'en': 'Orion', 'zh_CN': '猎户座', 'ja': 'オリオン座', 'ko': '오리온자리', 'fr': 'Orion', 'de': 'Orion', 'es': 'Orión', 'ru': 'Орион' },
+  'Pav': { 'en': 'Pavo', 'zh_CN': '孔雀座', 'ja': 'くじゃく座', 'ko': '공작자리', 'fr': 'Paon', 'de': 'Pfau', 'es': 'Pavo', 'ru': 'Павлин' },
+  'Peg': { 'en': 'Pegasus', 'zh_CN': '飞马座', 'ja': 'ペガスス座', 'ko': '페가수스자리', 'fr': 'Pégase', 'de': 'Pegasus', 'es': 'Pegaso', 'ru': 'Пегас' },
+  'Per': { 'en': 'Perseus', 'zh_CN': '英仙座', 'ja': 'ペルセウス座', 'ko': '페르세우스자리', 'fr': 'Persée', 'de': 'Perseus', 'es': 'Perseo', 'ru': 'Персей' },
+  'Phe': { 'en': 'Phoenix', 'zh_CN': '凤凰座', 'ja': 'ほうおう座', 'ko': '봉황자리', 'fr': 'Phénix', 'de': 'Phönix', 'es': 'Fénix', 'ru': 'Феникс' },
+  'Pic': { 'en': 'Pictor', 'zh_CN': '绘架座', 'ja': 'がか座', 'ko': '화가자리', 'fr': 'Chevalet', 'de': 'Maler', 'es': 'Pictor', 'ru': 'Живописец' },
+  'Psc': { 'en': 'Pisces', 'zh_CN': '双鱼座', 'ja': 'うお座', 'ko': '물고기자리', 'fr': 'Poissons', 'de': 'Fische', 'es': 'Piscis', 'ru': 'Рыбы' },
+  'PsA': { 'en': 'Piscis Austrinus', 'zh_CN': '南鱼座', 'ja': 'みなみのうお座', 'ko': '남쪽물고기자리', 'fr': 'Poisson austral', 'de': 'Südlicher Fisch', 'es': 'Piscis Austral', 'ru': 'Южная рыба' },
+  'Pup': { 'en': 'Puppis', 'zh_CN': '船尾座', 'ja': 'とも座', 'ko': '고물자리', 'fr': 'Poupe', 'de': 'Puppis (Achterdeck)', 'es': 'Puppis', 'ru': 'Корма' },
+  'Pyx': { 'en': 'Pyxis', 'zh_CN': '罗盘座', 'ja': 'らしんばん座', 'ko': '나침반자리', 'fr': 'Boussole', 'de': 'Kompass', 'es': 'Pyxis', 'ru': 'Компас' },
+  'Ret': { 'en': 'Reticulum', 'zh_CN': '网罟座', 'ja': 'レチクル座', 'ko': '망사자리', 'fr': 'Réticule', 'de': 'Netz', 'es': 'Retículo', 'ru': 'Сетка' },
+  'Sge': { 'en': 'Sagitta', 'zh_CN': '天箭座', 'ja': 'や座', 'ko': '화살자리', 'fr': 'Flèche', 'de': 'Pfeil', 'es': 'Saeta', 'ru': 'Стрела' },
+  'Sgr': { 'en': 'Sagittarius', 'zh_CN': '人马座', 'ja': 'いて座', 'ko': '궁수자리', 'fr': 'Sagittaire', 'de': 'Schütze', 'es': 'Sagitario', 'ru': 'Стрелец' },
+  'Sco': { 'en': 'Scorpius', 'zh_CN': '天蝎座', 'ja': 'さそり座', 'ko': '전갈자리', 'fr': 'Scorpion', 'de': 'Skorpion', 'es': 'Escorpio', 'ru': 'Скорпион' },
+  'Scl': { 'en': 'Sculptor', 'zh_CN': '玉夫座', 'ja': 'ちょうこくしつ座', 'ko': '조각가자리', 'fr': 'Sculpteur', 'de': 'Bildhauer', 'es': 'Escultor', 'ru': 'Скульптор' },
+  'Sct': { 'en': 'Scutum', 'zh_CN': '盾牌座', 'ja': 'たて座', 'ko': '방패자리', 'fr': 'Bouclier', 'de': 'Schild', 'es': 'Scutum', 'ru': 'Щит' },
+  'Ser': { 'en': 'Serpens', 'zh_CN': '巨蛇座', 'ja': 'へび座', 'ko': '뱀자리', 'fr': 'Serpent', 'de': 'Schlange', 'es': 'Serpens', 'ru': 'Змей' },
+  'Sex': { 'en': 'Sextans', 'zh_CN': '六分仪座', 'ja': 'ろくぶんぎ座', 'ko': '육분의자리', 'fr': 'Sextant', 'de': 'Sextant', 'es': 'Sextans', 'ru': 'Секстант' },
+  'Tau': { 'en': 'Taurus', 'zh_CN': '金牛座', 'ja': 'おうし座', 'ko': '황소자리', 'fr': 'Taureau', 'de': 'Stier', 'es': 'Tauro', 'ru': 'Телец' },
+  'Tel': { 'en': 'Telescopium', 'zh_CN': '望远镜座', 'ja': 'ぼうえんきょう座', 'ko': '망원경자리', 'fr': 'Télescope', 'de': 'Teleskop', 'es': 'Telescopio', 'ru': 'Телескоп' },
+  'Tri': { 'en': 'Triangulum', 'zh_CN': '三角座', 'ja': 'さんかく座', 'ko': '삼각형자리', 'fr': 'Triangle', 'de': 'Dreieck', 'es': 'Triángulo', 'ru': 'Треугольник' },
+  'TrA': { 'en': 'Triangulum Australe', 'zh_CN': '南三角座', 'ja': 'みなみのさんかく座', 'ko': '남쪽삼각형자리', 'fr': 'Triangle austral', 'de': 'Südliches Dreieck', 'es': 'Triángulo Austral', 'ru': 'Южный треугольник' },
+  'Tuc': { 'en': 'Tucana', 'zh_CN': '杜鹃座', 'ja': 'きょしちょう座', 'ko': '투카나자리', 'fr': 'Toucan', 'de': 'Tukan', 'es': 'Tucana', 'ru': 'Тукан' },
+  'UMa': { 'en': 'Ursa Major', 'zh_CN': '大熊座', 'ja': 'おおぐま座', 'ko': '큰곰자리', 'fr': 'Grande Ourse', 'de': 'Großer Bär', 'es': 'Osa Mayor', 'ru': 'Большая медведица' },
+  'UMi': { 'en': 'Ursa Minor', 'zh_CN': '小熊座', 'ja': 'こぐま座', 'ko': '작은곰자리', 'fr': 'Petite Ourse', 'de': 'Kleiner Bär', 'es': 'Osa Menor', 'ru': 'Малая медведица' },
+  'Vel': { 'en': 'Vela', 'zh_CN': '船帆座', 'ja': 'ほ座', 'ko': '돛자리', 'fr': 'Voiles', 'de': 'Vela (Segel)', 'es': 'Vela', 'ru': 'Паруса' },
+  'Vir': { 'en': 'Virgo', 'zh_CN': '室女座', 'ja': 'おとめ座', 'ko': '처녀자리', 'fr': 'Vierge', 'de': 'Jungfrau', 'es': 'Virgo', 'ru': 'Дева' },
+  'Vol': { 'en': 'Volans', 'zh_CN': '飞鱼座', 'ja': 'とびうお座', 'ko': '날치자리', 'fr': 'Poisson volant', 'de': 'Fliegender Fisch', 'es': 'Volans', 'ru': 'Летучая рыба' },
+  'Vul': { 'en': 'Vulpecula', 'zh_CN': '狐狸座', 'ja': 'こぎつね座', 'ko': '여우자리', 'fr': 'Petit Renard', 'de': 'Füchschen', 'es': 'Vulpecula', 'ru': 'Лисичка' },
+}
+
+
 export class I18n {
   // Read current language from AppStorage on every call, not a cached static.
   // This ensures the language is always in sync with the reactive UI state
@@ -1234,6 +1329,13 @@ export class I18n {
     const entry = OBJECT_TYPES[en]
     if (!entry) return en
     return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // Constellation abbreviation (IAU 3-letter) → full name
+  static constellationAbbr(abbr: string): string {
+    const entry = CONSTELLATION_ABBR[abbr]
+    if (!entry) return abbr
+    return entry[I18n.lang] ?? entry['en'] ?? abbr
   }
 
   // 行星名称翻译
