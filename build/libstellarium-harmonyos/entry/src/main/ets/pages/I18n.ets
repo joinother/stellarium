@@ -76,6 +76,10 @@ const OBJECT_TYPES: Record<string, Record<string, string>> = {
   'Supernova remnant': { 'en': 'Supernova remnant', 'zh_CN': '超新星遗迹', 'ja': '超新星残骸', 'ko': '초신성잔해', 'fr': 'Reste de supernova', 'de': 'Supernovaüberrest', 'es': 'Resto de supernova', 'ru': 'Остаток сверхновой' },
   'Variable Star': { 'en': 'Variable star', 'zh_CN': '变星', 'ja': '変光星', 'ko': '변광성', 'fr': 'Étoile variable', 'de': 'Veränderlicher Stern', 'es': 'Estrella variable', 'ru': 'Переменная звезда' },
   'Variable star': { 'en': 'Variable star', 'zh_CN': '变星', 'ja': '変光星', 'ko': '변광성', 'fr': 'Étoile variable', 'de': 'Veränderlicher Stern', 'es': 'Estrella variable', 'ru': 'Переменная звезда' },
+  'eruptive variable star': { 'en': 'eruptive variable star', 'zh_CN': '爆发变星', 'ja': '爆発変光星', 'ko': '폭발변광성', 'fr': 'étoile variable éruptive', 'de': 'eruptiver veränderlicher Stern', 'es': 'estrella variable eruptiva', 'ru': 'эруптивная переменная звезда' },
+  'rotating variable star': { 'en': 'rotating variable star', 'zh_CN': '自转变星', 'ja': '回転変光星', 'ko': '회전변광성', 'fr': 'étoile variable rotative', 'de': 'rotationsveränderlicher Stern', 'es': 'estrella variable rotante', 'ru': 'вращающаяся переменная звезда' },
+  'cataclysmic variable star': { 'en': 'cataclysmic variable star', 'zh_CN': '激变变星', 'ja': '激変変光星', 'ko': '격변변광성', 'fr': 'étoile variable cataclysmique', 'de': 'kataklysmischer veränderlicher Stern', 'es': 'estrella variable cataclísmica', 'ru': 'катаклизмическая переменная звезда' },
+  'star': { 'en': 'star', 'zh_CN': '恒星', 'ja': '恒星', 'ko': '항성', 'fr': 'étoile', 'de': 'Stern', 'es': 'estrella', 'ru': 'звезда' },
 }
 
 // 行星名称翻译表
@@ -1095,6 +1099,9 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   's0755': { 'en': 'Back', 'zh_CN': '后退', 'ja': '后退', 'ko': '后退', 'fr': 'Back', 'de': 'Back', 'es': 'Back', 'ru': 'Back' },
   's0756': { 'en': 'Pause', 'zh_CN': '暂停', 'ja': '暂停', 'ko': '暂停', 'fr': 'Pause', 'de': 'Pause', 'es': 'Pause', 'ru': 'Pause' },
   's0757': { 'en': 'Forward', 'zh_CN': '前进', 'ja': '运行', 'ko': '运行', 'fr': 'Forward', 'de': 'Forward', 'es': 'Forward', 'ru': 'Forward' },
+  's0760': { 'en': 'Speak Text', 'zh_CN': '朗读文本', 'ja': 'テキスト読み上げ', 'ko': '텍스트 읽기', 'fr': 'Lire le texte', 'de': 'Text vorlesen', 'es': 'Leer texto', 'ru': 'Озвучить текст' },
+  'coord_alt': { 'en': 'Alt', 'zh_CN': '高度', 'ja': '高度', 'ko': '고도', 'fr': 'Alt', 'de': 'Höhe', 'es': 'Alt', 'ru': 'Выс' },
+  'coord_az': { 'en': 'Az', 'zh_CN': '方位', 'ja': '方位', 'ko': '방위', 'fr': 'Az', 'de': 'Az', 'es': 'Az', 'ru': 'Аз' },
   's_coord_format_hint': { 'en': 'RA: hours  Dec: degrees', 'zh_CN': 'RA: 时  Dec: 度', 'ja': 'RA: hours  Dec: degrees', 'ko': 'RA: hours  Dec: degrees', 'fr': 'RA: hours  Dec: degrees', 'de': 'RA: hours  Dec: degrees', 'es': 'RA: hours  Dec: degrees', 'ru': 'RA: hours  Dec: degrees' },
   's_coord_go': { 'en': 'Go', 'zh_CN': '跳转', 'ja': 'Go', 'ko': 'Go', 'fr': 'Go', 'de': 'Go', 'es': 'Go', 'ru': 'Go' },
   's_coord_input': { 'en': 'RA/Dec', 'zh_CN': '赤经/赤纬', 'ja': 'RA/Dec', 'ko': 'RA/Dec', 'fr': 'RA/Dec', 'de': 'RA/Dec', 'es': 'RA/Dec', 'ru': 'RA/Dec' },
@@ -1324,11 +1331,44 @@ export class I18n {
     return entry[I18n.lang] ?? entry['en'] ?? key
   }
 
-  // 天体类型翻译（C++ 返回的英文类型名）
+  // 天体类型翻译（C++ 返回的英文类型名，支持复合类型如 "double star, pulsating variable star"）
   static objectType(en: string): string {
+    // 先尝试精确匹配
     const entry = OBJECT_TYPES[en]
-    if (!entry) return en
-    return entry[I18n.lang] ?? entry['en'] ?? en
+    if (entry) {
+      return entry[I18n.lang] ?? entry['en'] ?? en
+    }
+    // 复合类型：按逗号分割，逐段翻译
+    if (en.indexOf(',') >= 0) {
+      const parts = en.split(',')
+      const translatedParts: string[] = []
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i].trim()
+        // 先尝试原始大小写
+        const e1 = OBJECT_TYPES[part]
+        if (e1) {
+          translatedParts.push(e1[I18n.lang] ?? e1['en'] ?? part)
+          continue
+        }
+        // 再尝试首字母大写
+        const cap = part.charAt(0).toUpperCase() + part.slice(1)
+        const e2 = OBJECT_TYPES[cap]
+        if (e2) {
+          translatedParts.push(e2[I18n.lang] ?? e2['en'] ?? part)
+          continue
+        }
+        // 无法翻译，保留原文（可能已经是当前语言）
+        translatedParts.push(part)
+      }
+      return translatedParts.join(', ')
+    }
+    // 尝试首字母大写
+    const capKey = en.charAt(0).toUpperCase() + en.slice(1)
+    const capEntry = OBJECT_TYPES[capKey]
+    if (capEntry) {
+      return capEntry[I18n.lang] ?? capEntry['en'] ?? en
+    }
+    return en
   }
 
   // Constellation abbreviation (IAU 3-letter) → full name
@@ -1336,6 +1376,19 @@ export class I18n {
     const entry = CONSTELLATION_ABBR[abbr]
     if (!entry) return abbr
     return entry[I18n.lang] ?? entry['en'] ?? abbr
+  }
+
+  // Constellation full English name → localized name (reverse lookup)
+  static constellationFullName(name: string): string {
+    if (!name || name.length === 0) { return name }
+    const lower = name.toLowerCase()
+    for (const abbr of Object.keys(CONSTELLATION_ABBR)) {
+      const entry = CONSTELLATION_ABBR[abbr]
+      if (entry['en'].toLowerCase() === lower) {
+        return entry[I18n.lang] ?? entry['en'] ?? name
+      }
+    }
+    return name
   }
 
   // 行星名称翻译

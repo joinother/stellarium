@@ -2220,6 +2220,9 @@ private loadPlanetPositions(): void {
     // 星座缩写翻译（Sco→天蝎座等）
     const constName = I18n.constellationAbbr(raw)
     if (constName !== raw) { return constName }
+    // 星座全名翻译（Scorpius→天蝎座等，C++ 有时返回全名而非缩写）
+    const constFullName = I18n.constellationFullName(raw)
+    if (constFullName !== raw) { return constFullName }
     // 行星名翻译（所有语言）
     const planet = I18n.planetName(raw)
     if (planet !== raw) { return planet }
@@ -2243,11 +2246,9 @@ private loadPlanetPositions(): void {
     }
     return label
   }
-  // 天体类型本地化（Planet→行星…）；未知则原样。委托给 I18n.objectType()。
+  // 天体类型本地化（Planet→行星…）；支持复合类型如 "double star, pulsating variable star"。
   private zhType(type: string): string {
-    const translated = I18n.objectType(type)
-    if (translated === type) { return type }
-    return translated
+    return I18n.objectType(type)
   }
 
   // 中文/拼音/英文模糊匹配别名，返回可点的建议（zh 显示，en 检索）。
@@ -2281,7 +2282,10 @@ private loadPlanetPositions(): void {
     }
     if (result.found === true) {
       const incomingName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
-      const incomingType = result.type && result.type.length > 0 ? result.type : 'Object'
+      // 优先使用 objectType（C++ 返回的英文原始类型），便于 I18n.objectType() 正确切分复合类型并翻译
+      const incomingType = (result.objectType && (result.objectType as string).length > 0)
+        ? (result.objectType as string)
+        : ((result.type && result.type.length > 0) ? result.type : 'Object')
       // 仅在“换了一个新天体”时才收起详情（保留用户已展开的偏好）；同一目标的周期性刷新不重置展开态
       const isNewSelection = (this.selectedName !== incomingName) || (this.selectedType !== incomingType) || (!this.infoWinVisible)
       this.selectedName = incomingName
@@ -2294,7 +2298,7 @@ private loadPlanetPositions(): void {
       const hasAlt: boolean = typeof result.altitude === 'number'
       const hasAz: boolean = typeof result.azimuth === 'number'
       this.selectedCoordAlt = (hasAlt || hasAz)
-        ? ('Alt ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '   Az ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
+        ? (I18n.t('coord_alt') + ' ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '  ' + I18n.t('coord_az') + ' ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
@@ -3484,8 +3488,8 @@ private loadPlanetPositions(): void {
     // 左下角滑动详情卡片：其区域内不穿透到星图，让 Swiper 可正常滑动
     if (this.infoWinVisible && this.selectedName.length > 0) {
       if (this.isExpandedLayout) {
-        const bcX = this.EDGE_MARGIN + 160
-        const bcY = this.skyHeight - 220
+        const bcX = this.EDGE_MARGIN + 200
+        const bcY = this.skyHeight - 230
         const bcW = 340
         const bcH = 200
         if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
@@ -3543,6 +3547,10 @@ private loadPlanetPositions(): void {
   }
 
   private handleUiTap(x: number, y: number): boolean {
+    // 防闪退保护：确保所有数组和状态变量有效
+    try {
+    if (!this.pinnedActions || this.pinnedActions.length === 0) { return false }
+    if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) { return false }
     // 顶部搜索栏：点击打开搜索面板
     if (this.isExpandedLayout) {
       const sbX = this.EDGE_MARGIN + 64
@@ -3575,7 +3583,7 @@ private loadPlanetPositions(): void {
       // 常用固定入口
       const index = Math.floor((y - railTop) / step)
       const withinButton = index >= 0 && index < this.pinnedActions.length && y >= railTop + index * step && y <= railTop + index * step + 44
-      if (withinButton) {
+      if (withinButton && this.pinnedActions[index]) {
         this.onRailTap(this.pinnedActions[index].panel)
         return true
       }
@@ -3603,7 +3611,7 @@ private loadPlanetPositions(): void {
 	    if (this.isExpandedLayout && this.drawerOpen && x >= this.EDGE_MARGIN + 58 && x <= this.EDGE_MARGIN + 58 + 176) {
 	      const itemsTop = this.railTop() + 38
 	      const dIdx = Math.floor((y - itemsTop) / 46)
-	      if (dIdx >= 0 && dIdx < this.drawerActions.length) {
+	      if (dIdx >= 0 && dIdx < this.drawerActions.length && this.drawerActions[dIdx]) {
 	        this.onRailTap(this.drawerActions[dIdx].panel)
 	        return true
 	      }
@@ -3675,9 +3683,14 @@ private loadPlanetPositions(): void {
     }
 
     return true
+    } catch (e) {
+      hilog.error(0x0000, 'StellariumArkUI', 'handleUiTap crash: ' + (e instanceof Error ? e.message : String(e)))
+      return false
+    }
   }
 
   private handleOverlayTouch(event: TouchEvent): void {
+    try {
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) {
       return
@@ -3699,6 +3712,9 @@ private loadPlanetPositions(): void {
       return
     }
     this.handleSkyTouch(event)
+    } catch (e) {
+      hilog.error(0x0000, 'StellariumArkUI', 'handleOverlayTouch crash: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   private handleSkyTouch(event: TouchEvent): void {
@@ -3733,7 +3749,7 @@ private loadPlanetPositions(): void {
           // 常用固定入口
           for (let i = 0; i < this.pinnedActions.length; i++) {
             const bTop = railTop + i * step
-            if (downY >= bTop && downY <= bTop + 44) {
+            if (downY >= bTop && downY <= bTop + 44 && this.pinnedActions[i]) {
               this.onRailTap(this.pinnedActions[i].panel)
               return
             }
@@ -3761,7 +3777,7 @@ private loadPlanetPositions(): void {
         if (this.drawerOpen && downX >= this.EDGE_MARGIN + 58 && downX <= this.EDGE_MARGIN + 58 + 176) {
           const itemsTop = this.railTop() + 38   // 抽屉容器顶部 padding + 标题高度
           const idx = Math.floor((downY - itemsTop) / 46)
-          if (idx >= 0 && idx < this.drawerActions.length) {
+          if (idx >= 0 && idx < this.drawerActions.length && this.drawerActions[idx]) {
             this.onRailTap(this.drawerActions[idx].panel)
             return
           }
@@ -4173,7 +4189,7 @@ private loadPlanetPositions(): void {
       // 左下角滑动详情卡片（选中天体时显示）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: this.EDGE_MARGIN + 160, y: this.skyHeight - 220 })
+          .position({ x: this.EDGE_MARGIN + 200, y: this.skyHeight - 230 })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Block)
           .transition(TransitionEffect.asymmetric(
@@ -5422,7 +5438,7 @@ private loadPlanetPositions(): void {
         Button(I18n.t('i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.triggerAction('actionGoto_ReSelect_Last_Selected_Object') })
-        Button('朗读文本').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        Button(I18n.t('s0760')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
           .borderRadius(16).height(30).padding({ left: 10, right: 10 })
           .onClick(() => { this.speakSelectedObject() })
       }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4, bottom: 4 })
