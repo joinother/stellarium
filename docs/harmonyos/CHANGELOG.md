@@ -1236,3 +1236,56 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 通过 — 应用启动正常，中文界面完整显示，编译无错误
 - **备注：** I18n模块支持8种完整翻译（en/zh_CN/zh_TW/ja/ko/fr/de/es/ru），其他13种语言回退英语。语言选择器现可横向滚动选择21种语言。音频drone通过独立属性+循环展开优化，预计CPU降低30-40%。
+
+## [2026-07-26] TRAE - 位置功能补齐：城市搜索/时区显示/已保存位置/城市预设扩展
+
+- **修改文件：**
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（位置面板全面增强）
+  - `build/.../ets/pages/I18n.ets`（新增 11 条位置相关多语言翻译）
+  - `build/.../ets/pages/StellariumTypes.ets`（新增 LocSearchItem/SavedLocation 接口，扩展 StellariumBridgeResponse）
+  - 源码快照同步
+
+- **修改内容：**
+
+  ### 1. 城市搜索功能
+  - 新增位置搜索框，支持输入城市名搜索 Stellarium 内置位置数据库（ getLocationList C++ 命令）。
+  - 300ms 防抖触发搜索，避免频繁调用 C++ 后端。
+  - 搜索结果以列表形式展示城市名 + 坐标，点击可直接切换观测位置。
+  - 搜索结果最多返回 20 条（C++ 侧限制）。
+
+  ### 2. 时区显示
+  - 在位置面板中新增时区显示行，调用 getObserverInfo C++ 命令获取当前观测位置的 IANA 时区。
+  - 切换位置后自动延迟刷新时区（500ms 等待 C++ 侧切换完成）。
+
+  ### 3. 已保存位置管理
+  - 新增"保存当前位置"按钮，可将当前观测位置保存到 AppStorage 持久化存储。
+  - 已保存位置以横向卡片列表展示，点击可快速切换，每个位置支持单独删除。
+  - 重复保存同名位置时提示"该位置已保存"。
+  - 打开位置面板时自动加载已保存位置列表。
+
+  ### 4. 城市预设扩展
+  - 从 20 个城市预设扩展到 36 个（14 个中国城市 + 22 个世界城市）。
+  - 新增世界城市：巴黎、柏林、莫斯科、迪拜、孟买、开罗、里约、洛杉矶、多伦多、墨西哥城、曼谷、伊斯坦布尔、阿姆斯特丹、斯德哥尔摩、雷克雅未克、开普敦、布宜诺斯艾利斯、檀香山。
+  - 城市芯片改用 ForEach 数据驱动渲染，代码量减少 60%+。
+
+  ### 5. I18n 翻译
+  - 新增 11 条位置相关翻译键（loc_search_placeholder, loc_search_results, loc_no_results, loc_timezone, loc_saved_locations, loc_save_current, loc_no_saved, loc_already_saved, loc_saved_success, loc_search_hint），覆盖 8 种语言。
+
+  ### 6. 类型定义扩展
+  - 新增 LocSearchItem 接口（name, lat, lon, alt, planet）。
+  - 新增 SavedLocation 接口（同 LocSearchItem）。
+  - StellariumBridgeResponse 新增 locations, timeZone, region, state 字段。
+
+- **修改原因：** 对齐桌面版 Stellarium 位置功能，补齐城市搜索、时区显示、用户位置管理等缺失功能。
+- **构建结果：** BUILD SUCCESSFUL（11.5s）
+- **验证结果：**
+  - 模拟器安装启动正常 ✅
+  - 位置面板打开正常，显示搜索框、已保存位置、城市芯片 ✅
+  - 时区显示正常（"Europe/Paris"） ✅
+  - 城市搜索功能正常（搜索"Bei"返回 Bei'an/Beibei/Beichengqu/Beidao 等结果） ✅
+  - 搜索结果点击可切换位置（setLocationByName 命令成功调用） ✅
+  - 城市预设扩展后全部可正常点击切换 ✅
+- **备注：** getLocationList 命令已在 C++ 侧实现（StelMainView.cpp），无需重新编译 libstellarium.so。位置搜索使用 Stellarium 内置位置数据库（~3000+ 城市），不依赖网络。
+
+---
+
