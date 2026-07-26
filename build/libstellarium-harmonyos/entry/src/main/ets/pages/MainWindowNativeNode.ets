@@ -2635,31 +2635,26 @@ private loadPlanetPositions(): void {
     this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
     this.altitudeText = altitude.toFixed(0) + ' m'
     this.flashHint(I18n.t('i0073'))
-    // Async: try setLocationByName first, fallback to setLocation, then setLocationCoords
-    this.callNativeWhenReady('setLocationByName', name, (r: StellariumBridgeResponse) => {
-      if (r.ok === true) {
+    // Use callNative (direct, no retry) because callNativeWhenReady treats ok:false as
+    // "core not ready" and retries — but setLocationByName returns ok:false permanently
+    // when the city name isn't in the DB, so the fallback chain never fires.
+    // Strategy: setLocationCoords first (most reliable, just lat/lon/alt), then setLocation.
+    const r = this.callNative('setLocationCoords', `${latitude},${longitude},${altitude}`)
+    if (r.ok === true) {
+      hilog.info(0x0000, 'StellariumArkUI', `setLocationCoords OK: ${name} (${latitude},${longitude},${altitude})`)
+      this.refreshState()
+      setTimeout(() => { this.loadObserverInfo() }, 300)
+    } else {
+      // Fallback: setLocation with name|lat|lon|alt format
+      hilog.info(0x0000, 'StellariumArkUI', 'setLocationCoords failed, fallback to setLocation')
+      const r2 = this.callNative('setLocation', `${name}|${latitude}|${longitude}|${altitude}`)
+      if (r2.ok === true) {
         this.refreshState()
         setTimeout(() => { this.loadObserverInfo() }, 300)
       } else {
-        // Fallback 1: push coordinates via setLocation
-        hilog.info(0x0000, 'StellariumArkUI', 'setLocationByName failed, fallback to setLocation')
-        this.callNativeWhenReady('setLocation', `${name}|${latitude}|${longitude}|${altitude}`, (r2: StellariumBridgeResponse) => {
-          if (r2.ok === true) {
-            this.refreshState()
-            setTimeout(() => { this.loadObserverInfo() }, 300)
-          } else {
-            // Fallback 2: setLocationCoords (lat,lon[,alt]) - most reliable
-            hilog.info(0x0000, 'StellariumArkUI', 'setLocation failed, fallback to setLocationCoords')
-            this.callNativeWhenReady('setLocationCoords', `${latitude},${longitude},${altitude}`, (r3: StellariumBridgeResponse) => {
-              if (r3.ok === true) {
-                this.refreshState()
-                setTimeout(() => { this.loadObserverInfo() }, 300)
-              }
-            })
-          }
-        })
+        hilog.error(0x0000, 'StellariumArkUI', `setLocation also failed: ${r2.error ?? 'unknown'}`)
       }
-    }, 0, 100, 10)
+    }
   }
 
   // ===== 位置搜索（调用C++ getLocationList命令）=====
@@ -5004,55 +4999,28 @@ private loadPlanetPositions(): void {
 
   @Builder
   compactDock() {
-    Row() {
+    Row({ space: 6 }) {
       ForEach(this.pinnedActions, (item: ShellAction) => {
-        Column() {
-          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-            .width(20)
-            .height(20)
-            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#B0FFFFFF')
-        }
-          .width(40)
-          .height(40)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
-          .borderRadius(20)
-          .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+        Stack() { this.iconButton(item) }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             this.setPanel(item.panel)
           })
       }, (item: ShellAction) => item.panel)
-      // 更多按钮：展开抽屉项
-      Column() {
-        Image(this.getIcon('grid', false))
-          .width(20)
-          .height(20)
-          .fillColor(this.drawerOpen ? '#5B93BF' : '#B0FFFFFF')
-      }
-        .width(40)
-        .height(40)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .backgroundColor(this.drawerOpen ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
-        .borderRadius(20)
-        .clickEffect({ level: ClickEffectLevel.LIGHT })
-        .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+      // 更多按钮：三点图标，与平板端 moreButton 一致
+      Stack() { this.moreButton() }
+        .width(44)
+        .height(44)
+        .hitTestBehavior(HitTestMode.Block)
         .onClick(() => {
           this.toggleDrawer()
         })
     }
       .height(52)
-      .width('auto')
-      .padding({ left: 10, right: 10 })
-      .justifyContent(FlexAlign.SpaceEvenly)
-      .backgroundColor('rgba(18, 22, 36, 0.78)')
-      .backdropBlur(30)
-      .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.12)' })
-      .borderRadius(26)
-      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.36)', offsetX: 0, offsetY: 10 })
+      .padding({ left: 6, right: 6 })
+      .justifyContent(FlexAlign.Center)
       .margin({ bottom: 16 })
       .alignSelf(ItemAlign.Center)
       // 弹出动画
