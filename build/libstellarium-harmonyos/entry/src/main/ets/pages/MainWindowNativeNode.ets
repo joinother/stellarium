@@ -606,7 +606,7 @@ struct WindowNativeNode {
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
-    { label: I18n.t('pinned_search'), icon: 'search', panel: 'search' },
+    { label: I18n.t('i0021'), icon: 'search', panel: 'search' },
     { label: I18n.t('i0054'), icon: 'clock', panel: 'time' },
     { label: I18n.t('i0014'), icon: 'location', panel: 'place' },
     { label: I18n.t('i0100'), icon: 'layers', panel: 'layers' },
@@ -3448,8 +3448,8 @@ private loadPlanetPositions(): void {
   }
 
   private railHeight(): number {
-    // 常用区 + 分隔线 + 抽屉按钮 + 收起按钮 + 音乐按钮 + 顶部内边距
-    return this.pinnedActions.length * 58 + 112 + 44 + 14 + this.RAIL_TOP_PAD
+    // 常用区 + 分隔线 + 抽屉按钮 + 音乐按钮 + 顶部内边距
+    return this.pinnedActions.length * 58 + 60 + 44 + 14 + this.RAIL_TOP_PAD
   }
 
   // 点击侧栏入口：打开对应面板并收起抽屉
@@ -3516,11 +3516,8 @@ private loadPlanetPositions(): void {
         // 更多按钮
         const moreTop = rt + this.pinnedActions.length * 58 + 8
         if (y >= moreTop && y <= moreTop + 44) { return true }
-        // 收起按钮
-        const collapseTop = rt + this.pinnedActions.length * 58 + 60
-        if (y >= collapseTop && y <= collapseTop + 44) { return true }
         // 音乐按钮
-        const musicTop = rt + this.pinnedActions.length * 58 + 112
+        const musicTop = rt + this.pinnedActions.length * 58 + 60
         if (y >= musicTop && y <= musicTop + 44) { return true }
       } else if (x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
@@ -3551,13 +3548,12 @@ private loadPlanetPositions(): void {
     try {
     if (!this.pinnedActions || this.pinnedActions.length === 0) { return false }
     if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) { return false }
-    // 顶部搜索栏：点击打开搜索面板
+    // 顶部搜索栏：TextInput 自行处理触摸，仅阻止穿透到星图
     if (this.isExpandedLayout) {
       const sbX = this.EDGE_MARGIN + 64
       const sbY = this.EDGE_MARGIN
       if (x >= sbX && x <= sbX + 300 && y >= sbY && y <= sbY + 44) {
-        this.setPanel('search')
-        return true
+        return true  // 不打开面板，让 TextInput 接收触摸
       }
     } else {
       if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
@@ -3593,14 +3589,8 @@ private loadPlanetPositions(): void {
         this.toggleDrawer()
         return true
       }
-      // 收起页面按钮（原钉子位置）：把右侧浮动面板收回到左侧栏
-      const collapseTop = railTop + this.pinnedActions.length * step + 60
-      if (y >= collapseTop && y <= collapseTop + 44) {
-        this.closePanel()
-        return true
-      }
-      // 音乐开关按钮：和收起按钮同列，再往下 52vp
-      const musicTop = railTop + this.pinnedActions.length * step + 112
+      // 音乐开关按钮
+      const musicTop = railTop + this.pinnedActions.length * step + 60
       if (y >= musicTop && y <= musicTop + 44) {
         this.toggleMusic()
         return true
@@ -3760,14 +3750,8 @@ private loadPlanetPositions(): void {
             this.toggleDrawer()
             return
           }
-          // 收起页面按钮
-          const collapseTop = railTop + this.pinnedActions.length * step + 60
-          if (downY >= collapseTop && downY <= collapseTop + 44) {
-            this.closePanel()
-            return
-          }
           // 音乐开关按钮
-          const musicTop = railTop + this.pinnedActions.length * step + 112
+          const musicTop = railTop + this.pinnedActions.length * step + 60
           if (downY >= musicTop && downY <= musicTop + 44) {
             this.toggleMusic()
             return
@@ -4148,10 +4132,10 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
-      // 顶部搜索栏（中等宽度，居中显示）
+      // 顶部搜索栏（中等宽度，居中显示；抽屉打开时右移避免遮挡）
       Stack() { this.centerSearchBar() }
-        .position({ x: this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN })
-        .width(300)
+        .position({ x: this.drawerOpen ? this.EDGE_MARGIN + 250 : this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN })
+        .width(this.drawerOpen ? 260 : 300)
         .zIndex(48)
         .hitTestBehavior(HitTestMode.Block)
       // 搜索建议下拉列表（搜索框正下方）
@@ -4686,19 +4670,11 @@ private loadPlanetPositions(): void {
       .onClick(() => {
         this.toggleDrawer()
       })
-    // 收起页面按钮：把右侧浮动面板收到左侧栏（桌边）
-    Stack() { this.collapseButton() }
-      .width(44)
-      .height(44)
-      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 60 })
-      .onClick(() => {
-        this.closePanel()
-      })
     // 音乐开关：打开应用即播空灵底噪，点新星体叮一声；可随时静音
     Stack() { this.musicButton() }
       .width(44)
       .height(44)
-      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 112 })
+      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 60 })
       .onClick(() => {
         this.toggleMusic()
       })
@@ -5023,11 +4999,17 @@ private loadPlanetPositions(): void {
   @Builder
   moreButton() {
     Column() {
-      Image(this.getIcon('grid', false))
-        .width(22).height(22)
-        .fillColor(this.drawerOpen ? '#FFFFFF' : this.nmText())
-        .rotate({ angle: this.drawerOpen ? 45 : 0 })
-        .animation({ duration: 360, curve: curves.springMotion(0.5, 0.8) })
+      // 三点菜单图标（替代原方格图标，更简洁优雅）
+      Column({ space: 4 }) {
+        Circle().width(4).height(4).fill(this.drawerOpen ? '#FFFFFF' : this.nmText())
+        Circle().width(4).height(4).fill(this.drawerOpen ? '#FFFFFF' : this.nmText())
+        Circle().width(4).height(4).fill(this.drawerOpen ? '#FFFFFF' : this.nmText())
+      }
+      .width(22).height(22)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .rotate({ angle: this.drawerOpen ? 90 : 0 })
+      .animation({ duration: 360, curve: curves.springMotion(0.5, 0.8) })
     }
       .width(44)
       .height(44)
@@ -5305,16 +5287,6 @@ private loadPlanetPositions(): void {
         this.flashHint(this.uiLocked ? I18n.t('s0717') : I18n.t('s0718'))
       })
       .margin({ right: 6 })
-      Stack() { this.collapseButton() }
-        .width(36)
-        .height(36)
-        .margin({ right: 6 })
-        .onClick(() => {
-          this.closePanel()
-        })
-      this.smallRoundButton('×', () => {
-        this.closePanel()
-      })
     }
       .width('100%')
       .margin({ bottom: 14 })
@@ -5905,88 +5877,33 @@ private loadPlanetPositions(): void {
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'search') {
-      TextInput({ text: this.searchText, placeholder: I18n.t('i0063') })
-        .height(44)
-        .fontSize(15)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor(this.nmSub())
-        .backgroundColor(this.nmInput())
-        .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
-        .borderRadius(22)
-        .onChange((value: string) => {
-          this.searchText = value
-          this.fetchSuggestions(value)
-        })
-        .onSubmit(() => {
-          this.searchObject(this.searchText)
-        })
+      // ── 天体分类浏览面板 ──
       // 快选行星
-      if (this.searchText.length === 0) {
-        Row() {
-          Text(I18n.t('s0743')).fontSize(10).fontColor(this.nmSub()).width(52)
-          Scroll() {
-            Row({ space: 4 }) {
-              ForEach(['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'], (p: string) => {
-                Text(this.planetZh(p)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                  .backgroundColor(this.nmBg()).borderRadius(12)
-                  .onClick(() => { this.searchText = p; this.searchObject(p) })
-              })
-            }.padding({ left: 2 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
-        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
-        Row() {
-          Text(I18n.t('s0744')).fontSize(10).fontColor(this.nmSub()).width(52)
-          Scroll() {
-            Row({ space: 4 }) {
-              ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
-                Text(this.zhNameOf(s)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-                  .backgroundColor(this.nmBg()).borderRadius(12)
-                  .onClick(() => { this.searchText = s; this.searchObject(s) })
-              })
-            }.padding({ left: 2 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
-        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 4 })
-      }
-      // 搜索历史（无输入时显示，可点击复用）
-      if (this.searchText.length === 0 && this.searchHistory.length > 0) {
-        Row() {
-          Text(I18n.t('i0117')).fontSize(11).fontColor(this.nmSub()).margin({ right: 8 })
-          Text(I18n.t('i0118')).fontSize(11).fontColor('#6FA8FF').onClick(() => {
-            this.searchHistory = []
-            this.saveSearchHistoryToStorage()
-          })
-        }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 8, bottom: 4 })
-        Scroll() {
-          Row() {
-            ForEach(this.searchHistory, (item: string) => {
-              Text(item).fontSize(13).fontColor(this.nmText()).padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                .backgroundColor(this.nmBg()).borderRadius(16).margin({ right: 6, bottom: 6 })
-                .onClick(() => {
-                  this.searchText = item
-                  this.searchObject(item)
-                })
-            })
-          }.padding({ left: 10 })
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).width('100%').height(42)
-      }
-      // 搜索建议列表（输入时自动补全）
-      if (this.searchSuggestions.length > 0) {
+      Row() {
+        Text(I18n.t('s0743')).fontSize(10).fontColor(this.nmSub()).width(52)
         Scroll() {
           Row({ space: 4 }) {
-            ForEach(this.searchSuggestions, (s: SearchSug) => {
-              Text(s.zh + (s.zh !== s.en ? '  ' + s.en : ''))
-                .fontSize(12).fontColor(this.nmText())
-                .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-                .backgroundColor(this.nmBg())
-                .borderRadius(8)
-                .onClick(() => {
-                  this.searchObject(s.en)
-                  this.searchSuggestions = []
-                })
-            }, (s: SearchSug) => s.en)
-          }.padding({ left: 4, right: 4 })
-        }.width('100%').height(36).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-      }
+            ForEach(['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'], (p: string) => {
+              Text(this.planetZh(p)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor(this.nmBg()).borderRadius(12)
+                .onClick(() => { this.searchText = p; this.searchObject(p) })
+            })
+          }.padding({ left: 2 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+      }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
+      // 快选恒星
+      Row() {
+        Text(I18n.t('s0744')).fontSize(10).fontColor(this.nmSub()).width(52)
+        Scroll() {
+          Row({ space: 4 }) {
+            ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
+              Text(this.zhNameOf(s)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                .backgroundColor(this.nmBg()).borderRadius(12)
+                .onClick(() => { this.searchText = s; this.searchObject(s) })
+            })
+          }.padding({ left: 2 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
+      }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 4 })
       // 天体分类浏览（按分类 tab 切换，点击加载该分类天体列表）
       Row() {
         Text(I18n.t('i0021')).fontSize(12).fontColor(this.nmSub()).width(72)
@@ -8084,7 +8001,7 @@ private loadPlanetPositions(): void {
 
   private panelTitle(): ResourceStr {
     if (this.activePanel === 'search') {
-      return I18n.t('i0099')
+      return I18n.t('i0021')
     }
     if (this.activePanel === 'time') {
       return I18n.t('i0054')
