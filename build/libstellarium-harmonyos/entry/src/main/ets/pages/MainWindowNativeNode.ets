@@ -4412,11 +4412,11 @@ private loadPlanetPositions(): void {
 
       // 更多功能抽屉（紧凑模式：从底部弹出，一镜到底弹簧动画）
       if (this.drawerOpen) {
-        Stack() { this.compactDrawer() }
+        Column() { this.compactDrawer() }
           .position({ x: 0, y: 0 })
           .width('100%')
           .height('100%')
-          .hitTestBehavior(HitTestMode.Block)
+          .hitTestBehavior(HitTestMode.Transparent)
           .zIndex(70)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
@@ -5052,96 +5052,109 @@ private loadPlanetPositions(): void {
 
   @Builder
   compactDrawer() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      // 半透明背景遮罩：点击关闭
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('rgba(0, 0, 0, 0.35)')
-        .hitTestBehavior(HitTestMode.Block)
-        .onClick(() => { this.toggleDrawer() })
+    // 全屏遮罩层：点击关闭抽屉
+    Column()
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0, 0, 0, 0.40)')
+      .hitTestBehavior(HitTestMode.Block)
+      .onClick(() => { this.drawerOpen = false })
+      .justifyContent(FlexAlign.End)
 
-      // 抽屉内容（从底部弹出）
+    // 抽屉内容（底部弹出，可向下拖拽关闭）
+    Column() {
+      // 拖拽手柄区域（增大触摸热区到 48px 高）
       Column() {
-        // 拖拽手柄
         Row()
           .width(36)
           .height(4)
           .backgroundColor('rgba(255, 255, 255, 0.30)')
           .borderRadius(2)
-          .margin({ top: 10, bottom: 8 })
+      }
+      .width('100%')
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .gesture(
+        PanGesture({ fingers: 1, distance: 8 })
+          .onActionUpdate((event: GestureEvent) => {
+            if (event.offsetY > 60) {
+              this.drawerOpen = false
+            }
+          })
+      )
 
-        // 标题
-        Row() {
-          Text(I18n.t('c_more_functions'))
-            .fontSize(16)
-            .fontWeight(FontWeight.Medium)
-            .fontColor('#E5FFFFFF')
-            .layoutWeight(1)
+      // 标题栏
+      Row() {
+        Text(I18n.t('c_more_functions'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#E5FFFFFF')
+          .layoutWeight(1)
+        // 关闭按钮：增大触摸区域
+        Stack({ alignContent: Alignment.Center }) {
           Text('\u00d7')
             .fontSize(22)
             .fontColor('#99FFFFFF')
-            .width(32)
-            .height(32)
-            .textAlign(TextAlign.Center)
-            .onClick(() => { this.toggleDrawer() })
         }
-        .width('100%')
-        .padding({ left: 4, right: 4, bottom: 8 })
-
-        // 功能列表
-        Scroll() {
-          Column({ space: 2 }) {
-            ForEach(this.drawerActions, (item: ShellAction) => {
-              Row({ space: 14 }) {
-                Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-                  .width(22).height(22)
-                  .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
-                Text(item.label)
-                  .fontSize(15)
-                  .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .layoutWeight(1)
-              }
-                .width('100%')
-                .height(50)
-                .padding({ left: 16, right: 14 })
-                .borderRadius(14)
-                .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(0,0,0,0)')
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .stateStyles({
-                  pressed: {
-                    .scale({ x: 0.97, y: 0.97 })
-                    .backgroundColor('rgba(91, 147, 191, 0.12)')
-                  }
-                })
-                .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
-                .onClick(() => {
-                  this.onRailTap(item.panel)
-                })
-            }, (item: ShellAction) => item.panel)
-          }
-          .width('100%')
-          .padding({ bottom: 24 })
-        }
-        .width('100%')
-        .layoutWeight(1)
-        .scrollBar(BarState.Auto)
-        .scrollBarWidth(4)
-        .scrollBarColor('#33FFFFFF')
+        .width(40)
+        .height(40)
+        .onClick(() => { this.drawerOpen = false })
       }
       .width('100%')
-      .height('52%')
-      .padding({ left: 18, right: 18, bottom: 20 })
-      .backgroundColor('rgba(12, 16, 28, 0.82)')
-      .backdropBlur(40)
-      .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.20)' })
-      .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
-      .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
+      .padding({ left: 4, right: 4, bottom: 8 })
+
+      // 功能列表（可滚动）
+      Scroll() {
+        Column({ space: 2 }) {
+          ForEach(this.drawerActions, (item: ShellAction) => {
+            Row({ space: 14 }) {
+              Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+                .width(22).height(22)
+                .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              Text(item.label)
+                .fontSize(15)
+                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+            }
+              .width('100%')
+              .height(50)
+              .padding({ left: 16, right: 14 })
+              .borderRadius(14)
+              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(0,0,0,0)')
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .stateStyles({
+                pressed: {
+                  .scale({ x: 0.97, y: 0.97 })
+                  .backgroundColor('rgba(91, 147, 191, 0.12)')
+                }
+              })
+              .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+              .onClick(() => {
+                this.onRailTap(item.panel)
+              })
+          }, (item: ShellAction) => item.panel)
+        }
+        .width('100%')
+        .padding({ bottom: 24 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .edgeEffect(EdgeEffect.Spring)
+      .scrollBar(BarState.Auto)
+      .scrollBarWidth(4)
+      .scrollBarColor('#33FFFFFF')
     }
     .width('100%')
-    .height('100%')
+    .height('55%')
+    .padding({ left: 18, right: 18, bottom: 20 })
+    .backgroundColor('rgba(12, 16, 28, 0.85)')
+    .backdropBlur(40)
+    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.20)' })
+    .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
+    .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
   }
 
   @Builder
@@ -5848,28 +5861,33 @@ private loadPlanetPositions(): void {
   @Builder
   bottomSheetPanel() {
     Column() {
-      // 拖拽手柄（可拖动调整面板高度）
-      Row()
-        .width(36)
-        .height(4)
-        .backgroundColor('rgba(255, 255, 255, 0.30)')
-        .borderRadius(2)
-        .margin({ top: 10, bottom: 8 })
-        .gesture(
-          PanGesture({ fingers: 1, distance: 5 })
-            .onActionStart((event: GestureEvent) => {
-              this.sheetDragStartY = event.fingerList[0].localY
-              this.sheetDragStartPct = this.sheetHeightPct
-            })
-            .onActionUpdate((event: GestureEvent) => {
-              const deltaY = event.offsetY
-              const skyH = this.skyHeight > 1 ? this.skyHeight : 800
-              const pctDelta = -deltaY / skyH * 100
-              let newPct = this.sheetDragStartPct + pctDelta
-              newPct = Math.max(50, Math.min(90, newPct))
-              this.sheetHeightPct = newPct
-            })
-        )
+      // 拖拽手柄区域（增大到48px高，更容易抓住）
+      Column() {
+        Row()
+          .width(36)
+          .height(4)
+          .backgroundColor('rgba(255, 255, 255, 0.30)')
+          .borderRadius(2)
+      }
+      .width('100%')
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .gesture(
+        PanGesture({ fingers: 1, distance: 5 })
+          .onActionStart((event: GestureEvent) => {
+            this.sheetDragStartY = event.fingerList[0].localY
+            this.sheetDragStartPct = this.sheetHeightPct
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            const deltaY = event.offsetY
+            const skyH = this.skyHeight > 1 ? this.skyHeight : 800
+            const pctDelta = -deltaY / skyH * 100
+            let newPct = this.sheetDragStartPct + pctDelta
+            newPct = Math.max(50, Math.min(90, newPct))
+            this.sheetHeightPct = newPct
+          })
+      )
       // 面板标题栏
       Row() {
         Text(this.panelTitle())
@@ -5877,14 +5895,15 @@ private loadPlanetPositions(): void {
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
           .layoutWeight(1)
-        // 关闭按钮
-        Text('\u00d7')
-          .fontSize(22)
-          .fontColor('#99FFFFFF')
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .onClick(() => { this.closePanel() })
+        // 关闭按钮：增大触摸区域
+        Stack({ alignContent: Alignment.Center }) {
+          Text('\u00d7')
+            .fontSize(22)
+            .fontColor('#99FFFFFF')
+        }
+        .width(40)
+        .height(40)
+        .onClick(() => { this.closePanel() })
       }
       .width('100%')
       .padding({ left: 4, right: 4, bottom: 8 })
@@ -5897,6 +5916,7 @@ private loadPlanetPositions(): void {
       }
         .width('100%')
         .layoutWeight(1)
+        .edgeEffect(EdgeEffect.Spring)
         .scrollBar(BarState.Auto)
         .scrollBarWidth(4)
         .scrollBarColor('#33FFFFFF')
