@@ -226,6 +226,11 @@ struct WindowNativeNode {
   @State private sessionImportMsg: string = ''
   // 程序化音乐：默认开（打开应用即播放），可静音并持久化
   @State private musicEnabled: boolean = false
+  @State private fpsDisplay: number = 0
+  @State private fpsVisible: boolean = false
+  private fpsFrameCount: number = 0
+  private fpsLastTime: number = 0
+  private fpsTimer: number = 0
   private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
   @State private manualYear: number = 2026
@@ -598,7 +603,7 @@ struct WindowNativeNode {
   private gyroLastTimeMs: number = 0
   private gyroEventCount: number = 0
   private readonly gyroSensitivity: number = 180
-  private gyroCallback: ((data: sensor.GyroscopeResponse) => void) | undefined = undefined
+  private gyroCallback: ((data: sensor.OrientationResponse) => void) | undefined = undefined
   private dragLogCount: number = 0
   private touchStartedOnUi: boolean = false
   private panelDragging: boolean = false
@@ -781,10 +786,30 @@ struct WindowNativeNode {
   private startTwinkle(): void {
     if (this.twTimer !== 0) { return }
     this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 2000)
+    // FPS monitor: poll C++ getFPS every 1s for real render frame rate
+    this.fpsTimer = setInterval(() => {
+      try {
+        const r = this.callNative('getFPS', '')
+        if (r && r.ok && typeof r.fps === 'number' && r.fps > 0) {
+          this.fpsDisplay = Math.round(r.fps)
+        } else if (r && r.pending) {
+          // If pending, try again after a short delay
+          setTimeout(() => {
+            const r2 = this.callNative('getFPS', '')
+            if (r2 && r2.ok && typeof r2.fps === 'number' && r2.fps > 0) {
+              this.fpsDisplay = Math.round(r2.fps)
+            }
+          }, 100)
+        }
+      } catch (e) {
+        // Silent error to avoid log spam
+      }
+    }, 500) as number
   }
 
   private stopTwinkle(): void {
     if (this.twTimer !== 0) { clearInterval(this.twTimer); this.twTimer = 0 }
+    if (this.fpsTimer !== 0) { clearInterval(this.fpsTimer); this.fpsTimer = 0 }
   }
 
   aboutToAppear(): void {
@@ -2090,14 +2115,20 @@ private loadPlanetPositions(): void {
       return
     }
     if (this.gyroCallback === undefined) {
-      this.gyroCallback = (data: sensor.GyroscopeResponse) => {
-        this.onGyroscopeData(data)
+      this.gyroCallback = (data: sensor.OrientationResponse) => {
+        this.onOrientationData(data)
       }
     }
     try {
-      sensor.on(sensor.SensorId.GYROSCOPE, this.gyroCallback, { interval: 50000000 })
+      // ORIENTATION sensor returns absolute device orientation:
+      //   data.alpha = azimuth (0-360, compass heading)
+      //   data.beta  = pitch (-180 to 180, front-back tilt)
+      //   data.gamma = roll (-90 to 90, left-right tilt)
+      // This gives "point device at sky → star map follows" behavior.
+      sensor.on(sensor.SensorId.ORIENTATION, this.gyroCallback, { interval: 50000000 })
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
+      this.gyroFirstReading = true
       this.gyroscopeEnabled = true
       this.gyroscopeStatus = I18n.t('m_gyro_listening')
     } catch (error) {
@@ -2109,7 +2140,7 @@ private loadPlanetPositions(): void {
   private stopGyroscope(updateStatus: boolean): void {
     if (this.gyroCallback !== undefined) {
       try {
-        sensor.off(sensor.SensorId.GYROSCOPE, this.gyroCallback)
+        sensor.off(sensor.SensorId.ORIENTATION, this.gyroCallback)
       } catch (error) {
       }
     }
@@ -2120,52 +2151,104 @@ private loadPlanetPositions(): void {
     }
   }
 
-  private onGyroscopeData(data: sensor.GyroscopeResponse): void {
-    const now = Date.now()
-    if (this.gyroLastTimeMs === 0) {
-      this.gyroLastTimeMs = now
+  // Absolute orientation tracking: device azimuth/altitude → sky view direction.
+  // Uses ORIENTATION sensor (compass + tilt) for "point at sky" behavior.
+  private gyroLastAz: number = 0
+  private gyroLastAlt: number = 0
+  private gyroFirstReading: boolean = true
+
+  private onOrientationData(data: sensor.OrientationResponse): void {
+    // ORIENTATION sensor (degrees):
+    //   data.alpha = azimuth (0-360): 0=North, 90=East, 180=South, 270=West
+    //   data.beta  = pitch (-180 to 180): positive = tilting forward (screen up)
+    //   data.gamma = roll (-90 to 90): positive = tilting right
+    //
+    // ABSOLUTE ORIENTATION MODE (like Star Walk, SkyView, etc.):
+    // Device azimuth → sky view azimuth
+    // Device altitude (pitch) → sky view altitude
+    // "Point device at sky → star map shows what's there"
+
+    // Sensitivity controls how much the view moves relative to device rotation.
+    // In absolute mode, sensitivity acts as a smoothing factor.
+    let smoothFactor: number = 0.3  // Default (Standard): 30% new + 70% old
+    if (this.gyroscopeSensitivityText === 'Low') { smoothFactor = 0.15 }
+    else if (this.gyroscopeSensitivityText === 'High') { smoothFactor = 0.5 }
+
+    // --- Compute target azimuth and altitude from device orientation ---
+    // Alpha is compass heading: 0=N, 90=E, 180=S, 270=W
+    // In Stellarium, azimuth is also measured from North, going East.
+    // For landscape mode, the device is rotated 90° clockwise.
+    // When holding device in landscape (left hand), screen faces user:
+    //   - Rotating body clockwise → alpha increases → view moves East
+    //   - Tilting top of device up → beta increases → view moves up
+    //
+    // For landscape mode with device rotated 90° CW:
+    //   The "facing direction" of the device is alpha + 90° (roughly)
+    //   But to keep it simple and match user expectation:
+    //   We map alpha directly to azimuth, beta to altitude.
+
+    let targetAz = data.alpha
+    // Beta: positive when tilting forward (top of phone away from user)
+    // For astronomy: when device is held up facing sky, beta ≈ 0-90 = looking up
+    // We want: device flat (beta=0) = looking at horizon (alt=0)
+    //          device upright (beta=90) = looking at zenith (alt=90)
+    let targetAlt = data.beta
+
+    // Clamp altitude to valid range [-90, 90]
+    if (targetAlt > 90) targetAlt = 90
+    if (targetAlt < -90) targetAlt = -90
+
+    // First reading: initialize and set view immediately
+    if (this.gyroFirstReading) {
+      this.gyroFirstReading = false
+      this.gyroLastAz = targetAz
+      this.gyroLastAlt = targetAlt
+      // Set view immediately on first reading
+      this.callNative('moveToAltAz', targetAz.toFixed(2) + '|' + targetAlt.toFixed(2) + '|0')
+      this.gyroscopeStatus = I18n.t('m_gyro_working')
       return
     }
 
-    const dt = Math.min(0.1, Math.max(0.001, (now - this.gyroLastTimeMs) / 1000.0))
-    this.gyroLastTimeMs = now
-    if (dt <= 0.0) {
+    // Smooth interpolation: gradually move toward target
+    let smoothAz = this.gyroLastAz + (targetAz - this.gyroLastAz) * smoothFactor
+    let smoothAlt = this.gyroLastAlt + (targetAlt - this.gyroLastAlt) * smoothFactor
+
+    // Handle azimuth wrap-around for smoothing
+    let azDiff = targetAz - this.gyroLastAz
+    if (azDiff > 180) azDiff -= 360
+    if (azDiff < -180) azDiff += 360
+    smoothAz = this.gyroLastAz + azDiff * smoothFactor
+    if (smoothAz < 0) smoothAz += 360
+    if (smoothAz >= 360) smoothAz -= 360
+
+    // Apply calibration offset
+    smoothAz += this.gyroOffsetAz
+    smoothAlt += this.gyroOffsetAlt
+    if (smoothAz < 0) smoothAz += 360
+    if (smoothAz >= 360) smoothAz -= 360
+    if (smoothAlt > 90) smoothAlt = 90
+    if (smoothAlt < -90) smoothAlt = -90
+
+    // Dead zone: skip if change is too small
+    let finalAzDiff = smoothAz - this.gyroLastAz
+    if (finalAzDiff > 180) finalAzDiff -= 360
+    if (finalAzDiff < -180) finalAzDiff += 360
+    let finalAltDiff = smoothAlt - this.gyroLastAlt
+    if (Math.abs(finalAzDiff) < 0.5 && Math.abs(finalAltDiff) < 0.5) {
       return
     }
 
-    // Gyroscope axes (rad/s):
-    //   data.x = rotation around device X (pitch, tilting forward/back)
-    //   data.y = rotation around device Y (yaw, tilting left/right)
-    //   data.z = rotation around device Z (roll, rotating in plane)
-    // For landscape mode (expandedShell), map:
-    //   device yaw (data.y) -> azimuth pan (dx)
-    //   device pitch (data.x) -> altitude pan (dy)
-    // Sensitivity multiplier based on user setting
-    let sensMult: number = 1.0
-    if (this.gyroscopeSensitivityText === 'Low') { sensMult = 0.5 }
-    else if (this.gyroscopeSensitivityText === 'High') { sensMult = 2.0 }
+    this.gyroLastAz = smoothAz
+    this.gyroLastAlt = smoothAlt
 
-    const dx = -data.y * dt * this.gyroSensitivity * sensMult
-    const dy = data.x * dt * this.gyroSensitivity * sensMult
-    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) {
-      return
-    }
-
-    // 应用校准偏移：每帧注入微量偏移，使星图缓慢漂移到正确位置
-    const offsetDx = this.gyroOffsetAz * 0.03
-    const offsetDy = this.gyroOffsetAlt * 0.03
-    this.gyroOffsetAz *= 0.97
-    this.gyroOffsetAlt *= 0.97
-
-    const clampedDx = Math.max(-25, Math.min(25, dx + offsetDx))
-    const clampedDy = Math.max(-25, Math.min(25, dy + offsetDy))
-    const result = this.callNative('panBy', clampedDx.toFixed(2) + '|' + clampedDy.toFixed(2) + '|' + this.skyWidth.toString() + '|' + this.skyHeight.toString())
+    // Use moveToAltAz with duration=0 for instant response (no animation delay)
+    // This gives true "point at sky" behavior
+    const result = this.callNative('moveToAltAz', smoothAz.toFixed(2) + '|' + smoothAlt.toFixed(2) + '|0')
     this.gyroEventCount += 1
     if (this.gyroEventCount % 20 === 0) {
       this.gyroscopeStatus = (result.ok === true || result.pending === true) ? I18n.t('m_gyro_working') : (result.error ? result.error : I18n.t('m_gyro_core_not_ready'))
     }
   }
-
   private searchObject(name: string): void {
     const query = name.trim()
     if (query.length === 0) {
@@ -3489,8 +3572,14 @@ private loadPlanetPositions(): void {
     return this.pinnedActions.length * 58 + 60 + 44 + 52 + 14 + this.RAIL_TOP_PAD
   }
 
-  // 点击侧栏入口：打开对应面板并收起抽屉
+  // 点击侧栏入口：打开对应面板并收起抽屉（带 400ms 防抖，避免 onClick 与 handleUiTap 双触发）
+  private lastRailTapTime: number = 0
+  private lastRailTapPanel: string = ''
   private onRailTap(panel: string): void {
+    const now = Date.now()
+    if (panel === this.lastRailTapPanel && now - this.lastRailTapTime < 400) { return }
+    this.lastRailTapTime = now
+    this.lastRailTapPanel = panel
     this.setPanel(panel)
     if (this.drawerOpen) {
       this.getUIContext().animateTo({ duration: 240, curve: Curve.Friction }, () => {
@@ -3499,7 +3588,11 @@ private loadPlanetPositions(): void {
     }
   }
 
+  private lastDrawerToggleTime: number = 0
   private toggleDrawer(): void {
+    const now = Date.now()
+    if (now - this.lastDrawerToggleTime < 400) { return }
+    this.lastDrawerToggleTime = now
     this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, () => {
       this.drawerOpen = !this.drawerOpen
     })
@@ -3558,7 +3651,7 @@ private loadPlanetPositions(): void {
         // 音乐按钮
         const musicTop = rt + this.pinnedActions.length * 58 + 60
         if (y >= musicTop && y <= musicTop + 44) { return true }
-      } else if (x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
+      } else if (!this.drawerOpen && x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148 && y >= this.skyHeight - 364 && y <= this.skyHeight - 90) {
         return true
       }
       // 低频功能抽屉区域（展开时）
@@ -3590,18 +3683,29 @@ private loadPlanetPositions(): void {
     // 顶部搜索栏已移除，搜索功能通过左侧图标进入分类面板
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
     if (this.handleInfoWinTap(x, y)) { return true }
-    // zoom +/- buttons (expanded layout, bottom-left)
-	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148) {
-	      if (y >= this.skyHeight - 224 && y <= this.skyHeight - 160) {
-	        this.zoomStep(0.5)
-	        return true
-	      }
-	      if (y >= this.skyHeight - 154 && y <= this.skyHeight - 90) {
-	        this.zoomStep(2.0)
-	        return true
-	      }
-	    }
-	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 7 && x <= this.EDGE_MARGIN + 51) {
+
+    // 低频功能抽屉项（展开时）— 必须在缩放按钮之前检查，因为两者区域可能重叠
+    if (this.isExpandedLayout && this.drawerOpen && x >= this.EDGE_MARGIN + 58 && x <= this.EDGE_MARGIN + 58 + 176) {
+      const itemsTop = this.railTop() + 38
+      const dIdx = Math.floor((y - itemsTop) / 46)
+      if (dIdx >= 0 && dIdx < this.drawerActions.length && this.drawerActions[dIdx]) {
+        this.onRailTap(this.drawerActions[dIdx].panel)
+        return true
+      }
+    }
+
+    // zoom +/- buttons (expanded layout, bottom-left) — 抽屉打开时完全跳过
+    if (this.isExpandedLayout && !this.drawerOpen && x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148) {
+      if (y >= this.skyHeight - 364 && y <= this.skyHeight - 280) {
+        this.zoomStep(0.5)
+        return true
+      }
+      if (y >= this.skyHeight - 154 && y <= this.skyHeight - 90) {
+        this.zoomStep(2.0)
+        return true
+      }
+    }
+    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 7 && x <= this.EDGE_MARGIN + 51) {
       const railTop = this.railTop() + this.RAIL_TOP_PAD
       const step = 58
       // 常用固定入口
@@ -3623,16 +3727,6 @@ private loadPlanetPositions(): void {
         this.toggleMusic()
         return true
       }
-	    }
-
-	    // 低频功能抽屉项（展开时）
-	    if (this.isExpandedLayout && this.drawerOpen && x >= this.EDGE_MARGIN + 58 && x <= this.EDGE_MARGIN + 58 + 176) {
-	      const itemsTop = this.railTop() + 38
-	      const dIdx = Math.floor((y - itemsTop) / 46)
-	      if (dIdx >= 0 && dIdx < this.drawerActions.length && this.drawerActions[dIdx]) {
-	        this.onRailTap(this.drawerActions[dIdx].panel)
-	        return true
-	      }
 	    }
 
 	    if (!this.isExpandedLayout && y >= this.skyHeight - 128) {
@@ -3760,6 +3854,15 @@ private loadPlanetPositions(): void {
       }
       if (this.isUiPoint(downX, downY)) {
         this.touchStartedOnUi = true
+        // 抽屉项点击（抽屉展开时）— 优先检查，避免与缩放按钮区域重叠
+        if (this.drawerOpen && downX >= this.EDGE_MARGIN + 58 && downX <= this.EDGE_MARGIN + 58 + 176) {
+          const itemsTop = this.railTop() + 38
+          const idx = Math.floor((downY - itemsTop) / 46)
+          if (idx >= 0 && idx < this.drawerActions.length && this.drawerActions[idx]) {
+            this.onRailTap(this.drawerActions[idx].panel)
+            return
+          }
+        }
         // Handle sidebar button clicks since XComponent swallows onClick events
         if (downX >= this.EDGE_MARGIN + 7 && downX <= this.EDGE_MARGIN + 51) {
           const railTop = this.railTop() + this.RAIL_TOP_PAD
@@ -3782,15 +3885,6 @@ private loadPlanetPositions(): void {
           const musicTop = railTop + this.pinnedActions.length * step + 60
           if (downY >= musicTop && downY <= musicTop + 44) {
             this.toggleMusic()
-            return
-          }
-        }
-        // 抽屉项点击（抽屉展开时）
-        if (this.drawerOpen && downX >= this.EDGE_MARGIN + 58 && downX <= this.EDGE_MARGIN + 58 + 176) {
-          const itemsTop = this.railTop() + 38   // 抽屉容器顶部 padding + 标题高度
-          const idx = Math.floor((downY - itemsTop) / 46)
-          if (idx >= 0 && idx < this.drawerActions.length && this.drawerActions[idx]) {
-            this.onRailTap(this.drawerActions[idx].panel)
             return
           }
         }
@@ -3865,9 +3959,9 @@ private loadPlanetPositions(): void {
       if (this.touchMoved) {
         this.nativeDragActive = true
         const now = Date.now()
-        if (now - this.lastDragCommandMs >= 24) {
-          if (this.dragLogCount < 3) {
-            hilog.info(0x0000, 'StellariumArkUI', 'dragView from ArkUI')
+        if (now - this.lastDragCommandMs >= 16) {
+          if (this.dragLogCount < 5) {
+            hilog.info(0x0000, 'StellariumArkUI', 'dragView dx=' + Math.round(x - this.touchLastX).toString() + ' dy=' + Math.round(y - this.touchLastY).toString() + ' throttle=' + (now - this.lastDragCommandMs).toString() + 'ms')
             this.dragLogCount += 1
           }
           this.callNativeFire('dragView',
@@ -4124,28 +4218,46 @@ private loadPlanetPositions(): void {
       // 左上角 Stellarium 常驻标已移除，避免遮挡星图
       Stack() { this.railShell() }
         .position({ x: this.EDGE_MARGIN, y: this.railTop() })
-        .hitTestBehavior(HitTestMode.Block)
+        .hitTestBehavior(HitTestMode.Default)
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.drawerOpen) {
         Stack() { this.actionDrawer() }
           .position({ x: this.EDGE_MARGIN + 58, y: this.railTop() })
-          .hitTestBehavior(HitTestMode.Block)
+          .width(176)
+          .height(this.drawerActions.length * 46 + 58)
+          .hitTestBehavior(HitTestMode.Default)
           .zIndex(6)
       }
-      Stack() { this.zoomButton('zoom_in') }
-        .hitTestBehavior(HitTestMode.Block)
-        .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 220 })
-        .hitTestBehavior(HitTestMode.Block)
-        .onClick(() => {
-          this.zoomStep(0.5)
-          this.flashHint(I18n.t('i0076'))
-        })
-      Stack() { this.zoomButton('zoom_out') }
-        .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 150 })
-        .onClick(() => {
-          this.zoomStep(2.0)
-          this.flashHint(I18n.t('i0077'))
-        })
+      // FPS counter (always visible for debugging)
+      Text(this.fpsDisplay.toString() + ' FPS')
+        .fontSize(11)
+        .fontColor(this.fpsDisplay >= 55 ? '#7FD0FF' : (this.fpsDisplay >= 30 ? '#FFD479' : '#FF6B6B'))
+        .fontFamily('monospace')
+        .fontWeight(FontWeight.Bold)
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor('rgba(0, 0, 0, 0.6)')
+        .borderRadius(8)
+        .position({ x: this.EDGE_MARGIN + 58, y: this.EDGE_MARGIN + 52 })
+        .zIndex(80)
+        .hitTestBehavior(HitTestMode.None)
+      if (!this.drawerOpen) {
+        Stack() { this.zoomButton('zoom_in') }
+          .hitTestBehavior(HitTestMode.Block)
+          .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 360 })
+          .onClick(() => {
+            this.zoomStep(0.5)
+            this.flashHint(I18n.t('i0076'))
+          })
+      }
+      if (!this.drawerOpen) {
+        Stack() { this.zoomButton('zoom_out') }
+          .hitTestBehavior(HitTestMode.Block)
+          .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 260 })
+          .onClick(() => {
+            this.zoomStep(2.0)
+            this.flashHint(I18n.t('i0077'))
+          })
+      }
       if (this.panelVisible) {
         Stack({ alignContent: Alignment.TopStart }) { this.floatingPanel() }
           .width(this.panelWidth)
@@ -4738,6 +4850,7 @@ private loadPlanetPositions(): void {
           .width(44)
           .height(44)
           .position({ x: 7, y: this.RAIL_TOP_PAD + idx * 58 })
+          .hitTestBehavior(HitTestMode.Block)
           .onClick(() => {
             this.onRailTap(item.panel)
           })
@@ -4754,6 +4867,7 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 8 })
+      .hitTestBehavior(HitTestMode.Block)
       .onClick(() => {
         this.toggleDrawer()
       })
@@ -4762,6 +4876,7 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 60 })
+      .hitTestBehavior(HitTestMode.Block)
       .onClick(() => {
         this.toggleMusic()
       })
@@ -4770,6 +4885,7 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 116 })
+      .hitTestBehavior(HitTestMode.Block)
       .onClick(() => {
         this.toggleGyroscope(!this.gyroscopeEnabled)
         this.flashHint(this.gyroscopeEnabled ? '陀螺仪：开' : '陀螺仪：关')
@@ -5125,6 +5241,7 @@ private loadPlanetPositions(): void {
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.drawerOpen ? 1.08 : 1.0, y: this.drawerOpen ? 1.08 : 1.0 })
+      .onClick(() => { this.toggleDrawer() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {
@@ -5155,6 +5272,7 @@ private loadPlanetPositions(): void {
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.musicEnabled ? 1.06 : 1.0, y: this.musicEnabled ? 1.06 : 1.0 })
+      .onClick(() => { this.toggleMusic() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {
@@ -5215,6 +5333,10 @@ private loadPlanetPositions(): void {
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.gyroscopeEnabled ? 1.06 : 1.0, y: this.gyroscopeEnabled ? 1.06 : 1.0 })
+      .onClick(() => {
+        this.toggleGyroscope(!this.gyroscopeEnabled)
+        this.flashHint(this.gyroscopeEnabled ? '陀螺仪：开' : '陀螺仪：关')
+      })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {

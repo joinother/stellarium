@@ -1421,3 +1421,22 @@
 - **构建结果：** BUILD SUCCESSFUL (13.9s)
 - **验证结果：** 通过 — 类型显示"双星"/"恒星"（非double star/star），星座显示"天鹰座"/"飞马座"（非Aql/Peg），Alt/Az显示"高度"/"方位"，多次点击UI面板无闪退，缩放按钮不被遮挡
 - **备注：** 根因是 `result.type` 来自 C++ `getObjectTypeI18n()`，可能被 `q_()` 部分翻译导致 `OBJECT_TYPES` 查不到 key；改用 `result.objectType`（`getObjectType()` 的纯英文输出）后翻译正常
+
+---
+
+## [2026-07-27] TRAE - 帧率优化回退+FPS计数器修复+陀螺仪绝对指向+zoom按钮位置调整
+
+- **修改文件：**
+  - `src/StelMainView.cpp`（渲染间隔回退、FPS原子变量位置修正、陀螺仪moveToAltAz重写）
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`（FPS显示位置调整、zoom按钮间距与上移）
+
+- **修改内容：**
+  1. **帧率优化回退**：尝试8ms渲染间隔(120FPS)导致SIGSEGV崩溃，PBO异步回读(glMapBufferRange)在模拟器上也导致SIGSEGV崩溃。回退到12ms(83FPS)同步glReadPixels，稳定运行在49-59 FPS。
+  2. **FPS计数器修复**：原子变量`s_ohosRenderFps`从函数体移到匿名命名空间（文件作用域），避免每帧重建；在`renderOhosFrameNow()`每帧末尾更新FPS值(1.0/dt)；`getFPS`命令直接读取原子变量，无需跨线程投递；FPS显示位置从右下角移到左上角工具栏旁，避免与底部缩放按钮/详情卡片重叠。
+  3. **陀螺仪重写**：从相对`panBy`改为绝对`moveToAltAz`，设备方位角(alpha)直接映射到星图方位角，设备俯仰角(beta)映射到星图高度角，实现"设备指向哪里星图就转到哪里"的行为。
+  4. **zoom按钮位置调整**：增大间距从14vp到44vp，上移避免底部裁切。
+
+- **修改原因：** 120FPS/PBO方案在模拟器上崩溃不可用；FPS计数器原子变量作用域错误导致读不到值；陀螺仪相对平移不符合"指向即转向"直觉；zoom按钮间距过小且被底部裁切。
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 应用正常运行，FPS显示49-59，无崩溃
+- **备注：** PBO异步回读(glMapBufferRange)和8ms间隔(120FPS)在模拟器上均导致SIGSEGV，已记录到 KNOWN-ISSUES.md。真机是否有同样问题待验证。

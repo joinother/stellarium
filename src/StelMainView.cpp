@@ -79,6 +79,7 @@
 #include <QWaitCondition>
 #include <QHash>
 #include <QSet>
+#include <atomic>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsAnchorLayout>
 #include <QGraphicsWidget>
@@ -135,8 +136,18 @@ StelMainView* StelMainView::singleton = Q_NULLPTR;
 namespace
 {
 using OhosSubmitFrameFunc = void (*)(const unsigned char*, int, int);
-constexpr int OHOS_INTERACTIVE_RENDER_INTERVAL_MS = 33;
-constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 125;
+constexpr int OHOS_INTERACTIVE_RENDER_INTERVAL_MS = 12;  // ~83 FPS (PBO-safe, 8ms causes SEGV)
+constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;  // 30 FPS idle
+
+// Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
+// read by StellariumOhos_command("getFPS") on ArkUI thread.
+static std::atomic<float> s_ohosRenderFps{0.0f};
+
+// Render resolution scale factor (0.0-1.0). Reduces the framebuffer resolution
+// to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
+// the texture to full screen automatically.
+// 0.6 = 60% resolution = 36% of original pixel count = ~64% less data.
+constexpr double OHOS_RENDER_SCALE = 0.6;
 
 void ohosMark(const char* message)
 {
@@ -352,14 +363,67 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	if (width <= 0 || height <= 0)
 		return;
 
-	// 复用静态像素缓冲区，避免每帧分配/释放 ~22MB 导致堆碎片化和长期卡顿。
-	// 只在缓冲区不够大时才 grow（QByteArray::resize 不会自动收缩）。
+	// Downsample the framebuffer using glBlitFramebuffer to reduce glReadPixels data.
+	// At 60% scale: 1536x960 instead of 2560x1600 = 36% of original data = ~10ms vs ~34ms.
+	constexpr double READBACK_SCALE = 0.5;
+	const int readW = qMax(1, int(width * READBACK_SCALE));
+	const int readH = qMax(1, int(height * READBACK_SCALE));
+
+	// Create downsample FBO + texture (once)
+	static GLuint s_readbackFBO = 0;
+	static GLuint s_readbackTex = 0;
+	static int s_readbackW = 0;
+	static int s_readbackH = 0;
+	if (s_readbackFBO == 0 || s_readbackW != readW || s_readbackH != readH)
+	{
+		if (s_readbackFBO == 0)
+		{
+			gl->glGenFramebuffers(1, &s_readbackFBO);
+			gl->glGenTextures(1, &s_readbackTex);
+		}
+		glBindTexture(GL_TEXTURE_2D, s_readbackTex);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, readW, readH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		s_readbackW = readW;
+		s_readbackH = readH;
+	}
+
+	// Get QOpenGLExtraFunctions for glBlitFramebuffer
+	QOpenGLExtraFunctions* extraFns = QOpenGLContext::currentContext()->extraFunctions();
+
+	// Blit (downsample) from main framebuffer to readback FBO
+	GLint mainFBO = 0;
+	gl->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &mainFBO);
+	gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, mainFBO);
+	gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_readbackFBO);
+	gl->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_readbackTex, 0);
+	if (extraFns)
+	{
+		extraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, readW, readH, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	}
+
+	// Synchronous glReadPixels (PBO caused SIGSEGV on emulator due to glMapBufferRange)
 	static QByteArray pixels;
-	const int neededSize = width * height * 4;
+	const int neededSize = readW * readH * 4;
 	if (pixels.size() < neededSize)
 		pixels.resize(neededSize);
+
 	gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
-	gl->glReadPixels(viewport[0], viewport[1], width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, s_readbackFBO);
+
+	const double readPixelsStart = StelApp::getTotalRunTime();
+
+	// Synchronous readback - blocks until GPU finishes, but is stable
+	gl->glReadPixels(0, 0, readW, readH, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+	const unsigned char* rgba = reinterpret_cast<const unsigned char*>(pixels.constData());
+
+	const double readPixelsEnd = StelApp::getTotalRunTime();
+
+	gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, mainFBO);
+	gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mainFBO);
+
 	const GLenum error = gl->glGetError();
 	if (error != GL_NO_ERROR)
 	{
@@ -367,7 +431,8 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 		return;
 	}
 
-	const unsigned char* rgba = reinterpret_cast<const unsigned char*>(pixels.constData());
+	if (!rgba)
+		return;
 	++observedFrames;
 	if (submittedFrames == 0)
 	{
@@ -397,8 +462,21 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 			return;
 	}
 
-	submitFrame(rgba, width, height);
+	const double submitFrameStart = StelApp::getTotalRunTime();
+	submitFrame(rgba, readW, readH);
+	const double submitFrameEnd = StelApp::getTotalRunTime();
 	++submittedFrames;
+
+	static int s_submitFrameCounter = 0;
+	if ((s_submitFrameCounter++ % 30) == 0)
+	{
+		const double readMs = (readPixelsEnd - readPixelsStart) * 1000.0;
+		const double submitMs = (submitFrameEnd - submitFrameStart) * 1000.0;
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StellariumFps",
+			"submitDetail: readPixels=%{public}.1fms submitFrame=%{public}.1fms rw=%{public}d rh=%{public}d fw=%{public}d fh=%{public}d",
+			readMs, submitMs, readW, readH, width, height);
+	}
+
 	if (submittedFrames == 1)
 	{
 		qInfo() << "Submitted first Stellarium framebuffer to OpenHarmony native surface:" << width << "x" << height;
@@ -1188,6 +1266,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	// 高频命令（dragView/zoomBy/panBy）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
 	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
+
+	// getFPS: read from a lock-free atomic updated by renderOhosFrameNow().
+	// Avoids calling StelApp::getInstance().getFps() from the ArkUI thread
+	// (not thread-safe) and avoids the async queue (which returns pending forever).
+	if (commandName == "getFPS")
+	{
+		QJsonObject fpsResult;
+		fpsResult["ok"] = true;
+		fpsResult["fps"] = s_ohosRenderFps.load();
+		response = QString::fromUtf8(QJsonDocument(fpsResult).toJson(QJsonDocument::Compact)).toUtf8();
+		return response.constData();
+	}
 
 	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
@@ -6273,8 +6363,10 @@ void StelMainView::startOhosRenderPump()
 
 void StelMainView::renderOhosFrameNow()
 {
+	const double t0 = StelApp::getTotalRunTime();
 	ohosDrainCommandQueue();
 	ohosUpdateLandscapeFadeWithZoom();
+	const double t1 = StelApp::getTotalRunTime();
 	if (!stelApp || !glWidget || !glWidget->context() || !StelApp::isInitialized())
 	{
 		requestOhosSceneRepaint();
@@ -6294,19 +6386,47 @@ void StelMainView::renderOhosFrameNow()
 	lastOhosRenderTimeSec = now;
 
 	const double pixelRatio = glWidget->devicePixelRatioF();
-	const int width = qMax(1, int(glWidget->width() * pixelRatio));
-	const int height = qMax(1, int(glWidget->height() * pixelRatio));
+	const int width = qMax(1, int(glWidget->width() * pixelRatio * OHOS_RENDER_SCALE));
+	const int height = qMax(1, int(glWidget->height() * pixelRatio * OHOS_RENDER_SCALE));
 
 	StelApp& app = StelApp::getInstance();
 	app.setDevicePixelsPerPixel(devicePixelRatioF());
 	gl->glBindFramebuffer(GL_FRAMEBUFFER, glWidget->defaultFramebufferObject());
 	gl->glViewport(0, 0, width, height);
 
+	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();
 	app.update(dt);
 	ohosProcessPendingPointSelect();
+	const double t3 = StelApp::getTotalRunTime();
 	app.draw();
+	const double t4 = StelApp::getTotalRunTime();
 	submitOhosFramebuffer(gl);
+	const double t5 = StelApp::getTotalRunTime();
+
+	const int intervalMs = currentOhosRenderIntervalMs();
+	const bool maxFps = needsMaxFPS();
+	static int s_frameCounter = 0;
+	if ((s_frameCounter++ % 30) == 0)
+	{
+		const double cmdMs = (t1 - t0) * 1000.0;
+		const double setupMs = (t2 - t1) * 1000.0;
+		const double updateMs = (t3 - t2) * 1000.0;
+		const double drawMs = (t4 - t3) * 1000.0;
+		const double submitMs = (t5 - t4) * 1000.0;
+		const double totalMs = (t5 - t0) * 1000.0;
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StellariumFps",
+			"frame: total=%{public}.1fms cmd=%{public}.1fms setup=%{public}.1fms update=%{public}.1fms draw=%{public}.1fms submit=%{public}.1fms interval=%{public}dms maxFps=%{public}d fps=%{public}.1f",
+			totalMs, cmdMs, setupMs, updateMs, drawMs, submitMs, intervalMs, maxFps ? 1 : 0,
+			static_cast<double>(app.getFps()));
+	}
+
+	// Update lock-free FPS counter every frame for getFPS command.
+	// Compute from actual frame time delta for accuracy.
+#if defined(__OHOS__)
+	if (dt > 0.001 && dt < 0.25)
+		s_ohosRenderFps.store(1.0f / static_cast<float>(dt));
+#endif
 }
 
 void StelMainView::requestOhosSceneRepaint()
@@ -6456,6 +6576,8 @@ void StelMainView::thereWasAnEvent()
 	updateQueued = false;
 	if (fpsTimer && fpsTimer->interval() != OHOS_INTERACTIVE_RENDER_INTERVAL_MS)
 		fpsTimer->setInterval(OHOS_INTERACTIVE_RENDER_INTERVAL_MS);
+	// Update lock-free FPS counter for getFPS command
+	s_ohosRenderFps.store(StelApp::getInstance().getFps());
 #endif
 }
 
@@ -6468,7 +6590,7 @@ bool StelMainView::needsMaxFPS() const
 	// after that, it switches back to the default minfps value to save power.
 	// The fps is also kept to max if the timerate is higher than normal speed.
 	const double timeRate = stelApp->getCore()->getTimeRate();
-	return (now - lastEventTimeSec < 2.5) || fabs(timeRate) > StelCore::JD_SECOND;
+	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;
 }
 
 void StelMainView::moveEvent(QMoveEvent * event)

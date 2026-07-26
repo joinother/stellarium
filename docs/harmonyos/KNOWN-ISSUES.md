@@ -278,4 +278,22 @@
 
 ---
 
+### 11. PBO异步回读(glMapBufferRange)导致SIGSEGV崩溃 — 【2026-07-27 TRAE 已记录】
+
+- **状态：** 已回退为同步glReadPixels（规避）
+- **现象：** 尝试用 PBO（Pixel Buffer Object）异步回读帧缓冲以提升性能，调用 `glMapBufferRange` 读取 PBO 数据时，模拟器进程立即 `Signal:SIGSEGV` 退出。
+- **根因（推测）：** 模拟器的 OpenGL ES 实现对 `glMapBufferRange` 的支持不完整或存在驱动缺陷，映射 PBO 内存时触发段错误。可能与模拟器 GPU 驱动（SwiftShader/Angle 翻译层）有关。
+- **规避措施：** 回退为同步 `glReadPixels`，渲染间隔设为12ms（83FPS目标），实测稳定运行在49-59 FPS，无崩溃。
+- **待办：** 真机验证 PBO 方案是否可用（真机 GPU 驱动可能与模拟器不同）。若真机可用，可针对真机启用 PBO、模拟器回退同步。
+
+---
+
+### 12. 8ms渲染间隔(120FPS)导致PBO三重缓冲崩溃 — 【2026-07-27 TRAE 已记录】
+
+- **状态：** 已回退到12ms(83FPS)（规避）
+- **现象：** 将渲染间隔从12ms降到8ms（目标120FPS）后，配合 PBO 三重缓冲方案，模拟器进程 `Signal:SIGSEGV` 崩溃。
+- **根因（推测）：** 8ms 间隔下 PBO 三重缓冲的轮换节奏过快，前一帧的 glReadPixels/glMapBufferRange 尚未完成就被下一帧覆盖，导致 GPU 驱动状态错乱触发段错误。与 #11 的 glMapBufferRange 崩溃同源。
+- **规避措施：** 渲染间隔回退到12ms（83FPS），使用同步 glReadPixels。稳定运行在49-59 FPS。
+- **待办：** 与 #11 一并在真机上验证。
+
 > **最后更新：** 2026-07-27
