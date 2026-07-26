@@ -1314,3 +1314,19 @@
 
 ---
 
+
+## [2026-07-26] TRAE Agent - 修复星座英文/类型英文/UI闪退/缩放键遮挡
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`, `entry/src/main/ets/pages/I18n.ets`
+- **修改内容：**
+  1. 使用 `result.objectType`（C++返回的英文原始类型）替代 `result.type`（i18n版本），修复复合类型如"double star, pulsating variable star"只能部分翻译的问题
+  2. 在 `handleUiTap` 和 `handleOverlayTouch` 中添加 try-catch 防御性包装，防止UI点击闪退
+  3. 添加 NaN/undefined 坐标检查
+  4. 将详情卡片位置从 `EDGE_MARGIN+170` 移至 `EDGE_MARGIN+200`，避免与缩放按钮重叠
+  5. 在 `I18n.ets` 中添加 `constellationFullName()` 方法，支持星座全名反查（如 Scorpius→天蝎座）
+  6. 将硬编码的 Alt/Az 标签替换为 i18n 键 `coord_alt`/`coord_az`（高度/方位）
+  7. 将硬编码的中文"朗读文本"替换为 i18n 键 `s0760`
+- **修改原因：** 用户报告星座仍显示英文、UI点击闪退、放大缩小键被遮挡、双星右侧有英文
+- **构建结果：** BUILD SUCCESSFUL (13.9s)
+- **验证结果：** 通过 — 类型显示"双星"/"恒星"（非double star/star），星座显示"天鹰座"/"飞马座"（非Aql/Peg），Alt/Az显示"高度"/"方位"，多次点击UI面板无闪退，缩放按钮不被遮挡
+- **备注：** 根因是 `result.type` 来自 C++ `getObjectTypeI18n()`，可能被 `q_()` 部分翻译导致 `OBJECT_TYPES` 查不到 key；改用 `result.objectType`（`getObjectType()` 的纯英文输出）后翻译正常
