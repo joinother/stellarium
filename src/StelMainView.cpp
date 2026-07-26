@@ -4342,21 +4342,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						so["englishName"] = sh->getEnglishName();
 						so["zhr"] = sh->getZHR();
 						so["status"] = (st == MeteorShower::ACTIVE_CONFIRMED) ? "confirmed" : "generic";
-						so["speed"] = infoMap.value("speed", 0).toInt();
-						so["popIdx"] = infoMap.value("pop-idx", 0).toFloat();
+						so["speed"] = infoMap.value("velocity", 0).toInt();
+						so["popIdx"] = infoMap.value("population-index", 0).toFloat();
 						so["parent"] = infoMap.value("parent", "").toString();
-						// Solar longitude -> approximate date
-						double peakSolLong = 0;
-						int actYear = 0;
-						MeteorShower::Activity act = sh->hasGenericShower(0, false);
-						double currentSolLong = StelUtils::getSolarLongitude(core->getJD());
-						act = sh->hasGenericShower(currentSolLong, false);
-						if (act.year > 0) actYear = act.year;
-						if (act.peak > 0) {
-							so["peakDate"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.peak, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
-							so["activeStart"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.start, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
-							so["activeEnd"] = fmtLocal(MeteorShower::JDfromSolarLongitude(act.finish, actYear > 0 ? actYear : StelUtils::getYearFromJD(core->getJD())));
-						}
+						so["zhrMax"] = infoMap.value("zhr-max", 0).toInt();
 						showerList.append(so);
 					}
 				}
