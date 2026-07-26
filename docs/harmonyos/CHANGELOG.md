@@ -1,3 +1,17 @@
+
+## [2026-07-27] TRAE - 地面透明度FOV联动+compactDrawer修复+果冻Q弹动画
+
+- **修改文件：** `src/StelMainView.cpp`, `build/.../MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **地面透明度FOV联动**（C++）：`ohosUpdateLandscapeFadeWithZoom()` 新增 FOV-based fade 逻辑。原来只根据视角海拔（俯仰角）控制地面透明度，现在同时考虑 FOV（视场角）：FOV ≤ 5° 时地面透明度达 92%，FOV ≥ 60° 时不影响。取海拔和FOV两个因素的较大值。解决"放大到最大地面不透明"问题。
+  2. **compactDrawer Stack 重构**：将 `compactDrawer()` 从两个并列根元素（遮罩Column + 内容Column）改为 `Stack({ alignContent: Alignment.Bottom })` 包裹，修复抽屉内容无法正确渲染的问题。将外层包装从 `Column` 改为 `Stack`，`hitTestBehavior` 从 `Block` 改为 `Default`，修复滚动不生效。
+  3. **抽屉高度提升**：从 55% 增至 65%，显示更多功能项（8项可见 vs 原来6项）。
+  4. **果冻Q弹动画**：所有面板切换动画的 spring 参数从 `springMotion(0.55, 0.85)` 调整为 `springMotion(0.34, 0.68)`，降低阻尼比实现更Q弹的果冻效果。涉及：`setPanel`、`closePanel`、`toggleDrawer`、`bottomSheetPanel` transition、`compactDrawer` transition、详情卡片 transition。
+  5. **面板拖拽松手回弹**：`bottomSheetPanel` 拖拽手柄新增 `onActionEnd`，松手时用 `springMotion(0.36, 0.72)` 回弹至目标高度。
+  6. **面板拖拽上限**：确认 `sheetHeightPct` 最大值为 90（即 9/10），最小 50。
+- **修改原因：** 用户反馈：1)手机端放大最大地面不透明；2)更多功能抽屉关不掉/滚不动；3)面板切换要果冻Q弹；4)面板只能拖到9/10
+- **构建结果：** BUILD SUCCESSFUL（C++ 交叉编译 + hvigor HAP 打包均成功）
+- **验证结果：** 模拟器实测：1)更多功能抽屉正常打开/关闭/滚动，显示全部11项功能；2)面板弹出有Q弹弹簧动画；3)地面透明度FOV联动已编译进 .so
 ## [2026-07-27] TRAE - compactShell琉璃质感+移除Stellarium实时控件+左侧工具栏
 
 - **修改文件：** `build/.../MainWindowNativeNode.ets`, `build/.../I18n.ets`

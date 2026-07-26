@@ -3596,7 +3596,7 @@ private loadPlanetPositions(): void {
     const now = Date.now()
     if (now - this.lastDrawerToggleTime < 400) { return }
     this.lastDrawerToggleTime = now
-    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, () => {
+    this.getUIContext().animateTo({ duration: 480, curve: curves.springMotion(0.34, 0.68) }, () => {
       this.drawerOpen = !this.drawerOpen
     })
     this.resetPanelIdle()
@@ -4412,17 +4412,17 @@ private loadPlanetPositions(): void {
 
       // 更多功能抽屉（紧凑模式：从底部弹出，一镜到底弹簧动画）
       if (this.drawerOpen) {
-        Column() { this.compactDrawer() }
+        Stack() { this.compactDrawer() }
           .position({ x: 0, y: 0 })
           .width('100%')
           .height('100%')
-          .hitTestBehavior(HitTestMode.Transparent)
+          .hitTestBehavior(HitTestMode.Default)
           .zIndex(70)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: 0, y: 80 }).animation({ duration: 480, curve: curves.springMotion(0.55, 0.85) })),
+              .combine(TransitionEffect.translate({ x: 0, y: 80 }).animation({ duration: 560, curve: curves.springMotion(0.34, 0.68) })),
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
-              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 220, curve: Curve.EaseIn }))
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 300, curve: curves.springMotion(0.40, 0.72) }))
           ))
       }
 
@@ -5052,14 +5052,14 @@ private loadPlanetPositions(): void {
 
   @Builder
   compactDrawer() {
+    Stack({ alignContent: Alignment.Bottom }) {
     // 全屏遮罩层：点击关闭抽屉
     Column()
       .width('100%')
       .height('100%')
       .backgroundColor('rgba(0, 0, 0, 0.40)')
-      .hitTestBehavior(HitTestMode.Block)
+      .hitTestBehavior(HitTestMode.Transparent)
       .onClick(() => { this.drawerOpen = false })
-      .justifyContent(FlexAlign.End)
 
     // 抽屉内容（底部弹出，可向下拖拽关闭）
     Column() {
@@ -5148,13 +5148,14 @@ private loadPlanetPositions(): void {
       .scrollBarColor('#33FFFFFF')
     }
     .width('100%')
-    .height('55%')
+    .height('65%')
     .padding({ left: 18, right: 18, bottom: 20 })
     .backgroundColor('rgba(12, 16, 28, 0.85)')
     .backdropBlur(40)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.20)' })
     .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
     .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
+    }
   }
 
   @Builder

@@ -2438,8 +2438,7 @@ private loadPlanetPositions(): void {
       this.infoWinVisible = true
       if (isNewSelection) {
         this.infoWinExpanded = false
-        this.cardOffsetX = 0
-        this.cardOffsetY = 0
+        // 保留用户拖动位置，不重置 cardOffsetX/Y
       }
       // 尝试从本地别名表补充中文简介
       const dispName = this.selectedName
@@ -2635,31 +2634,26 @@ private loadPlanetPositions(): void {
     this.coordinateText = this.formatDegrees(latitude, 'N', 'S') + ' / ' + this.formatDegrees(longitude, 'E', 'W')
     this.altitudeText = altitude.toFixed(0) + ' m'
     this.flashHint(I18n.t('i0073'))
-    // Async: try setLocationByName first, fallback to setLocation, then setLocationCoords
-    this.callNativeWhenReady('setLocationByName', name, (r: StellariumBridgeResponse) => {
-      if (r.ok === true) {
+    // Use callNative (direct, no retry) because callNativeWhenReady treats ok:false as
+    // "core not ready" and retries — but setLocationByName returns ok:false permanently
+    // when the city name isn't in the DB, so the fallback chain never fires.
+    // Strategy: setLocationCoords first (most reliable, just lat/lon/alt), then setLocation.
+    const r = this.callNative('setLocationCoords', `${latitude},${longitude},${altitude}`)
+    if (r.ok === true) {
+      hilog.info(0x0000, 'StellariumArkUI', `setLocationCoords OK: ${name} (${latitude},${longitude},${altitude})`)
+      this.refreshState()
+      setTimeout(() => { this.loadObserverInfo() }, 300)
+    } else {
+      // Fallback: setLocation with name|lat|lon|alt format
+      hilog.info(0x0000, 'StellariumArkUI', 'setLocationCoords failed, fallback to setLocation')
+      const r2 = this.callNative('setLocation', `${name}|${latitude}|${longitude}|${altitude}`)
+      if (r2.ok === true) {
         this.refreshState()
         setTimeout(() => { this.loadObserverInfo() }, 300)
       } else {
-        // Fallback 1: push coordinates via setLocation
-        hilog.info(0x0000, 'StellariumArkUI', 'setLocationByName failed, fallback to setLocation')
-        this.callNativeWhenReady('setLocation', `${name}|${latitude}|${longitude}|${altitude}`, (r2: StellariumBridgeResponse) => {
-          if (r2.ok === true) {
-            this.refreshState()
-            setTimeout(() => { this.loadObserverInfo() }, 300)
-          } else {
-            // Fallback 2: setLocationCoords (lat,lon[,alt]) - most reliable
-            hilog.info(0x0000, 'StellariumArkUI', 'setLocation failed, fallback to setLocationCoords')
-            this.callNativeWhenReady('setLocationCoords', `${latitude},${longitude},${altitude}`, (r3: StellariumBridgeResponse) => {
-              if (r3.ok === true) {
-                this.refreshState()
-                setTimeout(() => { this.loadObserverInfo() }, 300)
-              }
-            })
-          }
-        })
+        hilog.error(0x0000, 'StellariumArkUI', `setLocation also failed: ${r2.error ?? 'unknown'}`)
       }
-    }, 0, 100, 10)
+    }
   }
 
   // ===== 位置搜索（调用C++ getLocationList命令）=====
@@ -3602,7 +3596,7 @@ private loadPlanetPositions(): void {
     const now = Date.now()
     if (now - this.lastDrawerToggleTime < 400) { return }
     this.lastDrawerToggleTime = now
-    this.getUIContext().animateTo({ duration: 260, curve: Curve.Friction }, () => {
+    this.getUIContext().animateTo({ duration: 480, curve: curves.springMotion(0.34, 0.68) }, () => {
       this.drawerOpen = !this.drawerOpen
     })
     this.resetPanelIdle()
@@ -3635,9 +3629,9 @@ private loadPlanetPositions(): void {
           return true
         }
       } else {
-        const bcX = 16 + this.cardOffsetX
-        const bcY = 70 + this.cardOffsetY
-        const bcW = this.skyWidth - 32
+        const bcX = this.skyWidth * 0.06 + this.cardOffsetX
+        const bcY = this.skyHeight - 280 + this.cardOffsetY
+        const bcW = Math.floor(this.skyWidth * 0.88)
         const bcH = 200
         if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
           return true
@@ -4191,8 +4185,8 @@ private loadPlanetPositions(): void {
         this.compactShell()
       }
 
-      // 点击反馈提示：置顶显示、不拦截触摸
-      if (this.actionHint !== '') {
+      // 点击反馈提示：仅在平板布局（expandedShell）时显示
+      if (this.actionHint !== '' && this.isExpandedLayout) {
         Row() {
           Text(this.actionHint)
             .fontSize(13)
@@ -4204,7 +4198,7 @@ private loadPlanetPositions(): void {
             .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
         }
           .hitTestBehavior(HitTestMode.None)
-          .position({ x: 0, y: this.isExpandedLayout ? 16 : 80 })
+          .position({ x: 0, y: 16 })
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .zIndex(20)
@@ -4257,7 +4251,6 @@ private loadPlanetPositions(): void {
           .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 360 })
           .onClick(() => {
             this.zoomStep(0.5)
-            this.flashHint(I18n.t('i0076'))
           })
       }
       if (!this.drawerOpen) {
@@ -4266,7 +4259,6 @@ private loadPlanetPositions(): void {
           .position({ x: this.EDGE_MARGIN + 92, y: this.skyHeight - 260 })
           .onClick(() => {
             this.zoomStep(2.0)
-            this.flashHint(I18n.t('i0077'))
           })
       }
       if (this.panelVisible) {
@@ -4328,43 +4320,82 @@ private loadPlanetPositions(): void {
           this.handleSkyTouch(event)
         })
 
-      // 顶部信息栏：左侧缩放按钮（紧凑） + 右侧观测者徽章
-      Row() {
-        // 左侧：两个缩放按钮，紧凑但留缝隙
-        Row({ space: 6 }) {
-          Stack() {
-            Image(this.getIcon('zoom_in', false))
-              .width(18).height(18).fillColor(this.nmText())
-          }
-          .width(36).height(36)
-          .backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(22)
-          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
-          .borderRadius(18)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
-
-          Stack() {
-            Image(this.getIcon('zoom_out', false))
-              .width(18).height(18).fillColor(this.nmText())
-          }
-          .width(36).height(36)
-          .backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(22)
-          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
-          .borderRadius(18)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
+      // 左侧垂直工具栏：缩放 + 陀螺仪 + 音乐（琉璃风格）
+      Column({ space: 6 }) {
+        // 缩放按钮（放大）
+        Stack() {
+          Image(this.getIcon('zoom_in', false))
+            .width(24).height(24).fillColor(this.nmText())
         }
+          .width(44).height(44)
+          .backgroundColor('rgba(35, 55, 85, 0.72)')
+          .backdropBlur(30)
+          .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
+          .borderRadius(22)
+          .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .stateStyles({
+            pressed: {
+              .scale({ x: 0.88, y: 0.88 })
+              .backgroundColor('rgba(50, 80, 120, 0.80)')
+            }
+          })
+          .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+          .onClick(() => { this.zoomStep(0.5) })
 
-        Blank()
+        // 缩放按钮（缩小）
+        Stack() {
+          Image(this.getIcon('zoom_out', false))
+            .width(24).height(24).fillColor(this.nmText())
+        }
+          .width(44).height(44)
+          .backgroundColor('rgba(35, 55, 85, 0.72)')
+          .backdropBlur(30)
+          .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
+          .borderRadius(22)
+          .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .stateStyles({
+            pressed: {
+              .scale({ x: 0.88, y: 0.88 })
+              .backgroundColor('rgba(50, 80, 120, 0.80)')
+            }
+          })
+          .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+          .onClick(() => { this.zoomStep(2.0) })
 
-        this.observerBadge()
+        // 分隔线
+        Row()
+          .width(20)
+          .height(0.5)
+          .backgroundColor('rgba(120, 170, 220, 0.15)')
+          .margin({ top: 2, bottom: 2 })
+
+        // 陀螺仪按钮
+        Stack() { this.gyroButton() }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick(() => {
+            this.toggleGyroscope(!this.gyroscopeEnabled)
+            this.flashHint(this.gyroscopeEnabled ? I18n.t('m_gyro_on') : I18n.t('m_gyro_off'))
+          })
+          .gesture(LongPressGesture({ repeat: false, duration: 600 })
+            .onAction(() => {
+              if (this.gyroscopeEnabled) {
+                this.gyroCalibPanelOpen = !this.gyroCalibPanelOpen
+              }
+            }))
+
+        // 音乐按钮
+        Stack() { this.musicButton() }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick(() => { this.toggleMusic() })
       }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-      .position({ x: 0, y: 0 })
-      .zIndex(3)
+        .position({ x: 12, y: 60 })
+        .zIndex(3)
 
       // 陀螺仪校准面板
       if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
@@ -4379,17 +4410,33 @@ private loadPlanetPositions(): void {
           ))
       }
 
-      // 选中天体详情卡片（显示在最上端，可拖动）
-      if (this.infoWinVisible && this.selectedName.length > 0 && !this.panelVisible) {
+      // 更多功能抽屉（紧凑模式：从底部弹出，一镜到底弹簧动画）
+      if (this.drawerOpen) {
+        Stack() { this.compactDrawer() }
+          .position({ x: 0, y: 0 })
+          .width('100%')
+          .height('100%')
+          .hitTestBehavior(HitTestMode.Default)
+          .zIndex(70)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 80 }).animation({ duration: 560, curve: curves.springMotion(0.34, 0.68) })),
+            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 300, curve: curves.springMotion(0.40, 0.72) }))
+          ))
+      }
+
+      // 选中天体详情卡片（紧凑模式：靠右下角，Dock 上方，可拖动）
+      if (this.infoWinVisible && this.selectedName.length > 0 && !this.panelVisible && !this.drawerOpen) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: 16 + this.cardOffsetX, y: 70 + this.cardOffsetY })
+          .position({ x: this.skyWidth * 0.06 + this.cardOffsetX, y: this.skyHeight - 280 + this.cardOffsetY })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: 0, y: -40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
             TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
-              .combine(TransitionEffect.translate({ x: 0, y: -20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
 
@@ -4598,7 +4645,7 @@ private loadPlanetPositions(): void {
           }
         }
         .width('100%')
-        .padding({ bottom: 14 })
+        .padding({ bottom: 20 })
 
         // ── 第二页：时间（升起/中天/落下 + 月相/距角） ──
         Column({ space: 0 }) {
@@ -4667,7 +4714,7 @@ private loadPlanetPositions(): void {
 
         }
         .width('100%')
-        .padding({ bottom: 14 })
+        .padding({ bottom: 20 })
 
         // ── 第三页：天体标识（可展开/收起） ──
         Column({ space: 0 }) {
@@ -4697,15 +4744,16 @@ private loadPlanetPositions(): void {
 
         }
         .width('100%')
-        .padding({ bottom: 14 })
+        .padding({ bottom: 20 })
       }
       .index(this.bottomCardIndex)
       .indicator(true)
-      .indicatorStyle({ selectedColor: '#5B93BF', color: 'rgba(255,255,255,0.3)', size: 6 })
+      .indicatorStyle({ selectedColor: '#5B93BF', color: 'rgba(255,255,255,0.3)', size: 5 })
       .duration(300)
       .curve(curves.springMotion(0.5, 0.85))
       .width('100%')
-      .height(110)
+      .height(130)
+      .padding({ bottom: 18 })
 
       // 统一操作按钮行（在 Swiper 下方，三页共享）
       Row({ space: 8 }) {
@@ -4720,7 +4768,7 @@ private loadPlanetPositions(): void {
       }
       .width('100%').padding({ left: 14, right: 14, top: 2, bottom: 8 })
     }
-    .width(this.isExpandedLayout ? 340 : (this.skyWidth - 32))
+    .width(this.isExpandedLayout ? 340 : Math.floor(this.skyWidth * 0.88))
     .backgroundColor('rgba(12, 16, 28, 0.78)')
     .backdropBlur(40)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
@@ -4740,8 +4788,8 @@ private loadPlanetPositions(): void {
       bcX = this.EDGE_MARGIN + 200 + this.cardOffsetX
       bcY = this.skyHeight - 230 + this.cardOffsetY
     } else {
-      bcX = 16 + this.cardOffsetX
-      bcY = 70 + this.cardOffsetY
+      bcX = this.skyWidth * 0.06 + this.cardOffsetX
+      bcY = this.skyHeight - 280 + this.cardOffsetY
     }
     if (x < bcX - 8 || x > bcX + bcW + 8 || y < bcY - 8) { return false }
     // 只处理头部区域（前 ~48px：名称 + 类型 + 关闭按钮）
@@ -4876,24 +4924,24 @@ private loadPlanetPositions(): void {
   zoomButton(icon: string) {
     Stack() {
       Image(this.getIcon(icon, false))
-        .width(28).height(28)
+        .width(26).height(26)
         .fillColor(this.nmText())
     }
-      .width(56)
-      .height(56)
-      .backgroundColor('rgba(25, 26, 28, 0.72)')
-      .backdropBlur(26)
-      .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
-      .borderRadius(28)
-      .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
+      .width(48)
+      .height(48)
+      .backgroundColor('rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
+      .borderRadius(24)
+      .shadow({ radius: 10, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {
-          .scale({ x: 0.9, y: 0.9 })
-          .backgroundColor('rgba(255, 255, 255, 0.12)')
+          .scale({ x: 0.88, y: 0.88 })
+          .backgroundColor('rgba(50, 80, 120, 0.80)')
         }
       })
-      .animation({ duration: 240, curve: curves.springMotion(0.42, 0.85) })
+      .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
       // 手势由外层 Stack.onClick 统一处理
   }
 
@@ -5003,56 +5051,141 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  compactDock() {
-    Row() {
-      ForEach(this.pinnedActions, (item: ShellAction) => {
-        Column() {
-          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-            .width(20)
-            .height(20)
-            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#B0FFFFFF')
+  compactDrawer() {
+    Stack({ alignContent: Alignment.Bottom }) {
+    // 全屏遮罩层：点击关闭抽屉
+    Column()
+      .width('100%')
+      .height('100%')
+      .backgroundColor('rgba(0, 0, 0, 0.40)')
+      .hitTestBehavior(HitTestMode.Transparent)
+      .onClick(() => { this.drawerOpen = false })
+
+    // 抽屉内容（底部弹出，可向下拖拽关闭）
+    Column() {
+      // 拖拽手柄区域（增大触摸热区到 48px 高）
+      Column() {
+        Row()
+          .width(36)
+          .height(4)
+          .backgroundColor('rgba(255, 255, 255, 0.30)')
+          .borderRadius(2)
+      }
+      .width('100%')
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .gesture(
+        PanGesture({ fingers: 1, distance: 8 })
+          .onActionUpdate((event: GestureEvent) => {
+            if (event.offsetY > 60) {
+              this.drawerOpen = false
+            }
+          })
+      )
+
+      // 标题栏
+      Row() {
+        Text(I18n.t('c_more_functions'))
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#E5FFFFFF')
+          .layoutWeight(1)
+        // 关闭按钮：增大触摸区域
+        Stack({ alignContent: Alignment.Center }) {
+          Text('\u00d7')
+            .fontSize(22)
+            .fontColor('#99FFFFFF')
         }
-          .width(40)
-          .height(40)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
-          .borderRadius(20)
-          .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+        .width(40)
+        .height(40)
+        .onClick(() => { this.drawerOpen = false })
+      }
+      .width('100%')
+      .padding({ left: 4, right: 4, bottom: 8 })
+
+      // 功能列表（可滚动）
+      Scroll() {
+        Column({ space: 2 }) {
+          ForEach(this.drawerActions, (item: ShellAction) => {
+            Row({ space: 14 }) {
+              Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+                .width(22).height(22)
+                .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              Text(item.label)
+                .fontSize(15)
+                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+            }
+              .width('100%')
+              .height(50)
+              .padding({ left: 16, right: 14 })
+              .borderRadius(14)
+              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(0,0,0,0)')
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .stateStyles({
+                pressed: {
+                  .scale({ x: 0.97, y: 0.97 })
+                  .backgroundColor('rgba(91, 147, 191, 0.12)')
+                }
+              })
+              .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+              .onClick(() => {
+                this.onRailTap(item.panel)
+              })
+          }, (item: ShellAction) => item.panel)
+        }
+        .width('100%')
+        .padding({ bottom: 24 })
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .edgeEffect(EdgeEffect.Spring)
+      .scrollBar(BarState.Auto)
+      .scrollBarWidth(4)
+      .scrollBarColor('#33FFFFFF')
+    }
+    .width('100%')
+    .height('65%')
+    .padding({ left: 18, right: 18, bottom: 20 })
+    .backgroundColor('rgba(12, 16, 28, 0.85)')
+    .backdropBlur(40)
+    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.20)' })
+    .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
+    .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
+    }
+  }
+
+  @Builder
+  compactDock() {
+    Row({ space: 6 }) {
+      ForEach(this.pinnedActions, (item: ShellAction) => {
+        Stack() { this.iconButton(item) }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
+          .scale(this.activePanel === item.panel && this.panelVisible ? { x: 1.08, y: 1.08 } : { x: 1.0, y: 1.0 })
+          .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
           .onClick(() => {
             this.setPanel(item.panel)
           })
       }, (item: ShellAction) => item.panel)
-      // 更多按钮：展开抽屉项
-      Column() {
-        Image(this.getIcon('grid', false))
-          .width(20)
-          .height(20)
-          .fillColor(this.drawerOpen ? '#5B93BF' : '#B0FFFFFF')
-      }
-        .width(40)
-        .height(40)
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .backgroundColor(this.drawerOpen ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
-        .borderRadius(20)
-        .clickEffect({ level: ClickEffectLevel.LIGHT })
-        .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+      // 更多按钮：三点图标，与平板端 moreButton 一致
+      Stack() { this.moreButton() }
+        .width(44)
+        .height(44)
+        .hitTestBehavior(HitTestMode.Block)
+        .scale(this.drawerOpen ? { x: 1.08, y: 1.08 } : { x: 1.0, y: 1.0 })
+        .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
         .onClick(() => {
           this.toggleDrawer()
         })
     }
       .height(52)
-      .width('auto')
-      .padding({ left: 10, right: 10 })
-      .justifyContent(FlexAlign.SpaceEvenly)
-      .backgroundColor('rgba(18, 22, 36, 0.78)')
-      .backdropBlur(30)
-      .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.12)' })
-      .borderRadius(26)
-      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.36)', offsetX: 0, offsetY: 10 })
+      .padding({ left: 6, right: 6 })
+      .justifyContent(FlexAlign.Center)
       .margin({ bottom: 16 })
       .alignSelf(ItemAlign.Center)
       // 弹出动画
@@ -5282,22 +5415,23 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0 })
       .shadow({
-        radius: this.activePanel === item.panel && this.panelVisible ? 18 : 0,
-        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0)',
+        radius: this.activePanel === item.panel && this.panelVisible ? 18 : 8,
+        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0.28)',
         offsetX: 0,
-        offsetY: 6
+        offsetY: 4
       })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {
           .scale({ x: 0.9, y: 0.9 })
-          .backgroundColor('rgba(255, 255, 255, 0.12)')
+          .backgroundColor('rgba(40, 60, 90, 0.72)')
         }
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
@@ -5354,11 +5488,13 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.drawerOpen ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.drawerOpen ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.drawerOpen ? 1.08 : 1.0, y: this.drawerOpen ? 1.08 : 1.0 })
+      .shadow({ radius: this.drawerOpen ? 18 : 8, color: this.drawerOpen ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
       .onClick(() => { this.toggleDrawer() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
@@ -5385,11 +5521,13 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .alignContent(Alignment.Center)
-      .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.musicEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.musicEnabled ? 1.06 : 1.0, y: this.musicEnabled ? 1.06 : 1.0 })
+      .shadow({ radius: this.musicEnabled ? 14 : 8, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.20)' : 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
       .onClick(() => { this.toggleMusic() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
@@ -5446,8 +5584,9 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .alignContent(Alignment.Center)
-      .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.gyroscopeEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.gyroscopeEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.gyroscopeEnabled ? 1.06 : 1.0, y: this.gyroscopeEnabled ? 1.06 : 1.0 })
@@ -5723,28 +5862,33 @@ private loadPlanetPositions(): void {
   @Builder
   bottomSheetPanel() {
     Column() {
-      // 拖拽手柄（可拖动调整面板高度）
-      Row()
-        .width(36)
-        .height(4)
-        .backgroundColor('rgba(255, 255, 255, 0.30)')
-        .borderRadius(2)
-        .margin({ top: 10, bottom: 8 })
-        .gesture(
-          PanGesture({ fingers: 1, distance: 5 })
-            .onActionStart((event: GestureEvent) => {
-              this.sheetDragStartY = event.fingerList[0].localY
-              this.sheetDragStartPct = this.sheetHeightPct
-            })
-            .onActionUpdate((event: GestureEvent) => {
-              const deltaY = event.offsetY
-              const skyH = this.skyHeight > 1 ? this.skyHeight : 800
-              const pctDelta = -deltaY / skyH * 100
-              let newPct = this.sheetDragStartPct + pctDelta
-              newPct = Math.max(50, Math.min(90, newPct))
-              this.sheetHeightPct = newPct
-            })
-        )
+      // 拖拽手柄区域（增大到48px高，更容易抓住）
+      Column() {
+        Row()
+          .width(36)
+          .height(4)
+          .backgroundColor('rgba(255, 255, 255, 0.30)')
+          .borderRadius(2)
+      }
+      .width('100%')
+      .height(48)
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      .gesture(
+        PanGesture({ fingers: 1, distance: 5 })
+          .onActionStart((event: GestureEvent) => {
+            this.sheetDragStartY = event.fingerList[0].localY
+            this.sheetDragStartPct = this.sheetHeightPct
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            const deltaY = event.offsetY
+            const skyH = this.skyHeight > 1 ? this.skyHeight : 800
+            const pctDelta = -deltaY / skyH * 100
+            let newPct = this.sheetDragStartPct + pctDelta
+            newPct = Math.max(50, Math.min(90, newPct))
+            this.sheetHeightPct = newPct
+          })
+      )
       // 面板标题栏
       Row() {
         Text(this.panelTitle())
@@ -5752,14 +5896,15 @@ private loadPlanetPositions(): void {
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
           .layoutWeight(1)
-        // 关闭按钮
-        Text('\u00d7')
-          .fontSize(22)
-          .fontColor('#99FFFFFF')
-          .width(32)
-          .height(32)
-          .textAlign(TextAlign.Center)
-          .onClick(() => { this.closePanel() })
+        // 关闭按钮：增大触摸区域
+        Stack({ alignContent: Alignment.Center }) {
+          Text('\u00d7')
+            .fontSize(22)
+            .fontColor('#99FFFFFF')
+        }
+        .width(40)
+        .height(40)
+        .onClick(() => { this.closePanel() })
       }
       .width('100%')
       .padding({ left: 4, right: 4, bottom: 8 })
@@ -5772,6 +5917,7 @@ private loadPlanetPositions(): void {
       }
         .width('100%')
         .layoutWeight(1)
+        .edgeEffect(EdgeEffect.Spring)
         .scrollBar(BarState.Auto)
         .scrollBarWidth(4)
         .scrollBarColor('#33FFFFFF')
