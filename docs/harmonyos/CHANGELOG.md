@@ -1,3 +1,15 @@
+## [2026-07-27] TRAE - compactDock三点图标+透明背景+位置选择修复
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **compactDock三点图标**：用 `moreButton()` Builder 替换内联九宫格 `getIcon('grid')` 图标，与平板端 `verticalRail` 完全一致（三点菜单+旋转动画）。
+  2. **compactDock透明背景**：移除整条不透明 `backgroundColor('rgba(18,22,36,0.78)')` 背景栏，改用 `iconButton()` Builder，每个按钮有独立胶囊半透明背景，按钮间可见星图，实现与平板端一致的透明效果。
+  3. **setLocation修复**：将 `callNativeWhenReady('setLocationByName', ...)` 改为 `callNative('setLocationCoords', ...)` 直接调用。根因：`callNativeWhenReady` 把 `ok:false` 当作"核心未就绪"无限重试，但 `setLocationByName("Beijing")` 返回 `ok:false` 是永久错误（城市名不在Stellarium位置DB中），导致 fallback 链永不执行。改用 `setLocationCoords`（只需坐标，最可靠）作为首选，`setLocation` 作为 fallback。
+- **修改原因：** 用户反馈紧凑布局的"更多"按钮用了九宫格而非三点图标、底部菜单栏不透明、位置选择功能（图钉+城市预设）全部失效
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 模拟器截图确认：7个独立圆形半透明按钮、按钮间可见背景、最右侧为垂直三点图标。位置选择代码路径修复（callNative直接调用，不再卡在重试循环）
+- **备注：** callNativeWhenReady 仅适用于"核心启动中"的临时失败场景，不适用于命令本身返回 false 的永久错误。setLocationByName 的 fallback 逻辑已移除，因为 setLocationCoords 已经是更可靠的方案。
+
 ## [2026-07-27] TRAE - 渲染性能优化：PBO异步回读+VSync禁用+FBO降采样（8 FPS→61 FPS）
 
 - **修改文件：**
