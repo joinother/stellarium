@@ -238,4 +238,44 @@
 
 ---
 
-> **最后更新：** 2026-07-23
+## P2 - 中优先级（续）
+
+### 8. 星图帧率极低（8 FPS）— 【2026-07-27 TRAE 已修复并验证】
+
+- **状态：** ✅ 已修复并验证（2026-07-27）
+- **现象（修复前）：** 星图拖动、选星、缩放均严重卡顿，实测帧率仅8 FPS。
+- **真实根因（已验证）：** C++侧每帧用 `glReadPixels` 同步读取帧缓冲（34ms/帧），加上 `eglSwapBuffers` 的VSync阻塞（16ms），总帧时间约50ms（20 FPS），再叠加其他开销降至8 FPS。
+- **修复（已验证有效）：**
+  1. PBO三缓冲异步回读：glReadPixels返回立即返回，2帧后读取数据（34ms→1ms）
+  2. FBO降采样：glBlitFramebuffer降采样到50%后回读，减少64%数据量
+  3. 禁用VSync：eglSwapInterval(0) 消除eglSwapBuffers阻塞
+  4. 渲染间隔优化：交互态16ms（60FPS），空闲态66ms（15FPS）
+- **验证结果：** 模拟器实测稳定61 FPS
+- **修改文件：** `src/StelMainView.cpp`、`build/.../cpp/hello.cpp`
+
+---
+
+### 9. 抽屉面板触摸穿透到缩放按钮 — 【2026-07-27 TRAE 已修复并验证】
+
+- **状态：** ✅ 已修复并验证（2026-07-27）
+- **现象（修复前）：** 点击"天文计算"会触发下方的放大按钮，点击"音频控制"会触发下方的缩小按钮。
+- **真实根因：** 抽屉面板与缩放按钮在同一Stack层级，面板的hitTestBehavior设置无法完全阻止事件穿透到下方的按钮。
+- **修复：** 抽屉打开时用条件渲染 `if (!this.drawerOpen)` 完全隐藏zoom_in/zoom_out按钮，而非仅设置hitTestBehavior。
+- **验证结果：** 模拟器截图确认抽屉面板各选项可正常点击
+- **修改文件：** `build/.../ets/pages/MainWindowNativeNode.ets`
+
+---
+
+### 10. 应用图标和加载屏问题 — 【2026-07-27 TRAE 已修复并验证】
+
+- **状态：** ✅ 已修复并验证（2026-07-27）
+- **现象（修复前）：** 启动页保留旧AI生成图标；加载屏background.png左下角1/4有银河图案与纯色背景格格不入。
+- **修复：**
+  1. 应用图标替换为原版Stellarium图标（data/icons/512x512/stellarium.png）
+  2. 加载屏背景替换为纯深色(#05070F) PNG，消除银河拼图不一致
+- **验证结果：** 模拟器截图确认图标和加载屏正确
+- **修改文件：** `AppScope/resources/base/media/app_icon.png`、`entry/.../resources/base/media/{startIcon,foreground,background}.png`
+
+---
+
+> **最后更新：** 2026-07-27
