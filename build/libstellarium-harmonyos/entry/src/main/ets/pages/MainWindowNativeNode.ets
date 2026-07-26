@@ -247,6 +247,7 @@ struct WindowNativeNode {
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
   @State private locationPickerStatus: ResourceStr = $r('app.string.m_drag_map_hint')
+  @State private mapGestureActive: boolean = false
   @State private observerPlanet: string = 'Earth'
   @State private planetList: string[] = []
   @State private pointAlt: string = '45'
@@ -943,9 +944,9 @@ struct WindowNativeNode {
     } else if (panel === 'oculars') {
       this.loadOculars()
     } else if (panel === 'satellites') {
-      this.loadSatellites()
+      this.ensurePluginLoaded('Satellites', () => { this.loadSatellites() })
     } else if (panel === 'meteorshowers') {
-      this.loadMeteorShowers()
+      this.ensurePluginLoaded('MeteorShowers', () => { this.loadMeteorShowers() })
     } else if (panel === 'observing') {
       // observing list is state-driven, no async load needed
     } else if (panel === 'audio') {
@@ -1445,6 +1446,21 @@ struct WindowNativeNode {
     else if (name == 'iconicMode') { this.satIconicMode = v }
     else if (name == 'hideInvisible') { this.satHideInvisible = v }
     this.callNativeWhenReady('setSatellitesFlag', name + ':' + (v ? '1' : '0'), () => { this.loadSatellites() })
+  }
+
+  // 确保插件已加载，未加载时先 loadPlugin 再回调
+  private ensurePluginLoaded(pluginName: string, callback: () => void): void {
+    this.callNativeWhenReady('getPluginList', '', (r: StellariumBridgeResponse) => {
+      const items = r.items as string[] | undefined
+      if (items && items.indexOf(pluginName) >= 0) {
+        callback()
+      } else {
+        hilog.info(0x0000, 'StellariumArkUI', 'Auto-loading plugin: ' + pluginName)
+        this.callNativeWhenReady('loadPlugin', pluginName, () => {
+          callback()
+        })
+      }
+    })
   }
 
   // ===== 流星雨（MeteorShowers 插件桥）=====
@@ -2378,6 +2394,29 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Down || event.type === TouchType.Move) {
       this.updatePickerFromMap(event.touches[0].x, event.touches[0].y)
     }
+  }
+
+  // 阻止地图触摸事件冒泡到父Scroll，防止拖动地图时面板也跟着滚动
+  private stopMapTouchPropagation(event: TouchEvent): boolean {
+    if (event.touches.length >= 1) {
+      if (event.type === TouchType.Down || event.type === TouchType.Move) {
+        this.updatePickerFromMap(event.touches[0].x, event.touches[0].y)
+      }
+    }
+    return true
+  }
+
+  // 地图选点专用：手势回调，用 priorityGesture 绑定
+  private mapPanStart(): void {
+    this.mapGestureActive = true
+  }
+
+  private mapPanUpdate(x: number, y: number): void {
+    this.updatePickerFromMap(x, y)
+  }
+
+  private mapPanEnd(): void {
+    this.mapGestureActive = false
   }
 
   private async useDeviceLocation(): Promise<void> {
@@ -6315,6 +6354,17 @@ private loadPlanetPositions(): void {
             .borderRadius(14).height(36).padding({ left: 14, right: 14 })
             .onClick(() => { this.addCurrentBookmark() })
         }.width('100%')
+        if (this.selectedName.length > 0) {
+          Row() {
+            Text(I18n.t('bookmark_selected_object_hint') + ': ' + this.selectedName)
+              .fontSize(12).fontColor('#99FFFFFF').layoutWeight(1)
+            Button(I18n.t('btn_bookmark_object'))
+              .fontSize(12).fontColor('#E5FFFFFF')
+              .backgroundColor('rgba(91,147,191,0.35)')
+              .borderRadius(14).height(36).padding({ left: 14, right: 14 })
+              .onClick(() => { this.addCurrentBookmark() })
+          }.width('100%').margin({ top: 4 })
+        }
         if (this.bookmarkLoading) {
           Column() {
             Text($r('app.string.c_loading_bookmarks')).fontSize(13).fontColor('#99FFFFFF')
@@ -7165,6 +7215,7 @@ private loadPlanetPositions(): void {
           .width('100%')
           .height(this.locationMapHeight())
           .clip(true)
+          .hitTestBehavior(HitTestMode.Block)
           .backgroundColor('rgba(11, 24, 43, 0.46)')
           .border({ width: 1, color: 'rgba(159, 232, 255, 0.22)' })
           .borderRadius(14)
@@ -7174,8 +7225,21 @@ private loadPlanetPositions(): void {
             this.mapRenderHeight = Number(newArea.height)
           })
           .onTouch((event: TouchEvent) => {
-            this.handleLocationMapTouch(event)
+            this.stopMapTouchPropagation(event)
           })
+          .priorityGesture(
+            PanGesture()
+              .onActionStart((event: GestureEvent) => {
+                this.mapPanStart()
+              })
+              .onActionUpdate((event: GestureEvent) => {
+                this.mapPanUpdate(event.fingerList[0].localX, event.fingerList[0].localY)
+              })
+              .onActionEnd(() => {
+                this.mapPanEnd()
+              }),
+            GestureMask.IgnoreInternal
+          )
         Text(this.pickerCoordinateText())
           .fontSize(12)
           .fontColor('#99FFFFFF')

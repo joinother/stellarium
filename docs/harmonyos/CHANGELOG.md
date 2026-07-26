@@ -1,3 +1,28 @@
+## [2026-07-26] TRAE - 修复地图拖动UI滑动 + 插件自动加载 + 书签面板增强
+
+- **修改文件：**
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（地图手势修复、插件自动加载、书签面板增强）
+  - `build/.../ets/pages/I18n.ets`（新增 2 条多语言翻译键）
+
+- **修改内容：**
+  1. **修复地图选点时UI上下滑动问题**：在位置面板的世界地图 Stack 上添加 `priorityGesture(PanGesture)` + `GestureMask.IgnoreInternal`，阻止父 Scroll 容器拦截地图拖动手势。同时保留原有 `onTouch` + `hitTestBehavior(HitTestMode.Block)` 处理 Down/Move 事件的图钉定位。
+  2. **卫星/流星雨插件自动加载**：打开 satellites 或 meteorshowers 面板时，自动检查插件是否已加载，未加载时先调用 `loadPlugin` 再加载数据，避免用户手动先到 config 面板加载插件。
+  3. **书签面板增强**：当有选中天体时，书签面板顶部显示"当前选中: XXX"提示和"收藏天体"按钮，方便快速将选中天体加入书签。
+  4. **新增 I18n 键**：`btn_bookmark_object`（收藏天体）和 `bookmark_selected_object_hint`（当前选中），覆盖 8 种语言。
+
+- **修改原因：**
+  - 用户反馈地图选点时整个面板会上下滑动（触摸事件穿透到父 Scroll）
+  - 卫星/流星雨面板需要用户手动加载插件才能使用，体验不佳
+  - 书签面板缺少快速收藏当前选中天体的入口
+
+- **构建结果：** BUILD SUCCESSFUL（10.3s）
+- **验证结果：**
+  - 地图拖动后坐标更新正常（27.44°S/78.61°E → 75.21°N/100.82°W → 74.26°S/1.09°W）
+  - 面板元素 Y 坐标不变（时区 y=1169, 应用 y=1231），无上下滑动
+  - 应用启动正常，无崩溃
+
+---
+
 ## [2026-07-26] TRAE - 修复 string.json JSON 解析错误
 
 - **修改文件：**

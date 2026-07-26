@@ -7,7 +7,7 @@ import hilog from '@ohos.hilog'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
-import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS } from './I18n'
 
@@ -216,6 +216,10 @@ struct WindowNativeNode {
   @State private selectedPhase: string = ''
   @State private selectedElongation: string = ''
   @State private selectedRich: string = ''
+  @State private audioVolume: number = 0.7
+  @State private sessionExportText: string = ''
+  @State private sessionImportText: string = ''
+  @State private sessionImportMsg: string = ''
   // 程序化音乐：默认开（打开应用即播放），可静音并持久化
   @State private musicEnabled: boolean = false
   private lastMusicToggle: number = 0
@@ -243,6 +247,7 @@ struct WindowNativeNode {
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
   @State private locationPickerStatus: ResourceStr = $r('app.string.m_drag_map_hint')
+  @State private mapGestureActive: boolean = false
   @State private observerPlanet: string = 'Earth'
   @State private planetList: string[] = []
   @State private pointAlt: string = '45'
@@ -273,6 +278,12 @@ struct WindowNativeNode {
   @State private tonightShowerJd: number = 0
   @State private tonightPlanetRows: TonightPlanetRow[] = []
   @State private locationPickMode: string = 'map'
+  @State private locSearchQuery: string = ''
+  @State private locSearchResults: LocSearchItem[] = []
+  @State private locSearching: boolean = false
+  @State private observerTimeZone: string = ''
+  @State private savedLocations: SavedLocation[] = []
+  @State private locSearchDebounce: number = 0
   @State private hierContinent: string = ''
   @State private hierRegion: string = ''
   @State private hierCity: string = ''
@@ -594,9 +605,11 @@ struct WindowNativeNode {
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
+    { label: I18n.t('pinned_search'), icon: 'search', panel: 'search' },
     { label: $r('app.string.i0054'), icon: 'clock', panel: 'time' },
     { label: $r('app.string.i0014'), icon: 'location', panel: 'place' },
     { label: $r('app.string.i0100'), icon: 'layers', panel: 'layers' },
+    { label: I18n.t('pinned_obs_list'), icon: 'observe', panel: 'observing' },
     { label: $r('app.string.i0102'), icon: 'settings', panel: 'settings' }
   ]
   // 低频入口：收进抽屉（点侧栏底部九宫格按钮展开），图标全部专属不重复
@@ -610,7 +623,8 @@ struct WindowNativeNode {
     { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
-    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' },
+    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
   // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
   private readonly actions: ShellAction[] = [
@@ -628,7 +642,8 @@ struct WindowNativeNode {
     { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: $r('app.string.i0273'), panel: 'config' },
     { icon: 'orbit', label: $r('app.string.i0274'), panel: 'astro' },
-    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' }
+    { icon: 'help', label: $r('app.string.i0217'), panel: 'help' },
+    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
   @State private drawerOpen: boolean = false
 
@@ -647,6 +662,15 @@ struct WindowNativeNode {
       'Tokyo': '35.6762|139.6503|40', 'Seoul': '37.5665|126.9780|38',
       'Singapore': '1.3521|103.8198|15', 'NewYork': '40.7128|-74.0060|10',
       'London': '51.5074|-0.1278|25', 'Sydney': '-33.8688|151.2093|58',
+      'Paris': '48.8566|2.3522|35', 'Berlin': '52.5200|13.4050|34',
+      'Moscow': '55.7558|37.6173|156', 'Dubai': '25.2048|55.2708|16',
+      'Mumbai': '19.0760|72.8777|14', 'Cairo': '30.0444|31.2357|23',
+      'Rio': '-22.9068|-43.1729|5', 'LosAngeles': '34.0522|-118.2437|89',
+      'Toronto': '43.6532|-79.3832|76', 'Mexico': '19.4326|-99.1332|2240',
+      'Bangkok': '13.7563|100.5018|2', 'Istanbul': '41.0082|28.9784|39',
+      'Amsterdam': '52.3676|4.9041|2', 'Stockholm': '59.3293|18.0686|28',
+      'Reykjavik': '64.1466|-21.9426|61', 'CapeTown': '-33.9249|18.4241|25',
+      'BuenosAires': '-34.6037|-58.3816|25', 'Honolulu': '21.3099|-157.8581|4',
     }
     const v = m[id]
     if (v === undefined) { return undefined }
@@ -911,6 +935,8 @@ struct WindowNativeNode {
     } else if (panel === 'place') {
       this.refreshState()
       this.loadPlanetList()
+      this.loadObserverInfo()
+      this.loadSavedLocations()
     } else if (panel === 'catalogs') {
       if (this.catalogList.length === 0) this.loadStarCatalogs()
     } else if (panel === 'bookmarks') {
@@ -918,9 +944,13 @@ struct WindowNativeNode {
     } else if (panel === 'oculars') {
       this.loadOculars()
     } else if (panel === 'satellites') {
-      this.loadSatellites()
+      this.ensurePluginLoaded('Satellites', () => { this.loadSatellites() })
     } else if (panel === 'meteorshowers') {
-      this.loadMeteorShowers()
+      this.ensurePluginLoaded('MeteorShowers', () => { this.loadMeteorShowers() })
+    } else if (panel === 'observing') {
+      // observing list is state-driven, no async load needed
+    } else if (panel === 'audio') {
+      // audio panel is state-driven
     } else if (panel === 'help') {
       this.loadAboutInfo()
     } else if (panel === 'scripts') {
@@ -1416,6 +1446,21 @@ struct WindowNativeNode {
     else if (name == 'iconicMode') { this.satIconicMode = v }
     else if (name == 'hideInvisible') { this.satHideInvisible = v }
     this.callNativeWhenReady('setSatellitesFlag', name + ':' + (v ? '1' : '0'), () => { this.loadSatellites() })
+  }
+
+  // 确保插件已加载，未加载时先 loadPlugin 再回调
+  private ensurePluginLoaded(pluginName: string, callback: () => void): void {
+    this.callNativeWhenReady('getPluginList', '', (r: StellariumBridgeResponse) => {
+      const items = r.items as string[] | undefined
+      if (items && items.indexOf(pluginName) >= 0) {
+        callback()
+      } else {
+        hilog.info(0x0000, 'StellariumArkUI', 'Auto-loading plugin: ' + pluginName)
+        this.callNativeWhenReady('loadPlugin', pluginName, () => {
+          callback()
+        })
+      }
+    })
   }
 
   // ===== 流星雨（MeteorShowers 插件桥）=====
@@ -2351,6 +2396,29 @@ private loadPlanetPositions(): void {
     }
   }
 
+  // 阻止地图触摸事件冒泡到父Scroll，防止拖动地图时面板也跟着滚动
+  private stopMapTouchPropagation(event: TouchEvent): boolean {
+    if (event.touches.length >= 1) {
+      if (event.type === TouchType.Down || event.type === TouchType.Move) {
+        this.updatePickerFromMap(event.touches[0].x, event.touches[0].y)
+      }
+    }
+    return true
+  }
+
+  // 地图选点专用：手势回调，用 priorityGesture 绑定
+  private mapPanStart(): void {
+    this.mapGestureActive = true
+  }
+
+  private mapPanUpdate(x: number, y: number): void {
+    this.updatePickerFromMap(x, y)
+  }
+
+  private mapPanEnd(): void {
+    this.mapGestureActive = false
+  }
+
   private async useDeviceLocation(): Promise<void> {
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.locationPickerStatus = $r('app.string.m_req_location_perm')
@@ -2392,6 +2460,8 @@ private loadPlanetPositions(): void {
 
   private applyPickerLocation(): void {
     this.setLocation(this.locationPickerName, this.locationPickerLatitude, this.locationPickerLongitude, this.locationPickerAltitude)
+    // 延迟刷新时区信息（等C++侧location切换完成）
+    setTimeout(() => { this.loadObserverInfo() }, 500)
   }
 
   private distance(x0: number, y0: number, x1: number, y1: number): number {
@@ -2432,6 +2502,114 @@ private loadPlanetPositions(): void {
         this.refreshState()
       }
     })
+  }
+
+  // ===== 位置搜索（调用C++ getLocationList命令）=====
+  private searchLocations(query: string): void {
+    const q = query.trim()
+    if (q.length < 1) {
+      this.locSearchResults = []
+      this.locSearching = false
+      return
+    }
+    this.locSearching = true
+    this.callInteractive('getLocationList', q, (r: StellariumBridgeResponse) => {
+      this.locSearching = false
+      if (r.ok === true && r.locations) {
+        const rawList = r.locations as Object[]
+        this.locSearchResults = rawList.map((item: Object) => {
+          const loc = item as Record<string, string | number>
+          return {
+            name: (loc['name'] as string) ?? '',
+            lat: (loc['lat'] as number) ?? 0,
+            lon: (loc['lon'] as number) ?? 0,
+            alt: (loc['alt'] as number) ?? 0,
+            planet: (loc['planet'] as string) ?? 'Earth',
+          } as LocSearchItem
+        })
+      } else {
+        this.locSearchResults = []
+      }
+    })
+  }
+
+  private selectSearchLocation(item: LocSearchItem): void {
+    this.setLocation(item.name, item.lat, item.lon, item.alt)
+    this.locSearchQuery = ''
+    this.locSearchResults = []
+    this.locationPickMode = 'map'
+  }
+
+  // ===== 时区获取 =====
+  private loadObserverInfo(): void {
+    this.callInteractive('getObserverInfo', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.observerTimeZone = r.timeZone ?? ''
+        if (r.planetName) {
+          this.observerPlanet = r.planetName
+        }
+      }
+    })
+  }
+
+  // ===== 已保存位置管理（持久化到 preferences）=====
+  private loadSavedLocations(): void {
+    try {
+      const prefs = AppStorage.get<Record<string, Object>>('stellariumPrefs')
+      if (prefs && prefs['savedLocations']) {
+        const raw = prefs['savedLocations'] as Object[]
+        this.savedLocations = raw.map((item: Object) => {
+          const loc = item as Record<string, string | number>
+          return {
+            name: (loc['name'] as string) ?? '',
+            lat: (loc['lat'] as number) ?? 0,
+            lon: (loc['lon'] as number) ?? 0,
+            alt: (loc['alt'] as number) ?? 0,
+            planet: (loc['planet'] as string) ?? 'Earth',
+          } as SavedLocation
+        })
+      }
+    } catch (e) {
+      hilog.info(0x0000, 'StellariumArkUI', 'loadSavedLocations error: %{public}s', (e as Error).message ?? '')
+    }
+  }
+
+  private saveCurrentLocation(): void {
+    const name = this.locationPickerName
+    // 检查是否已存在
+    const exists = this.savedLocations.some((s: SavedLocation) => s.name === name)
+    if (exists) {
+      this.flashHint(I18n.t('loc_already_saved'))
+      return
+    }
+    const item: SavedLocation = {
+      name: name,
+      lat: this.locationPickerLatitude,
+      lon: this.locationPickerLongitude,
+      alt: this.locationPickerAltitude,
+      planet: this.observerPlanet,
+    }
+    this.savedLocations = [...this.savedLocations, item]
+    this.persistSavedLocations()
+    this.flashHint(I18n.t('loc_saved_success'))
+  }
+
+  private deleteSavedLocation(name: string): void {
+    this.savedLocations = this.savedLocations.filter((s: SavedLocation) => s.name !== name)
+    this.persistSavedLocations()
+  }
+
+  private persistSavedLocations(): void {
+    try {
+      let prefs = AppStorage.get<Record<string, Object>>('stellariumPrefs')
+      if (!prefs) {
+        prefs = {} as Record<string, Object>
+      }
+      prefs['savedLocations'] = this.savedLocations
+      AppStorage.setOrCreate<Record<string, Object>>('stellariumPrefs', prefs)
+    } catch (e) {
+      hilog.info(0x0000, 'StellariumArkUI', 'persistSavedLocations error: %{public}s', (e as Error).message ?? '')
+    }
   }
 
   private loadPlanetList(): void {
@@ -4453,7 +4631,7 @@ private loadPlanetPositions(): void {
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
       'unlock': $r('app.media.ic_unlock'),
-      'forward': $r('app.media.ic_forward'),
+      'observe': $r('app.media.ic_list'), 'audio': $r('app.media.ic_audio'), 'forward': $r('app.media.ic_forward'),
     }
     return map[icon] || $r('app.media.ic_search')
   }
@@ -6176,6 +6354,17 @@ private loadPlanetPositions(): void {
             .borderRadius(14).height(36).padding({ left: 14, right: 14 })
             .onClick(() => { this.addCurrentBookmark() })
         }.width('100%')
+        if (this.selectedName.length > 0) {
+          Row() {
+            Text(I18n.t('bookmark_selected_object_hint') + ': ' + this.selectedName)
+              .fontSize(12).fontColor('#99FFFFFF').layoutWeight(1)
+            Button(I18n.t('btn_bookmark_object'))
+              .fontSize(12).fontColor('#E5FFFFFF')
+              .backgroundColor('rgba(91,147,191,0.35)')
+              .borderRadius(14).height(36).padding({ left: 14, right: 14 })
+              .onClick(() => { this.addCurrentBookmark() })
+          }.width('100%').margin({ top: 4 })
+        }
         if (this.bookmarkLoading) {
           Column() {
             Text($r('app.string.c_loading_bookmarks')).fontSize(13).fontColor('#99FFFFFF')
@@ -6524,6 +6713,136 @@ private loadPlanetPositions(): void {
           if (this.videoDir.length > 0) {
             Text('存放目录：' + this.videoDir)
               .fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 6, right: 6 })
+          }
+        }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'observing') {
+      // 观测列表独立面板
+      Scroll() {
+        Column({ space: 8 }) {
+          Row({ space: 8 }) {
+            Text(I18n.t('panel_observing_list')).fontSize(15).fontColor(this.nmText()).layoutWeight(1)
+            if (this.observingList.length > 0) {
+              Button(I18n.t('clear_all')).fontSize(11).fontColor('#FF6B6B').backgroundColor('rgba(255,107,107,0.12)')
+                .borderRadius(16).height(26).padding({ left: 10, right: 10 })
+                .onClick(() => {
+                  this.observingList = []
+                  AppStorage.setOrCreate('observingList', JSON.stringify(this.observingList))
+                  this.flashHint($r('app.string.i0302'))
+                })
+            }
+          }.width('100%').padding({ left: 4, right: 4 })
+          if (this.observingList.length === 0) {
+            Column() {
+              Text(I18n.t('obs_list_empty')).fontSize(13).fontColor('#99FFFFFF').margin({ top: 12 })
+              Text($r('app.string.i0110')).fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
+            }.width('100%').height(140).justifyContent(FlexAlign.Center)
+          } else {
+            ForEach(this.observingList, (name: string) => {
+              Row({ space: 8 }) {
+                Column({ space: 2 }) {
+                  Text(this.zhNameOf(name)).fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Button($r('app.string.i0134')).fontSize(11).fontColor('#5B93BF').backgroundColor('rgba(91,147,191,0.18)')
+                  .borderRadius(8).height(28).padding({ left: 10, right: 10 })
+                  .onClick(() => { this.searchObject(name) })
+                Text('x').fontSize(13).fontColor('rgba(255,255,255,0.4)')
+                  .width(28).height(28).textAlign(TextAlign.Center)
+                  .onClick(() => {
+                    const idx = this.observingList.indexOf(name)
+                    if (idx >= 0) {
+                      this.observingList.splice(idx, 1)
+                      AppStorage.setOrCreate('observingList', JSON.stringify(this.observingList))
+                    }
+                  })
+              }
+              .width('100%')
+              .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+              .backgroundColor('rgba(255,255,255,0.04)')
+              .borderRadius(12)
+              .border({ width: 1, color: this.nmBorder() })
+            }, (name: string) => name)
+          }
+        }.width('100%').padding({ left: 4, right: 4 })
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    } else if (this.activePanel === 'audio') {
+      // 音频控制面板
+      Scroll() {
+        Column({ space: 10 }) {
+          Text(I18n.t('panel_audio_ctrl')).fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 4 })
+          Row() {
+            Text(I18n.t('audio_toggle')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.musicEnabled })
+              .onChange((isOn: boolean) => {
+                this.musicEnabled = isOn
+                const engine = AudioEngine.getInstance()
+                if (isOn) { engine.start().then(() => { engine.setMuted(false) }) } else { engine.setMuted(true) }
+                this.persistMusicEnabled()
+                this.flashHint(isOn ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
+              })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text(I18n.t('audio_volume')).fontSize(13).fontColor('#E5FFFFFF').width(72)
+            Text(Math.round(this.audioVolume * 100) + '%').fontSize(13).fontColor(this.nmText()).margin({ right: 8 })
+            Slider({ value: this.audioVolume, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet })
+              .width('40%')
+              .blockColor(this.nmAccent())
+              .trackColor(this.nmBg())
+              .selectedColor(this.nmAccent())
+              .showSteps(false)
+              .onChange((val: number) => {
+                this.audioVolume = val
+                AudioEngine.getInstance().setVolume(val)
+              })
+          }.height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row() {
+            Text(I18n.t('angle_measure')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Button(I18n.t('angle_measure'))
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+              .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+              .onClick(() => { this.triggerAction('actionShow_Angle_Measure') })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Text(I18n.t('angle_measure_hint')).fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 10, right: 10 })
+          Row() {
+            Text($r('app.string.i0121')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+            Button($r('app.string.i0251'))
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+              .borderRadius(14).height(32).padding({ left: 14, right: 14 })
+              .onClick(() => {
+                this.triggerAction('actionSave_Screenshot_Global')
+                this.flashHint(I18n.t('screenshot_saved'))
+              })
+          }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 8, bottom: 4 })
+          Text(I18n.t('session_export')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 4 })
+          Button(I18n.t('session_export'))
+            .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+            .borderRadius(14).height(32).width('100%').padding({ left: 14, right: 14 })
+            .onClick(() => { this.sessionExport() })
+          Text(I18n.t('session_hint')).fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+          if (this.sessionExportText.length > 0) {
+            Scroll() {
+              Text(this.sessionExportText).fontSize(9).fontColor('#99FFFFFF').width('100%').fontFamily('monospace')
+            }.width('100%').height(100).backgroundColor(this.nmBg()).borderRadius(8).padding(8)
+              .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+          }
+          Text(I18n.t('session_import')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 8, bottom: 4 })
+          TextArea({ placeholder: 'Paste session JSON here', text: this.sessionImportText })
+            .fontSize(10).fontColor(this.nmText())
+            .placeholderColor('#8CFFFFFF')
+            .backgroundColor(this.nmBg()).borderRadius(8)
+            .width('100%').height(72)
+            .onChange((v: string) => { this.sessionImportText = v })
+          Button(I18n.t('session_import'))
+            .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+            .borderRadius(14).height(32).width('100%').padding({ left: 14, right: 14 })
+            .onClick(() => { this.sessionApply() })
+          if (this.sessionImportMsg.length > 0) {
+            Text(this.sessionImportMsg).fontSize(10).fontColor('#FFAA00').width('100%')
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -6896,6 +7215,7 @@ private loadPlanetPositions(): void {
           .width('100%')
           .height(this.locationMapHeight())
           .clip(true)
+          .hitTestBehavior(HitTestMode.Block)
           .backgroundColor('rgba(11, 24, 43, 0.46)')
           .border({ width: 1, color: 'rgba(159, 232, 255, 0.22)' })
           .borderRadius(14)
@@ -6905,8 +7225,21 @@ private loadPlanetPositions(): void {
             this.mapRenderHeight = Number(newArea.height)
           })
           .onTouch((event: TouchEvent) => {
-            this.handleLocationMapTouch(event)
+            this.stopMapTouchPropagation(event)
           })
+          .priorityGesture(
+            PanGesture()
+              .onActionStart((event: GestureEvent) => {
+                this.mapPanStart()
+              })
+              .onActionUpdate((event: GestureEvent) => {
+                this.mapPanUpdate(event.fingerList[0].localX, event.fingerList[0].localY)
+              })
+              .onActionEnd(() => {
+                this.mapPanEnd()
+              }),
+            GestureMask.IgnoreInternal
+          )
         Text(this.pickerCoordinateText())
           .fontSize(12)
           .fontColor('#99FFFFFF')
@@ -6946,6 +7279,15 @@ private loadPlanetPositions(): void {
             this.locationPickerAltitude = Math.round(altitude)
           }
         })
+      // 时区显示
+      if (this.observerTimeZone.length > 0) {
+        Row() {
+          Text(I18n.t('loc_timezone')).fontSize(11).fontColor('#8EA0BD')
+          Text(this.observerTimeZone).fontSize(11).fontColor('#7FB3DC').margin({ left: 8 })
+        }
+        .width('100%')
+        .margin({ top: 6 })
+      }
       Row() {
         Row() {
             Image($r('app.media.ic_globe')).width(14).height(14).fillColor('#FFFFFFFF')
@@ -7159,122 +7501,130 @@ private loadPlanetPositions(): void {
   @Builder
   cityChipsRow() {
     Column({ space: 4 }) {
+      // 城市搜索框
+      Row() {
+        TextInput({ text: this.locSearchQuery, placeholder: I18n.t('loc_search_placeholder') })
+          .height(34)
+          .fontSize(12)
+          .fontColor('#E5FFFFFF')
+          .placeholderColor('#8EA0BD')
+          .backgroundColor('rgba(255, 255, 255, 0.06)')
+          .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
+          .borderRadius(12)
+          .layoutWeight(1)
+          .onChange((value: string) => {
+            this.locSearchQuery = value
+            if (value.trim().length >= 1) {
+              clearTimeout(this.locSearchDebounce)
+              this.locSearchDebounce = setTimeout(() => {
+                this.searchLocations(value)
+              }, 300)
+            } else {
+              this.locSearchResults = []
+            }
+          })
+        if (this.locSearching) {
+          LoadingProgress()
+            .width(18).height(18)
+            .color('#7FB3DC')
+            .margin({ left: 8 })
+        }
+      }
+      .width('100%')
+
+      // 搜索结果列表
+      if (this.locSearchResults.length > 0) {
+        Text(I18n.t('loc_search_results')).fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 6 })
+        Column({ space: 4 }) {
+          ForEach(this.locSearchResults, (item: LocSearchItem) => {
+            Row() {
+              Column() {
+                Text(item.name).fontSize(12).fontColor('#E5FFFFFF').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.formatDegrees(item.lat, 'N', 'S') + ' / ' + this.formatDegrees(item.lon, 'E', 'W'))
+                  .fontSize(10).fontColor('#8EA0BD')
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+              Image($r('app.media.ic_location')).width(14).height(14).fillColor('#7FB3DC')
+            }
+            .width('100%')
+            .height(44)
+            .padding({ left: 10, right: 10 })
+            .backgroundColor('rgba(107, 163, 214, 0.10)')
+            .border({ width: 1, color: 'rgba(107, 163, 214, 0.15)' })
+            .borderRadius(10)
+            .onClick(() => { this.selectSearchLocation(item) })
+          }, (item: LocSearchItem) => item.name + item.lat.toString())
+        }
+        .width('100%')
+      } else if (this.locSearchQuery.trim().length > 0 && !this.locSearching) {
+        Text(I18n.t('loc_no_results')).fontSize(11).fontColor('#8EA0BD').width('100%').padding({ left: 2, top: 6 })
+      }
+
+      // 已保存位置
+      Row() {
+        Text(I18n.t('loc_saved_locations')).fontSize(11).fontColor('#99FFFFFF').layoutWeight(1)
+        Button(I18n.t('loc_save_current'))
+          .fontSize(10).fontColor('#7FB3DC')
+          .height(26).padding({ left: 8, right: 8 })
+          .backgroundColor('rgba(107, 163, 214, 0.15)')
+          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+          .borderRadius(13)
+          .onClick(() => { this.saveCurrentLocation() })
+      }
+      .width('100%')
+      .margin({ top: 6 })
+
+      if (this.savedLocations.length === 0) {
+        Text(I18n.t('loc_no_saved')).fontSize(10).fontColor('#8EA0BD').width('100%').padding({ left: 2 })
+      } else {
+        Scroll() {
+          Row({ space: 8 }) {
+            ForEach(this.savedLocations, (s: SavedLocation) => {
+              Row() {
+                Button(s.name)
+                  .fontSize(10).fontColor('#7FB3DC')
+                  .height(28).padding({ left: 8, right: 8 })
+                  .backgroundColor('rgba(107, 163, 214, 0.20)')
+                  .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+                  .borderRadius(14)
+                  .onClick(() => { this.setLocation(s.name, s.lat, s.lon, s.alt) })
+                Text('x')
+                  .fontSize(10).fontColor('#FF9999')
+                  .margin({ left: 2 })
+                  .onClick(() => { this.deleteSavedLocation(s.name) })
+              }
+            }, (s: SavedLocation) => s.name)
+          }
+          .padding({ left: 2, right: 2 })
+        }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .width('100%')
+      }
+
       // 中国城市
-      Text('中国城市').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 })
+      Text('中国城市').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 6 })
       Scroll() {
         Row({ space: 8 }) {
-          Button('北京')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Beijing') })
-          Button('上海')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Shanghai') })
-          Button('广州')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Guangzhou') })
-          Button('深圳')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Shenzhen') })
-          Button('成都')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Chengdu') })
-          Button('杭州')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Hangzhou') })
-          Button('武汉')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Wuhan') })
-          Button('西安')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Xian') })
-          Button('南京')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Nanjing') })
-          Button('重庆')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Chongqing') })
-          Button('哈尔滨')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Harbin') })
-          Button('拉萨')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Lhasa') })
-          Button('乌鲁木齐')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Urumqi') })
-          Button('香港')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_HongKong') })
+          ForEach([
+            { label: '北京', id: 'city_Beijing' }, { label: '上海', id: 'city_Shanghai' },
+            { label: '广州', id: 'city_Guangzhou' }, { label: '深圳', id: 'city_Shenzhen' },
+            { label: '成都', id: 'city_Chengdu' }, { label: '杭州', id: 'city_Hangzhou' },
+            { label: '武汉', id: 'city_Wuhan' }, { label: '西安', id: 'city_Xian' },
+            { label: '南京', id: 'city_Nanjing' }, { label: '重庆', id: 'city_Chongqing' },
+            { label: '哈尔滨', id: 'city_Harbin' }, { label: '拉萨', id: 'city_Lhasa' },
+            { label: '乌鲁木齐', id: 'city_Urumqi' }, { label: '香港', id: 'city_HongKong' },
+          ], (c: Record<string, string>) => {
+            Button(c.label)
+              .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
+              .height(30).padding({ left: 10, right: 10 })
+              .backgroundColor('rgba(107, 163, 214, 0.20)')
+              .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+              .borderRadius(16)
+              .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
+              .onClick(() => { this.handleChip(c.id) })
+          }, (c: Record<string, string>) => c.id)
         }
         .padding({ left: 2, right: 2 })
       }
@@ -7285,54 +7635,29 @@ private loadPlanetPositions(): void {
       Text('世界城市').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
       Scroll() {
         Row({ space: 8 }) {
-          Button('东京')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Tokyo') })
-          Button('首尔')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Seoul') })
-          Button('新加坡')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Singapore') })
-          Button('纽约')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_NewYork') })
-          Button('伦敦')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_London') })
-          Button('悉尼')
-            .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
-            .height(30).padding({ left: 10, right: 10 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
-            .borderRadius(16)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
-            .onClick(() => { this.handleChip('city_Sydney') })
+          ForEach([
+            { label: '东京', id: 'city_Tokyo' }, { label: '首尔', id: 'city_Seoul' },
+            { label: '新加坡', id: 'city_Singapore' }, { label: '纽约', id: 'city_NewYork' },
+            { label: '伦敦', id: 'city_London' }, { label: '悉尼', id: 'city_Sydney' },
+            { label: '巴黎', id: 'city_Paris' }, { label: '柏林', id: 'city_Berlin' },
+            { label: '莫斯科', id: 'city_Moscow' }, { label: '迪拜', id: 'city_Dubai' },
+            { label: '孟买', id: 'city_Mumbai' }, { label: '开罗', id: 'city_Cairo' },
+            { label: '里约', id: 'city_Rio' }, { label: '洛杉矶', id: 'city_LosAngeles' },
+            { label: '多伦多', id: 'city_Toronto' }, { label: '墨西哥城', id: 'city_Mexico' },
+            { label: '曼谷', id: 'city_Bangkok' }, { label: '伊斯坦布尔', id: 'city_Istanbul' },
+            { label: '阿姆斯特丹', id: 'city_Amsterdam' }, { label: '斯德哥尔摩', id: 'city_Stockholm' },
+            { label: '雷克雅未克', id: 'city_Reykjavik' }, { label: '开普敦', id: 'city_CapeTown' },
+            { label: '布宜诺斯艾利斯', id: 'city_BuenosAires' }, { label: '檀香山', id: 'city_Honolulu' },
+          ], (c: Record<string, string>) => {
+            Button(c.label)
+              .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
+              .height(30).padding({ left: 10, right: 10 })
+              .backgroundColor('rgba(107, 163, 214, 0.20)')
+              .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+              .borderRadius(16)
+              .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
+              .onClick(() => { this.handleChip(c.id) })
+          }, (c: Record<string, string>) => c.id)
         }
         .padding({ left: 2, right: 2 })
       }
@@ -7343,7 +7668,6 @@ private loadPlanetPositions(): void {
     .width('100%')
     .margin({ top: 12 })
   }
-
   private handleChip(id: string): void {
     if (id === 'refresh') {
       this.refreshSelectedObject()
