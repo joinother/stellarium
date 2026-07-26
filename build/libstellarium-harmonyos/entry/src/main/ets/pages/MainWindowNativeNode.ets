@@ -208,6 +208,8 @@ struct WindowNativeNode {
   @State private infoWinVisible: boolean = false
   @State private infoWinExpanded: boolean = false
   @State private bottomCardIndex: number = 0
+  @State private cardOffsetX: number = 0
+  @State private cardOffsetY: number = 0
   @State private centerSearchText: string = ''
   @State private selectedSize: string = ''
   @State private selectedRise: string = ''
@@ -2302,7 +2304,18 @@ private loadPlanetPositions(): void {
         : ''
       this.selectedConstellation = result.constellation && result.constellation.length > 0 ? result.constellation : ''
       this.selectedDistance = result.distance && result.distance.length > 0 ? result.distance : ''
-      this.selectedSize = result.size && result.size.length > 0 ? result.size : ''
+      // 过滤接近0的角直径（小行星等天体角直径极小，显示0无意义）
+      const rawSize = result.size && result.size.length > 0 ? result.size : ''
+      if (rawSize.length > 0) {
+        const sizeMatch = rawSize.match(/([\d.]+)/)
+        if (sizeMatch && parseFloat(sizeMatch[1]) === 0) {
+          this.selectedSize = ''
+        } else {
+          this.selectedSize = rawSize
+        }
+      } else {
+        this.selectedSize = ''
+      }
       this.selectedRise = result.rise && result.rise.length > 0 ? result.rise : ''
       this.selectedSet = result.set && result.set.length > 0 ? result.set : ''
       this.selectedTransit = result.transit && result.transit.length > 0 ? result.transit : ''
@@ -2311,7 +2324,11 @@ private loadPlanetPositions(): void {
       this.selectedRich = result.info && result.info.length > 0 ? result.info : ''
       // 选中成功后弹出独立浮动详情窗口（新目标默认收起，不打扰当前菜单；同一目标刷新时保留展开态）
       this.infoWinVisible = true
-      if (isNewSelection) { this.infoWinExpanded = false }
+      if (isNewSelection) {
+        this.infoWinExpanded = false
+        this.cardOffsetX = 0
+        this.cardOffsetY = 0
+      }
       // 尝试从本地别名表补充中文简介
       const dispName = this.selectedName
       const alias = ALIAS_LIST.find(a => a.en === dispName || a.zh === dispName)
@@ -3548,18 +3565,7 @@ private loadPlanetPositions(): void {
     try {
     if (!this.pinnedActions || this.pinnedActions.length === 0) { return false }
     if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) { return false }
-    // 顶部搜索栏：TextInput 自行处理触摸，仅阻止穿透到星图
-    if (this.isExpandedLayout) {
-      const sbX = this.EDGE_MARGIN + 64
-      const sbY = this.EDGE_MARGIN
-      if (x >= sbX && x <= sbX + 300 && y >= sbY && y <= sbY + 44) {
-        return true  // 不打开面板，让 TextInput 接收触摸
-      }
-    } else {
-      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
-        return true  // 搜索框是TextInput，阻止穿透到星图
-      }
-    }
+    // 顶部搜索栏已移除，搜索功能通过左侧图标进入分类面板
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
     if (this.handleInfoWinTap(x, y)) { return true }
     // zoom +/- buttons (expanded layout, bottom-left)
@@ -4132,45 +4138,8 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
-      // 顶部搜索栏（中等宽度，居中显示；抽屉打开时右移避免遮挡）
-      Stack() { this.centerSearchBar() }
-        .position({ x: this.drawerOpen ? this.EDGE_MARGIN + 250 : this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN })
-        .width(this.drawerOpen ? 260 : 300)
-        .zIndex(48)
-        .hitTestBehavior(HitTestMode.Block)
-      // 搜索建议下拉列表（搜索框正下方）
-      if (this.searchText.length > 0 && this.searchSuggestions.length > 0) {
-        Scroll() {
-          Column({ space: 4 }) {
-            ForEach(this.searchSuggestions, (s: SearchSug) => {
-              Row({ space: 8 }) {
-                Text(s.zh)
-                  .fontSize(13).fontColor('#E5FFFFFF')
-                  .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                Text(s.en)
-                  .fontSize(11).fontColor('#99FFFFFF')
-              }
-              .width('100%')
-              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-              .backgroundColor('rgba(12, 16, 28, 0.85)')
-              .backdropBlur(25)
-              .borderRadius(10)
-              .onClick(() => {
-                this.searchObject(s.en)
-                this.searchSuggestions = []
-              })
-            }, (s: SearchSug) => s.en)
-          }
-          .padding({ top: 4, bottom: 4 })
-        }
-        .width(300).height(200)
-        .position({ x: this.EDGE_MARGIN + 64, y: this.EDGE_MARGIN + 48 })
-        .zIndex(49)
-        .hitTestBehavior(HitTestMode.Block)
-        .scrollBar(BarState.Auto)
-        .scrollBarWidth(3)
-      }
-      // 左下角滑动详情卡片（选中天体时显示）
+      // 搜索功能通过左侧搜索图标 → 天体分类面板
+      // 左下角滑动详情卡片（选中天体时显示，Swiper 自带左右滑动切换）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
           .position({ x: this.EDGE_MARGIN + 200, y: this.skyHeight - 230 })
@@ -4230,12 +4199,7 @@ private loadPlanetPositions(): void {
 
       this.bottomDock()
 
-      // 顶部搜索栏（紧凑布局，中等宽度）
-      Stack() { this.centerSearchBar() }
-        .position({ x: 16, y: 50 })
-        .width(280)
-        .zIndex(48)
-        .hitTestBehavior(HitTestMode.Block)
+      // 紧凑布局：搜索通过左侧/底部搜索图标进入分类面板
       // 选中天体滑动详情卡片（紧凑布局：底部 dock 上方）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
@@ -4415,25 +4379,49 @@ private loadPlanetPositions(): void {
         }
         .width('100%')
 
-        // ── 第三栏：补充信息 + 操作 ──
-        Column({ space: 0 }) {
-          if (this.selectedPhase.length > 0) {
-            Row() {
-              Text(I18n.t('i0291')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedPhase).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
+        // ── 第三栏：可视化信息卡片 + 操作 ──
+        Column({ space: 8 }) {
+          // 月相/距角/亮度等关键数据以卡片形式呈现
+          if (this.selectedPhase.length > 0 || this.selectedElongation.length > 0) {
+            Row({ space: 8 }) {
+              if (this.selectedPhase.length > 0) {
+                Column() {
+                  Text(I18n.t('i0291')).fontSize(9).fontColor('#8099BBCC')
+                  Text(this.selectedPhase).fontSize(18).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Center)
+                .padding({ top: 10, bottom: 10, left: 12, right: 12 })
+                .backgroundColor('rgba(91,147,191,0.08)')
+                .borderRadius(12)
+                .layoutWeight(1)
+              }
+              if (this.selectedElongation.length > 0) {
+                Column() {
+                  Text(I18n.t('i0255')).fontSize(9).fontColor('#8099BBCC')
+                  Text(this.selectedElongation).fontSize(18).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+                }
+                .alignItems(HorizontalAlign.Center)
+                .padding({ top: 10, bottom: 10, left: 12, right: 12 })
+                .backgroundColor('rgba(91,147,191,0.08)')
+                .borderRadius(12)
+                .layoutWeight(1)
+              }
+            }
+            .width('100%')
+            .padding({ left: 14, right: 14, top: 10 })
           }
-          if (this.selectedElongation.length > 0) {
-            Row() {
-              Text(I18n.t('i0255')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedElongation).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
+          // 描述文本（带引号样式）
           if (this.selectedRich.length > 0) {
-            Text(this.richZh(this.selectedRich))
-              .fontSize(11).fontColor('#CCFFFFFF').lineHeight(16)
-              .width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-              .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Column() {
+              Text(this.richZh(this.selectedRich))
+                .fontSize(11).fontColor('#CCFFFFFF').lineHeight(18)
+                .maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .width('100%')
+            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+            .backgroundColor('rgba(91,147,191,0.06)')
+            .borderRadius(10)
+            .margin({ left: 14, right: 14 })
           }
           // 操作按钮
           Row({ space: 8 }) {
@@ -4446,7 +4434,7 @@ private loadPlanetPositions(): void {
               .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
               .onClick(() => { this.toggleTracking() })
           }
-          .width('100%').padding({ left: 14, right: 14, top: 8, bottom: 10 })
+          .width('100%').padding({ left: 14, right: 14, top: 4, bottom: 10 })
         }
         .width('100%')
       }
@@ -5264,10 +5252,12 @@ private loadPlanetPositions(): void {
           .fontSize(18)
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
-        Text(this.panelSubtitle())
-          .fontSize(11)
-          .fontColor('#99FFFFFF')
-          .margin({ top: 3 })
+        if (this.panelSubtitle().length > 0) {
+          Text(this.panelSubtitle())
+            .fontSize(11)
+            .fontColor('#99FFFFFF')
+            .margin({ top: 3 })
+        }
       }
       Blank()
       Row() {
@@ -5886,7 +5876,7 @@ private loadPlanetPositions(): void {
             ForEach(['Sun', 'Moon', 'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'], (p: string) => {
               Text(this.planetZh(p)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .backgroundColor(this.nmBg()).borderRadius(12)
-                .onClick(() => { this.searchText = p; this.searchObject(p) })
+                .onClick(() => { this.searchObject(p) })
             })
           }.padding({ left: 2 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
@@ -5899,7 +5889,7 @@ private loadPlanetPositions(): void {
             ForEach(['Sirius', 'Canopus', 'Arcturus', 'Vega', 'Rigel', 'Betelgeuse', 'Polaris'], (s: string) => {
               Text(this.zhNameOf(s)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .backgroundColor(this.nmBg()).borderRadius(12)
-                .onClick(() => { this.searchText = s; this.searchObject(s) })
+                .onClick(() => { this.searchObject(s) })
             })
           }.padding({ left: 2 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
@@ -5967,7 +5957,7 @@ private loadPlanetPositions(): void {
             ] as string[], (c: string) => {
               Text(this.zhNameOf(c)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .backgroundColor(this.nmBg()).borderRadius(12)
-                .onClick(() => { this.searchText = c; this.searchObject(c) })
+                .onClick(() => { this.searchObject(c) })
             }, (c: string) => c)
           }.padding({ left: 2 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
@@ -7399,7 +7389,7 @@ private loadPlanetPositions(): void {
         .margin({ top: 10 })
 
       if (this.locationPickMode === 'map') {
-        TextInput({ text: this.locationPickerName, placeholder: I18n.t('i0066') })
+        TextInput({ text: this.locationPickerName === I18n.t('custom_location') ? '' : this.locationPickerName, placeholder: I18n.t('i0066') })
           .height(36)
           .fontSize(13)
           .fontColor('#E5FFFFFF')
@@ -7479,21 +7469,26 @@ private loadPlanetPositions(): void {
           .margin({ top: 10 })
       }
 
-      TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: I18n.t('i0067') })
-        .height(34)
-        .fontSize(12)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.06)')
-        .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
-        .borderRadius(12)
-        .margin({ top: 8 })
-        .onChange((value: string) => {
-          const altitude = Number(value)
-          if (Number.isFinite(altitude)) {
-            this.locationPickerAltitude = Math.round(altitude)
-          }
-        })
+      Row() {
+        Text(I18n.t('i0016')).fontSize(11).fontColor('#8EA0BD').width(56)
+        TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: I18n.t('i0067') })
+          .height(34)
+          .fontSize(12)
+          .fontColor('#E5FFFFFF')
+          .placeholderColor('#8EA0BD')
+          .backgroundColor('rgba(255, 255, 255, 0.06)')
+          .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
+          .borderRadius(12)
+          .layoutWeight(1)
+          .onChange((value: string) => {
+            const altitude = Number(value)
+            if (Number.isFinite(altitude)) {
+              this.locationPickerAltitude = Math.round(altitude)
+            }
+          })
+      }
+      .width('100%')
+      .margin({ top: 8 })
       // 时区显示
       if (this.observerTimeZone.length > 0) {
         Row() {
@@ -8046,7 +8041,7 @@ private loadPlanetPositions(): void {
   }
 
   private panelSubtitle(): string {
-    return this.timeRateText
+    return ''
   }
 
   // View 面板标签页选择器
