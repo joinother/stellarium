@@ -1,3 +1,24 @@
+## [2026-07-27] TRAE - 上架版离线分支初始化（release/v1.0-offline）
+
+- **修改文件：**
+  - `AppScope/app.json5`（包名改为 org.stellarium.app，vendor 改为 stellarium）
+  - `entry/src/main/module.json5`（移除 INTERNET 和 GET_WIFI_INFO 权限）
+  - `entry/src/main/ets/pages/MainWindowNativeNode.ets`（RELEASE_OFFLINE 标记、联网 UI 禁用、启动进度条、FPS 计数器优化）
+  - `entry/src/main/ets/pages/I18n.ets`（新增 load_initializing/load_finalizing/load_unavailable/load_offline_mode/set_fps_monitor 多语言字符串）
+
+- **修改内容：**
+  1. **包名规范化**：`org.qtproject.example.stellarium` → `org.stellarium.app`（上架后不可更改）
+  2. **移除联网权限**：module.json5 中删除 `ohos.permission.INTERNET` 和 `ohos.permission.GET_WIFI_INFO`，保留 LOCATION/ACCELEROMETER/GYROSCOPE
+  3. **联网 UI 禁用（非删除）**：添加 `RELEASE_OFFLINE` 常量，星表下载按钮显示"不可用"灰色标签、卫星面板显示离线提示、LX200 望远镜按钮全部 `.enabled(false)` + 灰色样式 + 触摸热区屏蔽
+  4. **首次启动进度提示**：用官方 `Progress` 组件（ProgressType.Linear）替换 `LoadingProgress` 旋转器，显示百分比和当前步骤文字（初始化星图→即将完成）
+  5. **FPS 计数器优化**：移到左上角角落、默认隐藏、设置面板添加"显示帧率"开关、字号缩小、半透明
+
+- **修改原因：** 上架华为应用市场需要：(1) 正式包名；(2) 个人开发者无 ICP 备案不能有联网权限；(3) 联网功能入口不能直接删除否则用户找不到，改为灰色禁用；(4) 首次启动资源提取较慢需要进度反馈
+
+- **构建结果：** BUILD SUCCESSFUL（编译通过，签名失败因包名变更需重新配置签名——预期行为）
+- **验证结果：** 未验证（需配置华为发布签名后才能安装）
+- **备注：** 此改动仅在 `release/v1.0-offline` 分支上，不影响 `openharmony-preview-v1` 开发分支。后续开发继续在 `openharmony-preview-v1` 上进行，需要同步到上架版时 merge 到此分支。
+
 ## [2026-07-27] TRAE - 渲染性能优化：PBO异步回读+VSync禁用+FBO降采样（8 FPS→61 FPS）
 
 - **修改文件：**

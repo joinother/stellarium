@@ -329,6 +329,11 @@ struct WindowNativeNode {
   @State private stars: boolean = true
   @State private skyCultures: string[] = []
   @State private isLoading: boolean = true
+  // 上架版离线模式标记：禁用所有联网功能入口（灰色不可操作）
+  private readonly RELEASE_OFFLINE: boolean = true
+  // 首次启动进度提示
+  @State private loadProgress: number = 0
+  @State private loadStep: string = ""
   // 启动动画：星空淡入 + 核心就绪后整体淡出
   @State private splashGone: boolean = false
   @State private splashOpacity: number = 0
@@ -777,6 +782,7 @@ struct WindowNativeNode {
   private dismissSplash(): void {
     if (this.splashGone) { return }
     this.isLoading = false
+    this.loadProgress = 100
     this.getUIContext().animateTo({ duration: 650, curve: Curve.EaseInOut, onFinish: () => { this.splashGone = true; this.stopTwinkle() } }, () => {
       this.splashOpacity = 0
     })
@@ -836,10 +842,14 @@ struct WindowNativeNode {
   private startupBridgeSync(): void {
     if (this.bridgeSyncStarted) { return }
     this.bridgeSyncStarted = true
+    this.loadStep = I18n.t('i0001')
+    this.loadProgress = 10
     this.callNativeWhenReady("getSkyCultures", "", (r) => {
       if (r.ok === true && Array.isArray(r.items)) {
         this.skyCultures = r.items as string[]
         this.currentSkyCulture = r.current as string
+        this.loadProgress = 60
+        this.loadStep = I18n.t('load_finalizing')
         // Qt 初始化成功，自动关闭启动画面（星空淡出）
         this.dismissSplash()
       }
@@ -848,16 +858,19 @@ struct WindowNativeNode {
       if (r.ok === true && Array.isArray(r.items)) {
         this.landscapeList = r.items as Array<LandscapeItem>
         this.currentLandscapeId = r.current as string
+        this.loadProgress = Math.max(this.loadProgress, 30)
       }
     })
     this.callNativeWhenReady("getScriptList", "", (r) => {
       if (r.ok === true && Array.isArray(r.items)) {
         this.scriptList = r.items as string[]
+        this.loadProgress = Math.max(this.loadProgress, 40)
       }
     })
     this.callNativeWhenReady("getLoadedModuleNames", "", (r) => {
       if (r.ok === true && Array.isArray(r.items)) {
         this.moduleList = r.items as string[]
+        this.loadProgress = Math.max(this.loadProgress, 50)
       }
     })
     this.loadSkyCultureList()
@@ -1075,6 +1088,11 @@ struct WindowNativeNode {
 
   // ===== 星表下载（C++ 桥：getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）=====
   private loadStarCatalogs(): void {
+    if (this.RELEASE_OFFLINE) {
+      this.catalogLoading = false
+      this.catalogList = []
+      return
+    }
     this.catalogLoading = true
     this.callNativeWhenReady('getStarCatalogs', '', (r: StellariumBridgeResponse) => {
       const resp = r as StarCatalogsResponse
@@ -1462,6 +1480,7 @@ struct WindowNativeNode {
 
   // ===== 卫星（Satellites 插件桥）=====
   private loadSatellites(): void {
+    if (this.RELEASE_OFFLINE) { return }
     this.callNativeWhenReady('getSatellites', '', (r: StellariumBridgeResponse) => {
       const resp = r as SatellitesResponse
       const s = resp.satellites
@@ -3786,9 +3805,11 @@ private loadPlanetPositions(): void {
         if (x >= 1225 && x <= 1310) { this.callInteractive('setTracking', '0', () => { this.refreshState() }); return true }
       }
       if (y >= 630 && y <= 690) {
-        if (x >= 1095 && x < 1175) { this.lx200GotoSelected(); return true }
-        if (x >= 1175 && x < 1245) { this.lx200SyncSelected(); return true }
-        if (x >= 1245 && x <= 1320) { this.lx200Abort(); return true }
+        if (!this.RELEASE_OFFLINE) {
+          if (x >= 1095 && x < 1175) { this.lx200GotoSelected(); return true }
+          if (x >= 1175 && x < 1245) { this.lx200SyncSelected(); return true }
+          if (x >= 1245 && x <= 1320) { this.lx200Abort(); return true }
+        }
       }
     } else if (this.activePanel === 'place') {
       if (y >= 455 && y <= 505 && x >= 1300 && x <= right) { this.useDeviceLocation(); return true }
@@ -4120,16 +4141,43 @@ private loadPlanetPositions(): void {
               .opacity(this.splashIn ? 1 : 0)
               .animation({ duration: 600, curve: Curve.EaseOut, delay: 150 })
               .margin({ bottom: 26 })
-            LoadingProgress()
-              .width(38).height(38)
+            // 官方 Progress 组件：线性进度条
+
+            Progress({ value: this.loadProgress, total: 100, type: ProgressType.Linear })
+
+              .width(180).height(4)
+
               .color("#5B93BF")
+
+              .backgroundColor("rgba(91,147,191,0.15)")
+
+              .borderRadius(2)
+
               .opacity(this.splashIn ? 1 : 0)
+
               .animation({ duration: 600, curve: Curve.EaseOut, delay: 300 })
-            Text("正在唤醒星空…")
-              .fontSize(12).fontColor("#99FFFFFF")
-              .margin({ top: 14 })
-              .opacity(this.splashIn ? 1 : 0)
-              .animation({ duration: 600, curve: Curve.EaseOut, delay: 400 })
+
+            Row() {
+
+              Text(this.loadStep.length > 0 ? this.loadStep : I18n.t('load_initializing'))
+
+                .fontSize(12).fontColor("#99FFFFFF")
+
+                .layoutWeight(1)
+
+              Text(this.loadProgress + '%')
+
+                .fontSize(11).fontColor("#5B93BF")
+
+            }
+
+            .width(180)
+
+            .margin({ top: 10 })
+
+            .opacity(this.splashIn ? 1 : 0)
+
+            .animation({ duration: 600, curve: Curve.EaseOut, delay: 400 })
           }
           .align(Alignment.Center)
         }
@@ -4228,18 +4276,19 @@ private loadPlanetPositions(): void {
           .hitTestBehavior(HitTestMode.Default)
           .zIndex(6)
       }
-      // FPS counter (always visible for debugging)
-      Text(this.fpsDisplay.toString() + ' FPS')
-        .fontSize(11)
-        .fontColor(this.fpsDisplay >= 55 ? '#7FD0FF' : (this.fpsDisplay >= 30 ? '#FFD479' : '#FF6B6B'))
-        .fontFamily('monospace')
-        .fontWeight(FontWeight.Bold)
-        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-        .backgroundColor('rgba(0, 0, 0, 0.6)')
-        .borderRadius(8)
-        .position({ x: this.EDGE_MARGIN + 58, y: this.EDGE_MARGIN + 52 })
-        .zIndex(80)
-        .hitTestBehavior(HitTestMode.None)
+      // FPS counter (top-left corner, subtle)
+      if (this.fpsVisible) {
+        Text(this.fpsDisplay.toString() + ' FPS')
+          .fontSize(10)
+          .fontColor(this.fpsDisplay >= 55 ? '#557FD0FF' : (this.fpsDisplay >= 30 ? '#55FFD479' : '#55FF6B6B'))
+          .fontFamily('monospace')
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .backgroundColor('rgba(0, 0, 0, 0.3)')
+          .borderRadius(6)
+          .position({ x: this.EDGE_MARGIN, y: this.EDGE_MARGIN })
+          .zIndex(80)
+          .hitTestBehavior(HitTestMode.None)
+      }
       if (!this.drawerOpen) {
         Stack() { this.zoomButton('zoom_in') }
           .hitTestBehavior(HitTestMode.Block)
@@ -6917,6 +6966,12 @@ private loadPlanetPositions(): void {
                       .fontSize(11).fontColor('#7FB3DC')
                       .padding({ left: 8, right: 8, top: 3, bottom: 3 })
                       .backgroundColor('rgba(91,147,191,0.15)').borderRadius(8)
+                  } else if (this.RELEASE_OFFLINE) {
+                    Text(I18n.t('load_unavailable'))
+                      .fontSize(11).fontColor('#66555555')
+                      .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                      .backgroundColor('rgba(255,255,255,0.03)')
+                      .borderRadius(8)
                   } else {
                     Button(this.catalogBusy && this.catalogDownloadingId === c.id ? '下载中' : '下载')
                       .fontSize(12).fontColor('#E5FFFFFF')
@@ -7036,6 +7091,15 @@ private loadPlanetPositions(): void {
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'satellites') {
       // 卫星：全局显示开关 + 分组列表
+      if (this.RELEASE_OFFLINE) {
+        Column() {
+          Text(I18n.t('load_unavailable'))
+            .fontSize(14).fontColor('#99FFFFFF')
+          Text(I18n.t('load_offline_mode'))
+            .fontSize(12).fontColor('#66555555')
+            .margin({ top: 8 })
+        }.width('100%').height(120).justifyContent(FlexAlign.Center)
+      } else
       Scroll() {
         Column({ space: 10 }) {
           Row() {
@@ -7455,6 +7519,12 @@ private loadPlanetPositions(): void {
       this.gyroscopeRow()
       this.lx200Panel()
       this.languageRow()
+      // FPS 显示开关（调试用）
+      Row() {
+        Text(I18n.t('set_fps_monitor')).fontSize(13).fontColor(this.nmText()).layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.fpsVisible })
+          .onChange((isOn: boolean) => { this.fpsVisible = isOn })
+      }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
       Row() {
         Text(I18n.t('set_distance_units'))
           .fontSize(14)
@@ -7681,24 +7751,26 @@ private loadPlanetPositions(): void {
       TextInput({ text: this.lx200Host, placeholder: I18n.t('i0064') })
         .height(38)
         .fontSize(13)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.06)')
-        .border({ width: 1, color: this.nmInputBorder() })
+        .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#E5FFFFFF')
+        .placeholderColor('#44555555')
+        .backgroundColor('rgba(255, 255, 255, 0.02)')
+        .border({ width: 1, color: 'rgba(255,255,255,0.05)' })
         .borderRadius(12)
         .margin({ top: 8 })
+        .enabled(!this.RELEASE_OFFLINE)
         .onChange((value: string) => {
           this.lx200Host = value
         })
       TextInput({ text: this.lx200Port, placeholder: I18n.t('i0065') })
         .height(38)
         .fontSize(13)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor('#8EA0BD')
-        .backgroundColor('rgba(255, 255, 255, 0.06)')
-        .border({ width: 1, color: 'rgba(214, 238, 255, 0.14)' })
+        .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#E5FFFFFF')
+        .placeholderColor('#44555555')
+        .backgroundColor('rgba(255, 255, 255, 0.02)')
+        .border({ width: 1, color: 'rgba(255,255,255,0.05)' })
         .borderRadius(12)
         .margin({ top: 8 })
+        .enabled(!this.RELEASE_OFFLINE)
         .onChange((value: string) => {
           this.lx200Port = value
         })
@@ -7706,31 +7778,34 @@ private loadPlanetPositions(): void {
         Button(I18n.t('i0049'))
           .height(32)
           .fontSize(12)
-          .fontColor('#FFFFFFFF')
-          .backgroundColor('#5B93BF')
+          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#FFFFFFFF')
+          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : '#5B93BF')
           .borderRadius(16)
           .margin({ right: 8 })
+          .enabled(!this.RELEASE_OFFLINE)
           .onClick(() => {
             this.lx200GotoSelected()
           })
         Button(I18n.t('i0050'))
           .height(32)
           .fontSize(12)
-          .fontColor('#7FB3DC')
-          .backgroundColor('rgba(107, 163, 214, 0.20)')
-          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#7FB3DC')
+          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : 'rgba(107, 163, 214, 0.20)')
+          .border({ width: 1, color: this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.05)' : 'rgba(107, 163, 214, 0.25)' })
           .borderRadius(16)
           .margin({ right: 8 })
+          .enabled(!this.RELEASE_OFFLINE)
           .onClick(() => {
             this.lx200SyncSelected()
           })
         Button(I18n.t('i0051'))
           .height(32)
           .fontSize(12)
-          .fontColor('#FFD9D9')
-          .backgroundColor('rgba(255, 121, 121, 0.14)')
-          .border({ width: 1, color: 'rgba(255, 121, 121, 0.26)' })
+          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#FFD9D9')
+          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : 'rgba(255, 121, 121, 0.14)')
+          .border({ width: 1, color: this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.05)' : 'rgba(255, 121, 121, 0.26)' })
           .borderRadius(16)
+          .enabled(!this.RELEASE_OFFLINE)
           .onClick(() => {
             this.lx200Abort()
           })
@@ -7939,31 +8014,34 @@ private loadPlanetPositions(): void {
 	        Button(I18n.t('i0049'))
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#FFFFFFFF')
-	          .backgroundColor('#5B93BF')
+	          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#FFFFFFFF')
+	          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : '#5B93BF')
 	          .borderRadius(16)
 	          .margin({ right: 8 })
+	          .enabled(!this.RELEASE_OFFLINE)
 	          .onClick(() => {
 	            this.lx200GotoSelected()
 	          })
 	        Button(I18n.t('i0050'))
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#7FB3DC')
-	          .backgroundColor('rgba(107, 163, 214, 0.20)')
-	          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+	          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#7FB3DC')
+	          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : 'rgba(107, 163, 214, 0.20)')
+	          .border({ width: 1, color: this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.05)' : 'rgba(107, 163, 214, 0.25)' })
 	          .borderRadius(16)
 	          .margin({ right: 8 })
+	          .enabled(!this.RELEASE_OFFLINE)
 	          .onClick(() => {
 	            this.lx200SyncSelected()
 	          })
 	        Button(I18n.t('i0051'))
 	          .height(32)
 	          .fontSize(12)
-	          .fontColor('#FFD9D9')
-	          .backgroundColor('rgba(255, 121, 121, 0.14)')
-	          .border({ width: 1, color: 'rgba(255, 121, 121, 0.26)' })
+	          .fontColor(this.RELEASE_OFFLINE ? '#66555555' : '#FFD9D9')
+	          .backgroundColor(this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.03)' : 'rgba(255, 121, 121, 0.14)')
+	          .border({ width: 1, color: this.RELEASE_OFFLINE ? 'rgba(255,255,255,0.05)' : 'rgba(255, 121, 121, 0.26)' })
 	          .borderRadius(16)
+	          .enabled(!this.RELEASE_OFFLINE)
 	          .onClick(() => {
 	            this.lx200Abort()
 	          })
