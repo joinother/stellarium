@@ -3499,11 +3499,22 @@ private loadPlanetPositions(): void {
       }
     }
     if (this.isExpandedLayout) {
-      // 左侧工具栏区域（宽屏布局：常用入口 + 抽屉按钮 + 钉住按钮整条轨道）
-      if (!this.railCollapsed && x >= this.EDGE_MARGIN && x <= this.EDGE_MARGIN + 58) {
-        if (y >= this.railTop() && y <= this.railTop() + this.railHeight()) {
-          return true
+      // 左侧工具栏：只拦截实际按钮区域（44x44），按钮间空隙穿透到星图
+      if (!this.railCollapsed && x >= this.EDGE_MARGIN + 7 && x <= this.EDGE_MARGIN + 51) {
+        const rt = this.railTop() + this.RAIL_TOP_PAD
+        // 常用入口按钮（每个 44x44，间距 58）
+        for (let i = 0; i < this.pinnedActions.length; i++) {
+          if (y >= rt + i * 58 && y <= rt + i * 58 + 44) { return true }
         }
+        // 更多按钮
+        const moreTop = rt + this.pinnedActions.length * 58 + 8
+        if (y >= moreTop && y <= moreTop + 44) { return true }
+        // 收起按钮
+        const collapseTop = rt + this.pinnedActions.length * 58 + 60
+        if (y >= collapseTop && y <= collapseTop + 44) { return true }
+        // 音乐按钮
+        const musicTop = rt + this.pinnedActions.length * 58 + 112
+        if (y >= musicTop && y <= musicTop + 44) { return true }
       } else if (x >= this.EDGE_MARGIN + 92 && x <= this.EDGE_MARGIN + 148 && y >= this.skyHeight - 224 && y <= this.skyHeight - 90) {
         return true
       }
@@ -3555,8 +3566,8 @@ private loadPlanetPositions(): void {
 	        return true
 	      }
 	    }
-	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN && x <= this.EDGE_MARGIN + 58) {
-      const railTop = this.railTop()
+	    if (this.isExpandedLayout && x >= this.EDGE_MARGIN + 7 && x <= this.EDGE_MARGIN + 51) {
+      const railTop = this.railTop() + this.RAIL_TOP_PAD
       const step = 58
       // 常用固定入口
       const index = Math.floor((y - railTop) / step)
@@ -3713,8 +3724,8 @@ private loadPlanetPositions(): void {
       if (this.isUiPoint(downX, downY)) {
         this.touchStartedOnUi = true
         // Handle sidebar button clicks since XComponent swallows onClick events
-        if (downX >= this.EDGE_MARGIN && downX <= this.EDGE_MARGIN + 58) {
-          const railTop = this.railTop()
+        if (downX >= this.EDGE_MARGIN + 7 && downX <= this.EDGE_MARGIN + 51) {
+          const railTop = this.railTop() + this.RAIL_TOP_PAD
           const step = 58
           // 常用固定入口
           for (let i = 0; i < this.pinnedActions.length; i++) {
@@ -4082,12 +4093,12 @@ private loadPlanetPositions(): void {
       // 左上角 Stellarium 常驻标已移除，避免遮挡星图
       Stack() { this.railShell() }
         .position({ x: this.EDGE_MARGIN, y: this.railTop() })
-        .hitTestBehavior(HitTestMode.Block)
+        .hitTestBehavior(HitTestMode.Transparent)
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.drawerOpen) {
         Stack() { this.actionDrawer() }
           .position({ x: this.EDGE_MARGIN + 58, y: this.railTop() })
-          .hitTestBehavior(HitTestMode.Block)
+          .hitTestBehavior(HitTestMode.Transparent)
           .zIndex(6)
       }
       Stack() { this.zoomButton('zoom_in') }
