@@ -1,3 +1,16 @@
+## [2026-07-27] TRAE - compactShell琉璃质感+移除Stellarium实时控件+左侧工具栏
+
+- **修改文件：** `build/.../MainWindowNativeNode.ets`, `build/.../I18n.ets`
+- **修改内容：**
+  1. **琉璃质感**：iconButton/moreButton/musicButton/gyroButton/zoomButton 全部改为 `rgba(35,55,85,0.72)` + `backdropBlur(30)` + `1.5px` 浅蓝边框光圈 `rgba(160,200,240,0.40)`，按压态改为深蓝灰 `rgba(40,60,90,0.72)`，增加可读性和琉璃折射感。
+  2. **移除 observerBadge**：compactShell 顶部不再显示 "Stellarium 实时" 控件。
+  3. **移除 flashHint**：紧凑模式下不再显示蓝色提示气泡（仅平板布局保留）。
+  4. **左侧垂直工具栏**：缩放按钮从顶部移到左侧，改为琉璃风格；陀螺仪和音乐按钮也添加到左侧垂直栏。
+  5. **添加 m_gyro_on** i18n 翻译键。
+- **修改原因：** 用户反馈紧凑布局太透明缺可读性、缺陀螺仪和音乐按钮、蓝色提示气泡看着奇怪、Stellarium实时控件多余
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 模拟器截图确认：左侧垂直栏有缩放+陀螺仪+音乐按钮、顶部右侧干净无控件、无蓝色气泡、按钮有琉璃折射质感
+
 ## [2026-07-27] TRAE - compactDock三点图标+透明背景+位置选择修复
 
 - **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
