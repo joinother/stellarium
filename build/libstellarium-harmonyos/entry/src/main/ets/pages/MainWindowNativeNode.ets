@@ -208,6 +208,7 @@ struct WindowNativeNode {
   @State private infoWinVisible: boolean = false
   @State private infoWinExpanded: boolean = false
   @State private bottomCardIndex: number = 0
+  @State private panelContentKey: number = 0
   @State private cardOffsetX: number = 0
   @State private cardOffsetY: number = 0
   @State private centerSearchText: string = ''
@@ -925,6 +926,7 @@ struct WindowNativeNode {
     this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
       this.panelVisible = nextVisible
+      this.panelContentKey++
     })
     // 打开「位置」面板时自动刷新今晚天象（用户要求每次进入都自动刷新）
     if (panel === 'place' && nextVisible) {
@@ -3502,7 +3504,9 @@ private loadPlanetPositions(): void {
         return true
       }
     }
-    // 左下角滑动详情卡片：其区域内不穿透到星图，让 Swiper 可正常滑动
+    // 左下角滑动详情卡片：标记为 UI 区域，防止 overlay 启动星图拖拽。
+    // handleInfoWinTap 只处理头部关闭按钮，Swiper body 区域不拦截，
+    // 让 Swiper 自身手势系统处理水平滑动。
     if (this.infoWinVisible && this.selectedName.length > 0) {
       if (this.isExpandedLayout) {
         const bcX = this.EDGE_MARGIN + 200
@@ -4454,44 +4458,37 @@ private loadPlanetPositions(): void {
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
 
-  // 浮动详情窗的触摸交互统一走 overlay 的 handleUiTap（XComponent 会吞掉组件自身的 onClick），
-  // 这里按坐标派发：头部切换展开/收起、右上 ✕ 关闭、展开后底部按钮行 居中/跟踪。
+  // 底部详情卡片触摸交互：只处理头部关闭按钮，
+  // Swiper body 区域返回 false，让 Swiper 自身手势系统处理水平滑动。
   private handleInfoWinTap(x: number, y: number): boolean {
     if (!this.infoWinVisible) { return false }
-    let wl: number = 0
-    let wt: number = 0
-    let wr: number = 0
+    // bottomDetailCard 坐标（与 expandedShell/compactShell 中的 position 一致）
+    let bcX: number = 0
+    let bcY: number = 0
+    const bcW = 340
     if (this.isExpandedLayout) {
-      wl = this.infoWinLeft(); wt = this.EDGE_MARGIN; wr = wl + this.infoWinWidth()
+      bcX = this.EDGE_MARGIN + 200
+      bcY = this.skyHeight - 230
     } else {
-      wl = 16; wt = 60; wr = wl + (this.skyWidth - 32)
+      bcX = 16
+      bcY = this.skyHeight - 250
     }
-    if (x < wl - 8 || x > wr + 8 || y < wt - 8) { return false }
-    const headerH = 54
-    if (y <= wt + headerH) {
+    if (x < bcX - 8 || x > bcX + bcW + 8 || y < bcY - 8) { return false }
+    // 只处理头部区域（前 ~48px：名称 + 类型 + 关闭按钮）
+    const headerH = 48
+    if (y <= bcY + headerH) {
       const closeW = 40
-      if (x >= wr - closeW) {
+      if (x >= bcX + bcW - closeW) {
         this.infoWinVisible = false
-      } else {
-        this.infoWinExpanded = !this.infoWinExpanded
+        return true
       }
+      // 头部其他区域点击不做任何操作
       return true
     }
-    // 展开态：底部按钮行（左 居中 / 右 跟踪），主体其余区域仅消费触摸、不穿透到星图
-    if (this.infoWinExpanded) {
-      const bodyTop = wt + headerH + 1
-      const bodyBottom = wt + headerH + this.infoWinDetailH() + 64
-      if (y > bodyTop && y <= bodyBottom) {
-        const mid = wl + (wr - wl) / 2
-        if (x < mid) {
-          this.moveToSelectedObject()
-        } else {
-          this.toggleTracking()
-        }
-      }
-      return true
-    }
-    return true
+    // Swiper body 区域：返回 false，不消费触摸。
+    // isUiPoint 已返回 true，所以 handleSkyTouch 不会被调用。
+    // Swiper 自身手势系统可以正常处理水平滑动。
+    return false
   }
 
   @Builder
@@ -5705,6 +5702,7 @@ private loadPlanetPositions(): void {
           }
         }
         .width('100%')
+        .animation({ duration: 280, curve: curves.springMotion(0.42, 0.85) })
       }
       .width('100%')
       .layoutWeight(1)
@@ -5738,10 +5736,6 @@ private loadPlanetPositions(): void {
           this.switchRow(I18n.t('set_lock_view'), this.viewLock, '', 'setViewLock')
           this.switchRow(I18n.t('set_vert_clamp'), this.verticalClamp, '', 'setVerticalClamp')
           this.switchRow(I18n.t('set_flat_horizon'), this.flatHorizon, '', 'setFlatHorizon')
-          Row() {
-            Text(I18n.t('i0231')).fontSize(12).fontColor(this.nmSub()).width(72)
-            Text(this.timeScale).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-          }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
           Row({ space: 6 }) {
             Button(I18n.t('i0142')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
@@ -7470,10 +7464,10 @@ private loadPlanetPositions(): void {
       }
 
       Row() {
-        Text(I18n.t('i0016')).fontSize(11).fontColor('#8EA0BD').width(56)
+        Text(I18n.t('i0016')).fontSize(12).fontColor('#8EA0BD').width(56)
         TextInput({ text: this.locationPickerAltitude.toFixed(0), placeholder: I18n.t('i0067') })
           .height(34)
-          .fontSize(12)
+          .fontSize(13)
           .fontColor('#E5FFFFFF')
           .placeholderColor('#8EA0BD')
           .backgroundColor('rgba(255, 255, 255, 0.06)')
@@ -7486,6 +7480,7 @@ private loadPlanetPositions(): void {
               this.locationPickerAltitude = Math.round(altitude)
             }
           })
+        Text('m').fontSize(11).fontColor('#8EA0BD').margin({ left: 6 })
       }
       .width('100%')
       .margin({ top: 8 })

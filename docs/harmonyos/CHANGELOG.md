@@ -1,3 +1,24 @@
+## [2026-07-27] TRAE - 综合UI修复：Swiper拖动+时区翻译+面板动画+1x移除
+
+- **修改文件：**
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（Swiper触摸、面板动画、altitude标签、timeScale移除、viewTab动画）
+  - `build/.../ets/pages/I18n.ets`（17条时区翻译+25条tn_*今夜天象翻译+7条大洲翻译）
+
+- **修改内容：**
+  1. **修复三栏详情卡片Swiper拖不动**：重新将bottomDetailCard区域加入isUiPoint，重写handleInfoWinTap只处理头部关闭按钮。
+  2. **修复时区翻译**：17个tz_*键在ja/ko/fr/de/es/ru语言下显示原始key名，全部替换为正确翻译。
+  3. **修复今夜天象翻译**：25个tn_*键全部替换为8种语言翻译。
+  4. **修复altitude输入框**：添加m单位后缀。
+  5. **移除settings面板的1x显示**。
+  6. **统一面板切换动画**。
+  7. **添加viewTab动画**。
+  8. **修复法语单引号编译错误**。
+
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 应用启动正常，无崩溃
+
+---
+
 ## [2026-07-26] TRAE - 修复地图拖动UI滑动 + 插件自动加载 + 书签面板增强
 
 - **修改文件：**
