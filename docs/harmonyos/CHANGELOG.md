@@ -1440,3 +1440,15 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 应用正常运行，FPS显示49-59，无崩溃
 - **备注：** PBO异步回读(glMapBufferRange)和8ms间隔(120FPS)在模拟器上均导致SIGSEGV，已记录到 KNOWN-ISSUES.md。真机是否有同样问题待验证。
+
+## [2026-07-27] TRAE Agent - 修复手机竖屏布局：启用 compactShell
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. build() 方法中将 `this.expandedShell()` 替换为 `this.harmonyShell()`，使竖屏（skyWidth < 900）时渲染 compactShell 而非 expandedShell
+  2. onAreaChange 中添加布局切换逻辑：从横屏切到竖屏时自动关闭面板（panelVisible=false），让用户先看到星图+底部Dock
+  3. compactShell 已包含：底部弹出半屏面板（bottomSheetPanel）+ 底部图标Dock（compactDock）+ 弹簧过渡动画
+- **修改原因：** 用户反馈手机竖屏布局一团稀烂，左侧工具栏被压缩、底部无Dock、面板不弹出。根因是 build() 硬编码调用 expandedShell，未根据屏幕宽度切换布局
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 通过，模拟器截图确认：左侧工具栏已移除，底部Dock横向排列6个图标，半屏面板默认关闭，点击Dock图标可弹出半屏面板
+- **备注：** compactShell 早在上一轮已实现（bottomSheetPanel/compactDock/弹簧动画），但 build() 未调用 harmonyShell() 导致从未生效

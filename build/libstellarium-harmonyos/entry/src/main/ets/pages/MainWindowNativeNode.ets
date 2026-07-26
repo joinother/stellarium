@@ -4094,7 +4094,7 @@ private loadPlanetPositions(): void {
           this.handleOverlayTouch(event)
         })
 
-      this.expandedShell()
+      this.harmonyShell()
 
       // 启动动画：星空淡入 + 核心就绪后整体淡出（不阻挡首帧交互太久）
       if (!this.splashGone) {
@@ -4165,9 +4165,14 @@ private loadPlanetPositions(): void {
         this.startupBridgeSync()
         this.skyWidth = Number(newArea.width) > 1 ? Number(newArea.width) : 1
         this.skyHeight = Number(newArea.height) > 1 ? Number(newArea.height) : 1
+        const wasExpanded = this.isExpandedLayout
         this.isExpandedLayout = this.skyWidth >= 900
         this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)
         this.panelMaxHeight = Math.min(this.skyHeight * 0.78, 700)
+        // Switched to compact layout: auto-close panel so user sees star map + dock
+        if (wasExpanded && !this.isExpandedLayout) {
+          this.panelVisible = false
+        }
         hilog.info(0x0000, "StellariumArkUI", "onAreaChange w=%{public}s h=%{public}s expanded=%{public}s", this.skyWidth.toString(), this.skyHeight.toString(), this.isExpandedLayout.toString())
       })
   }
@@ -4307,45 +4312,31 @@ private loadPlanetPositions(): void {
 
   @Builder
   compactShell() {
-    Column() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      // 星图触摸层（全屏）
+      Column()
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Block)
+        .onTouch((event: TouchEvent) => {
+          this.handleSkyTouch(event)
+        })
+
+      // 顶部信息栏：观测者徽章 + 缩放按钮
       Row() {
         this.observerBadge()
         Blank()
-        this.smallRoundButton('×', () => {
-          this.closePanel()
-        })
-      }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 16 })
-
-      // 缩放按钮（右上角）
-      Row() {
         Stack() { this.zoomButton('zoom_in') }
           .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
         Stack() { this.zoomButton('zoom_out') }
           .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
       }
       .width('100%')
-      .justifyContent(FlexAlign.End)
-      .padding({ right: 16 })
-      .margin({ bottom: -20 })
-      .zIndex(2)
+      .padding({ left: 16, right: 16, top: 16 })
+      .alignSelf(ItemAlign.Start)
+      .zIndex(3)
 
-      Blank()
-        .width('100%')
-        .layoutWeight(1)
-        .hitTestBehavior(HitTestMode.Block)
-        .onTouch((event: TouchEvent) => {
-          this.handleSkyTouch(event)
-        })
-
-      if (this.panelVisible) {
-        this.compactPanel()
-      }
-
-      this.bottomDock()
-
-      // 陀螺仪校准面板（紧凑布局）
+      // 陀螺仪校准面板
       if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
         Stack() { this.gyroCalibPanel() }
           .position({ x: 16, y: 80 })
@@ -4357,11 +4348,11 @@ private loadPlanetPositions(): void {
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
           ))
       }
-      // 紧凑布局：搜索通过左侧/底部搜索图标进入分类面板
-      // 选中天体滑动详情卡片（紧凑布局：底部 dock 上方）
-      if (this.infoWinVisible && this.selectedName.length > 0) {
+
+      // 选中天体详情卡片（面板未打开时显示在 dock 上方）
+      if (this.infoWinVisible && this.selectedName.length > 0 && !this.panelVisible) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: 16, y: this.skyHeight - 250 })
+          .position({ x: 16, y: this.skyHeight - 220 })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
@@ -4371,11 +4362,20 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
+
+      // 底部弹出半屏面板（带弹簧动画）
+      if (this.panelVisible) {
+        this.bottomSheetPanel()
+      }
+
+      // 紧凑底部 Dock（图标条）
+      if (!this.panelVisible) {
+        this.compactDock()
+      }
     }
-      .width('100%')
-      .height('100%')
-      .padding({ bottom: 14 })
-      .zIndex(1)
+    .width('100%')
+    .height('100%')
+    .zIndex(1)
   }
 
   // ---- 选中天体的独立浮动详情窗口 ----
@@ -4944,6 +4944,50 @@ private loadPlanetPositions(): void {
           .hitTestBehavior(HitTestMode.Block)
       }
     }
+  }
+
+  @Builder
+  compactDock() {
+    Row() {
+      ForEach(this.pinnedActions, (item: ShellAction) => {
+        Column() {
+          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+            .width(22)
+            .height(22)
+            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#B0FFFFFF')
+        }
+          .width(44)
+          .height(44)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
+          .borderRadius(22)
+          .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0 })
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+          .onClick(() => {
+            this.setPanel(item.panel)
+          })
+      }, (item: ShellAction) => item.panel)
+    }
+      .height(52)
+      .width('auto')
+      .padding({ left: 10, right: 10 })
+      .justifyContent(FlexAlign.SpaceEvenly)
+      .backgroundColor('rgba(18, 22, 36, 0.78)')
+      .backdropBlur(30)
+      .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.12)' })
+      .borderRadius(26)
+      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.36)', offsetX: 0, offsetY: 10 })
+      .margin({ bottom: 16 })
+      .alignSelf(ItemAlign.Center)
+      // 弹出动画
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: 0, y: 60 }).animation({ duration: 400, curve: curves.springMotion(0.5, 0.85) })),
+        TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.EaseIn })
+          .combine(TransitionEffect.translate({ x: 0, y: 30 }).animation({ duration: 180, curve: Curve.EaseIn }))
+      ))
   }
 
   @Builder
@@ -5603,10 +5647,34 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  compactPanel() {
+  bottomSheetPanel() {
     Column() {
-      this.panelHandle()
-      this.panelHeader()
+      // 拖拽手柄
+      Row()
+        .width(36)
+        .height(4)
+        .backgroundColor('rgba(255, 255, 255, 0.30)')
+        .borderRadius(2)
+        .margin({ top: 10, bottom: 8 })
+      // 面板标题栏
+      Row() {
+        Text(this.panelTitle())
+          .fontSize(17)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#E5FFFFFF')
+          .layoutWeight(1)
+        // 关闭按钮
+        Text('\u00d7')
+          .fontSize(22)
+          .fontColor('#99FFFFFF')
+          .width(32)
+          .height(32)
+          .textAlign(TextAlign.Center)
+          .onClick(() => { this.closePanel() })
+      }
+      .width('100%')
+      .padding({ left: 4, right: 4, bottom: 8 })
+      // 面板内容（可滚动）
       Scroll() {
         Column() {
           this.panelContent()
@@ -5615,20 +5683,25 @@ private loadPlanetPositions(): void {
       }
         .width('100%')
         .layoutWeight(1)
+        .scrollBar(BarState.Auto)
+        .scrollBarWidth(4)
+        .scrollBarColor('#33FFFFFF')
     }
-      .width('92%')
-      .constraintSize({ minHeight: 156, maxHeight: 560 })
-      .padding({ top: 10, left: 16, right: 16, bottom: 14 })
-      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
-      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
-      .borderRadius(32)
-      .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
-      .margin({ bottom: 10 })
-      .alignSelf(ItemAlign.Center)
-      .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
-      .opacity(this.panelIdleOpacity)
-      .animation({ duration: 480, curve: curves.springMotion(0.5, 0.92) })
+      .width('100%')
+      .height('52%')
+      .padding({ left: 18, right: 18, bottom: 20 })
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.72)' : 'rgba(18, 22, 36, 0.88)')
+      .backdropBlur(this.panelIdleGlass ? 45 : 35)
+      .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.20)' : 'rgba(91, 147, 191, 0.14)' })
+      .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
+      .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
+      // 从底部弹出弹簧动画
+      .transition(TransitionEffect.asymmetric(
+        TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+          .combine(TransitionEffect.translate({ x: 0, y: 400 }).animation({ duration: 520, curve: curves.springMotion(0.62, 0.88) })),
+        TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+          .combine(TransitionEffect.translate({ x: 0, y: 200 }).animation({ duration: 320, curve: curves.springMotion(0.5, 0.85) }))
+      ))
   }
 
   @Builder
