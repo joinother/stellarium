@@ -4186,8 +4186,8 @@ private loadPlanetPositions(): void {
         this.compactShell()
       }
 
-      // 点击反馈提示：置顶显示、不拦截触摸
-      if (this.actionHint !== '') {
+      // 点击反馈提示：仅在平板布局（expandedShell）时显示
+      if (this.actionHint !== '' && this.isExpandedLayout) {
         Row() {
           Text(this.actionHint)
             .fontSize(13)
@@ -4199,7 +4199,7 @@ private loadPlanetPositions(): void {
             .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
         }
           .hitTestBehavior(HitTestMode.None)
-          .position({ x: 0, y: this.isExpandedLayout ? 16 : 80 })
+          .position({ x: 0, y: 16 })
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .zIndex(20)
@@ -4323,43 +4323,67 @@ private loadPlanetPositions(): void {
           this.handleSkyTouch(event)
         })
 
-      // 顶部信息栏：左侧缩放按钮（紧凑） + 右侧观测者徽章
-      Row() {
-        // 左侧：两个缩放按钮，紧凑但留缝隙
-        Row({ space: 6 }) {
-          Stack() {
-            Image(this.getIcon('zoom_in', false))
-              .width(18).height(18).fillColor(this.nmText())
-          }
-          .width(36).height(36)
-          .backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(22)
-          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
-          .borderRadius(18)
+      // 左侧垂直工具栏：缩放 + 陀螺仪 + 音乐（琉璃风格）
+      Column({ space: 8 }) {
+        // 缩放按钮
+        Stack() {
+          Image(this.getIcon('zoom_in', false))
+            .width(20).height(20).fillColor(this.nmText())
+        }
+          .width(40).height(40)
+          .backgroundColor('rgba(35, 55, 85, 0.72)')
+          .backdropBlur(30)
+          .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
+          .borderRadius(20)
+          .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
 
-          Stack() {
-            Image(this.getIcon('zoom_out', false))
-              .width(18).height(18).fillColor(this.nmText())
-          }
-          .width(36).height(36)
-          .backgroundColor('rgba(25, 26, 28, 0.72)')
-          .backdropBlur(22)
-          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
-          .borderRadius(18)
+        Stack() {
+          Image(this.getIcon('zoom_out', false))
+            .width(20).height(20).fillColor(this.nmText())
+        }
+          .width(40).height(40)
+          .backgroundColor('rgba(35, 55, 85, 0.72)')
+          .backdropBlur(30)
+          .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
+          .borderRadius(20)
+          .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
-        }
 
-        Blank()
+        // 分隔线
+        Row()
+          .width(20)
+          .height(0.5)
+          .backgroundColor('rgba(120, 170, 220, 0.15)')
+          .margin({ top: 2, bottom: 2 })
 
-        this.observerBadge()
+        // 陀螺仪按钮
+        Stack() { this.gyroButton() }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick(() => {
+            this.toggleGyroscope(!this.gyroscopeEnabled)
+            this.flashHint(this.gyroscopeEnabled ? I18n.t('m_gyro_on') : I18n.t('m_gyro_off'))
+          })
+          .gesture(LongPressGesture({ repeat: false, duration: 600 })
+            .onAction(() => {
+              if (this.gyroscopeEnabled) {
+                this.gyroCalibPanelOpen = !this.gyroCalibPanelOpen
+              }
+            }))
+
+        // 音乐按钮
+        Stack() { this.musicButton() }
+          .width(44)
+          .height(44)
+          .hitTestBehavior(HitTestMode.Block)
+          .onClick(() => { this.toggleMusic() })
       }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
-      .position({ x: 0, y: 0 })
-      .zIndex(3)
+        .position({ x: 12, y: 60 })
+        .zIndex(3)
 
       // 陀螺仪校准面板
       if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
@@ -5250,22 +5274,23 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.08 : 1.0 })
       .shadow({
-        radius: this.activePanel === item.panel && this.panelVisible ? 18 : 0,
-        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0)',
+        radius: this.activePanel === item.panel && this.panelVisible ? 18 : 8,
+        color: this.activePanel === item.panel && this.panelVisible ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0.28)',
         offsetX: 0,
-        offsetY: 6
+        offsetY: 4
       })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
         pressed: {
           .scale({ x: 0.9, y: 0.9 })
-          .backgroundColor('rgba(255, 255, 255, 0.12)')
+          .backgroundColor('rgba(40, 60, 90, 0.72)')
         }
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
@@ -5322,11 +5347,13 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.drawerOpen ? 'rgba(107, 163, 214, 0.35)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.drawerOpen ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.drawerOpen ? 1.08 : 1.0, y: this.drawerOpen ? 1.08 : 1.0 })
+      .shadow({ radius: this.drawerOpen ? 18 : 8, color: this.drawerOpen ? 'rgba(107, 163, 214, 0.25)' : 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
       .onClick(() => { this.toggleDrawer() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
@@ -5353,11 +5380,13 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .alignContent(Alignment.Center)
-      .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.musicEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.musicEnabled ? 1.06 : 1.0, y: this.musicEnabled ? 1.06 : 1.0 })
+      .shadow({ radius: this.musicEnabled ? 14 : 8, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.20)' : 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
       .onClick(() => { this.toggleMusic() })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
@@ -5414,8 +5443,9 @@ private loadPlanetPositions(): void {
       .width(44)
       .height(44)
       .alignContent(Alignment.Center)
-      .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
-      .border({ width: 1, color: this.gyroscopeEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
+      .backdropBlur(30)
+      .border({ width: 1.5, color: this.gyroscopeEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
       .scale({ x: this.gyroscopeEnabled ? 1.06 : 1.0, y: this.gyroscopeEnabled ? 1.06 : 1.0 })
