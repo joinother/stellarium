@@ -212,6 +212,8 @@ struct WindowNativeNode {
   @State private panelContentKey: number = 0
   @State private cardOffsetX: number = 0
   @State private cardOffsetY: number = 0
+  @State private cardDragStartX: number = 0
+  @State private cardDragStartY: number = 0
   @State private centerSearchText: string = ''
   @State private selectedSize: string = ''
   @State private selectedRise: string = ''
@@ -3620,17 +3622,17 @@ private loadPlanetPositions(): void {
     // 让 Swiper 自身手势系统处理水平滑动。
     if (this.infoWinVisible && this.selectedName.length > 0) {
       if (this.isExpandedLayout) {
-        const bcX = this.EDGE_MARGIN + 200
-        const bcY = this.skyHeight - 230
+        const bcX = this.EDGE_MARGIN + 200 + this.cardOffsetX
+        const bcY = this.skyHeight - 230 + this.cardOffsetY
         const bcW = 340
         const bcH = 200
         if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
           return true
         }
       } else {
-        const bcX = 16
-        const bcY = this.skyHeight - 250
-        const bcW = 340
+        const bcX = 16 + this.cardOffsetX
+        const bcY = 70 + this.cardOffsetY
+        const bcW = this.skyWidth - 32
         const bcH = 200
         if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
           return true
@@ -4293,7 +4295,7 @@ private loadPlanetPositions(): void {
       // 左下角滑动详情卡片（选中天体时显示，Swiper 自带左右滑动切换）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: this.EDGE_MARGIN + 200, y: this.skyHeight - 230 })
+          .position({ x: this.EDGE_MARGIN + 200 + this.cardOffsetX, y: this.skyHeight - 230 + this.cardOffsetY })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
@@ -4322,18 +4324,42 @@ private loadPlanetPositions(): void {
           this.handleSkyTouch(event)
         })
 
-      // 顶部信息栏：观测者徽章 + 缩放按钮
+      // 顶部信息栏：左侧缩放按钮（紧凑） + 右侧观测者徽章
       Row() {
-        this.observerBadge()
-        Blank()
-        Stack() { this.zoomButton('zoom_in') }
+        // 左侧：两个缩放按钮，紧凑但留缝隙
+        Row({ space: 6 }) {
+          Stack() {
+            Image(this.getIcon('zoom_in', false))
+              .width(18).height(18).fillColor(this.nmText())
+          }
+          .width(36).height(36)
+          .backgroundColor('rgba(25, 26, 28, 0.72)')
+          .backdropBlur(22)
+          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+          .borderRadius(18)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.triggerAction('actionZoom_In_Auto') })
-        Stack() { this.zoomButton('zoom_out') }
+
+          Stack() {
+            Image(this.getIcon('zoom_out', false))
+              .width(18).height(18).fillColor(this.nmText())
+          }
+          .width(36).height(36)
+          .backgroundColor('rgba(25, 26, 28, 0.72)')
+          .backdropBlur(22)
+          .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
+          .borderRadius(18)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.triggerAction('actionZoom_Out_Auto') })
+        }
+
+        Blank()
+
+        this.observerBadge()
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 16 })
-      .alignSelf(ItemAlign.Start)
+      .padding({ left: 16, right: 16, top: 16, bottom: 16 })
+      .position({ x: 0, y: 0 })
       .zIndex(3)
 
       // 陀螺仪校准面板
@@ -4349,17 +4375,17 @@ private loadPlanetPositions(): void {
           ))
       }
 
-      // 选中天体详情卡片（面板未打开时显示在 dock 上方）
+      // 选中天体详情卡片（显示在最上端，可拖动）
       if (this.infoWinVisible && this.selectedName.length > 0 && !this.panelVisible) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: 16, y: this.skyHeight - 220 })
+          .position({ x: 16 + this.cardOffsetX, y: 70 + this.cardOffsetY })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
-              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+              .combine(TransitionEffect.translate({ x: 0, y: -40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
             TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
-              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+              .combine(TransitionEffect.translate({ x: 0, y: -20 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
 
@@ -4452,7 +4478,14 @@ private loadPlanetPositions(): void {
   @Builder
   bottomDetailCard() {
     Column() {
-      // 头部：天体名称 + 类型 + 关闭
+      // 拖拽手柄（可拖动整个卡片）
+      Row()
+        .width(28)
+        .height(3)
+        .backgroundColor('rgba(255, 255, 255, 0.25)')
+        .borderRadius(1.5)
+        .margin({ top: 8, bottom: 4 })
+      // 头部：天体名称 + 类型 + 关闭（可拖动）
       Row() {
         Image(this.getIcon('info', false))
           .width(16).height(16).fillColor('#5B93BF').margin({ right: 8 })
@@ -4463,11 +4496,30 @@ private loadPlanetPositions(): void {
           .fontSize(10).fontColor('#7FB3DC')
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .backgroundColor('rgba(91,147,191,0.15)').borderRadius(6)
-        Text('✕')
-          .fontSize(13).fontColor('#99FFFFFF').padding({ left: 8, right: 4 })
+        Text('\u2702')
+          .fontSize(11).fontColor('#8099BBCC').padding({ left: 6, right: 4 })
+        Text('\u2715')
+          .fontSize(13).fontColor('#99FFFFFF').padding({ left: 4, right: 4 })
           .onClick(() => { this.infoWinVisible = false })
       }
-      .width('100%').padding({ left: 14, right: 12, top: 10, bottom: 8 })
+      .width('100%').padding({ left: 14, right: 12, top: 6, bottom: 8 })
+      .gesture(
+        PanGesture({ fingers: 1, distance: 5 })
+          .onActionStart((event: GestureEvent) => {
+            this.cardDragStartX = this.cardOffsetX
+            this.cardDragStartY = this.cardOffsetY
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            let newX: number = this.cardDragStartX + event.offsetX
+            let newY: number = this.cardDragStartY + event.offsetY
+            const cardW: number = this.isExpandedLayout ? 340 : (this.skyWidth - 32)
+            const cardH: number = 200
+            newX = Math.max(-cardW * 0.6, Math.min(newX, this.skyWidth - cardW * 0.4))
+            newY = Math.max(-cardH * 0.5, Math.min(newY, this.skyHeight - 100))
+            this.cardOffsetX = newX
+            this.cardOffsetY = newY
+          })
+      )
 
       Divider().color('rgba(91,147,191,0.15)').margin({ left: 8, right: 8 })
 
@@ -4664,7 +4716,7 @@ private loadPlanetPositions(): void {
       }
       .width('100%').padding({ left: 14, right: 14, top: 2, bottom: 8 })
     }
-    .width(340)
+    .width(this.isExpandedLayout ? 340 : (this.skyWidth - 32))
     .backgroundColor('rgba(12, 16, 28, 0.78)')
     .backdropBlur(40)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
@@ -4679,13 +4731,13 @@ private loadPlanetPositions(): void {
     // bottomDetailCard 坐标（与 expandedShell/compactShell 中的 position 一致）
     let bcX: number = 0
     let bcY: number = 0
-    const bcW = 340
+    const bcW = this.isExpandedLayout ? 340 : (this.skyWidth - 32)
     if (this.isExpandedLayout) {
-      bcX = this.EDGE_MARGIN + 200
-      bcY = this.skyHeight - 230
+      bcX = this.EDGE_MARGIN + 200 + this.cardOffsetX
+      bcY = this.skyHeight - 230 + this.cardOffsetY
     } else {
-      bcX = 16
-      bcY = this.skyHeight - 250
+      bcX = 16 + this.cardOffsetX
+      bcY = 70 + this.cardOffsetY
     }
     if (x < bcX - 8 || x > bcX + bcW + 8 || y < bcY - 8) { return false }
     // 只处理头部区域（前 ~48px：名称 + 类型 + 关闭按钮）
@@ -5688,7 +5740,7 @@ private loadPlanetPositions(): void {
         .scrollBarColor('#33FFFFFF')
     }
       .width('100%')
-      .height('52%')
+      .height('70%')
       .padding({ left: 18, right: 18, bottom: 20 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.72)' : 'rgba(18, 22, 36, 0.88)')
       .backdropBlur(this.panelIdleGlass ? 45 : 35)
