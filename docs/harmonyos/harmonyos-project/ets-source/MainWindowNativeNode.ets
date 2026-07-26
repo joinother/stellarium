@@ -189,6 +189,9 @@ struct WindowNativeNode {
   @State private isExpandedLayout: boolean = true
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = true
+  @State private sheetHeightPct: number = 70
+  @State private sheetDragStartY: number = 0
+  @State private sheetDragStartPct: number = 70
   @State private searchText: string = ''
   @State private selectedName: string = ''
   @State private searchSuggestions: SearchSug[] = []
@@ -953,6 +956,9 @@ struct WindowNativeNode {
   private setPanel(panel: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = this.activePanel === panel ? !this.panelVisible : true
+    if (nextVisible) {
+      this.sheetHeightPct = 70
+    }
     this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
       this.panelVisible = nextVisible
@@ -1002,6 +1008,7 @@ struct WindowNativeNode {
     if (this.uiLocked) {
       return
     }
+    this.sheetHeightPct = 70
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
@@ -3613,9 +3620,7 @@ private loadPlanetPositions(): void {
         return true
       }
     } else {
-      if (x >= 16 && x <= 16 + 280 && y >= 50 && y <= 50 + 44) {
-        return true
-      }
+      // 紧凑布局：顶部缩放按钮和徽章由组件自身 onClick 处理，不拦截
     }
     // 左下角滑动详情卡片：标记为 UI 区域，防止 overlay 启动星图拖拽。
     // handleInfoWinTap 只处理头部关闭按钮，Swiper body 区域不拦截，
@@ -3671,10 +3676,17 @@ private loadPlanetPositions(): void {
       }
       return false
     }
+    if (this.isExpandedLayout) {
+      if (this.panelVisible && y >= this.skyHeight - this.panelMaxHeight) {
+        return true
+      }
+      return y >= this.skyHeight - 80
+    }
+    // 紧凑布局：底部 Dock 由组件自身 onClick 处理，不拦截
     if (this.panelVisible && y >= this.skyHeight - this.panelMaxHeight) {
       return true
     }
-    return y >= this.skyHeight - 80
+    return false
   }
 
   private handleUiTap(x: number, y: number): boolean {
@@ -3731,15 +3743,7 @@ private loadPlanetPositions(): void {
       }
 	    }
 
-	    if (!this.isExpandedLayout && y >= this.skyHeight - 128) {
-	      const start = this.skyWidth * 0.04
-	      const itemWidth = this.skyWidth * 0.92 / (this.pinnedActions.length - 1)
-	      const index = Math.floor((x - start) / itemWidth)
-	      if (index >= 0 && index < this.pinnedActions.length) {
-	        this.setPanel(this.pinnedActions[index].panel)
-	        return true
-	      }
-	    }
+	    // 紧凑布局的 Dock 点击由 compactDock 组件自身 onClick 处理，不走 overlay 映射
 
 	    if (!this.panelVisible) {
 	      return false
@@ -4200,7 +4204,7 @@ private loadPlanetPositions(): void {
             .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
         }
           .hitTestBehavior(HitTestMode.None)
-          .position({ x: 0, y: 16 })
+          .position({ x: 0, y: this.isExpandedLayout ? 16 : 80 })
           .width('100%')
           .justifyContent(FlexAlign.Center)
           .zIndex(20)
@@ -5004,16 +5008,16 @@ private loadPlanetPositions(): void {
       ForEach(this.pinnedActions, (item: ShellAction) => {
         Column() {
           Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-            .width(22)
-            .height(22)
+            .width(20)
+            .height(20)
             .fillColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : '#B0FFFFFF')
         }
-          .width(44)
-          .height(44)
+          .width(40)
+          .height(40)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
           .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
-          .borderRadius(22)
+          .borderRadius(20)
           .scale({ x: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0, y: this.activePanel === item.panel && this.panelVisible ? 1.12 : 1.0 })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
@@ -5021,6 +5025,24 @@ private loadPlanetPositions(): void {
             this.setPanel(item.panel)
           })
       }, (item: ShellAction) => item.panel)
+      // 更多按钮：展开抽屉项
+      Column() {
+        Image(this.getIcon('grid', false))
+          .width(20)
+          .height(20)
+          .fillColor(this.drawerOpen ? '#5B93BF' : '#B0FFFFFF')
+      }
+        .width(40)
+        .height(40)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor(this.drawerOpen ? 'rgba(91, 147, 191, 0.18)' : Color.Transparent)
+        .borderRadius(20)
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .animation({ duration: 300, curve: curves.springMotion(0.42, 0.82) })
+        .onClick(() => {
+          this.toggleDrawer()
+        })
     }
       .height(52)
       .width('auto')
@@ -5701,13 +5723,28 @@ private loadPlanetPositions(): void {
   @Builder
   bottomSheetPanel() {
     Column() {
-      // 拖拽手柄
+      // 拖拽手柄（可拖动调整面板高度）
       Row()
         .width(36)
         .height(4)
         .backgroundColor('rgba(255, 255, 255, 0.30)')
         .borderRadius(2)
         .margin({ top: 10, bottom: 8 })
+        .gesture(
+          PanGesture({ fingers: 1, distance: 5 })
+            .onActionStart((event: GestureEvent) => {
+              this.sheetDragStartY = event.fingerList[0].localY
+              this.sheetDragStartPct = this.sheetHeightPct
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              const deltaY = event.offsetY
+              const skyH = this.skyHeight > 1 ? this.skyHeight : 800
+              const pctDelta = -deltaY / skyH * 100
+              let newPct = this.sheetDragStartPct + pctDelta
+              newPct = Math.max(50, Math.min(90, newPct))
+              this.sheetHeightPct = newPct
+            })
+        )
       // 面板标题栏
       Row() {
         Text(this.panelTitle())
@@ -5740,7 +5777,7 @@ private loadPlanetPositions(): void {
         .scrollBarColor('#33FFFFFF')
     }
       .width('100%')
-      .height('70%')
+      .height(this.sheetHeightPct + '%')
       .padding({ left: 18, right: 18, bottom: 20 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.72)' : 'rgba(18, 22, 36, 0.88)')
       .backdropBlur(this.panelIdleGlass ? 45 : 35)
