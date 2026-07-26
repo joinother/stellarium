@@ -2241,7 +2241,7 @@ private loadPlanetPositions(): void {
     return label
   }
   // 天体类型本地化（Planet→行星…）；未知则原样。委托给 I18n.objectType()。
-  private zhType(type: string): ResourceStr {
+  private zhType(type: string): string {
     const translated = I18n.objectType(type)
     if (translated === type) { return type }
     return translated
@@ -4769,7 +4769,7 @@ private loadPlanetPositions(): void {
   }
 
   // ===== 中文映射（数据层英文名 → 界面中文） =====
-  private planetZh(en: string): ResourceStr {
+  private planetZh(en: string): string {
     switch (en) {
       case 'Sun': return I18n.t('pl_sun')
       case 'Moon': return I18n.t('pl_moon')
@@ -4785,7 +4785,7 @@ private loadPlanetPositions(): void {
     }
   }
 
-  private sensZh(en: string): ResourceStr {
+  private sensZh(en: string): string {
     switch (en) {
       case 'Standard': return I18n.t('sens_standard')
       case 'Fast': return I18n.t('sens_fast')
