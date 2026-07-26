@@ -208,6 +208,7 @@ struct WindowNativeNode {
   @State private infoWinVisible: boolean = false
   @State private infoWinExpanded: boolean = false
   @State private bottomCardIndex: number = 0
+  @State private infoTextExpanded: boolean = false
   @State private panelContentKey: number = 0
   @State private cardOffsetX: number = 0
   @State private cardOffsetY: number = 0
@@ -456,6 +457,9 @@ struct WindowNativeNode {
   @State private gyroscopeEnabled: boolean = false
   @State private gyroscopeStatus: ResourceStr = I18n.t('m_gyro_off')
   @State private gyroscopeSensitivityText: string = 'Standard'
+  @State private gyroCalibPanelOpen: boolean = false
+  @State private gyroOffsetAz: number = 0    // 方位角校准偏移（度）
+  @State private gyroOffsetAlt: number = 0   // 高度角校准偏移（度）
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
@@ -551,13 +555,12 @@ struct WindowNativeNode {
     this.panelIdleOpacity = 1.0
     this.panelIdleGlass = false
     this.panelIdleTimer = setTimeout(() => {
-      // 空闲→右侧面板变成浅色朦胧毛玻璃，后面的星空仍隐约可见；钉住(uiLocked)时保持原样
       if (!this.uiLocked) {
         this.panelIdleOpacity = 0.88
         this.panelIdleGlass = true
       }
       this.panelIdleTimer = -1
-    }, 10000)
+    }, 5000)
   }
 
   private sidebarAutoCollapseTimer: number = -1
@@ -572,7 +575,7 @@ struct WindowNativeNode {
       this.sidebarAutoCollapseTimer = setTimeout(() => {
         this.railCollapsed = true
         this.sidebarAutoCollapseTimer = -1
-      }, 10000)
+      }, 5000)
     }
   }
   // 目标详情自动刷新：选中天体后每秒重新拉一次坐标，让“地平坐标”随地球自转实时变化。
@@ -777,7 +780,7 @@ struct WindowNativeNode {
   // 星空交错闪烁：每 1 秒翻转一次相位，让亮星/暗星交替明暗
   private startTwinkle(): void {
     if (this.twTimer !== 0) { return }
-    this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 1000)
+    this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 2000)
   }
 
   private stopTwinkle(): void {
@@ -1042,7 +1045,7 @@ struct WindowNativeNode {
   // (50ms x 40 = 2s) so a single tap/search resolves without a visible delay
   // and WITHOUT blocking the render thread. onOk receives the FRESH result.
   private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void): void {
-    this.callNativeWhenReady(name, payload, onOk, 0, 50, 40)
+    this.callNativeWhenReady(name, payload, onOk, 0, 100, 15)
   }
 
   // ===== 星表下载（C++ 桥：getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）=====
@@ -2092,7 +2095,7 @@ private loadPlanetPositions(): void {
       }
     }
     try {
-      sensor.on(sensor.SensorId.GYROSCOPE, this.gyroCallback, { interval: 60000000 })
+      sensor.on(sensor.SensorId.GYROSCOPE, this.gyroCallback, { interval: 50000000 })
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
       this.gyroscopeEnabled = true
@@ -2124,26 +2127,41 @@ private loadPlanetPositions(): void {
       return
     }
 
-    const dt = Math.min(0.08, Math.max(0.0, (now - this.gyroLastTimeMs) / 1000.0))
+    const dt = Math.min(0.1, Math.max(0.001, (now - this.gyroLastTimeMs) / 1000.0))
     this.gyroLastTimeMs = now
     if (dt <= 0.0) {
       return
     }
 
-    const dx = -data.z * dt * this.gyroSensitivity
-    const dy = data.x * dt * this.gyroSensitivity
-    if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
+    // Gyroscope axes (rad/s):
+    //   data.x = rotation around device X (pitch, tilting forward/back)
+    //   data.y = rotation around device Y (yaw, tilting left/right)
+    //   data.z = rotation around device Z (roll, rotating in plane)
+    // For landscape mode (expandedShell), map:
+    //   device yaw (data.y) -> azimuth pan (dx)
+    //   device pitch (data.x) -> altitude pan (dy)
+    // Sensitivity multiplier based on user setting
+    let sensMult: number = 1.0
+    if (this.gyroscopeSensitivityText === 'Low') { sensMult = 0.5 }
+    else if (this.gyroscopeSensitivityText === 'High') { sensMult = 2.0 }
+
+    const dx = -data.y * dt * this.gyroSensitivity * sensMult
+    const dy = data.x * dt * this.gyroSensitivity * sensMult
+    if (Math.abs(dx) < 0.05 && Math.abs(dy) < 0.05) {
       return
     }
 
-    const clampedDx = Math.max(-18, Math.min(18, dx))
-    const clampedDy = Math.max(-18, Math.min(18, dy))
-    // panBy is high-frequency & fire-and-forget: it is drained on the next
-    // render frame, so DON'T wrap it in a retry loop (would flood). A first
-    // call returns {pending} which here simply means "enqueued/working".
-    const result = this.callNative('panBy', clampedDx.toString() + '|' + clampedDy.toString() + '|' + this.skyWidth.toString() + '|' + this.skyHeight.toString())
+    // 应用校准偏移：每帧注入微量偏移，使星图缓慢漂移到正确位置
+    const offsetDx = this.gyroOffsetAz * 0.03
+    const offsetDy = this.gyroOffsetAlt * 0.03
+    this.gyroOffsetAz *= 0.97
+    this.gyroOffsetAlt *= 0.97
+
+    const clampedDx = Math.max(-25, Math.min(25, dx + offsetDx))
+    const clampedDy = Math.max(-25, Math.min(25, dy + offsetDy))
+    const result = this.callNative('panBy', clampedDx.toFixed(2) + '|' + clampedDy.toFixed(2) + '|' + this.skyWidth.toString() + '|' + this.skyHeight.toString())
     this.gyroEventCount += 1
-    if (this.gyroEventCount % 12 === 0) {
+    if (this.gyroEventCount % 20 === 0) {
       this.gyroscopeStatus = (result.ok === true || result.pending === true) ? I18n.t('m_gyro_working') : (result.error ? result.error : I18n.t('m_gyro_core_not_ready'))
     }
   }
@@ -2192,7 +2210,7 @@ private loadPlanetPositions(): void {
       if (this.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWinVisible)) {
         this.refreshSelectedObject()
       }
-    }, 1000) as number
+    }, 5000) as number
   }
 
   private stopDetailAutoRefresh(): void {
@@ -3468,7 +3486,7 @@ private loadPlanetPositions(): void {
 
   private railHeight(): number {
     // 常用区 + 分隔线 + 抽屉按钮 + 音乐按钮 + 顶部内边距
-    return this.pinnedActions.length * 58 + 60 + 44 + 14 + this.RAIL_TOP_PAD
+    return this.pinnedActions.length * 58 + 60 + 44 + 52 + 14 + this.RAIL_TOP_PAD
   }
 
   // 点击侧栏入口：打开对应面板并收起抽屉
@@ -4142,13 +4160,25 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.translate({ x: 40, y: 0 }).animation({ duration: 200, curve: Curve.EaseIn }))
           ))
       }
+      // 陀螺仪校准面板（开启陀螺仪时显示在侧栏右侧）
+      if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
+        Stack() { this.gyroCalibPanel() }
+          .position({ x: this.EDGE_MARGIN + 64, y: this.railTop() + 120 })
+          .hitTestBehavior(HitTestMode.Block)
+          .zIndex(60)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: -20, y: 0 }).animation({ duration: 300, curve: curves.springMotion(0.5, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+          ))
+      }
       // 搜索功能通过左侧搜索图标 → 天体分类面板
       // 左下角滑动详情卡片（选中天体时显示，Swiper 自带左右滑动切换）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
           .position({ x: this.EDGE_MARGIN + 200, y: this.skyHeight - 230 })
           .zIndex(50)
-          .hitTestBehavior(HitTestMode.Block)
+          .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
               .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
@@ -4203,13 +4233,25 @@ private loadPlanetPositions(): void {
 
       this.bottomDock()
 
+      // 陀螺仪校准面板（紧凑布局）
+      if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
+        Stack() { this.gyroCalibPanel() }
+          .position({ x: 16, y: 80 })
+          .hitTestBehavior(HitTestMode.Block)
+          .zIndex(60)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: -20, y: 0 }).animation({ duration: 300, curve: curves.springMotion(0.5, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+          ))
+      }
       // 紧凑布局：搜索通过左侧/底部搜索图标进入分类面板
       // 选中天体滑动详情卡片（紧凑布局：底部 dock 上方）
       if (this.infoWinVisible && this.selectedName.length > 0) {
         Stack() { this.bottomDetailCard() }
           .position({ x: 16, y: this.skyHeight - 250 })
           .zIndex(50)
-          .hitTestBehavior(HitTestMode.Block)
+          .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
               .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
@@ -4317,130 +4359,177 @@ private loadPlanetPositions(): void {
 
       Divider().color('rgba(91,147,191,0.15)').margin({ left: 8, right: 8 })
 
-      // 滑动分栏区域
+      // 滑动分栏区域（三页：概览 / 时间 / 详情）
       Swiper() {
-        // ── 第一栏：基本信息 ──
+        // ── 第一页：概览（关键数据卡片 + 坐标） ──
         Column({ space: 0 }) {
-          if (this.selectedMagnitude.length > 0) {
-            Row() {
-              Text(I18n.t('i0007')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedMagnitude).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
-          }
-          if (this.selectedDistance.length > 0) {
-            Row() {
-              Text(I18n.t('i0011')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedDistance).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-          if (this.selectedSize.length > 0) {
-            Row() {
-              Text(I18n.t('i0290')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedSize).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-          if (this.selectedConstellation.length > 0) {
-            Row() {
-              Text(I18n.t('i0010')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.zhNameOf(this.selectedConstellation)).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-        }
-        .width('100%')
+          // 数据卡片行：视星等 + 距离
+          Row({ space: 8 }) {
+            if (this.selectedMagnitude.length > 0) {
+              Column() {
+                Text(I18n.t('i0007')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedMagnitude).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+            if (this.selectedDistance.length > 0) {
+              Column() {
+                Text(I18n.t('i0011')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedDistance).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+          }.width('100%').padding({ left: 14, right: 14, top: 10 })
 
-        // ── 第二栏：坐标信息 ──
-        Column({ space: 0 }) {
+          // 数据卡片行：大小 + 星座
+          Row({ space: 8 }) {
+            if (this.selectedSize.length > 0) {
+              Column() {
+                Text(I18n.t('i0290')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedSize).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+            if (this.selectedConstellation.length > 0) {
+              Column() {
+                Text(I18n.t('i0010')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.zhNameOf(this.selectedConstellation)).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+          }.width('100%').padding({ left: 14, right: 14, top: 6 })
+
+          // 坐标信息
           if (this.selectedCoordEq.length > 0) {
             Row() {
-              Text(I18n.t('i0008')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedCoordEq).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 6 })
+              Text(I18n.t('i0008')).fontSize(10).fontColor('#8099BBCC').width(56)
+              Text(this.selectedCoordEq).fontSize(11).fontColor('#CCFFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 8, bottom: 2 })
           }
           if (this.selectedCoordAlt.length > 0) {
             Row() {
-              Text(I18n.t('i0009')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedCoordAlt).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-          if (this.selectedRise.length > 0) {
-            Row() {
-              Text(I18n.t('s0700')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedRise).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-          if (this.selectedTransit.length > 0) {
-            Row() {
-              Text(I18n.t('s0701')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedTransit).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
-          }
-          if (this.selectedSet.length > 0) {
-            Row() {
-              Text(I18n.t('s0702')).fontSize(11).fontColor('#8099BBCC').width(56)
-              Text(this.selectedSet).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            }.width('100%').padding({ left: 14, right: 14, top: 4, bottom: 6 })
+              Text(I18n.t('i0009')).fontSize(10).fontColor('#8099BBCC').width(56)
+              Text(this.selectedCoordAlt).fontSize(11).fontColor('#CCFFFFFF').layoutWeight(1)
+            }.width('100%').padding({ left: 14, right: 14, top: 2, bottom: 6 })
           }
         }
         .width('100%')
+        .padding({ bottom: 14 })
 
-        // ── 第三栏：可视化信息卡片 + 操作 ──
-        Column({ space: 8 }) {
-          // 月相/距角/亮度等关键数据以卡片形式呈现
-          if (this.selectedPhase.length > 0 || this.selectedElongation.length > 0) {
-            Row({ space: 8 }) {
-              if (this.selectedPhase.length > 0) {
-                Column() {
-                  Text(I18n.t('i0291')).fontSize(9).fontColor('#8099BBCC')
-                  Text(this.selectedPhase).fontSize(18).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
-                }
-                .alignItems(HorizontalAlign.Center)
-                .padding({ top: 10, bottom: 10, left: 12, right: 12 })
-                .backgroundColor('rgba(91,147,191,0.08)')
-                .borderRadius(12)
-                .layoutWeight(1)
+        // ── 第二页：时间（升起/中天/落下 + 月相/距角） ──
+        Column({ space: 0 }) {
+          // 时间卡片行：升起 / 中天 / 落下
+          Row({ space: 6 }) {
+            if (this.selectedRise.length > 0) {
+              Column() {
+                Text(I18n.t('s0700')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedRise).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
               }
-              if (this.selectedElongation.length > 0) {
-                Column() {
-                  Text(I18n.t('i0255')).fontSize(9).fontColor('#8099BBCC')
-                  Text(this.selectedElongation).fontSize(18).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
-                }
-                .alignItems(HorizontalAlign.Center)
-                .padding({ top: 10, bottom: 10, left: 12, right: 12 })
-                .backgroundColor('rgba(91,147,191,0.08)')
-                .borderRadius(12)
-                .layoutWeight(1)
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 8, right: 8 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+            if (this.selectedTransit.length > 0) {
+              Column() {
+                Text(I18n.t('s0701')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedTransit).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
               }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 8, right: 8 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+            if (this.selectedSet.length > 0) {
+              Column() {
+                Text(I18n.t('s0702')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedSet).fontSize(14).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 8, right: 8 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+          }.width('100%').padding({ left: 14, right: 14, top: 10 })
+
+          // 月相 / 距角
+          Row({ space: 8 }) {
+            if (this.selectedPhase.length > 0) {
+              Column() {
+                Text(I18n.t('i0291')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedPhase).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+            if (this.selectedElongation.length > 0) {
+              Column() {
+                Text(I18n.t('i0255')).fontSize(9).fontColor('#8099BBCC')
+                Text(this.selectedElongation).fontSize(16).fontWeight(FontWeight.Bold).fontColor('#7FB3DC').margin({ top: 2 })
+              }
+              .alignItems(HorizontalAlign.Center)
+              .padding({ top: 8, bottom: 8, left: 10, right: 10 })
+              .backgroundColor('rgba(91,147,191,0.08)')
+              .borderRadius(10)
+              .layoutWeight(1)
+            }
+          }.width('100%').padding({ left: 14, right: 14, top: 6 })
+
+        }
+        .width('100%')
+        .padding({ bottom: 14 })
+
+        // ── 第三页：天体标识（可展开/收起） ──
+        Column({ space: 0 }) {
+          if (this.selectedRich.length > 0) {
+            // 标题行：点击可展开/收起
+            Row() {
+              Text(I18n.t('i0300')).fontSize(11).fontColor('#8099BBCC').layoutWeight(1)
+              Text(this.infoTextExpanded ? '▲' : '▼').fontSize(10).fontColor('#8099BBCC')
             }
             .width('100%')
-            .padding({ left: 14, right: 14, top: 10 })
-          }
-          // 描述文本（带引号样式）
-          if (this.selectedRich.length > 0) {
+            .padding({ left: 14, right: 14, top: 10, bottom: 6 })
+            .onClick(() => { this.infoTextExpanded = !this.infoTextExpanded })
+
+            // 内容：展开时显示全部，收起时显示 2 行
             Column() {
               Text(this.richZh(this.selectedRich))
-                .fontSize(11).fontColor('#CCFFFFFF').lineHeight(18)
-                .maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
+                .fontSize(10).fontColor('#AAFFFFFF').lineHeight(16)
+                .maxLines(this.infoTextExpanded ? 20 : 2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
             .width('100%')
-            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-            .backgroundColor('rgba(91,147,191,0.06)')
+            .padding({ left: 14, right: 14, top: 4, bottom: 8 })
+            .backgroundColor('rgba(91,147,191,0.05)')
             .borderRadius(10)
             .margin({ left: 14, right: 14 })
           }
-          // 操作按钮
-          Row({ space: 8 }) {
-            Button(I18n.t('btn_center'))
-              .fontSize(12).fontColor('#E5FFFFFF')
-              .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
-              .onClick(() => { this.moveToSelectedObject() })
-            Button(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'))
-              .fontSize(12).fontColor('#E5FFFFFF')
-              .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
-              .onClick(() => { this.toggleTracking() })
-          }
-          .width('100%').padding({ left: 14, right: 14, top: 4, bottom: 10 })
+
         }
         .width('100%')
+        .padding({ bottom: 14 })
       }
       .index(this.bottomCardIndex)
       .indicator(true)
@@ -4448,7 +4537,20 @@ private loadPlanetPositions(): void {
       .duration(300)
       .curve(curves.springMotion(0.5, 0.85))
       .width('100%')
-      .height(150)
+      .height(110)
+
+      // 统一操作按钮行（在 Swiper 下方，三页共享）
+      Row({ space: 8 }) {
+        Button(I18n.t('btn_center'))
+          .fontSize(12).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(30).layoutWeight(1)
+          .onClick(() => { this.moveToSelectedObject() })
+        Button(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'))
+          .fontSize(12).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(30).layoutWeight(1)
+          .onClick(() => { this.toggleTracking() })
+      }
+      .width('100%').padding({ left: 14, right: 14, top: 2, bottom: 8 })
     }
     .width(340)
     .backgroundColor('rgba(12, 16, 28, 0.78)')
@@ -4663,6 +4765,21 @@ private loadPlanetPositions(): void {
       .onClick(() => {
         this.toggleMusic()
       })
+    // 陀螺仪开关：开启后随设备转动平移星图，长按打开校准面板
+    Stack() { this.gyroButton() }
+      .width(44)
+      .height(44)
+      .position({ x: 7, y: this.RAIL_TOP_PAD + this.pinnedActions.length * 58 + 116 })
+      .onClick(() => {
+        this.toggleGyroscope(!this.gyroscopeEnabled)
+        this.flashHint(this.gyroscopeEnabled ? '陀螺仪：开' : '陀螺仪：关')
+      })
+      .gesture(LongPressGesture({ repeat: false, duration: 600 })
+        .onAction(() => {
+          if (this.gyroscopeEnabled) {
+            this.gyroCalibPanelOpen = !this.gyroCalibPanelOpen
+          }
+        }))
   }
     .width(58)
         .height(this.railHeight())
@@ -4795,6 +4912,10 @@ private loadPlanetPositions(): void {
 
   private richZh(text: string): string {
     if (!text || text.length === 0) return ''
+    // 清理 HTML 标签（<span>, <br>, <i>, <b>, <a> 等）
+    let out: string = text.replace(/<[^>]*>/g, '')
+    // 清理多余空白和连接符
+    out = out.replace(/\s*-\s*/g, ' · ').replace(/\s{2,}/g, ' ').trim()
     const phrases: [string, string][] = [
       ['eclipsing binary system', '食双星系统'],
       ['double star', '双星'],
@@ -4812,7 +4933,6 @@ private loadPlanetPositions(): void {
       [' nebula', '星云'],
       [' cluster', '星团']
     ]
-    let out: string = text
     for (let i = 0; i < phrases.length; i++) {
       const pair = phrases[i]
       out = out.replace(new RegExp(pair[0], 'gi'), pair[1])
@@ -5018,18 +5138,18 @@ private loadPlanetPositions(): void {
   // 音乐开关按钮（左侧栏底部）：开着时音符亮起，静音时变暗
   @Builder
   musicButton() {
-    Column() {
-      Text(this.musicEnabled ? '♪' : '♪')
-        .fontSize(22)
-        .fontWeight(FontWeight.Bold)
+    Stack() {
+      Text('\u266A')
+        .fontSize(20)
+        .fontWeight(FontWeight.Medium)
         .fontColor(this.musicEnabled ? '#7FD0FF' : '#5A6270')
-        .opacity(this.musicEnabled ? 1.0 : 0.5)
+        .opacity(this.musicEnabled ? 1.0 : 0.45)
+        .textAlign(TextAlign.Center)
         .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
     }
       .width(44)
       .height(44)
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center)
+      .alignContent(Alignment.Center)
       .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
       .border({ width: 1, color: this.musicEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(22)
@@ -5043,6 +5163,165 @@ private loadPlanetPositions(): void {
         }
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+  }
+
+  // ── 陀螺仪按钮 ──
+  @Builder
+  gyroButton() {
+    Stack() {
+      // 外圈：旋转的轨道环
+      Circle()
+        .width(28)
+        .height(28)
+        .fill('none')
+        .stroke(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
+        .strokeWidth(1.5)
+        .opacity(this.gyroscopeEnabled ? 0.8 : 0.4)
+      // 中圈：十字准星
+      Circle()
+        .width(16)
+        .height(16)
+        .fill('none')
+        .stroke(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
+        .strokeWidth(1)
+        .opacity(this.gyroscopeEnabled ? 0.6 : 0.3)
+      // 中心点
+      Circle()
+        .width(5)
+        .height(5)
+        .fill(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
+        .opacity(this.gyroscopeEnabled ? 1.0 : 0.5)
+      // 十字线
+      if (this.gyroscopeEnabled) {
+        Line().width(2).height(10)
+          .stroke('#7FD0FF').strokeWidth(1)
+          .position({ x: 21, y: 6 })
+        Line().width(2).height(10)
+          .stroke('#7FD0FF').strokeWidth(1)
+          .position({ x: 21, y: 28 })
+        Line().width(10).height(2)
+          .stroke('#7FD0FF').strokeWidth(1)
+          .position({ x: 6, y: 21 })
+        Line().width(10).height(2)
+          .stroke('#7FD0FF').strokeWidth(1)
+          .position({ x: 28, y: 21 })
+      }
+    }
+      .width(44)
+      .height(44)
+      .alignContent(Alignment.Center)
+      .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.22)' : 'rgba(255, 255, 255, 0.06)')
+      .border({ width: 1, color: this.gyroscopeEnabled ? 'rgba(107, 163, 214, 0.45)' : 'rgba(255, 255, 255, 0.08)' })
+      .borderRadius(22)
+      .margin({ top: 4, bottom: 4 })
+      .scale({ x: this.gyroscopeEnabled ? 1.06 : 1.0, y: this.gyroscopeEnabled ? 1.06 : 1.0 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .stateStyles({
+        pressed: {
+          .scale({ x: 0.9, y: 0.9 })
+          .backgroundColor('rgba(255, 255, 255, 0.12)')
+        }
+      })
+      .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
+  }
+
+  // ── 陀螺仪校准面板 ──
+  @Builder
+  gyroCalibPanel() {
+    Column({ space: 12 }) {
+      // 标题行
+      Row() {
+        Stack() {
+          Circle().width(10).height(10)
+            .fill(this.gyroscopeEnabled ? '#5BDF7F' : '#666')
+            .opacity(0.9)
+        }.width(16).height(16)
+        Text(I18n.t('i0060'))
+          .fontSize(14).fontWeight(FontWeight.Bold).fontColor('#E5FFFFFF').layoutWeight(1).margin({ left: 6 })
+        Text('×')
+          .fontSize(18).fontColor('#99FFFFFF')
+          .onClick(() => { this.gyroCalibPanelOpen = false })
+      }
+      .width('100%')
+
+      Text(I18n.t('i0043'))
+        .fontSize(11).fontColor('#8099BBCC').width('100%')
+
+      // 灵敏度选择
+      Row({ space: 8 }) {
+        Text(I18n.t('i0061')).fontSize(12).fontColor('#CCCCCC').width(44)
+        Row({ space: 6 }) {
+          ForEach(['Low', 'Standard', 'High'], (s: string, idx: number) => {
+            Text(s)
+              .fontSize(11)
+              .fontColor(this.gyroscopeSensitivityText === s ? '#FFFFFF' : '#8099BBCC')
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .borderRadius(10)
+              .backgroundColor(this.gyroscopeSensitivityText === s ? 'rgba(91,147,191,0.35)' : 'rgba(255,255,255,0.06)')
+              .onClick(() => {
+                this.gyroscopeSensitivityText = s
+                this.flashHint(s)
+              })
+          })
+        }.layoutWeight(1).justifyContent(FlexAlign.End)
+      }.width('100%')
+
+      // 方位角校准
+      Row({ space: 10 }) {
+        Text(I18n.t('i0084') + '→' + I18n.t('i0086')).fontSize(11).fontColor('#CCCCCC').width(50)
+        Slider({ value: this.gyroOffsetAz, min: -30, max: 30, step: 0.5 })
+          .layoutWeight(1)
+          .selectedColor('#5B93BF')
+          .trackColor('rgba(255,255,255,0.12)')
+          .onChange((v: number) => { this.gyroOffsetAz = v })
+        Text(this.gyroOffsetAz.toFixed(1) + '°')
+          .fontSize(11).fontColor('#7FB3DC').width(48).textAlign(TextAlign.End)
+      }.width('100%')
+
+      // 高度角校准
+      Row({ space: 10 }) {
+        Text(I18n.t('i0016')).fontSize(11).fontColor('#CCCCCC').width(50)
+        Slider({ value: this.gyroOffsetAlt, min: -30, max: 30, step: 0.5 })
+          .layoutWeight(1)
+          .selectedColor('#5B93BF')
+          .trackColor('rgba(255,255,255,0.12)')
+          .onChange((v: number) => { this.gyroOffsetAlt = v })
+        Text(this.gyroOffsetAlt.toFixed(1) + '°')
+          .fontSize(11).fontColor('#7FB3DC').width(48).textAlign(TextAlign.End)
+      }.width('100%')
+
+      // 重置按钮
+      Row({ space: 8 }) {
+        Button(I18n.t('i0053'))
+          .fontSize(12).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(91,147,191,0.25)').borderRadius(12).height(32).layoutWeight(1)
+          .onClick(() => {
+            this.gyroOffsetAz = 0
+            this.gyroOffsetAlt = 0
+            this.flashHint(I18n.t('i0053'))
+          })
+        Button(I18n.t('i0051'))
+          .fontSize(12).fontColor('#E5FFFFFF')
+          .backgroundColor('rgba(200,80,60,0.25)').borderRadius(12).height(32).layoutWeight(1)
+          .onClick(() => {
+            this.toggleGyroscope(false)
+            this.gyroCalibPanelOpen = false
+          })
+      }.width('100%').margin({ top: 4 })
+
+      // 状态信息
+      Row() {
+        Text((this.gyroscopeStatus as string))
+          .fontSize(10).fontColor('#8099BBCC')
+      }.width('100%')
+    }
+    .width(280)
+    .padding(16)
+    .backgroundColor('rgba(12, 16, 28, 0.85)')
+    .backdropBlur(40)
+    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+    .borderRadius(20)
+    .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
 
   // 切换音乐开关（带 350ms 防抖，避免坐标命中与 onClick 双触发导致来回跳）

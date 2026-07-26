@@ -199,7 +199,7 @@ export class AudioEngine {
   private readonly revWet: number = 0.40
 
   // 音量级别
-  private readonly chimeLevel: number = 0.40  // 选星叮声整体增益
+  private readonly chimeLevel: number = 0.22  // 选星叮声整体增益（降低刺耳感）
 
   // 正弦查找表
   private sineTable: Float32Array = new Float32Array(SINE_SIZE + 1)
@@ -352,27 +352,8 @@ export class AudioEngine {
       await this.renderer.start()
       this.running = true
 
-      // 初始化起始状态
-      // Drone 从 Am7 根音开始，淡入
-      this.drone.v0.freq = this.drone.v0.targetFreq
-      this.drone.v1.freq = this.drone.v1.targetFreq
-      this.drone.v2.freq = this.drone.v2.targetFreq
-      this.drone.gain = 0
-      this.drone.targetGain = 0.25
-
-      // Pads 淡入
-      for (let i = 0; i < this.NUM_PADS; i++) {
-        this.pads[i].freq = this.pads[i].targetFreq
-        this.pads[i].gain = 0
-      }
-
-      // Shimmer 淡入
-      this.shimmer0.freq = this.shimmer0.targetFreq
-      this.shimmer0.gain = 0
-      this.shimmer1.freq = this.shimmer1.targetFreq
-      this.shimmer1.gain = 0
-
-      hilog.info(DOMAIN, TAG, 'audio engine started (v4 Interstellar symphonic)')
+      // 背景音已移除，仅保留选星叮声
+      hilog.info(DOMAIN, TAG, 'audio engine started (chime-only mode)')
     } catch (e) {
       this.running = false
       hilog.error(DOMAIN, TAG, 'audio engine start failed: %{public}s', (e as Error).message ?? String(e))
@@ -408,6 +389,8 @@ export class AudioEngine {
 
   // ───────────────────────── 实时合成（核心render循环）─────────────────────────
 
+  // 背景音已移除（drone/pad/shimmer/melody 全部禁用），仅保留选星叮声。
+  // 这极大降低了 CPU 占用，避免与星图渲染线程争抢资源导致卡顿。
   private render(buffer: ArrayBuffer): void {
     const n: number = (buffer.byteLength / 2) | 0
     if (this.muted || !this.running) {
@@ -417,289 +400,24 @@ export class AudioEngine {
     }
     const out: Int16Array = new Int16Array(buffer)
 
-    // 缓存常量和状态到局部变量（性能关键）
     const tbl: Float32Array = this.sineTable
     const ss: number = SINE_SCALE
     const tp: number = TWO_PI
-    const tpos: number = TWO_PI_OVER_SR
 
-    // 和弦变化调度（16-20秒切换）
-    this.sinceChordChange += n
-    if (this.sinceChordChange >= this.nextChordChange) {
-      this.chordIndex = (this.chordIndex + 1) % this.chords.length
-      this.applyChord(this.chordIndex)
-      this.nextChordChange = (16 + Math.random() * 4) * SR
-      this.sinceChordChange = 0
-    }
-
-    // ── 旋律调度：每3-6秒触发一个新音符 ──
-    this.melNoteAge += n
-    if (!this.melActive || this.melNoteAge >= this.melNoteDur) {
-      const seq = this.melSeq[this.chordIndex % this.melSeq.length]
-      this.melNoteIdx = Math.floor(Math.random() * seq.length)
-      this.melTargetFreq = seq[this.melNoteIdx]
-      this.melActive = true
-      this.melNoteAge = 0
-      this.melNoteDur = (3 + Math.random() * 3) * SR  // 3-6秒
-    }
-
-    // Drone 引用
-    const dr: DeepDrone = this.drone
-    // Drone 淡入/增益滑向目标
-    dr.gain += (dr.targetGain - dr.gain) * 0.0001
-
-    // Pad 引用
-    const p0: Pad = this.pads[0]
-    const p1: Pad = this.pads[1]
-    const p2: Pad = this.pads[2]
-    const p3: Pad = this.pads[3]
-    const p4: Pad = this.pads[4]
-
-    // Shimmer 引用
-    const sh0: ShimmerVoice = this.shimmer0
-    const sh1: ShimmerVoice = this.shimmer1
-    // Shimmer 淡入
-    sh0.gain += (sh0.targetGain - sh0.gain) * 0.00008
-    sh1.gain += (sh1.targetGain - sh1.gain) * 0.00008
-
-    // Chime 引用
     const chimes: Chime[] = this.chimes
     const numChimes: number = chimes.length
     const chimeLvl: number = this.chimeLevel
 
-    // 混响状态
+    // 轻量混响（单延迟线，仅用于 chime 尾音）
     const rb1: Float32Array = this.revBuf1
-    const rb2: Float32Array = this.revBuf2
-    let rlp1: number = this.revLp1
-    let rlp2: number = this.revLp2
     let rpos: number = this.revPos
     const rlen: number = this.revLen
-    const rfb: number = this.revFeedback
-    const rwet: number = this.revWet
-
-    // 频率滑动系数（0.0002 → 约5秒到位）
-    const slideK: number = 0.0002
-
-    // ── 内循环：每sample ──
+    const rfb: number = 0.25
 
     for (let i = 0; i < n; i++) {
       let mix: number = 0
 
-      // ═══════════════════════════════════════════════════
-      // 第1层：Deep Bass Drone（3个失谐正弦，~30-55Hz）
-      // ═══════════════════════════════════════════════════
-
-      // Voice 0：基频
-      dr.v0.freq += (dr.v0.targetFreq - dr.v0.freq) * slideK
-      dr.v0.phase += dr.v0.freq * tpos
-      if (dr.v0.phase >= tp) { dr.v0.phase -= tp }
-      let d0i: number = dr.v0.phase * ss
-      let d0i0: number = d0i | 0
-      let d0f: number = d0i - d0i0
-      let dv0: number = tbl[d0i0] + (tbl[d0i0 + 1] - tbl[d0i0]) * d0f
-
-      // Voice 1：+0.25Hz失谐
-      dr.v1.freq += (dr.v1.targetFreq - dr.v1.freq) * slideK
-      dr.v1.phase += dr.v1.freq * tpos
-      if (dr.v1.phase >= tp) { dr.v1.phase -= tp }
-      let d1i: number = dr.v1.phase * ss
-      let d1i0: number = d1i | 0
-      let d1f: number = d1i - d1i0
-      let dv1: number = tbl[d1i0] + (tbl[d1i0 + 1] - tbl[d1i0]) * d1f
-
-      // Voice 2：-0.25Hz失谐
-      dr.v2.freq += (dr.v2.targetFreq - dr.v2.freq) * slideK
-      dr.v2.phase += dr.v2.freq * tpos
-      if (dr.v2.phase >= tp) { dr.v2.phase -= tp }
-      let d2i: number = dr.v2.phase * ss
-      let d2i0: number = d2i | 0
-      let d2f: number = d2i - d2i0
-      let dv2: number = tbl[d2i0] + (tbl[d2i0 + 1] - tbl[d2i0]) * d2f
-
-      // 3个voice平均 → chorus效果
-      let droneMix: number = (dv0 + dv1 + dv2) * 0.33333 * dr.gain
-      // 低通滤波 (cutoff ~100Hz)
-      dr.lpState += dr.lpCoeff * (droneMix - dr.lpState)
-      mix += dr.lpState
-
-      // ═══════════════════════════════════════════════════
-      // 第2层：String Pad（5个正弦，LFO调制幅度）
-      // ═══════════════════════════════════════════════════
-
-      // --- Pad 0 ---
-      p0.freq += (p0.targetFreq - p0.freq) * slideK
-      p0.gain += (p0.targetGain - p0.gain) * 0.00015
-      p0.phase += p0.freq * tpos
-      if (p0.phase >= tp) { p0.phase -= tp }
-      p0.lfo += p0.lfoInc
-      if (p0.lfo >= tp) { p0.lfo -= tp }
-      {
-        let li: number = p0.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.5 + 0.5 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = p0.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        let raw: number = s * p0.gain * breath
-        p0.lpState += p0.lpCoeff * (raw - p0.lpState)
-        mix += p0.lpState
-      }
-
-      // --- Pad 1 ---
-      p1.freq += (p1.targetFreq - p1.freq) * slideK
-      p1.gain += (p1.targetGain - p1.gain) * 0.00015
-      p1.phase += p1.freq * tpos
-      if (p1.phase >= tp) { p1.phase -= tp }
-      p1.lfo += p1.lfoInc
-      if (p1.lfo >= tp) { p1.lfo -= tp }
-      {
-        let li: number = p1.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.5 + 0.5 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = p1.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        let raw: number = s * p1.gain * breath
-        p1.lpState += p1.lpCoeff * (raw - p1.lpState)
-        mix += p1.lpState
-      }
-
-      // --- Pad 2 ---
-      p2.freq += (p2.targetFreq - p2.freq) * slideK
-      p2.gain += (p2.targetGain - p2.gain) * 0.00015
-      p2.phase += p2.freq * tpos
-      if (p2.phase >= tp) { p2.phase -= tp }
-      p2.lfo += p2.lfoInc
-      if (p2.lfo >= tp) { p2.lfo -= tp }
-      {
-        let li: number = p2.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.5 + 0.5 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = p2.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        let raw: number = s * p2.gain * breath
-        p2.lpState += p2.lpCoeff * (raw - p2.lpState)
-        mix += p2.lpState
-      }
-
-      // --- Pad 3 ---
-      p3.freq += (p3.targetFreq - p3.freq) * slideK
-      p3.gain += (p3.targetGain - p3.gain) * 0.00015
-      p3.phase += p3.freq * tpos
-      if (p3.phase >= tp) { p3.phase -= tp }
-      p3.lfo += p3.lfoInc
-      if (p3.lfo >= tp) { p3.lfo -= tp }
-      {
-        let li: number = p3.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.5 + 0.5 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = p3.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        let raw: number = s * p3.gain * breath
-        p3.lpState += p3.lpCoeff * (raw - p3.lpState)
-        mix += p3.lpState
-      }
-
-      // --- Pad 4 ---
-      p4.freq += (p4.targetFreq - p4.freq) * slideK
-      p4.gain += (p4.targetGain - p4.gain) * 0.00015
-      p4.phase += p4.freq * tpos
-      if (p4.phase >= tp) { p4.phase -= tp }
-      p4.lfo += p4.lfoInc
-      if (p4.lfo >= tp) { p4.lfo -= tp }
-      {
-        let li: number = p4.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.5 + 0.5 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = p4.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        let raw: number = s * p4.gain * breath
-        p4.lpState += p4.lpCoeff * (raw - p4.lpState)
-        mix += p4.lpState
-      }
-
-      // ═══════════════════════════════════════════════════
-      // 第3层：High Shimmer（2个极轻高频，若有若无）
-      // ═══════════════════════════════════════════════════
-
-      // Shimmer 0
-      sh0.freq += (sh0.targetFreq - sh0.freq) * slideK
-      sh0.phase += sh0.freq * tpos
-      if (sh0.phase >= tp) { sh0.phase -= tp }
-      sh0.lfo += sh0.lfoInc
-      if (sh0.lfo >= tp) { sh0.lfo -= tp }
-      {
-        let li: number = sh0.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.3 + 0.7 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = sh0.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        mix += s * sh0.gain * breath
-      }
-
-      // Shimmer 1
-      sh1.freq += (sh1.targetFreq - sh1.freq) * slideK
-      sh1.phase += sh1.freq * tpos
-      if (sh1.phase >= tp) { sh1.phase -= tp }
-      sh1.lfo += sh1.lfoInc
-      if (sh1.lfo >= tp) { sh1.lfo -= tp }
-      {
-        let li: number = sh1.lfo * ss
-        let li0: number = li | 0
-        let lf: number = li - li0
-        let breath: number = 0.3 + 0.7 * (tbl[li0] + (tbl[li0 + 1] - tbl[li0]) * lf)
-        let pi: number = sh1.phase * ss
-        let pi0: number = pi | 0
-        let pf: number = pi - pi0
-        let s: number = tbl[pi0] + (tbl[pi0 + 1] - tbl[pi0]) * pf
-        mix += s * sh1.gain * breath
-
-      // ═══════════════════════════════════════════════════
-      // 第2.5层：Melody 旋律线（缓慢电影配乐式旋律）
-      // ═══════════════════════════════════════════════════
-      if (this.melActive) {
-        const mAttack: number = 0.6 * SR
-        const mRelease: number = 1.0 * SR
-        let mEnv: number = 1.0
-        if (this.melNoteAge < mAttack) {
-          mEnv = this.melNoteAge / mAttack
-        } else if (this.melNoteAge > this.melNoteDur - mRelease) {
-          mEnv = (this.melNoteDur - this.melNoteAge) / mRelease
-          if (mEnv < 0) { mEnv = 0; this.melActive = false }
-        }
-        this.melFreq += (this.melTargetFreq - this.melFreq) * 0.003
-        this.melPhase += this.melFreq * tpos
-        if (this.melPhase >= tp) { this.melPhase -= tp }
-        let mi: number = this.melPhase * ss
-        let mi0: number = mi | 0
-        let mf: number = mi - mi0
-        let mSamp: number = tbl[mi0] + (tbl[mi0 + 1] - tbl[mi0]) * mf
-        let melRaw: number = mSamp * mEnv * this.melLevel
-        this.melLpState += this.melLpCoeff * (melRaw - this.melLpState)
-        mix += this.melLpState
-      }
-      }
-
-      // ═══════════════════════════════════════════════════
-      // 第4层：Chimes（选星叮声，保留原有逻辑）
-      // ═══════════════════════════════════════════════════
-
+      // ── 仅处理 Chimes（选星叮声）──
       for (let c = 0; c < numChimes; c++) {
         const ch: Chime = chimes[c]
         if (!ch.active) { continue }
@@ -724,31 +442,18 @@ export class AudioEngine {
         mix += s * ch.env * ch.gain * chimeLvl
       }
 
-      // ═══════════════════════════════════════════════════
-      // 双延迟线混响
-      // ═══════════════════════════════════════════════════
-
+      // 轻量混响
       const d1: number = rb1[rpos]
-      const d2: number = rb2[rpos]
-      rlp1 += (d1 - rlp1) * 0.5
-      rlp2 += (d2 - rlp2) * 0.5
-      const w1: number = rlp1 * rfb
-      const w2: number = rlp2 * rfb
-      rb1[rpos] = mix + w1
-      rb2[rpos] = mix + w2
+      rb1[rpos] = mix + d1 * rfb
       rpos++
       if (rpos >= rlen) { rpos = 0 }
-      const wet: number = ((w1 + w2) * 0.5) * rwet
+      const wet: number = d1 * 0.15
 
-      // 最终输出：干信号 + 湿信号
-      let o: number = (mix * 0.4 + wet) * this.masterVol
+      let o: number = (mix * 0.6 + wet) * this.masterVol
       if (o > 1.0) { o = 1.0 } else if (o < -1.0) { o = -1.0 }
       out[i] = (o * 32767) | 0
     }
 
-    // 回写混响状态
-    this.revLp1 = rlp1
-    this.revLp2 = rlp2
     this.revPos = rpos
   }
 
@@ -780,13 +485,13 @@ export class AudioEngine {
     // ── 太阳 ──
     if (otype === 'star' && name.toLowerCase().includes('sun')) {
       return {
-        freq: this.scale[len - 3],
-        gain: 0.48,
-        decay: 2.5,
+        freq: this.scale[3],
+        gain: 0.20,
+        decay: 4.0,
         partials: [
           { ratio: 1.0, gain: 1.0 },
-          { ratio: 2.0, gain: 0.35 },
-          { ratio: 3.0, gain: 0.18 }
+          { ratio: 2.0, gain: 0.12 },
+          { ratio: 3.0, gain: 0.05 }
         ],
         pan: 0
       }
@@ -820,13 +525,13 @@ export class AudioEngine {
       // 中等距离恒星（50-500光年）：温暖略带延迟感
       if (distLY > 50) {
         return {
-          freq: this.scale[idx],
-          gain: 0.14,
-          decay: 5.0,
+          freq: this.scale[Math.max(0, idx - 2)],
+          gain: 0.10,
+          decay: 6.0,
           partials: [
             { ratio: 1.0, gain: 1.0 },
-            { ratio: 2.0, gain: 0.2 },
-            { ratio: 3.0, gain: 0.08 }
+            { ratio: 2.0, gain: 0.10 },
+            { ratio: 3.0, gain: 0.04 }
           ],
           pan: 0
         }
@@ -844,16 +549,16 @@ export class AudioEngine {
           pan: 0
         }
       }
-      const vol: number = Math.max(0.15, Math.min(0.5, (6.5 - mag) / 8.0)) * 0.55
-      const decay: number = tk > 15000 ? 1.8 : 3.5
+      const vol: number = Math.max(0.10, Math.min(0.28, (6.5 - mag) / 8.0)) * 0.45
+      const decay: number = tk > 15000 ? 3.0 : 5.0
       return {
-        freq: this.scale[idx],
+        freq: this.scale[Math.max(0, idx - 3)],
         gain: vol,
         decay: decay,
         partials: [
           { ratio: 1.0, gain: 1.0 },
-          { ratio: 2.0, gain: 0.3 },
-          { ratio: 3.0, gain: tk > 10000 ? 0.12 : 0.05 }
+          { ratio: 2.0, gain: 0.12 },
+          { ratio: 3.0, gain: tk > 10000 ? 0.05 : 0.02 }
         ],
         pan: 0
       }
@@ -1225,22 +930,17 @@ export class AudioEngine {
         })
         return { freq: this.scale[0], gain: 0, decay: 0.01, partials: [], pan: 0 }
       }
-      // 一般卫星：3个递进高频短促beep（电子信号感）
+      // 一般卫星：2个递进高频短促beep（电子信号感）
+      // 降低增益和泛音强度，减少刺耳感但保持尖锐特色
       this.playChime({
-        freq: this.scale[15 + (hash % 3)],
-        gain: 0.25, decay: 1.2,
-        partials: [{ ratio: 1.0, gain: 1.0 }, { ratio: 2.0, gain: 0.3 }],
+        freq: this.scale[14 + (hash % 3)],
+        gain: 0.16, decay: 1.0,
+        partials: [{ ratio: 1.0, gain: 1.0 }, { ratio: 2.0, gain: 0.12 }],
         pan: 0
       })
       this.playChime({
-        freq: this.scale[15 + (hash % 3)] * 1.5,
-        gain: 0.15, decay: 0.6,
-        partials: [{ ratio: 1.0, gain: 1.0 }, { ratio: 2.0, gain: 0.2 }],
-        pan: 0
-      })
-      this.playChime({
-        freq: this.scale[15 + (hash % 3)] * 2.0,
-        gain: 0.10, decay: 0.3,
+        freq: this.scale[14 + (hash % 3)] * 1.5,
+        gain: 0.09, decay: 0.5,
         partials: [{ ratio: 1.0, gain: 1.0 }],
         pan: 0
       })

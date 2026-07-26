@@ -1,3 +1,28 @@
+## [2026-07-27] TRAE - 综合修复：音效+性能+陀螺仪+图标+启动屏
+
+- **修改文件：**
+  - `build/.../ets/pages/StellariumAudio.ets`（卫星音效调整）
+  - `build/.../ets/pages/MainWindowNativeNode.ets`（陀螺仪重设计、性能优化、音乐按钮居中、面板空闲计时器）
+  - `build/.../resources/base/element/color.json`（启动屏背景色）
+  - `AppScope/resources/base/media/app_icon.png`（替换为原版Stellarium图标）
+  - `entry/.../resources/base/media/foreground.png` + `background.png`（自适应图标层）
+
+- **修改内容：**
+  1. **卫星音效**：减少chime数量3→2，降低增益(0.25→0.16)，降低泛音强度(0.3→0.12)，频率下移1个音阶，减少刺耳感但保持尖锐电子信号特色。
+  2. **性能优化**：callInteractive轮询从80ms×25降低到100ms×15；详情自动刷新3s→5s；闪烁定时器1s→2s；面板空闲计时器10s→5s（符合用户要求）。
+  3. **陀螺仪按钮重设计**：从纯文字"◎"改为十字准星reticle风格（双圆环+中心点+十字线），使用Circle和Line组件。
+  4. **陀螺仪位置修复**：更新railHeight计算包含陀螺按钮空间，调整y坐标避免与菜单栏重叠。
+  5. **陀螺仪功能修复**：修正传感器轴映射(data.y→方位角, data.x→高度角)，添加灵敏度选择(Low/Standard/High)，降低死区阈值(0.08→0.05)，传感器间隔60ms→50ms。
+  6. **校准面板改进**：使用i18n国际化文本，添加灵敏度选择器，添加状态指示灯。
+  7. **音乐按钮居中**：从Column改为Stack+alignContent(Center)，使用Unicode转义确保音符居中。
+  8. **启动屏背景**：系统start_window_background从#FFFFFF改为#05070F（深空黑），消除惨白启动屏。
+  9. **应用图标**：从AI生成图标替换为原版Stellarium图标（月牙+星空+地景剪影），216×216px。
+
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 编译通过，无错误
+
+---
+
 ## [2026-07-27] TRAE - 综合UI修复：Swiper拖动+时区翻译+面板动画+1x移除
 
 - **修改文件：**
