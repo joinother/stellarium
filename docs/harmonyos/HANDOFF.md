@@ -157,8 +157,7 @@ $HDC -t 127.0.0.1:5555 file recv /data/local/tmp/ui.jpeg /tmp/ui.jpeg
 ### 5.1 性能优化（C++ + ArkTS）
 - **定时器清理**：`aboutToDisappear()` 中补充清理 `twTimer`、`fpsTimer`、`hintTimer`、`locSearchDebounce`、`panelIdleTimer`、`sidebarAutoCollapseTimer`
 - **FPS轮询降频**：从 500ms 延长到 5000ms，移除内嵌 `setTimeout` 重试
-- **C++命令队列保护**：添加 256 条上限，队列过大时丢弃新命令；使用 `swap` 零拷贝优化批处理
-- **C++队列零拷贝**：`ohosDrainCommandQueue()` 中 `batch = s_ohosCmdQueue; s_ohosCmdQueue.clear();` 改为 `batch.swap(s_ohosCmdQueue);`
+- **C++命令队列**：`ohosDrainCommandQueue()` 使用 `batch = s_ohosCmdQueue; s_ohosCmdQueue.clear();` 批量取出执行（注：此前文档误称有256上限和swap零拷贝，实际代码中均未实现，已修正）
 
 ### 5.2 面板拖拽双限位弹簧效果
 - 底部面板 `PanGesture` 重构：
