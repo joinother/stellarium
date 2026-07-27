@@ -5,6 +5,78 @@
 
 ---
 
+## 2026-07-27 最新恢复结论：Git 干净不等于 HAP 干净
+
+这次“回退后星图仍然模糊/拖动怪/点击异常”的根因已经定位：实际 HAP 编译目录里的 native 入口文件被后续实验污染，但它不在 Git 跟踪范围内，所以 `git checkout`/回退后 `git status` 仍显示干净。
+
+关键文件：
+
+```
+Git 跟踪镜像源:
+  harmonyos/cpp-source/hello.cpp
+
+实际 HAP 编译源:
+  build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp
+```
+
+坏包的 `libentry.so` 里能看到这些字符串：
+
+```
+disabled vsync (eglSwapInterval=0)
+frameBreakdown: makeCurrent=...
+glTexStorage2D
+glTexSubImage2D
+```
+
+Pad 上可用的金标准 HAP，以及修复后的 HAP，`libentry.so` 里应是旧路径：
+
+```
+glTexImage2D
+upload submitted frame failed
+draw submitted frame failed
+```
+
+已新增脚本：
+
+```
+scripts/sync-ohos-build-sources.sh
+```
+
+每次从 Git 回退、切分支、或多个 AI 交替修改后，构建前先运行：
+
+```
+cd ~/stellarium-src
+scripts/sync-ohos-build-sources.sh
+```
+
+然后再进入 hvigor 工程构建：
+
+```
+cd ~/stellarium-src/build/libstellarium-harmonyos
+env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
+JAVA_HOME=/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home \
+OHOS_BASE_SDK_HOME=/Users/jiexuanyang/Library/OpenHarmony/Sdk \
+DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk \
+PATH=/Applications/DevEco-Studio.app/Contents/tools/node/bin:/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
+```
+
+验证入口库是否正确：
+
+```
+unzip -q build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap -d /tmp/stel_check
+shasum -a 256 /tmp/stel_check/libs/arm64-v8a/libentry.so
+strings /tmp/stel_check/libs/arm64-v8a/libentry.so | grep -E 'disabled vsync|glTexStorage2D|glTexImage2D|upload submitted'
+```
+
+当前已验证结果：
+
+- Pad 金标准包：`/Users/jiexuanyang/stellarium-signing-pad/stellarium-pad-signed.hap`
+- 金标准 `libentry.so` 哈希：`0a2f0a1383d6edeb8a149d5251599f27416d12a1dd463394216d630602d7538e`
+- 修复后新 HAP 的 `libentry.so` 哈希已与金标准一致
+- 用户在模拟器确认：修复后“没问题了”
+- 注意：不要安装到真实 Pad `7LZBB26323200303` 覆盖金标准包；测试目标用 `127.0.0.1:5555`
+
 ## 一、最重要的警告：用量已耗尽，优先从这里开始
 
 WorkBuddy 当前会话用量已耗尽。接手方请：
