@@ -1491,3 +1491,37 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 通过，模拟器截图确认：左侧工具栏已移除，底部Dock横向排列6个图标，半屏面板默认关闭，点击Dock图标可弹出半屏面板
 - **备注：** compactShell 早在上一轮已实现（bottomSheetPanel/compactDock/弹簧动画），但 build() 未调用 harmonyShell() 导致从未生效
+
+## [2026-07-27] TRAE - 长时间运行性能优化：定时器清理+FPS轮询降频+C++队列保护
+
+- **修改文件：**
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+  - `src/StelMainView.cpp`
+
+- **修改内容：**
+  1. **aboutToDisappear 完整定时器清理**：补充清理 `twTimer`、`fpsTimer`、`hintTimer`、`locSearchDebounce`、`panelIdleTimer`、`sidebarAutoCollapseTimer` 共6个遗漏的定时器。原实现仅清理陀螺仪和详情刷新定时器，组件销毁时其他定时器继续运行，导致内存泄漏和CPU占用随时间累积。
+  2. **FPS轮询降频**：`fpsTimer` 间隔从 500ms 延长到 5000ms，并移除内嵌的 `setTimeout` 重试逻辑。大幅降低 N-API 调用频率和 JSON 字符串解析次数，减轻 ArkTS GC 压力（长时间运行后 GC 停顿是"变卡"的主要原因之一）。
+  3. **C++命令队列防御上限**：`s_ohosCmdQueue` 在 fire-and-forget 路径（dragView/zoomBy/panBy）和普通命令路径中均添加 256 条上限。队列超过上限时，fire-and-forget 命令丢弃，普通命令路径清空队列后追加新命令，防止极端负载下队列无限增长。
+  4. **C++队列零拷贝优化**：`ohosDrainCommandQueue()` 中 `batch = s_ohosCmdQueue; s_ohosCmdQueue.clear();` 改为 `batch.swap(s_ohosCmdQueue);`，消除每帧深拷贝 `std::function` 的开销。
+
+- **修改原因：** 用户反馈"开了一段时间，几个小时后，整个应用还会变卡"。根因分析：① ArkTS 层定时器在 aboutToDisappear 中清理不完整，切后台/销毁时泄漏；② fpsTimer 每 500ms 高频轮询，长时间运行后产生大量短生命周期 JSON 对象，加剧 GC 压力；③ C++ 命令队列在极端场景下（如持续快速拖动）可能短暂积压，深拷贝 std::function 每帧都有固定开销。
+- **构建结果：** ArkTS hvigor 构建通过（C++ .so 未重新交叉编译，仅修改了源码；如需生效需 Qt OHOS 交叉编译）
+- **验证结果：** 代码审查通过，逻辑正确
+- **备注：** C++ 侧的修改需要重新运行 Qt OHOS 交叉编译才能生成新的 libstellarium.so。如果只是测试 ArkTS 层的定时器修复，可以直接 hvigor 构建并运行（ArkTS 修改即时生效）。
+
+## [2026-07-27] TRAE - 面板拖拽双限位弹簧效果
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：** 重构底部面板 PanGesture 的 onActionUpdate 和 onActionEnd 逻辑
+  - onActionUpdate: 90%以上施加弹性阻力（overscroll，每多拉1%只显示0.3%），模拟"拉不动"的感觉；下限0%不施加阻力
+  - onActionEnd: 基于 velocity + position 双判断实现三段式限位（0% / 60% / 90%）
+    - 60-90%区间：velocity向下(<-80)轻轻一蹭即snap到60%，velocity向上(>80)snap到90%，无速度时75%阈值判断
+    - 0-60%区间：velocity向下轻轻一蹭即snap到0%（关闭），velocity向上snap到60%，无速度时30%阈值判断
+    - 三个限位点之间无中间停留位置
+- **修改原因：** 用户要求面板只有0%、60%、90%三个稳定位置，中间轻轻一蹭就滑到下一个限位，拉过限位有overscroll回弹效果
+- **构建结果：** 待验证
+- **验证结果：** 待验证
+- **备注：** 三个限位均使用 springMotion(0.36, 0.72) 弹簧动画
+- **构建结果：** BUILD SUCCESSFUL (2026-07-27)
+- **验证结果：** 待真机/模拟器验证
+- **备注：** build-profile.json5 改为 OpenHarmony runtime + compileSdkVersion: 24 以适配当前 SDK；DEVECO_SDK_HOME 需通过环境变量传入

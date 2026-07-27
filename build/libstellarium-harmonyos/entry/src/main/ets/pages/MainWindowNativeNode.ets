@@ -189,9 +189,9 @@ struct WindowNativeNode {
   @State private isExpandedLayout: boolean = true
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = true
-  @State private sheetHeightPct: number = 70
+  @State private sheetHeightPct: number = 60
   @State private sheetDragStartY: number = 0
-  @State private sheetDragStartPct: number = 70
+  @State private sheetDragStartPct: number = 60
   @State private searchText: string = ''
   @State private selectedName: string = ''
   @State private searchSuggestions: SearchSug[] = []
@@ -791,25 +791,17 @@ struct WindowNativeNode {
   private startTwinkle(): void {
     if (this.twTimer !== 0) { return }
     this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 2000)
-    // FPS monitor: poll C++ getFPS every 1s for real render frame rate
+    // FPS monitor: poll C++ getFPS every 5s for real render frame rate
     this.fpsTimer = setInterval(() => {
       try {
         const r = this.callNative('getFPS', '')
         if (r && r.ok && typeof r.fps === 'number' && r.fps > 0) {
           this.fpsDisplay = Math.round(r.fps)
-        } else if (r && r.pending) {
-          // If pending, try again after a short delay
-          setTimeout(() => {
-            const r2 = this.callNative('getFPS', '')
-            if (r2 && r2.ok && typeof r2.fps === 'number' && r2.fps > 0) {
-              this.fpsDisplay = Math.round(r2.fps)
-            }
-          }, 100)
         }
       } catch (e) {
         // Silent error to avoid log spam
       }
-    }, 500) as number
+    }, 5000) as number
   }
 
   private stopTwinkle(): void {
@@ -951,13 +943,20 @@ struct WindowNativeNode {
     }))
     this.stopGyroscope(false)
     this.stopDetailAutoRefresh()
+    // 清理所有定时器防止内存泄漏
+    if (this.twTimer !== 0) { clearInterval(this.twTimer); this.twTimer = 0 }
+    if (this.fpsTimer !== 0) { clearInterval(this.fpsTimer); this.fpsTimer = 0 }
+    if (this.hintTimer !== 0) { clearTimeout(this.hintTimer); this.hintTimer = 0 }
+    if (this.locSearchDebounce !== 0) { clearTimeout(this.locSearchDebounce); this.locSearchDebounce = 0 }
+    if (this.panelIdleTimer >= 0) { clearTimeout(this.panelIdleTimer); this.panelIdleTimer = -1 }
+    if (this.sidebarAutoCollapseTimer >= 0) { clearTimeout(this.sidebarAutoCollapseTimer); this.sidebarAutoCollapseTimer = -1 }
   }
 
   private setPanel(panel: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = this.activePanel === panel ? !this.panelVisible : true
     if (nextVisible) {
-      this.sheetHeightPct = 70
+      this.sheetHeightPct = 60
     }
     this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
@@ -1008,7 +1007,7 @@ struct WindowNativeNode {
     if (this.uiLocked) {
       return
     }
-    this.sheetHeightPct = 70
+    this.sheetHeightPct = 60
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
@@ -3630,7 +3629,7 @@ private loadPlanetPositions(): void {
         }
       } else {
         const bcX = this.skyWidth * 0.06 + this.cardOffsetX
-        const bcY = this.skyHeight - 280 + this.cardOffsetY
+        const bcY = this.skyHeight - 380 + this.cardOffsetY
         const bcW = Math.floor(this.skyWidth * 0.88)
         const bcH = 200
         if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
@@ -4166,7 +4165,7 @@ private loadPlanetPositions(): void {
         this.skyWidth = Number(newArea.width) > 1 ? Number(newArea.width) : 1
         this.skyHeight = Number(newArea.height) > 1 ? Number(newArea.height) : 1
         const wasExpanded = this.isExpandedLayout
-        this.isExpandedLayout = this.skyWidth >= 900
+        this.isExpandedLayout = px2vp(this.skyWidth) >= 900
         this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)
         this.panelMaxHeight = Math.min(this.skyHeight * 0.78, 700)
         // Switched to compact layout: auto-close panel so user sees star map + dock
@@ -4329,7 +4328,7 @@ private loadPlanetPositions(): void {
         }
           .width(44).height(44)
           .backgroundColor('rgba(35, 55, 85, 0.72)')
-          .backdropBlur(30)
+          .backdropBlur(16)
           .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
           .borderRadius(22)
           .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
@@ -4350,7 +4349,7 @@ private loadPlanetPositions(): void {
         }
           .width(44).height(44)
           .backgroundColor('rgba(35, 55, 85, 0.72)')
-          .backdropBlur(30)
+          .backdropBlur(16)
           .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
           .borderRadius(22)
           .shadow({ radius: 8, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
@@ -4429,7 +4428,7 @@ private loadPlanetPositions(): void {
       // 选中天体详情卡片（紧凑模式：靠右下角，Dock 上方，可拖动）
       if (this.infoWinVisible && this.selectedName.length > 0 && !this.panelVisible && !this.drawerOpen) {
         Stack() { this.bottomDetailCard() }
-          .position({ x: this.skyWidth * 0.06 + this.cardOffsetX, y: this.skyHeight - 280 + this.cardOffsetY })
+          .position({ x: this.skyWidth * 0.06 + this.cardOffsetX, y: this.skyHeight - 380 + this.cardOffsetY })
           .zIndex(50)
           .hitTestBehavior(HitTestMode.Default)
           .transition(TransitionEffect.asymmetric(
@@ -4519,7 +4518,7 @@ private loadPlanetPositions(): void {
     .height(44)
     .padding({ left: 16, right: 16 })
     .backgroundColor('rgba(12, 16, 28, 0.72)')
-    .backdropBlur(35)
+    .backdropBlur(18)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(22)
     .shadow({ radius: 16, color: 'rgba(0,0,0,0.25)', offsetX: 0, offsetY: 6 })
@@ -4645,7 +4644,7 @@ private loadPlanetPositions(): void {
           }
         }
         .width('100%')
-        .padding({ bottom: 20 })
+        .padding({ bottom: 50 })
 
         // ── 第二页：时间（升起/中天/落下 + 月相/距角） ──
         Column({ space: 0 }) {
@@ -4714,7 +4713,7 @@ private loadPlanetPositions(): void {
 
         }
         .width('100%')
-        .padding({ bottom: 20 })
+        .padding({ bottom: 50 })
 
         // ── 第三页：天体标识（可展开/收起） ──
         Column({ space: 0 }) {
@@ -4744,16 +4743,16 @@ private loadPlanetPositions(): void {
 
         }
         .width('100%')
-        .padding({ bottom: 20 })
+        .padding({ bottom: 50 })
       }
       .index(this.bottomCardIndex)
       .indicator(true)
-      .indicatorStyle({ selectedColor: '#5B93BF', color: 'rgba(255,255,255,0.3)', size: 5 })
+      .indicatorStyle({ selectedColor: '#5B93BF', color: 'rgba(255,255,255,0.3)', size: 4 })
       .duration(300)
       .curve(curves.springMotion(0.5, 0.85))
       .width('100%')
-      .height(130)
-      .padding({ bottom: 18 })
+      .height(200)
+      .padding({ bottom: 50 })
 
       // 统一操作按钮行（在 Swiper 下方，三页共享）
       Row({ space: 8 }) {
@@ -4770,7 +4769,7 @@ private loadPlanetPositions(): void {
     }
     .width(this.isExpandedLayout ? 340 : Math.floor(this.skyWidth * 0.88))
     .backgroundColor('rgba(12, 16, 28, 0.78)')
-    .backdropBlur(40)
+    .backdropBlur(10)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(20)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
@@ -4789,7 +4788,7 @@ private loadPlanetPositions(): void {
       bcY = this.skyHeight - 230 + this.cardOffsetY
     } else {
       bcX = this.skyWidth * 0.06 + this.cardOffsetX
-      bcY = this.skyHeight - 280 + this.cardOffsetY
+      bcY = this.skyHeight - 380 + this.cardOffsetY
     }
     if (x < bcX - 8 || x > bcX + bcW + 8 || y < bcY - 8) { return false }
     // 只处理头部区域（前 ~48px：名称 + 类型 + 关闭按钮）
@@ -4882,7 +4881,7 @@ private loadPlanetPositions(): void {
     }
       .width('100%')
       .backgroundColor('rgba(20,21,23,0.92)')
-      .backdropBlur(26)
+      .backdropBlur(14)
       .border({ width: 1, color: this.nmBorder() })
       .borderRadius(16)
       .shadow({ radius: 24, color: 'rgba(0,0,0,0.35)', offsetX: 0, offsetY: 10 })
@@ -4913,7 +4912,7 @@ private loadPlanetPositions(): void {
       .height(38)
       .padding({ left: 14, right: 12 })
       .backgroundColor('rgba(25, 26, 28, 0.72)')
-      .backdropBlur(22)
+      .backdropBlur(12)
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(19)
       .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.24)', offsetX: 0, offsetY: 8 })
@@ -4930,7 +4929,7 @@ private loadPlanetPositions(): void {
       .width(48)
       .height(48)
       .backgroundColor('rgba(35, 55, 85, 0.72)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 1.5, color: 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(24)
       .shadow({ radius: 10, color: 'rgba(0, 0, 0, 0.28)', offsetX: 0, offsetY: 4 })
@@ -5004,7 +5003,7 @@ private loadPlanetPositions(): void {
     .width(58)
         .height(this.railHeight())
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.50)' : 'rgba(18, 22, 36, 0.78)')
-      .backdropBlur(this.panelIdleGlass ? 40 : 26)
+      .backdropBlur(this.panelIdleGlass ? 20 : 14)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.15)' : 'rgba(91, 147, 191, 0.10)' })
       .borderRadius(29)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.32)', offsetX: 0, offsetY: 14 })
@@ -5035,7 +5034,7 @@ private loadPlanetPositions(): void {
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
             .backgroundColor('rgba(25, 26, 28, 0.72)')
-            .backdropBlur(20)
+            .backdropBlur(10)
             .borderRadius(14)
             .shadow({ radius: 18, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
         }
@@ -5151,7 +5150,7 @@ private loadPlanetPositions(): void {
     .height('65%')
     .padding({ left: 18, right: 18, bottom: 20 })
     .backgroundColor('rgba(12, 16, 28, 0.85)')
-    .backdropBlur(40)
+    .backdropBlur(10)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.20)' })
     .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
     .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })
@@ -5210,7 +5209,7 @@ private loadPlanetPositions(): void {
       .padding({ left: 8, right: 8 })
       .justifyContent(FlexAlign.SpaceBetween)
       .backgroundColor('rgba(25, 26, 28, 0.78)')
-      .backdropBlur(26)
+      .backdropBlur(14)
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.08)' })
       .borderRadius(33)
       .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 14 })
@@ -5416,7 +5415,7 @@ private loadPlanetPositions(): void {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 1.5, color: this.activePanel === item.panel && this.panelVisible ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
@@ -5489,7 +5488,7 @@ private loadPlanetPositions(): void {
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
       .backgroundColor(this.drawerOpen ? '#5B93BF' : 'rgba(35, 55, 85, 0.72)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 1.5, color: this.drawerOpen ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
@@ -5522,7 +5521,7 @@ private loadPlanetPositions(): void {
       .height(44)
       .alignContent(Alignment.Center)
       .backgroundColor(this.musicEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 1.5, color: this.musicEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
@@ -5585,7 +5584,7 @@ private loadPlanetPositions(): void {
       .height(44)
       .alignContent(Alignment.Center)
       .backgroundColor(this.gyroscopeEnabled ? 'rgba(91, 147, 191, 0.55)' : 'rgba(35, 55, 85, 0.72)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 1.5, color: this.gyroscopeEnabled ? 'rgba(160, 210, 255, 0.60)' : 'rgba(160, 200, 240, 0.40)' })
       .borderRadius(22)
       .margin({ top: 4, bottom: 4 })
@@ -5697,7 +5696,7 @@ private loadPlanetPositions(): void {
     .width(280)
     .padding(16)
     .backgroundColor('rgba(12, 16, 28, 0.85)')
-    .backdropBlur(40)
+    .backdropBlur(10)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(20)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
@@ -5783,7 +5782,7 @@ private loadPlanetPositions(): void {
       .width(176)
       .padding({ top: 4, bottom: 10, left: 6, right: 6 })
       .backgroundColor('rgba(25, 26, 28, 0.86)')
-      .backdropBlur(30)
+      .backdropBlur(16)
       .border({ width: 0.5, color: 'rgba(255, 255, 255, 0.10)' })
       .borderRadius(20)
       .shadow({ radius: 30, color: 'rgba(0, 0, 0, 0.40)', offsetX: 6, offsetY: 10 })
@@ -5849,7 +5848,7 @@ private loadPlanetPositions(): void {
       .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backdropBlur(this.panelIdleGlass ? 22 : 14)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
@@ -5884,9 +5883,64 @@ private loadPlanetPositions(): void {
             const deltaY = event.offsetY
             const skyH = this.skyHeight > 1 ? this.skyHeight : 800
             const pctDelta = -deltaY / skyH * 100
-            let newPct = this.sheetDragStartPct + pctDelta
-            newPct = Math.max(50, Math.min(90, newPct))
-            this.sheetHeightPct = newPct
+            let rawNew = this.sheetDragStartPct + pctDelta
+            // 90%以上施加弹性阻力（overscroll：每多拉1%只显示0.3%，拉不动的感觉）
+            if (rawNew > 90) {
+              const overscroll = rawNew - 90
+              rawNew = 90 + overscroll * 0.3
+            }
+            // 下限0%（关闭方向不施加阻力，直接关闭）
+            if (rawNew < 0) rawNew = 0
+            this.sheetHeightPct = rawNew
+          })
+          .onActionEnd((event: GestureEvent) => {
+            const velocity = event.velocityY || 0
+            const current = this.sheetHeightPct
+            let target = current
+            if (current > 90) {
+              // overscroll回弹到90%
+              target = 90
+            } else if (current > 60) {
+              // 在60-90%区间：轻轻一蹭就切换，不停留
+              if (velocity < -80) {
+                // 往下轻轻一蹭 → 60%
+                target = 60
+              } else if (velocity > 80) {
+                // 往上轻轻一蹭 → 90%
+                target = 90
+              } else {
+                // 几乎没速度，按位置阈值75%判断
+                target = current >= 75 ? 90 : 60
+              }
+            } else if (current > 0) {
+              // 在0-60%区间：轻轻一蹭就切换，不停留
+              if (velocity < -80) {
+                // 往下轻轻一蹭 → 0%（关闭）
+                target = 0
+              } else if (velocity > 80) {
+                // 往上轻轻一蹭 → 60%
+                target = 60
+              } else {
+                // 几乎没速度，按位置阈值30%判断
+                target = current >= 30 ? 60 : 0
+              }
+            } else {
+              target = 0
+            }
+            if (target === 0) {
+              // 关闭面板：先弹簧动画到0，再触发隐藏
+              this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.36, 0.72) }, () => {
+                this.sheetHeightPct = 0
+              })
+              setTimeout(() => {
+                this.panelVisible = false
+                this.sheetHeightPct = 60
+              }, 320)
+            } else {
+              this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.36, 0.72) }, () => {
+                this.sheetHeightPct = target
+              })
+            }
           })
       )
       // 面板标题栏
@@ -5926,7 +5980,7 @@ private loadPlanetPositions(): void {
       .height(this.sheetHeightPct + '%')
       .padding({ left: 18, right: 18, bottom: 20 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.72)' : 'rgba(18, 22, 36, 0.88)')
-      .backdropBlur(this.panelIdleGlass ? 45 : 35)
+      .backdropBlur(this.panelIdleGlass ? 22 : 16)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.20)' : 'rgba(91, 147, 191, 0.14)' })
       .borderRadius({ topLeft: 28, topRight: 28, bottomLeft: 0, bottomRight: 0 })
       .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.50)', offsetX: 0, offsetY: -10 })

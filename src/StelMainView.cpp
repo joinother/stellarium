@@ -147,7 +147,7 @@ static std::atomic<float> s_ohosRenderFps{0.0f};
 // to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
 // the texture to full screen automatically.
 // 0.6 = 60% resolution = 36% of original pixel count = ~64% less data.
-constexpr double OHOS_RENDER_SCALE = 0.6;
+constexpr double OHOS_RENDER_SCALE = 0.5;
 
 void ohosMark(const char* message)
 {
@@ -365,7 +365,7 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 
 	// Downsample the framebuffer using glBlitFramebuffer to reduce glReadPixels data.
 	// At 60% scale: 1536x960 instead of 2560x1600 = 36% of original data = ~10ms vs ~34ms.
-	constexpr double READBACK_SCALE = 0.5;
+	constexpr double READBACK_SCALE = 0.4;
 	const int readW = qMax(1, int(width * READBACK_SCALE));
 	const int readH = qMax(1, int(height * READBACK_SCALE));
 
@@ -5272,6 +5272,29 @@ protected:
 #endif
 
 		//update and draw
+#if defined(__OHOS__)
+		{
+			// Apply same resolution limit as renderOhosFrameNow to prevent
+			// viewport from jumping to full widget size in the Qt paint path.
+			const double pixelRatio = mainView->devicePixelRatioF();
+			const int physW = qMax(1, int(mainView->glWidget->width() * pixelRatio));
+			const int physH = qMax(1, int(mainView->glWidget->height() * pixelRatio));
+			constexpr int MAX_RENDER_SHORT_SIDE = 800;
+			const double scale = (double)MAX_RENDER_SHORT_SIDE / qMin(physW, physH);
+			const double finalScale = qMin(scale, OHOS_RENDER_SCALE);
+			const int vw = qMax(1, int(physW * finalScale));
+			const int vh = qMax(1, int(physH * finalScale));
+			QOpenGLContext::currentContext()->functions()->glViewport(0, 0, vw, vh);
+			static bool s_loggedPaintViewport = false;
+			if (!s_loggedPaintViewport)
+			{
+				s_loggedPaintViewport = true;
+				OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
+					"PAINT_VIEWPORT: phys=%{public}dx%{public}d finalScale=%{public}.3f -> viewport=%{public}dx%{public}d",
+					physW, physH, finalScale, vw, vh);
+			}
+		}
+#endif
 		app.update(dt); // may also issue GL calls
 		app.draw();
 #if defined(__OHOS__)
@@ -6400,8 +6423,24 @@ void StelMainView::renderOhosFrameNow()
 	lastOhosRenderTimeSec = now;
 
 	const double pixelRatio = glWidget->devicePixelRatioF();
-	const int width = qMax(1, int(glWidget->width() * pixelRatio * OHOS_RENDER_SCALE));
-	const int height = qMax(1, int(glWidget->height() * pixelRatio * OHOS_RENDER_SCALE));
+	// 固定渲染分辨率上限，防止窗口 resize 或获取到错误尺寸时导致分辨率暴增、帧率暴跌。
+	// 以 800px 短边为基准，保持宽高比，在清晰度与性能之间取得平衡。
+	const int physW = qMax(1, int(glWidget->width() * pixelRatio));
+	const int physH = qMax(1, int(glWidget->height() * pixelRatio));
+	constexpr int MAX_RENDER_SHORT_SIDE = 800;
+	const double scale = (double)MAX_RENDER_SHORT_SIDE / qMin(physW, physH);
+	const double finalScale = qMin(scale, OHOS_RENDER_SCALE);
+	const int width = qMax(1, int(physW * finalScale));
+	const int height = qMax(1, int(physH * finalScale));
+
+	static bool s_loggedViewportOnce = false;
+	if (!s_loggedViewportOnce)
+	{
+		s_loggedViewportOnce = true;
+		OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
+			"FIXED_VIEWPORT: phys=%{public}dx%{public}d scale=%{public}.3f final=%{public}.3f -> viewport=%{public}dx%{public}d",
+			physW, physH, scale, finalScale, width, height);
+	}
 
 	StelApp& app = StelApp::getInstance();
 	app.setDevicePixelsPerPixel(devicePixelRatioF());
