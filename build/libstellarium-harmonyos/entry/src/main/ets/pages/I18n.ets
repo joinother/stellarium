@@ -879,7 +879,6 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'm_gyro_core_not_ready': { 'en': 'Sky core not ready', 'zh_CN': '星图核心未就绪', 'ja': 'Sky core not ready', 'ko': 'Sky core not ready', 'fr': 'Sky core not ready', 'de': 'Sky core not ready', 'es': 'Sky core not ready', 'ru': 'Sky core not ready' },
   'm_gyro_listening': { 'en': 'Listening', 'zh_CN': '正在监听', 'ja': 'Listening', 'ko': 'Listening', 'fr': 'Listening', 'de': 'Listening', 'es': 'Listening', 'ru': 'Listening' },
   'm_gyro_off': { 'en': 'Off', 'zh_CN': '已关闭', 'ja': 'Off', 'ko': 'Off', 'fr': 'Off', 'de': 'Off', 'es': 'Off', 'ru': 'Off' },
-  'm_gyro_on': { 'en': 'On', 'zh_CN': '已开启', 'ja': 'On', 'ko': 'On', 'fr': 'On', 'de': 'On', 'es': 'On', 'ru': 'On' },
   'm_gyro_unavailable': { 'en': 'Gyroscope unavailable', 'zh_CN': '陀螺仪不可用', 'ja': 'Gyroscope unavailable', 'ko': 'Gyroscope unavailable', 'fr': 'Gyroscope unavailable', 'de': 'Gyroscope unavailable', 'es': 'Gyroscope unavailable', 'ru': 'Gyroscope unavailable' },
   'm_gyro_working': { 'en': 'Working', 'zh_CN': '工作中', 'ja': 'Working', 'ko': 'Working', 'fr': 'Working', 'de': 'Working', 'es': 'Working', 'ru': 'Working' },
   'm_lock_hit': { 'en': 'm_lock_hit', 'zh_CN': 'm_lock_hit', 'ja': 'm_lock_hit', 'ko': 'm_lock_hit', 'fr': 'm_lock_hit', 'de': 'm_lock_hit', 'es': 'm_lock_hit', 'ru': 'm_lock_hit' },
