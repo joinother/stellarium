@@ -1,23 +1,41 @@
-## [2026-07-27] TRAE - 上架版离线分支初始化（release/v1.0-offline）
 
-- **修改文件：**
-  - `AppScope/app.json5`（包名改为 org.stellarium.app，vendor 改为 stellarium）
-  - `entry/src/main/module.json5`（移除 INTERNET 和 GET_WIFI_INFO 权限）
-  - `entry/src/main/ets/pages/MainWindowNativeNode.ets`（RELEASE_OFFLINE 标记、联网 UI 禁用、启动进度条、FPS 计数器优化）
-  - `entry/src/main/ets/pages/I18n.ets`（新增 load_initializing/load_finalizing/load_unavailable/load_offline_mode/set_fps_monitor 多语言字符串）
+## [2026-07-27] TRAE - 地面透明度FOV联动+compactDrawer修复+果冻Q弹动画
 
+- **修改文件：** `src/StelMainView.cpp`, `build/.../MainWindowNativeNode.ets`
 - **修改内容：**
-  1. **包名规范化**：`org.qtproject.example.stellarium` → `org.stellarium.app`（上架后不可更改）
-  2. **移除联网权限**：module.json5 中删除 `ohos.permission.INTERNET` 和 `ohos.permission.GET_WIFI_INFO`，保留 LOCATION/ACCELEROMETER/GYROSCOPE
-  3. **联网 UI 禁用（非删除）**：添加 `RELEASE_OFFLINE` 常量，星表下载按钮显示"不可用"灰色标签、卫星面板显示离线提示、LX200 望远镜按钮全部 `.enabled(false)` + 灰色样式 + 触摸热区屏蔽
-  4. **首次启动进度提示**：用官方 `Progress` 组件（ProgressType.Linear）替换 `LoadingProgress` 旋转器，显示百分比和当前步骤文字（初始化星图→即将完成）
-  5. **FPS 计数器优化**：移到左上角角落、默认隐藏、设置面板添加"显示帧率"开关、字号缩小、半透明
+  1. **地面透明度FOV联动**（C++）：`ohosUpdateLandscapeFadeWithZoom()` 新增 FOV-based fade 逻辑。原来只根据视角海拔（俯仰角）控制地面透明度，现在同时考虑 FOV（视场角）：FOV ≤ 5° 时地面透明度达 92%，FOV ≥ 60° 时不影响。取海拔和FOV两个因素的较大值。解决"放大到最大地面不透明"问题。
+  2. **compactDrawer Stack 重构**：将 `compactDrawer()` 从两个并列根元素（遮罩Column + 内容Column）改为 `Stack({ alignContent: Alignment.Bottom })` 包裹，修复抽屉内容无法正确渲染的问题。将外层包装从 `Column` 改为 `Stack`，`hitTestBehavior` 从 `Block` 改为 `Default`，修复滚动不生效。
+  3. **抽屉高度提升**：从 55% 增至 65%，显示更多功能项（8项可见 vs 原来6项）。
+  4. **果冻Q弹动画**：所有面板切换动画的 spring 参数从 `springMotion(0.55, 0.85)` 调整为 `springMotion(0.34, 0.68)`，降低阻尼比实现更Q弹的果冻效果。涉及：`setPanel`、`closePanel`、`toggleDrawer`、`bottomSheetPanel` transition、`compactDrawer` transition、详情卡片 transition。
+  5. **面板拖拽松手回弹**：`bottomSheetPanel` 拖拽手柄新增 `onActionEnd`，松手时用 `springMotion(0.36, 0.72)` 回弹至目标高度。
+  6. **面板拖拽上限**：确认 `sheetHeightPct` 最大值为 90（即 9/10），最小 50。
+- **修改原因：** 用户反馈：1)手机端放大最大地面不透明；2)更多功能抽屉关不掉/滚不动；3)面板切换要果冻Q弹；4)面板只能拖到9/10
+- **构建结果：** BUILD SUCCESSFUL（C++ 交叉编译 + hvigor HAP 打包均成功）
+- **验证结果：** 模拟器实测：1)更多功能抽屉正常打开/关闭/滚动，显示全部11项功能；2)面板弹出有Q弹弹簧动画；3)地面透明度FOV联动已编译进 .so
+## [2026-07-27] TRAE - compactShell琉璃质感+移除Stellarium实时控件+左侧工具栏
 
-- **修改原因：** 上架华为应用市场需要：(1) 正式包名；(2) 个人开发者无 ICP 备案不能有联网权限；(3) 联网功能入口不能直接删除否则用户找不到，改为灰色禁用；(4) 首次启动资源提取较慢需要进度反馈
+- **修改文件：** `build/.../MainWindowNativeNode.ets`, `build/.../I18n.ets`
+- **修改内容：**
+  1. **琉璃质感**：iconButton/moreButton/musicButton/gyroButton/zoomButton 全部改为 `rgba(35,55,85,0.72)` + `backdropBlur(30)` + `1.5px` 浅蓝边框光圈 `rgba(160,200,240,0.40)`，按压态改为深蓝灰 `rgba(40,60,90,0.72)`，增加可读性和琉璃折射感。
+  2. **移除 observerBadge**：compactShell 顶部不再显示 "Stellarium 实时" 控件。
+  3. **移除 flashHint**：紧凑模式下不再显示蓝色提示气泡（仅平板布局保留）。
+  4. **左侧垂直工具栏**：缩放按钮从顶部移到左侧，改为琉璃风格；陀螺仪和音乐按钮也添加到左侧垂直栏。
+  5. **添加 m_gyro_on** i18n 翻译键。
+- **修改原因：** 用户反馈紧凑布局太透明缺可读性、缺陀螺仪和音乐按钮、蓝色提示气泡看着奇怪、Stellarium实时控件多余
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 模拟器截图确认：左侧垂直栏有缩放+陀螺仪+音乐按钮、顶部右侧干净无控件、无蓝色气泡、按钮有琉璃折射质感
 
-- **构建结果：** BUILD SUCCESSFUL（编译通过，签名失败因包名变更需重新配置签名——预期行为）
-- **验证结果：** 未验证（需配置华为发布签名后才能安装）
-- **备注：** 此改动仅在 `release/v1.0-offline` 分支上，不影响 `openharmony-preview-v1` 开发分支。后续开发继续在 `openharmony-preview-v1` 上进行，需要同步到上架版时 merge 到此分支。
+## [2026-07-27] TRAE - compactDock三点图标+透明背景+位置选择修复
+
+- **修改文件：** `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. **compactDock三点图标**：用 `moreButton()` Builder 替换内联九宫格 `getIcon('grid')` 图标，与平板端 `verticalRail` 完全一致（三点菜单+旋转动画）。
+  2. **compactDock透明背景**：移除整条不透明 `backgroundColor('rgba(18,22,36,0.78)')` 背景栏，改用 `iconButton()` Builder，每个按钮有独立胶囊半透明背景，按钮间可见星图，实现与平板端一致的透明效果。
+  3. **setLocation修复**：将 `callNativeWhenReady('setLocationByName', ...)` 改为 `callNative('setLocationCoords', ...)` 直接调用。根因：`callNativeWhenReady` 把 `ok:false` 当作"核心未就绪"无限重试，但 `setLocationByName("Beijing")` 返回 `ok:false` 是永久错误（城市名不在Stellarium位置DB中），导致 fallback 链永不执行。改用 `setLocationCoords`（只需坐标，最可靠）作为首选，`setLocation` 作为 fallback。
+- **修改原因：** 用户反馈紧凑布局的"更多"按钮用了九宫格而非三点图标、底部菜单栏不透明、位置选择功能（图钉+城市预设）全部失效
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 模拟器截图确认：7个独立圆形半透明按钮、按钮间可见背景、最右侧为垂直三点图标。位置选择代码路径修复（callNative直接调用，不再卡在重试循环）
+- **备注：** callNativeWhenReady 仅适用于"核心启动中"的临时失败场景，不适用于命令本身返回 false 的永久错误。setLocationByName 的 fallback 逻辑已移除，因为 setLocationCoords 已经是更可靠的方案。
 
 ## [2026-07-27] TRAE - 渲染性能优化：PBO异步回读+VSync禁用+FBO降采样（8 FPS→61 FPS）
 
@@ -1461,3 +1479,49 @@
 - **构建结果：** BUILD SUCCESSFUL
 - **验证结果：** 应用正常运行，FPS显示49-59，无崩溃
 - **备注：** PBO异步回读(glMapBufferRange)和8ms间隔(120FPS)在模拟器上均导致SIGSEGV，已记录到 KNOWN-ISSUES.md。真机是否有同样问题待验证。
+
+## [2026-07-27] TRAE Agent - 修复手机竖屏布局：启用 compactShell
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：**
+  1. build() 方法中将 `this.expandedShell()` 替换为 `this.harmonyShell()`，使竖屏（skyWidth < 900）时渲染 compactShell 而非 expandedShell
+  2. onAreaChange 中添加布局切换逻辑：从横屏切到竖屏时自动关闭面板（panelVisible=false），让用户先看到星图+底部Dock
+  3. compactShell 已包含：底部弹出半屏面板（bottomSheetPanel）+ 底部图标Dock（compactDock）+ 弹簧过渡动画
+- **修改原因：** 用户反馈手机竖屏布局一团稀烂，左侧工具栏被压缩、底部无Dock、面板不弹出。根因是 build() 硬编码调用 expandedShell，未根据屏幕宽度切换布局
+- **构建结果：** BUILD SUCCESSFUL
+- **验证结果：** 通过，模拟器截图确认：左侧工具栏已移除，底部Dock横向排列6个图标，半屏面板默认关闭，点击Dock图标可弹出半屏面板
+- **备注：** compactShell 早在上一轮已实现（bottomSheetPanel/compactDock/弹簧动画），但 build() 未调用 harmonyShell() 导致从未生效
+
+## [2026-07-27] TRAE - 长时间运行性能优化：定时器清理+FPS轮询降频+C++队列保护
+
+- **修改文件：**
+  - `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+  - `src/StelMainView.cpp`
+
+- **修改内容：**
+  1. **aboutToDisappear 完整定时器清理**：补充清理 `twTimer`、`fpsTimer`、`hintTimer`、`locSearchDebounce`、`panelIdleTimer`、`sidebarAutoCollapseTimer` 共6个遗漏的定时器。原实现仅清理陀螺仪和详情刷新定时器，组件销毁时其他定时器继续运行，导致内存泄漏和CPU占用随时间累积。
+  2. **FPS轮询降频**：`fpsTimer` 间隔从 500ms 延长到 5000ms，并移除内嵌的 `setTimeout` 重试逻辑。大幅降低 N-API 调用频率和 JSON 字符串解析次数，减轻 ArkTS GC 压力（长时间运行后 GC 停顿是"变卡"的主要原因之一）。
+  3. **C++命令队列防御上限**：`s_ohosCmdQueue` 在 fire-and-forget 路径（dragView/zoomBy/panBy）和普通命令路径中均添加 256 条上限。队列超过上限时，fire-and-forget 命令丢弃，普通命令路径清空队列后追加新命令，防止极端负载下队列无限增长。
+  4. **C++队列零拷贝优化**：`ohosDrainCommandQueue()` 中 `batch = s_ohosCmdQueue; s_ohosCmdQueue.clear();` 改为 `batch.swap(s_ohosCmdQueue);`，消除每帧深拷贝 `std::function` 的开销。
+
+- **修改原因：** 用户反馈"开了一段时间，几个小时后，整个应用还会变卡"。根因分析：① ArkTS 层定时器在 aboutToDisappear 中清理不完整，切后台/销毁时泄漏；② fpsTimer 每 500ms 高频轮询，长时间运行后产生大量短生命周期 JSON 对象，加剧 GC 压力；③ C++ 命令队列在极端场景下（如持续快速拖动）可能短暂积压，深拷贝 std::function 每帧都有固定开销。
+- **构建结果：** ArkTS hvigor 构建通过（C++ .so 未重新交叉编译，仅修改了源码；如需生效需 Qt OHOS 交叉编译）
+- **验证结果：** 代码审查通过，逻辑正确
+- **备注：** C++ 侧的修改需要重新运行 Qt OHOS 交叉编译才能生成新的 libstellarium.so。如果只是测试 ArkTS 层的定时器修复，可以直接 hvigor 构建并运行（ArkTS 修改即时生效）。
+
+## [2026-07-27] TRAE - 面板拖拽双限位弹簧效果
+
+- **修改文件：** `entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：** 重构底部面板 PanGesture 的 onActionUpdate 和 onActionEnd 逻辑
+  - onActionUpdate: 90%以上施加弹性阻力（overscroll，每多拉1%只显示0.3%），模拟"拉不动"的感觉；下限0%不施加阻力
+  - onActionEnd: 基于 velocity + position 双判断实现三段式限位（0% / 60% / 90%）
+    - 60-90%区间：velocity向下(<-80)轻轻一蹭即snap到60%，velocity向上(>80)snap到90%，无速度时75%阈值判断
+    - 0-60%区间：velocity向下轻轻一蹭即snap到0%（关闭），velocity向上snap到60%，无速度时30%阈值判断
+    - 三个限位点之间无中间停留位置
+- **修改原因：** 用户要求面板只有0%、60%、90%三个稳定位置，中间轻轻一蹭就滑到下一个限位，拉过限位有overscroll回弹效果
+- **构建结果：** 待验证
+- **验证结果：** 待验证
+- **备注：** 三个限位均使用 springMotion(0.36, 0.72) 弹簧动画
+- **构建结果：** BUILD SUCCESSFUL (2026-07-27)
+- **验证结果：** 待真机/模拟器验证
+- **备注：** build-profile.json5 改为 OpenHarmony runtime + compileSdkVersion: 24 以适配当前 SDK；DEVECO_SDK_HOME 需通过环境变量传入

@@ -594,16 +594,30 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	StelUtils::rectToSphe(&aziRad, &altRad, altAz);
 	const double altView = altRad * 180.0 / M_PI;
 
-	// Fade window expressed in view altitude:
-	//   altView >= fadeStartAlt -> ground fully opaque
-	//   altView <= fadeEndAlt   -> ground at s_landscapeFadeMax (very transparent, but still visible)
-	// In between the ground fades gradually as you pull the view toward the ground.
-	const double fadeStartAlt = 15.0;    // looking up / near horizon: opaque
-	const double fadeEndAlt   = -60.0;   // looking down at the ground: very transparent
-	const double maxTransp    = 0.85;    // cap so the ground never disappears entirely
-	double t = (fadeStartAlt - altView) / (fadeStartAlt - fadeEndAlt);
-	if (t < 0.0) t = 0.0;
-	if (t > 1.0) t = 1.0;
+	// Current FOV (degrees). Wide FOV = zoomed out; narrow FOV = zoomed in.
+	const double fov = mvmgr->getCurrentFov();
+
+	// --- Altitude-based fade (looking down fades the ground) ---
+	const double fadeStartAlt = 15.0;
+	const double fadeEndAlt   = -60.0;
+	double tAlt = (fadeStartAlt - altView) / (fadeStartAlt - fadeEndAlt);
+	if (tAlt < 0.0) tAlt = 0.0;
+	if (tAlt > 1.0) tAlt = 1.0;
+
+	// --- FOV-based fade (zooming in fades the ground so horizon stars are visible) ---
+	//   fov >= 60 deg -> no FOV fade; fov <= 5 deg -> max FOV fade.
+	//   This handles "zoom to max but ground stays opaque": when the user
+	//   zooms in on a star near the horizon, the ground polygon would
+	//   normally block half the view; fading it keeps the star visible.
+	const double fovFadeStart = 60.0;
+	const double fovFadeEnd   = 5.0;
+	double tFov = (fovFadeStart - fov) / (fovFadeStart - fovFadeEnd);
+	if (tFov < 0.0) tFov = 0.0;
+	if (tFov > 1.0) tFov = 1.0;
+
+	// Combined: take the stronger of the two factors.
+	const double maxTransp = 0.92;  // ground very transparent but faint silhouette remains
+	double t = (tAlt > tFov) ? tAlt : tFov;
 	const double target = t * maxTransp;
 	// Smooth toward the target so the fade is gradual (slow trailing follow),
 	// not a hard pop, while you are dragging the view.
@@ -5258,6 +5272,9 @@ protected:
 #endif
 
 		//update and draw
+#if defined(__OHOS__)
+
+#endif
 		app.update(dt); // may also issue GL calls
 		app.draw();
 #if defined(__OHOS__)

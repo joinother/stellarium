@@ -289,7 +289,7 @@ bool MeteorShowersMgr::restoreDefaultCatalog(const QString& destination)
 	setLastUpdate(QDateTime::fromString("2015-07-01T00:00:00"));
 
 	qInfo() << "[MeteorShowersMgr] The default catalog was copied!";
-	displayMessage(q_("Using the default Meteor Showers catalog."), "#bb0000");
+	// displayMessage(q_("Using the default Meteor Showers catalog."), "#bb0000");
 
 	return true;
 }
