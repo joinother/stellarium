@@ -7,6 +7,27 @@
 
 ## 1. 仓库处理策略
 
+### 1.0 2026-07-27 离线候选策略
+
+当前未备案个人上架优先走离线候选：
+
+```
+release/v1.0-offline-candidate
+```
+
+该分支的上架口径：
+
+- 不申请 `ohos.permission.INTERNET`
+- 不申请 `ohos.permission.GET_WIFI_INFO`
+- 不申请 `ohos.permission.LOCATION`
+- 不申请 `ohos.permission.APPROXIMATELY_LOCATION`
+- 隐藏星表下载入口
+- 隐藏 LX200 / TCP 望远镜控制入口
+- 隐藏自动定位按钮
+- 保留离线城市库、手动经纬度、离线世界地图、陀螺仪、星图渲染、搜索、时间控制、图层/详情等本地功能
+
+备案后再从 `feature/online-services` 或开发主线恢复在线地图、远程下载、账号/会员、云服务等能力。
+
 ### 1.1 当前仓库结构
 
 ```
@@ -53,14 +74,14 @@ git push myfork v1.0.0
 
 | 功能 | 是否联网 | 上架处理 |
 |------|----------|----------|
-| 星表下载（getStarCatalogs） | 是（下载额外星表数据） | **保留**，按需下载，用户可选 |
-| 卫星 TLE 数据更新 | 是（从 celestrak.org 拉取） | **保留**，用户手动触发更新 |
+| 星表下载（getStarCatalogs） | 是（下载额外星表数据） | **离线版隐藏**，备案后恢复 |
+| 卫星 TLE 数据更新 | 是（从 celestrak.org 拉取） | **离线版隐藏/禁用远程更新**，备案后恢复 |
 | 流星雨数据 | 否（本地计算） | 无需处理 |
-| LX200 望远镜控制 | 是（局域网 TCP） | **保留**，需在隐私政策中说明 |
+| LX200 望远镜控制 | 是（局域网 TCP） | **离线版隐藏**，局域网通信也按网络能力处理 |
 | 脚本下载/播放 | 否（本地脚本） | 无需处理 |
 | 配置导入/导出 | 否（本地文件） | 无需处理 |
 | 语音合成 | 否（当前未集成） | 无需处理 |
-| GPS 定位 | 是（系统定位服务） | **保留**，需在隐私政策中说明 |
+| GPS 定位 | 是（系统定位服务） | **离线版隐藏并移除权限**，使用离线城市库/手动经纬度 |
 
 ### 2.2 隐私政策要求
 
@@ -71,28 +92,30 @@ git push myfork v1.0.0
    - 使用 GitHub Pages 托管为网页：`https://joinother.github.io/stellarium/privacy`
    
 2. **隐私政策需涵盖**：
-   - 位置信息：用于匹配观测位置（仅在使用时获取，不上传服务器）
-   - 网络访问：用于星表下载和卫星数据更新（用户主动触发）
-   - 局域网通信：用于望远镜控制（仅用户主动连接时）
+   - 离线版不申请网络权限、定位权限
+   - 观测地点由用户通过离线城市库或手动输入经纬度设置
    - 不收集任何用户个人信息
    - 不包含任何第三方追踪 SDK
 
 ### 2.3 权限精简
 
-当前 `module.json5` 中的权限：
+离线候选 `module.json5` 中的权限：
 
 ```json
 "requestPermissions": [
-  { "name": "ohos.permission.INTERNET", "reason": "$string:net_reason" },
-  { "name": "ohos.permission.LOCATION", "reason": "$string:stellarium_permission_reason_location" },
-  { "name": "ohos.permission.APPROXIMATELY_LOCATION", "reason": "$string:stellarium_permission_reason_location" }
+  { "name": "ohos.permission.STORE_PERSISTENT_DATA" },
+  { "name": "ohos.permission.FILE_ACCESS_PERSIST" },
+  { "name": "ohos.permission.PREPARE_APP_TERMINATE" },
+  { "name": "ohos.permission.ACCELEROMETER" },
+  { "name": "ohos.permission.GYROSCOPE" }
 ]
 ```
 
-上架建议：
-- **INTERNET**：保留（星表下载、卫星数据）
-- **LOCATION**：保留（观测位置匹配）
-- 移除不必要的权限（如有）
+离线上架候选：
+- **移除 INTERNET**
+- **移除 GET_WIFI_INFO**
+- **移除 LOCATION / APPROXIMATELY_LOCATION**
+- 保留本地存储与传感器权限
 
 ---
 

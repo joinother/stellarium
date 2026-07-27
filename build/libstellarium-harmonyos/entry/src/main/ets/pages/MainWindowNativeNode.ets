@@ -1,6 +1,5 @@
 import { command } from 'libentry.so'
-import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit'
-import { geoLocationManager } from '@kit.LocationKit'
+import { common } from '@kit.AbilityKit'
 import { sensor } from '@kit.SensorServiceKit'
 import { curves } from '@kit.ArkUI'
 import hilog from '@ohos.hilog'
@@ -78,6 +77,7 @@ interface BookmarksResponse extends StellariumBridgeResponse {
 
 const BOOKMARK_STORE: string = 'stellarium_bookmarks'
 const SEARCH_HISTORY_STORE: string = 'stellarium_search_history'
+const OFFLINE_APPGALLERY_BUILD: boolean = true
 
 
 // 望远镜/目镜配置（Oculars 插件桥）
@@ -627,7 +627,6 @@ struct WindowNativeNode {
   // 低频入口：收进抽屉（点侧栏底部九宫格按钮展开），图标全部专属不重复
   private readonly drawerActions: ShellAction[] = [
     { label: I18n.t('i0101'), icon: 'info', panel: 'object' },
-    { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
     { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
@@ -646,7 +645,6 @@ struct WindowNativeNode {
     { label: I18n.t('i0100'), icon: 'layers', panel: 'layers' },
     { label: I18n.t('i0102'), icon: 'settings', panel: 'settings' },
     { label: I18n.t('i0101'), icon: 'info', panel: 'object' },
-    { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
     { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
@@ -973,7 +971,7 @@ struct WindowNativeNode {
       this.loadPlanetList()
       this.loadObserverInfo()
       this.loadSavedLocations()
-    } else if (panel === 'catalogs') {
+    } else if (panel === 'catalogs' && !OFFLINE_APPGALLERY_BUILD) {
       if (this.catalogList.length === 0) this.loadStarCatalogs()
     } else if (panel === 'bookmarks') {
       this.loadBookmarks()
@@ -2561,41 +2559,8 @@ private loadPlanetPositions(): void {
 
   private async useDeviceLocation(): Promise<void> {
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
-    this.locationPickerStatus = I18n.t('m_req_location_perm')
-    try {
-      const context = getContext(this) as common.UIAbilityContext
-      const atManager = abilityAccessCtrl.createAtManager()
-      const permissions: Array<Permissions> = [
-        'ohos.permission.APPROXIMATELY_LOCATION',
-        'ohos.permission.LOCATION'
-      ]
-      await atManager.requestPermissionsFromUser(context, permissions)
-      this.locationPickerStatus = I18n.t('m_getting_location')
-      const current = await geoLocationManager.getCurrentLocation({
-        priority: geoLocationManager.LocationRequestPriority.ACCURACY,
-        scenario: geoLocationManager.LocationRequestScenario.DAILY_LIFE_SERVICE,
-        maxAccuracy: 2000,
-        timeoutMs: 5000
-      })
-      const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
-      this.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude, I18n.t('m_device_loc_synced'))
-      this.applyPickerLocation()
-      this.locationPickMode = 'map'
-      this.hierContinent = ''
-      this.hierRegion = ''
-      this.hierCity = ''
-    } catch (err) {
-      const errMsg: string = err instanceof Error ? err.message : JSON.stringify(err)
-      hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', errMsg)
-      // Simulator usually has no GPS; fall back to saved or default location
-      if (this.locationPickerLatitude === 0 && this.locationPickerLongitude === 0) {
-        this.setPickerLocation(I18n.t('city_beijing'), 39.9, 116.4, 43, I18n.t('m_gps_sim_default'))
-        this.applyPickerLocation()
-      } else {
-        this.locationPickerStatus = I18n.t('m_gps_unavailable')
-        this.applyPickerLocation()
-      }
-    }
+    this.locationPickerStatus = I18n.t('m_drag_map_hint')
+    this.flashHint(I18n.t('m_drag_map_hint'))
   }
 
   private applyPickerLocation(): void {
@@ -3785,13 +3750,13 @@ private loadPlanetPositions(): void {
         if (x >= 1160 && x < 1225) { this.moveToSelectedObject(); return true }
         if (x >= 1225 && x <= 1310) { this.callInteractive('setTracking', '0', () => { this.refreshState() }); return true }
       }
-      if (y >= 630 && y <= 690) {
+      if (!OFFLINE_APPGALLERY_BUILD && y >= 630 && y <= 690) {
         if (x >= 1095 && x < 1175) { this.lx200GotoSelected(); return true }
         if (x >= 1175 && x < 1245) { this.lx200SyncSelected(); return true }
         if (x >= 1245 && x <= 1320) { this.lx200Abort(); return true }
       }
     } else if (this.activePanel === 'place') {
-      if (y >= 455 && y <= 505 && x >= 1300 && x <= right) { this.useDeviceLocation(); return true }
+      if (!OFFLINE_APPGALLERY_BUILD && y >= 455 && y <= 505 && x >= 1300 && x <= right) { this.useDeviceLocation(); return true }
     }
 
     return true
@@ -5805,7 +5770,9 @@ private loadPlanetPositions(): void {
       if (this.speechStatus.length > 0) {
         Text(this.speechStatus).fontSize(10).fontColor('#FFAA00').width('100%').padding({ left: 4, right: 4 })
       }
-	      this.lx200ObjectControls()
+		      if (!OFFLINE_APPGALLERY_BUILD) {
+		        this.lx200ObjectControls()
+		      }
       } // end object selectedName else
     } else if (this.activePanel === 'time') {
       this.infoRow(I18n.t('i0054'), this.observationTimeText)
@@ -6886,9 +6853,14 @@ private loadPlanetPositions(): void {
         .width('100%')
         .padding({ left: 4, right: 4 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
-    } else if (this.activePanel === 'catalogs') {
-      // 星表下载面板
-      if (this.catalogLoading) {
+	    } else if (this.activePanel === 'catalogs') {
+	      if (OFFLINE_APPGALLERY_BUILD) {
+	        Column() {
+	          Text(I18n.t('m_all_catalogs_included')).fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
+	        }.width('100%').height(120).justifyContent(FlexAlign.Center)
+	      } else {
+	      // 星表下载面板
+	      if (this.catalogLoading) {
         Column() {
           Text(I18n.t('c_loading_catalogs')).fontSize(13).fontColor('#99FFFFFF')
         }.width('100%').height(120).justifyContent(FlexAlign.Center)
@@ -6938,6 +6910,7 @@ private loadPlanetPositions(): void {
             }, (c: StarCatalogItem) => c.id)
           }.width('100%').padding({ left: 2, right: 2 })
         }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+      }
       }
     } else if (this.activePanel === 'bookmarks') {
       // 书签面板：保存当前视图 + 已存书签列表（点击跳转 / 删除）
@@ -7453,7 +7426,9 @@ private loadPlanetPositions(): void {
       this.infoRow(I18n.t('i0060'), this.gyroscopeStatus)
       this.infoRow(I18n.t('i0061'), this.sensZh(this.gyroscopeSensitivityText))
       this.gyroscopeRow()
-      this.lx200Panel()
+      if (!OFFLINE_APPGALLERY_BUILD) {
+        this.lx200Panel()
+      }
       this.languageRow()
       Row() {
         Text(I18n.t('set_distance_units'))
@@ -7762,6 +7737,7 @@ private loadPlanetPositions(): void {
           .fontWeight(FontWeight.Medium)
           .fontColor('#E5FFFFFF')
           .layoutWeight(1)
+        if (!OFFLINE_APPGALLERY_BUILD) {
         Row() {
             Image($r('app.media.ic_location')).width(14).height(14).fillColor('#FFFFFFFF')
             Text(I18n.t('i0052')).fontSize(11).fontColor('#FFFFFFFF').margin({ left: 4 })
@@ -7771,8 +7747,9 @@ private loadPlanetPositions(): void {
           .backgroundColor('#5B93BF')
           .borderRadius(15)
           .onClick(() => {
-            this.useDeviceLocation()
-          })
+	            this.useDeviceLocation()
+	          })
+        }
       }
         .width('100%')
 

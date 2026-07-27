@@ -22,15 +22,17 @@
 | 星表下载（getStarCatalogs） | **移除UI入口**，编译时用product配置关闭 |
 | 卫星TLE数据更新 | **移除UI入口**，卫星功能仅用内置数据 |
 | LX200望远镜控制（TCP） | **移除UI入口**，局域网通信也算联网 |
-| GPS定位 | **保留**，系统定位服务不需要ICP备案 |
+| GPS定位 | **移除UI入口和权限**，第一版改用离线城市库/手动经纬度 |
 
-> **关键：** 上架版本的 `module.json5` 中应移除 `ohos.permission.INTERNET` 权限，只保留定位权限。
+> **关键：** 未备案离线上架候选版的 `module.json5` 中应移除 `ohos.permission.INTERNET`、`ohos.permission.GET_WIFI_INFO`、`ohos.permission.LOCATION`、`ohos.permission.APPROXIMATELY_LOCATION`。第一版不触发网络或定位权限弹窗。
 
 ### 1.3 版本管理
 
 ```
-openharmony-preview-v1     → 开发版（含联网功能，仅自用/测试）
-harmonyos-release           → 上架版（不联网，提交华为审核）
+openharmony-preview-v1             → 开发版（可继续保留未来联网功能）
+recovery/latest-entryfix            → 最新功能 + entry 修复验证线
+release/v1.0-offline-candidate      → 未备案离线上架候选，不联网、不定位
+feature/online-services             → 备案后再恢复网络地图/API/下载/账号等
 ```
 
 编译时通过 `build-profile.json5` 的 product 配置区分：
@@ -51,7 +53,7 @@ harmonyos-release           → 上架版（不联网，提交华为审核）
 | 检测项 | 要求 | 当前状态 |
 |--------|------|----------|
 | 应用签名 | 必须使用华为CA签发的发布证书 | ❌ 未配置发布签名 |
-| 权限最小化 | 只申请必要权限 | ⚠️ 上架版需移除INTERNET权限 |
+| 权限最小化 | 只申请必要权限 | ✅ 离线候选已移除网络/Wi-Fi/定位权限，仅保留本地存储与传感器 |
 | 无恶意代码 | 不含病毒/木马 | ✅ 纯开源代码 |
 | 数据安全 | 不泄露用户隐私 | ✅ 不收集用户数据 |
 | 加密合规 | 不使用不安全加密算法 | ✅ 使用系统加密 |
@@ -133,7 +135,7 @@ harmonyos-release           → 上架版（不联网，提交华为审核）
 
 - [ ] **内容分级：** 所有人（天文教育类）
 
-- [ ] **权限精简：** 上架版只保留 `ohos.permission.LOCATION`，移除 `ohos.permission.INTERNET`
+- [x] **权限精简：** 离线候选已移除 `INTERNET`、`GET_WIFI_INFO`、`LOCATION`、`APPROXIMATELY_LOCATION`
 
 - [ ] **应用体积评估：** 当前460MB
   - 考虑将大星表数据从HAP中移除，首次使用时本地内置即可（不联网下载）
@@ -171,7 +173,8 @@ harmonyos-release           → 上架版（不联网，提交华为审核）
 本应用不收集任何用户个人信息。
 
 ## 权限使用
-- 位置权限：用于匹配观测位置，仅在用户主动使用时获取，不上传任何服务器。
+- 本应用不申请网络权限。
+- 本应用不申请定位权限；观测地点由用户通过离线城市库或手动经纬度设置。
 
 ## 第三方SDK
 本应用不包含任何第三方追踪SDK或广告SDK。
@@ -192,7 +195,7 @@ https://github.com/joinother/stellarium/tree/openharmony-preview-v1
 1. ❌ 包名未规范化
 2. ❌ 无隐私政策
 3. ❌ 无华为发布签名
-4. ❌ 上架版未移除联网功能
+4. ✅ 离线候选已移除联网/定位权限，并隐藏联网入口
 5. ❌ 未准备截图
 6. ❌ 未构建 Release HAP
 

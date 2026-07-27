@@ -18,12 +18,11 @@ Stellarium **不收集、不存储、不上传**任何用户个人信息。具�
 
 ## 2. 应用使用的设备功能
 
-### 2.1 位置信息（ohos.permission.LOCATION / APPROXIMATELY_LOCATION）
+### 2.1 观测地点
 
-- **用途：** 用于将星图与您的观测位置匹配，显示当前位置可见的天体
-- **获取时机：** 仅当您在应用内主动点击"自动定位"时获取
-- **存储方式：** 位置数据仅保存在您的设备本地，不上传任何服务器
-- **可拒绝：** 您可以拒绝位置权限，手动输入城市名或经纬度
+- **用途：** 用于将星图与用户选择的观测地点匹配，显示当地可见的天体
+- **获取方式：** 上架离线版不申请定位权限，不读取系统 GPS；用户可通过离线城市库、离线地图选点或手动经纬度设置
+- **存储方式：** 观测地点仅保存在设备本地，不上传任何服务器
 
 ### 2.2 加速度计和陀螺仪（ohos.permission.ACCELEROMETER / GYROSCOPE）
 
@@ -42,6 +41,7 @@ Stellarium **不收集、不存储、不上传**任何用户个人信息。具�
 Stellarium 上架版本（v1.0）为**完全离线版本**：
 
 - 不申请网络权限（ohos.permission.INTERNET）
+- 不申请定位权限（ohos.permission.LOCATION / APPROXIMATELY_LOCATION）
 - 不进行任何网络通信
 - 所有天文计算和数据均在本地完成
 - 不包含星表下载、卫星数据更新等联网功能
@@ -50,7 +50,7 @@ Stellarium 上架版本（v1.0）为**完全离线版本**：
 
 Stellarium 基于 GPLv2 开源许可证，完整源代码公开于：
 
-https://github.com/joinother/stellarium/tree/openharmony-preview-v1
+https://github.com/joinother/stellarium/tree/release/v1.0-offline-candidate
 
 任何人都可以审查源代码，验证本隐私政策的声明。
 

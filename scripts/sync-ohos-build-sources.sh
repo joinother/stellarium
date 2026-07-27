@@ -11,22 +11,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SRC="$REPO_ROOT/harmonyos/cpp-source/hello.cpp"
-DST="$REPO_ROOT/build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp"
-
-if [ ! -f "$SRC" ]; then
-  echo "ERROR: missing tracked source: $SRC" >&2
-  exit 1
-fi
-
-if [ ! -d "$(dirname "$DST")" ]; then
-  echo "ERROR: missing hvigor cpp source dir: $(dirname "$DST")" >&2
-  echo "Open/generate the HarmonyOS build project first." >&2
-  exit 1
-fi
-
-cp "$SRC" "$DST"
+SOURCES=(
+  "harmonyos/cpp-source/hello.cpp:build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp"
+  "harmonyos/module.json5:build/libstellarium-harmonyos/entry/src/main/module.json5"
+)
 
 echo "Synced:"
-echo "  $SRC"
-echo "  -> $DST"
+for item in "${SOURCES[@]}"; do
+  SRC="$REPO_ROOT/${item%%:*}"
+  DST="$REPO_ROOT/${item#*:}"
+
+  if [ ! -f "$SRC" ]; then
+    echo "ERROR: missing tracked source: $SRC" >&2
+    exit 1
+  fi
+
+  if [ ! -d "$(dirname "$DST")" ]; then
+    echo "ERROR: missing hvigor destination dir: $(dirname "$DST")" >&2
+    echo "Open/generate the HarmonyOS build project first." >&2
+    exit 1
+  fi
+
+  cp "$SRC" "$DST"
+  echo "  $SRC"
+  echo "  -> $DST"
+done
