@@ -122,25 +122,19 @@ git push myfork v1.0.0
 
 ## 3. 应用包名规范化
 
-### 3.1 当前包名
+### 3.1 上架应用标识
 
 ```
-org.qtproject.example.stellarium
+中文名：星象仪
+英文名：Stellarium
+包名：com.joinother.skyinstrument
 ```
 
-### 3.2 推荐包名
+### 3.2 包名注意事项
 
-```
-org.stellarium.app
-```
-
-### 3.3 修改步骤
-
-1. 修改 `AppScope/app.json5` 中的 `bundleName`
-2. 修改 `entry/src/main/module.json5` 中的 `bundleName`（如有）
-3. 修改签名配置中的包名
-4. 重新生成签名证书
-5. 卸载旧应用后重新安装
+1. `com.joinother.skyinstrument` 是上架候选包名，提交到 AppGallery Connect 后不可更改。
+2. 本地调试须使用为该包名重新生成的调试签名；此前的 Qt 示例包调试签名不可复用。
+3. 发布证书和 Profile 必须由 AppGallery Connect 为这个包名签发，私钥和密码只保存在本机安全存储中。
 
 > **注意**：包名一旦上架不可更改，请在首次发布前确定。
 
@@ -223,7 +217,7 @@ HAP 包约 **460MB**，主要来自 `entry/libs/` 中的 `.so` 文件。
 
 ## 6. 上架检查清单
 
-- [ ] 包名规范化为 `org.stellarium.app`
+- [x] 上架候选包名配置为 `com.joinother.skyinstrument`
 - [ ] 隐私政策页面创建并托管
 - [ ] 华为发布证书申请
 - [ ] Release 签名配置
