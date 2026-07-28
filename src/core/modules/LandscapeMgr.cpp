@@ -891,6 +891,10 @@ void LandscapeMgr::init()
 	setLandscapeTransparency(conf->value("landscape/transparency", 0.5).toDouble());
 
 	cardinalPoints = new Cardinals();
+	// The OpenHarmony bridge can apply the saved language before LandscapeMgr
+	// finishes constructing. Initialise labels from the current locale here as
+	// well, otherwise a cold Chinese launch keeps the Cardinals defaults (N/S/E/W).
+	cardinalPoints->updateI18n();
 	cardinalPoints->setFlagShow4WCRLabels(conf->value("viewing/flag_cardinal_points", true).toBool());
 	cardinalPoints->setFlagShow8WCRLabels(conf->value("viewing/flag_ordinal_points", true).toBool());
 	cardinalPoints->setFlagShow16WCRLabels(conf->value("viewing/flag_16wcr_points", false).toBool());

@@ -19,11 +19,10 @@ release/v1.0-offline-candidate
 
 - 不申请 `ohos.permission.INTERNET`
 - 不申请 `ohos.permission.GET_WIFI_INFO`
-- 不申请 `ohos.permission.LOCATION`
-- 不申请 `ohos.permission.APPROXIMATELY_LOCATION`
+- 可申请 `ohos.permission.LOCATION` / `ohos.permission.APPROXIMATELY_LOCATION`，仅用于本机匹配天象，不上传
 - 隐藏星表下载入口
 - 隐藏 LX200 / TCP 望远镜控制入口
-- 隐藏自动定位按钮
+- 保留自动定位按钮；定位仅本机使用，不联网、不上传
 - 保留离线城市库、手动经纬度、离线世界地图、陀螺仪、星图渲染、搜索、时间控制、图层/详情等本地功能
 
 备案后再从 `feature/online-services` 或开发主线恢复在线地图、远程下载、账号/会员、云服务等能力。
@@ -81,7 +80,7 @@ git push myfork v1.0.0
 | 脚本下载/播放 | 否（本地脚本） | 无需处理 |
 | 配置导入/导出 | 否（本地文件） | 无需处理 |
 | 语音合成 | 否（当前未集成） | 无需处理 |
-| GPS 定位 | 是（系统定位服务） | **离线版隐藏并移除权限**，使用离线城市库/手动经纬度 |
+| GPS 定位 | 否（系统定位服务本身不访问本应用服务器） | **离线版保留**，仅本机用于匹配天象 |
 
 ### 2.2 隐私政策要求
 
@@ -92,8 +91,8 @@ git push myfork v1.0.0
    - 使用 GitHub Pages 托管为网页：`https://joinother.github.io/stellarium/privacy`
    
 2. **隐私政策需涵盖**：
-   - 离线版不申请网络权限、定位权限
-   - 观测地点由用户通过离线城市库或手动输入经纬度设置
+   - 离线版不申请网络权限
+   - 定位仅在用户主动点击自动定位时请求，用于本机天象匹配，不上传
    - 不收集任何用户个人信息
    - 不包含任何第三方追踪 SDK
 
@@ -106,6 +105,8 @@ git push myfork v1.0.0
   { "name": "ohos.permission.STORE_PERSISTENT_DATA" },
   { "name": "ohos.permission.FILE_ACCESS_PERSIST" },
   { "name": "ohos.permission.PREPARE_APP_TERMINATE" },
+  { "name": "ohos.permission.APPROXIMATELY_LOCATION" },
+  { "name": "ohos.permission.LOCATION" },
   { "name": "ohos.permission.ACCELEROMETER" },
   { "name": "ohos.permission.GYROSCOPE" }
 ]
@@ -114,7 +115,7 @@ git push myfork v1.0.0
 离线上架候选：
 - **移除 INTERNET**
 - **移除 GET_WIFI_INFO**
-- **移除 LOCATION / APPROXIMATELY_LOCATION**
+- **保留 LOCATION / APPROXIMATELY_LOCATION**，仅用于本机天象匹配
 - 保留本地存储与传感器权限
 
 ---

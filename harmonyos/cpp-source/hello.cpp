@@ -34,6 +34,8 @@ struct EglState
     GLuint starBuffer = 0;
     GLuint frameProgram = 0;
     GLuint frameTexture = 0;
+    int frameTextureWidth = 0;
+    int frameTextureHeight = 0;
     bool submittedFrame = false;
 };
 
@@ -359,7 +361,14 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
     }
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    if (g_egl.frameTextureWidth != frameWidth || g_egl.frameTextureHeight != frameHeight) {
+        // Allocate only when the rendered surface changes size. Reallocating a
+        // texture on every frame creates avoidable driver synchronization.
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, frameWidth, frameHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        g_egl.frameTextureWidth = frameWidth;
+        g_egl.frameTextureHeight = frameHeight;
+    }
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, frameWidth, frameHeight, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     const GLenum textureError = glGetError();
     if (textureError != GL_NO_ERROR) {
         OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,

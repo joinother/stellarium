@@ -146,8 +146,9 @@ static std::atomic<float> s_ohosRenderFps{0.0f};
 // Render resolution scale factor (0.0-1.0). Reduces the framebuffer resolution
 // to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
 // the texture to full screen automatically.
-// 0.6 = 60% resolution = 36% of original pixel count = ~64% less data.
-constexpr double OHOS_RENDER_SCALE = 0.6;
+// 52% keeps labels legible while roughly quartering the pixels sent through
+// the emulator's expensive draw/readback path compared with full resolution.
+constexpr double OHOS_RENDER_SCALE = 0.52;
 
 void ohosMark(const char* message)
 {
@@ -363,11 +364,13 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	if (width <= 0 || height <= 0)
 		return;
 
-	// Downsample the framebuffer using glBlitFramebuffer to reduce glReadPixels data.
-	// At 60% scale: 1536x960 instead of 2560x1600 = 36% of original data = ~10ms vs ~34ms.
-	constexpr double READBACK_SCALE = 0.5;
-	const int readW = qMax(1, int(width * READBACK_SCALE));
-	const int readH = qMax(1, int(height * READBACK_SCALE));
+	// The bridge has to synchronously copy the GL frame into the Native XComponent.
+	// Favor motion while the sky is being manipulated, then restore detail once
+	// the user has stopped. This avoids letting the smooth ArkUI shell outrun the
+	// sky renderer during drags and pinch gestures.
+	const double readbackScale = StelMainView::getInstance().needsMaxFPS() ? 0.25 : 0.40;
+	const int readW = qMax(1, int(width * readbackScale));
+	const int readH = qMax(1, int(height * readbackScale));
 
 	// Create downsample FBO + texture (once)
 	static GLuint s_readbackFBO = 0;
@@ -507,8 +510,8 @@ static QList<std::function<void()>> s_ohosCmdQueue;
 // TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
 // ground texture gradually becomes transparent so the lower-hemisphere sky is
 // revealed instead of being occluded by an opaque landscape. Capped so the
-// ground stays faintly visible (never fully invisible). Driven every frame
-// from renderOhosFrameNow().
+// ground fades away completely once the view has moved below the horizon.
+// Driven every frame from renderOhosFrameNow().
 static bool s_landscapeFadeWithZoom = true;
 static float s_landscapeFadeSmooth = 0.f;
 // Virtual pointing-stick target: after pointAtSky centers the view on a sky
@@ -564,14 +567,14 @@ static void ohosDrainCommandQueue()
 		fn();
 }
 
-// Gradually fade the landscape as the observer TILTS THE VIEW DOWN toward the
-// ground (lower view-center altitude), so the ground no longer occludes the
-// lower-hemisphere sky while looking down. Driven by the VIEW DIRECTION
-// (altitude of the screen-center), NOT by zoom/FOV.
+// Gradually fade the landscape as the observer zooms in and tilts the view
+// down toward the ground. Zoom controls the primary fade and reaches complete
+// transparency at maximum zoom; looking toward the nadir adds a softer fade
+// without making the landscape disappear by itself.
 // Reuses the engine's own transparency path: LandscapeMgr applies
 // (1 - transparency) * landFader as the ground alpha, so pushing transparency
-// toward s_landscapeFadeMax keeps the ground very see-through but still visible
-// (never fully invisible).
+// toward 1.0 removes the landscape entirely once it would otherwise occlude
+// the lower-hemisphere sky.
 static void ohosUpdateLandscapeFadeWithZoom()
 {
 	if (!s_landscapeFadeWithZoom)
@@ -594,24 +597,28 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	StelUtils::rectToSphe(&aziRad, &altRad, altAz);
 	const double altView = altRad * 180.0 / M_PI;
 
-	// Fade window expressed in view altitude:
-	//   altView >= fadeStartAlt -> ground fully opaque
-	//   altView <= fadeEndAlt   -> ground at s_landscapeFadeMax (very transparent, but still visible)
-	// In between the ground fades gradually as you pull the view toward the ground.
-	const double fadeStartAlt = 15.0;    // looking up / near horizon: opaque
-	const double fadeEndAlt   = -60.0;   // looking down at the ground: very transparent
-	const double maxTransp    = 0.85;    // cap so the ground never disappears entirely
-	double t = (fadeStartAlt - altView) / (fadeStartAlt - fadeEndAlt);
-	if (t < 0.0) t = 0.0;
-	if (t > 1.0) t = 1.0;
-	const double target = t * maxTransp;
+	const auto smoothstep = [](double value) {
+		value = qBound(0.0, value, 1.0);
+		return value * value * (3.0 - 2.0 * value);
+	};
+
+	// Zooming in makes the ground progressively less useful. The normal view
+	// remains opaque down to 60 deg FOV; the maximum useful zoom (4 deg) fades
+	// it away entirely, even when the camera is still near the horizon.
+	const double fov = mvmgr->getCurrentFov();
+	const double zoomFade = smoothstep((60.0 - fov) / (60.0 - 4.0));
+
+	// Tilting down is an additional, gentler cue. It starts before the horizon
+	// and reaches 75% at the nadir, so the ground still has spatial context
+	// unless the user also zooms all the way in.
+	const double nadirFade = smoothstep((15.0 - altView) / (15.0 - -90.0)) * 0.75;
+	const double target = zoomFade + (1.0 - zoomFade) * nadirFade;
 	// Smooth toward the target so the fade is gradual (slow trailing follow),
 	// not a hard pop, while you are dragging the view.
-	const float rate = 0.10f;
+	const float rate = 0.18f;
 	float cur = s_landscapeFadeSmooth + (static_cast<float>(target) - s_landscapeFadeSmooth) * rate;
 	s_landscapeFadeSmooth = cur;
-	if (cur > 0.002f)
-		lmgr->setFlagLandscapeUseTransparency(true);
+	lmgr->setFlagLandscapeUseTransparency(true);
 	lmgr->setLandscapeTransparency(static_cast<double>(cur));
 }
 
@@ -722,7 +729,7 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 		result["pending"] = true;
 		return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 	}
-	// Fire-and-forget view commands (zoomBy / dragView / panBy) are called
+	// Fire-and-forget view commands (zoomBy / zoomStep / dragView / panBy) are called
 	// rapidly, never polled for a result, and often repeat with identical
 	// args. Routing them through the consume-on-read store would let a stale
 	// cached result be returned on the next identical call WITHOUT executing
@@ -730,7 +737,7 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	// execution and return pending; the caller ignores the return value.
 	{
 		const QString cmdName = key.section('|', 0, 0);
-		if (cmdName == "zoomBy" || cmdName == "dragView" || cmdName == "panBy")
+		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_ohosCmdQueue.append([command]() { command(); });
@@ -812,7 +819,9 @@ static int ohosTemperatureFromSpType(const QString& sp)
 	return base;
 }
 
-QJsonObject selectedObjectJson(StelCore* core = nullptr)
+// Complete object prose is expensive to generate. Initial selections need it for
+// the detail sheet, but the 300ms live refresh only needs the changing values.
+QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeFullInfo = true)
 {
 	QJsonObject result;
 	result["ok"] = true;
@@ -837,6 +846,17 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr)
 		// Normalized magnitude (visual, no extinction)
 		if (m.contains("vmag"))
 			result["magnitude"] = m["vmag"].toDouble();
+		// 观测条件：核心已计算大气消光后的星等和气团质量，直接透传给前端。
+		if (m.contains("vmage"))
+			result["apparentMagnitude"] = m["vmage"].toDouble();
+		if (m.contains("airmass"))
+		{
+			const double airmass = m["airmass"].toDouble();
+			if (airmass >= 0.0)
+				result["airmass"] = airmass;
+		}
+		if (m.contains("vmag") && m.contains("vmage"))
+			result["extinction"] = m["vmage"].toDouble() - m["vmag"].toDouble();
 
 		// Normalized altitude / azimuth (apparent, degrees)
 		if (m.contains("altitude"))
@@ -913,6 +933,12 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr)
 			StelObject::Size | StelObject::PlainText).simplified();
 		if (!info.isEmpty())
 			result["info"] = info;
+		if (includeFullInfo)
+		{
+			const QString fullInfo = object->getInfoString(core, StelObject::AllInfo | StelObject::PlainText).simplified();
+			if (!fullInfo.isEmpty())
+				result["fullInfo"] = fullInfo;
+		}
 	}
 	return result;
 }
@@ -1421,8 +1447,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 		const auto list = objectMgr->listMatchingObjects(prefix, maxItems, true);
 		QJsonArray items;
-		for (const auto& pair : list) { items.append(pair.first); }
-		result["ok"] = true; result["items"] = items;
+		QJsonArray keys;
+		for (const auto& pair : list)
+		{
+			items.append(pair.first);
+			// pair.first is a localized display label. Keep it for the UI, but
+			// return the object's stable English name for the follow-up selection.
+			const QString key = pair.second ? pair.second->getEnglishName() : QString();
+			keys.append(key.isEmpty() ? pair.first : key);
+		}
+		result["ok"] = true; result["items"] = items; result["keys"] = keys;
 		result["count"] = items.size(); result["prefix"] = prefix;
 		return result;
 	}
@@ -1518,7 +1552,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
 						 "selectAt tapX=%{public}d tapY=%{public}d skyW=%{public}d skyH=%{public}d vpW=%{public}d vpH=%{public}d sx=%{public}d syTop=%{public}d syGL=%{public}d",
 						 x, y, skyW, skyH, vp[2], vp[3], sx, syTop, sy);
+			// The desktop default is tuned for a mouse cursor. Give a one-shot
+			// touch pick a finger-sized target without changing desktop selection
+			// behavior or leaving a global radius behind for later operations.
+			objectMgr->setObjectSearchRadius(44.0);
 			found = objectMgr->findAndSelect(core, sx, sy);
+			objectMgr->setObjectSearchRadius(25.0);
 			qInfo() << "[StellariumOhos][selectAt] found" << found;
 			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
 						 "selectAt found=%{public}d", found ? 1 : 0);
@@ -1654,7 +1693,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		if (commandName == "getSelectedObjectInfo")
-			return selectedObjectJson(core);
+			return selectedObjectJson(core, arg.trimmed().toLower() == "full");
 
 		if (commandName == "moveToSelected")
 		{

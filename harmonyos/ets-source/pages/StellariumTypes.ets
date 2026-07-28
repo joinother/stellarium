@@ -256,6 +256,9 @@ export interface StellariumBridgeResponse {
   ra?: string
   dec?: string
   magnitude?: number
+  apparentMagnitude?: number
+  airmass?: number
+  extinction?: number
   azimuth?: number
   constellation?: string
   // 音乐引擎用：英文类型(便于分支) / 光谱型 / 推算温度(越热音越高)
@@ -270,6 +273,8 @@ export interface StellariumBridgeResponse {
   transit?: string
   phase?: number
   elongation?: number
+  fullInfo?: string
+  keys?: string[]
   replies?: string
   sent?: string
   mode?: string
