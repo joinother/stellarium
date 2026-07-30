@@ -5262,7 +5262,8 @@ private loadPlanetPositions(): void {
     // its rich data never sits over that visual centre. When another main
     // panel is open, retain the existing left-side coexistence layout.
     if (!this.panelVisible) {
-      return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN)
+      // 平板横屏：卡片靠右但留出足够边距，比之前再右移 16vp。
+      return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN + 16)
     }
     const minLeft = this.EDGE_MARGIN + 92
     const preferred = this.EDGE_MARGIN + 150
@@ -5285,9 +5286,8 @@ private loadPlanetPositions(): void {
     if (this.panelVisible) {
       return Math.min(420, Math.max(360, this.expandedDetailAvailableWidth()))
     }
-    // The foldable emulator maps vp to a much larger physical width. Keep this
-    // deliberately narrow so a centered target remains visible in real pixels.
-    return this.clamp(this.skyWidth * 0.27, 260, 330)
+    // 平板横屏：加宽到 38%，确保"实时高度/方位"等字段不被截断。
+    return this.clamp(this.skyWidth * 0.38, 340, 480)
   }
 
   private bottomCardHeight(): number {
