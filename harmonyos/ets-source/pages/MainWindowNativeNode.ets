@@ -4694,6 +4694,26 @@ private loadPlanetPositions(): void {
             return
           }
         }
+        // 手机端右上角快捷按钮（陀螺仪/音频）：XComponent 同样吞掉了 onClick，
+        // 需要坐标级分派，与上方 tablet rail workaround 同理。
+        if (!this.isExpandedLayout && !this.drawerOpen && this.isCompactTopQuickPoint(downX, downY)) {
+          const qx = this.compactTopQuickX()
+          const qy = this.compactTopQuickY()
+          // 陀螺仪按钮（上方的 44x44，圆心约 qx+22, qy+22）
+          if (downX >= qx && downX <= qx + 44 && downY >= qy && downY <= qy + 44) {
+            hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro tap via handleSkyTouch')
+            this.resetPanelIdle()
+            this.toggleGyroscope(!this.gyroscopeEnabled)
+            return
+          }
+          // 音频按钮（下方的 44x44，间距 10vp，圆心约 qx+22, qy+54+22）
+          if (downX >= qx && downX <= qx + 44 && downY >= qy + 54 && downY <= qy + 54 + 44) {
+            hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio tap via handleSkyTouch')
+            this.resetPanelIdle()
+            this.setPanel('audio')
+            return
+          }
+        }
         return
       }
       this.skyTouchActive = true
@@ -5401,10 +5421,12 @@ private loadPlanetPositions(): void {
   compactTopQuickControls() {
     Column({ space: 10 }) {
       this.compactQuickButton('gyro', this.gyroscopeEnabled, () => {
+        hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroscopeEnabled.toString())
         this.resetPanelIdle()
         this.toggleGyroscope(!this.gyroscopeEnabled)
       })
       this.compactQuickButton('audio', this.musicEnabled, () => {
+        hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio button CLICKED musicEnabled=%{public}s', this.musicEnabled.toString())
         this.resetPanelIdle()
         this.setPanel('audio')
       })
@@ -6768,13 +6790,10 @@ private loadPlanetPositions(): void {
   @Builder
   musicButton() {
     Stack() {
-      Text('\u266A')
-        .fontSize(20)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.musicEnabled ? '#7FD0FF' : '#5A6270')
-        .opacity(this.musicEnabled ? 1.0 : 0.45)
-        .textAlign(TextAlign.Center)
-        .animation({ duration: 200, curve: curves.springMotion(0.42, 0.85) })
+      Image(this.getIcon('audio', this.musicEnabled))
+        .width(22)
+        .height(22)
+        .fillColor(this.musicEnabled ? '#FFFFFF' : this.nmText())
     }
       .width(44)
       .height(44)
@@ -6795,47 +6814,14 @@ private loadPlanetPositions(): void {
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
   }
 
-  // ── 陀螺仪按钮 ──
+  // ── 陀螺仪按钮（平板左侧栏，与手机端 compactQuickButton 共用 ic_gyro.svg）──
   @Builder
   gyroButton() {
     Stack() {
-      // 外圈：旋转的轨道环
-      Circle()
-        .width(28)
-        .height(28)
-        .fill('none')
-        .stroke(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
-        .strokeWidth(1.5)
-        .opacity(this.gyroscopeEnabled ? 0.8 : 0.4)
-      // 中圈：十字准星
-      Circle()
-        .width(16)
-        .height(16)
-        .fill('none')
-        .stroke(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
-        .strokeWidth(1)
-        .opacity(this.gyroscopeEnabled ? 0.6 : 0.3)
-      // 中心点
-      Circle()
-        .width(5)
-        .height(5)
-        .fill(this.gyroscopeEnabled ? '#7FD0FF' : '#5A6270')
-        .opacity(this.gyroscopeEnabled ? 1.0 : 0.5)
-      // 十字线
-      if (this.gyroscopeEnabled) {
-        Line().width(2).height(10)
-          .stroke('#7FD0FF').strokeWidth(1)
-          .position({ x: 21, y: 6 })
-        Line().width(2).height(10)
-          .stroke('#7FD0FF').strokeWidth(1)
-          .position({ x: 21, y: 28 })
-        Line().width(10).height(2)
-          .stroke('#7FD0FF').strokeWidth(1)
-          .position({ x: 6, y: 21 })
-        Line().width(10).height(2)
-          .stroke('#7FD0FF').strokeWidth(1)
-          .position({ x: 28, y: 21 })
-      }
+      Image(this.getIcon('gyro', this.gyroscopeEnabled))
+        .width(22)
+        .height(22)
+        .fillColor(this.gyroscopeEnabled ? '#FFFFFF' : this.nmText())
     }
       .width(44)
       .height(44)
