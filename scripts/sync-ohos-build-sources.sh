@@ -23,6 +23,7 @@ SOURCES=(
   "harmonyos/ets-source/pages/UiExtensionNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/UiExtensionNativeNode.ets"
   "harmonyos/ets-source/pages/I18n.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets"
   "harmonyos/ets-source/qability/QAbility.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/QAbility.ets"
+  "harmonyos/ets-source/qability/StellariumResourceBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/StellariumResourceBootstrap.ets"
   "harmonyos/ets-source/resources/base/media/ic_audio.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_audio.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
   "harmonyos/module.json5:build/libstellarium-harmonyos/entry/src/main/module.json5"

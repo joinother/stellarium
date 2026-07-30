@@ -93,6 +93,10 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
   // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
   const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
+  // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
+  // .ssc files, so an upgraded install would keep an empty Scripts panel forever
+  // unless the missing directory itself forces a re-extract.
+  const scriptMarker = `${installRoot}/scripts/constellations_tour.ssc`;
 
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
@@ -106,6 +110,12 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but skyculture data missing ` +
       `(${skycultureMarker}); forcing re-extract`);
+    needExtract = true;
+  }
+  if (!needExtract && !exists(scriptMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but sky-tour scripts missing ` +
+      `(${scriptMarker}); forcing re-extract`);
     needExtract = true;
   }
 

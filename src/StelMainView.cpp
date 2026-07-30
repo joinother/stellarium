@@ -1665,9 +1665,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	{
 		StelSkyCultureMgr* skyCultureMgr = GETSTELMODULE(StelSkyCultureMgr);
 		if (!skyCultureMgr) { result["error"] = "sky culture manager not found"; return result; }
-		bool ok = skyCultureMgr->setCurrentSkyCultureNameI18(arg.trimmed());
+		// 调用方可能传本地化显示名（设置面板）或稳定 ID（星图文化列表）。
+		// 两种都要接受，否则其中一侧的按钮会全部静默失效。
+		const QString wanted = arg.trimmed();
+		bool ok = skyCultureMgr->setCurrentSkyCultureID(wanted);
+		if (!ok) { ok = skyCultureMgr->setCurrentSkyCultureNameI18(wanted); }
 		result["ok"] = ok;
-		result["culture"] = arg.trimmed();
+		if (!ok) { result["error"] = "unknown sky culture: " + wanted; }
+		result["culture"] = skyCultureMgr->getCurrentSkyCultureNameI18();
+		result["cultureId"] = skyCultureMgr->getCurrentSkyCultureID();
 		return result;
 	}
 
@@ -2315,8 +2321,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "playScript")
 		{
 			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
-			smgr.runScript(arg);
-			result["ok"] = true;
+			// runScript() reports failure (missing file, syntax error, already
+			// running). Swallowing it made every failed tour look like a success.
+			const bool started = smgr.runScript(arg);
+			result["ok"] = started;
+			if (!started) { result["error"] = "failed to run script: " + arg; }
 			return result;
 		}
 
@@ -2820,13 +2829,46 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const StelCore* core = StelApp::getInstance().getCore();
 			double fov = core->getMovementMgr()->getCurrentFov();
 			result["ok"] = true;
-			result["fov"] = fov * 180.0 / M_PI;
+			// getCurrentFov() 返回的已经是「度」，不能再乘 180/PI（会得到 3437 这类荒谬值）
+			result["fov"] = fov;
 			// Direction the center of view is looking at
 			Vec3d adir = core->j2000ToAltAz(core->getMovementMgr()->getViewDirectionJ2000(), StelCore::RefractionOff);
 			double alt = std::asin(adir[2]) * 180.0 / M_PI;
 			double az = std::atan2(adir[1], -adir[0]) * 180.0 / M_PI;
 			result["centerAlt"] = alt;
 			result["centerAz"] = az;
+			return result;
+		}
+
+		// setViewportOffset — 把投影中心在屏幕上平移，单位为屏幕宽/高的百分比（[-50, 50]）。
+		// 用途：平板端右侧详情面板会遮挡画面右半部分，此时把投影中心左移，
+		// 使被选中的天体正好落在「左侧工具栏与右侧详情面板之间」的可视空白区中央。
+		// 参数格式："hPct|vPct"，例如 "-15.5|0"
+		if (commandName == "setViewportOffset")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			if (!core) { result["error"] = "core not ready"; return result; }
+			const QStringList parts = arg.split('|');
+			bool okH = false;
+			const double hPct = parts.size() > 0 ? parts[0].trimmed().toDouble(&okH) : 0.0;
+			bool okV = false;
+			const double vPct = parts.size() > 1 ? parts[1].trimmed().toDouble(&okV) : 0.0;
+			if (!okH) { result["error"] = "expects hPct|vPct"; return result; }
+			core->setViewportOffset(hPct, okV ? vPct : 0.0);
+			result["ok"] = true;
+			result["hOffset"] = core->getViewportHorizontalOffset();
+			result["vOffset"] = core->getViewportVerticalOffset();
+			return result;
+		}
+
+		// getViewportOffset — 读回当前视口偏移百分比
+		if (commandName == "getViewportOffset")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			if (!core) { result["error"] = "core not ready"; return result; }
+			result["ok"] = true;
+			result["hOffset"] = core->getViewportHorizontalOffset();
+			result["vOffset"] = core->getViewportVerticalOffset();
 			return result;
 		}
 
@@ -4409,7 +4451,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonArray v;
 			v.append(d[0]); v.append(d[1]); v.append(d[2]);
 			result["viewJ2000"] = v;
-			result["fovDeg"] = movementMgr->getCurrentFov() * 180.0 / M_PI;
+			// getCurrentFov() 已是「度」，字段名 fovDeg 直接取用即可
+			result["fovDeg"] = movementMgr->getCurrentFov();
 			result["jd"] = core->getJD();
 			const StelLocation& loc = core->getCurrentLocation();
 			QJsonObject lo;

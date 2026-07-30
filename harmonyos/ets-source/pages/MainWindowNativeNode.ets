@@ -10,7 +10,7 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { AudioEngine } from './StellariumAudio'
-import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS } from './I18n'
+import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
 
 interface CityPreset {
   lat: number
@@ -510,8 +510,10 @@ struct WindowNativeNode {
   @State private liveMode: boolean = true
   @State private timeScale: string = '1x'
   @State private currentFovText: string = '--'
+  /** 观测地 UTC 偏移（小时），由 getState 的 timeText-jd 差值校准，供轻量时间刷新使用 */
+  private utcOffsetHours: number = 8
   @State private fovSliderValue: number = 60
-  @State private currentProjection: string = 'Perspective'
+  @State private currentProjection: string = 'ProjectionPerspective'
   @State private uiLocked: boolean = false
   @State private panelIdleOpacity: number = 1.0
   @State private panelIdleGlass: boolean = false
@@ -634,6 +636,8 @@ struct WindowNativeNode {
   // 时间面板打开时，每 1s 拉一次 getState，让"时间"字段像走动的钟一样实时更新
   // （否则只在打开瞬间刷新一次，点按钮/时间流逝都不会再更新，永远显示 --）
   private timePanelTimer: number = 0
+  /** 时间面板低频全量状态兜底定时器（3s），与高频轻量时间刷新配合使用 */
+  private timePanelFullTimer: number = 0
   private touchStartX: number = 0
   private touchStartY: number = 0
   private touchLastX: number = 0
@@ -641,6 +645,8 @@ struct WindowNativeNode {
   private touchMoved: boolean = false
   private skyTouchActive: boolean = false
   private pinchStartDistance: number = 0
+  /** 缩放 FOV 胶囊提示的节流时间戳 */
+  private lastFovHintMs: number = 0
   private pinchActive: boolean = false
   private nativeDragActive: boolean = false
   private lastDragCommandMs: number = 0
@@ -694,10 +700,9 @@ struct WindowNativeNode {
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
+  // 手机端抽屉：陀螺仪与音频控制已提到右上角常驻快捷区，此处不再重复列出
   private readonly compactDrawerActions: ShellAction[] = [
     { label: I18n.t('dock_observe'), icon: 'observe', panel: 'observing' },
-    { label: I18n.t('m_gyro_title'), icon: 'gyro', panel: 'gyro' },
-    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' },
     { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
@@ -1058,6 +1063,12 @@ struct WindowNativeNode {
     })
     this.loadSkyCultureList()
     this.loadPluginList()
+    // 读回引擎当前投影，否则设置页里没有任何一项是高亮的，看起来像“全都没生效”
+    this.callNativeWhenReady('getProjectionList', '', (r) => {
+      if (r.ok === true && r.current !== undefined) {
+        this.currentProjection = r.current as string
+      }
+    })
     // 初始化距离单位设置
     this.callNativeWhenReady('getConfigString', 'astronomy/flag_use_km_for_distance', (r) => {
       if (r.ok) {
@@ -1146,11 +1157,20 @@ struct WindowNativeNode {
     this.stopSkyInertia()
     this.stopGyroscope(false)
     this.stopDetailAutoRefresh()
+    this.stopTimePanelTimers()
+    this.unregisterFoldListeners()
+  }
+
+  /** 停掉时间面板的高频/低频两个刷新定时器 */
+  private stopTimePanelTimers(): void {
     if (this.timePanelTimer !== 0) {
       clearInterval(this.timePanelTimer)
       this.timePanelTimer = 0
     }
-    this.unregisterFoldListeners()
+    if (this.timePanelFullTimer !== 0) {
+      clearInterval(this.timePanelFullTimer)
+      this.timePanelFullTimer = 0
+    }
   }
 
   private setPanel(panel: string): void {
@@ -1169,14 +1189,22 @@ struct WindowNativeNode {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
     }
+    // 平板端：面板开/关时把投影中心平移到剩余空白区中央，避免详情面板遮挡准星和锁定天体
+    this.applyViewportCenterForPanel(nextVisible)
     // 时间面板：打开时启动每秒刷新（让"时间"字段实时走动），关闭或切到别的面板时停掉
     if (panel === 'time' && nextVisible) {
       if (this.timePanelTimer === 0) {
-        this.timePanelTimer = setInterval(() => { this.refreshState() }, 1000)
+        // 高频（125ms）只刷时间/速率这两个字段，读秒才会像水一样连续流动；
+        // 早期用 1000ms + refreshState 全量刷新，导致加速时 2s→11s 跳跃，
+        // 且每秒一次几十个 @State 的全量重排会打断星图拖动手势（表现为"打开面板后拖动变生硬"）。
+        this.timePanelTimer = setInterval(() => { this.refreshSimTimeLight() }, 125)
+        // 全量状态低频兜底（3s 一次），同步图层开关/坐标/FOV 等其余字段
+        if (this.timePanelFullTimer === 0) {
+          this.timePanelFullTimer = setInterval(() => { this.refreshState() }, 3000)
+        }
       }
-    } else if (this.timePanelTimer !== 0) {
-      clearInterval(this.timePanelTimer)
-      this.timePanelTimer = 0
+    } else {
+      this.stopTimePanelTimers()
     }
     if (panel === 'object') {
       this.refreshSelectedObject()
@@ -1215,10 +1243,9 @@ struct WindowNativeNode {
       return
     }
     // 关面板时停掉时间面板定时器，避免后台空转
-    if (this.timePanelTimer !== 0) {
-      clearInterval(this.timePanelTimer)
-      this.timePanelTimer = 0
-    }
+    this.stopTimePanelTimers()
+    // 面板关闭：投影中心复位到屏幕正中
+    this.applyViewportCenterForPanel(false)
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
@@ -1860,6 +1887,15 @@ struct WindowNativeNode {
     }
     if (result.timeText !== undefined) {
       this.observationTimeText = this.formatObservationTime(result.timeText)
+      // 顺便校准 UTC 偏移（timeText 已含观测地偏移，jd 是纯 UTC；差值即偏移小时数）
+      // 供轻量刷新 refreshSimTimeLight 使用，避免每次都跑全量 getState
+      if (result.jd !== undefined) {
+        const localMs = Date.parse(result.timeText.endsWith('Z') ? result.timeText : result.timeText + 'Z')
+        const utcMs = ((result.jd as number) - 2440587.5) * 86400000
+        if (!Number.isNaN(localMs)) {
+          this.utcOffsetHours = Math.round((localMs - utcMs) / 3600000 * 4) / 4 // 取到一刻钟精度
+        }
+      }
     }
     // 只有当原生确实返回了观测者经纬度时，才用原生值刷新头部位置字段，
     // 否则保留 setLocation 已应用到头部的值（避免被 planetName 等字段清成“未命名”或空值）。
@@ -1938,6 +1974,7 @@ struct WindowNativeNode {
   private setFovPreset(deg: number): void {
     this.callInteractive('setFOV', deg.toString(), (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'setFovPreset %{public}d ok=%{public}s', deg, r.ok === true ? '1' : '0')
+      this.flashHint('视场 ' + deg.toFixed(1) + '°')
       this.refreshState()
     })
   }
@@ -1947,6 +1984,10 @@ struct WindowNativeNode {
     this.callInteractive('setProjectionType', name, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
         this.currentProjection = name
+        this.flashHint(I18n.projectionName(name))
+      } else {
+        hilog.error(0x0000, 'StellariumArkUI', 'setProjectionType rejected %{public}s err=%{public}s', name, r.error ?? '')
+        this.flashHint(I18n.t('msg_apply_failed'))
       }
     })
   }
@@ -2133,7 +2174,14 @@ private loadPlanetPositions(): void {
   }
 
   private playScriptByName(filename: string): void {
-    this.callInteractive('playScript', filename, () => {})
+    this.callInteractive('playScript', filename, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.flashHint(I18n.t('msg_script_running'))
+      } else {
+        hilog.error(0x0000, 'StellariumArkUI', 'playScript failed %{public}s err=%{public}s', filename, r.error ?? '')
+        this.flashHint(I18n.t('msg_apply_failed'))
+      }
+    })
   }
 
   private fetchSuggestions(prefix: string): void {
@@ -2326,7 +2374,7 @@ private loadPlanetPositions(): void {
         const newJd = currentJd + dayOffset
         // 用 setTimeToJD（会自动暂停）
         this.callNativeFire('setTimeToJD', newJd.toFixed(6))
-        setTimeout(() => { this.refreshState() }, 350)
+        this.refreshTimeNow()
       }
     })
   }
@@ -2340,7 +2388,7 @@ private loadPlanetPositions(): void {
   }
 
   private advanceTime(hours: number): void {
-    this.callInteractive('advanceTime', hours.toString(), () => { this.refreshState() })
+    this.callInteractive('advanceTime', hours.toString(), () => { this.refreshTimeNow() })
     this.flashHint((hours > 0 ? I18n.t('i0044') : '') + hours.toString() + ' h')
   }
 
@@ -2723,6 +2771,38 @@ private loadPlanetPositions(): void {
     this.callInteractive('moveToSelected', '', (r) => this.applySelectedObject(r))
   }
 
+  /**
+   * 平板端：详情面板打开时，把投影中心平移到「左侧工具栏与右侧详情面板之间」的空白区中央，
+   * 使十字准星/被锁定的天体不被面板遮挡。关闭面板时归零复位。
+   * 全部按当前设备实际尺寸动态计算（skyWidth / panelWidth / EDGE_MARGIN 都是响应式值）。
+   */
+  private applyViewportCenterForPanel(panelOpen: boolean): void {
+    if (!this.isExpandedLayout) {
+      // 手机/悬停态面板在底部，不遮挡水平中心，无需偏移
+      this.callNativeFire('setViewportOffset', '0|0')
+      return
+    }
+    if (!panelOpen) {
+      this.callNativeFire('setViewportOffset', '0|0')
+      return
+    }
+    // 空白区：左界 = 左侧工具栏右缘，右界 = 详情面板左缘
+    const freeLeft: number = this.EDGE_MARGIN + 58 // 工具栏按钮列（44 宽 + 内边距）
+    const freeRight: number = this.expandedMainPanelLeft()
+    if (freeRight - freeLeft < 120) {
+      // 空白区太窄（异常情形），不做偏移以免把画面推出屏幕
+      this.callNativeFire('setViewportOffset', '0|0')
+      return
+    }
+    const freeCenterX: number = (freeLeft + freeRight) / 2
+    // 目标：投影中心从屏幕中央 (skyWidth/2) 移到 freeCenterX。
+    // StelCore::setViewportOffset 的水平百分比以屏幕宽为基数，负值向左。
+    let hPct: number = ((freeCenterX - this.skyWidth / 2) / this.skyWidth) * 100
+    hPct = this.clamp(hPct, -50, 50)
+    this.callNativeFire('setViewportOffset', hPct.toFixed(2) + '|0')
+    hilog.info(0x0000, 'StellariumArkUI', 'viewport offset -> ' + hPct.toFixed(2) + '% (freeCenter=' + Math.round(freeCenterX).toString() + ' sky=' + Math.round(this.skyWidth).toString() + ')')
+  }
+
   // 精确到角秒：地球自转约 15″/秒，300ms 刷新时用户能直接看到坐标连续变化。
   private fmtDegMin(deg: number): string {
     const sign = deg < 0 ? '-' : ''
@@ -2948,6 +3028,36 @@ private loadPlanetPositions(): void {
   private formatLocalDateTime(date: Date): string {
     return date.getFullYear().toString() + '-' + this.pad2(date.getMonth() + 1) + '-' + this.pad2(date.getDate()) +
       ' ' + this.pad2(date.getHours()) + ':' + this.pad2(date.getMinutes()) + ':' + this.pad2(date.getSeconds())
+  }
+
+  /**
+   * 轻量时间刷新：只取 jd + timeRate（getSimulationTime 极轻），不做 getState 全量状态同步。
+   * 用于时间面板的高频（~120ms）流式刷新，让读秒像水一样连续流动而不是每秒跳一大格。
+   * 注意：不要在这里改动除时间/速率以外的任何 @State，否则会引发全局重排、拖动星图变卡。
+   */
+  private refreshSimTimeLight(): void {
+    this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true || r.jd === undefined) { return }
+      const jd: number = r.jd as number
+      // jd 是 UTC；加上观测地 UTC 偏移后再格式化，与 getState 的 timeText 口径保持一致
+      const text: string = this.jdToLocalTimeText(jd + this.utcOffsetHours / 24.0)
+      if (text !== this.observationTimeText) {
+        this.observationTimeText = text
+      }
+      if (r.timeRate !== undefined) {
+        const rt: string = this.formatRate(r.timeRate as number)
+        if (rt !== this.timeRateText) { this.timeRateText = rt }
+      }
+    })
+  }
+
+  /** 儒略日 -> 'YYYY-MM-DD HH:mm:ss' 本地显示文本（入参需已含 UTC 偏移）。 */
+  private jdToLocalTimeText(jd: number): string {
+    // 用 UTC 取值避免设备时区二次偏移（jd 已带观测地偏移）
+    const d = new Date((jd - 2440587.5) * 86400000)
+    const p2 = (n: number): string => n < 10 ? '0' + n : n.toString()
+    return d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' ' +
+      p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ':' + p2(d.getUTCSeconds())
   }
 
   private formatObservationTime(raw: string): string {
@@ -4066,7 +4176,12 @@ private loadPlanetPositions(): void {
   }
 
   private panelLeft(): number {
-    // 跟随面板真实位置（含拖动偏移），避免点面板却漏成星图拖拽
+    // 跟随面板真实位置（含拖动偏移），避免点面板却漏成星图拖拽。
+    // 展开态直接复用渲染用的 expandedMainPanelLeft()，保证命中区与实际绘制位置永远一致
+    // （历史上两者各算各的，右侧 EDGE_MARGIN 留边导致命中区整体偏移）。
+    if (this.isExpandedLayout) {
+      return this.expandedMainPanelLeft()
+    }
     return this.skyWidth - this.panelWidth + this.panelOffsetX
   }
 
@@ -4168,6 +4283,9 @@ private loadPlanetPositions(): void {
         return true
       }
       if (this.isCompactZoomPoint(x, y)) {
+        return true
+      }
+      if (this.isCompactTopQuickPoint(x, y)) {
         return true
       }
       if (this.isCompactMorePoint(x, y)) {
@@ -4633,6 +4751,18 @@ private loadPlanetPositions(): void {
         } else {
           const scale = currentDistance / this.pinchStartDistance
           this.callNativeFire('zoomBy', scale.toString() + '|0')
+          // 缩放时弹小蓝胶囊实时显示 FOV（节流 150ms，避免桥接风暴）
+          const nowMs = Date.now()
+          if (nowMs - this.lastFovHintMs >= 150) {
+            this.lastFovHintMs = nowMs
+            this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
+              if (r.ok === true && r.fov !== undefined) {
+                const fovDeg = r.fov as number
+                this.currentFovText = fovDeg.toFixed(1) + '°'
+                this.flashHint('视场 ' + fovDeg.toFixed(1) + '°')
+              }
+            })
+          }
         }
         this.touchMoved = true
         return
@@ -4858,6 +4988,11 @@ private loadPlanetPositions(): void {
         if (this.isFoldTabletLayout) {
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.42, 300), 340)
           this.panelMaxHeight = Math.min(this.skyHeight * 0.70, 560)
+        } else if (this.isExpandedLayout) {
+          // 平板/大屏：详情面板占屏宽 6/10 的右半区，并与屏幕右缘保留 EDGE_MARGIN 距离；
+          // 高度拉长到 88%，上下同样留边，视觉上更像一块完整的侧栏。
+          this.panelWidth = Math.min(Math.max(this.skyWidth * 0.60 - this.EDGE_MARGIN, 320), 720)
+          this.panelMaxHeight = Math.max(this.skyHeight - this.EDGE_MARGIN * 2, 320)
         } else {
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)
           this.panelMaxHeight = Math.min(this.skyHeight * 0.78, 700)
@@ -5139,6 +5274,14 @@ private loadPlanetPositions(): void {
         .padding({ bottom: 14 })
         .zIndex(1)
 
+      // 手机端右上角常驻快捷区：陀螺仪 + 音频（与平板左侧栏入口一致）
+      if (!this.drawerOpen) {
+        Stack() { this.compactTopQuickControls() }
+          .position({ x: this.compactTopQuickX(), y: this.compactTopQuickY() })
+          .hitTestBehavior(HitTestMode.Block)
+          .zIndex(30)
+      }
+
       // 陀螺仪校准面板（紧凑布局）
       if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
         Stack() { this.gyroCalibPanel() }
@@ -5247,6 +5390,44 @@ private loadPlanetPositions(): void {
       .width(54)
       .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.Block)
+  }
+
+  /**
+   * 手机端右上角常驻快捷区：陀螺仪 + 音频控制。
+   * 这两项是观星高频功能，此前被收进「更多」抽屉，需要两次点击才能用；
+   * 现提到顶部与平板端左侧栏的入口保持一致（同图标、同激活配色）。
+   */
+  @Builder
+  compactTopQuickControls() {
+    Column({ space: 10 }) {
+      this.compactQuickButton('gyro', this.gyroscopeEnabled, () => {
+        this.resetPanelIdle()
+        this.toggleGyroscope(!this.gyroscopeEnabled)
+      })
+      this.compactQuickButton('audio', this.musicEnabled, () => {
+        this.resetPanelIdle()
+        this.setPanel('audio')
+      })
+    }
+      .width(48)
+      .alignItems(HorizontalAlign.Center)
+      .hitTestBehavior(HitTestMode.Block)
+  }
+
+  /** 手机端右上快捷区左上角坐标（与顶部搜索栏同高，靠右缘） */
+  private compactTopQuickX(): number {
+    return this.skyWidth - 18 - 44
+  }
+
+  private compactTopQuickY(): number {
+    return 50
+  }
+
+  private isCompactTopQuickPoint(x: number, y: number): boolean {
+    if (this.isExpandedLayout) { return false }
+    const qx = this.compactTopQuickX()
+    const qy = this.compactTopQuickY()
+    return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + 108
   }
 
   @Builder
@@ -5418,7 +5599,8 @@ private loadPlanetPositions(): void {
   }
 
   private expandedDetailSummaryY(): number {
-    return Math.max(this.EDGE_MARGIN + 84, 104)
+    // 上移：原先 +84 使小详情卡偏中，遮挡视野中心；贴近顶部留出更多星空可视区
+    return Math.max(this.EDGE_MARGIN + 16, 48)
   }
 
   private expandedDetailSummaryHeight(): number {
@@ -6450,7 +6632,7 @@ private loadPlanetPositions(): void {
       'grid': $r('app.media.ic_grid'),
       'more': $r('app.media.ic_more'),
       'close': $r('app.media.ic_close'),
-      'gyro': $r('app.media.ic_orbit'),
+      'gyro': $r('app.media.ic_gyro'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
@@ -7289,8 +7471,20 @@ private loadPlanetPositions(): void {
 		      }
       } // end object selectedName else
     } else if (this.activePanel === 'time') {
-      this.infoRow(I18n.t('i0054'), this.observationTimeText)
-      this.infoRow(I18n.t('i0055'), this.timeRateText)
+      // 直接绑定 @State：不能走 infoRow(@Builder)，其简单类型参数按值捕获，
+      // observationTimeText/timeRateText 变化不会触发 Builder 重建（表现为数值钉死不动）
+      Row() {
+        Text(I18n.t('i0054')).fontSize(11).fontColor('#99FFFFFF').width(64).textAlign(TextAlign.Start)
+        Text(this.observationTimeText)
+          .fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+          .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.width('100%').padding({ left: 10, right: 10, top: 3, bottom: 3 })
+      Row() {
+        Text(I18n.t('i0055')).fontSize(11).fontColor('#99FFFFFF').width(64).textAlign(TextAlign.Start)
+        Text(this.timeRateText)
+          .fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+          .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.width('100%').padding({ left: 10, right: 10, top: 3, bottom: 3 })
       // 时间控制按钮：[倒带][现在][停止][实时][快进][超快]
       this.timeSpeedChips()
       // Sky Guide 风格时间拖动滑块（-365天 ~ +365天）
@@ -7662,7 +7856,7 @@ private loadPlanetPositions(): void {
           // 投影方式选项（中文标签 + 点击后显示说明）
           Scroll() {
             Row({ space: 6 }) {
-              ForEach(['Perspective', 'Stereographic', 'Fisheye', 'HammerAitoff', 'Mercator', 'Orthographic'], (name: string) => {
+              ForEach(PROJECTION_KEYS, (name: string) => {
                 Text(I18n.projectionName(name))
                   .fontSize(11).fontColor(this.currentProjection === name ? '#FFFFFFFF' : '#99FFFFFF')
                   .padding({ left: 10, right: 10, top: 3, bottom: 3 })
@@ -7733,7 +7927,7 @@ private loadPlanetPositions(): void {
           Row() {
             Text(I18n.t('i0029')).fontSize(12).fontColor(this.nmSub()).width(72)
             Row({ space: 6 }) {
-              Text('km')
+              Text(I18n.t('unit_km'))
                 .fontSize(11).fontColor(this.useMetricUnits ? '#FFFFFFFF' : '#99FFFFFF')
                 .padding({ left: 10, right: 10, top: 3, bottom: 3 })
                 .backgroundColor(this.useMetricUnits ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
@@ -7742,7 +7936,7 @@ private loadPlanetPositions(): void {
                   this.useMetricUnits = true
                   this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=true', () => {})
                 })
-              Text('mi')
+              Text(I18n.t('unit_mile'))
                 .fontSize(11).fontColor(!this.useMetricUnits ? '#FFFFFFFF' : '#99FFFFFF')
                 .padding({ left: 10, right: 10, top: 3, bottom: 3 })
                 .backgroundColor(!this.useMetricUnits ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
@@ -7897,7 +8091,12 @@ private loadPlanetPositions(): void {
             .scale({ x: this.configTab === tab.id ? 1.06 : 1.0, y: this.configTab === tab.id ? 1.06 : 1.0 })
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .animation({ duration: 220, curve: curves.springMotion(0.5, 1.0) })
-            .onClick(() => { this.configTab = tab.id })
+            .onClick(() => {
+              this.configTab = tab.id
+              // 离线应用：切到"脚本/插件"页时自动加载列表，无需用户再点"加载"按钮
+              if (tab.id === 5 && this.scriptList.length === 0) { this.loadScriptList() }
+              if (tab.id === 6 && this.pluginList.length === 0) { this.loadPluginList() }
+            })
         }, (tab: TabItem, index: number) => tab.id.toString())
       }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
       Scroll() {
@@ -8003,9 +8202,14 @@ private loadPlanetPositions(): void {
           } else {
             // Plugins
             Text(I18n.t('i0124')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Button(I18n.t('i0244')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            // 离线应用：插件列表进页即自动加载，此按钮仅作手动刷新用
+            Button(I18n.t('act_refresh')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadPluginList() })
+            if (this.pluginList.length === 0) {
+              Text(I18n.t('msg_loading')).fontSize(11).fontColor(this.nmSub())
+                .width('100%').margin({ top: 10 })
+            }
             Scroll() {
               Column({ space: 2 }) {
                 ForEach(this.pluginList, (pl: PluginItem) => {
@@ -9599,7 +9803,7 @@ private loadPlanetPositions(): void {
   @Builder
   timeSpeedChips() {
     Scroll() {
-      Row({ space: 7 }) {
+      Row({ space: 5 }) {
         // 倒带 — 单按钮循环升档：-1x → -2x → -10x → -1分/秒 → -1时/秒 → -10天/秒 → 回到-1x
         // 激活时标签直接显示当前倒带速度
         this.speedChip('rewind',
@@ -9698,7 +9902,7 @@ private loadPlanetPositions(): void {
 
   @Builder
   speedChip(id: string, label: string, icon: string | null, active: boolean) {
-    Row({ space: 5 }) {
+    Row({ space: 4 }) {
       if (icon) {
         // 用 $r 引用 media 资源（$rawfile 读的是 rawfile/ 目录，不是 media/）
         Image($r('app.media.' + icon.replace('.svg', '')))
@@ -9712,7 +9916,9 @@ private loadPlanetPositions(): void {
         .fontColor(active ? '#FFFFFF' : '#B8D4EF')
     }
       .height(32)
-      .padding({ left: 11, right: 11 })
+      // 内边距收紧：保证 倒带/停止/实时/减速/快进 五个按钮在 360vp 宽屏上一屏排下，
+      // 否则最右的「快进」会被挤出可视区，用户只能点到「减速」（曾导致误以为快进=暂停）
+      .padding({ left: 7, right: 7 })
       .borderRadius(16)
       .backgroundColor(active ? 'rgba(79, 148, 211, 0.55)' : 'rgba(107, 163, 214, 0.15)')
       .border({ width: active ? 1.2 : 0.6, color: active ? 'rgba(127, 179, 220, 0.7)' : 'rgba(127, 179, 220, 0.22)' })
@@ -9890,6 +10096,16 @@ private loadPlanetPositions(): void {
     .width('100%')
     .margin({ top: 12 })
   }
+  /**
+   * 时间类操作后刷新「时间/速度」显示。
+   * 立即刷一次（响应快），350ms 后再刷一次（引擎异步应用 JD/timeRate 需要时间窗口）。
+   */
+  private refreshTimeNow(): void {
+    this.refreshState()
+    // 注意：此处必须是 setTimeout(refreshState)，绝不能调 refreshTimeNow 自身（会无限递归栈溢出）
+    setTimeout(() => { this.refreshState() }, 350)
+  }
+
   private handleChip(id: string): void {
     if (id === 'refresh') {
       this.refreshSelectedObject()
@@ -9903,18 +10119,18 @@ private loadPlanetPositions(): void {
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === 'stop') {
       // 停止：冻结时间
       this._lastNonZeroSpeedIndex = this.timeSpeedIndex !== 6 ? this.timeSpeedIndex : 7
       this.applySpeedStep(6) // SPEED_IDX_STOP
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === 'realtime') {
       // 实时：回到当前时刻 + 恢复 1x 正常速度
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === 'rewind') {
       // 倒带：单按钮循环升档 -1x → -2x → -10x → -1分/秒 → -1时/秒 → -1天/秒 → 回到-1x
       let rewIdx = 5 // 默认从 -1x 起步（非倒带状态按下时）
@@ -9924,7 +10140,7 @@ private loadPlanetPositions(): void {
       }
       this.applySpeedStep(rewIdx)
       this.flashHint(I18n.t('s0763_rewind') + ' ' + this.timeRateText)
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === 'faster' || id === 'fast' || id === 'warp') {
       // 快进：单按钮循环升档 1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
       let fwdIdx = 7 // 默认回 1x（停止/倒带状态按下时从 1x 起步）
@@ -9934,7 +10150,7 @@ private loadPlanetPositions(): void {
       }
       this.applySpeedStep(fwdIdx)
       this.flashHint(I18n.t('s0765_fast') + ' ' + this.timeRateText)
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === 'slower') {
       // 减速：向"停止"方向降一档（快进降档、倒带也降档），降到1x再点=停止，不会跨进反向
       let prevIdx = this.timeSpeedIndex
@@ -9945,7 +10161,7 @@ private loadPlanetPositions(): void {
       }
       this.applySpeedStep(prevIdx)
       this.flashHint(prevIdx === 6 ? I18n.t('s0761_stop') : I18n.t('s0759_slower') + ' ' + this.timeRateText)
-      setTimeout(() => { this.refreshState() }, 350)
+      this.refreshTimeNow()
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {

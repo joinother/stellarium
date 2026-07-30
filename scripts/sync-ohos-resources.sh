@@ -40,7 +40,10 @@ fi
 mkdir -p "$DST"
 
 # Top-level data directories the core expects under its install root.
-DIRS=(data textures landscapes stars translations skycultures)
+# `scripts` holds Stellarium's .ssc sky-tour scripts. It also happens to hold this
+# repo's own build shell scripts, so it gets an allow-list filter below — without
+# it, StelScriptMgr::getScriptList() finds nothing and the Scripts panel is empty.
+DIRS=(data textures landscapes stars translations skycultures scripts)
 
 # Non-culture files living directly inside skycultures/ (CMake scaffolding).
 # They must not be copied into the rawfile (they would be treated as junk).
@@ -51,12 +54,22 @@ SKYCULTURE_EXCLUDES=(
   --exclude='*.py'
 )
 
+# Only Stellarium script assets may enter rawfile. Shell/Python/Swift build
+# helpers that share this directory would be flagged by hvigor as stray source.
+SCRIPT_INCLUDES=(
+  --include='*.ssc'
+  --include='*.inc'
+  --exclude='*'
+)
+
 for d in "${DIRS[@]}"; do
   SRC="$REPO_ROOT/$d"
   [ -d "$SRC" ] || { echo "SKIP (missing): $SRC"; continue; }
   echo "==> syncing $d -> $DST/$d"
   if [ "$d" = "skycultures" ]; then
     rsync -a --update "${SKYCULTURE_EXCLUDES[@]}" "$SRC/" "$DST/$d/"
+  elif [ "$d" = "scripts" ]; then
+    rsync -a --update --no-r --dirs "${SCRIPT_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   else
     rsync -a --update "$SRC/" "$DST/$d/"
   fi
@@ -66,3 +79,4 @@ echo
 echo "Done. rawfile tree size:"
 du -sh "$DST"
 echo "Skyculture count: $(ls -1 "$DST/skycultures" 2>/dev/null | wc -l)"
+echo "Script count:     $(ls -1 "$DST/scripts"/*.ssc 2>/dev/null | wc -l)"

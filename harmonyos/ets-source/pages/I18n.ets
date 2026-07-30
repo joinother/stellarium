@@ -227,23 +227,47 @@ const PLUGIN_NAMES: Record<string, Record<string, string>> = {
 }
 
 // 投影方式名称+说明翻译表（key=Stellarium内部英文名）
+// 投影方式键名，顺序与展示顺序一致。
+// 必须与 StelCore::ProjectionType 的枚举键逐字相同——原生端 setProjectionType
+// 会用 getAllProjectionTypeKeys() 做白名单校验，拼错即静默失败。
+export const PROJECTION_KEYS: string[] = [
+  'ProjectionPerspective', 'ProjectionStereographic', 'ProjectionFisheye',
+  'ProjectionOrthographic', 'ProjectionEqualArea', 'ProjectionHammer',
+  'ProjectionMollweide', 'ProjectionSinusoidal', 'ProjectionMercator',
+  'ProjectionMiller', 'ProjectionCylinder', 'ProjectionCylinderFill'
+]
+
 const PROJECTION_NAMES: Record<string, Record<string, string>> = {
-  'Perspective': { 'en': 'Perspective', 'zh_CN': '透视', 'ja': '透視', 'ko': '투시', 'fr': 'Perspective', 'de': 'Perspektive', 'es': 'Perspectiva', 'ru': 'Перспектива' },
-  'Stereographic': { 'en': 'Stereographic', 'zh_CN': '极射', 'ja': '平射', 'ko': '극사영', 'fr': 'Stéréographique', 'de': 'Stereografisch', 'es': 'Estereográfica', 'ru': 'Стереографическая' },
-  'Fisheye': { 'en': 'Fisheye', 'zh_CN': '鱼眼', 'ja': '魚眼', 'ko': '어안', 'fr': 'Oeil de poisson', 'de': 'Fisheye', 'es': 'Ojo de pez', 'ru': 'Рыбий глаз' },
-  'HammerAitoff': { 'en': 'Hammer-Aitoff', 'zh_CN': '哈默-艾托夫', 'ja': 'ハンマー・イトフ', 'ko': '해머-아이토프', 'fr': 'Hammer-Aitoff', 'de': 'Hammer-Aitoff', 'es': 'Hammer-Aitoff', 'ru': 'Хаммер-Аитова' },
-  'Mercator': { 'en': 'Mercator', 'zh_CN': '墨卡托', 'ja': 'メルカトル', 'ko': '메르카토르', 'fr': 'Mercator', 'de': 'Mercator', 'es': 'Mercator', 'ru': 'Меркатора' },
-  'Orthographic': { 'en': 'Orthographic', 'zh_CN': '正交', 'ja': '正射', 'ko': '정사영', 'fr': 'Orthographique', 'de': 'Orthografisch', 'es': 'Ortográfica', 'ru': 'Ортографическая' }
+  // 键名必须与 StelCore::ProjectionType 枚举键完全一致，
+  // 否则 setProjectionType 会被原生端白名单拒绝、按钮全部静默失效。
+  'ProjectionPerspective': { 'en': 'Perspective', 'zh_CN': '透视', 'ja': '透視', 'ko': '투시', 'fr': 'Perspective', 'de': 'Perspektive', 'es': 'Perspectiva', 'ru': 'Перспектива' },
+  'ProjectionStereographic': { 'en': 'Stereographic', 'zh_CN': '极射', 'ja': '平射', 'ko': '극사영', 'fr': 'Stéréographique', 'de': 'Stereografisch', 'es': 'Estereográfica', 'ru': 'Стереографическая' },
+  'ProjectionFisheye': { 'en': 'Fisheye', 'zh_CN': '鱼眼', 'ja': '魚眼', 'ko': '어안', 'fr': 'Oeil de poisson', 'de': 'Fisheye', 'es': 'Ojo de pez', 'ru': 'Рыбий глаз' },
+  'ProjectionOrthographic': { 'en': 'Orthographic', 'zh_CN': '正交', 'ja': '正射', 'ko': '정사영', 'fr': 'Orthographique', 'de': 'Orthografisch', 'es': 'Ortográfica', 'ru': 'Ортографическая' },
+  'ProjectionEqualArea': { 'en': 'Equal Area', 'zh_CN': '等积', 'ja': '正積', 'ko': '등적', 'fr': 'Équivalente', 'de': 'Flächentreu', 'es': 'Equivalente', 'ru': 'Равновеликая' },
+  'ProjectionHammer': { 'en': 'Hammer-Aitoff', 'zh_CN': '哈默-艾托夫', 'ja': 'ハンマー・イトフ', 'ko': '해머-아이토프', 'fr': 'Hammer-Aitoff', 'de': 'Hammer-Aitoff', 'es': 'Hammer-Aitoff', 'ru': 'Хаммер-Аитова' },
+  'ProjectionMollweide': { 'en': 'Mollweide', 'zh_CN': '摩尔威特', 'ja': 'モルワイデ', 'ko': '몰바이데', 'fr': 'Mollweide', 'de': 'Mollweide', 'es': 'Mollweide', 'ru': 'Мольвейде' },
+  'ProjectionSinusoidal': { 'en': 'Sinusoidal', 'zh_CN': '正弦', 'ja': 'サンソン', 'ko': '정현', 'fr': 'Sinusoïdale', 'de': 'Sinusoidal', 'es': 'Sinusoidal', 'ru': 'Синусоидальная' },
+  'ProjectionMercator': { 'en': 'Mercator', 'zh_CN': '墨卡托', 'ja': 'メルカトル', 'ko': '메르카토르', 'fr': 'Mercator', 'de': 'Mercator', 'es': 'Mercator', 'ru': 'Меркатора' },
+  'ProjectionMiller': { 'en': 'Miller', 'zh_CN': '米勒', 'ja': 'ミラー', 'ko': '밀러', 'fr': 'Miller', 'de': 'Miller', 'es': 'Miller', 'ru': 'Миллера' },
+  'ProjectionCylinder': { 'en': 'Cylinder', 'zh_CN': '圆柱', 'ja': '円筒', 'ko': '원통', 'fr': 'Cylindrique', 'de': 'Zylindrisch', 'es': 'Cilíndrica', 'ru': 'Цилиндрическая' },
+  'ProjectionCylinderFill': { 'en': 'Cylinder Fill', 'zh_CN': '全景圆柱', 'ja': '全天円筒', 'ko': '전천 원통', 'fr': 'Cylindrique pleine', 'de': 'Zylinder Vollbild', 'es': 'Cilíndrica completa', 'ru': 'Цилиндрическая заливка' }
 }
 
 // 投影方式功能说明（一句话描述，帮助用户理解每个投影的用途）
 const PROJECTION_DESC: Record<string, Record<string, string>> = {
-  'Perspective': { 'en': 'Natural view like the human eye', 'zh_CN': '模拟人眼看到的自然视角，最适合日常观星', 'ja': '人間の目のような自然な視点', 'ko': '사람 눈과 같은 자연스러운 시점', 'fr': 'Vue naturelle comme l\'œil humain', 'de': 'Natürliche Sicht wie das menschliche Auge', 'es': 'Vista natural como el ojo humano', 'ru': 'Естественный вид как у человеческого глаза' },
-  'Stereographic': { 'en': 'Great for constellation shapes, no distortion near center', 'zh_CN': '星座形状不失真，中心区域最清晰', 'ja': '星座の形が歪まず、中心部が鮮明', 'ko': '별자리 모양 왜곡 없음, 중심부 선명', 'fr': 'Idéal pour les formes des constellations', 'de': 'Gut für Sternbildformen, keine Verzerrung im Zentrum', 'es': 'Ideal para formas de constelaciones', 'ru': 'Отлично для форм созвездий, без искажений в центре' },
-  'Fisheye': { 'en': 'Ultra-wide 180° view of the whole sky dome', 'zh_CN': '180° 超广角，一眼看到整个半球天空', 'ja': '180° 超広角、空全体が見える', 'ko': '180° 초광각, 하늘 전체 한눈에', 'fr': 'Ultra grand angle 180° du ciel entier', 'de': 'Ultraweitwinkel 180° des gesamten Himmels', 'es': 'Ultra gran angular 180° del cielo completo', 'ru': 'Сверхширокий угол 180° всего неба' },
-  'HammerAitoff': { 'en': 'Equal-area map, shows entire celestial sphere', 'zh_CN': '等面积投影，可显示整个天球（全天星图）', 'ja': '等積投影、天球全体を表示', 'ko': '등적 투영, 천구 전체 표시', 'fr': 'Projection équivalente, sphère céleste entière', 'de': 'Flächentreue Projektion, ganzer Himmel', 'es': 'Proyección equivalente, esfera celeste completa', 'ru': 'Равноплощадная проекция, вся небесная сфера' },
-  'Mercator': { 'en': 'Map-like, straight lines = great circles; poles stretched', 'zh_CN': '地图式投影，直线即大圆航线；两极拉伸严重', 'ja': '地図式、直線=大円航路；極域が伸びる', 'ko': '지도식, 직선=대원항로; 극심하게 늘어남', 'fr': 'Style carte, les pôles sont étirés', 'de': 'kartenartig, Pole stark gestreckt', 'es': 'Estilo mapa, los polos se estiran', 'ru': 'Карта, полюса сильно растянуты' },
-  'Orthographic': { 'en': 'View from space, Earth-like horizon curve', 'zh_CN': '从太空俯瞰视角，地平线呈弧形', 'ja': '宇宙からの眺め、地平線が弧を描く', 'ko': '우주에서 내려다보는 시점, 지평선 곡선', 'fr': 'Vue depuis l\'espace', 'de': 'Blick aus dem Weltraum', 'es': 'Vista desde el espacio', 'ru': 'Вид из космоса' }
+  'ProjectionPerspective': { 'en': 'Natural view like the human eye', 'zh_CN': '模拟人眼看到的自然视角，最适合日常观星', 'ja': '人間の目のような自然な視点', 'ko': '사람 눈과 같은 자연스러운 시점', 'fr': 'Vue naturelle comme l\'œil humain', 'de': 'Natürliche Sicht wie das menschliche Auge', 'es': 'Vista natural como el ojo humano', 'ru': 'Естественный вид как у человеческого глаза' },
+  'ProjectionStereographic': { 'en': 'Great for constellation shapes, no distortion near center', 'zh_CN': '星座形状不失真，中心区域最清晰', 'ja': '星座の形が歪まず、中心部が鮮明', 'ko': '별자리 모양 왜곡 없음, 중심부 선명', 'fr': 'Idéal pour les formes des constellations', 'de': 'Gut für Sternbildformen, keine Verzerrung im Zentrum', 'es': 'Ideal para formas de constelaciones', 'ru': 'Отлично для форм созвездий, без искажений в центре' },
+  'ProjectionFisheye': { 'en': 'Ultra-wide 180° view of the whole sky dome', 'zh_CN': '180° 超广角，一眼看到整个半球天空', 'ja': '180° 超広角、空全体が見える', 'ko': '180° 초광각, 하늘 전체 한눈에', 'fr': 'Ultra grand angle 180° du ciel entier', 'de': 'Ultraweitwinkel 180° des gesamten Himmels', 'es': 'Ultra gran angular 180° del cielo completo', 'ru': 'Сверхширокий угол 180° всего неба' },
+  'ProjectionOrthographic': { 'en': 'View from space, Earth-like horizon curve', 'zh_CN': '从太空俯瞰视角，地平线呈弧形', 'ja': '宇宙からの眺め、地平線が弧を描く', 'ko': '우주에서 내려다보는 시점, 지평선 곡선', 'fr': 'Vue depuis l\'espace', 'de': 'Blick aus dem Weltraum', 'es': 'Vista desde el espacio', 'ru': 'Вид из космоса' },
+  'ProjectionEqualArea': { 'en': 'Preserves area, good for wide sky surveys', 'zh_CN': '保持面积比例不变，适合大范围巡天对比', 'ja': '面積比が保たれ、広域観測に適する', 'ko': '면적 비율 유지, 광역 관측에 적합', 'fr': 'Conserve les aires, idéal pour les relevés', 'de': 'Flächentreu, gut für Himmelsdurchmusterungen', 'es': 'Conserva el área, ideal para sondeos', 'ru': 'Сохраняет площадь, удобна для обзоров' },
+  'ProjectionHammer': { 'en': 'Equal-area map, shows entire celestial sphere', 'zh_CN': '等面积投影，可显示整个天球（全天星图）', 'ja': '等積投影、天球全体を表示', 'ko': '등적 투영, 천구 전체 표시', 'fr': 'Projection équivalente, sphère céleste entière', 'de': 'Flächentreue Projektion, ganzer Himmel', 'es': 'Proyección equivalente, esfera celeste completa', 'ru': 'Равноплощадная проекция, вся небесная сфера' },
+  'ProjectionMollweide': { 'en': 'Elliptical all-sky map, common in astronomy papers', 'zh_CN': '椭圆形全天图，天文论文常用', 'ja': '楕円形の全天図、論文でよく使われる', 'ko': '타원형 전천 지도, 논문에서 흔함', 'fr': 'Carte elliptique du ciel entier', 'de': 'Elliptische Ganzhimmelskarte', 'es': 'Mapa elíptico de todo el cielo', 'ru': 'Эллиптическая карта всего неба' },
+  'ProjectionSinusoidal': { 'en': 'Equal-area, curved meridians', 'zh_CN': '等积投影，经线呈弧形收拢', 'ja': '正積投影、経線が湾曲', 'ko': '등적 투영, 경선이 휘어짐', 'fr': 'Équivalente, méridiens courbes', 'de': 'Flächentreu, gebogene Meridiane', 'es': 'Equivalente, meridianos curvos', 'ru': 'Равновеликая, изогнутые меридианы' },
+  'ProjectionMercator': { 'en': 'Map-like, straight lines = great circles; poles stretched', 'zh_CN': '地图式投影，直线即大圆航线；两极拉伸严重', 'ja': '地図式、直線=大円航路；極域が伸びる', 'ko': '지도식, 직선=대원항로; 극심하게 늘어남', 'fr': 'Style carte, les pôles sont étirés', 'de': 'kartenartig, Pole stark gestreckt', 'es': 'Estilo mapa, los polos se estiran', 'ru': 'Карта, полюса сильно растянуты' },
+  'ProjectionMiller': { 'en': 'Mercator-like but with milder polar stretching', 'zh_CN': '类似墨卡托，但两极拉伸更温和', 'ja': 'メルカトル風、極域の伸びが穏やか', 'ko': '메르카토르와 비슷하나 극지 왜곡이 적음', 'fr': 'Proche de Mercator, pôles moins étirés', 'de': 'Wie Mercator, aber mildere Polstreckung', 'es': 'Como Mercator, con polos menos estirados', 'ru': 'Как Меркатор, но полюса мягче' },
+  'ProjectionCylinder': { 'en': 'Simple cylindrical panorama of the sky', 'zh_CN': '简单圆柱全景，横向铺开整片天空', 'ja': '単純な円筒パノラマ', 'ko': '단순 원통 파노라마', 'fr': 'Panorama cylindrique simple', 'de': 'Einfaches Zylinderpanorama', 'es': 'Panorama cilíndrico simple', 'ru': 'Простая цилиндрическая панорама' },
+  'ProjectionCylinderFill': { 'en': 'Full-frame cylinder; zoom and panning are locked', 'zh_CN': '铺满整屏的圆柱投影，锁定缩放与平移', 'ja': '全画面円筒、ズームと移動は固定', 'ko': '전체 화면 원통, 확대·이동 잠김', 'fr': 'Cylindre plein écran, zoom verrouillé', 'de': 'Vollbild-Zylinder, Zoom gesperrt', 'es': 'Cilindro a pantalla completa, zoom bloqueado', 'ru': 'Цилиндр на весь экран, зум заблокирован' }
 }
 
 // 地景名称翻译表
@@ -337,13 +361,17 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'msg_not_selected': { 'en': 'not selected', 'zh_CN': '未选中', 'ja': '未選択', 'ko': '미선택', 'fr': 'non sélectionné', 'de': 'nicht ausgewählt', 'es': 'no seleccionado', 'ru': 'не выбрано' },
   'msg_paused': { 'en': 'Paused', 'zh_CN': '已暂停', 'ja': '一時停止中', 'ko': '일시정지됨', 'fr': 'En pause', 'de': 'Pausiert', 'es': 'Pausado', 'ru': 'Пауза' },
   's0758_play': { 'en': 'Realtime', 'zh_CN': '实时', 'ja': 'リアルタイム', 'ko': '실시간', 'fr': 'Temps réel', 'de': 'Echtzeit', 'es': 'Tiempo real', 'ru': 'Реальное время' },
-  's0759_slower': { 'en': 'Fast', 'zh_CN': '快进', 'ja': '早送り', 'ko': '빠르게', 'fr': 'Avance rapide', 'de': 'Schnellvorlauf', 'es': 'Avance rápido', 'ru': 'Быстро' },
+  's0759_slower': { 'en': 'Slower', 'zh_CN': '减速', 'ja': '減速', 'ko': '느리게', 'fr': 'Ralentir', 'de': 'Langsamer', 'es': 'Más lento', 'ru': 'Медленнее' },
   's0760_faster': { 'en': 'Ultra Fast', 'zh_CN': '超快', 'ja': '超早送り', 'ko': '초고속', 'fr': 'Très rapide', 'de': 'Sehr schnell', 'es': 'Ultra rápido', 'ru': 'Сверхбыстро' },
   's0761_stop': { 'en': 'Stop', 'zh_CN': '停止', 'ja': '停止', 'ko': '정지', 'fr': 'Arrêter', 'de': 'Stoppen', 'es': 'Detener', 'ru': 'Стоп' },
   's0762_warp': { 'en': 'Warp', 'zh_CN': '极速', 'ja': 'ワープ', 'ko': '워프', 'fr': 'Vitesse lumière', 'de': 'Lichtgeschw.', 'es': 'Velocidad luz', 'ru': 'Ускорение' },
   's0763_rewind': { 'en': 'Rewind', 'zh_CN': '倒带', 'ja': '巻き戻し', 'ko': '되감기', 'fr': 'Retour', 'de': 'Rückspul', 'es': 'Rebobinar', 'ru': 'Назад' },
   's0764_realtime': { 'en': 'Live', 'zh_CN': '实时', 'ja': 'リアルタイム', 'ko': '실시간', 'fr': 'Temps réel', 'de': 'Echtzeit', 'es': 'Tiempo real', 'ru': 'Реал' },
   's0765_fast': { 'en': 'Fast Fwd', 'zh_CN': '快进', 'ja': '早送り', 'ko': '빨리감기', 'fr': 'Avance rapide', 'de': 'Vorlauf', 'es': 'Avance rápido', 'ru': 'Вперёд' },
+  'act_refresh': { 'en': 'Refresh', 'zh_CN': '刷新', 'ja': '更新', 'ko': '새로고침', 'fr': 'Actualiser', 'de': 'Aktualisieren', 'es': 'Actualizar', 'ru': 'Обновить' },
+  'msg_loading': { 'en': 'Loading...', 'zh_CN': '正在加载…', 'ja': '読み込み中…', 'ko': '로딩 중…', 'fr': 'Chargement…', 'de': 'Laden…', 'es': 'Cargando…', 'ru': 'Загрузка…' },
+  'unit_km': { 'en': 'km', 'zh_CN': '千米', 'ja': 'km', 'ko': 'km', 'fr': 'km', 'de': 'km', 'es': 'km', 'ru': 'км' },
+  'unit_mile': { 'en': 'mi', 'zh_CN': '英里', 'ja': 'マイル', 'ko': '마일', 'fr': 'mi', 'de': 'mi', 'es': 'mi', 'ru': 'миль' },
   's0766_scrubber': { 'en': 'Time Travel', 'zh_CN': '时间旅行', 'ja': 'タイムトラベル', 'ko': '시간여행', 'fr': 'Voyage temporel', 'de': 'Zeitreise', 'es': 'Viaje temporal', 'ru': 'Путешествие во времени' },
   'msg_planet_switched': { 'en': 'Switched observing planet', 'zh_CN': '已切换观测星球', 'ja': '観測惑星切替済み', 'ko': '관측 행성 전환됨', 'fr': 'Planète d\'observation changée', 'de': 'Beobachtungsplanet gewechselt', 'es': 'Planeta de observación cambiado', 'ru': 'Планета наблюдения переключена' },
   'msg_pointed_to': { 'en': 'Pointed to Alt', 'zh_CN': '已指向 高度角', 'ja': '指向済み 高度', 'ko': '포인팅됨 고도', 'fr': 'Pointé vers Alt', 'de': 'Gezeigt auf Höhe', 'es': 'Apuntado a Alt', 'ru': 'Наведено на высоту' },
