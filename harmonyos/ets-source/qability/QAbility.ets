@@ -16,7 +16,9 @@ export default class QAbility extends UIAbility {
       const mainWindow = await windowStage.getMainWindow();
       await mainWindow.setWindowLayoutFullScreen(true);
       await mainWindow.setWindowSystemBarEnable([]);
-      await mainWindow.setSpecificSystemBarEnabled('navigationIndicator', false);
+      if (canIUse('SystemCapability.Window.SessionManager')) {
+        await mainWindow.setSpecificSystemBarEnabled('navigationIndicator', false);
+      }
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() success');
     } catch (err) {
       hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() failed: ' + JSON.stringify(err));

@@ -6,7 +6,7 @@
     "description": "$string:module_desc",
     "mainElement": "QAbility",
     "deviceTypes": [
-      "default",
+      "phone",
       "tablet"
     ],
     "deliveryWithInstall": true,
@@ -64,9 +64,6 @@
     "requestPermissions": [
       {
         "name": "ohos.permission.STORE_PERSISTENT_DATA"
-      },
-      {
-        "name": "ohos.permission.FILE_ACCESS_PERSIST"
       },
       {
         "name": "ohos.permission.PREPARE_APP_TERMINATE"

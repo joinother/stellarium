@@ -122,7 +122,9 @@ Q_LOGGING_CATEGORY(mainview, "stel.MainView")
 #include <clocale>
 #if defined(__OHOS__)
 #include <dlfcn.h>
+#include <EGL/egl.h>
 #include <hilog/log.h>
+#include <QtGui/qopenglcontext_platform.h>
 #endif
 
 #ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY
@@ -136,19 +138,34 @@ StelMainView* StelMainView::singleton = Q_NULLPTR;
 namespace
 {
 using OhosSubmitFrameFunc = void (*)(const unsigned char*, int, int);
-constexpr int OHOS_INTERACTIVE_RENDER_INTERVAL_MS = 12;  // ~83 FPS (PBO-safe, 8ms causes SEGV)
-constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;  // 30 FPS idle
+using OhosSubmitTextureFunc = bool (*)(unsigned int, int, int, void*, void*);
+// The CPU fallback still copies every frame GPU -> CPU -> GPU. Keep it below
+// the display refresh rate, but do not cap it at 30 FPS when recent timings
+// show a frame has enough headroom for fluid touch manipulation.
+constexpr int OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS = 8; // 120 FPS on high-refresh displays.
+constexpr int OHOS_FALLBACK_INTERACTIVE_RENDER_INTERVAL_MS = 20;  // 50 FPS while CPU-copying frames.
+constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;        // 30 FPS once the scene settles.
+
+// Once the dedicated render pump is running it owns presentation to the
+// XComponent. The QGraphics paint path can still be entered by Qt, but must
+// not submit a duplicate framebuffer to the native surface.
+static bool s_ohosRenderPumpActive = false;
+static bool s_ohosZeroCopyActive = false;
+static bool s_ohosZeroCopySupported = true;
 
 // Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
 // read by StellariumOhos_command("getFPS") on ArkUI thread.
 static std::atomic<float> s_ohosRenderFps{0.0f};
 
+// Ignore delayed settle phases left behind by an earlier object selection.
+static std::atomic<quint64> s_ohosNavigationSerial{0};
+
 // Render resolution scale factor (0.0-1.0). Reduces the framebuffer resolution
 // to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
 // the texture to full screen automatically.
-// 52% keeps labels legible while roughly quartering the pixels sent through
-// the emulator's expensive draw/readback path compared with full resolution.
-constexpr double OHOS_RENDER_SCALE = 0.52;
+// 65% keeps labels readable while avoiding a full-resolution CPU readback.
+// The shared-texture path below always renders at native resolution.
+constexpr double OHOS_RENDER_SCALE = 0.65;
 
 void ohosMark(const char* message)
 {
@@ -159,7 +176,11 @@ int currentOhosRenderIntervalMs()
 {
 	if (!StelApp::isInitialized())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
-	return StelMainView::getInstance().needsMaxFPS() ? OHOS_INTERACTIVE_RENDER_INTERVAL_MS : OHOS_IDLE_RENDER_INTERVAL_MS;
+	if (!StelMainView::getInstance().needsMaxFPS())
+		return OHOS_IDLE_RENDER_INTERVAL_MS;
+	return s_ohosZeroCopyActive
+		? OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS
+		: OHOS_FALLBACK_INTERACTIVE_RENDER_INTERVAL_MS;
 }
 
 void markOhosInteraction()
@@ -337,6 +358,7 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 
 	static bool resolved = false;
 	static OhosSubmitFrameFunc submitFrame = nullptr;
+	static OhosSubmitTextureFunc submitTexture = nullptr;
 	if (!resolved)
 	{
 		resolved = true;
@@ -345,8 +367,10 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 			entryHandle = dlopen("libentry.so", RTLD_NOW);
 		submitFrame = reinterpret_cast<OhosSubmitFrameFunc>(entryHandle ? dlsym(entryHandle, "StellariumEntry_submitFrame")
 													: dlsym(RTLD_DEFAULT, "StellariumEntry_submitFrame"));
+		submitTexture = reinterpret_cast<OhosSubmitTextureFunc>(entryHandle ? dlsym(entryHandle, "StellariumEntry_submitTexture")
+													: dlsym(RTLD_DEFAULT, "StellariumEntry_submitTexture"));
 		qInfo() << "OpenHarmony native frame bridge" << (submitFrame ? "resolved." : "not found.");
-		ohosMark(submitFrame ? "frame bridge resolved" : "frame bridge not found");
+		ohosMark(submitTexture ? "zero-copy frame bridge resolved" : (submitFrame ? "frame bridge resolved" : "frame bridge not found"));
 	}
 	if (!submitFrame)
 		return;
@@ -368,7 +392,17 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	// Favor motion while the sky is being manipulated, then restore detail once
 	// the user has stopped. This avoids letting the smooth ArkUI shell outrun the
 	// sky renderer during drags and pinch gestures.
-	const double readbackScale = StelMainView::getInstance().needsMaxFPS() ? 0.25 : 0.40;
+	QOpenGLContext* currentContext = QOpenGLContext::currentContext();
+	auto* nativeContext = currentContext ? currentContext->nativeInterface<QNativeInterface::QEGLContext>() : nullptr;
+	const bool tryZeroCopy = submitTexture && s_ohosZeroCopySupported && nativeContext;
+
+	// The old 25%/40% fallback made the effective displayed resolution only
+	// about 13%/21% after the render scale, which is visibly blurred. Try the
+	// shared GPU texture at native resolution from its very first frame; only a
+	// confirmed driver failure falls back to the balanced CPU-copy scale.
+	const double readbackScale = (s_ohosZeroCopyActive || tryZeroCopy)
+		? 1.0
+		: (StelMainView::getInstance().needsMaxFPS() ? 0.50 : 0.65);
 	const int readW = qMax(1, int(width * readbackScale));
 	const int readH = qMax(1, int(height * readbackScale));
 
@@ -405,6 +439,25 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 	if (extraFns)
 	{
 		extraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, readW, readH, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	}
+
+	// When both EGL contexts can join the same share group, the XComponent can
+	// sample this texture directly. That removes the full-frame GPU -> CPU -> GPU
+	// transfer which is the dominant source of motion stutter on HarmonyOS.
+	if (tryZeroCopy)
+	{
+		gl->glFlush();
+		if (submitTexture(s_readbackTex, readW, readH,
+			reinterpret_cast<void*>(nativeContext->display()),
+			reinterpret_cast<void*>(nativeContext->nativeContext())))
+		{
+			s_ohosZeroCopyActive = true;
+			gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, mainFBO);
+			gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, mainFBO);
+			return;
+		}
+		s_ohosZeroCopyActive = false;
+		s_ohosZeroCopySupported = false;
 	}
 
 	// Synchronous glReadPixels (PBO caused SIGSEGV on emulator due to glMapBufferRange)
@@ -543,6 +596,58 @@ static bool s_viewLock = false;
 //      parasitic rotation entirely: vertical finger motion only ever changes
 //      altitude, horizontal motion only ever changes azimuth.
 static bool s_verticalClamp = true;
+// Momentum from a finger pan lives on the Qt render thread. The ArkTS gesture
+// layer only supplies one final velocity; advancing it here avoids queuing a
+// bridge call for every 16 ms animation tick when presentation is slower.
+static bool s_ohosPanInertiaActive = false;
+static double s_ohosPanInertiaVx = 0.0; // viewport pixels per millisecond
+static double s_ohosPanInertiaVy = 0.0;
+static double s_ohosPanInertiaElapsedSec = 0.0;
+
+static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
+{
+	if (!core || s_viewLock)
+		return;
+	StelMovementMgr* movementMgr = core->getMovementMgr();
+	if (!movementMgr)
+		return;
+	if (s_verticalClamp)
+	{
+		const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+		const double ppr = prj ? static_cast<double>(prj->getPixelPerRadAtCenter()) : 0.0;
+		if (ppr <= 1e-9)
+			return;
+		movementMgr->panView(dx / ppr, -dy / ppr);
+	}
+	else
+	{
+		// The decoupled mode is the default on OHOS. Preserve the native path
+		// only for callers that explicitly turn it off.
+		movementMgr->dragView(0, 0, qRound(dx), qRound(dy));
+	}
+	movementMgr->setFlagTracking(false);
+}
+
+static void ohosUpdatePanInertia(double dtSec)
+{
+	if (!s_ohosPanInertiaActive || s_viewLock)
+	{
+		s_ohosPanInertiaActive = false;
+		return;
+	}
+	const double safeDtSec = qBound(0.001, dtSec, 0.080);
+	const double dtMs = safeDtSec * 1000.0;
+	ohosApplyPanDelta(StelApp::getInstance().getCore(), s_ohosPanInertiaVx * dtMs, s_ohosPanInertiaVy * dtMs);
+	s_ohosPanInertiaElapsedSec += safeDtSec;
+	const double decay = std::pow(0.955, dtMs / 16.667);
+	s_ohosPanInertiaVx *= decay;
+	s_ohosPanInertiaVy *= decay;
+	const double speed = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy);
+	if (speed < 0.010 || s_ohosPanInertiaElapsedSec > 1.8)
+		s_ohosPanInertiaActive = false;
+	else
+		markOhosInteraction();
+}
 static void markQtLoopRunning();
 
 static void ohosDrainCommandQueue()
@@ -570,7 +675,9 @@ static void ohosDrainCommandQueue()
 // Gradually fade the landscape as the observer zooms in and tilts the view
 // down toward the ground. Zoom controls the primary fade and reaches complete
 // transparency at maximum zoom; looking toward the nadir adds a softer fade
-// without making the landscape disappear by itself.
+// without making the landscape disappear by itself. A selected object that is
+// geometrically above the horizon but behind a local tree or ridge gets a
+// temporary extra fade, so the selection marker remains useful.
 // Reuses the engine's own transparency path: LandscapeMgr applies
 // (1 - transparency) * landFader as the ground alpha, so pushing transparency
 // toward 1.0 removes the landscape entirely once it would otherwise occlude
@@ -612,7 +719,27 @@ static void ohosUpdateLandscapeFadeWithZoom()
 	// and reaches 75% at the nadir, so the ground still has spatial context
 	// unless the user also zooms all the way in.
 	const double nadirFade = smoothstep((15.0 - altView) / (15.0 - -90.0)) * 0.75;
-	const double target = zoomFade + (1.0 - zoomFade) * nadirFade;
+	double target = zoomFade + (1.0 - zoomFade) * nadirFade;
+
+	// The sky object and its selection reticle are rendered before the local
+	// landscape. If a selected object is above the mathematical horizon but the
+	// current landscape texture covers that exact direction, keep the landscape
+	// translucent enough for the object to remain identifiable. Do not apply
+	// this while the user controls landscape opacity manually: disabling the
+	// automatic fade is an explicit request for a fixed ground layer.
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+	{
+		const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+		const Vec3d objectAltAz = object->getAltAzPosAuto(core);
+		double objectAz = 0.0;
+		double objectAlt = 0.0;
+		StelUtils::rectToSphe(&objectAz, &objectAlt, objectAltAz);
+		const bool aboveHorizon = objectAlt >= 0.0;
+		const float landscapeOpacity = lmgr->getLandscapeOpacity(objectAltAz);
+		if (aboveHorizon && landscapeOpacity > 0.5f)
+			target = qMax(target, 0.82);
+	}
 	// Smooth toward the target so the fade is gradual (slow trailing follow),
 	// not a hard pop, while you are dragging the view.
 	const float rate = 0.18f;
@@ -737,7 +864,7 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	// execution and return pending; the caller ignores the return value.
 	{
 		const QString cmdName = key.section('|', 0, 0);
-		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz")
+		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_ohosCmdQueue.append([command]() { command(); });
@@ -1421,8 +1548,31 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			bool found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
 			if (found && movementMgr && !objectMgr->getSelectedObject().isEmpty())
 			{
-				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
-				movementMgr->setFlagTracking(true);
+				const StelObjectP target = objectMgr->getSelectedObject().first();
+				const QString type = target->getType().toLower();
+				const QString englishName = target->getEnglishName().toLower();
+				double targetFov = 22.0;
+				if (type.contains("constellation"))
+					targetFov = 48.0;
+				else if (type.contains("planet") || englishName == "sun" || englishName == "moon")
+					targetFov = 18.0;
+				else if (type.contains("nebula") || type.contains("galaxy") || type.contains("cluster"))
+					targetFov = 14.0;
+
+				const double currentFov = movementMgr->getCurrentFov();
+				const double transitFov = std::max(targetFov, std::max(currentFov, 38.0));
+				const quint64 serial = ++s_ohosNavigationSerial;
+				movementMgr->setFlagTracking(false);
+				if (currentFov + 0.5 < transitFov)
+					movementMgr->zoomTo(transitFov, 0.45f);
+				movementMgr->moveToObject(target, 1.35f, StelMovementMgr::ZoomNone);
+				QTimer::singleShot(480, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
+					if (serial == s_ohosNavigationSerial.load())
+						movementMgr->zoomTo(targetFov, 0.92f);
+				});
+				qInfo() << "[StellariumOhos][navigate]" << target->getEnglishName()
+						<< "type=" << type << "fov" << currentFov << "->" << targetFov;
+				result["navigationTargetFov"] = targetFov;
 			}
 			markOhosInteraction();
 
@@ -1593,6 +1743,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "invalid dragView payload";
 				return result;
 			}
+			s_ohosPanInertiaActive = false;
 			if (s_viewLock)
 			{
 				// View locked: panning disabled (zoom still allowed elsewhere).
@@ -1600,31 +1751,40 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["locked"] = true;
 				return result;
 			}
-			if (s_verticalClamp)
-			{
-				// Decoupled-axis pan: vertical finger motion -> altitude only,
-				// horizontal -> azimuth only. No parasitic rotation near poles,
-				// and panView clamps altitude to ±90° (zenith/nadir hard stop).
-				const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
-				const double ppr = prj ? static_cast<double>(prj->getPixelPerRadAtCenter()) : 0.0;
-				if (ppr > 1e-9)
-				{
-					// Screen y grows downward. Empirically (matches the native
-					// dragView feel verified on the simulator): swiping UP
-					// (y2<y1) raises the view altitude, so dAlt = (y1-y2)/ppr.
-					const double dAz  = (x2 - x1) / ppr;
-					const double dAlt = (y1 - y2) / ppr;
-					movementMgr->panView(dAz, dAlt);
-					movementMgr->setFlagTracking(false);
-				}
-			}
-			else
-			{
-				movementMgr->dragView(x1, y1, x2, y2);
-			}
+			ohosApplyPanDelta(core, x2 - x1, y2 - y1);
 			markOhosInteraction();
 			result["ok"] = true;
 			result["fov"] = movementMgr->getCurrentFov();
+			return result;
+		}
+
+		if (commandName == "startPanInertia")
+		{
+			const QStringList parts = arg.split('|');
+			bool okX = false;
+			bool okY = false;
+			const double vx = parts.value(0).toDouble(&okX);
+			const double vy = parts.value(1).toDouble(&okY);
+			if (!okX || !okY || s_viewLock)
+			{
+				result["ok"] = true;
+				return result;
+			}
+			s_ohosPanInertiaVx = qBound(-4.0, vx, 4.0);
+			s_ohosPanInertiaVy = qBound(-4.0, vy, 4.0);
+			s_ohosPanInertiaElapsedSec = 0.0;
+			s_ohosPanInertiaActive = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy) >= 0.05;
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "stopPanInertia")
+		{
+			s_ohosPanInertiaActive = false;
+			s_ohosPanInertiaVx = 0.0;
+			s_ohosPanInertiaVy = 0.0;
+			result["ok"] = true;
 			return result;
 		}
 
@@ -5300,7 +5460,8 @@ protected:
 		app.update(dt); // may also issue GL calls
 		app.draw();
 #if defined(__OHOS__)
-		submitOhosFramebuffer(QOpenGLContext::currentContext()->functions());
+			if (!s_ohosRenderPumpActive)
+				submitOhosFramebuffer(QOpenGLContext::currentContext()->functions());
 #endif
 		painter->endNativePainting();
 
@@ -6392,6 +6553,7 @@ void StelMainView::deinit()
 void StelMainView::startOhosRenderPump()
 {
 	ohosMark("startOhosRenderPump entered");
+	s_ohosRenderPumpActive = true;
 	markQtLoopRunning();
 	updateQueued = false;
 	fpsTimer->setInterval(currentOhosRenderIntervalMs());
@@ -6425,8 +6587,12 @@ void StelMainView::renderOhosFrameNow()
 	lastOhosRenderTimeSec = now;
 
 	const double pixelRatio = glWidget->devicePixelRatioF();
-	const int width = qMax(1, int(glWidget->width() * pixelRatio * OHOS_RENDER_SCALE));
-	const int height = qMax(1, int(glWidget->height() * pixelRatio * OHOS_RENDER_SCALE));
+	// Optimistically draw the first frame at native resolution as well. A driver
+	// that rejects sharing disables s_ohosZeroCopySupported during presentation,
+	// so the following fallback frames return to OHOS_RENDER_SCALE.
+	const double renderScale = s_ohosZeroCopySupported ? 1.0 : OHOS_RENDER_SCALE;
+	const int width = qMax(1, int(glWidget->width() * pixelRatio * renderScale));
+	const int height = qMax(1, int(glWidget->height() * pixelRatio * renderScale));
 
 	StelApp& app = StelApp::getInstance();
 	app.setDevicePixelsPerPixel(devicePixelRatioF());
@@ -6435,6 +6601,7 @@ void StelMainView::renderOhosFrameNow()
 
 	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();
+	ohosUpdatePanInertia(dt);
 	app.update(dt);
 	ohosProcessPendingPointSelect();
 	const double t3 = StelApp::getTotalRunTime();
@@ -6483,7 +6650,12 @@ void StelMainView::requestOhosSceneRepaint()
 // Update the translated title
 void StelMainView::initTitleI18n()
 {
+	#if defined(__OHOS__)
+	// Recents uses the Qt window title instead of the ArkTS label.
+	setWindowTitle(QStringLiteral("星象仪"));
+	#else
 	setWindowTitle(StelUtils::getApplicationName());
+	#endif
 }
 
 void StelMainView::setFullScreen(bool b)
@@ -6613,8 +6785,9 @@ void StelMainView::thereWasAnEvent()
 	lastEventTimeSec = StelApp::getTotalRunTime();
 #if defined(__OHOS__)
 	updateQueued = false;
-	if (fpsTimer && fpsTimer->interval() != OHOS_INTERACTIVE_RENDER_INTERVAL_MS)
-		fpsTimer->setInterval(OHOS_INTERACTIVE_RENDER_INTERVAL_MS);
+	const int interactiveInterval = currentOhosRenderIntervalMs();
+	if (fpsTimer && fpsTimer->interval() != interactiveInterval)
+		fpsTimer->setInterval(interactiveInterval);
 	// Update lock-free FPS counter for getFPS command
 	s_ohosRenderFps.store(StelApp::getInstance().getFps());
 #endif
@@ -6625,11 +6798,17 @@ bool StelMainView::needsMaxFPS() const
 	const double now = StelApp::getTotalRunTime();
 
 	// Determines when the next display will need to be triggered
-	// The current policy is that after an event, the FPS is maximum for 2.5 seconds
+	// The desktop policy keeps maximum FPS for several seconds after an event.
+	// On HarmonyOS each frame crosses the GPU/CPU bridge, so returning to the
+	// lower idle cadence promptly avoids wasting work after a drag or pinch ends.
 	// after that, it switches back to the default minfps value to save power.
 	// The fps is also kept to max if the timerate is higher than normal speed.
 	const double timeRate = stelApp->getCore()->getTimeRate();
+#if defined(__OHOS__)
+	return (now - lastEventTimeSec < 0.8) || fabs(timeRate) > StelCore::JD_SECOND;
+#else
 	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;
+#endif
 }
 
 void StelMainView::moveEvent(QMoveEvent * event)

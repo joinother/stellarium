@@ -37,6 +37,8 @@ struct EglState
     int frameTextureWidth = 0;
     int frameTextureHeight = 0;
     bool submittedFrame = false;
+    bool sharedTextureContext = false;
+    bool zeroCopyUnavailable = false;
 };
 
 EglState g_egl;
@@ -315,6 +317,105 @@ void renderPreview()
     eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 }
 
+bool shareContextWithQt(EGLDisplay qtDisplay, EGLContext qtContext)
+{
+    if (g_egl.sharedTextureContext)
+        return true;
+    if (g_egl.zeroCopyUnavailable || qtDisplay == EGL_NO_DISPLAY || qtContext == EGL_NO_CONTEXT || qtDisplay != g_egl.display)
+        return false;
+
+    // The surface context is created before Qt starts its render loop. Recreate
+    // it once with Qt's context as the share context so GL textures remain on
+    // the GPU and can be sampled by the XComponent compositor.
+    eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (g_egl.context != EGL_NO_CONTEXT)
+        eglDestroyContext(g_egl.display, g_egl.context);
+
+    const EGLint contextAttribs[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 3,
+        EGL_NONE
+    };
+    g_egl.context = eglCreateContext(g_egl.display, g_egl.config, qtContext, contextAttribs);
+    if (g_egl.context == EGL_NO_CONTEXT) {
+        // Keep the proven CPU-copy bridge available when an EGL driver refuses
+        // cross-context sharing on a specific device.
+        g_egl.context = eglCreateContext(g_egl.display, g_egl.config, EGL_NO_CONTEXT, contextAttribs);
+        g_egl.zeroCopyUnavailable = true;
+        OH_LOG_Print(LOG_APP, LOG_WARN, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "zero-copy EGL sharing unavailable: %{public}x", eglGetError());
+        return false;
+    }
+
+    g_egl.sharedTextureContext = true;
+    OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                 "zero-copy EGL texture sharing enabled");
+    return true;
+}
+
+bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
+                            EGLDisplay qtDisplay, EGLContext qtContext)
+{
+    std::lock_guard<std::mutex> lock(g_renderMutex);
+    if (texture == 0 || frameWidth <= 0 || frameHeight <= 0 ||
+        g_egl.display == EGL_NO_DISPLAY || g_egl.surface == EGL_NO_SURFACE || g_egl.context == EGL_NO_CONTEXT)
+        return false;
+
+    const EGLDisplay previousDisplay = eglGetCurrentDisplay();
+    const EGLSurface previousDrawSurface = eglGetCurrentSurface(EGL_DRAW);
+    const EGLSurface previousReadSurface = eglGetCurrentSurface(EGL_READ);
+    const EGLContext previousContext = eglGetCurrentContext();
+    const auto restorePreviousContext = [&]() {
+        if (previousDisplay != EGL_NO_DISPLAY && previousContext != EGL_NO_CONTEXT)
+            eglMakeCurrent(previousDisplay, previousDrawSurface, previousReadSurface, previousContext);
+        else
+            eglMakeCurrent(g_egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    };
+
+    if (!shareContextWithQt(qtDisplay, qtContext)) {
+        restorePreviousContext();
+        return false;
+    }
+    if (eglMakeCurrent(g_egl.display, g_egl.surface, g_egl.surface, g_egl.context) != EGL_TRUE) {
+        OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "zero-copy eglMakeCurrent failed: %{public}x", eglGetError());
+        restorePreviousContext();
+        return false;
+    }
+    if (g_egl.frameProgram == 0) {
+        g_egl.frameProgram = createFrameProgram();
+        if (g_egl.frameProgram == 0) {
+            restorePreviousContext();
+            return false;
+        }
+    }
+
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, g_egl.width > 0 ? g_egl.width : frameWidth, g_egl.height > 0 ? g_egl.height : frameHeight);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(g_egl.frameProgram);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glUniform1i(glGetUniformLocation(g_egl.frameProgram, "u_frame"), 0);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (glGetError() != GL_NO_ERROR || eglSwapBuffers(g_egl.display, g_egl.surface) != EGL_TRUE) {
+        OH_LOG_Print(LOG_APP, LOG_ERROR, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "zero-copy presentation failed: %{public}x", eglGetError());
+        restorePreviousContext();
+        return false;
+    }
+    restorePreviousContext();
+    if (!g_egl.submittedFrame) {
+        OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "displayed zero-copy Stellarium texture %{public}dx%{public}d", frameWidth, frameHeight);
+        g_egl.submittedFrame = true;
+    }
+    return true;
+}
+
 void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHeight)
 {
     std::lock_guard<std::mutex> lock(g_renderMutex);
@@ -500,6 +601,14 @@ extern "C" __attribute__((visibility("default"))) void StellariumEntry_submitFra
         loggedSubmit = true;
     }
     renderSubmittedFrame(rgba, width, height);
+}
+
+extern "C" __attribute__((visibility("default"))) bool StellariumEntry_submitTexture(
+    unsigned int texture, int width, int height, void* qtDisplay, void* qtContext)
+{
+    return renderSubmittedTexture(texture, width, height,
+                                 reinterpret_cast<EGLDisplay>(qtDisplay),
+                                 reinterpret_cast<EGLContext>(qtContext));
 }
 
 static bool getStringArg(napi_env env, napi_value value, std::string &out)
