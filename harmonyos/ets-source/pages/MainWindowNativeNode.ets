@@ -264,7 +264,10 @@ struct WindowNativeNode {
   private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
   /** Current speed-step index into TIME_SPEED_STEPS. */
-  @State private timeSpeedIndex: number = 1  // 0=pause, 1=1x (default)
+  @State private timeSpeedIndex: number = 7  // 7=1x realtime (default, new index)
+  /** Sky Guide 风格时间滑块：偏移天数（0=今天，负=过去，正=未来）*/
+  @State private scrubberValue: number = 0
+  @State private scrubberLabel: string = '今天'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
   @State private manualDay: number = 20
@@ -2198,59 +2201,91 @@ private loadPlanetPositions(): void {
 
   // ===== 时间速率档位系统 =====
   // Stellarium 内部单位：Julian days per second (JD/s)
-  // 1 JD = 86400 秒���所以 1x 实时 = 1/86400 ≈ 1.1574e-5 JD/s
+  // 1 JD = 86400 ��，所以 1x 实时 = 1/86400 ≈ 1.1574e-5 JD/s
   // 档位表：索引 0=暂停, 1=1x, 2=2x, 3=10x, 4=1分/秒, 5=1时/秒, 6=1天/秒, 7=10天/秒
+  // 负索引 = 倒带：-1=-1x, -2=-1时/秒, -3=-1天/秒
   private readonly SPEED_STEPS: number[] = [
-    0,
-    1.0 / 86400.0,
-    2.0 / 86400.0,
-    10.0 / 86400.0,
-    60.0 / 86400.0,
-    360.0 / 86400.0,
-    86400.0 / 86400.0,
-    864000.0 / 86400.0,
+    -864000.0 / 86400.0,   // -10: 倒带 极速(1天/秒反向)
+    -360.0 / 86400.0,      // -9:  倒带 快进(1时/秒反向)
+    -60.0 / 86400.0,       // -8:  倒带(1分/秒反向)
+    -10.0 / 86400.0,       // -7:  倒带 10x
+    -2.0 / 86400.0,        // -6:  倒带 2x
+    -1.0 / 86400.0,        // -5:  倒带 1x
+    0,                      //  0:  停止
+    1.0 / 86400.0,         //  1:  实时 1x
+    2.0 / 86400.0,         //  2:  2x
+    10.0 / 86400.0,        //  3:  10x
+    60.0 / 86400.0,        //  4:  1分/秒
+    360.0 / 86400.0,       //  5:  1时/秒
+    86400.0 / 86400.0,     //  6:  1天/秒
+    864000.0 / 86400.0,    //  7:  10天/秒
   ]
+  // SPEED_STEPS 的"零点"索引（停止）和"实时"索引
+  private static readonly SPEED_IDX_STOP = 6
+  private static readonly SPEED_IDX_REALTIME = 7
 
   /** Apply speed at given step index. Clamps to valid range. */
   private applySpeedStep(index: number): void {
     const len: number = this.SPEED_STEPS.length
+    // 映射到有效范围（含负索引倒带）
     const idx: number = Math.max(0, Math.min(len - 1, index))
     const rate: number = this.SPEED_STEPS[idx]
     this.timeSpeedIndex = idx
     this.setTimeRate(rate)
+    this.timeRateText = this.formatRate(rate)
   }
 
-  /** Speed up one step (or resume from pause → 1x). */
+  /** Speed up one step. */
   private speedUp(): void {
-    if (this.timeSpeedIndex === 0) {
-      this.applySpeedStep(1)   // 暂停 → 1x
-    } else {
-      this.applySpeedStep(this.timeSpeedIndex + 1)
-    }
+    this.applySpeedStep(this.timeSpeedIndex + 1)
   }
 
-  /** Slow down one step (or pause if at 1x). */
+  /** Slow down one step (can go into reverse). */
   private speedDown(): void {
-    if (this.timeSpeedIndex <= 1) {
-      this.applySpeedStep(0)   // 1x 或更低 → 暂停
-    } else {
-      this.applySpeedStep(this.timeSpeedIndex - 1)
-    }
+    this.applySpeedStep(this.timeSpeedIndex - 1)
   }
 
   /** Toggle pause: remember current non-zero speed, restore on unpause. */
   private togglePause(): void {
-    if (this.timeRateText === I18n.t('msg_paused') || this.timeSpeedIndex === 0) {
+    if (this.timeSpeedIndex === 6) { // SPEED_IDX_STOP
       // Resume: restore last speed or default to 1x
-      const resumeIdx = this._lastNonZeroSpeedIndex > 0 ? this._lastNonZeroSpeedIndex : 1
+      const resumeIdx = this._lastNonZeroSpeedIndex > 0 && this._lastNonZeroSpeedIndex !== 6 ? this._lastNonZeroSpeedIndex : 7
       this.applySpeedStep(resumeIdx)
     } else {
       // Pause: remember current speed
       this._lastNonZeroSpeedIndex = this.timeSpeedIndex
-      this.applySpeedStep(0)
+      this.applySpeedStep(6) // SPEED_IDX_STOP
     }
   }
-  private _lastNonZeroSpeedIndex: number = 1
+  private _lastNonZeroSpeedIndex: number = 7
+
+  /** Sky Guide 风格时间滑块：拖动时设置模拟时间（暂停时间流逝）*/
+  private applyScrubber(dayOffset: number): void {
+    // 更新标签
+    if (dayOffset === 0) {
+      this.scrubberLabel = '今天'
+    } else if (dayOffset > 0) {
+      if (dayOffset < 30) { this.scrubberLabel = '+' + dayOffset + '天后' }
+      else if (dayOffset < 365) { this.scrubberLabel = '+' + Math.round(dayOffset / 30) + '月后' }
+      else { this.scrubberLabel = '+' + (dayOffset / 365).toFixed(1) + '年后' }
+    } else {
+      const abs = Math.abs(dayOffset)
+      if (abs < 30) { this.scrubberLabel = abs + '天前' }
+      else if (abs < 365) { this.scrubberLabel = Math.round(abs / 30) + '月前' }
+      else { this.scrubberLabel = (abs / 365).toFixed(1) + '年前' }
+    }
+
+    // 调用 native setJD：基于当前真实 JD 加上偏移天数
+    // 先获取当前 JD，然后加上偏移
+    this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
+      if (r && r.jd) {
+        const currentJd = Number(r.jd)
+        const newJd = currentJd + dayOffset
+        // 用 setTimeToJD（会自动暂停）
+        this.callNativeFire('setTimeToJD', newJd.toFixed(6))
+      }
+    })
+  }
 
   private zoomStep(factor: number): void {
     hilog.info(0x0000, 'StellariumArkUI', 'zoomStep factor=%{public}s', factor.toString())
@@ -4269,12 +4304,13 @@ private loadPlanetPositions(): void {
       }
     } else if (this.activePanel === 'time') {
       if (y >= 545 && y <= 595) {
-        // 新档位按钮：现在 | 停止 | 实时 | 快进 | 超快
-        if (x >= 1080 && x < 1145) { this.handleChip('now'); return true }
-        if (x >= 1145 && x < 1210) { this.handleChip('stop'); return true }
-        if (x >= 1210 && x < 1275) { this.handleChip('realtime'); return true }
-        if (x >= 1275 && x < 1340) { this.handleChip('fast'); return true }
-        if (x >= 1340 && x <= 1405) { this.handleChip('warp'); return true }
+        // 新档位按钮：倒带 | 现在 | 停止 | 实时 | 快进 | 超快
+        if (x >= 1040 && x < 1095) { this.handleChip('rewind'); return true }
+        if (x >= 1095 && x < 1155) { this.handleChip('now'); return true }
+        if (x >= 1155 && x < 1215) { this.handleChip('stop'); return true }
+        if (x >= 1215 && x < 1275) { this.handleChip('realtime'); return true }
+        if (x >= 1275 && x < 1335) { this.handleChip('fast'); return true }
+        if (x >= 1335 && x <= 1400) { this.handleChip('warp'); return true }
       }
       if (y >= 610 && y <= 660) {
         if (x >= 1095 && x < 1220) { this.advanceTime(12); return true }
@@ -7212,8 +7248,10 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow(I18n.t('i0054'), this.observationTimeText)
       this.infoRow(I18n.t('i0055'), this.timeRateText)
-      // 时间控制：每个按钮 = 一个明确的速度档位，无切换逻辑
+      // 时间控制按钮：[倒带][现在][停止][实时][快进][超快]
       this.timeSpeedChips()
+      // Sky Guide 风格时间拖动滑块（-365天 ~ +365天）
+      this.timeScrubberSlider()
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
       Row()
@@ -9502,23 +9540,25 @@ private loadPlanetPositions(): void {
       .margin({ top: 12 })
   }
 
-  // 时间速度控制按钮：每个按钮 = 一个明确的速度档位
-  // 布局：[现在] [停止] [实时] [快进] [超快]
+  // 时间速度控制按钮 — 参考 Sky Guide 的交互范式
+  // 布局：[倒带] [现在] [停止] [实时] [快进] [超快]
   // 当前档位高亮，点击立即更新速度显示
   @Builder
   timeSpeedChips() {
     Scroll() {
       Row({ space: 7 }) {
+        // 倒带 — 反向1x（时间倒流）
+        this.speedChip('rewind', I18n.t('s0763_rewind'), 'ic_time_rewind.svg', this.timeSpeedIndex < 6)
         // 现在 — 回到当前时刻 + 重置为1x
-        this.speedChip('now', I18n.t('s0754'), null, this.timeSpeedIndex === 1)
+        this.speedChip('now', I18n.t('s0754'), null, false)
         // 停止 — 冻结时间
-        this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 0)
-        // 实时 — 1x 正常速度
-        this.speedChip('realtime', I18n.t('s0758_play'), 'ic_time_realtime.svg', this.timeSpeedIndex === 1)
-        // 快进 — 1小时/秒档位
-        this.speedChip('fast', I18n.t('s0759_slower'), 'ic_time_fast.svg', this.timeSpeedIndex >= 4 && this.timeSpeedIndex <= 5)
-        // 极速 — 1天/秒
-        this.speedChip('warp', I18n.t('s0760_faster'), 'ic_time_warp.svg', this.timeSpeedIndex >= 6)
+        this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 6)
+        // 实时 — 回到当前时刻 + 1x
+        this.speedChip('realtime', I18n.t('s0764_realtime'), 'ic_time_realtime.svg', this.timeSpeedIndex === 7)
+        // 快进 — 升一档
+        this.speedChip('fast', I18n.t('s0765_fast'), 'ic_time_fast.svg', this.timeSpeedIndex >= 10 && this.timeSpeedIndex <= 12)
+        // 极速 — 10天/秒
+        this.speedChip('warp', I18n.t('s0760_faster'), 'ic_time_warp.svg', this.timeSpeedIndex === 13)
       }
       .padding({ left: 2, right: 10 })
     }
@@ -9526,14 +9566,52 @@ private loadPlanetPositions(): void {
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
-      .margin({ top: 10 })
+      .margin({ top: 8 })
+  }
+
+  // ===== Sky Guide 风格：时间拖动滑块 =====
+  @Builder
+  timeScrubberSlider() {
+    Column({ space: 6 }) {
+      // 滑块标签行
+      Row() {
+        Text(I18n.t('s0766_scrubber'))
+          .fontSize(11)
+          .fontColor('rgba(180, 210, 235, 0.7)')
+        Blank()
+        Text(this.scrubberLabel)
+          .fontSize(11)
+          .fontColor('rgba(180, 210, 235, 0.9)')
+      }
+      .width('100%')
+
+      // 滑块本体：范围 -365天 ~ +365天（以"今天"为中心）
+      Slider({
+        value: this.scrubberValue,
+        min: -365,
+        max: 365,
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .blockColor('#4FA8D3')
+        .trackColor('rgba(79, 168, 211, 0.25)')
+        .selectedColor('#4FA8D3')
+        .showTips(true)
+        .onChange((value: number) => {
+          this.scrubberValue = value
+          this.applyScrubber(value)
+        })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 6, bottom: 4 })
   }
 
   @Builder
   speedChip(id: string, label: string, icon: string | null, active: boolean) {
     Row({ space: 5 }) {
       if (icon) {
-        Image($rawfile(icon))
+        // 用 $r 引用 media 资源（$rawfile 读的是 rawfile/ 目录，不是 media/）
+        Image($r('app.media.' + icon.replace('.svg', '')))
           .width(14)
           .height(14)
           .fillColor(active ? '#FFFFFF' : '#7FB3DC')
@@ -9731,36 +9809,33 @@ private loadPlanetPositions(): void {
     } else if (id === 'untrack') {
       this.callInteractive('setTracking', '0', () => { this.refreshState() })
     } else if (id === 'now') {
+      // 现在：回到当前时刻 + 重置为1x
       this.triggerAction('actionReturn_To_Current_Time')
-      this.timeSpeedIndex = 1
-      this.setTimeRate(1.0 / 86400.0)
+      this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
     } else if (id === 'stop') {
       // 停止：冻结时间
-      this._lastNonZeroSpeedIndex = this.timeSpeedIndex > 0 ? this.timeSpeedIndex : 1
-      this.timeSpeedIndex = 0
-      this.setTimeRate(0)
-      this.timeRateText = I18n.t('msg_paused')
+      this._lastNonZeroSpeedIndex = this.timeSpeedIndex !== 6 ? this.timeSpeedIndex : 7
+      this.applySpeedStep(6) // SPEED_IDX_STOP
     } else if (id === 'realtime') {
-      // 实时：恢复 1x 正常速度
-      this.timeSpeedIndex = 1
-      this.setTimeRate(1.0 / 86400.0)
+      // 实时：回到当前时刻 + 恢复 1x 正常速度
+      this.triggerAction('actionReturn_To_Current_Time')
+      this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
+    } else if (id === 'rewind') {
+      // 倒带：反向 1x（时间倒流）
+      this.applySpeedStep(5) // index 5 = -1x reverse
     } else if (id === 'faster' || id === 'fast') {
-      // 快进：1小时/秒（看日落日出）
-      const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex === 0 ? 5 : this.timeSpeedIndex + 1)
+      // 快进：升一档
+      const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex + 1)
       this.applySpeedStep(nextIdx)
-      this.timeRateText = this.formatRate(this.SPEED_STEPS[nextIdx])
     } else if (id === 'warp') {
-      // 极速：1天/秒（看四季变化）
-      this.timeSpeedIndex = 6
-      this.setTimeRate(1.0)
-      this.timeRateText = I18n.t('s0762_warp')
+      // 极速：正向 10天/秒
+      this.applySpeedStep(13) // index 13 = 10天/秒
     } else if (id === 'slower') {
-      // 减速：降一档
+      // 减速/降档（含跨过停止进入倒带）
       const prevIdx = Math.max(0, this.timeSpeedIndex - 1)
       this.applySpeedStep(prevIdx)
-      this.timeRateText = this.formatRate(this.SPEED_STEPS[prevIdx])
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {
