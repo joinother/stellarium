@@ -18,6 +18,13 @@ interface CityPreset {
   alt: number
 }
 
+// 时间轴刻度：value=偏移天数（-365~+365），major=主刻度
+interface TimeTick {
+  label: string
+  value: number
+  major: boolean
+}
+
 interface TonightPlanetRow {
   name: string
   line: string
@@ -624,6 +631,9 @@ struct WindowNativeNode {
   private detailTimer: number = 0
   private detailRefreshing: boolean = false
   private detailRefreshGuard: number = 0
+  // 时间面板打开时，每 1s 拉一次 getState，让"时间"字段像走动的钟一样实时更新
+  // （否则只在打开瞬间刷新一次，点按钮/时间流逝都不会再更新，永远显示 --）
+  private timePanelTimer: number = 0
   private touchStartX: number = 0
   private touchStartY: number = 0
   private touchLastX: number = 0
@@ -1136,6 +1146,10 @@ struct WindowNativeNode {
     this.stopSkyInertia()
     this.stopGyroscope(false)
     this.stopDetailAutoRefresh()
+    if (this.timePanelTimer !== 0) {
+      clearInterval(this.timePanelTimer)
+      this.timePanelTimer = 0
+    }
     this.unregisterFoldListeners()
   }
 
@@ -1154,6 +1168,15 @@ struct WindowNativeNode {
     if (nextVisible) {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
+    }
+    // 时间面板：打开时启动每秒刷新（让"时间"字段实时走动），关闭或切到别的面板时停掉
+    if (panel === 'time' && nextVisible) {
+      if (this.timePanelTimer === 0) {
+        this.timePanelTimer = setInterval(() => { this.refreshState() }, 1000)
+      }
+    } else if (this.timePanelTimer !== 0) {
+      clearInterval(this.timePanelTimer)
+      this.timePanelTimer = 0
     }
     if (panel === 'object') {
       this.refreshSelectedObject()
@@ -1190,6 +1213,11 @@ struct WindowNativeNode {
   private closePanel(force: boolean = false): void {
     if (this.uiLocked && !force) {
       return
+    }
+    // 关面板时停掉时间面板定时器，避免后台空转
+    if (this.timePanelTimer !== 0) {
+      clearInterval(this.timePanelTimer)
+      this.timePanelTimer = 0
     }
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
@@ -2223,6 +2251,21 @@ private loadPlanetPositions(): void {
   // SPEED_STEPS 的"零点"索引（停止）和"实时"索引
   private static readonly SPEED_IDX_STOP = 6
   private static readonly SPEED_IDX_REALTIME = 7
+
+  // 时间轴刻度（线性天刻度，-365 ~ +365，今天居中）
+  // value=偏移天数；major=主刻度（更长更亮）；percent=在轴上的水平百分比
+  private readonly timeTicks: TimeTick[] = [
+    { label: '1年前', value: -365, major: true },
+    { label: '6月前', value: -180, major: false },
+    { label: '1月前', value: -30, major: false },
+    { label: '今天', value: 0, major: true },
+    { label: '1月后', value: 30, major: false },
+    { label: '6月后', value: 180, major: false },
+    { label: '1年后', value: 365, major: true }
+  ]
+  private tickPercent(value: number): number {
+    return ((value + 365) / 730) * 100
+  }
 
   /** Apply speed at given step index. Clamps to valid range. */
   private applySpeedStep(index: number): void {
@@ -9570,11 +9613,11 @@ private loadPlanetPositions(): void {
       .margin({ top: 8 })
   }
 
-  // ===== Sky Guide 风格：时间拖动滑块 =====
+  // ===== Sky Guide 风格：带刻度的时间轴 =====
   @Builder
   timeScrubberSlider() {
     Column({ space: 6 }) {
-      // 滑块标签行
+      // 顶部标签行：标题 + 当前偏移量
       Row() {
         Text(I18n.t('s0766_scrubber'))
           .fontSize(11)
@@ -9582,29 +9625,62 @@ private loadPlanetPositions(): void {
         Blank()
         Text(this.scrubberLabel)
           .fontSize(11)
-          .fontColor('rgba(180, 210, 235, 0.9)')
+          .fontColor('#7FD3F0')
+          .fontWeight(FontWeight.Medium)
       }
       .width('100%')
 
-      // 滑块本体：范围 -365天 ~ +365天（以"今天"为中心）
-      Slider({
-        value: this.scrubberValue,
-        min: -365,
-        max: 365,
-        step: 1,
-        style: SliderStyle.OutSet
-      })
-        .blockColor('#4FA8D3')
-        .trackColor('rgba(79, 168, 211, 0.25)')
-        .selectedColor('#4FA8D3')
-        .showTips(true)
-        .onChange((value: number) => {
-          this.scrubberValue = value
-          this.applyScrubber(value)
+      // 滑块 + 刻度线叠加
+      Stack({ alignContent: Alignment.Center }) {
+        Slider({
+          value: this.scrubberValue,
+          min: -365,
+          max: 365,
+          step: 1,
+          style: SliderStyle.OutSet
         })
+          .blockColor('#4FA8D3')
+          .trackColor('rgba(79, 168, 211, 0.25)')
+          .selectedColor('#4FA8D3')
+          .showTips(true)
+          .onChange((value: number) => {
+            this.scrubberValue = value
+            this.applyScrubber(value)
+          })
+
+        // 刻度线：按真实天刻度百分比绝对定位在轨道上
+        Stack({ alignContent: Alignment.TopStart }) {
+          ForEach(this.timeTicks, (t: TimeTick) => {
+            Column()
+              .width(1)
+              .height(t.major ? 16 : 9)
+              .backgroundColor(t.major ? 'rgba(127, 179, 220, 0.75)' : 'rgba(127, 179, 220, 0.35)')
+              .borderRadius(0.5)
+              .position({ x: this.tickPercent(t.value) + '%', y: '50%' })
+              .translate({ y: '-50%', x: '-50%' })
+          }, (t: TimeTick) => t.label)
+        }
+        .width('100%')
+        .height(28)
+      }
+      .width('100%')
+
+      // 刻度标签：与刻度线同百分比定位，左右两端不外溢
+      Stack({ alignContent: Alignment.TopStart }) {
+        ForEach(this.timeTicks, (t: TimeTick) => {
+          Text(t.label)
+            .fontSize(9)
+            .fontColor(t.major ? '#B8D4EF' : 'rgba(184, 212, 239, 0.55)')
+            .position({ x: this.tickPercent(t.value) + '%', y: 0 })
+            .translate({ x: t.value <= -300 ? '0%' : t.value >= 300 ? '-100%' : '-50%' })
+        }, (t: TimeTick) => t.label)
+      }
+      .width('100%')
+      .height(12)
+      .margin({ top: 1 })
     }
     .width('100%')
-    .padding({ left: 12, right: 12, top: 6, bottom: 4 })
+    .padding({ left: 12, right: 12, top: 6, bottom: 8 })
   }
 
   @Builder
