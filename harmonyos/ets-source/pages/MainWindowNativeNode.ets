@@ -6727,34 +6727,49 @@ private loadPlanetPositions(): void {
     AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
   }
 
-  // 低频功能抽屉：从侧栏右侧滑出，图标 + 名称，一行一项
+  // 低频功能抽屉：从侧栏右侧滑出，图标(带背景圆) + 名称 + 激活态左边框
   @Builder
   actionDrawer() {
-    Column({ space: 4 }) {
+    Column({ space: 3 }) {
       Text(I18n.t('c_more_functions'))
         .fontSize(12)
+        .fontWeight(FontWeight.Medium)
         .fontColor(this.panelIdleGlass ? 'rgba(229,255,255,0.58)' : this.nmSub())
         .width('100%')
-        .padding({ left: 18, top: 12, bottom: 6 })
+        .padding({ left: 18, top: 10, bottom: 6 })
       ForEach(this.drawerActions, (item: ShellAction) => {
-        Row({ space: 14 }) {
-          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-            .width(20)
-            .height(20)
-            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#93D7FF' : this.nmText())
+        Row({ space: 12 }) {
+          // 图标背景圆
+          Stack() {
+            Circle()
+              .width(32)
+              .height(32)
+              .fill(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.28)' : 'rgba(255, 255, 255, 0.06)')
+            Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+              .width(18)
+              .height(18)
+              .fillColor(this.activePanel === item.panel && this.panelVisible ? '#93D7FF' : this.nmText())
+          }
+            .width(32)
+            .height(32)
           Text(item.label)
             .fontSize(14)
-            .fontColor(this.activePanel === item.panel && this.panelVisible ? '#C7EDFF' : this.nmText())
+            .fontWeight(this.activePanel === item.panel && this.panelVisible ? FontWeight.Medium : FontWeight.Normal)
+            .fontColor(this.activePanel === item.panel && this.panelVisible ? '#E0F4FF' : this.nmText())
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
         }
           .width('100%')
-          .height(44)
-          .padding({ left: 16, right: 14 })
+          .height(46)
+          .padding({ left: 14, right: 12 })
           .borderRadius(14)
-          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.20)' : 'rgba(255,255,255,0.02)')
-          .border({ width: this.activePanel === item.panel && this.panelVisible ? 0.5 : 0, color: 'rgba(147, 215, 255, 0.22)' })
+          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.14)' : 'rgba(255,255,255,0.03)')
+          .border({
+            width: { left: this.activePanel === item.panel && this.panelVisible ? 3 : 0, right: 0, top: 0, bottom: 0 },
+            color: this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'transparent'
+          })
+          .borderRadius({ topLeft: 14, bottomLeft: 14, topRight: 14, bottomRight: 14 })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .stateStyles({
             pressed: {
@@ -6762,15 +6777,14 @@ private loadPlanetPositions(): void {
               .backgroundColor('rgba(255,255,255,0.08)')
             }
           })
-          .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
+          .animation({ duration: 200, curve: curves.springMotion(0.42, 0.86) })
           .onClick(() => {
-            // 选中抽屉项即进入该功能，抽屉随即收起，不能与主面板同时占位。
             this.onRailTap(item.panel)
           })
       }, (item: ShellAction) => item.panel)
     }
       .width(this.drawerWidth())
-      .padding({ top: 4, bottom: 12, left: 8, right: 8 })
+      .padding({ top: 4, bottom: 10, left: 8, right: 8 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.52)' : 'rgba(18, 22, 36, 0.78)')
       .backdropBlur(this.panelIdleGlass ? 42 : 30)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.16)' : 'rgba(255, 255, 255, 0.10)' })
@@ -6806,22 +6820,45 @@ private loadPlanetPositions(): void {
         Column({ space: 2 }) {
           ForEach(this.compactDrawerActions, (item: ShellAction) => {
             Row({ space: 10 }) {
-              Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-                .width(20)
-                .height(20)
-                .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              // 图标背景圆
+              Stack() {
+                Circle()
+                  .width(30)
+                  .height(30)
+                  .fill(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.26)' : 'rgba(255, 255, 255, 0.06)')
+                Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+                  .width(17)
+                  .height(17)
+                  .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              }
+                .width(30)
+                .height(30)
               Text(item.label)
                 .fontSize(14)
-                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+                .fontWeight(this.activePanel === item.panel && this.panelVisible ? FontWeight.Medium : FontWeight.Normal)
+                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#B8E4FF' : this.nmText())
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1)
             }
-              .height(40)
+              .height(42)
               .width('100%')
-              .padding({ left: 12, right: 10 })
+              .padding({ left: 10, right: 10 })
               .borderRadius(12)
-              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(255,255,255,0.02)')
+              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.15)' : 'rgba(255,255,255,0.03)')
+              .border({
+                width: { left: this.activePanel === item.panel && this.panelVisible ? 2.5 : 0, right: 0, top: 0, bottom: 0 },
+                color: this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'transparent'
+              })
+              .borderRadius({ topLeft: 12, bottomLeft: 12, topRight: 12, bottomRight: 12 })
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .stateStyles({
+                pressed: {
+                  .scale({ x: 0.97, y: 0.97 })
+                  .backgroundColor('rgba(255,255,255,0.08)')
+                }
+              })
+              .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
               .onClick(() => {
                 if (item.panel === 'gyro') {
                   this.toggleGyroscope(!this.gyroscopeEnabled)

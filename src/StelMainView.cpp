@@ -1551,24 +1551,36 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const StelObjectP target = objectMgr->getSelectedObject().first();
 				const QString type = target->getType().toLower();
 				const QString englishName = target->getEnglishName().toLower();
-				double targetFov = 22.0;
+				// Target FOV tuned for phone-screen visibility:
+			//   planets/sun/moon ~1.5° (large enough to see disk/detail)
+			//   stars           ~0.8° (tight on the point source + label)
+			//   nebulae/galaxies ~6°  (show extended structure context)
+			//   constellations  ~45° (show pattern across sky)
+			//   default          ~3°  (generic object, reasonably close)
+			double targetFov = 3.0;
 				if (type.contains("constellation"))
-					targetFov = 48.0;
+					targetFov = 45.0;
 				else if (type.contains("planet") || englishName == "sun" || englishName == "moon")
-					targetFov = 18.0;
+					targetFov = 1.5;
+				else if (type.contains("star") || type.contains("star_object"))
+					targetFov = 0.8;
 				else if (type.contains("nebula") || type.contains("galaxy") || type.contains("cluster"))
-					targetFov = 14.0;
+					targetFov = 6.0;
+				else if (type.contains("satellite"))
+					targetFov = 30.0;
 
+				// Transit zoom: pull back slightly during pan so user sees approach
 				const double currentFov = movementMgr->getCurrentFov();
-				const double transitFov = std::max(targetFov, std::max(currentFov, 38.0));
+				const double transitFov = std::max(targetFov * 3.0, std::max(currentFov, 12.0));
 				const quint64 serial = ++s_ohosNavigationSerial;
 				movementMgr->setFlagTracking(false);
 				if (currentFov + 0.5 < transitFov)
-					movementMgr->zoomTo(transitFov, 0.45f);
-				movementMgr->moveToObject(target, 1.35f, StelMovementMgr::ZoomNone);
-				QTimer::singleShot(480, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
+					movementMgr->zoomTo(transitFov, 0.40f);
+				movementMgr->moveToObject(target, 1.20f, StelMovementMgr::ZoomNone);
+				// Final zoom-in after move completes
+				QTimer::singleShot(520, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
 					if (serial == s_ohosNavigationSerial.load())
-						movementMgr->zoomTo(targetFov, 0.92f);
+						movementMgr->zoomTo(targetFov, 0.85f);
 				});
 				qInfo() << "[StellariumOhos][navigate]" << target->getEnglishName()
 						<< "type=" << type << "fov" << currentFov << "->" << targetFov;
