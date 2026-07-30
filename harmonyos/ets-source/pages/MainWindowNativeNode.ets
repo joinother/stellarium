@@ -4911,6 +4911,14 @@ private loadPlanetPositions(): void {
               .height(this.expandedDetailSummaryHeight())
               .zIndex(50)
               .hitTestBehavior(HitTestMode.Default)
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 280, curve: Curve.EaseOut })
+                  .combine(TransitionEffect.translate({ x: -20, y: 0 }).animation({ duration: 440, curve: curves.springMotion(0.52, 0.86) })),
+                TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+                  .combine(TransitionEffect.translate({ x: -12, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
+              ))
+          } else {
+            // 极窄空间（<140vp）：隐藏摘要，避免与搜索面板重叠
           }
         } else {
           Stack() { this.bottomDetailCard() }
@@ -5311,16 +5319,17 @@ private loadPlanetPositions(): void {
     return this.expandedMainPanelLeft() - detailLeft - 18
   }
 
+  // 平板展开布局 + 搜索面板打开时，始终用紧凑摘要（不挤完整大卡片）。
   private useExpandedDetailSummary(): boolean {
-    return this.isExpandedLayout && this.panelVisible && this.expandedDetailAvailableWidth() < 360
+    return this.isExpandedLayout && this.panelVisible
   }
 
   private expandedDetailSummaryWidth(): number {
-    return this.clamp(this.expandedDetailAvailableWidth(), 180, 280)
+    return this.clamp(this.expandedDetailAvailableWidth(), 140, 300)
   }
 
   private canShowExpandedDetailSummary(): boolean {
-    return this.expandedDetailAvailableWidth() >= 180
+    return this.expandedDetailAvailableWidth() >= 140
   }
 
   private expandedDetailSummaryX(): number {
