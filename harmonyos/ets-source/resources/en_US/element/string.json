@@ -10,7 +10,7 @@
     },
     {
       "name": "QAbility_label",
-      "value": "stellarium"
+      "value": "星象仪"
     },
     {
       "name": "qt_permission_reason_read_pasteboard",
@@ -1535,9 +1535,14 @@
     {
       "name": "s0702",
       "value": "Set"
+    },
+    {
+      "name": "i0290",
+      "value": "Angular size"
+    },
+    {
+      "name": "i0291",
+      "value": "Phase"
     }
-  ,
-  { "name": "i0290", "value": "Angular size" },
-  { "name": "i0291", "value": "Phase" }
-]
+  ]
 }
