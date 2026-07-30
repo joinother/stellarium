@@ -226,6 +226,26 @@ const PLUGIN_NAMES: Record<string, Record<string, string>> = {
   'Vts': { 'en': 'Vts', 'zh_CN': '虚拟望远镜', 'ja': '仮想望遠鏡', 'ko': '가상 망원경', 'fr': 'Télescope virtuel', 'de': 'Virtuelles Teleskop', 'es': 'Telescopio virtual', 'ru': 'Виртуальный телескоп' },
 }
 
+// 投影方式名称+说明翻译表（key=Stellarium内部英文名）
+const PROJECTION_NAMES: Record<string, Record<string, string>> = {
+  'Perspective': { 'en': 'Perspective', 'zh_CN': '透视', 'ja': '透視', 'ko': '투시', 'fr': 'Perspective', 'de': 'Perspektive', 'es': 'Perspectiva', 'ru': 'Перспектива' },
+  'Stereographic': { 'en': 'Stereographic', 'zh_CN': '极射', 'ja': '平射', 'ko': '극사영', 'fr': 'Stéréographique', 'de': 'Stereografisch', 'es': 'Estereográfica', 'ru': 'Стереографическая' },
+  'Fisheye': { 'en': 'Fisheye', 'zh_CN': '鱼眼', 'ja': '魚眼', 'ko': '어안', 'fr': 'Oeil de poisson', 'de': 'Fisheye', 'es': 'Ojo de pez', 'ru': 'Рыбий глаз' },
+  'HammerAitoff': { 'en': 'Hammer-Aitoff', 'zh_CN': '哈默-艾托夫', 'ja': 'ハンマー・イトフ', 'ko': '해머-아이토프', 'fr': 'Hammer-Aitoff', 'de': 'Hammer-Aitoff', 'es': 'Hammer-Aitoff', 'ru': 'Хаммер-Аитова' },
+  'Mercator': { 'en': 'Mercator', 'zh_CN': '墨卡托', 'ja': 'メルカトル', 'ko': '메르카토르', 'fr': 'Mercator', 'de': 'Mercator', 'es': 'Mercator', 'ru': 'Меркатора' },
+  'Orthographic': { 'en': 'Orthographic', 'zh_CN': '正交', 'ja': '正射', 'ko': '정사영', 'fr': 'Orthographique', 'de': 'Orthografisch', 'es': 'Ortográfica', 'ru': 'Ортографическая' }
+}
+
+// 投影方式功能说明（一句话描述，帮助用户理解每个投影的用途）
+const PROJECTION_DESC: Record<string, Record<string, string>> = {
+  'Perspective': { 'en': 'Natural view like the human eye', 'zh_CN': '模拟人眼看到的自然视角，最适合日常观星', 'ja': '人間の目のような自然な視点', 'ko': '사람 눈과 같은 자연스러운 시점', 'fr': 'Vue naturelle comme l\'œil humain', 'de': 'Natürliche Sicht wie das menschliche Auge', 'es': 'Vista natural como el ojo humano', 'ru': 'Естественный вид как у человеческого глаза' },
+  'Stereographic': { 'en': 'Great for constellation shapes, no distortion near center', 'zh_CN': '星座形状不失真，中心区域最清晰', 'ja': '星座の形が歪まず、中心部が鮮明', 'ko': '별자리 모양 왜곡 없음, 중심부 선명', 'fr': 'Idéal pour les formes des constellations', 'de': 'Gut für Sternbildformen, keine Verzerrung im Zentrum', 'es': 'Ideal para formas de constelaciones', 'ru': 'Отлично для форм созвездий, без искажений в центре' },
+  'Fisheye': { 'en': 'Ultra-wide 180° view of the whole sky dome', 'zh_CN': '180° 超广角，一眼看到整个半球天空', 'ja': '180° 超広角、空全体が見える', 'ko': '180° 초광각, 하늘 전체 한눈에', 'fr': 'Ultra grand angle 180° du ciel entier', 'de': 'Ultraweitwinkel 180° des gesamten Himmels', 'es': 'Ultra gran angular 180° del cielo completo', 'ru': 'Сверхширокий угол 180° всего неба' },
+  'HammerAitoff': { 'en': 'Equal-area map, shows entire celestial sphere', 'zh_CN': '等面积投影，可显示整个天球（全天星图）', 'ja': '等積投影、天球全体を表示', 'ko': '등적 투영, 천구 전체 표시', 'fr': 'Projection équivalente, sphère céleste entière', 'de': 'Flächentreue Projektion, ganzer Himmel', 'es': 'Proyección equivalente, esfera celeste completa', 'ru': 'Равноплощадная проекция, вся небесная сфера' },
+  'Mercator': { 'en': 'Map-like, straight lines = great circles; poles stretched', 'zh_CN': '地图式投影，直线即大圆航线；两极拉伸严重', 'ja': '地図式、直線=大円航路；極域が伸びる', 'ko': '지도식, 직선=대원항로; 극심하게 늘어남', 'fr': 'Style carte, les pôles sont étirés', 'de': 'kartenartig, Pole stark gestreckt', 'es': 'Estilo mapa, los polos se estiran', 'ru': 'Карта, полюса сильно растянуты' },
+  'Orthographic': { 'en': 'View from space, Earth-like horizon curve', 'zh_CN': '从太空俯瞰视角，地平线呈弧形', 'ja': '宇宙からの眺め、地平線が弧を描く', 'ko': '우주에서 내려다보는 시점, 지평선 곡선', 'fr': 'Vue depuis l\'espace', 'de': 'Blick aus dem Weltraum', 'es': 'Vista desde el espacio', 'ru': 'Вид из космоса' }
+}
+
 // 地景名称翻译表
 const LANDSCAPE_NAMES: Record<string, Record<string, string>> = {
   'Armintxe Cave': { 'en': 'Armintxe Cave', 'zh_CN': '阿明特谢洞穴', 'ja': 'アルミントシェ洞窟', 'ko': '아르민트셰 동굴', 'fr': 'Grotte d\'Armintxe', 'de': 'Armintxe-Höhle', 'es': 'Cueva de Armintxe', 'ru': 'Пещера Арминтше' },
@@ -1473,6 +1493,20 @@ export class I18n {
     const entry = LANDSCAPE_NAMES[en]
     if (!entry) return en
     return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // 投影方式名称翻译
+  static projectionName(en: string): string {
+    const entry = PROJECTION_NAMES[en]
+    if (!entry) return en
+    return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // 投影方式功能说明
+  static projectionDesc(en: string): string {
+    const entry = PROJECTION_DESC[en]
+    if (!entry) return ''
+    return entry[I18n.lang] ?? entry['en'] ?? ''
   }
 
   // 灵敏度翻译

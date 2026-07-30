@@ -7656,12 +7656,14 @@ private loadPlanetPositions(): void {
           Text(I18n.t('set_projection')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           Row() {
             Text(I18n.t('set_projection')).fontSize(12).fontColor(this.nmSub()).width(72)
-            Text(this.currentProjection).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+            Text(I18n.projectionName(this.currentProjection)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+
+          // 投影方式选项（中文标签 + 点击后显示说明）
           Scroll() {
             Row({ space: 6 }) {
               ForEach(['Perspective', 'Stereographic', 'Fisheye', 'HammerAitoff', 'Mercator', 'Orthographic'], (name: string) => {
-                Text(name)
+                Text(I18n.projectionName(name))
                   .fontSize(11).fontColor(this.currentProjection === name ? '#FFFFFFFF' : '#99FFFFFF')
                   .padding({ left: 10, right: 10, top: 3, bottom: 3 })
                   .backgroundColor(this.currentProjection === name ? 'rgba(107,163,214,0.35)' : 'rgba(255,255,255,0.05)')
@@ -7670,6 +7672,14 @@ private loadPlanetPositions(): void {
               }, (name: string) => name)
             }.padding({ left: 4, right: 4 })
           }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+
+          // 当前投影的功能说明（一句话帮助用户理解）
+          Text(I18n.projectionDesc(this.currentProjection))
+            .fontSize(10).fontColor('rgba(180,210,235,0.55)')
+            .width('100%')
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.nmBorder())
