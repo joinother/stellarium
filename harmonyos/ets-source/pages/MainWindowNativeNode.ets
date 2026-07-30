@@ -6298,6 +6298,7 @@ private loadPlanetPositions(): void {
   }
 
   private pluginZh(en: string): ResourceStr {
+    // 先查精确映射（保持已有 key 的一致性）
     switch (en) {
       case 'Angle Measure': return I18n.t('plugin_angle_measure')
       case 'ArchaeoLines': return I18n.t('plugin_archaeolines')
@@ -6319,8 +6320,13 @@ private loadPlanetPositions(): void {
       case 'Remote Control': return I18n.t('plugin_remote_control')
       case 'Screenshots': return I18n.t('plugin_screenshots')
       case 'Sky Cultures': return I18n.t('plugin_skycultures')
-      default: return en
     }
+    // 回退到 PLUGIN_NAMES 字典（覆盖所有 40+ 插件）
+    const dictName = I18n.pluginName(en)
+    if (dictName !== en) return dictName
+    // 最后兜底：尝试首字母大写等微调后再查一次
+    const trimmed = en.trim()
+    return I18n.pluginName(trimmed) !== trimmed ? I18n.pluginName(trimmed) : en
   }
 
   private landscapeZh(en: string): ResourceStr {
