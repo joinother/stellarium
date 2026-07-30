@@ -6612,6 +6612,129 @@ private loadPlanetPositions(): void {
     return I18n.pluginName(trimmed) !== trimmed ? I18n.pluginName(trimmed) : en
   }
 
+  // ── 插件功能描述（副标题） ──
+  private pluginDesc(en: string): string {
+    switch (en) {
+      case 'Angle Measure': return I18n.t('plugin_desc_angle_measure') as string
+      case 'ArchaeoLines': return I18n.t('plugin_desc_archaeolines') as string
+      case 'Calendars': return I18n.t('plugin_desc_calendars') as string
+      case 'Equation of Time': return I18n.t('plugin_desc_equation_of_time') as string
+      case 'Exoplanets': return I18n.t('plugin_desc_exoplanets') as string
+      case 'Lens distortion estimator': return I18n.t('plugin_desc_lens_distortion') as string
+      case 'Meteor Showers': return I18n.t('plugin_desc_meteor_showers') as string
+      case 'Novae': return I18n.t('plugin_desc_novae') as string
+      case 'Observability': return I18n.t('plugin_desc_observability') as string
+      case 'Pulsars': return I18n.t('plugin_desc_pulsars') as string
+      case 'Quasars': return I18n.t('plugin_desc_quasars') as string
+      case 'Remote Control': return I18n.t('plugin_desc_remote_control') as string
+      case 'Satellites': return I18n.t('plugin_desc_satellites') as string
+      case 'Screenshots': return I18n.t('plugin_desc_screenshots') as string
+      case 'Sky Cultures': return I18n.t('plugin_desc_skycultures') as string
+      case 'Solar System Editor': return I18n.t('plugin_desc_solar_system_editor') as string
+      case 'Supernovae': return I18n.t('plugin_desc_supernovae') as string
+      case 'Text User Interface': return I18n.t('plugin_desc_text_user_interface') as string
+      case 'Time Zone': return I18n.t('plugin_desc_time_zone') as string
+      case 'Voculars': return I18n.t('plugin_desc_voculars') as string
+    }
+    return ''
+  }
+
+  // ── 脚本文件名 → 中文名 ──
+  private scriptZh(filename: string): ResourceStr {
+    // 去掉 .ssc 后缀
+    const name = filename.replace(/\.ssc$/, '')
+    switch (name) {
+      case 'constellations_tour': return I18n.t('script_name_constellations_tour')
+      case 'modern_constellations_tour': return I18n.t('script_name_modern_constellations_tour')
+      case 'messier_marathon': return I18n.t('script_name_messier_marathon')
+      case 'BAS_Messier_Tour': return I18n.t('script_name_BAS_Messier_Tour')
+      case 'planets_tour': return I18n.t('script_name_planets_tour')
+      case 'BAS_Jupiter_Moons': return I18n.t('script_name_BAS_Jupiter_Moons')
+      case 'lunar_total': return I18n.t('script_name_lunar_total')
+      case 'lunar_partial': return I18n.t('script_name_lunar_partial')
+      case 'solar_eclipse': return I18n.t('script_name_solar_eclipse')
+      case 'transit_of_venus': return I18n.t('script_name_transit_of_venus')
+      case 'supernova': return I18n.t('script_name_supernova')
+      case 'triple_sunrise_and_sunsets': return I18n.t('script_name_triple_sunrise_and_sunsets')
+      case 'analemma': return I18n.t('script_name_analemma')
+      case 'martian_analemma': return I18n.t('script_name_martian_analemma')
+      case 'saturnian_analemma': return I18n.t('script_name_saturnian_analemma')
+      case 'uranian_analemma': return I18n.t('script_name_uranian_analemma')
+      case 'best_ngc': return I18n.t('script_name_best_ngc')
+      case 'h400_tour': return I18n.t('script_name_h400_tour')
+      case 'double_stars': return I18n.t('script_name_double_stars')
+      case 'largest_known_stars': return I18n.t('script_name_largest_known_stars')
+      case 'binocular_highlights': return I18n.t('script_name_binocular_highlights')
+      case 'binosky': return I18n.t('script_name_binosky')
+      case 'bennett': return I18n.t('script_name_bennett')
+      case 'sky_cultures': return I18n.t('script_name_sky_cultures')
+      case 'landscapes': return I18n.t('script_name_landscapes')
+      case 'screensaver': return I18n.t('script_name_screensaver')
+      case 'solar_system_screensaver': return I18n.t('script_name_solar_system_screensaver')
+      case 'skybox': return I18n.t('script_name_skybox')
+      case 'random_location': return I18n.t('script_name_random_location')
+      case 'sun': return I18n.t('script_name_sun')
+      case 'zodiac': return I18n.t('script_name_zodiac')
+      case 'phobos_phun_1': return I18n.t('script_name_phobos_phun_1')
+      case 'phobos_phun_2': return '火卫一趣闻（二）'
+      case 'phobos_phun_3': return '火卫一趣闻（三）'
+      case 'phobos_phun_4': return '火卫一趣闻（四）'
+      case 'phobos_phun_5': return '火卫一趣闻（五）'
+      case 'morsels_1': return '天体小点心（一）'
+      case 'morsels_2': return '天体小点心（二）'
+      case 'morsels_3': return '天体小点心（三）'
+      case 'morsels_4': return '天体小点心（四）'
+      case 'earth_1': return '地球一月天象'
+      case 'earth_2': return '地球二月天象'
+      case 'earth_3': return '地球三月天象'
+      case 'earth_4': return '地球四月天象'
+      case 'earth_5': return '地球五月天象'
+      case 'earth_6': return '地球六月天象'
+      case 'earth_7': return '地球七月天象'
+      case 'startup': return '启动引导脚本'
+      default: return filename
+    }
+  }
+
+  // ── 脚本简短描述 ──
+  private scriptDesc(filename: string): string {
+    const name = filename.replace(/\.ssc$/, '')
+    switch (name) {
+      case 'constellations_tour': return I18n.t('script_desc_constellations_tour') as string
+      case 'modern_constellations_tour': return I18n.t('script_desc_constellations_tour') as string
+      case 'messier_marathon': return I18n.t('script_desc_messier_marathon') as string
+      case 'BAS_Messier_Tour': return I18n.t('script_desc_messier_marathon') as string
+      case 'planets_tour': return I18n.t('script_desc_planets_tour') as string
+      case 'BAS_Jupiter_Moons': return I18n.t('script_desc_gral') as string
+      case 'lunar_total': return I18n.t('script_desc_lunar_total') as string
+      case 'lunar_partial': return I18n.t('script_desc_gral') as string
+      case 'solar_eclipse': return I18n.t('script_desc_solar_eclipse') as string
+      case 'transit_of_venus': return I18n.t('script_desc_gral') as string
+      case 'supernova': return I18n.t('script_desc_gral') as string
+      case 'triple_sunrise_and_sunsets': return I18n.t('script_desc_gral') as string
+      case 'analemma': return I18n.t('script_desc_analemma') as string
+      case 'martian_analemma': return I18n.t('script_desc_gral') as string
+      case 'saturnian_analemma': return I18n.t('script_desc_gral') as string
+      case 'uranian_analemma': return I18n.t('script_desc_gral') as string
+      case 'best_ngc': return I18n.t('script_desc_best_ngc') as string
+      case 'h400_tour': return I18n.t('script_desc_gral') as string
+      case 'double_stars': return I18n.t('script_desc_double_stars') as string
+      case 'largest_known_stars': return I18n.t('script_desc_gral') as string
+      case 'binocular_highlights': return I18n.t('script_desc_binocular_highlights') as string
+      case 'binosky': return I18n.t('script_desc_gral') as string
+      case 'bennett': return I18n.t('script_desc_gral') as string
+      case 'sky_cultures': return I18n.t('script_desc_sky_cultures') as string
+      case 'landscapes': return I18n.t('script_desc_gral') as string
+      case 'screensaver': return I18n.t('script_desc_screensaver') as string
+      case 'solar_system_screensaver': return I18n.t('script_desc_gral') as string
+      case 'skybox': return I18n.t('script_desc_gral') as string
+      case 'random_location': return I18n.t('script_desc_random_location') as string
+      case 'sun': return I18n.t('script_desc_gral') as string
+      case 'zodiac': return I18n.t('script_desc_gral') as string
+      default: return ''
+    }
+  }
+
   private landscapeZh(en: string): ResourceStr {
     switch (en) {
       case 'Garching': return I18n.t('land_garching')
@@ -8174,10 +8297,23 @@ private loadPlanetPositions(): void {
             Scroll() {
               Column({ space: 2 }) {
                 ForEach(this.scriptList, (s: string) => {
-                  Row() {
-                    Text(s).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                  Column({ space: 0 }) {
+                    // 第一行：中文名
+                    Row() {
+                      Text(this.scriptZh(s)).fontSize(11).fontColor(this.nmText())
+                        .fontWeight(FontWeight.Medium).layoutWeight(1)
+                      Text('▶').fontSize(9).fontColor('#7FD0FF')
+                    }
+                    .height(28).width('100%').padding({ left: 10, right: 10 })
+                    // 第二行：简短描述
+                    if (this.scriptDesc(s)) {
+                      Text(this.scriptDesc(s))
+                        .fontSize(8).fontColor('#77FFFFFF').width('100%')
+                        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .padding({ left: 10, right: 10, bottom: 3 })
+                    }
                   }
-                  .height(30).width('100%').padding({ left: 12, right: 12 })
+                  .width('100%')
                   .backgroundColor(this.nmBg())
                   .borderRadius(4)
                   .onClick(() => { this.playScriptByName(s) })
@@ -8199,17 +8335,29 @@ private loadPlanetPositions(): void {
             Scroll() {
               Column({ space: 2 }) {
                 ForEach(this.pluginList, (pl: PluginItem) => {
-                  Row() {
-                    Text(this.pluginZh(pl.name)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-                    Toggle({ type: ToggleType.Switch, isOn: pl.loaded })
-                      .width(40).height(22)
-                      .onChange((val: boolean) => {
-                        this.togglePlugin(pl.id, !val)
-                      })
+                  Column({ space: 0 }) {
+                    // 第一行：中文名 + 开关
+                    Row() {
+                      Text(this.pluginZh(pl.name)).fontSize(12).fontColor(this.nmText())
+                        .fontWeight(FontWeight.Medium).layoutWeight(1)
+                      Toggle({ type: ToggleType.Switch, isOn: pl.loaded })
+                        .width(40).height(22)
+                        .onChange((val: boolean) => {
+                          this.togglePlugin(pl.id, !val)
+                        })
+                    }
+                    .height(36)
+                    // 第二行：功能说明（副标题）
+                    if (this.pluginDesc(pl.name)) {
+                      Text(this.pluginDesc(pl.name))
+                        .fontSize(9).fontColor('#88FFFFFF').width('100%')
+                        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                        .padding({ bottom: 4 })
+                    }
                   }
-                  .height(36).width('100%').padding({ left: 10, right: 10 })
+                  .width('100%').padding({ left: 10, right: 10, top: 6, bottom: 4 })
                   .backgroundColor(this.nmBg())
-                  .borderRadius(4)
+                  .borderRadius(6)
                 }, (pl: PluginItem) => pl.id)
               }
             }
@@ -8872,23 +9020,36 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0252')).fontSize(11).fontColor('#FFFFFF').backgroundColor('#C0392B')
               .borderRadius(8).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.triggerAction('actionStop_Script') })
-            Button('暂停').fontSize(11).fontColor('#FFFFFF').backgroundColor('#E67E22')
+            Button(I18n.t('i0142')).fontSize(11).fontColor('#FFFFFF').backgroundColor('#E67E22')
               .borderRadius(8).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.pauseScript() })
-            Button('继续').fontSize(11).fontColor('#FFFFFF').backgroundColor('#2E7D32')
+            Button(I18n.t('btn_resume')).fontSize(11).fontColor('#FFFFFF').backgroundColor('#2E7D32')
               .borderRadius(8).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.resumeScript() })
           }.width('100%').padding({ left: 6, right: 6 })
           if (this.scriptList.length === 0) {
-            Text('没有可用脚本').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 6 })
+            Text(I18n.t('msg_no_scripts')).fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 6 })
           }
           Scroll() {
             Column({ space: 2 }) {
               ForEach(this.scriptList, (s: string) => {
-                Row() {
-                  Text(s).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                Column({ space: 0 }) {
+                  // 第一行：中文名 + 播放图标
+                  Row() {
+                    Text(this.scriptZh(s)).fontSize(11).fontColor(this.nmText())
+                      .fontWeight(FontWeight.Medium).layoutWeight(1)
+                    Text('▶').fontSize(9).fontColor('#7FD0FF')
+                  }
+                  .height(28).width('100%').padding({ left: 10, right: 10 })
+                  // 第二行：简短描述
+                  if (this.scriptDesc(s)) {
+                    Text(this.scriptDesc(s))
+                      .fontSize(8).fontColor('#77FFFFFF').width('100%')
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .padding({ left: 10, right: 10, bottom: 3 })
+                  }
                 }
-                .height(30).width('100%').padding({ left: 12, right: 12 })
+                .width('100%')
                 .backgroundColor(this.nmBg())
                 .borderRadius(6)
                 .onClick(() => { this.playScriptByName(s) })
@@ -8904,7 +9065,7 @@ private loadPlanetPositions(): void {
             .fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 4, right: 4 })
 
           Row({ space: 10 }) {
-            Button(this.recording ? '停止录制' : '开始录制')
+            Button(this.recording ? I18n.t('btn_stop_recording') : I18n.t('btn_start_recording'))
               .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.recording ? '#C0392B' : '#2E7D32')
               .borderRadius(10).height(36).padding({ left: 16, right: 16 })
               .onClick(() => { this.recording ? this.stopRecording() : this.startRecording() })
