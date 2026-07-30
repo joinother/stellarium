@@ -4348,13 +4348,12 @@ private loadPlanetPositions(): void {
       }
     } else if (this.activePanel === 'time') {
       if (y >= 545 && y <= 595) {
-        // 新档位按钮：倒带 | 现在 | 停止 | 实时 | 快进 | 超快
-        if (x >= 1040 && x < 1095) { this.handleChip('rewind'); return true }
-        if (x >= 1095 && x < 1155) { this.handleChip('now'); return true }
-        if (x >= 1155 && x < 1215) { this.handleChip('stop'); return true }
-        if (x >= 1215 && x < 1275) { this.handleChip('realtime'); return true }
-        if (x >= 1275 && x < 1335) { this.handleChip('fast'); return true }
-        if (x >= 1335 && x <= 1400) { this.handleChip('warp'); return true }
+        // 循环升档按钮：倒带 | 停止 | 实时 | 减速 | 快进（快进/倒带可连点升档）
+        if (x >= 1040 && x < 1110) { this.handleChip('rewind'); return true }
+        if (x >= 1110 && x < 1180) { this.handleChip('stop'); return true }
+        if (x >= 1180 && x < 1250) { this.handleChip('realtime'); return true }
+        if (x >= 1250 && x < 1320) { this.handleChip('slower'); return true }
+        if (x >= 1320 && x <= 1400) { this.handleChip('fast'); return true }
       }
       if (y >= 610 && y <= 660) {
         if (x >= 1095 && x < 1220) { this.advanceTime(12); return true }
@@ -9591,18 +9590,22 @@ private loadPlanetPositions(): void {
   timeSpeedChips() {
     Scroll() {
       Row({ space: 7 }) {
-        // 倒带 — 反向1x（时间倒流）
-        this.speedChip('rewind', I18n.t('s0763_rewind'), 'ic_time_rewind.svg', this.timeSpeedIndex < 6)
-        // 现在 — 回到当前时刻 + 重置为1x
-        this.speedChip('now', I18n.t('s0754'), null, false)
+        // 倒带 — 单按钮循环升档：-1x → -2x → -10x → -1分/秒 → -1时/秒 → -10天/秒 → 回到-1x
+        // 激活时标签直接显示当前倒带速度
+        this.speedChip('rewind',
+          this.timeSpeedIndex < 6 ? I18n.t('s0763_rewind') + ' ' + this.timeRateText : I18n.t('s0763_rewind'),
+          'ic_time_rewind.svg', this.timeSpeedIndex < 6)
         // 停止 — 冻结时间
         this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 6)
         // 实时 — 回到当前时刻 + 1x
         this.speedChip('realtime', I18n.t('s0764_realtime'), 'ic_time_realtime.svg', this.timeSpeedIndex === 7)
-        // 快进 — 升一档
-        this.speedChip('fast', I18n.t('s0765_fast'), 'ic_time_fast.svg', this.timeSpeedIndex >= 10 && this.timeSpeedIndex <= 12)
-        // 极速 — 10天/秒
-        this.speedChip('warp', I18n.t('s0760_faster'), 'ic_time_warp.svg', this.timeSpeedIndex === 13)
+        // 减速 — 每点降一档；降到1x再点=停止
+        this.speedChip('slower', I18n.t('s0759_slower'), 'ic_time_slower.svg', false)
+        // 快进 — 单按钮循环升档：1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
+        // 激活时标签直接显示当前档位速度
+        this.speedChip('fast',
+          this.timeSpeedIndex > 7 ? I18n.t('s0765_fast') + ' ' + this.timeRateText : I18n.t('s0765_fast'),
+          'ic_time_fast.svg', this.timeSpeedIndex > 7)
       }
       .padding({ left: 2, right: 10 })
     }
@@ -9903,22 +9906,35 @@ private loadPlanetPositions(): void {
       this.timeRateText = '1x'
       setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'rewind') {
-      // 倒带：反向 1x（时间倒流）
-      this.applySpeedStep(5) // index 5 = -1x reverse
+      // 倒带：单按钮循环升档 -1x → -2x → -10x → -1分/秒 → -1时/秒 → -1天/秒 → 回到-1x
+      let rewIdx = 5 // 默认从 -1x 起步（非倒带状态按下时）
+      if (this.timeSpeedIndex < 6) {
+        // 已在倒带中：再点升一档（索引减小=更快反向）；到底(0)循环回 -1x
+        rewIdx = this.timeSpeedIndex === 0 ? 5 : this.timeSpeedIndex - 1
+      }
+      this.applySpeedStep(rewIdx)
+      this.flashHint(I18n.t('s0763_rewind') + ' ' + this.timeRateText)
       setTimeout(() => { this.refreshState() }, 350)
-    } else if (id === 'faster' || id === 'fast') {
-      // 快进：升一档
-      const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex + 1)
-      this.applySpeedStep(nextIdx)
-      setTimeout(() => { this.refreshState() }, 350)
-    } else if (id === 'warp') {
-      // 极速：正向 10天/秒
-      this.applySpeedStep(13) // index 13 = 10天/秒
+    } else if (id === 'faster' || id === 'fast' || id === 'warp') {
+      // 快进：单按钮循环升档 1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
+      let fwdIdx = 7 // 默认回 1x（停止/倒带状态按下时从 1x 起步）
+      if (this.timeSpeedIndex >= 7) {
+        // 已在正向：升一档；到顶(13)循环回 1x
+        fwdIdx = this.timeSpeedIndex >= 13 ? 7 : this.timeSpeedIndex + 1
+      }
+      this.applySpeedStep(fwdIdx)
+      this.flashHint(I18n.t('s0765_fast') + ' ' + this.timeRateText)
       setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'slower') {
-      // 减速/降档（含跨过停止进入倒带）
-      const prevIdx = Math.max(0, this.timeSpeedIndex - 1)
+      // 减速：向"停止"方向降一档（快进降档、倒带也降档），降到1x再点=停止，不会跨进反向
+      let prevIdx = this.timeSpeedIndex
+      if (this.timeSpeedIndex > 6) {
+        prevIdx = this.timeSpeedIndex - 1
+      } else if (this.timeSpeedIndex < 6) {
+        prevIdx = this.timeSpeedIndex + 1
+      }
       this.applySpeedStep(prevIdx)
+      this.flashHint(prevIdx === 6 ? I18n.t('s0761_stop') : I18n.t('s0759_slower') + ' ' + this.timeRateText)
       setTimeout(() => { this.refreshState() }, 350)
     } else if (id === '+12h') {
       this.advanceTime(12)
