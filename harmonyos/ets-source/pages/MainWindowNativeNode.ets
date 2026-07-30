@@ -4269,10 +4269,12 @@ private loadPlanetPositions(): void {
       }
     } else if (this.activePanel === 'time') {
       if (y >= 545 && y <= 595) {
-        if (x >= 1095 && x < 1155) { this.triggerAction('actionReturn_To_Current_Time'); this.timeSpeedIndex=1; this.setTimeRate(1.0/86400.0); return true }
-        if (x >= 1155 && x < 1220) { this.speedDown(); return true }
-        if (x >= 1220 && x < 1280) { this.togglePause(); return true }
-        if (x >= 1280 && x <= 1345) { this.speedUp(); return true }
+        // 新档位按钮：现在 | 停止 | 实时 | 快进 | 超快
+        if (x >= 1080 && x < 1145) { this.handleChip('now'); return true }
+        if (x >= 1145 && x < 1210) { this.handleChip('stop'); return true }
+        if (x >= 1210 && x < 1275) { this.handleChip('realtime'); return true }
+        if (x >= 1275 && x < 1340) { this.handleChip('fast'); return true }
+        if (x >= 1340 && x <= 1405) { this.handleChip('warp'); return true }
       }
       if (y >= 610 && y <= 660) {
         if (x >= 1095 && x < 1220) { this.advanceTime(12); return true }
@@ -7204,8 +7206,8 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow(I18n.t('i0054'), this.observationTimeText)
       this.infoRow(I18n.t('i0055'), this.timeRateText)
-      this.infoRow(I18n.t('i0056'), this.timeRateText)
-      this.quickChips([{ id: 'now', label: I18n.t('s0754') }, { id: 'play', label: I18n.t('s0758_play') }, { id: 'pause', label: I18n.t('s0756') }, { id: 'slower', label: I18n.t('s0759_slower') }, { id: 'faster', label: I18n.t('s0760_faster') }])
+      // 时间控制：每个按钮 = 一个明确的速度档位，无切换逻辑
+      this.timeSpeedChips()
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
       Row()
@@ -9494,8 +9496,57 @@ private loadPlanetPositions(): void {
       .margin({ top: 12 })
   }
 
+  // 时间速度控制按钮：每个按钮 = 一个明确的速度档位
+  // 布局：[现在] [停止] [实时] [快进] [超快]
+  // 当前档位高亮，点击立即更新速度显示
+  @Builder
+  timeSpeedChips() {
+    Scroll() {
+      Row({ space: 7 }) {
+        // 现在 — 回到当前时刻 + 重置为1x
+        this.speedChip('now', I18n.t('s0754'), null, this.timeSpeedIndex === 1)
+        // 停止 — 冻结时间
+        this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 0)
+        // 实时 — 1x 正常速度
+        this.speedChip('realtime', I18n.t('s0758_play'), 'ic_time_realtime.svg', this.timeSpeedIndex === 1)
+        // 快进 — 1小时/秒档位
+        this.speedChip('fast', I18n.t('s0759_slower'), 'ic_time_fast.svg', this.timeSpeedIndex >= 4 && this.timeSpeedIndex <= 5)
+        // 极速 — 1天/秒
+        this.speedChip('warp', I18n.t('s0760_faster'), 'ic_time_warp.svg', this.timeSpeedIndex >= 6)
+      }
+      .padding({ left: 2, right: 10 })
+    }
+      .width('100%')
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .margin({ top: 10 })
+  }
 
   @Builder
+  speedChip(id: string, label: string, icon: string | null, active: boolean) {
+    Row({ space: 5 }) {
+      if (icon) {
+        Image($rawfile(icon))
+          .width(14)
+          .height(14)
+          .fillColor(active ? '#FFFFFF' : '#7FB3DC')
+      }
+      Text(label)
+        .fontSize(11.5)
+        .fontWeight(active ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(active ? '#FFFFFF' : '#B8D4EF')
+    }
+      .height(32)
+      .padding({ left: 11, right: 11 })
+      .borderRadius(16)
+      .backgroundColor(active ? 'rgba(79, 148, 211, 0.55)' : 'rgba(107, 163, 214, 0.15)')
+      .border({ width: active ? 1.2 : 0.6, color: active ? 'rgba(127, 179, 220, 0.7)' : 'rgba(127, 179, 220, 0.22)' })
+      .shadow(active ? { radius: 10, color: 'rgba(49, 120, 200, 0.25)', offsetX: 0, offsetY: 3 } : { radius: 8, color: 'rgba(0, 0, 0, 0.12)', offsetX: 0, offsetY: 4 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+      .onClick(() => { this.handleChip(id) })
+  }  @Builder
   cityChipsRow() {
     Column({ space: 4 }) {
       // 城市搜索框
@@ -9677,15 +9728,33 @@ private loadPlanetPositions(): void {
       this.triggerAction('actionReturn_To_Current_Time')
       this.timeSpeedIndex = 1
       this.setTimeRate(1.0 / 86400.0)
-    } else if (id === 'play') {
-      // 播放/恢复：从暂停恢复或保持当前速度
-      if (this.timeSpeedIndex === 0) { this.applySpeedStep(this._lastNonZeroSpeedIndex > 0 ? this._lastNonZeroSpeedIndex : 1) }
-    } else if (id === 'pause') {
-      this.togglePause()
+      this.timeRateText = '1x'
+    } else if (id === 'stop') {
+      // 停止：冻结时间
+      this._lastNonZeroSpeedIndex = this.timeSpeedIndex > 0 ? this.timeSpeedIndex : 1
+      this.timeSpeedIndex = 0
+      this.setTimeRate(0)
+      this.timeRateText = I18n.t('msg_paused')
+    } else if (id === 'realtime') {
+      // 实时：恢复 1x 正常速度
+      this.timeSpeedIndex = 1
+      this.setTimeRate(1.0 / 86400.0)
+      this.timeRateText = '1x'
+    } else if (id === 'faster' || id === 'fast') {
+      // 快进：1小时/秒（看日落日出）
+      const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex === 0 ? 5 : this.timeSpeedIndex + 1)
+      this.applySpeedStep(nextIdx)
+      this.timeRateText = this.formatRate(this.SPEED_STEPS[nextIdx])
+    } else if (id === 'warp') {
+      // 极速：1天/秒（看四季变化）
+      this.timeSpeedIndex = 6
+      this.setTimeRate(1.0)
+      this.timeRateText = I18n.t('s0762_warp')
     } else if (id === 'slower') {
-      this.speedDown()
-    } else if (id === 'faster') {
-      this.speedUp()
+      // 减速：降一档
+      const prevIdx = Math.max(0, this.timeSpeedIndex - 1)
+      this.applySpeedStep(prevIdx)
+      this.timeRateText = this.formatRate(this.SPEED_STEPS[prevIdx])
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {
