@@ -139,6 +139,26 @@ const SAT_GROUPS: Record<string, Record<string, string>> = {
   'resource': { 'en': 'Resource', 'zh_CN': '资源', 'ja': '資源', 'ko': '자원', 'fr': 'Ressource', 'de': 'Ressource', 'es': 'Recurso', 'ru': 'Ресурс' },
   'space-station': { 'en': 'Space Station', 'zh_CN': '空间站', 'ja': '宇宙ステーション', 'ko': '우주정거장', 'fr': 'Station spatiale', 'de': 'Raumstation', 'es': 'Estación espacial', 'ru': 'Космическая станция' },
   'tracking': { 'en': 'Tracking', 'zh_CN': '跟踪', 'ja': '追跡', 'ko': '추적', 'fr': 'Suivi', 'de': 'Verfolgung', 'es': 'Seguimiento', 'ru': 'Слежение' },
+  // 以下为补全的卫星分组（从 satellites.json 数据源提取，原字典缺失）
+  'active': { 'en': 'Active', 'zh_CN': '在轨', 'ja': '運用中', 'ko': '운용중', 'fr': 'Actif', 'de': 'Aktiv', 'es': 'Activo', 'ru': 'Активные' },
+  'analyst': { 'en': 'Analyst', 'zh_CN': '侦察', 'ja': '分析衛星', 'ko': '정찰위성', 'fr': 'Analyste', 'de': 'Analyst', 'es': 'Analista', 'ru': 'Аналитические' },
+  'argos': { 'en': 'Argos', 'zh_CN': '阿戈斯', 'ja': 'アルゴス', 'ko': '아르고스', 'fr': 'Argos', 'de': 'Argos', 'es': 'Argos', 'ru': 'Аргос' },
+  'chinasat': { 'en': 'ChinaSat', 'zh_CN': '中星', 'ja': 'チャイナサット', 'ko': '차이나샛', 'fr': 'ChinaSat', 'de': 'ChinaSat', 'es': 'ChinaSat', 'ru': 'Китайсат' },
+  'crewed': { 'en': 'Crewed', 'zh_CN': '载人', 'ja': '有人', 'ko': '유인', 'fr': 'Habitée', 'de': 'Bemannt', 'es': 'Tripulada', 'ru': 'Пилотируемые' },
+  'cubesat': { 'en': 'CubeSat', 'zh_CN': '立方星', 'ja': 'キューブサット', 'ko': '큐브위성', 'fr': 'CubeSat', 'de': 'CubeSat', 'es': 'CubeSat', 'ru': 'КубСат' },
+  'iridium next': { 'en': 'Iridium NEXT', 'zh_CN': '铱星NEXT', 'ja': 'Iridium-NEXT', 'ko': 'Iridium-NEXT', 'fr': 'Iridium-NEXT', 'de': 'Iridium-NEXT', 'es': 'Iridium-NEXT', 'ru': 'Иридиум-NEXT' },
+  'iridium-NEXT': { 'en': 'Iridium NEXT', 'zh_CN': '铱星NEXT', 'ja': 'Iridium-NEXT', 'ko': 'Iridium-NEXT', 'fr': 'Iridium-NEXT', 'de': 'Iridium-NEXT', 'es': 'Iridium-NEXT', 'ru': 'Иридиум-NEXT' },
+  'observatory': { 'en': 'Observatory', 'zh_CN': '观测台', 'ja': '天文台', 'ko': '관측소', 'fr': 'Observatoire', 'de': 'Observatorium', 'es': 'Observatorio', 'ru': 'Обсерватория' },
+  'oneweb': { 'en': 'OneWeb', 'zh_CN': '一网', 'ja': 'ワンウェブ', 'ko': '원웹', 'fr': 'OneWeb', 'de': 'OneWeb', 'es': 'OneWeb', 'ru': 'OneWeb' },
+  'orbcomm': { 'en': 'ORBCOMM', 'zh_CN': '轨通', 'ja': 'オブコム', 'ko': '오브컴', 'fr': 'ORBCOMM', 'de': 'ORBCOMM', 'es': 'ORBCOMM', 'ru': 'ОРБКОММ' },
+  'other-comm': { 'en': 'Other Comm', 'zh_CN': '其他通信', 'ja': 'その他通信', 'ko': '기타 통신', 'fr': 'Autres comms', 'de': 'Sonstige Komm.', 'es': 'Otras coms', 'ru': 'Прочие связь' },
+  'planet': { 'en': 'Planet', 'zh_CN': '行星', 'ja': 'プラネット', 'ko': '플래닛', 'fr': 'Planet', 'de': 'Planet', 'es': 'Planet', 'ru': 'Планет' },
+  'qzss': { 'en': 'QZSS', 'zh_CN': '准天顶', 'ja': 'みちびき', 'ko': '준천정', 'fr': 'QZSS', 'de': 'QZSS', 'es': 'QZSS', 'ru': 'QZSS' },
+  'raduga': { 'en': 'Raduga', 'zh_CN': '彩虹', 'ja': 'ラドゥガ', 'ko': '라두가', 'fr': 'Radouga', 'de': 'Raduga', 'es': 'Raduga', 'ru': 'Радуга' },
+  'resupply': { 'en': 'Resupply', 'zh_CN': '补给', 'ja': '補給', 'ko': '보급', 'fr': 'Ravitaillement', 'de': 'Nachschub', 'es': 'Reabastecimiento', 'ru': 'Снабжение' },
+  'sarsat': { 'en': 'SARSAT', 'zh_CN': '搜救', 'ja': 'サーチ・アンド・レスキュー', 'ko': '수색구조', 'fr': 'SARSAT', 'de': 'SARSAT', 'es': 'SARSAT', 'ru': 'САРСАТ' },
+  'science': { 'en': 'Science', 'zh_CN': '科研', 'ja': '科学', 'ko': '과학연구', 'fr': 'Science', 'de': 'Wissenschaft', 'es': 'Ciencia', 'ru': 'Наука' },
+  'spire': { 'en': 'Spire', 'zh_CN': '斯派尔', 'ja': 'スパイアー', 'ko': '스파이어', 'fr': 'Spire', 'de': 'Spire', 'es': 'Spire', 'ru': 'Spire' },
 }
 
 // 插件名称翻译表
