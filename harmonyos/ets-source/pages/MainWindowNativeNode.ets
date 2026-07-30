@@ -1176,10 +1176,13 @@ struct WindowNativeNode {
   private setPanel(panel: string): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = this.activePanel === panel ? !this.panelVisible : true
+    // 平板端：视口偏移必须与面板动画在同一帧内生效，否则天空会瞬间跳位。
+    // 放入 animateTo 回调确保 ArkUI 在同一渲染批次中处理状态变更和原生偏移。
     this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
       this.panelVisible = nextVisible
       this.panelContentKey++
+      this.applyViewportCenterForPanel(nextVisible)
     })
     // 打开「位置」面板时自动刷新今晚天象（用户要求每次进入都自动刷新）
     if (panel === 'place' && nextVisible) {
@@ -1189,8 +1192,6 @@ struct WindowNativeNode {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
     }
-    // 平板端：面板开/关时把投影中心平移到剩余空白区中央，避免详情面板遮挡准星和锁定天体
-    this.applyViewportCenterForPanel(nextVisible)
     // 时间面板：打开时启动每秒刷新（让"时间"字段实时走动），关闭或切到别的面板时停掉
     if (panel === 'time' && nextVisible) {
       if (this.timePanelTimer === 0) {
@@ -2726,7 +2727,7 @@ private loadPlanetPositions(): void {
         this.flashHint(I18n.t('i0071').replace('%s', displayName))
         // Do not leave the search panel covering the centered target on tablets.
         if (this.activePanel === 'search') {
-          this.panelVisible = false
+          this.closePanel(true)
           this.drawerOpen = false
         }
       } else {
@@ -2946,7 +2947,7 @@ private loadPlanetPositions(): void {
       // selected targets. Close only that obsolete surface; panels such as
       // time, location, and layers must remain available while inspecting.
       if (this.activePanel === 'object' && this.panelVisible) {
-        this.panelVisible = false
+        this.closePanel(true)
       }
       if (isNewSelection) {
         this.infoWinExpanded = false
@@ -4258,7 +4259,7 @@ private loadPlanetPositions(): void {
       this.drawerOpen = opening
       // 平板端一次只呈现一种主操作界面，避免抽屉和右侧面板并排抢空间。
       if (opening && this.isExpandedLayout) {
-        this.panelVisible = false
+        this.closePanel(true)
       }
     })
     this.resetPanelIdle()
@@ -4444,7 +4445,7 @@ private loadPlanetPositions(): void {
     const right = this.panelRight()
     if (x >= right - 60 && x <= right && y >= top && y <= top + 60) {
       if (!this.uiLocked) {
-        this.panelVisible = false
+        this.closePanel(true)
       }
       return true
     }
@@ -5683,7 +5684,7 @@ private loadPlanetPositions(): void {
 
   private showFullObjectInspector(): void {
     this.drawerOpen = false
-    this.panelVisible = false
+    this.closePanel(true)
     this.infoWinVisible = true
     this.infoWinExpanded = true
     this.bottomCardIndex = 2
@@ -5977,8 +5978,7 @@ private loadPlanetPositions(): void {
     }
     .width(this.bottomCardWidth())
     .height(this.bottomCardHeight())
-    .backgroundColor('rgba(12, 16, 28, 0.78)')
-    .backdropBlur(40)
+    .backgroundColor('rgba(12, 16, 28, 0.88)')
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(16)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
@@ -6022,7 +6022,7 @@ private loadPlanetPositions(): void {
       }.width('100%')
     }
       .width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-      .backgroundColor('rgba(12,16,28,0.84)').backdropBlur(36)
+      .backgroundColor('rgba(12,16,28,0.92)')
       .border({ width: 0.5, color: 'rgba(147,215,255,0.16)' }).borderRadius(14)
       .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
@@ -7061,8 +7061,7 @@ private loadPlanetPositions(): void {
     }
     .width(280)
     .padding(16)
-    .backgroundColor('rgba(12, 16, 28, 0.85)')
-    .backdropBlur(40)
+    .backgroundColor('rgba(12, 16, 28, 0.92)')
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(20)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
@@ -7344,8 +7343,7 @@ private loadPlanetPositions(): void {
       .width(this.panelWidth)
       .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
-      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 72)' : 'rgba(18, 22, 36, 0.88)')
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
