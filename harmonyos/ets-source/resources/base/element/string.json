@@ -2711,6 +2711,266 @@
     {
       "name": "rich_cluster",
       "value": "星团"
+    },
+    {
+      "name": "s0705",
+      "value": " objects"
+    },
+    {
+      "name": "s0714",
+      "value": "Custom location"
+    },
+    {
+      "name": "s0722",
+      "value": "Now"
+    },
+    {
+      "name": "s0723",
+      "value": "Shown "
+    },
+    {
+      "name": "s0724",
+      "value": "Hidden "
+    },
+    {
+      "name": "s0733",
+      "value": "Not selected"
+    },
+    {
+      "name": "s0734",
+      "value": "Tap sky or search"
+    },
+    {
+      "name": "s0735",
+      "value": "Waiting"
+    },
+    {
+      "name": "s0736",
+      "value": "Tap a celestial object in the sky, or enter a name in search."
+    },
+    {
+      "name": "s0737",
+      "value": "Disconnected"
+    },
+    {
+      "name": "s0747",
+      "value": "Total: "
+    },
+    {
+      "name": "s0748",
+      "value": "G: "
+    },
+    {
+      "name": "s0749",
+      "value": "C: "
+    },
+    {
+      "name": "s0750",
+      "value": "N: "
+    },
+    {
+      "name": "s0758",
+      "value": "Shanghai"
+    },
+    {
+      "name": "s0759",
+      "value": "Shenzhen"
+    },
+    {
+      "name": "s0762",
+      "value": "Selected"
+    },
+    {
+      "name": "s0763",
+      "value": "LX200 command failed"
+    },
+    {
+      "name": "s0764",
+      "value": "Off"
+    },
+    {
+      "name": "s0765",
+      "value": "Apply to sync"
+    },
+    {
+      "name": "s0766",
+      "value": "Year"
+    },
+    {
+      "name": "s0767",
+      "value": "Month"
+    },
+    {
+      "name": "s0768",
+      "value": "Day"
+    },
+    {
+      "name": "s0769",
+      "value": "Applied: "
+    },
+    {
+      "name": "s0770",
+      "value": "Moon"
+    },
+    {
+      "name": "s0771",
+      "value": "Mars"
+    },
+    {
+      "name": "s0772",
+      "value": "Jupiter"
+    },
+    {
+      "name": "s0773",
+      "value": "Saturn"
+    },
+    {
+      "name": "s0774",
+      "value": "Sirius"
+    },
+    {
+      "name": "s0775",
+      "value": "Vega"
+    },
+    {
+      "name": "s0776",
+      "value": "Betelgeuse"
+    },
+    {
+      "name": "s0777",
+      "value": "Polaris"
+    },
+    {
+      "name": "s0778",
+      "value": "Andromeda Galaxy"
+    },
+    {
+      "name": "s0779",
+      "value": "Orion Nebula"
+    },
+    {
+      "name": "s0780",
+      "value": "Pleiades"
+    },
+    {
+      "name": "s0781",
+      "value": "Hercules Cluster"
+    },
+    {
+      "name": "s0782",
+      "value": "Lagoon Nebula"
+    },
+    {
+      "name": "s0783",
+      "value": "North America Nebula"
+    },
+    {
+      "name": "s0784",
+      "value": "Double Cluster"
+    },
+    {
+      "name": "s0785",
+      "value": "Not found"
+    },
+    {
+      "name": "s0786",
+      "value": "No selection"
+    },
+    {
+      "name": "s0787",
+      "value": "Try English name"
+    },
+    {
+      "name": "s0788",
+      "value": "No match"
+    },
+    {
+      "name": "s0789",
+      "value": "No selectable object at tap position. Zoom in or use search."
+    },
+    {
+      "name": "s0790",
+      "value": "Simplified Chinese"
+    },
+    {
+      "name": "s0791",
+      "value": "Traditional Chinese (HK)"
+    },
+    {
+      "name": "s0792",
+      "value": "Traditional Chinese (TW)"
+    },
+    {
+      "name": "i0300",
+      "value": "Star Mag Limit"
+    },
+    {
+      "name": "i0301",
+      "value": "Clear All"
+    },
+    {
+      "name": "i0302",
+      "value": "Observing list cleared"
+    },
+    {
+      "name": "i0310",
+      "value": "Gesture Guide"
+    },
+    {
+      "name": "i0311",
+      "value": "Drag: Rotate the star map"
+    },
+    {
+      "name": "i0312",
+      "value": "Pinch: Zoom in / out"
+    },
+    {
+      "name": "i0313",
+      "value": "Tap: Select a celestial object"
+    },
+    {
+      "name": "i0314",
+      "value": "Two-finger drag: Pan the view"
+    },
+    {
+      "name": "i0315",
+      "value": "Long press: Track the selected object"
+    },
+    {
+      "name": "i0316",
+      "value": "Light Pollution"
+    },
+    {
+      "name": "i0317",
+      "value": "Bortle {n}"
+    },
+    {
+      "name": "s_coord_input",
+      "value": "RA/Dec"
+    },
+    {
+      "name": "s_coord_format_hint",
+      "value": "RA: hours  Dec: degrees"
+    },
+    {
+      "name": "s_coord_go",
+      "value": "Go"
+    },
+    {
+      "name": "msg_paused",
+      "value": "已暂停"
+    },
+    {
+      "name": "s0758_play",
+      "value": "▶ 播放"
+    },
+    {
+      "name": "s0759_slower",
+      "value": "⏪ 减速"
+    },
+    {
+      "name": "s0760_faster",
+      "value": "⏩ 加速"
     }
   ]
 }

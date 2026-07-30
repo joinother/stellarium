@@ -12,6 +12,12 @@ import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, L
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS } from './I18n'
 
+interface CityPreset {
+  lat: number
+  lon: number
+  alt: number
+}
+
 interface TonightPlanetRow {
   name: string
   line: string
@@ -257,6 +263,8 @@ struct WindowNativeNode {
   private fpsTimer: number = 0
   private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
+  /** Current speed-step index into TIME_SPEED_STEPS. */
+  @State private timeSpeedIndex: number = 1  // 0=pause, 1=1x (default)
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
   @State private manualDay: number = 20
@@ -668,7 +676,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
@@ -682,7 +689,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
@@ -699,7 +705,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
@@ -710,7 +715,7 @@ struct WindowNativeNode {
   private SELFTEST: boolean = false  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
 
   // 城市快速定位预设数据: id -> "lat|lon|alt"
-  private getCityPreset(id: string): ESObject | undefined {
+  private getCityPreset(id: string): CityPreset | undefined {
     const m: Record<string, string> = {
       'Beijing': '39.9042|116.4074|44', 'Shanghai': '31.2304|121.4737|4',
       'Guangzhou': '23.1291|113.2644|21', 'Shenzhen': '22.5431|114.0579|7',
@@ -735,7 +740,7 @@ struct WindowNativeNode {
     const v = m[id]
     if (v === undefined) { return undefined }
     const p = v.split('|')
-    const result: ESObject = { 'lat': parseFloat(p[0]), 'lon': parseFloat(p[1]), 'alt': parseFloat(p[2]) }
+    const result: CityPreset = { lat: parseFloat(p[0]), lon: parseFloat(p[1]), alt: parseFloat(p[2]) }
     return result
   }
 
@@ -1332,7 +1337,7 @@ struct WindowNativeNode {
   // ===== 书签本地持久化（@ohos.data.preferences）=====
   private async saveBookmarksToStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, BOOKMARK_STORE)
       const jsonStr: string = JSON.stringify(this.bookmarkList)
       await store.put('bookmarks', jsonStr)
@@ -1344,7 +1349,7 @@ struct WindowNativeNode {
 
   private async loadBookmarksFromStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, BOOKMARK_STORE)
       const jsonStr: string = (await store.get('bookmarks', '[]')) as string
       const parsed: BookmarkItem[] = JSON.parse(jsonStr)
@@ -1358,7 +1363,7 @@ struct WindowNativeNode {
 
   private async saveSearchHistoryToStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
       const jsonStr: string = JSON.stringify(this.searchHistory)
       await store.put('history', jsonStr)
@@ -1370,7 +1375,7 @@ struct WindowNativeNode {
 
   private async loadSearchHistoryFromStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
       const jsonStr: string = (await store.get('history', '[]')) as string
       const parsed: string[] = JSON.parse(jsonStr)
@@ -2187,8 +2192,65 @@ private loadPlanetPositions(): void {
       if (result.timeRate !== undefined) {
         this.timeRateText = this.formatRate(result.timeRate)
       }
+      this.refreshState()
     })
   }
+
+  // ===== 时间速率档位系统 =====
+  // Stellarium 内部单位：Julian days per second (JD/s)
+  // 1 JD = 86400 秒���所以 1x 实时 = 1/86400 ≈ 1.1574e-5 JD/s
+  // 档位表：索引 0=暂停, 1=1x, 2=2x, 3=10x, 4=1分/秒, 5=1时/秒, 6=1天/秒, 7=10天/秒
+  private readonly SPEED_STEPS: number[] = [
+    0,
+    1.0 / 86400.0,
+    2.0 / 86400.0,
+    10.0 / 86400.0,
+    60.0 / 86400.0,
+    360.0 / 86400.0,
+    86400.0 / 86400.0,
+    864000.0 / 86400.0,
+  ]
+
+  /** Apply speed at given step index. Clamps to valid range. */
+  private applySpeedStep(index: number): void {
+    const len: number = this.SPEED_STEPS.length
+    const idx: number = Math.max(0, Math.min(len - 1, index))
+    const rate: number = this.SPEED_STEPS[idx]
+    this.timeSpeedIndex = idx
+    this.setTimeRate(rate)
+  }
+
+  /** Speed up one step (or resume from pause → 1x). */
+  private speedUp(): void {
+    if (this.timeSpeedIndex === 0) {
+      this.applySpeedStep(1)   // 暂停 → 1x
+    } else {
+      this.applySpeedStep(this.timeSpeedIndex + 1)
+    }
+  }
+
+  /** Slow down one step (or pause if at 1x). */
+  private speedDown(): void {
+    if (this.timeSpeedIndex <= 1) {
+      this.applySpeedStep(0)   // 1x 或更低 → 暂停
+    } else {
+      this.applySpeedStep(this.timeSpeedIndex - 1)
+    }
+  }
+
+  /** Toggle pause: remember current non-zero speed, restore on unpause. */
+  private togglePause(): void {
+    if (this.timeRateText === I18n.t('msg_paused') || this.timeSpeedIndex === 0) {
+      // Resume: restore last speed or default to 1x
+      const resumeIdx = this._lastNonZeroSpeedIndex > 0 ? this._lastNonZeroSpeedIndex : 1
+      this.applySpeedStep(resumeIdx)
+    } else {
+      // Pause: remember current speed
+      this._lastNonZeroSpeedIndex = this.timeSpeedIndex
+      this.applySpeedStep(0)
+    }
+  }
+  private _lastNonZeroSpeedIndex: number = 1
 
   private zoomStep(factor: number): void {
     hilog.info(0x0000, 'StellariumArkUI', 'zoomStep factor=%{public}s', factor.toString())
@@ -2511,6 +2573,8 @@ private loadPlanetPositions(): void {
     if (now - this.gyroLastDispatchMs < 20) { return }
     this.gyroLastDispatchMs = now
     // High-frequency view updates must not go through the result cache.
+    // Native bridge takes azimuth first, altitude second. The previous order
+    // was reversed, which made calibrated Pad movement point at the wrong sky.
     this.callNativeFire('moveToAltAz', smoothAz.toFixed(2) + '|' + smoothAlt.toFixed(2) + '|0')
     this.gyroEventCount += 1
     if (this.gyroEventCount % 20 === 0) {
@@ -2767,16 +2831,30 @@ private loadPlanetPositions(): void {
   }
 
   private formatRate(rate: number): string {
-    if (rate === 0) {
+    if (rate === 0 || Math.abs(rate) < 1e-18) {
       return I18n.t('msg_paused')
     }
-    if (Math.abs(rate - 0.000011574074074074073) < 0.0000001) {
-      return '1x'
+    const secPerDay = 86400.0
+    const absRate = Math.abs(rate)
+    const sign = rate > 0 ? '' : '-'
+    // Map common speeds to human-readable labels
+    interface SpeedLabel { limit: number; label: string }
+    const thresholds: SpeedLabel[] = [
+      { limit: 2.0 / secPerDay,     label: '2x' } as SpeedLabel,
+      { limit: 10.0 / secPerDay,    label: '10x' } as SpeedLabel,
+      { limit: 60.0 / secPerDay,    label: '1分/秒' } as SpeedLabel,
+      { limit: 360.0 / secPerDay,   label: '1时/秒' } as SpeedLabel,
+      { limit: 1.0,                label: '1天/秒' } as SpeedLabel,
+      { limit: 10.0,               label: '10天/秒' } as SpeedLabel,
+    ] as SpeedLabel[]
+    if (Math.abs(absRate - 1.0 / secPerDay) < 0.0000001) { return sign + '1x' }
+    let speedLabel: string = ''
+    for (const t of thresholds) {
+      if (absRate <= t.limit * 1.01) { speedLabel = t.label; break }
     }
-    if (rate > 0) {
-      return rate.toFixed(6)
-    }
-    return I18n.t('msg_paused')
+    if (speedLabel.length > 0) { return sign + speedLabel }
+    const mult: number = absRate * secPerDay
+    return sign + mult.toFixed(0) + 'x'
   }
 
   private formatDegrees(value: number, positive: string, negative: string): string {
@@ -2897,7 +2975,7 @@ private loadPlanetPositions(): void {
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.locationPickerStatus = I18n.t('m_req_location_perm')
     try {
-      const context = getContext(this) as common.UIAbilityContext
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
       const atManager = abilityAccessCtrl.createAtManager()
       const permissions: Array<Permissions> = [
         'ohos.permission.APPROXIMATELY_LOCATION',
@@ -4191,10 +4269,10 @@ private loadPlanetPositions(): void {
       }
     } else if (this.activePanel === 'time') {
       if (y >= 545 && y <= 595) {
-        if (x >= 1095 && x < 1155) { this.triggerAction('actionReturn_To_Current_Time'); this.setTimeRate(0.000011574074074073); return true }
-        if (x >= 1155 && x < 1220) { this.triggerAction('actionDecrease_Time_Speed'); return true }
-        if (x >= 1220 && x < 1280) { this.setTimeRate(0); return true }
-        if (x >= 1280 && x <= 1345) { this.triggerAction('actionIncrease_Time_Speed'); return true }
+        if (x >= 1095 && x < 1155) { this.triggerAction('actionReturn_To_Current_Time'); this.timeSpeedIndex=1; this.setTimeRate(1.0/86400.0); return true }
+        if (x >= 1155 && x < 1220) { this.speedDown(); return true }
+        if (x >= 1220 && x < 1280) { this.togglePause(); return true }
+        if (x >= 1280 && x <= 1345) { this.speedUp(); return true }
       }
       if (y >= 610 && y <= 660) {
         if (x >= 1095 && x < 1220) { this.advanceTime(12); return true }
@@ -7080,8 +7158,8 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow(I18n.t('i0054'), this.observationTimeText)
       this.infoRow(I18n.t('i0055'), this.timeRateText)
-      this.infoRow(I18n.t('i0056'), this.timeRateText === I18n.t('msg_paused') ? I18n.t('s0756') : I18n.t('s0757'))
-      this.quickChips([{ id: 'now', label: I18n.t('s0754') }, { id: 'back', label: I18n.t('s0755') }, { id: 'pause', label: I18n.t('s0756') }, { id: 'forward', label: I18n.t('s0757') }])
+      this.infoRow(I18n.t('i0056'), this.timeRateText)
+      this.quickChips([{ id: 'now', label: I18n.t('s0754') }, { id: 'play', label: I18n.t('s0758_play') }, { id: 'pause', label: I18n.t('s0756') }, { id: 'slower', label: I18n.t('s0759_slower') }, { id: 'faster', label: I18n.t('s0760_faster') }])
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
       Row()
@@ -7284,7 +7362,7 @@ private loadPlanetPositions(): void {
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedDate = new Date(this.manualYear, this.manualMonth - 1, this.manualDay)
-            DatePickerDialog.show({
+            this.getUIContext().showDatePickerDialog({
               start: new Date('1900-01-01'),
               end: new Date('2100-12-31'),
               selected: this.pickedDate,
@@ -7307,7 +7385,7 @@ private loadPlanetPositions(): void {
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedTime = new Date(2000, 0, 1, this.manualHour, this.manualMinute)
-            TimePickerDialog.show({
+            this.getUIContext().showTimePickerDialog({
               selected: this.pickedTime,
               onAccept: (value: TimePickerResult) => {
                 this.manualHour = value.hour ?? this.manualHour
@@ -7412,13 +7490,13 @@ private loadPlanetPositions(): void {
           Row({ space: 6 }) {
             Button(I18n.t('i0142')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.triggerAction('actionDecrease_Time_Speed') })
+              .onClick(() => { this.speedDown() })
             Button(I18n.t('i0245')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.setTimeRate(1) })
+              .onClick(() => { this.togglePause() })
             Button(I18n.t('i0246')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.triggerAction('actionIncrease_Time_Speed') })
+              .onClick(() => { this.speedUp() })
           }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           Row()
             .width('100%').height(0.5)
@@ -8668,6 +8746,7 @@ private loadPlanetPositions(): void {
                 AudioEngine.getInstance().setVolume(val)
               })
           }.height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          if (!OFFLINE_APPGALLERY_BUILD) {
           Row() {
             Text(I18n.t('angle_measure')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
             Button(I18n.t('angle_measure'))
@@ -8715,6 +8794,7 @@ private loadPlanetPositions(): void {
             .onClick(() => { this.sessionApply() })
           if (this.sessionImportMsg.length > 0) {
             Text(this.sessionImportMsg).fontSize(10).fontColor('#FFAA00').width('100%')
+          }
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -8844,14 +8924,19 @@ private loadPlanetPositions(): void {
           })
       }
       .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12).margin({ top: 4, bottom: 4 })
-      // 截图+夜间模式
+      // The offline release does not expose screenshots until the file is
+      // written through a user-accessible media path.
       Row() {
-        Button(I18n.t('i0048'))
-          .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
-          .borderRadius(12).height(36).layoutWeight(1)
-          .onClick(() => {
-            this.callInteractive('saveScreenShot', '', () => { this.flashHint(I18n.t('i0083')) })
-          })
+        if (!OFFLINE_APPGALLERY_BUILD) {
+          Button(I18n.t('i0048'))
+            .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+            .borderRadius(12).height(36).layoutWeight(1)
+            .onClick(() => {
+              this.callInteractive('saveScreenShot', '', (r: StellariumBridgeResponse) => {
+                this.flashHint(r.ok === true ? I18n.t('i0083') : '截图失败')
+              })
+            })
+        }
         Row() {
             Image($r(this.nightMode ? 'app.media.ic_moon' : 'app.media.ic_sun')).width(16).height(16).fillColor('#E5FFFFFF')
             Text(this.nightMode ? I18n.t('s0707') : I18n.t('s0708')).fontSize(12).fontColor('#E5FFFFFF').margin({ left: 4 })
@@ -9544,13 +9629,17 @@ private loadPlanetPositions(): void {
       this.callInteractive('setTracking', '0', () => { this.refreshState() })
     } else if (id === 'now') {
       this.triggerAction('actionReturn_To_Current_Time')
-      this.setTimeRate(0.000011574074074073)
-    } else if (id === 'back') {
-      this.triggerAction('actionDecrease_Time_Speed')
+      this.timeSpeedIndex = 1
+      this.setTimeRate(1.0 / 86400.0)
+    } else if (id === 'play') {
+      // 播放/恢复：从暂停恢复或保持当前速度
+      if (this.timeSpeedIndex === 0) { this.applySpeedStep(this._lastNonZeroSpeedIndex > 0 ? this._lastNonZeroSpeedIndex : 1) }
     } else if (id === 'pause') {
-      this.setTimeRate(0)
-    } else if (id === 'forward') {
-      this.triggerAction('actionIncrease_Time_Speed')
+      this.togglePause()
+    } else if (id === 'slower') {
+      this.speedDown()
+    } else if (id === 'faster') {
+      this.speedUp()
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {
@@ -9563,9 +9652,9 @@ private loadPlanetPositions(): void {
       this.searchObject('Jupiter')
     } else if (id.startsWith('city_')) {
       const cityId = id.substring(5)
-      const preset: ESObject | null = this.getCityPreset(cityId) ?? null
+      const preset: CityPreset | null = this.getCityPreset(cityId) ?? null
       if (preset !== null) {
-        this.setLocation(cityId, preset['lat'] as number, preset['lon'] as number, preset['alt'] as number)
+        this.setLocation(cityId, preset.lat, preset.lon, preset.alt)
       }
     } else if (id === 'Beijing') {
       this.setLocation('Beijing', 39.9042, 116.4074, 44)
