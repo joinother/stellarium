@@ -12,6 +12,12 @@ import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, L
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS } from './I18n'
 
+interface CityPreset {
+  lat: number
+  lon: number
+  alt: number
+}
+
 interface TonightPlanetRow {
   name: string
   line: string
@@ -257,6 +263,11 @@ struct WindowNativeNode {
   private fpsTimer: number = 0
   private lastMusicToggle: number = 0
   @State private timeRateText: string = '1x'
+  /** Current speed-step index into TIME_SPEED_STEPS. */
+  @State private timeSpeedIndex: number = 7  // 7=1x realtime (default, new index)
+  /** Sky Guide 风格时间滑块：偏移天数（0=今天，负=过去，正=未来）*/
+  @State private scrubberValue: number = 0
+  @State private scrubberLabel: string = '今天'
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
   @State private manualDay: number = 20
@@ -668,7 +679,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
@@ -682,7 +692,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
@@ -699,7 +708,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
-    { label: I18n.t('panel_scripts'), icon: 'script', panel: 'scripts' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
@@ -710,7 +718,7 @@ struct WindowNativeNode {
   private SELFTEST: boolean = false  // 开发自检：启动即对全部开关跑一次 findAction，验证无死开关。发布前改 false。
 
   // 城市快速定位预设数据: id -> "lat|lon|alt"
-  private getCityPreset(id: string): ESObject | undefined {
+  private getCityPreset(id: string): CityPreset | undefined {
     const m: Record<string, string> = {
       'Beijing': '39.9042|116.4074|44', 'Shanghai': '31.2304|121.4737|4',
       'Guangzhou': '23.1291|113.2644|21', 'Shenzhen': '22.5431|114.0579|7',
@@ -735,7 +743,7 @@ struct WindowNativeNode {
     const v = m[id]
     if (v === undefined) { return undefined }
     const p = v.split('|')
-    const result: ESObject = { 'lat': parseFloat(p[0]), 'lon': parseFloat(p[1]), 'alt': parseFloat(p[2]) }
+    const result: CityPreset = { lat: parseFloat(p[0]), lon: parseFloat(p[1]), alt: parseFloat(p[2]) }
     return result
   }
 
@@ -1084,8 +1092,7 @@ struct WindowNativeNode {
     } else {
       I18n.setLanguage('zh_CN')
     }
-    // ArkUI 默认就是中文时，旧逻辑不会调用 setLanguage()，导致 Qt 星图
-    // 保留英文罗盘缓存。启动完成后始终同步一次原生语言。
+    // Keep Qt's sky labels in sync when ArkUI starts in its default Chinese.
     this.callNativeWhenReady('setLanguage', this.selectedLanguage, () => {})
     // 卡在天顶↔天底 默认开启：上下滑到天顶/天底就停（不翻转），且竖直滑动绝不会引起旋转
     this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
@@ -1333,7 +1340,7 @@ struct WindowNativeNode {
   // ===== 书签本地持久化（@ohos.data.preferences）=====
   private async saveBookmarksToStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, BOOKMARK_STORE)
       const jsonStr: string = JSON.stringify(this.bookmarkList)
       await store.put('bookmarks', jsonStr)
@@ -1345,7 +1352,7 @@ struct WindowNativeNode {
 
   private async loadBookmarksFromStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, BOOKMARK_STORE)
       const jsonStr: string = (await store.get('bookmarks', '[]')) as string
       const parsed: BookmarkItem[] = JSON.parse(jsonStr)
@@ -1359,7 +1366,7 @@ struct WindowNativeNode {
 
   private async saveSearchHistoryToStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
       const jsonStr: string = JSON.stringify(this.searchHistory)
       await store.put('history', jsonStr)
@@ -1371,7 +1378,7 @@ struct WindowNativeNode {
 
   private async loadSearchHistoryFromStorage(): Promise<void> {
     try {
-      const ctx = getContext(this) as common.UIAbilityContext
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
       const store = await preferences.getPreferences(ctx, SEARCH_HISTORY_STORE)
       const jsonStr: string = (await store.get('history', '[]')) as string
       const parsed: string[] = JSON.parse(jsonStr)
@@ -2133,8 +2140,7 @@ private loadPlanetPositions(): void {
     this.searchObject(suggestion.en)
   }
 
-  // 星座不是一个可见的点目标。快捷定位前打开名称与连线即可提供上下文；
-  // 不自动开启全图边界，后者在手机/模拟器上既杂乱又显著拖慢绘制。
+  // Keep constellation navigation clear and light: labels and lines, no global boundaries.
   private openConstellationGuide(name: string): void {
     this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
@@ -2188,6 +2194,96 @@ private loadPlanetPositions(): void {
     this.callInteractive('setTimeRate', rate.toString(), (result) => {
       if (result.timeRate !== undefined) {
         this.timeRateText = this.formatRate(result.timeRate)
+      }
+      this.refreshState()
+    })
+  }
+
+  // ===== 时间速率档位系统 =====
+  // Stellarium 内部单位：Julian days per second (JD/s)
+  // 1 JD = 86400 ��，所以 1x 实时 = 1/86400 ≈ 1.1574e-5 JD/s
+  // 档位表：索引 0=暂停, 1=1x, 2=2x, 3=10x, 4=1分/秒, 5=1时/秒, 6=1天/秒, 7=10天/秒
+  // 负索引 = 倒带：-1=-1x, -2=-1时/秒, -3=-1天/秒
+  private readonly SPEED_STEPS: number[] = [
+    -864000.0 / 86400.0,   // -10: 倒带 极速(1天/秒反向)
+    -360.0 / 86400.0,      // -9:  倒带 快进(1时/秒反向)
+    -60.0 / 86400.0,       // -8:  倒带(1分/秒反向)
+    -10.0 / 86400.0,       // -7:  倒带 10x
+    -2.0 / 86400.0,        // -6:  倒带 2x
+    -1.0 / 86400.0,        // -5:  倒带 1x
+    0,                      //  0:  停止
+    1.0 / 86400.0,         //  1:  实时 1x
+    2.0 / 86400.0,         //  2:  2x
+    10.0 / 86400.0,        //  3:  10x
+    60.0 / 86400.0,        //  4:  1分/秒
+    360.0 / 86400.0,       //  5:  1时/秒
+    86400.0 / 86400.0,     //  6:  1天/秒
+    864000.0 / 86400.0,    //  7:  10天/秒
+  ]
+  // SPEED_STEPS 的"零点"索引（停止）和"实时"索引
+  private static readonly SPEED_IDX_STOP = 6
+  private static readonly SPEED_IDX_REALTIME = 7
+
+  /** Apply speed at given step index. Clamps to valid range. */
+  private applySpeedStep(index: number): void {
+    const len: number = this.SPEED_STEPS.length
+    // 映射到有效范围（含负索引倒带）
+    const idx: number = Math.max(0, Math.min(len - 1, index))
+    const rate: number = this.SPEED_STEPS[idx]
+    this.timeSpeedIndex = idx
+    this.setTimeRate(rate)
+    this.timeRateText = this.formatRate(rate)
+  }
+
+  /** Speed up one step. */
+  private speedUp(): void {
+    this.applySpeedStep(this.timeSpeedIndex + 1)
+  }
+
+  /** Slow down one step (can go into reverse). */
+  private speedDown(): void {
+    this.applySpeedStep(this.timeSpeedIndex - 1)
+  }
+
+  /** Toggle pause: remember current non-zero speed, restore on unpause. */
+  private togglePause(): void {
+    if (this.timeSpeedIndex === 6) { // SPEED_IDX_STOP
+      // Resume: restore last speed or default to 1x
+      const resumeIdx = this._lastNonZeroSpeedIndex > 0 && this._lastNonZeroSpeedIndex !== 6 ? this._lastNonZeroSpeedIndex : 7
+      this.applySpeedStep(resumeIdx)
+    } else {
+      // Pause: remember current speed
+      this._lastNonZeroSpeedIndex = this.timeSpeedIndex
+      this.applySpeedStep(6) // SPEED_IDX_STOP
+    }
+  }
+  private _lastNonZeroSpeedIndex: number = 7
+
+  /** Sky Guide 风格时间滑块：拖动时设置模拟时间（暂停时间流逝）*/
+  private applyScrubber(dayOffset: number): void {
+    // 更新标签
+    if (dayOffset === 0) {
+      this.scrubberLabel = '今天'
+    } else if (dayOffset > 0) {
+      if (dayOffset < 30) { this.scrubberLabel = '+' + dayOffset + '天后' }
+      else if (dayOffset < 365) { this.scrubberLabel = '+' + Math.round(dayOffset / 30) + '月后' }
+      else { this.scrubberLabel = '+' + (dayOffset / 365).toFixed(1) + '年后' }
+    } else {
+      const abs = Math.abs(dayOffset)
+      if (abs < 30) { this.scrubberLabel = abs + '天前' }
+      else if (abs < 365) { this.scrubberLabel = Math.round(abs / 30) + '月前' }
+      else { this.scrubberLabel = (abs / 365).toFixed(1) + '年前' }
+    }
+
+    // 调用 native setJD：基于当前真实 JD 加上偏移天数
+    // 先获取当前 JD，然后加上偏移
+    this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
+      if (r && r.jd) {
+        const currentJd = Number(r.jd)
+        const newJd = currentJd + dayOffset
+        // 用 setTimeToJD（会自动暂停）
+        this.callNativeFire('setTimeToJD', newJd.toFixed(6))
+        setTimeout(() => { this.refreshState() }, 350)
       }
     })
   }
@@ -2513,6 +2609,8 @@ private loadPlanetPositions(): void {
     if (now - this.gyroLastDispatchMs < 20) { return }
     this.gyroLastDispatchMs = now
     // High-frequency view updates must not go through the result cache.
+    // Native bridge takes azimuth first, altitude second. The previous order
+    // was reversed, which made calibrated Pad movement point at the wrong sky.
     this.callNativeFire('moveToAltAz', smoothAz.toFixed(2) + '|' + smoothAlt.toFixed(2) + '|0')
     this.gyroEventCount += 1
     if (this.gyroEventCount % 20 === 0) {
@@ -2535,9 +2633,7 @@ private loadPlanetPositions(): void {
       if (result.found === true) {
         const displayName = this.zhNameOf(this.selectedName.length > 0 ? this.selectedName : query)
         this.flashHint(I18n.t('i0071').replace('%s', displayName))
-        // A selected object is centered by the native engine. Keeping the
-        // search/category panel open on tablets covers that center point, so
-        // dismiss the search surface on every layout once selection succeeds.
+        // Do not leave the search panel covering the centered target on tablets.
         if (this.activePanel === 'search') {
           this.panelVisible = false
           this.drawerOpen = false
@@ -2684,9 +2780,7 @@ private loadPlanetPositions(): void {
       this.selectedApparentMagnitude = (apparentMag < 98) ? apparentMag.toFixed(2) : ''
       this.selectedAirmass = typeof result.airmass === 'number' ? (result.airmass as number).toFixed(2) : ''
       this.selectedExtinction = typeof result.extinction === 'number' ? (result.extinction as number).toFixed(2) : ''
-      // The live 300ms refresh deliberately omits fullInfo: it is static prose
-      // and expensive for the Qt core to regenerate. Keep the version returned
-      // with the initial selection instead of clearing the existing details.
+      // Keep the initial full detail text during the lightweight live refresh.
       if (result.fullInfo && result.fullInfo.length > 0) {
         this.selectedFullInfo = result.fullInfo
       }
@@ -2773,16 +2867,30 @@ private loadPlanetPositions(): void {
   }
 
   private formatRate(rate: number): string {
-    if (rate === 0) {
+    if (rate === 0 || Math.abs(rate) < 1e-18) {
       return I18n.t('msg_paused')
     }
-    if (Math.abs(rate - 0.000011574074074074073) < 0.0000001) {
-      return '1x'
+    const secPerDay = 86400.0
+    const absRate = Math.abs(rate)
+    const sign = rate > 0 ? '' : '-'
+    // Map common speeds to human-readable labels
+    interface SpeedLabel { limit: number; label: string }
+    const thresholds: SpeedLabel[] = [
+      { limit: 2.0 / secPerDay,     label: '2x' } as SpeedLabel,
+      { limit: 10.0 / secPerDay,    label: '10x' } as SpeedLabel,
+      { limit: 60.0 / secPerDay,    label: '1分/秒' } as SpeedLabel,
+      { limit: 360.0 / secPerDay,   label: '1时/秒' } as SpeedLabel,
+      { limit: 1.0,                label: '1天/秒' } as SpeedLabel,
+      { limit: 10.0,               label: '10天/秒' } as SpeedLabel,
+    ] as SpeedLabel[]
+    if (Math.abs(absRate - 1.0 / secPerDay) < 0.0000001) { return sign + '1x' }
+    let speedLabel: string = ''
+    for (const t of thresholds) {
+      if (absRate <= t.limit * 1.01) { speedLabel = t.label; break }
     }
-    if (rate > 0) {
-      return rate.toFixed(6)
-    }
-    return I18n.t('msg_paused')
+    if (speedLabel.length > 0) { return sign + speedLabel }
+    const mult: number = absRate * secPerDay
+    return sign + mult.toFixed(0) + 'x'
   }
 
   private formatDegrees(value: number, positive: string, negative: string): string {
@@ -2903,7 +3011,7 @@ private loadPlanetPositions(): void {
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.locationPickerStatus = I18n.t('m_req_location_perm')
     try {
-      const context = getContext(this) as common.UIAbilityContext
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
       const atManager = abilityAccessCtrl.createAtManager()
       const permissions: Array<Permissions> = [
         'ohos.permission.APPROXIMATELY_LOCATION',
@@ -4197,10 +4305,13 @@ private loadPlanetPositions(): void {
       }
     } else if (this.activePanel === 'time') {
       if (y >= 545 && y <= 595) {
-        if (x >= 1095 && x < 1155) { this.triggerAction('actionReturn_To_Current_Time'); this.setTimeRate(0.000011574074074073); return true }
-        if (x >= 1155 && x < 1220) { this.triggerAction('actionDecrease_Time_Speed'); return true }
-        if (x >= 1220 && x < 1280) { this.setTimeRate(0); return true }
-        if (x >= 1280 && x <= 1345) { this.triggerAction('actionIncrease_Time_Speed'); return true }
+        // 新档位按钮：倒带 | 现在 | 停止 | 实时 | 快进 | 超快
+        if (x >= 1040 && x < 1095) { this.handleChip('rewind'); return true }
+        if (x >= 1095 && x < 1155) { this.handleChip('now'); return true }
+        if (x >= 1155 && x < 1215) { this.handleChip('stop'); return true }
+        if (x >= 1215 && x < 1275) { this.handleChip('realtime'); return true }
+        if (x >= 1275 && x < 1335) { this.handleChip('fast'); return true }
+        if (x >= 1335 && x <= 1400) { this.handleChip('warp'); return true }
       }
       if (y >= 610 && y <= 660) {
         if (x >= 1095 && x < 1220) { this.advanceTime(12); return true }
@@ -4839,6 +4950,14 @@ private loadPlanetPositions(): void {
               .height(this.expandedDetailSummaryHeight())
               .zIndex(50)
               .hitTestBehavior(HitTestMode.Default)
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 280, curve: Curve.EaseOut })
+                  .combine(TransitionEffect.translate({ x: -20, y: 0 }).animation({ duration: 440, curve: curves.springMotion(0.52, 0.86) })),
+                TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
+                  .combine(TransitionEffect.translate({ x: -12, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
+              ))
+          } else {
+            // 极窄空间（<140vp）：隐藏摘要，避免与搜索面板重叠
           }
         } else {
           Stack() { this.bottomDetailCard() }
@@ -5190,7 +5309,8 @@ private loadPlanetPositions(): void {
     // its rich data never sits over that visual centre. When another main
     // panel is open, retain the existing left-side coexistence layout.
     if (!this.panelVisible) {
-      return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN)
+      // 平板横屏：卡片靠右但留出足够边距，比之前再右移 16vp。
+      return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN + 16)
     }
     const minLeft = this.EDGE_MARGIN + 92
     const preferred = this.EDGE_MARGIN + 150
@@ -5213,9 +5333,8 @@ private loadPlanetPositions(): void {
     if (this.panelVisible) {
       return Math.min(420, Math.max(360, this.expandedDetailAvailableWidth()))
     }
-    // The foldable emulator maps vp to a much larger physical width. Keep this
-    // deliberately narrow so a centered target remains visible in real pixels.
-    return this.clamp(this.skyWidth * 0.27, 260, 330)
+    // 平板横屏：加宽到 38%，确保"实时高度/方位"等字段不被截断。
+    return this.clamp(this.skyWidth * 0.38, 340, 480)
   }
 
   private bottomCardHeight(): number {
@@ -5239,16 +5358,17 @@ private loadPlanetPositions(): void {
     return this.expandedMainPanelLeft() - detailLeft - 18
   }
 
+  // 平板展开布局 + 搜索面板打开时，始终用紧凑摘要（不挤完整大卡片）。
   private useExpandedDetailSummary(): boolean {
-    return this.isExpandedLayout && this.panelVisible && this.expandedDetailAvailableWidth() < 360
+    return this.isExpandedLayout && this.panelVisible
   }
 
   private expandedDetailSummaryWidth(): number {
-    return this.clamp(this.expandedDetailAvailableWidth(), 180, 280)
+    return this.clamp(this.expandedDetailAvailableWidth(), 140, 300)
   }
 
   private canShowExpandedDetailSummary(): boolean {
-    return this.expandedDetailAvailableWidth() >= 180
+    return this.expandedDetailAvailableWidth() >= 140
   }
 
   private expandedDetailSummaryX(): number {
@@ -6215,6 +6335,7 @@ private loadPlanetPositions(): void {
   }
 
   private pluginZh(en: string): ResourceStr {
+    // 先查精确映射（保持已有 key 的一致性）
     switch (en) {
       case 'Angle Measure': return I18n.t('plugin_angle_measure')
       case 'ArchaeoLines': return I18n.t('plugin_archaeolines')
@@ -6236,8 +6357,13 @@ private loadPlanetPositions(): void {
       case 'Remote Control': return I18n.t('plugin_remote_control')
       case 'Screenshots': return I18n.t('plugin_screenshots')
       case 'Sky Cultures': return I18n.t('plugin_skycultures')
-      default: return en
     }
+    // 回退到 PLUGIN_NAMES 字典（覆盖所有 40+ 插件）
+    const dictName = I18n.pluginName(en)
+    if (dictName !== en) return dictName
+    // 最后兜底：尝试首字母大写等微调后再查一次
+    const trimmed = en.trim()
+    return I18n.pluginName(trimmed) !== trimmed ? I18n.pluginName(trimmed) : en
   }
 
   private landscapeZh(en: string): ResourceStr {
@@ -6655,34 +6781,49 @@ private loadPlanetPositions(): void {
     AppStorage.setOrCreate('stellariumSettings', JSON.stringify(obj))
   }
 
-  // 低频功能抽屉：从侧栏右侧滑出，图标 + 名称，一行一项
+  // 低频功能抽屉：从侧栏右侧滑出，图标(带背景圆) + 名称 + 激活态左边框
   @Builder
   actionDrawer() {
-    Column({ space: 4 }) {
+    Column({ space: 3 }) {
       Text(I18n.t('c_more_functions'))
         .fontSize(12)
+        .fontWeight(FontWeight.Medium)
         .fontColor(this.panelIdleGlass ? 'rgba(229,255,255,0.58)' : this.nmSub())
         .width('100%')
-        .padding({ left: 18, top: 12, bottom: 6 })
+        .padding({ left: 18, top: 10, bottom: 6 })
       ForEach(this.drawerActions, (item: ShellAction) => {
-        Row({ space: 14 }) {
-          Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-            .width(20)
-            .height(20)
-            .fillColor(this.activePanel === item.panel && this.panelVisible ? '#93D7FF' : this.nmText())
+        Row({ space: 12 }) {
+          // 图标背景圆
+          Stack() {
+            Circle()
+              .width(32)
+              .height(32)
+              .fill(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.28)' : 'rgba(255, 255, 255, 0.06)')
+            Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+              .width(18)
+              .height(18)
+              .fillColor(this.activePanel === item.panel && this.panelVisible ? '#93D7FF' : this.nmText())
+          }
+            .width(32)
+            .height(32)
           Text(item.label)
             .fontSize(14)
-            .fontColor(this.activePanel === item.panel && this.panelVisible ? '#C7EDFF' : this.nmText())
+            .fontWeight(this.activePanel === item.panel && this.panelVisible ? FontWeight.Medium : FontWeight.Normal)
+            .fontColor(this.activePanel === item.panel && this.panelVisible ? '#E0F4FF' : this.nmText())
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
         }
           .width('100%')
-          .height(44)
-          .padding({ left: 16, right: 14 })
+          .height(46)
+          .padding({ left: 14, right: 12 })
           .borderRadius(14)
-          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.20)' : 'rgba(255,255,255,0.02)')
-          .border({ width: this.activePanel === item.panel && this.panelVisible ? 0.5 : 0, color: 'rgba(147, 215, 255, 0.22)' })
+          .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.14)' : 'rgba(255,255,255,0.03)')
+          .border({
+            width: { left: this.activePanel === item.panel && this.panelVisible ? 3 : 0, right: 0, top: 0, bottom: 0 },
+            color: this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'transparent'
+          })
+          .borderRadius({ topLeft: 14, bottomLeft: 14, topRight: 14, bottomRight: 14 })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .stateStyles({
             pressed: {
@@ -6690,15 +6831,14 @@ private loadPlanetPositions(): void {
               .backgroundColor('rgba(255,255,255,0.08)')
             }
           })
-          .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
+          .animation({ duration: 200, curve: curves.springMotion(0.42, 0.86) })
           .onClick(() => {
-            // 选中抽屉项即进入该功能，抽屉随即收起，不能与主面板同时占位。
             this.onRailTap(item.panel)
           })
       }, (item: ShellAction) => item.panel)
     }
       .width(this.drawerWidth())
-      .padding({ top: 4, bottom: 12, left: 8, right: 8 })
+      .padding({ top: 4, bottom: 10, left: 8, right: 8 })
       .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.52)' : 'rgba(18, 22, 36, 0.78)')
       .backdropBlur(this.panelIdleGlass ? 42 : 30)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.16)' : 'rgba(255, 255, 255, 0.10)' })
@@ -6734,22 +6874,45 @@ private loadPlanetPositions(): void {
         Column({ space: 2 }) {
           ForEach(this.compactDrawerActions, (item: ShellAction) => {
             Row({ space: 10 }) {
-              Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
-                .width(20)
-                .height(20)
-                .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              // 图标背景圆
+              Stack() {
+                Circle()
+                  .width(30)
+                  .height(30)
+                  .fill(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.26)' : 'rgba(255, 255, 255, 0.06)')
+                Image(this.getIcon(item.icon, this.activePanel === item.panel && this.panelVisible))
+                  .width(17)
+                  .height(17)
+                  .fillColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+              }
+                .width(30)
+                .height(30)
               Text(item.label)
                 .fontSize(14)
-                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#7FB3DC' : this.nmText())
+                .fontWeight(this.activePanel === item.panel && this.panelVisible ? FontWeight.Medium : FontWeight.Normal)
+                .fontColor(this.activePanel === item.panel && this.panelVisible ? '#B8E4FF' : this.nmText())
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1)
             }
-              .height(40)
+              .height(42)
               .width('100%')
-              .padding({ left: 12, right: 10 })
+              .padding({ left: 10, right: 10 })
               .borderRadius(12)
-              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.18)' : 'rgba(255,255,255,0.02)')
+              .backgroundColor(this.activePanel === item.panel && this.panelVisible ? 'rgba(91, 147, 191, 0.15)' : 'rgba(255,255,255,0.03)')
+              .border({
+                width: { left: this.activePanel === item.panel && this.panelVisible ? 2.5 : 0, right: 0, top: 0, bottom: 0 },
+                color: this.activePanel === item.panel && this.panelVisible ? '#5B93BF' : 'transparent'
+              })
+              .borderRadius({ topLeft: 12, bottomLeft: 12, topRight: 12, bottomRight: 12 })
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .stateStyles({
+                pressed: {
+                  .scale({ x: 0.97, y: 0.97 })
+                  .backgroundColor('rgba(255,255,255,0.08)')
+                }
+              })
+              .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
               .onClick(() => {
                 if (item.panel === 'gyro') {
                   this.toggleGyroscope(!this.gyroscopeEnabled)
@@ -7086,8 +7249,10 @@ private loadPlanetPositions(): void {
     } else if (this.activePanel === 'time') {
       this.infoRow(I18n.t('i0054'), this.observationTimeText)
       this.infoRow(I18n.t('i0055'), this.timeRateText)
-      this.infoRow(I18n.t('i0056'), this.timeRateText === I18n.t('msg_paused') ? I18n.t('s0756') : I18n.t('s0757'))
-      this.quickChips([{ id: 'now', label: I18n.t('s0754') }, { id: 'back', label: I18n.t('s0755') }, { id: 'pause', label: I18n.t('s0756') }, { id: 'forward', label: I18n.t('s0757') }])
+      // 时间控制按钮：[倒带][现在][停止][实时][快进][超快]
+      this.timeSpeedChips()
+      // Sky Guide 风格时间拖动滑块（-365天 ~ +365天）
+      this.timeScrubberSlider()
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
       // 天文事件快捷跳转
       Row()
@@ -7290,7 +7455,7 @@ private loadPlanetPositions(): void {
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedDate = new Date(this.manualYear, this.manualMonth - 1, this.manualDay)
-            DatePickerDialog.show({
+            this.getUIContext().showDatePickerDialog({
               start: new Date('1900-01-01'),
               end: new Date('2100-12-31'),
               selected: this.pickedDate,
@@ -7313,7 +7478,7 @@ private loadPlanetPositions(): void {
           .borderRadius(8).height(36).layoutWeight(1)
           .onClick(() => {
             this.pickedTime = new Date(2000, 0, 1, this.manualHour, this.manualMinute)
-            TimePickerDialog.show({
+            this.getUIContext().showTimePickerDialog({
               selected: this.pickedTime,
               onAccept: (value: TimePickerResult) => {
                 this.manualHour = value.hour ?? this.manualHour
@@ -7418,13 +7583,13 @@ private loadPlanetPositions(): void {
           Row({ space: 6 }) {
             Button(I18n.t('i0142')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.triggerAction('actionDecrease_Time_Speed') })
+              .onClick(() => { this.speedDown() })
             Button(I18n.t('i0245')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.setTimeRate(1) })
+              .onClick(() => { this.togglePause() })
             Button(I18n.t('i0246')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-              .onClick(() => { this.triggerAction('actionIncrease_Time_Speed') })
+              .onClick(() => { this.speedUp() })
           }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           Row()
             .width('100%').height(0.5)
@@ -8674,6 +8839,7 @@ private loadPlanetPositions(): void {
                 AudioEngine.getInstance().setVolume(val)
               })
           }.height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
+          if (!OFFLINE_APPGALLERY_BUILD) {
           Row() {
             Text(I18n.t('angle_measure')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
             Button(I18n.t('angle_measure'))
@@ -8721,6 +8887,7 @@ private loadPlanetPositions(): void {
             .onClick(() => { this.sessionApply() })
           if (this.sessionImportMsg.length > 0) {
             Text(this.sessionImportMsg).fontSize(10).fontColor('#FFAA00').width('100%')
+          }
           }
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
@@ -8850,14 +9017,19 @@ private loadPlanetPositions(): void {
           })
       }
       .height(40).width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12).margin({ top: 4, bottom: 4 })
-      // 截图+夜间模式
+      // The offline release does not expose screenshots until the file is
+      // written through a user-accessible media path.
       Row() {
-        Button(I18n.t('i0048'))
-          .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
-          .borderRadius(12).height(36).layoutWeight(1)
-          .onClick(() => {
-            this.callInteractive('saveScreenShot', '', () => { this.flashHint(I18n.t('i0083')) })
-          })
+        if (!OFFLINE_APPGALLERY_BUILD) {
+          Button(I18n.t('i0048'))
+            .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
+            .borderRadius(12).height(36).layoutWeight(1)
+            .onClick(() => {
+              this.callInteractive('saveScreenShot', '', (r: StellariumBridgeResponse) => {
+                this.flashHint(r.ok === true ? I18n.t('i0083') : '截图失败')
+              })
+            })
+        }
         Row() {
             Image($r(this.nightMode ? 'app.media.ic_moon' : 'app.media.ic_sun')).width(16).height(16).fillColor('#E5FFFFFF')
             Text(this.nightMode ? I18n.t('s0707') : I18n.t('s0708')).fontSize(12).fontColor('#E5FFFFFF').margin({ left: 4 })
@@ -9369,8 +9541,97 @@ private loadPlanetPositions(): void {
       .margin({ top: 12 })
   }
 
+  // 时间速度控制按钮 — 参考 Sky Guide 的交互范式
+  // 布局：[倒带] [现在] [停止] [实时] [快进] [超快]
+  // 当前档位高亮，点击立即更新速度显示
+  @Builder
+  timeSpeedChips() {
+    Scroll() {
+      Row({ space: 7 }) {
+        // 倒带 — 反向1x（时间倒流）
+        this.speedChip('rewind', I18n.t('s0763_rewind'), 'ic_time_rewind.svg', this.timeSpeedIndex < 6)
+        // 现在 — 回到当前时刻 + 重置为1x
+        this.speedChip('now', I18n.t('s0754'), null, false)
+        // 停止 — 冻结时间
+        this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 6)
+        // 实时 — 回到当前时刻 + 1x
+        this.speedChip('realtime', I18n.t('s0764_realtime'), 'ic_time_realtime.svg', this.timeSpeedIndex === 7)
+        // 快进 — 升一档
+        this.speedChip('fast', I18n.t('s0765_fast'), 'ic_time_fast.svg', this.timeSpeedIndex >= 10 && this.timeSpeedIndex <= 12)
+        // 极速 — 10天/秒
+        this.speedChip('warp', I18n.t('s0760_faster'), 'ic_time_warp.svg', this.timeSpeedIndex === 13)
+      }
+      .padding({ left: 2, right: 10 })
+    }
+      .width('100%')
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .margin({ top: 8 })
+  }
+
+  // ===== Sky Guide 风格：时间拖动滑块 =====
+  @Builder
+  timeScrubberSlider() {
+    Column({ space: 6 }) {
+      // 滑块标签行
+      Row() {
+        Text(I18n.t('s0766_scrubber'))
+          .fontSize(11)
+          .fontColor('rgba(180, 210, 235, 0.7)')
+        Blank()
+        Text(this.scrubberLabel)
+          .fontSize(11)
+          .fontColor('rgba(180, 210, 235, 0.9)')
+      }
+      .width('100%')
+
+      // 滑块本体：范围 -365天 ~ +365天（以"今天"为中心）
+      Slider({
+        value: this.scrubberValue,
+        min: -365,
+        max: 365,
+        step: 1,
+        style: SliderStyle.OutSet
+      })
+        .blockColor('#4FA8D3')
+        .trackColor('rgba(79, 168, 211, 0.25)')
+        .selectedColor('#4FA8D3')
+        .showTips(true)
+        .onChange((value: number) => {
+          this.scrubberValue = value
+          this.applyScrubber(value)
+        })
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12, top: 6, bottom: 4 })
+  }
 
   @Builder
+  speedChip(id: string, label: string, icon: string | null, active: boolean) {
+    Row({ space: 5 }) {
+      if (icon) {
+        // 用 $r 引用 media 资源（$rawfile 读的是 rawfile/ 目录，不是 media/）
+        Image($r('app.media.' + icon.replace('.svg', '')))
+          .width(14)
+          .height(14)
+          .fillColor(active ? '#FFFFFF' : '#7FB3DC')
+      }
+      Text(label)
+        .fontSize(11.5)
+        .fontWeight(active ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(active ? '#FFFFFF' : '#B8D4EF')
+    }
+      .height(32)
+      .padding({ left: 11, right: 11 })
+      .borderRadius(16)
+      .backgroundColor(active ? 'rgba(79, 148, 211, 0.55)' : 'rgba(107, 163, 214, 0.15)')
+      .border({ width: active ? 1.2 : 0.6, color: active ? 'rgba(127, 179, 220, 0.7)' : 'rgba(127, 179, 220, 0.22)' })
+      .shadow(active ? { radius: 10, color: 'rgba(49, 120, 200, 0.25)', offsetX: 0, offsetY: 3 } : { radius: 8, color: 'rgba(0, 0, 0, 0.12)', offsetX: 0, offsetY: 4 })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+      .onClick(() => { this.handleChip(id) })
+  }  @Builder
   cityChipsRow() {
     Column({ space: 4 }) {
       // 城市搜索框
@@ -9549,14 +9810,40 @@ private loadPlanetPositions(): void {
     } else if (id === 'untrack') {
       this.callInteractive('setTracking', '0', () => { this.refreshState() })
     } else if (id === 'now') {
+      // 现在：回到当前时刻 + 重置为1x
       this.triggerAction('actionReturn_To_Current_Time')
-      this.setTimeRate(0.000011574074074073)
-    } else if (id === 'back') {
-      this.triggerAction('actionDecrease_Time_Speed')
-    } else if (id === 'pause') {
-      this.setTimeRate(0)
-    } else if (id === 'forward') {
-      this.triggerAction('actionIncrease_Time_Speed')
+      this.applySpeedStep(7) // SPEED_IDX_REALTIME
+      this.timeRateText = '1x'
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'stop') {
+      // 停止：冻结时间
+      this._lastNonZeroSpeedIndex = this.timeSpeedIndex !== 6 ? this.timeSpeedIndex : 7
+      this.applySpeedStep(6) // SPEED_IDX_STOP
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'realtime') {
+      // 实时：回到当前时刻 + 恢复 1x 正常速度
+      this.triggerAction('actionReturn_To_Current_Time')
+      this.applySpeedStep(7) // SPEED_IDX_REALTIME
+      this.timeRateText = '1x'
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'rewind') {
+      // 倒带：反向 1x（时间倒流）
+      this.applySpeedStep(5) // index 5 = -1x reverse
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'faster' || id === 'fast') {
+      // 快进：升一档
+      const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex + 1)
+      this.applySpeedStep(nextIdx)
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'warp') {
+      // 极速：正向 10天/秒
+      this.applySpeedStep(13) // index 13 = 10天/秒
+      setTimeout(() => { this.refreshState() }, 350)
+    } else if (id === 'slower') {
+      // 减速/降档（含跨过停止进入倒带）
+      const prevIdx = Math.max(0, this.timeSpeedIndex - 1)
+      this.applySpeedStep(prevIdx)
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {
@@ -9569,9 +9856,9 @@ private loadPlanetPositions(): void {
       this.searchObject('Jupiter')
     } else if (id.startsWith('city_')) {
       const cityId = id.substring(5)
-      const preset: ESObject | null = this.getCityPreset(cityId) ?? null
+      const preset: CityPreset | null = this.getCityPreset(cityId) ?? null
       if (preset !== null) {
-        this.setLocation(cityId, preset['lat'] as number, preset['lon'] as number, preset['alt'] as number)
+        this.setLocation(cityId, preset.lat, preset.lon, preset.alt)
       }
     } else if (id === 'Beijing') {
       this.setLocation('Beijing', 39.9042, 116.4074, 44)

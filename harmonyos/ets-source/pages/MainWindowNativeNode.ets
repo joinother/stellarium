@@ -2283,6 +2283,7 @@ private loadPlanetPositions(): void {
         const newJd = currentJd + dayOffset
         // 用 setTimeToJD（会自动暂停）
         this.callNativeFire('setTimeToJD', newJd.toFixed(6))
+        setTimeout(() => { this.refreshState() }, 350)
       }
     })
   }
@@ -9813,29 +9814,36 @@ private loadPlanetPositions(): void {
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'stop') {
       // 停止：冻结时间
       this._lastNonZeroSpeedIndex = this.timeSpeedIndex !== 6 ? this.timeSpeedIndex : 7
       this.applySpeedStep(6) // SPEED_IDX_STOP
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'realtime') {
       // 实时：回到当前时刻 + 恢复 1x 正常速度
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'rewind') {
       // 倒带：反向 1x（时间倒流）
       this.applySpeedStep(5) // index 5 = -1x reverse
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'faster' || id === 'fast') {
       // 快进：升一档
       const nextIdx = Math.min(this.SPEED_STEPS.length - 1, this.timeSpeedIndex + 1)
       this.applySpeedStep(nextIdx)
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'warp') {
       // 极速：正向 10天/秒
       this.applySpeedStep(13) // index 13 = 10天/秒
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === 'slower') {
       // 减速/降档（含跨过停止进入倒带）
       const prevIdx = Math.max(0, this.timeSpeedIndex - 1)
       this.applySpeedStep(prevIdx)
+      setTimeout(() => { this.refreshState() }, 350)
     } else if (id === '+12h') {
       this.advanceTime(12)
     } else if (id === '-12h') {
