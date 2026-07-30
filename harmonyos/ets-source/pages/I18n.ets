@@ -205,6 +205,25 @@ const PLUGIN_NAMES: Record<string, Record<string, string>> = {
   'Text User Interface': { 'en': 'Text User Interface', 'zh_CN': '文本用户界面', 'ja': 'テキストUI', 'ko': '텍스트 UI', 'fr': 'Interface texte', 'de': 'Text-Benutzeroberfläche', 'es': 'Interfaz de texto', 'ru': 'Текстовый интерфейс' },
   'Time Zone': { 'en': 'Time Zone', 'zh_CN': '时区', 'ja': 'タイムゾーン', 'ko': '시간대', 'fr': 'Fuseau horaire', 'de': 'Zeitzone', 'es': 'Zona horaria', 'ru': 'Часовой пояс' },
   'Voculars': { 'en': 'Voculars', 'zh_CN': '声码器', 'ja': 'ボキュラーズ', 'ko': '보큘러스', 'fr': 'Voculars', 'de': 'Voculars', 'es': 'Voculars', 'ru': 'Вокуляры' },
+  // 以下为补齐的插件名称（从 C++ displayedName 提取）
+  'Nebula Textures': { 'en': 'Nebula Textures', 'zh_CN': '星云纹理', 'ja': '星雲テクスチャ', 'ko': '성운 텍스처', 'fr': 'Textures de nébuleuses', 'de': 'Nebel-Texturen', 'es': 'Texturas de nebulosas', 'ru': 'Текстуры туманностей' },
+  'Bright Novae': { 'en': 'Bright Novae', 'zh_CN': '亮新星', 'ja': '新星', 'ko': '밝은 신성', 'fr': 'Novae brillantes', 'de': 'Helle Novae', 'es': 'Novas brillantes', 'ru': 'Яркие новые' },
+  'Object Visibility': { 'en': 'Object Visibility', 'zh_CN': '天体可见性', 'ja': '天体の可視性', 'ko': '천체 가시성', 'fr': 'Visibilité des objets', 'de': 'Objektsichtbarkeit', 'es': 'Visibilidad de objetos', 'ru': 'Видимость объектов' },
+  'Observability Analysis': { 'en': 'Observability Analysis', 'zh_CN': '可观测性分析', 'ja': '観測可能性分析', 'ko': '관측가능성 분석', "fr": "Analyse d'observabilité", 'de': 'Beobachtbarkeitsanalyse', 'es': 'Análisis de observabilidad', 'ru': 'Анализ наблюдаемости' },
+  'Oculars': { 'en': 'Oculars', 'zh_CN': '目镜', 'ja': 'アイピース', 'ko': '아이피스', 'fr': 'Oculaires', 'de': 'Okulare', 'es': 'Oculares', 'ru': 'Окуляры' },
+  'Online Queries': { 'en': 'Online Queries', 'zh_CN': '在线查询', 'ja': 'オンライン検索', 'ko': '온라인 조회', 'fr': 'Requêtes en ligne', 'de': 'Online-Abfragen', 'es': 'Consultas en línea', 'ru': 'Онлайн-запросы' },
+  'Planes': { 'en': 'Planes', 'zh_CN': '飞机', 'ja': '航空機', 'ko': '비행기', 'fr': 'Avions', 'de': 'Flugzeuge', 'es': 'Aviones', 'ru': 'Самолёты' },
+  'Pointer Coordinates': { 'en': 'Pointer Coordinates', 'zh_CN': '指针坐标', 'ja': 'ポインター座標', 'ko': '포인터 좌표', 'fr': 'Coordonnées du pointeur', 'de': 'Zeigerkoordinaten', 'es': 'Coordenadas del puntero', 'ru': 'Координаты указателя' },
+  'Remote Sync': { 'en': 'Remote Sync', 'zh_CN': '远程同步', 'ja': 'リモート同期', 'ko': '원격 동기화', 'fr': 'Synchronisation à distance', 'de': 'Remote-Synchronisation', 'es': 'Sincronización remota', 'ru': 'Удалённая синхронизация' },
+  '3D Sceneries': { 'en': '3D Sceneries', 'zh_CN': '3D场景', 'ja': '3Dシーナリ', 'ko': '3D 장면', 'fr': 'Scènes 3D', 'de': '3D-Szenarien', 'es': 'Escenarios 3D', 'ru': '3D-сцены' },
+  'Sky Culture Maker': { 'en': 'Sky Culture Maker', 'zh_CN': '星空文化制作器', 'ja': '星空文化メーカー', 'ko': '별자리 문화 메이커', 'fr': 'Créateur de cultures célestes', 'de': 'Sternkultur-Ersteller', 'es': 'Creador de culturas celestes', 'ru': 'Создатель звёздных культур' },
+  'Historical Supernovae': { 'en': 'Historical Supernovae', 'zh_CN': '历史超新星', 'ja': '歴史的な超新星', 'ko': '역사적 초신성', 'fr': 'Supernovae historiques', 'de': 'Historische Supernovae', 'es': 'Supernovas históricas', 'ru': 'Исторические сверхновые' },
+  'Time Navigator': { 'en': 'Time Navigator', 'zh_CN': '时间导航器', 'ja': 'タイムナビゲーター', 'ko': '시간 내비게이터', 'fr': 'Navigateur temporel', 'de': 'Zeit-Navigator', 'es': 'Navegador temporal', 'ru': 'Навигатор времени' },
+  'Telescope Control': { 'en': 'Telescope Control', 'zh_CN': '望远镜控制', 'ja': '望遠鏡制御', 'ko': '망원경 제어', 'fr': 'Contrôle de télescope', 'de': 'Teleskopsteuerung', 'es': 'Control de telescopio', 'ru': 'Управление телескопом' },
+  'Mosaic Camera': { 'en': 'Mosaic Camera', 'zh_CN': '拼接相机', 'ja': 'モザイクカメラ', 'ko': '모자이크 카메라', 'fr': 'Caméra mosaïque', 'de': 'Mosaik-Kamera', 'es': 'Cámara mosaico', 'ru': 'Мозаичная камера' },
+  'Navigational Stars': { 'en': 'Navigational Stars', 'zh_CN': '导航星', 'ja': '航法星', 'ko': '항법 별', 'fr': 'Étoiles de navigation', 'de': 'Navigationssterne', 'es': 'Estrellas de navegación', 'ru': 'Навигационные звёзды' },
+  'Oculus': { 'en': 'Oculus', 'zh_CN': 'Oculus VR', 'ja': 'Oculus', 'ko': 'Oculus', 'fr': 'Oculus', 'de': 'Oculus', 'es': 'Oculus', 'ru': 'Oculus' },
+  'Vts': { 'en': 'Vts', 'zh_CN': '虚拟望远镜', 'ja': '仮想望遠鏡', 'ko': '가상 망원경', 'fr': 'Télescope virtuel', 'de': 'Virtuelles Teleskop', 'es': 'Telescopio virtual', 'ru': 'Виртуальный телескоп' },
 }
 
 // 地景名称翻译表
