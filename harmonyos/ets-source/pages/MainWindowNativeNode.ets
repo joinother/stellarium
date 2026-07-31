@@ -3396,24 +3396,20 @@ private loadPlanetPositions(): void {
     ]
   }
 
-  // Derive the world basis directly from the two physical references. Gravity
-  // points down; gravity x magnetic points east; east x gravity points north.
+  // Derive the world basis directly from the two physical references. On this
+  // HarmonyOS device the gravity response is the support vector pointing up.
+  // Magnetic x up points east; up x east points north.
   // This gives a true device pose without applying a second correction to an
   // already fused rotation quaternion.
   private gyroForwardFromGravityAndMagnetic(): number[] {
     if (this.gyroGravityDevice.length !== 3 || this.gyroMagneticDevice.length !== 3) { return [] }
-    // HarmonyOS exposes the measured support acceleration here: on this
-    // device it points away from Earth. Convert it to the physical down axis
-    // before constructing the ENU basis.
-    const gravityRaw = this.gyroNormalizeVector(this.gyroGravityDevice)
-    const gravity = [-gravityRaw[0], -gravityRaw[1], -gravityRaw[2]]
+    const up = this.gyroNormalizeVector(this.gyroGravityDevice)
     const magnetic = this.gyroNormalizeVector(this.gyroMagneticDevice)
-    const eastRaw = this.gyroCross(gravity, magnetic)
+    const eastRaw = this.gyroCross(magnetic, up)
     const eastLength = Math.sqrt(eastRaw[0] * eastRaw[0] + eastRaw[1] * eastRaw[1] + eastRaw[2] * eastRaw[2])
     if (eastLength < 0.12) { return [] }
     const east = [eastRaw[0] / eastLength, eastRaw[1] / eastLength, eastRaw[2] / eastLength]
-    const north = this.gyroNormalizeVector(this.gyroCross(east, gravity))
-    const up = [-gravity[0], -gravity[1], -gravity[2]]
+    const north = this.gyroNormalizeVector(this.gyroCross(up, east))
     // The observer looks through the rear of the display, i.e. device -Z.
     const rearNormal = [0, 0, -1]
     const enu = [
@@ -5472,6 +5468,9 @@ private loadPlanetPositions(): void {
         return true
       }
     }
+    if (!this.drawerOpen && this.isCompactTopQuickPoint(x, y)) {
+      return true
+    }
     return y >= this.skyHeight - 80
   }
 
@@ -5804,7 +5803,8 @@ private loadPlanetPositions(): void {
           if (downX >= qx && downX <= qx + 44 && downY >= qy + 54 && downY <= qy + 54 + 44) {
             hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio tap via handleSkyTouch')
             this.resetPanelIdle()
-            this.setPanel('audio')
+            this.toggleMusic()
+            this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
             return
           }
         }
@@ -6587,7 +6587,8 @@ private loadPlanetPositions(): void {
       this.compactQuickButton('audio', this.musicEnabled, () => {
         hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio button CLICKED musicEnabled=%{public}s', this.musicEnabled.toString())
         this.resetPanelIdle()
-        this.setPanel('audio')
+        this.toggleMusic()
+        this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
       })
     }
       .width(44)
@@ -6630,8 +6631,8 @@ private loadPlanetPositions(): void {
     }
     if (x >= qx && x <= qx + 44 && y >= qy + 54 && y <= qy + 98) {
       this.resetPanelIdle()
-      this.setPanel('audio')
-      this.flashHint('已打开音频控制')
+      this.toggleMusic()
+      this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
       return true
     }
     return false
@@ -6646,7 +6647,17 @@ private loadPlanetPositions(): void {
       return
     }
     if (event.type === TouchType.Up) {
-      this.handleCompactTopQuickTap(this.touchWindowX(points[0]), this.touchWindowY(points[0]))
+      // Prefer the explicit window coordinates. Some ArkUI builds expose only
+      // component-local x/y for this small overlay, so retain that fallback.
+      const windowX = points[0].windowX
+      const windowY = points[0].windowY
+      if (typeof windowX === 'number' && typeof windowY === 'number') {
+        this.handleCompactTopQuickTap(windowX, windowY)
+      } else {
+        const localX = points[0].x ?? 0
+        const localY = points[0].y ?? 0
+        this.handleCompactTopQuickTap(this.compactTopQuickX() + localX, this.compactTopQuickY() + localY)
+      }
     }
   }
 
@@ -6662,7 +6673,8 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor(active ? '#5B93BF' : 'rgba(18, 22, 36, 0.76)')
+      .backgroundColor(active ? 'rgba(91, 147, 191, 0.60)' : 'rgba(18, 22, 36, 0.50)')
+      .backdropBlur(active ? 28 : 36)
       .border({ width: 1, color: active ? 'rgba(107, 163, 214, 0.42)' : 'rgba(255, 255, 255, 0.10)' })
       .borderRadius(22)
       .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
