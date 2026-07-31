@@ -547,9 +547,9 @@ struct WindowNativeNode {
   @State private gyroscopeStatus: ResourceStr = I18n.t('m_gyro_off')
   @State private gyroscopeSensitivityText: string = 'Standard'
   @State private gyroCalibPanelOpen: boolean = false
-  // A compact, tilt-compensated magnetic heading. Keeping this visible makes
-  // it possible to verify that the physical compass and the sky agree.
+  // The gyro control itself becomes a live compass while it is enabled.
   @State private gyroCompassText: string = '罗盘 --'
+  @State private gyroCompassAngle: number = 0
   @State private gyroOffsetAz: number = 0    // 方位角校准偏移（度）
   @State private gyroOffsetAlt: number = 0   // 高度角校准偏移（度）
   @State private liveMode: boolean = true
@@ -722,6 +722,8 @@ struct WindowNativeNode {
   private gyroLastDiagnosticMs: number = 0
   private gyroLastCompassUiUpdateMs: number = 0
   private gyroMagneticHeading: number = Number.NaN
+  private gyroRawAzimuth: number = Number.NaN
+  private gyroRawAltitude: number = Number.NaN
   // Automatic, session-local alignment from the physical magnetic compass to
   // Stellarium's Alt/Az frame. The visible slider remains a separate manual
   // fine adjustment, so it stays predictable for the user.
@@ -2975,6 +2977,7 @@ private loadPlanetPositions(): void {
       this.gyroMagneticHeading = Number.NaN
       this.gyroCompassAzAlignment = 0
       this.gyroCompassText = '罗盘 --'
+      this.gyroCompassAngle = 0
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
@@ -3035,6 +3038,7 @@ private loadPlanetPositions(): void {
     this.gyroMagneticHeading = Number.NaN
     this.gyroCompassAzAlignment = 0
     this.gyroCompassText = '罗盘 --'
+    this.gyroCompassAngle = 0
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3598,6 +3602,12 @@ private loadPlanetPositions(): void {
     const heading = this.gyroMagneticHeadingFromDeviceVectors()
     if (!Number.isFinite(heading)) { return }
     this.gyroMagneticHeading = heading
+    // Keep the needle continuous through 359 -> 0 rather than animating a
+    // full revolution in the opposite direction.
+    let delta = (heading - this.gyroCompassAngle) % 360
+    if (delta > 180) { delta -= 360 }
+    if (delta < -180) { delta += 360 }
+    this.gyroCompassAngle += delta
     const now = Date.now()
     if (now - this.gyroLastCompassUiUpdateMs < 120) { return }
     this.gyroLastCompassUiUpdateMs = now
@@ -6447,16 +6457,6 @@ private loadPlanetPositions(): void {
           .position({ x: this.EDGE_MARGIN, y: this.railTop() })
           .hitTestBehavior(HitTestMode.Default)
       }
-      // A compact live magnetic heading sits beside the active gyro control.
-      // It is informational only, so it never steals a sky gesture.
-      if (this.expandedUiAllowed() && this.gyroscopeEnabled && !this.railCollapsed) {
-        Stack() { this.gyroCompassReadout() }
-          .position({ x: this.EDGE_MARGIN + 64, y: this.railTop() + this.RAIL_TOP_PAD + this.pinnedActions.length * this.RAIL_ITEM_STEP + this.RAIL_GYRO_OFFSET + 8 })
-          .hitTestBehavior(HitTestMode.None)
-          .zIndex(28)
-          .opacity(this.railPinned ? 1.0 : this.panelIdleOpacity)
-          .animation({ duration: 240, curve: Curve.EaseOut })
-      }
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.expandedUiAllowed() && this.drawerOpen) {
         Stack() { this.actionDrawer() }
@@ -6691,15 +6691,6 @@ private loadPlanetPositions(): void {
             this.handleCompactTopQuickTouch(event)
           })
       }
-      if (!this.drawerOpen && this.gyroscopeEnabled) {
-        Stack() { this.gyroCompassReadout() }
-          .position({ x: Math.max(12, this.compactTopQuickX() - 92), y: this.compactTopQuickY() + 8 })
-          .hitTestBehavior(HitTestMode.None)
-          .zIndex(29)
-          .opacity(this.phoneChromeOpacity())
-          .animation({ duration: 240, curve: Curve.EaseOut })
-      }
-
       // 陀螺仪校准面板（紧凑布局）
       if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
         Stack() { this.gyroCalibPanel() }
@@ -6912,10 +6903,14 @@ private loadPlanetPositions(): void {
   @Builder
   compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true, pressed: boolean = false) {
     Row() {
-      Image(this.getIcon(icon, active))
-        .width(22)
-        .height(22)
-        .fillColor(active ? '#FFFFFF' : this.nmText())
+      if (icon === 'gyro' && active) {
+        this.gyroCompassGlyph()
+      } else {
+        Image(this.getIcon(icon, active))
+          .width(22)
+          .height(22)
+          .fillColor(active ? '#FFFFFF' : this.nmText())
+      }
     }
       .width(44)
       .height(44)
@@ -8421,10 +8416,14 @@ private loadPlanetPositions(): void {
   @Builder
   gyroButton() {
     Stack() {
-      Image(this.getIcon('gyro', this.gyroscopeEnabled))
-        .width(22)
-        .height(22)
-        .fillColor(this.gyroscopeEnabled ? '#FFFFFF' : this.nmText())
+      if (this.gyroscopeEnabled) {
+        this.gyroCompassGlyph()
+      } else {
+        Image(this.getIcon('gyro', false))
+          .width(22)
+          .height(22)
+          .fillColor(this.nmText())
+      }
     }
       .width(44)
       .height(44)
@@ -8448,25 +8447,34 @@ private loadPlanetPositions(): void {
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
   }
 
-  // Small enough to stay out of the sky, but explicit enough for the user to
-  // validate the physical direction while testing the gyro.
+  // The active gyro control is its own compact compass: cardinal directions
+  // stay fixed while the needle follows the physical magnetic heading.
   @Builder
-  gyroCompassReadout() {
-    Row({ space: 5 }) {
-      Circle().width(5).height(5).fill(this.gyroCompassText === '罗盘 --' ? '#8A98A8' : this.nmAccent())
-      Text(this.gyroCompassText)
-        .fontSize(11)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.nmText())
-        .maxLines(1)
+  gyroCompassGlyph() {
+    Stack() {
+      Circle()
+        .width(32).height(32)
+        .fill('rgba(7, 14, 27, 0.28)')
+        .stroke('rgba(207, 236, 255, 0.52)')
+        .strokeWidth(0.8)
+      Text('北').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#FF9A8A')
+        .position({ x: 10, y: 0 })
+      Text('东').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
+        .position({ x: 24, y: 11 })
+      Text('南').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
+        .position({ x: 10, y: 23 })
+      Text('西').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
+        .position({ x: 1, y: 11 })
+      Text('▲')
+        .fontSize(12)
+        .fontColor('#FF7060')
+        .position({ x: 10, y: 8 })
+        .rotate({ angle: this.gyroCompassAngle })
+        .animation({ duration: 90, curve: Curve.Linear })
     }
-      .height(28)
-      .padding({ left: 9, right: 10 })
-      .backgroundColor(this.phoneChromeIsGlass() ? 'rgba(10,14,26,0.44)' : this.nm())
-      .backdropBlur(28)
-      .border({ width: 0.5, color: this.nmBorder() })
-      .borderRadius(14)
-      .shadow({ radius: 12, color: 'rgba(0,0,0,0.20)', offsetX: 0, offsetY: 5 })
+      .width(32)
+      .height(32)
+      .alignContent(Alignment.Center)
   }
 
   // ── 陀螺仪校准面板 ──

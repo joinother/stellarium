@@ -3656,21 +3656,37 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			// Keep physical zenith at the top through normal views so the horizon
-			// remains level. The zenith projection becomes undefined only at the
-			// two poles, where we blend to a transported basis to avoid a flip.
-			const Vec3d zenith(0., 0., 1.);
-			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
+			// Preserve the complete device pose. The ArkTS layer supplies the
+			// screen-up vector from the same fused rotation sample as the aim, so
+			// rolling the tablet must rotate the horizon and compass marks too.
+			// Fall back to a transported basis only at the two polar singularities
+			// or on older clients which send az|alt without an up vector.
 			static Vec3d previousGyroUp(0., 0., 1.);
 			static bool hasPreviousGyroUp = false;
-			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
-			if (transportedUp.normSquared() < 1e-8)
-				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			const double zenithStrength = zenithUp.normSquared();
-			const double zenithBlend = std::clamp((zenithStrength - 0.01) / 0.09, 0.0, 1.0);
-			Vec3d up = !hasPreviousGyroUp
-				? zenithUp
-				: transportedUp * (1.0 - zenithBlend) + zenithUp * zenithBlend;
+			Vec3d up;
+			bool hasSensorUp = false;
+			if (parts.size() >= 5)
+			{
+				bool okUpX = false, okUpY = false, okUpZ = false;
+				const Vec3d sensorUp(parts[2].toDouble(&okUpX), parts[3].toDouble(&okUpY), parts[4].toDouble(&okUpZ));
+				if (okUpX && okUpY && okUpZ)
+				{
+					up = sensorUp - aim * aim.dot(sensorUp);
+					if (up.normSquared() > 1e-8)
+					{
+						up.normalize();
+						if (hasPreviousGyroUp && up.dot(previousGyroUp) < 0.)
+							up = -up;
+						hasSensorUp = true;
+					}
+				}
+			}
+			if (!hasSensorUp)
+			{
+				up = previousGyroUp - aim * aim.dot(previousGyroUp);
+				if (up.normSquared() < 1e-8)
+					up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
+			}
 			if (up.normSquared() < 1e-8)
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
