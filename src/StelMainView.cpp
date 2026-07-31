@@ -3523,11 +3523,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d aim(cos(altRad) * cos(azRad), cos(altRad) * sin(azRad), sin(altRad));
 			aim.normalize();
 
-			// Keep the physical zenith at the top of the map. The orientation
-			// sensor's screen-up vector is device-frame data; using it directly
-			// here made a vertical Pad render its horizon as a vertical line.
-			// Near zenith/nadir the zenith projection degenerates, so preserve a
-			// continuously transported basis only in that small polar region.
+			// Start with physical zenith at the top, then parallel-transport that
+			// camera-up vector across every later view direction. A switch back to
+			// a freshly projected zenith basis after crossing either pole was the
+			// last source of the visible 180-degree turn.
 			const Vec3d zenith(0., 0., 1.);
 			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
 			static Vec3d previousGyroUp(0., 0., 1.);
@@ -3535,7 +3534,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
 			if (transportedUp.normSquared() < 1e-8)
 				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			Vec3d up = (zenithUp.normSquared() >= 0.06 || !hasPreviousGyroUp) ? zenithUp : transportedUp;
+			Vec3d up = !hasPreviousGyroUp ? zenithUp : transportedUp;
 			if (up.normSquared() < 1e-8)
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
