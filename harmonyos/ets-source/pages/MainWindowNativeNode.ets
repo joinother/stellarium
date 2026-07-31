@@ -2943,17 +2943,10 @@ private loadPlanetPositions(): void {
       // Rotation vector is a complete fused pose, so it remains continuous
       // while a tablet crosses the horizon. ORIENTATION is Euler based and is
       // retained only as a fallback for devices without this sensor.
-      // ROTATION_VECTOR is already the system's synchronized fusion of
-      // gyroscope, gravity and compass. Mixing in independently delivered
-      // GRAVITY/MAGNETIC callbacks here combines samples from different
-      // moments, which showed up as sideways drift and jitter. We do still
-      // sample gravity and magnetic field slowly for the *read-only* compass
-      // readout and explicit user calibration; those readings never drive the
-      // per-frame camera pose.
       sensor.on(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback, { interval: 16666667 })
       try {
-        sensor.on(sensor.SensorId.GRAVITY, this.gyroGravityCallback, { interval: 100000000 })
-        sensor.on(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback, { interval: 100000000 })
+        sensor.on(sensor.SensorId.GRAVITY, this.gyroGravityCallback, { interval: 16666667 })
+        sensor.on(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback, { interval: 33333333 })
       } catch (compassError) {
         // A device without either auxiliary sensor can still use its fused
         // rotation vector; the readout simply remains unavailable.
@@ -3265,7 +3258,7 @@ private loadPlanetPositions(): void {
     // Stellarium's azimuth frame. More importantly, it becomes ambiguous when
     // the Pad is flat. Anchor only once the display has a real horizontal aim;
     // after that use its delta, not its changing Euler-angle zero point.
-    const rawHeading = this.wrapGyroAzimuth(-data.alpha + this.gyroEffectiveAzOffset())
+    const rawHeading = this.wrapGyroAzimuth(-data.alpha + this.gyroOffsetAz)
     let targetAz = rawHeading
     if (this.gyroAbsolutePoseReady) {
       if (!this.gyroHeadingReferenceReady && horizontalStrength >= 0.42) {
@@ -3541,21 +3534,13 @@ private loadPlanetPositions(): void {
   // alpha/beta/gamma discontinuity at the horizon.
   private onGravityData(data: sensor.GravityResponse): void {
     if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
-      const sample = [data.x, data.y, data.z]
-      this.gyroFilteredGravityDevice = this.gyroFilterDeviceVector(this.gyroFilteredGravityDevice, sample, 0.34)
-      this.gyroGravityDevice = this.gyroFilteredGravityDevice
-      this.updateGyroCompassReadout()
+      this.gyroGravityDevice = [data.x, data.y, data.z]
     }
   }
 
   private onMagneticFieldData(data: sensor.MagneticFieldResponse): void {
     if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
-      const sample = [data.x, data.y, data.z]
-      // Magnetic readings are noisier than gravity but affect only heading;
-      // a modest local filter removes jitter without making tilt feel delayed.
-      this.gyroFilteredMagneticDevice = this.gyroFilterDeviceVector(this.gyroFilteredMagneticDevice, sample, 0.12)
-      this.gyroMagneticDevice = this.gyroFilteredMagneticDevice
-      this.updateGyroCompassReadout()
+      this.gyroMagneticDevice = [data.x, data.y, data.z]
     }
   }
 
@@ -3678,69 +3663,50 @@ private loadPlanetPositions(): void {
     // The screen front is device +Z. The observer looks through the rear of
     // the tablet, therefore the sky-facing ray is the inverse normal.
     const normalEnu = this.gyroRotateVector(orientation, [0, 0, 1])
-    // Keep the camera direction from one synchronized system-fused pose.
-    // The native layer derives a gravity-locked map-up vector, so yaw does
-    // not incorrectly roll the horizon line.
-    let forward = this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
-    let up = this.gyroBridgeFromEnu(this.gyroRotateVector(orientation, [0, 1, 0]))
+    const fusedForward = this.gyroForwardFromGravityAndMagnetic()
+    let forward = fusedForward.length === 3
+      ? fusedForward
+      : this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
     forward = this.gyroNormalizeVector(forward)
 
-    const azimuthOffset = this.gyroEffectiveAzOffset()
-    if (azimuthOffset !== 0) {
-      forward = this.gyroRotateAboutVertical(forward, azimuthOffset)
-      up = this.gyroRotateAboutVertical(up, azimuthOffset)
+    if (this.gyroOffsetAz !== 0) {
+      forward = this.gyroRotateAboutVertical(forward, this.gyroOffsetAz)
     }
     if (this.gyroOffsetAlt !== 0) {
       const horizontal = Math.sqrt(forward[0] * forward[0] + forward[1] * forward[1])
       if (horizontal > 0.001) {
         forward = this.gyroRotateAboutAxis(forward, [forward[1] / horizontal, -forward[0] / horizontal, 0], this.gyroOffsetAlt)
-        up = this.gyroRotateAboutAxis(up, [forward[1] / horizontal, -forward[0] / horizontal, 0], this.gyroOffsetAlt)
         forward = this.gyroNormalizeVector(forward)
       }
     }
 
     const now = Date.now()
-    const rawUp = this.gyroOrthonormalizeUp(forward, up)
     if (this.gyroFwd.length !== 3) {
-      // A rotation-vector sample describes one complete rigid body pose.
-      // Seed the local celestial tangent plane from that pose exactly once.
       this.gyroFwd = forward
-      this.gyroUp = rawUp
       this.gyroLastSampleMs = now
     } else {
       let dt = this.gyroLastSampleMs > 0 ? (now - this.gyroLastSampleMs) / 1000 : 1 / 60
       this.gyroLastSampleMs = now
       if (dt <= 0) { dt = 1 / 60 }
       if (dt > 0.25) { dt = 0.25 }
-      let tau = 0.050
-      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.12 }
-      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.032 }
+      let tau = 0.09
+      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.16 }
+      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.05 }
       const a = 1 - Math.exp(-dt / tau)
-      const previousForward = this.gyroFwd
-      const previousUp = this.gyroUp
-      const smoothedForward = this.gyroSlerpUnitVector(previousForward, forward, a)
-      const transportedUp = this.gyroParallelTransportUp(previousForward, smoothedForward, previousUp)
-      let targetUp = this.gyroOrthonormalizeUp(smoothedForward, rawUp)
-      // A physical tablet cannot roll more than 135 degrees in one fused
-      // sample. Treat that as a sensor discontinuity rather than flipping the
-      // view basis; the next valid sample converges normally.
-      if (this.gyroDot(transportedUp, targetUp) < -0.70) {
-        targetUp = transportedUp
-      }
-      this.gyroFwd = smoothedForward
-      this.gyroUp = this.gyroSlerpUnitVector(transportedUp, targetUp, a)
+      this.gyroFwd = this.gyroNormalizeVector([
+        this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * a,
+        this.gyroFwd[1] + (forward[1] - this.gyroFwd[1]) * a,
+        this.gyroFwd[2] + (forward[2] - this.gyroFwd[2]) * a
+      ])
     }
 
-    if (now - this.gyroLastDispatchMs < 16) { return }
+    if (now - this.gyroLastDispatchMs < 33) { return }
     this.gyroLastDispatchMs = now
     const altAz = this.gyroVectorAltAz(this.gyroFwd)
     this.gyroLastAz = altAz[0]
     this.gyroLastAlt = altAz[1]
     this.updateGyroTargetGuide()
-    // Native code derives a stable map-up vector from real zenith, with a
-    // continuity fallback only at the two poles.
-    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3) + '|'
-      + this.gyroUp[0].toFixed(5) + '|' + this.gyroUp[1].toFixed(5) + '|' + this.gyroUp[2].toFixed(5))
+    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3))
     this.gyroEventCount += 1
     if (this.gyroEventCount % 4 === 0) {
       this.gyroscopeStatus = I18n.t('m_gyro_working')
@@ -6949,8 +6915,8 @@ private loadPlanetPositions(): void {
   compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true, pressed: boolean = false) {
     Row() {
       Image(this.getIcon(icon, active))
-        .width(icon === 'gyro' && active ? 28 : 22)
-        .height(icon === 'gyro' && active ? 28 : 22)
+        .width(22)
+        .height(22)
         .fillColor(active ? '#FFFFFF' : this.nmText())
     }
       .width(44)
@@ -8293,7 +8259,7 @@ private loadPlanetPositions(): void {
       'grid': $r('app.media.ic_grid'),
       'more': $r('app.media.ic_more'),
       'close': $r('app.media.ic_close'),
-      'gyro': isActive ? $r('app.media.ic_compass_on') : $r('app.media.ic_gyro'),
+      'gyro': $r('app.media.ic_gyro'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
@@ -8458,8 +8424,8 @@ private loadPlanetPositions(): void {
   gyroButton() {
     Stack() {
       Image(this.getIcon('gyro', this.gyroscopeEnabled))
-        .width(this.gyroscopeEnabled ? 28 : 22)
-        .height(this.gyroscopeEnabled ? 28 : 22)
+        .width(22)
+        .height(22)
         .fillColor(this.gyroscopeEnabled ? '#FFFFFF' : this.nmText())
     }
       .width(44)
@@ -8505,17 +8471,6 @@ private loadPlanetPositions(): void {
 
       Text(I18n.t('i0043'))
         .fontSize(11).fontColor('#8099BBCC').width('100%')
-
-      Row() {
-        Text('罗盘').fontSize(12).fontColor('#CCCCCC').width(44)
-        Text(this.gyroCompassText)
-          .fontSize(12).fontColor('#7FB3DC').layoutWeight(1)
-        Button('对齐磁北')
-          .fontSize(11).fontColor('#E5FFFFFF')
-          .height(28).padding({ left: 10, right: 10 })
-          .backgroundColor('rgba(91,147,191,0.25)').borderRadius(14)
-          .onClick(() => { this.alignGyroToMagneticNorth() })
-      }.width('100%')
 
       // 灵敏度选择
       Row({ space: 8 }) {

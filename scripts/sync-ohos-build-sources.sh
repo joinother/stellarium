@@ -27,7 +27,6 @@ SOURCES=(
   "harmonyos/ets-source/qability/StellariumResourceBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/StellariumResourceBootstrap.ets"
   "harmonyos/ets-source/resources/base/media/ic_audio.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_audio.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
-  "harmonyos/ets-source/resources/base/media/ic_compass_on.png:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_compass_on.png"
   "harmonyos/module.json5:build/libstellarium-harmonyos/entry/src/main/module.json5"
   "harmonyos/resources/base/element/string.json:build/libstellarium-harmonyos/entry/src/main/resources/base/element/string.json"
   "harmonyos/resources/zh_CN/element/string.json:build/libstellarium-harmonyos/entry/src/main/resources/zh_CN/element/string.json"

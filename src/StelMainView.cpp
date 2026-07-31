@@ -3656,38 +3656,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			// Preserve the complete celestial camera basis supplied by ArkTS. Its
-			// screen-up vector has already been parallel-transported and smoothed
-			// in the tangent plane of the sky sphere, so a tablet roll must remain
-			// a roll here. Re-orienting it against the preceding frame would turn a
-			// legitimate half-turn into a sudden 180-degree horizon flip.
+			// Keep physical zenith at the top through normal views so the horizon
+			// remains level. The zenith projection becomes undefined only at the
+			// two poles, where we blend to a transported basis to avoid a flip.
+			const Vec3d zenith(0., 0., 1.);
+			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
 			static Vec3d previousGyroUp(0., 0., 1.);
-			Vec3d up;
-			bool hasSensorUp = false;
-			if (parts.size() >= 5)
-			{
-				bool okUpX = false, okUpY = false, okUpZ = false;
-				const Vec3d sensorUp(parts[2].toDouble(&okUpX), parts[3].toDouble(&okUpY), parts[4].toDouble(&okUpZ));
-				if (okUpX && okUpY && okUpZ)
-				{
-					up = sensorUp - aim * aim.dot(sensorUp);
-					if (up.normSquared() > 1e-8)
-					{
-						up.normalize();
-						hasSensorUp = true;
-					}
-				}
-			}
-			if (!hasSensorUp)
-			{
-				up = previousGyroUp - aim * aim.dot(previousGyroUp);
-				if (up.normSquared() < 1e-8)
-					up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			}
+			static bool hasPreviousGyroUp = false;
+			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
+			if (transportedUp.normSquared() < 1e-8)
+				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
+			const double zenithStrength = zenithUp.normSquared();
+			const double zenithBlend = std::clamp((zenithStrength - 0.01) / 0.09, 0.0, 1.0);
+			Vec3d up = !hasPreviousGyroUp
+				? zenithUp
+				: transportedUp * (1.0 - zenithBlend) + zenithUp * zenithBlend;
 			if (up.normSquared() < 1e-8)
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
 			previousGyroUp = up;
+			hasPreviousGyroUp = true;
 
 			// Order matters: setViewDirectionJ2000() re-reads the *current* up
 			// vector when it calls core->lookAtJ2000().
