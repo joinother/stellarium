@@ -133,6 +133,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     }
   }
 
+  // HAP updates preserve filesDir. Keep the mutable runtime copy of this
+  // small pair in sync so an old ssystem_major.ini cannot keep referring to
+  // the pre-fix Earth texture after a normal overwrite install.
+  try {
+    writeRawFile(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
+  }
+
   // Observable proof that localization data is on disk, so "star names don't
   // translate" can be diagnosed from logs instead of being invisible.
   hilog.info(LOG_DOMAIN, LOG_TAG,

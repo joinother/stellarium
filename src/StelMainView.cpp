@@ -30,6 +30,7 @@
 #include "SkyGui.hpp"
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
+#include "SolarEclipseComputer.hpp"
 #include "StelActionMgr.hpp"
 #include "StelOpenGL.hpp"
 #include "StelOpenGLArray.hpp"
@@ -80,6 +81,7 @@
 #include <QHash>
 #include <QSet>
 #include <atomic>
+#include <algorithm>
 #include <QGraphicsSceneMouseEvent>
 #include <QGraphicsAnchorLayout>
 #include <QGraphicsWidget>
@@ -159,6 +161,11 @@ static std::atomic<float> s_ohosRenderFps{0.0f};
 
 // Ignore delayed settle phases left behind by an earlier object selection.
 static std::atomic<quint64> s_ohosNavigationSerial{0};
+// Last ArkUI safe point. Layout changes should animate only the delta between
+// two safe regions, never re-apply the full offset and drift the selected body.
+static QString s_ohosSafeTargetObject;
+static double s_ohosSafeTargetY = 0.0;
+static double s_ohosSafeTargetHeight = 0.0;
 
 // Render resolution scale factor (0.0-1.0). Reduces the framebuffer resolution
 // to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
@@ -617,7 +624,11 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 		const double ppr = prj ? static_cast<double>(prj->getPixelPerRadAtCenter()) : 0.0;
 		if (ppr <= 1e-9)
 			return;
-		movementMgr->panView(dx / ppr, -dy / ppr);
+		// ArkTS deltas describe finger motion. StelMovementMgr::panView moves
+		// the camera, so the old signs made the sky travel against the hand in
+		// both axes. Keep direct manipulation: drag right/up shows sky moving
+		// right/up, and the render-thread inertia below inherits the same frame.
+		movementMgr->panView(-dx / ppr, dy / ppr);
 	}
 	else
 	{
@@ -864,7 +875,7 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	// execution and return pending; the caller ignores the return value.
 	{
 		const QString cmdName = key.section('|', 0, 0);
-		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
+		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "setGyroView" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_ohosCmdQueue.append([command]() { command(); });
@@ -1074,6 +1085,9 @@ QJsonObject currentStateJson()
 {
 	QJsonObject result;
 	result["ok"] = true;
+	// The ArkUI shell is rendered separately from Stellarium's Qt scene.  Return
+	// the authoritative property here instead of inferring night mode from a UI action.
+	result["nightMode"] = StelApp::getInstance().getVisionModeNight();
 
 	StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
 	StelCore* core = StelApp::getInstance().getCore();
@@ -1544,9 +1558,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			const QString query = arg.trimmed();
+			const QStringList searchParts = arg.split('|');
+			const QString query = searchParts.value(0).trimmed();
+			const bool selectOnly = searchParts.value(1).trimmed().compare("selectOnly", Qt::CaseInsensitive) == 0;
 			bool found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
-			if (found && movementMgr && !objectMgr->getSelectedObject().isEmpty())
+			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty())
 			{
 				const StelObjectP target = objectMgr->getSelectedObject().first();
 				const QString type = target->getType().toLower();
@@ -1576,8 +1592,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				movementMgr->setFlagTracking(false);
 				if (currentFov + 0.5 < transitFov)
 					movementMgr->zoomTo(transitFov, 0.40f);
-				movementMgr->moveToObject(target, 1.20f, StelMovementMgr::ZoomNone);
-				// Final zoom-in after move completes
 				QTimer::singleShot(520, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
 					if (serial == s_ohosNavigationSerial.load())
 						movementMgr->zoomTo(targetFov, 0.85f);
@@ -1588,7 +1602,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			markOhosInteraction();
 
-			result = selectedObjectJson(core);
+			// FullInfo expands a large rich-text block and can take a visible slice
+			// of a frame on a tablet. Return the data needed to open the card now;
+			// ArkTS requests the long prose after the selection/navigation settles.
+			result = selectedObjectJson(core, false);
 			result["ok"] = true;
 			result["found"] = found;
 			result["query"] = query;
@@ -1732,7 +1749,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		markOhosInteraction();
-		result = selectedObjectJson(core);
+			// Keep the tap response lightweight so the selected target can be drawn
+			// immediately. The full detail prose is loaded asynchronously by ArkTS.
+			result = selectedObjectJson(core, false);
 		result["ok"] = true;
 		result["found"] = found;
 		result["tapX"] = x;
@@ -1872,6 +1891,158 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "getSelectedObjectInfo")
 			return selectedObjectJson(core, arg.trimmed().toLower() == "full");
+
+		if (commandName == "moveToSelectedAt")
+		{
+			if (!objectMgr || !movementMgr || !core || objectMgr->getSelectedObject().isEmpty())
+			{
+				result["error"] = "no selected object";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			bool okX = false;
+			bool okY = false;
+			bool okW = false;
+			bool okH = false;
+			const double x = parts.value(0).toDouble(&okX);
+			const double y = parts.value(1).toDouble(&okY);
+			const double width = parts.value(2).toDouble(&okW);
+			const double height = parts.value(3).toDouble(&okH);
+			const QString mode = parts.value(4).trimmed().toLower();
+			if ((parts.size() != 4 && parts.size() != 5) || !okX || !okY || !okW || !okH || width <= 1.0 || height <= 1.0)
+			{
+				result["error"] = "moveToSelectedAt expects x|y|width|height|[focus|layout]";
+				return result;
+			}
+			// Horizontal viewport offsets translate the projected image directly,
+			// which is ideal for a tablet's side panel. Stellarium deliberately
+			// compensates its vertical offset while tracking an object, though, so
+			// a phone's top card needs an explicit, animated vertical pan below.
+			const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+			const double horizontalOffset = ((x / width) - 0.5) * 100.0;
+			// Do not estimate the vertical adjustment from field of view. That
+			// approximation is visibly wrong at high zoom and when a phone sheet
+			// changes from 6/10 to 9/10. Measure the selected body's actual
+			// projected position and convert the required screen-pixel delta with
+			// the projector's local pixel-per-radian scale instead.
+			auto verticalPanToTarget = [core, selectedObject, y, height]() {
+				const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+				if (!prj)
+					return 0.0;
+				const Vec4i viewport = prj->getViewport();
+				const double ppr = static_cast<double>(prj->getPixelPerRadAtCenter());
+				if (viewport[3] <= 1 || ppr <= 1e-9)
+					return 0.0;
+				Vec3d projected;
+				if (!prj->project(selectedObject->getJ2000EquatorialPos(core), projected))
+					return 0.0;
+				const double currentTopY = static_cast<double>(viewport[3] - 1) - projected[1];
+				const double desiredTopY = (y / height) * viewport[3];
+				return (desiredTopY - currentTopY) / ppr;
+			};
+			const double verticalPan = verticalPanToTarget();
+			const bool hasPreviousSafePoint = s_ohosSafeTargetObject == selectedObject->getEnglishName()
+				&& s_ohosSafeTargetHeight > 1.0;
+			const double layoutVerticalPan = hasPreviousSafePoint ? verticalPan : 0.0;
+			qInfo() << "[StellariumOhos][safe-target]" << objectMgr->getSelectedObject().constFirst()->getEnglishName()
+					<< "screen" << x << y << width << height
+					<< "horizontalOffset" << horizontalOffset << "verticalPan" << verticalPan
+					<< "layoutVerticalPan" << layoutVerticalPan << "mode" << mode;
+			const quint64 serial = ++s_ohosNavigationSerial;
+			auto animateVerticalPan = [movementMgr, verticalPanToTarget, serial]() {
+				const double verticalPan = verticalPanToTarget();
+				QTimer* timer = new QTimer(&StelMainView::getInstance());
+				timer->setInterval(16);
+				QObject::connect(timer, &QTimer::timeout, timer, [timer, movementMgr, verticalPanToTarget, verticalPan, serial, step = 0, previous = 0.0]() mutable {
+					if (serial != s_ohosNavigationSerial.load())
+					{
+						timer->stop();
+						timer->deleteLater();
+						return;
+					}
+					++step;
+					const double progress = (1.0 - std::cos(M_PI * qMin(step, 20) / 20.0)) * 0.5;
+					movementMgr->panView(0.0, verticalPan * (progress - previous));
+					markOhosInteraction();
+					previous = progress;
+					if (step >= 20)
+					{
+						timer->stop();
+						timer->deleteLater();
+						// Zoom and move-to-object use separate animations. Correct once
+						// after the main pan finishes from the *actual* projected point,
+						// otherwise the selected body can drift below its safe centre as
+						// the zoom animation settles.
+						QTimer::singleShot(64, &StelMainView::getInstance(), [movementMgr, verticalPanToTarget, serial]() {
+							if (serial != s_ohosNavigationSerial.load())
+								return;
+							const double remainingPan = verticalPanToTarget();
+							if (std::abs(remainingPan) > 1e-5)
+							{
+								movementMgr->panView(0.0, remainingPan);
+								markOhosInteraction();
+							}
+						});
+					}
+				});
+				timer->start();
+			};
+			// A layout transition moves an already positioned target. Re-running
+			// moveToObject() here first snaps it to the ordinary centre. Animate
+			// only the changed projection/vertical distance instead. Do not use
+			// moveViewport(duration): its QTimeLine is not clocked consistently by
+			// the OHOS render pump, producing a visible jump when a side panel closes.
+			if (mode == "layout" && hasPreviousSafePoint)
+			{
+				movementMgr->setFlagTracking(false);
+				const auto animateLayoutShift = [movementMgr, core, horizontalOffset, layoutVerticalPan, serial]() {
+					const double startHorizontalOffset = core->getViewportHorizontalOffset();
+					QTimer* timer = new QTimer(&StelMainView::getInstance());
+					timer->setInterval(16);
+					QObject::connect(timer, &QTimer::timeout, timer, [timer, movementMgr, core, startHorizontalOffset, horizontalOffset, layoutVerticalPan, serial, step = 0, previous = 0.0]() mutable {
+						if (serial != s_ohosNavigationSerial.load())
+						{
+							timer->stop();
+							timer->deleteLater();
+							return;
+						}
+						++step;
+						const double progress = (1.0 - std::cos(M_PI * qMin(step, 20) / 20.0)) * 0.5;
+						core->setViewportHorizontalOffset(startHorizontalOffset + (horizontalOffset - startHorizontalOffset) * progress);
+						movementMgr->panView(0.0, layoutVerticalPan * (progress - previous));
+						markOhosInteraction();
+						previous = progress;
+						if (step >= 20)
+						{
+							// Keep Stellarium's viewport target in sync for the next layout change.
+							movementMgr->moveViewport(horizontalOffset, 0.0, 0.0f);
+							timer->stop();
+							timer->deleteLater();
+						}
+					});
+					timer->start();
+				};
+				animateLayoutShift();
+			}
+			else
+			{
+				movementMgr->setFlagTracking(false);
+				movementMgr->moveViewport(horizontalOffset, 0.0, 0.0f);
+				movementMgr->moveToObject(selectedObject, 0.70f, StelMovementMgr::ZoomNone);
+				QTimer::singleShot(690, &StelMainView::getInstance(), animateVerticalPan);
+			}
+			s_ohosSafeTargetObject = selectedObject->getEnglishName();
+			s_ohosSafeTargetY = y;
+			s_ohosSafeTargetHeight = height;
+			result = selectedObjectJson(core, false);
+			result["ok"] = true;
+			result["safeTargetX"] = x;
+			result["safeTargetY"] = y;
+			result["viewportHorizontalOffset"] = core->getViewportHorizontalOffset();
+			result["viewportVerticalOffset"] = core->getViewportVerticalOffset();
+			markOhosInteraction();
+			return result;
+		}
 
 		if (commandName == "moveToSelected")
 		{
@@ -2321,9 +2492,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "playScript")
 		{
 			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
-			// runScript() reports failure (missing file, syntax error, already
-			// running). Swallowing it made every failed tour look like a success.
+		// runScript() reports failure (missing file, syntax error, already
+		// running). Swallowing it made every failed tour look like a success.
 			const bool started = smgr.runScript(arg);
+			qInfo() << "[StellariumOhos][script] playScript started=" << started << "arg=" << arg;
 			result["ok"] = started;
 			if (!started) { result["error"] = "failed to run script: " + arg; }
 			return result;
@@ -3246,6 +3418,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		// moveToAltAz — point view to specific altitude/azimuth
+		if (commandName == "gyroDiagnostic")
+		{
+			const QStringList parts = arg.split('|');
+			if (parts.size() >= 4)
+				qInfo().noquote() << QString("GYRO_RAW a=%1 b=%2 g=%3 samples=%4").arg(parts[0], parts[1], parts[2], parts[3]);
+			result["ok"] = true;
+			return result;
+		}
+
+		// moveToAltAz — point view to specific altitude/azimuth
 		if (commandName == "moveToAltAz")
 		{
 			QStringList parts = arg.split('|');
@@ -3260,7 +3442,31 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					aim[0] = cos(alt * M_PI/180.) * cos(az * M_PI/180.);
 					aim[1] = cos(alt * M_PI/180.) * sin(az * M_PI/180.);
 					aim[2] = sin(alt * M_PI/180.);
-					mvmgr->moveToAltAzi(aim, Vec3d(0., 0., 1.), duration);
+					// A fixed world-Z up vector is parallel to the view at zenith and
+					// nadir, which leaves the camera roll undefined and flips the sky.
+					// Keep a continuous tangent basis instead.
+					Vec3d aimUp(0., 0., 1.);
+					aimUp -= aim * aim.dot(aimUp);
+					if (aimUp.normSquared() < 1.e-8)
+						aimUp = Vec3d(-cos(az * M_PI / 180.), -sin(az * M_PI / 180.), 0.) * (alt >= 0. ? 1. : -1.);
+					else
+						aimUp.normalize();
+					if (parts.size() >= 6)
+					{
+						bool okUpX = false, okUpY = false, okUpZ = false;
+						aimUp = Vec3d(parts[3].toDouble(&okUpX), parts[4].toDouble(&okUpY), parts[5].toDouble(&okUpZ));
+						if (okUpX && okUpY && okUpZ && aimUp.normSquared() >= 0.0001)
+							aimUp.normalize();
+					}
+					mvmgr->moveToAltAzi(aim, aimUp, duration);
+					// ArkTS app logs are not exposed on every retail device. Keep a
+					// throttled native record for validating the gyro coordinate frame.
+					static int gyroDiagnosticCount = 0;
+					if (parts.size() >= 9 && (++gyroDiagnosticCount % 120 == 0))
+					{
+						qInfo().noquote() << QString("GYRO_NATIVE raw=%1,%2,%3 -> az=%4 alt=%5")
+							.arg(parts[6], parts[7], parts[8], parts[0], parts[1]);
+					}
 					result["ok"] = true;
 				} else {
 					result["ok"] = false;
@@ -3272,6 +3478,77 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 		return result;
 	}
+
+		// setGyroView — direct, non-animated view pose for device-pose tracking.
+		//
+		// moveToAltAz must not be used for this. Its auto-move path
+		// (StelMovementMgr::updateAutoMove) unconditionally overwrites the
+		// requested up vector with the local zenith on every frame when no
+		// target object is set, so the device roll we send is thrown away, and
+		// the forced upright vector snaps the view whenever the aim passes
+		// close to the zenith. It also restarts an interpolation on every
+		// sample, which shows up as stutter at sensor rates.
+		//
+		// Payload: az|alt[|upX|upY|upZ]  (up given in the same alt-az frame)
+		if (commandName == "setGyroView")
+		{
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 2)
+			{
+				result["ok"] = false;
+				result["error"] = "usage: az|alt[|upX|upY|upZ]";
+				return result;
+			}
+			bool okAz = false, okAlt = false;
+			const double azDeg = parts[0].toDouble(&okAz);
+			const double altDeg = parts[1].toDouble(&okAlt);
+			if (!okAz || !okAlt)
+			{
+				result["ok"] = false;
+				result["error"] = "invalid az/alt";
+				return result;
+			}
+
+			StelCore* core = StelApp::getInstance().getCore();
+			StelMovementMgr* mvmgr = core->getMovementMgr();
+			if (mvmgr->getMountMode() != StelMovementMgr::MountAltAzimuthal)
+				mvmgr->setMountMode(StelMovementMgr::MountAltAzimuthal);
+			// The device pose owns the view while the gyro is on; object
+			// tracking would fight it for the same frame.
+			if (mvmgr->getFlagTracking())
+				mvmgr->setFlagTracking(false);
+
+			const double azRad = azDeg * M_PI / 180.;
+			const double altRad = altDeg * M_PI / 180.;
+			Vec3d aim(cos(altRad) * cos(azRad), cos(altRad) * sin(azRad), sin(altRad));
+			aim.normalize();
+
+			Vec3d up(0., 0., 1.);
+			if (parts.size() >= 5)
+			{
+				bool okX = false, okY = false, okZ = false;
+				const Vec3d raw(parts[2].toDouble(&okX), parts[3].toDouble(&okY), parts[4].toDouble(&okZ));
+				if (okX && okY && okZ && raw.normSquared() > 1e-8)
+					up = raw;
+			}
+			// Gram-Schmidt against the aim so roll stays well defined even when
+			// the user points straight at the zenith or the nadir.
+			up -= aim * aim.dot(up);
+			if (up.normSquared() < 1e-8)
+			{
+				up = Vec3d(0., 0., 1.) - aim * aim.dot(Vec3d(0., 0., 1.));
+				if (up.normSquared() < 1e-8)
+					up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
+			}
+			up.normalize();
+
+			// Order matters: setViewDirectionJ2000() re-reads the *current* up
+			// vector when it calls core->lookAtJ2000().
+			mvmgr->setViewUpVector(up); // mount frame == alt-az here
+			mvmgr->setViewDirectionJ2000(core->altAzToJ2000(aim, StelCore::RefractionOff));
+			result["ok"] = true;
+			return result;
+		}
 
 		// getViewDirection — current view direction as alt/az
 		if (commandName == "getViewDirection")
@@ -3618,6 +3895,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["limitMagnitude"] = drawer->getLimitMagnitude();
 			result["customStarMagLimit"] = drawer->getCustomStarMagnitudeLimit();
+			result["starMagnitudeLimitEnabled"] = drawer->getFlagStarMagnitudeLimit();
 			result["flagNebulaMagLimit"] = drawer->getFlagNebulaMagnitudeLimit();
 			result["customNebulaMagLimit"] = drawer->getCustomNebulaMagnitudeLimit();
 			return result;
@@ -3628,8 +3906,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			bool ok;
 			double mag = arg.toDouble(&ok);
 			if (ok) {
-				StelApp::getInstance().getCore()->getSkyDrawer()->setCustomStarMagnitudeLimit(mag);
+				StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+				// The custom value alone is inert in Stellarium. It takes effect only
+				// while the explicit user magnitude-limit flag is enabled.
+				drawer->setFlagStarMagnitudeLimit(true);
+				drawer->setCustomStarMagnitudeLimit(std::clamp(mag, 2.0, 9.0));
 				result["ok"] = true;
+				result["customStarMagLimit"] = drawer->getCustomStarMagnitudeLimit();
+				result["starMagnitudeLimitEnabled"] = drawer->getFlagStarMagnitudeLimit();
 			} else {
 				result["ok"] = false;
 				result["error"] = "invalid magnitude";
@@ -3896,6 +4180,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (rts[0] > 0) result["rise"] = StelUtils::julianDayToISO8601String(rts[0]);
 			if (rts[1] > 0) result["transit"] = StelUtils::julianDayToISO8601String(rts[1]);
 			if (rts[2] > 0) result["set"] = StelUtils::julianDayToISO8601String(rts[2]);
+			// 前一次升起/中天/落下：把时间回拨 1.5 天后重算（取回拨后首个事件，即本次之前最近的一次）
+			{
+				double origJD = core->getJD();
+				core->setJD(origJD - 1.5);
+				Vec4d prevRts = sel.first()->getRTSTime(core);
+				core->setJD(origJD);
+				result["prevRiseJD"] = prevRts[0];
+				result["prevTransitJD"] = prevRts[1];
+				result["prevSetJD"] = prevRts[2];
+				if (prevRts[0] > 0) result["prevRise"] = StelUtils::julianDayToISO8601String(prevRts[0]);
+				if (prevRts[1] > 0) result["prevTransit"] = StelUtils::julianDayToISO8601String(prevRts[1]);
+				if (prevRts[2] > 0) result["prevSet"] = StelUtils::julianDayToISO8601String(prevRts[2]);
+			}
 			return result;
 		}
 
@@ -5076,6 +5373,405 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["frameCount"] = g_videoRecorder.frameCount;
 			result["maxFrames"] = g_videoRecorder.maxFrames;
 			result["fps"] = g_videoRecorder.fps;
+			return result;
+		}
+
+		// ========== 天文计算（AstroCalc）桥接命令 ==========
+
+		// getSiderealTime — 当地恒星时（小时，[0,24)）
+		if (commandName == "getSiderealTime")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			// getLocalSiderealTime() 返回弧度，需换算成小时：2π rad = 24 h
+			double lst = core->getLocalSiderealTime() * 12.0 / M_PI;
+			lst = std::fmod(lst, 24.0);
+			if (lst < 0) lst += 24.0;
+			int h = (int)lst;
+			int m = (int)((lst - h) * 60.0);
+			result["ok"] = true;
+			result["hours"] = lst;
+			result["h"] = h;
+			result["m"] = m;
+			int s = (int)(((lst - h) * 60.0 - m) * 60.0);
+			result["s"] = s;
+			result["text"] = QString("%1h %2m %3s").arg(h).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0'));
+			return result;
+		}
+
+		// getNightMode / setNightMode — 夜视（红光）模式
+		if (commandName == "getNightMode")
+		{
+			result["ok"] = true;
+			result["night"] = StelApp::getInstance().getVisionModeNight();
+			return result;
+		}
+		if (commandName == "setNightMode")
+		{
+			bool on = (arg.trimmed() == "1" || arg.trimmed().toLower() == "true");
+			StelApp::getInstance().setVisionModeNight(on);
+			result["ok"] = true;
+			result["night"] = StelApp::getInstance().getVisionModeNight();
+			return result;
+		}
+
+		// getAtmosphereParams / setAtmosphereParams — 大气折射与消光参数
+		// Stellarium 没有全局的“折射开关”，折射由大气参数驱动：气压设为 0 mbar 即等价于关闭折射。
+		if (commandName == "getAtmosphereParams")
+		{
+			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+			if (!drawer)
+			{
+				result["error"] = "sky drawer not available";
+				return result;
+			}
+			result["ok"] = true;
+			result["pressure"] = drawer->getAtmospherePressure();
+			result["temperature"] = drawer->getAtmosphereTemperature();
+			result["extinction"] = drawer->getExtinctionCoefficient();
+			result["refractionOn"] = drawer->getAtmospherePressure() > 0.0;
+			return result;
+		}
+		if (commandName == "setAtmosphereParams")
+		{
+			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
+			if (!drawer)
+			{
+				result["error"] = "sky drawer not available";
+				return result;
+			}
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			if (jo.contains("pressure"))
+				drawer->setAtmospherePressure(qBound(0.0, jo.value("pressure").toDouble(), 1500.0));
+			if (jo.contains("temperature"))
+				drawer->setAtmosphereTemperature(qBound(-60.0, jo.value("temperature").toDouble(), 60.0));
+			if (jo.contains("extinction"))
+				drawer->setExtinctionCoefficient(qBound(0.0, jo.value("extinction").toDouble(), 1.0));
+			result["ok"] = true;
+			result["pressure"] = drawer->getAtmospherePressure();
+			result["temperature"] = drawer->getAtmosphereTemperature();
+			result["extinction"] = drawer->getExtinctionCoefficient();
+			result["refractionOn"] = drawer->getAtmospherePressure() > 0.0;
+			return result;
+		}
+
+		// getEphemeris — 选中（或指定）天体的星历表：随时间变化的 RA/Dec/高度/方位/星等
+		if (commandName == "getEphemeris")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			QString name = jo.value("name").toString();
+			double startJD = jo.value("jd").toDouble(0.0);
+			int days = jo.value("days").toInt(14);
+			int stepHours = jo.value("stepHours").toInt(24);
+
+			StelObjectP obj;
+			if (!name.isEmpty())
+				obj = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& sel = objectMgr->getSelectedObject();
+				if (!sel.isEmpty()) obj = sel.first();
+			}
+			if (!obj)
+			{
+				result["ok"] = false;
+				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				return result;
+			}
+			if (startJD <= 0) startJD = core->getJD();
+			double origJD = core->getJD();
+			QJsonArray rows;
+			double jd = startJD;
+			double endJD = startJD + days;
+			while (jd <= endJD)
+			{
+				core->setJD(jd);
+				Vec3d eq = obj->getEquinoxEquatorialPos(core);
+				Vec3d aa = obj->getAltAzPosApparent(core);
+				double alt = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
+				double az = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
+				QJsonObject row;
+				row["jd"] = jd;
+				row["date"] = StelUtils::julianDayToISO8601String(jd);
+				row["ra"] = StelUtils::radToHmsStr(eq[0]);
+				row["dec"] = StelUtils::radToDmsStr(eq[1]);
+				row["altitude"] = alt;
+				row["azimuth"] = az;
+				row["magnitude"] = obj->getVMagnitude(core);
+				rows.append(row);
+				jd += stepHours / 24.0;
+			}
+			core->setJD(origJD);
+			result["ok"] = true;
+			result["name"] = obj->getNameI18n();
+			result["ephemeris"] = rows;
+			return result;
+		}
+
+		// getAltAzCurve — 选中（或指定）天体在一段时间内的高度/方位变化曲线（用于图表）
+		if (commandName == "getAltAzCurve")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			QString name = jo.value("name").toString();
+			double startJD = jo.value("jd").toDouble(0.0);
+			int hours = jo.value("hours").toInt(24);
+			int stepMin = jo.value("stepMin").toInt(10);
+
+			StelObjectP obj;
+			if (!name.isEmpty())
+				obj = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& sel = objectMgr->getSelectedObject();
+				if (!sel.isEmpty()) obj = sel.first();
+			}
+			if (!obj)
+			{
+				result["ok"] = false;
+				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				return result;
+			}
+			if (startJD <= 0) startJD = core->getJD();
+			double origJD = core->getJD();
+			QJsonArray rows;
+			int n = (hours * 60) / stepMin;
+			for (int i = 0; i <= n; i++)
+			{
+				double jd = startJD + i * stepMin / 1440.0;
+				core->setJD(jd);
+				Vec3d aa = obj->getAltAzPosApparent(core);
+				double alt = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
+				double az = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
+				QJsonObject row;
+				row["jd"] = jd;
+				row["t"] = i * stepMin / 60.0; // hours from start
+				row["altitude"] = alt;
+				row["azimuth"] = az;
+				rows.append(row);
+			}
+			core->setJD(origJD);
+			result["ok"] = true;
+			result["name"] = obj->getNameI18n();
+			result["curve"] = rows;
+			return result;
+		}
+
+		// getPlanetCalc — 行星计算器：各行星距离/相位/距角/星等/高度/升落
+		if (commandName == "getPlanetCalc")
+		{
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
+												   << "Saturn" << "Uranus" << "Neptune" << "Pluto" << "Sun" << "Moon";
+			QJsonArray items;
+			for (const QString& pn : planetNames)
+			{
+				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
+				if (!p) continue;
+				QJsonObject po;
+				po["name"] = p->getNameI18n();
+				po["englishName"] = pn;
+				Vec3d eq = p->getEquinoxEquatorialPos(core);
+				po["ra"] = StelUtils::radToHmsStr(eq[0]);
+				po["dec"] = StelUtils::radToDmsStr(eq[1]);
+				Vec3d aa = p->getAltAzPosApparent(core);
+				po["altitude"] = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
+				po["azimuth"] = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
+				po["magnitude"] = p->getVMagnitude(core);
+				if (pn != "Sun")
+				{
+					double dist = p->getDistance(); // AU
+					po["distanceAU"] = dist;
+					Vec4d rts = p->getRTSTime(core);
+					po["rise"] = StelUtils::julianDayToISO8601String(rts[0]);
+					po["transit"] = StelUtils::julianDayToISO8601String(rts[1]);
+					po["set"] = StelUtils::julianDayToISO8601String(rts[2]);
+				}
+				if (pn == "Moon")
+				{
+					QVariantMap mim = p->getInfoMap(core);
+					po["illumination"] = mim.value("illumination", 0).toDouble();
+					po["age"] = mim.value("age", 0).toDouble();
+				}
+				else if (pn != "Sun" && pn != "Pluto")
+				{
+					Vec3d obsPos = core->getCurrentObserver()->getCenterVsop87Pos();
+					po["elongation"] = p->getElongation(obsPos);
+					po["phaseAngle"] = p->getPhaseAngle(obsPos);
+					po["phase"] = p->getPhase(obsPos);
+				}
+				items.append(po);
+			}
+			result["ok"] = true;
+			result["planetCalc"] = items;
+			return result;
+		}
+
+		// getPhenomena — 行星间的合（最小角距），未来约 400 天内距角 < 4° 的事件
+		if (commandName == "getPhenomena")
+		{
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
+												   << "Saturn" << "Uranus" << "Neptune";
+			QList<QJsonObject> phenomenaList;
+			QList<PlanetP> planets;
+			for (const QString& pn : planetNames)
+			{
+				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
+				if (p) planets.append(p);
+			}
+			double origJD = core->getJD();
+			double startJD = origJD;
+			int horizon = 400; // days
+			QJsonArray items;
+			for (int a = 0; a < planets.size(); a++)
+			{
+				for (int b = a + 1; b < planets.size(); b++)
+				{
+					double bestJD = 0, bestSep = 999;
+					for (int d = 0; d <= horizon; d++)
+					{
+						double jd = startJD + d;
+						core->setJD(jd);
+						Vec3d va = planets[a]->getEquinoxEquatorialPos(core); va.normalize();
+						Vec3d vb = planets[b]->getEquinoxEquatorialPos(core); vb.normalize();
+						double sep = std::acos(qBound(-1.0, va.dot(vb), 1.0)) * 180.0 / M_PI;
+						if (sep < bestSep) { bestSep = sep; bestJD = jd; }
+					}
+					if (bestSep < 4.0)
+					{
+						QJsonObject po;
+						po["bodyA"] = planets[a]->getNameI18n();
+						po["bodyB"] = planets[b]->getNameI18n();
+						po["jd"] = bestJD;
+						po["date"] = StelUtils::julianDayToISO8601String(bestJD);
+						po["separation"] = bestSep;
+						phenomenaList.append(po);
+					}
+				}
+			}
+			core->setJD(origJD);
+			// 按日期排序（QJsonArray 的迭代器不支持 std::sort，先在 QList 上排好再装回去）
+			std::sort(phenomenaList.begin(), phenomenaList.end(), [](const QJsonObject& x, const QJsonObject& y) {
+				return x.value("jd").toDouble() < y.value("jd").toDouble();
+			});
+			for (const QJsonObject& po : phenomenaList)
+				items.append(po);
+			result["ok"] = true;
+			result["phenomena"] = items;
+			return result;
+		}
+
+		// getEclipses — 未来若干个月内的日食与月食预报
+		if (commandName == "getEclipses")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
+			double startJD = jo.value("jd").toDouble(0.0);
+			int months = jo.value("months").toInt(36);
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			if (startJD <= 0) startJD = core->getJD();
+			double origJD = core->getJD();
+			QJsonArray items;
+			QList<QJsonObject> eclipseList;
+
+			auto elongDeg = [&](double jd) -> double {
+				core->setJD(jd);
+				PlanetP sun = ssys->getSun();
+				PlanetP moon = ssys->getMoon();
+				if (!sun || !moon) return -1;
+				Vec3d sv = sun->getEquinoxEquatorialPos(core); sv.normalize();
+				Vec3d mv = moon->getEquinoxEquatorialPos(core); mv.normalize();
+				double c = qBound(-1.0, sv.dot(mv), 1.0);
+				return std::acos(c) * 180.0 / M_PI;
+			};
+			auto refineMin = [&](double jd0, double target) -> double {
+				double best = jd0, bestE = 999;
+				for (int k = -144; k <= 144; k++)
+				{
+					double jd = jd0 + k * (1.0 / 144.0);
+					double e = elongDeg(jd);
+					double diff = (target == 0.0) ? e : std::fabs(e - 180.0);
+					if (e >= 0 && diff < bestE) { bestE = diff; best = jd; }
+				}
+				return best;
+			};
+
+			double limitJD = startJD + months * 30.0;
+			double prevPhase = elongDeg(startJD);
+			int solarCount = 0, lunarCount = 0;
+			for (double jd = startJD; jd <= limitJD; jd += 1.0)
+			{
+				double e = elongDeg(jd);
+				// 检测过近（日食：elong→0）或过远（月食：elong→180）
+				bool solarCand = (prevPhase > 1.0 && e <= 1.0) || (e <= 1.0 && jd == startJD);
+				bool lunarCand = (prevPhase < 179.0 && e >= 179.0) || (e >= 179.0 && jd == startJD);
+				if (solarCand)
+				{
+					double nm = refineMin(jd, 0.0);
+					double dRatio, latDeg, lngDeg, altitude, pathWidth, duration, magnitude;
+					calcSolarEclipseData(nm, dRatio, latDeg, lngDeg, altitude, pathWidth, duration, magnitude);
+					if (magnitude > 0 && solarCount < 12)
+					{
+						QString type = magnitude >= 1.0 ? QStringLiteral("中心食") : QStringLiteral("偏食");
+						// 用 SolarEclipseComputer 区分全食/环食/混合食
+						SolarEclipseComputer sec(core, &StelApp::getInstance().getLocaleMgr());
+						SolarEclipseComputer::EclipseMapData map = sec.generateEclipseMap(nm);
+						switch (map.eclipseType)
+						{
+							case SolarEclipseComputer::EclipseMapData::EclipseType::Total: type = QStringLiteral("全食"); break;
+							case SolarEclipseComputer::EclipseMapData::EclipseType::Annular: type = QStringLiteral("环食"); break;
+							case SolarEclipseComputer::EclipseMapData::EclipseType::Hybrid: type = QStringLiteral("全环食"); break;
+							default: break;
+						}
+						QJsonObject ev;
+						ev["kind"] = "solar";
+						ev["type"] = type;
+						ev["jd"] = nm;
+						ev["date"] = StelUtils::julianDayToISO8601String(nm);
+						ev["magnitude"] = magnitude;
+						ev["pathWidthKm"] = pathWidth * 6371.0 * 2.0 * M_PI / 360.0 * 1000.0; // 近似
+						ev["durationMin"] = duration / 60.0;
+						ev["centralLat"] = latDeg;
+						ev["centralLng"] = lngDeg;
+						eclipseList.append(ev);
+						solarCount++;
+					}
+				}
+				else if (lunarCand)
+				{
+					double fm = refineMin(jd, 180.0);
+					// 几何估算：月球进入地影的程度
+					double sep = std::fabs(180.0 - elongDeg(fm));
+					double moonAngR = 0.26;            // 月球角半径（度，近似）
+					double umbraAngR = 0.73;          // 地影在本影处的角半径（度，近似）
+					double umbralMag = (umbraAngR - sep) / (2.0 * moonAngR);
+					if (umbralMag > 0 && lunarCount < 12)
+					{
+						QString type = umbralMag >= 1.0 ? QStringLiteral("全食") : QStringLiteral("偏食");
+						QJsonObject ev;
+						ev["kind"] = "lunar";
+						ev["type"] = type;
+						ev["jd"] = fm;
+						ev["date"] = StelUtils::julianDayToISO8601String(fm);
+						ev["magnitude"] = umbralMag;
+						ev["note"] = QStringLiteral("几何估算");
+						eclipseList.append(ev);
+						lunarCount++;
+					}
+				}
+				prevPhase = e;
+			}
+			core->setJD(origJD);
+			// QJsonArray 的迭代器不支持 std::sort，先在 QList 上按时间排好再装回去
+			std::sort(eclipseList.begin(), eclipseList.end(), [](const QJsonObject& x, const QJsonObject& y) {
+				return x.value("jd").toDouble() < y.value("jd").toDouble();
+			});
+			for (const QJsonObject& ev : eclipseList)
+				items.append(ev);
+			result["ok"] = true;
+			result["eclipses"] = items;
 			return result;
 		}
 

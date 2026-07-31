@@ -81,6 +81,22 @@ export interface ObjectInfo {
   magnitude: number
 }
 
+export interface LocSearchItem {
+  name: string
+  lat: number
+  lon: number
+  alt: number
+  planet: string
+}
+
+export interface SavedLocation {
+  name: string
+  lat: number
+  lon: number
+  alt: number
+  planet: string
+}
+
 export interface SkyCultureItem {
   id: string
   name: string
@@ -242,6 +258,9 @@ export interface StellariumBridgeResponse {
   info?: string
   query?: string
   timeRate?: number
+  value?: string
+  locations?: Object[]
+  timeZone?: string
   jd?: number
   timeText?: string
   fov?: number
@@ -261,6 +280,7 @@ export interface StellariumBridgeResponse {
   extinction?: number
   azimuth?: number
   constellation?: string
+  culture?: string
   // 音乐引擎用：英文类型(便于分支) / 光谱型 / 推算温度(越热音越高)
   objectType?: string
   spType?: string
@@ -278,6 +298,19 @@ export interface StellariumBridgeResponse {
   replies?: string
   sent?: string
   mode?: string
+  // 天文计算桥接命令的返回体
+  ephemeris?: Array<EphemerisRow>
+  curve?: Array<AltAzPoint>
+  planetCalc?: Array<PlanetCalcItem>
+  phenomena?: Array<PhenomenonItem>
+  eclipses?: Array<EclipseItem>
+  // 恒星时 / 夜视 / 大气参数
+  text?: string
+  night?: boolean
+  nightMode?: boolean
+  pressure?: number
+  temperature?: number
+  refractionOn?: boolean
   actionShow_Stars?: boolean
   actionShow_Planets?: boolean
   actionShow_Planets_Orbits?: boolean
@@ -397,4 +430,63 @@ export interface TonightEvents {
   planets?: Array<TonightPlanet>
   meteorShowers?: Array<TonightShower>
   satellites?: TonightSatellites
+}
+
+// ---- 天文计算（AstroCalc）数据结构 ----
+// 星历表：选中天体随日期变化的位置
+export interface EphemerisRow {
+  jd?: number
+  date?: string
+  ra?: string
+  dec?: string
+  altitude?: number
+  azimuth?: number
+  magnitude?: number
+}
+// 高度/方位角曲线上的一个采样点（t = 距起始时刻的小时数）
+export interface AltAzPoint {
+  jd?: number
+  t?: number
+  altitude?: number
+  azimuth?: number
+}
+// 行星计算器条目
+export interface PlanetCalcItem {
+  name?: string
+  englishName?: string
+  ra?: string
+  dec?: string
+  altitude?: number
+  azimuth?: number
+  magnitude?: number
+  distanceAU?: number
+  rise?: string
+  transit?: string
+  set?: string
+  illumination?: number
+  age?: number
+  elongation?: number
+  phaseAngle?: number
+  phase?: number
+}
+// 天象（行星间的合）
+export interface PhenomenonItem {
+  bodyA?: string
+  bodyB?: string
+  jd?: number
+  date?: string
+  separation?: number
+}
+// 日食 / 月食
+export interface EclipseItem {
+  kind?: string
+  type?: string
+  jd?: number
+  date?: string
+  magnitude?: number
+  pathWidthKm?: number
+  durationMin?: number
+  centralLat?: number
+  centralLng?: number
+  note?: string
 }

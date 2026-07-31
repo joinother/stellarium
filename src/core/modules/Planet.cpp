@@ -4567,9 +4567,14 @@ void Planet::draw3dModel(StelCore* core, StelProjector::ModelViewTranformP trans
 		{
 			bool drawingModel = ssm->getFlagUseObjModels() && (!objModelPath.isEmpty() || isMoon);
 			if (drawingModel)
-				drawingModel = drawObjModel(light, &sPainter, isMoon, screenRd);
+			{
+				bool objOk = drawObjModel(light, &sPainter, isMoon, screenRd);
+				drawingModel = objOk;
+			}
 			if (!drawingModel)
+			{
 				drawSphere(light, &sPainter, screenRd, drawOnlyRing);
+			}
 		}
 
 		if (survey && survey.colors->getInterstate() > 0.0f)
@@ -5018,9 +5023,14 @@ bool Planet::drawMoon(const StelPainterLight& light, StelPainter& painter)
 	{
 		model.attemptedToLoad = true;
 		if(!sMoon(model, equatorialRadius, oneMinusOblateness))
+		{
 			return false;
+		}
 	}
-	if(model.vertexArr.isEmpty()) return false;
+	if(model.vertexArr.isEmpty())
+	{
+		return false;
+	}
 
 	constexpr int colorTexUnit = 0;
 	constexpr int normalTexUnit = 2;
@@ -5028,9 +5038,18 @@ bool Planet::drawMoon(const StelPainterLight& light, StelPainter& painter)
 	constexpr int horizonTexUnit = 4;
 
 	// For lazy loading, return if texture is not yet loaded
-	if (horizonMap && !horizonMap->bind(horizonTexUnit)) return false;
-	if (normalMap && !normalMap->bind(normalTexUnit)) return false;
-	if (texMap && !texMap->bind(colorTexUnit)) return false;
+	if (horizonMap && !horizonMap->bind(horizonTexUnit))
+	{
+		return false;
+	}
+	if (normalMap && !normalMap->bind(normalTexUnit))
+	{
+		return false;
+	}
+	if (texMap && !texMap->bind(colorTexUnit))
+	{
+		return false;
+	}
 
 	const auto projector = painter.getProjector();
 	if(!moonShaderProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
@@ -5259,17 +5278,21 @@ void Planet::drawSphere(const StelPainterLight& light, StelPainter* painter, flo
 
 	if (isMoon)
 	{
-		GL(normalMap->bind(2));
-		GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.normalMap, 2));
-		if (!rData.shadowCandidates.isEmpty())
+		if (normalMap) {
+			GL(normalMap->bind(2));
+			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.normalMap, 2));
+		}
+		if (!rData.shadowCandidates.isEmpty() && texEarthShadow)
 		{
 			GL(texEarthShadow->bind(3));
 			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.earthShadow, 3));
 			const auto push = computeEclipsePush();
 			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.eclipsePush, push)); // constant for now...
 		}
-		GL(horizonMap->bind(4));
-		GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.horizonMap, 4));
+		if (horizonMap) {
+			GL(horizonMap->bind(4));
+			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.horizonMap, 4));
+		}
 	}
 
 	if (englishName==L1S("Mars"))
@@ -5338,7 +5361,9 @@ void Planet::drawSphere(const StelPainterLight& light, StelPainter* painter, flo
 	}
 	
 	if (!drawOnlyRing)
+	{
 		GL(gl->glDrawElements(GL_TRIANGLES, model.indiceArr.size(), GL_UNSIGNED_SHORT, reinterpret_cast<void*>(indicesOffset)));
+	}
 
 	if (rings)
 	{
@@ -5482,15 +5507,21 @@ void Planet::drawSurvey(const StelPainterLight& light, StelCore* core, StelPaint
 
 	if (isMoon)
 	{
-		GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.normalMap, 2));
-		if (!rData.shadowCandidates.isEmpty())
+		if (normalMap) {
+			GL(normalMap->bind(2));
+			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.normalMap, 2));
+		}
+		if (!rData.shadowCandidates.isEmpty() && texEarthShadow)
 		{
 			GL(texEarthShadow->bind(3));
 			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.earthShadow, 3));
 			const auto push = computeEclipsePush();
 			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.eclipsePush, push)); // constant for now...
 		}
-		GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.horizonMap, 4));
+		if (horizonMap) {
+			GL(horizonMap->bind(4));
+			GL(sphereMoonShaderProgram->setUniformValue(sphereMoonShaderVars.horizonMap, 4));
+		}
 	}
 
 	// Apply a rotation otherwise the hips surveys don't get rendered at the

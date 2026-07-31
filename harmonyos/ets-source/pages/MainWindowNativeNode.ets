@@ -8,7 +8,7 @@ import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
-import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, EphemerisRow, AltAzPoint, PlanetCalcItem, PhenomenonItem, EclipseItem, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
 
@@ -73,6 +73,8 @@ interface StarCatalogStatusResponse extends StellariumBridgeResponse {
 }
 interface LimitMagnitudeResponse extends StellariumBridgeResponse {
   limitMagnitude?: number
+  customStarMagLimit?: number
+  starMagnitudeLimitEnabled?: boolean
 }
 
 // 书签（C++ 桥 addBookmark / getBookmarks / deleteBookmark / gotoBookmark）
@@ -236,6 +238,12 @@ struct WindowNativeNode {
   @State private selectedCoordAlt: string = ''
   @State private selectedConstellation: string = ''
   @State private selectedDistance: string = ''
+  // 陀螺仪观测时，若已选目标落在视场外，在安全边缘给出方向提示。
+  // 坐标本身不参与渲染，只有这三个 @State 会驱动提示箭头刷新。
+  @State private gyroGuideVisible: boolean = false
+  @State private gyroGuideAngle: number = 0
+  @State private gyroGuideX: number = 0
+  @State private gyroGuideY: number = 0
   @State private visibleConstellations: string = ''
   // 富化的天体详情（独立浮动窗口，不切换当前菜单；默认收起，可展开）
   @State private infoWinVisible: boolean = false
@@ -272,9 +280,20 @@ struct WindowNativeNode {
   @State private timeRateText: string = '1x'
   /** Current speed-step index into TIME_SPEED_STEPS. */
   @State private timeSpeedIndex: number = 7  // 7=1x realtime (default, new index)
-  /** Sky Guide 风格时间滑块：偏移天数（0=今天，负=过去，正=未来）*/
+  // 原生命令在下一渲染帧才生效。此窗口内忽略轮询到的旧速率，避免按钮
+  // 刚显示“-2x”又被上一帧的“-10x”短暂盖回去而产生闪烁。
+  private pendingTimeRate: number = Number.NaN
+  private pendingTimeRateUntilMs: number = 0
+  /** 时间轴相对真实当前时刻的偏移秒数（0=此刻，负=过去，正=未来）*/
   @State private scrubberValue: number = 0
-  @State private scrubberLabel: string = '今天'
+  @State private scrubberLabel: string = '此刻'
+  // 时间轴的中心 JD。它不是系统时间的固定快照：模拟时间接近边界时会
+  // 重新定锚到当前模拟时间，避免快进后游标永远卡在两端。
+  private scrubberReferenceJd: number = 0
+  private scrubberPendingOffset: number = 0
+  private scrubberAnchorPending: boolean = false
+  private scrubberLastSendMs: number = 0
+  private scrubberInteracting: boolean = false
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
   @State private manualDay: number = 20
@@ -468,6 +487,20 @@ struct WindowNativeNode {
   @State private dsoClusters: number = 0
   @State private dsoNebulae: number = 0
   @State private planetPositions: Array<PlanetPosition> = []
+  @State private ephemerisData: Array<EphemerisRow> = []
+  @State private planetCalcData: Array<PlanetCalcItem> = []
+  @State private altAzCurve: Array<AltAzPoint> = []
+  @State private altAzName: string = ''
+  @State private altAzError: string = ''
+  @State private eclipseData: Array<EclipseItem> = []
+  @State private phenomenaData: Array<PhenomenonItem> = []
+  @State private tonightAstro: TonightEvents | null = null
+  @State private siderealTimeText: string = '--'
+  @State private nightModeOn: boolean = false
+  @State private atmoPressure: number = 1013
+  @State private atmoTemperature: number = 10
+  @State private atmoExtinction: number = 0.13
+  @State private refractionOn: boolean = true
   @State private skyCultureList: Array<SkyCultureItem> = []
   @State private currentSkyCultureId: string = ''
   @State private pluginList: Array<PluginItem> = []
@@ -633,6 +666,13 @@ struct WindowNativeNode {
   private detailTimer: number = 0
   private detailRefreshing: boolean = false
   private detailRefreshGuard: number = 0
+  // FullInfo is intentionally loaded after a new target is drawn. Keeping its
+  // timer separate from the live-value poll prevents it from delaying panning.
+  private selectedFullInfoTimer: number = 0
+  private expandedTargetPlacementTimer: number = 0
+  private selectedUiLayoutTimer: number = 0
+  private lastSafeNavigationPayload: string = ''
+  private lastSafeNavigationAt: number = 0
   // 时间面板打开时，每 1s 拉一次 getState，让"时间"字段像走动的钟一样实时更新
   // （否则只在打开瞬间刷新一次，点按钮/时间流逝都不会再更新，永远显示 --）
   private timePanelTimer: number = 0
@@ -658,9 +698,19 @@ struct WindowNativeNode {
   private dragVelocityX: number = 0
   private dragVelocityY: number = 0
   private skyInertiaTimer: number = 0
+  // Momentum runs in the Qt render loop. ArkTS only supplies the release
+  // velocity, avoiding a stream of cross-thread drag commands after lift-off.
+  private nativeSkyInertiaActive: boolean = false
   private skyDragging: boolean = false
   private gyroLastTimeMs: number = 0
+  private gyroGuideTargetAz: number = Number.NaN
+  private gyroGuideTargetAlt: number = Number.NaN
+  private gyroGuideLastUpdateMs: number = 0
+  private gyroLastDiagnosticMs: number = 0
+  private gyroAbsolutePoseReady: boolean = false
+  private gyroAbsoluteUp: number[] = [0, 1, 0]
   private gyroEventCount: number = 0
+  private gyroRawEventCount: number = 0
   private readonly gyroSensitivity: number = 180
   private gyroCallback: ((data: sensor.OrientationResponse) => void) | undefined = undefined
   private dragLogCount: number = 0
@@ -696,7 +746,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
-    { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
@@ -708,7 +757,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
-    { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' }
   ]
@@ -724,7 +772,6 @@ struct WindowNativeNode {
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
-    { icon: 'orbit', label: I18n.t('i0274'), panel: 'astro' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
@@ -1061,8 +1108,12 @@ struct WindowNativeNode {
         this.moduleList = r.items as string[]
       }
     })
-    this.loadSkyCultureList()
-    this.loadPluginList()
+    // Sky cultures and plugin management are not part of the offline release.
+    // Do not start requests for screens that have no release-ready UI.
+    if (!OFFLINE_APPGALLERY_BUILD) {
+      this.loadSkyCultureList()
+      this.loadPluginList()
+    }
     // 读回引擎当前投影，否则设置页里没有任何一项是高亮的，看起来像“全都没生效”
     this.callNativeWhenReady('getProjectionList', '', (r) => {
       if (r.ok === true && r.current !== undefined) {
@@ -1075,11 +1126,11 @@ struct WindowNativeNode {
         this.useMetricUnits = r.value === 'true'
       }
     })
-    // 初始化星等限制：走实时桥，避免只读到配置缓存。
+    // 初始化星等限制：控制项应显示用户保存的上限，而不是会随缩放变化的动态渲染上限。
     this.callNativeWhenReady('getLimitMagnitude', '', (r) => {
       const resp = r as LimitMagnitudeResponse
-      if (resp.ok && resp.limitMagnitude !== undefined) {
-        const v = Number(resp.limitMagnitude)
+      if (resp.ok && resp.customStarMagLimit !== undefined) {
+        const v = Number(resp.customStarMagLimit)
         if (!isNaN(v)) { this.starMagLimit = Math.round(v * 10) / 10 }
       }
     })
@@ -1090,7 +1141,12 @@ struct WindowNativeNode {
         const s = JSON.parse(settings) as Record<string, boolean | string>
         if (s.nightMode !== undefined) { this.nightMode = s.nightMode as boolean; this.triggerAction("actionShow_Night_Mode") }
         if (s.equatorialMount !== undefined) { this.equatorialMount = s.equatorialMount as boolean; this.triggerAction("actionSwitch_Equatorial_Mount") }
-        if (s.gyroscopeEnabled !== undefined) { this.gyroscopeEnabled = s.gyroscopeEnabled as boolean }
+        // Sensor subscriptions do not survive an Ability restart. Restoring a
+        // saved "on" flag here left the UI lit while no listener existed.
+        if (s.gyroscopeEnabled !== undefined) {
+          this.gyroscopeEnabled = false
+          this.gyroscopeStatus = I18n.t('m_gyro_off')
+        }
         if (s.gyroscopeSensitivityText !== undefined) { this.gyroscopeSensitivityText = s.gyroscopeSensitivityText as string }
         if (s.selectedLanguage !== undefined) {
           const lang = s.selectedLanguage as string
@@ -1174,15 +1230,21 @@ struct WindowNativeNode {
   }
 
   private setPanel(panel: string): void {
+    // The offline candidate must not expose unfinished script playback or
+    // AstroCalc screens. Keep their implementation intact for later work.
+    if (OFFLINE_APPGALLERY_BUILD && (panel === 'scripts' || panel === 'astro')) {
+      return
+    }
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = this.activePanel === panel ? !this.panelVisible : true
-    // 平板端：视口偏移必须与面板动画在同一帧内生效，否则天空会瞬间跳位。
-    // 放入 animateTo 回调确保 ArkUI 在同一渲染批次中处理状态变更和原生偏移。
+    // The selected-target navigator owns the projection centre while a card is
+    // visible. Do not reset it from this animation: that command races the
+    // target navigator and used to pull a locked object straight back below
+    // the panel.
     this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.45, 0.88) }, () => {
       this.activePanel = panel
       this.panelVisible = nextVisible
       this.panelContentKey++
-      this.applyViewportCenterForPanel(nextVisible)
     })
     // 打开「位置」面板时自动刷新今晚天象（用户要求每次进入都自动刷新）
     if (panel === 'place' && nextVisible) {
@@ -1192,8 +1254,11 @@ struct WindowNativeNode {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
     }
+    this.scheduleSelectedObjectForUiChange(380)
     // 时间面板：打开时启动每秒刷新（让"时间"字段实时走动），关闭或切到别的面板时停掉
     if (panel === 'time' && nextVisible) {
+      // 恒星时 / 夜视 / 折射：打开面板时取一次真实值
+      this.loadTimeExtras()
       if (this.timePanelTimer === 0) {
         // 高频（125ms）只刷时间/速率这两个字段，读秒才会像水一样连续流动；
         // 早期用 1000ms + refreshState 全量刷新，导致加速时 2s→11s 跳跃，
@@ -1201,7 +1266,10 @@ struct WindowNativeNode {
         this.timePanelTimer = setInterval(() => { this.refreshSimTimeLight() }, 125)
         // 全量状态低频兜底（3s 一次），同步图层开关/坐标/FOV 等其余字段
         if (this.timePanelFullTimer === 0) {
-          this.timePanelFullTimer = setInterval(() => { this.refreshState() }, 3000)
+          this.timePanelFullTimer = setInterval(() => {
+            this.refreshState()
+            this.loadTimeExtras()
+          }, 3000)
         }
       }
     } else {
@@ -1209,6 +1277,8 @@ struct WindowNativeNode {
     }
     if (panel === 'object') {
       this.refreshSelectedObject()
+    } else if (panel === 'astro') {
+      this.loadAstroTab(this.astroTab)
     } else if (panel === 'layers' || panel === 'time' || panel === 'settings') {
       this.refreshState()
     } else if (panel === 'place') {
@@ -1245,11 +1315,10 @@ struct WindowNativeNode {
     }
     // 关面板时停掉时间面板定时器，避免后台空转
     this.stopTimePanelTimers()
-    // 面板关闭：投影中心复位到屏幕正中
-    this.applyViewportCenterForPanel(false)
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
+    this.scheduleSelectedObjectForUiChange(360)
   }
 
   private runOnTouchUp(event: TouchEvent, action: () => void): void {
@@ -1880,11 +1949,19 @@ struct WindowNativeNode {
     this.fogEffect = result.actionShow_Fog === true
     this.meteors = result.meteors === true
     this.autoZoomResets = result.autoZoomResets === true
-    this.nightMode = result.actionShow_Night_Mode === true
+    // The native Stellarium property is authoritative. The QAction is not
+    // guaranteed to update when the time-panel uses the direct bridge command.
+    if (result.nightMode !== undefined) {
+      this.nightMode = result.nightMode === true
+      this.nightModeOn = this.nightMode
+    } else if (result.actionShow_Night_Mode !== undefined) {
+      this.nightMode = result.actionShow_Night_Mode === true
+      this.nightModeOn = this.nightMode
+    }
     this.flipHoriz = result.actionHorizontal_Flip === true
     this.flipVert = result.actionVertical_Flip === true
     if (result.timeRate !== undefined) {
-      this.timeRateText = this.formatRate(result.timeRate)
+      this.syncTimeRateState(result.timeRate as number)
     }
     if (result.timeText !== undefined) {
       this.observationTimeText = this.formatObservationTime(result.timeText)
@@ -2001,6 +2078,12 @@ struct WindowNativeNode {
     })
   }
 
+  private saveScreenshot(): void {
+    this.callInteractive('saveScreenShot', '', (r: StellariumBridgeResponse) => {
+      this.flashHint(r.ok === true ? I18n.t('screenshot_saved') : '截图保存失败')
+    })
+  }
+
   private jdToDateStr(jd: string): string {
     const numJd = parseFloat(jd);
     if (numJd <= 0) return '--'
@@ -2018,8 +2101,163 @@ struct WindowNativeNode {
         this.rtsData.set('nextRiseJD', rv['nextRiseJD'] !== undefined ? String(rv['nextRiseJD']) : '0')
         this.rtsData.set('nextTransitJD', rv['nextTransitJD'] !== undefined ? String(rv['nextTransitJD']) : '0')
         this.rtsData.set('nextSetJD', rv['nextSetJD'] !== undefined ? String(rv['nextSetJD']) : '0')
+        this.rtsData.set('prevRiseJD', rv['prevRiseJD'] !== undefined ? String(rv['prevRiseJD']) : '0')
+        this.rtsData.set('prevTransitJD', rv['prevTransitJD'] !== undefined ? String(rv['prevTransitJD']) : '0')
+        this.rtsData.set('prevSetJD', rv['prevSetJD'] !== undefined ? String(rv['prevSetJD']) : '0')
       }
     })
+  }
+
+  private loadEphemeris(): void {
+    if (this.ephemerisData.length === 0) {
+      this.callInteractive('getEphemeris', JSON.stringify({ days: 14, stepHours: 24 }), (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.ephemeris !== undefined) this.ephemerisData = r.ephemeris as Array<EphemerisRow>
+      })
+    }
+  }
+
+  private loadPlanetCalc(): void {
+    this.callInteractive('getPlanetCalc', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.planetCalc !== undefined) this.planetCalcData = r.planetCalc as Array<PlanetCalcItem>
+    })
+  }
+
+  private loadAltAzCurve(): void {
+    if (this.altAzCurve.length === 0) {
+      this.callInteractive('getAltAzCurve', JSON.stringify({ hours: 24, stepMin: 30 }), (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.curve !== undefined) {
+          this.altAzCurve = r.curve as Array<AltAzPoint>
+          this.altAzName = r.name !== undefined ? r.name : ''
+          this.altAzError = ''
+        } else {
+          this.altAzCurve = []
+          this.altAzError = '请先在星图上选中一个天体，再来看它的高度曲线。'
+        }
+      })
+    }
+  }
+
+  private loadEclipses(): void {
+    if (this.eclipseData.length === 0) {
+      this.callInteractive('getEclipses', JSON.stringify({ months: 36 }), (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.eclipses !== undefined) this.eclipseData = r.eclipses as Array<EclipseItem>
+      })
+    }
+  }
+
+  private loadPhenomena(): void {
+    if (this.phenomenaData.length === 0) {
+      this.callInteractive('getPhenomena', '', (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.phenomena !== undefined) this.phenomenaData = r.phenomena as Array<PhenomenonItem>
+      })
+    }
+  }
+
+  private loadTonightAstro(): void {
+    if (this.tonightAstro === null) {
+      this.callInteractive('getTonightEvents', '', (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.tonight !== undefined) this.tonightAstro = r.tonight as TonightEvents
+      })
+    }
+  }
+
+  // ---- 时间面板扩展：恒星时 / 夜视 / 大气折射 ----
+  private loadTimeExtras(): void {
+    const st: StellariumBridgeResponse = this.callNative('getSiderealTime', '')
+    if (st.ok === true && st.text !== undefined) this.siderealTimeText = st.text
+
+    const nm: StellariumBridgeResponse = this.callNative('getNightMode', '')
+    if (nm.ok === true) this.nightModeOn = (nm.night === true)
+
+    this.applyAtmosphereResponse(this.callNative('getAtmosphereParams', ''))
+  }
+
+  private applyAtmosphereResponse(r: StellariumBridgeResponse): void {
+    if (r.ok !== true) return
+    if (r.pressure !== undefined) this.atmoPressure = r.pressure
+    if (r.temperature !== undefined) this.atmoTemperature = r.temperature
+    if (r.extinction !== undefined) this.atmoExtinction = r.extinction
+    this.refractionOn = (r.refractionOn === true)
+  }
+
+  private applyAtmosphere(pressure: number, temperature: number, extinction: number): void {
+    this.applyAtmosphereResponse(this.callNative('setAtmosphereParams',
+      JSON.stringify({ pressure: pressure, temperature: temperature, extinction: extinction })))
+  }
+
+  // ---- 天文计算辅助：高度曲线 ----
+  private hourOffsetLabel(t: number): string {
+    const h: number = Math.floor(t)
+    const mi: number = Math.round((t - h) * 60)
+    if (h === 0 && mi === 0) return '此刻'
+    let s: string = ''
+    if (h > 0) s += h.toString() + ' 小时'
+    if (mi > 0) s += mi.toString() + ' 分'
+    return s + '后'
+  }
+
+  private altAzMaxLabel(): string {
+    let m: number = -999
+    let t: number = 0
+    for (let i = 0; i < this.altAzCurve.length; i++) {
+      const p: AltAzPoint = this.altAzCurve[i]
+      const v: number = p.altitude !== undefined ? p.altitude : -999
+      if (v > m) { m = v; t = p.t !== undefined ? p.t : 0 }
+    }
+    if (m < -90) return '--'
+    return m.toFixed(1) + '°（' + this.hourOffsetLabel(t) + '）'
+  }
+
+  private altAzNowLabel(): string {
+    if (this.altAzCurve.length === 0) return '--'
+    const p: AltAzPoint = this.altAzCurve[0]
+    const alt: number = p.altitude !== undefined ? p.altitude : 0
+    const az: number = p.azimuth !== undefined ? p.azimuth : 0
+    return '高度 ' + alt.toFixed(1) + '° / 方位 ' + az.toFixed(1) + '°'
+  }
+
+  private altAzVisibleHours(): string {
+    let cnt: number = 0
+    for (let i = 0; i < this.altAzCurve.length; i++) {
+      const p: AltAzPoint = this.altAzCurve[i]
+      if (p.altitude !== undefined && p.altitude > 0) cnt++
+    }
+    // 采样间隔 30 分钟
+    return (cnt * 0.5).toFixed(1) + ' 小时'
+  }
+
+  private altBarHeight(alt: number | undefined): number {
+    const a: number = alt !== undefined ? alt : -90
+    const v: number = (a + 90) / 180
+    return Math.max(1, v * 96)
+  }
+
+  // ---- 通用格式化：把 ISO 时间截成 "MM-DD HH:MM" / "HH:MM" ----
+  private fmtDateTime(s: string | undefined): string {
+    if (s === undefined || s.length === 0) return '--'
+    return s.replace('T', ' ').slice(0, 16)
+  }
+
+  private fmtClock(s: string | undefined): string {
+    if (s === undefined || s.length < 16) return '--:--'
+    return s.slice(11, 16)
+  }
+
+  private fmtNum(v: number | undefined, digits: number, suffix: string): string {
+    if (v === undefined) return '--'
+    return v.toFixed(digits) + suffix
+  }
+
+  private loadAstroTab(id: number): void {
+    if (id === 0) this.loadPlanetPositions()
+    else if (id === 1) this.loadEphemeris()
+    else if (id === 2) this.loadRTS()
+    else if (id === 3) this.loadPhenomena()
+    else if (id === 4) this.loadAltAzCurve()
+    else if (id === 5) this.loadTonightAstro()
+    else if (id === 6) this.loadPlanetCalc()
+    else if (id === 7) this.loadEclipses()
+    else if (id === 8) this.loadAlmanac()
   }
 
   private loadAlmanac(): void {
@@ -2261,19 +2499,21 @@ private loadPlanetPositions(): void {
   }
 
   private setSkyCulture(name: string): void {
-    this.callInteractive('setSkyCulture', name, () => {
-      this.currentSkyCulture = name
-      this.flashHint(I18n.t('i0068'))
+    this.callInteractive('setSkyCulture', name, (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) {
+        this.flashHint(I18n.t('msg_apply_failed'))
+        return
+      }
+      const culture = r.culture && r.culture.length > 0 ? r.culture : name
+      this.currentSkyCulture = culture
+      this.flashHint(I18n.t('i0068').replace('%s', culture))
     })
   }
 
   private setTimeRate(rate: number): void {
-    this.callInteractive('setTimeRate', rate.toString(), (result) => {
-      if (result.timeRate !== undefined) {
-        this.timeRateText = this.formatRate(result.timeRate)
-      }
-      this.refreshState()
-    })
+    // 速率命令本身不需要结果。此前这里紧跟一次 getState，旧的异步状态会
+    // 短暂覆盖刚刚更新的文本，造成“倒带/快进按钮闪一下”的错觉。
+    this.callNativeFire('setTimeRate', rate.toString())
   }
 
   // ===== 时间速率档位系统 =====
@@ -2301,19 +2541,19 @@ private loadPlanetPositions(): void {
   private static readonly SPEED_IDX_STOP = 6
   private static readonly SPEED_IDX_REALTIME = 7
 
-  // 时间轴刻度（线性天刻度，-365 ~ +365，今天居中）
-  // value=偏移天数；major=主刻度（更长更亮）；percent=在轴上的水平百分比
+  // 连续时间轴：拖动范围为前后 12 小时且精确到秒。跨天跳转由
+  // 面板下方的 +/-12h 快捷操作承担，避免小滑块退化成“按天跳”。
   private readonly timeTicks: TimeTick[] = [
-    { label: '1年前', value: -365, major: true },
-    { label: '6月前', value: -180, major: false },
-    { label: '1月前', value: -30, major: false },
-    { label: '今天', value: 0, major: true },
-    { label: '1月后', value: 30, major: false },
-    { label: '6月后', value: 180, major: false },
-    { label: '1年后', value: 365, major: true }
+    { label: '12小时前', value: -43200, major: true },
+    { label: '6小时前', value: -21600, major: false },
+    { label: '1小时前', value: -3600, major: false },
+    { label: '此刻', value: 0, major: true },
+    { label: '1小时后', value: 3600, major: false },
+    { label: '6小时后', value: 21600, major: false },
+    { label: '12小时后', value: 43200, major: true }
   ]
   private tickPercent(value: number): number {
-    return ((value + 365) / 730) * 100
+    return ((value + 43200) / 86400) * 100
   }
 
   /** Apply speed at given step index. Clamps to valid range. */
@@ -2323,8 +2563,35 @@ private loadPlanetPositions(): void {
     const idx: number = Math.max(0, Math.min(len - 1, index))
     const rate: number = this.SPEED_STEPS[idx]
     this.timeSpeedIndex = idx
+    this.pendingTimeRate = rate
+    this.pendingTimeRateUntilMs = Date.now() + 500
     this.setTimeRate(rate)
     this.timeRateText = this.formatRate(rate)
+  }
+
+  /** 将原生返回的速率映射回时间档位，保证面板重建后按钮状态不会丢失。 */
+  private syncTimeRateState(rate: number): void {
+    const now = Date.now()
+    if (!Number.isNaN(this.pendingTimeRate)) {
+      const rateMatchesPending = Math.abs(rate - this.pendingTimeRate) < 1e-9
+      if (!rateMatchesPending && now < this.pendingTimeRateUntilMs) {
+        return
+      }
+      this.pendingTimeRate = Number.NaN
+      this.pendingTimeRateUntilMs = 0
+    }
+    this.timeRateText = this.formatRate(rate)
+    let nearestIndex = 0
+    let nearestDistance = Number.MAX_VALUE
+    for (let i = 0; i < this.SPEED_STEPS.length; i++) {
+      const candidate = this.SPEED_STEPS[i]
+      const distance = Math.abs(candidate - rate)
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearestIndex = i
+      }
+    }
+    this.timeSpeedIndex = nearestIndex
   }
 
   /** Speed up one step. */
@@ -2351,33 +2618,115 @@ private loadPlanetPositions(): void {
   }
   private _lastNonZeroSpeedIndex: number = 7
 
-  /** Sky Guide 风格时间滑块：拖动时设置模拟时间（暂停时间流逝）*/
-  private applyScrubber(dayOffset: number): void {
-    // 更新标签
-    if (dayOffset === 0) {
-      this.scrubberLabel = '今天'
-    } else if (dayOffset > 0) {
-      if (dayOffset < 30) { this.scrubberLabel = '+' + dayOffset + '天后' }
-      else if (dayOffset < 365) { this.scrubberLabel = '+' + Math.round(dayOffset / 30) + '月后' }
-      else { this.scrubberLabel = '+' + (dayOffset / 365).toFixed(1) + '年后' }
-    } else {
-      const abs = Math.abs(dayOffset)
-      if (abs < 30) { this.scrubberLabel = abs + '天前' }
-      else if (abs < 365) { this.scrubberLabel = Math.round(abs / 30) + '月前' }
-      else { this.scrubberLabel = (abs / 365).toFixed(1) + '年前' }
+  /** 更新时间轴当前位置的自然语言标签。 */
+  private updateScrubberLabel(secondOffset: number): void {
+    const seconds = Math.round(secondOffset)
+    if (seconds === 0) {
+      this.scrubberLabel = '此刻'
+      return
     }
+    const sign = seconds > 0 ? '+' : '-'
+    const abs = Math.abs(seconds)
+    if (abs < 60) {
+      this.scrubberLabel = sign + abs.toString() + '秒'
+    } else if (abs < 3600) {
+      const minutes = Math.floor(abs / 60)
+      const remainSeconds = abs % 60
+      this.scrubberLabel = sign + minutes.toString() + '分' + (remainSeconds > 0 ? remainSeconds.toString() + '秒' : '')
+    } else {
+      const hours = Math.floor(abs / 3600)
+      const minutes = Math.floor((abs % 3600) / 60)
+      this.scrubberLabel = sign + hours.toString() + '时' + (minutes > 0 ? minutes.toString() + '分' : '')
+    }
+  }
 
-    // 调用 native setJD：基于当前真实 JD 加上偏移天数
-    // 先获取当前 JD，然后加上偏移
+  /** 开始一次时间轴交互，并固定这次交互的时间基准。 */
+  private beginScrubberInteraction(secondOffset: number): void {
+    this.scrubberPendingOffset = Math.round(secondOffset)
+    this.updateScrubberLabel(this.scrubberPendingOffset)
+    if (this.scrubberReferenceJd > 0) {
+      this.sendScrubberTime(true)
+      return
+    }
+    if (this.scrubberAnchorPending) {
+      return
+    }
+    this.scrubberAnchorPending = true
     this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
-      if (r && r.jd) {
-        const currentJd = Number(r.jd)
-        const newJd = currentJd + dayOffset
-        // 用 setTimeToJD（会自动暂停）
-        this.callNativeFire('setTimeToJD', newJd.toFixed(6))
-        this.refreshTimeNow()
+      this.scrubberAnchorPending = false
+      if (r.ok === true && r.jd !== undefined) {
+        // Keep the current slider position stable while establishing its centre.
+        this.scrubberReferenceJd = Number(r.jd) - this.scrubberPendingOffset / 86400.0
+        this.sendScrubberTime(true)
       }
     })
+  }
+
+  /** 把当前偏移应用到固定基准；移动中限流，松手时强制发送最终值。 */
+  private sendScrubberTime(force: boolean = false): void {
+    if (this.scrubberReferenceJd <= 0) {
+      return
+    }
+    const now = Date.now()
+    if (!force && now - this.scrubberLastSendMs < 90) {
+      return
+    }
+    this.scrubberLastSendMs = now
+    const targetJd = this.scrubberReferenceJd + this.scrubberPendingOffset / 86400.0
+    // setTimeToJD 会把原生模拟速率设为 0，避免用户拖动时星图仍继续走时。
+    this.callNativeFire('setTimeToJD', targetJd.toFixed(6))
+    this.timeSpeedIndex = WindowNativeNode.SPEED_IDX_STOP
+    this.pendingTimeRate = 0
+    this.pendingTimeRateUntilMs = Date.now() + 500
+    this.timeRateText = this.formatRate(0)
+    if (force) {
+      setTimeout(() => { this.refreshSimTimeLight() }, 140)
+    }
+  }
+
+  /** 时间轴值变化：所有值都相对同一个按下瞬间，绝不累加到前一个结果。 */
+  private applyScrubber(secondOffset: number, mode: SliderChangeMode): void {
+    const offset = Math.round(secondOffset)
+    this.scrubberValue = offset
+    this.scrubberPendingOffset = offset
+    this.updateScrubberLabel(offset)
+    if (mode === SliderChangeMode.Begin) {
+      this.scrubberInteracting = true
+    }
+    if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Click || this.scrubberReferenceJd <= 0) {
+      this.beginScrubberInteraction(offset)
+      return
+    }
+    const finished = mode === SliderChangeMode.End
+    this.sendScrubberTime(finished)
+    if (finished || mode === SliderChangeMode.Click) {
+      this.scrubberInteracting = false
+    }
+  }
+
+  private syncScrubberToSimulation(jd: number): void {
+    if (this.scrubberReferenceJd <= 0) {
+      this.scrubberReferenceJd = Date.now() / 86400000.0 + 2440587.5
+    }
+    let offset = Math.round((jd - this.scrubberReferenceJd) * 86400.0)
+    // A timeline is a local control surface, not a calendar with a hard wall.
+    // Re-centre before the thumb reaches the end so pause and reverse dragging
+    // continue from the visible simulated time instead of snapping back to 12h.
+    if (Math.abs(offset) > 38880) {
+      this.scrubberReferenceJd = jd
+      offset = 0
+    }
+    this.scrubberValue = offset
+    this.updateScrubberLabel(offset)
+  }
+
+  private resetScrubberToRealtime(): void {
+    this.scrubberInteracting = false
+    this.scrubberAnchorPending = false
+    this.scrubberReferenceJd = 0
+    this.scrubberPendingOffset = 0
+    this.scrubberValue = 0
+    this.updateScrubberLabel(0)
   }
 
   private zoomStep(factor: number): void {
@@ -2385,7 +2734,15 @@ private loadPlanetPositions(): void {
     // Discrete zoom is a direct view command. Do not route it through the
     // result-polling cache, which can make a tap appear to do nothing.
     this.callNativeFire('zoomStep', factor.toString())
-    setTimeout(() => { this.refreshState() }, 450)
+    setTimeout(() => {
+      this.refreshState()
+      // Tablet zoom changes the projection after the selected target was put
+      // in its card-safe region. Settle it back to that region once the
+      // native 400 ms zoom animation has completed.
+      if (this.isExpandedLayout && this.selectedStatus === 'Selected' && (this.panelVisible || this.infoWinVisible)) {
+        this.placeSelectedObjectInSafeArea('layout')
+      }
+    }, 450)
   }
 
   private advanceTime(hours: number): void {
@@ -2417,7 +2774,12 @@ private loadPlanetPositions(): void {
     const i18nCode = I18n.fromStellariumCode(lang)
     // 同步 I18n 模块（触发 AppStorage 变更 → UI 重渲染）
     I18n.setLanguage(i18nCode)
+    // The panel contains many static text nodes. Updating this local storage
+    // link and the panel identity makes the open panel rebuild immediately,
+    // rather than waiting for it to be closed and opened again.
+    this.i18nLang = i18nCode
     this.selectedLanguage = lang
+    this.panelContentKey++
     // 持久化语言选择
     try {
       const settings = AppStorage.get<string>('stellariumSettings')
@@ -2427,13 +2789,11 @@ private loadPlanetPositions(): void {
     } catch (e) { }
     // 立即提示，不等 C++ 确认（避免阻塞触摸和星图交互）
     this.flashHint(I18n.t('msg_lang_switched_done') + ': ' + (LANGUAGE_DISPLAY[lang] ?? LANGUAGE_DISPLAY[i18nCode] ?? lang))
-    // 延迟同步 C++ 侧语言，避免同步 N-API 调用阻塞 UI 线程导致星图无响应
+    // 延迟同步 C++ 侧语言，避免同步 N-API 调用阻塞 UI 线程导致星图无响应。
+    // 这里不能 refreshState：该全量状态刷新会与选中对象的安全居中动画竞争，
+    // 表现为星图先上移又下移。
     setTimeout(() => {
-      this.callNativeWhenReady('setLanguage', lang, (r: StellariumBridgeResponse) => {
-        if (r.ok === true) {
-          this.refreshState()
-        }
-      }, 0, 300, 3)
+      this.callNativeWhenReady('setLanguage', lang, () => {}, 0, 300, 3)
     }, 50)
   }
 
@@ -2526,11 +2886,6 @@ private loadPlanetPositions(): void {
       }
     }
     try {
-      // ORIENTATION sensor returns absolute device orientation:
-      //   data.alpha = azimuth (0-360, compass heading)
-      //   data.beta  = pitch (-180 to 180, front-back tilt)
-      //   data.gamma = roll (-90 to 90, left-right tilt)
-      // This gives "point device at sky → star map follows" behavior.
       sensor.on(sensor.SensorId.ORIENTATION, this.gyroCallback, { interval: 16666667 })
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
@@ -2560,14 +2915,20 @@ private loadPlanetPositions(): void {
     this.gyroCalibrated = false
     this.gyroFirstReading = true
     this.gyroLastDispatchMs = 0
+    this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
       this.gyroscopeStatus = I18n.t('m_gyro_off')
     }
   }
 
-  // Absolute orientation tracking: device azimuth/altitude → sky view direction.
-  // Uses ORIENTATION sensor (compass + tilt) for "point at sky" behavior.
+  // Device-pose tracking.
+  //
+  // Only the *heading* is calibrated against the current sky view. Pitch and
+  // roll come from gravity and are already absolute, so re-basing them would
+  // tilt the horizon. The heading, by contrast, depends on the magnetometer
+  // and is either arbitrary or drifting, which is what made the sky jump
+  // sideways when the fusion filter re-converged.
   private gyroLastAz: number = 0
   private gyroLastAlt: number = 0
   private gyroFirstReading: boolean = true
@@ -2578,7 +2939,25 @@ private loadPlanetPositions(): void {
   private gyroReferenceAlt: number = 0
   private gyroReferenceViewAz: number = 0
   private gyroReferenceViewAlt: number = 0
+  private gyroHeadingSyncInFlight: boolean = false
+  // Smoothed pose, expressed in the bridge's alt-az frame.
+  private gyroFwd: number[] = []
+  private gyroUp: number[] = []
+  private gyroSentFwd: number[] = []
+  private gyroLastSampleMs: number = 0
   private gyroLastDispatchMs: number = 0
+  // Last raw sensor quaternion (x,y,z,w) — kept for the diagnostic log so the
+  // exact mapping can be reconstructed and verified offline.
+  private gyroLastRawQ: number[] = [0, 0, 0, 1]
+  // Anchored-pose model: we capture the device orientation and the engine's
+  // current sky view once, then track only the *relative* tablet rotation from
+  // that anchor. This is immune to landscape/portrait screen rotation and to
+  // Stellarium's internal azimuth-sign convention (we read the live view back
+  // from the engine instead of guessing an ENU->alt-az mapping).
+  private gyroAnchorQuat: number[] = []
+  private gyroAnchorFwd: number[] = []
+  private gyroAnchorUp: number[] = []
+  private gyroAnchorValid: boolean = false
 
   private wrapGyroAzimuth(angle: number): number {
     let wrapped = angle % 360
@@ -2593,80 +2972,105 @@ private loadPlanetPositions(): void {
     return delta
   }
 
-  // Establish a relative reference instead of jumping to a raw sensor angle.
-  // This is required because the platform orientation reading can be uncalibrated
-  // or use a screen-relative frame when the Pad is rotated.
+  private updateGyroTargetGuide(force: boolean = false): void {
+    if (!this.gyroscopeEnabled || this.selectedStatus !== 'Selected' ||
+      !Number.isFinite(this.gyroGuideTargetAz) || !Number.isFinite(this.gyroGuideTargetAlt) ||
+      !Number.isFinite(this.gyroLastAz) || !Number.isFinite(this.gyroLastAlt)) {
+      this.gyroGuideVisible = false
+      return
+    }
+    const now = Date.now()
+    if (!force && now - this.gyroGuideLastUpdateMs < 100) { return }
+    this.gyroGuideLastUpdateMs = now
+
+    // Project the target's local tangent-plane direction around the current
+    // view. Cos(altitude) prevents a small azimuth change near zenith from
+    // looking like an enormous horizontal turn.
+    const horizontal = this.shortestGyroAzimuthDelta(this.gyroLastAz, this.gyroGuideTargetAz) *
+      Math.cos(this.gyroLastAlt * Math.PI / 180)
+    const vertical = this.gyroGuideTargetAlt - this.gyroLastAlt
+    const separation = Math.sqrt(horizontal * horizontal + vertical * vertical)
+    const fov = Math.max(5, this.fovSliderValue > 0 ? this.fovSliderValue : 60)
+    if (separation <= fov * 0.48) {
+      this.gyroGuideVisible = false
+      return
+    }
+
+    // The forward icon points right at 0 degrees. Negative vertical is up on
+    // screen, so a target above the view produces a -90 degree arrow.
+    const angle = Math.atan2(-vertical, horizontal) * 180 / Math.PI
+    const left = this.isExpandedLayout ? (this.railCollapsed ? 54 : this.EDGE_MARGIN + 82) : 18
+    const right = this.skyWidth - (this.isExpandedLayout && this.panelVisible
+      ? this.panelWidth + this.EDGE_MARGIN + 18 : 18)
+    const top = this.isFoldHoverLayout ? 46 : 64
+    const bottom = this.skyHeight - (this.isFoldHoverLayout ? 104 : 96)
+    const centerX = Math.max(left + 24, (left + right) / 2)
+    const centerY = Math.max(top + 24, (top + bottom) / 2)
+    const radians = angle * Math.PI / 180
+    const dx = Math.cos(radians)
+    const dy = Math.sin(radians)
+    // Intersect the direction vector with the usable viewport rectangle.
+    // This puts the guide on its edge rather than on an arbitrary inner ring.
+    const halfW = Math.max(1, (right - left) / 2 - 24)
+    const halfH = Math.max(1, (bottom - top) / 2 - 24)
+    const edgeScaleX = Math.abs(dx) > 0.0001 ? halfW / Math.abs(dx) : Number.POSITIVE_INFINITY
+    const edgeScaleY = Math.abs(dy) > 0.0001 ? halfH / Math.abs(dy) : Number.POSITIVE_INFINITY
+    const edgeScale = Math.min(edgeScaleX, edgeScaleY)
+    this.gyroGuideAngle = angle
+    this.gyroGuideX = this.clamp(centerX + dx * edgeScale - 22, left, Math.max(left, right - 44))
+    this.gyroGuideY = this.clamp(centerY + dy * edgeScale - 22, top, Math.max(top, bottom - 44))
+    this.gyroGuideVisible = true
+  }
+
+  // The Orientation sensor already reports a world-referenced pose. Do not
+  // anchor it to the existing sky view: doing so makes "flat" retain an
+  // arbitrary altitude instead of consistently looking at the nadir.
   private calibrateGyroscope(): void {
     if (!this.gyroscopeEnabled || this.gyroFirstReading) { return }
-    this.gyroCalibrated = false
-    this.gyroscopeStatus = '正在校准'
-    this.callInteractive('getViewAltAz', '', (result: StellariumBridgeResponse) => {
-      if (!this.gyroscopeEnabled) { return }
-      if (result.ok === true && typeof result.azimuth === 'number' && typeof result.altitude === 'number') {
-        this.gyroReferenceAz = this.gyroRawAz
-        this.gyroReferenceAlt = this.gyroRawAlt
-        this.gyroReferenceViewAz = result.azimuth as number
-        this.gyroReferenceViewAlt = result.altitude as number
-        this.gyroLastAz = this.gyroReferenceViewAz
-        this.gyroLastAlt = this.gyroReferenceViewAlt
-        this.gyroLastDispatchMs = 0
-        this.gyroCalibrated = true
-        this.gyroscopeStatus = '已校准'
-      } else {
-        this.gyroscopeStatus = I18n.t('m_gyro_core_not_ready')
-      }
-    })
+    this.gyroAbsolutePoseReady = false
+    this.gyroLastDispatchMs = 0
+    this.gyroCalibrated = true
+    this.gyroscopeStatus = '已校准'
   }
 
   private onOrientationData(data: sensor.OrientationResponse): void {
-    // ORIENTATION sensor (degrees):
-    //   data.alpha = azimuth (0-360): 0=North, 90=East, 180=South, 270=West
-    //   data.beta  = pitch (-180 to 180): positive = tilting forward (screen up)
-    //   data.gamma = roll (-90 to 90): positive = tilting right
-    //
-    // ABSOLUTE ORIENTATION MODE (like Star Walk, SkyView, etc.):
-    // Device azimuth → sky view azimuth
-    // Device altitude (pitch) → sky view altitude
-    // "Point device at sky → star map shows what's there"
-
-    // Sensitivity controls how much the view moves relative to device rotation.
-    // In absolute mode, sensitivity acts as a smoothing factor.
     let smoothFactor: number = 0.18
     if (this.gyroscopeSensitivityText === 'Low') { smoothFactor = 0.10 }
     else if (this.gyroscopeSensitivityText === 'High') { smoothFactor = 0.28 }
 
-    // --- Compute target azimuth and altitude from device orientation ---
-    // Alpha is compass heading: 0=N, 90=E, 180=S, 270=W
-    // In Stellarium, azimuth is also measured from North, going East.
-    // For landscape mode, the device is rotated 90° clockwise.
-    // When holding device in landscape (left hand), screen faces user:
-    //   - Rotating body clockwise → alpha increases → view moves East
-    //   - Tilting top of device up → beta increases → view moves up
-    //
-    // For landscape mode with device rotated 90° CW:
-    //   The "facing direction" of the device is alpha + 90° (roughly)
-    //   But to keep it simple and match user expectation:
-    //   We map alpha directly to azimuth, beta to altitude.
+    if (!Number.isFinite(data.alpha) || !Number.isFinite(data.beta) || !Number.isFinite(data.gamma)) { return }
+    const alpha = data.alpha * Math.PI / 180
+    const beta = data.beta * Math.PI / 180
+    const gamma = data.gamma * Math.PI / 180
+    const cosAlpha = Math.cos(alpha)
+    const sinAlpha = Math.sin(alpha)
+    const cosBeta = Math.cos(beta)
+    const sinBeta = Math.sin(beta)
+    const cosGamma = Math.cos(gamma)
+    const sinGamma = Math.sin(gamma)
+    // World-space normal of the display front. The observer looks through the
+    // back of the device, hence the sky-forward vector is its inverse.
+    const normalX = cosAlpha * sinGamma + sinAlpha * sinBeta * cosGamma
+    const normalY = sinAlpha * sinGamma - cosAlpha * sinBeta * cosGamma
+    const normalZ = cosBeta * cosGamma
+    const forwardX = -normalX
+    const forwardY = -normalY
+    const forwardZ = -normalZ
+    const targetAz = this.wrapGyroAzimuth(Math.atan2(forwardY, forwardX) * 180 / Math.PI + this.gyroOffsetAz)
+    const targetAlt = this.clamp(Math.asin(this.clamp(forwardZ, -1, 1)) * 180 / Math.PI + this.gyroOffsetAlt, -90, 90)
+    // Device Y is the top edge of the screen. Keeping it as the camera up
+    // basis removes the otherwise undefined roll at zenith and nadir.
+    const rawUp: number[] = [-sinAlpha * cosBeta, cosAlpha * cosBeta, sinBeta]
 
-    const targetAz = data.alpha
-    // Beta: positive when tilting forward (top of phone away from user)
-    // For astronomy: when device is held up facing sky, beta ≈ 0-90 = looking up
-    // We want: device flat (beta=0) = looking at horizon (alt=0)
-    //          device upright (beta=90) = looking at zenith (alt=90)
-    // In landscape the device's screen-up pitch axis is gamma rather than beta.
-    // The reference calibration below absorbs the device's initial orientation.
-    let targetAlt = this.skyWidth > this.skyHeight ? data.gamma : data.beta
-
-    // Clamp altitude to valid range [-90, 90]
-    if (targetAlt > 90) targetAlt = 90
-    if (targetAlt < -90) targetAlt = -90
-
-    if (!Number.isFinite(targetAz) || !Number.isFinite(targetAlt)) { return }
     this.gyroRawAz = targetAz
     this.gyroRawAlt = targetAlt
-
-    // First reading only captures the sensor frame. Moving the sky here made
-    // every enable jump to an arbitrary heading before the user could calibrate.
+    const diagnosticNow = Date.now()
+    if (diagnosticNow - this.gyroLastDiagnosticMs >= 750) {
+      this.gyroLastDiagnosticMs = diagnosticNow
+      hilog.info(0x0000, 'StellariumArkUI', '[GYRO_ORIENTATION] alpha=' + data.alpha.toFixed(2) +
+        ' beta=' + data.beta.toFixed(2) + ' gamma=' + data.gamma.toFixed(2) +
+        ' absAz=' + targetAz.toFixed(2) + ' absAlt=' + targetAlt.toFixed(2))
+    }
     if (this.gyroFirstReading) {
       this.gyroFirstReading = false
       this.calibrateGyroscope()
@@ -2674,39 +3078,320 @@ private loadPlanetPositions(): void {
     }
     if (!this.gyroCalibrated) { return }
 
-    // Keep the current view as the calibration anchor and track only rotation
-    // since that moment. Calibration offsets therefore do not accumulate on
-    // every sensor event, which was the source of the observed drifting.
-    const targetViewAz = this.wrapGyroAzimuth(this.gyroReferenceViewAz +
-      this.shortestGyroAzimuthDelta(this.gyroReferenceAz, targetAz) + this.gyroOffsetAz)
-    const targetViewAlt = this.clamp(this.gyroReferenceViewAlt +
-      (targetAlt - this.gyroReferenceAlt) + this.gyroOffsetAlt, -90, 90)
-
-    // Smooth interpolation: gradually move toward target
-    const smoothAz = this.wrapGyroAzimuth(this.gyroLastAz +
-      this.shortestGyroAzimuthDelta(this.gyroLastAz, targetViewAz) * smoothFactor)
-    const smoothAlt = this.gyroLastAlt + (targetViewAlt - this.gyroLastAlt) * smoothFactor
-
-    // Dead zone: skip if change is too small
-    const finalAzDiff = this.shortestGyroAzimuthDelta(this.gyroLastAz, smoothAz)
-    const finalAltDiff = smoothAlt - this.gyroLastAlt
-    if (Math.abs(finalAzDiff) < 0.25 && Math.abs(finalAltDiff) < 0.25) {
-      return
+    if (!this.gyroAbsolutePoseReady) {
+      this.gyroLastAz = targetAz
+      this.gyroLastAlt = targetAlt
+      this.gyroAbsoluteUp = rawUp
+      this.gyroAbsolutePoseReady = true
     }
+    const smoothAz = this.wrapGyroAzimuth(this.gyroLastAz +
+      this.shortestGyroAzimuthDelta(this.gyroLastAz, targetAz) * smoothFactor)
+    const smoothAlt = this.gyroLastAlt + (targetAlt - this.gyroLastAlt) * smoothFactor
+
+    const azDelta = this.shortestGyroAzimuthDelta(this.gyroLastAz, smoothAz)
+    const altDelta = smoothAlt - this.gyroLastAlt
+    if (Math.abs(azDelta) < 0.25 && Math.abs(altDelta) < 0.25) { return }
 
     this.gyroLastAz = smoothAz
     this.gyroLastAlt = smoothAlt
-
+    const aimX = Math.cos(smoothAlt * Math.PI / 180) * Math.cos(smoothAz * Math.PI / 180)
+    const aimY = Math.cos(smoothAlt * Math.PI / 180) * Math.sin(smoothAz * Math.PI / 180)
+    const aimZ = Math.sin(smoothAlt * Math.PI / 180)
+    let upX = this.gyroAbsoluteUp[0] + (rawUp[0] - this.gyroAbsoluteUp[0]) * smoothFactor
+    let upY = this.gyroAbsoluteUp[1] + (rawUp[1] - this.gyroAbsoluteUp[1]) * smoothFactor
+    let upZ = this.gyroAbsoluteUp[2] + (rawUp[2] - this.gyroAbsoluteUp[2]) * smoothFactor
+    const upDotAim = upX * aimX + upY * aimY + upZ * aimZ
+    upX -= aimX * upDotAim
+    upY -= aimY * upDotAim
+    upZ -= aimZ * upDotAim
+    const upLength = Math.sqrt(upX * upX + upY * upY + upZ * upZ)
+    this.gyroAbsoluteUp = upLength > 0.0001 ? [upX / upLength, upY / upLength, upZ / upLength] : rawUp
     const now = Date.now()
+    this.updateGyroTargetGuide()
     if (now - this.gyroLastDispatchMs < 20) { return }
     this.gyroLastDispatchMs = now
-    // High-frequency view updates must not go through the result cache.
-    // Native bridge takes azimuth first, altitude second. The previous order
-    // was reversed, which made calibrated Pad movement point at the wrong sky.
-    this.callNativeFire('moveToAltAz', smoothAz.toFixed(2) + '|' + smoothAlt.toFixed(2) + '|0')
+    this.callNativeFire('setGyroView', smoothAz.toFixed(3) + '|' + smoothAlt.toFixed(3) + '|'
+      + this.gyroAbsoluteUp[0].toFixed(5) + '|' + this.gyroAbsoluteUp[1].toFixed(5) + '|' + this.gyroAbsoluteUp[2].toFixed(5))
     this.gyroEventCount += 1
     if (this.gyroEventCount % 20 === 0) {
       this.gyroscopeStatus = I18n.t('m_gyro_working')
+    }
+  }
+
+  private gyroNormalizeQuaternion(q: number[]): number[] {
+    const length = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
+    if (length < 0.000001) { return [0, 0, 0, 1] }
+    return [q[0] / length, q[1] / length, q[2] / length, q[3] / length]
+  }
+
+  private gyroConjugateQuaternion(q: number[]): number[] {
+    return [-q[0], -q[1], -q[2], q[3]]
+  }
+
+  private gyroMultiplyQuaternions(a: number[], b: number[]): number[] {
+    return [
+      a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+      a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+      a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+      a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]
+    ]
+  }
+
+  private gyroRotateVector(q: number[], v: number[]): number[] {
+    const vectorQuaternion = [v[0], v[1], v[2], 0]
+    const rotated = this.gyroMultiplyQuaternions(this.gyroMultiplyQuaternions(q, vectorQuaternion), this.gyroConjugateQuaternion(q))
+    return [rotated[0], rotated[1], rotated[2]]
+  }
+
+  private gyroNormalizeVector(v: number[]): number[] {
+    const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    if (length < 0.000001) { return [1, 0, 0] }
+    return [v[0] / length, v[1] / length, v[2] / length]
+  }
+
+  private gyroAltAzVector(azimuth: number, altitude: number): number[] {
+    const az = azimuth * Math.PI / 180
+    const alt = altitude * Math.PI / 180
+    return [Math.cos(alt) * Math.cos(az), Math.cos(alt) * Math.sin(az), Math.sin(alt)]
+  }
+
+  private gyroVectorAltAz(v: number[]): number[] {
+    const n = this.gyroNormalizeVector(v)
+    let azimuth = Math.atan2(n[1], n[0]) * 180 / Math.PI
+    if (azimuth < 0) { azimuth += 360 }
+    return [azimuth, Math.asin(n[2]) * 180 / Math.PI]
+  }
+
+  // Rotate about the local vertical. Azimuth in the bridge frame is
+  // atan2(y, x), so this adds `deg` to the azimuth of any vector.
+  private gyroRotateAboutVertical(v: number[], deg: number): number[] {
+    if (deg === 0) { return v }
+    const r = deg * Math.PI / 180
+    const c = Math.cos(r)
+    const s = Math.sin(r)
+    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]]
+  }
+
+  private gyroRotateAboutAxis(v: number[], axis: number[], deg: number): number[] {
+    if (deg === 0) { return v }
+    const r = deg * Math.PI / 180
+    const c = Math.cos(r)
+    const s = Math.sin(r)
+    const d = axis[0] * v[0] + axis[1] * v[1] + axis[2] * v[2]
+    const cx = axis[1] * v[2] - axis[2] * v[1]
+    const cy = axis[2] * v[0] - axis[0] * v[2]
+    const cz = axis[0] * v[1] - axis[1] * v[0]
+    return [
+      v[0] * c + cx * s + axis[0] * d * (1 - c),
+      v[1] * c + cy * s + axis[1] * d * (1 - c),
+      v[2] * c + cz * s + axis[2] * d * (1 - c)
+    ]
+  }
+
+  // Keep the up vector perpendicular to the view direction. Without this the
+  // two drift apart after repeated smoothing and the roll becomes unstable
+  // near the zenith.
+  private gyroOrthonormalizeUp(fwd: number[], up: number[]): number[] {
+    const d = fwd[0] * up[0] + fwd[1] * up[1] + fwd[2] * up[2]
+    let o: number[] = [up[0] - fwd[0] * d, up[1] - fwd[1] * d, up[2] - fwd[2] * d]
+    if (o[0] * o[0] + o[1] * o[1] + o[2] * o[2] < 0.000001) {
+      const dz = fwd[2]
+      o = [-fwd[0] * dz, -fwd[1] * dz, 1 - fwd[2] * dz]
+      if (o[0] * o[0] + o[1] * o[1] + o[2] * o[2] < 0.000001) { return [1, 0, 0] }
+    }
+    return this.gyroNormalizeVector(o)
+  }
+
+  // The rotation-vector sensor reports in the ENU (east/north/up) world frame,
+  // while the engine view direction and setGyroView use the bridge alt-az frame
+  // (azimuth = atan2(y, x), x points south). The two frames differ only by a
+  // 90 deg rotation about the vertical, but applying an ENU-frame relative
+  // rotation directly to a bridge-frame vector silently swaps pitch and roll.
+  // These helpers keep the math in one frame at a time.
+  private gyroEnuFromBridge(v: number[]): number[] { // bridge (x=-north,y=east,z=up) -> ENU
+    return [v[1], -v[0], v[2]]
+  }
+  private gyroBridgeFromEnu(v: number[]): number[] { // ENU -> bridge
+    return [-v[1], v[0], v[2]]
+  }
+
+  // Legacy quaternion implementation retained temporarily only to keep this
+  // restoration narrowly scoped. It is not subscribed or called.
+  private calibrateGyroscopeQuaternionUnused(): void {
+    if (!this.gyroscopeEnabled) { return }
+    this.gyroCalibrated = false
+    this.gyroAnchorValid = false
+    this.gyroAnchorQuat = []
+    this.gyroAnchorFwd = []
+    this.gyroAnchorUp = []
+    this.gyroHeadingSyncInFlight = false
+    this.gyroscopeStatus = '正在校准'
+  }
+
+  // Capture the engine's current sky view plus the device pose as the anchor.
+  // After this, the gyro tracks only the *relative* tablet rotation from the
+  // anchor, which is independent of landscape/portrait and of the engine's
+  // internal azimuth convention. `q` is the device->world quaternion.
+  private syncGyroAnchor(q: number[]): void {
+    if (this.gyroHeadingSyncInFlight) { return }
+    this.gyroHeadingSyncInFlight = true
+    this.callInteractive('getViewDirection', '', (result: StellariumBridgeResponse) => {
+      this.gyroHeadingSyncInFlight = false
+      if (!this.gyroscopeEnabled) { return }
+      if (result.ok === true && typeof result.azimuth === 'number' && typeof result.altitude === 'number') {
+        // Current view direction, read back from the engine in the bridge
+        // alt-az frame, then converted to ENU where the sensor quaternion lives.
+        const f0Bridge = this.gyroAltAzVector(result.azimuth as number, result.altitude as number)
+        // Preserve a complete, non-degenerate camera basis at calibration.
+        // Projecting the world zenith every frame becomes undefined at the
+        // zenith/nadir and was the source of the 180-degree flip. The tablet's
+        // screen-up vector is a stable fallback through both poles.
+        const f0Enu = this.gyroEnuFromBridge(f0Bridge)
+        const screenUpEnu = this.gyroRotateVector(q, [0, 1, 0])
+        this.gyroAnchorQuat = q
+        this.gyroAnchorFwd = this.gyroNormalizeVector(f0Enu)
+        this.gyroAnchorUp = this.gyroOrthonormalizeUp(this.gyroAnchorFwd, screenUpEnu)
+        this.gyroAnchorValid = true
+        this.gyroCalibrated = true
+        // Force the smoothing filter to re-seed from the next sample.
+        this.gyroFwd = []
+        this.gyroUp = []
+        this.gyroSentFwd = []
+        this.gyroLastSampleMs = 0
+        this.gyroLastDispatchMs = 0
+        this.gyroscopeStatus = '已校准'
+        const raw = this.gyroLastRawQ
+        const anchorMsg = '[GYROANCHOR] engAz=' + (result.azimuth as number).toFixed(2) +
+          ' engAlt=' + (result.altitude as number).toFixed(2) +
+          ' rawQ=' + raw[0].toFixed(4) + ',' + raw[1].toFixed(4) + ',' + raw[2].toFixed(4) + ',' + raw[3].toFixed(4) +
+          ' calibratedConj=' + q[0].toFixed(4) + ',' + q[1].toFixed(4) + ',' + q[2].toFixed(4) + ',' + q[3].toFixed(4)
+        hilog.info(0x0000, 'StellariumArkUI', '%{public}s', anchorMsg)
+      } else {
+        this.gyroscopeStatus = I18n.t('m_gyro_core_not_ready')
+      }
+    })
+  }
+
+  private onRotationVectorData(data: sensor.RotationVectorResponse): void {
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.z) || !Number.isFinite(data.w)) { return }
+    this.gyroLastRawQ = [data.x, data.y, data.z, data.w]
+    // This probe is intentionally independent of calibration and view-motion
+    // thresholds. It proves whether the device delivers rotation samples.
+    this.gyroRawEventCount += 1
+    if (this.gyroRawEventCount % 120 === 0) {
+      this.callNativeFire('gyroDiagnostic', data.x.toFixed(3) + '|' + data.y.toFixed(3) + '|' + data.z.toFixed(3) + '|' + this.gyroRawEventCount.toString())
+    }
+    // ROTATION_VECTOR reports a rotation quaternion. OpenHarmony follows the
+    // Android sensor convention where the value represents world->device, so a
+    // conjugation gives the device->world rotation. Skipping it inverts pitch
+    // (you see ground instead of sky); we verified this empirically.
+    const orientation = this.gyroConjugateQuaternion(
+      this.gyroNormalizeQuaternion([data.x, data.y, data.z, data.w]))
+
+    if (this.gyroFirstReading) {
+      this.gyroFirstReading = false
+    }
+
+    // First valid reading: anchor the device pose to the live sky view.
+    if (!this.gyroAnchorValid) {
+      this.syncGyroAnchor(orientation)
+      return
+    }
+    if (!this.gyroCalibrated) { return }
+
+    // Relative rotation of the tablet from the anchor pose to now, in the
+    // device->world (ENU) frame. The anchor vectors are stored in ENU too, so
+    // rotating them by rel reproduces exactly how far the tablet has turned.
+    const rel = this.gyroMultiplyQuaternions(orientation, this.gyroConjugateQuaternion(this.gyroAnchorQuat))
+    const fwdEnu = this.gyroRotateVector(rel, this.gyroAnchorFwd)
+    const upEnu = this.gyroRotateVector(rel, this.gyroAnchorUp)
+    // Rotate the calibrated camera basis as one rigid pose. Do not rebuild the
+    // up vector from world zenith here: that basis has no unique direction at
+    // the zenith/nadir and makes the scene flip while crossing either pole.
+    let fwd = this.gyroBridgeFromEnu(fwdEnu)
+    let up = this.gyroBridgeFromEnu(upEnu)
+
+    // Manual calibration nudges, applied to the whole pose so up stays
+    // consistent with the view direction. These operate in the bridge frame.
+    const yaw = this.gyroOffsetAz
+    if (yaw !== 0) {
+      fwd = this.gyroRotateAboutVertical(fwd, yaw)
+      up = this.gyroRotateAboutVertical(up, yaw)
+    }
+    if (this.gyroOffsetAlt !== 0) {
+      // Tilt around the horizontal axis at right angles to the current
+      // heading, so the manual nudge raises the view instead of shearing it.
+      const h = Math.sqrt(fwd[0] * fwd[0] + fwd[1] * fwd[1])
+      if (h > 0.001) {
+        const axis: number[] = [fwd[1] / h, -fwd[0] / h, 0]
+        fwd = this.gyroRotateAboutAxis(fwd, axis, this.gyroOffsetAlt)
+        up = this.gyroRotateAboutAxis(up, axis, this.gyroOffsetAlt)
+      }
+    }
+    fwd = this.gyroNormalizeVector(fwd)
+    up = this.gyroOrthonormalizeUp(fwd, up)
+
+    const now = Date.now()
+    if (this.gyroFwd.length !== 3 || this.gyroUp.length !== 3) {
+      // First sample after (re)calibration: adopt the pose outright.
+      this.gyroFwd = fwd
+      this.gyroUp = up
+      this.gyroLastSampleMs = now
+    } else {
+      let dt = this.gyroLastSampleMs > 0 ? (now - this.gyroLastSampleMs) / 1000 : 1 / 60
+      this.gyroLastSampleMs = now
+      if (!(dt > 0)) { dt = 1 / 60 }
+      if (dt > 0.25) { dt = 0.25 }
+      // Time-constant low pass, so the feel no longer depends on the sensor
+      // delivery rate. The old filter used a fixed per-sample alpha *and* a
+      // 0.18 degree dead zone that returned without storing the new pose:
+      // during slow panning the stored pose froze until the error grew past
+      // roughly a degree, then the view jumped. That was the stutter.
+      let tau = 0.09
+      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.16 }
+      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.05 }
+      const a = 1 - Math.exp(-dt / tau)
+      const sFwd = this.gyroNormalizeVector([
+        this.gyroFwd[0] + (fwd[0] - this.gyroFwd[0]) * a,
+        this.gyroFwd[1] + (fwd[1] - this.gyroFwd[1]) * a,
+        this.gyroFwd[2] + (fwd[2] - this.gyroFwd[2]) * a
+      ])
+      const sUp = [
+        this.gyroUp[0] + (up[0] - this.gyroUp[0]) * a,
+        this.gyroUp[1] + (up[1] - this.gyroUp[1]) * a,
+        this.gyroUp[2] + (up[2] - this.gyroUp[2]) * a
+      ]
+      this.gyroFwd = sFwd
+      this.gyroUp = this.gyroOrthonormalizeUp(sFwd, sUp)
+    }
+
+    // Sample at the device rate, but keep the ArkTS-to-Qt queue bounded. The
+    // native renderer receives the latest complete pose about 30 times/sec.
+    if (now - this.gyroLastDispatchMs < 33) { return }
+    // Skip only the bridge call when nothing moved — never the state update.
+    if (this.gyroSentFwd.length === 3) {
+      const d = this.clamp(this.gyroSentFwd[0] * this.gyroFwd[0] + this.gyroSentFwd[1] * this.gyroFwd[1] + this.gyroSentFwd[2] * this.gyroFwd[2], -1, 1)
+      if (Math.acos(d) * 180 / Math.PI < 0.01 && now - this.gyroLastDispatchMs < 250) { return }
+    }
+    this.gyroSentFwd = this.gyroFwd
+    this.gyroLastDispatchMs = now
+
+    const altAz = this.gyroVectorAltAz(this.gyroFwd)
+    this.gyroLastAz = altAz[0]
+    this.gyroLastAlt = altAz[1]
+    // Dedicated direct-pose command: moveToAltAz would drop the up vector and
+    // restart an interpolation on every sample.
+    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3) + '|'
+      + this.gyroUp[0].toFixed(5) + '|' + this.gyroUp[1].toFixed(5) + '|' + this.gyroUp[2].toFixed(5))
+    this.gyroEventCount += 1
+    if (this.gyroEventCount % 4 === 0) {
+      this.gyroscopeStatus = I18n.t('m_gyro_working')
+      const raw = this.gyroLastRawQ
+      const diagMsg = '[GYROSAMP] rawQ=' + raw[0].toFixed(4) + ',' + raw[1].toFixed(4) + ',' + raw[2].toFixed(4) + ',' + raw[3].toFixed(4) +
+        ' sentAz=' + this.gyroLastAz.toFixed(2) + ' sentAlt=' + this.gyroLastAlt.toFixed(2) +
+        ' up=' + this.gyroUp[0].toFixed(3) + ',' + this.gyroUp[1].toFixed(3) + ',' + this.gyroUp[2].toFixed(3) +
+        ' offAz=' + this.gyroOffsetAz + ' offAlt=' + this.gyroOffsetAlt
+      hilog.info(0x0000, 'StellariumArkUI', '%{public}s', diagMsg)
     }
   }
   private searchObject(name: string): void {
@@ -2720,17 +3405,35 @@ private loadPlanetPositions(): void {
     hist.unshift(query)
     this.searchHistory = hist.slice(0, 20)
     this.saveSearchHistoryToStorage()
-    this.callInteractive('searchObject', query, (result) => {
-      this.applySelectedObject(result)
+    const gyroSelection = this.gyroscopeEnabled
+    this.callInteractive('searchObject', gyroSelection ? query + '|selectOnly' : query, (result) => {
       if (result.found === true) {
-        const displayName = this.zhNameOf(this.selectedName.length > 0 ? this.selectedName : query)
-        this.flashHint(I18n.t('i0071').replace('%s', displayName))
-        // Do not leave the search panel covering the centered target on tablets.
+        // Close the search sheet before calculating the target's final safe
+        // point. Otherwise the first navigation avoids the old 9/10 sheet,
+        // then visibly performs a second correction for the top detail card.
         if (this.activePanel === 'search') {
-          this.closePanel(true)
+          // Do this in-place instead of closePanel(): that generic helper
+          // schedules a later recenter for the closing sheet, which can race
+          // the newly opened object card and undo its safe target.
+          this.stopTimePanelTimers()
+          this.getUIContext().animateTo({ duration: 260, curve: curves.springMotion(0.45, 0.9) }, () => {
+            this.panelVisible = false
+          })
           this.drawerOpen = false
         }
+        this.applySelectedObject(result)
+        // Under gyro control, a selected target is navigated by the edge guide,
+        // not by moving the camera. Normal searches keep the explicit tracking
+        // behavior requested for time-lapse observing.
+        this.callInteractive('setTracking', gyroSelection ? '0' : '1', (trackingResult: StellariumBridgeResponse) => {
+          if (trackingResult.ok === true) {
+            this.trackingText = gyroSelection ? 'Off' : 'On'
+          }
+        })
+        const displayName = this.zhNameOf(this.selectedName.length > 0 ? this.selectedName : query)
+        this.flashHint(I18n.t('i0071').replace('%s', displayName))
       } else {
+        this.applySelectedObject(result)
         this.flashHint(I18n.t('i0072').replace('%s', query))
       }
     })
@@ -2762,46 +3465,201 @@ private loadPlanetPositions(): void {
     }, 300) as number
   }
 
+  private pauseDetailRefreshForSkyDrag(): void {
+    // Object-info polling uses the same ArkTS-to-Qt queue as panning. Stop it
+    // for the duration of a gesture so an open detail card cannot make the sky
+    // lag behind the finger.
+    this.stopDetailAutoRefresh()
+  }
+
+  private resumeDetailRefreshAfterSkyDrag(): void {
+    if (this.infoWinVisible && this.selectedStatus === 'Selected') {
+      this.startDetailAutoRefresh()
+    }
+  }
+
   private stopDetailAutoRefresh(): void {
     if (this.detailTimer !== 0) { clearInterval(this.detailTimer); this.detailTimer = 0 }
     if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
     this.detailRefreshing = false
   }
 
-  private moveToSelectedObject(): void {
-    this.callInteractive('moveToSelected', '', (r) => this.applySelectedObject(r))
+  private requestSelectedFullInfo(expectedName: string): void {
+    if (this.selectedFullInfoTimer !== 0) {
+      clearTimeout(this.selectedFullInfoTimer)
+    }
+    // Let target selection, the card's first layout, and any navigation start
+    // finish before asking Qt to generate the expensive AllInfo prose.
+    this.selectedFullInfoTimer = setTimeout(() => {
+      this.selectedFullInfoTimer = 0
+      if (!this.infoWinVisible || this.skyDragging || this.selectedName !== expectedName) {
+        return
+      }
+      this.callInteractive('getSelectedObjectInfo', 'full', (r) => {
+        const returnedName = r.name && r.name.length > 0 ? r.name : r.englishName
+        if (r.ok === true && r.found === true && returnedName === this.selectedName) {
+          this.applySelectedObject(r, true)
+        }
+      })
+    }, 550) as number
   }
 
-  /**
-   * 平板端：详情面板打开时，把投影中心平移到「左侧工具栏与右侧详情面板之间」的空白区中央，
-   * 使十字准星/被锁定的天体不被面板遮挡。关闭面板时归零复位。
-   * 全部按当前设备实际尺寸动态计算（skyWidth / panelWidth / EDGE_MARGIN 都是响应式值）。
-   */
-  private applyViewportCenterForPanel(panelOpen: boolean): void {
-    if (!this.isExpandedLayout) {
-      // 手机/悬停态面板在底部，不遮挡水平中心，无需偏移
-      this.callNativeFire('setViewportOffset', '0|0')
+  private moveToSelectedObject(fromLayoutChange: boolean = false): void {
+    if (this.panelVisible || this.infoWinVisible) {
+      this.placeSelectedObjectInSafeArea(fromLayoutChange ? 'layout' : 'focus')
       return
     }
-    if (!panelOpen) {
-      this.callNativeFire('setViewportOffset', '0|0')
+    this.navigateSelectedObjectTo(this.skyWidth / 2, this.skyHeight / 2, fromLayoutChange ? 'layout' : 'focus')
+  }
+
+  private navigateSelectedObjectTo(x: number, y: number, mode: string = 'focus'): void {
+    if (this.skyWidth <= 1 || this.skyHeight <= 1) { return }
+    const payload = `${Math.round(x)}|${Math.round(y)}|${Math.round(this.skyWidth)}|${Math.round(this.skyHeight)}|${mode}`
+    hilog.info(0x0000, 'StellariumArkUI', 'safe-target request mode=%{public}s compact=%{public}s panel=%{public}s drawer=%{public}s info=%{public}s target=%{public}s',
+      mode, (!this.isExpandedLayout).toString(), this.panelVisible.toString(), this.drawerOpen.toString(), this.infoWinVisible.toString(), payload)
+    const now = Date.now()
+    // ArkUI may emit several area-change callbacks during one panel animation.
+    // The native target is already moving toward this exact geometry, so a
+    // duplicate request would restart it and look like a visible stutter.
+    if (payload === this.lastSafeNavigationPayload && now - this.lastSafeNavigationAt < 420) {
       return
     }
-    // 空白区：左界 = 左侧工具栏右缘，右界 = 详情面板左缘
-    const freeLeft: number = this.EDGE_MARGIN + 58 // 工具栏按钮列（44 宽 + 内边距）
-    const freeRight: number = this.expandedMainPanelLeft()
-    if (freeRight - freeLeft < 120) {
-      // 空白区太窄（异常情形），不做偏移以免把画面推出屏幕
-      this.callNativeFire('setViewportOffset', '0|0')
+    this.lastSafeNavigationPayload = payload
+    this.lastSafeNavigationAt = now
+    this.callInteractive('moveToSelectedAt', payload, (r) => this.applySelectedObject(r))
+  }
+
+  private placeSelectedObjectInSafeArea(mode: string = 'focus'): void {
+    if (this.isExpandedLayout) {
+      this.placeSelectedObjectInExpandedSafeArea(mode)
+    } else {
+      this.placeSelectedObjectInCompactSafeArea(mode)
+    }
+  }
+
+  // UI placement is not static: panels can open, close, snap between 6/10
+  // and 9/10, or be dragged. Re-run the same navigation after those layout
+  // changes. With no inspector/sheet remaining, moveToSelectedObject() uses
+  // the native visual centre again.
+  private scheduleSelectedObjectForUiChange(delay: number = 360): void {
+    if (this.selectedUiLayoutTimer !== 0) {
+      clearTimeout(this.selectedUiLayoutTimer)
+      this.selectedUiLayoutTimer = 0
+    }
+    if (this.selectedStatus !== 'Selected') {
       return
     }
-    const freeCenterX: number = (freeLeft + freeRight) / 2
-    // 目标：投影中心从屏幕中央 (skyWidth/2) 移到 freeCenterX。
-    // StelCore::setViewportOffset 的水平百分比以屏幕宽为基数，负值向左。
-    let hPct: number = ((freeCenterX - this.skyWidth / 2) / this.skyWidth) * 100
-    hPct = this.clamp(hPct, -50, 50)
-    this.callNativeFire('setViewportOffset', hPct.toFixed(2) + '|0')
-    hilog.info(0x0000, 'StellariumArkUI', 'viewport offset -> ' + hPct.toFixed(2) + '% (freeCenter=' + Math.round(freeCenterX).toString() + ' sky=' + Math.round(this.skyWidth).toString() + ')')
+    this.selectedUiLayoutTimer = setTimeout(() => {
+      this.selectedUiLayoutTimer = 0
+      if (this.selectedStatus === 'Selected') {
+        this.moveToSelectedObject(true)
+      }
+    }, delay) as number
+  }
+
+  private compactSafeTargetPoint(): number[] {
+    // Phone inspectors deliberately live at the top, not at the bottom.
+    // Calculate the vertical gap from their real rendered bounds so a locked
+    // target never lands inside either the inspector, the bottom dock, or an
+    // open sheet. The centre x is clear of the left zoom controls and the
+    // right quick controls.
+    let top = 38
+    let bottom = this.skyHeight - 100 // compact bottom dock plus breathing room
+
+    // Compact panels replace the detailed object card. Reserving the hidden
+    // card's area made a 9/10 sheet calculate a target underneath itself.
+    if (this.infoWinVisible && !this.panelVisible && !this.drawerOpen) {
+      if (this.isPhoneDetailPeek()) {
+        top = Math.max(top, this.compactObjectPeekY() + 72 + 28)
+      } else {
+        top = Math.max(top, this.bottomCardY() + this.bottomCardHeight() + 28)
+      }
+    }
+    let sheetTop = -1
+    if (this.panelVisible || this.drawerOpen) {
+      sheetTop = this.skyHeight - 90 - this.compactPanelHeight()
+      bottom = Math.min(bottom, sheetTop - 32)
+    }
+
+    // On very short screens, preserve a reachable sky target even when the
+    // detail card and a 9/10 sheet leave no conventional vertical gap.
+    if (bottom - top < 96) {
+      bottom = Math.max(bottom, top + 96)
+    }
+    const targetY = this.clamp((top + bottom) / 2, top + 20, bottom - 20)
+    hilog.info(0x0000, 'StellariumArkUI', 'compact-safe h=%{public}d usable=%{public}d snap=%{public}s drag=%{public}s sheetTop=%{public}d top=%{public}d bottom=%{public}d targetY=%{public}d',
+      Math.round(this.skyHeight), Math.round(this.compactPanelUsableHeight()), this.compactPanelSnapRatio.toString(), this.compactPanelDragOffsetY.toString(), Math.round(sheetTop), Math.round(top), Math.round(bottom), Math.round(targetY))
+    return [this.skyWidth / 2, targetY]
+  }
+
+  private placeSelectedObjectInCompactSafeArea(mode: string = 'focus'): void {
+    if (this.isExpandedLayout || (!this.panelVisible && !this.drawerOpen && !this.infoWinVisible) || this.selectedStatus !== 'Selected') {
+      return
+    }
+    const target = this.compactSafeTargetPoint()
+    this.navigateSelectedObjectTo(target[0], target[1], mode)
+  }
+
+  private expandedSafeTargetPoint(): number[] {
+    const left = this.EDGE_MARGIN + 64
+    const right = this.panelVisible ? this.expandedMainPanelLeft() - 18
+      : (this.infoWinVisible ? this.bottomCardX() - 18 : this.skyWidth - this.EDGE_MARGIN)
+    let top = this.EDGE_MARGIN + 24
+    // With both cards open, the only generous uninterrupted sky region is
+    // below the compact object summary and to the left of the main panel.
+    if (this.panelVisible && this.infoWinVisible && this.useExpandedDetailSummary()) {
+      top = this.expandedDetailSummaryY() + this.expandedDetailSummaryHeight() + 28
+    }
+    const bottom = this.skyHeight - this.EDGE_MARGIN
+    if (right - left < 120 || bottom - top < 120) {
+      return [this.skyWidth / 2, this.skyHeight / 2]
+    }
+    return [(left + right) / 2, (top + bottom) / 2]
+  }
+
+  private easeSelectedObjectTo(x: number, y: number): void {
+    const centerX = this.skyWidth / 2
+    const centerY = this.skyHeight / 2
+    // Native panView moves the scene, so its x axis is the inverse of the
+    // apparent object motion. A positive screen target must therefore pan
+    // left, otherwise the selected body is pushed further under a right panel.
+    const dx = centerX - x
+    // Native panView moves the scene, not the selected marker. Both apparent
+    // screen axes are inverse: sending the old y sign made a 9/10 bottom
+    // sheet push the marker downward and a top inspector keep it under the
+    // card instead of moving it into the remaining sky.
+    const dy = y - centerY
+    const steps = 9
+    let step = 0
+    let previousX = 0
+    let previousY = 0
+    const timer = setInterval(() => {
+      if (!this.panelVisible && !this.infoWinVisible) {
+        clearInterval(timer)
+        if (this.expandedTargetPlacementTimer === timer) this.expandedTargetPlacementTimer = 0
+        return
+      }
+      step++
+      const p = (1 - Math.cos(Math.PI * step / steps)) / 2
+      const nextX = Math.round(dx * p)
+      const nextY = Math.round(dy * p)
+      this.callNativeFire('dragView', `0|0|${nextX - previousX}|${nextY - previousY}`)
+      previousX = nextX
+      previousY = nextY
+      if (step >= steps) {
+        clearInterval(timer)
+        if (this.expandedTargetPlacementTimer === timer) this.expandedTargetPlacementTimer = 0
+      }
+    }, 36) as number
+    this.expandedTargetPlacementTimer = timer
+  }
+
+  private placeSelectedObjectInExpandedSafeArea(mode: string = 'focus'): void {
+    if (!this.isExpandedLayout || (!this.panelVisible && !this.infoWinVisible) || this.selectedStatus !== 'Selected') {
+      return
+    }
+    const target = this.expandedSafeTargetPoint()
+    this.navigateSelectedObjectTo(target[0], target[1], mode)
   }
 
   // 精确到角秒：地球自转约 15″/秒，300ms 刷新时用户能直接看到坐标连续变化。
@@ -2913,6 +3771,14 @@ private loadPlanetPositions(): void {
       this.selectedCoordEq = (ra.length > 0 || dec.length > 0) ? (ra + '  ' + dec).trim() : ''
       const hasAlt: boolean = typeof result.altitude === 'number'
       const hasAz: boolean = typeof result.azimuth === 'number'
+      this.gyroGuideTargetAlt = hasAlt ? result.altitude as number : Number.NaN
+      this.gyroGuideTargetAz = hasAz ? result.azimuth as number : Number.NaN
+      // A stationary device may not pass the sensor movement threshold again
+      // after a search. Recalculate the edge guide at selection time instead
+      // of waiting for the next meaningful orientation delta.
+      if (this.gyroscopeEnabled) {
+        this.updateGyroTargetGuide(true)
+      }
       this.selectedCoordAlt = (hasAlt || hasAz)
         ? (I18n.t('coord_alt') + ' ' + (hasAlt ? this.fmtDegMin(result.altitude as number) : '--') + '  ' + I18n.t('coord_az') + ' ' + (hasAz ? this.fmtDegMin(result.azimuth as number) : '--'))
         : ''
@@ -2953,7 +3819,14 @@ private loadPlanetPositions(): void {
         this.infoWinExpanded = false
         this.cardOffsetX = 0
         this.cardOffsetY = 0
+        // The lightweight tap/search response deliberately has no AllInfo.
+        // Never leave the previous target's prose visible while it is loading.
+        this.selectedFullInfo = ''
+        if (this.panelVisible || this.infoWinVisible) {
+          this.placeSelectedObjectInSafeArea()
+        }
       }
+      this.updateGyroTargetGuide(true)
       // 尝试从本地别名表补充中文简介
       const dispName = this.selectedName
       const alias = ALIAS_LIST.find(a => a.en === dispName || a.zh === dispName)
@@ -2961,6 +3834,7 @@ private loadPlanetPositions(): void {
       // 换了新天体 → 按它的"性格"响一声（模仿 Sky Guide 的叮）
       if (isNewSelection) {
         AudioEngine.getInstance().chimeForSelection(result)
+        this.requestSelectedFullInfo(this.selectedName)
       }
       this.startDetailAutoRefresh()
     } else {
@@ -2978,6 +3852,9 @@ private loadPlanetPositions(): void {
       this.selectedCoordAlt = ''
       this.selectedConstellation = ''
       this.selectedDistance = ''
+      this.gyroGuideTargetAz = Number.NaN
+      this.gyroGuideTargetAlt = Number.NaN
+      this.gyroGuideVisible = false
       this.selectedSize = ''
       this.selectedRise = ''
       this.selectedSet = ''
@@ -3046,8 +3923,10 @@ private loadPlanetPositions(): void {
         this.observationTimeText = text
       }
       if (r.timeRate !== undefined) {
-        const rt: string = this.formatRate(r.timeRate as number)
-        if (rt !== this.timeRateText) { this.timeRateText = rt }
+        this.syncTimeRateState(r.timeRate as number)
+      }
+      if (!this.scrubberInteracting) {
+        this.syncScrubberToSimulation(jd)
       }
     })
   }
@@ -3065,14 +3944,20 @@ private loadPlanetPositions(): void {
     if (!raw || raw.length === 0) {
       return '--'
     }
-    const text = raw.trim()
-    if (text.indexOf('T') < 0) {
-      return text
-    }
-    const hasExplicitZone = text.endsWith('Z') || text.indexOf('+') > 10 || text.lastIndexOf('-') > 10
-    const ms = Date.parse(hasExplicitZone ? text : text + 'Z')
-    if (!Number.isNaN(ms)) {
-      return this.formatLocalDateTime(new Date(ms))
+    // C++ has already applied the observation location's UTC offset before it
+    // serializes timeText. Parsing the ISO value as a device-local Date applied
+    // a second timezone conversion every 3 seconds, racing the lightweight JD
+    // refresh and making the digits visibly jump. Preserve that local clock.
+    let text = raw.trim()
+    if (text.endsWith('Z')) {
+      text = text.slice(0, -1)
+    } else {
+      const plus = text.lastIndexOf('+')
+      const minus = text.lastIndexOf('-')
+      const zoneStart = Math.max(plus, minus)
+      if (zoneStart > 10) {
+        text = text.slice(0, zoneStart)
+      }
     }
     return text.replace('T', ' ')
   }
@@ -3266,7 +4151,7 @@ private loadPlanetPositions(): void {
       this.locSearching = false
       if (r.ok === true && r.locations) {
         const rawList = r.locations as Object[]
-        this.locSearchResults = rawList.map((item: Object) => {
+        this.locSearchResults = rawList.map((item: Object): LocSearchItem => {
           const loc = item as Record<string, string | number>
           return {
             name: (loc['name'] as string) ?? '',
@@ -3368,7 +4253,7 @@ private loadPlanetPositions(): void {
       const prefs = AppStorage.get<Record<string, Object>>('stellariumPrefs')
       if (prefs && prefs['savedLocations']) {
         const raw = prefs['savedLocations'] as Object[]
-        this.savedLocations = raw.map((item: Object) => {
+        this.savedLocations = raw.map((item: Object): SavedLocation => {
           const loc = item as Record<string, string | number>
           return {
             name: (loc['name'] as string) ?? '',
@@ -4262,6 +5147,7 @@ private loadPlanetPositions(): void {
         this.closePanel(true)
       }
     })
+    this.scheduleSelectedObjectForUiChange(320)
     this.resetPanelIdle()
     this.resetSidebarAutoCollapse()
   }
@@ -4379,7 +5265,8 @@ private loadPlanetPositions(): void {
     try {
 	    if (!this.pinnedActions || this.pinnedActions.length === 0) { return false }
 	    if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) { return false }
-      if (this.handleCompactZoomTap(x, y)) { return true }
+	    if (this.handleCompactTopQuickTap(x, y)) { return true }
+	    if (this.handleCompactZoomTap(x, y)) { return true }
       if (this.handleCompactMoreTap(x, y)) { return true }
 	    // 顶部搜索栏已移除，搜索功能通过左侧图标进入分类面板
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
@@ -4532,10 +5419,25 @@ private loadPlanetPositions(): void {
     }
   }
 
+  // The floating panel sits above the sky touch surface.  Keep its gestures
+  // owned by ArkUI so a Slider/Scroll drag can never become a sky pan.
+  private handleFloatingPanelTouch(event: TouchEvent): void {
+    this.resetPanelIdle()
+    this.resetSidebarAutoCollapse()
+    if (event.type === TouchType.Down) {
+      this.stopSkyInertia()
+      this.skyTouchFeedback = false
+    }
+  }
+
   private stopSkyInertia(resetVelocity: boolean = true): void {
     if (this.skyInertiaTimer !== 0) {
       clearInterval(this.skyInertiaTimer)
       this.skyInertiaTimer = 0
+    }
+    if (this.nativeSkyInertiaActive) {
+      this.callNativeFire('stopPanInertia', '')
+      this.nativeSkyInertiaActive = false
     }
     if (resetVelocity) {
       this.dragVelocityX = 0
@@ -4554,7 +5456,7 @@ private loadPlanetPositions(): void {
     const rawDy = targetY - this.dragLastRawY
     // Physical Pads have a large, high-density canvas. A small gain keeps the
     // sky responsive without changing the geometry of the native renderer.
-    const gain = this.isExpandedLayout ? 1.18 : (this.isFoldHoverLayout ? 1.20 : 1.22)
+    const gain = this.isExpandedLayout ? 1.35 : (this.isFoldHoverLayout ? 1.34 : 1.36)
     if (this.dragLastSampleMs > 0) {
       const vx = rawDx * gain / dt
       const vy = rawDy * gain / dt
@@ -4591,33 +5493,9 @@ private loadPlanetPositions(): void {
     if (initialSpeed < 0.05 || this.pinchActive || this.viewLock) {
       return
     }
-    let vx = this.dragVelocityX
-    let vy = this.dragVelocityY
-    let virtualX = this.dragFilteredX
-    let virtualY = this.dragFilteredY
-    let lastMs = Date.now()
-    let frames = 0
-    this.skyInertiaTimer = setInterval(() => {
-      const now = Date.now()
-      const dt = Math.min(32, Math.max(8, now - lastMs))
-      lastMs = now
-      const nextX = virtualX + vx * dt
-      const nextY = virtualY + vy * dt
-      this.callNativeFire('dragView',
-        Math.round(virtualX).toString() + '|' +
-        Math.round(virtualY).toString() + '|' +
-        Math.round(nextX).toString() + '|' +
-        Math.round(nextY).toString())
-      virtualX = nextX
-      virtualY = nextY
-      vx *= 0.95
-      vy *= 0.95
-      frames += 1
-      const speed = Math.sqrt(vx * vx + vy * vy)
-      if (speed < 0.010 || frames > 90) {
-        this.stopSkyInertia()
-      }
-    }, 16) as number
+    this.nativeSkyInertiaActive = true
+    this.callNativeFire('startPanInertia',
+      this.dragVelocityX.toFixed(4) + '|' + this.dragVelocityY.toFixed(4))
   }
 
   private handleSkyTouch(event: TouchEvent): void {
@@ -4719,6 +5597,7 @@ private loadPlanetPositions(): void {
       }
       this.skyTouchActive = true
       this.skyDragging = true
+      this.pauseDetailRefreshForSkyDrag()
       this.touchStartX = downX
       this.touchStartY = downY
       this.touchLastX = this.touchStartX
@@ -4801,6 +5680,13 @@ private loadPlanetPositions(): void {
       // 阈值放宽到 16vp:uitest/mock 注入的触摸常有几像素位移,
       // 4vp 会把"轻点"误判成"拖动",导致 selectAt 不触发。
       if (totalMove > 16) {
+        // Manual panning and sensor tracking must never drive the native
+        // camera together. Leave gyro mode on the first real sky drag, while
+        // keeping taps and pinch zoom available without changing its state.
+        if (!this.touchMoved && this.gyroscopeEnabled) {
+          this.stopGyroscope(true)
+          this.flashHint('已退出陀螺仪')
+        }
         this.touchMoved = true
       }
       if (this.touchMoved) {
@@ -4821,30 +5707,25 @@ private loadPlanetPositions(): void {
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       const x = this.touchWindowX(points[0])
       const y = this.touchWindowY(points[0])
+      const endedOnUi = this.isUiPoint(x, y)
       // End panel drag
       if (this.panelDragging) {
         this.panelDragging = false
+        this.scheduleSelectedObjectForUiChange(160)
         return
       }
-      // If touch started on a UI element (sidebar/panel), do not trigger selectAt
-      if (this.touchStartedOnUi || this.isUiPoint(x, y)) {
+      // Gesture ownership is decided on Down. A drag that started on the sky
+      // must still finish as a sky gesture even when the finger crosses the
+      // floating object card before it lifts; otherwise the early return leaves
+      // skyDragging set and permanently pauses detail refresh/inertia.
+      if (this.touchStartedOnUi) {
         this.touchStartedOnUi = false
         return
-      }
-      if (this.panelVisible) {
-        const pl = this.panelLeft()
-        const pr = this.panelRight()
-        const pt = this.panelTop()
-        if (x >= pl && x <= pr && y >= pt && y <= pt + 900) {
-          this.skyTouchActive = false
-          this.skyTouchFeedback = false
-          return
-        }
       }
       if (this.nativeDragActive) {
         this.emitFluidDrag(x, y, Date.now())
         this.startSkyInertia()
-      } else if (!this.touchMoved && !this.pinchActive && Date.now() - this.lastInfoWinCloseMs > 320) {
+      } else if (!this.touchMoved && !this.pinchActive && !endedOnUi && Date.now() - this.lastInfoWinCloseMs > 320) {
         const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
         this.callInteractive('selectAt', payload, (result) => {
@@ -4862,6 +5743,7 @@ private loadPlanetPositions(): void {
       this.skyTouchActive = false
       this.skyTouchFeedback = false
       this.skyDragging = false
+      this.resumeDetailRefreshAfterSkyDrag()
     }
   }
 
@@ -4985,15 +5867,25 @@ private loadPlanetPositions(): void {
           })
         })
       }
-      // 夜间红滤镜覆盖层（Stellarium 经典功能：保护暗适应视力）
-      if (this.nightMode) {
-        Stack()
-          .width('100%')
-          .height('100%')
-          .backgroundColor('rgba(255, 20, 0, 0.22)')
-          .hitTestBehavior(HitTestMode.Default)
-          .zIndex(99)
-      }
+      // Native night mode colors the Qt sky. These permanent, input-transparent
+      // layers extend the same low-luminance red treatment to the ArkUI tree.
+      Stack()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#A00000')
+        .blendMode(BlendMode.COLOR, BlendApplyType.OFFSCREEN)
+        .opacity(this.nightMode ? 0.78 : 0)
+        .animation({ duration: 450, curve: Curve.EaseInOut })
+        .hitTestBehavior(HitTestMode.Transparent)
+        .zIndex(98)
+      Stack()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#000000')
+        .opacity(this.nightMode ? 0.48 : 0)
+        .animation({ duration: 450, curve: Curve.EaseInOut })
+        .hitTestBehavior(HitTestMode.Transparent)
+        .zIndex(99)
     }
       .width('100%')
       .height('100%')
@@ -5037,6 +5929,18 @@ private loadPlanetPositions(): void {
               .combine(TransitionEffect.scale({ x: 0.985, y: 0.985 }).animation({ duration: 220, curve: curves.springMotion(0.55, 0.88) })))
       }
 
+      // Gyroscope target guide: it is deliberately visual-only, so it never
+      // steals a pan, pinch, or button press from the sky and chrome layers.
+      if (this.gyroGuideVisible) {
+        Stack() { this.gyroTargetGuide() }
+          .position({ x: this.gyroGuideX, y: this.gyroGuideY })
+          .width(44)
+          .height(44)
+          .zIndex(4)
+          .hitTestBehavior(HitTestMode.None)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+      }
+
       // 点击反馈提示：置顶显示、不拦截触摸
       if (this.actionHint !== '') {
         Row() {
@@ -5067,6 +5971,28 @@ private loadPlanetPositions(): void {
       .height('100%')
       .zIndex(3)
       .hitTestBehavior(HitTestMode.Default)
+  }
+
+  @Builder
+  gyroTargetGuide() {
+    Stack() {
+      Circle()
+        .width(44)
+        .height(44)
+        .fill('rgba(8, 21, 36, 0.76)')
+        .stroke('rgba(169, 232, 255, 0.72)')
+        .strokeWidth(1)
+        .backdropBlur(22)
+      Text('↑')
+        .fontSize(29)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#E5FAFF')
+        .rotate({ angle: this.gyroGuideAngle + 90 })
+        .animation({ duration: 140, curve: Curve.EaseOut })
+    }
+      .width(44)
+      .height(44)
+      .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 4 })
   }
 
   @Builder
@@ -5117,7 +6043,13 @@ private loadPlanetPositions(): void {
           .width(this.panelWidth)
           .height(this.panelMaxHeight)
           .position({ x: this.skyWidth - this.panelWidth - this.EDGE_MARGIN + this.panelOffsetX, y: this.EDGE_MARGIN + this.panelOffsetY })
-          .hitTestBehavior(HitTestMode.Transparent)
+          // Default keeps the panel above the sibling sky surface while still
+          // letting its deepest child (Button, Slider, Scroll, TextInput) own
+          // the gesture. Block would stop those controls at this outer shell.
+          .hitTestBehavior(HitTestMode.Default)
+          .onTouch((event: TouchEvent) => {
+            this.handleFloatingPanelTouch(event)
+          })
           // 面板滑入滑出动画：从右侧滑入 + 淡入（一镜到底的连续弹簧滑动）
           .transition(TransitionEffect.asymmetric(
             TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
@@ -5301,6 +6233,17 @@ private loadPlanetPositions(): void {
           .position({ x: this.compactTopQuickX(), y: this.compactTopQuickY() })
           .hitTestBehavior(HitTestMode.Block)
           .zIndex(30)
+        // Keep a dedicated touch target above the Qt XComponent.  The native
+        // surface otherwise intermittently captures the compact quick buttons.
+        Stack() { }
+          .width(44)
+          .height(98)
+          .position({ x: this.compactTopQuickX(), y: this.compactTopQuickY() })
+          .hitTestBehavior(HitTestMode.Block)
+          .zIndex(31)
+          .onTouch((event: TouchEvent) => {
+            this.handleCompactTopQuickTouch(event)
+          })
       }
 
       // 陀螺仪校准面板（紧凑布局）
@@ -5432,9 +6375,11 @@ private loadPlanetPositions(): void {
         this.setPanel('audio')
       })
     }
-      .width(48)
+      .width(44)
       .alignItems(HorizontalAlign.Center)
       .hitTestBehavior(HitTestMode.Block)
+      .opacity(this.phoneChromeOpacity())
+      .animation({ duration: 420, curve: Curve.EaseOut })
   }
 
   /** 手机端右上快捷区左上角坐标（与顶部搜索栏同高，靠右缘） */
@@ -5451,6 +6396,43 @@ private loadPlanetPositions(): void {
     const qx = this.compactTopQuickX()
     const qy = this.compactTopQuickY()
     return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + 108
+  }
+
+  // The native sky XComponent can consume ArkUI Button.onClick on phones.
+  // Route these two high-frequency controls through the same coordinate path
+  // as the tablet rail so their visual and touch regions always agree.
+  private handleCompactTopQuickTap(x: number, y: number): boolean {
+    if (this.isExpandedLayout || this.drawerOpen || !this.isCompactTopQuickPoint(x, y)) {
+      return false
+    }
+    const qx = this.compactTopQuickX()
+    const qy = this.compactTopQuickY()
+    if (x >= qx && x <= qx + 44 && y >= qy && y <= qy + 44) {
+      this.resetPanelIdle()
+      this.toggleGyroscope(!this.gyroscopeEnabled)
+      this.flashHint(this.gyroscopeEnabled ? '陀螺仪已开启，正在校准' : '陀螺仪已关闭')
+      return true
+    }
+    if (x >= qx && x <= qx + 44 && y >= qy + 54 && y <= qy + 98) {
+      this.resetPanelIdle()
+      this.setPanel('audio')
+      this.flashHint('已打开音频控制')
+      return true
+    }
+    return false
+  }
+
+  private handleCompactTopQuickTouch(event: TouchEvent): void {
+    const points = event.touches.length > 0 ? event.touches : event.changedTouches
+    if (points.length === 0) { return }
+    if (event.type === TouchType.Down) {
+      this.stopSkyInertia()
+      this.skyTouchFeedback = false
+      return
+    }
+    if (event.type === TouchType.Up) {
+      this.handleCompactTopQuickTap(this.touchWindowX(points[0]), this.touchWindowY(points[0]))
+    }
   }
 
   @Builder
@@ -5530,6 +6512,7 @@ private loadPlanetPositions(): void {
               this.compactPanelSnapRatio = 0.9
               this.compactPanelDragOffsetY = 0
             })
+            this.scheduleSelectedObjectForUiChange(300)
           }
         })
         .onSubmit(() => {
@@ -5550,6 +6533,7 @@ private loadPlanetPositions(): void {
   }
 
   private bottomCardX(): number {
+    if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return 16 }
     if (!this.isExpandedLayout) { return Math.max(24, (this.skyWidth - this.bottomCardWidth()) / 2) }
     // Search recenters a target. Keep the tablet inspector on the far edge so
     // its rich data never sits over that visual centre. When another main
@@ -5574,7 +6558,7 @@ private loadPlanetPositions(): void {
 
   private bottomCardWidth(): number {
     // 手机详情卡保持左右对称留白，避免视觉上贴住右侧边框。
-    if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return Math.min(400, Math.max(320, this.skyWidth - 28)) }
+    if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return Math.min(380, Math.max(286, this.skyWidth - 58)) }
     if (!this.isExpandedLayout) { return Math.min(318, Math.max(280, this.skyWidth - 52)) }
     if (this.panelVisible) {
       return Math.min(420, Math.max(360, this.expandedDetailAvailableWidth()))
@@ -5661,11 +6645,17 @@ private loadPlanetPositions(): void {
   }
 
   private compactObjectPeekWidth(): number {
-    return Math.min(Math.max(this.skyWidth - 160, 250), 360)
+    // Keep the selected-object peek entirely clear of the right-side gyro and
+    // audio controls.  On narrow phones the old 250vp minimum overlapped them.
+    const quickLeft = this.compactTopQuickX()
+    return Math.min(Math.max(210, quickLeft - 34), 320)
   }
 
   private compactObjectPeekX(): number {
-    return Math.max(88, (this.skyWidth - this.compactObjectPeekWidth()) / 2)
+    const quickLeft = this.compactTopQuickX()
+    const rightBound = quickLeft - 14
+    const centered = (this.skyWidth - this.compactObjectPeekWidth()) / 2
+    return Math.max(16, Math.min(centered, rightBound - this.compactObjectPeekWidth()))
   }
 
   private compactObjectPeekY(): number {
@@ -5680,6 +6670,7 @@ private loadPlanetPositions(): void {
     this.skyTouchActive = false
     this.skyTouchFeedback = false
     this.skyDragging = false
+    this.scheduleSelectedObjectForUiChange(280)
   }
 
   private showFullObjectInspector(): void {
@@ -5690,6 +6681,7 @@ private loadPlanetPositions(): void {
     this.bottomCardIndex = 2
     this.dismissedObjectName = ''
     this.resetPanelIdle()
+    this.scheduleSelectedObjectForUiChange(320)
   }
 
   private compactPanelUsableHeight(): number {
@@ -5795,6 +6787,7 @@ private loadPlanetPositions(): void {
       this.compactPanelSnapRatio = nextRatio
       this.compactPanelDragOffsetY = 0
     })
+    this.scheduleSelectedObjectForUiChange(390)
   }
 
   private expandedUiAllowed(): boolean {
@@ -5978,7 +6971,8 @@ private loadPlanetPositions(): void {
     }
     .width(this.bottomCardWidth())
     .height(this.bottomCardHeight())
-    .backgroundColor('rgba(12, 16, 28, 0.88)')
+    .backgroundColor('rgba(12, 16, 28, 0.72)')
+    .backdropBlur(28)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
     .borderRadius(16)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
@@ -6022,7 +7016,8 @@ private loadPlanetPositions(): void {
       }.width('100%')
     }
       .width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
-      .backgroundColor('rgba(12,16,28,0.92)')
+      .backgroundColor('rgba(12,16,28,0.72)')
+      .backdropBlur(28)
       .border({ width: 0.5, color: 'rgba(147,215,255,0.16)' }).borderRadius(14)
       .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
@@ -6243,8 +7238,8 @@ private loadPlanetPositions(): void {
       }
     }
       .width('100%')
-      .backgroundColor('rgba(20,21,23,0.92)')
-      .backdropBlur(26)
+      .backgroundColor('rgba(18, 22, 36, 0.75)')
+      .backdropBlur(34)
       .border({ width: 1, color: this.nmBorder() })
       .borderRadius(16)
       .shadow({ radius: 24, color: 'rgba(0,0,0,0.35)', offsetX: 0, offsetY: 10 })
@@ -7334,6 +8329,7 @@ private loadPlanetPositions(): void {
           this.panelContent()
         }
           .width('100%')
+          .id('panel-content-' + this.i18nLang + '-' + this.panelContentKey.toString())
       }
         .width('100%')
         .layoutWeight(1)
@@ -7343,7 +8339,8 @@ private loadPlanetPositions(): void {
       .width(this.panelWidth)
       .constraintSize({ maxHeight: this.panelMaxHeight })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
-      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 72)' : 'rgba(18, 22, 36, 0.88)')
+      .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.55)' : 'rgba(18, 22, 36, 0.82)')
+      .backdropBlur(this.panelIdleGlass ? 45 : 30)
       .border({ width: 0.5, color: this.panelIdleGlass ? 'rgba(91, 147, 191, 0.18)' : 'rgba(91, 147, 191, 0.12)' })
       .borderRadius(32)
       .shadow({ radius: 34, color: 'rgba(0, 0, 0, 0.34)', offsetX: 0, offsetY: 18 })
@@ -7364,6 +8361,7 @@ private loadPlanetPositions(): void {
         }
           .width('100%')
           .padding({ bottom: 34 })
+          .id('panel-content-' + this.i18nLang + '-' + this.panelContentKey.toString())
       }
         .width('100%')
         .layoutWeight(1)
@@ -7592,11 +8590,70 @@ private loadPlanetPositions(): void {
           .fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
           .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.width('100%').padding({ left: 10, right: 10, top: 3, bottom: 3 })
+      Row() {
+        Text('恒星时').fontSize(11).fontColor('#99FFFFFF').width(64).textAlign(TextAlign.Start)
+        Text(this.siderealTimeText)
+          .fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      }.width('100%').padding({ left: 10, right: 10, top: 3, bottom: 3 })
+      Text('恒星时 = 此刻正好在你头顶中天的那条赤经线，用来判断某个天体现在转到哪儿了。')
+        .fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 2 })
       // 时间控制按钮：[倒带][现在][停止][实时][快进][超快]
       this.timeSpeedChips()
       // Sky Guide 风格时间拖动滑块（-365天 ~ +365天）
       this.timeScrubberSlider()
       this.quickChips([{ id: '+12h', label: '+12h' }, { id: '-12h', label: '-12h' }])
+      // 观测辅助：夜视模式 / 大气折射
+      Row()
+        .width('100%').height(0.5)
+        .backgroundColor(this.nmBorder())
+        .margin({ top: 8, bottom: 4 })
+      Row() {
+        Column({ space: 1 }) {
+          Text('夜视模式').fontSize(12).fontColor(this.nmText()).width('100%')
+          Text('整个界面转成红光，夜里看不刺眼、也不影响眼睛适应黑暗').fontSize(9).fontColor(this.nmSub()).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Toggle({ type: ToggleType.Switch, isOn: this.nightModeOn })
+          .onChange((v: boolean) => {
+            this.nightModeOn = v
+            this.nightMode = v
+            this.persistNightMode()
+            this.callNative('setNightMode', v ? 'true' : 'false')
+          })
+      }.width('100%').padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      Row() {
+        Column({ space: 1 }) {
+          Text('大气折射').fontSize(12).fontColor(this.nmText()).width('100%')
+          Text('空气会把贴近地平线的天体"抬高"一点，开启后显示的是肉眼实际看到的位置').fontSize(9).fontColor(this.nmSub()).width('100%')
+        }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+        Toggle({ type: ToggleType.Switch, isOn: this.refractionOn })
+          .onChange((v: boolean) => {
+            this.applyAtmosphere(v ? 1013 : 0, this.atmoTemperature, this.atmoExtinction)
+          })
+      }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 4 })
+      Row() {
+        Text('气压').fontSize(11).fontColor(this.nmSub()).width(56)
+        Slider({ value: this.atmoPressure, min: 0, max: 1100, step: 5 })
+          .layoutWeight(1)
+          .onChange((v: number) => { this.applyAtmosphere(v, this.atmoTemperature, this.atmoExtinction) })
+        Text(this.atmoPressure.toFixed(0) + ' mbar').fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
+      }.width('100%').padding({ left: 10, right: 10 })
+      Row() {
+        Text('气温').fontSize(11).fontColor(this.nmSub()).width(56)
+        Slider({ value: this.atmoTemperature, min: -40, max: 50, step: 1 })
+          .layoutWeight(1)
+          .onChange((v: number) => { this.applyAtmosphere(this.atmoPressure, v, this.atmoExtinction) })
+        Text(this.atmoTemperature.toFixed(0) + ' °C').fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
+      }.width('100%').padding({ left: 10, right: 10 })
+      Row() {
+        Text('消光').fontSize(11).fontColor(this.nmSub()).width(56)
+        Slider({ value: this.atmoExtinction, min: 0, max: 1, step: 0.01 })
+          .layoutWeight(1)
+          .onChange((v: number) => { this.applyAtmosphere(this.atmoPressure, this.atmoTemperature, v) })
+        Text(this.atmoExtinction.toFixed(2)).fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
+      }.width('100%').padding({ left: 10, right: 10 })
+      Text('消光越大，越靠近地平线的星星被大气挡得越暗（城市雾霾天可调高）。')
+        .fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
       // 天文事件快捷跳转
       Row()
         .width('100%').height(0.5)
@@ -7862,10 +8919,13 @@ private loadPlanetPositions(): void {
       this.locationPickerPanel()
       this.cityChipsRow()
       this.observerPlanetSection()
-      this.pointingTestSection()
-      this.watchGyroSection()
-      this.continuationSection()
-      this.tonightEventsSection()
+      // These are developer scaffolding screens, not release-ready features.
+      if (!OFFLINE_APPGALLERY_BUILD) {
+        this.pointingTestSection()
+        this.watchGyroSection()
+        this.continuationSection()
+        this.tonightEventsSection()
+      }
     } else if (this.activePanel === 'layers') {
       this.viewTabs()
       Scroll() {
@@ -8185,41 +9245,29 @@ private loadPlanetPositions(): void {
           { label: I18n.t('c0001'), id: 1 },
           { label: I18n.t('c0002'), id: 2 },
           { label: I18n.t('c0003'), id: 3 },
-          { label: I18n.t('c0004'), id: 4 },
-          { label: I18n.t('c0005'), id: 5 },
-          { label: I18n.t('c0006'), id: 6 },
         ] as TabItem[], (tab: TabItem) => {
           Text(tab.label)
             .fontSize(10)
-            .fontColor(this.configTab === tab.id ? this.nmText() : this.nmSub())
+            .fontColor(this.configTab === tab.id ? '#F4FAFF' : '#C8D4E2')
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor(this.configTab === tab.id ? this.nmAccent() : this.nmBg())
+            .backgroundColor(this.configTab === tab.id ? '#397EAE' : 'rgba(255,255,255,0.09)')
             .borderRadius(6)
             .scale({ x: this.configTab === tab.id ? 1.06 : 1.0, y: this.configTab === tab.id ? 1.06 : 1.0 })
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .animation({ duration: 220, curve: curves.springMotion(0.5, 1.0) })
-            .onClick(() => {
-              this.configTab = tab.id
-              // 离线应用：切到"脚本/插件"页时自动加载列表，无需用户再点"加载"按钮
-              if (tab.id === 5 && this.scriptList.length === 0) { this.loadScriptList() }
-              if (tab.id === 6 && this.pluginList.length === 0) { this.loadPluginList() }
-            })
+            .onClick(() => { this.configTab = tab.id })
         }, (tab: TabItem, index: number) => tab.id.toString())
-      }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
+      }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 }).id('config-tabs-' + this.i18nLang)
       Scroll() {
         Column({ space: 0 }) {
           if (this.configTab === 0) {
             // Main
             this.languageRow()
             Row() {
-              Text(I18n.t('i0119')).fontSize(12).fontColor(this.nmSub()).width(72)
-              Text(this.currentSkyCultureId !== '' ? this.currentSkyCultureId : I18n.t('s0729')).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            Row() {
               Text(I18n.t('set_distance_units')).fontSize(12).fontColor(this.nmSub()).width(72)
               Row({ space: 6 }) {
-                Text('km')
-                  .fontSize(11).fontColor(this.useMetricUnits ? '#5B93BF' : '#99FFFFFF')
+                Text(I18n.t('unit_km'))
+                  .fontSize(11).fontColor(this.useMetricUnits ? '#F4FAFF' : '#C8D4E2')
                   .padding({ left: 8, right: 8, top: 3, bottom: 3 })
                   .backgroundColor(this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
                   .borderRadius(8)
@@ -8227,8 +9275,8 @@ private loadPlanetPositions(): void {
                     this.useMetricUnits = true
                     this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=true', () => {})
                   })
-                Text('mi')
-                  .fontSize(11).fontColor(!this.useMetricUnits ? '#5B93BF' : '#99FFFFFF')
+                Text(I18n.t('unit_mile'))
+                  .fontSize(11).fontColor(!this.useMetricUnits ? '#F4FAFF' : '#C8D4E2')
                   .padding({ left: 8, right: 8, top: 3, bottom: 3 })
                   .backgroundColor(!this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
                   .borderRadius(8)
@@ -8238,7 +9286,6 @@ private loadPlanetPositions(): void {
                   })
               }
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            this.lockRow()
             this.infoRow(I18n.t('s0350'), 'Stellarium 26.2 for HarmonyOS')
           } else if (this.configTab === 1) {
             // Information
@@ -8271,16 +9318,6 @@ private loadPlanetPositions(): void {
             Row() {
               Text(I18n.t('i0223')).fontSize(10).fontColor('#CC8FB6FF').width('100%').padding({ left: 2 })
             }.height(18).width('100%').margin({ top: 4 })
-          } else if (this.configTab === 4) {
-            // Tools
-            Row() {
-              Text(I18n.t('i0121')).fontSize(12).fontColor(this.nmSub()).width(72)
-              Button(I18n.t('i0251')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(8).height(28).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionSave_Screenshot_Global') })
-            }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            this.infoRow(I18n.t('s0356'), 'PNG')
-            this.infoRow(I18n.t('s0357'), I18n.t('s0732'))
           } else if (this.configTab === 5) {
             // Scripts
             Row() {
@@ -8362,7 +9399,7 @@ private loadPlanetPositions(): void {
             .width('100%').height(260).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           }
         }.width('100%')
-      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF').id('config-content-' + this.i18nLang)
     } else if (this.activePanel === 'astro') {
       // 天文计算窗口
       Row({ space: 2 }) {
@@ -8383,7 +9420,7 @@ private loadPlanetPositions(): void {
             .padding({ left: 6, right: 6, top: 4, bottom: 4 })
             .backgroundColor(this.astroTab === tab.id ? this.nmAccent() : this.nmBg())
             .borderRadius(6)
-            .onClick(() => { this.astroTab = tab.id })
+            .onClick(() => { this.astroTab = tab.id; this.loadAstroTab(tab.id) })
         }, (tab: TabItem, index: number) => tab.id.toString())
       }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
       Scroll() {
@@ -8417,29 +9454,34 @@ private loadPlanetPositions(): void {
             .width('100%').height(220).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
           } else if (this.astroTab === 1) {
             Text(I18n.t('i0126')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0167')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
-              Button(I18n.t('i0152')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionPrevious_Rising') })
-              Button(I18n.t('i0154')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionPrevious_Transit') })
-              Button(I18n.t('i0153')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionPrevious_Setting') })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
-            Row({ space: 6 }) {
-              Button(I18n.t('i0146')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionNext_Rising') })
-              Button(I18n.t('i0148')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionNext_Transit') })
-              Button(I18n.t('i0147')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmAccent())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionNext_Setting') })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 4 })
+              Button('刷新星历').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.ephemerisData = []; this.loadEphemeris() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            Text('先在主界面点选一个天体，这里显示它未来 14 天的每日位置。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            Row() {
+              Text('日期').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
+              Text('赤经').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
+              Text('赤纬').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
+              Text('高度').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+              Text('方位').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+              Text('星等').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+            }.width('100%').padding({ left: 8, right: 8 }).margin({ bottom: 2 })
+            if (this.ephemerisData.length === 0) {
+              Text('（未选中天体或计算中…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            }
+            ForEach(this.ephemerisData, (row: EphemerisRow) => {
+              Row() {
+                Text(this.fmtDateTime(row.date)).fontSize(10).fontColor(this.nmText()).layoutWeight(2)
+                Text(row.ra !== undefined ? row.ra : '').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
+                Text(row.dec !== undefined ? row.dec : '').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
+                Text(this.fmtNum(row.altitude, 1, '°')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+                Text(this.fmtNum(row.azimuth, 0, '°')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+                Text(this.fmtNum(row.magnitude, 1, '')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
+              }.width('100%').padding({ left: 8, right: 8 }).height(26)
+              .backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+            }, (row: EphemerisRow, index: number) => index.toString())
           } else if (this.astroTab === 2) {
             Text(I18n.t('i0127')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Button(I18n.t('i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -8477,67 +9519,180 @@ private loadPlanetPositions(): void {
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 3) {
             Text(I18n.t('i0128')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0168')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
-              Button(I18n.t('i0253')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-              Button(I18n.t('i0254')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-              Button(I18n.t('i0255')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
-            Text(I18n.t('s0745')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 6, bottom: 2 })
-            Row({ space: 6 }) {
-              Button(I18n.t('s0751')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.adjustTime(1) })
-              Button(I18n.t('s0752')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.setTimeNow() })
-              Button(I18n.t('s0753')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.adjustTime(-1) })
-            }.width('100%').padding({ left: 4, right: 4 })
+              Button('计算天象').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.phenomenaData = []; this.loadPhenomena() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            Text('未来约 400 天里行星之间角距小于 4° 的“合”（点击跳到该时刻）。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            if (this.phenomenaData.length === 0) {
+              Text('（计算中，或未来一年无明显合相…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            }
+            ForEach(this.phenomenaData, (p: PhenomenonItem) => {
+              Column({ space: 1 }) {
+                Row() {
+                  Text((p.bodyA !== undefined ? p.bodyA : '') + ' ↔ ' + (p.bodyB !== undefined ? p.bodyB : ''))
+                    .fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                  Text('角距 ' + this.fmtNum(p.separation, 2, '°')).fontSize(10).fontColor(this.nmSub()).width(86)
+                }.width('100%').padding({ left: 8, right: 8 })
+                Text(this.fmtDateTime(p.date)).fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+              }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+              .onClick(() => { if (p.jd !== undefined) this.callNative('setJD', String(p.jd)) })
+            }, (p: PhenomenonItem, index: number) => index.toString())
           } else if (this.astroTab === 4) {
             Text(I18n.t('i0129')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0169')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
-              Button(I18n.t('i0256')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-              Button(I18n.t('i0257')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+              Button('刷新曲线').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.altAzCurve = []; this.altAzError = ''; this.loadAltAzCurve() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            if (this.altAzError.length > 0) {
+              Text(this.altAzError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else if (this.altAzCurve.length === 0) {
+              Text('（正在计算未来 24 小时的高度变化…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else {
+              Text(this.altAzName + ' · 未来 24 小时高度变化').fontSize(11).fontColor(this.nmText()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              Stack({ alignContent: Alignment.Center }) {
+                Row() {
+                  ForEach(this.altAzCurve, (r: AltAzPoint) => {
+                    Column()
+                      .width(4)
+                      .height(this.altBarHeight(r.altitude))
+                      .backgroundColor((r.altitude !== undefined && r.altitude > 0) ? this.nmAccent() : '#33FFFFFF')
+                      .borderRadius(1)
+                  }, (r: AltAzPoint, index: number) => index.toString())
+                }.width('100%').height(96).alignItems(VerticalAlign.Bottom).justifyContent(FlexAlign.SpaceBetween)
+                Divider().color('#66FFFFFF').strokeWidth(1).width('100%')
+              }.width('100%').height(96).padding({ left: 6, right: 6 })
+              Row() {
+                Text('现在').fontSize(9).fontColor(this.nmSub()).layoutWeight(1).textAlign(TextAlign.Start)
+                Text('+12h').fontSize(9).fontColor(this.nmSub()).layoutWeight(1).textAlign(TextAlign.Center)
+                Text('+24h').fontSize(9).fontColor(this.nmSub()).layoutWeight(1).textAlign(TextAlign.End)
+              }.width('100%').padding({ left: 6, right: 6 }).margin({ bottom: 6 })
+              Text('中间那条横线是地平线，线以上（亮色）表示天体在地平线上方、可以看到。').fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 6 })
+              this.infoRow('当前位置', this.altAzNowLabel())
+              this.infoRow('最高高度', this.altAzMaxLabel())
+              this.infoRow('地平线以上时长', this.altAzVisibleHours())
+            }
           } else if (this.astroTab === 5) {
             Text(I18n.t('i0130')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0170')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
-            Button(I18n.t('i0242')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
-              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-              .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+            Row({ space: 6 }) {
+              Button(I18n.t('i0242')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.tonightAstro = null; this.loadTonightAstro() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            if (this.tonightAstro === null) {
+              Text('（正在汇总今晚的观测条件…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else {
+              Text('太阳与暗夜窗口').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
+              this.infoRow('日落', this.fmtDateTime(this.tonightAstro!.sun?.set))
+              this.infoRow('天文暮光结束', this.fmtDateTime(this.tonightAstro!.sun?.astroTwilightEnd))
+              this.infoRow('天文暮光开始', this.fmtDateTime(this.tonightAstro!.sun?.astroTwilightStart))
+              this.infoRow('日出', this.fmtDateTime(this.tonightAstro!.sun?.rise))
+              this.infoRow('可用暗夜时长', this.fmtNum(this.tonightAstro!.sun?.darkWindowHours, 1, ' 小时'))
+              Text('月亮').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 8, bottom: 2 })
+              this.infoRow('月相', this.tonightAstro!.moon?.phaseName ?? '--')
+              this.infoRow('照亮比例', this.fmtNum(this.tonightAstro!.moon?.illumination, 1, ' %'))
+              this.infoRow('月龄', this.fmtNum(this.tonightAstro!.moon?.age, 1, ' 天'))
+              this.infoRow('月出', this.fmtDateTime(this.tonightAstro!.moon?.rise))
+              this.infoRow('月落', this.fmtDateTime(this.tonightAstro!.moon?.set))
+              Text('行星（点击跳到中天时刻）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 8, bottom: 2 })
+              ForEach(this.tonightAstro!.planets ?? [], (p: TonightPlanet) => {
+                Column({ space: 1 }) {
+                  Row() {
+                    Text(p.name ?? '').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                    Text((p.visible === true ? '现在可见' : '在地平线下')).fontSize(9)
+                      .fontColor((p.visible === true) ? this.nmAccent() : this.nmSub()).width(64)
+                    Text((p.magnitude ?? 0).toFixed(1) + ' 等').fontSize(10).fontColor(this.nmSub()).width(52)
+                  }.width('100%').padding({ left: 8, right: 8 })
+                  Text('升 ' + this.fmtClock(p.rise)
+                    + '  中天 ' + this.fmtClock(p.transit)
+                    + '  落 ' + this.fmtClock(p.set))
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+                .onClick(() => { if (p.transitJd !== undefined) this.callNative('setJD', String(p.transitJd)) })
+              }, (p: TonightPlanet, index: number) => index.toString())
+              if ((this.tonightAstro!.meteorShowers ?? []).length > 0) {
+                Text('活跃流星雨（点击跳到最佳观测时刻）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 8, bottom: 2 })
+                ForEach(this.tonightAstro!.meteorShowers ?? [], (s: TonightShower) => {
+                  Row() {
+                    Text(s.name ?? '').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                    Text('每小时约 ' + String(s.zhr ?? '?') + ' 颗').fontSize(10).fontColor(this.nmSub()).width(96)
+                  }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
+                  .backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+                  .onClick(() => { if (s.primeJd !== undefined) this.callNative('setJD', String(s.primeJd)) })
+                }, (s: TonightShower, index: number) => index.toString())
+              }
+            }
           } else if (this.astroTab === 6) {
             Text(I18n.t('i0131')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0171')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
-            Button(I18n.t('i0243')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
-              .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-              .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
+            Row({ space: 6 }) {
+              Button(I18n.t('i0243')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.loadPlanetCalc() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            if (this.planetCalcData.length === 0) {
+              Text('（正在计算各行星的实时数据…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            }
+            ForEach(this.planetCalcData, (p: PlanetCalcItem) => {
+              Column({ space: 2 }) {
+                Row() {
+                  Text(p.name ?? '').fontSize(12).fontColor(this.nmText()).layoutWeight(1)
+                  Text((p.magnitude ?? 0).toFixed(1) + ' 等').fontSize(10).fontColor(this.nmSub()).width(52)
+                }.width('100%').padding({ left: 8, right: 8 })
+                Text('赤经 ' + String(p.ra ?? '--') + '   赤纬 ' + String(p.dec ?? '--'))
+                  .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                Text('高度 ' + (p.altitude ?? 0).toFixed(1) + '°   方位 ' + (p.azimuth ?? 0).toFixed(1) + '°'
+                  + (p.distanceAU !== undefined ? ('   距离 ' + (p.distanceAU ?? 0).toFixed(3) + ' AU') : ''))
+                  .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                if (p.elongation !== undefined) {
+                  Text('距角 ' + ((p.elongation ?? 0) * 180 / Math.PI).toFixed(1) + '°'
+                    + '   相位 ' + ((p.phase ?? 0) * 100).toFixed(0) + '%')
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+                if (p.illumination !== undefined) {
+                  Text('照亮 ' + (p.illumination ?? 0).toFixed(1) + '%   月龄 ' + (p.age ?? 0).toFixed(1) + ' 天')
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+                if (p.rise !== undefined) {
+                  Text('升 ' + this.fmtClock(p.rise)
+                    + '  中天 ' + this.fmtClock(p.transit)
+                    + '  落 ' + this.fmtClock(p.set))
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+              }.width('100%').padding({ top: 5, bottom: 5 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 3 })
+              .onClick(() => { this.callNative('searchObject', String(p.englishName ?? '')) })
+            }, (p: PlanetCalcItem, index: number) => index.toString())
           } else if (this.astroTab === 7) {
             Text(I18n.t('i0132')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-            Text(I18n.t('i0172')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
             Row({ space: 6 }) {
-              Button(I18n.t('i0258')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-              Button(I18n.t('i0259')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-              Button(I18n.t('i0260')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-                .borderRadius(14).height(28).padding({ left: 8, right: 8 })
-                .onClick(() => { this.triggerAction('actionShow_AstroCalc_Window_Global') })
-            }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
+              Button('计算日月食').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(16).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.eclipseData = []; this.loadEclipses() })
+            }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            Text('未来约 3 年内的日食与月食（点击可把时间跳到食甚时刻）。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            if (this.eclipseData.length === 0) {
+              Text('（正在推算日月食，需要几秒钟…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            }
+            ForEach(this.eclipseData, (e: EclipseItem) => {
+              Column({ space: 1 }) {
+                Row() {
+                  Text(((e.kind === 'solar') ? '日' : '月') + (e.type ?? ''))
+                    .fontSize(11).fontColor(this.nmAccent()).width(56)
+                  Text(this.fmtDateTime(e.date)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                  Text('食分 ' + (e.magnitude ?? 0).toFixed(2)).fontSize(10).fontColor(this.nmSub()).width(62)
+                }.width('100%').padding({ left: 8, right: 8 })
+                if (e.durationMin !== undefined) {
+                  Text('中心食持续 ' + (e.durationMin ?? 0).toFixed(1) + ' 分钟   中心点 '
+                    + (e.centralLat ?? 0).toFixed(1) + '°, ' + (e.centralLng ?? 0).toFixed(1) + '°')
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+                if (e.note !== undefined) {
+                  Text(e.note ?? '').fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+              }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+              .onClick(() => { if (e.jd !== undefined) this.callNative('setJD', String(e.jd)) })
+            }, (e: EclipseItem, index: number) => index.toString())
           } else {
             Text(I18n.t('i0133')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
             Button(I18n.t('i0240')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -9020,9 +10175,13 @@ private loadPlanetPositions(): void {
               .onClick(() => { this.triggerAction('actionStop_Script') })
             Button(I18n.t('i0142')).fontSize(11).fontColor('#FFFFFF').backgroundColor('#E67E22')
               .borderRadius(8).height(30).padding({ left: 10, right: 10 })
+              .enabled(false) // 引擎已移除 pause/resume 能力（上游 deprecated），按钮置灰禁用
+              .opacity(0.4)
               .onClick(() => { this.pauseScript() })
             Button(I18n.t('btn_resume')).fontSize(11).fontColor('#FFFFFF').backgroundColor('#2E7D32')
               .borderRadius(8).height(30).padding({ left: 10, right: 10 })
+              .enabled(false) // 同上，resume 亦不可用
+              .opacity(0.4)
               .onClick(() => { this.resumeScript() })
           }.width('100%').padding({ left: 6, right: 6 })
           if (this.scriptList.length === 0) {
@@ -9254,10 +10413,7 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0251'))
               .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
               .borderRadius(14).height(32).padding({ left: 14, right: 14 })
-              .onClick(() => {
-                this.triggerAction('actionSave_Screenshot_Global')
-                this.flashHint(I18n.t('screenshot_saved'))
-              })
+              .onClick(() => { this.saveScreenshot() })
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
           Row()
             .width('100%').height(0.5)
@@ -9309,9 +10465,9 @@ private loadPlanetPositions(): void {
           .fontColor('#E5FFFFFF')
           .width(72)
         Row({ space: 6 }) {
-          Text('km')
+          Text(I18n.t('unit_km'))
             .fontSize(12)
-            .fontColor(this.useMetricUnits ? '#5B93BF' : '#99FFFFFF')
+            .fontColor(this.useMetricUnits ? '#F4FAFF' : '#C8D4E2')
             .padding({ left: 8, right: 8, top: 3, bottom: 3 })
             .backgroundColor(this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
             .borderRadius(8)
@@ -9319,9 +10475,9 @@ private loadPlanetPositions(): void {
               this.useMetricUnits = true
               this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=true', () => {})
             })
-          Text('mi')
+          Text(I18n.t('unit_mile'))
             .fontSize(12)
-            .fontColor(!this.useMetricUnits ? '#5B93BF' : '#99FFFFFF')
+            .fontColor(!this.useMetricUnits ? '#F4FAFF' : '#C8D4E2')
             .padding({ left: 8, right: 8, top: 3, bottom: 3 })
             .backgroundColor(!this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
             .borderRadius(8)
@@ -9333,7 +10489,6 @@ private loadPlanetPositions(): void {
       }
         .height(40)
         .width('100%')
-      this.lockRow()
       // 观测列表
       if (this.observingList.length > 0) {
         Row() {
@@ -9426,9 +10581,7 @@ private loadPlanetPositions(): void {
             .fontSize(13).fontColor('#E5FFFFFF').backgroundColor('rgba(255,255,255,0.08)')
             .borderRadius(12).height(36).layoutWeight(1)
             .onClick(() => {
-              this.callInteractive('saveScreenShot', '', (r: StellariumBridgeResponse) => {
-                this.flashHint(r.ok === true ? I18n.t('i0083') : '截图失败')
-              })
+              this.saveScreenshot()
             })
         }
         Row() {
@@ -9492,7 +10645,7 @@ private loadPlanetPositions(): void {
         Row({ space: 6 }) {
           ForEach(SUPPORTED_LANGUAGES, (lang: string) => {
             Text(LANGUAGE_DISPLAY[lang] ?? lang)
-              .fontSize(11).fontColor(this.selectedLanguage === lang ? "#FFFFFFFF" : "#99FFFFFF")
+              .fontSize(11).fontColor(this.selectedLanguage === lang ? "#F4FAFF" : "#C8D4E2")
               .padding({ left: 10, right: 10, top: 3, bottom: 3 })
               .backgroundColor(this.selectedLanguage === lang ? "rgba(107,163,214,0.35)" : "rgba(255,255,255,0.05)")
               .borderRadius(8)
@@ -9500,8 +10653,8 @@ private loadPlanetPositions(): void {
           }, (lang: string) => lang)
         }.padding({ left: 4, right: 4 })
       }.width("100%").height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 8 })
-      // 星图文化选择
-      if (this.skyCultures.length > 0) {
+      // Sky-culture selection is intentionally hidden in the offline release.
+      if (!OFFLINE_APPGALLERY_BUILD && this.skyCultures.length > 0) {
         Row() {
           Text(I18n.t('i0035')).fontSize(12).fontColor("#99FFFFFF").width(72)
           Text(this.currentSkyCulture).fontSize(14).fontColor("#E5FFFFFF").layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -9653,7 +10806,7 @@ private loadPlanetPositions(): void {
           Image($rawfile('worldmap.jpg'))
             .width('100%')
             .height('100%')
-            .objectFit(ImageFit.Fill)
+            .objectFit(ImageFit.Contain)
           // 经纬度刻度
           Text('N').fontSize(9).fontColor('#99FFFFFF').position({ x: 6, y: 4 })
           Text('S').fontSize(9).fontColor('#99FFFFFF').position({ x: 6, y: this.mapRenderHeight - 16 })
@@ -9665,8 +10818,9 @@ private loadPlanetPositions(): void {
             .textShadow({ radius: 8, color: 'rgba(159, 232, 255, 0.75)', offsetX: 0, offsetY: 0 })
             .position({ x: this.pickerPinX(), y: this.pickerPinY() })
         }
-          .width('100%')
+          .width(this.locationMapWidth())
           .height(this.locationMapHeight())
+          .alignSelf(ItemAlign.Center)
           .clip(true)
           .hitTestBehavior(HitTestMode.Block)
           .backgroundColor('rgba(11, 24, 43, 0.46)')
@@ -9874,7 +11028,7 @@ private loadPlanetPositions(): void {
           })), (lang: LangOption) => {
             Text(lang.name)
               .fontSize(12)
-              .fontColor(this.selectedLanguage === lang.code ? '#5B93BF' : '#99FFFFFF')
+              .fontColor(this.selectedLanguage === lang.code ? '#F4FAFF' : '#C8D4E2')
               .padding({ left: 8, right: 8, top: 3, bottom: 3 })
               .backgroundColor(this.selectedLanguage === lang.code ? '#5B93BF' : 'rgba(255,255,255,0.06)')
               .borderRadius(8)
@@ -9950,7 +11104,7 @@ private loadPlanetPositions(): void {
     Scroll() {
       Row({ space: 5 }) {
         // 倒带 — 单按钮循环升档：-1x → -2x → -10x → -1分/秒 → -1时/秒 → -10天/秒 → 回到-1x
-        // 激活时标签直接显示当前倒带速度
+        // 倒带与减速都显示当前反向倍率，避免用户无法判断“减速”是否已生效。
         this.speedChip('rewind',
           this.timeSpeedIndex < 6 ? I18n.t('s0763_rewind') + ' ' + this.timeRateText : I18n.t('s0763_rewind'),
           'ic_time_rewind.svg', this.timeSpeedIndex < 6)
@@ -9959,7 +11113,9 @@ private loadPlanetPositions(): void {
         // 实时 — 回到当前时刻 + 1x
         this.speedChip('realtime', I18n.t('s0764_realtime'), 'ic_time_realtime.svg', this.timeSpeedIndex === 7)
         // 减速 — 每点降一档；降到1x再点=停止
-        this.speedChip('slower', I18n.t('s0759_slower'), 'ic_time_slower.svg', false)
+        this.speedChip('slower',
+          this.timeSpeedIndex < 6 ? I18n.t('s0759_slower') + ' ' + this.timeRateText : I18n.t('s0759_slower'),
+          'ic_time_slower.svg', false)
         // 快进 — 单按钮循环升档：1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
         // 激活时标签直接显示当前档位速度
         this.speedChip('fast',
@@ -9992,54 +11148,80 @@ private loadPlanetPositions(): void {
       }
       .width('100%')
 
-      // 滑块 + 刻度线叠加
+      // 时间尺由视觉层和一层透明的原生 Slider 组成。视觉层不参与命中，
+      // 让整条时间轴都能拖动，同时避免外观退化为普通“已完成进度条”。
       Stack({ alignContent: Alignment.Center }) {
-        Slider({
-          value: this.scrubberValue,
-          min: -365,
-          max: 365,
-          step: 1,
-          style: SliderStyle.OutSet
-        })
-          .blockColor('#4FA8D3')
-          .trackColor('rgba(79, 168, 211, 0.25)')
-          .selectedColor('#4FA8D3')
-          .showTips(true)
-          .onChange((value: number) => {
-            this.scrubberValue = value
-            this.applyScrubber(value)
-          })
+        Row()
+          .width('100%')
+          .height(1)
+          .backgroundColor('rgba(189, 218, 240, 0.34)')
+          .hitTestBehavior(HitTestMode.None)
 
-        // 刻度线：按真实天刻度百分比绝对定位在轨道上
+        // 刻度线：中间“此刻”更亮，两端为年份边界。
         Stack({ alignContent: Alignment.TopStart }) {
           ForEach(this.timeTicks, (t: TimeTick) => {
             Column()
-              .width(1)
-              .height(t.major ? 16 : 9)
-              .backgroundColor(t.major ? 'rgba(127, 179, 220, 0.75)' : 'rgba(127, 179, 220, 0.35)')
+              .width(t.value === 0 ? 2 : 1)
+              .height(t.value === 0 ? 25 : (t.major ? 18 : 10))
+              .backgroundColor(t.value === 0 ? '#DFF5FF' : (t.major ? 'rgba(143, 194, 229, 0.82)' : 'rgba(143, 194, 229, 0.38)'))
               .borderRadius(0.5)
               .position({ x: this.tickPercent(t.value) + '%', y: '50%' })
               .translate({ y: '-50%', x: '-50%' })
           }, (t: TimeTick) => t.label)
         }
         .width('100%')
-        .height(28)
+        .height(34)
+        .hitTestBehavior(HitTestMode.None)
+
+        // 发光游标由状态精确定位；真正的手势由下面透明 Slider 承接。
+        Stack({ alignContent: Alignment.Center }) {
+          Circle().width(18).height(18)
+            .fill('rgba(58, 142, 190, 0.22)')
+            .border({ width: 1.5, color: '#92DCF7' })
+            .shadow({ radius: 8, color: 'rgba(100, 205, 247, 0.45)', offsetX: 0, offsetY: 0 })
+          Circle().width(5).height(5).fill('#F3FBFF')
+        }
+        .position({ x: this.tickPercent(this.scrubberValue) + '%', y: '50%' })
+        .translate({ x: '-50%', y: '-50%' })
+        .hitTestBehavior(HitTestMode.None)
+
+        Slider({
+          value: this.scrubberValue,
+          min: -43200,
+          max: 43200,
+          step: 1,
+          style: SliderStyle.InSet
+        })
+          .width('100%')
+          .height(42)
+          .blockColor('rgba(0, 0, 0, 0)')
+          .trackColor('rgba(0, 0, 0, 0)')
+          .selectedColor('rgba(0, 0, 0, 0)')
+          .showTips(false)
+          .onChange((value: number, mode: SliderChangeMode) => {
+            this.applyScrubber(value, mode)
+          })
       }
       .width('100%')
+      .height(42)
 
       // 刻度标签：与刻度线同百分比定位，左右两端不外溢
       Stack({ alignContent: Alignment.TopStart }) {
         ForEach(this.timeTicks, (t: TimeTick) => {
-          Text(t.label)
-            .fontSize(9)
-            .fontColor(t.major ? '#B8D4EF' : 'rgba(184, 212, 239, 0.55)')
-            .position({ x: this.tickPercent(t.value) + '%', y: 0 })
-            .translate({ x: t.value <= -300 ? '0%' : t.value >= 300 ? '-100%' : '-50%' })
-        }, (t: TimeTick) => t.label)
+          // 月级短刻度只提供定位感，不再和“此刻”挤成一团。
+          if (t.major || Math.abs(t.value) === 21600) {
+            Text(t.value === 0 ? '此刻' : t.label)
+              .fontSize(9)
+              .fontColor(t.major ? '#B8D4EF' : 'rgba(184, 212, 239, 0.62)')
+              .position({ x: this.tickPercent(t.value) + '%', y: 0 })
+              .translate({ x: t.value <= -40000 ? '0%' : t.value >= 40000 ? '-100%' : '-50%' })
+          }
+        }, (t: TimeTick) => 'timeline-label-' + t.value.toString())
       }
       .width('100%')
       .height(12)
       .margin({ top: 1 })
+      .hitTestBehavior(HitTestMode.None)
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 6, bottom: 8 })
@@ -10264,6 +11446,7 @@ private loadPlanetPositions(): void {
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
+      this.resetScrubberToRealtime()
       this.refreshTimeNow()
     } else if (id === 'stop') {
       // 停止：冻结时间
@@ -10275,6 +11458,7 @@ private loadPlanetPositions(): void {
       this.triggerAction('actionReturn_To_Current_Time')
       this.applySpeedStep(7) // SPEED_IDX_REALTIME
       this.timeRateText = '1x'
+      this.resetScrubberToRealtime()
       this.refreshTimeNow()
     } else if (id === 'rewind') {
       // 倒带：单按钮循环升档 -1x → -2x → -10x → -1分/秒 → -1时/秒 → -1天/秒 → 回到-1x
@@ -10506,8 +11690,7 @@ private loadPlanetPositions(): void {
       { label: I18n.t('v0001'), id: 1 },
       { label: I18n.t('v0002'), id: 2 },
       { label: I18n.t('v0003'), id: 3 },
-      { label: I18n.t('v0004'), id: 4 },
-      { label: I18n.t('v0005'), id: 5 }
+      { label: I18n.t('v0004'), id: 4 }
     ]
     if (!OFFLINE_APPGALLERY_BUILD) {
       tabs.push({ label: I18n.t('v0006'), id: 6 })
@@ -10554,8 +11737,8 @@ private loadPlanetPositions(): void {
       Text(I18n.t('i0300')).fontSize(12).fontColor(this.nmSub()).width(72)
       Slider({
         value: this.starMagLimit,
-        min: 1.0,
-        max: 12.0,
+        min: 2.0,
+        max: 9.0,
         step: 0.5,
         style: SliderStyle.OutSet
       })
@@ -10567,9 +11750,9 @@ private loadPlanetPositions(): void {
         .layoutWeight(1)
         .onChange((value: number) => {
           this.starMagLimit = Math.round(value * 10) / 10
-          this.callInteractive('setLimitMagnitude', this.starMagLimit.toFixed(1), () => {
-            this.refreshState()
-          })
+          // Native code enables the forced limit before applying this value.
+          // A 2.0--9.0 range makes the visual effect apparent on mobile data.
+          this.callInteractive('setLimitMagnitude', this.starMagLimit.toFixed(1), () => {})
         })
       Text(this.starMagLimit.toFixed(1)).fontSize(12).fontColor(this.nmText()).width(28).textAlign(TextAlign.End)
     }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
