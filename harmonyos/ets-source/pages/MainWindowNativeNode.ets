@@ -3427,6 +3427,45 @@ private loadPlanetPositions(): void {
     return this.gyroNormalizeVector(o)
   }
 
+  // Interpolate directly on the unit sphere. Linear interpolation of the
+  // forward and screen-up vectors independently makes a non-rigid camera and
+  // is the source of the apparent jump when the view crosses the zenith.
+  private gyroSlerpUnitVector(from: number[], to: number[], amount: number): number[] {
+    const a = this.gyroNormalizeVector(from)
+    const b = this.gyroNormalizeVector(to)
+    const dot = this.clamp(this.gyroDot(a, b), -1, 1)
+    if (dot > 0.9995) {
+      return this.gyroNormalizeVector([
+        a[0] + (b[0] - a[0]) * amount,
+        a[1] + (b[1] - a[1]) * amount,
+        a[2] + (b[2] - a[2]) * amount
+      ])
+    }
+    const angle = Math.acos(dot)
+    const sinAngle = Math.sin(angle)
+    const fromWeight = Math.sin((1 - amount) * angle) / sinAngle
+    const toWeight = Math.sin(amount * angle) / sinAngle
+    return this.gyroNormalizeVector([
+      a[0] * fromWeight + b[0] * toWeight,
+      a[1] * fromWeight + b[1] * toWeight,
+      a[2] * fromWeight + b[2] * toWeight
+    ])
+  }
+
+  // Parallel-transport the screen's up axis along the celestial sphere from
+  // one look direction to the next. This provides a continuous tangent-plane
+  // basis at zenith and nadir instead of rebuilding one from an Euler angle.
+  private gyroParallelTransportUp(oldForward: number[], newForward: number[], oldUp: number[]): number[] {
+    const axis = this.gyroCross(oldForward, newForward)
+    const axisLength = Math.sqrt(this.gyroDot(axis, axis))
+    if (axisLength < 0.000001) {
+      return this.gyroOrthonormalizeUp(newForward, oldUp)
+    }
+    const normalizedAxis = [axis[0] / axisLength, axis[1] / axisLength, axis[2] / axisLength]
+    const angle = Math.atan2(axisLength, this.clamp(this.gyroDot(oldForward, newForward), -1, 1)) * 180 / Math.PI
+    return this.gyroOrthonormalizeUp(newForward, this.gyroRotateAboutAxis(oldUp, normalizedAxis, angle))
+  }
+
   // The rotation-vector sensor reports in the ENU (east/north/up) world frame,
   // while the engine view direction and setGyroView use the bridge alt-az frame
   // (azimuth = atan2(y, x), x points south). The two frames differ only by a
@@ -3661,9 +3700,12 @@ private loadPlanetPositions(): void {
     }
 
     const now = Date.now()
+    const rawUp = this.gyroOrthonormalizeUp(forward, up)
     if (this.gyroFwd.length !== 3) {
+      // A rotation-vector sample describes one complete rigid body pose.
+      // Seed the local celestial tangent plane from that pose exactly once.
       this.gyroFwd = forward
-      this.gyroUp = this.gyroOrthonormalizeUp(forward, up)
+      this.gyroUp = rawUp
       this.gyroLastSampleMs = now
     } else {
       let dt = this.gyroLastSampleMs > 0 ? (now - this.gyroLastSampleMs) / 1000 : 1 / 60
@@ -3674,16 +3716,19 @@ private loadPlanetPositions(): void {
       if (this.gyroscopeSensitivityText === 'Low') { tau = 0.12 }
       else if (this.gyroscopeSensitivityText === 'High') { tau = 0.032 }
       const a = 1 - Math.exp(-dt / tau)
-      this.gyroFwd = this.gyroNormalizeVector([
-        this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * a,
-        this.gyroFwd[1] + (forward[1] - this.gyroFwd[1]) * a,
-        this.gyroFwd[2] + (forward[2] - this.gyroFwd[2]) * a
-      ])
-      this.gyroUp = this.gyroOrthonormalizeUp(this.gyroFwd, [
-        this.gyroUp[0] + (up[0] - this.gyroUp[0]) * a,
-        this.gyroUp[1] + (up[1] - this.gyroUp[1]) * a,
-        this.gyroUp[2] + (up[2] - this.gyroUp[2]) * a
-      ])
+      const previousForward = this.gyroFwd
+      const previousUp = this.gyroUp
+      const smoothedForward = this.gyroSlerpUnitVector(previousForward, forward, a)
+      const transportedUp = this.gyroParallelTransportUp(previousForward, smoothedForward, previousUp)
+      let targetUp = this.gyroOrthonormalizeUp(smoothedForward, rawUp)
+      // A physical tablet cannot roll more than 135 degrees in one fused
+      // sample. Treat that as a sensor discontinuity rather than flipping the
+      // view basis; the next valid sample converges normally.
+      if (this.gyroDot(transportedUp, targetUp) < -0.70) {
+        targetUp = transportedUp
+      }
+      this.gyroFwd = smoothedForward
+      this.gyroUp = this.gyroSlerpUnitVector(transportedUp, targetUp, a)
     }
 
     if (now - this.gyroLastDispatchMs < 16) { return }
@@ -6903,14 +6948,10 @@ private loadPlanetPositions(): void {
   @Builder
   compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true, pressed: boolean = false) {
     Row() {
-      if (icon === 'gyro' && active) {
-        this.gyroCompassGlyph()
-      } else {
-        Image(this.getIcon(icon, active))
-          .width(22)
-          .height(22)
-          .fillColor(active ? '#FFFFFF' : this.nmText())
-      }
+      Image(this.getIcon(icon, active))
+        .width(icon === 'gyro' && active ? 28 : 22)
+        .height(icon === 'gyro' && active ? 28 : 22)
+        .fillColor(active ? '#FFFFFF' : this.nmText())
     }
       .width(44)
       .height(44)
@@ -8252,7 +8293,7 @@ private loadPlanetPositions(): void {
       'grid': $r('app.media.ic_grid'),
       'more': $r('app.media.ic_more'),
       'close': $r('app.media.ic_close'),
-      'gyro': $r('app.media.ic_gyro'),
+      'gyro': isActive ? $r('app.media.ic_compass_on') : $r('app.media.ic_gyro'),
       'zoom_in': $r('app.media.ic_zoom_in'),
       'zoom_out': $r('app.media.ic_zoom_out'),
       'lock': $r('app.media.ic_lock'),
@@ -8416,14 +8457,10 @@ private loadPlanetPositions(): void {
   @Builder
   gyroButton() {
     Stack() {
-      if (this.gyroscopeEnabled) {
-        this.gyroCompassGlyph()
-      } else {
-        Image(this.getIcon('gyro', false))
-          .width(22)
-          .height(22)
-          .fillColor(this.nmText())
-      }
+      Image(this.getIcon('gyro', this.gyroscopeEnabled))
+        .width(this.gyroscopeEnabled ? 28 : 22)
+        .height(this.gyroscopeEnabled ? 28 : 22)
+        .fillColor(this.gyroscopeEnabled ? '#FFFFFF' : this.nmText())
     }
       .width(44)
       .height(44)
@@ -8445,36 +8482,6 @@ private loadPlanetPositions(): void {
         }
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
-  }
-
-  // The active gyro control is its own compact compass: cardinal directions
-  // stay fixed while the needle follows the physical magnetic heading.
-  @Builder
-  gyroCompassGlyph() {
-    Stack() {
-      Circle()
-        .width(32).height(32)
-        .fill('rgba(7, 14, 27, 0.28)')
-        .stroke('rgba(207, 236, 255, 0.52)')
-        .strokeWidth(0.8)
-      Text('北').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#FF9A8A')
-        .position({ x: 10, y: 0 })
-      Text('东').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
-        .position({ x: 24, y: 11 })
-      Text('南').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
-        .position({ x: 10, y: 23 })
-      Text('西').fontSize(7).fontWeight(FontWeight.Medium).fontColor('#E5FFFFFF')
-        .position({ x: 1, y: 11 })
-      Text('▲')
-        .fontSize(12)
-        .fontColor('#FF7060')
-        .position({ x: 10, y: 8 })
-        .rotate({ angle: this.gyroCompassAngle })
-        .animation({ duration: 90, curve: Curve.Linear })
-    }
-      .width(32)
-      .height(32)
-      .alignContent(Alignment.Center)
   }
 
   // ── 陀螺仪校准面板 ──

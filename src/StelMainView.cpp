@@ -3656,13 +3656,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			// Preserve the complete device pose. The ArkTS layer supplies the
-			// screen-up vector from the same fused rotation sample as the aim, so
-			// rolling the tablet must rotate the horizon and compass marks too.
-			// Fall back to a transported basis only at the two polar singularities
-			// or on older clients which send az|alt without an up vector.
+			// Preserve the complete celestial camera basis supplied by ArkTS. Its
+			// screen-up vector has already been parallel-transported and smoothed
+			// in the tangent plane of the sky sphere, so a tablet roll must remain
+			// a roll here. Re-orienting it against the preceding frame would turn a
+			// legitimate half-turn into a sudden 180-degree horizon flip.
 			static Vec3d previousGyroUp(0., 0., 1.);
-			static bool hasPreviousGyroUp = false;
 			Vec3d up;
 			bool hasSensorUp = false;
 			if (parts.size() >= 5)
@@ -3675,8 +3674,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (up.normSquared() > 1e-8)
 					{
 						up.normalize();
-						if (hasPreviousGyroUp && up.dot(previousGyroUp) < 0.)
-							up = -up;
 						hasSensorUp = true;
 					}
 				}
@@ -3691,7 +3688,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
 			previousGyroUp = up;
-			hasPreviousGyroUp = true;
 
 			// Order matters: setViewDirectionJ2000() re-reads the *current* up
 			// vector when it calls core->lookAtJ2000().
