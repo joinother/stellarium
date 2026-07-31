@@ -566,6 +566,9 @@ static QHash<QString, QJsonObject> s_ohosCmdCache;
 // guaranteed to be pumped; we hand commands to the pump instead.
 static QMutex s_ohosCmdQueueMutex;
 static QList<std::function<void()>> s_ohosCmdQueue;
+// Device pose samples supersede one another. Keeping a dedicated latest-value
+// slot prevents the render thread from replaying stale gyro positions.
+static std::function<void()> s_pendingGyroCommand;
 // View-altitude-based landscape auto-fade (port feature). When the observer
 // TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
 // ground texture gradually becomes transparent so the lower-hemisphere sky is
@@ -586,6 +589,15 @@ static bool s_pendingPointSelect = false;
 static bool s_pointTracking = false;
 static Vec3d s_trackTargetJ2000(0.0, 0.0, 1.0);
 static const double s_trackLerpK = 0.18; // fraction of remaining angle per frame
+// The first pose after enabling the sensor should not snap the sky away from
+// the user's current view. Streamed gyro samples update the target while this
+// short, one-time hand-off runs in the render loop.
+static bool s_gyroTransitionArmed = false;
+static bool s_gyroTransitionActive = false;
+static Vec3d s_gyroTransitionStartJ2000(0.0, 0.0, 1.0);
+static Vec3d s_gyroTransitionTargetJ2000(0.0, 0.0, 1.0);
+static double s_gyroTransitionStartSec = 0.0;
+static constexpr double OHOS_GYRO_HANDOFF_SECONDS = 0.35;
 // --- Manual view-control modes (OHOS bridge) -------------------------------
 // s_viewLock ("锁定视角"): when ON, ALL manual panning (dragView / panBy) is
 // ignored — the view direction is frozen — but pinch zoom (zoomBy / zoomStep)
@@ -670,14 +682,19 @@ static void ohosDrainCommandQueue()
 	QList<std::function<void()>> batch;
 	{
 		QMutexLocker lock(&s_ohosCmdQueueMutex);
-		if (s_ohosCmdQueue.isEmpty())
+		if (s_ohosCmdQueue.isEmpty() && !s_pendingGyroCommand)
 			return;
 		batch = s_ohosCmdQueue;
 		s_ohosCmdQueue.clear();
+		if (s_pendingGyroCommand)
+		{
+			batch.append(std::move(s_pendingGyroCommand));
+			s_pendingGyroCommand = {};
+		}
 	}
 	markQtLoopRunning();
 	// 只在批量大时才打日志，避免每帧一条 WARN 日志造成 IO 开销
-	if (batch.size() > 1)
+	if (batch.size() > 4)
 		OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
 	for (auto& fn : batch)
 		fn();
@@ -810,6 +827,30 @@ static void ohosUpdatePointTracking()
 	mvmgr->setViewDirectionJ2000(next);
 }
 
+static void ohosUpdateGyroTransition()
+{
+	if (!s_gyroTransitionActive)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelMovementMgr* mvmgr = core ? core->getMovementMgr() : nullptr;
+	if (!mvmgr)
+		return;
+	const double elapsed = StelApp::getTotalRunTime() - s_gyroTransitionStartSec;
+	const double progress = qBound(0.0, elapsed / OHOS_GYRO_HANDOFF_SECONDS, 1.0);
+	const double eased = progress * progress * (3.0 - 2.0 * progress);
+	Vec3d next = s_gyroTransitionStartJ2000 * (1.0 - eased) + s_gyroTransitionTargetJ2000 * eased;
+	if (next.normSquared() > 1e-9)
+	{
+		next.normalize();
+		mvmgr->setViewDirectionJ2000(next);
+	}
+	if (progress >= 1.0)
+		s_gyroTransitionActive = false;
+}
+
 static void markQtLoopRunning()
 {
 	QMutexLocker lock(&s_ohosCmdMutex);
@@ -875,7 +916,16 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	// execution and return pending; the caller ignores the return value.
 	{
 		const QString cmdName = key.section('|', 0, 0);
-		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "setGyroView" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
+		if (cmdName == "setGyroView")
+		{
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_pendingGyroCommand = [command]() { command(); };
+			result["ok"] = false;
+			result["error"] = "pending";
+			result["pending"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_ohosCmdQueue.append([command]() { command(); });
@@ -1431,7 +1481,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	const QString commandName = QString::fromUtf8(command ? command : "");
 	const QString arg = QString::fromUtf8(payload ? payload : "");
 	// 高频命令（dragView/zoomBy/panBy）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
-	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy")
+	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
 	// getFPS: read from a lock-free atomic updated by renderOhosFrameNow().
@@ -1449,7 +1499,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
 		result["ok"] = false;
-		qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
+		if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView")
+			qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
 
 		StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
 		StelCore* core = StelApp::getInstance().getCore();
@@ -3479,6 +3530,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		return result;
 	}
 
+		if (commandName == "beginGyroViewTransition")
+		{
+			s_gyroTransitionArmed = true;
+			s_gyroTransitionActive = false;
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "cancelGyroViewTransition")
+		{
+			s_gyroTransitionArmed = false;
+			s_gyroTransitionActive = false;
+			result["ok"] = true;
+			return result;
+		}
+
 		// setGyroView — direct, non-animated view pose for device-pose tracking.
 		//
 		// moveToAltAz must not be used for this. Its auto-move path
@@ -3522,6 +3589,23 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const double altRad = altDeg * M_PI / 180.;
 			Vec3d aim(cos(altRad) * cos(azRad), cos(altRad) * sin(azRad), sin(altRad));
 			aim.normalize();
+			const Vec3d targetJ2000 = core->altAzToJ2000(aim, StelCore::RefractionOff);
+			if (s_gyroTransitionArmed)
+			{
+				s_gyroTransitionArmed = false;
+				s_gyroTransitionActive = true;
+				s_gyroTransitionStartJ2000 = mvmgr->getViewDirectionJ2000();
+				s_gyroTransitionTargetJ2000 = targetJ2000;
+				s_gyroTransitionStartSec = StelApp::getTotalRunTime();
+				result["ok"] = true;
+				return result;
+			}
+			if (s_gyroTransitionActive)
+			{
+				s_gyroTransitionTargetJ2000 = targetJ2000;
+				result["ok"] = true;
+				return result;
+			}
 
 			// Keep physical zenith at the top through normal views so the horizon
 			// remains level. The zenith projection becomes undefined only at the
@@ -3547,7 +3631,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			// Order matters: setViewDirectionJ2000() re-reads the *current* up
 			// vector when it calls core->lookAtJ2000().
 			mvmgr->setViewUpVector(up); // mount frame == alt-az here
-			mvmgr->setViewDirectionJ2000(core->altAzToJ2000(aim, StelCore::RefractionOff));
+			mvmgr->setViewDirectionJ2000(targetJ2000);
 			result["ok"] = true;
 			return result;
 		}
@@ -7354,6 +7438,7 @@ void StelMainView::renderOhosFrameNow()
 
 	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();
+	ohosUpdateGyroTransition();
 	ohosUpdatePanInertia(dt);
 	app.update(dt);
 	ohosProcessPendingPointSelect();

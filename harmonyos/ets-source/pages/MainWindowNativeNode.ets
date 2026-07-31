@@ -727,6 +727,8 @@ struct WindowNativeNode {
   // data with the rotation-vector pose was the source of the prior drift.
   private gyroGravityDevice: number[] = []
   private gyroMagneticDevice: number[] = []
+  private gyroFilteredGravityDevice: number[] = []
+  private gyroFilteredMagneticDevice: number[] = []
   private dragLogCount: number = 0
   private touchStartedOnUi: boolean = false
   private panelDragging: boolean = false
@@ -2915,6 +2917,8 @@ private loadPlanetPositions(): void {
       }
     }
     try {
+      // Native code blends the first live pose from the current sky view.
+      this.callNativeFire('beginGyroViewTransition')
       // Rotation vector is a complete fused pose, so it remains continuous
       // while a tablet crosses the horizon. ORIENTATION is Euler based and is
       // retained only as a fallback for devices without this sensor.
@@ -2934,6 +2938,8 @@ private loadPlanetPositions(): void {
       this.gyroSentFwd = []
       this.gyroGravityDevice = []
       this.gyroMagneticDevice = []
+      this.gyroFilteredGravityDevice = []
+      this.gyroFilteredMagneticDevice = []
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
@@ -2955,6 +2961,7 @@ private loadPlanetPositions(): void {
   }
 
   private stopGyroscope(updateStatus: boolean): void {
+    this.callNativeFire('cancelGyroViewTransition')
     if (this.gyroCallback !== undefined) {
       try {
         sensor.off(sensor.SensorId.ORIENTATION, this.gyroCallback)
@@ -2988,6 +2995,8 @@ private loadPlanetPositions(): void {
     this.gyroUsingRotationVector = false
     this.gyroGravityDevice = []
     this.gyroMagneticDevice = []
+    this.gyroFilteredGravityDevice = []
+    this.gyroFilteredMagneticDevice = []
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3053,13 +3062,13 @@ private loadPlanetPositions(): void {
       return
     }
     const now = Date.now()
-    if (!force && now - this.gyroGuideLastUpdateMs < 100) { return }
+    if (!force && now - this.gyroGuideLastUpdateMs < 16) { return }
     this.gyroGuideLastUpdateMs = now
 
     // Project the target's local tangent-plane direction around the current
     // view. Cos(altitude) prevents a small azimuth change near zenith from
     // looking like an enormous horizontal turn.
-    const horizontal = this.shortestGyroAzimuthDelta(this.gyroLastAz, this.gyroGuideTargetAz) *
+    const horizontal = this.shortestGyroAzimuthDelta(this.gyroGuideTargetAz, this.gyroLastAz) *
       Math.cos(this.gyroLastAlt * Math.PI / 180)
     const vertical = this.gyroGuideTargetAlt - this.gyroLastAlt
     const separation = Math.sqrt(horizontal * horizontal + vertical * vertical)
@@ -3378,14 +3387,29 @@ private loadPlanetPositions(): void {
   // alpha/beta/gamma discontinuity at the horizon.
   private onGravityData(data: sensor.GravityResponse): void {
     if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
-      this.gyroGravityDevice = [data.x, data.y, data.z]
+      const sample = [data.x, data.y, data.z]
+      this.gyroFilteredGravityDevice = this.gyroFilterDeviceVector(this.gyroFilteredGravityDevice, sample, 0.34)
+      this.gyroGravityDevice = this.gyroFilteredGravityDevice
     }
   }
 
   private onMagneticFieldData(data: sensor.MagneticFieldResponse): void {
     if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
-      this.gyroMagneticDevice = [data.x, data.y, data.z]
+      const sample = [data.x, data.y, data.z]
+      // Magnetic readings are noisier than gravity but affect only heading;
+      // a modest local filter removes jitter without making tilt feel delayed.
+      this.gyroFilteredMagneticDevice = this.gyroFilterDeviceVector(this.gyroFilteredMagneticDevice, sample, 0.22)
+      this.gyroMagneticDevice = this.gyroFilteredMagneticDevice
     }
+  }
+
+  private gyroFilterDeviceVector(previous: number[], sample: number[], alpha: number): number[] {
+    if (previous.length !== 3) { return sample }
+    return [
+      previous[0] + (sample[0] - previous[0]) * alpha,
+      previous[1] + (sample[1] - previous[1]) * alpha,
+      previous[2] + (sample[2] - previous[2]) * alpha
+    ]
   }
 
   private gyroCross(a: number[], b: number[]): number[] {
@@ -3454,9 +3478,9 @@ private loadPlanetPositions(): void {
       this.gyroLastSampleMs = now
       if (dt <= 0) { dt = 1 / 60 }
       if (dt > 0.25) { dt = 0.25 }
-      let tau = 0.09
-      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.16 }
-      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.05 }
+      let tau = 0.04
+      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.09 }
+      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.025 }
       const a = 1 - Math.exp(-dt / tau)
       this.gyroFwd = this.gyroNormalizeVector([
         this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * a,
@@ -3465,7 +3489,7 @@ private loadPlanetPositions(): void {
       ])
     }
 
-    if (now - this.gyroLastDispatchMs < 33) { return }
+    if (now - this.gyroLastDispatchMs < 16) { return }
     this.gyroLastDispatchMs = now
     const altAz = this.gyroVectorAltAz(this.gyroFwd)
     this.gyroLastAz = altAz[0]
@@ -3762,7 +3786,7 @@ private loadPlanetPositions(): void {
     }
     this.selectedUiLayoutTimer = setTimeout(() => {
       this.selectedUiLayoutTimer = 0
-      if (this.selectedStatus === 'Selected') {
+      if (this.selectedStatus === 'Selected' && !this.gyroscopeEnabled) {
         this.moveToSelectedObject(true)
       }
     }, delay) as number
@@ -4033,7 +4057,9 @@ private loadPlanetPositions(): void {
         // The lightweight tap/search response deliberately has no AllInfo.
         // Never leave the previous target's prose visible while it is loading.
         this.selectedFullInfo = ''
-        if (this.panelVisible || this.infoWinVisible) {
+        // Sensor tracking owns the camera. A gyro-mode search selects the
+        // target and opens its card, but never starts a safe-area fly-to.
+        if (!this.gyroscopeEnabled && (this.panelVisible || this.infoWinVisible)) {
           this.placeSelectedObjectInSafeArea()
         }
       }
@@ -6203,7 +6229,6 @@ private loadPlanetPositions(): void {
         .fontWeight(FontWeight.Medium)
         .fontColor('#E5FAFF')
         .rotate({ angle: this.gyroGuideAngle + 90 })
-        .animation({ duration: 140, curve: Curve.EaseOut })
     }
       .width(44)
       .height(44)
@@ -6583,13 +6608,13 @@ private loadPlanetPositions(): void {
         hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroscopeEnabled.toString())
         this.resetPanelIdle()
         this.toggleGyroscope(!this.gyroscopeEnabled)
-      })
+      }, false)
       this.compactQuickButton('audio', this.musicEnabled, () => {
         hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio button CLICKED musicEnabled=%{public}s', this.musicEnabled.toString())
         this.resetPanelIdle()
         this.toggleMusic()
         this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
-      })
+      }, false)
     }
       .width(44)
       .alignItems(HorizontalAlign.Center)
@@ -6662,7 +6687,7 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
-  compactQuickButton(icon: string, active: boolean, action: () => void) {
+  compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true) {
     Row() {
       Image(this.getIcon(icon, active))
         .width(22)
@@ -6679,7 +6704,11 @@ private loadPlanetPositions(): void {
       .borderRadius(22)
       .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
-      .onClick(action)
+      .onClick(() => {
+        // The compact top controls have a separate touch target over Qt.
+        // Handling the same tap twice immediately flips their state back.
+        if (receiveTap) { action() }
+      })
   }
 
   // ---- 选中天体的独立浮动详情窗口 ----
