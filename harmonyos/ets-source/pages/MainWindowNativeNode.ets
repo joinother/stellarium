@@ -3078,11 +3078,13 @@ private loadPlanetPositions(): void {
     }
     if (!this.gyroCalibrated) { return }
 
+    let initialPose = false
     if (!this.gyroAbsolutePoseReady) {
       this.gyroLastAz = targetAz
       this.gyroLastAlt = targetAlt
       this.gyroAbsoluteUp = rawUp
       this.gyroAbsolutePoseReady = true
+      initialPose = true
     }
     const smoothAz = this.wrapGyroAzimuth(this.gyroLastAz +
       this.shortestGyroAzimuthDelta(this.gyroLastAz, targetAz) * smoothFactor)
@@ -3090,7 +3092,10 @@ private loadPlanetPositions(): void {
 
     const azDelta = this.shortestGyroAzimuthDelta(this.gyroLastAz, smoothAz)
     const altDelta = smoothAlt - this.gyroLastAlt
-    if (Math.abs(azDelta) < 0.25 && Math.abs(altDelta) < 0.25) { return }
+    // The first valid pose must always reach the native view. Without this,
+    // enabling the sensor while the Pad is held still leaves Stellarium at
+    // the old horizon because the normal dead-zone returns before dispatch.
+    if (!initialPose && Math.abs(azDelta) < 0.25 && Math.abs(altDelta) < 0.25) { return }
 
     this.gyroLastAz = smoothAz
     this.gyroLastAlt = smoothAlt
