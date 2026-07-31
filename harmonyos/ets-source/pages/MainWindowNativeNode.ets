@@ -719,7 +719,14 @@ struct WindowNativeNode {
   private readonly gyroSensitivity: number = 180
   private gyroCallback: ((data: sensor.OrientationResponse) => void) | undefined = undefined
   private gyroRotationCallback: ((data: sensor.RotationVectorResponse) => void) | undefined = undefined
+  private gyroGravityCallback: ((data: sensor.GravityResponse) => void) | undefined = undefined
+  private gyroMagneticCallback: ((data: sensor.MagneticFieldResponse) => void) | undefined = undefined
   private gyroUsingRotationVector: boolean = false
+  // These are intentionally kept in device coordinates. Combining gravity
+  // and magnetic field here produces a stable ENU basis; rotating magnetic
+  // data with the rotation-vector pose was the source of the prior drift.
+  private gyroGravityDevice: number[] = []
+  private gyroMagneticDevice: number[] = []
   private dragLogCount: number = 0
   private touchStartedOnUi: boolean = false
   private panelDragging: boolean = false
@@ -2897,11 +2904,23 @@ private loadPlanetPositions(): void {
         this.onRotationVectorDirect(data)
       }
     }
+    if (this.gyroGravityCallback === undefined) {
+      this.gyroGravityCallback = (data: sensor.GravityResponse) => {
+        this.onGravityData(data)
+      }
+    }
+    if (this.gyroMagneticCallback === undefined) {
+      this.gyroMagneticCallback = (data: sensor.MagneticFieldResponse) => {
+        this.onMagneticFieldData(data)
+      }
+    }
     try {
       // Rotation vector is a complete fused pose, so it remains continuous
       // while a tablet crosses the horizon. ORIENTATION is Euler based and is
       // retained only as a fallback for devices without this sensor.
       sensor.on(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback, { interval: 16666667 })
+      sensor.on(sensor.SensorId.GRAVITY, this.gyroGravityCallback, { interval: 16666667 })
+      sensor.on(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback, { interval: 33333333 })
       this.gyroUsingRotationVector = true
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
@@ -2913,6 +2932,8 @@ private loadPlanetPositions(): void {
       this.gyroFwd = []
       this.gyroUp = []
       this.gyroSentFwd = []
+      this.gyroGravityDevice = []
+      this.gyroMagneticDevice = []
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
@@ -2946,6 +2967,18 @@ private loadPlanetPositions(): void {
       } catch (error) {
       }
     }
+    if (this.gyroGravityCallback !== undefined) {
+      try {
+        sensor.off(sensor.SensorId.GRAVITY, this.gyroGravityCallback)
+      } catch (error) {
+      }
+    }
+    if (this.gyroMagneticCallback !== undefined) {
+      try {
+        sensor.off(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback)
+      } catch (error) {
+      }
+    }
     this.gyroLastTimeMs = 0
     this.gyroCalibrated = false
     this.gyroFirstReading = true
@@ -2953,6 +2986,8 @@ private loadPlanetPositions(): void {
     this.gyroAbsolutePoseReady = false
     this.gyroHeadingReferenceReady = false
     this.gyroUsingRotationVector = false
+    this.gyroGravityDevice = []
+    this.gyroMagneticDevice = []
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3341,6 +3376,50 @@ private loadPlanetPositions(): void {
   // Direct rotation-vector path. The system fusion already combines gravity,
   // gyroscope and magnetometer into a complete pose, which avoids the Euler
   // alpha/beta/gamma discontinuity at the horizon.
+  private onGravityData(data: sensor.GravityResponse): void {
+    if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
+      this.gyroGravityDevice = [data.x, data.y, data.z]
+    }
+  }
+
+  private onMagneticFieldData(data: sensor.MagneticFieldResponse): void {
+    if (Number.isFinite(data.x) && Number.isFinite(data.y) && Number.isFinite(data.z)) {
+      this.gyroMagneticDevice = [data.x, data.y, data.z]
+    }
+  }
+
+  private gyroCross(a: number[], b: number[]): number[] {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ]
+  }
+
+  // Derive the world basis directly from the two physical references. Gravity
+  // points down; gravity x magnetic points east; east x gravity points north.
+  // This gives a true device pose without applying a second correction to an
+  // already fused rotation quaternion.
+  private gyroForwardFromGravityAndMagnetic(): number[] {
+    if (this.gyroGravityDevice.length !== 3 || this.gyroMagneticDevice.length !== 3) { return [] }
+    const gravity = this.gyroNormalizeVector(this.gyroGravityDevice)
+    const magnetic = this.gyroNormalizeVector(this.gyroMagneticDevice)
+    const eastRaw = this.gyroCross(gravity, magnetic)
+    const eastLength = Math.sqrt(eastRaw[0] * eastRaw[0] + eastRaw[1] * eastRaw[1] + eastRaw[2] * eastRaw[2])
+    if (eastLength < 0.12) { return [] }
+    const east = [eastRaw[0] / eastLength, eastRaw[1] / eastLength, eastRaw[2] / eastLength]
+    const north = this.gyroNormalizeVector(this.gyroCross(east, gravity))
+    const up = [-gravity[0], -gravity[1], -gravity[2]]
+    // The observer looks through the rear of the display, i.e. device -Z.
+    const rearNormal = [0, 0, -1]
+    const enu = [
+      rearNormal[0] * east[0] + rearNormal[1] * east[1] + rearNormal[2] * east[2],
+      rearNormal[0] * north[0] + rearNormal[1] * north[1] + rearNormal[2] * north[2],
+      rearNormal[0] * up[0] + rearNormal[1] * up[1] + rearNormal[2] * up[2]
+    ]
+    return this.gyroNormalizeVector(this.gyroBridgeFromEnu(enu))
+  }
+
   private onRotationVectorDirect(data: sensor.RotationVectorResponse): void {
     if (!this.gyroscopeEnabled || !Number.isFinite(data.x) || !Number.isFinite(data.y) ||
       !Number.isFinite(data.z) || !Number.isFinite(data.w)) { return }
@@ -3349,7 +3428,10 @@ private loadPlanetPositions(): void {
     // The screen front is device +Z. The observer looks through the rear of
     // the tablet, therefore the sky-facing ray is the inverse normal.
     const normalEnu = this.gyroRotateVector(orientation, [0, 0, 1])
-    let forward = this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
+    const fusedForward = this.gyroForwardFromGravityAndMagnetic()
+    let forward = fusedForward.length === 3
+      ? fusedForward
+      : this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
     forward = this.gyroNormalizeVector(forward)
 
     if (this.gyroOffsetAz !== 0) {

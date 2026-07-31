@@ -3523,10 +3523,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d aim(cos(altRad) * cos(azRad), cos(altRad) * sin(azRad), sin(altRad));
 			aim.normalize();
 
-			// Start with physical zenith at the top, then parallel-transport that
-			// camera-up vector across every later view direction. A switch back to
-			// a freshly projected zenith basis after crossing either pole was the
-			// last source of the visible 180-degree turn.
+			// Keep physical zenith at the top through normal views so the horizon
+			// remains level. The zenith projection becomes undefined only at the
+			// two poles, where we blend to a transported basis to avoid a flip.
 			const Vec3d zenith(0., 0., 1.);
 			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
 			static Vec3d previousGyroUp(0., 0., 1.);
@@ -3534,7 +3533,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
 			if (transportedUp.normSquared() < 1e-8)
 				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			Vec3d up = !hasPreviousGyroUp ? zenithUp : transportedUp;
+			const double zenithStrength = zenithUp.normSquared();
+			const double zenithBlend = std::clamp((zenithStrength - 0.01) / 0.09, 0.0, 1.0);
+			Vec3d up = !hasPreviousGyroUp
+				? zenithUp
+				: transportedUp * (1.0 - zenithBlend) + zenithUp * zenithBlend;
 			if (up.normSquared() < 1e-8)
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
