@@ -3056,8 +3056,16 @@ private loadPlanetPositions(): void {
     const forwardX = -normalX
     const forwardY = -normalY
     const forwardZ = -normalZ
-    const targetAz = this.wrapGyroAzimuth(Math.atan2(forwardY, forwardX) * 180 / Math.PI + this.gyroOffsetAz)
     const targetAlt = this.clamp(Math.asin(this.clamp(forwardZ, -1, 1)) * 180 / Math.PI + this.gyroOffsetAlt, -90, 90)
+    // A display pointing near the zenith or nadir has no meaningful heading:
+    // tiny sensor noise can map to any azimuth and makes the horizon slide
+    // sideways while lifting the Pad. alpha is the fused compass heading and
+    // remains stable when the Pad is vertical, so use it for yaw; retain the
+    // last heading in the polar dead zone and restore it progressively.
+    const horizontalStrength = Math.sqrt(forwardX * forwardX + forwardY * forwardY)
+    const rawHeading = this.wrapGyroAzimuth(data.alpha + this.gyroOffsetAz)
+    const targetAz = horizontalStrength < 0.22 && this.gyroAbsolutePoseReady
+      ? this.gyroLastAz : rawHeading
     // Device Y is the top edge of the screen. Keeping it as the camera up
     // basis removes the otherwise undefined roll at zenith and nadir.
     const rawUp: number[] = [-sinAlpha * cosBeta, cosAlpha * cosBeta, sinBeta]
@@ -3086,8 +3094,9 @@ private loadPlanetPositions(): void {
       this.gyroAbsolutePoseReady = true
       initialPose = true
     }
+    const headingFactor = horizontalStrength < 0.38 ? smoothFactor * 0.35 : smoothFactor
     const smoothAz = this.wrapGyroAzimuth(this.gyroLastAz +
-      this.shortestGyroAzimuthDelta(this.gyroLastAz, targetAz) * smoothFactor)
+      this.shortestGyroAzimuthDelta(this.gyroLastAz, targetAz) * headingFactor)
     const smoothAlt = this.gyroLastAlt + (targetAlt - this.gyroLastAlt) * smoothFactor
 
     const azDelta = this.shortestGyroAzimuthDelta(this.gyroLastAz, smoothAz)
