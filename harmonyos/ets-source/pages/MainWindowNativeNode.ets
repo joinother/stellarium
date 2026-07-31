@@ -3402,7 +3402,11 @@ private loadPlanetPositions(): void {
   // already fused rotation quaternion.
   private gyroForwardFromGravityAndMagnetic(): number[] {
     if (this.gyroGravityDevice.length !== 3 || this.gyroMagneticDevice.length !== 3) { return [] }
-    const gravity = this.gyroNormalizeVector(this.gyroGravityDevice)
+    // HarmonyOS exposes the measured support acceleration here: on this
+    // device it points away from Earth. Convert it to the physical down axis
+    // before constructing the ENU basis.
+    const gravityRaw = this.gyroNormalizeVector(this.gyroGravityDevice)
+    const gravity = [-gravityRaw[0], -gravityRaw[1], -gravityRaw[2]]
     const magnetic = this.gyroNormalizeVector(this.gyroMagneticDevice)
     const eastRaw = this.gyroCross(gravity, magnetic)
     const eastLength = Math.sqrt(eastRaw[0] * eastRaw[0] + eastRaw[1] * eastRaw[1] + eastRaw[2] * eastRaw[2])
