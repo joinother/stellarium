@@ -547,6 +547,9 @@ struct WindowNativeNode {
   @State private gyroscopeStatus: ResourceStr = I18n.t('m_gyro_off')
   @State private gyroscopeSensitivityText: string = 'Standard'
   @State private gyroCalibPanelOpen: boolean = false
+  // A compact, tilt-compensated magnetic heading. Keeping this visible makes
+  // it possible to verify that the physical compass and the sky agree.
+  @State private gyroCompassText: string = '罗盘 --'
   @State private gyroOffsetAz: number = 0    // 方位角校准偏移（度）
   @State private gyroOffsetAlt: number = 0   // 高度角校准偏移（度）
   @State private liveMode: boolean = true
@@ -717,6 +720,12 @@ struct WindowNativeNode {
   private gyroGuideLastUpdateMs: number = 0
   private gyroGuideReachedAtMs: number = 0
   private gyroLastDiagnosticMs: number = 0
+  private gyroLastCompassUiUpdateMs: number = 0
+  private gyroMagneticHeading: number = Number.NaN
+  // Automatic, session-local alignment from the physical magnetic compass to
+  // Stellarium's Alt/Az frame. The visible slider remains a separate manual
+  // fine adjustment, so it stays predictable for the user.
+  private gyroCompassAzAlignment: number = 0
   private gyroAbsolutePoseReady: boolean = false
   private gyroAbsoluteUp: number[] = [0, 1, 0]
   // alpha is not a stable world heading while a tablet lies flat. Establish
@@ -2935,8 +2944,19 @@ private loadPlanetPositions(): void {
       // ROTATION_VECTOR is already the system's synchronized fusion of
       // gyroscope, gravity and compass. Mixing in independently delivered
       // GRAVITY/MAGNETIC callbacks here combines samples from different
-      // moments, which showed up as sideways drift and jitter.
+      // moments, which showed up as sideways drift and jitter. We do still
+      // sample gravity and magnetic field slowly for the *read-only* compass
+      // readout and explicit user calibration; those readings never drive the
+      // per-frame camera pose.
       sensor.on(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback, { interval: 16666667 })
+      try {
+        sensor.on(sensor.SensorId.GRAVITY, this.gyroGravityCallback, { interval: 100000000 })
+        sensor.on(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback, { interval: 100000000 })
+      } catch (compassError) {
+        // A device without either auxiliary sensor can still use its fused
+        // rotation vector; the readout simply remains unavailable.
+        hilog.warn(0x0000, 'StellariumArkUI', 'gyro compass sensors unavailable: %{public}s', JSON.stringify(compassError))
+      }
       this.gyroUsingRotationVector = true
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
@@ -2952,6 +2972,9 @@ private loadPlanetPositions(): void {
       this.gyroMagneticDevice = []
       this.gyroFilteredGravityDevice = []
       this.gyroFilteredMagneticDevice = []
+      this.gyroMagneticHeading = Number.NaN
+      this.gyroCompassAzAlignment = 0
+      this.gyroCompassText = '罗盘 --'
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
@@ -3009,6 +3032,9 @@ private loadPlanetPositions(): void {
     this.gyroMagneticDevice = []
     this.gyroFilteredGravityDevice = []
     this.gyroFilteredMagneticDevice = []
+    this.gyroMagneticHeading = Number.NaN
+    this.gyroCompassAzAlignment = 0
+    this.gyroCompassText = '罗盘 --'
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3235,7 +3261,7 @@ private loadPlanetPositions(): void {
     // Stellarium's azimuth frame. More importantly, it becomes ambiguous when
     // the Pad is flat. Anchor only once the display has a real horizontal aim;
     // after that use its delta, not its changing Euler-angle zero point.
-    const rawHeading = this.wrapGyroAzimuth(-data.alpha + this.gyroOffsetAz)
+    const rawHeading = this.wrapGyroAzimuth(-data.alpha + this.gyroEffectiveAzOffset())
     let targetAz = rawHeading
     if (this.gyroAbsolutePoseReady) {
       if (!this.gyroHeadingReferenceReady && horizontalStrength >= 0.42) {
@@ -3475,6 +3501,7 @@ private loadPlanetPositions(): void {
       const sample = [data.x, data.y, data.z]
       this.gyroFilteredGravityDevice = this.gyroFilterDeviceVector(this.gyroFilteredGravityDevice, sample, 0.34)
       this.gyroGravityDevice = this.gyroFilteredGravityDevice
+      this.updateGyroCompassReadout()
     }
   }
 
@@ -3485,6 +3512,7 @@ private loadPlanetPositions(): void {
       // a modest local filter removes jitter without making tilt feel delayed.
       this.gyroFilteredMagneticDevice = this.gyroFilterDeviceVector(this.gyroFilteredMagneticDevice, sample, 0.12)
       this.gyroMagneticDevice = this.gyroFilteredMagneticDevice
+      this.updateGyroCompassReadout()
     }
   }
 
@@ -3503,6 +3531,10 @@ private loadPlanetPositions(): void {
       a[2] * b[0] - a[0] * b[2],
       a[0] * b[1] - a[1] * b[0]
     ]
+  }
+
+  private gyroDot(a: number[], b: number[]): number {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
   }
 
   // Derive the world basis directly from the two physical references. On this
@@ -3529,6 +3561,66 @@ private loadPlanetPositions(): void {
     return this.gyroNormalizeVector(this.gyroBridgeFromEnu(enu))
   }
 
+  // Heading from magnetic north with tilt compensation. `GRAVITY` supplies
+  // the physical up axis and the horizontal component of the magnetic field
+  // supplies magnetic north, so this remains meaningful while the tablet is
+  // tilted toward the horizon. It is deliberately diagnostic/calibration-only
+  // and never fed into the high-frequency camera loop.
+  private gyroMagneticHeadingFromDeviceVectors(): number {
+    if (this.gyroGravityDevice.length !== 3 || this.gyroMagneticDevice.length !== 3) {
+      return Number.NaN
+    }
+    const up = this.gyroNormalizeVector(this.gyroGravityDevice)
+    const magnetic = this.gyroNormalizeVector(this.gyroMagneticDevice)
+    const northRaw = [
+      magnetic[0] - up[0] * this.gyroDot(magnetic, up),
+      magnetic[1] - up[1] * this.gyroDot(magnetic, up),
+      magnetic[2] - up[2] * this.gyroDot(magnetic, up)
+    ]
+    const northLength = Math.sqrt(this.gyroDot(northRaw, northRaw))
+    if (northLength < 0.12) { return Number.NaN }
+    const north = [northRaw[0] / northLength, northRaw[1] / northLength, northRaw[2] / northLength]
+    const east = this.gyroNormalizeVector(this.gyroCross(north, up))
+    // The observer looks through the rear side of the display.
+    const rearNormal = [0, 0, -1]
+    const eastComponent = this.gyroDot(rearNormal, east)
+    const northComponent = this.gyroDot(rearNormal, north)
+    return this.wrapGyroAzimuth(Math.atan2(eastComponent, northComponent) * 180 / Math.PI)
+  }
+
+  private gyroCompassDirection(heading: number): string {
+    const directions = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
+    const index = Math.floor((this.wrapGyroAzimuth(heading) + 22.5) / 45) % directions.length
+    return directions[index]
+  }
+
+  private updateGyroCompassReadout(): void {
+    const heading = this.gyroMagneticHeadingFromDeviceVectors()
+    if (!Number.isFinite(heading)) { return }
+    this.gyroMagneticHeading = heading
+    const now = Date.now()
+    if (now - this.gyroLastCompassUiUpdateMs < 120) { return }
+    this.gyroLastCompassUiUpdateMs = now
+    this.gyroCompassText = '磁北 ' + this.gyroCompassDirection(heading) + ' ' + Math.round(heading).toString().padStart(3, '0') + '°'
+  }
+
+  private gyroEffectiveAzOffset(): number {
+    return this.gyroOffsetAz + this.gyroCompassAzAlignment
+  }
+
+  private alignGyroToMagneticNorth(): void {
+    if (!Number.isFinite(this.gyroMagneticHeading) || !Number.isFinite(this.gyroLastAz)) {
+      this.flashHint('罗盘数据尚未就绪')
+      return
+    }
+    // Bridge azimuth is measured from south; a conventional compass bearing
+    // is measured clockwise from north, hence the fixed 180-degree conversion.
+    const expectedBridgeAz = this.wrapGyroAzimuth(this.gyroMagneticHeading + 180)
+    const correction = this.shortestGyroAzimuthDelta(this.gyroLastAz, expectedBridgeAz)
+    this.gyroCompassAzAlignment += correction
+    this.flashHint('已按' + this.gyroCompassText + '对齐')
+  }
+
   private onRotationVectorDirect(data: sensor.RotationVectorResponse): void {
     if (!this.gyroscopeEnabled || !Number.isFinite(data.x) || !Number.isFinite(data.y) ||
       !Number.isFinite(data.z) || !Number.isFinite(data.w)) { return }
@@ -3537,16 +3629,17 @@ private loadPlanetPositions(): void {
     // The screen front is device +Z. The observer looks through the rear of
     // the tablet, therefore the sky-facing ray is the inverse normal.
     const normalEnu = this.gyroRotateVector(orientation, [0, 0, 1])
-    // Keep the camera basis from one synchronized system-fused pose. The
-    // screen-up vector is essential at zenith/nadir, where azimuth alone has
-    // no defined roll and otherwise produces an abrupt spin.
+    // Keep the camera direction from one synchronized system-fused pose.
+    // The native layer derives a gravity-locked map-up vector, so yaw does
+    // not incorrectly roll the horizon line.
     let forward = this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
     let up = this.gyroBridgeFromEnu(this.gyroRotateVector(orientation, [0, 1, 0]))
     forward = this.gyroNormalizeVector(forward)
 
-    if (this.gyroOffsetAz !== 0) {
-      forward = this.gyroRotateAboutVertical(forward, this.gyroOffsetAz)
-      up = this.gyroRotateAboutVertical(up, this.gyroOffsetAz)
+    const azimuthOffset = this.gyroEffectiveAzOffset()
+    if (azimuthOffset !== 0) {
+      forward = this.gyroRotateAboutVertical(forward, azimuthOffset)
+      up = this.gyroRotateAboutVertical(up, azimuthOffset)
     }
     if (this.gyroOffsetAlt !== 0) {
       const horizontal = Math.sqrt(forward[0] * forward[0] + forward[1] * forward[1])
@@ -6354,6 +6447,16 @@ private loadPlanetPositions(): void {
           .position({ x: this.EDGE_MARGIN, y: this.railTop() })
           .hitTestBehavior(HitTestMode.Default)
       }
+      // A compact live magnetic heading sits beside the active gyro control.
+      // It is informational only, so it never steals a sky gesture.
+      if (this.expandedUiAllowed() && this.gyroscopeEnabled && !this.railCollapsed) {
+        Stack() { this.gyroCompassReadout() }
+          .position({ x: this.EDGE_MARGIN + 64, y: this.railTop() + this.RAIL_TOP_PAD + this.pinnedActions.length * this.RAIL_ITEM_STEP + this.RAIL_GYRO_OFFSET + 8 })
+          .hitTestBehavior(HitTestMode.None)
+          .zIndex(28)
+          .opacity(this.railPinned ? 1.0 : this.panelIdleOpacity)
+          .animation({ duration: 240, curve: Curve.EaseOut })
+      }
       // 低频功能抽屉：贴着侧栏右侧滑出
       if (this.expandedUiAllowed() && this.drawerOpen) {
         Stack() { this.actionDrawer() }
@@ -6587,6 +6690,14 @@ private loadPlanetPositions(): void {
           .onTouch((event: TouchEvent) => {
             this.handleCompactTopQuickTouch(event)
           })
+      }
+      if (!this.drawerOpen && this.gyroscopeEnabled) {
+        Stack() { this.gyroCompassReadout() }
+          .position({ x: Math.max(12, this.compactTopQuickX() - 92), y: this.compactTopQuickY() + 8 })
+          .hitTestBehavior(HitTestMode.None)
+          .zIndex(29)
+          .opacity(this.phoneChromeOpacity())
+          .animation({ duration: 240, curve: Curve.EaseOut })
       }
 
       // 陀螺仪校准面板（紧凑布局）
@@ -8337,6 +8448,27 @@ private loadPlanetPositions(): void {
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
   }
 
+  // Small enough to stay out of the sky, but explicit enough for the user to
+  // validate the physical direction while testing the gyro.
+  @Builder
+  gyroCompassReadout() {
+    Row({ space: 5 }) {
+      Circle().width(5).height(5).fill(this.gyroCompassText === '罗盘 --' ? '#8A98A8' : this.nmAccent())
+      Text(this.gyroCompassText)
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.nmText())
+        .maxLines(1)
+    }
+      .height(28)
+      .padding({ left: 9, right: 10 })
+      .backgroundColor(this.phoneChromeIsGlass() ? 'rgba(10,14,26,0.44)' : this.nm())
+      .backdropBlur(28)
+      .border({ width: 0.5, color: this.nmBorder() })
+      .borderRadius(14)
+      .shadow({ radius: 12, color: 'rgba(0,0,0,0.20)', offsetX: 0, offsetY: 5 })
+  }
+
   // ── 陀螺仪校准面板 ──
   @Builder
   gyroCalibPanel() {
@@ -8358,6 +8490,17 @@ private loadPlanetPositions(): void {
 
       Text(I18n.t('i0043'))
         .fontSize(11).fontColor('#8099BBCC').width('100%')
+
+      Row() {
+        Text('罗盘').fontSize(12).fontColor('#CCCCCC').width(44)
+        Text(this.gyroCompassText)
+          .fontSize(12).fontColor('#7FB3DC').layoutWeight(1)
+        Button('对齐磁北')
+          .fontSize(11).fontColor('#E5FFFFFF')
+          .height(28).padding({ left: 10, right: 10 })
+          .backgroundColor('rgba(91,147,191,0.25)').borderRadius(14)
+          .onClick(() => { this.alignGyroToMagneticNorth() })
+      }.width('100%')
 
       // 灵敏度选择
       Row({ space: 8 }) {
@@ -8410,6 +8553,7 @@ private loadPlanetPositions(): void {
           .onClick(() => {
             this.gyroOffsetAz = 0
             this.gyroOffsetAlt = 0
+            this.gyroCompassAzAlignment = 0
             this.calibrateGyroscope()
             this.flashHint('已重新校准')
           })
