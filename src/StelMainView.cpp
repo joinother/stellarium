@@ -158,6 +158,13 @@ static bool s_ohosZeroCopySupported = true;
 // Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
 // read by StellariumOhos_command("getFPS") on ArkUI thread.
 static std::atomic<float> s_ohosRenderFps{0.0f};
+// Updated on the Qt render thread and read by ArkTS without crossing the
+// command queue. The edge guide must use the same projector as the star map:
+// altitude/azimuth deltas are not a screen-space direction in wide fields.
+static std::atomic<float> s_ohosSelectedScreenXRatio{0.0f};
+static std::atomic<float> s_ohosSelectedScreenYRatio{0.0f};
+static std::atomic<bool> s_ohosSelectedScreenValid{false};
+static std::atomic<bool> s_ohosSelectedScreenVisible{false};
 
 // Ignore delayed settle phases left behind by an earlier object selection.
 static std::atomic<quint64> s_ohosNavigationSerial{0};
@@ -851,6 +858,34 @@ static void ohosUpdateGyroTransition()
 		s_gyroTransitionActive = false;
 }
 
+static void ohosUpdateSelectedScreenProjection()
+{
+	s_ohosSelectedScreenValid.store(false);
+	s_ohosSelectedScreenVisible.store(false);
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (!core || !objectMgr || objectMgr->getSelectedObject().isEmpty())
+		return;
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 1 || viewport[3] <= 1)
+		return;
+	Vec3d projected;
+	if (!projector->project(objectMgr->getSelectedObject().constFirst()->getJ2000EquatorialPos(core), projected))
+		return;
+	const float xRatio = static_cast<float>((projected[0] - viewport[0]) / viewport[2]);
+	const float yRatio = static_cast<float>((viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3]);
+	s_ohosSelectedScreenXRatio.store(xRatio);
+	s_ohosSelectedScreenYRatio.store(yRatio);
+	s_ohosSelectedScreenVisible.store(projector->checkInViewport(projected));
+	s_ohosSelectedScreenValid.store(true);
+}
+
 static void markQtLoopRunning()
 {
 	QMutexLocker lock(&s_ohosCmdMutex);
@@ -1481,7 +1516,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	const QString commandName = QString::fromUtf8(command ? command : "");
 	const QString arg = QString::fromUtf8(payload ? payload : "");
 	// 高频命令（dragView/zoomBy/panBy）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
-	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView")
+	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
 	// getFPS: read from a lock-free atomic updated by renderOhosFrameNow().
@@ -1495,11 +1530,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		response = QString::fromUtf8(QJsonDocument(fpsResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
+	if (commandName == "getGyroGuidePosition")
+	{
+		QJsonObject guideResult;
+		guideResult["ok"] = true;
+		guideResult["valid"] = s_ohosSelectedScreenValid.load();
+		guideResult["visible"] = s_ohosSelectedScreenVisible.load();
+		guideResult["xRatio"] = s_ohosSelectedScreenXRatio.load();
+		guideResult["yRatio"] = s_ohosSelectedScreenYRatio.load();
+		response = QString::fromUtf8(QJsonDocument(guideResult).toJson(QJsonDocument::Compact)).toUtf8();
+		return response.constData();
+	}
 
 	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
 		result["ok"] = false;
-		if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView")
+		if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition")
 			qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
 
 		StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
@@ -3578,6 +3624,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 			StelCore* core = StelApp::getInstance().getCore();
 			StelMovementMgr* mvmgr = core->getMovementMgr();
+			// Sensor pose is continuous interaction, not an occasional command.
+			// Keep the render pump at its high-refresh cadence while it is active.
+			markOhosInteraction();
 			if (mvmgr->getMountMode() != StelMovementMgr::MountAltAzimuthal)
 				mvmgr->setMountMode(StelMovementMgr::MountAltAzimuthal);
 			// The device pose owns the view while the gyro is on; object
@@ -7441,6 +7490,7 @@ void StelMainView::renderOhosFrameNow()
 	ohosUpdateGyroTransition();
 	ohosUpdatePanInertia(dt);
 	app.update(dt);
+	ohosUpdateSelectedScreenProjection();
 	ohosProcessPendingPointSelect();
 	const double t3 = StelApp::getTotalRunTime();
 	app.draw();

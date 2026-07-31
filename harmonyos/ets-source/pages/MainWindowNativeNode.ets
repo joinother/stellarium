@@ -76,6 +76,12 @@ interface LimitMagnitudeResponse extends StellariumBridgeResponse {
   customStarMagLimit?: number
   starMagnitudeLimitEnabled?: boolean
 }
+interface GyroGuideProjection extends StellariumBridgeResponse {
+  valid?: boolean
+  visible?: boolean
+  xRatio?: number
+  yRatio?: number
+}
 
 // 书签（C++ 桥 addBookmark / getBookmarks / deleteBookmark / gotoBookmark）
 interface BookmarkItem {
@@ -244,6 +250,9 @@ struct WindowNativeNode {
   @State private gyroGuideAngle: number = 0
   @State private gyroGuideX: number = 0
   @State private gyroGuideY: number = 0
+  // The compact phone quick controls are tapped through a transparent layer
+  // above Qt, so keep their pressed appearance in explicit ArkUI state.
+  @State private compactQuickPressed: string = ''
   @State private visibleConstellations: string = ''
   // 富化的天体详情（独立浮动窗口，不切换当前菜单；默认收起，可展开）
   @State private infoWinVisible: boolean = false
@@ -706,6 +715,7 @@ struct WindowNativeNode {
   private gyroGuideTargetAz: number = Number.NaN
   private gyroGuideTargetAlt: number = Number.NaN
   private gyroGuideLastUpdateMs: number = 0
+  private gyroGuideReachedAtMs: number = 0
   private gyroLastDiagnosticMs: number = 0
   private gyroAbsolutePoseReady: boolean = false
   private gyroAbsoluteUp: number[] = [0, 1, 0]
@@ -2922,9 +2932,11 @@ private loadPlanetPositions(): void {
       // Rotation vector is a complete fused pose, so it remains continuous
       // while a tablet crosses the horizon. ORIENTATION is Euler based and is
       // retained only as a fallback for devices without this sensor.
+      // ROTATION_VECTOR is already the system's synchronized fusion of
+      // gyroscope, gravity and compass. Mixing in independently delivered
+      // GRAVITY/MAGNETIC callbacks here combines samples from different
+      // moments, which showed up as sideways drift and jitter.
       sensor.on(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback, { interval: 16666667 })
-      sensor.on(sensor.SensorId.GRAVITY, this.gyroGravityCallback, { interval: 16666667 })
-      sensor.on(sensor.SensorId.MAGNETIC_FIELD, this.gyroMagneticCallback, { interval: 33333333 })
       this.gyroUsingRotationVector = true
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
@@ -3054,16 +3066,94 @@ private loadPlanetPositions(): void {
     return delta
   }
 
+  // Keep the guide's heading continuous. Native projection supplies angles in
+  // [-180, 180], but animating that value directly can make a one-degree turn
+  // across the boundary look like a full-circle spin.
+  private setGyroGuidePose(x: number, y: number, targetAngle: number): void {
+    let angle = targetAngle
+    if (this.gyroGuideVisible) {
+      let delta = (targetAngle - this.gyroGuideAngle) % 360
+      if (delta > 180) { delta -= 360 }
+      if (delta < -180) { delta += 360 }
+      angle = this.gyroGuideAngle + delta
+    }
+    this.gyroGuideX = x
+    this.gyroGuideY = y
+    this.gyroGuideAngle = angle
+    this.gyroGuideVisible = true
+  }
+
   private updateGyroTargetGuide(force: boolean = false): void {
     if (!this.gyroscopeEnabled || this.selectedStatus !== 'Selected' ||
       !Number.isFinite(this.gyroGuideTargetAz) || !Number.isFinite(this.gyroGuideTargetAlt) ||
       !Number.isFinite(this.gyroLastAz) || !Number.isFinite(this.gyroLastAlt)) {
       this.gyroGuideVisible = false
+      this.gyroGuideReachedAtMs = 0
       return
     }
     const now = Date.now()
     if (!force && now - this.gyroGuideLastUpdateMs < 16) { return }
     this.gyroGuideLastUpdateMs = now
+
+    const left = this.isExpandedLayout ? (this.railCollapsed ? 54 : this.EDGE_MARGIN + 82) : 18
+    const right = this.skyWidth - (this.isExpandedLayout && this.panelVisible
+      ? this.panelWidth + this.EDGE_MARGIN + 18 : 18)
+    const top = this.isFoldHoverLayout ? 46 : 64
+    const bottom = this.skyHeight - (this.isFoldHoverLayout ? 104 : 96)
+    const centerX = Math.max(left + 24, (left + right) / 2)
+    const centerY = Math.max(top + 24, (top + bottom) / 2)
+
+    // The C++ render loop projects the selected object with the active
+    // Stellarium projector. This remains correct for every FOV and projection
+    // type, unlike deriving a screen vector from separate alt/az deltas.
+    const projection = this.callNative('getGyroGuidePosition') as GyroGuideProjection
+    if (projection.ok === true && projection.valid === true &&
+      typeof projection.xRatio === 'number' && typeof projection.yRatio === 'number') {
+      const targetX = (projection.xRatio as number) * this.skyWidth
+      const targetY = (projection.yRatio as number) * this.skyHeight
+      const targetInClearSky = projection.visible === true &&
+        targetX >= left + 24 && targetX <= right - 24 && targetY >= top + 24 && targetY <= bottom - 24
+      if (targetInClearSky) {
+        if (this.gyroGuideReachedAtMs === 0) {
+          this.gyroGuideReachedAtMs = now
+        }
+        // The arrow confirms that the target has arrived, then gets out of
+        // the way. It reappears only after the object leaves the clear sky.
+        if (now - this.gyroGuideReachedAtMs >= 1800) {
+          this.gyroGuideVisible = false
+          return
+        }
+        // The guide sits above its target and points down. At the very top,
+        // place it below instead so it stays fully reachable and visible.
+        const placeAbove = targetY - 58 >= top
+        this.setGyroGuidePose(
+          this.clamp(targetX - 22, left, Math.max(left, right - 44)),
+          this.clamp(targetY + (placeAbove ? -58 : 14) - 22, top, Math.max(top, bottom - 44)),
+          placeAbove ? 90 : -90
+        )
+        return
+      }
+      this.gyroGuideReachedAtMs = 0
+      // If the native projection is outside the usable sky area, its true
+      // screen-space vector still gives an accurate edge direction.
+      const dx = targetX - centerX
+      const dy = targetY - centerY
+      if (Number.isFinite(dx) && Number.isFinite(dy) && Math.abs(dx) + Math.abs(dy) > 0.5) {
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI
+        const radians = angle * Math.PI / 180
+        const halfW = Math.max(1, (right - left) / 2 - 24)
+        const halfH = Math.max(1, (bottom - top) / 2 - 24)
+        const edgeScaleX = Math.abs(Math.cos(radians)) > 0.0001 ? halfW / Math.abs(Math.cos(radians)) : Number.POSITIVE_INFINITY
+        const edgeScaleY = Math.abs(Math.sin(radians)) > 0.0001 ? halfH / Math.abs(Math.sin(radians)) : Number.POSITIVE_INFINITY
+        const edgeScale = Math.min(edgeScaleX, edgeScaleY)
+        this.setGyroGuidePose(
+          this.clamp(centerX + Math.cos(radians) * edgeScale - 22, left, Math.max(left, right - 44)),
+          this.clamp(centerY + Math.sin(radians) * edgeScale - 22, top, Math.max(top, bottom - 44)),
+          angle
+        )
+        return
+      }
+    }
 
     // Project the target's local tangent-plane direction around the current
     // view. Cos(altitude) prevents a small azimuth change near zenith from
@@ -3075,19 +3165,13 @@ private loadPlanetPositions(): void {
     const fov = Math.max(5, this.fovSliderValue > 0 ? this.fovSliderValue : 60)
     if (separation <= fov * 0.48) {
       this.gyroGuideVisible = false
+      this.gyroGuideReachedAtMs = 0
       return
     }
 
     // The forward icon points right at 0 degrees. Negative vertical is up on
     // screen, so a target above the view produces a -90 degree arrow.
     const angle = Math.atan2(-vertical, horizontal) * 180 / Math.PI
-    const left = this.isExpandedLayout ? (this.railCollapsed ? 54 : this.EDGE_MARGIN + 82) : 18
-    const right = this.skyWidth - (this.isExpandedLayout && this.panelVisible
-      ? this.panelWidth + this.EDGE_MARGIN + 18 : 18)
-    const top = this.isFoldHoverLayout ? 46 : 64
-    const bottom = this.skyHeight - (this.isFoldHoverLayout ? 104 : 96)
-    const centerX = Math.max(left + 24, (left + right) / 2)
-    const centerY = Math.max(top + 24, (top + bottom) / 2)
     const radians = angle * Math.PI / 180
     const dx = Math.cos(radians)
     const dy = Math.sin(radians)
@@ -3098,10 +3182,11 @@ private loadPlanetPositions(): void {
     const edgeScaleX = Math.abs(dx) > 0.0001 ? halfW / Math.abs(dx) : Number.POSITIVE_INFINITY
     const edgeScaleY = Math.abs(dy) > 0.0001 ? halfH / Math.abs(dy) : Number.POSITIVE_INFINITY
     const edgeScale = Math.min(edgeScaleX, edgeScaleY)
-    this.gyroGuideAngle = angle
-    this.gyroGuideX = this.clamp(centerX + dx * edgeScale - 22, left, Math.max(left, right - 44))
-    this.gyroGuideY = this.clamp(centerY + dy * edgeScale - 22, top, Math.max(top, bottom - 44))
-    this.gyroGuideVisible = true
+    this.setGyroGuidePose(
+      this.clamp(centerX + dx * edgeScale - 22, left, Math.max(left, right - 44)),
+      this.clamp(centerY + dy * edgeScale - 22, top, Math.max(top, bottom - 44)),
+      angle
+    )
   }
 
   // The Orientation sensor already reports a world-referenced pose. Do not
@@ -3398,7 +3483,7 @@ private loadPlanetPositions(): void {
       const sample = [data.x, data.y, data.z]
       // Magnetic readings are noisier than gravity but affect only heading;
       // a modest local filter removes jitter without making tilt feel delayed.
-      this.gyroFilteredMagneticDevice = this.gyroFilterDeviceVector(this.gyroFilteredMagneticDevice, sample, 0.22)
+      this.gyroFilteredMagneticDevice = this.gyroFilterDeviceVector(this.gyroFilteredMagneticDevice, sample, 0.12)
       this.gyroMagneticDevice = this.gyroFilteredMagneticDevice
     }
   }
@@ -3452,19 +3537,22 @@ private loadPlanetPositions(): void {
     // The screen front is device +Z. The observer looks through the rear of
     // the tablet, therefore the sky-facing ray is the inverse normal.
     const normalEnu = this.gyroRotateVector(orientation, [0, 0, 1])
-    const fusedForward = this.gyroForwardFromGravityAndMagnetic()
-    let forward = fusedForward.length === 3
-      ? fusedForward
-      : this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
+    // Keep the camera basis from one synchronized system-fused pose. The
+    // screen-up vector is essential at zenith/nadir, where azimuth alone has
+    // no defined roll and otherwise produces an abrupt spin.
+    let forward = this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
+    let up = this.gyroBridgeFromEnu(this.gyroRotateVector(orientation, [0, 1, 0]))
     forward = this.gyroNormalizeVector(forward)
 
     if (this.gyroOffsetAz !== 0) {
       forward = this.gyroRotateAboutVertical(forward, this.gyroOffsetAz)
+      up = this.gyroRotateAboutVertical(up, this.gyroOffsetAz)
     }
     if (this.gyroOffsetAlt !== 0) {
       const horizontal = Math.sqrt(forward[0] * forward[0] + forward[1] * forward[1])
       if (horizontal > 0.001) {
         forward = this.gyroRotateAboutAxis(forward, [forward[1] / horizontal, -forward[0] / horizontal, 0], this.gyroOffsetAlt)
+        up = this.gyroRotateAboutAxis(up, [forward[1] / horizontal, -forward[0] / horizontal, 0], this.gyroOffsetAlt)
         forward = this.gyroNormalizeVector(forward)
       }
     }
@@ -3472,20 +3560,26 @@ private loadPlanetPositions(): void {
     const now = Date.now()
     if (this.gyroFwd.length !== 3) {
       this.gyroFwd = forward
+      this.gyroUp = this.gyroOrthonormalizeUp(forward, up)
       this.gyroLastSampleMs = now
     } else {
       let dt = this.gyroLastSampleMs > 0 ? (now - this.gyroLastSampleMs) / 1000 : 1 / 60
       this.gyroLastSampleMs = now
       if (dt <= 0) { dt = 1 / 60 }
       if (dt > 0.25) { dt = 0.25 }
-      let tau = 0.04
-      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.09 }
-      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.025 }
+      let tau = 0.050
+      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.12 }
+      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.032 }
       const a = 1 - Math.exp(-dt / tau)
       this.gyroFwd = this.gyroNormalizeVector([
         this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * a,
         this.gyroFwd[1] + (forward[1] - this.gyroFwd[1]) * a,
         this.gyroFwd[2] + (forward[2] - this.gyroFwd[2]) * a
+      ])
+      this.gyroUp = this.gyroOrthonormalizeUp(this.gyroFwd, [
+        this.gyroUp[0] + (up[0] - this.gyroUp[0]) * a,
+        this.gyroUp[1] + (up[1] - this.gyroUp[1]) * a,
+        this.gyroUp[2] + (up[2] - this.gyroUp[2]) * a
       ])
     }
 
@@ -3497,7 +3591,8 @@ private loadPlanetPositions(): void {
     this.updateGyroTargetGuide()
     // Native code derives a stable map-up vector from real zenith, with a
     // continuity fallback only at the two poles.
-    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3))
+    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3) + '|'
+      + this.gyroUp[0].toFixed(5) + '|' + this.gyroUp[1].toFixed(5) + '|' + this.gyroUp[2].toFixed(5))
     this.gyroEventCount += 1
     if (this.gyroEventCount % 4 === 0) {
       this.gyroscopeStatus = I18n.t('m_gyro_working')
@@ -3740,6 +3835,13 @@ private loadPlanetPositions(): void {
   }
 
   private moveToSelectedObject(fromLayoutChange: boolean = false): void {
+    // Sensor pose is the camera owner while gyro mode is active. Starting a
+    // second auto-move here creates a visible jump when the next pose sample
+    // correctly takes control back, so center/track only refresh the guide.
+    if (this.gyroscopeEnabled) {
+      this.updateGyroTargetGuide(true)
+      return
+    }
     if (this.panelVisible || this.infoWinVisible) {
       this.placeSelectedObjectInSafeArea(fromLayoutChange ? 'layout' : 'focus')
       return
@@ -6179,6 +6281,7 @@ private loadPlanetPositions(): void {
           .height(44)
           .zIndex(4)
           .hitTestBehavior(HitTestMode.None)
+          .animation({ duration: 130, curve: Curve.Linear })
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
@@ -6217,21 +6320,21 @@ private loadPlanetPositions(): void {
   @Builder
   gyroTargetGuide() {
     Stack() {
-      Circle()
-        .width(44)
-        .height(44)
-        .fill('rgba(8, 21, 36, 0.76)')
-        .stroke('rgba(169, 232, 255, 0.72)')
-        .strokeWidth(1)
-        .backdropBlur(22)
       Text('↑')
         .fontSize(29)
         .fontWeight(FontWeight.Medium)
         .fontColor('#E5FAFF')
         .rotate({ angle: this.gyroGuideAngle + 90 })
+        .animation({ duration: 130, curve: Curve.Linear })
     }
       .width(44)
       .height(44)
+      .alignContent(Alignment.Center)
+      .backgroundColor('rgba(8, 21, 36, 0.76)')
+      .backdropBlur(22)
+      .border({ width: 1, color: 'rgba(169, 232, 255, 0.72)' })
+      .borderRadius(22)
+      .clip(true)
       .shadow({ radius: 14, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 4 })
   }
 
@@ -6608,13 +6711,13 @@ private loadPlanetPositions(): void {
         hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroscopeEnabled.toString())
         this.resetPanelIdle()
         this.toggleGyroscope(!this.gyroscopeEnabled)
-      }, false)
+      }, false, this.compactQuickPressed === 'gyro')
       this.compactQuickButton('audio', this.musicEnabled, () => {
         hilog.info(0x0000, 'StellariumArkUI', '[DIAG] audio button CLICKED musicEnabled=%{public}s', this.musicEnabled.toString())
         this.resetPanelIdle()
         this.toggleMusic()
         this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
-      }, false)
+      }, false, this.compactQuickPressed === 'audio')
     }
       .width(44)
       .alignItems(HorizontalAlign.Center)
@@ -6639,6 +6742,16 @@ private loadPlanetPositions(): void {
     return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + 108
   }
 
+  private compactQuickIdAt(x: number, y: number): string {
+    if (this.isExpandedLayout || this.drawerOpen) { return '' }
+    const qx = this.compactTopQuickX()
+    const qy = this.compactTopQuickY()
+    if (x < qx || x > qx + 44) { return '' }
+    if (y >= qy && y <= qy + 44) { return 'gyro' }
+    if (y >= qy + 54 && y <= qy + 98) { return 'audio' }
+    return ''
+  }
+
   // The native sky XComponent can consume ArkUI Button.onClick on phones.
   // Route these two high-frequency controls through the same coordinate path
   // as the tablet rail so their visual and touch regions always agree.
@@ -6646,15 +6759,14 @@ private loadPlanetPositions(): void {
     if (this.isExpandedLayout || this.drawerOpen || !this.isCompactTopQuickPoint(x, y)) {
       return false
     }
-    const qx = this.compactTopQuickX()
-    const qy = this.compactTopQuickY()
-    if (x >= qx && x <= qx + 44 && y >= qy && y <= qy + 44) {
+    const quickId = this.compactQuickIdAt(x, y)
+    if (quickId === 'gyro') {
       this.resetPanelIdle()
       this.toggleGyroscope(!this.gyroscopeEnabled)
       this.flashHint(this.gyroscopeEnabled ? '陀螺仪已开启，正在校准' : '陀螺仪已关闭')
       return true
     }
-    if (x >= qx && x <= qx + 44 && y >= qy + 54 && y <= qy + 98) {
+    if (quickId === 'audio') {
       this.resetPanelIdle()
       this.toggleMusic()
       this.flashHint(this.musicEnabled ? I18n.t('music_on_hint') : I18n.t('music_off_hint'))
@@ -6664,30 +6776,30 @@ private loadPlanetPositions(): void {
   }
 
   private handleCompactTopQuickTouch(event: TouchEvent): void {
+    if (event.type === TouchType.Cancel) {
+      this.compactQuickPressed = ''
+      return
+    }
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) { return }
+    const windowX = points[0].windowX
+    const windowY = points[0].windowY
+    const x = typeof windowX === 'number' ? windowX : this.compactTopQuickX() + (points[0].x ?? 0)
+    const y = typeof windowY === 'number' ? windowY : this.compactTopQuickY() + (points[0].y ?? 0)
     if (event.type === TouchType.Down) {
       this.stopSkyInertia()
       this.skyTouchFeedback = false
+      this.compactQuickPressed = this.compactQuickIdAt(x, y)
       return
     }
     if (event.type === TouchType.Up) {
-      // Prefer the explicit window coordinates. Some ArkUI builds expose only
-      // component-local x/y for this small overlay, so retain that fallback.
-      const windowX = points[0].windowX
-      const windowY = points[0].windowY
-      if (typeof windowX === 'number' && typeof windowY === 'number') {
-        this.handleCompactTopQuickTap(windowX, windowY)
-      } else {
-        const localX = points[0].x ?? 0
-        const localY = points[0].y ?? 0
-        this.handleCompactTopQuickTap(this.compactTopQuickX() + localX, this.compactTopQuickY() + localY)
-      }
+      this.compactQuickPressed = ''
+      this.handleCompactTopQuickTap(x, y)
     }
   }
 
   @Builder
-  compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true) {
+  compactQuickButton(icon: string, active: boolean, action: () => void, receiveTap: boolean = true, pressed: boolean = false) {
     Row() {
       Image(this.getIcon(icon, active))
         .width(22)
@@ -6698,11 +6810,13 @@ private loadPlanetPositions(): void {
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor(active ? 'rgba(91, 147, 191, 0.60)' : 'rgba(18, 22, 36, 0.50)')
+      .backgroundColor(pressed ? 'rgba(169, 232, 255, 0.24)' : (active ? 'rgba(91, 147, 191, 0.60)' : 'rgba(18, 22, 36, 0.50)'))
       .backdropBlur(active ? 28 : 36)
       .border({ width: 1, color: active ? 'rgba(107, 163, 214, 0.42)' : 'rgba(255, 255, 255, 0.10)' })
       .borderRadius(22)
       .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
+      .scale({ x: pressed ? 0.90 : (active ? 1.05 : 1.0), y: pressed ? 0.90 : (active ? 1.05 : 1.0) })
+      .animation({ duration: pressed ? 70 : 180, curve: Curve.EaseOut })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .onClick(() => {
         // The compact top controls have a separate touch target over Qt.
@@ -6732,6 +6846,10 @@ private loadPlanetPositions(): void {
     return Math.min(this.skyHeight * 0.42, 400)
   }
   private toggleTracking(): void {
+    if (this.gyroscopeEnabled) {
+      this.updateGyroTargetGuide(true)
+      return
+    }
     const want = this.trackingText !== 'On'
     this.callInteractive('setTracking', want ? '1' : '0', () => {
       this.trackingText = want ? 'On' : 'Off'
