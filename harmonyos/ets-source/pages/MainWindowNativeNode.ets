@@ -718,6 +718,8 @@ struct WindowNativeNode {
   private gyroRawEventCount: number = 0
   private readonly gyroSensitivity: number = 180
   private gyroCallback: ((data: sensor.OrientationResponse) => void) | undefined = undefined
+  private gyroRotationCallback: ((data: sensor.RotationVectorResponse) => void) | undefined = undefined
+  private gyroUsingRotationVector: boolean = false
   private dragLogCount: number = 0
   private touchStartedOnUi: boolean = false
   private panelDragging: boolean = false
@@ -2890,8 +2892,17 @@ private loadPlanetPositions(): void {
         this.onOrientationData(data)
       }
     }
+    if (this.gyroRotationCallback === undefined) {
+      this.gyroRotationCallback = (data: sensor.RotationVectorResponse) => {
+        this.onRotationVectorDirect(data)
+      }
+    }
     try {
-      sensor.on(sensor.SensorId.ORIENTATION, this.gyroCallback, { interval: 16666667 })
+      // Rotation vector is a complete fused pose, so it remains continuous
+      // while a tablet crosses the horizon. ORIENTATION is Euler based and is
+      // retained only as a fallback for devices without this sensor.
+      sensor.on(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback, { interval: 16666667 })
+      this.gyroUsingRotationVector = true
       this.gyroLastTimeMs = 0
       this.gyroEventCount = 0
       this.gyroFirstReading = true
@@ -2899,15 +2910,26 @@ private loadPlanetPositions(): void {
       this.gyroLastDispatchMs = 0
       this.gyroAbsolutePoseReady = false
       this.gyroHeadingReferenceReady = false
+      this.gyroFwd = []
+      this.gyroUp = []
+      this.gyroSentFwd = []
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
-      hilog.info(0x0000, 'StellariumArkUI', 'startGyroscope sensor.on success')
+      hilog.info(0x0000, 'StellariumArkUI', 'startGyroscope rotation-vector sensor.on success')
     } catch (error) {
-      this.gyroscopeEnabled = false
-      this.gyroscopeStatus = I18n.t('m_gyro_unavailable')
-      this.flashHint(I18n.t('m_gyro_unavailable'))
-      hilog.error(0x0000, 'StellariumArkUI', 'startGyroscope sensor.on failed: %{public}s', JSON.stringify(error))
+      try {
+        sensor.on(sensor.SensorId.ORIENTATION, this.gyroCallback, { interval: 16666667 })
+        this.gyroUsingRotationVector = false
+        this.gyroscopeEnabled = true
+        this.gyroscopeStatus = '正在校准'
+        hilog.warn(0x0000, 'StellariumArkUI', 'rotation-vector unavailable; using orientation fallback')
+      } catch (fallbackError) {
+        this.gyroscopeEnabled = false
+        this.gyroscopeStatus = I18n.t('m_gyro_unavailable')
+        this.flashHint(I18n.t('m_gyro_unavailable'))
+        hilog.error(0x0000, 'StellariumArkUI', 'startGyroscope sensors failed: %{public}s', JSON.stringify(fallbackError))
+      }
     }
   }
 
@@ -2918,12 +2940,19 @@ private loadPlanetPositions(): void {
       } catch (error) {
       }
     }
+    if (this.gyroRotationCallback !== undefined) {
+      try {
+        sensor.off(sensor.SensorId.ROTATION_VECTOR, this.gyroRotationCallback)
+      } catch (error) {
+      }
+    }
     this.gyroLastTimeMs = 0
     this.gyroCalibrated = false
     this.gyroFirstReading = true
     this.gyroLastDispatchMs = 0
     this.gyroAbsolutePoseReady = false
     this.gyroHeadingReferenceReady = false
+    this.gyroUsingRotationVector = false
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3309,6 +3338,69 @@ private loadPlanetPositions(): void {
     })
   }
 
+  // Direct rotation-vector path. The system fusion already combines gravity,
+  // gyroscope and magnetometer into a complete pose, which avoids the Euler
+  // alpha/beta/gamma discontinuity at the horizon.
+  private onRotationVectorDirect(data: sensor.RotationVectorResponse): void {
+    if (!this.gyroscopeEnabled || !Number.isFinite(data.x) || !Number.isFinite(data.y) ||
+      !Number.isFinite(data.z) || !Number.isFinite(data.w)) { return }
+    const orientation = this.gyroConjugateQuaternion(
+      this.gyroNormalizeQuaternion([data.x, data.y, data.z, data.w]))
+    // The screen front is device +Z. The observer looks through the rear of
+    // the tablet, therefore the sky-facing ray is the inverse normal.
+    const normalEnu = this.gyroRotateVector(orientation, [0, 0, 1])
+    let forward = this.gyroBridgeFromEnu([-normalEnu[0], -normalEnu[1], -normalEnu[2]])
+    forward = this.gyroNormalizeVector(forward)
+
+    if (this.gyroOffsetAz !== 0) {
+      forward = this.gyroRotateAboutVertical(forward, this.gyroOffsetAz)
+    }
+    if (this.gyroOffsetAlt !== 0) {
+      const horizontal = Math.sqrt(forward[0] * forward[0] + forward[1] * forward[1])
+      if (horizontal > 0.001) {
+        forward = this.gyroRotateAboutAxis(forward, [forward[1] / horizontal, -forward[0] / horizontal, 0], this.gyroOffsetAlt)
+        forward = this.gyroNormalizeVector(forward)
+      }
+    }
+
+    const now = Date.now()
+    if (this.gyroFwd.length !== 3) {
+      this.gyroFwd = forward
+      this.gyroLastSampleMs = now
+    } else {
+      let dt = this.gyroLastSampleMs > 0 ? (now - this.gyroLastSampleMs) / 1000 : 1 / 60
+      this.gyroLastSampleMs = now
+      if (dt <= 0) { dt = 1 / 60 }
+      if (dt > 0.25) { dt = 0.25 }
+      let tau = 0.09
+      if (this.gyroscopeSensitivityText === 'Low') { tau = 0.16 }
+      else if (this.gyroscopeSensitivityText === 'High') { tau = 0.05 }
+      const a = 1 - Math.exp(-dt / tau)
+      this.gyroFwd = this.gyroNormalizeVector([
+        this.gyroFwd[0] + (forward[0] - this.gyroFwd[0]) * a,
+        this.gyroFwd[1] + (forward[1] - this.gyroFwd[1]) * a,
+        this.gyroFwd[2] + (forward[2] - this.gyroFwd[2]) * a
+      ])
+    }
+
+    if (now - this.gyroLastDispatchMs < 33) { return }
+    this.gyroLastDispatchMs = now
+    const altAz = this.gyroVectorAltAz(this.gyroFwd)
+    this.gyroLastAz = altAz[0]
+    this.gyroLastAlt = altAz[1]
+    this.updateGyroTargetGuide()
+    // Native code derives a stable map-up vector from real zenith, with a
+    // continuity fallback only at the two poles.
+    this.callNativeFire('setGyroView', this.gyroLastAz.toFixed(3) + '|' + this.gyroLastAlt.toFixed(3))
+    this.gyroEventCount += 1
+    if (this.gyroEventCount % 4 === 0) {
+      this.gyroscopeStatus = I18n.t('m_gyro_working')
+    }
+  }
+
+  // Retained as a reference implementation for diagnosing sensor-fusion
+  // differences. The active implementation above intentionally does not
+  // anchor the sky view to an arbitrary startup pose.
   private onRotationVectorData(data: sensor.RotationVectorResponse): void {
     if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.z) || !Number.isFinite(data.w)) { return }
     this.gyroLastRawQ = [data.x, data.y, data.z, data.w]
