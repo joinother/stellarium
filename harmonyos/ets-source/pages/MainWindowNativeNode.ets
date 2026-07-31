@@ -709,6 +709,11 @@ struct WindowNativeNode {
   private gyroLastDiagnosticMs: number = 0
   private gyroAbsolutePoseReady: boolean = false
   private gyroAbsoluteUp: number[] = [0, 1, 0]
+  // alpha is not a stable world heading while a tablet lies flat. Establish
+  // this reference only after the display normal has a usable horizontal part.
+  private gyroHeadingReferenceReady: boolean = false
+  private gyroHeadingSensorAz: number = 0
+  private gyroHeadingViewAz: number = 0
   private gyroEventCount: number = 0
   private gyroRawEventCount: number = 0
   private readonly gyroSensitivity: number = 180
@@ -2892,6 +2897,8 @@ private loadPlanetPositions(): void {
       this.gyroFirstReading = true
       this.gyroCalibrated = false
       this.gyroLastDispatchMs = 0
+      this.gyroAbsolutePoseReady = false
+      this.gyroHeadingReferenceReady = false
       this.gyroscopeEnabled = true
       // 方向传感器不是麦克风；避免把普通启用反馈写成“正在监听”。
       this.gyroscopeStatus = '正在校准'
@@ -2915,6 +2922,8 @@ private loadPlanetPositions(): void {
     this.gyroCalibrated = false
     this.gyroFirstReading = true
     this.gyroLastDispatchMs = 0
+    this.gyroAbsolutePoseReady = false
+    this.gyroHeadingReferenceReady = false
     this.gyroGuideVisible = false
     this.gyroscopeEnabled = false
     if (updateStatus) {
@@ -3028,6 +3037,7 @@ private loadPlanetPositions(): void {
   private calibrateGyroscope(): void {
     if (!this.gyroscopeEnabled || this.gyroFirstReading) { return }
     this.gyroAbsolutePoseReady = false
+    this.gyroHeadingReferenceReady = false
     this.gyroLastDispatchMs = 0
     this.gyroCalibrated = true
     this.gyroscopeStatus = '已校准'
@@ -3063,9 +3073,22 @@ private loadPlanetPositions(): void {
     // remains stable when the Pad is vertical, so use it for yaw; retain the
     // last heading in the polar dead zone and restore it progressively.
     const horizontalStrength = Math.sqrt(forwardX * forwardX + forwardY * forwardY)
-    const rawHeading = this.wrapGyroAzimuth(data.alpha + this.gyroOffsetAz)
-    const targetAz = horizontalStrength < 0.22 && this.gyroAbsolutePoseReady
-      ? this.gyroLastAz : rawHeading
+    // In landscape, the reported alpha rotates in the opposite direction to
+    // Stellarium's azimuth frame. More importantly, it becomes ambiguous when
+    // the Pad is flat. Anchor only once the display has a real horizontal aim;
+    // after that use its delta, not its changing Euler-angle zero point.
+    const rawHeading = this.wrapGyroAzimuth(-data.alpha + this.gyroOffsetAz)
+    let targetAz = rawHeading
+    if (this.gyroAbsolutePoseReady) {
+      if (!this.gyroHeadingReferenceReady && horizontalStrength >= 0.42) {
+        this.gyroHeadingSensorAz = rawHeading
+        this.gyroHeadingViewAz = this.gyroLastAz
+        this.gyroHeadingReferenceReady = true
+      }
+      targetAz = this.gyroHeadingReferenceReady
+        ? this.wrapGyroAzimuth(this.gyroHeadingViewAz + this.shortestGyroAzimuthDelta(this.gyroHeadingSensorAz, rawHeading))
+        : this.gyroLastAz
+    }
     // Device Y is the top edge of the screen. Keeping it as the camera up
     // basis removes the otherwise undefined roll at zenith and nadir.
     const rawUp: number[] = [-sinAlpha * cosBeta, cosAlpha * cosBeta, sinBeta]
@@ -3094,7 +3117,7 @@ private loadPlanetPositions(): void {
       this.gyroAbsolutePoseReady = true
       initialPose = true
     }
-    const headingFactor = horizontalStrength < 0.38 ? smoothFactor * 0.35 : smoothFactor
+    const headingFactor = this.gyroHeadingReferenceReady ? smoothFactor : 0
     const smoothAz = this.wrapGyroAzimuth(this.gyroLastAz +
       this.shortestGyroAzimuthDelta(this.gyroLastAz, targetAz) * headingFactor)
     const smoothAlt = this.gyroLastAlt + (targetAlt - this.gyroLastAlt) * smoothFactor
