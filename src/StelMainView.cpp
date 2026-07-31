@@ -3523,24 +3523,24 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d aim(cos(altRad) * cos(azRad), cos(altRad) * sin(azRad), sin(altRad));
 			aim.normalize();
 
-			Vec3d up(0., 0., 1.);
-			if (parts.size() >= 5)
-			{
-				bool okX = false, okY = false, okZ = false;
-				const Vec3d raw(parts[2].toDouble(&okX), parts[3].toDouble(&okY), parts[4].toDouble(&okZ));
-				if (okX && okY && okZ && raw.normSquared() > 1e-8)
-					up = raw;
-			}
-			// Gram-Schmidt against the aim so roll stays well defined even when
-			// the user points straight at the zenith or the nadir.
-			up -= aim * aim.dot(up);
+			// Keep the physical zenith at the top of the map. The orientation
+			// sensor's screen-up vector is device-frame data; using it directly
+			// here made a vertical Pad render its horizon as a vertical line.
+			// Near zenith/nadir the zenith projection degenerates, so preserve a
+			// continuously transported basis only in that small polar region.
+			const Vec3d zenith(0., 0., 1.);
+			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
+			static Vec3d previousGyroUp(0., 0., 1.);
+			static bool hasPreviousGyroUp = false;
+			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
+			if (transportedUp.normSquared() < 1e-8)
+				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
+			Vec3d up = (zenithUp.normSquared() >= 0.06 || !hasPreviousGyroUp) ? zenithUp : transportedUp;
 			if (up.normSquared() < 1e-8)
-			{
-				up = Vec3d(0., 0., 1.) - aim * aim.dot(Vec3d(0., 0., 1.));
-				if (up.normSquared() < 1e-8)
-					up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			}
+				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
+			previousGyroUp = up;
+			hasPreviousGyroUp = true;
 
 			// Order matters: setViewDirectionJ2000() re-reads the *current* up
 			// vector when it calls core->lookAtJ2000().
