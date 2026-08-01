@@ -93,6 +93,10 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
   // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
   const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
+  // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
+  // .ssc files, so an upgraded install would keep an empty Scripts panel forever
+  // unless the missing directory itself forces a re-extract.
+  const scriptMarker = `${installRoot}/scripts/constellations_tour.ssc`;
 
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
@@ -108,6 +112,12 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
       `(${skycultureMarker}); forcing re-extract`);
     needExtract = true;
   }
+  if (!needExtract && !exists(scriptMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but sky-tour scripts missing ` +
+      `(${scriptMarker}); forcing re-extract`);
+    needExtract = true;
+  }
 
   if (needExtract) {
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
@@ -121,6 +131,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     } catch (err) {
       hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to extract stars_4: ${JSON.stringify(err)}`);
     }
+  }
+
+  // HAP updates preserve filesDir. Keep the mutable runtime copy of this
+  // small pair in sync so an old ssystem_major.ini cannot keep referring to
+  // the pre-fix Earth texture after a normal overwrite install.
+  try {
+    writeRawFile(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
   }
 
   // Observable proof that localization data is on disk, so "star names don't
