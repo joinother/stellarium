@@ -13,14 +13,16 @@ by maintainers, must start independently from current upstream `master`.
 
 | Branch | Purpose | Rules |
 | --- | --- | --- |
+| `master` | Read-only mirror of official `origin/master` | Fast-forward only. Never put product work here. |
 | `harmonyos-baseline-v1.0.1-tablet` | Known tablet-test fallback tag | Immutable; never develop directly. |
 | `harmonyos/dev` | Product integration branch | The only shared integration branch for active product work. |
 | `fix/<topic>` | One focused bug or feature | Branch from `harmonyos/dev`; build and test before merging back. |
 | `harmonyos/release/<version>` | Store-submission branch | Create only from a verified `harmonyos/dev` commit. |
-| `upstream/openharmony-bootstrap` | Clean experiment based on official `master` | No product UI, signing, branding, store files, or command bridge. |
 
-Do not merge `harmonyos/dev` into `upstream/openharmony-bootstrap`, and do
-not merge official `master` into the product port as an ad-hoc conflict fix.
+Do not merge official `master` into the product port as an ad-hoc conflict fix.
+If maintainers later request an upstream experiment, create a temporary
+`upstream/<topic>` branch directly from current `master`; never merge
+`harmonyos/dev` into it.
 All older `backup-*`, `recovery/*`, `release/*`, and
 `openharmony-preview-v1` refs are historical only. Do not develop or release
 from them.
