@@ -1,8 +1,8 @@
 # Stellarium HarmonyOS 移植 — Agent 协作工作流
 
-> **最后更新：2026-07-20**
-> **当前分支：** `openharmony-preview-v1`
-> **当前状态：** 能构建、安装、启动；横屏 UI 正常；星图触摸/选星可用；触摸事件已修复但仍有边缘死区问题
+> **最后更新：2026-08-01**
+> **当前开发分支：** `develop/harmonyos`
+> **当前状态：** 产品仍在开发中，不能作为官方上游 PR 或最终上架包。开始任何工作前，先阅读 [PROJECT-STATUS.md](PROJECT-STATUS.md) 以确认分支、未提交工作和优先级。
 
 ---
 
@@ -49,7 +49,8 @@ OpenGL ES → XComponent → Framebuffer
 ```
 docs/harmonyos/
 ├── AGENTS.md                  ← 你正在读的这个文件
-├── HANDOFF.md                 ← 项目交接文档（给新 Agent 的快速入门）
+├── PROJECT-STATUS.md          ← 当前唯一可信的分支、工作树、优先级状态
+├── HANDOFF.md                 ← 历史项目交接文档（需与 PROJECT-STATUS.md 交叉核对）
 ├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
 ├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
 ├── codex/                     ← Codex Agent 的工作记录
