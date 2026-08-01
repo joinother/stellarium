@@ -23,6 +23,17 @@ Do not merge official `master` into the product port as an ad-hoc conflict fix.
 If maintainers later request an upstream experiment, create a temporary
 `upstream/<topic>` branch directly from current `master`; never merge
 `harmonyos/dev` into it.
+
+## Release Snapshots
+
+| Version | Source branch | Immutable tag | Status |
+| --- | --- | --- | --- |
+| `1.0.1` build `1000002` | `harmonyos/release/v1.0.1-offline` | `harmonyos-v1.0.1-offline-build1000002` | Offline store-submission source snapshot. |
+
+Every store submission needs both a frozen `harmonyos/release/<version>`
+branch and a matching immutable tag. Release branches receive no feature work;
+a corrected submission is a new version, not a force-push or amendment of the
+old one.
 All older `backup-*`, `recovery/*`, `release/*`, and
 `openharmony-preview-v1` refs are historical only. Do not develop or release
 from them.
