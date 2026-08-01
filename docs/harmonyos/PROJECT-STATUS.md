@@ -52,6 +52,7 @@ these files while they are uncommitted.
 - [ ] Gyroscope: replace iterative axis tweaks with a documented pose pipeline
       and validate it on the physical tablet across portrait/landscape,
       horizon, zenith, nadir, and roll.
+      See [GYROSCOPE-AUDIT.md](GYROSCOPE-AUDIT.md) before modifying it.
 - [ ] Prevent ArkUI panel gestures and buttons from passing through to the
       XComponent star-map touch layer.
 - [ ] Keep a selected/search target inside the actual visible sky region when
