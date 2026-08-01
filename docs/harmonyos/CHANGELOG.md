@@ -1,3 +1,21 @@
+## [2026-08-01] Codex - establish development baseline and verify current HAP
+
+- **Modified files:** `docs/harmonyos/PROJECT-STATUS.md`,
+  `docs/harmonyos/AGENTS.md`, and the tracked HarmonyOS build-project copies
+  of `I18n.ets`, `MainWindowNativeNode.ets`,
+  `StellariumResourceBootstrap.ets`, and `ic_audio.svg`.
+- **Changes:** Defined the current branch policy and priority queue. Synced the
+  tracked build-project copies with their identical canonical files under
+  `harmonyos/ets-source/` so the worktree no longer carries an unexplained
+  multi-thousand-line diff.
+- **Build result:** `assembleHap --no-daemon` completed successfully on 2026-08-01
+  after setting `DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`.
+  ArkTS emitted four existing `NODE` deprecation warnings.
+- **Verification:** Build/package/sign succeeded. Device interaction and
+  gyroscope behavior still require physical-tablet validation.
+- **Notes:** Current development continues only on `develop/harmonyos`.
+  `release/v1.0-offline-candidate` remains a frozen fallback. No remote push
+  has been performed.
 
 ## [2026-07-27] TRAE - 地面透明度FOV联动+compactDrawer修复+果冻Q弹动画
 
