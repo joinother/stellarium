@@ -49,8 +49,7 @@ these files while they are uncommitted.
 - [ ] Reconcile the active ETS changes into one reviewed commit with a clear
       feature list and a successful HAP build.
 - [ ] Establish one repeatable tablet install and log-capture procedure.
-- [ ] Push reviewed commits to `myfork/harmonyos/dev` after explicit user
-      authorization.
+- [x] Push reviewed commits to `myfork/harmonyos/dev` (2026-08-01).
 
 ### P1: Core interaction correctness
 
