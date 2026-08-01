@@ -13,14 +13,17 @@ by maintainers, must start independently from current upstream `master`.
 
 | Branch | Purpose | Rules |
 | --- | --- | --- |
-| `baseline/v1.0.1-tablet-test` | Known tablet-test fallback | Never develop directly. Keep it unchanged. |
-| `release/v1.0-offline-candidate` | Frozen release candidate snapshot | Never develop directly. Tag/build only after verification. |
-| `develop/harmonyos` | Product integration branch | The only shared integration branch for active product work. |
-| `fix/<topic>` | One focused bug or feature | Branch from `develop/harmonyos`; build and test before merging back. |
+| `harmonyos-baseline-v1.0.1-tablet` | Known tablet-test fallback tag | Immutable; never develop directly. |
+| `harmonyos/dev` | Product integration branch | The only shared integration branch for active product work. |
+| `fix/<topic>` | One focused bug or feature | Branch from `harmonyos/dev`; build and test before merging back. |
+| `harmonyos/release/<version>` | Store-submission branch | Create only from a verified `harmonyos/dev` commit. |
 | `upstream/openharmony-bootstrap` | Clean experiment based on official `master` | No product UI, signing, branding, store files, or command bridge. |
 
-Do not merge `develop/harmonyos` into `upstream/openharmony-bootstrap`, and do
+Do not merge `harmonyos/dev` into `upstream/openharmony-bootstrap`, and do
 not merge official `master` into the product port as an ad-hoc conflict fix.
+All older `backup-*`, `recovery/*`, `release/*`, and
+`openharmony-preview-v1` refs are historical only. Do not develop or release
+from them.
 
 ## Current Working Tree
 
@@ -44,7 +47,7 @@ these files while they are uncommitted.
 - [ ] Reconcile the active ETS changes into one reviewed commit with a clear
       feature list and a successful HAP build.
 - [ ] Establish one repeatable tablet install and log-capture procedure.
-- [ ] Push reviewed commits to `myfork/develop/harmonyos` after explicit user
+- [ ] Push reviewed commits to `myfork/harmonyos/dev` after explicit user
       authorization.
 
 ### P1: Core interaction correctness
@@ -71,7 +74,7 @@ these files while they are uncommitted.
 
 ## Change Workflow
 
-1. Create one `fix/<topic>` branch from `develop/harmonyos`.
+1. Create one `fix/<topic>` branch from `harmonyos/dev`.
 2. Change the canonical source under `harmonyos/ets-source/` or the relevant
    native source, not only its copied build output.
 3. Build, install, and record device/simulator verification.

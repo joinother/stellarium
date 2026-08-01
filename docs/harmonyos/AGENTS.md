@@ -1,7 +1,7 @@
 # Stellarium HarmonyOS 移植 — Agent 协作工作流
 
 > **最后更新：2026-08-01**
-> **当前开发分支：** `develop/harmonyos`
+> **当前开发分支：** `harmonyos/dev`
 > **当前状态：** 产品仍在开发中，不能作为官方上游 PR 或最终上架包。开始任何工作前，先阅读 [PROJECT-STATUS.md](PROJECT-STATUS.md) 以确认分支、未提交工作和优先级。
 
 ---
@@ -66,11 +66,11 @@ docs/harmonyos/
 │   ├── ets-source/            ← ArkUI/ETS 源码
 │   ├── cpp-source/            ← C++ Native 源码
 │   └── *.json5                ← 构建配置
-└── signing/                   ← 签名证书和配置
-    ├── stellarium-app-keypair.p12
-    ├── stellarium-app-cert-chain.cer
-    └── stellarium-ca-release-profile.p7b
 ```
+
+> **签名材料不属于仓库。** `.p12` 私钥库、`.cer` 证书和 `.p7b`
+> Profile 只能保存在仓库外的本机安全位置或 DevEco 的安全配置中。它们不得
+> 出现在 `docs/harmonyos/`、任意 Git 分支、提交、补丁或日志中。
 
 ### 2.3 CHANGELOG.md 格式
 
