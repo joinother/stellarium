@@ -15,6 +15,8 @@ export default class QAbilityStage extends AbilityStage {
   private static appArgs?: Array<string>;
 
   private static setupQtApplicationCalled: boolean = false;
+  private static stageCreateHandled: boolean = false;
+  private static activeStage: QAbilityStage | undefined = undefined;
 
   private static initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): void {
     if (!QAbilityStage.setupQtApplicationCalled) {
@@ -38,14 +40,29 @@ export default class QAbilityStage extends AbilityStage {
     QAbilityStage.initQtAppContextImpl(appContext, QAbility.name);
   }
 
+  public static handleStageCreateAfterPrivacyConsent(): void {
+    if (QAbilityStage.activeStage !== undefined && !QAbilityStage.stageCreateHandled) {
+      QAbilityStage.stageCreateHandled = true;
+      qpa.handleAbilityStageOnCreate(QAbilityStage.activeStage);
+    }
+  }
+
+  public static isQtInitialized(): boolean {
+    return QAbilityStage.setupQtApplicationCalled;
+  }
+
   onCreate(): void {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onCreate()');
-    qpa.handleAbilityStageOnCreate(this);
+    // Qt reads device information while it is initialized. The ability starts Qt
+    // only after the user has explicitly accepted the privacy policy.
+    QAbilityStage.activeStage = this;
   }
 
   onNewProcessRequest(want: Want): string {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: want.parameters: ' + JSON.stringify(want.parameters));
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    if (!QAbilityStage.isQtInitialized()) {
+      return '';
+    }
     let processKey: string = qpa.handleAbilityStageOnNewProcessRequest(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: processKey: "' + processKey + '"');
     return processKey;
@@ -53,7 +70,9 @@ export default class QAbilityStage extends AbilityStage {
 
   onAcceptWant(want: Want): string {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: want.parameters: ' + JSON.stringify(want.parameters));
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    if (!QAbilityStage.isQtInitialized()) {
+      return '';
+    }
     let instanceKey: string = qpa.handleAbilityStageOnAcceptWant(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: instanceKey: "' + instanceKey + '"');
     return instanceKey;
@@ -61,6 +80,8 @@ export default class QAbilityStage extends AbilityStage {
 
   onDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onDestroy()');
-    qpa.handleAbilityStageOnDestroy(this);
+    if (QAbilityStage.isQtInitialized()) {
+      qpa.handleAbilityStageOnDestroy(this);
+    }
   }
 }
