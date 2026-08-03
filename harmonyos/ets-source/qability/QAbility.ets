@@ -8,11 +8,21 @@ import preferences from '@ohos.data.preferences';
 import qpa from 'libqohos.so';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 
+interface PrivacyConsentCallbacks {
+  onAcceptPrivacy: () => Promise<void>
+  onDeclinePrivacy: () => Promise<void>
+}
+
+interface PrivacyConsentStorage {
+  privacyConsentCallbacks: PrivacyConsentCallbacks
+}
+
 export default class QAbility extends UIAbility {
 
   private localStorage: LocalStorage | null = null;
   private static readonly PRIVACY_STORE = 'stellarium_privacy';
   private static readonly PRIVACY_ACCEPTED_KEY = 'accepted_version';
+  private static readonly PRIVACY_POLICY_VERSION = '2026-07-28';
   private initialWant: Want | undefined = undefined;
   private initialLaunchParam: AbilityConstant.LaunchParam | undefined = undefined;
   private initialWindowStage: Window.WindowStage | undefined = undefined;
@@ -41,12 +51,12 @@ export default class QAbility extends UIAbility {
 
   private async hasAcceptedPrivacyPolicy(): Promise<boolean> {
     const store = await preferences.getPreferences(this.context, QAbility.PRIVACY_STORE);
-    return store.getSync(QAbility.PRIVACY_ACCEPTED_KEY, '') === '1.0';
+    return store.getSync(QAbility.PRIVACY_ACCEPTED_KEY, '') === QAbility.PRIVACY_POLICY_VERSION;
   }
 
   private async rememberPrivacyAcceptance(): Promise<void> {
     const store = await preferences.getPreferences(this.context, QAbility.PRIVACY_STORE);
-    store.putSync(QAbility.PRIVACY_ACCEPTED_KEY, '1.0');
+    store.putSync(QAbility.PRIVACY_ACCEPTED_KEY, QAbility.PRIVACY_POLICY_VERSION);
     await store.flush();
   }
 
@@ -58,14 +68,19 @@ export default class QAbility extends UIAbility {
     if (this.initialWindowStage === undefined) {
       return;
     }
-    this.localStorage = new LocalStorage({
-      privacyConsentCallbacks: {
-        onAcceptPrivacy: async (): Promise<void> => {
-          await this.rememberPrivacyAcceptance();
-          this.startQtAfterPrivacyConsent();
-        }
+    const callbacks: PrivacyConsentCallbacks = {
+      onAcceptPrivacy: async (): Promise<void> => {
+        await this.rememberPrivacyAcceptance();
+        this.startQtAfterPrivacyConsent();
+      },
+      onDeclinePrivacy: async (): Promise<void> => {
+        await this.context.terminateSelf();
       }
-    });
+    }
+    const storageData: PrivacyConsentStorage = {
+      privacyConsentCallbacks: callbacks
+    }
+    this.localStorage = new LocalStorage(storageData);
     await this.initialWindowStage.loadContent('pages/PrivacyConsent', this.localStorage);
   }
 

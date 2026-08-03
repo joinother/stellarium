@@ -18,6 +18,15 @@ interface CityPreset {
   alt: number
 }
 
+// The visual shells differ between phone, tablet and fold states, but the
+// sky must always reason about their occupied geometry in exactly one way.
+interface UiOcclusionRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 // 时间轴刻度：value=偏移天数（-365~+365），major=主刻度
 interface TimeTick {
   label: string
@@ -2492,16 +2501,46 @@ private loadPlanetPositions(): void {
     this.searchObject(suggestion.en)
   }
 
-  // Keep constellation navigation clear and light: labels and lines, no global boundaries.
+  // Constellations are not consistently searchable by their English display
+  // names in every sky culture. IAU abbreviations are stable native keys and
+  // retain the constellation object type, so native navigation frames the
+  // complete pattern rather than a single member star.
   private openConstellationGuide(name: string): void {
-    this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
+    const abbreviationByConstellation: Record<string, string> = {
+      'Orion': 'ORI',
+      'Ursa Major': 'UMA',
+      'Cassiopeia': 'CAS',
+      'Scorpius': 'SCO',
+      'Leo': 'LEO',
+      'Gemini': 'GEM',
+      'Taurus': 'TAU',
+      'Cygnus': 'CYG',
+      'Lyra': 'LYR',
+      'Aquila': 'AQL',
+      'Sagittarius': 'SGR',
+      'Virgo': 'VIR',
+      'Canis Major': 'CMA',
+      'Andromeda': 'AND',
+      'Pegasus': 'PEG'
+    }
+    const constellationKey = abbreviationByConstellation[name] || name
+    this.flashHint('已开启星座名称、连线和图像，正在定位' + this.zhNameOf(name))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false
       this.callInteractive('setActionChecked', 'actionShow_Constellation_Lines|1', () => {
         this.constellationLines = true
         this.callInteractive('setActionChecked', 'actionShow_Constellation_Labels|1', () => {
           this.constellationLabels = true
-          this.searchObject(name)
+          this.callInteractive('setActionChecked', 'actionShow_Constellation_Art|1', () => {
+            this.constellationArt = true
+            this.callInteractive('searchObject', constellationKey, (result) => {
+              if (result.found !== true) {
+                this.flashHint('暂时无法定位' + this.zhNameOf(name))
+              } else {
+                this.applySelectedObject(result)
+              }
+            })
+          })
         })
       })
     })
@@ -2509,6 +2548,31 @@ private loadPlanetPositions(): void {
 
   private loadCategoryObjects(category: string): void {
     this.searchCategory = category
+    // StarMgr's broad list is intentionally display-oriented and includes
+    // designations such as "21 Tau". Those labels are not guaranteed lookup
+    // keys in every packaged catalogue. Keep the browse strip useful by
+    // presenting well-known stars whose standard names are stable searches;
+    // typed suggestions retain their engine-provided HIP keys.
+    if (category === 'star') {
+      this.categoryObjects = [
+        { name: 'Sirius', zh: '天狼星' },
+        { name: 'Canopus', zh: '老人星' },
+        { name: 'Arcturus', zh: '大角星' },
+        { name: 'Vega', zh: '织女星' },
+        { name: 'Capella', zh: '五车二' },
+        { name: 'Rigel', zh: '参宿七' },
+        { name: 'Procyon', zh: '南河三' },
+        { name: 'Betelgeuse', zh: '参宿四' },
+        { name: 'Altair', zh: '牛郎星' },
+        { name: 'Aldebaran', zh: '毕宿五' },
+        { name: 'Spica', zh: '角宿一' },
+        { name: 'Antares', zh: '心宿二' },
+        { name: 'Pollux', zh: '北河三' },
+        { name: 'Fomalhaut', zh: '北落师门' },
+        { name: 'Polaris', zh: '北极星' }
+      ] as NameItem[]
+      return
+    }
     const moduleIdMap: Record<string, string> = {
       'planet': 'SolarSystem:planet',
       'moon': 'SolarSystem:moon',
@@ -3981,11 +4045,11 @@ private loadPlanetPositions(): void {
   }
 
   private placeSelectedObjectInSafeArea(mode: string = 'focus'): void {
-    if (this.isExpandedLayout) {
-      this.placeSelectedObjectInExpandedSafeArea(mode)
-    } else {
-      this.placeSelectedObjectInCompactSafeArea(mode)
+    if ((!this.panelVisible && !this.drawerOpen && !this.infoWinVisible) || this.selectedStatus !== 'Selected') {
+      return
     }
+    const target = this.safeSkyTargetPoint()
+    this.navigateSelectedObjectTo(target[0], target[1], mode)
   }
 
   // UI placement is not static: panels can open, close, snap between 6/10
@@ -4009,38 +4073,7 @@ private loadPlanetPositions(): void {
   }
 
   private compactSafeTargetPoint(): number[] {
-    // Phone inspectors deliberately live at the top, not at the bottom.
-    // Calculate the vertical gap from their real rendered bounds so a locked
-    // target never lands inside either the inspector, the bottom dock, or an
-    // open sheet. The centre x is clear of the left zoom controls and the
-    // right quick controls.
-    let top = 38
-    let bottom = this.skyHeight - 100 // compact bottom dock plus breathing room
-
-    // Compact panels replace the detailed object card. Reserving the hidden
-    // card's area made a 9/10 sheet calculate a target underneath itself.
-    if (this.infoWinVisible && !this.panelVisible && !this.drawerOpen) {
-      if (this.isPhoneDetailPeek()) {
-        top = Math.max(top, this.compactObjectPeekY() + 72 + 28)
-      } else {
-        top = Math.max(top, this.bottomCardY() + this.bottomCardHeight() + 28)
-      }
-    }
-    let sheetTop = -1
-    if (this.panelVisible || this.drawerOpen) {
-      sheetTop = this.skyHeight - 90 - this.compactPanelHeight()
-      bottom = Math.min(bottom, sheetTop - 32)
-    }
-
-    // On very short screens, preserve a reachable sky target even when the
-    // detail card and a 9/10 sheet leave no conventional vertical gap.
-    if (bottom - top < 96) {
-      bottom = Math.max(bottom, top + 96)
-    }
-    const targetY = this.clamp((top + bottom) / 2, top + 20, bottom - 20)
-    hilog.info(0x0000, 'StellariumArkUI', 'compact-safe h=%{public}d usable=%{public}d snap=%{public}s drag=%{public}s sheetTop=%{public}d top=%{public}d bottom=%{public}d targetY=%{public}d',
-      Math.round(this.skyHeight), Math.round(this.compactPanelUsableHeight()), this.compactPanelSnapRatio.toString(), this.compactPanelDragOffsetY.toString(), Math.round(sheetTop), Math.round(top), Math.round(bottom), Math.round(targetY))
-    return [this.skyWidth / 2, targetY]
+    return this.safeSkyTargetPoint()
   }
 
   private placeSelectedObjectInCompactSafeArea(mode: string = 'focus'): void {
@@ -4052,20 +4085,7 @@ private loadPlanetPositions(): void {
   }
 
   private expandedSafeTargetPoint(): number[] {
-    const left = this.EDGE_MARGIN + 64
-    const right = this.panelVisible ? this.expandedMainPanelLeft() - 18
-      : (this.infoWinVisible ? this.bottomCardX() - 18 : this.skyWidth - this.EDGE_MARGIN)
-    let top = this.EDGE_MARGIN + 24
-    // With both cards open, the only generous uninterrupted sky region is
-    // below the compact object summary and to the left of the main panel.
-    if (this.panelVisible && this.infoWinVisible && this.useExpandedDetailSummary()) {
-      top = this.expandedDetailSummaryY() + this.expandedDetailSummaryHeight() + 28
-    }
-    const bottom = this.skyHeight - this.EDGE_MARGIN
-    if (right - left < 120 || bottom - top < 120) {
-      return [this.skyWidth / 2, this.skyHeight / 2]
-    }
-    return [(left + right) / 2, (top + bottom) / 2]
+    return this.safeSkyTargetPoint()
   }
 
   private easeSelectedObjectTo(x: number, y: number): void {
@@ -4277,6 +4297,10 @@ private loadPlanetPositions(): void {
         // target and opens its card, but never starts a safe-area fly-to.
         if (!this.gyroscopeEnabled && (this.panelVisible || this.infoWinVisible)) {
           this.placeSelectedObjectInSafeArea()
+          // ArkUI inserts the inspector after this bridge callback. Re-run
+          // placement once its final bounds exist, so freeform windows do not
+          // retain the old visual centre after selecting a new object.
+          this.scheduleSelectedObjectForUiChange(300)
         }
       }
       this.updateGyroTargetGuide(true)
@@ -5532,6 +5556,147 @@ private loadPlanetPositions(): void {
     return this.EDGE_MARGIN + this.panelOffsetY
   }
 
+  // Every visual shell reports its own chrome here. Hit-testing, selected
+  // object placement and edge guides then consume the same geometry instead
+  // of maintaining subtly different phone/tablet coordinate formulas.
+  private uiOcclusionRects(safePadding: number = 0): UiOcclusionRect[] {
+    const rects: UiOcclusionRect[] = []
+    const add = (left: number, top: number, width: number, height: number): void => {
+      const padding = Math.max(0, safePadding)
+      const l = this.clamp(left - padding, 0, this.skyWidth)
+      const t = this.clamp(top - padding, 0, this.skyHeight)
+      const r = this.clamp(left + width + padding, 0, this.skyWidth)
+      const b = this.clamp(top + height + padding, 0, this.skyHeight)
+      if (r > l && b > t) {
+        rects.push({ left: l, top: t, right: r, bottom: b })
+      }
+    }
+
+    if (this.isFoldHoverLayout) {
+      // The lower observatory console is not sky at all in hover mode.
+      add(0, this.hoverConsoleTop(), this.skyWidth, this.skyHeight - this.hoverConsoleTop())
+      return rects
+    }
+
+    if (this.isExpandedLayout) {
+      add(this.EDGE_MARGIN + 64, this.EDGE_MARGIN, 300, 44)
+      if (this.railCollapsed && !this.railPinned) {
+        add(this.EDGE_MARGIN, this.railTop() + this.railHeight() / 2, 26, 56)
+      } else {
+        add(this.EDGE_MARGIN, this.railTop(), 58, this.railHeight())
+      }
+      if (this.drawerOpen) {
+        add(this.drawerLeft(), this.railTop(), this.drawerWidth(), this.drawerActions.length * 46 + 58)
+      } else {
+        add(this.expandedZoomX(), this.expandedZoomInY(), 44, 44)
+        add(this.expandedZoomX(), this.expandedZoomOutY(), 44, 44)
+      }
+      if (this.panelVisible) {
+        add(this.panelLeft(), this.panelTop(), this.panelWidth, this.panelMaxHeight)
+      }
+      if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
+        add(this.EDGE_MARGIN + 64, this.railTop() + 120, 280, 300)
+      }
+      if (this.infoWinVisible && this.selectedName.length > 0 && !this.drawerOpen) {
+        if (this.useExpandedDetailSummary() && this.canShowExpandedDetailSummary()) {
+          add(this.expandedDetailSummaryX(), this.expandedDetailSummaryY(), this.expandedDetailSummaryWidth(), this.expandedDetailSummaryHeight())
+        } else {
+          add(this.bottomCardX(), this.bottomCardY(), this.bottomCardWidth(), this.bottomCardHitHeight())
+        }
+      }
+      return rects
+    }
+
+    if (this.shouldShowCompactTopQuickControls()) {
+      add(this.compactTopQuickX(), this.compactTopQuickY(), 44, 98)
+    }
+    if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
+      add(16, 80, 280, 300)
+    }
+    if (this.panelVisible || this.drawerOpen) {
+      const panelHeight = this.compactPanelHeight()
+      const panelWidth = this.isFoldHoverLayout ? this.skyWidth * 0.72 : this.skyWidth * 0.94
+      add((this.skyWidth - panelWidth) / 2, this.skyHeight - 90 - panelHeight, panelWidth, panelHeight)
+    }
+    if (!this.drawerOpen && !this.panelVisible && this.infoWinVisible && this.selectedName.length > 0) {
+      if (this.isPhoneDetailPeek()) {
+        add(this.compactObjectPeekX(), this.compactObjectPeekY(), this.compactObjectPeekWidth(), 64)
+      } else {
+        add(this.bottomCardX(), this.bottomCardY(), this.bottomCardWidth(), this.bottomCardHitHeight())
+      }
+    }
+    // The dock is mounted independently of the panel, so it must reserve
+    // space even while the panel animation is still settling.
+    add(0, this.skyHeight - 80, this.skyWidth, 80)
+    return rects
+  }
+
+  private isInsideUiOcclusion(x: number, y: number): boolean {
+    const rects = this.uiOcclusionRects()
+    for (let i = 0; i < rects.length; i++) {
+      const rect = rects[i]
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // Find the largest unobstructed rectangle, with a small preference for the
+  // visual centre. This works the same for a phone sheet, a tablet side panel
+  // and a resizable freeform window without assuming any fixed orientation.
+  private safeSkyTargetPoint(): number[] {
+    const inset = 16
+    const safeRects = this.uiOcclusionRects(18)
+    const xs: number[] = [inset, Math.max(inset, this.skyWidth - inset)]
+    const ys: number[] = [inset, Math.max(inset, this.skyHeight - inset)]
+    for (let i = 0; i < safeRects.length; i++) {
+      const rect = safeRects[i]
+      if (xs.indexOf(rect.left) < 0) { xs.push(rect.left) }
+      if (xs.indexOf(rect.right) < 0) { xs.push(rect.right) }
+      if (ys.indexOf(rect.top) < 0) { ys.push(rect.top) }
+      if (ys.indexOf(rect.bottom) < 0) { ys.push(rect.bottom) }
+    }
+    xs.sort((a: number, b: number) => a - b)
+    ys.sort((a: number, b: number) => a - b)
+
+    let best: UiOcclusionRect | undefined = undefined
+    let bestScore = -1
+    const centerX = this.skyWidth / 2
+    const centerY = this.skyHeight / 2
+    for (let lx = 0; lx < xs.length - 1; lx++) {
+      for (let rx = lx + 1; rx < xs.length; rx++) {
+        for (let ty = 0; ty < ys.length - 1; ty++) {
+          for (let by = ty + 1; by < ys.length; by++) {
+            const candidate: UiOcclusionRect = { left: xs[lx], top: ys[ty], right: xs[rx], bottom: ys[by] }
+            const width = candidate.right - candidate.left
+            const height = candidate.bottom - candidate.top
+            if (width < 72 || height < 72) { continue }
+            let intersects = false
+            for (let i = 0; i < safeRects.length; i++) {
+              const rect = safeRects[i]
+              if (!(candidate.right <= rect.left || candidate.left >= rect.right || candidate.bottom <= rect.top || candidate.top >= rect.bottom)) {
+                intersects = true
+                break
+              }
+            }
+            if (intersects) { continue }
+            const distance = Math.abs((candidate.left + candidate.right) / 2 - centerX) + Math.abs((candidate.top + candidate.bottom) / 2 - centerY)
+            const score = width * height - distance * 48
+            if (score > bestScore) {
+              bestScore = score
+              best = candidate
+            }
+          }
+        }
+      }
+    }
+    if (!best) {
+      return [centerX, centerY]
+    }
+    return [(best.left + best.right) / 2, (best.top + best.bottom) / 2]
+  }
+
   private railTop(): number {
     // Rail always starts near top of screen with a safe edge margin
     return this.EDGE_MARGIN
@@ -5606,6 +5771,12 @@ private loadPlanetPositions(): void {
   }
 
   private isUiPoint(x: number, y: number): boolean {
+    // Do this before the legacy per-control checks. The same visible bounds
+    // are used by safeSkyTargetPoint(), so a panel can neither cover a target
+    // nor leak a touch through to the Qt sky surface.
+    if (this.isInsideUiOcclusion(x, y)) {
+      return true
+    }
     // 顶部搜索栏：点击区域不穿透到星图
     if (this.isExpandedLayout) {
       const sbX = this.EDGE_MARGIN + 64
@@ -6128,8 +6299,17 @@ private loadPlanetPositions(): void {
       // Panel drag handling
       if (this.panelDragging) {
         this.touchStartedOnUi = false
-        this.panelOffsetX = this.panelDragStartOffsetX + (x - this.panelDragStartX)
-        this.panelOffsetY = this.panelDragStartOffsetY + (y - this.panelDragStartY)
+        const nextX = this.panelDragStartOffsetX + (x - this.panelDragStartX)
+        const nextY = this.panelDragStartOffsetY + (y - this.panelDragStartY)
+        // Keep the draggable tablet panel in the band to the right of the
+        // rail. A freeform window must never allow it to sit on the rail or
+        // leave an invisible hit target outside the visible window.
+        const baseLeft = this.skyWidth - this.panelWidth - this.EDGE_MARGIN
+        const minimumLeft = this.EDGE_MARGIN + 58 + 18
+        const minimumOffsetX = Math.min(0, minimumLeft - baseLeft)
+        const maximumOffsetY = Math.max(0, this.skyHeight - this.EDGE_MARGIN - this.panelMaxHeight - this.EDGE_MARGIN)
+        this.panelOffsetX = this.clamp(nextX, minimumOffsetX, 0)
+        this.panelOffsetY = this.clamp(nextY, 0, maximumOffsetY)
         return
       }
 
@@ -6685,7 +6865,7 @@ private loadPlanetPositions(): void {
         .zIndex(1)
 
       // 手机端右上角常驻快捷区：陀螺仪 + 音频（与平板左侧栏入口一致）
-      if (!this.drawerOpen) {
+      if (this.shouldShowCompactTopQuickControls()) {
         Stack() { this.compactTopQuickControls() }
           .position({ x: this.compactTopQuickX(), y: this.compactTopQuickY() })
           .hitTestBehavior(HitTestMode.Block)
@@ -6839,6 +7019,30 @@ private loadPlanetPositions(): void {
       .animation({ duration: 420, curve: Curve.EaseOut })
   }
 
+  // A freeform tablet window can be much narrower than a phone. Keeping a
+  // permanent vertical quick bar there leaves no usable width for a selected
+  // object's data, so the same actions remain available from More instead.
+  private isConstrainedCompactWindow(): boolean {
+    return !this.isExpandedLayout && !this.isFoldHoverLayout &&
+      (this.skyWidth < 440 || this.skyHeight < 560)
+  }
+
+  private shouldShowCompactTopQuickControls(): boolean {
+    return !this.drawerOpen && !this.isConstrainedCompactWindow()
+  }
+
+  // One source of truth for the compact inspector and the selected-object
+  // safe area. When quick controls are visible, reserve their entire column.
+  private compactDetailHorizontalBounds(): number[] {
+    const margin = this.skyWidth < 360 ? 12 : 16
+    const left = margin
+    let right = this.skyWidth - margin
+    if (this.shouldShowCompactTopQuickControls()) {
+      right = Math.min(right, this.compactTopQuickX() - 12)
+    }
+    return [left, Math.max(left + 80, right)]
+  }
+
   /** 手机端右上快捷区左上角坐标（与顶部搜索栏同高，靠右缘） */
   private compactTopQuickX(): number {
     return this.skyWidth - 18 - 44
@@ -6849,14 +7053,14 @@ private loadPlanetPositions(): void {
   }
 
   private isCompactTopQuickPoint(x: number, y: number): boolean {
-    if (this.isExpandedLayout) { return false }
+    if (!this.shouldShowCompactTopQuickControls()) { return false }
     const qx = this.compactTopQuickX()
     const qy = this.compactTopQuickY()
     return x >= qx - 8 && x <= qx + 52 && y >= qy - 8 && y <= qy + 108
   }
 
   private compactQuickIdAt(x: number, y: number): string {
-    if (this.isExpandedLayout || this.drawerOpen) { return '' }
+    if (!this.shouldShowCompactTopQuickControls()) { return '' }
     const qx = this.compactTopQuickX()
     const qy = this.compactTopQuickY()
     if (x < qx || x > qx + 44) { return '' }
@@ -6869,7 +7073,7 @@ private loadPlanetPositions(): void {
   // Route these two high-frequency controls through the same coordinate path
   // as the tablet rail so their visual and touch regions always agree.
   private handleCompactTopQuickTap(x: number, y: number): boolean {
-    if (this.isExpandedLayout || this.drawerOpen || !this.isCompactTopQuickPoint(x, y)) {
+    if (!this.shouldShowCompactTopQuickControls() || !this.isCompactTopQuickPoint(x, y)) {
       return false
     }
     const quickId = this.compactQuickIdAt(x, y)
@@ -7020,7 +7224,10 @@ private loadPlanetPositions(): void {
   }
 
   private bottomCardX(): number {
-    if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return 16 }
+    if (!this.isExpandedLayout && !this.isFoldHoverLayout) {
+      const bounds = this.compactDetailHorizontalBounds()
+      return bounds[0] + Math.max(0, (bounds[1] - bounds[0] - this.bottomCardWidth()) / 2)
+    }
     if (!this.isExpandedLayout) { return Math.max(24, (this.skyWidth - this.bottomCardWidth()) / 2) }
     // Search recenters a target. Keep the tablet inspector on the far edge so
     // its rich data never sits over that visual centre. When another main
@@ -7040,12 +7247,18 @@ private loadPlanetPositions(): void {
     // upper safe area, leaving the lower half of the sky visible for the lock
     // marker and for direct sky interaction.
     if (this.isExpandedLayout) { return Math.max(this.EDGE_MARGIN + 76, 92) }
+    if (this.isConstrainedCompactWindow()) {
+      return Math.max(16, Math.min(48, this.skyHeight * 0.08))
+    }
     return Math.max(86, Math.min(126, this.skyHeight * 0.12))
   }
 
   private bottomCardWidth(): number {
     // 手机详情卡保持左右对称留白，避免视觉上贴住右侧边框。
-    if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return Math.min(380, Math.max(286, this.skyWidth - 58)) }
+    if (!this.isExpandedLayout && !this.isFoldHoverLayout) {
+      const bounds = this.compactDetailHorizontalBounds()
+      return Math.max(120, Math.min(380, bounds[1] - bounds[0]))
+    }
     if (!this.isExpandedLayout) { return Math.min(318, Math.max(280, this.skyWidth - 52)) }
     if (this.panelVisible) {
       return Math.min(420, Math.max(360, this.expandedDetailAvailableWidth()))
@@ -7055,7 +7268,12 @@ private loadPlanetPositions(): void {
   }
 
   private bottomCardHeight(): number {
-    return this.isExpandedLayout ? 340 : (this.isFoldHoverLayout ? 318 : 292)
+    if (this.isExpandedLayout) { return 340 }
+    if (this.isFoldHoverLayout) { return 318 }
+    // In a freeform window keep the dock reachable and let the card body
+    // scroll, rather than drawing past the lower edge.
+    const available = this.skyHeight - this.bottomCardY() - 96
+    return Math.max(180, Math.min(292, available))
   }
 
   private bottomCardSwiperHeight(): number {
@@ -7134,19 +7352,17 @@ private loadPlanetPositions(): void {
   private compactObjectPeekWidth(): number {
     // Keep the selected-object peek entirely clear of the right-side gyro and
     // audio controls.  On narrow phones the old 250vp minimum overlapped them.
-    const quickLeft = this.compactTopQuickX()
-    return Math.min(Math.max(210, quickLeft - 34), 320)
+    const bounds = this.compactDetailHorizontalBounds()
+    return Math.max(140, Math.min(320, bounds[1] - bounds[0]))
   }
 
   private compactObjectPeekX(): number {
-    const quickLeft = this.compactTopQuickX()
-    const rightBound = quickLeft - 14
-    const centered = (this.skyWidth - this.compactObjectPeekWidth()) / 2
-    return Math.max(16, Math.min(centered, rightBound - this.compactObjectPeekWidth()))
+    const bounds = this.compactDetailHorizontalBounds()
+    return bounds[0] + Math.max(0, (bounds[1] - bounds[0] - this.compactObjectPeekWidth()) / 2)
   }
 
   private compactObjectPeekY(): number {
-    return 92
+    return this.isConstrainedCompactWindow() ? 16 : 92
   }
 
   private dismissObjectInspector(): void {
@@ -7174,6 +7390,11 @@ private loadPlanetPositions(): void {
   private compactPanelUsableHeight(): number {
     if (this.isFoldHoverLayout) {
       return Math.max(Math.min(this.skyHeight * 0.46, 520), 320)
+    }
+    if (this.isConstrainedCompactWindow()) {
+      // Freeform windows do not have a phone-sized bottom area to spare.
+      // Use their actual viewport and keep the remaining content scrollable.
+      return Math.max(this.skyHeight - 180, 180)
     }
     return Math.max(this.skyHeight - 318, 320)
   }
@@ -7330,14 +7551,27 @@ private loadPlanetPositions(): void {
       }
         .width('100%').padding({ left: 16, right: 16, top: 3, bottom: 7 })
 
-      Row() {
-        Text('实时高度 / 方位').fontSize(10).fontColor('#8FBBD6').width(72)
-        Text(this.selectedCoordAlt.length > 0 ? this.selectedCoordAlt : '--')
-          .fontSize(11).fontColor('#E2F5FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(this.selectedCoordAlt.length > 0 ? '已定位' : '等待定位')
-          .fontSize(10).fontColor('#BDE8FF').margin({ left: 8 })
+      if (this.isConstrainedCompactWindow()) {
+        Column({ space: 2 }) {
+          Row() {
+            Text('实时高度 / 方位').fontSize(10).fontColor('#8FBBD6').layoutWeight(1)
+            Text(this.selectedCoordAlt.length > 0 ? '已定位' : '等待定位')
+              .fontSize(10).fontColor('#BDE8FF')
+          }.width('100%')
+          Text(this.selectedCoordAlt.length > 0 ? this.selectedCoordAlt : '--')
+            .fontSize(11).fontColor('#E2F5FF').width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+          .height(40).width('100%').padding({ left: 16, right: 16, bottom: 4 })
+      } else {
+        Row() {
+          Text('实时高度 / 方位').fontSize(10).fontColor('#8FBBD6').width(72)
+          Text(this.selectedCoordAlt.length > 0 ? this.selectedCoordAlt : '--')
+            .fontSize(11).fontColor('#E2F5FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(this.selectedCoordAlt.length > 0 ? '已定位' : '等待定位')
+            .fontSize(10).fontColor('#BDE8FF').margin({ left: 8 })
+        }
+          .height(24).width('100%').padding({ left: 16, right: 16, bottom: 4 })
       }
-        .height(24).width('100%').padding({ left: 16, right: 16, bottom: 4 })
 
       Row({ space: 4 }) {
         this.objectDetailTab('观测', 0)
@@ -7458,9 +7692,9 @@ private loadPlanetPositions(): void {
     }
     .width(this.bottomCardWidth())
     .height(this.bottomCardHeight())
-    .backgroundColor('rgba(12, 16, 28, 0.72)')
-    .backdropBlur(28)
-    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+    .backgroundColor('rgba(10, 14, 26, 0.58)')
+    .backdropBlur(36)
+    .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.14)' })
     .borderRadius(16)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
