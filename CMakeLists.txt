@@ -434,10 +434,21 @@ SET(ENABLE_SPEECH 1 CACHE BOOL "Define whether speech output should be activated
 # Activate QtWebEngine support
 SET(ENABLE_QTWEBENGINE 1 CACHE BOOL "Define whether QtWebEngine module should be supported if it installed.")
 
+# Activate Qt Positioning support. It is not currently available in Qt for OHOS.
+IF(STELLARIUM_PLATFORM_OHOS)
+     SET(ENABLE_QT_POSITIONING 0 CACHE BOOL "Define whether OS location services through Qt Positioning should be supported.")
+ELSE()
+     SET(ENABLE_QT_POSITIONING 1 CACHE BOOL "Define whether OS location services through Qt Positioning should be supported.")
+ENDIF()
+
 # Activate GPS support. Solution depends on operating system:
 # - Windows: Only directly-attached serial NMEA emitter.
 # - Other systems: libgps if possible and NMEA emitter as fallback.
 SET(ENABLE_GPS 1 CACHE BOOL "Define whether GPS queries should be supported.")
+IF(ENABLE_GPS AND NOT ENABLE_QT_POSITIONING)
+     MESSAGE(STATUS "GPS: disabled because Qt Positioning is unavailable.")
+     SET(ENABLE_GPS 0 CACHE BOOL "Define whether GPS queries should be supported." FORCE)
+ENDIF()
 
 # Activate support for ShowMySky atmosphere
 SET(ENABLE_SHOWMYSKY 1 CACHE BOOL "Define whether to support ShowMySky atmosphere model if installed")
@@ -629,7 +640,12 @@ ELSE()
      MESSAGE(STATUS "Found Qt${QT_VERSION_MAJOR}: ${QMAKE_LOCATION} (found suitable version ${QT_VERSION})")
 ENDIF()
 
-FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts Positioning REQUIRED)
+SET(STELLARIUM_QT_COMPONENTS Concurrent Gui Network Widgets Charts)
+IF(ENABLE_QT_POSITIONING)
+     LIST(APPEND STELLARIUM_QT_COMPONENTS Positioning)
+     ADD_DEFINITIONS(-DENABLE_QT_POSITIONING)
+ENDIF()
+FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS ${STELLARIUM_QT_COMPONENTS} REQUIRED)
 IF(Qt6_FOUND)
      FIND_PACKAGE(Qt6 COMPONENTS SvgWidgets REQUIRED)
      # Qt 6.10 split off FooPrivate from Foo.

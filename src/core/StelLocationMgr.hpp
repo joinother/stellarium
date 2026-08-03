@@ -25,7 +25,12 @@
 #include <QMetaType>
 #include <QMap>
 #include <QImage>
+#ifdef ENABLE_QT_POSITIONING
 #include <QtPositioning/QGeoPositionInfoSource>
+#else
+class QGeoPositionInfo;
+class QGeoPositionInfoSource;
+#endif
 #include <QLoggingCategory>
 #include "VecMath.hpp"
 
@@ -196,10 +201,12 @@ private slots:
 	void positionUpdated(QGeoPositionInfo gpsPos);
 	//#endif
 #endif
+#ifdef ENABLE_QT_POSITIONING
 	/// MAYBE NOT NEEDED AFTER ALL:
 	//! Use QLocation services to get location from OS (via IP, Wifi, ...)
 	//! Needs permissions.
 	void positionUpdatedFromOS(const QGeoPositionInfo &info);
+#endif
 
 private:
 	void loadRegions();

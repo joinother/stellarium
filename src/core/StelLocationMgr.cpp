@@ -496,6 +496,7 @@ StelLocationMgr::StelLocationMgr()
 	planetSurfaceMap=QImage(":/graphicGui/miscWorldMap.jpg");
 	connect(StelApp::getInstance().getCore(), &StelCore::locationChanged, this, &StelLocationMgr::changePlanetMapForLocation);
 
+#ifdef ENABLE_QT_POSITIONING
 	// configure the QGeoPositionInfoSource which can be queried from OS
 	qGeoPositionInfoSource = QGeoPositionInfoSource::createDefaultSource(this);
 	if (qGeoPositionInfoSource && (qGeoPositionInfoSource->supportedPositioningMethods() & QGeoPositionInfoSource::AllPositioningMethods))
@@ -506,10 +507,12 @@ StelLocationMgr::StelLocationMgr()
 		delete qGeoPositionInfoSource;
 		qGeoPositionInfoSource=nullptr;
 	}
+#endif
 }
 
 StelLocationMgr::~StelLocationMgr()
 {
+#ifdef ENABLE_GPS
 	if (nmeaHelper)
 	{
 		delete nmeaHelper;
@@ -520,16 +523,21 @@ StelLocationMgr::~StelLocationMgr()
 		delete libGpsHelper;
 		libGpsHelper=nullptr;
 	}
+#endif
+#ifdef ENABLE_QT_POSITIONING
 	if (qGeoPositionInfoSource)
 	{
 		delete qGeoPositionInfoSource;
 		qGeoPositionInfoSource=nullptr;
 	}
+#endif
+#ifdef ENABLE_GPS
 	if (positionSource)
 	{
 		delete positionSource;
 		positionSource=nullptr;
 	}
+#endif
 }
 
 StelLocationMgr::StelLocationMgr(const LocationList &locations)
@@ -944,6 +952,7 @@ bool StelLocationMgr::deleteUserLocation(const QString& id)
 void StelLocationMgr::locationFromIP()
 {
 	// TODO: Find out how to properly setup geoclue2 on Linux, then reactivate.
+#ifdef ENABLE_QT_POSITIONING
 #ifdef Q_OS_WIN
 #if (QT_VERSION>=QT_VERSION_CHECK(6,6,0))
 	QLocationPermission locationPermission;
@@ -996,8 +1005,19 @@ void StelLocationMgr::locationFromIP()
 });
 #endif
 #endif
+#else
+	qCDebug(LocIP) << "Qt Positioning is unavailable, doing freegeoIP service lookup for location";
+
+	QSettings* conf = StelApp::getInstance().getSettings();
+	QNetworkRequest req( QUrl( conf->value("main/geoip_api_url", "https://freegeoip.stellarium.org/json/").toString() ) );
+	req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::PreferCache);
+	req.setRawHeader("User-Agent", StelUtils::getUserAgentString().toLatin1());
+	QNetworkReply* networkReply=StelApp::getInstance().getNetworkAccessManager()->get(req);
+	connect(networkReply, &QNetworkReply::finished, this, &StelLocationMgr::changeLocationFromNetworkLookup);
+#endif
 }
 
+#ifdef ENABLE_QT_POSITIONING
 // Private slot that is called when position info arrives
 void StelLocationMgr::positionUpdatedFromOS(const QGeoPositionInfo &info)
 {
@@ -1036,6 +1056,7 @@ void StelLocationMgr::positionUpdatedFromOS(const QGeoPositionInfo &info)
 	QSettings* conf = StelApp::getInstance().getSettings();
 	conf->setValue("init_location/last_location", QString("%1, %2").arg(QString::number(gCoord.latitude()), QString::number(gCoord.longitude())));
 }
+#endif
 
 #ifdef ENABLE_GPS
 void StelLocationMgr::locationFromGPS(int interval)
