@@ -125,6 +125,7 @@ export class AudioEngine {
   private renderer: audio.AudioRenderer | undefined = undefined
   private running: boolean = false
   private muted: boolean = false
+  private volume: number = 1.0
 
   private scale: number[] = []
   private pads: Pad[] = []
@@ -291,6 +292,10 @@ export class AudioEngine {
     hilog.info(DOMAIN, TAG, 'muted = %{public}s', m ? 'true' : 'false')
   }
 
+  setVolume(volume: number): void {
+    this.volume = Math.max(0, Math.min(1, volume))
+  }
+
   isRunning(): boolean {
     return this.running
   }
@@ -348,6 +353,7 @@ export class AudioEngine {
     const rlen: number = this.revLen
     const rfb: number = this.revFeedback
     const rwet: number = this.revWet
+    const outputVolume: number = this.volume
 
     for (let i = 0; i < n; i++) {
       let mix: number = 0
@@ -477,7 +483,7 @@ export class AudioEngine {
       if (rpos >= rlen) { rpos = 0 }
       const wet: number = ((w1 + w2) * 0.5) * rwet
 
-      let o: number = mix * 0.45 + wet   // 干信号降低，湿信号比例提升
+      let o: number = (mix * 0.45 + wet) * outputVolume
       if (o > 1.0) { o = 1.0 } else if (o < -1.0) { o = -1.0 }
       out[i] = (o * 32767) | 0
     }
