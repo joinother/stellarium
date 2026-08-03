@@ -1709,6 +1709,72 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "focusConstellation")
+		{
+			if (!objectMgr || !movementMgr)
+			{
+				result["error"] = "constellation navigation is not ready";
+				return result;
+			}
+			ConstellationMgr* constellationMgr = GETSTELMODULE(ConstellationMgr);
+			if (!constellationMgr)
+			{
+				result["error"] = "constellation manager not found";
+				return result;
+			}
+
+			const QString name = arg.trimmed();
+			StelObjectP constellation = constellationMgr->searchByName(name);
+			if (!constellation)
+			{
+				// getEnglishName() is the stable key exposed by the native list. Some
+				// sky cultures use another display name, so resolve it explicitly.
+				for (const auto& entry : constellationMgr->listAllObjects(true))
+				{
+					if (entry.first.compare(name, Qt::CaseInsensitive) == 0)
+					{
+						constellation = entry.second;
+						break;
+					}
+				}
+			}
+			if (!constellation)
+			{
+				result["ok"] = true;
+				result["found"] = false;
+				result["query"] = name;
+				return result;
+			}
+
+			// Do not isolate a single constellation: users need the nearby pattern
+			// and its art to understand where the selected constellation sits.
+			constellationMgr->setFlagIsolateSelected(false);
+			constellationMgr->setFlagBoundaries(false);
+			constellationMgr->setFlagLines(true);
+			constellationMgr->setFlagLabels(true);
+			constellationMgr->setFlagArt(true);
+			objectMgr->setSelectedObject(constellation);
+
+			const quint64 serial = ++s_ohosNavigationSerial;
+			movementMgr->setFlagTracking(false);
+			const double currentFov = movementMgr->getCurrentFov();
+			const double targetFov = 45.0;
+			const double transitFov = std::max(targetFov * 1.8, std::max(currentFov, 60.0));
+			if (currentFov + 0.5 < transitFov)
+				movementMgr->zoomTo(transitFov, 0.35f);
+			movementMgr->moveToObject(constellation, 0.62f, StelMovementMgr::ZoomNone);
+			QTimer::singleShot(500, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
+				if (serial == s_ohosNavigationSerial.load())
+					movementMgr->zoomTo(targetFov, 0.72f);
+			});
+			result = selectedObjectJson(core, false);
+			result["ok"] = true;
+			result["found"] = true;
+			result["query"] = name;
+			markOhosInteraction();
+			return result;
+		}
+
 	if (commandName == "listMatchingObjects")
 	{
 		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
@@ -2011,92 +2077,33 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "moveToSelectedAt expects x|y|width|height|[focus|layout]";
 				return result;
 			}
-			// Horizontal viewport offsets translate the projected image directly,
-			// which is ideal for a tablet's side panel. Stellarium deliberately
-			// compensates its vertical offset while tracking an object, though, so
-			// a phone's top card needs an explicit, animated vertical pan below.
+			// The viewport centre is the native way to reserve sky around ArkUI.
+			// Applying both axes before moveToObject keeps the selected body on the
+			// same target point throughout the flight. The previous vertical pan
+			// happened after the auto-move and visibly put targets under a tablet
+			// inspector before correcting them.
 			const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
 			const double horizontalOffset = ((x / width) - 0.5) * 100.0;
-			// Do not estimate the vertical adjustment from field of view. That
-			// approximation is visibly wrong at high zoom and when a phone sheet
-			// changes from 6/10 to 9/10. Measure the selected body's actual
-			// projected position and convert the required screen-pixel delta with
-			// the projector's local pixel-per-radian scale instead.
-			auto verticalPanToTarget = [core, selectedObject, y, height]() {
-				const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
-				if (!prj)
-					return 0.0;
-				const Vec4i viewport = prj->getViewport();
-				const double ppr = static_cast<double>(prj->getPixelPerRadAtCenter());
-				if (viewport[3] <= 1 || ppr <= 1e-9)
-					return 0.0;
-				Vec3d projected;
-				if (!prj->project(selectedObject->getJ2000EquatorialPos(core), projected))
-					return 0.0;
-				const double currentTopY = static_cast<double>(viewport[3] - 1) - projected[1];
-				const double desiredTopY = (y / height) * viewport[3];
-				return (desiredTopY - currentTopY) / ppr;
-			};
-			const double verticalPan = verticalPanToTarget();
+			const double verticalOffset = ((y / height) - 0.5) * 100.0;
 			const bool hasPreviousSafePoint = s_ohosSafeTargetObject == selectedObject->getEnglishName()
 				&& s_ohosSafeTargetHeight > 1.0;
-			const double layoutVerticalPan = hasPreviousSafePoint ? verticalPan : 0.0;
 			qInfo() << "[StellariumOhos][safe-target]" << objectMgr->getSelectedObject().constFirst()->getEnglishName()
 					<< "screen" << x << y << width << height
-					<< "horizontalOffset" << horizontalOffset << "verticalPan" << verticalPan
-					<< "layoutVerticalPan" << layoutVerticalPan << "mode" << mode;
+					<< "horizontalOffset" << horizontalOffset << "verticalOffset" << verticalOffset
+					<< "mode" << mode;
 			const quint64 serial = ++s_ohosNavigationSerial;
-			auto animateVerticalPan = [movementMgr, verticalPanToTarget, serial]() {
-				const double verticalPan = verticalPanToTarget();
-				QTimer* timer = new QTimer(&StelMainView::getInstance());
-				timer->setInterval(16);
-				QObject::connect(timer, &QTimer::timeout, timer, [timer, movementMgr, verticalPanToTarget, verticalPan, serial, step = 0, previous = 0.0]() mutable {
-					if (serial != s_ohosNavigationSerial.load())
-					{
-						timer->stop();
-						timer->deleteLater();
-						return;
-					}
-					++step;
-					const double progress = (1.0 - std::cos(M_PI * qMin(step, 20) / 20.0)) * 0.5;
-					movementMgr->panView(0.0, verticalPan * (progress - previous));
-					markOhosInteraction();
-					previous = progress;
-					if (step >= 20)
-					{
-						timer->stop();
-						timer->deleteLater();
-						// Zoom and move-to-object use separate animations. Correct once
-						// after the main pan finishes from the *actual* projected point,
-						// otherwise the selected body can drift below its safe centre as
-						// the zoom animation settles.
-						QTimer::singleShot(64, &StelMainView::getInstance(), [movementMgr, verticalPanToTarget, serial]() {
-							if (serial != s_ohosNavigationSerial.load())
-								return;
-							const double remainingPan = verticalPanToTarget();
-							if (std::abs(remainingPan) > 1e-5)
-							{
-								movementMgr->panView(0.0, remainingPan);
-								markOhosInteraction();
-							}
-						});
-					}
-				});
-				timer->start();
-			};
-			// A layout transition moves an already positioned target. Re-running
-			// moveToObject() here first snaps it to the ordinary centre. Animate
-			// only the changed projection/vertical distance instead. Do not use
-			// moveViewport(duration): its QTimeLine is not clocked consistently by
-			// the OHOS render pump, producing a visible jump when a side panel closes.
+			// Layout changes retain the selected object and only move the viewport
+			// centre. A fresh focus also moves the camera towards that already
+			// shifted centre, so it never lands at the ordinary screen centre first.
 			if (mode == "layout" && hasPreviousSafePoint)
 			{
 				movementMgr->setFlagTracking(false);
-				const auto animateLayoutShift = [movementMgr, core, horizontalOffset, layoutVerticalPan, serial]() {
+				const auto animateLayoutShift = [movementMgr, core, horizontalOffset, verticalOffset, serial]() {
 					const double startHorizontalOffset = core->getViewportHorizontalOffset();
+					const double startVerticalOffset = core->getViewportVerticalOffset();
 					QTimer* timer = new QTimer(&StelMainView::getInstance());
 					timer->setInterval(16);
-					QObject::connect(timer, &QTimer::timeout, timer, [timer, movementMgr, core, startHorizontalOffset, horizontalOffset, layoutVerticalPan, serial, step = 0, previous = 0.0]() mutable {
+					QObject::connect(timer, &QTimer::timeout, timer, [timer, movementMgr, core, startHorizontalOffset, startVerticalOffset, horizontalOffset, verticalOffset, serial, step = 0]() mutable {
 						if (serial != s_ohosNavigationSerial.load())
 						{
 							timer->stop();
@@ -2106,13 +2113,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						++step;
 						const double progress = (1.0 - std::cos(M_PI * qMin(step, 20) / 20.0)) * 0.5;
 						core->setViewportHorizontalOffset(startHorizontalOffset + (horizontalOffset - startHorizontalOffset) * progress);
-						movementMgr->panView(0.0, layoutVerticalPan * (progress - previous));
+						core->setViewportVerticalOffset(startVerticalOffset + (verticalOffset - startVerticalOffset) * progress);
 						markOhosInteraction();
-						previous = progress;
 						if (step >= 20)
 						{
 							// Keep Stellarium's viewport target in sync for the next layout change.
-							movementMgr->moveViewport(horizontalOffset, 0.0, 0.0f);
+							movementMgr->moveViewport(horizontalOffset, verticalOffset, 0.0f);
 							timer->stop();
 							timer->deleteLater();
 						}
@@ -2124,9 +2130,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else
 			{
 				movementMgr->setFlagTracking(false);
-				movementMgr->moveViewport(horizontalOffset, 0.0, 0.0f);
+				movementMgr->moveViewport(horizontalOffset, verticalOffset, 0.0f);
 				movementMgr->moveToObject(selectedObject, 0.70f, StelMovementMgr::ZoomNone);
-				QTimer::singleShot(690, &StelMainView::getInstance(), animateVerticalPan);
 			}
 			s_ohosSafeTargetObject = selectedObject->getEnglishName();
 			s_ohosSafeTargetY = y;

@@ -241,6 +241,10 @@ struct WindowNativeNode {
   @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
+  @State private categoryLoading: boolean = false
+  @State private categoryError: string = ''
+  @State private detailLiveTick: number = 0
+  @State private detailSupplementExpanded: boolean = false
   @State private selectedType: string = ''
   @State private selectedStatus: string = ''
   @State private selectedInfo: string = ''
@@ -287,8 +291,8 @@ struct WindowNativeNode {
   @State private sessionExportText: string = ''
   @State private sessionImportText: string = ''
   @State private sessionImportMsg: string = ''
-  // 程序化音乐：默认开（打开应用即播放），可静音并持久化
-  @State private musicEnabled: boolean = false
+  // 程序化音乐默认开启；用户明确关闭后才由本地设置覆盖这个默认值。
+  @State private musicEnabled: boolean = true
   @State private fpsDisplay: number = 0
   @State private fpsVisible: boolean = false
   private fpsFrameCount: number = 0
@@ -795,7 +799,7 @@ struct WindowNativeNode {
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]
-  // 手机端抽屉：陀螺仪与音频控制已提到右上角常驻快捷区，此处不再重复列出
+  // 紧凑布局把陀螺仪放进底部常驻区；音频属于低频调节，保留在更多中。
   private readonly compactDrawerActions: ShellAction[] = [
     { label: I18n.t('dock_observe'), icon: 'observe', panel: 'observing' },
     { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
@@ -804,6 +808,7 @@ struct WindowNativeNode {
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
+    { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' }
   ]
   // 全量列表：面板渲染等处仍按老逻辑遍历（顺序 = 固定项 + 抽屉项）
@@ -1055,6 +1060,11 @@ struct WindowNativeNode {
     const explicitlyExpanded = this.foldStatusValue === 1 || this.foldStatusValue === 11 || this.foldDisplayModeValue === 1
     const largeFoldCanvas = this.isFoldableDevice && shortSide >= 620 && aspect <= 1.55
     const tabletCanvas = shortSide >= 700 || (shortSide >= 620 && longSide >= 1000 && aspect <= 1.75)
+    // A tablet in freeform/small-window mode still reports itself as a tablet,
+    // but it no longer has room for the expanded rail plus a side sheet.
+    // Window width, rather than device class, is the authoritative layout
+    // signal so phone and tablet small windows share the compact shell.
+    const narrowWindow = width < 760 || height < 500
     const angle = this.responsiveFoldAngle()
     const prevMode = this.responsiveLayoutMode
     let nextMode = prevMode
@@ -1081,7 +1091,7 @@ struct WindowNativeNode {
           nextMode = 'compact'
         }
       }
-    } else if (!folded && (explicitlyExpanded || largeFoldCanvas || tabletCanvas)) {
+    } else if (!folded && !narrowWindow && (explicitlyExpanded || largeFoldCanvas || tabletCanvas)) {
       nextMode = 'expanded'
     } else {
       nextMode = 'compact'
@@ -1433,6 +1443,24 @@ struct WindowNativeNode {
   // and WITHOUT blocking the render thread. onOk receives the FRESH result.
   private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void): void {
     this.callNativeWhenReady(name, payload, onOk, 0, 100, 15)
+  }
+
+  // Like callInteractive(), but preserves a terminal bridge error. Feature
+  // probing needs this: an older bundled native library returns "unknown
+  // command" for a new command and must immediately use its compatibility
+  // path instead of retrying until the callback disappears.
+  private callInteractiveResult(name: string, payload: string, onResult: (r: StellariumBridgeResponse) => void, attempt: number = 0): void {
+    const result = this.callNative(name, payload)
+    if (result.ok === true) {
+      onResult(result)
+      return
+    }
+    const waiting = result.error === 'pending' || result.error === 'Core not ready'
+    if (!waiting || attempt >= 15) {
+      onResult(result)
+      return
+    }
+    setTimeout(() => this.callInteractiveResult(name, payload, onResult, attempt + 1), 100)
   }
 
   // ===== 星表下载（C++ 桥：getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）=====
@@ -2501,30 +2529,76 @@ private loadPlanetPositions(): void {
     this.searchObject(suggestion.en)
   }
 
-  // Constellations are not consistently searchable by their English display
-  // names in every sky culture. IAU abbreviations are stable native keys and
-  // retain the constellation object type, so native navigation frames the
-  // complete pattern rather than a single member star.
-  private openConstellationGuide(name: string): void {
-    const abbreviationByConstellation: Record<string, string> = {
-      'Orion': 'ORI',
-      'Ursa Major': 'UMA',
-      'Cassiopeia': 'CAS',
-      'Scorpius': 'SCO',
-      'Leo': 'LEO',
-      'Gemini': 'GEM',
-      'Taurus': 'TAU',
-      'Cygnus': 'CYG',
-      'Lyra': 'LYR',
-      'Aquila': 'AQL',
-      'Sagittarius': 'SGR',
-      'Virgo': 'VIR',
-      'Canis Major': 'CMA',
-      'Andromeda': 'AND',
-      'Pegasus': 'PEG'
+  private selectCategoryObject(item: NameItem): void {
+    const name = item.name ?? ''
+    if (name.length === 0) { return }
+    const openTarget = (): void => {
+      if (this.searchCategory === 'constellation') {
+        this.openConstellationGuide(name)
+      } else {
+        this.searchObject(name)
+      }
     }
-    const constellationKey = abbreviationByConstellation[name] || name
-    this.flashHint('已开启星座名称、连线和图像，正在定位' + this.zhNameOf(name))
+    // A category selection is a navigation command, not an inspection of the
+    // search sheet. Dismiss the sheet before calculating the target's safe
+    // sky point; otherwise the sheet and detail card leave only a lower gap.
+    if (this.activePanel === 'search' && this.panelVisible) {
+      this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+        this.panelVisible = false
+      })
+      this.drawerOpen = false
+      setTimeout(openTarget, 200)
+      return
+    }
+    openTarget()
+  }
+
+  private openConstellationGuide(name: string): void {
+    this.flashHint('正在定位' + this.zhNameOf(name))
+    // Keep the visual switches and constellation selection in one Qt-thread
+    // operation. The previous five bridge round trips could be consumed in a
+    // different order, leaving a selected constellation with no visible lines.
+    this.callInteractiveResult('focusConstellation', name, (result) => {
+      // Existing release libraries predate focusConstellation. Keep them
+      // usable while an update is being built, rather than making every chip
+      // silently fail on an older bundled libstellarium.
+      if (result.ok !== true) {
+        this.openConstellationGuideLegacy(name)
+        return
+      }
+      if (result.found !== true) {
+        this.flashHint('暂时无法定位' + this.zhNameOf(name))
+        return
+      }
+      this.constellationBoundaries = false
+      this.constellationLines = true
+      this.constellationLabels = true
+      this.constellationArt = true
+      this.applySelectedObject(result)
+    })
+  }
+
+  private openConstellationGuideLegacy(name: string): void {
+    const abbreviationByConstellation: Record<string, string> = {
+      'Orion': 'ORI', 'Ursa Major': 'UMA', 'Cassiopeia': 'CAS', 'Scorpius': 'SCO',
+      'Leo': 'LEO', 'Gemini': 'GEM', 'Taurus': 'TAU', 'Cygnus': 'CYG', 'Lyra': 'LYR',
+      'Aquila': 'AQL', 'Sagittarius': 'SGR', 'Virgo': 'VIR', 'Canis Major': 'CMA',
+      'Andromeda': 'AND', 'Pegasus': 'PEG'
+    }
+    const fallback = abbreviationByConstellation[name] ?? ''
+    const selectConstellation = (key: string, allowFallback: boolean): void => {
+      this.callInteractive('searchObject', key, (result) => {
+        if (result.found === true) {
+          this.applySelectedObject(result)
+          return
+        }
+        if (allowFallback && fallback.length > 0 && fallback !== key) {
+          selectConstellation(fallback, false)
+          return
+        }
+        this.flashHint('暂时无法定位' + this.zhNameOf(name))
+      })
+    }
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false
       this.callInteractive('setActionChecked', 'actionShow_Constellation_Lines|1', () => {
@@ -2533,13 +2607,9 @@ private loadPlanetPositions(): void {
           this.constellationLabels = true
           this.callInteractive('setActionChecked', 'actionShow_Constellation_Art|1', () => {
             this.constellationArt = true
-            this.callInteractive('searchObject', constellationKey, (result) => {
-              if (result.found !== true) {
-                this.flashHint('暂时无法定位' + this.zhNameOf(name))
-              } else {
-                this.applySelectedObject(result)
-              }
-            })
+            // Releases before focusConstellation do not agree on whether a
+            // full name or an IAU abbreviation is indexed. Try both once.
+            selectConstellation(name, true)
           })
         })
       })
@@ -2548,6 +2618,68 @@ private loadPlanetPositions(): void {
 
   private loadCategoryObjects(category: string): void {
     this.searchCategory = category
+    this.categoryLoading = true
+    this.categoryError = ''
+    const curated: Record<string, NameItem[]> = {
+      'planet': [
+        { name: 'Moon', zh: '月球' }, { name: 'Mercury', zh: '水星' }, { name: 'Venus', zh: '金星' },
+        { name: 'Mars', zh: '火星' }, { name: 'Jupiter', zh: '木星' }, { name: 'Saturn', zh: '土星' },
+        { name: 'Uranus', zh: '天王星' }, { name: 'Neptune', zh: '海王星' }
+      ],
+      'moon': [
+        { name: 'Moon', zh: '月球' }, { name: 'Io', zh: '木卫一' }, { name: 'Europa', zh: '木卫二' },
+        { name: 'Ganymede', zh: '木卫三' }, { name: 'Callisto', zh: '木卫四' }, { name: 'Titan', zh: '土卫六' }
+      ],
+      'double_star': [
+        { name: 'Mizar', zh: '开阳' }, { name: 'Albireo', zh: '天鹅座贝塔' }, { name: 'Castor', zh: '北河二' }
+      ],
+      'variable': [
+        { name: 'Algol', zh: '大陵五' }, { name: 'Mira', zh: '刍藁增二' }, { name: 'Betelgeuse', zh: '参宿四' }
+      ],
+      'constellation': [
+        { name: 'Orion', zh: '猎户座' }, { name: 'Ursa Major', zh: '大熊座' }, { name: 'Cassiopeia', zh: '仙后座' },
+        { name: 'Scorpius', zh: '天蝎座' }, { name: 'Leo', zh: '狮子座' }, { name: 'Gemini', zh: '双子座' },
+        { name: 'Taurus', zh: '金牛座' }, { name: 'Cygnus', zh: '天鹅座' }, { name: 'Lyra', zh: '天琴座' },
+        { name: 'Aquila', zh: '天鹰座' }, { name: 'Sagittarius', zh: '人马座' }, { name: 'Virgo', zh: '室女座' },
+        { name: 'Canis Major', zh: '大犬座' }, { name: 'Andromeda', zh: '仙女座' }, { name: 'Pegasus', zh: '飞马座' }
+      ],
+      'galaxy': [
+        { name: 'M31', zh: '仙女座星系' }, { name: 'M33', zh: '三角座星系' }, { name: 'M51', zh: '涡状星系' },
+        { name: 'M81', zh: '波德星系' }, { name: 'M82', zh: '雪茄星系' }
+      ],
+      'open_cluster': [
+        { name: 'M45', zh: '昴星团' }, { name: 'M44', zh: '蜂巢星团' }, { name: 'M7', zh: '托勒密星团' }, { name: 'M11', zh: '野鸭星团' }
+      ],
+      'globular_cluster': [
+        { name: 'M13', zh: '武仙座大星团' }, { name: 'M3', zh: 'M3球状星团' }, { name: 'M5', zh: 'M5球状星团' }, { name: 'M92', zh: 'M92球状星团' }
+      ],
+      'nebula': [
+        { name: 'M42', zh: '猎户座大星云' }, { name: 'M8', zh: '礁湖星云' }, { name: 'M20', zh: '三裂星云' }, { name: 'NGC 7000', zh: '北美星云' }
+      ],
+      'planetary_nebula': [
+        { name: 'M57', zh: '环状星云' }, { name: 'M27', zh: '哑铃星云' }, { name: 'NGC 7293', zh: '螺旋星云' }
+      ],
+      'dark_nebula': [
+        { name: 'Barnard 33', zh: '马头星云' }, { name: 'B 86', zh: '墨迹星云' }, { name: 'B 72', zh: 'S形暗星云' }
+      ],
+      'messier': [
+        { name: 'M1', zh: '蟹状星云' }, { name: 'M31', zh: '仙女座星系' }, { name: 'M42', zh: '猎户座大星云' }, { name: 'M45', zh: '昴星团' }, { name: 'M57', zh: '环状星云' }
+      ],
+      'caldwell': [
+        { name: 'C14', zh: '双星团' }, { name: 'C20', zh: '北美星云' }, { name: 'C33', zh: '东面纱星云' }
+      ],
+      'ngc': [
+        { name: 'NGC 224', zh: '仙女座星系' }, { name: 'NGC 1976', zh: '猎户座大星云' }, { name: 'NGC 7000', zh: '北美星云' }
+      ],
+      'ic': [
+        { name: 'IC 434', zh: '马头星云背景星云' }, { name: 'IC 1396', zh: '象鼻星云' }, { name: 'IC 1805', zh: '心脏星云' }
+      ]
+    }
+    if (curated[category]) {
+      this.categoryObjects = curated[category]
+      this.categoryLoading = false
+      return
+    }
     // StarMgr's broad list is intentionally display-oriented and includes
     // designations such as "21 Tau". Those labels are not guaranteed lookup
     // keys in every packaged catalogue. Keep the browse strip useful by
@@ -2571,27 +2703,50 @@ private loadPlanetPositions(): void {
         { name: 'Fomalhaut', zh: '北落师门' },
         { name: 'Polaris', zh: '北极星' }
       ] as NameItem[]
+      this.categoryLoading = false
       return
     }
     const moduleIdMap: Record<string, string> = {
       'planet': 'SolarSystem:planet',
       'moon': 'SolarSystem:moon',
-      'star': 'StarMgr:0',
-      'variable': 'StarMgr:3',
+      // The broad curated sets are populated by the packaged offline star
+      // catalogue. The "bright" subsets can legitimately be empty when an
+      // optional HIP extension has not been installed.
+      'double_star': 'StarMgr:0',
+      'variable': 'StarMgr:1',
+      'constellation': 'ConstellationMgr',
       'galaxy': 'NebulaMgr:0',
-      'cluster': 'NebulaMgr:5',
+      'open_cluster': 'NebulaMgr:6',
+      'globular_cluster': 'NebulaMgr:7',
       'nebula': 'NebulaMgr:10',
+      'planetary_nebula': 'NebulaMgr:11',
+      'dark_nebula': 'NebulaMgr:12',
       'messier': 'NebulaMgr:100',
+      'caldwell': 'NebulaMgr:101',
+      'ngc': 'NebulaMgr:108',
+      'ic': 'NebulaMgr:109'
     }
     const moduleId = moduleIdMap[category] || ''
+    if (moduleId.length === 0) {
+      this.categoryObjects = []
+      this.categoryLoading = false
+      this.categoryError = '该分类暂不可用'
+      return
+    }
     this.callInteractive('listObjects', moduleId, (result) => {
-      if (Array.isArray(result.items)) {
-        const items = result.items as string[]
+      this.categoryLoading = false
+      if (result.ok !== true || !Array.isArray(result.items)) {
         this.categoryObjects = []
-        for (let i = 0; i < Math.min(items.length, 20); i++) {
-          this.categoryObjects.push({ name: items[i], zh: this.zhNameOf(items[i]) })
-        }
+        this.categoryError = '未能读取该分类，请重试'
+        return
       }
+      const items = result.items as string[]
+      const next: NameItem[] = []
+      for (let i = 0; i < Math.min(items.length, 30); i++) {
+        next.push({ name: items[i], zh: this.zhNameOf(items[i]) })
+      }
+      this.categoryObjects = next
+      if (next.length === 0) { this.categoryError = '当前星表中没有此类天体' }
     })
   }
 
@@ -4144,6 +4299,16 @@ private loadPlanetPositions(): void {
     return sign + d.toString() + '°' + (m < 10 ? '0' + m : m.toString()) + '\'' + (s < 10 ? '0' + s : s.toString()) + '″'
   }
 
+  private selectedRaValue(): string {
+    const parts = this.selectedCoordEq.trim().split(/\s{2,}/)
+    return parts.length > 0 && parts[0].length > 0 ? parts[0] : '--'
+  }
+
+  private selectedDecValue(): string {
+    const parts = this.selectedCoordEq.trim().split(/\s{2,}/)
+    return parts.length > 1 && parts[1].length > 0 ? parts[1] : '--'
+  }
+
   // 把核心返回的英文名映射成当前语言显示；中文时用别名表，其他语言用行星名翻译或原样
   private zhNameOf(raw: string): string {
     if (!raw || raw.length === 0) { return raw }
@@ -4273,6 +4438,10 @@ private loadPlanetPositions(): void {
       this.selectedPhase = (typeof result.phase === 'number') ? (result.phase as number).toFixed(0) + '%' : ''
       this.selectedElongation = (typeof result.elongation === 'number') ? (result.elongation as number).toFixed(1) + '°' : ''
       this.selectedRich = result.info && result.info.length > 0 ? result.info : ''
+      // Some ArkUI Scroll descendants retain their previous text layout during
+      // a lightweight refresh. Keep an explicit tick so every live coordinate
+      // field in the expanded inspector is rebuilt from this same response.
+      this.detailLiveTick++
       // 选中成功后弹出独立浮动详情窗口（新目标默认收起，不打扰当前菜单；同一目标刷新时保留展开态）
       if (targetChanged) {
         this.dismissedObjectName = ''
@@ -4288,6 +4457,7 @@ private loadPlanetPositions(): void {
       }
       if (isNewSelection) {
         this.infoWinExpanded = false
+        this.detailSupplementExpanded = false
         this.cardOffsetX = 0
         this.cardOffsetY = 0
         // The lightweight tap/search response deliberately has no AllInfo.
@@ -5894,6 +6064,7 @@ private loadPlanetPositions(): void {
 	    if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) { return false }
 	    if (this.handleCompactTopQuickTap(x, y)) { return true }
 	    if (this.handleCompactZoomTap(x, y)) { return true }
+      if (this.handleCompactDockTap(x, y)) { return true }
       if (this.handleCompactMoreTap(x, y)) { return true }
 	    // 顶部搜索栏已移除，搜索功能通过左侧图标进入分类面板
     // 浮动详情窗优先处理（其区域内已由 isUiPoint 拦截，不会落到星图选星）
@@ -7028,7 +7199,9 @@ private loadPlanetPositions(): void {
   }
 
   private shouldShowCompactTopQuickControls(): boolean {
-    return !this.drawerOpen && !this.isConstrainedCompactWindow()
+    // Gyroscope is now a bottom dock control in every compact window. Keeping
+    // a second top target causes overlap and duplicate touch dispatch.
+    return false
   }
 
   // One source of truth for the compact inspector and the selected-object
@@ -7293,9 +7466,10 @@ private loadPlanetPositions(): void {
     return this.expandedMainPanelLeft() - detailLeft - 18
   }
 
-  // 平板展开布局 + 搜索面板打开时，始终用紧凑摘要（不挤完整大卡片）。
+  // 平板默认使用紧凑摘要；完整资料由用户明确打开。展开时不再让一张
+  // 大卡片遮住半幅星图，右侧面板打开时也沿用完全相同的几何规则。
   private useExpandedDetailSummary(): boolean {
-    return this.isExpandedLayout && this.panelVisible
+    return this.isExpandedLayout && !this.infoWinExpanded
   }
 
   private expandedDetailSummaryWidth(): number {
@@ -7311,12 +7485,13 @@ private loadPlanetPositions(): void {
   }
 
   private expandedDetailSummaryY(): number {
-    // 上移：原先 +84 使小详情卡偏中，遮挡视野中心；贴近顶部留出更多星空可视区
-    return Math.max(this.EDGE_MARGIN + 16, 48)
+    // Align with the side sheet. A common baseline makes the three floating
+    // surfaces read as one deliberate layout instead of staggered widgets.
+    return this.panelTop()
   }
 
   private expandedDetailSummaryHeight(): number {
-    return 230
+    return 224
   }
 
   private isExpandedDetailSummaryPoint(x: number, y: number): boolean {
@@ -7336,7 +7511,9 @@ private loadPlanetPositions(): void {
       return true
     }
     if (y >= sy + this.expandedDetailSummaryHeight() - 42) {
-      if (x < sx + sw / 2) {
+      if (x < sx + sw / 3) {
+        this.showFullObjectInspector()
+      } else if (x < sx + sw * 2 / 3) {
         this.moveToSelectedObject()
       } else {
         this.toggleTracking()
@@ -7482,6 +7659,34 @@ private loadPlanetPositions(): void {
     return true
   }
 
+  // The Qt surface can absorb ArkUI button clicks on some devices. Route the
+  // compact dock through the same coordinate dispatcher as the tablet rail.
+  private handleCompactDockTap(x: number, y: number): boolean {
+    if (this.isExpandedLayout || this.isFoldHoverLayout) { return false }
+    const size = this.compactDockButtonSize()
+    const width = this.compactDockWidth()
+    const left = (this.skyWidth - width) / 2
+    const top = this.skyHeight - 14 - size
+    if (x < left - 8 || x > left + width + 8 || y < top - 8 || y > top + size + 8) { return false }
+    const step = (width - size) / 4
+    const index = Math.round((x - left - size / 2) / step)
+    const actions = this.compactDockActions()
+    if (index < 0 || index >= actions.length) { return false }
+    const item = actions[index]
+    if (item.panel === 'gyro') {
+      this.toggleGyroscope(!this.gyroscopeEnabled)
+      return true
+    }
+    if (item.panel === 'more') {
+      this.toggleDrawer()
+      return true
+    }
+    this.drawerOpen = false
+    this.setPanel(item.panel)
+    this.flashHint(I18n.t('msg_panel_opened'))
+    return true
+  }
+
   private updateCompactPanelDrag(offsetY: number): void {
     const usable = this.compactPanelUsableHeight()
     this.compactPanelDragOffsetY = this.clamp(offsetY, -usable * 0.34, usable * 0.12)
@@ -7510,12 +7715,13 @@ private loadPlanetPositions(): void {
       this.pinnedActions[0],
       this.pinnedActions[1],
       this.pinnedActions[2],
-      this.pinnedActions[3],
+      { label: '陀螺仪', icon: 'gyro', panel: 'gyro' },
       { label: '更多', icon: 'more', panel: 'more' }
     ] as ShellAction[]
   }
 
   private dockActionActive(item: ShellAction): boolean {
+    if (item.panel === 'gyro') { return this.gyroscopeEnabled }
     if (this.drawerOpen) {
       return item.panel === 'more'
     }
@@ -7618,33 +7824,41 @@ private loadPlanetPositions(): void {
             this.objectDataRow(I18n.t('i0010'), this.selectedConstellation.length > 0 ? this.zhNameOf(this.selectedConstellation) : '--')
             Text('坐标会跟随时间、位置与视角更新。').fontSize(11).fontColor('#8FBBD6').lineHeight(16).width('100%').margin({ top: 4 })
           } else if (this.bottomCardIndex === 2) {
+            // Reading the tick here forces this scroll subtree to redraw from
+            // the same live response as the header altitude/azimuth line.
+            Text(this.detailLiveTick.toString()).fontSize(1).fontColor(Color.Transparent).height(1).width(1)
             Text('完整资料').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
-            Row({ space: 8 }) {
-              Column({ space: 7 }) {
-                if (this.selectedCoordAlt.length > 0) { this.objectDataTile('实时高度 / 方位', this.selectedCoordAlt) }
-                if (this.selectedMagnitude.length > 0) { this.objectDataTile(I18n.t('i0007'), this.selectedMagnitude) }
-                if (this.selectedSize.length > 0) { this.objectDataTile(I18n.t('i0290'), this.selectedSize) }
-                if (this.selectedApparentMagnitude.length > 0) { this.objectDataTile('大气后星等', this.selectedApparentMagnitude) }
-                if (this.selectedRise.length > 0) { this.objectDataTile(I18n.t('s0700'), this.selectedRise) }
-                if (this.selectedSet.length > 0) { this.objectDataTile(I18n.t('s0702'), this.selectedSet) }
-              }.layoutWeight(1)
-              Column({ space: 7 }) {
-                if (this.selectedCoordEq.length > 0) { this.objectDataTile('赤经 / 赤纬', this.selectedCoordEq) }
-                if (this.selectedDistance.length > 0) { this.objectDataTile(I18n.t('i0011'), this.selectedDistance) }
-                if (this.selectedExtinction.length > 0) { this.objectDataTile('大气衰减', this.selectedExtinction + ' 等') }
-                if (this.selectedAirmass.length > 0) { this.objectDataTile('气团质量', this.selectedAirmass) }
-                if (this.selectedTransit.length > 0) { this.objectDataTile(I18n.t('s0701'), this.selectedTransit) }
-                if (this.selectedConstellation.length > 0) { this.objectDataTile(I18n.t('i0010'), this.zhNameOf(this.selectedConstellation)) }
-              }.layoutWeight(1)
-            }.width('100%')
+            if (this.selectedCoordAlt.length > 0) { this.objectDataRow('实时高度 / 方位', this.selectedCoordAlt) }
+            if (this.selectedCoordEq.length > 0) {
+              this.objectDataRow('赤经 (RA)', this.selectedRaValue())
+              this.objectDataRow('赤纬 (Dec)', this.selectedDecValue())
+            }
+            if (this.selectedDistance.length > 0) { this.objectDataRow(I18n.t('i0011'), this.selectedDistance) }
+            if (this.selectedMagnitude.length > 0) { this.objectDataRow(I18n.t('i0007'), this.selectedMagnitude) }
+            if (this.selectedSize.length > 0) { this.objectDataRow(I18n.t('i0290'), this.selectedSize) }
+            if (this.selectedApparentMagnitude.length > 0) { this.objectDataRow('大气后星等', this.selectedApparentMagnitude) }
+            if (this.selectedExtinction.length > 0) { this.objectDataRow('大气衰减', this.selectedExtinction + ' 等') }
+            if (this.selectedAirmass.length > 0) { this.objectDataRow('气团质量', this.selectedAirmass) }
+            if (this.selectedRise.length > 0) { this.objectDataRow(I18n.t('s0700'), this.selectedRise) }
+            if (this.selectedTransit.length > 0) { this.objectDataRow(I18n.t('s0701'), this.selectedTransit) }
+            if (this.selectedSet.length > 0) { this.objectDataRow(I18n.t('s0702'), this.selectedSet) }
+            if (this.selectedConstellation.length > 0) { this.objectDataRow(I18n.t('i0010'), this.zhNameOf(this.selectedConstellation)) }
             if (this.selectedFullInfo.length > 0 || this.selectedRich.length > 0) {
               Column() {
-                Text('补充观测资料').fontSize(11).fontColor('#8FBBD6').width('100%')
-                ForEach(this.detailNarrativeLines(), (line: string) => {
-                  Text(line).fontSize(12).fontColor('#D8EBF4').lineHeight(18).width('100%')
-                    .padding({ left: 10, right: 10, top: 7, bottom: 7 })
-                    .backgroundColor('rgba(147,215,255,0.045)').borderRadius(8)
-                }, (line: string, index: number) => line + index.toString())
+                Row() {
+                  Text('补充观测资料').fontSize(11).fontColor('#8FBBD6').layoutWeight(1)
+                  Text(this.detailSupplementExpanded ? '收起' : '展开')
+                    .fontSize(11).fontColor('#8FD3FF').padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                    .backgroundColor('rgba(91,147,191,0.20)').borderRadius(8)
+                    .onClick(() => { this.detailSupplementExpanded = !this.detailSupplementExpanded })
+                }.width('100%')
+                if (this.detailSupplementExpanded) {
+                  ForEach(this.detailNarrativeLines(), (line: string) => {
+                    Text(line).fontSize(12).fontColor('#D8EBF4').lineHeight(18).width('100%')
+                      .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+                      .backgroundColor('rgba(147,215,255,0.045)').borderRadius(8)
+                  }, (line: string, index: number) => line + index.toString())
+                }
               }
                 .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
                 .backgroundColor('rgba(91,147,191,0.08)').borderRadius(12)
@@ -7701,7 +7915,10 @@ private loadPlanetPositions(): void {
 
   @Builder
   expandedObjectSummary() {
-    Column({ space: 7 }) {
+    Column({ space: 6 }) {
+      // Explicitly depend on each refresh result. Some ArkUI descendants keep
+      // their text measure cache unless a state value is read in this builder.
+      Text(this.detailLiveTick.toString()).height(1).fontSize(1).opacity(0)
       Row() {
         Image(this.getIcon('info', false)).width(16).height(16).fillColor('#73C8FF').margin({ right: 7 })
         Text(this.zhNameOf(this.selectedName)).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#F1FAFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -7721,25 +7938,22 @@ private loadPlanetPositions(): void {
       if (this.selectedCoordEq.length > 0) {
         this.expandedSummaryLine('赤经 / 赤纬', this.selectedCoordEq)
       }
-      if (this.selectedApparentMagnitude.length > 0 || this.selectedAirmass.length > 0) {
-        this.expandedSummaryLine('观测条件', this.expandedAtmosphereSummary())
-      }
-      Button('完整资料')
-        .height(30).fontSize(11).fontColor('#DDF4FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(9).width('100%')
-        .onClick(() => { this.showFullObjectInspector() })
-      Row({ space: 6 }) {
+      Row({ space: 4 }) {
+        Button('完整资料')
+          .height(30).fontSize(10).fontColor('#DDF4FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(8).layoutWeight(1)
+          .onClick(() => { this.showFullObjectInspector() })
         Button(I18n.t('btn_center'))
-          .height(30).fontSize(11).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(9).layoutWeight(1)
+          .height(30).fontSize(10).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(8).layoutWeight(1)
           .onClick(() => { this.moveToSelectedObject() })
         Button(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'))
-          .height(30).fontSize(11).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(9).layoutWeight(1)
+          .height(30).fontSize(10).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(8).layoutWeight(1)
           .onClick(() => { this.toggleTracking() })
       }.width('100%')
     }
-      .width('100%').padding({ left: 12, right: 12, top: 12, bottom: 12 })
+      .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
       .backgroundColor('rgba(12,16,28,0.72)')
       .backdropBlur(28)
-      .border({ width: 0.5, color: 'rgba(147,215,255,0.16)' }).borderRadius(14)
+      .border({ width: 0.5, color: 'rgba(147,215,255,0.16)' }).borderRadius(16)
       .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
 
@@ -7760,7 +7974,7 @@ private loadPlanetPositions(): void {
       Text(value).fontSize(10).fontColor('#D6EDF7').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
     }
       .width('100%').height(20).padding({ left: 6, right: 6 })
-      .backgroundColor('rgba(255,255,255,0.035)').borderRadius(6)
+      .backgroundColor('rgba(255,255,255,0.035)').borderRadius(8)
   }
 
   private expandedAtmosphereSummary(): string {
@@ -8156,24 +8370,39 @@ private loadPlanetPositions(): void {
   @Builder
   bottomDock() {
     Row() {
-      // 紧凑底栏只保留四个最高频入口，观测/设置/插件等放进更多抽屉，避免手机折叠态挤爆。
+      // Compact mode deliberately uses independent glass controls. This is
+      // shared by phones and narrow tablet windows; it is not a shrunken rail.
       ForEach(this.compactDockActions(), (item: ShellAction) => {
         this.dockButton(item)
       }, (item: ShellAction) => item.panel)
     }
-      .height(66)
-      .width(this.isFoldHoverLayout ? '58%' : '92%')
-      .padding({ left: 6, right: 6 })
+      .height(this.compactDockButtonSize())
+      .width(this.compactDockWidth())
       .justifyContent(FlexAlign.SpaceBetween)
-      .backgroundColor(this.phoneChromeIsGlass() ? 'rgba(10, 14, 26, 0.42)' : 'rgba(25, 26, 28, 0.64)')
-      .backdropBlur(this.phoneChromeIsGlass() ? 40 : 26)
-      .border({ width: 0.5, color: this.phoneChromeIsGlass() ? 'rgba(147, 215, 255, 0.10)' : 'rgba(255, 255, 255, 0.08)' })
-      .borderRadius(33)
-      .shadow({ radius: 28, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 14 })
       .alignSelf(ItemAlign.Center)
       .opacity(this.phoneChromeOpacity())
       .scale({ x: this.phoneChromeOpacity() < 1 ? 0.98 : 1.0, y: this.phoneChromeOpacity() < 1 ? 0.98 : 1.0 })
       .animation({ duration: 420, curve: Curve.Friction })
+  }
+
+  private compactDockButtonSize(): number {
+    // Calculate the control diameter from the same available width as the
+    // gaps. Fixed gaps made the five controls feel compressed in tablet
+    // freeform windows even when there was room to breathe.
+    const outerPadding = this.skyWidth < 420 ? 28 : 48
+    const available = this.skyWidth - outerPadding - this.compactDockGap() * 4
+    return this.clamp(available / 5, 44, 56)
+  }
+
+  private compactDockGap(): number {
+    if (this.skyWidth < 420) { return 9 }
+    if (this.skyWidth < 620) { return 14 }
+    return 18
+  }
+
+  private compactDockWidth(): number {
+    const size = this.compactDockButtonSize()
+    return Math.min(this.skyWidth - 20, size * 5 + this.compactDockGap() * 4)
   }
 
   // 手机上的常驻控件随空闲状态变为轻透玻璃；展开和平板悬停布局保持各自的面板规则。
@@ -9005,22 +9234,21 @@ private loadPlanetPositions(): void {
   dockButton(item: ShellAction) {
     Column() {
       Image(this.getIcon(item.icon, this.dockActionActive(item)))
-        .width(22)
-        .height(22)
+        .width(23)
+        .height(23)
         .objectFit(ImageFit.Contain)
         .fillColor(this.dockActionActive(item) ? '#70C8FF' : '#E5FFFFFF')
         .opacity(this.dockActionActive(item) ? 1 : 0.78)
-      Text(item.label)
-        .fontSize(10)
-        .fontColor(this.dockActionActive(item) ? '#70C8FF' : '#99FFFFFF')
-        .margin({ top: 2 })
     }
-      .layoutWeight(1)
-      .height(52)
+      .width(this.compactDockButtonSize())
+      .height(this.compactDockButtonSize())
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor(Color.Transparent)
-      .borderRadius(8)
+      .backgroundColor(this.dockActionActive(item) ? 'rgba(75, 138, 190, 0.54)' : 'rgba(14, 19, 32, 0.58)')
+      .backdropBlur(this.phoneChromeIsGlass() ? 40 : 28)
+      .border({ width: 0.5, color: this.dockActionActive(item) ? 'rgba(151,222,255,0.28)' : 'rgba(255,255,255,0.13)' })
+      .borderRadius(this.compactDockButtonSize() / 2)
+      .shadow({ radius: 16, color: 'rgba(0,0,0,0.34)', offsetX: 0, offsetY: 8 })
       .scale({ x: 1.0, y: 1.0 })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .stateStyles({
@@ -9031,6 +9259,10 @@ private loadPlanetPositions(): void {
       })
       .animation({ duration: 260, curve: curves.springMotion(0.42, 0.85) })
       .onClick(() => {
+        if (item.panel === 'gyro') {
+          this.toggleGyroscope(!this.gyroscopeEnabled)
+          return
+        }
         if (item.panel === 'more') {
           this.toggleDrawer()
           return
@@ -9878,11 +10110,21 @@ private loadPlanetPositions(): void {
           Row({ space: 8 }) {
             ForEach([
               { code: 'planet', label: I18n.t('i0103') },
+              { code: 'moon', label: I18n.t('cat_moons') },
               { code: 'star', label: I18n.t('i0104') },
+              { code: 'double_star', label: I18n.t('cat_double_stars') },
+              { code: 'variable', label: I18n.t('cat_variable_stars') },
+              { code: 'constellation', label: I18n.t('ui_constellation') },
               { code: 'galaxy', label: I18n.t('i0105') },
-              { code: 'cluster', label: I18n.t('i0106') },
+              { code: 'open_cluster', label: I18n.t('cat_open_clusters') },
+              { code: 'globular_cluster', label: I18n.t('cat_globular_clusters') },
               { code: 'nebula', label: I18n.t('i0107') },
+              { code: 'planetary_nebula', label: I18n.t('cat_planetary_nebulae') },
+              { code: 'dark_nebula', label: I18n.t('cat_dark_nebulae') },
               { code: 'messier', label: I18n.t('i0108') },
+              { code: 'caldwell', label: I18n.t('cat_caldwell') },
+              { code: 'ngc', label: 'NGC' },
+              { code: 'ic', label: 'IC' }
             ] as CatOption[], (cat: CatOption) => {
               Text(cat.label)
                 .fontSize(13).fontColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
@@ -9895,21 +10137,27 @@ private loadPlanetPositions(): void {
           }.padding({ left: 2, right: 12 })
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
         Text('推荐天体').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 10, bottom: 6 })
-        Scroll() {
-          Row({ space: 6 }) {
-            ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
-              { name: 'Moon', zh: '月球' } as NameItem, { name: 'Mars', zh: '火星' } as NameItem, { name: 'Jupiter', zh: '木星' } as NameItem, { name: 'Saturn', zh: '土星' } as NameItem,
-              { name: 'Sirius', zh: '天狼星' } as NameItem, { name: 'Vega', zh: '织女星' } as NameItem, { name: 'Betelgeuse', zh: '参宿四' } as NameItem, { name: 'Polaris', zh: '北极星' } as NameItem,
-            ] as NameItem[], (item: NameItem) => {
-              Text(item.zh ?? item.name ?? '')
-                .fontSize(12).fontColor(this.nmText())
-                .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-                .backgroundColor(this.nmBg()).borderRadius(16)
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .onClick(() => this.searchObject(item.name ?? ''))
-            }, (item: NameItem) => this.searchCategory + '/' + item.name)
-          }.padding({ left: 2, right: 12 })
-        }.width('100%').height(38).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        if (this.categoryLoading) {
+          Text('正在读取天体目录...').fontSize(12).fontColor(this.nmSub()).height(38).padding({ left: 8, top: 8 })
+        } else if (this.categoryError.length > 0) {
+          Text(this.categoryError).fontSize(12).fontColor(this.nmSub()).height(38).padding({ left: 8, top: 8 })
+        } else {
+          Scroll() {
+            Row({ space: 6 }) {
+              ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
+                { name: 'Moon', zh: '月球' } as NameItem, { name: 'Mars', zh: '火星' } as NameItem, { name: 'Jupiter', zh: '木星' } as NameItem, { name: 'Saturn', zh: '土星' } as NameItem,
+                { name: 'Sirius', zh: '天狼星' } as NameItem, { name: 'Vega', zh: '织女星' } as NameItem, { name: 'Betelgeuse', zh: '参宿四' } as NameItem, { name: 'Polaris', zh: '北极星' } as NameItem,
+              ] as NameItem[], (item: NameItem) => {
+                Text(item.zh ?? item.name ?? '')
+                  .fontSize(12).fontColor(this.nmText())
+                  .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+                  .backgroundColor(this.nmBg()).borderRadius(16)
+                  .clickEffect({ level: ClickEffectLevel.LIGHT })
+                  .onClick(() => this.selectCategoryObject(item))
+              }, (item: NameItem) => this.searchCategory + '/' + item.name)
+            }.padding({ left: 2, right: 12 })
+          }.width('100%').height(38).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        }
       }
 
       // 今夜星座快速导航（15 个常见星座，点击搜索定位）
@@ -9924,7 +10172,7 @@ private loadPlanetPositions(): void {
             ] as string[], (c: string) => {
               Text(this.zhNameOf(c)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .backgroundColor(this.nmBg()).borderRadius(12)
-                .onClick(() => this.openConstellationGuide(c))
+                .onClick(() => this.selectCategoryObject({ name: c, zh: this.zhNameOf(c) }))
             }, (c: string) => c)
           }.padding({ left: 2 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
@@ -9932,19 +10180,19 @@ private loadPlanetPositions(): void {
 
       // RA/Dec 坐标跳转
       Row() {
-        Text(I18n.t('s_coord_input')).fontSize(12).fontColor(this.nmSub()).width(72)
-        Text(I18n.t('s_coord_format_hint')).fontSize(10).fontColor('#66FFFFFF').layoutWeight(1).textAlign(TextAlign.End)
+        Text('赤经 / 赤纬').fontSize(12).fontColor(this.nmSub()).width(72)
+        Text('赤经用时，赤纬用度').fontSize(10).fontColor('#66FFFFFF').layoutWeight(1).textAlign(TextAlign.End)
       }
       .height(24).width('100%').padding({ left: 10, right: 10 }).margin({ top: 8 })
       Row({ space: 6 }) {
-        TextInput({ text: this.coordInputRA, placeholder: 'RA (5.5 / 5h30m)' })
+        TextInput({ text: this.coordInputRA, placeholder: '赤经 5h30m' })
           .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
           .placeholderColor(this.nmSub())
           .backgroundColor(this.nmInput())
           .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
           .borderRadius(8)
           .onChange((v: string) => { this.coordInputRA = v })
-        TextInput({ text: this.coordInputDec, placeholder: 'Dec (+45.5 / -30d15m)' })
+        TextInput({ text: this.coordInputDec, placeholder: '赤纬 +45°30′' })
           .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
           .placeholderColor(this.nmSub())
           .backgroundColor(this.nmInput())
