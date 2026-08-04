@@ -1,0 +1,44 @@
+--- a/src/plugins/platforms/ohos/qohosqabilityinstancesmanager.cpp
++++ b/src/plugins/platforms/ohos/qohosqabilityinstancesmanager.cpp
+@@
+ std::string QAbilityInstancesManagerImpl::getQAbilityInstanceIdOrPendingAutoStartedId(QNapi::Object qAbility) const
+ {
+     auto optInstanceId = tryGetQAbilityInstanceIdFromWant(
+         qAbility, qAbility.get<QNapi::Object>("launchWant"));
++
++    qOhosPrintfWarning(
++        "[ABILITY-PROBE] resolve instance: marker='%s' pendingAuto='%s' startedAuto='%s' peers=%zu pendingStarts=%zu",
++        optInstanceId.has_value() ? optInstanceId.value().c_str() : "<missing>",
++        m_pendingAutoStartedInstanceId.has_value() ? m_pendingAutoStartedInstanceId.value().c_str() : "<missing>",
++        m_startedAutoStartedInstanceId.has_value() ? m_startedAutoStartedInstanceId.value().c_str() : "<missing>",
++        m_ownedUiAbilityPeers->size(), m_pendingInstancesStartParams.size());
+ 
+     if (!optInstanceId.has_value() && !m_pendingAutoStartedInstanceId.has_value()) {
+@@
+ void QAbilityInstancesManagerImpl::handleStartedInstance(
+     JsState &jsState, const std::string &abilityInstanceId,
+     const std::function<std::shared_ptr<QAbilityPeer>(const std::string &, const InstanceStartParams &)> &qAbilityPeerFactory)
+ {
++    qOhosPrintfWarning(
++        "[ABILITY-PROBE] start instance: id='%s' pendingAuto='%s' startedAuto='%s' peers=%zu pendingStarts=%zu",
++        abilityInstanceId.c_str(),
++        m_pendingAutoStartedInstanceId.has_value() ? m_pendingAutoStartedInstanceId.value().c_str() : "<missing>",
++        m_startedAutoStartedInstanceId.has_value() ? m_startedAutoStartedInstanceId.value().c_str() : "<missing>",
++        m_ownedUiAbilityPeers->size(), m_pendingInstancesStartParams.size());
++
+     auto startParamsIter = m_pendingInstancesStartParams.find(abilityInstanceId);
+--- a/src/plugins/platforms/ohos/qohosjsmain.cpp
++++ b/src/plugins/platforms/ohos/qohosjsmain.cpp
+@@
+ void handleAbilityOnWindowStageCreate(const CallbackInfo &cbInfo)
+ {
+     QNapi::Object qAbility;
+     QNapi::Object windowStage;
+     cbInfo.getLeadingArgs(Q_FUNC_INFO, qAbility, windowStage);
++
++    auto launchWant = qAbility.eval<QNapi::Object>("launchWant");
++    qOhosPrintfWarning(
++        "[ABILITY-PROBE] callback=onWindowStageCreate launchWant=%s",
++        QNapi::toJsonString(launchWant).c_str());
+ 
+     qAbility.set(getAbilityWindowStageCreatedOrRestoredPropSymbol(cbInfo.jsState()), true);
