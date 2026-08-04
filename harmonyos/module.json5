@@ -58,7 +58,7 @@
             "value": "true"
           }
         ],
-        "continuable": false
+        "continuable": true
       }
     ],
     "requestPermissions": [

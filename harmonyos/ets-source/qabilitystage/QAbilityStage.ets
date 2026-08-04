@@ -15,12 +15,25 @@ export default class QAbilityStage extends AbilityStage {
   private static appArgs?: Array<string>;
 
   private static setupQtApplicationCalled: boolean = false;
+  private static resourcesPrepared: boolean = false;
+
+  private static prepareResourcesIfNeeded(appContext: common.ApplicationContext): void {
+    if (QAbilityStage.resourcesPrepared) {
+      return;
+    }
+
+    prepareStellariumResources(appContext);
+    QAbilityStage.resourcesPrepared = true;
+  }
 
   private static initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): void {
     if (!QAbilityStage.setupQtApplicationCalled) {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: init');
+      // A specified Ability has a short AcceptWant deadline. The normal path
+      // prepares resources in AbilityStage.onCreate before this callback.
+      // Keep a fallback for lifecycle variants that skip that stage callback.
+      QAbilityStage.prepareResourcesIfNeeded(appContext);
       QAbilityStage.setupQtApplicationCalled = true;
-      prepareStellariumResources(appContext);
       qpa.setupQtApplication({
         appContext: appContext,
         modulesFactories: QtUtils.getModulesFactoriesMapForQt(),
@@ -40,6 +53,7 @@ export default class QAbilityStage extends AbilityStage {
 
   onCreate(): void {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onCreate()');
+    QAbilityStage.prepareResourcesIfNeeded(this.context.getApplicationContext());
     qpa.handleAbilityStageOnCreate(this);
   }
 
