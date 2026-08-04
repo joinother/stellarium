@@ -1,0 +1,28 @@
+--- a/src/plugins/platforms/ohos/qohosqabilityinstancesmanager.cpp
++++ b/src/plugins/platforms/ohos/qohosqabilityinstancesmanager.cpp
+@@
+     QOhosSupplier<std::string> m_abilityInstanceIdsGenerator;
+     std::map<std::string, InstanceStartParams> m_pendingInstancesStartParams;
+     QOhosOptional<std::string> m_pendingAutoStartedInstanceId;
++    // API 23 can recreate the default UIAbility's WindowStage without the Qt
++    // instance marker. Reuse the default id instead of aborting the process.
++    QOhosOptional<std::string> m_startedAutoStartedInstanceId;
+ };
+@@
+     if (!optInstanceId.has_value() && !m_pendingAutoStartedInstanceId.has_value()) {
++        if (m_startedAutoStartedInstanceId.has_value()) {
++            qOhosPrintfWarning(
++                "Got Ability without '%s' param after default startup; reusing id='%s'",
++                qAbilityInstanceIdWantParamKey, m_startedAutoStartedInstanceId.value().c_str());
++            return m_startedAutoStartedInstanceId.value();
++        }
++
+         qOhosReportFatalErrorAndAbort(
+             "Got Ability without '%s' param and no pending auto-started instance",
+             qAbilityInstanceIdWantParamKey);
+@@
+     } else if (abilityInstanceId == m_pendingAutoStartedInstanceId) {
+         m_pendingAutoStartedInstanceId.reset();
++        m_startedAutoStartedInstanceId = makeQOhosOptional(abilityInstanceId);
+ 
+         InstanceStartParams startParams = {
