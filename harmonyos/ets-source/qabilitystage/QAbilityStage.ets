@@ -16,6 +16,12 @@ export default class QAbilityStage extends AbilityStage {
 
   private static setupQtApplicationCalled: boolean = false;
   private static resourcesPrepared: boolean = false;
+  private static lifecycleSequence: number = 0;
+
+  private static traceLifecycle(event: string, detail: string = ''): void {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `[LIFECYCLE] stage=${++QAbilityStage.lifecycleSequence} event=${event}${detail ? ` detail=${detail}` : ''}`);
+  }
 
   private static prepareResourcesIfNeeded(appContext: common.ApplicationContext): void {
     if (QAbilityStage.resourcesPrepared) {
@@ -28,6 +34,7 @@ export default class QAbilityStage extends AbilityStage {
 
   private static initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): void {
     if (!QAbilityStage.setupQtApplicationCalled) {
+      QAbilityStage.traceLifecycle('initQtAppContext:before', abilityClassName);
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: init');
       // A specified Ability has a short AcceptWant deadline. The normal path
       // prepares resources in AbilityStage.onCreate before this callback.
@@ -42,6 +49,7 @@ export default class QAbilityStage extends AbilityStage {
         abilityClassName: abilityClassName,
         _unusedQChildProcess: new QChildProcess(),
       });
+      QAbilityStage.traceLifecycle('initQtAppContext:after', abilityClassName);
     } else {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: already initialized');
     }
@@ -52,29 +60,37 @@ export default class QAbilityStage extends AbilityStage {
   }
 
   onCreate(): void {
+    QAbilityStage.traceLifecycle('onCreate:before');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onCreate()');
     QAbilityStage.prepareResourcesIfNeeded(this.context.getApplicationContext());
     qpa.handleAbilityStageOnCreate(this);
+    QAbilityStage.traceLifecycle('onCreate:after');
   }
 
   onNewProcessRequest(want: Want): string {
+    QAbilityStage.traceLifecycle('onNewProcessRequest:before', JSON.stringify(want.parameters));
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: want.parameters: ' + JSON.stringify(want.parameters));
     QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
     let processKey: string = qpa.handleAbilityStageOnNewProcessRequest(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: processKey: "' + processKey + '"');
+    QAbilityStage.traceLifecycle('onNewProcessRequest:after', processKey);
     return processKey;
   }
 
   onAcceptWant(want: Want): string {
+    QAbilityStage.traceLifecycle('onAcceptWant:before', JSON.stringify(want.parameters));
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: want.parameters: ' + JSON.stringify(want.parameters));
     QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
     let instanceKey: string = qpa.handleAbilityStageOnAcceptWant(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: instanceKey: "' + instanceKey + '"');
+    QAbilityStage.traceLifecycle('onAcceptWant:after', instanceKey);
     return instanceKey;
   }
 
   onDestroy() {
+    QAbilityStage.traceLifecycle('onDestroy:before');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onDestroy()');
     qpa.handleAbilityStageOnDestroy(this);
+    QAbilityStage.traceLifecycle('onDestroy:after');
   }
 }
