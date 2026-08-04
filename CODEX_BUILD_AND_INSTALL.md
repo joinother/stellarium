@@ -8,7 +8,7 @@
 ## 0. 一句话结论（先读这个）
 
 - 编译用的 SDK 是 **API 24（HarmonyOS 6.1.1）**，它自带 `hms` + `openharmony` 组件，**正好匹配工程的 `compileSdkVersion: 6.1.1(24)`**。
-- 工程 `compatibleSdkVersion: 6.0.0(20)` 只是「最低可运行版本」，**不需要本机真的装一个 API 20 SDK**。你机器上 `~/Library/OpenHarmony/Sdk/20` 那个目录**缺 `hms` 组件**，千万别把 `sdk.dir` 指过去，否则必报 `SDK component missing`。
+- 工程 `compatibleSdkVersion` 和 `targetSdkVersion` 都是 API 22，`compileSdkVersion` 保持 API 24。API 23、24 继续安装同一份包。**不需要本机真的装一个 API 22 SDK**。不要把 `sdk.dir` 指到不完整的旧 SDK 目录，否则会报 `SDK component missing`。
 - 真实构建根目录是 **`build/libstellarium-harmonyos/`**，不是 `harmonyos/`（`harmonyos/` 只是被 git 跟踪的源模板）。
 - 历史上构建失败的根因是 **`build/libstellarium-harmonyos/local.properties` 为空文件**（读到空 `sdk.dir`）→ 报 `SDK component missing`。写入 `sdk.dir` 即可。
 
@@ -124,6 +124,17 @@ DEVICE=7LZBB26323200303   # 真机序列号；模拟器用 127.0.0.1:5555
 # 成功会打印：install bundle successfully.
 ```
 
+### 调试包归档
+
+`/Users/jiexuanyang/Downloads/stellarium-release-candidate/debug-backups/v1.0.1-build1000002/` 固定保留四个 HAP：
+
+- `v1.0.1-friday-unsigned.hap`：周五原始 `1.0.1 (1000002)` 未签名包；只用于文件级对照。
+- `v1.0.1-friday-default-signed.hap`：周五原包的本机测试签名副本。
+- `v1.0.1-build1000002-api22-unsigned.hap`：API 22 兼容构建的未签名副本。
+- `v1.0.1-build1000002-api22-default-signed.hap`：同一 API 22 构建的本机测试签名副本。
+
+以后不改代码时，直接安装已签名副本，不重新签名。只有未签名 HAP 发生变化才生成新的测试签名包。签名材料不进入 Git，也不复制到归档目录。
+
 ### 签名现实（最容易卡住的一步）
 - **release 签名**（`build-profile.json5` product 默认曾设为 `release`）：是 AppGallery 发布用的 `app_gallery` profile，
   **真机侧载会直接拒绝** → 报 `code:9568322 signature verification failed due to not trusted app source`。
@@ -166,8 +177,7 @@ DEVICE=7LZBB26323200303   # 真机序列号；模拟器用 127.0.0.1:5555
 
 ---
 
-## 10. 关于「API 20 编不出来」
+## 10. 关于最低 API 版本
 
-不用去找 API 20 的 SDK。工程 `compileSdkVersion` 是 24，本机 DevEco SDK 就是 24（含 `hms`），直接能编。
-「API 20」只是 `compatibleSdkVersion`（最低运行版本）。之前编不出是 `local.properties` 为空导致 `sdk.dir` 缺失，
-不是 API 版本问题。
+不用去找 API 22 的 SDK。工程 `compileSdkVersion` 是 24，本机 DevEco SDK 就是 24（含 `hms`），直接能编。
+API 22 只是 `compatibleSdkVersion`（最低运行版本），而 API 23、24 会安装同一份 HAP。之前编不出是 `local.properties` 为空导致 `sdk.dir` 缺失，不是 API 版本问题。

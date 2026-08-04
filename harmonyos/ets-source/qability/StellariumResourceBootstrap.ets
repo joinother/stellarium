@@ -77,6 +77,7 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
 
 export function prepareStellariumResources(appContext: common.ApplicationContext): string {
   const installRoot = `${appContext.filesDir}/stellarium`;
+  const userConfigPath = `${appContext.filesDir}/.stellarium/config.ini`;
   const markerPath = `${installRoot}/${MARKER}`;
   const translationsDir = `${installRoot}/translations`;
   // Star/UI names live in these per-domain .qm files. The one-time extraction
@@ -91,6 +92,10 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // missing from a previously extracted build, the toggles report success but
   // draw nothing — force a re-extract so the device actually has the data.
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
+  // Stellarium aborts during native startup when this template is absent.
+  // HAP overwrite installs preserve filesDir, so an older interrupted
+  // extraction can leave the star marker present while this file is missing.
+  const defaultConfigPath = `${installRoot}/data/default_cfg.ini`;
   // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
   const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
   // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
@@ -112,6 +117,11 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
       `(${skycultureMarker}); forcing re-extract`);
     needExtract = true;
   }
+  if (!needExtract && !exists(defaultConfigPath)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but default config template missing (${defaultConfigPath}); forcing re-extract`);
+    needExtract = true;
+  }
   if (!needExtract && !exists(scriptMarker)) {
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but sky-tour scripts missing ` +
@@ -131,6 +141,14 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     } catch (err) {
       hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to extract stars_4: ${JSON.stringify(err)}`);
     }
+  }
+
+  // Qt's QFile::copy() can fail on an API 22 device while creating this
+  // first-run file, even though the ArkTS app sandbox is writable. Write it
+  // through the platform file API before native initialization instead.
+  if (!exists(userConfigPath)) {
+    hilog.info(LOG_DOMAIN, LOG_TAG, `Creating first-run config at ${userConfigPath}`);
+    writeRawFile(appContext, `${RAW_ROOT}/data/default_cfg.ini`, userConfigPath);
   }
 
   // HAP updates preserve filesDir. Keep the mutable runtime copy of this
