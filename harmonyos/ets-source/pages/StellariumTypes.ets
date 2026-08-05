@@ -249,6 +249,7 @@ export const ALIAS_LIST: AliasEntry[] = [
 
 export interface StellariumBridgeResponse {
   ok?: boolean
+  isTimeNow?: boolean
   pending?: boolean
   found?: boolean
   error?: string
