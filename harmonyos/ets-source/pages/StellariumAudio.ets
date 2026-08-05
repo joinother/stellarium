@@ -125,6 +125,7 @@ export class AudioEngine {
   private renderer: audio.AudioRenderer | undefined = undefined
   private running: boolean = false
   private muted: boolean = false
+  private volume: number = 1.0
 
   private scale: number[] = []
   private pads: Pad[] = []
@@ -289,6 +290,11 @@ export class AudioEngine {
   setMuted(m: boolean): void {
     this.muted = m
     hilog.info(DOMAIN, TAG, 'muted = %{public}s', m ? 'true' : 'false')
+  }
+
+  setVolume(v: number): void {
+    this.volume = Math.max(0.0, Math.min(1.0, v))
+    hilog.info(DOMAIN, TAG, 'volume = %{public}f', this.volume)
   }
 
   isRunning(): boolean {
@@ -479,7 +485,7 @@ export class AudioEngine {
 
       let o: number = mix * 0.45 + wet   // 干信号降低，湿信号比例提升
       if (o > 1.0) { o = 1.0 } else if (o < -1.0) { o = -1.0 }
-      out[i] = (o * 32767) | 0
+      out[i] = ((o * this.volume) * 32767) | 0
     }
 
     this.revLp1 = rlp1

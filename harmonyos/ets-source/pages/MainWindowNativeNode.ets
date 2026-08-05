@@ -232,6 +232,7 @@ struct WindowNativeNode {
   @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
+  @State private categoryObjectCount: number = 0
   @State private selectedType: string = ''
   @State private selectedStatus: string = ''
   @State private selectedInfo: string = ''
@@ -1290,6 +1291,9 @@ struct WindowNativeNode {
     if (nextVisible) {
       this.resetPanelIdle()
       this.resetSidebarAutoCollapse()
+      if (panel === 'search' && this.categoryObjects.length === 0) {
+        this.loadCategoryObjects(this.searchCategory)
+      }
     }
     this.scheduleSelectedObjectForUiChange(380)
     // 时间面板：打开时启动每秒刷新（让"时间"字段实时走动），关闭或切到别的面板时停掉
@@ -2512,22 +2516,46 @@ private loadPlanetPositions(): void {
     const moduleIdMap: Record<string, string> = {
       'planet': 'SolarSystem:planet',
       'moon': 'SolarSystem:moon',
-      'star': 'StarMgr:0',
-      'variable': 'StarMgr:3',
+      'star': 'StarMgr',
+      'variable': 'StarMgr:1',
       'galaxy': 'NebulaMgr:0',
       'cluster': 'NebulaMgr:5',
       'nebula': 'NebulaMgr:10',
       'messier': 'NebulaMgr:100',
+      'comet': 'SolarSystem:comet',
+      'asteroid': 'SolarSystem:asteroid',
+      'constellation': 'ConstellationMgr',
     }
     const moduleId = moduleIdMap[category] || ''
+    this.categoryObjects = []
+    this.categoryObjectCount = 0
     this.callInteractive('listObjects', moduleId, (result) => {
-      if (Array.isArray(result.items)) {
-        const items = result.items as string[]
-        this.categoryObjects = []
-        for (let i = 0; i < Math.min(items.length, 20); i++) {
-          this.categoryObjects.push({ name: items[i], zh: this.zhNameOf(items[i]) })
+      const items = Array.isArray(result.items) ? result.items as string[] : []
+      const seen: Record<string, boolean> = {}
+      const browse: NameItem[] = []
+      for (const name of items) {
+        if (name.length === 0 || seen[name]) { continue }
+        seen[name] = true
+        browse.push({ name, zh: this.zhNameOf(name) })
+        if (browse.length >= 60) { break }
+      }
+      if (browse.length === 0) {
+        for (const item of ALIAS_LIST) {
+          let includeItem = false
+          if (category === 'planet') {
+            includeItem = item.type === 'planet' || item.type === 'moon'
+          } else if (category === 'moon') {
+            includeItem = item.type === 'moon'
+          } else if (category === 'star') {
+            includeItem = item.type === 'star'
+          } else if (category === 'galaxy' || category === 'cluster' || category === 'nebula' || category === 'constellation') {
+            includeItem = item.type === category
+          }
+          if (includeItem) { browse.push({ name: item.en, zh: item.zh }) }
         }
       }
+      this.categoryObjectCount = items.length
+      this.categoryObjects = browse
     })
   }
 
@@ -6315,7 +6343,7 @@ private loadPlanetPositions(): void {
         .backgroundColor("#05070F")
         .opacity(this.splashOpacity)
         .zIndex(100)
-        .onClick(() => { this.dismissSplash() })
+
         .onAppear(() => {
           this.startTwinkle()
           this.getUIContext().animateTo({ duration: 700, curve: Curve.EaseOut }, () => {
@@ -9644,11 +9672,16 @@ private loadPlanetPositions(): void {
           Row({ space: 8 }) {
             ForEach([
               { code: 'planet', label: I18n.t('i0103') },
+              { code: 'moon', label: '卫星' },
               { code: 'star', label: I18n.t('i0104') },
+              { code: 'variable', label: '变星' },
               { code: 'galaxy', label: I18n.t('i0105') },
               { code: 'cluster', label: I18n.t('i0106') },
               { code: 'nebula', label: I18n.t('i0107') },
               { code: 'messier', label: I18n.t('i0108') },
+              { code: 'comet', label: '彗星' },
+              { code: 'asteroid', label: '小行星' },
+              { code: 'constellation', label: '星座' },
             ] as CatOption[], (cat: CatOption) => {
               Text(cat.label)
                 .fontSize(13).fontColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
@@ -9660,22 +9693,30 @@ private loadPlanetPositions(): void {
             }, (cat: CatOption) => cat.code)
           }.padding({ left: 2, right: 12 })
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-        Text('推荐天体').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ top: 10, bottom: 6 })
+        Row() {
+          Text('目录天体').fontSize(11).fontColor(this.nmSub()).layoutWeight(1)
+          Text(this.categoryObjectCount > 0 ? '已加载 ' + this.categoryObjectCount + ' 个' : '正在读取目录')
+            .fontSize(10).fontColor(this.nmSub())
+        }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 10, bottom: 6 })
         Scroll() {
-          Row({ space: 6 }) {
-            ForEach(this.categoryObjects.length > 0 ? this.categoryObjects : [
-              { name: 'Moon', zh: '月球' } as NameItem, { name: 'Mars', zh: '火星' } as NameItem, { name: 'Jupiter', zh: '木星' } as NameItem, { name: 'Saturn', zh: '土星' } as NameItem,
-              { name: 'Sirius', zh: '天狼星' } as NameItem, { name: 'Vega', zh: '织女星' } as NameItem, { name: 'Betelgeuse', zh: '参宿四' } as NameItem, { name: 'Polaris', zh: '北极星' } as NameItem,
-            ] as NameItem[], (item: NameItem) => {
+          Flex({ wrap: FlexWrap.Wrap }) {
+            ForEach(this.categoryObjects, (item: NameItem) => {
               Text(item.zh ?? item.name ?? '')
                 .fontSize(12).fontColor(this.nmText())
                 .padding({ left: 12, right: 12, top: 7, bottom: 7 })
                 .backgroundColor(this.nmBg()).borderRadius(16)
+                .margin({ right: 6, bottom: 6 })
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .onClick(() => this.searchObject(item.name ?? ''))
+                .onClick(() => {
+                  if (this.searchCategory === 'constellation') {
+                    this.openConstellationGuide(item.name ?? '')
+                  } else {
+                    this.searchObject(item.name ?? '')
+                  }
+                })
             }, (item: NameItem) => this.searchCategory + '/' + item.name)
-          }.padding({ left: 2, right: 12 })
-        }.width('100%').height(38).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+          }.width('100%').padding({ left: 2, right: 6 })
+        }.width('100%').height(112).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
       }
 
       // 今夜星座快速导航（15 个常见星座，点击搜索定位）

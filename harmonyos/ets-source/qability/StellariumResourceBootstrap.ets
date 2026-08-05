@@ -1,4 +1,5 @@
 import common from '@ohos.app.ability.common';
+import deviceInfo from '@ohos.deviceInfo';
 import fs from '@ohos.file.fs';
 import hilog from '@ohos.hilog';
 import { setEnv } from 'libentry.so';
@@ -155,6 +156,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
 
   const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);
+  // STEL_USERDIR only needed on API 22 to fix QFile::copy crash (config file
+  // copy fails without an explicit user dir). On API 24+ the default
+  // .stellarium dir works correctly — setting it to an empty dir breaks star
+  // catalog loading because Stellarium can't find config.ini there.
+  const apiLevel = deviceInfo.sdkApiVersion || 0;
+  if (apiLevel > 0 && apiLevel <= 22) {
+    const userDir = `${appContext.filesDir}/stellarium_userdir`;
+    const userDirSet = setEnv('STEL_USERDIR', userDir);
+    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
+  } else {
+    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR not set (API ${apiLevel} > 22, using default .stellarium)`);
+  }
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const widgetsRhiSet = setEnv('QT_WIDGETS_RHI', '0');

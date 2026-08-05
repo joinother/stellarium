@@ -1659,6 +1659,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QString query = searchParts.value(0).trimmed();
 			const bool selectOnly = searchParts.value(1).trimmed().compare("selectOnly", Qt::CaseInsensitive) == 0;
 			bool found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
+			// Constellation names are culture data. Some cultures do not expose
+			// them through the generic object-manager index, so query their module
+			// directly before reporting a false "not found" result.
+			if (!found && !query.isEmpty())
+			{
+				if (auto* constellationMgr = GETSTELMODULE(ConstellationMgr))
+				{
+					const StelObjectP constellation = constellationMgr->searchByName(query);
+					if (constellation)
+						found = objectMgr->setSelectedObject(constellation);
+				}
+			}
 			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty())
 			{
 				const StelObjectP target = objectMgr->getSelectedObject().first();

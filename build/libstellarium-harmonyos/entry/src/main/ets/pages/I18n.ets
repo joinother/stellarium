@@ -139,6 +139,26 @@ const SAT_GROUPS: Record<string, Record<string, string>> = {
   'resource': { 'en': 'Resource', 'zh_CN': '资源', 'ja': '資源', 'ko': '자원', 'fr': 'Ressource', 'de': 'Ressource', 'es': 'Recurso', 'ru': 'Ресурс' },
   'space-station': { 'en': 'Space Station', 'zh_CN': '空间站', 'ja': '宇宙ステーション', 'ko': '우주정거장', 'fr': 'Station spatiale', 'de': 'Raumstation', 'es': 'Estación espacial', 'ru': 'Космическая станция' },
   'tracking': { 'en': 'Tracking', 'zh_CN': '跟踪', 'ja': '追跡', 'ko': '추적', 'fr': 'Suivi', 'de': 'Verfolgung', 'es': 'Seguimiento', 'ru': 'Слежение' },
+  // 以下为补全的卫星分组（从 satellites.json 数据源提取，原字典缺失）
+  'active': { 'en': 'Active', 'zh_CN': '在轨', 'ja': '運用中', 'ko': '운용중', 'fr': 'Actif', 'de': 'Aktiv', 'es': 'Activo', 'ru': 'Активные' },
+  'analyst': { 'en': 'Analyst', 'zh_CN': '侦察', 'ja': '分析衛星', 'ko': '정찰위성', 'fr': 'Analyste', 'de': 'Analyst', 'es': 'Analista', 'ru': 'Аналитические' },
+  'argos': { 'en': 'Argos', 'zh_CN': '阿戈斯', 'ja': 'アルゴス', 'ko': '아르고스', 'fr': 'Argos', 'de': 'Argos', 'es': 'Argos', 'ru': 'Аргос' },
+  'chinasat': { 'en': 'ChinaSat', 'zh_CN': '中星', 'ja': 'チャイナサット', 'ko': '차이나샛', 'fr': 'ChinaSat', 'de': 'ChinaSat', 'es': 'ChinaSat', 'ru': 'Китайсат' },
+  'crewed': { 'en': 'Crewed', 'zh_CN': '载人', 'ja': '有人', 'ko': '유인', 'fr': 'Habitée', 'de': 'Bemannt', 'es': 'Tripulada', 'ru': 'Пилотируемые' },
+  'cubesat': { 'en': 'CubeSat', 'zh_CN': '立方星', 'ja': 'キューブサット', 'ko': '큐브위성', 'fr': 'CubeSat', 'de': 'CubeSat', 'es': 'CubeSat', 'ru': 'КубСат' },
+  'iridium next': { 'en': 'Iridium NEXT', 'zh_CN': '铱星NEXT', 'ja': 'Iridium-NEXT', 'ko': 'Iridium-NEXT', 'fr': 'Iridium-NEXT', 'de': 'Iridium-NEXT', 'es': 'Iridium-NEXT', 'ru': 'Иридиум-NEXT' },
+  'iridium-NEXT': { 'en': 'Iridium NEXT', 'zh_CN': '铱星NEXT', 'ja': 'Iridium-NEXT', 'ko': 'Iridium-NEXT', 'fr': 'Iridium-NEXT', 'de': 'Iridium-NEXT', 'es': 'Iridium-NEXT', 'ru': 'Иридиум-NEXT' },
+  'observatory': { 'en': 'Observatory', 'zh_CN': '观测台', 'ja': '天文台', 'ko': '관측소', 'fr': 'Observatoire', 'de': 'Observatorium', 'es': 'Observatorio', 'ru': 'Обсерватория' },
+  'oneweb': { 'en': 'OneWeb', 'zh_CN': '一网', 'ja': 'ワンウェブ', 'ko': '원웹', 'fr': 'OneWeb', 'de': 'OneWeb', 'es': 'OneWeb', 'ru': 'OneWeb' },
+  'orbcomm': { 'en': 'ORBCOMM', 'zh_CN': '轨通', 'ja': 'オブコム', 'ko': '오브컴', 'fr': 'ORBCOMM', 'de': 'ORBCOMM', 'es': 'ORBCOMM', 'ru': 'ОРБКОММ' },
+  'other-comm': { 'en': 'Other Comm', 'zh_CN': '其他通信', 'ja': 'その他通信', 'ko': '기타 통신', 'fr': 'Autres comms', 'de': 'Sonstige Komm.', 'es': 'Otras coms', 'ru': 'Прочие связь' },
+  'planet': { 'en': 'Planet', 'zh_CN': '行星', 'ja': 'プラネット', 'ko': '플래닛', 'fr': 'Planet', 'de': 'Planet', 'es': 'Planet', 'ru': 'Планет' },
+  'qzss': { 'en': 'QZSS', 'zh_CN': '准天顶', 'ja': 'みちびき', 'ko': '준천정', 'fr': 'QZSS', 'de': 'QZSS', 'es': 'QZSS', 'ru': 'QZSS' },
+  'raduga': { 'en': 'Raduga', 'zh_CN': '彩虹', 'ja': 'ラドゥガ', 'ko': '라두가', 'fr': 'Radouga', 'de': 'Raduga', 'es': 'Raduga', 'ru': 'Радуга' },
+  'resupply': { 'en': 'Resupply', 'zh_CN': '补给', 'ja': '補給', 'ko': '보급', 'fr': 'Ravitaillement', 'de': 'Nachschub', 'es': 'Reabastecimiento', 'ru': 'Снабжение' },
+  'sarsat': { 'en': 'SARSAT', 'zh_CN': '搜救', 'ja': 'サーチ・アンド・レスキュー', 'ko': '수색구조', 'fr': 'SARSAT', 'de': 'SARSAT', 'es': 'SARSAT', 'ru': 'САРСАТ' },
+  'science': { 'en': 'Science', 'zh_CN': '科研', 'ja': '科学', 'ko': '과학연구', 'fr': 'Science', 'de': 'Wissenschaft', 'es': 'Ciencia', 'ru': 'Наука' },
+  'spire': { 'en': 'Spire', 'zh_CN': '斯派尔', 'ja': 'スパイアー', 'ko': '스파이어', 'fr': 'Spire', 'de': 'Spire', 'es': 'Spire', 'ru': 'Spire' },
 }
 
 // 插件名称翻译表
@@ -185,6 +205,69 @@ const PLUGIN_NAMES: Record<string, Record<string, string>> = {
   'Text User Interface': { 'en': 'Text User Interface', 'zh_CN': '文本用户界面', 'ja': 'テキストUI', 'ko': '텍스트 UI', 'fr': 'Interface texte', 'de': 'Text-Benutzeroberfläche', 'es': 'Interfaz de texto', 'ru': 'Текстовый интерфейс' },
   'Time Zone': { 'en': 'Time Zone', 'zh_CN': '时区', 'ja': 'タイムゾーン', 'ko': '시간대', 'fr': 'Fuseau horaire', 'de': 'Zeitzone', 'es': 'Zona horaria', 'ru': 'Часовой пояс' },
   'Voculars': { 'en': 'Voculars', 'zh_CN': '声码器', 'ja': 'ボキュラーズ', 'ko': '보큘러스', 'fr': 'Voculars', 'de': 'Voculars', 'es': 'Voculars', 'ru': 'Вокуляры' },
+  // 以下为补齐的插件名称（从 C++ displayedName 提取）
+  'Nebula Textures': { 'en': 'Nebula Textures', 'zh_CN': '星云纹理', 'ja': '星雲テクスチャ', 'ko': '성운 텍스처', 'fr': 'Textures de nébuleuses', 'de': 'Nebel-Texturen', 'es': 'Texturas de nebulosas', 'ru': 'Текстуры туманностей' },
+  'Bright Novae': { 'en': 'Bright Novae', 'zh_CN': '亮新星', 'ja': '新星', 'ko': '밝은 신성', 'fr': 'Novae brillantes', 'de': 'Helle Novae', 'es': 'Novas brillantes', 'ru': 'Яркие новые' },
+  'Object Visibility': { 'en': 'Object Visibility', 'zh_CN': '天体可见性', 'ja': '天体の可視性', 'ko': '천체 가시성', 'fr': 'Visibilité des objets', 'de': 'Objektsichtbarkeit', 'es': 'Visibilidad de objetos', 'ru': 'Видимость объектов' },
+  'Observability Analysis': { 'en': 'Observability Analysis', 'zh_CN': '可观测性分析', 'ja': '観測可能性分析', 'ko': '관측가능성 분석', "fr": "Analyse d'observabilité", 'de': 'Beobachtbarkeitsanalyse', 'es': 'Análisis de observabilidad', 'ru': 'Анализ наблюдаемости' },
+  'Oculars': { 'en': 'Oculars', 'zh_CN': '目镜', 'ja': 'アイピース', 'ko': '아이피스', 'fr': 'Oculaires', 'de': 'Okulare', 'es': 'Oculares', 'ru': 'Окуляры' },
+  'Online Queries': { 'en': 'Online Queries', 'zh_CN': '在线查询', 'ja': 'オンライン検索', 'ko': '온라인 조회', 'fr': 'Requêtes en ligne', 'de': 'Online-Abfragen', 'es': 'Consultas en línea', 'ru': 'Онлайн-запросы' },
+  'Planes': { 'en': 'Planes', 'zh_CN': '飞机', 'ja': '航空機', 'ko': '비행기', 'fr': 'Avions', 'de': 'Flugzeuge', 'es': 'Aviones', 'ru': 'Самолёты' },
+  'Pointer Coordinates': { 'en': 'Pointer Coordinates', 'zh_CN': '指针坐标', 'ja': 'ポインター座標', 'ko': '포인터 좌표', 'fr': 'Coordonnées du pointeur', 'de': 'Zeigerkoordinaten', 'es': 'Coordenadas del puntero', 'ru': 'Координаты указателя' },
+  'Remote Sync': { 'en': 'Remote Sync', 'zh_CN': '远程同步', 'ja': 'リモート同期', 'ko': '원격 동기화', 'fr': 'Synchronisation à distance', 'de': 'Remote-Synchronisation', 'es': 'Sincronización remota', 'ru': 'Удалённая синхронизация' },
+  '3D Sceneries': { 'en': '3D Sceneries', 'zh_CN': '3D场景', 'ja': '3Dシーナリ', 'ko': '3D 장면', 'fr': 'Scènes 3D', 'de': '3D-Szenarien', 'es': 'Escenarios 3D', 'ru': '3D-сцены' },
+  'Sky Culture Maker': { 'en': 'Sky Culture Maker', 'zh_CN': '星空文化制作器', 'ja': '星空文化メーカー', 'ko': '별자리 문화 메이커', 'fr': 'Créateur de cultures célestes', 'de': 'Sternkultur-Ersteller', 'es': 'Creador de culturas celestes', 'ru': 'Создатель звёздных культур' },
+  'Historical Supernovae': { 'en': 'Historical Supernovae', 'zh_CN': '历史超新星', 'ja': '歴史的な超新星', 'ko': '역사적 초신성', 'fr': 'Supernovae historiques', 'de': 'Historische Supernovae', 'es': 'Supernovas históricas', 'ru': 'Исторические сверхновые' },
+  'Time Navigator': { 'en': 'Time Navigator', 'zh_CN': '时间导航器', 'ja': 'タイムナビゲーター', 'ko': '시간 내비게이터', 'fr': 'Navigateur temporel', 'de': 'Zeit-Navigator', 'es': 'Navegador temporal', 'ru': 'Навигатор времени' },
+  'Telescope Control': { 'en': 'Telescope Control', 'zh_CN': '望远镜控制', 'ja': '望遠鏡制御', 'ko': '망원경 제어', 'fr': 'Contrôle de télescope', 'de': 'Teleskopsteuerung', 'es': 'Control de telescopio', 'ru': 'Управление телескопом' },
+  'Mosaic Camera': { 'en': 'Mosaic Camera', 'zh_CN': '拼接相机', 'ja': 'モザイクカメラ', 'ko': '모자이크 카메라', 'fr': 'Caméra mosaïque', 'de': 'Mosaik-Kamera', 'es': 'Cámara mosaico', 'ru': 'Мозаичная камера' },
+  'Navigational Stars': { 'en': 'Navigational Stars', 'zh_CN': '导航星', 'ja': '航法星', 'ko': '항법 별', 'fr': 'Étoiles de navigation', 'de': 'Navigationssterne', 'es': 'Estrellas de navegación', 'ru': 'Навигационные звёзды' },
+  'Oculus': { 'en': 'Oculus', 'zh_CN': 'Oculus VR', 'ja': 'Oculus', 'ko': 'Oculus', 'fr': 'Oculus', 'de': 'Oculus', 'es': 'Oculus', 'ru': 'Oculus' },
+  'Vts': { 'en': 'Vts', 'zh_CN': '虚拟望远镜', 'ja': '仮想望遠鏡', 'ko': '가상 망원경', 'fr': 'Télescope virtuel', 'de': 'Virtuelles Teleskop', 'es': 'Telescopio virtual', 'ru': 'Виртуальный телескоп' },
+}
+
+// 投影方式名称+说明翻译表（key=Stellarium内部英文名）
+// 投影方式键名，顺序与展示顺序一致。
+// 必须与 StelCore::ProjectionType 的枚举键逐字相同——原生端 setProjectionType
+// 会用 getAllProjectionTypeKeys() 做白名单校验，拼错即静默失败。
+export const PROJECTION_KEYS: string[] = [
+  'ProjectionPerspective', 'ProjectionStereographic', 'ProjectionFisheye',
+  'ProjectionOrthographic', 'ProjectionEqualArea', 'ProjectionHammer',
+  'ProjectionMollweide', 'ProjectionSinusoidal', 'ProjectionMercator',
+  'ProjectionMiller', 'ProjectionCylinder', 'ProjectionCylinderFill'
+]
+
+const PROJECTION_NAMES: Record<string, Record<string, string>> = {
+  // 键名必须与 StelCore::ProjectionType 枚举键完全一致，
+  // 否则 setProjectionType 会被原生端白名单拒绝、按钮全部静默失效。
+  'ProjectionPerspective': { 'en': 'Perspective', 'zh_CN': '透视', 'ja': '透視', 'ko': '투시', 'fr': 'Perspective', 'de': 'Perspektive', 'es': 'Perspectiva', 'ru': 'Перспектива' },
+  'ProjectionStereographic': { 'en': 'Stereographic', 'zh_CN': '极射', 'ja': '平射', 'ko': '극사영', 'fr': 'Stéréographique', 'de': 'Stereografisch', 'es': 'Estereográfica', 'ru': 'Стереографическая' },
+  'ProjectionFisheye': { 'en': 'Fisheye', 'zh_CN': '鱼眼', 'ja': '魚眼', 'ko': '어안', 'fr': 'Oeil de poisson', 'de': 'Fisheye', 'es': 'Ojo de pez', 'ru': 'Рыбий глаз' },
+  'ProjectionOrthographic': { 'en': 'Orthographic', 'zh_CN': '正交', 'ja': '正射', 'ko': '정사영', 'fr': 'Orthographique', 'de': 'Orthografisch', 'es': 'Ortográfica', 'ru': 'Ортографическая' },
+  'ProjectionEqualArea': { 'en': 'Equal Area', 'zh_CN': '等积', 'ja': '正積', 'ko': '등적', 'fr': 'Équivalente', 'de': 'Flächentreu', 'es': 'Equivalente', 'ru': 'Равновеликая' },
+  'ProjectionHammer': { 'en': 'Hammer-Aitoff', 'zh_CN': '哈默-艾托夫', 'ja': 'ハンマー・イトフ', 'ko': '해머-아이토프', 'fr': 'Hammer-Aitoff', 'de': 'Hammer-Aitoff', 'es': 'Hammer-Aitoff', 'ru': 'Хаммер-Аитова' },
+  'ProjectionMollweide': { 'en': 'Mollweide', 'zh_CN': '摩尔威特', 'ja': 'モルワイデ', 'ko': '몰바이데', 'fr': 'Mollweide', 'de': 'Mollweide', 'es': 'Mollweide', 'ru': 'Мольвейде' },
+  'ProjectionSinusoidal': { 'en': 'Sinusoidal', 'zh_CN': '正弦', 'ja': 'サンソン', 'ko': '정현', 'fr': 'Sinusoïdale', 'de': 'Sinusoidal', 'es': 'Sinusoidal', 'ru': 'Синусоидальная' },
+  'ProjectionMercator': { 'en': 'Mercator', 'zh_CN': '墨卡托', 'ja': 'メルカトル', 'ko': '메르카토르', 'fr': 'Mercator', 'de': 'Mercator', 'es': 'Mercator', 'ru': 'Меркатора' },
+  'ProjectionMiller': { 'en': 'Miller', 'zh_CN': '米勒', 'ja': 'ミラー', 'ko': '밀러', 'fr': 'Miller', 'de': 'Miller', 'es': 'Miller', 'ru': 'Миллера' },
+  'ProjectionCylinder': { 'en': 'Cylinder', 'zh_CN': '圆柱', 'ja': '円筒', 'ko': '원통', 'fr': 'Cylindrique', 'de': 'Zylindrisch', 'es': 'Cilíndrica', 'ru': 'Цилиндрическая' },
+  'ProjectionCylinderFill': { 'en': 'Cylinder Fill', 'zh_CN': '全景圆柱', 'ja': '全天円筒', 'ko': '전천 원통', 'fr': 'Cylindrique pleine', 'de': 'Zylinder Vollbild', 'es': 'Cilíndrica completa', 'ru': 'Цилиндрическая заливка' }
+}
+
+// 投影方式功能说明（一句话描述，帮助用户理解每个投影的用途）
+const PROJECTION_DESC: Record<string, Record<string, string>> = {
+  'ProjectionPerspective': { 'en': 'Natural view like the human eye', 'zh_CN': '模拟人眼看到的自然视角，最适合日常观星', 'ja': '人間の目のような自然な視点', 'ko': '사람 눈과 같은 자연스러운 시점', 'fr': 'Vue naturelle comme l\'œil humain', 'de': 'Natürliche Sicht wie das menschliche Auge', 'es': 'Vista natural como el ojo humano', 'ru': 'Естественный вид как у человеческого глаза' },
+  'ProjectionStereographic': { 'en': 'Great for constellation shapes, no distortion near center', 'zh_CN': '星座形状不失真，中心区域最清晰', 'ja': '星座の形が歪まず、中心部が鮮明', 'ko': '별자리 모양 왜곡 없음, 중심부 선명', 'fr': 'Idéal pour les formes des constellations', 'de': 'Gut für Sternbildformen, keine Verzerrung im Zentrum', 'es': 'Ideal para formas de constelaciones', 'ru': 'Отлично для форм созвездий, без искажений в центре' },
+  'ProjectionFisheye': { 'en': 'Ultra-wide 180° view of the whole sky dome', 'zh_CN': '180° 超广角，一眼看到整个半球天空', 'ja': '180° 超広角、空全体が見える', 'ko': '180° 초광각, 하늘 전체 한눈에', 'fr': 'Ultra grand angle 180° du ciel entier', 'de': 'Ultraweitwinkel 180° des gesamten Himmels', 'es': 'Ultra gran angular 180° del cielo completo', 'ru': 'Сверхширокий угол 180° всего неба' },
+  'ProjectionOrthographic': { 'en': 'View from space, Earth-like horizon curve', 'zh_CN': '从太空俯瞰视角，地平线呈弧形', 'ja': '宇宙からの眺め、地平線が弧を描く', 'ko': '우주에서 내려다보는 시점, 지평선 곡선', 'fr': 'Vue depuis l\'espace', 'de': 'Blick aus dem Weltraum', 'es': 'Vista desde el espacio', 'ru': 'Вид из космоса' },
+  'ProjectionEqualArea': { 'en': 'Preserves area, good for wide sky surveys', 'zh_CN': '保持面积比例不变，适合大范围巡天对比', 'ja': '面積比が保たれ、広域観測に適する', 'ko': '면적 비율 유지, 광역 관측에 적합', 'fr': 'Conserve les aires, idéal pour les relevés', 'de': 'Flächentreu, gut für Himmelsdurchmusterungen', 'es': 'Conserva el área, ideal para sondeos', 'ru': 'Сохраняет площадь, удобна для обзоров' },
+  'ProjectionHammer': { 'en': 'Equal-area map, shows entire celestial sphere', 'zh_CN': '等面积投影，可显示整个天球（全天星图）', 'ja': '等積投影、天球全体を表示', 'ko': '등적 투영, 천구 전체 표시', 'fr': 'Projection équivalente, sphère céleste entière', 'de': 'Flächentreue Projektion, ganzer Himmel', 'es': 'Proyección equivalente, esfera celeste completa', 'ru': 'Равноплощадная проекция, вся небесная сфера' },
+  'ProjectionMollweide': { 'en': 'Elliptical all-sky map, common in astronomy papers', 'zh_CN': '椭圆形全天图，天文论文常用', 'ja': '楕円形の全天図、論文でよく使われる', 'ko': '타원형 전천 지도, 논문에서 흔함', 'fr': 'Carte elliptique du ciel entier', 'de': 'Elliptische Ganzhimmelskarte', 'es': 'Mapa elíptico de todo el cielo', 'ru': 'Эллиптическая карта всего неба' },
+  'ProjectionSinusoidal': { 'en': 'Equal-area, curved meridians', 'zh_CN': '等积投影，经线呈弧形收拢', 'ja': '正積投影、経線が湾曲', 'ko': '등적 투영, 경선이 휘어짐', 'fr': 'Équivalente, méridiens courbes', 'de': 'Flächentreu, gebogene Meridiane', 'es': 'Equivalente, meridianos curvos', 'ru': 'Равновеликая, изогнутые меридианы' },
+  'ProjectionMercator': { 'en': 'Map-like, straight lines = great circles; poles stretched', 'zh_CN': '地图式投影，直线即大圆航线；两极拉伸严重', 'ja': '地図式、直線=大円航路；極域が伸びる', 'ko': '지도식, 직선=대원항로; 극심하게 늘어남', 'fr': 'Style carte, les pôles sont étirés', 'de': 'kartenartig, Pole stark gestreckt', 'es': 'Estilo mapa, los polos se estiran', 'ru': 'Карта, полюса сильно растянуты' },
+  'ProjectionMiller': { 'en': 'Mercator-like but with milder polar stretching', 'zh_CN': '类似墨卡托，但两极拉伸更温和', 'ja': 'メルカトル風、極域の伸びが穏やか', 'ko': '메르카토르와 비슷하나 극지 왜곡이 적음', 'fr': 'Proche de Mercator, pôles moins étirés', 'de': 'Wie Mercator, aber mildere Polstreckung', 'es': 'Como Mercator, con polos menos estirados', 'ru': 'Как Меркатор, но полюса мягче' },
+  'ProjectionCylinder': { 'en': 'Simple cylindrical panorama of the sky', 'zh_CN': '简单圆柱全景，横向铺开整片天空', 'ja': '単純な円筒パノラマ', 'ko': '단순 원통 파노라마', 'fr': 'Panorama cylindrique simple', 'de': 'Einfaches Zylinderpanorama', 'es': 'Panorama cilíndrico simple', 'ru': 'Простая цилиндрическая панорама' },
+  'ProjectionCylinderFill': { 'en': 'Full-frame cylinder; zoom and panning are locked', 'zh_CN': '铺满整屏的圆柱投影，锁定缩放与平移', 'ja': '全画面円筒、ズームと移動は固定', 'ko': '전체 화면 원통, 확대·이동 잠김', 'fr': 'Cylindre plein écran, zoom verrouillé', 'de': 'Vollbild-Zylinder, Zoom gesperrt', 'es': 'Cilindro a pantalla completa, zoom bloqueado', 'ru': 'Цилиндр на весь экран, зум заблокирован' }
 }
 
 // 地景名称翻译表
@@ -252,6 +335,8 @@ const RICH_PHRASES: Record<string, Record<string, string>> = {
 const UI_STRINGS: Record<string, Record<string, string>> = {
   'btn_start_recording': { 'en': 'Start Recording', 'zh_CN': '开始录制', 'ja': '録画開始', 'ko': '녹화 시작', 'fr': 'Commencer l\'enregistrement', 'de': 'Aufnahme starten', 'es': 'Iniciar grabación', 'ru': 'Начать запись' },
   'btn_stop_recording': { 'en': 'Stop Recording', 'zh_CN': '停止录制', 'ja': '録画停止', 'ko': '녹화 중지', 'fr': 'Arrêter l\'enregistrement', 'de': 'Aufnahme stoppen', 'es': 'Detener grabación', 'ru': 'Остановить запись' },
+  'btn_resume': { 'en': 'Resume', 'zh_CN': '继续', 'ja': '再開', 'ko': '계속', 'fr': 'Reprendre', 'de': 'Fortsetzen', 'es': 'Continuar', 'ru': 'Продолжить' },
+  'msg_no_scripts': { 'en': 'No scripts available', 'zh_CN': '没有可用脚本', 'ja': '利用可能なスクリプトなし', 'ko': '사용 가능한 스크립트 없음', 'fr': 'Aucun script disponible', 'de': 'Keine Skripte verfügbar', 'es': 'Sin scripts disponibles', 'ru': 'Нет доступных скриптов' },
   'btn_bookmark_object': { 'en': 'Bookmark Object', 'zh_CN': '收藏天体', 'ja': '天体をブックマーク', 'ko': '천체 북마크', 'fr': 'Marquer l\'objet', 'de': 'Objekt markieren', 'es': 'Marcar objeto', 'ru': 'Добавить объект' },
   'bookmark_selected_object_hint': { 'en': 'Selected', 'zh_CN': '当前选中', 'ja': '選択中', 'ko': '선택됨', 'fr': 'Sélectionné', 'de': 'Ausgewählt', 'es': 'Seleccionado', 'ru': 'Выбран' },
   'msg_apply_failed': { 'en': 'Apply failed', 'zh_CN': '应用失败', 'ja': '適用失敗', 'ko': '적용 실패', 'fr': 'Échec de l\'application', 'de': 'Anwendung fehlgeschlagen', 'es': 'Error al aplicar', 'ru': 'Ошибка применения' },
@@ -277,6 +362,19 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'msg_not_found_alt': { 'en': 'not found', 'zh_CN': '未找到', 'ja': '見つかりません', 'ko': '찾을 수 없음', 'fr': 'introuvable', 'de': 'nicht gefunden', 'es': 'no encontrado', 'ru': 'не найдено' },
   'msg_not_selected': { 'en': 'not selected', 'zh_CN': '未选中', 'ja': '未選択', 'ko': '미선택', 'fr': 'non sélectionné', 'de': 'nicht ausgewählt', 'es': 'no seleccionado', 'ru': 'не выбрано' },
   'msg_paused': { 'en': 'Paused', 'zh_CN': '已暂停', 'ja': '一時停止中', 'ko': '일시정지됨', 'fr': 'En pause', 'de': 'Pausiert', 'es': 'Pausado', 'ru': 'Пауза' },
+  's0758_play': { 'en': 'Realtime', 'zh_CN': '实时', 'ja': 'リアルタイム', 'ko': '실시간', 'fr': 'Temps réel', 'de': 'Echtzeit', 'es': 'Tiempo real', 'ru': 'Реальное время' },
+  's0759_slower': { 'en': 'Slower', 'zh_CN': '减速', 'ja': '減速', 'ko': '느리게', 'fr': 'Ralentir', 'de': 'Langsamer', 'es': 'Más lento', 'ru': 'Медленнее' },
+  's0760_faster': { 'en': 'Ultra Fast', 'zh_CN': '超快', 'ja': '超早送り', 'ko': '초고속', 'fr': 'Très rapide', 'de': 'Sehr schnell', 'es': 'Ultra rápido', 'ru': 'Сверхбыстро' },
+  's0761_stop': { 'en': 'Stop', 'zh_CN': '停止', 'ja': '停止', 'ko': '정지', 'fr': 'Arrêter', 'de': 'Stoppen', 'es': 'Detener', 'ru': 'Стоп' },
+  's0762_warp': { 'en': 'Warp', 'zh_CN': '极速', 'ja': 'ワープ', 'ko': '워프', 'fr': 'Vitesse lumière', 'de': 'Lichtgeschw.', 'es': 'Velocidad luz', 'ru': 'Ускорение' },
+  's0763_rewind': { 'en': 'Rewind', 'zh_CN': '倒带', 'ja': '巻き戻し', 'ko': '되감기', 'fr': 'Retour', 'de': 'Rückspul', 'es': 'Rebobinar', 'ru': 'Назад' },
+  's0764_realtime': { 'en': 'Live', 'zh_CN': '实时', 'ja': 'リアルタイム', 'ko': '실시간', 'fr': 'Temps réel', 'de': 'Echtzeit', 'es': 'Tiempo real', 'ru': 'Реал' },
+  's0765_fast': { 'en': 'Fast Fwd', 'zh_CN': '快进', 'ja': '早送り', 'ko': '빨리감기', 'fr': 'Avance rapide', 'de': 'Vorlauf', 'es': 'Avance rápido', 'ru': 'Вперёд' },
+  'act_refresh': { 'en': 'Refresh', 'zh_CN': '刷新', 'ja': '更新', 'ko': '새로고침', 'fr': 'Actualiser', 'de': 'Aktualisieren', 'es': 'Actualizar', 'ru': 'Обновить' },
+  'msg_loading': { 'en': 'Loading...', 'zh_CN': '正在加载…', 'ja': '読み込み中…', 'ko': '로딩 중…', 'fr': 'Chargement…', 'de': 'Laden…', 'es': 'Cargando…', 'ru': 'Загрузка…' },
+  'unit_km': { 'en': 'km', 'zh_CN': '千米', 'ja': 'km', 'ko': 'km', 'fr': 'km', 'de': 'km', 'es': 'km', 'ru': 'км' },
+  'unit_mile': { 'en': 'mi', 'zh_CN': '英里', 'ja': 'マイル', 'ko': '마일', 'fr': 'mi', 'de': 'mi', 'es': 'mi', 'ru': 'миль' },
+  's0766_scrubber': { 'en': 'Time Travel', 'zh_CN': '时间旅行', 'ja': 'タイムトラベル', 'ko': '시간여행', 'fr': 'Voyage temporel', 'de': 'Zeitreise', 'es': 'Viaje temporal', 'ru': 'Путешествие во времени' },
   'msg_planet_switched': { 'en': 'Switched observing planet', 'zh_CN': '已切换观测星球', 'ja': '観測惑星切替済み', 'ko': '관측 행성 전환됨', 'fr': 'Planète d\'observation changée', 'de': 'Beobachtungsplanet gewechselt', 'es': 'Planeta de observación cambiado', 'ru': 'Планета наблюдения переключена' },
   'msg_pointed_to': { 'en': 'Pointed to Alt', 'zh_CN': '已指向 高度角', 'ja': '指向済み 高度', 'ko': '포인팅됨 고도', 'fr': 'Pointé vers Alt', 'de': 'Gezeigt auf Höhe', 'es': 'Apuntado a Alt', 'ru': 'Наведено на высоту' },
   'msg_pointing': { 'en': 'Pointing', 'zh_CN': '指向中…', 'ja': '指向中…', 'ko': '포인팅 중…', 'fr': 'Pointage en cours…', 'de': 'Zeige…', 'es': 'Apuntando…', 'ru': 'Наведение…' },
@@ -718,7 +816,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'i0258': { 'en': 'Solar', 'zh_CN': '日食', 'ja': '日食', 'ko': '일식', 'fr': 'Solar', 'de': 'Solar', 'es': 'Solar', 'ru': 'Solar' },
   'i0259': { 'en': 'Lunar', 'zh_CN': '月食', 'ja': '月食', 'ko': '월식', 'fr': 'Lunar', 'de': 'Lunar', 'es': 'Lunar', 'ru': 'Lunar' },
   'i0260': { 'en': 'Transit', 'zh_CN': '凌日', 'ja': '凌日', 'ko': '엄격', 'fr': 'Transit', 'de': 'Transit', 'es': 'Transit', 'ru': 'Transit' },
-  'i0261': { 'en': 'Stellarium for HarmonyOS', 'zh_CN': 'Stellarium for HarmonyOS', 'ja': 'Stellarium for HarmonyOS', 'ko': 'Stellarium for HarmonyOS', 'fr': 'Stellarium for HarmonyOS', 'de': 'Stellarium for HarmonyOS', 'es': 'Stellarium for HarmonyOS', 'ru': 'Stellarium for HarmonyOS' },
+  'i0261': { 'en': '星象仪 for HarmonyOS', 'zh_CN': '星象仪 for HarmonyOS', 'ja': '星象仪 for HarmonyOS', 'ko': '星象仪 for HarmonyOS', 'fr': '星象仪 for HarmonyOS', 'de': '星象仪 for HarmonyOS', 'es': '星象仪 for HarmonyOS', 'ru': '星象仪 for HarmonyOS' },
   'i0262': { 'en': 'Community port of Stellarium 26.2', 'zh_CN': '基于 Stellarium 26.2 C++ 核心的社区移植版', 'ja': 'Stellarium 26.2 をベースにしたコミュニティ移植版', 'ko': 'Stellarium 26.2 C++ 핵심 기반 커뮤니티 이식판', 'fr': 'Community port of Stellarium 26.2', 'de': 'Community port of Stellarium 26.2', 'es': 'Community port of Stellarium 26.2', 'ru': 'Community port of Stellarium 26.2' },
   'i0263': { 'en': 'Renderer: OpenGL ES via XComponent', 'zh_CN': '渲染引擎：OpenGL ES via XComponent', 'ja': 'レンダラ: OpenGL ES via XComponent', 'ko': '렌더러: OpenGL ES via XComponent', 'fr': 'Renderer: OpenGL ES via XComponent', 'de': 'Renderer: OpenGL ES via XComponent', 'es': 'Renderer: OpenGL ES via XComponent', 'ru': 'Renderer: OpenGL ES via XComponent' },
   'i0264': { 'en': 'ArkTS-N-API-C-C++ bridge', 'zh_CN': 'ArkTS-N-API-C-C++ 桥接架构', 'ja': 'ArkTS-N-API-C-C++ ブリッジ', 'ko': 'ArkTS-N-API-C-C++ 브리지', 'fr': 'ArkTS-N-API-C-C++ bridge', 'de': 'ArkTS-N-API-C-C++ bridge', 'es': 'ArkTS-N-API-C-C++ bridge', 'ru': 'ArkTS-N-API-C-C++ bridge' },
@@ -913,7 +1011,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'msg_continuation_initiated': { 'en': 'msg_continuation_initiated', 'zh_CN': 'msg_continuation_initiated', 'ja': 'msg_continuation_initiated', 'ko': 'msg_continuation_initiated', 'fr': 'msg_continuation_initiated', 'de': 'msg_continuation_initiated', 'es': 'msg_continuation_initiated', 'ru': 'msg_continuation_initiated' },
   'msg_flip_north_up': { 'en': 'msg_flip_north_up', 'zh_CN': 'msg_flip_north_up', 'ja': 'msg_flip_north_up', 'ko': 'msg_flip_north_up', 'fr': 'msg_flip_north_up', 'de': 'msg_flip_north_up', 'es': 'msg_flip_north_up', 'ru': 'msg_flip_north_up' },
   'msg_flip_south_up': { 'en': 'msg_flip_south_up', 'zh_CN': 'msg_flip_south_up', 'ja': 'msg_flip_south_up', 'ko': 'msg_flip_south_up', 'fr': 'msg_flip_south_up', 'de': 'msg_flip_south_up', 'es': 'msg_flip_south_up', 'ru': 'msg_flip_south_up' },
-  'msg_lang_switched_done': { 'en': 'msg_lang_switched_done', 'zh_CN': 'msg_lang_switched_done', 'ja': 'msg_lang_switched_done', 'ko': 'msg_lang_switched_done', 'fr': 'msg_lang_switched_done', 'de': 'msg_lang_switched_done', 'es': 'msg_lang_switched_done', 'ru': 'msg_lang_switched_done' },
+  'msg_lang_switched_done': { 'en': 'Interface language switched to', 'zh_CN': '界面语言已切换为', 'ja': '表示言語を切り替えました', 'ko': '인터페이스 언어 변경:', 'fr': 'Langue de l’interface :', 'de': 'Sprache umgestellt auf', 'es': 'Idioma de la interfaz:', 'ru': 'Язык интерфейса:' },
   'p_bookmarks': { 'en': 'Bookmarks', 'zh_CN': '书签', 'ja': 'ブックマーク', 'ko': '북마크', 'fr': 'Bookmarks', 'de': 'Bookmarks', 'es': 'Bookmarks', 'ru': 'Bookmarks' },
   'p_catalogs': { 'en': 'Star Catalogs', 'zh_CN': '星表下载', 'ja': '星表ダウンロード', 'ko': '별표 다운로드', 'fr': 'Star Catalogs', 'de': 'Star Catalogs', 'es': 'Star Catalogs', 'ru': 'Star Catalogs' },
   'p_meteors': { 'en': 'Meteor Showers', 'zh_CN': '流星雨', 'ja': '流星群', 'ko': '유성우', 'fr': 'Meteor Showers', 'de': 'Meteor Showers', 'es': 'Meteor Showers', 'ru': 'Meteor Showers' },
@@ -958,6 +1056,77 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'plugin_text_user_interface': { 'en': 'Text Interface', 'zh_CN': '文本界面', 'ja': 'Text Interface', 'ko': 'Text Interface', 'fr': 'Text Interface', 'de': 'Text Interface', 'es': 'Text Interface', 'ru': 'Text Interface' },
   'plugin_time_zone': { 'en': 'Time Zone', 'zh_CN': '时区', 'ja': 'Time Zone', 'ko': 'Time Zone', 'fr': 'Time Zone', 'de': 'Time Zone', 'es': 'Time Zone', 'ru': 'Time Zone' },
   'plugin_voculars': { 'en': 'Virtual Oculars', 'zh_CN': '虚拟目镜', 'ja': 'Virtual Oculars', 'ko': 'Virtual Oculars', 'fr': 'Virtual Oculars', 'de': 'Virtual Oculars', 'es': 'Virtual Oculars', 'ru': 'Virtual Oculars' },
+
+  // ── 插件功能描述（副标题） ──
+  'plugin_desc_angle_measure': { 'en': 'Measure angular distance between two objects on screen', 'zh_CN': '在屏幕上测量两个天体之间的角距离', 'ja': 'Measure angular distance', 'ko': '각 거리 측정', 'fr': 'Mesurer la distance angulaire', 'de': 'Winkelmessung', 'es': 'Medir distancia angular', 'ru': 'Измерение углового расстояния' },
+  'plugin_desc_archaeolines': { 'en': 'Display ancient astronomical alignment lines', 'zh_CN': '显示古代天文对齐线（如金字塔、巨石阵方位）', 'ja': 'Ancient alignment lines', 'ko': '고천문 정렬선', 'fr': 'Lignes d\'alignement anciennes', 'de': 'Archäologische Linien', 'es': 'Líneas de alineación antiguas', 'ru': 'Археологические линии' },
+  'plugin_desc_calendars': { 'en': 'Show various historical and cultural calendars', 'zh_CN': '显示各种历史和文化历法（农历、儒略历等）', 'ja': 'Historical calendars', 'ko': '역사적 달력', 'fr': 'Calendriers historiques', 'de': 'Historische Kalender', 'es': 'Calendarios históricos', 'ru': 'Исторические календари' },
+  'plugin_desc_equation_of_time': { 'en': 'Visualize the equation of time (sun clock vs actual)', 'zh_CN': '可视化时间方程（真太阳时与平太阳时的差值）', 'ja': 'Equation of time visualization', 'ko': '시간 방정식', 'fr': 'Équation du temps', 'de': 'Zeitgleichung', 'es': 'Ecuación del tiempo', 'ru': 'Уравнение времени' },
+  'plugin_desc_exoplanets': { 'en': 'Display cataloged exoplanetary systems with data', 'zh_CN': '展示已确认的系外行星系统及其基本数据', 'ja': 'Exoplanet catalog display', 'ko': '계외행성 목록', 'fr': 'Catalogue d\'exoplanètes', 'de': 'Exoplanetenkatalog', 'es': 'Catálogo de exoplanetas', 'ru': 'Каталог экзопланет' },
+  'plugin_desc_lens_distortion': { 'en': 'Estimate and correct camera lens distortion for astrophotography', 'zh_CN': '估算并校正相机镜头畸变，用于天文摄影', 'ja': 'Lens distortion correction', 'ko': '렌즈 왜곡 보정', 'fr': 'Correction de distorsion', 'de': 'Objektivverzerrung', 'es': 'Corrección de distorsión de lente', 'ru': 'Коррекция дисторсии объектива' },
+  'plugin_desc_meteor_showers': { 'en': 'Show active meteor showers with radiants and rates', 'zh_CN': '显示当前活跃的流星雨及其辐射点、每小时流星数', 'ja': 'Active meteor showers', 'ko': '활성 유성우', 'fr': 'Perséides actives', 'de': 'Aktive Meteorschauer', 'es': 'Lluvias de meteoros activas', 'ru': 'Активные метеорные потоки' },
+  'plugin_desc_novae': { 'en': 'Display recorded nova events in the sky', 'zh_CN': '展示已记录的新星事件位置', 'ja': 'Nova events display', 'ko': '신성 이벤트', 'fr': 'Événements de novae', 'de': 'Novae-Ereignisse', 'es': 'Eventos de novas', 'ru': 'События новых звёзд' },
+  'plugin_desc_observability': { 'en': 'Calculate best observation dates for objects', 'zh_CN': '计算各天体的最佳观测日期和条件', 'ja': 'Observability calculator', 'ko': '관측 가능성', 'fr': 'Observabilité', 'de': 'Beobachtbarkeit', 'es': 'Observabilidad', 'ru': 'Наблюдаемость' },
+  'plugin_desc_pulsars': { 'en': 'Display cataloged pulsar positions', 'zh_CN': '展示已记录的脉冲星位置', 'ja': 'Pulsar catalog', 'ko': '펄서 목록', 'fr': 'Catalogue de pulsars', 'de': 'Pulsarkatalog', 'es': 'Catálogo de púlsares', 'ru': 'Каталог пульсаров' },
+  'plugin_desc_quasars': { 'en': 'Display bright quasar positions', 'zh_CN': '展示明亮类星体的位置', 'ja': 'Quasar positions', 'ko': '류사체 위치', 'fr': 'Positions des quasars', 'de': 'Quasare', 'es': 'Posiciones de cuásares', 'ru': 'Квазары' },
+  'plugin_desc_remote_control': { 'en': 'Control Stellarium remotely over network', 'zh_CN': '通过网络远程控制星象仪', 'ja': 'Remote control', 'ko': '원격 제어', 'fr': 'Contrôle à distance', 'de': 'Fernsteuerung', 'es': 'Control remoto', 'ru': 'Удалённое управление' },
+  'plugin_desc_satellites': { 'en': 'Track artificial satellites and space debris', 'zh_CN': '追踪人造卫星和太空碎片轨道', 'ja': 'Satellite tracking', 'ko': '인공위성 추적', 'fr': 'Suivi de satellites', 'de': 'Satellitenverfolgung', 'es': 'Seguimiento de satélites', 'ru': 'Отслеживание спутников' },
+  'plugin_desc_screenshots': { 'en': 'Take high-quality screenshots of the sky', 'zh_CN': '拍摄高质量星空截图', 'ja': 'Screenshot tool', 'ko': '스크린샷 도구', 'fr': 'Capture d\'écran', 'de': 'Bildschirmfoto', 'es': 'Captura de pantalla', 'ru': 'Скриншоты' },
+  'plugin_desc_skycultures': { 'en': 'Switch between different culture\'s constellation figures', 'zh_CN': '在不同文化的星座图案之间切换（中国、希腊等）', 'ja': 'Sky cultures switcher', 'ko': '별자리 문화 전환', 'fr': 'Cultures du ciel', 'de': 'Himmelskulturen', 'es': 'Culturas del cielo', 'ru': 'Культуры неба' },
+  'plugin_desc_solar_system_editor': { 'en': 'Add or modify solar system bodies', 'zh_CN': '添加或修改太阳系天体数据', 'ja': 'Solar system editor', 'ko': '태양계 편집기', 'fr': 'Éditeur du système solaire', 'de': 'Sonnensystem-Editor', 'es': 'Editor del sistema solar', 'ru': 'Редактор Солнечной системы' },
+  'plugin_desc_supernovae': { 'en': 'Display recorded supernova events', 'zh_CN': '展示已记录的超新星事件位置', 'ja': 'Supernova events', 'ko': '초신성 이벤트', 'fr': 'Supernovae', 'de': 'Supernovae', 'es': 'Supernovas', 'ru': 'Сверхновые' },
+  'plugin_desc_text_user_interface': { 'en': 'Control Stellarium via text commands', 'zh_CN': '通过文本命令控制星象仪', 'ja': 'Text interface', 'ko': '텍스트 인터페이스', 'fr': 'Interface texte', 'de': 'Textschnittstelle', 'es': 'Interfaz de texto', 'ru': 'Текстовый интерфейс' },
+  'plugin_desc_time_zone': { 'en': 'Display multiple time zone clocks', 'zh_CN': '显示多个时区的时钟', 'ja': 'Time zone display', 'ko': '시간대 표시', 'fr': 'Fuseaux horaires', 'de': 'Zeitzonen', 'es': 'Zonas horarias', 'ru': 'Часовые пояса' },
+  'plugin_desc_voculars': { 'en': 'Simulate telescope eyepiece and CCD sensor views', 'zh_CN': '模拟望远镜目镜和CCD传感器的视野效果', 'ja': 'Eyepiece simulation', 'ko': '안경 시뮬레이션', 'fr': 'Simulation oculaire', 'de': 'Okularsimulation', 'es': 'Simulación de ocular', 'ru': 'Симуляция окуляра' },
+
+  // ── 脚本中文名称 ──
+  'script_name_constellations_tour': { 'en': 'Constellation Tour', 'zh_CN': '星座漫游导览', 'ja': '星座ツアー', 'ko': '별자리 투어', 'fr': 'Tour des constellations', 'de': 'Konstellationsreise', 'es': 'Tour de constelaciones', 'ru': ' Tur по созвездиям' },
+  'script_name_modern_constellations_tour': { 'en': 'Modern Constellation Tour', 'zh_CN': '现代88星座巡游', 'ja': '現代星座ツアー', 'ko': '현대 별자리 투어', 'fr': 'Tour des constellations modernes', 'de': 'Moderne Konstellationen', 'es': 'Tour de constelaciones modernas', 'ru': 'Тур по современным созвездиям' },
+  'script_name_messier_marathon': { 'en': 'Messier Marathon', 'zh_CN': '梅西耶马拉松', 'ja': 'メシエマラソン', 'ko': '메시에 마라톤', 'fr': 'Marathon Messier', 'de': 'Messier-Marathon', 'es': 'Maratón Messier', 'ru': 'Мессье-марафон' },
+  'script_name_BAS_Messier_Tour': { 'en': 'BAS Messier Tour', 'zh_CN': '梅西耶天体深度游', 'ja': 'BASメシエツアー', 'ko': 'BAS 메시에 투어', 'fr': 'Tour Messier BAS', 'de': 'BAS Messier-Tour', 'es': 'Tour Messier BAS', 'ru': ' Тур Мессье от BAS' },
+  'script_name_planets_tour': { 'en': 'Planets Tour', 'zh_CN': '行星系统巡游', 'ja': '惑星ツアー', 'ko': '행성 투어', 'fr': 'Tour des planètes', 'de': 'Planetenreise', 'es': 'Tour planetario', 'ru': ' Тур по планетам' },
+  'script_name_BAS_Jupiter_Moons': { 'en': 'Jupiter Moons', 'zh_CN': '木星伽利略卫星', 'ja': '木星の衛星', 'ko': '목성 위성', 'fr': 'Lunes de Jupiter', 'de': 'Jupitermonde', 'es': 'Lunas de Júpiter', 'ru': 'Спутники Юпитера' },
+  'script_name_lunar_total': { 'en': 'Total Lunar Eclipse', 'zh_CN': '月全食演示', 'ja': '皆既月食', 'ko': '개기월식', 'fr': 'Éclipse totale de Lune', 'de': 'Mondfinsternis total', 'es': 'Eclipse total de Luna', 'ru': 'Полное лунное затмение' },
+  'script_name_lunar_partial': { 'en': 'Partial Lunar Eclipse', 'zh_CN': '月偏食演示', 'ja': '部分月食', 'ko': '부분월식', 'fr': 'Éclipse partielle de Lune', 'de': 'Partielle Mondfinsternis', 'es': 'Eclipse parcial de Luna', 'ru': 'Частичное лунное затмение' },
+  'script_name_solar_eclipse': { 'en': 'Solar Eclipse', 'zh_CN': '日食演示', 'ja': '日食', 'ko': '일식', 'fr': 'Éclipse solaire', 'de': 'Sonnenfinsternis', 'es': 'Eclipse solar', 'ru': 'Солнечное затмение' },
+  'script_name_transit_of_venus': { 'en': 'Transit of Venus', 'zh_CN': '金星凌日', 'ja': '金星のトランジット', 'ko': '금성 태양면 통과', 'fr': 'Transit de Vénus', 'de': 'Venus-Durchgang', 'es': 'Tránsito de Venus', 'ru': 'Прохождение Венеры' },
+  'script_name_supernova': { 'en': 'Supernova 1054 (Crab Nebula)', 'zh_CN': '超新星1054（蟹状星云）', 'ja': '超新星1054', 'ko': '초신성1054', 'fr': 'Supernova 1054', 'de': 'Supernova 1054', 'es': 'Supernova 1054', 'ru': 'Сверхновая 1054' },
+  'script_name_triple_sunrise_and_sunsets': { 'en': 'Triple Sunrise & Sunsets', 'zh_CN': '三重日出与日落', 'ja': '三重の日出入り', 'ko': '삼중 일출일몰', 'fr': 'Triple lever/coucher', 'de': 'Dreifacher Sonnenaufgang', 'es': 'Triple amanecer/atardecer', 'ru': 'Тройные восходы и закаты' },
+  'script_name_analemma': { 'en': 'Analemma (Sun\'s annual figure-8)', 'zh_CN': '日行8字曲线', 'ja': 'アナレンマ', 'ko': '아날렘마', 'fr': 'Analemme', 'de': 'Analemma', 'es': 'Analema', 'ru': 'Аналемма' },
+  'script_name_martian_analemma': { 'en': 'Martian Analemma', 'zh_CN': '火星日行曲线', 'ja': '火星アナレンマ', 'ko': '화성 아날렘마', 'fr': 'Analemme martienne', 'de': 'Marianische Analemma', 'es': 'Analema marciano', 'ru': 'Марсианская аналемма' },
+  'script_name_saturnian_analemma': { 'en': 'Saturnian Analemma', 'zh_CN': '土星日行曲线', 'ja': '土星アナレンマ', 'ko': '토성 아날렘마', 'fr': 'Analemme saturnienne', 'de': 'Saturn-Analemma', 'es': 'Analema de Saturno', 'ru': 'Сатурнианская аналемма' },
+  'script_name_uranian_analemma': { 'en': 'Uranian Analemma', 'zh_CN': '天王星日行曲线', 'ja': '天王星アナレンマ', 'ko': '천왕성 아날렘마', 'fr': 'Analemme uranienne', 'de': 'Uranus-Analemma', 'es': 'Analema de Urano', 'ru': 'Урановская аналемма' },
+  'script_name_best_ngc': { 'en': 'Best NGC Objects', 'zh_CN': 'NGC精选深空天体', 'ja': 'NGCベスト', 'ko': 'NGC 베스트', 'fr': 'Meilleurs objets NGC', 'de': 'Beste NGC-Objekte', 'es': 'Mejores objetos NGC', 'ru': 'Лучшие объекты NGC' },
+  'script_name_h400_tour': { 'en': 'Herschel 400 Tour', 'zh_CN': '赫歇尔400巡游', 'ja': 'ハーシェル400', 'ko': '허셜 400', 'fr': 'Tour Herschel 400', 'de': 'Herschel 400 Tour', 'es': 'Tour Herschel 400', 'ru': ' Тур Herschel 400' },
+  'script_name_double_stars': { 'en': 'Double Stars', 'zh_CN': '双星观测指南', 'ja': '二重星', 'ko': '쌍성', 'fr': 'Étoiles doubles', 'de': 'Doppelsterne', 'es': 'Estrellas dobles', 'ru': 'Двойные звёзды' },
+  'script_name_largest_known_stars': { 'en': 'Brightest Stars', 'zh_CN': '最亮的恒星', 'ja': '明るい恒星', 'ko': '가장 밝은 항성', 'fr': 'Étoiles les plus brillantes', 'de': 'Hellste Sterne', 'es': 'Estrellas más brillantes', 'ru': 'Ярчайшие звёзды' },
+  'script_name_binocular_highlights': { 'en': 'Binocular Highlights', 'zh_CN': '双筒望远镜精选目标', 'ja': '双眼鏡ハイライト', 'ko': '쌍안경 하이라이트', 'fr': 'Highlights jumelles', 'de': 'Fernglas-Highlights', 'es': 'Destacados prismáticos', 'ru': 'Объекты для бинокля' },
+  'script_name_binosky': { 'en': 'BinoSky Objects', 'zh_CN': '双筒星空观测', 'ja': 'BinoSky', 'ko': 'BinoSky', 'fr': 'BinoSky', 'de': 'BinoSky', 'es': 'BinoSky', 'ru': 'BinoSky' },
+  'script_name_bennett': { 'en': 'Bennett\'s List', 'zh_CN': '贝内特天体列表', 'ja': 'ベネットリスト', 'ko': '베넷 리스트', 'fr': 'Liste de Bennett', 'de': 'Bennetts Liste', 'es': 'Lista de Bennett', 'ru': 'Список Беннетта' },
+  'script_name_sky_cultures': { 'en': 'Sky Cultures Demo', 'zh_CN': '星空文化展示', 'ja': '星空文化デモ', 'ko': '별자리 문화 데모', 'fr': 'Démonstration cultures du ciel', 'de': 'Himmelskulturen Demo', 'es': 'Demo culturas del cielo', 'ru': 'Демонстрация культур неба' },
+  'script_name_landscapes': { 'en': 'World Landscapes Tour', 'zh_CN': '世界各地景切换', 'ja': '世界の風景ツアー', 'ko': '세계 풍경 투어', 'fr': 'Tour des paysages', 'de': 'Landschaftsrundreise', 'es': 'Tour de paisajes', 'ru': ' Тур по ландшафтам' },
+  'script_name_screensaver': { 'en': 'Screensaver Mode', 'zh_CN': '屏幕保护模式', 'ja': 'スクリーンセーバー', 'ko': '화면보호기', 'fr': 'Écran de veille', 'de': 'Bildschirmschoner', 'es': 'Salvapantallas', 'ru': 'Хранитель экрана' },
+  'script_name_solar_system_screensaver': { 'en': 'Solar System Screensaver', 'zh_CN': '太阳系屏保动画', 'ja': '太陽系スクリーンセーバー', 'ko': '태양계 화면보호기', 'fr': 'Écran de veille Solaire', 'de': 'Sonnensystem-Bildschirmschoner', 'es': 'Salvapantallas del sistema solar', 'ru': 'Хранитель экрана Солнечной системы' },
+  'script_name_skybox': { 'en': 'All-Sky Box', 'zh_CN': '全天盒全景', 'ja': 'スカイボックス', 'ko': '스카이박스', 'fr': 'Boîte de ciel entier', 'de': 'Himmelbox', 'es': 'Caja de cielo completo', 'ru': 'Небесный куб' },
+  'script_name_random_location': { 'en': 'Random Location Jump', 'zh_CN': '随机地球位置跳转', 'ja': 'ランダムロケーション', 'ko': '무작위 위치', 'fr': 'Location aléatoire', 'de': 'Zufälliger Ort', 'es': 'Ubicación aleatoria', 'ru': 'Случайная локация' },
+  'script_name_sun': { 'en': 'Sun Information', 'zh_CN': '太阳信息总览', 'ja': '太陽情報', 'ko': '태양 정보', 'fr': 'Informations Soleil', 'de': 'Sonneninformationen', 'es': 'Información del Sol', 'ru': 'Информация о Солнце' },
+  'script_name_zodiac': { 'en': 'Zodiac Constellations', 'zh_CN': '黄道十二星座', 'ja': '黄道十二宮', 'ko': '황도 12별자리', 'fr': 'Zodiaque', 'de': 'Tierkreiszeichen', 'es': 'Zodíaco', 'ru': 'Зодиак' },
+  'script_name_phobos_phun_1': { 'en': 'Phobos Fun Part 1', 'zh_CN': '火卫一趣闻（一）', 'ja': 'フォボスファン①', 'ko': '포보스 재미①', 'fr': 'Phobos Fun 1', 'de': 'Phobos Spaß 1', 'es': 'Diversión Fobos 1', 'ru': 'Фобос-развлечение 1' },
+
+  // ── 脚本简短描述（副标题） ──
+  'script_desc_constellations_tour': { 'en': 'Interactive tour through major constellations with mythology', 'zh_CN': '交互式游览主要星座，附带神话故事讲解', 'ja': 'Major constellations tour', 'ko': '주요 별자리 투어', 'fr': 'Tour interactif', 'de': 'Interaktive Reise', 'es': 'Tour interactivo', 'ru': 'Интерактивный тур' },
+  'script_desc_messier_marathon': { 'en': 'View all 110 Messier objects in one night', 'zh_CN': '在一夜之内浏览全部110个梅西耶天体', 'ja': 'All 110 Messier objects', 'ko': '메시에 천체 110개', 'fr': '110 objets Messier', 'de': '110 Messier-Objekte', 'es': '110 objetos Messier', 'ru': '110 объектов Мессье' },
+  'script_desc_planets_tour': { 'en': 'Tour all major planets and dwarf planets', 'zh_CN': '巡游所有主要行星和矮行星', 'ja': 'Planet tour', 'ko': '행성 투어', 'fr': 'Tour des planètes', 'de': 'Planetenreise', 'es': 'Tour planetario', 'ru': ' Тур по планетам' },
+  'script_desc_lunar_total': { 'en': 'Simulate a total lunar eclipse event', 'zh_CN': '模拟一次完整的月全食过程', 'ja': 'Total lunar eclipse sim', 'ko': '개기월식 시뮬레이션', 'fr': 'Simulation éclipse totale', 'de': 'Mondfinsternis Simulation', 'es': 'Simulación eclipse total', 'ru': 'Симуляция полного затмения' },
+  'script_desc_solar_eclipse': { 'en': 'Simulate a solar eclipse event', 'zh_CN': '模拟日食全过程及月球本影扫过地球', 'ja': 'Solar eclipse sim', 'ko': '일식 시뮬레이션', 'fr': 'Simulation éclipse solaire', 'de': 'Sonnenfinsternis Sim', 'es': 'Simulación eclipse solar', 'ru': 'Симуляция солнечного затмения' },
+  'script_desc_analemma': { 'en': 'Trace the Sun\'s annual figure-8 path in the sky', 'zh_CN': '描绘太阳在天空中一年走出的"8"字形轨迹', 'ja': 'Sun\'s figure-8 path', 'ko': '태양의 8자 경로', 'fr': 'Trajectoire en 8', 'de': 'Figur-8 Bahn', 'es': 'Trajectoria en forma de 8', 'ru': 'Фигура-8 Солнца' },
+  'script_desc_best_ngc': { 'en': 'Best deep-sky objects from the New General Catalogue', 'zh_CN': '从NGC星表中精选的最美深空天体', 'ja': 'Best NGC objects', 'ko': 'NGC 최고 체', 'fr': 'Meilleurs objets NGC', 'de': 'Beste NGC Objekte', 'es': 'Mejores objetos NGC', 'ru': 'Лучшие объекты NGC' },
+  'script_desc_double_stars': { 'en': 'Beautiful double and multiple star systems', 'zh_CN': '美丽的双星和多合星系统观赏', 'ja': 'Double star systems', 'ko': '쌍성 및 다중성 계', 'fr': 'Systèmes d\'étoiles doubles', 'de': 'Doppelsysteme', 'es': 'Sistemas de estrellas dobles', 'ru': 'Двойные системы' },
+  'script_desc_sky_cultures': { 'en': 'See how different cultures picture the same stars', 'zh_CN': '看看不同文化如何想象同一片星空', 'ja': 'Multiple sky cultures', 'ko': '다양한 별자리 문화', 'fr': 'Différentes cultures', 'de': 'Verschiedene Kulturen', 'es': 'Diferentes culturas', 'ru': 'Различные культуры' },
+  'script_desc_random_location': { 'en': 'Jump to a random spot on Earth and see the sky there', 'zh_CN': '随机传送到地球上某处，看看那里的天空', 'ja': 'Random Earth location', 'ko': '무작위 지구 위치', 'fr': 'Location aléatoire', 'de': 'Zufälliger Ort', 'es': 'Ubicación aleatoria', 'ru': 'Случайное место на Земле' },
+  'script_desc_screensaver': { 'en': 'Slowly rotating view of the current sky as screensaver', 'zh_CN': '以当前星空为背景缓慢旋转的屏保效果', 'ja': 'Rotating sky screensaver', 'ko': '회전하는 하늘 화면보호기', 'fr': 'Écran de veille rotatif', 'de': 'Drehender Himmel', 'es': 'Salvapantallas rotatorio', 'ru': 'Вращающийся хранитель экрана' },
+  'script_desc_gral': { 'en': 'Explore this astronomical phenomenon', 'zh_CN': '探索此天文现象', 'ja': 'Explore this phenomenon', 'ko': '이 현상 탐색', 'fr': 'Explorer ce phénomène', 'de': 'Dieses Phänomen erkunden', 'es': 'Explorar este fenómeno', 'ru': 'Исследовать это явление' },
+
   's0300': { 'en': 'Night mode', 'zh_CN': '夜间模式', 'ja': 'ナイトモード', 'ko': '야간 모드', 'fr': 'Night mode', 'de': 'Night mode', 'es': 'Night mode', 'ru': 'Night mode' },
   's0301': { 'en': 'Equatorial mount', 'zh_CN': '赤道仪模式', 'ja': '赤道儀モード', 'ko': '적도의 모드', 'fr': 'Equatorial mount', 'de': 'Equatorial mount', 'es': 'Equatorial mount', 'ru': 'Equatorial mount' },
   's0302': { 'en': 'Auto horizon reset', 'zh_CN': '地平线自动重置', 'ja': '地平線の自動リセット', 'ko': '지평선 자동 재설정', 'fr': 'Auto horizon reset', 'de': 'Auto horizon reset', 'es': 'Auto horizon reset', 'ru': 'Auto horizon reset' },
@@ -1425,6 +1594,20 @@ export class I18n {
     const entry = LANDSCAPE_NAMES[en]
     if (!entry) return en
     return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // 投影方式名称翻译
+  static projectionName(en: string): string {
+    const entry = PROJECTION_NAMES[en]
+    if (!entry) return en
+    return entry[I18n.lang] ?? entry['en'] ?? en
+  }
+
+  // 投影方式功能说明
+  static projectionDesc(en: string): string {
+    const entry = PROJECTION_DESC[en]
+    if (!entry) return ''
+    return entry[I18n.lang] ?? entry['en'] ?? ''
   }
 
   // 灵敏度翻译
