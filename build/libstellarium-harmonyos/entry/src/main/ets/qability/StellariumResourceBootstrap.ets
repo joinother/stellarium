@@ -1,4 +1,5 @@
 import common from '@ohos.app.ability.common';
+import deviceInfo from '@ohos.deviceInfo';
 import fs from '@ohos.file.fs';
 import hilog from '@ohos.hilog';
 import { setEnv } from 'libentry.so';
@@ -93,6 +94,10 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
   // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
   const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
+  // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
+  // .ssc files, so an upgraded install would keep an empty Scripts panel forever
+  // unless the missing directory itself forces a re-extract.
+  const scriptMarker = `${installRoot}/scripts/constellations_tour.ssc`;
 
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
@@ -106,6 +111,12 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but skyculture data missing ` +
       `(${skycultureMarker}); forcing re-extract`);
+    needExtract = true;
+  }
+  if (!needExtract && !exists(scriptMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but sky-tour scripts missing ` +
+      `(${scriptMarker}); forcing re-extract`);
     needExtract = true;
   }
 
@@ -123,6 +134,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     }
   }
 
+  // HAP updates preserve filesDir. Keep the mutable runtime copy of this
+  // small pair in sync so an old ssystem_major.ini cannot keep referring to
+  // the pre-fix Earth texture after a normal overwrite install.
+  try {
+    writeRawFile(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
+  }
+
   // Observable proof that localization data is on disk, so "star names don't
   // translate" can be diagnosed from logs instead of being invisible.
   hilog.info(LOG_DOMAIN, LOG_TAG,
@@ -133,6 +156,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
 
   const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);
+  // STEL_USERDIR only needed on API 22 to fix QFile::copy crash (config file
+  // copy fails without an explicit user dir). On API 24+ the default
+  // .stellarium dir works correctly — setting it to an empty dir breaks star
+  // catalog loading because Stellarium can't find config.ini there.
+  const apiLevel = deviceInfo.sdkApiVersion || 0;
+  if (apiLevel > 0 && apiLevel <= 22) {
+    const userDir = `${appContext.filesDir}/stellarium_userdir`;
+    const userDirSet = setEnv('STEL_USERDIR', userDir);
+    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
+  } else {
+    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR not set (API ${apiLevel} > 22, using default .stellarium)`);
+  }
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const widgetsRhiSet = setEnv('QT_WIDGETS_RHI', '0');

@@ -265,7 +265,7 @@ NMEALookupHelper::NMEALookupHelper(QObject *parent)
 			qDebug() << "  Manufacturer:"   << pi.manufacturer();
 			qDebug() << "  VendorID:"       << pi.vendorIdentifier();
 			qDebug() << "  ProductID:"      << pi.productIdentifier();
-			qDebug() << "  SerialNumber:"   << pi.serialNumber();
+			// Do not inspect or log identifiers of attached serial devices.
 #if (QT_VERSION<QT_VERSION_CHECK(5,14,0))
 			qDebug() << "  Busy:"           << pi.isBusy();
 #endif

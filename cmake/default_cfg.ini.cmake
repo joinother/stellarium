@@ -59,8 +59,22 @@ time_display_format                 = system_default
 date_display_format                 = yyyymmdd
 
 [search]
-flag_search_online                  = true
+flag_search_online                  = false
 simbad_server_url                   = https://simbad.u-strasbg.fr/
+
+# Keep first launch offline. Catalogue updates and online search can be
+# enabled explicitly by the user after the app is ready.
+[Exoplanets]
+updates_enabled                     = false
+
+[MeteorShowers]
+automatic_updates_enabled           = false
+
+[Novae]
+updates_enabled                     = false
+
+[Satellites]
+updates_enabled                     = false
 
 [stars]
 relative_scale                      = 1.0

@@ -1053,13 +1053,19 @@ struct WindowNativeNode {
     const halfFolded = this.isHalfFoldedStatus()
     const folded = this.foldStatusValue === 2
     const explicitlyExpanded = this.foldStatusValue === 1 || this.foldStatusValue === 11 || this.foldDisplayModeValue === 1
+    // Fold status describes the physical device, not the current app window.
+    // A freeform window must stay compact even while an unfolded phone reports
+    // the expanded display mode.
+    const compactWindow = shortSide < 620 || longSide < 700
     const largeFoldCanvas = this.isFoldableDevice && shortSide >= 620 && aspect <= 1.55
     const tabletCanvas = shortSide >= 700 || (shortSide >= 620 && longSide >= 1000 && aspect <= 1.75)
     const angle = this.responsiveFoldAngle()
     const prevMode = this.responsiveLayoutMode
     let nextMode = prevMode
 
-    if (this.isFoldableDevice && folded && !halfFolded) {
+    if (compactWindow) {
+      nextMode = 'compact'
+    } else if (this.isFoldableDevice && folded && !halfFolded) {
       nextMode = 'compact'
     } else if (this.isFoldableDevice && halfFolded) {
       if (prevMode === 'expanded') {
@@ -1102,7 +1108,7 @@ struct WindowNativeNode {
     } else {
       applyLayout()
     }
-    hilog.info(0x0000, 'StellariumArkUI', 'layout source=%{public}s w=%{public}s h=%{public}s foldable=%{public}s status=%{public}s displayMode=%{public}s angle=%{public}s uiMode=%{public}s hover=%{public}s foldTablet=%{public}s expanded=%{public}s', source, width.toString(), height.toString(), this.isFoldableDevice.toString(), this.foldStatusValue.toString(), this.foldDisplayModeValue.toString(), angle.toString(), nextMode, this.isFoldHoverLayout.toString(), this.isFoldTabletLayout.toString(), this.isExpandedLayout.toString())
+    hilog.info(0x0000, 'StellariumArkUI', 'layout source=%{public}s w=%{public}s h=%{public}s compactWindow=%{public}s foldable=%{public}s status=%{public}s displayMode=%{public}s angle=%{public}s uiMode=%{public}s hover=%{public}s foldTablet=%{public}s expanded=%{public}s', source, width.toString(), height.toString(), compactWindow.toString(), this.isFoldableDevice.toString(), this.foldStatusValue.toString(), this.foldDisplayModeValue.toString(), angle.toString(), nextMode, this.isFoldHoverLayout.toString(), this.isFoldTabletLayout.toString(), this.isExpandedLayout.toString())
   }
 
   aboutToAppear(): void {
@@ -2507,7 +2513,7 @@ private loadPlanetPositions(): void {
   }
 
   // Keep constellation navigation clear and light: labels and lines, no global boundaries.
-  private openConstellationGuide(name: string, moduleId: string = ''): void {
+  private openConstellationGuide(name: string, moduleId: string = 'ConstellationMgr'): void {
     this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false
@@ -2560,10 +2566,12 @@ private loadPlanetPositions(): void {
     const category = this.searchCategory
     this.categoryLoading = true
     this.categoryLoadFailed = false
+    hilog.info(0x0000, 'StellariumArkUI', '[CATALOG] request category=%{public}s module=%{public}s offset=%{public}d', category, this.categoryModuleId, offset)
     this.callNativeWhenReady('listObjects', this.categoryModuleId + '|' + this.CATEGORY_PAGE_SIZE + '|' + offset, (result) => {
       if (serial !== this.categoryRequestSerial) { return }
       const items = Array.isArray(result.items) ? result.items as string[] : []
       const keys = Array.isArray(result.keys) ? result.keys as string[] : []
+      hilog.info(0x0000, 'StellariumArkUI', '[CATALOG] page category=%{public}s module=%{public}s offset=%{public}d items=%{public}d total=%{public}s more=%{public}s', category, this.categoryModuleId, offset, items.length, String(result.count ?? -1), String(result.hasMore === true))
       const seen: Record<string, boolean> = {}
       for (const existing of this.categoryObjects) {
         if (existing.name.length > 0) { seen[existing.name] = true }
@@ -3929,7 +3937,13 @@ private loadPlanetPositions(): void {
     const gyroSelection = this.gyroscopeEnabled
     let payload = catalogModuleId.length > 0 ? 'catalog|' + catalogModuleId + '|' + query : query
     if (gyroSelection) { payload += '|selectOnly' }
+    if (catalogModuleId.length > 0) {
+      hilog.info(0x0000, 'StellariumArkUI', '[CATALOG] select request module=%{public}s key=%{public}s', catalogModuleId, query)
+    }
     this.callInteractive('searchObject', payload, (result) => {
+      if (catalogModuleId.length > 0) {
+        hilog.info(0x0000, 'StellariumArkUI', '[CATALOG] select result module=%{public}s key=%{public}s found=%{public}s ok=%{public}s error=%{public}s', catalogModuleId, query, String(result.found === true), String(result.ok === true), result.error ?? '')
+      }
       if (result.found === true) {
         // Close the search sheet before calculating the target's final safe
         // point. Otherwise the first navigation avoids the old 9/10 sheet,
@@ -4457,7 +4471,12 @@ private loadPlanetPositions(): void {
       if (r.timeRate !== undefined) {
         this.syncTimeRateState(r.timeRate as number)
       }
-      if (!this.scrubberInteracting) {
+      if (!this.scrubberInteracting && r.isTimeNow === true) {
+        // In real-time mode both the simulation and wall clock advance. Keep
+        // the slider centred on their shared moving "now", rather than the
+        // instant when this panel was opened.
+        this.resetScrubberToRealtime()
+      } else if (!this.scrubberInteracting) {
         this.syncScrubberToSimulation(jd)
       }
     })
