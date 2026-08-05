@@ -1134,6 +1134,10 @@ struct WindowNativeNode {
       if (r.ok === true && Array.isArray(r.items)) {
         this.skyCultures = r.items as string[]
         this.currentSkyCulture = r.current as string
+        // On API 22 the early startup retry can be lost before Qt is ready.
+        // A successful culture query proves the core is initialized, so apply
+        // the persisted app language at this stable point.
+        this.callNativeWhenReady('setLanguage', this.selectedLanguage, () => {})
         // Qt 初始化成功，自动关闭启动画面（星空淡出）
         this.dismissSplash()
       }
@@ -1215,8 +1219,6 @@ struct WindowNativeNode {
     } else {
       I18n.setLanguage('zh_CN')
     }
-    // Keep Qt's sky labels in sync when ArkUI starts in its default Chinese.
-    this.callNativeWhenReady('setLanguage', this.selectedLanguage, () => {})
     // 卡在天顶↔天底 默认开启：上下滑到天顶/天底就停（不翻转），且竖直滑动绝不会引起旋转
     this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
       if (r.ok === true) { this.verticalClamp = true }
