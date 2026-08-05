@@ -1656,9 +1656,28 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 
 			const QStringList searchParts = arg.split('|');
-			const QString query = searchParts.value(0).trimmed();
-			const bool selectOnly = searchParts.value(1).trimmed().compare("selectOnly", Qt::CaseInsensitive) == 0;
-			bool found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
+			QString query = searchParts.value(0).trimmed();
+			const bool selectOnly = searchParts.contains(QStringLiteral("selectOnly"), Qt::CaseInsensitive);
+			bool found = false;
+			if (query == QLatin1String("catalog") && searchParts.size() >= 3)
+			{
+				const QString moduleId = searchParts.value(1).trimmed();
+				const QString objectId = searchParts.value(2).trimmed();
+				const auto objects = objectMgr->listAllModuleObjects(moduleId, true);
+				for (const auto& pair : objects)
+				{
+					if (pair.second && pair.second->getID() == objectId)
+					{
+						found = objectMgr->setSelectedObject(pair.second);
+						query = objectId;
+						break;
+					}
+				}
+			}
+			else
+			{
+				found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
+			}
 			// Constellation names are culture data. Some cultures do not expose
 			// them through the generic object-manager index, so query their module
 			// directly before reporting a false "not found" result.
@@ -1753,18 +1772,40 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	{
 		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
 		QString moduleId = arg.trimmed();
+		int maxItems = 60;
 		bool inEnglish = true;
 		int sep = moduleId.indexOf('|');
 		if (sep > 0) {
-			QString lang = moduleId.mid(sep + 1).trimmed().toLower();
-			inEnglish = (lang != "false" && lang != "0");
+			const QString option = moduleId.mid(sep + 1).trimmed().toLower();
+			bool isLimit = false;
+			const int requestedLimit = option.toInt(&isLimit);
+			if (isLimit)
+				maxItems = qBound(1, requestedLimit, 120);
+			else
+				inEnglish = (option != "false" && option != "0");
 			moduleId = moduleId.left(sep);
 		}
 		const auto list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
 		QJsonArray items;
-		for (const auto& pair : list) { items.append(pair.first); }
-		result["ok"] = true; result["items"] = items;
-		result["count"] = items.size(); result["moduleId"] = moduleId;
+		QJsonArray keys;
+		QSet<QString> seenIds;
+		for (const auto& pair : list)
+		{
+			const StelObjectP object = pair.second;
+			const QString id = object ? object->getID() : pair.first;
+			if (id.isEmpty() || seenIds.contains(id))
+				continue;
+			seenIds.insert(id);
+			QString displayName = object ? object->getNameI18n() : pair.first;
+			if (displayName.isEmpty())
+				displayName = pair.first;
+			items.append(displayName);
+			keys.append(id);
+			if (items.size() >= maxItems)
+				break;
+		}
+		result["ok"] = true; result["items"] = items; result["keys"] = keys;
+		result["count"] = list.size(); result["moduleId"] = moduleId;
 		return result;
 	}
 

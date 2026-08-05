@@ -233,6 +233,7 @@ struct WindowNativeNode {
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
   @State private categoryObjectCount: number = 0
+  @State private categoryModuleId: string = 'SolarSystem:planet'
   @State private selectedType: string = ''
   @State private selectedStatus: string = ''
   @State private selectedInfo: string = ''
@@ -2497,7 +2498,7 @@ private loadPlanetPositions(): void {
   }
 
   // Keep constellation navigation clear and light: labels and lines, no global boundaries.
-  private openConstellationGuide(name: string): void {
+  private openConstellationGuide(name: string, moduleId: string = ''): void {
     this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false
@@ -2505,7 +2506,7 @@ private loadPlanetPositions(): void {
         this.constellationLines = true
         this.callInteractive('setActionChecked', 'actionShow_Constellation_Labels|1', () => {
           this.constellationLabels = true
-          this.searchObject(name)
+          this.searchObject(name, moduleId)
         })
       })
     })
@@ -2527,16 +2528,19 @@ private loadPlanetPositions(): void {
       'constellation': 'ConstellationMgr',
     }
     const moduleId = moduleIdMap[category] || ''
+    this.categoryModuleId = moduleId
     this.categoryObjects = []
     this.categoryObjectCount = 0
-    this.callInteractive('listObjects', moduleId, (result) => {
+    this.callInteractive('listObjects', moduleId + '|60', (result) => {
       const items = Array.isArray(result.items) ? result.items as string[] : []
+      const keys = Array.isArray(result.keys) ? result.keys as string[] : []
       const seen: Record<string, boolean> = {}
       const browse: NameItem[] = []
-      for (const name of items) {
-        if (name.length === 0 || seen[name]) { continue }
-        seen[name] = true
-        browse.push({ name, zh: this.zhNameOf(name) })
+      for (let i = 0; i < items.length; i++) {
+        const key = (keys[i] && keys[i].length > 0) ? keys[i] : items[i]
+        if (key.length === 0 || seen[key]) { continue }
+        seen[key] = true
+        browse.push({ name: key, zh: items[i] })
         if (browse.length >= 60) { break }
       }
       if (browse.length === 0) {
@@ -3866,7 +3870,7 @@ private loadPlanetPositions(): void {
       hilog.info(0x0000, 'StellariumArkUI', '%{public}s', diagMsg)
     }
   }
-  private searchObject(name: string): void {
+  private searchObject(name: string, catalogModuleId: string = ''): void {
     const query = name.trim()
     if (query.length === 0) {
       return
@@ -3878,7 +3882,9 @@ private loadPlanetPositions(): void {
     this.searchHistory = hist.slice(0, 20)
     this.saveSearchHistoryToStorage()
     const gyroSelection = this.gyroscopeEnabled
-    this.callInteractive('searchObject', gyroSelection ? query + '|selectOnly' : query, (result) => {
+    let payload = catalogModuleId.length > 0 ? 'catalog|' + catalogModuleId + '|' + query : query
+    if (gyroSelection) { payload += '|selectOnly' }
+    this.callInteractive('searchObject', payload, (result) => {
       if (result.found === true) {
         // Close the search sheet before calculating the target's final safe
         // point. Otherwise the first navigation avoids the old 9/10 sheet,
@@ -9709,9 +9715,9 @@ private loadPlanetPositions(): void {
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => {
                   if (this.searchCategory === 'constellation') {
-                    this.openConstellationGuide(item.name ?? '')
+                    this.openConstellationGuide(item.name ?? '', this.categoryModuleId)
                   } else {
-                    this.searchObject(item.name ?? '')
+                    this.searchObject(item.name ?? '', this.categoryModuleId)
                   }
                 })
             }, (item: NameItem) => this.searchCategory + '/' + item.name)
