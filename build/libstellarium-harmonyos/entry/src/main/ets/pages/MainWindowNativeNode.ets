@@ -314,8 +314,8 @@ struct WindowNativeNode {
   @State private manualDay: number = 20
   @State private manualHour: number = 23
   @State private manualMinute: number = 0
-  @State private selectedLanguage: string = 'zh_CN'
-  @StorageLink('i18nLang') private i18nLang: string = 'zh_CN'
+  @State private selectedLanguage: string = I18n.systemLanguage()
+  @StorageLink('i18nLang') private i18nLang: string = I18n.systemLanguage()
   @State private bridgeSyncStarted: boolean = false
   private autoLocateStarted: boolean = false
   @State private equatorialMount: boolean = false
@@ -1219,12 +1219,7 @@ struct WindowNativeNode {
     if (this.musicEnabled) {
       AudioEngine.getInstance().start()
     }
-    // 使用保存的语言设置（不强制覆盖为中文）
-    if (this.selectedLanguage && this.selectedLanguage !== 'zh_CN') {
-      I18n.setLanguage(I18n.fromStellariumCode(this.selectedLanguage))
-    } else {
-      I18n.setLanguage('zh_CN')
-    }
+    I18n.setLanguage(I18n.fromStellariumCode(this.selectedLanguage))
     // 卡在天顶↔天底 默认开启：上下滑到天顶/天底就停（不翻转），且竖直滑动绝不会引起旋转
     this.callNativeWhenReady("setVerticalClamp", "1", (r: StellariumBridgeResponse) => {
       if (r.ok === true) { this.verticalClamp = true }

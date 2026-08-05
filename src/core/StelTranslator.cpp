@@ -219,6 +219,12 @@ void StelTranslator::init(const QString& fileName)
 //! Try to determine system language from system configuration
 void StelTranslator::initSystemLanguage()
 {
+#if defined(__OHOS__)
+	const QByteArray ohosLocale = qgetenv("STELLARIUM_OHOS_LOCALE");
+	if (!ohosLocale.isEmpty())
+		systemLangName = QString::fromUtf8(ohosLocale);
+	else
+#endif
 #ifdef ENABLE_NLS
 	systemLangName = QLocale::system().name();
 	if (systemLangName.isEmpty())

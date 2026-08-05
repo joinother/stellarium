@@ -2,11 +2,36 @@ import common from '@ohos.app.ability.common';
 import deviceInfo from '@ohos.deviceInfo';
 import fs from '@ohos.file.fs';
 import hilog from '@ohos.hilog';
+import i18n from '@ohos.i18n';
 import { setEnv } from 'libentry.so';
 import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 
 const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
+
+function stellariumSystemLocale(): string {
+  let locale = 'zh_CN';
+  try {
+    locale = i18n.getSystemLocale();
+  } catch (err) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `Unable to read system locale; using ${locale}: ${JSON.stringify(err)}`);
+  }
+
+  const normalized = locale.replace(/-/g, '_');
+  const lower = normalized.toLowerCase();
+  if (lower.startsWith('zh')) {
+    if (lower.includes('hant') || lower.includes('_tw') || lower.includes('_hk') || lower.includes('_mo')) {
+      return lower.includes('_hk') ? 'zh_HK' : 'zh_TW';
+    }
+    return 'zh_CN';
+  }
+
+  const parts = normalized.split('_');
+  if (parts.length >= 2 && parts[0].length >= 2 && parts[1].length === 2) {
+    return `${parts[0].toLowerCase()}_${parts[1].toUpperCase()}`;
+  }
+  return parts[0].toLowerCase() || 'zh_CN';
+}
 
 function exists(path: string): boolean {
   try {
@@ -170,6 +195,9 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   }
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
+  const locale = stellariumSystemLocale();
+  const localeSet = setEnv('STELLARIUM_OHOS_LOCALE', locale);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_LOCALE=${locale}, setEnv=${localeSet}`);
   const widgetsRhiSet = setEnv('QT_WIDGETS_RHI', '0');
   hilog.info(LOG_DOMAIN, LOG_TAG, `QT_WIDGETS_RHI=0, setEnv=${widgetsRhiSet}`);
   const childRhiSet = setEnv('QT_WIDGETS_NO_CHILD_RHI', '1');

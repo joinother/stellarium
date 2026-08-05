@@ -11,6 +11,8 @@
 // 完整翻译：en, zh_CN, ja, ko, fr, de, es, ru（8种）
 // 其他语言回退到英语。
 
+import i18n from '@ohos.i18n'
+
 // 语言代码类型
 export type LangCode = 'en' | 'zh_CN' | 'zh_TW' | 'ja' | 'ko' | 'fr' | 'de' | 'es' | 'ru' | 'pt' | 'it' | 'nl' | 'pl' | 'tr' | 'ar' | 'hi' | 'th' | 'vi' | 'id' | 'uk' | 'sv'
 
@@ -1450,6 +1452,23 @@ const CONSTELLATION_ABBR: Record<string, Record<string, string>> = {
 
 
 export class I18n {
+  static systemLanguage(): LangCode {
+    try {
+      const raw = i18n.getSystemLocale()
+      const normalized = raw.replace(/-/g, '_')
+      const lower = normalized.toLowerCase()
+      if (lower.startsWith('zh')) {
+        if (lower.includes('hant') || lower.includes('_tw') || lower.includes('_hk') || lower.includes('_mo')) {
+          return 'zh_TW'
+        }
+        return 'zh_CN'
+      }
+      return I18n.fromStellariumCode(normalized)
+    } catch (_err) {
+      return 'zh_CN'
+    }
+  }
+
   // Read current language from AppStorage on every call, not a cached static.
   // This ensures the language is always in sync with the reactive UI state
   // (driven by @StorageLink('i18nLang') in the component).
@@ -1493,7 +1512,8 @@ export class I18n {
       'uk': 'uk', 'uk_UA': 'uk',
       'sv': 'sv', 'sv_SE': 'sv',
     }
-    return map[code] ?? 'en'
+    const normalized = code.replace(/-/g, '_')
+    return map[normalized] ?? map[normalized.split('_')[0]] ?? 'en'
   }
 
   // 转换为 Stellarium 语言代码（发给 C++ setLanguage 命令）
