@@ -1664,15 +1664,24 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const QString moduleId = searchParts.value(1).trimmed();
 				const QString objectId = searchParts.value(2).trimmed();
 				const auto objects = objectMgr->listAllModuleObjects(moduleId, true);
+				qInfo() << "[StellariumOhos][catalog-select] module=" << moduleId
+						<< "id=" << objectId << "candidates=" << objects.size();
 				for (const auto& pair : objects)
 				{
-					if (pair.second && pair.second->getID() == objectId)
+					if (pair.second && (pair.second->getID() == objectId
+							|| pair.second->getEnglishName() == objectId
+							|| pair.first == objectId))
 					{
 						found = objectMgr->setSelectedObject(pair.second);
-						query = objectId;
+						query = pair.second->getEnglishName();
+						qInfo() << "[StellariumOhos][catalog-select] found=" << found
+								<< "name=" << pair.second->getEnglishName()
+								<< "id=" << pair.second->getID();
 						break;
 					}
 				}
+				if (!found)
+					qWarning() << "[StellariumOhos][catalog-select] not found module=" << moduleId << "id=" << objectId;
 			}
 			else
 			{
@@ -1771,24 +1780,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	if (commandName == "listObjects")
 	{
 		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
-		QString moduleId = arg.trimmed();
+		const QStringList options = arg.split('|');
+		QString moduleId = options.value(0).trimmed();
 		int maxItems = 60;
+		int offset = 0;
 		bool inEnglish = true;
-		int sep = moduleId.indexOf('|');
-		if (sep > 0) {
-			const QString option = moduleId.mid(sep + 1).trimmed().toLower();
-			bool isLimit = false;
-			const int requestedLimit = option.toInt(&isLimit);
-			if (isLimit)
-				maxItems = qBound(1, requestedLimit, 120);
-			else
-				inEnglish = (option != "false" && option != "0");
-			moduleId = moduleId.left(sep);
-		}
+		bool isLimit = false;
+		const int requestedLimit = options.value(1).trimmed().toInt(&isLimit);
+		if (isLimit)
+			maxItems = qBound(1, requestedLimit, 120);
+		else if (options.size() > 1)
+			inEnglish = (options.value(1).trimmed().toLower() != "false" && options.value(1).trimmed() != "0");
+		bool isOffset = false;
+		const int requestedOffset = options.value(2).trimmed().toInt(&isOffset);
+		if (isOffset)
+			offset = qMax(0, requestedOffset);
 		const auto list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
 		QJsonArray items;
 		QJsonArray keys;
 		QSet<QString> seenIds;
+		int uniqueCount = 0;
 		for (const auto& pair : list)
 		{
 			const StelObjectP object = pair.second;
@@ -1796,16 +1807,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (id.isEmpty() || seenIds.contains(id))
 				continue;
 			seenIds.insert(id);
-			QString displayName = object ? object->getNameI18n() : pair.first;
-			if (displayName.isEmpty())
-				displayName = pair.first;
-			items.append(displayName);
-			keys.append(id);
-			if (items.size() >= maxItems)
-				break;
+			if (uniqueCount >= offset && items.size() < maxItems)
+			{
+				QString displayName = object ? object->getNameI18n() : pair.first;
+				if (displayName.isEmpty())
+					displayName = pair.first;
+				items.append(displayName);
+				keys.append(id);
+			}
+			++uniqueCount;
 		}
 		result["ok"] = true; result["items"] = items; result["keys"] = keys;
-		result["count"] = list.size(); result["moduleId"] = moduleId;
+		result["count"] = uniqueCount; result["hasMore"] = offset + items.size() < uniqueCount;
+		result["offset"] = offset; result["moduleId"] = moduleId;
+		qInfo() << "[StellariumOhos][catalog-page] module=" << moduleId
+				<< "offset=" << offset << "returned=" << items.size() << "total=" << uniqueCount;
 		return result;
 	}
 

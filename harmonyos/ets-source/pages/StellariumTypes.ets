@@ -348,6 +348,8 @@ export interface StellariumBridgeResponse {
   actionVertical_Flip?: boolean
   items?: string[] | Object[]
   count?: number
+  hasMore?: boolean
+  offset?: number
   prefix?: string
   moduleId?: string
   // ---- 无缝流转 / 会话状态 (getSessionState / applySessionState) ----

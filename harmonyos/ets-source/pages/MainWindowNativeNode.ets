@@ -233,6 +233,10 @@ struct WindowNativeNode {
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
   @State private categoryObjectCount: number = 0
+  @State private categoryLoadedCount: number = 0
+  @State private categoryLoading: boolean = false
+  @State private categoryLoadFailed: boolean = false
+  @State private categoryHasMore: boolean = false
   @State private categoryModuleId: string = 'SolarSystem:planet'
   @State private selectedType: string = ''
   @State private selectedStatus: string = ''
@@ -687,6 +691,9 @@ struct WindowNativeNode {
   private selectedUiLayoutTimer: number = 0
   private lastSafeNavigationPayload: string = ''
   private lastSafeNavigationAt: number = 0
+  private categoryOffset: number = 0
+  private categoryRequestSerial: number = 0
+  private readonly CATEGORY_PAGE_SIZE: number = 60
   // 时间面板打开时，每 1s 拉一次 getState，让"时间"字段像走动的钟一样实时更新
   // （否则只在打开瞬间刷新一次，点按钮/时间流逝都不会再更新，永远显示 --）
   private timePanelTimer: number = 0
@@ -1411,14 +1418,16 @@ struct WindowNativeNode {
   // At startup the ArkUI thread may call the bridge before Qt has finished
   // bootstrapping; those calls return ok:false and are retried on a short
   // backoff instead of crashing the process.
-  private callNativeWhenReady(name: string, payload: string = '', onOk?: (r: StellariumBridgeResponse) => void, attempt: number = 0, intervalMs: number = 200, maxAttempts: number = 60): void {
+  private callNativeWhenReady(name: string, payload: string = '', onOk?: (r: StellariumBridgeResponse) => void, attempt: number = 0, intervalMs: number = 200, maxAttempts: number = 60, onFailure?: (r: StellariumBridgeResponse) => void): void {
     const r = this.callNative(name, payload)
     if (r.ok === true) {
       if (onOk) onOk(r)
       return
     }
     if (attempt < maxAttempts) {
-      setTimeout(() => this.callNativeWhenReady(name, payload, onOk, attempt + 1, intervalMs, maxAttempts), intervalMs)
+      setTimeout(() => this.callNativeWhenReady(name, payload, onOk, attempt + 1, intervalMs, maxAttempts, onFailure), intervalMs)
+    } else if (onFailure) {
+      onFailure(r)
     }
   }
 
@@ -2531,19 +2540,44 @@ private loadPlanetPositions(): void {
     this.categoryModuleId = moduleId
     this.categoryObjects = []
     this.categoryObjectCount = 0
-    this.callInteractive('listObjects', moduleId + '|60', (result) => {
+    this.categoryLoadedCount = 0
+    this.categoryLoading = false
+    this.categoryLoadFailed = false
+    this.categoryHasMore = false
+    this.categoryOffset = 0
+    this.categoryRequestSerial += 1
+    this.loadMoreCategoryObjects()
+  }
+
+  // Catalogs may contain many thousands of entries. Request small pages so the
+  // first page is usable immediately and append more only when the user scrolls.
+  private loadMoreCategoryObjects(): void {
+    if (this.categoryLoading || !this.categoryModuleId.length || (!this.categoryHasMore && this.categoryOffset > 0)) {
+      return
+    }
+    const serial = this.categoryRequestSerial
+    const offset = this.categoryOffset
+    const category = this.searchCategory
+    this.categoryLoading = true
+    this.categoryLoadFailed = false
+    this.callNativeWhenReady('listObjects', this.categoryModuleId + '|' + this.CATEGORY_PAGE_SIZE + '|' + offset, (result) => {
+      if (serial !== this.categoryRequestSerial) { return }
       const items = Array.isArray(result.items) ? result.items as string[] : []
       const keys = Array.isArray(result.keys) ? result.keys as string[] : []
       const seen: Record<string, boolean> = {}
+      for (const existing of this.categoryObjects) {
+        if (existing.name.length > 0) { seen[existing.name] = true }
+      }
       const browse: NameItem[] = []
       for (let i = 0; i < items.length; i++) {
         const key = (keys[i] && keys[i].length > 0) ? keys[i] : items[i]
         if (key.length === 0 || seen[key]) { continue }
         seen[key] = true
-        browse.push({ name: key, zh: items[i] })
-        if (browse.length >= 60) { break }
+        // Keep the stable catalog ID for native selection, while translating
+        // familiar names through the same alias table used by normal search.
+        browse.push({ name: key, zh: this.zhNameOf(items[i]) })
       }
-      if (browse.length === 0) {
+      if (browse.length === 0 && offset === 0) {
         for (const item of ALIAS_LIST) {
           let includeItem = false
           if (category === 'planet') {
@@ -2558,8 +2592,19 @@ private loadPlanetPositions(): void {
           if (includeItem) { browse.push({ name: item.en, zh: item.zh }) }
         }
       }
-      this.categoryObjectCount = items.length
-      this.categoryObjects = browse
+      const combined = this.categoryObjects.concat(browse)
+      this.categoryObjects = combined
+      this.categoryLoadedCount = combined.length
+      this.categoryObjectCount = typeof result.count === 'number' && result.count > 0 ? result.count : combined.length
+      this.categoryOffset = offset + items.length
+      this.categoryHasMore = result.hasMore === true && items.length > 0
+      this.categoryLoading = false
+      this.categoryLoadFailed = false
+    }, 0, 100, 60, (_failure) => {
+      if (serial !== this.categoryRequestSerial) { return }
+      this.categoryLoading = false
+      this.categoryLoadFailed = true
+      this.categoryHasMore = false
     })
   }
 
@@ -9701,8 +9746,11 @@ private loadPlanetPositions(): void {
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
         Row() {
           Text('目录天体').fontSize(11).fontColor(this.nmSub()).layoutWeight(1)
-          Text(this.categoryObjectCount > 0 ? '已加载 ' + this.categoryObjectCount + ' 个' : '正在读取目录')
+          Text(this.categoryLoadFailed ? '读取失败，点击重试' :
+            (this.categoryLoading ? (this.categoryLoadedCount > 0 ? '已加载 ' + this.categoryLoadedCount + ' 个，继续读取' : '正在读取目录') :
+              (this.categoryObjectCount > 0 ? '已加载 ' + this.categoryLoadedCount + ' / ' + this.categoryObjectCount + ' 个' : '目录为空')))
             .fontSize(10).fontColor(this.nmSub())
+            .onClick(() => { if (this.categoryLoadFailed) { this.loadCategoryObjects(this.searchCategory) } })
         }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 10, bottom: 6 })
         Scroll() {
           Flex({ wrap: FlexWrap.Wrap }) {
@@ -9721,8 +9769,14 @@ private loadPlanetPositions(): void {
                   }
                 })
             }, (item: NameItem) => this.searchCategory + '/' + item.name)
+            if (this.categoryLoading && this.categoryObjects.length > 0) {
+              Text('正在加载更多').fontSize(11).fontColor(this.nmSub()).padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            } else if (this.categoryHasMore) {
+              Text('继续向下浏览').fontSize(11).fontColor(this.nmSub()).padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            }
           }.width('100%').padding({ left: 2, right: 6 })
         }.width('100%').height(112).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
+          .onReachEnd(() => { this.loadMoreCategoryObjects() })
       }
 
       // 今夜星座快速导航（15 个常见星座，点击搜索定位）
