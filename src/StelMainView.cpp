@@ -1663,6 +1663,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				const QString moduleId = searchParts.value(1).trimmed();
 				const QString objectId = searchParts.value(2).trimmed();
+				query = objectId;
 				const auto objects = objectMgr->listAllModuleObjects(moduleId, true);
 				qInfo() << "[StellariumOhos][catalog-select] module=" << moduleId
 						<< "id=" << objectId << "candidates=" << objects.size();

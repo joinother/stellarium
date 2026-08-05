@@ -2534,10 +2534,6 @@ private loadPlanetPositions(): void {
       'moon': 'SolarSystem:moon',
       'star': 'StarMgr',
       'variable': 'StarMgr:1',
-      'galaxy': 'NebulaMgr:0',
-      'cluster': 'NebulaMgr:5',
-      'nebula': 'NebulaMgr:10',
-      'messier': 'NebulaMgr:100',
       'comet': 'SolarSystem:comet',
       'asteroid': 'SolarSystem:asteroid',
       'constellation': 'ConstellationMgr',
@@ -2594,7 +2590,7 @@ private loadPlanetPositions(): void {
             includeItem = item.type === 'moon'
           } else if (category === 'star') {
             includeItem = item.type === 'star'
-          } else if (category === 'galaxy' || category === 'cluster' || category === 'nebula' || category === 'constellation') {
+          } else if (category === 'constellation') {
             includeItem = item.type === category
           }
           if (includeItem) { browse.push({ name: item.en, zh: item.zh }) }
@@ -9745,10 +9741,6 @@ private loadPlanetPositions(): void {
               { code: 'moon', label: '卫星' },
               { code: 'star', label: I18n.t('i0104') },
               { code: 'variable', label: '变星' },
-              { code: 'galaxy', label: I18n.t('i0105') },
-              { code: 'cluster', label: I18n.t('i0106') },
-              { code: 'nebula', label: I18n.t('i0107') },
-              { code: 'messier', label: I18n.t('i0108') },
               { code: 'comet', label: '彗星' },
               { code: 'asteroid', label: '小行星' },
               { code: 'constellation', label: '星座' },
