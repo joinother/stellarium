@@ -1,5 +1,6 @@
 import type common from '@ohos.app.ability.common';
-import { privacyManager } from '@kit.StoreKit';
+import { privacyManager } from '@kit.AppGalleryKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import hilog from '@ohos.hilog';
 import { DEBUG } from '../../../../build/default/generated/profile/default/BuildProfile';
 import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
@@ -7,11 +8,10 @@ import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 export async function requestPrivacyConsent(
   context: common.UIAbilityContext,
 ): Promise<boolean> {
-  // AppGallery cannot resolve privacy declarations for locally Debug-signed
-  // installs. Keep this bypass build-time only: Release artifacts still use
-  // the platform consent flow exclusively and never use a custom dialog.
-  if (DEBUG) {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'Debug build: skipping AppGallery privacy consent request');
+  // Privacy Manager is unavailable on emulators. A physical Debug install
+  // still exercises the official flow using the module metadata test setup.
+  if (DEBUG && deviceInfo.productModel === 'emulator') {
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'Emulator Debug build: skipping unsupported privacy consent request');
     return true;
   }
 

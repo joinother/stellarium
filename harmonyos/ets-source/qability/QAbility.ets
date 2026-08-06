@@ -20,6 +20,34 @@ export default class QAbility extends UIAbility {
   private qtAbilityCreated: boolean = false;
   private qtInitialized: boolean = false;
   private isForeground: boolean = true;
+  private privacyHandoffSequence: number = 0;
+  private windowStageTracerAttached: boolean = false;
+
+  // Records the system-dialog-to-Qt hand-off without changing its timing.
+  private tracePrivacyHandoff(event: string): void {
+    this.privacyHandoffSequence++;
+    hilog.info(
+      LOG_DOMAIN,
+      LOG_TAG,
+      `[privacy-handoff #${this.privacyHandoffSequence} t=${Date.now()}] ${event}; foreground=${this.isForeground}; qtInitialized=${this.qtInitialized}`,
+    );
+  }
+
+  private async loadPrivacyBootstrap(windowStage: Window.WindowStage): Promise<boolean> {
+    this.tracePrivacyHandoff('loading privacy bootstrap page');
+    return new Promise<boolean>((resolve) => {
+      windowStage.loadContent('pages/PrivacyBootstrap', (err) => {
+        if (err.code) {
+          this.tracePrivacyHandoff(`privacy bootstrap page failed: ${JSON.stringify(err)}`);
+          hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy bootstrap page failed to load: ${JSON.stringify(err)}`);
+          resolve(false);
+          return;
+        }
+        this.tracePrivacyHandoff('privacy bootstrap page loaded');
+        resolve(true);
+      });
+    });
+  }
 
   private async requestPrivacyThenStart(): Promise<void> {
     if (this.privacyRequestStarted || this.privacyAccepted || this.qtInitialized || this.pendingWindowStage === null) {
@@ -27,21 +55,50 @@ export default class QAbility extends UIAbility {
     }
 
     this.privacyRequestStarted = true;
+    this.tracePrivacyHandoff('requesting official Privacy Manager consent');
     const accepted = await requestPrivacyConsent(this.context);
+    this.tracePrivacyHandoff(`official Privacy Manager returned accepted=${accepted}`);
     this.privacyRequestStarted = false;
     if (!accepted) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
       return;
     }
 
+    if (!await this.restoreHostWindowAfterPrivacy()) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted but host window could not be restored');
+      return;
+    }
     this.privacyAccepted = true;
-    // The system consent dialog resolves before its dismissal animation ends.
-    await new Promise<void>((resolve) => setTimeout(resolve, 300));
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'System privacy dialog dismissed; starting Qt window hand-off');
+    this.tracePrivacyHandoff('privacy accepted; beginning Qt hand-off');
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted; starting Qt window hand-off');
     this.startQtIfReady();
   }
 
+  // Privacy Manager is hosted as a system UIExtension. On some devices its
+  // dismissal leaves the host ability temporarily backgrounded. Re-show the
+  // already-loaded, opaque bootstrap window before handing it to Qt.
+  private async restoreHostWindowAfterPrivacy(): Promise<boolean> {
+    if (this.pendingWindowStage === null) {
+      return false;
+    }
+    try {
+      this.tracePrivacyHandoff('restoring host window after official dialog');
+      const mainWindow = await this.pendingWindowStage.getMainWindow();
+      mainWindow.setWindowBackgroundColor('#070b12');
+      await mainWindow.showWindow();
+      this.isForeground = true;
+      this.tracePrivacyHandoff('host window restored after official dialog');
+      return true;
+    } catch (err) {
+      this.tracePrivacyHandoff(`host window restore failed: ${JSON.stringify(err)}`);
+      return false;
+    }
+  }
+
   private async requestPrivacyAfterWindowReady(windowStage: Window.WindowStage): Promise<void> {
+    if (!await this.loadPrivacyBootstrap(windowStage)) {
+      return;
+    }
     await this.enterImmersive(windowStage);
     await this.requestPrivacyThenStart();
   }
@@ -67,13 +124,16 @@ export default class QAbility extends UIAbility {
 
     this.qtInitialized = true;
     try {
+      this.tracePrivacyHandoff('initializing Qt application context');
       this.initializeQtAbilityIfNeeded();
       if (!this.qtAbilityCreated) {
         this.qtInitialized = false;
         hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because Ability initialization is incomplete');
         return;
       }
+      this.tracePrivacyHandoff('asking Qt bridge to take the window stage');
       qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
+      this.tracePrivacyHandoff('asking Qt bridge to enter foreground');
       qpa.handleAbilityOnForeground(this);
     } catch (err) {
       // Keep the ability alive if the native bridge reports a synchronous
@@ -89,6 +149,7 @@ export default class QAbility extends UIAbility {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility::startQtIfReady lifecycle bridge unavailable');
     }
     this.enterImmersive(this.pendingWindowStage);
+    this.tracePrivacyHandoff('Qt hand-off calls completed');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
   }
 
@@ -135,11 +196,23 @@ export default class QAbility extends UIAbility {
   onWindowStageCreate(windowStage: Window.WindowStage) {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onWindowStageCreate(): this.launchWant.parameters: ' + JSON.stringify(this.launchWant.parameters));
     this.pendingWindowStage = windowStage;
+    if (!this.windowStageTracerAttached) {
+      try {
+        windowStage.on('windowStageEvent', (event: Window.WindowStageEventType) => {
+          this.tracePrivacyHandoff(`window stage event=${event}`);
+        });
+        this.windowStageTracerAttached = true;
+      } catch (err) {
+        this.tracePrivacyHandoff(`unable to attach window stage tracer: ${JSON.stringify(err)}`);
+      }
+    }
+    this.tracePrivacyHandoff('UIAbility window stage created');
     void this.requestPrivacyAfterWindowReady(windowStage);
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {
     this.pendingWindowStage = windowStage;
+    this.tracePrivacyHandoff('UIAbility window stage restored');
     if (this.qtInitialized) {
       qpa.handleAbilityOnWindowStageRestore(this, windowStage);
       this.enterImmersive(windowStage);
@@ -160,6 +233,7 @@ export default class QAbility extends UIAbility {
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     this.isForeground = true;
+    this.tracePrivacyHandoff('UIAbility onForeground');
     if (!this.qtInitialized) {
       this.startQtIfReady();
       return;
@@ -179,6 +253,7 @@ export default class QAbility extends UIAbility {
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
     this.isForeground = false;
+    this.tracePrivacyHandoff('UIAbility onBackground');
     if (!this.qtInitialized) {
       return;
     }
@@ -194,6 +269,7 @@ export default class QAbility extends UIAbility {
 
   onWindowStageDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
+    this.tracePrivacyHandoff('UIAbility window stage destroyed');
     if (this.qtInitialized) {
       qpa.handleAbilityOnWindowStageDestroy(this);
     }
