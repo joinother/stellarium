@@ -2504,7 +2504,7 @@ private loadPlanetPositions(): void {
   }
 
   // Keep constellation navigation clear and light: labels and lines, no global boundaries.
-  private openConstellationGuide(name: string, moduleId: string = ''): void {
+  private openConstellationGuide(name: string, moduleId: string = 'ConstellationMgr'): void {
     this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false

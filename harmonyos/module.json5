@@ -16,7 +16,7 @@
       {
         "name": "QAbility",
         "srcEntry": "./ets/qability/QAbility.ets",
-        "launchType": "specified",
+        "launchType": "singleton",
         "description": "$string:QAbility_desc",
         "icon": "$media:layered_image",
         "label": "$string:QAbility_label",

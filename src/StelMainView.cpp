@@ -1658,11 +1658,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QStringList searchParts = arg.split('|');
 			QString query = searchParts.value(0).trimmed();
 			const bool selectOnly = searchParts.contains(QStringLiteral("selectOnly"), Qt::CaseInsensitive);
+			QString preferredModule;
 			bool found = false;
 			if (query == QLatin1String("catalog") && searchParts.size() >= 3)
 			{
 				const QString moduleId = searchParts.value(1).trimmed();
 				const QString objectId = searchParts.value(2).trimmed();
+				// Catalog subsets use names such as "StarMgr:1". The lookup API
+				// belongs to StarMgr itself, so normalise the subset suffix first.
+				preferredModule = moduleId.section(':', 0, 0).toLower();
 				query = objectId;
 				const auto objects = objectMgr->listAllModuleObjects(moduleId, true);
 				qInfo() << "[StellariumOhos][catalog-select] module=" << moduleId
@@ -1684,7 +1688,35 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (!found)
 					qWarning() << "[StellariumOhos][catalog-select] not found module=" << moduleId << "id=" << objectId;
 			}
-			else
+
+			// A catalog page stores the object's stable ID, while the module index
+			// can temporarily refresh on a different schedule. Resolve the two
+			// catalog types that have dedicated lookup APIs before falling back to
+			// the global index, otherwise e.g. Leo may be reported missing or be
+			// claimed by Leo Meteor Shower instead of the constellation.
+			if (!found && !query.isEmpty() && preferredModule == QLatin1String("constellationmgr"))
+			{
+				if (auto* constellationMgr = GETSTELMODULE(ConstellationMgr))
+				{
+					StelObjectP constellation = constellationMgr->searchByName(query);
+					if (!constellation)
+						constellation = constellationMgr->searchByNameI18n(query);
+					if (constellation)
+						found = objectMgr->setSelectedObject(constellation);
+				}
+			}
+			else if (!found && !query.isEmpty() && preferredModule == QLatin1String("starmgr"))
+			{
+				if (auto* starMgr = GETSTELMODULE(StarMgr))
+				{
+					StelObjectP star = starMgr->searchByName(query);
+					if (!star)
+						star = starMgr->searchByNameI18n(query);
+					if (star)
+						found = objectMgr->setSelectedObject(star);
+				}
+			}
+			if (!found)
 			{
 				found = !query.isEmpty() && (objectMgr->findAndSelectI18n(query) || objectMgr->findAndSelect(query));
 			}
@@ -1695,7 +1727,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				if (auto* constellationMgr = GETSTELMODULE(ConstellationMgr))
 				{
-					const StelObjectP constellation = constellationMgr->searchByName(query);
+					StelObjectP constellation = constellationMgr->searchByName(query);
+					if (!constellation)
+						constellation = constellationMgr->searchByNameI18n(query);
 					if (constellation)
 						found = objectMgr->setSelectedObject(constellation);
 				}

@@ -1417,7 +1417,7 @@ void StelApp::immediateSave(const QString &key, const QVariant &value)
 // Update translations and font for sky everywhere in the program
 void StelApp::updateI18n()
 {
-#ifdef ENABLE_NLS
+#if defined(ENABLE_NLS) || defined(__OHOS__)
 	emit languageChanged();
 #endif
 }

@@ -117,8 +117,6 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // missing from a previously extracted build, the toggles report success but
   // draw nothing — force a re-extract so the device actually has the data.
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
-  // stars_4 catalog: pre-bundled for offline use. If missing, force re-extract.
-  const stars4Cat = `${installRoot}/stars/hip_gaia3/stars_4_1v0_6.cat`;
   // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
   // .ssc files, so an upgraded install would keep an empty Scripts panel forever
   // unless the missing directory itself forces a re-extract.
@@ -148,15 +146,6 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   if (needExtract) {
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
-  } else if (!exists(stars4Cat)) {
-    // Incremental: only extract the missing stars_4 catalog file
-    hilog.warn(LOG_DOMAIN, LOG_TAG,
-      `Marker present but stars_4 catalog missing (${stars4Cat}); extracting incrementally`);
-    try {
-      writeRawFile(appContext, `stars/hip_gaia3/stars_4_1v0_6.cat`, stars4Cat);
-    } catch (err) {
-      hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to extract stars_4: ${JSON.stringify(err)}`);
-    }
   }
 
   // HAP updates preserve filesDir. Keep the mutable runtime copy of this
@@ -181,18 +170,14 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
 
   const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);
-  // STEL_USERDIR only needed on API 22 to fix QFile::copy crash (config file
-  // copy fails without an explicit user dir). On API 24+ the default
-  // .stellarium dir works correctly — setting it to an empty dir breaks star
-  // catalog loading because Stellarium can't find config.ini there.
+  // Qt's default home directory is not a stable writable app-data location on
+  // every HarmonyOS release. The star manager stores starsConfig.json there;
+  // when that copy silently fails it starts with zero HIP stars and therefore
+  // no constellations. Keep it in the app sandbox on every supported API.
   const apiLevel = deviceInfo.sdkApiVersion || 0;
-  if (apiLevel > 0 && apiLevel <= 22) {
-    const userDir = `${appContext.filesDir}/stellarium_userdir`;
-    const userDirSet = setEnv('STEL_USERDIR', userDir);
-    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
-  } else {
-    hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR not set (API ${apiLevel} > 22, using default .stellarium)`);
-  }
+  const userDir = `${appContext.filesDir}/stellarium_userdir`;
+  const userDirSet = setEnv('STEL_USERDIR', userDir);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const locale = stellariumSystemLocale();
