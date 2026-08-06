@@ -964,12 +964,17 @@ struct WindowNativeNode {
         const r = this.callNative('getFPS', '')
         if (r && r.ok && typeof r.fps === 'number' && r.fps > 0) {
           this.fpsDisplay = Math.round(r.fps)
+          // A positive native FPS means Qt has rendered a real frame.  This is
+          // an independent readiness signal for devices where the optional
+          // sky-culture query does not return during startup.
+          this.dismissSplash()
         } else if (r && r.pending) {
           // If pending, try again after a short delay
           setTimeout(() => {
             const r2 = this.callNative('getFPS', '')
             if (r2 && r2.ok && typeof r2.fps === 'number' && r2.fps > 0) {
               this.fpsDisplay = Math.round(r2.fps)
+              this.dismissSplash()
             }
           }, 100)
         }
@@ -6446,11 +6451,6 @@ private loadPlanetPositions(): void {
               .translate({ y: this.splashIn ? 0 : 16 })
               .animation({ duration: 600, curve: Curve.EaseOut })
               .margin({ bottom: 10 })
-            Text(I18n.t('i0001'))
-              .fontSize(14).fontColor("#99FFFFFF")
-              .opacity(this.splashIn ? 1 : 0)
-              .animation({ duration: 600, curve: Curve.EaseOut, delay: 150 })
-              .margin({ bottom: 26 })
             LoadingProgress()
               .width(38).height(38)
               .color("#5B93BF")
