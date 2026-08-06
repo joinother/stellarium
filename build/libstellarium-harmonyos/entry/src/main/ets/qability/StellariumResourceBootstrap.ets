@@ -1,5 +1,4 @@
 import common from '@ohos.app.ability.common';
-import deviceInfo from '@ohos.deviceInfo';
 import fs from '@ohos.file.fs';
 import hilog from '@ohos.hilog';
 import i18n from '@ohos.i18n';
@@ -104,6 +103,9 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
 export function prepareStellariumResources(appContext: common.ApplicationContext): string {
   const installRoot = `${appContext.filesDir}/stellarium`;
   const markerPath = `${installRoot}/${MARKER}`;
+  const userDir = `${appContext.filesDir}/stellarium_userdir`;
+  const userConfigPath = `${userDir}/config.ini`;
+  const userStarsConfigPath = `${userDir}/stars/hip_gaia3/starsConfig.json`;
   const translationsDir = `${installRoot}/translations`;
   // Star/UI names live in these per-domain .qm files. The one-time extraction
   // is gated only by the marker file; if a previous run was interrupted, the
@@ -121,6 +123,11 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // .ssc files, so an upgraded install would keep an empty Scripts panel forever
   // unless the missing directory itself forces a re-extract.
   const scriptMarker = `${installRoot}/scripts/constellations_tour.ssc`;
+  // Qt creates the user config by copying this file during its own startup.
+  // A HAP update preserves filesDir, so a previously interrupted extraction
+  // can leave the generic marker behind while this mandatory source file is
+  // missing. Qt treats that copy failure as fatal and aborts the process.
+  const defaultConfigPath = `${installRoot}/data/default_cfg.ini`;
 
   let needExtract = !exists(markerPath);
   if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
@@ -142,22 +149,46 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
       `(${scriptMarker}); forcing re-extract`);
     needExtract = true;
   }
+  if (!needExtract && !exists(defaultConfigPath)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but default configuration is missing (${defaultConfigPath}); forcing re-extract`);
+    needExtract = true;
+  }
 
   if (needExtract) {
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
   }
 
-  // HAP updates preserve filesDir. Keep the mutable runtime copy of this
-  // small pair in sync so an old ssystem_major.ini cannot keep referring to
-  // the pre-fix Earth texture after a normal overwrite install.
+  // HAP updates preserve filesDir. Refresh startup-critical files even when
+  // an older install passes the extraction marker. In particular Qt aborts if
+  // default_cfg.ini is absent when it first creates the user configuration.
   try {
+    writeRawFile(appContext, `${RAW_ROOT}/data/default_cfg.ini`, defaultConfigPath);
     writeRawFile(appContext, `${RAW_ROOT}/data/ssystem_major.ini`, `${installRoot}/data/ssystem_major.ini`);
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
+  }
+
+  // On API 24, Qt can locate default_cfg.ini but QFile::copy() fails when it
+  // creates the first config.ini across the HarmonyOS sandbox file layer. Do
+  // the one-time copy through ArkUI's file API before Qt starts instead.
+  ensureDir(userDir);
+  if (!exists(userConfigPath)) {
+    writeRawFile(appContext, `${RAW_ROOT}/data/default_cfg.ini`, userConfigPath);
+    hilog.info(LOG_DOMAIN, LOG_TAG, `Created initial user configuration at ${userConfigPath}`);
+  }
+
+  // StarMgr creates this writable configuration with QFile::copy() on its
+  // first startup. That operation can silently fail on API 24, leaving the
+  // primary star catalog empty and consequently disabling constellation and
+  // named-star lookup. Create it through ArkUI before Qt initializes.
+  if (!exists(userStarsConfigPath)) {
+    writeRawFile(appContext, `${RAW_ROOT}/stars/hip_gaia3/defaultStarsConfig.json`, userStarsConfigPath);
+    hilog.info(LOG_DOMAIN, LOG_TAG, `Created initial star catalog configuration at ${userStarsConfigPath}`);
   }
 
   // Observable proof that localization data is on disk, so "star names don't
@@ -174,10 +205,8 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // every HarmonyOS release. The star manager stores starsConfig.json there;
   // when that copy silently fails it starts with zero HIP stars and therefore
   // no constellations. Keep it in the app sandbox on every supported API.
-  const apiLevel = deviceInfo.sdkApiVersion || 0;
-  const userDir = `${appContext.filesDir}/stellarium_userdir`;
   const userDirSet = setEnv('STEL_USERDIR', userDir);
-  hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet}`);
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const locale = stellariumSystemLocale();

@@ -12,14 +12,12 @@ import { requestPrivacyConsent } from './PrivacyConsent';
 
 export default class QAbility extends UIAbility {
 
-  private localStorage: LocalStorage | null = null;
   private pendingWant: Want | null = null;
   private pendingLaunchParam: AbilityConstant.LaunchParam | null = null;
   private pendingWindowStage: Window.WindowStage | null = null;
   private privacyRequestStarted: boolean = false;
-  private privacyGateLoading: boolean = false;
-  private privacyGateLoaded: boolean = false;
   private privacyAccepted: boolean = false;
+  private qtAbilityCreated: boolean = false;
   private qtInitialized: boolean = false;
   private isForeground: boolean = true;
 
@@ -28,9 +26,8 @@ export default class QAbility extends UIAbility {
       return;
     }
 
-    const windowStage = this.pendingWindowStage;
     this.privacyRequestStarted = true;
-    const accepted = await requestPrivacyConsent(this.context, windowStage);
+    const accepted = await requestPrivacyConsent(this.context);
     this.privacyRequestStarted = false;
     if (!accepted) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
@@ -38,26 +35,28 @@ export default class QAbility extends UIAbility {
     }
 
     this.privacyAccepted = true;
+    // The system consent dialog resolves before its dismissal animation ends.
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'System privacy dialog dismissed; starting Qt window hand-off');
     this.startQtIfReady();
   }
 
-  private async loadPrivacyGateThenRequest(windowStage: Window.WindowStage): Promise<void> {
-    // The fallback consent gate owns the window before Qt starts, so it must
-    // enter immersive mode itself instead of waiting for the Qt lifecycle.
+  private async requestPrivacyAfterWindowReady(windowStage: Window.WindowStage): Promise<void> {
     await this.enterImmersive(windowStage);
-    if (!this.privacyGateLoaded && !this.privacyGateLoading) {
-      this.privacyGateLoading = true;
-      try {
-        await windowStage.loadContent('pages/PrivacyGate');
-        this.privacyGateLoaded = true;
-        await this.enterImmersive(windowStage);
-      } catch (err) {
-        hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to load privacy gate: ${JSON.stringify(err)}`);
-      } finally {
-        this.privacyGateLoading = false;
-      }
-    }
     await this.requestPrivacyThenStart();
+  }
+
+  private initializeQtAbilityIfNeeded(): void {
+    if (this.qtAbilityCreated || this.pendingWant === null || this.pendingLaunchParam === null) {
+      return;
+    }
+
+    // Keep all Qt initialization after the system privacy decision. The native
+    // application bootstrap can load platform services, so hiding its window is
+    // not sufficient for the AppGallery pre-consent requirement.
+    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    qpa.handleAbilityOnCreate(this, this.pendingWant, this.pendingLaunchParam);
+    this.qtAbilityCreated = true;
   }
 
   private startQtIfReady(): void {
@@ -67,10 +66,22 @@ export default class QAbility extends UIAbility {
     }
 
     this.qtInitialized = true;
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
-    qpa.handleAbilityOnCreate(this, this.pendingWant, this.pendingLaunchParam);
-    qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
-    qpa.handleAbilityOnForeground(this);
+    try {
+      this.initializeQtAbilityIfNeeded();
+      if (!this.qtAbilityCreated) {
+        this.qtInitialized = false;
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because Ability initialization is incomplete');
+        return;
+      }
+      qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
+      qpa.handleAbilityOnForeground(this);
+    } catch (err) {
+      // Keep the ability alive if the native bridge reports a synchronous
+      // startup error, so the consent page does not turn into a home-screen flash.
+      this.qtInitialized = false;
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Qt startup hand-off failed: ${JSON.stringify(err)}`);
+      return;
+    }
     notifyLifecycle(true);
     try {
       command('setApplicationForeground', '1');
@@ -84,6 +95,9 @@ export default class QAbility extends UIAbility {
   private async enterImmersive(windowStage: Window.WindowStage): Promise<void> {
     try {
       const mainWindow = await windowStage.getMainWindow();
+      // Qt replaces the ArkUI content asynchronously after consent. Keep the
+      // native window opaque during that hand-off so the launcher cannot flash.
+      mainWindow.setWindowBackgroundColor('#070b12');
       await mainWindow.setWindowLayoutFullScreen(true);
       await mainWindow.setWindowSystemBarEnable([]);
       if (canIUse('SystemCapability.Window.SessionManager')) {
@@ -103,25 +117,25 @@ export default class QAbility extends UIAbility {
 
   onDestroy(): void | Promise<void> {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onDestroy()');
-    if (this.qtInitialized) {
+    if (this.qtAbilityCreated) {
       return qpa.handleAbilityOnDestroy(this);
     }
   }
 
   onPrepareToTerminate(): boolean {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onPrepareToTerminate()');
-    return this.qtInitialized ? qpa.handleAbilityOnPrepareToTerminate(this) : false;
+    return this.qtAbilityCreated ? qpa.handleAbilityOnPrepareToTerminate(this) : false;
   }
 
   onPrepareToTerminateAsync(): Promise<boolean> {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onPrepareToTerminateAsync()');
-    return this.qtInitialized ? qpa.handleAbilityOnPrepareToTerminateAsync(this) : Promise.resolve(false);
+    return this.qtAbilityCreated ? qpa.handleAbilityOnPrepareToTerminateAsync(this) : Promise.resolve(false);
   }
 
   onWindowStageCreate(windowStage: Window.WindowStage) {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onWindowStageCreate(): this.launchWant.parameters: ' + JSON.stringify(this.launchWant.parameters));
     this.pendingWindowStage = windowStage;
-    void this.loadPrivacyGateThenRequest(windowStage);
+    void this.requestPrivacyAfterWindowReady(windowStage);
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {
@@ -130,7 +144,7 @@ export default class QAbility extends UIAbility {
       qpa.handleAbilityOnWindowStageRestore(this, windowStage);
       this.enterImmersive(windowStage);
     } else {
-      void this.loadPrivacyGateThenRequest(windowStage);
+      void this.requestPrivacyAfterWindowReady(windowStage);
     }
   }
 
@@ -138,7 +152,7 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onNewWant(): want.parameters: ' + JSON.stringify(want.parameters));
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
-    if (this.qtInitialized) {
+    if (this.qtAbilityCreated) {
       qpa.handleAbilityOnNewWant(this, want, launchParam);
     }
   }
@@ -186,6 +200,8 @@ export default class QAbility extends UIAbility {
   }
 
   onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult | Promise<AbilityConstant.OnContinueResult> {
-    return qpa.handleAbilityOnContinue(this, wantParam);
+    return this.qtAbilityCreated
+      ? qpa.handleAbilityOnContinue(this, wantParam)
+      : AbilityConstant.OnContinueResult.REJECT;
   }
 }

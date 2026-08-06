@@ -687,6 +687,7 @@ struct WindowNativeNode {
   private detailTimer: number = 0
   private detailRefreshing: boolean = false
   private detailRefreshGuard: number = 0
+  private foregroundRefreshPaused: boolean = false
   // FullInfo is intentionally loaded after a new target is drawn. Keeping its
   // timer separate from the live-value poll prevents it from delaying panning.
   private selectedFullInfoTimer: number = 0
@@ -1274,6 +1275,23 @@ struct WindowNativeNode {
   private handleApplicationLifecycle = (foreground: boolean): void => {
     this.applicationInForeground = foreground
     if (foreground) {
+      if (this.foregroundRefreshPaused) {
+        this.foregroundRefreshPaused = false
+        if (this.activePanel === 'time' && this.panelVisible) {
+          this.loadTimeExtras()
+          this.timePanelTimer = setInterval(() => { this.refreshSimTimeLight() }, 125)
+          this.timePanelFullTimer = setInterval(() => {
+            this.refreshState()
+            this.loadTimeExtras()
+          }, 3000)
+        }
+        if (this.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWinVisible)) {
+          this.startDetailAutoRefresh()
+        }
+      }
+      if (this.musicEnabled) {
+        void AudioEngine.getInstance().start()
+      }
       if (this.gyroPausedForBackground) {
         this.gyroPausedForBackground = false
         this.startGyroscope()
@@ -1281,6 +1299,14 @@ struct WindowNativeNode {
       }
       return
     }
+
+    // This app declares no background task. Stop ArkUI polling and audio
+    // rendering as soon as the Ability leaves the foreground.
+    this.foregroundRefreshPaused = this.timePanelTimer !== 0 || this.detailTimer !== 0
+    this.stopTimePanelTimers()
+    this.stopDetailAutoRefresh()
+    this.stopSkyInertia()
+    void AudioEngine.getInstance().stop()
     if (this.gyroscopeEnabled) {
       this.gyroPausedForBackground = true
       this.stopGyroscope(false)

@@ -9,6 +9,7 @@ import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, EphemerisRow, AltAzPoint, PlanetCalcItem, PhenomenonItem, EclipseItem, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
+import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
 
@@ -553,6 +554,8 @@ struct WindowNativeNode {
   @State private gyroscopeStatus: ResourceStr = I18n.t('m_gyro_off')
   @State private gyroscopeSensitivityText: string = 'Standard'
   @State private gyroCalibPanelOpen: boolean = false
+  private applicationInForeground: boolean = true
+  private gyroPausedForBackground: boolean = false
   // The gyro control itself becomes a live compass while it is enabled.
   @State private gyroCompassText: string = '罗盘 --'
   @State private gyroCompassAngle: number = 0
@@ -684,6 +687,7 @@ struct WindowNativeNode {
   private detailTimer: number = 0
   private detailRefreshing: boolean = false
   private detailRefreshGuard: number = 0
+  private foregroundRefreshPaused: boolean = false
   // FullInfo is intentionally loaded after a new target is drawn. Keeping its
   // timer separate from the live-value poll prevents it from delaying panning.
   private selectedFullInfoTimer: number = 0
@@ -1127,6 +1131,7 @@ struct WindowNativeNode {
     this.loadSearchHistoryFromStorage()
     this.loadBookmarksFromStorage()
     this.registerFoldListeners()
+    this.subscribeApplicationLifecycle()
     this.startupBridgeSync()
   }
 
@@ -1264,6 +1269,57 @@ struct WindowNativeNode {
     this.stopDetailAutoRefresh()
     this.stopTimePanelTimers()
     this.unregisterFoldListeners()
+    this.unsubscribeApplicationLifecycle()
+  }
+
+  private handleApplicationLifecycle = (foreground: boolean): void => {
+    this.applicationInForeground = foreground
+    if (foreground) {
+      if (this.foregroundRefreshPaused) {
+        this.foregroundRefreshPaused = false
+        if (this.activePanel === 'time' && this.panelVisible) {
+          this.loadTimeExtras()
+          this.timePanelTimer = setInterval(() => { this.refreshSimTimeLight() }, 125)
+          this.timePanelFullTimer = setInterval(() => {
+            this.refreshState()
+            this.loadTimeExtras()
+          }, 3000)
+        }
+        if (this.selectedStatus === 'Selected' && ((this.activePanel === 'object' && this.panelVisible) || this.infoWinVisible)) {
+          this.startDetailAutoRefresh()
+        }
+      }
+      if (this.musicEnabled) {
+        void AudioEngine.getInstance().start()
+      }
+      if (this.gyroPausedForBackground) {
+        this.gyroPausedForBackground = false
+        this.startGyroscope()
+        hilog.info(0x0000, 'StellariumArkUI', 'foreground: gyroscope subscriptions restored')
+      }
+      return
+    }
+
+    // This app declares no background task. Stop ArkUI polling and audio
+    // rendering as soon as the Ability leaves the foreground.
+    this.foregroundRefreshPaused = this.timePanelTimer !== 0 || this.detailTimer !== 0
+    this.stopTimePanelTimers()
+    this.stopDetailAutoRefresh()
+    this.stopSkyInertia()
+    void AudioEngine.getInstance().stop()
+    if (this.gyroscopeEnabled) {
+      this.gyroPausedForBackground = true
+      this.stopGyroscope(false)
+      hilog.info(0x0000, 'StellariumArkUI', 'background: gyroscope subscriptions released')
+    }
+  }
+
+  private subscribeApplicationLifecycle(): void {
+    setLifecycleListener(this.handleApplicationLifecycle)
+  }
+
+  private unsubscribeApplicationLifecycle(): void {
+    setLifecycleListener(undefined)
   }
 
   /** 停掉时间面板的高频/低频两个刷新定时器 */
@@ -2989,6 +3045,9 @@ private loadPlanetPositions(): void {
   }
 
   private startGyroscope(): void {
+    if (!this.applicationInForeground) {
+      return
+    }
     if (this.gyroscopeEnabled) {
       hilog.info(0x0000, 'StellariumArkUI', 'startGyroscope ignored already enabled')
       return
@@ -9535,7 +9594,9 @@ private loadPlanetPositions(): void {
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
           Text(I18n.t('i0115')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-          this.switchRow(I18n.t('s0303'), this.gyroscopeEnabled, '')
+          // This must use the sensor-aware row. The generic layer switch has
+          // no native action for gyroscope state and only changed its visual.
+          this.gyroscopeRow()
           Row() {
             Text(I18n.t('i0230')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.sensZh(this.gyroscopeSensitivityText)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)

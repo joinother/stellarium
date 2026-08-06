@@ -285,6 +285,7 @@ export class AudioEngine {
       hilog.error(DOMAIN, TAG, 'audio engine stop failed: %{public}s', (e as Error).message ?? String(e))
     }
     this.renderer = undefined
+    hilog.info(DOMAIN, TAG, 'audio engine stopped and renderer released')
   }
 
   setMuted(m: boolean): void {

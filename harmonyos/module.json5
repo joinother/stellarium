@@ -83,10 +83,22 @@
         }
       },
       {
-        "name": "ohos.permission.ACCELEROMETER"
+        "name": "ohos.permission.ACCELEROMETER",
+        "usedScene": {
+          "abilities": [
+            "QAbility"
+          ],
+          "when": "inuse"
+        }
       },
       {
-        "name": "ohos.permission.GYROSCOPE"
+        "name": "ohos.permission.GYROSCOPE",
+        "usedScene": {
+          "abilities": [
+            "QAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ]
   }
