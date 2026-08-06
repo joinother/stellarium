@@ -18,6 +18,7 @@ export default class QAbility extends UIAbility {
   private privacyRequestStarted: boolean = false;
   private privacyAccepted: boolean = false;
   private qtAbilityCreated: boolean = false;
+  private qtWindowPrepared: boolean = false;
   private qtInitialized: boolean = false;
   private isForeground: boolean = true;
   private privacyHandoffSequence: number = 0;
@@ -33,20 +34,31 @@ export default class QAbility extends UIAbility {
     );
   }
 
-  private async loadPrivacyBootstrap(windowStage: Window.WindowStage): Promise<boolean> {
-    this.tracePrivacyHandoff('loading privacy bootstrap page');
-    return new Promise<boolean>((resolve) => {
-      windowStage.loadContent('pages/PrivacyBootstrap', (err) => {
-        if (err.code) {
-          this.tracePrivacyHandoff(`privacy bootstrap page failed: ${JSON.stringify(err)}`);
-          hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy bootstrap page failed to load: ${JSON.stringify(err)}`);
-          resolve(false);
-          return;
-        }
-        this.tracePrivacyHandoff('privacy bootstrap page loaded');
-        resolve(true);
-      });
-    });
+  private prepareQtWindowForPrivacy(windowStage: Window.WindowStage): boolean {
+    if (this.qtWindowPrepared) {
+      return true;
+    }
+
+    try {
+      // Qt owns the final window page. Prepare that page before the system
+      // privacy extension appears, but keep its native XComponent detached.
+      // This preserves one opaque host page across the dialog hand-off while
+      // keeping Stellarium's C++ application blocked before consent.
+      AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', false);
+      this.initializeQtAbilityIfNeeded();
+      if (!this.qtAbilityCreated) {
+        return false;
+      }
+      this.tracePrivacyHandoff('preparing deferred Qt window page');
+      qpa.handleAbilityOnWindowStageCreate(this, windowStage);
+      this.qtWindowPrepared = true;
+      this.tracePrivacyHandoff('deferred Qt window page requested');
+      return true;
+    } catch (err) {
+      this.tracePrivacyHandoff(`deferred Qt window preparation failed: ${JSON.stringify(err)}`);
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Deferred Qt window preparation failed: ${JSON.stringify(err)}`);
+      return false;
+    }
   }
 
   private async requestPrivacyThenStart(): Promise<void> {
@@ -69,8 +81,8 @@ export default class QAbility extends UIAbility {
       return;
     }
     this.privacyAccepted = true;
-    this.tracePrivacyHandoff('privacy accepted; beginning Qt hand-off');
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted; starting Qt window hand-off');
+    this.tracePrivacyHandoff('privacy accepted; releasing prepared Qt window');
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted; releasing prepared Qt window');
     this.startQtIfReady();
   }
 
@@ -96,7 +108,7 @@ export default class QAbility extends UIAbility {
   }
 
   private async requestPrivacyAfterWindowReady(windowStage: Window.WindowStage): Promise<void> {
-    if (!await this.loadPrivacyBootstrap(windowStage)) {
+    if (!this.prepareQtWindowForPrivacy(windowStage)) {
       return;
     }
     await this.enterImmersive(windowStage);
@@ -124,15 +136,16 @@ export default class QAbility extends UIAbility {
 
     this.qtInitialized = true;
     try {
-      this.tracePrivacyHandoff('initializing Qt application context');
-      this.initializeQtAbilityIfNeeded();
-      if (!this.qtAbilityCreated) {
+      if (!this.qtWindowPrepared) {
         this.qtInitialized = false;
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because Ability initialization is incomplete');
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because its window page is not prepared');
         return;
       }
-      this.tracePrivacyHandoff('asking Qt bridge to take the window stage');
-      qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
+      // MainWindowNativeNode is already the window root. Its native
+      // XComponent is mounted only when this AppStorage switch changes, so no
+      // second windowStage.loadContent() runs after the Privacy Manager exits.
+      this.tracePrivacyHandoff('releasing deferred Qt native node');
+      AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', true);
       this.tracePrivacyHandoff('asking Qt bridge to enter foreground');
       qpa.handleAbilityOnForeground(this);
     } catch (err) {

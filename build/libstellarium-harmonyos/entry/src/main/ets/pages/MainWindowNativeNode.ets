@@ -213,6 +213,10 @@ class OcularSelInfo {
 @Component
 struct WindowNativeNode {
   @State private createInfo: WindowNativeNodeCreateInfo | undefined = undefined
+  @Watch('onPrivacyNativeStartupAllowedChanged')
+  @StorageLink('stellariumPrivacyNativeStartupAllowed')
+  private privacyNativeStartupAllowed: boolean = false
+  private privacyPageStartupStarted: boolean = false
   @State private isExpandedLayout: boolean = false
   @State private isFoldHoverLayout: boolean = false
   @State private isFoldableDevice: boolean = false
@@ -1120,6 +1124,18 @@ struct WindowNativeNode {
     if (localStorage) {
       this.createInfo = localStorage.get<WindowNativeNodeCreateInfo>('createInfo')
     }
+    this.startPageAfterPrivacyIfNeeded()
+  }
+
+  private onPrivacyNativeStartupAllowedChanged(): void {
+    this.startPageAfterPrivacyIfNeeded()
+  }
+
+  private startPageAfterPrivacyIfNeeded(): void {
+    if (!this.privacyNativeStartupAllowed || this.privacyPageStartupStarted) {
+      return
+    }
+    this.privacyPageStartupStarted = true
     const stored = AppStorage.get<string>("observingList")
     if (stored) {
       try {
@@ -6363,7 +6379,7 @@ private loadPlanetPositions(): void {
         .zIndex(0)
         .hitTestBehavior(HitTestMode.None)
 
-      if (this.createInfo !== undefined) {
+      if (this.createInfo !== undefined && this.privacyNativeStartupAllowed) {
         XComponent({
           type: XComponentType.NODE,
           id: this.createInfo.xComponentId,
