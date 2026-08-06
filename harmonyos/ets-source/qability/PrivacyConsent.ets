@@ -21,7 +21,7 @@ async function requestLocalConsent(context: common.UIAbilityContext, windowStage
   const responseIndex = await new Promise<number>((resolve, reject) => {
     mainWindow.getUIContext().getPromptAction().showDialog({
       title: '隐私保护提示',
-      message: '为保障天文观测功能正常使用，点击同意后才会进入星图。定位和传感器只会在你主动使用对应功能时申请。',
+      message: '为保障天文观测功能正常使用，点击同意后才会进入星图。定位和传感器仅在你主动使用对应功能时申请。设备序列号（SN）或外接设备标识仅会在你主动连接外设后用于本机连接，不读取手机 SN，不保存也不上传。',
       buttons: [
         { text: '不同意', color: '#5c6068' },
         { text: '同意', color: '#0a59f7' },

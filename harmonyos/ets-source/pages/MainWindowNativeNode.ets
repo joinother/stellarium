@@ -9568,7 +9568,9 @@ private loadPlanetPositions(): void {
             .backgroundColor(this.nmBorder())
             .margin({ top: 6, bottom: 4 })
           Text(I18n.t('i0115')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
-          this.switchRow(I18n.t('s0303'), this.gyroscopeEnabled, '')
+          // This must use the sensor-aware row. The generic layer switch has
+          // no native action for gyroscope state and only changed its visual.
+          this.gyroscopeRow()
           Row() {
             Text(I18n.t('i0230')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.sensZh(this.gyroscopeSensitivityText)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
