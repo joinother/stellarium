@@ -42,11 +42,15 @@ export default class QAbility extends UIAbility {
   }
 
   private async loadPrivacyGateThenRequest(windowStage: Window.WindowStage): Promise<void> {
+    // The fallback consent gate owns the window before Qt starts, so it must
+    // enter immersive mode itself instead of waiting for the Qt lifecycle.
+    await this.enterImmersive(windowStage);
     if (!this.privacyGateLoaded && !this.privacyGateLoading) {
       this.privacyGateLoading = true;
       try {
         await windowStage.loadContent('pages/PrivacyGate');
         this.privacyGateLoaded = true;
+        await this.enterImmersive(windowStage);
       } catch (err) {
         hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to load privacy gate: ${JSON.stringify(err)}`);
       } finally {
