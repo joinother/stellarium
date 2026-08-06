@@ -5,6 +5,7 @@ import Want from '@ohos.app.ability.Want';
 import Window from '@ohos.window'
 import hilog from '@ohos.hilog';
 import qpa from 'libqohos.so';
+import { command } from 'libentry.so';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 
 export default class QAbility extends UIAbility {
@@ -65,6 +66,11 @@ export default class QAbility extends UIAbility {
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     qpa.handleAbilityOnForeground(this);
+    try {
+      command('setApplicationForeground', '1');
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground lifecycle bridge unavailable');
+    }
     if (this.context.windowStage) {
       this.enterImmersive(this.context.windowStage);
     }
@@ -72,6 +78,11 @@ export default class QAbility extends UIAbility {
 
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
+    try {
+      command('setApplicationForeground', '0');
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground lifecycle bridge unavailable');
+    }
     qpa.handleAbilityOnBackground(this);
   }
 

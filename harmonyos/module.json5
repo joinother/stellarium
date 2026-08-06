@@ -63,12 +63,6 @@
     ],
     "requestPermissions": [
       {
-        "name": "ohos.permission.STORE_PERSISTENT_DATA"
-      },
-      {
-        "name": "ohos.permission.PREPARE_APP_TERMINATE"
-      },
-      {
         "name": "ohos.permission.APPROXIMATELY_LOCATION",
         "reason": "$string:stellarium_permission_reason_location",
         "usedScene": {

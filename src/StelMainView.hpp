@@ -99,6 +99,7 @@ public:
 #if defined(__OHOS__)
 	void startOhosRenderPump();
 	void renderOhosFrameNow();
+	void setOhosApplicationForeground(bool foreground);
 #endif
 	//! Set the application title for the current language.
 	//! This is useful for e.g. chinese.

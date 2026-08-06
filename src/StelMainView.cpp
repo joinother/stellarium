@@ -154,6 +154,7 @@ constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;        // 30 FPS once the scene
 static bool s_ohosRenderPumpActive = false;
 static bool s_ohosZeroCopyActive = false;
 static bool s_ohosZeroCopySupported = true;
+static std::atomic<bool> s_ohosApplicationForeground{true};
 
 // Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
 // read by StellariumOhos_command("getFPS") on ArkUI thread.
@@ -1539,6 +1540,23 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		guideResult["xRatio"] = s_ohosSelectedScreenXRatio.load();
 		guideResult["yRatio"] = s_ohosSelectedScreenYRatio.load();
 		response = QString::fromUtf8(QJsonDocument(guideResult).toJson(QJsonDocument::Compact)).toUtf8();
+		return response.constData();
+	}
+	if (commandName == "setApplicationForeground")
+	{
+		const bool foreground = arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0;
+		s_ohosApplicationForeground.store(foreground);
+		if (qApp && StelApp::isInitialized())
+		{
+			QMetaObject::invokeMethod(qApp, [foreground]() {
+				if (StelApp::isInitialized())
+					StelMainView::getInstance().setOhosApplicationForeground(foreground);
+			}, Qt::QueuedConnection);
+		}
+		QJsonObject lifecycleResult;
+		lifecycleResult["ok"] = true;
+		lifecycleResult["foreground"] = foreground;
+		response = QString::fromUtf8(QJsonDocument(lifecycleResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
 
@@ -7543,6 +7561,8 @@ void StelMainView::deinit()
 void StelMainView::startOhosRenderPump()
 {
 	ohosMark("startOhosRenderPump entered");
+	if (!s_ohosApplicationForeground.load())
+		return;
 	s_ohosRenderPumpActive = true;
 	markQtLoopRunning();
 	updateQueued = false;
@@ -7552,8 +7572,36 @@ void StelMainView::startOhosRenderPump()
 	qWarning() << "Started OpenHarmony render pump.";
 }
 
+void StelMainView::setOhosApplicationForeground(bool foreground)
+{
+	s_ohosApplicationForeground.store(foreground);
+	if (!fpsTimer)
+		return;
+
+	if (!foreground)
+	{
+		// The app has no background task. Stop every continuous render activity
+		// while retaining the OpenGL scene so returning to the foreground is fast.
+		fpsTimer->stop();
+		s_ohosRenderFps.store(0.0f);
+		s_ohosPanInertiaActive = false;
+		s_gyroTransitionActive = false;
+		if (g_videoRecorder.timer)
+			g_videoRecorder.timer->stop();
+		ohosMark("OpenHarmony rendering paused in background");
+		return;
+	}
+
+	lastOhosRenderTimeSec = 0.0;
+	startOhosRenderPump();
+	requestOhosSceneRepaint();
+	ohosMark("OpenHarmony rendering resumed in foreground");
+}
+
 void StelMainView::renderOhosFrameNow()
 {
+	if (!s_ohosApplicationForeground.load())
+		return;
 	const double t0 = StelApp::getTotalRunTime();
 	ohosDrainCommandQueue();
 	ohosUpdateLandscapeFadeWithZoom();
