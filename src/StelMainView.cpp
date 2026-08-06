@@ -58,9 +58,11 @@
 #include "GridLinesMgr.hpp"
 #include "MilkyWay.hpp"
 
+#ifndef STELLARIUM_OHOS_OFFLINE
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#endif
 #include <QFile>
 
 #include <QByteArray>
@@ -1245,6 +1247,7 @@ QJsonObject currentStateJson()
 namespace {
 // OHOS 星表下载器：把 ConfigurationDialog 里耦合 UI 的下载逻辑抽成不依赖界面的版本，
 // 通过 N-API 命令桥触发；进度由 ArkTS 侧轮询 getStarCatalogStatus 获取（桥是请求-响应模式，无 C++→ArkTS 推送）。
+#ifndef STELLARIUM_OHOS_OFFLINE
 struct StarCatalogDownloader
 {
 	QPointer<QNetworkReply> reply;
@@ -1346,6 +1349,7 @@ struct StarCatalogDownloader
 	}
 };
 static StarCatalogDownloader g_starDownloader;
+#endif
 
 // ---- Bookmarks store (OHOS bridge) ----
 // 保存当前视图（J2000 视方向单位向量 + 视场 + 选中天体名）到 userDir/bookmarks.json
@@ -1639,21 +1643,32 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 	if (commandName == "downloadStarCatalog")
 	{
+	#ifdef STELLARIUM_OHOS_OFFLINE
+		result["ok"] = false;
+		result["error"] = "offline build: catalog downloads are disabled";
+	#else
 		g_starDownloader.start(arg);
 		result["ok"] = true;
 		result["started"] = true;
 		result["id"] = arg;
+	#endif
 		return result;
 	}
 
 	if (commandName == "getStarCatalogStatus")
 	{
+	#ifdef STELLARIUM_OHOS_OFFLINE
+		result["ok"] = true;
+		result["state"] = "disabled";
+		result["error"] = "offline build: catalog downloads are disabled";
+	#else
 		result["ok"] = true;
 		result["id"] = g_starDownloader.id;
 		result["state"] = g_starDownloader.done ? (g_starDownloader.error ? QString("error") : QString("done")) : QString("downloading");
 		result["bytes"] = (qint64)g_starDownloader.bytes;
 		result["error"] = g_starDownloader.errorStr;
 		result["md5ok"] = g_starDownloader.md5ok;
+	#endif
 		return result;
 	}
 

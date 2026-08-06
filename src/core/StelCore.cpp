@@ -215,7 +215,11 @@ void StelCore::init()
 	StelLocation location=locationMgr->getLastResortLocation(); // first location: Paris. Required if no IP connection on first launch!
 	if (defaultLocationID == "auto")
 	{
+	#ifdef STELLARIUM_OHOS_OFFLINE
+		qInfo() << "HarmonyOS offline build: skipping IP location lookup.";
+	#else
 		locationMgr->locationFromIP();
+	#endif
 	}
 	else if (defaultLocationID == "stellarium_cli")
 	{
@@ -1199,7 +1203,9 @@ void StelCore::returnToHome()
 	QSettings* conf = StelApp::getInstance().getSettings();
 	if (defaultLocationID == "auto")
 	{
+	#ifndef STELLARIUM_OHOS_OFFLINE
 		locationMgr.locationFromIP();
+	#endif
 		loc = locationMgr.getLastResortLocation();
 	}
 	else

@@ -23,6 +23,16 @@ PROJECT(Stellarium C CXX)
 
 SET(STELLARIUM_RELEASE_BUILD 0 CACHE BOOL "Set 1 to build as an official release (0 for development snapshots).")
 
+# The HarmonyOS AppGallery build is intentionally offline until online features
+# have their own consent and review flow. Keep this switch isolated so it can
+# be removed without touching the desktop/mobile builds.
+IF(OHOS)
+     SET(STELLARIUM_OHOS_OFFLINE 1 CACHE BOOL "Disable network access in the HarmonyOS build.")
+     IF(STELLARIUM_OHOS_OFFLINE)
+          ADD_DEFINITIONS(-DSTELLARIUM_OHOS_OFFLINE)
+     ENDIF()
+ENDIF()
+
 ########### Detect Qt version
 SET(ENABLE_QT6 1 CACHE BOOL "Whether to try building with Qt6. If Qt6 is not found, Qt5 will be used.")
 IF(ENABLE_QT6)

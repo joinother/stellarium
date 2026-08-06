@@ -1,5 +1,4 @@
 import common from '@ohos.app.ability.common';
-import deviceInfo from '@ohos.deviceInfo';
 import fs from '@ohos.file.fs';
 import hilog from '@ohos.hilog';
 import i18n from '@ohos.i18n';
@@ -174,10 +173,9 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // every HarmonyOS release. The star manager stores starsConfig.json there;
   // when that copy silently fails it starts with zero HIP stars and therefore
   // no constellations. Keep it in the app sandbox on every supported API.
-  const apiLevel = deviceInfo.sdkApiVersion || 0;
   const userDir = `${appContext.filesDir}/stellarium_userdir`;
   const userDirSet = setEnv('STEL_USERDIR', userDir);
-  hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet} (API ${apiLevel})`);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet}`);
   const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const locale = stellariumSystemLocale();
