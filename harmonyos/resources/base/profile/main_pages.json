@@ -1,0 +1,9 @@
+{
+  "src": [
+    "pages/PrivacyGate",
+    "pages/MainWindowNativeNode",
+    "pages/FloatWindowNativeNode",
+    "pages/SubWindowNativeNode",
+    "pages/UiExtensionNativeNode"
+  ]
+}

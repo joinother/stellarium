@@ -8,10 +8,74 @@ import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
 import { notifyLifecycle } from '../common/StellariumLifecycle';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
+import { requestPrivacyConsent } from './PrivacyConsent';
 
 export default class QAbility extends UIAbility {
 
   private localStorage: LocalStorage | null = null;
+  private pendingWant: Want | null = null;
+  private pendingLaunchParam: AbilityConstant.LaunchParam | null = null;
+  private pendingWindowStage: Window.WindowStage | null = null;
+  private privacyRequestStarted: boolean = false;
+  private privacyGateLoading: boolean = false;
+  private privacyGateLoaded: boolean = false;
+  private privacyAccepted: boolean = false;
+  private qtInitialized: boolean = false;
+  private isForeground: boolean = true;
+
+  private async requestPrivacyThenStart(): Promise<void> {
+    if (this.privacyRequestStarted || this.privacyAccepted || this.qtInitialized || this.pendingWindowStage === null) {
+      return;
+    }
+
+    const windowStage = this.pendingWindowStage;
+    this.privacyRequestStarted = true;
+    const accepted = await requestPrivacyConsent(this.context, windowStage);
+    this.privacyRequestStarted = false;
+    if (!accepted) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
+      return;
+    }
+
+    this.privacyAccepted = true;
+    this.startQtIfReady();
+  }
+
+  private async loadPrivacyGateThenRequest(windowStage: Window.WindowStage): Promise<void> {
+    if (!this.privacyGateLoaded && !this.privacyGateLoading) {
+      this.privacyGateLoading = true;
+      try {
+        await windowStage.loadContent('pages/PrivacyGate');
+        this.privacyGateLoaded = true;
+      } catch (err) {
+        hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to load privacy gate: ${JSON.stringify(err)}`);
+      } finally {
+        this.privacyGateLoading = false;
+      }
+    }
+    await this.requestPrivacyThenStart();
+  }
+
+  private startQtIfReady(): void {
+    if (!this.privacyAccepted || this.qtInitialized || this.pendingWant === null ||
+      this.pendingLaunchParam === null || this.pendingWindowStage === null || !this.isForeground) {
+      return;
+    }
+
+    this.qtInitialized = true;
+    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    qpa.handleAbilityOnCreate(this, this.pendingWant, this.pendingLaunchParam);
+    qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
+    qpa.handleAbilityOnForeground(this);
+    notifyLifecycle(true);
+    try {
+      command('setApplicationForeground', '1');
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility::startQtIfReady lifecycle bridge unavailable');
+    }
+    this.enterImmersive(this.pendingWindowStage);
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
+  }
 
   private async enterImmersive(windowStage: Window.WindowStage): Promise<void> {
     try {
@@ -29,43 +93,59 @@ export default class QAbility extends UIAbility {
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): want.parameters: ' + JSON.stringify(want.parameters));
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
-    qpa.handleAbilityOnCreate(this, want, launchParam);
+    this.pendingWant = want;
+    this.pendingLaunchParam = launchParam;
   }
 
   onDestroy(): void | Promise<void> {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onDestroy()');
-    return qpa.handleAbilityOnDestroy(this);
+    if (this.qtInitialized) {
+      return qpa.handleAbilityOnDestroy(this);
+    }
   }
 
   onPrepareToTerminate(): boolean {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onPrepareToTerminate()');
-    return qpa.handleAbilityOnPrepareToTerminate(this);
+    return this.qtInitialized ? qpa.handleAbilityOnPrepareToTerminate(this) : false;
   }
 
   onPrepareToTerminateAsync(): Promise<boolean> {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onPrepareToTerminateAsync()');
-    return qpa.handleAbilityOnPrepareToTerminateAsync(this);
+    return this.qtInitialized ? qpa.handleAbilityOnPrepareToTerminateAsync(this) : Promise.resolve(false);
   }
 
   onWindowStageCreate(windowStage: Window.WindowStage) {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onWindowStageCreate(): this.launchWant.parameters: ' + JSON.stringify(this.launchWant.parameters));
-    qpa.handleAbilityOnWindowStageCreate(this, windowStage);
-    this.enterImmersive(windowStage);
+    this.pendingWindowStage = windowStage;
+    void this.loadPrivacyGateThenRequest(windowStage);
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {
-    qpa.handleAbilityOnWindowStageRestore(this, windowStage);
-    this.enterImmersive(windowStage);
+    this.pendingWindowStage = windowStage;
+    if (this.qtInitialized) {
+      qpa.handleAbilityOnWindowStageRestore(this, windowStage);
+      this.enterImmersive(windowStage);
+    } else {
+      void this.loadPrivacyGateThenRequest(windowStage);
+    }
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onNewWant(): want.parameters: ' + JSON.stringify(want.parameters));
-    qpa.handleAbilityOnNewWant(this, want, launchParam);
+    this.pendingWant = want;
+    this.pendingLaunchParam = launchParam;
+    if (this.qtInitialized) {
+      qpa.handleAbilityOnNewWant(this, want, launchParam);
+    }
   }
 
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
+    this.isForeground = true;
+    if (!this.qtInitialized) {
+      this.startQtIfReady();
+      return;
+    }
     qpa.handleAbilityOnForeground(this);
     notifyLifecycle(true);
     try {
@@ -80,6 +160,10 @@ export default class QAbility extends UIAbility {
 
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
+    this.isForeground = false;
+    if (!this.qtInitialized) {
+      return;
+    }
     // Release page-owned sensor subscriptions before Qt transitions hidden.
     notifyLifecycle(false);
     try {
@@ -92,7 +176,9 @@ export default class QAbility extends UIAbility {
 
   onWindowStageDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
-    qpa.handleAbilityOnWindowStageDestroy(this);
+    if (this.qtInitialized) {
+      qpa.handleAbilityOnWindowStageDestroy(this);
+    }
   }
 
   onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult | Promise<AbilityConstant.OnContinueResult> {
