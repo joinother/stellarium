@@ -1053,13 +1053,19 @@ struct WindowNativeNode {
     const halfFolded = this.isHalfFoldedStatus()
     const folded = this.foldStatusValue === 2
     const explicitlyExpanded = this.foldStatusValue === 1 || this.foldStatusValue === 11 || this.foldDisplayModeValue === 1
+    // Fold state describes the physical device, not this window. In floating
+    // mode API 22 can still report an expanded fold state after the app window
+    // has become phone-sized, so the actual content bounds take precedence.
+    const compactWindow = shortSide < 520
     const largeFoldCanvas = this.isFoldableDevice && shortSide >= 620 && aspect <= 1.55
     const tabletCanvas = shortSide >= 700 || (shortSide >= 620 && longSide >= 1000 && aspect <= 1.75)
     const angle = this.responsiveFoldAngle()
     const prevMode = this.responsiveLayoutMode
     let nextMode = prevMode
 
-    if (this.isFoldableDevice && folded && !halfFolded) {
+    if (compactWindow) {
+      nextMode = 'compact'
+    } else if (this.isFoldableDevice && folded && !halfFolded) {
       nextMode = 'compact'
     } else if (this.isFoldableDevice && halfFolded) {
       if (prevMode === 'expanded') {
