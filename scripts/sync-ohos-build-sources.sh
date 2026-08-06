@@ -17,6 +17,8 @@ SOURCES=(
   "harmonyos/AppScope/resources/zh_CN/element/string.json:build/libstellarium-harmonyos/AppScope/resources/zh_CN/element/string.json"
   "harmonyos/AppScope/resources/base/media/app_icon.png:build/libstellarium-harmonyos/AppScope/resources/base/media/app_icon.png"
   "harmonyos/cpp-source/hello.cpp:build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp"
+  "harmonyos/ets-source/common/QtAppConstants.ets:build/libstellarium-harmonyos/entry/src/main/ets/common/QtAppConstants.ets"
+  "harmonyos/ets-source/common/StellariumLifecycle.ets:build/libstellarium-harmonyos/entry/src/main/ets/common/StellariumLifecycle.ets"
   "harmonyos/ets-source/pages/MainWindowNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets"
   "harmonyos/ets-source/pages/StellariumTypes.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/StellariumTypes.ets"
   "harmonyos/ets-source/pages/FloatWindowNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/FloatWindowNativeNode.ets"

@@ -6,6 +6,7 @@ import Window from '@ohos.window'
 import hilog from '@ohos.hilog';
 import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
+import { notifyLifecycle } from '../common/StellariumLifecycle';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 
 export default class QAbility extends UIAbility {
@@ -66,6 +67,7 @@ export default class QAbility extends UIAbility {
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     qpa.handleAbilityOnForeground(this);
+    notifyLifecycle(true);
     try {
       command('setApplicationForeground', '1');
     } catch (err) {
@@ -78,6 +80,8 @@ export default class QAbility extends UIAbility {
 
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
+    // Release page-owned sensor subscriptions before Qt transitions hidden.
+    notifyLifecycle(false);
     try {
       command('setApplicationForeground', '0');
     } catch (err) {

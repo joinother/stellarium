@@ -9,6 +9,7 @@ import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, EphemerisRow, AltAzPoint, PlanetCalcItem, PhenomenonItem, EclipseItem, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
+import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
 
@@ -553,6 +554,8 @@ struct WindowNativeNode {
   @State private gyroscopeStatus: ResourceStr = I18n.t('m_gyro_off')
   @State private gyroscopeSensitivityText: string = 'Standard'
   @State private gyroCalibPanelOpen: boolean = false
+  private applicationInForeground: boolean = true
+  private gyroPausedForBackground: boolean = false
   // The gyro control itself becomes a live compass while it is enabled.
   @State private gyroCompassText: string = '罗盘 --'
   @State private gyroCompassAngle: number = 0
@@ -1127,6 +1130,7 @@ struct WindowNativeNode {
     this.loadSearchHistoryFromStorage()
     this.loadBookmarksFromStorage()
     this.registerFoldListeners()
+    this.subscribeApplicationLifecycle()
     this.startupBridgeSync()
   }
 
@@ -1264,6 +1268,32 @@ struct WindowNativeNode {
     this.stopDetailAutoRefresh()
     this.stopTimePanelTimers()
     this.unregisterFoldListeners()
+    this.unsubscribeApplicationLifecycle()
+  }
+
+  private handleApplicationLifecycle = (foreground: boolean): void => {
+    this.applicationInForeground = foreground
+    if (foreground) {
+      if (this.gyroPausedForBackground) {
+        this.gyroPausedForBackground = false
+        this.startGyroscope()
+        hilog.info(0x0000, 'StellariumArkUI', 'foreground: gyroscope subscriptions restored')
+      }
+      return
+    }
+    if (this.gyroscopeEnabled) {
+      this.gyroPausedForBackground = true
+      this.stopGyroscope(false)
+      hilog.info(0x0000, 'StellariumArkUI', 'background: gyroscope subscriptions released')
+    }
+  }
+
+  private subscribeApplicationLifecycle(): void {
+    setLifecycleListener(this.handleApplicationLifecycle)
+  }
+
+  private unsubscribeApplicationLifecycle(): void {
+    setLifecycleListener(undefined)
   }
 
   /** 停掉时间面板的高频/低频两个刷新定时器 */
@@ -2989,6 +3019,9 @@ private loadPlanetPositions(): void {
   }
 
   private startGyroscope(): void {
+    if (!this.applicationInForeground) {
+      return
+    }
     if (this.gyroscopeEnabled) {
       hilog.info(0x0000, 'StellariumArkUI', 'startGyroscope ignored already enabled')
       return
