@@ -5,21 +5,26 @@ import hilog from '@ohos.hilog';
 import { DEBUG } from '../../../../build/default/generated/profile/default/BuildProfile';
 import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 
+export interface PrivacyConsentResult {
+  accepted: boolean;
+  dialogShown: boolean;
+}
+
 export async function requestPrivacyConsent(
   context: common.UIAbilityContext,
-): Promise<boolean> {
+): Promise<PrivacyConsentResult> {
   // Privacy Manager is unavailable on emulators. A physical Debug install
   // still exercises the official flow using the module metadata test setup.
   if (DEBUG && deviceInfo.productModel === 'emulator') {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Emulator Debug build: skipping unsupported privacy consent request');
-    return true;
+    return { accepted: true, dialogShown: false };
   }
 
   try {
     const management = privacyManager.getAppPrivacyMgmtInfo();
     if (management.type === privacyManager.AppPrivacyMgmtType.UNSUPPORTED || management.privacyInfo.length === 0) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy Manager has no AppGallery configuration; Qt startup remains blocked');
-      return false;
+      return { accepted: false, dialogShown: false };
     }
 
     const privacyStatement = management.privacyInfo.find((item) =>
@@ -33,7 +38,7 @@ export async function requestPrivacyConsent(
     );
     if (accepted) {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy Manager reports the current privacy statement is already accepted');
-      return true;
+      return { accepted: true, dialogShown: false };
     }
 
     const consent = await privacyManager.requestAppPrivacyConsent(context);
@@ -42,9 +47,9 @@ export async function requestPrivacyConsent(
       result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED,
     );
     hilog.info(LOG_DOMAIN, LOG_TAG, `Privacy Manager completed: accepted=${acceptedAfterRequest}`);
-    return acceptedAfterRequest;
+    return { accepted: acceptedAfterRequest, dialogShown: true };
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy Manager request failed; Qt startup remains blocked: ${JSON.stringify(err)}`);
-    return false;
+    return { accepted: false, dialogShown: false };
   }
 }
