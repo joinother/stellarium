@@ -3,6 +3,7 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { sensor } from '@kit.SensorServiceKit'
 import { curves } from '@kit.ArkUI'
+import { privacyManager } from '@kit.AppGalleryKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
@@ -964,12 +965,17 @@ struct WindowNativeNode {
         const r = this.callNative('getFPS', '')
         if (r && r.ok && typeof r.fps === 'number' && r.fps > 0) {
           this.fpsDisplay = Math.round(r.fps)
+          // A positive native FPS means Qt has rendered a real frame.  This is
+          // an independent readiness signal for devices where the optional
+          // sky-culture query does not return during startup.
+          this.dismissSplash()
         } else if (r && r.pending) {
           // If pending, try again after a short delay
           setTimeout(() => {
             const r2 = this.callNative('getFPS', '')
             if (r2 && r2.ok && typeof r2.fps === 'number' && r2.fps > 0) {
               this.fpsDisplay = Math.round(r2.fps)
+              this.dismissSplash()
             }
           }, 100)
         }
@@ -6446,11 +6452,6 @@ private loadPlanetPositions(): void {
               .translate({ y: this.splashIn ? 0 : 16 })
               .animation({ duration: 600, curve: Curve.EaseOut })
               .margin({ bottom: 10 })
-            Text(I18n.t('i0001'))
-              .fontSize(14).fontColor("#99FFFFFF")
-              .opacity(this.splashIn ? 1 : 0)
-              .animation({ duration: 600, curve: Curve.EaseOut, delay: 150 })
-              .margin({ bottom: 26 })
             LoadingProgress()
               .width(38).height(38)
               .color("#5B93BF")
@@ -9757,6 +9758,29 @@ private loadPlanetPositions(): void {
                 })
             }
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
+          Text('隐私').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Button('撤回隐私同意')
+            .fontSize(13).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            .borderRadius(8).height(38).width('100%')
+            .onClick(() => {
+              try {
+                privacyManager.disableService()
+                // Revocation must take effect immediately: end this Ability so the next
+                // launch enters the official Privacy Manager flow before Qt is started.
+                // Do not manually terminate Qt/native code here.
+                const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+                void context.terminateSelf().catch((err: Error) => {
+                  hilog.error(0x0000, 'StellariumArkUI', 'Failed to terminate after privacy revocation: %{public}s', JSON.stringify(err))
+                })
+              } catch (err) {
+                hilog.error(0x0000, 'StellariumArkUI', 'Failed to revoke privacy consent: %{public}s', JSON.stringify(err))
+                this.flashHint('撤回隐私同意失败')
+              }
+            })
         }.width('100%')
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')

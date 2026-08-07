@@ -71,14 +71,20 @@ echo ""
 
 # 3. 尝试编译（可选，如果环境已配置）
 echo "[3/3] 尝试编译 HAP..."
-if command -v hvigorw >/dev/null 2>&1 || [ -f "/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw" ]; then
-  HVIORW="/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw"
-  if [ -f "$HVIORW" ]; then
+DEVECO_HOME="${DEVECO_HOME:-/Applications/DevEco-Studio.app/Contents}"
+NODE_BIN="$DEVECO_HOME/tools/node/bin/node"
+HVIGORW_JS="$DEVECO_HOME/tools/hvigor/bin/hvigorw.js"
+SDK_HOME="${DEVECO_SDK_HOME:-$DEVECO_HOME/sdk}"
+OHOS_SDK_HOME="${OHOS_BASE_SDK_HOME:-$SDK_HOME/default/openharmony}"
+
+if [ -x "$NODE_BIN" ] && [ -f "$HVIGORW_JS" ]; then
     cd build/libstellarium-harmonyos
-    if env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
-       JAVA_HOME=/Applications/DevEco-Studio.app/Contents/jbr/Contents/Home \
-       OHOS_BASE_SDK_HOME=/Users/jiexuanyang/Library/OpenHarmony/Sdk \
-       "$HVIORW" assembleHap --no-daemon > /tmp/hvigor-check.log 2>&1; then
+    if env NODE_HOME="$DEVECO_HOME/tools/node/bin" \
+       JAVA_HOME="$DEVECO_HOME/jbr/Contents/Home" \
+       DEVECO_SDK_HOME="$SDK_HOME" \
+       OHOS_BASE_SDK_HOME="$OHOS_SDK_HOME" \
+       "$NODE_BIN" "$HVIGORW_JS" --mode module -p product=default \
+       assembleHap --analyze=normal --parallel --incremental --daemon > /tmp/hvigor-check.log 2>&1; then
       echo -e "${GREEN}  ✅ HAP 编译通过${NC}"
     else
       echo -e "${RED}  ❌ HAP 编译失败${NC}"
@@ -87,10 +93,6 @@ if command -v hvigorw >/dev/null 2>&1 || [ -f "/Applications/DevEco-Studio.app/C
       ERRORS=$((ERRORS + 1))
     fi
     cd - > /dev/null
-  else
-    echo -e "${YELLOW}  ⚠️  未找到 hvigorw，跳过编译检查${NC}"
-    WARNINGS=$((WARNINGS + 1))
-  fi
 else
   echo -e "${YELLOW}  ⚠️  DevEco Studio 未安装，跳过编译检查${NC}"
   WARNINGS=$((WARNINGS + 1))

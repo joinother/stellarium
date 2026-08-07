@@ -3,6 +3,7 @@ import { abilityAccessCtrl, common, Permissions } from '@kit.AbilityKit'
 import { geoLocationManager } from '@kit.LocationKit'
 import { sensor } from '@kit.SensorServiceKit'
 import { curves } from '@kit.ArkUI'
+import { privacyManager } from '@kit.AppGalleryKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
@@ -9757,6 +9758,29 @@ private loadPlanetPositions(): void {
                 })
             }
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.nmBorder())
+            .margin({ top: 6, bottom: 4 })
+          Text('隐私').fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
+          Button('撤回隐私同意')
+            .fontSize(13).fontColor(this.nmText()).backgroundColor(this.nmBg())
+            .borderRadius(8).height(38).width('100%')
+            .onClick(() => {
+              try {
+                privacyManager.disableService()
+                // Revocation must take effect immediately: end this Ability so the next
+                // launch enters the official Privacy Manager flow before Qt is started.
+                // Do not manually terminate Qt/native code here.
+                const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+                void context.terminateSelf().catch((err: Error) => {
+                  hilog.error(0x0000, 'StellariumArkUI', 'Failed to terminate after privacy revocation: %{public}s', JSON.stringify(err))
+                })
+              } catch (err) {
+                hilog.error(0x0000, 'StellariumArkUI', 'Failed to revoke privacy consent: %{public}s', JSON.stringify(err))
+                this.flashHint('撤回隐私同意失败')
+              }
+            })
         }.width('100%')
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
