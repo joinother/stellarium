@@ -2612,6 +2612,10 @@ private loadPlanetPositions(): void {
       'comet': 'SolarSystem:comet',
       'asteroid': 'SolarSystem:asteroid',
       'constellation': 'ConstellationMgr',
+      'galaxy': 'NebulaMgr:0',
+      'cluster': 'NebulaMgr:5',
+      'nebula': 'NebulaMgr:10',
+      'messier': 'NebulaMgr:100',
     }
     const moduleId = moduleIdMap[category] || ''
     this.categoryModuleId = moduleId
@@ -9829,6 +9833,10 @@ private loadPlanetPositions(): void {
               { code: 'comet', label: '彗星' },
               { code: 'asteroid', label: '小行星' },
               { code: 'constellation', label: '星座' },
+              { code: 'galaxy', label: '星系' },
+              { code: 'cluster', label: '星团' },
+              { code: 'nebula', label: '星云' },
+              { code: 'messier', label: 'M 天体' },
             ] as CatOption[], (cat: CatOption) => {
               Text(cat.label)
                 .fontSize(13).fontColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())

@@ -43,7 +43,7 @@ mkdir -p "$DST"
 # `scripts` holds Stellarium's .ssc sky-tour scripts. It also happens to hold this
 # repo's own build shell scripts, so it gets an allow-list filter below — without
 # it, StelScriptMgr::getScriptList() finds nothing and the Scripts panel is empty.
-DIRS=(data textures landscapes stars translations skycultures scripts)
+DIRS=(data textures landscapes nebulae stars translations skycultures scripts)
 
 # Non-culture files living directly inside skycultures/ (CMake scaffolding).
 # They must not be copied into the rawfile (they would be treated as junk).
@@ -52,6 +52,18 @@ SKYCULTURE_EXCLUDES=(
   --exclude='/CMakeLists.txt.template'
   --exclude='/TODO.txt'
   --exclude='*.py'
+)
+
+# Deep-sky data is a resource collection, not source code. Keep the catalogue
+# indexes and image files, while excluding the CMake metadata in this source
+# directory. `--delete` plus a full copy is intentional: rawfile is generated
+# output and must not keep stale zero-byte files from an older build.
+NEBULAE_INCLUDES=(
+  --include='*/'
+  --include='*.dat'
+  --include='*.json'
+  --include='*.png'
+  --exclude='*'
 )
 
 # Only Stellarium script assets may enter rawfile. Shell/Python/Swift build
@@ -68,6 +80,8 @@ for d in "${DIRS[@]}"; do
   echo "==> syncing $d -> $DST/$d"
   if [ "$d" = "skycultures" ]; then
     rsync -a --update "${SKYCULTURE_EXCLUDES[@]}" "$SRC/" "$DST/$d/"
+  elif [ "$d" = "nebulae" ]; then
+    rsync -a --delete --delete-excluded "${NEBULAE_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   elif [ "$d" = "scripts" ]; then
     rsync -a --update --no-r --dirs "${SCRIPT_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   else

@@ -9,6 +9,7 @@ import { command } from 'libentry.so';
 import { notifyLifecycle } from '../common/StellariumLifecycle';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 import { requestPrivacyConsent } from './PrivacyConsent';
+import { scheduleDeepSkyImageExtraction, setDeepSkyImageExtractionForeground } from './StellariumResourceBootstrap';
 
 export default class QAbility extends UIAbility {
 
@@ -188,6 +189,20 @@ export default class QAbility extends UIAbility {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'QAbility::startQtIfReady lifecycle bridge unavailable');
     }
     this.enterImmersive(this.pendingWindowStage);
+    // Optional deep-sky images are intentionally not part of the synchronous
+    // bootstrap. Start their resumable installation only after consent and the
+    // Qt foreground hand-off; completion reloads the existing collection.
+    setDeepSkyImageExtractionForeground(true);
+    setTimeout(() => {
+      scheduleDeepSkyImageExtraction(this.context.getApplicationContext(), () => {
+        try {
+          command('triggerAction', 'actionShow_DSO_Textures_Reload');
+          hilog.info(LOG_DOMAIN, LOG_TAG, 'Reload requested after deep-sky image installation');
+        } catch (err) {
+          hilog.warn(LOG_DOMAIN, LOG_TAG, `Unable to reload deep-sky images: ${JSON.stringify(err)}`);
+        }
+      });
+    }, 1200);
     this.tracePrivacyHandoff('Qt hand-off calls completed');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
   }
@@ -275,6 +290,7 @@ export default class QAbility extends UIAbility {
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     this.isForeground = true;
+    setDeepSkyImageExtractionForeground(true);
     this.tracePrivacyHandoff('UIAbility onForeground');
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
@@ -299,6 +315,7 @@ export default class QAbility extends UIAbility {
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
     this.isForeground = false;
+    setDeepSkyImageExtractionForeground(false);
     this.tracePrivacyHandoff('UIAbility onBackground');
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
