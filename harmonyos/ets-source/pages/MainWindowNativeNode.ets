@@ -513,6 +513,8 @@ struct WindowNativeNode {
   @State private dsoNebulae: number = 0
   @State private planetPositions: Array<PlanetPosition> = []
   @State private ephemerisData: Array<EphemerisRow> = []
+  @State private ephemerisName: string = ''
+  @State private ephemerisError: string = ''
   @State private planetCalcData: Array<PlanetCalcItem> = []
   @State private altAzCurve: Array<AltAzPoint> = []
   @State private altAzName: string = ''
@@ -2263,11 +2265,27 @@ struct WindowNativeNode {
   }
 
   private loadEphemeris(): void {
-    if (this.ephemerisData.length === 0) {
-      this.callInteractive('getEphemeris', JSON.stringify({ days: 14, stepHours: 24 }), (r: StellariumBridgeResponse) => {
-        if (r.ok === true && r.ephemeris !== undefined) this.ephemerisData = r.ephemeris as Array<EphemerisRow>
-      })
-    }
+    this.ephemerisData = []
+    this.ephemerisName = ''
+    this.ephemerisError = ''
+    this.callInteractive('getEphemeris', JSON.stringify({ days: 14, stepHours: 24 }), (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.ephemeris !== undefined) {
+        this.ephemerisData = r.ephemeris as Array<EphemerisRow>
+        this.ephemerisName = r.name !== undefined ? String(r.name) : ''
+      } else {
+        this.ephemerisError = '请先在星图上选中一个天体，再生成它的星历。'
+      }
+    })
+  }
+
+  private jumpToEphemerisRow(row: EphemerisRow): void {
+    if (row.jd === undefined || row.jd <= 0) return
+    this.callInteractive('setJD', String(row.jd), (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.refreshState()
+        this.loadEphemeris()
+      }
+    })
   }
 
   private loadPlanetCalc(): void {
@@ -2397,6 +2415,11 @@ struct WindowNativeNode {
   private fmtClock(s: string | undefined): string {
     if (s === undefined || s.length < 16) return '--:--'
     return s.slice(11, 16)
+  }
+
+  private fmtEphemerisDate(s: string | undefined): string {
+    if (s === undefined || s.length < 16) return '--'
+    return s.slice(5, 16).replace('T', ' ')
   }
 
   private fmtNum(v: number | undefined, digits: number, suffix: string): string {
@@ -10206,30 +10229,30 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button('刷新星历').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.ephemerisData = []; this.loadEphemeris() })
+                .onClick(() => { this.loadEphemeris() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-            Text('先在主界面点选一个天体，这里显示它未来 14 天的每日位置。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
-            Row() {
-              Text('日期').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
-              Text('赤经').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
-              Text('赤纬').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
-              Text('高度').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-              Text('方位').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-              Text('星等').fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-            }.width('100%').padding({ left: 8, right: 8 }).margin({ bottom: 2 })
-            if (this.ephemerisData.length === 0) {
-              Text('（未选中天体或计算中…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            Text('先在主界面点选一个天体，这里显示它未来 14 天的每日位置；点任一行可跳到该时刻。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            if (this.ephemerisError.length > 0) {
+              Text(this.ephemerisError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            } else if (this.ephemerisData.length === 0) {
+              Text('（正在生成星历…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            } else {
+              Text(this.ephemerisName + ' · 未来 14 天星历').fontSize(11).fontColor(this.nmText()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
             }
             ForEach(this.ephemerisData, (row: EphemerisRow) => {
-              Row() {
-                Text(this.fmtDateTime(row.date)).fontSize(10).fontColor(this.nmText()).layoutWeight(2)
-                Text(row.ra !== undefined ? row.ra : '').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
-                Text(row.dec !== undefined ? row.dec : '').fontSize(10).fontColor(this.nmSub()).layoutWeight(2)
-                Text(this.fmtNum(row.altitude, 1, '°')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-                Text(this.fmtNum(row.azimuth, 0, '°')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-                Text(this.fmtNum(row.magnitude, 1, '')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1)
-              }.width('100%').padding({ left: 8, right: 8 }).height(26)
+              Column({ space: 1 }) {
+                Row({ space: 8 }) {
+                  Text(this.fmtEphemerisDate(row.date)).fontSize(10).fontColor(this.nmText()).width(96)
+                  Text('赤经 ' + (row.ra ?? '--')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1).maxLines(1)
+                }.width('100%')
+                Text('赤纬 ' + (row.dec ?? '--')).fontSize(9).fontColor('#B8FFFFFF').width('100%').maxLines(1)
+                Text('高度 ' + this.fmtNum(row.altitude, 1, '°')
+                  + '   方位 ' + this.fmtNum(row.azimuth, 0, '°')
+                  + '   星等 ' + this.fmtNum(row.magnitude, 1, ''))
+                  .fontSize(9).fontColor('#88FFFFFF').width('100%').maxLines(1)
+              }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
               .backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
+              .onClick(() => { this.jumpToEphemerisRow(row) })
             }, (row: EphemerisRow, index: number) => index.toString())
           } else if (this.astroTab === 2) {
             Text(I18n.t('i0127')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })

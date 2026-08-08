@@ -5750,8 +5750,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			QString name = jo.value("name").toString();
 			double startJD = jo.value("jd").toDouble(0.0);
-			int days = jo.value("days").toInt(14);
-			int stepHours = jo.value("stepHours").toInt(24);
+			const int days = qBound(1, jo.value("days").toInt(14), 31);
+			const int stepHours = qBound(1, jo.value("stepHours").toInt(24), 24);
 
 			StelObjectP obj;
 			if (!name.isEmpty())
@@ -5768,31 +5768,36 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			if (startJD <= 0) startJD = core->getJD();
-			double origJD = core->getJD();
+			const double origJD = core->getJD();
 			QJsonArray rows;
-			double jd = startJD;
-			double endJD = startJD + days;
-			while (jd <= endJD)
+			const int samples = (days * 24) / stepHours;
+			for (int i = 0; i <= samples; ++i)
 			{
+				const double jd = startJD + i * stepHours / 24.0;
 				core->setJD(jd);
-				Vec3d eq = obj->getEquinoxEquatorialPos(core);
-				Vec3d aa = obj->getAltAzPosApparent(core);
-				double alt = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
-				double az = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
+				core->update(0);
+				double ra = 0.0;
+				double dec = 0.0;
+				StelUtils::rectToSphe(&ra, &dec, obj->getEquinoxEquatorialPos(core));
+				double az = 0.0;
+				double alt = 0.0;
+				StelUtils::rectToSphe(&az, &alt, obj->getAltAzPosAuto(core));
 				QJsonObject row;
 				row["jd"] = jd;
-				row["date"] = StelUtils::julianDayToISO8601String(jd);
-				row["ra"] = StelUtils::radToHmsStr(eq[0]);
-				row["dec"] = StelUtils::radToDmsStr(eq[1]);
-				row["altitude"] = alt;
-				row["azimuth"] = az;
+				row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+				row["ra"] = StelUtils::radToHmsStr(ra);
+				row["dec"] = StelUtils::radToDmsStr(dec);
+				row["altitude"] = alt * 180.0 / M_PI;
+				row["azimuth"] = StelUtils::fmodpos(az * 180.0 / M_PI, 360.0);
 				row["magnitude"] = obj->getVMagnitude(core);
 				rows.append(row);
-				jd += stepHours / 24.0;
 			}
 			core->setJD(origJD);
+			core->update(0);
 			result["ok"] = true;
 			result["name"] = obj->getNameI18n();
+			if (result["name"].toString().isEmpty())
+				result["name"] = obj->getEnglishName();
 			result["ephemeris"] = rows;
 			return result;
 		}
@@ -5862,9 +5867,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				QJsonObject po;
 				po["name"] = p->getNameI18n();
 				po["englishName"] = pn;
-				Vec3d eq = p->getEquinoxEquatorialPos(core);
-				po["ra"] = StelUtils::radToHmsStr(eq[0]);
-				po["dec"] = StelUtils::radToDmsStr(eq[1]);
+				double ra = 0.0;
+				double dec = 0.0;
+				StelUtils::rectToSphe(&ra, &dec, p->getEquinoxEquatorialPos(core));
+				po["ra"] = StelUtils::radToHmsStr(ra);
+				po["dec"] = StelUtils::radToDmsStr(dec);
 				Vec3d aa = p->getAltAzPosApparent(core);
 				po["altitude"] = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
 				po["azimuth"] = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
