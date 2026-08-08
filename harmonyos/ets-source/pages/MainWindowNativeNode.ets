@@ -438,7 +438,9 @@ struct WindowNativeNode {
   @State private zodiacalLight: boolean = false
   @State private viewTab: number = 0  // View面板子标签索引
   @State private configTab: number = 0  // Configuration面板子标签索引
-  @State private astroTab: number = 0   // 天文计算面板子标签索引
+  // Open AstroCalc on the observation-first view: it needs no selected object
+  // and immediately gives a useful answer for the current location and date.
+  @State private astroTab: number = 5   // 天文计算面板子标签索引
   @State private nightViewTab: number = 0
   @State private meteors: boolean = false
   @State private dsoLabels: boolean = true
@@ -801,6 +803,7 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
+    { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
@@ -812,6 +815,7 @@ struct WindowNativeNode {
     { label: I18n.t('panel_oculars'), icon: 'telescope', panel: 'oculars' },
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
+    { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
     { icon: 'tune', label: I18n.t('i0273'), panel: 'config' },
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
     { icon: 'help', label: I18n.t('i0217'), panel: 'help' }
@@ -1358,9 +1362,9 @@ struct WindowNativeNode {
   }
 
   private setPanel(panel: string): void {
-    // The offline candidate must not expose unfinished script playback or
-    // AstroCalc screens. Keep their implementation intact for later work.
-    if (OFFLINE_APPGALLERY_BUILD && (panel === 'scripts' || panel === 'astro')) {
+    // Script playback remains hidden in the offline candidate until its
+    // resource lifecycle is ready. AstroCalc is self-contained and offline.
+    if (OFFLINE_APPGALLERY_BUILD && panel === 'scripts') {
       return
     }
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
@@ -10130,12 +10134,12 @@ private loadPlanetPositions(): void {
       // 天文计算窗口
       Row({ space: 2 }) {
         ForEach([
+          { label: I18n.t('a0005'), id: 5 },
           { label: I18n.t('a0000'), id: 0 },
           { label: I18n.t('a0001'), id: 1 },
           { label: I18n.t('a0002'), id: 2 },
           { label: I18n.t('a0003'), id: 3 },
           { label: I18n.t('a0004'), id: 4 },
-          { label: I18n.t('a0005'), id: 5 },
           { label: I18n.t('a0006'), id: 6 },
           { label: I18n.t('a0007'), id: 7 },
           { label: I18n.t('a0008'), id: 8 },
