@@ -5905,12 +5905,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// getPhenomena — 行星间的合（最小角距），未来约 400 天内距角 < 4° 的事件
+		// getPhenomena — 行星间的合：扫描每个局部最小角距，再细化事件时刻。
 		if (commandName == "getPhenomena")
 		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
 			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
-												   << "Saturn" << "Uranus" << "Neptune";
+													   << "Saturn" << "Uranus" << "Neptune";
 			QList<QJsonObject> phenomenaList;
 			QList<PlanetP> planets;
 			for (const QString& pn : planetNames)
@@ -5918,37 +5920,88 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
 				if (p) planets.append(p);
 			}
-			double origJD = core->getJD();
-			double startJD = origJD;
-			int horizon = 400; // days
-			QJsonArray items;
-			for (int a = 0; a < planets.size(); a++)
-			{
-				for (int b = a + 1; b < planets.size(); b++)
+			const double origJD = core->getJD();
+			const double startJD = jo.value("jd").toDouble(origJD);
+			const int horizon = qBound(1, jo.value("days").toInt(400), 730);
+			const double maxSeparation = qBound(0.5, jo.value("maxSeparation").toDouble(4.0), 10.0);
+			const double coarseStep = 0.25; // 6 hours
+
+			QList<QPair<int, int>> pairs;
+			for (int a = 0; a < planets.size(); ++a)
+				for (int b = a + 1; b < planets.size(); ++b)
+					pairs.append(qMakePair(a, b));
+
+			auto separationAt = [&](double jd) -> QList<double> {
+				core->setJD(jd);
+				core->update(0);
+				QList<Vec3d> positions;
+				for (const PlanetP& planet : planets)
 				{
-					double bestJD = 0, bestSep = 999;
-					for (int d = 0; d <= horizon; d++)
+					Vec3d position = planet->getEquinoxEquatorialPos(core);
+					position.normalize();
+					positions.append(position);
+				}
+				QList<double> separations;
+				for (const QPair<int, int>& pair : pairs)
+					separations.append(std::acos(qBound(-1.0, positions[pair.first].dot(positions[pair.second]), 1.0)) * 180.0 / M_PI);
+				return separations;
+			};
+
+			auto separationDeg = [&](PlanetP first, PlanetP second, double jd) -> double {
+				core->setJD(jd);
+				core->update(0);
+				Vec3d firstPos = first->getEquinoxEquatorialPos(core); firstPos.normalize();
+				Vec3d secondPos = second->getEquinoxEquatorialPos(core); secondPos.normalize();
+				return std::acos(qBound(-1.0, firstPos.dot(secondPos), 1.0)) * 180.0 / M_PI;
+			};
+
+			auto refineMinimum = [&](PlanetP first, PlanetP second, double jd0) -> QPair<double, double> {
+				double bestJD = jd0;
+				double bestSeparation = 999.0;
+				for (int k = -36; k <= 36; ++k)
+				{
+					const double jd = jd0 + k * (1.0 / 144.0); // 10 minutes
+					const double separation = separationDeg(first, second, jd);
+					if (separation < bestSeparation)
 					{
-						double jd = startJD + d;
-						core->setJD(jd);
-						Vec3d va = planets[a]->getEquinoxEquatorialPos(core); va.normalize();
-						Vec3d vb = planets[b]->getEquinoxEquatorialPos(core); vb.normalize();
-						double sep = std::acos(qBound(-1.0, va.dot(vb), 1.0)) * 180.0 / M_PI;
-						if (sep < bestSep) { bestSep = sep; bestJD = jd; }
-					}
-					if (bestSep < 4.0)
-					{
-						QJsonObject po;
-						po["bodyA"] = planets[a]->getNameI18n();
-						po["bodyB"] = planets[b]->getNameI18n();
-						po["jd"] = bestJD;
-						po["date"] = StelUtils::julianDayToISO8601String(bestJD);
-						po["separation"] = bestSep;
-						phenomenaList.append(po);
+						bestSeparation = separation;
+						bestJD = jd;
 					}
 				}
+				return qMakePair(bestJD, bestSeparation);
+			};
+
+			const int samples = static_cast<int>(horizon / coarseStep);
+			QList<double> previous = separationAt(startJD);
+			QList<double> current = separationAt(startJD + coarseStep);
+			for (int i = 1; i < samples; ++i)
+			{
+				const double jd = startJD + (i + 1) * coarseStep;
+				const QList<double> next = separationAt(jd);
+				for (int pairIndex = 0; pairIndex < pairs.size(); ++pairIndex)
+				{
+					if (current[pairIndex] <= previous[pairIndex] && current[pairIndex] < next[pairIndex] && current[pairIndex] <= maxSeparation)
+					{
+						const QPair<int, int>& pair = pairs[pairIndex];
+						const QPair<double, double> event = refineMinimum(planets[pair.first], planets[pair.second], startJD + i * coarseStep);
+						if (event.second <= maxSeparation)
+						{
+							QJsonObject po;
+							po["bodyA"] = planets[pair.first]->getNameI18n();
+							po["bodyB"] = planets[pair.second]->getNameI18n();
+							po["jd"] = event.first;
+							po["date"] = StelUtils::julianDayToISO8601String(event.first + core->getUTCOffset(event.first) / 24.0);
+							po["separation"] = event.second;
+							phenomenaList.append(po);
+						}
+					}
+				}
+				previous = current;
+				current = next;
 			}
+			QJsonArray items;
 			core->setJD(origJD);
+			core->update(0);
 			// 按日期排序（QJsonArray 的迭代器不支持 std::sort，先在 QList 上排好再装回去）
 			std::sort(phenomenaList.begin(), phenomenaList.end(), [](const QJsonObject& x, const QJsonObject& y) {
 				return x.value("jd").toDouble() < y.value("jd").toDouble();

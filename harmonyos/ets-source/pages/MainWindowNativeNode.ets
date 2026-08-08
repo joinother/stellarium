@@ -521,6 +521,7 @@ struct WindowNativeNode {
   @State private altAzError: string = ''
   @State private eclipseData: Array<EclipseItem> = []
   @State private phenomenaData: Array<PhenomenonItem> = []
+  @State private phenomenaHint: string = ''
   @State private tonightAstro: TonightEvents | null = null
   @State private siderealTimeText: string = '--'
   @State private nightModeOn: boolean = false
@@ -2318,11 +2319,23 @@ struct WindowNativeNode {
   }
 
   private loadPhenomena(): void {
-    if (this.phenomenaData.length === 0) {
-      this.callInteractive('getPhenomena', '', (r: StellariumBridgeResponse) => {
-        if (r.ok === true && r.phenomena !== undefined) this.phenomenaData = r.phenomena as Array<PhenomenonItem>
-      })
-    }
+    this.phenomenaData = []
+    this.phenomenaHint = ''
+    this.callInteractive('getPhenomena', JSON.stringify({ days: 400, maxSeparation: 4 }), (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.phenomena !== undefined) {
+        this.phenomenaData = r.phenomena as Array<PhenomenonItem>
+        if (this.phenomenaData.length === 0) this.phenomenaHint = '未来 400 天没有角距小于 4° 的行星合相。'
+      } else {
+        this.phenomenaHint = '暂时无法完成天象计算，请稍后重试。'
+      }
+    })
+  }
+
+  private jumpToPhenomenon(item: PhenomenonItem): void {
+    if (item.jd === undefined || item.jd <= 0) return
+    this.callInteractive('setJD', String(item.jd), (r: StellariumBridgeResponse) => {
+      if (r.ok === true) this.refreshState()
+    })
   }
 
   private loadTonightAstro(): void {
@@ -10296,11 +10309,13 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button('计算天象').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.phenomenaData = []; this.loadPhenomena() })
+                .onClick(() => { this.loadPhenomena() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-            Text('未来约 400 天里行星之间角距小于 4° 的“合”（点击跳到该时刻）。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
-            if (this.phenomenaData.length === 0) {
-              Text('（计算中，或未来一年无明显合相…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            Text('未来 400 天内角距不大于 4° 的行星合相，时刻精确到约 10 分钟；点任一项可跳到该时刻。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            if (this.phenomenaHint.length > 0) {
+              Text(this.phenomenaHint).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            } else if (this.phenomenaData.length === 0) {
+              Text('（正在计算天象…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
             }
             ForEach(this.phenomenaData, (p: PhenomenonItem) => {
               Column({ space: 1 }) {
@@ -10311,7 +10326,7 @@ private loadPlanetPositions(): void {
                 }.width('100%').padding({ left: 8, right: 8 })
                 Text(this.fmtDateTime(p.date)).fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
               }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
-              .onClick(() => { if (p.jd !== undefined) this.callNative('setJD', String(p.jd)) })
+              .onClick(() => { this.jumpToPhenomenon(p) })
             }, (p: PhenomenonItem, index: number) => index.toString())
           } else if (this.astroTab === 4) {
             Text(I18n.t('i0129')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
