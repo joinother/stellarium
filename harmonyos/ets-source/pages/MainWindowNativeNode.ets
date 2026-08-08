@@ -504,6 +504,7 @@ struct WindowNativeNode {
   @State private scriptList: string[] = []
   @State private moduleList: string[] = []
   @State private rtsData: Map<string, string> = new Map()
+  @State private rtsError: string = ''
   @State private almanacData: Map<string, string> = new Map()
   @State private objectInfo: Map<string, string> = new Map()
   @State private dsoTotalCount: number = 0
@@ -2225,23 +2226,39 @@ struct WindowNativeNode {
     const numJd = parseFloat(jd);
     if (numJd <= 0) return '--'
     const date = new Date((numJd - 2440587.5) * 86400000)
-    const h = Math.floor((numJd - Math.floor(numJd)) * 24)
-    const m = Math.floor(((numJd - Math.floor(numJd)) * 24 - h) * 60)
-    return date.getMonth() + 1 + '/' + date.getDate() + ' ' + h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0')
+    return (date.getMonth() + 1).toString() + '/' + date.getDate().toString()
+      + ' ' + date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0')
   }
 
   private loadRTS(): void {
+    this.rtsError = ''
     this.callInteractive('getRTS', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.rts !== undefined) {
         const rv: Object = r.rts as Object
-        this.rtsData.set('name', rv['name'] !== undefined ? rv['name'] as string : 'N/A')
-        this.rtsData.set('nextRiseJD', rv['nextRiseJD'] !== undefined ? String(rv['nextRiseJD']) : '0')
-        this.rtsData.set('nextTransitJD', rv['nextTransitJD'] !== undefined ? String(rv['nextTransitJD']) : '0')
-        this.rtsData.set('nextSetJD', rv['nextSetJD'] !== undefined ? String(rv['nextSetJD']) : '0')
-        this.rtsData.set('prevRiseJD', rv['prevRiseJD'] !== undefined ? String(rv['prevRiseJD']) : '0')
-        this.rtsData.set('prevTransitJD', rv['prevTransitJD'] !== undefined ? String(rv['prevTransitJD']) : '0')
-        this.rtsData.set('prevSetJD', rv['prevSetJD'] !== undefined ? String(rv['prevSetJD']) : '0')
+        const data = new Map<string, string>()
+        data.set('name', rv['name'] !== undefined ? rv['name'] as string : 'N/A')
+        data.set('nextRiseJD', rv['nextRiseJD'] !== undefined ? String(rv['nextRiseJD']) : '0')
+        data.set('nextTransitJD', rv['nextTransitJD'] !== undefined ? String(rv['nextTransitJD']) : '0')
+        data.set('nextSetJD', rv['nextSetJD'] !== undefined ? String(rv['nextSetJD']) : '0')
+        data.set('prevRiseJD', rv['prevRiseJD'] !== undefined ? String(rv['prevRiseJD']) : '0')
+        data.set('prevTransitJD', rv['prevTransitJD'] !== undefined ? String(rv['prevTransitJD']) : '0')
+        data.set('prevSetJD', rv['prevSetJD'] !== undefined ? String(rv['prevSetJD']) : '0')
+        this.rtsData = data
+      } else {
+        this.rtsData = new Map()
+        this.rtsError = '请先在星图上选中一个天体，再计算升中天落。'
       }
+    })
+  }
+
+  private jumpToRts(key: string): void {
+    const jd = this.rtsData.get(key) ?? '0'
+    if (parseFloat(jd) <= 0) {
+      this.flashHint('该天体在当前位置没有这个事件。')
+      return
+    }
+    this.callInteractive('setJD', jd, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) this.refreshState()
     })
   }
 
@@ -2260,18 +2277,18 @@ struct WindowNativeNode {
   }
 
   private loadAltAzCurve(): void {
-    if (this.altAzCurve.length === 0) {
-      this.callInteractive('getAltAzCurve', JSON.stringify({ hours: 24, stepMin: 30 }), (r: StellariumBridgeResponse) => {
-        if (r.ok === true && r.curve !== undefined) {
-          this.altAzCurve = r.curve as Array<AltAzPoint>
-          this.altAzName = r.name !== undefined ? r.name : ''
-          this.altAzError = ''
-        } else {
-          this.altAzCurve = []
-          this.altAzError = '请先在星图上选中一个天体，再来看它的高度曲线。'
-        }
-      })
-    }
+    this.altAzCurve = []
+    this.altAzError = ''
+    this.callInteractive('getAltAzCurve', JSON.stringify({ hours: 24, stepMin: 30 }), (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.curve !== undefined) {
+        this.altAzCurve = r.curve as Array<AltAzPoint>
+        this.altAzName = r.name !== undefined ? r.name : ''
+        this.altAzError = ''
+      } else {
+        this.altAzCurve = []
+        this.altAzError = '请先在星图上选中一个天体，再来看它的高度曲线。'
+      }
+    })
   }
 
   private loadEclipses(): void {
@@ -2354,13 +2371,15 @@ struct WindowNativeNode {
   }
 
   private altAzVisibleHours(): string {
-    let cnt: number = 0
-    for (let i = 0; i < this.altAzCurve.length; i++) {
+    let hours: number = 0
+    for (let i = 0; i + 1 < this.altAzCurve.length; i++) {
       const p: AltAzPoint = this.altAzCurve[i]
-      if (p.altitude !== undefined && p.altitude > 0) cnt++
+      const next: AltAzPoint = this.altAzCurve[i + 1]
+      if (p.altitude !== undefined && p.altitude > 0 && p.t !== undefined && next.t !== undefined) {
+        hours += next.t - p.t
+      }
     }
-    // 采样间隔 30 分钟
-    return (cnt * 0.5).toFixed(1) + ' 小时'
+    return hours.toFixed(1) + ' 小时'
   }
 
   private altBarHeight(alt: number | undefined): number {
@@ -10217,7 +10236,9 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
-            if (this.rtsData.size > 0) {
+            if (this.rtsError.length > 0) {
+              Text(this.rtsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else if (this.rtsData.size > 0) {
               this.infoRow(I18n.t('s0358'), this.rtsData.get('name') ?? 'N/A')
               Row()
                 .width('100%').height(0.5)
@@ -10239,13 +10260,13 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button(I18n.t('i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionNext_Rising') })
+                .onClick(() => { this.jumpToRts('nextRiseJD') })
               Button(I18n.t('i0148')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionNext_Transit') })
+                .onClick(() => { this.jumpToRts('nextTransitJD') })
               Button(I18n.t('i0147')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionNext_Setting') })
+                .onClick(() => { this.jumpToRts('nextSetJD') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ top: 8 })
           } else if (this.astroTab === 3) {
             Text(I18n.t('i0128')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })

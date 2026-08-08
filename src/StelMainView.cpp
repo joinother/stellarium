@@ -4442,29 +4442,45 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			StelCore* core = StelApp::getInstance().getCore();
-			Vec4d rts = sel.first()->getRTSTime(core);
-			result["ok"] = true;
-			result["riseJD"] = rts[0];
-			result["transitJD"] = rts[1];
-			result["setJD"] = rts[2];
-			result["status"] = (int)rts[3];
-			// Convert to local time strings
-			if (rts[0] > 0) result["rise"] = StelUtils::julianDayToISO8601String(rts[0]);
-			if (rts[1] > 0) result["transit"] = StelUtils::julianDayToISO8601String(rts[1]);
-			if (rts[2] > 0) result["set"] = StelUtils::julianDayToISO8601String(rts[2]);
-			// 前一次升起/中天/落下：把时间回拨 1.5 天后重算（取回拨后首个事件，即本次之前最近的一次）
+			const StelObjectP object = sel.first();
+			const double currentJD = core->getJD();
+			double previous[3] = { 0.0, 0.0, 0.0 };
+			double next[3] = { 0.0, 0.0, 0.0 };
+
+			// getRTSTime() calculates the local civil date containing core->getJD().
+			// Scan nearby dates so the result is truly the previous/next event rather
+			// than an event earlier today labelled as "next".
+			for (int dayOffset = -2; dayOffset <= 2; ++dayOffset)
 			{
-				double origJD = core->getJD();
-				core->setJD(origJD - 1.5);
-				Vec4d prevRts = sel.first()->getRTSTime(core);
-				core->setJD(origJD);
-				result["prevRiseJD"] = prevRts[0];
-				result["prevTransitJD"] = prevRts[1];
-				result["prevSetJD"] = prevRts[2];
-				if (prevRts[0] > 0) result["prevRise"] = StelUtils::julianDayToISO8601String(prevRts[0]);
-				if (prevRts[1] > 0) result["prevTransit"] = StelUtils::julianDayToISO8601String(prevRts[1]);
-				if (prevRts[2] > 0) result["prevSet"] = StelUtils::julianDayToISO8601String(prevRts[2]);
+				core->setJD(currentJD + dayOffset);
+				core->update(0);
+				const Vec4d rts = object->getRTSTime(core);
+				for (int event = 0; event < 3; ++event)
+				{
+					const double eventJD = rts[event];
+					if (eventJD <= 0.0)
+						continue;
+					if (eventJD <= currentJD && eventJD > previous[event])
+						previous[event] = eventJD;
+					if (eventJD >= currentJD && (next[event] <= 0.0 || eventJD < next[event]))
+						next[event] = eventJD;
+				}
 			}
+			core->setJD(currentJD);
+			core->update(0);
+
+			QJsonObject rtsResult;
+			rtsResult["name"] = object->getNameI18n();
+			if (rtsResult["name"].toString().isEmpty())
+				rtsResult["name"] = object->getEnglishName();
+			rtsResult["nextRiseJD"] = next[0];
+			rtsResult["nextTransitJD"] = next[1];
+			rtsResult["nextSetJD"] = next[2];
+			rtsResult["prevRiseJD"] = previous[0];
+			rtsResult["prevTransitJD"] = previous[1];
+			rtsResult["prevSetJD"] = previous[2];
+			result["ok"] = true;
+			result["rts"] = rtsResult;
 			return result;
 		}
 
@@ -5788,8 +5804,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			QString name = jo.value("name").toString();
 			double startJD = jo.value("jd").toDouble(0.0);
-			int hours = jo.value("hours").toInt(24);
-			int stepMin = jo.value("stepMin").toInt(10);
+			const int hours = qBound(1, jo.value("hours").toInt(24), 72);
+			const int stepMin = qBound(5, jo.value("stepMin").toInt(30), 60);
 
 			StelObjectP obj;
 			if (!name.isEmpty())
@@ -5806,24 +5822,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			if (startJD <= 0) startJD = core->getJD();
-			double origJD = core->getJD();
+			const double origJD = core->getJD();
 			QJsonArray rows;
 			int n = (hours * 60) / stepMin;
 			for (int i = 0; i <= n; i++)
 			{
 				double jd = startJD + i * stepMin / 1440.0;
 				core->setJD(jd);
-				Vec3d aa = obj->getAltAzPosApparent(core);
-				double alt = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
-				double az = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
+				core->update(0);
+				double az = 0.0;
+				double alt = 0.0;
+				StelUtils::rectToSphe(&az, &alt, obj->getAltAzPosAuto(core));
 				QJsonObject row;
 				row["jd"] = jd;
 				row["t"] = i * stepMin / 60.0; // hours from start
-				row["altitude"] = alt;
-				row["azimuth"] = az;
+				row["altitude"] = alt * 180.0 / M_PI;
+				row["azimuth"] = StelUtils::fmodpos(az * 180.0 / M_PI, 360.0);
 				rows.append(row);
 			}
 			core->setJD(origJD);
+			core->update(0);
 			result["ok"] = true;
 			result["name"] = obj->getNameI18n();
 			result["curve"] = rows;
