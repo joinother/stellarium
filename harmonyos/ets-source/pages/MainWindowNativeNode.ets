@@ -8,6 +8,7 @@ import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
+import { LOCATION_ZH_NAMES } from './location_names_zh'
 
 import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, EphemerisRow, AltAzPoint, PlanetCalcItem, PhenomenonItem, EclipseItem, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, ObjectInfo, SkyCultureItem, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
@@ -5383,6 +5384,11 @@ private loadPlanetPositions(): void {
   // Translate region/city names to current language
   private translateRegion(name: string): string {
     if (!name || name === '未知地区') return I18n.t('region_unknown')
+    if (I18n.getLanguage() === 'zh_CN') {
+      // Keep the upstream name as the native lookup key; Chinese UI never
+      // falls back to that key, so incomplete source data cannot leak Latin text.
+      return LOCATION_ZH_NAMES[name] ?? '未收录地点'
+    }
     // Region names are city/timezone names from Stellarium's base_locations
     // Use I18n for known regions, fallback to original name
     const regionMap: Record<string, string> = {
@@ -5499,6 +5505,32 @@ private loadPlanetPositions(): void {
       'Bern': I18n.t('city_bern'),
       'Zurich': I18n.t('city_zurich'),
 
+      // Austria is the first European group shown by the source ordering.
+      // Keep its well-known cities and Vienna districts localized instead of
+      // falling straight through to the upstream English place names.
+      'Graz': '格拉茨',
+      'Linz': '林茨',
+      'Favoriten': '法沃里滕',
+      'Donaustadt': '多瑙城区',
+      'Floridsdorf': '弗洛里茨多夫',
+      'Salzburg': '萨尔茨堡',
+      'Innsbruck': '因斯布鲁克',
+      'Ottakring': '奥塔克灵',
+      'Klagenfurt am Woerthersee': '克拉根福',
+      'Sankt Poelten': '圣珀尔滕',
+      'Wiener Neustadt': '维也纳新城',
+      'Wels': '韦尔斯',
+      'Villach': '菲拉赫',
+      'Steyr': '施泰尔',
+      'Feldkirch': '费尔德基希',
+      'Bregenz': '布雷根茨',
+      'Dornbirn': '多恩比恩',
+      'Baden': '巴登',
+      'Amstetten': '阿姆施泰滕',
+      'Klosterneuburg': '克洛斯特新堡',
+      'Isle of Man': '马恩岛',
+      'Zwedru': '兹韦德鲁',
+
       'Mexico City': I18n.t('city_mexico_city'),
       'Guatemala': I18n.t('city_guatemala'),
       'Havana': I18n.t('city_havana'),
@@ -5545,6 +5577,24 @@ private loadPlanetPositions(): void {
       return I18n.t('h_region')
     }
     return I18n.t('h_city')
+  }
+
+  private hierarchyItemLabel(kind: string, name: string): string {
+    return kind === 'continent' ? this.translateContinent(name) : this.locationDisplayName(name)
+  }
+
+  private hierarchySelectionSummary(): string {
+    const parts: Array<string> = []
+    if (this.hierContinent) {
+      parts.push(this.translateContinent(this.hierContinent))
+    }
+    if (this.hierRegion) {
+      parts.push(this.locationDisplayName(this.hierRegion))
+    }
+    if (this.hierCity) {
+      parts.push(this.locationDisplayName(this.hierCity))
+    }
+    return parts.length > 0 ? parts.join('  >  ') : '未选择'
   }
 
   private hierRegions(): Array<string> {
@@ -5622,41 +5672,50 @@ private loadPlanetPositions(): void {
         Column({ space: 4 }) {
           if (kind === 'continent') {
             ForEach(this.hierContinents(), (item: string) => {
-              Button(this.translateContinent(item), { type: ButtonType.Normal })
+              Button(selected === item ? `✓ ${this.hierarchyItemLabel(kind, item)}` : this.hierarchyItemLabel(kind, item), { type: ButtonType.Normal })
                 .padding({ left: 8, right: 8, top: 6, bottom: 6 })
                 .width('100%')
                 .fontSize(11)
                 .fontColor(selected === item ? '#FFFFFFFF' : '#A8C4E0')
-                .backgroundColor(selected === item ? 'rgba(91, 147, 191, 0.65)' : 'rgba(255,255,255,0.03)')
-                .border({ width: selected === item ? 0 : 1, color: 'rgba(107,163,214,0.10)' })
+                .fontWeight(selected === item ? FontWeight.Medium : FontWeight.Regular)
+                .backgroundColor(selected === item ? '#2A6694' : 'rgba(255,255,255,0.03)')
+                .border({ width: selected === item ? 1.5 : 1, color: selected === item ? '#9BD8FF' : 'rgba(107,163,214,0.10)' })
                 .borderRadius(8)
-                .stateEffect(false)
+                .shadow(selected === item ? { radius: 8, color: 'rgba(99, 185, 255, 0.35)', offsetX: 0, offsetY: 1 } : { radius: 0, color: 'transparent', offsetX: 0, offsetY: 0 })
+                .stateEffect(true)
+                .animation({ duration: 160, curve: curves.springMotion(0.42, 0.86) })
                 .onClick(() => onSelect(item))
             }, (item: string) => item)
           } else if (kind === 'region') {
             ForEach(this.hierRegions(), (item: string) => {
-              Button(this.translateRegion(item), { type: ButtonType.Normal })
+              Button(selected === item ? `✓ ${this.hierarchyItemLabel(kind, item)}` : this.hierarchyItemLabel(kind, item), { type: ButtonType.Normal })
                 .padding({ left: 8, right: 8, top: 6, bottom: 6 })
                 .width('100%')
                 .fontSize(11)
                 .fontColor(selected === item ? '#FFFFFFFF' : '#A8C4E0')
-                .backgroundColor(selected === item ? 'rgba(91, 147, 191, 0.65)' : 'rgba(255,255,255,0.03)')
-                .border({ width: selected === item ? 0 : 1, color: 'rgba(107,163,214,0.10)' })
+                .fontWeight(selected === item ? FontWeight.Medium : FontWeight.Regular)
+                .backgroundColor(selected === item ? '#2A6694' : 'rgba(255,255,255,0.03)')
+                .border({ width: selected === item ? 1.5 : 1, color: selected === item ? '#9BD8FF' : 'rgba(107,163,214,0.10)' })
                 .borderRadius(8)
-                .stateEffect(false)
+                .shadow(selected === item ? { radius: 8, color: 'rgba(99, 185, 255, 0.35)', offsetX: 0, offsetY: 1 } : { radius: 0, color: 'transparent', offsetX: 0, offsetY: 0 })
+                .stateEffect(true)
+                .animation({ duration: 160, curve: curves.springMotion(0.42, 0.86) })
                 .onClick(() => onSelect(item))
             }, (item: string) => item)
           } else {
             ForEach(this.hierCityNames(), (item: string) => {
-              Button(this.translateRegion(item), { type: ButtonType.Normal })
+              Button(selected === item ? `✓ ${this.hierarchyItemLabel(kind, item)}` : this.hierarchyItemLabel(kind, item), { type: ButtonType.Normal })
                 .padding({ left: 8, right: 8, top: 6, bottom: 6 })
                 .width('100%')
                 .fontSize(11)
                 .fontColor(selected === item ? '#FFFFFFFF' : '#A8C4E0')
-                .backgroundColor(selected === item ? 'rgba(91, 147, 191, 0.65)' : 'rgba(255,255,255,0.03)')
-                .border({ width: selected === item ? 0 : 1, color: 'rgba(107,163,214,0.10)' })
+                .fontWeight(selected === item ? FontWeight.Medium : FontWeight.Regular)
+                .backgroundColor(selected === item ? '#2A6694' : 'rgba(255,255,255,0.03)')
+                .border({ width: selected === item ? 1.5 : 1, color: selected === item ? '#9BD8FF' : 'rgba(107,163,214,0.10)' })
                 .borderRadius(8)
-                .stateEffect(false)
+                .shadow(selected === item ? { radius: 8, color: 'rgba(99, 185, 255, 0.35)', offsetX: 0, offsetY: 1 } : { radius: 0, color: 'transparent', offsetX: 0, offsetY: 0 })
+                .stateEffect(true)
+                .animation({ duration: 160, curve: curves.springMotion(0.42, 0.86) })
                 .onClick(() => onSelect(item))
             }, (item: string) => item)
           }
@@ -11554,6 +11613,13 @@ private loadPlanetPositions(): void {
           }
             .width('100%')
             .height(196)
+          Text(this.hierarchySelectionSummary())
+            .fontSize(11)
+            .fontColor(this.hierContinent ? '#A9D9F5' : '#7F96AE')
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .margin({ top: 7 })
           Text(this.pickerCoordinateText())
             .fontSize(12)
             .fontColor('#99FFFFFF')

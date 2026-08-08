@@ -92,3 +92,4 @@ docs/harmonyos/signing/
 
 # === HarmonyOS 移植：hvigor 本地产物目录 ===
 .hvigor/
+tmp/location-zh-cache.json
