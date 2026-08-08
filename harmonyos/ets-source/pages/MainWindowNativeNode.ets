@@ -2312,9 +2312,12 @@ struct WindowNativeNode {
 
   private loadEclipses(): void {
     if (this.eclipseData.length === 0) {
-      this.callInteractive('getEclipses', JSON.stringify({ months: 36 }), (r: StellariumBridgeResponse) => {
+      // Eclipse prediction uses Stellarium's Besselian solver. On API 22 it
+      // can outlive the short interactive-command polling window, so keep
+      // polling the same in-flight command instead of submitting it again.
+      this.callNativeWhenReady('getEclipses', JSON.stringify({ months: 36 }), (r: StellariumBridgeResponse) => {
         if (r.ok === true && r.eclipses !== undefined) this.eclipseData = r.eclipses as Array<EclipseItem>
-      })
+      }, 0, 100, 200)
     }
   }
 
@@ -10472,7 +10475,7 @@ private loadPlanetPositions(): void {
                   Text('食分 ' + (e.magnitude ?? 0).toFixed(2)).fontSize(10).fontColor(this.nmSub()).width(62)
                 }.width('100%').padding({ left: 8, right: 8 })
                 if (e.durationMin !== undefined) {
-                  Text('中心食持续 ' + (e.durationMin ?? 0).toFixed(1) + ' 分钟   中心点 '
+                  Text('中心食持续 ' + Math.abs(e.durationMin ?? 0).toFixed(1) + ' 分钟   中心点 '
                     + (e.centralLat ?? 0).toFixed(1) + '°, ' + (e.centralLng ?? 0).toFixed(1) + '°')
                     .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
                 }

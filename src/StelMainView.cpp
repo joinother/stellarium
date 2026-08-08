@@ -2808,18 +2808,24 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
-			QStringList planetNames = ssys->getAllPlanetEnglishNames();
+			// getAllPlanetEnglishNames() also contains catalogued minor bodies,
+			// comets and satellites. The AstroCalc position table is deliberately
+			// the compact major-body table, matching its labels and fixed layout.
+			QStringList planetNames = QStringList() << "Sun" << "Moon" << "Mercury" << "Venus"
+											   << "Mars" << "Jupiter" << "Saturn" << "Uranus" << "Neptune";
 			QJsonArray items;
 			for (const QString& pn : planetNames)
 			{
 				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
 				if (!p) continue;
 				QJsonObject obj;
-				Vec3d eq = p->getEquinoxEquatorialPos(core);
+				double ra = 0.0;
+				double dec = 0.0;
+				StelUtils::rectToSphe(&ra, &dec, p->getEquinoxEquatorialPos(core));
 				obj["name"] = p->getNameI18n();
 				obj["englishName"] = p->getEnglishName();
-				obj["ra"] = StelUtils::radToHmsStr(eq[0]/M_PI*12.0);
-				obj["dec"] = StelUtils::radToDmsStr(eq[1]/M_PI*180.0);
+				obj["ra"] = StelUtils::radToHmsStr(ra);
+				obj["dec"] = StelUtils::radToDmsStr(dec);
 				Vec3d altaz = p->getAltAzPosApparent(core);
 				obj["altitude"] = std::asin(altaz[2] / altaz.norm()) * 180.0 / M_PI;
 				obj["azimuth"] = std::fmod(std::atan2(altaz[1], -altaz[0]) * 180.0 / M_PI + 360.0, 360.0);
@@ -6019,101 +6025,126 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			double startJD = jo.value("jd").toDouble(0.0);
-			int months = jo.value("months").toInt(36);
+			const int months = qBound(1, jo.value("months").toInt(36), 60);
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
 			if (startJD <= 0) startJD = core->getJD();
-			double origJD = core->getJD();
+			const double origJD = core->getJD();
 			QJsonArray items;
 			QList<QJsonObject> eclipseList;
+			PlanetP sun = ssys->getSun();
+			PlanetP moon = ssys->getMoon();
+			if (!sun || !moon)
+			{
+				result["ok"] = false;
+				result["error"] = "Sun or Moon unavailable";
+				return result;
+			}
 
-			auto elongDeg = [&](double jd) -> double {
+			auto phaseDistance = [&](double jd, double target) -> double {
 				core->setJD(jd);
-				PlanetP sun = ssys->getSun();
-				PlanetP moon = ssys->getMoon();
-				if (!sun || !moon) return -1;
+				core->update(0);
 				Vec3d sv = sun->getEquinoxEquatorialPos(core); sv.normalize();
 				Vec3d mv = moon->getEquinoxEquatorialPos(core); mv.normalize();
 				double c = qBound(-1.0, sv.dot(mv), 1.0);
-				return std::acos(c) * 180.0 / M_PI;
-			};
-			auto refineMin = [&](double jd0, double target) -> double {
-				double best = jd0, bestE = 999;
-				for (int k = -144; k <= 144; k++)
-				{
-					double jd = jd0 + k * (1.0 / 144.0);
-					double e = elongDeg(jd);
-					double diff = (target == 0.0) ? e : std::fabs(e - 180.0);
-					if (e >= 0 && diff < bestE) { bestE = diff; best = jd; }
-				}
-				return best;
+				const double elongation = std::acos(c) * 180.0 / M_PI;
+				return target == 0.0 ? elongation : std::fabs(180.0 - elongation);
 			};
 
-			double limitJD = startJD + months * 30.0;
-			double prevPhase = elongDeg(startJD);
-			int solarCount = 0, lunarCount = 0;
-			for (double jd = startJD; jd <= limitJD; jd += 1.0)
-			{
-				double e = elongDeg(jd);
-				// 检测过近（日食：elong→0）或过远（月食：elong→180）
-				bool solarCand = (prevPhase > 1.0 && e <= 1.0) || (e <= 1.0 && jd == startJD);
-				bool lunarCand = (prevPhase < 179.0 && e >= 179.0) || (e >= 179.0 && jd == startJD);
-				if (solarCand)
+			// New and full moon estimates are stable enough to bracket with +/- 1.5 days.
+			// Ternary refinement needs only 24 core updates per lunation and remains smooth on API 22.
+			auto refinePhase = [&](double estimate, double target) -> double {
+				double left = estimate - 1.5;
+				double right = estimate + 1.5;
+				for (int i = 0; i < 12; ++i)
 				{
-					double nm = refineMin(jd, 0.0);
+					const double third = (right - left) / 3.0;
+					const double first = left + third;
+					const double second = right - third;
+					if (phaseDistance(first, target) < phaseDistance(second, target))
+						right = second;
+					else
+						left = first;
+				}
+				const double resultJD = (left + right) / 2.0;
+				phaseDistance(resultJD, target);
+				return resultJD;
+			};
+
+			const double limitJD = startJD + months * 30.436875;
+			constexpr double synodicMonth = 29.530588853;
+			constexpr double referenceNewMoon = 2451550.09765;
+			const int firstLunation = static_cast<int>(std::floor((startJD - referenceNewMoon) / synodicMonth)) - 1;
+			const int lunations = static_cast<int>(std::ceil((limitJD - startJD) / synodicMonth)) + 3;
+			SolarEclipseComputer eclipseComputer(core, &StelApp::getInstance().getLocaleMgr());
+			for (int i = 0; i < lunations; ++i)
+			{
+				const double estimate = referenceNewMoon + (firstLunation + i) * synodicMonth;
+				// The instant of geocentric conjunction is close to, but not necessarily
+				// identical with, greatest eclipse. Use the native Besselian iteration so
+				// central duration and path data are evaluated at the correct instant.
+				const double newMoonJD = eclipseComputer.getJDofMinimumDistance(refinePhase(estimate, 0.0));
+				if (newMoonJD >= startJD && newMoonJD <= limitJD)
+				{
 					double dRatio, latDeg, lngDeg, altitude, pathWidth, duration, magnitude;
-					calcSolarEclipseData(nm, dRatio, latDeg, lngDeg, altitude, pathWidth, duration, magnitude);
-					if (magnitude > 0 && solarCount < 12)
+					core->setJD(newMoonJD);
+					core->update(0);
+					calcSolarEclipseData(newMoonJD, dRatio, latDeg, lngDeg, altitude, pathWidth, duration, magnitude);
+					if (magnitude > 0.0)
 					{
-						QString type = magnitude >= 1.0 ? QStringLiteral("中心食") : QStringLiteral("偏食");
-						// 用 SolarEclipseComputer 区分全食/环食/混合食
-						SolarEclipseComputer sec(core, &StelApp::getInstance().getLocaleMgr());
-						SolarEclipseComputer::EclipseMapData map = sec.generateEclipseMap(nm);
-						switch (map.eclipseType)
-						{
-							case SolarEclipseComputer::EclipseMapData::EclipseType::Total: type = QStringLiteral("全食"); break;
-							case SolarEclipseComputer::EclipseMapData::EclipseType::Annular: type = QStringLiteral("环食"); break;
-							case SolarEclipseComputer::EclipseMapData::EclipseType::Hybrid: type = QStringLiteral("全环食"); break;
-							default: break;
-						}
+						QString type = QStringLiteral("偏食");
+						// calcSolarEclipseData returns a signed central duration: negative is total,
+						// positive is annular. Avoid generateEclipseMap(), which creates a full
+						// worldwide path and is unnecessarily expensive for a compact event list.
+						if (duration < 0.0) type = QStringLiteral("全食");
+						else if (duration > 0.0) type = QStringLiteral("环食");
+						else if (magnitude >= 1.0) type = QStringLiteral("中心食");
 						QJsonObject ev;
 						ev["kind"] = "solar";
 						ev["type"] = type;
-						ev["jd"] = nm;
-						ev["date"] = StelUtils::julianDayToISO8601String(nm);
+						ev["jd"] = newMoonJD;
+						ev["date"] = StelUtils::julianDayToISO8601String(newMoonJD + core->getUTCOffset(newMoonJD) / 24.0);
 						ev["magnitude"] = magnitude;
-						ev["pathWidthKm"] = pathWidth * 6371.0 * 2.0 * M_PI / 360.0 * 1000.0; // 近似
-						ev["durationMin"] = duration / 60.0;
+						ev["pathWidthKm"] = pathWidth;
+						// calcSolarEclipseData() already returns the central duration in minutes.
+						ev["durationMin"] = duration;
 						ev["centralLat"] = latDeg;
 						ev["centralLng"] = lngDeg;
 						eclipseList.append(ev);
-						solarCount++;
 					}
 				}
-				else if (lunarCand)
+
+				const double fullMoonJD = refinePhase(estimate + synodicMonth * 0.5, 180.0);
+				if (fullMoonJD >= startJD && fullMoonJD <= limitJD)
 				{
-					double fm = refineMin(jd, 180.0);
-					// 几何估算：月球进入地影的程度
-					double sep = std::fabs(180.0 - elongDeg(fm));
-					double moonAngR = 0.26;            // 月球角半径（度，近似）
-					double umbraAngR = 0.73;          // 地影在本影处的角半径（度，近似）
-					double umbralMag = (umbraAngR - sep) / (2.0 * moonAngR);
-					if (umbralMag > 0 && lunarCount < 12)
+					core->setJD(fullMoonJD);
+					core->update(0);
+					const QVariantMap moonInfo = moon->getInfoMap(core);
+					const double penumbralMagnitude = moonInfo.value("penumbral-eclipse-magnitude", 0.0).toDouble();
+					const double umbralMagnitude = moonInfo.value("umbral-eclipse-magnitude", 0.0).toDouble();
+					if (penumbralMagnitude > 0.0)
 					{
-						QString type = umbralMag >= 1.0 ? QStringLiteral("全食") : QStringLiteral("偏食");
+						QString type = QStringLiteral("半影食");
+						if (umbralMagnitude >= 1.0) type = QStringLiteral("全食");
+						else if (umbralMagnitude > 0.0) type = QStringLiteral("偏食");
+						double azimuth = 0.0;
+						double altitudeRad = 0.0;
+						StelUtils::rectToSphe(&azimuth, &altitudeRad, moon->getAltAzPosAuto(core));
+						const double altitudeDeg = altitudeRad * 180.0 / M_PI;
 						QJsonObject ev;
 						ev["kind"] = "lunar";
 						ev["type"] = type;
-						ev["jd"] = fm;
-						ev["date"] = StelUtils::julianDayToISO8601String(fm);
-						ev["magnitude"] = umbralMag;
-						ev["note"] = QStringLiteral("几何估算");
+						ev["jd"] = fullMoonJD;
+						ev["date"] = StelUtils::julianDayToISO8601String(fullMoonJD + core->getUTCOffset(fullMoonJD) / 24.0);
+						ev["magnitude"] = umbralMagnitude > 0.0 ? umbralMagnitude : penumbralMagnitude;
+						ev["note"] = altitudeDeg >= 0.0
+							? QStringLiteral("本地月高 %1°").arg(altitudeDeg, 0, 'f', 1)
+							: QStringLiteral("本地不可见");
 						eclipseList.append(ev);
-						lunarCount++;
 					}
 				}
-				prevPhase = e;
 			}
 			core->setJD(origJD);
+			core->update(0);
 			// QJsonArray 的迭代器不支持 std::sort，先在 QList 上按时间排好再装回去
 			std::sort(eclipseList.begin(), eclipseList.end(), [](const QJsonObject& x, const QJsonObject& y) {
 				return x.value("jd").toDouble() < y.value("jd").toDouble();
