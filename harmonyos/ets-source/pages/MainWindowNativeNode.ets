@@ -2226,6 +2226,10 @@ struct WindowNativeNode {
   }
 
   private jdToDateStr(jd: string): string {
+    if (jd.indexOf('T') >= 0) {
+      const match = jd.match(/^(?:\d{4}-)?(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+      if (match !== null) return parseInt(match[1]).toString() + '/' + parseInt(match[2]).toString() + ' ' + match[3] + ':' + match[4]
+    }
     const numJd = parseFloat(jd);
     if (numJd <= 0) return '--'
     const date = new Date((numJd - 2440587.5) * 86400000)
@@ -2459,10 +2463,12 @@ struct WindowNativeNode {
     this.callInteractive('getAlmanac', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.almanac !== undefined) {
         const av: Object = r.almanac as Object
-        this.almanacData.set('sunNextRise', av['sunNextRise'] !== undefined ? String(av['sunNextRise']) : '0')
-        this.almanacData.set('sunNextSet', av['sunNextSet'] !== undefined ? String(av['sunNextSet']) : '0')
-        this.almanacData.set('moonNextRise', av['moonNextRise'] !== undefined ? String(av['moonNextRise']) : '0')
-        this.almanacData.set('moonNextSet', av['moonNextSet'] !== undefined ? String(av['moonNextSet']) : '0')
+        this.almanacData.set('sunNextRise', av['sunNextRiseText'] !== undefined ? String(av['sunNextRiseText']) : (av['sunNextRise'] !== undefined ? String(av['sunNextRise']) : '0'))
+        this.almanacData.set('sunNextTransit', av['sunNextTransitText'] !== undefined ? String(av['sunNextTransitText']) : (av['sunNextTransit'] !== undefined ? String(av['sunNextTransit']) : '0'))
+        this.almanacData.set('sunNextSet', av['sunNextSetText'] !== undefined ? String(av['sunNextSetText']) : (av['sunNextSet'] !== undefined ? String(av['sunNextSet']) : '0'))
+        this.almanacData.set('moonNextRise', av['moonNextRiseText'] !== undefined ? String(av['moonNextRiseText']) : (av['moonNextRise'] !== undefined ? String(av['moonNextRise']) : '0'))
+        this.almanacData.set('moonNextTransit', av['moonNextTransitText'] !== undefined ? String(av['moonNextTransitText']) : (av['moonNextTransit'] !== undefined ? String(av['moonNextTransit']) : '0'))
+        this.almanacData.set('moonNextSet', av['moonNextSetText'] !== undefined ? String(av['moonNextSetText']) : (av['moonNextSet'] !== undefined ? String(av['moonNextSet']) : '0'))
         this.almanacData.set('moonPhase', av['moonPhase'] !== undefined ? String(av['moonPhase']) : '0')
       }
     })
@@ -10190,7 +10196,8 @@ private loadPlanetPositions(): void {
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF').id('config-content-' + this.i18nLang)
     } else if (this.activePanel === 'astro') {
       // 天文计算窗口
-      Row({ space: 2 }) {
+      Scroll() {
+        Row({ space: 2 }) {
         ForEach([
           { label: I18n.t('a0005'), id: 5 },
           { label: I18n.t('a0000'), id: 0 },
@@ -10210,7 +10217,9 @@ private loadPlanetPositions(): void {
             .borderRadius(6)
             .onClick(() => { this.astroTab = tab.id; this.loadAstroTab(tab.id) })
         }, (tab: TabItem, index: number) => tab.id.toString())
-      }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 4, bottom: 8 })
+        }.padding({ left: 2, right: 2 })
+      }.width('100%').height(32).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        .margin({ top: 4, bottom: 8 })
       Scroll() {
         Column({ space: 0 }) {
           if (this.astroTab === 0) {
@@ -10503,7 +10512,7 @@ private loadPlanetPositions(): void {
               this.infoRow(I18n.t('s0367'), this.jdToDateStr(this.almanacData.get('moonNextRise') ?? '0'))
               this.infoRow(I18n.t('s0368'), this.jdToDateStr(this.almanacData.get('moonNextSet') ?? '0'))
               this.infoRow(I18n.t('s0701'), this.jdToDateStr(this.almanacData.get('moonNextTransit') ?? '0'))
-              this.infoRow(I18n.t('s0369'), (parseFloat(this.almanacData.get('moonPhase') ?? '0') * 100).toFixed(1) + '%')
+              this.infoRow(I18n.t('s0369'), parseFloat(this.almanacData.get('moonPhase') ?? '0').toFixed(1) + '%')
             }
           }
         }.width('100%')

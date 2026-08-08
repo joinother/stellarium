@@ -2783,6 +2783,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			PlanetP sun = ssys->getSun();
 			PlanetP moon = ssys->getMoon();
 			QJsonObject alm;
+			auto formatLocal = [&](double jd) -> QString {
+				if (jd <= 0.0)
+					return QString();
+				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+			};
 			alm["currentJD"] = core->getJD();
 			if (sun)
 			{
@@ -2790,6 +2795,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				alm["sunNextRise"] = srts[0];
 				alm["sunNextTransit"] = srts[1];
 				alm["sunNextSet"] = srts[2];
+				alm["sunNextRiseText"] = formatLocal(srts[0]);
+				alm["sunNextTransitText"] = formatLocal(srts[1]);
+				alm["sunNextSetText"] = formatLocal(srts[2]);
 			}
 			if (moon)
 			{
@@ -2797,6 +2805,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				alm["moonNextRise"] = mrts[0];
 				alm["moonNextTransit"] = mrts[1];
 				alm["moonNextSet"] = mrts[2];
+				alm["moonNextRiseText"] = formatLocal(mrts[0]);
+				alm["moonNextTransitText"] = formatLocal(mrts[1]);
+				alm["moonNextSetText"] = formatLocal(mrts[2]);
+				alm["moonPhase"] = moon->getInfoMap(core).value("illumination", 0.0).toDouble();
 			}
 			result["ok"] = true;
 			result["almanac"] = alm;
@@ -5361,12 +5373,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				sunObj["transit"] = fmtLocal(srts[1]);
 				sunObj["set"] = fmtLocal(srts[2]);
 				Vec4d astro = sun->getRTSTime(core, -18.0);
-				sunObj["astroTwilightEnd"] = fmtLocal(astro[2]);
-				sunObj["astroTwilightStart"] = fmtLocal(astro[0]);
-				sunObj["astroTwilightEndJd"] = astro[2];
-				if (astro[2] > 0 && astro[0] > astro[2])
-					sunObj["darkWindowHours"] = (astro[0] - astro[2]) * 24.0;
-				darkStartJd = astro[2];
+				const double astroEnd = astro[2];
+				double astroStart = astro[0];
+				// getRTSTime() returns the morning and evening events in the same
+				// civil date. For tonight, the following morning belongs to tomorrow.
+				if (astroStart > 0.0 && astroEnd > 0.0 && astroStart <= astroEnd)
+					astroStart += 1.0;
+				sunObj["astroTwilightEnd"] = fmtLocal(astroEnd);
+				sunObj["astroTwilightStart"] = fmtLocal(astroStart);
+				sunObj["astroTwilightEndJd"] = astroEnd;
+				if (astroEnd > 0.0 && astroStart > astroEnd)
+					sunObj["darkWindowHours"] = (astroStart - astroEnd) * 24.0;
+				darkStartJd = astroEnd;
 			}
 			out["sun"] = sunObj;
 
@@ -5864,7 +5882,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
 			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
-												   << "Saturn" << "Uranus" << "Neptune" << "Pluto" << "Sun" << "Moon";
+													   << "Saturn" << "Uranus" << "Neptune" << "Pluto" << "Sun" << "Moon";
+			auto formatLocal = [&](double jd) -> QString {
+				if (jd <= 0.0)
+					return QString();
+				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+			};
 			QJsonArray items;
 			for (const QString& pn : planetNames)
 			{
@@ -5882,14 +5905,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				po["altitude"] = std::asin(aa[2] / aa.norm()) * 180.0 / M_PI;
 				po["azimuth"] = std::fmod(std::atan2(aa[1], -aa[0]) * 180.0 / M_PI + 360.0, 360.0);
 				po["magnitude"] = p->getVMagnitude(core);
+				const Vec4d rts = p->getRTSTime(core);
+				po["rise"] = formatLocal(rts[0]);
+				po["transit"] = formatLocal(rts[1]);
+				po["set"] = formatLocal(rts[2]);
 				if (pn != "Sun")
 				{
 					double dist = p->getDistance(); // AU
 					po["distanceAU"] = dist;
-					Vec4d rts = p->getRTSTime(core);
-					po["rise"] = StelUtils::julianDayToISO8601String(rts[0]);
-					po["transit"] = StelUtils::julianDayToISO8601String(rts[1]);
-					po["set"] = StelUtils::julianDayToISO8601String(rts[2]);
 				}
 				if (pn == "Moon")
 				{
