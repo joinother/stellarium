@@ -5505,32 +5505,6 @@ private loadPlanetPositions(): void {
       'Bern': I18n.t('city_bern'),
       'Zurich': I18n.t('city_zurich'),
 
-      // Austria is the first European group shown by the source ordering.
-      // Keep its well-known cities and Vienna districts localized instead of
-      // falling straight through to the upstream English place names.
-      'Graz': '格拉茨',
-      'Linz': '林茨',
-      'Favoriten': '法沃里滕',
-      'Donaustadt': '多瑙城区',
-      'Floridsdorf': '弗洛里茨多夫',
-      'Salzburg': '萨尔茨堡',
-      'Innsbruck': '因斯布鲁克',
-      'Ottakring': '奥塔克灵',
-      'Klagenfurt am Woerthersee': '克拉根福',
-      'Sankt Poelten': '圣珀尔滕',
-      'Wiener Neustadt': '维也纳新城',
-      'Wels': '韦尔斯',
-      'Villach': '菲拉赫',
-      'Steyr': '施泰尔',
-      'Feldkirch': '费尔德基希',
-      'Bregenz': '布雷根茨',
-      'Dornbirn': '多恩比恩',
-      'Baden': '巴登',
-      'Amstetten': '阿姆施泰滕',
-      'Klosterneuburg': '克洛斯特新堡',
-      'Isle of Man': '马恩岛',
-      'Zwedru': '兹韦德鲁',
-
       'Mexico City': I18n.t('city_mexico_city'),
       'Guatemala': I18n.t('city_guatemala'),
       'Havana': I18n.t('city_havana'),
