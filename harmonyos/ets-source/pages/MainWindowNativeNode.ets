@@ -1191,10 +1191,10 @@ struct WindowNativeNode {
         this.moduleList = r.items as string[]
       }
     })
-    // Sky cultures and plugin management are not part of the offline release.
-    // Do not start requests for screens that have no release-ready UI.
+    // Sky cultures are fully packaged application content. Plugin management
+    // remains developer-only, so it stays hidden in the offline release.
+    this.loadSkyCultureList()
     if (!OFFLINE_APPGALLERY_BUILD) {
-      this.loadSkyCultureList()
       this.loadPluginList()
     }
     // 读回引擎当前投影，否则设置页里没有任何一项是高亮的，看起来像“全都没生效”
@@ -12375,7 +12375,8 @@ private loadPlanetPositions(): void {
       { label: I18n.t('v0001'), id: 1 },
       { label: I18n.t('v0002'), id: 2 },
       { label: I18n.t('v0003'), id: 3 },
-      { label: I18n.t('v0004'), id: 4 }
+      { label: I18n.t('v0004'), id: 4 },
+      { label: I18n.t('v0005'), id: 5 }
     ]
     if (!OFFLINE_APPGALLERY_BUILD) {
       tabs.push({ label: I18n.t('v0006'), id: 6 })
