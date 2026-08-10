@@ -273,6 +273,8 @@ export interface StellariumBridgeResponse {
   ok?: boolean
   isTimeNow?: boolean
   pending?: boolean
+  progress?: number
+  totalDays?: number
   found?: boolean
   error?: string
   name?: string
@@ -613,6 +615,8 @@ export interface EclipseItem {
   jd?: number
   date?: string
   magnitude?: number
+  saros?: number
+  gamma?: number
   pathWidthKm?: number
   durationMin?: number
   centralLat?: number
@@ -628,6 +632,10 @@ export interface EclipseItem {
   localCentralType?: string
   localCentralStart?: string
   localCentralEnd?: string
+  penumbralMagnitude?: number
+  umbralMagnitude?: number
+  localMoonAltitude?: number
+  visibility?: string
   note?: string
 }
 // 水星、金星凌日：接触时刻和可见性均以当前观测地点计算。

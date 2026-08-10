@@ -64,6 +64,16 @@ interface EphemerisOptions {
   allNakedEye?: boolean
 }
 
+interface RtsCalendarOptions {
+  days: number
+  jd?: number
+}
+
+interface EclipseOptions {
+  months: number
+  jd?: number
+}
+
 const CELESTIAL_POSITION_CATEGORIES: CelestialPositionCategory[] = [
   { id: 'planets', label: '行星' },
   { id: 'stars', label: '亮星' },
@@ -570,6 +580,14 @@ struct WindowNativeNode {
   @State private rtsCalendarName: string = ''
   @State private rtsCalendarError: string = ''
   @State private rtsCalendarDays: number = 14
+  @State private rtsCalendarStartOffsetDays: number = 0
+  @State private rtsCalendarStartYear: number = new Date().getFullYear()
+  @State private rtsCalendarStartMonth: number = new Date().getMonth() + 1
+  @State private rtsCalendarStartDay: number = new Date().getDate()
+  @State private rtsCalendarLoading: boolean = false
+  @State private rtsCalendarNeedsGeneration: boolean = false
+  @State private rtsCalendarProgress: number = 0
+  @State private rtsCalendarTotalDays: number = 0
   @State private almanacData: Map<string, string> = new Map()
   @State private almanacSeasons: Array<SeasonEvent> = []
   @State private almanacSeasonYear: string = ''
@@ -596,6 +614,9 @@ struct WindowNativeNode {
   @State private ephemerisDays: number = 14
   @State private ephemerisStepHours: number = 24
   @State private ephemerisStartOffsetDays: number = 0
+  @State private ephemerisStartYear: number = new Date().getFullYear()
+  @State private ephemerisStartMonth: number = new Date().getMonth() + 1
+  @State private ephemerisStartDay: number = new Date().getDate()
   @State private ephemerisMode: number = 0
   @State private ephemerisPrimary: string = 'Moon'
   @State private ephemerisSecondary: string = 'Sun'
@@ -624,9 +645,13 @@ struct WindowNativeNode {
   @State private altAzShowMoon: boolean = false
   @State private altAzMinimum: number = -90
   @State private graphStartOffsetDays: number = 0
+  @State private graphStartYear: number = new Date().getFullYear()
+  @State private graphStartMonth: number = new Date().getMonth() + 1
+  @State private graphStartDay: number = new Date().getDate()
   @State private graphMode: number = 0
   @State private graphLoading: boolean = false
   private graphTargetPickerActive: boolean = false
+  private rtsTargetPickerActive: boolean = false
   @State private annualElevationData: Array<AnnualElevationPoint> = []
   @State private annualElevationName: string = ''
   @State private annualElevationError: string = ''
@@ -656,6 +681,12 @@ struct WindowNativeNode {
   @State private planetTimeSeriesRightMax: number = 1
   @State private eclipseData: Array<EclipseItem> = []
   @State private eclipseMonths: number = 36
+  @State private eclipseStartOffsetDays: number = 0
+  @State private eclipseStartYear: number = new Date().getFullYear()
+  @State private eclipseStartMonth: number = new Date().getMonth() + 1
+  @State private eclipseStartDay: number = new Date().getDate()
+  @State private eclipseLoading: boolean = false
+  @State private eclipseError: string = ''
   @State private eclipseKindFilter: number = 0
   @State private eclipseTypeFilter: number = 0
   @State private eclipseMode: number = 0
@@ -1620,7 +1651,10 @@ struct WindowNativeNode {
     }
     // 关面板时停掉时间面板定时器，避免后台空转
     this.stopTimePanelTimers()
-    if (this.activePanel === 'search') this.graphTargetPickerActive = false
+    if (this.activePanel === 'search') {
+      this.graphTargetPickerActive = false
+      this.rtsTargetPickerActive = false
+    }
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
     })
@@ -1695,6 +1729,25 @@ struct WindowNativeNode {
   // and WITHOUT blocking the render thread. onOk receives the FRESH result.
   private callInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, onFailure?: (r: StellariumBridgeResponse) => void): void {
     this.callNativeWhenReady(name, payload, onOk, 0, 100, 15, onFailure)
+  }
+
+  private callLongRunningInteractive(name: string, payload: string, onOk: (r: StellariumBridgeResponse) => void, onFailure?: (r: StellariumBridgeResponse) => void, onProgress?: (r: StellariumBridgeResponse) => void, maxAttempts: number = 240): void {
+    let attempt = 0
+    const poll = (): void => {
+      const response = this.callNative(name, payload)
+      if (response.ok === true) {
+        onOk(response)
+        return
+      }
+      if (response.pending === true && attempt < maxAttempts) {
+        if (onProgress) onProgress(response)
+        ++attempt
+        setTimeout(poll, 100)
+        return
+      }
+      if (onFailure) onFailure(response)
+    }
+    poll()
   }
 
   // ===== 星表下载（C++ 桥：getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）=====
@@ -2406,6 +2459,11 @@ struct WindowNativeNode {
 
   private loadRTS(): void {
     this.rtsError = ''
+    if (this.selectedName.length === 0) {
+      this.rtsData = new Map()
+      this.rtsError = '升起、中天和落下时间需要先选择一个天体。'
+      return
+    }
     this.callInteractive('getRTS', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.rts !== undefined) {
         const rv: Object = r.rts as Object
@@ -2443,15 +2501,115 @@ struct WindowNativeNode {
   }
 
   private loadRtsCalendar(): void {
+    const requestId = ++this.rtsCalendarLoadSequence
     this.rtsCalendarData = []
     this.rtsCalendarError = ''
-    this.callInteractive('getRTSCalendar', JSON.stringify({ days: this.rtsCalendarDays }), (r: StellariumBridgeResponse) => {
-      if (r.ok === true && r.rtsCalendar !== undefined) {
-        this.rtsCalendarData = r.rtsCalendar as Array<RtsCalendarDay>
-        this.rtsCalendarName = r.name ?? ''
-      } else {
-        this.rtsCalendarError = '请先在星图上选中一个天体，再生成升中天落日期表。'
+    this.rtsCalendarNeedsGeneration = false
+    if (this.selectedName.length === 0) {
+      this.rtsCalendarLoading = false
+      this.rtsCalendarError = '请先选择一个天体，再生成升中天落日期表。'
+      return
+    }
+    this.rtsCalendarLoading = true
+    this.rtsCalendarProgress = 0
+    this.rtsCalendarTotalDays = this.rtsCalendarDays
+    this.resolveRtsCalendarStartJD(requestId, (startJD: number) => {
+      const options: RtsCalendarOptions = { days: this.rtsCalendarDays }
+      if (startJD > 0) options.jd = startJD
+      this.callLongRunningInteractive('getRTSCalendar', JSON.stringify(options), (r: StellariumBridgeResponse) => {
+        if (requestId !== this.rtsCalendarLoadSequence) return
+        this.rtsCalendarLoading = false
+        if (r.ok === true && r.rtsCalendar !== undefined) {
+          this.rtsCalendarData = r.rtsCalendar as Array<RtsCalendarDay>
+          this.rtsCalendarName = r.name ?? ''
+          this.rtsCalendarProgress = this.rtsCalendarDays
+        } else {
+          this.rtsCalendarError = '请先在星图上选中一个天体，再生成升中天落日期表。'
+        }
+      }, () => {
+        if (requestId !== this.rtsCalendarLoadSequence) return
+        this.rtsCalendarLoading = false
+        this.rtsCalendarError = '日期表计算时间较长，请缩短时长后重试。'
+      }, (progress: StellariumBridgeResponse) => {
+        if (requestId !== this.rtsCalendarLoadSequence) return
+        const completed = Number(progress.progress)
+        const total = Number(progress.totalDays)
+        if (Number.isFinite(completed) && completed > 0) this.rtsCalendarProgress = completed
+        if (Number.isFinite(total) && total > 0) this.rtsCalendarTotalDays = total
+      }, 480)
+    }, () => {
+      if (requestId !== this.rtsCalendarLoadSequence) return
+      this.rtsCalendarLoading = false
+      this.rtsCalendarError = '无法读取当前模拟时间，请点生成日期表后重试。'
+    })
+  }
+
+  private rtsCalendarLoadSequence: number = 0
+
+  private markRtsCalendarForRegeneration(): void {
+    ++this.rtsCalendarLoadSequence
+    this.rtsCalendarLoading = false
+    this.rtsCalendarData = []
+    this.rtsCalendarError = ''
+    this.rtsCalendarNeedsGeneration = true
+    this.rtsCalendarProgress = 0
+    this.rtsCalendarTotalDays = 0
+  }
+
+  private resolveRtsCalendarStartJD(requestId: number, onReady: (startJD: number) => void, onFailure: () => void): void {
+    if (this.rtsCalendarStartOffsetDays < 0) {
+      onReady(this.dateToJD(this.rtsCalendarStartYear, this.rtsCalendarStartMonth, this.rtsCalendarStartDay, 0, 0))
+      return
+    }
+    if (this.rtsCalendarStartOffsetDays === 0) {
+      onReady(0)
+      return
+    }
+    this.callInteractive('getState', '', (state: StellariumBridgeResponse) => {
+      if (requestId !== this.rtsCalendarLoadSequence) return
+      const currentJD = Number(state.jd)
+      if (state.ok === true && Number.isFinite(currentJD) && currentJD > 0) {
+        onReady(currentJD + this.rtsCalendarStartOffsetDays)
+        return
       }
+      onFailure()
+    }, () => {
+      if (requestId !== this.rtsCalendarLoadSequence) return
+      onFailure()
+    })
+  }
+
+  private rtsCalendarStartOptionLabel(offsetDays: number): string {
+    if (offsetDays < 0) {
+      return this.rtsCalendarStartYear.toString() + '-' + this.rtsCalendarStartMonth.toString().padStart(2, '0') + '-' + this.rtsCalendarStartDay.toString().padStart(2, '0')
+    }
+    if (offsetDays === 0) return '当前'
+    return '+' + offsetDays.toString() + ' 天'
+  }
+
+  private rtsCalendarDurationLabel(days: number): string {
+    if (days === 31) return '1 个月'
+    if (days === 62) return '2 个月'
+    if (days === 92) return '3 个月'
+    if (days === 183) return '6 个月'
+    if (days === 365) return '12 个月'
+    return days.toString() + ' 天'
+  }
+
+  private chooseRtsCalendarStartDate(): void {
+    this.pickedDate = new Date(this.rtsCalendarStartYear, this.rtsCalendarStartMonth - 1, this.rtsCalendarStartDay)
+    this.getUIContext().showDatePickerDialog({
+      start: new Date('1900-01-01'),
+      end: new Date('2100-12-31'),
+      selected: this.pickedDate,
+      onAccept: (value: DatePickerResult) => {
+        this.rtsCalendarStartYear = value.year ?? this.rtsCalendarStartYear
+        this.rtsCalendarStartMonth = (value.month ?? (this.rtsCalendarStartMonth - 1)) + 1
+        this.rtsCalendarStartDay = value.day ?? this.rtsCalendarStartDay
+        this.rtsCalendarStartOffsetDays = -1
+        this.markRtsCalendarForRegeneration()
+      },
+      onCancel: () => {}
     })
   }
 
@@ -2498,6 +2656,10 @@ struct WindowNativeNode {
   private ephemerisLoadSequence: number = 0
 
   private resolveEphemerisStartJD(requestId: number, onReady: (startJD: number) => void, onFailure: () => void): void {
+    if (this.ephemerisStartOffsetDays < 0) {
+      onReady(this.dateToJD(this.ephemerisStartYear, this.ephemerisStartMonth, this.ephemerisStartDay, 0, 0))
+      return
+    }
     if (this.ephemerisStartOffsetDays === 0) {
       onReady(0)
       return
@@ -2517,8 +2679,28 @@ struct WindowNativeNode {
   }
 
   private ephemerisStartOptionLabel(offsetDays: number): string {
+    if (offsetDays < 0) {
+      return this.ephemerisStartYear.toString() + '-' + this.ephemerisStartMonth.toString().padStart(2, '0') + '-' + this.ephemerisStartDay.toString().padStart(2, '0')
+    }
     if (offsetDays === 0) return '当前'
     return '+' + offsetDays.toString() + ' 天'
+  }
+
+  private chooseEphemerisStartDate(): void {
+    this.pickedDate = new Date(this.ephemerisStartYear, this.ephemerisStartMonth - 1, this.ephemerisStartDay)
+    this.getUIContext().showDatePickerDialog({
+      start: new Date('1900-01-01'),
+      end: new Date('2100-12-31'),
+      selected: this.pickedDate,
+      onAccept: (value: DatePickerResult) => {
+        this.ephemerisStartYear = value.year ?? this.ephemerisStartYear
+        this.ephemerisStartMonth = (value.month ?? (this.ephemerisStartMonth - 1)) + 1
+        this.ephemerisStartDay = value.day ?? this.ephemerisStartDay
+        this.ephemerisStartOffsetDays = -1
+        this.loadEphemeris()
+      },
+      onCancel: () => {}
+    })
   }
 
   private jumpToEphemerisRow(row: EphemerisRow): void {
@@ -2601,7 +2783,7 @@ struct WindowNativeNode {
           this.altAzError = ''
         } else {
           this.altAzCurve = []
-          this.altAzError = '请先在星图上选中一个天体，再来看它的高度曲线。'
+          this.altAzError = '请先在星图上选中一个天体，再来看它的' + (this.graphMode === 0 ? '高度' : '方位角') + '曲线。'
         }
       }, () => {
         if (requestId !== this.graphLoadSequence) return
@@ -2644,6 +2826,7 @@ struct WindowNativeNode {
     this.annualElevationData = []
     this.annualElevationError = ''
     this.callInteractive('getAnnualElevation', JSON.stringify({ hour: this.annualElevationHour }), (r: StellariumBridgeResponse) => {
+      if (requestId !== this.graphLoadSequence) return
       this.finishGraphLoad(requestId)
       if (r.ok === true && r.annualElevation !== undefined) {
         this.annualElevationData = r.annualElevation as Array<AnnualElevationPoint>
@@ -2653,6 +2836,7 @@ struct WindowNativeNode {
         this.annualElevationError = '请先在星图上选中一个天体，再生成全年高度曲线。'
       }
     }, () => {
+      if (requestId !== this.graphLoadSequence) return
       this.finishGraphLoad(requestId)
       this.annualElevationError = '计算等待超时，请点刷新后重试。'
     })
@@ -2731,6 +2915,10 @@ struct WindowNativeNode {
   }
 
   private resolveGraphStartJD(requestId: number, onReady: (startJD: number) => void, onFailure: () => void): void {
+    if (this.graphStartOffsetDays < 0) {
+      onReady(this.dateToJD(this.graphStartYear, this.graphStartMonth, this.graphStartDay, 0, 0))
+      return
+    }
     if (this.graphStartOffsetDays === 0) {
       onReady(0)
       return
@@ -2756,6 +2944,28 @@ struct WindowNativeNode {
     return '+' + offsetDays.toString() + ' 天'
   }
 
+  private graphCustomStartLabel(): string {
+    if (this.graphStartOffsetDays >= 0) return '指定日期'
+    return this.graphStartYear.toString() + '-' + this.graphStartMonth.toString().padStart(2, '0') + '-' + this.graphStartDay.toString().padStart(2, '0')
+  }
+
+  private chooseGraphStartDate(): void {
+    this.pickedDate = new Date(this.graphStartYear, this.graphStartMonth - 1, this.graphStartDay)
+    this.getUIContext().showDatePickerDialog({
+      start: new Date('1900-01-01'),
+      end: new Date('2100-12-31'),
+      selected: this.pickedDate,
+      onAccept: (value: DatePickerResult) => {
+        this.graphStartYear = value.year ?? this.graphStartYear
+        this.graphStartMonth = (value.month ?? (this.graphStartMonth - 1)) + 1
+        this.graphStartDay = value.day ?? this.graphStartDay
+        this.graphStartOffsetDays = -1
+        this.reloadCurrentGraph()
+      },
+      onCancel: () => {}
+    })
+  }
+
   private reloadCurrentGraph(): void {
     if (this.graphMode === 2) this.loadAnnualElevation()
     else if (this.graphMode === 3) this.loadObservabilityCalendar()
@@ -2778,6 +2988,25 @@ struct WindowNativeNode {
     this.searchSuggestions = []
     this.loadCategoryObjects('planet')
     this.setPanel('search')
+  }
+
+  private openRtsTargetPicker(): void {
+    this.rtsTargetPickerActive = true
+    this.searchText = ''
+    this.searchSuggestions = []
+    this.loadCategoryObjects('planet')
+    this.setPanel('search')
+  }
+
+  @Builder
+  rtsSelectionGuide() {
+    Column({ space: 5 }) {
+      Text('先选择一个天体，才能按当前观测地点计算它的升起、中天和落下时间。')
+        .fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8 })
+      Button('选择天体').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+        .borderRadius(16).height(28).padding({ left: 10, right: 10 })
+        .onClick(() => { this.openRtsTargetPicker() })
+    }.width('100%').padding({ left: 4 }).margin({ top: 5, bottom: 6 }).alignItems(HorizontalAlign.Start)
   }
 
   private graphTargetLabel(): string {
@@ -2823,14 +3052,89 @@ struct WindowNativeNode {
   }
 
   private loadEclipses(): void {
-    if (this.eclipseData.length === 0) {
-      // Eclipse prediction uses Stellarium's Besselian solver. On API 22 it
-      // can outlive the short interactive-command polling window, so keep
-      // polling the same in-flight command instead of submitting it again.
-      this.callNativeWhenReady('getEclipses', JSON.stringify({ months: this.eclipseMonths }), (r: StellariumBridgeResponse) => {
-        if (r.ok === true && r.eclipses !== undefined) this.eclipseData = r.eclipses as Array<EclipseItem>
-      }, 0, 100, 200)
+    if (this.eclipseData.length > 0 || this.eclipseLoading) return
+    const requestId = ++this.eclipseLoadSequence
+    this.eclipseLoading = true
+    this.eclipseError = ''
+    this.resolveEclipseStartJD(requestId, (startJD: number) => {
+      const options: EclipseOptions = { months: this.eclipseMonths }
+      if (startJD > 0) options.jd = startJD
+      this.callNativeWhenReady('getEclipses', JSON.stringify(options), (r: StellariumBridgeResponse) => {
+        if (requestId !== this.eclipseLoadSequence) return
+        this.eclipseLoading = false
+        if (r.ok === true && r.eclipses !== undefined) {
+          this.eclipseData = r.eclipses as Array<EclipseItem>
+          return
+        }
+        this.eclipseError = r.error ?? '日月食计算未能完成，请重试。'
+      }, 0, 100, 200, () => {
+        if (requestId !== this.eclipseLoadSequence) return
+        this.eclipseLoading = false
+        this.eclipseError = '日月食计算时间较长，请缩短预测范围后重试。'
+      })
+    }, () => {
+      if (requestId !== this.eclipseLoadSequence) return
+      this.eclipseLoading = false
+      this.eclipseError = '无法读取当前模拟时间，请重试。'
+    })
+  }
+
+  private eclipseLoadSequence: number = 0
+
+  private reloadEclipses(): void {
+    ++this.eclipseLoadSequence
+    this.eclipseLoading = false
+    this.eclipseData = []
+    this.eclipseError = ''
+    this.loadEclipses()
+  }
+
+  private resolveEclipseStartJD(requestId: number, onReady: (startJD: number) => void, onFailure: () => void): void {
+    if (this.eclipseStartOffsetDays < 0) {
+      onReady(this.dateToJD(this.eclipseStartYear, this.eclipseStartMonth, this.eclipseStartDay, 0, 0))
+      return
     }
+    if (this.eclipseStartOffsetDays === 0) {
+      onReady(0)
+      return
+    }
+    this.callInteractive('getState', '', (state: StellariumBridgeResponse) => {
+      if (requestId !== this.eclipseLoadSequence) return
+      const currentJD = Number(state.jd)
+      if (state.ok === true && Number.isFinite(currentJD) && currentJD > 0) {
+        onReady(currentJD + this.eclipseStartOffsetDays)
+        return
+      }
+      onFailure()
+    }, () => {
+      if (requestId !== this.eclipseLoadSequence) return
+      onFailure()
+    })
+  }
+
+  private eclipseStartOptionLabel(offsetDays: number): string {
+    if (offsetDays < 0) {
+      return this.eclipseStartYear.toString() + '-' + this.eclipseStartMonth.toString().padStart(2, '0') + '-' + this.eclipseStartDay.toString().padStart(2, '0')
+    }
+    if (offsetDays === 0) return '当前'
+    return '+' + offsetDays.toString() + ' 天'
+  }
+
+  private chooseEclipseStartDate(): void {
+    this.pickedDate = new Date(this.eclipseStartYear, this.eclipseStartMonth - 1, this.eclipseStartDay)
+    this.getUIContext().showDatePickerDialog({
+      start: new Date('1900-01-01'),
+      end: new Date('2100-12-31'),
+      selected: this.pickedDate,
+      onAccept: (value: DatePickerResult) => {
+        this.eclipseStartYear = value.year ?? this.eclipseStartYear
+        this.eclipseStartMonth = (value.month ?? (this.eclipseStartMonth - 1)) + 1
+        this.eclipseStartDay = value.day ?? this.eclipseStartDay
+        this.eclipseStartOffsetDays = -1
+        this.reloadEclipses()
+      },
+      onCancel: () => {}
+    })
   }
 
   private filteredEclipses(): Array<EclipseItem> {
@@ -5022,10 +5326,12 @@ private loadPlanetPositions(): void {
     this.callInteractive('searchObject', payload, (result) => {
       if (result.found === true) {
         const returnToGraph = this.graphTargetPickerActive
+        const returnToRts = this.rtsTargetPickerActive
+        const returnToAstroCalc = returnToGraph || returnToRts
         // Close the search sheet before calculating the target's final safe
         // point. Otherwise the first navigation avoids the old 9/10 sheet,
         // then visibly performs a second correction for the top detail card.
-        if (this.activePanel === 'search' && !returnToGraph) {
+        if (this.activePanel === 'search' && !returnToAstroCalc) {
           // Do this in-place instead of closePanel(): that generic helper
           // schedules a later recenter for the closing sheet, which can race
           // the newly opened object card and undo its safe target.
@@ -5039,6 +5345,10 @@ private loadPlanetPositions(): void {
         if (returnToGraph) {
           this.graphTargetPickerActive = false
           this.astroTab = 4
+          this.setPanel('astro')
+        } else if (returnToRts) {
+          this.rtsTargetPickerActive = false
+          this.astroTab = 2
           this.setPanel('astro')
         }
         // Under gyro control, a selected target is navigated by the edge guide,
@@ -11478,6 +11788,12 @@ private loadPlanetPositions(): void {
                     }
                   })
               }, (offsetDays: number) => offsetDays.toString())
+              Button(this.ephemerisStartOffsetDays < 0 ? this.ephemerisStartOptionLabel(-1) : '指定日期').fontSize(10)
+                .fontColor(this.ephemerisStartOffsetDays < 0 ? this.nmText() : this.nmSub())
+                .height(26).padding({ left: 9, right: 9 })
+                .backgroundColor(this.ephemerisStartOffsetDays < 0 ? this.nmAccent() : this.nmBg())
+                .borderRadius(5)
+                .onClick(() => { this.chooseEphemerisStartDate() })
             }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
             Text('采样间隔').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
             Row({ space: 4 }) {
@@ -11534,7 +11850,9 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
-            if (this.rtsError.length > 0) {
+            if (this.selectedName.length === 0) {
+              this.rtsSelectionGuide()
+            } else if (this.rtsError.length > 0) {
               Text(this.rtsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             } else if (this.rtsData.size > 0) {
               this.infoRow(I18n.t('s0358'), this.rtsData.get('name') ?? 'N/A')
@@ -11571,9 +11889,11 @@ private loadPlanetPositions(): void {
               .backgroundColor(this.nmBorder())
               .margin({ top: 10, bottom: 8 })
             Text('升中天落日期表').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
-            Row({ space: 4 }) {
-              ForEach([7, 14, 31], (days: number) => {
-                Text('未来 ' + days.toString() + ' 天').fontSize(10)
+            Text('持续时长').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
+            Scroll() {
+              Row({ space: 4 }) {
+                ForEach([7, 14, 31, 62, 92, 183, 365], (days: number) => {
+                  Text(this.rtsCalendarDurationLabel(days)).fontSize(10)
                   .fontColor(this.rtsCalendarDays === days ? this.nmText() : this.nmSub())
                   .padding({ left: 9, right: 9, top: 4, bottom: 4 })
                   .backgroundColor(this.rtsCalendarDays === days ? this.nmAccent() : this.nmBg())
@@ -11581,18 +11901,50 @@ private loadPlanetPositions(): void {
                   .onClick(() => {
                     if (this.rtsCalendarDays !== days) {
                       this.rtsCalendarDays = days
-                      this.loadRtsCalendar()
+                      this.markRtsCalendarForRegeneration()
                     }
                   })
-              }, (days: number) => days.toString())
+                }, (days: number) => days.toString())
+              }.padding({ left: 2, right: 2 })
+            }.width('100%').height(30).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 5 })
+            Text('开始日期').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
+            Row({ space: 4 }) {
+              ForEach([0, 1, 7, 30], (offsetDays: number) => {
+                Text(this.rtsCalendarStartOptionLabel(offsetDays)).fontSize(10)
+                  .fontColor(this.rtsCalendarStartOffsetDays === offsetDays ? this.nmText() : this.nmSub())
+                  .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                  .backgroundColor(this.rtsCalendarStartOffsetDays === offsetDays ? this.nmAccent() : this.nmBg())
+                  .borderRadius(5)
+                  .onClick(() => {
+                    if (this.rtsCalendarStartOffsetDays !== offsetDays) {
+                      this.rtsCalendarStartOffsetDays = offsetDays
+                      this.markRtsCalendarForRegeneration()
+                    }
+                  })
+              }, (offsetDays: number) => offsetDays.toString())
+              Button(this.rtsCalendarStartOffsetDays < 0 ? this.rtsCalendarStartOptionLabel(-1) : '指定日期').fontSize(10)
+                .fontColor(this.rtsCalendarStartOffsetDays < 0 ? this.nmText() : this.nmSub())
+                .height(26).padding({ left: 9, right: 9 })
+                .backgroundColor(this.rtsCalendarStartOffsetDays < 0 ? this.nmAccent() : this.nmBg())
+                .borderRadius(5)
+                .onClick(() => { this.chooseRtsCalendarStartDate() })
+            }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 5 })
+            Row({ space: 6 }) {
               Button('生成日期表').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(14).height(28).padding({ left: 9, right: 9 })
                 .onClick(() => { this.loadRtsCalendar() })
             }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 5 })
-            if (this.rtsCalendarError.length > 0) {
+            if (this.rtsCalendarLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(22).height(22).color(this.nmAccent())
+                Text('正在生成升中天落日期表… ' + this.rtsCalendarProgress.toString() + '/' + this.rtsCalendarTotalDays.toString() + ' 天').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
+            } else if (this.rtsCalendarNeedsGeneration) {
+              Text('参数已更新，请点击生成日期表开始计算。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 4 })
+            } else if (this.rtsCalendarError.length > 0) {
               Text(this.rtsCalendarError).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 4 })
             } else if (this.rtsCalendarData.length > 0) {
-              Text(this.rtsCalendarName + ' · 每项按本地日期计算，点击可跳到该日中天。')
+              Text(this.rtsCalendarName + ' · 从' + this.rtsCalendarStartOptionLabel(this.rtsCalendarStartOffsetDays) + '开始，持续 ' + this.rtsCalendarDurationLabel(this.rtsCalendarDays) + '；每项按本地日期计算，点击可跳到该日中天。')
                 .fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
               ForEach(this.rtsCalendarData, (day: RtsCalendarDay) => {
                 Column({ space: 1 }) {
@@ -11765,6 +12117,12 @@ private loadPlanetPositions(): void {
                       }
                     })
                 }, (offsetDays: number) => offsetDays.toString())
+                Button(this.graphCustomStartLabel()).fontSize(10)
+                  .fontColor(this.graphStartOffsetDays < 0 ? this.nmText() : this.nmSub())
+                  .height(26).padding({ left: 9, right: 9 })
+                  .backgroundColor(this.graphStartOffsetDays < 0 ? this.nmAccent() : this.nmBg())
+                  .borderRadius(5)
+                  .onClick(() => { this.chooseGraphStartDate() })
               }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 8 })
             }
             Row({ space: 4 }) {
@@ -12589,7 +12947,7 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button('计算日月食').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.eclipseData = []; this.loadEclipses() })
+                .onClick(() => { this.reloadEclipses() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
             Text('预测范围').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
             Row({ space: 4 }) {
@@ -12602,12 +12960,35 @@ private loadPlanetPositions(): void {
                   .onClick(() => {
                     if (this.eclipseMonths !== months) {
                       this.eclipseMonths = months
-                      this.eclipseData = []
-                      this.loadEclipses()
+                      this.reloadEclipses()
                     }
                   })
               }, (months: number) => months.toString())
             }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
+            Text('开始日期').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
+            Scroll() {
+              Row({ space: 4 }) {
+                ForEach([0, 1, 7, 30], (offsetDays: number) => {
+                  Text(this.eclipseStartOptionLabel(offsetDays)).fontSize(10)
+                    .fontColor(this.eclipseStartOffsetDays === offsetDays ? this.nmText() : this.nmSub())
+                    .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+                    .backgroundColor(this.eclipseStartOffsetDays === offsetDays ? this.nmAccent() : this.nmBg())
+                    .borderRadius(5)
+                    .onClick(() => {
+                      if (this.eclipseStartOffsetDays !== offsetDays) {
+                        this.eclipseStartOffsetDays = offsetDays
+                        this.reloadEclipses()
+                      }
+                    })
+                }, (offsetDays: number) => offsetDays.toString())
+                Button(this.eclipseStartOffsetDays < 0 ? this.eclipseStartOptionLabel(-1) : '指定日期').fontSize(10)
+                  .fontColor(this.eclipseStartOffsetDays < 0 ? this.nmText() : this.nmSub())
+                  .height(26).padding({ left: 9, right: 9 })
+                  .backgroundColor(this.eclipseStartOffsetDays < 0 ? this.nmAccent() : this.nmBg())
+                  .borderRadius(5)
+                  .onClick(() => { this.chooseEclipseStartDate() })
+              }.padding({ left: 2, right: 2 })
+            }.width('100%').height(30).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).margin({ bottom: 6 })
             Text('事件类别').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
             Row({ space: 4 }) {
               ForEach(['全部', '日食', '月食'], (label: string, index: number) => {
@@ -12626,10 +13007,17 @@ private loadPlanetPositions(): void {
                   .borderRadius(4).onClick(() => { this.eclipseTypeFilter = index })
               }, (label: string) => label)
             }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-            Text('未来 ' + (this.eclipseMonths / 12).toString() + ' 年内的日食与月食（点击可把时间跳到食甚时刻）。')
+            Text('从' + this.eclipseStartOptionLabel(this.eclipseStartOffsetDays) + '开始的未来 ' + (this.eclipseMonths / 12).toString() + ' 年日食与月食（点击可把时间跳到食甚时刻）。')
               .fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
-            if (this.eclipseData.length === 0) {
-              Text('（正在推算日月食，需要几秒钟…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            if (this.eclipseLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(22).height(22).color(this.nmAccent())
+                Text('正在推算日月食…').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
+            } else if (this.eclipseError.length > 0) {
+              Text(this.eclipseError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else if (this.eclipseData.length === 0) {
+              Text('点击“计算日月食”生成预测。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             } else if (this.filteredEclipses().length === 0) {
               Text('当前筛选条件下没有日月食。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             }
@@ -12641,10 +13029,23 @@ private loadPlanetPositions(): void {
                   Text(this.fmtDateTime(e.date)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
                   Text('食分 ' + (e.magnitude ?? 0).toFixed(2)).fontSize(10).fontColor(this.nmSub()).width(62)
                 }.width('100%').padding({ left: 8, right: 8 })
-                if (e.durationMin !== undefined) {
+                if (e.kind === 'solar' && e.saros !== undefined) {
+                  Text('沙罗周期 ' + (e.saros ?? 0).toString() + '   ' + (Math.abs(e.pathWidthKm ?? 0) > 0.1
+                    ? '中心路径宽 ' + Math.abs(e.pathWidthKm ?? 0).toFixed(0) + ' 千米' : '非中心食'))
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 }).maxLines(1)
+                }
+                if (e.durationMin !== undefined && Math.abs(e.durationMin ?? 0) > 0.001) {
                   Text('中心食持续 ' + Math.abs(e.durationMin ?? 0).toFixed(1) + ' 分钟   中心点 '
-                    + (e.centralLat ?? 0).toFixed(1) + '°, ' + (e.centralLng ?? 0).toFixed(1) + '°')
+                    + (e.centralLat ?? 0).toFixed(1) + '°, ' + (e.centralLng ?? 0).toFixed(1) + '°   路径偏离 ' + (e.gamma ?? 0).toFixed(3))
                     .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+                if (e.kind === 'lunar') {
+                  Text('沙罗周期 ' + (e.saros ?? 0).toString() + '   路径偏离 ' + (e.gamma ?? 0).toFixed(3)
+                    + '   半影食分 ' + (e.penumbralMagnitude ?? 0).toFixed(2)
+                    + '   本影食分 ' + (e.umbralMagnitude ?? 0).toFixed(2))
+                    .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 }).maxLines(1)
+                  Text((e.visibility ?? '本地条件未知') + '   月亮高度 ' + (e.localMoonAltitude ?? 0).toFixed(1) + '°')
+                    .fontSize(9).fontColor(this.nmAccent()).width('100%').padding({ left: 12 })
                 }
                 if (e.kind === 'solar' && e.localVisible === true) {
                   Text('本地食甚 ' + this.fmtClock(e.localMax) + '   食分 ' + (e.localMagnitude ?? 0).toFixed(2)

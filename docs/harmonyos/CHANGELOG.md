@@ -1543,7 +1543,7 @@
 
 ## [2026-08-09] Codex - 分类目录布局与小行星编号
 
-- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
 - **修改内容：** 分类目录改为显式横向双列网格，并扩大可滚动区域，避免右侧空置且只能单列浏览。已中文化的天体不再重复附带“外文名”；无中文译名时仅保留主名称。未命名小行星不再裸露显示数字，改为“未命名小行星”及“国际永久编号 N”。
 - **编号说明：** 数字来自 Stellarium 原始小行星星表中的 `minor_planet_number`，即国际小行星中心编定的永久编号；它是检索标识而不是用户可读名称。
 - **构建结果：** HAP 编译通过；`check-ohos.sh` 仍仅因已有 `setTimeout` 静态检查返回非零。
@@ -1721,3 +1721,69 @@
 - **修改原因：** 对齐桌面 AstroCalc 星历的起始日期与常用小时级步长控制，便于检查短时间内的位置和高度变化。
 - **构建结果：** 同步构建源后 `hvigor assembleHap --no-daemon` 成功，自动签名 HAP 已生成。
 - **验证结果：** 已安装至 API 22 模拟器 `127.0.0.1:5555`。在两天体星历中选择月亮、金星、+7 天、14 天和每 1 小时后，日志确认先执行 `getState`，随后 `getEphemeris` 收到 `jd:2461278.1384893744`、`stepHours:1` 及两个对象；界面对应选项高亮，标题显示“从+7 天开始，持续 14 天（每 1 小时）”。
+
+## [2026-08-10] Codex - AstroCalc 升中天落日期表起点与时长
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 升中天落日期表新增当前、+1 天、+7 天、+30 天起点，并补齐原生接口支持的 62 天时长。结果标题会显示起点和持续时长；未来起点通过读取当前模拟时间后传入 `getRTSCalendar` 的 `jd` 参数。
+- **加载与并发：** 日期和时长先配置、点击生成后才开始计算，避免用户连续调整时排队重复计算。日期表生成期间显示 ArkUI `LoadingProgress`；每个请求都有独立序号，早先结果不会覆盖当前设置。
+- **原生分片计算：** `getRTSCalendar` 每次只计算一天，保存任务进度并还原模拟时间；后续轮询会继续同一任务。62 天表不再长时间占用 Qt 渲染线程，星图和加载动画可持续响应。
+- **修改原因：** 对齐桌面 AstroCalc RTS 表“起始月份 + 持续时间”的观测规划方式，同时保证两个月日期表在设备端可完成生成。
+- **构建结果：** Qt HarmonyOS 交叉编译 `libstellarium.so` 成功并同步至 HAP 原生库目录；`hvigor assembleHap --no-daemon` 成功，自动签名 HAP 已生成。
+- **验证结果：** 已安装至 API 22 模拟器 `127.0.0.1:5555`。选中木星后，14 天表显示 2026-08-10 至 2026-08-23 的连续升中天落数据；切换为 +7 天和 62 天后，桥接日志收到 `getRTSCalendar {"days":62,"jd":...}`，分片任务完成后页面显示从 2026-08-17 开始的连续日期表、当日中天高度、星等、距日与距月。
+
+## [2026-08-11] Codex - AstroCalc 图表指定起始日期
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 高度、方位、月度可见性、月距和双变量时间曲线的起始日期新增 HarmonyOS 原生日历入口。除当前、+1、+7、+30 天外，用户可指定任意 1900-2100 年日期；计算会以所选日期的 00:00 作为已有原生曲线接口的 JD 起点。全年高度仍以当前模拟年份为基准。方位图未选中天体时的引导文案也改为准确说明“方位角曲线”。
+- **并发处理：** 全年高度曲线补齐请求序号校验，快速切换图表类型或本地时刻后，早先请求不再覆盖当前结果。
+- **构建结果：** 同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功，自动签名 HAP 已生成；仅有工程已有 API 弃用警告。
+- **验证结果：** 已安装至 API 22 模拟器 `127.0.0.1:5555`。图表页实测“指定日期”可打开原生日期选择器，确认后显示 `2026-08-11`；选择木星后，桥接日志确认 `getAltAzCurve` 收到 `jd:2461263.5`，并正常显示“木星 · 未来 24 小时高度变化（每 30 分）”。
+
+## [2026-08-11] Codex - AstroCalc 星历与升中天落表指定日期
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 星历及升中天落日期表的开始日期新增 HarmonyOS 原生日历入口。除当前、+1、+7、+30 天外，均可指定 1900-2100 年任意日期，并以该日 00:00 的 Julian Date 调用既有原生计算接口。结果标题会显示实际指定日期。
+- **交互策略：** 星历选择日期后立即刷新；升中天落表选择日期后只标记参数已更新，仍需点击“生成日期表”才启动可能持续较久的分片计算。
+- **构建结果：** 同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功，自动签名 HAP 已生成；仅有工程已有 API 弃用警告。
+- **验证结果：** 已安装至 API 22 模拟器 `127.0.0.1:5555`。两个入口都能打开并确认原生日期选择器，选择 `2026-08-11` 后分别确认 `getEphemeris` 与 `getRTSCalendar` 收到 `jd:2461263.5`；日期表在确认日期后显示“参数已更新，请点击生成日期表开始计算”。
+
+## [2026-08-11] Codex - AstroCalc 升中天落日期表性能修复
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`
+- **修复内容：** 原生日期表计算从“每次命令只处理 1 天”改为 18ms 时间片内连续处理多天，同时返回已完成天数与总天数。ArkUI 长任务轮询改为 100ms，`LoadingProgress` 显示“正在生成升中天落日期表… N/M 天”的真实进度。
+- **修复原因：** 先前实现每天计算完还需等待消费式跨线程命令结果的下一个轮询周期，导致实际上约每 500ms 才能推进 1 天，62 天表会被无意义的固定等待放大。
+- **构建结果：** HarmonyOS 原生 `stellarium` 交叉编译成功；同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功，仅有工程原有 API 弃用警告。
+- **验证结果：** 已安装至 API 22 模拟器 `127.0.0.1:5555`，选中木星后实测 62 天表约 1.7 秒完成；生成过程抓取到“正在生成升中天落日期表… 52/62 天”，完成后显示 62 天连续行。Qt 渲染帧在生成期间持续输出，无长时卡顿。
+
+## [2026-08-11] Codex - AstroCalc 升中天落全年观测规划
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 日期表时长扩展为 7 天、14 天、1 个月、2 个月、3 个月、6 个月和 12 个月；时长选择改为横向滚动，适配手机窄屏。原生接口最大范围扩大至 366 天，结果标题使用中文月数。RTS 长任务轮询可单独延长至 48 秒，全年计算不会错误触发原来的 24 秒超时。
+- **修改原因：** 对齐桌面 AstroCalc 以月为单位规划观测窗口的能力，并将移动端一次展示限制在一年内，避免数年日期表造成大量渲染和内存占用。
+- **构建结果：** 运行 `scripts/sync-ohos-build-sources.sh` 后，HarmonyOS 原生 `stellarium` 交叉编译成功；清理 ArkTS 产物后 `hvigor assembleHap --no-daemon` 成功并生成已签名 HAP。
+- **验证结果：** 已将新 HAP 安装到 API 22 模拟器 `127.0.0.1:5555` 并冷启动成功。62 天分片计算的实际性能验证见上一条；365 天交互式生成仍待在可稳定进入 AstroCalc 抽屉的模拟器会话中补测，不能将本次安装烟雾测试视为全年结果验证。
+
+## [2026-08-11] Codex - AstroCalc 日食观测路径信息
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 日食结果补回桌面 AstroCalc 使用的 Saros 系列号和路径偏离值；移动端日食卡片增加“沙罗周期”和中心路径宽度。全食、环食与中心食继续显示中心路径坐标、持续时间和路径偏离；偏食则明确标为“非中心食”，不再把零宽路径误当作有效路径。
+- **实现依据：** Saros 计算沿用桌面 `AstroCalcDialog::generateSolarEclipses` 的同源布朗朔望月与交点编号公式；路径宽度和食分继续由现有 Stellarium Besselian 日食求解器返回。
+- **构建结果：** HarmonyOS 原生 `stellarium` 交叉编译成功；同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功，已签名 HAP 已生成。
+- **验证结果：** 新 HAP 已安装至 API 22 模拟器 `127.0.0.1:5555` 并完成冷启动；主星图和工具栏正常渲染。日食结果的模拟器交互验证待与可稳定进入 AstroCalc 抽屉的自动化路径一并补测。
+
+## [2026-08-11] Codex - AstroCalc 日月食起始日期与月食观测数据
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 日月食预测新增当前、+1 天、+7 天、+30 天和指定日期入口；指定日期使用 HarmonyOS 原生日期选择器，并将所选日 00:00 作为 `getEclipses` 的 JD 起点。计算期间显示 `LoadingProgress`，请求序号会忽略过期计算结果。月食条目补齐桌面版同源的沙罗周期、路径偏离、半影食分、本影食分、本地月亮高度和中文观测条件。
+- **兼容性处理：** 原生库重编后只替换 `libstellarium.so`，保留已验证可在 API 22 运行的 Qt 运行库；避免当前 Qt 打包工具生成 API 23 最低版本运行库导致模拟器启动终止。
+- **构建结果：** HarmonyOS 原生 `stellarium` 交叉编译成功；同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功并生成已签名 HAP。
+- **验证结果：** 最新 HAP 已安装至 API 22 模拟器 `127.0.0.1:5555` 并冷启动，主星图与工具栏正常渲染。食页自动化受 HDC 虚拟坐标与截图缩放不一致影响，尚未可靠地逐项进入验证；C++ 与 ArkTS 均通过编译。
+
+## [2026-08-11] Codex - AstroCalc 升中天落选星引导
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 升起/中天/落下页在未选中天体时，直接显示“选择天体”引导，打开行星目录；用户选中后会自动返回升中天落页并计算结果。升中天落日期表在未选中时同样停止无效请求并显示明确提示。
+- **交互处理：** 引导选星与高度曲线的选星流程分开保存返回目标，取消搜索会清除对应状态，避免后续普通搜索错误跳转回天文计算页。
+- **构建结果：** 同步 ArkTS 源后 `hvigor assembleHap --no-daemon` 成功，自动签名 HAP 已生成；仅有工程已有 API 弃用警告。
+- **验证结果：** 最新 HAP 已安装至 API 22 模拟器 `127.0.0.1:5555` 并冷启动，主星图和工具栏正常渲染。HDC 坐标缩放问题仍导致无法可靠自动点进升降抽屉，选星回跳流程已通过 ArkTS 编译验证。

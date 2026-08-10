@@ -71,6 +71,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QJsonDocument>
 #include <cstdio>
 #include <QJsonObject>
@@ -570,6 +571,21 @@ static QMutex s_ohosCmdMutex;
 static bool s_qtLoopRunning = false;
 static QSet<QString> s_ohosCmdInflight;
 static QHash<QString, QJsonObject> s_ohosCmdCache;
+
+struct OhosRtsCalendarJob
+{
+	QString key;
+	StelObjectP object;
+	QString name;
+	double originalJD = 0.0;
+	double firstLocalMidnight = 0.0;
+	int totalDays = 0;
+	int nextDay = 0;
+	QJsonArray rows;
+};
+
+static OhosRtsCalendarJob* s_ohosRtsCalendarJob = nullptr;
+static constexpr qint64 OHOS_RTS_CALENDAR_SLICE_MS = 18;
 
 // Cross-thread command queue drained by the OHOS render pump
 // (renderOhosFrameNow) on the Qt main thread every frame. OHOS Qt may
@@ -4758,12 +4774,29 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			const StelObjectP object = selected.first();
-			const int days = qBound(1, options.value("days").toInt(14), 62);
-			const double originalJD = core->getJD();
-			double startJD = options.value("jd").toDouble(originalJD);
-			if (startJD <= 0.0) startJD = originalJD;
-			const double utcOffset = core->getUTCOffset(startJD) / 24.0;
-			const double firstLocalMidnight = std::floor(startJD + utcOffset - 0.5) + 0.5 - utcOffset;
+			const int days = qBound(1, options.value("days").toInt(14), 366);
+			const double currentJD = core->getJD();
+			double startJD = options.value("jd").toDouble(currentJD);
+			if (startJD <= 0.0) startJD = currentJD;
+			const QString requestKey = object->getEnglishName() + QLatin1Char('|') + arg;
+			if (s_ohosRtsCalendarJob && s_ohosRtsCalendarJob->key != requestKey)
+			{
+				delete s_ohosRtsCalendarJob;
+				s_ohosRtsCalendarJob = nullptr;
+			}
+			if (!s_ohosRtsCalendarJob)
+			{
+				s_ohosRtsCalendarJob = new OhosRtsCalendarJob;
+				s_ohosRtsCalendarJob->key = requestKey;
+				s_ohosRtsCalendarJob->object = object;
+				s_ohosRtsCalendarJob->name = object->getNameI18n().isEmpty() ? object->getEnglishName() : object->getNameI18n();
+				s_ohosRtsCalendarJob->originalJD = currentJD;
+				s_ohosRtsCalendarJob->totalDays = days;
+				const double utcOffset = core->getUTCOffset(startJD) / 24.0;
+				s_ohosRtsCalendarJob->firstLocalMidnight = std::floor(startJD + utcOffset - 0.5) + 0.5 - utcOffset;
+			}
+
+			OhosRtsCalendarJob& job = *s_ohosRtsCalendarJob;
 			PlanetP sun = GETSTELMODULE(SolarSystem)->getSun();
 			PlanetP moon = GETSTELMODULE(SolarSystem)->getMoon();
 
@@ -4778,14 +4811,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return year * 10000 + month * 100 + day;
 			};
 
-			QJsonArray rows;
-			for (int dayOffset = 0; dayOffset < days; ++dayOffset)
+			QElapsedTimer sliceTimer;
+			sliceTimer.start();
+			int processedDays = 0;
+			while (job.nextDay < job.totalDays && (processedDays == 0 || sliceTimer.elapsed() < OHOS_RTS_CALENDAR_SLICE_MS))
 			{
-				const double localMidnight = firstLocalMidnight + dayOffset;
+				const int dayOffset = job.nextDay;
+				const double localMidnight = job.firstLocalMidnight + dayOffset;
 				const double localNoon = localMidnight + 0.5;
 				core->setJD(localNoon);
 				core->update(0);
-				const Vec4d rts = object->getRTSTime(core);
+				const Vec4d rts = job.object->StelObject::getRTSTime(core);
 				const int expectedDate = localDateNumber(localNoon);
 				const bool alwaysBelow = rts[3] < 0.0;
 				const bool circumpolar = rts[3] > 50.0;
@@ -4801,9 +4837,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				row["transitJD"] = validTransit ? rts[1] : 0.0;
 				row["setJD"] = validSet ? rts[2] : 0.0;
 				if (alwaysBelow)
-					row["status"] = sun && object == sun ? QStringLiteral("极夜") : QStringLiteral("从不升起");
+					row["status"] = sun && job.object == sun ? QStringLiteral("极夜") : QStringLiteral("从不升起");
 				else if (circumpolar)
-					row["status"] = sun && object == sun ? QStringLiteral("极昼") : QStringLiteral("拱极不落");
+					row["status"] = sun && job.object == sun ? QStringLiteral("极昼") : QStringLiteral("拱极不落");
 				else if (!validTransit)
 					row["status"] = QStringLiteral("当天无中天");
 				if (validTransit)
@@ -4812,22 +4848,34 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					core->update(0);
 					double azimuth = 0.0;
 					double altitude = 0.0;
-					StelUtils::rectToSphe(&azimuth, &altitude, object->getAltAzPosAuto(core));
+					StelUtils::rectToSphe(&azimuth, &altitude, job.object->getAltAzPosAuto(core));
 					row["transitAltitude"] = altitude * M_180_PI;
-					const float magnitude = object->getVMagnitudeWithExtinction(core);
+					const float magnitude = job.object->getVMagnitudeWithExtinction(core);
 					if (magnitude < 50.0f) row["magnitude"] = magnitude;
-					if (sun && object != sun)
-						row["solarElongation"] = object->getJ2000EquatorialPos(core).angle(sun->getJ2000EquatorialPos(core)) * M_180_PI;
-					if (moon && object != moon && core->getCurrentPlanet() == GETSTELMODULE(SolarSystem)->getEarth())
-						row["lunarElongation"] = object->getJ2000EquatorialPos(core).angle(moon->getJ2000EquatorialPos(core)) * M_180_PI;
+					if (sun && job.object != sun)
+						row["solarElongation"] = job.object->getJ2000EquatorialPos(core).angle(sun->getJ2000EquatorialPos(core)) * M_180_PI;
+					if (moon && job.object != moon && core->getCurrentPlanet() == GETSTELMODULE(SolarSystem)->getEarth())
+						row["lunarElongation"] = job.object->getJ2000EquatorialPos(core).angle(moon->getJ2000EquatorialPos(core)) * M_180_PI;
 				}
-				rows.append(row);
+				job.rows.append(row);
+				++job.nextDay;
+				++processedDays;
 			}
-			core->setJD(originalJD);
+			core->setJD(job.originalJD);
 			core->update(0);
+			if (job.nextDay < job.totalDays)
+			{
+				result["ok"] = false;
+				result["pending"] = true;
+				result["progress"] = job.nextDay;
+				result["totalDays"] = job.totalDays;
+				return result;
+			}
 			result["ok"] = true;
-			result["name"] = object->getNameI18n().isEmpty() ? object->getEnglishName() : object->getNameI18n();
-			result["rtsCalendar"] = rows;
+			result["name"] = job.name;
+			result["rtsCalendar"] = job.rows;
+			delete s_ohosRtsCalendarJob;
+			s_ohosRtsCalendarJob = nullptr;
 			return result;
 		}
 
@@ -7875,6 +7923,20 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						ev["date"] = StelUtils::julianDayToISO8601String(newMoonJD + core->getUTCOffset(newMoonJD) / 24.0);
 						ev["magnitude"] = magnitude;
 						ev["pathWidthKm"] = pathWidth;
+						const auto eclipseBessel = calcSolarEclipseBessel();
+						double gamma = std::sqrt(eclipseBessel.x * eclipseBessel.x + eclipseBessel.y * eclipseBessel.y);
+						if (eclipseBessel.y < 0.0) gamma = -gamma;
+						ev["gamma"] = gamma;
+						const double brownLunation = std::round((newMoonJD - 2423436.40347) / 29.530588);
+						const int lunarNumber = static_cast<int>(brownLunation) + 1 - 953;
+						const int nodeNumber = lunarNumber + 105;
+						const int sarosSeed = 136 + 38 * nodeNumber;
+						const int nodeShift = -61 * nodeNumber;
+						const int sarosCorrection = qFloor(nodeShift / 358.0 + 0.5 - nodeNumber / (12.0 * 358.0 * 358.0));
+						int saros = 1 + ((sarosSeed + sarosCorrection * 223 - 1) % 223);
+						if (sarosSeed + sarosCorrection * 223 - 1 < 0) saros -= 223;
+						if (saros < -223) saros += 223;
+						ev["saros"] = saros;
 						// calcSolarEclipseData() already returns the central duration in minutes.
 						ev["durationMin"] = duration;
 						ev["centralLat"] = latDeg;
@@ -7943,15 +8005,53 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						double altitudeRad = 0.0;
 						StelUtils::rectToSphe(&azimuth, &altitudeRad, moon->getAltAzPosAuto(core));
 						const double altitudeDeg = altitudeRad * 180.0 / M_PI;
+						const bool topocentricBeforeGamma = core->getUseTopocentricCoordinates();
+						core->setUseTopocentricCoordinates(false);
+						core->update(0);
+						double sunRa = 0.0;
+						double sunDec = 0.0;
+						double moonRa = 0.0;
+						double moonDec = 0.0;
+						StelUtils::rectToSphe(&sunRa, &sunDec, sun->getEquinoxEquatorialPos(core));
+						StelUtils::rectToSphe(&moonRa, &moonDec, moon->getEquinoxEquatorialPos(core));
+						const double shadowRa = StelUtils::fmodpos(sunRa + M_PI, 2.0 * M_PI);
+						const double shadowDec = -sunDec;
+						const double raDifference = StelUtils::fmodpos(moonRa - shadowRa, 2.0 * M_PI);
+						const double besselX = std::cos(moonDec) * std::sin(raDifference) * 3600.0 * M_180_PI;
+						const double besselY = (std::cos(shadowDec) * std::sin(moonDec)
+							- std::sin(shadowDec) * std::cos(moonDec) * std::cos(raDifference)) * 3600.0 * M_180_PI;
+						const double moonDistance = moon->getEclipticPos().norm();
+						const double moonSemidiameter = std::atan(moon->getEquatorialRadius() / moonDistance) * M_180_PI * 3600.0;
+						double gamma = std::sqrt(besselX * besselX + besselY * besselY) * 0.2725076 / moonSemidiameter;
+						if (besselY < 0.0) gamma = -gamma;
+						core->setUseTopocentricCoordinates(topocentricBeforeGamma);
+						core->update(0);
+						const double brownLunation = std::round((fullMoonJD - 2423436.40347) / 29.530588 - 0.25);
+						const int lunarNumber = static_cast<int>(brownLunation) + 1 - 953;
+						const int nodeNumber = lunarNumber + 105;
+						const int sarosSeed = 148 + 38 * nodeNumber;
+						const int nodeShift = -61 * nodeNumber;
+						const int sarosCorrection = qFloor(nodeShift / 358.0 + 0.5 - nodeNumber / (12.0 * 358.0 * 358.0));
+						int saros = 1 + ((sarosSeed + sarosCorrection * 223 - 1) % 223);
+						if (sarosSeed + sarosCorrection * 223 - 1 < 0) saros -= 223;
+						if (saros < -223) saros += 223;
+						QString visibility = QStringLiteral("不可见");
+						if (altitudeDeg >= 45.0) visibility = QStringLiteral("观测条件极佳");
+						else if (altitudeDeg >= 30.0) visibility = QStringLiteral("观测条件良好");
+						else if (altitudeDeg >= 0.0) visibility = QStringLiteral("月亮较低");
+						if (umbralMagnitude < 1.0 && penumbralMagnitude < 0.7) visibility = QStringLiteral("不易肉眼观测");
 						QJsonObject ev;
 						ev["kind"] = "lunar";
 						ev["type"] = type;
 						ev["jd"] = fullMoonJD;
 						ev["date"] = StelUtils::julianDayToISO8601String(fullMoonJD + core->getUTCOffset(fullMoonJD) / 24.0);
 						ev["magnitude"] = umbralMagnitude > 0.0 ? umbralMagnitude : penumbralMagnitude;
-						ev["note"] = altitudeDeg >= 0.0
-							? QStringLiteral("本地月高 %1°").arg(altitudeDeg, 0, 'f', 1)
-							: QStringLiteral("本地不可见");
+						ev["saros"] = saros;
+						ev["gamma"] = gamma;
+						ev["penumbralMagnitude"] = penumbralMagnitude;
+						ev["umbralMagnitude"] = umbralMagnitude;
+						ev["localMoonAltitude"] = altitudeDeg;
+						ev["visibility"] = visibility;
 						eclipseList.append(ev);
 					}
 				}
