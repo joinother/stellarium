@@ -19,6 +19,7 @@ export interface CatOption {
 export interface NameItem {
   name: string
   zh?: ResourceStr
+  subtitle?: string
 }
 
 // 天体中文别名表：用于把 Stellarium 核心返回的拉丁/英文名（Jupiter、M31、Orion…）
@@ -69,6 +70,27 @@ export interface PlanetPosition {
   altitude: number
   azimuth: number
   magnitude: number
+}
+export interface HeliocentricPosition {
+  name: string
+  englishName: string
+  latitude: number
+  longitude: number
+  distanceAU: number
+  isComet: boolean
+  isSelectedMinor: boolean
+}
+export interface CelestialPosition {
+  name: string
+  englishName: string
+  catalogId: string
+  firstCoordinate: string
+  secondCoordinate: string
+  altitude: number
+  azimuth: number
+  magnitude: number
+  type: string
+  elongation?: number
 }
 export interface ObjectInfo {
   name: string
@@ -172,11 +194,11 @@ export const ALIAS_LIST: AliasEntry[] = [
   { zh: '北极二', py: 'beijier', en: 'Kochab', type: 'star' },
   // 著名深空
   { zh: '仙女座星系', py: 'xianvzuoyinxing', en: 'M31', type: 'galaxy' },
-  { zh: 'M32', py: '', en: 'M32', type: 'galaxy' },
-  { zh: 'M110', py: '', en: 'M110', type: 'galaxy' },
+  { zh: '梅西耶编号 32', py: '', en: 'M32', type: 'galaxy' },
+  { zh: '梅西耶编号 110', py: '', en: 'M110', type: 'galaxy' },
   { zh: '三角座星系', py: 'sanjiiaozuoyinxing', en: 'M33', type: 'galaxy' },
   { zh: '猎户座大星云', py: 'liehuzuodaxingyun', en: 'M42', type: 'nebula' },
-  { zh: 'M43', py: '', en: 'M43', type: 'nebula' },
+  { zh: '梅西耶编号 43', py: '', en: 'M43', type: 'nebula' },
   { zh: '昴星团', py: 'maoxingtuan', en: 'M45', type: 'cluster' },
   { zh: '蟹状星云', py: 'xiezhuangxingyun', en: 'M1', type: 'nebula' },
   { zh: '礁湖星云', py: 'jiaohuxingyun', en: 'M8', type: 'nebula' },
@@ -301,10 +323,30 @@ export interface StellariumBridgeResponse {
   mode?: string
   // 天文计算桥接命令的返回体
   ephemeris?: Array<EphemerisRow>
+  rtsCalendar?: Array<RtsCalendarDay>
   curve?: Array<AltAzPoint>
+  annualElevation?: Array<AnnualElevationPoint>
+  observability?: Array<ObservabilityDay>
+  lunarElongation?: Array<LunarElongationPoint>
+  timeSeries?: Array<PlanetTimeSeriesPoint>
+  planetPairDistance?: Array<PlanetPairDistancePoint>
+  hecPositions?: Array<HeliocentricPosition>
+  hecTime?: string
+  celestialPositions?: Array<CelestialPosition>
+  coordinateMode?: string
+  positionTime?: string
   planetCalc?: Array<PlanetCalcItem>
+  firstName?: string
+  secondName?: string
+  angularAvailable?: boolean
   phenomena?: Array<PhenomenonItem>
   eclipses?: Array<EclipseItem>
+  planetaryTransits?: Array<PlanetaryTransitItem>
+  moonPhases?: Array<MoonPhaseItem>
+  wutTargets?: Array<WutTarget>
+  period?: string
+  observationTime?: string
+  angularSizeAvailable?: boolean
   // 恒星时 / 夜视 / 大气参数
   text?: string
   night?: boolean
@@ -386,6 +428,13 @@ export interface SessionSnapshot {
   flags?: object
 }
 
+export interface SeasonEvent {
+  label?: string
+  jd?: number
+  date?: string
+  durationDays?: number
+}
+
 // 今夜天文事件聚合（getTonightEvents 返回）
 export interface TonightMoon {
   phaseName?: string
@@ -435,16 +484,47 @@ export interface TonightEvents {
   satellites?: TonightSatellites
 }
 
+export interface WutTarget {
+  name?: string
+  englishName?: string
+  type?: string
+  jd?: number
+  altitude?: number
+  azimuth?: number
+  magnitude?: number
+  angularSizeArcmin?: number
+  rise?: string
+  transit?: string
+  set?: string
+}
+
 // ---- 天文计算（AstroCalc）数据结构 ----
 // 星历表：选中天体随日期变化的位置
 export interface EphemerisRow {
   jd?: number
   date?: string
+  bodyName?: string
+  bodyEnglishName?: string
   ra?: string
   dec?: string
   altitude?: number
   azimuth?: number
   magnitude?: number
+}
+// 每个本地日期的升起、中天、落下数据；对应桌面 AstroCalc 的 RTS 表。
+export interface RtsCalendarDay {
+  date?: string
+  rise?: string
+  transit?: string
+  set?: string
+  riseJD?: number
+  transitJD?: number
+  setJD?: number
+  transitAltitude?: number
+  magnitude?: number
+  solarElongation?: number
+  lunarElongation?: number
+  status?: string
 }
 // 高度/方位角曲线上的一个采样点（t = 距起始时刻的小时数）
 export interface AltAzPoint {
@@ -452,6 +532,49 @@ export interface AltAzPoint {
   t?: number
   altitude?: number
   azimuth?: number
+  sunAltitude?: number
+  moonAltitude?: number
+}
+// 全年固定时刻高度曲线：与桌面版 Monthly Elevation 使用相同的三日采样。
+export interface AnnualElevationPoint {
+  jd?: number
+  date?: string
+  altitude?: number
+  azimuth?: number
+}
+// 月度可见性：每个天文暗夜的目标窗口和月光干扰。
+export interface ObservabilityDay {
+  date?: string
+  bestJD?: number
+  peakTime?: string
+  maxAltitude?: number
+  visibleHours?: number
+  darkHours?: number
+  moonIllumination?: number
+  moonAltitude?: number
+}
+// 月球距角曲线：目标相对月亮的赤道坐标夹角。
+export interface LunarElongationPoint {
+  jd?: number
+  t?: number
+  date?: string
+  separation?: number
+}
+// 双变量行星时间曲线：left 和 right 对应各自选择的物理量。
+export interface PlanetTimeSeriesPoint {
+  jd?: number
+  t?: number
+  date?: string
+  left?: number
+  right?: number
+}
+// 两个太阳系天体之间的线性距离与表观角距离。
+export interface PlanetPairDistancePoint {
+  jd?: number
+  t?: number
+  date?: string
+  linearDistance?: number
+  angularDistance?: number
 }
 // 行星计算器条目
 export interface PlanetCalcItem {
@@ -474,11 +597,14 @@ export interface PlanetCalcItem {
 }
 // 天象（行星间的合）
 export interface PhenomenonItem {
+  type?: string
   bodyA?: string
   bodyB?: string
   jd?: number
   date?: string
   separation?: number
+  metricLabel?: string
+  metricUnit?: string
 }
 // 日食 / 月食
 export interface EclipseItem {
@@ -491,5 +617,50 @@ export interface EclipseItem {
   durationMin?: number
   centralLat?: number
   centralLng?: number
+  localVisible?: boolean
+  localMagnitude?: number
+  localMax?: string
+  localSunAltitude?: number
+  localFirstContact?: string
+  localLastContact?: string
+  localFirstContactLabel?: string
+  localLastContactLabel?: string
+  localCentralType?: string
+  localCentralStart?: string
+  localCentralEnd?: string
   note?: string
+}
+// 水星、金星凌日：接触时刻和可见性均以当前观测地点计算。
+export interface PlanetaryTransitItem {
+  planet?: string
+  jd?: number
+  date?: string
+  firstContact?: string
+  secondContact?: string
+  middle?: string
+  thirdContact?: string
+  lastContact?: string
+  firstContactVisible?: boolean
+  secondContactVisible?: boolean
+  middleVisible?: boolean
+  thirdContactVisible?: boolean
+  lastContactVisible?: boolean
+  magnitude?: number
+  minimumSeparation?: number
+  durationMin?: number
+  observableDurationMin?: number
+  localVisible?: boolean
+  sunAltitude?: number
+}
+// 月相预报：以月球相对太阳的地心黄经差为准。
+export interface MoonPhaseItem {
+  phase?: string
+  jd?: number
+  date?: string
+  illumination?: number
+  altitude?: number
+  azimuth?: number
+  rise?: string
+  transit?: string
+  set?: string
 }

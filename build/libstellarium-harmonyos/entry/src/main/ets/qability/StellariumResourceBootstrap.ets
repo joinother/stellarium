@@ -7,6 +7,17 @@ import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 
 const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
+const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
+const DEEP_SKY_INDEX_FILES: Array<string> = [
+  'catalog.dat',
+  'names.dat',
+  'outlines.dat',
+  'discovery.dat',
+  'textures.json',
+];
+
+let deepSkyExtractionStarted = false;
+let deepSkyExtractionForeground = true;
 
 function stellariumSystemLocale(): string {
   let locale = 'zh_CN';
@@ -37,6 +48,14 @@ function exists(path: string): boolean {
     return fs.accessSync(path);
   } catch (_err) {
     return false;
+  }
+}
+
+function fileSize(path: string): number {
+  try {
+    return fs.statSync(path).size;
+  } catch (_err) {
+    return 0;
   }
 }
 
@@ -79,6 +98,25 @@ function writeRawFile(appContext: common.ApplicationContext, rawPath: string, ou
   }
 }
 
+function writeMarker(path: string): void {
+  ensureDir(parentDir(path));
+  let file: fs.File | undefined = undefined;
+  try {
+    file = fs.openSync(path, fs.OpenMode.CREATE | fs.OpenMode.TRUNC | fs.OpenMode.WRITE_ONLY);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to write resource marker ${path}: ${JSON.stringify(err)}`);
+    throw new Error(`Failed to write resource marker: ${path}`);
+  } finally {
+    if (file !== undefined) {
+      try {
+        fs.closeSync(file);
+      } catch (err) {
+        hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to close resource marker ${path}: ${JSON.stringify(err)}`);
+      }
+    }
+  }
+}
+
 function extractRawTree(appContext: common.ApplicationContext, rawDir: string, outputDir: string): void {
   ensureDir(outputDir);
   let entries: Array<string>;
@@ -89,6 +127,12 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
     throw new Error(`Failed to list raw resource directory: ${rawDir}`);
   }
   for (const entry of entries) {
+    // Deep-sky PNGs are intentionally copied after the first rendered frame.
+    // Copying their 140 MiB tree here blocks the API 22 ability startup long
+    // enough for the watchdog to terminate the process.
+    if (rawDir === RAW_ROOT && entry === 'nebulae') {
+      continue;
+    }
     const rawPath = rawDir.length > 0 ? `${rawDir}/${entry}` : entry;
     const outputPath = `${outputDir}/${entry}`;
     try {
@@ -98,6 +142,103 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
       writeRawFile(appContext, rawPath, outputPath);
     }
   }
+}
+
+function copyDeepSkyIndexes(appContext: common.ApplicationContext, installRoot: string): void {
+  for (const name of DEEP_SKY_INDEX_FILES) {
+    writeRawFile(appContext, `${RAW_NEBULAE_ROOT}/${name}`, `${installRoot}/nebulae/default/${name}`);
+  }
+}
+
+/**
+ * Resource extraction is application work, so it must stop while the ability
+ * is backgrounded. QAbility keeps this flag in sync with its lifecycle.
+ */
+export function setDeepSkyImageExtractionForeground(foreground: boolean): void {
+  deepSkyExtractionForeground = foreground;
+}
+
+/**
+ * Install the optional deep-sky image collection without delaying startup.
+ * The catalogue indexes are already present when this runs. One image per
+ * turn keeps the ArkUI thread responsive on API 22 and permits an interrupted
+ * installation to resume on the next foreground session.
+ */
+export function scheduleDeepSkyImageExtraction(
+  appContext: common.ApplicationContext,
+  onComplete: () => void,
+): void {
+  const installRoot = `${appContext.filesDir}/stellarium`;
+  const imageRoot = `${installRoot}/nebulae/default`;
+  const completeMarker = `${imageRoot}/.ohos_complete`;
+  if (exists(completeMarker)) {
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'Deep-sky image collection already installed');
+    return;
+  }
+  if (deepSkyExtractionStarted) {
+    return;
+  }
+
+  let imageNames: Array<string>;
+  try {
+    imageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
+      .filter((name: string) => name.endsWith('.png'));
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to list deep-sky images: ${JSON.stringify(err)}`);
+    return;
+  }
+  if (imageNames.length === 0) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, 'Deep-sky image list is empty; collection will not be marked complete');
+    return;
+  }
+
+  deepSkyExtractionStarted = true;
+  ensureDir(imageRoot);
+  let nextIndex = 0;
+  let copiedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const copyNext = (): void => {
+    if (!deepSkyExtractionForeground) {
+      setTimeout(copyNext, 1000);
+      return;
+    }
+    if (nextIndex >= imageNames.length) {
+      deepSkyExtractionStarted = false;
+      if (failedCount === 0) {
+        writeMarker(completeMarker);
+      }
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `Deep-sky images installed: copied=${copiedCount}, existing=${skippedCount}, ` +
+        `failed=${failedCount}, total=${imageNames.length}`);
+      onComplete();
+      return;
+    }
+
+    const name = imageNames[nextIndex++];
+    const outputPath = `${imageRoot}/${name}`;
+    try {
+      if (fileSize(outputPath) > 0) {
+        skippedCount++;
+      } else {
+        writeRawFile(appContext, `${RAW_NEBULAE_ROOT}/${name}`, outputPath);
+        copiedCount++;
+      }
+    } catch (err) {
+      // Keep processing the collection: one corrupt/missing optional image
+      // should not make catalogue browsing or the rest of the sky unusable.
+      failedCount++;
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `Unable to install deep-sky image ${name}: ${JSON.stringify(err)}`);
+    }
+    if ((nextIndex % 25) === 0 || nextIndex === imageNames.length) {
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `Deep-sky image extraction progress ${nextIndex}/${imageNames.length}`);
+    }
+    setTimeout(copyNext, 16);
+  };
+
+  hilog.info(LOG_DOMAIN, LOG_TAG, `Scheduling ${imageNames.length} deep-sky images after first frame`);
+  setTimeout(copyNext, 250);
 }
 
 export function prepareStellariumResources(appContext: common.ApplicationContext): string {
@@ -123,6 +264,9 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // .ssc files, so an upgraded install would keep an empty Scripts panel forever
   // unless the missing directory itself forces a re-extract.
   const scriptMarker = `${installRoot}/scripts/constellations_tour.ssc`;
+  // The deep-sky indexes are startup-critical because Browse Categories use
+  // them immediately. The PNG collection is deliberately installed later.
+  const nebulaeMarker = `${installRoot}/nebulae/default/catalog.dat`;
   // Qt creates the user config by copying this file during its own startup.
   // A HAP update preserves filesDir, so a previously interrupted extraction
   // can leave the generic marker behind while this mandatory source file is
@@ -159,6 +303,17 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
   }
+
+  // HAP updates preserve filesDir. Refresh these small, mandatory records on
+  // every start so upgraded installs can browse the restored categories even
+  // while the optional image collection is still being installed.
+  try {
+    copyDeepSkyIndexes(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh deep-sky indexes: ${JSON.stringify(err)}`);
+  }
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `Deep-sky catalogue on disk: ${nebulaeMarker}, size=${fileSize(nebulaeMarker)}`);
 
   // HAP updates preserve filesDir. Refresh startup-critical files even when
   // an older install passes the extraction marker. In particular Qt aborts if

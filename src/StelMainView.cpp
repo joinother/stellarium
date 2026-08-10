@@ -31,6 +31,8 @@
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
 #include "SolarEclipseComputer.hpp"
+#include "SpecificTimeMgr.hpp"
+#include "planetsephems/sidereal_time.h"
 #include "StelActionMgr.hpp"
 #include "StelOpenGL.hpp"
 #include "StelOpenGLArray.hpp"
@@ -2788,29 +2790,73 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return QString();
 				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
 			};
+			auto addEvents = [&](const QString& prefix, const Vec4d& rts) {
+				alm[prefix + "Rise"] = rts[0];
+				alm[prefix + "Transit"] = rts[1];
+				alm[prefix + "Set"] = rts[2];
+				alm[prefix + "RiseText"] = formatLocal(rts[0]);
+				alm[prefix + "TransitText"] = formatLocal(rts[1]);
+				alm[prefix + "SetText"] = formatLocal(rts[2]);
+			};
 			alm["currentJD"] = core->getJD();
 			if (sun)
 			{
 				Vec4d srts = sun->getRTSTime(core);
-				alm["sunNextRise"] = srts[0];
-				alm["sunNextTransit"] = srts[1];
-				alm["sunNextSet"] = srts[2];
-				alm["sunNextRiseText"] = formatLocal(srts[0]);
-				alm["sunNextTransitText"] = formatLocal(srts[1]);
-				alm["sunNextSetText"] = formatLocal(srts[2]);
+				addEvents("sun", srts);
+				if (srts[0] > 0.0 && srts[2] > srts[0])
+				{
+					const double daylightHours = (srts[2] - srts[0]) * 24.0;
+					alm["daylightHours"] = daylightHours;
+					alm["nightHours"] = 24.0 - daylightHours;
+				}
+				addEvents("civil", sun->getRTSTime(core, -6.0));
+				addEvents("nautical", sun->getRTSTime(core, -12.0));
+				addEvents("astronomical", sun->getRTSTime(core, -18.0));
 			}
-			if (moon)
-			{
-				Vec4d mrts = moon->getRTSTime(core);
-				alm["moonNextRise"] = mrts[0];
-				alm["moonNextTransit"] = mrts[1];
-				alm["moonNextSet"] = mrts[2];
-				alm["moonNextRiseText"] = formatLocal(mrts[0]);
-				alm["moonNextTransitText"] = formatLocal(mrts[1]);
-				alm["moonNextSetText"] = formatLocal(mrts[2]);
-				alm["moonPhase"] = moon->getInfoMap(core).value("illumination", 0.0).toDouble();
-			}
-			result["ok"] = true;
+				if (moon)
+				{
+					Vec4d mrts = moon->getRTSTime(core);
+					addEvents("moon", mrts);
+					alm["moonPhase"] = moon->getInfoMap(core).value("illumination", 0.0).toDouble();
+				}
+				const double localJD = core->getJD() + core->getUTCOffset(core->getJD()) / 24.0;
+				int year = 0;
+				int month = 0;
+				int day = 0;
+				StelUtils::getDateFromJulianDay(localJD, &year, &month, &day);
+				SpecificTimeMgr* specificTimeMgr = GETSTELMODULE(SpecificTimeMgr);
+				if (specificTimeMgr)
+				{
+					const double marchEquinox = specificTimeMgr->getEquinox(year, SpecificTimeMgr::Equinox::March);
+					const double juneSolstice = specificTimeMgr->getSolstice(year, SpecificTimeMgr::Solstice::June);
+					const double septemberEquinox = specificTimeMgr->getEquinox(year, SpecificTimeMgr::Equinox::September);
+					const double decemberSolstice = specificTimeMgr->getSolstice(year, SpecificTimeMgr::Solstice::December);
+					const double nextMarchEquinox = specificTimeMgr->getEquinox(year + 1, SpecificTimeMgr::Equinox::March);
+					const QList<QPair<QString, double>> seasonTimes = {
+						qMakePair(QStringLiteral("春分"), marchEquinox),
+						qMakePair(QStringLiteral("夏至"), juneSolstice),
+						qMakePair(QStringLiteral("秋分"), septemberEquinox),
+						qMakePair(QStringLiteral("冬至"), decemberSolstice),
+						qMakePair(QStringLiteral("春分"), nextMarchEquinox)
+					};
+					QJsonArray seasonEvents;
+					for (int index = 0; index < 4; ++index)
+					{
+						const double eventJD = seasonTimes.at(index).second;
+						const double nextEventJD = seasonTimes.at(index + 1).second;
+						if (eventJD <= 0.0 || nextEventJD <= 0.0)
+							continue;
+						QJsonObject event;
+						event["label"] = seasonTimes.at(index).first;
+						event["jd"] = eventJD;
+						event["date"] = formatLocal(eventJD);
+						event["durationDays"] = nextEventJD - eventJD;
+						seasonEvents.append(event);
+					}
+					alm["seasonYear"] = year;
+					alm["seasonEvents"] = seasonEvents;
+				}
+				result["ok"] = true;
 			result["almanac"] = alm;
 			return result;
 		}
@@ -2849,7 +2895,192 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-				// ========== Phase 2b ==========
+		// getHeliocentricEclipticPositions - desktop AstroCalc HEC major-body table.
+		if (commandName == "getHeliocentricEclipticPositions")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const bool includeSelectedMinor = options.value("includeSelectedMinor").toBool(false);
+			const bool includeBrightComets = options.value("includeBrightComets").toBool(false);
+			const double cometMagnitudeLimit = qBound(-5.0, options.value("cometMagnitudeLimit").toDouble(9.0), 15.0);
+			StelCore* core = StelApp::getInstance().getCore();
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			if (!core || !solarSystem)
+			{
+				result["ok"] = false;
+				result["error"] = "solar system unavailable";
+				return result;
+			}
+
+			QSet<QString> includedNames;
+			QJsonArray positions;
+			auto appendPlanet = [&](const PlanetP& planet, bool selectedMinor) {
+				if (!planet || includedNames.contains(planet->getEnglishName())) return;
+				const Vec3d position = planet->getHeliocentricEclipticPos();
+				const double distance = position.norm();
+				if (distance <= 0.000001) return; // The Sun is the graph origin, not a data point.
+				double longitude = 0.0;
+				double latitude = 0.0;
+				StelUtils::rectToSphe(&longitude, &latitude, position);
+				longitude = StelUtils::fmodpos(longitude, 2.0 * M_PI);
+				QJsonObject item;
+				item["englishName"] = planet->getEnglishName();
+				item["name"] = planet->getNameI18n();
+				item["latitude"] = latitude * M_180_PI;
+				item["longitude"] = longitude * M_180_PI;
+				item["distanceAU"] = distance;
+				item["isComet"] = planet->getPlanetType() == Planet::isComet;
+				item["isSelectedMinor"] = selectedMinor;
+				positions.append(item);
+				includedNames.insert(planet->getEnglishName());
+			};
+
+			for (const PlanetP& planet : solarSystem->getAllPlanets())
+			{
+				if (planet && planet->getPlanetType() == Planet::isPlanet)
+					appendPlanet(planet, false);
+			}
+			if (includeBrightComets)
+			{
+				for (const PlanetP& planet : solarSystem->getAllPlanets())
+				{
+					if (planet && planet->getPlanetType() == Planet::isComet
+						&& planet->getVMagnitude(core) <= cometMagnitudeLimit)
+						appendPlanet(planet, false);
+				}
+			}
+			if (includeSelectedMinor)
+			{
+				const QList<StelObjectP>& selectedObjects = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
+				for (const StelObjectP& object : selectedObjects)
+				{
+					PlanetP planet = qSharedPointerCast<Planet>(object);
+					if (planet && planet->getPlanetType() >= Planet::isAsteroid)
+						appendPlanet(planet, true);
+				}
+			}
+			result["ok"] = true;
+			result["hecTime"] = StelUtils::julianDayToISO8601String(core->getJD() + core->getUTCOffset(core->getJD()) / 24.0);
+			result["hecPositions"] = positions;
+			return result;
+		}
+
+		if (commandName == "getCelestialPositions")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString category = options.value("category").toString("planets");
+			const bool horizontal = options.value("horizontal").toBool(true);
+			const double magnitudeLimit = qBound(-5.0, options.value("magnitudeLimit").toDouble(6.0), 25.0);
+			const int maximumRows = qBound(10, options.value("maximumRows").toInt(80), 120);
+			StelCore* core = StelApp::getInstance().getCore();
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			NebulaMgr* nebulaMgr = GETSTELMODULE(NebulaMgr);
+			StarMgr* starMgr = GETSTELMODULE(StarMgr);
+			if (!core || !solarSystem)
+			{
+				result["ok"] = false;
+				result["error"] = "celestial data unavailable";
+				return result;
+			}
+
+			PlanetP sun = solarSystem->getSun();
+			QList<QJsonObject> positions;
+			auto appendObject = [&](const auto& object, const QString& catalogId = QString()) {
+				if (!object || !object->isAboveRealHorizon(core)) return;
+				const double magnitude = object->getVMagnitudeWithExtinction(core);
+				if (magnitude > magnitudeLimit) return;
+				const Vec3d altAz = object->getAltAzPosAuto(core);
+				double azimuth = 0.0;
+				double altitude = 0.0;
+				StelUtils::rectToSphe(&azimuth, &altitude, altAz);
+				azimuth = StelUtils::fmodpos(3.0 * M_PI - azimuth, 2.0 * M_PI);
+				double firstCoordinate = azimuth;
+				double secondCoordinate = altitude;
+				QString firstText;
+				QString secondText;
+				if (horizontal)
+				{
+					firstText = StelUtils::radToDmsStr(firstCoordinate, true);
+					secondText = StelUtils::radToDmsStr(secondCoordinate, true);
+				}
+				else
+				{
+					const Vec3d equatorial = object->getJ2000EquatorialPos(core);
+					StelUtils::rectToSphe(&firstCoordinate, &secondCoordinate, equatorial);
+					firstText = StelUtils::radToHmsStr(firstCoordinate);
+					secondText = StelUtils::radToDmsStr(secondCoordinate, true);
+				}
+				QString englishName = object->getEnglishName();
+				if (englishName.isEmpty()) englishName = catalogId;
+				if (englishName.isEmpty()) englishName = object->getID();
+				QString name = object->getNameI18n();
+				if (name.isEmpty()) name = catalogId;
+				if (name.isEmpty()) name = englishName;
+				QJsonObject position;
+				position["name"] = name;
+				position["englishName"] = englishName;
+				position["catalogId"] = catalogId;
+				position["firstCoordinate"] = firstText;
+				position["secondCoordinate"] = secondText;
+				position["altitude"] = altitude * M_180_PI;
+				position["azimuth"] = azimuth * M_180_PI;
+				position["magnitude"] = magnitude;
+				position["type"] = object->getObjectTypeI18n();
+				if (sun && object->getEnglishName() != sun->getEnglishName())
+					position["elongation"] = object->getJ2000EquatorialPos(core).angle(sun->getJ2000EquatorialPos(core)) * M_180_PI;
+				positions.append(position);
+			};
+
+			if (category == QStringLiteral("planets") || category == QStringLiteral("comets") || category == QStringLiteral("minorBodies"))
+			{
+				const QList<PlanetP>& candidates = category == QStringLiteral("planets") ? solarSystem->getAllPlanets() : solarSystem->getAllMinorBodies();
+				for (const PlanetP& planet : candidates)
+				{
+					if (!planet || planet == core->getCurrentPlanet()) continue;
+					const Planet::PlanetType planetType = planet->getPlanetType();
+					if (category == QStringLiteral("planets") && planetType == Planet::isUNDEFINED) continue;
+					if (category == QStringLiteral("comets") && planetType != Planet::isComet) continue;
+					if (category == QStringLiteral("minorBodies") && planetType < Planet::isAsteroid) continue;
+					if (!planet->hasValidPositionalData(core->getJD(), Planet::PositionQuality::OrbitPlotting)) continue;
+					appendObject(planet);
+				}
+			}
+			else if (category == QStringLiteral("stars") && starMgr)
+			{
+				for (const StelObjectP& star : starMgr->getHipparcosStars())
+					appendObject(star);
+			}
+			else if (nebulaMgr)
+			{
+				for (const NebulaP& nebula : nebulaMgr->getAllDeepSkyObjects())
+				{
+					if (!nebula || !nebula->objectInDisplayedCatalog() || !nebula->objectInAllowedSizeRangeLimits()) continue;
+					const QString type = nebula->getObjectType();
+					if (category == QStringLiteral("galaxies") && !type.contains(QStringLiteral("Galaxy"), Qt::CaseInsensitive)) continue;
+					if (category == QStringLiteral("nebulae") && !type.contains(QStringLiteral("Nebula"), Qt::CaseInsensitive)) continue;
+					if (category == QStringLiteral("clusters") && !type.contains(QStringLiteral("Cluster"), Qt::CaseInsensitive)) continue;
+					appendObject(nebula, nebula->getDSODesignationWIC());
+				}
+			}
+
+			std::sort(positions.begin(), positions.end(), [](const QJsonObject& first, const QJsonObject& second) {
+				const double firstAltitude = first.value("altitude").toDouble();
+				const double secondAltitude = second.value("altitude").toDouble();
+				if (!qFuzzyCompare(firstAltitude + 91.0, secondAltitude + 91.0)) return firstAltitude > secondAltitude;
+				return first.value("magnitude").toDouble() < second.value("magnitude").toDouble();
+			});
+			QJsonArray items;
+			for (int index = 0; index < positions.size() && index < maximumRows; ++index)
+				items.append(positions.at(index));
+			result["ok"] = true;
+			result["celestialPositions"] = items;
+			result["coordinateMode"] = horizontal ? QStringLiteral("horizontal") : QStringLiteral("equatorial");
+			result["positionTime"] = StelUtils::julianDayToISO8601String(core->getJD() + core->getUTCOffset(core->getJD()) / 24.0);
+			return result;
+		}
+
+		// ========== Phase 2b ==========
 		// getSkyCultureList
 		if (commandName == "getSkyCultureList")
 		{
@@ -4486,6 +4717,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			core->setJD(currentJD);
 			core->update(0);
+			auto formatLocal = [&](double jd) -> QString {
+				if (jd <= 0.0)
+					return QString();
+				return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+			};
 
 			QJsonObject rtsResult;
 			rtsResult["name"] = object->getNameI18n();
@@ -4494,11 +4730,104 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			rtsResult["nextRiseJD"] = next[0];
 			rtsResult["nextTransitJD"] = next[1];
 			rtsResult["nextSetJD"] = next[2];
+			rtsResult["nextRiseText"] = formatLocal(next[0]);
+			rtsResult["nextTransitText"] = formatLocal(next[1]);
+			rtsResult["nextSetText"] = formatLocal(next[2]);
 			rtsResult["prevRiseJD"] = previous[0];
 			rtsResult["prevTransitJD"] = previous[1];
 			rtsResult["prevSetJD"] = previous[2];
+			rtsResult["prevRiseText"] = formatLocal(previous[0]);
+			rtsResult["prevTransitText"] = formatLocal(previous[1]);
+			rtsResult["prevSetText"] = formatLocal(previous[2]);
 			result["ok"] = true;
 			result["rts"] = rtsResult;
+			return result;
+		}
+
+		// getRTSCalendar — desktop AstroCalc's daily rise/transit/set table for
+		// the selected object, adapted to a compact mobile result list.
+		if (commandName == "getRTSCalendar")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+			if (selected.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "no object selected";
+				return result;
+			}
+			const StelObjectP object = selected.first();
+			const int days = qBound(1, options.value("days").toInt(14), 62);
+			const double originalJD = core->getJD();
+			double startJD = options.value("jd").toDouble(originalJD);
+			if (startJD <= 0.0) startJD = originalJD;
+			const double utcOffset = core->getUTCOffset(startJD) / 24.0;
+			const double firstLocalMidnight = std::floor(startJD + utcOffset - 0.5) + 0.5 - utcOffset;
+			PlanetP sun = GETSTELMODULE(SolarSystem)->getSun();
+			PlanetP moon = GETSTELMODULE(SolarSystem)->getMoon();
+
+			auto formatLocal = [&](double jd) -> QString {
+				return jd > 0.0 ? StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0) : QString();
+			};
+			auto localDateNumber = [&](double jd) -> int {
+				int year = 0;
+				int month = 0;
+				int day = 0;
+				StelUtils::getDateFromJulianDay(jd + core->getUTCOffset(jd) / 24.0, &year, &month, &day);
+				return year * 10000 + month * 100 + day;
+			};
+
+			QJsonArray rows;
+			for (int dayOffset = 0; dayOffset < days; ++dayOffset)
+			{
+				const double localMidnight = firstLocalMidnight + dayOffset;
+				const double localNoon = localMidnight + 0.5;
+				core->setJD(localNoon);
+				core->update(0);
+				const Vec4d rts = object->getRTSTime(core);
+				const int expectedDate = localDateNumber(localNoon);
+				const bool alwaysBelow = rts[3] < 0.0;
+				const bool circumpolar = rts[3] > 50.0;
+				const bool validTransit = rts[1] > 0.0 && rts[3] != 20.0 && localDateNumber(rts[1]) == expectedDate;
+				const bool validRise = rts[0] > 0.0 && rts[3] != 30.0 && !alwaysBelow && !circumpolar && localDateNumber(rts[0]) == expectedDate;
+				const bool validSet = rts[2] > 0.0 && rts[3] != 40.0 && !alwaysBelow && !circumpolar && localDateNumber(rts[2]) == expectedDate;
+				QJsonObject row;
+				row["date"] = formatLocal(localNoon);
+				row["rise"] = validRise ? formatLocal(rts[0]) : QString();
+				row["transit"] = validTransit ? formatLocal(rts[1]) : QString();
+				row["set"] = validSet ? formatLocal(rts[2]) : QString();
+				row["riseJD"] = validRise ? rts[0] : 0.0;
+				row["transitJD"] = validTransit ? rts[1] : 0.0;
+				row["setJD"] = validSet ? rts[2] : 0.0;
+				if (alwaysBelow)
+					row["status"] = sun && object == sun ? QStringLiteral("极夜") : QStringLiteral("从不升起");
+				else if (circumpolar)
+					row["status"] = sun && object == sun ? QStringLiteral("极昼") : QStringLiteral("拱极不落");
+				else if (!validTransit)
+					row["status"] = QStringLiteral("当天无中天");
+				if (validTransit)
+				{
+					core->setJD(rts[1]);
+					core->update(0);
+					double azimuth = 0.0;
+					double altitude = 0.0;
+					StelUtils::rectToSphe(&azimuth, &altitude, object->getAltAzPosAuto(core));
+					row["transitAltitude"] = altitude * M_180_PI;
+					const float magnitude = object->getVMagnitudeWithExtinction(core);
+					if (magnitude < 50.0f) row["magnitude"] = magnitude;
+					if (sun && object != sun)
+						row["solarElongation"] = object->getJ2000EquatorialPos(core).angle(sun->getJ2000EquatorialPos(core)) * M_180_PI;
+					if (moon && object != moon && core->getCurrentPlanet() == GETSTELMODULE(SolarSystem)->getEarth())
+						row["lunarElongation"] = object->getJ2000EquatorialPos(core).angle(moon->getJ2000EquatorialPos(core)) * M_180_PI;
+				}
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["name"] = object->getNameI18n().isEmpty() ? object->getEnglishName() : object->getNameI18n();
+			result["rtsCalendar"] = rows;
 			return result;
 		}
 
@@ -5464,6 +5793,211 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// getWutTargets — 轻量版 What's Up Tonight：按观测时段、高度和星等筛选行星、亮星或梅西耶天体。
+		if (commandName == "getWutTargets")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString period = options.value("period").toString(QStringLiteral("midnight"));
+			const QString category = options.value("category").toString(QStringLiteral("planets"));
+			const double minimumAltitude = qBound(0.0, options.value("minAltitude").toDouble(20.0), 80.0);
+			const double maximumMagnitude = qBound(-5.0, options.value("maxMagnitude").toDouble(6.0), 15.0);
+			const bool limitAngularSize = options.value("limitAngularSize").toBool(false);
+			const double minimumAngularSizeArcmin = qBound(0.0, options.value("minAngularSizeArcmin").toDouble(10.0), 21600.0);
+			const double maximumAngularSizeArcmin = qBound(minimumAngularSizeArcmin, options.value("maxAngularSizeArcmin").toDouble(600.0), 21600.0);
+			const bool angularSizeAvailable = category != QStringLiteral("stars");
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			PlanetP sun = ssys->getSun();
+			if (!sun)
+			{
+				result["ok"] = false;
+				result["error"] = "Sun unavailable";
+				return result;
+			}
+
+			const double originalJD = core->getJD();
+			Vec4d civilTwilight = sun->getRTSTime(core, -6.0);
+			double evening = civilTwilight[2];
+			double morning = civilTwilight[0];
+			if (evening <= 0.0 || morning <= 0.0)
+			{
+				result["ok"] = false;
+				result["error"] = "no civil twilight at this location";
+				return result;
+			}
+			if (morning <= evening)
+				morning += 1.0;
+			const double midnight = (evening + morning) / 2.0;
+			QList<double> sampleJDs;
+			if (period == QStringLiteral("evening"))
+				sampleJDs.append(evening);
+			else if (period == QStringLiteral("morning"))
+				sampleJDs.append(morning);
+			else if (period == QStringLiteral("night"))
+			{
+				sampleJDs.append(evening);
+				sampleJDs.append(midnight);
+				sampleJDs.append(morning);
+			}
+			else
+				sampleJDs.append(midnight);
+
+			auto fmtLocal = [&](double jd) -> QString {
+				return jd > 0.0 ? StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0) : QString();
+			};
+			QList<QJsonObject> targets;
+			if (category != QStringLiteral("planets"))
+			{
+				QList<StelObjectP> candidates;
+				QString typeLabel;
+				if (category == QStringLiteral("stars"))
+				{
+					StarMgr* starMgr = GETSTELMODULE(StarMgr);
+					if (starMgr)
+						candidates = starMgr->getHipparcosStars();
+					typeLabel = QStringLiteral("亮星");
+				}
+				else if (category == QStringLiteral("messier"))
+				{
+					for (int number = 1; number <= 110; ++number)
+					{
+						StelObjectP object = objectMgr->searchByName(QStringLiteral("M%1").arg(number));
+						if (!object)
+							object = objectMgr->searchByName(QStringLiteral("M %1").arg(number));
+						if (object)
+							candidates.append(object);
+					}
+					typeLabel = QStringLiteral("梅西耶天体");
+				}
+				if (candidates.isEmpty())
+				{
+					core->setJD(originalJD);
+					core->update(0);
+					result["ok"] = true;
+					result["period"] = period;
+					result["angularSizeAvailable"] = angularSizeAvailable;
+					result["observationTime"] = fmtLocal(period == QStringLiteral("evening") ? evening : (period == QStringLiteral("morning") ? morning : midnight));
+					result["wutTargets"] = QJsonArray();
+					return result;
+				}
+
+				const double observationJD = period == QStringLiteral("evening") ? evening
+					: (period == QStringLiteral("morning") ? morning : midnight);
+				core->setJD(observationJD);
+				core->update(0);
+				for (const StelObjectP& object : candidates)
+				{
+					const double magnitude = object->getVMagnitude(core);
+					if (magnitude > maximumMagnitude)
+						continue;
+					const double angularSizeArcmin = object->getAngularRadius(core) * 120.0;
+					if (limitAngularSize && angularSizeArcmin > 0.0
+						&& (angularSizeArcmin < minimumAngularSizeArcmin || angularSizeArcmin > maximumAngularSizeArcmin))
+						continue;
+					Vec3d altAz = object->getAltAzPosAuto(core);
+					const double altitude = std::asin(altAz[2] / altAz.norm()) * 180.0 / M_PI;
+					if (altitude < minimumAltitude)
+						continue;
+					QString designation = object->getEnglishName();
+					if (designation.isEmpty())
+						designation = object->getID();
+					QJsonObject target;
+					target["name"] = object->getNameI18n().isEmpty() ? designation : object->getNameI18n();
+					target["englishName"] = designation;
+					target["type"] = typeLabel;
+					target["jd"] = observationJD;
+					target["altitude"] = altitude;
+					target["azimuth"] = StelUtils::fmodpos(std::atan2(altAz[1], -altAz[0]) * 180.0 / M_PI, 360.0);
+					target["magnitude"] = magnitude;
+					if (angularSizeArcmin > 0.0)
+						target["angularSizeArcmin"] = angularSizeArcmin;
+					const Vec4d rts = object->getRTSTime(core);
+					target["rise"] = fmtLocal(rts[0]);
+					target["transit"] = fmtLocal(rts[1]);
+					target["set"] = fmtLocal(rts[2]);
+					targets.append(target);
+				}
+				core->setJD(originalJD);
+				core->update(0);
+				std::sort(targets.begin(), targets.end(), [](const QJsonObject& first, const QJsonObject& second) {
+					return first.value("altitude").toDouble() > second.value("altitude").toDouble();
+				});
+				while (targets.size() > 40)
+					targets.removeLast();
+				QJsonArray items;
+				for (const QJsonObject& target : targets)
+					items.append(target);
+				result["ok"] = true;
+				result["period"] = period;
+				result["angularSizeAvailable"] = angularSizeAvailable;
+				result["observationTime"] = fmtLocal(observationJD);
+				result["wutTargets"] = items;
+				return result;
+			}
+			const QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
+				<< "Saturn" << "Uranus" << "Neptune";
+			for (const QString& englishName : planetNames)
+			{
+				PlanetP planet = qSharedPointerCast<Planet>(ssys->searchByName(englishName));
+				if (!planet)
+					continue;
+				double bestJD = 0.0;
+				double bestAltitude = -90.0;
+				double bestAzimuth = 0.0;
+				double bestMagnitude = 99.0;
+				double bestAngularSizeArcmin = 0.0;
+				for (const double jd : sampleJDs)
+				{
+					core->setJD(jd);
+					core->update(0);
+					Vec3d altAz = planet->getAltAzPosApparent(core);
+					const double altitude = std::asin(altAz[2] / altAz.norm()) * 180.0 / M_PI;
+					if (altitude > bestAltitude)
+					{
+						bestJD = jd;
+						bestAltitude = altitude;
+						bestAzimuth = std::fmod(std::atan2(altAz[1], -altAz[0]) * 180.0 / M_PI + 360.0, 360.0);
+						bestMagnitude = planet->getVMagnitude(core);
+						bestAngularSizeArcmin = planet->getAngularRadius(core) * 120.0;
+					}
+				}
+				if (bestAltitude < minimumAltitude || bestMagnitude > maximumMagnitude)
+					continue;
+				if (limitAngularSize && (bestAngularSizeArcmin < minimumAngularSizeArcmin || bestAngularSizeArcmin > maximumAngularSizeArcmin))
+					continue;
+				core->setJD(bestJD);
+				core->update(0);
+				const Vec4d rts = planet->getRTSTime(core);
+				QJsonObject target;
+				target["name"] = planet->getNameI18n();
+				target["englishName"] = englishName;
+				target["type"] = QStringLiteral("行星");
+				target["jd"] = bestJD;
+				target["altitude"] = bestAltitude;
+				target["azimuth"] = bestAzimuth;
+				target["magnitude"] = bestMagnitude;
+				target["angularSizeArcmin"] = bestAngularSizeArcmin;
+				target["rise"] = fmtLocal(rts[0]);
+				target["transit"] = fmtLocal(rts[1]);
+				target["set"] = fmtLocal(rts[2]);
+				targets.append(target);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			std::sort(targets.begin(), targets.end(), [](const QJsonObject& first, const QJsonObject& second) {
+				return first.value("altitude").toDouble() > second.value("altitude").toDouble();
+			});
+			QJsonArray items;
+			for (const QJsonObject& target : targets)
+				items.append(target);
+			result["ok"] = true;
+			result["period"] = period;
+			result["angularSizeAvailable"] = angularSizeAvailable;
+			result["observationTime"] = fmtLocal(period == QStringLiteral("evening") ? evening : (period == QStringLiteral("morning") ? morning : midnight));
+			result["wutTargets"] = items;
+			return result;
+		}
+
 		// ========== Help/日志 与 配置导入导出 ==========
 		// getLog — 返回应用日志尾部（arg=最大字符数，默认 8000）
 		if (commandName == "getLog")
@@ -5767,28 +6301,60 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// getEphemeris — 选中（或指定）天体的星历表：随时间变化的 RA/Dec/高度/方位/星等
+		// getEphemeris — 一个或多个天体的星历表：随时间变化的 RA/Dec/高度/方位/星等
 		if (commandName == "getEphemeris")
 		{
 			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			QString name = jo.value("name").toString();
+			QStringList names;
+			if (jo.value("names").isArray())
+			{
+				for (const QJsonValue& value : jo.value("names").toArray())
+				{
+					const QString objectName = value.toString();
+					if (!objectName.isEmpty() && !names.contains(objectName))
+						names.append(objectName);
+				}
+			}
+			const bool allNakedEye = jo.value("allNakedEye").toBool(false);
 			double startJD = jo.value("jd").toDouble(0.0);
 			const int days = qBound(1, jo.value("days").toInt(14), 31);
 			const int stepHours = qBound(1, jo.value("stepHours").toInt(24), 24);
 
-			StelObjectP obj;
-			if (!name.isEmpty())
-				obj = objectMgr->searchByName(name);
+			if (allNakedEye)
+			{
+				SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+				if (!solarSystem || core->getCurrentPlanet()->getEnglishName() != QStringLiteral("Earth"))
+				{
+					result["ok"] = false;
+					result["error"] = "Naked-eye planet ephemeris is available on Earth only";
+					return result;
+				}
+				names = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter" << "Saturn";
+			}
+			else if (!name.isEmpty() && names.isEmpty())
+				names.append(name);
+
+			QList<StelObjectP> objects;
+			if (!names.isEmpty())
+			{
+				for (const QString& objectName : names)
+				{
+					StelObjectP object = objectMgr->searchByName(objectName);
+					if (object)
+						objects.append(object);
+				}
+			}
 			else
 			{
 				const QList<StelObjectP>& sel = objectMgr->getSelectedObject();
-				if (!sel.isEmpty()) obj = sel.first();
+				if (!sel.isEmpty()) objects.append(sel.first());
 			}
-			if (!obj)
+			if (objects.isEmpty())
 			{
 				result["ok"] = false;
-				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				result["error"] = names.isEmpty() ? "no object selected" : ("object not found: " + names.join(','));
 				return result;
 			}
 			if (startJD <= 0) startJD = core->getJD();
@@ -5800,28 +6366,34 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const double jd = startJD + i * stepHours / 24.0;
 				core->setJD(jd);
 				core->update(0);
-				double ra = 0.0;
-				double dec = 0.0;
-				StelUtils::rectToSphe(&ra, &dec, obj->getEquinoxEquatorialPos(core));
-				double az = 0.0;
-				double alt = 0.0;
-				StelUtils::rectToSphe(&az, &alt, obj->getAltAzPosAuto(core));
-				QJsonObject row;
-				row["jd"] = jd;
-				row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
-				row["ra"] = StelUtils::radToHmsStr(ra);
-				row["dec"] = StelUtils::radToDmsStr(dec);
-				row["altitude"] = alt * 180.0 / M_PI;
-				row["azimuth"] = StelUtils::fmodpos(az * 180.0 / M_PI, 360.0);
-				row["magnitude"] = obj->getVMagnitude(core);
-				rows.append(row);
+				for (const StelObjectP& object : objects)
+				{
+					double ra = 0.0;
+					double dec = 0.0;
+					StelUtils::rectToSphe(&ra, &dec, object->getEquinoxEquatorialPos(core));
+					double az = 0.0;
+					double alt = 0.0;
+					StelUtils::rectToSphe(&az, &alt, object->getAltAzPosAuto(core));
+					QJsonObject row;
+					row["jd"] = jd;
+					row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+					row["bodyName"] = object->getNameI18n().isEmpty() ? object->getEnglishName() : object->getNameI18n();
+					row["bodyEnglishName"] = object->getEnglishName();
+					row["ra"] = StelUtils::radToHmsStr(ra);
+					row["dec"] = StelUtils::radToDmsStr(dec);
+					row["altitude"] = alt * 180.0 / M_PI;
+					row["azimuth"] = StelUtils::fmodpos(az * 180.0 / M_PI, 360.0);
+					row["magnitude"] = object->getVMagnitude(core);
+					rows.append(row);
+				}
 			}
 			core->setJD(origJD);
 			core->update(0);
 			result["ok"] = true;
-			result["name"] = obj->getNameI18n();
-			if (result["name"].toString().isEmpty())
-				result["name"] = obj->getEnglishName();
+			QStringList objectNames;
+			for (const StelObjectP& object : objects)
+				objectNames.append(object->getNameI18n().isEmpty() ? object->getEnglishName() : object->getNameI18n());
+			result["name"] = objectNames.join(QStringLiteral("、"));
 			result["ephemeris"] = rows;
 			return result;
 		}
@@ -5835,6 +6407,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double startJD = jo.value("jd").toDouble(0.0);
 			const int hours = qBound(1, jo.value("hours").toInt(24), 72);
 			const int stepMin = qBound(5, jo.value("stepMin").toInt(30), 60);
+			const bool includeSun = jo.value("includeSun").toBool(false);
+			const bool includeMoon = jo.value("includeMoon").toBool(false);
 
 			StelObjectP obj;
 			if (!name.isEmpty())
@@ -5852,6 +6426,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			if (startJD <= 0) startJD = core->getJD();
 			const double origJD = core->getJD();
+			SolarSystem* solarSystem = (includeSun || includeMoon) ? GETSTELMODULE(SolarSystem) : nullptr;
+			PlanetP sun = (includeSun && solarSystem) ? solarSystem->getSun() : PlanetP();
+			PlanetP moon = (includeMoon && solarSystem) ? solarSystem->getMoon() : PlanetP();
 			QJsonArray rows;
 			int n = (hours * 60) / stepMin;
 			for (int i = 0; i <= n; i++)
@@ -5867,6 +6444,20 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				row["t"] = i * stepMin / 60.0; // hours from start
 				row["altitude"] = alt * 180.0 / M_PI;
 				row["azimuth"] = StelUtils::fmodpos(az * 180.0 / M_PI, 360.0);
+				if (sun)
+				{
+					double sunAzimuth = 0.0;
+					double sunAltitude = 0.0;
+					StelUtils::rectToSphe(&sunAzimuth, &sunAltitude, sun->getAltAzPosAuto(core));
+					row["sunAltitude"] = sunAltitude * 180.0 / M_PI;
+				}
+				if (moon)
+				{
+					double moonAzimuth = 0.0;
+					double moonAltitude = 0.0;
+					StelUtils::rectToSphe(&moonAzimuth, &moonAltitude, moon->getAltAzPosAuto(core));
+					row["moonAltitude"] = moonAltitude * 180.0 / M_PI;
+				}
 				rows.append(row);
 			}
 			core->setJD(origJD);
@@ -5874,6 +6465,339 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["name"] = obj->getNameI18n();
 			result["curve"] = rows;
+			return result;
+		}
+
+		// getLunarElongationCurve - angular distance between the Moon and the selected target.
+		if (commandName == "getLunarElongationCurve")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString name = options.value("name").toString();
+			double startJD = options.value("jd").toDouble(0.0);
+			const int days = qBound(7, options.value("days").toInt(30), 90);
+			const int stepHours = qBound(1, options.value("stepHours").toInt(12), 24);
+
+			StelObjectP object;
+			if (!name.isEmpty())
+				object = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+				if (!selected.isEmpty()) object = selected.first();
+			}
+			if (!object)
+			{
+				result["ok"] = false;
+				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				return result;
+			}
+
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			PlanetP moon = solarSystem ? solarSystem->getMoon() : PlanetP();
+			if (!moon)
+			{
+				result["ok"] = false;
+				result["error"] = "Moon unavailable";
+				return result;
+			}
+			if (object == moon || object->getType() == "Satellite")
+			{
+				result["ok"] = false;
+				result["error"] = "lunar separation is unavailable for the Moon or satellites";
+				return result;
+			}
+
+			if (startJD <= 0.0) startJD = core->getJD();
+			const double originalJD = core->getJD();
+			QJsonArray rows;
+			const int samples = (days * 24) / stepHours;
+			for (int index = 0; index <= samples; ++index)
+			{
+				const double jd = startJD + index * stepHours / 24.0;
+				core->setJD(jd);
+				core->update(0);
+				QJsonObject row;
+				row["jd"] = jd;
+				row["t"] = index * stepHours / 24.0;
+				row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+				row["separation"] = moon->getJ2000EquatorialPos(core).angle(object->getJ2000EquatorialPos(core)) * M_180_PI;
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["name"] = object->getNameI18n();
+			if (result["name"].toString().isEmpty()) result["name"] = object->getEnglishName();
+			result["lunarElongation"] = rows;
+			return result;
+		}
+
+		// getPlanetTimeSeries - two independent planetary quantities sampled over time.
+		if (commandName == "getPlanetTimeSeries")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString name = options.value("name").toString();
+			double startJD = options.value("jd").toDouble(0.0);
+			const int days = qBound(7, options.value("days").toInt(30), 3650);
+			const int stepHours = qBound(1, options.value("stepHours").toInt(24), 240);
+			const QString leftMetric = options.value("leftMetric").toString("angularSize");
+			const QString rightMetric = options.value("rightMetric").toString("magnitude");
+			const QStringList metrics = {
+				"magnitude", "phase", "distance", "elongation", "angularSize",
+				"phaseAngle", "heliocentricDistance", "transitAltitude", "rightAscension", "declination"
+			};
+			if (!metrics.contains(leftMetric) || !metrics.contains(rightMetric))
+			{
+				result["ok"] = false;
+				result["error"] = "unsupported graph metric";
+				return result;
+			}
+
+			StelObjectP object;
+			if (!name.isEmpty())
+				object = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+				if (!selected.isEmpty()) object = selected.first();
+			}
+			Planet* planet = object ? dynamic_cast<Planet*>(object.data()) : nullptr;
+			if (!planet)
+			{
+				result["ok"] = false;
+				result["error"] = "selected object is not a planet";
+				return result;
+			}
+
+			if (startJD <= 0.0) startJD = core->getJD();
+			const double originalJD = core->getJD();
+			auto measure = [&](const QString& metric) -> double {
+				const Vec3d observerPosition = core->getCurrentObserver()->getCenterVsop87Pos();
+				if (metric == "magnitude") return planet->getVMagnitude(core);
+				if (metric == "phase") return planet->getPhase(observerPosition) * 100.0;
+				if (metric == "distance")
+				{
+					double distance = planet->getJ2000EquatorialPos(core).norm();
+					if (planet->getEnglishName() == "Moon") distance *= AU * 0.001;
+					return distance;
+				}
+				if (metric == "elongation") return planet->getElongation(observerPosition) * M_180_PI;
+				if (metric == "angularSize") return planet->getSpheroidAngularRadius(core) * 7200.0;
+				if (metric == "phaseAngle") return planet->getPhaseAngle(observerPosition) * M_180_PI;
+				if (metric == "heliocentricDistance") return planet->getHeliocentricEclipticPos().norm();
+				if (metric == "transitAltitude")
+				{
+					double azimuth = 0.0;
+					double altitude = 0.0;
+					StelUtils::rectToSphe(&azimuth, &altitude, planet->getAltAzPosAuto(core));
+					return altitude * M_180_PI;
+				}
+				double rightAscension = 0.0;
+				double declination = 0.0;
+				StelUtils::rectToSphe(&rightAscension, &declination, planet->getEquinoxEquatorialPos(core));
+				if (metric == "rightAscension")
+				{
+					rightAscension = 2.0 * M_PI - rightAscension;
+					return rightAscension * 12.0 / M_PI;
+				}
+				return declination * M_180_PI;
+			};
+
+			QJsonArray rows;
+			const int samples = (days * 24) / stepHours;
+			for (int index = 0; index <= samples; ++index)
+			{
+				double jd = startJD + index * stepHours / 24.0;
+				core->setJD(jd);
+				core->update(0);
+				if (leftMetric == "transitAltitude" || rightMetric == "transitAltitude")
+				{
+					const double transitJD = planet->getRTSTime(core)[1];
+					if (transitJD > 0.0)
+					{
+						jd = transitJD;
+						core->setJD(jd);
+						core->update(0);
+					}
+				}
+				QJsonObject row;
+				row["jd"] = jd;
+				row["t"] = (jd - startJD) * 24.0;
+				row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+				row["left"] = measure(leftMetric);
+				row["right"] = measure(rightMetric);
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["name"] = object->getNameI18n();
+			if (result["name"].toString().isEmpty()) result["name"] = object->getEnglishName();
+			result["timeSeries"] = rows;
+			return result;
+		}
+
+		// getAnnualElevation - sampled elevation for the current local year at a fixed local hour.
+		if (commandName == "getAnnualElevation")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString name = options.value("name").toString();
+			const int hour = qBound(0, options.value("hour").toInt(0), 23);
+
+			StelObjectP object;
+			if (!name.isEmpty())
+				object = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+				if (!selected.isEmpty()) object = selected.first();
+			}
+			if (!object)
+			{
+				result["ok"] = false;
+				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				return result;
+			}
+
+			const double originalJD = core->getJD();
+			const double originalOffset = core->getUTCOffset(originalJD) / 24.0;
+			int year = 0;
+			int month = 0;
+			int day = 0;
+			StelUtils::getDateFromJulianDay(originalJD + originalOffset, &year, &month, &day);
+			double localStartJD = 0.0;
+			StelUtils::getJDFromDate(&localStartJD, year, 1, 1, hour, 0, 0);
+			QJsonArray rows;
+			for (int dayOffset = 0; dayOffset <= 366; dayOffset += 3)
+			{
+				const double approximateLocalJD = localStartJD + static_cast<double>(dayOffset);
+				const double sampleJD = approximateLocalJD - core->getUTCOffset(approximateLocalJD) / 24.0;
+				core->setJD(sampleJD);
+				core->update(0);
+				double azimuth = 0.0;
+				double altitude = 0.0;
+				StelUtils::rectToSphe(&azimuth, &altitude, object->getAltAzPosAuto(core));
+				QJsonObject row;
+				row["jd"] = sampleJD;
+				row["date"] = StelUtils::julianDayToISO8601String(sampleJD + core->getUTCOffset(sampleJD) / 24.0).left(10);
+				row["altitude"] = altitude * M_180_PI;
+				row["azimuth"] = StelUtils::fmodpos(azimuth * M_180_PI, 360.0);
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["name"] = object->getNameI18n();
+			if (result["name"].toString().isEmpty()) result["name"] = object->getEnglishName();
+			result["annualElevation"] = rows;
+			return result;
+		}
+
+		// getObservabilityCalendar - future nightly observing windows for the selected target.
+		if (commandName == "getObservabilityCalendar")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString name = options.value("name").toString();
+			double startJD = options.value("jd").toDouble(0.0);
+			const int days = qBound(7, options.value("days").toInt(30), 90);
+			const double minAltitude = qBound(0.0, options.value("minAltitude").toDouble(20.0), 80.0);
+
+			StelObjectP object;
+			if (!name.isEmpty())
+				object = objectMgr->searchByName(name);
+			else
+			{
+				const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+				if (!selected.isEmpty()) object = selected.first();
+			}
+			if (!object)
+			{
+				result["ok"] = false;
+				result["error"] = name.isEmpty() ? "no object selected" : ("object not found: " + name);
+				return result;
+			}
+
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			PlanetP sun = solarSystem ? solarSystem->getSun() : PlanetP();
+			PlanetP moon = solarSystem ? solarSystem->getMoon() : PlanetP();
+			if (!sun || !moon)
+			{
+				result["ok"] = false;
+				result["error"] = "Sun or Moon unavailable";
+				return result;
+			}
+
+			if (startJD <= 0.0) startJD = core->getJD();
+			const double originalJD = core->getJD();
+			QJsonArray rows;
+			for (int day = 0; day < days; ++day)
+			{
+				core->setJD(startJD + static_cast<double>(day));
+				core->update(0);
+				const Vec4d twilight = sun->getRTSTime(core, -18.0);
+				double dusk = twilight[2];
+				double dawn = twilight[0];
+				QJsonObject row;
+				if (dusk <= 0.0 || dawn <= 0.0)
+				{
+					row["date"] = StelUtils::julianDayToISO8601String(startJD + day + core->getUTCOffset(startJD + day) / 24.0).left(10);
+					row["darkHours"] = 0.0;
+					row["visibleHours"] = 0.0;
+					rows.append(row);
+					continue;
+				}
+				if (dawn <= dusk) dawn += 1.0;
+				const int samples = 24;
+				const double step = (dawn - dusk) / static_cast<double>(samples);
+				double maxAltitude = -90.0;
+				double bestJD = dusk;
+				double visibleHours = 0.0;
+				double previousAltitude = -90.0;
+				for (int sample = 0; sample <= samples; ++sample)
+				{
+					const double sampleJD = dusk + step * sample;
+					core->setJD(sampleJD);
+					core->update(0);
+					double azimuth = 0.0;
+					double altitude = 0.0;
+					StelUtils::rectToSphe(&azimuth, &altitude, object->getAltAzPosAuto(core));
+					const double altitudeDegrees = altitude * M_180_PI;
+					if (altitudeDegrees > maxAltitude)
+					{
+						maxAltitude = altitudeDegrees;
+						bestJD = sampleJD;
+					}
+					if (sample > 0 && previousAltitude >= minAltitude && altitudeDegrees >= minAltitude)
+						visibleHours += step * 24.0;
+					previousAltitude = altitudeDegrees;
+				}
+
+				core->setJD(bestJD);
+				core->update(0);
+				double moonAzimuth = 0.0;
+				double moonAltitude = 0.0;
+				StelUtils::rectToSphe(&moonAzimuth, &moonAltitude, moon->getAltAzPosAuto(core));
+				const QVariantMap moonInfo = moon->getInfoMap(core);
+				row["date"] = StelUtils::julianDayToISO8601String(dusk + core->getUTCOffset(dusk) / 24.0).left(10);
+				row["bestJD"] = bestJD;
+				row["peakTime"] = StelUtils::julianDayToISO8601String(bestJD + core->getUTCOffset(bestJD) / 24.0);
+				row["maxAltitude"] = maxAltitude;
+				row["visibleHours"] = visibleHours;
+				row["darkHours"] = (dawn - dusk) * 24.0;
+				row["moonIllumination"] = moonInfo.value("illumination", 0.0).toDouble();
+				row["moonAltitude"] = moonAltitude * M_180_PI;
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["name"] = object->getNameI18n();
+			if (result["name"].toString().isEmpty()) result["name"] = object->getEnglishName();
+			result["observability"] = rows;
 			return result;
 		}
 
@@ -5934,46 +6858,176 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// getPhenomena — 行星间的合：扫描每个局部最小角距，再细化事件时刻。
+		// getPlanetPairDistanceCurve - linear and angular distance between two solar-system bodies.
+		if (commandName == "getPlanetPairDistanceCurve")
+		{
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const QString firstName = options.value("first").toString("Sun");
+			const QString secondName = options.value("second").toString("Moon");
+			double centerJD = options.value("jd").toDouble(0.0);
+			const int days = qBound(7, options.value("days").toInt(40), 365);
+			const int stepDays = qBound(1, options.value("stepDays").toInt(4), 30);
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			PlanetP first = solarSystem ? qSharedPointerCast<Planet>(solarSystem->searchByName(firstName)) : PlanetP();
+			PlanetP second = solarSystem ? qSharedPointerCast<Planet>(solarSystem->searchByName(secondName)) : PlanetP();
+			if (!first || !second || first == second)
+			{
+				result["ok"] = false;
+				result["error"] = "two different solar-system bodies are required";
+				return result;
+			}
+
+			if (centerJD <= 0.0) centerJD = core->getJD();
+			const double originalJD = core->getJD();
+			const double utcOffset = core->getUTCOffset(centerJD) / 24.0;
+			const double localMidnightJD = std::floor(centerJD + utcOffset - 0.5) + 0.5 - utcOffset;
+			const PlanetP currentPlanet = core->getCurrentPlanet();
+			const bool angularAvailable = first != currentPlanet && second != currentPlanet;
+			QJsonArray rows;
+			for (int dayOffset = -days; dayOffset <= days; dayOffset += stepDays)
+			{
+				const double jd = localMidnightJD + dayOffset;
+				core->setJD(jd);
+				core->update(0);
+				const Vec3d firstPosition = first->getJ2000EquatorialPos(core);
+				const Vec3d secondPosition = second->getJ2000EquatorialPos(core);
+				QJsonObject row;
+				row["jd"] = jd;
+				row["t"] = dayOffset;
+				row["date"] = StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+				row["linearDistance"] = (firstPosition - secondPosition).norm();
+				if (angularAvailable)
+					row["angularDistance"] = firstPosition.angle(secondPosition) * M_180_PI;
+				rows.append(row);
+			}
+			core->setJD(originalJD);
+			core->update(0);
+			result["ok"] = true;
+			result["firstName"] = first->getNameI18n();
+			if (result["firstName"].toString().isEmpty()) result["firstName"] = first->getEnglishName();
+			result["secondName"] = second->getNameI18n();
+			if (result["secondName"].toString().isEmpty()) result["secondName"] = second->getEnglishName();
+			result["angularAvailable"] = angularAvailable;
+			result["planetPairDistance"] = rows;
+			return result;
+		}
+
+		// getPhenomena — 扫描天体接近、留点及行星轨道事件，再细化事件时刻。
 		if (commandName == "getPhenomena")
 		{
+			struct PhenomenaSample
+			{
+				QList<double> pairSeparations;
+				QList<double> solarSeparations;
+				QList<double> heliocentricDistances;
+				QList<double> rightAscensions;
+			};
+
 			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
-			QStringList planetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
-													   << "Saturn" << "Uranus" << "Neptune";
+			const QStringList defaultPlanetNames = QStringList() << "Mercury" << "Venus" << "Mars" << "Jupiter"
+															  << "Saturn" << "Uranus" << "Neptune";
+			const QStringList selectablePlanetNames = QStringList() << "Sun" << "Moon" << "Mercury" << "Venus"
+																 << "Mars" << "Jupiter" << "Saturn" << "Uranus" << "Neptune" << "Pluto";
 			QList<QJsonObject> phenomenaList;
 			QList<PlanetP> planets;
-			for (const QString& pn : planetNames)
+			PlanetP sun = ssys->getSun();
+			if (!sun)
 			{
-				PlanetP p = qSharedPointerCast<Planet>(ssys->searchByName(pn));
-				if (p) planets.append(p);
+				result["ok"] = false;
+				result["error"] = "Sun unavailable";
+				return result;
+			}
+			const QString primaryName = jo.value("bodyA").toString();
+			const QString secondaryName = jo.value("bodyB").toString();
+			const bool customPair = !primaryName.isEmpty() && primaryName != QStringLiteral("all");
+			auto findPlanet = [&](const QString& name) -> PlanetP {
+				return qSharedPointerCast<Planet>(ssys->searchByName(name));
+			};
+			if (customPair)
+			{
+				PlanetP primary = findPlanet(primaryName);
+				if (!primary)
+				{
+					result["ok"] = false;
+					result["error"] = "Selected body unavailable";
+					return result;
+				}
+				planets.append(primary);
+				const QStringList targetNames = secondaryName.isEmpty() || secondaryName == QStringLiteral("all")
+					? selectablePlanetNames : QStringList() << secondaryName;
+				for (const QString& name : targetNames)
+				{
+					if (name == primaryName)
+						continue;
+					PlanetP target = findPlanet(name);
+					if (target)
+						planets.append(target);
+				}
+			}
+			else
+			{
+				for (const QString& name : defaultPlanetNames)
+				{
+					PlanetP planet = findPlanet(name);
+					if (planet)
+						planets.append(planet);
+				}
+			}
+			if (planets.size() < 2)
+			{
+				result["ok"] = false;
+				result["error"] = "Not enough bodies to compare";
+				return result;
 			}
 			const double origJD = core->getJD();
-			const double startJD = jo.value("jd").toDouble(origJD);
+			const double startJD = jo.value("jd").toDouble(origJD) + qBound(0, jo.value("startOffsetMonths").toInt(0), 24) * 30.4375;
 			const int horizon = qBound(1, jo.value("days").toInt(400), 730);
-			const double maxSeparation = qBound(0.5, jo.value("maxSeparation").toDouble(4.0), 10.0);
+			const double maxSeparation = qBound(0.5, jo.value("maxSeparation").toDouble(4.0), 20.0);
+			const bool includeOppositions = jo.value("includeOppositions").toBool(true);
+			const bool includePerihelionAphelion = jo.value("includePerihelionAphelion").toBool(true);
+			const bool includeElongationsQuadratures = jo.value("includeElongationsQuadratures").toBool(true);
+			const bool includeStations = jo.value("includeStations").toBool(true);
 			const double coarseStep = 0.25; // 6 hours
 
 			QList<QPair<int, int>> pairs;
-			for (int a = 0; a < planets.size(); ++a)
-				for (int b = a + 1; b < planets.size(); ++b)
-					pairs.append(qMakePair(a, b));
+			if (customPair)
+			{
+				for (int index = 1; index < planets.size(); ++index)
+					pairs.append(qMakePair(0, index));
+			}
+			else
+			{
+				for (int a = 0; a < planets.size(); ++a)
+					for (int b = a + 1; b < planets.size(); ++b)
+						pairs.append(qMakePair(a, b));
+			}
 
-			auto separationAt = [&](double jd) -> QList<double> {
+			auto separationAt = [&](double jd) -> PhenomenaSample {
 				core->setJD(jd);
 				core->update(0);
+				PhenomenaSample sample;
 				QList<Vec3d> positions;
 				for (const PlanetP& planet : planets)
 				{
 					Vec3d position = planet->getEquinoxEquatorialPos(core);
+					double ra = 0.0;
+					double dec = 0.0;
+					StelUtils::rectToSphe(&ra, &dec, position);
 					position.normalize();
 					positions.append(position);
+					sample.heliocentricDistances.append(planet->getHeliocentricEclipticPos().norm());
+					sample.rightAscensions.append(ra * 180.0 / M_PI);
 				}
-				QList<double> separations;
+				Vec3d sunPosition = sun->getEquinoxEquatorialPos(core);
+				sunPosition.normalize();
 				for (const QPair<int, int>& pair : pairs)
-					separations.append(std::acos(qBound(-1.0, positions[pair.first].dot(positions[pair.second]), 1.0)) * 180.0 / M_PI);
-				return separations;
+					sample.pairSeparations.append(std::acos(qBound(-1.0, positions[pair.first].dot(positions[pair.second]), 1.0)) * 180.0 / M_PI);
+				for (const Vec3d& position : positions)
+					sample.solarSeparations.append(std::acos(qBound(-1.0, position.dot(sunPosition), 1.0)) * 180.0 / M_PI);
+				return sample;
 			};
 
 			auto separationDeg = [&](PlanetP first, PlanetP second, double jd) -> double {
@@ -6000,29 +7054,183 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return qMakePair(bestJD, bestSeparation);
 			};
 
+			auto refineMaximum = [&](PlanetP first, PlanetP second, double jd0) -> QPair<double, double> {
+				double bestJD = jd0;
+				double bestSeparation = -1.0;
+				for (int k = -36; k <= 36; ++k)
+				{
+					const double jd = jd0 + k * (1.0 / 144.0);
+					const double separation = separationDeg(first, second, jd);
+					if (separation > bestSeparation)
+					{
+						bestSeparation = separation;
+						bestJD = jd;
+					}
+				}
+				return qMakePair(bestJD, bestSeparation);
+			};
+
+			auto refineSolarCrossing = [&](PlanetP planet, double start, double end, double target) -> QPair<double, double> {
+				double startValue = separationDeg(planet, sun, start) - target;
+				for (int iteration = 0; iteration < 18; ++iteration)
+				{
+					const double middle = (start + end) / 2.0;
+					const double middleValue = separationDeg(planet, sun, middle) - target;
+					if ((startValue <= 0.0 && middleValue <= 0.0) || (startValue >= 0.0 && middleValue >= 0.0))
+					{
+						start = middle;
+						startValue = middleValue;
+					}
+					else
+						end = middle;
+				}
+				const double eventJD = (start + end) / 2.0;
+				return qMakePair(eventJD, separationDeg(planet, sun, eventJD));
+			};
+
+			auto refineDistanceExtremum = [&](PlanetP planet, double jd0, bool minimum) -> QPair<double, double> {
+				double bestJD = jd0;
+				double bestDistance = minimum ? 999.0 : -1.0;
+				for (int k = -36; k <= 36; ++k)
+				{
+					const double jd = jd0 + k * (1.0 / 144.0);
+					const double distance = planet->getHeliocentricEclipticPos(jd + core->computeDeltaT(jd) / 86400.0).norm();
+					if ((minimum && distance < bestDistance) || (!minimum && distance > bestDistance))
+					{
+						bestDistance = distance;
+						bestJD = jd;
+					}
+				}
+				return qMakePair(bestJD, bestDistance);
+			};
+
+			auto refineStationaryPoint = [&](PlanetP planet, double jd0, bool maximum) -> QPair<double, double> {
+				core->setJD(jd0);
+				core->update(0);
+				Vec3d centerPosition = planet->getEquinoxEquatorialPos(core);
+				double referenceRA = 0.0;
+				double dec = 0.0;
+				StelUtils::rectToSphe(&referenceRA, &dec, centerPosition);
+				referenceRA *= 180.0 / M_PI;
+				double bestJD = jd0;
+				double bestRA = maximum ? -999.0 : 999.0;
+				for (int k = -36; k <= 36; ++k)
+				{
+					const double jd = jd0 + k * (1.0 / 144.0);
+					core->setJD(jd);
+					core->update(0);
+					Vec3d position = planet->getEquinoxEquatorialPos(core);
+					double ra = 0.0;
+					StelUtils::rectToSphe(&ra, &dec, position);
+					ra *= 180.0 / M_PI;
+					while (ra - referenceRA > 180.0) ra -= 360.0;
+					while (ra - referenceRA < -180.0) ra += 360.0;
+					if ((maximum && ra > bestRA) || (!maximum && ra < bestRA))
+					{
+						bestRA = ra;
+						bestJD = jd;
+					}
+				}
+				return qMakePair(bestJD, StelUtils::fmodpos(bestRA, 360.0));
+			};
+
+			auto addPhenomenon = [&](const QString& type, PlanetP first, PlanetP second, const QPair<double, double>& event,
+				const QString& metricLabel, const QString& metricUnit = QStringLiteral("°")) {
+				QJsonObject po;
+				po["type"] = type;
+				po["bodyA"] = first->getNameI18n();
+				po["bodyB"] = second->getNameI18n();
+				po["jd"] = event.first;
+				po["date"] = StelUtils::julianDayToISO8601String(event.first + core->getUTCOffset(event.first) / 24.0);
+				po["separation"] = event.second;
+				po["metricLabel"] = metricLabel;
+				po["metricUnit"] = metricUnit;
+				phenomenaList.append(po);
+			};
+
 			const int samples = static_cast<int>(horizon / coarseStep);
-			QList<double> previous = separationAt(startJD);
-			QList<double> current = separationAt(startJD + coarseStep);
+			PhenomenaSample previous = separationAt(startJD);
+			PhenomenaSample current = separationAt(startJD + coarseStep);
 			for (int i = 1; i < samples; ++i)
 			{
 				const double jd = startJD + (i + 1) * coarseStep;
-				const QList<double> next = separationAt(jd);
+				const PhenomenaSample next = separationAt(jd);
 				for (int pairIndex = 0; pairIndex < pairs.size(); ++pairIndex)
 				{
-					if (current[pairIndex] <= previous[pairIndex] && current[pairIndex] < next[pairIndex] && current[pairIndex] <= maxSeparation)
+					if (current.pairSeparations[pairIndex] <= previous.pairSeparations[pairIndex]
+						&& current.pairSeparations[pairIndex] < next.pairSeparations[pairIndex]
+						&& current.pairSeparations[pairIndex] <= maxSeparation)
 					{
 						const QPair<int, int>& pair = pairs[pairIndex];
 						const QPair<double, double> event = refineMinimum(planets[pair.first], planets[pair.second], startJD + i * coarseStep);
 						if (event.second <= maxSeparation)
+							addPhenomenon(QStringLiteral("合"), planets[pair.first], planets[pair.second], event, QStringLiteral("角距"));
+					}
+				}
+				const int specialPlanetEnd = customPair ? 1 : planets.size();
+				for (int planetIndex = 0; planetIndex < specialPlanetEnd; ++planetIndex)
+				{
+					const QString englishName = planets[planetIndex]->getEnglishName();
+					const bool outerPlanet = englishName == "Mars" || englishName == "Jupiter" || englishName == "Saturn"
+						|| englishName == "Uranus" || englishName == "Neptune";
+					const bool innerPlanet = englishName == "Mercury" || englishName == "Venus";
+					const bool eligibleForOrbitalEvents = planets[planetIndex] != sun && englishName != "Moon";
+					if (includeOppositions && outerPlanet && current.solarSeparations[planetIndex] >= previous.solarSeparations[planetIndex]
+						&& current.solarSeparations[planetIndex] > next.solarSeparations[planetIndex]
+						&& current.solarSeparations[planetIndex] >= 170.0)
+					{
+						const QPair<double, double> event = refineMaximum(planets[planetIndex], sun, startJD + i * coarseStep);
+						if (event.second >= 170.0)
+							addPhenomenon(QStringLiteral("冲"), planets[planetIndex], sun, event, QStringLiteral("距日"));
+					}
+					if (includeElongationsQuadratures && innerPlanet && current.solarSeparations[planetIndex] >= previous.solarSeparations[planetIndex]
+						&& current.solarSeparations[planetIndex] > next.solarSeparations[planetIndex]
+						&& current.solarSeparations[planetIndex] >= 10.0)
+					{
+						const QPair<double, double> event = refineMaximum(planets[planetIndex], sun, startJD + i * coarseStep);
+						core->setJD(event.first);
+						core->update(0);
+						const double direction = planets[planetIndex]->getElongationDLambda() * 180.0 / M_PI;
+						addPhenomenon(direction < 180.0 ? QStringLiteral("东大距") : QStringLiteral("西大距"),
+							planets[planetIndex], sun, event, QStringLiteral("距日"));
+					}
+					if (includeElongationsQuadratures && outerPlanet)
+					{
+						const double currentOffset = current.solarSeparations[planetIndex] - 90.0;
+						const double nextOffset = next.solarSeparations[planetIndex] - 90.0;
+						if ((currentOffset <= 0.0 && nextOffset > 0.0) || (currentOffset >= 0.0 && nextOffset < 0.0))
 						{
-							QJsonObject po;
-							po["bodyA"] = planets[pair.first]->getNameI18n();
-							po["bodyB"] = planets[pair.second]->getNameI18n();
-							po["jd"] = event.first;
-							po["date"] = StelUtils::julianDayToISO8601String(event.first + core->getUTCOffset(event.first) / 24.0);
-							po["separation"] = event.second;
-							phenomenaList.append(po);
+							const QPair<double, double> event = refineSolarCrossing(planets[planetIndex], startJD + i * coarseStep, jd, 90.0);
+							core->setJD(event.first);
+							core->update(0);
+							const double direction = planets[planetIndex]->getElongationDLambda() * 180.0 / M_PI;
+							addPhenomenon(direction < 180.0 ? QStringLiteral("东方照") : QStringLiteral("西方照"),
+								planets[planetIndex], sun, event, QStringLiteral("距日"));
 						}
+					}
+					if (includePerihelionAphelion && eligibleForOrbitalEvents && current.heliocentricDistances[planetIndex] <= previous.heliocentricDistances[planetIndex]
+						&& current.heliocentricDistances[planetIndex] < next.heliocentricDistances[planetIndex])
+					{
+						const QPair<double, double> event = refineDistanceExtremum(planets[planetIndex], startJD + i * coarseStep, true);
+						addPhenomenon(QStringLiteral("近日点"), planets[planetIndex], sun, event, QStringLiteral("日心距"), QStringLiteral(" AU"));
+					}
+					if (includePerihelionAphelion && eligibleForOrbitalEvents && current.heliocentricDistances[planetIndex] >= previous.heliocentricDistances[planetIndex]
+						&& current.heliocentricDistances[planetIndex] > next.heliocentricDistances[planetIndex])
+					{
+						const QPair<double, double> event = refineDistanceExtremum(planets[planetIndex], startJD + i * coarseStep, false);
+						addPhenomenon(QStringLiteral("远日点"), planets[planetIndex], sun, event, QStringLiteral("日心距"), QStringLiteral(" AU"));
+					}
+					const double previousMotion = StelUtils::fmodpos(current.rightAscensions[planetIndex] - previous.rightAscensions[planetIndex] + 180.0, 360.0) - 180.0;
+					const double nextMotion = StelUtils::fmodpos(next.rightAscensions[planetIndex] - current.rightAscensions[planetIndex] + 180.0, 360.0) - 180.0;
+					if (includeStations && eligibleForOrbitalEvents && previousMotion > 0.0 && nextMotion < 0.0)
+					{
+						const QPair<double, double> event = refineStationaryPoint(planets[planetIndex], startJD + i * coarseStep, true);
+						addPhenomenon(QStringLiteral("留（转逆行）"), planets[planetIndex], sun, event, QStringLiteral("赤经"));
+					}
+					if (includeStations && eligibleForOrbitalEvents && previousMotion < 0.0 && nextMotion > 0.0)
+					{
+						const QPair<double, double> event = refineStationaryPoint(planets[planetIndex], startJD + i * coarseStep, false);
+						addPhenomenon(QStringLiteral("留（转顺行）"), planets[planetIndex], sun, event, QStringLiteral("赤经"));
 					}
 				}
 				previous = current;
@@ -6035,16 +7243,455 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			std::sort(phenomenaList.begin(), phenomenaList.end(), [](const QJsonObject& x, const QJsonObject& y) {
 				return x.value("jd").toDouble() < y.value("jd").toDouble();
 			});
+			QList<QJsonObject> deduplicated;
 			for (const QJsonObject& po : phenomenaList)
+			{
+				int duplicateIndex = -1;
+				for (int index = deduplicated.size() - 1; index >= 0; --index)
+				{
+					const QJsonObject& previousEvent = deduplicated.at(index);
+					if (po.value("jd").toDouble() - previousEvent.value("jd").toDouble() >= 30.0)
+						break;
+					if (po.value("type").toString() == previousEvent.value("type").toString()
+						&& po.value("bodyA").toString() == previousEvent.value("bodyA").toString()
+						&& po.value("bodyB").toString() == previousEvent.value("bodyB").toString())
+					{
+						duplicateIndex = index;
+						break;
+					}
+				}
+				if (duplicateIndex >= 0)
+				{
+					const bool conjunction = po.value("type").toString() == QStringLiteral("合");
+					const double candidateValue = po.value("separation").toDouble();
+					const double previousValue = deduplicated.at(duplicateIndex).value("separation").toDouble();
+					if ((conjunction && candidateValue < previousValue) || (!conjunction && candidateValue > previousValue))
+						deduplicated[duplicateIndex] = po;
+					continue;
+				}
+				deduplicated.append(po);
+			}
+			for (const QJsonObject& po : deduplicated)
 				items.append(po);
 			result["ok"] = true;
 			result["phenomena"] = items;
 			return result;
 		}
 
+		if (commandName == "getMoonPhases")
+		{
+			struct MoonPhaseDefinition
+			{
+				double elongation;
+				QString name;
+			};
+
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			const int days = qBound(1, options.value("days").toInt(30), 365);
+			const double startJD = options.value("jd").toDouble(core->getJD());
+			const double endJD = startJD + static_cast<double>(days);
+			const double originalJD = core->getJD();
+			const bool originalTopocentric = core->getUseTopocentricCoordinates();
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			PlanetP sun = ssys->getSun();
+			PlanetP moon = ssys->getMoon();
+			PlanetP earth = ssys->getEarth();
+			if (!sun || !moon || !earth)
+			{
+				result["error"] = "Sun, Moon, or Earth unavailable";
+				return result;
+			}
+
+			core->setUseTopocentricCoordinates(false);
+			auto phaseOffset = [&](double jd, double target) -> double {
+				core->setJD(jd);
+				core->update(0);
+				double moonRa = 0.0;
+				double moonDec = 0.0;
+				double sunRa = 0.0;
+				double sunDec = 0.0;
+				double moonLongitude = 0.0;
+				double moonLatitude = 0.0;
+				double sunLongitude = 0.0;
+				double sunLatitude = 0.0;
+				const double obliquity = earth->getRotObliquity(core->getJDE());
+				StelUtils::rectToSphe(&moonRa, &moonDec, moon->getEquinoxEquatorialPos(core));
+				StelUtils::rectToSphe(&sunRa, &sunDec, sun->getEquinoxEquatorialPos(core));
+				StelUtils::equToEcl(moonRa, moonDec, obliquity, &moonLongitude, &moonLatitude);
+				StelUtils::equToEcl(sunRa, sunDec, obliquity, &sunLongitude, &sunLatitude);
+				return StelUtils::fmodpos((moonLongitude - sunLongitude) * M_180_PI - target, 360.0);
+			};
+
+			QList<QPair<MoonPhaseDefinition, double>> phaseEvents;
+			const QList<MoonPhaseDefinition> phases = {
+				{0.0, QStringLiteral("新月")},
+				{90.0, QStringLiteral("上弦")},
+				{180.0, QStringLiteral("满月")},
+				{270.0, QStringLiteral("下弦")}
+			};
+			for (const MoonPhaseDefinition& phase : phases)
+			{
+				const double step = 0.25;
+				double leftJD = startJD;
+				double leftOffset = phaseOffset(leftJD, phase.elongation);
+				if (leftOffset < 0.001)
+					phaseEvents.append(qMakePair(phase, leftJD));
+				for (double rightJD = startJD + step; rightJD <= endJD + 0.0001; rightJD += step)
+				{
+					const double rightOffset = phaseOffset(rightJD, phase.elongation);
+					if (rightOffset < leftOffset)
+					{
+						double lower = leftJD;
+						double upper = rightJD;
+						for (int iteration = 0; iteration < 24; ++iteration)
+						{
+							const double middle = (lower + upper) * 0.5;
+							if (phaseOffset(middle, phase.elongation) > 180.0)
+								lower = middle;
+							else
+								upper = middle;
+						}
+						phaseEvents.append(qMakePair(phase, (lower + upper) * 0.5));
+					}
+					leftJD = rightJD;
+					leftOffset = rightOffset;
+				}
+			}
+
+			std::sort(phaseEvents.begin(), phaseEvents.end(), [](const QPair<MoonPhaseDefinition, double>& first, const QPair<MoonPhaseDefinition, double>& second) {
+				return first.second < second.second;
+			});
+			core->setUseTopocentricCoordinates(true);
+			auto formatLocal = [&](double jd) -> QString {
+				return jd > 0.0 ? StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0) : QString();
+			};
+			QJsonArray items;
+			for (const QPair<MoonPhaseDefinition, double>& event : phaseEvents)
+			{
+				core->setJD(event.second);
+				core->update(0);
+				const Vec3d altAz = moon->getAltAzPosApparent(core);
+				const Vec4d rts = moon->getRTSTime(core);
+				const QVariantMap moonInfo = moon->getInfoMap(core);
+				QJsonObject item;
+				item["phase"] = event.first.name;
+				item["jd"] = event.second;
+				item["date"] = formatLocal(event.second);
+				item["illumination"] = moonInfo.value("illumination", 0.0).toDouble();
+				item["altitude"] = std::asin(altAz[2] / altAz.norm()) * M_180_PI;
+				item["azimuth"] = StelUtils::fmodpos(std::atan2(altAz[1], -altAz[0]) * M_180_PI, 360.0);
+				item["rise"] = formatLocal(rts[0]);
+				item["transit"] = formatLocal(rts[1]);
+				item["set"] = formatLocal(rts[2]);
+				items.append(item);
+			}
+			core->setJD(originalJD);
+			core->setUseTopocentricCoordinates(originalTopocentric);
+			core->update(0);
+			result["ok"] = true;
+			result["moonPhases"] = items;
+			return result;
+		}
+
+		// getPlanetaryTransits — Mercury/Venus transits across the Sun. This is the
+		// same Besselian-element iteration used by AstroCalc's desktop transit table.
+		if (commandName == "getPlanetaryTransits")
+		{
+			struct TransitElements
+			{
+				double x = 0.0;
+				double y = 0.0;
+				double d = 0.0;
+				double tf1 = 0.0;
+				double tf2 = 0.0;
+				double L1 = 0.0;
+				double L2 = 0.0;
+				double mu = 0.0;
+			};
+			struct LocalTransitParams
+			{
+				double dt = 0.0;
+				double L1 = 0.0;
+				double L2 = 0.0;
+				double ce = 0.0;
+				double magnitude = 0.0;
+				double altitude = 0.0;
+			};
+
+			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = doc.isObject() ? doc.object() : QJsonObject();
+			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
+			PlanetP earth = ssys ? ssys->getEarth() : PlanetP();
+			PlanetP sun = ssys ? ssys->getSun() : PlanetP();
+			if (!ssys || !earth || !sun || core->getCurrentPlanet() != earth)
+			{
+				result["ok"] = false;
+				result["error"] = "planetary transits are only available for an observer on Earth";
+				return result;
+			}
+
+			const double originalJD = core->getJD();
+			const bool originalTopocentric = core->getUseTopocentricCoordinates();
+			double startJD = options.value("jd").toDouble(originalJD);
+			if (startJD <= 0.0) startJD = originalJD;
+			const int years = qBound(1, options.value("years").toInt(20), 100);
+			const double stopJD = startJD + static_cast<double>(years) * 365.2425;
+
+			auto computeElements = [&](PlanetP object) -> TransitElements {
+				core->setUseTopocentricCoordinates(false);
+				core->update(0);
+				TransitElements elements;
+				double raPlanet = 0.0;
+				double decPlanet = 0.0;
+				double raSun = 0.0;
+				double decSun = 0.0;
+				const Vec3d sunPosition = sun->getEquinoxEquatorialPos(core);
+				StelUtils::rectToSphe(&raSun, &decSun, sunPosition);
+				StelUtils::rectToSphe(&raPlanet, &decPlanet, object->getEquinoxEquatorialPos(core));
+				const double sunDistanceAu = sunPosition.norm();
+				const double earthRadiusAu = earth->getEquatorialRadius() * AU;
+				const double planetDistanceEarthRadii = object->getEquinoxEquatorialPos(core).norm() * AU / earthRadiusAu;
+				const double gast = get_apparent_sidereal_time(core->getJD(), core->getJDE());
+				double raDifference = StelUtils::fmodpos(raPlanet - raSun, 2.0 * M_PI);
+				if (raDifference > M_PI) raDifference -= 2.0 * M_PI;
+				constexpr double sunEarthRadiusRatio = 109.12278;
+				const double solarRadiusEarthRadii = sunDistanceAu * 23454.7925;
+				const double ratio = planetDistanceEarthRadii / solarRadiusEarthRadii;
+				const double auxiliaryRa = raSun - ((ratio * std::cos(decPlanet) * raDifference) / ((1.0 - ratio) * std::cos(decSun)));
+				elements.d = decSun - (ratio * (decPlanet - decSun) / (1.0 - ratio));
+				elements.x = std::cos(decPlanet) * std::sin(raPlanet - auxiliaryRa) * planetDistanceEarthRadii;
+				elements.y = (std::cos(elements.d) * std::sin(decPlanet)
+					- std::cos(decPlanet) * std::sin(elements.d) * std::cos(raPlanet - auxiliaryRa)) * planetDistanceEarthRadii;
+				double z = (std::sin(decPlanet) * std::sin(elements.d)
+					+ std::cos(decPlanet) * std::cos(elements.d) * std::cos(raPlanet - auxiliaryRa)) * planetDistanceEarthRadii;
+				const double planetEarthRadiusRatio = object->getEquatorialRadius() / earth->getEquatorialRadius();
+				const double f1 = std::asin((sunEarthRadiusRatio + planetEarthRadiusRatio) / (solarRadiusEarthRadii * (1.0 - ratio)));
+				const double f2 = std::asin((sunEarthRadiusRatio - planetEarthRadiusRatio) / (solarRadiusEarthRadii * (1.0 - ratio)));
+				elements.tf1 = std::tan(f1);
+				elements.tf2 = std::tan(f2);
+				elements.L1 = z * elements.tf1 + planetEarthRadiusRatio / std::cos(f1);
+				elements.L2 = z * elements.tf2 - planetEarthRadiusRatio / std::cos(f2);
+				elements.mu = StelUtils::fmodpos(gast - auxiliaryRa * M_180_PI, 360.0);
+				return elements;
+			};
+
+			auto localTransit = [&](double jd, int contact, bool central, PlanetP object) -> LocalTransitParams {
+				const StelLocation& location = core->getCurrentLocation();
+				const Vec4d geocentricCoordinates = earth->getRectangularCoordinates(
+					static_cast<double>(location.getLongitude()), static_cast<double>(location.getLatitude()), static_cast<double>(location.altitude));
+				const double rc = geocentricCoordinates[0] / earth->getEquatorialRadius();
+				const double rs = geocentricCoordinates[1] / earth->getEquatorialRadius();
+				core->setUseTopocentricCoordinates(false);
+				core->setJD(jd);
+				core->update(0);
+				const TransitElements current = computeElements(object);
+				core->setJD(jd - 5.0 / 1440.0);
+				core->update(0);
+				const TransitElements before = computeElements(object);
+				core->setJD(jd + 5.0 / 1440.0);
+				core->update(0);
+				const TransitElements after = computeElements(object);
+				const double xdot = (after.x - before.x) * 6.0;
+				const double ydot = (after.y - before.y) * 6.0;
+				const double ddot = (after.d - before.d) * 6.0;
+				double mudot = after.mu - before.mu;
+				if (mudot < 0.0) mudot += 360.0;
+				mudot *= 6.0 * M_PI_180;
+				const double theta = StelUtils::fmodpos((current.mu + location.getLongitude()) * M_PI_180, 2.0 * M_PI);
+				const double xi = rc * std::sin(theta);
+				const double eta = rs * std::cos(current.d) - rc * std::sin(current.d) * std::cos(theta);
+				const double zeta = rs * std::sin(current.d) + rc * std::cos(current.d) * std::cos(theta);
+				const double xidot = mudot * rc * std::cos(theta);
+				const double etadot = mudot * xi * std::sin(current.d) - zeta * ddot;
+				const double u = current.x - xi;
+				const double v = current.y - eta;
+				const double udot = xdot - xidot;
+				const double vdot = ydot - etadot;
+				const double rateSquared = udot * udot + vdot * vdot;
+				const double rate = std::sqrt(rateSquared);
+				const double delta = (u * vdot - udot * v) / rate;
+				const double L1 = current.L1 - zeta * current.tf1;
+				const double L2 = current.L2 - zeta * current.tf2;
+				const double L = central ? L2 : L1;
+				const double ce = 1.0 - std::pow(delta / L, 2.0);
+				const double contactFactor = ce > 0.0 ? contact * std::sqrt(ce) : 0.0;
+				LocalTransitParams params;
+				params.dt = L * contactFactor / rate - (u * udot + v * vdot) / rateSquared;
+				params.L1 = L1;
+				params.L2 = L2;
+				params.ce = ce;
+				params.magnitude = (L1 - std::sqrt(u * u + v * v)) / (L1 + L2);
+				params.altitude = std::asin(rc * std::cos(current.d) * std::cos(theta) + rs * std::sin(current.d)) * M_180_PI;
+				return params;
+			};
+
+			auto refineLocalTransit = [&](double jd, int contact, bool central, PlanetP object) -> QPair<double, LocalTransitParams> {
+				LocalTransitParams params;
+				for (int iteration = 0; iteration < 20; ++iteration)
+				{
+					params = localTransit(jd, contact, central, object);
+					jd += params.dt / 24.0;
+					if (std::fabs(params.dt) <= 0.000001) break;
+				}
+				return qMakePair(jd, localTransit(jd, contact, central, object));
+			};
+
+			auto localVisibilityMinutes = [&](double firstJD, double lastJD, PlanetP object) -> double {
+				QList<double> boundaries;
+				boundaries.append(firstJD);
+				constexpr int samples = 24;
+				double previousJD = firstJD;
+				double previousAltitude = localTransit(previousJD, 0, false, object).altitude + 0.3;
+				for (int sample = 1; sample <= samples; ++sample)
+				{
+					const double currentJD = firstJD + (lastJD - firstJD) * sample / samples;
+					const double currentAltitude = localTransit(currentJD, 0, false, object).altitude + 0.3;
+					if ((previousAltitude < 0.0 && currentAltitude > 0.0) || (previousAltitude > 0.0 && currentAltitude < 0.0))
+					{
+						double lower = previousJD;
+						double upper = currentJD;
+						double lowerAltitude = previousAltitude;
+						for (int iteration = 0; iteration < 18; ++iteration)
+						{
+							const double middle = (lower + upper) * 0.5;
+							const double middleAltitude = localTransit(middle, 0, false, object).altitude + 0.3;
+							if ((lowerAltitude <= 0.0 && middleAltitude <= 0.0) || (lowerAltitude >= 0.0 && middleAltitude >= 0.0))
+							{
+								lower = middle;
+								lowerAltitude = middleAltitude;
+							}
+							else
+								upper = middle;
+						}
+						boundaries.append((lower + upper) * 0.5);
+					}
+					previousJD = currentJD;
+					previousAltitude = currentAltitude;
+				}
+				boundaries.append(lastJD);
+				std::sort(boundaries.begin(), boundaries.end());
+				double visibleMinutes = 0.0;
+				for (int index = 0; index + 1 < boundaries.size(); ++index)
+				{
+					const double begin = boundaries.at(index);
+					const double end = boundaries.at(index + 1);
+					if (localTransit((begin + end) * 0.5, 0, false, object).altitude >= -0.3)
+						visibleMinutes += (end - begin) * 1440.0;
+				}
+				return visibleMinutes;
+			};
+
+			auto formatLocal = [&](double jd) -> QString {
+				return jd > 0.0 ? StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0) : QString();
+			};
+
+			QJsonArray transits;
+			const QList<QPair<QString, QPair<double, double>>> candidates = {
+				qMakePair(QStringLiteral("Mercury"), qMakePair(2451612.023, 115.8774771)),
+				qMakePair(QStringLiteral("Venus"), qMakePair(2451996.706, 583.921361))
+			};
+			for (const QPair<QString, QPair<double, double>>& candidate : candidates)
+			{
+				PlanetP object = ssys->searchByEnglishName(candidate.first);
+				if (!object) continue;
+				const double referenceJD = candidate.second.first;
+				const double synodicPeriod = candidate.second.second;
+				const int firstIndex = static_cast<int>(std::floor((startJD - referenceJD) / synodicPeriod)) - 1;
+				const int conjunctions = static_cast<int>(std::ceil((stopJD - startJD) / synodicPeriod)) + 3;
+				for (int index = 0; index < conjunctions; ++index)
+				{
+					double jd = referenceJD + (firstIndex + index) * synodicPeriod;
+					if (jd < startJD - 2.0 || jd > stopJD + 2.0) continue;
+					double deltaHours = 1.0;
+					for (int iteration = 0; iteration < 20 && std::fabs(deltaHours) > 0.1 / 86400.0; ++iteration)
+					{
+						core->setUseTopocentricCoordinates(false);
+						core->setJD(jd);
+						core->update(0);
+						const TransitElements current = computeElements(object);
+						core->setJD(jd - 5.0 / 1440.0);
+						core->update(0);
+						const TransitElements before = computeElements(object);
+						core->setJD(jd + 5.0 / 1440.0);
+						core->update(0);
+						const TransitElements after = computeElements(object);
+						const double xdot = (after.x - before.x) * 6.0;
+						const double ydot = (after.y - before.y) * 6.0;
+						const double rateSquared = xdot * xdot + ydot * ydot;
+						deltaHours = -(current.x * xdot + current.y * ydot) / rateSquared;
+						jd += deltaHours / 24.0;
+					}
+					core->setJD(jd);
+					core->update(0);
+					const TransitElements geocentric = computeElements(object);
+					if (std::sqrt(geocentric.x * geocentric.x + geocentric.y * geocentric.y) > 0.9972 + geocentric.L1 || jd < startJD || jd > stopJD)
+						continue;
+
+					const QPair<double, LocalTransitParams> middle = refineLocalTransit(jd, 0, false, object);
+					if (middle.second.magnitude <= 0.0) continue;
+					const QPair<double, LocalTransitParams> first = refineLocalTransit(middle.first, -1, false, object);
+					const QPair<double, LocalTransitParams> last = refineLocalTransit(middle.first, 1, false, object);
+					const double firstJD = std::min(first.first, last.first);
+					const double lastJD = std::max(first.first, last.first);
+					const QPair<double, LocalTransitParams> second = refineLocalTransit(middle.first, -1, true, object);
+					const QPair<double, LocalTransitParams> third = refineLocalTransit(middle.first, 1, true, object);
+					const bool hasInteriorContacts = second.second.ce > 0.0 && third.second.ce > 0.0;
+					const double visibleMinutes = localVisibilityMinutes(firstJD, lastJD, object);
+
+					core->setUseTopocentricCoordinates(true);
+					core->setJD(middle.first);
+					core->update(0);
+					double azimuth = 0.0;
+					double altitude = 0.0;
+					StelUtils::rectToSphe(&azimuth, &altitude, object->getAltAzPosAuto(core));
+					const double minimumSeparation = object->getElongation(core->getObserverHeliocentricEclipticPos()) * M_180_PI;
+					QJsonObject item;
+					item["planet"] = candidate.first == QStringLiteral("Mercury") ? QStringLiteral("水星") : QStringLiteral("金星");
+					item["jd"] = middle.first;
+					item["date"] = formatLocal(middle.first);
+					item["firstContact"] = formatLocal(firstJD);
+					item["middle"] = formatLocal(middle.first);
+					item["lastContact"] = formatLocal(lastJD);
+					item["firstContactVisible"] = first.second.altitude >= -0.3;
+					item["middleVisible"] = altitude * M_180_PI >= -0.3;
+					item["lastContactVisible"] = last.second.altitude >= -0.3;
+					item["magnitude"] = middle.second.magnitude;
+					item["minimumSeparation"] = minimumSeparation;
+					item["durationMin"] = (lastJD - firstJD) * 1440.0;
+					item["observableDurationMin"] = visibleMinutes;
+					item["localVisible"] = visibleMinutes > 0.0;
+					item["sunAltitude"] = altitude * M_180_PI;
+					if (hasInteriorContacts)
+					{
+						item["secondContact"] = formatLocal(std::min(second.first, third.first));
+						item["thirdContact"] = formatLocal(std::max(second.first, third.first));
+						item["secondContactVisible"] = second.second.altitude >= -0.3;
+						item["thirdContactVisible"] = third.second.altitude >= -0.3;
+					}
+					transits.append(item);
+				}
+			}
+			core->setJD(originalJD);
+			core->setUseTopocentricCoordinates(originalTopocentric);
+			core->update(0);
+			result["ok"] = true;
+			result["planetaryTransits"] = transits;
+			return result;
+		}
+
 		// getEclipses — 未来若干个月内的日食与月食预报
 		if (commandName == "getEclipses")
 		{
+			struct LocalSolarEclipseParams
+			{
+				double dt = 0.0;
+				double L2 = 0.0;
+				double ce = 0.0;
+				double magnitude = 0.0;
+				double altitude = 0.0;
+			};
+
 			QJsonDocument doc = QJsonDocument::fromJson(arg.toUtf8());
 			QJsonObject jo = doc.isObject() ? doc.object() : QJsonObject();
 			double startJD = jo.value("jd").toDouble(0.0);
@@ -6093,11 +7740,111 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return resultJD;
 			};
 
+			auto localSolarEclipse = [&](double jd, int contact, bool central) -> LocalSolarEclipseParams {
+				const StelLocation& location = core->getCurrentLocation();
+				PlanetP earth = ssys->getEarth();
+				const Vec4d geocentricCoords = earth->getRectangularCoordinates(
+					static_cast<double>(location.getLongitude()), static_cast<double>(location.getLatitude()),
+					static_cast<double>(location.altitude));
+				const double earthRadius = earth->getEquatorialRadius();
+				const double rc = geocentricCoords[0] / earthRadius;
+				const double rs = geocentricCoords[1] / earthRadius;
+
+				core->setUseTopocentricCoordinates(false);
+				core->setJD(jd);
+				core->update(0);
+				const EclipseBesselParameters bp = calcBesselParameters(true);
+				const double theta = StelUtils::fmodpos((bp.elems.mu + location.getLongitude()) * M_PI_180, 2.0 * M_PI);
+				const double xi = rc * std::sin(theta);
+				const double eta = rs * std::cos(bp.elems.d) - rc * std::sin(bp.elems.d) * std::cos(theta);
+				const double zeta = rs * std::sin(bp.elems.d) + rc * std::cos(bp.elems.d) * std::cos(theta);
+				const double xidot = bp.mudot * rc * std::cos(theta);
+				const double etadot = bp.mudot * xi * std::sin(bp.elems.d) - zeta * bp.ddot;
+				const double u = bp.elems.x - xi;
+				const double v = bp.elems.y - eta;
+				const double udot = bp.xdot - xidot;
+				const double vdot = bp.ydot - etadot;
+				const double rateSquared = udot * udot + vdot * vdot;
+				const double delta = (u * vdot - udot * v) / std::sqrt(rateSquared);
+				const double L1 = bp.elems.L1 - zeta * bp.elems.tf1;
+				const double L2 = bp.elems.L2 - zeta * bp.elems.tf2;
+				const double L = central ? L2 : L1;
+				const double ce = 1.0 - (delta / L) * (delta / L);
+				const double contactFactor = ce > 0.0 ? contact * std::sqrt(ce) : 0.0;
+				LocalSolarEclipseParams local;
+				local.dt = (L * contactFactor / std::sqrt(rateSquared)) - (u * udot + v * vdot) / rateSquared;
+				local.L2 = L2;
+				local.ce = ce;
+				local.magnitude = (L1 - std::sqrt(u * u + v * v)) / (L1 + L2);
+				local.altitude = std::asin(rc * std::cos(bp.elems.d) * std::cos(theta) + rs * std::sin(bp.elems.d)) * M_180_PI;
+				return local;
+			};
+
+			auto refineLocalContact = [&](double jd, int contact, bool central) -> QPair<double, LocalSolarEclipseParams> {
+				LocalSolarEclipseParams local;
+				for (int iteration = 0; iteration < 20; ++iteration)
+				{
+					local = localSolarEclipse(jd, contact, central);
+					jd += local.dt / 24.0;
+					if (std::fabs(local.dt) <= 0.000001)
+						break;
+				}
+				local = localSolarEclipse(jd, contact, central);
+				return qMakePair(jd, local);
+			};
+
+			auto visibleSolarEclipseWindow = [&](double firstJD, double lastJD) -> QPair<double, double> {
+				QList<double> boundaries;
+				boundaries.append(firstJD);
+				constexpr int samples = 18;
+				double previousJD = firstJD;
+				double previousAltitude = localSolarEclipse(previousJD, 0, false).altitude + 0.3;
+				for (int sample = 1; sample <= samples; ++sample)
+				{
+					const double currentJD = firstJD + (lastJD - firstJD) * sample / samples;
+					const double currentAltitude = localSolarEclipse(currentJD, 0, false).altitude + 0.3;
+					if ((previousAltitude < 0.0 && currentAltitude > 0.0)
+						|| (previousAltitude > 0.0 && currentAltitude < 0.0))
+					{
+						double left = previousJD;
+						double right = currentJD;
+						double leftAltitude = previousAltitude;
+						for (int iteration = 0; iteration < 18; ++iteration)
+						{
+							const double middle = (left + right) / 2.0;
+							const double middleAltitude = localSolarEclipse(middle, 0, false).altitude + 0.3;
+							if ((leftAltitude <= 0.0 && middleAltitude <= 0.0)
+								|| (leftAltitude >= 0.0 && middleAltitude >= 0.0))
+							{
+								left = middle;
+								leftAltitude = middleAltitude;
+							}
+							else
+								right = middle;
+						}
+						boundaries.append((left + right) / 2.0);
+					}
+					previousJD = currentJD;
+					previousAltitude = currentAltitude;
+				}
+				boundaries.append(lastJD);
+				std::sort(boundaries.begin(), boundaries.end());
+				for (int index = 0; index + 1 < boundaries.size(); ++index)
+				{
+					const double begin = boundaries.at(index);
+					const double end = boundaries.at(index + 1);
+					if (localSolarEclipse((begin + end) / 2.0, 0, false).altitude >= -0.3)
+						return qMakePair(begin, end);
+				}
+				return qMakePair(0.0, 0.0);
+			};
+
 			const double limitJD = startJD + months * 30.436875;
 			constexpr double synodicMonth = 29.530588853;
 			constexpr double referenceNewMoon = 2451550.09765;
 			const int firstLunation = static_cast<int>(std::floor((startJD - referenceNewMoon) / synodicMonth)) - 1;
 			const int lunations = static_cast<int>(std::ceil((limitJD - startJD) / synodicMonth)) + 3;
+			const bool originalTopocentric = core->getUseTopocentricCoordinates();
 			SolarEclipseComputer eclipseComputer(core, &StelApp::getInstance().getLocaleMgr());
 			for (int i = 0; i < lunations; ++i)
 			{
@@ -6132,6 +7879,49 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						ev["durationMin"] = duration;
 						ev["centralLat"] = latDeg;
 						ev["centralLng"] = lngDeg;
+
+						const QPair<double, LocalSolarEclipseParams> localMaximum = refineLocalContact(newMoonJD, 0, false);
+						const LocalSolarEclipseParams localMaxParams = localMaximum.second;
+						if (localMaxParams.magnitude > 0.0 && localMaxParams.ce > 0.0)
+						{
+							const QPair<double, LocalSolarEclipseParams> localFirst = refineLocalContact(localMaximum.first, -1, false);
+							const QPair<double, LocalSolarEclipseParams> localLast = refineLocalContact(localMaximum.first, 1, false);
+							const double geometricFirst = std::min(localFirst.first, localLast.first);
+							const double geometricLast = std::max(localFirst.first, localLast.first);
+							const QPair<double, double> visibleWindow = visibleSolarEclipseWindow(geometricFirst, geometricLast);
+							const bool locallyVisible = visibleWindow.first > 0.0 && visibleWindow.second > visibleWindow.first;
+							ev["localVisible"] = locallyVisible;
+							if (locallyVisible)
+							{
+								const double visibleMaximumJD = qBound(visibleWindow.first, localMaximum.first, visibleWindow.second);
+								const LocalSolarEclipseParams visibleMaximum = localSolarEclipse(visibleMaximumJD, 0, false);
+								ev["localMagnitude"] = visibleMaximum.magnitude;
+								ev["localMax"] = StelUtils::julianDayToISO8601String(visibleMaximumJD + core->getUTCOffset(visibleMaximumJD) / 24.0);
+								ev["localSunAltitude"] = visibleMaximum.altitude;
+								ev["localFirstContact"] = StelUtils::julianDayToISO8601String(visibleWindow.first + core->getUTCOffset(visibleWindow.first) / 24.0);
+								ev["localLastContact"] = StelUtils::julianDayToISO8601String(visibleWindow.second + core->getUTCOffset(visibleWindow.second) / 24.0);
+								ev["localFirstContactLabel"] = visibleWindow.first > geometricFirst + 1.0 / 1440.0 ? QStringLiteral("日出") : QStringLiteral("初亏");
+								ev["localLastContactLabel"] = visibleWindow.second < geometricLast - 1.0 / 1440.0 ? QStringLiteral("日落") : QStringLiteral("复圆");
+
+								const QPair<double, LocalSolarEclipseParams> centralFirst = refineLocalContact(localMaximum.first, -1, true);
+								const QPair<double, LocalSolarEclipseParams> centralLast = refineLocalContact(localMaximum.first, 1, true);
+								if (centralFirst.second.ce > 0.0 && centralLast.second.ce > 0.0)
+								{
+									const double centralStart = std::max(std::min(centralFirst.first, centralLast.first), visibleWindow.first);
+									const double centralEnd = std::min(std::max(centralFirst.first, centralLast.first), visibleWindow.second);
+									if (centralEnd > centralStart)
+									{
+										ev["localCentralType"] = localMaxParams.L2 < 0.0 ? QStringLiteral("全食") : QStringLiteral("环食");
+										ev["localCentralStart"] = StelUtils::julianDayToISO8601String(centralStart + core->getUTCOffset(centralStart) / 24.0);
+										ev["localCentralEnd"] = StelUtils::julianDayToISO8601String(centralEnd + core->getUTCOffset(centralEnd) / 24.0);
+									}
+								}
+							}
+						}
+						else
+						{
+							ev["localVisible"] = false;
+						}
 						eclipseList.append(ev);
 					}
 				}
@@ -6167,6 +7957,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 			}
 			core->setJD(origJD);
+			core->setUseTopocentricCoordinates(originalTopocentric);
 			core->update(0);
 			// QJsonArray 的迭代器不支持 std::sort，先在 QList 上按时间排好再装回去
 			std::sort(eclipseList.begin(), eclipseList.end(), [](const QJsonObject& x, const QJsonObject& y) {

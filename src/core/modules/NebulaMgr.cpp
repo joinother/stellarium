@@ -2851,6 +2851,34 @@ QVector<QPair<QString,StelObjectP>> NebulaMgr::listAllObjectsByType(const QStrin
 	int type = objType.toInt();
 	switch (type)
 	{
+		case 200: // All nebula-related deep-sky object types.
+			for (const auto& n : dsoArray)
+			{
+				switch (n->nType)
+				{
+					case Nebula::NebSC:
+					case Nebula::NebN:
+					case Nebula::NebPn:
+					case Nebula::NebDn:
+					case Nebula::NebRn:
+					case Nebula::NebBn:
+					case Nebula::NebEn:
+					case Nebula::NebCn:
+					case Nebula::NebHII:
+					case Nebula::NebSNR:
+					case Nebula::NebISM:
+					case Nebula::NebEMO:
+					case Nebula::NebMolCld:
+					case Nebula::NebPossPN:
+					case Nebula::NebPPN:
+						break;
+					default:
+						continue;
+				}
+				const QString name = inEnglish ? n->getEnglishName() : n->getNameI18n();
+				map[name.isEmpty() ? n->getDSODesignationWIC() : name] = StelObjectP(n);
+			}
+			break;
 		case 0: // Bright galaxies?
 			for (const auto& n : dsoArray)
 			{
