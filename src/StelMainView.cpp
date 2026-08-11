@@ -179,6 +179,14 @@ static std::atomic<quint64> s_ohosNavigationSerial{0};
 static QString s_ohosSafeTargetObject;
 static double s_ohosSafeTargetY = 0.0;
 static double s_ohosSafeTargetHeight = 0.0;
+// A manual zoom must preserve a selected body's current screen position. This
+// is separate from Stellarium tracking, which intentionally recenters targets.
+static QString s_ohosZoomAnchorObject;
+static double s_ohosZoomAnchorXRatio = 0.5;
+static double s_ohosZoomAnchorYRatio = 0.5;
+// Automatic selection navigation owns the camera until its safe-area movement
+// settles. Capturing an anchor before that would cancel the centering motion.
+static double s_ohosSelectedAnchorHoldUntilSec = 0.0;
 
 // Render resolution scale factor (0.0-1.0). Reduces the framebuffer resolution
 // to cut down glReadPixels + glTexImage2D data size. The XComponent upscales
@@ -627,9 +635,8 @@ static Vec3d s_gyroTransitionTargetJ2000(0.0, 0.0, 1.0);
 static double s_gyroTransitionStartSec = 0.0;
 static constexpr double OHOS_GYRO_HANDOFF_SECONDS = 0.35;
 // --- Manual view-control modes (OHOS bridge) -------------------------------
-// s_viewLock ("锁定视角"): when ON, ALL manual panning (dragView / panBy) is
-// ignored — the view direction is frozen — but pinch zoom (zoomBy / zoomStep)
-// keeps working. Toggled any time from the ArkTS panel.
+// s_viewLock ("固定目标位置"): keeps a selected body's last released screen
+// position as the zoom anchor. Manual panning remains available.
 static bool s_viewLock = false;
 // s_verticalClamp ("卡在天顶↔天底"): when ON, finger drags are translated
 // DIRECTLY into Δazimuth/Δaltitude (decoupled axes, via panView) instead of the
@@ -650,10 +657,11 @@ static bool s_ohosPanInertiaActive = false;
 static double s_ohosPanInertiaVx = 0.0; // viewport pixels per millisecond
 static double s_ohosPanInertiaVy = 0.0;
 static double s_ohosPanInertiaElapsedSec = 0.0;
+static bool s_ohosCaptureSelectedAnchorAfterPan = false;
 
 static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 {
-	if (!core || s_viewLock)
+	if (!core)
 		return;
 	StelMovementMgr* movementMgr = core->getMovementMgr();
 	if (!movementMgr)
@@ -677,6 +685,12 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 		movementMgr->dragView(0, 0, qRound(dx), qRound(dy));
 	}
 	movementMgr->setFlagTracking(false);
+	// Every drag frame establishes the user's new intended target position
+	// before the following render frame applies time-flow compensation.
+	// A user drag takes ownership immediately; do not leave it waiting for an
+	// earlier automatic-centering animation's safety window to expire.
+	s_ohosSelectedAnchorHoldUntilSec = 0.0;
+	s_ohosCaptureSelectedAnchorAfterPan = true;
 }
 
 static void ohosUpdatePanInertia(double dtSec)
@@ -905,6 +919,81 @@ static void ohosUpdateSelectedScreenProjection()
 	s_ohosSelectedScreenYRatio.store(yRatio);
 	s_ohosSelectedScreenVisible.store(projector->checkInViewport(projected));
 	s_ohosSelectedScreenValid.store(true);
+}
+
+static void ohosCaptureSelectedZoomAnchor()
+{
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (!core || !objectMgr || objectMgr->getSelectedObject().isEmpty())
+		return;
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 1 || viewport[3] <= 1)
+		return;
+	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+	Vec3d projected;
+	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected)
+		|| !projector->checkInViewport(projected))
+		return;
+	s_ohosZoomAnchorObject = selectedObject->getEnglishName();
+	s_ohosZoomAnchorXRatio = (projected[0] - viewport[0]) / viewport[2];
+	s_ohosZoomAnchorYRatio = (viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3];
+}
+
+static void ohosDeferSelectedAnchor(double seconds)
+{
+	s_ohosZoomAnchorObject.clear();
+	s_ohosSelectedAnchorHoldUntilSec = StelApp::getTotalRunTime() + qMax(0.0, seconds);
+	qInfo() << "[StellariumOhos][anchor] deferred for" << seconds << "seconds";
+}
+
+static void ohosMaintainSelectedZoomAnchor()
+{
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	if (StelApp::getTotalRunTime() < s_ohosSelectedAnchorHoldUntilSec)
+		return;
+	StelCore* core = app->getCore();
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : nullptr;
+	if (!core || !objectMgr || !movementMgr || objectMgr->getSelectedObject().isEmpty())
+		return;
+	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+	if (selectedObject->getEnglishName() != s_ohosZoomAnchorObject)
+	{
+		ohosCaptureSelectedZoomAnchor();
+		qInfo() << "[StellariumOhos][anchor] captured" << selectedObject->getEnglishName();
+		return;
+	}
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 1 || viewport[3] <= 1)
+		return;
+	Vec3d projected;
+	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected))
+		return;
+	const double desiredX = viewport[0] + s_ohosZoomAnchorXRatio * viewport[2];
+	const double desiredY = viewport[1] + viewport[3] - 1
+		- s_ohosZoomAnchorYRatio * viewport[3];
+	const double deltaX = desiredX - projected[0];
+	const double deltaY = desiredY - projected[1];
+	if (std::abs(deltaX) < 0.5 && std::abs(deltaY) < 0.5)
+		return;
+	// Do not approximate pixels as altitude/azimuth deltas here. That drifts at
+	// wide fields and near the poles. dragView unprojects both screen points in
+	// the current projection, so it preserves the selected body's exact screen
+	// position regardless of the active projection or FOV.
+	movementMgr->dragView(qRound(projected[0]), qRound(projected[1]),
+		qRound(desiredX), qRound(desiredY));
 }
 
 static void markQtLoopRunning()
@@ -2033,13 +2122,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			s_ohosPanInertiaActive = false;
-			if (s_viewLock)
-			{
-				// View locked: panning disabled (zoom still allowed elsewhere).
-				result["ok"] = true;
-				result["locked"] = true;
-				return result;
-			}
 			ohosApplyPanDelta(core, x2 - x1, y2 - y1);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -2103,15 +2185,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "invalid panBy payload";
 				return result;
 			}
-			if (s_viewLock)
-			{
-				result["ok"] = true;
-				result["locked"] = true;
-				return result;
-			}
 			const double fovRad = movementMgr->getCurrentFov() * M_PI / 180.0;
 			movementMgr->panView(-dx / width * fovRad, dy / height * fovRad);
 			movementMgr->setFlagTracking(false);
+			s_ohosSelectedAnchorHoldUntilSec = 0.0;
+			s_ohosCaptureSelectedAnchorAfterPan = true;
 			markOhosInteraction();
 			result["ok"] = true;
 			result["fov"] = movementMgr->getCurrentFov();
@@ -2134,6 +2212,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "invalid zoom scale";
 				return result;
 			}
+			if (started)
+				ohosCaptureSelectedZoomAnchor();
 			movementMgr->handlePinch(scale, started);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -2201,6 +2281,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					<< "horizontalOffset" << horizontalOffset << "verticalPan" << verticalPan
 					<< "layoutVerticalPan" << layoutVerticalPan << "mode" << mode;
 			const quint64 serial = ++s_ohosNavigationSerial;
+			ohosDeferSelectedAnchor(mode == "layout" && hasPreviousSafePoint ? 0.45 : 1.15);
 			auto animateVerticalPan = [movementMgr, verticalPanToTarget, serial]() {
 				const double verticalPan = verticalPanToTarget();
 				QTimer* timer = new QTimer(&StelMainView::getInstance());
@@ -2300,6 +2381,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			if (objectMgr && movementMgr && !objectMgr->getSelectedObject().isEmpty())
 			{
+				ohosDeferSelectedAnchor(movementMgr->getAutoMoveDuration() + 0.15);
 				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
 				movementMgr->setFlagTracking(true);
 				result = selectedObjectJson(core);
@@ -2336,6 +2418,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setViewLock")
 		{
 			s_viewLock = (arg == "1" || arg.toLower() == "true");
+			if (s_viewLock)
+				s_ohosCaptureSelectedAnchorAfterPan = true;
 			result["ok"] = true;
 			result["viewLock"] = s_viewLock;
 			return result;
@@ -2488,6 +2572,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "zoomStep expects positive factor";
 				return result;
 			}
+			ohosCaptureSelectedZoomAnchor();
 			double aim = movementMgr->getCurrentFov() * factor;
 			if (aim < 0.001) aim = 0.001;
 			if (aim > 360.0) aim = 360.0;
@@ -9678,9 +9763,15 @@ void StelMainView::renderOhosFrameNow()
 	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();
 	ohosUpdateGyroTransition();
-	ohosUpdatePanInertia(dt);
-	app.update(dt);
-	ohosUpdateSelectedScreenProjection();
+		ohosUpdatePanInertia(dt);
+		app.update(dt);
+		if (s_ohosCaptureSelectedAnchorAfterPan)
+		{
+			s_ohosCaptureSelectedAnchorAfterPan = false;
+			ohosCaptureSelectedZoomAnchor();
+		}
+		ohosMaintainSelectedZoomAnchor();
+		ohosUpdateSelectedScreenProjection();
 	ohosProcessPendingPointSelect();
 	const double t3 = StelApp::getTotalRunTime();
 	app.draw();

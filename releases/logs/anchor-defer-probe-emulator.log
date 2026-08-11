@@ -1,0 +1,11 @@
+08-11 13:56:58.281  8918  8918 I A00000/StellariumEntryGL: Stellarium command searchObject
+08-11 13:56:58.281  8918  8918 I A00000/StellariumQt: [    10.540][INFO] [StellariumOhos] command received: "searchObject" "catalog|SolarSystem:planet|Neptune"
+08-11 13:56:58.283  8918  9094 I A00000/StellariumQt: [    10.542][INFO] [StellariumOhos] command on Qt thread: "searchObject"
+08-11 13:56:58.287  8918  9094 I A00000/StellariumQt: [    10.546][INFO] [StellariumOhos][anchor] captured "Neptune"
+08-11 13:56:58.303  8918  9094 I A00000/StellariumQt: [    10.562][INFO] [StellariumOhos][anchor] captured "Neptune"
+08-11 13:56:58.340  8918  9094 I A00000/StellariumQt: [    10.599][INFO] [StellariumOhos][anchor] captured "Neptune"
+08-11 13:56:58.377  8918  9094 I A00000/StellariumQt: [    10.636][INFO] [StellariumOhos][anchor] captured "Neptune"
+08-11 13:56:58.382  8918  8918 I A00000/StellariumEntryGL: Stellarium command searchObject
+08-11 13:56:58.382  8918  8918 I A00000/StellariumQt: [    10.641][INFO] [StellariumOhos] command received: "searchObject" "catalog|SolarSystem:planet|Neptune"
+08-11 13:56:58.414  8918  9094 I A00000/StellariumQt: [    10.673][INFO] [StellariumOhos][safe-target] "Neptune" screen 215 399 707 773 horizontalOffset -19.5898 verticalPan 0.454094 layoutVerticalPan 0 mode "focus"
+08-11 13:56:58.414  8918  9094 I A00000/StellariumQt: [    10.673][INFO] [StellariumOhos][anchor] deferred for 1.15 seconds

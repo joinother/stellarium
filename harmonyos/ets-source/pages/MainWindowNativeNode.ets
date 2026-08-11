@@ -156,6 +156,13 @@ interface GyroGuideProjection extends StellariumBridgeResponse {
   xRatio?: number
   yRatio?: number
 }
+interface SkyUiObstacle {
+  label: string
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
 
 // 书签（C++ 桥 addBookmark / getBookmarks / deleteBookmark / gotoBookmark）
 interface BookmarkItem {
@@ -576,7 +583,7 @@ struct WindowNativeNode {
   // 卡在天顶↔天底：默认开。开启后上下滑只改高度角（到天顶/天底就停，不翻转），
   // 左右滑只改方位角——即使手指在屏幕偏左/偏右处竖直滑，画面也绝不会旋转。
   @State private verticalClamp: boolean = true
-  // 锁定视角：开启后上下左右都不能拖动，但捏合缩放仍然可用。
+  // 固定目标位置：开启后仍可自由拖动，松手时记录当前目标位置供后续缩放保持。
   @State private viewLock: boolean = false
   // 画面防弯曲：限制最大视场角(100°)，不能缩到"整个天空变成一个球"，地平线保持基本平直。
   @State private flatHorizon: boolean = true
@@ -1014,6 +1021,7 @@ struct WindowNativeNode {
   private readonly RAIL_GYRO_OFFSET: number = 116
   // 平板缩放组与左侧轨道对齐，固定放在轨道下方，避免与底部目标详情卡抢位置。
   private readonly EXPANDED_ZOOM_GAP: number = 8
+  private readonly EXPANDED_ZOOM_SIZE: number = 48
 
   // 常用入口：直接固定在左侧栏（观星高频操作）
   private readonly pinnedActions: ShellAction[] = [
@@ -4608,12 +4616,13 @@ private loadPlanetPositions(): void {
     this.callNativeFire('zoomStep', factor.toString())
     setTimeout(() => {
       this.refreshState()
-      // Tablet zoom changes the projection after the selected target was put
-      // in its card-safe region. Settle it back to that region once the
-      // native 400 ms zoom animation has completed.
-      if (this.isExpandedLayout && this.selectedStatus === 'Selected' && (this.panelVisible || this.infoWinVisible)) {
-        this.placeSelectedObjectInSafeArea('layout')
-      }
+      this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
+        if (r.ok === true && r.fov !== undefined) {
+          const fovDeg = r.fov as number
+          this.currentFovText = fovDeg.toFixed(1) + '°'
+          this.flashHint('视场 ' + this.currentFovText)
+        }
+      })
     }, 450)
   }
 
@@ -5824,26 +5833,166 @@ private loadPlanetPositions(): void {
   private navigateSelectedObjectTo(x: number, y: number, mode: string = 'focus'): void {
     if (this.skyWidth <= 1 || this.skyHeight <= 1) { return }
     const payload = `${Math.round(x)}|${Math.round(y)}|${Math.round(this.skyWidth)}|${Math.round(this.skyHeight)}|${mode}`
+    const navigationKey = this.selectedName + '|' + payload
     hilog.info(0x0000, 'StellariumArkUI', 'safe-target request mode=%{public}s compact=%{public}s panel=%{public}s drawer=%{public}s info=%{public}s target=%{public}s',
       mode, (!this.isExpandedLayout).toString(), this.panelVisible.toString(), this.drawerOpen.toString(), this.infoWinVisible.toString(), payload)
     const now = Date.now()
-    // ArkUI may emit several area-change callbacks during one panel animation.
-    // The native target is already moving toward this exact geometry, so a
-    // duplicate request would restart it and look like a visible stutter.
-    if (payload === this.lastSafeNavigationPayload && now - this.lastSafeNavigationAt < 420) {
+    // A layout callback can re-fire long after its animation has settled.
+    // Repeating the same safe point would move a time-anchored target for no
+    // visible UI change. Focus commands still pass through after the short
+    // debounce so the explicit centre action remains available.
+    if (mode === 'layout' && navigationKey === this.lastSafeNavigationPayload) {
+      hilog.info(0x0000, 'StellariumArkUI', 'safe-target skipped unchanged layout')
       return
     }
-    this.lastSafeNavigationPayload = payload
+    if (navigationKey === this.lastSafeNavigationPayload && now - this.lastSafeNavigationAt < 420) {
+      return
+    }
+    this.lastSafeNavigationPayload = navigationKey
     this.lastSafeNavigationAt = now
     this.callInteractive('moveToSelectedAt', payload, (r) => this.applySelectedObject(r))
   }
 
   private placeSelectedObjectInSafeArea(mode: string = 'focus'): void {
-    if (this.isExpandedLayout) {
-      this.placeSelectedObjectInExpandedSafeArea(mode)
-    } else {
-      this.placeSelectedObjectInCompactSafeArea(mode)
+    const fallback = this.isExpandedLayout ? this.expandedSafeTargetPoint() : this.compactSafeTargetPoint()
+    if (mode === 'layout') {
+      const localTarget = this.selectedObjectLayoutAvoidanceTarget(fallback)
+      if (localTarget.length !== 2) {
+        return
+      }
+      this.navigateSelectedObjectTo(localTarget[0], localTarget[1], mode)
+      return
     }
+    if (this.isExpandedLayout) {
+      this.navigateSelectedObjectTo(fallback[0], fallback[1], mode)
+    } else {
+      this.navigateSelectedObjectTo(fallback[0], fallback[1], mode)
+    }
+  }
+
+  private selectedObjectUiObstacles(): SkyUiObstacle[] {
+    const obstacles: SkyUiObstacle[] = []
+    if (this.isExpandedLayout) {
+      if (this.drawerOpen) {
+        obstacles.push({
+          label: 'drawer', left: this.drawerLeft(), top: this.railTop(),
+          right: this.drawerLeft() + this.drawerWidth(),
+          bottom: this.railTop() + this.drawerActions.length * 46 + 58
+        })
+      }
+      if (this.panelVisible) {
+        obstacles.push({
+          label: 'panel', left: this.expandedMainPanelLeft(), top: this.panelTop(),
+          right: this.expandedMainPanelLeft() + this.panelWidth,
+          bottom: this.panelTop() + this.panelMaxHeight
+        })
+      }
+      if (this.infoWinVisible && !this.drawerOpen) {
+        if (this.useExpandedDetailSummary() && this.canShowExpandedDetailSummary()) {
+          obstacles.push({
+            label: 'summary', left: this.expandedDetailSummaryX(), top: this.expandedDetailSummaryY(),
+            right: this.expandedDetailSummaryX() + this.expandedDetailSummaryWidth(),
+            bottom: this.expandedDetailSummaryY() + this.expandedDetailSummaryHeight()
+          })
+        } else {
+          obstacles.push({
+            label: 'object-card', left: this.bottomCardX(), top: this.bottomCardY(),
+            right: this.bottomCardX() + this.bottomCardWidth(),
+            bottom: this.bottomCardY() + this.bottomCardHeight()
+          })
+        }
+      }
+      return obstacles
+    }
+
+    if (this.panelVisible || this.drawerOpen) {
+      const sheetTop = this.isFoldHoverLayout ? this.hoverPanelTop() : this.skyHeight - 90 - this.compactPanelHeight()
+      obstacles.push({ label: this.drawerOpen ? 'drawer' : 'sheet', left: 0, top: sheetTop, right: this.skyWidth, bottom: this.skyHeight - 90 })
+    }
+    if (!this.isFoldHoverLayout) {
+      obstacles.push({ label: 'bottom-dock', left: 0, top: this.skyHeight - 90, right: this.skyWidth, bottom: this.skyHeight })
+    }
+    if (!this.panelVisible && !this.drawerOpen && this.infoWinVisible) {
+      if (this.isPhoneDetailPeek()) {
+        obstacles.push({
+          label: 'object-peek', left: this.compactObjectPeekX(), top: this.compactObjectPeekY(),
+          right: this.compactObjectPeekX() + this.compactObjectPeekWidth(), bottom: this.compactObjectPeekY() + 64
+        })
+      } else {
+        obstacles.push({
+          label: 'object-card', left: this.bottomCardX(), top: this.bottomCardY(),
+          right: this.bottomCardX() + this.bottomCardWidth(), bottom: this.bottomCardY() + this.bottomCardHeight()
+        })
+      }
+    }
+    return obstacles
+  }
+
+  private pointOverlapsUiObstacle(x: number, y: number, obstacle: SkyUiObstacle, margin: number = 10): boolean {
+    return x >= obstacle.left - margin && x <= obstacle.right + margin &&
+      y >= obstacle.top - margin && y <= obstacle.bottom + margin
+  }
+
+  private selectedObjectLayoutAvoidanceTarget(fallback: number[]): number[] {
+    const projection = this.callNative('getGyroGuidePosition') as GyroGuideProjection
+    if (projection.ok !== true || projection.valid !== true || projection.visible !== true ||
+      typeof projection.xRatio !== 'number' || typeof projection.yRatio !== 'number') {
+      hilog.info(0x0000, 'StellariumArkUI', 'safe-target skipped unavailable projection')
+      return []
+    }
+    const currentX = (projection.xRatio as number) * this.skyWidth
+    const currentY = (projection.yRatio as number) * this.skyHeight
+    const obstacles = this.selectedObjectUiObstacles()
+    let collision: SkyUiObstacle | undefined = undefined
+    for (let index = 0; index < obstacles.length; index++) {
+      if (this.pointOverlapsUiObstacle(currentX, currentY, obstacles[index])) {
+        collision = obstacles[index]
+        break
+      }
+    }
+    if (collision === undefined) {
+      hilog.info(0x0000, 'StellariumArkUI', 'safe-target skipped clear x=%{public}d y=%{public}d', Math.round(currentX), Math.round(currentY))
+      return []
+    }
+
+    const edge = 18
+    const gap = 30
+    const minX = edge
+    const maxX = this.skyWidth - edge
+    const minY = edge
+    const maxY = this.skyHeight - edge
+    const candidates: number[][] = [
+      [collision.left - gap, currentY], [collision.right + gap, currentY],
+      [currentX, collision.top - gap], [currentX, collision.bottom + gap]
+    ]
+    let best: number[] = []
+    let bestDistance = Number.MAX_VALUE
+    for (let index = 0; index < candidates.length; index++) {
+      const candidateX = this.clamp(candidates[index][0], minX, maxX)
+      const candidateY = this.clamp(candidates[index][1], minY, maxY)
+      let clear = true
+      for (let obstacleIndex = 0; obstacleIndex < obstacles.length; obstacleIndex++) {
+        if (this.pointOverlapsUiObstacle(candidateX, candidateY, obstacles[obstacleIndex], 12)) {
+          clear = false
+          break
+        }
+      }
+      const distance = Math.pow(candidateX - currentX, 2) + Math.pow(candidateY - currentY, 2)
+      if (clear && distance < bestDistance) {
+        best = [candidateX, candidateY]
+        bestDistance = distance
+      }
+    }
+    if (best.length !== 2 || !Number.isFinite(best[0]) || !Number.isFinite(best[1])) {
+      if (!Number.isFinite(fallback[0]) || !Number.isFinite(fallback[1])) {
+        hilog.info(0x0000, 'StellariumArkUI', 'safe-target skipped no clear candidate')
+        return []
+      }
+      best = fallback
+    }
+    hilog.info(0x0000, 'StellariumArkUI', 'safe-target collision %{public}s at=%{public}d|%{public}d target=%{public}d|%{public}d',
+      collision.label, Math.round(currentX), Math.round(currentY), Math.round(best[0]), Math.round(best[1]))
+    return best
   }
 
   // UI placement is not static: panels can open, close, snap between 6/10
@@ -7494,13 +7643,14 @@ private loadPlanetPositions(): void {
   }
 
   private expandedZoomOutY(): number {
-    return this.expandedZoomInY() + 44 + this.EXPANDED_ZOOM_GAP
+    return this.expandedZoomInY() + this.EXPANDED_ZOOM_SIZE + this.EXPANDED_ZOOM_GAP
   }
 
   private isExpandedZoomPoint(x: number, y: number): boolean {
     if (!this.isExpandedLayout) { return false }
     const zx = this.expandedZoomX()
-    return x >= zx - 4 && x <= zx + 48 && y >= this.expandedZoomInY() - 4 && y <= this.expandedZoomOutY() + 48
+    return x >= zx - 4 && x <= zx + this.EXPANDED_ZOOM_SIZE + 4
+      && y >= this.expandedZoomInY() - 4 && y <= this.expandedZoomOutY() + this.EXPANDED_ZOOM_SIZE + 4
   }
 
   private drawerLeft(): number {
@@ -7682,11 +7832,11 @@ private loadPlanetPositions(): void {
 
     // zoom +/- buttons (expanded layout, bottom-left) — 抽屉打开时完全跳过
     if (this.isExpandedLayout && !this.drawerOpen && this.isExpandedZoomPoint(x, y)) {
-      if (y >= this.expandedZoomInY() - 4 && y <= this.expandedZoomInY() + 48) {
+      if (y >= this.expandedZoomInY() - 4 && y <= this.expandedZoomInY() + this.EXPANDED_ZOOM_SIZE + 4) {
         this.zoomStep(0.5)
         return true
       }
-      if (y >= this.expandedZoomOutY() - 4 && y <= this.expandedZoomOutY() + 48) {
+      if (y >= this.expandedZoomOutY() - 4 && y <= this.expandedZoomOutY() + this.EXPANDED_ZOOM_SIZE + 4) {
         this.zoomStep(2.0)
         return true
       }
@@ -7931,7 +8081,7 @@ private loadPlanetPositions(): void {
           }
         }
         if (this.isExpandedLayout && !this.drawerOpen && this.isExpandedZoomPoint(downX, downY)) {
-          if (downY <= this.expandedZoomInY() + 48) {
+          if (downY <= this.expandedZoomInY() + this.EXPANDED_ZOOM_SIZE + 4) {
             this.zoomStep(0.5)
             this.flashHint(I18n.t('i0076'))
           } else {
@@ -8414,7 +8564,12 @@ private loadPlanetPositions(): void {
           .zIndex(6)
       }
       if (this.expandedUiAllowed() && !this.drawerOpen) {
-        Stack() { this.expandedZoomButton('zoom_in') }
+        Button({ type: ButtonType.Normal }) { this.expandedZoomButton('zoom_in') }
+          .width(this.EXPANDED_ZOOM_SIZE)
+          .height(this.EXPANDED_ZOOM_SIZE)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(this.EXPANDED_ZOOM_SIZE / 2)
           .hitTestBehavior(HitTestMode.Block)
           .position({ x: this.expandedZoomX(), y: this.expandedZoomInY() })
           .onClick(() => {
@@ -8423,7 +8578,12 @@ private loadPlanetPositions(): void {
           })
       }
       if (this.expandedUiAllowed() && !this.drawerOpen) {
-        Stack() { this.expandedZoomButton('zoom_out') }
+        Button({ type: ButtonType.Normal }) { this.expandedZoomButton('zoom_out') }
+          .width(this.EXPANDED_ZOOM_SIZE)
+          .height(this.EXPANDED_ZOOM_SIZE)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(this.EXPANDED_ZOOM_SIZE / 2)
           .hitTestBehavior(HitTestMode.Block)
           .position({ x: this.expandedZoomX(), y: this.expandedZoomOutY() })
           .onClick(() => {
@@ -8855,14 +9015,14 @@ private loadPlanetPositions(): void {
         .height(22)
         .fillColor(active ? '#FFFFFF' : this.nmText())
     }
-      .width(44)
-      .height(44)
+      .width(this.EXPANDED_ZOOM_SIZE)
+      .height(this.EXPANDED_ZOOM_SIZE)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
       .backgroundColor(pressed ? 'rgba(169, 232, 255, 0.24)' : (active ? 'rgba(91, 147, 191, 0.60)' : 'rgba(18, 22, 36, 0.50)'))
       .backdropBlur(active ? 28 : 36)
       .border({ width: 1, color: active ? 'rgba(107, 163, 214, 0.42)' : 'rgba(255, 255, 255, 0.10)' })
-      .borderRadius(22)
+      .borderRadius(this.EXPANDED_ZOOM_SIZE / 2)
       .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
       .scale({ x: pressed ? 0.90 : (active ? 1.05 : 1.0), y: pressed ? 0.90 : (active ? 1.05 : 1.0) })
       .animation({ duration: pressed ? 70 : 180, curve: Curve.EaseOut })

@@ -1,0 +1,100 @@
+08-11 13:33:04.926  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:04.927  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:04.927  7966  7966 I A00000/StellariumQt: [   157.654][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:04.937  7966  8159 I A00000/StellariumQt: [   157.665][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:04.973  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:04.974  7966  7966 I A00000/StellariumQt: [   157.701][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.004  7966  8159 I A00000/StellariumQt: [   157.732][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:05.075  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.075  7966  7966 I A00000/StellariumQt: [   157.803][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.131  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:05.131  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:05.131  7966  7966 I A00000/StellariumQt: [   157.859][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:05.142  7966  8159 I A00000/StellariumQt: [   157.870][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:05.167  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.167  7966  7966 I A00000/StellariumQt: [   157.895][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.177  7966  8159 I A00000/StellariumQt: [   157.904][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:05.269  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.269  7966  7966 I A00000/StellariumQt: [   157.996][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.334  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:05.334  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:05.334  7966  7966 I A00000/StellariumQt: [   158.061][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:05.360  7966  8159 I A00000/StellariumQt: [   158.087][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:05.379  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.379  7966  7966 I A00000/StellariumQt: [   158.107][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.387  7966  8159 I A00000/StellariumQt: [   158.115][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:05.480  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.480  7966  7966 I A00000/StellariumQt: [   158.208][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.521  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:05.521  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:05.521  7966  7966 I A00000/StellariumQt: [   158.249][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:05.539  7966  8159 I A00000/StellariumQt: [   158.267][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:05.582  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.582  7966  7966 I A00000/StellariumQt: [   158.310][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.599  7966  8159 I A00000/StellariumQt: [   158.327][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:05.684  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.684  7966  7966 I A00000/StellariumQt: [   158.412][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.738  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:05.738  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:05.738  7966  7966 I A00000/StellariumQt: [   158.466][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:05.754  7966  8159 I A00000/StellariumQt: [   158.482][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:05.784  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.784  7966  7966 I A00000/StellariumQt: [   158.512][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.786  7966  8159 I A00000/StellariumQt: [   158.513][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:05.886  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.886  7966  7966 I A00000/StellariumQt: [   158.614][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:05.946  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:05.946  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:05.946  7966  7966 I A00000/StellariumQt: [   158.674][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:05.970  7966  8159 I A00000/StellariumQt: [   158.698][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:05.972  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:05.972  7966  7966 I A00000/StellariumQt: [   158.700][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.004  7966  8159 I A00000/StellariumQt: [   158.732][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:06.073  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.073  7966  7966 I A00000/StellariumQt: [   158.801][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.135  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:06.135  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:06.135  7966  7966 I A00000/StellariumQt: [   158.863][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:06.137  7966  8159 I A00000/StellariumQt: [   158.865][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:06.190  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.190  7966  7966 I A00000/StellariumQt: [   158.918][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.199  7966  8159 I A00000/StellariumQt: [   158.927][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:06.290  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.290  7966  7966 I A00000/StellariumQt: [   159.018][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.399  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.399  7966  7966 I A00000/StellariumQt: [   159.126][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.419  7966  8159 I A00000/StellariumQt: [   159.147][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:06.499  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.499  7966  7966 I A00000/StellariumQt: [   159.227][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.516  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:06.516  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:06.516  7966  7966 I A00000/StellariumQt: [   159.244][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:06.524  7966  8159 I A00000/StellariumQt: [   159.252][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:06.586  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.586  7966  7966 I A00000/StellariumQt: [   159.313][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.598  7966  8159 I A00000/StellariumQt: [   159.326][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:06.687  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.687  7966  7966 I A00000/StellariumQt: [   159.415][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.726  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:06.726  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:06.726  7966  7966 I A00000/StellariumQt: [   159.453][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:06.746  7966  8159 I A00000/StellariumQt: [   159.474][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:06.968  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:06.968  7966  7966 I A00000/StellariumQt: [   159.695][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:06.992  7966  8159 I A00000/StellariumQt: [   159.720][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:07.069  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:07.069  7966  7966 I A00000/StellariumQt: [   159.797][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:07.177  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:07.177  7966  7966 I A00000/StellariumQt: [   159.904][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:07.202  7966  8159 I A00000/StellariumQt: [   159.929][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:07.277  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:07.277  7966  7966 I A00000/StellariumQt: [   160.005][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:43.073  7966  7966 I A00000/StellariumArkUI: zoomStep factor=0.5
+08-11 13:33:43.073  7966  7966 I A00000/StellariumEntryGL: Stellarium command zoomStep
+08-11 13:33:43.073  7966  7966 I A00000/StellariumQt: [   195.801][INFO] [StellariumOhos] command received: "zoomStep" "0.5"
+08-11 13:33:43.089  7966  8159 I A00000/StellariumQt: [   195.817][INFO] [StellariumOhos] command on Qt thread: "zoomStep"
+08-11 13:33:43.526  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:43.526  7966  7966 I A00000/StellariumQt: [   196.254][INFO] [StellariumOhos] command received: "getFieldOfView" ""
+08-11 13:33:43.554  7966  8159 I A00000/StellariumQt: [   196.282][INFO] [StellariumOhos] command on Qt thread: "getFieldOfView"
+08-11 13:33:43.627  7966  7966 I A00000/StellariumEntryGL: Stellarium command getFieldOfView
+08-11 13:33:43.627  7966  7966 I A00000/StellariumQt: [   196.355][INFO] [StellariumOhos] command received: "getFieldOfView" ""

@@ -1,0 +1,120 @@
+08-11 13:41:23.233 21165 21366 W A00000/StellariumCpp: zero-copy frame bridge resolved
+08-11 13:41:23.233 21165 21366 W A00000/StellariumCpp: framebuffer viewport 1025x768
+08-11 13:41:23.251 21165 21366 I A00000/StellariumEntryGL: zero-copy EGL texture sharing enabled
+08-11 13:41:23.261 21165 21165 I A00000/StellariumEntryGL: Stellarium command getSkyCultures
+08-11 13:41:23.261 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getSkyCultures" ""
+08-11 13:41:23.261 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLandscapeList
+08-11 13:41:23.261 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getLandscapeList" ""
+08-11 13:41:23.261 21165 21165 I A00000/StellariumEntryGL: Stellarium command getScriptList
+08-11 13:41:23.261 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getScriptList" ""
+08-11 13:41:23.261 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLoadedModuleNames
+08-11 13:41:23.261 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getLoadedModuleNames" ""
+08-11 13:41:23.261 21165 21165 I A00000/StellariumEntryGL: Stellarium command getProjectionList
+08-11 13:41:23.261 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getProjectionList" ""
+08-11 13:41:23.262 21165 21165 I A00000/StellariumEntryGL: Stellarium command getConfigString
+08-11 13:41:23.262 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getConfigString" "astronomy/flag_use_km_for_distance"
+08-11 13:41:23.262 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLimitMagnitude
+08-11 13:41:23.262 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "getLimitMagnitude" ""
+08-11 13:41:23.262 21165 21165 I A00000/StellariumEntryGL: Stellarium command setVerticalClamp
+08-11 13:41:23.262 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "setVerticalClamp" "1"
+08-11 13:41:23.262 21165 21165 I A00000/StellariumEntryGL: Stellarium command setFlatHorizon
+08-11 13:41:23.262 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "setFlatHorizon" "1"
+08-11 13:41:23.262 21165 21165 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+08-11 13:41:23.262 21165 21165 I A00000/StellariumQt: [     4.137][INFO] [StellariumOhos] command received: "setActionChecked" "actionShow_Zenith_Nadir|1"
+08-11 13:41:23.262 21165 21366 I A00000/StellariumEntryGL: displayed zero-copy Stellarium texture 1025x768
+08-11 13:41:23.269 21165 21366 W A00000/StellariumCpp: startOhosRenderPump entered
+08-11 13:41:23.269 21165 21366 W A00000/StellariumCpp: ohosDrainCommandQueue ran n=10
+08-11 13:41:23.269 21165 21366 I A00000/StellariumQt: [     4.145][INFO] [StellariumOhos] command on Qt thread: "getSkyCultures"
+08-11 13:41:23.270 21165 21366 I A00000/StellariumQt: [     4.145][INFO] [StellariumOhos] command on Qt thread: "getLandscapeList"
+08-11 13:41:23.274 21165 21366 I A00000/StellariumQt: [     4.150][INFO] [StellariumOhos] command on Qt thread: "getScriptList"
+08-11 13:41:23.275 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "getLoadedModuleNames"
+08-11 13:41:23.275 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "getProjectionList"
+08-11 13:41:23.276 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "getConfigString"
+08-11 13:41:23.276 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "getLimitMagnitude"
+08-11 13:41:23.276 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "setVerticalClamp"
+08-11 13:41:23.276 21165 21366 I A00000/StellariumQt: [     4.151][INFO] [StellariumOhos] command on Qt thread: "setFlatHorizon"
+08-11 13:41:23.276 21165 21366 I A00000/StellariumQt: [     4.152][INFO] [StellariumOhos] command on Qt thread: "setActionChecked"
+08-11 13:41:23.290 21165 21366 I A00000/StellariumFps: frame: total=21.0ms cmd=7.0ms setup=0.0ms update=2.0ms draw=2.0ms submit=10.0ms interval=8ms maxFps=1 fps=0.3
+08-11 13:41:23.290 21165 21366 W A00000/StellariumQt: [     4.166][WARN] Started OpenHarmony render pump.
+08-11 13:41:23.290 21165 21366 D A00000/StellariumQt: [     4.166][DBG ] Max thread count (Global Pool):  4
+08-11 13:41:23.298 21165 21366 W A00000/StellariumQt: [     4.173][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:41:23.298 21165 21366 W A00000/StellariumQt: [     4.174][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:41:23.302 21165 21366 I A00000/StellariumQt: [     4.178][INFO] OpenGL viewport size: 2209 x 2415
+08-11 13:41:23.302 21165 21366 I A00000/StellariumQt: [     4.178][INFO] Creating scene FBO with size 2209.38x2415.63
+08-11 13:41:23.329 21165 21366 W A00000/StellariumQt: [     4.205][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:41:23.383 21165 21165 I A00000/StellariumEntryGL: Stellarium command getFPS
+08-11 13:41:23.383 21165 21165 I A00000/StellariumQt: [     4.258][INFO] [StellariumOhos] command received: "getFPS" ""
+08-11 13:41:23.462 21165 21165 I A00000/StellariumEntryGL: Stellarium command getSkyCultures
+08-11 13:41:23.462 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "getSkyCultures" ""
+08-11 13:41:23.462 21165 21165 I A00000/StellariumEntryGL: Stellarium command setLanguage
+08-11 13:41:23.462 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "setLanguage" "zh_CN"
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLandscapeList
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "getLandscapeList" ""
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getScriptList
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "getScriptList" ""
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLoadedModuleNames
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "getLoadedModuleNames" ""
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getProjectionList
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.338][INFO] [StellariumOhos] command received: "getProjectionList" ""
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getConfigString
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.339][INFO] [StellariumOhos] command received: "getConfigString" "astronomy/flag_use_km_for_distance"
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command getLimitMagnitude
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.339][INFO] [StellariumOhos] command received: "getLimitMagnitude" ""
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command setVerticalClamp
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.339][INFO] [StellariumOhos] command received: "setVerticalClamp" "1"
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command setFlatHorizon
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.339][INFO] [StellariumOhos] command received: "setFlatHorizon" "1"
+08-11 13:41:23.463 21165 21165 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+08-11 13:41:23.463 21165 21165 I A00000/StellariumQt: [     4.339][INFO] [StellariumOhos] command received: "setActionChecked" "actionShow_Zenith_Nadir|1"
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.358][INFO] [StellariumOhos] command on Qt thread: "setLanguage"
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.358][INFO] Application language: zh_CN
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.359][INFO] Sky language: zh_CN
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.359][INFO] Planetary features language: zh_CN
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.359][INFO] Scripts language: zh_CN
+08-11 13:41:23.483 21165 21366 I A00000/StellariumQt: [     4.359][INFO] Sky culture description language: zh_CN
+08-11 13:41:23.663 21165 21165 I A00000/StellariumEntryGL: Stellarium command setLanguage
+08-11 13:41:23.663 21165 21165 I A00000/StellariumQt: [     4.539][INFO] [StellariumOhos] command received: "setLanguage" "zh_CN"
+08-11 13:41:23.883 21165 21165 I A00000/StellariumEntryGL: Stellarium command getFPS
+08-11 13:41:23.883 21165 21165 I A00000/StellariumQt: [     4.759][INFO] [StellariumOhos] command received: "getFPS" ""
+08-11 13:41:23.979 21165 21366 I A00000/StellariumFps: frame: total=24.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=20.0ms interval=8ms maxFps=1 fps=0.3
+08-11 13:41:24.844 21165 21366 I A00000/StellariumFps: frame: total=16.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=12.0ms submit=3.0ms interval=33ms maxFps=0 fps=43.7
+08-11 13:41:25.827 21165 21366 I A00000/StellariumFps: frame: total=9.0ms cmd=0.0ms setup=1.0ms update=0.0ms draw=5.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.8
+08-11 13:41:26.816 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:27.805 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:28.794 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:29.793 21165 21366 I A00000/StellariumFps: frame: total=15.0ms cmd=0.0ms setup=0.0ms update=2.0ms draw=9.0ms submit=4.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:30.775 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:31.769 21165 21366 I A00000/StellariumFps: frame: total=9.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=5.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:32.755 21165 21366 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:33.746 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:34.736 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:35.728 21165 21366 I A00000/StellariumFps: frame: total=10.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=5.0ms submit=4.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:36.715 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:37.706 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:38.695 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=1.0ms setup=0.0ms update=0.0ms draw=3.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:39.683 21165 21366 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=3.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:40.674 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:41.665 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:42.654 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:43.644 21165 21366 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:44.635 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=5.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:45.631 21165 21366 I A00000/StellariumFps: frame: total=10.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=8.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:46.616 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:47.605 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:48.594 21165 21366 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:49.586 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:50.574 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:51.565 21165 21366 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:52.556 21165 21366 I A00000/StellariumFps: frame: total=8.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=5.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:53.547 21165 21366 I A00000/StellariumFps: frame: total=9.0ms cmd=1.0ms setup=0.0ms update=0.0ms draw=5.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:54.537 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:55.526 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:56.515 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:57.506 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=5.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:58.496 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:41:59.493 21165 21366 I A00000/StellariumFps: frame: total=14.0ms cmd=0.0ms setup=0.0ms update=2.0ms draw=9.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:42:00.475 21165 21366 I A00000/StellariumFps: frame: total=8.0ms cmd=0.0ms setup=1.0ms update=0.0ms draw=4.0ms submit=3.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:42:01.465 21165 21366 I A00000/StellariumFps: frame: total=7.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=2.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:42:02.455 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:42:03.443 21165 21366 I A00000/StellariumFps: frame: total=6.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=4.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3
+08-11 13:42:04.434 21165 21366 I A00000/StellariumFps: frame: total=4.0ms cmd=0.0ms setup=0.0ms update=0.0ms draw=3.0ms submit=1.0ms interval=33ms maxFps=0 fps=30.3

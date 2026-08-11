@@ -1,0 +1,120 @@
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getSkyCultures
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.340][INFO] [StellariumOhos] command received: "getSkyCultures" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLandscapeList
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getLandscapeList" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getScriptList
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getScriptList" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLoadedModuleNames
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getLoadedModuleNames" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getProjectionList
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getProjectionList" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getConfigString
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getConfigString" "astronomy/flag_use_km_for_distance"
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLimitMagnitude
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "getLimitMagnitude" ""
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command setVerticalClamp
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "setVerticalClamp" "1"
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command setFlatHorizon
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "setFlatHorizon" "1"
+08-11 13:51:54.086  2662  2662 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+08-11 13:51:54.086  2662  2662 I A00000/StellariumQt: [     4.341][INFO] [StellariumOhos] command received: "setActionChecked" "actionShow_Zenith_Nadir|1"
+08-11 13:51:54.215  2662  2857 I A00000/StellariumQt: [     4.469][INFO] Loaded 895910 discovery circumstances records for minor planets...
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.473][WARN] SSE: Comet cross-index data: Overwriting entry for "453P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "467P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "465P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "466P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "468P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "470P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "472P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "475P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "477P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "473P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "476P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "479P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "480P"
+08-11 13:51:54.219  2662  2857 W A00000/StellariumQt: [     4.474][WARN] SSE: Comet cross-index data: Overwriting entry for "481P"
+08-11 13:51:54.220  2662  2857 I A00000/StellariumQt: [     4.474][INFO] Loaded 2576 discovery circumstances records for comets...
+08-11 13:51:54.227  2662  2857 I A00000/StellariumQt: [     4.482][INFO] OpenGL viewport size: 1025 x 769
+08-11 13:51:54.227  2662  2857 I A00000/StellariumQt: [     4.482][INFO] Creating scene FBO with size 1025x768.75
+08-11 13:51:54.244  2662  2857 W A00000/StellariumCpp: StelRootItem paint reached
+08-11 13:51:54.245  2662  2857 I A00000/StellariumQt: [     4.499][INFO] OpenHarmony native frame bridge resolved.
+08-11 13:51:54.245  2662  2857 W A00000/StellariumCpp: zero-copy frame bridge resolved
+08-11 13:51:54.246  2662  2857 W A00000/StellariumCpp: framebuffer viewport 1025x768
+08-11 13:51:54.265  2662  2857 I A00000/StellariumEntryGL: zero-copy EGL texture sharing enabled
+08-11 13:51:54.280  2662  2857 I A00000/StellariumEntryGL: displayed zero-copy Stellarium texture 1025x768
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getSkyCultures
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getSkyCultures" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLandscapeList
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getLandscapeList" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getScriptList
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getScriptList" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLoadedModuleNames
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getLoadedModuleNames" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getProjectionList
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getProjectionList" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getConfigString
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getConfigString" "astronomy/flag_use_km_for_distance"
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLimitMagnitude
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "getLimitMagnitude" ""
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command setVerticalClamp
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "setVerticalClamp" "1"
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command setFlatHorizon
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "setFlatHorizon" "1"
+08-11 13:51:54.286  2662  2662 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+08-11 13:51:54.286  2662  2662 I A00000/StellariumQt: [     4.541][INFO] [StellariumOhos] command received: "setActionChecked" "actionShow_Zenith_Nadir|1"
+08-11 13:51:54.289  2662  2857 W A00000/StellariumCpp: startOhosRenderPump entered
+08-11 13:51:54.289  2662  2857 W A00000/StellariumCpp: ohosDrainCommandQueue ran n=10
+08-11 13:51:54.289  2662  2857 I A00000/StellariumQt: [     4.544][INFO] [StellariumOhos] command on Qt thread: "getSkyCultures"
+08-11 13:51:54.290  2662  2857 I A00000/StellariumQt: [     4.544][INFO] [StellariumOhos] command on Qt thread: "getLandscapeList"
+08-11 13:51:54.295  2662  2857 I A00000/StellariumQt: [     4.549][INFO] [StellariumOhos] command on Qt thread: "getScriptList"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "getLoadedModuleNames"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "getProjectionList"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "getConfigString"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "getLimitMagnitude"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "setVerticalClamp"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "setFlatHorizon"
+08-11 13:51:54.296  2662  2857 I A00000/StellariumQt: [     4.550][INFO] [StellariumOhos] command on Qt thread: "setActionChecked"
+08-11 13:51:54.314  2662  2857 I A00000/StellariumFps: frame: total=24.0ms cmd=6.0ms setup=0.0ms update=5.0ms draw=3.0ms submit=10.0ms interval=8ms maxFps=1 fps=0.2
+08-11 13:51:54.314  2662  2857 W A00000/StellariumQt: [     4.568][WARN] Started OpenHarmony render pump.
+08-11 13:51:54.314  2662  2857 D A00000/StellariumQt: [     4.568][DBG ] Max thread count (Global Pool):  4
+08-11 13:51:54.336  2662  2857 W A00000/StellariumQt: [     4.591][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:51:54.337  2662  2857 W A00000/StellariumQt: [     4.591][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:51:54.337  2662  2857 W A00000/StellariumQt: [     4.591][WARN] QWidget::paintEngine: Should no longer be called
+08-11 13:51:54.339  2662  2857 I A00000/StellariumQt: [     4.593][INFO] OpenGL viewport size: 2209 x 2415
+08-11 13:51:54.339  2662  2857 I A00000/StellariumQt: [     4.593][INFO] Creating scene FBO with size 2209.38x2415.63
+08-11 13:51:54.489  2662  2662 I A00000/StellariumEntryGL: Stellarium command getSkyCultures
+08-11 13:51:54.489  2662  2662 I A00000/StellariumQt: [     4.743][INFO] [StellariumOhos] command received: "getSkyCultures" ""
+08-11 13:51:54.489  2662  2662 I A00000/StellariumEntryGL: Stellarium command setLanguage
+08-11 13:51:54.489  2662  2662 I A00000/StellariumQt: [     4.743][INFO] [StellariumOhos] command received: "setLanguage" "zh_CN"
+08-11 13:51:54.490  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLandscapeList
+08-11 13:51:54.490  2662  2662 I A00000/StellariumQt: [     4.744][INFO] [StellariumOhos] command received: "getLandscapeList" ""
+08-11 13:51:54.490  2662  2662 I A00000/StellariumEntryGL: Stellarium command getScriptList
+08-11 13:51:54.490  2662  2662 I A00000/StellariumQt: [     4.744][INFO] [StellariumOhos] command received: "getScriptList" ""
+08-11 13:51:54.490  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLoadedModuleNames
+08-11 13:51:54.490  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "getLoadedModuleNames" ""
+08-11 13:51:54.490  2662  2662 I A00000/StellariumEntryGL: Stellarium command getProjectionList
+08-11 13:51:54.490  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "getProjectionList" ""
+08-11 13:51:54.490  2662  2662 I A00000/StellariumEntryGL: Stellarium command getConfigString
+08-11 13:51:54.490  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "getConfigString" "astronomy/flag_use_km_for_distance"
+08-11 13:51:54.491  2662  2662 I A00000/StellariumEntryGL: Stellarium command getLimitMagnitude
+08-11 13:51:54.491  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "getLimitMagnitude" ""
+08-11 13:51:54.491  2662  2662 I A00000/StellariumEntryGL: Stellarium command setVerticalClamp
+08-11 13:51:54.491  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "setVerticalClamp" "1"
+08-11 13:51:54.491  2662  2662 I A00000/StellariumEntryGL: Stellarium command setFlatHorizon
+08-11 13:51:54.491  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "setFlatHorizon" "1"
+08-11 13:51:54.491  2662  2662 I A00000/StellariumEntryGL: Stellarium command setActionChecked
+08-11 13:51:54.491  2662  2662 I A00000/StellariumQt: [     4.745][INFO] [StellariumOhos] command received: "setActionChecked" "actionShow_Zenith_Nadir|1"
+08-11 13:51:54.493  2662  2857 I A00000/StellariumQt: [     4.748][INFO] [StellariumOhos] command on Qt thread: "setLanguage"
+08-11 13:51:54.494  2662  2857 I A00000/StellariumQt: [     4.748][INFO] Application language: zh_CN
+08-11 13:51:54.494  2662  2857 I A00000/StellariumQt: [     4.748][INFO] Sky language: zh_CN
+08-11 13:51:54.494  2662  2857 I A00000/StellariumQt: [     4.748][INFO] Planetary features language: zh_CN
+08-11 13:51:54.494  2662  2857 I A00000/StellariumQt: [     4.748][INFO] Scripts language: zh_CN
+08-11 13:51:54.494  2662  2857 I A00000/StellariumQt: [     4.748][INFO] Sky culture description language: zh_CN
+08-11 13:51:54.523  2662  2662 I A00000/StellariumEntryGL: Stellarium command getFPS
+08-11 13:51:54.523  2662  2662 I A00000/StellariumQt: [     4.778][INFO] [StellariumOhos] command received: "getFPS" ""
+08-11 13:51:54.691  2662  2662 I A00000/StellariumEntryGL: Stellarium command setLanguage
+08-11 13:51:54.691  2662  2662 I A00000/StellariumQt: [     4.945][INFO] [StellariumOhos] command received: "setLanguage" "zh_CN"
+08-11 13:51:55.025  2662  2662 I A00000/StellariumEntryGL: Stellarium command getFPS
+08-11 13:51:55.025  2662  2662 I A00000/StellariumQt: [     5.279][INFO] [StellariumOhos] command received: "getFPS" ""
+08-11 13:51:55.122  2662  2857 I A00000/StellariumFps: frame: total=25.0ms cmd=0.0ms setup=1.0ms update=0.0ms draw=4.0ms submit=20.0ms interval=8ms maxFps=1 fps=0.2
+08-11 13:51:55.988  2662  2857 I A00000/StellariumFps: frame: total=5.0ms cmd=0.0ms setup=0.0ms update=1.0ms draw=3.0ms submit=1.0ms interval=33ms maxFps=0 fps=39.2
