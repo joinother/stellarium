@@ -387,6 +387,31 @@ struct WindowNativeNode {
   private scrubberAnchorPending: boolean = false
   private scrubberLastSendMs: number = 0
   private scrubberInteracting: boolean = false
+  // 时间转轴：顶部选择要调整的字段，底部同一条刻度轴只控制该字段。
+  @State private timeWheelUnit: string = 'hour'
+  @State private timeWheelYear: number = 2026
+  @State private timeWheelMonth: number = 8
+  @State private timeWheelDay: number = 11
+  @State private timeWheelHour: number = 20
+  @State private timeWheelMinute: number = 0
+  @State private timeWheelSecond: number = 0
+  @State private timeWheelTickLabels: string[] = []
+  @State private timeWheelVisualOffset: number = 0
+  @State private timeWheelDragging: boolean = false
+  private timeWheelLastInputMs: number = 0
+  private timeWheelLastTouchX: number = 0
+  private timeWheelLastTouchMs: number = 0
+  private timeWheelDragCarry: number = 0
+  @State private timeWheelAppliedSteps: number = 0
+  private timeWheelTransitionTimer: number = 0
+  private timeWheelTargetMs: number = 0
+  private timeWheelLastNativePushMs: number = 0
+  private timeWheelGestureBaseMs: number = 0
+  private timeWheelGestureSteps: number = 0
+  private timeWheelGestureTickOffset: number = 0
+  private timeWheelTrackBaseMs: number = 0
+  private readonly timeWheelTickSpacing: number = 42
+  private readonly timeWheelCenterTick: number = 20
   @State private manualYear: number = 2026
   @State private manualMonth: number = 7
   @State private manualDay: number = 20
@@ -652,6 +677,7 @@ struct WindowNativeNode {
   @State private graphLoading: boolean = false
   private graphTargetPickerActive: boolean = false
   private rtsTargetPickerActive: boolean = false
+  private ephemerisTargetPickerActive: boolean = false
   @State private annualElevationData: Array<AnnualElevationPoint> = []
   @State private annualElevationName: string = ''
   @State private annualElevationError: string = ''
@@ -1654,6 +1680,7 @@ struct WindowNativeNode {
     if (this.activePanel === 'search') {
       this.graphTargetPickerActive = false
       this.rtsTargetPickerActive = false
+      this.ephemerisTargetPickerActive = false
     }
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
@@ -2459,9 +2486,8 @@ struct WindowNativeNode {
 
   private loadRTS(): void {
     this.rtsError = ''
-    if (this.selectedName.length === 0) {
-      this.rtsData = new Map()
-      this.rtsError = '升起、中天和落下时间需要先选择一个天体。'
+    if (!this.hasSelectedObject()) {
+      this.clearRtsSelectionResults()
       return
     }
     this.callInteractive('getRTS', '', (r: StellariumBridgeResponse) => {
@@ -2505,9 +2531,8 @@ struct WindowNativeNode {
     this.rtsCalendarData = []
     this.rtsCalendarError = ''
     this.rtsCalendarNeedsGeneration = false
-    if (this.selectedName.length === 0) {
-      this.rtsCalendarLoading = false
-      this.rtsCalendarError = '请先选择一个天体，再生成升中天落日期表。'
+    if (!this.hasSelectedObject()) {
+      this.clearRtsSelectionResults()
       return
     }
     this.rtsCalendarLoading = true
@@ -2996,6 +3021,30 @@ struct WindowNativeNode {
     this.searchSuggestions = []
     this.loadCategoryObjects('planet')
     this.setPanel('search')
+  }
+
+  private openEphemerisTargetPicker(): void {
+    this.ephemerisTargetPickerActive = true
+    this.searchText = ''
+    this.searchSuggestions = []
+    this.loadCategoryObjects('planet')
+    this.setPanel('search')
+  }
+
+  private hasSelectedObject(): boolean {
+    return this.selectedStatus === 'Selected' && this.selectedName.length > 0
+  }
+
+  private clearRtsSelectionResults(): void {
+    this.rtsData = new Map()
+    this.rtsError = '升起、中天和落下时间需要先选择一个天体。'
+    this.rtsCalendarData = []
+    this.rtsCalendarName = ''
+    this.rtsCalendarLoading = false
+    this.rtsCalendarError = '请先选择一个天体，再生成升中天落日期表。'
+    this.rtsCalendarNeedsGeneration = false
+    this.rtsCalendarProgress = 0
+    ++this.rtsCalendarLoadSequence
   }
 
   @Builder
@@ -4234,6 +4283,324 @@ private loadPlanetPositions(): void {
     this.updateScrubberLabel(0)
   }
 
+  private timeWheelDateAtOffset(offset: number): Date {
+    const baseMs = this.timeWheelTrackBaseMs > 0
+      ? this.timeWheelTrackBaseMs
+      : Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1, this.timeWheelDay,
+        this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond)
+    const local = new Date(baseMs)
+    this.shiftTimeWheelDate(local, offset)
+    return local
+  }
+
+  private shiftTimeWheelDate(local: Date, steps: number): void {
+    if (this.timeWheelUnit === 'year') { local.setUTCFullYear(local.getUTCFullYear() + steps) }
+    else if (this.timeWheelUnit === 'month') { local.setUTCMonth(local.getUTCMonth() + steps) }
+    else if (this.timeWheelUnit === 'day') { local.setUTCDate(local.getUTCDate() + steps) }
+    else if (this.timeWheelUnit === 'hour') { local.setUTCHours(local.getUTCHours() + steps) }
+    else if (this.timeWheelUnit === 'minute') { local.setUTCMinutes(local.getUTCMinutes() + steps) }
+    else { local.setUTCSeconds(local.getUTCSeconds() + steps) }
+  }
+
+  private timeWheelDateAtFraction(baseMs: number, steps: number): Date {
+    const wholeSteps = steps >= 0 ? Math.floor(steps) : Math.ceil(steps)
+    const fractionalSteps = steps - wholeSteps
+    const local = new Date(baseMs)
+    this.shiftTimeWheelDate(local, wholeSteps)
+    if (fractionalSteps === 0) { return local }
+    const next = new Date(local.getTime())
+    this.shiftTimeWheelDate(next, fractionalSteps > 0 ? 1 : -1)
+    if (this.isCalendarTimeWheel()) {
+      const localDateMs = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
+      const nextDateMs = Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate())
+      const dayOffset = Math.round((nextDateMs - localDateMs) * Math.abs(fractionalSteps) / 86400000.0)
+      local.setUTCDate(local.getUTCDate() + dayOffset)
+      return local
+    }
+    return new Date(local.getTime() + (next.getTime() - local.getTime()) * Math.abs(fractionalSteps))
+  }
+
+  private isCalendarTimeWheel(): boolean {
+    return this.timeWheelUnit === 'year' || this.timeWheelUnit === 'month' || this.timeWheelUnit === 'day'
+  }
+
+  private timeWheelMajorInterval(): number {
+    if (this.timeWheelUnit === 'year') { return 5 }
+    if (this.timeWheelUnit === 'month') { return 3 }
+    return 5
+  }
+
+  private timeWheelTickValue(offset: number): string {
+    const local = this.timeWheelDateAtOffset(offset)
+    if (this.timeWheelUnit === 'year') { return local.getUTCFullYear().toString() }
+    if (this.timeWheelUnit === 'month') { return (local.getUTCMonth() + 1).toString().padStart(2, '0') + '月' }
+    if (this.timeWheelUnit === 'day') { return local.getUTCDate().toString().padStart(2, '0') + '日' }
+    if (this.timeWheelUnit === 'hour') { return local.getUTCHours().toString().padStart(2, '0') + '时' }
+    if (this.timeWheelUnit === 'minute') { return local.getUTCMinutes().toString().padStart(2, '0') + '分' }
+    return local.getUTCSeconds().toString().padStart(2, '0') + '秒'
+  }
+
+  private timeWheelTickLabel(offset: number): string {
+    if (offset % this.timeWheelMajorInterval() !== 0) { return '' }
+    return this.timeWheelTickValue(offset)
+  }
+
+  private timeWheelCurrentLabel(): string {
+    if (this.timeWheelUnit === 'year') { return this.timeWheelYear.toString() }
+    if (this.timeWheelUnit === 'month') { return this.timeWheelMonth.toString().padStart(2, '0') + '月' }
+    if (this.timeWheelUnit === 'day') { return this.timeWheelDay.toString().padStart(2, '0') + '日' }
+    if (this.timeWheelUnit === 'hour') { return this.timeWheelHour.toString().padStart(2, '0') + '时' }
+    if (this.timeWheelUnit === 'minute') { return this.timeWheelMinute.toString().padStart(2, '0') + '分' }
+    return this.timeWheelSecond.toString().padStart(2, '0') + '秒'
+  }
+
+  private refreshTimeWheelTicks(): void {
+    const labels: string[] = []
+    for (let index = 0; index <= this.timeWheelCenterTick * 2; index++) {
+      labels.push(this.timeWheelTickLabel(index - this.timeWheelCenterTick))
+    }
+    this.timeWheelTickLabels = labels
+  }
+
+  private isTimeWheelMajorTick(index: number): boolean {
+    return (index - this.timeWheelCenterTick) % this.timeWheelMajorInterval() === 0
+  }
+
+  private timeWheelVisibleTickOffset(index: number): number {
+    return index - this.timeWheelCenterTick + this.timeWheelAppliedSteps
+  }
+
+  private timeWheelVisibleTickLabel(index: number): string {
+    const offset = this.timeWheelVisibleTickOffset(index)
+    if (!this.isTimeWheelVisibleMajorTick(index) &&
+      this.timeWheelTickDistance(index) > this.timeWheelTickSpacing * 4.5) {
+      return ''
+    }
+    return this.timeWheelTickValue(offset)
+  }
+
+  private isTimeWheelVisibleMajorTick(index: number): boolean {
+    return this.timeWheelVisibleTickOffset(index) % this.timeWheelMajorInterval() === 0
+  }
+
+  private timeWheelTickDistance(index: number): number {
+    return Math.abs((index - this.timeWheelCenterTick) * this.timeWheelTickSpacing + this.timeWheelVisualOffset)
+  }
+
+  private isTimeWheelTickCentered(index: number): boolean {
+    const closestIndex = this.timeWheelCenterTick - Math.round(this.timeWheelVisualOffset / this.timeWheelTickSpacing)
+    return index === closestIndex
+  }
+
+  private timeWheelTickScale(index: number): number {
+    const focus = Math.max(0, 1 - this.timeWheelTickDistance(index) / (this.timeWheelTickSpacing * 3))
+    return 1 + focus * 0.22
+  }
+
+  private timeWheelTickOpacity(index: number): number {
+    const focus = Math.max(0, 1 - this.timeWheelTickDistance(index) / (this.timeWheelTickSpacing * 4.5))
+    const baseOpacity = this.isTimeWheelVisibleMajorTick(index) ? 0.12 : 0.04
+    return focus * (baseOpacity + (1 - baseOpacity) * focus)
+  }
+
+  private timeWheelTickBlur(index: number): number {
+    const distance = this.timeWheelTickDistance(index)
+    if (distance <= this.timeWheelTickSpacing / 2) { return 0 }
+    return Math.min(1.2, (distance / this.timeWheelTickSpacing - 0.5) * 0.42)
+  }
+
+  private timeWheelTickHeight(index: number): number {
+    const focus = Math.max(0, 1 - this.timeWheelTickDistance(index) / (this.timeWheelTickSpacing * 3))
+    const baseHeight = this.isTimeWheelVisibleMajorTick(index) ? 17 : 8
+    return baseHeight + (31 - baseHeight) * focus
+  }
+
+  private selectTimeWheelUnit(unit: string): void {
+    this.finishTimeWheelTransition()
+    this.timeWheelUnit = unit
+    this.timeWheelDragging = false
+    this.rebaseTimeWheelTrack()
+  }
+
+  private applyTimeWheelDate(local: Date, refreshTicks: boolean, sendNative: boolean): void {
+    this.timeWheelLastInputMs = Date.now()
+    this.timeWheelYear = local.getUTCFullYear()
+    this.timeWheelMonth = local.getUTCMonth() + 1
+    this.timeWheelDay = local.getUTCDate()
+    this.timeWheelHour = local.getUTCHours()
+    this.timeWheelMinute = local.getUTCMinutes()
+    this.timeWheelSecond = local.getUTCSeconds()
+    if (refreshTicks) { this.refreshTimeWheelTicks() }
+    if (sendNative) {
+      const targetJd = local.getTime() / 86400000.0 + 2440587.5 - this.utcOffsetHours / 24.0
+      this.callNativeFire('setTimeToJD', targetJd.toFixed(8))
+      this.timeWheelLastNativePushMs = Date.now()
+    }
+  }
+
+  private setTimeWheelStopped(): void {
+    this.timeSpeedIndex = WindowNativeNode.SPEED_IDX_STOP
+    this.pendingTimeRate = 0
+    this.pendingTimeRateUntilMs = Date.now() + 500
+    this.timeRateText = this.formatRate(0)
+  }
+
+  private startTimeWheelTransition(refreshTicks: boolean): void {
+    if (this.timeWheelTransitionTimer !== 0) { return }
+    this.timeWheelTransitionTimer = setInterval(() => {
+      const current = new Date(Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1, this.timeWheelDay,
+        this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond))
+      const target = new Date(this.timeWheelTargetMs)
+      const deltaMs = target.getTime() - current.getTime()
+      if (Math.abs(deltaMs) <= 1000) {
+        this.applyTimeWheelDate(target, refreshTicks, true)
+        clearInterval(this.timeWheelTransitionTimer)
+        this.timeWheelTransitionTimer = 0
+        this.timeWheelTargetMs = 0
+        return
+      }
+      const next = new Date(current.getTime())
+      if (this.isCalendarTimeWheel()) {
+        const days = Math.ceil(Math.abs(deltaMs) / 86400000.0 / 3.0)
+        next.setUTCDate(next.getUTCDate() + (deltaMs > 0 ? days : -days))
+      } else {
+        const seconds = Math.ceil(Math.abs(deltaMs) / 1000.0 / 3.0)
+        next.setUTCSeconds(next.getUTCSeconds() + (deltaMs > 0 ? seconds : -seconds))
+      }
+      const sendNative = Date.now() - this.timeWheelLastNativePushMs >= 96
+      this.applyTimeWheelDate(next, refreshTicks, sendNative)
+    }, 12)
+  }
+
+  private finishTimeWheelTransition(): void {
+    if (this.timeWheelTransitionTimer === 0) { return }
+    clearInterval(this.timeWheelTransitionTimer)
+    this.timeWheelTransitionTimer = 0
+    this.applyTimeWheelDate(new Date(this.timeWheelTargetMs), true, true)
+    this.timeWheelTargetMs = 0
+  }
+
+  private advanceTimeWheel(steps: number, refreshTicks: boolean = true): void {
+    if (steps === 0) { return }
+    const local = this.timeWheelTargetMs > 0
+      ? new Date(this.timeWheelTargetMs)
+      : new Date(Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1, this.timeWheelDay,
+      this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond))
+    if (this.timeWheelUnit === 'year') { local.setUTCFullYear(local.getUTCFullYear() + steps) }
+    else if (this.timeWheelUnit === 'month') { local.setUTCMonth(local.getUTCMonth() + steps) }
+    else if (this.timeWheelUnit === 'day') { local.setUTCDate(local.getUTCDate() + steps) }
+    else if (this.timeWheelUnit === 'hour') { local.setUTCHours(local.getUTCHours() + steps) }
+    else if (this.timeWheelUnit === 'minute') { local.setUTCMinutes(local.getUTCMinutes() + steps) }
+    else { local.setUTCSeconds(local.getUTCSeconds() + steps) }
+    this.setTimeWheelStopped()
+    if (this.timeWheelUnit === 'year' || this.timeWheelUnit === 'month' ||
+      this.timeWheelUnit === 'hour' || this.timeWheelUnit === 'minute') {
+      this.timeWheelTargetMs = local.getTime()
+      this.startTimeWheelTransition(refreshTicks)
+      return
+    }
+    this.applyTimeWheelDate(local, refreshTicks, true)
+  }
+
+  private timeWheelVelocityMultiplier(speed: number): number {
+    let baseMultiplier = 1.0
+    if (this.timeWheelUnit === 'year') { baseMultiplier = 0.07 }
+    else if (this.timeWheelUnit === 'month') { baseMultiplier = 0.08 }
+    else if (this.timeWheelUnit === 'day') { baseMultiplier = 0.2 }
+    else if (this.timeWheelUnit === 'hour') { baseMultiplier = 0.06 }
+    else if (this.timeWheelUnit === 'minute') { baseMultiplier = 0.25 }
+    if (speed < 0.35) { return baseMultiplier }
+    if (speed < 0.8) { return baseMultiplier * 2.0 }
+    if (speed < 1.4) { return baseMultiplier * 4.0 }
+    return baseMultiplier * 8.0
+  }
+
+  private rebaseTimeWheelTrack(): void {
+    this.timeWheelDragCarry = 0
+    this.timeWheelAppliedSteps = 0
+    this.timeWheelGestureTickOffset = 0
+    this.timeWheelVisualOffset = 0
+    this.timeWheelTrackBaseMs = Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1,
+      this.timeWheelDay, this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond)
+    this.refreshTimeWheelTicks()
+  }
+
+  private rebaseTimeWheelTrackAtCenter(): void {
+    const tickShift = Math.round(this.timeWheelVisualOffset / this.timeWheelTickSpacing)
+    if (tickShift === 0) { return }
+    this.timeWheelVisualOffset -= tickShift * this.timeWheelTickSpacing
+    this.timeWheelDragCarry = this.timeWheelVisualOffset
+    this.timeWheelAppliedSteps -= tickShift
+    this.timeWheelGestureTickOffset -= tickShift
+  }
+
+  private handleTimeWheelTouch(event: TouchEvent): void {
+    const points = event.touches.length > 0 ? event.touches : event.changedTouches
+    if (points.length === 0) { return }
+    const point = points[0]
+    if (event.type === TouchType.Down) {
+      this.finishTimeWheelTransition()
+      this.timeWheelDragging = true
+      this.timeWheelLastTouchX = point.x
+      this.timeWheelLastTouchMs = Date.now()
+      this.timeWheelLastInputMs = Date.now()
+      this.timeWheelGestureBaseMs = Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1,
+        this.timeWheelDay, this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond)
+      this.timeWheelGestureSteps = 0
+      this.timeWheelGestureTickOffset = this.timeWheelAppliedSteps
+      this.timeWheelDragCarry = this.timeWheelVisualOffset
+      this.rebaseTimeWheelTrackAtCenter()
+      this.setTimeWheelStopped()
+      return
+    }
+    if (event.type === TouchType.Move && this.timeWheelDragging) {
+      const now = Date.now()
+      const delta = point.x - this.timeWheelLastTouchX
+      const elapsedMs = Math.max(1, now - this.timeWheelLastTouchMs)
+      this.timeWheelLastTouchX = point.x
+      this.timeWheelLastTouchMs = now
+      const speed = Math.abs(delta) / elapsedMs
+      const requestedStepDelta = -delta * this.timeWheelVelocityMultiplier(speed) / this.timeWheelTickSpacing
+      const stepDelta = requestedStepDelta
+      const effectiveDelta = -stepDelta * this.timeWheelTickSpacing
+      this.timeWheelDragCarry += effectiveDelta
+      this.timeWheelGestureSteps += stepDelta
+      this.timeWheelVisualOffset = this.timeWheelDragCarry
+      const local = this.timeWheelDateAtFraction(this.timeWheelGestureBaseMs, this.timeWheelGestureSteps)
+      const sendNative = now - this.timeWheelLastNativePushMs >= 64
+      this.applyTimeWheelDate(local, false, sendNative)
+      if (Math.abs(this.timeWheelVisualOffset) >= this.timeWheelTickSpacing * 8) {
+        this.rebaseTimeWheelTrackAtCenter()
+      }
+      return
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.timeWheelDragging = false
+      if (this.timeWheelGestureBaseMs > 0) {
+        this.applyTimeWheelDate(this.timeWheelDateAtFraction(this.timeWheelGestureBaseMs,
+          this.timeWheelGestureSteps), false, true)
+      }
+    }
+  }
+
+  private syncTimeWheelFromSimulation(jd: number): void {
+    // ArkUI may emit Begin without a matching End while the panel is built.
+    // Guard only a short interval after actual user input so the display never
+    // becomes permanently detached from the simulated clock.
+    if (this.timeWheelDragging || Date.now() - this.timeWheelLastInputMs < 800) { return }
+    const local = new Date((jd + this.utcOffsetHours / 24.0 - 2440587.5) * 86400000.0)
+    this.timeWheelYear = local.getUTCFullYear()
+    this.timeWheelMonth = local.getUTCMonth() + 1
+    this.timeWheelDay = local.getUTCDate()
+    this.timeWheelHour = local.getUTCHours()
+    this.timeWheelMinute = local.getUTCMinutes()
+    this.timeWheelSecond = local.getUTCSeconds()
+    if (Math.abs(this.timeWheelVisualOffset) < 0.1) {
+      this.timeWheelTrackBaseMs = local.getTime()
+      this.refreshTimeWheelTicks()
+    }
+  }
+
   private zoomStep(factor: number): void {
     hilog.info(0x0000, 'StellariumArkUI', 'zoomStep factor=%{public}s', factor.toString())
     // Discrete zoom is a direct view command. Do not route it through the
@@ -5327,7 +5694,8 @@ private loadPlanetPositions(): void {
       if (result.found === true) {
         const returnToGraph = this.graphTargetPickerActive
         const returnToRts = this.rtsTargetPickerActive
-        const returnToAstroCalc = returnToGraph || returnToRts
+        const returnToEphemeris = this.ephemerisTargetPickerActive
+        const returnToAstroCalc = returnToGraph || returnToRts || returnToEphemeris
         // Close the search sheet before calculating the target's final safe
         // point. Otherwise the first navigation avoids the old 9/10 sheet,
         // then visibly performs a second correction for the top detail card.
@@ -5350,6 +5718,11 @@ private loadPlanetPositions(): void {
           this.rtsTargetPickerActive = false
           this.astroTab = 2
           this.setPanel('astro')
+        } else if (returnToEphemeris) {
+          this.ephemerisTargetPickerActive = false
+          this.astroTab = 1
+          this.setPanel('astro')
+          this.loadEphemeris()
         }
         // Under gyro control, a selected target is navigated by the edge guide,
         // not by moving the camera. Normal searches keep the explicit tracking
@@ -5827,10 +6200,8 @@ private loadPlanetPositions(): void {
       }
       this.startDetailAutoRefresh()
     } else {
-      // 后台刷新瞬时未命中（天体临时不可见等）时不关窗、不清数据，避免闪退式收起
-      if (fromRefresh) { return }
-      this.selectedName = 'Not found'
-      this.selectedType = result.query && result.query.length > 0 ? result.query : 'No selection'
+      this.selectedName = ''
+      this.selectedType = ''
       this.selectedStatus = result.query && result.query.length > 0 ? 'Try English name' : 'No match'
       this.selectedMagnitude = ''
       this.selectedApparentMagnitude = ''
@@ -5853,6 +6224,7 @@ private loadPlanetPositions(): void {
       this.selectedRich = ''
       this.infoWinVisible = false
       this.selectedInfo = '当前位置没有可选天体，请放大或使用搜索'
+      this.clearRtsSelectionResults()
     }
   }
 
@@ -5917,6 +6289,7 @@ private loadPlanetPositions(): void {
       if (!this.scrubberInteracting) {
         this.syncScrubberToSimulation(jd)
       }
+      this.syncTimeWheelFromSimulation(jd)
     })
   }
 
@@ -11725,6 +12098,21 @@ private loadPlanetPositions(): void {
                   .onClick(() => { this.ephemerisMode = mode })
               }, (label: string) => label)
             }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 5 })
+            if (this.ephemerisMode === 0) {
+              Row({ space: 8 }) {
+                Column({ space: 1 }) {
+                  Text('星历目标').fontSize(9).fontColor(this.nmSub())
+                  Text(this.selectedName.length > 0 ? this.zhNameOf(this.selectedName) : '尚未选择天体')
+                    .fontSize(11).fontColor(this.selectedName.length > 0 ? this.nmText() : this.nmSub())
+                    .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                Button(this.selectedName.length > 0 ? '更换天体' : '选择天体')
+                  .fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                  .borderRadius(16).height(28).padding({ left: 10, right: 10 })
+                  .onClick(() => { this.openEphemerisTargetPicker() })
+              }.width('100%').padding({ left: 4, right: 4, top: 4, bottom: 5 })
+                .backgroundColor('rgba(255, 255, 255, 0.035)').borderRadius(5).margin({ bottom: 5 })
+            }
             if (this.ephemerisMode === 1) {
               Text('第一个天体').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 3 })
               Scroll() {
@@ -11817,7 +12205,7 @@ private loadPlanetPositions(): void {
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.loadEphemeris() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-            Text(this.ephemerisMode === 0 ? '先在主界面点选一个天体；点任一行可跳到该时刻。' : (this.ephemerisMode === 1 ? '两个天体共用同一时间轴，便于直接比较位置和星等。' : '肉眼行星模式在地球上显示水星、金星、火星、木星和土星。')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+            Text(this.ephemerisMode === 0 ? '选择天体后将自动生成星历；点任一行可跳到对应时刻。' : (this.ephemerisMode === 1 ? '两个天体共用同一时间轴，便于直接比较位置和星等。' : '肉眼行星模式在地球上显示水星、金星、火星、木星和土星。')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
             if (this.ephemerisLoading) {
               Row({ space: 8 }) {
                 LoadingProgress().width(22).height(22).color(this.nmAccent())
@@ -11850,7 +12238,7 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0239')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(16).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadRTS() })
-            if (this.selectedName.length === 0) {
+            if (!this.hasSelectedObject()) {
               this.rtsSelectionGuide()
             } else if (this.rtsError.length > 0) {
               Text(this.rtsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
@@ -11873,6 +12261,7 @@ private loadPlanetPositions(): void {
               this.infoRow(I18n.t('s0701'), this.jdToDateStr(this.rtsData.get('prevTransitText') ?? '0'))
               this.infoRow(I18n.t('s0702'), this.jdToDateStr(this.rtsData.get('prevSetText') ?? '0'))
             }
+            if (this.hasSelectedObject()) {
             Row({ space: 6 }) {
               Button(I18n.t('i0146')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(16).height(30).padding({ left: 10, right: 10 })
@@ -11965,6 +12354,7 @@ private loadPlanetPositions(): void {
                 }.width('100%').padding({ top: 4, bottom: 4 }).backgroundColor(this.nmBg()).borderRadius(4).margin({ bottom: 2 })
                 .onClick(() => { this.jumpToRtsCalendar(day) })
               }, (day: RtsCalendarDay, index: number) => day.date ?? index.toString())
+            }
             }
           } else if (this.astroTab === 3) {
             Text(I18n.t('i0128')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
@@ -14638,100 +15028,155 @@ private loadPlanetPositions(): void {
       .margin({ top: 8 })
   }
 
-  // ===== Sky Guide 风格：带刻度的时间轴 =====
+  // ===== Sky Guide 风格：按字段选择的时间转轴 =====
   @Builder
   timeScrubberSlider() {
-    Column({ space: 6 }) {
-      // 顶部标签行：标题 + 当前偏移量
+    Column({ space: 8 }) {
       Row() {
-        Text(I18n.t('s0766_scrubber'))
-          .fontSize(11)
-          .fontColor('rgba(180, 210, 235, 0.7)')
-        Blank()
-        Text(this.scrubberLabel)
-          .fontSize(11)
-          .fontColor('#7FD3F0')
-          .fontWeight(FontWeight.Medium)
+        Text('时间转轴')
+          .fontSize(11).fontColor('rgba(180, 210, 235, 0.7)')
       }
       .width('100%')
 
-      // 时间尺由视觉层和一层透明的原生 Slider 组成。视觉层不参与命中，
-      // 让整条时间轴都能拖动，同时避免外观退化为普通“已完成进度条”。
+      // 顶部字段即视频中的日期时间条：先点字段，再用下方单一转轴调节。
+      Row({ space: 1 }) {
+        this.timeWheelYearField()
+        this.timeWheelMonthField()
+        this.timeWheelDayField()
+        this.timeWheelHourField()
+        this.timeWheelMinuteField()
+        this.timeWheelSecondField()
+      }
+      .width('100%').height(40).justifyContent(FlexAlign.Center).padding({ left: 4, right: 4 })
+      .backgroundColor('rgba(7, 12, 20, 0.74)')
+      .border({ width: 1, color: 'rgba(190, 220, 240, 0.18)' })
+      .borderRadius(20)
+
       Stack({ alignContent: Alignment.Center }) {
-        Row()
-          .width('100%')
-          .height(1)
-          .backgroundColor('rgba(189, 218, 240, 0.34)')
-          .hitTestBehavior(HitTestMode.None)
-
-        // 刻度线：中间“此刻”更亮，两端为年份边界。
-        Stack({ alignContent: Alignment.TopStart }) {
-          ForEach(this.timeTicks, (t: TimeTick) => {
-            Column()
-              .width(t.value === 0 ? 2 : 1)
-              .height(t.value === 0 ? 25 : (t.major ? 18 : 10))
-              .backgroundColor(t.value === 0 ? '#DFF5FF' : (t.major ? 'rgba(143, 194, 229, 0.82)' : 'rgba(143, 194, 229, 0.38)'))
-              .borderRadius(0.5)
-              .position({ x: this.tickPercent(t.value) + '%', y: '50%' })
-              .translate({ y: '-50%', x: '-50%' })
-          }, (t: TimeTick) => t.label)
+        Row() {
+          ForEach(this.timeWheelTickLabels, (_label: string, index: number) => {
+            Column({ space: 2 }) {
+              Text(this.timeWheelVisibleTickLabel(index)).maxLines(1).minFontSize(8)
+                .fontSize(this.timeWheelUnit === 'year' ? 10 : 12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#E7F3FC')
+                .textAlign(TextAlign.Center).width(42).height(16)
+                .opacity(this.timeWheelTickOpacity(index))
+                .scale({ x: this.timeWheelTickScale(index), y: this.timeWheelTickScale(index) })
+              Stack({ alignContent: Alignment.Bottom }) {
+                Column()
+                  .width(1)
+                  .height(this.timeWheelTickHeight(index))
+                  .backgroundColor('#D9EDFA')
+                  .opacity(this.timeWheelTickOpacity(index))
+              }
+                .width(2)
+                .height(31)
+            }
+              .width(this.timeWheelTickSpacing)
+              .height(56)
+              .justifyContent(FlexAlign.Center)
+              .alignItems(HorizontalAlign.Center)
+              .blur(this.timeWheelTickBlur(index))
+          }, (_label: string, index: number) => 'time-wheel-tick-' + index.toString())
         }
-        .width('100%')
-        .height(34)
+        .width(this.timeWheelTickSpacing * (this.timeWheelCenterTick * 2 + 1))
+        .translate({ x: this.timeWheelVisualOffset, y: 0 })
+        .align(Alignment.Center)
         .hitTestBehavior(HitTestMode.None)
 
-        // 发光游标由状态精确定位；真正的手势由下面透明 Slider 承接。
-        Stack({ alignContent: Alignment.Center }) {
-          Circle().width(18).height(18)
-            .fill('rgba(58, 142, 190, 0.22)')
-            .border({ width: 1.5, color: '#92DCF7' })
-            .shadow({ radius: 8, color: 'rgba(100, 205, 247, 0.45)', offsetX: 0, offsetY: 0 })
-          Circle().width(5).height(5).fill('#F3FBFF')
-        }
-        .position({ x: this.tickPercent(this.scrubberValue) + '%', y: '50%' })
-        .translate({ x: '-50%', y: '-50%' })
-        .hitTestBehavior(HitTestMode.None)
-
-        Slider({
-          value: this.scrubberValue,
-          min: -43200,
-          max: 43200,
-          step: 1,
-          style: SliderStyle.InSet
-        })
+        Column()
           .width('100%')
-          .height(42)
-          .blockColor('rgba(0, 0, 0, 0)')
-          .trackColor('rgba(0, 0, 0, 0)')
-          .selectedColor('rgba(0, 0, 0, 0)')
-          .showTips(false)
-          .onChange((value: number, mode: SliderChangeMode) => {
-            this.applyScrubber(value, mode)
-          })
+          .height(56)
+          .backgroundColor('rgba(0, 0, 0, 0)')
+          .onTouch((event: TouchEvent) => { this.handleTimeWheelTouch(event) })
       }
       .width('100%')
-      .height(42)
-
-      // 刻度标签：与刻度线同百分比定位，左右两端不外溢
-      Stack({ alignContent: Alignment.TopStart }) {
-        ForEach(this.timeTicks, (t: TimeTick) => {
-          // 月级短刻度只提供定位感，不再和“此刻”挤成一团。
-          if (t.major || Math.abs(t.value) === 21600) {
-            Text(t.value === 0 ? '此刻' : t.label)
-              .fontSize(9)
-              .fontColor(t.major ? '#B8D4EF' : 'rgba(184, 212, 239, 0.62)')
-              .position({ x: this.tickPercent(t.value) + '%', y: 0 })
-              .translate({ x: t.value <= -40000 ? '0%' : t.value >= 40000 ? '-100%' : '-50%' })
-          }
-        }, (t: TimeTick) => 'timeline-label-' + t.value.toString())
-      }
-      .width('100%')
-      .height(12)
-      .margin({ top: 1 })
-      .hitTestBehavior(HitTestMode.None)
+      .height(56)
+      .padding({ left: 10, right: 10 })
+      .backgroundColor('rgba(12, 18, 29, 0.76)')
+      .border({ width: 1, color: 'rgba(190, 220, 240, 0.24)' })
+      .borderRadius(28)
+      .clip(true)
     }
     .width('100%')
     .padding({ left: 12, right: 12, top: 6, bottom: 8 })
+  }
+
+  @Builder
+  timeWheelYearField() {
+    Button() {
+      Row() {
+        Text(this.timeWheelYear.toString()).maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'year' ? 14 : 12)
+          .fontWeight(this.timeWheelUnit === 'year' ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.timeWheelUnit === 'year' ? '#FFFFFF' : '#BDD1E1')
+      }.justifyContent(FlexAlign.Center).width('100%')
+    }
+      .width(47).height(32)
+      .padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'year' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16)
+      .onClick(() => { this.selectTimeWheelUnit('year') })
+  }
+
+  @Builder
+  timeWheelMonthField() {
+    Button() {
+      Text(this.timeWheelMonth.toString().padStart(2, '0') + '月').maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'month' ? 14 : 12)
+        .fontWeight(this.timeWheelUnit === 'month' ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.timeWheelUnit === 'month' ? '#FFFFFF' : '#BDD1E1').textAlign(TextAlign.Center).width('100%')
+    }
+      .width(34).height(32).padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'month' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16).onClick(() => { this.selectTimeWheelUnit('month') })
+  }
+
+  @Builder
+  timeWheelDayField() {
+    Button() {
+      Text(this.timeWheelDay.toString().padStart(2, '0') + '日').maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'day' ? 14 : 12)
+        .fontWeight(this.timeWheelUnit === 'day' ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.timeWheelUnit === 'day' ? '#FFFFFF' : '#BDD1E1').textAlign(TextAlign.Center).width('100%')
+    }
+      .width(34).height(32).padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'day' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16).onClick(() => { this.selectTimeWheelUnit('day') })
+  }
+
+  @Builder
+  timeWheelHourField() {
+    Button() {
+      Text(this.timeWheelHour.toString().padStart(2, '0') + ':').maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'hour' ? 14 : 12)
+        .fontWeight(this.timeWheelUnit === 'hour' ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.timeWheelUnit === 'hour' ? '#FFFFFF' : '#BDD1E1').textAlign(TextAlign.Center).width('100%')
+    }
+      .width(30).height(32).padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'hour' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16).onClick(() => { this.selectTimeWheelUnit('hour') })
+  }
+
+  @Builder
+  timeWheelMinuteField() {
+    Button() {
+      Text(this.timeWheelMinute.toString().padStart(2, '0') + ':').maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'minute' ? 14 : 12)
+        .fontWeight(this.timeWheelUnit === 'minute' ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.timeWheelUnit === 'minute' ? '#FFFFFF' : '#BDD1E1').textAlign(TextAlign.Center).width('100%')
+    }
+      .width(30).height(32).padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'minute' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16).onClick(() => { this.selectTimeWheelUnit('minute') })
+  }
+
+  @Builder
+  timeWheelSecondField() {
+    Button() {
+      Text(this.timeWheelSecond.toString().padStart(2, '0')).maxLines(1).minFontSize(10).fontSize(this.timeWheelUnit === 'second' ? 14 : 12)
+        .fontWeight(this.timeWheelUnit === 'second' ? FontWeight.Medium : FontWeight.Normal)
+        .fontColor(this.timeWheelUnit === 'second' ? '#FFFFFF' : '#BDD1E1').textAlign(TextAlign.Center).width('100%')
+    }
+      .width(26).height(32).padding({ left: 1, right: 1 })
+      .backgroundColor(this.timeWheelUnit === 'second' ? 'rgba(185, 204, 220, 0.34)' : 'rgba(0, 0, 0, 0)')
+      .borderRadius(16).onClick(() => { this.selectTimeWheelUnit('second') })
   }
 
   @Builder
