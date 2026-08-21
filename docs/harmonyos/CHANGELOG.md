@@ -2283,3 +2283,12 @@
 - **构建结果：** `scripts/sync-ohos-build-sources.sh` 同步成功；配置 `DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk` 后，`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
 - **验证结果：** HAP SHA-256 为 `8949cfb329131a298d07b2abba31ed104c611cff648f820213549a87d8c9b891`；原生库 SHA-256 为 `876c809e21acb4e02fef6756e88db67112b9e12ebee1b3857fed994fba1e0304`；ArkTS 镜像一致；`hap-sign-tool.jar verify-app` 通过，`Digest verify result: true`；仅存在既有弃用警告；当前无在线 HDC 设备。
 - **备注：** 未修改隐私门控、SN、启动、陀螺仪、地图、签名和构建模式；`build/` 下生成镜像未纳入 Git 提交。
+
+## [2026-08-21] Codex - 星空文化离线区域地图
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`。
+- **修改内容：** 迁移桌面版文化区域地图的核心能力：新增 `getSkyCultureTerritoryGeometry` 桥接命令，仅返回当前文化在所选年份的简化 GeoJSON 外轮廓；移动端用应用内置 `worldmap.jpg` 和原生 Canvas 叠加绘制，支持按年份更新，默认折叠并使用明确的离线说明。
+- **修改原因：** 移动端此前只能查看文化地理档案文字，不能直观看到文化覆盖区域；该实现不使用花瓣地图、不请求网络，也不加载全部文化边界。
+- **构建结果：** 原生 `stellarium` 编译成功；同步源码后 `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** HAP SHA-256 为 `57d76d5489cee47c3b23bd05b81842a219582e6c58b65622dda1a5895870f5aa`；原生库 SHA-256 为 `af3f15102f906a0b809da293cf65931c8b700652150cd735d5d71907fa655b1e`；HAP 内含 `resources/rawfile/worldmap.jpg`、`ets/modules.abc` 和新库；ArkTS 镜像一致；`hap-sign-tool.jar verify-app` 通过，`Digest verify result: true`；当前无在线 HDC 设备，未进行设备交互验证。
+- **备注：** 边界点按每个轮廓最多约 160 点抽稀；不修改隐私门控、SN、启动、陀螺仪、地图 SDK、签名和构建模式。

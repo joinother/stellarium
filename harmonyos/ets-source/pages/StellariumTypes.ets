@@ -160,6 +160,13 @@ export interface SkyCultureTerritoryEntry {
   activeAtSimulationTime: boolean
 }
 
+export interface SkyCultureTerritoryPolygon {
+  name: string
+  beginTime: number
+  endTime: number
+  points: Array<Array<number>>
+}
+
 export interface PluginItem {
   id: string
   name: string
@@ -397,6 +404,7 @@ export interface StellariumBridgeResponse {
   territoryActiveSegmentCount?: number
   territorySimulationYear?: number
   territoryArchive?: Array<SkyCultureTerritoryEntry>
+  territoryPolygons?: Array<SkyCultureTerritoryPolygon>
   beginTime?: number
   endTime?: number
   constellationCount?: number

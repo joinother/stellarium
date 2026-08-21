@@ -3505,6 +3505,86 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "getSkyCultureTerritoryGeometry")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			bool yearIsValid = false;
+			int selectedYear = arg.trimmed().toInt(&yearIsValid);
+			if (!yearIsValid)
+			{
+				const double localJD = core->getJD() + core->getUTCOffset(core->getJD()) / 24.0;
+				int month = 0;
+				int day = 0;
+				StelUtils::getDateFromJulianDay(localJD, &selectedYear, &month, &day);
+			}
+			selectedYear = qBound(-40000, selectedYear, 10000);
+			const QString id = skyCultureMgr.getCurrentSkyCultureID();
+			const QString territoryPath = StelFileMgr::findFile(QStringLiteral("skycultures/%1/territory.geojson").arg(id));
+			QJsonArray polygons;
+			if (!territoryPath.isEmpty())
+			{
+				QFile territoryFile(territoryPath);
+				if (territoryFile.open(QFile::ReadOnly))
+				{
+					QJsonParseError parseError;
+					const QJsonDocument territoryDocument = QJsonDocument::fromJson(territoryFile.readAll(), &parseError);
+					if (parseError.error == QJsonParseError::NoError && territoryDocument.isObject())
+					{
+						const QJsonArray features = territoryDocument.object().value(QStringLiteral("features")).toArray();
+						for (const QJsonValue& featureValue : features)
+						{
+							if (!featureValue.isObject()) continue;
+							const QJsonObject feature = featureValue.toObject();
+							const QJsonObject properties = feature.value(QStringLiteral("properties")).toObject();
+							const int beginTime = properties.value(QStringLiteral("beginTime")).toInt();
+							const int endTime = properties.value(QStringLiteral("endTime")).toInt();
+							if ((beginTime != 0 && selectedYear < beginTime) || (endTime != 0 && endTime < 9000 && selectedYear > endTime)) continue;
+
+							auto appendPolygon = [&](const QJsonArray& ring) {
+								if (ring.size() < 3) return;
+								const int stride = qMax(1, (ring.size() + 159) / 160);
+								QJsonArray points;
+								for (int pointIndex = 0; pointIndex < ring.size(); pointIndex += stride)
+								{
+									const QJsonArray coordinate = ring.at(pointIndex).toArray();
+									if (coordinate.size() < 2) continue;
+									QJsonArray point;
+									point.append(coordinate.at(0).toDouble());
+									point.append(coordinate.at(1).toDouble());
+									points.append(point);
+								}
+								if (points.size() < 3) return;
+								QJsonObject polygon;
+								polygon["name"] = properties.value(QStringLiteral("name")).toString();
+								polygon["beginTime"] = beginTime;
+								polygon["endTime"] = endTime;
+								polygon["points"] = points;
+								polygons.append(polygon);
+							};
+
+							const QJsonObject geometry = feature.value(QStringLiteral("geometry")).toObject();
+							const QString geometryType = geometry.value(QStringLiteral("type")).toString();
+							const QJsonArray coordinates = geometry.value(QStringLiteral("coordinates")).toArray();
+							if (geometryType == QLatin1String("Polygon") && !coordinates.isEmpty())
+								appendPolygon(coordinates.at(0).toArray());
+							else if (geometryType == QLatin1String("MultiPolygon"))
+							{
+								for (const QJsonValue& polygonValue : coordinates)
+								{
+									const QJsonArray polygonRings = polygonValue.toArray();
+									if (!polygonRings.isEmpty()) appendPolygon(polygonRings.at(0).toArray());
+								}
+							}
+						}
+					}
+				}
+			}
+			result["ok"] = true;
+			result["year"] = selectedYear;
+			result["territoryPolygons"] = polygons;
+			return result;
+		}
+
 		if (commandName == "setSkyCultureLabelStyle")
 		{
 			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();

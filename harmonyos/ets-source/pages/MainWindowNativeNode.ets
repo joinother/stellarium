@@ -13,7 +13,7 @@ import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 import { LOCATION_ZH_NAMES } from './location_names_zh'
 
-import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureTerritoryEntry, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
@@ -902,6 +902,11 @@ struct WindowNativeNode {
   @State private skyCultureHasTerritoryArchive: boolean = false
   @State private skyCultureTerritorySegmentCount: number = 0
   @State private skyCultureTerritoryExpanded: boolean = false
+  @State private skyCultureTerritoryMapExpanded: boolean = false
+  @State private skyCultureTerritoryMapLoading: boolean = false
+  @State private skyCultureTerritoryMapError: string = ''
+  @State private skyCultureTerritoryMapPolygons: Array<SkyCultureTerritoryPolygon> = []
+  @State private skyCultureTerritoryMapYear: number = 0
   @State private skyCultureRegions: string[] = []
   @State private skyCultureClassification: string = ''
   @State private skyCultureLicense: string = ''
@@ -971,6 +976,10 @@ struct WindowNativeNode {
   @State private skyCultureTimeFollowSimulation: boolean = false
   @State private skyCultureNarrationExpanded: boolean = false
   @State private skyCultureDescriptionExpanded: boolean = false
+  private skyCultureMapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
+  private skyCultureMapContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.skyCultureMapContextSettings)
+  private skyCultureMapRenderWidth: number = 0
+  private skyCultureMapRenderHeight: number = 0
   @State private pluginList: Array<PluginItem> = []
   @State private landscapeDetailOpen: boolean = false
   @State private selectedLandscapeName: string = ''
@@ -4570,6 +4579,9 @@ struct WindowNativeNode {
         this.skyCultureNarrationExpanded = false
         this.skyCultureDescriptionExpanded = false
         this.skyCultureTerritoryExpanded = false
+        this.skyCultureTerritoryMapExpanded = false
+        this.skyCultureTerritoryMapPolygons = []
+        this.skyCultureTerritoryMapError = ''
         this.loadSkyCultureDetails()
         this.refreshState()
         return
@@ -5109,6 +5121,65 @@ struct WindowNativeNode {
     const start = entry.beginTime === 0 ? '早期' : this.skyCultureFormatYear(entry.beginTime)
     const end = entry.endTime === 0 || entry.endTime >= 9000 ? '至今' : this.skyCultureFormatYear(entry.endTime)
     return start + ' 至 ' + end
+  }
+
+  private loadSkyCultureTerritoryMap(): void {
+    if (!this.skyCultureHasTerritoryArchive || this.currentSkyCultureId.length === 0 || this.skyCultureTerritoryMapLoading) return
+    const requestedYear = this.skyCultureTimeYear
+    this.skyCultureTerritoryMapLoading = true
+    this.skyCultureTerritoryMapError = ''
+    this.callInteractive('getSkyCultureTerritoryGeometry', requestedYear.toString(), (r: StellariumBridgeResponse) => {
+      this.skyCultureTerritoryMapLoading = false
+      if (r.ok !== true || r.territoryPolygons === undefined || !Array.isArray(r.territoryPolygons)) {
+        this.skyCultureTerritoryMapError = '未能读取该年份的文化区域。'
+        return
+      }
+      this.skyCultureTerritoryMapPolygons = r.territoryPolygons as Array<SkyCultureTerritoryPolygon>
+      this.skyCultureTerritoryMapYear = r.year !== undefined ? Math.round(r.year) : requestedYear
+      this.skyCultureTerritoryMapExpanded = true
+      this.drawSkyCultureTerritoryMap()
+    }, () => {
+      this.skyCultureTerritoryMapLoading = false
+      this.skyCultureTerritoryMapError = '未能读取该年份的文化区域。'
+    })
+  }
+
+  private drawSkyCultureTerritoryMap(): void {
+    const width = this.skyCultureMapRenderWidth
+    const height = this.skyCultureMapRenderHeight
+    if (width <= 0 || height <= 0) return
+    this.skyCultureMapContext.clearRect(0, 0, width, height)
+    this.skyCultureMapContext.lineWidth = 1.2
+    this.skyCultureMapContext.strokeStyle = 'rgba(255, 219, 115, 0.96)'
+    this.skyCultureMapContext.fillStyle = 'rgba(255, 194, 76, 0.18)'
+    for (let polygonIndex = 0; polygonIndex < this.skyCultureTerritoryMapPolygons.length; polygonIndex++) {
+      const points = this.skyCultureTerritoryMapPolygons[polygonIndex].points
+      if (points.length < 3) continue
+      let started = false
+      let crossesDateLine = false
+      let previousLongitude = 0
+      this.skyCultureMapContext.beginPath()
+      for (let pointIndex = 0; pointIndex < points.length; pointIndex++) {
+        const point = points[pointIndex]
+        if (point.length < 2) continue
+        const longitude = point[0]
+        const latitude = point[1]
+        const x = (longitude + 180) / 360 * width
+        const y = (90 - latitude) / 180 * height
+        if (!started || Math.abs(longitude - previousLongitude) > 180) {
+          if (started) crossesDateLine = true
+          this.skyCultureMapContext.moveTo(x, y)
+          started = true
+        } else {
+          this.skyCultureMapContext.lineTo(x, y)
+        }
+        previousLongitude = longitude
+      }
+      if (!started) continue
+      this.skyCultureMapContext.closePath()
+      if (!crossesDateLine) this.skyCultureMapContext.fill()
+      this.skyCultureMapContext.stroke()
+    }
   }
 
   private loadPluginList(): void {
@@ -18180,6 +18251,40 @@ private loadPlanetPositions(): void {
           }
           Button(this.skyCultureTerritoryExpanded ? '收起地理档案' : '查看地理档案').fontSize(10).fontColor(this.nmAccent()).backgroundColor('rgba(0,0,0,0)')
             .height(26).padding({ left: 0, right: 8 }).onClick(() => { this.skyCultureTerritoryExpanded = !this.skyCultureTerritoryExpanded })
+          Row({ space: 8 }) {
+            Column({ space: 1 }) {
+              Text('文化区域地图').fontSize(11).fontColor(this.nmText()).width('100%')
+              Text('使用本地地图和文化资料，不联网').fontSize(9).fontColor(this.nmSub()).width('100%')
+            }.layoutWeight(1)
+            Button(this.skyCultureTerritoryMapExpanded ? '更新地图' : '在地图中查看').fontSize(10).fontColor(this.nmAccent()).backgroundColor(this.nmBg())
+              .borderRadius(5).height(28).padding({ left: 9, right: 9 }).enabled(!this.skyCultureTerritoryMapLoading)
+              .onClick(() => { this.loadSkyCultureTerritoryMap() })
+          }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ top: 3, bottom: this.skyCultureTerritoryMapExpanded ? 4 : 2 })
+          if (this.skyCultureTerritoryMapLoading) {
+            this.graphLoadingRow('正在绘制文化区域地图…')
+          } else if (this.skyCultureTerritoryMapError.length > 0) {
+            Text(this.skyCultureTerritoryMapError).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
+          } else if (this.skyCultureTerritoryMapExpanded) {
+            Column({ space: 4 }) {
+              Text('地图年份：' + this.skyCultureFormatYear(this.skyCultureTerritoryMapYear) + ' · ' + this.skyCultureTerritoryMapPolygons.length + ' 个区域轮廓')
+                .fontSize(10).fontColor(this.nmSub()).width('100%')
+              if (this.skyCultureTerritoryMapPolygons.length === 0) {
+                Text('该年份没有可显示的文化区域。可调整年份后更新地图。').fontSize(10).fontColor(this.nmSub()).width('100%')
+              } else {
+                Stack() {
+                  Image($rawfile('worldmap.jpg')).width('100%').height('100%').objectFit(ImageFit.Fill)
+                  Canvas(this.skyCultureMapContext).width('100%').height('100%')
+                    .onReady(() => { this.drawSkyCultureTerritoryMap() })
+                    .onAreaChange((oldArea: Area, newArea: Area) => {
+                      this.skyCultureMapRenderWidth = Number(newArea.width)
+                      this.skyCultureMapRenderHeight = Number(newArea.height)
+                      this.drawSkyCultureTerritoryMap()
+                    })
+                }.width('100%').aspectRatio(2).clip(true).backgroundColor(this.nmBg())
+                  .border({ width: 1, color: this.nmBorder() }).borderRadius(6)
+              }
+            }.width('100%').padding({ left: 8, right: 8, top: 7, bottom: 7 }).backgroundColor('rgba(91,147,191,0.08)').borderRadius(6).margin({ bottom: 3 })
+          }
         }
         if (this.skyCultureLicense.length > 0) {
           Text('资料许可：' + this.skyCultureLicense).fontSize(10).fontColor(this.nmSub()).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
