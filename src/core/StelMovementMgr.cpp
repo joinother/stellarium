@@ -1419,6 +1419,15 @@ void StelMovementMgr::setFlagTracking(bool b)
 	}
 }
 
+void StelMovementMgr::cancelAutoMove()
+{
+	if (!flagAutoMove)
+		return;
+	flagAutoMove = false;
+	move.coef = 1.f;
+	move.targetObject.clear();
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Move to the given J2000 equatorial position

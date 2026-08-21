@@ -12,6 +12,7 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
+    "easyGo": "$profile:easy_go",
     "metadata": [
       {
         "name": "appgallery_privacy_hosted",
@@ -28,7 +29,7 @@
         "srcEntry": "./ets/qability/QAbility.ets",
         "launchType": "singleton",
         "description": "$string:QAbility_desc",
-        "icon": "$media:layered_image",
+        "icon": "$media:app_icon",
         "label": "$string:QAbility_label",
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",

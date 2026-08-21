@@ -119,7 +119,7 @@ void ConstellationMgr::init()
 	setHullsFadeDuration(conf->value("viewing/constellation_hulls_fade_duration", 1.0f).toFloat());
 	setZodiacThickness(conf->value("viewing/skyculture_zodiac_thickness", 1).toInt());
 	setZodiacFadeDuration(conf->value("viewing/skyculture_zodiac_fade_duration", 1.0f).toFloat());
-	setHullsThickness(conf->value("viewing/skyculture_lunarsystem_thickness", 1).toInt());
+	setLunarSystemThickness(conf->value("viewing/skyculture_lunarsystem_thickness", 1).toInt());
 	setLunarSystemFadeDuration(conf->value("viewing/skyculture_lunarsystem_fade_duration", 1.0f).toFloat());
 
 	setLinesFadeDuration(conf->value("viewing/constellation_lines_fade_duration", 1.0f).toFloat());

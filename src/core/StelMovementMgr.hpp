@@ -191,6 +191,8 @@ public slots:
 
 	//! Set object tracking on/off and go to selected object
 	void setFlagTracking(bool b=true);
+	//! Stop a running automatic move while preserving the current camera pose.
+	void cancelAutoMove();
 	//! Get current object tracking status.
 	bool getFlagTracking(void) const {return flagTracking;}
 

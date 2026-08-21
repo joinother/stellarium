@@ -2048,3 +2048,213 @@
 - **构建结果：** `hvigorw assembleHap --no-daemon` 成功，仅有工程已有 API 弃用警告。签名 HAP SHA-256：`f6551329f81c8ce274bc64224f04bbce4690b2540ed8faab4b04b6557fc0e727`。
 - **验证结果：** 已覆盖安装、冷启动 API 22 模拟器 `127.0.0.1:5555`，渲染与选中目标锚定正常，无 fatal/abort；截图 `releases/logs/safe-target-ui-emulator.jpeg` 确认水星处于资料摘要和右侧面板之外。平板 `7LZBB26323200303` 已覆盖安装，锁屏状态下无法完成交互验证。
 - **备注：** 增加 `safe-target skipped clear` 与 `safe-target collision ...` 日志，可在真机上直接确认“无重定位/局部避让”两条路径。
+
+## [2026-08-14] Codex - 隐私门控与启动冻结治理复测
+
+- **修改文件：** `harmonyos/ets-source/qability/{PrivacyConsent,QAbility,StellariumResourceBootstrap}.ets`、`harmonyos/ets-source/qabilitystage/QAbilityStage.ets`、`harmonyos/ets-source/pages/{PrivacyBootstrap,MainWindowNativeNode}.ets`、`scripts/sync-ohos-build-sources.sh`。
+- **修改内容：** 同意系统隐私协议前仅加载 ArkUI 的 `PrivacyBootstrap`，不初始化 Qt/QPA；首次 Stellarium 资源树复制改为异步读写；Qt 初始化设为单一 Promise；启动桥接查询拆分并错峰执行；资源准备期间使用 ArkUI 原生 `LoadingProgress`。
+- **修改原因：** 审核日志同时指出 SN 在 Qt 初始化链中被内部访问，并报告 `BUSSINESS_THREAD_BLOCK_6S`。历史启动日志显示首次资源复制量约 471 MB，且启动时存在多组集中桥接调用，均可能长时间占用 Ability 主线程。
+- **构建结果：** `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` 成功。补齐 `QAbilityStage.ets` 同步条目后重新构建，HAP SHA-256：`424b0d2429ccaa9f7fedaec27929c6651b9564130ae8d9be7766707b9938e482`。
+- **验证结果：** 已覆盖安装并冷启动 API 23 模拟器 `127.0.0.1:5555`。日志确认隐私门控下 `accepted=false`、`qtAbilityCreated=false`、`qtInitialized=false`；源码静态检索无 `@ohos.deviceInfo`、`.serial` 调用；模拟器日志未出现本应用的 `APPFREEZE`、`THREAD_BLOCK` 或 `BUSSINESS_THREAD_BLOCK`；构建工程内的 `QAbilityStage.ets` 已与源码一致。
+- **备注：** 该模拟器的 Privacy Manager 返回 `1006700003`，不支持当前隐私托管配置，因此合规地停止于隐私门控页，不能在模拟器伪造同意后 Qt 启动。真机/云真机应清除应用数据后分别采集“不同意”和“同意后”两段日志，验证 SN 访问仅出现在同意之后。
+
+## [2026-08-14] Codex - 图层状态同步与预设
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 原生状态桥接补齐图层面板使用的高级网格、坐标线、极点、特殊点、地景、星座文化和巡天开关；两个 J2000 极点改为独立状态。新增“纯净星空 / 观测辅助 / 摄影构图”预设，并通过一个原生命令批量更新，避免逐项切换造成闪烁。
+- **验证结果：** 原生 CMake 和 `hvigorw assembleHap` 均成功。静态映射检查确认 76 个图层开关均有原生状态回传，夜间模式使用独立状态字段；HAP 内的 `libstellarium.so` 与本次剥离构建产物哈希一致。HAP 已覆盖安装到平板 `7LZBB26323200303`；设备锁屏使 `aa start` 返回 `10106102`，待解锁后完成真机点按验证。
+## [2026-08-20] Codex - 月相90天首次计算超时修复
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`
+- **修改内容：** 月相预报改用长任务轮询；90天计算等待窗口延长至约60秒；增加请求去重、切换天数时旧请求失效保护，并记录计算耗时和事件数量。
+- **修改原因：** 首次生成未来90天月相时，原通用交互通道约1.5秒就报告超时，但原生计算仍在后台完成，用户再次刷新才读到上一次结果。
+- **构建结果：** 原生 `stellarium` 编译成功；HAP `assembleHap` 成功。
+- **验证结果：** 已完成静态检查和构建；平板已识别新版安装包，月相首次点击的真机交互待设备前台可用后补采集。
+- **备注：** 现有项目 ArkTS 弃用 API 警告未改动。
+
+## [2026-08-20] Codex - 日心黄道轨道层与行星避让优化
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 为八大行星增加独立、逐级错开的椭圆轨道；行星点沿对应轨道定位；小天体仅在发生碰撞时做轻微角度/半径避让；行星点增加暗色分离层；降低轨道线视觉强度并移除距离参考圆对主图的干扰。
+- **修改原因：** 日心黄道图此前只有距离参考圆，行星没有各自轨道，且碰撞布局会大幅移动行星点，造成轨道和行星相互重叠、难以阅读。
+- **构建结果：** 待构建。
+- **验证结果：** 原生 `stellarium` 编译成功；HAP `assembleHap` 成功并已安装到平板。
+- **备注：** 轨道半径按视觉可读性分配，不代表图中线性距离比例；表格中的真实日心距离保持不变。
+## [2026-08-20] Codex - 修正日心黄道行星偏离轨道
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 八大行星严格使用真实黄经定位在各自椭圆轨道上；轨道绘制与行星点共用同一水平/垂直半径；碰撞避让仅保留给彗星和小行星。
+- **修改原因：** 原布局算法会对行星使用角度偏移，导致行星点与自身轨道不一致；椭圆纵横比也未和点位计算统一，造成视觉偏移。
+- **构建结果：** `hvigorw assembleHap --no-daemon` 成功；HAP SHA-256：`fbaaf54d6e8338279f138e25f6168f4c0cf8c51e2abd6c47ccdb091995caf02f`。
+- **验证结果：** `git diff --check` 通过；新版 HAP 已成功覆盖安装到平板 `7LZBB26323200303`。
+- **备注：** 轨道半径仍是为了可读性做的视觉映射，不代表真实线性距离比例。
+
+## [2026-08-20] Codex - 稳定选中天体的搜索与缩放锚点
+
+- **修改文件：** `src/StelMainView.cpp`。
+- **修改内容：** 移除搜索后重复的延迟缩放；新的安全区导航和缩放手势会先取消旧自动移动并使旧定时器失效；缩放开始时重新捕获当前选中天体的屏幕位置（包括暂时在边缘外的位置），避免复用旧天体锚点；关闭跟踪时同步取消未完成的自动移动。
+- **修复问题：** 首次搜索不居中、双指缩放时目标从左上角跳回中间、详情关闭或布局变化后目标被旧动画再次拉走。
+- **验证计划：** 原生编译、同步 ArkTS 工程、构建 HAP，并在平板上覆盖安装后采集搜索/缩放/详情关闭日志。
+
+## [2026-08-20] Codex - 星空显示项继续对齐开源版
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes,I18n}.ets`。
+- **修改内容：** 对照开源版 `ViewDialog` 补齐“全部网格与标记”“星座区域填充”“星群辅助射线”三个真实 action；加入原生状态回读、图层预设/自检清单和中文界面开关，并保持构建工程镜像同步。
+- **修改原因：** “星空及显示”页面此前仍缺少开源版的三个显示控制入口，导致功能和开源版不完整。
+- **构建结果：** HarmonyOS 原生 `libstellarium.so` 编译成功；`hvigorw assembleHap --no-daemon` 成功。HAP SHA-256：`5f7215892775a4be107b82df8e8d03b5be7b4754f7c6776968db641e35b6c15e`。原生库与 HAP 工程内副本 SHA-256：`aca5eab1c9bdd57dd80b3494e00edeb50d4001972d16fa873f2dbaeb2b33a0c0`。
+- **验证结果：** `git diff --check` 通过；`MainWindowNativeNode.ets`、`StellariumTypes.ets` 镜像一致。`hdc list targets` 无在线模拟器或平板，本轮未安装验证。
+- **备注：** 构建仍只有既有 API 弃用警告；未改动隐私、SN、陀螺仪逻辑。
+
+## [2026-08-20] Codex - 视场标记构图参数对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 为圆形视场标记接入直径控制；为矩形视场标记接入宽度、高度、旋转角控制。参数由 `SpecialMarkersMgr` 读写，数值修改后由 Stellarium 保存到用户配置；仅在对应标记已开启时显示滑杆。
+- **修改原因：** 开源版 `ViewDialog` 已支持这些构图参数，鸿蒙端此前只能开关标记，无法按目镜、相机或传感器实际视场使用。
+- **构建结果：** HarmonyOS 原生 `libstellarium.so` 编译成功；`hvigorw assembleHap --no-daemon` 成功。签名 HAP SHA-256：`7604b5fb228171de3b59a16a0d8d17e302afda0af551b31916551b043ccee41d`。
+- **验证结果：** `git diff --check` 通过；构建源镜像同步通过；HAP 内含 `libstellarium.so`，并可检索到新桥接命令 `setFovMarkerSetting`。`hdc list targets` 无在线设备，真机交互验证待设备连接后完成。
+
+## [2026-08-20] Codex - 星空文化年代筛选
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 在“选择星空文化”增加“按适用年代筛选”，提供年份输入、快速年代滑杆、回到当代按钮、实时匹配数量和空结果提示；筛选使用文化元数据的 `beginTime` / `endTime`，未标注范围的文化保持可见，`9146` 及未设结束时间按持续至当代处理。
+- **修改原因：** 对齐开源版 `ViewDialog::filterSkyCultures()` 的历史年代过滤能力，使移动端可以按指定年代探索可用星空文化。
+- **构建结果：** `hvigorw assembleHap --no-daemon` 成功；签名 HAP SHA-256：`d1b57db9e9274e87fbff47d01ca9fedc2ea39a408361bc5e7b8b15b853a271bf`。
+- **验证结果：** ArkTS 编译通过；筛选边界已按开源文化元数据静态核对。`hdc list targets` 无在线设备，真机交互验证待设备连接后补充。
+- **备注：** 未改动原生桥、隐私门控、SN 或陀螺仪逻辑。
+
+## [2026-08-20] Codex - 星空文化地域浏览
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 增加中文地区下拉筛选，覆盖全部开源文化地区，并和名称搜索、资料类别、历史年代筛选组合生效。
+- **修改原因：** 开源版文化目录按地区归类；移动端此前只能输入地区名称搜索，无法直接浏览一个地区的全部文化。
+- **构建结果：** `hvigorw assembleHap --no-daemon` 成功；签名 HAP SHA-256：`7904387560bf3aec3a655a2da60f65b669965c00b80e21c246190117cbee5ad7`。
+- **验证结果：** ArkTS 编译、源码镜像一致性及 `git diff --check` 均通过。`hdc list targets` 无在线设备，真机交互验证待设备连接后补充。
+- **备注：** 不依赖定位，也未改动原生桥、隐私门控、SN 或陀螺仪逻辑。
+
+## [2026-08-20] Codex - 星空文化名称样式与资料统计
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 删除星图、资料、黄道和月宿中的“原名与中文”并列样式，改为单选的中文译名、文化原名、通俗读音、学术转写（星图与资料额外支持现代名称）；当前文化资料卡补充星群数量。
+- **修改原因：** 对齐开源版的 `Native`、`Pronounce`、`Translit`、`Translated` 与 `Modern` 名称样式，同时避免移动端将中外文名称堆叠在同一行，降低阅读负担。
+- **构建结果：** `hvigorw assembleHap --no-daemon` 成功；签名 HAP SHA-256：`dcd4b9afd7a3b40ac925c2590304e03e4eda0a8c4ddcbca2d212283c8ccc8655`。
+- **验证结果：** ArkTS 编译、源码镜像一致性及 `git diff --check` 均通过。`hdc list targets` 无在线设备，真机交互验证待设备连接后补充。
+- **备注：** 复用已有 `setSkyCultureLabelStyle` 桥接；未改动隐私门控、SN、陀螺仪或渲染逻辑。
+
+## [2026-08-21] Codex - 星空文化完整资料阅读
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** `getSkyCultureDetails` 新增完整文化描述字段：复用原版 `getCurrentSkyCultureHtmlDescription()`，在原生侧转为保留段落的纯文本；移动端文化卡片保留简述，并提供“阅读完整资料 / 收起完整资料”入口。
+- **修改原因：** 原版文化页面提供完整 `description.md` 阅读，移动端此前只显示用于朗读的简化摘要，无法完整查阅来源与文化说明。
+- **构建结果：** 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` 成功。签名 HAP SHA-256：`fbcfc75c5fa89473bc42da543d4daf63615de4158ee87a0187e1d241e2e67ddc`。
+- **验证结果：** `git diff --check` 通过；HAP 内剥离后的 `libstellarium.so` SHA-256 为 `e12d1bd663df00c03d577edf2697a6aea1aa48e6b5e84b11a4fcfd12c3c821f9`，与打包中间产物一致，并可检索到 `getSkyCultureDetails` 与新增 `description` 字段。无在线 HDC 设备，真机阅读交互待设备连接后补充。
+- **备注：** 未改动权限、隐私门控、SN、陀螺仪或渲染逻辑。
+
+## [2026-08-21] Codex - 星空文化地理档案
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 对齐开源版 `SkyCultureMapGraphicsView` 的文化时期资料：原生桥仅读取 `territory.geojson` 的名称、起止年份和 ISO 地区码，不返回或绘制任何坐标与边界；文化详情新增“文化地理档案”，可按当前年代筛选的年份查看对应有效时期。
+- **修改原因：** 保留原版文化地图的历史资料能力，同时避免在移动端直接渲染历史疆域边界；本轮不接入花瓣地图或其他地图 SDK，也不增加联网请求。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功。HAP 打包未完成：本机 `hvigor` 无法在 `runtimeOS: HarmonyOS` 工程下发现对应 HarmonyOS SDK 组件，报 `00303312 Cannot find the corresponding SDK version`；未通过修改运行时类型规避，避免产物与正式 HarmonyOS 构建不一致。
+- **验证结果：** `git diff --check` 通过；原生 C++ 编译通过，仅保留项目既有的未使用变量及 Qt 弃用 API 警告。构建工程镜像已由 `sync-ohos-build-sources.sh` 同步。
+- **备注：** 待在 DevEco Studio 补齐/修复 HarmonyOS 6.1.1 SDK 后重新执行 `assembleHap`；未改动权限、隐私门控、SN、陀螺仪、位置选择地图或渲染逻辑。
+## [2026-08-21] Codex - 星空文化星座选择与可读性控制对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 原生桥补齐 `ConstellationMgr.flagConstellationPick` 的状态读写；星空文化页新增“选中星座时单独显示”和“仅保留最后选中的星座”开关，打开前者后后者才可用，关闭前者会同步关闭后者。进一步接入原版的星座/星群字号、星座线和边界线宽、星座绘图亮度、星群连线与辅助射线线宽，以及各图层 `0.1–10 秒` 的淡入淡出时长；进入文化页时回读实际状态。
+- **修改原因：** 对齐开源版 `ViewDialog` 与 RemoteControl 中已有的星座选择和可读性调节能力，移动端此前只具备底层的部分桥接，缺少可用入口和状态回读。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功，新的 `libstellarium.so` 已同步到 HAP 工程，两个文件 SHA-256 一致：`9531578beae071b59e701d6608dac0018ddd45537f61433e4c63ae9ef5631b3b`。HAP 打包未完成：本机 HarmonyOS SDK 缺少工程声明的 `6.1.1(24)` 组件，hvigor 报 `00303312 Cannot find the corresponding SDK version`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源与构建工程镜像一致；剥离后的原生库可检索到 `getSkyCultureVisualSettings`、`setSkyCultureVisualSetting` 和 `constellationPick`。未通过修改 `runtimeOS` 或 SDK 版本规避构建阻塞，避免正式产物偏离。
+- **备注：** 不涉及隐私门控、SN、启动、陀螺仪、位置选择或地图 SDK。
+
+## [2026-08-21] Codex - 星空文化区域、黄道与月宿显示参数对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`src/core/modules/ConstellationMgr.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 为已接入的星座区域、文化黄道和月宿图层补齐原版的线宽与 `0.1–10 秒` 淡入淡出调节；控件仅在对应图层开启，且当前文化确实定义黄道或月宿时显示。修正原生初始化中错误将 `skyculture_lunarsystem_thickness` 写入星座区域线宽的问题，改为正确初始化月宿线宽。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功，原生库与 HAP 工程副本 SHA-256 一致：`1ce4413dbb256480dcbdd254994f2f3bb24a68a671687c04a94c8cb86bf88a85`。HAP 命令已按原产品配置尝试，但独立 hvigor 无法识别工程所需 SDK，报 `00303312 Cannot find the corresponding SDK version`；未修改 `runtimeOS`、SDK 版本、产品或签名配置规避。
+- **验证结果：** `git diff --check` 通过；`MainWindowNativeNode.ets` 与 `StellariumTypes.ets` 的源码/构建工程镜像一致；原生库可检索到新增六个桥接属性。当前终端未发现 `hdc` 命令，不能进行设备安装或真机交互验证。
+- **备注：** 仅涉及显示设置，不改变隐私门控、SN、启动、陀螺仪、位置选择或地图 SDK。
+
+## [2026-08-21] Codex - 星空文化图层颜色控制对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 原生桥读取并设置星座连线/标签/边界/区域、星群连线/标签、辅助射线、文化黄道和月宿的原始颜色配置；移动端新增折叠的“图层颜色”面板，只列出当前启用且可用的图层，支持当前色值查看、`#RRGGBB` 精确输入和预设色板。
+- **修改原因：** 开源版可分别保存这些图层的颜色，鸿蒙端此前只能调整线宽、字号和淡入淡出，无法完成文化图层的视觉定制。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功。`libstellarium.so` 与 HAP 工程副本 SHA-256 一致：`63b34ba77e45d641606c823d485fc030e2ebb4037e92ef00ce984452c84d853a`；`hvigorw assembleHap --no-daemon` 成功，签名 HAP SHA-256：`1235326a26b1a32639d142733f8061a1d8d238a8767233ed301c4d2e88838990`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源与构建工程镜像一致；签名产物已生成。当前 `hdc list targets` 无在线设备，未安装交互验证。
+- **备注：** 颜色写入原版 `color/*` 配置键并立即保存；未涉及隐私门控、SN、启动、陀螺仪、位置选择或地图 SDK。
+
+## [2026-08-21] Codex - 行星轨道显示高级控制对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 在“星空及显示 > 行星”中为“显示轨道”增加折叠的高级设置区，可控制仅显示当前选中天体、始终显示八大行星、仅显示行星、包含卫星、轨道保持显示、线宽及四种轨道配色模式；打开设置时从原生侧回读实际状态。
+- **修改原因：** 对齐开源桌面版 `ViewDialog` 已有的 `SolarSystem.flag*Orbits`、`SolarSystem.orbitsThickness` 与 `SolarSystem.orbitColorStyle` 属性，移动端此前只有轨道总开关，无法控制显示范围和可读性。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` 成功。原生库与 HAP 工程副本 SHA-256 均为 `3821af0789e189167fdfb1f29638b8f77c9d4844222277a4533fe7d2982225a7`；签名 HAP SHA-256 为 `bf6e685a48fbb575533dd80e27794733c9d3ab0d6b08db34fe018ea68f9be8e2`。
+- **验证结果：** `git diff --check` 通过，ArkTS 源与构建工程镜像一致；HAP 内包含新的 `libstellarium.so`（打包阶段剥离符号后的 SHA-256：`ec21910cb86934c143ba6f62a808efe296063673de66b89a0e2b745425286761`）。`hdc list targets` 无在线设备，未执行真机或模拟器交互验证。
+- **备注：** 未改变隐私门控、SN、启动、陀螺仪、位置选择、地图、构建模式或签名配置。
+
+## [2026-08-21] Codex - 行星轨迹显示高级控制对齐
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 在“星空及显示 > 行星 > 显示轨迹”下增加折叠设置区，可控制仅保留最近选中的天体、保留对象数量、历史跨度、轨迹线宽和轨迹颜色；设置状态从原生 `SolarSystem` 回读。
+- **修改原因：** 对齐开源桌面版 `ViewDialog` 的 `flagIsolatedTrails`、`numberIsolatedTrails`、`maxTrailTimeExtent`、`trailsThickness` 和 `trailsColor`，移动端此前只有轨迹总开关。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` 成功。原生库与 HAP 工程副本 SHA-256 均为 `c0cafd72118c28d1f9e765733e2626e7265d8d9f6b6bc7bf2c40f57730c93d27`；签名 HAP SHA-256 为 `4fa6b5021346b2bb8913f52288b7adbb78e93496019691f69a40dbe9e1c4257f`。
+- **验证结果：** `git diff --check` 通过，ArkTS 源与构建工程镜像一致，HAP 内含 `ets/modules.abc` 和新的 `libstellarium.so`；当前无在线 HDC 设备，未执行设备交互验证。
+- **备注：** 未改变隐私门控、SN、启动、陀螺仪、位置选择、地图、构建模式或签名配置。
+## [2026-08-21] Codex - 完善星空文化名称组合设置
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 补齐原版星空文化的多名称组合显示能力，区分星图标签与资料卡标签，并按当前文化回读真实引擎状态。
+- **修改原因：** 当前移动端只有单一名称样式选择，无法使用原版的中文、文化原名、读音、转写、现代名称等组合显示。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 已生成。
+- **验证结果：** `git diff --check` 通过；HAP SHA-256 为 `ca77df387d4b3a233cc6bbc7edfcaa18bdaae5ad82d078fbd7f6dcb3feb46dae`。构建产物中可检索到名称组合状态和 `setSkyCultureLabelStyle` 桥接符号；当前无在线 HDC 设备，未进行平板交互测试。
+- **备注：** 不修改隐私、启动、地图、陀螺仪和签名配置。
+
+## [2026-08-21] Codex - 星空文化年代范围筛选
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 在“按适用年代筛选”中增加“单个年份 / 年代范围”切换；年代范围按文化有效年代与用户输入区间是否有交集进行筛选，支持公元前年份、起止年输入，并自动纠正结束年早于起始年的情况。
+- **修改原因：** 对齐开源版 `ViewDialog` 的起止年代过滤能力；移动端原先只能查看某一个年份，无法查找一段历史时期内可用的星空文化。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 已生成。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+- **备注：** 开启年代范围时自动停用“跟随星图模拟时间”，切回单个年份后可重新开启；不修改隐私、启动、地图、陀螺仪、签名和构建模式。
+
+## [2026-08-21] Codex - 星空文化目录按地区分组
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 文化目录按地区排序并增加中文地区分组标题；筛选结果仍保留搜索、类型、地区和年代条件，未标注地区归入“其他地区”。
+- **修改原因：** 对齐开源版文化目录的地区分组结构，减少长列表中不同地区文化混在一起造成的查找负担。
+- **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。签名 HAP SHA-256 为 `771df1f48a60c952065cde02be291c71d6c4e0bb562db7b166dd00c27a3664ef`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+## [2026-08-21] Codex - 星空文化筛选跟随星图时间
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 补充文化年代筛选与星图模拟年份同步能力；新增“同步”按钮和“跟随星图模拟时间”开关，筛选范围支持模拟时间处于未来的情况。
+- **修改原因：** 用户快进到历史或未来时间后，文化筛选仍使用设备当前年份，和星图实际时间不一致。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 已生成。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；HAP SHA-256 为 `c37e8f67b8639c848e24b56dc9749dd1f14c16023bdc34d4d646e4f87c90f1b1`。当前无在线 HDC 设备，未进行设备交互测试。
+- **备注：** 不修改隐私、启动、地图、陀螺仪和签名配置。
+## [2026-08-21] Codex - 星空文化实时跟随模拟时间
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`
+- **修改内容：** `getSimulationTime` 返回观测地本地模拟年份；星空文化年代筛选在开启“跟随星图模拟时间”后每 500 毫秒通过轻量查询更新年份和匹配结果。切换图层页签、关闭面板、进入后台时自动停止，恢复前台并回到文化页后恢复；“同步”按钮可在关闭跟随时强制读取一次。
+- **修改原因：** 上一轮同步只在读取文化详情时更新，模拟时间继续流逝后筛选年份不会变化。
+- **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。签名 HAP SHA-256：`cbe31c70598eed91c23c4c7dbc88a36f17ce1df5b6da5942092a7f26c7ac7a12`。
+- **验证结果：** `git diff --check` 通过；`MainWindowNativeNode.ets`、`StellariumTypes.ets` 与构建工程镜像一致；原生库与 HAP 工程副本 SHA-256 均为 `0a5369078a56e3e0dfc87d7c7e23912f547a6eb272014957090771d64370bdc8`。当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+- **备注：** 不修改隐私、启动、地图、陀螺仪和签名配置。
+
+## [2026-08-21] Codex - 星空文化边界与通用名称状态
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`
+- **修改内容：** 文化资料桥新增星座边界来源和国际通用名称可用性；资料卡显示“国际天文学联合会边界 / 本文化自定义边界 / 未定义边界”等中文状态。没有国际通用名称的文化会禁用对应开关并明确提示，避免打开后无效果。
+- **修改原因：** 对齐开源版 `StelSkyCulture` 元数据，同时让移动端用户知道当前文化的边界定义和名称数据是否存在。
+- **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。原生库 SHA-256 为 `2de70c030e1c8dc9617ea51da62c4b419c9e9c3e34867ac5cce87773a8a3aa51`；签名 HAP SHA-256 为 `771df1f48a60c952065cde02be291c71d6c4e0bb562db7b166dd00c27a3664ef`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；原生库与构建工程副本 SHA-256 一致；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+- **备注：** 不修改隐私、启动、地图、陀螺仪、签名和构建模式。
+
+## [2026-08-21] Codex - 星空文化完整类型筛选
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** “选择星空文化”的类型筛选补充“资料待完善”，与原版 `StelSkyCulture::INCOMPLETE` 分类一一对应。
+- **修改原因：** 移动端此前能显示该分类的中文说明，但无法单独筛选，导致目录能力不完整。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `ce87e24d410f7b6aeb987529abd34f5d699d2ce17df409f5c88ca84300909d42`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；`hap-sign-tool verify-app` 验证通过；当前无在线 HDC 设备，未进行平板或模拟器交互验证。

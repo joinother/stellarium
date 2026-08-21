@@ -98,6 +98,28 @@ function writeRawFile(appContext: common.ApplicationContext, rawPath: string, ou
   }
 }
 
+async function writeRawFileAsync(appContext: common.ApplicationContext, rawPath: string, outputPath: string): Promise<void> {
+  ensureDir(parentDir(outputPath));
+  let file: fs.File | undefined = undefined;
+  try {
+    const content = await appContext.resourceManager.getRawFileContent(rawPath);
+    file = await fs.open(outputPath, fs.OpenMode.CREATE | fs.OpenMode.TRUNC | fs.OpenMode.WRITE_ONLY);
+    const data = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
+    await fs.write(file.fd, data);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to asynchronously write raw resource ${rawPath}: ${JSON.stringify(err)}`);
+    throw new Error(`Failed to write raw resource: ${rawPath}`);
+  } finally {
+    if (file !== undefined) {
+      try {
+        await fs.close(file);
+      } catch (err) {
+        hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to close resource file ${outputPath}: ${JSON.stringify(err)}`);
+      }
+    }
+  }
+}
+
 function writeMarker(path: string): void {
   ensureDir(parentDir(path));
   let file: fs.File | undefined = undefined;
@@ -142,6 +164,44 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
       writeRawFile(appContext, rawPath, outputPath);
     }
   }
+}
+
+async function extractRawTreeAsync(appContext: common.ApplicationContext, rawDir: string, outputDir: string): Promise<void> {
+  ensureDir(outputDir);
+  let entries: Array<string>;
+  try {
+    entries = await appContext.resourceManager.getRawFileList(rawDir);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to list raw resource directory ${rawDir}: ${JSON.stringify(err)}`);
+    throw new Error(`Failed to list raw resource directory: ${rawDir}`);
+  }
+
+  for (const entry of entries) {
+    if (rawDir === RAW_ROOT && entry === 'nebulae') {
+      continue;
+    }
+    const rawPath = rawDir.length > 0 ? `${rawDir}/${entry}` : entry;
+    const outputPath = `${outputDir}/${entry}`;
+    try {
+      await appContext.resourceManager.getRawFileList(rawPath);
+      await extractRawTreeAsync(appContext, rawPath, outputPath);
+    } catch (_err) {
+      await writeRawFileAsync(appContext, rawPath, outputPath);
+    }
+  }
+}
+
+export async function prepareStellariumResourcesAsync(appContext: common.ApplicationContext): Promise<void> {
+  const installRoot = `${appContext.filesDir}/stellarium`;
+  if (exists(`${installRoot}/${MARKER}`)) {
+    return;
+  }
+
+  const startedAt = Date.now();
+  hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] asynchronous Stellarium resource extraction started');
+  await extractRawTreeAsync(appContext, RAW_ROOT, installRoot);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] asynchronous Stellarium resource extraction completed in ${Date.now() - startedAt} ms`);
 }
 
 function copyDeepSkyIndexes(appContext: common.ApplicationContext, installRoot: string): void {

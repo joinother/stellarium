@@ -79,6 +79,8 @@ export interface HeliocentricPosition {
   distanceAU: number
   isComet: boolean
   isSelectedMinor: boolean
+  displayLongitude?: number
+  displayRadius?: number
 }
 export interface CelestialPosition {
   name: string
@@ -122,6 +124,40 @@ export interface SavedLocation {
 export interface SkyCultureItem {
   id: string
   name: string
+  region?: string[]
+  classification?: string
+  beginTime?: number
+  endTime?: number
+  constellationCount?: number
+  asterismCount?: number
+  nativeNameCount?: number
+  artCount?: number
+  hasZodiac?: boolean
+  hasLunarSystem?: boolean
+}
+
+export interface SkyCultureRawItem {
+  id?: string
+  name?: string
+  region?: string[]
+  classification?: string
+  beginTime?: number
+  endTime?: number
+  constellationCount?: number
+  asterismCount?: number
+  nativeNameCount?: number
+  artCount?: number
+  hasZodiac?: boolean
+  hasLunarSystem?: boolean
+}
+
+export interface SkyCultureTerritoryEntry {
+  name: string
+  beginTime: number
+  endTime: number
+  countryCode: string
+  countryCode3: string
+  activeAtSimulationTime: boolean
 }
 
 export interface PluginItem {
@@ -271,6 +307,8 @@ export const ALIAS_LIST: AliasEntry[] = [
 
 export interface StellariumBridgeResponse {
   ok?: boolean
+  id?: string
+  format?: string
   isTimeNow?: boolean
   pending?: boolean
   progress?: number
@@ -287,8 +325,49 @@ export interface StellariumBridgeResponse {
   locations?: Object[]
   timeZone?: string
   jd?: number
+  jdOfToday?: number
+  year?: number
   timeText?: string
   fov?: number
+  fovCircularMarkerSize?: number
+  fovRectangularMarkerWidth?: number
+  fovRectangularMarkerHeight?: number
+  fovRectangularMarkerRotation?: number
+  orbitIsolated?: boolean
+  orbitMajorPlanets?: boolean
+  orbitPlanetsOnly?: boolean
+  orbitWithMoons?: boolean
+  orbitPermanent?: boolean
+  orbitThickness?: number
+  orbitColorStyle?: string
+  trailIsolated?: boolean
+  trailSelectionCount?: number
+  trailYears?: number
+  trailThickness?: number
+  trailColor?: string
+  constellationFontSize?: number
+  constellationLineThickness?: number
+  constellationBoundaryThickness?: number
+  constellationHullsThickness?: number
+  zodiacThickness?: number
+  lunarSystemThickness?: number
+  constellationArtIntensity?: number
+  constellationLinesFadeDuration?: number
+  constellationLabelsFadeDuration?: number
+  constellationArtFadeDuration?: number
+  constellationBoundariesFadeDuration?: number
+  constellationHullsFadeDuration?: number
+  zodiacFadeDuration?: number
+  lunarSystemFadeDuration?: number
+  skyCultureColors?: Record<string, string>
+  setting?: string
+  color?: string
+  asterismFontSize?: number
+  asterismLineThickness?: number
+  rayHelperThickness?: number
+  asterismLinesFadeDuration?: number
+  asterismLabelsFadeDuration?: number
+  rayHelperFadeDuration?: number
   tracking?: boolean
   locationName?: string
   locationRegion?: string
@@ -306,6 +385,34 @@ export interface StellariumBridgeResponse {
   azimuth?: number
   constellation?: string
   culture?: string
+  cultureId?: string
+  region?: string[]
+  classification?: string
+  license?: string
+  boundariesType?: string
+  narration?: string
+  description?: string
+  hasTerritoryArchive?: boolean
+  territorySegmentCount?: number
+  territoryActiveSegmentCount?: number
+  territorySimulationYear?: number
+  territoryArchive?: Array<SkyCultureTerritoryEntry>
+  beginTime?: number
+  endTime?: number
+  constellationCount?: number
+  asterismCount?: number
+  nativeNameCount?: number
+  artCount?: number
+  hasZodiac?: boolean
+  hasLunarSystem?: boolean
+  screenLabelStyle?: string
+  infoLabelStyle?: string
+  zodiacLabelStyle?: string
+  lunarSystemLabelStyle?: string
+  abbreviatedNames?: boolean
+  overrideCommonNames?: boolean
+  defaultId?: string
+  usesCommonNames?: boolean
   // 音乐引擎用：英文类型(便于分支) / 光谱型 / 推算温度(越热音越高)
   objectType?: string
   spType?: string
@@ -360,6 +467,8 @@ export interface StellariumBridgeResponse {
   actionShow_Planets?: boolean
   actionShow_Planets_Orbits?: boolean
   actionShow_Planets_Hints?: boolean
+  actionShow_Planets_Trails?: boolean
+  actionShow_Planets_EnlargeMoon?: boolean
   actionShow_Nebulas?: boolean
   actionShow_MilkyWay?: boolean
   actionShow_Ground?: boolean
@@ -367,6 +476,7 @@ export interface StellariumBridgeResponse {
   actionShow_Constellation_Labels?: boolean
   actionShow_Constellation_Boundaries?: boolean
   actionShow_Constellation_Art?: boolean
+  actionShow_Constellation_Hulls?: boolean
   actionShow_Atmosphere?: boolean
   actionShow_Cardinal_Points?: boolean
   actionShow_Azimuthal_Grid?: boolean
@@ -384,6 +494,60 @@ export interface StellariumBridgeResponse {
   actionShow_Planets_ShowMinorBodyMarkers?: boolean
   actionShow_Planets_Nomenclature?: boolean
   actionShow_Fog?: boolean
+  actionShow_Ecliptic_Line?: boolean
+  actionShow_Equator_Line?: boolean
+  actionShow_Galactic_Grid?: boolean
+  actionShow_Galactic_Equator_Line?: boolean
+  actionShow_Supergalactic_Equator_Line?: boolean
+  actionShow_Equator_J2000_Line?: boolean
+  actionShow_Ecliptic_J2000_Line?: boolean
+  actionShow_Celestial_Poles?: boolean
+  actionShow_Ecliptic_Poles?: boolean
+  actionShow_Galactic_Poles?: boolean
+  actionShow_Equinox_Points?: boolean
+  actionShow_Solstice_Points?: boolean
+  actionShow_Antisolar_Point?: boolean
+  actionShow_Umbra_Circle?: boolean
+  actionShow_Penumbra_Circle?: boolean
+  actionShow_Compass_Marks?: boolean
+  actionShow_Gridlines?: boolean
+  actionShow_FOV_Center_Marker?: boolean
+  actionShow_FOV_Circular_Marker?: boolean
+  actionShow_FOV_Rectangular_Marker?: boolean
+  actionShow_Intercardinal_Points?: boolean
+  actionShow_Secondary_Intercardinal_Points?: boolean
+  actionShow_Tertiary_Intercardinal_Points?: boolean
+  actionShow_Prime_Vertical_Line?: boolean
+  actionShow_Current_Vertical_Line?: boolean
+  actionShow_Colure_Lines?: boolean
+  actionShow_Precession_Circles?: boolean
+  actionShow_Circumpolar_Circles?: boolean
+  actionShow_Invariable_Plane_Line?: boolean
+  actionShow_Solar_Equator_Line?: boolean
+  actionShow_Ecliptic_J2000_Grid?: boolean
+  actionShow_Supergalactic_Grid?: boolean
+  actionShow_Fixed_Equatorial_Grid?: boolean
+  actionShow_Fixed_Equator_Line?: boolean
+  actionShow_Zenith_Nadir?: boolean
+  actionShow_Celestial_J2000_Poles?: boolean
+  actionShow_Ecliptic_J2000_Poles?: boolean
+  actionShow_Equinox_J2000_Points?: boolean
+  actionShow_Solstice_J2000_Points?: boolean
+  actionShow_Galactic_Center?: boolean
+  actionShow_Supergalactic_Poles?: boolean
+  actionShow_Apex_Points?: boolean
+  actionShow_Umbra_Center_Point?: boolean
+  actionShow_Longitude_Line?: boolean
+  actionShow_Quadrature_Line?: boolean
+  actionShow_Ray_Helpers?: boolean
+  actionShow_LandscapeIllumination?: boolean
+  actionShow_LandscapeLabels?: boolean
+  actionShow_Zodiac?: boolean
+  actionShow_LunarSystem?: boolean
+  actionShow_Asterism_Lines?: boolean
+  actionShow_Asterism_Labels?: boolean
+  actionShow_Hips_Surveys?: boolean
+  actionShow_Toast_Survey?: boolean
   actionShow_Meteors?: boolean
   meteors?: boolean
   dsoLabels?: boolean

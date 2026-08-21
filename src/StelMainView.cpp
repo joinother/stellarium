@@ -55,10 +55,12 @@
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
+#include "AsterismMgr.hpp"
 #include "StelLocationMgr.hpp"
 #include "StarMgr.hpp"
 #include "GridLinesMgr.hpp"
 #include "MilkyWay.hpp"
+#include "SpecialMarkersMgr.hpp"
 
 #ifndef STELLARIUM_OHOS_OFFLINE
 #include <QNetworkAccessManager>
@@ -99,6 +101,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QRegularExpression>
+#include <QTextDocument>
 #include <QtPlugin>
 #include <QThread>
 #include <QTimer>
@@ -634,6 +637,9 @@ static Vec3d s_gyroTransitionStartJ2000(0.0, 0.0, 1.0);
 static Vec3d s_gyroTransitionTargetJ2000(0.0, 0.0, 1.0);
 static double s_gyroTransitionStartSec = 0.0;
 static constexpr double OHOS_GYRO_HANDOFF_SECONDS = 0.35;
+// A gyro pose and a selected-object screen anchor both own the camera
+// direction. While the sensor drives the view, leave the anchor suspended.
+static bool s_gyroViewActive = false;
 // --- Manual view-control modes (OHOS bridge) -------------------------------
 // s_viewLock ("固定目标位置"): keeps a selected body's last released screen
 // position as the zoom anchor. Manual panning remains available.
@@ -684,6 +690,9 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 		// only for callers that explicitly turn it off.
 		movementMgr->dragView(0, 0, qRound(dx), qRound(dy));
 	}
+	// Manual panning takes ownership immediately. An in-flight selection move
+	// must not write a stale camera direction on the next render frame.
+	movementMgr->cancelAutoMove();
 	movementMgr->setFlagTracking(false);
 	// Every drag frame establishes the user's new intended target position
 	// before the following render frame applies time-flow compensation.
@@ -923,6 +932,10 @@ static void ohosUpdateSelectedScreenProjection()
 
 static void ohosCaptureSelectedZoomAnchor()
 {
+	// A selection change or an interrupted gesture must never reuse the
+	// previous object's screen anchor. Clear first so every early return also
+	// leaves no stale target for the render-loop maintainer.
+	s_ohosZoomAnchorObject.clear();
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
 		return;
@@ -938,8 +951,7 @@ static void ohosCaptureSelectedZoomAnchor()
 		return;
 	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
 	Vec3d projected;
-	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected)
-		|| !projector->checkInViewport(projected))
+	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected))
 		return;
 	s_ohosZoomAnchorObject = selectedObject->getEnglishName();
 	s_ohosZoomAnchorXRatio = (projected[0] - viewport[0]) / viewport[2];
@@ -955,6 +967,8 @@ static void ohosDeferSelectedAnchor(double seconds)
 
 static void ohosMaintainSelectedZoomAnchor()
 {
+	if (s_gyroViewActive)
+		return;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
 		return;
@@ -1307,6 +1321,13 @@ QJsonObject currentStateJson()
 		result["fov"] = movementMgr->getCurrentFov();
 		result["tracking"] = movementMgr->getFlagTracking();
 	}
+	if (SpecialMarkersMgr* markerMgr = GETSTELMODULE(SpecialMarkersMgr))
+	{
+		result["fovCircularMarkerSize"] = markerMgr->getFOVCircularMarkerSize();
+		result["fovRectangularMarkerWidth"] = markerMgr->getFOVRectangularMarkerWidth();
+		result["fovRectangularMarkerHeight"] = markerMgr->getFOVRectangularMarkerHeight();
+		result["fovRectangularMarkerRotation"] = markerMgr->getFOVRectangularMarkerRotationAngle();
+	}
 
 	if (actionMgr)
 	{
@@ -1317,21 +1338,84 @@ QJsonObject currentStateJson()
 			"actionShow_Planets_Labels",
 			"actionShow_Planets_Orbits",
 			"actionShow_Planets_Hints",
+			"actionShow_Planets_Trails",
+			"actionShow_Planets_EnlargeMoon",
+			"actionShow_Planets_EnlargePlanets",
+			"actionShow_Planets_EnlargeSun",
+			"actionShow_Planets_ShowMinorBodyMarkers",
+			"actionShow_Planets_Nomenclature",
 			"actionShow_Nebulas",
+			"actionShow_DSO_Textures",
 			"actionShow_MilkyWay",
+			"actionShow_Fog",
 			"actionShow_Ground",
+			"actionShow_LandscapeIllumination",
+			"actionShow_LandscapeLabels",
 			"actionShow_Constellation_Lines",
 			"actionShow_Constellation_Labels",
-			"actionShow_Constellation_Boundaries",
-			"actionShow_Constellation_Art",
+				"actionShow_Constellation_Boundaries",
+				"actionShow_Constellation_Art",
+				"actionShow_Constellation_Hulls",
+			"actionShow_Zodiac",
+			"actionShow_LunarSystem",
+			"actionShow_Asterism_Lines",
+			"actionShow_Asterism_Labels",
 			"actionShow_Atmosphere",
 			"actionShow_Cardinal_Points",
 			"actionShow_Azimuthal_Grid",
 			"actionShow_Equatorial_Grid",
 			"actionShow_Equatorial_J2000_Grid",
 			"actionShow_Ecliptic_Grid",
+			"actionShow_Ecliptic_J2000_Grid",
+			"actionShow_Galactic_Grid",
+			"actionShow_Supergalactic_Grid",
+			"actionShow_Fixed_Equatorial_Grid",
+			"actionShow_Fixed_Equator_Line",
+			"actionShow_Equator_Line",
+			"actionShow_Ecliptic_Line",
+			"actionShow_Galactic_Equator_Line",
+			"actionShow_Supergalactic_Equator_Line",
+			"actionShow_Equator_J2000_Line",
+			"actionShow_Ecliptic_J2000_Line",
 			"actionShow_Meridian_Line",
-			"actionShow_Horizon_Line"
+			"actionShow_Horizon_Line",
+			"actionShow_Celestial_Poles",
+			"actionShow_Ecliptic_Poles",
+			"actionShow_Galactic_Poles",
+			"actionShow_Equinox_Points",
+			"actionShow_Solstice_Points",
+			"actionShow_Antisolar_Point",
+			"actionShow_Umbra_Circle",
+			"actionShow_Penumbra_Circle",
+				"actionShow_Compass_Marks",
+				"actionShow_Gridlines",
+			"actionShow_FOV_Center_Marker",
+			"actionShow_FOV_Circular_Marker",
+			"actionShow_FOV_Rectangular_Marker",
+			"actionShow_Intercardinal_Points",
+			"actionShow_Secondary_Intercardinal_Points",
+			"actionShow_Tertiary_Intercardinal_Points",
+			"actionShow_Prime_Vertical_Line",
+			"actionShow_Current_Vertical_Line",
+			"actionShow_Colure_Lines",
+			"actionShow_Precession_Circles",
+			"actionShow_Circumpolar_Circles",
+			"actionShow_Invariable_Plane_Line",
+			"actionShow_Solar_Equator_Line",
+			"actionShow_Zenith_Nadir",
+			"actionShow_Celestial_J2000_Poles",
+			"actionShow_Ecliptic_J2000_Poles",
+			"actionShow_Equinox_J2000_Points",
+			"actionShow_Solstice_J2000_Points",
+			"actionShow_Galactic_Center",
+			"actionShow_Supergalactic_Poles",
+			"actionShow_Apex_Points",
+			"actionShow_Umbra_Center_Point",
+			"actionShow_Longitude_Line",
+				"actionShow_Quadrature_Line",
+				"actionShow_Ray_Helpers",
+			"actionShow_Hips_Surveys",
+			"actionShow_Toast_Survey"
 		};
 		for (const QString& id : ids)
 		{
@@ -1349,6 +1433,8 @@ QJsonObject currentStateJson()
 
 		return result;
 	}
+
+	return result;
 }
 
 namespace {
@@ -1682,6 +1768,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
 		StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
 
+		if (commandName == "setActionStates")
+		{
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+			const QJsonArray states = document.isArray() ? document.array() : QJsonArray();
+			int applied = 0;
+			for (const QJsonValue& value : states)
+			{
+				const QJsonObject state = value.toObject();
+				StelAction* action = actionMgr ? actionMgr->findAction(state.value("id").toString()) : nullptr;
+				if (!action || !action->isCheckable())
+					continue;
+				action->setChecked(state.value("enabled").toBool());
+				++applied;
+			}
+			markOhosInteraction();
+			result["ok"] = true;
+			result["applied"] = applied;
+			return result;
+		}
+
+		if (commandName == "setFovMarkerSetting")
+		{
+			const QString setting = arg.section('|', 0, 0);
+			bool parsed = false;
+			const double value = arg.section('|', 1, 1).toDouble(&parsed);
+			if (!parsed)
+			{
+				result["error"] = "invalid marker value";
+				return result;
+			}
+
+			SpecialMarkersMgr* markerMgr = GETSTELMODULE(SpecialMarkersMgr);
+			if (!markerMgr)
+			{
+				result["error"] = "marker manager unavailable";
+				return result;
+			}
+
+			if (setting == "circleSize" && value >= 0.1 && value <= 180.0)
+				markerMgr->setFOVCircularMarkerSize(value);
+			else if (setting == "rectWidth" && value >= 0.1 && value <= 180.0)
+				markerMgr->setFOVRectangularMarkerWidth(value);
+			else if (setting == "rectHeight" && value >= 0.1 && value <= 180.0)
+				markerMgr->setFOVRectangularMarkerHeight(value);
+			else if (setting == "rectRotation" && value >= -180.0 && value <= 180.0)
+				markerMgr->setFOVRectangularMarkerRotationAngle(value);
+			else
+			{
+				result["error"] = "marker value out of range";
+				return result;
+			}
+
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
 		if (commandName == "triggerAction" || commandName == "setActionChecked" || commandName == "getActionState")
 		{
 			StelAction* action = actionMgr ? actionMgr->findAction(arg.section('|', 0, 0)) : nullptr;
@@ -1874,18 +2017,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						found = objectMgr->setSelectedObject(constellation);
 				}
 			}
-			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty())
+			const bool selectedObserverPlanet = found && core && !objectMgr->getSelectedObject().isEmpty()
+				&& core->getCurrentPlanet()
+				&& objectMgr->getSelectedObject().constFirst()->getEnglishName().compare(
+					core->getCurrentPlanet()->getEnglishName(), Qt::CaseInsensitive) == 0;
+			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty() && !selectedObserverPlanet)
 			{
 				const StelObjectP target = objectMgr->getSelectedObject().first();
 				const QString type = target->getType().toLower();
 				const QString englishName = target->getEnglishName().toLower();
 				// Target FOV tuned for phone-screen visibility:
-			//   planets/sun/moon ~1.5° (large enough to see disk/detail)
-			//   stars           ~0.8° (tight on the point source + label)
-			//   nebulae/galaxies ~6°  (show extended structure context)
-			//   constellations  ~45° (show pattern across sky)
-			//   default          ~3°  (generic object, reasonably close)
-			double targetFov = 3.0;
+				//   planets/sun/moon ~1.5° (large enough to see disk/detail)
+				//   stars           ~0.8° (tight on the point source + label)
+				//   nebulae/galaxies ~6°  (show extended structure context)
+				//   constellations  ~45° (show pattern across sky)
+				//   default          ~3°  (generic object, reasonably close)
+				double targetFov = 3.0;
 				if (type.contains("constellation"))
 					targetFov = 45.0;
 				else if (type.contains("planet") || englishName == "sun" || englishName == "moon")
@@ -1897,19 +2044,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				else if (type.contains("satellite"))
 					targetFov = 30.0;
 
-				// Transit zoom: pull back slightly during pan so user sees approach
-				const double currentFov = movementMgr->getCurrentFov();
-				const double transitFov = std::max(targetFov * 3.0, std::max(currentFov, 12.0));
-				const quint64 serial = ++s_ohosNavigationSerial;
+				// ArkUI's moveToSelectedAt is the single owner of search
+				// navigation. Starting a second delayed zoom here caused the target
+				// to move again after it had already been placed in the safe area.
+				movementMgr->cancelAutoMove();
 				movementMgr->setFlagTracking(false);
-				if (currentFov + 0.5 < transitFov)
-					movementMgr->zoomTo(transitFov, 0.40f);
-				QTimer::singleShot(520, &StelMainView::getInstance(), [movementMgr, targetFov, serial]() {
-					if (serial == s_ohosNavigationSerial.load())
-						movementMgr->zoomTo(targetFov, 0.85f);
-				});
 				qInfo() << "[StellariumOhos][navigate]" << target->getEnglishName()
-						<< "type=" << type << "fov" << currentFov << "->" << targetFov;
+						<< "type=" << type << "single-owner=ArkUI";
 				result["navigationTargetFov"] = targetFov;
 			}
 			markOhosInteraction();
@@ -2213,7 +2354,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			if (started)
+			{
+				// A pinch takes ownership of the camera immediately. Invalidate
+				// delayed safe-area/selection callbacks before capturing the current
+				// screen position, otherwise the old move can overwrite the gesture.
+				++s_ohosNavigationSerial;
+				movementMgr->cancelAutoMove();
+				s_ohosSelectedAnchorHoldUntilSec = 0.0;
 				ohosCaptureSelectedZoomAnchor();
+			}
 			movementMgr->handlePinch(scale, started);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -2246,6 +2395,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "moveToSelectedAt expects x|y|width|height|[focus|layout]";
 				return result;
 			}
+			// A new safe-area request supersedes every previous search/layout
+			// animation. Otherwise an older timer can recenter the selected object
+			// after this request has completed.
+			++s_ohosNavigationSerial;
+			movementMgr->cancelAutoMove();
 			// Horizontal viewport offsets translate the projected image directly,
 			// which is ideal for a tablet's side panel. Stellarium deliberately
 			// compensates its vertical offset while tracking an object, though, so
@@ -2401,6 +2555,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			const bool enabled = arg == "1" || arg.toLower() == "true";
+			if (!enabled)
+				movementMgr->cancelAutoMove();
 			movementMgr->setFlagTracking(enabled);
 			markOhosInteraction();
 			result = currentStateJson();
@@ -2572,6 +2728,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "zoomStep expects positive factor";
 				return result;
 			}
+			++s_ohosNavigationSerial;
+			movementMgr->cancelAutoMove();
+			s_ohosSelectedAnchorHoldUntilSec = 0.0;
 			ohosCaptureSelectedZoomAnchor();
 			double aim = movementMgr->getCurrentFov() * factor;
 			if (aim < 0.001) aim = 0.001;
@@ -3185,20 +3344,244 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getSkyCultureList
 		if (commandName == "getSkyCultureList")
 		{
-			QStringList ids = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListIDs();
-			QStringList names = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListI18();
-			QString current = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			const QStringList ids = skyCultureMgr.getSkyCultureListIDs();
+			const QStringList names = skyCultureMgr.getSkyCultureListI18();
+			const QString current = skyCultureMgr.getCurrentSkyCultureID();
+			const QMap<QString, StelSkyCulture> cultures = skyCultureMgr.getDirToNameMap();
+			auto classificationName = [](const StelSkyCulture::CLASSIFICATION classification) {
+				switch (classification)
+				{
+					case StelSkyCulture::TRADITIONAL: return QStringLiteral("traditional");
+					case StelSkyCulture::ETHNOGRAPHIC: return QStringLiteral("ethnographic");
+					case StelSkyCulture::HISTORICAL: return QStringLiteral("historical");
+					case StelSkyCulture::SINGLE: return QStringLiteral("single");
+					case StelSkyCulture::COMPARATIVE: return QStringLiteral("comparative");
+					case StelSkyCulture::PERSONAL: return QStringLiteral("personal");
+					default: return QStringLiteral("incomplete");
+				}
+			};
 			QJsonArray items;
 			for (int i = 0; i < ids.size(); i++)
 			{
 				QJsonObject obj;
 				obj["id"] = ids[i];
-				obj["name"] = names[i];
+				obj["name"] = i < names.size() ? names[i] : ids[i];
+				const StelSkyCulture culture = cultures.value(ids[i]);
+				obj["region"] = culture.region;
+				obj["classification"] = classificationName(culture.classification);
+				obj["beginTime"] = culture.beginTime;
+				obj["endTime"] = culture.endTime;
+				obj["constellationCount"] = culture.constellations.size();
+				obj["asterismCount"] = culture.asterisms.size();
+				obj["nativeNameCount"] = culture.names.size();
+				obj["hasZodiac"] = !culture.zodiac.isEmpty();
+				obj["hasLunarSystem"] = !culture.lunarSystem.isEmpty();
+				int artCount = 0;
+				for (const QJsonValue& constellation : culture.constellations)
+				{
+					if (constellation.isObject() && constellation.toObject().contains("image")) ++artCount;
+				}
+				obj["artCount"] = artCount;
 				items.append(obj);
 			}
 			result["ok"] = true;
 			result["items"] = items;
 			result["current"] = current;
+			return result;
+		}
+
+		if (commandName == "getSkyCultureDetails")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			const QString id = skyCultureMgr.getCurrentSkyCultureID();
+			const StelSkyCulture culture = skyCultureMgr.getDirToNameMap().value(id);
+			QString classification = QStringLiteral("incomplete");
+			switch (culture.classification)
+			{
+				case StelSkyCulture::TRADITIONAL: classification = QStringLiteral("traditional"); break;
+				case StelSkyCulture::ETHNOGRAPHIC: classification = QStringLiteral("ethnographic"); break;
+				case StelSkyCulture::HISTORICAL: classification = QStringLiteral("historical"); break;
+				case StelSkyCulture::SINGLE: classification = QStringLiteral("single"); break;
+				case StelSkyCulture::COMPARATIVE: classification = QStringLiteral("comparative"); break;
+				case StelSkyCulture::PERSONAL: classification = QStringLiteral("personal"); break;
+				default: break;
+			}
+			int artCount = 0;
+			for (const QJsonValue& constellation : culture.constellations)
+			{
+				if (constellation.isObject() && constellation.toObject().contains("image")) ++artCount;
+			}
+			result["ok"] = true;
+			result["id"] = id;
+			result["name"] = skyCultureMgr.getCurrentSkyCultureNameI18();
+			result["englishName"] = skyCultureMgr.getCurrentSkyCultureEnglishName();
+			result["region"] = culture.region;
+			result["classification"] = classification;
+			result["license"] = culture.license;
+			result["beginTime"] = culture.beginTime;
+			result["endTime"] = culture.endTime;
+			QString boundaryType = QStringLiteral("none");
+			switch (culture.boundariesType)
+			{
+				case StelSkyCulture::BoundariesType::IAU: boundaryType = QStringLiteral("iau"); break;
+				case StelSkyCulture::BoundariesType::Own: boundaryType = QStringLiteral("own"); break;
+				default: break;
+			}
+			result["boundariesType"] = boundaryType;
+			result["constellationCount"] = culture.constellations.size();
+			result["asterismCount"] = culture.asterisms.size();
+			result["nativeNameCount"] = culture.names.size();
+			result["artCount"] = artCount;
+			result["hasZodiac"] = !culture.zodiac.isEmpty();
+			result["hasLunarSystem"] = !culture.lunarSystem.isEmpty();
+			result["screenLabelStyle"] = skyCultureMgr.getScreenLabelStyleString();
+			result["infoLabelStyle"] = skyCultureMgr.getInfoLabelStyleString();
+			result["zodiacLabelStyle"] = skyCultureMgr.getZodiacLabelStyleString();
+			result["lunarSystemLabelStyle"] = skyCultureMgr.getLunarSystemLabelStyleString();
+			result["abbreviatedNames"] = skyCultureMgr.getFlagUseAbbreviatedNames();
+			result["overrideCommonNames"] = skyCultureMgr.getFlagOverrideUseCommonNames();
+			result["defaultId"] = skyCultureMgr.getDefaultSkyCultureID();
+			result["usesCommonNames"] = skyCultureMgr.currentSkycultureUsesCommonNames();
+			result["narration"] = skyCultureMgr.getCurrentSkyCultureNarration();
+			QTextDocument descriptionDocument;
+			descriptionDocument.setHtml(skyCultureMgr.getCurrentSkyCultureHtmlDescription());
+			QString plainDescription = descriptionDocument.toPlainText();
+			plainDescription.replace(QRegularExpression(QStringLiteral("[ \\t]+\\n")), QStringLiteral("\n"));
+			plainDescription.replace(QRegularExpression(QStringLiteral("\\n{3,}")), QStringLiteral("\n\n"));
+			result["description"] = plainDescription.trimmed();
+
+			// The desktop culture map renders GeoJSON boundaries. Mobile exposes only
+			// the associated period metadata, never the boundary coordinates.
+			const QString territoryPath = StelFileMgr::findFile(QStringLiteral("skycultures/%1/territory.geojson").arg(id));
+			QJsonArray territoryArchive;
+			int territorySegmentCount = 0;
+			int activeTerritorySegmentCount = 0;
+			int simulationYear = 0;
+			int simulationMonth = 0;
+			int simulationDay = 0;
+			const double localJD = core->getJD() + core->getUTCOffset(core->getJD()) / 24.0;
+			StelUtils::getDateFromJulianDay(localJD, &simulationYear, &simulationMonth, &simulationDay);
+			if (!territoryPath.isEmpty())
+			{
+				QFile territoryFile(territoryPath);
+				if (territoryFile.open(QFile::ReadOnly))
+				{
+					QJsonParseError parseError;
+					const QJsonDocument territoryDocument = QJsonDocument::fromJson(territoryFile.readAll(), &parseError);
+					if (parseError.error == QJsonParseError::NoError && territoryDocument.isObject())
+					{
+						const QJsonArray features = territoryDocument.object().value(QStringLiteral("features")).toArray();
+						for (const QJsonValue& featureValue : features)
+						{
+							if (!featureValue.isObject()) continue;
+							const QJsonObject properties = featureValue.toObject().value(QStringLiteral("properties")).toObject();
+							if (properties.isEmpty()) continue;
+							const int beginTime = properties.value(QStringLiteral("beginTime")).toInt();
+							const int endTime = properties.value(QStringLiteral("endTime")).toInt();
+							const bool active = (beginTime == 0 || simulationYear >= beginTime)
+								&& (endTime == 0 || endTime >= 9000 || simulationYear <= endTime);
+							QJsonObject entry;
+							entry["name"] = properties.value(QStringLiteral("name")).toString();
+							entry["beginTime"] = beginTime;
+							entry["endTime"] = endTime;
+							entry["countryCode"] = properties.value(QStringLiteral("ISO3166-1-Alpha-2")).toString();
+							entry["countryCode3"] = properties.value(QStringLiteral("ISO3166-1-Alpha-3")).toString();
+							entry["activeAtSimulationTime"] = active;
+							territoryArchive.append(entry);
+							++territorySegmentCount;
+							if (active) ++activeTerritorySegmentCount;
+						}
+					}
+				}
+			}
+			result["hasTerritoryArchive"] = !territoryPath.isEmpty();
+			result["territorySegmentCount"] = territorySegmentCount;
+			result["territoryActiveSegmentCount"] = activeTerritorySegmentCount;
+			result["territorySimulationYear"] = simulationYear;
+			result["territoryArchive"] = territoryArchive;
+			return result;
+		}
+
+		if (commandName == "setSkyCultureLabelStyle")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			const QStringList parts = arg.split('|');
+			const QString target = parts.value(0).trimmed().toLower();
+			const QString style = parts.value(1).trimmed();
+			if (parts.size() != 2 || style.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "setSkyCultureLabelStyle expects target|style";
+				return result;
+			}
+			if (target == QLatin1String("screen"))
+				skyCultureMgr.setScreenLabelStyle(style);
+			else if (target == QLatin1String("info"))
+				skyCultureMgr.setInfoLabelStyle(style);
+			else if (target == QLatin1String("zodiac"))
+				skyCultureMgr.setZodiacLabelStyle(style);
+			else if (target == QLatin1String("lunar"))
+				skyCultureMgr.setLunarSystemLabelStyle(style);
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "unknown sky culture label target";
+				return result;
+			}
+			result["ok"] = true;
+			result["target"] = target;
+			result["style"] = style;
+			result["screenLabelStyle"] = skyCultureMgr.getScreenLabelStyleString();
+			result["infoLabelStyle"] = skyCultureMgr.getInfoLabelStyleString();
+			result["zodiacLabelStyle"] = skyCultureMgr.getZodiacLabelStyleString();
+			result["lunarSystemLabelStyle"] = skyCultureMgr.getLunarSystemLabelStyleString();
+			return result;
+		}
+
+		if (commandName == "setSkyCultureDefault")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			const bool ok = skyCultureMgr.setDefaultSkyCultureID(arg.trimmed());
+			result["ok"] = ok;
+			result["defaultId"] = skyCultureMgr.getDefaultSkyCultureID();
+			if (!ok)
+				result["error"] = "invalid sky culture default";
+			return result;
+		}
+
+		if (commandName == "setSkyCultureCommonNames")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			const bool enabled = arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0;
+			skyCultureMgr.setFlagOverrideUseCommonNames(enabled);
+			result["ok"] = true;
+			result["overrideCommonNames"] = skyCultureMgr.getFlagOverrideUseCommonNames();
+			return result;
+		}
+
+		if (commandName == "reloadSkyCulture")
+		{
+			StelApp::getInstance().getSkyCultureMgr().reloadSkyCulture();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "setSkyCultureScreenLabelStyle")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			skyCultureMgr.setScreenLabelStyle(arg);
+			result["ok"] = true;
+			result["screenLabelStyle"] = skyCultureMgr.getScreenLabelStyleString();
+			return result;
+		}
+
+		if (commandName == "setSkyCultureShortLabels")
+		{
+			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			skyCultureMgr.setFlagUseAbbreviatedNames(arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0);
+			result["ok"] = true;
+			result["abbreviatedNames"] = skyCultureMgr.getFlagUseAbbreviatedNames();
 			return result;
 		}
 
@@ -3441,10 +3824,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getSimulationTime")
 		{
 			const StelCore* core = StelApp::getInstance().getCore();
+			const double jd = core->getJD();
+			const double localJD = jd + core->getUTCOffset(jd) / 24.0;
+			int year = 0;
+			int month = 0;
+			int day = 0;
+			StelUtils::getDateFromJulianDay(localJD, &year, &month, &day);
 			result["ok"] = true;
-			result["jd"] = core->getJD();
-			result["jdOfToday"] = core->getJD();
+			result["jd"] = jd;
+			result["jdOfToday"] = jd;
 			result["timeRate"] = core->getTimeRate();
+			result["year"] = year;
 			return result;
 		}
 
@@ -4067,6 +4457,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			s_gyroTransitionArmed = true;
 			s_gyroTransitionActive = false;
+			// Searching first starts an automatic centering move. The device pose
+			// must own the camera before sensor frames arrive, otherwise that move
+			// overwrites every other gyro update.
+			if (StelCore* core = StelApp::getInstance().getCore())
+				core->getMovementMgr()->cancelAutoMove();
+			s_gyroViewActive = true;
 			result["ok"] = true;
 			return result;
 		}
@@ -4075,6 +4471,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			s_gyroTransitionArmed = false;
 			s_gyroTransitionActive = false;
+			s_gyroViewActive = false;
+			// Resume a saved view lock from the camera position where the user
+			// stopped using the gyro; correcting against an old anchor would jump.
+			if (s_viewLock)
+				s_ohosCaptureSelectedAnchorAfterPan = true;
 			result["ok"] = true;
 			return result;
 		}
@@ -4111,6 +4512,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 			StelCore* core = StelApp::getInstance().getCore();
 			StelMovementMgr* mvmgr = core->getMovementMgr();
+			s_gyroViewActive = true;
+			mvmgr->cancelAutoMove();
 			// Sensor pose is continuous interaction, not an occasional command.
 			// Keep the render pump at its high-refresh cadence while it is active.
 			markOhosInteraction();
@@ -4593,6 +4996,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			flags["art"] = cmgr->getFlagArt();
 			flags["labels"] = cmgr->getFlagLabels();
 			flags["isolateSelected"] = cmgr->getFlagIsolateSelected();
+			flags["constellationPick"] = cmgr->getFlagConstellationPick();
 			result["ok"] = true;
 			result["flags"] = flags;
 			return result;
@@ -4610,6 +5014,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				else if (flagName == "art") cmgr->setFlagArt(state);
 				else if (flagName == "labels") cmgr->setFlagLabels(state);
 				else if (flagName == "isolateSelected") cmgr->setFlagIsolateSelected(state);
+				else if (flagName == "constellationPick") cmgr->setFlagConstellationPick(state);
 				else {
 					result["ok"] = false;
 					result["error"] = "unknown constellation flag: " + flagName;
@@ -4620,6 +5025,372 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["ok"] = false;
 				result["error"] = "usage: flagName|state";
 			}
+			return result;
+		}
+
+		if (commandName == "getOrbitDisplaySettings")
+		{
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			if (!solarSystem)
+			{
+				result["error"] = "solar system module unavailable";
+				return result;
+			}
+			result["ok"] = true;
+			result["orbitIsolated"] = solarSystem->getFlagIsolatedOrbits();
+			result["orbitMajorPlanets"] = solarSystem->getFlagPlanetsOrbits();
+			result["orbitPlanetsOnly"] = solarSystem->getFlagPlanetsOrbitsOnly();
+			result["orbitWithMoons"] = solarSystem->getFlagOrbitsWithMoons();
+			result["orbitPermanent"] = solarSystem->getFlagPermanentOrbits();
+			result["orbitThickness"] = solarSystem->getOrbitsThickness();
+			result["orbitColorStyle"] = solarSystem->getOrbitColorStyle();
+			return result;
+		}
+
+		if (commandName == "setOrbitDisplaySetting")
+		{
+			const QString setting = arg.section('|', 0, 0).trimmed();
+			const QString value = arg.section('|', 1, 1).trimmed();
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			if (!solarSystem)
+			{
+				result["error"] = "solar system module unavailable";
+				return result;
+			}
+
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			if (setting == "isolated")
+				solarSystem->setFlagIsolatedOrbits(enabled);
+			else if (setting == "majorPlanets")
+				solarSystem->setFlagPlanetsOrbits(enabled);
+			else if (setting == "planetsOnly")
+				solarSystem->setFlagPlanetsOrbitsOnly(enabled);
+			else if (setting == "withMoons")
+				solarSystem->setFlagOrbitsWithMoons(enabled);
+			else if (setting == "permanent")
+				solarSystem->setFlagPermanentOrbits(enabled);
+			else if (setting == "thickness")
+			{
+				bool parsed = false;
+				const int thickness = value.toInt(&parsed);
+				if (!parsed || thickness < 1 || thickness > 5)
+				{
+					result["error"] = "orbit thickness must be between 1 and 5";
+					return result;
+				}
+				solarSystem->setOrbitsThickness(thickness);
+			}
+			else if (setting == "colorStyle")
+			{
+				if (value != "one_color" && value != "groups" && value != "major_planets" && value != "major_planets_minor_types")
+				{
+					result["error"] = "unknown orbit color style";
+					return result;
+				}
+				solarSystem->setOrbitColorStyle(value);
+			}
+			else
+			{
+				result["error"] = "unknown orbit display setting";
+				return result;
+			}
+
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "getTrailDisplaySettings")
+		{
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			if (!solarSystem)
+			{
+				result["error"] = "solar system module unavailable";
+				return result;
+			}
+			result["ok"] = true;
+			result["trailIsolated"] = solarSystem->getFlagIsolatedTrails();
+			result["trailSelectionCount"] = solarSystem->getNumberIsolatedTrails();
+			result["trailYears"] = solarSystem->getMaxTrailTimeExtent();
+			result["trailThickness"] = solarSystem->getTrailsThickness();
+			result["trailColor"] = solarSystem->getTrailsColor().toHtmlColor().toUpper();
+			return result;
+		}
+
+		if (commandName == "setTrailDisplaySetting")
+		{
+			const QString setting = arg.section('|', 0, 0).trimmed();
+			const QString value = arg.section('|', 1, 1).trimmed();
+			SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+			if (!solarSystem)
+			{
+				result["error"] = "solar system module unavailable";
+				return result;
+			}
+
+			if (setting == "isolated")
+			{
+				const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+				solarSystem->setFlagIsolatedTrails(enabled);
+			}
+			else if (setting == "selectionCount" || setting == "years" || setting == "thickness")
+			{
+				bool parsed = false;
+				const int number = value.toInt(&parsed);
+				if (!parsed)
+				{
+					result["error"] = "trail setting expects an integer";
+					return result;
+				}
+				if (setting == "selectionCount" && number >= 1 && number <= 5)
+					solarSystem->setNumberIsolatedTrails(number);
+				else if (setting == "years" && number >= 1 && number <= 250)
+					solarSystem->setMaxTrailTimeExtent(number);
+				else if (setting == "thickness" && number >= 1 && number <= 5)
+					solarSystem->setTrailsThickness(number);
+				else
+				{
+					result["error"] = "trail setting value out of range";
+					return result;
+				}
+			}
+			else if (setting == "color")
+			{
+				QString colorText = value;
+				if (colorText.startsWith('#')) colorText.remove(0, 1);
+				const QRegularExpression hexColorExpression(QStringLiteral("^[0-9A-Fa-f]{6}$"));
+				if (!hexColorExpression.match(colorText).hasMatch())
+				{
+					result["error"] = "trail color expects #RRGGBB";
+					return result;
+				}
+				bool redOk = false;
+				bool greenOk = false;
+				bool blueOk = false;
+				const int red = colorText.mid(0, 2).toInt(&redOk, 16);
+				const int green = colorText.mid(2, 2).toInt(&greenOk, 16);
+				const int blue = colorText.mid(4, 2).toInt(&blueOk, 16);
+				if (!redOk || !greenOk || !blueOk)
+				{
+					result["error"] = "invalid trail color";
+					return result;
+				}
+				const Vec3f color(red / 255.f, green / 255.f, blue / 255.f);
+				solarSystem->setTrailsColor(color);
+				StelApp::immediateSave("color/object_trails_color", color.toStr());
+			}
+			else
+			{
+				result["error"] = "unknown trail display setting";
+				return result;
+			}
+
+			markOhosInteraction();
+			result["ok"] = true;
+			result["trailColor"] = solarSystem->getTrailsColor().toHtmlColor().toUpper();
+			return result;
+		}
+
+		if (commandName == "getSkyCultureVisualSettings")
+		{
+			ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+			AsterismMgr* amgr = GETSTELMODULE(AsterismMgr);
+			if (!cmgr || !amgr)
+			{
+				result["error"] = "sky culture display managers unavailable";
+				return result;
+			}
+			result["ok"] = true;
+			result["constellationFontSize"] = cmgr->getFontSize();
+			result["constellationLineThickness"] = cmgr->getConstellationLineThickness();
+			result["constellationBoundaryThickness"] = cmgr->getBoundariesThickness();
+			result["constellationHullsThickness"] = cmgr->getHullsThickness();
+			result["zodiacThickness"] = cmgr->getZodiacThickness();
+			result["lunarSystemThickness"] = cmgr->getLunarSystemThickness();
+			result["constellationArtIntensity"] = cmgr->getArtIntensity();
+			result["constellationLinesFadeDuration"] = cmgr->getLinesFadeDuration();
+			result["constellationLabelsFadeDuration"] = cmgr->getLabelsFadeDuration();
+			result["constellationArtFadeDuration"] = cmgr->getArtFadeDuration();
+			result["constellationBoundariesFadeDuration"] = cmgr->getBoundariesFadeDuration();
+			result["constellationHullsFadeDuration"] = cmgr->getHullsFadeDuration();
+			result["zodiacFadeDuration"] = cmgr->getZodiacFadeDuration();
+			result["lunarSystemFadeDuration"] = cmgr->getLunarSystemFadeDuration();
+			result["asterismFontSize"] = amgr->getFontSize();
+			result["asterismLineThickness"] = amgr->getAsterismLineThickness();
+			result["rayHelperThickness"] = amgr->getRayHelperThickness();
+			result["asterismLinesFadeDuration"] = amgr->getLinesFadeDuration();
+			result["asterismLabelsFadeDuration"] = amgr->getLabelsFadeDuration();
+			result["rayHelperFadeDuration"] = amgr->getRayHelpersFadeDuration();
+			QJsonObject colors;
+			colors["constellationLines"] = cmgr->getLinesColor().toHtmlColor().toUpper();
+			colors["constellationLabels"] = cmgr->getLabelsColor().toHtmlColor().toUpper();
+			colors["constellationBoundaries"] = cmgr->getBoundariesColor().toHtmlColor().toUpper();
+			colors["constellationHulls"] = cmgr->getHullsColor().toHtmlColor().toUpper();
+			colors["zodiac"] = cmgr->getZodiacColor().toHtmlColor().toUpper();
+			colors["lunarSystem"] = cmgr->getLunarSystemColor().toHtmlColor().toUpper();
+			colors["asterismLines"] = amgr->getLinesColor().toHtmlColor().toUpper();
+			colors["asterismLabels"] = amgr->getLabelsColor().toHtmlColor().toUpper();
+			colors["rayHelpers"] = amgr->getRayHelpersColor().toHtmlColor().toUpper();
+			result["skyCultureColors"] = colors;
+			return result;
+		}
+
+		if (commandName == "setSkyCultureVisualSetting")
+		{
+			const QString setting = arg.section('|', 0, 0);
+			bool parsed = false;
+			const double value = arg.section('|', 1, 1).toDouble(&parsed);
+			if (!parsed)
+			{
+				result["error"] = "invalid sky culture display value";
+				return result;
+			}
+
+			ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+			AsterismMgr* amgr = GETSTELMODULE(AsterismMgr);
+			if (!cmgr || !amgr)
+			{
+				result["error"] = "sky culture display managers unavailable";
+				return result;
+			}
+
+			if (setting == "constellationFontSize" && value >= 8.0 && value <= 40.0)
+				cmgr->setFontSize(qRound(value));
+			else if (setting == "constellationLineThickness" && value >= 1.0 && value <= 5.0)
+				cmgr->setConstellationLineThickness(qRound(value));
+			else if (setting == "constellationBoundaryThickness" && value >= 1.0 && value <= 5.0)
+				cmgr->setBoundariesThickness(qRound(value));
+			else if (setting == "constellationHullsThickness" && value >= 1.0 && value <= 5.0)
+				cmgr->setHullsThickness(qRound(value));
+			else if (setting == "zodiacThickness" && value >= 1.0 && value <= 5.0)
+				cmgr->setZodiacThickness(qRound(value));
+			else if (setting == "lunarSystemThickness" && value >= 1.0 && value <= 5.0)
+				cmgr->setLunarSystemThickness(qRound(value));
+			else if (setting == "constellationArtIntensity" && value >= 0.0 && value <= 1.0)
+				cmgr->setArtIntensity(static_cast<float>(value));
+			else if (setting == "constellationLinesFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setLinesFadeDuration(static_cast<float>(value));
+			else if (setting == "constellationLabelsFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setLabelsFadeDuration(static_cast<float>(value));
+			else if (setting == "constellationArtFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setArtFadeDuration(static_cast<float>(value));
+			else if (setting == "constellationBoundariesFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setBoundariesFadeDuration(static_cast<float>(value));
+			else if (setting == "constellationHullsFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setHullsFadeDuration(static_cast<float>(value));
+			else if (setting == "zodiacFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setZodiacFadeDuration(static_cast<float>(value));
+			else if (setting == "lunarSystemFadeDuration" && value >= 0.1 && value <= 10.0)
+				cmgr->setLunarSystemFadeDuration(static_cast<float>(value));
+			else if (setting == "asterismFontSize" && value >= 8.0 && value <= 40.0)
+				amgr->setFontSize(qRound(value));
+			else if (setting == "asterismLineThickness" && value >= 1.0 && value <= 5.0)
+				amgr->setAsterismLineThickness(qRound(value));
+			else if (setting == "rayHelperThickness" && value >= 1.0 && value <= 5.0)
+				amgr->setRayHelperThickness(qRound(value));
+			else if (setting == "asterismLinesFadeDuration" && value >= 0.1 && value <= 10.0)
+				amgr->setLinesFadeDuration(static_cast<float>(value));
+			else if (setting == "asterismLabelsFadeDuration" && value >= 0.1 && value <= 10.0)
+				amgr->setLabelsFadeDuration(static_cast<float>(value));
+			else if (setting == "rayHelperFadeDuration" && value >= 0.1 && value <= 10.0)
+				amgr->setRayHelpersFadeDuration(static_cast<float>(value));
+			else
+			{
+				result["error"] = "sky culture display value out of range";
+				return result;
+			}
+
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "setSkyCultureVisualColor")
+		{
+			const QString setting = arg.section('|', 0, 0).trimmed();
+			QString colorText = arg.section('|', 1, 1).trimmed();
+			if (colorText.startsWith('#')) colorText.remove(0, 1);
+			const QRegularExpression hexColorExpression(QStringLiteral("^[0-9A-Fa-f]{6}$"));
+			if (!hexColorExpression.match(colorText).hasMatch())
+			{
+				result["error"] = "sky culture color expects #RRGGBB";
+				return result;
+			}
+			bool redOk = false;
+			bool greenOk = false;
+			bool blueOk = false;
+			const int red = colorText.mid(0, 2).toInt(&redOk, 16);
+			const int green = colorText.mid(2, 2).toInt(&greenOk, 16);
+			const int blue = colorText.mid(4, 2).toInt(&blueOk, 16);
+			if (!redOk || !greenOk || !blueOk)
+			{
+				result["error"] = "invalid sky culture color";
+				return result;
+			}
+			const Vec3f color(red / 255.f, green / 255.f, blue / 255.f);
+			ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+			AsterismMgr* amgr = GETSTELMODULE(AsterismMgr);
+			if (!cmgr || !amgr)
+			{
+				result["error"] = "sky culture display managers unavailable";
+				return result;
+			}
+
+			if (setting == "constellationLines")
+			{
+				cmgr->setLinesColor(color);
+				StelApp::immediateSave("color/const_lines_color", color.toStr());
+			}
+			else if (setting == "constellationLabels")
+			{
+				cmgr->setLabelsColor(color);
+				StelApp::immediateSave("color/const_names_color", color.toStr());
+			}
+			else if (setting == "constellationBoundaries")
+			{
+				cmgr->setBoundariesColor(color);
+				StelApp::immediateSave("color/const_boundary_color", color.toStr());
+			}
+			else if (setting == "constellationHulls")
+			{
+				cmgr->setHullsColor(color);
+				StelApp::immediateSave("color/const_hull_color", color.toStr());
+			}
+			else if (setting == "zodiac")
+			{
+				cmgr->setZodiacColor(color);
+				StelApp::immediateSave("color/skyculture_zodiac_color", color.toStr());
+			}
+			else if (setting == "lunarSystem")
+			{
+				cmgr->setLunarSystemColor(color);
+				StelApp::immediateSave("color/skyculture_lunarsystem_color", color.toStr());
+			}
+			else if (setting == "asterismLines")
+			{
+				amgr->setLinesColor(color);
+				StelApp::immediateSave("color/asterism_lines_color", color.toStr());
+			}
+			else if (setting == "asterismLabels")
+			{
+				amgr->setLabelsColor(color);
+				StelApp::immediateSave("color/asterism_names_color", color.toStr());
+			}
+			else if (setting == "rayHelpers")
+			{
+				amgr->setRayHelpersColor(color);
+				StelApp::immediateSave("color/rayhelper_lines_color", color.toStr());
+			}
+			else
+			{
+				result["error"] = "unknown sky culture color";
+				return result;
+			}
+
+			markOhosInteraction();
+			result["ok"] = true;
+			result["setting"] = setting;
+			result["color"] = color.toHtmlColor().toUpper();
 			return result;
 		}
 
@@ -7413,6 +8184,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "getMoonPhases")
 		{
+			QElapsedTimer moonPhaseTimer;
+			moonPhaseTimer.start();
 			struct MoonPhaseDefinition
 			{
 				double elongation;
@@ -7524,6 +8297,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			core->update(0);
 			result["ok"] = true;
 			result["moonPhases"] = items;
+			qInfo() << "[StellariumOhos][moon-phase] days=" << days
+					<< "events=" << items.size()
+					<< "elapsedMs=" << moonPhaseTimer.elapsed();
 			return result;
 		}
 

@@ -21,78 +21,66 @@ export default class QAbility extends UIAbility {
   private qtAbilityCreated: boolean = false;
   private qtInitialized: boolean = false;
   private isForeground: boolean = true;
-  private privacyHandoffSequence: number = 0;
-  private windowStageTracerAttached: boolean = false;
   private qtWindowPrepared: boolean = false;
   private privacyWaitingForSystemForeground: boolean = false;
+  private privacyHandoffBackgroundObserved: boolean = false;
   private privacyHandoffGeneration: number = 0;
 
-  // Records the system-dialog-to-Qt hand-off without changing its timing.
-  private tracePrivacyHandoff(event: string): void {
-    this.privacyHandoffSequence++;
-    hilog.info(
-      LOG_DOMAIN,
-      LOG_TAG,
-      `[privacy-handoff #${this.privacyHandoffSequence} t=${Date.now()}] ${event}; foreground=${this.isForeground}; qtInitialized=${this.qtInitialized}`,
-    );
+  private logPrivacyGate(stage: string): void {
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-gate] ${stage}; accepted=${this.privacyAccepted}; qtAbilityCreated=${this.qtAbilityCreated}; qtInitialized=${this.qtInitialized}`);
   }
 
   private waitForStablePrivacyReturn(): void {
-    // On physical devices the Privacy Manager promise can resolve before the
-    // system sends the matching background/foreground lifecycle pair. Starting
-    // Qt in that short gap exposes Home for one frame. Wait for the restored
-    // foreground callback instead. The fallback only covers devices which do
-    // not emit that pair, so they cannot remain on PrivacyBootstrap forever.
     this.privacyWaitingForSystemForeground = true;
+    this.privacyHandoffBackgroundObserved = false;
     const generation = ++this.privacyHandoffGeneration;
-    this.tracePrivacyHandoff('privacy accepted; waiting for stable system foreground');
+    this.logPrivacyGate('privacy dialog accepted; waiting for lifecycle restore');
     setTimeout(() => {
-      if (generation !== this.privacyHandoffGeneration ||
-        !this.privacyWaitingForSystemForeground || !this.isForeground || this.qtInitialized) {
+      if (generation !== this.privacyHandoffGeneration || !this.privacyWaitingForSystemForeground ||
+        this.privacyHandoffBackgroundObserved || !this.isForeground || this.qtInitialized) {
         return;
       }
+      // Some Privacy Manager versions keep the host Ability foreground for the
+      // entire consent flow and therefore emit no lifecycle pair. Starting
+      // from this settled callback avoids leaving those devices on black.
       this.privacyWaitingForSystemForeground = false;
-      this.tracePrivacyHandoff('privacy foreground callback absent; stable-return fallback starting Qt');
-      this.startQtIfReady();
-    }, 1000);
+      this.logPrivacyGate('privacy lifecycle callback absent; starting Qt after settled fallback');
+      void this.startQtIfReady();
+    }, 420);
   }
 
   private startQtAfterStablePrivacyForeground(): void {
     const generation = ++this.privacyHandoffGeneration;
     this.privacyWaitingForSystemForeground = false;
-    // Allow the system to restore the opaque ArkUI host before Qt replaces it.
     setTimeout(() => {
       if (generation !== this.privacyHandoffGeneration || !this.isForeground || this.qtInitialized) {
         return;
       }
-      this.tracePrivacyHandoff('stable privacy foreground restored; starting Qt');
-      this.startQtIfReady();
+      this.logPrivacyGate('privacy foreground restored; starting Qt');
+      void this.startQtIfReady();
     }, 80);
   }
 
-  private prepareQtWindowForPrivacy(windowStage: Window.WindowStage): boolean {
+  private async preparePrivacyHostPage(windowStage: Window.WindowStage): Promise<boolean> {
     if (this.qtWindowPrepared) {
       return true;
     }
 
     try {
-      // Keep the final ArkUI page as the window root while the system-owned
-      // consent sheet is shown. Its native XComponent stays absent until the
-      // AppStorage switch is released after consent, so Stellarium itself does
-      // not start before the official Privacy Manager decision.
+      // Keep privacy consent and the Qt page in separate ArkUI roots. Qt must
+      // load its page once to inject the native-node createInfo; preloading
+      // that page here made it remount after consent and exposed the launcher
+      // between two copies of the launch screen on physical devices.
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', false);
-      this.initializeQtAbilityIfNeeded();
-      if (!this.qtAbilityCreated) {
-        return false;
-      }
-      this.tracePrivacyHandoff('preparing final Qt window page before Privacy Manager');
-      qpa.handleAbilityOnWindowStageCreate(this, windowStage);
+      const pageLoadStartedAt = Date.now();
+      await windowStage.loadContent('pages/PrivacyBootstrap');
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[privacy-gate] privacy bootstrap page loaded in ${Date.now() - pageLoadStartedAt} ms`);
       this.qtWindowPrepared = true;
-      this.tracePrivacyHandoff('final Qt window page prepared with native startup blocked');
       return true;
     } catch (err) {
-      this.tracePrivacyHandoff(`preparing final Qt window page failed: ${JSON.stringify(err)}`);
-      hilog.error(LOG_DOMAIN, LOG_TAG, `Qt window preparation failed: ${JSON.stringify(err)}`);
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy host page preparation failed: ${JSON.stringify(err)}`);
       return false;
     }
   }
@@ -103,58 +91,67 @@ export default class QAbility extends UIAbility {
     }
 
     this.privacyRequestStarted = true;
-    this.tracePrivacyHandoff('requesting official Privacy Manager consent');
+    this.logPrivacyGate('requesting system privacy consent');
     const consent = await requestPrivacyConsent(this.context);
-    this.tracePrivacyHandoff(
-      `official Privacy Manager returned accepted=${consent.accepted}; dialogShown=${consent.dialogShown}`,
-    );
     this.privacyRequestStarted = false;
     if (!consent.accepted) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
       return;
     }
 
-    // IMPORTANT - Privacy Manager hand-off on physical devices:
-    // Do not start Qt directly from the request promise. Privacy Manager may
-    // resolve before its background/foreground lifecycle pair reaches us.
-    // Do not call mainWindow.showWindow(), recreate the window stage, or
-    // change Qt/native libraries to work around that state.
+    // Privacy Manager resolves its Promise only after the user has acted on
+    // the system dialog. Start Qt from that official completion point.
     this.privacyAccepted = true;
     if (consent.dialogShown) {
+      await this.restoreHostWindowAfterPrivacy();
       this.waitForStablePrivacyReturn();
       return;
     }
-    this.tracePrivacyHandoff('privacy was already accepted; starting Qt');
+    this.logPrivacyGate('system privacy consent accepted');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted; starting Qt');
-    this.startQtIfReady();
+    void this.startQtIfReady();
+  }
+
+  private async restoreHostWindowAfterPrivacy(): Promise<void> {
+    if (this.pendingWindowStage === null) {
+      return;
+    }
+    try {
+      const mainWindow = await this.pendingWindowStage.getMainWindow();
+      mainWindow.setWindowBackgroundColor('#070b12');
+      await mainWindow.showWindow();
+      this.isForeground = true;
+      this.logPrivacyGate('privacy host window restored before Qt hand-off');
+    } catch (err) {
+      // The host can already be visible on some Privacy Manager versions.
+      // Continue in that state instead of treating it as a failed consent.
+      this.logPrivacyGate('privacy host window already visible or unavailable');
+    }
   }
 
   private async requestPrivacyAfterWindowReady(windowStage: Window.WindowStage): Promise<void> {
-    if (!this.prepareQtWindowForPrivacy(windowStage)) {
+    if (!await this.preparePrivacyHostPage(windowStage)) {
       return;
     }
-
     await this.enterImmersive(windowStage);
-    // qpa.handleAbilityOnWindowStageCreate schedules loadContent() internally.
-    // Let MainWindowNativeNode become the opaque root before the Privacy
-    // Manager extension covers it; never replace this page after consent.
-    this.tracePrivacyHandoff('waiting for final Qt page before Privacy Manager request');
-    await new Promise<void>((resolve) => setTimeout(resolve, 300));
-    this.tracePrivacyHandoff('final Qt page delay complete; requesting Privacy Manager');
+    this.logPrivacyGate('privacy bootstrap is ready; requesting system privacy consent');
     await this.requestPrivacyThenStart();
   }
 
-  private initializeQtAbilityIfNeeded(): void {
+  private async initializeQtAbilityIfNeeded(): Promise<void> {
     if (this.qtAbilityCreated || this.pendingWant === null || this.pendingLaunchParam === null) {
       return;
     }
 
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    // setupQtApplication() enters Qt's Harmony bridge. Keep both this call and
+    // the deferred AbilityStage callback behind the Privacy Manager decision.
+    QAbilityStage.releasePrivacyGate();
+    await QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
     qpa.handleAbilityOnCreate(this, this.pendingWant, this.pendingLaunchParam);
     this.qtAbilityCreated = true;
   }
 
-  private startQtIfReady(): void {
+  private async startQtIfReady(): Promise<void> {
     if (!this.privacyAccepted || this.qtInitialized || this.pendingWant === null ||
       this.pendingLaunchParam === null || this.pendingWindowStage === null || !this.isForeground) {
       return;
@@ -164,21 +161,34 @@ export default class QAbility extends UIAbility {
     try {
       if (!this.qtWindowPrepared) {
         this.qtInitialized = false;
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because its final page is not prepared');
+        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because its single ArkUI host is not prepared');
         return;
       }
-      // The window root has already been prepared. This flips the only gate
-      // that mounts the native XComponent, avoiding a second loadContent()
-      // call and the one-frame launcher exposure on physical devices.
+      AppStorage.setOrCreate('stellariumStartupPreparing', true);
+      const contextInitializationStartedAt = Date.now();
+      await this.initializeQtAbilityIfNeeded();
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[startup] Qt application context initialized in ${Date.now() - contextInitializationStartedAt} ms`);
+      // The Qt template normally receives this lifecycle callback directly
+      // from onWindowStageCreate(). We defer it until consent so Qt cannot
+      // initialize before the policy decision, but it still must run to put
+      // the native XComponent createInfo into the page's shared storage.
+      qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] requested Qt window-stage page injection');
+      // handleAbilityOnWindowStageCreate() schedules loadContent() internally.
+      // Allow it to remount the already prepared ArkUI page before releasing
+      // the native-node gate, otherwise the visible page has no createInfo.
+      await this.enterImmersive(this.pendingWindowStage);
+      await new Promise<void>((resolve) => setTimeout(resolve, 160));
+      AppStorage.setOrCreate('stellariumStartupPreparing', false);
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', true);
-      this.tracePrivacyHandoff('released prepared Qt native node after privacy consent');
-      this.tracePrivacyHandoff('asking Qt bridge to enter foreground');
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] released Qt native-node gate');
       qpa.handleAbilityOnForeground(this);
-      this.tracePrivacyHandoff('Qt bridge entered foreground after privacy consent');
     } catch (err) {
       // Keep the ability alive if the native bridge reports a synchronous
       // startup error, so the consent page does not turn into a home-screen flash.
       this.qtInitialized = false;
+      AppStorage.setOrCreate('stellariumStartupPreparing', false);
       hilog.error(LOG_DOMAIN, LOG_TAG, `Qt startup hand-off failed: ${JSON.stringify(err)}`);
       return;
     }
@@ -203,7 +213,6 @@ export default class QAbility extends UIAbility {
         }
       });
     }, 1200);
-    this.tracePrivacyHandoff('Qt hand-off calls completed');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
   }
 
@@ -225,7 +234,8 @@ export default class QAbility extends UIAbility {
   }
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onCreate(): want.parameters: ' + JSON.stringify(want.parameters));
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ability created; Qt initialization is blocked pending consent');
+    AppStorage.setOrCreate('stellariumStartupPreparing', false);
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
   }
@@ -248,38 +258,22 @@ export default class QAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: Window.WindowStage) {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onWindowStageCreate(): this.launchWant.parameters: ' + JSON.stringify(this.launchWant.parameters));
     this.pendingWindowStage = windowStage;
-    if (!this.windowStageTracerAttached) {
-      try {
-        windowStage.on('windowStageEvent', (event: Window.WindowStageEventType) => {
-          this.tracePrivacyHandoff(`window stage event=${event}`);
-        });
-        this.windowStageTracerAttached = true;
-      } catch (err) {
-        this.tracePrivacyHandoff(`unable to attach window stage tracer: ${JSON.stringify(err)}`);
-      }
-    }
-    this.tracePrivacyHandoff('UIAbility window stage created');
     void this.requestPrivacyAfterWindowReady(windowStage);
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {
     this.pendingWindowStage = windowStage;
-    this.tracePrivacyHandoff('UIAbility window stage restored');
     if (this.qtInitialized) {
       qpa.handleAbilityOnWindowStageRestore(this, windowStage);
       this.enterImmersive(windowStage);
     } else {
-      if (this.qtWindowPrepared) {
-        qpa.handleAbilityOnWindowStageRestore(this, windowStage);
-      }
       void this.requestPrivacyAfterWindowReady(windowStage);
     }
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onNewWant(): want.parameters: ' + JSON.stringify(want.parameters));
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onNewWant()');
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
     if (this.qtAbilityCreated) {
@@ -291,13 +285,12 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     this.isForeground = true;
     setDeepSkyImageExtractionForeground(true);
-    this.tracePrivacyHandoff('UIAbility onForeground');
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
         this.startQtAfterStablePrivacyForeground();
         return;
       }
-      this.startQtIfReady();
+      void this.startQtIfReady();
       return;
     }
     qpa.handleAbilityOnForeground(this);
@@ -316,13 +309,12 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
     this.isForeground = false;
     setDeepSkyImageExtractionForeground(false);
-    this.tracePrivacyHandoff('UIAbility onBackground');
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
-        // The system-owned consent UI has covered the host. Invalidate the
-        // no-callback fallback and wait for its real foreground restoration.
+        // A real background/foreground pair owns the hand-off. It invalidates
+        // the no-lifecycle fallback until onForeground restores the host.
+        this.privacyHandoffBackgroundObserved = true;
         this.privacyHandoffGeneration++;
-        this.tracePrivacyHandoff('privacy hand-off observed background; waiting for restore');
       }
       return;
     }
@@ -338,7 +330,6 @@ export default class QAbility extends UIAbility {
 
   onWindowStageDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
-    this.tracePrivacyHandoff('UIAbility window stage destroyed');
     if (this.qtAbilityCreated) {
       qpa.handleAbilityOnWindowStageDestroy(this);
     }

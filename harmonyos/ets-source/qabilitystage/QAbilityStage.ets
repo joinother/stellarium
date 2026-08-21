@@ -7,7 +7,7 @@ import common from '@ohos.app.ability.common';
 import hilog from '@ohos.hilog';
 import qpa from 'libqohos.so';
 import {APP_LIBRARY_NAME, LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
-import { prepareStellariumResources } from '../qability/StellariumResourceBootstrap';
+import { prepareStellariumResources, prepareStellariumResourcesAsync } from '../qability/StellariumResourceBootstrap';
 
 export default class QAbilityStage extends AbilityStage {
 
@@ -15,12 +15,38 @@ export default class QAbilityStage extends AbilityStage {
   private static appArgs?: Array<string>;
 
   private static setupQtApplicationCalled: boolean = false;
+  private static setupQtApplicationPromise: Promise<void> | undefined = undefined;
+  private static privacyGateReleased: boolean = false;
+  private static stageInstance: QAbilityStage | undefined = undefined;
+  private static stageCreateForwarded: boolean = false;
 
-  private static initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): void {
+  public static releasePrivacyGate(): void {
+    QAbilityStage.privacyGateReleased = true;
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] Qt initialization gate released after consent');
+  }
+
+  private static forwardStageCreateIfNeeded(): void {
+    if (!QAbilityStage.privacyGateReleased || QAbilityStage.stageCreateForwarded ||
+      QAbilityStage.stageInstance === undefined) {
+      return;
+    }
+    qpa.handleAbilityStageOnCreate(QAbilityStage.stageInstance);
+    QAbilityStage.stageCreateForwarded = true;
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] forwarded AbilityStage create to Qt after consent');
+  }
+
+  private static async initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): Promise<void> {
+    if (!QAbilityStage.privacyGateReleased) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, '[privacy-gate] blocked Qt application context initialization before consent');
+      throw new Error('Qt application context initialization requires privacy consent');
+    }
     if (!QAbilityStage.setupQtApplicationCalled) {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: init');
-      QAbilityStage.setupQtApplicationCalled = true;
+      const preparationStartedAt = Date.now();
+      await prepareStellariumResourcesAsync(appContext);
       prepareStellariumResources(appContext);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[startup] Qt resource preparation completed in ${Date.now() - preparationStartedAt} ms`);
       qpa.setupQtApplication({
         appContext: appContext,
         modulesFactories: QtUtils.getModulesFactoriesMapForQt(),
@@ -29,31 +55,55 @@ export default class QAbilityStage extends AbilityStage {
         abilityClassName: abilityClassName,
         _unusedQChildProcess: new QChildProcess(),
       });
+      QAbilityStage.setupQtApplicationCalled = true;
+      QAbilityStage.forwardStageCreateIfNeeded();
     } else {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: already initialized');
     }
   }
 
-  public static initQtAppContextIfNeeded(appContext: common.ApplicationContext): void {
-    QAbilityStage.initQtAppContextImpl(appContext, QAbility.name);
+  public static initQtAppContextIfNeeded(appContext: common.ApplicationContext): Promise<void> {
+    if (QAbilityStage.setupQtApplicationPromise === undefined) {
+      QAbilityStage.setupQtApplicationPromise = QAbilityStage.initQtAppContextImpl(appContext, QAbility.name)
+        .catch(() => {
+          QAbilityStage.setupQtApplicationPromise = undefined;
+          throw new Error('Qt application context initialization failed');
+        });
+    }
+    return QAbilityStage.setupQtApplicationPromise;
+  }
+
+  public static isQtApplicationInitialized(): boolean {
+    return QAbilityStage.setupQtApplicationCalled;
   }
 
   onCreate(): void {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onCreate()');
-    qpa.handleAbilityStageOnCreate(this);
+    QAbilityStage.stageInstance = this;
+    if (!QAbilityStage.privacyGateReleased) {
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] deferred AbilityStage create for Qt pending consent');
+      return;
+    }
+    QAbilityStage.forwardStageCreateIfNeeded();
   }
 
   onNewProcessRequest(want: Want): string {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: want.parameters: ' + JSON.stringify(want.parameters));
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest');
+    if (!QAbilityStage.isQtApplicationInitialized()) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ignored Qt process request before consent');
+      return '';
+    }
     let processKey: string = qpa.handleAbilityStageOnNewProcessRequest(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onNewProcessRequest: processKey: "' + processKey + '"');
     return processKey;
   }
 
   onAcceptWant(want: Want): string {
-    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: want.parameters: ' + JSON.stringify(want.parameters));
-    QAbilityStage.initQtAppContextIfNeeded(this.context.getApplicationContext());
+    hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant');
+    if (!QAbilityStage.isQtApplicationInitialized()) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ignored Qt accept-want request before consent');
+      return '';
+    }
     let instanceKey: string = qpa.handleAbilityStageOnAcceptWant(this, want);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onAcceptWant: instanceKey: "' + instanceKey + '"');
     return instanceKey;
@@ -61,6 +111,10 @@ export default class QAbilityStage extends AbilityStage {
 
   onDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::onDestroy()');
-    qpa.handleAbilityStageOnDestroy(this);
+    if (QAbilityStage.stageCreateForwarded) {
+      qpa.handleAbilityStageOnDestroy(this);
+      QAbilityStage.stageCreateForwarded = false;
+    }
+    QAbilityStage.stageInstance = undefined;
   }
 }
