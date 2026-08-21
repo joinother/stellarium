@@ -912,6 +912,8 @@ struct WindowNativeNode {
   @State private skyCultureTerritoryMapPolygons: Array<SkyCultureTerritoryPolygon> = []
   @State private skyCultureTerritoryMapYear: number = new Date().getFullYear()
   @State private skyCultureTerritoryMapYearInput: string = new Date().getFullYear().toString()
+  @State private skyCultureMapUseLocationRotation: boolean = false
+  @State private skyCultureObserverLatitude: number = 0
   @State private skyCultureRegions: string[] = []
   @State private skyCultureClassification: string = ''
   @State private skyCultureLicense: string = ''
@@ -5185,6 +5187,10 @@ struct WindowNativeNode {
     this.setSkyCultureTerritoryMapYear(this.skyCultureSimulationYear)
   }
 
+  private skyCultureMapRotationAngle(): number {
+    return this.skyCultureMapUseLocationRotation && this.skyCultureObserverLatitude < 0 ? 180 : 0
+  }
+
   private skyCultureTerritoryRange(entry: SkyCultureTerritoryEntry): string {
     const start = entry.beginTime === 0 ? '早期' : this.skyCultureFormatYear(entry.beginTime)
     const end = entry.endTime === 0 || entry.endTime >= 9000 ? '至今' : this.skyCultureFormatYear(entry.endTime)
@@ -8279,6 +8285,9 @@ private loadPlanetPositions(): void {
   private loadObserverInfo(updateTimeZone: boolean = true): void {
     this.callInteractive('getObserverInfo', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
+        if (r.latitude !== undefined) {
+          this.skyCultureObserverLatitude = Number(r.latitude)
+        }
         if (updateTimeZone) {
           this.observerTimeZone = this.timezoneDisplayName(r.timeZone ?? '')
         }
@@ -18380,6 +18389,19 @@ private loadPlanetPositions(): void {
                   .onClick(() => { this.loadSkyCultureTerritoryMap() })
               }.width('100%')
               Text('地图年份独立于文化目录筛选；可按星图当前时间同步。').fontSize(9).fontColor(this.nmSub()).width('100%')
+              Row() {
+                Column({ space: 1 }) {
+                  Text('按观测地旋转地图').fontSize(10).fontColor(this.nmText()).width('100%')
+                  Text(this.skyCultureMapUseLocationRotation
+                    ? (this.skyCultureObserverLatitude < 0 ? '南半球：地图已旋转 180°' : '北半球：保持标准方向')
+                    : '关闭时保持标准方向').fontSize(9).fontColor(this.nmSub()).width('100%')
+                }.layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.skyCultureMapUseLocationRotation }).width(38).height(21)
+                  .onChange((enabled: boolean) => {
+                    this.skyCultureMapUseLocationRotation = enabled
+                    this.loadObserverInfo(false)
+                  })
+              }.width('100%').padding({ top: 2, bottom: 2 })
               Slider({ value: this.skyCultureTerritoryMapYear, min: -40000, max: this.skyCultureTerritoryMapMaxYear(), step: 1, style: SliderStyle.OutSet })
                 .height(24).width('100%')
                 .onChange((year: number) => { this.setSkyCultureTerritoryMapYear(year) })
@@ -18397,7 +18419,7 @@ private loadPlanetPositions(): void {
                       this.skyCultureMapRenderHeight = Number(newArea.height)
                       this.drawSkyCultureTerritoryMap()
                     })
-                }.width('100%').aspectRatio(2).clip(true).backgroundColor(this.nmBg())
+                }.width('100%').aspectRatio(2).clip(true).rotate({ angle: this.skyCultureMapRotationAngle() }).backgroundColor(this.nmBg())
                   .border({ width: 1, color: this.nmBorder() }).borderRadius(6)
               }
             }.width('100%').padding({ left: 8, right: 8, top: 7, bottom: 7 }).backgroundColor('rgba(91,147,191,0.08)').borderRadius(6).margin({ bottom: 3 })

@@ -2343,3 +2343,10 @@
 - **构建结果：** `scripts/sync-ohos-build-sources.sh` 同步成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `d604948178bbe0522b7b680380080df93e778e3bc4b032d192f4a5e8a1c6cf57`。
 - **验证结果：** `git diff --check` 通过；HAP 包含 `modules.abc` 和文化绘图资源；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
 - **备注：** 图片仍来自应用沙箱本地资源，不联网，不涉及隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。
+
+## [2026-08-22] Codex - 星空文化地图按观测地旋转
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 对齐原版 `SkyCultureMapGraphicsView::rotateMap()`，在离线文化区域地图中增加“按观测地旋转地图”开关；启用后南半球地图旋转 180°，北半球保持标准方向，并使用 `getObserverInfo` 的当前纬度更新状态。
+- **修改原因：** 移动端此前缺少原版的文化地图朝向逻辑，用户在南半球查看文化区域时地图方向与原版不一致。
+- **备注：** 仍只使用应用内置离线地图和文化资料，不接入花瓣地图或其他地图 SDK，不增加联网请求；未修改隐私、SN、启动、陀螺仪、签名或构建模式。
