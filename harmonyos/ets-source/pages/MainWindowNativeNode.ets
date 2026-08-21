@@ -906,7 +906,8 @@ struct WindowNativeNode {
   @State private skyCultureTerritoryMapLoading: boolean = false
   @State private skyCultureTerritoryMapError: string = ''
   @State private skyCultureTerritoryMapPolygons: Array<SkyCultureTerritoryPolygon> = []
-  @State private skyCultureTerritoryMapYear: number = 0
+  @State private skyCultureTerritoryMapYear: number = new Date().getFullYear()
+  @State private skyCultureTerritoryMapYearInput: string = new Date().getFullYear().toString()
   @State private skyCultureRegions: string[] = []
   @State private skyCultureClassification: string = ''
   @State private skyCultureLicense: string = ''
@@ -4637,6 +4638,7 @@ struct WindowNativeNode {
       if (r.territorySimulationYear !== undefined) {
         this.skyCultureSimulationYear = r.territorySimulationYear
         if (this.skyCultureTimeFollowSimulation) this.setSkyCultureTimeYear(this.skyCultureSimulationYear)
+        if (!this.skyCultureTerritoryMapExpanded) this.setSkyCultureTerritoryMapYear(r.territorySimulationYear)
       }
       this.skyCultureDetailsLoading = false
       this.loadSkyCultureConstellationSelectionFlags()
@@ -5117,6 +5119,29 @@ struct WindowNativeNode {
     return this.skyCultureTerritoryArchive.filter((entry: SkyCultureTerritoryEntry) => this.skyCultureTerritoryIncludesYear(entry, this.skyCultureTimeYear))
   }
 
+  private skyCultureTerritoryMapMaxYear(): number {
+    return Math.min(10000, this.skyCultureFilterMaxYear())
+  }
+
+  private setSkyCultureTerritoryMapYear(year: number): void {
+    const clamped = Math.max(-40000, Math.min(this.skyCultureTerritoryMapMaxYear(), Math.round(year)))
+    this.skyCultureTerritoryMapYear = clamped
+    this.skyCultureTerritoryMapYearInput = clamped.toString()
+  }
+
+  private applySkyCultureTerritoryMapYearInput(): void {
+    const year = parseInt(this.skyCultureTerritoryMapYearInput, 10)
+    if (Number.isNaN(year)) {
+      this.skyCultureTerritoryMapYearInput = this.skyCultureTerritoryMapYear.toString()
+      return
+    }
+    this.setSkyCultureTerritoryMapYear(year)
+  }
+
+  private syncSkyCultureTerritoryMapYearToSimulation(): void {
+    this.setSkyCultureTerritoryMapYear(this.skyCultureSimulationYear)
+  }
+
   private skyCultureTerritoryRange(entry: SkyCultureTerritoryEntry): string {
     const start = entry.beginTime === 0 ? '早期' : this.skyCultureFormatYear(entry.beginTime)
     const end = entry.endTime === 0 || entry.endTime >= 9000 ? '至今' : this.skyCultureFormatYear(entry.endTime)
@@ -5125,7 +5150,8 @@ struct WindowNativeNode {
 
   private loadSkyCultureTerritoryMap(): void {
     if (!this.skyCultureHasTerritoryArchive || this.currentSkyCultureId.length === 0 || this.skyCultureTerritoryMapLoading) return
-    const requestedYear = this.skyCultureTimeYear
+    this.applySkyCultureTerritoryMapYearInput()
+    const requestedYear = this.skyCultureTerritoryMapYear
     this.skyCultureTerritoryMapLoading = true
     this.skyCultureTerritoryMapError = ''
     this.callInteractive('getSkyCultureTerritoryGeometry', requestedYear.toString(), (r: StellariumBridgeResponse) => {
@@ -18266,6 +18292,21 @@ private loadPlanetPositions(): void {
             Text(this.skyCultureTerritoryMapError).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
           } else if (this.skyCultureTerritoryMapExpanded) {
             Column({ space: 4 }) {
+              Row({ space: 6 }) {
+                Text('地图年份').fontSize(10).fontColor(this.nmText()).width(52)
+                TextInput({ text: this.skyCultureTerritoryMapYearInput, placeholder: '年份' }).fontSize(11).fontColor(this.nmText()).height(28).width(86)
+                  .onChange((value: string) => { this.skyCultureTerritoryMapYearInput = value })
+                  .onSubmit(() => { this.applySkyCultureTerritoryMapYearInput() })
+                Button('同步星图时间').fontSize(9).fontColor(this.nmAccent()).backgroundColor(this.nmBg()).borderRadius(5).height(28).padding({ left: 7, right: 7 })
+                  .onClick(() => { this.syncSkyCultureTerritoryMapYearToSimulation() })
+                Button('更新').fontSize(9).fontColor(this.nmAccent()).backgroundColor(this.nmBg()).borderRadius(5).height(28).padding({ left: 8, right: 8 })
+                  .enabled(!this.skyCultureTerritoryMapLoading)
+                  .onClick(() => { this.loadSkyCultureTerritoryMap() })
+              }.width('100%')
+              Text('地图年份独立于文化目录筛选；可按星图当前时间同步。').fontSize(9).fontColor(this.nmSub()).width('100%')
+              Slider({ value: this.skyCultureTerritoryMapYear, min: -40000, max: this.skyCultureTerritoryMapMaxYear(), step: 1, style: SliderStyle.OutSet })
+                .height(24).width('100%')
+                .onChange((year: number) => { this.setSkyCultureTerritoryMapYear(year) })
               Text('地图年份：' + this.skyCultureFormatYear(this.skyCultureTerritoryMapYear) + ' · ' + this.skyCultureTerritoryMapPolygons.length + ' 个区域轮廓')
                 .fontSize(10).fontColor(this.nmSub()).width('100%')
               if (this.skyCultureTerritoryMapPolygons.length === 0) {

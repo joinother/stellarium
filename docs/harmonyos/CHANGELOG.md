@@ -2292,3 +2292,20 @@
 - **构建结果：** 原生 `stellarium` 编译成功；同步源码后 `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
 - **验证结果：** HAP SHA-256 为 `57d76d5489cee47c3b23bd05b81842a219582e6c58b65622dda1a5895870f5aa`；原生库 SHA-256 为 `af3f15102f906a0b809da293cf65931c8b700652150cd735d5d71907fa655b1e`；HAP 内含 `resources/rawfile/worldmap.jpg`、`ets/modules.abc` 和新库；ArkTS 镜像一致；`hap-sign-tool.jar verify-app` 通过，`Digest verify result: true`；当前无在线 HDC 设备，未进行设备交互验证。
 - **备注：** 边界点按每个轮廓最多约 160 点抽稀；不修改隐私门控、SN、启动、陀螺仪、地图 SDK、签名和构建模式。
+## [2026-08-21] Codex - 开始处理文化区域地图独立年份控制
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 将文化区域地图年份与星空文化目录筛选年份拆分，增加地图年份输入、同步星图时间和独立更新入口。
+- **修改原因：** 地图初版误用目录筛选年份，用户调整文化资料筛选年份时会意外改变地图请求年份。
+- **构建结果：** 待验证。
+- **验证结果：** 待验证。
+- **备注：** 不涉及隐私、SN、启动、陀螺仪、地图 SDK 或联网逻辑。
+
+## [2026-08-21] Codex - 完成文化区域地图独立年份控制
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 地图初始年份改为当前模拟时间；新增地图年份输入框、范围校验、细粒度滑杆、“同步星图时间”和独立“更新”入口；地图请求不再读取目录筛选年份。
+- **修改原因：** 文化目录的年代筛选与地图显示年份是两个不同工作流，必须避免互相干扰。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `785a799b9604389351992d93b1904e7ed9ae2c029c9e607daa23bea6d81a19cd`。
+- **验证结果：** `git diff --check` 通过；源码与构建工程 ArkTS 镜像一致；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行设备交互验证。
+- **备注：** 构建产物当前为工程既有 debug profile；未修改隐私门控、SN、启动、陀螺仪、地图 SDK 或联网逻辑。
