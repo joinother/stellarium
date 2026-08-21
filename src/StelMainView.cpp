@@ -3413,13 +3413,32 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			for (const QJsonValue& constellation : culture.constellations)
 			{
 				if (!constellation.isObject()) continue;
-				const QJsonObject image = constellation.toObject().value(QStringLiteral("image")).toObject();
+				const QJsonObject constellationObject = constellation.toObject();
+				const QJsonObject image = constellationObject.value(QStringLiteral("image")).toObject();
 				const QString imageFile = image.value(QStringLiteral("file")).toString();
 				if (imageFile.isEmpty()) continue;
 				++artCount;
 				QJsonObject art;
 				art[QStringLiteral("rawPath")] = QStringLiteral("skycultures/%1/%2").arg(id, imageFile);
 				art[QStringLiteral("index")] = artCount;
+				QString displayName;
+				const QStringList idParts = constellationObject.value(QStringLiteral("id")).toString().split(' ', Qt::SkipEmptyParts);
+				if (idParts.size() == 3)
+				{
+					if (ConstellationMgr* constellationMgr = GETSTELMODULE(ConstellationMgr))
+					{
+						const StelObjectP constellationObject = constellationMgr->searchByID(idParts.at(2));
+						if (constellationObject)
+							displayName = constellationObject->getNameI18n().trimmed();
+					}
+				}
+				if (displayName.isEmpty())
+				{
+					const QJsonObject commonName = constellationObject.value(QStringLiteral("common_name")).toObject();
+					displayName = commonName.value(QStringLiteral("native")).toString().trimmed();
+				}
+				if (!displayName.isEmpty())
+					art[QStringLiteral("name")] = displayName;
 				constellationArt.append(art);
 			}
 			result["ok"] = true;

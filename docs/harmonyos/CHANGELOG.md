@@ -2326,3 +2326,11 @@
 - **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；原生库与 HAP 工程副本 SHA-256 均为 `0839c40d97ea19ce6ed411a0ad955b13e2f25c0bb4e863e7c1c27c66dc35acb5`；签名 HAP SHA-256 为 `d1e2df99b710793a7b2fde55565fb0a578b332f495e38a186925b29b39f72e65`。
 - **验证结果：** `git diff --check` 通过；ArkTS 源与构建镜像一致；HAP 包含 1024 个文化绘图资源；仓库内 839 个 `image.file` 引用全部存在；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行设备交互验证。
 - **备注：** 仅使用本地 rawfile 和应用沙箱文件，不联网、不接入地图 SDK，不涉及隐私、SN、启动或陀螺仪。
+## [2026-08-22] Codex - 完善星空文化绘图名称
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`
+- **修改内容：** 为离线文化绘图返回对应星座的本地化名称；移动端缩略图标题优先显示单一中文名称，缺失时回退为简洁序号，并限制单行省略。
+- **修改原因：** 原先缩略图只能显示“绘图 1/2”，用户无法判断图片对应的星座；同时避免中文和外文并列造成信息拥挤。
+- **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；原生库与工程副本 SHA-256 均为 `200e6644f3acf4e2b27e94db5a89f44a347eee672ca6e4be82b5f2f7e588f19f`；签名 HAP SHA-256 为 `c7f6131465427bd3bf3439d98df5c1e636f5de581278bc97ac1ee6a33140a092`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码已同步到构建工程；HAP 包含 `modules.abc`、新原生库和文化绘图资源；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+- **备注：** 仅使用现有文化 JSON 和星座本地化数据，不联网，不涉及隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。

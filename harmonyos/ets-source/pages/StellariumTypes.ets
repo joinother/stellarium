@@ -154,6 +154,7 @@ export interface SkyCultureRawItem {
 export interface SkyCultureArtItem {
   rawPath: string
   index: number
+  name?: string
 }
 
 export interface SkyCultureTerritoryEntry {

@@ -18266,7 +18266,9 @@ private loadPlanetPositions(): void {
                 Column({ space: 3 }) {
                   Image(this.skyCultureArtFilePath(art.rawPath)).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
                     .backgroundColor('rgba(0,0,0,0.22)').borderRadius(5)
-                  Text('绘图 ' + art.index).fontSize(9).fontColor(this.nmSub()).width('100%').textAlign(TextAlign.Center)
+                  Text(art.name !== undefined && art.name.length > 0 ? art.name : '星座绘图 ' + art.index)
+                    .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
                 }.width('31%').padding(4).margin({ right: 1, bottom: 8 }).backgroundColor(this.nmBg()).borderRadius(6)
               }, (art: SkyCultureArtItem) => art.rawPath)
             }.width('100%').padding({ top: 5, bottom: 5 })
