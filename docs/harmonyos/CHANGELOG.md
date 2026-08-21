@@ -2258,3 +2258,11 @@
 - **修改原因：** 移动端此前能显示该分类的中文说明，但无法单独筛选，导致目录能力不完整。
 - **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `ce87e24d410f7b6aeb987529abd34f5d699d2ce17df409f5c88ca84300909d42`。
 - **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；`hap-sign-tool verify-app` 验证通过；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+
+## [2026-08-21] Codex - 星空文化星座选择操作
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 在星空文化设置中增加“全选星座”和“清除选择”入口，复用原版已注册的 `actionShow_Constellation_Select` 与 `actionShow_Constellation_Deselect` 动作，并保留现有隔离显示和单选逻辑。
+- **修改原因：** 原版支持批量选择和清除星座，移动端此前只有隔离显示开关，没有直接操作入口。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `6e6d952134403815f21a436dbe4ea5cc4f60addea1a6a84be582f971d5b2e7a`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；使用 DevEco SDK 内置 `hap-sign-tool.jar verify-app` 验证通过；当前无在线 HDC 设备，未进行平板或模拟器交互验证。

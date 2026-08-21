@@ -4773,6 +4773,12 @@ struct WindowNativeNode {
     })
   }
 
+  private applySkyCultureConstellationSelection(actionId: string, hint: string): void {
+    this.callInteractive('triggerAction', actionId, (r: StellariumBridgeResponse) => {
+      if (r.ok === true) this.flashHint(hint)
+    })
+  }
+
   private loadSkyCultureVisualSettings(): void {
     this.callInteractive('getSkyCultureVisualSettings', '', (r: StellariumBridgeResponse) => {
       if (r.ok !== true) return
@@ -18191,6 +18197,12 @@ private loadPlanetPositions(): void {
           .opacity(this.skyCultureIsolateSelected ? 1 : 0.45)
           .onChange((enabled: boolean) => { this.setSkyCultureConstellationSinglePick(enabled) })
       }.height(34).width('100%').padding({ left: 8, right: 8 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: 8 })
+      Row({ space: 6 }) {
+        Button('全选星座').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg()).borderRadius(5).height(30)
+          .layoutWeight(1).onClick(() => { this.applySkyCultureConstellationSelection('actionShow_Constellation_Select', '已选中全部星座') })
+        Button('清除选择').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg()).borderRadius(5).height(30)
+          .layoutWeight(1).onClick(() => { this.applySkyCultureConstellationSelection('actionShow_Constellation_Deselect', '已清除星座选择') })
+      }.width('100%').padding({ left: 8, right: 8 }).margin({ bottom: 8 })
       Text('星图可读性').fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
       Row() {
         Text('星座标签字号').fontSize(11).fontColor(this.nmText()).width(84)
