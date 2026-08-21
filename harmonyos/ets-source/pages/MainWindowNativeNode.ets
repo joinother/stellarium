@@ -13,7 +13,7 @@ import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from './location_hierarchy'
 import { LOCATION_ZH_NAMES } from './location_names_zh'
 
-import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
+import { ALIAS_LIST, StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, AliasEntry, SearchSug, AliasHit, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, ShellAction, LocSearchItem, SavedLocation } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, BRIGHT_STARS, PROJECTION_KEYS } from './I18n'
@@ -898,6 +898,8 @@ struct WindowNativeNode {
   @State private skyCultureDetailError: string = ''
   @State private skyCultureNarration: string = ''
   @State private skyCultureDescription: string = ''
+  @State private skyCultureArtItems: Array<SkyCultureArtItem> = []
+  @State private skyCultureArtExpanded: boolean = false
   @State private skyCultureTerritoryArchive: Array<SkyCultureTerritoryEntry> = []
   @State private skyCultureHasTerritoryArchive: boolean = false
   @State private skyCultureTerritorySegmentCount: number = 0
@@ -4579,6 +4581,8 @@ struct WindowNativeNode {
         this.currentSkyCulture = r.culture !== undefined ? r.culture : (selected !== undefined ? selected.name : id)
         this.skyCultureNarrationExpanded = false
         this.skyCultureDescriptionExpanded = false
+        this.skyCultureArtItems = []
+        this.skyCultureArtExpanded = false
         this.skyCultureTerritoryExpanded = false
         this.skyCultureTerritoryMapExpanded = false
         this.skyCultureTerritoryMapPolygons = []
@@ -4632,6 +4636,7 @@ struct WindowNativeNode {
       this.skyCultureLunarLabelMode = this.skyCultureScreenLabelModeFromBridge(r.lunarSystemLabelStyle)
       this.skyCultureNarration = this.cleanSkyCultureNarration(r.narration !== undefined ? r.narration : '')
       this.skyCultureDescription = this.cleanSkyCultureDescription(r.description !== undefined ? r.description : '')
+      this.skyCultureArtItems = r.constellationArt !== undefined ? r.constellationArt : []
       this.skyCultureHasTerritoryArchive = r.hasTerritoryArchive === true
       this.skyCultureTerritorySegmentCount = r.territorySegmentCount !== undefined ? r.territorySegmentCount : 0
       this.skyCultureTerritoryArchive = r.territoryArchive !== undefined ? r.territoryArchive : []
@@ -5052,6 +5057,11 @@ struct WindowNativeNode {
 
   private cleanSkyCultureDescription(text: string): string {
     return text.replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  private skyCultureArtFilePath(rawPath: string): string {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    return 'file://' + context.filesDir + '/stellarium/' + rawPath
   }
 
   private skyCultureRegionText(regions: string[]): string {
@@ -18240,6 +18250,31 @@ private loadPlanetPositions(): void {
             Text(this.skyCultureNativeNameCount + ' 个本土名称').fontSize(10).fontColor(this.nmText()).padding({ left: 7, right: 7, top: 3, bottom: 3 }).backgroundColor(this.nmBg()).borderRadius(5)
           }
         }.width('100%').margin({ top: 2, bottom: 2 })
+        if (this.skyCultureArtItems.length > 0) {
+          Row() {
+            Column({ space: 1 }) {
+              Text('文化星座绘图').fontSize(11).fontColor(this.nmText()).width('100%')
+              Text(this.skyCultureArtItems.length + ' 幅本地绘图，可离线查看').fontSize(9).fontColor(this.nmSub()).width('100%')
+            }.layoutWeight(1)
+            Button(this.skyCultureArtExpanded ? '收起' : '查看').fontSize(10).fontColor(this.nmAccent()).backgroundColor(this.nmBg())
+              .borderRadius(5).height(28).padding({ left: 9, right: 9 })
+              .onClick(() => { this.skyCultureArtExpanded = !this.skyCultureArtExpanded })
+          }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6)
+          if (this.skyCultureArtExpanded) {
+            Flex({ wrap: FlexWrap.Wrap }) {
+              ForEach(this.skyCultureArtItems.slice(0, 24), (art: SkyCultureArtItem) => {
+                Column({ space: 3 }) {
+                  Image(this.skyCultureArtFilePath(art.rawPath)).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
+                    .backgroundColor('rgba(0,0,0,0.22)').borderRadius(5)
+                  Text('绘图 ' + art.index).fontSize(9).fontColor(this.nmSub()).width('100%').textAlign(TextAlign.Center)
+                }.width('31%').padding(4).margin({ right: 1, bottom: 8 }).backgroundColor(this.nmBg()).borderRadius(6)
+              }, (art: SkyCultureArtItem) => art.rawPath)
+            }.width('100%').padding({ top: 5, bottom: 5 })
+            if (this.skyCultureArtItems.length > 24) {
+              Text('已显示前 24 幅，完整绘图仍由星图图层按需加载。').fontSize(9).fontColor(this.nmSub()).width('100%')
+            }
+          }
+        }
         if (this.skyCultureNarration.length > 0) {
           Text(this.skyCultureNarration).fontSize(11).fontColor(this.nmText()).width('100%')
             .lineHeight(18).maxLines(this.skyCultureNarrationExpanded ? 40 : 4).textOverflow({ overflow: TextOverflow.Ellipsis })

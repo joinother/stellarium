@@ -151,6 +151,11 @@ export interface SkyCultureRawItem {
   hasLunarSystem?: boolean
 }
 
+export interface SkyCultureArtItem {
+  rawPath: string
+  index: number
+}
+
 export interface SkyCultureTerritoryEntry {
   name: string
   beginTime: number
@@ -411,6 +416,7 @@ export interface StellariumBridgeResponse {
   asterismCount?: number
   nativeNameCount?: number
   artCount?: number
+  constellationArt?: Array<SkyCultureArtItem>
   hasAsterisms?: boolean
   hasZodiac?: boolean
   hasLunarSystem?: boolean

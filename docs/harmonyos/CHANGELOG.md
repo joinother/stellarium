@@ -2309,3 +2309,20 @@
 - **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `785a799b9604389351992d93b1904e7ed9ae2c029c9e607daa23bea6d81a19cd`。
 - **验证结果：** `git diff --check` 通过；源码与构建工程 ArkTS 镜像一致；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行设备交互验证。
 - **备注：** 构建产物当前为工程既有 debug profile；未修改隐私门控、SN、启动、陀螺仪、地图 SDK 或联网逻辑。
+## [2026-08-21] Codex - 开始处理星空文化绘图浏览
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`
+- **修改内容：** 接入文化目录已有的本地星座绘图资源，在文化资料页提供离线缩略图浏览入口。
+- **修改原因：** 当前页面只显示绘图数量，用户无法查看原版文化资源中的实际绘图。
+- **构建结果：** 待验证。
+- **验证结果：** 待验证。
+- **备注：** 仅使用应用内 rawfile 资源，不联网、不接入地图 SDK，不涉及隐私、SN、启动或陀螺仪。
+
+## [2026-08-21] Codex - 完成星空文化绘图浏览
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`
+- **修改内容：** 原生桥从当前文化的 `index.json` 读取实际 `image.file`，返回本地资源路径；文化资料页新增可折叠的“文化星座绘图”缩略图区，最多展示 24 幅，使用解压到应用沙箱的离线图片。
+- **修改原因：** 让文化页面真正使用原版随文化提供的星座图，不再只显示绘图数量。
+- **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；原生库与 HAP 工程副本 SHA-256 均为 `0839c40d97ea19ce6ed411a0ad955b13e2f25c0bb4e863e7c1c27c66dc35acb5`；签名 HAP SHA-256 为 `d1e2df99b710793a7b2fde55565fb0a578b332f495e38a186925b29b39f72e65`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源与构建镜像一致；HAP 包含 1024 个文化绘图资源；仓库内 839 个 `image.file` 引用全部存在；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行设备交互验证。
+- **备注：** 仅使用本地 rawfile 和应用沙箱文件，不联网、不接入地图 SDK，不涉及隐私、SN、启动或陀螺仪。

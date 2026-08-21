@@ -3409,9 +3409,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				default: break;
 			}
 			int artCount = 0;
+			QJsonArray constellationArt;
 			for (const QJsonValue& constellation : culture.constellations)
 			{
-				if (constellation.isObject() && constellation.toObject().contains("image")) ++artCount;
+				if (!constellation.isObject()) continue;
+				const QJsonObject image = constellation.toObject().value(QStringLiteral("image")).toObject();
+				const QString imageFile = image.value(QStringLiteral("file")).toString();
+				if (imageFile.isEmpty()) continue;
+				++artCount;
+				QJsonObject art;
+				art[QStringLiteral("rawPath")] = QStringLiteral("skycultures/%1/%2").arg(id, imageFile);
+				art[QStringLiteral("index")] = artCount;
+				constellationArt.append(art);
 			}
 			result["ok"] = true;
 			result["id"] = id;
@@ -3434,6 +3443,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["asterismCount"] = culture.asterisms.size();
 			result["nativeNameCount"] = culture.names.size();
 			result["artCount"] = artCount;
+			result["constellationArt"] = constellationArt;
 			result["hasAsterisms"] = asterismMgr && asterismMgr->isLinesDefined();
 			result["hasZodiac"] = !culture.zodiac.isEmpty();
 			result["hasLunarSystem"] = !culture.lunarSystem.isEmpty();
