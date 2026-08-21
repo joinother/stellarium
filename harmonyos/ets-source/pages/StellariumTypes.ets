@@ -403,6 +403,7 @@ export interface StellariumBridgeResponse {
   asterismCount?: number
   nativeNameCount?: number
   artCount?: number
+  hasAsterisms?: boolean
   hasZodiac?: boolean
   hasLunarSystem?: boolean
   screenLabelStyle?: string

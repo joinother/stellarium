@@ -913,6 +913,7 @@ struct WindowNativeNode {
   @State private skyCultureAsterismCount: number = 0
   @State private skyCultureNativeNameCount: number = 0
   @State private skyCultureArtCount: number = 0
+  @State private skyCultureHasAsterisms: boolean = false
   @State private skyCultureHasZodiac: boolean = false
   @State private skyCultureHasLunarSystem: boolean = false
   @State private skyCultureScreenLabelMode: number = 0
@@ -4604,6 +4605,7 @@ struct WindowNativeNode {
       this.skyCultureAsterismCount = r.asterismCount !== undefined ? r.asterismCount : 0
       this.skyCultureNativeNameCount = r.nativeNameCount !== undefined ? r.nativeNameCount : 0
       this.skyCultureArtCount = r.artCount !== undefined ? r.artCount : 0
+      this.skyCultureHasAsterisms = r.hasAsterisms === true
       this.skyCultureHasZodiac = r.hasZodiac === true
       this.skyCultureHasLunarSystem = r.hasLunarSystem === true
       this.skyCultureShortLabels = r.abbreviatedNames === true
@@ -18080,9 +18082,14 @@ private loadPlanetPositions(): void {
     this.switchRow(I18n.t('s0525'), this.constellationArt, 'actionShow_Constellation_Art')
     this.switchRow(I18n.t('s0526'), this.zodiac, 'actionShow_Zodiac')
     this.switchRow(I18n.t('s0527'), this.lunarSystem, 'actionShow_LunarSystem')
-    this.switchRow(I18n.t('s0528'), this.asterismLines, 'actionShow_Asterism_Lines')
-    this.switchRow(I18n.t('s0529'), this.asterismLabels, 'actionShow_Asterism_Labels')
-    this.switchRow(I18n.t('s0540'), this.rayHelpers, 'actionShow_Ray_Helpers')
+    if (this.skyCultureHasAsterisms) {
+      this.switchRow(I18n.t('s0528'), this.asterismLines, 'actionShow_Asterism_Lines')
+      this.switchRow(I18n.t('s0529'), this.asterismLabels, 'actionShow_Asterism_Labels')
+      this.switchRow(I18n.t('s0540'), this.rayHelpers, 'actionShow_Ray_Helpers')
+    } else if (!this.skyCultureDetailsLoading && this.currentSkyCultureId.length > 0) {
+      Text('当前文化没有定义星群连线和辅助射线').fontSize(10).fontColor(this.nmSub()).width('100%')
+        .padding({ left: 8, right: 8, top: 7, bottom: 7 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: 6 })
+    }
     Row()
       .width('100%').height(0.5)
       .backgroundColor(this.nmBorder())
@@ -18232,20 +18239,22 @@ private loadPlanetPositions(): void {
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationArtIntensity', value, (current: number) => { this.skyCultureConstellationArtIntensity = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: 3 })
-      Row() {
-        Text('星群标签字号').fontSize(11).fontColor(this.nmText()).width(84)
-        Text(this.skyCultureAsterismFontSize.toFixed(0)).fontSize(11).fontColor(this.nmSub()).width(28).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureAsterismFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet })
-          .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
-          .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismFontSize', value, (current: number) => { this.skyCultureAsterismFontSize = current }) })
-      }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: 3 })
-      Row() {
-        Text('星群连线粗细').fontSize(11).fontColor(this.nmText()).width(84)
-        Text(this.skyCultureAsterismLineThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureAsterismLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
-          .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
-          .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLineThickness', value, (current: number) => { this.skyCultureAsterismLineThickness = current }) })
-      }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.constellationHulls || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
+      if (this.skyCultureHasAsterisms) {
+        Row() {
+          Text('星群标签字号').fontSize(11).fontColor(this.nmText()).width(84)
+          Text(this.skyCultureAsterismFontSize.toFixed(0)).fontSize(11).fontColor(this.nmSub()).width(28).textAlign(TextAlign.End)
+          Slider({ value: this.skyCultureAsterismFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet })
+            .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
+            .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismFontSize', value, (current: number) => { this.skyCultureAsterismFontSize = current }) })
+        }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: 3 })
+        Row() {
+          Text('星群连线粗细').fontSize(11).fontColor(this.nmText()).width(84)
+          Text(this.skyCultureAsterismLineThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
+          Slider({ value: this.skyCultureAsterismLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+            .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
+            .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLineThickness', value, (current: number) => { this.skyCultureAsterismLineThickness = current }) })
+        }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.constellationHulls || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
+      }
       if (this.constellationHulls) {
         Row() {
           Text('星座区域边界').fontSize(11).fontColor(this.nmText()).width(84)
@@ -18255,7 +18264,7 @@ private loadPlanetPositions(): void {
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationHullsThickness', value, (current: number) => { this.skyCultureConstellationHullsThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
       }
-      if (this.rayHelpers) {
+      if (this.skyCultureHasAsterisms && this.rayHelpers) {
         Row() {
           Text('辅助射线粗细').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureRayHelperThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
@@ -18324,7 +18333,7 @@ private loadPlanetPositions(): void {
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationHullsFadeDuration', value, (current: number) => { this.skyCultureConstellationHullsFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.asterismLines || this.asterismLabels || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
       }
-      if (this.asterismLines) {
+      if (this.skyCultureHasAsterisms && this.asterismLines) {
         Row() {
           Text('星群连线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismLinesFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
@@ -18333,7 +18342,7 @@ private loadPlanetPositions(): void {
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLinesFadeDuration', value, (current: number) => { this.skyCultureAsterismLinesFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.asterismLabels || this.rayHelpers ? 3 : 8 })
       }
-      if (this.asterismLabels) {
+      if (this.skyCultureHasAsterisms && this.asterismLabels) {
         Row() {
           Text('星群标签').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismLabelsFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
@@ -18342,7 +18351,7 @@ private loadPlanetPositions(): void {
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLabelsFadeDuration', value, (current: number) => { this.skyCultureAsterismLabelsFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(6).margin({ bottom: this.rayHelpers ? 3 : 8 })
       }
-      if (this.rayHelpers) {
+      if (this.skyCultureHasAsterisms && this.rayHelpers) {
         Row() {
           Text('辅助射线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureRayHelperFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)

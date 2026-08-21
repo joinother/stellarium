@@ -2266,3 +2266,11 @@
 - **修改原因：** 原版支持批量选择和清除星座，移动端此前只有隔离显示开关，没有直接操作入口。
 - **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `6e6d952134403815f21a436dbe4ea5cc4f60addea1a6a84be582f971d5b2e7a`。
 - **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；使用 DevEco SDK 内置 `hap-sign-tool.jar verify-app` 验证通过；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+
+## [2026-08-21] Codex - 星空文化可用图层状态
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 星图文化详情新增星群定义可用性；当当前文化未定义星群时，移动端隐藏星群连线、标签、辅助射线及对应字号、线宽、过渡参数，并显示原因说明。
+- **修改原因：** 与原版 `ViewDialog` 依据 `AsterismMgr::isLinesDefined()` 禁用无定义控件的逻辑对齐，避免产生不可见的伪开关。
+- **构建结果：** 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。原生库 SHA-256 为 `876c809e21acb4e02fef6756e88db67112b9e12ebee1b3857fed994fba1e0304`；签名 HAP SHA-256 为 `2e214dae7aae2d9e35696821efdc8ce5dfa455bccdcfdc9f476b020964e4a2f8`。
+- **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；使用 DevEco SDK 内置 `hap-sign-tool.jar verify-app` 验证通过（`Digest verify result: true`）；当前无在线 HDC 设备，未进行平板或模拟器交互验证。

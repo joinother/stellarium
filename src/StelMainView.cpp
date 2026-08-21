@@ -3394,6 +3394,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getSkyCultureDetails")
 		{
 			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+			AsterismMgr* asterismMgr = GETSTELMODULE(AsterismMgr);
 			const QString id = skyCultureMgr.getCurrentSkyCultureID();
 			const StelSkyCulture culture = skyCultureMgr.getDirToNameMap().value(id);
 			QString classification = QStringLiteral("incomplete");
@@ -3433,6 +3434,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["asterismCount"] = culture.asterisms.size();
 			result["nativeNameCount"] = culture.names.size();
 			result["artCount"] = artCount;
+			result["hasAsterisms"] = asterismMgr && asterismMgr->isLinesDefined();
 			result["hasZodiac"] = !culture.zodiac.isEmpty();
 			result["hasLunarSystem"] = !culture.lunarSystem.isEmpty();
 			result["screenLabelStyle"] = skyCultureMgr.getScreenLabelStyleString();
