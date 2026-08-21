@@ -900,6 +900,8 @@ struct WindowNativeNode {
   @State private skyCultureDescription: string = ''
   @State private skyCultureArtItems: Array<SkyCultureArtItem> = []
   @State private skyCultureArtExpanded: boolean = false
+  @State private skyCultureArtPreviewPath: string = ''
+  @State private skyCultureArtPreviewName: string = ''
   @State private skyCultureTerritoryArchive: Array<SkyCultureTerritoryEntry> = []
   @State private skyCultureHasTerritoryArchive: boolean = false
   @State private skyCultureTerritorySegmentCount: number = 0
@@ -4583,6 +4585,8 @@ struct WindowNativeNode {
         this.skyCultureDescriptionExpanded = false
         this.skyCultureArtItems = []
         this.skyCultureArtExpanded = false
+        this.skyCultureArtPreviewPath = ''
+        this.skyCultureArtPreviewName = ''
         this.skyCultureTerritoryExpanded = false
         this.skyCultureTerritoryMapExpanded = false
         this.skyCultureTerritoryMapPolygons = []
@@ -4637,6 +4641,8 @@ struct WindowNativeNode {
       this.skyCultureNarration = this.cleanSkyCultureNarration(r.narration !== undefined ? r.narration : '')
       this.skyCultureDescription = this.cleanSkyCultureDescription(r.description !== undefined ? r.description : '')
       this.skyCultureArtItems = r.constellationArt !== undefined ? r.constellationArt : []
+      this.skyCultureArtPreviewPath = ''
+      this.skyCultureArtPreviewName = ''
       this.skyCultureHasTerritoryArchive = r.hasTerritoryArchive === true
       this.skyCultureTerritorySegmentCount = r.territorySegmentCount !== undefined ? r.territorySegmentCount : 0
       this.skyCultureTerritoryArchive = r.territoryArchive !== undefined ? r.territoryArchive : []
@@ -5062,6 +5068,33 @@ struct WindowNativeNode {
   private skyCultureArtFilePath(rawPath: string): string {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     return 'file://' + context.filesDir + '/stellarium/' + rawPath
+  }
+
+  @Builder
+  private skyCultureArtPreviewOverlay() {
+    if (this.skyCultureArtPreviewPath.length > 0) {
+      Stack() {
+        Column({ space: 10 }) {
+          Row() {
+            Text(this.skyCultureArtPreviewName.length > 0 ? this.skyCultureArtPreviewName : '星座绘图')
+              .fontSize(15).fontColor(this.nmText()).fontWeight(FontWeight.Medium)
+              .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Button('关闭').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
+              .borderRadius(6).height(28).padding({ left: 10, right: 10 })
+              .onClick(() => {
+                this.skyCultureArtPreviewPath = ''
+                this.skyCultureArtPreviewName = ''
+              })
+          }.width('88%')
+          Image(this.skyCultureArtPreviewPath).width('88%').height('72%').objectFit(ImageFit.Contain)
+            .backgroundColor('rgba(0,0,0,0.28)').borderRadius(8)
+          Text('离线文化绘图').fontSize(10).fontColor(this.nmSub())
+        }
+        .width('100%').height('100%').justifyContent(FlexAlign.Center)
+      }
+      .width('100%').height('100%').backgroundColor('rgba(3,7,15,0.94)')
+      .zIndex(101).hitTestBehavior(HitTestMode.Block)
+    }
   }
 
   private skyCultureRegionText(regions: string[]): string {
@@ -9963,6 +9996,8 @@ private loadPlanetPositions(): void {
         })
 
       this.harmonyShell()
+
+      this.skyCultureArtPreviewOverlay()
 
       // 启动动画：星空淡入 + 核心就绪后整体淡出（不阻挡首帧交互太久）
       if (!this.splashGone) {
@@ -18270,6 +18305,10 @@ private loadPlanetPositions(): void {
                     .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1)
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
                 }.width('31%').padding(4).margin({ right: 1, bottom: 8 }).backgroundColor(this.nmBg()).borderRadius(6)
+                  .onClick(() => {
+                    this.skyCultureArtPreviewPath = this.skyCultureArtFilePath(art.rawPath)
+                    this.skyCultureArtPreviewName = art.name !== undefined && art.name.length > 0 ? art.name : '星座绘图 ' + art.index
+                  })
               }, (art: SkyCultureArtItem) => art.rawPath)
             }.width('100%').padding({ top: 5, bottom: 5 })
             if (this.skyCultureArtItems.length > 24) {

@@ -2334,3 +2334,12 @@
 - **构建结果：** 原生 `stellarium` 编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；原生库与工程副本 SHA-256 均为 `200e6644f3acf4e2b27e94db5a89f44a347eee672ca6e4be82b5f2f7e588f19f`；签名 HAP SHA-256 为 `c7f6131465427bd3bf3439d98df5c1e636f5de581278bc97ac1ee6a33140a092`。
 - **验证结果：** `git diff --check` 通过；ArkTS 源码已同步到构建工程；HAP 包含 `modules.abc`、新原生库和文化绘图资源；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
 - **备注：** 仅使用现有文化 JSON 和星座本地化数据，不联网，不涉及隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。
+
+## [2026-08-22] Codex - 增加星空文化绘图大图预览
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 点击文化绘图缩略图后打开离线大图预览，显示对应名称和关闭入口；切换文化或重新读取资料时自动清理预览状态。
+- **修改原因：** 缩略图只能快速浏览，无法辨认细节；补齐文化绘图的查看闭环。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 同步成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `d604948178bbe0522b7b680380080df93e778e3bc4b032d192f4a5e8a1c6cf57`。
+- **验证结果：** `git diff --check` 通过；HAP 包含 `modules.abc` 和文化绘图资源；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+- **备注：** 图片仍来自应用沙箱本地资源，不联网，不涉及隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。
