@@ -5077,6 +5077,20 @@ struct WindowNativeNode {
     return start + ' 至 ' + end
   }
 
+  private skyCultureSimulationTimeMatches(): boolean {
+    if (this.skyCultureBeginTime === 0 && this.skyCultureEndTime === 0) return true
+    const beginsBeforeYear = this.skyCultureBeginTime === 0 || this.skyCultureSimulationYear >= this.skyCultureBeginTime
+    const endsAfterYear = this.skyCultureEndTime === 0 || this.skyCultureEndTime >= 9000 || this.skyCultureSimulationYear <= this.skyCultureEndTime
+    return beginsBeforeYear && endsAfterYear
+  }
+
+  private skyCultureSimulationTimeStatus(): string {
+    if (this.skyCultureBeginTime === 0 && this.skyCultureEndTime === 0) return '当前模拟时间：该文化未标注适用年代'
+    return this.skyCultureSimulationTimeMatches()
+      ? '当前模拟时间：在该文化适用年代内'
+      : '当前模拟时间：不在该文化适用年代内'
+  }
+
   private skyCultureFormatYear(year: number): string {
     return year < 0 ? '公元前 ' + Math.abs(year) + ' 年' : '公元 ' + year + ' 年'
   }
@@ -18113,6 +18127,8 @@ private loadPlanetPositions(): void {
         Text(this.skyCultureRegionText(this.skyCultureRegions) + ' · ' + this.skyCultureClassificationText(this.skyCultureClassification))
           .fontSize(11).fontColor(this.nmSub()).width('100%')
         Text(this.skyCultureTimeRange()).fontSize(10).fontColor(this.nmSub()).width('100%')
+        Text(this.skyCultureSimulationTimeStatus()).fontSize(10)
+          .fontColor(this.skyCultureSimulationTimeMatches() ? this.nmAccent() : this.nmSub()).width('100%')
         Text('星座边界：' + this.skyCultureBoundaryTypeText(this.skyCultureBoundariesType) + ' · 国际通用名称：' + (this.skyCultureUsesCommonNames ? '已收录' : '未收录'))
           .fontSize(10).fontColor(this.nmSub()).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         Row({ space: 6 }) {

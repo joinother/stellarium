@@ -2274,3 +2274,12 @@
 - **修改原因：** 与原版 `ViewDialog` 依据 `AsterismMgr::isLinesDefined()` 禁用无定义控件的逻辑对齐，避免产生不可见的伪开关。
 - **构建结果：** 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。原生库 SHA-256 为 `876c809e21acb4e02fef6756e88db67112b9e12ebee1b3857fed994fba1e0304`；签名 HAP SHA-256 为 `2e214dae7aae2d9e35696821efdc8ce5dfa455bccdcfdc9f476b020964e4a2f8`。
 - **验证结果：** `git diff --check` 通过；ArkTS 源码与构建工程镜像一致；使用 DevEco SDK 内置 `hap-sign-tool.jar verify-app` 验证通过（`Digest verify result: true`）；当前无在线 HDC 设备，未进行平板或模拟器交互验证。
+
+## [2026-08-21] Codex - 星空文化模拟年代状态
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 在当前文化资料中增加“当前模拟时间是否处于该文化适用年代内”的状态提示；无年代元数据时明确显示“未标注适用年代”。判断复用文化起止年代与星图模拟年份，不新增桥接调用。
+- **修改原因：** 让用户切换历史或未来时间后，能直接知道当前文化是否仍适用，避免把“文化没有数据”和“当前年份不适用”混淆。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 同步成功；配置 `DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk` 后，`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** HAP SHA-256 为 `8949cfb329131a298d07b2abba31ed104c611cff648f820213549a87d8c9b891`；原生库 SHA-256 为 `876c809e21acb4e02fef6756e88db67112b9e12ebee1b3857fed994fba1e0304`；ArkTS 镜像一致；`hap-sign-tool.jar verify-app` 通过，`Digest verify result: true`；仅存在既有弃用警告；当前无在线 HDC 设备。
+- **备注：** 未修改隐私门控、SN、启动、陀螺仪、地图、签名和构建模式；`build/` 下生成镜像未纳入 Git 提交。
