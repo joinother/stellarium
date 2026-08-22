@@ -157,6 +157,12 @@ public slots:
 	void setEquatorialTextColor(const Vec3f &color);
 	void setEquatorialLineColor(const Vec3f &color);
 	void setHorizontalTextColor(const Vec3f &color);
+	void resetMeasurement();
+	bool setPointFromScreen(double x, double y);
+	bool hasMeasurementStart() const { return mobileHasStart; }
+	bool hasMeasurementEnd() const { return mobileHasEnd; }
+	double getMeasuredAngle() const { return mobileHasEnd ? angleEquatorial : 0.0; }
+	QString getMeasuredAngleText() const;
 	void setHorizontalLineColor(const Vec3f &color);
 
 private slots:
@@ -193,6 +199,8 @@ private:
 	bool flagShowHorizontalPA;
 	bool flagShowHorizontalStartSkylinked;
 	bool flagShowHorizontalEndSkylinked;
+	bool mobileHasStart;
+	bool mobileHasEnd;
 	Vec3f equatorialTextColor;
 	Vec3f equatorialLineColor;
 	Vec3f horizontalTextColor;

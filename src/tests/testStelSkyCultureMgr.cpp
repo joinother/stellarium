@@ -46,3 +46,22 @@ void TestStelSkyCultureMgr::testStelSkyCultureMgr()
 	QVERIFY(!scMgr.setDefaultSkyCultureID(""));
 	QVERIFY(scMgr.getSkyCultureListIDs().contains("modern", Qt::CaseInsensitive));
 }
+
+void TestStelSkyCultureMgr::testCultureMetadataAndNameKeysStayAligned()
+{
+	StelFileMgr::init();
+
+	StelSkyCultureMgr scMgr;
+	const QMap<QString, StelSkyCulture> cultures = scMgr.getDirToNameMap();
+	const QMap<QString, QString> namesById = scMgr.getDirToI18Map();
+
+	QCOMPARE(cultures.value("maya").region.first().toString(), QStringLiteral("Central America"));
+	QCOMPARE(cultures.value("macedonian").region.first().toString(), QStringLiteral("Southern Europe"));
+	QCOMPARE(cultures.value("chinese_yuan_dynasty").region.first().toString(), QStringLiteral("Eastern Asia"));
+
+	for (const QString& id : scMgr.getSkyCultureListIDs())
+	{
+		QVERIFY2(namesById.contains(id), qPrintable(QStringLiteral("missing localized name for %1").arg(id)));
+		QCOMPARE(cultures.value(id).id, id);
+	}
+}

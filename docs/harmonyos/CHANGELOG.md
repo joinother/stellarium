@@ -2428,3 +2428,92 @@
 - **构建结果：** BUILD SUCCESSFUL：C++ `stellarium` 目标与 `assembleHap` 均通过
 - **验证结果：** 静态检查通过；ArkTS 仅保留项目原有弃用警告，尚未在设备上安装验证
 - **备注：** 不修改签名、隐私、探针和构建配置。
+
+## [2026-08-22] Codex - 补齐鸿蒙端角度测量插件
+
+- **修改文件：** `plugins/AngleMeasure/src/AngleMeasure.hpp`、`plugins/AngleMeasure/src/AngleMeasure.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`。
+- **修改内容：** 增加原生测量状态和 `getAngleMeasure`、`angleMeasurePoint`、`resetAngleMeasure` 命令；平板触摸和鼠标轻点可依次取两个位置，第三次点击开始下一次测量；界面增加启停、重置和角距离反馈。
+- **修改原因：** 原有入口只能触发桌面动作，鸿蒙触摸层没有把点位交给 AngleMeasure 插件。
+- **构建结果：** C++ `stellarium` 交叉编译通过；`harmonydeployqt` 同步原生库成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL，签名 HAP SHA-256 为 `4e09691d5374dc361643a08e412cfd7e31476844e6972eabb5f7153f65f16c65`。
+- **验证结果：** `git diff --check` 和源码符号静态检查通过；HAP 已成功覆盖安装到平板 `7LZBB26323200303`，但设备处于锁屏状态，系统以 `10106102` 拒绝自动启动，因此尚未完成设备内两点测量交互验证。
+- **备注：** 不修改隐私、SN、地图、陀螺仪和签名配置。
+## [2026-08-22] Codex - 修复流星数量显示与地景列表滚动
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/core/modules/SporadicMeteorMgr.cpp`
+- **修改内容：** 开始处理流星率控件范围/可见数量偏低，以及地景列表可滚动区域过小的问题。
+- **修改原因：** 移动端流星控件被限制为 0-100，且候选流星无效时没有补偿；地景列表内层滚动容器与外层图层滚动容器嵌套后被压缩。
+- **构建结果：** BUILD SUCCESSFUL；`stelMain`、`stellarium`、`libstellarium.so` 和 HAP 均构建通过。
+- **验证结果：** `git diff --check` 通过；ArkTS 源与构建工程副本一致；部署输出与 `build/src/libstellarium.so` 一致；签名 HAP 已生成并通过 `hap-sign-tool verify-app`（`Digest verify result: true`、`verify-app success`）。`scripts/check-ohos.sh` 的 HAP 阶段通过，但脚本仍报告工程既有的 2 条 `setTimeout` 规则告警。
+- **备注：** 地景列表改由图层外层统一滚动；流星控件范围为 0-1000，实际可见率仍受观测条件影响。
+
+### 平板安装验证
+
+- **设备：** `7LZBB26323200303`
+- **结果：** `entry-default-signed.hap` 覆盖安装成功，`QAbility` 启动成功并保持前台。
+- **日志：** 未发现 `AppFreeze`、`BUSSINESS_THREAD_BLOCK`、Privacy 异常或崩溃；启动后帧率日志正常输出。
+- **截图：** `/tmp/stellarium-install-check.jpeg`，2560×1600，星图、地景和底部 Dock 均正常显示。
+# [2026-08-22] Codex - 修复升级后深空图片集合被旧标记跳过
+
+- **修改文件：** `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`src/core/StelSkyLayerMgr.cpp`、`src/core/StelSkyImageTile.cpp`，以及构建工程中的资源引导镜像
+- **修改内容：** 深空图片安装改用版本化完成标记，并校验仙女座 `m31.png` 与玫瑰星云 `n2244.png`；旧安装即使存在 `.ohos_complete` 也会重新扫描并补齐缺失图片。深空图层加载入口增加目标图片路径诊断日志。
+- **修改原因：** HAP 升级会保留 `filesDir`，旧空标记会导致新增或未完成复制的深空图片永久不再同步。
+- **构建结果：** `cmake --build . --parallel --target stellarium` 成功；`harmonydeployqt --no-build` 同步原生库成功；`assembleHap --no-daemon` 成功。最终 HAP SHA-256：`143150e63d43cfb09fcebeb57ea3e538a44e47ae00101c81058ea9964bf4f969`。
+- **验证结果：** 静态校验确认 HAP 包含 `m31.png`、`n2244.png`，rawfile 共 674 张 PNG；已成功覆盖安装到平板 `7LZBB26323200303`。启动验证暂未完成，原因是平板处于锁屏状态，系统拒绝开发者模式下自动解锁启动。
+- **备注：** 仓库现有图片集合仍以 1024×1024 及以下的开源资源为主；本次先修复设备端资源缺失问题，不将低分辨率资源误称为高清资源。
+
+- **补充：** 异步安装队列优先复制 `m31.png` 与 `n2244.png`，减少用户首次查看重点深空天体时的等待。
+- **补充：** 两张重点图片复制完成后立即触发一次纹理重载，全部图片复制结束后再触发一次，避免必须等待完整资源集才显示重点图片。
+## [2026-08-22] Codex - 修复仙女座纹理与误导性蓝框
+
+- **修改文件：** `src/core/modules/SpecialMarkersMgr.cpp`、`src/StelMainView.cpp`
+- **修改内容：** 鸿蒙端启动时关闭视场矩形标记；搜索深空天体时打开深空纹理显示并重新装载纹理集合。
+- **修改原因：** 仙女座详情页中的四角蓝框是 FOV 矩形标记，不是 `m31.png` 的边界；深空图片在启动后异步复制完成时，旧纹理集合可能仍未重新建立，导致仙女座照片不显示。
+- **构建结果：** C++ 原生库与 HAP 构建成功；清理重复 native 库路径后最终 HAP SHA-256 为 `65fdbc3dd32dcddb73b387067f80dbc15efd7d30b4893a55458117c335cd7b15`。
+- **验证结果：** `git diff --check` 通过；HAP 内含 `m31.png` 和更新后的 `libstellarium.so`。执行 `hdc list targets` 时设备列表为空，尚未完成平板安装和截图验证。
+- **备注：** 桌面端仍保留原有 FOV 矩形标记配置；本次只改变鸿蒙端默认行为。
+## [2026-08-23] Codex - 建立 HarmonyOS 联网功能台账
+
+- **修改文件：** `docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/AGENTS.md`、`cmake/default_cfg.ini.cmake`
+- **修改内容：** 登记运行时在线搜索、目录更新、卫星 TLE、实时飞机、HiPS/DSS、自动定位、本机远程控制/同步，以及 CMake/Qt 构建阶段的联网来源；增加新联网功能登记模板和协作规则；补齐 Supernovae、Pulsars、Quasars 的默认自动更新关闭配置。
+- **修改原因：** 后续开发需要持续识别联网行为，避免默认联网、隐私外发和国内部署方案遗漏。
+- **构建结果：** 未重复完整构建；本次仅修改联网台账、协作规则、CMake 说明和默认配置模板。
+- **验证结果：** `git diff --check` 通过；新增台账、规则和默认配置无尾随空白；七个目录更新配置均已核对为关闭。
+- **备注：** `STELLARIUM_OHOS_OFFLINE` 当前覆盖核心 IP 定位、在线搜索和星表下载；插件网络实现仍需依赖默认关闭和用户触发控制，不能视为全局网络防火墙。地图 SDK 仍按项目决定暂缓。
+
+## [2026-08-23] Codex - 补充在线巡天与 MPC 联网盘点
+
+- **修改文件：** `docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/CHANGELOG.md`
+- **修改内容：** 核实鸿蒙“视图/巡天”入口中的 HiPS 和 DSS/TOAST 在线巡天功能，补充目录、图层元数据和多级瓦片请求说明；登记太阳系编辑器中的 MPC 小行星/彗星列表下载、用户自定义 URL 导入和 MPES 在线查询。
+- **修改原因：** 用户询问在线巡天入口及项目中其他容易被漏记的在线天文数据功能。
+- **构建结果：** 未构建；本次仅更新联网台账和文档。
+- **验证结果：** 已通过源码静态核对入口、默认地址和用户触发路径；`git diff --check` 通过。
+- **备注：** 在线巡天是用户主动打开后的远程星图数据功能，不是默认后台任务；MPC 在线导入属于独立的数据下载/查询功能，不应与巡天图层混为一谈。
+
+## [2026-08-23] Codex - 核查未备案版本的联网边界
+
+- **修改文件：** `docs/harmonyos/NETWORK-INVENTORY.md`、`harmonyos/module.json5`（核查，未修改）
+- **修改内容：** 核对鸿蒙 HAP 权限声明和 `STELLARIUM_OHOS_OFFLINE` 覆盖范围，确认未声明 `ohos.permission.INTERNET`，同时记录仍存在的插件网络实现和局域网 RemoteSync 实现。
+- **修改原因：** 未备案版本要求整个应用不联网，不能把“默认不请求”误认为“代码级绝对禁网”。
+- **构建结果：** 未构建；本次仅核查并更新联网台账。
+- **验证结果：** `harmonyos/module.json5` 和构建工程副本均未发现 `ohos.permission.INTERNET`；源码静态检查发现离线宏当前只覆盖核心 IP 定位、在线搜索和星表下载。
+- **备注：** 未备案版本继续保持无网络权限；在形成正式发布包前，还需要禁用 HiPS/TOAST、插件在线更新/查询、MPC 在线导入以及 RemoteSync 等入口，才能达到代码和功能层面的严格禁网目标。
+
+## [2026-08-23] Codex - 增加 HarmonyOS 本地 CLI 命令通道
+
+- **修改文件：** `harmonyos/ets-source/qability/QAbility.ets`、`scripts/stellarium-cli.mjs`、`docs/harmonyos/CLI.md`
+- **修改内容：** 使用官方 `aa start --ps` Want 字符串参数接收命令名、payload 和 requestId；入口在隐私同意及 Qt 初始化完成后异步执行，并通过带 requestId 的 `hilog` 输出结构化响应；新增 Node.js CLI，支持设备选择、命令载荷、超时和 JSON 输出。
+- **修改原因：** 让平板/模拟器的现有原生命令桥可以被命令行调用，便于自动化调试和功能测试，同时不增加网络服务。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 已生成。
+- **验证结果：** Node CLI 语法检查通过；平板 `7LZBB26323200303` 已覆盖安装并验证 `getTimeInfo`、`setFOV 45`、`getFOV`、负数 payload 的 `setViewportOffset -15|0`；未发现 `AppFreeze`、`BUSSINESS_THREAD_BLOCK` 或 `SIGABRT`。
+- **备注：** CLI 使用本地 `hdc` 调试通道，不监听端口、不联网；连续视图命令返回“已入队”，查询命令等待原生结果。未关闭蓝色视场框。
+- **补充：** CLI payload 增加内部前缀兼容 `aa --ps` 对负号开头字符串的限制；平板已验证 `getTimeInfo`、`setFOV 45` 和 `getFOV` 命令通路。
+- **官方建议核对：** 已在 `docs/harmonyos/CLI.md` 补充 `aa start -W` 启动耗时、`aa force-stop` 冷启动、`hilog` 请求过滤，以及 `uitest` 截图、控件树和触摸/键鼠注入的官方调试路径。
+
+## [2026-08-23] Codex - 增加深空图像加载状态探针
+
+- **修改文件：** `src/core/StelSkyImageTile.hpp`、`src/core/StelSkyImageTile.cpp`、`src/StelMainView.cpp`、`scripts/generate-deep-sky-inventory.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/AGENTS.md`。
+- **修改内容：** 新增 `getDeepSkyImageStatus` CLI 命令，分别报告 `textures.json` 引用数、沙箱 PNG 落盘数、缺失文件、图层可见性，以及当前惰性纹理树中已就绪/等待/出错的纹理；默认检查 M31、玫瑰星云等重点资源，`all` 参数列出全部 PNG。资源清单通过目录交叉编号补齐 M31/M42/M51 等通用名匹配。
+- **修改原因：** 仅看到 M31 不能证明其他资源已经复制或被引擎加载；需要把“资源存在”和“当前纹理已可显示”分开诊断，避免把惰性加载误判成资源丢失。
+- **构建结果：** C++ `stellarium` 目标编译成功；原生库 SHA-256 为 `13f29c4c9b3a4f4a4069e78318a20f95bc0de70699fef9a6c788e952c4a3ea05`；`assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `97d1ffda90f35222e46c80a24fce53fa0261f490124717f18ce35857da512e47`。
+- **验证结果：** HAP 已覆盖安装到平板 `7LZBB26323200303`，并确认 HAP 包含 `m31.png`、`n2244.png`、`textures.json` 和新原生库；启动及 CLI 探针采样暂未完成，设备被系统锁屏拒绝启动（`10106102`）。
+- **备注：** 探针不强制加载全部 674 张图片，避免首次启动卡顿；未关闭蓝色四角视场框。

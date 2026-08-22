@@ -30,9 +30,9 @@ class TestStelSkyCultureMgr : public QObject
 Q_OBJECT
 private slots:
 	void testStelSkyCultureMgr();
+	void testCultureMetadataAndNameKeysStayAligned();
 
 private:
 };
 
 #endif // TESTSTELSKYCULTUREMGR_HPP
-

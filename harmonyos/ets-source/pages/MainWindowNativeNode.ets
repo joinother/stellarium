@@ -999,6 +999,10 @@ struct WindowNativeNode {
   private skyCultureMapRenderWidth: number = 0
   private skyCultureMapRenderHeight: number = 0
   @State private pluginList: Array<PluginItem> = []
+  @State private angleMeasureEnabled: boolean = false
+  @State private angleMeasureHasStart: boolean = false
+  @State private angleMeasureHasEnd: boolean = false
+  @State private angleMeasureText: string = ''
   @State private landscapeDetailOpen: boolean = false
   @State private selectedLandscapeName: string = ''
   @State private landscapeTransp: number = 0
@@ -3034,6 +3038,47 @@ struct WindowNativeNode {
     this.callInteractive('triggerAction', actionId, (r: StellariumBridgeResponse) => {
       hilog.info(0x0000, 'StellariumArkUI', 'triggerAction %{public}s ok=%{public}s err=%{public}s', actionId, r.ok === true ? '1' : '0', r.error ?? '')
       this.refreshState()
+    })
+  }
+
+  private toggleAngleMeasure(): void {
+    this.callInteractive('triggerAction', 'actionShow_Angle_Measure', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) {
+        this.flashHint('角度测量插件不可用')
+        return
+      }
+      this.angleMeasureEnabled = r.checked === true
+      if (!this.angleMeasureEnabled) {
+        this.angleMeasureHasStart = false
+        this.angleMeasureHasEnd = false
+        this.angleMeasureText = ''
+      }
+      this.flashHint(this.angleMeasureEnabled ? '角度测量已开启，请点击两个位置' : '角度测量已关闭')
+    })
+  }
+
+  private resetAngleMeasure(): void {
+    this.callInteractive('resetAngleMeasure', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.angleMeasureHasStart = false
+        this.angleMeasureHasEnd = false
+        this.angleMeasureText = ''
+      }
+    })
+  }
+
+  private measureAngleAt(x: number, y: number): void {
+    const payload = Math.round(x).toString() + '|' + Math.round(y).toString() + '|' +
+      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
+    this.callInteractive('angleMeasurePoint', payload, (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) {
+        this.flashHint('测量点无效，请重新点击')
+        return
+      }
+      this.angleMeasureHasStart = r.hasStart === true
+      this.angleMeasureHasEnd = r.hasEnd === true
+      this.angleMeasureText = r.angleText ?? ''
+      this.flashHint(this.angleMeasureHasEnd ? '角距离：' + this.angleMeasureText : '已记录第一个位置，请点击第二个位置')
     })
   }
 
@@ -10080,7 +10125,11 @@ private loadPlanetPositions(): void {
     if (event.action === 1 && this.mouseSkyPressed) {
       this.mouseSkyPressed = false
       if (!this.mouseSkyMoved && !this.isUiPoint(x, y)) {
-        this.selectSkyAt(x, y)
+        if (this.angleMeasureEnabled) {
+          this.measureAngleAt(x, y)
+        } else {
+          this.selectSkyAt(x, y)
+        }
       }
     }
   }
@@ -10505,17 +10554,21 @@ private loadPlanetPositions(): void {
         this.emitFluidDrag(x, y, Date.now())
         this.startSkyInertia()
       } else if (!this.touchMoved && !this.pinchActive && !endedOnUi && Date.now() - this.lastInfoWinCloseMs > 320) {
-        const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
-        hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
-        this.callInteractive('selectAt', payload, (result) => {
-          hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
-          this.applySelectedObject(result)
-          if (result.found === true) {
-            this.flashHint(I18n.t('i0074').replace('%s', this.zhNameOf(this.selectedName)))
-          } else {
-            this.flashHint(I18n.t('i0075'))
-          }
-        })
+        if (this.angleMeasureEnabled) {
+          this.measureAngleAt(this.touchStartX, this.touchStartY)
+        } else {
+          const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
+          hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
+          this.callInteractive('selectAt', payload, (result) => {
+            hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
+            this.applySelectedObject(result)
+            if (result.found === true) {
+              this.flashHint(I18n.t('i0074').replace('%s', this.zhNameOf(this.selectedName)))
+            } else {
+              this.flashHint(I18n.t('i0075'))
+            }
+          })
+        }
       }
       if (this.pinchActive) {
         if (this.pinchNativePushPending) {
@@ -16992,12 +17045,21 @@ private loadPlanetPositions(): void {
           if (!OFFLINE_APPGALLERY_BUILD) {
           Row() {
             Text(I18n.t('angle_measure')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
-            Button(I18n.t('angle_measure'))
+            Button(this.angleMeasureEnabled ? '结束测量' : I18n.t('angle_measure'))
               .fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
               .borderRadius(14).height(32).padding({ left: 14, right: 14 })
-              .onClick(() => { this.triggerAction('actionShow_Angle_Measure') })
+              .onClick(() => { this.toggleAngleMeasure() })
+            if (this.angleMeasureEnabled) {
+              Button('重置')
+                .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                .borderRadius(12).height(30).padding({ left: 10, right: 10 })
+                .onClick(() => { this.resetAngleMeasure() })
+            }
           }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(12)
           Text(I18n.t('angle_measure_hint')).fontSize(10).fontColor('#99FFFFFF').width('100%').padding({ left: 10, right: 10 })
+          if (this.angleMeasureHasEnd && this.angleMeasureText.length > 0) {
+            Text('当前角距离  ' + this.angleMeasureText).fontSize(12).fontColor(this.nmAccent()).width('100%').padding({ left: 10, right: 10 })
+          }
           Row() {
             Text(I18n.t('i0121')).fontSize(13).fontColor('#E5FFFFFF').layoutWeight(1)
             Button(I18n.t('i0251'))
@@ -18495,12 +18557,14 @@ private loadPlanetPositions(): void {
     }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
     if (this.meteors) {
       Row() {
-        Text('流星数量').fontSize(12).fontColor(this.nmSub()).width(72)
-        Slider({ value: this.meteorZhr, min: 0, max: 100, step: 1, style: SliderStyle.OutSet })
+        Text('理论流星率').fontSize(12).fontColor(this.nmSub()).width(76)
+        Slider({ value: this.meteorZhr, min: 0, max: 1000, step: 1, style: SliderStyle.OutSet })
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
           .onChange((value: number) => { this.setSkyDisplaySetting('meteorZhr', Math.round(value)) })
-        Text(this.meteorZhr + ' / 小时').fontSize(11).fontColor(this.nmText()).width(60).textAlign(TextAlign.End)
-      }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+        Text(this.meteorZhr + ' / 小时').fontSize(11).fontColor(this.nmText()).width(66).textAlign(TextAlign.End)
+      }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 2 })
+      Text('实际可见数量还会受夜间、地景亮度和地平高度影响')
+        .fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 86, right: 10 }).margin({ bottom: 4 })
     }
     this.switchRow(I18n.t('s0300'), this.nightMode, 'actionShow_Night_Mode')
     this.switchRow(I18n.t('s0309'), this.flipHoriz, 'actionHorizontal_Flip')
@@ -18835,29 +18899,23 @@ private loadPlanetPositions(): void {
     Row() {
       Text(I18n.t('i0288')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 })
     }.height(18).width('100%').margin({ top: 6 })
-    Scroll() {
-      Column({ space: 2 }) {
-        ForEach(this.landscapeList, (item: LandscapeItem) => {
-          Row() {
-            Text(this.landscapeZh(item.name)).fontSize(11)
-              .fontColor(this.currentLandscapeId === item.id ? this.nmAccent() : this.nmText())
-              .layoutWeight(1)
-            if (this.currentLandscapeId === item.id) {
-              Text(I18n.t('s0602')).fontSize(9).fontColor(this.nmAccent()).margin({ right: 8 })
-            }
+    Column({ space: 2 }) {
+      ForEach(this.landscapeList, (item: LandscapeItem) => {
+        Row() {
+          Text(this.landscapeZh(item.name)).fontSize(11)
+            .fontColor(this.currentLandscapeId === item.id ? this.nmAccent() : this.nmText())
+            .layoutWeight(1)
+          if (this.currentLandscapeId === item.id) {
+            Text(I18n.t('s0602')).fontSize(9).fontColor(this.nmAccent()).margin({ right: 8 })
           }
-          .height(32).width('100%').padding({ left: 12, right: 12 })
-          .backgroundColor(this.currentLandscapeId === item.id ? 'rgba(80,140,200,0.18)' : 'rgba(0,0,0,0)')
-          .borderRadius(4)
-          .onClick(() => { this.selectLandscape(item.id, item.name) })
-        }, (item: LandscapeItem, index: number) => item.id)
-      }
+        }
+        .height(32).width('100%').padding({ left: 12, right: 12 })
+        .backgroundColor(this.currentLandscapeId === item.id ? 'rgba(80,140,200,0.18)' : 'rgba(0,0,0,0)')
+        .borderRadius(4)
+        .onClick(() => { this.selectLandscape(item.id, item.name) })
+      }, (item: LandscapeItem, index: number) => item.id)
     }
     .width('100%')
-    .layoutWeight(1)
-    .scrollBar(BarState.Auto)
-    .scrollBarWidth(4)
-    .scrollBarColor('#33FFFFFF')
     Row() {
       Text(I18n.t('i0289')).fontSize(12).fontColor(this.nmSub()).width(72)
       Text(this.landscapeTransp + '%').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
@@ -19003,7 +19061,8 @@ private loadPlanetPositions(): void {
           Row({ space: 8 }) {
             Column({ space: 1 }) {
               Text('文化区域地图').fontSize(11).fontColor(this.nmText()).width('100%')
-              Text('使用本地地图和文化资料，不联网').fontSize(9).fontColor(this.nmSub()).width('100%')
+              Text('使用本地地图和文化资料，不联网；文化分布示意不代表现行行政区划或政治边界')
+                .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(2)
             }.layoutWeight(1)
             Button(this.skyCultureTerritoryMapExpanded ? '更新地图' : '在地图中查看').fontSize(10).fontColor(this.nmAccent()).backgroundColor(this.nmBg())
               .borderRadius(5).height(28).padding({ left: 9, right: 9 }).enabled(!this.skyCultureTerritoryMapLoading)

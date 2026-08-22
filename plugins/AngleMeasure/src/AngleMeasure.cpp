@@ -79,6 +79,8 @@ AngleMeasure::AngleMeasure()
 	, flagShowHorizontalPA(false)
 	, flagShowHorizontalStartSkylinked(false)
 	, flagShowHorizontalEndSkylinked(false)
+	, mobileHasStart(false)
+	, mobileHasEnd(false)
 	, angleHorizontal(0.)
 #ifndef NO_GUI
 	, toolbarButton(Q_NULLPTR)
@@ -346,6 +348,59 @@ void improveClickMatch(StelProjectorP prj, double x, double y, Vec3d &v)
 	double dx = x - win.v[0];
 	double dy = y - win.v[1];
 	prj->unProject(x+dx,y+dy,v);
+}
+
+void AngleMeasure::resetMeasurement()
+{
+	startPoint.set(0., 0., 0.);
+	endPoint.set(0., 0., 0.);
+	startPointHor.set(0., 0., 0.);
+	endPointHor.set(0., 0., 0.);
+	mobileHasStart = false;
+	mobileHasEnd = false;
+	lineVisible = false;
+	dragging = false;
+}
+
+bool AngleMeasure::setPointFromScreen(double x, double y)
+{
+	StelCore* core = StelApp::getInstance().getCore();
+	if (!core)
+		return false;
+
+	const StelProjectorP prj = core->getProjection(StelCore::FrameEquinoxEqu);
+	const StelProjectorP prjHor = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
+	Vec3d equatorialPoint;
+	Vec3d horizontalPoint;
+	if (!prj->unProject(x, y, equatorialPoint) || !prjHor->unProject(x, y, horizontalPoint))
+		return false;
+	improveClickMatch(prj, x, y, equatorialPoint);
+
+	if (!mobileHasStart || mobileHasEnd)
+	{
+		startPoint = equatorialPoint;
+		endPoint = equatorialPoint;
+		startPointHor = horizontalPoint;
+		endPointHor = horizontalPoint;
+		mobileHasStart = true;
+		mobileHasEnd = false;
+		lineVisible = false;
+	}
+	else
+	{
+		endPoint = equatorialPoint;
+		endPointHor = horizontalPoint;
+		mobileHasEnd = true;
+		lineVisible = true;
+	}
+
+	calculateEnds();
+	return true;
+}
+
+QString AngleMeasure::getMeasuredAngleText() const
+{
+	return mobileHasEnd ? formatAngleString(angleEquatorial) : QString();
 }
 
 void AngleMeasure::handleMouseClicks(class QMouseEvent* event)

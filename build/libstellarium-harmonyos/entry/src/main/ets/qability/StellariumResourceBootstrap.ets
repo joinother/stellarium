@@ -8,6 +8,11 @@ import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
 const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
+// The old completion marker was created before the optional image collection
+// became upgradeable. Use a new marker and verify the two prominent images so
+// an existing filesDir cannot permanently hide an incomplete collection.
+const DEEP_SKY_INSTALL_MARKER = '.ohos_complete_v2';
+const DEEP_SKY_SENTINELS: Array<string> = ['m31.png', 'n2244.png'];
 const DEEP_SKY_INDEX_FILES: Array<string> = [
   'catalog.dat',
   'names.dat',
@@ -57,6 +62,19 @@ function fileSize(path: string): number {
   } catch (_err) {
     return 0;
   }
+}
+
+function deepSkyCollectionReady(imageRoot: string): boolean {
+  if (!exists(`${imageRoot}/${DEEP_SKY_INSTALL_MARKER}`)) {
+    return false;
+  }
+  for (const name of DEEP_SKY_SENTINELS) {
+    if (fileSize(`${imageRoot}/${name}`) <= 0) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `Deep-sky completion marker present but ${name} is missing`);
+      return false;
+    }
+  }
+  return true;
 }
 
 function ensureDir(path: string): void {
@@ -230,8 +248,8 @@ export function scheduleDeepSkyImageExtraction(
 ): void {
   const installRoot = `${appContext.filesDir}/stellarium`;
   const imageRoot = `${installRoot}/nebulae/default`;
-  const completeMarker = `${imageRoot}/.ohos_complete`;
-  if (exists(completeMarker)) {
+  const completeMarker = `${imageRoot}/${DEEP_SKY_INSTALL_MARKER}`;
+  if (deepSkyCollectionReady(imageRoot)) {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Deep-sky image collection already installed');
     return;
   }
@@ -241,8 +259,11 @@ export function scheduleDeepSkyImageExtraction(
 
   let imageNames: Array<string>;
   try {
-    imageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
+    const availableImageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
       .filter((name: string) => name.endsWith('.png'));
+    const featuredImages = DEEP_SKY_SENTINELS.filter((name: string) => availableImageNames.includes(name));
+    imageNames = featuredImages.concat(
+      availableImageNames.filter((name: string) => !featuredImages.includes(name)));
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to list deep-sky images: ${JSON.stringify(err)}`);
     return;
@@ -258,6 +279,7 @@ export function scheduleDeepSkyImageExtraction(
   let copiedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
+  let featuredReloadRequested = false;
   const copyNext = (): void => {
     if (!deepSkyExtractionForeground) {
       setTimeout(copyNext, 1000);
@@ -293,6 +315,11 @@ export function scheduleDeepSkyImageExtraction(
     if ((nextIndex % 25) === 0 || nextIndex === imageNames.length) {
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `Deep-sky image extraction progress ${nextIndex}/${imageNames.length}`);
+    }
+    if (!featuredReloadRequested && nextIndex >= DEEP_SKY_SENTINELS.length) {
+      featuredReloadRequested = true;
+      hilog.info(LOG_DOMAIN, LOG_TAG, 'Featured deep-sky images ready; requesting an early texture reload');
+      onComplete();
     }
     setTimeout(copyNext, 16);
   };

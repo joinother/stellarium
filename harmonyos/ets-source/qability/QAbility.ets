@@ -11,6 +11,13 @@ import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 import { requestPrivacyConsent } from './PrivacyConsent';
 import { scheduleDeepSkyImageExtraction, setDeepSkyImageExtractionForeground } from './StellariumResourceBootstrap';
 
+interface StellariumCliRequest {
+  commandName: string;
+  payload: string;
+  requestId: string;
+  attempts: number;
+}
+
 export default class QAbility extends UIAbility {
 
   private pendingWant: Want | null = null;
@@ -25,6 +32,103 @@ export default class QAbility extends UIAbility {
   private privacyWaitingForSystemForeground: boolean = false;
   private privacyHandoffBackgroundObserved: boolean = false;
   private privacyHandoffGeneration: number = 0;
+  private cliRequests: StellariumCliRequest[] = [];
+
+  private isCliCommandName(value: string): boolean {
+    return /^[A-Za-z][A-Za-z0-9_]*$/.test(value) && value.length <= 96;
+  }
+
+  private readCliString(parameters: Record<string, Object> | undefined, key: string): string {
+    if (parameters === undefined) {
+      return '';
+    }
+    const value = parameters[key];
+    return typeof value === 'string' ? value : '';
+  }
+
+  private queueCliRequest(want: Want): void {
+    const parameters = want.parameters as Record<string, Object> | undefined;
+    const commandName = this.readCliString(parameters, 'skyinstrument.cli.command').trim();
+    if (commandName.length === 0) {
+      return;
+    }
+    if (!this.isCliCommandName(commandName)) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] rejected invalid command name');
+      return;
+    }
+    const encodedPayload = this.readCliString(parameters, 'skyinstrument.cli.payload');
+    const payload = encodedPayload.startsWith('__STEL_CLI_PAYLOAD__')
+      ? encodedPayload.substring('__STEL_CLI_PAYLOAD__'.length)
+      : encodedPayload;
+    if (payload.length > 32768) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] rejected payload larger than 32768 bytes');
+      return;
+    }
+    let requestId = this.readCliString(parameters, 'skyinstrument.cli.requestId').trim();
+    if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(requestId)) {
+      requestId = `cli-${Date.now()}`;
+    }
+    if (this.cliRequests.some((request: StellariumCliRequest) => request.requestId === requestId)) {
+      return;
+    }
+    this.cliRequests.push({ commandName: commandName, payload: payload, requestId: requestId, attempts: 0 });
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[cli] queued requestId=%{public}s command=%{public}s', requestId, commandName);
+    this.drainCliRequests();
+  }
+
+  private isCliFireAndForget(commandName: string): boolean {
+    return commandName === 'dragView' || commandName === 'zoomBy' || commandName === 'zoomStep' ||
+      commandName === 'endPinch' || commandName === 'panBy' || commandName === 'moveToAltAz' ||
+      commandName === 'setGyroView' || commandName === 'gyroDiagnostic' ||
+      commandName === 'startPanInertia' || commandName === 'stopPanInertia';
+  }
+
+  private drainCliRequests(): void {
+    if (!this.qtInitialized || this.cliRequests.length === 0) {
+      return;
+    }
+    const request = this.cliRequests[0];
+    request.attempts += 1;
+    let rawResponse = '';
+    try {
+      rawResponse = command(request.commandName, request.payload);
+    } catch (err) {
+      this.finishCliRequest(request, JSON.stringify({ ok: false, error: String(err) }));
+      return;
+    }
+    let response: Record<string, Object> = {};
+    try {
+      response = JSON.parse(rawResponse) as Record<string, Object>;
+    } catch (err) {
+      this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'invalid native response' }));
+      return;
+    }
+    if (response['pending'] === true) {
+      if (this.isCliFireAndForget(request.commandName)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: true, accepted: true, pending: true }));
+        return;
+      }
+      if (request.attempts < 120) {
+        setTimeout(() => this.drainCliRequests(), 80);
+        return;
+      }
+      this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'command timeout', pending: true }));
+      return;
+    }
+    this.finishCliRequest(request, rawResponse);
+  }
+
+  private finishCliRequest(request: StellariumCliRequest, response: string): void {
+    if (this.cliRequests.length > 0 && this.cliRequests[0].requestId === request.requestId) {
+      this.cliRequests.shift();
+    } else {
+      this.cliRequests = this.cliRequests.filter((item: StellariumCliRequest) => item.requestId !== request.requestId);
+    }
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      '[cli-response] requestId=%{public}s command=%{public}s response=%{public}s',
+      request.requestId, request.commandName, response);
+    this.drainCliRequests();
+  }
 
   private logPrivacyGate(stage: string): void {
     hilog.info(LOG_DOMAIN, LOG_TAG,
@@ -214,6 +318,7 @@ export default class QAbility extends UIAbility {
       });
     }, 1200);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
+    this.drainCliRequests();
   }
 
   private async enterImmersive(windowStage: Window.WindowStage): Promise<void> {
@@ -238,6 +343,7 @@ export default class QAbility extends UIAbility {
     AppStorage.setOrCreate('stellariumStartupPreparing', false);
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
+    this.queueCliRequest(want);
   }
 
   onDestroy(): void | Promise<void> {
@@ -276,8 +382,10 @@ export default class QAbility extends UIAbility {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onNewWant()');
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
+    this.queueCliRequest(want);
     if (this.qtAbilityCreated) {
       qpa.handleAbilityOnNewWant(this, want, launchParam);
+      this.drainCliRequests();
     }
   }
 

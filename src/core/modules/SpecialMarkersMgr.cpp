@@ -298,7 +298,11 @@ void SpecialMarkersMgr::init()
 	setFlagFOVCenterMarker(conf->value("viewing/flag_fov_center_marker").toBool());
 	setFlagFOVCircularMarker(conf->value("viewing/flag_fov_circular_marker").toBool());
 	setFOVCircularMarkerSize(conf->value("viewing/size_fov_circular_marker", 1.0).toDouble());
+#if defined(__OHOS__)
+	setFlagFOVRectangularMarker(false);
+#else
 	setFlagFOVRectangularMarker(conf->value("viewing/flag_fov_rectangular_marker").toBool());
+#endif
 	setFOVRectangularMarkerWidth(conf->value("viewing/width_fov_rectangular_marker", 4.0).toDouble());
 	setFOVRectangularMarkerHeight(conf->value("viewing/height_fov_rectangular_marker", 3.0).toDouble());
 	setFOVRectangularMarkerRotationAngle(conf->value("viewing/rot_fov_rectangular_marker", 0.0).toDouble());

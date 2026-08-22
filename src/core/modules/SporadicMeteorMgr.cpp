@@ -106,13 +106,14 @@ void SporadicMeteorMgr::update(double deltaTime)
 		float prob = StelApp::getInstance().getRandF();
 		if (prob < rate)
 		{
-			SporadicMeteor* m = new SporadicMeteor(core, m_maxVelocity, m_bolideTexture);
-			if (m->isAlive())
+			for (int attempt = 0; attempt < 8; ++attempt)
 			{
-				activeMeteors.append(m);
-			}
-			else
-			{
+				SporadicMeteor* m = new SporadicMeteor(core, m_maxVelocity, m_bolideTexture);
+				if (m->isAlive())
+				{
+					activeMeteors.append(m);
+					break;
+				}
 				delete m;
 			}
 		}

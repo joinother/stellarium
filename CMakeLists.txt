@@ -23,11 +23,11 @@ PROJECT(Stellarium C CXX)
 
 SET(STELLARIUM_RELEASE_BUILD 0 CACHE BOOL "Set 1 to build as an official release (0 for development snapshots).")
 
-# The HarmonyOS AppGallery build is intentionally offline until online features
-# have their own consent and review flow. Keep this switch isolated so it can
-# be removed without touching the desktop/mobile builds.
+# The HarmonyOS AppGallery build keeps core network paths offline until online
+# features have their own consent and review flow. Plugin network code remains
+# available for explicitly enabled, separately reviewed features.
 IF(OHOS)
-     SET(STELLARIUM_OHOS_OFFLINE 1 CACHE BOOL "Disable network access in the HarmonyOS build.")
+     SET(STELLARIUM_OHOS_OFFLINE 1 CACHE BOOL "Disable core network paths in the HarmonyOS build.")
      IF(STELLARIUM_OHOS_OFFLINE)
           ADD_DEFINITIONS(-DSTELLARIUM_OHOS_OFFLINE)
      ENDIF()

@@ -29,6 +29,7 @@
 #include "StelPainter.hpp"
 #include "StelModuleMgr.hpp"
 #include "SolarSystem.hpp"
+#include <QFileInfo>
 #include <QDebug>
 
 #include <cstdio>
@@ -396,6 +397,26 @@ bool StelSkyImageTile::isReadyToDisplay() const
 	return tex && tex->canBind();
 }
 
+void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& pending, QStringList& errors) const
+{
+	if (!absoluteImageURI.isEmpty())
+	{
+		const QString name = QFileInfo(absoluteImageURI).fileName();
+		if (errorOccured)
+			errors.append(name);
+		else if (isReadyToDisplay())
+			ready.append(name);
+		else
+			pending.append(name);
+	}
+
+	for (QObject* child : children())
+	{
+		if (const auto* tile = qobject_cast<const StelSkyImageTile*>(child))
+			tile->collectTextureStatus(ready, pending, errors);
+	}
+}
+
 // Load the tile from a valid QVariantMap
 void StelSkyImageTile::loadFromQVariantMap(const QVariantMap& map)
 {
@@ -531,7 +552,11 @@ void StelSkyImageTile::loadFromQVariantMap(const QVariantMap& map)
 			{
 				// Maybe the user meant a file in stellarium local files
 				absoluteImageURI = imageUrl;
+				if (imageUrl == QLatin1String("m31.png") || imageUrl == QLatin1String("n2244.png"))
+					qWarning() << "[dso-textures] target image is not in the data root:" << imageUrl;
 			}
+			else if (imageUrl == QLatin1String("m31.png") || imageUrl == QLatin1String("n2244.png"))
+				qInfo() << "[dso-textures] target image resolved:" << imageUrl << absoluteImageURI;
 		}
 	}
 	else

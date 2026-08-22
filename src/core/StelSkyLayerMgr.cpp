@@ -93,7 +93,10 @@ void StelSkyLayerMgr::loadCollection(int decimateBy)
 	if (path.isEmpty())
 		qWarning() << "ERROR while loading nebula texture set default";
 	else
+	{
+		qInfo() << "[dso-textures] loading collection index:" << path;
 		insertSkyImage(path, QString(), true, decimateBy);
+	}
 
 #ifdef USE_STATIC_PLUGIN_NEBULATEXTURES
 	// [NebulaTextures] The custom textures need to be loaded synchronously at the program startup in order to take effect

@@ -212,7 +212,7 @@ void StelCore::init()
 		defaultLocationID = conf->value("init_location/location", "auto").toString();
 	bool ok;
 	StelLocationMgr* locationMgr = &StelApp::getInstance().getLocationMgr();
-	StelLocation location=locationMgr->getLastResortLocation(); // first location: Paris. Required if no IP connection on first launch!
+	StelLocation location=locationMgr->getLastResortLocation(); // first location: Beijing. Used when no IP connection is available on first launch.
 	if (defaultLocationID == "auto")
 	{
 	#ifdef STELLARIUM_OHOS_OFFLINE

@@ -348,6 +348,12 @@ export interface StellariumBridgeResponse {
   year?: number
   timeText?: string
   fov?: number
+  enabled?: boolean
+  checked?: boolean
+  hasStart?: boolean
+  hasEnd?: boolean
+  angleDegrees?: number
+  angleText?: string
   fovCircularMarkerSize?: number
   fovRectangularMarkerWidth?: number
   fovRectangularMarkerHeight?: number

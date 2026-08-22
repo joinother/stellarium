@@ -73,6 +73,15 @@ automatic_updates_enabled           = false
 [Novae]
 updates_enabled                     = false
 
+[Supernovae]
+updates_enabled                     = false
+
+[Pulsars]
+updates_enabled                     = false
+
+[Quasars]
+updates_enabled                     = false
+
 [Satellites]
 updates_enabled                     = false
 

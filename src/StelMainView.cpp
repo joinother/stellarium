@@ -44,10 +44,13 @@
 #include "StelObserver.hpp"
 #include "StelLocaleMgr.hpp"
 #include "StelSkyCultureMgr.hpp"
+#include "StelSkyLayerMgr.hpp"
+#include "StelSkyImageTile.hpp"
 #include "LandscapeMgr.hpp"
 #include "NebulaMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
 #include "../plugins/Oculars/src/Oculars.hpp"
+#include "../plugins/AngleMeasure/src/AngleMeasure.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShower.hpp"
@@ -111,6 +114,7 @@
 #include <QWindow>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <functional>
 #include <QStorageInfo>
 #ifdef Q_OS_WIN
 	#include <QPinchGesture>
@@ -1887,6 +1891,91 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		return result;
 	}
 
+	if (commandName == "getAngleMeasure")
+	{
+		AngleMeasure* measure = GETSTELMODULE(AngleMeasure);
+		if (!measure)
+		{
+			result["error"] = "AngleMeasure plugin not loaded";
+			return result;
+		}
+		result["ok"] = true;
+		result["enabled"] = measure->isEnabled();
+		result["hasStart"] = measure->hasMeasurementStart();
+		result["hasEnd"] = measure->hasMeasurementEnd();
+		result["angleDegrees"] = measure->getMeasuredAngle() * M_180_PI;
+		result["angleText"] = measure->getMeasuredAngleText();
+		return result;
+	}
+
+	if (commandName == "resetAngleMeasure")
+	{
+		AngleMeasure* measure = GETSTELMODULE(AngleMeasure);
+		if (!measure)
+		{
+			result["error"] = "AngleMeasure plugin not loaded";
+			return result;
+		}
+		measure->resetMeasurement();
+		result["ok"] = true;
+		return result;
+	}
+
+	if (commandName == "angleMeasurePoint")
+	{
+		AngleMeasure* measure = GETSTELMODULE(AngleMeasure);
+		if (!measure || !core)
+		{
+			result["error"] = "AngleMeasure plugin not loaded";
+			return result;
+		}
+		const QStringList parts = arg.split('|');
+		if (parts.size() < 2)
+		{
+			result["error"] = "angleMeasurePoint expects x|y or x|y|width|height";
+			return result;
+		}
+		bool okX = false;
+		bool okY = false;
+		const double x = parts[0].toDouble(&okX);
+		const double y = parts[1].toDouble(&okY);
+		bool okW = false;
+		bool okH = false;
+		int skyW = 1440;
+		int skyH = 960;
+		if (parts.size() >= 4)
+		{
+			skyW = parts[2].toInt(&okW);
+			skyH = parts[3].toInt(&okH);
+		}
+		if (!okX || !okY)
+		{
+			result["error"] = "invalid angle measurement point";
+			return result;
+		}
+		const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
+		const Vec4i vp = prj->getViewport();
+		const double scaleX = (okW && skyW > 0) ? static_cast<double>(vp[2]) / skyW : static_cast<double>(vp[2]) / 1440.0;
+		const double scaleY = (okH && skyH > 0) ? static_cast<double>(vp[3]) / skyH : static_cast<double>(vp[3]) / 960.0;
+		const double sx = x * scaleX;
+		const double sy = vp[3] - 1.0 - y * scaleY;
+		if (!measure->isEnabled())
+			measure->enableAngleMeasure(true);
+		if (!measure->setPointFromScreen(sx, sy))
+		{
+			result["error"] = "unable to project measurement point";
+			return result;
+		}
+		markOhosInteraction();
+		result["ok"] = true;
+		result["enabled"] = measure->isEnabled();
+		result["hasStart"] = measure->hasMeasurementStart();
+		result["hasEnd"] = measure->hasMeasurementEnd();
+		result["angleDegrees"] = measure->getMeasuredAngle() * M_180_PI;
+		result["angleText"] = measure->getMeasuredAngleText();
+		return result;
+	}
+
 	if (commandName == "selftestActions")
 	{
 		QStringList ids = arg.split('|', Qt::SkipEmptyParts);
@@ -2049,6 +2138,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				&& core->getCurrentPlanet()
 				&& objectMgr->getSelectedObject().constFirst()->getEnglishName().compare(
 					core->getCurrentPlanet()->getEnglishName(), Qt::CaseInsensitive) == 0;
+			if (found && !objectMgr->getSelectedObject().isEmpty()
+				&& objectMgr->getSelectedObject().constFirst()->getType().compare(
+					QLatin1String("Nebula"), Qt::CaseInsensitive) == 0)
+			{
+				if (auto* skyLayerMgr = GETSTELMODULE(StelSkyLayerMgr))
+				{
+					skyLayerMgr->setFlagShow(true);
+					StelAction* reloadAction = actionMgr ? actionMgr->findAction("actionShow_DSO_Textures_Reload") : nullptr;
+					if (reloadAction)
+					{
+						reloadAction->trigger();
+						qInfo() << "[dso-textures] reloaded after deep-sky selection:"
+							<< objectMgr->getSelectedObject().constFirst()->getEnglishName();
+					}
+				}
+			}
 			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty() && !selectedObserverPlanet)
 			{
 				const StelObjectP target = objectMgr->getSelectedObject().first();
@@ -3385,7 +3490,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
 			const QStringList ids = skyCultureMgr.getSkyCultureListIDs();
-			const QStringList names = skyCultureMgr.getSkyCultureListI18();
+			const QMap<QString, QString> namesById = skyCultureMgr.getDirToI18Map();
 			const QString current = skyCultureMgr.getCurrentSkyCultureID();
 			const QMap<QString, StelSkyCulture> cultures = skyCultureMgr.getDirToNameMap();
 			auto classificationName = [](const StelSkyCulture::CLASSIFICATION classification) {
@@ -3405,8 +3510,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				QJsonObject obj;
 				obj["id"] = ids[i];
-				obj["name"] = i < names.size() ? names[i] : ids[i];
 				const StelSkyCulture culture = cultures.value(ids[i]);
+				obj["name"] = namesById.value(ids[i], culture.englishName);
 				obj["region"] = culture.region;
 				obj["classification"] = classificationName(culture.classification);
 				obj["beginTime"] = culture.beginTime;
@@ -4232,24 +4337,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			result["ok"] = true;
 			result["planets"] = planets;
-			return result;
-		}
-
-		// getSkyCultureList — get available sky cultures
-		if (commandName == "getSkyCultureList")
-		{
-			QStringList cultures = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListIDs();
-			QStringList displayNames = StelApp::getInstance().getSkyCultureMgr().getSkyCultureListEnglish();
-			QJsonArray list;
-			for (int i = 0; i < cultures.size(); i++) {
-				QJsonObject item;
-				item["id"] = cultures[i];
-				item["name"] = (i < displayNames.size()) ? displayNames[i] : cultures[i];
-				list.append(item);
-			}
-			result["ok"] = true;
-			result["skyCultures"] = list;
-			result["current"] = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
 			return result;
 		}
 
@@ -6152,6 +6239,121 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["projection"] = core->getCurrentProjectionTypeKey();
 			result["fps"] = StelApp::getInstance().getFps();
 			result["language"] = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+			return result;
+		}
+
+		// getDeepSkyImageStatus — distinguish copied files from textures that
+		// the lazy deep-sky renderer has actually made ready for display.
+		if (commandName == "getDeepSkyImageStatus")
+		{
+			const QString dataRoot = qEnvironmentVariable("STELLARIUM_DATA_ROOT");
+			const QString imageRoot = dataRoot.isEmpty()
+				? StelFileMgr::findFile("nebulae/default")
+				: dataRoot + "/nebulae/default";
+			const QString indexPath = imageRoot + "/textures.json";
+			QJsonArray referencedImages;
+			QFile indexFile(indexPath);
+			if (indexFile.open(QFile::ReadOnly))
+			{
+				const QJsonDocument indexDocument = QJsonDocument::fromJson(indexFile.readAll());
+				std::function<void(const QJsonValue&)> collectImageUrls = [&](const QJsonValue& value) {
+					if (value.isObject())
+					{
+						const QJsonObject object = value.toObject();
+						const QString imageUrl = object.value("imageUrl").toString();
+						if (!imageUrl.isEmpty())
+							referencedImages.append(imageUrl);
+						for (const QString& key : object.keys())
+							collectImageUrls(object.value(key));
+					}
+					else if (value.isArray())
+					{
+						for (const QJsonValue& child : value.toArray())
+							collectImageUrls(child);
+					}
+				};
+				if (indexDocument.isObject())
+					collectImageUrls(indexDocument.object());
+				else if (indexDocument.isArray())
+					collectImageUrls(indexDocument.array());
+			}
+
+			QSet<QString> referencedNames;
+			for (const QJsonValue& value : referencedImages)
+				referencedNames.insert(QFileInfo(value.toString()).fileName());
+			const QStringList diskNames = QDir(imageRoot).entryList(QStringList() << "*.png", QDir::Files, QDir::Name);
+			QSet<QString> diskSet;
+			for (const QString& name : diskNames)
+				diskSet.insert(name);
+			QJsonArray missingFiles;
+			qint64 diskBytes = 0;
+			for (const QString& name : diskNames)
+				diskBytes += QFileInfo(imageRoot + "/" + name).size();
+			for (const QString& name : std::as_const(referencedNames))
+				if (!diskSet.contains(name))
+					missingFiles.append(name);
+
+			QStringList activeReady;
+			QStringList activePending;
+			QStringList activeErrors;
+			bool layerVisible = false;
+			int layerCount = 0;
+			if (auto* skyLayerMgr = GETSTELMODULE(StelSkyLayerMgr))
+			{
+				const QMap<QString, StelSkyLayerP> layers = skyLayerMgr->getAllSkyLayers();
+				for (auto iter = layers.cbegin(); iter != layers.cend(); ++iter)
+				{
+					const auto* tile = qobject_cast<const StelSkyImageTile*>(iter.value().data());
+					if (!tile)
+						continue;
+					++layerCount;
+					layerVisible = layerVisible || skyLayerMgr->getShowLayer(iter.key());
+					tile->collectTextureStatus(activeReady, activePending, activeErrors);
+				}
+			}
+			activeReady.removeDuplicates();
+			activePending.removeDuplicates();
+			activeErrors.removeDuplicates();
+
+			QJsonArray targets;
+			QStringList requested;
+			if (arg.trimmed().compare("all", Qt::CaseInsensitive) == 0)
+				requested = diskNames;
+			else
+				requested = QStringList() << "m31.png" << "n2244.png" << "m42.png" << "m51-vasey.png" << "m13.png" << "m45.png";
+			for (const QString& name : std::as_const(requested))
+			{
+				QJsonObject item;
+				const QString normalized = QFileInfo(name).fileName();
+				item["name"] = normalized;
+				item["referenced"] = referencedNames.contains(normalized);
+				const QFileInfo fileInfo(imageRoot + "/" + normalized);
+				item["onDisk"] = fileInfo.exists() && fileInfo.size() > 0;
+				item["bytes"] = fileInfo.exists() ? fileInfo.size() : 0;
+				item["textureReady"] = activeReady.contains(normalized);
+				item["texturePending"] = activePending.contains(normalized);
+				item["textureError"] = activeErrors.contains(normalized);
+				targets.append(item);
+			}
+
+			result["ok"] = true;
+			result["imageRoot"] = imageRoot;
+			result["indexPresent"] = QFileInfo::exists(indexPath);
+			result["referencedCount"] = referencedNames.size();
+			result["onDiskCount"] = diskNames.size();
+			result["missingCount"] = missingFiles.size();
+			result["missingFiles"] = missingFiles;
+			result["diskBytes"] = diskBytes;
+			result["layerCount"] = layerCount;
+			result["layerVisible"] = layerVisible;
+			result["activeTextureReadyCount"] = activeReady.size();
+			result["activeTexturePendingCount"] = activePending.size();
+			result["activeTextureErrorCount"] = activeErrors.size();
+			result["targets"] = targets;
+			qInfo() << "[dso-probe] deep-sky status: referenced=" << referencedNames.size()
+					<< "onDisk=" << diskNames.size() << "missing=" << missingFiles.size()
+					<< "activeReady=" << activeReady.size() << "activePending=" << activePending.size()
+					<< "activeErrors=" << activeErrors.size();
 			return result;
 		}
 
