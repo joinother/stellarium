@@ -2513,7 +2513,16 @@
 
 - **修改文件：** `src/core/StelSkyImageTile.hpp`、`src/core/StelSkyImageTile.cpp`、`src/StelMainView.cpp`、`scripts/generate-deep-sky-inventory.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/AGENTS.md`。
 - **修改内容：** 新增 `getDeepSkyImageStatus` CLI 命令，分别报告 `textures.json` 引用数、沙箱 PNG 落盘数、缺失文件、图层可见性，以及当前惰性纹理树中已就绪/等待/出错的纹理；默认检查 M31、玫瑰星云等重点资源，`all` 参数列出全部 PNG。资源清单通过目录交叉编号补齐 M31/M42/M51 等通用名匹配。
+- **补充：** 将纹理等待状态细分为后台读取和尚未开始；全量探针改为 `all|偏移|数量` 分页，避免单条 `hilog` 超长导致 CLI 无法解析。
 - **修改原因：** 仅看到 M31 不能证明其他资源已经复制或被引擎加载；需要把“资源存在”和“当前纹理已可显示”分开诊断，避免把惰性加载误判成资源丢失。
 - **构建结果：** C++ `stellarium` 目标编译成功；原生库 SHA-256 为 `13f29c4c9b3a4f4a4069e78318a20f95bc0de70699fef9a6c788e952c4a3ea05`；`assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `97d1ffda90f35222e46c80a24fce53fa0261f490124717f18ce35857da512e47`。
 - **验证结果：** HAP 已覆盖安装到平板 `7LZBB26323200303`，并确认 HAP 包含 `m31.png`、`n2244.png`、`textures.json` 和新原生库；启动及 CLI 探针采样暂未完成，设备被系统锁屏拒绝启动（`10106102`）。
 - **备注：** 探针不强制加载全部 674 张图片，避免首次启动卡顿；未关闭蓝色四角视场框。
+
+## [2026-08-23] Codex - 高清深空资源分页探针与平板验证
+
+- **修改文件：** `src/StelMainView.cpp`、`src/core/StelSkyImageTile.cpp`、`src/core/StelSkyImageTile.hpp`、`scripts/stellarium-cli.mjs`、`docs/harmonyos/CLI.md`。
+- **修改内容：** 保留蓝色四角视场框；新增深空图像落盘、索引引用、纹理就绪、后台读取、未开始和错误状态探针；修复 CLI 传递 `all|偏移|数量` 时被 `hdc` 远端 shell 将竖线截断的问题，并完成分页读取。
+- **构建结果：** HarmonyOS 原生 `stellarium` 编译成功；原生库 SHA-256 为 `06a2c9a941d96cdf4468167135ba9defbed70df782b6d8567999dac18c74e66c`；签名 HAP SHA-256 为 `9282dca6ea2b3565d80cc3da8494e9ca44ec8e14f54a4a21ef8d50c543d65507`。
+- **验证结果：** HAP 已覆盖安装到平板 `7LZBB26323200303`，解锁后 Ability 启动成功；674 个分页项逐页返回，674/674 PNG 已落盘、674/674 已被索引引用、缺失 0、纹理错误 0；72/72 高清资源均已落盘并被引用，其中当前纹理树已就绪 5 个。其余纹理处于引擎惰性加载队列，不代表资源缺失。
+- **资源清单：** 高清 72 项及全部 674 项对应目录编号、类型、通用名和 HAP 收录状态见 `docs/harmonyos/DEEP-SKY-RESOURCE-INVENTORY.md`。

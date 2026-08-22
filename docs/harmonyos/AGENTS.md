@@ -337,7 +337,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 | 命令 | 功能 | 参数 |
 |------|------|------|
-| `getDeepSkyImageStatus` | 区分索引、沙箱文件和当前纹理就绪状态 | 空参数检查重点图片；`all` 列出全部 PNG |
+| `getDeepSkyImageStatus` | 区分索引、沙箱文件和当前纹理就绪状态 | 空参数检查重点图片；`all|偏移|数量` 分页列出 PNG |
 
 ### 卫星
 

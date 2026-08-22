@@ -93,7 +93,8 @@ public:
 
 	//! Collect the image tiles currently materialized by the lazy texture tree.
 	//! A tile can be present on disk without having an OpenGL texture yet.
-	void collectTextureStatus(QStringList& ready, QStringList& pending, QStringList& errors) const;
+	void collectTextureStatus(QStringList& ready, QStringList& loading,
+							 QStringList& notStarted, QStringList& errors) const;
 
 	//! Convert the image information to a map following the JSON structure.
 	//! It can be saved as JSON using the StelJsonParser methods.

@@ -57,6 +57,10 @@ function shell(options, args) {
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+function quoteHdcShellArg(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
 function findDevice(options) {
   if (options.device) return;
   const output = execFileSync(options.hdc, ['list', 'targets'], { encoding: 'utf8' });
@@ -103,7 +107,10 @@ try {
   if (options.payload !== undefined) {
     // aa --ps rejects values beginning with '-'. The Ability removes this
     // prefix after receipt, so negative coordinates and offsets remain intact.
-    args.push('--ps', 'skyinstrument.cli.payload', `__STEL_CLI_PAYLOAD__${options.payload}`);
+    // hdc executes the remote command through a shell; quote payloads so
+    // pipe-delimited command arguments are not interpreted as pipelines.
+    args.push('--ps', 'skyinstrument.cli.payload', quoteHdcShellArg(
+      `__STEL_CLI_PAYLOAD__${options.payload}`));
   }
   if (!options.json) console.error(`设备 ${options.device}：执行 ${options.command}（${requestId}）`);
   const launchResult = shell(options, args);

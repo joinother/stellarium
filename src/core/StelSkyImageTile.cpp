@@ -397,7 +397,8 @@ bool StelSkyImageTile::isReadyToDisplay() const
 	return tex && tex->canBind();
 }
 
-void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& pending, QStringList& errors) const
+void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& loading,
+												QStringList& notStarted, QStringList& errors) const
 {
 	if (!absoluteImageURI.isEmpty())
 	{
@@ -406,14 +407,16 @@ void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& pen
 			errors.append(name);
 		else if (isReadyToDisplay())
 			ready.append(name);
+		else if (tex && tex->isLoading())
+			loading.append(name);
 		else
-			pending.append(name);
+			notStarted.append(name);
 	}
 
 	for (QObject* child : children())
 	{
 		if (const auto* tile = qobject_cast<const StelSkyImageTile*>(child))
-			tile->collectTextureStatus(ready, pending, errors);
+			tile->collectTextureStatus(ready, loading, notStarted, errors);
 	}
 }
 

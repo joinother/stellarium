@@ -6294,7 +6294,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					missingFiles.append(name);
 
 			QStringList activeReady;
-			QStringList activePending;
+			QStringList activeLoading;
+			QStringList activeNotStarted;
 			QStringList activeErrors;
 			bool layerVisible = false;
 			int layerCount = 0;
@@ -6308,19 +6309,35 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						continue;
 					++layerCount;
 					layerVisible = layerVisible || skyLayerMgr->getShowLayer(iter.key());
-					tile->collectTextureStatus(activeReady, activePending, activeErrors);
+					tile->collectTextureStatus(activeReady, activeLoading, activeNotStarted, activeErrors);
 				}
 			}
 			activeReady.removeDuplicates();
-			activePending.removeDuplicates();
+			activeLoading.removeDuplicates();
+			activeNotStarted.removeDuplicates();
 			activeErrors.removeDuplicates();
 
 			QJsonArray targets;
 			QStringList requested;
-			if (arg.trimmed().compare("all", Qt::CaseInsensitive) == 0)
-				requested = diskNames;
+			const QStringList probeParts = arg.trimmed().split('|', Qt::KeepEmptyParts);
+			const bool allRequested = probeParts.value(0).compare("all", Qt::CaseInsensitive) == 0;
+			int targetOffset = 0;
+			int targetLimit = allRequested ? 8 : 6;
+			if (allRequested)
+			{
+				bool offsetOk = false;
+				bool limitOk = false;
+				targetOffset = probeParts.value(1).toInt(&offsetOk);
+				const int requestedLimit = probeParts.value(2).toInt(&limitOk);
+				if (!offsetOk || targetOffset < 0)
+					targetOffset = 0;
+				if (limitOk && requestedLimit > 0)
+					targetLimit = qBound(1, requestedLimit, 64);
+			}
+			if (allRequested)
+				requested = diskNames.mid(targetOffset, targetLimit);
 			else
-				requested = QStringList() << "m31.png" << "n2244.png" << "m42.png" << "m51-vasey.png" << "m13.png" << "m45.png";
+				requested = QStringList() << "m31.png" << "n2244.png" << "m42.png" << "m51-vasey.png" << "m13.png" << "pleiades.png";
 			for (const QString& name : std::as_const(requested))
 			{
 				QJsonObject item;
@@ -6331,7 +6348,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				item["onDisk"] = fileInfo.exists() && fileInfo.size() > 0;
 				item["bytes"] = fileInfo.exists() ? fileInfo.size() : 0;
 				item["textureReady"] = activeReady.contains(normalized);
-				item["texturePending"] = activePending.contains(normalized);
+				item["textureLoading"] = activeLoading.contains(normalized);
+				item["textureNotStarted"] = activeNotStarted.contains(normalized);
 				item["textureError"] = activeErrors.contains(normalized);
 				targets.append(item);
 			}
@@ -6347,12 +6365,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["layerCount"] = layerCount;
 			result["layerVisible"] = layerVisible;
 			result["activeTextureReadyCount"] = activeReady.size();
-			result["activeTexturePendingCount"] = activePending.size();
+			result["activeTextureLoadingCount"] = activeLoading.size();
+			result["activeTextureNotStartedCount"] = activeNotStarted.size();
+			result["activeTexturePendingCount"] = activeLoading.size() + activeNotStarted.size();
 			result["activeTextureErrorCount"] = activeErrors.size();
+			result["targetOffset"] = allRequested ? targetOffset : 0;
+			result["targetLimit"] = allRequested ? targetLimit : requested.size();
+			result["targetTotal"] = diskNames.size();
+			result["targetHasMore"] = allRequested && targetOffset + requested.size() < diskNames.size();
 			result["targets"] = targets;
 			qInfo() << "[dso-probe] deep-sky status: referenced=" << referencedNames.size()
 					<< "onDisk=" << diskNames.size() << "missing=" << missingFiles.size()
-					<< "activeReady=" << activeReady.size() << "activePending=" << activePending.size()
+					<< "activeReady=" << activeReady.size() << "activeLoading=" << activeLoading.size()
+					<< "activeNotStarted=" << activeNotStarted.size()
 					<< "activeErrors=" << activeErrors.size();
 			return result;
 		}
