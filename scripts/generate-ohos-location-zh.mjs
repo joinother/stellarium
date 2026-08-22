@@ -56,9 +56,9 @@ const manualNames = {
 }
 
 function hierarchyNames(source) {
-  const objectStart = source.indexOf('= {')
+  const objectStart = source.indexOf('=')
   if (objectStart < 0) throw new Error('Unable to find LOCATION_HIERARCHY object')
-  const literal = source.slice(objectStart + 2).replace(/;\s*$/, '')
+  const literal = source.slice(objectStart + 1).replace(/;\s*$/, '')
   const hierarchy = Function(`\"use strict\"; return (${literal})`)()
   const names = new Set()
   for (const regions of Object.values(hierarchy)) {

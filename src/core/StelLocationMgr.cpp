@@ -489,8 +489,11 @@ StelLocationMgr::StelLocationMgr()
 #else
 	locations.unite(loadCities("data/user_locations.txt", true));
 #endif
-	// Init to Paris France because it's the center of the world.
-	lastResortLocation = locationForString(conf->value("init_location/last_location", "Paris, Western Europe").toString());
+	// Use a deterministic Chinese default when the offline build has no saved location.
+	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Beijing").toString();
+	if (configuredLastLocation.isEmpty() || configuredLastLocation == QStringLiteral("Paris, Western Europe"))
+		configuredLastLocation = QStringLiteral("Beijing, Beijing");
+	lastResortLocation = locationForString(configuredLastLocation);
 
 	planetName="Earth";
 	planetSurfaceMap=QImage(":/graphicGui/miscWorldMap.jpg");
@@ -542,8 +545,10 @@ StelLocationMgr::StelLocationMgr(const LocationList &locations)
 	setLocations(locations);
 
 	QSettings* conf = StelApp::getInstance().getSettings();
-	// Init to Paris France because it's the center of the world.
-	lastResortLocation = locationForString(conf->value("init_location/last_location", "Paris, Western Europe").toString());
+	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Beijing").toString();
+	if (configuredLastLocation.isEmpty() || configuredLastLocation == QStringLiteral("Paris, Western Europe"))
+		configuredLastLocation = QStringLiteral("Beijing, Beijing");
+	lastResortLocation = locationForString(configuredLastLocation);
 }
 
 void StelLocationMgr::setLocations(const LocationList &locations)
@@ -1771,7 +1776,6 @@ const StelLocation& StelLocationMgr::getLastResortLocation()
 {
 	// Unfortunately the isValid test is super lame.
 	if (!lastResortLocation.isValid())
-		// Fallback to Paris France because it's the center of the world.
-		lastResortLocation = locationForString("Paris, Western Europe");
+		lastResortLocation = locationForString("Beijing, Beijing");
 	return lastResortLocation;
 }

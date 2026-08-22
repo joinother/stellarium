@@ -2350,3 +2350,81 @@
 - **修改内容：** 对齐原版 `SkyCultureMapGraphicsView::rotateMap()`，在离线文化区域地图中增加“按观测地旋转地图”开关；启用后南半球地图旋转 180°，北半球保持标准方向，并使用 `getObserverInfo` 的当前纬度更新状态。
 - **修改原因：** 移动端此前缺少原版的文化地图朝向逻辑，用户在南半球查看文化区域时地图方向与原版不一致。
 - **备注：** 仍只使用应用内置离线地图和文化资料，不接入花瓣地图或其他地图 SDK，不增加联网请求；未修改隐私、SN、启动、陀螺仪、签名或构建模式。
+
+## [2026-08-22] Codex - 星空文化资料请求竞态修复
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 为星空文化目录和详情请求增加请求序号；刷新目录、切换文化或重复读取资料时，过期回调不再覆盖当前文化的名称、说明、绘图和区域地图状态。
+- **修改原因：** 异步请求返回顺序不确定，快速操作可能让旧文化资料晚于新文化资料返回，造成页面内容错位。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 完成；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256 为 `98348a0bc8cc8f67ffcc16db4cdf501c67becdcbe4397f921091526b970bb511`。
+- **验证结果：** HAP 内含文化绘图资源；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；HAP 已安装到平板 `7LZBB26323200303`。启动交互因平板锁屏被系统阻止，未完成页面点击验证。
+- **备注：** 不接入语音 Kit，不修改隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。
+
+## [2026-08-22] Codex - 修复星空文化绘图与名称样式控件
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 使用 `fileUri.getUriFromPath()` 生成鸿蒙本地文件 URI，并在绘图文件缺失时显示明确占位；移除四处名称样式选择器写死的 `value('名称样式')`，改为由当前索引显示实际选项。
+- **修改原因：** 文化绘图文件已在平板沙箱中存在但 `file://` 拼接路径无法稳定交给 ArkUI Image；名称样式选择后仍显示占位文字，用户无法确认当前选择。
+- **构建结果：** 同上一次构建，`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** 名称样式控件的 ArkTS 编译通过；HAP 签名校验通过并已安装到平板，页面点击验证待解锁后完成。
+- **备注：** 不接入网络或地图 SDK，不修改隐私、SN、启动、陀螺仪、签名和构建模式。
+
+## [2026-08-22] Codex - 星空文化筛选器与绘图资源显示修复
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 将星空文化的“类型”和“地区”原生下拉框改为页面内展开式筛选控件；选中后立即显示实际中文选项、当前筛选条件和匹配数量，筛选列表仍按原版分类值过滤。绘图改用 `fileUri.getUriFromPath()` 直接生成沙箱 URI，移除会误判已安装文件的 `accessSync` 前置拦截。
+- **修改原因：** 原生下拉层与文化页面视觉层级冲突，选中后仍显示占位文字；平板沙箱中绘图文件存在，但预检查误判导致页面显示“绘图资源未安装”。
+- **验证结果：** 源码同步完成，`git diff --check` 通过；`scripts/check-ohos.sh` 报告 HAP 编译通过；签名 HAP SHA-256 为 `04067eafc37860d5bc376326acf1e44141b84a3b2636d06c0833983782c04a4c`；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`。检查脚本另报 2 条工程既有 `setTimeout` 规则告警，与本次改动无关。
+
+## [2026-08-22] Codex - 星空文化名称样式控件统一
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 将星图、资料卡、黄道十二宫和月宿系统的“名称样式”统一为页面内展开式选择器；点击后立即显示中文译名、文化原名、通俗读音、学术转写或现代名称，并将选择发送到对应核心配置目标。
+- **修改原因：** 原生下拉层与页面 UI 视觉层级不一致，桥接响应较慢时选项看起来没有变化。
+- **验证结果：** `scripts/check-ohos.sh` 报告 HAP 编译通过；签名 HAP SHA-256 为 `35c72a916eea57037a4c8ae0d569e9a43558d2d744e39464c12c07ffa989aa85`；`hap-sign-tool verify-app` 报告 `Digest verify result: true`、`verify-app success`；HAP 已成功安装到平板，但设备锁屏导致无法自动启动进行点击验证。
+
+## [2026-08-22] Codex - 名称样式选择器视觉与动效调整
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 名称样式选择器改用不透明的页面内面板；当前项使用实底、边框、圆点和“已选”状态，未选项保留清晰的可点击底色；展开时外层设置行按选项数量增高，避免与相邻控件重叠。
+- **动效：** 选择器展开/收起增加淡入淡出和轻微位移转场，面板边框、按钮和选中状态使用短时缓动动画。
+- **验证结果：** 源码同步完成；`hvigorw assembleHap --no-daemon` 构建通过；HAP SHA-256 为 `4976db4d6f689f242e73e5410a64a940fd5f9a46bfbed77114f92dabfe00daa5`。检查脚本仍报告工程原有的 2 条 `setTimeout` 规则告警。
+- **备注：** 不修改隐私、SN、启动、陀螺仪、地图 SDK、签名或构建模式。
+
+## [2026-08-22] Codex - Pad 横屏侧栏模式迁移
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 参考录屏将 Pad 横屏改为左侧三分之一宽的磨砂侧栏，底部 Dock 作为主入口，移除大屏左侧竖向工具轨；面板增加顶部拖拽短柄，并从左侧滑入，右侧持续保留星图视野。
+- **探索页：** Pad 进入搜索入口时显示“今晚、专题、日历、恒星”分组卡片，复用现有观测计划、图层、天文计算和天体搜索功能。
+- **交互同步：** 修正大屏面板、详情摘要、选中天体避让、陀螺仪引导和点击命中区域，使面板移动到左侧后仍保持天体定位逻辑一致。
+- **验证结果：** 源码同步完成；`hvigorw assembleHap --no-daemon` 构建通过；HAP SHA-256 为 `e3e373e48697066453b549595249956448dea3a5eaf0c10dc455653f3a856d1c`；`git diff --check` 通过。脚本仍报告工程原有的 2 条 `setTimeout` 规则告警。
+- **备注：** 不修改隐私、SN、启动、陀螺仪算法、地图 SDK、签名或构建模式。
+
+## [2026-08-22] Codex - 缩放手势队列与选中锚点稳定
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`
+- **修改内容：** 双指缩放按 8ms 节流提交最新 FOV 比例，抬手前补发最后比例并发送 `endPinch`；原生锚点在缩放结束后的短窗口内保持防抖死区；缩放过程中只更新固定 FOV 文本，不反复弹出提示气泡触发 UI 重排。
+- **修改原因：** 选中天体缩放时画面抖动，未选中缩放时因跨线程命令积压导致手感不均匀。
+- **构建结果：** C++ `stellarium` 交叉编译通过；同步 native 库后 `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；HAP SHA-256：`a65c2712be9cb6b5506f676f4ced75ad59916fd9eb33b28b461003b4021b8faf`。
+- **验证结果：** `git diff --check` 通过；HAP 已覆盖安装到平板 `7LZBB26323200303`。平板处于锁屏状态，系统拒绝启动应用（`10106102`），因此本轮未能采集实际缩放日志。
+- **备注：** 保持原生分辨率和现有陀螺仪逻辑不变。
+## 位置选择修复
+
+- 位置层级补齐离线国家/地区列，形成“大洲 → 国家/地区 → 行政区 → 城市”，国家信息由项目内置时区国家表生成，不依赖联网地图。
+- 地图顶部输入框和地点搜索框均支持提交搜索，搜索同时匹配英文名、中文译名、国家/行政区和 Stellarium 内置地点库。
+- 地图拖动只由 PanGesture 更新坐标，移除触摸回调的重复写入；自定义点位显示为“自定义位置”，不再被刷新成“未收录地点”。
+## [2026-08-22] Codex - 修复位置选择、搜索和地图自定义点
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`harmonyos/ets-source/pages/location_hierarchy.ts`、`harmonyos/ets-source/pages/location_countries.ts`、`scripts/generate-ohos-location-hierarchy.mjs`、`src/StelMainView.cpp`。
+- **修改内容：** 层级选择补齐“国家/地区”列；基于项目内置 IANA 时区表离线生成国家信息；地图输入框和城市搜索框增加提交/搜索按钮；搜索支持中文译名、英文名、国家/地区、行政区和地点库包含匹配；地图拖动统一由 `PanGesture` 更新坐标；自定义地图点显示为“自定义位置”。
+- **构建结果：** C++ ARM64 原生库编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 已生成。首次打包遇到 ArkTS 禁止解构声明，改为兼容写法后通过。
+- **验证结果：** 离线数据校验通过；北京/上海→中国、东京→日本、巴黎→法国、伦敦（英国）和伦敦（加拿大）分别归类正确；原生库与 HAP 工程副本 SHA-256 均为 `62c7b4f1542a4332c2f184d8d1de09bd110c941eb3aa9a990681c73c943bbc48`。
+- **备注：** 国家层级由地点时区映射生成，跨国时区或没有对应 IANA 区域的少量地点使用未知地区回退；不依赖联网地图 SDK。
+## [2026-08-22] Codex - 对齐今天天象筛选与结果表
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`
+- **修改内容：** 按原版 AstroCalc WUT 补充真实分类、观测条件字段和表格化结果布局。
+- **修改原因：** 鸿蒙端当前仅支持行星、亮星、梅西耶三类，无法复现原版分类栏和筛选工作流。
+- **构建结果：** BUILD SUCCESSFUL：C++ `stellarium` 目标与 `assembleHap` 均通过
+- **验证结果：** 静态检查通过；ArkTS 仅保留项目原有弃用警告，尚未在设备上安装验证
+- **备注：** 不修改签名、隐私、探针和构建配置。

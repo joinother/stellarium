@@ -953,6 +953,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'h_city': { 'en': 'City', 'zh_CN': '城市', 'ja': '都市', 'ko': '도시', 'fr': 'Ville', 'de': 'Stadt', 'es': 'Ciudad', 'ru': 'Город' },
   'h_continent': { 'en': 'Continent', 'zh_CN': '大洲', 'ja': '大陸', 'ko': '대륙', 'fr': 'Continent', 'de': 'Kontinent', 'es': 'Continente', 'ru': 'Континент' },
   'h_region': { 'en': 'Region', 'zh_CN': '地区', 'ja': '地域', 'ko': '지역', 'fr': 'Région', 'de': 'Region', 'es': 'Región', 'ru': 'Регион' },
+  'h_country': { 'en': 'Country', 'zh_CN': '国家/地区', 'ja': '国/地域', 'ko': '국가/지역', 'fr': 'Pays/région', 'de': 'Land/Region', 'es': 'País/región', 'ru': 'Страна/регион' },
   'land_armintxe': { 'en': 'Armagh Observatory Landscape', 'zh_CN': '阿尔明特克斯洞穴', 'ja': 'Armagh Observatory Landscape', 'ko': 'Armagh Observatory Landscape', 'fr': 'Armagh Observatory Landscape', 'de': 'Armagh Observatory Landscape', 'es': 'Armagh Observatory Landscape', 'ru': 'Armagh Observatory Landscape' },
   'land_garching': { 'en': 'Garching', 'zh_CN': '加兴', 'ja': 'Garching', 'ko': 'Garching', 'fr': 'Garching', 'de': 'Garching', 'es': 'Garching', 'ru': 'Garching' },
   'land_geneva': { 'en': 'Geneva', 'zh_CN': '日内瓦', 'ja': 'Geneva', 'ko': 'Geneva', 'fr': 'Geneva', 'de': 'Geneva', 'es': 'Geneva', 'ru': 'Geneva' },

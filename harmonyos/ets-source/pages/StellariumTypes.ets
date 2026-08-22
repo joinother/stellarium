@@ -9,6 +9,9 @@ export interface HierCity {
   lo: number
   al: number
   p: number
+  country: string
+  province?: string
+  planet?: string
 }
 
 export interface CatOption {
@@ -107,10 +110,13 @@ export interface ObjectInfo {
 
 export interface LocSearchItem {
   name: string
+  displayName?: string
   lat: number
   lon: number
   alt: number
   planet: string
+  country?: string
+  region?: string
 }
 
 export interface SavedLocation {
@@ -476,6 +482,17 @@ export interface StellariumBridgeResponse {
   text?: string
   night?: boolean
   nightMode?: boolean
+  luminanceAdaptation?: boolean
+  starTwinkle?: boolean
+  forcedStarTwinkle?: boolean
+  bigStarHalo?: boolean
+  starSpiky?: boolean
+  twinkleAmount?: number
+  bortleScale?: number
+  meteorZhr?: number
+  milkyWayIntensity?: number
+  zodiacalLight?: boolean
+  zodiacalIntensity?: number
   pressure?: number
   temperature?: number
   refractionOn?: boolean
@@ -677,7 +694,9 @@ export interface WutTarget {
   angularSizeArcmin?: number
   rise?: string
   transit?: string
+  maxAltitude?: number
   set?: string
+  constellation?: string
 }
 
 // ---- 天文计算（AstroCalc）数据结构 ----

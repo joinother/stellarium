@@ -275,6 +275,11 @@ bool initEgl(void* window)
         return false;
     }
 
+    // Do not make the Qt render thread wait for every display refresh. The
+    // compositor still presents at the panel's native refresh rate, while
+    // the producer can keep the newest full-resolution frame ready.
+    eglSwapInterval(g_egl.display, 0);
+
     OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG, "EGL initialized");
     return true;
 }
@@ -606,9 +611,17 @@ extern "C" __attribute__((visibility("default"))) void StellariumEntry_submitFra
 extern "C" __attribute__((visibility("default"))) bool StellariumEntry_submitTexture(
     unsigned int texture, int width, int height, void* qtDisplay, void* qtContext)
 {
-    return renderSubmittedTexture(texture, width, height,
+    const bool accepted = renderSubmittedTexture(texture, width, height,
                                  reinterpret_cast<EGLDisplay>(qtDisplay),
                                  reinterpret_cast<EGLContext>(qtContext));
+    static bool loggedTexturePath = false;
+    if (!loggedTexturePath) {
+        OH_LOG_Print(LOG_APP, accepted ? LOG_INFO : LOG_WARN, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                     "zero-copy texture submit %{public}s %{public}dx%{public}d qtDisplay=%{public}p qtContext=%{public}p eglError=%{public}x",
+                     accepted ? "accepted" : "rejected", width, height, qtDisplay, qtContext, eglGetError());
+        loggedTexturePath = true;
+    }
+    return accepted;
 }
 
 static bool getStringArg(napi_env env, napi_value value, std::string &out)
@@ -706,8 +719,14 @@ static napi_value Command(napi_env env, napi_callback_info info)
     if (hasArgs) {
         StellariumCommandFunc command = resolveStellariumCommand();
         if (command) {
-            OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
-                         "Stellarium command %{public}s", commandName.c_str());
+            // Continuous view commands are intentionally silent. Logging each
+            // drag sample can contend with the UI thread during a gesture.
+            const bool continuous = commandName == "dragView" || commandName == "zoomBy" ||
+                                    commandName == "panBy" || commandName == "setGyroView";
+            if (!continuous) {
+                OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
+                             "Stellarium command %{public}s", commandName.c_str());
+            }
             const char* nativeResponse = command(commandName.c_str(), payload.c_str());
             response = nativeResponse ? nativeResponse : R"({"ok":false,"error":"empty native response"})";
         } else {
