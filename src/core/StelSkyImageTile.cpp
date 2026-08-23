@@ -100,16 +100,19 @@ void StelSkyImageTile::draw(StelCore* core, StelPainter& sPainter, float opacity
 	// TODO: adjust that viewportconvexpolygon by aberration to select the right tiles.
 	// I thought the viewportpolygon needs to be enlarged just a bit. (I use 20 arcseconds here as estimate of max. aberration from earth.)
 	//getTilesToDraw(result, core, prj->getViewportConvexPolygon(0,0)->getEnlarged(20./3600.*M_PI_180 *core->getAberrationFactor()), limitLuminance, true);
-	// But it seems not even the AllSky region prevents clipping, so it must be caused somewhere else.
-//	const SphericalCap& hp = prj->getBoundingCap();
-//	getTilesToDraw(result, core, SphericalRegionP(new SphericalCap(hp)), limitLuminance, true);
-	getTilesToDraw(result, core, SphericalRegionP(new AllSkySphericalRegion()), limitLuminance, true);
+	// Use the actual viewport so that only visible images enter the texture queue.
+	// The all-sky region makes every deep-sky image eligible on every frame.
+	getTilesToDraw(result, core, prj->getViewportConvexPolygon(0, 0), limitLuminance, true);
 
 	int numToBeLoaded=0;
 	for (auto* t : std::as_const(result))
 		if (t->isReadyToDisplay()==false)
 			++numToBeLoaded;
 	updatePercent(result.size(), numToBeLoaded);
+	static int drawProbeFrame = 0;
+	if ((drawProbeFrame++ % 120) == 0)
+		qInfo() << "[dso-textures] viewport candidates=" << result.size()
+				<< "pending=" << numToBeLoaded;
 
 	// Draw in the good order
 	sPainter.setBlending(true, GL_ONE, GL_ONE);

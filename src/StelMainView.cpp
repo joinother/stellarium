@@ -2210,19 +2210,98 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (ok && n > 0 && n <= 50) { maxItems = n; }
 			prefix = prefix.left(sep);
 		}
-		const auto list = objectMgr->listMatchingObjects(prefix, maxItems, true);
+		const QString query = prefix.trimmed();
+		const QString normalizedQuery = [&query]() {
+			QString value = query.toLower();
+			value.remove(QRegularExpression(QStringLiteral("[\\s_-]+")));
+			return value;
+		}();
+		struct SearchCandidate
+		{
+			QString label;
+			StelObjectP object;
+			int rank;
+		};
+		QVector<SearchCandidate> candidates;
+		QHash<QString, int> candidateIndexes;
+		auto addCandidate = [&](const QString& label, const StelObjectP& object)
+		{
+			if (!object || label.trimmed().isEmpty() || normalizedQuery.isEmpty())
+				return;
+			QString normalizedLabel = label.trimmed().toLower();
+			normalizedLabel.remove(QRegularExpression(QStringLiteral("[\\s_-]+")));
+			if (normalizedLabel.isEmpty())
+				return;
+			int rank = -1;
+			if (normalizedLabel == normalizedQuery)
+				rank = 0;
+			else if (normalizedLabel.startsWith(normalizedQuery))
+				rank = 1;
+			else if (normalizedLabel.contains(normalizedQuery))
+				rank = 2;
+			if (rank < 0)
+				return;
+			const QString objectKey = object->getType() + QLatin1Char('|') + object->getID();
+			auto existing = candidateIndexes.constFind(objectKey);
+			if (existing != candidateIndexes.constEnd())
+			{
+				SearchCandidate& current = candidates[*existing];
+				if (rank < current.rank || (rank == current.rank && label.size() < current.label.size()))
+				{
+					current.label = label.trimmed();
+					current.rank = rank;
+				}
+				return;
+			}
+			candidateIndexes.insert(objectKey, candidates.size());
+			candidates.append({label.trimmed(), object, rank});
+		};
+
+		// Keep the module-specific catalog matching, but search all supported
+		// display names and stable IDs as well. This covers localized names,
+		// English names, catalog numbers, and names omitted by a module's
+		// optional additional-name setting.
+		const auto indexedMatches = objectMgr->listMatchingObjects(query, maxItems * 4, false);
+		for (const auto& pair : indexedMatches)
+			addCandidate(pair.first, pair.second);
+		const auto moduleMap = objectMgr->objectModulesMap();
+		for (auto it = moduleMap.constBegin(); it != moduleMap.constEnd(); ++it)
+		{
+			if (it.key().contains(QLatin1Char(':')))
+				continue;
+			for (const bool inEnglish : {true, false})
+			{
+				const auto objects = objectMgr->listAllModuleObjects(it.key(), inEnglish);
+				for (const auto& pair : objects)
+				{
+					const StelObjectP object = pair.second;
+					if (!object)
+						continue;
+					addCandidate(pair.first, object);
+					addCandidate(object->getEnglishName(), object);
+					addCandidate(object->getNameI18n(), object);
+					addCandidate(object->getID(), object);
+				}
+			}
+		}
+		std::sort(candidates.begin(), candidates.end(), [](const SearchCandidate& left, const SearchCandidate& right) {
+			if (left.rank != right.rank)
+				return left.rank < right.rank;
+			return left.label.localeAwareCompare(right.label) < 0;
+		});
 		QJsonArray items;
 		QJsonArray keys;
-		for (const auto& pair : list)
+		for (int i = 0; i < candidates.size() && i < maxItems; ++i)
 		{
-			items.append(pair.first);
+			const auto& candidate = candidates.at(i);
+			items.append(candidate.label);
 			// pair.first is a localized display label. Keep it for the UI, but
 			// return the object's stable English name for the follow-up selection.
-			const QString key = pair.second ? pair.second->getEnglishName() : QString();
-			keys.append(key.isEmpty() ? pair.first : key);
+			const QString key = candidate.object ? candidate.object->getEnglishName() : QString();
+			keys.append(key.isEmpty() ? candidate.label : key);
 		}
 		result["ok"] = true; result["items"] = items; result["keys"] = keys;
-		result["count"] = items.size(); result["prefix"] = prefix;
+		result["count"] = items.size(); result["prefix"] = query;
 		return result;
 	}
 
