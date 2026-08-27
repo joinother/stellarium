@@ -220,6 +220,10 @@ public:
 	QString getCatalogNumberString() const {return id;}
 	//! Returns the (COSPAR) International Designator.
 	QString getInternationalDesignator() const {return internationalDesignator;}
+	//! Returns when this satellite record was last refreshed in the bundled catalogue.
+	QDateTime getLastUpdated() const {return lastUpdated;}
+	//! Returns the parsed TLE epoch shown in object information.
+	QString getTleEpoch() const {return tleEpoch;}
 
 	//! Set new tleElements.  This assumes the designation is already set, populates
 	//! the tleElements values and configures internal orbit parameters.
@@ -430,4 +434,3 @@ typedef QSharedPointer<Satellite> SatelliteP;
 bool operator<(const SatelliteP& left, const SatelliteP& right);
 
 #endif // SATELLITE_HPP
-

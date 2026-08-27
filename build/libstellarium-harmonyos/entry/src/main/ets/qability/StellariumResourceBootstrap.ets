@@ -7,6 +7,10 @@ import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
 
 const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
+const MULTILINGUAL_SEARCH_INDEX = 'data/search/multilingual-sky-aliases.tsv';
+const CATALOG_MANIFEST = 'data/ohos/catalog-manifest.json';
+const DEEP_STAR_CATALOG = 'stars/hip_gaia3/stars_4_1v0_6.cat';
+const DEEP_STAR_CATALOG_BYTES = 55759776;
 const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
 // The old completion marker was created before the optional image collection
 // became upgradeable. Use a new marker and verify the two prominent images so
@@ -20,9 +24,15 @@ const DEEP_SKY_INDEX_FILES: Array<string> = [
   'discovery.dat',
   'textures.json',
 ];
+const DEEP_SKY_IMAGE_FILE = /^[a-z][a-z0-9_-]*\.png$/i;
+const DETAIL_MEDIA_ASSET_PATH = /^(?:textures\/[a-z0-9_.-]+\.(?:png|jpe?g|webp)|nebulae\/default\/[a-z][a-z0-9_-]*\.png|skycultures\/[a-z0-9_]+\/illustrations\/(?:[a-z0-9_-]+\/)*[a-z0-9_.-]+\.(?:png|jpe?g|webp))$/i;
 
 let deepSkyExtractionStarted = false;
 let deepSkyExtractionForeground = true;
+
+function isDeferredStartupAsset(rawPath: string): boolean {
+  return rawPath === `${RAW_ROOT}/${DEEP_STAR_CATALOG}`;
+}
 
 function stellariumSystemLocale(): string {
   let locale = 'zh_CN';
@@ -175,6 +185,9 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
     }
     const rawPath = rawDir.length > 0 ? `${rawDir}/${entry}` : entry;
     const outputPath = `${outputDir}/${entry}`;
+    if (isDeferredStartupAsset(rawPath)) {
+      continue;
+    }
     try {
       appContext.resourceManager.getRawFileListSync(rawPath);
       extractRawTree(appContext, rawPath, outputPath);
@@ -200,6 +213,9 @@ async function extractRawTreeAsync(appContext: common.ApplicationContext, rawDir
     }
     const rawPath = rawDir.length > 0 ? `${rawDir}/${entry}` : entry;
     const outputPath = `${outputDir}/${entry}`;
+    if (isDeferredStartupAsset(rawPath)) {
+      continue;
+    }
     try {
       await appContext.resourceManager.getRawFileList(rawPath);
       await extractRawTreeAsync(appContext, rawPath, outputPath);
@@ -211,13 +227,36 @@ async function extractRawTreeAsync(appContext: common.ApplicationContext, rawDir
 
 export async function prepareStellariumResourcesAsync(appContext: common.ApplicationContext): Promise<void> {
   const installRoot = `${appContext.filesDir}/stellarium`;
+  const manifestPath = `${installRoot}/${CATALOG_MANIFEST}`;
+  const deepStarPath = `${installRoot}/${DEEP_STAR_CATALOG}`;
   if (exists(`${installRoot}/${MARKER}`)) {
+    await writeRawFileAsync(appContext, `${RAW_ROOT}/${CATALOG_MANIFEST}`, manifestPath);
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] refreshed bundled astronomy catalogue manifest');
+    const indexPath = `${installRoot}/${MULTILINGUAL_SEARCH_INDEX}`;
+    if (!exists(indexPath)) {
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/${MULTILINGUAL_SEARCH_INDEX}`, indexPath);
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] installed multilingual search index for existing resources');
+    }
+    if (fileSize(deepStarPath) !== DEEP_STAR_CATALOG_BYTES) {
+      const startedAt = Date.now();
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] installing upgraded stars_4 catalogue asynchronously');
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/${DEEP_STAR_CATALOG}`, deepStarPath);
+      if (fileSize(deepStarPath) !== DEEP_STAR_CATALOG_BYTES) {
+        throw new Error(`Deep star catalogue size mismatch: ${fileSize(deepStarPath)}`);
+      }
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[startup] installed upgraded stars_4 catalogue in ${Date.now() - startedAt} ms`);
+    }
     return;
   }
 
   const startedAt = Date.now();
   hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] asynchronous Stellarium resource extraction started');
   await extractRawTreeAsync(appContext, RAW_ROOT, installRoot);
+  await writeRawFileAsync(appContext, `${RAW_ROOT}/${DEEP_STAR_CATALOG}`, deepStarPath);
+  if (fileSize(deepStarPath) !== DEEP_STAR_CATALOG_BYTES) {
+    throw new Error(`Deep star catalogue size mismatch: ${fileSize(deepStarPath)}`);
+  }
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] asynchronous Stellarium resource extraction completed in ${Date.now() - startedAt} ms`);
 }
@@ -234,6 +273,114 @@ function copyDeepSkyIndexes(appContext: common.ApplicationContext, installRoot: 
  */
 export function setDeepSkyImageExtractionForeground(foreground: boolean): void {
   deepSkyExtractionForeground = foreground;
+}
+
+/**
+ * Makes one verified detail image available immediately after the user selects
+ * its object. This reads only the packaged rawfile and does not wait for the
+ * optional background collection pass to reach the requested image.
+ */
+export async function ensureDeepSkyDetailImage(
+  appContext: common.ApplicationContext,
+  imageName: string,
+): Promise<boolean> {
+  if (!DEEP_SKY_IMAGE_FILE.test(imageName)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] rejected invalid image name: ${imageName}`);
+    return false;
+  }
+  return ensureStellariumDetailMediaAsset(appContext, `nebulae/default/${imageName}`);
+}
+
+function resolvePackagedDeepSkyPath(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+): string {
+  const prefix = 'nebulae/default/';
+  if (!relativePath.startsWith(prefix)) {
+    return relativePath;
+  }
+
+  const requestedName = relativePath.substring(prefix.length);
+  const requestedLower = requestedName.toLowerCase();
+  let imageNames: Array<string> = [];
+  try {
+    imageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
+      .filter((name: string) => DEEP_SKY_IMAGE_FILE.test(name));
+  } catch (err) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] unable to list packaged deep-sky images: ${JSON.stringify(err)}`);
+    return '';
+  }
+
+  const exactName = imageNames.find((name: string) => name.toLowerCase() === requestedLower);
+  if (exactName !== undefined) {
+    return `${prefix}${exactName}`;
+  }
+
+  const requestedStem = requestedLower.substring(0, requestedLower.length - '.png'.length);
+  const candidates = imageNames.filter((name: string) => {
+    const lower = name.toLowerCase();
+    const stem = lower.substring(0, lower.length - '.png'.length);
+    if (!stem.startsWith(requestedStem) || stem.length === requestedStem.length) {
+      return false;
+    }
+    const suffixFirst = stem.charAt(requestedStem.length);
+    return suffixFirst < '0' || suffixFirst > '9';
+  }).sort((left: string, right: string) => left.length - right.length || left.localeCompare(right));
+  return candidates.length > 0 ? `${prefix}${candidates[0]}` : '';
+}
+
+/**
+ * Resolves and installs one approved detail asset, returning the actual path.
+ * Some bundled deep-sky filenames carry a source suffix (for example
+ * m51-vasey.png), so callers must use this result instead of the requested
+ * catalogue stem.
+ */
+export async function resolveStellariumDetailMediaAsset(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+): Promise<string> {
+  if (!DETAIL_MEDIA_ASSET_PATH.test(relativePath)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] rejected invalid asset path: ${relativePath}`);
+    return '';
+  }
+  const resolvedPath = resolvePackagedDeepSkyPath(appContext, relativePath);
+  if (resolvedPath.length === 0) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] package missing requested=${relativePath}`);
+    return '';
+  }
+  const outputPath = `${appContext.filesDir}/stellarium/${resolvedPath}`;
+  if (fileSize(outputPath) > 0) {
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=filesDir`);
+    return resolvedPath;
+  }
+  try {
+    await writeRawFileAsync(appContext, `${RAW_ROOT}/${resolvedPath}`, outputPath);
+    if (fileSize(outputPath) <= 0) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG,
+        `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=empty`);
+      return '';
+    }
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=copied`);
+    return resolvedPath;
+  } catch (err) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=unavailable: ${JSON.stringify(err)}`);
+    return '';
+  }
+}
+
+/**
+ * Copies one approved object-detail asset from the package into filesDir. The
+ * caller may only request deep-sky images or culture illustration paths; this
+ * keeps UI-provided paths inside the read-only resource bundle.
+ */
+export async function ensureStellariumDetailMediaAsset(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+): Promise<boolean> {
+  return (await resolveStellariumDetailMediaAsset(appContext, relativePath)).length > 0;
 }
 
 /**

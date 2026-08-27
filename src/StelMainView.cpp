@@ -47,6 +47,7 @@
 #include "StelSkyLayerMgr.hpp"
 #include "StelSkyImageTile.hpp"
 #include "LandscapeMgr.hpp"
+#include "Nebula.hpp"
 #include "NebulaMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
 #include "../plugins/Oculars/src/Oculars.hpp"
@@ -58,6 +59,7 @@
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
+#include "Constellation.hpp"
 #include "AsterismMgr.hpp"
 #include "StelLocationMgr.hpp"
 #include "StarMgr.hpp"
@@ -65,6 +67,7 @@
 #include "MilkyWay.hpp"
 #include "ZodiacalLight.hpp"
 #include "SpecialMarkersMgr.hpp"
+#include "StelOhosCommandCatalog.hpp"
 
 #ifndef STELLARIUM_OHOS_OFFLINE
 #include <QNetworkAccessManager>
@@ -105,6 +108,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QRegularExpression>
+#include <QTextStream>
 #include <QTextDocument>
 #include <QtPlugin>
 #include <QThread>
@@ -134,6 +138,7 @@ Q_LOGGING_CATEGORY(mainview, "stel.MainView")
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <clocale>
 #if defined(__OHOS__)
 #include <dlfcn.h>
@@ -664,6 +669,16 @@ static bool s_verticalClamp = true;
 static bool s_ohosPanInertiaActive = false;
 static bool s_ohosPinchActive = false;
 static double s_ohosPinchAnchorRelaxUntilSec = 0.0;
+enum class OhosPinchAnchorMode
+{
+	None,
+	SelectedObject,
+	SkyPoint
+};
+static OhosPinchAnchorMode s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+static Vec3d s_ohosPinchSkyPointJ2000(0.0, 0.0, 1.0);
+static double s_ohosPinchTargetXRatio = 0.5;
+static double s_ohosPinchTargetYRatio = 0.5;
 static double s_ohosPanInertiaVx = 0.0; // viewport pixels per millisecond
 static double s_ohosPanInertiaVy = 0.0;
 static double s_ohosPanInertiaElapsedSec = 0.0;
@@ -696,6 +711,7 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 	}
 	// Manual panning takes ownership immediately. An in-flight selection move
 	// must not write a stale camera direction on the next render frame.
+	++s_ohosNavigationSerial;
 	movementMgr->cancelAutoMove();
 	movementMgr->setFlagTracking(false);
 	// Every drag frame establishes the user's new intended target position
@@ -708,7 +724,7 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 
 static void ohosUpdatePanInertia(double dtSec)
 {
-	if (!s_ohosPanInertiaActive || s_viewLock)
+	if (!s_ohosPanInertiaActive)
 	{
 		s_ohosPanInertiaActive = false;
 		return;
@@ -962,6 +978,88 @@ static void ohosCaptureSelectedZoomAnchor()
 	s_ohosZoomAnchorYRatio = (viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3];
 }
 
+static void ohosBeginPinchAnchor(double touchX, double touchY, double touchWidth, double touchHeight)
+{
+	s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized() || touchWidth <= 1.0 || touchHeight <= 1.0)
+		return;
+	StelCore* core = app->getCore();
+	if (!core)
+		return;
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 1 || viewport[3] <= 1)
+		return;
+
+	s_ohosPinchTargetXRatio = qBound(0.0, touchX / touchWidth, 1.0);
+	s_ohosPinchTargetYRatio = qBound(0.0, touchY / touchHeight, 1.0);
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+	{
+		Vec3d projected;
+		const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+		if (projector->project(selectedObject->getJ2000EquatorialPos(core), projected)
+			&& projector->checkInViewport(projected))
+		{
+			const double selectedTouchX = ((projected[0] - viewport[0]) / viewport[2]) * touchWidth;
+			const double selectedTouchY = ((viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3]) * touchHeight;
+			const double threshold = qBound(48.0, qMin(touchWidth, touchHeight) * 0.08, 96.0);
+			if (std::hypot(selectedTouchX - touchX, selectedTouchY - touchY) <= threshold)
+			{
+				ohosCaptureSelectedZoomAnchor();
+				s_ohosPinchAnchorMode = OhosPinchAnchorMode::SelectedObject;
+				return;
+			}
+		}
+	}
+
+	const double viewportX = viewport[0] + s_ohosPinchTargetXRatio * viewport[2];
+	const double viewportY = viewport[1] + viewport[3] - 1 - s_ohosPinchTargetYRatio * viewport[3];
+	if (projector->unProject(viewportX, viewportY, s_ohosPinchSkyPointJ2000))
+	{
+		s_ohosPinchSkyPointJ2000.normalize();
+		s_ohosPinchAnchorMode = OhosPinchAnchorMode::SkyPoint;
+	}
+}
+
+static void ohosUpdatePinchTarget(double touchX, double touchY, double touchWidth, double touchHeight)
+{
+	if (s_ohosPinchAnchorMode != OhosPinchAnchorMode::SkyPoint || touchWidth <= 1.0 || touchHeight <= 1.0)
+		return;
+	s_ohosPinchTargetXRatio = qBound(0.0, touchX / touchWidth, 1.0);
+	s_ohosPinchTargetYRatio = qBound(0.0, touchY / touchHeight, 1.0);
+}
+
+static void ohosMaintainPinchSkyAnchor()
+{
+	if (!s_ohosPinchActive || s_ohosPinchAnchorMode != OhosPinchAnchorMode::SkyPoint || s_gyroViewActive)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	StelCore* core = app->getCore();
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : nullptr;
+	if (!core || !movementMgr)
+		return;
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 1 || viewport[3] <= 1)
+		return;
+	Vec3d projected;
+	if (!projector->project(s_ohosPinchSkyPointJ2000, projected))
+		return;
+	const double desiredX = viewport[0] + s_ohosPinchTargetXRatio * viewport[2];
+	const double desiredY = viewport[1] + viewport[3] - 1 - s_ohosPinchTargetYRatio * viewport[3];
+	if (std::abs(desiredX - projected[0]) < 1.5 && std::abs(desiredY - projected[1]) < 1.5)
+		return;
+	movementMgr->dragView(qRound(projected[0]), qRound(projected[1]), qRound(desiredX), qRound(desiredY));
+}
+
 static void ohosDeferSelectedAnchor(double seconds)
 {
 	s_ohosZoomAnchorObject.clear();
@@ -1092,7 +1190,7 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 			result["pending"] = true;
 			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 		}
-		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "endPinch" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
+		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "endPinch" || cmdName == "beginSkyGesture" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_ohosCmdQueue.append([command]() { command(); });
@@ -1174,9 +1272,58 @@ static int ohosTemperatureFromSpType(const QString& sp)
 	return base;
 }
 
+QJsonObject constellationDetailMediaJson(const StelObjectP& object)
+{
+	QJsonObject result;
+	if (!object || object->getType() != Constellation::CONSTELLATION_TYPE)
+		return result;
+
+	const QString abbreviation = object->getID();
+	if (abbreviation.isEmpty())
+		return result;
+
+	auto imagePathForCulture = [&abbreviation](const StelSkyCulture& culture, const QString& cultureId) {
+		for (const QJsonValue& constellation : culture.constellations)
+		{
+			if (!constellation.isObject())
+				continue;
+			const QJsonObject record = constellation.toObject();
+			const QStringList idParts = record.value(QStringLiteral("id")).toString().split(' ', Qt::SkipEmptyParts);
+			if (idParts.size() != 3 || idParts.at(0) != QStringLiteral("CON") || idParts.at(2) != abbreviation)
+				continue;
+			const QString imageFile = record.value(QStringLiteral("image")).toObject().value(QStringLiteral("file")).toString();
+			if (!imageFile.isEmpty())
+				return QStringLiteral("skycultures/%1/%2").arg(cultureId, imageFile);
+		}
+		return QString();
+	};
+
+	StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+	const QString currentCultureId = skyCultureMgr.getCurrentSkyCultureID();
+	const QMap<QString, StelSkyCulture> cultures = skyCultureMgr.getDirToNameMap();
+	QString rawPath = imagePathForCulture(cultures.value(currentCultureId), currentCultureId);
+	QString label = QStringLiteral("当前天空文化星座绘图");
+
+	// The IAU culture intentionally contains only stick figures. Its 88
+	// abbreviations are identical to the modern culture, which supplies the
+	// corresponding original illustrations.
+	if (rawPath.isEmpty() && currentCultureId == QStringLiteral("modern_iau"))
+	{
+		rawPath = imagePathForCulture(cultures.value(QStringLiteral("modern")), QStringLiteral("modern"));
+		label = QStringLiteral("现代星座绘图");
+	}
+	if (rawPath.isEmpty())
+		return result;
+
+	result[QStringLiteral("detailMediaPath")] = rawPath;
+	result[QStringLiteral("detailMediaKind")] = QStringLiteral("constellation");
+	result[QStringLiteral("detailMediaLabel")] = label;
+	return result;
+}
+
 // Complete object prose is expensive to generate. Initial selections need it for
 // the detail sheet, but the 300ms live refresh only needs the changing values.
-QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeFullInfo = true)
+QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = false)
 {
 	QJsonObject result;
 	result["ok"] = true;
@@ -1193,10 +1340,263 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeFullInfo = 
 	result["name"] = object->getNameI18n();
 	result["englishName"] = object->getEnglishName();
 	result["type"] = object->getObjectTypeI18n();
+	if (object->getType() == QLatin1String("Nebula"))
+	{
+		const NebulaP nebula = qSharedPointerCast<Nebula>(object);
+		const QString catalogId = nebula->getDSODesignationWIC();
+		if (!catalogId.isEmpty())
+			result["catalogId"] = catalogId;
+	}
+	const QJsonObject detailMedia = constellationDetailMediaJson(object);
+	for (auto it = detailMedia.constBegin(); it != detailMedia.constEnd(); ++it)
+		result[it.key()] = it.value();
 
 	if (core)
 	{
 		const QVariantMap m = object->getInfoMap(core);
+		if (includeDetails)
+		{
+			QJsonArray detailFields;
+			QSet<QString> emittedKeys;
+			auto appendField = [&detailFields, &emittedKeys](const QString& key, const QString& section, QString value) {
+				value.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+				value.replace(QRegularExpression(QStringLiteral("[\\r\\n]+")), QStringLiteral(" · "));
+				value = value.simplified();
+				if (value.isEmpty() || value == QLatin1String("?") || value == QLatin1String("---") || emittedKeys.contains(key))
+					return;
+				QJsonObject field;
+				field[QStringLiteral("key")] = key;
+				field[QStringLiteral("section")] = section;
+				field[QStringLiteral("value")] = value;
+				detailFields.append(field);
+				emittedKeys.insert(key);
+			};
+			auto appendText = [&m, &appendField](const QString& key, const QString& section, const QString& mapKey) {
+				if (!m.contains(mapKey))
+					return;
+				const QVariant value = m.value(mapKey);
+				QString text;
+				if (value.metaType().id() == QMetaType::QStringList)
+					text = value.toStringList().join(QStringLiteral(" · "));
+				else
+					text = value.toString();
+				appendField(key, section, text);
+			};
+			auto appendLocalizedText = [&m, &appendField](const QString& key, const QString& section, const QString& mapKey) {
+				if (!m.contains(mapKey))
+					return;
+				appendField(key, section, q_(m.value(mapKey).toString()));
+			};
+			auto appendNumber = [&m, &appendField](const QString& key, const QString& section, const QString& mapKey,
+				int decimals, const QString& suffix = QString()) {
+				if (!m.contains(mapKey))
+					return;
+				bool ok = false;
+				const double number = m.value(mapKey).toDouble(&ok);
+				if (!ok || !std::isfinite(number))
+					return;
+				appendField(key, section, QString::number(number, 'f', decimals) + suffix);
+			};
+			auto appendPositiveNumber = [&m, &appendNumber](const QString& key, const QString& section, const QString& mapKey,
+				int decimals, const QString& suffix = QString()) {
+				bool ok = false;
+				const double number = m.value(mapKey).toDouble(&ok);
+				if (ok && std::isfinite(number) && number > 0.0)
+					appendNumber(key, section, mapKey, decimals, suffix);
+			};
+			auto appendScaledPositiveNumber = [&m, &appendField](const QString& key, const QString& section,
+				const QString& mapKey, double scale, int decimals, const QString& suffix = QString()) {
+				bool ok = false;
+				const double number = m.value(mapKey).toDouble(&ok);
+				if (ok && std::isfinite(number) && number > 0.0)
+					appendField(key, section, QString::number(number * scale, 'f', decimals) + suffix);
+			};
+			auto appendNonZeroNumber = [&m, &appendField](const QString& key, const QString& section,
+				const QString& mapKey, int decimals, const QString& suffix = QString()) {
+				bool ok = false;
+				const double number = m.value(mapKey).toDouble(&ok);
+				if (ok && std::isfinite(number) && std::abs(number) > std::numeric_limits<double>::epsilon())
+					appendField(key, section, QString::number(number, 'g', decimals) + suffix);
+			};
+			auto appendDegreePair = [&m, &appendField](const QString& key, const QString& section,
+				const QString& firstKey, const QString& secondKey) {
+				bool firstOk = false;
+				bool secondOk = false;
+				const double first = m.value(firstKey).toDouble(&firstOk);
+				const double second = m.value(secondKey).toDouble(&secondOk);
+				if (firstOk && secondOk && std::isfinite(first) && std::isfinite(second))
+					appendField(key, section, QStringLiteral("%1°, %2°").arg(first, 0, 'f', 3).arg(second, 0, 'f', 3));
+			};
+
+			appendText(QStringLiteral("designations"), QStringLiteral("identity"), QStringLiteral("designations"));
+			appendText(QStringLiteral("culturalNames"), QStringLiteral("identity"), QStringLiteral("cultural-names"));
+			appendText(QStringLiteral("designation"), QStringLiteral("identity"), QStringLiteral("designation"));
+			appendText(QStringLiteral("catalogNumber"), QStringLiteral("identity"), QStringLiteral("catalog"));
+			appendText(QStringLiteral("internationalDesignator"), QStringLiteral("identity"), QStringLiteral("international-designator"));
+
+			appendText(QStringLiteral("hourAngle"), QStringLiteral("coordinates"), QStringLiteral("hourAngle-hms"));
+			if (m.contains(QStringLiteral("raJ2000")) && m.contains(QStringLiteral("decJ2000")))
+			{
+				const double raJ2000 = m.value(QStringLiteral("raJ2000")).toDouble() * M_PI / 180.0;
+				const double decJ2000 = m.value(QStringLiteral("decJ2000")).toDouble() * M_PI / 180.0;
+				appendField(QStringLiteral("equatorialJ2000"), QStringLiteral("coordinates"),
+					StelUtils::radToHmsStr(raJ2000) + QStringLiteral("  ") + StelUtils::radToDmsStr(decJ2000, true));
+			}
+			appendDegreePair(QStringLiteral("geometricAltAz"), QStringLiteral("coordinates"),
+				QStringLiteral("altitude-geometric"), QStringLiteral("azimuth-geometric"));
+			appendDegreePair(QStringLiteral("eclipticCurrent"), QStringLiteral("coordinates"), QStringLiteral("elong"), QStringLiteral("elat"));
+			appendDegreePair(QStringLiteral("eclipticJ2000"), QStringLiteral("coordinates"), QStringLiteral("elongJ2000"), QStringLiteral("elatJ2000"));
+			appendDegreePair(QStringLiteral("galactic"), QStringLiteral("coordinates"), QStringLiteral("glong"), QStringLiteral("glat"));
+			appendDegreePair(QStringLiteral("supergalactic"), QStringLiteral("coordinates"), QStringLiteral("sglong"), QStringLiteral("sglat"));
+			appendNumber(QStringLiteral("parallacticAngle"), QStringLiteral("coordinates"), QStringLiteral("parallacticAngle"), 2, QStringLiteral("°"));
+
+				auto appendMagnitude = [&m, &appendNumber](const QString& key, const QString& mapKey, const QString& suffix = QString()) {
+					bool ok = false;
+					const double magnitude = m.value(mapKey).toDouble(&ok);
+					if (ok && std::isfinite(magnitude) && magnitude > -50.0 && magnitude < 50.0)
+						appendNumber(key, QStringLiteral("observation"), mapKey, 2, suffix);
+				};
+				appendMagnitude(QStringLiteral("blueMagnitude"), QStringLiteral("bmag"));
+				appendMagnitude(QStringLiteral("surfaceBrightness"), QStringLiteral("surface-brightness"), QStringLiteral(" 等/平方角分"));
+			appendNumber(QStringLiteral("colorIndex"), QStringLiteral("observation"), QStringLiteral("bV"), 2);
+
+			appendText(QStringLiteral("spectralClass"), QStringLiteral("physical"), QStringLiteral("spectral-class"));
+			appendText(QStringLiteral("starType"), QStringLiteral("physical"), QStringLiteral("star-type"));
+			appendText(QStringLiteral("morphology"), QStringLiteral("physical"), QStringLiteral("morpho"));
+			appendNumber(QStringLiteral("redshift"), QStringLiteral("physical"), QStringLiteral("redshift"), 6);
+			if (m.contains(QStringLiteral("axis-major-dms")) || m.contains(QStringLiteral("axis-minor-dms")))
+			{
+				const QString major = m.value(QStringLiteral("axis-major-dms")).toString();
+				const QString minor = m.value(QStringLiteral("axis-minor-dms")).toString();
+				appendField(QStringLiteral("angularAxes"), QStringLiteral("physical"),
+					minor.isEmpty() ? major : QStringLiteral("%1 × %2").arg(major, minor));
+			}
+			appendNumber(QStringLiteral("positionAngle"), QStringLiteral("physical"), QStringLiteral("orientation-angle"), 1, QStringLiteral("°"));
+			appendNumber(QStringLiteral("albedo"), QStringLiteral("physical"), QStringLiteral("albedo"), 3);
+
+			if (m.contains(QStringLiteral("variable-star")))
+			{
+				appendText(QStringLiteral("variabilityType"), QStringLiteral("stellar"), QStringLiteral("variable-star"));
+				appendPositiveNumber(QStringLiteral("stellarParallax"), QStringLiteral("stellar"), QStringLiteral("parallax"), 3, QStringLiteral(" mas"));
+				appendNumber(QStringLiteral("stellarAbsoluteMagnitude"), QStringLiteral("stellar"), QStringLiteral("absolute-mag"), 2);
+				appendPositiveNumber(QStringLiteral("stellarDistance"), QStringLiteral("stellar"), QStringLiteral("distance-ly"), 2, QStringLiteral(" 光年"));
+				appendPositiveNumber(QStringLiteral("variabilityPeriod"), QStringLiteral("stellar"), QStringLiteral("period"), 6, QStringLiteral(" 天"));
+				appendPositiveNumber(QStringLiteral("doubleStarObservationYear"), QStringLiteral("stellar"), QStringLiteral("wds-year"), 0);
+				appendNumber(QStringLiteral("doubleStarPositionAngle"), QStringLiteral("stellar"), QStringLiteral("wds-position-angle"), 1, QStringLiteral("°"));
+				appendPositiveNumber(QStringLiteral("doubleStarSeparation"), QStringLiteral("stellar"), QStringLiteral("wds-separation"), 2, QStringLiteral("″"));
+			}
+
+			appendNumber(QStringLiteral("heliocentricDistance"), QStringLiteral("orbit"), QStringLiteral("heliocentric-distance"), 4, QStringLiteral(" AU"));
+			appendText(QStringLiteral("phaseAngle"), QStringLiteral("orbit"), QStringLiteral("phase-angle-dms"));
+			if (m.contains(QStringLiteral("is-waning")))
+				appendField(QStringLiteral("illuminationTrend"), QStringLiteral("orbit"),
+					m.value(QStringLiteral("is-waning")).toBool() ? QStringLiteral("waning") : QStringLiteral("waxing"));
+			appendPositiveNumber(QStringLiteral("orbitalSpeed"), QStringLiteral("orbit"), QStringLiteral("velocity-kms"), 3, QStringLiteral(" km/s"));
+			appendPositiveNumber(QStringLiteral("heliocentricSpeed"), QStringLiteral("orbit"), QStringLiteral("heliocentric-velocity-kms"), 3, QStringLiteral(" km/s"));
+			appendNumber(QStringLiteral("centralLongitude"), QStringLiteral("surface"), QStringLiteral("central_l"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("centralLatitude"), QStringLiteral("surface"), QStringLiteral("central_b"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("rotationAxisAngle"), QStringLiteral("surface"), QStringLiteral("pa_axis"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("subsolarLongitude"), QStringLiteral("surface"), QStringLiteral("subsolar_l"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("subsolarLatitude"), QStringLiteral("surface"), QStringLiteral("subsolar_b"), 2, QStringLiteral("°"));
+			bool eclipseOk = false;
+			const double eclipseMagnitude = m.value(QStringLiteral("eclipse-magnitude")).toDouble(&eclipseOk);
+			if (eclipseOk && std::isfinite(eclipseMagnitude) && eclipseMagnitude > 0.0)
+			{
+				appendScaledPositiveNumber(QStringLiteral("eclipseObscuration"), QStringLiteral("surface"), QStringLiteral("eclipse-obscuration"), 1.0, 2, QStringLiteral("%"));
+				appendPositiveNumber(QStringLiteral("eclipseMagnitude"), QStringLiteral("surface"), QStringLiteral("eclipse-magnitude"), 3);
+				appendNumber(QStringLiteral("eclipseCrescentAngle"), QStringLiteral("surface"), QStringLiteral("eclipse-crescent-angle"), 2, QStringLiteral("°"));
+			}
+
+			appendText(QStringLiteral("moonPhaseName"), QStringLiteral("lunar"), QStringLiteral("phase-name"));
+			appendPositiveNumber(QStringLiteral("moonAge"), QStringLiteral("lunar"), QStringLiteral("age"), 2, QStringLiteral(" 天"));
+			appendNumber(QStringLiteral("librationLongitude"), QStringLiteral("lunar"), QStringLiteral("libration_l"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("librationLatitude"), QStringLiteral("lunar"), QStringLiteral("libration_b"), 2, QStringLiteral("°"));
+			appendNumber(QStringLiteral("colongitude"), QStringLiteral("lunar"), QStringLiteral("colongitude"), 2, QStringLiteral("°"));
+			appendPositiveNumber(QStringLiteral("penumbralMagnitude"), QStringLiteral("lunar"), QStringLiteral("penumbral-eclipse-magnitude"), 3);
+			appendPositiveNumber(QStringLiteral("umbralMagnitude"), QStringLiteral("lunar"), QStringLiteral("umbral-eclipse-magnitude"), 3);
+
+			appendPositiveNumber(QStringLiteral("tailLength"), QStringLiteral("comet"), QStringLiteral("tail-length-km"), 0, QStringLiteral(" km"));
+			appendPositiveNumber(QStringLiteral("comaDiameter"), QStringLiteral("comet"), QStringLiteral("coma-diameter-km"), 0, QStringLiteral(" km"));
+
+			if (m.contains(QStringLiteral("tle-epoch")))
+			{
+				appendLocalizedText(QStringLiteral("description"), QStringLiteral("satellite"), QStringLiteral("description"));
+				appendText(QStringLiteral("tleEpoch"), QStringLiteral("satellite"), QStringLiteral("tle-epoch"));
+				appendText(QStringLiteral("tleLine1"), QStringLiteral("satellite"), QStringLiteral("tle1"));
+				appendText(QStringLiteral("tleLine2"), QStringLiteral("satellite"), QStringLiteral("tle2"));
+				appendPositiveNumber(QStringLiteral("range"), QStringLiteral("satellite"), QStringLiteral("range"), 1, QStringLiteral(" km"));
+				appendNumber(QStringLiteral("rangeRate"), QStringLiteral("satellite"), QStringLiteral("rangerate"), 3, QStringLiteral(" km/s"));
+				appendPositiveNumber(QStringLiteral("height"), QStringLiteral("satellite"), QStringLiteral("height"), 1, QStringLiteral(" km"));
+				appendDegreePair(QStringLiteral("subpoint"), QStringLiteral("satellite"), QStringLiteral("subpoint-lat"), QStringLiteral("subpoint-long"));
+				appendNumber(QStringLiteral("inclination"), QStringLiteral("satellite"), QStringLiteral("inclination"), 2, QStringLiteral("°"));
+				appendPositiveNumber(QStringLiteral("orbitalPeriod"), QStringLiteral("satellite"), QStringLiteral("period"), 2, QStringLiteral(" 分"));
+				appendPositiveNumber(QStringLiteral("perigeeAltitude"), QStringLiteral("satellite"), QStringLiteral("perigee-altitude"), 0, QStringLiteral(" km"));
+				appendPositiveNumber(QStringLiteral("apogeeAltitude"), QStringLiteral("satellite"), QStringLiteral("apogee-altitude"), 0, QStringLiteral(" km"));
+				appendPositiveNumber(QStringLiteral("sunReflectionAngle"), QStringLiteral("satellite"), QStringLiteral("sun-reflection-angle"), 2, QStringLiteral("°"));
+				appendText(QStringLiteral("operationalStatus"), QStringLiteral("satellite"), QStringLiteral("operational-status"));
+				appendLocalizedText(QStringLiteral("visibility"), QStringLiteral("satellite"), QStringLiteral("visibility"));
+			}
+
+			appendText(QStringLiteral("hostStarName"), QStringLiteral("plugin"), QStringLiteral("starProperName"));
+			appendText(QStringLiteral("hostStarAliases"), QStringLiteral("plugin"), QStringLiteral("starAltNames"));
+			appendText(QStringLiteral("hostSpectralType"), QStringLiteral("plugin"), QStringLiteral("stype"));
+			if (m.contains(QStringLiteral("starProperName")) || m.contains(QStringLiteral("hasHabitablePlanets")))
+				appendPositiveNumber(QStringLiteral("hostDistance"), QStringLiteral("plugin"), QStringLiteral("distance"), 2, QStringLiteral(" pc"));
+			appendPositiveNumber(QStringLiteral("hostMass"), QStringLiteral("plugin"), QStringLiteral("smass"), 3, QStringLiteral(" M☉"));
+			appendNumber(QStringLiteral("hostMetallicity"), QStringLiteral("plugin"), QStringLiteral("smetal"), 3);
+			appendPositiveNumber(QStringLiteral("hostRadius"), QStringLiteral("plugin"), QStringLiteral("sradius"), 3, QStringLiteral(" R☉"));
+			appendPositiveNumber(QStringLiteral("effectiveTemperature"), QStringLiteral("plugin"), QStringLiteral("effectiveTemp"), 0, QStringLiteral(" K"));
+			if (m.contains(QStringLiteral("hasHabitablePlanets")))
+				appendField(QStringLiteral("hasHabitablePlanets"), QStringLiteral("plugin"),
+					m.value(QStringLiteral("hasHabitablePlanets")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"));
+
+			appendText(QStringLiteral("novaType"), QStringLiteral("plugin"), QStringLiteral("nova-type"));
+			appendText(QStringLiteral("supernovaType"), QStringLiteral("plugin"), QStringLiteral("sntype"));
+			appendNumber(QStringLiteral("maximumMagnitude"), QStringLiteral("plugin"), QStringLiteral("max-magnitude"), 2);
+			appendNumber(QStringLiteral("minimumMagnitude"), QStringLiteral("plugin"), QStringLiteral("min-magnitude"), 2);
+			appendPositiveNumber(QStringLiteral("peakJulianDay"), QStringLiteral("plugin"), QStringLiteral("peakJD"), 3);
+			appendPositiveNumber(QStringLiteral("declineTwoMagnitudes"), QStringLiteral("plugin"), QStringLiteral("m2"), 2, QStringLiteral(" 天"));
+			appendPositiveNumber(QStringLiteral("declineThreeMagnitudes"), QStringLiteral("plugin"), QStringLiteral("m3"), 2, QStringLiteral(" 天"));
+			appendPositiveNumber(QStringLiteral("declineSixMagnitudes"), QStringLiteral("plugin"), QStringLiteral("m6"), 2, QStringLiteral(" 天"));
+			appendPositiveNumber(QStringLiteral("declineNineMagnitudes"), QStringLiteral("plugin"), QStringLiteral("m9"), 2, QStringLiteral(" 天"));
+			if (m.contains(QStringLiteral("peakJD")) && !m.contains(QStringLiteral("dmeasure")))
+				appendScaledPositiveNumber(QStringLiteral("transientDistance"), QStringLiteral("plugin"), QStringLiteral("distance"), 1000.0, 2, QStringLiteral(" 光年"));
+			appendText(QStringLiteral("notes"), QStringLiteral("plugin"), QStringLiteral("notes"));
+			appendText(QStringLiteral("note"), QStringLiteral("plugin"), QStringLiteral("note"));
+
+			appendNumber(QStringLiteral("absoluteMagnitude"), QStringLiteral("plugin"), QStringLiteral("amag"), 2);
+			appendNumber(QStringLiteral("radioFlux6cm"), QStringLiteral("plugin"), QStringLiteral("f6"), 2, QStringLiteral(" Jy"));
+			appendNumber(QStringLiteral("radioFlux20cm"), QStringLiteral("plugin"), QStringLiteral("f20"), 2, QStringLiteral(" Jy"));
+			appendText(QStringLiteral("sourceClass"), QStringLiteral("plugin"), QStringLiteral("sclass"));
+
+			if (m.contains(QStringLiteral("dmeasure")) || m.contains(QStringLiteral("bperiod")))
+			{
+				appendPositiveNumber(QStringLiteral("annualParallax"), QStringLiteral("plugin"), QStringLiteral("parallax"), 3, QStringLiteral(" mas"));
+				appendPositiveNumber(QStringLiteral("binaryPeriod"), QStringLiteral("plugin"), QStringLiteral("bperiod"), 6, QStringLiteral(" 天"));
+				appendPositiveNumber(QStringLiteral("pulseFrequency"), QStringLiteral("plugin"), QStringLiteral("frequency"), 6, QStringLiteral(" Hz"));
+				appendNonZeroNumber(QStringLiteral("frequencyDerivative"), QStringLiteral("plugin"), QStringLiteral("pfrequency"), 8, QStringLiteral(" Hz/s"));
+				appendNonZeroNumber(QStringLiteral("periodDerivative"), QStringLiteral("plugin"), QStringLiteral("pderivative"), 8, QStringLiteral(" s/s"));
+				appendPositiveNumber(QStringLiteral("pulsePeriod"), QStringLiteral("plugin"), QStringLiteral("period"), 9, QStringLiteral(" s"));
+				appendPositiveNumber(QStringLiteral("dispersionMeasure"), QStringLiteral("plugin"), QStringLiteral("dmeasure"), 3, QStringLiteral(" pc/cm³"));
+				appendNumber(QStringLiteral("eccentricity"), QStringLiteral("plugin"), QStringLiteral("eccentricity"), 6);
+				appendPositiveNumber(QStringLiteral("electronDensityDistance"), QStringLiteral("plugin"), QStringLiteral("distance"), 3, QStringLiteral(" kpc"));
+				appendPositiveNumber(QStringLiteral("distanceEstimate"), QStringLiteral("plugin"), QStringLiteral("adistance"), 3, QStringLiteral(" kpc"));
+				appendPositiveNumber(QStringLiteral("profileWidth50"), QStringLiteral("plugin"), QStringLiteral("w50"), 2, QStringLiteral(" ms"));
+				appendText(QStringLiteral("glitchCount"), QStringLiteral("plugin"), QStringLiteral("glitch"));
+				appendPositiveNumber(QStringLiteral("flux400"), QStringLiteral("plugin"), QStringLiteral("s400"), 2, QStringLiteral(" mJy"));
+				appendPositiveNumber(QStringLiteral("flux600"), QStringLiteral("plugin"), QStringLiteral("s600"), 2, QStringLiteral(" mJy"));
+				appendPositiveNumber(QStringLiteral("flux1400"), QStringLiteral("plugin"), QStringLiteral("s1400"), 2, QStringLiteral(" mJy"));
+			}
+
+			appendText(QStringLiteral("meteorStatus"), QStringLiteral("plugin"), QStringLiteral("status"));
+			appendText(QStringLiteral("meteorCode"), QStringLiteral("plugin"), QStringLiteral("id"));
+			appendPositiveNumber(QStringLiteral("meteorVelocity"), QStringLiteral("plugin"), QStringLiteral("velocity"), 1, QStringLiteral(" km/s"));
+			appendPositiveNumber(QStringLiteral("populationIndex"), QStringLiteral("plugin"), QStringLiteral("population-index"), 2);
+			appendText(QStringLiteral("parentBody"), QStringLiteral("plugin"), QStringLiteral("parent"));
+			appendText(QStringLiteral("maximumZhr"), QStringLiteral("plugin"), QStringLiteral("zhr-max"));
+
+			result[QStringLiteral("detailFields")] = detailFields;
+		}
 
 		// Normalized magnitude (visual, no extinction)
 		if (m.contains("vmag"))
@@ -1282,18 +1682,6 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeFullInfo = 
 		if (m.contains("elongation"))
 			result["elongation"] = m["elongation"].toDouble() * 180.0 / M_PI;
 
-		// Plain-text summary info
-		const QString info = object->getInfoString(core, StelObject::ShortInfo |
-			StelObject::Magnitude | StelObject::AltAzi | StelObject::Distance |
-			StelObject::Size | StelObject::PlainText).simplified();
-		if (!info.isEmpty())
-			result["info"] = info;
-		if (includeFullInfo)
-		{
-			const QString fullInfo = object->getInfoString(core, StelObject::AllInfo | StelObject::PlainText).simplified();
-			if (!fullInfo.isEmpty())
-				result["fullInfo"] = fullInfo;
-		}
 	}
 	return result;
 }
@@ -1575,6 +1963,89 @@ struct StarCatalogDownloader
 };
 static StarCatalogDownloader g_starDownloader;
 #endif
+constexpr int OHOS_SATELLITE_CATALOG_MAX_AGE_DAYS = 14;
+constexpr int OHOS_STAR_CATALOG_MAX_AGE_DAYS = 180;
+
+double catalogAgeDays(const QDateTime& checkedAt)
+{
+	if (!checkedAt.isValid())
+		return -1.0;
+	return qMax(0.0, checkedAt.toUTC().secsTo(QDateTime::currentDateTimeUtc()) / 86400.0);
+}
+
+QJsonObject catalogStatus(const QString& status, const QDateTime& checkedAt, int maxAgeDays)
+{
+	QJsonObject result;
+	result["status"] = status;
+	result["checkedAt"] = checkedAt.isValid() ? checkedAt.toUTC().toString(Qt::ISODate) : QString();
+	result["ageDays"] = catalogAgeDays(checkedAt);
+	result["maxAgeDays"] = maxAgeDays;
+	return result;
+}
+
+QJsonObject getOhosCatalogHealth()
+{
+	QJsonObject result;
+	QJsonObject satellites = catalogStatus("unknown", QDateTime(), OHOS_SATELLITE_CATALOG_MAX_AGE_DAYS);
+	QJsonObject stars = catalogStatus("unknown", QDateTime(), OHOS_STAR_CATALOG_MAX_AGE_DAYS);
+	QString manifestPath;
+	try { manifestPath = StelFileMgr::findFile(QStringLiteral("data/ohos/catalog-manifest.json")); }
+	catch (...) { manifestPath.clear(); }
+
+	QFile manifestFile(manifestPath);
+	QJsonParseError parseError;
+	const bool opened = !manifestPath.isEmpty() && manifestFile.open(QIODevice::ReadOnly);
+	const QJsonDocument manifest = opened ? QJsonDocument::fromJson(manifestFile.readAll(), &parseError) : QJsonDocument();
+	if (!opened || parseError.error != QJsonParseError::NoError || !manifest.isObject())
+	{
+		result["manifestPresent"] = false;
+		result["satellites"] = satellites;
+		result["stars"] = stars;
+		return result;
+	}
+
+	result["manifestPresent"] = true;
+	const QJsonObject catalogs = manifest.object().value("catalogs").toObject();
+	const QJsonObject satelliteManifest = catalogs.value("satellites").toObject();
+	const QDateTime satelliteUpdatedAt = QDateTime::fromString(satelliteManifest.value("fetchedAt").toString(), Qt::ISODate);
+	const double satelliteAge = catalogAgeDays(satelliteUpdatedAt);
+	const bool partial = satelliteManifest.value("partial").toBool(false);
+	const bool verified = satelliteManifest.value("verified").toBool(false);
+	const bool satelliteIntegrityFailure = !verified && !partial;
+	const bool satelliteStale = !satelliteUpdatedAt.isValid() || satelliteAge > OHOS_SATELLITE_CATALOG_MAX_AGE_DAYS || satelliteIntegrityFailure;
+	satellites = catalogStatus(satelliteStale ? "stale" : (partial ? "attention" : "current"), satelliteUpdatedAt, OHOS_SATELLITE_CATALOG_MAX_AGE_DAYS);
+	satellites["verified"] = verified;
+	satellites["partial"] = partial;
+	satellites["sourceErrors"] = satelliteManifest.value("sourceErrors").toArray().size();
+	satellites["entries"] = satelliteManifest.value("entries").toInt();
+
+	const QJsonObject starManifest = catalogs.value("stars").toObject();
+	const QDateTime starsCheckedAt = QDateTime::fromString(starManifest.value("checkedAt").toString(), Qt::ISODate);
+	const double starsAge = catalogAgeDays(starsCheckedAt);
+	const bool starsVerified = starManifest.value("verified").toBool(false);
+	QJsonArray missingFiles;
+	for (const QJsonValue& fileValue : starManifest.value("files").toArray())
+	{
+		const QJsonObject file = fileValue.toObject();
+		const QString fileName = file.value("file").toString();
+		const qint64 expectedBytes = qint64(file.value("bytes").toDouble());
+		QString filePath;
+		try { filePath = StelFileMgr::findFile(QStringLiteral("stars/hip_gaia3/%1").arg(fileName)); }
+		catch (...) { filePath.clear(); }
+		const QFileInfo fileInfo(filePath);
+		if (fileName.isEmpty() || !fileInfo.isFile() || (expectedBytes > 0 && fileInfo.size() != expectedBytes))
+			missingFiles.append(fileName);
+	}
+	const bool starStale = !starsCheckedAt.isValid() || starsAge > OHOS_STAR_CATALOG_MAX_AGE_DAYS || !starsVerified || !missingFiles.isEmpty();
+	stars = catalogStatus(starStale ? "stale" : "current", starsCheckedAt, OHOS_STAR_CATALOG_MAX_AGE_DAYS);
+	stars["verified"] = starsVerified;
+	stars["missingFiles"] = missingFiles;
+	stars["files"] = starManifest.value("files").toArray().size();
+
+	result["satellites"] = satellites;
+	result["stars"] = stars;
+	return result;
+}
 
 // ---- Bookmarks store (OHOS bridge) ----
 // 保存当前视图（J2000 视方向单位向量 + 视场 + 选中天体名）到 userDir/bookmarks.json
@@ -1799,6 +2270,55 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		StelCore* core = StelApp::getInstance().getCore();
 		StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
 		StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+
+		if (commandName == "getCommandCatalog")
+		{
+			result["ok"] = true;
+			result["version"] = 1;
+			result["offlineOnly"] = true;
+			result["transport"] = "local-hdc-aa-want";
+			result["commands"] = StellariumOhosCommandCatalog::all();
+			return result;
+		}
+		if (commandName == "getCommandSchema")
+		{
+			const QString requested = arg.trimmed();
+			const QJsonObject schema = StellariumOhosCommandCatalog::schema(requested);
+			if (schema.isEmpty())
+			{
+				result["error"] = "unknown command";
+				return result;
+			}
+			result["ok"] = true;
+			result["schema"] = schema;
+			return result;
+		}
+		if (commandName == "getCommandStatus")
+		{
+			const QString requested = arg.trimmed();
+			const QJsonObject schema = StellariumOhosCommandCatalog::schema(requested);
+			if (schema.isEmpty())
+			{
+				result["error"] = "unknown command";
+				return result;
+			}
+			result["ok"] = true;
+			result["available"] = true;
+			result["loaded"] = true;
+			result["restricted"] = schema.value("requiresConfirmation").toBool();
+			result["network"] = !schema.value("offline").toBool();
+			result["command"] = requested;
+			return result;
+		}
+		if (commandName == "getCatalogHealth")
+		{
+			result["ok"] = true;
+			const QJsonObject health = getOhosCatalogHealth();
+			result["manifestPresent"] = health.value("manifestPresent").toBool(false);
+			result["satellites"] = health.value("satellites").toObject();
+			result["stars"] = health.value("stars").toObject();
+			return result;
+		}
 
 		if (commandName == "setActionStates")
 		{
@@ -2060,6 +2580,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const bool selectOnly = searchParts.contains(QStringLiteral("selectOnly"), Qt::CaseInsensitive);
 			QString preferredModule;
 			bool found = false;
+			if (query == QLatin1String("object") && searchParts.size() >= 3)
+			{
+				const QString objectType = searchParts.value(1).trimmed();
+				const QString objectId = searchParts.value(2).trimmed();
+				const StelObjectP object = objectMgr->searchByID(objectType, objectId);
+				if (object)
+				{
+					found = objectMgr->setSelectedObject(object);
+					query = object->getEnglishName();
+				}
+				else
+				{
+					qWarning() << "[StellariumOhos][search-select] object not found type="
+							<< objectType << "id=" << objectId;
+				}
+			}
 			if (query == QLatin1String("catalog") && searchParts.size() >= 3)
 			{
 				const QString moduleId = searchParts.value(1).trimmed();
@@ -2211,34 +2747,59 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			prefix = prefix.left(sep);
 		}
 		const QString query = prefix.trimmed();
-		const QString normalizedQuery = [&query]() {
-			QString value = query.toLower();
-			value.remove(QRegularExpression(QStringLiteral("[\\s_-]+")));
-			return value;
-		}();
+		auto normalizeSearchText = [](QString value) {
+			// Search input can come from a keyboard, IME, voice input, or a
+			// catalog alias. Normalize equivalent Unicode forms before matching.
+			value = value.normalized(QString::NormalizationForm_KC).toCaseFolded();
+			const QString decomposed = value.normalized(QString::NormalizationForm_D);
+			QString folded;
+			folded.reserve(decomposed.size());
+			for (int index = 0; index < decomposed.size(); ++index)
+			{
+				const QChar character = decomposed.at(index);
+				const QChar previous = index > 0 ? decomposed.at(index - 1) : QChar();
+				const bool latinLikeMark = character.category() == QChar::Mark_NonSpacing
+					&& (previous.script() == QChar::Script_Latin
+						|| previous.script() == QChar::Script_Greek
+						|| previous.script() == QChar::Script_Cyrillic);
+				if (latinLikeMark)
+					continue;
+				const int digit = character.digitValue();
+				if (digit >= 0)
+					folded.append(QChar(QLatin1Char('0').unicode() + digit));
+				else
+					folded.append(character);
+			}
+			folded.remove(QRegularExpression(QStringLiteral("[\\p{P}\\p{S}\\s]+")));
+			return folded;
+		};
+		const QString normalizedQuery = normalizeSearchText(query);
 		struct SearchCandidate
 		{
 			QString label;
 			StelObjectP object;
 			int rank;
+			bool crossLanguage = false;
 		};
 		QVector<SearchCandidate> candidates;
 		QHash<QString, int> candidateIndexes;
-		auto addCandidate = [&](const QString& label, const StelObjectP& object)
+		auto addCandidate = [&](const QString& label, const StelObjectP& object, int forcedRank = -1, bool crossLanguage = false)
 		{
 			if (!object || label.trimmed().isEmpty() || normalizedQuery.isEmpty())
 				return;
-			QString normalizedLabel = label.trimmed().toLower();
-			normalizedLabel.remove(QRegularExpression(QStringLiteral("[\\s_-]+")));
+			const QString normalizedLabel = normalizeSearchText(label.trimmed());
 			if (normalizedLabel.isEmpty())
 				return;
-			int rank = -1;
-			if (normalizedLabel == normalizedQuery)
-				rank = 0;
-			else if (normalizedLabel.startsWith(normalizedQuery))
-				rank = 1;
-			else if (normalizedLabel.contains(normalizedQuery))
-				rank = 2;
+			int rank = forcedRank;
+			if (rank < 0)
+			{
+				if (normalizedLabel == normalizedQuery)
+					rank = 0;
+				else if (normalizedLabel.startsWith(normalizedQuery))
+					rank = 1;
+				else if (normalizedLabel.contains(normalizedQuery))
+					rank = 2;
+			}
 			if (rank < 0)
 				return;
 			const QString objectKey = object->getType() + QLatin1Char('|') + object->getID();
@@ -2250,37 +2811,178 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				{
 					current.label = label.trimmed();
 					current.rank = rank;
+					current.crossLanguage = crossLanguage;
 				}
 				return;
 			}
 			candidateIndexes.insert(objectKey, candidates.size());
-			candidates.append({label.trimmed(), object, rank});
+			candidates.append({label.trimmed(), object, rank, crossLanguage});
 		};
 
-		// Keep the module-specific catalog matching, but search all supported
-		// display names and stable IDs as well. This covers localized names,
-		// English names, catalog numbers, and names omitted by a module's
-		// optional additional-name setting.
-		const auto indexedMatches = objectMgr->listMatchingObjects(query, maxItems * 4, false);
-		for (const auto& pair : indexedMatches)
-			addCandidate(pair.first, pair.second);
-		const auto moduleMap = objectMgr->objectModulesMap();
-		for (auto it = moduleMap.constBegin(); it != moduleMap.constEnd(); ++it)
+		// Reuse every loaded module's own index. It understands official aliases,
+		// catalog designations and plugin-specific availability rules without
+		// rebuilding whole star/DSO catalogues on every keystroke.
+		QStringList queryVariants;
+		auto addVariant = [&queryVariants](const QString& value) {
+			const QString trimmed = value.trimmed();
+			if (!trimmed.isEmpty() && !queryVariants.contains(trimmed, Qt::CaseInsensitive))
+				queryVariants.append(trimmed);
+		};
+		addVariant(query);
+		QString spacedQuery = query;
+		spacedQuery.replace(QRegularExpression(QStringLiteral("[\\s_-]+")), QStringLiteral(" "));
+		addVariant(spacedQuery.simplified());
+		addVariant(normalizedQuery);
+		addVariant(StelUtils::substituteGreek(query));
+		for (const QString& variant : std::as_const(queryVariants))
 		{
-			if (it.key().contains(QLatin1Char(':')))
-				continue;
-			for (const bool inEnglish : {true, false})
+			const auto indexedMatches = objectMgr->listMatchingObjects(variant, maxItems * 4, false);
+			for (const auto& pair : indexedMatches)
 			{
-				const auto objects = objectMgr->listAllModuleObjects(it.key(), inEnglish);
-				for (const auto& pair : objects)
+				addCandidate(pair.first, pair.second);
+				if (pair.second)
 				{
-					const StelObjectP object = pair.second;
-					if (!object)
+					addCandidate(pair.second->getEnglishName(), pair.second);
+					addCandidate(pair.second->getNameI18n(), pair.second);
+					addCandidate(pair.second->getID(), pair.second);
+				}
+			}
+		}
+
+		// The active Qt translation catalog only indexes the selected language.
+		// Merge the generated official aliases into the normal result set instead
+		// of using them only when local results are empty. This preserves exact
+		// local matches while keeping useful cross-language candidates visible.
+		auto differsByAtMostOne = [](const QString& left, const QString& right) {
+			if (qAbs(left.size() - right.size()) > 1)
+				return false;
+			int leftIndex = 0;
+			int rightIndex = 0;
+			int differences = 0;
+			while (leftIndex < left.size() && rightIndex < right.size())
+			{
+				if (left.at(leftIndex) == right.at(rightIndex))
+				{
+					++leftIndex;
+					++rightIndex;
+					continue;
+				}
+				if (++differences > 1)
+					return false;
+				if (left.size() > right.size())
+					++leftIndex;
+				else if (right.size() > left.size())
+					++rightIndex;
+				else
+				{
+					++leftIndex;
+					++rightIndex;
+				}
+			}
+			return true;
+		};
+		if (!normalizedQuery.isEmpty())
+		{
+			struct CrossLanguageAlias { QString englishName; };
+			static QHash<QString, QVector<CrossLanguageAlias>> aliasesByNormalizedName;
+			static bool aliasesLoaded = false;
+			if (!aliasesLoaded)
+			{
+				aliasesLoaded = true;
+				const QString indexPath = StelFileMgr::findFile(QStringLiteral("data/search/multilingual-sky-aliases.tsv"));
+				QFile indexFile(indexPath);
+				if (indexFile.open(QFile::ReadOnly | QFile::Text))
+				{
+					QTextStream stream(&indexFile);
+					while (!stream.atEnd())
+					{
+						const QString line = stream.readLine();
+						if (line.startsWith(QLatin1Char('#')))
+							continue;
+						const QStringList fields = line.split(QLatin1Char('\t'));
+						if (fields.size() < 2)
+							continue;
+						const QString normalizedAlias = normalizeSearchText(fields.at(0));
+						const QString englishName = fields.at(1).trimmed();
+						if (!normalizedAlias.isEmpty() && !englishName.isEmpty())
+							aliasesByNormalizedName[normalizedAlias].append({englishName});
+					}
+					qInfo() << "[StellariumOhos][search] loaded official multilingual aliases:" << aliasesByNormalizedName.size();
+				}
+				else
+				{
+					qWarning() << "[StellariumOhos][search] multilingual alias index unavailable:" << indexPath;
+				}
+			}
+
+			auto addCrossLanguageAlias = [&](const QString& normalizedAlias, int rank) {
+				const auto aliases = aliasesByNormalizedName.constFind(normalizedAlias);
+				if (aliases == aliasesByNormalizedName.constEnd())
+					return;
+				for (const CrossLanguageAlias& alias : *aliases)
+				{
+					const StelObjectP object = objectMgr->searchByName(alias.englishName);
+					if (object)
+						addCandidate(object->getNameI18n(), object, rank, true);
+				}
+			};
+
+			addCrossLanguageAlias(normalizedQuery, 3);
+			if (candidates.size() < maxItems * 4 && normalizedQuery.size() >= 2)
+			{
+				for (auto it = aliasesByNormalizedName.constBegin(); it != aliasesByNormalizedName.constEnd() && candidates.size() < maxItems * 4; ++it)
+				{
+					if (it.key().startsWith(normalizedQuery))
+						addCrossLanguageAlias(it.key(), 4);
+				}
+			}
+			if (candidates.size() < maxItems * 4 && normalizedQuery.size() >= 3)
+			{
+				for (auto it = aliasesByNormalizedName.constBegin(); it != aliasesByNormalizedName.constEnd() && candidates.size() < maxItems * 4; ++it)
+				{
+					if (it.key().contains(normalizedQuery))
+						addCrossLanguageAlias(it.key(), 5);
+				}
+			}
+			// A one-character typo in a translated name should behave like a
+			// one-character typo in English. Resolve only close official aliases;
+			// this stays bounded by the result cap and never scans object catalogs.
+			if (candidates.size() < maxItems * 4 && normalizedQuery.size() >= 3)
+			{
+				for (auto it = aliasesByNormalizedName.constBegin(); it != aliasesByNormalizedName.constEnd() && candidates.size() < maxItems * 4; ++it)
+				{
+					if (!differsByAtMostOne(normalizedQuery, it.key()))
 						continue;
-					addCandidate(pair.first, object);
-					addCandidate(object->getEnglishName(), object);
-					addCandidate(object->getNameI18n(), object);
-					addCandidate(object->getID(), object);
+					addCrossLanguageAlias(it.key(), 7);
+				}
+			}
+		}
+
+		// A typo or a missing Chinese connective character should not turn an
+		// otherwise known object into a dead end. This fallback is bounded and
+		// only consults the module's indexed prefix candidates.
+		if (normalizedQuery.size() >= 3 && candidates.size() < maxItems * 4)
+		{
+			QSet<QString> fuzzyPrefixes;
+			fuzzyPrefixes.insert(query.left(query.size() - 1).trimmed());
+			fuzzyPrefixes.insert(query.left(qMax(2, (query.size() * 2) / 3)).trimmed());
+			for (const QString& fuzzyPrefix : std::as_const(fuzzyPrefixes))
+			{
+				if (fuzzyPrefix.size() < 2)
+					continue;
+				const auto nearMatches = objectMgr->listMatchingObjects(fuzzyPrefix, 12, false);
+				for (const auto& pair : nearMatches)
+				{
+					if (!pair.second)
+						continue;
+					auto addNearMatch = [&](const QString& label) {
+						if (differsByAtMostOne(normalizedQuery, normalizeSearchText(label)))
+							addCandidate(label, pair.second, 6);
+					};
+					addNearMatch(pair.first);
+					addNearMatch(pair.second->getEnglishName());
+					addNearMatch(pair.second->getNameI18n());
+					addNearMatch(pair.second->getID());
 				}
 			}
 		}
@@ -2291,6 +2993,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		});
 		QJsonArray items;
 		QJsonArray keys;
+		QJsonArray ids;
+		QJsonArray typeIds;
+		QJsonArray types;
+		QJsonArray fuzzy;
+		QJsonArray crossLanguage;
 		for (int i = 0; i < candidates.size() && i < maxItems; ++i)
 		{
 			const auto& candidate = candidates.at(i);
@@ -2299,8 +3006,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			// return the object's stable English name for the follow-up selection.
 			const QString key = candidate.object ? candidate.object->getEnglishName() : QString();
 			keys.append(key.isEmpty() ? candidate.label : key);
+			ids.append(candidate.object ? candidate.object->getID() : QString());
+			typeIds.append(candidate.object ? candidate.object->getType() : QString());
+			types.append(candidate.object ? candidate.object->getObjectTypeI18n() : QString());
+			fuzzy.append(candidate.rank >= 6);
+			crossLanguage.append(candidate.crossLanguage);
 		}
 		result["ok"] = true; result["items"] = items; result["keys"] = keys;
+		result["ids"] = ids; result["typeIds"] = typeIds; result["types"] = types; result["fuzzy"] = fuzzy; result["crossLanguage"] = crossLanguage;
 		result["count"] = items.size(); result["prefix"] = query;
 		return result;
 	}
@@ -2308,6 +3021,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	if (commandName == "listObjects")
 	{
 		if (!objectMgr) { result["error"] = "object manager not found"; return result; }
+		StelCore* core = StelApp::getInstance().getCore();
+		if (!core) { result["error"] = "core not ready"; return result; }
 		const QStringList options = arg.split('|');
 		QString moduleId = options.value(0).trimmed();
 		int maxItems = 60;
@@ -2323,9 +3038,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		const int requestedOffset = options.value(2).trimmed().toInt(&isOffset);
 		if (isOffset)
 			offset = qMax(0, requestedOffset);
+		const QString visibilityFilter = options.value(3).trimmed().toLower();
+		const QString instrumentFilter = options.value(4).trimmed().toLower();
 		const auto list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
 		QJsonArray items;
 		QJsonArray keys;
+		QJsonArray types;
+		QJsonArray altitudes;
+		QJsonArray magnitudes;
+		QJsonArray visibleNow;
 		QSet<QString> seenIds;
 		int uniqueCount = 0;
 		for (const auto& pair : list)
@@ -2335,6 +3056,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (id.isEmpty() || seenIds.contains(id))
 				continue;
 			seenIds.insert(id);
+			const Vec3d altAz = object ? object->getAltAzPosAuto(core) : Vec3d();
+			double azimuth = 0.0;
+			double altitude = -M_PI_2;
+			if (object && altAz.normSquared() > 0.0)
+				StelUtils::rectToSphe(&azimuth, &altitude, altAz);
+			const double altitudeDegrees = altitude * M_180_PI;
+			const double magnitude = object ? object->getVMagnitudeWithExtinction(core) : 99.0;
+			if (visibilityFilter == QStringLiteral("above") && altitudeDegrees < 0.0)
+				continue;
+			if (visibilityFilter == QStringLiteral("good") && altitudeDegrees < 20.0)
+				continue;
+			if (instrumentFilter == QStringLiteral("naked") && magnitude > 6.0)
+				continue;
+			if (instrumentFilter == QStringLiteral("binocular") && magnitude > 10.0)
+				continue;
 			if (uniqueCount >= offset && items.size() < maxItems)
 			{
 				QString displayName = object ? object->getNameI18n() : pair.first;
@@ -2342,12 +3078,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					displayName = pair.first;
 				items.append(displayName);
 				keys.append(id);
+				types.append(object ? object->getObjectTypeI18n() : QString());
+				altitudes.append(altitudeDegrees);
+				magnitudes.append(magnitude);
+				visibleNow.append(altitudeDegrees >= 0.0);
 			}
 			++uniqueCount;
 		}
 		result["ok"] = true; result["items"] = items; result["keys"] = keys;
+		result["types"] = types; result["altitudes"] = altitudes; result["magnitudes"] = magnitudes; result["visibleNow"] = visibleNow;
 		result["count"] = uniqueCount; result["hasMore"] = offset + items.size() < uniqueCount;
 		result["offset"] = offset; result["moduleId"] = moduleId;
+		result["visibilityFilter"] = visibilityFilter; result["instrumentFilter"] = instrumentFilter;
 		qInfo() << "[StellariumOhos][catalog-page] module=" << moduleId
 				<< "offset=" << offset << "returned=" << items.size() << "total=" << uniqueCount;
 		return result;
@@ -2482,6 +3224,25 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "beginSkyGesture")
+		{
+			if (!movementMgr)
+			{
+				result["error"] = "movement manager not ready";
+				return result;
+			}
+			// A touch on unobstructed sky owns the camera immediately. This also
+			// invalidates panel-safe-area timers before the drag threshold is met.
+			++s_ohosNavigationSerial;
+			movementMgr->cancelAutoMove();
+			s_ohosPanInertiaActive = false;
+			s_ohosSelectedAnchorHoldUntilSec = 0.0;
+			ohosCaptureSelectedZoomAnchor();
+			markOhosInteraction();
+			result["ok"] = true;
+			return result;
+		}
+
 		if (commandName == "startPanInertia")
 		{
 			const QStringList parts = arg.split('|');
@@ -2489,7 +3250,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			bool okY = false;
 			const double vx = parts.value(0).toDouble(&okX);
 			const double vy = parts.value(1).toDouble(&okY);
-			if (!okX || !okY || s_viewLock)
+			if (!okX || !okY)
 			{
 				result["ok"] = true;
 				return result;
@@ -2560,6 +3321,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			bool okScale = false;
 			const double scale = parts.value(0).toDouble(&okScale);
 			const bool started = parts.value(1) == "1" || parts.value(1).toLower() == "true";
+			bool okCenterX = false;
+			bool okCenterY = false;
+			bool okTouchWidth = false;
+			bool okTouchHeight = false;
+			const double centerX = parts.value(2).toDouble(&okCenterX);
+			const double centerY = parts.value(3).toDouble(&okCenterY);
+			const double touchWidth = parts.value(4).toDouble(&okTouchWidth);
+			const double touchHeight = parts.value(5).toDouble(&okTouchHeight);
+			const bool hasTouchCenter = parts.size() >= 6 && okCenterX && okCenterY
+				&& okTouchWidth && okTouchHeight && touchWidth > 1.0 && touchHeight > 1.0;
 			if (!okScale || scale <= 0.0)
 			{
 				result["error"] = "invalid zoom scale";
@@ -2574,8 +3345,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				movementMgr->cancelAutoMove();
 				s_ohosSelectedAnchorHoldUntilSec = 0.0;
 				s_ohosPinchActive = true;
-				ohosCaptureSelectedZoomAnchor();
+				if (hasTouchCenter)
+					ohosBeginPinchAnchor(centerX, centerY, touchWidth, touchHeight);
+				else
+				{
+					ohosCaptureSelectedZoomAnchor();
+					s_ohosPinchAnchorMode = OhosPinchAnchorMode::SelectedObject;
+				}
 			}
+			else if (hasTouchCenter)
+				ohosUpdatePinchTarget(centerX, centerY, touchWidth, touchHeight);
 			movementMgr->handlePinch(scale, started);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -2585,14 +3364,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "endPinch")
 		{
+			// The last absolute scale and endPinch may be drained in the same
+			// render frame. Apply its anchor once before clearing gesture state so
+			// the final frame cannot jump away from the fingers.
+			if (s_ohosPinchAnchorMode == OhosPinchAnchorMode::SkyPoint)
+				ohosMaintainPinchSkyAnchor();
+			else if (s_ohosPinchAnchorMode == OhosPinchAnchorMode::SelectedObject)
+				ohosMaintainSelectedZoomAnchor();
 			s_ohosPinchActive = false;
+			s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
 			s_ohosPinchAnchorRelaxUntilSec = StelApp::getTotalRunTime() + 0.18;
+			s_ohosCaptureSelectedAnchorAfterPan = true;
 			result["ok"] = true;
 			return result;
 		}
 
 		if (commandName == "getSelectedObjectInfo")
-			return selectedObjectJson(core, arg.trimmed().toLower() == "full");
+		{
+			const QString detailMode = arg.trimmed().toLower();
+			return selectedObjectJson(core, detailMode == QStringLiteral("details") || detailMode == QStringLiteral("full"));
+		}
 
 		if (commandName == "moveToSelectedAt")
 		{
@@ -2626,7 +3417,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			// compensates its vertical offset while tracking an object, though, so
 			// a phone's top card needs an explicit, animated vertical pan below.
 			const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
-			const double horizontalOffset = ((x / width) - 0.5) * 100.0;
+			const double horizontalOffset = mode == QLatin1String("center")
+				? 0.0 : ((x / width) - 0.5) * 100.0;
 			// Do not estimate the vertical adjustment from field of view. That
 			// approximation is visibly wrong at high zoom and when a phone sheet
 			// changes from 6/10 to 9/10. Measure the selected body's actual
@@ -3948,6 +4740,43 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// setPluginLoadAtStartup — persist whether a plugin should load on the next launch
+		if (commandName == "setPluginLoadAtStartup")
+		{
+			const QStringList parts = arg.split('|');
+			if (parts.size() != 2)
+			{
+				result["ok"] = false;
+				result["error"] = "format: pluginId|0|1";
+				return result;
+			}
+
+			const QString pluginId = parts[0].trimmed();
+			const bool enabled = parts[1] == "1" || parts[1].compare("true", Qt::CaseInsensitive) == 0;
+			StelModuleMgr& moduleMgr = StelApp::getInstance().getModuleMgr();
+			bool found = false;
+			for (const auto& descriptor : moduleMgr.getPluginsList())
+			{
+				if (descriptor.info.id == pluginId)
+				{
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+			{
+				result["ok"] = false;
+				result["error"] = "unknown plugin: " + pluginId;
+				return result;
+			}
+
+			moduleMgr.setPluginLoadAtStartup(pluginId, enabled);
+			result["ok"] = true;
+			result["id"] = pluginId;
+			result["loadAtStartup"] = enabled;
+			return result;
+		}
+
 		// loadPlugin / unloadPlugin
 		if (commandName == "loadPlugin")
 		{
@@ -4004,9 +4833,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const StelObjectP& obj = sel[0];
 			Vec3d altaz = obj->getAltAzPosApparent(StelApp::getInstance().getCore());
 			Vec3d radec = obj->getEquinoxEquatorialPos(StelApp::getInstance().getCore());
-			info["name"] = obj->getEnglishName();
+			// `name` is the display contract used by the HarmonyOS detail UI.
+			// Keep the stable English identifier separate so a localized catalog
+			// name can never be accidentally replaced by it.
+			info["name"] = obj->getNameI18n();
+			if (info["name"].toString().isEmpty()) info["name"] = obj->getEnglishName();
 			info["nameI18"] = obj->getNameI18n();
-			info["type"] = obj->getType();
+			info["englishName"] = obj->getEnglishName();
+			info["type"] = obj->getObjectTypeI18n();
+			info["typeId"] = obj->getType();
 			info["ra"] = radec[0] * 180.0 / M_PI;
 			info["dec"] = radec[1] * 180.0 / M_PI;
 			info["alt"] = altaz[1] * 180.0 / M_PI;
@@ -4142,15 +4977,50 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// setTimeToJD — set simulation time to Julian Day
-		if (commandName == "setTimeToJD")
+
+		// setJulianDate accepts a named date scale so the UI and CLI cannot
+		// accidentally treat an MJD value as a full Julian Day. setTimeToJD is
+		// retained as the legacy JD-only form used by the existing time controls.
+		if (commandName == "setJulianDate" || commandName == "setTimeToJD")
 		{
-			double jd = arg.toDouble();
+			QString scale = QStringLiteral("jd");
+			QString numericText = arg.trimmed();
+			if (commandName == "setJulianDate")
+			{
+				const int separator = numericText.indexOf('|');
+				if (separator <= 0 || separator == numericText.size() - 1)
+				{
+					result["error"] = "setJulianDate expects jd|number or mjd|number";
+					return result;
+				}
+				scale = numericText.left(separator).trimmed().toLower();
+				numericText = numericText.mid(separator + 1).trimmed();
+				if (scale != "jd" && scale != "mjd")
+				{
+					result["error"] = "setJulianDate scale must be jd or mjd";
+					return result;
+				}
+			}
+			bool numberOk = false;
+			const double suppliedValue = numericText.toDouble(&numberOk);
+			if (!numberOk || !std::isfinite(suppliedValue))
+			{
+				result["error"] = "Julian date must be a finite number";
+				return result;
+			}
+			const double jd = scale == "mjd" ? suppliedValue + 2400000.5 : suppliedValue;
+			if (!std::isfinite(jd))
+			{
+				result["error"] = "Julian date is outside the supported numeric range";
+				return result;
+			}
 			StelCore* core = StelApp::getInstance().getCore();
 			core->setJD(jd);
 			core->setTimeRate(0.0);
 			result["ok"] = true;
 			result["jd"] = jd;
+			result["mjd"] = jd - 2400000.5;
+			result["calendarSystem"] = jd < 2299161.0 ? "julian" : "gregorian";
 			return result;
 		}
 
@@ -4166,6 +5036,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelUtils::getDateFromJulianDay(localJD, &year, &month, &day);
 			result["ok"] = true;
 			result["jd"] = jd;
+			result["mjd"] = jd - 2400000.5;
+			result["calendarSystem"] = jd < 2299161.0 ? "julian" : "gregorian";
+			result["julianDateStep"] = 0.00001;
 			result["jdOfToday"] = jd;
 			result["timeRate"] = core->getTimeRate();
 			result["year"] = year;
@@ -7012,8 +7885,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// ========== Satellites plugin (卫星) ==========
 		if (commandName == "getSatellites")
 		{
-			Satellites* sats = GETSTELMODULE(Satellites);
+			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
+			const QStringList options = arg.split('|');
+			const QString group = options.value(0).trimmed();
+			const QString query = options.value(1).trimmed();
+			bool limitOk = false;
+			int limit = options.value(2).toInt(&limitOk);
+			if (!limitOk || limit <= 0) limit = 40;
+			limit = qBound(1, limit, 100);
+			StelCore* core = StelApp::getInstance().getCore();
 			QJsonObject s;
 			QJsonArray groups;
 			for (const QString& g : sats->getGroupIdList()) groups.append(g);
@@ -7023,14 +7904,27 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s["hints"] = sats->getFlagHintsVisible();
 			s["iconicMode"] = sats->getFlagIconicMode();
 			s["hideInvisible"] = sats->getFlagHideInvisible();
-			s["count"] = sats->listAllIds().size();
+			const QVariantMap catalog = sats->getCatalogSummary(group, query, limit);
+			s["count"] = catalog.value("count").toInt();
+			s["offline"] =
+#ifdef STELLARIUM_OHOS_OFFLINE
+				true;
+#else
+				false;
+#endif
+			s["observerIsEarth"] = core->getCurrentPlanet()->getEnglishName() == QStringLiteral("Earth");
+			s["dateInRange"] = sats->isDateInValidRange(core);
+			s["newestUpdate"] = catalog.value("newestUpdate").toString();
+			s["outdatedCount"] = catalog.value("outdatedCount").toInt();
+			s["matchedCount"] = catalog.value("matchedCount").toInt();
+			s["items"] = QJsonArray::fromVariantList(catalog.value("items").toList());
 			result["ok"] = true;
 			result["satellites"] = s;
 			return result;
 		}
 		if (commandName == "setSatellitesFlag")
 		{
-			Satellites* sats = GETSTELMODULE(Satellites);
+			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 			QStringList parts = arg.split(":", Qt::SkipEmptyParts);
 			QString name = parts.size() > 0 ? parts[0].trimmed() : "";
@@ -7231,7 +8125,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 			// 卫星概况
 			QJsonObject satObj;
-			Satellites* sats = GETSTELMODULE(Satellites);
+			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
 			if (sats)
 			{
 				satObj["count"] = sats->listAllIds().size();
@@ -7377,7 +8271,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				target["transit"] = fmtLocal(rts[1]);
 				target["maxAltitude"] = maxAltitude(object);
 				target["set"] = fmtLocal(rts[2]);
-				target["constellation"] = core->getIAUConstellation(object->getEquinoxEquatorialPos(core));
+				const QString constellationId = core->getIAUConstellation(object->getEquinoxEquatorialPos(core));
+				target["constellationId"] = constellationId;
+				target["constellation"] = ConstellationMgr::getIAUconstellationName(constellationId);
+				if (target["constellation"].toString().isEmpty()) target["constellation"] = constellationId;
 				targets.append(target);
 			};
 
@@ -11099,13 +11996,19 @@ void StelMainView::renderOhosFrameNow()
 	ohosUpdatePointTracking();
 	ohosUpdateGyroTransition();
 		ohosUpdatePanInertia(dt);
-		app.update(dt);
 		if (s_ohosCaptureSelectedAnchorAfterPan)
 		{
 			s_ohosCaptureSelectedAnchorAfterPan = false;
 			ohosCaptureSelectedZoomAnchor();
 		}
-		ohosMaintainSelectedZoomAnchor();
+		// Capture the user's post-drag screen position before simulation time
+		// advances. The maintainer below then compensates this very frame instead
+		// of anchoring one time-step late and visibly drifting after release.
+		app.update(dt);
+		if (s_ohosPinchActive && s_ohosPinchAnchorMode == OhosPinchAnchorMode::SkyPoint)
+			ohosMaintainPinchSkyAnchor();
+		else
+			ohosMaintainSelectedZoomAnchor();
 		ohosUpdateSelectedScreenProjection();
 	ohosProcessPendingPointSelect();
 	const double t3 = StelApp::getTotalRunTime();

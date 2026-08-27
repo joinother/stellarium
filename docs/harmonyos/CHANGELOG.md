@@ -1,3 +1,65 @@
+## [2026-08-27] Codex - 恢复设置页设备与隐私入口
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/I18n.ets`、`harmonyos/AppScope/app.json5`
+- **修改内容：** 将原本埋在长设置列表中部和底部的陀螺仪开关、隐私撤回入口统一提升到设置页首屏“设备与隐私”分组；陀螺仪继续复用现有传感器融合与快捷按钮逻辑。撤回操作增加 ArkUI 原生确认对话框，确认后停止姿态传感器、调用 AppGalleryKit `privacyManager.disableService()` 并退出 Ability，下次启动重新进入系统隐私同意流程。
+- **修改原因：** 两项能力并未从代码删除，但因设置页信息层级过深，在手机和平板上很难找到；原撤回按钮也缺少防误触确认。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；Build 提升为 `1000039`，签名 HAP SHA-256 为 `50480fc91ab44b5a34b8e97c2e2ad7ac97618aede4a5450d857fee48c1c721ae`。
+- **验证结果：** `git diff --check`、43 语言资源检查、112 字段详情契约和源码/构建镜像一致性检查通过；签名 HAP 已覆盖安装到模拟器和平板。平板启动因锁屏返回 `10106102`，模拟器受既有 Privacy Manager 环境限制，设置页视觉回归待设备解锁后补验。
+- **备注：** 撤回入口仅调用华为原生 Privacy Manager，不维护应用自定义隐私同意状态，不新增联网、权限或设备标识读取。
+
+## [2026-08-27] Codex - 天体补充资料统一结构化排版
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/AppScope/app.json5`
+- **修改内容：** 以 `detailFields` 结构化协议替代可见详情中的 `AllInfo` 文本猜分段；按编号名称、观测数据、坐标参考、物理性质、恒星与双星、轨道光照、行星表面、月球、彗星、人造卫星和插件扩展资料分组。手机详情、Pad 检查器和旧浮动详情统一使用同一 Builder；长说明自适应为上下排版，短值保持双栏，加载期使用原生 `LoadingProgress`。补齐变星、双星、行星表面、日食、TLE、新星、脉冲星等字段，并彻底移除前后端 `fullInfo` 原始文本通路。
+- **修改原因：** 选中天体后的补充资料曾把结构化信息压平成长文本，出现字段粘连、分段错误和未排版原始资料。
+- **构建结果：** HarmonyOS 原生 `stellarium` 编译成功，仅保留工程已有警告；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。最终 Build 为 `1000038`，签名 HAP SHA-256 为 `d5bca2f54b730587ba1746129dcd983f8f6c886cf89da7f54621194714b43215`。
+- **验证结果：** `git diff --check` 与 `verify-ohos-object-details.mjs` 通过，确认 112 个详情字段全部具有标签并归入 11 个分组；手机详情、Pad 检查器和旧浮动详情均使用统一 Builder，前后端均不再保留 `fullInfo`/`selectedRich`。上一构建已对太阳、月球、火星、天狼星、M31、M42、M13 和 ISS 完成多类型 CLI 结构化回归。平板当前锁屏返回 `10106102`，最终真机截图待设备解锁后补验。
+
+## [2026-08-27] Codex - 更新离线 TLE 与完整星表并修复覆盖安装迁移
+
+- **修改文件：** `plugins/Satellites/resources/satellites.json`、`plugins/Satellites/src/Satellites.cpp`、`scripts/update-ohos-astronomy-data.mjs`、`scripts/stellarium-cli.mjs`、`data/ohos/catalog-manifest.json`、`stars/hip_gaia3/stars_4_1v0_6.cat`、`harmonyos/AppScope/app.json5`
+- **修改内容：** CelesTrak `stations`/`visual` 与 SatNOGS 补充源共刷新 796/3134 条内置 TLE；`active` 因 HTTP 403 限频保留 `partial` 状态。恢复官方 `stars_4`，内置星表扩展为 5 个分卷。离线卫星目录新增快照标识，覆盖安装时替换插件用户目录的旧 TLE，并同步计算有效期。CLI 对 Qt 冷启动的无响应、`bridge not available` 和启动期 `pending` 执行有界重试。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；最终 build 为 `1000031`，签名 HAP SHA-256 为 `396252b7f6f304faa6bc417ae9a1a72d25846ab25170e461468053af0a8b7b47`。
+- **验证结果：** 平板 `192.168.1.30:33805` 冷启动 CLI 验证通过；ISS `lastUpdated` 和 TLE 历元均为 2026-08-27，`outdated=false`、`dateInRange=true`。星表 `files=5`、`missingFiles=[]`、`verified=true`。HAP 已覆盖安装到平板和模拟器；模拟器 Privacy Manager 返回 `1006700003`，隐私门控按设计阻止 Qt/CLI 启动，未绕过用户同意。
+
+## [2026-08-27] Codex - 恢复选中天体后的拖动惯性
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/AppScope/app.json5`
+- **修改内容：** 移除固定目标状态对 ArkTS 释放速度和 C++ 惯性启动/更新的三重拦截；惯性期间继续逐帧重采样选中天体屏幕锚点，结束后恢复固定；`beginSkyGesture` 加入 QAbility CLI 高频命令白名单。
+- **修改原因：** 选中天体并开启固定目标位置后，手势抬起时速度被直接丢弃，导致拖动没有惯性。
+- **构建结果：** HarmonyOS 原生 `stellarium` 增量编译成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；最终 build 为 `1000026`，签名 HAP SHA-256 为 `59ad2394844d242274a4f80f9a12c1cb42cc44502ae4badf1b2df1d83a5f377f`。
+- **验证结果：** HAP 已覆盖安装并启动于平板 `192.168.1.30:33805` 和模拟器 `127.0.0.1:5555`。平板 CLI 合成测试中，织女一固定状态下释放后屏幕 X 比例在 `80ms/320ms/1000ms` 由 `0.6126` 连续变化到 `0.6331/0.6350`；`2400ms/3300ms` 稳定在 `0.6351` 附近，确认惯性恢复且结束后不随时间漂移。
+
+## [2026-08-24] Codex - 多语言搜索体验统一
+
+- **搜索匹配：** `listMatchingObjects` 现在对全角字符、兼容字符、重音符号、组合字符、各文字数字和标点/空格做统一归一化；当前语言、英文、目录号和 43 种官方译名同时参与排序。
+- **候选排序：** 保持精确匹配、当前语言前缀、英文/目录号优先，再合并官方跨语言别名、包含匹配与一字符近似匹配；不会因当前语言已有较弱候选而隐藏其他语言的官方名称结果。
+- **界面与验证：** 搜索、位置搜索、目录加载状态、近似/跨语言提示、目录号和小行星永久编号文案已补齐 43 种语言；`verify-ohos-search.mjs` 覆盖英语基准、42 种非英语界面语言各一个官方天体别名、中、日、韩、法、德、俄、阿、孟加拉等跨语言输入与全角编号用例，`check-ohos-i18n.mjs` 会强制这些搜索键覆盖全部支持语言。
+- **构建结果：** HarmonyOS 原生 `stellarium` 交叉编译成功（仅工程既有 4 条警告）；`hvigorw assembleHap --no-daemon` 成功，生成已签名 HAP `entry-default-signed.hap`。
+- **验证限制：** 静态国际化检查、镜像同步和 HAP 打包通过。当前 `hdc list targets` 无在线设备，自动运行时搜索用例等待平板或模拟器重新连接后执行。
+
+## [2026-08-24] Codex - 天体名称入口统一使用官方本地化
+
+- 修正 `getObjectInfo`：`name` 改为官方本地化名称，`englishName` 单独返回为稳定检索标识，`type` 改为官方本地化类型并保留 `typeId`。
+- 修正“今晚可观测”星座字段：显示官方星座译名，IAU 缩写单独返回为 `constellationId`。
+- 分类目录、详情相关副标题统一把英文名和目录号放到中文主标题下方，避免中英文并列挤在同一行。
+- `check-ohos-i18n.mjs` 增加自定义 UI 英文回退审计和星空文化资源语言数量报告。
+- 验证：官方核心天体语言包 43 种；星空文化及其描述资源当前各 2 种；`git diff --check` 通过；HAP 构建成功。
+
+## [2026-08-24] Codex - 修复统一多语言架构回归
+
+- **修改文件：** `harmonyos/ets-source/pages/I18n.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets`、`docs/harmonyos/I18N-ARCHITECTURE.md`
+- **修复内容：** 恢复被误删的卫星分组和插件名称字典；保留官方 `.qm` 天体名称来源，移除旧的恒星、行星、星座自维护译名表。
+- **规范：** 天体名称由 Stellarium 官方翻译资源返回；鸿蒙新增 UI、类型、插件、地景等文本由统一键值表管理，缺失时按既定规则回退，不再擅自创建第二套天体译名。
+- **校验：** `node scripts/check-ohos-i18n.mjs` 通过，确认 43 个官方语言包、源文件与构建镜像均一致；`git diff --check` 通过。
+- **构建结果：** DevEco hvigor `assembleHap --mode module -p product=default --no-daemon` BUILD SUCCESSFUL（15.5 秒）；仅保留工程已有 API 弃用警告。
+
+## [2026-08-24] Codex - 补充三维项目对比与交互取舍
+
+- **修改文件：** `docs/harmonyos/GAP-ANALYSIS-2026-08-23.md`、`docs/harmonyos/CHANGELOG.md`
+- **修改内容：** 对比 Stellarium、Celestia、OpenSpace 和 Cosmonium 的定位与移植价值；记录 Stellarium 已有的选星、居中、跟踪、拖动、捏合缩放和键鼠交互；明确 Celestia Mobile 的三维相机和场景组织可参考，但其触摸交互不作为 Pad 端设计模板。
+- **三维路线：** 继续使用 Stellarium 的天文计算、星图和主交互，仅在其基础上增加行星近景观察模式；保留选中范围视场框，并要求新增三维控制同时支持触摸、键鼠和 CLI。
+- **验证结果：** `git diff --check` 通过；本次仅更新文档，未修改 C++、ArkTS 或构建配置。
 
 ## [2026-07-27] TRAE - 地面透明度FOV联动+compactDrawer修复+果冻Q弹动画
 
@@ -2286,7 +2348,7 @@
 
 ## [2026-08-21] Codex - 星空文化离线区域地图
 
-- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`。
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`scripts/verify-ohos-search.mjs`、`docs/harmonyos/CLI.md`。
 - **修改内容：** 迁移桌面版文化区域地图的核心能力：新增 `getSkyCultureTerritoryGeometry` 桥接命令，仅返回当前文化在所选年份的简化 GeoJSON 外轮廓；移动端用应用内置 `worldmap.jpg` 和原生 Canvas 叠加绘制，支持按年份更新，默认折叠并使用明确的离线说明。
 - **修改原因：** 移动端此前只能查看文化地理档案文字，不能直观看到文化覆盖区域；该实现不使用花瓣地图、不请求网络，也不加载全部文化边界。
 - **构建结果：** 原生 `stellarium` 编译成功；同步源码后 `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
@@ -2532,3 +2594,267 @@
 - **修改内容：** `StelSkyImageTile` 改用实际 J2000 视场筛选纹理，只为当前视野内的图片创建纹理任务；新增低频 `[dso-textures] viewport candidates/pending` 探针。
 - **搜索修复：** `listMatchingObjects` 现在合并中文名、英文名、稳定 ID、目录编号和模块候选，支持去空格/连字符匹配，并按对象去重，避免同一天体因多个别名重复显示。
 - **验证情况：** 原生库编译成功，`assembleHap --no-daemon` 成功，HAP 已覆盖安装到平板 `7LZBB26323200303`。安装后的启动验证暂受设备锁屏错误 `10106102` 阻塞，解锁后需重新执行资源探针和截图确认。
+## [2026-08-23] Codex - 建立统一 CLI 命令目录与批量协议
+
+- **修改文件：** `src/StelOhosCommandCatalog.hpp`、`src/StelMainView.cpp`、`scripts/stellarium-cli.mjs`、`scripts/check-ohos-command-catalog.mjs`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CLI.md`
+- **修改内容：** 为现有命令桥增加机器可读的 `getCommandCatalog`、`getCommandSchema`、`getCommandStatus`；CLI 增加目录查询、命令描述、JSON payload、批量执行和 JSONL 交互模式；新增命令目录一致性检查。
+- **修改原因：** 让核心功能、脚本和插件统一复用同一命令总线，方便普通用户入口、自动化和 AI 调用，并保证新增命令不会脱离 CLI 目录。
+- **构建结果：** `libstellarium.so` 编译通过；`assembleHap --no-daemon` 成功，生成 `entry-default-signed.hap`
+- **验证结果：** Node CLI 语法检查通过；命令目录一致性检查通过（255 个命令）；ArkTS 编译通过；未连接 `hdc` 设备，暂未完成设备回传验证
+- **备注：** CLI 和应用内“命令”入口均只使用本地命令桥，不监听网络；应用内高风险命令需要二次确认。现有 ArkTS 弃用告警与本次改动无关。
+## [2026-08-24] Codex - 统一官方天体翻译与鸿蒙语言资源校验
+
+- **修改文件：** `harmonyos/ets-source/pages/I18n.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`、`docs/harmonyos/I18N-ARCHITECTURE.md`、`scripts/check-ohos-i18n.mjs`，以及对应构建副本
+- **修改内容：** 处理官方 `.qm` 语言域、鸿蒙自定义界面文案和天体名称的职责边界；详情类型优先使用核心本地化结果；增加 43 种官方资源包和双副本一致性检查
+- **修改原因：** 避免 ArkUI 自维护的星名、行星名和星座名覆盖 Stellarium 官方译名，并发现语言选择器已列出但资源或界面支持不完整的问题
+- **构建结果：** 进行中
+- **验证结果：** 进行中
+- **备注：** 不改变用户已有的其他功能和未相关修改
+## [2026-08-24] Codex - 原版资源覆盖审计与陈旧资源清理
+
+- **修改文件：** `scripts/audit-ohos-resource-coverage.mjs`、`scripts/sync-ohos-resources.sh`、`docs/harmonyos/RESOURCE-COVERAGE-AUDIT-2026-08-24.md`
+- **修改内容：** 新增可重复运行的资源审计，分别核对源码、期望同步集合、rawfile 和静态调用入口；覆盖核心目录、官方翻译、天体/地景/天空文化简介、深空图片、原版桌面 GUI、插件资源和三维地景。普通资源目录同步改为 `rsync --delete`，清理源码已不存在的旧文件。
+- **审计发现：** `scenery3d/` 源码 135 个文件、约 21.7 MiB，当前未进入 rawfile；插件资源候选 132 个，需要按插件运行验证；rawfile 曾残留 `stars/hip_gaia3/stars_4_1v0_6.cat`，约 53 MiB。
+- **构建结果：** DevEco hvigor `assembleHap --no-daemon` BUILD SUCCESSFUL；首次尝试因旧 `DEVECO_SDK_HOME` 环境变量失败，补齐当前 DevEco SDK 路径后成功。
+- **验证结果：** 深空清单生成成功（674 张图片，674 张进入 HAP 清单）；官方核心翻译校验通过；命令目录 255 条一致；`git diff --check` 通过。自定义 UI 仍有 809 项语言回退告警，属于已有缺口。
+- **备注：** 审计报告明确区分“已打包”“存在代码入口”和“设备实测渲染”，不能据此把三维地景或插件资源宣称为已完成迁移。
+
+## [2026-08-24] Codex - 补齐官方多语言资源
+
+- **修改文件：** `harmonyos/ets-source/pages/I18n.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets`、`scripts/sync-ohos-i18n-from-po.mjs`、`translations/`
+- **修改内容：** 复用源码官方 PO 翻译，补齐鸿蒙 UI 中可匹配的语言条目；编译并同步天空文化、天空文化介绍、脚本、行星地貌、地景介绍、三维地景介绍和远程控制翻译域。语言切换仍统一通过 `I18n`，天体名称不在自定义表中重译。
+- **结果：** `stellarium`、`stellarium-sky` 以及可生成的附加翻译域按 43 种目标语言编译并进入 rawfile；无官方 PO 对应的自定义短语继续保留待补清单，不强行伪造译文。
+- **验证结果：** `check-ohos-i18n.mjs` 通过；自定义 UI 英文回退从 809 项降至 677 项；源工程与构建镜像一致；`git diff --check` 通过。
+## [2026-08-24] Codex - 固化多语言与地域文化表述规范
+
+- **修改文件：** `scripts/sync-ohos-resources.sh`、`scripts/check-ohos-i18n.mjs`、`harmonyos/ets-source/pages/I18n.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/location_countries.ts`、`docs/harmonyos/{I18N-ARCHITECTURE,LOCALIZATION-POLICY}.md`
+- **修改内容：** 资源同步前自动编译上游 PO；系统语言区分香港和台湾繁体；中文变体共用官方地区术语；检查脚本验证 PO/QM 覆盖和中国香港、澳门、台湾地区名称。
+- **修改原因：** 多语言内容需尊重本地语言与文化资料原意，同时避免中文界面与中国官方地理、历史和文化表述相冲突。
+- **构建结果：** DevEco hvigor `assembleHap --mode module -p product=default --no-daemon` BUILD SUCCESSFUL（19.5 秒）。
+- **验证结果：** 官方 PO/QM 覆盖检查、中文地区术语检查、命令目录检查和 `git diff --check` 通过；签名 HAP 内的翻译域已抽查。
+- **备注：** 天体名称和天空文化内容继续使用 Stellarium 官方资源，不恢复鸿蒙自维护的名称表。
+## [2026-08-24] Codex - 制定原版桌面 GUI 图标复用计划
+
+- **修改文件：** `docs/harmonyos/DESKTOP-GUI-ASSET-REUSE-PLAN.md`、`docs/harmonyos/CHANGELOG.md`
+- **修改内容：** 盘点桌面 213 个 GUI 资源及 Qt UI 入口，按 SVG 图标、状态位图、控件、地图和页签划分复用边界；制定资源清单、导出、导航替换、图层状态、地图审核和设备验收的四批推进顺序。
+- **修改原因：** 复用原版图形语义应提升识别性，不能把固定尺寸的旧桌面位图直接塞入 ArkUI Dock 或绕过地图范围审查。
+- **构建结果：** 本次仅新增计划文档，未改动运行时代码。
+- **验证结果：** 已核对 `data/gui/`、`data/gui/guiRes.qrc`、`src/gui/` 与鸿蒙现有图标映射；`git diff --check` 通过。
+- **备注：** 地图和天空文化地图资源在审核通过前不进入用户可见发布界面。
+## [2026-08-24] Codex - 搜索候选精确选择与输入性能修复
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`。
+- **修改内容：** 搜索建议保留核心的精确/前缀/包含匹配排序；输入增加 140ms 防抖；候选返回官方本地化类型、对象类型和稳定 ID，点击时按“对象类型 + ID”精确选中，避免同名天体或插件对象被通用名称搜索误选。
+- **搜索范围：** 已注册到 `StelObjectMgr` 的核心目录和已加载对象插件均参与候选；仅存在于资源包、尚未被模块加载的数据不进入候选。默认加载的卫星、系外行星、流星雨和新星插件已在此范围内。
+- **本地化：** 不恢复手写天体中文别名表；中文名称、英文名、目录号和星空文化已有读音仍由 Stellarium 官方资源提供。
+- **构建结果：** 进行中。
+- **验证结果：** 进行中；将执行命令目录、源/构建镜像同步和 HAP 构建检查。
+
+## [2026-08-24] Codex - 搜索索引收敛与受限近似匹配
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/StellariumTypes.ets`。
+- **修改内容：** 搜索建议只复用已加载对象模块的原生索引，不再在每次输入时重复枚举完整恒星和深空目录；继续支持中文名、英文名、目录号、希腊字母、空格和连字符差异。正常结果为空时，额外尝试一级增删改容错；近似结果在界面中明确标注“近似匹配”。
+- **范围：** 已加载的核心星表和对象插件参与索引；未加载插件或仅已打包但未由对象模块读取的数据不应出现在候选中。
+- **验证：** 原生 `stellarium` 与签名 HAP 构建通过；新增设备侧回归脚本覆盖 M31、NGC、HIP、中文名、希腊字母和近似匹配。当前无 HDC 设备连接，待平板接入后执行该脚本确认运行时结果。
+
+## [2026-08-24] Codex - 补齐跨语言天体和位置检索
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{I18n,MainWindowNativeNode,StellariumTypes}.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`data/search/multilingual-sky-aliases.tsv`、`scripts/{build-ohos-multilingual-search-index,sync-ohos-resources,check-ohos-i18n,verify-ohos-search}.mjs`、`docs/harmonyos/{I18N-ARCHITECTURE,CLI,CHANGELOG}.md`，以及对应构建副本。
+- **修改内容：** 天体搜索使用由 `po/stellarium-sky` 生成的官方跨语言别名索引，在原生当前语言、英文名和目录号检索无结果后才回退查找；命中会经对象管理器验证且始终按当前语言显示。位置选择改为中文保留审核术语、非中文使用 HarmonyOS `System.getDisplayCountry()`；地点候选按当前语言显示，同时允许原始英文名、官方中文名和当前显示名离线检索。
+- **修改原因：** 修复外语界面仍被强制显示中文地点、以及不同语言名称无法作为天体检索入口的问题；避免重新维护不可靠的天体或国家译名表。
+- **构建结果：** DevEco CMake `stellarium` 构建成功；`harmonydeployqt --no-build` 同步原生库成功；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。签名 HAP SHA-256：`db96803ed04d11b4f336b6456853da5e50cd9dda05bb81a0385e61f74a6574de`。
+- **验证结果：** `check-ohos-i18n.mjs`、Node 脚本语法检查和 `git diff --check` 通过；官方跨语言索引包含 46,932 行且已进入 HAP rawfile。当前 `hdc list targets` 为 `[Empty]`，设备侧法语/德语天体检索回归待平板或模拟器接入后运行。
+- **备注：** 自定义 ArkUI 文案仍有 677 项与英文相同的翻译回退警告，已在检查脚本中持续报告；后续按页面逐项补齐，不能用机器猜译替代上游天文名称资源。
+## [2026-08-24] Codex - 补齐 ArkTS 高频界面多语言与占位符防回归
+
+- **修改文件：** `harmonyos/ets-source/pages/I18n.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/check-ohos-i18n.mjs`，以及构建工程中的对应 ETS 镜像。
+- **修改内容：** 为定位、陀螺仪、望远镜、目标锁定、会话导入导出、方向翻转、今夜天象提示和固定搜索入口补齐简体中文、英语、日语、韩语、法语、德语、西班牙语、俄语文案；锁定与会话流程移除硬编码中文和表情符号，统一通过 `I18n` 输出；新增校验，禁止 `m_*`、`msg_*`、`pinned_*` 等内部键名直接成为可见文本。
+- **修改原因：** 部分 ArkTS 自定义 UI 在切换语言后回退为英文，且多个会话状态键会直接显示为 `m_unknown` 等内部标识，破坏跨语言界面一致性。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（2026-08-24）；仅有项目已有的 `getSystemLocale` 和 `NODE` API 弃用警告。
+- **验证结果：** `scripts/check-ohos-i18n.mjs`、`git diff --check` 通过；43 种官方天体与天空文化资源、跨语言检索索引和中文地区术语保护均通过。ArkTS 自定义 UI 的英语同形项从 677 降至 638；剩余项包含专有名词与低频界面文案，后续按实际入口继续补齐。
+- **备注：** 当前未检测到连接设备，尚未完成真机语言切换截图验证；本次未改动天体名称的官方 QM 资源、联网策略、隐私逻辑或签名配置。
+
+## [2026-08-24] Codex - 完善儒略日时间控制
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,I18n,StellariumTypes}.ets`、`scripts/verify-ohos-julian-date.mjs`、`docs/harmonyos/{AGENTS,CLI,CHANGELOG}.md`。
+- **修改内容：** 新增统一 `setJulianDate` 命令，显式接受 `jd|数值` 或 `mjd|数值`；`getSimulationTime` 返回 JD、MJD、历法制度及 `0.00001` 日步长。时间面板新增 JD/MJD 双向编辑、微调和 1582-10-15 历法提示，编辑时不被高频轮询覆盖。
+- **修改原因：** 对齐桌面版“Julian Day”页，避免把“儒略日”误称或混同为“儒略历”，并使 UI、CLI 与核心时间设置走同一校验路径。
+- **构建结果：** Qt 原生 `stellarium` 交叉编译成功；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL，生成已签名 HAP `entry-default-signed.hap`。仅保留工程既有的 ArkTS 弃用 API 警告。
+- **验证结果：** `node scripts/verify-ohos-julian-date.mjs`、`node scripts/check-ohos-command-catalog.mjs` 与 `git diff --check` 已通过；当前无 HDC 设备，设备侧 CLI 回归待连接后执行。
+- **备注：** 此功能不引入网络访问、设备标识读取或新的运行时权限。
+## [2026-08-24] Codex - 扩展 ArkTS 界面至 43 语言的官方译文同步链路
+
+- **修改文件：** `harmonyos/ets-source/pages/I18n.ets`、`scripts/sync-ohos-i18n-from-po.mjs`、`scripts/check-ohos-i18n.mjs`，以及构建工程中的 `I18n.ets` 镜像。
+- **修改内容：** 将上游 PO 同步改为规范化匹配（统一空白、兼容引号与省略号、忽略末尾句点），新增 3,582 个可追溯到 Stellarium 官方翻译的 ArkTS 文案字段；ArkTS 语言选择接入鸿蒙 `I18NUtil.getBestMatchLocale`，用全部 43 个已支持语言做区域最佳匹配；新增 `check-ohos-i18n.mjs --strict-ui`，按语言输出未显式翻译字段并在严格模式下失败。
+- **修改原因：** 仅有八种主语言的界面表不足以覆盖已内置的 43 种官方天体和天空文化语言资源；原先精确字符串匹配会漏掉仅在标点或空白上不同的官方译文。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（2026-08-24）；无新增编译错误，仅保留项目已有弃用 API 警告。
+- **验证结果：** 常规国际化校验与 `git diff --check` 通过；严格检查当前正确报告 30,080 个待审校字段。英语、简体中文、日语、韩语、法语、德语、西班牙语、俄语已显式覆盖全部 1,054 个 ArkTS UI 键；其余 35 种语言继续优先从官方 PO 资源补齐。
+- **备注：** 未使用联网翻译或未审校批量机器翻译。严格检查尚未通过，不能将剩余英文回退描述为“已完成的本地化”。
+
+## [2026-08-24] Codex - 搜索目录分层筛选
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,I18n,StellariumTypes}.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/{MainWindowNativeNode,I18n,StellariumTypes}.ets`、`docs/harmonyos/{CLI,CHANGELOG}.md`。
+- **修改内容：** 搜索空态新增已选条件标签和“筛选”分层菜单，支持天体类型、实时可见度、肉眼/双筒镜/望远镜观测能力叠加；分类行显示当前可见状态、高度和星等。`listObjects` 先按条件过滤全部原生目录，再进行分页，返回每项实时观测摘要。
+- **本地化与边界：** 新增筛选 UI 全部走 `I18n`，覆盖中文、英语、日语、韩语、法语、德语、西班牙语和俄语，其余已支持语言按现有回退规则显示；仪器条件为星等阈值的观测能力近似值，不假定用户已配置某一具体目镜或望远镜。
+- **构建结果：** Qt 原生 `stellarium` 交叉编译成功；`harmonydeployqt --no-build` 已同步新 `libstellarium.so`；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** 命令目录检查通过（256 条）；源工程与构建镜像一致；`git diff --check` 通过；已确认签名 HAP 内包含更新后的 `libs/arm64-v8a/libstellarium.so`。当前 `hdc list targets` 为 `[Empty]`，待设备连接后仍需验证类型、可见度、仪器条件叠加及标签移除。
+- **备注：** 本功能完全离线计算，不新增联网、权限或设备标识读取。
+
+## [2026-08-24] Codex - 搜索筛选天体类型 SVG 图标
+
+- **修改文件：** `harmonyos/ets-source/resources/base/media/ic_catalog_*.svg`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/sync-ohos-build-sources.sh`，以及构建工程中的对应 SVG 和 ETS 镜像。
+- **修改内容：** 为行星、卫星、恒星、变星、彗星、小行星、星座、星系、星团、星云和梅西耶天体绘制统一规格的单色 SVG 图标；图标应用于当前条件标签、横向分类栏和筛选层级菜单。
+- **设计原则：** 使用行星圆面、月牙、星形、彗尾、岩体、星点连线、旋臂、点阵和云气轮廓表达类别，不用 emoji、字母或互相穿插的细线；ArkUI 根据当前状态统一着色，不改变布局尺寸。
+- **构建结果：** DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL，已重新生成已签名 HAP。
+- **验证结果：** 11 个 SVG 均通过 XML 语法检查，源资源与构建工程镜像一致，并确认全部进入签名 HAP；`git diff --check` 通过。当前无 HDC 设备，待连接后进行实际显示和触控回归。
+- **备注：** 仅新增本地矢量资源，不涉及网络、权限、隐私或原生渲染逻辑。
+## [2026-08-24] Codex - 位置搜索本地化与模糊匹配修复
+
+- **修改文件：** `harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`、`scripts/verify-ohos-location-search.mjs`、`docs/harmonyos/CHANGELOG.md`
+- **修改内容：** 地点搜索兼容空格、连字符、撇号和拉丁音标差异；统一纳入中国香港特别行政区、中国澳门特别行政区和中国台湾地区的规范检索别名；候选新增行政区/国家副标题与坐标，避免同名地点难以分辨。中文国家显示改用经审核的 `location_countries.ts` 中文字段，非中文仍交由 HarmonyOS 系统地区名本地化。
+- **修改原因：** 修复 `Xi'an`/`xian`、`Sao Paulo`/`São Paulo`、`Hong Kong`/`hongkong` 等查询不稳定，以及中文界面国家名称错误回退英文的问题。
+- **构建结果：** DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** 7,387 条离线地点、12 组规范化检索用例、43 种官方语言资源检查和 `git diff --check` 通过；当前 `hdc list targets` 为 `[Empty]`，未完成设备侧点按验证。
+- **备注：** 搜索保持完全离线；`LOCATION-SEARCH-AUDIT-2026-08-24.md` 记录了既有中文地名表的机器翻译历史和校订边界，不能将其覆盖率描述为官方译名质量。
+
+## [2026-08-24] Codex - 位置搜索相关度排序
+
+- **修改文件：** `harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets` 及对应构建镜像。
+- **修改内容：** 地点结果按完整名称、前缀、包含关系和上下文匹配进行离线排序；扫描完整位置库后再保留前 20 条，避免数据库顺序导致短查询结果失真。
+- **构建结果：** DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（18.3 秒）；保留工程已有 `getSystemLocale`、`NODE` 弃用警告。
+- **验证结果：** 7,387 条地点、12 组位置搜索回归、官方多语言资源检查和 `git diff --check` 通过；当前无 HDC 设备，未完成设备侧验证。
+- **补充：** 搜索扫描中的状态提示改用覆盖 43 种语言的 `search_catalog_loading`，不再把“搜索结果”误作加载状态。
+
+## [2026-08-24] Codex - 平板端天体详情检查器
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` 及构建工程对应镜像。
+- **修改内容：** 平板横屏选中天体后改为左侧固定详情检查器，保留右侧星图与选中标记；头部提供类型化单色视觉区、中文主名称与英文次级名称、更多操作和关闭按钮；正文将相对位置、今晚观测、物理字段、编号/原始名称和核心资料合并为连续滚动区。
+- **交互边界：** 更多菜单只接入已存在的本地操作（视野中心、跟踪、观测列表）；功能面板打开时继续使用原有窄摘要，手机端紧凑提示条及底部详情卡不变。检查器范围已纳入星图安全区避让和触控拦截，实时刷新不改变其展开状态或位置。
+- **构建结果：** DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（2026-08-24），生成已签名 HAP；仅保留工程既有 ArkTS 弃用 API 警告。
+- **验证结果：** 源码已同步到构建工程，`git diff --check` 通过；当前 `hdc list targets` 为 `[Empty]`，待平板接入后需验证抽屉宽度、滚动、更多菜单及星图拖动。
+- **备注：** 本次未新增联网、设备信息读取、权限或伪造的天体图片；深空头图映射应在后续以本地资源与天体 ID 的可靠对应关系单独实现。
+
+## [2026-08-24] Codex - 天体详情离线媒体区
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` 及构建工程对应镜像。
+- **修改内容：** 详情检查器新增媒体区：按 M/NGC/IC 目录号匹配本地 `nebulae/default` 深空资料图，点按后进入全屏查看；太阳系主要天体复用原版表面纹理，以可左右拖动的球体窗口呈现，并为土星添加环的轮廓层。
+- **资料边界：** 深空图明确标注为离线资料图像，行星明确标注为内置表面纹理模型；无可靠匹配或尚未完成可选深空资源安装时显示空态，不替换为其他天体照片。全屏页声明不联网下载。
+- **构建结果：** DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（19.5 秒），生成已签名 HAP。
+- **验证结果：** `git diff --check` 通过；签名 HAP 已确认包含 `m31.png`、`n281.png`、日、地、火、木、土纹理。当前 `hdc list targets` 为 `[Empty]`，媒体加载、拖动模型和全屏预览待平板接入后截图验证。
+- **备注：** 原版的 OBJ 文件主要服务于 Stellarium 核心的行星/卫星或 3D 地景渲染；本次没有把 3D 地景模型错误作为详情天体模型展示。复杂 OBJ 的原生交互式详情预览需要单独接入 GLES 渲染通道后再实现。
+
+## [2026-08-24] Codex - 详情媒体按需本地解包
+
+- **修改文件：** `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 选中带有可靠 M/NGC/IC 图像映射的深空天体时，直接从 HAP 的本地 rawfile 异步解包对应单张 PNG；媒体区在文件就绪前显示原生加载控件，完成后只刷新当前仍被选中的天体。行星区域改为准确标注“可旋转天体表面纹理”，不把二维纹理冒称为 OBJ 三维模型。
+- **修改原因：** 可选深空图像集合在后台逐张安装；在其完成前，首次选中 NGC 281 等对象可能错误显示空态，尽管准确图片已随 HAP 分发。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL（21 秒）；已生成签名 HAP `build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256：`35fa46e07399e96cef51283cd4967208d478a9513904a2bc0d7bb9478db71d94`。
+- **验证结果：** `git diff --check` 通过，原始 ETS 与构建镜像逐字一致；已确认 HAP 含 `m31.png`、`n281.png`、`m1dumont.png` 及日地火木土纹理。当前 `hdc list targets` 返回 `[Empty]`，因此 NGC 281、M31/NGC 224 的首次选中加载、全屏预览和快速切换天体仍待平板或模拟器接入后验证。
+- **备注：** 全过程仅读取应用包内资源，不新增网络、权限、设备标识或外部图像来源；真正可自由旋转/缩放的 OBJ 预览仍须单独接入 GLES/XComponent 渲染通道。
+
+## [2026-08-24] Codex - 选中星座展示准确文化绘图
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 原生核心按当前选中星座的唯一缩写，在当前天空文化的 `index.json` 中查找对应 `image.file` 并返回本地资源路径；IAU 现代星座文化本身没有插图时，才按相同 IAU 缩写回退至原版 `modern` 文化的 88 幅对应绘图。ArkUI 将该图按需从 HAP 解包、显示并支持全屏查看。
+- **资料边界：** 当前文化有画时绝不替换为别的文化的图；仅 `modern_iau` 因与 `modern` 共用同一套 88 个 IAU 星座定义而使用明确标注的现代插图回退。没有来源图的文化星座不伪造图片。
+- **构建结果：** 待重新编译原生库、同步并构建 HAP。
+- **验证结果：** 待验证现代星座、IAU 星座及有本土插图的天空文化的选择路径。
+
+## [2026-08-24] Codex - 扩展太阳系详情纹理覆盖
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 详情媒体的精确纹理表扩展至原版已有的 50 余种命名天体资源：主行星、月球、主要卫星、冥王星系、谷神星、灶神星、爱神星、贝努、加斯帕拉、艾达、塞德娜、阋神星、妊神星、戴丝诺美亚及 2007 OR10 等。匹配仅依据核心返回的标准英文名称归一化结果，不对名称相似的不同天体误用图片。
+- **修改原因：** 源码已携带这些可离线复用的表面纹理，先补齐可靠的逐天体视觉资料覆盖，再为无原图的恒星、彗星和目录小天体设计明确标注的类型视觉。
+- **构建结果：** 待 ArkTS/HAP 构建验证。
+- **验证结果：** 待设备侧选择谷神星、木卫一、土卫六、天卫五、海卫一及冥卫一核对。
+
+## [2026-08-24] Codex - 全类型详情本地视觉回退
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`。
+- **修改内容：** 当当前天体没有可靠的逐对象图片、文化绘图或表面纹理时，详情页展示本地类型视觉：恒星按核心返回的光谱温度呈色，彗星、星系、球状/疏散星团、星云、小行星、星座和人造卫星使用各自不同的原生矢量构图。允许天空文化插图目录含嵌套子目录，以正确支持满文等原版资源路径。
+- **资料边界：** 回退视觉明确标为“本地天体类别示意”，不以实拍、巡天照片或具体天体影像宣称；准确本地资料始终优先。
+- **构建结果：** 待 ArkTS/HAP 构建验证。
+- **验证结果：** 待设备侧覆盖恒星、彗星、小行星、星云、星系、星团和无插图的星座空态。
+
+## [2026-08-24] Codex - 显式居中与流星雨目标定位
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 显式点击“居中”、键盘居中和回车改用星图视口中心，不再复用带详情卡/侧栏偏移的安全区目标；流星雨列表条目改用统一天体搜索回调，并在选中后请求星图中心定位。
+- **修改原因：** 修复居中后目标偏向屏幕一侧，以及从流星雨列表选择目标后星图不自动定位的问题。
+- **避让边界：** 自动选中和界面布局变化仍只在核心投影点实际落入 Dock、面板或详情卡障碍区域时执行；无碰撞时不发送移动命令。
+- **构建结果：** Qt 原生 `stellarium` 编译成功；`harmonydeployqt --no-build` 同步完成；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** `git diff --check` 通过；`libstellarium.so` 与 HAP 工程副本 SHA-256 均为 `c85db5f3890413de2dca8466a63b641707855211304844f62fe2d33e26bbe5d0`；签名 HAP SHA-256 为 `33fb5509cd40b8dbd5272ce4e4c44ee2f838d6f8a315fa28fefd796283bc6ac9`；已安装到平板 `7LZBB26323200303`，启动回归因设备锁屏被系统错误码 `10106102` 阻止。
+- **备注：** 不新增联网、权限、设备标识读取或资源下载。
+## [2026-08-24] Codex - 卫星插件离线目录与构建机更新链路
+
+- **修改文件：** `plugins/Satellites/src/{Satellite,Satellites}.{hpp,cpp}`、`src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/update-ohos-astronomy-data.mjs`、`docs/harmonyos/{NETWORK-INVENTORY,OFFLINE-CATALOG-UPDATES,CLI}.md`。
+- **修改内容：** 鸿蒙离线构建下卫星插件不再创建网络管理器或 13 秒检查定时器，任何旧设置或调用均无法启用在线 TLE 更新；卫星面板及 CLI 新增本地检索、精确 NORAD 选中、内置数据时间、过期和观测位置状态。
+- **数据策略：** 新增只在开发/构建机手动执行的更新器；卫星数据来自 CelesTrak 3LE，完整校验后才覆盖，清单记录来源、时间、SHA-256、条目数和验证状态；失败不修改现有目录。基础恒星目录只做本地完整性检查，未授权不下载数百 MiB 以上资源。
+- **构建结果：** `versionCode` 提升至 `1000032`；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。
+- **验证结果：** 圆角调用仅保留统一令牌，以及细线/圆形图像所需的特殊几何；源码与构建镜像一致，`git diff --check` 通过。
+- **备注：** 不新增网络权限、运行时 HTTP、SN/设备标识读取或远程控制服务。
+## [2026-08-24] Codex - 修复卫星目录设备端查询阻塞
+
+- **修改文件：** `plugins/Satellites/src/{Satellites.hpp,Satellites.cpp}`、`src/StelMainView.cpp`、`scripts/update-ohos-astronomy-data.mjs`、`docs/harmonyos/OFFLINE-CATALOG-UPDATES.md`。
+- **修改内容：** 新增卫星插件内部单次遍历的轻量目录摘要接口；去除 `getSatellites` 对每个 ID 的线性 `getById()`、完整 `getInfoMap()` 计算，保留分组、名称/NORAD 搜索、过期统计、显示状态和高度字段。构建机更新脚本改为逐源记录错误，部分源成功时安全合并并在清单中标记 `partial/sourceErrors`。
+- **修改原因：** 3134 条卫星目录在设备命令线程中触发重复线性查找，导致 CLI 超时；CelesTrak 的 `active` 源本次返回 HTTP 403，不能伪装成完整更新。
+- **构建结果：** Qt 原生库构建成功；资源同步完成；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；HAP SHA-256：`0f9a1d6aee815bcdc25fdc4459ebcbdbca6b282a446c7216543757e44e4e078a`。
+- **验证结果：** 平板安装成功；更新前设备 CLI 返回 3134 条目录、`offline:true`，`stations|ISS|20` 返回 3 项，NORAD `25544` 精确选择成功，均不再超时。更新后目录成功刷新 166 条现有 TLE，`stations`/`visual` 成功、`active` 记录 403；最终包安装后设备处于锁屏状态，需解锁后复测最终包的 CLI 启动回归。
+- **备注：** 应用运行时仍不创建卫星网络管理器、不启动自动更新定时器、不新增网络权限；目录更新仅发生在构建机显式执行脚本时。
+## [2026-08-24] Codex - 接入本地与镜像数据源契约
+
+- **修改文件：** `data/ohos/network-sources.json`、`scripts/ohos-data-sources.mjs`、`scripts/update-ohos-astronomy-data.mjs`、`scripts/check-ohos-network-sources.mjs`、`docs/harmonyos/OFFLINE-MIRROR-ARCHITECTURE.md`、`docs/harmonyos/NETWORK-INVENTORY.md`
+- **修改内容：** 卫星 TLE 更新器改为通过统一注册表解析 `local`、`mirror`、`upstream` 三种构建源；新增镜像根地址和本地源根目录参数；清单记录来源模式、解析端点、条目数和校验值；修正运行时网络权限校验。
+- **修改原因：** 为未来将外部链接/API 切换到本地数据或国内镜像预留稳定接口，同时保持 HarmonyOS 发布包运行时离线。
+- **构建结果：** 未重新编译 C++；本轮仅修改 Node.js 脚本与文档。
+- **验证结果：** `check-ohos-network-sources.mjs` 通过；离线目录检查通过；临时本地缓存和本机临时镜像服务两种模式均成功读取 3 个卫星源；`git diff --check` 通过。
+- **备注：** 未新增 `INTERNET` 权限；镜像服务仍需逐项确认数据授权、署名、更新频率和外发字段。
+## [2026-08-24] Codex - 内置星表与卫星目录过期提示
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/OFFLINE-CATALOG-UPDATES.md`。
+- **修改内容：** 新增只读本地命令 `getCatalogHealth`；读取随 HAP 解包的 `catalog-manifest.json` 和基础星表文件，返回卫星目录与星表的核验时间、年龄、完整性、部分更新和过期状态。卫星面板与设置页显示明确的本地状态。
+- **过期规则：** 卫星目录超过 14 天提示更新；基础 `hip_gaia3` 星表超过 180 天未复核、文件缺失或校验失败提示复核。单颗卫星 TLE 历元和模拟日期范围继续作为独立计算有效性提示。
+- **隐私边界：** 检查不联网、不申请权限、不读取 SN、位置或用户搜索内容。
+- **构建结果：** 待同步构建副本并编译验证。
+- **验证结果：** 待执行命令目录、离线资源和 HAP 构建检查。
+## [2026-08-27] Codex - 双指缩放按触点选择锚点
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`。
+- **修改内容：** 双指缩放桥接新增触点中心与视口尺寸；触点靠近已选天体时保持该天体屏幕位置，触点位于其他天空区域时保持该天空坐标并允许双指中心平移。连续缩放命令限制为约 60Hz，手势结束后重新捕获选中天体锚点。
+- **交互竞争修复：** 星图手势落下即取消面板避让和旧居中动画；手动拖动及惯性帧在模拟时间更新前捕获锚点，惯性结束后立即由同一锚点抵消时间流逝，不取消选中天体时原有的惯性手感。
+- **修改原因：** 修复存在已选天体时所有捏合都被选中天体抢占、画面抖动、缩放卡顿或偶发不生效的问题。
+- **构建结果：** 待验证。
+- **验证结果：** 待在无选择、捏合选中天体及捏合远处天空三种场景验证。
+## [2026-08-27] Codex - 统一 ArkUI 大圆角体系
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 新增控件、面板、弹层和胶囊四类圆角令牌；将历史页面中分散的 4-32vp 圆角收敛到统一语义，底部 Dock 在手机和平板布局均使用 22vp 面板圆角。
+- **修改原因：** 修复搜索、设置、插件、星空文化、天文计算和底部状态栏之间圆角曲率不一致的问题。
+- **构建结果：** 进行中。
+- **验证结果：** 进行中。
+- **备注：** 保留细线、拖拽把手和明确圆形图像的原始几何，不新增联网、权限或设备标识读取。
+## [2026-08-27] Codex - 详情图片加载链路防回归
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/AppScope/app.json5`，以及构建工程对应镜像。
+- **修改内容：** 深空天体详情增加核心稳定目录号；按目录号匹配离线资料图；将 `m51.png`、`m57.png` 等逻辑请求解析到 `m51-vasey.png`、`m57dumont.png` 等实际包内文件；行星纹理在升级安装沙箱缺失时可从 HAP 按需补齐；异步结果同时校验天体身份和请求路径，避免快速切换时串图。
+- **修改原因：** 当前平板资源已经完整，但旧版本升级后的 `filesDir` 可能只刷新月球纹理，且带来源后缀的深空文件无法通过简单文件名猜测稳定命中。
+- **构建结果：** C++ `stellarium` 与 DevEco `assembleHap --no-daemon` 均成功；Build 从 `1000032` 提升到 `1000033`，版本名保持 `1.0.9`；签名 HAP SHA-256 为 `2330fa6fa9c366501a4b6510a432b3d100934064bd4f334eb35237e5d88371ac`。
+- **验证结果：** 674 张深空 PNG 与 `textures.json` 的 674 条引用逐项一致、缺失 0；M1/M51/M57/M58/M63/M82 等带后缀文件解析通过；HAP 包含 674 张深空图和 8 张主要行星详情纹理；平板 `192.168.1.30:33805` 覆盖安装并正常启动，设备探针返回 `onDiskCount=674`、`referencedCount=674`、`missingCount=0`、`activeTextureErrorCount=0`，M51 返回稳定 `catalogId=M 51`。
+- **备注：** 详情图片、行星纹理及修复逻辑均只读取 HAP 内置资源，不新增网络、权限或外部图片下载。
+## [2026-08-27] Codex - 统一应用配置与插件生命周期语义
+
+- **修改文件：** `src/{StelMainView.cpp,StelOhosCommandCatalog.hpp}`、`harmonyos/ets-source/pages/{MainWindowNativeNode,I18n}.ets`、`harmonyos/AppScope/app.json5`、`docs/harmonyos/{CLI,CHANGELOG}.md`，以及对应 HarmonyOS 构建镜像。
+- **修改内容：** 插件管理页不再用开关直接加载或卸载当前进程插件；当前载入状态改为只读状态，原版的“随应用启动载入”成为唯一生命周期开关。Oculars、Satellites、MeteorShowers 提供独立“打开插件功能”入口，显示、轨道、目镜和模拟等业务选项继续留在各自面板。
+- **核心与 CLI：** 新增 `setPluginLoadAtStartup` 统一命令并登记到机器可读目录；修复 ArkUI 将 `getPluginList` 对象数组误判为字符串数组、导致打开插件面板时重复加载的问题；目镜面板也统一先确认 `Oculars` 已载入。离线发布版启动后会读取本地插件清单，此操作不访问网络。
+- **构建结果：** `versionCode` 提升至 `1000040`；Qt 原生 `stellarium` 与 DevEco `assembleHap` 均 BUILD SUCCESSFUL，保留项目已有 ArkTS 弃用 API 警告。
+- **验证结果：** 命令目录 259 条一致、43 种官方语言资源校验、源码/构建镜像比较和 `git diff --check` 均通过；签名 HAP 内的 `libstellarium.so` 已确认包含新命令。模拟器 `127.0.0.1:5555` 与平板 `192.168.1.30:33805` 覆盖安装成功；设备命令桥在 30 秒内未就绪，运行态点按与启动开关写回仍待设备完成隐私/前台启动后验证。
+- **产物：** `build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256 `613ed4dc681af71cd4a6b0af5d2006ad3319c03cfba31aa36bbab9b8e17e5435`。
+- **备注：** 本次不新增网络访问、权限、设备标识读取或在线数据源；当前进程载入、下次启动载入和插件内部功能启用为三种独立状态，不得再次合并为同一个开关。
+
+## [2026-08-27] Codex - 统一“更多功能”大面板
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/AppScope/app.json5`。
+- **修改内容：** “更多功能”改为普通 `activePanel` 页面，与搜索、时间、位置、图层共用同一浮动大卡片、响应式尺寸、关闭按钮、滚动、拖拽和转场逻辑；Pad、手机与折叠屏不再渲染独立小抽屉。
+- **交互结果：** Dock 的“更多”选中态直接跟随面板状态，打开其他低频功能时在同一面板内切换；面板出现后沿用现有 Dock 挤压与天体遮挡避让规则。
+- **构建版本：** `versionCode` 提升至 `1000041`，版本名保持 `1.0.9`。
+- **备注：** 不新增联网、权限、设备标识读取或数据采集。

@@ -895,7 +895,7 @@ export const LOCATION_COUNTRY_NAMES: Record<string, LocationCountryName> =
   "en": "Tuvalu"
  },
  "TW": {
-  "zh": "台湾",
+  "zh": "中国台湾地区",
   "en": "Taiwan"
  },
  "TZ": {

@@ -78,7 +78,7 @@ export default class QAbility extends UIAbility {
 
   private isCliFireAndForget(commandName: string): boolean {
     return commandName === 'dragView' || commandName === 'zoomBy' || commandName === 'zoomStep' ||
-      commandName === 'endPinch' || commandName === 'panBy' || commandName === 'moveToAltAz' ||
+      commandName === 'endPinch' || commandName === 'beginSkyGesture' || commandName === 'panBy' || commandName === 'moveToAltAz' ||
       commandName === 'setGyroView' || commandName === 'gyroDiagnostic' ||
       commandName === 'startPanInertia' || commandName === 'stopPanInertia';
   }

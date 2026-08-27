@@ -497,6 +497,32 @@ void Satellites::init()
 		restoreDefaultCatalog();
 	}
 
+#ifdef STELLARIUM_OHOS_OFFLINE
+	QFile bundledCatalog(":/satellites/satellites.json");
+	if (bundledCatalog.open(QIODevice::ReadOnly))
+	{
+		try
+		{
+			const QVariantMap bundledMap = StelJsonParser::parse(&bundledCatalog).toMap();
+			const QString bundledSnapshot = bundledMap.value("offlineSnapshot").toString();
+			const QString installedSnapshot = loadDataMap(catalogPath).value("offlineSnapshot").toString();
+			if (!bundledSnapshot.isEmpty() && bundledSnapshot != installedSnapshot)
+			{
+				qInfo().noquote() << "[Satellites] installing bundled offline snapshot" << bundledSnapshot
+				                    << "over" << (installedSnapshot.isEmpty() ? QStringLiteral("legacy catalogue") : installedSnapshot);
+				if (!saveDataMap(bundledMap, catalogPath))
+					qWarning() << "[Satellites] failed to install bundled offline snapshot";
+			}
+			if (!bundledSnapshot.isEmpty() && loadDataMap(catalogPath).value("offlineSnapshot").toString() == bundledSnapshot)
+				setLastUpdate(QDateTime::fromString(bundledSnapshot, Qt::ISODate));
+		}
+		catch (std::runtime_error &e)
+		{
+			qWarning() << "[Satellites] cannot inspect bundled offline snapshot:" << e.what();
+		}
+	}
+#endif
+
 	qInfo().noquote() << "[Satellites] loading catalogue file:" << QDir::toNativeSeparators(catalogPath);
 
 	// create satellites according to content of satellites.json file
@@ -504,15 +530,19 @@ void Satellites::init()
 	// create list of "supergroups" for satellites
 	createSuperGroupsList();
 
-	// Set up download manager and the update schedule
+	updateState = CompleteNoUpdates;
+#ifndef STELLARIUM_OHOS_OFFLINE
+	// Set up download manager and the update schedule.
 	downloadMgr = new QNetworkAccessManager(this);
 	connect(downloadMgr, &QNetworkAccessManager::finished, this, &Satellites::saveDownloadedUpdate);
-	updateState = CompleteNoUpdates;
 	updateTimer = new QTimer(this);
 	updateTimer->setSingleShot(false);   // recurring check for update
 	updateTimer->setInterval(13000);     // check once every 13 seconds to see if it is time for an update
 	connect(updateTimer, &QTimer::timeout, this, &Satellites::checkForUpdate);
 	updateTimer->start();
+#else
+	qInfo() << "[Satellites] HarmonyOS offline build: online TLE updates are disabled.";
+#endif
 
 	SolarSystem* ssystem = GETSTELMODULE(SolarSystem);
 	earth = ssystem->getEarth();
@@ -1165,7 +1195,11 @@ void Satellites::loadSettings()
 	setLastUpdate(QDateTime::fromString(conf->value("last_update", "2001-05-25T12:00:00").toString(), Qt::ISODate));
 	setFlagHintsVisible(conf->value("show_satellite_hints", true).toBool());
 	Satellite::showLabels = conf->value("show_satellite_labels", false).toBool();
+#ifdef STELLARIUM_OHOS_OFFLINE
+	updatesEnabled = false;
+#else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
+#endif
 	autoAddEnabled = conf->value("auto_add_enabled", true).toBool();
 	autoRemoveEnabled = conf->value("auto_remove_enabled", true).toBool();
 	autoDisplayEnabled = conf->value("auto_display_enabled", true).toBool();
@@ -1616,6 +1650,71 @@ SatellitesListModel* Satellites::getSatellitesListModel()
 	if (!satelliteListModel)
 		satelliteListModel = new SatellitesListModel(&satellites, this);
 	return satelliteListModel;
+}
+
+QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& query, int limit) const
+{
+	QVariantMap summary;
+	QVariantList items;
+	QDateTime newestUpdate;
+	int count = 0;
+	int outdatedCount = 0;
+	int matchedCount = 0;
+	const QString normalizedQuery = query.trimmed();
+	const double currentJD = StelApp::getInstance().getCore()->getJD();
+
+	for (const SatelliteP& satellite : satellites)
+	{
+		if (satellite.isNull() || !satellite->initialized)
+			continue;
+
+		count++;
+		const QDateTime lastUpdated = satellite->lastUpdated;
+		if (lastUpdated.isValid() && (!newestUpdate.isValid() || lastUpdated > newestUpdate))
+			newestUpdate = lastUpdated;
+
+		const bool outdated = qAbs(currentJD - satellite->tleEpochJD) > Satellite::tleEpochAge;
+		if (outdated)
+			outdatedCount++;
+		if (!group.isEmpty() && !satellite->groups.contains(group))
+			continue;
+
+		QString localizedName;
+		bool matches = normalizedQuery.isEmpty()
+			|| satellite->id.contains(normalizedQuery, Qt::CaseInsensitive)
+			|| satellite->name.contains(normalizedQuery, Qt::CaseInsensitive);
+		if (!matches)
+		{
+			localizedName = satellite->getNameI18n();
+			matches = localizedName.contains(normalizedQuery, Qt::CaseInsensitive);
+		}
+		if (!matches)
+			continue;
+
+		matchedCount++;
+		if (items.size() >= limit)
+			continue;
+		if (localizedName.isEmpty())
+			localizedName = satellite->getNameI18n();
+
+		QVariantMap item;
+		item.insert("id", satellite->id);
+		item.insert("name", localizedName);
+		item.insert("englishName", satellite->name);
+		item.insert("displayed", satellite->displayed);
+		item.insert("outdated", outdated);
+		item.insert("tleEpoch", satellite->tleEpoch);
+		item.insert("lastUpdated", lastUpdated.toUTC().toString(Qt::ISODate));
+		item.insert("heightKm", satellite->height);
+		items.append(item);
+	}
+
+	summary.insert("count", count);
+	summary.insert("newestUpdate", newestUpdate.toUTC().toString(Qt::ISODate));
+	summary.insert("outdatedCount", outdatedCount);
+	summary.insert("matchedCount", matchedCount);
+	summary.insert("items", items);
+	return summary;
 }
 
 SatelliteP Satellites::getById(const QString& id) const
@@ -2178,12 +2277,23 @@ bool Satellites::getFlagLabelsVisible()
 
 void Satellites::setUpdatesEnabled(bool enabled)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	Q_UNUSED(enabled)
+	if (updatesEnabled)
+	{
+		updatesEnabled = false;
+		emit updatesEnabledChanged(false);
+		emit settingsChanged();
+	}
+	return;
+#else
 	if (enabled != updatesEnabled)
 	{
 		updatesEnabled = enabled;
 		emit settingsChanged();
 		emit updatesEnabledChanged(enabled);
 	}
+#endif
 }
 
 void Satellites::setAutoAddEnabled(bool enabled)
@@ -2597,15 +2707,24 @@ void Satellites::setUpdateFrequencyHours(int hours)
 
 void Satellites::checkForUpdate(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	return;
+#else
 	if (updatesEnabled && (updateState != Updating)
 	    && (lastUpdate.first.addSecs(updateFrequencyHours * 3600) <= QDateTime::currentDateTime()))
 	{
 		updateFromOnlineSources();
 	}
+#endif
 }
 
 void Satellites::updateFromOnlineSources()
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	qWarning() << "[Satellites] Online TLE updates are unavailable in the HarmonyOS offline build.";
+	emit updateStateChanged(OtherError);
+	return;
+#else
 	// never update TLE's for any date before Oct 4, 1957, 19:28:34GMT ;-)
 	if (StelApp::getInstance().getCore()->getJD()<2436116.3115)
 		return;
@@ -2672,6 +2791,7 @@ void Satellites::updateFromOnlineSources()
 			downloadMgr->get(QNetworkRequest(source.url));
 		}
 	}
+#endif
 }
 
 void Satellites::saveDownloadedUpdate(QNetworkReply* reply)

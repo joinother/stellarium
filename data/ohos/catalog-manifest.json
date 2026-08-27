@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "catalogs": {
+    "stars": {
+      "source": "bundled hip_gaia3 catalogs 0-4",
+      "checkedAt": "2026-08-27T09:54:54.113Z",
+      "files": [
+        {
+          "file": "stars_0_0v0_21.cat",
+          "bytes": 242320,
+          "expectedBytes": 242320,
+          "md5": "0e8b8bb5d177c5caad433569140597e9",
+          "expectedMd5": "0e8b8bb5d177c5caad433569140597e9",
+          "valid": true
+        },
+        {
+          "file": "stars_1_0v0_16.cat",
+          "bytes": 1037728,
+          "expectedBytes": 1037728,
+          "md5": "3a7aac6aa540911418ca2c3358e4b489",
+          "expectedMd5": "3a7aac6aa540911418ca2c3358e4b489",
+          "valid": true
+        },
+        {
+          "file": "stars_2_0v0_17.cat",
+          "bytes": 6804736,
+          "expectedBytes": 6804736,
+          "md5": "23d59734215dcbc539d9bf13eb4ed7f8",
+          "expectedMd5": "23d59734215dcbc539d9bf13eb4ed7f8",
+          "valid": true
+        },
+        {
+          "file": "stars_3_0v0_10.cat",
+          "bytes": 20075344,
+          "expectedBytes": 20075344,
+          "md5": "39c82706afb12b1a3d08eee92ddef5e5",
+          "expectedMd5": "39c82706afb12b1a3d08eee92ddef5e5",
+          "valid": true
+        },
+        {
+          "file": "stars_4_1v0_6.cat",
+          "bytes": 55759776,
+          "expectedBytes": 55759776,
+          "md5": "f5e57f400291d3d0c247ec669b1a4a07",
+          "expectedMd5": "f5e57f400291d3d0c247ec669b1a4a07",
+          "valid": true
+        }
+      ],
+      "verified": true,
+      "largeDownloadAllowed": false,
+      "limitingMagnitude": 12,
+      "note": "内置 stars_0 至 stars_4，覆盖到约 12 等；stars_5 至 stars_8 合计约 4 GiB，不直接打入离线 HAP。"
+    },
+    "satellites": {
+      "source": "CelesTrak GP 3LE with SatNOGS supplement",
+      "sourceMode": "upstream",
+      "sources": [
+        {
+          "sourceId": "satellites.tle.stations",
+          "role": "primary",
+          "format": "tle-3le",
+          "sourceMode": "upstream",
+          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=3LE",
+          "bytes": 3528,
+          "entries": 21,
+          "sha256": "561eb4cfb9e8a92662de0cab23141c20ae8492845d2f3ef1e6bad59444f2289d",
+          "ok": true
+        },
+        {
+          "sourceId": "satellites.tle.visual",
+          "role": "primary",
+          "format": "tle-3le",
+          "sourceMode": "upstream",
+          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=3LE",
+          "bytes": 26376,
+          "entries": 157,
+          "sha256": "3457ddc85ac61175ce4cd78b6f0206dc9a06148a2c0184bb49af21f17cfd83a8",
+          "ok": true
+        },
+        {
+          "sourceId": "satellites.tle.satnogs",
+          "role": "supplement",
+          "format": "satnogs-json",
+          "sourceMode": "upstream",
+          "resolvedEndpoint": "https://db.satnogs.org/api/tle/?format=json",
+          "bytes": 524191,
+          "entries": 1671,
+          "sha256": "a97bb7850621b37a02bc59159c15f755bd420c6213d3444fbc947179072d614d",
+          "ok": true
+        }
+      ],
+      "sourceErrors": [
+        {
+          "sourceId": "satellites.tle.active",
+          "role": "primary",
+          "sourceMode": "upstream",
+          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=3LE",
+          "error": "satellites.tle.active: HTTP 403"
+        }
+      ],
+      "fetchedAt": "2026-08-27T09:54:53.973Z",
+      "sha256": "f82d11a95714c7c8d21b72cd6d3a25ba49f175309fc4ce66bab27f4ef7a69670",
+      "bytes": 1924760,
+      "entries": 3134,
+      "validTleEntries": 3134,
+      "refreshedEntries": 796,
+      "primaryRefreshedEntries": 166,
+      "supplementalRefreshedEntries": 630,
+      "supplementalAvailableEntries": 1645,
+      "verified": false,
+      "partial": true
+    }
+  },
+  "generatedAt": "2026-08-27T09:54:53.973Z"
+}

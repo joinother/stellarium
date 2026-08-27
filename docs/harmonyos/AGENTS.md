@@ -270,6 +270,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 | `setJD` | 设置 Julian Date | jd |
 | `setDate` | 设置日期时间 | YYYY-MM-DDThh:mm |
 | `setTimeToJD` | 设置模拟时间为指定 JD | jd |
+| `setJulianDate` | 按 JD 或 MJD 设置模拟时间 | jd\|数值 或 mjd\|数值 |
 
 ### 位置/观测
 

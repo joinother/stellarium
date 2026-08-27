@@ -314,6 +314,9 @@ public:
 	QHash<QString,QString> getSatellites(const QString& group=QString(), Status vis=Both) const;
 	//! Get a model representing the list of satellites.
 	SatellitesListModel* getSatellitesListModel();
+	//! Return a lightweight, single-pass catalogue summary for platform integrations.
+	//! This intentionally avoids orbital-detail calculations for every satellite.
+	QVariantMap getCatalogSummary(const QString& group, const QString& query, int limit) const;
 
 	//! Get a satellite object by its identifier (i.e. NORAD number).
 	SatelliteP getById(const QString& id) const;
@@ -332,6 +335,8 @@ public:
 
 	//! get the date and time the TLE elements were updated
 	QPair<QDateTime, double> getLastUpdate(void) const {return lastUpdate;}
+	//! Returns whether the supplied simulation date is inside the catalogue range.
+	bool isDateInValidRange(const StelCore* core) const {return isValidRangeDates(core);}
 	//! set the date and time the TLE elements were updated
 	void setLastUpdate(QDateTime last);
 	void setLastUpdate(double last);
@@ -1001,4 +1006,3 @@ public:
 };
 
 #endif /* SATELLITES_HPP */
-

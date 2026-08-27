@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "policy": {
+    "runtime": "local-only",
+    "buildDefaultSource": "upstream",
+    "allowedBuildSources": ["local", "mirror", "upstream"],
+    "mirrorMustBeExplicit": true,
+    "networkPermissionRequiredAtRuntime": false
+  },
+  "sources": [
+    {
+      "id": "satellites.tle.stations",
+      "kind": "catalog",
+      "format": "tle-3le",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/stations.3le",
+      "localPath": "data/ohos/mirror-cache/satellites/stations.3le",
+      "output": "plugins/Satellites/resources/satellites.json",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "satellites.tle.visual",
+      "kind": "catalog",
+      "format": "tle-3le",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/visual.3le",
+      "localPath": "data/ohos/mirror-cache/satellites/visual.3le",
+      "output": "plugins/Satellites/resources/satellites.json",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "satellites.tle.active",
+      "kind": "catalog",
+      "format": "tle-3le",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/active.3le",
+      "localPath": "data/ohos/mirror-cache/satellites/active.3le",
+      "output": "plugins/Satellites/resources/satellites.json",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "satellites.tle.satnogs",
+      "kind": "catalog-supplement",
+      "format": "satnogs-json",
+      "upstreamUrl": "https://db.satnogs.org/api/tle/?format=json",
+      "mirrorPath": "/v1/catalogs/satellites/satnogs.json",
+      "localPath": "data/ohos/mirror-cache/satellites/satnogs.json",
+      "output": "plugins/Satellites/resources/satellites.json",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.exoplanets",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://www.stellarium.org/json/exoplanets.json",
+      "mirrorPath": "/v1/catalogs/exoplanets.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/exoplanets.json",
+      "output": "plugins/Exoplanets",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.meteor-showers",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://stellarium.org/json/MeteorShowers.json",
+      "mirrorPath": "/v1/catalogs/meteor-showers.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/meteor-showers.json",
+      "output": "plugins/MeteorShowers",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.novae",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://stellarium.org/json/novae.json",
+      "mirrorPath": "/v1/catalogs/novae.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/novae.json",
+      "output": "plugins/Novae",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.supernovae",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://stellarium.org/json/supernovae.json",
+      "mirrorPath": "/v1/catalogs/supernovae.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/supernovae.json",
+      "output": "plugins/Supernovae",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.pulsars",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://stellarium.org/json/pulsars.json",
+      "mirrorPath": "/v1/catalogs/pulsars.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/pulsars.json",
+      "output": "plugins/Pulsars",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "catalog.quasars",
+      "kind": "catalog",
+      "format": "json",
+      "upstreamUrl": "https://stellarium.org/json/quasars.json",
+      "mirrorPath": "/v1/catalogs/quasars.json",
+      "localPath": "data/ohos/mirror-cache/catalogs/quasars.json",
+      "output": "plugins/Quasars",
+      "outboundFields": [],
+      "runtimeDefault": "bundled"
+    },
+    {
+      "id": "survey.hips.directory",
+      "kind": "survey-directory",
+      "format": "ivoa-hips-json",
+      "upstreamUrl": "https://data.stellarium.org/surveys/hipslist",
+      "mirrorPath": "/v1/surveys/hips/index.json",
+      "localPath": "data/ohos/mirror-cache/surveys/hips/index.json",
+      "output": "data/hips",
+      "outboundFields": ["sky-tile-identifier"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "survey.dss.tiles",
+      "kind": "survey-tiles",
+      "format": "jpg-tiles",
+      "upstreamUrl": "http://dss.stellarium.org/survey/{level}/{x}_{y}.jpg",
+      "mirrorPath": "/v1/surveys/dss/{level}/{x}_{y}.jpg",
+      "localPath": "data/ohos/mirror-cache/surveys/dss",
+      "output": "data/surveys/dss",
+      "outboundFields": ["sky-tile-identifier"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.simbad",
+      "kind": "online-query",
+      "format": "simbad-response",
+      "upstreamUrl": "https://simbad.u-strasbg.fr/",
+      "mirrorPath": "/v1/query/simbad",
+      "localPath": "data/ohos/mirror-cache/query/simbad",
+      "output": "runtime-only",
+      "outboundFields": ["user-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "catalog.mpc",
+      "kind": "catalog-query",
+      "format": "mpc-orbit-elements",
+      "upstreamUrl": "https://www.minorplanetcenter.net/",
+      "mirrorPath": "/v1/catalogs/mpc",
+      "localPath": "data/ohos/mirror-cache/catalogs/mpc",
+      "output": "plugins/SolarSystemEditor",
+      "outboundFields": ["object-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "realtime.planes",
+      "kind": "realtime-query",
+      "format": "aircraft-json",
+      "upstreamUrl": "https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius}",
+      "mirrorPath": "/v1/realtime/planes/{lat}/{lon}/{radius}",
+      "localPath": "data/ohos/mirror-cache/realtime/planes",
+      "output": "plugins/Planes",
+      "outboundFields": ["latitude", "longitude", "radius"],
+      "runtimeDefault": "disabled"
+    }
+  ]
+}

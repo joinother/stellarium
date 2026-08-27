@@ -7,12 +7,20 @@
 ## 当前结论
 
 - HarmonyOS 构建默认启用 `STELLARIUM_OHOS_OFFLINE=1`。
-- 当前策略是“内置数据优先、自动联网默认关闭、用户主动开启后才联网”，不是对所有插件网络 API 的编译期总禁用。
+- 卫星插件在 HarmonyOS 离线构建中已在代码级禁用在线 TLE 更新：不创建网络管理器、不启动更新定时器，旧配置也不能重新开启更新。
 - 核心 IP 定位、在线搜索和星表下载在该构建开关下被编译禁用。
 - 插件自身的网络实现仍保留，后续若在 HarmonyOS 暴露对应入口，必须增加隐私说明、权限/同意流程、超时和内置数据回退。
 - 当前鸿蒙 `module.json5` 未声明 `ohos.permission.INTERNET`，因此已生成 HAP 没有系统授予的公网访问权限；这属于运行时权限边界，不等同于源码中所有网络请求代码都已移除。
 - 严格“整个应用绝对不联网”尚未完成代码级封口：HiPS/TOAST、若干插件更新器、MPC 导入和 RemoteSync 的网络实现仍编译保留，必须在提交未备案版本前禁用入口并增加统一离线构建门禁。
 - 地图 SDK 当前按项目决定暂缓，不接入花瓣地图或其他地图 SDK。
+
+## 统一数据源替换契约
+
+- 所有可替换的目录、巡天资源和在线接口先登记在 `data/ohos/network-sources.json`，由 `scripts/check-ohos-network-sources.mjs` 校验。
+- 构建机支持 `local`、`mirror`、`upstream` 三种来源模式；应用运行时不读取来源 URL，也不新增公网网络权限。
+- 卫星更新器已经接入该契约：默认 `upstream` 保持原有开发流程；发布构建应使用 `--source-mode local`，镜像构建必须显式指定 `--source-mode mirror --mirror-base-url ...`。
+- `local` 模式读取仓库相对路径下的审核缓存，`mirror` 和 `upstream` 只允许出现在开发/构建阶段；清单记录来源模式、解析端点、字节数和 SHA-256，不记录设备标识、位置或用户查询。
+- 这套注册表是替换接口和审计边界，不等同于所有桌面插件已经完成本地化；每个新接入项仍需单独核对授权、隐私字段、缓存和失败回退。
 
 ## 运行时联网台账
 
@@ -29,7 +37,7 @@
 | Supernovae | 自动更新关闭 | 用户主动开启更新 | `https://stellarium.org/json/supernovae.json` | 超新星目录 JSON | 适合国内静态镜像；先核对数据许可 |
 | Pulsars | 自动更新关闭 | 用户主动开启更新 | `https://stellarium.org/json/pulsars.json` | 脉冲星目录 JSON | 适合国内静态镜像；先核对数据许可 |
 | Quasars | 自动更新关闭 | 用户主动开启更新 | `https://stellarium.org/json/quasars.json` | 类星体目录 JSON | 适合国内静态镜像；先核对数据许可 |
-| Satellites | 插件可加载，更新默认关闭 | 用户主动刷新卫星数据；若开启自动更新则按周期请求 | CelesTrak、AMSAT、Mike McCants，具体 URL 见 `plugins/Satellites/src/Satellites.cpp` | 公开卫星轨道/TLE 或 GP 数据；会保存到本地 | 可做定时同步服务，但不是简单静态文件替换；需保留来源、历元、更新时间、失效策略和授权 |
+| Satellites | HarmonyOS 运行时严格离线 | 应用内无更新入口；仅开发/构建机显式运行 `scripts/update-ohos-astronomy-data.mjs --update-satellites` | CelesTrak GP 3LE：`stations`、`visual`、`active`；SatNOGS TLE API 作补充 | 构建机下载公开 TLE，验证后写入下一次 HAP 内置目录；运行时不请求、不保存远程响应 | 构建机可后续评估合规镜像；当前保留来源、时间、校验和和失败回退，部分源失败时标记 `partial`，不把旧数据伪称最新 |
 | Planes | 默认关闭 | 用户开启飞机图层且处于实时模式；默认约每 15 秒请求 | `https://opendata.adsb.fi/api/v2/lat/%1/lon/%2/dist/%3`；备用 `https://api.airplanes.live/v2/point/%1/%2/%3` | 当前观测纬度、经度、半径；返回实时航空器信息 | 不建议简单镜像，数据时效性决定必须访问实时服务；目前没有已验证的国内公开等价 API |
 | HiPS 远程星图层（在线巡天） | 默认不显示 | 鸿蒙端“视图/巡天”页打开“HiPS 巡天”，或恢复了已保存的可见远程图层；页面提示“在线巡天需要网络连接” | 默认目录源：`http://alasky.u-strasbg.fr/MocServer/query?*/P/*&get=record`、`https://data.stellarium.org/surveys/hipslist`；每个图层还请求图层根目录下的 `properties`、不同层级的 `Norder.../Dir.../Npix...` 瓦片及可能的缩略图 | 巡天目录、图层元数据、当前视场对应的多级图像瓦片；请求路径中可能包含当前天区坐标/瓦片编号 | 适合自建合规 HiPS 镜像，但工作量大，需同步目录、元数据和多级瓦片；先确认上游数据许可、署名和更新策略；不接地图 SDK |
 | DSS/TOAST 数字化巡天（在线巡天） | 默认不显示 | 鸿蒙端“视图/巡天”页打开“DSS/TOAST 巡天”开关后，按当前视场加载图像 | 默认 `http://dss.stellarium.org/survey/{level}/{x}_{y}.jpg` | 当前天区对应层级、横纵坐标的 JPG 图像瓦片 | 可部署完整瓦片镜像，但需确认原始数据许可、瓦片生成方式和存储成本；目前未验证国内等价公开服务 |

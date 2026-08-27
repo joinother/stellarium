@@ -103,3 +103,6 @@
 `harmonyos/ets-source/`(git 跟踪) 与 `build/libstellarium-harmonyos/entry/src/main/ets/`(构建副本)
 的 `MainWindowNativeNode.ets` 必须 md5 一致；`harmonyos/resources/` 与
 `build/.../resources/` 的 `string.json` 同样双写。改其一须同步其二。
+# 维护说明
+
+本文保留历史迁移记录。文中出现的 `ALIAS_LIST`、手工恒星/行星/星座表仅代表旧实现，现已停用并不参与编译。当前天体名称统一由 Stellarium 核心及官方 `.qm` 资源提供，新的名称翻译不得继续写入本文所述表格。

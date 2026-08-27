@@ -39,6 +39,11 @@ fi
 
 mkdir -p "$DST"
 
+# Compile the upstream Qt catalogs first. The rawfile mirror must contain the
+# same official translations that the native core loads at runtime.
+node "$SCRIPT_DIR/build-ohos-official-translations.mjs"
+node "$SCRIPT_DIR/build-ohos-multilingual-search-index.mjs"
+
 # Top-level data directories the core expects under its install root.
 # `scripts` holds Stellarium's .ssc sky-tour scripts. It also happens to hold this
 # repo's own build shell scripts, so it gets an allow-list filter below — without
@@ -79,13 +84,13 @@ for d in "${DIRS[@]}"; do
   [ -d "$SRC" ] || { echo "SKIP (missing): $SRC"; continue; }
   echo "==> syncing $d -> $DST/$d"
   if [ "$d" = "skycultures" ]; then
-    rsync -a --update "${SKYCULTURE_EXCLUDES[@]}" "$SRC/" "$DST/$d/"
+    rsync -a --delete --delete-excluded "${SKYCULTURE_EXCLUDES[@]}" "$SRC/" "$DST/$d/"
   elif [ "$d" = "nebulae" ]; then
     rsync -a --delete --delete-excluded "${NEBULAE_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   elif [ "$d" = "scripts" ]; then
-    rsync -a --update --no-r --dirs "${SCRIPT_INCLUDES[@]}" "$SRC/" "$DST/$d/"
+    rsync -a --delete --delete-excluded --no-r --dirs "${SCRIPT_INCLUDES[@]}" "$SRC/" "$DST/$d/"
   else
-    rsync -a --update "$SRC/" "$DST/$d/"
+    rsync -a --delete "$SRC/" "$DST/$d/"
   fi
 done
 
