@@ -18,6 +18,11 @@ interface StellariumCliRequest {
   attempts: number;
 }
 
+interface WindowAvoidAreaChange {
+  type: Window.AvoidAreaType;
+  area: Window.AvoidArea;
+}
+
 export default class QAbility extends UIAbility {
 
   private pendingWant: Want | null = null;
@@ -33,6 +38,14 @@ export default class QAbility extends UIAbility {
   private privacyHandoffBackgroundObserved: boolean = false;
   private privacyHandoffGeneration: number = 0;
   private cliRequests: StellariumCliRequest[] = [];
+  private safeAreaWindow: Window.Window | null = null;
+  private safeAreaTopPixels: number = 0;
+
+  private readonly avoidAreaChangeCallback = (data: WindowAvoidAreaChange): void => {
+    if (data.type === Window.AvoidAreaType.TYPE_SYSTEM || data.type === Window.AvoidAreaType.TYPE_CUTOUT) {
+      this.publishScreenSafeArea(data.area.topRect.height);
+    }
+  };
 
   private isCliCommandName(value: string): boolean {
     return /^[A-Za-z][A-Za-z0-9_]*$/.test(value) && value.length <= 96;
@@ -80,7 +93,7 @@ export default class QAbility extends UIAbility {
     return commandName === 'dragView' || commandName === 'zoomBy' || commandName === 'zoomStep' ||
       commandName === 'endPinch' || commandName === 'beginSkyGesture' || commandName === 'panBy' || commandName === 'moveToAltAz' ||
       commandName === 'setGyroView' || commandName === 'gyroDiagnostic' ||
-      commandName === 'startPanInertia' || commandName === 'stopPanInertia';
+      commandName === 'startPanInertia' || commandName === 'stopPanInertia' || commandName === 'playScript';
   }
 
   private drainCliRequests(): void {
@@ -332,9 +345,44 @@ export default class QAbility extends UIAbility {
       if (canIUse('SystemCapability.Window.SessionManager')) {
         await mainWindow.setSpecificSystemBarEnabled('navigationIndicator', false);
       }
+      this.registerScreenSafeArea(mainWindow);
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() success');
     } catch (err) {
       hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() failed: ' + JSON.stringify(err));
+    }
+  }
+
+  private publishScreenSafeArea(topPixels: number): void {
+    const measuredTop = Number.isFinite(topPixels) ? Math.max(0, Math.round(topPixels)) : 0;
+    this.safeAreaTopPixels = Math.max(this.safeAreaTopPixels, measuredTop);
+    const top = this.safeAreaTopPixels;
+    try {
+      const result = command('setScreenSafeArea', top.toString());
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[safe-area] topPixels=%{public}s native=%{public}s', top.toString(), result);
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[safe-area] native update failed: %{public}s', JSON.stringify(err));
+    }
+  }
+
+  private registerScreenSafeArea(mainWindow: Window.Window): void {
+    if (this.safeAreaWindow !== null && this.safeAreaWindow !== mainWindow) {
+      try {
+        this.safeAreaWindow.off('avoidAreaChange', this.avoidAreaChangeCallback);
+      } catch (err) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, '[safe-area] previous listener removal failed');
+      }
+    }
+    this.safeAreaWindow = mainWindow;
+    try {
+      const systemArea = mainWindow.getWindowAvoidArea(Window.AvoidAreaType.TYPE_SYSTEM);
+      const cutoutArea = mainWindow.getWindowAvoidArea(Window.AvoidAreaType.TYPE_CUTOUT);
+      this.publishScreenSafeArea(Math.max(systemArea.topRect.height, cutoutArea.topRect.height));
+      mainWindow.off('avoidAreaChange', this.avoidAreaChangeCallback);
+      mainWindow.on('avoidAreaChange', this.avoidAreaChangeCallback);
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[safe-area] avoidAreaChange listener registered');
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[safe-area] avoid area unavailable: %{public}s', JSON.stringify(err));
+      this.publishScreenSafeArea(0);
     }
   }
 

@@ -22,6 +22,7 @@
 #include "StelFader.hpp"
 #include "StelObjectMgr.hpp"
 #include "StelApp.hpp"
+#include "StelLocaleMgr.hpp"
 #include "StelCore.hpp"
 #include "StelModuleMgr.hpp"
 
@@ -34,8 +35,57 @@
 #include "StelPainter.hpp"
 
 #include <QString>
+#include <QStringList>
 #include <QDebug>
 #include <QTimer>
+#include <QtMath>
+#include <QRegularExpression>
+#include <climits>
+#if defined(__OHOS__)
+#include <atomic>
+#endif
+
+#if defined(__OHOS__)
+namespace
+{
+std::atomic<int> ohosScreenSafeAreaTopPx{0};
+std::atomic<int> ohosScreenSafeAreaShiftDip{0};
+
+QString translateScriptLabel(const QString& text)
+{
+	if (!StelApp::isInitialized())
+		return text;
+
+	const auto& translator = StelApp::getInstance().getLocaleMgr().getScriptsTranslator();
+	const QString translated = translator.qtranslate(text);
+	if (translated != text)
+		return translated;
+
+	const QStringList parts = text.split(QStringLiteral(" - "), Qt::KeepEmptyParts);
+	if (parts.size() < 2)
+		return text;
+
+	static const QRegularExpression messierPrefix(QStringLiteral("^(\\[M\\d+\\]\\s*)(.+)$"));
+	QStringList localizedParts;
+	bool changed = false;
+	for (const QString& part : parts)
+	{
+		QString candidate = part.trimmed();
+		QString prefix;
+		const QRegularExpressionMatch match = messierPrefix.match(candidate);
+		if (match.hasMatch())
+		{
+			prefix = match.captured(1);
+			candidate = match.captured(2).trimmed();
+		}
+		const QString localizedCandidate = translator.qtranslate(candidate);
+		changed = changed || localizedCandidate != candidate;
+		localizedParts.append(prefix + localizedCandidate);
+	}
+	return changed ? localizedParts.join(QStringLiteral(" - ")) : text;
+}
+}
+#endif
 
 // Base class from which other label types inherit
 class StelLabel
@@ -176,8 +226,12 @@ public:
 	//! @param core the StelCore object
 	//! @param sPainter the StelPainter to use for drawing operations
 	bool draw(StelCore* core, StelPainter& sPainter) override;
+	int getRequestedY() const { return requestedY; }
 
 private:
+	void updateScreenPosition();
+	int requestedX;
+	int requestedY;
 	int screenX;
 	int screenY;
 };
@@ -462,12 +516,27 @@ bool EquatorialLabel::draw(StelCore *core, StelPainter& sPainter)
 ///////////////////////
 ScreenLabel::ScreenLabel(const QString& text, int x, int y, const QFont& font, const Vec3f& color)
 	: StelLabel(text, font, color)
+	, requestedX(x)
+	, requestedY(y)
 {
-	QFontMetrics metrics(font);
+	updateScreenPosition();
+}
+
+void ScreenLabel::updateScreenPosition()
+{
+	QFontMetrics metrics(labelFont);
 	StelCore* core = StelApp::getInstance().getCore();
 	const double ppx = core->getCurrentStelProjectorParams().devicePixelsPerPixel;
-	screenX = x*ppx;
-	screenY = core->getProjection2d()->getViewportHeight() - (y*ppx + metrics.height());
+	int effectiveY = requestedY;
+#if defined(__OHOS__)
+	const int safeTopDip = qCeil(static_cast<double>(ohosScreenSafeAreaTopPx.load()) / qMax(ppx, 0.01));
+	const int safeShiftDip = ohosScreenSafeAreaShiftDip.load();
+	const int topGroupLimitDip = safeTopDip + qMax(32, metrics.height() * 3);
+	if (effectiveY < topGroupLimitDip)
+		effectiveY += safeShiftDip;
+#endif
+	screenX = qRound(requestedX * ppx);
+	screenY = core->getProjection2d()->getViewportHeight() - qRound(effectiveY * ppx + metrics.height());
 }
 
 ScreenLabel::~ScreenLabel()
@@ -479,6 +548,7 @@ bool ScreenLabel::draw(StelCore*, StelPainter& sPainter)
 	if (labelFader.getInterstate() <= 0.f)
 		return false;
 
+	updateScreenPosition();
 	sPainter.setColor(labelColor, labelFader.getInterstate());
 	sPainter.setFont(labelFont);
 	sPainter.drawText(screenX, screenY, labelText, 0, 0, 0, false);
@@ -492,6 +562,13 @@ LabelMgr::LabelMgr() : counter(0)
 {
 	setObjectName("LabelMgr");
 }
+
+#if defined(__OHOS__)
+void LabelMgr::setOhosScreenSafeAreaTop(int pixels)
+{
+	ohosScreenSafeAreaTopPx.store(qMax(0, pixels));
+}
+#endif
  
 LabelMgr::~LabelMgr()
 {
@@ -504,6 +581,24 @@ void LabelMgr::init()
 void LabelMgr::draw(StelCore* core)
 {
 	StelPainter sPainter(core->getProjection(StelCore::FrameJ2000));
+#if defined(__OHOS__)
+	int minimumTopLabelY = INT_MAX;
+	for (auto* label : std::as_const(allLabels))
+	{
+		if (const auto* screenLabel = dynamic_cast<const ScreenLabel*>(label))
+			minimumTopLabelY = qMin(minimumTopLabelY, screenLabel->getRequestedY());
+	}
+	if (minimumTopLabelY == INT_MAX)
+	{
+		ohosScreenSafeAreaShiftDip.store(0);
+	}
+	else
+	{
+		const double ppx = core->getCurrentStelProjectorParams().devicePixelsPerPixel;
+		const int safeTopDip = qCeil(static_cast<double>(ohosScreenSafeAreaTopPx.load()) / qMax(ppx, 0.01));
+		ohosScreenSafeAreaShiftDip.store(qMax(0, safeTopDip + 12 - minimumTopLabelY));
+	}
+#endif
 	for (auto* l : std::as_const(allLabels))
 	{
 		l->draw(core, sPainter);
@@ -699,9 +794,14 @@ int LabelMgr::labelScreen(const QString& text,
 			  bool autoDelete,
 			  int autoDeleteTimeoutMs)
 {
+	QString localizedText = text;
+#if defined(__OHOS__)
+	if (StelApp::isInitialized())
+		localizedText = translateScriptLabel(text);
+#endif
 	QFont font=QGuiApplication::font();
 	font.setPixelSize(static_cast<int>(fontSize));
-	ScreenLabel* l = new ScreenLabel(text, x, y, font, fontColor);
+	ScreenLabel* l = new ScreenLabel(localizedText, x, y, font, fontColor);
 	if (l==Q_NULLPTR)
 		return -1;
 
@@ -730,7 +830,13 @@ void LabelMgr::setLabelShow(int id, bool show)
 void LabelMgr::setLabelText(int id, const QString& newText)
 {
 	if (allLabels.contains(id))  // mistake-proofing!
+	{
+#if defined(__OHOS__)
+		allLabels[id]->setText(translateScriptLabel(newText));
+#else
 		allLabels[id]->setText(newText);
+#endif
+	}
 }
 	
 void LabelMgr::deleteLabel(int id)

@@ -100,6 +100,7 @@ public:
 	void startOhosRenderPump();
 	void renderOhosFrameNow();
 	void setOhosApplicationForeground(bool foreground);
+	void setOhosScriptRenderHeartbeat(bool active);
 #endif
 	//! Set the application title for the current language.
 	//! This is useful for e.g. chinese.

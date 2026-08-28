@@ -5,6 +5,10 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=dev-env.sh
+source "$SCRIPT_DIR/dev-env.sh"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -71,7 +75,6 @@ echo ""
 
 # 3. 尝试编译（可选，如果环境已配置）
 echo "[3/3] 尝试编译 HAP..."
-DEVECO_HOME="${DEVECO_HOME:-/Applications/DevEco-Studio.app/Contents}"
 NODE_BIN="$DEVECO_HOME/tools/node/bin/node"
 HVIGORW_JS="$DEVECO_HOME/tools/hvigor/bin/hvigorw.js"
 SDK_HOME="${DEVECO_SDK_HOME:-$DEVECO_HOME/sdk}"

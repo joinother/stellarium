@@ -310,6 +310,34 @@ const RICH_PHRASES: Record<string, Record<string, string>> = {
 
 // UI 字符串翻译表（硬编码的 UI 文本 → 各语言）
 const UI_STRINGS: Record<string, Record<string, string>> = {
+	'polar_scope_title': { 'en': 'Polar Scope', 'zh_CN': '极轴镜', 'zh_HK': '極軸鏡', 'zh_TW': '極軸鏡', 'ja': '極軸望遠鏡', 'ko': '극축 망원경', 'fr': 'Viseur polaire', 'de': 'Polsucher', 'es': 'Buscador polar', 'ru': 'Полярный искатель' },
+	'polar_scope_aligning': { 'en': 'Aligning the live sky with the celestial pole', 'zh_CN': '正在将实时星图对准天极', 'zh_HK': '正在將即時星圖對準天極', 'zh_TW': '正在將即時星圖對準天極', 'ja': 'リアルタイム星図を天の極に合わせています', 'ko': '실시간 성도를 천구의 극에 맞추는 중', 'fr': 'Alignement du ciel en direct sur le pôle céleste', 'de': 'Live-Himmel wird am Himmelspol ausgerichtet', 'es': 'Alineando el cielo en directo con el polo celeste', 'ru': 'Наведение живой карты неба на полюс мира' },
+	'polar_scope_north_pole': { 'en': 'Live view centered on the north celestial pole', 'zh_CN': '实时星图已对准北天极', 'zh_HK': '即時星圖已對準北天極', 'zh_TW': '即時星圖已對準北天極', 'ja': '北天の極を中心としたリアルタイム表示', 'ko': '북천구의 극을 중심으로 한 실시간 보기', 'fr': 'Vue en direct centrée sur le pôle nord céleste', 'de': 'Live-Ansicht auf den nördlichen Himmelspol', 'es': 'Vista en directo centrada en el polo norte celeste', 'ru': 'Живая карта с центром на северном полюсе мира' },
+	'polar_scope_south_pole': { 'en': 'Live view centered on the south celestial pole', 'zh_CN': '实时星图已对准南天极', 'zh_HK': '即時星圖已對準南天極', 'zh_TW': '即時星圖已對準南天極', 'ja': '南天の極を中心としたリアルタイム表示', 'ko': '남천구의 극을 중심으로 한 실시간 보기', 'fr': 'Vue en direct centrée sur le pôle sud céleste', 'de': 'Live-Ansicht auf den südlichen Himmelspol', 'es': 'Vista en directo centrada en el polo sur celeste', 'ru': 'Живая карта с центром на южном полюсе мира' },
+	'polar_scope_north_position': { 'en': 'Polaris relative to the north celestial pole', 'zh_CN': '北极星相对于北天极的位置', 'zh_HK': '北極星相對於北天極的位置', 'zh_TW': '北極星相對於北天極的位置', 'ja': '北天の極に対する北極星の位置', 'ko': '북천구의 극에 대한 북극성 위치', 'fr': 'Position de Polaris par rapport au pôle nord céleste', 'de': 'Position des Polarsterns relativ zum Himmelsnordpol', 'es': 'Posición de Polaris respecto al polo norte celeste', 'ru': 'Положение Полярной звезды относительно северного полюса мира' },
+	'polar_scope_south_position': { 'en': 'Sigma Octantis relative to the south celestial pole', 'zh_CN': '南极座σ相对于南天极的位置', 'zh_HK': '南極座σ相對於南天極的位置', 'zh_TW': '南極座σ相對於南天極的位置', 'ja': '南天の極に対するはちぶんぎ座σ星の位置', 'ko': '남천구의 극에 대한 팔분의자리 시그마 위치', 'fr': 'Position de Sigma Octantis par rapport au pôle sud céleste', 'de': 'Position von Sigma Octantis relativ zum Himmelssüdpol', 'es': 'Posición de Sigma Octantis respecto al polo sur celeste', 'ru': 'Положение Сигмы Октанта относительно южного полюса мира' },
+	'polar_scope_hour_angle': { 'en': 'Pole-star hour angle', 'zh_CN': '极星时角', 'zh_HK': '極星時角', 'zh_TW': '極星時角', 'ja': '極星の時角', 'ko': '극성 시간각', 'fr': 'Angle horaire de l’étoile polaire', 'de': 'Stundenwinkel des Polarsterns', 'es': 'Ángulo horario de la estrella polar', 'ru': 'Часовой угол полярной звезды' },
+	'polar_scope_view_angle': { 'en': 'Reticle clock position', 'zh_CN': '分划钟面位置', 'zh_HK': '分劃鐘面位置', 'zh_TW': '分劃鐘面位置', 'ja': 'レチクル時計位置', 'ko': '레티클 시계 위치', 'fr': 'Position horaire du réticule', 'de': 'Uhrposition im Absehen', 'es': 'Posición de reloj en la retícula', 'ru': 'Положение на шкале сетки' },
+	'polar_scope_flip_horizontal': { 'en': 'Horizontal flip', 'zh_CN': '水平翻转', 'zh_HK': '水平翻轉', 'zh_TW': '水平翻轉', 'ja': '左右反転', 'ko': '좌우 반전', 'fr': 'Miroir horizontal', 'de': 'Horizontal spiegeln', 'es': 'Volteo horizontal', 'ru': 'Отразить по горизонтали' },
+	'polar_scope_flip_vertical': { 'en': 'Vertical flip', 'zh_CN': '垂直翻转', 'zh_HK': '垂直翻轉', 'zh_TW': '垂直翻轉', 'ja': '上下反転', 'ko': '상하 반전', 'fr': 'Miroir vertical', 'de': 'Vertikal spiegeln', 'es': 'Volteo vertical', 'ru': 'Отразить по вертикали' },
+	'polar_scope_earth_only': { 'en': 'Polar-scope simulation is available from Earth only.', 'zh_CN': '极轴镜模拟仅适用于地球观测位置。', 'zh_HK': '極軸鏡模擬僅適用於地球觀測位置。', 'zh_TW': '極軸鏡模擬僅適用於地球觀測位置。', 'ja': '極軸望遠鏡シミュレーションは地球上でのみ利用できます。', 'ko': '극축 망원경 시뮬레이션은 지구 관측 위치에서만 사용할 수 있습니다.', 'fr': 'La simulation du viseur polaire est disponible uniquement depuis la Terre.', 'de': 'Die Polsucher-Simulation ist nur von der Erde aus verfügbar.', 'es': 'La simulación del buscador polar solo está disponible desde la Tierra.', 'ru': 'Симуляция полярного искателя доступна только с Земли.' },
+	'polar_scope_open_failed': { 'en': 'Unable to open the polar scope.', 'zh_CN': '无法打开极轴镜。', 'zh_HK': '無法開啟極軸鏡。', 'zh_TW': '無法開啟極軸鏡。', 'ja': '極軸望遠鏡を開けません。', 'ko': '극축 망원경을 열 수 없습니다.', 'fr': 'Impossible d’ouvrir le viseur polaire.', 'de': 'Der Polsucher kann nicht geöffnet werden.', 'es': 'No se puede abrir el buscador polar.', 'ru': 'Не удалось открыть полярный искатель.' },
+	'polar_scope_restore_failed': { 'en': 'Unable to restore the previous sky view.', 'zh_CN': '无法恢复进入前的星图视角。', 'zh_HK': '無法恢復進入前的星圖視角。', 'zh_TW': '無法恢復進入前的星圖視角。', 'ja': '以前の星図表示を復元できません。', 'ko': '이전 성도 보기를 복원할 수 없습니다.', 'fr': 'Impossible de restaurer la vue précédente du ciel.', 'de': 'Die vorherige Himmelsansicht konnte nicht wiederhergestellt werden.', 'es': 'No se puede restaurar la vista anterior del cielo.', 'ru': 'Не удалось восстановить предыдущий вид неба.' },
+	'view_coord_center_title': { 'en': 'View Center Coordinates', 'zh_CN': '视场中心坐标', 'zh_HK': '視場中心座標', 'zh_TW': '視場中心座標', 'ja': '視野中心座標', 'ko': '시야 중심 좌표', 'fr': 'Coordonnées du centre', 'de': 'Koordinaten der Bildmitte', 'es': 'Coordenadas del centro', 'ru': 'Координаты центра поля' },
+	'view_coord_show_on_screen': { 'en': 'Show on screen', 'zh_CN': '显示在屏幕', 'zh_HK': '顯示在螢幕', 'zh_TW': '顯示在螢幕', 'ja': '画面に表示', 'ko': '화면에 표시', 'fr': 'Afficher à l’écran', 'de': 'Auf dem Bildschirm anzeigen', 'es': 'Mostrar en pantalla', 'ru': 'Показывать на экране' },
+	'view_coord_show_hint': { 'en': 'Updates continuously as the sky view moves', 'zh_CN': '移动星图时持续更新视场中心坐标', 'zh_HK': '移動星圖時持續更新視場中心座標', 'zh_TW': '移動星圖時持續更新視場中心座標', 'ja': '星図の移動に合わせて継続更新します', 'ko': '성도를 이동하면 계속 갱신됩니다', 'fr': 'Actualisation continue pendant le déplacement', 'de': 'Wird beim Bewegen der Sternkarte laufend aktualisiert', 'es': 'Se actualiza al mover el mapa celeste', 'ru': 'Обновляется при перемещении карты неба' },
+	'view_coord_system': { 'en': 'Coordinate system', 'zh_CN': '坐标系', 'zh_HK': '座標系', 'zh_TW': '座標系', 'ja': '座標系', 'ko': '좌표계', 'fr': 'Système de coordonnées', 'de': 'Koordinatensystem', 'es': 'Sistema de coordenadas', 'ru': 'Система координат' },
+	'view_coord_equatorial': { 'en': 'Equatorial', 'zh_CN': '赤道', 'zh_HK': '赤道', 'zh_TW': '赤道', 'ja': '赤道', 'ko': '적도', 'fr': 'Équatorial', 'de': 'Äquatorial', 'es': 'Ecuatorial', 'ru': 'Экваториальная' },
+	'view_coord_horizontal': { 'en': 'Horizontal', 'zh_CN': '地平', 'zh_HK': '地平', 'zh_TW': '地平', 'ja': '地平', 'ko': '지평', 'fr': 'Horizontal', 'de': 'Horizontal', 'es': 'Horizontal', 'ru': 'Горизонтальная' },
+	'view_coord_galactic': { 'en': 'Galactic', 'zh_CN': '银河', 'zh_HK': '銀河', 'zh_TW': '銀河', 'ja': '銀河', 'ko': '은하', 'fr': 'Galactique', 'de': 'Galaktisch', 'es': 'Galáctico', 'ru': 'Галактическая' },
+	'view_coord_j2000': { 'en': 'J2000', 'zh_CN': 'J2000 基准', 'zh_HK': 'J2000 基準', 'zh_TW': 'J2000 基準', 'ja': 'J2000 基準', 'ko': 'J2000 기준', 'fr': 'Référence J2000', 'de': 'J2000-Bezug', 'es': 'Referencia J2000', 'ru': 'Эпоха J2000' },
+	'view_coord_of_date': { 'en': 'Of date (true)', 'zh_CN': '当前历元（真实）', 'zh_HK': '目前曆元（真實）', 'zh_TW': '目前曆元（真實）', 'ja': '現在の元期（真）', 'ko': '현재 역원(진)', 'fr': 'À la date (vraies)', 'de': 'Zum Datum (wahr)', 'es': 'De la fecha (verdaderas)', 'ru': 'На дату (истинные)' },
+	'view_coord_ra': { 'en': 'R.A.', 'zh_CN': '赤经 R.A.', 'zh_HK': '赤經 R.A.', 'zh_TW': '赤經 R.A.', 'ja': '赤経 R.A.', 'ko': '적경 R.A.', 'fr': 'A.D.', 'de': 'R.A.', 'es': 'A.R.', 'ru': 'П.В.' },
+	'view_coord_dec': { 'en': 'Dec.', 'zh_CN': '赤纬 Dec.', 'zh_HK': '赤緯 Dec.', 'zh_TW': '赤緯 Dec.', 'ja': '赤緯 Dec.', 'ko': '적위 Dec.', 'fr': 'Déc.', 'de': 'Dekl.', 'es': 'Dec.', 'ru': 'Скл.' },
+	'view_coord_azimuth': { 'en': 'Azimuth', 'zh_CN': '方位角', 'zh_HK': '方位角', 'zh_TW': '方位角', 'ja': '方位角', 'ko': '방위각', 'fr': 'Azimut', 'de': 'Azimut', 'es': 'Acimut', 'ru': 'Азимут' },
+	'view_coord_altitude': { 'en': 'Altitude', 'zh_CN': '高度角', 'zh_HK': '高度角', 'zh_TW': '高度角', 'ja': '高度角', 'ko': '고도각', 'fr': 'Hauteur', 'de': 'Höhe', 'es': 'Altura', 'ru': 'Высота' },
+	'view_coord_galactic_longitude': { 'en': 'Gal. longitude', 'zh_CN': '银经', 'zh_HK': '銀經', 'zh_TW': '銀經', 'ja': '銀経', 'ko': '은경', 'fr': 'Longitude gal.', 'de': 'Gal. Länge', 'es': 'Longitud gal.', 'ru': 'Гал. долгота' },
+	'view_coord_galactic_latitude': { 'en': 'Gal. latitude', 'zh_CN': '银纬', 'zh_HK': '銀緯', 'zh_TW': '銀緯', 'ja': '銀緯', 'ko': '은위', 'fr': 'Latitude gal.', 'de': 'Gal. Breite', 'es': 'Latitud gal.', 'ru': 'Гал. широта' },
 	'julian_date': { 'en': 'Julian Day', 'zh_CN': '儒略日', 'zh_HK': '儒略日', 'zh_TW': '儒略日', 'ja': 'ユリウス日', 'ko': '율리우스일', 'fr': 'Jour julien', 'de': 'Julianisches Datum', 'es': 'Día juliano', 'ru': 'Юлианская дата' },
 	'modified_julian_date': { 'en': 'Modified Julian Day', 'zh_CN': '修正儒略日', 'zh_HK': '修正儒略日', 'zh_TW': '修正儒略日', 'ja': '修正ユリウス日', 'ko': '수정 율리우스일', 'fr': 'Jour julien modifié', 'de': 'Modifiziertes Julianisches Datum', 'es': 'Día juliano modificado', 'ru': 'Модифицированная юлианская дата' },
 	'julian_date_hint': { 'en': 'JD and MJD identify the same instant. MJD = JD - 2400000.5.', 'zh_CN': 'JD 与 MJD 表示同一时刻，MJD = JD - 2400000.5。', 'zh_HK': 'JD 與 MJD 表示同一時刻，MJD = JD - 2400000.5。', 'zh_TW': 'JD 與 MJD 表示同一時刻，MJD = JD - 2400000.5。', 'ja': 'JD と MJD は同じ瞬間を示します。MJD = JD - 2400000.5。', 'ko': 'JD와 MJD는 같은 시각을 나타냅니다. MJD = JD - 2400000.5.', 'fr': 'JD et MJD désignent le même instant. MJD = JD - 2400000.5.', 'de': 'JD und MJD bezeichnen denselben Zeitpunkt. MJD = JD - 2400000.5.', 'es': 'JD y MJD indican el mismo instante. MJD = JD - 2400000.5.', 'ru': 'JD и MJD обозначают один момент. MJD = JD - 2400000.5.' },
@@ -469,6 +497,9 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'panel_satellites': { 'en': 'Satellites', 'zh_CN': '卫星', 'ja': '衛星', 'ko': '위성', 'fr': 'Satellites', 'de': 'Satelliten', 'es': 'Satélites', 'ru': 'Спутники', 'ar': 'الأقمار الصناعية', 'bn': 'কৃত্রিম উপগ্রহ', 'cs': 'Družice', 'da': 'Satellitter', 'el': 'Δορυφόροι', 'fa': 'ماهواره‌ها', 'fi': 'Satelliitit', 'he': 'לווינים', 'hi': 'उपग्रह', 'hr': 'Sateliti', 'hu': 'Műhold', 'id': 'Satelit', 'it': 'Satelliti', 'ml': 'കൃത്രിമ ഉപഗ്രഹങ്ങള്‍', 'mr': 'उपग्रह', 'ms': 'Satelit', 'nb': 'Satellitter', 'nl': 'Satellieten', 'pl': 'Satelity', 'pt': 'Satélites', 'pt_BR': 'Satélites', 'ro': 'Sateliți', 'si': 'චන්ද්‍රිකා', 'sk': 'Družice', 'sv': 'Satelliter', 'ta': 'துணை கோள்கள்', 'te': 'ఉపగ్రహాలు', 'th': 'ดาวเทียม', 'uk': 'Супутники', 'vi': 'Vệ tinh', 'zh_HK': '人造衛星', 'zh_TW': '人造衛星' },
   'panel_meteorshowers': { 'en': 'Meteor Showers', 'zh_CN': '流星雨', 'ja': '流星群', 'ko': '유성우', 'fr': 'Pluies de météores', 'de': 'Meteorschauer', 'es': 'Lluvias de meteoros', 'ru': 'Метеорные потоки', 'ar': 'زخات الشهب', 'bn': 'উল্কাবৃষ্টি', 'cs': 'Meteorické roje', 'fa': 'رگبارهای شهابی', 'fi': 'Meteoriparvet', 'he': 'ממטרי מטאורים', 'hi': 'उल्कापात ', 'hr': 'Meteorske kiše', 'hu': 'Meteorzápor', 'id': 'Hujan Meteor', 'it': 'Sciami meteorici', 'ms': 'Hujan Meteor', 'nb': 'Meteorsvermer', 'nl': 'Meteoorzwermen', 'pl': 'Deszcze meteorów', 'pt': 'Chuva de Meteoros', 'pt_BR': 'Chuva de Meteoros', 'ro': 'Ploi de meteoriţi', 'sk': 'Meteorické roje', 'sl': 'Meteorski roji', 'sv': 'Meteorregn', 'th': 'ฝนดาวตก', 'uk': 'Метеорні потоки', 'vi': 'Mưa sao băng', 'zh_HK': '流星雨', 'zh_TW': '流星雨' },
   'panel_scripts': { 'en': 'Scripts', 'zh_CN': '脚本', 'ja': 'スクリプト', 'ko': '스크립트', 'fr': 'Scripts', 'de': 'Skripte', 'es': 'Scripts', 'ru': 'Скрипты', 'ar': 'البرامج النصية‏', 'bn': 'কার্যলিপিসমূহ', 'cs': 'Skripty', 'da': 'Skripts', 'el': 'Σενάρια', 'fa': 'برنامه‌ها', 'fi': 'Skriptit', 'he': 'תסריטים', 'hi': 'क्रमादेश', 'hr': 'Skripte', 'hu': 'Szkriptek', 'id': 'Skrip', 'it': 'Script', 'ml': 'സ്ക്രിപ്റ്റുകള്‍', 'mr': 'आज्ञावली', 'ms': 'Skrip', 'nb': 'Skript', 'ne': 'स्क्रिप्टहरू', 'pl': 'Skrypty', 'pt_BR': 'Apresentações', 'ro': 'Scripturi', 'si': 'ස්ක්‍රිප්ටු', 'sk': 'Skripty', 'sl': 'Programi', 'sv': 'Skript', 'ta': 'ஸ்கிரிப்டுகள்', 'te': 'స్క్రిప్టులు', 'th': 'สคริปต์', 'uk': 'Скрипти', 'vi': 'Nguyên bản', 'zh_HK': '腳本', 'zh_TW': '腳本(Scripts)' },
+  'panel_commands': { 'en': 'Commands', 'zh_CN': '命令', 'zh_HK': '命令', 'zh_TW': '命令' },
+  'script_starting_named': { 'en': 'Starting: %1', 'zh_CN': '正在启动：%1', 'zh_HK': '正在啟動：%1', 'zh_TW': '正在啟動：%1' },
+  'script_recorded_commands': { 'en': '%1 commands recorded', 'zh_CN': '已记录 %1 条命令', 'zh_HK': '已記錄 %1 條命令', 'zh_TW': '已記錄 %1 條命令' },
   'catalog_fallback': { 'en': 'Star Catalog', 'zh_CN': '星表', 'ja': '星表', 'ko': '성표', 'fr': 'Catalogue d\'étoiles', 'de': 'Sternkatalog', 'es': 'Catálogo de estrellas', 'ru': 'Каталог звёзд' },
   'bookmark_fallback': { 'en': 'Bookmark', 'zh_CN': '书签', 'ja': 'ブックマーク', 'ko': '북마크', 'fr': 'Signet', 'de': 'Lesezeichen', 'es': 'Marcador', 'ru': 'Закладка' },
   'meteor_active_showers': { 'en': 'Active Meteor Showers', 'zh_CN': '活跃流星雨', 'ja': '活動中の流星群', 'ko': '활성 유성우', 'fr': 'Pluies de météores actives', 'de': 'Aktive Meteorschauer', 'es': 'Lluvias de meteoros activas', 'ru': 'Активные метеорные потоки' },
@@ -853,7 +884,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'i0270': { 'en': 'Search: find objects', 'zh_CN': 'Search：搜索天体', 'ja': '検索: 天体を探す', 'ko': '검색: 천체 찾기', 'fr': 'Search: find objects', 'de': 'Search: find objects', 'es': 'Search: find objects', 'ru': 'Search: find objects' },
   'i0271': { 'en': 'Time: astronomical events', 'zh_CN': 'Time：时间控制（天文事件/节气跳转）', 'ja': '時刻: 天文イベント', 'ko': '시간: 천문 현상', 'fr': 'Time: astronomical events', 'de': 'Time: astronomical events', 'es': 'Time: astronomical events', 'ru': 'Time: astronomical events' },
   'i0272': { 'en': 'Location: GPS/map/city', 'zh_CN': 'Location：位置选择（GPS/地图/城市）', 'ja': '場所: GPS/地図/都市', 'ko': '위치: GPS/지도/도시', 'fr': 'Location: GPS/map/city', 'de': 'Location: GPS/map/city', 'es': 'Location: GPS/map/city', 'ru': 'Location: GPS/map/city' },
-  'i0273': { 'en': 'Config: settings', 'zh_CN': '应用配置', 'ja': '設定: 構成', 'ko': '설정: 환경설정', 'fr': 'Config: settings', 'de': 'Config: settings', 'es': 'Config: settings', 'ru': 'Config: settings' },
+  'i0273': { 'en': 'Settings', 'zh_CN': '设置', 'ja': '設定', 'ko': '설정', 'fr': 'Réglages', 'de': 'Einstellungen', 'es': 'Configuración', 'ru': 'Настройки' },
   'i0274': { 'en': 'AstroCalc: calculations', 'zh_CN': '天文计算', 'ja': 'AstroCalc: 計算', 'ko': 'AstroCalc: 계산', 'fr': 'AstroCalc: calculations', 'de': 'AstroCalc: calculations', 'es': 'AstroCalc: calculations', 'ru': 'AstroCalc: calculations' },
   'i0275': { 'en': 'Direction', 'zh_CN': '方向控制', 'ja': '方向', 'ko': '방향', 'fr': 'Direction', 'de': 'Direction', 'es': 'Direction', 'ru': 'Direction' },
   'i0276': { 'en': 'FOV', 'zh_CN': '视场角', 'ja': '視野', 'ko': '시야', 'fr': 'Champ visuel', 'de': 'GF', 'es': 'FOV', 'ru': 'ПЗ', 'ar': 'ح ر', 'bn': 'দৃষ্টিক্ষেত্র', 'cs': 'ZP', 'el': 'ΟΠ', 'fi': 'näkökenttä', 'he': 'שדה הראייה', 'hi': 'दृ॰क्षे॰', 'hr': 'V.P.', 'hu': 'Látómező', 'it': 'Campo visivo', 'nl': 'Gezichtsveld', 'pt': 'CDV', 'pt_BR': 'CDV', 'sl': 'Vidno polje', 'sv': 'Synfält', 'th': 'ขอบเขตภาพ', 'uk': 'ПЗ', 'zh_HK': '視場', 'zh_TW': '視野' },
@@ -958,6 +989,18 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'c_pointing_test': { 'en': 'Virtual Pointer Test', 'zh_CN': '虚拟指星笔测试', 'ja': 'Virtual Pointer Test', 'ko': 'Virtual Pointer Test', 'fr': 'Virtual Pointer Test', 'de': 'Virtual Pointer Test', 'es': 'Virtual Pointer Test', 'ru': 'Virtual Pointer Test' },
   'c_record_name_hint': { 'en': 'Name this recording', 'zh_CN': '给这段录制起个名', 'ja': 'Name this recording', 'ko': 'Name this recording', 'fr': 'Name this recording', 'de': 'Name this recording', 'es': 'Name this recording', 'ru': 'Name this recording' },
   'c_recording': { 'en': '● Recording', 'zh_CN': '● 录制中', 'ja': '● Recording', 'ko': '● Recording', 'fr': '● Recording', 'de': '● Recording', 'es': '● Recording', 'ru': '● Recording' },
+  'script_playing': { 'en': 'Script playing', 'zh_CN': '脚本播放中', 'ja': 'スクリプト再生中', 'ko': '스크립트 재생 중', 'fr': 'Script en lecture', 'de': 'Skript läuft', 'es': 'Reproduciendo script', 'ru': 'Сценарий выполняется' },
+  'script_replaying': { 'en': 'Recording playback', 'zh_CN': '录制回放中', 'ja': '録画を再生中', 'ko': '녹화 재생 중', 'fr': 'Lecture de l’enregistrement', 'de': 'Aufnahme wird abgespielt', 'es': 'Reproduciendo grabación', 'ru': 'Воспроизведение записи' },
+  'script_preparing': { 'en': 'Preparing script', 'zh_CN': '正在准备脚本', 'ja': 'スクリプトを準備中', 'ko': '스크립트 준비 중', 'fr': 'Préparation du script', 'de': 'Skript wird vorbereitet', 'es': 'Preparando script', 'ru': 'Подготовка сценария' },
+  'script_slow': { 'en': 'Slower', 'zh_CN': '慢', 'ja': '遅く', 'ko': '느리게', 'fr': 'Plus lent', 'de': 'Langsamer', 'es': 'Más lento', 'ru': 'Медленнее' },
+  'script_fast': { 'en': 'Faster', 'zh_CN': '快', 'ja': '速く', 'ko': '빠르게', 'fr': 'Plus rapide', 'de': 'Schneller', 'es': 'Más rápido', 'ru': 'Быстрее' },
+  'script_stop': { 'en': 'Stop', 'zh_CN': '停止', 'ja': '停止', 'ko': '중지', 'fr': 'Arrêter', 'de': 'Stopp', 'es': 'Detener', 'ru': 'Остановить' },
+  'script_pause': { 'en': 'Pause', 'zh_CN': '暂停', 'ja': '一時停止', 'ko': '일시정지', 'fr': 'Pause', 'de': 'Pause', 'es': 'Pausar', 'ru': 'Пауза' },
+  'script_recording': { 'en': 'Recording', 'zh_CN': '录制中', 'ja': '録画中', 'ko': '녹화 중', 'fr': 'Enregistrement', 'de': 'Aufnahme', 'es': 'Grabando', 'ru': 'Запись' },
+  'script_recording_paused': { 'en': 'Recording paused', 'zh_CN': '录制已暂停', 'ja': '録画を一時停止', 'ko': '녹화 일시정지', 'fr': 'Enregistrement en pause', 'de': 'Aufnahme pausiert', 'es': 'Grabación pausada', 'ru': 'Запись приостановлена' },
+  'script_recording_count': { 'en': 'commands', 'zh_CN': '条', 'ja': 'コマンド', 'ko': '개 명령', 'fr': 'commandes', 'de': 'Befehle', 'es': 'comandos', 'ru': 'команд' },
+  'script_open_controls': { 'en': 'Controls', 'zh_CN': '操作', 'ja': '操作', 'ko': '操作', 'fr': 'Commandes', 'de': 'Bedienung', 'es': 'Controles', 'ru': 'Управление' },
+  'script_focus_controls': { 'en': 'Focus', 'zh_CN': '专注', 'ja': '集中', 'ko': '집중', 'fr': 'Focus', 'de': 'Fokus', 'es': 'Enfoque', 'ru': 'Фокус' },
   'c_runtime_logs': { 'en': 'Runtime Logs', 'zh_CN': '运行日志', 'ja': 'Runtime Logs', 'ko': 'Runtime Logs', 'fr': 'Runtime Logs', 'de': 'Runtime Logs', 'es': 'Runtime Logs', 'ru': 'Runtime Logs' },
   'c_satellite_groups': { 'en': 'Satellite Groups', 'zh_CN': '卫星分组', 'ja': '衛星グループ', 'ko': '위성 그룹', 'fr': 'Satellite Groups', 'de': 'Satellite Groups', 'es': 'Satellite Groups', 'ru': 'Satellite Groups' },
   'c_saved_recordings': { 'en': 'Saved Recordings', 'zh_CN': '已保存的录制', 'ja': 'Saved Recordings', 'ko': 'Saved Recordings', 'fr': 'Saved Recordings', 'de': 'Saved Recordings', 'es': 'Saved Recordings', 'ru': 'Saved Recordings' },
@@ -1155,6 +1198,23 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'script_name_sun': { 'en': 'Sun Information', 'zh_CN': '太阳信息总览', 'ja': '太陽情報', 'ko': '태양 정보', 'fr': 'Informations Soleil', 'de': 'Sonneninformationen', 'es': 'Información del Sol', 'ru': 'Информация о Солнце' },
   'script_name_zodiac': { 'en': 'Zodiac Constellations', 'zh_CN': '黄道十二星座', 'ja': '黄道十二宮', 'ko': '황도 12별자리', 'fr': 'Zodiaque', 'de': 'Tierkreiszeichen', 'es': 'Zodíaco', 'ru': 'Зодиак' },
   'script_name_phobos_phun_1': { 'en': 'Phobos Fun Part 1', 'zh_CN': '火卫一趣闻（一）', 'ja': 'フォボスファン①', 'ko': '포보스 재미①', 'fr': 'Phobos Fun 1', 'de': 'Phobos Spaß 1', 'es': 'Diversión Fobos 1', 'ru': 'Фобос-развлечение 1' },
+
+  'script_name_phobos_phun_2': { 'en': 'Phobos Fun Part 2', 'zh_CN': '火卫一趣闻（二）', 'zh_HK': '火衛一趣聞（二）', 'zh_TW': '火衛一趣聞（二）' },
+  'script_name_phobos_phun_3': { 'en': 'Phobos Fun Part 3', 'zh_CN': '火卫一趣闻（三）', 'zh_HK': '火衛一趣聞（三）', 'zh_TW': '火衛一趣聞（三）' },
+  'script_name_phobos_phun_4': { 'en': 'Phobos Fun Part 4', 'zh_CN': '火卫一趣闻（四）', 'zh_HK': '火衛一趣聞（四）', 'zh_TW': '火衛一趣聞（四）' },
+  'script_name_phobos_phun_5': { 'en': 'Phobos Fun Part 5', 'zh_CN': '火卫一趣闻（五）', 'zh_HK': '火衛一趣聞（五）', 'zh_TW': '火衛一趣聞（五）' },
+  'script_name_morsels_1': { 'en': 'Astronomy Morsels Part 1', 'zh_CN': '天文小品（一）', 'zh_HK': '天文小品（一）', 'zh_TW': '天文小品（一）' },
+  'script_name_morsels_2': { 'en': 'Astronomy Morsels Part 2', 'zh_CN': '天文小品（二）', 'zh_HK': '天文小品（二）', 'zh_TW': '天文小品（二）' },
+  'script_name_morsels_3': { 'en': 'Astronomy Morsels Part 3', 'zh_CN': '天文小品（三）', 'zh_HK': '天文小品（三）', 'zh_TW': '天文小品（三）' },
+  'script_name_morsels_4': { 'en': 'Astronomy Morsels Part 4', 'zh_CN': '天文小品（四）', 'zh_HK': '天文小品（四）', 'zh_TW': '天文小品（四）' },
+  'script_name_earth_1': { 'en': 'Best Views of Earth from Other Worlds', 'zh_CN': '从其他天体欣赏地球', 'zh_HK': '從其他天體欣賞地球', 'zh_TW': '從其他天體欣賞地球' },
+  'script_name_earth_2': { 'en': 'Earth Events from Mercury', 'zh_CN': '从水星观测地球天象', 'zh_HK': '從水星觀測地球天象', 'zh_TW': '從水星觀測地球天象' },
+  'script_name_earth_3': { 'en': 'Earth Events from Venus', 'zh_CN': '从金星观测地球天象', 'zh_HK': '從金星觀測地球天象', 'zh_TW': '從金星觀測地球天象' },
+  'script_name_earth_4': { 'en': 'Earth Events from Mars', 'zh_CN': '从火星观测地球天象', 'zh_HK': '從火星觀測地球天象', 'zh_TW': '從火星觀測地球天象' },
+  'script_name_earth_5': { 'en': 'Earth and Other Planets from Mars', 'zh_CN': '从火星观测地球与其他行星', 'zh_HK': '從火星觀測地球與其他行星', 'zh_TW': '從火星觀測地球與其他行星' },
+  'script_name_earth_6': { 'en': 'Earth and Mars from Callisto', 'zh_CN': '从木卫四观测地球与火星', 'zh_HK': '從木衛四觀測地球與火星', 'zh_TW': '從木衛四觀測地球與火星' },
+  'script_name_earth_7': { 'en': 'Earth and Other Planets from Ceres', 'zh_CN': '从谷神星观测地球与其他行星', 'zh_HK': '從穀神星觀測地球與其他行星', 'zh_TW': '從穀神星觀測地球與其他行星' },
+  'script_name_startup': { 'en': 'Startup Guide', 'zh_CN': '启动引导脚本', 'zh_HK': '啟動引導腳本', 'zh_TW': '啟動引導腳本' },
 
   // ── 脚本简短描述（副标题） ──
   'script_desc_constellations_tour': { 'en': 'Interactive tour through major constellations with mythology', 'zh_CN': '交互式游览主要星座，附带神话故事讲解', 'ja': 'Major constellations tour', 'ko': '주요 별자리 투어', 'fr': 'Tour interactif', 'de': 'Interaktive Reise', 'es': 'Tour interactivo', 'ru': 'Интерактивный тур' },
@@ -1409,9 +1469,23 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
 
 
 export class I18n {
+  private static systemLanguageTag(lang: LangCode): string {
+    if (lang === 'zh_CN') return 'zh-Hans'
+    if (lang === 'zh_HK') return 'zh-Hant-HK'
+    if (lang === 'zh_TW') return 'zh-Hant-TW'
+    return lang.replace(/_/g, '-')
+  }
+
   static systemLanguage(): LangCode {
+    let raw = ''
     try {
-      const raw = i18n.getSystemLocale()
+      const preferred = i18n.System.getAppPreferredLanguage()
+      if (preferred.length > 0 && preferred !== 'default') raw = preferred
+    } catch (_err) {
+      raw = ''
+    }
+    try {
+      if (raw.length === 0) raw = i18n.getSystemLocale()
       const normalized = raw.replace(/-/g, '_')
       const lower = normalized.toLowerCase()
       if (lower.startsWith('zh')) {
@@ -1439,6 +1513,11 @@ export class I18n {
 
   // 设置当前语言（同时通知 AppStorage 触发 UI 重渲染）
   static setLanguage(lang: LangCode): void {
+    try {
+      i18n.System.setAppPreferredLanguage(I18n.systemLanguageTag(lang))
+    } catch (_err) {
+      // Older HarmonyOS releases may not expose app language persistence.
+    }
     AppStorage.setOrCreate('i18nLang', lang)
   }
 

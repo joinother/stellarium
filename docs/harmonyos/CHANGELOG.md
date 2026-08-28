@@ -1,3 +1,36 @@
+## [2026-08-28] Codex - 修复菜单动态语言切换并补齐地球专题脚本字幕
+
+- **修改文件：** `Brewfile`、`harmonyos/ets-source/pages/{I18n,MainWindowNativeNode}.ets`、`scripts/earth_{1..7}.ssc`、`po/stellarium-scripts/{POTFILES.in,stellarium-scripts.pot,zh_CN.po}`、`translations/stellarium-scripts/zh_CN.qm`。
+- **修改内容：** 底部 Dock、更多菜单、固定入口和抽屉动作改为每次构建界面时读取当前语言，不再缓存首次语言；命令面板、脚本启动状态、录制数量和 16 个补充脚本标题接入统一 `I18n`，并纠正 `earth_1` 至 `earth_7` 被误写成月份脚本的问题。
+- **脚本翻译：** 将 7 个地球专题脚本的 151 条屏幕字幕接入原生 `tr()` 链路，补齐翻译提取清单及简体中文译文；修正 8 条自动模糊匹配造成的错误天体名称，最终 `msgfmt` 检查为 582 条完整译文、0 条未翻译、0 条模糊译文。
+- **同步方式：** 仅同步本轮 ArkTS、脚本和 `zh_CN.qm` 到 DevEco 生成工程；未运行会覆盖 `build-profile.json5` 的全量同步，也未修改 Debug/Release 签名、证书或 Provision。
+- **验证结果：** `git diff --check` 通过；`assembleHap` BUILD SUCCESSFUL。签名 HAP 内 `earth_1.ssc`、`earth_7.ssc` 和 `stellarium-scripts/zh_CN.qm` 的 SHA-256 与源码一致。`check-ohos.sh` 最终非零仅来自工程既有的 4 条重复 `setTimeout` 静态规则，HAP 构建阶段通过。
+
+## [2026-08-28] Codex - 统一 Homebrew 与开发工具路径
+
+- **修改文件：** `Brewfile`、`scripts/{dev-env,bootstrap-dev-tools,check-dev-tools,check-ohos}.sh`、`scripts/dev-tools/npm-global-packages.txt`、`docs/harmonyos/HANDOFF.md`。
+- **修改内容：** 用 `Brewfile` 管理 macOS 直接依赖，用独立清单管理 Homebrew npm 前缀下的 DevEco CLI；所有终端和项目脚本共用 `scripts/dev-env.sh`，统一解析 Homebrew、DevEco SDK、HDC 与 hvigor 路径；新增一键安装和只读体检命令。
+- **修改原因：** 修复 `ffmpeg` 等工具只存在于应用私有目录、交互终端可见但 DevEco/非交互脚本找不到的路径分裂问题。
+- **验证结果：** `brew bundle check` 通过；从仅含 `/usr/local/bin:/usr/bin:/bin` 的干净 Bash 和登录 Zsh 启动时，`brew`、`ffmpeg`、`ffprobe`、`node`、`npm`、`cmake`、`ninja`、`deveco` 与 `devecocli` 均解析到 `/opt/homebrew/bin`，Homebrew 路径置顶且不重复。现有 `check-ohos.sh` 的 HAP 构建阶段通过；最终非零仅来自工程已有的 4 条 `setTimeout` 静态规则。
+- **设备结果：** 极轴镜 Build `1000047` 已成功覆盖安装到平板，包管理器确认版本为 `1.0.9 (1000047)`。
+- **备注：** 不重置或清理 Homebrew 仓库；安装脚本只补齐声明依赖，不自动执行 `brew bundle cleanup`。
+
+## [2026-08-28] Codex - 按参考录屏重构极轴镜为实时星图叠加层
+
+- **参考核对：** 逐帧检查 `ScreenRecording_08-28-2026 01-02-02_1.MP4` 与 `IMG_3150.PNG`，确认参考应用保留原实时星图、星座线、标签和地景，只叠加顶部标题、红色极轴分划与底部数据控制；分划会随拖动和捏合缩放改变屏幕位置及尺寸。
+- **修改内容：** 删除 ArkUI 第二套星点数据和固定屏幕中心分划；C++ 返回天极及极星在当前 Stellarium 投影中的实时屏幕坐标，透明 Canvas 据此绘制 24 小时外圈、12 小时内圈、中心标记、极星方向和夹角。极轴镜模式保留原星图触控，隐藏普通 Dock/面板，顶部和底部改为参考录屏的整宽黑色结构；水平/垂直翻转直接调用 Stellarium 原生视图翻转，退出时恢复进入前视角、FOV 和翻转状态。
+- **构建结果：** C++ 交叉编译成功；`hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` BUILD SUCCESSFUL。Build 提升为 `1000047`；签名 HAP 包内确认包含新版 `libstellarium.so`、`ic_back.svg` 和 `ic_polar_scope.svg`。
+- **设备状态：** 新 HAP 已成功覆盖安装到平板 `192.168.1.30:33805`，包管理器确认 `1.0.9 (1000047)`，Ability 启动成功。设备 CLI 的 `getPolarScopeData` 返回 `stars: []`、有效的天极/极星屏幕坐标与半径；布局和截图确认原 XComponent 星图仍在，ArkUI 仅增加透明 Canvas 分划层。当前截图处于低纬度日间视图，拖动/缩放与退出恢复仍需在可见夜空状态下继续视觉回归。
+- **工具环境：** 发现 ffmpeg 原本仅存在于 TRAE、哔哩哔哩等应用私有目录；已通过 Homebrew 安装 `ffmpeg 9.0.1_1`，`ffmpeg`/`ffprobe` 统一位于 `/opt/homebrew/bin`。Homebrew 仓库存在既有异常工作树状态，暂未执行破坏性重置。
+
+## [2026-08-27] Codex - 修复天体详情全屏图像预览
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/AppScope/app.json5`
+- **修改内容：** 全屏预览改为独立最高层媒体容器，关闭按钮扩大为 44vp 原生命中区；弹层不再依赖媒体路径持续存在，路径短暂变化或加载失败时仍可关闭。图片增加明确可用尺寸、原生加载指示、失败空态和重试入口，并记录资源解析、卡片加载、全屏加载及开关事件。
+- **修改原因：** 仙女座星系等本地资料图像展开后存在图片区域无尺寸、失败无反馈和关闭事件被底层界面干扰的问题。
+- **构建结果：** `hvigorw assembleHap --mode module -p product=default -p buildMode=debug --no-daemon` BUILD SUCCESSFUL；Build 提升为 `1000044`，签名 HAP SHA-256 为 `a316ade936d2838df057d164d9ba681bb3821be2b865dd5a953f1c54913d0f40`。HAP 内确认包含 1,199,176 字节的 `m31.png`。
+- **验证结果：** 最终签名 HAP 已覆盖安装到平板和模拟器，平板包管理器确认 `versionCode=1000044`；平板当前系统锁屏，`aa start` 返回 `10106102`，因此全屏图片加载和关闭按钮的真机点按日志需在解锁后补验。模拟器受既有 Privacy Manager 环境限制停在黑色启动窗口，未通过修改隐私门控规避。
+
 ## [2026-08-27] Codex - 恢复设置页设备与隐私入口
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/I18n.ets`、`harmonyos/AppScope/app.json5`
@@ -2858,3 +2891,84 @@
 - **交互结果：** Dock 的“更多”选中态直接跟随面板状态，打开其他低频功能时在同一面板内切换；面板出现后沿用现有 Dock 挤压与天体遮挡避让规则。
 - **构建版本：** `versionCode` 提升至 `1000041`，版本名保持 `1.0.9`。
 - **备注：** 不新增联网、权限、设备标识读取或数据采集。
+
+## [2026-08-27] Codex - 视场中心坐标实时显示
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes,I18n}.ets`、`harmonyos/AppScope/app.json5`。
+- **修改内容：** 新增视场中心坐标命令和屏幕覆盖层，支持赤道 J2000、赤道当前历元（真实）、地平方位角/高度角及银河银经/银纬；应用配置增加坐标系选择和“显示在屏幕”开关，拖动、惯性、时间流逝和陀螺仪期间快速刷新，退后台或关闭显示后停止刷新。
+- **修改原因：** 在触摸移动星图时持续显示当前视场中心坐标，并将原版 `PointerCoordinates` 插件的坐标定义适配为移动端稳定的视场中心语义。
+- **构建结果：** Qt 原生 `stellarium` 编译成功；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；`versionCode` 提升至 `1000042`。
+- **验证结果：** 命令目录一致性检查通过（260 条），国际化检查、源码/构建镜像比较和 `git diff --check` 通过；快速刷新调整后的签名 HAP SHA-256 为 `a6b32a07336aa282ef195a060500c09cd5e15f7441bdbb3eec0b66809364e368`，已覆盖安装到模拟器和平板。平板当前锁屏导致系统以 `10106102` 拒绝启动；模拟器受既有 Privacy Manager 启动门控影响，窗口未附着，设备侧拖动和四种显示模式待平板解锁后验证。
+- **备注：** 坐标转换全部调用 Stellarium 核心；方位角按正北 0 度、向东递增，地平坐标使用无折射几何值。未新增联网、权限、设备标识读取，也未改变陀螺仪磁场与重力组合逻辑。
+
+## [2026-08-27] Codex - 合并设置与应用配置入口
+
+- **修改文件：** `harmonyos/ets-source/pages/{MainWindowNativeNode,I18n}.ets`、`harmonyos/AppScope/app.json5`。
+- **修改内容：** Pad、手机和全量动作列表只保留一个“设置”入口；历史 `config` 面板调用自动转到统一设置页。设置页采用原版 Configuration 的主设置、信息、附加、时间、工具、脚本、插件分类，并新增置顶的“设备与隐私”分类。
+- **可发现性：** 设置页默认打开“设备与隐私”，陀螺仪控制、灵敏度说明、撤回隐私同意和视场中心坐标设置可直接看到，不再埋在快捷设置长列表中。
+- **设备验证修正：** Pad 底部 Dock 布局的“更多功能”列表补入唯一“设置”入口，避免只在宽屏左侧栏布局可达。
+- **构建版本：** 首次构建使用 `1000045`；设备截图发现入口可达性问题后，最终 `versionCode` 提升至 `1000046`，版本名保持 `1.0.9`。
+- **备注：** 不新增联网、权限、设备标识读取或隐私采集。
+## [2026-08-28] Codex - 统一手机、平板与桌面响应式操作模型
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **统一入口：** 新增 `primaryDockActions` 与 `moreActions` 两级动作模型；搜索、时间、位置、图层、更多在所有屏幕共享同一组底部 Dock 按钮，更多面板也共享同一完整功能清单。
+- **统一交互：** Pad/桌面使用底部 Dock + 浮动面板，手机保留底部 Dock 的向上拉起面板；两者共用 `dockActionAt`、`activateDockAction`、`setPanel` 和面板状态，不再按屏幕尺寸分裂功能逻辑。
+- **弃用说明：** 旧 iPad 左侧竖向菜单、侧栏抽屉、侧栏自动收起和侧栏坐标命中逻辑已退出当前 Shell。为兼容历史 Builder 与旧状态字段，残留符号统一标记为 `@deprecated`，不再参与当前布局、触摸命中或天体避让。
+- **构建结果：** `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP 为 `entry-default-signed.hap`，版本 `1.0.9 (1000048)`。
+- **设备结果：** HAP 已成功覆盖安装到平板 `192.168.1.30:33805`，包管理器确认 `versionCode=1000048`。启动回归受设备锁屏阻断，系统返回 `10106102`；解锁后应优先验证五个 Dock 入口、更多面板滚动/关闭和手机面板拖拽呈现。
+
+## [2026-08-28] Codex - 脚本字幕本地化与挖孔安全区
+
+- **修改文件：** `src/core/modules/LabelMgr.{cpp,hpp}`、`po/stellarium-scripts/zh_CN.po`。
+- **修改内容：** HarmonyOS 屏幕字幕统一复用 `stellarium-scripts` 翻译表；对梅西叶之旅的“类型 - 星座 - 季节”动态字幕按字段翻译，并补齐太阳食、金星凌日等常用脚本的中文条目。屏幕字幕每帧重新计算位置，按顶部字幕组统一下移，避开原生窗口返回的挖孔/系统安全区，同时保留脚本各行间距。
+- **修改原因：** 修复脚本字幕仍显示英文，以及挖孔屏覆盖顶部字幕的问题；不改动桌面端字幕位置和脚本天文逻辑。
+- **构建结果：** Qt HarmonyOS 交叉编译 `stellarium` BUILD SUCCESSFUL；已用 Qt `lconvert` 生成更新后的 `zh_CN.qm`。
+- **验证结果：** `git diff --check` 通过；待完成构建工程同步、`assembleHap` 和平板播放脚本截图验证。
+- **备注：** 翻译仍以源项目 `stellarium-scripts` 目录为准；未新增联网、权限或设备标识读取。
+
+## [2026-08-28] Codex - 脚本播放专注模式与录制时间轴
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/I18n.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`src/StelMainView.cpp`、`docs/harmonyos/SCRIPT-DESIGN.md`，以及对应构建工程镜像。
+- **修改内容：** 脚本启动后进入专注模式，只显示脚本名、实际运行状态、速度和停止；播放状态由 `getScriptStatus` 轮询，不再用固定延时判断结束。录制增加暂停/继续和录制控制条，命令保存相对时间 `t`，回放按时间轴逐条调度并可停止；旧 `{c,p}` 录制继续兼容。每次启动刷新脚本中文 `.qm` 到应用沙箱，避免升级安装沿用旧字幕资源。
+- **修改原因：** 播放脚本时普通 UI 干扰字幕和星图；原录制回放一次性发送全部命令，没有保留用户操作间隔；Qt 6 的暂停/继续接口已废弃，不能继续提供伪可用按钮。
+- **构建结果：** `versionCode` 从 `1000048` 提升至 `1000049`；源码同步完成；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL；签名 HAP SHA-256：`75986aaa13d10cfc7de751def3acc638fef735b0a20269df4f3346d71713fadd`。
+- **验证结果：** ArkTS 编译、资源编译、Native Ninja、签名和打包均通过；HAP 含 `stellarium-scripts/en.qm` 与 `zh_CN.qm`；源码与构建工程的 MainWindow、资源引导和 I18n 镜像一致；`git diff --check` 通过。当前 `hdc list targets` 无在线设备，未完成平板交互验证。
+- **备注：** 未新增联网、权限、设备标识读取；脚本设计、核心模块盘点和命令桥边界见 `docs/harmonyos/SCRIPT-DESIGN.md`。
+
+## [2026-08-28] Codex - 补齐录制命令边界
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/SCRIPT-DESIGN.md`，以及对应构建工程镜像。
+- **修改内容：** 同步命令与免解析命令共用成功命令记录入口；离散时间、夜间模式和按钮缩放进入录制时间轴，拖动和陀螺仪逐帧数据继续过滤。脚本播放、录制和回放互斥，暂停时长不计入时间轴。
+- **验证目标：** 静态检查和 HAP 构建通过后，使用录制文件确认暂停间隔、离散操作和回放停止均可恢复普通 Shell。
+## 2026-08-28：脚本播放与录制会话统一
+
+- **播放界面**：原生 `.ssc` 播放和录制回放统一进入简化控制条，普通 Dock、面板和详情层不参与播放态布局；脚本结束、失败或停止后恢复普通 Shell。
+- **录制界面**：录制默认进入专注状态，仅保留录制状态、计数、暂停/继续、停止和“操作/专注”切换；展开操作界面后可完成搜索、定位、图层和时间等业务操作。
+- **回放时间轴**：录制回放新增独立暂停/继续和 0.25x–16x 调速。调速以当前虚拟时间为锚点重排后续命令，不修改录制文件中的 `t`，暂停时长不计入虚拟时间。
+- **状态互斥**：脚本播放、录制和录制回放共用会话互斥检查，避免同时启动造成核心命令和 UI 状态竞争；页面销毁时清理回放计时器和录制状态。
+- **职责边界**：脚本天球字幕继续由 C++ `LabelMgr` 和脚本 `.qm` 翻译资源处理，ArkUI 只负责控制条、业务提示和屏幕安全区；设计说明见 `docs/harmonyos/SCRIPT-DESIGN.md`。
+- **验证**：`CompileArkTS` 通过；`git diff --check` 通过。完整 `assembleHap` 受当前构建工程脱敏 `storePassword/keyPassword` 少于 32 位阻塞，未修改签名配置。
+
+## 2026-08-28：脚本渲染泵互斥
+
+- **修改内容**：脚本运行期间暂停普通 `fpsTimer`，由 Qt 线程专用心跳独占帧提交；原生渲染泵激活时跳过 Qt 图形场景的重复 `app.update()/app.draw()`，脚本结束后自动恢复普通帧定时器。
+- **探针**：增加重复图形绘制跳过计数和脚本渲染泵接管/恢复日志，便于平板日志确认是否存在双重帧路径。
+- **验证**：C++ 代码已完成静态检查，待重新交叉编译 `libstellarium.so` 后进行设备帧率和日志回归。
+## [2026-08-28] Codex - 离线天体资料预热与详情资源状态
+
+- **修改文件：** `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，以及对应生成工程镜像。
+- **深空资源预热：** 启动后的离线复制队列现在优先处理 M31、M42、M51、蟹状星云、M13、昴星团、玫瑰星云、礁湖星云、三叶星云和环状星云等 10 张重点资料图，再继续处理其余资源；预热总数从 HAP 原始资源目录统计，不再在尚未启动时误报为已完成。
+- **详情状态：** 详情卡区明确区分“正在准备离线资料”“没有匹配的离线资源”和“本地资源解码失败”；行星纹理也增加了设备解码失败日志与状态反馈，避免空白区域没有解释。
+- **资源核对：** 源码与生成工程均包含 674 张深空 PNG（129,798,432 字节）；50 个行星及卫星纹理映射全部存在，生成工程纹理缺失为 0。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh` 成功；`CompileArkTS`、资源编译、Native 构建和 `PackageHap` 均通过；关键 ETS 镜像比较和 `git diff --check` 通过。`scripts/check-ohos.sh` 最终因现有脱敏签名配置的 `storePassword/keyPassword` 少于 32 位，在 `SignHap` 失败，未修改签名材料；检查脚本另报告 4 条既有 `setTimeout` 静态规则告警。
+- **备注：** 本轮未新增联网、API、权限或签名敏感信息；尚未连接设备，未进行平板运行时日志回归。
+## [2026-08-28] Codex - 筛选与脚本播放态动画及响应式排版
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`；同步至 `build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：** 天体筛选面板的页面切换改用 ArkUI 原生 `animateTo`，筛选标签、目录卡片和分类选中态增加透明度、位移、缩放及弹性过渡；长名称统一使用弹性布局、单行省略，避免筛选项和结果卡片互相遮挡。
+- **脚本播放态：** 播放控制栏拆分为状态/脚本名称区和操作区，速度、暂停/继续、停止改为稳定尺寸的原生图标按钮，播放态进入和退出增加底部轻移与淡入淡出过渡，减少小屏中文按钮文字挤压。
+- **修改原因：** 筛选整块缺少连续过渡，脚本播放时的紧凑菜单存在文字遮挡和控件拥挤问题。
+- **构建结果：** `git diff --check` 通过；`scripts/sync-ohos-build-sources.sh` 同步通过；`scripts/check-ohos.sh` 的 ArkTS/HAP 阶段仍被工程已有的 `setTimeout` 静态规则及入口 Builder 调用错误阻断，未发现本轮新增的筛选或播放控件错误。
+- **验证结果：** 国际化审计通过（43 种官方语言资源存在）；尚未进行设备截图回归。
+- **备注：** 未修改 `build-profile.json5`、签名证书、密钥库或 Provision；动画仅使用 ArkUI `animateTo`、`TransitionEffect` 和 `springMotion`。

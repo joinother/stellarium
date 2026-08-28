@@ -21,6 +21,9 @@
 
 #include "StelScriptOutput.hpp"
 #include "StelScriptMgr.hpp"
+#if defined(__OHOS__)
+#include "StelMainView.hpp"
+#endif
 #include "StelMainScriptAPI.hpp"
 #include "StelModuleMgr.hpp"
 #include "LabelMgr.hpp"
@@ -776,6 +779,23 @@ bool StelScriptMgr::runPreprocessedScript(const QString &preprocessedScript, con
 	emit scriptRunning();
 	emit runningScriptIdChanged(scriptId);
 
+#if defined(__OHOS__)
+	// Script waits run a nested Qt event loop. Keep the custom OHOS renderer
+	// alive during that loop; otherwise a long tour appears to freeze because
+	// the normal frame timer is not guaranteed to be dispatched between script
+	// instructions. This timer stays on the Qt thread and never touches the
+	// script engine from another thread.
+	QTimer ohosRenderHeartbeat;
+	ohosRenderHeartbeat.setTimerType(Qt::PreciseTimer);
+	ohosRenderHeartbeat.setInterval(16);
+	QObject::connect(&ohosRenderHeartbeat, &QTimer::timeout, []() {
+		if (StelApp::isInitialized())
+			StelMainView::getInstance().renderOhosFrameNow();
+	});
+	StelMainView::getInstance().setOhosScriptRenderHeartbeat(true);
+	ohosRenderHeartbeat.start();
+#endif
+
 #ifdef ENABLE_SCRIPT_QML
 	engine->setInterrupted(false);
 	//QStringList stackTrace;
@@ -789,6 +809,11 @@ bool StelScriptMgr::runPreprocessedScript(const QString &preprocessedScript, con
 	engine->popContext();
 	scriptEnded();
 	Q_UNUSED(context)
+#endif
+
+#if defined(__OHOS__)
+	ohosRenderHeartbeat.stop();
+	StelMainView::getInstance().setOhosScriptRenderHeartbeat(false);
 #endif
 	return true;
 }

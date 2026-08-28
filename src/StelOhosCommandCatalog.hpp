@@ -25,13 +25,13 @@ inline QStringList names()
 		"getMeteorShowers,getMeteors,getMilkyWayFlags,getMilkyWayIntensity,getMoonPhases,getMountMode,getNebulaFlags,"
 		"getNightMode,getObjectInfo,getObjectPositions,getObjectSpokenText,getObservabilityCalendar,getObserverInfo,"
 		"getObserverPlanetList,getOculars,getOrbitDisplaySettings,getPhenomena,getPlanetCalc,getPlanetPairDistanceCurve,"
-		"getPlanetPositions,getPlanetTimeSeries,getPlanetaryTransits,getPluginList,getProjectionInfo,getProjectionList,"
+		"getPlanetPositions,getPlanetTimeSeries,getPlanetaryTransits,getPluginList,getPolarScopeData,getProjectionInfo,getProjectionList,"
 		"getRTS,getRTSCalendar,getSatellites,getScreenInfo,getScriptList,getScriptRate,getScriptStatus,"
 		"getSelectedObjectInfo,getSelectedObjects,getSelectedType,getSessionState,getSiderealTime,getSimulationTime,"
 		"getSkyCultureDetails,getSkyCultureInfo,getSkyCultureList,getSkyCultureTerritoryGeometry,getSkyCultureVisualSettings,"
 		"getSkyCultures,getSolarElongation,getSolarSystemFlags,getStarCatalogStatus,getStarCatalogs,getStarCount,"
 		"getStarCountFull,getStarFlags,getStarScale,getState,getTimeFormat,getTimeInfo,getTonightEvents,"
-		"getTracking,getTrailDisplaySettings,getVMagnitude,getVideoRecordingState,getViewDirection,getViewportOffset,"
+		"getTracking,getTrailDisplaySettings,getVMagnitude,getVideoRecordingState,getViewCenterCoordinates,getViewDirection,getViewportOffset,"
 		"getViewportSize,getWutTargets,gotoBookmark,gotoRADec,gyroDiagnostic,importConfig,listMatchingObjects,listObjects,"
 		"listRecordings,loadPlugin,loadRecording,moveToAltAz,moveToSelected,moveToSelectedAt,panBy,pauseScript,playScript,"
 		"pointAtSky,pointAtSkyStop,reloadSkyCulture,resetAngleMeasure,resumeScript,saveRecording,saveScreenShot,searchObject,"
@@ -40,7 +40,7 @@ inline QStringList names()
 		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDitheringMode,setDsoLabels,setFOV,"
 		"setFieldOfView,setFlagClearSky,setFlagGravityLabels,setFlatHorizon,setFovMarkerSetting,setGridFlag,setGyroView,"
 		"setJD,setLandscape,setLandscapeFadeWithZoom,setLandscapeOpacity,setLandscapeTransparency,setLandscapeUseTransparency,"
-		"setLanguage,setLightPollution,setLimitMagnitude,setLocation,setLocationByName,setLocationCoords,setMeteorShowersFlag,"
+        "setLanguage,setLightPollution,setLimitMagnitude,setLocation,setLocationByName,setLocationCoords,setMeteorShowersFlag,setScreenSafeArea,"
 		"setMeteors,setMilkyWayFlag,setMilkyWayIntensity,setMountMode,setNebulaFlag,setNightMode,setObserverPlanet,"
 		"setOcularMode,setOrbitDisplaySetting,setPluginLoadAtStartup,setProjectionType,setSatellitesFlag,setScriptRate,setSkyCulture,"
 		"setSkyCultureCommonNames,setSkyCultureDefault,setSkyCultureLabelStyle,setSkyCultureScreenLabelStyle,"
@@ -95,6 +95,7 @@ inline QJsonObject item(const QString& name)
 	else if (name == "selectAt") value["examplePayload"] = "720|480|1440|960";
 	else if (name == "setActionChecked") value["examplePayload"] = "actionShow_Stars|1";
 	else if (name == "getWutTargets") value["examplePayload"] = "{\"category\":\"planets\"}";
+	else if (name == "getPolarScopeData") value["description"] = QStringLiteral("读取实时极轴镜分划数据，包括天极/极星屏幕投影、时角和钟面位置；星空由 Stellarium 原生渲染");
 	else if (name == "getCommandSchema") value["examplePayload"] = "getTimeInfo";
 	return value;
 }

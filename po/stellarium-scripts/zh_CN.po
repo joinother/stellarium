@@ -2,26 +2,105 @@
 # Copyright (C) YEAR Stellarium's team
 # This file is distributed under the same license as the PACKAGE package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
-# 
+#
 # Translators:
 # Celestial Phineas <hanghang0713@hotmail.com>, 2022
 # Cat Astro, 2022
 # 殳玮 孙 <itun@qq.com>, 2026
-# 
+#
 #, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
-"POT-Creation-Date: 2026-07-03 12:42+0700\n"
+"POT-Creation-Date: 2026-08-28 15:38+0800\n"
 "PO-Revision-Date: 2022-10-05 14:25+0000\n"
 "Last-Translator: 殳玮 孙 <itun@qq.com>, 2026\n"
-"Language-Team: Chinese (China) (https://app.transifex.com/stellarium/teams/80998/zh_CN/)\n"
+"Language-Team: Chinese (China) (https://app.transifex.com/stellarium/teams/"
+"80998/zh_CN/)\n"
+"Language: zh_CN\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Language: zh_CN\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: scripts/BAS_Jupiter_Moons.ssc:16
+msgid ""
+"Bridgend Astronomical Society - Jupiter's Moons Orbital Simulation v20250707"
+msgstr "布里真德天文协会——木星卫星轨道模拟（2025年7月7日）"
+
+#: scripts/BAS_Jupiter_Moons.ssc:17
+msgid ""
+"Note: Jupiter may not actually be visible from your location at this time."
+msgstr "注意：木星此时不一定能从您所在的位置看到。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:19
+msgid ""
+"There are 95 moons of Jupiter with confirmed orbits as of 5 February 2024."
+msgstr "截至2024年2月5日，木星已有95颗卫星确认拥有轨道。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:21
+msgid ""
+"The most massive of the moons are the four Galilean moons (may not be "
+"visible if behind Jupiter in their orbit):"
+msgstr "其中质量最大的卫星是四颗伽利略卫星（运行到木星背面时可能不可见）："
+
+#: scripts/BAS_Jupiter_Moons.ssc:24
+msgid ""
+"Io ( Jupiter I ), innermost and second smallest of the four. Has over 400 "
+"active volcanoes. "
+msgstr "木卫一（木星I），四颗卫星中最靠内、第二小的一颗，拥有400多座活火山。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:30
+msgid ""
+"Europa ( Jupiter II ), smallest of the four and the closest icy moon to "
+"Jupiter. "
+msgstr "木卫二（木星II），四颗卫星中最小的一颗，也是距离木星最近的冰质卫星。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:36
+msgid "Ganymede ( Jupiter III ), Largest moon in the solar system. "
+msgstr "木卫三（木星III），太阳系中最大的卫星。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:42
+msgid ""
+"and Callisto ( Jupiter IV ), second largest moon of Jupiter and heavily "
+"cratered. "
+msgstr "木卫四（木星IV），木星第二大卫星，表面遍布陨石坑。"
+
+#: scripts/BAS_Jupiter_Moons.ssc:50
+msgid ""
+"BAS - Jupiter's Moons Orbital Simulation will now run.  (use the << >> menu "
+"options to adjust speed of sim.)"
+msgstr ""
+"布里真德天文协会的木星卫星轨道模拟即将开始。（使用“<<”“>>”菜单选项调整模拟速"
+"度。）"
+
+#: scripts/BAS_Jupiter_Moons.ssc:61
+msgid "Simulation now complete"
+msgstr "模拟完成"
+
+#: scripts/BAS_Jupiter_Moons.ssc:63
+msgid "Display will restore previous config."
+msgstr "显示设置将恢复到之前的配置。"
+
+#: scripts/BAS_Messier_Tour.ssc:138
+msgid ""
+"Bridgend Astronomical Society - Stellarium Messier Object Tour v20251114"
+msgstr "布里真德天文协会——Stellarium梅西叶天体之旅（2025年11月14日）"
+
+#: scripts/BAS_Messier_Tour.ssc:140
+msgid "Note: Not all objects may be visible from your location!"
+msgstr "注意：并非所有天体都能从您所在的位置看到！"
+
+#: scripts/BAS_Messier_Tour.ssc:142
+msgid ""
+"In addition to Stellarium data this shows Object Type - Constellation - "
+"Season Viewable"
+msgstr "除Stellarium数据外，这里还显示天体类型、星座和适合观测的季节。"
+
+#: scripts/BAS_Messier_Tour.ssc:164
+msgid "Stellarium Messier Object End of Tour"
+msgstr "Stellarium梅西叶天体之旅结束"
 
 #: scripts/analemma.ssc:17
 msgid "Analemma"
@@ -356,7 +435,8 @@ msgstr "夏天的其他三角形"
 
 #: scripts/binocular_highlights.ssc:64
 msgid "Epsilon, Zeta and Alpha Lyrae"
-msgstr "天琴座α（织女一），天琴座ε（织女二和织女增二）和天琴座ζ（织女三和织女增一）"
+msgstr ""
+"天琴座α（织女一），天琴座ε（织女二和织女增二）和天琴座ζ（织女三和织女增一）"
 
 #: scripts/binocular_highlights.ssc:65
 msgid "M57 and Expectations"
@@ -823,6 +903,659 @@ msgstr "6.3角分（西北西）"
 msgid "Separation:"
 msgstr "角间距:"
 
+#: scripts/earth_1.ssc:24
+msgid "Press N for next outer body"
+msgstr "按 N 切换到下一颗外侧天体"
+
+#: scripts/earth_1.ssc:27
+msgid "Press B to go back to the last inner body"
+msgstr "按 B 返回上一颗内侧天体"
+
+#: scripts/earth_1.ssc:30
+msgid "Press F  to toggle flags and labels"
+msgstr "按 F 切换标记和标签"
+
+#: scripts/earth_1.ssc:33
+msgid "Press S  toggle screen saver mode"
+msgstr "按 S 切换屏幕保护模式"
+
+#: scripts/earth_1.ssc:36 scripts/earth_2.ssc:50953 scripts/earth_3.ssc:79554
+#: scripts/earth_5.ssc:22273 scripts/earth_6.ssc:14637 scripts/earth_7.ssc:2852
+msgid "By Qam1"
+msgstr "作者：Qam1"
+
+#: scripts/earth_1.ssc:181
+msgid "Elongation: 11.849 degrees"
+msgstr "距角：11.849 度"
+
+#: scripts/earth_1.ssc:196
+msgid "Elongation: 6.390 degrees"
+msgstr "距角：6.390 度"
+
+#: scripts/earth_1.ssc:210
+msgid "Elongation: 3.186 degrees"
+msgstr "距角：3.186 度"
+
+#: scripts/earth_1.ssc:228
+msgid "Elongation: 1.952 degrees"
+msgstr "距角：1.952 度"
+
+#: scripts/earth_1.ssc:245
+msgid "Elongation: 1.908 degrees"
+msgstr "距角：1.908 度"
+
+#: scripts/earth_1.ssc:264
+msgid "Elongation: 0.756 degrees"
+msgstr "距角：0.756 度"
+
+#: scripts/earth_1.ssc:282
+msgid "Elongation: 0.692 degrees"
+msgstr "距角：0.692 度"
+
+#: scripts/earth_1.ssc:369
+msgid "Screensaver Mode off"
+msgstr "屏幕保护模式已关闭"
+
+#: scripts/earth_1.ssc:375
+msgid "Screensaver Mode on"
+msgstr "屏幕保护模式已开启"
+
+#: scripts/earth_2.ssc:50891
+msgid "Earth Events from Mercury"
+msgstr "从水星观测地球天象"
+
+#: scripts/earth_2.ssc:50909 scripts/earth_3.ssc:79429
+#: scripts/earth_4.ssc:67769 scripts/earth_5.ssc:22087
+#: scripts/earth_6.ssc:14415 scripts/earth_7.ssc:2655
+msgid "Everything"
+msgstr "全部"
+
+#: scripts/earth_2.ssc:50912 scripts/earth_3.ssc:79435
+msgid "  Oppositions"
+msgstr "  冲日"
+
+#: scripts/earth_2.ssc:50915
+msgid "   Oppositions Cycle 1"
+msgstr "   冲日周期 1"
+
+#: scripts/earth_2.ssc:50918
+msgid "   Oppositions Cycle 2"
+msgstr "   冲日周期 2"
+
+#: scripts/earth_2.ssc:50921
+msgid "   Oppositions Cycle 3"
+msgstr "   冲日周期 3"
+
+#: scripts/earth_2.ssc:50924
+msgid "  Closest Approaches"
+msgstr "  最近接近"
+
+#: scripts/earth_2.ssc:50927 scripts/earth_3.ssc:79461
+#: scripts/earth_4.ssc:67812
+msgid "  Superior Conjunctions"
+msgstr "  上合"
+
+#: scripts/earth_2.ssc:50930
+msgid "  Venus-Earth Conjunctions"
+msgstr "  金星与地球合"
+
+#: scripts/earth_2.ssc:50933
+msgid "  Venus-Earth Conjunctions <1"
+msgstr "  金星与地球合，小于 1"
+
+#: scripts/earth_2.ssc:50937 scripts/earth_3.ssc:79539
+#: scripts/earth_4.ssc:67914 scripts/earth_5.ssc:22114 scripts/earth_7.ssc:2682
+msgid "Quit"
+msgstr "退出"
+
+#: scripts/earth_2.ssc:50942 scripts/earth_3.ssc:79543
+#: scripts/earth_4.ssc:67920 scripts/earth_5.ssc:22118
+#: scripts/earth_6.ssc:14460 scripts/earth_7.ssc:2687
+msgid "Press = / - to toggle"
+msgstr "按 = / - 切换"
+
+#: scripts/earth_2.ssc:50945 scripts/earth_3.ssc:79546
+#: scripts/earth_4.ssc:67925 scripts/earth_5.ssc:22121
+#: scripts/earth_6.ssc:14463 scripts/earth_7.ssc:2690
+msgid "Press [ for Keypress mode"
+msgstr "按 [ 进入按键控制模式"
+
+#: scripts/earth_2.ssc:50948 scripts/earth_3.ssc:79549
+#: scripts/earth_4.ssc:67930 scripts/earth_5.ssc:22124
+#: scripts/earth_6.ssc:14466 scripts/earth_7.ssc:2693
+msgid "Press ] for Screen Saver Mode"
+msgstr "按 ] 进入屏幕保护模式"
+
+#: scripts/earth_2.ssc:50969 scripts/earth_2.ssc:51028
+#: scripts/earth_3.ssc:79571 scripts/earth_3.ssc:79659
+#: scripts/earth_4.ssc:67953 scripts/earth_4.ssc:68013
+#: scripts/earth_5.ssc:22147 scripts/earth_5.ssc:22202
+#: scripts/earth_6.ssc:14499 scripts/earth_6.ssc:14560 scripts/earth_7.ssc:2717
+#: scripts/earth_7.ssc:2791
+msgid "-->"
+msgstr "-->"
+
+#: scripts/earth_2.ssc:51067 scripts/earth_3.ssc:79698
+#: scripts/earth_6.ssc:14609 scripts/earth_7.ssc:2830
+msgid "Press = for next event"
+msgstr "按 = 查看下一个事件"
+
+#: scripts/earth_2.ssc:51070 scripts/earth_3.ssc:79701
+#: scripts/earth_4.ssc:68055 scripts/earth_5.ssc:22254
+#: scripts/earth_6.ssc:14612 scripts/earth_7.ssc:2833
+msgid "Press -  for previous event"
+msgstr "按 - 查看上一个事件"
+
+#: scripts/earth_2.ssc:51074 scripts/earth_3.ssc:79705
+#: scripts/earth_4.ssc:68059 scripts/earth_5.ssc:22258
+#: scripts/earth_6.ssc:14616 scripts/earth_7.ssc:2837
+msgid "Press [  go back to start date "
+msgstr "按 [ 返回起始日期"
+
+#: scripts/earth_2.ssc:51077 scripts/earth_3.ssc:79708
+#: scripts/earth_4.ssc:68062 scripts/earth_5.ssc:22261
+#: scripts/earth_6.ssc:14621 scripts/earth_7.ssc:2840
+msgid "Press ]  go back to Main Menu"
+msgstr "按 ] 返回主菜单"
+
+#: scripts/earth_2.ssc:51084 scripts/earth_3.ssc:79715
+#: scripts/earth_4.ssc:68069 scripts/earth_5.ssc:22268
+#: scripts/earth_6.ssc:14630 scripts/earth_7.ssc:2847
+msgid "Press + - [ or ]  for  Main Menu "
+msgstr "按 +、-、[ 或 ] 返回主菜单"
+
+#: scripts/earth_2.ssc:51402 scripts/earth_2.ssc:51964
+#: scripts/earth_3.ssc:80623 scripts/earth_3.ssc:81365
+#: scripts/earth_4.ssc:69093 scripts/earth_4.ssc:69845
+#: scripts/earth_5.ssc:23210 scripts/earth_6.ssc:15593 scripts/earth_7.ssc:3359
+msgid "Later!!!"
+msgstr "稍后再说！"
+
+#: scripts/earth_2.ssc:51630 scripts/earth_3.ssc:80870
+#: scripts/earth_4.ssc:69338 scripts/earth_5.ssc:22969
+#: scripts/earth_6.ssc:15499
+msgid "Light Travel Time: "
+msgstr "光行时："
+
+#: scripts/earth_2.ssc:51718 scripts/earth_3.ssc:80958
+#: scripts/earth_4.ssc:69426
+msgid "Elongation:"
+msgstr "距角："
+
+#: scripts/earth_2.ssc:51751 scripts/earth_3.ssc:80991
+#: scripts/earth_4.ssc:69459
+msgid "Illumination:"
+msgstr "照明比例："
+
+#: scripts/earth_2.ssc:51757 scripts/earth_3.ssc:80997
+#: scripts/earth_4.ssc:69465
+msgid "Earth Magnitude:"
+msgstr "地球星等："
+
+#: scripts/earth_2.ssc:51764 scripts/earth_3.ssc:81004
+#: scripts/earth_4.ssc:69472
+msgid "Moon Magnitude:"
+msgstr "月球星等："
+
+#: scripts/earth_2.ssc:51784 scripts/earth_3.ssc:81021
+#: scripts/earth_4.ssc:69492
+msgid "Moon Elongation:"
+msgstr "月球距角："
+
+#: scripts/earth_2.ssc:51793 scripts/earth_2.ssc:51798
+#: scripts/earth_3.ssc:81035 scripts/earth_3.ssc:81040
+#: scripts/earth_4.ssc:69501 scripts/earth_4.ssc:69506
+msgid "Viewing Longitude:     "
+msgstr "观测经度：     "
+
+#: scripts/earth_2.ssc:51805 scripts/earth_3.ssc:81047
+msgid "Cycle: "
+msgstr "周期："
+
+#: scripts/earth_2.ssc:51857 scripts/earth_3.ssc:81241
+#: scripts/earth_4.ssc:69755
+msgid "Julian Date:"
+msgstr "儒略日："
+
+#: scripts/earth_3.ssc:79411
+msgid "Earth Events from Venus"
+msgstr "从金星观测地球天象"
+
+#: scripts/earth_3.ssc:79432 scripts/earth_4.ssc:67772
+msgid " Orbit"
+msgstr " 轨道"
+
+#: scripts/earth_3.ssc:79438
+msgid "   Quadratures"
+msgstr "   方照"
+
+#: scripts/earth_3.ssc:79441
+msgid "    Eastern Quadratures"
+msgstr "    东方照"
+
+#: scripts/earth_3.ssc:79444
+msgid "    Western Quadratures"
+msgstr "    西方照"
+
+#: scripts/earth_3.ssc:79447 scripts/earth_4.ssc:67798
+msgid "  CoQuadratures"
+msgstr "  共方照"
+
+#: scripts/earth_3.ssc:79450 scripts/earth_4.ssc:67801
+msgid "   Eastern CoQuadratures"
+msgstr "   东方共方照"
+
+#: scripts/earth_3.ssc:79453 scripts/earth_4.ssc:67804
+msgid "   Western Coquadratures"
+msgstr "   西方共方照"
+
+#: scripts/earth_3.ssc:79456 scripts/earth_4.ssc:67807
+msgid "  Retrograde Motions"
+msgstr "  逆行"
+
+#: scripts/earth_3.ssc:79464
+msgid "  Greatest Moon Elongations"
+msgstr "  月球最大距角"
+
+#: scripts/earth_3.ssc:79468 scripts/earth_4.ssc:67829
+msgid " Conjunctions"
+msgstr " 合"
+
+#: scripts/earth_3.ssc:79472
+msgid "  Bright Stars & Nebula"
+msgstr "  亮星与星云"
+
+#: scripts/earth_3.ssc:79476 scripts/earth_4.ssc:67840
+msgid "   Aldebaran"
+msgstr "   毕宿五"
+
+#: scripts/earth_3.ssc:79480
+msgid "   Alpha Capricorn"
+msgstr "   垒壁阵四"
+
+#: scripts/earth_3.ssc:79483 scripts/earth_4.ssc:67845
+msgid "   Antares"
+msgstr "   心宿二"
+
+#: scripts/earth_3.ssc:79487
+msgid "   Beehive Cluster"
+msgstr "   蜂巢星团"
+
+#: scripts/earth_3.ssc:79491
+msgid "   Circlet"
+msgstr "   双鱼座圆环星群"
+
+#: scripts/earth_3.ssc:79495
+msgid "   Lagoon Nebula"
+msgstr "   泻湖星云"
+
+#: scripts/earth_3.ssc:79498 scripts/earth_4.ssc:67855
+msgid "   Pleiades"
+msgstr "   昴星团"
+
+#: scripts/earth_3.ssc:79501 scripts/earth_4.ssc:67861
+msgid "   Regulus"
+msgstr "   轩辕十四"
+
+#: scripts/earth_3.ssc:79504 scripts/earth_4.ssc:67867
+msgid "   Spica"
+msgstr "   角宿一"
+
+#: scripts/earth_3.ssc:79507
+msgid "   Trifid Nebula"
+msgstr "   三叶星云"
+
+#: scripts/earth_3.ssc:79511 scripts/earth_4.ssc:67876
+msgid "  Planets"
+msgstr "  行星"
+
+#: scripts/earth_3.ssc:79515 scripts/earth_4.ssc:67881
+msgid "   Mercury"
+msgstr "   水星"
+
+#: scripts/earth_3.ssc:79520
+msgid "   Mars"
+msgstr "   火星"
+
+#: scripts/earth_3.ssc:79524
+msgid "   Jupiter"
+msgstr "   木星"
+
+#: scripts/earth_3.ssc:79528 scripts/earth_4.ssc:67897
+msgid "   Saturn"
+msgstr "   土星"
+
+#: scripts/earth_3.ssc:79531 scripts/earth_4.ssc:67902
+msgid "   Uranus"
+msgstr "   天王星"
+
+#: scripts/earth_3.ssc:79534 scripts/earth_4.ssc:67908
+msgid "   Neptune"
+msgstr "   海王星"
+
+#: scripts/earth_4.ssc:67751
+msgid "Earth Events from Mars"
+msgstr "从火星观测地球天象"
+
+#: scripts/earth_4.ssc:67775
+msgid "  Greatest"
+msgstr "  最大"
+
+#: scripts/earth_4.ssc:67778
+msgid "   Elongations"
+msgstr "   距角"
+
+#: scripts/earth_4.ssc:67781
+msgid "    Western Greatest Elongations"
+msgstr "    西大距"
+
+#: scripts/earth_4.ssc:67784
+msgid "    Eastern Greatest Elongations"
+msgstr "    东大距"
+
+#: scripts/earth_4.ssc:67788
+msgid "   Brillancies"
+msgstr "   最亮"
+
+#: scripts/earth_4.ssc:67791
+msgid "    Western Greatest Brilliancies"
+msgstr "    西方最亮"
+
+#: scripts/earth_4.ssc:67795
+msgid "    Eastern Greatest Brilliancies"
+msgstr "    东方最亮"
+
+#: scripts/earth_4.ssc:67815
+msgid "   Inferior Conjunctions"
+msgstr "   下合"
+
+#: scripts/earth_4.ssc:67818
+msgid "    Transits"
+msgstr "    凌日"
+
+#: scripts/earth_4.ssc:67824
+msgid "   Zodiac"
+msgstr "   黄道十二宫"
+
+#: scripts/earth_4.ssc:67834
+msgid "  Bright Stars"
+msgstr "  亮星"
+
+#: scripts/earth_4.ssc:67850
+msgid "   Beehive"
+msgstr "   蜂巢星团"
+
+#: scripts/earth_4.ssc:67886
+msgid "   Venus"
+msgstr "   金星"
+
+#: scripts/earth_4.ssc:67892
+msgid "    Jupiter"
+msgstr "    木星"
+
+#: scripts/earth_4.ssc:67935 scripts/earth_5.ssc:22129
+#: scripts/earth_6.ssc:14472 scripts/earth_7.ssc:2698
+msgid "By Qam1 "
+msgstr "作者：Qam1"
+
+#: scripts/earth_4.ssc:68052 scripts/earth_5.ssc:22251
+msgid "Press + for next event"
+msgstr "按 + 查看下一个事件"
+
+#: scripts/earth_5.ssc:22052
+msgid "Venus and Earth"
+msgstr "金星与地球"
+
+#: scripts/earth_5.ssc:22057
+msgid "Greatest Elongations"
+msgstr "最大距角"
+
+#: scripts/earth_5.ssc:22061
+msgid "and"
+msgstr "与"
+
+#: scripts/earth_5.ssc:22065
+msgid "Brilliancies from Mars"
+msgstr "从火星观测最亮时刻"
+
+#: scripts/earth_5.ssc:22090
+msgid "Venus Only"
+msgstr "仅金星"
+
+#: scripts/earth_5.ssc:22093 scripts/earth_6.ssc:14418
+msgid "Earth Only"
+msgstr "仅地球"
+
+#: scripts/earth_5.ssc:22096
+msgid "Greatest Elongations Evenings"
+msgstr "傍晚最大距角"
+
+#: scripts/earth_5.ssc:22099
+msgid "Greatest Elongations Mornings"
+msgstr "清晨最大距角"
+
+#: scripts/earth_5.ssc:22102
+msgid "Longest Earth (>46"
+msgstr "地球最长可见时段（>46"
+
+#: scripts/earth_5.ssc:22105
+msgid "Ceres Oppositions"
+msgstr "谷神星冲日"
+
+#: scripts/earth_5.ssc:22108
+msgid "Jupiter Oppositions"
+msgstr "木星冲日"
+
+#: scripts/earth_5.ssc:22111
+msgid "Saturn Only"
+msgstr "仅土星"
+
+#: scripts/earth_5.ssc:22947 scripts/earth_6.ssc:15397
+msgid "Greatest Elongation Evening"
+msgstr "傍晚最大距角"
+
+#: scripts/earth_5.ssc:22955 scripts/earth_6.ssc:15391
+msgid "Greatest Elongation Morning"
+msgstr "清晨最大距角"
+
+#: scripts/earth_5.ssc:22974 scripts/earth_6.ssc:15491 scripts/earth_7.ssc:3128
+msgid "Moon Elong:    "
+msgstr "月球距角：    "
+
+#: scripts/earth_5.ssc:22978 scripts/earth_6.ssc:15495
+msgid "Moon Mag:      "
+msgstr "月球星等：      "
+
+#: scripts/earth_5.ssc:22981
+msgid "Illumination:   "
+msgstr "照明比例：   "
+
+#: scripts/earth_5.ssc:22989
+msgid "Elongation:     "
+msgstr "距角：     "
+
+#: scripts/earth_5.ssc:22992 scripts/earth_5.ssc:23005
+msgid "Magnitude:     "
+msgstr "星等：     "
+
+#: scripts/earth_5.ssc:23002 scripts/earth_5.ssc:23029
+#: scripts/earth_6.ssc:15469 scripts/earth_7.ssc:3125 scripts/earth_7.ssc:3156
+msgid "Elongation:    "
+msgstr "距角：    "
+
+#: scripts/earth_5.ssc:23016
+msgid "Opposition"
+msgstr "冲日"
+
+#: scripts/earth_5.ssc:23039
+msgid "Ring Tilt:  "
+msgstr "环倾角：  "
+
+#: scripts/earth_5.ssc:23096 scripts/earth_5.ssc:23101 scripts/earth_7.ssc:3217
+#: scripts/earth_7.ssc:3222 scripts/earth_7.ssc:3236 scripts/earth_7.ssc:3241
+msgid "Viewing Longitude: "
+msgstr "观测经度："
+
+#: scripts/earth_6.ssc:14385
+msgid "Earth and Mars Greatest Elongations"
+msgstr "地球与火星的最大距角"
+
+#: scripts/earth_6.ssc:14390
+msgid "and Transits from Callisto"
+msgstr "以及从木卫四观测到的凌日"
+
+#: scripts/earth_6.ssc:14421
+msgid "Mars Only"
+msgstr "仅火星"
+
+#: scripts/earth_6.ssc:14424
+msgid "Longest Earth (>11.8"
+msgstr "地球最长可见时段（>11.8"
+
+#: scripts/earth_6.ssc:14430
+msgid "Longest Mars (>19.0"
+msgstr "火星最长可见时段（>19.0"
+
+#: scripts/earth_6.ssc:14435
+msgid "Earth Evenings Only"
+msgstr "仅地球傍晚事件"
+
+#: scripts/earth_6.ssc:14438
+msgid "Earth Mornings Only"
+msgstr "仅地球清晨事件"
+
+#: scripts/earth_6.ssc:14441
+msgid "Mars Evenings Only"
+msgstr "仅火星傍晚事件"
+
+#: scripts/earth_6.ssc:14444
+msgid "Mars Mornings Only"
+msgstr "仅火星清晨事件"
+
+#: scripts/earth_6.ssc:14447
+msgid "All Transits"
+msgstr "全部凌日"
+
+#: scripts/earth_6.ssc:14450
+msgid "Earth and Moon Transits"
+msgstr "地球与月球凌日"
+
+#: scripts/earth_6.ssc:14453
+msgid "Mars Transits"
+msgstr "火星凌日"
+
+#: scripts/earth_6.ssc:15061 scripts/earth_6.ssc:15072
+msgid "Lat: "
+msgstr "纬度："
+
+#: scripts/earth_6.ssc:15414
+msgid "Mars Transit"
+msgstr "火星凌日"
+
+#: scripts/earth_6.ssc:15420
+msgid "Mars Grazing Transit"
+msgstr "火星擦边凌日"
+
+#: scripts/earth_6.ssc:15436
+msgid "Earth Transit"
+msgstr "地球凌日"
+
+#: scripts/earth_6.ssc:15441
+msgid "Earth Grazing Transit"
+msgstr "地球擦边凌日"
+
+#: scripts/earth_6.ssc:15448
+msgid "Earth Transit (Without Moon!)"
+msgstr "地球凌日（不含月球）"
+
+#: scripts/earth_6.ssc:15453
+msgid "Moon Transit (Without Earth!)"
+msgstr "月球凌日（不含地球）"
+
+#: scripts/earth_6.ssc:15473
+msgid "From Sun Center: "
+msgstr "距太阳中心："
+
+#: scripts/earth_6.ssc:15482
+msgid "Magnitude:      "
+msgstr "星等：      "
+
+#: scripts/earth_6.ssc:15486
+msgid "Illumination:  "
+msgstr "照明比例：  "
+
+#: scripts/earth_6.ssc:15514
+msgid "Long:"
+msgstr "经度："
+
+#: scripts/earth_7.ssc:2625
+msgid "Earth and other visible planets"
+msgstr "地球与其他可见行星"
+
+#: scripts/earth_7.ssc:2628
+msgid "Greatest Elongations and Oppositions"
+msgstr "最大距角与冲日"
+
+#: scripts/earth_7.ssc:2632
+msgid "From Ceres"
+msgstr "从谷神星观测"
+
+#: scripts/earth_7.ssc:2658
+msgid "Earth"
+msgstr "地球"
+
+#: scripts/earth_7.ssc:2662
+msgid "Mars"
+msgstr "火星"
+
+#: scripts/earth_7.ssc:2665
+msgid "Jupiter"
+msgstr "木星"
+
+#: scripts/earth_7.ssc:2668
+msgid "Saturn"
+msgstr "土星"
+
+#: scripts/earth_7.ssc:2671
+msgid "Planet Conjunctions"
+msgstr "行星合"
+
+#: scripts/earth_7.ssc:2674
+msgid "Jupiter - Saturn Conjunctions"
+msgstr "木星与土星合"
+
+#: scripts/earth_7.ssc:2679
+msgid "Jupiter - Star >1 degree Conjunctions"
+msgstr "木星与恒星大于 1 度的合"
+
+#: scripts/earth_7.ssc:3114
+msgid "Earth Greatest Elongation Evening"
+msgstr "地球傍晚最大距角"
+
+#: scripts/earth_7.ssc:3118
+msgid "Earth Greatest Elongation Morning"
+msgstr "地球清晨最大距角"
+
+#: scripts/earth_7.ssc:3145
+msgid "Mars Greatest Elongation Evening"
+msgstr "火星傍晚最大距角"
+
+#: scripts/earth_7.ssc:3150
+msgid "Mars Greatest Elongation Morning"
+msgstr "火星清晨最大距角"
+
+#: scripts/earth_7.ssc:3169
+msgid "Jupiter Opposition"
+msgstr "木星冲日"
+
+#: scripts/earth_7.ssc:3180
+msgid "Saturn Opposition"
+msgstr "土星冲日"
+
+#: scripts/earth_7.ssc:3185
+msgid "Ring Tilt:    "
+msgstr "环倾角：    "
+
 #: scripts/martian_analemma.ssc:17
 msgid "Martian analemma"
 msgstr "火星日行迹"
@@ -890,6 +1623,23 @@ msgstr "行星掩亮星"
 msgid "Mutual occultations of planets"
 msgstr "行星互掩"
 
+#: scripts/planets_tour.ssc:21 scripts/planets_tour.ssc:38
+msgid "The Solar System - A Tour of the Planets"
+msgstr "太阳系——行星之旅"
+
+#: scripts/screensaver.ssc:17 scripts/constellations_tour.ssc:32
+#: scripts/modern_constellations_tour.ssc:32
+msgid "Press Ctrl+T to un-hide the toolbar"
+msgstr "按Ctrl+T取消隐藏工具栏"
+
+#: scripts/sun.ssc:38
+msgid "Sun from"
+msgstr "从以下天体看太阳："
+
+#: scripts/sun.ssc:39
+msgid "Angular size of Sun is"
+msgstr "太阳的角直径为"
+
 #: scripts/supernova.ssc:23
 msgid "Europe, Uraniborg."
 msgstr "欧洲，Uraniborg"
@@ -935,8 +1685,7 @@ msgid "First observations in China."
 msgstr "中国第一次观测到它。"
 
 #: scripts/supernova.ssc:109
-msgid ""
-"The clouds are gone and Tycho Brahe the first time watching a new star!"
+msgid "The clouds are gone and Tycho Brahe the first time watching a new star!"
 msgstr "云消失了，第谷(Tycho Brahe)第一次看到新恒星！"
 
 #: scripts/supernova.ssc:118
@@ -957,8 +1706,8 @@ msgstr "赫歇尔400目录"
 
 #: scripts/h400_tour.ssc:17
 msgid ""
-"The Herschel 400 is a subset of John Herschel's General Catalogue of Nebulae"
-" and Clusters"
+"The Herschel 400 is a subset of John Herschel's General Catalogue of Nebulae "
+"and Clusters"
 msgstr "赫歇尔400目录是赫歇尔星云和星团总表的一部分"
 
 #: scripts/h400_tour.ssc:18
@@ -1247,11 +1996,6 @@ msgstr "仙王座VV A 的伴星，是B型主序星"
 msgid "Solar radii"
 msgstr "太阳半径"
 
-#: scripts/constellations_tour.ssc:32
-#: scripts/modern_constellations_tour.ssc:32
-msgid "Press Ctrl+T to un-hide the toolbar"
-msgstr "按Ctrl+T取消隐藏工具栏"
-
 #: scripts/triple_sunrise_and_sunsets.ssc:17
 msgid "Location: Mercury, 0N, 90E"
 msgstr "位置：水星，0N，90E"
@@ -1312,419 +2056,678 @@ msgstr "太阳日"
 msgid "Uranian analemma"
 msgstr "天王星日行迹"
 
-#: scripts/messier_marathon.ssc:32
+#: scripts/messier_marathon.ssc:35
 msgid "Messier Marathon"
 msgstr "梅西叶马拉松"
 
-#: scripts/messier_marathon.ssc:99
+#: scripts/messier_marathon.ssc:54
 msgid "Difficulty is 0"
 msgstr "难度是0"
 
-#: scripts/messier_marathon.ssc:100
+#: scripts/messier_marathon.ssc:55
 msgid "Very diffuse, very dark, very difficult"
 msgstr "很弥散，很暗，难度极大"
 
-#: scripts/messier_marathon.ssc:101
+#: scripts/messier_marathon.ssc:56
 msgid "Easier than M74, small"
 msgstr "比M74容易多了，小"
 
-#: scripts/messier_marathon.ssc:102
+#: scripts/messier_marathon.ssc:57
 msgid "Visible to the naked eye, no difficulty"
 msgstr "肉眼可见，没难度"
 
-#: scripts/messier_marathon.ssc:103
+#: scripts/messier_marathon.ssc:58
 msgid "More difficult than M110 to verify, small"
 msgstr "比M110难确认，小"
 
-#: scripts/messier_marathon.ssc:104
+#: scripts/messier_marathon.ssc:59
 msgid "In the west of M31, it is easy to detect"
 msgstr "在M31西边，容易发觉"
 
-#: scripts/messier_marathon.ssc:105
+#: scripts/messier_marathon.ssc:60
 msgid "Diffuse, great, brighter"
 msgstr "弥散，极大，较亮"
 
-#: scripts/messier_marathon.ssc:106
+#: scripts/messier_marathon.ssc:61
 msgid "Small, easy to locate, not as horror as imagined"
 msgstr "小，易定位，没有想象的恐怖"
 
-#: scripts/messier_marathon.ssc:107
+#: scripts/messier_marathon.ssc:62
 msgid "Difficult to locate, easy to detect and verify"
 msgstr "难定位，易发觉确认"
 
-#: scripts/messier_marathon.ssc:108
+#: scripts/messier_marathon.ssc:63
 msgid "Small, easy to locate, don't confuse with NGC663"
 msgstr "小，易定位，别和NGC663搞混了"
 
-#: scripts/messier_marathon.ssc:109
+#: scripts/messier_marathon.ssc:64
 msgid "Large, scattered, easy"
 msgstr "大，疏散，容易"
 
-#: scripts/messier_marathon.ssc:110
+#: scripts/messier_marathon.ssc:65
 msgid "Fuzzy, easy to find, accompanied by a small star"
 msgstr "易看出模糊，不难找，旁有小星相伴"
 
-#: scripts/messier_marathon.ssc:111
+#: scripts/messier_marathon.ssc:66
 msgid "Visible to the naked eye, better than M31"
 msgstr "肉眼可见，比M31好看"
 
-#: scripts/messier_marathon.ssc:112
+#: scripts/messier_marathon.ssc:67
 msgid "Very close to M42, not easy to see the fuzzy"
 msgstr "与M42很近，不太容易看出云雾状"
 
-#: scripts/messier_marathon.ssc:113
+#: scripts/messier_marathon.ssc:68
 msgid "Small, dark, few stars around"
 msgstr "小，暗，周围没什么星星"
 
-#: scripts/messier_marathon.ssc:114
+#: scripts/messier_marathon.ssc:69
 msgid "Easy to locate, easy to detect in a good transparency."
 msgstr "容易定位，透明度好的话还是容易发现的"
 
-#: scripts/messier_marathon.ssc:115
+#: scripts/messier_marathon.ssc:70
 msgid "Visible to the naked eye, easier"
 msgstr "肉眼可见，较易"
 
-#: scripts/messier_marathon.ssc:116 scripts/messier_marathon.ssc:168
-#: scripts/messier_marathon.ssc:194
+#: scripts/messier_marathon.ssc:71 scripts/messier_marathon.ssc:123
+#: scripts/messier_marathon.ssc:154
 msgid "Easy to locate and verify"
 msgstr "易定位确认"
 
-#: scripts/messier_marathon.ssc:117 scripts/messier_marathon.ssc:118
+#: scripts/messier_marathon.ssc:72 scripts/messier_marathon.ssc:73
 msgid "Large, scattered"
 msgstr "大，疏散"
 
-#: scripts/messier_marathon.ssc:119
+#: scripts/messier_marathon.ssc:74
 msgid "Bright, easy to verify, difficult to locate"
 msgstr "亮，易确认，不好定位"
 
-#: scripts/messier_marathon.ssc:120
+#: scripts/messier_marathon.ssc:75
 msgid "Large, difficult to locate, easy to confuse with NGC2506"
 msgstr "大，较难定位，易和NGC2506混淆"
 
-#: scripts/messier_marathon.ssc:121
+#: scripts/messier_marathon.ssc:76
 msgid "Easy, more scattered"
 msgstr "易，较疏散"
 
-#: scripts/messier_marathon.ssc:122
+#: scripts/messier_marathon.ssc:77
 msgid "Easy, fuzzy"
 msgstr "易，模糊"
 
-#: scripts/messier_marathon.ssc:123
+#: scripts/messier_marathon.ssc:78
 msgid "Easy, scattered"
 msgstr "易，疏散"
 
-#: scripts/messier_marathon.ssc:124
+#: scripts/messier_marathon.ssc:79
 msgid "Easy, large, scattered"
 msgstr "易，大，疏散"
 
-#: scripts/messier_marathon.ssc:125
+#: scripts/messier_marathon.ssc:80
 msgid "Very close to M96 and M105"
 msgstr "与M96、M105非常近"
 
-#: scripts/messier_marathon.ssc:126
+#: scripts/messier_marathon.ssc:81
 msgid "Easy to locate and verify, assist to verify M95 and M105"
 msgstr "易定位确认，可协助确认M95、M105"
 
-#: scripts/messier_marathon.ssc:127
+#: scripts/messier_marathon.ssc:82
 msgid "Dark"
 msgstr "暗"
 
-#: scripts/messier_marathon.ssc:128
+#: scripts/messier_marathon.ssc:83
 msgid "Very close, it’s like M81 and M82"
 msgstr "挨的很近，有些像M81、M82的样子"
 
-#: scripts/messier_marathon.ssc:129
+#: scripts/messier_marathon.ssc:84
 msgid "There is NGC3628 nearby, don't think you have found a new comet"
 msgstr "附近有NGC3628，别以为自己发现了新彗星"
 
-#: scripts/messier_marathon.ssc:130
+#: scripts/messier_marathon.ssc:85
 msgid "Like the darkened M33, require a high sky conditions"
 msgstr "像变暗的M33，对天空条件要求高"
 
-#: scripts/messier_marathon.ssc:131
+#: scripts/messier_marathon.ssc:86
 msgid "Difficult to locate, 4 stars of the inverted 7 shape beside"
 msgstr "难定位，附近有4颗星排成倒7形状"
 
-#: scripts/messier_marathon.ssc:132
+#: scripts/messier_marathon.ssc:87
 msgid "Easy, you can see the companion galaxy"
 msgstr "易，可看到伴星系"
 
-#: scripts/messier_marathon.ssc:133
+#: scripts/messier_marathon.ssc:88
 msgid "Easy to verify"
 msgstr "易确认"
 
-#: scripts/messier_marathon.ssc:134
+#: scripts/messier_marathon.ssc:89
 msgid "Not easy to locate, small, slightly dark"
 msgstr "不易定位，小，稍暗"
 
-#: scripts/messier_marathon.ssc:135
+#: scripts/messier_marathon.ssc:90
 msgid "Not easy to locate, bright"
 msgstr "不易定位，亮"
 
-#: scripts/messier_marathon.ssc:136
+#: scripts/messier_marathon.ssc:91
 msgid "Not easy to locate, no bright stars nearby"
 msgstr "不易定位，附近无亮星"
 
-#: scripts/messier_marathon.ssc:137
+#: scripts/messier_marathon.ssc:92
 msgid "Easy to locate"
 msgstr "易定位"
 
-#: scripts/messier_marathon.ssc:138
+#: scripts/messier_marathon.ssc:93
 msgid "Beside M60, it is easy to verify"
 msgstr "在M60旁边，还是容易确认的"
 
-#: scripts/messier_marathon.ssc:139
+#: scripts/messier_marathon.ssc:94
 msgid "It’s an easier one"
 msgstr "算是较容易的一个了"
 
-#: scripts/messier_marathon.ssc:140
+#: scripts/messier_marathon.ssc:95
 msgid "As bright as M85, easy to verify"
 msgstr "和M85一样算是亮的了，容易确认"
 
-#: scripts/messier_marathon.ssc:141
+#: scripts/messier_marathon.ssc:96
 msgid "Dark, hard to look"
 msgstr "暗，使劲看"
 
-#: scripts/messier_marathon.ssc:142
+#: scripts/messier_marathon.ssc:97
 msgid "Easy to detect than M89, easy to locate"
 msgstr "比M89容易看出来，也容易定位"
 
-#: scripts/messier_marathon.ssc:143
+#: scripts/messier_marathon.ssc:98
 msgid "Easy to locate, detect once"
 msgstr "易定位，眼一瞪就出来了"
 
-#: scripts/messier_marathon.ssc:144
+#: scripts/messier_marathon.ssc:99
 msgid "There is an NGC4438 near M84 and M86, don't make a mistake"
 msgstr "M84、M86附近有个NGC4438，别搞错了"
 
-#: scripts/messier_marathon.ssc:145
+#: scripts/messier_marathon.ssc:100
 msgid "M84 are together, closer to NGC4438"
 msgstr "和M84在一块儿，更靠近NGC4438"
 
-#: scripts/messier_marathon.ssc:146
+#: scripts/messier_marathon.ssc:101
 msgid "Just above M90, almost like M90"
 msgstr "就在M90上面，和M90差不多"
 
-#: scripts/messier_marathon.ssc:147
+#: scripts/messier_marathon.ssc:102
 msgid "Look hard"
 msgstr "使劲看"
 
-#: scripts/messier_marathon.ssc:148
+#: scripts/messier_marathon.ssc:103
 msgid "This bunch of things in the Virgo Cluster is not easy"
 msgstr "室女座星系团这堆东西没有容易的"
 
-#: scripts/messier_marathon.ssc:149
+#: scripts/messier_marathon.ssc:104
 msgid "M99 is easier to verify than M98"
 msgstr "M99比M98容易确认多了"
 
-#: scripts/messier_marathon.ssc:150
+#: scripts/messier_marathon.ssc:105
 msgid "First find M100 and then find M98 and M99"
 msgstr "先确定M100再找M98、M99"
 
-#: scripts/messier_marathon.ssc:151
+#: scripts/messier_marathon.ssc:106
 msgid "Far away, but very bright, easy to find"
 msgstr "虽位置远些，但很亮，算是容易找的了"
 
-#: scripts/messier_marathon.ssc:152
+#: scripts/messier_marathon.ssc:107
 msgid "Small, not easy to locate, a little difficult"
 msgstr "小，不易定位，有点难度"
 
-#: scripts/messier_marathon.ssc:153
+#: scripts/messier_marathon.ssc:108
 msgid "Not easy to locate, easy to verify"
 msgstr "不易定位，易确认"
 
-#: scripts/messier_marathon.ssc:154
+#: scripts/messier_marathon.ssc:109
 msgid "Easy to locate and verify, small"
 msgstr "易定位确认，小"
 
-#: scripts/messier_marathon.ssc:155
+#: scripts/messier_marathon.ssc:110
 msgid "Easy to verify, a star 5 magnitude nearby"
 msgstr "易确认，附近有一颗5等星"
 
-#: scripts/messier_marathon.ssc:156
+#: scripts/messier_marathon.ssc:111
 msgid "Visible to the naked eye, big, bright"
 msgstr "肉眼可见，大，亮"
 
-#: scripts/messier_marathon.ssc:157
+#: scripts/messier_marathon.ssc:112
 msgid "Bright and big in the galaxies, not hard to find"
 msgstr "在星系里算是亮且大的了，不难找"
 
-#: scripts/messier_marathon.ssc:158
+#: scripts/messier_marathon.ssc:113
 msgid "Bright, easy to verify"
 msgstr "亮，易确认"
 
-#: scripts/messier_marathon.ssc:159
+#: scripts/messier_marathon.ssc:114
 msgid "Easy to verify in a right location"
 msgstr "只要位置对，一下就确认了"
 
-#: scripts/messier_marathon.ssc:160
+#: scripts/messier_marathon.ssc:115
 msgid "Famous, like the shoulder pole star"
 msgstr "这么出名的东西，不用介绍，像扁担星"
 
-#: scripts/messier_marathon.ssc:161
+#: scripts/messier_marathon.ssc:116
 msgid "It may be easier to locate from the Dragon"
 msgstr "从天龙座找过来可能更容易定位"
 
-#: scripts/messier_marathon.ssc:162
+#: scripts/messier_marathon.ssc:117
 msgid "Small, 20 times or more is still easy to detect"
 msgstr "小，20倍以上还是容易发觉的"
 
-#: scripts/messier_marathon.ssc:163
+#: scripts/messier_marathon.ssc:118
 msgid "More difficult than M57, not easy to locate, very small"
 msgstr "比M57要难许多，不易定位，很小"
 
-#: scripts/messier_marathon.ssc:164
+#: scripts/messier_marathon.ssc:119
 msgid "Easy, small, looks like a cluster of stars 7-8 magnitude"
 msgstr "易，小，看上去像七八颗星组成的星团"
 
-#: scripts/messier_marathon.ssc:165
+#: scripts/messier_marathon.ssc:120
 msgid "Larger than imagined, very scattered, not easy to locate"
 msgstr "比想象的大，很疏散，不易定位"
 
-#: scripts/messier_marathon.ssc:166
+#: scripts/messier_marathon.ssc:121
 msgid "Find M71 first, then find M27, and will be easier to locate"
 msgstr "先找到M71，再找M27较容易定位"
 
-#: scripts/messier_marathon.ssc:167
+#: scripts/messier_marathon.ssc:122
 msgid "Easy to locate, easy to verify in 50 binos"
 msgstr "容易定位，在50双筒中都很容易确认"
 
-#: scripts/messier_marathon.ssc:169
+#: scripts/messier_marathon.ssc:124
 msgid "Bright, like M13, easy to find"
 msgstr "亮，像M13一样，好找"
 
-#: scripts/messier_marathon.ssc:170
+#: scripts/messier_marathon.ssc:125
 msgid "Detect it with M12, brighter than M12"
 msgstr "和M12在一起找，比M12还亮"
 
-#: scripts/messier_marathon.ssc:171
+#: scripts/messier_marathon.ssc:126
 msgid "Difficult to locate, easy to verify"
 msgstr "难定位，易确认"
 
-#: scripts/messier_marathon.ssc:172 scripts/messier_marathon.ssc:195
+#: scripts/messier_marathon.ssc:127 scripts/messier_marathon.ssc:155
 msgid "Small, not easy to verify"
 msgstr "小，不易确认"
 
-#: scripts/messier_marathon.ssc:173
+#: scripts/messier_marathon.ssc:128
 msgid "Bright, big, don't forget to detect NGC6144 nearby"
 msgstr "亮，大，别忘了看看附近的NGC6144"
 
-#: scripts/messier_marathon.ssc:174
+#: scripts/messier_marathon.ssc:129
 msgid "Not easy to verify at low power, easy at high power"
 msgstr "在低倍下不易确认，高于20倍就很容易了"
 
-#: scripts/messier_marathon.ssc:175
+#: scripts/messier_marathon.ssc:130
 msgid "Follow the line of M4 and Antares, easy to verify"
 msgstr "顺着M4与心宿二的联线找下去，易确认"
 
-#: scripts/messier_marathon.ssc:176
+#: scripts/messier_marathon.ssc:131
 msgid "Looking down from M19, darker than M19, but easy to verify"
 msgstr "从M19往下找，比M19暗，但也易确认"
 
-#: scripts/messier_marathon.ssc:177
+#: scripts/messier_marathon.ssc:132
 msgid "Easy to locate, bright, and almost like M13"
 msgstr "易定位，亮，和M13差不多"
 
-#: scripts/messier_marathon.ssc:178
+#: scripts/messier_marathon.ssc:133
 msgid "Easy to locate M26 by M11"
 msgstr "通过M11定位M26，易确认"
 
-#: scripts/messier_marathon.ssc:179
+#: scripts/messier_marathon.ssc:134 scripts/messier_marathon.ssc:135
+#: scripts/messier_marathon.ssc:136
 msgid "Easy"
 msgstr "易"
 
-#: scripts/messier_marathon.ssc:180
+#: scripts/messier_marathon.ssc:137
 msgid "Rather large, Milky Way star patch with open cluster NGC6603"
 msgstr "相当大的银河星场，包含疏散星团 NGC 6603"
 
-#: scripts/messier_marathon.ssc:181 scripts/messier_marathon.ssc:200
+#: scripts/messier_marathon.ssc:138 scripts/messier_marathon.ssc:161
 msgid "Difficult to locate, bright, easy to verify"
 msgstr "定位难，亮，易确认"
 
-#: scripts/messier_marathon.ssc:182
+#: scripts/messier_marathon.ssc:139
 msgid "Beside M81, vertical to each other"
 msgstr "和M81在一起，相互垂直"
 
-#: scripts/messier_marathon.ssc:183
+#: scripts/messier_marathon.ssc:140
 msgid "Large, a little fuzzy"
 msgstr "大，稍模糊"
 
-#: scripts/messier_marathon.ssc:183
+#: scripts/messier_marathon.ssc:141
 msgid "Beside M20"
 msgstr "和M20在一起"
 
-#: scripts/messier_marathon.ssc:184
+#: scripts/messier_marathon.ssc:142
 msgid "It’s not hard to see the diffuse nebula"
 msgstr "不难看出弥漫星云"
 
-#: scripts/messier_marathon.ssc:185
+#: scripts/messier_marathon.ssc:143
 msgid "Visible to the naked eye, extremely easy"
 msgstr "肉眼可见，极易"
 
-#: scripts/messier_marathon.ssc:186
+#: scripts/messier_marathon.ssc:144
 msgid "Big, easy"
 msgstr "大，易"
 
-#: scripts/messier_marathon.ssc:186
+#: scripts/messier_marathon.ssc:145
 msgid "Easy to locate and verify, bright"
 msgstr "易定位确认，亮"
 
-#: scripts/messier_marathon.ssc:187
+#: scripts/messier_marathon.ssc:146
 msgid "M13 second"
 msgstr "M13第二"
 
-#: scripts/messier_marathon.ssc:187 scripts/messier_marathon.ssc:191
+#: scripts/messier_marathon.ssc:147 scripts/messier_marathon.ssc:151
 msgid "Small and dim, difficult"
 msgstr "小而暗淡，困难"
 
-#: scripts/messier_marathon.ssc:188
+#: scripts/messier_marathon.ssc:148
 msgid "A bit smaller and brighter than M69"
 msgstr "比M69更小更亮"
 
-#: scripts/messier_marathon.ssc:189
+#: scripts/messier_marathon.ssc:149
 msgid "Very small and fuzzy, difficult"
 msgstr "极小且弥散，困难。"
 
-#: scripts/messier_marathon.ssc:190
+#: scripts/messier_marathon.ssc:150
 msgid "Pretty large, faint, yet still clear"
 msgstr "相当大，暗淡，但仍可辨认"
 
-#: scripts/messier_marathon.ssc:192
+#: scripts/messier_marathon.ssc:152
 msgid "Too big, scattered, not easy to verify"
 msgstr "太大，太疏散反而不易确认"
 
-#: scripts/messier_marathon.ssc:193
+#: scripts/messier_marathon.ssc:153
 msgid "Bigger than M6"
 msgstr "比M6还大"
 
-#: scripts/messier_marathon.ssc:195
+#: scripts/messier_marathon.ssc:156
 msgid "Small, difficult"
 msgstr "小，困难"
 
-#: scripts/messier_marathon.ssc:196
+#: scripts/messier_marathon.ssc:157
 msgid "Faint, check the Y shape of the star pattern"
 msgstr "暗弱，注意星群呈 Y 形分布。"
 
-#: scripts/messier_marathon.ssc:197
+#: scripts/messier_marathon.ssc:158
 msgid "Brighter than imagined, can be detected with 60 binos"
 msgstr "比想象的亮，60双筒都能看到"
 
-#: scripts/messier_marathon.ssc:198
+#: scripts/messier_marathon.ssc:159
 msgid "Darker than M97, long strips, look hard"
 msgstr "比M97暗，长条状，得使劲看"
 
-#: scripts/messier_marathon.ssc:199
+#: scripts/messier_marathon.ssc:160
 msgid "Easy to verify with more than 20 times binos"
 msgstr "20倍以上的镜子很容易确认"
 
-#: scripts/messier_marathon.ssc:201
+#: scripts/messier_marathon.ssc:162
 msgid "In the morning light, it looks too hard, dark"
 msgstr "在晨光中只有看起来太费劲了，暗"
 
-#: scripts/messier_marathon.ssc:202
+#: scripts/messier_marathon.ssc:163
 msgid "Very dim, the most difficult object to get!"
 msgstr "非常暗淡，是最难观测到的目标！"
 
-#: scripts/messier_marathon.ssc:296
+#: scripts/messier_marathon.ssc:274
 msgid "cannot be seen now"
 msgstr "现在看不到了"
+
+#~ msgid "Supernova remnant"
+#~ msgstr "超新星遗迹"
+
+#~ msgid "Globular Cluster"
+#~ msgstr "球状星团"
+
+#~ msgid "Open Cluster"
+#~ msgstr "疏散星团"
+
+#~ msgid "Planetary Nebula"
+#~ msgstr "行星状星云"
+
+#~ msgid "Spiral Galaxy"
+#~ msgstr "螺旋星系"
+
+#~ msgid "Elliptical Galaxy"
+#~ msgstr "椭圆星系"
+
+#~ msgid "Lenticular (S0) Galaxy"
+#~ msgstr "透镜状星系（S0）"
+
+#~ msgid "Irregular Galaxy"
+#~ msgstr "不规则星系"
+
+#~ msgid "Asterism"
+#~ msgstr "星群"
+
+#~ msgid "Double Star"
+#~ msgstr "双星"
+
+#~ msgid "Star Cloud"
+#~ msgstr "恒星云"
+
+#~ msgid "Winter"
+#~ msgstr "冬季"
+
+#~ msgid "Autumn / Early Winter"
+#~ msgstr "秋季 / 初冬"
+
+#~ msgid "Early Spring"
+#~ msgstr "初春"
+
+#~ msgid "Late Spring"
+#~ msgstr "晚春"
+
+#~ msgid "Mid-Summer"
+#~ msgstr "仲夏"
+
+#~ msgid "Late Summer"
+#~ msgstr "夏末"
+
+#~ msgid "Taurus"
+#~ msgstr "金牛座"
+
+#~ msgid "Aquarius"
+#~ msgstr "宝瓶座"
+
+#~ msgid "Canes Venatici"
+#~ msgstr "猎犬座"
+
+#~ msgid "Scorpio"
+#~ msgstr "天蝎座"
+
+#~ msgid "Scorpius"
+#~ msgstr "天蝎座"
+
+#~ msgid "Serpens Caput"
+#~ msgstr "巨蛇座（蛇头）"
+
+#~ msgid "Serpens Claudia"
+#~ msgstr "巨蛇座（蛇尾）"
+
+#~ msgid "Ophiucus"
+#~ msgstr "蛇夫座"
+
+#~ msgid "Scutum"
+#~ msgstr "盾牌座"
+
+#~ msgid "Hercules"
+#~ msgstr "武仙座"
+
+#~ msgid "Pegasus"
+#~ msgstr "飞马座"
+
+#~ msgid "Sagittarius"
+#~ msgstr "人马座"
+
+#~ msgid "Andromeda"
+#~ msgstr "仙女座"
+
+#~ msgid "Triangulum"
+#~ msgstr "三角座"
+
+#~ msgid "Perseus"
+#~ msgstr "英仙座"
+
+#~ msgid "Gemini"
+#~ msgstr "双子座"
+
+#~ msgid "Auriga"
+#~ msgstr "御夫座"
+
+#~ msgid "Cygnus"
+#~ msgstr "天鹅座"
+
+#~ msgid "Canis Major"
+#~ msgstr "大犬座"
+
+#~ msgid "Orion"
+#~ msgstr "猎户座"
+
+#~ msgid "Cancer"
+#~ msgstr "巨蟹座"
+
+#~ msgid "Puppis"
+#~ msgstr "船尾座"
+
+#~ msgid "Hydra"
+#~ msgstr "长蛇座"
+
+#~ msgid "Virgo"
+#~ msgstr "室女座"
+
+#~ msgid "Monocerus"
+#~ msgstr "麒麟座"
+
+#~ msgid "Coma Berenices"
+#~ msgstr "后发座"
+
+#~ msgid "Leo"
+#~ msgstr "狮子座"
+
+#~ msgid "Cetus"
+#~ msgstr "鲸鱼座"
+
+#~ msgid "Lepus"
+#~ msgstr "天兔座"
+
+#~ msgid "Lyra"
+#~ msgstr "天琴座"
+
+#~ msgid "Sagitta"
+#~ msgstr "天箭座"
+
+#~ msgid "Pisces"
+#~ msgstr "双鱼座"
+
+#~ msgid "Ursa Major"
+#~ msgstr "大熊座"
+
+#~ msgid "Draco"
+#~ msgstr "天龙座"
+
+#~ msgid "Cassiopea"
+#~ msgstr "仙后座"
+
+#~ msgid "Cassiopeia"
+#~ msgstr "仙后座"
+
+#~ msgid "Place: Rangpur, Bangladesh"
+#~ msgstr "地点：孟加拉国朗布尔"
+
+#~ msgid "Date: 2009-07-21, just before dawn."
+#~ msgstr "日期：2009年7月21日，黎明前"
+
+#~ msgid "Orion and Gemini climb into the dawn sky"
+#~ msgstr "猎户座和双子座升入黎明的天空"
+
+#~ msgid "fading from view as the sky brightens with"
+#~ msgstr "随着天空变亮而逐渐隐去"
+
+#~ msgid "the appearance of the Sun"
+#~ msgstr "太阳的出现"
+
+#~ msgid "The Sun has a companion this morning..."
+#~ msgstr "今天早晨，太阳有一位伴侣……"
+
+#~ msgid "The Moon."
+#~ msgstr "月球。"
+
+#~ msgid "The Moon starts to obscure the Sun's disc"
+#~ msgstr "月球开始遮挡太阳圆面"
+
+#~ msgid "and the sky becomes a little darker"
+#~ msgstr "天空也变得稍暗"
+
+#~ msgid "As the last of the Sun is covered by the Moon"
+#~ msgstr "当太阳最后的光芒被月球遮住时"
+
+#~ msgid "the sky darkens quickly, and the brighter stars"
+#~ msgstr "天空迅速变暗，较亮的恒星"
+
+#~ msgid "and planets become visible"
+#~ msgstr "和行星开始显现"
+
+#~ msgid "At totality, the Sun is completely hidden behind the Moon"
+#~ msgstr "全食时，太阳完全隐藏在月球之后"
+
+#~ msgid "The Sun emerges from behind the Moon"
+#~ msgstr "太阳从月球后方重新出现"
+
+#~ msgid "The sky brightens once more"
+#~ msgstr "天空再次变亮"
+
+#~ msgid "The End"
+#~ msgstr "结束"
+
+#~ msgid "NEVER look directly at the Sun!"
+#~ msgstr "绝不要直视太阳！"
+
+#~ msgid "Sydney Australia"
+#~ msgstr "澳大利亚悉尼"
+
+#~ msgid "just below the Sun."
+#~ msgstr "就在太阳下方。"
+
+#~ msgid "just above the Sun."
+#~ msgstr "就在太阳上方。"
+
+#~ msgid "Dobsonian Telescope"
+#~ msgstr "多布森望远镜"
+
+#~ msgid "as seen through a"
+#~ msgstr "通过以下设备看到的"
+
+#~ msgid "First Contact approx 8:12 a.m."
+#~ msgstr "初亏，约上午8:12"
+
+#~ msgid "Second Contact approx 8:30 a.m."
+#~ msgstr "食既，约上午8:30"
+
+#~ msgid "for approximately 6 hours."
+#~ msgstr "持续约6小时。"
+
+#~ msgid "across the face of the Sun"
+#~ msgstr "横穿太阳表面"
+
+#~ msgid "Venus continues to transit"
+#~ msgstr "金星继续凌日"
+
+#~ msgid "Third Contact approx 2:20 p.m."
+#~ msgstr "生光，约下午2:20"
+
+#~ msgid "Fourth Contact approx 2:39 p.m."
+#~ msgstr "复圆，约下午2:39"
+
+#~ msgid "than a century away. "
+#~ msgstr "要再等一个多世纪。"
+
+#~ msgid "The next Transit of Venus is more "
+#~ msgstr "下一次金星凌日还要"
+
+#~ msgid "Returning to current time and date."
+#~ msgstr "正在返回当前日期和时间。"
+
+#~ msgid "Equatorial Telescope"
+#~ msgstr "赤道仪望远镜"

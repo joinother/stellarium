@@ -1,5 +1,12 @@
 # Stellarium HarmonyOS 移植 — 项目交接文档
 
+## 当前 UI 架构（2026-08-28）
+
+- 手机、平板和未来桌面端统一使用底部 Dock：搜索、时间、位置、图层、更多。
+- `moreActions` 是跨设备唯一的低频功能清单；设备尺寸只改变面板呈现，不能改变功能入口。
+- 手机保留底部面板向上拉起；宽屏使用底部 Dock + 浮动面板，二者共享同一 `setPanel` 状态机。
+- 旧 iPad 左侧竖栏/侧栏抽屉已经弃用，不得恢复为新的功能入口。源码中仅保留历史 Builder 的兼容符号，并标记 `@deprecated`；它们不参与当前 Shell 的布局、命中测试和天体避让。
+
 > **创建时间：** 2026-07-27
 > **最后更新：** 2026-07-27
 > **当前分支：** `openharmony-preview-v1`
@@ -36,6 +43,19 @@ OpenGL ES → XComponent → Framebuffer → PBO异步回读 → EGL显示
 ---
 
 ## 2. 构建命令速查
+
+### 2.0 统一工具环境
+
+```bash
+source scripts/dev-env.sh
+scripts/check-dev-tools.sh
+```
+
+macOS 命令行依赖由根目录 `Brewfile` 管理，全局 npm CLI 由
+`scripts/dev-tools/npm-global-packages.txt` 管理。首次配置或补齐工具时运行
+`scripts/bootstrap-dev-tools.sh`。项目脚本不应再引用应用私有目录中的
+`ffmpeg`、`node` 等可执行文件。当前用户的 `~/.zprofile` 和 `~/.zshrc`
+统一加载 `~/.config/devtools/env.sh`，不要再分别追加 Homebrew 路径。
 
 ### 2.1 生成 libs/（首次或 .so 丢失时）
 
@@ -139,8 +159,9 @@ $HDC -t 127.0.0.1:5555 file recv /data/local/tmp/ui.jpeg /tmp/ui.jpeg
 - ✅ FPS计数器（实时显示渲染帧率）
 
 ### UI设计
-- ✅ expandedShell布局（左侧垂直工具栏 + 右侧浮动面板）
-- ✅ compactShell布局（底部Dock + 底部面板）
+- ✅ 统一 Dock 入口（搜索/时间/位置/图层/更多）
+- ✅ expandedShell 响应式呈现（底部 Dock + 浮动面板）
+- ✅ compactShell 响应式呈现（底部 Dock + 向上拉起面板）
 - ✅ 果冻磨砂玻璃面板（rgba(10,14,26,0.55) + backdropBlur 45）
 - ✅ 面板5秒空闲自动收起
 - ✅ 品牌色钴蓝 #5B93BF

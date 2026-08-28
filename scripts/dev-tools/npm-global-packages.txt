@@ -1,0 +1,3 @@
+# Global CLIs installed under Homebrew's npm prefix.
+@deveco/deveco-cli@stable
+@deveco/deveco-code@0.1.3

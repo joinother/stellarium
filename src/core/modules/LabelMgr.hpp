@@ -43,6 +43,10 @@ public:
 	//! Construct a LabelMgr object.
 	LabelMgr();
 	~LabelMgr() override;
+
+#if defined(__OHOS__)
+	static void setOhosScreenSafeAreaTop(int pixels);
+#endif
  
 	///////////////////////////////////////////////////////////////////////////
 	// Methods defined in the StelModule class

@@ -135,11 +135,11 @@ var messierText = [
 core.clear("deepspace");
 ConstellationMgr.setFlagIsolateSelected(true);
 
-LabelMgr.labelScreen("Bridgend Astronomical Society - Stellarium Messier Object Tour v20251114",250,50,true,30,"#ffffff");
+LabelMgr.labelScreen(tr("Bridgend Astronomical Society - Stellarium Messier Object Tour v20251114"),250,50,true,30,"#ffffff");
 core.wait(5);
-LabelMgr.labelScreen("Note: Not all objects may be visible from your location!",250,100,true,30,"#ffffff");
+LabelMgr.labelScreen(tr("Note: Not all objects may be visible from your location!"),250,100,true,30,"#ffffff");
 core.wait(5);
-LabelMgr.labelScreen("In addition to Stellarium data this shows Object Type - Constellation - Season Viewable",250,150,true,30,"#ffffff");
+LabelMgr.labelScreen(tr("In addition to Stellarium data this shows Object Type - Constellation - Season Viewable"),250,150,true,30,"#ffffff");
 core.wait(5);
 LabelMgr.deleteAllLabels();
 
@@ -161,7 +161,7 @@ for (i=0; i<messier.length; i++)
 
 }
 
-LabelMgr.labelScreen("Stellarium Messier Object End of Tour",200,200,true,30,"#ffffff");
+LabelMgr.labelScreen(tr("Stellarium Messier Object End of Tour"),200,200,true,30,"#ffffff");
 core.wait(6);
 
 core.clear("natural");

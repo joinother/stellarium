@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
-"POT-Creation-Date: 2026-07-12 20:52+0700\n"
+"POT-Creation-Date: 2026-08-28 15:38+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,6 +16,82 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#: scripts/BAS_Jupiter_Moons.ssc:16
+msgid ""
+"Bridgend Astronomical Society - Jupiter's Moons Orbital Simulation v20250707"
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:17
+msgid ""
+"Note: Jupiter may not actually be visible from your location at this time."
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:19
+msgid ""
+"There are 95 moons of Jupiter with confirmed orbits as of 5 February 2024."
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:21
+msgid ""
+"The most massive of the moons are the four Galilean moons (may not be "
+"visible if behind Jupiter in their orbit):"
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:24
+msgid ""
+"Io ( Jupiter I ), innermost and second smallest of the four. Has over 400 "
+"active volcanoes. "
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:30
+msgid ""
+"Europa ( Jupiter II ), smallest of the four and the closest icy moon to "
+"Jupiter. "
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:36
+msgid "Ganymede ( Jupiter III ), Largest moon in the solar system. "
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:42
+msgid ""
+"and Callisto ( Jupiter IV ), second largest moon of Jupiter and heavily "
+"cratered. "
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:50
+msgid ""
+"BAS - Jupiter's Moons Orbital Simulation will now run.  (use the << >> menu "
+"options to adjust speed of sim.)"
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:61
+msgid "Simulation now complete"
+msgstr ""
+
+#: scripts/BAS_Jupiter_Moons.ssc:63
+msgid "Display will restore previous config."
+msgstr ""
+
+#: scripts/BAS_Messier_Tour.ssc:138
+msgid ""
+"Bridgend Astronomical Society - Stellarium Messier Object Tour v20251114"
+msgstr ""
+
+#: scripts/BAS_Messier_Tour.ssc:140
+msgid "Note: Not all objects may be visible from your location!"
+msgstr ""
+
+#: scripts/BAS_Messier_Tour.ssc:142
+msgid ""
+"In addition to Stellarium data this shows Object Type - Constellation - "
+"Season Viewable"
+msgstr ""
+
+#: scripts/BAS_Messier_Tour.ssc:164
+msgid "Stellarium Messier Object End of Tour"
+msgstr ""
 
 #: scripts/analemma.ssc:17
 msgid "Analemma"
@@ -817,6 +893,659 @@ msgstr ""
 msgid "Separation:"
 msgstr ""
 
+#: scripts/earth_1.ssc:24
+msgid "Press N for next outer body"
+msgstr ""
+
+#: scripts/earth_1.ssc:27
+msgid "Press B to go back to the last inner body"
+msgstr ""
+
+#: scripts/earth_1.ssc:30
+msgid "Press F  to toggle flags and labels"
+msgstr ""
+
+#: scripts/earth_1.ssc:33
+msgid "Press S  toggle screen saver mode"
+msgstr ""
+
+#: scripts/earth_1.ssc:36 scripts/earth_2.ssc:50953 scripts/earth_3.ssc:79554
+#: scripts/earth_5.ssc:22273 scripts/earth_6.ssc:14637 scripts/earth_7.ssc:2852
+msgid "By Qam1"
+msgstr ""
+
+#: scripts/earth_1.ssc:181
+msgid "Elongation: 11.849 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:196
+msgid "Elongation: 6.390 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:210
+msgid "Elongation: 3.186 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:228
+msgid "Elongation: 1.952 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:245
+msgid "Elongation: 1.908 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:264
+msgid "Elongation: 0.756 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:282
+msgid "Elongation: 0.692 degrees"
+msgstr ""
+
+#: scripts/earth_1.ssc:369
+msgid "Screensaver Mode off"
+msgstr ""
+
+#: scripts/earth_1.ssc:375
+msgid "Screensaver Mode on"
+msgstr ""
+
+#: scripts/earth_2.ssc:50891
+msgid "Earth Events from Mercury"
+msgstr ""
+
+#: scripts/earth_2.ssc:50909 scripts/earth_3.ssc:79429
+#: scripts/earth_4.ssc:67769 scripts/earth_5.ssc:22087
+#: scripts/earth_6.ssc:14415 scripts/earth_7.ssc:2655
+msgid "Everything"
+msgstr ""
+
+#: scripts/earth_2.ssc:50912 scripts/earth_3.ssc:79435
+msgid "  Oppositions"
+msgstr ""
+
+#: scripts/earth_2.ssc:50915
+msgid "   Oppositions Cycle 1"
+msgstr ""
+
+#: scripts/earth_2.ssc:50918
+msgid "   Oppositions Cycle 2"
+msgstr ""
+
+#: scripts/earth_2.ssc:50921
+msgid "   Oppositions Cycle 3"
+msgstr ""
+
+#: scripts/earth_2.ssc:50924
+msgid "  Closest Approaches"
+msgstr ""
+
+#: scripts/earth_2.ssc:50927 scripts/earth_3.ssc:79461
+#: scripts/earth_4.ssc:67812
+msgid "  Superior Conjunctions"
+msgstr ""
+
+#: scripts/earth_2.ssc:50930
+msgid "  Venus-Earth Conjunctions"
+msgstr ""
+
+#: scripts/earth_2.ssc:50933
+msgid "  Venus-Earth Conjunctions <1"
+msgstr ""
+
+#: scripts/earth_2.ssc:50937 scripts/earth_3.ssc:79539
+#: scripts/earth_4.ssc:67914 scripts/earth_5.ssc:22114 scripts/earth_7.ssc:2682
+msgid "Quit"
+msgstr ""
+
+#: scripts/earth_2.ssc:50942 scripts/earth_3.ssc:79543
+#: scripts/earth_4.ssc:67920 scripts/earth_5.ssc:22118
+#: scripts/earth_6.ssc:14460 scripts/earth_7.ssc:2687
+msgid "Press = / - to toggle"
+msgstr ""
+
+#: scripts/earth_2.ssc:50945 scripts/earth_3.ssc:79546
+#: scripts/earth_4.ssc:67925 scripts/earth_5.ssc:22121
+#: scripts/earth_6.ssc:14463 scripts/earth_7.ssc:2690
+msgid "Press [ for Keypress mode"
+msgstr ""
+
+#: scripts/earth_2.ssc:50948 scripts/earth_3.ssc:79549
+#: scripts/earth_4.ssc:67930 scripts/earth_5.ssc:22124
+#: scripts/earth_6.ssc:14466 scripts/earth_7.ssc:2693
+msgid "Press ] for Screen Saver Mode"
+msgstr ""
+
+#: scripts/earth_2.ssc:50969 scripts/earth_2.ssc:51028
+#: scripts/earth_3.ssc:79571 scripts/earth_3.ssc:79659
+#: scripts/earth_4.ssc:67953 scripts/earth_4.ssc:68013
+#: scripts/earth_5.ssc:22147 scripts/earth_5.ssc:22202
+#: scripts/earth_6.ssc:14499 scripts/earth_6.ssc:14560 scripts/earth_7.ssc:2717
+#: scripts/earth_7.ssc:2791
+msgid "-->"
+msgstr ""
+
+#: scripts/earth_2.ssc:51067 scripts/earth_3.ssc:79698
+#: scripts/earth_6.ssc:14609 scripts/earth_7.ssc:2830
+msgid "Press = for next event"
+msgstr ""
+
+#: scripts/earth_2.ssc:51070 scripts/earth_3.ssc:79701
+#: scripts/earth_4.ssc:68055 scripts/earth_5.ssc:22254
+#: scripts/earth_6.ssc:14612 scripts/earth_7.ssc:2833
+msgid "Press -  for previous event"
+msgstr ""
+
+#: scripts/earth_2.ssc:51074 scripts/earth_3.ssc:79705
+#: scripts/earth_4.ssc:68059 scripts/earth_5.ssc:22258
+#: scripts/earth_6.ssc:14616 scripts/earth_7.ssc:2837
+msgid "Press [  go back to start date "
+msgstr ""
+
+#: scripts/earth_2.ssc:51077 scripts/earth_3.ssc:79708
+#: scripts/earth_4.ssc:68062 scripts/earth_5.ssc:22261
+#: scripts/earth_6.ssc:14621 scripts/earth_7.ssc:2840
+msgid "Press ]  go back to Main Menu"
+msgstr ""
+
+#: scripts/earth_2.ssc:51084 scripts/earth_3.ssc:79715
+#: scripts/earth_4.ssc:68069 scripts/earth_5.ssc:22268
+#: scripts/earth_6.ssc:14630 scripts/earth_7.ssc:2847
+msgid "Press + - [ or ]  for  Main Menu "
+msgstr ""
+
+#: scripts/earth_2.ssc:51402 scripts/earth_2.ssc:51964
+#: scripts/earth_3.ssc:80623 scripts/earth_3.ssc:81365
+#: scripts/earth_4.ssc:69093 scripts/earth_4.ssc:69845
+#: scripts/earth_5.ssc:23210 scripts/earth_6.ssc:15593 scripts/earth_7.ssc:3359
+msgid "Later!!!"
+msgstr ""
+
+#: scripts/earth_2.ssc:51630 scripts/earth_3.ssc:80870
+#: scripts/earth_4.ssc:69338 scripts/earth_5.ssc:22969
+#: scripts/earth_6.ssc:15499
+msgid "Light Travel Time: "
+msgstr ""
+
+#: scripts/earth_2.ssc:51718 scripts/earth_3.ssc:80958
+#: scripts/earth_4.ssc:69426
+msgid "Elongation:"
+msgstr ""
+
+#: scripts/earth_2.ssc:51751 scripts/earth_3.ssc:80991
+#: scripts/earth_4.ssc:69459
+msgid "Illumination:"
+msgstr ""
+
+#: scripts/earth_2.ssc:51757 scripts/earth_3.ssc:80997
+#: scripts/earth_4.ssc:69465
+msgid "Earth Magnitude:"
+msgstr ""
+
+#: scripts/earth_2.ssc:51764 scripts/earth_3.ssc:81004
+#: scripts/earth_4.ssc:69472
+msgid "Moon Magnitude:"
+msgstr ""
+
+#: scripts/earth_2.ssc:51784 scripts/earth_3.ssc:81021
+#: scripts/earth_4.ssc:69492
+msgid "Moon Elongation:"
+msgstr ""
+
+#: scripts/earth_2.ssc:51793 scripts/earth_2.ssc:51798
+#: scripts/earth_3.ssc:81035 scripts/earth_3.ssc:81040
+#: scripts/earth_4.ssc:69501 scripts/earth_4.ssc:69506
+msgid "Viewing Longitude:     "
+msgstr ""
+
+#: scripts/earth_2.ssc:51805 scripts/earth_3.ssc:81047
+msgid "Cycle: "
+msgstr ""
+
+#: scripts/earth_2.ssc:51857 scripts/earth_3.ssc:81241
+#: scripts/earth_4.ssc:69755
+msgid "Julian Date:"
+msgstr ""
+
+#: scripts/earth_3.ssc:79411
+msgid "Earth Events from Venus"
+msgstr ""
+
+#: scripts/earth_3.ssc:79432 scripts/earth_4.ssc:67772
+msgid " Orbit"
+msgstr ""
+
+#: scripts/earth_3.ssc:79438
+msgid "   Quadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79441
+msgid "    Eastern Quadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79444
+msgid "    Western Quadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79447 scripts/earth_4.ssc:67798
+msgid "  CoQuadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79450 scripts/earth_4.ssc:67801
+msgid "   Eastern CoQuadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79453 scripts/earth_4.ssc:67804
+msgid "   Western Coquadratures"
+msgstr ""
+
+#: scripts/earth_3.ssc:79456 scripts/earth_4.ssc:67807
+msgid "  Retrograde Motions"
+msgstr ""
+
+#: scripts/earth_3.ssc:79464
+msgid "  Greatest Moon Elongations"
+msgstr ""
+
+#: scripts/earth_3.ssc:79468 scripts/earth_4.ssc:67829
+msgid " Conjunctions"
+msgstr ""
+
+#: scripts/earth_3.ssc:79472
+msgid "  Bright Stars & Nebula"
+msgstr ""
+
+#: scripts/earth_3.ssc:79476 scripts/earth_4.ssc:67840
+msgid "   Aldebaran"
+msgstr ""
+
+#: scripts/earth_3.ssc:79480
+msgid "   Alpha Capricorn"
+msgstr ""
+
+#: scripts/earth_3.ssc:79483 scripts/earth_4.ssc:67845
+msgid "   Antares"
+msgstr ""
+
+#: scripts/earth_3.ssc:79487
+msgid "   Beehive Cluster"
+msgstr ""
+
+#: scripts/earth_3.ssc:79491
+msgid "   Circlet"
+msgstr ""
+
+#: scripts/earth_3.ssc:79495
+msgid "   Lagoon Nebula"
+msgstr ""
+
+#: scripts/earth_3.ssc:79498 scripts/earth_4.ssc:67855
+msgid "   Pleiades"
+msgstr ""
+
+#: scripts/earth_3.ssc:79501 scripts/earth_4.ssc:67861
+msgid "   Regulus"
+msgstr ""
+
+#: scripts/earth_3.ssc:79504 scripts/earth_4.ssc:67867
+msgid "   Spica"
+msgstr ""
+
+#: scripts/earth_3.ssc:79507
+msgid "   Trifid Nebula"
+msgstr ""
+
+#: scripts/earth_3.ssc:79511 scripts/earth_4.ssc:67876
+msgid "  Planets"
+msgstr ""
+
+#: scripts/earth_3.ssc:79515 scripts/earth_4.ssc:67881
+msgid "   Mercury"
+msgstr ""
+
+#: scripts/earth_3.ssc:79520
+msgid "   Mars"
+msgstr ""
+
+#: scripts/earth_3.ssc:79524
+msgid "   Jupiter"
+msgstr ""
+
+#: scripts/earth_3.ssc:79528 scripts/earth_4.ssc:67897
+msgid "   Saturn"
+msgstr ""
+
+#: scripts/earth_3.ssc:79531 scripts/earth_4.ssc:67902
+msgid "   Uranus"
+msgstr ""
+
+#: scripts/earth_3.ssc:79534 scripts/earth_4.ssc:67908
+msgid "   Neptune"
+msgstr ""
+
+#: scripts/earth_4.ssc:67751
+msgid "Earth Events from Mars"
+msgstr ""
+
+#: scripts/earth_4.ssc:67775
+msgid "  Greatest"
+msgstr ""
+
+#: scripts/earth_4.ssc:67778
+msgid "   Elongations"
+msgstr ""
+
+#: scripts/earth_4.ssc:67781
+msgid "    Western Greatest Elongations"
+msgstr ""
+
+#: scripts/earth_4.ssc:67784
+msgid "    Eastern Greatest Elongations"
+msgstr ""
+
+#: scripts/earth_4.ssc:67788
+msgid "   Brillancies"
+msgstr ""
+
+#: scripts/earth_4.ssc:67791
+msgid "    Western Greatest Brilliancies"
+msgstr ""
+
+#: scripts/earth_4.ssc:67795
+msgid "    Eastern Greatest Brilliancies"
+msgstr ""
+
+#: scripts/earth_4.ssc:67815
+msgid "   Inferior Conjunctions"
+msgstr ""
+
+#: scripts/earth_4.ssc:67818
+msgid "    Transits"
+msgstr ""
+
+#: scripts/earth_4.ssc:67824
+msgid "   Zodiac"
+msgstr ""
+
+#: scripts/earth_4.ssc:67834
+msgid "  Bright Stars"
+msgstr ""
+
+#: scripts/earth_4.ssc:67850
+msgid "   Beehive"
+msgstr ""
+
+#: scripts/earth_4.ssc:67886
+msgid "   Venus"
+msgstr ""
+
+#: scripts/earth_4.ssc:67892
+msgid "    Jupiter"
+msgstr ""
+
+#: scripts/earth_4.ssc:67935 scripts/earth_5.ssc:22129
+#: scripts/earth_6.ssc:14472 scripts/earth_7.ssc:2698
+msgid "By Qam1 "
+msgstr ""
+
+#: scripts/earth_4.ssc:68052 scripts/earth_5.ssc:22251
+msgid "Press + for next event"
+msgstr ""
+
+#: scripts/earth_5.ssc:22052
+msgid "Venus and Earth"
+msgstr ""
+
+#: scripts/earth_5.ssc:22057
+msgid "Greatest Elongations"
+msgstr ""
+
+#: scripts/earth_5.ssc:22061
+msgid "and"
+msgstr ""
+
+#: scripts/earth_5.ssc:22065
+msgid "Brilliancies from Mars"
+msgstr ""
+
+#: scripts/earth_5.ssc:22090
+msgid "Venus Only"
+msgstr ""
+
+#: scripts/earth_5.ssc:22093 scripts/earth_6.ssc:14418
+msgid "Earth Only"
+msgstr ""
+
+#: scripts/earth_5.ssc:22096
+msgid "Greatest Elongations Evenings"
+msgstr ""
+
+#: scripts/earth_5.ssc:22099
+msgid "Greatest Elongations Mornings"
+msgstr ""
+
+#: scripts/earth_5.ssc:22102
+msgid "Longest Earth (>46"
+msgstr ""
+
+#: scripts/earth_5.ssc:22105
+msgid "Ceres Oppositions"
+msgstr ""
+
+#: scripts/earth_5.ssc:22108
+msgid "Jupiter Oppositions"
+msgstr ""
+
+#: scripts/earth_5.ssc:22111
+msgid "Saturn Only"
+msgstr ""
+
+#: scripts/earth_5.ssc:22947 scripts/earth_6.ssc:15397
+msgid "Greatest Elongation Evening"
+msgstr ""
+
+#: scripts/earth_5.ssc:22955 scripts/earth_6.ssc:15391
+msgid "Greatest Elongation Morning"
+msgstr ""
+
+#: scripts/earth_5.ssc:22974 scripts/earth_6.ssc:15491 scripts/earth_7.ssc:3128
+msgid "Moon Elong:    "
+msgstr ""
+
+#: scripts/earth_5.ssc:22978 scripts/earth_6.ssc:15495
+msgid "Moon Mag:      "
+msgstr ""
+
+#: scripts/earth_5.ssc:22981
+msgid "Illumination:   "
+msgstr ""
+
+#: scripts/earth_5.ssc:22989
+msgid "Elongation:     "
+msgstr ""
+
+#: scripts/earth_5.ssc:22992 scripts/earth_5.ssc:23005
+msgid "Magnitude:     "
+msgstr ""
+
+#: scripts/earth_5.ssc:23002 scripts/earth_5.ssc:23029
+#: scripts/earth_6.ssc:15469 scripts/earth_7.ssc:3125 scripts/earth_7.ssc:3156
+msgid "Elongation:    "
+msgstr ""
+
+#: scripts/earth_5.ssc:23016
+msgid "Opposition"
+msgstr ""
+
+#: scripts/earth_5.ssc:23039
+msgid "Ring Tilt:  "
+msgstr ""
+
+#: scripts/earth_5.ssc:23096 scripts/earth_5.ssc:23101 scripts/earth_7.ssc:3217
+#: scripts/earth_7.ssc:3222 scripts/earth_7.ssc:3236 scripts/earth_7.ssc:3241
+msgid "Viewing Longitude: "
+msgstr ""
+
+#: scripts/earth_6.ssc:14385
+msgid "Earth and Mars Greatest Elongations"
+msgstr ""
+
+#: scripts/earth_6.ssc:14390
+msgid "and Transits from Callisto"
+msgstr ""
+
+#: scripts/earth_6.ssc:14421
+msgid "Mars Only"
+msgstr ""
+
+#: scripts/earth_6.ssc:14424
+msgid "Longest Earth (>11.8"
+msgstr ""
+
+#: scripts/earth_6.ssc:14430
+msgid "Longest Mars (>19.0"
+msgstr ""
+
+#: scripts/earth_6.ssc:14435
+msgid "Earth Evenings Only"
+msgstr ""
+
+#: scripts/earth_6.ssc:14438
+msgid "Earth Mornings Only"
+msgstr ""
+
+#: scripts/earth_6.ssc:14441
+msgid "Mars Evenings Only"
+msgstr ""
+
+#: scripts/earth_6.ssc:14444
+msgid "Mars Mornings Only"
+msgstr ""
+
+#: scripts/earth_6.ssc:14447
+msgid "All Transits"
+msgstr ""
+
+#: scripts/earth_6.ssc:14450
+msgid "Earth and Moon Transits"
+msgstr ""
+
+#: scripts/earth_6.ssc:14453
+msgid "Mars Transits"
+msgstr ""
+
+#: scripts/earth_6.ssc:15061 scripts/earth_6.ssc:15072
+msgid "Lat: "
+msgstr ""
+
+#: scripts/earth_6.ssc:15414
+msgid "Mars Transit"
+msgstr ""
+
+#: scripts/earth_6.ssc:15420
+msgid "Mars Grazing Transit"
+msgstr ""
+
+#: scripts/earth_6.ssc:15436
+msgid "Earth Transit"
+msgstr ""
+
+#: scripts/earth_6.ssc:15441
+msgid "Earth Grazing Transit"
+msgstr ""
+
+#: scripts/earth_6.ssc:15448
+msgid "Earth Transit (Without Moon!)"
+msgstr ""
+
+#: scripts/earth_6.ssc:15453
+msgid "Moon Transit (Without Earth!)"
+msgstr ""
+
+#: scripts/earth_6.ssc:15473
+msgid "From Sun Center: "
+msgstr ""
+
+#: scripts/earth_6.ssc:15482
+msgid "Magnitude:      "
+msgstr ""
+
+#: scripts/earth_6.ssc:15486
+msgid "Illumination:  "
+msgstr ""
+
+#: scripts/earth_6.ssc:15514
+msgid "Long:"
+msgstr ""
+
+#: scripts/earth_7.ssc:2625
+msgid "Earth and other visible planets"
+msgstr ""
+
+#: scripts/earth_7.ssc:2628
+msgid "Greatest Elongations and Oppositions"
+msgstr ""
+
+#: scripts/earth_7.ssc:2632
+msgid "From Ceres"
+msgstr ""
+
+#: scripts/earth_7.ssc:2658
+msgid "Earth"
+msgstr ""
+
+#: scripts/earth_7.ssc:2662
+msgid "Mars"
+msgstr ""
+
+#: scripts/earth_7.ssc:2665
+msgid "Jupiter"
+msgstr ""
+
+#: scripts/earth_7.ssc:2668
+msgid "Saturn"
+msgstr ""
+
+#: scripts/earth_7.ssc:2671
+msgid "Planet Conjunctions"
+msgstr ""
+
+#: scripts/earth_7.ssc:2674
+msgid "Jupiter - Saturn Conjunctions"
+msgstr ""
+
+#: scripts/earth_7.ssc:2679
+msgid "Jupiter - Star >1 degree Conjunctions"
+msgstr ""
+
+#: scripts/earth_7.ssc:3114
+msgid "Earth Greatest Elongation Evening"
+msgstr ""
+
+#: scripts/earth_7.ssc:3118
+msgid "Earth Greatest Elongation Morning"
+msgstr ""
+
+#: scripts/earth_7.ssc:3145
+msgid "Mars Greatest Elongation Evening"
+msgstr ""
+
+#: scripts/earth_7.ssc:3150
+msgid "Mars Greatest Elongation Morning"
+msgstr ""
+
+#: scripts/earth_7.ssc:3169
+msgid "Jupiter Opposition"
+msgstr ""
+
+#: scripts/earth_7.ssc:3180
+msgid "Saturn Opposition"
+msgstr ""
+
+#: scripts/earth_7.ssc:3185
+msgid "Ring Tilt:    "
+msgstr ""
+
 #: scripts/martian_analemma.ssc:17
 msgid "Martian analemma"
 msgstr ""
@@ -882,6 +1611,23 @@ msgstr ""
 
 #: scripts/morsels_4.ssc:68
 msgid "Mutual occultations of planets"
+msgstr ""
+
+#: scripts/planets_tour.ssc:21 scripts/planets_tour.ssc:38
+msgid "The Solar System - A Tour of the Planets"
+msgstr ""
+
+#: scripts/screensaver.ssc:17 scripts/constellations_tour.ssc:32
+#: scripts/modern_constellations_tour.ssc:32
+msgid "Press Ctrl+T to un-hide the toolbar"
+msgstr ""
+
+#: scripts/sun.ssc:38
+msgid "Sun from"
+msgstr ""
+
+#: scripts/sun.ssc:39
+msgid "Angular size of Sun is"
 msgstr ""
 
 #: scripts/supernova.ssc:23
@@ -1223,10 +1969,6 @@ msgstr ""
 
 #: scripts/largest_known_stars.ssc:92
 msgid "Solar radii"
-msgstr ""
-
-#: scripts/constellations_tour.ssc:32 scripts/modern_constellations_tour.ssc:32
-msgid "Press Ctrl+T to un-hide the toolbar"
 msgstr ""
 
 #: scripts/triple_sunrise_and_sunsets.ssc:17

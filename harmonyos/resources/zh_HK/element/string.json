@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "模組說明"
+    },
+    {
+      "name": "QAbility_desc",
+      "value": "說明"
+    },
+    {
+      "name": "QAbility_label",
+      "value": "星象儀"
+    }
+  ]
+}

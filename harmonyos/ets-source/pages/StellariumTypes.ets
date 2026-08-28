@@ -67,6 +67,34 @@ export interface PlanetPosition {
   azimuth: number
   magnitude: number
 }
+export interface PolarScopeStar {
+  name: string
+  englishName: string
+  magnitude: number
+  radiusDeg: number
+  positionAngleDeg: number
+}
+export interface PolarScopeData {
+  hemisphere: string
+  poleName: string
+  planetName: string
+  latitude: number
+  siderealHours: number
+  hourAngleHours?: number
+  hourAngleText: string
+  viewAngleText: string
+  poleStarName: string
+  poleStarEnglishName?: string
+  poleStarMagnitude?: number
+  poleStarRadiusDeg?: number
+  poleScreenValid?: boolean
+  poleScreenXRatio?: number
+  poleScreenYRatio?: number
+  poleStarScreenValid?: boolean
+  poleStarScreenXRatio?: number
+  poleStarScreenYRatio?: number
+  stars: Array<PolarScopeStar>
+}
 export interface HeliocentricPosition {
   name: string
   englishName: string
@@ -230,6 +258,22 @@ export interface StellariumBridgeResponse {
   year?: number
   timeText?: string
   fov?: number
+  j2000Ra?: string
+  j2000Dec?: string
+  ofDateRa?: string
+  ofDateDec?: string
+  azimuthText?: string
+  altitudeText?: string
+  galacticLongitude?: string
+  galacticLatitude?: string
+  j2000RaDegrees?: number
+  j2000DecDegrees?: number
+  ofDateRaDegrees?: number
+  ofDateDecDegrees?: number
+  azimuthDegrees?: number
+  altitudeDegrees?: number
+  galacticLongitudeDegrees?: number
+  galacticLatitudeDegrees?: number
   enabled?: boolean
   checked?: boolean
   hasStart?: boolean
@@ -368,6 +412,7 @@ export interface StellariumBridgeResponse {
   planetaryTransits?: Array<PlanetaryTransitItem>
   moonPhases?: Array<MoonPhaseItem>
   wutTargets?: Array<WutTarget>
+  polarScope?: PolarScopeData
   period?: string
   observationTime?: string
   angularSizeAvailable?: boolean

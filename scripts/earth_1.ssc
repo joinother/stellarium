@@ -21,19 +21,19 @@ LabelMgr.deleteAllLabels();
 var ss = -1;
 
 // Labels
-var txt1 = LabelMgr.labelScreen("Press N for next outer body", 470, 60, false, 35, "#FF0000");
+var txt1 = LabelMgr.labelScreen(tr("Press N for next outer body"), 470, 60, false, 35, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("Press B to go back to the last inner body", 470, 120, false, 35, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press B to go back to the last inner body"), 470, 120, false, 35, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("Press F  to toggle flags and labels", 470, 180, false, 35, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press F  to toggle flags and labels"), 470, 180, false, 35, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("Press S  toggle screen saver mode", 470, 240, false, 35, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press S  toggle screen saver mode"), 470, 240, false, 35, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("By Qam1", 770, 140, false, 15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("By Qam1"), 770, 140, false, 15, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
 spd = spd * 4;
@@ -178,7 +178,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(121.71, 27.24, 71492000, 1, "", "Jupiter");
 		StelMovementMgr.zoomTo(34, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 11.849 degrees", 350, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 11.849 degrees"), 350, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 	}
 
@@ -193,7 +193,7 @@ SolarSystem.setFlagOrbits(true);
 		core.wait(0.1);
 		StelMovementMgr.zoomTo(28, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 6.390 degrees", 350, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 6.390 degrees"), 350, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 	}
 
@@ -207,7 +207,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(57.73, 60.0, 30268000, 1, "", "Uranus");
 		StelMovementMgr.zoomTo(15.6, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 3.186 degrees", 350, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 3.186 degrees"), 350, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 
 
@@ -225,7 +225,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(94.71, 11.24, 24764000, 1, "", "Neptune");
 		StelMovementMgr.zoomTo(10.6, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 1.952 degrees", 350, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 1.952 degrees"), 350, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 
 		sd = 1;
@@ -242,7 +242,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(38.49, 62.04, 76, 1, "", "Pluto");
 		StelMovementMgr.zoomTo(25, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 1.908 degrees", 500, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 1.908 degrees"), 500, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 
 
@@ -261,7 +261,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(1.49, 1.04, 76, 1, "", "Sedna");
 		StelMovementMgr.zoomTo(3.14, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 0.756 degrees", 500, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 0.756 degrees"), 500, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 
 
@@ -279,7 +279,7 @@ SolarSystem.setFlagOrbits(true);
 		core.setObserverLocation(38.49, 31.04, 76, 1, "", "Eris");
 		StelMovementMgr.zoomTo(25, 1);
 
-		txt1 = LabelMgr.labelScreen("Elongation: 0.692 degrees", 500, 10, false, 25, "#AAFFAA");
+		txt1 = LabelMgr.labelScreen(tr("Elongation: 0.692 degrees"), 500, 10, false, 25, "#AAFFAA");
 		LabelMgr.setLabelShow(txt1, true);
 
 
@@ -366,13 +366,13 @@ LabelMgr.deleteAllLabels();
 
 if (ss == -1)
 {
-txt1 = LabelMgr.labelScreen("Screensaver Mode off", 400, 20, false, 25, "#F6A101");
+txt1 = LabelMgr.labelScreen(tr("Screensaver Mode off"), 400, 20, false, 25, "#F6A101");
 LabelMgr.setLabelShow(txt1, true);
 core.wait(1);
 }
 else
 {
-txt1 = LabelMgr.labelScreen("Screensaver Mode on", 400, 20, false, 25, "#F6A101");
+txt1 = LabelMgr.labelScreen(tr("Screensaver Mode on"), 400, 20, false, 25, "#F6A101");
 LabelMgr.setLabelShow(txt1, true);
 }
 core.wait(1);

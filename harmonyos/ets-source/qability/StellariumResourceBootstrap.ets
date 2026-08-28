@@ -17,6 +17,10 @@ const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
 // an existing filesDir cannot permanently hide an incomplete collection.
 const DEEP_SKY_INSTALL_MARKER = '.ohos_complete_v2';
 const DEEP_SKY_SENTINELS: Array<string> = ['m31.png', 'n2244.png'];
+const DEEP_SKY_PRIORITY_IMAGES: Array<string> = [
+  'm31.png', 'm42.png', 'm51-vasey.png', 'm1dumont.png', 'm13.png',
+  'pleiades.png', 'n2244.png', 'm8.png', 'm20.png', 'm57dumont.png',
+];
 const DEEP_SKY_INDEX_FILES: Array<string> = [
   'catalog.dat',
   'names.dat',
@@ -27,8 +31,21 @@ const DEEP_SKY_INDEX_FILES: Array<string> = [
 const DEEP_SKY_IMAGE_FILE = /^[a-z][a-z0-9_-]*\.png$/i;
 const DETAIL_MEDIA_ASSET_PATH = /^(?:textures\/[a-z0-9_.-]+\.(?:png|jpe?g|webp)|nebulae\/default\/[a-z][a-z0-9_-]*\.png|skycultures\/[a-z0-9_]+\/illustrations\/(?:[a-z0-9_-]+\/)*[a-z0-9_.-]+\.(?:png|jpe?g|webp))$/i;
 
+export interface DeepSkyWarmupStatus {
+  state: string
+  installed: number
+  total: number
+  pending: number
+  failed: number
+  foreground: boolean
+}
+
 let deepSkyExtractionStarted = false;
 let deepSkyExtractionForeground = true;
+let deepSkyExtractionTotal = 0;
+let deepSkyExtractionFailed = 0;
+let deepSkyPackagedTotal = 0;
+const detailAssetJobs: Map<string, Promise<string>> = new Map();
 
 function isDeferredStartupAsset(rawPath: string): boolean {
   return rawPath === `${RAW_ROOT}/${DEEP_STAR_CATALOG}`;
@@ -231,7 +248,9 @@ export async function prepareStellariumResourcesAsync(appContext: common.Applica
   const deepStarPath = `${installRoot}/${DEEP_STAR_CATALOG}`;
   if (exists(`${installRoot}/${MARKER}`)) {
     await writeRawFileAsync(appContext, `${RAW_ROOT}/${CATALOG_MANIFEST}`, manifestPath);
-    hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] refreshed bundled astronomy catalogue manifest');
+    await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`,
+      `${installRoot}/translations/stellarium-scripts/zh_CN.qm`);
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] refreshed bundled catalogue manifest and script translation');
     const indexPath = `${installRoot}/${MULTILINGUAL_SEARCH_INDEX}`;
     if (!exists(indexPath)) {
       await writeRawFileAsync(appContext, `${RAW_ROOT}/${MULTILINGUAL_SEARCH_INDEX}`, indexPath);
@@ -291,6 +310,47 @@ export async function ensureDeepSkyDetailImage(
   return ensureStellariumDetailMediaAsset(appContext, `nebulae/default/${imageName}`);
 }
 
+function packagedDeepSkyImageNames(appContext: common.ApplicationContext): Array<string> {
+  try {
+    const names = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
+      .filter((name: string) => DEEP_SKY_IMAGE_FILE.test(name));
+    deepSkyPackagedTotal = names.length;
+    return names;
+  } catch (err) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] unable to list packaged deep-sky images: ${JSON.stringify(err)}`);
+    return [];
+  }
+}
+
+export function getDeepSkyResourceWarmupStatus(appContext: common.ApplicationContext): DeepSkyWarmupStatus {
+  const imageRoot = `${appContext.filesDir}/stellarium/nebulae/default`;
+  let installed = 0;
+  try {
+    installed = fs.listFileSync(imageRoot).filter((name: string) =>
+      DEEP_SKY_IMAGE_FILE.test(name) && fileSize(`${imageRoot}/${name}`) > 0).length;
+  } catch (_err) {
+    installed = 0;
+  }
+  if (deepSkyPackagedTotal === 0) {
+    packagedDeepSkyImageNames(appContext);
+  }
+  const total = deepSkyExtractionTotal > 0
+    ? deepSkyExtractionTotal
+    : (deepSkyPackagedTotal > 0 ? deepSkyPackagedTotal : installed);
+  const pending = Math.max(0, total - installed);
+  return {
+    state: deepSkyExtractionStarted ? 'warming' :
+      (pending === 0 && total > 0 && deepSkyExtractionFailed === 0
+        ? 'ready'
+        : (deepSkyExtractionFailed > 0 ? 'failed' : 'partial')),
+    installed: installed,
+    total: total,
+    pending: pending,
+    failed: deepSkyExtractionFailed,
+    foreground: deepSkyExtractionForeground,
+  };
+}
+
 function resolvePackagedDeepSkyPath(
   appContext: common.ApplicationContext,
   relativePath: string,
@@ -336,6 +396,24 @@ function resolvePackagedDeepSkyPath(
  * catalogue stem.
  */
 export async function resolveStellariumDetailMediaAsset(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+): Promise<string> {
+  const existingJob = detailAssetJobs.get(relativePath);
+  if (existingJob !== undefined) {
+    return existingJob;
+  }
+  const job = resolveStellariumDetailMediaAssetInternal(appContext, relativePath);
+  detailAssetJobs.set(relativePath, job);
+  job.then(() => {
+    detailAssetJobs.delete(relativePath);
+  }, () => {
+    detailAssetJobs.delete(relativePath);
+  });
+  return job;
+}
+
+async function resolveStellariumDetailMediaAssetInternal(
   appContext: common.ApplicationContext,
   relativePath: string,
 ): Promise<string> {
@@ -406,27 +484,37 @@ export function scheduleDeepSkyImageExtraction(
 
   let imageNames: Array<string>;
   try {
-    const availableImageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
-      .filter((name: string) => name.endsWith('.png'));
-    const featuredImages = DEEP_SKY_SENTINELS.filter((name: string) => availableImageNames.includes(name));
-    imageNames = featuredImages.concat(
-      availableImageNames.filter((name: string) => !featuredImages.includes(name)));
+    const availableImageNames = packagedDeepSkyImageNames(appContext);
+    const priorityNames: Array<string> = [];
+    for (const priorityName of DEEP_SKY_PRIORITY_IMAGES) {
+      const match = availableImageNames.find((name: string) => name.toLowerCase() === priorityName.toLowerCase());
+      if (match !== undefined && !priorityNames.includes(match)) {
+        priorityNames.push(match);
+      }
+    }
+    imageNames = priorityNames.concat(
+      availableImageNames.filter((name: string) => !priorityNames.includes(name)));
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Unable to list deep-sky images: ${JSON.stringify(err)}`);
     return;
   }
   if (imageNames.length === 0) {
     hilog.error(LOG_DOMAIN, LOG_TAG, 'Deep-sky image list is empty; collection will not be marked complete');
+    deepSkyExtractionTotal = 0;
+    deepSkyExtractionFailed = 1;
     return;
   }
 
+  deepSkyExtractionTotal = imageNames.length;
+  deepSkyExtractionFailed = 0;
   deepSkyExtractionStarted = true;
   ensureDir(imageRoot);
   let nextIndex = 0;
   let copiedCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
-  let featuredReloadRequested = false;
+  let priorityReloadRequested = false;
+  const priorityCount = Math.min(DEEP_SKY_PRIORITY_IMAGES.length, imageNames.length);
   const copyNext = (): void => {
     if (!deepSkyExtractionForeground) {
       setTimeout(copyNext, 1000);
@@ -434,6 +522,7 @@ export function scheduleDeepSkyImageExtraction(
     }
     if (nextIndex >= imageNames.length) {
       deepSkyExtractionStarted = false;
+      deepSkyExtractionFailed = failedCount;
       if (failedCount === 0) {
         writeMarker(completeMarker);
       }
@@ -457,15 +546,17 @@ export function scheduleDeepSkyImageExtraction(
       // Keep processing the collection: one corrupt/missing optional image
       // should not make catalogue browsing or the rest of the sky unusable.
       failedCount++;
+      deepSkyExtractionFailed = failedCount;
       hilog.warn(LOG_DOMAIN, LOG_TAG, `Unable to install deep-sky image ${name}: ${JSON.stringify(err)}`);
     }
     if ((nextIndex % 25) === 0 || nextIndex === imageNames.length) {
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `Deep-sky image extraction progress ${nextIndex}/${imageNames.length}`);
     }
-    if (!featuredReloadRequested && nextIndex >= DEEP_SKY_SENTINELS.length) {
-      featuredReloadRequested = true;
-      hilog.info(LOG_DOMAIN, LOG_TAG, 'Featured deep-sky images ready; requesting an early texture reload');
+    if (!priorityReloadRequested && nextIndex >= priorityCount) {
+      priorityReloadRequested = true;
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `Priority deep-sky images ready: ${priorityCount}; requesting an early texture reload`);
       onComplete();
     }
     setTimeout(copyNext, 16);
@@ -489,6 +580,7 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const keyQmStellarium = `${translationsDir}/stellarium/zh_CN.qm`;
   const keyQmSky = `${translationsDir}/stellarium-sky/zh_CN.qm`;
   const keyQmSkyCultures = `${translationsDir}/stellarium-skycultures/zh_CN.qm`;
+  const keyQmScripts = `${translationsDir}/stellarium-scripts/zh_CN.qm`;
 
   // Constellation lines / art are driven by skyculture data. If it was
   // missing from a previously extracted build, the toggles report success but
@@ -508,11 +600,11 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   const defaultConfigPath = `${installRoot}/data/default_cfg.ini`;
 
   let needExtract = !exists(markerPath);
-  if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures))) {
+  if (!needExtract && (!exists(keyQmStellarium) || !exists(keyQmSky) || !exists(keyQmSkyCultures) || !exists(keyQmScripts))) {
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but translations incomplete ` +
       `(stellarium=${exists(keyQmStellarium)} sky=${exists(keyQmSky)} ` +
-      `skycultures=${exists(keyQmSkyCultures)}); forcing re-extract`);
+      `skycultures=${exists(keyQmSkyCultures)} scripts=${exists(keyQmScripts)}); forcing re-extract`);
     needExtract = true;
   }
   if (!needExtract && !exists(skycultureMarker)) {
@@ -558,6 +650,7 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon.png`, `${installRoot}/textures/moon.png`);
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon_normals.png`, `${installRoot}/textures/moon_normals.png`);
     writeRawFile(appContext, `${RAW_ROOT}/textures/moon_horizon.png`, `${installRoot}/textures/moon_horizon.png`);
+    writeRawFile(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`, keyQmScripts);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
   }
@@ -586,7 +679,8 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     `Translations on disk: dir=${exists(translationsDir)} ` +
     `stellarium/zh_CN.qm=${exists(keyQmStellarium)} ` +
     `stellarium-sky/zh_CN.qm=${exists(keyQmSky)} ` +
-    `stellarium-skycultures/zh_CN.qm=${exists(keyQmSkyCultures)}`);
+    `stellarium-skycultures/zh_CN.qm=${exists(keyQmSkyCultures)} ` +
+    `stellarium-scripts/zh_CN.qm=${exists(keyQmScripts)}`);
 
   const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);

@@ -50888,7 +50888,7 @@ StelMovementMgr.setFlagTracking(true);
 core.wait(0.3);
 
 
-txt1 = LabelMgr.labelScreen("Earth Events from Mercury", 320*x, 20*y, false, 25,"#E1E243");
+txt1 = LabelMgr.labelScreen(tr("Earth Events from Mercury"), 320*x, 20*y, false, 25,"#E1E243");
 LabelMgr.setLabelShow(txt1, true);
 
 txt1 = LabelMgr.labelScreen(id[f].substring(5,7) + "/" + id[f].substring(0,4) +  " to "  + id[l].substring(5,7) + "/" + id[l].substring(0,4), 400*x, 80*y, false, 20, "#9AAAFF");
@@ -50906,51 +50906,51 @@ LabelMgr.setLabelShow(txt1, true);
 sty = 55;
 
 
-txt1 = LabelMgr.labelScreen("Everything", 750 * x, sty *y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("Everything"), 750 * x, sty *y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("  Oppositions", 750 * x, (sty+20)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("  Oppositions"), 750 * x, (sty+20)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("   Oppositions Cycle 1", 750 * x, (sty+40)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("   Oppositions Cycle 1"), 750 * x, (sty+40)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("   Oppositions Cycle 2", 750 * x, (sty+60)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("   Oppositions Cycle 2"), 750 * x, (sty+60)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("   Oppositions Cycle 3", 750 * x, (sty+80)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("   Oppositions Cycle 3"), 750 * x, (sty+80)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("  Closest Approaches", 750 * x, (sty+100)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("  Closest Approaches"), 750 * x, (sty+100)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("  Superior Conjunctions", 750 * x, (sty+120)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("  Superior Conjunctions"), 750 * x, (sty+120)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("  Venus-Earth Conjunctions", 750 * x, (sty+140)*y, false, 15,"#F9E397");
+txt1 = LabelMgr.labelScreen(tr("  Venus-Earth Conjunctions"), 750 * x, (sty+140)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("  Venus-Earth Conjunctions <1" + degstring, 750 * x, (sty+160)*y, false, 15,"#F9E397");
-LabelMgr.setLabelShow(txt1, true);
-
-
-txt1 = LabelMgr.labelScreen("Quit", 750 * x, (sty+180)*y, false, 15, "#F9E397");
+txt1 = LabelMgr.labelScreen(tr("  Venus-Earth Conjunctions <1") + degstring, 750 * x, (sty+160)*y, false, 15,"#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
 
-
-txt1 = LabelMgr.labelScreen("Press = / - to toggle", 680 * x, (sty+600)*y, false, 15,"#FF0000");
-LabelMgr.setLabelShow(txt1, true);
-
-txt1 = LabelMgr.labelScreen("Press [ for Keypress mode", 680 * x, (sty+620)*y, false, 15, "#FF0000");
-LabelMgr.setLabelShow(txt1, true);
-
-txt1 = LabelMgr.labelScreen("Press ] for Screen Saver Mode", 680 * x, (sty+640)*y,false, 15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Quit"), 750 * x, (sty+180)*y, false, 15, "#F9E397");
 LabelMgr.setLabelShow(txt1, true);
 
 
 
-txt1 = LabelMgr.labelScreen("By Qam1", 10, 700*y, false, 25, "#A0801D");
+txt1 = LabelMgr.labelScreen(tr("Press = / - to toggle"), 680 * x, (sty+600)*y, false, 15,"#FF0000");
+LabelMgr.setLabelShow(txt1, true);
+
+txt1 = LabelMgr.labelScreen(tr("Press [ for Keypress mode"), 680 * x, (sty+620)*y, false, 15, "#FF0000");
+LabelMgr.setLabelShow(txt1, true);
+
+txt1 = LabelMgr.labelScreen(tr("Press ] for Screen Saver Mode"), 680 * x, (sty+640)*y,false, 15, "#FF0000");
+LabelMgr.setLabelShow(txt1, true);
+
+
+
+txt1 = LabelMgr.labelScreen(tr("By Qam1"), 10, 700*y, false, 25, "#A0801D");
 LabelMgr.setLabelShow(txt1, true);
 
 
@@ -50966,7 +50966,7 @@ while (q ==0)
 {
 
 
-txt1 = LabelMgr.labelScreen("-->", 710*x, ((au*20)+26)*y, false, 25, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("-->"), 710*x, ((au*20)+26)*y, false, 25, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
 core.wait(0.07);
@@ -51025,7 +51025,7 @@ LabelMgr.setLabelShow(txt1, false);
 
 
 
-txt1 = LabelMgr.labelScreen("-->", 710*x, ((au*20)+26)*y, false, 25, "#FFFFFF");
+txt1 = LabelMgr.labelScreen(tr("-->"), 710*x, ((au*20)+26)*y, false, 25, "#FFFFFF");
 LabelMgr.setLabelShow(txt1, true);
 core.wait(.5);
 
@@ -51064,24 +51064,24 @@ if (ss == 0)
 {
 
 
-txt1 = LabelMgr.labelScreen("Press = for next event", 700 * x, 400*y, false, 15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press = for next event"), 700 * x, 400*y, false, 15, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("Press -  for previous event", 700*x, 420*y, false,15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press -  for previous event"), 700*x, 420*y, false,15, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
 
-txt1 = LabelMgr.labelScreen("Press [  go back to start date ", 700*x, 460*y,false, 15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press [  go back to start date "), 700*x, 460*y,false, 15, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
-txt1 = LabelMgr.labelScreen("Press ]  go back to Main Menu", 700*x, 480*y, false, 15, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press ]  go back to Main Menu"), 700*x, 480*y, false, 15, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 
 }
 
 else
 {
-txt1 = LabelMgr.labelScreen("Press + - [ or ]  for  Main Menu ", 700*x, 460*y,false, 15,"#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Press + - [ or ]  for  Main Menu "), 700*x, 460*y,false, 15,"#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 }
 
@@ -51399,7 +51399,7 @@ pt = pt + 1
 
 if (au == pt)
 {
-txt1 = LabelMgr.labelScreen("Later!!!", 400, 20, false, 75, "#FFFFFF");
+txt1 = LabelMgr.labelScreen(tr("Later!!!"), 400, 20, false, 75, "#FFFFFF");
 LabelMgr.setLabelShow(txt1, true);
 core.stopScript();  
 }
@@ -51627,7 +51627,7 @@ sstring = " second ";
 
 
 
-txt1 = LabelMgr.labelScreen("Light Travel Time: " + lmin + mstring + lsec + sstring, 700*x, 670*y, false, 15, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Light Travel Time: ") + lmin + mstring + lsec + sstring, 700*x, 670*y, false, 15, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 
@@ -51715,7 +51715,7 @@ elong[i] = Math.acos(elong[i]) * deg ;
 
 
 
-txt1 = LabelMgr.labelScreen("Elongation:", 10*x, 560*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Elongation:"), 10*x, 560*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 if (fv[i] < 10)
@@ -51748,20 +51748,20 @@ txt1 = LabelMgr.labelScreen(fvp[i].toFixed(3)+"%", 195*x, 585*y, false, 20, "#AA
 LabelMgr.setLabelShow(txt1, true);
 
 
-txt1 = LabelMgr.labelScreen("Illumination:", 10*x, 585*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Illumination:"), 10*x, 585*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 
 
 
-txt1 = LabelMgr.labelScreen("Earth Magnitude:", 10*x, 610*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Earth Magnitude:"), 10*x, 610*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 txt1 = LabelMgr.labelScreen(emag[i].toFixed(3), 200*x, 610*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 
-txt1 = LabelMgr.labelScreen("Moon Magnitude:", 10*x, 635*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Moon Magnitude:"), 10*x, 635*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 if (mfv[i] < 0)
@@ -51781,7 +51781,7 @@ LabelMgr.setLabelShow(txt1, true);
 
 
 
-txt1 = LabelMgr.labelScreen("Moon Elongation:", 10*x, 660*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Moon Elongation:"), 10*x, 660*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 txt1 = LabelMgr.labelScreen(im[i].toFixed(3) + degstring, 205*x, 660*y, false, 20, "#AAFFAA");
@@ -51790,19 +51790,19 @@ LabelMgr.setLabelShow(txt1, true);
 
 if (il[i] > 0)
 {
-txt1 = LabelMgr.labelScreen("Viewing Longitude:     " + il[i] + "E", 10*x, 685*y, false, 20, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Viewing Longitude:     ") + il[i] + "E", 10*x, 685*y, false, 20, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 }
 else
 {
-txt1 = LabelMgr.labelScreen("Viewing Longitude:     " + Math.abs(il[i])+"W", 10*x, 685*y, false, 20, "#FF0000");
+txt1 = LabelMgr.labelScreen(tr("Viewing Longitude:     ") + Math.abs(il[i])+"W", 10*x, 685*y, false, 20, "#FF0000");
 LabelMgr.setLabelShow(txt1, true);
 }
 
 
 
 
-txt1 = LabelMgr.labelScreen("Cycle: "+ cycle[i], 10*x, 535*y, false, 20, "#AAFFAA");
+txt1 = LabelMgr.labelScreen(tr("Cycle: ")+ cycle[i], 10*x, 535*y, false, 20, "#AAFFAA");
 LabelMgr.setLabelShow(txt1, true);
 
 
@@ -51854,7 +51854,7 @@ txt1 = LabelMgr.labelScreen(ename, 10*x, 500*y, false, 20, "#00FF71");
 LabelMgr.setLabelShow(txt1, true);
 
 
-txt1 = LabelMgr.labelScreen("Julian Date:", 700*x, 635*y, false, 15, "#00FF71");
+txt1 = LabelMgr.labelScreen(tr("Julian Date:"), 700*x, 635*y, false, 15, "#00FF71");
 LabelMgr.setLabelShow(txt1, true);
 
 txt1 = LabelMgr.labelScreen(core.getJDay().toFixed(3), 790*x, 635*y, false, 15, "#00FF71");
@@ -51961,7 +51961,7 @@ LabelMgr.deleteAllLabels();
 }
 
 
-txt1 = LabelMgr.labelScreen("Later!!!", 400, 20, false, 75, "#FFFFFF");
+txt1 = LabelMgr.labelScreen(tr("Later!!!"), 400, 20, false, 75, "#FFFFFF");
 LabelMgr.setLabelShow(txt1, true);
 
 core.wait(2);

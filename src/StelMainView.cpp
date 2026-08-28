@@ -38,6 +38,7 @@
 #include "StelOpenGLArray.hpp"
 #include "StelProjector.hpp"
 #include "StelModuleMgr.hpp"
+#include "modules/LabelMgr.hpp"
 #include "StelMovementMgr.hpp"
 #include "StelObject.hpp"
 #include "StelObjectMgr.hpp"
@@ -175,6 +176,8 @@ static bool s_ohosRenderPumpActive = false;
 static bool s_ohosZeroCopyActive = false;
 static bool s_ohosZeroCopySupported = true;
 static std::atomic<bool> s_ohosApplicationForeground{true};
+static std::atomic<bool> s_ohosScriptRenderHeartbeat{false};
+static std::atomic<quint64> s_ohosSkippedGraphicsPaints{0};
 
 // Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
 // read by StellariumOhos_command("getFPS") on ArkUI thread.
@@ -612,6 +615,8 @@ static constexpr qint64 OHOS_RTS_CALENDAR_SLICE_MS = 18;
 // guaranteed to be pumped; we hand commands to the pump instead.
 static QMutex s_ohosCmdQueueMutex;
 static QList<std::function<void()>> s_ohosCmdQueue;
+static std::atomic_bool s_ohosScriptStartPending{false};
+static std::atomic_uint64_t s_ohosScriptStartGeneration{0};
 // Device pose samples supersede one another. Keeping a dedicated latest-value
 // slot prevents the render thread from replaying stale gyro positions.
 static std::function<void()> s_pendingGyroCommand;
@@ -1073,6 +1078,11 @@ static void ohosMaintainSelectedZoomAnchor()
 		return;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
+		return;
+	// Script tours own selection, zoom and camera movement. Applying the
+	// user's manual selection anchor here would fight autoZoomIn/zoomTo and
+	// leave each scripted target off-center.
+	if (app->getScriptMgr().scriptIsRunning())
 		return;
 	if (StelApp::getTotalRunTime() < s_ohosSelectedAnchorHoldUntilSec)
 		return;
@@ -2257,6 +2267,25 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		lifecycleResult["ok"] = true;
 		lifecycleResult["foreground"] = foreground;
 		response = QString::fromUtf8(QJsonDocument(lifecycleResult).toJson(QJsonDocument::Compact)).toUtf8();
+		return response.constData();
+	}
+	if (commandName == "setScreenSafeArea")
+	{
+		bool ok = false;
+		const int topPixels = arg.toInt(&ok);
+		QJsonObject safeAreaResult;
+		if (!ok)
+		{
+			safeAreaResult["ok"] = false;
+			safeAreaResult["error"] = "invalid safe area height";
+		}
+		else
+		{
+			LabelMgr::setOhosScreenSafeAreaTop(topPixels);
+			safeAreaResult["ok"] = true;
+			safeAreaResult["topPixels"] = qMax(0, topPixels);
+		}
+		response = QString::fromUtf8(QJsonDocument(safeAreaResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
 
@@ -3947,8 +3976,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		// gotoRADec - jump the view to a specific RA/Dec (J2000 equatorial coordinates).
-		// arg: "<ra_hours>|<dec_degrees>" where ra is in hours (0-24) and dec in degrees (-90 to +90).
-		// Recenters the view on that sky direction and selects the nearest object on the next frame.
+		// arg: "<ra_hours>|<dec_degrees>[|select_nearest]" where ra is in hours
+		// (0-24), dec in degrees (-90 to +90), and select_nearest defaults to true.
 		if (commandName == "gotoRADec")
 		{
 			if (!core || !movementMgr)
@@ -3976,7 +4005,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d j2000;
 			StelUtils::spheToRect(raRad, decRad, j2000);
 			movementMgr->setViewDirectionJ2000(j2000);
-			s_pendingPointSelect = true;
+			const bool selectNearest = parts.size() < 3 || parts[2].trimmed() != QStringLiteral("0");
+			if (selectNearest)
+				s_pendingPointSelect = true;
 			result["ok"] = true;
 			result["ra"] = raHours;
 			result["dec"] = decDeg;
@@ -4003,18 +4034,48 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "playScript")
 		{
 			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
-		// runScript() reports failure (missing file, syntax error, already
-		// running). Swallowing it made every failed tour look like a success.
-			const bool started = smgr.runScript(arg);
-			qInfo() << "[StellariumOhos][script] playScript started=" << started << "arg=" << arg;
-			result["ok"] = started;
-			if (!started) { result["error"] = "failed to run script: " + arg; }
+			if (arg.trimmed().isEmpty())
+			{
+				result["error"] = "script name is empty";
+				return result;
+			}
+			if (smgr.scriptIsRunning() || s_ohosScriptStartPending.exchange(true))
+			{
+				result["error"] = "a script is already running or starting";
+				return result;
+			}
+
+			// runScript() is deliberately blocking in upstream Stellarium. Do not
+			// invoke it from ohosDrainCommandQueue(), which is also responsible for
+			// returning the current frame to the surface. Schedule it after this
+			// command callback has returned so bridge polling and rendering remain
+			// responsive while the script enters its own event loop.
+			const QString scriptName = arg.trimmed();
+			const quint64 generation = s_ohosScriptStartGeneration.fetch_add(1) + 1;
+			QTimer::singleShot(0, qApp, [scriptName, generation]() {
+				QElapsedTimer timer;
+				timer.start();
+				bool started = false;
+				if (generation == s_ohosScriptStartGeneration.load() && StelApp::isInitialized())
+				{
+					StelScriptMgr& scriptMgr = StelApp::getInstance().getScriptMgr();
+					started = scriptMgr.runScript(scriptName);
+				}
+				qInfo() << "[StellariumOhos][script] playScript started=" << started
+				       << "arg=" << scriptName << "elapsedMs=" << timer.elapsed();
+				s_ohosScriptStartPending.store(false);
+			});
+			result["ok"] = true;
+			result["accepted"] = true;
+			result["script"] = scriptName;
 			return result;
 		}
 
 		// stopScript
 		if (commandName == "stopScript")
 		{
+			s_ohosScriptStartGeneration.fetch_add(1);
+			s_ohosScriptStartPending.store(false);
 			StelApp::getInstance().getScriptMgr().stopScript();
 			result["ok"] = true;
 			return result;
@@ -5866,6 +5927,64 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["azimuth"] = az;
 			result["altitude"] = alt;
+			return result;
+		}
+
+		// getViewCenterCoordinates — all supported coordinate systems for the
+		// current center of view. ArkUI can switch presentation without repeating
+		// astronomical transforms or issuing multiple bridge requests.
+		if (commandName == "getViewCenterCoordinates")
+		{
+			const StelCore* core = StelApp::getInstance().getCore();
+			if (!core || !core->getMovementMgr())
+			{
+				result["ok"] = false;
+				result["error"] = "core/movement not ready";
+				return result;
+			}
+
+			const Vec3d viewJ2000 = core->getMovementMgr()->getViewDirectionJ2000();
+			double j2000Ra = 0.0;
+			double j2000Dec = 0.0;
+			StelUtils::rectToSphe(&j2000Ra, &j2000Dec, viewJ2000);
+			j2000Ra = StelUtils::fmodpos(j2000Ra, 2.0 * M_PI);
+
+			double ofDateRa = 0.0;
+			double ofDateDec = 0.0;
+			StelUtils::rectToSphe(&ofDateRa, &ofDateDec,
+				core->j2000ToEquinoxEqu(viewJ2000, StelCore::RefractionOff));
+			ofDateRa = StelUtils::fmodpos(ofDateRa, 2.0 * M_PI);
+
+			double horizontalLongitude = 0.0;
+			double altitude = 0.0;
+			StelUtils::rectToSphe(&horizontalLongitude, &altitude,
+				core->j2000ToAltAz(viewJ2000, StelCore::RefractionOff));
+			const double azimuth = StelUtils::fmodpos(3.0 * M_PI - horizontalLongitude, 2.0 * M_PI);
+
+			double galacticLongitude = 0.0;
+			double galacticLatitude = 0.0;
+			StelUtils::rectToSphe(&galacticLongitude, &galacticLatitude,
+				core->j2000ToGalactic(viewJ2000));
+			galacticLongitude = StelUtils::fmodpos(galacticLongitude, 2.0 * M_PI);
+
+			constexpr double radiansToDegrees = 180.0 / M_PI;
+			result["ok"] = true;
+			result["j2000Ra"] = StelUtils::radToHmsStr(j2000Ra, true);
+			result["j2000Dec"] = StelUtils::radToDmsStr(j2000Dec, true);
+			result["ofDateRa"] = StelUtils::radToHmsStr(ofDateRa, true);
+			result["ofDateDec"] = StelUtils::radToDmsStr(ofDateDec, true);
+			result["azimuthText"] = StelUtils::radToDmsStr(azimuth, true);
+			result["altitudeText"] = StelUtils::radToDmsStr(altitude, true);
+			result["galacticLongitude"] = StelUtils::radToDmsStr(galacticLongitude, true);
+			result["galacticLatitude"] = StelUtils::radToDmsStr(galacticLatitude, true);
+			result["j2000RaDegrees"] = j2000Ra * radiansToDegrees;
+			result["j2000DecDegrees"] = j2000Dec * radiansToDegrees;
+			result["ofDateRaDegrees"] = ofDateRa * radiansToDegrees;
+			result["ofDateDecDegrees"] = ofDateDec * radiansToDegrees;
+			result["azimuthDegrees"] = azimuth * radiansToDegrees;
+			result["altitudeDegrees"] = altitude * radiansToDegrees;
+			result["galacticLongitudeDegrees"] = galacticLongitude * radiansToDegrees;
+			result["galacticLatitudeDegrees"] = galacticLatitude * radiansToDegrees;
 			return result;
 		}
 
@@ -7736,6 +7855,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			ConstellationMgr* cm = GETSTELMODULE(ConstellationMgr);
 			if (cm) { fl["constLines"] = cm->getFlagLines(); fl["constLabels"] = cm->getFlagLabels(); }
 			fl["tracking"] = movementMgr->getFlagTracking();
+			fl["flipHorz"] = core->getFlipHorz();
+			fl["flipVert"] = core->getFlipVert();
 			if (SporadicMeteorMgr* mm = GETSTELMODULE(SporadicMeteorMgr)) fl["meteors"] = mm->getFlagShow();
 			result["flags"] = fl;
 			return result;
@@ -7787,6 +7908,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			if (s.contains("fovDeg") && s["fovDeg"].isDouble())
 				movementMgr->setFov(s["fovDeg"].toDouble() * M_PI / 180.0);
+			if (s.contains("flags") && s["flags"].isObject())
+			{
+				const QJsonObject flags = s["flags"].toObject();
+				if (flags.contains("flipHorz")) core->setFlipHorz(flags["flipHorz"].toBool());
+				if (flags.contains("flipVert")) core->setFlipVert(flags["flipVert"].toBool());
+			}
 			if (s.contains("selected") && objectMgr)
 			{
 				const QString sel = s["selected"].toString();
@@ -8472,7 +8599,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "cannot open file";
 				return result;
 			}
-			// 包裹成标准结构：{name, created, commands:[{c,p}]}
+			// 包裹成标准结构：{name, created, commands:[{c,p,t}]}。
+			// t 为可选的相对毫秒时间；旧版仅含 c/p 的录制保持兼容。
 			QJsonObject root;
 			root["name"] = name;
 			root["created"] = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
@@ -8603,6 +8731,159 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			int s = (int)(((lst - h) * 60.0 - m) * 60.0);
 			result["s"] = s;
 			result["text"] = QString("%1h %2m %3s").arg(h).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0'));
+			return result;
+		}
+
+		// getPolarScopeData — 离线极轴镜模拟数据。
+		// 极轴镜的视场固定在天球极点，显示位置由当前恒星时和恒星的
+		// 实时赤道坐标计算。ArkUI 只绘制分划，不在 UI 层硬编码星点坐标。
+		if (commandName == "getPolarScopeData")
+		{
+			if (!core)
+			{
+				result["error"] = "core unavailable";
+				return result;
+			}
+			const StelLocation& location = core->getCurrentLocation();
+			const QString observerPlanet = core->getCurrentPlanet() ? core->getCurrentPlanet()->getEnglishName() : QString();
+			if (observerPlanet.compare(QStringLiteral("Earth"), Qt::CaseInsensitive) != 0)
+			{
+				result["error"] = QStringLiteral("polar scope requires an Earth observer");
+				result["observerPlanet"] = observerPlanet;
+				return result;
+			}
+
+			const bool north = location.getLatitude() >= 0.0f;
+			const Vec3d poleEquinox(0.0, 0.0, north ? 1.0 : -1.0);
+			const Vec3d poleJ2000 = core->equinoxEquToJ2000(poleEquinox, StelCore::RefractionOff);
+			StarMgr* stars = GETSTELMODULE(StarMgr);
+			if (!stars)
+			{
+				result["error"] = "star manager unavailable";
+				return result;
+			}
+
+			double siderealHours = core->getLocalSiderealTime() * 12.0 / M_PI;
+			siderealHours = std::fmod(siderealHours, 24.0);
+			if (siderealHours < 0.0) siderealHours += 24.0;
+			auto formatHours = [](double hours) {
+				hours = std::fmod(hours, 24.0);
+				if (hours < 0.0) hours += 24.0;
+				const int h = static_cast<int>(hours);
+				const int m = static_cast<int>((hours - h) * 60.0);
+				const int s = qBound(0, static_cast<int>(((hours - h) * 60.0 - m) * 60.0 + 0.5), 59);
+				return QStringLiteral("%1h %2m %3s").arg(h, 2, 10, QChar('0')).arg(m, 2, 10, QChar('0')).arg(s, 2, 10, QChar('0'));
+			};
+
+			struct PolarStar {
+				StelObjectP object;
+				double radiusDeg = 0.0;
+				double positionAngleDeg = 0.0;
+				double magnitude = 99.0;
+			};
+			QList<PolarStar> polarStars;
+			const QList<StelObjectP> candidates = stars->searchAround(poleJ2000, 12.0, core);
+			for (const StelObjectP& object : candidates)
+			{
+				if (!object) continue;
+				Vec3d position = core->j2000ToEquinoxEqu(object->getJ2000EquatorialPos(core), StelCore::RefractionOff);
+				position.normalize();
+				const double dot = qBound(-1.0, position * poleEquinox, 1.0);
+				const double radiusDeg = std::acos(dot) * M_180_PI;
+				const double magnitude = object->getVMagnitude(core);
+				if (radiusDeg > 12.0 || magnitude > 8.0) continue;
+				double ra = std::atan2(position[1], position[0]);
+				if (ra < 0.0) ra += 2.0 * M_PI;
+				double hourAngle = siderealHours - ra * 12.0 / M_PI;
+				hourAngle = std::fmod(hourAngle, 24.0);
+				if (hourAngle < 0.0) hourAngle += 24.0;
+				// 12-hour clock position: HA 0h is at the top and increases clockwise.
+				double positionAngleDeg = std::fmod(360.0 - hourAngle * 15.0 + 360.0, 360.0);
+				if (!north) positionAngleDeg = std::fmod(360.0 - positionAngleDeg + 360.0, 360.0);
+				PolarStar star;
+				star.object = object;
+				star.radiusDeg = radiusDeg;
+				star.positionAngleDeg = positionAngleDeg;
+				star.magnitude = magnitude;
+				polarStars.append(star);
+			}
+			std::sort(polarStars.begin(), polarStars.end(), [](const PolarStar& left, const PolarStar& right) {
+				return left.magnitude < right.magnitude;
+			});
+
+			const QString preferredName = north ? QStringLiteral("Polaris") : QStringLiteral("Sigma Octantis");
+			PolarStar poleStar;
+			bool hasPoleStar = false;
+			for (const PolarStar& star : polarStars)
+			{
+				if (star.object->getEnglishName().compare(preferredName, Qt::CaseInsensitive) == 0)
+				{
+					poleStar = star;
+					hasPoleStar = true;
+					break;
+				}
+			}
+			if (!hasPoleStar && !polarStars.isEmpty())
+			{
+				for (const PolarStar& star : polarStars)
+					if (star.radiusDeg <= 2.0) { poleStar = star; hasPoleStar = true; break; }
+			}
+
+			result["ok"] = true;
+			result["hemisphere"] = north ? QStringLiteral("north") : QStringLiteral("south");
+			result["poleName"] = north ? QStringLiteral("北天极") : QStringLiteral("南天极");
+			result["planetName"] = observerPlanet;
+			result["latitude"] = location.getLatitude();
+			result["siderealHours"] = siderealHours;
+			result["poleRa"] = QStringLiteral("00h 00m 00s");
+			result["poleDec"] = north ? QStringLiteral("+90° 00′ 00″") : QStringLiteral("-90° 00′ 00″");
+			// The live Stellarium renderer supplies the stars. Keep this payload
+			// limited to reticle geometry so ArkUI never builds a second sky layer.
+			result["stars"] = QJsonArray();
+			result["starCount"] = polarStars.size();
+			const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionOff);
+			const Vec4i viewport = projector ? projector->getViewport() : Vec4i();
+			auto appendScreenPosition = [&result, &projector, &viewport](const Vec3d& position,
+				const QString& validKey, const QString& xKey, const QString& yKey) {
+				Vec3d projected;
+				const bool valid = projector && viewport[2] > 1 && viewport[3] > 1
+					&& projector->project(position, projected);
+				result[validKey] = valid;
+				if (!valid) return;
+				result[xKey] = (projected[0] - viewport[0]) / viewport[2];
+				result[yKey] = (viewport[1] + viewport[3] - 1.0 - projected[1]) / viewport[3];
+			};
+			appendScreenPosition(poleJ2000, QStringLiteral("poleScreenValid"),
+				QStringLiteral("poleScreenXRatio"), QStringLiteral("poleScreenYRatio"));
+			if (hasPoleStar)
+			{
+				appendScreenPosition(poleStar.object->getJ2000EquatorialPos(core),
+					QStringLiteral("poleStarScreenValid"), QStringLiteral("poleStarScreenXRatio"),
+					QStringLiteral("poleStarScreenYRatio"));
+				const Vec3d position = poleStar.object->getEquinoxEquatorialPos(core);
+				double ra = std::atan2(position[1], position[0]);
+				if (ra < 0.0) ra += 2.0 * M_PI;
+				double hourAngle = siderealHours - ra * 12.0 / M_PI;
+				hourAngle = std::fmod(hourAngle, 24.0);
+				if (hourAngle < 0.0) hourAngle += 24.0;
+				result["poleStarName"] = poleStar.object->getNameI18n().isEmpty() ? poleStar.object->getEnglishName() : poleStar.object->getNameI18n();
+				result["poleStarEnglishName"] = poleStar.object->getEnglishName();
+				result["poleStarMagnitude"] = poleStar.magnitude;
+				result["poleStarRadiusDeg"] = poleStar.radiusDeg;
+				result["hourAngleHours"] = hourAngle;
+				result["hourAngleText"] = formatHours(hourAngle);
+				result["viewAngleHours"] = poleStar.positionAngleDeg / 15.0;
+				result["viewAngleText"] = formatHours(poleStar.positionAngleDeg / 15.0);
+			}
+			else
+			{
+				result["poleStarName"] = north ? QStringLiteral("北极星附近亮星") : QStringLiteral("南天极附近亮星");
+				result["hourAngleText"] = QStringLiteral("--");
+				result["viewAngleText"] = QStringLiteral("--");
+			}
+			QJsonObject polarScope = result;
+			polarScope.remove("ok");
+			result["polarScope"] = polarScope;
 			return result;
 		}
 
@@ -10796,6 +11077,16 @@ protected:
 		Q_UNUSED(option)
 		Q_UNUSED(widget)
 
+#if defined(__OHOS__)
+		if (s_ohosRenderPumpActive)
+		{
+			const quint64 skipped = s_ohosSkippedGraphicsPaints.fetch_add(1) + 1;
+			if ((skipped % 120) == 1)
+				qInfo() << "[StellariumOhos][render] skipped graphics paint while native pump owns frame" << skipped;
+			return;
+		}
+#endif
+
 		//a sanity check
 		Q_ASSERT(mainView->glContext() == QOpenGLContext::currentContext());
 
@@ -11955,6 +12246,27 @@ void StelMainView::setOhosApplicationForeground(bool foreground)
 	ohosMark("OpenHarmony rendering resumed in foreground");
 }
 
+void StelMainView::setOhosScriptRenderHeartbeat(bool active)
+{
+	const bool wasActive = s_ohosScriptRenderHeartbeat.exchange(active);
+	if (wasActive == active)
+		return;
+	if (fpsTimer)
+	{
+		if (active)
+		{
+			fpsTimer->stop();
+			qInfo() << "[StellariumOhos][render] script heartbeat owns frame timer";
+		}
+		else if (s_ohosApplicationForeground.load())
+		{
+			fpsTimer->setInterval(currentOhosRenderIntervalMs());
+			fpsTimer->start();
+			qInfo() << "[StellariumOhos][render] normal frame timer restored after script";
+		}
+	}
+}
+
 void StelMainView::renderOhosFrameNow()
 {
 	if (!s_ohosApplicationForeground.load())
@@ -12161,6 +12473,8 @@ void StelMainView::fpsTimerUpdate()
 	const int requiredFpsInterval = currentOhosRenderIntervalMs();
 	if (fpsTimer->interval() != requiredFpsInterval)
 		fpsTimer->setInterval(requiredFpsInterval);
+	if (s_ohosScriptRenderHeartbeat.load())
+		return;
 	renderOhosFrameNow();
 	return;
 #endif

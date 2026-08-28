@@ -18,7 +18,7 @@ core.wait(2);
 
 defaultWait = 10;
 
-LabelMgr.labelScreen("The Solar System - A Tour of the Planets",200,200,true,30,"#ff0000");
+LabelMgr.labelScreen(tr("The Solar System - A Tour of the Planets"),200,200,true,30,"#ff0000");
 core.wait(5);
 LabelMgr.deleteAllLabels();
 
@@ -35,6 +35,6 @@ for (i=0; i<planets.length; i++)
 
 }
 
-LabelMgr.labelScreen("The Solar System - A Tour of the Planets",200,200,true,30,"#ff0000");
+LabelMgr.labelScreen(tr("The Solar System - A Tour of the Planets"),200,200,true,30,"#ff0000");
 core.wait(defaultWait);
 LabelMgr.deleteAllLabels();

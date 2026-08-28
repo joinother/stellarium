@@ -35,8 +35,8 @@ for (i=0; i<planets.length; i++)
 
 	core.selectObjectByName("Sun", false);
 
-	var pname = LabelMgr.labelScreen("Sun from " + planets[i], 20, 20, false, 20, "#AA0000");
-	var psize = LabelMgr.labelScreen("Angular size of Sun is " + psizes[i], 20, 50, false, 20, "#AA0000");
+	var pname = LabelMgr.labelScreen(tr("Sun from") + " " + planets[i], 20, 20, false, 20, "#AA0000");
+	var psize = LabelMgr.labelScreen(tr("Angular size of Sun is") + " " + psizes[i], 20, 50, false, 20, "#AA0000");
 	LabelMgr.setLabelShow(pname, true);
 	LabelMgr.setLabelShow(psize, true);
 

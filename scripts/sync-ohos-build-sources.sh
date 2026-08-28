@@ -13,6 +13,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SOURCES=(
   "harmonyos/AppScope/app.json5:build/libstellarium-harmonyos/AppScope/app.json5"
+  "harmonyos/build-profile.json5:build/libstellarium-harmonyos/build-profile.json5"
   "harmonyos/AppScope/resources/base/element/string.json:build/libstellarium-harmonyos/AppScope/resources/base/element/string.json"
   "harmonyos/AppScope/resources/zh_CN/element/string.json:build/libstellarium-harmonyos/AppScope/resources/zh_CN/element/string.json"
   "harmonyos/AppScope/resources/base/media/app_icon.png:build/libstellarium-harmonyos/AppScope/resources/base/media/app_icon.png"
@@ -36,6 +37,7 @@ SOURCES=(
   "harmonyos/ets-source/qability/PrivacyConsent.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/PrivacyConsent.ets"
   "harmonyos/ets-source/qability/StellariumResourceBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/StellariumResourceBootstrap.ets"
   "harmonyos/ets-source/resources/base/media/ic_audio.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_audio.svg"
+  "harmonyos/ets-source/resources/base/media/ic_back.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_back.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_planet.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_planet.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_moon.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_moon.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_star.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_star.svg"
@@ -49,6 +51,7 @@ SOURCES=(
   "harmonyos/ets-source/resources/base/media/ic_catalog_messier.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_messier.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
   "harmonyos/ets-source/resources/base/media/ic_oculars.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_oculars.svg"
+  "harmonyos/ets-source/resources/base/media/ic_polar_scope.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_polar_scope.svg"
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_conjunction.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_conjunction.svg"
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_opposition.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_opposition.svg"
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_quadrature_east.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_quadrature_east.svg"
@@ -89,4 +92,18 @@ for item in "${SOURCES[@]}"; do
   cp "$SRC" "$DST"
   echo "  $SRC"
   echo "  -> $DST"
+done
+
+# Keep every localized system label in the generated project. Resource
+# directories are created here because a newly added locale may not exist in
+# the generated build tree yet.
+for tree in AppScope/resources resources; do
+  while IFS= read -r src; do
+    rel="${src#${REPO_ROOT}/harmonyos/}"
+    dst="$REPO_ROOT/build/libstellarium-harmonyos/$rel"
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    echo "  $src"
+    echo "  -> $dst"
+  done < <(find "$REPO_ROOT/harmonyos/$tree" -type f -path '*/element/string.json' -print | sort)
 done

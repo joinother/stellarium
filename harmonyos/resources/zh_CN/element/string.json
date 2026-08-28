@@ -14,7 +14,7 @@
     },
     {
       "name": "qt_permission_reason_read_pasteboard",
-      "value": "Used to read clipboard contents."
+      "value": "用于读取剪贴板内容。"
     },
     {
       "name": "stellarium_permission_reason_location",
