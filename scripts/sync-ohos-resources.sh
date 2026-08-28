@@ -48,7 +48,7 @@ node "$SCRIPT_DIR/build-ohos-multilingual-search-index.mjs"
 # `scripts` holds Stellarium's .ssc sky-tour scripts. It also happens to hold this
 # repo's own build shell scripts, so it gets an allow-list filter below — without
 # it, StelScriptMgr::getScriptList() finds nothing and the Scripts panel is empty.
-DIRS=(data textures landscapes nebulae stars translations skycultures scripts)
+DIRS=(data textures landscapes nebulae stars translations skycultures scenery3d scripts)
 
 # Non-culture files living directly inside skycultures/ (CMake scaffolding).
 # They must not be copied into the rawfile (they would be treated as junk).

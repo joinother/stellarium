@@ -52,11 +52,18 @@
 #include "NebulaMgr.hpp"
 #include "SporadicMeteorMgr.hpp"
 #include "../plugins/Oculars/src/Oculars.hpp"
+#include "../plugins/MosaicCamera/src/MosaicCamera.hpp"
+#include "../plugins/EquationOfTime/src/EquationOfTime.hpp"
+#include "../plugins/ArchaeoLines/src/ArchaeoLines.hpp"
 #include "../plugins/AngleMeasure/src/AngleMeasure.hpp"
+#include "../plugins/NavStars/src/NavStars.hpp"
+#include "../plugins/PointerCoordinates/src/PointerCoordinates.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShower.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowers.hpp"
+#include "../plugins/Scenery3d/src/Scenery3d.hpp"
+#include "../plugins/Scenery3d/src/SceneInfo.hpp"
 #include "StelScriptMgr.hpp"
 #include "SolarSystem.hpp"
 #include "ConstellationMgr.hpp"
@@ -190,6 +197,15 @@ static std::atomic<float> s_ohosSelectedScreenYRatio{0.0f};
 static std::atomic<bool> s_ohosSelectedScreenValid{false};
 static std::atomic<bool> s_ohosSelectedScreenVisible{false};
 
+// The polar-scope reticle is rendered after StelApp::draw() on the Qt render
+// thread. This keeps it in the same frame and projection as the native sky;
+// ArkUI only owns the controls and status text.
+static std::atomic<bool> s_ohosPolarScopeOverlayActive{false};
+static std::atomic<bool> s_ohosPolarScopeFlipHorizontal{false};
+static std::atomic<bool> s_ohosPolarScopeFlipVertical{false};
+static StelObjectP s_ohosPolarScopeStar;
+static bool s_ohosPolarScopeStarNorth = false;
+
 // Ignore delayed settle phases left behind by an earlier object selection.
 static std::atomic<quint64> s_ohosNavigationSerial{0};
 // Last ArkUI safe point. Layout changes should animate only the delta between
@@ -226,6 +242,138 @@ void markOhosInteraction()
 {
 	if (StelApp::isInitialized())
 		StelMainView::getInstance().thereWasAnEvent();
+}
+
+void drawOhosPolarScopeOverlay(StelCore* core)
+{
+	if (!s_ohosPolarScopeOverlayActive.load() || !core)
+		return;
+
+	const StelLocation& location = core->getCurrentLocation();
+	const bool north = location.getLatitude() >= 0.0f;
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionOff);
+	if (!projector)
+		return;
+
+	const Vec3d poleEquinox(0.0, 0.0, north ? 1.0 : -1.0);
+	const Vec3d poleJ2000 = core->equinoxEquToJ2000(poleEquinox, StelCore::RefractionOff);
+	Vec3d poleScreen;
+	if (!projector->project(poleJ2000, poleScreen))
+		return;
+
+	if (!s_ohosPolarScopeStar || s_ohosPolarScopeStarNorth != north)
+	{
+		s_ohosPolarScopeStar.clear();
+		StarMgr* stars = GETSTELMODULE(StarMgr);
+		if (stars)
+		{
+			const QString preferredName = north ? QStringLiteral("Polaris") : QStringLiteral("Sigma Octantis");
+			const QString preferredHip = north ? QStringLiteral("HIP 11767") : QStringLiteral("HIP 104382");
+			s_ohosPolarScopeStar = stars->searchByName(preferredHip);
+			if (!s_ohosPolarScopeStar)
+				s_ohosPolarScopeStar = stars->searchByName(preferredName);
+			const QList<StelObjectP> candidates = stars->searchAround(poleJ2000, 12.0, core);
+			for (const StelObjectP& object : candidates)
+			{
+				if (!s_ohosPolarScopeStar && object && object->getEnglishName().compare(preferredName, Qt::CaseInsensitive) == 0)
+				{
+					s_ohosPolarScopeStar = object;
+					break;
+				}
+			}
+			if (!s_ohosPolarScopeStar)
+			{
+				for (const StelObjectP& object : candidates)
+				{
+					if (!object) continue;
+					Vec3d position = object->getJ2000EquatorialPos(core);
+					position.normalize();
+					const double angularDistance = std::acos(qBound(-1.0, position * poleJ2000, 1.0)) * M_180_PI;
+					if (angularDistance <= 2.0)
+					{
+						s_ohosPolarScopeStar = object;
+						break;
+					}
+				}
+			}
+		}
+		s_ohosPolarScopeStarNorth = north;
+	}
+
+	Vec3d starScreen;
+	const bool hasStar = s_ohosPolarScopeStar &&
+		projector->project(s_ohosPolarScopeStar->getJ2000EquatorialPos(core), starScreen);
+	const double centerX = poleScreen[0];
+	const double centerY = poleScreen[1];
+	double outerRadius = hasStar ? std::hypot(starScreen[0] - centerX, starScreen[1] - centerY) : 0.0;
+	if (outerRadius < 12.0)
+		outerRadius = projector->getPixelPerRadAtCenter() * (2.0 * M_PI / 180.0);
+	if (outerRadius < 12.0)
+		return;
+
+	const double horizontalSign = s_ohosPolarScopeFlipHorizontal.load() ? -1.0 : 1.0;
+	const double verticalSign = s_ohosPolarScopeFlipVertical.load() ? -1.0 : 1.0;
+	const Vec3f reticleColor(0.956f, 0.435f, 0.420f);
+	StelPainter painter(projector);
+	painter.setBlending(true);
+	painter.setLineSmooth(true);
+	painter.setColor(reticleColor, 0.82f);
+	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(outerRadius));
+
+	for (int hour = 0; hour < 24; ++hour)
+	{
+		const double angle = -hour * 15.0 * M_PI / 180.0;
+		const bool major = hour % 6 == 0;
+		const double inner = outerRadius - (major ? 10.0 : 6.0);
+		const double x1 = centerX + std::sin(angle) * inner * horizontalSign;
+		const double y1 = centerY + std::cos(angle) * inner * verticalSign;
+		const double x2 = centerX + std::sin(angle) * (outerRadius + 1.0) * horizontalSign;
+		const double y2 = centerY + std::cos(angle) * (outerRadius + 1.0) * verticalSign;
+		painter.drawLine2d(static_cast<float>(x1), static_cast<float>(y1), static_cast<float>(x2), static_cast<float>(y2));
+		if (major)
+		{
+			const double labelRadius = outerRadius + 15.0;
+			painter.drawText(static_cast<float>(centerX + std::sin(angle) * labelRadius * horizontalSign),
+				static_cast<float>(centerY + std::cos(angle) * labelRadius * verticalSign),
+				QString::number(hour));
+		}
+	}
+
+	painter.setLineSmooth(false);
+	painter.setColor(reticleColor, 0.72f);
+	const double innerLabelRadius = outerRadius * 0.72;
+	for (int hour = 0; hour < 12; ++hour)
+	{
+		const double angle = hour * 30.0 * M_PI / 180.0;
+		const QString label = hour == 0 ? QStringLiteral("12") : QString::number(hour);
+		painter.drawText(static_cast<float>(centerX + std::sin(angle) * innerLabelRadius * horizontalSign),
+			static_cast<float>(centerY + std::cos(angle) * innerLabelRadius * verticalSign), label);
+	}
+
+	painter.setColor(reticleColor, 0.62f);
+	painter.drawLine2d(static_cast<float>(centerX), static_cast<float>(centerY),
+		static_cast<float>(centerX), static_cast<float>(centerY + outerRadius * verticalSign));
+	painter.setColor(reticleColor, 0.90f);
+	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), 5.5f);
+	painter.drawLine2d(static_cast<float>(centerX - 12.0), static_cast<float>(centerY),
+		static_cast<float>(centerX + 12.0), static_cast<float>(centerY));
+	painter.drawLine2d(static_cast<float>(centerX), static_cast<float>(centerY - 12.0),
+		static_cast<float>(centerX), static_cast<float>(centerY + 12.0));
+
+	if (hasStar)
+	{
+		const double starX = centerX + (starScreen[0] - centerX) * horizontalSign;
+		const double starY = centerY + (starScreen[1] - centerY) * verticalSign;
+		painter.setColor(reticleColor, 0.76f);
+		painter.drawLine2d(static_cast<float>(centerX), static_cast<float>(centerY),
+			static_cast<float>(starX), static_cast<float>(starY));
+		painter.setColor(reticleColor, 0.95f);
+		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 9.0f);
+		painter.setColor(reticleColor, 0.72f);
+		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 3.0f);
+		painter.drawText(static_cast<float>(starX + 12.0), static_cast<float>(starY - 8.0),
+			north ? QStringLiteral("北极星") : QStringLiteral("南极星"));
+	}
 }
 
 QString formatLx200Ra(int totalSeconds)
@@ -1333,10 +1481,30 @@ QJsonObject constellationDetailMediaJson(const StelObjectP& object)
 
 // Complete object prose is expensive to generate. Initial selections need it for
 // the detail sheet, but the 300ms live refresh only needs the changing values.
+QString selectedObjectInfoMode()
+{
+	const StelGui* gui = dynamic_cast<const StelGui*>(StelApp::getInstance().getGui());
+	if (!gui)
+		return QStringLiteral("default");
+
+	const StelObject::InfoStringGroup flags = gui->getInfoTextFilters();
+	if (flags == StelObject::InfoStringGroup(StelObject::AllInfo))
+		return QStringLiteral("all");
+	if (flags == StelObject::InfoStringGroup(StelObject::ShortInfo))
+		return QStringLiteral("short");
+	if (flags == StelObject::InfoStringGroup(StelObject::None))
+		return QStringLiteral("none");
+	if (flags == StelObject::InfoStringGroup(StelObject::DefaultInfo))
+		return QStringLiteral("default");
+	return QStringLiteral("custom");
+}
+
 QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = false)
 {
 	QJsonObject result;
 	result["ok"] = true;
+	const QString infoMode = selectedObjectInfoMode();
+	result[QStringLiteral("infoMode")] = infoMode;
 
 	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
 	if (!objectMgr || objectMgr->getSelectedObject().isEmpty())
@@ -1364,11 +1532,24 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	if (core)
 	{
 		const QVariantMap m = object->getInfoMap(core);
-		if (includeDetails)
+		const bool includeConfiguredDetails = infoMode != QStringLiteral("none")
+			&& (includeDetails || infoMode == QStringLiteral("all")
+			|| infoMode == QStringLiteral("default") || infoMode == QStringLiteral("custom"));
+		if (includeConfiguredDetails)
 		{
 			QJsonArray detailFields;
 			QSet<QString> emittedKeys;
-			auto appendField = [&detailFields, &emittedKeys](const QString& key, const QString& section, QString value) {
+			// The desktop configuration uses DefaultInfo as a curated subset of
+			// AllInfo. Keep the same distinction in the structured bridge payload.
+			const QSet<QString> defaultExcludedKeys = {
+				QStringLiteral("equatorialJ2000"), QStringLiteral("geometricAltAz"),
+				QStringLiteral("eclipticJ2000"), QStringLiteral("galactic"),
+				QStringLiteral("supergalactic")
+			};
+			auto appendField = [&detailFields, &emittedKeys, &infoMode, &defaultExcludedKeys](const QString& key, const QString& section, QString value) {
+				if (infoMode == QStringLiteral("short") || infoMode == QStringLiteral("none")
+					|| (infoMode == QStringLiteral("default") && defaultExcludedKeys.contains(key)))
+					return;
 				value.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
 				value.replace(QRegularExpression(QStringLiteral("[\\r\\n]+")), QStringLiteral(" · "));
 				value = value.simplified();
@@ -1445,6 +1626,17 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			appendText(QStringLiteral("internationalDesignator"), QStringLiteral("identity"), QStringLiteral("international-designator"));
 
 			appendText(QStringLiteral("hourAngle"), QStringLiteral("coordinates"), QStringLiteral("hourAngle-hms"));
+			appendText(QStringLiteral("meanSiderealTime"), QStringLiteral("coordinates"), QStringLiteral("meanSidTm"));
+			appendText(QStringLiteral("apparentSiderealTime"), QStringLiteral("coordinates"), QStringLiteral("appSidTm"));
+			if (m.contains(QStringLiteral("ra")) && m.contains(QStringLiteral("dec")))
+			{
+				const double raOfDate = m.value(QStringLiteral("ra")).toDouble() * M_PI / 180.0;
+				const double decOfDate = m.value(QStringLiteral("dec")).toDouble() * M_PI / 180.0;
+				appendField(QStringLiteral("equatorialOfDate"), QStringLiteral("coordinates"),
+					StelUtils::radToHmsStr(raOfDate) + QStringLiteral("  ") + StelUtils::radToDmsStr(decOfDate, true));
+			}
+			appendDegreePair(QStringLiteral("apparentAltAz"), QStringLiteral("coordinates"),
+				QStringLiteral("altitude"), QStringLiteral("azimuth"));
 			if (m.contains(QStringLiteral("raJ2000")) && m.contains(QStringLiteral("decJ2000")))
 			{
 				const double raJ2000 = m.value(QStringLiteral("raJ2000")).toDouble() * M_PI / 180.0;
@@ -1607,6 +1799,10 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 
 			result[QStringLiteral("detailFields")] = detailFields;
 		}
+		else
+		{
+			result[QStringLiteral("detailFields")] = QJsonArray();
+		}
 
 		// Normalized magnitude (visual, no extinction)
 		if (m.contains("vmag"))
@@ -1638,6 +1834,12 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		}
 		if (m.contains("dec"))
 			result["dec"] = StelUtils::radToDmsStr(m["dec"].toDouble() * M_PI / 180., true);
+		if (m.contains("hourAngle-hms"))
+			result["hourAngle"] = m["hourAngle-hms"].toString();
+		if (m.contains("meanSidTm"))
+			result["meanSiderealTime"] = m["meanSidTm"].toString();
+		if (m.contains("appSidTm"))
+			result["apparentSiderealTime"] = m["appSidTm"].toString();
 
 		// Constellation (IAU abbreviation, full name via i18n if available)
 		if (m.contains("iauConstellation"))
@@ -1700,6 +1902,7 @@ QJsonObject currentStateJson()
 {
 	QJsonObject result;
 	result["ok"] = true;
+	result[QStringLiteral("selectedInfoMode")] = selectedObjectInfoMode();
 	// The ArkUI shell is rendered separately from Stellarium's Qt scene.  Return
 	// the authoritative property here instead of inferring night mode from a UI action.
 	result["nightMode"] = StelApp::getInstance().getVisionModeNight();
@@ -2346,6 +2549,47 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["manifestPresent"] = health.value("manifestPresent").toBool(false);
 			result["satellites"] = health.value("satellites").toObject();
 			result["stars"] = health.value("stars").toObject();
+			return result;
+		}
+		if (commandName == "setPolarScopeOverlay")
+		{
+			const QStringList values = arg.split('|');
+			const bool active = !values.isEmpty() && (values.at(0) == "1" || values.at(0).compare("true", Qt::CaseInsensitive) == 0);
+			const bool flipHorizontal = values.size() > 1 && values.at(1) == "1";
+			const bool flipVertical = values.size() > 2 && values.at(2) == "1";
+			s_ohosPolarScopeOverlayActive.store(active);
+			s_ohosPolarScopeFlipHorizontal.store(flipHorizontal);
+			s_ohosPolarScopeFlipVertical.store(flipVertical);
+			if (!active)
+				s_ohosPolarScopeStar.clear();
+			result["ok"] = true;
+			result["active"] = active;
+			result["flipHorizontal"] = flipHorizontal;
+			result["flipVertical"] = flipVertical;
+			return result;
+		}
+		if (commandName == "centerPolarScope")
+		{
+			if (!core || !movementMgr)
+			{
+				result["error"] = "core/movement not ready";
+				return result;
+			}
+			const QString observerPlanet = core->getCurrentPlanet() ? core->getCurrentPlanet()->getEnglishName() : QString();
+			if (observerPlanet.compare(QStringLiteral("Earth"), Qt::CaseInsensitive) != 0)
+			{
+				result["error"] = "polar scope requires an Earth observer";
+				return result;
+			}
+			movementMgr->cancelAutoMove();
+			const bool north = core->getCurrentLocation().getLatitude() >= 0.0f;
+			if (north)
+				movementMgr->lookTowardsNCP();
+			else
+				movementMgr->lookTowardsSCP();
+			markOhosInteraction();
+			result["ok"] = true;
+			result["hemisphere"] = north ? "north" : "south";
 			return result;
 		}
 
@@ -3579,7 +3823,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				ohosDeferSelectedAnchor(movementMgr->getAutoMoveDuration() + 0.15);
 				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
-				movementMgr->setFlagTracking(true);
+				movementMgr->setFlagTracking(false);
 				result = selectedObjectJson(core);
 				result["ok"] = true;
 				markOhosInteraction();
@@ -3828,11 +4072,123 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				QJsonObject item;
 				item["id"] = ids[i];
 				item["name"] = (i < names.size()) ? names[i] : ids[i];
+				const QString iniPath = StelFileMgr::findFile("landscapes/" + ids[i] + "/landscape.ini", StelFileMgr::File);
+				if (!iniPath.isEmpty())
+				{
+					QSettings ini(iniPath, QSettings::IniFormat);
+					item["author"] = ini.value("landscape/author").toString();
+					item["description"] = ini.value("landscape/description").toString();
+					item["source"] = "landscapes/" + ids[i] + "/landscape.ini";
+					item["hasDescription"] = !ini.value("landscape/description").toString().trimmed().isEmpty();
+					item["hasLocation"] = ini.childGroups().contains("location");
+					if (item["hasLocation"].toBool())
+					{
+						item["planet"] = ini.value("location/planet").toString();
+						item["latitude"] = ini.value("location/latitude").toString();
+						item["longitude"] = ini.value("location/longitude").toString();
+						item["altitude"] = ini.value("location/altitude").toDouble();
+						item["timezone"] = ini.value("location/timezone").toString();
+					}
+				}
+				else
+				{
+					item["source"] = "landscapes/" + ids[i] + "/landscape.ini";
+					item["hasDescription"] = false;
+					item["hasLocation"] = false;
+				}
 				items.append(item);
 			}
 			result["ok"] = true;
 			result["items"] = items;
 			result["current"] = lmgr->getCurrentLandscapeID();
+			return result;
+		}
+
+		// getScenery3dList — preserve the original scene metadata and localized description.
+		if (commandName == "getScenery3dList")
+		{
+			Scenery3d* scenery = GETSTELMODULE(Scenery3d);
+			if (!scenery)
+			{
+				result["ok"] = false;
+				result["error"] = "Scenery3d plugin not loaded";
+				return result;
+			}
+			QJsonArray items;
+			for (const QString& id : SceneInfo::getAllSceneIDs())
+			{
+				SceneInfo info;
+				if (!SceneInfo::loadByID(id, info))
+					continue;
+				QJsonObject item;
+				item["id"] = info.id;
+				item["name"] = info.name;
+				item["author"] = info.author;
+				item["copyright"] = info.copyright;
+				item["description"] = info.description;
+				item["descriptionSource"] = "scenery3d/" + id + "/description.<语言>.utf8";
+				const QString localizedDescription = info.getLocalizedHTMLDescription();
+				if (!localizedDescription.trimmed().isEmpty())
+				{
+					item["descriptionHtml"] = localizedDescription;
+					QTextDocument descriptionDocument;
+					descriptionDocument.setHtml(localizedDescription);
+					item["description"] = descriptionDocument.toPlainText().simplified();
+				}
+				item["source"] = "scenery3d/" + id + "/scenery3d.ini";
+				item["landscape"] = info.landscapeName;
+				item["modelScenery"] = info.modelScenery;
+				item["modelGround"] = info.modelGround;
+				if (info.hasLocation())
+				{
+					item["planet"] = info.location->planetName;
+					item["latitude"] = info.location->getLatitude(false);
+					item["longitude"] = info.location->getLongitude(false);
+					item["altitude"] = info.location->altitude;
+					item["timezone"] = info.location->ianaTimeZone;
+				}
+				item["current"] = scenery->getCurrentSceneID() == id;
+				items.append(item);
+			}
+			result["ok"] = true;
+			result["items"] = items;
+			result["current"] = scenery->getCurrentSceneID();
+			result["loading"] = scenery->getLoadingSceneID();
+			result["enabled"] = scenery->getEnableScene();
+			result["default"] = scenery->getDefaultScenery3dID();
+			return result;
+		}
+
+		if (commandName == "setScenery3dScene")
+		{
+			Scenery3d* scenery = GETSTELMODULE(Scenery3d);
+			if (!scenery)
+			{
+				result["ok"] = false;
+				result["error"] = "Scenery3d plugin not loaded";
+				return result;
+			}
+			const SceneInfo scene = scenery->loadScenery3dByID(arg.trimmed());
+			result["ok"] = scene.isValid;
+			result["id"] = arg.trimmed();
+			result["loading"] = scenery->getLoadingSceneID();
+			if (!scene.isValid) result["error"] = "invalid 3D scene";
+			return result;
+		}
+
+		if (commandName == "setScenery3dEnabled")
+		{
+			Scenery3d* scenery = GETSTELMODULE(Scenery3d);
+			if (!scenery)
+			{
+				result["ok"] = false;
+				result["error"] = "Scenery3d plugin not loaded";
+				return result;
+			}
+			const bool enabled = arg.trimmed() == "1" || arg.trimmed().compare("true", Qt::CaseInsensitive) == 0;
+			scenery->setEnableScene(enabled);
+			result["ok"] = true;
+			result["enabled"] = scenery->getEnableScene();
 			return result;
 		}
 
@@ -4021,12 +4377,86 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelScriptMgr& smgr = StelApp::getInstance().getScriptMgr();
 			QStringList scripts = smgr.getScriptList();
 			QJsonArray items;
+			QJsonArray details;
 			for (const QString& s : scripts)
 			{
 				items.append(s);
+				QJsonObject detail;
+				detail["file"] = s;
+				detail["name"] = smgr.getName(s);
+				detail["author"] = smgr.getAuthor(s);
+				detail["license"] = smgr.getLicense(s);
+				detail["version"] = smgr.getVersion(s);
+				detail["description"] = smgr.getDescription(s);
+				detail["shortcut"] = smgr.getShortcut(s);
+				detail["source"] = "scripts/" + s;
+				detail["hasMetadata"] = !detail["name"].toString().trimmed().isEmpty()
+					|| !detail["author"].toString().trimmed().isEmpty()
+					|| !detail["license"].toString().trimmed().isEmpty()
+					|| !detail["version"].toString().trimmed().isEmpty()
+					|| !detail["description"].toString().trimmed().isEmpty();
+				details.append(detail);
 			}
 			result["ok"] = true;
 			result["items"] = items;
+			result["details"] = details;
+			return result;
+		}
+
+		if (commandName == "importScript")
+		{
+			const QString requestedPath = arg.trimmed();
+			const QFileInfo sourceInfo(requestedPath);
+			if (requestedPath.isEmpty() || !sourceInfo.exists() || !sourceInfo.isFile())
+			{
+				result["ok"] = false;
+				result["error"] = "script file not found";
+				return result;
+			}
+			if (sourceInfo.suffix().compare(QStringLiteral("ssc"), Qt::CaseInsensitive) != 0)
+			{
+				result["ok"] = false;
+				result["error"] = "only .ssc scripts are supported";
+				return result;
+			}
+			if (sourceInfo.size() <= 0 || sourceInfo.size() > 2 * 1024 * 1024)
+			{
+				result["ok"] = false;
+				result["error"] = "script size must be between 1 byte and 2 MiB";
+				return result;
+			}
+			const QString scriptDir = StelFileMgr::getUserDir() + QStringLiteral("/scripts");
+			if (!QDir().mkpath(scriptDir))
+			{
+				result["ok"] = false;
+				result["error"] = "cannot create user script directory";
+				return result;
+			}
+			const QString destinationPath = scriptDir + "/" + sourceInfo.fileName();
+			if (QFileInfo(destinationPath).canonicalFilePath() == sourceInfo.canonicalFilePath())
+			{
+				result["ok"] = true;
+				result["file"] = sourceInfo.fileName();
+				result["alreadyImported"] = true;
+				return result;
+			}
+			if (QFileInfo::exists(destinationPath))
+			{
+				result["ok"] = false;
+				result["error"] = "a script with the same name already exists";
+				return result;
+			}
+			if (!QFile::copy(sourceInfo.absoluteFilePath(), destinationPath))
+			{
+				result["ok"] = false;
+				result["error"] = "cannot copy script into user directory";
+				return result;
+			}
+			qInfo() << "[StellariumOhos][script] imported" << sourceInfo.absoluteFilePath()
+			        << "to" << destinationPath;
+			result["ok"] = true;
+			result["file"] = sourceInfo.fileName();
+			result["path"] = destinationPath;
 			return result;
 		}
 
@@ -4792,6 +5222,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				QJsonObject obj;
 				obj["id"] = pd.info.id;
 				obj["name"] = pd.info.displayedName;
+				obj["description"] = q_(pd.info.description);
+				obj["authors"] = pd.info.authors;
+				obj["contact"] = pd.info.contact;
+				obj["version"] = pd.info.version;
+				obj["license"] = pd.info.license;
+				obj["acknowledgements"] = q_(pd.info.acknowledgements);
+				obj["hasPreviewImage"] = !pd.info.image.isNull();
+				obj["source"] = "plugins/" + pd.info.id;
 				obj["loaded"] = pd.loaded;
 				obj["loadAtStartup"] = pd.loadAtStartup;
 				items.append(obj);
@@ -5930,6 +6368,251 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "getNavigationSettings")
+		{
+			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+			if (!mvmgr)
+			{
+				result["error"] = "movement module unavailable";
+				return result;
+			}
+			const Vec3d initView = mvmgr->getInitViewingDirection();
+			double initAz = 0.0;
+			double initAlt = 0.0;
+			StelUtils::rectToSphe(&initAz, &initAlt, initView);
+			initAz = StelUtils::fmodpos(initAz * 180.0 / M_PI, 360.0);
+			initAlt *= 180.0 / M_PI;
+			result["ok"] = true;
+			result["mouseNavigation"] = mvmgr->getFlagEnableMouseNavigation();
+			result["mouseZooming"] = mvmgr->getFlagEnableMouseZooming();
+			result["moveKeys"] = mvmgr->getFlagEnableMoveKeys();
+			result["zoomKeys"] = mvmgr->getFlagEnableZoomKeys();
+			result["gravityLabels"] = StelApp::getInstance().getCore()->getFlagGravityLabels();
+			result["autoZoomResets"] = mvmgr->getFlagAutoZoomOutResetsDirection();
+			result["maxFov"] = mvmgr->getUserMaxFov();
+			result["currentFov"] = mvmgr->getCurrentFov();
+			result["startupFov"] = mvmgr->getInitFov();
+			result["startupAzimuth"] = initAz;
+			result["startupAltitude"] = initAlt;
+			return result;
+		}
+
+		if (commandName == "getEphemerisSettings")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["de430Available"] = core->de430IsAvailable();
+			result["de431Available"] = core->de431IsAvailable();
+			result["de440Available"] = core->de440IsAvailable();
+			result["de441Available"] = core->de441IsAvailable();
+			result["de430Active"] = core->de430IsActive();
+			result["de431Active"] = core->de431IsActive();
+			result["de440Active"] = core->de440IsActive();
+			result["de441Active"] = core->de441IsActive();
+			return result;
+		}
+
+		if (commandName == "setEphemerisSetting")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			const QString key = arg.section('|', 0, 0).trimmed().toLower();
+			const bool enabled = arg.section('|', 1, 1).trimmed() == "1" ||
+				arg.section('|', 1, 1).trimmed().compare("true", Qt::CaseInsensitive) == 0;
+			if (!core || arg.section('|', 1, 1).trimmed().isEmpty())
+			{
+				result["error"] = "usage: ephemeris|0-or-1";
+				return result;
+			}
+			if (key == "de430")
+			{
+				if (enabled && !core->de430IsAvailable()) { result["error"] = "DE430 is not installed"; return result; }
+				core->setDe430Active(enabled);
+			}
+			else if (key == "de431")
+			{
+				if (enabled && !core->de431IsAvailable()) { result["error"] = "DE431 is not installed"; return result; }
+				core->setDe431Active(enabled);
+			}
+			else if (key == "de440")
+			{
+				if (enabled && !core->de440IsAvailable()) { result["error"] = "DE440 is not installed"; return result; }
+				core->setDe440Active(enabled);
+			}
+			else if (key == "de441")
+			{
+				if (enabled && !core->de441IsAvailable()) { result["error"] = "DE441 is not installed"; return result; }
+				core->setDe441Active(enabled);
+			}
+			else
+			{
+				result["error"] = "unknown ephemeris";
+				return result;
+			}
+			StelApp::getInstance().getSettings()->sync();
+			result["ok"] = true;
+			result["setting"] = key;
+			result["enabled"] = enabled;
+			return result;
+		}
+
+		if (commandName == "getInformationSettings")
+		{
+			const StelGui* currentGui = dynamic_cast<const StelGui*>(StelApp::getInstance().getGui());
+			if (!currentGui) { result["error"] = "gui unavailable"; return result; }
+			const StelObject::InfoStringGroup flags = currentGui->getInfoTextFilters();
+			result["ok"] = true;
+			result["infoMode"] = selectedObjectInfoMode();
+			result["customInfoMask"] = static_cast<int>(flags);
+			return result;
+		}
+
+		if (commandName == "setInformationSetting")
+		{
+			StelGui* currentGui = dynamic_cast<StelGui*>(StelApp::getInstance().getGui());
+			const QString key = arg.section('|', 0, 0).trimmed().toLower();
+			const QString value = arg.section('|', 1, 1).trimmed();
+			if (!currentGui || value.isEmpty()) { result["error"] = "usage: mode|all/default/short/none/custom or mask|number"; return result; }
+			StelObject::InfoStringGroup flags(StelObject::None);
+			if (key == "mode")
+			{
+				if (value == "all") flags = StelObject::AllInfo;
+				else if (value == "default") flags = StelObject::DefaultInfo;
+				else if (value == "short") flags = StelObject::ShortInfo;
+				else if (value == "none") flags = StelObject::None;
+				else if (value == "custom") flags = currentGui->getInfoTextFilters();
+				else { result["error"] = "unknown information mode"; return result; }
+				currentGui->setInfoTextFilters(flags);
+				StelApp::immediateSave("gui/selected_object_info", value);
+			}
+			else if (key == "mask")
+			{
+				bool parsed = false;
+				const int mask = value.toInt(&parsed);
+				const int allowed = static_cast<int>(StelObject::AllInfo);
+				if (!parsed || mask < 0 || (mask & ~allowed) != 0) { result["error"] = "invalid information mask"; return result; }
+				flags = static_cast<StelObject::InfoStringGroupFlags>(mask);
+				currentGui->setInfoTextFilters(flags);
+				StelApp::immediateSave("gui/selected_object_info", "custom");
+			}
+			else { result["error"] = "unknown information setting"; return result; }
+			result["ok"] = true;
+			result["infoMode"] = selectedObjectInfoMode();
+			result["customInfoMask"] = static_cast<int>(currentGui->getInfoTextFilters());
+			return result;
+		}
+
+		if (commandName == "getTimeSettings")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			result["ok"] = true;
+			result["startupTimeMode"] = core->getStartupTimeMode();
+			result["startupTimeStop"] = core->getStartupTimeStop();
+			result["todayTime"] = core->getInitTodayTime().toString("HH:mm:ss");
+			result["presetSkyTime"] = core->getPresetSkyTime();
+			result["deltaTAlgorithm"] = core->getCurrentDeltaTAlgorithmKey();
+			QTextDocument description;
+			description.setHtml(core->getCurrentDeltaTAlgorithmDescription());
+			result["deltaTDescription"] = description.toPlainText().simplified();
+			return result;
+		}
+
+		if (commandName == "setTimeSetting")
+		{
+			StelCore* core = StelApp::getInstance().getCore();
+			const QString key = arg.section('|', 0, 0).trimmed().toLower();
+			const QString value = arg.section('|', 1, 1).trimmed();
+			if (!core || value.isEmpty()) { result["error"] = "usage: startupMode|actual/today/preset; startupStop|0/1; todayTime|HH:mm:ss; deltaT|key; presetCurrent|1"; return result; }
+			if (key == "startupmode" && (value == "actual" || value == "today" || value == "preset")) core->setStartupTimeMode(value);
+			else if (key == "startupstop") core->setStartupTimeStop(value == "1" || value.compare("true", Qt::CaseInsensitive) == 0);
+			else if (key == "todaytime")
+			{
+				const QTime time = QTime::fromString(value, "HH:mm:ss");
+				if (!time.isValid()) { result["error"] = "today time must be HH:mm:ss"; return result; }
+				core->setInitTodayTime(time);
+			}
+			else if (key == "presetcurrent") core->setPresetSkyTime(core->getJD());
+			else if (key == "deltat")
+			{
+				const QMetaEnum algorithms = QMetaEnum::fromType<StelCore::DeltaTAlgorithm>();
+				if (algorithms.keyToValue(value.toLatin1().constData()) < 0) { result["error"] = "unknown DeltaT algorithm"; return result; }
+				core->setCurrentDeltaTAlgorithmKey(value);
+			}
+			else { result["error"] = "unknown time setting"; return result; }
+			result["ok"] = true;
+			result["setting"] = key;
+			return result;
+		}
+
+		if (commandName == "setNavigationSetting")
+		{
+			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+			const QString key = arg.section('|', 0, 0).trimmed();
+			const QString value = arg.section('|', 1, 1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			if (!mvmgr || key.isEmpty() || value.isEmpty())
+			{
+				result["error"] = "usage: setting|value";
+				return result;
+			}
+			if (key == "mouseNavigation") mvmgr->setFlagEnableMouseNavigation(enabled);
+			else if (key == "mouseZooming") mvmgr->setFlagEnableMouseZooming(enabled);
+			else if (key == "moveKeys") mvmgr->setFlagEnableMoveKeys(enabled);
+			else if (key == "zoomKeys") mvmgr->setFlagEnableZoomKeys(enabled);
+			else if (key == "gravityLabels") StelApp::getInstance().getCore()->setFlagGravityLabels(enabled);
+			else if (key == "autoZoomResets") mvmgr->setFlagAutoZoomOutResetsDirection(enabled);
+			else if (key == "maxFov")
+			{
+				bool parsed = false;
+				const double maxFov = value.toDouble(&parsed);
+				if (!parsed || maxFov < 1.0 || maxFov > 360.0)
+				{
+					result["error"] = "max FOV must be between 1 and 360 degrees";
+					return result;
+				}
+				mvmgr->setUserMaxFov(maxFov);
+			}
+			else
+			{
+				result["error"] = "unknown navigation setting";
+				return result;
+			}
+			markOhosInteraction();
+			result["ok"] = true;
+			result["setting"] = key;
+			return result;
+		}
+
+		if (commandName == "saveCurrentView")
+		{
+			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
+			if (!mvmgr)
+			{
+				result["error"] = "movement module unavailable";
+				return result;
+			}
+			mvmgr->setInitFov(mvmgr->getCurrentFov());
+			mvmgr->setInitViewDirectionToCurrent();
+			StelApp::getInstance().getSettings()->sync();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "saveAllSettings")
+		{
+			StelApp::getInstance().getSettings()->sync();
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "restoreDefaultSettings")
+		{
+			StelApp::getInstance().getSettings()->setValue("main/restore_defaults", true);
+			StelApp::getInstance().getSettings()->sync();
+			result["ok"] = true;
+			result["restartRequired"] = true;
+			return result;
+		}
+
 		// getViewCenterCoordinates — all supported coordinate systems for the
 		// current center of view. ArkUI can switch presentation without repeating
 		// astronomical transforms or issuing multiple bridge requests.
@@ -6098,8 +6781,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["id"] = lmgr->getCurrentLandscapeID();
 			result["name"] = lmgr->getCurrentLandscapeName();
-			result["author"] = QString();
+			const Landscape* currentLandscape = lmgr->getCurrentLandscape();
+			result["author"] = currentLandscape != Q_NULLPTR ? currentLandscape->getAuthorName() : QString();
 			result["description"] = lmgr->getCurrentLandscapeHtmlDescription();
+			result["source"] = "landscapes/" + lmgr->getCurrentLandscapeID() + "/landscape.ini";
+			if (currentLandscape != Q_NULLPTR && currentLandscape->hasLocation())
+			{
+				const StelLocation& location = currentLandscape->getLocation();
+				result["planet"] = location.planetName;
+				result["latitude"] = location.getLatitude(false);
+				result["longitude"] = location.getLongitude(false);
+				result["altitude"] = location.altitude;
+				result["timezone"] = location.ianaTimeZone;
+			}
 			result["atmosphere"] = lmgr->getFlagAtmosphere();
 			result["fog"] = lmgr->getFlagFog();
 			result["ground"] = lmgr->getFlagLandscape();
@@ -7954,6 +8648,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			o["telescopeNames"] = tn;
 			o["lensNames"] = ln;
 			o["ccdNames"] = cn;
+			const QJsonObject instrumentState = QJsonObject::fromVariantMap(oculars->getOhosInstrumentState());
+			for (auto it = instrumentState.constBegin(); it != instrumentState.constEnd(); ++it)
+				o.insert(it.key(), it.value());
+			o["hasSelection"] = StelApp::getInstance().getStelObjectMgr().getWasSelected();
 			result["ok"] = true;
 			result["oculars"] = o;
 			return result;
@@ -7962,8 +8660,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			Oculars* oculars = GETSTELMODULE(Oculars);
 			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
-			oculars->enableOcular(arg.trimmed() == "1" || arg.trimmed() == "true");
+			const bool requested = arg.trimmed() == "1" || arg.trimmed() == "true";
+			oculars->enableOcular(requested);
 			result["ok"] = true;
+			result["requested"] = requested;
+			result["applied"] = oculars->getEnableOcular();
+			result["selectionRequired"] = requested && oculars->getFlagRequireSelection() && !StelApp::getInstance().getStelObjectMgr().getWasSelected();
 			return result;
 		}
 		if (commandName == "setTelrad")
@@ -8008,6 +8710,375 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["index"] = idx;
 			return result;
 		}
+		if (commandName == "selectOcularInstrument")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			bool indexOk = false;
+			const QString kind = parts.value(0).trimmed().toLower();
+			const int index = parts.value(1).trimmed().toInt(&indexOk);
+			if (!indexOk)
+			{
+				result["ok"] = false;
+				result["error"] = "usage: ocular|telescope|lens|ccd|index";
+				return result;
+			}
+			if (kind == "ocular") oculars->selectOcularAtIndex(index);
+			else if (kind == "telescope") oculars->selectTelescopeAtIndex(index);
+			else if (kind == "lens") oculars->selectLensAtIndex(index);
+			else if (kind == "ccd") oculars->selectCCDAtIndex(index);
+			else
+			{
+				result["ok"] = false;
+				result["error"] = "unknown ocular instrument kind: " + kind;
+				return result;
+			}
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "setOcularSetting")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "requireSelection") oculars->setFlagRequireSelection(enabled);
+			else if (setting == "autoLimitMagnitude") oculars->setFlagAutoLimitMagnitude(enabled);
+			else if (setting == "hideGridsLines") oculars->setFlagHideGridsLines(enabled);
+			else if (setting == "autoScaleTelrad") oculars->setFlagScalingFOVForTelrad(enabled);
+			else if (setting == "autoScaleCcd") oculars->setFlagScalingFOVForCCD(enabled);
+			else if (setting == "semiTransparentMask") oculars->setFlagUseSemiTransparency(enabled);
+			else if (setting == "showResolutionCriteria") oculars->setFlagShowResolutionCriteria(enabled);
+			else if (setting == "autoSetMountForCcd") oculars->setFlagAutosetMountForCCD(enabled);
+			else if (setting == "horizontalCoordinates") oculars->setFlagHorizontalCoordinates(enabled);
+			else if (setting == "sensorCropOverlay") oculars->setFlagShowCcdCropOverlay(enabled);
+			else if (setting == "sensorPixelGrid") oculars->setFlagShowCcdCropOverlayPixelGrid(enabled);
+			else if (setting == "focuserOverlay") oculars->setFlagShowFocuserOverlay(enabled);
+			else if (setting == "scaleImageCircle") oculars->setFlagScaleImageCircle(enabled);
+			else if (setting == "maxExposureTimeForCcd") oculars->setFlagMaxExposureTimeForCCD(enabled);
+			else if (setting == "showContour") oculars->setFlagShowContour(enabled);
+			else if (setting == "showCardinals") oculars->setFlagShowCardinals(enabled);
+			else if (setting == "alignCrosshair") oculars->setFlagAlignCrosshair(enabled);
+			else if (setting == "smallFocuserOverlay") oculars->setFlagUseSmallFocuserOverlay(enabled);
+			else if (setting == "mediumFocuserOverlay") oculars->setFlagUseMediumFocuserOverlay(enabled);
+			else if (setting == "largeFocuserOverlay") oculars->setFlagUseLargeFocuserOverlay(enabled);
+			else if (setting == "dmsDegrees") oculars->setFlagDMSDegrees(enabled);
+			else if (setting == "initFov") oculars->setFlagInitFovUsage(enabled);
+			else if (setting == "initDirection") oculars->setFlagInitDirectionUsage(enabled);
+			else if (setting == "oagLimits") oculars->setFlagShowOAGLimits(enabled);
+			else if (setting == "guiPanelEnabled") oculars->enableGuiPanel(enabled);
+			else if (setting == "maskOpacity")
+			{
+				bool opacityOk = false;
+				const int opacity = value.toInt(&opacityOk);
+				if (opacityOk && opacity >= 0 && opacity <= 100) oculars->setTransparencyMask(opacity);
+				else ok = false;
+			}
+			else if (setting == "ccdRotation")
+			{
+				bool angleOk = false;
+				const double angle = value.toDouble(&angleOk);
+				if (angleOk) oculars->setSelectedCCDRotationAngle(angle);
+				else ok = false;
+			}
+			else if (setting == "prismRotation")
+			{
+				bool angleOk = false;
+				const double angle = value.toDouble(&angleOk);
+				if (angleOk) oculars->setSelectedCCDPrismPositionAngle(angle);
+				else ok = false;
+			}
+			else if (setting == "ccdCropHSize" || setting == "ccdCropVSize")
+			{
+				bool sizeOk = false;
+				const int size = value.toInt(&sizeOk);
+				if (!sizeOk || size < 1 || size > 10000) ok = false;
+				else if (setting == "ccdCropHSize") oculars->setCcdCropOverlayHSize(size);
+				else oculars->setCcdCropOverlayVSize(size);
+			}
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown or invalid ocular setting: " + setting;
+			return result;
+		}
+		if (commandName == "rotateOcularReticle")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			const QString direction = arg.trimmed().toLower();
+			if (direction == "clockwise" || direction == "cw" || direction == "1") oculars->rotateReticleClockwise();
+			else if (direction == "counterclockwise" || direction == "ccw" || direction == "-1") oculars->rotateReticleCounterclockwise();
+			else { result["ok"] = false; result["error"] = "usage: clockwise|counterclockwise"; return result; }
+			result["ok"] = true;
+			return result;
+		}
+		if (commandName == "resetOcularInstrument")
+		{
+			Oculars* oculars = GETSTELMODULE(Oculars);
+			if (!oculars) { result["ok"] = false; result["error"] = "Oculars plugin not loaded"; return result; }
+			const QString kind = arg.trimmed().toLower();
+			if (kind == "ccd" || kind == "all") oculars->ccdRotationReset();
+			if (kind == "prism" || kind == "all") oculars->prismPositionAngleReset();
+			if (kind != "ccd" && kind != "prism" && kind != "all") { result["ok"] = false; result["error"] = "usage: ccd|prism|all"; return result; }
+			result["ok"] = true;
+			return result;
+		}
+
+		if (commandName == "getPointerCoordinates")
+		{
+			PointerCoordinates* pointer = GETSTELMODULE(PointerCoordinates);
+			if (!pointer) { result["ok"] = false; result["error"] = "PointerCoordinates plugin not loaded"; return result; }
+			QJsonObject state;
+			state["enabled"] = pointer->isEnabled();
+			state["enableAtStartup"] = pointer->getFlagEnableAtStartup();
+			state["showCoordinatesButton"] = pointer->getFlagShowCoordinatesButton();
+			state["showConstellation"] = pointer->getFlagShowConstellation();
+			state["showCrossedLines"] = pointer->getFlagShowCrossedLines();
+			state["showElongation"] = pointer->getFlagShowElongation();
+			state["coordinateSystem"] = pointer->getCurrentCoordinateSystemKey();
+			state["coordinatesPlace"] = pointer->getCurrentCoordinatesPlaceKey();
+			result["ok"] = true;
+			result["pointerCoordinates"] = state;
+			return result;
+		}
+		if (commandName == "setPointerCoordinates")
+		{
+			PointerCoordinates* pointer = GETSTELMODULE(PointerCoordinates);
+			if (!pointer) { result["ok"] = false; result["error"] = "PointerCoordinates plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "enabled") pointer->enableCoordinates(enabled);
+			else if (setting == "enableAtStartup") pointer->setFlagEnableAtStartup(enabled);
+			else if (setting == "showCoordinatesButton") pointer->setFlagShowCoordinatesButton(enabled);
+			else if (setting == "showConstellation") pointer->setFlagShowConstellation(enabled);
+			else if (setting == "showCrossedLines") pointer->setFlagShowCrossedLines(enabled);
+			else if (setting == "showElongation") pointer->setFlagShowElongation(enabled);
+			else if (setting == "coordinateSystem")
+			{
+				const QStringList valid = {"RaDecJ2000", "RaDec", "HourAngle", "Ecliptic", "EclipticJ2000", "AltAzi", "Galactic", "Supergalactic"};
+				if (!valid.contains(value)) ok = false;
+				else pointer->setCurrentCoordinateSystemKey(value);
+			}
+			else if (setting == "coordinatesPlace")
+			{
+				const QStringList valid = {"TopCenter", "TopRight", "RightBottomCorner", "NearMouseCursor", "Custom"};
+				if (!valid.contains(value)) ok = false;
+				else pointer->setCurrentCoordinatesPlaceKey(value);
+			}
+			else ok = false;
+			if (ok) pointer->saveConfiguration();
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown or invalid pointer coordinates setting: " + setting;
+			return result;
+		}
+
+		// ========== Mosaic Camera plugin (相机拼接视场) ==========
+		if (commandName == "getMosaicCamera")
+		{
+			MosaicCamera* camera = GETSTELMODULE(MosaicCamera);
+			if (!camera) { result["ok"] = false; result["error"] = "MosaicCamera plugin not loaded"; return result; }
+			QJsonObject state;
+			state["enabled"] = camera->isEnabled();
+			state["currentCamera"] = camera->getCurrentCamera();
+			state["ra"] = camera->getCurrentRA();
+			state["dec"] = camera->getCurrentDec();
+			state["rotation"] = camera->getCurrentRotation();
+			state["visible"] = camera->getCurrentVisibility();
+			QJsonArray names;
+			for (const QString& name : camera->getCameraNames()) names.append(name);
+			state["names"] = names;
+			result["ok"] = true;
+			result["mosaicCamera"] = state;
+			return result;
+		}
+		if (commandName == "setMosaicCamera")
+		{
+			MosaicCamera* camera = GETSTELMODULE(MosaicCamera);
+			if (!camera) { result["ok"] = false; result["error"] = "MosaicCamera plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "enabled") camera->enableMosaicCamera(enabled);
+			else if (setting == "camera")
+			{
+				if (!camera->getCameraNames().contains(value)) ok = false;
+				else camera->setCurrentCamera(value);
+			}
+			else if (setting == "visible") camera->setCurrentVisibility(enabled);
+			else if (setting == "setToView") camera->setRADecToView();
+			else if (setting == "setToSelected") camera->setRADecToObject();
+			else if (setting == "viewToCamera") camera->setViewToCamera();
+			else if (setting == "ra" || setting == "dec" || setting == "rotation")
+			{
+				bool numberOk = false;
+				const double number = value.toDouble(&numberOk);
+				const bool inRange = setting == "ra" ? number >= 0.0 && number < 360.0 :
+					setting == "dec" ? number >= -90.0 && number <= 90.0 : number >= -360.0 && number <= 360.0;
+				if (!numberOk || !inRange) ok = false;
+				else if (setting == "ra") camera->setCurrentRA(number);
+				else if (setting == "dec") camera->setCurrentDec(number);
+				else camera->setCurrentRotation(number);
+			}
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown or invalid mosaic camera setting: " + setting;
+			return result;
+		}
+
+		// ========== Equation of Time plugin (时间方程) ==========
+		if (commandName == "getEquationOfTime")
+		{
+			EquationOfTime* equation = GETSTELMODULE(EquationOfTime);
+			if (!equation) { result["ok"] = false; result["error"] = "EquationOfTime plugin not loaded"; return result; }
+			result["ok"] = true;
+			result["enabled"] = equation->isEnabled();
+			result["msFormat"] = equation->getFlagMsFormat();
+			result["inverted"] = equation->getFlagInvertedValue();
+			result["enableAtStartup"] = equation->getFlagEnableAtStartup();
+			result["minutes"] = core ? core->getSolutionEquationOfTime() : 0.0;
+			return result;
+		}
+		if (commandName == "setEquationOfTime")
+		{
+			EquationOfTime* equation = GETSTELMODULE(EquationOfTime);
+			if (!equation) { result["ok"] = false; result["error"] = "EquationOfTime plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "enabled") equation->enableEquationOfTime(enabled);
+			else if (setting == "msFormat") equation->setFlagMsFormat(enabled);
+			else if (setting == "inverted") equation->setFlagInvertedValue(enabled);
+			else if (setting == "enableAtStartup") equation->setFlagEnableAtStartup(enabled);
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown equation of time setting: " + setting;
+			return result;
+		}
+
+		// ========== ArchaeoLines plugin (古天文辅助线) ==========
+		if (commandName == "getArchaeoLines")
+		{
+			ArchaeoLines* lines = GETSTELMODULE(ArchaeoLines);
+			if (!lines) { result["ok"] = false; result["error"] = "ArchaeoLines plugin not loaded"; return result; }
+			result["ok"] = true;
+			result["enabled"] = lines->isEnabled();
+			result["lineWidth"] = lines->getLineWidth();
+			result["equinox"] = lines->isEquinoxDisplayed();
+			result["solstices"] = lines->isSolsticesDisplayed();
+			result["crossquarters"] = lines->isCrossquartersDisplayed();
+			result["majorStandstills"] = lines->isMajorStandstillsDisplayed();
+			result["minorStandstills"] = lines->isMinorStandstillsDisplayed();
+			result["polarCircles"] = lines->isPolarCirclesDisplayed();
+			result["zenithPassage"] = lines->isZenithPassageDisplayed();
+			result["nadirPassage"] = lines->isNadirPassageDisplayed();
+			result["selectedObject"] = lines->isSelectedObjectDisplayed();
+			result["selectedObjectAzimuth"] = lines->isSelectedObjectAzimuthDisplayed();
+			result["selectedObjectHourAngle"] = lines->isSelectedObjectHourAngleDisplayed();
+			result["currentSun"] = lines->isCurrentSunDisplayed();
+			result["currentMoon"] = lines->isCurrentMoonDisplayed();
+			result["currentPlanet"] = static_cast<int>(lines->whichCurrentPlanetDisplayed());
+			return result;
+		}
+		if (commandName == "setArchaeoLineSetting")
+		{
+			ArchaeoLines* lines = GETSTELMODULE(ArchaeoLines);
+			if (!lines) { result["ok"] = false; result["error"] = "ArchaeoLines plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "enabled") lines->enableArchaeoLines(enabled);
+			else if (setting == "equinox") lines->showEquinox(enabled);
+			else if (setting == "solstices") lines->showSolstices(enabled);
+			else if (setting == "crossquarters") lines->showCrossquarters(enabled);
+			else if (setting == "majorStandstills") lines->showMajorStandstills(enabled);
+			else if (setting == "minorStandstills") lines->showMinorStandstills(enabled);
+			else if (setting == "polarCircles") lines->showPolarCircles(enabled);
+			else if (setting == "zenithPassage") lines->showZenithPassage(enabled);
+			else if (setting == "nadirPassage") lines->showNadirPassage(enabled);
+			else if (setting == "selectedObject") lines->showSelectedObject(enabled);
+			else if (setting == "selectedObjectAzimuth") lines->showSelectedObjectAzimuth(enabled);
+			else if (setting == "selectedObjectHourAngle") lines->showSelectedObjectHourAngle(enabled);
+			else if (setting == "currentSun") lines->showCurrentSun(enabled);
+			else if (setting == "currentMoon") lines->showCurrentMoon(enabled);
+			else if (setting == "currentPlanet") lines->showCurrentPlanetNamed(value);
+			else if (setting == "lineWidth")
+			{
+				bool widthOk = false;
+				const int width = value.toInt(&widthOk);
+				if (!widthOk || width < 1 || width > 8) ok = false;
+				else lines->setLineWidth(width);
+			}
+			else ok = false;
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown or invalid archaeo line setting: " + setting;
+			return result;
+		}
+
+		// ========== Navigational Stars plugin (导航星) ==========
+		if (commandName == "getNavStars")
+		{
+			NavStars* stars = GETSTELMODULE(NavStars);
+			if (!stars) { result["ok"] = false; result["error"] = "NavStars plugin not loaded"; return result; }
+			result["ok"] = true;
+			result["enabled"] = stars->getNavStarsMarks();
+			result["setKey"] = stars->getCurrentNavigationalStarsSetKey();
+			result["setDescription"] = stars->getCurrentNavigationalStarsSetDescription();
+			result["starCount"] = stars->getStarsNumbers().size();
+			result["highlightWhenVisible"] = stars->getHighlightWhenVisible();
+			result["limitInfo"] = stars->getLimitInfoToNavStars();
+			result["upperLimb"] = stars->getUpperLimb();
+			result["tabulatedDisplay"] = stars->getTabulatedDisplay();
+			result["extraDecimals"] = stars->getShowExtraDecimals();
+			result["useUtc"] = stars->getFlagUseUTCTime();
+			result["enableAtStartup"] = stars->getEnableAtStartup();
+			result["setKeys"] = QJsonArray{
+				"AngloAmerican", "French", "British", "Wrinkles", "Russian", "USSRAvia", "USSRSpace", "German",
+				"GeminiAPS", "MeadeLX200", "MeadeETX", "MeadeAS494", "MeadeAS497", "CelestronNS", "Apollo",
+				"SkywatcherSS", "VixenSB", "ArgoNavis", "OrionIS", "SkyCommander"};
+			return result;
+		}
+		if (commandName == "setNavStarsSetting")
+		{
+			NavStars* stars = GETSTELMODULE(NavStars);
+			if (!stars) { result["ok"] = false; result["error"] = "NavStars plugin not loaded"; return result; }
+			const QStringList parts = arg.split('|');
+			const QString setting = parts.value(0).trimmed();
+			const QString value = parts.value(1).trimmed();
+			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
+			bool ok = true;
+			if (setting == "enabled") stars->setNavStarsMarks(enabled);
+			else if (setting == "set")
+			{
+				const QMetaEnum setEnum = QMetaEnum::fromType<NavStars::NavigationalStarsSet>();
+				if (setEnum.keyToValue(value.toLatin1().constData()) < 0) ok = false;
+				else stars->setCurrentNavigationalStarsSetKey(value);
+			}
+			else if (setting == "highlightWhenVisible") stars->setHighlightWhenVisible(enabled);
+			else if (setting == "limitInfo") stars->setLimitInfoToNavStars(enabled);
+			else if (setting == "upperLimb") stars->setUpperLimb(enabled);
+			else if (setting == "tabulatedDisplay") stars->setTabulatedDisplay(enabled);
+			else if (setting == "extraDecimals") stars->setShowExtraDecimals(enabled);
+			else if (setting == "useUtc") stars->setFlagUseUTCTime(enabled);
+			else if (setting == "enableAtStartup") stars->setEnableAtStartup(enabled);
+			else ok = false;
+			if (ok) stars->saveConfiguration();
+			result["ok"] = ok;
+			if (!ok) result["error"] = "unknown or invalid navigational stars setting: " + setting;
+			return result;
+		}
 
 		// ========== Satellites plugin (卫星) ==========
 		if (commandName == "getSatellites")
@@ -8044,6 +9115,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s["newestUpdate"] = catalog.value("newestUpdate").toString();
 			s["outdatedCount"] = catalog.value("outdatedCount").toInt();
 			s["matchedCount"] = catalog.value("matchedCount").toInt();
+			s["catalogSource"] = "plugins/Satellites/resources/satellites.json";
+			QFile bundledCatalog(":/satellites/satellites.json");
+			if (bundledCatalog.open(QIODevice::ReadOnly))
+			{
+				const QJsonDocument catalogDocument = QJsonDocument::fromJson(bundledCatalog.readAll());
+				if (catalogDocument.isObject())
+				{
+					const QJsonObject catalogObject = catalogDocument.object();
+					s["catalogCreator"] = catalogObject.value("creator").toString();
+					s["catalogSnapshot"] = catalogObject.value("offlineSnapshot").toString();
+				}
+			}
 			s["items"] = QJsonArray::fromVariantList(catalog.value("items").toList());
 			result["ok"] = true;
 			result["satellites"] = s;
@@ -8076,6 +9159,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			m["labels"] = ms->getEnableLabels();
 			m["activeOnly"] = ms->getActiveRadiantOnly();
 			m["marker"] = ms->getEnableMarker();
+			m["catalogName"] = "meteor showers data";
+			m["catalogSource"] = "plugins/MeteorShowers/resources/MeteorShowers.json";
+			QFile showerCatalog(":/MeteorShowers/MeteorShowers.json");
+			if (showerCatalog.open(QIODevice::ReadOnly))
+			{
+				const QJsonDocument showerDocument = QJsonDocument::fromJson(showerCatalog.readAll());
+				if (showerDocument.isObject())
+					m["catalogVersion"] = showerDocument.object().value("version").toInt();
+			}
 			result["ok"] = true;
 			result["meteorShowers"] = m;
 			// Active shower list with details
@@ -12324,8 +13416,11 @@ void StelMainView::renderOhosFrameNow()
 		ohosUpdateSelectedScreenProjection();
 	ohosProcessPendingPointSelect();
 	const double t3 = StelApp::getTotalRunTime();
-	app.draw();
-	const double t4 = StelApp::getTotalRunTime();
+		app.draw();
+		// Oculars draws its reticle in the native draw pass. Keep the polar scope
+		// on this same render thread so the overlay cannot lag behind the sky.
+		drawOhosPolarScopeOverlay(app.getCore());
+		const double t4 = StelApp::getTotalRunTime();
 	submitOhosFramebuffer(gl);
 	const double t5 = StelApp::getTotalRunTime();
 

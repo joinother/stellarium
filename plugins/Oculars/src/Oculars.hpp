@@ -33,6 +33,7 @@
 #include "VecMath.hpp"
 
 #include <QSettings>
+#include <QVariantMap>
 
 #define MIN_OCULARS_INI_VERSION 3.1f
 #define DEFAULT_CCD_CROP_OVERLAY_SIZE 250
@@ -210,6 +211,7 @@ public slots:
 	int getTelescopeCount() const { return telescopes.size(); }
 	int getLensCount() const { return lenses.size(); }
 	int getCCDCount() const { return ccds.size(); }
+	QVariantMap getOhosInstrumentState() const;
 
 	//! Toggles the sensor frame overlay.
 	void toggleCCD(bool show);

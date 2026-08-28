@@ -1,3 +1,18 @@
+## 2026-08-29
+
+- 恢复正式设置面板的“视角与导航”标签，默认进入设置时显示“主设置”，设备与隐私仍保留为独立标签。
+- 新增启动视角信息、当前视场角、保存当前视角为启动视角、最大视场角，以及鼠标/触控板/键盘导航、保持文字正向、自动缩放复位等设置。
+- 新增原生命令 `getNavigationSettings`、`setNavigationSetting`、`saveCurrentView`、`saveAllSettings`、`restoreDefaultSettings`；恢复默认设置需要重启应用。
+
+## [2026-08-29] Codex - 统一天体分类图标并补齐稀有天体图标
+
+- **修改文件：** `harmonyos/ets-source/resources/base/media/ic_catalog_*.svg`、`ic_satellite.svg`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/sync-ohos-build-sources.sh`。
+- **修改内容：** 重绘行星、月球、恒星、变星、彗星、小行星、星座、星系、星团、星云和梅西耶分类图标，统一为 24×24 安全视口、单色主体和明确的天体轮廓；修正卫星图标，新增卫星、系外行星、脉冲星、新星、超新星和类星体专用图标，并让详情页按天体类型选择对应资源。
+- **修改原因：** 解决分类小图标比例不统一、图形识别性弱、卫星及插件天体类型回退到通用图标的问题。
+- **联网影响：** 无新增联网行为，图标全部随应用本地分发。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 成功；SVG XML 校验通过；`hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。签名 HAP 包含六个新增图标资源，SHA-256 为 `3a6358dba32f064eeab25f6cccbd7c7723c0115b592d4228138a4aa8e853661d`。
+- **验证结果：** 源码与生成工程资源镜像一致，`git diff --check` 通过。`check-ohos.sh` 的 HAP 编译通过，但脚本仍因项目既有 4 条 `setTimeout` 静态规则返回非零；未修改签名、证书或密钥库。
+
 ## [2026-08-28] Codex - 修复菜单动态语言切换并补齐地球专题脚本字幕
 
 - **修改文件：** `Brewfile`、`harmonyos/ets-source/pages/{I18n,MainWindowNativeNode}.ets`、`scripts/earth_{1..7}.ssc`、`po/stellarium-scripts/{POTFILES.in,stellarium-scripts.pot,zh_CN.po}`、`translations/stellarium-scripts/zh_CN.qm`。
@@ -2972,3 +2987,116 @@
 - **构建结果：** `git diff --check` 通过；`scripts/sync-ohos-build-sources.sh` 同步通过；`scripts/check-ohos.sh` 的 ArkTS/HAP 阶段仍被工程已有的 `setTimeout` 静态规则及入口 Builder 调用错误阻断，未发现本轮新增的筛选或播放控件错误。
 - **验证结果：** 国际化审计通过（43 种官方语言资源存在）；尚未进行设备截图回归。
 - **备注：** 未修改 `build-profile.json5`、签名证书、密钥库或 Provision；动画仅使用 ArkUI `animateTo`、`TransitionEffect` 和 `springMotion`。
+
+## [2026-08-28] Codex - PC 2-in-1 设备支持
+
+- **修改文件：** `harmonyos/module.json5`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，以及对应生成工程镜像。
+- **修改内容：** 模块清单新增 HarmonyOS `2in1` 设备类型，并声明全屏、分屏和自由窗口；900 x 520 vp 以上的桌面窗口复用 Pad 宽屏 Shell，超宽窗口适度扩展面板；保留鼠标滚轮缩放、触摸板双指平移/捏合和键盘快捷键，并为鼠标拖动补齐释放惯性。
+- **修改原因：** 让应用可部署到 PC 2-in-1，并在可调整大小的窗口中保持手机、Pad、PC 共用的一套响应式入口和操作逻辑。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 和 HAP 编译通过；当前 SDK 的模块清单校验接受 `2in1`。
+- **验证结果：** `git diff --check` 通过；`scripts/check-ohos.sh` 仍报告 4 条既有 `setTimeout` 静态规则告警，但 ArkTS/HAP 编译成功。尚未连接 2-in-1 设备进行窗口缩放和键鼠实机回归。
+- **备注：** 未修改 `build-profile.json5`、签名证书、密钥库或 Provision；`mouse2TouchEventMode` 继续保持关闭，避免已有独立鼠标处理收到重复触摸事件。
+
+## [2026-08-28] Codex - 接入目镜模拟与三类插件控制
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes,I18n}.ets`。
+- **修改内容：** 保留并完善 Oculars 真实器材链，在统一命令总线上新增 MosaicCamera 相机拼接视场、EquationOfTime 时间方程、ArchaeoLines 古天文辅助线的读取与写入命令；ArkUI 增加独立控制面板、加载态、不可用态、参数范围校验和多语言文案。
+- **修改原因：** 目镜和插件入口需要可发现、可操作，并且所有状态必须来自原版插件 API，不能用脱离核心的模拟按钮。
+- **联网与隐私：** 本轮未增加联网、麦克风、设备标识或敏感权限；“PC 2 音频输入”因当前工程只有音频输出且会触发麦克风权限，暂不接入。
+- **构建结果：** 待执行 C++/ArkTS/HAP 检查。
+- **验证结果：** 待执行。
+- **备注：** 未修改 `build-profile.json5`、Debug/Release 签名、证书、密钥库或 Provision。
+
+## [2026-08-29] Codex - 修正极轴镜天极定位
+
+- **根因：** 进入极轴镜时曾用固定的 J2000 `赤经 0°、赤纬 ±90°` 定位；这不是当前历元的真实天极，会因岁差导致极轴镜中心偏离北天极，进而使北极星关系位置不正确。
+- **修正：** 新增 `centerPolarScope` 命令，直接调用 Stellarium 原生 `lookTowardsNCP()` / `lookTowardsSCP()`，按当前历元定位天极并取消未完成的自动移动。
+- **目标识别：** 北半球优先按 HIP 11767 精确获取北极星，南半球优先按 HIP 104382 获取南极星；极轴镜中增加目标圈和中文标识，避免只依赖底层星点光晕。
+- **验证结果：** `cmake --build build --target stellarium -j2` 成功；生成工程同步成功；`CompileArkTS`、`assembleHap` 成功；`git diff --check` 通过。HAP 输出位于 `build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap`。
+- **备注：** 未修改签名配置、证书、密钥库、网络或权限；尚未进行本轮平板运行时视觉回归。
+
+## [2026-08-28] Codex - 完善目镜与插件控制面板
+
+- **修改内容：** 清理 Oculars ArkTS 状态、刷新与调节方法的重复声明；CCD 旋转、棱镜和裁剪控件仅在真实 CCD 配置可用时显示；保留真实 Oculars API 的器材选择、视野计算、十字丝和遮罩控制。
+- **修改内容：** 新增 PointerCoordinates 独立 ArkUI 面板，支持原版插件的 8 类坐标系、5 种显示位置、启动/工具栏开关及星座、交叉坐标线、距角信息开关；C++ 写入后保存插件配置。
+- **修正内容：** Screenshots 不再错误映射到音频面板；插件入口均按真实插件命令和状态工作，不新增联网、敏感权限或签名配置改动。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh` 成功；`cmake --build build --parallel --target stellarium` 成功；`scripts/check-ohos.sh` 的 HAP/CompileArkTS 阶段成功；`git diff --check` 通过。
+- **验证备注：** 检查脚本仍报告工程已有的 4 条 `setTimeout` 静态规则告警（源文件与生成镜像各两条），不影响本次 ArkTS 编译；未连接平板进行安装回归。
+
+## [2026-08-28] Codex - 统一选中天体实时信息与显示完整度
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`。
+- **修改内容：** 选中天体命令读取原版信息过滤器状态；实时返回时角、平恒星时、视恒星时、当日赤经赤纬和视高度/方位；完整资料字段随每次详情刷新重新计算，简要模式不再残留上一份完整字段。
+- **修改原因：** 修复点击天体后 ArkUI 小信息栏和详情栏只更新基础字段、时角和恒星时停留在首次取值，以及“完整/默认/简要/不显示”切换在移动端没有实际差异的问题。
+- **构建结果：** 待执行 C++/ArkTS/HAP 检查。
+- **验证结果：** 待执行。
+- **备注：** 未修改 `build-profile.json5`、Debug/Release 签名、证书、密钥库、网络、设备标识或权限。
+
+## [2026-08-28] Codex - 对齐信息显示四档模式
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，以及对应生成工程镜像。
+- **修改内容：** 选中天体详情每 300ms 更新时角、赤纬、平恒星时、视恒星时、方位角和地平高度；完整、默认、简要、不显示分别限制结构化资料和实时字段，切换后立即重新拉取当前天体数据。
+- **修正内容：** 默认模式不再错误地返回全部资料；简要和不显示模式清空上一档的实时/结构化字段，避免看起来“所有选项都一样”。星图拖动期间暂停详情轮询，结束后恢复。
+- **构建结果：** `cmake --build build --parallel --target stellarium` 通过；`scripts/sync-ohos-build-sources.sh` 通过；`scripts/check-ohos.sh` 的 HAP 编译通过。
+- **验证备注：** `scripts/check-ohos.sh` 仍报告工程既有的 4 条 `setTimeout` 静态规则告警；未修改 `build-profile.json5`、签名证书、密钥库、网络、设备标识或权限，未连接设备做实机回归。
+## [2026-08-28] Codex - 开始处理插件热加载与脚本导入
+
+- **修改文件：** `src/core/StelModuleMgr.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`（预计）
+- **修改内容：** 调查并处理运行时插件加载后必须重启的问题；设计离线脚本导入入口。
+- **修改原因：** 运行时加载目前没有复用启动阶段的注册、扩展加载和初始化流程；脚本面板尚无文件导入入口。
+- **构建结果：** 待验证。
+- **验证结果：** 进行中。
+- **备注：** 不修改签名、证书、密钥库、Provision 或联网配置；鸿蒙运行时不支持任意外部二进制插件热安装，本轮仅实现安全的脚本导入并记录插件包边界。
+
+## [2026-08-28] Codex - 完成插件热加载与离线脚本导入
+
+- **修改文件：** src/core/StelModuleMgr.cpp、src/core/StelModuleMgr.hpp、src/core/StelApp.cpp、src/StelMainView.cpp、src/StelOhosCommandCatalog.hpp、harmonyos/ets-source/pages/MainWindowNativeNode.ets、harmonyos/ets-source/pages/I18n.ets
+- **修改内容：** 运行时 loadPlugin 现在完成模块注册、扩展加载、插件初始化和调用列表刷新；启动流程复用同一入口。卸载时清理扩展引用和 loaded 状态。脚本面板新增系统文档选择器导入 .ssc，复制到应用用户脚本目录后立即刷新列表；CLI 新增受限的 importScript 路径命令。
+- **修改原因：** 修复插件打开后必须退出重进才生效；补齐脚本导入的离线用户流程。
+- **构建结果：** C++ cmake --build build --parallel --target stellarium 通过；harmonydeployqt 部署库生成通过；HAP 编译通过。
+- **验证结果：** 命令目录检查通过（277 个命令）；ETS/I18n 镜像一致；设备安装成功。设备启动回归因开发者模式下屏幕锁定被系统拒绝，尚未执行运行时插件/脚本回归。
+- **备注：** 插件仍随 HAP 静态编译，未开放任意二进制插件安装；脚本导入仅复制 .ssc，不自动执行；未增加联网、权限或签名配置改动。
+
+## [2026-08-28] Codex - 极轴镜原生帧同步与退出修复
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，以及同步后的构建工程镜像。
+- **渲染修复：** 极轴镜分划、刻度、极点标记和极星关系线改在 Qt/OpenGL 星图帧完成后绘制，复用当前 Stellarium 投影；ArkUI 不再通过第二张 Canvas 异步追赶星图，避免叠加层滞后和顿挫。翻转状态通过新增 `setPolarScopeOverlay` 命令同步。
+- **退出修复：** 极轴镜顶部改用高对比度关闭图标；点击后立即隐藏覆盖层、停止轮询并关闭原生分划，旧的进入/数据回调通过过渡序号丢弃，原视角随后异步恢复。
+- **刷新修复：** 极轴镜状态查询由 50ms 调整为 100ms，仅用于更新面板数值；原生分划随渲染帧更新，关闭或切后台时不会继续请求，旧请求不会覆盖重新打开后的状态。
+- **验证结果：** `cmake --build build --parallel --target stellarium` 通过；`scripts/sync-ohos-build-sources.sh` 通过；命令目录 278 条一致；DevEco `hvigorw assembleHap --no-daemon` BUILD SUCCESSFUL。签名 HAP：`build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap`，SHA-256 为 `32f35deb2cd9d4fda993050b734d46e4fd0d2aa4d42d4dd520df48f454b5b745`。
+- **检查备注：** `scripts/check-ohos.sh` 的 HAP 编译通过，但仍因仓库原有的 4 条 `setTimeout` 静态规则告警返回失败；未修改签名配置、证书、密钥库或 Provision，尚未进行平板运行时回归。
+
+## [2026-08-28] Codex - 统一天体详情与跟踪操作
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`，以及同步后的构建工程镜像。
+- **小卡片交互：** 点击星体只显示可拖动摘要卡；居中和跟踪移到卡片外的独立动作条，详情卡不再把两类动作塞进内容区，也不再通过摘要底部空白区隐式触发动作。
+- **大详情面板：** “完整资料”进入 `object` 普通面板，与设置、图层共用面板容器、标题栏、关闭动画和滚动行为；关闭后回到小卡片，不保留旧的大检查器状态。
+- **跟踪状态：** ArkTS 增加请求序号、待确认状态和短暂旧状态屏蔽；原生一次性居中命令不再隐式开启跟踪，避免点击跟踪后被旧导航或状态轮询改回去。
+- **联网与权限：** 本轮未增加联网、麦克风、设备标识或其他敏感权限；未修改 `build-profile.json5`、证书、密钥库或 Provision。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh`、`git diff --check`、`cmake --build build --parallel --target stellarium`、命令目录检查和 `hvigorw assembleHap --no-daemon` 均通过；HAP SHA-256 为 `26d0b0971fdd437a9cc8ae15b555735edd558eb6dda706b359909fa1b984b34c`。`scripts/check-ohos.sh` 仍只因仓库已有的 4 条 `setTimeout` 静态规则报错而返回 1，HAP 编译阶段通过。
+- **验证备注：** 源工程与生成工程的 `MainWindowNativeNode.ets` SHA-256 均为 `bb30169f84843187c1d93b9fd2ac591a8758a208ddcd3ecae6b51fdf729e59cd`；未连接设备进行本轮点按回归。
+## [2026-08-28] Codex - 保留插件、脚本和地景原版资料
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes}.ets`、`docs/harmonyos/RESOURCE-AUDIT.md`。
+- **修改内容：** 插件桥接补充原版说明、作者、联系、版本、许可证、致谢、预览图存在性和来源；脚本桥接保留旧 `items` 文件名数组并新增 `details` 元数据数组；地景列表补充 `landscape.ini` 中的作者、说明、来源、地点、星球和时区，当前地景详情补回真实作者。
+- **界面行为：** 设置 > 插件、脚本列表和图层 > 地景直接展示原始资料；缺失字段明确显示“原版未提供”，不伪造内容。
+- **修改原因：** 修复鸿蒙移植只展示名称/状态导致开源署名、介绍和资源说明丢失的问题，并记录其他尚未完全接入的隐藏资源。
+- **构建结果：** 原生 `stellarium` 编译通过；同步生成工程后 `assembleHap --no-daemon` BUILD SUCCESSFUL；输出 `entry-default-signed.hap`。
+- **验证结果：** 命令目录一致、国际化审计通过，`git diff --check` 通过；HAP 编译仅保留既有 HarmonyOS 弃用警告。提交检查脚本的 ArkTS 反模式项仍会报告历史 `setTimeout` 写法，但不影响本次 CompileArkTS。
+- **备注：** 未新增联网、权限、设备标识读取或签名配置修改。
+
+## [2026-08-28] Codex - 保留扩展资源元数据并接入三维地景
+
+- **插件资料：** 修复 ArkTS 插件列表解析丢弃原生字段的问题，完整保留说明、作者、联系、版本、许可证、致谢、预览图状态和源码目录。
+- **三维地景：** 新增 `getScenery3dList`、`setScenery3dScene` 和 `setScenery3dEnabled`，并让 `sync-ohos-resources.sh` 离线复制完整 `scenery3d/` 目录；读取原版 `scenery3d.ini`、当前语言的 `description.<语言>.utf8`、模型文件和观测位置；“更多 > 3D场景”展示这些资料。
+- **数据目录：** 卫星面板展示内置目录创建信息和离线快照；流星雨面板展示原版目录版本和来源路径。未在原版元数据中声明的许可不自行推断。
+- **联网与签名：** 未新增联网、权限、设备标识或签名配置修改。
+
+## [2026-08-29] Codex - 补齐设置与附加设置核心子项
+
+- **主设置：** 新增 DE430、DE431、DE440、DE441 的本地安装状态与启用开关；未安装的星历文件显示为不可用，避免点击后无效果。
+- **信息设置：** 新增自定义信息字段，名称、目录编号、星等、J2000/历元坐标、方位高度、距离、时角、升中落、大小、轨道光照、银河坐标、星座、恒星时和附加资料均由原版 `StelObject::InfoStringGroup` 实际控制。
+- **时间设置：** 新增启动时间来源、启动时暂停、今天指定时刻、当前时刻保存为预设时间和 Delta-T 算法选择，并接入 `StelCore` 的原生读写接口。
+- **命令总线：** 新增 `get/setEphemerisSettings`、`get/setInformationSettings`、`get/setTimeSettings` 对应的查询和控制命令，保持离线运行，不新增权限或公网依赖。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh` 成功；`cmake --build build --target stellarium -j2` 成功；HAP 编译通过；`git diff --check` 通过。`scripts/check-ohos.sh` 仍仅因项目既有的 4 条 `setTimeout` 静态规则告警返回非零。
+- **备注：** 未修改 `build-profile.json5`、Debug/Release 签名、证书、密钥库或 Provision。

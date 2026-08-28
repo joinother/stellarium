@@ -34,6 +34,14 @@ node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyIm
 
 `--payload` 沿用 `StellariumOhos_command` 的原有字符串格式。例如 `selectAt` 使用 `x|y|skyW|skyH`，`setActionChecked` 使用 `actionId|1`。CLI 会自动处理 `aa --ps` 对负号开头字符串的限制，并对 payload 做 shell 转义，保证竖线分隔参数不会被 `hdc` 远端 shell 当成管道。命令名不在 CLI 中硬编码，桥接层已支持的命令均可直接调用；可执行 `--help` 查看工具参数。
 
+导入脚本前，先把文件发送到设备可读路径，再调用导入命令：
+
+```bash
+hdc -t <设备ID> file send ./example.ssc /data/local/tmp/example.ssc
+node scripts/stellarium-cli.mjs --device <设备ID> --command importScript \
+  --payload /data/local/tmp/example.ssc --json
+```
+
 ## 机器可读目录
 
 命令桥提供统一目录、单命令 schema 和当前状态查询：
@@ -124,6 +132,17 @@ node scripts/stellarium-cli.mjs --command setJulianDate --payload 'mjd|51544.500
 `stellarium-cli.mjs` 是开发机和自动化使用的本地 CLI；应用不监听 HTTP 端口、不开放公网控制，也不把 `hdc` 当作普通用户权限。应用抽屉中已增加“命令”入口，直接读取同一目录并执行同一命令桥，支持筛选、payload、JSON 结果和高风险命令确认。这样普通用户、AI 和 ArkUI 点击操作最终走同一套命令实现，不会产生三套行为。
 
 脚本和插件也通过同一命令总线调用：脚本使用 `playScript`/`stopScript`/`setScriptRate`；插件清单使用 `getPluginList`，当前进程载入使用 `loadPlugin`/`unloadPlugin`，随应用启动载入使用 `setPluginLoadAtStartup`（例如 `Satellites|1`），各插件功能则使用自己的命令。三类状态不得混用。未备案版本保持离线，网络更新和外部设备命令必须继续受目录权限标记约束。
+
+`getPluginList` 的每个条目还返回原版 `StelPluginInfo` 的 `description`、`authors`、`contact`、`version`、`license`、`acknowledgements`、`hasPreviewImage` 和 `source`。`getLandscapeList` 的每个条目返回 `landscape.ini` 中的 `author`、`description`、`source`、地点/星球/时区字段；`getLandscapeInfo` 返回当前地景的完整说明。`getScriptList` 的 `items` 仍是旧的 `.ssc` 文件名数组，同时新增 `details` 数组，逐项返回 `Name`、`Author`、`License`、`Version`、`Description`、`Shortcut` 和来源路径，旧 CLI 无需改动即可继续使用。
+
+导入脚本使用系统文档选择器，应用只接受 `.ssc` 文件并复制到应用沙箱中的用户脚本目录，完成后立即刷新脚本列表。CLI 或自动化流程也可以调用：
+
+```bash
+node scripts/stellarium-cli.mjs --device <设备ID> --command importScript \
+  --payload /data/local/tmp/example.ssc --json
+```
+
+`importScript` 只复制脚本，不执行脚本；同名文件和超过 2 MiB 的文件会被拒绝。鸿蒙版本的插件随 HAP 静态编译，`loadPlugin` 只负责当前进程内即时初始化已随包发布的插件，不支持从文件管理器安装任意 `.so` 插件。这样可以保持签名、权限和离线边界可审计。
 
 ## 官方依据
 

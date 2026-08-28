@@ -243,6 +243,134 @@ QSettings* Oculars::getSettings()
 	return settings;
 }
 
+QVariantMap Oculars::getOhosInstrumentState() const
+{
+	QVariantMap state;
+	QVariantList ocularItems;
+	QVariantList telescopeItems;
+	QVariantList lensItems;
+	QVariantList ccdItems;
+	bool hasBinocular = false;
+
+	for (int index = 0; index < oculars.size(); ++index)
+	{
+		const Ocular* ocular = oculars.at(index);
+		QVariantMap item;
+		item["index"] = index;
+		item["name"] = ocular->name();
+		item["apparentFov"] = ocular->apparentFOV();
+		item["focalLength"] = ocular->effectiveFocalLength();
+		item["fieldStop"] = ocular->fieldStop();
+		item["binocular"] = ocular->isBinoculars();
+		item["permanentCrosshair"] = ocular->hasPermanentCrosshair();
+		hasBinocular = hasBinocular || ocular->isBinoculars();
+		ocularItems.append(item);
+	}
+
+	for (int index = 0; index < telescopes.size(); ++index)
+	{
+		const Telescope* telescope = telescopes.at(index);
+		QVariantMap item;
+		item["index"] = index;
+		item["name"] = telescope->name();
+		item["diameter"] = telescope->diameter();
+		item["focalLength"] = telescope->focalLength();
+		item["focalRatio"] = telescope->diameter() > 0.0 ? telescope->focalLength() / telescope->diameter() : 0.0;
+		item["horizontalFlipped"] = telescope->isHFlipped();
+		item["verticalFlipped"] = telescope->isVFlipped();
+		item["equatorial"] = telescope->isEquatorial();
+		telescopeItems.append(item);
+	}
+
+	for (int index = 0; index < lenses.size(); ++index)
+	{
+		const Lens* lens = lenses.at(index);
+		QVariantMap item;
+		item["index"] = index;
+		item["name"] = lens->getName();
+		item["multiplier"] = lens->getMultipler();
+		lensItems.append(item);
+	}
+
+	for (int index = 0; index < ccds.size(); ++index)
+	{
+		const CCD* ccd = ccds.at(index);
+		QVariantMap item;
+		item["index"] = index;
+		item["name"] = ccd->name();
+		item["resolutionX"] = ccd->resolutionX();
+		item["resolutionY"] = ccd->resolutionY();
+		item["chipWidth"] = ccd->chipWidth();
+		item["chipHeight"] = ccd->chipHeight();
+		item["binningX"] = ccd->binningX();
+		item["binningY"] = ccd->binningY();
+		item["rotation"] = ccd->chipRotAngle();
+		ccdItems.append(item);
+	}
+
+	state["ocularItems"] = ocularItems;
+	state["telescopeItems"] = telescopeItems;
+	state["lensItems"] = lensItems;
+	state["ccdItems"] = ccdItems;
+	state["ocularReady"] = !oculars.isEmpty() && (!telescopes.isEmpty() || hasBinocular);
+	state["ccdReady"] = !ccds.isEmpty() && !telescopes.isEmpty();
+	state["requireSelection"] = getFlagRequireSelection();
+	state["autoLimitMagnitude"] = getFlagAutoLimitMagnitude();
+	state["hideGridsLines"] = getFlagHideGridsLines();
+	state["autoScaleTelrad"] = getFlagScalingFOVForTelrad();
+	state["autoScaleCcd"] = getFlagScalingFOVForCCD();
+	state["semiTransparentMask"] = getFlagUseSemiTransparency();
+	state["maskOpacity"] = getTransparencyMask();
+	state["showResolutionCriteria"] = getFlagShowResolutionCriteria();
+	state["autoSetMountForCcd"] = getFlagAutosetMountForCCD();
+	state["horizontalCoordinates"] = getFlagHorizontalCoordinates();
+	state["sensorCropOverlay"] = getFlagShowCcdCropOverlay();
+	state["sensorPixelGrid"] = getFlagShowCcdCropOverlayPixelGrid();
+	state["focuserOverlay"] = getFlagShowFocuserOverlay();
+	state["scaleImageCircle"] = getFlagScaleImageCircle();
+	state["maxExposureTimeForCcd"] = getFlagMaxExposureTimeForCCD();
+	state["showContour"] = getFlagShowContour();
+	state["showCardinals"] = getFlagShowCardinals();
+	state["alignCrosshair"] = getFlagAlignCrosshair();
+	state["smallFocuserOverlay"] = getFlagUseSmallFocuserOverlay();
+	state["mediumFocuserOverlay"] = getFlagUseMediumFocuserOverlay();
+	state["largeFocuserOverlay"] = getFlagUseLargeFocuserOverlay();
+	state["dmsDegrees"] = getFlagDMSDegrees();
+	state["initFov"] = getFlagInitFovUsage();
+	state["initDirection"] = getFlagInitDirectionUsage();
+	state["oagLimits"] = getFlagShowOAGLimits();
+	state["ccdCropHSize"] = getCcdCropOverlayHSize();
+	state["ccdCropVSize"] = getCcdCropOverlayVSize();
+	state["ccdPrismRotation"] = getSelectedCCDPrismPositionAngle();
+	state["guiPanelEnabled"] = getFlagGuiPanelEnabled();
+
+	Ocular* ocular = selectedOcularIndex >= 0 && selectedOcularIndex < oculars.size() ? oculars.at(selectedOcularIndex) : Q_NULLPTR;
+	Telescope* telescope = selectedTelescopeIndex >= 0 && selectedTelescopeIndex < telescopes.size() ? telescopes.at(selectedTelescopeIndex) : Q_NULLPTR;
+	Lens* lens = selectedLensIndex >= 0 && selectedLensIndex < lenses.size() ? lenses.at(selectedLensIndex) : Q_NULLPTR;
+	CCD* ccd = selectedCCDIndex >= 0 && selectedCCDIndex < ccds.size() ? ccds.at(selectedCCDIndex) : Q_NULLPTR;
+
+	if (ocular && (ocular->isBinoculars() || telescope))
+	{
+		const double magnification = ocular->magnification(telescope, lens);
+		const double aperture = ocular->isBinoculars() ? ocular->fieldStop() : telescope->diameter();
+		state["magnification"] = magnification;
+		state["actualFov"] = ocular->actualFOV(telescope, lens);
+		state["exitPupil"] = magnification > 0.0 ? aperture / magnification : 0.0;
+		state["limitMagnitude"] = computeLimitMagnitude(ocular, telescope);
+	}
+
+	if (ccd && telescope)
+	{
+		state["ccdFovX"] = ccd->getActualFOVx(telescope, lens);
+		state["ccdFovY"] = ccd->getActualFOVy(telescope, lens);
+		state["ccdPixelScaleX"] = ccd->getCentralAngularResolutionX(telescope, lens) * 3600.0;
+		state["ccdPixelScaleY"] = ccd->getCentralAngularResolutionY(telescope, lens) * 3600.0;
+		state["ccdRotation"] = ccd->chipRotAngle();
+	}
+
+	return state;
+}
+
 bool Oculars::configureGui(bool show)
 {
 #ifdef NO_GUI

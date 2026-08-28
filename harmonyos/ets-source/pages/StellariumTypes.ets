@@ -59,6 +59,28 @@ export interface TabItem {
 export interface LandscapeItem {
   id: string
   name: string
+  author?: string
+  description?: string
+  source?: string
+  hasDescription?: boolean
+  hasLocation?: boolean
+  planet?: string
+  latitude?: string
+  longitude?: string
+  altitude?: number
+  timezone?: string
+}
+
+export interface ScriptMetadata {
+  file: string
+  name?: string
+  author?: string
+  license?: string
+  version?: string
+  description?: string
+  shortcut?: string
+  source?: string
+  hasMetadata?: boolean
 }
 
 export interface PlanetPosition {
@@ -209,6 +231,33 @@ export interface PluginItem {
   name: string
   loaded: boolean
   loadAtStartup: boolean
+  description?: string
+  authors?: string
+  contact?: string
+  version?: string
+  license?: string
+  acknowledgements?: string
+  hasPreviewImage?: boolean
+  source?: string
+}
+
+export interface Scenery3dItem {
+  id: string
+  name: string
+  author?: string
+  description?: string
+  copyright?: string
+  source?: string
+  descriptionSource?: string
+  landscape?: string
+  modelScenery?: string
+  modelGround?: string
+  planet?: string
+  latitude?: string
+  longitude?: string
+  altitude?: number
+  timezone?: string
+  current?: boolean
 }
 
 export interface ShellAction {
@@ -258,6 +307,32 @@ export interface StellariumBridgeResponse {
   year?: number
   timeText?: string
   fov?: number
+  mouseNavigation?: boolean
+  mouseZooming?: boolean
+  moveKeys?: boolean
+  zoomKeys?: boolean
+  gravityLabels?: boolean
+  autoZoomResets?: boolean
+  currentFov?: number
+  startupFov?: number
+  startupAzimuth?: number
+  startupAltitude?: number
+  maxFov?: number
+  de430Available?: boolean
+  de431Available?: boolean
+  de440Available?: boolean
+  de441Available?: boolean
+  de430Active?: boolean
+  de431Active?: boolean
+  de440Active?: boolean
+  de441Active?: boolean
+  customInfoMask?: number
+  startupTimeMode?: string
+  startupTimeStop?: boolean
+  todayTime?: string
+  presetSkyTime?: number
+  deltaTAlgorithm?: string
+  deltaTDescription?: string
   j2000Ra?: string
   j2000Dec?: string
   ofDateRa?: string
@@ -275,6 +350,36 @@ export interface StellariumBridgeResponse {
   galacticLongitudeDegrees?: number
   galacticLatitudeDegrees?: number
   enabled?: boolean
+  minutes?: number
+  mosaicCamera?: Object
+  msFormat?: boolean
+  inverted?: boolean
+  enableAtStartup?: boolean
+  lineWidth?: number
+  equinox?: boolean
+  solstices?: boolean
+  crossquarters?: boolean
+  majorStandstills?: boolean
+  minorStandstills?: boolean
+  polarCircles?: boolean
+  zenithPassage?: boolean
+  nadirPassage?: boolean
+  selectedObject?: boolean
+  selectedObjectAzimuth?: boolean
+  selectedObjectHourAngle?: boolean
+  currentSun?: boolean
+  currentMoon?: boolean
+  currentPlanet?: number
+  setKey?: string
+  setDescription?: string
+  setKeys?: string[]
+  starCount?: number
+  highlightWhenVisible?: boolean
+  limitInfo?: boolean
+  upperLimb?: boolean
+  tabulatedDisplay?: boolean
+  extraDecimals?: boolean
+  useUtc?: boolean
   checked?: boolean
   hasStart?: boolean
   hasEnd?: boolean
@@ -329,6 +434,11 @@ export interface StellariumBridgeResponse {
   target?: string
   ra?: string
   dec?: string
+  hourAngle?: string
+  meanSiderealTime?: string
+  apparentSiderealTime?: string
+  infoMode?: string
+  selectedInfoMode?: string
   magnitude?: number
   apparentMagnitude?: number
   airmass?: number
@@ -522,11 +632,11 @@ export interface StellariumBridgeResponse {
   actionShow_Meteors?: boolean
   meteors?: boolean
   dsoLabels?: boolean
-  autoZoomResets?: boolean
   actionShow_Night_Mode?: boolean
   actionHorizontal_Flip?: boolean
   actionVertical_Flip?: boolean
   items?: string[] | Object[]
+  details?: Object[]
   count?: number
   hasMore?: boolean
   offset?: number

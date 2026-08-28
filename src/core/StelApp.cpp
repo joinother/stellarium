@@ -796,13 +796,7 @@ void StelApp::initPlugIns()
 			continue;
 		SplashScreen::showMessage(QString("%1 \"%2\"...").arg(q_("Loading plugin"), q_(i.info.displayedName)));
 		StelModule* m = moduleMgr->loadPlugin(i.info.id);
-		if (m!=nullptr)
-		{
-			moduleMgr->registerModule(m, true);
-			//load extensions after the module is registered
-			moduleMgr->loadExtensions(i.info.id);
-			m->init();
-		}
+		Q_UNUSED(m);
 	}
 	SplashScreen::clearMessage();
 }

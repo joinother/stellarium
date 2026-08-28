@@ -56,10 +56,10 @@ public:
 	//! @param alsoDelete if true also delete the StelModule instance, otherwise it has to be deleted by external code.
 	void unloadModule(const QString& moduleID, bool alsoDelete=true);
 
-	//! Load dynamically a module
+	//! Load and initialize a module, including its extensions and call lists.
 	//! @param moduleID the name of the module = name of the dynamic library file without extension
 	//! (e.g "mymodule" for mymodule.so or mymodule.dll)
-	//! @return the loaded module or Q_NULLPTR in case of error. The returned Stelmodule still needs to be initialized
+	//! @return the initialized module or Q_NULLPTR in case of error.
 	StelModule* loadPlugin(const QString& moduleID);
 
 	QObjectList loadExtensions(const QString& moduleID);
@@ -127,6 +127,9 @@ private:
 
 	//! All currently known extensions
 	QObjectList extensions;
+
+	//! Extensions grouped by plugin so runtime unload can remove stale objects.
+	QMap<QString, QObjectList> pluginExtensions;
 
 	//! The list of all module in the correct order for each action
 	QMap<StelModule::StelModuleActionName, QList<StelModule*> > callOrders;

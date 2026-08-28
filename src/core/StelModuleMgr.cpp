@@ -83,12 +83,15 @@ void StelModuleMgr::registerModule(StelModule* m, bool fgenerateCallingLists)
 *************************************************************************/
 void StelModuleMgr::unloadModule(const QString& moduleID, bool alsoDelete)
 {
-	StelModule* m = getModule(moduleID);
+	StelModule* m = getModule(moduleID, true);
 	if (!m)
 	{
 		qWarning() << "Module" << moduleID << "is not loaded.";
 		return;
 	}
+	const QObjectList pluginExts = pluginExtensions.take(moduleID);
+	for (QObject* extension : pluginExts)
+		extensions.removeOne(extension);
 	modules.remove(moduleID);
 	m->setParent(Q_NULLPTR);
 	callingListsToRegenerate = true;
@@ -97,6 +100,9 @@ void StelModuleMgr::unloadModule(const QString& moduleID, bool alsoDelete)
 		m->deinit();
 		delete m;
 	}
+	if (pluginDescriptorList.contains(moduleID))
+		pluginDescriptorList[moduleID].loaded = false;
+	update();
 }
 
 /*************************************************************************
@@ -119,15 +125,43 @@ StelModule* StelModuleMgr::getModule(const QString& moduleID, bool noWarning) co
 *************************************************************************/
 StelModule* StelModuleMgr::loadPlugin(const QString& moduleID)
 {
+	StelModule* existing = getModule(moduleID, true);
+	if (existing)
+	{
+		pluginDescriptorList[moduleID].loaded = true;
+		return existing;
+	}
+
 	for (const auto& desc : getPluginsList())
 	{
 		if (desc.info.id==moduleID)
 		{
 			Q_ASSERT(desc.pluginInterface);
-			StelModule* sMod = desc.pluginInterface->getStelModule();
-			qInfo() << "Loaded plugin" << moduleID;
-			pluginDescriptorList[moduleID].loaded=true;
-			return sMod;
+			StelModule* module = desc.pluginInterface->getStelModule();
+			if (!module)
+			{
+				qWarning() << "Plugin" << moduleID << "returned a null module";
+				return Q_NULLPTR;
+			}
+
+			StelModule* duplicate = getModule(module->objectName(), true);
+			if (duplicate)
+			{
+				delete module;
+				pluginDescriptorList[moduleID].loaded = true;
+				return duplicate;
+			}
+
+			registerModule(module, false);
+			const QObjectList exts = loadExtensions(moduleID);
+			pluginExtensions[moduleID] = exts;
+			module->init();
+			callingListsToRegenerate = true;
+			update();
+			pluginDescriptorList[moduleID].loaded = true;
+			qInfo() << "Loaded and initialized plugin" << moduleID
+			        << "extensions=" << exts.size();
+			return module;
 		}
 	}
 	qWarning() << "Unable to find plugin called" << moduleID;

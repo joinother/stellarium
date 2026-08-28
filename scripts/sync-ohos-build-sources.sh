@@ -12,8 +12,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SOURCES=(
+  # DevEco owns build-profile.json5 and its local signing credentials; never sync it here.
   "harmonyos/AppScope/app.json5:build/libstellarium-harmonyos/AppScope/app.json5"
-  "harmonyos/build-profile.json5:build/libstellarium-harmonyos/build-profile.json5"
   "harmonyos/AppScope/resources/base/element/string.json:build/libstellarium-harmonyos/AppScope/resources/base/element/string.json"
   "harmonyos/AppScope/resources/zh_CN/element/string.json:build/libstellarium-harmonyos/AppScope/resources/zh_CN/element/string.json"
   "harmonyos/AppScope/resources/base/media/app_icon.png:build/libstellarium-harmonyos/AppScope/resources/base/media/app_icon.png"
@@ -49,6 +49,12 @@ SOURCES=(
   "harmonyos/ets-source/resources/base/media/ic_catalog_cluster.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_cluster.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_nebula.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_nebula.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_messier.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_messier.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_satellite.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_satellite.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_exoplanet.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_exoplanet.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_pulsar.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_pulsar.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_nova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_nova.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_supernova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_supernova.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_quasar.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_quasar.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
   "harmonyos/ets-source/resources/base/media/ic_oculars.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_oculars.svg"
   "harmonyos/ets-source/resources/base/media/ic_polar_scope.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_polar_scope.svg"
