@@ -214,6 +214,16 @@
 
 ---
 
+## [2026-08-30] Codex - Sky Guide 功能、视觉与离线路线预研
+
+- **新增文件：** `docs/harmonyos/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md`、`data/ohos/sky-guide-feature-contract.json`。
+- **调研内容：** 只读核对 Fifth Star Labs 官方官网、Team、News 和 Support 用户指南，整理搜索引导、连续时间、滤镜波段、3D 星座艺术、AR/罗盘、卫星过境与提醒、彗星/流星/天文事件、星声、Widget/桌面卡片、视觉语言和动画模式。
+- **规划内容：** 区分官方已确认、合理推断和待确认能力；预留 `SkyGuidePresentationSession`、`SpectralFilterSession`、本地 `ExoplanetCatalog`、卫星发射/轨道双目录、统一 `AstronomyEvent`、`LocalMediaAsset` 和 `NotificationSchedule` 接口，明确与 Stellarium 核心、未来 Astro3D 的状态边界。
+- **联网与本地化：** 保持 HarmonyOS 运行时离线优先；多光谱先做明确标注的本地可视化，不把 RGB 资源冒称真实 UV/IR；系外行星、最近发射卫星、在线巡天和镜像站只做接口预研；补充 Sky Guide 官方参考网址为研发资料，不新增运行时网络行为。
+- **资源与合规：** 明确不复制 Sky Guide 的商标、专有图标、截图、插画、照片或闭源实现；继续复用 Stellarium 自带本地化资源，涉及中国地图、地理、历史与文化内容遵守仓库官方术语约束。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh`、`scripts/sync-ohos-resources.sh` 和 `scripts/check-ohos.sh` 通过；新契约已同步到生成工程 rawfile，HAP `assembleHap`/`CompileArkTS` 通过，仅保留工程既有 4 条 `setTimeout` 静态提示。未修改签名、证书、密钥库、Provision、`build-profile.json5`、隐私、SN 或运行时联网配置。
+- **验证结果：** `jq empty`、`git diff --check`、命令目录审计（302 个命令）、资源覆盖审计和 43 种官方语言审计通过；语言审计仍报告既有 636 个自定义 UI 英文回退项，未在本轮伪称已完成母语审校。
+
 ## [2026-07-27] TRAE - 触摸穿透修复+图标替换+加载屏修正
 
 - **修改文件：**

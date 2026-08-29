@@ -14,6 +14,10 @@
 - 严格“整个应用绝对不联网”尚未完成代码级封口：HiPS/TOAST、若干插件更新器、MPC 导入和 RemoteSync 的网络实现仍编译保留，必须在提交未备案版本前禁用入口并增加统一离线构建门禁。
 - 地图 SDK 当前按项目决定暂缓，不接入花瓣地图或其他地图 SDK。
 
+## 研发参考网址（不属于运行时联网）
+
+2026-08-30 对 Sky Guide/Fifth Star Labs 官方官网、News 和 Support 的只读调研仅用于产品设计参考，不会被打包进应用运行时请求列表，也不会因此新增公网权限、网页跳转或数据外发。调研记录见 `docs/harmonyos/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md`。其官方页面确认了滤镜、卫星过境、离线运行、AR、时间控制、对象引导、桌面摘要和星声等交互思路；本项目只复用业务抽象和视觉原则，不复制专有图标、照片、插画或代码。
+
 ## 统一数据源替换契约
 
 - 所有可替换的目录、巡天资源和在线接口先登记在 `data/ohos/network-sources.json`，由 `scripts/check-ohos-network-sources.mjs` 校验。

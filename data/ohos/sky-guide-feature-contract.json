@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "status": "research-only",
+  "researchDate": "2026-08-30",
+  "benchmark": {
+    "product": "Sky Guide",
+    "company": "Fifth Star Labs LLC",
+    "officialSources": [
+      "https://www.fifthstarlabs.com/",
+      "https://www.fifthstarlabs.com/team",
+      "https://www.fifthstarlabs.com/news",
+      "https://www.fifthstarlabs.com/news/2021/8/18/sky-guide-x-arrives",
+      "https://support.fifthstarlabs.com/category/6-user-topics",
+      "https://support.fifthstarlabs.com/article/9-does-sky-guide-work-without-wi-fi-or-cellular-service",
+      "https://support.fifthstarlabs.com/article/18-creating-filters",
+      "https://support.fifthstarlabs.com/article/21-satellites",
+      "https://support.fifthstarlabs.com/article/8-finding-objects",
+      "https://support.fifthstarlabs.com/article/16-controlling-time",
+      "https://support.fifthstarlabs.com/article/15-augmented-reality",
+      "https://support.fifthstarlabs.com/article/25-plus-and-pro"
+    ],
+    "assetPolicy": "reference-only-do-not-copy-proprietary-assets"
+  },
+  "architecture": {
+    "stellariumAuthority": ["time", "observer", "selectedTarget", "skyView", "catalogs", "events"],
+    "presentationAuthority": ["cards", "filters", "artLayers", "animations", "inputMapping", "resourceStatus"],
+    "separateSessions": ["SkyGuidePresentationSession", "SpectralFilterSession", "Astro3DSession", "NotificationSchedule"],
+    "forbiddenCoupling": [
+      "implicitTargetMoveOnPanelChange",
+      "duplicateFrameTimer",
+      "implicitNetworkDownload",
+      "implicitLocationUpload",
+      "rgbAssetLabeledAsNonVisibleWavelengthData",
+      "proprietarySkyGuideAssetCopy"
+    ]
+  },
+  "features": [
+    {
+      "id": "object-guidance",
+      "displayName": "天体搜索与引导",
+      "evidence": "official-confirmed",
+      "priority": "P0",
+      "offline": true,
+      "currentMapping": ["searchObject", "moveToSelected", "getSelectedObjectInfo"],
+      "cli": ["searchObject", "moveToSelected", "getSelectedObjectInfo"],
+      "uiPattern": ["category-browse", "direction-arrow", "compass-follow", "single-detail-card"]
+    },
+    {
+      "id": "time-navigation",
+      "displayName": "连续时间控制",
+      "evidence": "official-confirmed",
+      "priority": "P0",
+      "offline": true,
+      "currentMapping": ["setTimeRate", "advanceTime", "setJD"],
+      "cli": ["setTimeRate", "advanceTime", "setJD"],
+      "uiPattern": ["play-pause-realtime", "continuous-fast-rate", "long-press-day-step"]
+    },
+    {
+      "id": "spectral-filter",
+      "displayName": "多光谱滤镜可视化",
+      "evidence": "official-confirmed-interaction;data-scope-needs-verification",
+      "priority": "P1",
+      "offline": true,
+      "dataKind": ["measured-band", "visualization-only"],
+      "bands": ["gamma-ray", "x-ray", "ultraviolet", "visible", "hydrogen-alpha", "infrared", "microwave", "radio"],
+      "states": ["idle", "preparing", "ready", "decodeFailed", "noMatch", "closed"],
+      "cli": ["createSpectralFilter", "updateSpectralFilter", "closeSpectralFilter", "getSpectralFilterStatus"],
+      "uiPattern": ["long-press-create", "drag", "resize", "rotate-to-switch-band", "flick-to-close"]
+    },
+    {
+      "id": "exoplanet-catalog",
+      "displayName": "系外行星目录",
+      "evidence": "future-target-not-confirmed-in-public-sources",
+      "priority": "P1",
+      "offline": true,
+      "networkDefault": "disabled",
+      "requiredFields": ["hostStarId", "planetId", "discoveryStatus", "periodDays", "semiMajorAxisAu", "eccentricity", "mass", "radius", "epoch", "source", "license"],
+      "cli": ["queryLocalExoplanets", "importExoplanetSnapshot", "getExoplanetCatalogStatus"]
+    },
+    {
+      "id": "satellite-launch-and-orbit",
+      "displayName": "卫星发射与轨道目录",
+      "evidence": "official-confirmed-satellite-passes;launch-catalog-not-confirmed",
+      "priority": "P1",
+      "offline": true,
+      "catalogs": ["launchCatalog", "orbitalCatalog"],
+      "states": ["ready", "stale", "expired", "invalid", "noMatch"],
+      "cli": ["getSatellites", "getSatelliteCatalogStatus", "getSatellitePasses", "getSatelliteLaunchInfo"]
+    },
+    {
+      "id": "astronomy-events",
+      "displayName": "统一天文事件",
+      "evidence": "official-confirmed-event-workflows",
+      "priority": "P0",
+      "offline": true,
+      "kinds": ["solar-eclipse", "lunar-eclipse", "transit", "comet-perihelion", "meteor-shower", "satellite-pass", "satellite-transit-shadow"],
+      "requiredFields": ["eventId", "kind", "start", "peak", "end", "observer", "visibility", "sourceVersion", "offline", "actions"],
+      "cli": ["getTonightEvents", "getMeteorShowers", "getSatelliteTransitEvents", "gotoSatelliteTransitEvent"]
+    },
+    {
+      "id": "constellation-art",
+      "displayName": "星座艺术与插画层",
+      "evidence": "official-confirmed",
+      "priority": "P0",
+      "offline": true,
+      "currentMapping": ["getSkyCultureList", "getConstellationInfo", "getDeepSkyImageStatus"],
+      "states": ["preparing", "ready", "decodeFailed", "noMatch"],
+      "uiPattern": ["sky-overlay", "thin-glow-lines", "resource-fallback", "target-anchored"]
+    },
+    {
+      "id": "desktop-card",
+      "displayName": "桌面大卡片",
+      "evidence": "official-confirmed-widget-pattern;harmonyos-api-needs-verification",
+      "priority": "P1",
+      "offline": true,
+      "payloads": ["tonights-sky", "moon-phase", "visible-planets", "next-event", "tracked-satellite-pass"],
+      "actions": ["openApp", "openObject", "openEvent"],
+      "networkDefault": "disabled"
+    },
+    {
+      "id": "ar-and-sensor-overlay",
+      "displayName": "AR、罗盘与姿态叠加",
+      "evidence": "official-confirmed",
+      "priority": "P2",
+      "offline": true,
+      "requiredCapabilities": ["motion-sensor", "camera", "optional-lidar"],
+      "privacyGate": "native-consent-before-sensor-or-camera-access",
+      "uiPattern": ["compass-mode", "ar-mode", "compass-correction", "blend-adjustment"]
+    },
+    {
+      "id": "astro3d-session",
+      "displayName": "独立三维太阳系",
+      "evidence": "future-target-from-existing-celestia-research",
+      "priority": "P2",
+      "offline": true,
+      "authority": "separate-from-stellarium-renderer",
+      "sync": ["manual-time-only", "manual-target-only", "manual-open-in-sky"],
+      "forbidden": ["sharedOpenGLContext", "sharedFrameTimer", "implicitTimeWriteBack", "implicitSelectionWriteBack"]
+    }
+  ],
+  "assetManifestFields": [
+    "assetId",
+    "objectId",
+    "assetType",
+    "file",
+    "dimensionsOrModelBounds",
+    "locale",
+    "author",
+    "license",
+    "source",
+    "sha256",
+    "offline",
+    "fallbackAssetId",
+    "status"
+  ],
+  "networkPolicy": {
+    "runtimeDefault": "offline",
+    "newNetworkRequires": ["user-action", "privacy-explanation", "minimal-fields", "timeout", "local-fallback", "source-license", "network-inventory-entry"],
+    "neverSendByDefault": ["serialNumber", "deviceSn", "accountId", "privacyConsentToken"],
+    "candidateFutureSources": ["exoplanet-catalog", "satellite-tle", "satellite-launch-data", "hips", "dss", "simbad", "mpc", "weather"],
+    "mirrorPolicy": "build-time-snapshot-with-version-sha256-license-and-attribution"
+  },
+  "localizationPolicy": {
+    "stableIdentity": ["objectId", "sourceName", "catalogNumber"],
+    "displayIdentity": ["localizedName", "localizedType", "localizedDescription"],
+    "reuseStellariumResources": true,
+    "cultureAttributionRequired": true,
+    "chinaTerminologyPolicy": "follow-repository-AGENTS-and-official-Chinese-geographic-terminology",
+    "supportedLocaleStrategy": "shared-provider-with-node-rebuild-on-locale-change"
+  },
+  "implementationStatus": {
+    "runtimeIntegrated": false,
+    "contractOnly": true,
+    "nextFiles": [
+      "docs/harmonyos/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md",
+      "docs/harmonyos/NETWORK-INVENTORY.md",
+      "docs/harmonyos/CHANGELOG.md"
+    ]
+  }
+}
