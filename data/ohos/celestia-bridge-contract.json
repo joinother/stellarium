@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "status": "design-only",
+  "runtime": "offline",
+  "authority": {
+    "stellarium": ["time", "observer", "selectedTarget", "skyView", "locale"],
+    "astro3d": ["sceneCamera", "modelPose", "renderQuality", "localAnimation"]
+  },
+  "inputSnapshot": {
+    "required": ["schemaVersion", "jd", "timeRate", "observer", "target", "skyView", "offline"],
+    "fields": {
+      "schemaVersion": "integer",
+      "jd": "number",
+      "timeRate": "number",
+      "observer": {
+        "planet": "string",
+        "latitude": "number",
+        "longitude": "number",
+        "altitude": "number"
+      },
+      "target": {
+        "id": "string",
+        "displayName": "string",
+        "objectType": "string"
+      },
+      "skyView": {
+        "j2000Direction": "number[3]",
+        "fovDeg": "number"
+      },
+      "locale": "string",
+      "offline": "boolean"
+    }
+  },
+  "eventsFromAstro3d": {
+    "allowed": ["ready", "failed", "closed", "targetRequested", "timeSyncRequested"],
+    "requiredFields": ["schemaVersion", "requestId", "source", "event"],
+    "writeBackPolicy": "adapter-and-command-bridge-only"
+  },
+  "syncModes": ["manual", "time-only", "target-only"],
+  "forbidden": [
+    "sharedOpenGLContext",
+    "sharedFrameTimer",
+    "implicitJulianDateWriteBack",
+    "implicitSelectionWriteBack",
+    "runtimeNetworkDownload",
+    "runtimePushNotification"
+  ]
+}

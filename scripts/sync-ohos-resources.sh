@@ -94,6 +94,83 @@ for d in "${DIRS[@]}"; do
   fi
 done
 
+FFMPEG_BIN="${FFMPEG:-}"
+if [ -z "$FFMPEG_BIN" ]; then
+  FFMPEG_BIN="$(command -v ffmpeg || true)"
+fi
+if [ -n "$FFMPEG_BIN" ]; then
+  converted=0
+  while IFS= read -r -d '' texture; do
+    description="$(file -b "$texture")"
+    case "$description" in
+      *"16-bit"*)
+        compatible="${texture}.compat.png"
+        "$FFMPEG_BIN" -hide_banner -loglevel error -y -i "$texture" \
+          -vf format=rgba -frames:v 1 "$compatible"
+        mv "$compatible" "$texture"
+        converted=$((converted + 1))
+        echo "  normalized 16-bit texture: ${texture#$DST/}"
+        ;;
+    esac
+  done < <(find "$DST/textures" -type f -iname '*.png' -print0)
+  echo "Texture compatibility pass: converted $converted 16-bit PNG(s)"
+  remaining_16bit="$(file -b "$DST"/textures/*.png | awk '/16-bit/ { count++ } END { print count + 0 }')"
+  if [ "$remaining_16bit" -ne 0 ]; then
+    echo "ERROR: rawfile still contains $remaining_16bit 16-bit PNG(s) after compatibility pass" >&2
+    exit 1
+  fi
+
+  MODEL_TEXTURES=(
+    sun.png mercury.png venus.png earth_cmap.png moon.png mars.png jupiter.png saturn.png uranus.png neptune.png
+    pluto.png charon.png ceres.png vesta.png eros.png bennu.png gaspra.png ida.png sedna.png eris.png haumea.png
+    dysnomia.png 2007OR10.png phobos.png deimos.png io.png europa.png ganymede.png callisto.png amalthea.png
+    mimas.png enceladus.png tethys.png dione.png rhea.png titan.png hyperion.png iapetus.png phoebe.png janus.png
+    epimetheus.png prometheus.png ariel.png umbriel.png titania.png oberon.png miranda.png triton.png nereid.png proteus.png
+  )
+  model_texture_count=0
+  for model_texture in "${MODEL_TEXTURES[@]}"; do
+    texture_path="$DST/textures/$model_texture"
+    [ -f "$texture_path" ] || continue
+    "$FFMPEG_BIN" -hide_banner -loglevel error -y -i "$texture_path" \
+      -vf 'scale=512:256:flags=lanczos,format=rgba' -frames:v 1 -pix_fmt rgba -f rawvideo \
+      "${texture_path}.model.rgba"
+    model_texture_count=$((model_texture_count + 1))
+  done
+  echo "Detail-model CPU textures: generated $model_texture_count RGBA sidecar file(s)"
+
+  RING_TEXTURES=(saturn_rings_radial.png uranus_rings.png neptune_rings.png)
+  ring_texture_count=0
+  for ring_texture in "${RING_TEXTURES[@]}"; do
+    texture_path="$DST/textures/$ring_texture"
+    [ -f "$texture_path" ] || continue
+    "$FFMPEG_BIN" -hide_banner -loglevel error -y -i "$texture_path" \
+      -vf 'scale=512:2:flags=lanczos,format=rgba' -frames:v 1 -pix_fmt rgba -f rawvideo \
+      "${texture_path}.model.rgba"
+    ring_texture_count=$((ring_texture_count + 1))
+  done
+  echo "Detail-model ring textures: generated $ring_texture_count RGBA sidecar file(s)"
+
+  # ArkUI ImageKit on the target API rejects the grayscale and indexed PNG
+  # encodings used by many upstream constellation illustrations. Normalize
+  # only the generated HAP copy; the upstream sky-culture files stay intact.
+  art_converted=0
+  while IFS= read -r -d '' illustration; do
+    description="$(file -b "$illustration")"
+    case "$description" in
+      *"grayscale"*|*"colormap"*)
+        compatible="${illustration}.compat.png"
+        "$FFMPEG_BIN" -hide_banner -loglevel error -y -i "$illustration" \
+          -vf format=rgba -frames:v 1 "$compatible"
+        mv "$compatible" "$illustration"
+        art_converted=$((art_converted + 1))
+        ;;
+    esac
+  done < <(find "$DST/skycultures" -type f -path '*/illustrations/*' -iname '*.png' -print0)
+  echo "Sky-culture illustration compatibility pass: converted $art_converted grayscale/indexed PNG(s)"
+else
+  echo "WARNING: ffmpeg not found; 16-bit texture previews may fail on some devices" >&2
+fi
+
 echo
 echo "Done. rawfile tree size:"
 du -sh "$DST"

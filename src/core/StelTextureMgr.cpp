@@ -32,6 +32,8 @@ StelTextureMgr::StelTextureMgr(QObject *parent)
 {
 #ifdef Q_PROCESSOR_X86_64
 	loaderThreadPool->setMaxThreadCount(QThread::idealThreadCount());
+#elif defined(__OHOS__)
+	loaderThreadPool->setMaxThreadCount(2);
 #else
 	//on other archs, for now ensure that just 1 texture is at once in background
 	//otherwise, for large textures loaded in parallel (some scenery3d scenes), the risk of an out-of-memory error is greater on 32bit systems

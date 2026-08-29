@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "runtime": "offline",
+  "defaultRenderer": "image-fallback",
+  "models": [
+    {
+      "objectType": "constellation",
+      "idPattern": "*",
+      "state": "planned",
+      "format": "glTF 2.0",
+      "assetKeyPattern": "constellations/{culture}/{iau}.glb",
+      "displaySpace": "sky-direction-anchor",
+      "coordinateFrame": "J2000",
+      "depthModel": "display-only",
+      "interactions": ["rotate", "zoom", "pan", "reset"],
+      "fallback": "skyculture-artwork",
+      "offlineOnly": true,
+      "notes": "A constellation figure is a visual overlay, not a physical 3D star system. Real stellar distances must not be inferred from this model."
+    }
+  ]
+}

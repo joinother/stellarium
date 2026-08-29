@@ -6,6 +6,25 @@ CLI 通过 DevEco 自带的 `hdc` 和鸿蒙官方 `aa start --ps` 启动参数�
 
 应用收到命令后，会等待隐私同意、Qt 初始化和原生命令桥就绪，再执行命令；结果通过带请求 ID 的 `hilog` 记录返回给 CLI。首次启动若尚未同意隐私政策，CLI 会等待至超时，完成同意后重新执行即可。
 
+`searchObject`、`selectAt` 和 `clearSelection` 的 CLI 结果同时同步到 ArkUI 详情卡；因此通过 CLI 选中行星时，会自动打开与应用内点选相同的详情媒体区域，不需要额外注入触摸事件。
+
+对象详情统一使用一张可拖动的完整资料卡。卡片位置由 ArkUI 保存，连接到选中天体的细线可通过信息设置或本地 CLI 控制：
+
+```bash
+node scripts/stellarium-cli.mjs --device <设备ID> --command setObjectDetailConnector --payload 1 --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command getObjectDetailConnector --json
+```
+
+`enabled` 为 `true` 时显示连接线，`false` 时隐藏；该设置不改变星图投影、选中状态或天体位置，也不产生联网行为。
+
+星座被选中后，可读取详情媒体未来切换为本地 3D 模型所需的能力契约：
+
+```bash
+node scripts/stellarium-cli.mjs --device <设备ID> --command getObjectDetailModel --json
+```
+
+当前返回 `state: planned`、实际 `assetKey`、`glTF 2.0` 格式、J2000 坐标锚点和二维文化绘图回退路径。只有未来离线模型完成授权、校验与渲染接入后才能改为 `ready`；该命令本身不会下载模型或访问网络。
+
 ## 使用
 
 在仓库根目录执行：
@@ -33,6 +52,14 @@ node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyIm
 ```
 
 `--payload` 沿用 `StellariumOhos_command` 的原有字符串格式。例如 `selectAt` 使用 `x|y|skyW|skyH`，`setActionChecked` 使用 `actionId|1`。CLI 会自动处理 `aa --ps` 对负号开头字符串的限制，并对 payload 做 shell 转义，保证竖线分隔参数不会被 `hdc` 远端 shell 当成管道。命令名不在 CLI 中硬编码，桥接层已支持的命令均可直接调用；可执行 `--help` 查看工具参数。
+
+流星诊断使用与桌面端相同的理论流星率范围（`0–240000` ZHR）。鸿蒙设置页的滑杆前段对 `0–1000` 做精细调整，后段按对数映射到桌面端上限；显示值仍是真实 ZHR，不是滑杆位置。用以下命令可核对当前生成条件、预期速率、实际接受数量和绘制抑制原因：
+
+```bash
+node scripts/stellarium-cli.mjs --device <设备ID> --command getMeteorDiagnostics --json
+```
+
+重点字段：`zhr`/`maxZhr` 为配置值和上限，`realTimeSpeed` 与 `generationSuppression` 判断是否允许生成，`drawSuppression` 判断是否因白天过亮或图层关闭而不绘制，`activeCount` 为当前存活流星数，`acceptedCount`/`rejectedCount` 用于判断随机辐射点和地平线过滤造成的损失。该诊断只读取本地运行状态，不联网。
 
 导入脚本前，先把文件发送到设备可读路径，再调用导入命令：
 
@@ -144,6 +171,10 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command importScript \
 
 `importScript` 只复制脚本，不执行脚本；同名文件和超过 2 MiB 的文件会被拒绝。鸿蒙版本的插件随 HAP 静态编译，`loadPlugin` 只负责当前进程内即时初始化已随包发布的插件，不支持从文件管理器安装任意 `.so` 插件。这样可以保持签名、权限和离线边界可审计。
 
+设备端响应通过带序号的 `responseChunk` 日志分片传输，CLI 会自动重组完整 JSON；因此 `getScriptList`、`getPluginList` 等长查询不再因为 `hilog` 单行长度而出现“无法解析设备响应”。`pauseScript` 和 `resumeScript` 在 Qt 6 原生脚本引擎下会明确返回 `ok=false`、`supported=false`，不能把不支持的操作报告为成功。
+
+CLI 的 `importScript` 只适用于应用进程可读取的路径。普通应用通常不能读取开发机通过 `hdc file send` 放入的 `/data/local/tmp`，所以开发机传文件与应用导入不是同一步；用户端请使用脚本面板的 HarmonyOS 系统文档选择器。插件仍不能通过文件管理器导入任意 native 二进制。
+
 ## 官方依据
 
 鸿蒙官方 `aa` 工具支持显式启动 Ability 以及 `--ps <key> <value>` 字符串 Want 参数；官方 Want 文档将 `parameters` 定义为应用间传递自定义键值的载体。当前实现使用这些参数，不注册自定义 URI，不新增网络端口。
@@ -171,5 +202,6 @@ hdc -t 7LZBB26323200303 shell uitest uiInput keyEvent 2050
 - CLI 需要已连接、已授权的 `hdc` 设备和可调试安装包。
 - 结果通过日志回传，超大结果可能受系统日志单行长度限制；查询类命令建议按范围或数量参数分批调用。
 - `getDeepSkyImageStatus` 默认检查重点图片；传入 `--payload 'all|偏移|数量'` 分页列出已复制 PNG，单页数量最多 64。`onDisk` 只代表资源已复制，`textureReady` 才代表当前惰性纹理树已经取得可绑定纹理；`textureLoading` 表示正在后台读取，`textureNotStarted` 表示尚未开始绑定。没有进入当前视场的图片可能保持未实例化，不应据此判定资源缺失。
+- `getConstellationArtStatus` 接受星座缩写或名称（例如 `Ori`），也可传 `all`；返回艺术文件是否落盘、纹理是否未启动/加载中/可绑定/失败，以及当前视口相交和有效亮度，用于区分资源、解码与绘制问题。
 - 连续视图命令（如 `dragView`、`zoomBy`）返回“已入队”，不等待逐帧完成。
 - 这是开发者控制通道，不是面向普通用户的应用内命令行界面；Release 包也不会因此监听网络端口。

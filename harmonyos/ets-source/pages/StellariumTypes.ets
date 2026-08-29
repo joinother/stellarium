@@ -17,6 +17,8 @@ export interface HierCity {
 export interface CatOption {
   code: string
   label: ResourceStr
+  moduleId?: string
+  iconKey?: string
 }
 
 export interface NameItem {
@@ -85,9 +87,15 @@ export interface ScriptMetadata {
 
 export interface PlanetPosition {
   name: string
+  englishName?: string
+  rightAscension?: string
+  declination?: string
   altitude: number
   azimuth: number
   magnitude: number
+  distanceAU?: number
+  angularSizeArcmin?: number
+  transit?: string
 }
 export interface PolarScopeStar {
   name: string
@@ -139,6 +147,9 @@ export interface CelestialPosition {
   magnitude: number
   type: string
   elongation?: number
+  angularSizeArcmin?: number
+  distanceAU?: number
+  transit?: string
 }
 export interface ObjectInfo {
   name: string
@@ -210,6 +221,13 @@ export interface SkyCultureArtItem {
   name?: string
 }
 
+export interface SkyCultureDescriptionBlock {
+  index: number
+  kind: string
+  level?: number
+  text: string
+}
+
 export interface SkyCultureTerritoryEntry {
   name: string
   beginTime: number
@@ -264,12 +282,27 @@ export interface ShellAction {
   label: ResourceStr
   icon: string
   panel: string
+  section?: ResourceStr
 }
 
 export interface ObjectDetailField {
   key: string
   value: string
   section: string
+}
+
+export interface ObjectDetailModel {
+  schemaVersion: number
+  state: string
+  format: string
+  assetKey: string
+  assetPath?: string
+  registryPath?: string
+  fallbackMediaPath?: string
+  coordinateFrame?: string
+  interactions?: string[]
+  offline: boolean
+  source?: string
 }
 
 
@@ -281,8 +314,10 @@ export interface StellariumBridgeResponse {
   pending?: boolean
   progress?: number
   totalDays?: number
+  totalCandidates?: number
   found?: boolean
   error?: string
+  selectionRequired?: boolean
   name?: string
   englishName?: string
   catalogId?: string
@@ -290,6 +325,16 @@ export interface StellariumBridgeResponse {
   detailMediaPath?: string
   detailMediaKind?: string
   detailMediaLabel?: string
+  detailModel?: ObjectDetailModel
+  activeTextureStatus?: string
+  activeTextureReadyCount?: number
+  activeTextureLoadingCount?: number
+  activeTextureNotStartedCount?: number
+  activeTexturePendingCount?: number
+  activeTextureErrorCount?: number
+  descriptionBlocks?: SkyCultureDescriptionBlock[]
+  descriptionFormatVersion?: number
+  retried?: number
   info?: string
   query?: string
   timeRate?: number
@@ -301,6 +346,28 @@ export interface StellariumBridgeResponse {
   timeZone?: string
   jd?: number
   mjd?: number
+  startJD?: number
+  endJD?: number
+  days?: number
+  stepHours?: number
+  calculationTime?: string
+  localTime?: string
+  observerLocation?: string
+  coordinateFrame?: string
+  latitude?: number
+  longitude?: number
+  altitude?: number
+  meanSiderealTime?: string
+  apparentSiderealTime?: string
+  meanSiderealHours?: number
+  apparentSiderealHours?: number
+  equationOfTimeMinutes?: number
+  sunAltitude?: number
+  sunAzimuth?: number
+  moonAltitude?: number
+  moonAzimuth?: number
+  moonIllumination?: number
+  offline?: boolean
   calendarSystem?: string
   julianDateStep?: number
   jdOfToday?: number
@@ -425,18 +492,14 @@ export interface StellariumBridgeResponse {
   asterismLabelsFadeDuration?: number
   rayHelperFadeDuration?: number
   tracking?: boolean
+  viewLock?: boolean
   locationName?: string
   locationRegion?: string
   planetName?: string
-  latitude?: number
-  longitude?: number
-  altitude?: number
   target?: string
   ra?: string
   dec?: string
   hourAngle?: string
-  meanSiderealTime?: string
-  apparentSiderealTime?: string
   infoMode?: string
   selectedInfoMode?: string
   magnitude?: number
@@ -537,7 +600,8 @@ export interface StellariumBridgeResponse {
   starSpiky?: boolean
   twinkleAmount?: number
   bortleScale?: number
-  meteorZhr?: number
+	meteorZhr?: number
+	meteorZhrMax?: number
   milkyWayIntensity?: number
   zodiacalLight?: boolean
   zodiacalIntensity?: number
@@ -757,9 +821,47 @@ export interface EphemerisRow {
   bodyEnglishName?: string
   ra?: string
   dec?: string
+  raOfDate?: string
+  decOfDate?: string
   altitude?: number
   azimuth?: number
+  geometricAltitude?: number
+  geometricAzimuth?: number
+  polarDistanceDegrees?: number
+  polarDistanceJ2000Degrees?: number
+  hourAngle?: string
+  hourAngleDegrees?: number
+  meanSiderealTime?: string
+  apparentSiderealTime?: string
+  aboveHorizon?: boolean
+  airmass?: number
   magnitude?: number
+  phase?: number
+  distanceAU?: number
+  elongationDegrees?: number
+  angularSizeArcmin?: number
+  heliocentricDistanceAU?: number
+}
+
+export interface AstroCalcContext {
+  jd?: number
+  localTime?: string
+  observerLocation?: string
+  timeZone?: string
+  latitude?: number
+  longitude?: number
+  altitude?: number
+  meanSiderealTime?: string
+  apparentSiderealTime?: string
+  meanSiderealHours?: number
+  apparentSiderealHours?: number
+  equationOfTimeMinutes?: number
+  sunAltitude?: number
+  sunAzimuth?: number
+  moonAltitude?: number
+  moonAzimuth?: number
+  moonIllumination?: number
+  offline?: boolean
 }
 // 每个本地日期的升起、中天、落下数据；对应桌面 AstroCalc 的 RTS 表。
 export interface RtsCalendarDay {
@@ -844,6 +946,9 @@ export interface PlanetCalcItem {
   elongation?: number
   phaseAngle?: number
   phase?: number
+  phaseAngleDegrees?: number
+  elongationDegrees?: number
+  heliocentricDistanceAU?: number
 }
 // 天象（行星间的合）
 export interface PhenomenonItem {

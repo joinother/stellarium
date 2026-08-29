@@ -115,6 +115,22 @@ $HDC -t 127.0.0.1:5555 shell snapshot_display -f /data/local/tmp/ui.jpeg
 $HDC -t 127.0.0.1:5555 file recv /data/local/tmp/ui.jpeg /tmp/ui.jpeg
 ```
 
+### 2.6 平板测试设备准备
+
+为避免长时间安装、启动和回归测试被息屏打断，使用项目脚本准备设备：
+
+```bash
+scripts/prepare-ohos-device.sh 192.168.1.30:33805 prepare
+```
+
+脚本会通过 HarmonyOS 官方设备调试命令覆盖 24 小时息屏时间、唤醒屏幕，并发送系统最低亮度按键；随后用 `hidumper` 输出实际屏幕亮度和亮度下限。测试完成后恢复系统原有息屏策略：
+
+```bash
+scripts/prepare-ohos-device.sh 192.168.1.30:33805 restore
+```
+
+该脚本只改变连接设备的测试环境，不写入应用源码、应用配置、签名或隐私配置；亮度恢复需在系统设置中按需要调整。
+
 ---
 
 ## 3. 核心文件索引

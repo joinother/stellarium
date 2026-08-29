@@ -490,6 +490,13 @@ StelScriptMgr::StelScriptMgr(QObject *parent): QObject(parent)
 #endif
 	engine->globalObject().setProperty("core", objectValue);
 
+#ifdef ENABLE_SCRIPT_QML
+	// Keep the translation helper available to legacy scripts which call tr()
+	// without including i18n.inc. Scripts that include the file redefine the
+	// same compatible helper, so this remains backward compatible.
+	engine->evaluate(QStringLiteral("function tr(str) { return core.translate(str); }"));
+#endif
+
 	// Add other classes which we want to be directly accessible from scripts
 	if(StelSkyLayerMgr* smgr = GETSTELMODULE(StelSkyLayerMgr))
 		objectValue = engine->newQObject(smgr);

@@ -235,6 +235,17 @@ void StelCore::init()
 		location = locationMgr->locationForString(defaultLocationID);
 	}
 
+	#ifdef STELLARIUM_OHOS_OFFLINE
+	if (location.name.trimmed().isEmpty() && qFuzzyIsNull(location.getLatitude()) && qFuzzyIsNull(location.getLongitude()))
+	{
+		location = locationMgr->getLastResortLocation();
+		defaultLocationID = location.getID();
+		conf->setValue("init_location/location", defaultLocationID);
+		conf->setValue("init_location/last_location", defaultLocationID);
+		qInfo() << "HarmonyOS offline build: restored invalid empty startup location to" << defaultLocationID;
+	}
+	#endif
+
 	if (!location.isValid())
 	{
 		qWarning() << "Location" << defaultLocationID << "is unknown.";

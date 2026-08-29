@@ -490,9 +490,9 @@ StelLocationMgr::StelLocationMgr()
 	locations.unite(loadCities("data/user_locations.txt", true));
 #endif
 	// Use a deterministic Chinese default when the offline build has no saved location.
-	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Beijing").toString();
+	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Eastern Asia").toString();
 	if (configuredLastLocation.isEmpty() || configuredLastLocation == QStringLiteral("Paris, Western Europe"))
-		configuredLastLocation = QStringLiteral("Beijing, Beijing");
+		configuredLastLocation = QStringLiteral("Beijing, Eastern Asia");
 	lastResortLocation = locationForString(configuredLastLocation);
 
 	planetName="Earth";
@@ -545,9 +545,9 @@ StelLocationMgr::StelLocationMgr(const LocationList &locations)
 	setLocations(locations);
 
 	QSettings* conf = StelApp::getInstance().getSettings();
-	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Beijing").toString();
+	QString configuredLastLocation = conf->value("init_location/last_location", "Beijing, Eastern Asia").toString();
 	if (configuredLastLocation.isEmpty() || configuredLastLocation == QStringLiteral("Paris, Western Europe"))
-		configuredLastLocation = QStringLiteral("Beijing, Beijing");
+		configuredLastLocation = QStringLiteral("Beijing, Eastern Asia");
 	lastResortLocation = locationForString(configuredLastLocation);
 }
 
@@ -814,6 +814,8 @@ const StelLocation StelLocationMgr::locationFromCLI() const
 		ret.setLongitude(180/M_PI * lonVar.toDouble());
 		ret.role = 'X';
 	}
+	if (!latVar.isValid() || !lonVar.isValid())
+		ret.role = '!';
 
 	bool ok;
 	ret.altitude = conf->value("altitude", 0).toInt(&ok);
@@ -1774,8 +1776,27 @@ QColor StelLocationMgr::getColorForCoordinates(const double lng, const double la
 //! Return a valid location when no valid one was found.
 const StelLocation& StelLocationMgr::getLastResortLocation()
 {
-	// Unfortunately the isValid test is super lame.
-	if (!lastResortLocation.isValid())
-		lastResortLocation = locationForString("Beijing, Beijing");
+	// A default-constructed Earth location at 0/0 passes StelLocation::isValid(),
+	// so validate the actual identity and coordinates before accepting it.
+	const bool emptyEquatorLocation = lastResortLocation.name.trimmed().isEmpty()
+		&& qFuzzyIsNull(lastResortLocation.getLatitude())
+		&& qFuzzyIsNull(lastResortLocation.getLongitude());
+	if (!lastResortLocation.isValid() || emptyEquatorLocation)
+	{
+		lastResortLocation = locationForString("Beijing, Eastern Asia");
+		if (lastResortLocation.name.trimmed().isEmpty()
+			|| (qFuzzyIsNull(lastResortLocation.getLatitude()) && qFuzzyIsNull(lastResortLocation.getLongitude())))
+		{
+			lastResortLocation.name = QStringLiteral("Beijing");
+			lastResortLocation.state = QStringLiteral("Beijing");
+			lastResortLocation.region = QStringLiteral("Eastern Asia");
+			lastResortLocation.role = QChar('C');
+			lastResortLocation.setLatitude(39.9075f);
+			lastResortLocation.setLongitude(116.39723f);
+			lastResortLocation.altitude = 49;
+			lastResortLocation.ianaTimeZone = QStringLiteral("Asia/Shanghai");
+			lastResortLocation.planetName = QStringLiteral("Earth");
+		}
+	}
 	return lastResortLocation;
 }

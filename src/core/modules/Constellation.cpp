@@ -458,7 +458,7 @@ void Constellation::drawArtOptim(StelPainter& sPainter, const SphericalRegion& r
 			sPainter.setColor(intensity,intensity,intensity);
 
 			// The texture is not fully loaded
-			if (artTexture->bind()==false)
+			if (artTexture->bind(0, true)==false)
 				return;
 
 			sPainter.drawStelVertexArray(artPolygon, false, obsVelocity);

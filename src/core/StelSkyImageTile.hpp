@@ -94,7 +94,12 @@ public:
 	//! Collect the image tiles currently materialized by the lazy texture tree.
 	//! A tile can be present on disk without having an OpenGL texture yet.
 	void collectTextureStatus(QStringList& ready, QStringList& loading,
-							 QStringList& notStarted, QStringList& errors) const;
+							 QStringList& notStarted, QStringList& errors,
+							 bool viewportOnly=false) const;
+
+	//! Drop failed texture objects so the current viewport can retry decoding.
+	//! Descriptor and missing-file errors remain terminal.
+	int retryFailedTextures(bool viewportOnly=false);
 
 	//! Convert the image information to a map following the JSON structure.
 	//! It can be saved as JSON using the StelJsonParser methods.
@@ -173,6 +178,11 @@ private:
 
 	//! The list of all the subTiles URL or already loaded JSON map for this tile
 	QVariantList subTilesUrls;
+
+	void resetViewportCandidates();
+	bool viewportCandidate;
+	int textureRetryCount;
+	double nextTextureRetryTime;
 
 	// Used for smooth fade in
 	QTimeLine* texFader;

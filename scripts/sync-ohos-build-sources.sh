@@ -55,6 +55,7 @@ SOURCES=(
   "harmonyos/ets-source/resources/base/media/ic_catalog_nova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_nova.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_supernova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_supernova.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_quasar.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_quasar.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_plugin.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_plugin.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
   "harmonyos/ets-source/resources/base/media/ic_oculars.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_oculars.svg"
   "harmonyos/ets-source/resources/base/media/ic_polar_scope.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_polar_scope.svg"
@@ -69,6 +70,7 @@ SOURCES=(
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_station.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_station.svg"
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_station_direct.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_station_direct.svg"
   "harmonyos/ets-source/resources/base/media/ic_phenomenon_station_retrograde.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_phenomenon_station_retrograde.svg"
+  "harmonyos/ets-source/resources/base/media/ic_time_resume.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_time_resume.svg"
   "harmonyos/module.json5:build/libstellarium-harmonyos/entry/src/main/module.json5"
   "harmonyos/resources/base/profile/main_pages.json:build/libstellarium-harmonyos/entry/src/main/resources/base/profile/main_pages.json"
   "harmonyos/resources/base/profile/easy_go.json:build/libstellarium-harmonyos/entry/src/main/resources/base/profile/easy_go.json"
@@ -113,3 +115,15 @@ for tree in AppScope/resources resources; do
     echo "  -> $dst"
   done < <(find "$REPO_ROOT/harmonyos/$tree" -type f -path '*/element/string.json' -print | sort)
 done
+
+OHOS_ADDITIONAL_PKGS="${OHOS_ADDITIONAL_PKGS:-$HOME/.local/opt/ohos/additional-packages}"
+JPEG_SOURCE="$OHOS_ADDITIONAL_PKGS/lib/libjpeg.so"
+JPEG_TARGET="$REPO_ROOT/build/libstellarium-harmonyos/entry/libs/arm64-v8a/libjpeg.so"
+if [ -f "$JPEG_SOURCE" ]; then
+  mkdir -p "$(dirname "$JPEG_TARGET")"
+  cp "$JPEG_SOURCE" "$JPEG_TARGET"
+  echo "  $JPEG_SOURCE"
+  echo "  -> $JPEG_TARGET"
+else
+  echo "WARNING: missing HarmonyOS libjpeg.so at $JPEG_SOURCE; JPEG textures will not load" >&2
+fi

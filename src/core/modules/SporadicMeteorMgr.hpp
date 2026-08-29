@@ -23,6 +23,9 @@
 #include "SporadicMeteor.hpp"
 #include "StelModule.hpp"
 
+#include <QJsonObject>
+#include <QHash>
+
 //! @class SporadicMeteorMgr
 //! Simulates a sporadic meteor shower, with a random color and a random radiant.
 //! @author Marcos Cardinot <mcardinot@gmail.com>
@@ -31,6 +34,8 @@ class SporadicMeteorMgr : public StelModule
 	Q_OBJECT
 	Q_PROPERTY(int zhr READ getZHR WRITE setZHR NOTIFY zhrChanged)
 public:
+	static constexpr int MaxZHR = 240000;
+
 	//! Constructor
 	//! @param zhr Zenith Hourly Rate
 	//! @param maxv Maximum meteor velocity
@@ -47,6 +52,7 @@ public slots:
 	// Methods callable from script and GUI
 	//! Get the current zenith hourly rate.
 	int getZHR() const { return m_zhr; }
+	QJsonObject getDiagnostics() const;
 	//! Set the zenith hourly rate.
 	void setZHR(int zhr);
 
@@ -75,6 +81,19 @@ private:
 	int m_maxVelocity;
 	bool m_flagShow;
 	bool m_flagForcedShow;
+	quint64 m_diagnosticElapsedFrames;
+	quint64 m_diagnosticCandidateCount;
+	quint64 m_diagnosticRequestedCount;
+	quint64 m_diagnosticAcceptedCount;
+	quint64 m_diagnosticRejectedCount;
+	double m_diagnosticElapsedSeconds;
+	double m_lastDeltaTime;
+	double m_lastExpectedPerSecond;
+	double m_lastSpawnProbability;
+	int m_lastMaxMeteorsPerFrame;
+	QString m_lastGenerationSuppression;
+	double m_spawnAccumulator;
+	QHash<QString, quint64> m_diagnosticRejectionReasons;
 };
 
 #endif // SPORADICMETEORMGR_HPP

@@ -33,6 +33,7 @@
 Meteor::Meteor(const StelCore* core, const StelTextureSP& bolideTexture)
 	: m_core(core)
 	, m_alive(false)
+	, m_rejectionReason(QStringLiteral("not-initialized"))
 	, m_speed(72.)
 	, m_initialZ(1.)
 	, m_finalZ(1.)
@@ -68,6 +69,7 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 	// meteors won't be visible if radiant is below 0degrees
 	if (radiantAlt < 0.f)
 	{
+		m_rejectionReason = QStringLiteral("radiant-below-horizon");
 		return;
 	}
 
@@ -106,6 +108,9 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 	// or if it's below the horizon!
 	if (positionAltAz[2] > static_cast<double>(MAX_ALTITUDE) || meteorAlt <= 0.f)
 	{
+		m_rejectionReason = positionAltAz[2] > static_cast<double>(MAX_ALTITUDE)
+			? QStringLiteral("above-max-altitude")
+			: QStringLiteral("below-horizon");
 		return;
 	}
 
@@ -116,6 +121,7 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 		// introduce a probabilistic factor just to make them a bit harder to occur
 		float prob = StelApp::getInstance().getRandF();
 		if (prob > 0.3f) {
+			m_rejectionReason = QStringLiteral("earth-grazer-probability");
 			return;
 		}
 
@@ -136,6 +142,7 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 
 	// a meteor cannot hit the observer!
 	if (m_minDist < MIN_ALTITUDE) {
+		m_rejectionReason = QStringLiteral("observer-distance");
 		return;
 	}
 
@@ -143,11 +150,10 @@ void Meteor::init(const float& radiantAlpha, const float& radiantDelta,
 	float Mag = StelApp::getInstance().getRandF() * 9.0f - 4.5f;
 	// compute RMag and CMag
 	RCMag rcMag;
-	m_core->getSkyDrawer()->computeRCMag(Mag, &rcMag);
-	m_absMag = rcMag.radius <= 1.2f ? 0.f : rcMag.luminance;
-	if (m_absMag == 0.f) {
-		return;
-	}
+	if (m_core->getSkyDrawer()->computeRCMag(Mag, &rcMag) && rcMag.luminance > 0.f)
+		m_absMag = rcMag.luminance;
+	else
+		m_absMag = qBound(0.05f, std::pow(10.f, -0.4f * (Mag + 4.5f)), 1.f);
 
 	// most visible meteors are under about 184km distant
 	// scale max mag down if outside this range

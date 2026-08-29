@@ -50,6 +50,9 @@ void StelSkyImageTile::initCtor()
 	withAberration = true;
 	decimation = 1;
 	flagVisible = true;
+	viewportCandidate = false;
+	textureRetryCount = 0;
+	nextTextureRetryTime = 0.0;
 }
 
 // Constructor
@@ -97,6 +100,7 @@ void StelSkyImageTile::draw(StelCore* core, StelPainter& sPainter, float opacity
 
 	const float limitLuminance = core->getSkyDrawer()->getLimitLuminance();
 	QMultiMap<double, StelSkyImageTile*> result;
+	resetViewportCandidates();
 	// TODO: adjust that viewportconvexpolygon by aberration to select the right tiles.
 	// I thought the viewportpolygon needs to be enlarged just a bit. (I use 20 arcseconds here as estimate of max. aberration from earth.)
 	//getTilesToDraw(result, core, prj->getViewportConvexPolygon(0,0)->getEnlarged(20./3600.*M_PI_180 *core->getAberrationFactor()), limitLuminance, true);
@@ -145,7 +149,8 @@ void StelSkyImageTile::getTilesToDraw(QMultiMap<double, StelSkyImageTile*>& resu
 	}
 #endif
 
-	// An error occurred during loading
+	// Descriptor and missing-file errors are terminal. Decode/upload errors
+	// live on StelTexture and are retried below with a small backoff.
 	if (errorOccured)
 		return;
 
@@ -219,6 +224,20 @@ void StelSkyImageTile::getTilesToDraw(QMultiMap<double, StelSkyImageTile*>& resu
 
 	if (noTexture==false)
 	{
+		viewportCandidate = true;
+		if (tex && tex->hasError())
+		{
+			const double now = StelApp::getTotalRunTime();
+			if (textureRetryCount < 2 && now >= nextTextureRetryTime)
+			{
+				++textureRetryCount;
+				nextTextureRetryTime = now + (textureRetryCount == 1 ? 2.0 : 8.0);
+				qWarning() << "[dso-textures] retry" << textureRetryCount
+						   << QFileInfo(absoluteImageURI).fileName()
+						   << tex->getErrorMessage();
+				tex.clear();
+			}
+		}
 		if (!tex)
 		{
 			// The tile has an associated texture, but it is not yet loaded: load it now
@@ -401,12 +420,13 @@ bool StelSkyImageTile::isReadyToDisplay() const
 }
 
 void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& loading,
-												QStringList& notStarted, QStringList& errors) const
+												QStringList& notStarted, QStringList& errors,
+												bool viewportOnly) const
 {
-	if (!absoluteImageURI.isEmpty())
+	if (!absoluteImageURI.isEmpty() && (!viewportOnly || viewportCandidate))
 	{
 		const QString name = QFileInfo(absoluteImageURI).fileName();
-		if (errorOccured)
+		if (errorOccured || (tex && tex->hasError()))
 			errors.append(name);
 		else if (isReadyToDisplay())
 			ready.append(name);
@@ -419,8 +439,36 @@ void StelSkyImageTile::collectTextureStatus(QStringList& ready, QStringList& loa
 	for (QObject* child : children())
 	{
 		if (const auto* tile = qobject_cast<const StelSkyImageTile*>(child))
-			tile->collectTextureStatus(ready, loading, notStarted, errors);
+			tile->collectTextureStatus(ready, loading, notStarted, errors, viewportOnly);
 	}
+}
+
+void StelSkyImageTile::resetViewportCandidates()
+{
+	viewportCandidate = false;
+	for (QObject* child : children())
+	{
+		if (auto* tile = qobject_cast<StelSkyImageTile*>(child))
+			tile->resetViewportCandidates();
+	}
+}
+
+int StelSkyImageTile::retryFailedTextures(bool viewportOnly)
+{
+	int retried = 0;
+	if ((!viewportOnly || viewportCandidate) && tex && tex->hasError())
+	{
+		tex.clear();
+		textureRetryCount = 0;
+		nextTextureRetryTime = 0.0;
+		++retried;
+	}
+	for (QObject* child : children())
+	{
+		if (auto* tile = qobject_cast<StelSkyImageTile*>(child))
+			retried += tile->retryFailedTextures(viewportOnly);
+	}
+	return retried;
 }
 
 // Load the tile from a valid QVariantMap

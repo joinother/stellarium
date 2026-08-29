@@ -58,6 +58,7 @@ public:
 
 	//! Indicate if the meteor still visible.
 	bool isAlive() const { return m_alive; }
+	QString getRejectionReason() const { return m_rejectionReason; }
 	//! Set meteor absolute magnitude.
 	void setAbsMag(float mag) { m_absMag = mag; }
 	//! Get meteor absolute magnitude.
@@ -91,6 +92,7 @@ private:
 	const StelCore* m_core;         //! The associated StelCore instance.
 
 	bool m_alive;                   //! Indicates if the meteor it still visible.
+	QString m_rejectionReason;
 	double m_speed;                  //! Velocity of meteor in km/s.
 	Mat4d m_matAltAzToRadiant;      //! Rotation matrix to convert from horizontal to radiant coordinate system.
 	Vec3d m_position;               //! Meteor position in radiant coordinate system.

@@ -27,6 +27,7 @@
 #include "StelSkyCultureSkyPartition.hpp"
 
 #include <vector>
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 
@@ -129,6 +130,7 @@ public:
 	QVector<QPair<QString,StelObjectP>> listAllObjects(bool inEnglish) const override;
 	QString getName() const override { return "Constellations"; }
 	QString getStelObjectType() const override;
+	QJsonObject getArtStatus(const QString& abbreviation = QString()) const;
 
 	///////////////////////////////////////////////////////////////////////////
 	//! Returns whether the current skyculture defines a zodiac-type cultural coordinate system

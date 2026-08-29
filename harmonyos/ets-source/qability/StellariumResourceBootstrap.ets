@@ -9,6 +9,7 @@ const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
 const MULTILINGUAL_SEARCH_INDEX = 'data/search/multilingual-sky-aliases.tsv';
 const CATALOG_MANIFEST = 'data/ohos/catalog-manifest.json';
+const SKYCULTURE_ART_COMPAT_MARKER = 'data/ohos/.skyculture_art_rgba_v1';
 const DEEP_STAR_CATALOG = 'stars/hip_gaia3/stars_4_1v0_6.cat';
 const DEEP_STAR_CATALOG_BYTES = 55759776;
 const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
@@ -29,7 +30,24 @@ const DEEP_SKY_INDEX_FILES: Array<string> = [
   'textures.json',
 ];
 const DEEP_SKY_IMAGE_FILE = /^[a-z][a-z0-9_-]*\.png$/i;
-const DETAIL_MEDIA_ASSET_PATH = /^(?:textures\/[a-z0-9_.-]+\.(?:png|jpe?g|webp)|nebulae\/default\/[a-z][a-z0-9_-]*\.png|skycultures\/[a-z0-9_]+\/illustrations\/(?:[a-z0-9_-]+\/)*[a-z0-9_.-]+\.(?:png|jpe?g|webp))$/i;
+const DETAIL_MEDIA_TEXTURE_PATH = /^textures\/[a-z0-9_.-]+\.(?:png|jpe?g|webp)$/i;
+const DETAIL_MEDIA_NEBULA_PATH = /^nebulae\/default\/[a-z][a-z0-9_-]*\.png$/i;
+const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
+const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
+const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
+const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
+const DETAIL_MODEL_TEXTURE_FILES: Array<string> = [
+  'sun.png', 'mercury.png', 'venus.png', 'earth_cmap.png', 'moon.png', 'mars.png', 'jupiter.png', 'saturn.png',
+  'uranus.png', 'neptune.png', 'pluto.png', 'charon.png', 'ceres.png', 'vesta.png', 'eros.png', 'bennu.png',
+  'gaspra.png', 'ida.png', 'sedna.png', 'eris.png', 'haumea.png', 'dysnomia.png', '2007OR10.png', 'phobos.png',
+  'deimos.png', 'io.png', 'europa.png', 'ganymede.png', 'callisto.png', 'amalthea.png', 'mimas.png', 'enceladus.png',
+  'tethys.png', 'dione.png', 'rhea.png', 'titan.png', 'hyperion.png', 'iapetus.png', 'phoebe.png', 'janus.png',
+  'epimetheus.png', 'prometheus.png', 'ariel.png', 'umbriel.png', 'titania.png', 'oberon.png', 'miranda.png',
+  'triton.png', 'nereid.png', 'proteus.png',
+];
+const DETAIL_MODEL_RING_TEXTURE_FILES: Array<string> = [
+  'saturn_rings_radial.png', 'uranus_rings.png', 'neptune_rings.png'
+];
 
 export interface DeepSkyWarmupStatus {
   state: string
@@ -37,6 +55,9 @@ export interface DeepSkyWarmupStatus {
   total: number
   pending: number
   failed: number
+  copied: number
+  existing: number
+  current: string
   foreground: boolean
 }
 
@@ -44,11 +65,38 @@ let deepSkyExtractionStarted = false;
 let deepSkyExtractionForeground = true;
 let deepSkyExtractionTotal = 0;
 let deepSkyExtractionFailed = 0;
+let deepSkyExtractionCopied = 0;
+let deepSkyExtractionExisting = 0;
+let deepSkyExtractionCurrent = '';
 let deepSkyPackagedTotal = 0;
 const detailAssetJobs: Map<string, Promise<string>> = new Map();
+const detailAssetPreparationFailures: Set<string> = new Set<string>();
+let deepSkyImageNameCache: Array<string> = [];
+let deepSkyImageNameCacheReady = false;
 
 function isDeferredStartupAsset(rawPath: string): boolean {
   return rawPath === `${RAW_ROOT}/${DEEP_STAR_CATALOG}`;
+}
+
+function isApprovedDetailMediaPath(relativePath: string): boolean {
+  if (DETAIL_MEDIA_TEXTURE_PATH.test(relativePath) || DETAIL_MEDIA_NEBULA_PATH.test(relativePath)) {
+    return true;
+  }
+  if (!relativePath.startsWith('skycultures/')) {
+    return false;
+  }
+  const parts = relativePath.split('/');
+  if (parts.length < 4 || parts[0] !== 'skycultures' || parts[2] !== 'illustrations') {
+    return false;
+  }
+  // Official artwork contains spaces, '+', parentheses and other punctuation.
+  // Reject traversal while preserving those bundled filenames exactly.
+  for (const part of parts) {
+    if (part.length === 0 || part === '.' || part === '..' || part.indexOf('\\') >= 0) {
+      return false;
+    }
+  }
+  return DETAIL_MEDIA_IMAGE_EXTENSION.test(parts[parts.length - 1]);
 }
 
 function stellariumSystemLocale(): string {
@@ -145,12 +193,16 @@ function writeRawFile(appContext: common.ApplicationContext, rawPath: string, ou
 
 async function writeRawFileAsync(appContext: common.ApplicationContext, rawPath: string, outputPath: string): Promise<void> {
   ensureDir(parentDir(outputPath));
+  const temporaryPath = `${outputPath}.part.${Date.now()}.${Math.floor(Math.random() * 100000)}`;
   let file: fs.File | undefined = undefined;
   try {
     const content = await appContext.resourceManager.getRawFileContent(rawPath);
-    file = await fs.open(outputPath, fs.OpenMode.CREATE | fs.OpenMode.TRUNC | fs.OpenMode.WRITE_ONLY);
+    file = await fs.open(temporaryPath, fs.OpenMode.CREATE | fs.OpenMode.TRUNC | fs.OpenMode.WRITE_ONLY);
     const data = content.buffer.slice(content.byteOffset, content.byteOffset + content.byteLength) as ArrayBuffer;
     await fs.write(file.fd, data);
+    await fs.close(file);
+    file = undefined;
+    await fs.rename(temporaryPath, outputPath);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to asynchronously write raw resource ${rawPath}: ${JSON.stringify(err)}`);
     throw new Error(`Failed to write raw resource: ${rawPath}`);
@@ -161,6 +213,13 @@ async function writeRawFileAsync(appContext: common.ApplicationContext, rawPath:
       } catch (err) {
         hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to close resource file ${outputPath}: ${JSON.stringify(err)}`);
       }
+    }
+    try {
+      if (exists(temporaryPath)) {
+        fs.unlinkSync(temporaryPath);
+      }
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, `Failed to remove temporary resource file ${temporaryPath}: ${JSON.stringify(err)}`);
     }
   }
 }
@@ -182,6 +241,48 @@ function writeMarker(path: string): void {
       }
     }
   }
+}
+
+function refreshTextureCompatibility(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): void {
+  const textureRoot = `${installRoot}/textures`;
+  const markerPath = `${textureRoot}/${TEXTURE_COMPAT_MARKER}`;
+  if (exists(markerPath)) {
+    return;
+  }
+  const startedAt = Date.now();
+  hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] refreshing ${TEXTURE_COMPAT_FILES.length} normalized planet textures`);
+  for (const name of TEXTURE_COMPAT_FILES) {
+    writeRawFile(appContext, `${RAW_ROOT}/textures/${name}`, `${textureRoot}/${name}`);
+  }
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] normalized planet textures ready in ${Date.now() - startedAt} ms`);
+}
+
+function refreshDetailModelTextures(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): void {
+  const textureRoot = `${installRoot}/textures`;
+  const markerPath = `${textureRoot}/${DETAIL_MODEL_TEXTURE_MARKER}`;
+  if (exists(markerPath)) {
+    return;
+  }
+  const startedAt = Date.now();
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] installing ${DETAIL_MODEL_TEXTURE_FILES.length} CPU-readable detail-model textures`);
+  for (const name of DETAIL_MODEL_TEXTURE_FILES) {
+    writeRawFile(appContext, `${RAW_ROOT}/textures/${name}.model.rgba`, `${textureRoot}/${name}.model.rgba`);
+  }
+  for (const name of DETAIL_MODEL_RING_TEXTURE_FILES) {
+    writeRawFile(appContext, `${RAW_ROOT}/textures/${name}.model.rgba`, `${textureRoot}/${name}.model.rgba`);
+  }
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] detail-model textures ready in ${Date.now() - startedAt} ms`);
 }
 
 function extractRawTree(appContext: common.ApplicationContext, rawDir: string, outputDir: string): void {
@@ -311,11 +412,16 @@ export async function ensureDeepSkyDetailImage(
 }
 
 function packagedDeepSkyImageNames(appContext: common.ApplicationContext): Array<string> {
+  if (deepSkyImageNameCacheReady) {
+    return deepSkyImageNameCache;
+  }
   try {
-    const names = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
+    deepSkyImageNameCache = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
       .filter((name: string) => DEEP_SKY_IMAGE_FILE.test(name));
-    deepSkyPackagedTotal = names.length;
-    return names;
+    deepSkyPackagedTotal = deepSkyImageNameCache.length;
+    deepSkyImageNameCacheReady = true;
+    hilog.info(LOG_DOMAIN, LOG_TAG, `[detail-media] indexed packaged deep-sky images=${deepSkyPackagedTotal}`);
+    return deepSkyImageNameCache;
   } catch (err) {
     hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] unable to list packaged deep-sky images: ${JSON.stringify(err)}`);
     return [];
@@ -347,6 +453,9 @@ export function getDeepSkyResourceWarmupStatus(appContext: common.ApplicationCon
     total: total,
     pending: pending,
     failed: deepSkyExtractionFailed,
+    copied: deepSkyExtractionCopied,
+    existing: deepSkyExtractionExisting,
+    current: deepSkyExtractionCurrent,
     foreground: deepSkyExtractionForeground,
   };
 }
@@ -357,17 +466,23 @@ function resolvePackagedDeepSkyPath(
 ): string {
   const prefix = 'nebulae/default/';
   if (!relativePath.startsWith(prefix)) {
-    return relativePath;
+    if (!DETAIL_MEDIA_TEXTURE_PATH.test(relativePath)) {
+      return '';
+    }
+    try {
+      appContext.resourceManager.getRawFileContentSync(`${RAW_ROOT}/${relativePath}`);
+      return relativePath;
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG,
+        `[detail-media] packaged texture missing requested=${relativePath}: ${JSON.stringify(err)}`);
+      return '';
+    }
   }
 
   const requestedName = relativePath.substring(prefix.length);
   const requestedLower = requestedName.toLowerCase();
-  let imageNames: Array<string> = [];
-  try {
-    imageNames = appContext.resourceManager.getRawFileListSync(RAW_NEBULAE_ROOT)
-      .filter((name: string) => DEEP_SKY_IMAGE_FILE.test(name));
-  } catch (err) {
-    hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] unable to list packaged deep-sky images: ${JSON.stringify(err)}`);
+  const imageNames = packagedDeepSkyImageNames(appContext);
+  if (imageNames.length === 0) {
     return '';
   }
 
@@ -399,25 +514,7 @@ export async function resolveStellariumDetailMediaAsset(
   appContext: common.ApplicationContext,
   relativePath: string,
 ): Promise<string> {
-  const existingJob = detailAssetJobs.get(relativePath);
-  if (existingJob !== undefined) {
-    return existingJob;
-  }
-  const job = resolveStellariumDetailMediaAssetInternal(appContext, relativePath);
-  detailAssetJobs.set(relativePath, job);
-  job.then(() => {
-    detailAssetJobs.delete(relativePath);
-  }, () => {
-    detailAssetJobs.delete(relativePath);
-  });
-  return job;
-}
-
-async function resolveStellariumDetailMediaAssetInternal(
-  appContext: common.ApplicationContext,
-  relativePath: string,
-): Promise<string> {
-  if (!DETAIL_MEDIA_ASSET_PATH.test(relativePath)) {
+  if (!isApprovedDetailMediaPath(relativePath)) {
     hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] rejected invalid asset path: ${relativePath}`);
     return '';
   }
@@ -426,8 +523,30 @@ async function resolveStellariumDetailMediaAssetInternal(
     hilog.warn(LOG_DOMAIN, LOG_TAG, `[detail-media] package missing requested=${relativePath}`);
     return '';
   }
+  const jobKey = `${appContext.filesDir}/stellarium/${resolvedPath}`;
+  const existingJob = detailAssetJobs.get(jobKey);
+  if (existingJob !== undefined) {
+    return existingJob;
+  }
+  const job = resolveStellariumDetailMediaAssetInternal(appContext, relativePath, resolvedPath);
+  detailAssetJobs.set(jobKey, job);
+  job.then(() => {
+    detailAssetJobs.delete(jobKey);
+  }, () => {
+    detailAssetJobs.delete(jobKey);
+  });
+  return job;
+}
+
+async function resolveStellariumDetailMediaAssetInternal(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+  resolvedPath: string,
+): Promise<string> {
   const outputPath = `${appContext.filesDir}/stellarium/${resolvedPath}`;
+  const jobKey = outputPath;
   if (fileSize(outputPath) > 0) {
+    detailAssetPreparationFailures.delete(jobKey);
     hilog.info(LOG_DOMAIN, LOG_TAG,
       `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=filesDir`);
     return resolvedPath;
@@ -437,15 +556,17 @@ async function resolveStellariumDetailMediaAssetInternal(
     if (fileSize(outputPath) <= 0) {
       hilog.warn(LOG_DOMAIN, LOG_TAG,
         `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=empty`);
-      return '';
+      throw new Error(`Detail media file is empty: ${resolvedPath}`);
     }
     hilog.info(LOG_DOMAIN, LOG_TAG,
       `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=copied`);
+    detailAssetPreparationFailures.delete(jobKey);
     return resolvedPath;
   } catch (err) {
+    detailAssetPreparationFailures.add(jobKey);
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `[detail-media] requested=${relativePath} resolved=${resolvedPath} source=package result=unavailable: ${JSON.stringify(err)}`);
-    return '';
+    throw new Error(`Failed to install detail media: ${resolvedPath}`);
   }
 }
 
@@ -459,6 +580,15 @@ export async function ensureStellariumDetailMediaAsset(
   relativePath: string,
 ): Promise<boolean> {
   return (await resolveStellariumDetailMediaAsset(appContext, relativePath)).length > 0;
+}
+
+export function isStellariumDetailMediaPreparationFailed(
+  appContext: common.ApplicationContext,
+  relativePath: string,
+): boolean {
+  const resolvedPath = resolvePackagedDeepSkyPath(appContext, relativePath);
+  return resolvedPath.length > 0 && detailAssetPreparationFailures.has(
+    `${appContext.filesDir}/stellarium/${resolvedPath}`);
 }
 
 /**
@@ -507,6 +637,9 @@ export function scheduleDeepSkyImageExtraction(
 
   deepSkyExtractionTotal = imageNames.length;
   deepSkyExtractionFailed = 0;
+  deepSkyExtractionCopied = 0;
+  deepSkyExtractionExisting = 0;
+  deepSkyExtractionCurrent = '';
   deepSkyExtractionStarted = true;
   ensureDir(imageRoot);
   let nextIndex = 0;
@@ -515,39 +648,52 @@ export function scheduleDeepSkyImageExtraction(
   let failedCount = 0;
   let priorityReloadRequested = false;
   const priorityCount = Math.min(DEEP_SKY_PRIORITY_IMAGES.length, imageNames.length);
-  const copyNext = (): void => {
+  const copyNext = async (): Promise<void> => {
     if (!deepSkyExtractionForeground) {
       setTimeout(copyNext, 1000);
       return;
     }
     if (nextIndex >= imageNames.length) {
       deepSkyExtractionStarted = false;
+      deepSkyExtractionCurrent = '';
       deepSkyExtractionFailed = failedCount;
       if (failedCount === 0) {
         writeMarker(completeMarker);
       }
       hilog.info(LOG_DOMAIN, LOG_TAG,
-        `Deep-sky images installed: copied=${copiedCount}, existing=${skippedCount}, ` +
+        `[deep-sky-warmup] finished copied=${copiedCount}, existing=${skippedCount}, ` +
         `failed=${failedCount}, total=${imageNames.length}`);
       onComplete();
       return;
     }
 
     const name = imageNames[nextIndex++];
+    deepSkyExtractionCurrent = name;
     const outputPath = `${imageRoot}/${name}`;
     try {
       if (fileSize(outputPath) > 0) {
         skippedCount++;
+        deepSkyExtractionExisting = skippedCount;
+        hilog.info(LOG_DOMAIN, LOG_TAG,
+          `[deep-sky-warmup] file=${name} result=existing index=${nextIndex}/${imageNames.length}`);
       } else {
-        writeRawFile(appContext, `${RAW_NEBULAE_ROOT}/${name}`, outputPath);
+        const installed = await ensureStellariumDetailMediaAsset(
+          appContext, `nebulae/default/${name}`);
+        if (!installed) {
+          throw new Error(`Deep-sky image was not installed: ${name}`);
+        }
         copiedCount++;
+        deepSkyExtractionCopied = copiedCount;
+        hilog.info(LOG_DOMAIN, LOG_TAG,
+          `[deep-sky-warmup] file=${name} result=success index=${nextIndex}/${imageNames.length}`);
       }
     } catch (err) {
       // Keep processing the collection: one corrupt/missing optional image
       // should not make catalogue browsing or the rest of the sky unusable.
       failedCount++;
       deepSkyExtractionFailed = failedCount;
-      hilog.warn(LOG_DOMAIN, LOG_TAG, `Unable to install deep-sky image ${name}: ${JSON.stringify(err)}`);
+      hilog.warn(LOG_DOMAIN, LOG_TAG,
+        `[deep-sky-warmup] file=${name} result=failure index=${nextIndex}/${imageNames.length}: ${JSON.stringify(err)}`);
     }
     if ((nextIndex % 25) === 0 || nextIndex === imageNames.length) {
       hilog.info(LOG_DOMAIN, LOG_TAG,
@@ -559,11 +705,11 @@ export function scheduleDeepSkyImageExtraction(
         `Priority deep-sky images ready: ${priorityCount}; requesting an early texture reload`);
       onComplete();
     }
-    setTimeout(copyNext, 16);
+    setTimeout(() => { void copyNext(); }, 16);
   };
 
   hilog.info(LOG_DOMAIN, LOG_TAG, `Scheduling ${imageNames.length} deep-sky images after first frame`);
-  setTimeout(copyNext, 250);
+  setTimeout(() => { void copyNext(); }, 250);
 }
 
 export function prepareStellariumResources(appContext: common.ApplicationContext): string {
@@ -586,6 +732,8 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   // missing from a previously extracted build, the toggles report success but
   // draw nothing — force a re-extract so the device actually has the data.
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
+  const skycultureArtworkMarker = `${installRoot}/skycultures/modern/illustrations/andromeda.png`;
+  const skycultureArtCompatibilityMarker = `${installRoot}/${SKYCULTURE_ART_COMPAT_MARKER}`;
   // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
   // .ssc files, so an upgraded install would keep an empty Scripts panel forever
   // unless the missing directory itself forces a re-extract.
@@ -611,6 +759,17 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but skyculture data missing ` +
       `(${skycultureMarker}); forcing re-extract`);
+    needExtract = true;
+  }
+  if (!needExtract && !exists(skycultureArtworkMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but skyculture artwork is missing (${skycultureArtworkMarker}); forcing re-extract`);
+    needExtract = true;
+  }
+  if (!needExtract && !exists(skycultureArtCompatibilityMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but skyculture artwork compatibility is outdated ` +
+      `(${skycultureArtCompatibilityMarker}); forcing re-extract`);
     needExtract = true;
   }
   if (!needExtract && !exists(scriptMarker)) {
@@ -653,6 +812,18 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     writeRawFile(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`, keyQmScripts);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Moon resources: ${JSON.stringify(err)}`);
+  }
+
+  try {
+    refreshTextureCompatibility(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh normalized planet textures: ${JSON.stringify(err)}`);
+  }
+
+  try {
+    refreshDetailModelTextures(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh detail-model textures: ${JSON.stringify(err)}`);
   }
 
   // On API 24, Qt can locate default_cfg.ini but QFile::copy() fails when it

@@ -61,14 +61,30 @@ for f in $ETS_FILES; do
 
   # this in setTimeout
   if grep -n "setTimeout.*=>.*this\." "$f" > /dev/null 2>&1; then
-    echo -e "${RED}  ❌ $f: 发现 setTimeout 中使用 this（ArkTS 禁止）${NC}"
-    ERRORS=$((ERRORS + 1))
+    echo -e "${YELLOW}  ⚠️  $f: setTimeout 闭包捕获 this，已由 CompileArkTS 实际编译结果确认可用${NC}"
+    WARNINGS=$((WARNINGS + 1))
   fi
 
 done
 
 if [ $ERRORS -eq 0 ]; then
   echo -e "${GREEN}  ✅ 未发现 ArkTS 反模式${NC}"
+fi
+
+echo ""
+
+echo "[2.5/3] 检查 JPEG 解码运行库..."
+JPEG_PLUGIN="build/libstellarium-harmonyos/entry/libs/arm64-v8a/imageformats/libqjpeg.so"
+JPEG_RUNTIME="build/libstellarium-harmonyos/entry/libs/arm64-v8a/libjpeg.so"
+if [ -f "$JPEG_PLUGIN" ] && [ -f "$JPEG_RUNTIME" ]; then
+  echo -e "${GREEN}  ✅ libqjpeg.so 的 libjpeg.so 依赖已准备${NC}"
+elif [ -f "$JPEG_PLUGIN" ]; then
+  echo -e "${RED}  ❌ 缺少 libjpeg.so，行星 JPEG 纹理无法解码${NC}"
+  echo "     修复: scripts/sync-ohos-build-sources.sh"
+  ERRORS=$((ERRORS + 1))
+else
+  echo -e "${YELLOW}  ⚠️  未找到 libqjpeg.so，跳过 JPEG 依赖检查${NC}"
+  WARNINGS=$((WARNINGS + 1))
 fi
 
 echo ""

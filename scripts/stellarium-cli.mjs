@@ -110,9 +110,23 @@ function readResponse(options, requestId, deadline, relaunch) {
     } catch (error) { log = ''; }
     const requestLines = log.split(/\r?\n/).filter((line) => line.includes(requestId));
     if (requestLines.length > 0) requestSeen = true;
-    const lines = requestLines.filter((line) => line.includes(RESPONSE_MARKER) && line.includes(`requestId=${requestId}`));
-    if (lines.length > 0) {
-      const line = lines[lines.length - 1];
+    const responseLines = requestLines.filter((line) => line.includes(RESPONSE_MARKER) && line.includes(`requestId=${requestId}`));
+    const chunks = responseLines.map((line) => {
+      const match = line.match(/chunkIndex=(\d+)\s+chunkCount=(\d+)\s+responseChunk=(.*)$/);
+      if (!match) return undefined;
+      return { index: Number(match[1]), count: Number(match[2]), value: match[3].trim() };
+    }).filter((chunk) => chunk !== undefined);
+    if (chunks.length > 0) {
+      const expectedCount = chunks[0].count;
+      const byIndex = new Map(chunks.map((chunk) => [chunk.index, chunk.value]));
+      if (byIndex.size >= expectedCount && Array.from({ length: expectedCount }, (_, index) => byIndex.has(index)).every(Boolean)) {
+        const raw = Array.from({ length: expectedCount }, (_, index) => byIndex.get(index)).join('');
+        try { return JSON.parse(raw); } catch (error) { return { ok: false, error: '无法解析设备响应', raw }; }
+      }
+    }
+    const legacyLines = responseLines.filter((line) => line.includes(' response='));
+    if (legacyLines.length > 0) {
+      const line = legacyLines[legacyLines.length - 1];
       const marker = ' response=';
       const index = line.indexOf(marker);
       if (index >= 0) {

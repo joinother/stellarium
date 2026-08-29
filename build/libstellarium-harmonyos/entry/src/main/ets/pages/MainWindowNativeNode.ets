@@ -7,6 +7,7 @@ import { KeyCode } from '@kit.InputKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
+import { image } from '@kit.ImageKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
@@ -14,11 +15,11 @@ import { LOCATION_HIERARCHY } from './location_hierarchy'
 import { LOCATION_COUNTRY_NAMES } from './location_countries'
 import { LOCATION_ZH_NAMES } from './location_names_zh'
 
-import { StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, SearchSug, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, ScriptMetadata, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, PolarScopeData } from './StellariumTypes'
+import { StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, SearchSug, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, ScriptMetadata, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, PolarScopeData } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
 import { AudioEngine } from './StellariumAudio'
 import { I18n, LANGUAGE_DISPLAY, SUPPORTED_LANGUAGES, PROJECTION_KEYS } from './I18n'
-import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, resolveStellariumDetailMediaAsset } from '../qability/StellariumResourceBootstrap'
+import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, isStellariumDetailMediaPreparationFailed, resolveStellariumDetailMediaAsset } from '../qability/StellariumResourceBootstrap'
 
 // Shared corner-radius scale for the ArkUI shell.
 const UI_RADIUS_CONTROL: number = 14
@@ -32,10 +33,28 @@ interface CityPreset {
   alt: number
 }
 
+interface ImageDecodeSize {
+  width: number
+  height: number
+}
+
+interface ObjectInspectorRingSpec {
+  texturePath: string
+  innerRadius: number
+  outerRadius: number
+  tilt: number
+  opacity: number
+}
+
 interface HeliocentricPositionOptions {
   includeSelectedMinor: boolean
   includeBrightComets: boolean
   cometMagnitudeLimit: number
+}
+
+interface ConstellationNavigationItem {
+  englishName: string
+  localizedName: string
 }
 
 interface HeliocentricOrbit {
@@ -591,7 +610,11 @@ struct WindowNativeNode {
   private privacyNativeStartupAllowed: boolean = false
   @StorageLink('stellariumStartupPreparing')
   private startupPreparing: boolean = false
+  @Watch('onCliUiEventChanged')
+  @StorageLink('stellariumCliUiEvent')
+  private cliUiEvent: string = ''
   private privacyPageStartupStarted: boolean = false
+  private lastCliUiEventId: string = ''
   @State private isExpandedLayout: boolean = false
   @State private isFoldHoverLayout: boolean = false
   @State private isFoldableDevice: boolean = false
@@ -606,6 +629,8 @@ struct WindowNativeNode {
   @State private responsiveLayoutMode: string = 'compact'
   @State private activePanel: string = 'object'
   @State private panelVisible: boolean = false
+  @State private panelNavigationDepth: number = 0
+  private panelNavigationStack: string[] = []
   @State private searchText: string = ''
   @State private selectedName: string = ''
   @State private selectedEnglishName: string = ''
@@ -613,12 +638,15 @@ struct WindowNativeNode {
   @State private selectedDetailMediaPath: string = ''
   @State private selectedDetailMediaKind: string = ''
   @State private selectedDetailMediaLabel: string = ''
+  @State private selectedDetailModel: ObjectDetailModel | undefined = undefined
   @State private selectedObjectType: string = ''
   @State private selectedTemperatureK: number = 0
   @State private searchSuggestions: SearchSug[] = []
   @State private searchHistory: string[] = []
   @State private searchCategory: string = 'planet'
   @State private categoryObjects: NameItem[] = []
+  @State private objectCatalogCategories: CatOption[] = []
+  @State private constellationNavigationItems: ConstellationNavigationItem[] = []
   @State private categoryObjectCount: number = 0
   @State private categoryLoadedCount: number = 0
   @State private categoryLoading: boolean = false
@@ -665,9 +693,25 @@ struct WindowNativeNode {
   private dismissedObjectName: string = ''
   @State private infoTextExpanded: boolean = false
   @State private panelContentKey: number = 0
+  private languageRefreshSerial: number = 0
+  private languageSwitchTimer: number = -1
   @State private cardOffsetX: number = 0
   @State private cardOffsetY: number = 0
+  @State private objectDetailConnectorVisible: boolean = true
+  @State private objectDetailConnectorX: number = 0
+  @State private objectDetailConnectorY: number = 0
+  @State private objectDetailConnectorLength: number = 0
+  @State private objectDetailConnectorAngle: number = 0
+  @State private objectDetailConnectorEndX: number = 0
+  @State private objectDetailConnectorEndY: number = 0
+  @State private objectDetailConnectorTargetX: number = 0
+  @State private objectDetailConnectorTargetY: number = 0
+  @State private objectDetailConnectorTargetOnScreen: boolean = false
+  @State private objectDetailContentOpacity: number = 1
+  @State private objectDetailContentTranslateX: number = 0
   private objectCardDragging: boolean = false
+  private objectCardPlacementPending: boolean = false
+  private objectDetailTabTransitionId: number = 0
   private objectCardDragStartX: number = 0
   private objectCardDragStartY: number = 0
   private objectCardDragStartOffsetX: number = 0
@@ -684,8 +728,15 @@ struct WindowNativeNode {
   @State private objectInspectorMediaKind: string = 'none'
   @State private objectInspectorMediaLabel: string = ''
   @State private objectInspectorMediaLoading: boolean = false
+  @State private objectInspectorMediaDecoding: boolean = false
+  @State private objectInspectorMediaPixelMap: image.PixelMap | undefined = undefined
   @State private objectInspectorMediaLoadFailed: boolean = false
+  @State private objectInspectorMediaPreparationFailed: boolean = false
   @State private objectInspectorMediaNoMatch: boolean = false
+  @State private objectInspectorMediaWarmupState: string = 'unknown'
+  @State private objectInspectorMediaWarmupInstalled: number = 0
+  @State private objectInspectorMediaWarmupTotal: number = 0
+  @State private objectInspectorMediaWarmupFailed: number = 0
   private objectInspectorMediaRequestPath: string = ''
   private objectInspectorMediaResolvedRequestPath: string = ''
   private objectInspectorMediaResolvedPath: string = ''
@@ -694,8 +745,35 @@ struct WindowNativeNode {
   @State private objectInspectorMediaPreviewPath: string = ''
   @State private objectInspectorMediaPreviewLoading: boolean = false
   @State private objectInspectorMediaPreviewFailed: boolean = false
-  @State private objectInspectorModelOffset: number = 0
+  private objectInspectorMediaWarmupTimer: number = 0
+  private objectInspectorMediaDecodeGeneration: number = 0
+  @State private skyTextureStatusVisible: boolean = false
+  @State private skyTextureStatusText: string = ''
+  @State private skyTextureStatusError: boolean = false
+  private skyTextureStatusTimer: number = 0
+  private skyTextureStatusDelayTimer: number = 0
+  private skyTextureStatusPolls: number = 0
+  @State private objectInspectorModelPixelMap: image.PixelMap | undefined = undefined
+  @State private objectInspectorModelYaw: number = 0
+  @State private objectInspectorModelPitch: number = 0
+  @State private objectInspectorModelScale: number = 1
+  @State private objectInspectorModelRendering: boolean = false
+  private objectInspectorModelTexturePixels: ArrayBuffer | undefined = undefined
+  private objectInspectorModelTextureWidth: number = 0
+  private objectInspectorModelTextureHeight: number = 0
+  private objectInspectorModelTextureStride: number = 0
+  private objectInspectorModelRingTexturePixels: ArrayBuffer | undefined = undefined
+  private objectInspectorModelRingTextureWidth: number = 0
+  private objectInspectorModelRingTextureHeight: number = 0
+  private objectInspectorModelRingTextureStride: number = 0
   private objectInspectorModelLastX: number = 0
+  private objectInspectorModelLastY: number = 0
+  private objectInspectorModelLastPinchDistance: number = 0
+  private objectInspectorModelRenderGeneration: number = 0
+  private objectInspectorModelRenderPending: boolean = false
+  private objectInspectorModelRenderHighQuality: boolean = false
+  private objectInspectorModelRenderTimer: number = 0
+  @State private objectInspectorModelInteracting: boolean = false
   @State private audioVolume: number = 0.7
   @State private sessionExportText: string = ''
   @State private sessionImportText: string = ''
@@ -791,7 +869,9 @@ struct WindowNativeNode {
   @State private locationPickerLongitude: number = 116.4074
   @State private locationPickerAltitude: number = 44
   @State private locationPickerStatus: ResourceStr = I18n.t('m_drag_map_hint')
-  @State private mapGestureActive: boolean = false
+  private mapTouchStartX: number = 0
+  private mapTouchStartY: number = 0
+  private mapTouchMoved: boolean = false
   @State private observerPlanet: string = 'Earth'
   @State private planetList: string[] = []
   @State private pointAlt: string = '45'
@@ -1014,6 +1094,8 @@ struct WindowNativeNode {
   @State private moduleList: string[] = []
   @State private rtsData: Map<string, string> = new Map()
   @State private rtsError: string = ''
+  @State private rtsLoading: boolean = false
+  private rtsRequestSequence: number = 0
   @State private rtsCalendarData: Array<RtsCalendarDay> = []
   @State private rtsCalendarName: string = ''
   @State private rtsCalendarError: string = ''
@@ -1027,6 +1109,9 @@ struct WindowNativeNode {
   @State private rtsCalendarProgress: number = 0
   @State private rtsCalendarTotalDays: number = 0
   @State private almanacData: Map<string, string> = new Map()
+  @State private almanacLoading: boolean = false
+  @State private almanacError: string = ''
+  private almanacRequestSequence: number = 0
   @State private almanacSeasons: Array<SeasonEvent> = []
   @State private almanacSeasonYear: string = ''
   @State private objectInfo: Map<string, string> = new Map()
@@ -1035,19 +1120,29 @@ struct WindowNativeNode {
   @State private dsoClusters: number = 0
   @State private dsoNebulae: number = 0
   @State private planetPositions: Array<PlanetPosition> = []
+  @State private planetPositionsLoading: boolean = false
+  @State private planetPositionsError: string = ''
+  private planetPositionsRequestSequence: number = 0
   @State private positionMode: number = 0
   @State private hecPositions: Array<HeliocentricPosition> = []
+  @State private hecPositionsLoading: boolean = false
+  @State private hecPositionsError: string = ''
+  private hecPositionsRequestSequence: number = 0
   @State private hecTime: string = ''
   @State private hecIncludeSelectedMinor: boolean = false
   @State private hecIncludeBrightComets: boolean = false
   @State private hecCometMagnitudeLimit: number = 9
   @State private celestialPositions: Array<CelestialPosition> = []
+  @State private celestialPositionsLoading: boolean = false
+  @State private celestialPositionsError: string = ''
+  private celestialPositionsRequestSequence: number = 0
   @State private celestialPositionCategory: string = 'planets'
   @State private celestialPositionMagnitude: number = 6
   @State private celestialPositionHorizontal: boolean = true
   @State private celestialPositionTime: string = ''
   @State private ephemerisData: Array<EphemerisRow> = []
   @State private ephemerisName: string = ''
+  @State private ephemerisMeta: string = ''
   @State private ephemerisError: string = ''
   @State private ephemerisDays: number = 14
   @State private ephemerisStepHours: number = 24
@@ -1060,9 +1155,14 @@ struct WindowNativeNode {
   @State private ephemerisSecondary: string = 'Sun'
   @State private ephemerisLoading: boolean = false
   @State private planetCalcData: Array<PlanetCalcItem> = []
+  @State private planetCalcLoading: boolean = false
+  @State private planetCalcError: string = ''
+  private planetCalcRequestSequence: number = 0
   @State private planetCalcMode: number = 0
   @State private planetPairDistanceData: Array<PlanetPairDistancePoint> = []
   @State private planetPairDistanceError: string = ''
+  @State private planetPairDistanceLoading: boolean = false
+  private planetPairDistanceRequestSequence: number = 0
   @State private planetPairFirst: string = 'Sun'
   @State private planetPairSecond: string = 'Moon'
   @State private planetPairFirstName: string = '太阳'
@@ -1099,6 +1199,7 @@ struct WindowNativeNode {
   @State private observabilityData: Array<ObservabilityDay> = []
   @State private observabilityName: string = ''
   @State private observabilityError: string = ''
+  @State private observabilityProgress: string = ''
   @State private observabilityDays: number = 30
   @State private observabilityMinAltitude: number = 20
   @State private lunarElongationData: Array<LunarElongationPoint> = []
@@ -1153,9 +1254,15 @@ struct WindowNativeNode {
   @State private phenomenaIncludeElongationsQuadratures: boolean = true
   @State private phenomenaIncludeStations: boolean = true
   @State private astroExporting: boolean = false
+  @State private astroContext: AstroCalcContext | undefined = undefined
+  @State private astroCalcSnapshot: string = ''
+  private astroContextTimer: number = 0
+  private astroContextRequestId: number = 0
+  private astroContextRequestPending: boolean = false
   @State private tonightAstro: TonightEvents | null = null
   @State private wutTargets: Array<WutTarget> = []
   @State private wutLoading: boolean = false
+  @State private wutProgress: string = ''
   @State private wutCategory: string = 'planets'
   @State private wutPeriod: string = 'midnight'
   @State private wutMinAltitude: number = 20
@@ -1167,6 +1274,7 @@ struct WindowNativeNode {
   @State private wutAngularSizeAvailable: boolean = true
   @State private wutObservationTime: string = ''
   @State private wutHint: string = ''
+  private wutRequestSequence: number = 0
   @State private siderealTimeText: string = '--'
   @State private nightModeOn: boolean = false
   @State private atmoPressure: number = 1013
@@ -1180,10 +1288,20 @@ struct WindowNativeNode {
   @State private skyCultureDetailError: string = ''
   @State private skyCultureNarration: string = ''
   @State private skyCultureDescription: string = ''
+  @State private skyCultureDescriptionBlocks: Array<SkyCultureDescriptionBlock> = []
   @State private skyCultureArtItems: Array<SkyCultureArtItem> = []
+  @State private skyCultureArtStates: Record<string, string> = {}
   @State private skyCultureArtExpanded: boolean = false
+  @State private skyCultureArtPreviewOpen: boolean = false
   @State private skyCultureArtPreviewPath: string = ''
   @State private skyCultureArtPreviewName: string = ''
+  @State private skyCultureArtPreviewRawPath: string = ''
+  @State private skyCultureArtPreviewLoading: boolean = false
+  @State private skyCultureArtPreviewFailed: boolean = false
+  @State private skyCultureArtPreviewPixelMap: image.PixelMap | undefined = undefined
+  @State private skyCultureArtThumbnailPixelMaps: Record<string, image.PixelMap> = {}
+  private skyCultureArtDecodeGeneration: number = 0
+  private skyCultureArtThumbnailGeneration: number = 0
   @State private skyCultureTerritoryArchive: Array<SkyCultureTerritoryEntry> = []
   @State private skyCultureHasTerritoryArchive: boolean = false
   @State private skyCultureTerritorySegmentCount: number = 0
@@ -1283,6 +1401,9 @@ struct WindowNativeNode {
   private polarScopeTransitionId: number = 0
   @State private pluginList: Array<PluginItem> = []
   @State private pluginListLoading: boolean = false
+  @State private pluginStartupPending: string[] = []
+  @State private pluginStartupOverrides: Record<string, boolean> = {}
+  @State private pluginFeatureLoading: string[] = []
   @State private commandCatalog: Array<CommandCatalogEntry> = []
   @State private commandSearchText: string = ''
   @State private commandNameInput: string = ''
@@ -1320,6 +1441,7 @@ struct WindowNativeNode {
   @State private bigStarHalo: boolean = true
   @State private starSpiky: boolean = false
   @State private meteorZhr: number = 10
+  @State private meteorZhrMax: number = 240000
   @State private zodiacalLight: boolean = true
   @State private zodiacalIntensity: number = 1
   @State private starMagLimit: number = 6.0
@@ -1636,6 +1758,7 @@ struct WindowNativeNode {
   private detailTimer: number = 0
   private detailRefreshing: boolean = false
   private detailRefreshGuard: number = 0
+  private objectDetailConnectorTimer: number = 0
   private foregroundRefreshPaused: boolean = false
   // Structured details are loaded after a new target is drawn. Keeping this
   // timer separate from the live-value poll prevents it from delaying panning.
@@ -1646,6 +1769,7 @@ struct WindowNativeNode {
   private lastSafeNavigationAt: number = 0
   private categoryOffset: number = 0
   private categoryRequestSerial: number = 0
+  private satelliteCatalogReady: boolean = false
   private readonly CATEGORY_PAGE_SIZE: number = 60
   // 时间面板打开时，每 1s 拉一次 getState，让"时间"字段像走动的钟一样实时更新
   // （否则只在打开瞬间刷新一次，点按钮/时间流逝都不会再更新，永远显示 --）
@@ -1669,6 +1793,7 @@ struct WindowNativeNode {
   private pinchLastScale: number = 1
   private pinchCenterX: number = 0
   private pinchCenterY: number = 0
+  private pinchStartFov: number = 60
   private pinchLastNativePushMs: number = 0
   private pinchNativePushPending: boolean = false
   /** 缩放 FOV 胶囊提示的节流时间戳 */
@@ -1726,6 +1851,10 @@ struct WindowNativeNode {
   private gyroFilteredMagneticDevice: number[] = []
   private dragLogCount: number = 0
   private touchStartedOnUi: boolean = false
+  private lastSkyTapAt: number = 0
+  private lastSkyTapX: number = 0
+  private lastSkyTapY: number = 0
+  private skySelectionRequestSerial: number = 0
   private mouseSkyPressed: boolean = false
   private mouseSkyMoved: boolean = false
   private mouseSkyStartX: number = 0
@@ -1755,24 +1884,46 @@ struct WindowNativeNode {
 
   private moreActions(): ShellAction[] {
     return [
-      { label: I18n.t('dock_observe'), icon: 'observe', panel: 'observing' },
+      { label: I18n.t('more_workspace_observing'), icon: 'observe', panel: 'observeHub', section: I18n.t('more_section_workspace') },
+      { label: I18n.t('more_sky_data'), icon: 'satellite', panel: 'dataHub', section: I18n.t('more_section_data') },
+      { label: I18n.t('more_automation'), icon: 'script', panel: 'automationHub', section: I18n.t('more_section_automation') },
+      { label: I18n.t('panel_tools_data'), icon: 'tools', panel: 'tools', section: I18n.t('more_section_system') },
+      { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings', section: I18n.t('more_section_system') },
+      { icon: 'help', label: I18n.t('i0217'), panel: 'help', section: I18n.t('more_section_system') }
+    ]
+  }
+  private observingHubActions(): ShellAction[] {
+    return [
+      { label: I18n.t('more_observe_list'), icon: 'observe', panel: 'observing' },
       { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
       { label: I18n.t('panel_oculars'), icon: 'oculars', panel: 'oculars' },
       { label: I18n.t('panel_angle_measure'), icon: 'angle', panel: 'angleMeasure' },
       { label: I18n.t('panel_nav_stars'), icon: 'nav_stars', panel: 'navStars' },
+      { label: I18n.t('polar_scope_title'), icon: 'polar_scope', panel: 'polarScope' },
+      { label: I18n.t('panel_telescope_control'), icon: 'telescope', panel: 'telescope' }
+    ]
+  }
+  private skyDataHubActions(): ShellAction[] {
+    return [
+      { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
       { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
       { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
       { label: I18n.t('3D Sceneries'), icon: 'orbit', panel: 'scenery3d' },
-      { label: I18n.t('i0274'), icon: 'orbit', panel: 'astro' },
-      { label: I18n.t('polar_scope_title'), icon: 'polar_scope', panel: 'polarScope' },
-      { label: I18n.t('panel_telescope_control'), icon: 'telescope', panel: 'telescope' },
-      { label: I18n.t('panel_tools_data'), icon: 'tools', panel: 'tools' },
-      { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings' },
+      { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
+      { label: I18n.t('more_plugins_manage'), icon: 'settings', panel: 'pluginManager' }
+    ]
+  }
+  private automationHubActions(): ShellAction[] {
+    return [
       { icon: 'script', label: I18n.t('panel_scripts'), panel: 'scripts' },
       { icon: 'code', label: I18n.t('panel_commands'), panel: 'commands' },
-      { icon: 'help', label: I18n.t('i0217'), panel: 'help' },
       { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
     ]
+  }
+  private moreActionStartsSection(item: ShellAction, index: number): boolean {
+    if (index === 0) return true
+    const actions = this.moreActions()
+    return actions[index - 1].section !== item.section
   }
   // @deprecated 旧左侧栏仅为历史 Builder 和旧状态兼容保留，不属于当前 Shell。
   // 当前入口只能通过 primaryDockActions 与 moreActions 访问，旧 rail/drawer 状态永远不参与布局。
@@ -2108,6 +2259,39 @@ struct WindowNativeNode {
     this.startPageAfterPrivacyIfNeeded()
   }
 
+  private onCliUiEventChanged(): void {
+    if (this.cliUiEvent.length === 0) {
+      return
+    }
+    try {
+      const event = JSON.parse(this.cliUiEvent) as Record<string, Object>
+      const requestId = event['requestId'] as string
+      if (requestId === undefined || requestId.length === 0 || requestId === this.lastCliUiEventId) {
+        return
+      }
+      this.lastCliUiEventId = requestId
+      const commandName = event['commandName'] as string
+      const response = event['response'] as StellariumBridgeResponse
+      if ((commandName === 'setObjectDetailConnector' || commandName === 'getObjectDetailConnector') &&
+        (response as Record<string, Object>)['enabled'] !== undefined) {
+        const enabled = (response as Record<string, Object>)['enabled'] as boolean
+        this.setObjectDetailConnector(enabled, false)
+        hilog.info(0x0000, 'StellariumArkUI', '[cli-ui] detail connector=%{public}s', enabled.toString())
+        return
+      }
+      if (commandName === 'clearSelection' || response.found !== true) {
+        this.applySelectedObject(response)
+        return
+      }
+      this.applySelectedObject(response, false, 'center')
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[cli-ui] selection synchronized command=%{public}s name=%{public}s',
+        commandName, this.selectedName)
+    } catch (err) {
+      hilog.warn(0x0000, 'StellariumArkUI', '[cli-ui] event ignored: %{public}s', JSON.stringify(err))
+    }
+  }
+
   private startPageAfterPrivacyIfNeeded(): void {
     if (!this.privacyNativeStartupAllowed || this.privacyPageStartupStarted) {
       return
@@ -2224,6 +2408,29 @@ struct WindowNativeNode {
         if (saved.viewCoordinatesVisible !== undefined) { this.viewCoordinatesVisible = saved.viewCoordinatesVisible as boolean }
         if (saved.viewCoordinateFamily !== undefined) { this.viewCoordinateFamily = saved.viewCoordinateFamily as string }
         if (saved.viewEquatorialEpoch !== undefined) { this.viewEquatorialEpoch = saved.viewEquatorialEpoch as string }
+        if (saved.objectDetailConnectorVisible !== undefined) { this.objectDetailConnectorVisible = saved.objectDetailConnectorVisible as boolean }
+        const savedAstroTab = Number(saved.astroTab)
+        if (Number.isInteger(savedAstroTab) && savedAstroTab >= 0 && savedAstroTab <= 9) this.astroTab = savedAstroTab
+        const savedPositionMode = Number(saved.positionMode)
+        if (Number.isInteger(savedPositionMode) && savedPositionMode >= 0 && savedPositionMode <= 2) this.positionMode = savedPositionMode
+        const savedCelestialMagnitude = Number(saved.celestialPositionMagnitude)
+        if (Number.isFinite(savedCelestialMagnitude)) this.celestialPositionMagnitude = this.clamp(savedCelestialMagnitude, -5, 25)
+        if (saved.celestialPositionCategory !== undefined) this.celestialPositionCategory = saved.celestialPositionCategory as string
+        if (saved.celestialPositionHorizontal !== undefined) this.celestialPositionHorizontal = saved.celestialPositionHorizontal === 'true'
+        const savedEphemerisMode = Number(saved.ephemerisMode)
+        if (Number.isInteger(savedEphemerisMode) && savedEphemerisMode >= 0 && savedEphemerisMode <= 2) this.ephemerisMode = savedEphemerisMode
+        const savedEphemerisDays = Number(saved.ephemerisDays)
+        if (Number.isInteger(savedEphemerisDays) && savedEphemerisDays >= 1 && savedEphemerisDays <= 31) this.ephemerisDays = savedEphemerisDays
+        const savedEphemerisStep = Number(saved.ephemerisStepHours)
+        if (Number.isInteger(savedEphemerisStep) && savedEphemerisStep >= 1 && savedEphemerisStep <= 24) this.ephemerisStepHours = savedEphemerisStep
+        const savedRtsDays = Number(saved.rtsCalendarDays)
+        if (Number.isInteger(savedRtsDays) && savedRtsDays >= 1 && savedRtsDays <= 365) this.rtsCalendarDays = savedRtsDays
+        const savedGraphMode = Number(saved.graphMode)
+        if (Number.isInteger(savedGraphMode) && savedGraphMode >= 0 && savedGraphMode <= 5) this.graphMode = savedGraphMode
+        const savedEclipseMonths = Number(saved.eclipseMonths)
+        if (Number.isInteger(savedEclipseMonths) && savedEclipseMonths >= 1 && savedEclipseMonths <= 60) this.eclipseMonths = savedEclipseMonths
+        const savedMoonPhaseDays = Number(saved.moonPhaseDays)
+        if (savedMoonPhaseDays === 30 || savedMoonPhaseDays === 90) this.moonPhaseDays = savedMoonPhaseDays
       } catch (_err) { }
     }
     if (this.musicEnabled) { AudioEngine.getInstance().start() }
@@ -2242,7 +2449,20 @@ struct WindowNativeNode {
       musicEnabled: this.musicEnabled,
       viewCoordinatesVisible: this.viewCoordinatesVisible,
       viewCoordinateFamily: this.viewCoordinateFamily,
-      viewEquatorialEpoch: this.viewEquatorialEpoch
+      viewEquatorialEpoch: this.viewEquatorialEpoch,
+      objectDetailConnectorVisible: this.objectDetailConnectorVisible,
+      astroTab: this.astroTab.toString(),
+      positionMode: this.positionMode.toString(),
+      celestialPositionCategory: this.celestialPositionCategory,
+      celestialPositionMagnitude: this.celestialPositionMagnitude.toString(),
+      celestialPositionHorizontal: this.celestialPositionHorizontal.toString(),
+      ephemerisMode: this.ephemerisMode.toString(),
+      ephemerisDays: this.ephemerisDays.toString(),
+      ephemerisStepHours: this.ephemerisStepHours.toString(),
+      rtsCalendarDays: this.rtsCalendarDays.toString(),
+      graphMode: this.graphMode.toString(),
+      eclipseMonths: this.eclipseMonths.toString(),
+      moonPhaseDays: this.moonPhaseDays.toString()
     }))
   }
 
@@ -2263,10 +2483,20 @@ struct WindowNativeNode {
     this.stopSkyInertia()
     this.stopGyroscope(false)
     this.stopDetailAutoRefresh()
+    this.stopObjectDetailConnectorRefresh()
+    this.stopObjectInspectorMediaWarmup()
+    this.clearObjectInspectorDecodedImage()
+    this.skyCultureArtDecodeGeneration++
+    this.clearSkyCultureArtThumbnails()
+    const skyCulturePixelMap = this.skyCultureArtPreviewPixelMap
+    this.skyCultureArtPreviewPixelMap = undefined
+    this.releaseDecodedImage(skyCulturePixelMap, 'disappear-sky-culture-art')
+    this.stopSkyTextureStatusObserver()
     this.stopTimePanelTimers()
     this.stopViewCoordinateTimer()
     this.stopSkyCultureTimeFollowTimer()
     this.stopPolarScopeTimer()
+    this.stopAstroCalcContextTimer()
     this.stopScriptStatusPolling()
     if (this.replaying) {
       this.finishRecordingReplay('回放已结束')
@@ -2305,6 +2535,7 @@ struct WindowNativeNode {
       this.syncViewCoordinateTimer()
       this.syncSkyCultureTimeFollowTimer()
       this.syncPolarScopeTimer()
+      this.syncAstroCalcContextTimer()
       return
     }
 
@@ -2315,6 +2546,7 @@ struct WindowNativeNode {
     this.stopViewCoordinateTimer()
     this.stopSkyCultureTimeFollowTimer()
     this.stopPolarScopeTimer()
+    this.stopAstroCalcContextTimer()
     this.stopDetailAutoRefresh()
     this.stopSkyInertia()
     void AudioEngine.getInstance().stop()
@@ -2392,6 +2624,28 @@ struct WindowNativeNode {
     if (this.polarScopeTimer === 0) {
       this.polarScopeTimer = setInterval(() => { this.loadPolarScopeData(false) }, 100)
     }
+  }
+
+  private shouldRefreshAstroCalcContext(): boolean {
+    return this.applicationInForeground && this.activePanel === 'astro' && this.panelVisible
+  }
+
+  private stopAstroCalcContextTimer(): void {
+    if (this.astroContextTimer !== 0) {
+      clearInterval(this.astroContextTimer)
+      this.astroContextTimer = 0
+    }
+    ++this.astroContextRequestId
+  }
+
+  private syncAstroCalcContextTimer(): void {
+    if (!this.shouldRefreshAstroCalcContext()) {
+      this.stopAstroCalcContextTimer()
+      return
+    }
+    if (this.astroContextTimer !== 0) return
+    this.loadAstroCalcContext()
+    this.astroContextTimer = setInterval(() => { this.loadAstroCalcContext() }, 1000)
   }
 
   private loadPolarScopeData(showLoading: boolean = true): void {
@@ -2525,15 +2779,31 @@ struct WindowNativeNode {
     })
   }
 
-  private setPanel(panel: string): void {
+  private setPanel(panel: string, preserveHistory: boolean = false, forceVisible: boolean = false): void {
+    if (!preserveHistory) {
+      this.panelNavigationStack = []
+      this.panelNavigationDepth = 0
+    }
     // “应用配置”已并入“设置”；保留旧面板名兼容历史命令和书签。
     if (panel === 'config') panel = 'settings'
+    // 天体详情是跨设备的独立浮动卡片，不再打开第二个“对象”面板。
+    if (panel === 'object') {
+      this.toggleObjectInspector()
+      return
+    }
+    // 插件管理和设置共用同一套界面，直达入口只负责选中对应标签。
+    if (panel === 'pluginManager') {
+      this.configTab = 6
+      panel = 'settings'
+    } else if (panel === 'settings' && this.configTab >= 4 && this.configTab <= 6) {
+      this.configTab = 0
+    }
     if (panel === 'polarScope') {
       this.enterPolarScope()
       return
     }
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
-    const nextVisible = this.activePanel === panel ? !this.panelVisible : true
+    const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
     if (panel !== 'object') {
       this.fullInspectorRequested = false
       this.infoWinExpanded = false
@@ -2549,7 +2819,8 @@ struct WindowNativeNode {
         this.fullInspectorRequested = false
         this.infoWinExpanded = false
       }
-      this.panelContentKey++
+      // activePanel 本身会触发内容刷新；不要为每次路由切换再更换 Scroll 的 id，
+      // 否则 ArkUI 会销毁并重建子树，插件页/文化页表现为整块面板闪烁。
       this.syncSkyCultureTimeFollowTimer()
       this.syncPolarScopeTimer()
     })
@@ -2558,12 +2829,16 @@ struct WindowNativeNode {
       this.refreshTonight()
     }
     if (panel === 'observing' && nextVisible) {
-      this.loadWutTargets()
+      if (this.wutTargets.length === 0 && !this.wutLoading) {
+        this.wutHint = I18n.t('observing_refresh_hint') as string
+      }
     }
     if (nextVisible) {
       this.resetPanelIdle()
-      if (panel === 'search' && this.categoryObjects.length === 0) {
-        this.loadCategoryObjects(this.searchCategory)
+      if (panel === 'search') {
+        this.loadObjectCatalogCategories()
+        this.loadConstellationNavigation()
+        if (this.categoryObjects.length === 0) this.loadCategoryObjects(this.searchCategory)
       }
     }
     this.scheduleSelectedObjectForUiChange(380)
@@ -2591,7 +2866,7 @@ struct WindowNativeNode {
     if (panel === 'object') {
       this.refreshSelectedObject()
     } else if (panel === 'astro') {
-      this.loadAstroTab(this.astroTab)
+      if (nextVisible) this.loadAstroTab(this.astroTab)
     } else if (panel === 'layers' || panel === 'time') {
       this.refreshState()
     } else if (panel === 'settings') {
@@ -2642,6 +2917,29 @@ struct WindowNativeNode {
     }
   }
 
+  private openSubPanel(panel: string): void {
+    if (this.activePanel !== panel && this.panelVisible) {
+      this.panelNavigationStack = this.panelNavigationStack.concat([this.activePanel])
+      this.panelNavigationDepth = this.panelNavigationStack.length
+    }
+    this.setPanel(panel, true, true)
+  }
+
+  private canGoBackPanel(): boolean {
+    return this.panelNavigationStack.length > 0
+  }
+
+  private goBackPanel(): void {
+    if (!this.canGoBackPanel()) {
+      this.closePanel(true)
+      return
+    }
+    const previous = this.panelNavigationStack[this.panelNavigationStack.length - 1]
+    this.panelNavigationStack = this.panelNavigationStack.slice(0, this.panelNavigationStack.length - 1)
+    this.panelNavigationDepth = this.panelNavigationStack.length
+    this.setPanel(previous, true, true)
+  }
+
   private closePanel(force: boolean = false): void {
     if (this.uiLocked && !force) {
       return
@@ -2654,12 +2952,15 @@ struct WindowNativeNode {
     this.stopTimePanelTimers()
     this.stopSkyCultureTimeFollowTimer()
     this.stopPolarScopeTimer()
+    this.stopAstroCalcContextTimer()
     if (this.activePanel === 'search') {
       this.graphTargetPickerActive = false
       this.rtsTargetPickerActive = false
       this.ephemerisTargetPickerActive = false
     }
     const closingObjectPanel = this.activePanel === 'object'
+    this.panelNavigationStack = []
+    this.panelNavigationDepth = 0
     this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.45, 0.9) }, () => {
       this.panelVisible = false
       if (closingObjectPanel) {
@@ -4012,7 +4313,15 @@ struct WindowNativeNode {
   }
 
   // 确保插件已加载，未加载时先 loadPlugin 再回调
-  private ensurePluginLoaded(pluginName: string, callback: () => void): void {
+  private ensurePluginLoaded(pluginName: string, callback: () => void, failureCallback?: () => void): void {
+    if (this.pluginFeatureLoading.indexOf(pluginName) >= 0) {
+      hilog.info(0x0000, 'StellariumArkUI', 'Plugin feature load already pending: ' + pluginName)
+      return
+    }
+    this.pluginFeatureLoading = this.pluginFeatureLoading.concat([pluginName])
+    const finish = (): void => {
+      this.pluginFeatureLoading = this.pluginFeatureLoading.filter((id: string) => id !== pluginName)
+    }
     this.callNativeWhenReady('getPluginList', '', (r: StellariumBridgeResponse) => {
       const items = r.items as Array<PluginItem> | undefined
       let loaded = false
@@ -4025,18 +4334,30 @@ struct WindowNativeNode {
         }
       }
       if (loaded) {
+        finish()
         callback()
       } else {
         hilog.info(0x0000, 'StellariumArkUI', 'Auto-loading plugin: ' + pluginName)
         this.callInteractive('loadPlugin', pluginName, (loadResult: StellariumBridgeResponse) => {
-          this.loadPluginList()
-          if (loadResult.ok === true) callback()
-          else this.flashHint(I18n.t('plugin_load_failed'))
+          finish()
+          if (loadResult.ok === true) {
+            this.updatePluginLoadedItem(pluginName, true)
+            this.loadObjectCatalogCategories()
+            callback()
+          }
+          else {
+            this.flashHint(I18n.t('plugin_load_failed'))
+            if (failureCallback !== undefined) failureCallback()
+          }
         }, () => {
-          this.loadPluginList()
+          finish()
           this.flashHint(I18n.t('plugin_load_failed'))
+          if (failureCallback !== undefined) failureCallback()
         })
       }
+    }, 0, 100, 15, () => {
+      finish()
+      if (failureCallback !== undefined) failureCallback()
     })
   }
 
@@ -4288,6 +4609,7 @@ struct WindowNativeNode {
     if (result.bigStarHalo !== undefined) this.bigStarHalo = result.bigStarHalo === true
     if (result.starSpiky !== undefined) this.starSpiky = result.starSpiky === true
     if (result.meteorZhr !== undefined) this.meteorZhr = Math.round(result.meteorZhr as number)
+    if (result.meteorZhrMax !== undefined) this.meteorZhrMax = Math.max(1000, Math.round(result.meteorZhrMax as number))
     if (result.zodiacalLight !== undefined) this.zodiacalLight = result.zodiacalLight === true
     if (result.zodiacalIntensity !== undefined) this.zodiacalIntensity = result.zodiacalIntensity as number
     this.autoZoomResets = result.autoZoomResets === true
@@ -4334,11 +4656,14 @@ struct WindowNativeNode {
     }
     if (result.fov !== undefined) {
       this.fovText = result.fov.toFixed(1) + '°'
-      this.fovSliderValue = Math.round(result.fov)
+      this.fovSliderValue = result.fov
       this.currentFovText = result.fov.toFixed(1) + '°'
     }
     if (result.tracking !== undefined && !this.trackingRequestPending && Date.now() >= this.trackingStateIgnoreUntilMs) {
       this.trackingText = result.tracking ? 'On' : 'Off'
+    }
+    if (result.viewLock !== undefined) {
+      this.viewLock = result.viewLock === true
     }
     })
   }
@@ -4357,6 +4682,10 @@ struct WindowNativeNode {
   // Routed bridge flag: calls a named bridge command (e.g. setMeteors) with "1"/"0"
   private setBridgeFlag(cmd: string, enabled: boolean): void {
     hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag send %{public}s|%{public}s', cmd, enabled ? '1' : '0')
+    if (cmd === 'setViewLock') {
+      this.setViewLockState(enabled)
+      return
+    }
     // 同步本地 @State：否则面板关闭重开后 Toggle 会显示旧值，再点一次就把状态发反了
     this.syncBridgeFlagState(cmd, enabled)
     this.callInteractive(cmd, enabled ? '1' : '0', (r: StellariumBridgeResponse) => {
@@ -4464,6 +4793,47 @@ struct WindowNativeNode {
     else if (cmd === 'setAutoZoomResets') { this.autoZoomResets = enabled }
   }
 
+  private setViewLockState(enabled: boolean): void {
+    if (enabled && !this.hasSelectedObject()) {
+      this.viewLock = false
+      this.flashHint(I18n.t('view_lock_requires_selection'))
+      return
+    }
+    const previous = this.viewLock
+    this.viewLock = enabled
+    this.callInteractive('setViewLock', enabled ? '1' : '0', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) {
+        this.viewLock = previous
+        this.flashHint(r.selectionRequired === true ? I18n.t('view_lock_requires_selection') : I18n.t('msg_apply_failed'))
+        return
+      }
+      if (r.viewLock !== undefined) this.viewLock = r.viewLock === true
+      if (r.tracking !== undefined) this.trackingText = r.tracking === true ? 'On' : 'Off'
+      this.flashHint(this.viewLock ? I18n.t('view_lock_enabled') : I18n.t('view_lock_disabled'))
+    }, () => {
+      this.viewLock = previous
+      this.flashHint(I18n.t('msg_apply_failed'))
+    })
+  }
+
+  private toggleViewLock(): void {
+    this.setViewLockState(!this.viewLock)
+  }
+
+  private meteorZhrSliderPosition(): number {
+    const value = Math.max(0, Math.min(this.meteorZhrMax, this.meteorZhr))
+    if (value <= 1000) return value * 0.75
+    const upperRange = Math.max(1, this.meteorZhrMax / 1000)
+    return 750 + Math.log(value / 1000) / Math.log(upperRange) * 250
+  }
+
+  private meteorZhrFromSliderPosition(position: number): number {
+    const clamped = Math.max(0, Math.min(1000, position))
+    if (clamped <= 750) return Math.round(clamped / 0.75)
+    const upperRange = Math.max(1, this.meteorZhrMax / 1000)
+    return Math.round(1000 * Math.pow(upperRange, (clamped - 750) / 250))
+  }
+
   private setSkyDisplaySetting(setting: string, value: boolean | number): void {
     if (setting === 'luminanceAdaptation') this.luminanceAdaptation = value as boolean
     else if (setting === 'starTwinkle') this.starTwinkle = value as boolean
@@ -4476,7 +4846,12 @@ struct WindowNativeNode {
     else if (setting === 'zodiacalIntensity') this.zodiacalIntensity = value as number
     const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
     this.callInteractive('setSkyDisplaySetting', payload, (r: StellariumBridgeResponse) => {
-      if (r.ok === true && (typeof value === 'boolean' || setting === 'bortleScale')) this.refreshState()
+      if (r.ok === true) {
+        if (typeof value === 'boolean' || setting === 'bortleScale') this.refreshState()
+      } else {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        this.refreshState()
+      }
     })
   }
 
@@ -4524,6 +4899,11 @@ struct WindowNativeNode {
     this.callInteractive('getTimeFormat', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.format !== undefined) { this.configTimeFormat = r.format as string }
     })
+    this.callInteractive('getConfigString', 'astronomy/flag_use_km_for_distance', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.value !== undefined) {
+        this.useMetricUnits = (r.value as string).toLowerCase() === 'true' || r.value === '1'
+      }
+    })
     this.callInteractive('getDitheringMode', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.mode !== undefined) { this.configDitheringMode = r.mode as string }
     })
@@ -4534,6 +4914,7 @@ struct WindowNativeNode {
       if (r.moveKeys !== undefined) this.navigationMoveKeysEnabled = r.moveKeys === true
       if (r.zoomKeys !== undefined) this.navigationZoomKeysEnabled = r.zoomKeys === true
       if (r.gravityLabels !== undefined) this.navigationGravityLabelsEnabled = r.gravityLabels === true
+      if (r.autoZoomResets !== undefined) this.autoZoomResets = r.autoZoomResets === true
       if (r.startupFov !== undefined) this.navigationStartupFov = Number(r.startupFov)
       if (r.startupAzimuth !== undefined) this.navigationStartupAzimuth = Number(r.startupAzimuth)
       if (r.startupAltitude !== undefined) this.navigationStartupAltitude = Number(r.startupAltitude)
@@ -4672,6 +5053,7 @@ struct WindowNativeNode {
       else if (setting === 'moveKeys') this.navigationMoveKeysEnabled = enabled
       else if (setting === 'zoomKeys') this.navigationZoomKeysEnabled = enabled
       else if (setting === 'gravityLabels') this.navigationGravityLabelsEnabled = enabled
+      else if (setting === 'autoZoomResets') this.autoZoomResets = enabled
     })
   }
 
@@ -4742,6 +5124,9 @@ struct WindowNativeNode {
       if (r.ok === true) {
         this.configDateFormat = value
         this.flashHint('日期格式已更新')
+      } else {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        this.loadConfigurationSettings()
       }
     })
   }
@@ -4751,6 +5136,9 @@ struct WindowNativeNode {
       if (r.ok === true) {
         this.configTimeFormat = value
         this.flashHint('时间格式已更新')
+      } else {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        this.loadConfigurationSettings()
       }
     })
   }
@@ -4760,6 +5148,20 @@ struct WindowNativeNode {
       if (r.ok === true) {
         this.configDitheringMode = value
         this.flashHint('渲染质量已更新')
+      } else {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        this.loadConfigurationSettings()
+      }
+    })
+  }
+
+  private setDistanceUnit(useMetric: boolean): void {
+    this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=' + (useMetric ? 'true' : 'false'), (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.useMetricUnits = useMetric
+      } else {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        this.loadConfigurationSettings()
       }
     })
   }
@@ -4836,12 +5238,18 @@ struct WindowNativeNode {
   }
 
   private loadRTS(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.rtsRequestSequence
     this.rtsError = ''
+    this.rtsLoading = true
     if (!this.hasSelectedObject()) {
+      this.rtsLoading = false
       this.clearRtsSelectionResults()
       return
     }
     this.callInteractive('getRTS', '', (r: StellariumBridgeResponse) => {
+      if (requestId !== this.rtsRequestSequence) return
+      this.rtsLoading = false
       if (r.ok === true && r.rts !== undefined) {
         const rv: Object = r.rts as Object
         const data = new Map<string, string>()
@@ -4861,8 +5269,13 @@ struct WindowNativeNode {
         this.rtsData = data
       } else {
         this.rtsData = new Map()
-        this.rtsError = '请先在星图上选中一个天体，再计算升中天落。'
+        this.rtsError = r.error ?? '请先在星图上选中一个天体，再计算升中天落。'
       }
+    }, () => {
+      if (requestId !== this.rtsRequestSequence) return
+      this.rtsLoading = false
+      this.rtsData = new Map()
+      this.rtsError = '升中天落计算失败，请点刷新后重试。'
     })
   }
 
@@ -4885,6 +5298,16 @@ struct WindowNativeNode {
   private makeAstroCsv(exportData: AstroCsvExport): string {
     const lines: Array<string> = []
     lines.push('# ' + exportData.title)
+    if (this.astroContext !== undefined) {
+      const location = this.astroContext.observerLocation !== undefined && this.astroContext.observerLocation.length > 0
+        ? this.astroContext.observerLocation : '当前观测位置'
+      lines.push('# 观测地点: ' + location)
+      lines.push('# 本地时间: ' + this.fmtDateTime(this.astroContext.localTime))
+      lines.push('# 时区: ' + (this.astroContext.timeZone ?? '--'))
+      lines.push('# 平恒星时: ' + (this.astroContext.meanSiderealTime ?? '--'))
+      lines.push('# 视恒星时: ' + (this.astroContext.apparentSiderealTime ?? '--'))
+    }
+    if (this.astroCalcSnapshot.length > 0) lines.push('# 参数: ' + this.astroCalcSnapshot)
     lines.push(exportData.headers.map((header: string) => this.csvCell(header)).join(','))
     for (const row of exportData.rows) {
       lines.push(row.map((cell: string | number | boolean | undefined) => this.csvCell(cell)).join(','))
@@ -4895,20 +5318,20 @@ struct WindowNativeNode {
   private currentAstroCsvExport(): AstroCsvExport | undefined {
     if (this.astroTab === 0) {
       if (this.positionMode === 0 && this.planetPositions.length > 0) {
-        return { title: '地平位置', headers: ['天体', '高度(度)', '方位(度)', '星等'],
-          rows: this.planetPositions.map((item: PlanetPosition) => [this.planetZh(item.name), item.altitude, item.azimuth, item.magnitude]) }
+        return { title: '地平位置', headers: ['天体', '赤经(当日)', '赤纬(当日)', '高度(度)', '方位(度)', '星等', '距离(AU)', '视直径(角分)', '中天'],
+          rows: this.planetPositions.map((item: PlanetPosition) => [this.planetZh(item.name), item.rightAscension, item.declination, item.altitude, item.azimuth, item.magnitude, item.distanceAU, item.angularSizeArcmin, item.transit]) }
       }
       if (this.positionMode === 1 && this.hecPositions.length > 0) {
         return { title: '日心黄道位置', headers: ['天体', '英文名', '黄纬(度)', '黄经(度)', '日心距离(AU)', '彗星', '已选小天体'],
           rows: this.hecPositions.map((item: HeliocentricPosition) => [this.hecTitle(item), item.englishName, item.latitude, item.longitude, item.distanceAU, item.isComet, item.isSelectedMinor]) }
       }
       if (this.positionMode === 2 && this.celestialPositions.length > 0) {
-        return { title: '目录天体位置', headers: ['天体', '英文名', '目录编号', '坐标一', '坐标二', '高度(度)', '方位(度)', '星等', '类型', '距日(度)'],
-          rows: this.celestialPositions.map((item: CelestialPosition) => [this.celestialPositionTitle(item), item.englishName, item.catalogId, item.firstCoordinate, item.secondCoordinate, item.altitude, item.azimuth, item.magnitude, item.type, item.elongation]) }
+        return { title: '目录天体位置', headers: ['天体', '英文名', '目录编号', '坐标一', '坐标二', '高度(度)', '方位(度)', '星等', '类型', '距日(度)', '视直径(角分)', '距离(AU)', '中天'],
+          rows: this.celestialPositions.map((item: CelestialPosition) => [this.celestialPositionTitle(item), item.englishName, item.catalogId, item.firstCoordinate, item.secondCoordinate, item.altitude, item.azimuth, item.magnitude, item.type, item.elongation, item.angularSizeArcmin, item.distanceAU, item.transit]) }
       }
     } else if (this.astroTab === 1 && this.ephemerisData.length > 0) {
-      return { title: (this.ephemerisName.length > 0 ? this.ephemerisName : '天体') + '星历', headers: ['日期时间', '天体', '英文名', '赤经', '赤纬', '高度(度)', '方位(度)', '星等'],
-        rows: this.ephemerisData.map((item: EphemerisRow) => [item.date, item.bodyName, item.bodyEnglishName, item.ra, item.dec, item.altitude, item.azimuth, item.magnitude]) }
+      return { title: (this.ephemerisName.length > 0 ? this.ephemerisName : '天体') + '星历', headers: ['日期时间', '天体', '英文名', '赤经(J2000)', '赤纬(J2000)', '赤经(当日)', '赤纬(当日)', '高度(度)', '方位(度)', '时角(度)', '极距(度)', '星等', '相位(%)', '距离(AU)', '距日(度)', '视直径(角分)', '气团质量'],
+        rows: this.ephemerisData.map((item: EphemerisRow) => [item.date, item.bodyName, item.bodyEnglishName, item.ra, item.dec, item.raOfDate, item.decOfDate, item.altitude, item.azimuth, item.hourAngleDegrees, item.polarDistanceDegrees, item.magnitude, item.phase !== undefined ? item.phase * 100 : undefined, item.distanceAU, item.elongationDegrees, item.angularSizeArcmin, item.airmass]) }
     } else if (this.astroTab === 2 && this.rtsCalendarData.length > 0) {
       return { title: (this.rtsCalendarName.length > 0 ? this.rtsCalendarName : '天体') + '升中天落日期表', headers: ['日期', '升起', '中天', '落下', '中天高度(度)', '星等', '距日(度)', '距月(度)', '状态'],
         rows: this.rtsCalendarData.map((item: RtsCalendarDay) => [item.date, item.rise, item.transit, item.set, item.transitAltitude, item.magnitude, item.solarElongation, item.lunarElongation, item.status]) }
@@ -4916,15 +5339,15 @@ struct WindowNativeNode {
       return { title: '天象预报', headers: ['日期时间', '事件', '天体一', '天体二', '数值', '指标', '单位'],
         rows: this.phenomenaData.map((item: PhenomenonItem) => [item.date, item.type, item.bodyA, item.bodyB, item.separation, item.metricLabel, item.metricUnit]) }
     } else if (this.astroTab === 4) {
-      if (this.graphMode === 0 && this.altAzCurve.length > 0) {
-        return { title: this.altAzName + '地平高度曲线', headers: ['儒略日', '距起点(小时)', '高度(度)', '方位(度)', '太阳高度(度)', '月亮高度(度)'],
+      if ((this.graphMode === 0 || this.graphMode === 1) && this.altAzCurve.length > 0) {
+        return { title: this.altAzName + (this.graphMode === 0 ? '地平高度曲线' : '方位角曲线'), headers: ['儒略日', '距起点(小时)', '高度(度)', '方位(度)', '太阳高度(度)', '月亮高度(度)'],
           rows: this.altAzCurve.map((item: AltAzPoint) => [item.jd, item.t, item.altitude, item.azimuth, item.sunAltitude, item.moonAltitude]) }
       }
-      if (this.graphMode === 1 && this.annualElevationData.length > 0) {
+      if (this.graphMode === 2 && this.annualElevationData.length > 0) {
         return { title: this.annualElevationName + '全年高度', headers: ['日期', '儒略日', '高度(度)', '方位(度)'],
           rows: this.annualElevationData.map((item: AnnualElevationPoint) => [item.date, item.jd, item.altitude, item.azimuth]) }
       }
-      if (this.graphMode === 2 && this.observabilityData.length > 0) {
+      if (this.graphMode === 3 && this.observabilityData.length > 0) {
         return { title: this.observabilityName + '观测窗口', headers: ['日期', '最佳时刻', '最高高度(度)', '可观测时长(小时)', '暗夜时长(小时)', '月面照明(%)', '月亮高度(度)'],
           rows: this.observabilityData.map((item: ObservabilityDay) => [item.date, item.peakTime, item.maxAltitude, item.visibleHours, item.darkHours, item.moonIllumination, item.moonAltitude]) }
       }
@@ -4970,6 +5393,7 @@ struct WindowNativeNode {
   }
 
   private async exportCurrentAstroCsv(): Promise<void> {
+    this.updateAstroCalcSnapshot()
     const exportData = this.currentAstroCsvExport()
     if (exportData === undefined || exportData.rows.length === 0) {
       this.flashHint('当前页没有可导出的计算结果，请先生成数据。')
@@ -5005,6 +5429,7 @@ struct WindowNativeNode {
   }
 
   private loadRtsCalendar(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = ++this.rtsCalendarLoadSequence
     this.rtsCalendarData = []
     this.rtsCalendarError = ''
@@ -5125,6 +5550,7 @@ struct WindowNativeNode {
   }
 
   private loadEphemeris(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = ++this.ephemerisLoadSequence
     this.ephemerisData = []
     this.ephemerisName = ''
@@ -5141,17 +5567,27 @@ struct WindowNativeNode {
         if (r.ok === true && r.ephemeris !== undefined) {
           this.ephemerisData = r.ephemeris as Array<EphemerisRow>
           this.ephemerisName = r.name !== undefined ? String(r.name) : ''
+          const location = r.observerLocation !== undefined ? String(r.observerLocation) : ''
+          const timeZone = r.timeZone !== undefined ? String(r.timeZone) : ''
+          const frame = r.coordinateFrame !== undefined ? String(r.coordinateFrame) : 'J2000'
+          const calculatedAt = r.calculationTime !== undefined ? this.fmtDateTime(String(r.calculationTime)) : ''
+          this.ephemerisMeta = '坐标系 ' + frame + (location.length > 0 ? ' · 观测地 ' + location : '')
+            + (timeZone.length > 0 ? ' · 时区 ' + timeZone : '')
+            + (calculatedAt.length > 0 ? ' · 计算于 ' + calculatedAt : '')
         } else {
+          this.ephemerisMeta = ''
           this.ephemerisError = r.error ?? '请先在星图上选中一个天体，再生成它的星历。'
         }
       }, 0, 100, 80, () => {
         if (requestId !== this.ephemerisLoadSequence) return
         this.ephemerisLoading = false
+        this.ephemerisMeta = ''
         this.ephemerisError = '星历计算时间较长，请缩短时间范围或增大采样间隔后重试。'
       })
     }, () => {
       if (requestId !== this.ephemerisLoadSequence) return
       this.ephemerisLoading = false
+      this.ephemerisMeta = ''
       this.ephemerisError = '无法读取当前模拟时间，请点刷新后重试。'
     })
   }
@@ -5217,14 +5653,33 @@ struct WindowNativeNode {
   }
 
   private loadPlanetCalc(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.planetCalcRequestSequence
+    this.planetCalcData = []
+    this.planetCalcError = ''
+    this.planetCalcLoading = true
     this.callInteractive('getPlanetCalc', '', (r: StellariumBridgeResponse) => {
-      if (r.ok === true && r.planetCalc !== undefined) this.planetCalcData = r.planetCalc as Array<PlanetCalcItem>
+      if (requestId !== this.planetCalcRequestSequence) return
+      this.planetCalcLoading = false
+      if (r.ok === true && r.planetCalc !== undefined) {
+        this.planetCalcData = r.planetCalc as Array<PlanetCalcItem>
+        if (this.planetCalcData.length === 0) this.planetCalcError = '当前没有可显示的行星数据。'
+      } else {
+        this.planetCalcError = r.error ?? '行星实时数据计算失败，请点刷新后重试。'
+      }
+    }, () => {
+      if (requestId !== this.planetCalcRequestSequence) return
+      this.planetCalcLoading = false
+      this.planetCalcError = '行星实时数据计算失败，请点刷新后重试。'
     })
   }
 
   private loadPlanetPairDistance(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.planetPairDistanceRequestSequence
     this.planetPairDistanceData = []
     this.planetPairDistanceError = ''
+    this.planetPairDistanceLoading = true
     const options = JSON.stringify({
       first: this.planetPairFirst,
       second: this.planetPairSecond,
@@ -5232,6 +5687,8 @@ struct WindowNativeNode {
       stepDays: this.planetPairStepDays
     })
     this.callInteractive('getPlanetPairDistanceCurve', options, (r: StellariumBridgeResponse) => {
+      if (requestId !== this.planetPairDistanceRequestSequence) return
+      this.planetPairDistanceLoading = false
       if (r.ok === true && r.planetPairDistance !== undefined) {
         const data = r.planetPairDistance as Array<PlanetPairDistancePoint>
         this.planetPairDistanceData = data
@@ -5241,8 +5698,12 @@ struct WindowNativeNode {
         this.updatePlanetPairDistanceRanges(data)
       } else {
         this.planetPairDistanceData = []
-        this.planetPairDistanceError = '请选择两个不同的太阳系天体。'
+        this.planetPairDistanceError = r.error ?? '请选择两个不同的太阳系天体。'
       }
+    }, () => {
+      if (requestId !== this.planetPairDistanceRequestSequence) return
+      this.planetPairDistanceLoading = false
+      this.planetPairDistanceError = '距离曲线计算失败，请点刷新后重试。'
     })
   }
 
@@ -5267,6 +5728,7 @@ struct WindowNativeNode {
   }
 
   private loadAltAzCurve(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = this.beginGraphLoad()
     this.altAzCurve = []
     this.altAzError = ''
@@ -5299,32 +5761,45 @@ struct WindowNativeNode {
   }
 
   private loadObservabilityCalendar(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = this.beginGraphLoad()
     this.observabilityData = []
     this.observabilityError = ''
+    this.observabilityProgress = '准备计算…'
     this.resolveGraphStartJD(requestId, (startJD: number) => {
       const options = JSON.stringify({ jd: startJD, days: this.observabilityDays, minAltitude: this.observabilityMinAltitude })
-      this.callNativeWhenReady('getObservabilityCalendar', options, (r: StellariumBridgeResponse) => {
+      this.callLongRunningInteractive('getObservabilityCalendar', options, (r: StellariumBridgeResponse) => {
         if (requestId !== this.graphLoadSequence) return
         this.finishGraphLoad(requestId)
+        this.observabilityProgress = ''
         if (r.ok === true && r.observability !== undefined) {
           this.observabilityData = r.observability as Array<ObservabilityDay>
           this.observabilityName = r.name ?? ''
         } else {
           this.observabilityData = []
-          this.observabilityError = '请先在星图上选中一个天体，再查看它未来多晚的可见性。'
+          this.observabilityError = (r.error ?? '').toString().includes('no object')
+            ? '请先在星图上选中一个天体，再查看它未来多晚的可见性。'
+            : '观测窗口计算失败，请稍后重试。'
         }
-      }, 0, 100, 200, () => {
+      }, () => {
         if (requestId !== this.graphLoadSequence) return
         this.finishGraphLoad(requestId)
+        this.observabilityProgress = ''
         this.observabilityError = '计算等待超时，请稍后重试。'
+      }, (progress: StellariumBridgeResponse) => {
+        if (requestId !== this.graphLoadSequence) return
+        const completed = Number(progress.progress ?? 0)
+        const total = Number(progress.totalDays ?? this.observabilityDays)
+        this.observabilityProgress = '正在计算：' + Math.min(completed, total).toFixed(0) + ' / ' + total.toFixed(0) + ' 天'
       })
     }, () => {
+      this.observabilityProgress = ''
       this.observabilityError = '无法读取当前模拟时间，请点刷新后重试。'
     })
   }
 
   private loadAnnualElevation(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = this.beginGraphLoad()
     this.annualElevationData = []
     this.annualElevationError = ''
@@ -5346,6 +5821,7 @@ struct WindowNativeNode {
   }
 
   private loadLunarElongation(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = this.beginGraphLoad()
     this.lunarElongationData = []
     this.lunarElongationError = ''
@@ -5372,6 +5848,7 @@ struct WindowNativeNode {
   }
 
   private loadPlanetTimeSeries(): void {
+    this.updateAstroCalcSnapshot()
     const requestId = this.beginGraphLoad()
     this.planetTimeSeriesData = []
     this.planetTimeSeriesError = ''
@@ -5514,6 +5991,8 @@ struct WindowNativeNode {
   }
 
   private clearRtsSelectionResults(): void {
+    ++this.rtsRequestSequence
+    this.rtsLoading = false
     this.rtsData = new Map()
     this.rtsError = '升起、中天和落下时间需要先选择一个天体。'
     this.rtsCalendarData = []
@@ -5579,6 +6058,7 @@ struct WindowNativeNode {
   }
 
   private loadEclipses(): void {
+    this.updateAstroCalcSnapshot()
     if (this.eclipseData.length > 0 || this.eclipseLoading) return
     const requestId = ++this.eclipseLoadSequence
     this.eclipseLoading = true
@@ -5680,10 +6160,13 @@ struct WindowNativeNode {
   }
 
   private loadPlanetaryTransits(): void {
+    this.updateAstroCalcSnapshot()
     if (!this.planetaryTransitLoaded && !this.planetaryTransitLoading) {
+      const requestId = ++this.planetaryTransitRequestSequence
       this.planetaryTransitLoading = true
       this.planetaryTransitError = ''
       this.callNativeWhenReady('getPlanetaryTransits', JSON.stringify({ years: this.planetaryTransitYears }), (r: StellariumBridgeResponse) => {
+        if (requestId !== this.planetaryTransitRequestSequence) return
         this.planetaryTransitLoading = false
         if (r.ok === true && r.planetaryTransits !== undefined) {
           this.planetaryTransitData = r.planetaryTransits as Array<PlanetaryTransitItem>
@@ -5693,6 +6176,7 @@ struct WindowNativeNode {
         }
         this.planetaryTransitLoaded = true
       }, 0, 100, 200, () => {
+        if (requestId !== this.planetaryTransitRequestSequence) return
         this.planetaryTransitLoading = false
         this.planetaryTransitLoaded = true
         this.planetaryTransitError = '行星凌日计算时间较长，请缩短预测范围后重试。'
@@ -5700,7 +6184,11 @@ struct WindowNativeNode {
     }
   }
 
+  private planetaryTransitRequestSequence: number = 0
+
   private loadPhenomena(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.phenomenaRequestSequence
     this.phenomenaData = []
     this.phenomenaHint = ''
     this.phenomenaLoading = true
@@ -5716,6 +6204,7 @@ struct WindowNativeNode {
       includeStations: this.phenomenaIncludeStations,
     }
     this.callNativeWhenReady('getPhenomena', JSON.stringify(options), (r: StellariumBridgeResponse) => {
+      if (requestId !== this.phenomenaRequestSequence) return
       this.phenomenaLoading = false
       if (r.ok === true && r.phenomena !== undefined) {
         this.phenomenaData = r.phenomena as Array<PhenomenonItem>
@@ -5724,10 +6213,13 @@ struct WindowNativeNode {
         this.phenomenaHint = r.error ?? '暂时无法完成天象计算，请稍后重试。'
       }
     }, 0, 100, 300, () => {
+      if (requestId !== this.phenomenaRequestSequence) return
       this.phenomenaLoading = false
       this.phenomenaHint = '计算时间较长，请缩短预测范围或减少比较对象后重试。'
     })
   }
+
+  private phenomenaRequestSequence: number = 0
 
   private phenomenaBodyName(body: string): string {
     return body === 'all' ? '全部行星' : this.planetPairBodyName(body)
@@ -5794,7 +6286,9 @@ struct WindowNativeNode {
   }
 
   private loadWutTargets(): void {
+    const requestId = ++this.wutRequestSequence
     this.wutLoading = true
+    this.wutProgress = '准备计算…'
     this.wutHint = ''
     const options = JSON.stringify({
       category: this.wutCategory,
@@ -5806,8 +6300,10 @@ struct WindowNativeNode {
       maxAngularSizeArcmin: this.wutMaxAngularSizeArcmin,
       direction: this.wutDirection
     })
-    this.callInteractive('getWutTargets', options, (r: StellariumBridgeResponse) => {
+    this.callLongRunningInteractive('getWutTargets', options, (r: StellariumBridgeResponse) => {
+      if (requestId !== this.wutRequestSequence) return
       this.wutLoading = false
+      this.wutProgress = ''
       if (r.ok === true && r.wutTargets !== undefined) {
         this.wutTargets = r.wutTargets as Array<WutTarget>
         this.wutObservationTime = r.observationTime ?? ''
@@ -5816,13 +6312,22 @@ struct WindowNativeNode {
         if (this.wutTargets.length === 0) this.wutHint = '当前条件下没有符合要求的' + this.wutCategoryTitle() + '。'
       } else {
         this.wutTargets = []
-        this.wutHint = '当前地点没有可用的民用暮光观测窗口。'
+        this.wutHint = (r.error ?? '').toString().includes('twilight')
+          ? '当前地点没有可用的民用暮光观测窗口。'
+          : '可观测目标计算失败，请稍后刷新。'
       }
     }, () => {
+      if (requestId !== this.wutRequestSequence) return
       this.wutLoading = false
+      this.wutProgress = ''
       this.wutTargets = []
       this.wutHint = '可观测目标计算暂时不可用，请稍后刷新。'
-    })
+    }, (progress: StellariumBridgeResponse) => {
+      if (requestId !== this.wutRequestSequence) return
+      const completed = Number(progress.progress ?? 0)
+      const total = Number(progress.totalCandidates ?? 0)
+      this.wutProgress = total > 0 ? '正在筛选：' + completed.toFixed(0) + ' / ' + total.toFixed(0) : '正在筛选…'
+    }, 900)
   }
 
   private addWutTargetToObservingList(target: WutTarget): void {
@@ -6270,12 +6775,119 @@ struct WindowNativeNode {
     return v.toFixed(digits) + suffix
   }
 
+  private loadAstroCalcContext(): void {
+    if (this.astroContextRequestPending) return
+    this.astroContextRequestPending = true
+    const requestId = ++this.astroContextRequestId
+    this.callInteractive('getAstroCalcContext', '', (r: StellariumBridgeResponse) => {
+      this.astroContextRequestPending = false
+      if (requestId !== this.astroContextRequestId) return
+      if (r.ok !== true) {
+        this.astroContext = undefined
+        return
+      }
+      this.astroContext = {
+        jd: r.jd as number,
+        localTime: r.localTime as string,
+        observerLocation: r.observerLocation as string,
+        timeZone: r.timeZone as string,
+        latitude: Number(r.latitude),
+        longitude: Number(r.longitude),
+        altitude: Number(r.altitude),
+        meanSiderealTime: r.meanSiderealTime as string,
+        apparentSiderealTime: r.apparentSiderealTime as string,
+        meanSiderealHours: Number(r.meanSiderealHours),
+        apparentSiderealHours: Number(r.apparentSiderealHours),
+        equationOfTimeMinutes: Number(r.equationOfTimeMinutes),
+        sunAltitude: Number(r.sunAltitude),
+        sunAzimuth: Number(r.sunAzimuth),
+        moonAltitude: Number(r.moonAltitude),
+        moonAzimuth: Number(r.moonAzimuth),
+        moonIllumination: Number(r.moonIllumination),
+        offline: r.offline === true
+      }
+    }, () => {
+      this.astroContextRequestPending = false
+    })
+  }
+
   private almanacHoursLabel(key: string): string {
     const value = this.almanacData.get(key) ?? ''
     return value.length > 0 ? parseFloat(value).toFixed(1) + ' 小时' : '--'
   }
 
+  private updateAstroCalcSnapshot(): void {
+    if (this.astroTab === 0) {
+      const mode = this.positionMode === 0 ? '地平位置' : (this.positionMode === 1 ? '日心黄道' : '目录天体')
+      this.astroCalcSnapshot = mode + (this.positionMode === 2 ? ' · 星等 ≤ ' + this.celestialPositionMagnitude.toFixed(1) : '')
+      return
+    }
+    if (this.astroTab === 1) {
+      const target = this.ephemerisMode === 0 ? '当前选中天体' : (this.ephemerisMode === 1 ? '两个天体' : '全部肉眼行星')
+      this.astroCalcSnapshot = target + ' · ' + this.ephemerisDays.toString() + ' 天 · 每 ' + this.ephemerisStepHours.toString() + ' 小时'
+      return
+    }
+    if (this.astroTab === 2) {
+      this.astroCalcSnapshot = '升中天落 · ' + this.rtsCalendarDays.toString() + ' 天 · ' + (this.hasSelectedObject() ? this.graphTargetLabel() : '未选择天体')
+      return
+    }
+    if (this.astroTab === 3) {
+      this.astroCalcSnapshot = this.phenomenaBodyName(this.phenomenaPrimary) + ' / ' + this.phenomenaBodyName(this.phenomenaTarget) + ' · ' + this.phenomenaDays.toString() + ' 天'
+      return
+    }
+    if (this.astroTab === 4) {
+      let detail = ''
+      if (this.graphMode === 0 || this.graphMode === 1) {
+        detail = this.altAzHours.toString() + ' 小时 · 每 ' + this.altAzStepMin.toString() + ' 分钟'
+      } else if (this.graphMode === 2) {
+        detail = '每日 ' + this.annualElevationHour.toString().padStart(2, '0') + ':00'
+      } else if (this.graphMode === 3) {
+        detail = this.observabilityDays.toString() + ' 天 · 最低 ' + this.observabilityMinAltitude.toString() + '°'
+      } else if (this.graphMode === 4) {
+        detail = this.lunarElongationDays.toString() + ' 天 · 每 ' + this.lunarElongationStepHours.toString() + ' 小时'
+      } else {
+        detail = this.planetTimeSeriesDays.toString() + ' 天 · 每 ' + this.planetTimeSeriesStepHours.toString() + ' 小时'
+      }
+      this.astroCalcSnapshot = this.graphModeLabel(this.graphMode) + ' · ' + this.graphTargetLabel() + ' · '
+        + this.graphStartOptionLabel(this.graphStartOffsetDays) + ' · ' + detail
+      return
+    }
+    if (this.astroTab === 5) {
+      this.astroCalcSnapshot = '今晚可观测 · ' + this.wutCategory + ' · ' + this.wutObservationTime
+      return
+    }
+    if (this.astroTab === 6) {
+      this.astroCalcSnapshot = this.planetCalcMode === 0 ? '行星实时位置' : this.planetPairBodyName(this.planetPairFirst)
+        + ' / ' + this.planetPairBodyName(this.planetPairSecond) + ' · ' + this.planetPairDays.toString() + ' 天'
+      return
+    }
+    if (this.astroTab === 7) {
+      this.astroCalcSnapshot = (this.eclipseMode === 0 ? '日月食' : '行星凌日') + ' · ' + (this.eclipseMode === 0 ? this.eclipseMonths.toString() + ' 个月' : this.planetaryTransitYears.toString() + ' 年')
+      return
+    }
+    if (this.astroTab === 9) {
+      this.astroCalcSnapshot = '月相 · 未来 ' + this.moonPhaseDays.toString() + ' 天'
+      return
+    }
+    if (this.astroTab === 8) {
+      this.astroCalcSnapshot = '年历 · 当前模拟日期 · 当前观测地点'
+      return
+    }
+    this.astroCalcSnapshot = ''
+  }
+
+  private graphModeLabel(mode: number): string {
+    if (mode === 0) return '高度曲线'
+    if (mode === 1) return '方位角曲线'
+    if (mode === 2) return '全年高度'
+    if (mode === 3) return '月度可观测性'
+    if (mode === 4) return '月距曲线'
+    return '双变量时间曲线'
+  }
+
   private loadAstroTab(id: number): void {
+    this.updateAstroCalcSnapshot()
+    this.loadAstroCalcContext()
     if (id === 0) {
       if (this.positionMode === 0) this.loadPlanetPositions()
       else if (this.positionMode === 1) this.loadHeliocentricPositions()
@@ -6305,6 +6917,7 @@ struct WindowNativeNode {
   }
 
   private loadMoonPhases(): void {
+    this.updateAstroCalcSnapshot()
     const days = this.moonPhaseDays
     if (this.moonPhaseLoading && this.moonPhaseLoadingDays === days) return
     const requestId = ++this.moonPhaseRequestId
@@ -6345,9 +6958,16 @@ struct WindowNativeNode {
   }
 
   private loadAlmanac(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.almanacRequestSequence
     this.almanacSeasons = []
     this.almanacSeasonYear = ''
+    this.almanacData = new Map()
+    this.almanacError = ''
+    this.almanacLoading = true
     this.callInteractive('getAlmanac', '', (r: StellariumBridgeResponse) => {
+      if (requestId !== this.almanacRequestSequence) return
+      this.almanacLoading = false
       if (r.ok === true && r.almanac !== undefined) {
         const av: Object = r.almanac as Object
         const textValue = (name: string): string => av[name + 'Text'] !== undefined ? String(av[name + 'Text']) : (av[name] !== undefined ? String(av[name]) : '0')
@@ -6370,7 +6990,14 @@ struct WindowNativeNode {
         this.almanacData = data
         if (Array.isArray(av['seasonEvents'])) this.almanacSeasons = av['seasonEvents'] as Array<SeasonEvent>
         if (av['seasonYear'] !== undefined) this.almanacSeasonYear = String(av['seasonYear'])
+        if (this.almanacData.size === 0) this.almanacError = '当前没有可显示的年历数据。'
+      } else {
+        this.almanacError = r.error ?? '年历计算失败，请点刷新后重试。'
       }
+    }, () => {
+      if (requestId !== this.almanacRequestSequence) return
+      this.almanacLoading = false
+      this.almanacError = '年历计算失败，请点刷新后重试。'
     })
   }
 
@@ -6424,7 +7051,7 @@ struct WindowNativeNode {
   }
 
   private selectSkyCulture(id: string): void {
-    if (id === this.currentSkyCultureId || this.skyCultureDetailsLoading) return
+    if (id === this.currentSkyCultureId) return
     const requestId = ++this.skyCultureDetailsRequestId
     this.skyCultureDetailsLoading = true
     this.skyCultureDetailError = ''
@@ -6433,22 +7060,23 @@ struct WindowNativeNode {
       if (r.ok === true) {
         this.currentSkyCultureId = r.cultureId !== undefined ? r.cultureId : id
         const selected = this.skyCultureList.find((item: SkyCultureItem) => item.id === this.currentSkyCultureId)
-        this.currentSkyCulture = r.culture !== undefined ? r.culture : (selected !== undefined ? selected.name : id)
+        this.currentSkyCulture = r.culture !== undefined ? this.skyCultureDisplayName(this.currentSkyCultureId, r.culture) : (selected !== undefined ? this.skyCultureDisplayName(selected.id, selected.name) : id)
         this.skyCultureLabelPickerOpen = ''
         this.skyCultureClassificationFilterOpen = false
         this.skyCultureRegionFilterOpen = false
         this.skyCultureNarrationExpanded = false
         this.skyCultureDescriptionExpanded = false
+        this.skyCultureDescriptionBlocks = []
+        this.clearSkyCultureArtThumbnails()
         this.skyCultureArtItems = []
+        this.skyCultureArtStates = {}
         this.skyCultureArtExpanded = false
-        this.skyCultureArtPreviewPath = ''
-        this.skyCultureArtPreviewName = ''
+        this.closeSkyCultureArtPreview()
         this.skyCultureTerritoryExpanded = false
         this.skyCultureTerritoryMapExpanded = false
         this.skyCultureTerritoryMapPolygons = []
         this.skyCultureTerritoryMapError = ''
         this.loadSkyCultureDetails()
-        this.refreshState()
         return
       }
       this.skyCultureDetailsLoading = false
@@ -6473,7 +7101,7 @@ struct WindowNativeNode {
         return
       }
       this.currentSkyCultureId = r.id !== undefined ? r.id : this.currentSkyCultureId
-      this.currentSkyCulture = r.name !== undefined ? r.name : this.currentSkyCulture
+      this.currentSkyCulture = r.name !== undefined ? this.skyCultureDisplayName(this.currentSkyCultureId, r.name) : this.currentSkyCulture
       this.skyCultureLabelPickerOpen = ''
       this.skyCultureRegions = r.region !== undefined ? r.region : []
       this.skyCultureClassification = r.classification !== undefined ? r.classification : ''
@@ -6500,9 +7128,12 @@ struct WindowNativeNode {
       this.skyCultureLunarLabelMode = this.skyCultureScreenLabelModeFromBridge(r.lunarSystemLabelStyle)
       this.skyCultureNarration = this.cleanSkyCultureNarration(r.narration !== undefined ? r.narration : '')
       this.skyCultureDescription = this.cleanSkyCultureDescription(r.description !== undefined ? r.description : '')
+      this.skyCultureDescriptionBlocks = r.descriptionBlocks !== undefined ? r.descriptionBlocks : []
+      this.clearSkyCultureArtThumbnails()
       this.skyCultureArtItems = r.constellationArt !== undefined ? r.constellationArt : []
-      this.skyCultureArtPreviewPath = ''
-      this.skyCultureArtPreviewName = ''
+      this.skyCultureArtStates = {}
+      this.closeSkyCultureArtPreview()
+      this.prepareSkyCultureArtResources(this.skyCultureArtItems, requestId)
       this.skyCultureHasTerritoryArchive = r.hasTerritoryArchive === true
       this.skyCultureTerritorySegmentCount = r.territorySegmentCount !== undefined ? r.territorySegmentCount : 0
       this.skyCultureTerritoryArchive = r.territoryArchive !== undefined ? r.territoryArchive : []
@@ -6612,10 +7243,11 @@ struct WindowNativeNode {
   }
 
   private skyCultureLabelModeOptions(target: string): string[] {
+    const options: string[] = [I18n.t('culture_translated_name'), I18n.t('culture_native_name'), I18n.t('culture_pronunciation'), I18n.t('culture_transliteration')]
     if (target === 'zodiac' || target === 'lunar') {
-      return ['中文译名', '文化原名', '通俗读音', '学术转写']
+      return options
     }
-    return ['中文译名', '文化原名', '通俗读音', '学术转写', '现代名称']
+    return options.concat([I18n.t('culture_modern_name')])
   }
 
   private skyCultureLabelModePickerHeight(target: string): number {
@@ -6640,11 +7272,11 @@ struct WindowNativeNode {
     Column() {
       Row() {
         Column({ space: 1 }) {
-          Text('当前名称').fontSize(9).fontColor(this.nmSub()).width('100%')
+          Text(I18n.t('culture_current_name')).fontSize(9).fontColor(this.nmSub()).width('100%')
           Text(this.skyCultureLabelModeOptions(target)[selected >= 0 && selected < this.skyCultureLabelModeOptions(target).length ? selected : 0])
             .fontSize(11).fontColor(this.nmText()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.layoutWeight(1)
-        Text(this.skyCultureLabelPickerOpen === target ? '收起' : '展开').fontSize(10)
+        Text(this.skyCultureLabelPickerOpen === target ? I18n.t('culture_collapse') : I18n.t('culture_expand')).fontSize(10)
           .fontColor(this.nmText()).padding({ left: 7, right: 7, top: 4, bottom: 4 })
           .backgroundColor(this.skyCultureLabelPickerOpen === target ? this.nmPickerSelected() : this.nmInput())
           .border({ width: 1, color: this.skyCultureLabelPickerOpen === target ? this.nmAccent() : this.nmBorder() })
@@ -6666,7 +7298,7 @@ struct WindowNativeNode {
                 Circle().width(6).height(6).fill(this.nmBorder()).margin({ right: 8 })
               }
               Text(option).fontSize(10).fontColor(index === selected ? '#FFFFFFFF' : this.nmText()).layoutWeight(1)
-              Text(index === selected ? '已选' : '选择').fontSize(9)
+              Text(index === selected ? I18n.t('culture_selected') : I18n.t('culture_choose')).fontSize(9)
                 .fontColor(index === selected ? '#FFFFFFFF' : this.nmSub())
             }.height(28).width('100%').padding({ left: 9, right: 9 })
               .backgroundColor(index === selected ? this.nmPickerSelected() : this.nmPickerOption())
@@ -6888,14 +7520,14 @@ struct WindowNativeNode {
         if (!matchesTime) return false
       }
       if (query.length === 0) return true
-      const text = item.name + ' ' + item.id + ' ' + (item.region ?? []).join(' ')
+      const text = this.skyCultureDisplayName(item.id, item.name) + ' ' + item.name + ' ' + item.id + ' ' + (item.region ?? []).join(' ')
       return text.toLowerCase().includes(query)
     })
     filtered.sort((first: SkyCultureItem, second: SkyCultureItem) => {
       const firstRegion = this.skyCultureRegionKey(first)
       const secondRegion = this.skyCultureRegionKey(second)
       if (firstRegion !== secondRegion) return firstRegion.localeCompare(secondRegion)
-      return first.name.localeCompare(second.name)
+      return this.skyCultureDisplayName(first.id, first.name).localeCompare(this.skyCultureDisplayName(second.id, second.name))
     })
     return filtered
   }
@@ -7018,7 +7650,7 @@ struct WindowNativeNode {
 
   private skyCultureRegionFilterLabels(): string[] {
     return [
-      '全部地区', '澳大拉西亚', '中美洲', '东亚', '东欧', '美拉尼西亚', '北非', '北美洲',
+      I18n.t('culture_all_regions'), '澳大拉西亚', '中美洲', '东亚', '东欧', '美拉尼西亚', '北非', '北美洲',
       '北亚', '北欧', '波利尼西亚', '南美洲', '东南亚', '南部非洲', '南亚', '南欧', '西亚', '西欧', '全球'
     ]
   }
@@ -7039,38 +7671,442 @@ struct WindowNativeNode {
     return labels[index >= 0 ? index : 0]
   }
 
+  private skyCultureFilterOpen(kind: string): boolean {
+    return kind === 'classification' ? this.skyCultureClassificationFilterOpen : this.skyCultureRegionFilterOpen
+  }
+
+  private skyCultureFilterLabels(kind: string): string[] {
+    return kind === 'classification' ? this.skyCultureClassificationFilterLabels() : this.skyCultureRegionFilterLabels()
+  }
+
+  private skyCultureFilterValues(kind: string): string[] {
+    return kind === 'classification' ? this.skyCultureClassificationFilterValues() : this.skyCultureRegionFilterValues()
+  }
+
+  private skyCultureFilterValue(kind: string): string {
+    return kind === 'classification' ? this.skyCultureClassificationFilter : this.skyCultureRegionFilter
+  }
+
+  private skyCultureFilterLabel(kind: string): string {
+    return kind === 'classification' ? this.skyCultureClassificationFilterLabel() : this.skyCultureRegionFilterLabel()
+  }
+
+  private setSkyCultureFilterValue(kind: string, value: string): void {
+    this.getUIContext().animateTo({ duration: 180, curve: curves.springMotion(0.46, 0.88) }, () => {
+      if (kind === 'classification') {
+        this.skyCultureClassificationFilter = value
+        this.skyCultureClassificationFilterOpen = false
+      } else {
+        this.skyCultureRegionFilter = value
+        this.skyCultureRegionFilterOpen = false
+      }
+    })
+  }
+
+  private toggleSkyCultureFilter(kind: string): void {
+    const opening = !this.skyCultureFilterOpen(kind)
+    this.getUIContext().animateTo({ duration: 220, curve: curves.springMotion(0.46, 0.88) }, () => {
+      if (kind === 'classification') {
+        this.skyCultureClassificationFilterOpen = opening
+        this.skyCultureRegionFilterOpen = false
+      } else {
+        this.skyCultureRegionFilterOpen = opening
+        this.skyCultureClassificationFilterOpen = false
+      }
+    })
+  }
+
+  @Builder
+  private skyCultureFilterPicker(kind: string) {
+    Column({ space: 2 }) {
+      Row() {
+        Text(kind === 'classification' ? I18n.t('culture_type') : I18n.t('culture_region')).fontSize(10).fontColor(this.nmSub()).width(56).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.skyCultureFilterLabel(kind)).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.skyCultureFilterOpen(kind) ? I18n.t('culture_collapse') : I18n.t('culture_choose')).fontSize(10).fontColor(this.nmAccent())
+          .padding({ left: 5, right: 5, top: 3, bottom: 3 })
+          .backgroundColor(this.skyCultureFilterOpen(kind) ? this.nmPickerSelected() : this.nmInput())
+          .border({ width: 1, color: this.skyCultureFilterOpen(kind) ? this.nmAccent() : this.nmBorder() })
+          .borderRadius(UI_RADIUS_CONTROL)
+      }.height(36).width('100%').padding({ left: 10, right: 10 })
+        .backgroundColor(this.skyCultureFilterOpen(kind) ? this.nmPickerHeaderActive() : this.nmPickerHeader())
+        .border({ width: 1, color: this.skyCultureFilterOpen(kind) ? this.nmAccent() : this.nmBorder() })
+        .borderRadius(UI_RADIUS_CONTROL)
+        .animation({ duration: 180, curve: Curve.EaseInOut })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .onClick(() => { this.toggleSkyCultureFilter(kind) })
+      if (this.skyCultureFilterOpen(kind)) {
+        Column({ space: 2 }) {
+          ForEach(this.skyCultureFilterLabels(kind), (label: string, index: number) => {
+            Row() {
+              Circle().width(7).height(7).fill(this.skyCultureFilterValues(kind)[index] === this.skyCultureFilterValue(kind) ? this.nmAccent() : this.nmBorder()).margin({ right: 8 })
+              Text(label).fontSize(11).fontColor(this.skyCultureFilterValues(kind)[index] === this.skyCultureFilterValue(kind) ? this.nmAccent() : this.nmText()).layoutWeight(1)
+              if (this.skyCultureFilterValues(kind)[index] === this.skyCultureFilterValue(kind)) Text(I18n.t('culture_current')).fontSize(9).fontColor(this.nmAccent())
+            }.height(32).width('100%').padding({ left: 10, right: 10 })
+              .backgroundColor(this.skyCultureFilterValues(kind)[index] === this.skyCultureFilterValue(kind) ? this.nmPickerSelected() : this.nmPickerOption())
+              .border({ width: 1, color: this.skyCultureFilterValues(kind)[index] === this.skyCultureFilterValue(kind) ? this.nmAccent() : this.nmBorder() })
+              .borderRadius(UI_RADIUS_CONTROL)
+              .animation({ duration: 180, curve: curves.springMotion(0.46, 0.88) })
+              .clickEffect({ level: ClickEffectLevel.LIGHT })
+              .onClick(() => { this.setSkyCultureFilterValue(kind, this.skyCultureFilterValues(kind)[index]) })
+          }, (label: string) => kind + '-' + label)
+        }.width('100%').padding({ left: 5, right: 5, bottom: 6 })
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: -8 }).animation({ duration: 220, curve: curves.springMotion(0.46, 0.88) })),
+            TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: -4 }).animation({ duration: 150, curve: Curve.EaseIn }))
+          ))
+      }
+    }.layoutWeight(1)
+      .backgroundColor(this.skyCultureFilterOpen(kind) ? this.nmPickerSurface() : 'rgba(255,255,255,0.045)')
+      .border({ width: 1, color: this.skyCultureFilterOpen(kind) ? this.nmAccent() : this.nmBorder() })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .animation({ duration: 220, curve: curves.springMotion(0.46, 0.88) })
+  }
+
   private cleanSkyCultureNarration(text: string): string {
-    return text.replace(/\s*\.\s*\.\s*\.\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    return text.replace(/[\u200B-\u200D\u2060\uFEFF\uFFFD\uFFFC]/g, '').replace(/\s*\.\s*\.\s*\.\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
   }
 
   private cleanSkyCultureDescription(text: string): string {
-    return text.replace(/\n{3,}/g, '\n\n').trim()
+    return text.replace(/[\u200B-\u200D\u2060\uFEFF\uFFFD\uFFFC]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  }
+
+  private skyCultureDisplayName(id: string, rawName: string): string {
+    if (id !== 'tibetan') return rawName
+    const language = I18n.getLanguage()
+    if (language === 'zh_CN') return '中国藏族星空文化'
+    if (language === 'zh_HK' || language === 'zh_TW') return '中國藏族星空文化'
+    if (language === 'en') return 'Tibetan Sky Culture (China)'
+    const qualifiers: Record<string, string> = {
+      'ar': 'الصين', 'bn': 'চীন', 'cs': 'Čína', 'da': 'Kina', 'de': 'China',
+      'el': 'Κίνα', 'es': 'China', 'fa': 'چین', 'fi': 'Kiina', 'fr': 'Chine',
+      'gu': 'ચીન', 'he': 'סין', 'hi': 'चीन', 'hr': 'Kina', 'hu': 'Kína',
+      'id': 'Tiongkok', 'it': 'Cina', 'ja': '中国', 'ko': '중국', 'ml': 'ചൈന',
+      'mr': 'चीन', 'ms': 'China', 'nb': 'Kina', 'ne': 'चीन', 'nl': 'China',
+      'pl': 'Chiny', 'pt': 'China', 'pt_BR': 'China', 'ro': 'China', 'ru': 'Китай',
+      'si': 'චීනය', 'sk': 'Čína', 'sl': 'Kitajska', 'sv': 'Kina', 'ta': 'சீனா',
+      'te': 'చైనా', 'th': 'จีน', 'uk': 'Китай', 'vi': 'Trung Quốc'
+    }
+    const qualifier = qualifiers[language] ?? 'China'
+    return rawName + ' (' + qualifier + ')'
+  }
+
+  private skyCultureNarrationParagraphs(): string[] {
+    return this.cleanSkyCultureNarration(this.skyCultureNarration).split(/\n+/).map((item: string) => item.trim()).filter((item: string) => item.length > 0)
+  }
+
+  @Builder skyCultureDescriptionBlockView(block: SkyCultureDescriptionBlock) {
+    if (block.kind === 'heading') {
+      Text(block.text).fontSize(block.level !== undefined && block.level <= 1 ? 15 : 13)
+        .fontColor(this.nmText()).fontWeight(FontWeight.Medium).width('100%')
+        .margin({ top: 8, bottom: 3 })
+    } else if (block.kind === 'bullet') {
+      Text('• ' + block.text).fontSize(11).lineHeight(19).fontColor(this.nmText()).width('100%')
+        .padding({ left: 8, right: 4 })
+    } else if (block.kind === 'tableRow') {
+      Text(block.text).fontSize(10).lineHeight(17).fontColor(this.nmText()).width('100%')
+        .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+        .backgroundColor('rgba(255,255,255,0.045)').borderRadius(UI_RADIUS_CONTROL)
+    } else {
+      Text(block.text).fontSize(11).lineHeight(19).fontColor(this.nmText()).width('100%')
+    }
   }
 
   private skyCultureArtFilePath(rawPath: string): string {
+    if (!this.isSafeSkyCultureArtPath(rawPath)) return ''
+    const path = this.stellariumFilesDir() + '/stellarium/' + rawPath
+    try {
+      fileIo.accessSync(path)
+      return path
+    } catch (_err) {
+      return ''
+    }
+  }
+
+  private skyCultureArtUri(rawPath: string): string {
+    const path = this.skyCultureArtFilePath(rawPath)
+    return path.length > 0 ? fileUri.getUriFromPath(path) : ''
+  }
+
+  private stellariumFilesDir(): string {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-    const path = context.filesDir + '/stellarium/' + rawPath
-    return fileUri.getUriFromPath(path)
+    return context.getApplicationContext().filesDir
+  }
+
+  private isSafeSkyCultureArtPath(rawPath: string): boolean {
+    if (!rawPath.startsWith('skycultures/')) return false
+    const parts = rawPath.split('/')
+    if (parts.length < 4 || parts[0] !== 'skycultures' || parts[2] !== 'illustrations') return false
+    for (const part of parts) {
+      if (part.length === 0 || part === '.' || part === '..' || part.indexOf('\\') >= 0) return false
+    }
+    return /\.(?:png|jpe?g|webp)$/i.test(parts[parts.length - 1])
+  }
+
+  private skyCultureArtStatus(rawPath: string): string {
+    const status = this.skyCultureArtStates[rawPath]
+    return status === undefined ? 'preparing' : status
+  }
+
+  private setSkyCultureArtStatus(rawPath: string, status: string): void {
+    if (this.skyCultureArtStates[rawPath] === status) return
+    const next: Record<string, string> = {}
+    const keys = Object.keys(this.skyCultureArtStates)
+    for (const key of keys) next[key] = this.skyCultureArtStates[key]
+    next[rawPath] = status
+    this.skyCultureArtStates = next
+  }
+
+  private clearSkyCultureArtThumbnails(): void {
+    this.skyCultureArtThumbnailGeneration++
+    const oldMaps = this.skyCultureArtThumbnailPixelMaps
+    this.skyCultureArtThumbnailPixelMaps = {}
+    for (const rawPath of Object.keys(oldMaps)) {
+      this.releaseDecodedImage(oldMaps[rawPath], 'sky-culture-art-thumbnail')
+    }
+  }
+
+  private decodeSkyCultureArtThumbnail(rawPath: string, requestId: number, resolvedPath: string = rawPath): void {
+    if (this.skyCultureArtThumbnailPixelMaps[rawPath] !== undefined) {
+      return
+    }
+    const filePath = this.skyCultureArtFilePath(resolvedPath)
+    if (filePath.length === 0) {
+      return
+    }
+    const generation = this.skyCultureArtThumbnailGeneration
+    this.decodeLocalImage(filePath, 'sky-culture-art-thumbnail', (pixelMap: image.PixelMap) => {
+      if (requestId !== this.skyCultureDetailsRequestId || generation !== this.skyCultureArtThumbnailGeneration ||
+        this.currentSkyCultureId.length === 0) {
+        this.releaseDecodedImage(pixelMap, 'stale-sky-culture-art-thumbnail')
+        return
+      }
+      const next: Record<string, image.PixelMap> = {}
+      for (const key of Object.keys(this.skyCultureArtThumbnailPixelMaps)) {
+        next[key] = this.skyCultureArtThumbnailPixelMaps[key]
+      }
+      next[rawPath] = pixelMap
+      this.skyCultureArtThumbnailPixelMaps = next
+      this.setSkyCultureArtStatus(rawPath, 'ready')
+      hilog.info(0x0000, 'StellariumArkUI', '[sky-culture-art] thumbnail ready path=%{public}s', rawPath)
+    }, (err: Error) => {
+      if (requestId !== this.skyCultureDetailsRequestId || generation !== this.skyCultureArtThumbnailGeneration ||
+        this.currentSkyCultureId.length === 0) {
+        return
+      }
+      this.setSkyCultureArtStatus(rawPath, 'decodeFailed')
+      hilog.warn(0x0000, 'StellariumArkUI', '[sky-culture-art] thumbnail decode failed path=%{public}s error=%{public}s',
+        rawPath, JSON.stringify(err))
+    }, { width: 320, height: 320 })
+  }
+
+  private prepareSkyCultureArtResources(items: Array<SkyCultureArtItem>, requestId: number): void {
+    const initial: Record<string, string> = {}
+    const missing: Array<string> = []
+    const visiblePaths: string[] = []
+    let ready = 0
+    for (let index = 0; index < items.length; index++) {
+      const art = items[index]
+      if (this.skyCultureArtFilePath(art.rawPath).length > 0) {
+        initial[art.rawPath] = 'ready'
+        ready++
+        if (index < 24) visiblePaths.push(art.rawPath)
+      } else {
+        initial[art.rawPath] = 'preparing'
+        missing.push(art.rawPath)
+      }
+    }
+    this.skyCultureArtStates = initial
+    for (const rawPath of visiblePaths) {
+      this.decodeSkyCultureArtThumbnail(rawPath, requestId)
+    }
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[sky-culture-art] probe total=%{public}s ready=%{public}s pending=%{public}s',
+      items.length.toString(), ready.toString(), missing.length.toString())
+    let nextIndex = 0
+    const copyNext = (): void => {
+      if (requestId !== this.skyCultureDetailsRequestId || this.currentSkyCultureId.length === 0) return
+      if (nextIndex >= missing.length) {
+        let completed = 0
+        let failed = 0
+        for (const key of Object.keys(this.skyCultureArtStates)) {
+          if (this.skyCultureArtStates[key] === 'ready') completed++
+          if (this.skyCultureArtStates[key] === 'missing') failed++
+        }
+        hilog.info(0x0000, 'StellariumArkUI',
+          '[sky-culture-art] preparation complete ready=%{public}s missing=%{public}s total=%{public}s',
+          completed.toString(), failed.toString(), items.length.toString())
+        return
+      }
+      const rawPath = missing[nextIndex++]
+      const context = (this.getUIContext().getHostContext() as common.UIAbilityContext).getApplicationContext()
+      resolveStellariumDetailMediaAsset(context, rawPath).then((resolvedPath: string) => {
+        if (requestId !== this.skyCultureDetailsRequestId) return
+        const filePath = resolvedPath.length > 0 ? this.skyCultureArtFilePath(resolvedPath) : ''
+        this.setSkyCultureArtStatus(rawPath, filePath.length > 0 ? 'ready' : 'missing')
+        if (filePath.length > 0 && items.slice(0, 24).some((item: SkyCultureArtItem) => item.rawPath === rawPath)) {
+          this.decodeSkyCultureArtThumbnail(rawPath, requestId, resolvedPath)
+        }
+        copyNext()
+      }).catch((err: Error) => {
+        if (requestId !== this.skyCultureDetailsRequestId) return
+        this.setSkyCultureArtStatus(rawPath, 'missing')
+        hilog.warn(0x0000, 'StellariumArkUI',
+          '[sky-culture-art] preparation failed path=%{public}s error=%{public}s', rawPath, JSON.stringify(err))
+        copyNext()
+      })
+    }
+    copyNext()
+  }
+
+  private openSkyCultureArtPreview(art: SkyCultureArtItem): void {
+    this.skyCultureArtPreviewOpen = true
+    this.skyCultureArtDecodeGeneration++
+    const oldPixelMap = this.skyCultureArtPreviewPixelMap
+    this.skyCultureArtPreviewPixelMap = undefined
+    this.releaseDecodedImage(oldPixelMap, 'switch-sky-culture-art')
+    this.skyCultureArtPreviewRawPath = art.rawPath
+    this.skyCultureArtPreviewName = art.name !== undefined && art.name.length > 0 ? art.name : '星座绘图 ' + art.index
+    this.skyCultureArtPreviewFailed = false
+    this.skyCultureArtPreviewLoading = true
+    this.skyCultureArtPreviewPath = this.skyCultureArtUri(art.rawPath)
+    this.resolveSkyCultureArtPreview(art.rawPath)
+  }
+
+  private resolveSkyCultureArtPreview(rawPath: string): void {
+    const current = this.skyCultureArtFilePath(rawPath)
+    if (current.length > 0) {
+      this.skyCultureArtPreviewPath = fileUri.getUriFromPath(current)
+      this.skyCultureArtPreviewLoading = true
+      this.skyCultureArtPreviewFailed = false
+      this.setSkyCultureArtStatus(rawPath, 'ready')
+      this.decodeSkyCultureArtPreview(current, rawPath)
+      return
+    }
+    const context = (this.getUIContext().getHostContext() as common.UIAbilityContext).getApplicationContext()
+    resolveStellariumDetailMediaAsset(context, rawPath).then((resolvedPath: string) => {
+      if (!this.skyCultureArtPreviewOpen || this.skyCultureArtPreviewRawPath !== rawPath) return
+      const filePath = resolvedPath.length > 0 ? this.skyCultureArtFilePath(resolvedPath) : ''
+      this.skyCultureArtPreviewPath = filePath.length > 0 ? fileUri.getUriFromPath(filePath) : ''
+      this.skyCultureArtPreviewLoading = filePath.length > 0
+      this.skyCultureArtPreviewFailed = filePath.length === 0
+      this.setSkyCultureArtStatus(rawPath, filePath.length > 0 ? 'ready' : 'missing')
+      if (filePath.length > 0) {
+        this.decodeSkyCultureArtPreview(filePath, rawPath)
+      }
+    }).catch((_err: Error) => {
+      if (!this.skyCultureArtPreviewOpen || this.skyCultureArtPreviewRawPath !== rawPath) return
+      this.skyCultureArtPreviewPath = ''
+      this.skyCultureArtPreviewLoading = false
+      this.skyCultureArtPreviewFailed = true
+      this.setSkyCultureArtStatus(rawPath, 'missing')
+    })
+  }
+
+  private closeSkyCultureArtPreview(): void {
+    this.skyCultureArtPreviewOpen = false
+    this.skyCultureArtDecodeGeneration++
+    const oldPixelMap = this.skyCultureArtPreviewPixelMap
+    this.skyCultureArtPreviewPixelMap = undefined
+    this.releaseDecodedImage(oldPixelMap, 'sky-culture-art')
+    this.skyCultureArtPreviewPath = ''
+    this.skyCultureArtPreviewName = ''
+    this.skyCultureArtPreviewRawPath = ''
+    this.skyCultureArtPreviewLoading = false
+    this.skyCultureArtPreviewFailed = false
+  }
+
+  private onSkyCultureArtLoaded(): void {
+    if (!this.skyCultureArtPreviewOpen) return
+    this.skyCultureArtPreviewLoading = false
+    this.skyCultureArtPreviewFailed = false
+    this.setSkyCultureArtStatus(this.skyCultureArtPreviewRawPath, 'ready')
+    hilog.info(0x0000, 'StellariumArkUI', '[sky-culture-art] preview loaded path=%{public}s', this.skyCultureArtPreviewRawPath)
+  }
+
+  private decodeSkyCultureArtPreview(filePath: string, rawPath: string): void {
+    const generation = ++this.skyCultureArtDecodeGeneration
+    this.decodeLocalImage(filePath, 'sky-culture-art', (pixelMap: image.PixelMap) => {
+      if (!this.skyCultureArtPreviewOpen || this.skyCultureArtPreviewRawPath !== rawPath ||
+        generation !== this.skyCultureArtDecodeGeneration) {
+        this.releaseDecodedImage(pixelMap, 'stale-sky-culture-art')
+        return
+      }
+      const oldPixelMap = this.skyCultureArtPreviewPixelMap
+      this.skyCultureArtPreviewPixelMap = pixelMap
+      this.releaseDecodedImage(oldPixelMap, 'previous-sky-culture-art')
+      this.skyCultureArtPreviewLoading = false
+      this.skyCultureArtPreviewFailed = false
+      this.setSkyCultureArtStatus(rawPath, 'ready')
+      hilog.info(0x0000, 'StellariumArkUI', '[sky-culture-art] pixel map ready path=%{public}s', rawPath)
+    }, (err: Error) => {
+      if (!this.skyCultureArtPreviewOpen || this.skyCultureArtPreviewRawPath !== rawPath ||
+        generation !== this.skyCultureArtDecodeGeneration) {
+        return
+      }
+      this.skyCultureArtPreviewLoading = false
+      this.skyCultureArtPreviewFailed = true
+      this.setSkyCultureArtStatus(rawPath, 'decodeFailed')
+      hilog.error(0x0000, 'StellariumArkUI', '[sky-culture-art] pixel map decode failed path=%{public}s error=%{public}s',
+        rawPath, JSON.stringify(err))
+    })
+  }
+
+  private onSkyCultureArtError(): void {
+    if (!this.skyCultureArtPreviewOpen) return
+    this.skyCultureArtPreviewLoading = false
+    this.skyCultureArtPreviewFailed = true
+    this.setSkyCultureArtStatus(this.skyCultureArtPreviewRawPath, 'decodeFailed')
+    hilog.error(0x0000, 'StellariumArkUI', '[sky-culture-art] preview decode failed path=%{public}s', this.skyCultureArtPreviewRawPath)
   }
 
   @Builder
   private skyCultureArtPreviewOverlay() {
-    if (this.skyCultureArtPreviewPath.length > 0) {
+    if (this.skyCultureArtPreviewOpen) {
       Stack() {
         Column({ space: 10 }) {
           Row() {
             Text(this.skyCultureArtPreviewName.length > 0 ? this.skyCultureArtPreviewName : '星座绘图')
               .fontSize(15).fontColor(this.nmText()).fontWeight(FontWeight.Medium)
               .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Button('关闭').fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
-              .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-              .onClick(() => {
-                this.skyCultureArtPreviewPath = ''
-                this.skyCultureArtPreviewName = ''
-              })
+            Stack() {
+              Image(this.getIcon('close', false)).width(20).height(20).fillColor(this.nmText())
+            }
+              .width(44).height(44).borderRadius(UI_RADIUS_PILL).backgroundColor('rgba(255,255,255,0.10)')
+              .hitTestBehavior(HitTestMode.Block).onClick(() => { this.closeSkyCultureArtPreview() })
           }.width('88%')
-          Image(this.skyCultureArtPreviewPath).width('88%').height('72%').objectFit(ImageFit.Contain)
-            .backgroundColor('rgba(0,0,0,0.28)').borderRadius(UI_RADIUS_CONTROL)
+          Stack({ alignContent: Alignment.Center }) {
+            if (this.skyCultureArtPreviewPixelMap !== undefined) {
+              Image(this.skyCultureArtPreviewPixelMap).width('88%').height('72%').objectFit(ImageFit.Contain)
+                .backgroundColor('rgba(0,0,0,0.28)').borderRadius(UI_RADIUS_CONTROL)
+                .onComplete(() => { this.onSkyCultureArtLoaded() })
+                .onError(() => { this.onSkyCultureArtError() })
+            }
+            if (this.skyCultureArtPreviewLoading) {
+              Column({ space: 10 }) {
+                LoadingProgress().width(34).height(34).color(this.nmAccent())
+                Text('正在打开离线绘图').fontSize(12).fontColor(this.nmSub())
+              }
+            } else if (this.skyCultureArtPreviewFailed) {
+              Column({ space: 10 }) {
+                Text('绘图资源无法显示').fontSize(13).fontColor(this.nmText())
+                Text('资源缺失或设备解码失败').fontSize(11).fontColor(this.nmSub())
+                Button('重新加载').fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
+                  .borderRadius(UI_RADIUS_CONTROL).height(32)
+                  .onClick(() => {
+                    this.skyCultureArtPreviewFailed = false
+                    this.skyCultureArtPreviewLoading = true
+                    const oldPixelMap = this.skyCultureArtPreviewPixelMap
+                    this.skyCultureArtPreviewPixelMap = undefined
+                    this.releaseDecodedImage(oldPixelMap, 'retry-sky-culture-art')
+                    this.skyCultureArtPreviewPath = ''
+                    this.resolveSkyCultureArtPreview(this.skyCultureArtPreviewRawPath)
+                  })
+              }
+            }
+          }.width('100%').height('72%')
           Text('离线文化绘图').fontSize(10).fontColor(this.nmSub())
         }
         .width('100%').height('100%').justifyContent(FlexAlign.Center)
@@ -7103,8 +8139,8 @@ struct WindowNativeNode {
           .width('100%').height(54)
 
         Stack({ alignContent: Alignment.Center }) {
-          if (this.objectInspectorMediaPreviewPath.length > 0) {
-            Image(this.objectInspectorMediaPreviewPath)
+          if (this.objectInspectorMediaPixelMap !== undefined) {
+            Image(this.objectInspectorMediaPixelMap)
               .width('100%').height('100%').objectFit(ImageFit.Contain)
               .onComplete(() => { this.onObjectInspectorMediaPreviewLoaded() })
               .onError(() => { this.onObjectInspectorMediaPreviewError() })
@@ -7141,8 +8177,8 @@ struct WindowNativeNode {
 
   private openObjectInspectorMediaPreview(): void {
     if (this.objectInspectorMediaPath.length === 0) { return }
-    this.objectInspectorMediaPreviewLoading = true
-    this.objectInspectorMediaPreviewFailed = false
+    this.objectInspectorMediaPreviewLoading = this.objectInspectorMediaPixelMap === undefined && !this.objectInspectorMediaLoadFailed
+    this.objectInspectorMediaPreviewFailed = this.objectInspectorMediaLoadFailed
     this.objectInspectorMediaPreviewPath = this.objectInspectorMediaPath
     this.objectInspectorMediaFullscreen = true
     hilog.info(0x0000, 'StellariumArkUI',
@@ -7163,16 +8199,8 @@ struct WindowNativeNode {
     this.objectInspectorMediaPreviewFailed = false
     this.objectInspectorMediaPreviewLoading = true
     this.objectInspectorMediaPreviewPath = ''
-    const retryPath = this.objectInspectorMediaPath
-    hilog.info(0x0000, 'StellariumArkUI', '[detail-media-preview] retry uri=%{public}s', retryPath)
-    setTimeout(() => {
-      if (!this.objectInspectorMediaFullscreen) { return }
-      this.objectInspectorMediaPreviewPath = retryPath
-      if (retryPath.length === 0) {
-        this.objectInspectorMediaPreviewLoading = false
-        this.objectInspectorMediaPreviewFailed = true
-      }
-    }, 16)
+    hilog.info(0x0000, 'StellariumArkUI', '[detail-media-preview] retry uri=%{public}s', this.objectInspectorMediaPath)
+    this.retryObjectInspectorMedia()
   }
 
   private onObjectInspectorMediaPreviewLoaded(): void {
@@ -7187,6 +8215,26 @@ struct WindowNativeNode {
     this.objectInspectorMediaPreviewLoading = false
     this.objectInspectorMediaPreviewFailed = true
     hilog.error(0x0000, 'StellariumArkUI', '[detail-media-preview] image failed uri=%{public}s', this.objectInspectorMediaPreviewPath)
+  }
+
+  private retryObjectInspectorMedia(): void {
+    const retryPath = this.objectInspectorMediaResolvedRequestPath.length > 0
+      ? this.objectInspectorMediaResolvedRequestPath
+      : this.objectInspectorMediaRequestPath
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[detail-media] retry request=%{public}s resolved=%{public}s', retryPath, this.objectInspectorMediaResolvedPath)
+    this.clearObjectInspectorDecodedImage()
+    this.objectInspectorMediaPath = ''
+    this.objectInspectorMediaResolvedPath = ''
+    this.objectInspectorMediaResolvedRequestPath = ''
+    this.objectInspectorMediaResolutionComplete = false
+    this.objectInspectorMediaRequestPath = ''
+    this.objectInspectorMediaLoading = false
+    this.objectInspectorMediaDecoding = false
+    this.objectInspectorMediaLoadFailed = false
+    this.objectInspectorMediaPreparationFailed = false
+    this.objectInspectorMediaNoMatch = false
+    this.refreshObjectInspectorMedia()
   }
 
   private skyCultureRegionText(regions: string[]): string {
@@ -7477,7 +8525,8 @@ struct WindowNativeNode {
           const id = obj['id'] !== undefined ? obj['id'] as string : '';
           const name = obj['name'] !== undefined ? obj['name'] as string : id;
           const loaded = obj['loaded'] !== undefined ? obj['loaded'] as boolean : false;
-          const startup = obj['loadAtStartup'] !== undefined ? obj['loadAtStartup'] as boolean : false;
+          const serverStartup = obj['loadAtStartup'] !== undefined ? obj['loadAtStartup'] as boolean : false;
+          const startup = this.pluginStartupValue(id, serverStartup)
           list.push({
             id: id,
             name: name,
@@ -7500,11 +8549,84 @@ struct WindowNativeNode {
     })
   }
 
+  private pluginStartupValue(id: string, fallback: boolean): boolean {
+    const override = this.pluginStartupOverrides[id]
+    return override === undefined ? fallback : override
+  }
+
+  private updatePluginStartupItem(id: string, enabled: boolean): void {
+    this.pluginList = this.pluginList.map((item: PluginItem) => {
+      if (item.id !== id) return item
+      return {
+        id: item.id,
+        name: item.name,
+        loaded: item.loaded,
+        loadAtStartup: enabled,
+        description: item.description,
+        authors: item.authors,
+        contact: item.contact,
+        version: item.version,
+        license: item.license,
+        acknowledgements: item.acknowledgements,
+        hasPreviewImage: item.hasPreviewImage,
+        source: item.source
+      }
+    })
+  }
+
+  private setPluginStartupOverride(id: string, enabled: boolean): void {
+    const next: Record<string, boolean> = {}
+    const keys = Object.keys(this.pluginStartupOverrides)
+    for (let index = 0; index < keys.length; index++) {
+      next[keys[index]] = this.pluginStartupOverrides[keys[index]]
+    }
+    next[id] = enabled
+    this.pluginStartupOverrides = next
+  }
+
+  private updatePluginLoadedItem(id: string, loaded: boolean): void {
+    this.pluginList = this.pluginList.map((item: PluginItem) => {
+      if (item.id !== id) return item
+      return {
+        id: item.id,
+        name: item.name,
+        loaded: loaded,
+        loadAtStartup: item.loadAtStartup,
+        description: item.description,
+        authors: item.authors,
+        contact: item.contact,
+        version: item.version,
+        license: item.license,
+        acknowledgements: item.acknowledgements,
+        hasPreviewImage: item.hasPreviewImage,
+        source: item.source
+      }
+    })
+  }
+
+  private clearPluginStartupOverride(id: string): void {
+    const next: Record<string, boolean> = {}
+    const keys = Object.keys(this.pluginStartupOverrides)
+    for (let index = 0; index < keys.length; index++) {
+      if (keys[index] !== id) next[keys[index]] = this.pluginStartupOverrides[keys[index]]
+    }
+    this.pluginStartupOverrides = next
+  }
+
   private setPluginLoadAtStartup(id: string, enabled: boolean): void {
+    if (this.pluginStartupPending.indexOf(id) >= 0) return
+    const previous = this.pluginList.find((item: PluginItem) => item.id === id)?.loadAtStartup ?? !enabled
+    this.pluginStartupPending = this.pluginStartupPending.concat([id])
+    this.setPluginStartupOverride(id, enabled)
+    this.updatePluginStartupItem(id, enabled)
     this.callInteractive('setPluginLoadAtStartup', id + '|' + (enabled ? '1' : '0'), () => {
-      this.loadPluginList()
+      this.pluginStartupPending = this.pluginStartupPending.filter((pluginId: string) => pluginId !== id)
+      this.updatePluginStartupItem(id, enabled)
+      this.clearPluginStartupOverride(id)
     }, () => {
-      this.loadPluginList()
+      this.pluginStartupPending = this.pluginStartupPending.filter((pluginId: string) => pluginId !== id)
+      this.updatePluginStartupItem(id, previous)
+      this.clearPluginStartupOverride(id)
       this.flashHint(I18n.t('plugin_setting_failed'))
     })
   }
@@ -7524,6 +8646,7 @@ struct WindowNativeNode {
     if (id === 'PointerCoordinates') return 'pointerCoordinates'
     if (id === 'Scenery3d') return 'scenery3d'
     if (id === 'TelescopeControl') return 'telescope'
+    if (id === 'Text User Interface') return 'commands'
     if (id === 'Sky Cultures') return 'layers'
     if (id === 'NebulaTextures') return 'search'
     if (id === 'Exoplanets' || id === 'Pulsars' || id === 'Quasars' || id === 'Novae' || id === 'Supernovae') return 'search'
@@ -7537,17 +8660,17 @@ struct WindowNativeNode {
     } else if (id === 'Calendars') {
       this.astroTab = 8
     } else if (id === 'MosaicCamera') {
-      this.setPanel('mosaicCamera')
+      this.openSubPanel('mosaicCamera')
       return
     } else if (id === 'ArchaeoLines') {
-      this.setPanel('archaeoLines')
+      this.openSubPanel('archaeoLines')
       return
     } else if (id === 'Scenery3d') {
-      this.setPanel('scenery3d')
+      this.openSubPanel('scenery3d')
       return
     } else if (id === 'Sky Cultures') {
       this.viewTab = 5
-      this.setPanel('layers')
+      this.openSubPanel('layers')
       return
     } else if (id === 'NebulaTextures') {
       this.searchCategory = 'nebula'
@@ -7556,14 +8679,14 @@ struct WindowNativeNode {
       this.searchText = ''
     }
     const panel = this.pluginFeaturePanel(id)
-    if (panel.length > 0) this.setPanel(panel)
+    if (panel.length > 0) this.openSubPanel(panel)
   }
 
     private loadFov(): void {
     this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && typeof r.fov === 'number') {
         this.currentFovText = (r.fov as number).toFixed(1) + '°'
-        this.fovSliderValue = Math.round(r.fov as number)
+        this.fovSliderValue = r.fov as number
       }
     })
   }
@@ -7609,25 +8732,52 @@ private loadObjectInfo(): void {
     })
   }
 private loadPlanetPositions(): void {
-    this.callInteractive('getObjectPositions', '', (r) => {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.planetPositionsRequestSequence
+    this.planetPositions = []
+    this.planetPositionsError = ''
+    this.planetPositionsLoading = true
+    this.callInteractive('getObjectPositions', '', (r: StellariumBridgeResponse) => {
+      if (requestId !== this.planetPositionsRequestSequence) return
+      this.planetPositionsLoading = false
       if (r.ok === true && Array.isArray(r.items)) {
         this.planetPositions = (r.items as Array<PlanetPosition>).map((p: PlanetPosition) => ({
           name: p.name,
+          englishName: p.englishName,
+          rightAscension: p.rightAscension,
+          declination: p.declination,
           altitude: Math.round(p.altitude * 10) / 10,
           azimuth: Math.round(p.azimuth * 10) / 10,
           magnitude: Math.round(p.magnitude * 100) / 100,
+          distanceAU: p.distanceAU,
+          angularSizeArcmin: p.angularSizeArcmin,
+          transit: p.transit,
         }))
+        if (this.planetPositions.length === 0) this.planetPositionsError = '当前没有可显示的行星位置。'
+      } else {
+        this.planetPositionsError = r.error ?? '行星位置计算失败，请点刷新后重试。'
       }
+    }, () => {
+      if (requestId !== this.planetPositionsRequestSequence) return
+      this.planetPositionsLoading = false
+      this.planetPositionsError = '行星位置计算失败，请点刷新后重试。'
     })
   }
 
   private loadHeliocentricPositions(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.hecPositionsRequestSequence
+    this.hecPositions = []
+    this.hecPositionsError = ''
+    this.hecPositionsLoading = true
     const options: HeliocentricPositionOptions = {
       includeSelectedMinor: this.hecIncludeSelectedMinor,
       includeBrightComets: this.hecIncludeBrightComets,
       cometMagnitudeLimit: this.hecCometMagnitudeLimit,
     }
     this.callInteractive('getHeliocentricEclipticPositions', JSON.stringify(options), (r: StellariumBridgeResponse) => {
+      if (requestId !== this.hecPositionsRequestSequence) return
+      this.hecPositionsLoading = false
       if (r.ok === true && r.hecPositions !== undefined) {
         const positions = (r.hecPositions as Array<HeliocentricPosition>).map((p: HeliocentricPosition) => ({
           name: p.name,
@@ -7640,11 +8790,23 @@ private loadPlanetPositions(): void {
         }))
         this.hecPositions = this.hecLayoutPositions(positions)
         this.hecTime = r.hecTime ?? ''
+        if (this.hecPositions.length === 0) this.hecPositionsError = '当前没有可显示的日心位置。'
+      } else {
+        this.hecPositionsError = r.error ?? '日心黄道位置计算失败，请点刷新后重试。'
       }
+    }, () => {
+      if (requestId !== this.hecPositionsRequestSequence) return
+      this.hecPositionsLoading = false
+      this.hecPositionsError = '日心黄道位置计算失败，请点刷新后重试。'
     })
   }
 
   private loadCelestialPositions(): void {
+    this.updateAstroCalcSnapshot()
+    const requestId = ++this.celestialPositionsRequestSequence
+    this.celestialPositions = []
+    this.celestialPositionsError = ''
+    this.celestialPositionsLoading = true
     const options: CelestialPositionOptions = {
       category: this.celestialPositionCategory,
       horizontal: this.celestialPositionHorizontal,
@@ -7652,10 +8814,19 @@ private loadPlanetPositions(): void {
       maximumRows: 80,
     }
     this.callInteractive('getCelestialPositions', JSON.stringify(options), (r: StellariumBridgeResponse) => {
+      if (requestId !== this.celestialPositionsRequestSequence) return
+      this.celestialPositionsLoading = false
       if (r.ok === true && r.celestialPositions !== undefined) {
         this.celestialPositions = r.celestialPositions as Array<CelestialPosition>
         this.celestialPositionTime = r.positionTime ?? ''
+        if (this.celestialPositions.length === 0) this.celestialPositionsError = '当前筛选条件下没有可显示的目录天体。'
+      } else {
+        this.celestialPositionsError = r.error ?? '目录天体位置计算失败，请点刷新后重试。'
       }
+    }, () => {
+      if (requestId !== this.celestialPositionsRequestSequence) return
+      this.celestialPositionsLoading = false
+      this.celestialPositionsError = '目录天体位置计算失败，请点刷新后重试。'
     })
   }
 
@@ -7807,13 +8978,13 @@ private loadPlanetPositions(): void {
     }, 140)
   }
 
-  private fetchSuggestions(prefix: string): void {
+  private fetchSuggestions(prefix: string, languageSerial: number = this.languageRefreshSerial): void {
     if (prefix.length < 1) { this.searchSuggestions = []; return }
     // Native matching covers localized names, English names, catalog IDs, and
     // spacing/hyphen variants across every currently loaded object module.
     this.callInteractive('listMatchingObjects', prefix + '|30', (result) => {
       // Only apply if the query prefix is still current (user may have typed more).
-      if (this.searchText.trim() !== prefix) { return }
+      if (this.searchText.trim() !== prefix || this.languageRefreshSerial !== languageSerial) { return }
       const suggestions: SearchSug[] = []
       const seen: Record<string, boolean> = {}
       if (Array.isArray(result.items)) {
@@ -7861,8 +9032,8 @@ private loadPlanetPositions(): void {
   }
 
   // Keep constellation navigation clear and light: labels and lines, no global boundaries.
-  private openConstellationGuide(name: string, moduleId: string = 'ConstellationMgr'): void {
-    this.flashHint('已开启星座名称和连线，正在定位' + this.zhNameOf(name))
+  private openConstellationGuide(name: string, moduleId: string = 'ConstellationMgr', displayName: string = ''): void {
+    this.flashHint('已开启星座名称和连线，正在定位' + (displayName.length > 0 ? displayName : this.zhNameOf(name)))
     this.callInteractive('setActionChecked', 'actionShow_Constellation_Boundaries|0', () => {
       this.constellationBoundaries = false
       this.callInteractive('setActionChecked', 'actionShow_Constellation_Lines|1', () => {
@@ -7875,22 +9046,95 @@ private loadPlanetPositions(): void {
     })
   }
 
-  private loadCategoryObjects(category: string): void {
-    this.searchCategory = category
-    const moduleIdMap: Record<string, string> = {
-      'planet': 'SolarSystem:planet',
-      'moon': 'SolarSystem:moon',
-      'star': 'StarMgr',
-      'variable': 'StarMgr:1',
-      'comet': 'SolarSystem:comet',
-      'asteroid': 'SolarSystem:asteroid',
-      'constellation': 'ConstellationMgr',
-      'galaxy': 'NebulaMgr:0',
-      'cluster': 'NebulaMgr:5',
-      'nebula': 'NebulaMgr:200',
-      'messier': 'NebulaMgr:100',
+  private loadObjectCatalogCategories(languageSerial: number = this.languageRefreshSerial): void {
+    this.callNativeWhenReady('getObjectCatalogCategories', '', (result: StellariumBridgeResponse) => {
+      if (this.languageRefreshSerial !== languageSerial) return
+      if (result.ok !== true || !Array.isArray(result.items)) return
+      const items = result.items as Array<Object>
+      const categories: CatOption[] = []
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index]
+        const moduleId = item['moduleId'] !== undefined ? String(item['moduleId']) : ''
+        const label = item['label'] !== undefined ? String(item['label']) : moduleId
+        if (moduleId.length === 0) continue
+        categories.push({
+          code: 'module:' + moduleId,
+          label: label,
+          moduleId: moduleId,
+          iconKey: this.catalogIconForModule(moduleId)
+        })
+      }
+      this.objectCatalogCategories = categories
+    })
+  }
+
+  private loadConstellationNavigation(languageSerial: number = this.languageRefreshSerial): void {
+    const preferred: string[] = [
+      'Orion', 'Ursa Major', 'Cassiopeia', 'Scorpius', 'Leo',
+      'Gemini', 'Taurus', 'Cygnus', 'Lyra', 'Aquila',
+      'Sagittarius', 'Virgo', 'Canis Major', 'Andromeda', 'Pegasus'
+    ]
+    this.callNativeWhenReady('getConstellationList', '', (result: StellariumBridgeResponse) => {
+      if (this.languageRefreshSerial !== languageSerial) return
+      if (result.ok !== true || !Array.isArray(result.items)) return
+      const rawItems = result.items as Array<Object>
+      const localizedByEnglish: Record<string, string> = {}
+      for (let index = 0; index < rawItems.length; index++) {
+        const rawItem = rawItems[index]
+        const englishName = rawItem['englishName'] !== undefined ? String(rawItem['englishName']) : ''
+        const localizedName = rawItem['localizedName'] !== undefined ? String(rawItem['localizedName']) : englishName
+        if (englishName.length > 0) localizedByEnglish[englishName] = localizedName
+      }
+      const navigationItems: ConstellationNavigationItem[] = []
+      for (const englishName of preferred) {
+        const localizedName = localizedByEnglish[englishName]
+        if (localizedName !== undefined && localizedName.length > 0) {
+          navigationItems.push({ englishName: englishName, localizedName: localizedName })
+        }
+      }
+      this.constellationNavigationItems = navigationItems
+    })
+  }
+
+  private catalogLabelForModule(moduleId: string, fallback: ResourceStr): ResourceStr {
+    for (const option of this.objectCatalogCategories) {
+      if (option.moduleId === moduleId) return option.label
     }
-    const moduleId = moduleIdMap[category] || ''
+    return fallback
+  }
+
+  private catalogIconForModule(moduleId: string): string {
+    const module = moduleId.toLowerCase()
+    if (module.indexOf('satellite') >= 0 || module.indexOf('artificial') >= 0) return 'catalog_satellite'
+    if (module.indexOf('exoplanet') >= 0) return 'catalog_exoplanet'
+    if (module.indexOf('pulsar') >= 0) return 'catalog_pulsar'
+    if (module.indexOf('quasar') >= 0) return 'catalog_quasar'
+    if (module.indexOf('supernova') >= 0) return 'catalog_supernova'
+    if (module.indexOf('nova') >= 0) return 'catalog_nova'
+    if (module.indexOf('meteor') >= 0) return 'meteor'
+    if (module.indexOf('telescope') >= 0) return 'telescope'
+    if (module.indexOf('solarsystem:moon') >= 0) return 'catalog_moon'
+    if (module.indexOf('solarsystem:planet') >= 0 || module.indexOf('dwarf planet') >= 0) return 'catalog_planet'
+    if (module.indexOf('solarsystem:comet') >= 0) return 'catalog_comet'
+    if (module.indexOf('solarsystem:') >= 0) return 'catalog_asteroid'
+    if (module.indexOf('nebulamgr:0') >= 0 || module.indexOf('nebulamgr:1') >= 0 || module.indexOf('nebulamgr:2') >= 0 || module.indexOf('nebulamgr:3') >= 0) return 'catalog_galaxy'
+    if (module.indexOf('nebulamgr:4') >= 0) return 'catalog_quasar'
+    if (module.indexOf('nebulamgr:5') >= 0 || module.indexOf('nebulamgr:6') >= 0 || module.indexOf('nebulamgr:7') >= 0 || module.indexOf('nebulamgr:8') >= 0) return 'catalog_cluster'
+    if (module.indexOf('nebulamgr:') >= 0) return 'catalog_nebula'
+    if (module.indexOf('constellation') >= 0 || module.indexOf('asterism') >= 0) return 'catalog_constellation'
+    return 'catalog_plugin'
+  }
+
+  private categoryModuleIdFor(category: string): string {
+    for (const option of this.searchCategoryOptions()) {
+      if (option.code === category) return option.moduleId ?? ''
+    }
+    return ''
+  }
+
+  private loadCategoryObjects(category: string, moduleIdOverride: string = ''): void {
+    this.searchCategory = category
+    const moduleId = moduleIdOverride.length > 0 ? moduleIdOverride : this.categoryModuleIdFor(category)
     this.categoryModuleId = moduleId
     this.categoryObjects = []
     this.categoryObjectCount = 0
@@ -7900,18 +9144,47 @@ private loadPlanetPositions(): void {
     this.categoryHasMore = false
     this.categoryOffset = 0
     this.categoryRequestSerial += 1
+    if (moduleId === 'Satellites' && !this.satelliteCatalogReady) {
+      const serial = this.categoryRequestSerial
+      this.categoryLoading = true
+      this.ensurePluginLoaded('Satellites', () => {
+        if (serial !== this.categoryRequestSerial || this.categoryModuleId !== 'Satellites') return
+        this.satelliteCatalogReady = true
+        this.categoryLoading = false
+        this.loadMoreCategoryObjects()
+      }, () => {
+        if (serial !== this.categoryRequestSerial || this.categoryModuleId !== 'Satellites') return
+        this.categoryLoading = false
+        this.categoryLoadFailed = true
+      })
+      return
+    }
     this.loadMoreCategoryObjects()
   }
 
   private searchCategoryOptions(): Array<CatOption> {
-    return [
-      { code: 'planet', label: I18n.t('i0103') }, { code: 'moon', label: I18n.t('nav_satellites') },
-      { code: 'star', label: I18n.t('i0104') }, { code: 'variable', label: I18n.objectType('Variable star') },
-      { code: 'comet', label: I18n.objectType('Comet') }, { code: 'asteroid', label: I18n.objectType('Asteroid') },
-      { code: 'constellation', label: I18n.objectType('Constellation') }, { code: 'galaxy', label: I18n.objectType('Galaxy') },
-      { code: 'cluster', label: I18n.objectType('Cluster') }, { code: 'nebula', label: I18n.objectType('Nebula') },
-      { code: 'messier', label: I18n.t('search_messier_objects') }
+    const core: CatOption[] = [
+      { code: 'planet', label: this.catalogLabelForModule('SolarSystem:planet', I18n.t('i0103')), moduleId: 'SolarSystem:planet', iconKey: 'catalog_planet' },
+      { code: 'moon', label: this.catalogLabelForModule('SolarSystem:moon', I18n.objectType('Moon')), moduleId: 'SolarSystem:moon', iconKey: 'catalog_moon' },
+      { code: 'star', label: this.catalogLabelForModule('StarMgr', I18n.t('i0104')), moduleId: 'StarMgr', iconKey: 'catalog_star' },
+      { code: 'variable', label: this.catalogLabelForModule('StarMgr:1', I18n.objectType('Variable star')), moduleId: 'StarMgr:1', iconKey: 'catalog_variable_star' },
+      { code: 'comet', label: this.catalogLabelForModule('SolarSystem:comet', I18n.objectType('Comet')), moduleId: 'SolarSystem:comet', iconKey: 'catalog_comet' },
+      { code: 'asteroid', label: this.catalogLabelForModule('SolarSystem:asteroid', I18n.objectType('Asteroid')), moduleId: 'SolarSystem:asteroid', iconKey: 'catalog_asteroid' },
+      { code: 'artificial', label: this.catalogLabelForModule('SolarSystem:artificial', I18n.objectType('Artificial satellite')), moduleId: 'SolarSystem:artificial', iconKey: 'catalog_satellite' },
+      { code: 'satellite', label: this.catalogLabelForModule('Satellites', I18n.objectType('Artificial satellite')), moduleId: 'Satellites', iconKey: 'catalog_satellite' },
+      { code: 'constellation', label: this.catalogLabelForModule('ConstellationMgr', I18n.objectType('Constellation')), moduleId: 'ConstellationMgr', iconKey: 'catalog_constellation' },
+      { code: 'galaxy', label: this.catalogLabelForModule('NebulaMgr:0', I18n.objectType('Galaxy')), moduleId: 'NebulaMgr:0', iconKey: 'catalog_galaxy' },
+      { code: 'cluster', label: this.catalogLabelForModule('NebulaMgr:5', I18n.objectType('Cluster')), moduleId: 'NebulaMgr:5', iconKey: 'catalog_cluster' },
+      { code: 'nebula', label: this.catalogLabelForModule('NebulaMgr:10', I18n.objectType('Nebula')), moduleId: 'NebulaMgr:10', iconKey: 'catalog_nebula' },
+      { code: 'messier', label: this.catalogLabelForModule('NebulaMgr:100', I18n.t('search_messier_objects')), moduleId: 'NebulaMgr:100', iconKey: 'catalog_messier' }
     ]
+    const knownModules: Record<string, boolean> = {}
+    for (const option of core) knownModules[option.moduleId ?? ''] = true
+    const dynamic: CatOption[] = []
+    for (const option of this.objectCatalogCategories) {
+      if (!knownModules[option.moduleId ?? '']) dynamic.push(option)
+    }
+    return core.concat(dynamic)
   }
 
   private searchCategoryLabel(): string {
@@ -7922,13 +9195,10 @@ private loadPlanetPositions(): void {
   }
 
   private searchCategoryIcon(category: string): string {
-    const iconMap: Record<string, string> = {
-      'planet': 'catalog_planet', 'moon': 'catalog_moon', 'star': 'catalog_star',
-      'variable': 'catalog_variable_star', 'comet': 'catalog_comet', 'asteroid': 'catalog_asteroid',
-      'constellation': 'catalog_constellation', 'galaxy': 'catalog_galaxy', 'cluster': 'catalog_cluster',
-      'nebula': 'catalog_nebula', 'messier': 'catalog_messier'
+    for (const option of this.searchCategoryOptions()) {
+      if (option.code === category) return option.iconKey ?? 'catalog_plugin'
     }
-    return iconMap[category] || 'search'
+    return 'catalog_plugin'
   }
 
   private searchVisibilityLabel(): string {
@@ -7985,6 +9255,30 @@ private loadPlanetPositions(): void {
       parts.push(I18n.format('search_magnitude', [item.magnitude.toFixed(1)]))
     }
     return parts.join(' · ')
+  }
+
+  private catalogIconForObjectType(rawType: string, fallback: string): string {
+    const type = rawType.toLowerCase()
+    if (type.indexOf('supernova') >= 0 || type.indexOf('超新星') >= 0) return 'catalog_supernova'
+    if (type.indexOf('nova') >= 0 || type.indexOf('新星') >= 0) return 'catalog_nova'
+    if (type.indexOf('pulsar') >= 0 || type.indexOf('脉冲星') >= 0) return 'catalog_pulsar'
+    if (type.indexOf('quasar') >= 0 || type.indexOf('类星体') >= 0) return 'catalog_quasar'
+    if (type.indexOf('exoplanet') >= 0 || type.indexOf('系外行星') >= 0) return 'catalog_exoplanet'
+    if (type.indexOf('satellite') >= 0 || type.indexOf('artificial') >= 0 || type.indexOf('人造') >= 0) return 'catalog_satellite'
+    if (type.indexOf('meteor shower') >= 0 || type.indexOf('流星雨') >= 0) return 'meteor'
+    if (type.indexOf('galaxy') >= 0 || type.indexOf('星系') >= 0) return 'catalog_galaxy'
+    if (type.indexOf('nebula') >= 0 || type.indexOf('星云') >= 0) return 'catalog_nebula'
+    if (type.indexOf('cluster') >= 0 || type.indexOf('星团') >= 0) return 'catalog_cluster'
+    if (type.indexOf('comet') >= 0 || type.indexOf('彗') >= 0) return 'catalog_comet'
+    if (type.indexOf('asteroid') >= 0 || type.indexOf('小行星') >= 0) return 'catalog_asteroid'
+    if (type.indexOf('planet') >= 0 || type.indexOf('行星') >= 0) return 'catalog_planet'
+    if (type.indexOf('moon') >= 0 || type.indexOf('卫星') >= 0) return 'catalog_moon'
+    if (type.indexOf('constellation') >= 0 || type.indexOf('星座') >= 0) return 'catalog_constellation'
+    return fallback
+  }
+
+  private categoryObjectIcon(item: NameItem): string {
+    return this.catalogIconForObjectType(item.type ?? '', this.searchCategoryIcon(this.searchCategory))
   }
 
   private searchFilterMenuTitle(): string {
@@ -8091,8 +9385,12 @@ private loadPlanetPositions(): void {
       } else if (this.searchFilterPage === 'type') {
         Row() { Image(this.getIcon('catalog_planet', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(I18n.t('i0103')).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
           .width('100%').height(48).padding({ left: 10 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.selectSearchFilterCategory('planet') })
-        Row() { Image(this.getIcon('catalog_moon', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(I18n.t('nav_satellites')).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
+        Row() { Image(this.getIcon('catalog_moon', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(this.catalogLabelForModule('SolarSystem:moon', I18n.objectType('Moon'))).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
           .width('100%').height(48).padding({ left: 10 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.selectSearchFilterCategory('moon') })
+        Row() { Image(this.getIcon('catalog_satellite', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(this.catalogLabelForModule('SolarSystem:artificial', I18n.objectType('Artificial satellite'))).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
+          .width('100%').height(48).padding({ left: 10 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.selectSearchFilterCategory('artificial') })
+        Row() { Image(this.getIcon('catalog_satellite', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(this.catalogLabelForModule('Satellites', I18n.objectType('Artificial satellite'))).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }
+          .width('100%').height(48).padding({ left: 10 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.selectSearchFilterCategory('satellite') })
         Row() { Image(this.getIcon('catalog_star', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(I18n.t('i0104')).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }); Image(this.getIcon('forward', false)).width(16).height(16).fillColor(this.nmSub()) }
           .width('100%').height(48).padding({ left: 10, right: 10 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.setSearchFilterPage('star') })
         Row() { Image(this.getIcon('catalog_galaxy', false)).width(19).height(19).fillColor(this.nmSub()).margin({ right: 11 }); Text(I18n.t('search_deep_sky')).fontSize(14).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }); Image(this.getIcon('forward', false)).width(16).height(16).fillColor(this.nmSub()) }
@@ -8794,12 +10092,14 @@ private loadPlanetPositions(): void {
     // Discrete zoom is a direct view command. Do not route it through the
     // result-polling cache, which can make a tap appear to do nothing.
     this.callNativeFire('zoomStep', factor.toString())
+    this.scheduleSkyTextureStatusCheck()
     setTimeout(() => {
       this.refreshState()
       this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
         if (r.ok === true && r.fov !== undefined) {
           const fovDeg = r.fov as number
           this.currentFovText = fovDeg.toFixed(1) + '°'
+          this.fovSliderValue = fovDeg
           this.flashHint('视场 ' + this.currentFovText)
         }
       })
@@ -8870,6 +10170,7 @@ private loadPlanetPositions(): void {
     // rather than waiting for it to be closed and opened again.
     this.i18nLang = i18nCode
     this.selectedLanguage = lang
+    const languageSerial = ++this.languageRefreshSerial
     this.languageRevision++
     this.panelContentKey++
     // 持久化语言选择
@@ -8884,8 +10185,25 @@ private loadPlanetPositions(): void {
     // 延迟同步 C++ 侧语言，避免同步 N-API 调用阻塞 UI 线程导致星图无响应。
     // 这里不能 refreshState：该全量状态刷新会与选中对象的安全居中动画竞争，
     // 表现为星图先上移又下移。
-    setTimeout(() => {
-      this.callNativeWhenReady('setLanguage', lang, () => {}, 0, 300, 3)
+    if (this.languageSwitchTimer >= 0) {
+      clearTimeout(this.languageSwitchTimer)
+      this.languageSwitchTimer = -1
+    }
+    this.languageSwitchTimer = setTimeout(() => {
+      this.languageSwitchTimer = -1
+      this.callNativeWhenReady('setLanguage', lang, () => {
+        if (this.languageRefreshSerial !== languageSerial) return
+        const selectedCategoryModuleId = this.categoryModuleId
+        this.objectCatalogCategories = []
+        this.categoryObjects = []
+        this.searchSuggestions = []
+        this.constellationNavigationItems = []
+        this.loadObjectCatalogCategories(languageSerial)
+        this.loadConstellationNavigation(languageSerial)
+        this.loadCategoryObjects(this.searchCategory, selectedCategoryModuleId)
+        const query = this.searchText.trim()
+        if (query.length > 0) this.fetchSuggestions(query, languageSerial)
+      }, 0, 300, 3)
     }, 50)
   }
 
@@ -8927,6 +10245,100 @@ private loadPlanetPositions(): void {
     this.hintTimer = setTimeout(() => {
       this.actionHint = ''
     }, 1600) as number
+  }
+
+  private stopSkyTextureStatusObserver(): void {
+    if (this.skyTextureStatusTimer !== 0) {
+      clearTimeout(this.skyTextureStatusTimer)
+      this.skyTextureStatusTimer = 0
+    }
+    if (this.skyTextureStatusDelayTimer !== 0) {
+      clearTimeout(this.skyTextureStatusDelayTimer)
+      this.skyTextureStatusDelayTimer = 0
+    }
+    this.skyTextureStatusPolls = 0
+  }
+
+  private hideSkyTextureStatus(): void {
+    this.stopSkyTextureStatusObserver()
+    this.skyTextureStatusVisible = false
+    this.skyTextureStatusText = ''
+    this.skyTextureStatusError = false
+  }
+
+  private updateSkyTextureStatus(result: StellariumBridgeResponse): void {
+    if (result.ok !== true) {
+      this.hideSkyTextureStatus()
+      return
+    }
+    const pending = typeof result.activeTexturePendingCount === 'number'
+      ? result.activeTexturePendingCount as number : 0
+    const errors = typeof result.activeTextureErrorCount === 'number'
+      ? result.activeTextureErrorCount as number : 0
+    const status = result.activeTextureStatus ?? ''
+    if (errors > 0 || status === 'error' || status === 'partial-error') {
+      this.skyTextureStatusVisible = true
+      this.skyTextureStatusError = true
+      this.skyTextureStatusText = '当前视野有 ' + errors.toString() + ' 项资料图加载失败'
+      return
+    }
+    if (pending > 0 || status === 'loading') {
+      this.skyTextureStatusVisible = true
+      this.skyTextureStatusError = false
+      this.skyTextureStatusText = '正在载入当前视野资料图 · ' + pending.toString() + ' 项待完成'
+      return
+    }
+    this.hideSkyTextureStatus()
+  }
+
+  private pollSkyTextureStatus(): void {
+    if (this.skyTextureStatusPolls >= 24) {
+      if (this.skyTextureStatusVisible && !this.skyTextureStatusError) {
+        this.skyTextureStatusText = '仍在后台准备当前视野资料图，完成后会自动显示'
+      }
+      this.stopSkyTextureStatusObserver()
+      return
+    }
+    this.skyTextureStatusPolls++
+    this.callInteractive('getDeepSkyImageStatus', '', (result: StellariumBridgeResponse) => {
+      this.updateSkyTextureStatus(result)
+      const pending = typeof result.activeTexturePendingCount === 'number'
+        ? result.activeTexturePendingCount as number : 0
+      if (pending <= 0 || result.activeTextureStatus === 'error' || result.activeTextureStatus === 'partial-error') {
+        this.stopSkyTextureStatusObserver()
+      } else if (this.skyTextureStatusPolls < 24) {
+        const delay = this.skyTextureStatusPolls <= 8 ? 350 : 900
+        this.skyTextureStatusTimer = setTimeout(() => {
+          this.skyTextureStatusTimer = 0
+          this.pollSkyTextureStatus()
+        }, delay) as number
+      }
+    }, () => {
+      this.skyTextureStatusTimer = setTimeout(() => {
+        this.skyTextureStatusTimer = 0
+        this.pollSkyTextureStatus()
+      }, 900) as number
+    })
+  }
+
+  private scheduleSkyTextureStatusCheck(): void {
+    if (this.skyTextureStatusDelayTimer !== 0) {
+      clearTimeout(this.skyTextureStatusDelayTimer)
+    }
+    this.skyTextureStatusDelayTimer = setTimeout(() => {
+      this.skyTextureStatusDelayTimer = 0
+      this.stopSkyTextureStatusObserver()
+      this.pollSkyTextureStatus()
+    }, 180) as number
+  }
+
+  private retrySkyTextureStatus(): void {
+    this.skyTextureStatusError = false
+    this.skyTextureStatusVisible = true
+    this.skyTextureStatusText = '正在重新载入当前视野资料图'
+    this.callInteractive('retryDeepSkyImages', '', () => {
+      this.scheduleSkyTextureStatusCheck()
+    }, () => { this.skyTextureStatusError = true })
   }
 
   private lx200Payload(): string {
@@ -9964,7 +11376,8 @@ private loadPlanetPositions(): void {
             this.panelVisible = false
           })
         }
-        this.applySelectedObject(result, false, placement)
+        const selectionPlacement = placement.length > 0 ? placement : (returnToAstroCalc ? '' : 'center')
+        this.applySelectedObject(result, false, selectionPlacement)
         if (returnToGraph) {
           this.graphTargetPickerActive = false
           this.astroTab = 4
@@ -9998,11 +11411,18 @@ private loadPlanetPositions(): void {
     })
   }
 
+  private isConstellationSelection(result: StellariumBridgeResponse): boolean {
+    const type = ((result.type ?? '') + ' ' + (result.objectType ?? '')).toLowerCase()
+    return type.indexOf('constellation') >= 0 || type.indexOf('星座') >= 0
+  }
+
   // 拉取当前选中天体的信息并刷新详情面板。
   // 加防重入：避免自动刷新(1Hz)与手动“刷新”按钮重叠，导致 consume-on-read 结果被互相冲掉。
   // callNativeWhenReady 放弃轮询时不会回调，所以配 detailRefreshGuard 兜底复位，防止永久卡死。
   private refreshSelectedObject(): void {
     if (this.detailRefreshing) { return }
+    const expectedName = this.selectedName
+    const selectionSerial = this.skySelectionRequestSerial
     this.detailRefreshing = true
     if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard) }
     this.detailRefreshGuard = setTimeout(() => { this.detailRefreshing = false }, 450) as number
@@ -10010,6 +11430,9 @@ private loadPlanetPositions(): void {
     this.callInteractive('getSelectedObjectInfo', details, (r) => {
       this.detailRefreshing = false
       if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
+      if (selectionSerial !== this.skySelectionRequestSerial || expectedName !== this.selectedName) {
+        return
+      }
       this.applySelectedObject(r, true)
     })
   }
@@ -10023,6 +11446,7 @@ private loadPlanetPositions(): void {
         this.refreshSelectedObject()
       }
     }, 300) as number
+    this.startObjectDetailConnectorRefresh()
   }
 
   private pauseDetailRefreshForSkyDrag(): void {
@@ -10035,6 +11459,7 @@ private loadPlanetPositions(): void {
   private resumeDetailRefreshAfterSkyDrag(): void {
     if (this.infoWinVisible && this.selectedStatus === 'Selected') {
       this.startDetailAutoRefresh()
+      this.scheduleSkyTextureStatusCheck()
     }
   }
 
@@ -10042,6 +11467,203 @@ private loadPlanetPositions(): void {
     if (this.detailTimer !== 0) { clearInterval(this.detailTimer); this.detailTimer = 0 }
     if (this.detailRefreshGuard !== 0) { clearTimeout(this.detailRefreshGuard); this.detailRefreshGuard = 0 }
     this.detailRefreshing = false
+  }
+
+  private startObjectDetailConnectorRefresh(): void {
+    if (this.objectDetailConnectorTimer !== 0) { return }
+    this.objectDetailConnectorTimer = setInterval(() => {
+      this.refreshObjectDetailConnector()
+    }, 50) as number
+    this.refreshObjectDetailConnector()
+  }
+
+  private stopObjectDetailConnectorRefresh(): void {
+    if (this.objectDetailConnectorTimer !== 0) {
+      clearInterval(this.objectDetailConnectorTimer)
+      this.objectDetailConnectorTimer = 0
+    }
+    this.objectDetailConnectorLength = 0
+  }
+
+  private objectDetailCardY(): number {
+    return this.isFoldHoverLayout ? this.hoverBottomCardY() : this.bottomCardY()
+  }
+
+  private pointInsideRect(x: number, y: number, left: number, top: number, right: number, bottom: number, margin: number = 0): boolean {
+    return x >= left - margin && x <= right + margin && y >= top - margin && y <= bottom + margin
+  }
+
+  private rectsOverlap(leftA: number, topA: number, rightA: number, bottomA: number,
+    leftB: number, topB: number, rightB: number, bottomB: number): boolean {
+    return leftA < rightB && rightA > leftB && topA < bottomB && bottomA > topB
+  }
+
+  private rayRectIntersection(originX: number, originY: number, targetX: number, targetY: number,
+    left: number, top: number, right: number, bottom: number): number[] {
+    const dx = targetX - originX
+    const dy = targetY - originY
+    const intersections: number[][] = []
+    if (Math.abs(dx) > 0.0001) {
+      const leftT = (left - originX) / dx
+      const leftY = originY + leftT * dy
+      if (leftT > 0 && leftY >= top - 0.5 && leftY <= bottom + 0.5) intersections.push([leftT, left, leftY])
+      const rightT = (right - originX) / dx
+      const rightY = originY + rightT * dy
+      if (rightT > 0 && rightY >= top - 0.5 && rightY <= bottom + 0.5) intersections.push([rightT, right, rightY])
+    }
+    if (Math.abs(dy) > 0.0001) {
+      const topT = (top - originY) / dy
+      const topX = originX + topT * dx
+      if (topT > 0 && topX >= left - 0.5 && topX <= right + 0.5) intersections.push([topT, topX, top])
+      const bottomT = (bottom - originY) / dy
+      const bottomX = originX + bottomT * dx
+      if (bottomT > 0 && bottomX >= left - 0.5 && bottomX <= right + 0.5) intersections.push([bottomT, bottomX, bottom])
+    }
+    if (intersections.length === 0) return []
+    intersections.sort((a: number[], b: number[]) => a[0] - b[0])
+    return [intersections[0][1], intersections[0][2]]
+  }
+
+  private placeObjectCardAwayFromTarget(targetX: number, targetY: number): boolean {
+    const width = this.detailCardWidth()
+    const height = this.detailCardHeight()
+    const currentX = this.detailCardX()
+    const currentY = this.detailCardY()
+    if (!this.pointInsideRect(targetX, targetY, currentX, currentY, currentX + width, currentY + height, 24)) {
+      return false
+    }
+
+    const edge = 12
+    const topEdge = this.isExpandedLayout ? Math.max(52, this.EDGE_MARGIN + 20) : 56
+    const dockTop = Math.max(topEdge + height, this.skyHeight - 76)
+    const maxX = Math.max(edge, this.skyWidth - width - edge)
+    const maxY = Math.max(topEdge, dockTop - height - edge)
+    const sideY = this.clamp(targetY - height / 2, topEdge, maxY)
+    const horizontalX = this.clamp(targetX - width / 2, edge, maxX)
+    const candidates: number[][] = [
+      [edge, sideY], [maxX, sideY],
+      [horizontalX, topEdge], [horizontalX, maxY],
+      [edge, topEdge], [maxX, topEdge], [edge, maxY], [maxX, maxY]
+    ]
+    const panelLeft = this.expandedMainPanelLeft()
+    const panelTop = this.panelTop()
+    const panelRight = panelLeft + this.panelWidth
+    const panelBottom = panelTop + this.panelMaxHeight
+    let bestX = currentX
+    let bestY = currentY
+    let bestDistance = Number.MAX_VALUE
+    for (let index = 0; index < candidates.length; index++) {
+      const candidateX = candidates[index][0]
+      const candidateY = candidates[index][1]
+      const candidateRight = candidateX + width
+      const candidateBottom = candidateY + height
+      if (this.pointInsideRect(targetX, targetY, candidateX, candidateY, candidateRight, candidateBottom, 24)) continue
+      if (candidateBottom > dockTop) continue
+      if (this.isExpandedLayout && this.panelVisible &&
+        this.rectsOverlap(candidateX, candidateY, candidateRight, candidateBottom, panelLeft - 10, panelTop - 10, panelRight + 10, panelBottom + 10)) continue
+      const distance = Math.pow(candidateX - currentX, 2) + Math.pow(candidateY - currentY, 2)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestX = candidateX
+        bestY = candidateY
+      }
+    }
+    if (!Number.isFinite(bestDistance) || bestDistance === Number.MAX_VALUE || bestDistance < 1) return false
+    const baseX = this.baseBottomCardX()
+    const baseY = this.isFoldHoverLayout ? this.baseHoverBottomCardY() : this.baseBottomCardY()
+    this.getUIContext().animateTo({ duration: 300, curve: curves.springMotion(0.48, 0.88) }, () => {
+      this.cardOffsetX = this.clampedObjectCardOffsetX(baseX, width) + bestX - currentX
+      this.cardOffsetY = this.clampedObjectCardOffsetY(baseY, height) + bestY - currentY
+    })
+    return true
+  }
+
+  private refreshObjectDetailConnector(): void {
+    if (!this.objectDetailConnectorVisible || !this.infoWinVisible || this.selectedStatus !== 'Selected' ||
+      this.selectedName.length === 0) {
+      this.objectDetailConnectorLength = 0
+      return
+    }
+    const projection = this.callNative('getGyroGuidePosition') as GyroGuideProjection
+    if (projection.ok !== true || projection.valid !== true ||
+      typeof projection.xRatio !== 'number' || typeof projection.yRatio !== 'number') {
+      return
+    }
+    const targetX = (projection.xRatio as number) * this.skyWidth
+    const targetY = (projection.yRatio as number) * this.skyHeight
+    if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
+      return
+    }
+    const targetOnScreen = projection.visible === true && targetX >= 0 && targetX <= this.skyWidth && targetY >= 0 && targetY <= this.skyHeight
+    if (this.objectCardPlacementPending) {
+      this.objectCardPlacementPending = false
+      if (targetOnScreen && this.placeObjectCardAwayFromTarget(targetX, targetY)) {
+        this.objectDetailConnectorLength = 0
+        return
+      }
+    }
+    const left = this.detailCardX()
+    const top = this.detailCardY()
+    const right = left + this.detailCardWidth()
+    const bottom = top + this.detailCardHeight()
+    if (targetOnScreen && this.pointInsideRect(targetX, targetY, left, top, right, bottom, 2)) {
+      this.objectDetailConnectorLength = 0
+      return
+    }
+    const centerX = (left + right) / 2
+    const centerY = (top + bottom) / 2
+    const cardIntersection = this.rayRectIntersection(centerX, centerY, targetX, targetY, left, top, right, bottom)
+    if (cardIntersection.length !== 2) {
+      this.objectDetailConnectorLength = 0
+      return
+    }
+    let endX = targetX
+    let endY = targetY
+    if (!targetOnScreen) {
+      const screenIntersection = this.rayRectIntersection(centerX, centerY, targetX, targetY, 12, 12, this.skyWidth - 12, this.skyHeight - 12)
+      if (screenIntersection.length !== 2) {
+        this.objectDetailConnectorLength = 0
+        return
+      }
+      endX = screenIntersection[0]
+      endY = screenIntersection[1]
+    }
+    const directionX = endX - centerX
+    const directionY = endY - centerY
+    const directionLength = Math.sqrt(directionX * directionX + directionY * directionY)
+    if (!Number.isFinite(directionLength) || directionLength < 1) {
+      this.objectDetailConnectorLength = 0
+      return
+    }
+    const unitX = directionX / directionLength
+    const unitY = directionY / directionLength
+    const anchorX = cardIntersection[0] + unitX * 5
+    const anchorY = cardIntersection[1] + unitY * 5
+    if (targetOnScreen) {
+      endX -= unitX * 16
+      endY -= unitY * 16
+    }
+    const dx = endX - anchorX
+    const dy = endY - anchorY
+    const length = Math.sqrt(dx * dx + dy * dy)
+    if (!Number.isFinite(length) || length < 18) {
+      this.objectDetailConnectorLength = 0
+      return
+    }
+    this.objectDetailConnectorX = (endX + anchorX) / 2
+    this.objectDetailConnectorY = (endY + anchorY) / 2
+    this.objectDetailConnectorLength = Math.min(length, Math.max(this.skyWidth, this.skyHeight) * 1.5)
+    this.objectDetailConnectorAngle = Math.atan2(dy, dx) * 180 / Math.PI
+    this.objectDetailConnectorEndX = endX
+    this.objectDetailConnectorEndY = endY
+    this.objectDetailConnectorTargetX = targetOnScreen ? targetX : endX
+    this.objectDetailConnectorTargetY = targetOnScreen ? targetY : endY
+    this.objectDetailConnectorTargetOnScreen = targetOnScreen
+  }
+
+  private objectDetailMarkerSize(): number {
+    const fov = this.clamp(this.fovSliderValue > 0 ? this.fovSliderValue : 60, 4, 180)
+    return this.clamp(32 * Math.pow(60 / fov, 0.35), 24, 58)
   }
 
   private requestSelectedDetails(expectedName: string): void {
@@ -10069,11 +11691,16 @@ private loadPlanetPositions(): void {
   }
 
   private moveToSelectedObject(fromLayoutChange: boolean = false): void {
+    if (!this.hasSelectedObject()) {
+      this.flashHint(I18n.t('center_requires_selection'))
+      return
+    }
     // Sensor pose is the camera owner while gyro mode is active. Starting a
     // second auto-move here creates a visible jump when the next pose sample
     // correctly takes control back, so center/track only refresh the guide.
     if (this.gyroscopeEnabled) {
       this.updateGyroTargetGuide(true)
+      this.flashHint(I18n.t('center_unavailable_gyro'))
       return
     }
     if (fromLayoutChange) {
@@ -10103,7 +11730,18 @@ private loadPlanetPositions(): void {
     }
     this.lastSafeNavigationPayload = navigationKey
     this.lastSafeNavigationAt = now
-    this.callInteractive('moveToSelectedAt', payload, (r) => this.applySelectedObject(r))
+    this.callInteractive('moveToSelectedAt', payload, (r) => {
+      if (r.ok !== true) {
+        this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        return
+      }
+      this.applySelectedObject(r)
+      if (mode === 'center') {
+        this.flashHint(I18n.t('center_applied'))
+      }
+    }, (r) => {
+      this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+    })
   }
 
   private placeSelectedObjectInSafeArea(mode: string = 'focus'): void {
@@ -10242,10 +11880,8 @@ private loadPlanetPositions(): void {
     return best
   }
 
-  // UI placement is not static: panels can open, close, snap between 6/10
-  // and 9/10, or be dragged. Re-run the same navigation after those layout
-  // changes. With no inspector/sheet remaining, moveToSelectedObject() uses
-  // the native visual centre again.
+  // UI layout changes only refresh the connector. The selected object owns its
+  // current sky position; opening a panel must never move the sky behind it.
   private scheduleSelectedObjectForUiChange(delay: number = 360): void {
     if (this.selectedUiLayoutTimer !== 0) {
       clearTimeout(this.selectedUiLayoutTimer)
@@ -10256,8 +11892,8 @@ private loadPlanetPositions(): void {
     }
     this.selectedUiLayoutTimer = setTimeout(() => {
       this.selectedUiLayoutTimer = 0
-      if (this.selectedStatus === 'Selected' && !this.gyroscopeEnabled) {
-        this.moveToSelectedObject(true)
+      if (this.selectedStatus === 'Selected') {
+        this.refreshObjectDetailConnector()
       }
     }, delay) as number
   }
@@ -10522,6 +12158,7 @@ private loadPlanetPositions(): void {
       this.selectedDetailMediaPath = result.detailMediaPath && result.detailMediaPath.length > 0 ? result.detailMediaPath : ''
       this.selectedDetailMediaKind = result.detailMediaKind && result.detailMediaKind.length > 0 ? result.detailMediaKind : ''
       this.selectedDetailMediaLabel = result.detailMediaLabel && result.detailMediaLabel.length > 0 ? result.detailMediaLabel : ''
+      this.selectedDetailModel = result.detailModel
       this.selectedObjectType = result.objectType && result.objectType.length > 0 ? result.objectType : ''
       this.selectedTemperatureK = typeof result.temperatureK === 'number' ? result.temperatureK : 0
       this.selectedType = incomingType
@@ -10583,16 +12220,17 @@ private loadPlanetPositions(): void {
       // 选中成功后弹出独立浮动详情窗口（新目标默认收起，不打扰当前菜单；同一目标刷新时保留展开态）
       if (targetChanged) {
         this.dismissedObjectName = ''
+        this.objectDetailConnectorLength = 0
       }
       if (!preserveClosedDetail) {
         this.infoWinVisible = true
       }
       if (isNewSelection) {
-        this.infoWinExpanded = false
-        this.fullInspectorRequested = false
+        this.infoWinExpanded = true
+        this.fullInspectorRequested = true
         this.objectInspectorMoreOpen = false
-        this.cardOffsetX = 0
-        this.cardOffsetY = 0
+        this.bottomCardIndex = 2
+        this.objectCardPlacementPending = true
         // The lightweight tap/search response deliberately has no detailFields.
         // Never leave the previous target's structured data visible while loading.
         this.selectedDetailFields = []
@@ -10601,14 +12239,7 @@ private loadPlanetPositions(): void {
         // target and opens its card, but never starts a safe-area fly-to.
         if (!this.gyroscopeEnabled && !this.isObserverPlanetSelection(incomingName)) {
           if (placement === 'center') {
-            this.navigateSelectedObjectTo(this.skyWidth / 2, this.skyHeight / 2, 'selection-center')
-          } else if (this.panelVisible || this.infoWinVisible) {
-            const expectedName = incomingName
-            setTimeout(() => {
-              if (this.selectedStatus === 'Selected' && this.selectedName === expectedName && !this.skyDragging && !this.gyroscopeEnabled) {
-                this.placeSelectedObjectInSafeArea('selection')
-              }
-            }, 120)
+            this.navigateSelectedObjectTo(this.skyWidth / 2, this.skyHeight / 2, 'center')
           }
         }
       }
@@ -10627,6 +12258,7 @@ private loadPlanetPositions(): void {
       this.selectedDetailMediaPath = ''
       this.selectedDetailMediaKind = ''
       this.selectedDetailMediaLabel = ''
+      this.selectedDetailModel = undefined
       this.selectedObjectType = ''
       this.selectedTemperatureK = 0
       this.selectedType = ''
@@ -10658,7 +12290,11 @@ private loadPlanetPositions(): void {
       this.objectInspectorMediaKind = 'none'
       this.objectInspectorMediaLabel = ''
       this.objectInspectorMediaLoading = false
+      this.objectInspectorMediaDecoding = false
+      this.clearObjectInspectorDecodedImage()
       this.objectInspectorMediaLoadFailed = false
+      this.objectInspectorMediaPreparationFailed = false
+      this.stopObjectInspectorMediaWarmup()
       this.objectInspectorMediaRequestPath = ''
       this.objectInspectorMediaResolvedRequestPath = ''
       this.objectInspectorMediaResolvedPath = ''
@@ -10816,40 +12452,32 @@ private loadPlanetPositions(): void {
     return (90 - this.locationPickerLatitude) / 180 * this.mapRenderHeight - 9
   }
 
-  private handleLocationMapTouch(event: TouchEvent): void {
+  private handleLocationMapTouch(event: TouchEvent): boolean {
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length < 1) {
-      return
+      return false
     }
-    if (event.type === TouchType.Down || event.type === TouchType.Move) {
-      this.updatePickerFromMap(points[0].x, points[0].y)
+    const point = points[0]
+    if (event.type === TouchType.Down) {
+      this.mapTouchStartX = point.x
+      this.mapTouchStartY = point.y
+      this.mapTouchMoved = false
+    } else if (event.type === TouchType.Move) {
+      const deltaX = point.x - this.mapTouchStartX
+      const deltaY = point.y - this.mapTouchStartY
+      if (Math.sqrt(deltaX * deltaX + deltaY * deltaY) > 10) this.mapTouchMoved = true
     } else if (event.type === TouchType.Up) {
-      this.applyPickerLocation()
+      if (!this.mapTouchMoved) {
+        this.updatePickerFromMap(point.x, point.y)
+        this.applyPickerLocation()
+      }
+      this.mapTouchMoved = false
+    } else if (event.type === TouchType.Cancel) {
+      this.mapTouchMoved = false
     }
-  }
-
-  // 阻止地图触摸事件冒泡到父Scroll，防止拖动地图时面板也跟着滚动
-  private stopMapTouchPropagation(event: TouchEvent): boolean {
-    // Coordinates are updated only by PanGesture below. Updating them here as
-    // well mixes touch-space and local-space coordinates and makes the pin jump.
-    return true
-  }
-
-  // 地图选点专用：手势回调，用 priorityGesture 绑定
-  private mapPanStart(event: GestureEvent): void {
-    this.mapGestureActive = true
-    if (event.fingerList.length > 0) {
-      this.updatePickerFromMap(event.fingerList[0].localX, event.fingerList[0].localY)
-    }
-  }
-
-  private mapPanUpdate(x: number, y: number): void {
-    this.updatePickerFromMap(x, y)
-  }
-
-  private mapPanEnd(): void {
-    this.mapGestureActive = false
-    this.applyPickerLocation()
+    // Do not take ownership of a vertical panel scroll. A deliberate stationary
+    // tap still chooses the map point, while swiping across the map scrolls the panel.
+    return false
   }
 
   private async useDeviceLocation(): Promise<void> {
@@ -11438,12 +13066,14 @@ private loadPlanetPositions(): void {
       Row({ space: 10 }) {
         Text(I18n.t('c_altitude')).fontSize(11).fontColor('#CCCCCC').width(48)
         Slider({ value: this.watchAlt, min: 0, max: 90, step: 1 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.watchAlt = v; this.watchGyroSend() })
       }.width('100%')
       Row({ space: 10 }) {
         Text(I18n.t('c_azimuth')).fontSize(11).fontColor('#CCCCCC').width(48)
         Slider({ value: this.watchAz, min: 0, max: 360, step: 1 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.watchAz = v; this.watchGyroSend() })
       }.width('100%')
@@ -12347,40 +13977,8 @@ private loadPlanetPositions(): void {
         return true
       }
     }
-    // 左下角滑动详情卡片：标记为 UI 区域，防止 overlay 启动星图拖拽。
-    // handleInfoWinTap 只处理头部关闭按钮，Swiper body 区域不拦截，
-    // 让 Swiper 自身手势系统处理水平滑动。
-    if (this.isTabletObjectInspectorPoint(x, y) || this.isExpandedDetailSummaryPoint(x, y)) {
+    if (this.isObjectDetailCardPoint(x, y) || this.isObjectActionBarPoint(x, y)) {
       return true
-    }
-    if (this.isObjectActionBarPoint(x, y)) {
-      return true
-    }
-    if (this.infoWinVisible && this.selectedName.length > 0 && (!this.panelVisible || !this.useExpandedDetailSummary())) {
-      if (this.isPhoneDetailPeek()) {
-        const peekX = this.compactObjectPeekX()
-        const peekY = this.compactObjectPeekY()
-        const peekW = this.compactObjectPeekWidth()
-        if (x >= peekX - 8 && x <= peekX + peekW + 8 && y >= peekY - 8 && y <= peekY + 72) {
-          return true
-        }
-      } else if (this.isExpandedLayout) {
-        const bcX = this.bottomCardX()
-        const bcY = this.bottomCardY()
-        const bcW = this.bottomCardWidth()
-        const bcH = this.bottomCardHitHeight()
-        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
-          return true
-        }
-      } else {
-        const bcX = this.bottomCardX()
-        const bcY = this.bottomCardY()
-        const bcW = this.bottomCardWidth()
-        const bcH = this.bottomCardHitHeight()
-        if (x >= bcX && x <= bcX + bcW && y >= bcY && y <= bcY + bcH) {
-          return true
-        }
-      }
     }
     if (this.isExpandedLayout) {
       // 浮动面板区域（含 30vp 余量，覆盖圆角/边距，杜绝点面板却拖星图）
@@ -12524,10 +14122,40 @@ private loadPlanetPositions(): void {
     }
   }
 
-  private selectSkyAt(x: number, y: number): void {
+  private resetSkyTapSequence(): void {
+    this.lastSkyTapAt = 0
+  }
+
+  private isSkyDoubleTap(x: number, y: number): boolean {
+    const now = Date.now()
+    const tapInterval = this.lastSkyTapAt > 0 ? now - this.lastSkyTapAt : 0
+    const withinTime = this.lastSkyTapAt > 0 && tapInterval <= 800
+    const withinDistance = this.distance(x, y, this.lastSkyTapX, this.lastSkyTapY) <= 28
+    if (this.lastSkyTapAt > 0) {
+      hilog.info(0x0000, 'StellariumArkUI', 'sky tap interval=' + tapInterval.toString() +
+        'ms distance=' + this.distance(x, y, this.lastSkyTapX, this.lastSkyTapY).toFixed(1) +
+        ' double=' + (withinTime && withinDistance).toString())
+    }
+    if (withinTime && withinDistance) {
+      this.resetSkyTapSequence()
+      return true
+    }
+    this.lastSkyTapAt = now
+    this.lastSkyTapX = x
+    this.lastSkyTapY = y
+    return false
+  }
+
+  private requestSkySelection(x: number, y: number): void {
+    const requestSerial = ++this.skySelectionRequestSerial
     const payload = Math.round(x).toString() + '|' + Math.round(y).toString() + '|' +
       Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
     this.callInteractive('selectAt', payload, (result) => {
+      if (requestSerial !== this.skySelectionRequestSerial) {
+        hilog.info(0x0000, 'StellariumArkUI', 'selectAt result ignored after newer selection gesture')
+        return
+      }
+      hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
       this.applySelectedObject(result)
       this.flashHint(result.found === true
         ? I18n.t('i0074').replace('%s', this.zhNameOf(this.selectedName))
@@ -12535,11 +14163,39 @@ private loadPlanetPositions(): void {
     })
   }
 
+  private clearSkySelectionFromDoubleTap(x: number, y: number): void {
+    const requestSerial = ++this.skySelectionRequestSerial
+    this.resetSkyTapSequence()
+    this.stopDetailAutoRefresh()
+    this.stopObjectDetailConnectorRefresh()
+    this.applySelectedObject({ ok: true, found: false } as StellariumBridgeResponse)
+    hilog.info(0x0000, 'StellariumArkUI', 'double tap cleared sky selection at ' +
+      Math.round(x).toString() + ',' + Math.round(y).toString())
+    this.flashHint(I18n.t('m_session_unselected'))
+    this.callInteractive('clearSelection', '', (result) => {
+      if (requestSerial !== this.skySelectionRequestSerial) { return }
+      this.applySelectedObject(result)
+    })
+  }
+
+  private handleSkyTap(x: number, y: number): void {
+    if (this.angleMeasureEnabled) {
+      this.measureAngleAt(x, y)
+      return
+    }
+    if (this.isSkyDoubleTap(x, y)) {
+      this.clearSkySelectionFromDoubleTap(x, y)
+      return
+    }
+    this.requestSkySelection(x, y)
+  }
+
   private handleSkyMouse(event: MouseEvent): void {
     const x = event.windowX
     const y = event.windowY
     if (event.action === 0 && event.button === 0) {
       this.mouseSkyPressed = !this.isUiPoint(x, y)
+      if (!this.mouseSkyPressed) { this.resetSkyTapSequence() }
       this.mouseSkyMoved = false
       this.mouseSkyStartX = x
       this.mouseSkyStartY = y
@@ -12552,6 +14208,7 @@ private loadPlanetPositions(): void {
     if (event.action === 2 && this.mouseSkyPressed) {
       const distance = this.distance(x, y, this.mouseSkyStartX, this.mouseSkyStartY)
       if (distance > 3) {
+        this.resetSkyTapSequence()
         if (!this.mouseSkyMoved && this.gyroscopeEnabled) {
           this.stopGyroscope(true)
           this.flashHint('已退出陀螺仪')
@@ -12574,11 +14231,7 @@ private loadPlanetPositions(): void {
     if (event.action === 1 && this.mouseSkyPressed) {
       this.mouseSkyPressed = false
       if (!this.mouseSkyMoved && !this.isUiPoint(x, y)) {
-        if (this.angleMeasureEnabled) {
-          this.measureAngleAt(x, y)
-        } else {
-          this.selectSkyAt(x, y)
-        }
+        this.handleSkyTap(x, y)
       } else if (this.mouseSkyMoved) {
         if (Date.now() - this.mouseSkyLastSampleMs > 90) {
           this.dragVelocityX *= 0.35
@@ -12765,6 +14418,7 @@ private loadPlanetPositions(): void {
         }
       }
       if (this.isDockPoint(downX, downY)) {
+        this.resetSkyTapSequence()
         this.dockTouchActive = true
         this.touchStartedOnUi = true
         this.skyTouchFeedback = false
@@ -12772,6 +14426,7 @@ private loadPlanetPositions(): void {
         return
       }
       if (this.isUiPoint(downX, downY)) {
+        this.resetSkyTapSequence()
         this.touchStartedOnUi = true
         // 手机端右上角快捷按钮（陀螺仪/音频）：XComponent 同样吞掉了 onClick，
         // 需要坐标级分派，与上方 tablet rail workaround 同理。
@@ -12824,6 +14479,7 @@ private loadPlanetPositions(): void {
       this.skyTouchFeedbackMulti = allowTouchFeedback && points.length >= 2
       hilog.info(0x0000, 'StellariumArkUI', 'sky touch down at ' + Math.round(this.touchStartX).toString() + ',' + Math.round(this.touchStartY).toString() + ' sky=' + this.skyWidth.toString() + 'x' + this.skyHeight.toString())
       if (points.length >= 2) {
+        this.resetSkyTapSequence()
         this.skyTouchX2 = this.touchWindowX(points[1])
         this.skyTouchY2 = this.touchWindowY(points[1])
         this.pinchCenterX = (this.touchWindowX(points[0]) + this.skyTouchX2) / 2
@@ -12831,6 +14487,7 @@ private loadPlanetPositions(): void {
         this.pinchStartDistance = this.distance(
           this.touchWindowX(points[0]), this.touchWindowY(points[0]),
           this.touchWindowX(points[1]), this.touchWindowY(points[1]))
+        this.pinchStartFov = this.clamp(this.fovSliderValue > 0 ? this.fovSliderValue : 60, 4, 180)
         this.pinchLastScale = 1
         this.pinchLastNativePushMs = Date.now()
         this.pinchNativePushPending = false
@@ -12876,6 +14533,7 @@ private loadPlanetPositions(): void {
           x, y, this.touchWindowX(points[1]), this.touchWindowY(points[1]))
         if (!this.pinchActive || this.pinchStartDistance <= 1) {
           this.pinchStartDistance = currentDistance
+          this.pinchStartFov = this.clamp(this.fovSliderValue > 0 ? this.fovSliderValue : 60, 4, 180)
           this.pinchActive = true
           this.pinchLastScale = 1
           this.pinchLastNativePushMs = Date.now()
@@ -12886,6 +14544,9 @@ private loadPlanetPositions(): void {
         } else {
           const scale = currentDistance / this.pinchStartDistance
           this.pinchLastScale = scale
+          const estimatedFov = this.clamp(this.pinchStartFov / Math.max(0.25, scale), 4, 180)
+          this.fovSliderValue = estimatedFov
+          this.currentFovText = estimatedFov.toFixed(1) + '°'
           this.pinchNativePushPending = true
           const now = Date.now()
           if (now - this.pinchLastNativePushMs >= 16) {
@@ -12924,6 +14585,7 @@ private loadPlanetPositions(): void {
       // 阈值放宽到 16vp:uitest/mock 注入的触摸常有几像素位移,
       // 4vp 会把"轻点"误判成"拖动",导致 selectAt 不触发。
       if (totalMove > 16) {
+        this.resetSkyTapSequence()
         this.cancelSelectedObjectUiChange()
         // Manual panning and sensor tracking must never drive the native
         // camera together. Leave gyro mode on the first real sky drag, while
@@ -12980,21 +14642,10 @@ private loadPlanetPositions(): void {
         this.emitFluidDrag(x, y, Date.now())
         this.startSkyInertia()
       } else if (!this.touchMoved && !this.pinchActive && !endedOnUi && Date.now() - this.lastInfoWinCloseMs > 320) {
-        if (this.angleMeasureEnabled) {
-          this.measureAngleAt(this.touchStartX, this.touchStartY)
-        } else {
-          const payload = Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' + Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
-          hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' + payload)
-          this.callInteractive('selectAt', payload, (result) => {
-            hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
-            this.applySelectedObject(result)
-            if (result.found === true) {
-              this.flashHint(I18n.t('i0074').replace('%s', this.zhNameOf(this.selectedName)))
-            } else {
-              this.flashHint(I18n.t('i0075'))
-            }
-          })
-        }
+        hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' +
+          Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' +
+          Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString())
+        this.handleSkyTap(this.touchStartX, this.touchStartY)
       }
       if (this.pinchActive) {
         if (this.pinchNativePushPending) {
@@ -13003,6 +14654,7 @@ private loadPlanetPositions(): void {
             Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString())
         }
         this.callNativeFire('endPinch')
+        this.scheduleSkyTextureStatusCheck()
       }
       this.pinchActive = false
       this.pinchNativePushPending = false
@@ -13011,6 +14663,7 @@ private loadPlanetPositions(): void {
       this.skyTouchFeedback = false
       this.skyTouchFeedbackMulti = false
       this.skyDragging = false
+      if (event.type === TouchType.Cancel) { this.resetSkyTapSequence() }
       this.resumeDetailRefreshAfterSkyDrag()
     }
   }
@@ -13107,7 +14760,7 @@ private loadPlanetPositions(): void {
         Stack() { }
           .width('100%')
           .height('100%')
-          .hitTestBehavior(HitTestMode.Block)
+          .hitTestBehavior(HitTestMode.Default)
           .onTouch((event: TouchEvent) => { this.handleSkyTouch(event) })
       }
       if (!this.scriptPlaybackVisible() && !(this.recording && !this.recordingUiExpanded) && !this.polarScopeVisible) {
@@ -13120,6 +14773,30 @@ private loadPlanetPositions(): void {
         this.polarScopeOverlay()
         this.skyCultureArtPreviewOverlay()
         this.objectInspectorMediaPreviewOverlay()
+      }
+
+      if (this.skyTextureStatusVisible) {
+        Row({ space: 8 }) {
+          if (!this.skyTextureStatusError) {
+            LoadingProgress().width(16).height(16).color('#9EDCFA')
+          }
+          Text(this.skyTextureStatusText)
+            .fontSize(11).fontColor('#EDF9FF').maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.skyTextureStatusError) {
+            Button('重试')
+              .height(28).fontSize(10).fontColor('#F4FBFF')
+              .backgroundColor('rgba(255,255,255,0.12)').borderRadius(UI_RADIUS_PILL)
+              .onClick(() => { this.retrySkyTextureStatus() })
+          }
+        }
+          .height(38).padding({ left: 12, right: 10 })
+          .backgroundColor(this.skyTextureStatusError ? 'rgba(111,50,42,0.92)' : 'rgba(16,31,46,0.90)')
+          .backdropBlur(18).borderRadius(UI_RADIUS_PILL)
+          .position({ x: 16, y: (this.isExpandedLayout || this.isFoldHoverLayout) ? 58 : 98 })
+          .constraintSize({ maxWidth: Math.max(220, this.skyWidth - 32) })
+          .zIndex(92).hitTestBehavior(HitTestMode.Transparent)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
       // 启动动画：星空淡入 + 核心就绪后整体淡出（不阻挡首帧交互太久）
@@ -13596,57 +15273,20 @@ private loadPlanetPositions(): void {
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
           ))
       }
-      // 大屏详情优先与右侧主面板并排；空间不足时保留不遮挡的目标摘要，而不是关闭。
-      if (this.infoWinVisible && this.selectedName.length > 0 && (this.activePanel !== 'object' || !this.panelVisible)) {
-        if (this.showObjectActionBar()) {
-          Stack() { this.objectActionBar() }
-            .position({ x: this.objectActionBarX(), y: this.objectActionBarY() })
-            .width(this.objectActionBarWidth())
-            .zIndex(51)
-            .hitTestBehavior(HitTestMode.Default)
-        }
-        if (this.useTabletObjectInspector()) {
-          Stack() { this.tabletObjectInspector() }
-            .position({ x: this.tabletInspectorX(), y: this.tabletInspectorY() })
-            .width(this.tabletInspectorWidth())
-            .height(this.tabletInspectorHeight())
-            .zIndex(50)
-            .hitTestBehavior(HitTestMode.Default)
-            .transition(TransitionEffect.asymmetric(
-              TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })
-                .combine(TransitionEffect.translate({ x: -28, y: 0 }).animation({ duration: 360, curve: curves.springMotion(0.55, 0.86) })),
-              TransitionEffect.OPACITY.animation({ duration: 140, curve: Curve.EaseIn })
-                .combine(TransitionEffect.translate({ x: -18, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
-            ))
-        } else if (this.useExpandedDetailSummary()) {
-          if (this.canShowExpandedDetailSummary()) {
-            Stack() { this.expandedObjectSummary() }
-              .position({ x: this.expandedDetailSummaryX(), y: this.expandedDetailSummaryY() })
-              .width(this.expandedDetailSummaryWidth())
-              .height(this.expandedDetailSummaryHeight())
-              .zIndex(50)
-              .hitTestBehavior(HitTestMode.Default)
-              .transition(TransitionEffect.asymmetric(
-                TransitionEffect.OPACITY.animation({ duration: 280, curve: Curve.EaseOut })
-                  .combine(TransitionEffect.translate({ x: -20, y: 0 }).animation({ duration: 440, curve: curves.springMotion(0.52, 0.86) })),
-                TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
-                  .combine(TransitionEffect.translate({ x: -12, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
-              ))
-          } else {
-            // 极窄空间（<140vp）：隐藏摘要，避免与搜索面板重叠
-          }
-        } else {
-          Stack() { this.bottomDetailCard() }
-            .position({ x: this.bottomCardX(), y: this.bottomCardY() })
-            .zIndex(50)
-            .hitTestBehavior(HitTestMode.Default)
-            .transition(TransitionEffect.asymmetric(
-              TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
-                .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
-              TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
-                .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
-            ))
-        }
+      if (this.infoWinVisible && this.selectedName.length > 0) {
+        this.objectDetailConnectorLayer()
+        Stack() { this.unifiedObjectDetailCard() }
+          .position({ x: this.detailCardX(), y: this.detailCardY() })
+          .width(this.detailCardWidth())
+          .height(this.detailCardHeight())
+          .zIndex(50)
+          .hitTestBehavior(HitTestMode.Default)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+          ))
       }
     }
       .width('100%')
@@ -13722,16 +15362,12 @@ private loadPlanetPositions(): void {
         .hitTestBehavior(HitTestMode.Block)
         .zIndex(40)
 
-      if (!this.panelVisible && this.infoWinVisible && this.selectedName.length > 0) {
-        if (this.showObjectActionBar()) {
-          Stack() { this.objectActionBar() }
-            .position({ x: this.objectActionBarX(), y: this.objectActionBarY() })
-            .width(this.objectActionBarWidth())
-            .zIndex(36)
-            .hitTestBehavior(HitTestMode.Default)
-        }
-        Stack() { this.bottomDetailCard() }
-          .position({ x: this.bottomCardX(), y: this.hoverBottomCardY() })
+      if (this.infoWinVisible && this.selectedName.length > 0) {
+        this.objectDetailConnectorLayer()
+        Stack() { this.unifiedObjectDetailCard() }
+          .position({ x: this.detailCardX(), y: this.detailCardY() })
+          .width(this.detailCardWidth())
+          .height(this.detailCardHeight())
           .zIndex(35)
           .hitTestBehavior(HitTestMode.Default)
       }
@@ -13793,34 +15429,20 @@ private loadPlanetPositions(): void {
             TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseIn })
           ))
       }
-      // 手机先显示紧凑的选中提示条；用户主动点开后才显示完整检查器。
-      // 必须作为 Stack 的独立子层，Column 内的 position 会参与普通排版，导致卡片贴边。
-      if (!this.panelVisible && this.infoWinVisible && this.selectedName.length > 0) {
-        if (this.showObjectActionBar()) {
-          Stack() { this.objectActionBar() }
-            .position({ x: this.objectActionBarX(), y: this.objectActionBarY() })
-            .width(this.objectActionBarWidth())
-            .zIndex(51)
-            .hitTestBehavior(HitTestMode.Default)
-        }
-        if (this.isPhoneDetailPeek()) {
-          Stack() { this.compactObjectPeek() }
-            .position({ x: this.compactObjectPeekX(), y: this.compactObjectPeekY() })
-            .width(this.compactObjectPeekWidth())
-            .zIndex(50)
-            .hitTestBehavior(HitTestMode.Default)
-        } else {
-          Stack() { this.bottomDetailCard() }
-            .position({ x: this.bottomCardX(), y: this.bottomCardY() })
-            .zIndex(50)
-            .hitTestBehavior(HitTestMode.Default)
-            .transition(TransitionEffect.asymmetric(
-              TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
-                .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
-              TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
-                .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
-            ))
-        }
+      if (this.infoWinVisible && this.selectedName.length > 0) {
+        this.objectDetailConnectorLayer()
+        Stack() { this.unifiedObjectDetailCard() }
+          .position({ x: this.detailCardX(), y: this.detailCardY() })
+          .width(this.detailCardWidth())
+          .height(this.detailCardHeight())
+          .zIndex(50)
+          .hitTestBehavior(HitTestMode.Default)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 260, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: 40 }).animation({ duration: 420, curve: curves.springMotion(0.55, 0.85) })),
+            TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: 20 }).animation({ duration: 200, curve: Curve.EaseIn }))
+          ))
       }
     }
       .width('100%')
@@ -14019,20 +15641,35 @@ private loadPlanetPositions(): void {
     return Math.min(this.skyHeight * 0.42, 400)
   }
   private setTrackingState(enabled: boolean): void {
+    if (enabled && !this.hasSelectedObject()) {
+      this.flashHint(I18n.t('tracking_requires_selection'))
+      return
+    }
     if (this.gyroscopeEnabled) {
       this.updateGyroTargetGuide(true)
+      this.flashHint(I18n.t('tracking_unavailable_gyro'))
       return
     }
     const requestSerial = ++this.trackingRequestSerial
     this.trackingRequestPending = true
     this.trackingText = enabled ? 'On' : 'Off'
+    if (enabled) {
+      // Native tracking owns the camera centre, so it supersedes the optional
+      // fixed-screen-position mode. The native response is authoritative and
+      // refreshState() will confirm the final toggle state.
+      this.viewLock = false
+    }
     this.callInteractive('setTracking', enabled ? '1' : '0', (result: StellariumBridgeResponse) => {
       if (requestSerial !== this.trackingRequestSerial) { return }
       this.trackingRequestPending = false
       if (result.tracking !== undefined) {
         this.trackingText = result.tracking === true ? 'On' : 'Off'
       }
+      if (result.viewLock !== undefined) {
+        this.viewLock = result.viewLock === true
+      }
       this.trackingStateIgnoreUntilMs = Date.now() + 450
+      this.flashHint(this.trackingText === 'On' ? I18n.t('tracking_enabled') : I18n.t('tracking_disabled'))
     }, () => {
       if (requestSerial !== this.trackingRequestSerial) { return }
       this.trackingRequestPending = false
@@ -14043,6 +15680,15 @@ private loadPlanetPositions(): void {
 
   private toggleTracking(): void {
     this.setTrackingState(this.trackingText !== 'On')
+  }
+
+  private setObjectDetailConnector(enabled: boolean, syncNative: boolean = true): void {
+    this.objectDetailConnectorVisible = enabled
+    this.refreshObjectDetailConnector()
+    this.saveAppSettings()
+    if (syncNative) {
+      this.callInteractive('setObjectDetailConnector', enabled ? '1' : '0', () => {})
+    }
   }
 
 
@@ -14106,19 +15752,31 @@ private loadPlanetPositions(): void {
   private baseBottomCardX(): number {
     if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return 16 }
     if (!this.isExpandedLayout) { return Math.max(24, (this.skyWidth - this.bottomCardWidth()) / 2) }
-    // Search recenters a target. Keep the tablet inspector on the far edge so
-    // its rich data never sits over that visual centre. When another main
-    // panel is open, retain the existing left-side coexistence layout.
-    if (!this.panelVisible) {
-      // 平板横屏：卡片靠右但留出足够边距，比之前再右移 16vp。
-      return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN + 16)
-    }
-    return this.expandedMainPanelLeft() + this.panelWidth + 18
+    // The detail card is a freely placed window. Its base geometry must not
+    // depend on whether another panel is open, otherwise the card jumps when
+    // the bottom Dock changes the surrounding layout.
+    return Math.max(this.EDGE_MARGIN + 92, this.skyWidth - this.bottomCardWidth() - this.EDGE_MARGIN + 16)
   }
 
   private bottomCardY(): number {
     const base = this.baseBottomCardY()
     return base + this.clampedObjectCardOffsetY(base, this.bottomCardHeight())
+  }
+
+  private detailCardX(): number {
+    return this.bottomCardX()
+  }
+
+  private detailCardY(): number {
+    return this.objectDetailCardY()
+  }
+
+  private detailCardWidth(): number {
+    return this.bottomCardWidth()
+  }
+
+  private detailCardHeight(): number {
+    return this.bottomCardHeight()
   }
 
   private baseBottomCardY(): number {
@@ -14140,15 +15798,14 @@ private loadPlanetPositions(): void {
     // 手机详情卡保持左右对称留白，避免视觉上贴住右侧边框。
     if (!this.isExpandedLayout && !this.isFoldHoverLayout) { return Math.min(380, Math.max(286, this.skyWidth - 58)) }
     if (!this.isExpandedLayout) { return Math.min(318, Math.max(280, this.skyWidth - 52)) }
-    if (this.panelVisible) {
-      return Math.min(420, Math.max(360, this.expandedDetailAvailableWidth()))
-    }
-    // 平板横屏：加宽到 38%，确保"实时高度/方位"等字段不被截断。
+    // Keep the same responsive width while other panels open and close.
     return this.clamp(this.skyWidth * 0.38, 340, 480)
   }
 
   private bottomCardHeight(): number {
-    return this.isExpandedLayout ? 340 : (this.isFoldHoverLayout ? 318 : 292)
+    if (this.isExpandedLayout) { return Math.min(440, Math.max(360, this.skyHeight - 176)) }
+    if (this.isFoldHoverLayout) { return Math.min(380, Math.max(320, this.skyHeight - this.hoverConsoleTop() - 104)) }
+    return this.clamp(this.skyHeight * 0.56, 320, 420)
   }
 
   private bottomCardSwiperHeight(): number {
@@ -14170,7 +15827,7 @@ private loadPlanetPositions(): void {
 
   // 平板展开布局 + 搜索面板打开时，始终用紧凑摘要（不挤完整大卡片）。
   private useExpandedDetailSummary(): boolean {
-    return this.isExpandedLayout && this.panelVisible && this.activePanel !== 'object' && !this.fullInspectorRequested
+    return false
   }
 
   private expandedDetailSummaryWidth(): number {
@@ -14232,12 +15889,11 @@ private loadPlanetPositions(): void {
   }
 
   private useTabletObjectInspector(): boolean {
-    return this.isExpandedLayout && !this.panelVisible && this.fullInspectorRequested
+    return false
   }
 
   private showObjectActionBar(): boolean {
-    return this.infoWinVisible && this.selectedName.length > 0 &&
-      !this.fullInspectorRequested && (this.activePanel !== 'object' || !this.panelVisible)
+    return false
   }
 
   private objectActionBarX(): number {
@@ -14274,14 +15930,11 @@ private loadPlanetPositions(): void {
         .height(36).fontSize(12).fontColor('#E8F8FF')
         .backgroundColor('rgba(91,147,191,0.38)').borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
         .onClick(() => { this.moveToSelectedObject() })
-      Button(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'))
+      Button(this.viewLock ? I18n.t('btn_unlock_view') : I18n.t('btn_lock_view'))
         .height(36).fontSize(12).fontColor('#E8F8FF')
-        .backgroundColor(this.trackingText === 'On' ? 'rgba(91,147,191,0.50)' : 'rgba(255,255,255,0.08)')
+        .backgroundColor(this.viewLock ? 'rgba(91,147,191,0.50)' : 'rgba(255,255,255,0.08)')
         .borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
-        .opacity(this.trackingRequestPending ? 0.58 : 1)
-        .onClick(() => {
-          if (!this.trackingRequestPending) { this.toggleTracking() }
-        })
+        .onClick(() => { this.toggleViewLock() })
     }
       .width('100%').height(40).padding({ left: 2, right: 2 })
       .backgroundColor('rgba(10,14,26,0.70)').backdropBlur(24)
@@ -14294,6 +15947,18 @@ private loadPlanetPositions(): void {
     const sx = this.expandedDetailSummaryX()
     const sy = this.expandedDetailSummaryY()
     return x >= sx - 8 && x <= sx + this.expandedDetailSummaryWidth() + 8 && y >= sy - 8 && y <= sy + this.expandedDetailSummaryHeight() + 8
+  }
+
+  private isObjectDetailCardRendered(): boolean {
+    return this.infoWinVisible && this.selectedName.length > 0
+  }
+
+  private isObjectDetailCardPoint(x: number, y: number): boolean {
+    if (!this.isObjectDetailCardRendered()) { return false }
+    const left = this.detailCardX()
+    const top = this.detailCardY()
+    return x >= left - 8 && x <= left + this.detailCardWidth() + 8 &&
+      y >= top - 8 && y <= top + this.detailCardHeight() + 8
   }
 
   private isTabletObjectInspectorPoint(x: number, y: number): boolean {
@@ -14316,7 +15981,7 @@ private loadPlanetPositions(): void {
   }
 
   private isPhoneDetailPeek(): boolean {
-    return !this.isExpandedLayout && !this.isFoldHoverLayout && !this.infoWinExpanded
+    return false
   }
 
   private compactObjectPeekWidth(): number {
@@ -14361,6 +16026,7 @@ private loadPlanetPositions(): void {
       this.selectedUiLayoutTimer = 0
     }
     this.infoWinVisible = false
+    this.stopObjectDetailConnectorRefresh()
     this.infoWinExpanded = false
     this.objectInspectorMoreOpen = false
     this.dismissedObjectName = this.selectedName
@@ -14368,9 +16034,8 @@ private loadPlanetPositions(): void {
     this.skyTouchActive = false
     this.skyTouchFeedback = false
     this.skyDragging = false
-    // Closing the inspector must not recenter an already anchored target.
-    // The next native frame keeps its current screen position instead.
-    this.setTrackingState(false)
+    // Closing the inspector must not alter the camera mode. Tracking and
+    // fixed-position anchoring are independent of the card's visibility.
   }
 
   private handleObjectInspectorDragTouch(event: TouchEvent): void {
@@ -14396,28 +16061,10 @@ private loadPlanetPositions(): void {
     }
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.objectCardDragging = false
-      let baseX = this.baseBottomCardX()
-      let baseY = this.baseBottomCardY()
-      let width = this.bottomCardWidth()
-      let height = this.bottomCardHeight()
-      if (this.useTabletObjectInspector()) {
-        baseX = this.baseTabletInspectorX()
-        baseY = this.baseTabletInspectorY()
-        width = this.tabletInspectorWidth()
-        height = this.tabletInspectorHeight()
-      } else if (this.useExpandedDetailSummary()) {
-        baseX = this.baseExpandedDetailSummaryX()
-        baseY = this.baseExpandedDetailSummaryY()
-        width = this.expandedDetailSummaryWidth()
-        height = this.expandedDetailSummaryHeight()
-      } else if (this.isFoldHoverLayout) {
-        baseY = this.baseHoverBottomCardY()
-      } else if (this.isPhoneDetailPeek()) {
-        baseX = this.baseCompactObjectPeekX()
-        baseY = this.baseCompactObjectPeekY()
-        width = this.compactObjectPeekWidth()
-        height = 72
-      }
+      const baseX = this.baseBottomCardX()
+      const baseY = this.isFoldHoverLayout ? this.baseHoverBottomCardY() : this.baseBottomCardY()
+      const width = this.detailCardWidth()
+      const height = this.detailCardHeight()
       this.cardOffsetX = this.clampedObjectCardOffsetX(baseX, width)
       this.cardOffsetY = this.clampedObjectCardOffsetY(baseY, height)
     }
@@ -14450,13 +16097,24 @@ private loadPlanetPositions(): void {
     this.fullInspectorRequested = true
     this.objectInspectorMoreOpen = false
     this.bottomCardIndex = 2
+    this.objectCardPlacementPending = true
     this.dismissedObjectName = ''
     this.resetPanelIdle()
     this.refreshSelectedObject()
-    // Full details are a first-class panel, sharing the same container,
-    // header, close gesture, scrolling and animation as settings/layers.
-    this.setPanel('object')
+    this.startObjectDetailConnectorRefresh()
     this.scheduleSelectedObjectForUiChange(320)
+  }
+
+  private toggleObjectInspector(): void {
+    if (!this.hasSelectedObject()) {
+      this.flashHint(I18n.t('center_requires_selection'))
+      return
+    }
+    if (this.infoWinVisible) {
+      this.dismissObjectInspector()
+    } else {
+      this.showFullObjectInspector()
+    }
   }
 
   private compactPanelUsableHeight(): number {
@@ -14622,6 +16280,10 @@ private loadPlanetPositions(): void {
       this.setPanel('more')
       return
     }
+    if (item.panel === 'object') {
+      this.showFullObjectInspector()
+      return
+    }
     this.setPanel(item.panel)
     this.flashHint(I18n.t('msg_panel_opened'))
   }
@@ -14661,13 +16323,71 @@ private loadPlanetPositions(): void {
 
   // ── 天体检查器：把实时观测、坐标和完整资料分开呈现，避免字段堆成数据清单。 ──
   @Builder
-  bottomDetailCard() {
+  objectDetailConnectorLayer() {
+    if (this.objectDetailConnectorVisible && this.objectDetailConnectorLength > 0) {
+      Row()
+        .width(this.objectDetailConnectorLength)
+        .height(6)
+        .backgroundColor('rgba(111, 196, 239, 0.12)')
+        .borderRadius(3)
+        .position({ x: this.objectDetailConnectorX - this.objectDetailConnectorLength / 2, y: this.objectDetailConnectorY - 3 })
+        .rotate({ angle: this.objectDetailConnectorAngle })
+        .hitTestBehavior(HitTestMode.None)
+        .animation({ duration: 90, curve: Curve.EaseOut })
+        .zIndex(45)
+      Row()
+        .width(this.objectDetailConnectorLength)
+        .height(1.25)
+        .backgroundColor('rgba(198, 235, 255, 0.62)')
+        .borderRadius(1)
+        .position({ x: this.objectDetailConnectorX - this.objectDetailConnectorLength / 2, y: this.objectDetailConnectorY - 0.625 })
+        .rotate({ angle: this.objectDetailConnectorAngle })
+        .hitTestBehavior(HitTestMode.None)
+        .animation({ duration: 90, curve: Curve.EaseOut })
+        .zIndex(46)
+      if (this.objectDetailConnectorTargetOnScreen) {
+        Circle()
+          .width(this.objectDetailMarkerSize()).height(this.objectDetailMarkerSize())
+          .fill('rgba(91,147,191,0.035)')
+          .stroke('rgba(166,224,255,0.20)').strokeWidth(5)
+          .position({ x: this.objectDetailConnectorTargetX - this.objectDetailMarkerSize() / 2, y: this.objectDetailConnectorTargetY - this.objectDetailMarkerSize() / 2 })
+          .hitTestBehavior(HitTestMode.None)
+          .animation({ duration: 90, curve: Curve.EaseOut })
+          .zIndex(45)
+        Circle()
+          .width(this.objectDetailMarkerSize() * 0.72).height(this.objectDetailMarkerSize() * 0.72)
+          .fill('rgba(0,0,0,0)')
+          .stroke('rgba(207,239,255,0.68)').strokeWidth(1.25)
+          .position({ x: this.objectDetailConnectorTargetX - this.objectDetailMarkerSize() * 0.36, y: this.objectDetailConnectorTargetY - this.objectDetailMarkerSize() * 0.36 })
+          .hitTestBehavior(HitTestMode.None)
+          .animation({ duration: 90, curve: Curve.EaseOut })
+          .zIndex(46)
+      } else {
+        Circle()
+          .width(10).height(10)
+          .fill('rgba(180,226,250,0.34)')
+          .stroke('rgba(220,244,255,0.74)').strokeWidth(1)
+          .position({ x: this.objectDetailConnectorEndX - 5, y: this.objectDetailConnectorEndY - 5 })
+          .hitTestBehavior(HitTestMode.None)
+          .animation({ duration: 90, curve: Curve.EaseOut })
+          .zIndex(46)
+      }
+    }
+  }
+
+  @Builder
+  unifiedObjectDetailCard() {
     Column() {
+      Stack({ alignContent: Alignment.Center }) {
+        Row()
+          .width(40).height(4).backgroundColor('rgba(225,241,250,0.34)').borderRadius(2)
+      }
+        .width('100%').height(26)
+        .hitTestBehavior(HitTestMode.Block)
+        .onTouch((event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) })
       Row() {
-        Image(this.getIcon('info', false))
-          .width(28).height(28).fillColor('#73C8FF').margin({ right: 5 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => { this.showFullObjectInspector() })
+        Image(this.getIcon(this.objectInspectorIcon(), false))
+          .width(26).height(26).fillColor('#73C8FF').margin({ right: 7 })
         Text(this.zhNameOf(this.selectedName))
           .fontSize(18).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF')
           .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -14682,7 +16402,6 @@ private loadPlanetPositions(): void {
           })
       }
       .width('100%').padding({ left: 16, right: 14, top: 10, bottom: 6 })
-      .onTouch((event: TouchEvent) => { this.handleObjectInspectorDragTouch(event) })
 
       Row({ space: 4 }) {
         this.objectCompactMetric(I18n.t('i0007'), this.selectedMagnitude.length > 0 ? this.selectedMagnitude : '--')
@@ -14748,6 +16467,7 @@ private loadPlanetPositions(): void {
             Text('坐标会跟随时间、位置与视角更新。').fontSize(11).fontColor('#8FBBD6').lineHeight(16).width('100%').margin({ top: 4 })
           } else if (this.bottomCardIndex === 2) {
             Text('完整资料').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
+            this.tabletInspectorMedia()
             Row({ space: 8 }) {
               Column({ space: 7 }) {
                 if (this.selectedCoordAlt.length > 0) { this.objectDataTile('实时高度 / 方位', this.selectedCoordAlt) }
@@ -14769,19 +16489,35 @@ private loadPlanetPositions(): void {
             this.structuredObjectDetails(false)
           } else {
             Text('目标操作').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
+            Row({ space: 8 }) {
+              Button(I18n.t('btn_center'))
+                .fontSize(12).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                .onClick(() => { this.moveToSelectedObject() })
+              Button(this.viewLock ? I18n.t('btn_unlock_view') : I18n.t('btn_lock_view'))
+                .fontSize(12).fontColor('#E8F8FF')
+                .backgroundColor(this.viewLock ? 'rgba(91,147,191,0.50)' : 'rgba(255,255,255,0.08)')
+                .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+                .onClick(() => { this.toggleViewLock() })
+            }.width('100%')
             Button(this.observingList.includes(this.selectedName) ? I18n.t('s0739') : I18n.t('s0738'))
               .fontSize(12).fontColor('#E8F8FF').backgroundColor('rgba(91,147,191,0.28)').borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
               .onClick(() => { this.toggleSelectedObservingList() })
             Row({ space: 8 }) {
               Button(I18n.t('s0721'))
                 .fontSize(12).fontColor('#DDF4FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
+                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
                 .onClick(() => { this.refreshSelectedObject(); this.refreshState() })
               Button(I18n.t('i0134'))
                 .fontSize(12).fontColor('#DDF4FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
+                .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
                 .onClick(() => { this.triggerAction('actionGoto_ReSelect_Last_Selected_Object'); this.refreshSelectedObject() })
             }.width('100%')
             Button(I18n.t('s0760'))
               .fontSize(12).fontColor('#DDF4FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
+              .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
               .onClick(() => { this.speakSelectedObject() })
             if (this.speechStatus.length > 0) {
               Text(this.speechStatus).fontSize(11).fontColor('#B9DBEB').lineHeight(16).width('100%').maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -14795,6 +16531,8 @@ private loadPlanetPositions(): void {
         .scrollBar(BarState.Auto)
         .width('100%')
         .layoutWeight(1)
+        .opacity(this.objectDetailContentOpacity)
+        .translate({ x: this.objectDetailContentTranslateX, y: 0 })
 
     }
     .width(this.bottomCardWidth())
@@ -14802,7 +16540,7 @@ private loadPlanetPositions(): void {
     .backgroundColor('rgba(12, 16, 28, 0.72)')
     .backdropBlur(28)
     .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
-    .borderRadius(UI_RADIUS_PILL)
+    .borderRadius(UI_RADIUS_PANEL)
     .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
   }
 
@@ -14880,7 +16618,7 @@ private loadPlanetPositions(): void {
         if (this.objectInspectorMoreOpen) {
           Column({ space: 2 }) {
             this.tabletInspectorAction('视野中心', 'orbit', () => { this.moveToSelectedObject() })
-            this.tabletInspectorAction(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'), 'lock', () => { this.toggleTracking() })
+            this.tabletInspectorAction(this.viewLock ? I18n.t('btn_unlock_view') : I18n.t('btn_lock_view'), 'lock', () => { this.toggleViewLock() })
             this.tabletInspectorAction(this.observingList.includes(this.selectedName) ? I18n.t('s0739') : I18n.t('s0738'), 'observe', () => { this.toggleSelectedObservingList() })
           }
             .width('100%').padding({ left: 12, right: 12, top: 10, bottom: 10 })
@@ -14954,9 +16692,9 @@ private loadPlanetPositions(): void {
         Button(I18n.t('btn_center'))
           .height(36).fontSize(12).fontColor('#E7F7FF').backgroundColor('rgba(91,147,191,0.34)').borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
           .onClick(() => { this.moveToSelectedObject() })
-        Button(this.trackingText === 'On' ? I18n.t('btn_untrack') : I18n.t('btn_track'))
+        Button(this.viewLock ? I18n.t('btn_unlock_view') : I18n.t('btn_lock_view'))
           .height(36).fontSize(12).fontColor('#E7F7FF').backgroundColor('rgba(255,255,255,0.07)').borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
-          .onClick(() => { this.toggleTracking() })
+          .onClick(() => { this.toggleViewLock() })
       }
         .width('100%').padding({ left: 16, right: 16, top: 10, bottom: 12 })
     }
@@ -14967,21 +16705,7 @@ private loadPlanetPositions(): void {
   }
 
   private objectInspectorIcon(): string {
-    const type = (this.selectedType + ' ' + this.selectedObjectType).toLowerCase()
-    if (type.indexOf('supernova') >= 0 || type.indexOf('超新星') >= 0) return 'catalog_supernova'
-    if (type.indexOf('nova') >= 0 || type.indexOf('新星') >= 0) return 'catalog_nova'
-    if (type.indexOf('pulsar') >= 0 || type.indexOf('脉冲星') >= 0) return 'catalog_pulsar'
-    if (type.indexOf('quasar') >= 0 || type.indexOf('类星体') >= 0) return 'catalog_quasar'
-    if (type.indexOf('exoplanet') >= 0 || type.indexOf('系外行星') >= 0) return 'catalog_exoplanet'
-    if (type.indexOf('satellite') >= 0 || type.indexOf('人造卫星') >= 0) return 'catalog_satellite'
-    if (type.indexOf('galaxy') >= 0 || type.indexOf('星系') >= 0) return 'catalog_galaxy'
-    if (type.indexOf('nebula') >= 0 || type.indexOf('星云') >= 0) return 'catalog_nebula'
-    if (type.indexOf('cluster') >= 0 || type.indexOf('星团') >= 0) return 'catalog_cluster'
-    if (type.indexOf('comet') >= 0 || type.indexOf('彗') >= 0) return 'catalog_comet'
-    if (type.indexOf('asteroid') >= 0 || type.indexOf('小行星') >= 0) return 'catalog_asteroid'
-    if (type.indexOf('planet') >= 0 || type.indexOf('行星') >= 0) return 'catalog_planet'
-    if (type.indexOf('moon') >= 0 || type.indexOf('卫星') >= 0) return 'catalog_moon'
-    return 'catalog_star'
+    return this.catalogIconForObjectType(this.selectedType + ' ' + this.selectedObjectType, 'catalog_star')
   }
 
   private objectInspectorSubtitle(): string {
@@ -14995,13 +16719,185 @@ private loadPlanetPositions(): void {
   }
 
   private objectInspectorFileUri(relativePath: string): string {
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-    const path = context.filesDir + '/stellarium/' + relativePath
+    const path = this.objectInspectorFilePath(relativePath)
+    return path.length > 0 ? fileUri.getUriFromPath(path) : ''
+  }
+
+  private objectInspectorFilePath(relativePath: string): string {
+    const path = this.stellariumFilesDir() + '/stellarium/' + relativePath
     try {
       fileIo.accessSync(path)
-      return fileUri.getUriFromPath(path)
+      return path
     } catch (_err) {
       return ''
+    }
+  }
+
+  private releaseDecodedImage(pixelMap: image.PixelMap | undefined, label: string): void {
+    if (pixelMap === undefined) {
+      return
+    }
+    pixelMap.release().then(() => {
+      hilog.info(0x0000, 'StellariumArkUI', '[detail-media] released pixel map kind=%{public}s', label)
+    }).catch((err: Error) => {
+      hilog.warn(0x0000, 'StellariumArkUI', '[detail-media] pixel map release failed kind=%{public}s error=%{public}s',
+        label, JSON.stringify(err))
+    })
+  }
+
+  private clearObjectInspectorDecodedImage(): void {
+    const oldPixelMap = this.objectInspectorMediaPixelMap
+    this.objectInspectorMediaPixelMap = undefined
+    this.objectInspectorMediaDecodeGeneration++
+    this.clearObjectInspectorModelRenderer()
+    this.releaseDecodedImage(oldPixelMap, 'object-inspector')
+  }
+
+  private clearObjectInspectorModelRenderer(): void {
+    const oldModelPixelMap = this.objectInspectorModelPixelMap
+    if (this.objectInspectorModelRenderTimer !== 0) {
+      clearTimeout(this.objectInspectorModelRenderTimer)
+      this.objectInspectorModelRenderTimer = 0
+    }
+    this.objectInspectorModelPixelMap = undefined
+    this.objectInspectorModelTexturePixels = undefined
+    this.objectInspectorModelTextureWidth = 0
+    this.objectInspectorModelTextureHeight = 0
+    this.objectInspectorModelTextureStride = 0
+    this.objectInspectorModelRingTexturePixels = undefined
+    this.objectInspectorModelRingTextureWidth = 0
+    this.objectInspectorModelRingTextureHeight = 0
+    this.objectInspectorModelRingTextureStride = 0
+    this.objectInspectorModelRendering = false
+    this.objectInspectorModelRenderPending = false
+    this.objectInspectorModelRenderHighQuality = false
+    this.objectInspectorModelInteracting = false
+    this.objectInspectorModelRenderGeneration++
+    this.releaseDecodedImage(oldModelPixelMap, 'object-inspector-model')
+  }
+
+  private decodeLocalImage(
+    filePath: string,
+    label: string,
+    onSuccess: (pixelMap: image.PixelMap) => void,
+    onFailure: (err: Error) => void,
+    desiredSize?: ImageDecodeSize,
+  ): void {
+    let source: image.ImageSource | undefined = undefined
+    let file: fileIo.File | undefined = undefined
+    const closeFile = (): void => {
+      if (file === undefined) return
+      try {
+        fileIo.closeSync(file)
+      } catch (err) {
+        hilog.warn(0x0000, 'StellariumArkUI', '[detail-media] file close failed kind=%{public}s error=%{public}s',
+          label, JSON.stringify(err))
+      }
+      file = undefined
+    }
+    try {
+      file = fileIo.openSync(filePath, fileIo.OpenMode.READ_ONLY)
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[detail-media] create image source kind=%{public}s path=%{public}s fd=%{public}s',
+        label, filePath, file.fd.toString())
+      source = image.createImageSource(file.fd)
+      const pixelMapPromise = label === 'model'
+        ? (desiredSize === undefined
+          ? source.createPixelMapUsingAllocator({
+            desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+            desiredDynamicRange: image.DecodingDynamicRange.SDR
+          }, image.AllocatorType.SHARE_MEMORY)
+          : source.createPixelMapUsingAllocator({
+            desiredSize: desiredSize,
+            desiredPixelFormat: image.PixelMapFormat.RGBA_8888,
+            desiredDynamicRange: image.DecodingDynamicRange.SDR
+          }, image.AllocatorType.SHARE_MEMORY))
+        : (desiredSize === undefined
+          ? source.createPixelMap()
+          : source.createPixelMap({ desiredSize: desiredSize }))
+      pixelMapPromise.then((pixelMap: image.PixelMap) => {
+        if (label === 'model') {
+          hilog.info(0x0000, 'StellariumArkUI',
+            '[detail-media] decode promise settled kind=%{public}s bytes=%{public}s',
+            label, pixelMap.getPixelBytesNumber().toString())
+        }
+        onSuccess(pixelMap)
+        source?.release().catch((err: Error) => {
+          hilog.warn(0x0000, 'StellariumArkUI', '[detail-media] image source release failed kind=%{public}s error=%{public}s',
+            label, JSON.stringify(err))
+        })
+        closeFile()
+      }).catch((err: Error) => {
+        source?.release().catch((releaseErr: Error) => {
+          hilog.warn(0x0000, 'StellariumArkUI', '[detail-media] image source release failed kind=%{public}s error=%{public}s',
+            label, JSON.stringify(releaseErr))
+        })
+        closeFile()
+        onFailure(err)
+      })
+    } catch (err) {
+      if (source !== undefined) {
+        source.release().catch((releaseErr: Error) => {
+          hilog.warn(0x0000, 'StellariumArkUI', '[detail-media] image source release failed kind=%{public}s error=%{public}s',
+            label, JSON.stringify(releaseErr))
+        })
+      }
+      closeFile()
+      onFailure(err as Error)
+    }
+  }
+
+  private updateObjectInspectorMediaWarmup(kind: string): void {
+    if (kind !== 'image') {
+      this.objectInspectorMediaWarmupState = 'unknown'
+      this.objectInspectorMediaWarmupInstalled = 0
+      this.objectInspectorMediaWarmupTotal = 0
+      this.objectInspectorMediaWarmupFailed = 0
+      return
+    }
+    try {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const status: DeepSkyWarmupStatus = getDeepSkyResourceWarmupStatus(context.getApplicationContext())
+      this.objectInspectorMediaWarmupState = status.state
+      this.objectInspectorMediaWarmupInstalled = status.installed
+      this.objectInspectorMediaWarmupTotal = status.total
+      this.objectInspectorMediaWarmupFailed = status.failed
+    } catch (err) {
+      this.objectInspectorMediaWarmupState = 'unknown'
+      hilog.warn(0x0000, 'StellariumArkUI',
+        '[detail-media] unable to read warmup status error=%{public}s', JSON.stringify(err))
+    }
+  }
+
+  private objectInspectorMediaWarmupText(): string {
+    if (this.objectInspectorMediaWarmupTotal <= 0) {
+      return '正在检查离线图库'
+    }
+    let text = '离线图库已准备 ' + this.objectInspectorMediaWarmupInstalled.toString() + '/' +
+      this.objectInspectorMediaWarmupTotal.toString()
+    if (this.objectInspectorMediaWarmupFailed > 0) {
+      text += ' · ' + this.objectInspectorMediaWarmupFailed.toString() + ' 项失败'
+    }
+    return text
+  }
+
+  private startObjectInspectorMediaWarmup(): void {
+    if (this.objectInspectorMediaWarmupTimer !== 0) {
+      return
+    }
+    this.objectInspectorMediaWarmupTimer = setInterval(() => {
+      if (!this.objectInspectorMediaLoading || this.objectInspectorMediaKind !== 'image') {
+        this.stopObjectInspectorMediaWarmup()
+        return
+      }
+      this.updateObjectInspectorMediaWarmup('image')
+    }, 500) as number
+  }
+
+  private stopObjectInspectorMediaWarmup(): void {
+    if (this.objectInspectorMediaWarmupTimer !== 0) {
+      clearInterval(this.objectInspectorMediaWarmupTimer)
+      this.objectInspectorMediaWarmupTimer = 0
     }
   }
 
@@ -15009,7 +16905,7 @@ private loadPlanetPositions(): void {
     const objectKey = this.selectedEnglishName.toLowerCase().replace(/[^a-z0-9]/g, '')
     const textures: Array<[string, string]> = [
       ['sun', 'textures/sun.png'], ['mercury', 'textures/mercury.png'], ['venus', 'textures/venus.png'],
-      ['earth', 'textures/earth-clouds.png'], ['moon', 'textures/moon.png'], ['mars', 'textures/mars.png'],
+      ['earth', 'textures/earth_cmap.png'], ['moon', 'textures/moon.png'], ['mars', 'textures/mars.png'],
       ['jupiter', 'textures/jupiter.png'], ['saturn', 'textures/saturn.png'], ['uranus', 'textures/uranus.png'],
       ['neptune', 'textures/neptune.png'], ['pluto', 'textures/pluto.png'], ['charon', 'textures/charon.png'],
       ['ceres', 'textures/ceres.png'], ['vesta', 'textures/vesta.png'], ['eros', 'textures/eros.png'],
@@ -15032,6 +16928,21 @@ private loadPlanetPositions(): void {
       }
     }
     return ''
+  }
+
+  private objectInspectorPlanetRingSpec(): ObjectInspectorRingSpec | undefined {
+    const objectKey = this.selectedEnglishName.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const specs: Array<[string, ObjectInspectorRingSpec]> = [
+      ['saturn', { texturePath: 'textures/saturn_rings_radial.png', innerRadius: 1.24, outerRadius: 2.33, tilt: 0.35, opacity: 0.94 }],
+      ['uranus', { texturePath: 'textures/uranus_rings.png', innerRadius: 1.05, outerRadius: 3.82, tilt: 0.55, opacity: 1.0 }],
+      ['neptune', { texturePath: 'textures/neptune_rings.png', innerRadius: 1.65, outerRadius: 2.54, tilt: 0.42, opacity: 0.9 }]
+    ]
+    for (const pair of specs) {
+      if (objectKey === pair[0] || objectKey.startsWith(pair[0] + 'observer')) {
+        return pair[1]
+      }
+    }
+    return undefined
   }
 
   private objectInspectorDeepSkyImageName(): string {
@@ -15095,31 +17006,56 @@ private loadPlanetPositions(): void {
       this.objectInspectorMediaResolvedPath.length > 0
       ? this.objectInspectorMediaResolvedPath
       : requestedPath
-    const path = resolvedPath.length > 0 ? this.objectInspectorFileUri(resolvedPath) : ''
+    const filePath = resolvedPath.length > 0 ? this.objectInspectorFilePath(resolvedPath) : ''
+    const path = filePath.length > 0 ? fileUri.getUriFromPath(filePath) : ''
     const kind = planetTexturePath.length > 0
       ? 'model'
       : (this.selectedDetailMediaPath.length > 0 ? 'constellation' : (deepSkyImageName.length > 0 ? 'image' : 'visual'))
+    const modelRawFilePath = kind === 'model' && resolvedPath.length > 0
+      ? this.objectInspectorFilePath(resolvedPath + '.model.rgba')
+      : ''
+    const ringSpec = kind === 'model' ? this.objectInspectorPlanetRingSpec() : undefined
+    const ringRawFilePath = ringSpec === undefined
+      ? ''
+      : this.objectInspectorFilePath(ringSpec.texturePath + '.model.rgba')
     const resolutionAlreadyAttempted = this.objectInspectorMediaResolutionComplete &&
       this.objectInspectorMediaResolvedRequestPath === requestedPath
     const shouldResolve = requestedPath.length > 0 && path.length === 0 && !resolutionAlreadyAttempted
+    const mediaKeySame = path === this.objectInspectorMediaPath && kind === this.objectInspectorMediaKind
+    if (mediaKeySame && (this.objectInspectorMediaDecoding || this.objectInspectorModelRendering)) {
+      return
+    }
+    const shouldDecode = path.length > 0 && (kind === 'image' || kind === 'constellation' || kind === 'model') &&
+      !(mediaKeySame && this.objectInspectorMediaLoadFailed) &&
+      (!mediaKeySame || (kind === 'model'
+        ? this.objectInspectorModelTexturePixels === undefined
+        : this.objectInspectorMediaPixelMap === undefined))
     if (path === this.objectInspectorMediaPath && kind === this.objectInspectorMediaKind &&
-      this.objectInspectorMediaLoading === shouldResolve &&
+      this.objectInspectorMediaLoading === (shouldResolve || shouldDecode) &&
+      this.objectInspectorMediaDecoding === shouldDecode &&
       (!shouldResolve || this.objectInspectorMediaRequestPath === requestedPath)) { return }
+    this.clearObjectInspectorDecodedImage()
     this.objectInspectorMediaPath = path
     this.objectInspectorMediaKind = kind
     this.objectInspectorMediaLabel = kind === 'model'
-      ? '可旋转天体表面纹理'
+      ? '离线三维球体'
       : (kind === 'constellation' ? this.selectedDetailMediaLabel : (kind === 'image' ? '离线深空资料图像' : '本地天体类别示意'))
     this.objectInspectorMediaFullscreen = false
     this.objectInspectorMediaPreviewPath = ''
     this.objectInspectorMediaPreviewLoading = false
     this.objectInspectorMediaPreviewFailed = false
-    this.objectInspectorModelOffset = 0
-    this.objectInspectorMediaLoading = shouldResolve
+    this.objectInspectorModelYaw = 0
+    this.objectInspectorModelPitch = 0
+    this.objectInspectorModelScale = 1
+    this.objectInspectorModelLastPinchDistance = 0
+    this.objectInspectorMediaLoading = shouldResolve || shouldDecode
+    this.objectInspectorMediaDecoding = shouldDecode
     this.objectInspectorMediaLoadFailed = false
+    this.objectInspectorMediaPreparationFailed = false
     this.objectInspectorMediaNoMatch = false
+    this.updateObjectInspectorMediaWarmup(kind)
     this.objectInspectorMediaRequestPath = this.objectInspectorMediaLoading ? requestedPath : ''
-    if (this.objectInspectorMediaLoading) {
+    if (shouldResolve) {
       const expectedSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
       const expectedRequestPath = requestedPath
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -15128,6 +17064,7 @@ private loadPlanetPositions(): void {
         '[detail-media] warmup state=%{public}s installed=%{public}s total=%{public}s pending=%{public}s failed=%{public}s',
         warmupStatus.state, warmupStatus.installed.toString(), warmupStatus.total.toString(),
         warmupStatus.pending.toString(), warmupStatus.failed.toString())
+      this.startObjectInspectorMediaWarmup()
       resolveStellariumDetailMediaAsset(context.getApplicationContext(), requestedPath).then((actualPath: string) => {
         const currentSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
         if (currentSelection !== expectedSelection || this.objectInspectorMediaRequestPath !== expectedRequestPath) { return }
@@ -15138,27 +17075,526 @@ private loadPlanetPositions(): void {
         this.objectInspectorMediaResolutionComplete = true
         this.objectInspectorMediaNoMatch = actualPath.length === 0
         this.objectInspectorMediaLoadFailed = false
+        this.objectInspectorMediaPreparationFailed = false
+        this.stopObjectInspectorMediaWarmup()
+        this.updateObjectInspectorMediaWarmup(kind)
         hilog.info(0x0000, 'StellariumArkUI',
           '[detail-media] selection=%{public}s requested=%{public}s resolved=%{public}s',
           this.selectedName, expectedRequestPath, actualPath)
         this.refreshObjectInspectorMedia()
+      }).catch((err: Error) => {
+        const currentSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
+        if (currentSelection !== expectedSelection || this.objectInspectorMediaRequestPath !== expectedRequestPath) { return }
+        this.objectInspectorMediaLoading = false
+        this.objectInspectorMediaRequestPath = ''
+        this.objectInspectorMediaResolutionComplete = true
+        this.objectInspectorMediaNoMatch = false
+        this.objectInspectorMediaLoadFailed = false
+        this.objectInspectorMediaPreparationFailed =
+          isStellariumDetailMediaPreparationFailed(context.getApplicationContext(), expectedRequestPath)
+        this.stopObjectInspectorMediaWarmup()
+        hilog.error(0x0000, 'StellariumArkUI',
+          '[detail-media] request failed request=%{public}s error=%{public}s', expectedRequestPath, err.message)
+      })
+    }
+    if (shouldDecode) {
+      const expectedSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
+      const expectedPath = path
+      const generation = this.objectInspectorMediaDecodeGeneration
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[detail-media] decoding local image kind=%{public}s uri=%{public}s', kind, expectedPath)
+      if (kind === 'model') {
+        this.loadObjectInspectorModelRawTexture(modelRawFilePath, ringRawFilePath, generation, expectedSelection, expectedPath)
+        return
+      }
+      this.decodeLocalImage(filePath, kind, (pixelMap: image.PixelMap) => {
+        const currentSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
+        if (currentSelection !== expectedSelection || this.objectInspectorMediaPath !== expectedPath ||
+          generation !== this.objectInspectorMediaDecodeGeneration) {
+          this.releaseDecodedImage(pixelMap, 'stale-object-inspector')
+          return
+        }
+        const oldPixelMap = this.objectInspectorMediaPixelMap
+        this.objectInspectorMediaPixelMap = pixelMap
+        this.releaseDecodedImage(oldPixelMap, 'previous-object-inspector')
+        this.objectInspectorMediaLoading = false
+        this.objectInspectorMediaLoadFailed = false
+        this.objectInspectorMediaDecoding = false
+        if (this.objectInspectorMediaFullscreen) {
+          this.objectInspectorMediaPreviewLoading = false
+          this.objectInspectorMediaPreviewFailed = false
+        }
+        hilog.info(0x0000, 'StellariumArkUI',
+          '[detail-media] pixel map ready kind=%{public}s uri=%{public}s', kind, expectedPath)
+      }, (err: Error) => {
+        const currentSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
+        if (currentSelection !== expectedSelection || this.objectInspectorMediaPath !== expectedPath ||
+          generation !== this.objectInspectorMediaDecodeGeneration) {
+          return
+        }
+        this.objectInspectorMediaDecoding = false
+        this.objectInspectorMediaLoading = false
+        this.objectInspectorMediaLoadFailed = true
+        if (this.objectInspectorMediaFullscreen) {
+          this.objectInspectorMediaPreviewLoading = false
+          this.objectInspectorMediaPreviewFailed = true
+        }
+        hilog.error(0x0000, 'StellariumArkUI',
+          '[detail-media] pixel map decode failed kind=%{public}s uri=%{public}s error=%{public}s',
+          kind, expectedPath, JSON.stringify(err))
       })
     }
   }
 
+  private loadObjectInspectorModelRawTexture(
+    rawFilePath: string,
+    ringRawFilePath: string,
+    mediaGeneration: number,
+    expectedSelection: string,
+    expectedPath: string,
+  ): void {
+    const expectedBytes = 512 * 256 * 4
+    let file: fileIo.File | undefined = undefined
+    try {
+      if (rawFilePath.length === 0) {
+        throw new Error('CPU texture sidecar is missing')
+      }
+      const pixels = new ArrayBuffer(expectedBytes)
+      file = fileIo.openSync(rawFilePath, fileIo.OpenMode.READ_ONLY)
+      const bytesRead = fileIo.readSync(file.fd, pixels)
+      fileIo.closeSync(file)
+      file = undefined
+      const currentSelection = this.selectedName + '\n' + this.selectedEnglishName + '\n' + this.selectedCatalogId
+      if (currentSelection !== expectedSelection || this.objectInspectorMediaPath !== expectedPath ||
+        mediaGeneration !== this.objectInspectorMediaDecodeGeneration) {
+        return
+      }
+      if (bytesRead !== expectedBytes) {
+        throw new Error('CPU texture sidecar has unexpected size: ' + bytesRead.toString())
+      }
+      this.objectInspectorModelTexturePixels = pixels
+      this.objectInspectorModelTextureWidth = 512
+      this.objectInspectorModelTextureHeight = 256
+      this.objectInspectorModelTextureStride = 512 * 4
+      this.objectInspectorModelRingTexturePixels = undefined
+      this.objectInspectorModelRingTextureWidth = 0
+      this.objectInspectorModelRingTextureHeight = 0
+      this.objectInspectorModelRingTextureStride = 0
+      if (ringRawFilePath.length > 0) {
+        const ringExpectedBytes = 512 * 2 * 4
+        let ringFile: fileIo.File | undefined = undefined
+        try {
+          const ringPixels = new ArrayBuffer(ringExpectedBytes)
+          ringFile = fileIo.openSync(ringRawFilePath, fileIo.OpenMode.READ_ONLY)
+          const ringBytesRead = fileIo.readSync(ringFile.fd, ringPixels)
+          fileIo.closeSync(ringFile)
+          ringFile = undefined
+          if (ringBytesRead !== ringExpectedBytes) {
+            throw new Error('ring sidecar has unexpected size: ' + ringBytesRead.toString())
+          }
+          this.objectInspectorModelRingTexturePixels = ringPixels
+          this.objectInspectorModelRingTextureWidth = 512
+          this.objectInspectorModelRingTextureHeight = 2
+          this.objectInspectorModelRingTextureStride = 512 * 4
+          hilog.info(0x0000, 'StellariumArkUI',
+            '[detail-model] ring texture ready path=%{public}s bytes=%{public}s',
+            ringRawFilePath, ringBytesRead.toString())
+        } catch (ringErr) {
+          if (ringFile !== undefined) {
+            try {
+              fileIo.closeSync(ringFile)
+            } catch (_ringCloseErr) { }
+          }
+          hilog.warn(0x0000, 'StellariumArkUI',
+            '[detail-model] ring texture unavailable path=%{public}s error=%{public}s',
+            ringRawFilePath, JSON.stringify(ringErr))
+        }
+      }
+      this.objectInspectorMediaLoading = false
+      this.objectInspectorMediaDecoding = true
+      this.objectInspectorMediaLoadFailed = false
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[detail-model] CPU texture ready path=%{public}s bytes=%{public}s phase=%{public}s',
+        rawFilePath, bytesRead.toString(), this.selectedPhase)
+      this.requestObjectInspectorModelRender(true)
+    } catch (err) {
+      if (file !== undefined) {
+        try {
+          fileIo.closeSync(file)
+        } catch (_closeErr) { }
+      }
+      if (mediaGeneration !== this.objectInspectorMediaDecodeGeneration) {
+        return
+      }
+      this.objectInspectorMediaLoading = false
+      this.objectInspectorMediaDecoding = false
+      this.objectInspectorMediaLoadFailed = true
+      hilog.error(0x0000, 'StellariumArkUI',
+        '[detail-model] CPU texture load failed path=%{public}s error=%{public}s',
+        rawFilePath, JSON.stringify(err))
+    }
+  }
+
+  private objectInspectorModelIllumination(): number {
+    const value = Number.parseFloat(this.selectedPhase.replace('%', ''))
+    if (!Number.isFinite(value)) {
+      return -1
+    }
+    return Math.max(0, Math.min(1, value / 100))
+  }
+
+  private requestObjectInspectorModelRender(highQuality: boolean): void {
+    if (this.objectInspectorModelTexturePixels === undefined ||
+      this.objectInspectorModelTextureWidth <= 0 || this.objectInspectorModelTextureHeight <= 0) {
+      return
+    }
+    this.objectInspectorModelRenderHighQuality = this.objectInspectorModelRenderHighQuality || highQuality
+    this.objectInspectorModelRenderPending = true
+    if (this.objectInspectorModelRendering) {
+      return
+    }
+    if (!highQuality) {
+      if (this.objectInspectorModelRenderTimer !== 0) {
+        return
+      }
+      this.objectInspectorModelRenderTimer = setTimeout(() => {
+        this.objectInspectorModelRenderTimer = 0
+        this.flushObjectInspectorModelRender()
+      }, 18) as number
+      return
+    }
+    if (this.objectInspectorModelRenderTimer !== 0) {
+      clearTimeout(this.objectInspectorModelRenderTimer)
+      this.objectInspectorModelRenderTimer = 0
+    }
+    this.flushObjectInspectorModelRender()
+  }
+
+  private flushObjectInspectorModelRender(): void {
+    if (this.objectInspectorModelRendering || !this.objectInspectorModelRenderPending ||
+      this.objectInspectorModelTexturePixels === undefined) {
+      return
+    }
+    const renderHighQuality = this.objectInspectorModelRenderHighQuality
+    this.objectInspectorModelRenderPending = false
+    this.objectInspectorModelRenderHighQuality = false
+    this.objectInspectorModelRendering = true
+    this.renderObjectInspectorModel(renderHighQuality)
+  }
+
+  private renderObjectInspectorModel(highQuality: boolean): void {
+    const textureBuffer = this.objectInspectorModelTexturePixels
+    if (textureBuffer === undefined) {
+      this.objectInspectorModelRendering = false
+      return
+    }
+    const generation = this.objectInspectorModelRenderGeneration
+    const texture = new Uint8Array(textureBuffer)
+    const textureWidth = this.objectInspectorModelTextureWidth
+    const textureHeight = this.objectInspectorModelTextureHeight
+    const textureStride = this.objectInspectorModelTextureStride
+    const renderSize = highQuality ? 320 : 224
+    const outputBuffer = new ArrayBuffer(renderSize * renderSize * 4)
+    const output = new Uint8Array(outputBuffer)
+    const center = (renderSize - 1) / 2
+    const ringSpec = this.objectInspectorPlanetRingSpec()
+    const ringScaleLimit = ringSpec === undefined ? 0.39 : Math.min(0.39, 0.46 / ringSpec.outerRadius)
+    const radius = renderSize * ringScaleLimit * this.objectInspectorModelScale
+    const yaw = this.objectInspectorModelYaw
+    const pitch = this.objectInspectorModelPitch
+    const cosYaw = Math.cos(yaw)
+    const sinYaw = Math.sin(yaw)
+    const cosPitch = Math.cos(pitch)
+    const sinPitch = Math.sin(pitch)
+    const phase = this.objectInspectorModelIllumination()
+    const searchText = this.objectInspectorSearchText()
+    const isSun = searchText.indexOf('sun') >= 0 || this.selectedName === '太阳'
+    let lightX = -0.48
+    let lightY = 0.18
+    let lightZ = 0.86
+    if (!isSun && phase >= 0) {
+      const cosAlpha = 2 * phase - 1
+      const sinAlpha = Math.sqrt(Math.max(0, 1 - cosAlpha * cosAlpha))
+      lightX = -sinAlpha
+      lightY = 0.16 * sinAlpha
+      lightZ = cosAlpha
+    }
+    const lightLength = Math.sqrt(lightX * lightX + lightY * lightY + lightZ * lightZ)
+    lightX /= lightLength
+    lightY /= lightLength
+    lightZ /= lightLength
+    for (let y = 0; y < renderSize; y++) {
+      const sphereY = (center - y) / radius
+      for (let x = 0; x < renderSize; x++) {
+        const sphereX = (x - center) / radius
+        const radiusSquared = sphereX * sphereX + sphereY * sphereY
+        const outputIndex = (y * renderSize + x) * 4
+        if (radiusSquared > 1) {
+          output[outputIndex] = 0
+          output[outputIndex + 1] = 0
+          output[outputIndex + 2] = 0
+          output[outputIndex + 3] = 0
+          continue
+        }
+        const sphereZ = Math.sqrt(1 - radiusSquared)
+        const pitchedY = sphereY * cosPitch + sphereZ * sinPitch
+        const pitchedZ = -sphereY * sinPitch + sphereZ * cosPitch
+        const objectX = sphereX * cosYaw - pitchedZ * sinYaw
+        const objectZ = sphereX * sinYaw + pitchedZ * cosYaw
+        const objectY = Math.max(-1, Math.min(1, pitchedY))
+        let textureU = Math.atan2(objectX, objectZ) / (2 * Math.PI) + 0.5
+        textureU -= Math.floor(textureU)
+        const textureV = Math.max(0, Math.min(1, 0.5 - Math.asin(objectY) / Math.PI))
+        const textureX = textureU * textureWidth
+        const textureY = textureV * (textureHeight - 1)
+        const x0 = Math.floor(textureX) % textureWidth
+        const y0 = Math.floor(textureY)
+        const x1 = (x0 + 1) % textureWidth
+        const y1 = Math.min(textureHeight - 1, y0 + 1)
+        const fractionX = textureX - Math.floor(textureX)
+        const fractionY = textureY - y0
+        const topLeft = y0 * textureStride + x0 * 4
+        const topRight = y0 * textureStride + x1 * 4
+        const bottomLeft = y1 * textureStride + x0 * 4
+        const bottomRight = y1 * textureStride + x1 * 4
+        const topWeight = 1 - fractionY
+        const leftWeight = 1 - fractionX
+        const red = (texture[topLeft] * leftWeight + texture[topRight] * fractionX) * topWeight +
+          (texture[bottomLeft] * leftWeight + texture[bottomRight] * fractionX) * fractionY
+        const green = (texture[topLeft + 1] * leftWeight + texture[topRight + 1] * fractionX) * topWeight +
+          (texture[bottomLeft + 1] * leftWeight + texture[bottomRight + 1] * fractionX) * fractionY
+        const blue = (texture[topLeft + 2] * leftWeight + texture[topRight + 2] * fractionX) * topWeight +
+          (texture[bottomLeft + 2] * leftWeight + texture[bottomRight + 2] * fractionX) * fractionY
+        const lightDot = sphereX * lightX + sphereY * lightY + sphereZ * lightZ
+        let brightness = 1
+        if (isSun) {
+          brightness = 0.86 + sphereZ * 0.14
+        } else {
+          const transition = Math.max(0, Math.min(1, (lightDot + 0.08) / 0.16))
+          const smoothLight = transition * transition * (3 - 2 * transition)
+          brightness = (0.17 + 0.83 * smoothLight) * (0.80 + sphereZ * 0.20)
+        }
+        output[outputIndex] = Math.round(Math.max(0, Math.min(255, red * brightness)))
+        output[outputIndex + 1] = Math.round(Math.max(0, Math.min(255, green * brightness)))
+        output[outputIndex + 2] = Math.round(Math.max(0, Math.min(255, blue * brightness)))
+        output[outputIndex + 3] = Math.round(255 * Math.max(0, Math.min(1,
+          (1 - Math.sqrt(radiusSquared)) * radius)))
+      }
+    }
+    this.renderObjectInspectorModelRings(output, renderSize, center, radius)
+    image.createPixelMap(outputBuffer, {
+      size: { width: renderSize, height: renderSize },
+      srcPixelFormat: image.PixelMapFormat.RGBA_8888,
+      pixelFormat: image.PixelMapFormat.RGBA_8888,
+      alphaType: image.AlphaType.UNPREMUL,
+      editable: false
+    }).then((pixelMap: image.PixelMap) => {
+      if (generation !== this.objectInspectorModelRenderGeneration ||
+        this.objectInspectorModelTexturePixels === undefined) {
+        this.releaseDecodedImage(pixelMap, 'stale-object-inspector-model')
+        return
+      }
+      const oldPixelMap = this.objectInspectorModelPixelMap
+      this.objectInspectorModelPixelMap = pixelMap
+      this.releaseDecodedImage(oldPixelMap, 'previous-object-inspector-model')
+      this.objectInspectorModelRendering = false
+      this.objectInspectorMediaDecoding = false
+      this.objectInspectorMediaLoadFailed = false
+      const renderAgain = this.objectInspectorModelRenderPending
+      const renderAgainHighQuality = this.objectInspectorModelRenderHighQuality
+      this.objectInspectorModelRenderPending = false
+      this.objectInspectorModelRenderHighQuality = false
+      if (renderAgain) {
+        this.requestObjectInspectorModelRender(renderAgainHighQuality)
+      }
+    }).catch((err: Error) => {
+      if (generation !== this.objectInspectorModelRenderGeneration) {
+        return
+      }
+      this.objectInspectorModelRendering = false
+      this.objectInspectorMediaDecoding = false
+      this.objectInspectorMediaLoadFailed = true
+      hilog.error(0x0000, 'StellariumArkUI',
+        '[detail-model] sphere render failed error=%{public}s', JSON.stringify(err))
+    })
+  }
+
+  private renderObjectInspectorModelRings(
+    output: Uint8Array,
+    renderSize: number,
+    center: number,
+    planetRadius: number,
+  ): void {
+    const ringSpec = this.objectInspectorPlanetRingSpec()
+    const ringBuffer = this.objectInspectorModelRingTexturePixels
+    if (ringSpec === undefined || ringBuffer === undefined ||
+      this.objectInspectorModelRingTextureWidth <= 0 || this.objectInspectorModelRingTextureHeight <= 0) {
+      return
+    }
+    const ringTexture = new Uint8Array(ringBuffer)
+    const ringWidth = this.objectInspectorModelRingTextureWidth
+    const yaw = this.objectInspectorModelYaw
+    const pitch = this.objectInspectorModelPitch
+    const cosYaw = Math.cos(yaw)
+    const sinYaw = Math.sin(yaw)
+    const cosPitch = Math.cos(pitch)
+    const sinPitch = Math.sin(pitch)
+    const cosTilt = Math.cos(ringSpec.tilt)
+    const sinTilt = Math.sin(ringSpec.tilt)
+    const outerRadius = planetRadius * ringSpec.outerRadius
+    const innerRadius = planetRadius * ringSpec.innerRadius
+    const outerRadiusSquared = outerRadius * outerRadius
+    const innerRadiusSquared = innerRadius * innerRadius
+    for (let y = 0; y < renderSize; y++) {
+      const screenY = (center - y)
+      for (let x = 0; x < renderSize; x++) {
+        const screenX = (x - center)
+        const outputIndex = (y * renderSize + x) * 4
+        const normalizedX = screenX / planetRadius
+        const normalizedY = screenY / planetRadius
+        const sphereRadiusSquared = normalizedX * normalizedX + normalizedY * normalizedY
+        const ringA = sinTilt * normalizedY * cosPitch +
+          cosTilt * (normalizedX * sinYaw - normalizedY * sinPitch * cosYaw)
+        const ringB = sinTilt * sinPitch + cosTilt * cosPitch * cosYaw
+        if (Math.abs(ringB) < 0.0001) {
+          continue
+        }
+        const screenZ = -ringA / ringB
+        const pitchedY = normalizedY * cosPitch + screenZ * sinPitch
+        const pitchedZ = -normalizedY * sinPitch + screenZ * cosPitch
+        const objectX = normalizedX * cosYaw - pitchedZ * sinYaw
+        const objectY = pitchedY
+        const objectZ = normalizedX * sinYaw + pitchedZ * cosYaw
+        const ringRadiusSquared = (objectX * objectX + objectY * objectY + objectZ * objectZ) * planetRadius * planetRadius
+        if (ringRadiusSquared < innerRadiusSquared || ringRadiusSquared > outerRadiusSquared) {
+          continue
+        }
+        const ringRadius = Math.sqrt(ringRadiusSquared)
+        const radialPosition = Math.max(0, Math.min(1,
+          (ringRadius - innerRadius) / Math.max(1, outerRadius - innerRadius)))
+        const textureX = radialPosition * (ringWidth - 1)
+        const profileRadius = ringSpec.outerRadius > 3 ? 4 : 2
+        const profileStart = Math.max(0, Math.floor(textureX - profileRadius))
+        const profileEnd = Math.min(ringWidth - 1, Math.ceil(textureX + profileRadius))
+        let bestAlpha = 0
+        let red = 0
+        let green = 0
+        let blue = 0
+        for (let profileX = profileStart; profileX <= profileEnd; profileX++) {
+          for (let profileY = 0; profileY < this.objectInspectorModelRingTextureHeight; profileY++) {
+            const profileIndex = (profileY * ringWidth + profileX) * 4
+            const alpha = ringTexture[profileIndex + 3]
+            if (alpha > bestAlpha) {
+              bestAlpha = alpha
+              red = ringTexture[profileIndex]
+              green = ringTexture[profileIndex + 1]
+              blue = ringTexture[profileIndex + 2]
+            }
+          }
+        }
+        const ringAlpha = Math.max((bestAlpha / 255) * ringSpec.opacity,
+          ringSpec.outerRadius > 3 ? 0.16 : 0.10)
+        if (ringAlpha <= 0.01) {
+          continue
+        }
+        const planetFrontZ = sphereRadiusSquared <= 1
+          ? Math.sqrt(Math.max(0, 1 - sphereRadiusSquared))
+          : -Infinity
+        if (sphereRadiusSquared <= 1 && screenZ <= planetFrontZ) {
+          continue
+        }
+        const existingAlpha = output[outputIndex + 3] / 255
+        const sourceAlpha = Math.max(0, Math.min(1, ringAlpha))
+        const combinedAlpha = sourceAlpha + existingAlpha * (1 - sourceAlpha)
+        if (combinedAlpha <= 0) {
+          continue
+        }
+        output[outputIndex] = Math.round((red * sourceAlpha + output[outputIndex] * existingAlpha * (1 - sourceAlpha)) / combinedAlpha)
+        output[outputIndex + 1] = Math.round((green * sourceAlpha + output[outputIndex + 1] * existingAlpha * (1 - sourceAlpha)) / combinedAlpha)
+        output[outputIndex + 2] = Math.round((blue * sourceAlpha + output[outputIndex + 2] * existingAlpha * (1 - sourceAlpha)) / combinedAlpha)
+        output[outputIndex + 3] = Math.round(combinedAlpha * 255)
+      }
+    }
+  }
+
+  private resetObjectInspectorModelView(): void {
+    this.objectInspectorModelYaw = 0
+    this.objectInspectorModelPitch = 0
+    this.objectInspectorModelScale = 1
+    this.objectInspectorModelLastPinchDistance = 0
+    this.objectInspectorModelInteracting = false
+    this.requestObjectInspectorModelRender(true)
+  }
+
+  private normalizeObjectInspectorModelAngle(value: number): number {
+    const fullTurn = Math.PI * 2
+    let normalized = (value + Math.PI) % fullTurn
+    if (normalized < 0) {
+      normalized += fullTurn
+    }
+    return normalized - Math.PI
+  }
+
+  private clampObjectInspectorModelPitch(value: number): number {
+    return Math.max(-1.45, Math.min(1.45, value))
+  }
+
   private handleObjectInspectorModelTouch(event: TouchEvent): void {
+    event.stopPropagation()
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) { return }
     const x = this.touchScreenX(points[0])
+    const y = this.touchScreenY(points[0])
     if (event.type === TouchType.Down) {
+      this.objectInspectorModelInteracting = true
       this.objectInspectorModelLastX = x
+      this.objectInspectorModelLastY = y
+      if (points.length > 1) {
+        const secondX = this.touchScreenX(points[1])
+        const secondY = this.touchScreenY(points[1])
+        const deltaX = secondX - x
+        const deltaY = secondY - y
+        this.objectInspectorModelLastPinchDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+      } else {
+        this.objectInspectorModelLastPinchDistance = 0
+      }
       return
     }
     if (event.type === TouchType.Move) {
-      const delta = x - this.objectInspectorModelLastX
+      if (points.length > 1) {
+        const secondX = this.touchScreenX(points[1])
+        const secondY = this.touchScreenY(points[1])
+        const deltaX = secondX - x
+        const deltaY = secondY - y
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+        if (this.objectInspectorModelLastPinchDistance > 0) {
+          const rawScaleFactor = distance / this.objectInspectorModelLastPinchDistance
+          if (Number.isFinite(rawScaleFactor) && Math.abs(rawScaleFactor - 1) > 0.002) {
+            const scaleFactor = 1 + (rawScaleFactor - 1) * 0.68
+            this.objectInspectorModelScale = Math.max(0.82, Math.min(1.20,
+              this.objectInspectorModelScale * scaleFactor))
+            this.requestObjectInspectorModelRender(false)
+          }
+        }
+        this.objectInspectorModelLastPinchDistance = distance
+        return
+      }
+      const deltaX = x - this.objectInspectorModelLastX
+      const deltaY = y - this.objectInspectorModelLastY
       this.objectInspectorModelLastX = x
-      const next = this.objectInspectorModelOffset + delta
-      this.objectInspectorModelOffset = next > 120 ? -120 : (next < -120 ? 120 : next)
+      this.objectInspectorModelLastY = y
+      this.objectInspectorModelLastPinchDistance = 0
+      this.objectInspectorModelYaw = this.normalizeObjectInspectorModelAngle(
+        this.objectInspectorModelYaw + deltaX * 0.008)
+      this.objectInspectorModelPitch = this.clampObjectInspectorModelPitch(
+        this.objectInspectorModelPitch - deltaY * 0.008)
+      this.requestObjectInspectorModelRender(false)
+      return
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.objectInspectorModelLastPinchDistance = 0
+      this.objectInspectorModelInteracting = false
+      this.requestObjectInspectorModelRender(true)
     }
   }
 
@@ -15181,24 +17617,39 @@ private loadPlanetPositions(): void {
   @Builder
   tabletInspectorMedia() {
     if ((this.objectInspectorMediaKind === 'image' || this.objectInspectorMediaKind === 'constellation') &&
-      this.objectInspectorMediaPath.length > 0 && !this.objectInspectorMediaLoadFailed) {
+      this.objectInspectorMediaPixelMap !== undefined && !this.objectInspectorMediaLoadFailed) {
       Stack({ alignContent: Alignment.BottomStart }) {
-        Image(this.objectInspectorMediaPath)
+        Image(this.objectInspectorMediaPixelMap)
           .width('100%').height(210).objectFit(ImageFit.Cover)
           .onComplete(() => {
+            this.objectInspectorMediaDecoding = false
             this.objectInspectorMediaLoadFailed = false
             hilog.info(0x0000, 'StellariumArkUI', '[detail-media-card] image loaded uri=%{public}s', this.objectInspectorMediaPath)
           })
           .onError(() => {
+            this.objectInspectorMediaDecoding = false
             this.objectInspectorMediaLoadFailed = true
             hilog.error(0x0000, 'StellariumArkUI', '[detail-media-card] image failed uri=%{public}s', this.objectInspectorMediaPath)
           })
         Row({ space: 6 }) {
-          Text(this.objectInspectorMediaLabel).fontSize(10).fontColor('#E4F5FC')
+          Text(this.objectInspectorMediaLabel + (this.objectInspectorMediaKind === 'constellation' &&
+            this.selectedDetailModel !== undefined && this.selectedDetailModel.state === 'planned'
+            ? ' · ' + I18n.t('detail_model_planned') : ''))
+            .fontSize(10).fontColor('#E4F5FC')
           Text('点按查看').fontSize(10).fontColor('#A4D8EF')
         }
           .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
           .backgroundColor('rgba(0,0,0,0.50)')
+        if (this.objectInspectorMediaDecoding) {
+          Row({ space: 8 }) {
+            LoadingProgress().width(18).height(18).color('#8EC9E9')
+            Text('正在解码本地资料').fontSize(10).fontColor('#E4F5FC')
+          }
+            .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+            .backgroundColor('rgba(2,6,12,0.72)')
+            .borderRadius(UI_RADIUS_CONTROL)
+            .align(Alignment.Center)
+        }
       }
         .width('100%').height(210).clip(true).borderRadius(UI_RADIUS_CONTROL)
         .backgroundColor('#07101B').clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -15209,10 +17660,28 @@ private loadPlanetPositions(): void {
         Column({ space: 3 }) {
           Text('没有匹配的离线资源').fontSize(11).fontColor('#E4F5FC').width('100%')
           Text('当前天体没有随应用分发的对应图像或纹理').fontSize(10).fontColor('#9EC8DC').width('100%').maxLines(2)
+          Row({ space: 6 }) {
+            Button('重试').fontSize(10).fontColor('#E4F5FC').backgroundColor('rgba(91,147,191,0.32)')
+              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.retryObjectInspectorMedia() })
+          }
         }.layoutWeight(1)
       }
-        .width('100%').height(54).padding({ left: 12, right: 12 })
+        .width('100%').height(76).padding({ left: 12, right: 12 })
         .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
+    } else if (this.objectInspectorMediaPreparationFailed) {
+      Row({ space: 10 }) {
+        Image(this.getIcon(this.objectInspectorIcon(), false)).width(24).height(24).fillColor('#F1C27D')
+        Column({ space: 3 }) {
+          Text('离线资源准备失败').fontSize(11).fontColor('#E4F5FC').width('100%')
+          Text('文件未能完整复制到本地缓存，请重试').fontSize(10).fontColor('#9EC8DC').width('100%').maxLines(2)
+          Button('重试').fontSize(10).fontColor('#E4F5FC').backgroundColor('rgba(91,147,191,0.32)')
+            .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+            .onClick(() => { this.retryObjectInspectorMedia() })
+        }.layoutWeight(1)
+      }
+        .width('100%').height(76).padding({ left: 12, right: 12 })
+        .backgroundColor('rgba(241,194,125,0.08)').borderRadius(UI_RADIUS_CONTROL)
     } else if ((this.objectInspectorMediaKind === 'image' || this.objectInspectorMediaKind === 'constellation' ||
       this.objectInspectorMediaKind === 'model') && this.objectInspectorMediaLoadFailed) {
       Row({ space: 10 }) {
@@ -15220,44 +17689,106 @@ private loadPlanetPositions(): void {
         Column({ space: 3 }) {
           Text('本地资源解码失败').fontSize(11).fontColor('#E4F5FC').width('100%')
           Text('资源已找到，但当前设备无法显示此文件').fontSize(10).fontColor('#9EC8DC').width('100%').maxLines(2)
+          Row({ space: 6 }) {
+            Button('重试').fontSize(10).fontColor('#E4F5FC').backgroundColor('rgba(91,147,191,0.32)')
+              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
+              .onClick(() => { this.retryObjectInspectorMedia() })
+          }
         }.layoutWeight(1)
       }
-        .width('100%').height(54).padding({ left: 12, right: 12 })
+        .width('100%').height(76).padding({ left: 12, right: 12 })
         .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
-    } else if (this.objectInspectorMediaKind === 'model' && this.objectInspectorMediaPath.length > 0) {
-      Column({ space: 7 }) {
+    } else if (this.objectInspectorMediaKind === 'model' &&
+      (this.objectInspectorModelTexturePixels !== undefined || this.objectInspectorModelPixelMap !== undefined)) {
+      Column({ space: 8 }) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text(this.objectInspectorMediaLabel).fontSize(11).fontWeight(FontWeight.Medium)
+              .fontColor('#E4F5FC').width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.objectInspectorModelInteracting ? '正在调整视角' : '可自由旋转的离线球体')
+              .fontSize(9).fontColor(this.objectInspectorModelInteracting ? '#BDE8FF' : '#87B7CE')
+              .width('100%').maxLines(1)
+          }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+          Button('重置视角')
+            .fontSize(10).fontColor('#CBEAFF').height(30).padding({ left: 11, right: 11 })
+            .backgroundColor('rgba(35,74,98,0.58)').borderRadius(UI_RADIUS_PILL)
+            .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.96 })
+            .onClick(() => { this.resetObjectInspectorModelView() })
+        }
+          .width('100%').height(38).padding({ left: 11, right: 8 })
+          .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
         Stack({ alignContent: Alignment.Center }) {
-          Stack({ alignContent: Alignment.Center }) {
-            Image(this.objectInspectorMediaPath)
-              .width(360).height(180).objectFit(ImageFit.Fill)
-              .translate({ x: this.objectInspectorModelOffset, y: 0 })
+          Circle().width(202).height(202).fill('rgba(53,118,158,0.055)')
+            .stroke('rgba(143,211,255,0.09)').strokeWidth(1)
+          if (this.objectInspectorModelPixelMap !== undefined) {
+            Image(this.objectInspectorModelPixelMap)
+              .width(216).height(216).objectFit(ImageFit.Contain)
               .onComplete(() => {
+                this.objectInspectorMediaDecoding = false
                 this.objectInspectorMediaLoadFailed = false
-                hilog.info(0x0000, 'StellariumArkUI', '[detail-media-card] texture loaded uri=%{public}s', this.objectInspectorMediaPath)
+                hilog.info(0x0000, 'StellariumArkUI',
+                  '[detail-media-card] sphere loaded uri=%{public}s yaw=%{public}s pitch=%{public}s',
+                  this.objectInspectorMediaPath, this.objectInspectorModelYaw.toFixed(2),
+                  this.objectInspectorModelPitch.toFixed(2))
               })
               .onError(() => {
+                this.objectInspectorMediaDecoding = false
                 this.objectInspectorMediaLoadFailed = true
-                hilog.error(0x0000, 'StellariumArkUI', '[detail-media-card] texture failed uri=%{public}s', this.objectInspectorMediaPath)
+                hilog.error(0x0000, 'StellariumArkUI', '[detail-media-card] sphere failed uri=%{public}s', this.objectInspectorMediaPath)
               })
           }
-            .width(180).height(180).borderRadius(90).clip(true)
-          Circle().width(180).height(180).fillOpacity(0).stroke('rgba(178,226,247,0.38)').strokeWidth(1)
-          if (this.objectInspectorSearchText().indexOf('saturn') >= 0) {
-            Ellipse().width(222).height(66).fillOpacity(0).stroke('rgba(223,207,167,0.58)').strokeWidth(8).rotate({ angle: -13 })
+          Circle().width(169 * this.objectInspectorModelScale).height(169 * this.objectInspectorModelScale)
+            .fillOpacity(0).stroke('rgba(178,226,247,0.18)').strokeWidth(1)
+          if (this.objectInspectorMediaDecoding ||
+            (this.objectInspectorModelRendering && this.objectInspectorModelPixelMap === undefined)) {
+            Row({ space: 8 }) {
+              LoadingProgress().width(18).height(18).color('#8EC9E9')
+              Text(this.objectInspectorModelTexturePixels === undefined ? '正在解码本地纹理' : '正在生成三维球体')
+                .fontSize(10).fontColor('#E4F5FC')
+            }
+              .padding({ left: 10, right: 10, top: 7, bottom: 7 })
+              .backgroundColor('rgba(2,6,12,0.72)')
+              .borderRadius(UI_RADIUS_CONTROL)
+              .align(Alignment.Center)
           }
         }
-          .width('100%').height(194).backgroundColor('#07101B').borderRadius(UI_RADIUS_CONTROL)
+          .width('100%').height(248).clip(true).backgroundColor('#07101B').borderRadius(UI_RADIUS_CONTROL)
+          .hitTestBehavior(HitTestMode.Block)
           .onTouch((event: TouchEvent) => { this.handleObjectInspectorModelTouch(event) })
-        Text(this.objectInspectorMediaLabel + ' · 左右拖动旋转')
-          .fontSize(10).fontColor('#9EC8DC').width('100%').textAlign(TextAlign.Center)
+        Row({ space: 7 }) {
+          Text('单指旋转').fontSize(9).fontColor('#A9D3E7')
+          Text('·').fontSize(9).fontColor('#55798C')
+          Text('双指缩放').fontSize(9).fontColor('#A9D3E7')
+          Text('·').fontSize(9).fontColor('#55798C')
+          Text('松手后自动精绘').fontSize(9).fontColor('#A9D3E7')
+        }.width('100%').justifyContent(FlexAlign.Center)
+        Text('晨昏线依据当前照明比例近似显示')
+          .fontSize(9).fontColor('#769DB1').width('100%').textAlign(TextAlign.Center).maxLines(1)
       }
         .width('100%').padding({ top: 2, bottom: 3 })
+    } else if (this.objectInspectorMediaDecoding) {
+      Row({ space: 10 }) {
+        LoadingProgress().width(20).height(20).color('#8EC9E9')
+        Column({ space: 3 }) {
+          Text('正在解码本地图像').fontSize(11).fontColor('#E4F5FC').width('100%').maxLines(1)
+          Text('资源已找到，正在交给鸿蒙图像框架处理').fontSize(10).fontColor('#9EC8DC').width('100%').maxLines(1)
+        }.layoutWeight(1)
+      }
+        .width('100%').height(64).padding({ left: 12, right: 12 })
+        .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
     } else if (this.objectInspectorMediaLoading) {
       Row({ space: 10 }) {
         LoadingProgress().width(20).height(20).color('#8EC9E9')
-        Text('正在准备与当前天体匹配的离线资料图像').fontSize(11).fontColor('#9EC8DC').layoutWeight(1).maxLines(2)
+        Column({ space: 3 }) {
+          Text(this.objectInspectorMediaKind === 'image' ? '正在优先准备当前天体图像' : '正在准备本地表面纹理')
+            .fontSize(11).fontColor('#E4F5FC').width('100%').maxLines(1)
+          Text(this.objectInspectorMediaKind === 'image'
+            ? this.objectInspectorMediaWarmupText()
+            : '资源准备完成后将自动显示')
+            .fontSize(10).fontColor('#9EC8DC').width('100%').maxLines(1)
+        }.layoutWeight(1)
       }
-        .width('100%').height(54).padding({ left: 12, right: 12 })
+        .width('100%').height(64).padding({ left: 12, right: 12 })
         .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
     } else if (this.objectInspectorMediaKind === 'visual') {
       this.tabletInspectorFallbackVisual()
@@ -15389,6 +17920,24 @@ private loadPlanetPositions(): void {
       .backgroundColor('rgba(91,147,191,0.12)').borderRadius(UI_RADIUS_CONTROL)
   }
 
+  private selectObjectDetailTab(index: number): void {
+    if (index === this.bottomCardIndex) return
+    const direction = index > this.bottomCardIndex ? 1 : -1
+    const transitionId = ++this.objectDetailTabTransitionId
+    this.getUIContext().animateTo({ duration: 100, curve: Curve.EaseIn, onFinish: () => {
+      if (transitionId !== this.objectDetailTabTransitionId) return
+      this.bottomCardIndex = index
+      this.objectDetailContentTranslateX = 0 - direction * 10
+      this.getUIContext().animateTo({ duration: 230, curve: curves.springMotion(0.5, 0.88) }, () => {
+        this.objectDetailContentOpacity = 1
+        this.objectDetailContentTranslateX = 0
+      })
+    } }, () => {
+      this.objectDetailContentOpacity = 0
+      this.objectDetailContentTranslateX = direction * 8
+    })
+  }
+
   @Builder
   objectDetailTab(label: string, index: number) {
     Text(label)
@@ -15397,7 +17946,10 @@ private loadPlanetPositions(): void {
       .height(32).layoutWeight(1).textAlign(TextAlign.Center).padding({ top: 8, bottom: 8 })
       .backgroundColor(this.bottomCardIndex === index ? 'rgba(91,147,191,0.30)' : 'rgba(255,255,255,0.03)')
       .borderRadius(UI_RADIUS_CONTROL)
-      .onClick(() => { this.bottomCardIndex = index })
+      .scale({ x: this.bottomCardIndex === index ? 1.02 : 1, y: this.bottomCardIndex === index ? 1.02 : 1 })
+      .animation({ duration: 180, curve: Curve.EaseInOut })
+      .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+      .onClick(() => { this.selectObjectDetailTab(index) })
   }
 
   @Builder
@@ -15435,32 +17987,10 @@ private loadPlanetPositions(): void {
   // 底部详情卡片触摸交互：只处理头部关闭按钮，
   // Swiper body 区域返回 false，让 Swiper 自身手势系统处理水平滑动。
   private handleInfoWinTap(x: number, y: number): boolean {
-    if (!this.infoWinVisible || (this.panelVisible && this.useExpandedDetailSummary())) { return false }
-    if (this.isPhoneDetailPeek()) {
-      const peekX = this.compactObjectPeekX()
-      const peekY = this.compactObjectPeekY()
-      const peekW = this.compactObjectPeekWidth()
-      if (x < peekX - 8 || x > peekX + peekW + 8 || y < peekY - 8 || y > peekY + 72) { return false }
-      if (x >= peekX + peekW - 44) {
-        this.dismissObjectInspector()
-      } else {
-        this.infoWinExpanded = true
-        this.resetPanelIdle()
-      }
-      return true
-    }
-    // bottomDetailCard 坐标（与 expandedShell/compactShell 中的 position 一致）
-    let bcX: number = 0
-    let bcY: number = 0
-    const bcW = this.bottomCardWidth()
-    if (this.isExpandedLayout) {
-      bcX = this.bottomCardX()
-      bcY = this.bottomCardY()
-    } else {
-      bcX = this.bottomCardX()
-      bcY = this.bottomCardY()
-    }
-    if (x < bcX - 8 || x > bcX + bcW + 8 || y < bcY - 8) { return false }
+    if (!this.isObjectDetailCardPoint(x, y)) { return false }
+    const bcX = this.detailCardX()
+    const bcY = this.detailCardY()
+    const bcW = this.detailCardWidth()
     // 只处理头部区域（前 ~48px：名称 + 类型 + 关闭按钮）
     const headerH = 48
     if (y <= bcY + headerH) {
@@ -15681,7 +18211,7 @@ private loadPlanetPositions(): void {
       // 所有屏幕统一使用五个入口；手机仅改变面板的呈现方式，不改变动作集合。
       ForEach(this.canonicalDockActions(), (item: ShellAction) => {
         this.dockButton(item)
-      }, (item: ShellAction) => item.panel)
+      }, (item: ShellAction) => item.panel + '/' + this.languageRevision.toString())
     }
       .height(this.isExpandedLayout ? 48 : 66)
       .width(this.isExpandedLayout ? '100%' : this.compactDockWidthPercent() + '%')
@@ -16215,6 +18745,7 @@ private loadPlanetPositions(): void {
       'observe': $r('app.media.ic_list'), 'audio': $r('app.media.ic_audio'), 'forward': $r('app.media.ic_forward'),
       'time_slower': $r('app.media.ic_time_slower'), 'time_fast': $r('app.media.ic_time_fast'),
       'time_stop': $r('app.media.ic_time_stop'), 'time_realtime': $r('app.media.ic_time_realtime'),
+      'time_resume': $r('app.media.ic_time_resume'),
       'pause': $r('app.media.ic_pause'),
       'catalog_planet': $r('app.media.ic_catalog_planet'), 'catalog_moon': $r('app.media.ic_catalog_moon'),
       'catalog_star': $r('app.media.ic_catalog_star'), 'catalog_variable_star': $r('app.media.ic_catalog_variable_star'),
@@ -16224,7 +18755,7 @@ private loadPlanetPositions(): void {
       'catalog_messier': $r('app.media.ic_catalog_messier'), 'catalog_satellite': $r('app.media.ic_catalog_satellite'),
       'catalog_exoplanet': $r('app.media.ic_catalog_exoplanet'), 'catalog_pulsar': $r('app.media.ic_catalog_pulsar'),
       'catalog_nova': $r('app.media.ic_catalog_nova'), 'catalog_supernova': $r('app.media.ic_catalog_supernova'),
-      'catalog_quasar': $r('app.media.ic_catalog_quasar'),
+      'catalog_quasar': $r('app.media.ic_catalog_quasar'), 'catalog_plugin': $r('app.media.ic_catalog_plugin'),
       'polar_scope': $r('app.media.ic_polar_scope'),
       'tools': $r('app.media.ic_tune'),
     }
@@ -16484,6 +19015,7 @@ private loadPlanetPositions(): void {
       Row({ space: 10 }) {
         Text(I18n.t('i0084') + '→' + I18n.t('i0086')).fontSize(11).fontColor('#CCCCCC').width(50)
         Slider({ value: this.gyroOffsetAz, min: -30, max: 30, step: 0.5 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .selectedColor('#5B93BF')
           .trackColor('rgba(255,255,255,0.12)')
@@ -16496,6 +19028,7 @@ private loadPlanetPositions(): void {
       Row({ space: 10 }) {
         Text(I18n.t('i0016')).fontSize(11).fontColor('#CCCCCC').width(50)
         Slider({ value: this.gyroOffsetAlt, min: -30, max: 30, step: 0.5 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .selectedColor('#5B93BF')
           .trackColor('rgba(255,255,255,0.12)')
@@ -16728,7 +19261,7 @@ private loadPlanetPositions(): void {
                 this.drawerOpen = false
                 this.onRailTap(item.panel)
               })
-          }, (item: ShellAction) => item.icon + '/' + item.panel)
+          }, (item: ShellAction) => item.icon + '/' + item.panel + '/' + this.languageRevision.toString())
         }
           .width('100%')
           .padding({ bottom: 14 })
@@ -16966,6 +19499,19 @@ private loadPlanetPositions(): void {
   @Builder
   panelHeader() {
     Row() {
+      if (this.canGoBackPanel()) {
+        Row() {
+          Image(this.getIcon('back', false)).width(17).height(17).fillColor('#D9F1FF')
+          Text(I18n.t('more_back')).fontSize(11).fontColor('#B9DFF5').margin({ left: 3 })
+        }
+          .height(34)
+          .padding({ left: 7, right: 8 })
+          .borderRadius(UI_RADIUS_PILL)
+          .backgroundColor('rgba(255, 255, 255, 0.06)')
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .onClick(() => { this.goBackPanel() })
+          .margin({ right: 8 })
+      }
       Column() {
         Text(this.panelTitle())
           .fontSize(18)
@@ -17027,10 +19573,52 @@ private loadPlanetPositions(): void {
   }
 
   @Builder
+  hubActionList(actions: ShellAction[], description: ResourceStr) {
+    Column({ space: 7 }) {
+      Text(description)
+        .fontSize(11)
+        .lineHeight(16)
+        .fontColor(this.nmSub())
+        .width('100%')
+        .padding({ left: 4, right: 4, bottom: 4 })
+      ForEach(actions, (item: ShellAction) => {
+        Row({ space: 12 }) {
+          Stack() {
+            Circle().width(38).height(38).fill('rgba(91, 147, 191, 0.20)')
+            Image(this.getIcon(item.icon, false)).width(21).height(21).fillColor('#B8E4FF')
+          }.width(38).height(38)
+          Text(item.label)
+            .fontSize(15).fontWeight(FontWeight.Medium).fontColor('#EAF7FF')
+            .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+          Image(this.getIcon('forward', false)).width(17).height(17).fillColor('rgba(184, 228, 255, 0.58)')
+        }
+          .width('100%').height(58).padding({ left: 12, right: 12 })
+          .backgroundColor('rgba(255, 255, 255, 0.045)')
+          .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.10)' })
+          .borderRadius(UI_RADIUS_CONTROL)
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .stateStyles({ pressed: { .scale({ x: 0.98, y: 0.98 }).backgroundColor('rgba(91, 147, 191, 0.20)') } })
+          .animation({ duration: 180, curve: Curve.EaseOut })
+          .onClick(() => { this.openSubPanel(item.panel) })
+      }, (item: ShellAction) => item.icon + '/' + item.panel + '/' + this.languageRevision.toString())
+    }
+      .width('100%')
+      .padding({ bottom: 12 })
+  }
+
+  @Builder
   panelContent() {
     if (this.activePanel === 'more') {
       Column({ space: 6 }) {
-        ForEach(this.moreActions(), (item: ShellAction) => {
+        ForEach(this.moreActions(), (item: ShellAction, index: number) => {
+          if (this.moreActionStartsSection(item, index)) {
+            Text(item.section === undefined ? '' : item.section)
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#8FBBD6')
+              .width('100%')
+              .margin({ top: index === 0 ? 0 : 10, bottom: 1 })
+          }
           Row({ space: 12 }) {
             Stack() {
               Circle()
@@ -17071,12 +19659,18 @@ private loadPlanetPositions(): void {
             })
             .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
             .onClick(() => {
-              this.setPanel(item.panel)
+              this.openSubPanel(item.panel)
             })
-        }, (item: ShellAction) => item.icon + '/' + item.panel)
+            }, (item: ShellAction) => item.icon + '/' + item.panel + '/' + this.languageRevision.toString())
       }
         .width('100%')
         .padding({ bottom: 12 })
+    } else if (this.activePanel === 'observeHub') {
+      this.hubActionList(this.observingHubActions(), I18n.t('more_workspace_observing_desc'))
+    } else if (this.activePanel === 'dataHub') {
+      this.hubActionList(this.skyDataHubActions(), I18n.t('more_sky_data_desc'))
+    } else if (this.activePanel === 'automationHub') {
+      this.hubActionList(this.automationHubActions(), I18n.t('more_automation_desc'))
     } else if (this.activePanel === 'object') {
       if (this.selectedName.length === 0) {
         Column() {
@@ -17097,7 +19691,7 @@ private loadPlanetPositions(): void {
           .padding({ left: 8, right: 8, top: 2, bottom: 2 })
           .backgroundColor('rgba(91, 147, 191, 0.15)').borderRadius(UI_RADIUS_CONTROL)
         Blank()
-        Text(this.selectedStatus === 'Selected' ? this.trackStatusZh(this.trackingText) : this.selectedStatusZh(this.selectedStatus))
+        Text(this.selectedStatus === 'Selected' && this.viewLock ? I18n.t('view_lock_status_on') : this.selectedStatusZh(this.selectedStatus))
           .fontSize(11).fontColor('#99FFFFFF')
       }.width('100%').padding({ left: 4, right: 4 }).height(20).margin({ bottom: 8 })
 
@@ -17177,10 +19771,10 @@ private loadPlanetPositions(): void {
           })
       }
       .width("100%").margin({ top: 4, bottom: 4 })
-	      this.quickChips([
+      this.quickChips([
         { id: 'refresh', label: I18n.t('s0721') },
         { id: 'center', label: I18n.t('s0741') },
-        { id: this.trackingText === 'On' ? 'untrack' : 'track', label: this.trackingText === 'On' ? I18n.t('s0742') : I18n.t('btn_track') }
+        { id: this.viewLock ? 'unlock-view' : 'lock-view', label: this.viewLock ? I18n.t('btn_unlock_view') : I18n.t('btn_lock_view') }
       ])
       Row({ space: 6 }) {
         Button(I18n.t('i0134')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -17298,6 +19892,7 @@ private loadPlanetPositions(): void {
       Row() {
         Text('气压').fontSize(11).fontColor(this.nmSub()).width(56)
         Slider({ value: this.atmoPressure, min: 0, max: 1100, step: 5 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.applyAtmosphere(v, this.atmoTemperature, this.atmoExtinction) })
         Text(this.atmoPressure.toFixed(0) + ' mbar').fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
@@ -17305,6 +19900,7 @@ private loadPlanetPositions(): void {
       Row() {
         Text('气温').fontSize(11).fontColor(this.nmSub()).width(56)
         Slider({ value: this.atmoTemperature, min: -40, max: 50, step: 1 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.applyAtmosphere(this.atmoPressure, v, this.atmoExtinction) })
         Text(this.atmoTemperature.toFixed(0) + ' °C').fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
@@ -17312,6 +19908,7 @@ private loadPlanetPositions(): void {
       Row() {
         Text('消光').fontSize(11).fontColor(this.nmSub()).width(56)
         Slider({ value: this.atmoExtinction, min: 0, max: 1, step: 0.01 })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.applyAtmosphere(this.atmoPressure, this.atmoTemperature, v) })
         Text(this.atmoExtinction.toFixed(2)).fontSize(10).fontColor(this.nmSub()).width(72).textAlign(TextAlign.End)
@@ -17708,7 +20305,6 @@ private loadPlanetPositions(): void {
             .margin({ top: 6, bottom: 4 })
           Text(I18n.t('i0116')).fontSize(13).fontColor(this.nmText()).width('100%').margin({ top: 4, bottom: 8 })
           this.switchRow(I18n.t('s0304'), this.liveMode, '')
-          this.switchRow(I18n.t('set_lock_view'), this.viewLock, '', 'setViewLock')
           this.switchRow(I18n.t('set_vert_clamp'), this.verticalClamp, '', 'setVerticalClamp')
           this.switchRow(I18n.t('set_flat_horizon'), this.flatHorizon, '', 'setFlatHorizon')
           Row({ space: 6 }) {
@@ -17731,6 +20327,7 @@ private loadPlanetPositions(): void {
             Text(I18n.t('set_fov_slider')).fontSize(12).fontColor(this.nmSub()).width(72)
             Text(this.fovSliderValue + '°').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
             Slider({ value: this.fovSliderValue, min: 1, max: 180, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .width('40%')
               .blockColor(this.nmAccent())
               .trackColor(this.nmBg())
@@ -17846,6 +20443,8 @@ private loadPlanetPositions(): void {
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'search') {
+      Scroll() {
+        Column({ space: 0 }) {
       // 搜索优先，分类与推荐均为可横向滚动的原生标签，避免窄屏挤压和截断。
       Column() { this.centerSearchBar() }
         .width('100%')
@@ -17903,7 +20502,7 @@ private loadPlanetPositions(): void {
                 .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => this.loadCategoryObjects(cat.code))
-            }, (cat: CatOption) => cat.code)
+            }, (cat: CatOption) => cat.code + '/' + this.languageRevision.toString())
           }.padding({ left: 2, right: 12 })
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
         Row() {
@@ -17917,15 +20516,19 @@ private loadPlanetPositions(): void {
         Scroll() {
           Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
             ForEach(this.categoryObjects, (item: NameItem) => {
-              Column({ space: 1 }) {
-                Text(item.zh ?? item.name ?? '')
-                  .fontSize(12).fontColor(this.nmText()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                if (this.categoryObservationSubtitle(item).length > 0) {
-                  Text(this.categoryObservationSubtitle(item)).fontSize(9).fontColor(item.visibleNow === true ? '#7FB3DC' : this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Row({ space: 8 }) {
+                Image(this.getIcon(this.categoryObjectIcon(item), false)).width(22).height(22).fillColor(item.visibleNow === false ? this.nmSub() : '#91C8E8')
+                Column({ space: 2 }) {
+                  Text(item.zh ?? item.name ?? '')
+                    .fontSize(12).minFontSize(10).fontColor(this.nmText()).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  if (this.categoryObservationSubtitle(item).length > 0) {
+                    Text(this.categoryObservationSubtitle(item)).fontSize(9).minFontSize(8).fontColor(item.visibleNow === true ? '#7FB3DC' : this.nmSub()).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
                 }
+                .layoutWeight(1).alignItems(HorizontalAlign.Start)
               }
-                .width('49%').height(52).alignItems(HorizontalAlign.Start)
-                .padding({ left: 10, right: 8, top: 6, bottom: 5 })
+                .width('49%').height(78).alignItems(VerticalAlign.Center)
+                .padding({ left: 10, right: 8, top: 7, bottom: 7 })
                 .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
                 .margin({ bottom: 6 })
                 .transition(TransitionEffect.asymmetric(
@@ -17941,63 +20544,73 @@ private loadPlanetPositions(): void {
                     this.searchObject(item.name ?? '', this.categoryModuleId)
                   }
                 })
-            }, (item: NameItem) => this.searchCategory + '/' + item.name)
+            }, (item: NameItem) => this.searchCategory + '/' + item.name + '/' + this.languageRevision.toString())
             if (this.categoryLoading && this.categoryObjects.length > 0) {
               Text(I18n.t('search_loading_more')).fontSize(11).fontColor(this.nmSub()).padding({ left: 12, right: 12, top: 8, bottom: 8 })
             } else if (this.categoryHasMore) {
               Text(I18n.t('search_load_more')).fontSize(11).fontColor(this.nmSub()).padding({ left: 12, right: 12, top: 8, bottom: 8 })
             }
           }.width('100%').padding({ left: 2, right: 6 })
-        }.width('100%').height(168).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
+        }.width('100%').height(222).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
           .onReachEnd(() => { this.loadMoreCategoryObjects() })
       }
 
-      // 今夜星座快速导航（15 个常见星座，点击搜索定位）
+      // 常见星座快速导航：名称直接使用 Stellarium 当前语言的官方翻译。
       Row() {
         Text(I18n.t('constellation_chips_title')).fontSize(10).fontColor(this.nmSub()).width(52)
         Scroll() {
           Row({ space: 4 }) {
-            ForEach([
-              'Orion', 'Ursa Major', 'Cassiopeia', 'Scorpius', 'Leo',
-              'Gemini', 'Taurus', 'Cygnus', 'Lyra', 'Aquila',
-              'Sagittarius', 'Virgo', 'Canis Major', 'Andromeda', 'Pegasus'
-            ] as string[], (c: string) => {
-              Text(this.zhNameOf(c)).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            ForEach(this.constellationNavigationItems, (item: ConstellationNavigationItem) => {
+              Text(item.localizedName).fontSize(11).fontColor(this.nmText()).padding({ left: 8, right: 8, top: 4, bottom: 4 })
                 .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
-                .onClick(() => this.openConstellationGuide(c))
-            }, (c: string) => c)
+                .onClick(() => this.openConstellationGuide(item.englishName, 'ConstellationMgr', item.localizedName))
+            }, (item: ConstellationNavigationItem) => item.englishName + '/' + this.languageRevision.toString())
+            if (this.constellationNavigationItems.length === 0) {
+              Text(I18n.t('search_catalog_loading')).fontSize(10).fontColor(this.nmSub()).padding({ left: 8, right: 8 })
+            }
           }.padding({ left: 2 })
         }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).layoutWeight(1)
       }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })
 
       // RA/Dec 坐标跳转
       Row() {
-        Text(I18n.t('s_coord_input')).fontSize(12).fontColor(this.nmSub()).width(72)
-        Text(I18n.t('s_coord_format_hint')).fontSize(10).fontColor('#66FFFFFF').layoutWeight(1).textAlign(TextAlign.End)
+        Text(I18n.t('s_coord_input')).fontSize(12).fontColor(this.nmSub()).layoutWeight(1)
+        Text(I18n.t('s_coord_format_hint')).fontSize(9).fontColor('#66FFFFFF').maxLines(2).textAlign(TextAlign.End)
       }
-      .height(24).width('100%').padding({ left: 10, right: 10 }).margin({ top: 8 })
-      Row({ space: 6 }) {
-        TextInput({ text: this.coordInputRA, placeholder: 'RA (5.5 / 5h30m)' })
-          .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
-          .placeholderColor(this.nmSub())
-          .backgroundColor(this.nmInput())
-          .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
-          .borderRadius(UI_RADIUS_CONTROL)
-          .onChange((v: string) => { this.coordInputRA = v })
-        TextInput({ text: this.coordInputDec, placeholder: 'Dec (+45.5 / -30d15m)' })
-          .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
-          .placeholderColor(this.nmSub())
-          .backgroundColor(this.nmInput())
-          .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
-          .borderRadius(UI_RADIUS_CONTROL)
-          .onChange((v: string) => { this.coordInputDec = v })
-        Button(I18n.t('s_coord_go'))
-          .height(36).fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
-          .borderRadius(UI_RADIUS_CONTROL)
-          .padding({ left: 14, right: 14 })
-          .onClick(() => { this.goToCoordinates() })
+      .height(32).width('100%').padding({ left: 10, right: 10 }).margin({ top: 10 })
+      Column({ space: 6 }) {
+        Row({ space: 8 }) {
+          Text(I18n.t('view_coord_ra')).fontSize(11).fontColor(this.nmSub()).width(64)
+          TextInput({ text: this.coordInputRA, placeholder: '5.5 / 5h30m' })
+            .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
+            .placeholderColor(this.nmSub())
+            .backgroundColor(this.nmInput())
+            .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
+            .borderRadius(UI_RADIUS_CONTROL)
+            .onChange((v: string) => { this.coordInputRA = v })
+        }.width('100%')
+        Row({ space: 8 }) {
+          Text(I18n.t('view_coord_dec')).fontSize(11).fontColor(this.nmSub()).width(64)
+          TextInput({ text: this.coordInputDec, placeholder: '+45.5 / -30d15m' })
+            .height(36).layoutWeight(1).fontSize(13).fontColor('#E5FFFFFF')
+            .placeholderColor(this.nmSub())
+            .backgroundColor(this.nmInput())
+            .border({ width: 1, color: 'rgba(214, 238, 255, 0.16)' })
+            .borderRadius(UI_RADIUS_CONTROL)
+            .onChange((v: string) => { this.coordInputDec = v })
+          Button(I18n.t('s_coord_go'))
+            .height(36).fontSize(12).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+            .borderRadius(UI_RADIUS_CONTROL)
+            .padding({ left: 12, right: 12 })
+            .onClick(() => { this.goToCoordinates() })
+        }.width('100%')
       }
-      .width('100%').padding({ left: 10, right: 10 })
+      .width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 12 })
+
+        }.width('100%')
+      }
+      .width('100%').layoutWeight(1).scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
 
     } else if (this.activePanel === 'settings') {
       Scroll() {
@@ -18008,9 +20621,7 @@ private loadPlanetPositions(): void {
             { label: I18n.t('c0001'), id: 1 },
             { label: I18n.t('c0002'), id: 2 },
             { label: I18n.t('c0003'), id: 3 },
-            { label: I18n.t('c0004'), id: 4 },
-            { label: I18n.t('c0005'), id: 5 },
-            { label: I18n.t('c0006'), id: 6 },
+            { label: I18n.t('more_plugins_manage'), id: 6 },
             { label: I18n.t('settings_view_navigation'), id: 7 },
           ] as TabItem[], (tab: TabItem) => {
             Text(tab.label)
@@ -18059,8 +20670,7 @@ private loadPlanetPositions(): void {
                   .backgroundColor(this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
                   .borderRadius(UI_RADIUS_CONTROL)
                   .onClick(() => {
-                    this.useMetricUnits = true
-                    this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=true', () => {})
+                    this.setDistanceUnit(true)
                   })
                 Text(I18n.t('unit_mile'))
                   .fontSize(11).fontColor(!this.useMetricUnits ? '#F4FAFF' : '#C8D4E2')
@@ -18068,8 +20678,7 @@ private loadPlanetPositions(): void {
                   .backgroundColor(!this.useMetricUnits ? '#5B93BF' : 'rgba(255,255,255,0.06)')
                   .borderRadius(UI_RADIUS_CONTROL)
                   .onClick(() => {
-                    this.useMetricUnits = false
-                    this.callInteractive('setConfigString', 'astronomy/flag_use_km_for_distance=false', () => {})
+                    this.setDistanceUnit(false)
                   })
               }
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
@@ -18085,17 +20694,26 @@ private loadPlanetPositions(): void {
             Row({ space: 6 }) {
               Button(I18n.t('i0247')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 0 ? this.nmAccent() : this.nmBg())
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.infoLevel = 0; this.triggerAction('actionDisplayInfo_All') })
+                .onClick(() => { this.setInformationMode('all') })
               Button(I18n.t('i0248')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 1 ? this.nmAccent() : this.nmBg())
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.infoLevel = 1; this.triggerAction('actionDisplayInfo_Default') })
+                .onClick(() => { this.setInformationMode('default') })
               Button(I18n.t('i0249')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 2 ? this.nmAccent() : this.nmBg())
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.infoLevel = 2; this.triggerAction('actionDisplayInfo_Short') })
+                .onClick(() => { this.setInformationMode('short') })
               Button(I18n.t('i0250')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.infoLevel === 3 ? this.nmAccent() : this.nmBg())
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.infoLevel = 3; this.triggerAction('actionDisplayInfo_None') })
+                .onClick(() => { this.setInformationMode('none') })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 4 })
+            Row() {
+              Column() {
+                Text('详情卡指向线').fontSize(12).fontColor(this.nmText()).width('100%')
+                Text('在可见天体与详情卡之间显示细连接线').fontSize(10).fontColor(this.nmSub()).width('100%')
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+              Toggle({ type: ToggleType.Switch, isOn: this.objectDetailConnectorVisible })
+                .width(42).height(24).selectedColor(this.nmAccent())
+                .onChange((value: boolean) => { this.setObjectDetailConnector(value) })
+            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
             Text('自定义信息字段').fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 4 })
             Text('选择“自定义”后，详情卡和星体信息栏只显示下面勾选的字段。').fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 5 })
             this.informationSwitchRow('名称', 'name')
@@ -18114,8 +20732,10 @@ private loadPlanetPositions(): void {
             this.informationSwitchRow('恒星时', 'siderealTime')
             this.informationSwitchRow('附加资料', 'extra')
           } else if (this.configTab === 2) {
-            // 附加：原版的渲染与平台信息设置
-            Text('渲染').fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
+            // 附加：原版的渲染与天空显示设置
+            this.configurationSkyDisplaySettings()
+            Row().width('100%').height(0.5).backgroundColor(this.nmBorder()).margin({ top: 8, bottom: 8 })
+            Text('渲染输出').fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
             Row() {
               Text('色彩抖动').fontSize(12).fontColor(this.nmSub()).width(72)
               Text(this.configDitheringLabel(this.configDitheringMode)).fontSize(12).fontColor(this.nmText()).layoutWeight(1).textAlign(TextAlign.End)
@@ -18218,7 +20838,7 @@ private loadPlanetPositions(): void {
           } else if (this.configTab === 4) {
             Text(I18n.t('tools_data_hint')).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 8 })
             Button(I18n.t('panel_tools_data')).fontSize(12).fontColor(this.nmText()).backgroundColor(this.nmAccent())
-              .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').onClick(() => { this.setPanel('tools') })
+              .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').onClick(() => { this.openSubPanel('tools') })
             Text(I18n.t('tools_single_entry_hint')).fontSize(10).fontColor(this.nmSub()).width('100%').padding({ left: 8, right: 8 }).margin({ top: 8 })
           } else if (this.configTab === 5) {
             // Scripts
@@ -18320,8 +20940,12 @@ private loadPlanetPositions(): void {
                         Text(I18n.t('plugin_load_at_startup')).fontSize(11).fontColor(this.nmText()).width('100%')
                         Text(I18n.t('plugin_load_at_startup_hint')).fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(2)
                       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-                      Toggle({ type: ToggleType.Switch, isOn: pl.loadAtStartup })
+                      if (this.pluginStartupPending.indexOf(pl.id) >= 0) {
+                        LoadingProgress().width(16).height(16).color(this.nmAccent())
+                      }
+                      Toggle({ type: ToggleType.Switch, isOn: this.pluginStartupValue(pl.id, pl.loadAtStartup) })
                         .width(40).height(22)
+                        .enabled(this.pluginStartupPending.indexOf(pl.id) < 0)
                         .onChange((enabled: boolean) => { this.setPluginLoadAtStartup(pl.id, enabled) })
                     }.width('100%').height(40)
                     if (this.pluginFeaturePanel(pl.id).length > 0) {
@@ -18351,8 +20975,21 @@ private loadPlanetPositions(): void {
               }.layoutWeight(1).alignItems(HorizontalAlign.Start)
               Button(I18n.t('settings_view_center')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
-                .onClick(() => { this.triggerAction('actionGoto_Selected_Object') })
+                .opacity(this.hasSelectedObject() && !this.gyroscopeEnabled ? 1 : 0.58)
+                .onClick(() => { this.moveToSelectedObject() })
             }.width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+              .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+
+            Column({ space: 5 }) {
+              Row({ space: 8 }) {
+                Text(I18n.t('set_lock_view')).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.viewLock })
+                  .width(42).height(24).selectedColor(this.nmAccent())
+                  .onChange((enabled: boolean) => { this.setViewLockState(enabled) })
+              }.width('100%')
+              Text(this.viewLock ? I18n.t('view_lock_enabled') : I18n.t('settings_view_lock_hint'))
+                .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(3)
+            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
               .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
 
             Text(I18n.t('settings_view_startup')).fontSize(12).fontColor(this.nmSub()).width('100%').margin({ bottom: 5 })
@@ -18377,6 +21014,7 @@ private loadPlanetPositions(): void {
             Row() {
               Text(this.navigationMaxFov.toFixed(0) + '°').fontSize(14).fontColor(this.nmText()).width(48)
               Slider({ value: this.navigationMaxFov, min: 30, max: 360, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent())
                 .showSteps(false).onChange((value: number) => { this.navigationMaxFov = Math.round(value) })
               Button(I18n.t('settings_view_apply')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -18431,6 +21069,29 @@ private loadPlanetPositions(): void {
         }
         Text('CSV').fontSize(9).fontColor(this.nmSub())
       }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 }).alignItems(VerticalAlign.Center)
+      if (this.astroContext !== undefined) {
+        Column({ space: 2 }) {
+          Row({ space: 6 }) {
+            Text(this.astroContext.observerLocation !== undefined && this.astroContext.observerLocation.length > 0 ? this.astroContext.observerLocation : '当前观测位置')
+              .fontSize(10).fontColor(this.nmText()).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.astroContext.offline === true ? '离线计算' : '本地计算').fontSize(9).fontColor(this.nmAccent())
+          }.width('100%')
+          Text('时间 ' + this.fmtDateTime(this.astroContext.localTime) + ' · 时区 ' + (this.astroContext.timeZone ?? '--'))
+            .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text('平恒星时 ' + (this.astroContext.meanSiderealTime ?? '--') + ' · 视恒星时 ' + (this.astroContext.apparentSiderealTime ?? '--') + ' · 时间方程 ' + this.fmtNum(this.astroContext.equationOfTimeMinutes, 2, ' 分钟'))
+            .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text('太阳 ' + this.fmtNum(this.astroContext.sunAltitude, 1, '°') + ' / ' + this.fmtNum(this.astroContext.sunAzimuth, 1, '°')
+            + ' · 月亮 ' + this.fmtNum(this.astroContext.moonAltitude, 1, '°') + ' / ' + this.fmtNum(this.astroContext.moonAzimuth, 1, '°')
+            + ' · 月面 ' + this.fmtNum(this.astroContext.moonIllumination, 1, '%'))
+            .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.astroCalcSnapshot.length > 0) {
+            Text('参数快照 · ' + this.astroCalcSnapshot)
+              .fontSize(9).fontColor('#A8FFFFFF').width('100%').maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 })
+          .backgroundColor('rgba(255, 255, 255, 0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
+      }
       Scroll() {
         Column({ space: 0 }) {
           if (this.astroTab === 0) {
@@ -18456,22 +21117,40 @@ private loadPlanetPositions(): void {
               Button(I18n.t('i0241')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.loadPlanetPositions() })
-              Row() {
-                Text(I18n.t('s0374')).fontSize(10).fontColor(this.nmSub()).width(60)
-                Text(I18n.t('s0375')).fontSize(10).fontColor(this.nmSub()).width(50)
-                Text(I18n.t('s0376')).fontSize(10).fontColor(this.nmSub()).width(50)
-                Text(I18n.t('s0377')).fontSize(10).fontColor(this.nmSub()).width(40)
-              }.height(20).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 2 })
+              Column({ space: 1 }) {
+                Row() {
+                  Text(I18n.t('s0374')).fontSize(10).fontColor(this.nmSub()).width(60)
+                  Text(I18n.t('s0375')).fontSize(10).fontColor(this.nmSub()).width(50)
+                  Text(I18n.t('s0376')).fontSize(10).fontColor(this.nmSub()).width(50)
+                  Text(I18n.t('s0377')).fontSize(10).fontColor(this.nmSub()).width(40)
+                }.width('100%')
+                Text('赤经/赤纬（当日） · 距离 · 视直径 · 中天').fontSize(8).fontColor(this.nmSub()).width('100%')
+              }.width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 2 })
+              if (this.planetPositionsLoading) {
+                Row({ space: 8 }) {
+                  LoadingProgress().width(20).height(20).color(this.nmAccent())
+                  Text('正在计算行星位置…').fontSize(11).fontColor(this.nmSub())
+                }.width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
+              } else if (this.planetPositionsError.length > 0) {
+                Text(this.planetPositionsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
+              } else if (this.planetPositions.length === 0) {
+                Text('当前没有可显示的行星位置。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
+              }
               Scroll() {
                 Column({ space: 2 }) {
                   ForEach(this.planetPositions, (p: PlanetPosition) => {
-                    Row() {
-                      Text(this.planetZh(p.name)).fontSize(11).fontColor(this.nmText()).width(60)
-                      Text(p.altitude.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
-                      Text(p.azimuth.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
-                      Text(p.magnitude.toFixed(1)).fontSize(10).fontColor(this.nmSub()).width(40)
-                    }
-                    .height(28).width('100%').padding({ left: 8, right: 8 })
+                    Column({ space: 1 }) {
+                      Row() {
+                        Text(this.planetZh(p.name)).fontSize(11).fontColor(this.nmText()).width(60)
+                        Text(p.altitude.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
+                        Text(p.azimuth.toFixed(1) + '°').fontSize(10).fontColor(this.nmSub()).width(50)
+                        Text(p.magnitude.toFixed(1)).fontSize(10).fontColor(this.nmSub()).width(40)
+                      }.width('100%')
+                      Text((p.rightAscension ?? '--') + ' / ' + (p.declination ?? '--')
+                        + ' · ' + (p.distanceAU !== undefined ? p.distanceAU.toFixed(3) + ' AU' : '--')
+                        + ' · 中天 ' + (p.transit !== undefined ? this.fmtDateTime(p.transit) : '--'))
+                        .fontSize(8).fontColor(this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    }.height(40).width('100%').padding({ left: 8, right: 8, top: 3, bottom: 3 })
                     .backgroundColor(this.nmBg())
                     .borderRadius(UI_RADIUS_CONTROL)
                   }, (p: PlanetPosition, index: number) => p.name)
@@ -18511,6 +21190,16 @@ private loadPlanetPositions(): void {
                   .onClick(() => { this.loadHeliocentricPositions() })
                 Text(this.hecTime.length > 0 ? this.fmtDateTime(this.hecTime) : '正在计算…').fontSize(9).fontColor(this.nmSub()).layoutWeight(1)
               }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 5 })
+              if (this.hecPositionsLoading) {
+                Row({ space: 8 }) {
+                  LoadingProgress().width(20).height(20).color(this.nmAccent())
+                  Text('正在计算日心黄道位置…').fontSize(11).fontColor(this.nmSub())
+                }.width('100%').padding({ left: 8 }).margin({ top: 4, bottom: 6 })
+              } else if (this.hecPositionsError.length > 0) {
+                Text(this.hecPositionsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 4, bottom: 6 })
+              } else if (this.hecPositions.length === 0) {
+                Text('当前没有可显示的日心位置。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 4, bottom: 6 })
+              }
               Stack({ alignContent: Alignment.Center }) {
                 ForEach(HELIOCENTRIC_PLANET_ORBITS, (orbit: HeliocentricOrbit) => {
                   Circle()
@@ -18598,7 +21287,14 @@ private loadPlanetPositions(): void {
                   .onClick(() => { this.loadCelestialPositions() })
               }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 5 })
               Text(this.celestialPositionTime.length > 0 ? this.fmtDateTime(this.celestialPositionTime) : '正在计算…').fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 4 }).margin({ bottom: 4 })
-              if (this.celestialPositions.length === 0) {
+              if (this.celestialPositionsLoading) {
+                Row({ space: 8 }) {
+                  LoadingProgress().width(20).height(20).color(this.nmAccent())
+                  Text('正在计算目录天体位置…').fontSize(11).fontColor(this.nmSub())
+                }.width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
+              } else if (this.celestialPositionsError.length > 0) {
+                Text(this.celestialPositionsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+              } else if (this.celestialPositions.length === 0) {
                 Text('当前筛选条件下没有地平线以上的天体。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
               } else {
                 Scroll() {
@@ -18616,6 +21312,10 @@ private loadPlanetPositions(): void {
                           .fontSize(9).fontColor('#B8FFFFFF').width('100%').maxLines(1)
                         Text('地平高度 ' + position.altitude.toFixed(1) + '°   距日 ' + (position.elongation ?? 0).toFixed(1) + '°')
                           .fontSize(9).fontColor('#88FFFFFF').width('100%').maxLines(1)
+                        Text('视直径 ' + (position.angularSizeArcmin !== undefined ? position.angularSizeArcmin.toFixed(2) + '′' : '--')
+                          + (position.distanceAU !== undefined ? '   距离 ' + position.distanceAU.toFixed(3) + ' AU' : '')
+                          + (position.transit !== undefined ? '   中天 ' + this.fmtClock(position.transit) : ''))
+                          .fontSize(9).fontColor('#70FFFFFF').width('100%').maxLines(1)
                       }
                       .width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
                       .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
@@ -18757,6 +21457,9 @@ private loadPlanetPositions(): void {
               Text('尚未生成星历。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
             } else {
               Text(this.ephemerisName + ' · 从' + this.ephemerisStartOptionLabel(this.ephemerisStartOffsetDays) + '开始，持续 ' + this.ephemerisDays.toString() + ' 天（每 ' + this.ephemerisStepHours.toString() + ' 小时）').fontSize(11).fontColor(this.nmText()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              if (this.ephemerisMeta.length > 0) {
+                Text(this.ephemerisMeta).fontSize(9).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
+              }
             }
             ForEach(this.ephemerisData, (row: EphemerisRow) => {
               Column({ space: 1 }) {
@@ -18765,10 +21468,27 @@ private loadPlanetPositions(): void {
                   Text((row.bodyName !== undefined ? row.bodyName + '  ' : '') + '赤经 ' + (row.ra ?? '--')).fontSize(10).fontColor(this.nmSub()).layoutWeight(1).maxLines(1)
                 }.width('100%')
                 Text('赤纬 ' + (row.dec ?? '--')).fontSize(9).fontColor('#B8FFFFFF').width('100%').maxLines(1)
+                if (row.raOfDate !== undefined || row.decOfDate !== undefined) {
+                  Text('当日坐标 ' + (row.raOfDate ?? '--') + '  ' + (row.decOfDate ?? '--')).fontSize(9).fontColor('#A0FFFFFF').width('100%').maxLines(1)
+                }
                 Text('高度 ' + this.fmtNum(row.altitude, 1, '°')
                   + '   方位 ' + this.fmtNum(row.azimuth, 0, '°')
                   + '   星等 ' + this.fmtNum(row.magnitude, 1, ''))
                   .fontSize(9).fontColor('#88FFFFFF').width('100%').maxLines(1)
+                if (row.hourAngle !== undefined || row.polarDistanceDegrees !== undefined) {
+                  Text('时角 ' + (row.hourAngle ?? '--') + '   极距 ' + this.fmtNum(row.polarDistanceDegrees, 2, '°')
+                    + (row.airmass !== undefined ? '   气团 ' + row.airmass.toFixed(2) : ''))
+                    .fontSize(9).fontColor('#80FFFFFF').width('100%').maxLines(1)
+                }
+                if (row.phase !== undefined || row.distanceAU !== undefined || row.elongationDegrees !== undefined) {
+                  Text((row.phase !== undefined ? '相位 ' + (row.phase * 100).toFixed(1) + '%' : '')
+                    + (row.distanceAU !== undefined ? '   距离 ' + row.distanceAU.toFixed(3) + ' AU' : '')
+                    + (row.elongationDegrees !== undefined ? '   距日 ' + row.elongationDegrees.toFixed(1) + '°' : ''))
+                    .fontSize(9).fontColor('#70FFFFFF').width('100%').maxLines(1)
+                }
+                if (row.angularSizeArcmin !== undefined) {
+                  Text('视直径 ' + row.angularSizeArcmin.toFixed(2) + '′').fontSize(9).fontColor('#70FFFFFF').width('100%').maxLines(1)
+                }
               }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 })
               .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 2 })
               .onClick(() => { this.jumpToEphemerisRow(row) })
@@ -18780,6 +21500,11 @@ private loadPlanetPositions(): void {
               .onClick(() => { this.loadRTS() })
             if (!this.hasSelectedObject()) {
               this.rtsSelectionGuide()
+            } else if (this.rtsLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(20).height(20).color(this.nmAccent())
+                Text('正在计算升起、中天和落下时间…').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
             } else if (this.rtsError.length > 0) {
               Text(this.rtsError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             } else if (this.rtsData.size > 0) {
@@ -19198,6 +21923,7 @@ private loadPlanetPositions(): void {
               Row({ space: 8 }) {
                 Text('本地时刻 ' + this.annualElevationHour.toString().padStart(2, '0') + ':00').fontSize(10).fontColor(this.nmSub()).width(100)
                 Slider({ value: this.annualElevationHour, min: 0, max: 23, step: 1 })
+                  .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                   .layoutWeight(1)
                   .onChange((value: number) => {
                     const hour = Math.round(value)
@@ -19289,7 +22015,7 @@ private loadPlanetPositions(): void {
                   .onClick(() => { this.loadObservabilityCalendar() })
               }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
               if (this.graphLoading) {
-                this.graphLoadingRow('正在计算未来多晚的观测窗口…')
+                this.graphLoadingRow(this.observabilityProgress.length > 0 ? this.observabilityProgress : '正在计算未来多晚的观测窗口…')
               } else if (this.observabilityError.length > 0) {
                 Text(this.observabilityError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
                 this.graphSelectionGuide(this.observabilityError)
@@ -19510,6 +22236,12 @@ private loadPlanetPositions(): void {
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.tonightAstro = null; this.loadTonightAstro() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
+            if (this.wutLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(20).height(20).color(this.nmAccent())
+                Text(this.wutProgress.length > 0 ? this.wutProgress : '正在筛选可观测目标…').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8, top: 5, bottom: 7 })
+            }
             if (this.tonightAstro === null) {
               Text('（正在汇总今晚的观测条件…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             } else {
@@ -19698,8 +22430,15 @@ private loadPlanetPositions(): void {
                 .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
                 .onClick(() => { this.loadPlanetCalc() })
             }.width('100%').padding({ left: 4, right: 4 }).margin({ bottom: 6 })
-            if (this.planetCalcData.length === 0) {
-              Text('（正在计算各行星的实时数据…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            if (this.planetCalcLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(20).height(20).color(this.nmAccent())
+                Text('正在计算各行星的实时数据…').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
+            } else if (this.planetCalcError.length > 0) {
+              Text(this.planetCalcError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+            } else if (this.planetCalcData.length === 0) {
+              Text('当前没有可显示的行星实时数据。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
             }
             ForEach(this.planetCalcData, (p: PlanetCalcItem) => {
               Column({ space: 2 }) {
@@ -19716,6 +22455,11 @@ private loadPlanetPositions(): void {
                   Text('距角 ' + ((p.elongation ?? 0) * 180 / Math.PI).toFixed(1) + '°'
                     + '   相位 ' + ((p.phase ?? 0) * 100).toFixed(0) + '%')
                     .fontSize(9).fontColor('#88FFFFFF').width('100%').padding({ left: 12 })
+                }
+                if (p.phaseAngleDegrees !== undefined || p.heliocentricDistanceAU !== undefined) {
+                  Text((p.phaseAngleDegrees !== undefined ? '相位角 ' + p.phaseAngleDegrees.toFixed(1) + '°' : '')
+                    + (p.heliocentricDistanceAU !== undefined ? '   日心距 ' + p.heliocentricDistanceAU.toFixed(3) + ' AU' : ''))
+                    .fontSize(9).fontColor('#70FFFFFF').width('100%').padding({ left: 12 })
                 }
                 if (p.illumination !== undefined) {
                   Text('照亮 ' + (p.illumination ?? 0).toFixed(1) + '%   月龄 ' + (p.age ?? 0).toFixed(1) + ' 天')
@@ -19810,10 +22554,15 @@ private loadPlanetPositions(): void {
                   .borderRadius(UI_RADIUS_PILL).height(28).padding({ left: 9, right: 9 })
                   .onClick(() => { this.loadPlanetPairDistance() })
               }.width('100%').padding({ left: 2, right: 2 }).margin({ bottom: 6 })
-              if (this.planetPairDistanceError.length > 0) {
+              if (this.planetPairDistanceLoading) {
+                Row({ space: 8 }) {
+                  LoadingProgress().width(20).height(20).color(this.nmAccent())
+                  Text('正在计算两天体之间的距离变化…').fontSize(11).fontColor(this.nmSub())
+                }.width('100%').padding({ left: 8 }).margin({ top: 6, bottom: 6 })
+              } else if (this.planetPairDistanceError.length > 0) {
                 Text(this.planetPairDistanceError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
               } else if (this.planetPairDistanceData.length === 0) {
-                Text('（正在计算两天体之间的距离变化…）').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
+                Text('尚未生成距离曲线。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 6 })
               } else {
                 Text(this.planetPairFirstName + ' ↔ ' + this.planetPairSecondName + ' · 前后 ' + this.planetPairDays.toString() + ' 天')
                   .fontSize(11).fontColor(this.nmText()).width('100%').padding({ left: 2 }).margin({ bottom: 4 })
@@ -20060,7 +22809,16 @@ private loadPlanetPositions(): void {
             Button(I18n.t('i0240')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(UI_RADIUS_PILL).height(30).padding({ left: 10, right: 10 })
               .onClick(() => { this.loadAlmanac() })
-            if (this.almanacData.size > 0) {
+            if (this.almanacLoading) {
+              Row({ space: 8 }) {
+                LoadingProgress().width(20).height(20).color(this.nmAccent())
+                Text('正在计算年历…').fontSize(11).fontColor(this.nmSub())
+              }.width('100%').padding({ left: 8 }).margin({ top: 8, bottom: 6 })
+            } else if (this.almanacError.length > 0) {
+              Text(this.almanacError).fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            } else if (this.almanacData.size === 0) {
+              Text('尚未生成年历。').fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 8 })
+            } else if (this.almanacData.size > 0) {
               if (this.almanacSeasons.length > 0) {
                 Text((this.almanacSeasonYear.length > 0 ? this.almanacSeasonYear + ' 年' : '本年') + '四季节点')
                   .fontSize(11).fontColor(this.nmSub()).width('100%').padding({ left: 2 }).margin({ bottom: 2 })
@@ -20239,7 +22997,7 @@ private loadPlanetPositions(): void {
           Button(I18n.t('panel_tools_data'))
             .fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
             .borderRadius(UI_RADIUS_CONTROL).height(30).width('100%')
-            .onClick(() => { this.setPanel('tools') })
+            .onClick(() => { this.openSubPanel('tools') })
         }
         .width('100%')
         .padding({ left: 4, right: 4 })
@@ -20390,7 +23148,7 @@ private loadPlanetPositions(): void {
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Button(I18n.t('ocular_choose_target')).fontSize(11).fontColor('#FFFFFF').height(32)
                 .padding({ left: 12, right: 12 }).backgroundColor(this.nmAccent()).borderRadius(UI_RADIUS_CONTROL)
-                .onClick(() => { this.setPanel('search') })
+                .onClick(() => { this.openSubPanel('search') })
             }.width('100%').padding({ left: 12, right: 10, top: 10, bottom: 10 })
               .backgroundColor('rgba(91,147,191,0.16)').borderRadius(UI_RADIUS_CONTROL)
           }
@@ -20451,6 +23209,7 @@ private loadPlanetPositions(): void {
                 Text(this.ocularCcdRotation.toFixed(0) + '°').fontSize(11).fontColor(this.nmSub())
               }.width('100%')
               Slider({ value: this.ocularCcdRotation, min: -180, max: 180, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .width('100%').blockColor(this.nmAccent()).selectedColor(this.nmAccent()).trackColor(this.nmBg())
                 .onChange((value: number, mode: SliderChangeMode) => { this.changeOcularCcdRotation(value, mode) })
             }.width('100%').padding({ left: 12, right: 12, top: 8, bottom: 8 })
@@ -20463,6 +23222,7 @@ private loadPlanetPositions(): void {
                 Text(this.ocularCcdPrismRotation.toFixed(0) + '°').fontSize(11).fontColor(this.nmSub())
               }.width('100%')
               Slider({ value: this.ocularCcdPrismRotation, min: -180, max: 180, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .width('100%').blockColor(this.nmAccent()).selectedColor(this.nmAccent()).trackColor(this.nmBg())
                 .onChange((value: number, mode: SliderChangeMode) => { this.changeOcularPrismRotation(value, mode) })
               Button(I18n.t('ocular_reset_prism')).fontSize(10).fontColor(this.nmText()).backgroundColor(this.nmBg())
@@ -20492,6 +23252,7 @@ private loadPlanetPositions(): void {
                 Text(this.ocularMaskOpacity.toString() + '%').fontSize(11).fontColor(this.nmSub())
               }.width('100%')
               Slider({ value: this.ocularMaskOpacity, min: 0, max: 100, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .width('100%').blockColor(this.nmAccent()).selectedColor(this.nmAccent()).trackColor(this.nmBg())
                 .onChange((value: number, mode: SliderChangeMode) => { this.changeOcularMaskOpacity(value, mode) })
             }.width('100%').padding({ left: 12, right: 12, top: 8, bottom: 8 })
@@ -20532,12 +23293,14 @@ private loadPlanetPositions(): void {
                 Text(this.ocularCcdCropHSize.toString() + ' px').fontSize(10).fontColor(this.nmSub())
               }.width('100%')
               Slider({ value: this.ocularCcdCropHSize, min: 1, max: 1000, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .onChange((value: number, mode: SliderChangeMode) => { this.changeOcularCropSize('ccdCropHSize', value, mode) })
               Row() {
                 Text(I18n.t('ocular_crop_vertical')).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
                 Text(this.ocularCcdCropVSize.toString() + ' px').fontSize(10).fontColor(this.nmSub())
               }.width('100%')
               Slider({ value: this.ocularCcdCropVSize, min: 1, max: 1000, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .onChange((value: number, mode: SliderChangeMode) => { this.changeOcularCropSize('ccdCropVSize', value, mode) })
             }.width('100%').padding({ left: 12, right: 12, top: 8, bottom: 8 })
               .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
@@ -20738,6 +23501,7 @@ private loadPlanetPositions(): void {
               Text(this.archaeoLineWidth.toString()).fontSize(12).fontColor(this.nmSub())
             }.width('100%').padding({ left: 10, right: 10 })
             Slider({ value: this.archaeoLineWidth, min: 1, max: 8, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .width('100%').blockColor(this.nmAccent()).selectedColor(this.nmAccent()).trackColor(this.nmBg())
               .onChange((v: number, mode: SliderChangeMode) => { this.archaeoLineWidth = Math.round(v); if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) this.setArchaeoLineSetting('lineWidth', this.archaeoLineWidth.toString()) })
           }
@@ -21237,13 +24001,12 @@ private loadPlanetPositions(): void {
         }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
       }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'observing') {
-      Scroll() {
-        Column({ space: 8 }) {
+      Column({ space: 8 }) {
           Row({ space: 8 }) {
             Text(I18n.t('panel_observing_list')).fontSize(15).fontColor(this.nmText()).layoutWeight(1)
             Button(I18n.t('dock_search')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
               .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-              .onClick(() => { this.setPanel('search') })
+              .onClick(() => { this.openSubPanel('search') })
             if (this.observingList.length > 0) {
               Button(I18n.t('clear_all')).fontSize(11).fontColor('#FF6B6B').backgroundColor('rgba(255,107,107,0.12)')
                 .borderRadius(UI_RADIUS_PILL).height(26).padding({ left: 10, right: 10 })
@@ -21277,7 +24040,7 @@ private loadPlanetPositions(): void {
           if (this.wutLoading) {
             Row({ space: 8 }) {
               LoadingProgress().width(20).height(20).color(this.nmAccent())
-              Text('正在计算可观测目标…').fontSize(11).fontColor(this.nmSub())
+              Text(this.wutProgress.length > 0 ? this.wutProgress : '正在计算可观测目标…').fontSize(11).fontColor(this.nmSub())
             }.width('100%').padding({ left: 8, top: 7, bottom: 7 })
           } else if (this.wutTargets.length > 0) {
             ForEach(this.wutTargets.slice(0, 5), (target: WutTarget) => {
@@ -21316,7 +24079,7 @@ private loadPlanetPositions(): void {
               Text(I18n.t('obs_list_empty')).fontSize(13).fontColor('#99FFFFFF').margin({ top: 12 })
               Button(I18n.t('dock_search')).fontSize(11).fontColor(this.nmText()).backgroundColor(this.nmBg())
                 .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 }).margin({ top: 8 })
-                .onClick(() => { this.setPanel('search') })
+                .onClick(() => { this.openSubPanel('search') })
             }.width('100%').height(140).justifyContent(FlexAlign.Center)
           } else {
             ForEach(this.observingList, (name: string) => {
@@ -21340,7 +24103,6 @@ private loadPlanetPositions(): void {
             }, (name: string) => name)
           }
         }.width('100%').padding({ left: 4, right: 4 })
-      }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
     } else if (this.activePanel === 'telescope') {
       Scroll() {
         Column({ space: 8 }) {
@@ -21371,6 +24133,7 @@ private loadPlanetPositions(): void {
             Text(I18n.t('audio_volume')).fontSize(13).fontColor('#E5FFFFFF').width(72)
             Text(Math.round(this.audioVolume * 100) + '%').fontSize(13).fontColor(this.nmText()).margin({ right: 8 })
             Slider({ value: this.audioVolume, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .width('40%')
               .blockColor(this.nmAccent())
               .trackColor(this.nmBg())
@@ -21821,7 +24584,6 @@ private loadPlanetPositions(): void {
           .height(this.locationMapHeight())
           .alignSelf(ItemAlign.Center)
           .clip(true)
-          .hitTestBehavior(HitTestMode.Block)
           .backgroundColor('rgba(11, 24, 43, 0.46)')
           .border({ width: 1, color: 'rgba(159, 232, 255, 0.22)' })
           .borderRadius(UI_RADIUS_CONTROL)
@@ -21830,22 +24592,7 @@ private loadPlanetPositions(): void {
             this.mapRenderWidth = Number(newArea.width)
             this.mapRenderHeight = Number(newArea.height)
           })
-          .onTouch((event: TouchEvent) => {
-            this.stopMapTouchPropagation(event)
-          })
-          .priorityGesture(
-            PanGesture()
-              .onActionStart((event: GestureEvent) => {
-                this.mapPanStart(event)
-              })
-              .onActionUpdate((event: GestureEvent) => {
-                this.mapPanUpdate(event.fingerList[0].localX, event.fingerList[0].localY)
-              })
-              .onActionEnd(() => {
-                this.mapPanEnd()
-              }),
-            GestureMask.IgnoreInternal
-          )
+          .onTouch((event: TouchEvent) => this.handleLocationMapTouch(event))
         Text(this.pickerCoordinateText())
           .fontSize(12)
           .fontColor('#99FFFFFF')
@@ -22136,8 +24883,9 @@ private loadPlanetPositions(): void {
         this.speedChip('rewind',
           this.timeSpeedIndex < 6 ? I18n.t('s0763_rewind') + ' ' + this.timeRateText : I18n.t('s0763_rewind'),
           'ic_time_rewind.svg', this.timeSpeedIndex < 6)
-        // 停止 — 冻结时间
-        this.speedChip('stop', I18n.t('s0761_stop'), 'ic_time_stop.svg', this.timeSpeedIndex === 6)
+        // 停止/继续 — 停止后同一按钮变成继续，避免“停止”和播放状态混淆
+        this.speedChip('stop', this.timeSpeedIndex === 6 ? I18n.t('btn_resume') : I18n.t('s0761_stop'),
+          this.timeSpeedIndex === 6 ? 'ic_time_resume.svg' : 'ic_time_stop.svg', this.timeSpeedIndex === 6)
         // 实时 — 回到当前时刻 + 1x
         this.speedChip('realtime', I18n.t('s0764_realtime'), 'ic_time_realtime.svg', this.timeSpeedIndex === 7)
         // 减速 — 每点降一档；降到1x再点=停止
@@ -22561,10 +25309,10 @@ private loadPlanetPositions(): void {
       this.refreshState()
     } else if (id === 'center') {
       this.moveToSelectedObject()
-    } else if (id === 'track') {
-      this.setTrackingState(true)
-    } else if (id === 'untrack') {
-      this.setTrackingState(false)
+    } else if (id === 'lock-view') {
+      this.setViewLockState(true)
+    } else if (id === 'unlock-view') {
+      this.setViewLockState(false)
     } else if (id === 'now') {
       // 现在：回到当前时刻 + 重置为1x
       this.triggerAction('actionReturn_To_Current_Time')
@@ -22573,9 +25321,13 @@ private loadPlanetPositions(): void {
       this.resetScrubberToRealtime()
       this.refreshTimeNow()
     } else if (id === 'stop') {
-      // 停止：冻结时间
-      this._lastNonZeroSpeedIndex = this.timeSpeedIndex !== 6 ? this.timeSpeedIndex : 7
-      this.applySpeedStep(6) // SPEED_IDX_STOP
+      // 停止按钮是可逆状态：运行时停止，停止后恢复到停止前速度。
+      if (this.timeSpeedIndex === 6) {
+        this.applySpeedStep(this._lastNonZeroSpeedIndex === 6 ? 7 : this._lastNonZeroSpeedIndex)
+      } else {
+        this._lastNonZeroSpeedIndex = this.timeSpeedIndex
+        this.applySpeedStep(6) // SPEED_IDX_STOP
+      }
       this.refreshTimeNow()
     } else if (id === 'realtime') {
       // 实时：回到当前时刻 + 恢复 1x 正常速度
@@ -22742,6 +25494,59 @@ private loadPlanetPositions(): void {
       .backgroundColor(available && enabled ? this.nmBg() : Color.Transparent)
       .border({ width: 1, color: available ? this.nmBorder() : 'rgba(255,255,255,0.03)' })
       .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 4 })
+  }
+
+  @Builder
+  configurationSkyDisplaySettings() {
+    Text('天空显示').fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
+    Text('这些选项直接使用 Stellarium 核心设置，修改后立即作用于当前星图。').fontSize(10).fontColor(this.nmSub())
+      .width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 }).maxLines(2)
+    Row() {
+      Text('光污染等级').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+      Slider({ value: this.bortleScale, min: 1, max: 9, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+        .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
+        .onChange((value: number) => { this.setSkyDisplaySetting('bortleScale', Math.round(value)) })
+      Text('Bortle ' + this.bortleScale).fontSize(10).fontColor(this.nmText()).width(58).textAlign(TextAlign.End)
+    }.height(34).width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+    this.switchRow('人眼动态视觉调适', this.luminanceAdaptation, 'luminanceAdaptation', 'setSkyDisplayLuminanceAdaptation')
+    this.switchRow('星星闪烁', this.starTwinkle, 'starTwinkle', 'setSkyDisplayStarTwinkle')
+    if (this.starTwinkle) {
+      this.switchRow('无大气时保持闪烁', this.forcedStarTwinkle, 'forcedStarTwinkle', 'setSkyDisplayForcedTwinkle')
+    }
+    this.switchRow('亮星光晕', this.bigStarHalo, 'bigStarHalo', 'setSkyDisplayBigStarHalo')
+    this.switchRow('星芒效果', this.starSpiky, 'starSpiky', 'setSkyDisplayStarSpiky')
+    this.switchRow('黄道光', this.zodiacalLight, 'zodiacalLight', 'setSkyDisplayZodiacalLight')
+    if (this.zodiacalLight) {
+      Row() {
+        Text('黄道光亮度').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+        Slider({ value: this.zodiacalIntensity, min: 0, max: 5, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+          .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
+          .onChange((value: number) => { this.setSkyDisplaySetting('zodiacalIntensity', Math.round(value * 10) / 10) })
+        Text(this.zodiacalIntensity.toFixed(1)).fontSize(10).fontColor(this.nmText()).width(34).textAlign(TextAlign.End)
+      }.height(34).width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+    }
+    Row() {
+      Text('银河亮度').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+      Slider({ value: this.milkyWayBright, min: 0, max: 6, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+        .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
+        .onChange((value: number) => {
+          this.milkyWayBright = Math.round(value)
+          this.callInteractive('setMilkyWayIntensity', (this.milkyWayBright / 3).toFixed(2), (r: StellariumBridgeResponse) => {
+            if (r.ok !== true) { this.flashHint(r.error ?? I18n.t('msg_apply_failed')); this.refreshState() }
+          })
+        })
+      Text(this.milkyWayBright.toString()).fontSize(10).fontColor(this.nmText()).width(28).textAlign(TextAlign.End)
+    }.height(34).width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+    this.switchRow('流星雨显示', this.meteors, 'setMeteors', 'setMeteors')
+    if (this.meteors) {
+      Row() {
+        Text('理论流星率').fontSize(11).fontColor(this.nmText()).layoutWeight(1)
+        Slider({ value: this.meteorZhrSliderPosition(), min: 0, max: 1000, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+          .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
+          .onChange((value: number) => { this.setSkyDisplaySetting('meteorZhr', this.meteorZhrFromSliderPosition(value)) })
+        Text(this.meteorZhr + ' / 小时').fontSize(10).fontColor(this.nmText()).width(66).textAlign(TextAlign.End)
+      }.height(34).width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 4 })
+    }
   }
 
   @Builder
@@ -22953,6 +25758,15 @@ private loadPlanetPositions(): void {
     if (this.activePanel === 'more') {
       return I18n.t('c_more_functions')
     }
+    if (this.activePanel === 'observeHub') {
+      return I18n.t('more_workspace_observing')
+    }
+    if (this.activePanel === 'dataHub') {
+      return I18n.t('more_sky_data')
+    }
+    if (this.activePanel === 'automationHub') {
+      return I18n.t('more_automation')
+    }
     if (this.activePanel === 'search') {
       return this.isExpandedLayout ? '探索' : I18n.t('i0021')
     }
@@ -22975,6 +25789,7 @@ private loadPlanetPositions(): void {
       return I18n.t('i0217')
     }
     if (this.activePanel === 'settings') {
+      if (this.configTab === 6) return I18n.t('more_plugins_manage')
       return I18n.t('i0102')
     }
     if (this.activePanel === 'catalogs') {
@@ -23150,10 +25965,10 @@ private loadPlanetPositions(): void {
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
             .onClick(() => {
-              this.getUIContext().animateTo({ duration: 220, curve: curves.springMotion(0.42, 0.86) }, () => {
-                this.viewTab = tab.id
-                this.syncSkyCultureTimeFollowTimer()
-              })
+              // 只动画标签本身，不动画整棵设置树；整页过渡会让图层开关
+              // 和星空文化选择看起来闪烁，也会打断正在进行的滑动。
+              this.viewTab = tab.id
+              this.syncSkyCultureTimeFollowTimer()
             })
         }, (tab: TabItem, index: number) => tab.id.toString())
       }
@@ -23182,6 +25997,7 @@ private loadPlanetPositions(): void {
         step: 0.5,
         style: SliderStyle.OutSet
       })
+        .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
         .blockColor('#5B93BF')
         .trackColor('rgba(255,255,255,0.08)')
         .selectedColor('#5B93BF')
@@ -23203,7 +26019,7 @@ private loadPlanetPositions(): void {
     Text('观测条件').fontSize(11).fontColor(this.nmSub()).width('100%').margin({ bottom: 6 }).padding({ left: 2 })
     Row() {
       Text('光污染等级').fontSize(12).fontColor(this.nmSub()).width(76)
-      Slider({ value: this.bortleScale, min: 1, max: 9, step: 1, style: SliderStyle.OutSet })
+      Slider({ value: this.bortleScale, min: 1, max: 9, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
         .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
         .onChange((value: number) => { this.setSkyDisplaySetting('bortleScale', Math.round(value)) })
       Text('Bortle ' + this.bortleScale).fontSize(11).fontColor(this.nmText()).width(58).textAlign(TextAlign.End)
@@ -23219,7 +26035,7 @@ private loadPlanetPositions(): void {
     if (this.zodiacalLight) {
       Row() {
         Text('黄道光亮度').fontSize(12).fontColor(this.nmSub()).width(76)
-        Slider({ value: this.zodiacalIntensity, min: 0, max: 3, step: 0.1, style: SliderStyle.OutSet })
+        Slider({ value: this.zodiacalIntensity, min: 0, max: 5, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
           .onChange((value: number) => { this.setSkyDisplaySetting('zodiacalIntensity', Math.round(value * 10) / 10) })
         Text(this.zodiacalIntensity.toFixed(1)).fontSize(11).fontColor(this.nmText()).width(34).textAlign(TextAlign.End)
@@ -23252,9 +26068,9 @@ private loadPlanetPositions(): void {
     if (this.meteors) {
       Row() {
         Text('理论流星率').fontSize(12).fontColor(this.nmSub()).width(76)
-        Slider({ value: this.meteorZhr, min: 0, max: 1000, step: 1, style: SliderStyle.OutSet })
+        Slider({ value: this.meteorZhrSliderPosition(), min: 0, max: 1000, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false)
-          .onChange((value: number) => { this.setSkyDisplaySetting('meteorZhr', Math.round(value)) })
+          .onChange((value: number) => { this.setSkyDisplaySetting('meteorZhr', this.meteorZhrFromSliderPosition(value)) })
         Text(this.meteorZhr + ' / 小时').fontSize(11).fontColor(this.nmText()).width(66).textAlign(TextAlign.End)
       }.height(36).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 2 })
       Text('实际可见数量还会受夜间、地景亮度和地平高度影响')
@@ -23329,6 +26145,7 @@ private loadPlanetPositions(): void {
             Text('轨道线宽').fontSize(11).fontColor(this.nmText()).width(64)
             Text(this.orbitThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(34).textAlign(TextAlign.End)
             Slider({ value: this.orbitThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.setOrbitDisplayThickness(value) })
           }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
@@ -23372,6 +26189,7 @@ private loadPlanetPositions(): void {
               Text('保留选中对象').fontSize(11).fontColor(this.nmText()).width(84)
               Text(this.trailSelectionCount.toFixed(0) + ' 个').fontSize(11).fontColor(this.nmSub()).width(34).textAlign(TextAlign.End)
               Slider({ value: this.trailSelectionCount, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
                 .onChange((value: number) => { this.setTrailDisplayNumber('selectionCount', value) })
             }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
@@ -23380,6 +26198,7 @@ private loadPlanetPositions(): void {
             Text('历史跨度').fontSize(11).fontColor(this.nmText()).width(72)
             Text(this.trailYears.toFixed(0) + ' 年').fontSize(11).fontColor(this.nmSub()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.trailYears, min: 1, max: 250, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.setTrailDisplayNumber('years', value) })
           }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
@@ -23387,6 +26206,7 @@ private loadPlanetPositions(): void {
             Text('轨迹线宽').fontSize(11).fontColor(this.nmText()).width(72)
             Text(this.trailThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.trailThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.setTrailDisplayNumber('thickness', value) })
           }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
@@ -23489,6 +26309,7 @@ private loadPlanetPositions(): void {
             Text('圆形直径').fontSize(11).fontColor(this.nmSub()).width(72)
             Text(this.fovCircularMarkerSize.toFixed(1) + '°').fontSize(11).fontColor(this.nmText()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.fovCircularMarkerSize, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.fovCircularMarkerSize = value; this.setFovMarkerSetting('circleSize', value) })
           }.height(34).width('100%').padding({ left: 14, right: 10 }).margin({ bottom: 3 })
@@ -23499,6 +26320,7 @@ private loadPlanetPositions(): void {
             Text('矩形宽度').fontSize(11).fontColor(this.nmSub()).width(72)
             Text(this.fovRectangularMarkerWidth.toFixed(1) + '°').fontSize(11).fontColor(this.nmText()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.fovRectangularMarkerWidth, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.fovRectangularMarkerWidth = value; this.setFovMarkerSetting('rectWidth', value) })
           }.height(34).width('100%').padding({ left: 14, right: 10 })
@@ -23506,6 +26328,7 @@ private loadPlanetPositions(): void {
             Text('矩形高度').fontSize(11).fontColor(this.nmSub()).width(72)
             Text(this.fovRectangularMarkerHeight.toFixed(1) + '°').fontSize(11).fontColor(this.nmText()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.fovRectangularMarkerHeight, min: 0.1, max: 180, step: 0.1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.fovRectangularMarkerHeight = value; this.setFovMarkerSetting('rectHeight', value) })
           }.height(34).width('100%').padding({ left: 14, right: 10 })
@@ -23513,6 +26336,7 @@ private loadPlanetPositions(): void {
             Text('旋转角度').fontSize(11).fontColor(this.nmSub()).width(72)
             Text(this.fovRectangularMarkerRotation.toFixed(0) + '°').fontSize(11).fontColor(this.nmText()).width(42).textAlign(TextAlign.End)
             Slider({ value: this.fovRectangularMarkerRotation, min: -180, max: 180, step: 1, style: SliderStyle.OutSet })
+              .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
               .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
               .onChange((value: number) => { this.fovRectangularMarkerRotation = value; this.setFovMarkerSetting('rectRotation', value) })
           }.height(34).width('100%').padding({ left: 14, right: 10 }).margin({ bottom: 3 })
@@ -23632,6 +26456,7 @@ private loadPlanetPositions(): void {
       Text(I18n.t('i0289')).fontSize(12).fontColor(this.nmSub()).width(72)
       Text(this.landscapeTransp + '%').fontSize(14).fontColor(this.nmText()).margin({ right: 8 })
       Slider({ value: this.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
+        .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
         .layoutWeight(1)
         .blockColor(this.nmAccent())
         .trackColor(this.nmBg())
@@ -23711,9 +26536,21 @@ private loadPlanetPositions(): void {
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(this.skyCultureArtItems.slice(0, 24), (art: SkyCultureArtItem) => {
                 Column({ space: 3 }) {
-                  if (this.skyCultureArtFilePath(art.rawPath).length > 0) {
-                    Image(this.skyCultureArtFilePath(art.rawPath)).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
+                  if (this.skyCultureArtThumbnailPixelMaps[art.rawPath] !== undefined) {
+                    Image(this.skyCultureArtThumbnailPixelMaps[art.rawPath] as image.PixelMap).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
                       .backgroundColor('rgba(0,0,0,0.22)').borderRadius(UI_RADIUS_CONTROL)
+                      .onError(() => { this.setSkyCultureArtStatus(art.rawPath, 'decodeFailed') })
+                  } else if (this.skyCultureArtStatus(art.rawPath) === 'ready') {
+                    Stack({ alignContent: Alignment.Center }) {
+                      LoadingProgress().width(24).height(24).color(this.nmAccent())
+                    }.width('100%').aspectRatio(1).backgroundColor('rgba(0,0,0,0.22)').borderRadius(UI_RADIUS_CONTROL)
+                  } else if (this.skyCultureArtStatus(art.rawPath) === 'preparing') {
+                    Stack({ alignContent: Alignment.Center }) {
+                      LoadingProgress().width(24).height(24).color(this.nmAccent())
+                    }.width('100%').aspectRatio(1).backgroundColor('rgba(0,0,0,0.22)').borderRadius(UI_RADIUS_CONTROL)
+                  } else if (this.skyCultureArtStatus(art.rawPath) === 'decodeFailed') {
+                    Text('图像解码失败').fontSize(9).fontColor(this.nmSub()).width('100%').aspectRatio(1)
+                      .textAlign(TextAlign.Center).backgroundColor('rgba(0,0,0,0.22)').borderRadius(UI_RADIUS_CONTROL)
                   } else {
                     Text('绘图资源未安装').fontSize(9).fontColor(this.nmSub()).width('100%').aspectRatio(1)
                       .textAlign(TextAlign.Center).backgroundColor('rgba(0,0,0,0.22)').borderRadius(UI_RADIUS_CONTROL)
@@ -23723,8 +26560,7 @@ private loadPlanetPositions(): void {
                     .textOverflow({ overflow: TextOverflow.Ellipsis }).textAlign(TextAlign.Center)
                 }.width('31%').padding(4).margin({ right: 1, bottom: 8 }).backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
                   .onClick(() => {
-                    this.skyCultureArtPreviewPath = this.skyCultureArtFilePath(art.rawPath)
-                    this.skyCultureArtPreviewName = art.name !== undefined && art.name.length > 0 ? art.name : '星座绘图 ' + art.index
+                    this.openSkyCultureArtPreview(art)
                   })
               }, (art: SkyCultureArtItem) => art.rawPath)
             }.width('100%').padding({ top: 5, bottom: 5 })
@@ -23734,15 +26570,26 @@ private loadPlanetPositions(): void {
           }
         }
         if (this.skyCultureNarration.length > 0) {
-          Text(this.skyCultureNarration).fontSize(11).fontColor(this.nmText()).width('100%')
-            .lineHeight(18).maxLines(this.skyCultureNarrationExpanded ? 40 : 4).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Column({ space: 4 }) {
+            ForEach(this.skyCultureNarrationExpanded ? this.skyCultureNarrationParagraphs() : this.skyCultureNarrationParagraphs().slice(0, 2), (paragraph: string) => {
+              Text(paragraph).fontSize(11).fontColor(this.nmText()).width('100%').lineHeight(19)
+            }, (paragraph: string, index: number) => 'narration-' + index + '-' + paragraph)
+          }.width('100%')
           Button(this.skyCultureNarrationExpanded ? '收起说明' : '展开说明').fontSize(10).fontColor(this.nmAccent()).backgroundColor('rgba(0,0,0,0)')
             .height(26).padding({ left: 0, right: 8 }).onClick(() => { this.skyCultureNarrationExpanded = !this.skyCultureNarrationExpanded })
         }
         if (this.skyCultureDescription.length > 0 && this.skyCultureDescription !== this.skyCultureNarration) {
           Text('完整文化资料').fontSize(12).fontColor(this.nmSub()).width('100%').margin({ top: 4 })
-          Text(this.skyCultureDescription).fontSize(11).fontColor(this.nmText()).width('100%')
-            .lineHeight(18).maxLines(this.skyCultureDescriptionExpanded ? 999 : 5).textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.skyCultureDescriptionBlocks.length > 0) {
+            Column({ space: 3 }) {
+              ForEach(this.skyCultureDescriptionExpanded ? this.skyCultureDescriptionBlocks : this.skyCultureDescriptionBlocks.slice(0, 6), (block: SkyCultureDescriptionBlock) => {
+                this.skyCultureDescriptionBlockView(block)
+              }, (block: SkyCultureDescriptionBlock) => 'description-' + block.index)
+            }.width('100%')
+          } else {
+            Text(this.skyCultureDescription).fontSize(11).fontColor(this.nmText()).width('100%')
+              .lineHeight(19).maxLines(this.skyCultureDescriptionExpanded ? 999 : 6).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
           Button(this.skyCultureDescriptionExpanded ? '收起完整资料' : '阅读完整资料').fontSize(10).fontColor(this.nmAccent()).backgroundColor('rgba(0,0,0,0)')
             .height(26).padding({ left: 0, right: 8 }).onClick(() => { this.skyCultureDescriptionExpanded = !this.skyCultureDescriptionExpanded })
         }
@@ -23811,7 +26658,7 @@ private loadPlanetPositions(): void {
                     this.loadObserverInfo(false)
                   })
               }.width('100%').padding({ top: 2, bottom: 2 })
-              Slider({ value: this.skyCultureTerritoryMapYear, min: -40000, max: this.skyCultureTerritoryMapMaxYear(), step: 1, style: SliderStyle.OutSet })
+              Slider({ value: this.skyCultureTerritoryMapYear, min: -40000, max: this.skyCultureTerritoryMapMaxYear(), step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
                 .height(24).width('100%')
                 .onChange((year: number) => { this.setSkyCultureTerritoryMapYear(year) })
               Text('地图年份：' + this.skyCultureFormatYear(this.skyCultureTerritoryMapYear) + ' · ' + this.skyCultureTerritoryMapPolygons.length + ' 个区域轮廓')
@@ -23885,28 +26732,28 @@ private loadPlanetPositions(): void {
       Row() {
         Text('星座标签字号').fontSize(11).fontColor(this.nmText()).width(84)
         Text(this.skyCultureConstellationFontSize.toFixed(0)).fontSize(11).fontColor(this.nmSub()).width(28).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationFontSize', value, (current: number) => { this.skyCultureConstellationFontSize = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
       Row() {
         Text('星座连线粗细').fontSize(11).fontColor(this.nmText()).width(84)
         Text(this.skyCultureConstellationLineThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationLineThickness', value, (current: number) => { this.skyCultureConstellationLineThickness = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
       Row() {
         Text('星座边界粗细').fontSize(11).fontColor(this.nmText()).width(84)
         Text(this.skyCultureConstellationBoundaryThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationBoundaryThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationBoundaryThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationBoundaryThickness', value, (current: number) => { this.skyCultureConstellationBoundaryThickness = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
       Row() {
         Text('星座绘图亮度').fontSize(11).fontColor(this.nmText()).width(84)
         Text(Math.round(this.skyCultureConstellationArtIntensity * 100) + '%').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationArtIntensity, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationArtIntensity, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationArtIntensity', value, (current: number) => { this.skyCultureConstellationArtIntensity = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
@@ -23914,14 +26761,14 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星群标签字号').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismFontSize.toFixed(0)).fontSize(11).fontColor(this.nmSub()).width(28).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureAsterismFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureAsterismFontSize, min: 8, max: 40, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismFontSize', value, (current: number) => { this.skyCultureAsterismFontSize = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
         Row() {
           Text('星群连线粗细').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismLineThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureAsterismLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureAsterismLineThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLineThickness', value, (current: number) => { this.skyCultureAsterismLineThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.constellationHulls || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23930,7 +26777,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星座区域边界').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureConstellationHullsThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureConstellationHullsThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureConstellationHullsThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationHullsThickness', value, (current: number) => { this.skyCultureConstellationHullsThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23939,7 +26786,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('辅助射线粗细').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureRayHelperThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureRayHelperThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureRayHelperThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('rayHelperThickness', value, (current: number) => { this.skyCultureRayHelperThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23948,7 +26795,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('黄道线粗细').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureZodiacThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureZodiacThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureZodiacThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('zodiacThickness', value, (current: number) => { this.skyCultureZodiacThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.lunarSystem && this.skyCultureHasLunarSystem ? 3 : 8 })
@@ -23957,7 +26804,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('月宿线粗细').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureLunarSystemThickness.toFixed(0) + ' px').fontSize(11).fontColor(this.nmSub()).width(32).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureLunarSystemThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureLunarSystemThickness, min: 1, max: 5, step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('lunarSystemThickness', value, (current: number) => { this.skyCultureLunarSystemThickness = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
@@ -23966,14 +26813,14 @@ private loadPlanetPositions(): void {
       Row() {
         Text('星座连线').fontSize(11).fontColor(this.nmText()).width(84)
         Text(this.skyCultureConstellationLinesFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationLinesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationLinesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationLinesFadeDuration', value, (current: number) => { this.skyCultureConstellationLinesFadeDuration = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 3 })
       Row() {
         Text('星座标签').fontSize(11).fontColor(this.nmText()).width(84)
         Text(this.skyCultureConstellationLabelsFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-        Slider({ value: this.skyCultureConstellationLabelsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+        Slider({ value: this.skyCultureConstellationLabelsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
           .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationLabelsFadeDuration', value, (current: number) => { this.skyCultureConstellationLabelsFadeDuration = current }) })
       }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.constellationArt || this.constellationBoundaries || this.constellationHulls || this.asterismLines || this.asterismLabels || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23981,7 +26828,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星座绘图').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureConstellationArtFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureConstellationArtFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureConstellationArtFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationArtFadeDuration', value, (current: number) => { this.skyCultureConstellationArtFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.constellationBoundaries || this.constellationHulls || this.asterismLines || this.asterismLabels || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23990,7 +26837,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星座边界').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureConstellationBoundariesFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureConstellationBoundariesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureConstellationBoundariesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationBoundariesFadeDuration', value, (current: number) => { this.skyCultureConstellationBoundariesFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.constellationHulls || this.asterismLines || this.asterismLabels || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -23999,7 +26846,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星座区域边界').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureConstellationHullsFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureConstellationHullsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureConstellationHullsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('constellationHullsFadeDuration', value, (current: number) => { this.skyCultureConstellationHullsFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.asterismLines || this.asterismLabels || this.rayHelpers || (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -24008,7 +26855,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星群连线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismLinesFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureAsterismLinesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureAsterismLinesFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLinesFadeDuration', value, (current: number) => { this.skyCultureAsterismLinesFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.asterismLabels || this.rayHelpers ? 3 : 8 })
@@ -24017,7 +26864,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('星群标签').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureAsterismLabelsFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureAsterismLabelsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureAsterismLabelsFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('asterismLabelsFadeDuration', value, (current: number) => { this.skyCultureAsterismLabelsFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.rayHelpers ? 3 : 8 })
@@ -24026,7 +26873,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('辅助射线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureRayHelperFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureRayHelperFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureRayHelperFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('rayHelperFadeDuration', value, (current: number) => { this.skyCultureRayHelperFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: (this.zodiac && this.skyCultureHasZodiac) || (this.lunarSystem && this.skyCultureHasLunarSystem) ? 3 : 8 })
@@ -24035,7 +26882,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('黄道线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureZodiacFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureZodiacFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureZodiacFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('zodiacFadeDuration', value, (current: number) => { this.skyCultureZodiacFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: this.lunarSystem && this.skyCultureHasLunarSystem ? 3 : 8 })
@@ -24044,7 +26891,7 @@ private loadPlanetPositions(): void {
         Row() {
           Text('月宿线').fontSize(11).fontColor(this.nmText()).width(84)
           Text(this.skyCultureLunarSystemFadeDuration.toFixed(1) + ' 秒').fontSize(11).fontColor(this.nmSub()).width(38).textAlign(TextAlign.End)
-          Slider({ value: this.skyCultureLunarSystemFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureLunarSystemFadeDuration, min: 0.1, max: 10, step: 0.1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .layoutWeight(1).blockColor(this.nmAccent()).trackColor(this.nmBg()).selectedColor(this.nmAccent()).showSteps(false).showTips(false)
             .onChange((value: number) => { this.setSkyCultureVisualSetting('lunarSystemFadeDuration', value, (current: number) => { this.skyCultureLunarSystemFadeDuration = current }) })
         }.height(34).width('100%').padding({ left: 8, right: 10 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
@@ -24173,67 +27020,8 @@ private loadPlanetPositions(): void {
         .width('100%').backgroundColor('rgba(255,255,255,0.06)').borderRadius(UI_RADIUS_CONTROL)
         .onChange((value: string) => { this.skyCultureSearchText = value })
       Row({ space: 6 }) {
-        Column() {
-          Row() {
-            Text('类型').fontSize(10).fontColor(this.nmSub()).width(32)
-            Text(this.skyCultureClassificationFilterLabel()).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text(this.skyCultureClassificationFilterOpen ? '收起' : '选择').fontSize(10)
-              .fontColor(this.nmAccent())
-          }.height(32).width('100%').padding({ left: 9, right: 9 })
-            .onClick(() => {
-              this.skyCultureClassificationFilterOpen = !this.skyCultureClassificationFilterOpen
-              this.skyCultureRegionFilterOpen = false
-            })
-          if (this.skyCultureClassificationFilterOpen) {
-            Column({ space: 2 }) {
-              ForEach(this.skyCultureClassificationFilterLabels(), (label: string, index: number) => {
-                Row() {
-                  Text(label).fontSize(10).fontColor(this.skyCultureClassificationFilterValues()[index] === this.skyCultureClassificationFilter ? this.nmAccent() : this.nmText()).layoutWeight(1)
-                  if (this.skyCultureClassificationFilterValues()[index] === this.skyCultureClassificationFilter) {
-                    Text('当前').fontSize(9).fontColor(this.nmAccent())
-                  }
-                }.height(28).width('100%').padding({ left: 9, right: 9 })
-                  .backgroundColor(this.skyCultureClassificationFilterValues()[index] === this.skyCultureClassificationFilter ? 'rgba(80,140,200,0.16)' : 'rgba(255,255,255,0.025)')
-                  .borderRadius(UI_RADIUS_CONTROL)
-                  .onClick(() => {
-                    this.skyCultureClassificationFilter = this.skyCultureClassificationFilterValues()[index]
-                    this.skyCultureClassificationFilterOpen = false
-                  })
-              }, (label: string) => label)
-            }.width('100%').padding({ left: 4, right: 4, bottom: 4 })
-          }
-        }.layoutWeight(1).backgroundColor('rgba(255,255,255,0.045)').borderRadius(UI_RADIUS_CONTROL)
-        Column() {
-          Row() {
-            Text('地区').fontSize(10).fontColor(this.nmSub()).width(32)
-            Text(this.skyCultureRegionFilterLabel()).fontSize(11).fontColor(this.nmText()).layoutWeight(1)
-              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text(this.skyCultureRegionFilterOpen ? '收起' : '选择').fontSize(10).fontColor(this.nmAccent())
-          }.height(32).width('100%').padding({ left: 9, right: 9 })
-            .onClick(() => {
-              this.skyCultureRegionFilterOpen = !this.skyCultureRegionFilterOpen
-              this.skyCultureClassificationFilterOpen = false
-            })
-          if (this.skyCultureRegionFilterOpen) {
-            Column({ space: 2 }) {
-              ForEach(this.skyCultureRegionFilterLabels(), (label: string, index: number) => {
-                Row() {
-                  Text(label).fontSize(10).fontColor(this.skyCultureRegionFilterValues()[index] === this.skyCultureRegionFilter ? this.nmAccent() : this.nmText()).layoutWeight(1)
-                  if (this.skyCultureRegionFilterValues()[index] === this.skyCultureRegionFilter) {
-                    Text('当前').fontSize(9).fontColor(this.nmAccent())
-                  }
-                }.height(28).width('100%').padding({ left: 9, right: 9 })
-                  .backgroundColor(this.skyCultureRegionFilterValues()[index] === this.skyCultureRegionFilter ? 'rgba(80,140,200,0.16)' : 'rgba(255,255,255,0.025)')
-                  .borderRadius(UI_RADIUS_CONTROL)
-                  .onClick(() => {
-                    this.skyCultureRegionFilter = this.skyCultureRegionFilterValues()[index]
-                    this.skyCultureRegionFilterOpen = false
-                  })
-              }, (label: string) => label)
-            }.width('100%').padding({ left: 4, right: 4, bottom: 4 })
-          }
-        }.layoutWeight(1).backgroundColor('rgba(255,255,255,0.045)').borderRadius(UI_RADIUS_CONTROL)
+        this.skyCultureFilterPicker('classification')
+        this.skyCultureFilterPicker('region')
       }.width('100%').alignItems(VerticalAlign.Top)
     }.width('100%').padding({ bottom: 5 })
     if (this.skyCultureClassificationFilter !== 'all' || this.skyCultureRegionFilter !== 'all') {
@@ -24309,7 +27097,7 @@ private loadPlanetPositions(): void {
                 this.syncSkyCultureTimeFollowTimer()
               })
           }.width('100%').height(34).padding({ left: 8, right: 8 }).backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
-          Slider({ value: this.skyCultureTimeYear, min: -40000, max: this.skyCultureFilterMaxYear(), step: 1, style: SliderStyle.OutSet })
+          Slider({ value: this.skyCultureTimeYear, min: -40000, max: this.skyCultureFilterMaxYear(), step: 1, style: SliderStyle.OutSet }).sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .blockColor(this.nmAccent()).selectedColor(this.nmAccent()).trackColor(this.nmBg())
             .showSteps(false).showTips(false).width('100%')
             .onChange((year: number) => { this.setSkyCultureTimeYear(year) })
@@ -24357,7 +27145,7 @@ private loadPlanetPositions(): void {
             }
             Row({ space: 8 }) {
               Column({ space: 2 }) {
-                Text(sc.name).fontSize(12).fontColor(this.nmText()).fontWeight(sc.id === this.currentSkyCultureId ? FontWeight.Medium : FontWeight.Regular).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.skyCultureDisplayName(sc.id, sc.name)).fontSize(12).fontColor(this.nmText()).fontWeight(sc.id === this.currentSkyCultureId ? FontWeight.Medium : FontWeight.Regular).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(this.skyCultureRegionText(sc.region ?? []) + ' · ' + this.skyCultureClassificationText(sc.classification ?? ''))
                   .fontSize(9).fontColor(this.nmSub()).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               }.layoutWeight(1)

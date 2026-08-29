@@ -206,7 +206,7 @@ StelTexture::GLData StelTexture::loadFromData(const QByteArray& data, const QStr
  Bind the texture so that it can be used for openGL drawing (calls glBindTexture)
  *************************************************************************/
 
-bool StelTexture::bind(uint slot)
+bool StelTexture::bind(uint slot, bool prioritizeUpload)
 {
 	if (id != 0)
 	{
@@ -224,7 +224,7 @@ bool StelTexture::bind(uint slot)
 		// but don't give up too much if it's very high.
 		const double maxTimeNS = std::max(1e9 / (2 * StelMainView::getInstance().getDesiredFps()),
 		                                  MAX_LOAD_NANOSEC_PER_FRAME);
-		if(textureMgr->getTotalLoadTimeTaken() > maxTimeNS)
+		if(!prioritizeUpload && textureMgr->getTotalLoadTimeTaken() > maxTimeNS)
 			return false;
 		gl = QOpenGLContext::currentContext()->functions();
 		// Finally load the data in the main thread.

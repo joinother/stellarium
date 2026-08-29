@@ -137,10 +137,39 @@ export default class QAbility extends UIAbility {
     } else {
       this.cliRequests = this.cliRequests.filter((item: StellariumCliRequest) => item.requestId !== request.requestId);
     }
-    hilog.info(LOG_DOMAIN, LOG_TAG,
-      '[cli-response] requestId=%{public}s command=%{public}s response=%{public}s',
-      request.requestId, request.commandName, response);
+    this.publishCliUiEvent(request, response);
+    const responseText = String(response);
+    const chunkSize = 600;
+    const chunkCount = Math.max(1, Math.ceil(responseText.length / chunkSize));
+    for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+      const chunk = responseText.substring(chunkIndex * chunkSize, (chunkIndex + 1) * chunkSize);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        '[cli-response] requestId=%{public}s command=%{public}s chunkIndex=%{public}d chunkCount=%{public}d responseChunk=%{public}s',
+        request.requestId, request.commandName, chunkIndex, chunkCount, chunk);
+    }
     this.drainCliRequests();
+  }
+
+  private publishCliUiEvent(request: StellariumCliRequest, response: string): void {
+    if (request.commandName !== 'searchObject' && request.commandName !== 'selectAt' &&
+      request.commandName !== 'clearSelection' && request.commandName !== 'getSelectedObjectInfo') {
+      if (request.commandName !== 'setObjectDetailConnector' && request.commandName !== 'getObjectDetailConnector') {
+        return;
+      }
+    }
+    try {
+      const parsed = JSON.parse(response) as Record<string, Object>;
+      if (parsed['pending'] === true) {
+        return;
+      }
+      AppStorage.setOrCreate('stellariumCliUiEvent', JSON.stringify({
+        requestId: request.requestId,
+        commandName: request.commandName,
+        response: parsed,
+      }));
+    } catch (err) {
+      hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] UI event publish failed: %{public}s', JSON.stringify(err));
+    }
   }
 
   private logPrivacyGate(stage: string): void {

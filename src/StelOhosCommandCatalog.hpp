@@ -14,27 +14,27 @@ inline QStringList names()
 		"beginGyroViewTransition,beginSkyGesture,cancelGyroViewTransition,clearSelection,cycleCCD,cycleLens,cycleOcular,cycleTelescope,"
 		"deleteBookmark,deleteRecording,downloadStarCatalog,dragView,endPinch,exportConfig,getAboutInfo,"
 		"getAbsoluteStarScale,getActionState,getAlmanac,getAltAzCurve,getAngleMeasure,getAnnualElevation,getAppState,"
-		"getAppVersion,getAtmosphereBrightness,getAtmosphereFlags,getAtmosphereIntensity,getAtmosphereParams,"
+		"getAppVersion,getAstroCalcContext,getAtmosphereBrightness,getAtmosphereFlags,getAtmosphereIntensity,getAtmosphereParams,"
 		"getAutoMoveDuration,getAutoZoom,getAutoZoomResets,getBasicInfo,getBookmarks,getCatalogHealth,getCelestialPositions,getConfigString,"
-		"getConstellationFlags,getConstellationForPosition,getConstellationInfo,getConstellationList,getCurrentViewInfo,"
+		"getConstellationArtStatus,getConstellationFlags,getConstellationForPosition,getConstellationInfo,getConstellationList,getCurrentViewInfo,"
 		"getDSOCounts,getDateFormat,getDateTimeLocal,getDeepSkyImageStatus,getDeltaT,getDeltaTAlgorithmDescription,"
 		"getDistanceInfo,getDitheringMode,getDsoLabels,getEclipses,getEphemeris,getFOV,getFPS,getFieldOfView,"
 		"getFlagClearSky,getFlagGravityLabels,getGridFlags,getGyroGuidePosition,getHeliocentricEclipticPositions,"
 		"getIsDaylight,getLandscapeCount,getLandscapeInfo,getLandscapeList,getScenery3dList,getLandscapeOpacity,getLightPollution,"
 		"getLimitMagnitude,getLoadedModuleNames,getLocationList,getLog,getLunarElongationCurve,getMemoryUsage,"
-		"getMeteorShowers,getMeteors,getMilkyWayFlags,getMilkyWayIntensity,getMoonPhases,getMountMode,getNebulaFlags,"
-		"getNightMode,getObjectInfo,getObjectPositions,getObjectSpokenText,getObservabilityCalendar,getObserverInfo,"
+		"getMeteorDiagnostics,getMeteorShowers,getMeteors,getMilkyWayFlags,getMilkyWayIntensity,getMoonPhases,getMountMode,getNebulaFlags,"
+		"getNightMode,getObjectCatalogCategories,getObjectInfo,getObjectPositions,getObjectSpokenText,getObservabilityCalendar,getObserverInfo,"
 		"getObserverPlanetList,getOculars,getMosaicCamera,getEquationOfTime,getArchaeoLines,getNavStars,getOrbitDisplaySettings,getPhenomena,getPlanetCalc,getPlanetPairDistanceCurve,"
 		"getPlanetPositions,getPlanetTimeSeries,getPlanetaryTransits,getPluginList,getPointerCoordinates,getPolarScopeData,getProjectionInfo,getProjectionList,"
 		"getRTS,getRTSCalendar,getSatellites,getScreenInfo,getScriptList,getScriptRate,getScriptStatus,"
-		"getSelectedObjectInfo,getSelectedObjects,getSelectedType,getSessionState,getSiderealTime,getSimulationTime,"
-		"getSkyCultureDetails,getSkyCultureInfo,getSkyCultureList,getSkyCultureTerritoryGeometry,getSkyCultureVisualSettings,"
+		"getSelectedObjectInfo,getSelectedObjects,getSelectedType,getObjectDetailModel,getObjectDetailConnector,getSessionState,getSiderealTime,getSimulationTime,"
+		"getSkyCultureDetails,getSkyCultureInfo,getSkyCultureList,getSkyCultureState,getSkyCultureTerritoryGeometry,getSkyCultureVisualSettings,"
 		"getSkyCultures,getSolarElongation,getSolarSystemFlags,getStarCatalogStatus,getStarCatalogs,getStarCount,"
 		"getStarCountFull,getStarFlags,getStarScale,getState,getTimeFormat,getTimeInfo,getTonightEvents,"
 		"getTracking,getTrailDisplaySettings,getVMagnitude,getVideoRecordingState,getViewCenterCoordinates,getViewDirection,getViewportOffset,getNavigationSettings,getInformationSettings,getTimeSettings,getEphemerisSettings,"
 		"getViewportSize,getWutTargets,gotoBookmark,gotoRADec,gyroDiagnostic,importConfig,importScript,listMatchingObjects,listObjects,"
 		"listRecordings,loadPlugin,loadRecording,moveToAltAz,moveToSelected,moveToSelectedAt,panBy,pauseScript,playScript,"
-		"pointAtSky,pointAtSkyStop,reloadSkyCulture,resetAngleMeasure,resumeScript,saveRecording,saveScreenShot,searchObject,"
+		"pointAtSky,pointAtSkyStop,reloadSkyCulture,resetAngleMeasure,retryDeepSkyImages,resumeScript,saveRecording,saveScreenShot,searchObject,"
 		"selectAt,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,"
 		"setAtmosphereFlag,setAtmosphereParams,setAutoMoveDuration,setAutoZoom,setAutoZoomResets,setBortleScale,setCCD,"
 		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDitheringMode,setDsoLabels,setFOV,"
@@ -44,7 +44,7 @@ inline QStringList names()
 		"setMeteors,setMilkyWayFlag,setMilkyWayIntensity,setMountMode,setNebulaFlag,setNightMode,setObserverPlanet,"
 		"selectOcularInstrument,setOcularMode,setOcularSetting,rotateOcularReticle,resetOcularInstrument,setMosaicCamera,setEquationOfTime,setArchaeoLineSetting,setNavStarsSetting,setOrbitDisplaySetting,setPluginLoadAtStartup,setPointerCoordinates,setProjectionType,setSatellitesFlag,setScenery3dEnabled,setScenery3dScene,setScriptRate,setSkyCulture,"
 		"setSkyCultureCommonNames,setSkyCultureDefault,setSkyCultureLabelStyle,setSkyCultureScreenLabelStyle,"
-		"setSkyCultureShortLabels,setSkyCultureVisualColor,setSkyCultureVisualSetting,setSkyDisplaySetting,setSolarSystemFlag,"
+		"setSkyCultureShortLabels,setSkyCultureVisualColor,setSkyCultureVisualSetting,setSkyDisplaySetting,setSolarSystemFlag,setObjectDetailConnector,"
 		"setStarFlag,setStarLabelsAmount,setStarScale,setTelrad,setTimeFormat,setTimeRate,setTimeToJD,setJulianDate,setTracking,"
 		"setTrailDisplaySetting,setVerticalClamp,setViewLock,setViewportOffset,setNavigationSetting,setInformationSetting,setTimeSetting,setEphemerisSetting,saveCurrentView,saveAllSettings,restoreDefaultSettings,startPanInertia,startVideoRecording,"
 		"stopPanInertia,stopScript,stopVideoRecording,telescopeLx200Abort,telescopeLx200GotoSelected,telescopeLx200SyncSelected,"
@@ -94,13 +94,39 @@ inline QJsonObject item(const QString& name)
 	}
 	else if (name == "selectAt") value["examplePayload"] = "720|480|1440|960";
 	else if (name == "setActionChecked") value["examplePayload"] = "actionShow_Stars|1";
+	else if (name == "getConstellationArtStatus")
+	{
+		value["description"] = QStringLiteral("诊断当前星空文化的星座艺术文件、纹理加载和视口可见状态");
+		value["examplePayload"] = "Ori";
+	}
+	else if (name == "getObjectDetailModel")
+	{
+		value["description"] = QStringLiteral("读取选中天体详情媒体的 3D 模型能力契约；星座暂无已安装模型时返回 planned 和二维绘图回退");
+	}
+	else if (name == "retryDeepSkyImages")
+		value["description"] = QStringLiteral("重新尝试解码当前视野中失败的离线深空资料图，不重载整套图库");
 	else if (name == "importScript")
 	{
 		value["description"] = QStringLiteral("从设备可读路径导入离线 .ssc 脚本到用户脚本目录；不执行脚本内容");
 		value["examplePayload"] = "/data/local/tmp/example.ssc";
 	}
+	else if (name == "getScriptList")
+	{
+		value["description"] = QStringLiteral("列出内置和用户脚本；默认返回完整元数据，payload=summary 只返回文件名和数量，适合日志传输");
+		value["examplePayload"] = "summary";
+	}
+	else if (name == "getPluginList")
+	{
+		value["description"] = QStringLiteral("列出随 HAP 编译的插件；默认返回完整元数据，payload=summary 只返回运行/启动状态，适合日志传输");
+		value["examplePayload"] = "summary";
+	}
+	else if (name == "pauseScript" || name == "resumeScript")
+	{
+		value["description"] = QStringLiteral("控制原生脚本暂停或继续；Qt 6 脚本引擎不支持这两项操作，会返回 supported=false");
+	}
 	else if (name == "getWutTargets") value["examplePayload"] = "{\"category\":\"planets\"}";
 	else if (name == "getPolarScopeData") value["description"] = QStringLiteral("读取实时极轴镜分划数据，包括天极/极星屏幕投影、时角和钟面位置；星空由 Stellarium 原生渲染");
+	else if (name == "getAstroCalcContext") value["description"] = QStringLiteral("读取离线天文计算上下文，包括观测地点、时区、儒略日、平/视恒星时、时间方程和太阳/月球当前高度方位");
 	else if (name == "setPolarScopeOverlay")
 	{
 		value["description"] = QStringLiteral("在原生星图渲染帧中显示或隐藏极轴镜分划；payload 使用 active|水平翻转|垂直翻转");

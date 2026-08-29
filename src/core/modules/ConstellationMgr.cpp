@@ -603,7 +603,7 @@ void ConstellationMgr::loadLinesNamesAndArt(const StelSkyCulture &culture)
 			texturePath.clear();
 		}
 
-		cons->artTexture = StelApp::getInstance().getTextureManager().createTextureThread(texturePath, StelTexture::StelTextureParams(true));
+		cons->artTexture = StelApp::getInstance().getTextureManager().createTextureThread(texturePath, StelTexture::StelTextureParams(true), false);
 
 		const auto sizeData = imgData["size"].toArray();
 		if (sizeData.size() != 2)
@@ -730,6 +730,96 @@ void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) 
 	}
 
 	sPainter.setCullFace(false);
+}
+
+QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
+{
+	QJsonObject result;
+	QJsonArray items;
+	int textureCount = 0;
+	int fileCount = 0;
+	int readyCount = 0;
+	int loadingCount = 0;
+	int errorCount = 0;
+	int idleCount = 0;
+	int visibleCount = 0;
+
+	StelCore* core = StelApp::getInstance().getCore();
+	const StelProjectorP projector = core ? core->getProjection(StelCore::FrameJ2000) : StelProjectorP();
+	const SphericalRegionP region = projector ? projector->getViewportConvexPolygon() : SphericalRegionP();
+	const QString filter = abbreviation.trimmed();
+
+	for (const Constellation* constellation : constellations)
+	{
+		if (!filter.isEmpty() && filter.compare(QStringLiteral("all"), Qt::CaseInsensitive) != 0 &&
+		    filter.compare(constellation->getShortName(), Qt::CaseInsensitive) != 0 &&
+		    filter.compare(constellation->getEnglishName(), Qt::CaseInsensitive) != 0 &&
+		    filter.compare(constellation->getNameI18n(), Qt::CaseInsensitive) != 0)
+			continue;
+
+		QJsonObject item;
+		item["id"] = constellation->getShortName();
+		item["name"] = constellation->getNameI18n();
+		item["englishName"] = constellation->getEnglishName();
+		item["polygonVertices"] = constellation->artPolygon.vertex.size();
+		item["seasonallyVisible"] = constellation->isSeasonallyVisible();
+		item["fader"] = constellation->artFader.getInterstate();
+		item["effectiveIntensity"] = constellation->artFader.getInterstate() * constellation->artOpacity * Constellation::artIntensityFovScale;
+		item["intersectsViewport"] = region && region->intersects(constellation->boundingCap);
+
+		if (constellation->artTexture)
+		{
+			++textureCount;
+			const QString path = constellation->artTexture->getFullPath();
+			const bool onDisk = QFileInfo::exists(path);
+			const bool ready = constellation->artTexture->canBind();
+			const bool loading = constellation->artTexture->isLoading();
+			const bool error = constellation->artTexture->hasError();
+			item["path"] = path;
+			item["onDisk"] = onDisk;
+			item["ready"] = ready;
+			item["loading"] = loading;
+			item["error"] = error;
+			item["errorMessage"] = constellation->artTexture->getErrorMessage();
+			item["state"] = error ? QStringLiteral("decodeFailed")
+				: (ready ? QStringLiteral("ready")
+					: (loading ? QStringLiteral("loading")
+						: (onDisk ? QStringLiteral("notStarted") : QStringLiteral("noMatch"))));
+			if (onDisk) ++fileCount;
+			if (ready) ++readyCount;
+			else if (loading) ++loadingCount;
+			else if (error) ++errorCount;
+			else ++idleCount;
+		}
+		else
+		{
+			item["state"] = QStringLiteral("noMatch");
+		}
+
+		const bool visible = item.value("seasonallyVisible").toBool() &&
+		                     item.value("intersectsViewport").toBool() &&
+		                     item.value("effectiveIntensity").toDouble() > 0.0;
+		item["visible"] = visible;
+		if (visible) ++visibleCount;
+		items.append(item);
+	}
+
+	result["ok"] = true;
+	result["artDisplayed"] = artDisplayed;
+	result["artIntensity"] = artIntensity;
+	result["artFovScale"] = Constellation::artIntensityFovScale;
+	result["matched"] = items.size();
+	result["textureCount"] = textureCount;
+	result["fileCount"] = fileCount;
+	result["readyCount"] = readyCount;
+	result["loadingCount"] = loadingCount;
+	result["errorCount"] = errorCount;
+	result["idleCount"] = idleCount;
+	result["notStartedCount"] = idleCount;
+	result["pendingCount"] = loadingCount + idleCount;
+	result["visibleCount"] = visibleCount;
+	result["items"] = items;
+	return result;
 }
 
 // Draw constellations lines
