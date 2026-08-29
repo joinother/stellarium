@@ -3550,6 +3550,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		result["count"] = uniqueCount; result["hasMore"] = offset + items.size() < uniqueCount;
 		result["offset"] = offset; result["moduleId"] = moduleId;
 		result["visibilityFilter"] = visibilityFilter; result["instrumentFilter"] = instrumentFilter;
+		if (moduleId == QStringLiteral("StarMgr"))
+		{
+			const StarMgr* starMgr = GETSTELMODULE(StarMgr);
+			result["listKind"] = QStringLiteral("named");
+			result["namedCount"] = uniqueCount;
+			result["catalogTotal"] = starMgr ? static_cast<qint64>(starMgr->getLoadedStarCount()) : 0;
+			result["catalogReady"] = starMgr && starMgr->getLoadedCatalogCount() > 0;
+			result["catalogLevels"] = starMgr ? starMgr->getLoadedCatalogCount() : 0;
+		}
+		else
+		{
+			result["listKind"] = QStringLiteral("indexed");
+			result["catalogTotal"] = uniqueCount;
+			result["catalogReady"] = true;
+		}
 		qInfo() << "[StellariumOhos][catalog-page] module=" << moduleId
 				<< "offset=" << offset << "returned=" << items.size() << "total=" << uniqueCount;
 		return result;
@@ -3576,6 +3591,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonObject category;
 			category["moduleId"] = moduleId;
 			category["label"] = q_(it.value());
+			category["group"] = rootModule;
+			category["isCoreSubset"] = isCoreSubset;
+			category["isPluginCatalog"] = isPluginCatalog;
 			categories.append(category);
 		}
 		result["ok"] = true;
@@ -5815,7 +5833,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QJsonObject counts;
 			Vec3d viewDir = GETSTELMODULE(StelMovementMgr)->getViewDirectionJ2000();
 			double starFov = core->getMovementMgr()->getCurrentFov();
-			counts["visible"] = GETSTELMODULE(StarMgr)->searchAround(viewDir, starFov, core).size();
+			const StarMgr* starMgr = GETSTELMODULE(StarMgr);
+			counts["visible"] = starMgr->searchAround(viewDir, starFov, core).size();
+			counts["catalogTotal"] = starMgr ? static_cast<qint64>(starMgr->getLoadedStarCount()) : 0;
+			counts["named"] = starMgr ? static_cast<qint64>(starMgr->getNamedStarCount()) : 0;
 			result["ok"] = true;
 			result["counts"] = counts;
 			return result;
@@ -7212,11 +7233,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// getStarCount — total number of stars loaded
+		// getStarCountFull — total number of stars in loaded catalog levels
 		if (commandName == "getStarCountFull")
 		{
+			const StarMgr* starMgr = GETSTELMODULE(StarMgr);
 			result["ok"] = true;
-			result["total"] = GETSTELMODULE(StarMgr)->listAllObjects(true).size();
+			result["total"] = starMgr ? static_cast<qint64>(starMgr->getLoadedStarCount()) : 0;
+			result["catalogLevels"] = starMgr ? starMgr->getLoadedCatalogCount() : 0;
+			result["catalogReady"] = starMgr && starMgr->getLoadedCatalogCount() > 0;
+			result["named"] = starMgr ? static_cast<qint64>(starMgr->getNamedStarCount()) : 0;
 			return result;
 		}
 

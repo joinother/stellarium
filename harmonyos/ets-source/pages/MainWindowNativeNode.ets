@@ -652,6 +652,10 @@ struct WindowNativeNode {
   @State private categoryLoading: boolean = false
   @State private categoryLoadFailed: boolean = false
   @State private categoryHasMore: boolean = false
+  @State private categoryListKind: string = ''
+  @State private categoryCatalogTotal: number = 0
+  @State private categoryCatalogReady: boolean = true
+  @State private showExtendedCategories: boolean = false
   @State private categoryModuleId: string = 'SolarSystem:planet'
   @State private searchFilterPage: string = ''
   @State private searchVisibilityFilter: string = 'all'
@@ -9061,7 +9065,10 @@ private loadPlanetPositions(): void {
           code: 'module:' + moduleId,
           label: label,
           moduleId: moduleId,
-          iconKey: this.catalogIconForModule(moduleId)
+          iconKey: this.catalogIconForModule(moduleId),
+          group: item['group'] !== undefined ? String(item['group']) : moduleId.split(':')[0],
+          isCoreSubset: item['isCoreSubset'] === true,
+          isPluginCatalog: item['isPluginCatalog'] === true
         })
       }
       this.objectCatalogCategories = categories
@@ -9129,7 +9136,17 @@ private loadPlanetPositions(): void {
     for (const option of this.searchCategoryOptions()) {
       if (option.code === category) return option.moduleId ?? ''
     }
+    for (const option of this.objectCatalogCategories) {
+      if (option.code === category) return option.moduleId ?? ''
+    }
     return ''
+  }
+
+  private isCoreCategoryModule(moduleId: string): boolean {
+    for (const option of this.searchCategoryOptions()) {
+      if (option.moduleId === moduleId) return true
+    }
+    return false
   }
 
   private loadCategoryObjects(category: string, moduleIdOverride: string = ''): void {
@@ -9142,8 +9159,14 @@ private loadPlanetPositions(): void {
     this.categoryLoading = false
     this.categoryLoadFailed = false
     this.categoryHasMore = false
+    this.categoryListKind = ''
+    this.categoryCatalogTotal = 0
+    this.categoryCatalogReady = true
     this.categoryOffset = 0
     this.categoryRequestSerial += 1
+    if (moduleId.length > 0 && !this.isCoreCategoryModule(moduleId)) {
+      this.showExtendedCategories = true
+    }
     if (moduleId === 'Satellites' && !this.satelliteCatalogReady) {
       const serial = this.categoryRequestSerial
       this.categoryLoading = true
@@ -9178,17 +9201,26 @@ private loadPlanetPositions(): void {
       { code: 'nebula', label: this.catalogLabelForModule('NebulaMgr:10', I18n.objectType('Nebula')), moduleId: 'NebulaMgr:10', iconKey: 'catalog_nebula' },
       { code: 'messier', label: this.catalogLabelForModule('NebulaMgr:100', I18n.t('search_messier_objects')), moduleId: 'NebulaMgr:100', iconKey: 'catalog_messier' }
     ]
+    return core
+  }
+
+  private searchDynamicCategoryOptions(): Array<CatOption> {
+    const core = this.searchCategoryOptions()
     const knownModules: Record<string, boolean> = {}
     for (const option of core) knownModules[option.moduleId ?? ''] = true
     const dynamic: CatOption[] = []
     for (const option of this.objectCatalogCategories) {
       if (!knownModules[option.moduleId ?? '']) dynamic.push(option)
     }
-    return core.concat(dynamic)
+    dynamic.sort((left: CatOption, right: CatOption) => String(left.label).localeCompare(String(right.label)))
+    return dynamic
   }
 
   private searchCategoryLabel(): string {
     for (const option of this.searchCategoryOptions()) {
+      if (option.code === this.searchCategory) return String(option.label)
+    }
+    for (const option of this.objectCatalogCategories) {
       if (option.code === this.searchCategory) return String(option.label)
     }
     return I18n.t('search_browse_categories')
@@ -9198,7 +9230,26 @@ private loadPlanetPositions(): void {
     for (const option of this.searchCategoryOptions()) {
       if (option.code === category) return option.iconKey ?? 'catalog_plugin'
     }
+    for (const option of this.objectCatalogCategories) {
+      if (option.code === category) return option.iconKey ?? 'catalog_plugin'
+    }
     return 'catalog_plugin'
+  }
+
+  @Builder
+  catalogCategoryChip(cat: CatOption) {
+    Row({ space: 6 }) {
+      Image(this.getIcon(cat.iconKey ?? 'catalog_plugin', false)).width(15).height(15)
+        .fillColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
+      Text(cat.label).fontSize(13).fontColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
+        .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+      .padding({ left: 12, right: 14, top: 8, bottom: 8 })
+      .backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
+      .border({ width: { bottom: 2 }, color: this.searchCategory === cat.code ? '#5B93BF' : Color.Transparent })
+      .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
+      .clickEffect({ level: ClickEffectLevel.LIGHT })
+      .onClick(() => this.loadCategoryObjects(cat.code))
   }
 
   private searchVisibilityLabel(): string {
@@ -9469,6 +9520,9 @@ private loadPlanetPositions(): void {
       this.categoryObjectCount = typeof result.count === 'number' && result.count > 0 ? result.count : combined.length
       this.categoryOffset = offset + items.length
       this.categoryHasMore = result.hasMore === true && items.length > 0
+      this.categoryListKind = result.listKind ?? ''
+      this.categoryCatalogTotal = typeof result.catalogTotal === 'number' ? result.catalogTotal : this.categoryObjectCount
+      this.categoryCatalogReady = result.catalogReady !== false
       this.categoryLoading = false
       this.categoryLoadFailed = false
     }, 0, 100, 60, (_failure) => {
@@ -20492,24 +20546,45 @@ private loadPlanetPositions(): void {
         Scroll() {
           Row({ space: 8 }) {
             ForEach(this.searchCategoryOptions(), (cat: CatOption) => {
-              Row({ space: 6 }) {
-                Image(this.getIcon(this.searchCategoryIcon(cat.code), false)).width(15).height(15).fillColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
-                Text(cat.label).fontSize(13).fontColor(this.searchCategory === cat.code ? '#8FD3FF' : this.nmSub())
-              }
-                .padding({ left: 12, right: 14, top: 8, bottom: 8 })
-                .backgroundColor(Color.Transparent)
-                .border({ width: { bottom: 2 }, color: this.searchCategory === cat.code ? '#5B93BF' : Color.Transparent })
-                .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })
-                .clickEffect({ level: ClickEffectLevel.LIGHT })
-                .onClick(() => this.loadCategoryObjects(cat.code))
+              this.catalogCategoryChip(cat)
             }, (cat: CatOption) => cat.code + '/' + this.languageRevision.toString())
           }.padding({ left: 2, right: 12 })
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+        if (this.searchDynamicCategoryOptions().length > 0) {
+          Row() {
+            Text(this.showExtendedCategories ? I18n.t('search_browse_categories') : I18n.t('search_filter'))
+              .fontSize(11).fontColor(this.nmSub()).layoutWeight(1)
+            Text(this.showExtendedCategories ? '‹' : '… ' + this.searchDynamicCategoryOptions().length.toString())
+              .fontSize(14).fontColor('#8FD3FF')
+          }
+            .width('100%').padding({ left: 4, right: 4, top: 6, bottom: 2 })
+            .onClick(() => {
+              this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, () => {
+                this.showExtendedCategories = !this.showExtendedCategories
+              })
+            })
+          if (this.showExtendedCategories) {
+            Scroll() {
+              Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+                ForEach(this.searchDynamicCategoryOptions(), (cat: CatOption) => {
+                  this.catalogCategoryChip(cat)
+                }, (cat: CatOption) => cat.code + '/' + this.languageRevision.toString())
+              }.width('100%').padding({ left: 2, right: 4 })
+            }.width('100%').height(112).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
+              .transition(TransitionEffect.asymmetric(
+                TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }),
+                TransitionEffect.OPACITY.animation({ duration: 120, curve: Curve.EaseIn })
+              ))
+          }
+        }
         Row() {
           Text(I18n.t('search_catalog_objects')).fontSize(11).fontColor(this.nmSub()).layoutWeight(1)
           Text(this.categoryLoadFailed ? I18n.t('search_load_failed_retry') :
             (this.categoryLoading ? (this.categoryLoadedCount > 0 ? I18n.format('search_catalog_loading_more', [this.categoryLoadedCount.toString()]) : I18n.t('search_catalog_loading')) :
-              (this.categoryObjectCount > 0 ? I18n.format('search_catalog_loaded_count', [this.categoryLoadedCount.toString(), this.categoryObjectCount.toString()]) : I18n.t('search_catalog_empty'))))
+              (this.categoryObjectCount > 0 ? (this.categoryListKind === 'named'
+                ? I18n.t('search_all_stars') + ' ' + this.categoryObjectCount.toString() + ' · ' + I18n.format('search_catalog_loaded_count', [this.categoryLoadedCount.toString(), this.categoryCatalogTotal.toString()])
+                : I18n.format('search_catalog_loaded_count', [this.categoryLoadedCount.toString(), this.categoryObjectCount.toString()]))
+                : I18n.t('search_catalog_empty'))))
             .fontSize(10).fontColor(this.nmSub())
             .onClick(() => { if (this.categoryLoadFailed) { this.loadCategoryObjects(this.searchCategory) } })
         }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 10, bottom: 6 })

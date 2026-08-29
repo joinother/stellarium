@@ -19,6 +19,9 @@ export interface CatOption {
   label: ResourceStr
   moduleId?: string
   iconKey?: string
+  group?: string
+  isCoreSubset?: boolean
+  isPluginCatalog?: boolean
 }
 
 export interface NameItem {
@@ -342,6 +345,11 @@ export interface StellariumBridgeResponse {
   altitudes?: number[]
   magnitudes?: number[]
   visibleNow?: boolean[]
+  listKind?: string
+  namedCount?: number
+  catalogTotal?: number
+  catalogReady?: boolean
+  catalogLevels?: number
   locations?: Object[]
   timeZone?: string
   jd?: number

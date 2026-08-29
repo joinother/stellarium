@@ -219,6 +219,12 @@ public:
 	//! @return a list of matching object name by order of relevance, or an empty list if nothing matches
 	//! @note Listing stars with the common names only, not skyculture-related.
 	QVector<QPair<QString,StelObjectP>> listAllObjects(bool inEnglish) const override;
+	//! Return the number of stars contained in all successfully loaded catalog levels.
+	quint64 getLoadedStarCount() const;
+	//! Return the number of successfully loaded catalog levels.
+	int getLoadedCatalogCount() const;
+	//! Return the number of unique named stars available to the search index.
+	quint64 getNamedStarCount() const;
 	//! @param objType a string with int number 0...8.
 	//! 0..Interesting double stars
 	//! 1..Interesting variable stars

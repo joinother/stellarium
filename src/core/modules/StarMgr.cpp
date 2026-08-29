@@ -2524,6 +2524,40 @@ QVector<QPair<QString,StelObjectP>> StarMgr::listAllObjects(bool inEnglish) cons
 	return result;
 }
 
+quint64 StarMgr::getLoadedStarCount() const
+{
+	quint64 total = 0;
+	for (const auto* level : std::as_const(gridLevels))
+	{
+		if (level && level->isInitialized())
+			total += level->getNrOfStars();
+	}
+	return total;
+}
+
+int StarMgr::getLoadedCatalogCount() const
+{
+	int count = 0;
+	for (const auto* level : std::as_const(gridLevels))
+	{
+		if (level && level->isInitialized())
+			++count;
+	}
+	return count;
+}
+
+quint64 StarMgr::getNamedStarCount() const
+{
+	QSet<QString> seenIds;
+	for (const auto& pair : listAllObjects(true))
+	{
+		const StelObjectP object = pair.second;
+		if (object && !object->getID().isEmpty())
+			seenIds.insert(object->getID());
+	}
+	return static_cast<quint64>(seenIds.size());
+}
+
 QVector<QPair<QString,StelObjectP>> StarMgr::listAllObjectsByType(const QString &objType, bool inEnglish) const
 {
 	QMap<QString,StelObjectP> map;
@@ -2681,5 +2715,3 @@ QStringList StarMgr::getCultureLabels(StarId hip, StelObject::CulturalDisplaySty
 	labels.removeAll(QString());
 	return labels;
 }
-
-

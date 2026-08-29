@@ -100,6 +100,8 @@ node scripts/stellarium-cli.mjs --command listObjects --payload 'NebulaMgr|60|0|
 - `观测方式`：`all`（不限）、`naked`（消光后视星等不高于 6）、`binocular`（不高于 10）、`telescope`（不加星等上限）。
 - 返回的每个结果同时含有 `altitudes`、`magnitudes` 与 `visibleNow`，均基于当前本地观测位置和模拟时间计算；不会访问网络或读取设备标识。
 
+`getStarCount` 返回 `counts.visible`（当前视场内恒星数）、`counts.catalogTotal`（已加载星表的真实条目总数）和 `counts.named`（按稳定天体 ID 去重后的可检索命名恒星数）。这三个数字用途不同，不能互相替代；`getStarCountFull` 还会返回已加载星表级别数和 `catalogReady`。
+
 ## 卫星目录
 
 `getSatellites` 查询内置卫星目录，不会触发 TLE 下载。payload 为 `分组|搜索词|最多返回条数`；三段都可留空，条数默认 40、最大 100：
