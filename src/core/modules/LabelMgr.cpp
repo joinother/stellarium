@@ -50,6 +50,7 @@ namespace
 {
 std::atomic<int> ohosScreenSafeAreaTopPx{0};
 std::atomic<int> ohosScreenSafeAreaShiftDip{0};
+std::atomic<bool> ohosScriptUiVisible{false};
 
 QString translateScriptLabel(const QString& text)
 {
@@ -531,11 +532,23 @@ void ScreenLabel::updateScreenPosition()
 #if defined(__OHOS__)
 	const int safeTopDip = qCeil(static_cast<double>(ohosScreenSafeAreaTopPx.load()) / qMax(ppx, 0.01));
 	const int safeShiftDip = ohosScreenSafeAreaShiftDip.load();
-	const int topGroupLimitDip = safeTopDip + qMax(32, metrics.height() * 3);
+	const int scriptTopDip = ohosScriptUiVisible.load() ? 156 : 0;
+	const int topGroupLimitDip = qMax(safeTopDip, scriptTopDip) + qMax(32, metrics.height() * 3);
 	if (effectiveY < topGroupLimitDip)
+	{
 		effectiveY += safeShiftDip;
+		if (effectiveY < scriptTopDip)
+			effectiveY = scriptTopDip;
+	}
 #endif
-	screenX = qRound(requestedX * ppx);
+	int effectiveX = requestedX;
+	const int viewportWidthDip = qFloor(static_cast<double>(core->getProjection2d()->getViewportWidth()) / qMax(ppx, 0.01));
+	const int labelWidthDip = qCeil(static_cast<double>(metrics.horizontalAdvance(labelText)) / qMax(ppx, 0.01));
+	effectiveX = qBound(0, effectiveX, qMax(0, viewportWidthDip - labelWidthDip - 8));
+	const int viewportHeightDip = qFloor(static_cast<double>(core->getProjection2d()->getViewportHeight()) / qMax(ppx, 0.01));
+	const int labelHeightDip = qCeil(static_cast<double>(metrics.height()) / qMax(ppx, 0.01));
+	effectiveY = qBound(0, effectiveY, qMax(0, viewportHeightDip - labelHeightDip - 8));
+	screenX = qRound(effectiveX * ppx);
 	screenY = core->getProjection2d()->getViewportHeight() - qRound(effectiveY * ppx + metrics.height());
 }
 
@@ -567,6 +580,11 @@ LabelMgr::LabelMgr() : counter(0)
 void LabelMgr::setOhosScreenSafeAreaTop(int pixels)
 {
 	ohosScreenSafeAreaTopPx.store(qMax(0, pixels));
+}
+
+void LabelMgr::setOhosScriptUiVisible(bool visible)
+{
+	ohosScriptUiVisible.store(visible);
 }
 #endif
  

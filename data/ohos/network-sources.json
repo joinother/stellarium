@@ -17,7 +17,10 @@
       "localPath": "data/ohos/mirror-cache/satellites/stations.3le",
       "output": "plugins/Satellites/resources/satellites.json",
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Satellites/resources/satellites.json",
+      "bundledQrc": "plugins/Satellites/resources/Satellites.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "satellites.tle.visual",
@@ -28,7 +31,10 @@
       "localPath": "data/ohos/mirror-cache/satellites/visual.3le",
       "output": "plugins/Satellites/resources/satellites.json",
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Satellites/resources/satellites.json",
+      "bundledQrc": "plugins/Satellites/resources/Satellites.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "satellites.tle.active",
@@ -39,7 +45,10 @@
       "localPath": "data/ohos/mirror-cache/satellites/active.3le",
       "output": "plugins/Satellites/resources/satellites.json",
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Satellites/resources/satellites.json",
+      "bundledQrc": "plugins/Satellites/resources/Satellites.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "satellites.tle.satnogs",
@@ -50,7 +59,10 @@
       "localPath": "data/ohos/mirror-cache/satellites/satnogs.json",
       "output": "plugins/Satellites/resources/satellites.json",
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Satellites/resources/satellites.json",
+      "bundledQrc": "plugins/Satellites/resources/Satellites.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.exoplanets",
@@ -60,8 +72,13 @@
       "mirrorPath": "/v1/catalogs/exoplanets.json",
       "localPath": "data/ohos/mirror-cache/catalogs/exoplanets.json",
       "output": "plugins/Exoplanets",
+      "catalogKey": "stars",
+      "minEntries": 100,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Exoplanets/resources/exoplanets.json",
+      "bundledQrc": "plugins/Exoplanets/resources/Exoplanets.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.meteor-showers",
@@ -71,8 +88,13 @@
       "mirrorPath": "/v1/catalogs/meteor-showers.json",
       "localPath": "data/ohos/mirror-cache/catalogs/meteor-showers.json",
       "output": "plugins/MeteorShowers",
+      "catalogKey": "showers",
+      "minEntries": 1,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/MeteorShowers/resources/MeteorShowers.json",
+      "bundledQrc": "plugins/MeteorShowers/resources/MeteorShower.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.novae",
@@ -82,8 +104,13 @@
       "mirrorPath": "/v1/catalogs/novae.json",
       "localPath": "data/ohos/mirror-cache/catalogs/novae.json",
       "output": "plugins/Novae",
+      "catalogKey": "nova",
+      "minEntries": 1,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Novae/resources/novae.json",
+      "bundledQrc": "plugins/Novae/resources/Novae.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.supernovae",
@@ -93,8 +120,13 @@
       "mirrorPath": "/v1/catalogs/supernovae.json",
       "localPath": "data/ohos/mirror-cache/catalogs/supernovae.json",
       "output": "plugins/Supernovae",
+      "catalogKey": "supernova",
+      "minEntries": 1,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Supernovae/resources/supernovae.json",
+      "bundledQrc": "plugins/Supernovae/resources/Supernovae.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.pulsars",
@@ -104,8 +136,13 @@
       "mirrorPath": "/v1/catalogs/pulsars.json",
       "localPath": "data/ohos/mirror-cache/catalogs/pulsars.json",
       "output": "plugins/Pulsars",
+      "catalogKey": "pulsars",
+      "minEntries": 100,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Pulsars/resources/pulsars.json",
+      "bundledQrc": "plugins/Pulsars/resources/Pulsars.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "catalog.quasars",
@@ -115,8 +152,13 @@
       "mirrorPath": "/v1/catalogs/quasars.json",
       "localPath": "data/ohos/mirror-cache/catalogs/quasars.json",
       "output": "plugins/Quasars",
+      "catalogKey": "quasars",
+      "minEntries": 100,
       "outboundFields": [],
-      "runtimeDefault": "bundled"
+      "runtimeDefault": "bundled",
+      "bundledResource": "plugins/Quasars/resources/quasars.json",
+      "bundledQrc": "plugins/Quasars/resources/Quasars.qrc",
+      "updatePolicy": "build-time-only"
     },
     {
       "id": "survey.hips.directory",
@@ -141,6 +183,17 @@
       "runtimeDefault": "disabled"
     },
     {
+      "id": "survey.hips.tiles",
+      "kind": "survey-tiles",
+      "format": "hips-properties-and-tiles",
+      "upstreamUrl": "https://data.stellarium.org/surveys/{survey}/{tilePath}",
+      "mirrorPath": "/v1/surveys/hips/{survey}/{tilePath}",
+      "localPath": "data/ohos/mirror-cache/surveys/hips/tiles",
+      "output": "data/hips",
+      "outboundFields": ["sky-tile-identifier"],
+      "runtimeDefault": "disabled"
+    },
+    {
       "id": "query.simbad",
       "kind": "online-query",
       "format": "simbad-response",
@@ -149,6 +202,72 @@
       "localPath": "data/ohos/mirror-cache/query/simbad",
       "output": "runtime-only",
       "outboundFields": ["user-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.online.exoplanets",
+      "kind": "online-query",
+      "format": "html-or-text",
+      "upstreamUrl": "https://ase.exopla.net/index.php/{object}",
+      "mirrorPath": "/v1/query/exoplanets/{object}",
+      "localPath": "data/ohos/mirror-cache/query/exoplanets",
+      "output": "runtime-only",
+      "outboundFields": ["object-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.online.aavso",
+      "kind": "online-query",
+      "format": "html-or-text",
+      "upstreamUrl": "https://www.aavso.org/vsx/index.php?view=api.object&ident={object}",
+      "mirrorPath": "/v1/query/aavso/{object}",
+      "localPath": "data/ohos/mirror-cache/query/aavso",
+      "output": "runtime-only",
+      "outboundFields": ["object-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.online.gcvs",
+      "kind": "online-query",
+      "format": "html-or-text",
+      "upstreamUrl": "http://www.sai.msu.su/gcvs/cgi-bin/ident.cgi?cat=Hip+&num={object}",
+      "mirrorPath": "/v1/query/gcvs/{object}",
+      "localPath": "data/ohos/mirror-cache/query/gcvs",
+      "output": "runtime-only",
+      "outboundFields": ["object-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.online.wikipedia",
+      "kind": "external-webpage",
+      "format": "html",
+      "upstreamUrl": "https://en.wikipedia.org/wiki/{object}",
+      "mirrorPath": "/v1/query/wikipedia/{object}",
+      "localPath": "data/ohos/mirror-cache/query/wikipedia",
+      "output": "runtime-only",
+      "outboundFields": ["object-query"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "query.plate-solver.astrometry",
+      "kind": "image-upload-and-query",
+      "format": "astrometry-api",
+      "upstreamUrl": "http://nova.astrometry.net/api/",
+      "mirrorPath": "/v1/query/plate-solver",
+      "localPath": "data/ohos/mirror-cache/query/plate-solver",
+      "output": "runtime-only",
+      "outboundFields": ["user-image"],
+      "runtimeDefault": "disabled"
+    },
+    {
+      "id": "core.ip-location",
+      "kind": "location-query",
+      "format": "json",
+      "upstreamUrl": "https://freegeoip.stellarium.org/json/",
+      "mirrorPath": "/v1/location/ip",
+      "localPath": "data/ohos/mirror-cache/location/ip",
+      "output": "runtime-only",
+      "outboundFields": ["public-ip"],
       "runtimeDefault": "disabled"
     },
     {

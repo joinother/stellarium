@@ -102,6 +102,23 @@ for item in "${SOURCES[@]}"; do
   echo "  -> $DST"
 done
 
+# The native Stellarium library is produced by the cross-compiled CMake build.
+# Keep the generated hvigor project from silently packaging an older .so after
+# the C++ source was rebuilt.
+NATIVE_SOURCE="$REPO_ROOT/build/src/libstellarium.so"
+NATIVE_TARGET="$REPO_ROOT/build/libstellarium-harmonyos/entry/libs/arm64-v8a/libstellarium.so"
+if [ -f "$NATIVE_SOURCE" ]; then
+  if [ ! -d "$(dirname "$NATIVE_TARGET")" ]; then
+    echo "ERROR: missing native library destination dir: $(dirname "$NATIVE_TARGET")" >&2
+    exit 1
+  fi
+  cp "$NATIVE_SOURCE" "$NATIVE_TARGET"
+  echo "  $NATIVE_SOURCE"
+  echo "  -> $NATIVE_TARGET"
+else
+  echo "WARNING: missing cross-compiled libstellarium.so at $NATIVE_SOURCE; generated HAP may contain an older native library" >&2
+fi
+
 # Keep every localized system label in the generated project. Resource
 # directories are created here because a newly added locale may not exist in
 # the generated build tree yet.

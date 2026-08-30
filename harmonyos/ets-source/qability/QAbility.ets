@@ -96,12 +96,23 @@ export default class QAbility extends UIAbility {
       commandName === 'startPanInertia' || commandName === 'stopPanInertia' || commandName === 'playScript';
   }
 
+  private isUiCliCommand(commandName: string): boolean {
+    return commandName === 'openUiPanel' || commandName === 'closeUiPanel' || commandName === 'backUiPanel';
+  }
+
   private drainCliRequests(): void {
     if (!this.qtInitialized || this.cliRequests.length === 0) {
       return;
     }
     const request = this.cliRequests[0];
     request.attempts += 1;
+    if (this.isUiCliCommand(request.commandName)) {
+      const response = request.commandName === 'openUiPanel' && request.payload.trim().length === 0
+        ? JSON.stringify({ ok: false, error: 'panel name is required' })
+        : JSON.stringify({ ok: true, accepted: true, panel: request.payload.trim() });
+      this.finishCliRequest(request, response);
+      return;
+    }
     let rawResponse = '';
     try {
       rawResponse = command(request.commandName, request.payload);
@@ -151,6 +162,23 @@ export default class QAbility extends UIAbility {
   }
 
   private publishCliUiEvent(request: StellariumCliRequest, response: string): void {
+    if (this.isUiCliCommand(request.commandName)) {
+      try {
+        const parsed = JSON.parse(response) as Record<string, Object>;
+        if (parsed['ok'] !== true) {
+          return;
+        }
+        AppStorage.setOrCreate('stellariumCliUiEvent', JSON.stringify({
+          requestId: request.requestId,
+          commandName: request.commandName,
+          payload: request.payload,
+          response: parsed,
+        }));
+      } catch (err) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] UI event publish failed: %{public}s', JSON.stringify(err));
+      }
+      return;
+    }
     if (request.commandName !== 'searchObject' && request.commandName !== 'selectAt' &&
       request.commandName !== 'clearSelection' && request.commandName !== 'getSelectedObjectInfo') {
       if (request.commandName !== 'setObjectDetailConnector' && request.commandName !== 'getObjectDetailConnector') {
@@ -385,6 +413,7 @@ export default class QAbility extends UIAbility {
     const measuredTop = Number.isFinite(topPixels) ? Math.max(0, Math.round(topPixels)) : 0;
     this.safeAreaTopPixels = Math.max(this.safeAreaTopPixels, measuredTop);
     const top = this.safeAreaTopPixels;
+    AppStorage.setOrCreate<number>('stellariumScreenSafeTopPixels', top);
     try {
       const result = command('setScreenSafeArea', top.toString());
       hilog.info(LOG_DOMAIN, LOG_TAG, '[safe-area] topPixels=%{public}s native=%{public}s', top.toString(), result);

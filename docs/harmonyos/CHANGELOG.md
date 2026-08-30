@@ -1,4 +1,46 @@
+## 2026-08-31
+
+- **未来预研报告：** 在 `docs/harmonyos/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md` 增加行星地貌数据与 3D 交互链路，明确 `NomenclatureMgr`、搜索/详情、地表标注和独立 `Astro3DSession` 的职责边界，并预留地貌查询、标注控制和 3D 会话 CLI 接口。
+- **预研结论：** 地貌数据继续以 Stellarium 原版数据为权威来源；Celestia 仅作为独立 3D 渲染实验候选，不与星图业务、时间状态或渲染上下文耦合。该变更只更新文档，未修改代码、签名、隐私或联网配置。
+
+- **修复插件面板闪烁：** 导航星、古天文辅助线、相机拼接和时间方程在开关后回读状态时不再隐藏整组设置内容；保留原布局，仅禁用正在提交的控件并显示局部加载指示，错误状态也不会把面板内容移除。
+- **减少状态重排：** 插件状态回调先更新数据、最后结束加载状态，避免旧值和新值之间发生一次额外的结构性重绘；未修改插件业务逻辑、签名、隐私或联网配置。
+
+- **修复图片预览关闭：** 天空文化星座绘图和星体详情图片预览统一使用系统顶部安全区，关闭控件保持独立高层级和 `44vp` 触控区域；补充触摸抬起兜底，避免图片层或全屏阻塞层吞掉关闭事件。
+- **修复预览布局：** 图片改为标题栏以下的剩余空间布局，避免关闭按钮被刘海/挖孔遮挡或被图片区域覆盖；两种预览保持一致的关闭和错误恢复行为。
+- **平板回归：** 在 `192.168.1.30:33805` 实测星体详情图片和天空文化星座绘图均可打开、关闭；关闭后全屏标题从 `uitest dumpLayout` 消失，关闭按钮为可点击 `Button`，bounds=`[2399,144][2504,249]`。截图 `/tmp/stellarium-media-preview.png` 确认按钮位于顶部安全区下方。
+
+- **修复固定目标位置：** 开启固定目标时立即捕获当前选中天体的屏幕锚点，并在关闭时清理旧锚点，避免首帧或旧导航动作覆盖固定状态。
+- **修复手动拖动地平线滚转：** 自定义连续平移先写入新的屏幕上方向再重建视图矩阵；普通区域以本地天顶为水平基准，天顶/天底附近平滑过渡到运输基准，保留跨越极点的自由拖动而不翻转。
+- **修复陀螺仪极点翻转：** 旋转向量路径同时传递设备屏幕上方向，C++ 对输入基做正交化和符号连续处理；旧版仅发送方位/高度的调用仍保留兼容路径。
+- **验证：** `cmake --build build --parallel --target stellarium`、`scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh` 和命令目录检查通过；已连接平板并完成 HAP 覆盖安装、CLI 状态/固定目标/连续平移回归及非空画面截图检查。未修改签名、证书、Profile、隐私或联网配置。
+
+- **完善观测列表：** 观测目标列表改用 `@ohos.data.preferences` 持久化，兼容迁移旧的 `AppStorage` 数据；添加、移除和清空操作统一写入本地存储，应用重启后不会丢失目标。
+- **修复空白加载体验：** 打开观测列表时自动计算今晚可观测目标，推荐区与已保存列表分别显示；补充准备中、筛选进度、无匹配、暮光窗口不可用、计算失败和列表恢复状态，避免长时间等待时没有反馈。
+- **列表交互：** 已保存目标整行可点击定位，移除按钮和刷新按钮使用统一国际化文案；未修改签名、构建配置、隐私或联网配置。
+- **启动竞态与名称：** 长任务桥对启动期的短暂不可用增加有限重试，避免首轮自动计算误报失败；已保存的行星目标优先使用当前推荐结果或官方本地化名称展示，不再只显示英文内部名。
+
 ## 2026-08-30
+
+- **修复手机连线覆盖菜单：** 紧凑布局将星图触摸层、底部面板和 Dock 拆为独立层级；详情连线保持在菜单、Dock、快捷控件和详情卡之下，半透明菜单不再透出连线。UI 裁剪边界统一预留 `12vp` 固定间隔，避免连线光晕越过控件边缘。
+- **验证：** 已同步生成工程并通过 `scripts/check-ohos.sh`，ArkTS 与 HAP 构建成功；未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+- **修复详情连线遮挡 UI：** 详情卡与目标天体的连线改为独立轻量刷新，星图拖动期间保持约 `32ms` 更新；连线遇到侧栏、底部 Dock、底部面板、坐标浮层、极轴镜和校准面板时，在控件边界前截断或隐藏，不再绘制到菜单和滑杆上方。连线层保持 `HitTestMode.None`，不影响控件交互；角度跨越 `±180°` 时保持连续，避免方向突变。
+- **验证：** 已运行 `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh`，HAP 构建通过；最新 `entry-default-signed.hap` 已安装到平板 `192.168.1.30:33805`。CLI 验证 `setObjectDetailConnector/getObjectDetailConnector`、M31 选中和投影坐标正常；设备日志无 `AppFreeze`、崩溃或新增错误。未修改签名、证书、Profile、`build-profile.json5`、隐私或联网配置。
+
+- **修复卫星点选卡顿：** 详情卡只在目标类型已更新后解析媒体，卫星名称中的 `M/NGC/IC` 编号不再误触发深空图像解码；详情首屏请求增加进行中状态，避免与实时信息刷新重复发起完整资料请求。
+- **设备回归：** 平板手动点选 `GLOBALSTAR M066` 时原生 `selectAt` 约 `13ms`，未再出现 `detail-media` 深空图像解码；详情请求保持异步，未出现 `AppFreeze` 或崩溃。未修改签名、证书、Profile、隐私/SN 或联网配置。
+
+- **修复拖动视角回归：** OHOS 触摸和惯性平移不再调用接近天顶/天底会重算方位角的 `panView()` 路径，改为在当前视图方向、上方向和右方向基底上做小步长连续变换，避免无故跳到天顶或天底，同时保留正常拖动、惯性和翻转方向。
+- **修复详情连接线消失：** 详情连接线在星图拖动期间继续读取原生逐帧投影，选择目标后不会因拖动状态暂时跳过刷新；投影短暂无效、目标与卡片重叠或目标越出屏幕时保留最后有效几何状态，避免一滑动就断线或闪烁。
+- **验证：** 已重新编译 `build/src/libstellarium.so`，同步至生成工程并通过 `scripts/check-ohos.sh` 的 ArkTS、离线目录和 HAP 构建检查；保留项目既有 4 条 `setTimeout` 静态提示，未修改签名、证书、Profile 或联网配置。
+
+- **修复星图拖动回归：** 恢复默认“卡在天顶↔天底”输入路径，避免原生 `dragView` 在接近天顶/天底时因经线收敛造成视角突然跳转；详情卡不再因避让选中天体而自动移动，连接线在拖动期间和短暂投影无效/重叠时保留最后有效几何状态，避免一滑动就消失。
+- **验证待执行：** 本轮将重新同步生成工程、构建 HAP 并覆盖安装平板后，用 CLI 回归普通拖动、快速拖动、选中天体详情和连接线；不修改签名配置。
+
+- **修复星图拖动异常跳转：** 触摸事件仅在合理的时间间隔内参与惯性速度采样，过滤重复或异常时间戳；没有有效采样时不再启动惯性，避免松手后视角突然冲向天顶或天底。
+- **限制异常平移：** 原生单次平移和惯性速度按当前投影动态限幅，保留正常拖动和惯性手感，同时阻止单个异常事件跨越过大视场。
+- **验证结果：** 已同步生成工程，C++ `stellarium`、ArkTS/HAP 和 `git diff --check` 均通过；最新签名 HAP 已覆盖安装到平板 `192.168.1.30:33805`。普通拖动、快速拖动和接近天顶/天底的极端惯性回归均未再出现异常跳转，最高约 `+88.9°`、最低约 `-88.9°`；未修改签名、证书、Profile、`build-profile.json5`、隐私或联网配置。
 
 - **天体分类与星表回归完成：** 平板 `192.168.1.30:33805` 覆盖安装最新 HAP；`getStarCount` 区分当前视场可见恒星（`4566`）、已加载星表总量（`2328377`）和去重后的命名索引（`649`），`getStarCountFull` 确认 `stars_0`–`stars_4` 共 5 级且 `catalogReady=true`。
 - **计数语义修正：** `counts.named` 和 `getStarCountFull.named` 改为按稳定天体 ID 去重，避免同一颗恒星的多语言名、别名重复计入；浏览分类仍以分页接口的去重结果为准。
@@ -3449,3 +3491,190 @@
 - **构建结果：** 待本次增量修改后验证。
 - **验证结果：** 已在平板上验证上一版 `getStarCountFull` 返回 `2,328,377` 个已加载星表条目；待重新编译本次增量。
 - **备注：** 保持离线；不触碰签名、隐私/SN 或 `build-profile.json5`。
+## [2026-08-30] Codex - 完善天空文化界面与星座详情资料
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/pages/I18n.ets`、`src/StelMainView.cpp`、`harmonyos/ets-source/pages/StellariumTypes.ets`
+- **修改内容：** 将文化图层、当前文化、名称显示、星图可读性和文化选择拆成清晰的分组卡片；名称样式与分类/地区选择器改为全宽分层布局，保留选中态和展开过渡，避免窄屏挤压与透明叠底；星座详情卡接入当前天空文化的结构化介绍、资料来源和展开/收起状态，并补齐相关界面文案国际化。
+- **本轮细化：** 分类/地区和名称样式选项改为带勾选态的独立触控行，移除重复的“选择/已选”噪声；当前文化元数据改为可换行标签组，搜索、筛选摘要、文化绘图和文化地图文案接入统一国际化键，长语言不再被固定单行布局挤压。
+- **修改原因：** 修复天空文化选择器和说明内容拥挤、层级不清、长文本难阅读的问题；让用户在星图选中星座后能直接查看对应文化资料。
+- **构建结果：** `cmake --build build --parallel --target stellarium`、`scripts/check-ohos.sh` 均通过。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh`、`node scripts/check-ohos-i18n.mjs`、`node scripts/check-ohos-command-catalog.mjs`、`node scripts/audit-ohos-resource-coverage.mjs` 和 `git diff --check` 通过；源 ArkTS 与生成工程保持一致。仅保留工程既有的 ArkTS `setTimeout` 静态提示和 C++ 弃用/未使用变量警告。
+- **备注：** 不修改签名、证书、Provision、构建模式、隐私和联网配置。
+## [2026-08-30] Codex - 细化天空文化排版与星座资料卡
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
+- **修改内容：** 选择器改为不嵌套圆角的实体面板和分隔选项，去除重复的“当前名称/已选”噪声；当前文化元数据改为带字段标题的双列信息卡；文化概述和完整资料改为独立内容卡并增加行距，降低长文案拥挤感。
+- **星座详情：** 星图选中星座后，详情卡继续读取当前天空文化的官方 `description.md`，展示文化名称、结构化段落、来源和展开/收起入口；没有资料时保留明确的无资料状态。
+- **范围约束：** 不修改签名、证书、构建模式、隐私/SN、联网策略或 `build-profile.json5`。
+- **构建结果：** `cmake --build build --parallel --target stellarium`、`scripts/sync-ohos-build-sources.sh` 和 `scripts/check-ohos.sh` 通过；HAP `assembleHap` 成功。
+- **验证结果：** `node scripts/check-ohos-i18n.mjs`、`node scripts/check-ohos-command-catalog.mjs`、`node scripts/audit-ohos-resource-coverage.mjs`、`scripts/smoke-test-ohos-cli.mjs --device 192.168.1.30:33805` 和 `git diff --check` 通过；CLI 回归 `19/19`。
+- **设备：** 使用现有签名配置覆盖安装到平板 `192.168.1.30:33805` 并通过正确的包名/Ability 启动；未修改签名配置。
+## [2026-08-30] Codex - 收紧离线目录更新并核验流星雨内置资源
+
+- **修改文件：** `plugins/Exoplanets/src/Exoplanets.cpp`、`plugins/MeteorShowers/src/MeteorShowersMgr.cpp`、`plugins/Novae/src/Novae.cpp`、`plugins/Supernovae/src/Supernovae.cpp`、`plugins/Pulsars/src/Pulsars.cpp`、`plugins/Quasars/src/Quasars.cpp`、`data/ohos/network-sources.json`、`scripts/check-ohos-offline-catalogs.mjs`、`scripts/check-ohos-network-sources.mjs`、`scripts/check-ohos.sh`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/OFFLINE-MIRROR-ARCHITECTURE.md`、`docs/harmonyos/OFFLINE-CATALOG-UPDATES.md`
+- **修改内容：** HarmonyOS 离线构建不再创建六个目录插件的网络管理器或更新定时器，旧配置和手动更新入口也不能触发请求；新增 QRC/JSON 内置资源审计，登记流星雨等六类可直接随包分发的目录。
+- **修改原因：** 明确区分“目录本身可离线打包”和“构建机可用镜像更新”，避免未备案版本在运行时尝试联网，也避免把源目录文件误认为已经进入 HAP。
+- **构建结果：** `cmake --build build --parallel --target stellarium`、`scripts/sync-ohos-build-sources.sh`、`scripts/sync-ohos-resources.sh` 和 `scripts/check-ohos.sh` 均通过；HAP `assembleHap` 成功。
+- **验证结果：** `node --check scripts/update-ohos-astronomy-data.mjs`、`node scripts/check-ohos-offline-catalogs.mjs`、网络源检查、离线目录检查和 `git diff --check` 通过；使用临时本地缓存完成六类目录的 `--update-catalogs --verify-only` 回归。
+- **备注：** 未修改签名、证书、Provision、`build-profile.json5`、隐私/SN 或 HarmonyOS 网络权限；HiPS/TOAST、OnlineQueries、Plate Solver、Planes、MPC 和 RemoteSync 仍需单独决定是否在未备案包中隐藏或做代码级离线封口。
+## [2026-08-30] Codex - 复核离线打包、流星雨与镜像策略
+
+- **新增文档：** `docs/harmonyos/OFFLINE-FEATURE-MATRIX.md`，按功能列出可随包资源、构建期更新、运行时联网和局域网设备连接边界。
+- **工具改进：** `scripts/update-ohos-astronomy-data.mjs` 增加 `--update-catalogs`，可在构建机校验并原子更新系外行星、流星雨、新星、历史超新星、脉冲星和类星体 JSON；运行时不调用。
+- **结论：** 流星雨目录已经可以本地打包，流星雨显示/搜索/计算不依赖网络；卫星 TLE 只能作为带有效期的离线快照。HiPS/DSS、OnlineQueries、MPC、Planes 和 Plate Solver 不能用静态打包简单替代，仍需单独封口或备案后的合规服务设计。
+- **镜像策略：** 镜像只作为人工触发的构建输入，发布包使用已校验的本地文件、清单、哈希和失败回退；不把位置、SN、设备标识或用户查询词发给镜像。
+- **范围约束：** 未修改签名、证书、Provision、`build-profile.json5`、隐私/SN 或 HarmonyOS 网络权限。
+
+## [2026-08-30] Codex - 补全联网边界与本地化路线复核
+
+- **复核结论：** 流星雨、六类静态目录、卫星 TLE 快照、现有星表分卷、脚本、天空文化、地景、Scenery3d 和本地深空纹理可以随 HAP 分发；流星雨的显示、搜索和计算不依赖网络。
+- **补登记边界：** 增加深星表下载、帮助页检查更新、卫星自定义 TLE 导入和 Vts 本机连接；明确区分公网请求、外部网页、本机连接和局域网同步。
+- **策略调整：** 未备案包关闭所有公网运行时入口；镜像只作为人工触发的构建输入。备案后优先做版本化静态目录和有限天区瓦片镜像，SIMBAD、MPC、Planes、Plate Solver 等继续单独评估，不用静态缓存掩盖实时性、查询外发或图像上传问题。
+- **构建安全：** `--update-catalogs` 改为六类目录全部校验通过后再统一写入，避免中途某个源失败造成目录与清单不同步；`local` 模式缺少审核缓存时明确失败，不回退到当前文件。
+- **文件：** `docs/harmonyos/OFFLINE-FEATURE-MATRIX.md`、`docs/harmonyos/NETWORK-INVENTORY.md`。
+- **范围约束：** 未修改签名、证书、Provision、`build-profile.json5`、隐私/SN 或网络权限配置。
+
+## [2026-08-30] Codex - 修复极轴镜验证包使用旧原生库
+
+- **问题定位：** 平板此前安装的 HAP 中 `entry/libs/arm64-v8a/libstellarium.so` 早于本轮 CMake 产物，导致截图仍显示旧版极轴镜分划；不是极轴镜逻辑没有编译，而是生成工程打包了旧 `.so`。
+- **流程修复：** `scripts/sync-ohos-build-sources.sh` 现在会在同步 ArkTS 源码时，将 `build/src/libstellarium.so` 同步到生成工程的 arm64 原生库目录；缺失时明确警告，避免静默使用旧库。
+- **范围约束：** 未修改签名、证书、Provision、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-30] Codex - 修正极轴镜分划圈方向与尺度
+
+- **截图复核：** 平板旧验证包把北极星实际偏离天极的轨道圈画成内圈，再把固定 `2°` 圈画成主圈，和参考极轴镜的布局相反；外圈刻度方向也与参考图反向。
+- **修复内容：** 主分划圈改为以北极星距天极的实时投影半径绘制；24 小时外圈刻度改为北天极视图的逆时针方向，12 小时辅助刻度保持原方向；外圈数字放到圈外并预留 UI 安全边距，增强红光可见度。
+- **验证接口：** `getPolarScopeData.scopeRadiusPixels` 现在报告实际绘制圈半径，便于 CLI 与截图对照；仍复用同一套原生 Stellarium 星图帧，不创建第二张星图。
+
+## [2026-08-30] Codex - 平板极轴镜刻度与标注复核
+
+- **问题定位：** 平板截图中外圈只显示 0/6/12/18 四个主刻度，无法与参考极轴镜的完整 24 小时刻度对照；北极星文字还会贴近外圈刻度。
+- **修改内容：** 外圈改为显示 0–23 全部小时数字，0 位于顶部，1–12 沿左侧逆时针方向、23–13 沿右侧方向排列；北极星标注向主圈内部错开，减少与 10/11 等内圈刻度重叠。
+- **设备验证：** 通过 `192.168.1.30:33805` 覆盖安装最新 HAP，使用 CLI 启用极轴镜、居中并设置 FOV=4；`getPolarScopeData` 报告北天极屏幕中心约 `(0.50005, 0.49914)`、北极星距天极约 `0.62857°`、绘制半径约 `251.52 px`。
+- **截图：** `/tmp/stellarium-polar/polar-final.jpeg`；截图确认完整外圈刻度、北极星连线和主圈均已显示，未创建第二张星图。
+- **构建检查：** `cmake --build build --parallel --target stellarium`、`scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh` 通过；仅保留既有 4 个 ArkTS 静态警告及 C++ 警告。
+- **范围约束：** 未修改签名、证书、Provision、`build-profile.json5`、隐私/SN 或联网配置。
+## [2026-08-30] Codex - 补齐 Sky Guide 风格卫星详情与离线过境卡
+
+- **修改文件：** `plugins/Satellites/src/Satellite.hpp`、`plugins/Satellites/src/Satellite.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/{MainWindowNativeNode,StellariumTypes,I18n}.ets`、`docs/harmonyos/CLI.md`。
+- **修改内容：** 详情卡增加卫星发射资料字段和本地 TLE 过境预测展示，显示出现/最高点/消失时间、方位、最大高度、星等、可见性、TLE 历元与离线来源；新增 `getSatelliteDetail` 和 `getSatellitePasses` CLI 命令。
+- **修改原因：** 对齐已核验的 Sky Guide 卫星信息组织方式，同时保持 Stellarium 原生轨道计算和完全离线边界。
+- **构建结果：** C++ `stellarium` 目标已成功构建；ArkTS/HAP 同步与构建待完成。
+- **验证结果：** 已确认当前内置 TLE/COSPAR 数据不足以提供大多数卫星的精确发射日，界面不会用 TLE 历元冒充发射日期；待完成 ArkTS 检查与 HAP 构建。
+- **备注：** 未修改签名、证书、Profile、`build-profile.json5`、隐私或联网配置；精确发射日期及任务资料仅在未来离线富化目录提供时显示。
+
+## [2026-08-30] Codex - 完成卫星详情 ArkTS/HAP 验证
+
+- **修复内容：** 将卫星过境详情 Builder 中的局部变量移到普通类方法，修复 ArkTS “Only UI component syntax can be written here” 编译错误。
+- **同步与检查：** `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh` 全部通过；离线目录审计通过 10 项内置资源，ArkTS/HAP 检查保留 4 个既有 `setTimeout` 静态提示。
+- **构建结果：** `hvigorw assembleHap --no-daemon` 成功，产物为 `build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap` 和对应 unsigned HAP。
+- **范围约束：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置；未新增运行时联网请求。
+
+## [2026-08-30] Codex - 统一天文计算导航与选星交互
+
+- **导航结构：** 天文计算由原来的 10 个平铺标签改为“观测”“位置与数据”“事件与历法”两级导航；位置、星历、行星数据归入位置与数据，天象、日月食、年历归入事件与历法，今晚、升降、图表、月相归入观测。
+- **交互状态：** 一级分组与当前子页同步，切换后自动进入该组首个功能；当前天文计算页和分组会持久化，语言切换和重新进入面板不会回到错误的标签。
+- **选星引导：** 升降、需要目标的星历和图表在未选天体时显示统一提示，并按当前计算类型直达对应搜索选择器；选择完成后沿原有返回路径回到计算页。
+- **视觉布局：** 一级导航使用高对比选中态，二级导航使用底部强调线和过渡动画；保留现有计算结果、导出 CSV 和原生离线计算接口。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh` 和 `git diff --check` 通过；ArkTS、离线目录资源审计和 HAP 编译均通过，仅保留 4 个既有 `setTimeout` 静态提示。
+- **范围约束：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-30] Codex - 补齐统一设置页入口与投影配置
+
+- **设置入口：** 将已实现但此前无法从统一设置页进入的“工具”和“脚本”加入设置标签栏；插件、视角与导航继续使用同一设置容器，避免用户在多个重复入口之间寻找。
+- **附加设置：** 将投影选择从废弃的快捷设置面板迁入“附加”，显示当前投影、可选投影和投影说明，点击后立即调用原生 `setProjectionType`。
+- **标题同步：** 设置子页标题随当前标签同步显示设备与隐私、附加、时间、工具、脚本、插件和视角与导航。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh` 和 `git diff --check` 通过；ArkTS、离线目录资源审计和 HAP 编译均通过，仅保留 4 个既有 `setTimeout` 静态提示。
+- **范围约束：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+## [2026-08-30] Codex - 修复脚本交互、星云筛选与插件页面闪动
+
+- **脚本页面：** 移除主脚本页和设置页脚本列表的嵌套纵向滚动容器，统一由页面外层滚动承载；脚本条目和播放控制栏增加点击命中层级，修复 Pad 端播放、暂停/继续和速率按钮无法点击的问题。
+- **字幕安全区：** 原生 `LabelMgr` 在脚本控制栏和挖孔安全区同时存在时，统一把字幕限制在控制栏下方，并继续限制左右和上下边界，避免字幕被截断。
+- **插件页面：** 插件功能加载状态不再使用 `@State`，探测插件时不会触发整个 ArkUI 根节点重建；更多功能子页面和返回标题栏增加明确的点击阻断层级，减少页面闪动和返回无响应。
+- **搜索分类：** 将“星云”筛选从不存在的 `NebulaMgr:200` 修正为原版实际的 `NebulaMgr:10`（Nebulae），避免星云目录显示为空。
+- **构建验证：** C++ `stellarium`、`scripts/sync-ohos-build-sources.sh` 和 `scripts/check-ohos.sh` 通过；设备 CLI 因 `192.168.1.30:33805` 当前未返回应用响应，尚未完成设备侧星座数量和星云目录回归。
+- **范围约束：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网策略。
+# [2026-08-30] Codex - 修复极轴镜安全区与翻转错位
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 极轴镜原生叠加层改为直接使用当前 Stellarium 投影的水平/垂直翻转状态；北极星连线和标记直接使用同一投影坐标；北极星不在视口时不再使用视口外坐标计算分划半径；系统挖孔安全区同时约束极轴镜半径和 ArkUI 关闭按钮位置。
+- **修改原因：** 放大或点击垂直翻转后，原实现对已翻转的投影坐标再次手动翻转，导致连线、标记和分划不同步；极轴镜标题栏从屏幕顶端绘制，关闭按钮可能被挖孔覆盖。
+- **构建结果：** C++ `stellarium` 目标通过；`scripts/sync-ohos-build-sources.sh` 和 `scripts/check-ohos.sh` 通过，HAP 编译成功。
+- **验证结果：** 国际化、命令目录、资源覆盖和 `git diff --check` 通过；最新签名 HAP 已覆盖安装到平板 `192.168.1.30:33805`。CLI 验证 `getPolarScopeData`、`setPolarScopeOverlay` 和垂直翻转路径通过，截图确认原生极轴镜叠加层可见且北极星连线跟随投影。
+- **备注：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网策略。
+
+## [2026-08-30] Codex - 修复面板入口点击与统一转场
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 宽屏 Pad 面板外壳增加独立命中层级，避免全屏星图触摸层覆盖天文计算、卫星、流星雨、脚本和更多功能子页按钮；主 Dock 与所有面板路由统一增加淡入、位移和弹性转场，面板首次打开和子页切换都使用同一套动画状态。
+- **修改原因：** 布局树中按钮虽为可点击状态，但实际触摸被 Pad 星图层接走；更多功能子页只重绘没有路由转场，造成“点了没反应”和无动画的体验。
+- **构建结果：** 待本轮同步、ArkTS 检查和 HAP 构建验证。
+- **验证结果：** 已在设备布局树复现原问题，待修复包安装后回归更多功能、天文计算、卫星、流星雨和脚本入口。
+- **备注：** 不修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-31] Codex - 修复搜索/时间/位置面板叠层与子菜单交互
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 开始处理面板内容容器错误；将时间、位置等包含多个顶层控件的面板从叠放容器改为纵向内容容器，并统一稳定的路由动画承载层。
+- **修改原因：** 设备截图确认顶层 Row 被 `Stack` 叠放，造成文字、按钮和选择器重叠，进一步影响滚动与点击命中。
+- **构建结果：** 待修复后验证。
+- **验证结果：** 已在平板复现时间面板叠层现象；更多功能子菜单的第二项命中仍待修复包回归。
+- **备注：** 不修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-31] Codex - 统一面板转场并修复脚本滚动与控制栏点击
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 宽屏统一面板绑定独立的 `widePanelScroller`，明确使用纵向滚动并设置稳定面板高度；面板路由内容增加插入/移除转场；脚本播放控制栏的按钮行和外壳改用默认命中模式，避免父容器吞掉调速、回放暂停和停止按钮事件。
+- **修改原因：** Pad 端脚本列表无法稳定上下滚动，脚本控制栏部分控件点击无响应；子菜单切换只有状态变化，缺少可感知的淡入、位移和弹性过渡。
+- **构建结果：** 待同步和构建验证。
+- **验证结果：** 待设备 CLI 回归。
+- **备注：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置；普通 `.ssc` 脚本仍不伪造暂停能力，暂停/继续仅对本地录制回放提供真实控制。
+
+## [2026-08-31] Codex - 分离位置地区列的滚动控制器
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`
+- **修改内容：** 为大洲、国家、地区和城市四个地区选择列分别创建 `Scroller`，不再复用宽屏主面板滚动控制器。
+- **修改原因：** 多个滚动组件共用一个控制器会造成滚动位置互相影响，尤其在位置面板和主面板切换时容易出现滚动异常。
+- **构建结果：** 待同步和构建验证。
+- **验证结果：** 待设备回归。
+- **备注：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-31] Codex - 完成面板与脚本修复验证
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：** 完成生成工程同步，保留统一面板转场、脚本控制栏命中修复和位置地区列独立滚动控制器。
+- **构建结果：** `scripts/check-ohos.sh` 通过，HAP 编译通过（4 个既有 `setTimeout` 静态提示）。
+- **验证结果：** 最新签名 HAP 已覆盖安装到平板 `192.168.1.30:33805`；CLI 打开脚本面板成功，布局树显示 `Scroll` 为 `scrollable=true`、bounds=`[148,371][907,1519]`；此前已用 `uitest` 验证播放栏加速按钮可将 `1x` 改为 `2x`，停止按钮可使 `getScriptStatus.running=false`。
+- **备注：** 已执行 `power-shell setmode 602` 保持测试设备常亮；未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+## [2026-08-31] Codex - 手机紧凑布局与官方 MCP 开发流程
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/HANDOFF.md`、`docs/harmonyos/DEVELOPMENT-MCP-WORKFLOW.md`。
+- **响应式布局：** 手机紧凑面板容器改为底部居中对齐；手机 Dock 标签字号由 10 调整为 12，图标由 22 调整为 23，单项触控高度调整为 56；折叠悬停布局保留较小档位。紧凑面板两侧内边距独立适配，减少长文案贴边和内容拥挤。
+- **统一逻辑：** 继续复用同一组 Dock、面板状态和命令桥，尺寸断点只影响排列与视觉尺寸，不恢复旧 iPad 侧栏，也不复制手机业务逻辑。
+- **官方依据：** 通过 `harmonyos_developer_knowledge` MCP 核对窗口断点、`GridRow`、`animateTo`、`transition`、API 版本约束及 Intents/Agent Framework Kit 边界；当前 API 24 不引入 API 26 的 `ContainerReader` 或未经验证的 AI Kit。
+- **流程沉淀：** 新增 `DEVELOPMENT-MCP-WORKFLOW.md`，记录 MCP 配置、查询方法、CLI 优先契约、`hdc/aa/uitest` 验证步骤、离线边界和交接要求。
+- **验证结果：** `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh`、`git diff --check` 和源文件/生成工程一致性检查通过；检查脚本仅保留项目原有 4 个 `setTimeout` 静态提示。最新 HAP 已安装到平板 `192.168.1.30:33805`，包版本为 `1.0.9 (1000049)`；CLI 的 `openUiPanel search/more`、`backUiPanel`、`closeUiPanel` 和 `getAppState` 回归通过。未修改签名、证书、Profile、`build-profile.json5`、隐私或联网配置。
+
+## [2026-08-31] Codex - 修复位置城市搜索卡顿
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
+- **修改内容：** 位置搜索扫描改为 5ms 时间片并以 16ms 间隔让出 UI 事件循环；结果列表最多每 120ms 刷新一次，扫描结束时强制刷新且只提交一次；缓存中文行政区翻译；搜索按钮和回车会取消旧去抖任务，避免重复扫描。
+- **修改原因：** 原实现对每个命中地点都刷新响应式列表，并连续使用 `0ms` 定时器；中文查询还会为每条地点重复创建省份映射，导致位置搜索期间页面卡顿或无响应。
+- **构建结果：** `scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh`、命令目录检查和 `git diff --check` 通过；HAP 编译通过，仅保留既有 4 个 `setTimeout` 静态提示。
+- **验证结果：** 最新签名 HAP 已覆盖安装到平板 `192.168.1.30:33805`；`Beijing`、`Shanghai`、`Shenzhen` 查询均显示候选，连续快速输入只保留最后一次查询；搜索期间 `getAppState` 约 `0.62–0.71s` 返回，设备日志未见应用崩溃或实际 `AppFreeze`。
+- **备注：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或运行时联网配置。
+
+## [2026-08-31] Codex - 详情页实时坐标与稳定排版
+
+- **实时观测：** 详情页以独立的轻量刷新通道每 180ms 更新时角、平恒星时、视恒星时、视/几何地平坐标及其他坐标参考；完整资料请求不再阻塞坐标刷新，星图拖动期间暂停详情轮询以保持手势流畅。
+- **坐标覆盖：** 原生详情桥接补齐当日/J2000 赤道、视/几何地平、当日/J2000 黄道、银河、超银河和视差角字段；详情坐标页按统一行组件显示，避免同一坐标在静态资料和实时资料中重复出现。
+- **稳定排版：** 坐标行和结构化资料行使用固定高度、固定标签列和单一滚动区，避免字段长度变化触发瀑布流式上下错位；长值使用省略处理，不改变相邻行位置。
+- **验证结果：** CLI 连续读取天狼星详情时，高度、方位、时角和平恒星时持续变化；平板布局树确认坐标行边界不重叠，详情页滚动区可用；两次页面布局抓取间隔约 850ms，ArkUI 中的实时高度/方位和平恒星时文本均发生变化。`verify-ohos-object-details.mjs`、`check-ohos-i18n.mjs` 和 `check-ohos-command-catalog.mjs` 通过。
+- **范围约束：** 未修改签名、证书、Profile、`build-profile.json5`、隐私/SN 或联网配置。
+
+## [2026-08-31] Codex - 拆分卫星点选与完整详情计算
+
+- **点选首屏：** 卫星点选沿用轻量 `selectedObjectJson(core, false, false)` 响应，先显示名称、类型和实时观测基础值；不在点选帧中序列化长 TLE 或完整结构化资料。
+- **请求隔离：** 完整资料在选中稳定后延迟单次请求；卫星过境预测通过独立的 `getSatellitePasses` 按需加载，不与详情坐标刷新共用请求链，也不会在未完成过境请求时启动高频卫星详情轮询。
+- **设备验证：** 平板选中 ISS（NORAD `25544`）后，等待约 1.2 秒期间卫星 `getInfoMap` 日志计数没有继续增长；本地 TLE 12 小时过境计算返回正常，核心报告耗时约 `69ms`。点选、轻量详情、完整详情和过境查询均返回成功。
+- **范围约束：** 不修改卫星数据联网策略、签名、证书、Profile、`build-profile.json5`、隐私/SN 或权限配置。

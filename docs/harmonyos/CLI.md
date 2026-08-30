@@ -111,6 +111,18 @@ node scripts/stellarium-cli.mjs --command getSatellites --payload 'stations|ISS|
 node scripts/stellarium-cli.mjs --command getSatellites --payload '||40' --json
 ```
 
+选中卫星的详情和过境预测使用同一套本地卫星数据。`getSatelliteDetail` 返回卫星身份、发射资料、当前轨道参数和未来过境；`getSatellitePasses` 只计算超过指定地平高度的过境，不下载 TLE：
+
+```bash
+node scripts/stellarium-cli.mjs --command getSatelliteDetail --payload '25544' --json
+node scripts/stellarium-cli.mjs --command getSatellitePasses \
+  --payload-json '{"id":"25544","hours":24,"limit":5,"minElevation":10,"visibleOnly":true}' --json
+```
+
+两条命令都支持 `id`、`hours`（1–168 小时）、`limit`（1–32）和 `minElevation`（−5–89°）。`getSatelliteDetail` 默认计算 48 小时并返回最多 8 条过境，另含 `nextPass` 和 `nextVisiblePass`；`getSatellitePasses` 默认计算 24 小时并返回 `satellitePasses`。每条过境包含出现、最高点、消失时间（本地时间与 UTC）、三处方位角、最大高度、最大星等、可见性、TLE 历元及 `offline/source` 字段。
+
+发射日期严格区分精度：当前内置 TLE/COSPAR 数据通常只能提供发射年份，详情会显示年份，不会把 TLE 历元或目录更新时间冒充完整发射日期。精确日期、运营方、运载火箭、任务和载荷字段只有在离线富化目录提供时才出现。
+
 返回内容含内置目录的更新时间、TLE 过期数量、当前观测位置是否为地球、模拟日期是否在目录有效范围及精确 NORAD 编号。应用界面选中卫星也通过 `object|Satellite|NORAD编号` 精确定位，不按名称猜测。
 
 ## 批量与结构化调用
@@ -144,6 +156,17 @@ node scripts/stellarium-cli.mjs --interactive
 {"command":"getSelectedObjectInfo"}
 exit
 ```
+
+ArkUI 菜单也使用同一个本地 Want 通道，可直接打开、返回或关闭，无需模拟点击 Dock：
+
+```bash
+node scripts/stellarium-cli.mjs --command openUiPanel --payload time
+node scripts/stellarium-cli.mjs --command openUiPanel --payload dataHub
+node scripts/stellarium-cli.mjs --command backUiPanel
+node scripts/stellarium-cli.mjs --command closeUiPanel
+```
+
+`openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。
 
 ## 普通用户入口
 

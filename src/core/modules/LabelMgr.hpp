@@ -46,6 +46,7 @@ public:
 
 #if defined(__OHOS__)
 	static void setOhosScreenSafeAreaTop(int pixels);
+	static void setOhosScriptUiVisible(bool visible);
 #endif
  
 	///////////////////////////////////////////////////////////////////////////

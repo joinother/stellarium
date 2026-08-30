@@ -100,15 +100,19 @@ void MeteorShowersMgr::init()
 		restoreDefaultCatalog(m_catalogPath);
 	}
 
-	// Set up download manager and the update schedule
+	// Set up download manager and the update schedule.
+	m_updateState = CompleteNoUpdates;
+#ifndef STELLARIUM_OHOS_OFFLINE
 	//m_networkManager = StelApp::getInstance().getNetworkAccessManager();
 	m_networkManager = new QNetworkAccessManager(this);
-	m_updateState = CompleteNoUpdates;
 	m_updateTimer = new QTimer(this);
 	m_updateTimer->setSingleShot(false);   // recurring check for update
 	m_updateTimer->setInterval(300000);    // every 5 min, check if it's time to update
 	connect(m_updateTimer, SIGNAL(timeout()), this, SLOT(checkForUpdates()));
 	m_updateTimer->start();
+#else
+	qInfo() << "[MeteorShowersMgr] HarmonyOS offline build: online catalog updates are disabled.";
+#endif
 
 	// always check if we are on Earth
 	StelCore* core = StelApp::getInstance().getCore();
@@ -320,6 +324,9 @@ void MeteorShowersMgr::repaint()
 
 void MeteorShowersMgr::checkForUpdates()
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	return;
+#else
 #if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
 	if (m_enableAutoUpdates && m_lastUpdate.addSecs(static_cast<qint64>(m_updateFrequencyHours) * 3600) <= QDateTime::currentDateTime())
 #else
@@ -328,6 +335,7 @@ void MeteorShowersMgr::checkForUpdates()
 	{
 		updateCatalog();
 	}
+#endif
 }
 
 void MeteorShowersMgr::actionEnablePlugin(const bool &b)
@@ -353,6 +361,13 @@ void MeteorShowersMgr::deleteDownloadProgressBar()
 
 void MeteorShowersMgr::startDownload(const QString &urlString)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	Q_UNUSED(urlString)
+	qWarning() << "[MeteorShowersMgr] Online meteor shower catalog updates are unavailable in the HarmonyOS offline build.";
+	m_updateState = MeteorShowersMgr::OtherError;
+	emit updateStateChanged(m_updateState);
+	return;
+#else
 	QUrl url(urlString);
 	if (!url.isValid() || url.isRelative() || !url.scheme().startsWith("http", Qt::CaseInsensitive))
 	{
@@ -376,6 +391,7 @@ void MeteorShowersMgr::startDownload(const QString &urlString)
 	connect(m_downloadReply, SIGNAL(downloadProgress(qint64,qint64)), this, SLOT(updateDownloadProgress(qint64,qint64)));
 	m_updateState = MeteorShowersMgr::Updating;
 	emit updateStateChanged(m_updateState);
+#endif
 }
 
 void MeteorShowersMgr::updateDownloadProgress(qint64 bytesReceived, qint64 bytesTotal)
@@ -455,6 +471,12 @@ void MeteorShowersMgr::downloadComplete(QNetworkReply *reply)
 
 void MeteorShowersMgr::updateCatalog()
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	qWarning() << "[MeteorShowersMgr] Ignoring online catalog update request in the HarmonyOS offline build.";
+	m_updateState = MeteorShowersMgr::OtherError;
+	emit updateStateChanged(m_updateState);
+	return;
+#else
 	if (m_updateState==MeteorShowersMgr::Updating)
 	{
 		qWarning() << "[MeteorShowersMgr] already updating...  will not start again current update is complete.";
@@ -463,6 +485,7 @@ void MeteorShowersMgr::updateCatalog()
 
 	qDebug() << "[MeteorShowersMgr] Updating meteor showers catalog...";
 	startDownload(m_url);
+#endif
 }
 
 void MeteorShowersMgr::setEnablePlugin(const bool& b)
@@ -610,8 +633,15 @@ void MeteorShowersMgr::setUpdateFrequencyHours(const int& hours)
 
 void MeteorShowersMgr::setEnableAutoUpdates(const bool& b)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	Q_UNUSED(b)
+	m_enableAutoUpdates = false;
+	m_conf->setValue(MS_CONFIG_PREFIX + "/automatic_updates_enabled", false);
+	return;
+#else
 	m_enableAutoUpdates = b;
 	m_conf->setValue(MS_CONFIG_PREFIX + "/automatic_updates_enabled", b);
+#endif
 }
 
 void MeteorShowersMgr::setUrl(const QString& url)

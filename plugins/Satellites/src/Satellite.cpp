@@ -98,6 +98,7 @@ Satellite::Satellite(const QString& identifier, const QVariantMap& map)
 	, userDefined(false)
 	, newlyAdded(false)
 	, orbitValid(false)
+	, launchYear(0)
 	, tleEpochJD(0.)
 	, jdLaunchYearJan1(0)
 	, stdMag(99.)
@@ -136,6 +137,11 @@ Satellite::Satellite(const QString& identifier, const QVariantMap& map)
 	// If there are no such keys, these will be initialized with the default
 	// values given them above.
 	description = map.value("description", description).toString().trimmed();
+	launchDate = map.value("launchDate", map.value("launch-date")).toString().trimmed();
+	launchOperator = map.value("operator", map.value("launchOperator")).toString().trimmed();
+	launchVehicle = map.value("launchVehicle", map.value("launch-vehicle")).toString().trimmed();
+	mission = map.value("mission").toString().trimmed();
+	payloadType = map.value("payloadType", map.value("payload-type")).toString().trimmed();
 	displayed = map.value("visible", displayed).toBool();
 	orbitDisplayed = map.value("orbitVisible", orbitDisplayed).toBool();
 	userDefined = map.value("userDefined", userDefined).toBool();
@@ -260,6 +266,16 @@ QVariantMap Satellite::getMap(void)
 
 	if (!description.isEmpty())
 		map["description"] = description;
+	if (!launchDate.isEmpty())
+		map["launchDate"] = launchDate;
+	if (!launchOperator.isEmpty())
+		map["operator"] = launchOperator;
+	if (!launchVehicle.isEmpty())
+		map["launchVehicle"] = launchVehicle;
+	if (!mission.isEmpty())
+		map["mission"] = mission;
+	if (!payloadType.isEmpty())
+		map["payloadType"] = payloadType;
 
 	map["visible"] = displayed;
 	map["orbitVisible"] = orbitDisplayed;
@@ -553,6 +569,23 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 
 	if (!internationalDesignator.isEmpty())
 		map.insert("international-designator", internationalDesignator);
+	if (!launchDate.isEmpty())
+		map.insert("launch-date", launchDate);
+	if (launchYear > 0)
+	{
+		map.insert("launch-year", launchYear);
+		if (launchDate.isEmpty())
+			map.insert("launch-date", QString::number(launchYear));
+	}
+	map.insert("launch-date-precision", launchDate.isEmpty() ? QStringLiteral("year") : QStringLiteral("day"));
+	if (!launchOperator.isEmpty())
+		map.insert("launch-operator", launchOperator);
+	if (!launchVehicle.isEmpty())
+		map.insert("launch-vehicle", launchVehicle);
+	if (!mission.isEmpty())
+		map.insert("mission", mission);
+	if (!payloadType.isEmpty())
+		map.insert("payload-type", payloadType);
 
 	if (stdMag>98.) // replace whatever has been computed
 	{
@@ -588,6 +621,186 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 	map.insert("visibility", visibilityDescription.value(visibility, ""));
 
 	return map;
+}
+
+QVariantList Satellite::getPassPredictions(StelCore* core, double hours, int limit, double minimumElevation) const
+{
+	QVariantList passes;
+	if (!core || !pSatWrapper || !initialized || !orbitValid)
+		return passes;
+
+	const double originalJD = core->getJD();
+	const double searchHours = qBound(1.0, hours, 24.0 * 7.0);
+	const int maximumPasses = qBound(1, limit, 32);
+	const double elevationLimit = qBound(-5.0, minimumElevation, 89.0);
+	const double sampleStep = qMax(30.0, searchHours * 3600.0 / 720.0) / 86400.0;
+	const double stopJD = originalJD + searchHours / 24.0;
+	Satellite* satellite = const_cast<Satellite*>(this);
+	const bool originalOrbitLinesFlag = satellite->orbitLinesFlag;
+	const bool originalOrbitDisplayed = satellite->orbitDisplayed;
+	satellite->orbitLinesFlag = false;
+	satellite->orbitDisplayed = false;
+	const double sunUpdateStep = 300.0 / 86400.0;
+	double lastSunUpdateJD = originalJD - sunUpdateStep;
+
+	struct PassSample
+	{
+		double jd = 0.0;
+		double altitude = -90.0;
+		double azimuth = 0.0;
+		double magnitude = 99.0;
+		double range = 0.0;
+		gSatWrapper::Visibility visibility = gSatWrapper::UNKNOWN;
+		double sunAltitude = -90.0;
+	};
+
+	auto sampleAt = [&](double jd) -> PassSample {
+		core->setJD(jd);
+		if (std::abs(jd - lastSunUpdateJD) >= sunUpdateStep)
+		{
+			core->update(0);
+			lastSunUpdateJD = jd;
+		}
+		satellite->update(core, jd);
+		PassSample sample;
+		sample.jd = jd;
+		StelUtils::rectToSphe(&sample.azimuth, &sample.altitude, satellite->elAzPosition);
+		sample.azimuth *= M_180_PI;
+		sample.altitude *= M_180_PI;
+		if (sample.azimuth < 0.0)
+			sample.azimuth += 360.0;
+		sample.magnitude = satellite->getVMagnitude(core);
+		sample.range = satellite->range;
+		sample.visibility = satellite->visibility;
+		Vec3d sunAltAz = satellite->sun->getAltAzPosGeometric(core);
+		double unusedSunAzimuth = 0.0;
+		StelUtils::rectToSphe(&unusedSunAzimuth, &sample.sunAltitude, sunAltAz);
+		sample.sunAltitude *= M_180_PI;
+		return sample;
+	};
+
+	auto refineBoundary = [&](double low, double high, bool entering) -> double {
+		for (int iteration = 0; iteration < 22; ++iteration)
+		{
+			const double middle = (low + high) * 0.5;
+			const bool above = sampleAt(middle).altitude >= elevationLimit;
+			if (entering)
+			{
+				if (above) high = middle;
+				else low = middle;
+			}
+			else
+			{
+				if (above) low = middle;
+				else high = middle;
+			}
+		}
+		return entering ? high : low;
+	};
+
+	auto utcString = [](double jd) {
+		return StelUtils::julianDayToISO8601String(jd);
+	};
+	auto localString = [&](double jd) {
+		return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+	};
+	auto visibilityReason = [](gSatWrapper::Visibility visibility) {
+		switch (visibility)
+		{
+		case gSatWrapper::VISIBLE: return QStringLiteral("sunlit_and_observer_dark");
+		case gSatWrapper::PENUMBRAL: return QStringLiteral("penumbra");
+		case gSatWrapper::RADAR_SUN: return QStringLiteral("observer_in_daylight");
+		case gSatWrapper::RADAR_NIGHT: return QStringLiteral("satellite_in_earth_shadow");
+		case gSatWrapper::ANNULAR: return QStringLiteral("satellite_eclipsed");
+		case gSatWrapper::BELOW_HORIZON: return QStringLiteral("below_horizon");
+		default: return QStringLiteral("unknown");
+		}
+	};
+
+	PassSample previous = sampleAt(originalJD);
+	bool inPass = previous.altitude >= elevationLimit;
+	double passStartJD = inPass ? originalJD : 0.0;
+	PassSample best = previous;
+	bool visibleSeen = previous.visibility == gSatWrapper::VISIBLE && previous.altitude >= elevationLimit;
+	QString bestVisibilityReason = visibilityReason(previous.visibility);
+	int completedPasses = 0;
+
+	auto appendPass = [&](double startJD, double endJD, const PassSample& peak, bool ongoing) {
+		if (endJD <= startJD)
+			return;
+		const PassSample start = sampleAt(startJD);
+		const PassSample end = sampleAt(endJD);
+		QVariantMap pass;
+		pass.insert("start", localString(startJD));
+		pass.insert("peak", localString(peak.jd));
+		pass.insert("end", localString(endJD));
+		pass.insert("startUtc", utcString(startJD));
+		pass.insert("peakUtc", utcString(peak.jd));
+		pass.insert("endUtc", utcString(endJD));
+		pass.insert("appearance", localString(startJD));
+		pass.insert("disappearance", localString(endJD));
+		pass.insert("startAzimuth", start.azimuth);
+		pass.insert("peakAzimuth", peak.azimuth);
+		pass.insert("endAzimuth", end.azimuth);
+		pass.insert("maxAltitude", peak.altitude);
+		pass.insert("maxMagnitude", peak.magnitude);
+		pass.insert("peakRangeKm", peak.range);
+		pass.insert("durationSeconds", (endJD - startJD) * 86400.0);
+		pass.insert("elevationLimit", elevationLimit);
+		pass.insert("visible", visibleSeen);
+		pass.insert("peakVisible", peak.visibility == gSatWrapper::VISIBLE);
+		pass.insert("visibilityReason", visibleSeen ? QStringLiteral("sunlit_and_observer_dark") : bestVisibilityReason);
+		pass.insert("peakSunAltitude", peak.sunAltitude);
+		pass.insert("ongoing", ongoing);
+		pass.insert("offline", true);
+		pass.insert("source", QStringLiteral("local TLE propagation"));
+		pass.insert("tleEpoch", tleEpoch);
+		passes.append(pass);
+	};
+
+	for (double jd = originalJD + sampleStep; jd <= stopJD && completedPasses < maximumPasses; jd += sampleStep)
+	{
+		const PassSample current = sampleAt(qMin(jd, stopJD));
+		const bool previousAbove = previous.altitude >= elevationLimit;
+		const bool currentAbove = current.altitude >= elevationLimit;
+		if (!inPass && !previousAbove && currentAbove)
+		{
+			passStartJD = refineBoundary(previous.jd, current.jd, true);
+			inPass = true;
+			best = current;
+			visibleSeen = current.visibility == gSatWrapper::VISIBLE;
+			bestVisibilityReason = visibilityReason(current.visibility);
+		}
+		if (inPass)
+		{
+			if (current.altitude > best.altitude)
+				best = current;
+			if (current.visibility == gSatWrapper::VISIBLE && current.altitude >= elevationLimit)
+				visibleSeen = true;
+			if (current.visibility != gSatWrapper::VISIBLE && bestVisibilityReason == QStringLiteral("unknown"))
+				bestVisibilityReason = visibilityReason(current.visibility);
+		}
+		if (inPass && previousAbove && !currentAbove)
+		{
+			const double passEndJD = refineBoundary(previous.jd, current.jd, false);
+			appendPass(passStartJD, passEndJD, best, false);
+			++completedPasses;
+			inPass = false;
+			passStartJD = 0.0;
+			visibleSeen = false;
+			bestVisibilityReason = QStringLiteral("unknown");
+		}
+		previous = current;
+	}
+	if (inPass && completedPasses < maximumPasses)
+		appendPass(passStartJD, stopJD, best, true);
+
+	core->setJD(originalJD);
+	core->update(0);
+	satellite->update(core, originalJD);
+	satellite->orbitLinesFlag = originalOrbitLinesFlag;
+	satellite->orbitDisplayed = originalOrbitDisplayed;
+	return passes;
 }
 
 Vec3d Satellite::getJ2000EquatorialPos(const StelCore* core) const
@@ -1089,9 +1302,13 @@ void Satellite::parseInternationalDesignator(const QString& tle1)
 		else
 			year += 1900;
 		internationalDesignator = QString::number(year) + "-" + rawString.mid(2);
+		launchYear = year;
 	}
 	else
+	{
 		year = 1957;
+		launchYear = 0;
+	}
 	
 	StelUtils::getJDFromDate(&jdLaunchYearJan1, year, 1, 1, 0, 0, 0);	
 }

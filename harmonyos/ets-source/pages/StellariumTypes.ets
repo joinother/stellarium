@@ -308,6 +308,33 @@ export interface ObjectDetailModel {
   source?: string
 }
 
+export interface SatellitePass {
+  start?: string
+  appearance?: string
+  peak?: string
+  end?: string
+  disappearance?: string
+  startUtc?: string
+  peakUtc?: string
+  endUtc?: string
+  startAzimuth?: number
+  peakAzimuth?: number
+  endAzimuth?: number
+  maxAltitude?: number
+  maxMagnitude?: number
+  peakRangeKm?: number
+  durationSeconds?: number
+  elevationLimit?: number
+  visible?: boolean
+  peakVisible?: boolean
+  visibilityReason?: string
+  peakSunAltitude?: number
+  ongoing?: boolean
+  offline?: boolean
+  source?: string
+  tleEpoch?: string
+}
+
 
 export interface StellariumBridgeResponse {
   ok?: boolean
@@ -329,6 +356,12 @@ export interface StellariumBridgeResponse {
   detailMediaKind?: string
   detailMediaLabel?: string
   detailModel?: ObjectDetailModel
+  constellationCultureId?: string
+  constellationCultureName?: string
+  constellationCultureEnglishName?: string
+  constellationCultureDescription?: string
+  constellationCultureDescriptionBlocks?: SkyCultureDescriptionBlock[]
+  constellationCultureDescriptionSource?: string
   activeTextureStatus?: string
   activeTextureReadyCount?: number
   activeTextureLoadingCount?: number
@@ -365,6 +398,15 @@ export interface StellariumBridgeResponse {
   latitude?: number
   longitude?: number
   altitude?: number
+  equatorialOfDate?: string
+  equatorialJ2000?: string
+  apparentAltAz?: string
+  geometricAltAz?: string
+  eclipticCurrent?: string
+  eclipticJ2000?: string
+  galactic?: string
+  supergalactic?: string
+  parallacticAngle?: string
   meanSiderealTime?: string
   apparentSiderealTime?: string
   meanSiderealHours?: number
@@ -560,6 +602,11 @@ export interface StellariumBridgeResponse {
   transit?: string
   phase?: number
   elongation?: number
+  satellitePasses?: Array<SatellitePass>
+  satellitePassList?: Array<SatellitePass>
+  satellitePassesPending?: boolean
+  satellitePassesOffline?: boolean
+  satellitePassSource?: string
   detailFields?: Array<ObjectDetailField>
   keys?: string[]
   ids?: string[]

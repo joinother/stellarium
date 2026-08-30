@@ -213,15 +213,19 @@ void Quasars::init()
 
 	readJsonFile();
 
-	// Set up download manager and the update schedule
-	//networkManager = StelApp::getInstance().getNetworkAccessManager();
-	networkManager = new QNetworkAccessManager(this);;
+	// Set up download manager and the update schedule.
 	updateState = CompleteNoUpdates;
+#ifndef STELLARIUM_OHOS_OFFLINE
+	//networkManager = StelApp::getInstance().getNetworkAccessManager();
+	networkManager = new QNetworkAccessManager(this);
 	updateTimer = new QTimer(this);
 	updateTimer->setSingleShot(false);   // recurring check for update
 	updateTimer->setInterval(13000);     // check once every 13 seconds to see if it is time for an update
 	connect(updateTimer, SIGNAL(timeout()), this, SLOT(checkForUpdate()));
 	updateTimer->start();
+#else
+	qInfo() << "[Quasars] HarmonyOS offline build: online catalog updates are disabled.";
+#endif
 
 	connect(this, SIGNAL(jsonUpdateComplete(void)), this, SLOT(reloadCatalog()));
 	connect(StelApp::getInstance().getCore(), SIGNAL(configurationDataSaved()), this, SLOT(saveSettings()));
@@ -594,7 +598,11 @@ void Quasars::readSettingsFromConfig(void)
 	updateUrl = conf->value("url", "https://stellarium.org/json/quasars.json").toString();
 	updateFrequencyDays = conf->value("update_frequency_days", 100).toInt();
 	lastUpdate = QDateTime::fromString(conf->value("last_update", "2012-05-24T12:00:00").toString(), Qt::ISODate);
+#ifdef STELLARIUM_OHOS_OFFLINE
+	updatesEnabled = false;
+#else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
+#endif
 	setDisplayMode(conf->value("distribution_enabled", false).toBool());
 	setFlagUseQuasarMarkers(conf->value("flag_use_markers", false).toBool());
 	setMarkerColor(Vec3f(conf->value("marker_color", "1.0,0.5,0.4").toString()));
@@ -628,16 +636,26 @@ int Quasars::getSecondsToUpdate(void)
 
 void Quasars::checkForUpdate(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	return;
+#else
 #if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyDays * 3600 * 24) <= QDateTime::currentDateTime())
 #else
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyDays * 3600 * 24) <= QDateTime::currentDateTime() && networkManager->networkAccessible()==QNetworkAccessManager::Accessible)
 #endif
 		updateJSON();
+#endif
 }
 
 void Quasars::updateJSON(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	qWarning() << "[Quasars] Ignoring online catalog update request in the HarmonyOS offline build.";
+	updateState = Quasars::OtherError;
+	emit updateStateChanged(updateState);
+	return;
+#else
 	if (updateState==Quasars::Updating)
 	{
 		qWarning() << "[Quasars] Already updating...  will not start again current update is complete.";
@@ -646,6 +664,7 @@ void Quasars::updateJSON(void)
 
 	qDebug() << "[Quasars] Updating quasars catalog...";
 	startDownload(updateUrl);
+#endif
 }
 
 void Quasars::deleteDownloadProgressBar()

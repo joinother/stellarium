@@ -224,6 +224,12 @@ public:
 	QDateTime getLastUpdated() const {return lastUpdated;}
 	//! Returns the parsed TLE epoch shown in object information.
 	QString getTleEpoch() const {return tleEpoch;}
+	//! Returns locally propagated passes above the requested elevation.
+	//! The result contains local and UTC timestamps, azimuth/elevation at the
+	//! three pass milestones, visibility state and the TLE provenance. It never
+	//! performs a network request.
+	QVariantList getPassPredictions(StelCore* core, double hours = 48.0,
+		int limit = 8, double minimumElevation = 10.0) const;
 
 	//! Set new tleElements.  This assumes the designation is already set, populates
 	//! the tleElements values and configures internal orbit parameters.
@@ -324,6 +330,14 @@ private:
 	QString description;
 	//! International Designator / COSPAR designation / NSSDC ID.
 	QString internationalDesignator;
+	//! Optional exact launch date supplied by an enriched local catalog.
+	//! TLE/COSPAR data normally only provide the launch year.
+	QString launchDate;
+	QString launchOperator;
+	QString launchVehicle;
+	QString mission;
+	QString payloadType;
+	int launchYear;
 	//! Epoch of the TLE
 	QString tleEpoch;
 	//! Epoch of the TLE (JD)

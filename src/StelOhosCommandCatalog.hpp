@@ -26,7 +26,7 @@ inline QStringList names()
 		"getNightMode,getObjectCatalogCategories,getObjectInfo,getObjectPositions,getObjectSpokenText,getObservabilityCalendar,getObserverInfo,"
 		"getObserverPlanetList,getOculars,getMosaicCamera,getEquationOfTime,getArchaeoLines,getNavStars,getOrbitDisplaySettings,getPhenomena,getPlanetCalc,getPlanetPairDistanceCurve,"
 		"getPlanetPositions,getPlanetTimeSeries,getPlanetaryTransits,getPluginList,getPointerCoordinates,getPolarScopeData,getProjectionInfo,getProjectionList,"
-		"getRTS,getRTSCalendar,getSatellites,getScreenInfo,getScriptList,getScriptRate,getScriptStatus,"
+		"getRTS,getRTSCalendar,getSatellites,getSatelliteDetail,getSatellitePasses,getScreenInfo,getScriptList,getScriptRate,getScriptStatus,"
 		"getSelectedObjectInfo,getSelectedObjects,getSelectedType,getObjectDetailModel,getObjectDetailConnector,getSessionState,getSiderealTime,getSimulationTime,"
 		"getSkyCultureDetails,getSkyCultureInfo,getSkyCultureList,getSkyCultureState,getSkyCultureTerritoryGeometry,getSkyCultureVisualSettings,"
 		"getSkyCultures,getSolarElongation,getSolarSystemFlags,getStarCatalogStatus,getStarCatalogs,getStarCount,"
@@ -98,6 +98,16 @@ inline QJsonObject item(const QString& name)
 	{
 		value["description"] = QStringLiteral("诊断当前星空文化的星座艺术文件、纹理加载和视口可见状态");
 		value["examplePayload"] = "Ori";
+	}
+	else if (name == "getSatelliteDetail")
+	{
+		value["description"] = QStringLiteral("读取单颗卫星的离线身份、发射资料、当前观测、轨道参数和下一次过境");
+		value["examplePayload"] = "25544";
+	}
+	else if (name == "getSatellitePasses")
+	{
+		value["description"] = QStringLiteral("使用本地 TLE 计算指定卫星未来过境；不下载数据");
+		value["examplePayload"] = "{\"id\":\"25544\",\"hours\":24,\"limit\":5,\"minElevation\":10,\"visibleOnly\":true}";
 	}
 	else if (name == "getObjectDetailModel")
 	{

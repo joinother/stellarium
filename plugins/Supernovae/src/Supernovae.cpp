@@ -180,15 +180,19 @@ void Supernovae::init()
 
 	readJsonFile();
 
-	// Set up download manager and the update schedule
+	// Set up download manager and the update schedule.
+	updateState = CompleteNoUpdates;
+#ifndef STELLARIUM_OHOS_OFFLINE
 	//networkManager = StelApp::getInstance().getNetworkAccessManager();
 	networkManager = new QNetworkAccessManager(this);
-	updateState = CompleteNoUpdates;
 	updateTimer = new QTimer(this);
 	updateTimer->setSingleShot(false);   // recurring check for update
 	updateTimer->setInterval(13000);     // check once every 13 seconds to see if it is time for an update
 	connect(updateTimer, SIGNAL(timeout()), this, SLOT(checkForUpdate()));
 	updateTimer->start();
+#else
+	qInfo() << "[Supernovae] HarmonyOS offline build: online catalog updates are disabled.";
+#endif
 
 	connect(this, SIGNAL(jsonUpdateComplete(void)), this, SLOT(reloadCatalog()));
 	connect(StelApp::getInstance().getCore(), SIGNAL(configurationDataSaved()), this, SLOT(saveSettings()));
@@ -562,7 +566,11 @@ void Supernovae::readSettingsFromConfig(void)
 	updateUrl = conf->value("url", "https://stellarium.org/json/supernovae.json").toString();
 	updateFrequencyDays = conf->value("update_frequency_days", 100).toInt();
 	lastUpdate = QDateTime::fromString(conf->value("last_update", "2012-06-11T12:00:00").toString(), Qt::ISODate);
+#ifdef STELLARIUM_OHOS_OFFLINE
+	updatesEnabled = false;
+#else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
+#endif
 
 	conf->endGroup();
 }
@@ -586,16 +594,26 @@ int Supernovae::getSecondsToUpdate(void)
 
 void Supernovae::checkForUpdate(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	return;
+#else
 #if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyDays * 3600 * 24) <= QDateTime::currentDateTime())
 #else
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyDays * 3600 * 24) <= QDateTime::currentDateTime() && networkManager->networkAccessible()==QNetworkAccessManager::Accessible)
 #endif
 		updateJSON();
+#endif
 }
 
 void Supernovae::updateJSON(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	qWarning() << "[Supernovae] Ignoring online catalog update request in the HarmonyOS offline build.";
+	updateState = Supernovae::OtherError;
+	emit updateStateChanged(updateState);
+	return;
+#else
 	if (updateState==Supernovae::Updating)
 	{
 		qWarning() << "[Supernovae] already updating...  will not start again current update is complete.";
@@ -604,6 +622,7 @@ void Supernovae::updateJSON(void)
 
 	qDebug() << "[Supernovae] Updating supernovae catalog...";
 	startDownload(updateUrl);
+#endif
 }
 
 void Supernovae::deleteDownloadProgressBar()

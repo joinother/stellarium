@@ -206,6 +206,9 @@ static std::atomic<bool> s_ohosObjectDetailConnector{true};
 static std::atomic<bool> s_ohosPolarScopeOverlayActive{false};
 static std::atomic<bool> s_ohosPolarScopeFlipHorizontal{false};
 static std::atomic<bool> s_ohosPolarScopeFlipVertical{false};
+static std::atomic<int> s_ohosPolarScopeSafeTopPixels{0};
+static std::atomic<double> s_ohosPolarScopeSafeTopRatio{0.0};
+static std::atomic<double> s_ohosPolarScopeSafeBottomRatio{0.0};
 static StelObjectP s_ohosPolarScopeStar;
 static bool s_ohosPolarScopeStarNorth = false;
 
@@ -224,6 +227,8 @@ static double s_ohosZoomAnchorYRatio = 0.5;
 // Automatic selection navigation owns the camera until its safe-area movement
 // settles. Capturing an anchor before that would cancel the centering motion.
 static double s_ohosSelectedAnchorHoldUntilSec = 0.0;
+static Vec3d s_gyroPreviousUp(0., 0., 1.);
+static bool s_gyroHasPreviousUp = false;
 
 QString cleanSkyCultureDescriptionText(QString text)
 {
@@ -288,6 +293,26 @@ void markOhosInteraction()
 		StelMainView::getInstance().thereWasAnEvent();
 }
 
+double ohosPolarScopeSafeRadius(const StelProjectorP& projector, const Vec3d& poleScreen)
+{
+	if (!projector)
+		return 0.0;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 0 || viewport[3] <= 0)
+		return 0.0;
+	const double topRatio = qBound(0.0, s_ohosPolarScopeSafeTopRatio.load(), 0.45);
+	const double bottomRatio = qBound(0.0, s_ohosPolarScopeSafeBottomRatio.load(), 0.45);
+	const double measuredTopRatio = qBound(0.0,
+		static_cast<double>(s_ohosPolarScopeSafeTopPixels.load()) / viewport[3], 0.45);
+	const double left = viewport[0];
+	const double right = viewport[0] + viewport[2];
+	const double bottom = viewport[1] + viewport[3] * bottomRatio;
+	const double top = viewport[1] + viewport[3] * (1.0 - qMax(topRatio, measuredTopRatio));
+	const double safeRadius = 0.92 * qMin(qMin(poleScreen[0] - left, right - poleScreen[0]),
+		qMin(poleScreen[1] - bottom, top - poleScreen[1]));
+	return qMax(0.0, safeRadius - 34.0);
+}
+
 void drawOhosPolarScopeOverlay(StelCore* core)
 {
 	if (!s_ohosPolarScopeOverlayActive.load() || !core)
@@ -295,15 +320,21 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 
 	const StelLocation& location = core->getCurrentLocation();
 	const bool north = location.getLatitude() >= 0.0f;
-	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionOff);
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionAuto);
 	if (!projector)
 		return;
 
 	const Vec3d poleEquinox(0.0, 0.0, north ? 1.0 : -1.0);
 	const Vec3d poleJ2000 = core->equinoxEquToJ2000(poleEquinox, StelCore::RefractionOff);
-	Vec3d poleScreen;
-	if (!projector->project(poleJ2000, poleScreen))
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 0 || viewport[3] <= 0)
 		return;
+	Vec3d poleScreen;
+	if (!projector->project(poleJ2000, poleScreen) || !projector->checkInViewport(poleScreen))
+	{
+		poleScreen.set(viewport[0] + viewport[2] * 0.5,
+			viewport[1] + viewport[3] * 0.5, 0.0);
+	}
 
 	if (!s_ohosPolarScopeStar || s_ohosPolarScopeStarNorth != north)
 	{
@@ -346,46 +377,45 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 
 	Vec3d starScreen;
 	const bool hasStar = s_ohosPolarScopeStar &&
-		projector->project(s_ohosPolarScopeStar->getJ2000EquatorialPos(core), starScreen);
+		projector->project(s_ohosPolarScopeStar->getJ2000EquatorialPos(core), starScreen) &&
+		projector->checkInViewport(starScreen);
 	const double centerX = poleScreen[0];
 	const double centerY = poleScreen[1];
-	double outerRadius = hasStar ? std::hypot(starScreen[0] - centerX, starScreen[1] - centerY) : 0.0;
-	if (outerRadius < 12.0)
-		outerRadius = projector->getPixelPerRadAtCenter() * (2.0 * M_PI / 180.0);
-	if (outerRadius < 12.0)
+	const double poleStarRadius = hasStar
+		? std::hypot(starScreen[0] - centerX, starScreen[1] - centerY)
+		: projector->getPixelPerRadAtCenter() * (0.63 * M_PI / 180.0);
+	const double scopeRadius = qMin(poleStarRadius, ohosPolarScopeSafeRadius(projector, poleScreen));
+	if (scopeRadius < 80.0 || poleStarRadius < 12.0)
 		return;
 
-	const double horizontalSign = s_ohosPolarScopeFlipHorizontal.load() ? -1.0 : 1.0;
-	const double verticalSign = s_ohosPolarScopeFlipVertical.load() ? -1.0 : 1.0;
-	const Vec3f reticleColor(0.956f, 0.435f, 0.420f);
+	const double horizontalSign = core->getFlipHorz() ? -1.0 : 1.0;
+	const double verticalSign = core->getFlipVert() ? -1.0 : 1.0;
+	const Vec3f reticleColor(1.0f, 0.34f, 0.31f);
 	StelPainter painter(projector);
 	painter.setBlending(true);
 	painter.setLineSmooth(true);
-	painter.setColor(reticleColor, 0.82f);
-	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(outerRadius));
+	painter.setLineWidth(2.0f);
+	painter.setColor(reticleColor, 0.88f);
+	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(scopeRadius));
 
 	for (int hour = 0; hour < 24; ++hour)
 	{
 		const double angle = -hour * 15.0 * M_PI / 180.0;
 		const bool major = hour % 6 == 0;
-		const double inner = outerRadius - (major ? 10.0 : 6.0);
+		const double inner = scopeRadius - (major ? 14.0 : 8.0);
 		const double x1 = centerX + std::sin(angle) * inner * horizontalSign;
 		const double y1 = centerY + std::cos(angle) * inner * verticalSign;
-		const double x2 = centerX + std::sin(angle) * (outerRadius + 1.0) * horizontalSign;
-		const double y2 = centerY + std::cos(angle) * (outerRadius + 1.0) * verticalSign;
+		const double x2 = centerX + std::sin(angle) * scopeRadius * horizontalSign;
+		const double y2 = centerY + std::cos(angle) * scopeRadius * verticalSign;
 		painter.drawLine2d(static_cast<float>(x1), static_cast<float>(y1), static_cast<float>(x2), static_cast<float>(y2));
-		if (major)
-		{
-			const double labelRadius = outerRadius + 15.0;
-			painter.drawText(static_cast<float>(centerX + std::sin(angle) * labelRadius * horizontalSign),
-				static_cast<float>(centerY + std::cos(angle) * labelRadius * verticalSign),
-				QString::number(hour));
-		}
+		const double labelRadius = scopeRadius + 28.0;
+		painter.drawText(static_cast<float>(centerX + std::sin(angle) * labelRadius * horizontalSign),
+			static_cast<float>(centerY + std::cos(angle) * labelRadius * verticalSign),
+			QString::number(hour));
 	}
 
-	painter.setLineSmooth(false);
-	painter.setColor(reticleColor, 0.72f);
-	const double innerLabelRadius = outerRadius * 0.72;
+	painter.setColor(reticleColor, 0.78f);
+	const double innerLabelRadius = qMax(18.0, poleStarRadius - 30.0);
 	for (int hour = 0; hour < 12; ++hour)
 	{
 		const double angle = hour * 30.0 * M_PI / 180.0;
@@ -396,7 +426,7 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 
 	painter.setColor(reticleColor, 0.62f);
 	painter.drawLine2d(static_cast<float>(centerX), static_cast<float>(centerY),
-		static_cast<float>(centerX), static_cast<float>(centerY + outerRadius * verticalSign));
+		static_cast<float>(centerX), static_cast<float>(centerY + scopeRadius * verticalSign));
 	painter.setColor(reticleColor, 0.90f);
 	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), 5.5f);
 	painter.drawLine2d(static_cast<float>(centerX - 12.0), static_cast<float>(centerY),
@@ -406,18 +436,21 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 
 	if (hasStar)
 	{
-		const double starX = centerX + (starScreen[0] - centerX) * horizontalSign;
-		const double starY = centerY + (starScreen[1] - centerY) * verticalSign;
+		const double starX = starScreen[0];
+		const double starY = starScreen[1];
 		painter.setColor(reticleColor, 0.76f);
 		painter.drawLine2d(static_cast<float>(centerX), static_cast<float>(centerY),
 			static_cast<float>(starX), static_cast<float>(starY));
 		painter.setColor(reticleColor, 0.95f);
-		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 9.0f);
+		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 11.0f);
 		painter.setColor(reticleColor, 0.72f);
 		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 3.0f);
-		painter.drawText(static_cast<float>(starX + 12.0), static_cast<float>(starY - 8.0),
-			north ? QStringLiteral("北极星") : QStringLiteral("南极星"));
+		const float labelX = static_cast<float>(starX + (starX < centerX ? 42.0 : -96.0));
+		const float labelY = static_cast<float>(starY + (starY >= centerY ? -60.0 : 60.0));
+		painter.drawText(labelX, labelY, north ? QStringLiteral("北极星") : QStringLiteral("南极座σ"));
 	}
+	painter.setLineWidth(1.0f);
+	painter.setLineSmooth(false);
 }
 
 QString formatLx200Ra(int totalSeconds)
@@ -938,6 +971,8 @@ static double s_ohosPinchTargetYRatio = 0.5;
 static double s_ohosPanInertiaVx = 0.0; // viewport pixels per millisecond
 static double s_ohosPanInertiaVy = 0.0;
 static double s_ohosPanInertiaElapsedSec = 0.0;
+static double s_ohosPanInertiaTravelPixels = 0.0;
+static double s_ohosPanInertiaMaxTravelPixels = 0.0;
 static bool s_ohosCaptureSelectedAnchorAfterPan = false;
 
 static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
@@ -953,11 +988,49 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 		const double ppr = prj ? static_cast<double>(prj->getPixelPerRadAtCenter()) : 0.0;
 		if (ppr <= 1e-9)
 			return;
-		// ArkTS deltas describe finger motion. StelMovementMgr::panView moves
-		// the camera, so the old signs made the sky travel against the hand in
-		// both axes. Keep direct manipulation: drag right/up shows sky moving
-		// right/up, and the render-thread inertia below inherits the same frame.
-		movementMgr->panView(-dx / ppr, dy / ppr);
+		const double maxStepPixels = qMax(24.0, ppr * 0.18);
+		dx = qBound(-maxStepPixels, dx, maxStepPixels);
+		dy = qBound(-maxStepPixels, dy, maxStepPixels);
+		Vec3d view = movementMgr->j2000ToMountFrame(movementMgr->getViewDirectionJ2000());
+		Vec3d up = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
+		view.normalize();
+		up -= view * up.dot(view);
+		if (up.normSquared() < 1e-9)
+		{
+			const Vec3d reference = std::abs(view[2]) < 0.9 ? Vec3d(0., 0., 1.) : Vec3d(1., 0., 0.);
+			up = reference - view * reference.dot(view);
+		}
+		up.normalize();
+		Vec3d right = up ^ view;
+		if (right.normSquared() < 1e-9)
+			return;
+		right.normalize();
+		Vec3d nextView = view + right * (dx / ppr) + up * (dy / ppr);
+		if (nextView.normSquared() < 1e-9)
+			return;
+		nextView.normalize();
+		Vec3d transportedUp = up - nextView * up.dot(nextView);
+		if (transportedUp.normSquared() < 1e-9)
+			return;
+		transportedUp.normalize();
+
+		Vec3d horizonUp(0., 0., 1.);
+		horizonUp -= nextView * horizonUp.dot(nextView);
+		Vec3d nextUp = transportedUp;
+		const double horizonStrength = std::sqrt(horizonUp.normSquared());
+		if (horizonStrength > 1e-9)
+		{
+			horizonUp /= horizonStrength;
+			if (horizonUp.dot(transportedUp) < 0.)
+				horizonUp *= -1.;
+			const double horizonBlend = qBound(0.0, (horizonStrength - 0.05) / 0.20, 1.0);
+			nextUp = transportedUp * (1.0 - horizonBlend) + horizonUp * horizonBlend;
+		}
+		if (nextUp.normSquared() < 1e-9)
+			return;
+		nextUp.normalize();
+		movementMgr->setViewUpVectorJ2000(movementMgr->mountFrameToJ2000(nextUp));
+		movementMgr->setViewDirectionJ2000(movementMgr->mountFrameToJ2000(nextView));
 	}
 	else
 	{
@@ -987,13 +1060,24 @@ static void ohosUpdatePanInertia(double dtSec)
 	}
 	const double safeDtSec = qBound(0.001, dtSec, 0.080);
 	const double dtMs = safeDtSec * 1000.0;
-	ohosApplyPanDelta(StelApp::getInstance().getCore(), s_ohosPanInertiaVx * dtMs, s_ohosPanInertiaVy * dtMs);
+	double stepX = s_ohosPanInertiaVx * dtMs;
+	double stepY = s_ohosPanInertiaVy * dtMs;
+	const double stepPixels = std::hypot(stepX, stepY);
+	const double remainingPixels = qMax(0.0, s_ohosPanInertiaMaxTravelPixels - s_ohosPanInertiaTravelPixels);
+	if (stepPixels > remainingPixels && stepPixels > 1e-9)
+	{
+		const double scale = remainingPixels / stepPixels;
+		stepX *= scale;
+		stepY *= scale;
+	}
+	ohosApplyPanDelta(StelApp::getInstance().getCore(), stepX, stepY);
+	s_ohosPanInertiaTravelPixels += std::hypot(stepX, stepY);
 	s_ohosPanInertiaElapsedSec += safeDtSec;
 	const double decay = std::pow(0.955, dtMs / 16.667);
 	s_ohosPanInertiaVx *= decay;
 	s_ohosPanInertiaVy *= decay;
 	const double speed = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy);
-	if (speed < 0.010 || s_ohosPanInertiaElapsedSec > 1.8)
+	if (speed < 0.010 || s_ohosPanInertiaElapsedSec > 1.8 || s_ohosPanInertiaTravelPixels >= s_ohosPanInertiaMaxTravelPixels)
 		s_ohosPanInertiaActive = false;
 	else
 		markOhosInteraction();
@@ -1609,6 +1693,41 @@ QJsonObject constellationDetailMediaJson(const StelObjectP& object)
 	return result;
 }
 
+QJsonObject constellationCultureDescriptionJson(const StelObjectP& object, StelCore* core)
+{
+	QJsonObject result;
+	if (!object || object->getType() != Constellation::CONSTELLATION_TYPE)
+		return result;
+
+	const QSharedPointer<Constellation> constellation = qSharedPointerCast<Constellation>(object);
+	if (!constellation)
+		return result;
+
+	const QString narration = constellation->getNarration(core, StelObject::AllInfo);
+	const QString separator = QStringLiteral(". . . ");
+	const qsizetype separatorPos = narration.indexOf(separator);
+	QString markdown = separatorPos >= 0 ? narration.mid(separatorPos + separator.size()) : narration;
+	markdown = markdown.trimmed();
+	if (markdown.isEmpty())
+		return result;
+
+	const QString html = StelSkyCultureMgr::markdownToHTML(markdown);
+	QTextDocument document;
+	document.setHtml(html);
+	const QString plainText = cleanSkyCultureDescriptionText(document.toPlainText());
+	if (plainText.isEmpty())
+		return result;
+
+	const StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+	result[QStringLiteral("constellationCultureId")] = skyCultureMgr.getCurrentSkyCultureID();
+	result[QStringLiteral("constellationCultureName")] = skyCultureMgr.getCurrentSkyCultureNameI18();
+	result[QStringLiteral("constellationCultureEnglishName")] = skyCultureMgr.getCurrentSkyCultureEnglishName();
+	result[QStringLiteral("constellationCultureDescription")] = plainText;
+	result[QStringLiteral("constellationCultureDescriptionBlocks")] = skyCultureDescriptionBlocks(html);
+	result[QStringLiteral("constellationCultureDescriptionSource")] = QStringLiteral("Stellarium 天空文化 description.md");
+	return result;
+}
+
 QJsonObject objectDetailModelJson(const StelObjectP& object, const QJsonObject& fallbackMedia)
 {
 	QJsonObject result;
@@ -1657,8 +1776,10 @@ QString selectedObjectInfoMode()
 	return QStringLiteral("custom");
 }
 
-QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = false)
+QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = false, bool includeDynamic = true)
 {
+	QElapsedTimer infoTimer;
+	infoTimer.start();
 	QJsonObject result;
 	result["ok"] = true;
 	const QString infoMode = selectedObjectInfoMode();
@@ -1671,11 +1792,13 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		return result;
 	}
 
-	const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+		const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+	const QString selectedType = object->getType();
 	result["found"] = true;
 	result["name"] = object->getNameI18n();
 	result["englishName"] = object->getEnglishName();
 	result["type"] = object->getObjectTypeI18n();
+	result["objectType"] = object->getObjectType();
 	if (object->getType() == QLatin1String("Nebula"))
 	{
 		const NebulaP nebula = qSharedPointerCast<Nebula>(object);
@@ -1686,16 +1809,26 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	const QJsonObject detailMedia = constellationDetailMediaJson(object);
 	for (auto it = detailMedia.constBegin(); it != detailMedia.constEnd(); ++it)
 		result[it.key()] = it.value();
+	const QJsonObject cultureDescription = constellationCultureDescriptionJson(object, core);
+	for (auto it = cultureDescription.constBegin(); it != cultureDescription.constEnd(); ++it)
+		result[it.key()] = it.value();
 	const QJsonObject detailModel = objectDetailModelJson(object, detailMedia);
 	if (!detailModel.isEmpty())
 		result[QStringLiteral("detailModel")] = detailModel;
 
-	if (core)
+	if (core && includeDynamic)
 	{
 		const QVariantMap m = object->getInfoMap(core);
-		const bool includeConfiguredDetails = infoMode != QStringLiteral("none")
-			&& (includeDetails || infoMode == QStringLiteral("all")
-			|| infoMode == QStringLiteral("default") || infoMode == QStringLiteral("custom"));
+		if (selectedType.compare(QStringLiteral("Satellite"), Qt::CaseInsensitive) == 0)
+			qInfo() << "[StellariumOhos][selection-info] satellite getInfoMap elapsedMs=" << infoTimer.elapsed();
+		// Keep tap and heartbeat responses lightweight. Satellite records contain
+		// TLE lines and many derived fields; serializing them for every selection
+		// frame makes the ArkUI detail tree rebuild alongside the sky frame.
+		// The configured information level is applied to the explicit details
+		// request, not to the lightweight selection response.
+		const bool includeConfiguredDetails = includeDetails && infoMode != QStringLiteral("none")
+			&& (infoMode == QStringLiteral("all") || infoMode == QStringLiteral("default")
+			|| infoMode == QStringLiteral("custom"));
 		if (includeConfiguredDetails)
 		{
 			QJsonArray detailFields;
@@ -1884,6 +2017,11 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			if (m.contains(QStringLiteral("tle-epoch")))
 			{
 				appendLocalizedText(QStringLiteral("description"), QStringLiteral("satellite"), QStringLiteral("description"));
+				appendText(QStringLiteral("launchDate"), QStringLiteral("satellite"), QStringLiteral("launch-date"));
+				appendText(QStringLiteral("launchOperator"), QStringLiteral("satellite"), QStringLiteral("launch-operator"));
+				appendText(QStringLiteral("launchVehicle"), QStringLiteral("satellite"), QStringLiteral("launch-vehicle"));
+				appendText(QStringLiteral("mission"), QStringLiteral("satellite"), QStringLiteral("mission"));
+				appendText(QStringLiteral("payloadType"), QStringLiteral("satellite"), QStringLiteral("payload-type"));
 				appendText(QStringLiteral("tleEpoch"), QStringLiteral("satellite"), QStringLiteral("tle-epoch"));
 				appendText(QStringLiteral("tleLine1"), QStringLiteral("satellite"), QStringLiteral("tle1"));
 				appendText(QStringLiteral("tleLine2"), QStringLiteral("satellite"), QStringLiteral("tle2"));
@@ -1959,8 +2097,14 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			appendText(QStringLiteral("maximumZhr"), QStringLiteral("plugin"), QStringLiteral("zhr-max"));
 
 			result[QStringLiteral("detailFields")] = detailFields;
+			if (includeDetails && object->getType() == QLatin1String("Satellite"))
+			{
+				result[QStringLiteral("satellitePassesPending")] = true;
+				result[QStringLiteral("satellitePassesOffline")] = true;
+				result[QStringLiteral("satellitePassSource")] = QStringLiteral("local TLE propagation");
+			}
 		}
-		else
+		else if (includeDetails)
 		{
 			result[QStringLiteral("detailFields")] = QJsonArray();
 		}
@@ -1987,6 +2131,14 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			result["azimuth"] = m["azimuth"].toDouble();
 
 		// Normalized RA / Dec (formatted strings for display)
+		auto appendDynamicDegreePair = [&result, &m](const QString& resultKey, const QString& firstKey, const QString& secondKey) {
+			bool firstOk = false;
+			bool secondOk = false;
+			const double first = m.value(firstKey).toDouble(&firstOk);
+			const double second = m.value(secondKey).toDouble(&secondOk);
+			if (firstOk && secondOk && std::isfinite(first) && std::isfinite(second))
+				result[resultKey] = QStringLiteral("%1°, %2°").arg(first, 0, 'f', 3).arg(second, 0, 'f', 3);
+		};
 		if (m.contains("ra"))
 		{
 			double ra = m["ra"].toDouble();
@@ -1995,6 +2147,18 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		}
 		if (m.contains("dec"))
 			result["dec"] = StelUtils::radToDmsStr(m["dec"].toDouble() * M_PI / 180., true);
+		if (m.contains("ra") && m.contains("dec"))
+			result["equatorialOfDate"] = StelUtils::radToHmsStr(m["ra"].toDouble() * M_PI / 180.) + QStringLiteral("  ") + StelUtils::radToDmsStr(m["dec"].toDouble() * M_PI / 180., true);
+		if (m.contains("raJ2000") && m.contains("decJ2000"))
+			result["equatorialJ2000"] = StelUtils::radToHmsStr(m["raJ2000"].toDouble() * M_PI / 180.) + QStringLiteral("  ") + StelUtils::radToDmsStr(m["decJ2000"].toDouble() * M_PI / 180., true);
+		appendDynamicDegreePair(QStringLiteral("apparentAltAz"), QStringLiteral("altitude"), QStringLiteral("azimuth"));
+		appendDynamicDegreePair(QStringLiteral("geometricAltAz"), QStringLiteral("altitude-geometric"), QStringLiteral("azimuth-geometric"));
+		appendDynamicDegreePair(QStringLiteral("eclipticCurrent"), QStringLiteral("elong"), QStringLiteral("elat"));
+		appendDynamicDegreePair(QStringLiteral("eclipticJ2000"), QStringLiteral("elongJ2000"), QStringLiteral("elatJ2000"));
+		appendDynamicDegreePair(QStringLiteral("galactic"), QStringLiteral("glong"), QStringLiteral("glat"));
+		appendDynamicDegreePair(QStringLiteral("supergalactic"), QStringLiteral("sglong"), QStringLiteral("sglat"));
+		if (m.contains("parallacticAngle"))
+			result["parallacticAngle"] = QString::number(m["parallacticAngle"].toDouble(), 'f', 2) + QStringLiteral("°");
 		if (m.contains("hourAngle-hms"))
 			result["hourAngle"] = m["hourAngle-hms"].toString();
 		if (m.contains("meanSidTm"))
@@ -2681,6 +2845,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		else
 		{
 			LabelMgr::setOhosScreenSafeAreaTop(topPixels);
+			s_ohosPolarScopeSafeTopPixels.store(qMax(0, topPixels));
 			safeAreaResult["ok"] = true;
 			safeAreaResult["topPixels"] = qMax(0, topPixels);
 		}
@@ -2753,15 +2918,25 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const bool active = !values.isEmpty() && (values.at(0) == "1" || values.at(0).compare("true", Qt::CaseInsensitive) == 0);
 			const bool flipHorizontal = values.size() > 1 && values.at(1) == "1";
 			const bool flipVertical = values.size() > 2 && values.at(2) == "1";
+			const double safeTopRatio = values.size() > 3 ? values.at(3).toDouble() : 0.0;
+			const double safeBottomRatio = values.size() > 4 ? values.at(4).toDouble() : 0.0;
+			bool safeTopPixelsOk = false;
+			const int safeTopPixels = values.size() > 5 ? values.at(5).toInt(&safeTopPixelsOk) : 0;
 			s_ohosPolarScopeOverlayActive.store(active);
 			s_ohosPolarScopeFlipHorizontal.store(flipHorizontal);
 			s_ohosPolarScopeFlipVertical.store(flipVertical);
+			if (safeTopPixelsOk)
+				s_ohosPolarScopeSafeTopPixels.store(qMax(0, safeTopPixels));
+			s_ohosPolarScopeSafeTopRatio.store(qBound(0.0, safeTopRatio, 0.45));
+			s_ohosPolarScopeSafeBottomRatio.store(qBound(0.0, safeBottomRatio, 0.45));
 			if (!active)
 				s_ohosPolarScopeStar.clear();
 			result["ok"] = true;
 			result["active"] = active;
 			result["flipHorizontal"] = flipHorizontal;
 			result["flipVertical"] = flipVertical;
+			result["safeTopRatio"] = s_ohosPolarScopeSafeTopRatio.load();
+			result["safeBottomRatio"] = s_ohosPolarScopeSafeBottomRatio.load();
 			return result;
 		}
 		if (commandName == "centerPolarScope")
@@ -3636,8 +3811,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		return result;
 	}
 
-	if (commandName == "selectAt")
+		if (commandName == "selectAt")
 	{
+			QElapsedTimer selectTimer;
+			selectTimer.start();
 			if (!objectMgr || !core)
 			{
 				result["error"] = "selection manager not ready";
@@ -3712,8 +3889,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (!iauName.isEmpty())
 						constellationAtTap = constellationMgr->searchByName(iauName);
 				}
-				qInfo() << "[StellariumOhos][selectAt] constellation candidate"
+			qInfo() << "[StellariumOhos][selectAt] constellation candidate"
 						<< (constellationAtTap ? constellationAtTap->getID() : QStringLiteral("none"));
+			qInfo() << "[StellariumOhos][selectAt] candidate elapsedMs=" << selectTimer.elapsed();
 			}
 
 			objectMgr->setObjectSearchRadius(44.0);
@@ -3726,14 +3904,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						<< constellationAtTap->getID() << constellationAtTap->getNameI18n();
 			}
 			qInfo() << "[StellariumOhos][selectAt] found" << found;
+			qInfo() << "[StellariumOhos][selectAt] object-search elapsedMs=" << selectTimer.elapsed();
 			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
 						 "selectAt found=%{public}d", found ? 1 : 0);
 		}
 
 		markOhosInteraction();
-			// Keep the tap response lightweight so the selected target can be drawn
-			// immediately. The full detail prose is loaded asynchronously by ArkTS.
-				result = selectedObjectJson(core, false);
+				// Keep the tap response lightweight so the selected target can be drawn
+				// immediately. Satellite::getInfoMap() calculates telemetry and
+				// rise/set fields synchronously on the render thread; ArkTS requests
+				// the dynamic values after the selection has been drawn.
+				result = selectedObjectJson(core, false, false);
+				qInfo() << "[StellariumOhos][selectAt] response elapsedMs=" << selectTimer.elapsed();
 			result["ok"] = true;
 			result["found"] = found;
 			result["tapX"] = x;
@@ -3805,9 +3987,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["ok"] = true;
 				return result;
 			}
-			s_ohosPanInertiaVx = qBound(-4.0, vx, 4.0);
-			s_ohosPanInertiaVy = qBound(-4.0, vy, 4.0);
+			const StelProjectorP projector = core ? core->getProjection(StelCore::FrameJ2000) : StelProjectorP();
+			const double pixelsPerRad = projector ? static_cast<double>(projector->getPixelPerRadAtCenter()) : 0.0;
+			const double maxPixelVelocity = qBound(0.15, pixelsPerRad * 0.00075, 2.5);
+			s_ohosPanInertiaVx = qBound(-maxPixelVelocity, vx, maxPixelVelocity);
+			s_ohosPanInertiaVy = qBound(-maxPixelVelocity, vy, maxPixelVelocity);
 			s_ohosPanInertiaElapsedSec = 0.0;
+			s_ohosPanInertiaTravelPixels = 0.0;
+			const double fovRadians = movementMgr->getCurrentFov() * M_PI / 180.0;
+			s_ohosPanInertiaMaxTravelPixels = pixelsPerRad * qBound(0.025, fovRadians * 0.25, 0.22);
 			s_ohosPanInertiaActive = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy) >= 0.05;
 			markOhosInteraction();
 			result["ok"] = true;
@@ -3819,6 +4007,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s_ohosPanInertiaActive = false;
 			s_ohosPanInertiaVx = 0.0;
 			s_ohosPanInertiaVy = 0.0;
+			s_ohosPanInertiaTravelPixels = 0.0;
+			s_ohosPanInertiaMaxTravelPixels = 0.0;
 			result["ok"] = true;
 			return result;
 		}
@@ -3850,7 +4040,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			const double fovRad = movementMgr->getCurrentFov() * M_PI / 180.0;
-			movementMgr->panView(-dx / width * fovRad, dy / height * fovRad);
+			const StelProjectorP projector = core ? core->getProjection(StelCore::FrameJ2000) : StelProjectorP();
+			const double pixelsPerRad = projector ? static_cast<double>(projector->getPixelPerRadAtCenter()) : 0.0;
+			if (pixelsPerRad > 1e-9)
+				ohosApplyPanDelta(core, dx / width * fovRad * pixelsPerRad, dy / height * fovRad * pixelsPerRad);
 			movementMgr->setFlagTracking(false);
 			s_ohosSelectedAnchorHoldUntilSec = 0.0;
 			s_ohosCaptureSelectedAnchorAfterPan = true;
@@ -4189,7 +4382,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					movementMgr->cancelAutoMove();
 					movementMgr->setFlagTracking(false);
 				}
-				s_ohosCaptureSelectedAnchorAfterPan = true;
+				ohosCaptureSelectedZoomAnchor();
+				s_ohosCaptureSelectedAnchorAfterPan = s_ohosZoomAnchorObject.isEmpty();
+			}
+			else
+			{
+				s_ohosZoomAnchorObject.clear();
+				s_ohosCaptureSelectedAnchorAfterPan = false;
 			}
 			result["ok"] = true;
 			result["viewLock"] = s_viewLock;
@@ -4831,6 +5030,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					StelScriptMgr& scriptMgr = StelApp::getInstance().getScriptMgr();
 					started = scriptMgr.runScript(scriptName);
 				}
+				LabelMgr::setOhosScriptUiVisible(started);
 				qInfo() << "[StellariumOhos][script] playScript started=" << started
 				       << "arg=" << scriptName << "elapsedMs=" << timer.elapsed();
 				s_ohosScriptStartPending.store(false);
@@ -4838,6 +5038,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["ok"] = true;
 			result["accepted"] = true;
 			result["script"] = scriptName;
+			LabelMgr::setOhosScriptUiVisible(true);
 			return result;
 		}
 
@@ -4847,6 +5048,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s_ohosScriptStartGeneration.fetch_add(1);
 			s_ohosScriptStartPending.store(false);
 			StelApp::getInstance().getScriptMgr().stopScript();
+			LabelMgr::setOhosScriptUiVisible(false);
 			result["ok"] = true;
 			return result;
 		}
@@ -6484,6 +6686,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelScriptMgr& sm = StelApp::getInstance().getScriptMgr();
 			result["ok"] = true;
 			result["running"] = sm.scriptIsRunning();
+			LabelMgr::setOhosScriptUiVisible(sm.scriptIsRunning());
 			result["scriptId"] = sm.runningScriptId();
 			result["scriptRate"] = sm.getScriptRate();
 			return result;
@@ -6644,6 +6847,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (StelCore* core = StelApp::getInstance().getCore())
 				core->getMovementMgr()->cancelAutoMove();
 			s_gyroViewActive = true;
+			s_gyroHasPreviousUp = false;
 			result["ok"] = true;
 			return result;
 		}
@@ -6653,6 +6857,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s_gyroTransitionArmed = false;
 			s_gyroTransitionActive = false;
 			s_gyroViewActive = false;
+			s_gyroHasPreviousUp = false;
 			// Resume a saved view lock from the camera position where the user
 			// stopped using the gyro; correcting against an old anchor would jump.
 			if (s_viewLock)
@@ -6727,26 +6932,49 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			// Keep physical zenith at the top through normal views so the horizon
-			// remains level. The zenith projection becomes undefined only at the
-			// two poles, where we blend to a transported basis to avoid a flip.
-			const Vec3d zenith(0., 0., 1.);
-			Vec3d zenithUp = zenith - aim * aim.dot(zenith);
-			static Vec3d previousGyroUp(0., 0., 1.);
-			static bool hasPreviousGyroUp = false;
-			Vec3d transportedUp = previousGyroUp - aim * aim.dot(previousGyroUp);
-			if (transportedUp.normSquared() < 1e-8)
-				transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
-			const double zenithStrength = zenithUp.normSquared();
-			const double zenithBlend = std::clamp((zenithStrength - 0.01) / 0.09, 0.0, 1.0);
-			Vec3d up = !hasPreviousGyroUp
-				? zenithUp
-				: transportedUp * (1.0 - zenithBlend) + zenithUp * zenithBlend;
+			Vec3d up;
+			bool hasProvidedUp = false;
+			if (parts.size() >= 5)
+			{
+				bool okUpX = false, okUpY = false, okUpZ = false;
+				const double upX = parts[2].toDouble(&okUpX);
+				const double upY = parts[3].toDouble(&okUpY);
+				const double upZ = parts[4].toDouble(&okUpZ);
+				if (okUpX && okUpY && okUpZ)
+				{
+					up = Vec3d(upX, upY, upZ);
+					up -= aim * up.dot(aim);
+					hasProvidedUp = up.normSquared() >= 1e-8;
+				}
+			}
+			if (!hasProvidedUp)
+			{
+				// Compatibility for older callers that send only az|alt.
+				const Vec3d zenith(0., 0., 1.);
+				Vec3d zenithUp = zenith - aim * aim.dot(zenith);
+				Vec3d transportedUp = s_gyroPreviousUp - aim * aim.dot(s_gyroPreviousUp);
+				if (transportedUp.normSquared() < 1e-8)
+					transportedUp = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
+				const double zenithStrength = std::sqrt(zenithUp.normSquared());
+				const double zenithBlend = qBound(0.0, (zenithStrength - 0.05) / 0.20, 1.0);
+				if (zenithUp.normSquared() >= 1e-8)
+				{
+					zenithUp.normalize();
+					transportedUp.normalize();
+					if (zenithUp.dot(transportedUp) < 0.)
+						zenithUp *= -1.;
+					up = transportedUp * (1.0 - zenithBlend) + zenithUp * zenithBlend;
+				}
+				else
+					up = transportedUp;
+			}
 			if (up.normSquared() < 1e-8)
 				up = Vec3d(1., 0., 0.) - aim * aim.dot(Vec3d(1., 0., 0.));
 			up.normalize();
-			previousGyroUp = up;
-			hasPreviousGyroUp = true;
+			if (s_gyroHasPreviousUp && up.dot(s_gyroPreviousUp) < 0.)
+				up *= -1.;
+			s_gyroPreviousUp = up;
+			s_gyroHasPreviousUp = true;
 
 			// Order matters: setViewDirectionJ2000() re-reads the *current* up
 			// vector when it calls core->lookAtJ2000().
@@ -9615,6 +9843,109 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["satellites"] = s;
 			return result;
 		}
+		if (commandName == "getSatellitePasses" || commandName == "getSatelliteDetail")
+		{
+			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
+			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
+
+			QString satelliteId;
+			double hours = commandName == "getSatelliteDetail" ? 48.0 : 24.0;
+			int limit = commandName == "getSatelliteDetail" ? 8 : 5;
+			double minimumElevation = 10.0;
+			bool visibleOnly = commandName == "getSatelliteDetail";
+			const QJsonDocument optionsDocument = QJsonDocument::fromJson(arg.toUtf8());
+			if (optionsDocument.isObject())
+			{
+				const QJsonObject options = optionsDocument.object();
+				satelliteId = options.value("id").toString().trimmed();
+				hours = options.value("hours").toDouble(hours);
+				limit = options.value("limit").toInt(limit);
+				minimumElevation = options.value("minElevation").toDouble(minimumElevation);
+				visibleOnly = options.value("visibleOnly").toBool(visibleOnly);
+			}
+			else
+			{
+				const QStringList parts = arg.split('|');
+				satelliteId = parts.value(0).trimmed();
+				bool hoursOk = false;
+				const double parsedHours = parts.value(1).toDouble(&hoursOk);
+				if (hoursOk) hours = parsedHours;
+				bool limitOk = false;
+				const int parsedLimit = parts.value(2).toInt(&limitOk);
+				if (limitOk) limit = parsedLimit;
+				bool elevationOk = false;
+				const double parsedElevation = parts.value(3).toDouble(&elevationOk);
+				if (elevationOk) minimumElevation = parsedElevation;
+				if (parts.value(4).trimmed() == QStringLiteral("visible")) visibleOnly = true;
+			}
+
+			SatelliteP satellite;
+			if (!satelliteId.isEmpty())
+				satellite = sats->getById(satelliteId);
+			if (satellite.isNull())
+			{
+				const StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+				if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+					satellite = qSharedPointerDynamicCast<Satellite>(objectMgr->getSelectedObject().constFirst());
+			}
+			if (satellite.isNull())
+			{
+				result["ok"] = false;
+				result["error"] = "Satellite not found; provide a NORAD id or select a satellite";
+				return result;
+			}
+
+			StelCore* core = StelApp::getInstance().getCore();
+			QElapsedTimer passTimer;
+			passTimer.start();
+			const QVariantList passList = satellite->getPassPredictions(core, hours, qBound(1, limit, 32), minimumElevation);
+			QJsonArray allPasses;
+			QJsonArray returnedPasses;
+			for (const QVariant& value : passList)
+			{
+				const QJsonObject pass = QJsonObject::fromVariantMap(value.toMap());
+				allPasses.append(pass);
+				if (!visibleOnly || pass.value("visible").toBool(false))
+					returnedPasses.append(pass);
+			}
+
+			QJsonObject response;
+			response["satelliteId"] = satellite->getCatalogNumberString();
+			response["name"] = satellite->getNameI18n();
+			response["englishName"] = satellite->getEnglishName();
+			response["type"] = satellite->getObjectTypeI18n();
+			response["internationalDesignator"] = satellite->getInternationalDesignator();
+			response["tleEpoch"] = satellite->getTleEpoch();
+			response["passes"] = returnedPasses;
+			response["allPasses"] = allPasses;
+			response["visibleOnly"] = visibleOnly;
+			response["hours"] = qBound(1.0, hours, 24.0 * 7.0);
+			response["minimumElevation"] = qBound(-5.0, minimumElevation, 89.0);
+			response["calculatedAt"] = StelUtils::julianDayToISO8601String(core->getJD());
+			response["offline"] = true;
+			response["source"] = "local TLE propagation";
+			response["dataStatus"] = "local";
+			response["elapsedMs"] = passTimer.elapsed();
+			qInfo() << "[StellariumOhos][satellite-pass] id=" << satellite->getCatalogNumberString()
+			       << "hours=" << hours << "limit=" << limit << "elapsedMs=" << passTimer.elapsed();
+
+			if (commandName == "getSatelliteDetail")
+			{
+				const QVariantMap info = satellite->getInfoMap(core);
+				for (auto it = info.constBegin(); it != info.constEnd(); ++it)
+					response[it.key().toUtf8().constData()] = QJsonValue::fromVariant(it.value());
+				response["nextVisiblePass"] = returnedPasses.isEmpty() ? QJsonValue(QJsonValue::Null) : returnedPasses.first();
+				response["nextPass"] = allPasses.isEmpty() ? QJsonValue(QJsonValue::Null) : allPasses.first();
+			}
+			result["ok"] = true;
+			if (commandName == "getSatelliteDetail") result["satelliteDetail"] = response;
+			else
+			{
+				result["satellitePasses"] = response;
+				result["satellitePassList"] = returnedPasses;
+			}
+			return result;
+		}
 		if (commandName == "setSatellitesFlag")
 		{
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
@@ -10708,7 +11039,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			// limited to reticle geometry so ArkUI never builds a second sky layer.
 			result["stars"] = QJsonArray();
 			result["starCount"] = polarStars.size();
-			const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionOff);
+			const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionAuto);
 			const Vec4i viewport = projector ? projector->getViewport() : Vec4i();
 			auto appendScreenPosition = [&result, &projector, &viewport](const Vec3d& position,
 				const QString& validKey, const QString& xKey, const QString& yKey) {
@@ -10724,6 +11055,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				QStringLiteral("poleScreenXRatio"), QStringLiteral("poleScreenYRatio"));
 			if (hasPoleStar)
 			{
+				Vec3d poleProjected;
+				Vec3d poleStarProjected;
+				if (projector && projector->project(poleJ2000, poleProjected)
+					&& projector->project(poleStar.object->getJ2000EquatorialPos(core), poleStarProjected))
+				{
+					result["poleStarRadiusPixels"] = std::hypot(poleStarProjected[0] - poleProjected[0],
+						poleStarProjected[1] - poleProjected[1]);
+					result["scopeRadiusPixels"] = qMin(
+						result.value(QStringLiteral("poleStarRadiusPixels")).toDouble(),
+						ohosPolarScopeSafeRadius(projector, poleProjected));
+				}
 				appendScreenPosition(poleStar.object->getJ2000EquatorialPos(core),
 					QStringLiteral("poleStarScreenValid"), QStringLiteral("poleStarScreenXRatio"),
 					QStringLiteral("poleStarScreenYRatio"));

@@ -15,11 +15,20 @@ const celestrakSourceIds = [
   'satellites.tle.active',
 ];
 const satelliteFallbackSourceId = 'satellites.tle.satnogs';
+const bundledCatalogSourceIds = [
+  'catalog.exoplanets',
+  'catalog.meteor-showers',
+  'catalog.novae',
+  'catalog.supernovae',
+  'catalog.pulsars',
+  'catalog.quasars',
+];
 
 function usage(exitCode = 0) {
   console.log(`用法：
   node scripts/update-ohos-astronomy-data.mjs --check [--max-age-days 14]
   node scripts/update-ohos-astronomy-data.mjs --update-satellites
+  node scripts/update-ohos-astronomy-data.mjs --update-catalogs
   node scripts/update-ohos-astronomy-data.mjs --update-stars
   node scripts/update-ohos-astronomy-data.mjs --all
 
@@ -37,14 +46,15 @@ function usage(exitCode = 0) {
 }
 
 function parseArgs(args) {
-  const result = { check: false, updateSatellites: false, updateStars: false, offline: false, verifyOnly: false, maxAgeDays: 14, allowLargeStarDownload: false, sourceMode: 'upstream', mirrorBaseUrl: process.env.OHOS_MIRROR_BASE_URL ?? '', sourceRoot: root };
+  const result = { check: false, updateSatellites: false, updateCatalogs: false, updateStars: false, offline: false, verifyOnly: false, maxAgeDays: 14, allowLargeStarDownload: false, sourceMode: 'upstream', mirrorBaseUrl: process.env.OHOS_MIRROR_BASE_URL ?? '', sourceRoot: root };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === '--help' || arg === '-h') usage();
     if (arg === '--check') result.check = true;
     else if (arg === '--update-satellites') result.updateSatellites = true;
+    else if (arg === '--update-catalogs') result.updateCatalogs = true;
     else if (arg === '--update-stars') result.updateStars = true;
-    else if (arg === '--all') { result.updateSatellites = true; result.updateStars = true; }
+    else if (arg === '--all') { result.updateSatellites = true; result.updateCatalogs = true; result.updateStars = true; }
     else if (arg === '--offline') result.offline = true;
     else if (arg === '--source-mode' && args[index + 1]) result.sourceMode = args[++index];
     else if (arg === '--mirror-base-url' && args[index + 1]) result.mirrorBaseUrl = args[++index];
@@ -54,7 +64,7 @@ function parseArgs(args) {
     else if (arg === '--max-age-days' && args[index + 1]) result.maxAgeDays = Number(args[++index]);
     else throw new Error(`未知或不完整的参数：${arg}`);
   }
-  if (!result.check && !result.updateSatellites && !result.updateStars && !result.verifyOnly) result.check = true;
+  if (!result.check && !result.updateSatellites && !result.updateCatalogs && !result.updateStars && !result.verifyOnly) result.check = true;
   if (!Number.isFinite(result.maxAgeDays) || result.maxAgeDays < 1) throw new Error('--max-age-days 必须是不小于 1 的数字');
   if (!['local', 'mirror', 'upstream'].includes(result.sourceMode)) throw new Error('--source-mode 必须是 local、mirror 或 upstream');
   if (result.sourceMode === 'mirror' && !result.mirrorBaseUrl) throw new Error('mirror 模式必须提供 --mirror-base-url 或 OHOS_MIRROR_BASE_URL');
@@ -64,7 +74,7 @@ function parseArgs(args) {
     catch { throw new Error('--mirror-base-url 必须是有效的 HTTP(S) URL'); }
     if (!['http:', 'https:'].includes(mirrorUrl.protocol)) throw new Error('--mirror-base-url 必须使用 HTTP(S)');
   }
-  if (result.offline && result.sourceMode !== 'local' && (result.updateSatellites || result.updateStars)) throw new Error('--offline 更新只能配合 --source-mode local，避免意外联网');
+  if (result.offline && result.sourceMode !== 'local' && (result.updateSatellites || result.updateCatalogs || result.updateStars)) throw new Error('--offline 更新只能配合 --source-mode local，避免意外联网');
   return result;
 }
 
@@ -255,6 +265,54 @@ async function auditStars(options, manifest) {
   console.log(invalid.length === 0 ? `已核对内置星表：${files.length} 个文件，覆盖到约 12 等` : `星表缺失或校验失败：${invalid.join(', ')}`);
 }
 
+function catalogEntryCount(value, source) {
+  const key = source.catalogKey;
+  if (!key) throw new Error(`${source.id}: 注册表缺少 catalogKey`);
+  const entries = value?.[key];
+  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) throw new Error(`${source.id}: JSON 缺少 ${key} 对象`);
+  return Object.keys(entries).length;
+}
+
+async function updateBundledCatalogs(options, manifest, registry) {
+  manifest.schema = 1;
+  manifest.generatedAt = new Date().toISOString();
+  manifest.catalogs = manifest.catalogs ?? {};
+  const pendingWrites = [];
+  for (const sourceId of bundledCatalogSourceIds) {
+    const sourceDefinition = getSource(registry, sourceId);
+    const source = resolveSource(sourceDefinition, options.sourceMode, { mirrorBaseUrl: options.mirrorBaseUrl, sourceRoot: options.sourceRoot });
+    const text = await readResolvedText(source);
+    let value;
+    try {
+      value = JSON.parse(text);
+    } catch (error) {
+      throw new Error(`${sourceId}: JSON 无法解析：${error.message}`);
+    }
+    const entries = catalogEntryCount(value, sourceDefinition);
+    if (entries < (sourceDefinition.minEntries ?? 1)) throw new Error(`${sourceId}: 目录条数异常：${entries}`);
+    const outputPath = resolve(root, sourceDefinition.bundledResource);
+    const output = `${JSON.stringify(value, null, 2)}\n`;
+    const generatedAt = new Date().toISOString();
+    manifest.catalogs[sourceId] = {
+      source: sourceId,
+      sourceMode: source.resolvedMode,
+      resolvedEndpoint: sourceEndpoint(source),
+      fetchedAt: generatedAt,
+      bytes: Buffer.byteLength(output),
+      entries,
+      version: value.version ?? null,
+      sha256: sha256(output),
+      verified: true,
+    };
+    if (!options.verifyOnly) pendingWrites.push({ outputPath, value });
+    console.log(`${options.verifyOnly ? '已验证' : '已更新'} ${sourceId}（${source.resolvedMode}）：${entries} 条，SHA-256 ${sha256(output)}`);
+  }
+  if (!options.verifyOnly) {
+    for (const { outputPath, value } of pendingWrites) await writeJsonAtomically(outputPath, value);
+    await writeJsonAtomically(manifestPath, manifest);
+  }
+}
+
 async function check(options, manifest) {
   const text = await readFile(cataloguePath, 'utf8');
   const summary = validateCatalogue(JSON.parse(text));
@@ -268,8 +326,11 @@ async function check(options, manifest) {
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const registry = await loadOhosSourceRegistry();
-  const manifest = await loadManifest();
+  let manifest = await loadManifest();
   if (options.updateSatellites) await updateSatellites(options, manifest, registry);
+  if (options.updateSatellites && !options.verifyOnly) manifest = await loadManifest();
+  if (options.updateCatalogs) await updateBundledCatalogs(options, manifest, registry);
+  if (options.updateCatalogs && !options.verifyOnly) manifest = await loadManifest();
   if (options.updateStars) await auditStars(options, manifest);
   if (options.check || options.verifyOnly) await check(options, manifest);
 }

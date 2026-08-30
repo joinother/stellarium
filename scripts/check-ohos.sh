@@ -89,6 +89,17 @@ fi
 
 echo ""
 
+# 2.75. 检查可离线打包的目录资源
+echo "[2.75/3] 检查离线目录资源..."
+if node "$SCRIPT_DIR/check-ohos-offline-catalogs.mjs"; then
+  echo -e "${GREEN}  ✅ 内置目录资源与 QRC 一致${NC}"
+else
+  echo -e "${RED}  ❌ 离线目录资源检查失败${NC}"
+  ERRORS=$((ERRORS + 1))
+fi
+
+echo ""
+
 # 3. 尝试编译（可选，如果环境已配置）
 echo "[3/3] 尝试编译 HAP..."
 NODE_BIN="$DEVECO_HOME/tools/node/bin/node"

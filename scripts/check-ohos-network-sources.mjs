@@ -24,6 +24,7 @@ for (const source of registry.sources ?? []) {
   if (!source.localPath || source.localPath.startsWith('/')) errors.push(`${source.id}: localPath 必须是仓库相对路径`);
   if (!Array.isArray(source.outboundFields)) errors.push(`${source.id}: outboundFields 必须是数组`);
   if (source.runtimeDefault === 'bundled' && source.outboundFields.length > 0) errors.push(`${source.id}: bundled 数据源不能声明外发字段`);
+  if (source.runtimeDefault === 'bundled' && (!source.bundledResource || !source.bundledQrc || source.updatePolicy !== 'build-time-only')) errors.push(`${source.id}: bundled 数据源必须声明 bundledResource、bundledQrc 和 build-time-only 更新策略`);
 }
 
 if (errors.length) {

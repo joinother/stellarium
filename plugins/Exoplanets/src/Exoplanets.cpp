@@ -214,15 +214,19 @@ void Exoplanets::init()
 
 	readJsonFile();
 
-	// Set up download manager and the update schedule
+	// Set up download manager and the update schedule.
+	updateState = CompleteNoUpdates;
+#ifndef STELLARIUM_OHOS_OFFLINE
 	//networkManager = StelApp::getInstance().getNetworkAccessManager();
 	networkManager = new QNetworkAccessManager(this);
-	updateState = CompleteNoUpdates;
 	updateTimer = new QTimer(this);
 	updateTimer->setSingleShot(false);   // recurring check for update
 	updateTimer->setInterval(13000);     // check once every 13 seconds to see if it is time for an update
 	connect(updateTimer, SIGNAL(timeout()), this, SLOT(checkForUpdate()));
 	updateTimer->start();
+#else
+	qInfo() << "[Exoplanets] HarmonyOS offline build: online catalog updates are disabled.";
+#endif
 
 	connect(this, SIGNAL(jsonUpdateComplete(void)), this, SLOT(reloadCatalog()));
 	connect(StelApp::getInstance().getCore(), SIGNAL(configurationDataSaved()), this, SLOT(saveSettings()));
@@ -741,7 +745,11 @@ void Exoplanets::loadConfiguration(void)
 	updateUrl = conf->value("url", "https://www.stellarium.org/json/exoplanets.json").toString();
 	updateFrequencyHours = conf->value("update_frequency_hours", 72).toInt();
 	lastUpdate = QDateTime::fromString(conf->value("last_update", "2012-05-24T12:00:00").toString(), Qt::ISODate);
+#ifdef STELLARIUM_OHOS_OFFLINE
+	updatesEnabled = false;
+#else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
+#endif
 	setDisplayMode(conf->value("distribution_enabled", false).toBool());
 	setTimelineMode(conf->value("timeline_enabled", false).toBool());
 	setHabitableMode(conf->value("habitable_enabled", false).toBool());
@@ -784,16 +792,26 @@ int Exoplanets::getSecondsToUpdate(void)
 
 void Exoplanets::checkForUpdate(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	return;
+#else
 #if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyHours * 3600) <= QDateTime::currentDateTime())
 #else
 	if (updatesEnabled && lastUpdate.addSecs(updateFrequencyHours * 3600) <= QDateTime::currentDateTime() && networkManager->networkAccessible()==QNetworkAccessManager::Accessible)
 #endif
 		updateJSON();
+#endif
 }
 
 void Exoplanets::updateJSON(void)
 {
+#ifdef STELLARIUM_OHOS_OFFLINE
+	qWarning() << "[Exoplanets] Ignoring online catalog update request in the HarmonyOS offline build.";
+	updateState = Exoplanets::OtherError;
+	emit updateStateChanged(updateState);
+	return;
+#else
 	if (updateState==Exoplanets::Updating)
 	{
 		qWarning() << "[Exoplanets] Already updating...  will not start again until current update is complete.";
@@ -801,6 +819,7 @@ void Exoplanets::updateJSON(void)
 	}
 	qDebug() << "[Exoplanets] Updating exoplanets catalog ...";
 	startDownload(updateUrl);
+#endif
 }
 
 void Exoplanets::displayMessage(const QString& message, const QString &hexColor)
