@@ -2,13 +2,13 @@
 
 ## Introduction
 
-Fishing and hunting peoples represented by the Manchus have held traditions of stellar veneration since ancient times. The oldest and most primitive form of worship in Shamanism is the sacred reverence for celestial phenomena such as the cosmic dome, the sun, moon, and stars, often referred to as "worship of Heaven." Under the specific geographical and climatic conditions of northern China, the Manchu ancestors, through sustained and meticulous observation of the night sky over long-term production and life practices, developed a unique system of astronomical cognition and veneration.
+Fishing and hunting peoples represented by the Manchus have held traditions of stellar veneration since ancient times. One form of worship in these shamanic traditions is the sacred reverence for celestial phenomena such as the cosmic dome, the sun, moon, and stars, often referred to as "worship of Heaven." Under the specific geographical and climatic conditions of northern China, the Manchu ancestors, through sustained and meticulous observation of the night sky over long-term production and life practices, developed a unique system of astronomical cognition and veneration.
 
 ## Description
 
 ### Sky
 
-In the ancient beliefs of Manchu Shamanism, the cosmos did not initially have a fixed form. Mythology describes: "In the earliest, earliest times, Heaven had no shape; it flowed like water and drifted like clouds." This reflects a naive imagination of the chaotic state before the separation of heaven and earth.
+In the ancient beliefs of Manchu Shamanism, the cosmos did not initially have a fixed form. Mythology describes: "In the earliest, earliest times, Heaven had no shape; it flowed like water and drifted like clouds." This describes a traditional account of the chaotic state before the separation of heaven and earth.
 
 As observation deepened, the ancestors conceived various explanations for the universe's structure. One view holds that "the blue sky is lofty and vast, boundless," a direct description of the immense cosmos. Another widespread concept is the "Nine Heavens" or "Ninety-Nine Heavens" theory, positing that the cosmos naturally divides into nine layers (or ninety-nine). The uppermost layer is the Celestial Realm or Fire Realm (also called the Realm of Light), further divided into three sub-layers, inhabited by celestial deities, the sun, moon, stars, and gods of wind, thunder, rain, and snow. The middle layer is also in three sub-layers, the world where humans, animals, and lesser spirits multiply. The lower layer is the Earthly Realm or Realm of Darkness, again in three sub-layers, where the Earth Mother goddess and demons reside.
 
@@ -18,7 +18,7 @@ Additionally, there exists the concept of the universe as a "Cosmic Tree," "Heav
 
 The core of Manchu ancestral astronomical knowledge lies in the practical observation of celestial phenomena. Living in high-latitude, frigid regions with long winters and clear night skies, their stellar system particularly emphasizes winter constellations. They determined seasons, direction, time, and weather changes by observing the rise/set times, positions, and trajectories of specific constellations, directly guiding production and daily life. For example, observing the direction of the "dipper's handle" of the *Nadan usiha* (Big Dipper) — "when the dipper handle points north, winter reigns over the land"; judging the deep night hour by the position of the *Ilan usiha* (Orion's Belt); predicting wind and snow by observing changes in the form of *Gas'ha* (Eagle constellation). Such experiences crystallized into rich astronomical proverbs, such as "When the eagle (star) falls in the western sky, the sun peeks over the mountains" (foretelling dawn) and "When stars braid their hair, heavy snow will fall in succession."
 
-Star worship ceremonies themselves were closely tied to seasonal nodes. For instance, ceremonies held with the first snow prayed for bountiful winter hunts, while those in the first lunar month aimed to expel pestilence and pray for peace. This method of "determining time, direction, and the year" based on stellar movements formed an effective primitive calendrical system developed by the Manchu ancestors over long ages.
+Star worship ceremonies themselves were closely tied to seasonal nodes. For instance, ceremonies held with the first snow prayed for bountiful winter hunts, while those in the first lunar month aimed to expel pestilence and pray for peace. This method of "determining time, direction, and the year" based on stellar movements formed a traditional calendrical system serving everyday and subsistence activities developed by the Manchu ancestors over long ages.
 
 ### Sun and Moon
 

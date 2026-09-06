@@ -80,10 +80,6 @@ function shell(options, args) {
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
-function quoteHdcShellArg(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-
 function findDevice(options) {
   if (options.device) return;
   const output = execFileSync(options.hdc, ['list', 'targets'], { encoding: 'utf8' });
@@ -101,24 +97,25 @@ function readResponse(options, requestId, deadline, relaunch) {
   let requestSeen = false;
   let retriesRemaining = 2;
   let nextRetryAt = Date.now() + 900;
+  const byIndex = new Map();
   while (Date.now() < deadline) {
     let log = '';
     // Filter on the device before returning logs. A busy Qt UI can make the
     // complete hilog dump exceed the host-side buffer and hide the response.
     try {
-      log = shell(options, ['sh', '-c', `hilog -x | grep -F '${requestId}'`]);
+      log = shell(options, ['hilog', '-x', '-T', 'ohosQtTemplate', '-e', requestId]);
     } catch (error) { log = ''; }
     const requestLines = log.split(/\r?\n/).filter((line) => line.includes(requestId));
     if (requestLines.length > 0) requestSeen = true;
     const responseLines = requestLines.filter((line) => line.includes(RESPONSE_MARKER) && line.includes(`requestId=${requestId}`));
     const chunks = responseLines.map((line) => {
-      const match = line.match(/chunkIndex=(\d+)\s+chunkCount=(\d+)\s+responseChunk=(.*)$/);
+      const match = line.match(/chunkIndex=(\d+)\s+chunkCount=(\d+)\s+responseChunk=(.*)$/s);
       if (!match) return undefined;
-      return { index: Number(match[1]), count: Number(match[2]), value: match[3].trim() };
+      return { index: Number(match[1]), count: Number(match[2]), value: match[3] };
     }).filter((chunk) => chunk !== undefined);
     if (chunks.length > 0) {
       const expectedCount = chunks[0].count;
-      const byIndex = new Map(chunks.map((chunk) => [chunk.index, chunk.value]));
+      for (const chunk of chunks) byIndex.set(chunk.index, chunk.value);
       if (byIndex.size >= expectedCount && Array.from({ length: expectedCount }, (_, index) => byIndex.has(index)).every(Boolean)) {
         const raw = Array.from({ length: expectedCount }, (_, index) => byIndex.get(index)).join('');
         try { return JSON.parse(raw); } catch (error) { return { ok: false, error: '无法解析设备响应', raw }; }
@@ -144,6 +141,11 @@ function readResponse(options, requestId, deadline, relaunch) {
   throw new Error('等待设备响应超时；若是首次启动，请先在设备上完成隐私政策确认');
 }
 
+function encodePayload(payload) {
+  return `__STEL_CLI_PAYLOAD_URI__${encodeURIComponent(payload).replace(/[!'()*]/g,
+    character => '%' + character.charCodeAt(0).toString(16).toUpperCase())}`;
+}
+
 function runCommand(options, command, payload, quiet = false) {
   const deadline = Date.now() + options.timeout;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -153,8 +155,11 @@ function runCommand(options, command, payload, quiet = false) {
       '--ps', 'skyinstrument.cli.command', command,
       '--ps', 'skyinstrument.cli.requestId', requestId];
     if (payload !== undefined) {
-      args.push('--ps', 'skyinstrument.cli.payload', quoteHdcShellArg(
-        `__STEL_CLI_PAYLOAD__${payload}`));
+      // hdc reconstructs the remote shell command and splits spaces even when
+      // the host process supplied one argv item. Percent encoding keeps JSON,
+      // translated names and punctuation in one aa --ps value.
+      args.push('--ps', 'skyinstrument.cli.payload',
+        encodePayload(payload));
     }
     if (!quiet && !options.json) console.error(`设备 ${options.device}：执行 ${command}（${requestId}）`);
     const launch = () => shell(options, args);
@@ -241,10 +246,10 @@ async function main() {
   if (options.describe !== undefined) { output(options, runCommand(options, 'getCommandSchema', options.describe)); return; }
   const response = runCommand(options, options.command, payloadFromOptions(options));
   output(options, response);
-  process.exit(response.ok === false ? 1 : 0);
+  process.exitCode = response.ok === false ? 1 : 0;
 }
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
-  process.exit(2);
+  process.exitCode = 2;
 });

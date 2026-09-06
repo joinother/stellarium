@@ -79,7 +79,8 @@ void gSatTEME::setEpoch(gTime ai_time)
 	// call the propagator to get the initial state vector value
 	sgp4(CONSTANTS_SET, satrec,  dtsince, m_Position.v,  m_Vel.v);
 
-	m_SubPoint    = computeSubPoint( ai_time);
+	m_SubPoint = std::strcmp(getPropagationStatus(), "valid") == 0
+		? computeSubPoint(ai_time) : Vec3d(0., 0., -EARTH_RADIUS);
 }
 
 void gSatTEME::setMinSinceKepEpoch(double ai_minSinceKepEpoch)
@@ -90,7 +91,8 @@ void gSatTEME::setMinSinceKepEpoch(double ai_minSinceKepEpoch)
 	// call the propagator to get the initial state vector value
 	sgp4(CONSTANTS_SET, satrec,  ai_minSinceKepEpoch, m_Position.v,  m_Vel.v);
 
-	m_SubPoint    = computeSubPoint( Epoch);
+	m_SubPoint = std::strcmp(getPropagationStatus(), "valid") == 0
+		? computeSubPoint(Epoch) : Vec3d(0., 0., -EARTH_RADIUS);
 }
 
 Vec3d gSatTEME::computeSubPoint(gTime ai_Time)

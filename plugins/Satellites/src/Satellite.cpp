@@ -355,6 +355,13 @@ QString Satellite::getInfoString(const StelCore *core, const InfoStringGroup& fl
 
 	if (flags & ObjectType)
 		oss << QString("%1: <b>%2</b>").arg(q_("Type"), getObjectTypeI18n())  << "<br/>";
+	if (!orbitValid)
+	{
+		if (flags != InfoStringGroup(None))
+			oss << q_("Orbit propagation is invalid at this time. Update the TLE or choose a time near its epoch.") << "<br/>";
+		postProcessInfoString(str, flags);
+		return str;
+	}
 	
 	if ((flags & Magnitude) && ((stdMag<99.) || (RCS>0.)) && (visibility==gSatWrapper::VISIBLE))
 	{
@@ -554,18 +561,23 @@ void Satellite::calculateEpochFromLine1(const QString &tle)
 				.arg(StelUtils::hoursToHmsStr(24.*(dayOfYear-static_cast<int>(dayOfYear)), true));
 
 	tleEpoch = epochStr;
-	tleEpochJD = epoch.toJulianDay();
+	tleEpochJD = epoch.toJulianDay() - 0.5 + dayOfYear - std::floor(dayOfYear);
 }
 
 QVariantMap Satellite::getInfoMap(const StelCore *core) const
 {
-	QVariantMap map = StelObject::getInfoMap(core);
+	QVariantMap map = orbitValid ? StelObject::getInfoMap(core) : QVariantMap();
 
 	map.insert("description", QString(description).replace("\n", " - "));
 	map.insert("catalog", id);
 	map.insert("tle1", tleElements.first);
 	map.insert("tle2", tleElements.second);
 	map.insert("tle-epoch", tleEpoch);
+	map.insert("tle-epoch-jd", tleEpochJD);
+	map.insert("tle-age-days", core->getJD() - tleEpochJD);
+	map.insert("tle-outdated", std::abs(core->getJD() - tleEpochJD) > tleEpochAge);
+	map.insert("propagation-status", propagationStatus);
+	map.insert("sgp4-error", pSatWrapper ? pSatWrapper->getPropagationError() : -1);
 
 	if (!internationalDesignator.isEmpty())
 		map.insert("international-designator", internationalDesignator);
@@ -593,7 +605,15 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 		map.insert("vmage", "?");
 	}
 
-	map.insert("range", range);
+	map.insert("orbit-valid", initialized && orbitValid);
+	map.insert("inclination", pSatWrapper->getOrbitalInclination());
+	map.insert("period", pSatWrapper->getOrbitalPeriod());
+	map.insert("perigee-altitude", perigee);
+	map.insert("apogee-altitude", apogee);
+	map.insert("operational-status", getOperationalStatus());
+	if (!orbitValid) return map;
+	if (initialized && orbitValid && std::isfinite(range) && range > 0.0)
+		map.insert("range", range);
 	map.insert("rangerate", rangeRate);
 	map.insert("height", height);
 	map.insert("subpoint-lat", latLongSubPointPosition[0]);
@@ -604,17 +624,12 @@ QVariantMap Satellite::getInfoMap(const StelCore *core) const
 	map.insert("TEME-speed-X", velocity[0]);
 	map.insert("TEME-speed-Y", velocity[1]);
 	map.insert("TEME-speed-Z", velocity[2]);
-	map.insert("inclination", pSatWrapper->getOrbitalInclination());
-	map.insert("period", pSatWrapper->getOrbitalPeriod());
-	map.insert("perigee-altitude", perigee);
-	map.insert("apogee-altitude", apogee);
 #if (SATELLITES_PLUGIN_IRIDIUM == 1)
 	if (sunReflAngle>0.)
 	{  // Iridium
 		map.insert("sun-reflection-angle", sunReflAngle);
 	}
 #endif
-	map.insert("operational-status", getOperationalStatus());
 	map.insert("phase-angle", phaseAngle);
 	map.insert("phase-angle-dms", StelUtils::radToDmsStr(phaseAngle));
 	map.insert("phase-angle-deg", StelUtils::radToDecDegStr(phaseAngle));
@@ -642,6 +657,7 @@ QVariantList Satellite::getPassPredictions(StelCore* core, double hours, int lim
 	satellite->orbitDisplayed = false;
 	const double sunUpdateStep = 300.0 / 86400.0;
 	double lastSunUpdateJD = originalJD - sunUpdateStep;
+	bool predictionFailed = false;
 
 	struct PassSample
 	{
@@ -664,6 +680,11 @@ QVariantList Satellite::getPassPredictions(StelCore* core, double hours, int lim
 		satellite->update(core, jd);
 		PassSample sample;
 		sample.jd = jd;
+		if (!satellite->orbitValid)
+		{
+			predictionFailed = true;
+			return sample;
+		}
 		StelUtils::rectToSphe(&sample.azimuth, &sample.altitude, satellite->elAzPosition);
 		sample.azimuth *= M_180_PI;
 		sample.altitude *= M_180_PI;
@@ -800,6 +821,7 @@ QVariantList Satellite::getPassPredictions(StelCore* core, double hours, int lim
 	satellite->update(core, originalJD);
 	satellite->orbitLinesFlag = originalOrbitLinesFlag;
 	satellite->orbitDisplayed = originalOrbitDisplayed;
+	if (predictionFailed) passes.clear();
 	return passes;
 }
 
@@ -817,6 +839,7 @@ Vec3f Satellite::getInfoColor(void) const
 float Satellite::getVMagnitude(const StelCore* core) const
 {	
 	Q_UNUSED(core)
+	if (!orbitValid) return 99.f;
 	float vmag = 7.f; // Optimistic value of magnitude for artificial satellite without data for standard magnitude
 	if (iconicModeFlag)
 		vmag = 5.0;
@@ -1026,13 +1049,28 @@ void Satellite::recomputeSatData()
 	calculateSatDataFromLine2(tleElements.second);
 }
 
-void Satellite::update(const StelCore *core, const double JD)
+void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 {
-	if (pSatWrapper && orbitValid)
+	if (pSatWrapper)
 	{
 		epochTime = JD; // + timeShift; // We have "true" JD (UTC) from core, satellites don't need JDE!
 
 		pSatWrapper->setEpoch(epochTime);
+		QString nextStatus = pSatWrapper->getPropagationStatus();
+		if (nextStatus == QLatin1String("valid") && pSatWrapper->getSubPoint()[2] < 80.)
+			nextStatus = QStringLiteral("below_atmosphere_limit");
+		if (nextStatus != propagationStatus && nextStatus != QLatin1String("valid"))
+			qWarning() << "[Satellites][propagation]" << id << name << nextStatus
+				<< "tleAgeDays=" << JD - tleEpochJD << "sgp4Error=" << pSatWrapper->getPropagationError();
+		propagationStatus = nextStatus;
+		orbitValid = nextStatus == QLatin1String("valid");
+		if (!orbitValid)
+		{
+			range = 0.;
+			rangeRate = 0.;
+			visibility = gSatWrapper::UNKNOWN;
+			return;
+		}
 		position                 = pSatWrapper->getTEMEPos();
 		velocity                 = pSatWrapper->getTEMEVel();
 		latLongSubPointPosition  = pSatWrapper->getSubPoint();
@@ -1042,19 +1080,6 @@ void Satellite::update(const StelCore *core, const double JD)
 		perigee                  = pa[0];
 		apogee                   = pa[1];
 		*/
-		if (height < 80) // way below Kármán line: Satellite is certainly lost, at least TLE not applicable.
-		{
-			// The orbit is no longer valid.  Causes include very out of date
-			// TLE, system date and time out of a reasonable range, and orbital
-			// degradation and re-entry of a satellite.  In any of these cases
-			// we might end up with a problem - usually a crash of Stellarium
-			// because of a div/0 or something.
-			qWarning() << "Satellite has invalid orbit:" << name << id;
-			orbitValid = false;
-			displayed = false; // It shouldn't be displayed!
-			return;
-		}
-
 		elAzPosition = pSatWrapper->getAltAz();
 		elAzPosition.normalize();
 		XYZ = Satellite::getJ2000EquatorialPos(core);
@@ -1070,7 +1095,7 @@ void Satellite::update(const StelCore *core, const double JD)
 
 		// Compute orbit points to draw orbit line.
 		// We suppress computing so that no lines are computed in parallel as long as this uses static variables.
-		if (orbitLinesFlag && orbitDisplayed) computeOrbitPoints();
+		if (updateOrbit) updateOrbitLines();
 	}
 }
 
@@ -1158,6 +1183,21 @@ void Satellite::recalculateOrbitLines(void)
 {
 	orbitPoints.clear();
 	visibilityPoints.clear();
+}
+
+void Satellite::updateOrbitLines()
+{
+	if (initialized && displayed && orbitValid && orbitLinesFlag && shouldDisplayOrbit())
+		computeOrbitPoints();
+}
+
+QVariantMap Satellite::getOrbitLineStatus() const
+{
+	return {{"id", id}, {"enabled", orbitLinesFlag}, {"configured", orbitDisplayed},
+		{"selectedPreview", orbitPreview}, {"requested", shouldDisplayOrbit()},
+		{"orbitValid", isOrbitValid()}, {"displayed", displayed},
+		{"pointCount", orbitPoints.size()}, {"drawCount", orbitDrawCount},
+		{"lastDrawJD", orbitLastDrawJD}};
 }
 
 SatFlags Satellite::getFlags() const
@@ -1329,7 +1369,7 @@ bool Satellite::operator <(const Satellite& another) const
 void Satellite::draw(StelCore* core, StelPainter& painter)
 {
 	// Separated because first test should be very fast.
-	if (!displayed)
+	if (!displayed || !orbitValid)
 		return;
 
 	// 1) Do not show satellites before Space Era begins!
@@ -1431,7 +1471,7 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 		}
 	}
 
-	if (orbitDisplayed && Satellite::orbitLinesFlag && orbitValid && core->getFlagClearSky())
+	if (shouldDisplayOrbit() && Satellite::orbitLinesFlag && orbitValid && core->getFlagClearSky())
 		drawOrbit(core, painter);
 }
 
@@ -1482,6 +1522,8 @@ void Satellite::drawOrbit(StelCore *core, StelPainter& painter)
 			painter.setLineWidth(orbitLineThickness*ppx);
 
 		painter.drawPath(vertexArray, colorArray); // (does client state switching as needed internally)
+		++orbitDrawCount;
+		orbitLastDrawJD = core->getJD();
 
 		painter.enableClientStates(false);
 		if (orbitLineThickness>1 || ppx>1.f)
@@ -1500,6 +1542,17 @@ float Satellite::calculateOrbitSegmentIntensity(int segNum)
 
 void Satellite::computeOrbitPoints()
 {
+	const auto validSample = [this]() {
+		if (pSatWrapper->getPropagationStatus() == QLatin1String("valid"))
+		{
+			const Vec3d sample = pSatWrapper->getAltAz();
+			if (std::isfinite(sample[0]) && std::isfinite(sample[1]) && std::isfinite(sample[2]) && sample.normSquared() > 0.)
+				return true;
+		}
+		recalculateOrbitLines();
+		pSatWrapper->setEpoch(epochTime);
+		return false;
+	};
 	gTimeSpan computeInterval(0, 0, 0, orbitLineSegmentDuration);
 	gTimeSpan orbitSpan(0, 0, 0, orbitLineSegments*orbitLineSegmentDuration/2);
 	gTime epochTm;
@@ -1514,6 +1567,7 @@ void Satellite::computeOrbitPoints()
 		for (int i=0; i<=orbitLineSegments; i++)
 		{
 			pSatWrapper->setEpoch(epochTm.getGmtTm());
+			if (!validSample()) return;
 			Vec3d sat = pSatWrapper->getAltAz();
 			orbitPoints.append(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
 			visibilityPoints.append(pSatWrapper->getVisibilityPredict());
@@ -1545,6 +1599,7 @@ void Satellite::computeOrbitPoints()
 				orbitPoints.removeFirst();
 				visibilityPoints.removeFirst();
 				pSatWrapper->setEpoch(epochTm.getGmtTm());
+				if (!validSample()) return;
 				Vec3d sat = pSatWrapper->getAltAz();
 				orbitPoints.append(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
 				visibilityPoints.append(pSatWrapper->getVisibilityPredict());
@@ -1576,6 +1631,7 @@ void Satellite::computeOrbitPoints()
 				orbitPoints.removeLast();
 				visibilityPoints.removeLast();
 				pSatWrapper->setEpoch(epochTm.getGmtTm());
+				if (!validSample()) return;
 				Vec3d sat = pSatWrapper->getAltAz();
 				orbitPoints.push_front(Vec4d(sat[0],sat[1],sat[2],pSatWrapper->getSubPoint()[2]));
 				visibilityPoints.push_front(pSatWrapper->getVisibilityPredict());
@@ -1584,6 +1640,7 @@ void Satellite::computeOrbitPoints()
 			lastEpochCompForOrbit = epochTime;
 		}
 	}
+	pSatWrapper->setEpoch(epochTime);
 }
 
 bool operator <(const SatelliteP& left, const SatelliteP& right)

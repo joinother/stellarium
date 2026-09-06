@@ -459,11 +459,23 @@ protected:
 
 		map.insert("bV", getBV());
 
-		if (s->getPlx())
+		const double parallax = s->getPlx();
+		const double parallaxError = s->getPlxErr();
+		map.insert("distance-status", "unavailable");
+		if (std::isfinite(parallax) && std::isfinite(parallaxError) && (parallax != 0. || parallaxError > 0.))
 		{
-			map.insert("parallax", 0.001*s->getPlx());
-			map.insert("absolute-mag", getVMagnitude(core)+5.f*(std::log10(0.001*s->getPlx())));
-			map.insert("distance-ly", (AU/(SPEED_OF_LIGHT*86400*365.25)) / (s->getPlx()*((0.001/3600)*(M_PI/180))));
+			map.insert("parallax", 0.001 * parallax);
+			map.insert("parallax-error", 0.001 * parallaxError);
+			map.insert("distance-status", "low_confidence");
+			if (parallax > 0. && parallaxError > 0. && parallax / parallaxError > 5.)
+			{
+				const double distanceLy = PARSEC_LY * 1000. / parallax;
+				map.insert("absolute-mag", getVMagnitude(core) + 5. * (1. + std::log10(0.001 * parallax)));
+				map.insert("distance-ly", distanceLy);
+				map.insert("distance-error-ly", distanceLy * parallaxError / parallax);
+				map.insert("distance-method", "inverse_parallax");
+				map.insert("distance-status", "estimated");
+			}
 		}
 
 		if (vPeriod>0)

@@ -27,3 +27,11 @@
 - 每次资源同步先运行 `scripts/build-ohos-official-translations.mjs`，再将 `translations/` 镜像进 rawfile。
 - `scripts/check-ohos-i18n.mjs` 检查官方 PO 到 QM 的覆盖、构建镜像一致性、旧天体译名表回归，以及中文地区术语保护。
 - 人工翻译应由目标语言母语审校，重点检查日期/数字格式、敬语、文本方向、地名惯用写法和文化敏感语境。
+
+## 应用编辑层
+
+- `data/skyculture_editorial_context.json` 是应用层的补充说明资源，覆盖当前 43 个官方语言代码；它不覆盖、不删除上游 `skycultures/*/description.md`、作者署名、来源、许可证或原始历史记录。
+- `StelSkyCultureMgr` 在桌面 GUI、结构化详情和鸿蒙命令桥共享同一加载链路，并根据当前应用语言选择对应段落；语言缺失时仅回退英文，不回退中文。HTML 文本统一转义后再插入详情页。
+- 通用段落说明共同文化遗产、历史和地域语境、原始记录与后续解释的区分，以及不确定性标注；不得以此替换文化自身名称、语言、术语或可追溯来源。
+- 中国相关文化 ID 当前包括 `chinese`、`chinese_chenzhuo`、`chinese_manchu`、`chinese_song_dynasty`、`chinese_xianglin`、`chinese_yuan_dynasty`、`modern_chinese`、`modern_journey_to_the_west` 和 `tibetan`。相关语言段落统一使用 `西藏自治区`、`新疆维吾尔自治区`、`中国香港特别行政区`、`中国澳门特别行政区`、`中国台湾地区` 等规范表述；繁体中文保持同一语义。
+- 新增或修订语言段落须逐语言核对语义一致性、当地语言自然度和文化敏感性；未经目标语言审校不得宣称完成母语本地化。该资源不产生联网行为，也不改变离线资源策略。

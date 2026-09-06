@@ -386,6 +386,10 @@ public slots:
 	//! Return the scaled time for animated objects
 	static double getAnimationTime();
 
+	//! Dispatch a synthetic key event through the normal shortcut/module path.
+	//! Used by the offline touch/CLI script controller for legacy scripts.
+	void handleKeyEvent(class QKeyEvent* event);
+
 	//! Report that a download occurred. This is used for statistics purposes.
 	//! Connect this slot to QNetworkAccessManager::finished() slot to obtain statistics at the end of the program.
 	void reportFileDownloadFinished(QNetworkReply* reply);

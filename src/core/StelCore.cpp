@@ -1143,6 +1143,11 @@ void StelCore::updateTransformMatrices()
 	}
 }
 
+void StelCore::refreshTransformMatrices()
+{
+	updateTransformMatrices();
+}
+
 // This avoids calling a costly operation every frame.
 void StelCore::updateFixedEquatorialTransformMatrices()
 {
@@ -3145,14 +3150,17 @@ static bool iau_constlineVecInitialized=false;
 // We converted back to HH:MM:SS format to avoid the inherent rounding errors present in that file (Bug LP:#1690615).
 QString StelCore::getIAUConstellation(const Vec3d &positionEqJnow) const
 {
-	Q_ASSERT(positionEqJnow.norm()>0); // Just make sure it looks like a valid posititon.
+	const double positionLength = positionEqJnow.norm();
+	if (!std::isfinite(positionLength) || positionLength <= 0.) return QString();
 	// Precess positionJ2000 to 1875.0
 	const Vec3d pos1875=j2000ToJ1875(equinoxEquToJ2000(positionEqJnow, RefractionOff));
 	double RA1875;
 	double dec1875;
 	StelUtils::rectToSphe(&RA1875, &dec1875, pos1875);
+	if (!std::isfinite(RA1875) || !std::isfinite(dec1875)) return QString();
 	RA1875 *= 12./M_PI; // hours
 	if (RA1875 <0.) RA1875+=24.;
+	if (RA1875 >= 24.) RA1875 = 0.;
 	dec1875 *= M_180_PI; // degrees
 	Q_ASSERT(RA1875>=0.0);
 	Q_ASSERT(RA1875<=24.0);
@@ -3207,19 +3215,10 @@ QString StelCore::getIAUConstellation(const Vec3d &positionEqJnow) const
 	}
 
 	// iterate through vector, find entry where declination is lower.
-	int entry=0;
-	while (iau_constlineVec->at(entry).decLow > dec1875)
-		entry++;
-	while (entry<iau_constlineVec->size())
+	for (const auto& span : std::as_const(*iau_constlineVec))
 	{
-		while (iau_constlineVec->at(entry).RAhigh <= RA1875)
-			entry++;
-		while (iau_constlineVec->at(entry).RAlow >= RA1875)
-			entry++;
-		if (iau_constlineVec->at(entry).RAhigh > RA1875)
-			return iau_constlineVec->at(entry).constellation;
-		else
-			entry++;
+		if (dec1875 >= span.decLow && RA1875 >= span.RAlow && RA1875 < span.RAhigh)
+			return span.constellation;
 	}
 	qWarning() << "getIAUconstellation error: Cannot determine, algorithm failed.";
 	return "(?)";

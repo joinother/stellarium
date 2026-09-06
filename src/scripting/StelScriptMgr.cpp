@@ -37,6 +37,9 @@
 #include "StelFileMgr.hpp"
 #include "StelModuleMgr.hpp"
 #include "StelMovementMgr.hpp"
+#include "StelObjectMgr.hpp"
+#include "StelPropertyMgr.hpp"
+#include "StelObserver.hpp"
 
 #include "StelSkyDrawer.hpp"
 #include "StelSkyLayerMgr.hpp"
@@ -460,9 +463,10 @@ void StelScriptMgr::defVecClasses(QScriptEngine *engine)
 }
 #endif
 
-StelScriptMgr::StelScriptMgr(QObject *parent): QObject(parent)
+	StelScriptMgr::StelScriptMgr(QObject *parent): QObject(parent)
 {
 	waitEventLoop = new QEventLoop();
+	waitingForKeypress = false;
 #ifdef ENABLE_SCRIPT_QML
 	engine = new QJSEngine(this);
 	engine->installExtensions(QJSEngine::ConsoleExtension); // TBD: Maybe remove as unnecessary for us?
@@ -777,6 +781,7 @@ bool StelScriptMgr::runPreprocessedScript(const QString &preprocessedScript, con
 
 	// Make sure that the gui objects have been completely initialized (there used to be problems with startup scripts).
 	Q_ASSERT(StelApp::getInstance().getGui());
+	captureSessionState();
 
 	engine->globalObject().setProperty("scriptRateReadOnly", 1.0);
 
@@ -808,19 +813,25 @@ bool StelScriptMgr::runPreprocessedScript(const QString &preprocessedScript, con
 	//QStringList stackTrace;
 	//result=engine->evaluate(preprocessedScript, QString(), 1, &stackTrace);
 	result=engine->evaluate(preprocessedScript, QString(), 1);
+#if defined(__OHOS__)
+	// Stop the script-owned render heartbeat before restoring the camera. A
+	// heartbeat frame between restoreSessionState() and this cleanup can run
+	// the normal movement update and overwrite the restored view.
+	ohosRenderHeartbeat.stop();
+	StelMainView::getInstance().setOhosScriptRenderHeartbeat(false);
+#endif
 	scriptEnded();
 #else
 	// run that script in a new context
 	QScriptContext *context = engine->pushContext();
 	engine->evaluate(preprocessedScript);
 	engine->popContext();
-	scriptEnded();
-	Q_UNUSED(context)
-#endif
-
 #if defined(__OHOS__)
 	ohosRenderHeartbeat.stop();
 	StelMainView::getInstance().setOhosScriptRenderHeartbeat(false);
+#endif
+	scriptEnded();
+	Q_UNUSED(context)
 #endif
 	return true;
 }
@@ -938,6 +949,17 @@ void StelScriptMgr::stopScript()
 #endif
 }
 
+void StelScriptMgr::continueScript()
+{
+	if (waitingForKeypress && waitEventLoop->isRunning())
+		waitEventLoop->quit();
+}
+
+bool StelScriptMgr::isWaitingForKeypress() const
+{
+	return waitingForKeypress && waitEventLoop != Q_NULLPTR && waitEventLoop->isRunning();
+}
+
 void StelScriptMgr::setScriptRate(double r)
 {
 	qCDebug(Scripting) << "StelScriptMgr::setScriptRate(" << r << ")";
@@ -994,6 +1016,197 @@ double StelScriptMgr::getScriptRate() const
 	return engine->globalObject().property("scriptRateReadOnly").toNumber();
 }
 
+void StelScriptMgr::captureSessionState()
+{
+	StelCore* core = StelApp::getInstance().getCore();
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : Q_NULLPTR;
+	if (!core || !movementMgr)
+		return;
+
+	sessionState = ScriptSessionState();
+	sessionState.jd = core->getJD();
+	sessionState.timeRate = core->getTimeRate();
+	sessionState.location = core->getCurrentLocation();
+	sessionState.timeZone = core->getCurrentTimeZone();
+	sessionState.useCustomTimeZone = core->getUseCustomTimeZone();
+	sessionState.useDST = core->getUseDST();
+	sessionState.projectionKey = core->getCurrentProjectionTypeKey();
+	sessionState.viewDirection = movementMgr->getViewDirectionJ2000();
+	sessionState.viewUp = movementMgr->getViewUpVectorJ2000();
+	sessionState.viewDirectionMountFrame = movementMgr->j2000ToMountFrame(sessionState.viewDirection);
+	sessionState.viewUpMountFrame = movementMgr->j2000ToMountFrame(sessionState.viewUp);
+	sessionState.fov = movementMgr->getCurrentFov();
+	sessionState.viewportHorizontalOffset = core->getViewportHorizontalOffset();
+	sessionState.viewportVerticalOffset = core->getViewportVerticalOffset();
+	sessionState.tracking = movementMgr->getFlagTracking();
+	sessionState.lockEquatorialPosition = movementMgr->getFlagLockEquPos();
+	sessionState.mountMode = static_cast<int>(movementMgr->getMountMode());
+	sessionState.movementSpeedFactor = movementMgr->getMovementSpeedFactor();
+
+	StelPropertyMgr* propertyMgr = StelApp::getInstance().getStelPropertyManager();
+	if (propertyMgr)
+	{
+		for (StelProperty* property : propertyMgr->getAllProperties())
+		{
+			if (property->isSynchronizable())
+				sessionState.properties.insert(property->getId(), property->getValue());
+		}
+	}
+
+	const QList<StelObjectP>& selectedObjects = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
+	for (const StelObjectP& object : selectedObjects)
+	{
+		if (object)
+		{
+			sessionState.selectedObjects.append(qMakePair(object->getType(), object->getID()));
+			sessionState.selectedObjectNames.append(object->getEnglishName());
+		}
+	}
+	sessionState.valid = true;
+}
+
+void StelScriptMgr::restoreSessionState()
+{
+	if (!sessionState.valid || !StelApp::isInitialized())
+		return;
+
+	StelCore* core = StelApp::getInstance().getCore();
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : Q_NULLPTR;
+	if (!core || !movementMgr)
+		return;
+
+	StelPropertyMgr* propertyMgr = StelApp::getInstance().getStelPropertyManager();
+	if (propertyMgr)
+	{
+		for (auto it = sessionState.properties.cbegin(); it != sessionState.properties.cend(); ++it)
+		{
+			StelProperty* property = propertyMgr->getProperty(it.key(), true);
+			if (property && property->isSynchronizable())
+				property->setValue(it.value());
+		}
+	}
+
+	core->setUseCustomTimeZone(sessionState.useCustomTimeZone);
+	core->setUseDST(sessionState.useDST);
+	core->setObserver(new StelObserver(sessionState.location));
+	core->setCurrentTimeZone(sessionState.timeZone);
+	core->setJD(sessionState.jd);
+	core->refreshTransformMatrices();
+
+	movementMgr->cancelAutoMove();
+	movementMgr->cancelAutoZoom();
+	if (!sessionState.projectionKey.isEmpty() &&
+		core->getAllProjectionTypeKeys().contains(sessionState.projectionKey))
+	{
+		core->setCurrentProjectionTypeKey(sessionState.projectionKey);
+	}
+	// Changing to the saved projection can start its own FOV transition.
+	// Cancel it again before applying the exact saved camera pose.
+	movementMgr->cancelAutoMove();
+	movementMgr->cancelAutoZoom();
+	movementMgr->setFlagTracking(false);
+	movementMgr->setFlagLockEquPos(false);
+	movementMgr->setMountMode(static_cast<StelMovementMgr::MountMode>(sessionState.mountMode));
+	movementMgr->setFov(sessionState.fov);
+	movementMgr->moveViewport(sessionState.viewportHorizontalOffset, sessionState.viewportVerticalOffset, 0.0f);
+	movementMgr->setMovementSpeedFactor(sessionState.movementSpeedFactor);
+
+	StelObjectMgr& objectMgr = StelApp::getInstance().getStelObjectMgr();
+	QList<StelObjectP> selectedObjects;
+	for (const QString& name : sessionState.selectedObjectNames)
+	{
+		StelObjectP object = objectMgr.searchByName(name);
+		if (object)
+			selectedObjects.append(object);
+	}
+	// Keep compatibility with snapshots created before the stable-name field
+	// was added. IDs are still useful for modules whose English name is empty.
+	if (selectedObjects.isEmpty() && sessionState.selectedObjectNames.isEmpty())
+	{
+		for (const auto& identity : sessionState.selectedObjects)
+		{
+			StelObjectP object = objectMgr.searchByID(identity.first, identity.second);
+			if (object)
+				selectedObjects.append(object);
+		}
+	}
+	if (selectedObjects.isEmpty())
+		objectMgr.unSelect();
+	else
+		objectMgr.setSelectedObject(selectedObjects, StelModule::ReplaceSelection);
+	movementMgr->restoreTrackingState(sessionState.tracking);
+	movementMgr->setFlagLockEquPos(sessionState.lockEquatorialPosition);
+	movementMgr->restoreViewState(sessionState.viewDirection, sessionState.viewUp,
+								 sessionState.viewDirectionMountFrame, sessionState.viewUpMountFrame);
+	core->setTimeRate(sessionState.timeRate);
+	core->setClearSkyOnce();
+	const Vec3d restoredViewDirection = sessionState.viewDirection;
+	const Vec3d restoredViewUp = sessionState.viewUp;
+	const Vec3d restoredViewDirectionMountFrame = sessionState.viewDirectionMountFrame;
+	const Vec3d restoredViewUpMountFrame = sessionState.viewUpMountFrame;
+	const double restoredTimeRate = sessionState.timeRate;
+	const double restoredFov = sessionState.fov;
+	const double restoredViewportHorizontalOffset = sessionState.viewportHorizontalOffset;
+	const double restoredViewportVerticalOffset = sessionState.viewportVerticalOffset;
+	const int restoredMountMode = sessionState.mountMode;
+	const bool restoredLockEquatorialPosition = sessionState.lockEquatorialPosition;
+	const bool restoredTracking = sessionState.tracking;
+	const QStringList restoredSelectedObjectNames = sessionState.selectedObjectNames;
+	const QList<QPair<QString, QString>> restoredSelectedObjects = sessionState.selectedObjects;
+	auto applyRestoredState = [core, movementMgr, restoredViewDirection, restoredViewUp,
+							 restoredViewDirectionMountFrame, restoredViewUpMountFrame, restoredTimeRate,
+							 restoredFov, restoredViewportHorizontalOffset, restoredViewportVerticalOffset,
+							 restoredMountMode, restoredTracking, restoredLockEquatorialPosition,
+							 restoredSelectedObjectNames, restoredSelectedObjects]() {
+		if (!StelApp::isInitialized())
+			return;
+		core->refreshTransformMatrices();
+		movementMgr->cancelAutoMove();
+		movementMgr->cancelAutoZoom();
+		movementMgr->setMountMode(static_cast<StelMovementMgr::MountMode>(restoredMountMode));
+		movementMgr->setFov(restoredFov);
+		movementMgr->moveViewport(restoredViewportHorizontalOffset, restoredViewportVerticalOffset, 0.0f);
+		movementMgr->setFlagTracking(false);
+		movementMgr->setFlagLockEquPos(restoredLockEquatorialPosition);
+		movementMgr->restoreViewState(restoredViewDirection, restoredViewUp,
+										 restoredViewDirectionMountFrame, restoredViewUpMountFrame);
+		StelObjectMgr& objectMgr = StelApp::getInstance().getStelObjectMgr();
+		QList<StelObjectP> selectedObjects;
+		for (const QString& name : restoredSelectedObjectNames)
+		{
+			StelObjectP object = objectMgr.searchByName(name);
+			if (object)
+				selectedObjects.append(object);
+		}
+		if (selectedObjects.isEmpty() && restoredSelectedObjectNames.isEmpty())
+		{
+			for (const auto& identity : restoredSelectedObjects)
+			{
+				StelObjectP object = objectMgr.searchByID(identity.first, identity.second);
+				if (object)
+					selectedObjects.append(object);
+			}
+		}
+		if (selectedObjects.isEmpty())
+			objectMgr.unSelect();
+		else
+			objectMgr.setSelectedObject(selectedObjects, StelModule::ReplaceSelection);
+		movementMgr->restoreTrackingState(restoredTracking);
+		core->setTimeRate(restoredTimeRate);
+		core->setClearSkyOnce();
+	};
+	// A script can leave a pending zoom or observer notification in the event
+	// queue. Apply once immediately and once after that queue has drained.
+	applyRestoredState();
+	QTimer::singleShot(0, qApp, applyRestoredState);
+	QTimer::singleShot(120, qApp, applyRestoredState);
+	qInfo() << "[Scripting] restored pre-script session state; JD=" << sessionState.jd
+		<< "timeRate=" << sessionState.timeRate << "projection=" << sessionState.projectionKey
+		<< "fov=" << sessionState.fov;
+
+	sessionState.valid = false;
+}
+
 void StelScriptMgr::debug(const QString& msg)
 {
 	emit scriptDebug(msg);
@@ -1045,8 +1258,10 @@ void StelScriptMgr::scriptEnded()
 		qCWarning(Scripting) << msg;
 	}
 #endif
-	GETSTELMODULE(StelMovementMgr)->setMovementSpeedFactor(1.0);
+	restoreSessionState();
 	scriptFileName = QString();
+	waitingForKeypress = false;
+	waitMessage.clear();
 	emit runningScriptIdChanged(scriptFileName);
 	emit scriptStopped();
 }

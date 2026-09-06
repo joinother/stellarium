@@ -43,6 +43,8 @@
 #include <climits>
 #if defined(__OHOS__)
 #include <atomic>
+#include <QJsonObject>
+#include <QSet>
 #endif
 
 #if defined(__OHOS__)
@@ -51,6 +53,7 @@ namespace
 std::atomic<int> ohosScreenSafeAreaTopPx{0};
 std::atomic<int> ohosScreenSafeAreaShiftDip{0};
 std::atomic<bool> ohosScriptUiVisible{false};
+QSet<int> ohosScriptLabelIds;
 
 QString translateScriptLabel(const QString& text)
 {
@@ -84,6 +87,11 @@ QString translateScriptLabel(const QString& text)
 		localizedParts.append(prefix + localizedCandidate);
 	}
 	return changed ? localizedParts.join(QStringLiteral(" - ")) : text;
+}
+
+bool isOhosScriptLabel(int id)
+{
+	return ohosScriptUiVisible.load() && ohosScriptLabelIds.contains(id);
 }
 }
 #endif
@@ -558,6 +566,10 @@ ScreenLabel::~ScreenLabel()
 
 bool ScreenLabel::draw(StelCore*, StelPainter& sPainter)
 {
+#if defined(__OHOS__)
+	if (isOhosScriptLabel(id))
+		return false;
+#endif
 	if (labelFader.getInterstate() <= 0.f)
 		return false;
 
@@ -585,6 +597,22 @@ void LabelMgr::setOhosScreenSafeAreaTop(int pixels)
 void LabelMgr::setOhosScriptUiVisible(bool visible)
 {
 	ohosScriptUiVisible.store(visible);
+}
+
+QJsonArray LabelMgr::getOhosScriptCaptions() const
+{
+	QJsonArray captions;
+	for (auto* label : std::as_const(allLabels))
+	{
+		if (!ohosScriptLabelIds.contains(label->id) || !label->getFlagShow())
+			continue;
+		QJsonObject item;
+		item[QStringLiteral("id")] = label->id;
+		item[QStringLiteral("text")] = label->labelText;
+		item[QStringLiteral("visible")] = true;
+		captions.append(item);
+	}
+	return captions;
 }
 #endif
  
@@ -668,6 +696,10 @@ int LabelMgr::appendLabel(StelLabel* l, int autoDeleteTimeoutMs)
 	counter++;
 	l->id = counter;
 	allLabels[counter] = l;
+#if defined(__OHOS__)
+	if (ohosScriptUiVisible.load() && dynamic_cast<ScreenLabel*>(l) != nullptr)
+		ohosScriptLabelIds.insert(counter);
+#endif
 	return counter;
 }
 
@@ -867,6 +899,9 @@ void LabelMgr::deleteLabel(int id)
 
 	delete allLabels[id];
 	allLabels.remove(id);
+#if defined(__OHOS__)
+	ohosScriptLabelIds.remove(id);
+#endif
 }
 	
 void LabelMgr::update(double deltaTime)
@@ -891,5 +926,8 @@ int LabelMgr::deleteAllLabels(void)
 		count++;
 	}
 	allLabels.clear();
+#if defined(__OHOS__)
+	ohosScriptLabelIds.clear();
+#endif
 	return count;
 }

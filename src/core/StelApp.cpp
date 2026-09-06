@@ -1280,6 +1280,11 @@ void StelApp::handlePinch(qreal scale, bool started)
 	}
 }
 
+void StelApp::handleKeyEvent(QKeyEvent* event)
+{
+	handleKeys(event);
+}
+
 //! Set flag for activating night vision mode
 void StelApp::setVisionModeNight(bool b)
 {

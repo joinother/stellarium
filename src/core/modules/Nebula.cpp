@@ -481,6 +481,24 @@ QVariantMap Nebula::getInfoMap(const StelCore *core) const
 	map.insert("surface-brightness", getSurfaceBrightness(core));
 	map.insert("designations", withoutID ? QString() : designations.join(" - "));
 	map.insert("bmag", bMag);
+	if (std::isfinite(oDistance) && oDistance > 0.f)
+	{
+		map.insert("distance", oDistance);
+		map.insert("distance-unit", "kpc");
+		map.insert("distance-error", oDistanceErr);
+		map.insert("distance-method", "catalog");
+	}
+	else if (std::isfinite(parallax) && std::isfinite(parallaxErr) && (parallax != 0.f || parallaxErr > 0.f))
+	{
+		map.insert("distance-status", "low_confidence");
+		if (parallax > 0.f && parallaxErr > 0.f && parallax / parallaxErr > 5.f)
+		{
+			const double distanceLy = PARSEC_LY * 1000. / parallax;
+			map.insert("distance-ly", distanceLy);
+			map.insert("distance-error-ly", distanceLy * parallaxErr / parallax);
+			map.insert("distance-method", "inverse_parallax");
+		}
+	}
 	if (vMag < 50 && bMag < 50)
 		map.insert("bV", bMag-vMag);
 	if (redshift<99.f)

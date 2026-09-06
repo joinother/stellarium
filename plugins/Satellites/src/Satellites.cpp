@@ -515,6 +515,38 @@ void Satellites::init()
 			}
 			if (!bundledSnapshot.isEmpty() && loadDataMap(catalogPath).value("offlineSnapshot").toString() == bundledSnapshot)
 				setLastUpdate(QDateTime::fromString(bundledSnapshot, Qt::ISODate));
+			QVariantMap installedMap = loadDataMap(catalogPath);
+			QVariantMap installedRecords = installedMap.value("satellites").toMap();
+			const QVariantMap bundledRecords = bundledMap.value("satellites").toMap();
+			const auto epoch = [](const QVariantMap& record) {
+				const QString line = record.value("tle1").toString();
+				bool yearOk = false;
+				bool dayOk = false;
+				int year = line.mid(18, 2).toInt(&yearOk);
+				const double day = line.mid(20, 12).toDouble(&dayOk);
+				year += year < 57 ? 2000 : 1900;
+				if (!yearOk || !dayOk || day < 1. || day >= QDate(year, 12, 31).dayOfYear() + 1.) return 0.;
+				return QDate(year, 1, 1).toJulianDay() - 0.5 + day - 1.;
+			};
+			int refreshed = 0;
+			for (auto entry = bundledRecords.constBegin(); entry != bundledRecords.constEnd(); ++entry)
+			{
+				if (!installedRecords.contains(entry.key())) continue;
+				QVariantMap installed = installedRecords.value(entry.key()).toMap();
+				const QVariantMap bundled = entry.value().toMap();
+				if (installed.value("userDefined").toBool() || epoch(bundled) <= epoch(installed)) continue;
+				installed["tle1"] = bundled.value("tle1");
+				installed["tle2"] = bundled.value("tle2");
+				if (bundled.contains("lastUpdated")) installed["lastUpdated"] = bundled.value("lastUpdated");
+				installedRecords[entry.key()] = installed;
+				++refreshed;
+			}
+			if (refreshed > 0)
+			{
+				installedMap["satellites"] = installedRecords;
+				qInfo() << "[Satellites] merging newer bundled TLE records:" << refreshed;
+				if (!saveDataMap(installedMap, catalogPath)) qWarning() << "[Satellites] TLE merge failed";
+			}
 		}
 		catch (std::runtime_error &e)
 		{
@@ -688,7 +720,7 @@ QList<StelObjectP> Satellites::searchAround(const Vec3d& av, double limitFov, co
 
 	for (const auto& sat : satellites)
 	{
-		if (sat->initialized && sat->displayed)
+		if (sat->initialized && sat->displayed && sat->orbitValid)
 		{
 			equPos = sat->XYZ;
 			equPos.normalize();
@@ -939,6 +971,13 @@ QVector<QPair<QString,StelObjectP>> Satellites::listAllObjects(bool inEnglish) c
 
 	if (core->getCurrentPlanet()!=earth || !isValidRangeDates(core))
 		return result;
+
+	return listAllObjectsForCatalog(inEnglish);
+}
+
+QVector<QPair<QString,StelObjectP>> Satellites::listAllObjectsForCatalog(bool inEnglish) const
+{
+	QVector<QPair<QString,StelObjectP>> result;
 
 	for (const auto& sat : satellites)
 	{
@@ -1703,9 +1742,12 @@ QVariantMap Satellites::getCatalogSummary(const QString& group, const QString& q
 		item.insert("englishName", satellite->name);
 		item.insert("displayed", satellite->displayed);
 		item.insert("outdated", outdated);
+		item.insert("orbitValid", satellite->orbitValid);
+		item.insert("propagationStatus", satellite->propagationStatus);
+		item.insert("tleAgeDays", currentJD - satellite->tleEpochJD);
 		item.insert("tleEpoch", satellite->tleEpoch);
 		item.insert("lastUpdated", lastUpdated.toUTC().toString(Qt::ISODate));
-		item.insert("heightKm", satellite->height);
+		if (satellite->orbitValid) item.insert("heightKm", satellite->height);
 		items.append(item);
 	}
 
@@ -2899,7 +2941,7 @@ void Satellites::recalculateOrbitLines(void)
 {
 	for (const auto& sat : std::as_const(satellites))
 	{
-		if (sat->initialized && sat->displayed && sat->orbitDisplayed)
+		if (sat->initialized && sat->displayed && sat->shouldDisplayOrbit())
 			sat->recalculateOrbitLines();
 	}
 }
@@ -3404,6 +3446,11 @@ void Satellites::update(double deltaTime)
 
 	hintFader.update(static_cast<int>(deltaTime*1000));
 	const double JD=core->getJD();
+#ifdef Q_OS_OHOS
+	const QList<StelObjectP> selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
+	for (const auto& sat : std::as_const(satellites))
+		sat->orbitPreview = !selected.isEmpty() && selected.first().data() == sat.data();
+#endif
 #if (QT_VERSION<QT_VERSION_CHECK(6,0,0))
 	for (const auto& sat : std::as_const(satellites))
 	{
@@ -3411,25 +3458,14 @@ void Satellites::update(double deltaTime)
 			sat->update(core, JD);
 	}
 #else
-	// TODO: sat->update is an obvious candidate for parallelisation and without orbits, it indeed helps a lot.
-	// Unfortunately, the call to Satellite::computeOrbitPoints(); uses static variables, which messes up the orbit lines.
-	// We can compute satellites in parallel, but only if orbits are suppressed, until this is fixed.
+	const auto updateSat = [JD](QSharedPointer<Satellite>& sat){
+		if (sat->initialized && sat->displayed)
+			sat->update(core, JD, false);
+	};
+	QtConcurrent::blockingMap(QThreadPool::globalInstance(), satellites, updateSat);
 	if (getFlagOrbitLines())
-	{
 		for (const auto& sat : std::as_const(satellites))
-		{
-			if (sat->initialized && sat->displayed)
-				sat->update(core, JD);
-		}
-	}
-	else
-	{
-		const auto updateSat = [JD](QSharedPointer<Satellite>& sat){
-			if (sat->initialized && sat->displayed)
-				sat->update(core, JD);
-		};
-		QtConcurrent::blockingMap(QThreadPool::globalInstance(), satellites, updateSat);
-	}
+			sat->updateOrbitLines();
 #endif
 }
 
@@ -3480,6 +3516,8 @@ void Satellites::drawPointer(StelCore* core, StelPainter& painter)
 	if (!newSelected.empty())
 	{
 		const StelObjectP obj = newSelected[0];
+		const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(obj);
+		if (!satellite || !satellite->isOrbitValid()) return;
 		Vec3d pos=obj->getJ2000EquatorialPos(core);
 		Vec3d screenpos;
 

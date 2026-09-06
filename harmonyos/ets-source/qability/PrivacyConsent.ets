@@ -12,7 +12,10 @@ export async function requestPrivacyConsent(
   context: common.UIAbilityContext,
 ): Promise<PrivacyConsentResult> {
   try {
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=management-query-start');
     const management = privacyManager.getAppPrivacyMgmtInfo();
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-probe] phase=management-query-finish; type=${management.type}; linkCount=${management.privacyInfo.length}`);
     if (management.type === privacyManager.AppPrivacyMgmtType.UNSUPPORTED || management.privacyInfo.length === 0) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy Manager has no AppGallery configuration; Qt startup remains blocked');
       return { accepted: false, dialogShown: false };
@@ -21,7 +24,11 @@ export async function requestPrivacyConsent(
     const privacyStatement = management.privacyInfo.find((item) =>
       item.type === privacyManager.AppPrivacyLinkType.PRIVACY_STATEMENT_LINK,
     );
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-probe] phase=result-query-start; statementConfigured=${privacyStatement !== undefined}`);
     const privacyResults = privacyManager.getAppPrivacyResult();
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-probe] phase=result-query-finish; resultCount=${privacyResults.length}`);
     const accepted = privacyStatement !== undefined && privacyResults.some((result) =>
       result.type === privacyManager.AppPrivacyType.PRIVACY_AGREEMENT &&
       result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED &&
@@ -33,7 +40,10 @@ export async function requestPrivacyConsent(
       return { accepted: true, dialogShown: false };
     }
 
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=dialog-request-start');
     const consent = await privacyManager.requestAppPrivacyConsent(context);
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-probe] phase=dialog-request-finish; resultCount=${consent.results.length}`);
     const acceptedAfterRequest = consent.results.some((result) =>
       result.type === privacyManager.AppPrivacyType.PRIVACY_AGREEMENT &&
       result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED,

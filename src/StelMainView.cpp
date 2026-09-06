@@ -41,6 +41,7 @@
 #include "modules/LabelMgr.hpp"
 #include "StelMovementMgr.hpp"
 #include "StelObject.hpp"
+#include "OhosObjectDistance.hpp"
 #include "StelObjectMgr.hpp"
 #include "StelObserver.hpp"
 #include "StelLocaleMgr.hpp"
@@ -59,6 +60,7 @@
 #include "../plugins/NavStars/src/NavStars.hpp"
 #include "../plugins/PointerCoordinates/src/PointerCoordinates.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
+#include "../plugins/NebulaTextures/src/NebulaTextures.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShower.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowers.hpp"
@@ -76,6 +78,8 @@
 #include "ZodiacalLight.hpp"
 #include "SpecialMarkersMgr.hpp"
 #include "StelOhosCommandCatalog.hpp"
+#include "external/qtcompress/qzipreader.h"
+#include "external/qtcompress/qzipwriter.h"
 
 #ifndef STELLARIUM_OHOS_OFFLINE
 #include <QNetworkAccessManager>
@@ -105,12 +109,14 @@
 #include <atomic>
 #include <algorithm>
 #include <QGraphicsSceneMouseEvent>
+#include <QKeyEvent>
 #include <QGraphicsAnchorLayout>
 #include <QGraphicsWidget>
 #include <QGraphicsEffect>
 #include <QFileInfo>
 #include <QIcon>
 #include <QImageWriter>
+#include <QImageReader>
 #include <QMoveEvent>
 #include <QPluginLoader>
 #include <QScreen>
@@ -177,6 +183,8 @@ constexpr int OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS = 8; // 120 FPS on h
 // 120 FPS on every device, but it must never trade image sharpness for speed.
 constexpr int OHOS_FALLBACK_INTERACTIVE_RENDER_INTERVAL_MS = 8;
 constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;        // 30 FPS once the scene settles.
+constexpr int OHOS_MAX_COMMANDS_PER_FRAME = 8;
+constexpr qint64 OHOS_COMMAND_BUDGET_MS = 4;
 
 // Once the dedicated render pump is running it owns presentation to the
 // XComponent. The QGraphics paint path can still be entered by Qt, but must
@@ -186,6 +194,10 @@ static bool s_ohosZeroCopyActive = false;
 static bool s_ohosZeroCopySupported = true;
 static std::atomic<bool> s_ohosApplicationForeground{true};
 static std::atomic<bool> s_ohosScriptRenderHeartbeat{false};
+// Device-pose tracking remains interactive even without touch events. Keeping
+// this flag beside the render scheduler prevents the pump from dropping back
+// to the 30 FPS idle cadence while the user is physically turning the device.
+static std::atomic<bool> s_gyroViewActive{false};
 static std::atomic<quint64> s_ohosSkippedGraphicsPaints{0};
 
 // Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
@@ -235,7 +247,7 @@ QString cleanSkyCultureDescriptionText(QString text)
 	text.replace(QChar(0x00A0), QChar(' '));
 	text.remove(QChar::ReplacementCharacter);
 	text.remove(QChar(0xFFFC));
-	text.remove(QRegularExpression(QStringLiteral("[\\x{200B}-\\x{200D}\\x{2060}\\x{FEFF}]")));
+	text.remove(QChar(0xFEFF));
 	text.remove(QRegularExpression(QStringLiteral("[\\x{0000}-\\x{0008}\\x{000B}\\x{000C}\\x{000E}-\\x{001F}\\x{007F}]")));
 	text.replace(QRegularExpression(QStringLiteral("[ \\t]+")), QStringLiteral(" "));
 	return text.trimmed();
@@ -280,7 +292,7 @@ int currentOhosRenderIntervalMs()
 {
 	if (!StelApp::isInitialized())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
-	if (!StelMainView::getInstance().needsMaxFPS())
+	if (!s_gyroViewActive.load() && !StelMainView::getInstance().needsMaxFPS())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
 	return s_ohosZeroCopyActive
 		? OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS
@@ -476,58 +488,777 @@ QString formatLx200Dec(int totalArcSeconds)
 		.arg(value % 60, 2, 10, QChar('0'));
 }
 
-QJsonObject sendLx200Commands(const QString& host, quint16 port, const QStringList& commands)
+QString formatDisplayDec(int totalArcSeconds)
 {
-	QJsonObject result;
-	result["ok"] = false;
-	result["host"] = host;
-	result["port"] = int(port);
+	const QChar sign = totalArcSeconds < 0 ? QChar('-') : QChar('+');
+	const int value = std::abs(totalArcSeconds);
+	return QString("%1%2%3%4:%5")
+		.arg(sign)
+		.arg(value / 3600, 2, 10, QChar('0'))
+		.arg(QChar(0xB0))
+		.arg((value / 60) % 60, 2, 10, QChar('0'))
+		.arg(value % 60, 2, 10, QChar('0'));
+}
 
-	QTcpSocket socket;
-	socket.connectToHost(host, port);
-	if (!socket.waitForConnected(900))
+QString displayLx200Commands(const QStringList& commands)
+{
+	QString display = commands.join("|");
+	display.replace(QChar(0xDF), QChar('*'));
+	return display;
+}
+
+struct OhosTelescopeProfile
+{
+	int slot = 1;
+	QString name = QStringLiteral("Offline Telescope Simulator");
+	QString protocol = QStringLiteral("simulated");
+	QString deviceModel = QStringLiteral("Offline LX200 Simulator");
+	QString host;
+	int port = 0;
+	QString equinox = QStringLiteral("J2000");
+	int commandDelayMs = 0;
+	QJsonArray circles{1.0, 2.0, 4.0};
+};
+
+struct OhosTelescopeRuntimeState
+{
+	QString state = QStringLiteral("not_tested");
+	QString lastError;
+	qint64 testedAtMs = 0;
+	bool hasPosition = false;
+	bool positionMeasured = false;
+	Vec3d positionJ2000;
+	Vec3d markerFromJ2000;
+	double markerAnimationStartSec = 0.0;
+	double markerAnimationDurationSec = 0.0;
+	qint64 lastPositionSampleMs = 0;
+	QString name;
+	QJsonArray circles;
+};
+
+constexpr auto OHOS_TELESCOPE_PROFILES_KEY = "telescope_control/ohos_profiles";
+constexpr auto OHOS_TELESCOPE_SELECTED_SLOT_KEY = "telescope_control/ohos_selected_slot";
+QHash<int, OhosTelescopeRuntimeState> s_ohosTelescopeRuntime;
+
+constexpr auto OHOS_TELESCOPE_SIMULATOR_PROTOCOL = "simulated";
+constexpr auto OHOS_TELESCOPE_LX200_TCP_PROTOCOL = "lx200_tcp";
+constexpr auto OHOS_TELESCOPE_SIMULATOR_MODEL = "Offline LX200 Simulator";
+
+QStringList ohosLx200DeviceModels()
+{
+	return {
+		QStringLiteral("Meade AutoStar compatible"),
+		QStringLiteral("Meade LX200 (compatible)"),
+		QStringLiteral("Meade ETX70 (#494 Autostar, #506 CCS)"),
+		QStringLiteral("Losmandy G-11"),
+		QStringLiteral("Wildcard Innovations Argo Navis (Meade mode)")
+	};
+}
+
+bool isTelescopeSimulator(const OhosTelescopeProfile& profile)
+{
+	return profile.protocol == QString::fromLatin1(OHOS_TELESCOPE_SIMULATOR_PROTOCOL);
+}
+
+void setTelescopeRuntimeState(int slot, const QString& state, const QString& error = QString())
+{
+	OhosTelescopeRuntimeState& runtime = s_ohosTelescopeRuntime[slot];
+	runtime.state = state;
+	runtime.lastError = error;
+	runtime.testedAtMs = QDateTime::currentMSecsSinceEpoch();
+}
+
+Vec3d telescopeMarkerPosition(const OhosTelescopeRuntimeState& runtime)
+{
+	if (!runtime.hasPosition || runtime.markerAnimationDurationSec <= 0.0)
+		return runtime.positionJ2000;
+	const double progress = qBound(0.0,
+		(QDateTime::currentMSecsSinceEpoch() / 1000.0 - runtime.markerAnimationStartSec) / runtime.markerAnimationDurationSec, 1.0);
+	if (progress >= 1.0)
+		return runtime.positionJ2000;
+	Vec3d from = runtime.markerFromJ2000;
+	Vec3d to = runtime.positionJ2000;
+	from.normalize();
+	to.normalize();
+	const double dot = qBound(-1.0, from * to, 1.0);
+	const double angle = std::acos(dot);
+	const double sine = std::sin(angle);
+	if (angle < 1e-6 || std::abs(sine) < 1e-6)
+		return progress < 0.5 ? from : to;
+	Vec3d position = from * (std::sin((1.0 - progress) * angle) / sine) +
+		to * (std::sin(progress * angle) / sine);
+	position.normalize();
+	return position;
+}
+
+bool ohosTelescopeMarkerAnimating()
+{
+	const double now = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+	for (const OhosTelescopeRuntimeState& runtime : std::as_const(s_ohosTelescopeRuntime))
 	{
-		result["error"] = "LX200 TCP connect failed: " + socket.errorString();
+		if (runtime.markerAnimationDurationSec > 0.0 &&
+			now - runtime.markerAnimationStartSec < runtime.markerAnimationDurationSec)
+			return true;
+	}
+	return false;
+}
+
+void updateTelescopeMarker(const OhosTelescopeProfile& profile, const Vec3d& positionJ2000,
+				   bool measured, double animationSeconds = 0.0)
+{
+	OhosTelescopeRuntimeState& runtime = s_ohosTelescopeRuntime[profile.slot];
+	const Vec3d previous = telescopeMarkerPosition(runtime);
+	runtime.positionJ2000 = positionJ2000;
+	runtime.positionJ2000.normalize();
+	if (runtime.hasPosition && animationSeconds > 0.0 && previous * runtime.positionJ2000 < 0.999999)
+	{
+		runtime.markerFromJ2000 = previous;
+		runtime.markerAnimationStartSec = QDateTime::currentMSecsSinceEpoch() / 1000.0;
+		runtime.markerAnimationDurationSec = animationSeconds;
+	}
+	else
+	{
+		runtime.markerFromJ2000 = runtime.positionJ2000;
+		runtime.markerAnimationStartSec = 0.0;
+		runtime.markerAnimationDurationSec = 0.0;
+	}
+	runtime.hasPosition = true;
+	runtime.positionMeasured = measured;
+	runtime.name = profile.name;
+	runtime.circles = profile.circles;
+}
+
+void drawOhosTelescopeOverlay(StelCore* core)
+{
+	if (!core)
+		return;
+	QSettings* settings = StelApp::getInstance().getSettings();
+	const int selectedSlot = settings ? settings->value(OHOS_TELESCOPE_SELECTED_SLOT_KEY, 1).toInt() : 1;
+	if (!s_ohosTelescopeRuntime.contains(selectedSlot))
+		return;
+	const OhosTelescopeRuntimeState runtime = s_ohosTelescopeRuntime.value(selectedSlot);
+	if (!runtime.hasPosition)
+		return;
+
+	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000, StelCore::RefractionAuto);
+	if (!projector)
+		return;
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 0 || viewport[3] <= 0)
+		return;
+	Vec3d screen;
+	if (!projector->project(telescopeMarkerPosition(runtime), screen))
+		return;
+
+	const double left = viewport[0] + 26.0;
+	const double right = viewport[0] + viewport[2] - 26.0;
+	const double bottom = viewport[1] + 26.0;
+	const double top = viewport[1] + viewport[3] - 26.0;
+	const bool visible = screen[0] >= left && screen[0] <= right && screen[1] >= bottom && screen[1] <= top;
+	const double markerX = qBound(left, screen[0], right);
+	const double markerY = qBound(bottom, screen[1], top);
+	const Vec3f color = runtime.positionMeasured ? Vec3f(0.34f, 0.82f, 1.0f) : Vec3f(1.0f, 0.72f, 0.30f);
+
+	StelPainter painter(projector);
+	painter.setBlending(true);
+	painter.setLineSmooth(true);
+	painter.setLineWidth(2.0f);
+	painter.setColor(color, 0.92f);
+	if (visible)
+	{
+		for (const QJsonValue& value : runtime.circles)
+		{
+			const double diameterDegrees = value.toDouble();
+			const double radius = projector->getPixelPerRadAtCenter() * diameterDegrees * M_PI / 360.0;
+			if (radius >= 3.0 && radius <= qMax(viewport[2], viewport[3]) * 1.5)
+				painter.drawCircle(static_cast<float>(markerX), static_cast<float>(markerY), static_cast<float>(radius));
+		}
+		painter.drawCircle(static_cast<float>(markerX), static_cast<float>(markerY), 9.0f);
+		painter.drawLine2d(static_cast<float>(markerX - 24.0), static_cast<float>(markerY),
+			static_cast<float>(markerX - 8.0), static_cast<float>(markerY));
+		painter.drawLine2d(static_cast<float>(markerX + 8.0), static_cast<float>(markerY),
+			static_cast<float>(markerX + 24.0), static_cast<float>(markerY));
+		painter.drawLine2d(static_cast<float>(markerX), static_cast<float>(markerY - 24.0),
+			static_cast<float>(markerX), static_cast<float>(markerY - 8.0));
+		painter.drawLine2d(static_cast<float>(markerX), static_cast<float>(markerY + 8.0),
+			static_cast<float>(markerX), static_cast<float>(markerY + 24.0));
+	}
+	else
+	{
+		painter.drawCircle(static_cast<float>(markerX), static_cast<float>(markerY), 12.0f);
+		const double centerX = viewport[0] + viewport[2] * 0.5;
+		const double centerY = viewport[1] + viewport[3] * 0.5;
+		const double length = std::hypot(screen[0] - centerX, screen[1] - centerY);
+		if (length > 1.0)
+		{
+			const double dx = (screen[0] - centerX) / length;
+			const double dy = (screen[1] - centerY) / length;
+			painter.drawLine2d(static_cast<float>(markerX - dx * 18.0), static_cast<float>(markerY - dy * 18.0),
+				static_cast<float>(markerX + dx * 6.0), static_cast<float>(markerY + dy * 6.0));
+		}
+	}
+
+	const QString label = runtime.name.isEmpty()
+		? q_("Telescope Control")
+		: QStringLiteral("%1 · %2").arg(q_("Telescope Control"), runtime.name);
+	const float labelX = static_cast<float>(qBound(left, markerX + 18.0, right - 180.0));
+	const float labelY = static_cast<float>(qBound(bottom + 18.0, markerY + 24.0, top));
+	painter.drawText(labelX, labelY, label);
+	painter.setLineWidth(1.0f);
+	painter.setLineSmooth(false);
+}
+
+QJsonObject enrichTelescopeProfileJson(const QJsonObject& stored)
+{
+	QJsonObject value = stored;
+	const int slot = value.value("slot").toInt(1);
+	const QString protocol = value.value("protocol").toString(QString::fromLatin1(OHOS_TELESCOPE_LX200_TCP_PROTOCOL));
+	const bool simulated = protocol == QString::fromLatin1(OHOS_TELESCOPE_SIMULATOR_PROTOCOL);
+	const OhosTelescopeRuntimeState runtime = s_ohosTelescopeRuntime.value(slot);
+	value["state"] = simulated ? QStringLiteral("available") : runtime.state;
+	value["lastError"] = simulated ? QString() : runtime.lastError;
+	value["testedAtMs"] = simulated ? QDateTime::currentMSecsSinceEpoch() : runtime.testedAtMs;
+	return value;
+}
+
+QString telescopeEndpointScope(const QString& host)
+{
+	if (host.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) == 0)
+		return QStringLiteral("local_device");
+
+	const QHostAddress address(host);
+	if (address.isNull())
+		return QStringLiteral("hostname_or_unclassified");
+	if (address.isLoopback())
+		return QStringLiteral("local_device");
+	if (address.protocol() == QAbstractSocket::IPv4Protocol)
+	{
+		const quint32 ip = address.toIPv4Address();
+		const quint8 first = static_cast<quint8>(ip >> 24);
+		const quint8 second = static_cast<quint8>((ip >> 16) & 0xff);
+		const bool privateAddress = first == 10 || (first == 172 && second >= 16 && second <= 31) ||
+			(first == 192 && second == 168) || (first == 169 && second == 254);
+		return privateAddress ? QStringLiteral("local_or_lan") : QStringLiteral("public_or_unclassified");
+	}
+
+	const Q_IPV6ADDR ipv6 = address.toIPv6Address();
+	const bool uniqueLocal = (ipv6[0] & 0xfe) == 0xfc;
+	const bool linkLocal = ipv6[0] == 0xfe && (ipv6[1] & 0xc0) == 0x80;
+	return uniqueLocal || linkLocal ? QStringLiteral("local_or_lan") : QStringLiteral("public_or_unclassified");
+}
+
+bool telescopeEndpointMayConnect(const QString& scope)
+{
+	return scope == QStringLiteral("local_device") || scope == QStringLiteral("local_or_lan");
+}
+
+QJsonObject telescopeProfileJson(const OhosTelescopeProfile& profile)
+{
+	QJsonObject value;
+	value["slot"] = profile.slot;
+	value["name"] = profile.name;
+	value["protocol"] = profile.protocol;
+	value["deviceModel"] = profile.deviceModel;
+	value["host"] = profile.host;
+	value["port"] = profile.port;
+	value["equinox"] = profile.equinox;
+	value["commandDelayMs"] = profile.commandDelayMs;
+	value["circles"] = profile.circles;
+	value["autoConnect"] = false;
+	const bool simulated = isTelescopeSimulator(profile);
+	const QString scope = simulated ? QStringLiteral("offline_simulator") : telescopeEndpointScope(profile.host);
+	value["scope"] = scope;
+	value["connectionAllowed"] = simulated || telescopeEndpointMayConnect(scope);
+	return enrichTelescopeProfileJson(value);
+}
+
+bool parseTelescopeProfile(const QJsonObject& value, OhosTelescopeProfile& profile, QString& error)
+{
+	profile.slot = value.value("slot").toInt(0);
+	profile.name = value.value("name").toString().trimmed();
+	profile.protocol = value.value("protocol").toString(QString::fromLatin1(OHOS_TELESCOPE_LX200_TCP_PROTOCOL)).trimmed();
+	profile.deviceModel = value.value("deviceModel").toString(QStringLiteral("Meade LX200 (compatible)")).trimmed();
+	profile.host = value.value("host").toString().trimmed();
+	profile.port = value.value("port").toInt(0);
+	profile.equinox = value.value("equinox").toString(QStringLiteral("J2000"));
+	profile.commandDelayMs = value.value("commandDelayMs").toInt(0);
+	profile.circles = value.value("circles").toArray();
+
+	if (profile.slot < 1 || profile.slot > 9)
+		error = QStringLiteral("slot must be between 1 and 9");
+	else if (profile.name.isEmpty() || profile.name.size() > 80)
+		error = QStringLiteral("name must contain 1 to 80 characters");
+	else if (profile.protocol != QString::fromLatin1(OHOS_TELESCOPE_LX200_TCP_PROTOCOL) &&
+		 profile.protocol != QString::fromLatin1(OHOS_TELESCOPE_SIMULATOR_PROTOCOL))
+		error = QStringLiteral("only lx200_tcp and simulated are available in this build");
+	else if (isTelescopeSimulator(profile) && profile.deviceModel != QString::fromLatin1(OHOS_TELESCOPE_SIMULATOR_MODEL))
+		error = QStringLiteral("simulated profiles must use the offline simulator model");
+	else if (!isTelescopeSimulator(profile) && !ohosLx200DeviceModels().contains(profile.deviceModel))
+		error = QStringLiteral("device model is not available through the LX200 TCP bridge");
+	else if (!isTelescopeSimulator(profile) &&
+		(profile.host.isEmpty() || profile.host.size() > 255 || profile.port <= 0 || profile.port > 65535))
+		error = QStringLiteral("invalid LX200 endpoint");
+	else if (profile.equinox != QStringLiteral("J2000") && profile.equinox != QStringLiteral("JNow"))
+		error = QStringLiteral("equinox must be J2000 or JNow");
+	else if (profile.commandDelayMs < 0 || profile.commandDelayMs > 2000)
+		error = QStringLiteral("commandDelayMs must be between 0 and 2000");
+	else if (profile.circles.size() > 10)
+		error = QStringLiteral("at most 10 field-of-view circles are supported");
+
+	for (const QJsonValue& circle : std::as_const(profile.circles))
+	{
+		if (!circle.isDouble() || circle.toDouble() <= 0.0 || circle.toDouble() > 180.0)
+		{
+			error = QStringLiteral("field-of-view circles must be between 0 and 180 degrees");
+			break;
+		}
+	}
+	return error.isEmpty();
+}
+
+QJsonArray loadTelescopeProfileArray()
+{
+	QSettings* settings = StelApp::getInstance().getSettings();
+	if (!settings)
+		return {};
+	const QJsonDocument document = QJsonDocument::fromJson(settings->value(OHOS_TELESCOPE_PROFILES_KEY).toByteArray());
+	return document.isArray() ? document.array() : QJsonArray();
+}
+
+void storeTelescopeProfileArray(const QJsonArray& profiles)
+{
+	QSettings* settings = StelApp::getInstance().getSettings();
+	if (!settings)
+		return;
+	settings->setValue(OHOS_TELESCOPE_PROFILES_KEY, QJsonDocument(profiles).toJson(QJsonDocument::Compact));
+	settings->sync();
+}
+
+OhosTelescopeProfile defaultTelescopeProfile()
+{
+	return OhosTelescopeProfile();
+}
+
+QJsonObject telescopeProfilesJson()
+{
+	QJsonArray profiles = loadTelescopeProfileArray();
+	if (profiles.isEmpty())
+		profiles.append(telescopeProfileJson(defaultTelescopeProfile()));
+
+	QSettings* settings = StelApp::getInstance().getSettings();
+	int selectedSlot = settings ? settings->value(OHOS_TELESCOPE_SELECTED_SLOT_KEY, 1).toInt() : 1;
+	bool selectedExists = false;
+	for (const QJsonValue& value : std::as_const(profiles))
+		selectedExists = selectedExists || value.toObject().value("slot").toInt() == selectedSlot;
+	if (!selectedExists)
+	{
+		selectedSlot = profiles.at(0).toObject().value("slot").toInt(1);
+		if (settings)
+		{
+			settings->setValue(OHOS_TELESCOPE_SELECTED_SLOT_KEY, selectedSlot);
+			settings->sync();
+		}
+	}
+
+	QJsonObject result;
+	result["ok"] = true;
+	QJsonArray enrichedProfiles;
+	for (const QJsonValue& value : std::as_const(profiles))
+		enrichedProfiles.append(enrichTelescopeProfileJson(value.toObject()));
+	result["profiles"] = enrichedProfiles;
+	result["selectedSlot"] = selectedSlot;
+	result["maxProfiles"] = 9;
+	result["availableProtocols"] = QJsonArray{QString::fromLatin1(OHOS_TELESCOPE_SIMULATOR_PROTOCOL), QString::fromLatin1(OHOS_TELESCOPE_LX200_TCP_PROTOCOL)};
+	result["availableDeviceModels"] = QJsonArray::fromStringList(ohosLx200DeviceModels());
+	result["unavailableProtocols"] = QJsonArray{QStringLiteral("serial_lx200"), QStringLiteral("nexstar"), QStringLiteral("indi"), QStringLiteral("ascom"), QStringLiteral("rts2")};
+	result["autoConnectSupported"] = false;
+	return result;
+}
+
+QJsonObject saveTelescopeProfileJson(const QString& payload)
+{
+	QJsonParseError parseError;
+	const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+	QJsonObject result;
+	if (!document.isObject())
+	{
+		result["ok"] = false;
+		result["error"] = QStringLiteral("saveTelescopeProfile expects a JSON object: ") + parseError.errorString();
 		return result;
 	}
 
+	OhosTelescopeProfile profile;
+	QString error;
+	if (!parseTelescopeProfile(document.object(), profile, error))
+	{
+		result["ok"] = false;
+		result["error"] = error;
+		return result;
+	}
+
+	QJsonArray profiles = loadTelescopeProfileArray();
+	if (profiles.isEmpty())
+		profiles.append(telescopeProfileJson(defaultTelescopeProfile()));
+	for (qsizetype index = profiles.size() - 1; index >= 0; --index)
+	{
+		if (profiles.at(index).toObject().value("slot").toInt() == profile.slot)
+			profiles.removeAt(index);
+	}
+	profiles.append(telescopeProfileJson(profile));
+	QJsonArray sortedProfiles;
+	for (int slot = 1; slot <= 9; ++slot)
+	{
+		for (const QJsonValue& value : std::as_const(profiles))
+		{
+			if (value.toObject().value("slot").toInt() == slot)
+				sortedProfiles.append(value);
+		}
+	}
+	storeTelescopeProfileArray(sortedProfiles);
+	s_ohosTelescopeRuntime.remove(profile.slot);
+	result = telescopeProfilesJson();
+	result["savedSlot"] = profile.slot;
+	return result;
+}
+
+QJsonObject selectTelescopeProfileJson(const QString& payload)
+{
+	bool ok = false;
+	const int slot = payload.trimmed().toInt(&ok);
+	QJsonObject result;
+	const QJsonArray profiles = telescopeProfilesJson().value("profiles").toArray();
+	bool found = false;
+	for (const QJsonValue& value : profiles)
+		found = found || value.toObject().value("slot").toInt() == slot;
+	if (!ok || !found)
+	{
+		result["ok"] = false;
+		result["error"] = QStringLiteral("unknown telescope slot");
+		return result;
+	}
+	QSettings* settings = StelApp::getInstance().getSettings();
+	settings->setValue(OHOS_TELESCOPE_SELECTED_SLOT_KEY, slot);
+	settings->sync();
+	result = telescopeProfilesJson();
+	result["selectedSlot"] = slot;
+	return result;
+}
+
+QJsonObject deleteTelescopeProfileJson(const QString& payload)
+{
+	bool ok = false;
+	const int slot = payload.trimmed().toInt(&ok);
+	QJsonObject result;
+	if (!ok || slot < 1 || slot > 9)
+	{
+		result["ok"] = false;
+		result["error"] = QStringLiteral("slot must be between 1 and 9");
+		return result;
+	}
+	QJsonArray profiles = loadTelescopeProfileArray();
+	bool removed = false;
+	for (qsizetype index = profiles.size() - 1; index >= 0; --index)
+	{
+		if (profiles.at(index).toObject().value("slot").toInt() == slot)
+		{
+			profiles.removeAt(index);
+			removed = true;
+		}
+	}
+	if (!removed)
+	{
+		result["ok"] = false;
+		result["error"] = QStringLiteral("unknown telescope slot");
+		return result;
+	}
+	storeTelescopeProfileArray(profiles);
+	s_ohosTelescopeRuntime.remove(slot);
+	result = telescopeProfilesJson();
+	result["deletedSlot"] = slot;
+	return result;
+}
+
+bool resolveTelescopeProfile(const QString& payload, OhosTelescopeProfile& profile, QJsonObject& options, QString& error)
+{
+	const QString trimmed = payload.trimmed();
+	if (trimmed.startsWith('{'))
+	{
+		const QJsonDocument document = QJsonDocument::fromJson(trimmed.toUtf8());
+		if (!document.isObject())
+		{
+			error = QStringLiteral("invalid telescope JSON payload");
+			return false;
+		}
+		options = document.object();
+		const int requestedSlot = options.value("slot").toInt(0);
+		const QJsonArray profiles = telescopeProfilesJson().value("profiles").toArray();
+		const int selectedSlot = telescopeProfilesJson().value("selectedSlot").toInt(1);
+		const int slot = requestedSlot > 0 ? requestedSlot : selectedSlot;
+		for (const QJsonValue& value : profiles)
+		{
+			if (value.toObject().value("slot").toInt() == slot)
+				return parseTelescopeProfile(value.toObject(), profile, error);
+		}
+		error = QStringLiteral("unknown telescope slot");
+		return false;
+	}
+
+	if (trimmed.contains('|'))
+	{
+		const QStringList parts = trimmed.split('|');
+		profile = defaultTelescopeProfile();
+		profile.name = QStringLiteral("Legacy LX200 endpoint");
+		profile.protocol = QString::fromLatin1(OHOS_TELESCOPE_LX200_TCP_PROTOCOL);
+		profile.deviceModel = QStringLiteral("Meade LX200 (compatible)");
+		profile.host = parts.value(0).trimmed();
+		bool okPort = false;
+		profile.port = parts.value(1).trimmed().toInt(&okPort);
+		if (!okPort || profile.host.isEmpty() || profile.port <= 0 || profile.port > 65535)
+		{
+			error = QStringLiteral("invalid LX200 endpoint");
+			return false;
+		}
+		return true;
+	}
+
+	const QJsonObject stored = telescopeProfilesJson();
+	const int selectedSlot = stored.value("selectedSlot").toInt(1);
+	for (const QJsonValue& value : stored.value("profiles").toArray())
+	{
+		if (value.toObject().value("slot").toInt() == selectedSlot)
+			return parseTelescopeProfile(value.toObject(), profile, error);
+	}
+	error = QStringLiteral("no telescope profile selected");
+	return false;
+}
+
+QJsonObject sendLx200Commands(const OhosTelescopeProfile& profile, const QStringList& commands)
+{
+	QJsonObject result;
+	result["ok"] = false;
+	result["host"] = profile.host;
+	result["port"] = profile.port;
+	result["slot"] = profile.slot;
+	if (isTelescopeSimulator(profile))
+	{
+		result["ok"] = true;
+		result["simulated"] = true;
+		result["scope"] = QStringLiteral("offline_simulator");
+		result["connectionAttempted"] = false;
+		result["sent"] = displayLx200Commands(commands);
+		result["state"] = QStringLiteral("available");
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("available"));
+		return result;
+	}
+	const QString scope = telescopeEndpointScope(profile.host);
+	result["scope"] = scope;
+	if (!telescopeEndpointMayConnect(scope))
+	{
+		const QString error = QStringLiteral("public or unclassified telescope endpoints are blocked");
+		result["error"] = error;
+		result["errorCode"] = QStringLiteral("endpoint_blocked");
+		result["state"] = QStringLiteral("unavailable");
+		result["connectionAttempted"] = false;
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), error);
+		return result;
+	}
+
+	QTcpSocket socket;
+	result["connectionAttempted"] = true;
+	socket.connectToHost(profile.host, quint16(profile.port));
+	if (!socket.waitForConnected(900))
+	{
+		const QString error = "LX200 TCP connect failed: " + socket.errorString();
+		result["error"] = error;
+		result["errorCode"] = QStringLiteral("connect_failed");
+		result["state"] = QStringLiteral("unavailable");
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), error);
+		return result;
+	}
+	if (profile.commandDelayMs > 0)
+		QThread::msleep(static_cast<unsigned long>(profile.commandDelayMs));
+
 	QStringList replies;
+	QJsonArray replyList;
 	for (const QString& command : commands)
 	{
 		const QByteArray payload = command.toLatin1();
 		if (socket.write(payload) != payload.size() || !socket.waitForBytesWritten(600))
 		{
-			result["error"] = "LX200 TCP write failed: " + socket.errorString();
+			const QString error = "LX200 TCP write failed: " + socket.errorString();
+			result["error"] = error;
+			result["errorCode"] = QStringLiteral("write_failed");
+			result["state"] = QStringLiteral("unavailable");
 			result["command"] = command;
+			setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), error);
 			return result;
 		}
 
-		if (command == "#:Q#")
+		if (command == "#:Q#" || command == ":Q#")
 			continue;
 
 		QByteArray reply;
-			const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 900;
+		const bool singleByteReply = command.startsWith(":Sr") || command.startsWith(":Sd") || command == ":MS#";
+		const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 900;
 		while (QDateTime::currentMSecsSinceEpoch() < deadline)
 		{
 			if (socket.waitForReadyRead(250))
 			{
 				reply += socket.readAll();
-				if (reply.contains('#') || (!reply.isEmpty() && command == ":MS#"))
+				while (reply.startsWith('#'))
+					reply.remove(0, 1);
+				if (reply.contains('#') || (singleByteReply && !reply.isEmpty()))
 					break;
 			}
 		}
 		if (reply.isEmpty())
 		{
-			result["error"] = "LX200 TCP command timed out";
+			const QString error = QStringLiteral("LX200 TCP command timed out");
+			result["error"] = error;
+			result["errorCode"] = QStringLiteral("command_timeout");
+			result["state"] = QStringLiteral("unavailable");
 			result["command"] = command;
+			setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), error);
 			return result;
 		}
-		replies << QString::fromLatin1(reply);
+
+		const QString replyText = QString::fromLatin1(reply);
+		if ((command.startsWith(":Sr") || command.startsWith(":Sd")) && !reply.startsWith('1'))
+		{
+			const QString error = command.startsWith(":Sr")
+				? QStringLiteral("LX200 rejected target right ascension")
+				: QStringLiteral("LX200 rejected target declination");
+			result["error"] = error;
+			result["errorCode"] = command.startsWith(":Sr")
+				? QStringLiteral("ra_rejected")
+				: QStringLiteral("dec_rejected");
+			result["state"] = QStringLiteral("available");
+			result["command"] = command;
+			result["reply"] = replyText;
+			setTelescopeRuntimeState(profile.slot, QStringLiteral("available"), error);
+			return result;
+		}
+		if (command == ":MS#" && !reply.startsWith('0'))
+		{
+			const QString error = QStringLiteral("LX200 rejected slew command: ") + replyText;
+			result["error"] = error;
+			result["errorCode"] = QStringLiteral("slew_rejected");
+			result["state"] = QStringLiteral("available");
+			result["command"] = command;
+			result["reply"] = replyText;
+			setTelescopeRuntimeState(profile.slot, QStringLiteral("available"), error);
+			return result;
+		}
+		replies << replyText;
+		replyList.append(replyText);
 	}
 
 	result["ok"] = true;
 	result["replies"] = replies.join("|");
-	result["sent"] = commands.join("|");
+	result["replyList"] = replyList;
+	result["sent"] = displayLx200Commands(commands);
+	result["state"] = QStringLiteral("available");
+	setTelescopeRuntimeState(profile.slot, QStringLiteral("available"));
+	return result;
+}
+
+QJsonObject lx200EndpointInfo(const QString& payload)
+{
+	OhosTelescopeProfile profile;
+	QJsonObject options;
+	QString error;
+	QJsonObject result;
+	result["transport"] = "TCP";
+	result["connectionAttempted"] = false;
+	if (!resolveTelescopeProfile(payload, profile, options, error))
+	{
+		result["ok"] = false;
+		result["error"] = error;
+		return result;
+	}
+	if (isTelescopeSimulator(profile))
+	{
+		result["host"] = QString();
+		result["port"] = 0;
+		result["slot"] = profile.slot;
+		result["scope"] = QStringLiteral("offline_simulator");
+		result["networkConnection"] = false;
+		result["connectionAllowed"] = true;
+		result["state"] = QStringLiteral("available");
+		result["simulated"] = true;
+		result["ok"] = true;
+		return result;
+	}
+	const QString scope = telescopeEndpointScope(profile.host);
+	result["host"] = profile.host;
+	result["port"] = profile.port;
+	result["slot"] = profile.slot;
+	result["scope"] = scope;
+	result["networkConnection"] = scope == QStringLiteral("local_or_lan");
+	result["connectionAllowed"] = telescopeEndpointMayConnect(scope);
+	const OhosTelescopeRuntimeState runtime = s_ohosTelescopeRuntime.value(profile.slot);
+	result["state"] = runtime.state;
+	result["lastError"] = runtime.lastError;
+	result["testedAtMs"] = runtime.testedAtMs;
+	result["ok"] = true;
+	return result;
+}
+
+QJsonObject testTelescopeConnectionJson(const QString& payload)
+{
+	OhosTelescopeProfile profile;
+	QJsonObject options;
+	QString error;
+	QJsonObject result;
+	result["ok"] = false;
+	if (!resolveTelescopeProfile(payload, profile, options, error))
+	{
+		result["error"] = error;
+		return result;
+	}
+	if (isTelescopeSimulator(profile))
+	{
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("available"));
+		result["host"] = QString();
+		result["port"] = 0;
+		result["slot"] = profile.slot;
+		result["scope"] = QStringLiteral("offline_simulator");
+		result["connectionAttempted"] = false;
+		result["simulated"] = true;
+		result["ok"] = true;
+		result["state"] = QStringLiteral("available");
+		return result;
+	}
+	const QString scope = telescopeEndpointScope(profile.host);
+	result["host"] = profile.host;
+	result["port"] = profile.port;
+	result["slot"] = profile.slot;
+	result["scope"] = scope;
+	result["connectionAttempted"] = false;
+	if (!telescopeEndpointMayConnect(scope))
+	{
+		const QString endpointError = QStringLiteral("public or unclassified telescope endpoints are blocked");
+		result["error"] = endpointError;
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), endpointError);
+		return result;
+	}
+	result = sendLx200Commands(profile, {QStringLiteral("#:GR#")});
+	if (result.value("ok") != true)
+		return result;
+	const QJsonArray replies = result.value("replyList").toArray();
+	const QString reply = replies.isEmpty() ? QString() : replies.at(0).toString().trimmed();
+	static const QRegularExpression raProbePattern(QStringLiteral("^\\d{1,2}:\\d{2}(?::\\d{2})?#?$"));
+	if (!raProbePattern.match(reply).hasMatch())
+	{
+		const QString endpointError = QStringLiteral("The endpoint did not return an LX200 right ascension response");
+		result["ok"] = false;
+		result["error"] = endpointError;
+		result["errorCode"] = QStringLiteral("protocol_probe_failed");
+		result["state"] = QStringLiteral("unavailable");
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), endpointError);
+		return result;
+	}
+	result["probe"] = QStringLiteral(":GR#");
 	return result;
 }
 
@@ -541,6 +1272,7 @@ QJsonObject selectedObjectJ2000Json(Vec3d* positionOut = nullptr)
 	if (!core || !objectMgr || objectMgr->getSelectedObject().isEmpty())
 	{
 		result["error"] = "no selected object";
+		result["errorCode"] = QStringLiteral("no_selected_object");
 		return result;
 	}
 
@@ -561,32 +1293,203 @@ QJsonObject selectedObjectJ2000Json(Vec3d* positionOut = nullptr)
 	return result;
 }
 
-QJsonObject lx200GotoSelected(const QString& payload, bool sync)
+bool parseLx200PositionReplies(const QString& raReply, const QString& decReply,
+					   double& raRadians, double& decRadians, QString& error)
 {
-	const QStringList parts = payload.split('|');
-	if (parts.size() < 2)
+	const QRegularExpression raPattern(QStringLiteral("^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?"));
+	const QRegularExpression decPattern(QStringLiteral("^([+-])(\\d{1,2})[^0-9](\\d{2})(?::(\\d{2}))?"));
+	const QRegularExpressionMatch raMatch = raPattern.match(raReply.trimmed());
+	const QRegularExpressionMatch decMatch = decPattern.match(decReply.trimmed());
+	if (!raMatch.hasMatch() || !decMatch.hasMatch())
 	{
-		QJsonObject result;
-		result["ok"] = false;
-		result["error"] = "expects host|port";
+		error = QStringLiteral("LX200 returned an unsupported coordinate format");
+		return false;
+	}
+
+	const int hours = raMatch.captured(1).toInt();
+	const int raMinutes = raMatch.captured(2).toInt();
+	const int raSeconds = raMatch.captured(3).isEmpty() ? 0 : raMatch.captured(3).toInt();
+	const int degrees = decMatch.captured(2).toInt();
+	const int decMinutes = decMatch.captured(3).toInt();
+	const int decSeconds = decMatch.captured(4).isEmpty() ? 0 : decMatch.captured(4).toInt();
+	if (hours > 23 || raMinutes > 59 || raSeconds > 59 || degrees > 90 || decMinutes > 59 || decSeconds > 59)
+	{
+		error = QStringLiteral("LX200 returned coordinates outside the valid range");
+		return false;
+	}
+
+	raRadians = StelUtils::hmsToRad(static_cast<unsigned int>(hours), static_cast<unsigned int>(raMinutes), raSeconds);
+	decRadians = StelUtils::dmsToRad(degrees, static_cast<unsigned int>(decMinutes), decSeconds);
+	if (decMatch.captured(1) == QStringLiteral("-"))
+		decRadians = -decRadians;
+	return true;
+}
+
+QJsonObject telescopePositionJson(const QString& payload, Vec3d* positionOut = nullptr)
+{
+	OhosTelescopeProfile profile;
+	QJsonObject options;
+	QString error;
+	QJsonObject result;
+	result["ok"] = false;
+	if (!resolveTelescopeProfile(payload, profile, options, error))
+	{
+		result["error"] = error;
 		return result;
 	}
 
-	bool okPort = false;
-	const QString host = parts[0].trimmed();
-	const int portInt = parts[1].toInt(&okPort);
-	if (host.isEmpty() || !okPort || portInt <= 0 || portInt > 65535)
+	Vec3d positionJ2000;
+	if (isTelescopeSimulator(profile))
+	{
+		OhosTelescopeRuntimeState& runtime = s_ohosTelescopeRuntime[profile.slot];
+		if (!runtime.hasPosition)
+		{
+			StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+			if (!movementMgr)
+			{
+				result["error"] = QStringLiteral("movement manager not ready");
+				return result;
+			}
+			runtime.positionJ2000 = movementMgr->getViewDirectionJ2000();
+			runtime.positionJ2000.normalize();
+			runtime.markerFromJ2000 = runtime.positionJ2000;
+			runtime.hasPosition = true;
+			runtime.positionMeasured = true;
+			runtime.name = profile.name;
+			runtime.circles = profile.circles;
+		}
+		positionJ2000 = telescopeMarkerPosition(runtime);
+		result["simulated"] = true;
+		result["connectionAttempted"] = false;
+		result["scope"] = QStringLiteral("offline_simulator");
+		setTelescopeRuntimeState(profile.slot, QStringLiteral("available"));
+	}
+	else
+	{
+		result = sendLx200Commands(profile, {QStringLiteral("#:GR#"), QStringLiteral("#:GD#")});
+		if (result.value("ok") != true)
+			return result;
+		const QJsonArray replies = result.value("replyList").toArray();
+		if (replies.size() < 2)
+		{
+			result["ok"] = false;
+				result["error"] = QStringLiteral("LX200 did not return both coordinates");
+				result["errorCode"] = QStringLiteral("coordinate_response_invalid");
+				result["state"] = QStringLiteral("unavailable");
+				setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), result.value("error").toString());
+				return result;
+		}
+		double raRadians = 0.0;
+		double decRadians = 0.0;
+		if (!parseLx200PositionReplies(replies.at(0).toString(), replies.at(1).toString(), raRadians, decRadians, error))
+		{
+			result["ok"] = false;
+			result["error"] = error;
+			return result;
+		}
+		Vec3d equatorial;
+		StelUtils::spheToRect(raRadians, decRadians, equatorial);
+		positionJ2000 = profile.equinox == QStringLiteral("JNow")
+			? StelApp::getInstance().getCore()->equinoxEquToJ2000(equatorial, StelCore::RefractionOff)
+			: equatorial;
+		positionJ2000.normalize();
+	}
+
+	double raRadians = 0.0;
+	double decRadians = 0.0;
+	StelUtils::rectToSphe(&raRadians, &decRadians, positionJ2000);
+	if (raRadians < 0.0)
+		raRadians += 2.0 * M_PI;
+	const int raSeconds = int(std::floor(0.5 + raRadians * 43200.0 / M_PI)) % 86400;
+	const int decArcSeconds = int(std::floor(0.5 + decRadians * 648000.0 / M_PI));
+	if (!isTelescopeSimulator(profile))
+	{
+		OhosTelescopeRuntimeState& runtime = s_ohosTelescopeRuntime[profile.slot];
+		const qint64 sampleMs = QDateTime::currentMSecsSinceEpoch();
+		double interpolationSeconds = 0.0;
+		if (runtime.lastPositionSampleMs > 0)
+		{
+			const double sampleInterval = (sampleMs - runtime.lastPositionSampleMs) / 1000.0;
+			if (sampleInterval > 0.0 && sampleInterval <= 2.5)
+				interpolationSeconds = qBound(0.35, sampleInterval * 1.05, 1.5);
+		}
+		updateTelescopeMarker(profile, positionJ2000, true, interpolationSeconds);
+		runtime.lastPositionSampleMs = sampleMs;
+	}
+	result["ok"] = true;
+	result["slot"] = profile.slot;
+	result["name"] = profile.name;
+	result["equinox"] = QStringLiteral("J2000");
+	result["ra"] = formatLx200Ra(raSeconds);
+	result["dec"] = formatDisplayDec(decArcSeconds);
+	result["raHours"] = raRadians * 12.0 / M_PI;
+	result["decDegrees"] = decRadians * 180.0 / M_PI;
+	const OhosTelescopeRuntimeState markerRuntime = s_ohosTelescopeRuntime.value(profile.slot);
+	const double markerElapsed = QDateTime::currentMSecsSinceEpoch() / 1000.0 - markerRuntime.markerAnimationStartSec;
+	result["slewing"] = markerRuntime.markerAnimationDurationSec > 0.0 && markerElapsed < markerRuntime.markerAnimationDurationSec;
+	result["slewRemainingSeconds"] = qMax(0.0, markerRuntime.markerAnimationDurationSec - markerElapsed);
+	if (positionOut)
+		*positionOut = positionJ2000;
+	return result;
+}
+
+QJsonObject centerScreenOnTelescopeJson(const QString& payload)
+{
+	Vec3d positionJ2000;
+	QJsonObject result = telescopePositionJson(payload, &positionJ2000);
+	if (result.value("ok") != true)
+		return result;
+	StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+	if (!movementMgr)
+	{
+		result["ok"] = false;
+		result["error"] = QStringLiteral("movement manager not ready");
+		return result;
+	}
+	movementMgr->moveToJ2000(positionJ2000, movementMgr->getViewUpVectorJ2000(), 0.45f);
+	result["centered"] = true;
+	return result;
+}
+
+QJsonObject lx200GotoTarget(const QString& payload, bool sync)
+{
+	OhosTelescopeProfile profile;
+	QJsonObject options;
+	QString error;
+	if (!resolveTelescopeProfile(payload, profile, options, error))
 	{
 		QJsonObject result;
 		result["ok"] = false;
-		result["error"] = "invalid LX200 endpoint";
+		result["error"] = error;
 		return result;
 	}
 
 	Vec3d position;
-	QJsonObject objectResult = selectedObjectJ2000Json(&position);
-	if (objectResult["ok"] != true)
-		return objectResult;
+	QJsonObject objectResult;
+	const QString targetSource = options.value("targetSource").toString(QStringLiteral("selected"));
+	if (targetSource == QStringLiteral("screen_center"))
+	{
+		StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+		if (!movementMgr)
+		{
+			objectResult["ok"] = false;
+			objectResult["error"] = QStringLiteral("movement manager not ready");
+			return objectResult;
+		}
+		position = movementMgr->getViewDirectionJ2000();
+		position.normalize();
+		objectResult["ok"] = true;
+		objectResult["name"] = QStringLiteral("screen center");
+	}
+	else
+	{
+		objectResult = selectedObjectJ2000Json(&position);
+		if (objectResult["ok"] != true)
+			return objectResult;
+	}
+	const Vec3d positionJ2000 = position;
+	if (profile.equinox == QStringLiteral("JNow"))
+		position = StelApp::getInstance().getCore()->j2000ToEquinoxEqu(position, StelCore::RefractionOff);
 
 	const double raSigned = std::atan2(position[1], position[0]);
 	const double ra = raSigned >= 0.0 ? raSigned : raSigned + 2.0 * M_PI;
@@ -603,10 +1506,29 @@ QJsonObject lx200GotoSelected(const QString& payload, bool sync)
 		sync ? ":CM#" : ":MS#"
 	};
 
-	QJsonObject result = sendLx200Commands(host, quint16(portInt), commands);
+	QJsonObject result = sendLx200Commands(profile, commands);
+	if (isTelescopeSimulator(profile) && result.value("ok") == true)
+	{
+		OhosTelescopeRuntimeState& runtime = s_ohosTelescopeRuntime[profile.slot];
+		if (!runtime.hasPosition)
+		{
+			StelMovementMgr* movementMgr = GETSTELMODULE(StelMovementMgr);
+			if (movementMgr)
+				updateTelescopeMarker(profile, movementMgr->getViewDirectionJ2000(), true);
+		}
+		const Vec3d previous = telescopeMarkerPosition(s_ohosTelescopeRuntime.value(profile.slot));
+		const double angleDegrees = std::acos(qBound(-1.0, previous * positionJ2000, 1.0)) * M_180_PI;
+		const double slewSeconds = qBound(0.8, angleDegrees / 35.0, 4.0);
+		updateTelescopeMarker(profile, positionJ2000, true, slewSeconds);
+		result["slewing"] = slewSeconds > 0.0;
+		result["slewDurationSeconds"] = slewSeconds;
+		markOhosInteraction();
+	}
 	result["target"] = objectResult["name"].toString().isEmpty() ? objectResult["englishName"].toString() : objectResult["name"].toString();
+	result["targetSource"] = targetSource;
+	result["equinox"] = profile.equinox;
 	result["ra"] = formatLx200Ra(raSeconds);
-	result["dec"] = formatLx200Dec(decArcSeconds);
+	result["dec"] = formatDisplayDec(decArcSeconds);
 	result["mode"] = sync ? "sync" : "goto";
 	return result;
 }
@@ -899,6 +1821,7 @@ static constexpr qint64 OHOS_WUT_SLICE_MS = 18;
 // guaranteed to be pumped; we hand commands to the pump instead.
 static QMutex s_ohosCmdQueueMutex;
 static QList<std::function<void()>> s_ohosCmdQueue;
+static int s_ohosCommandQueueLogCooldown = 0;
 static std::atomic_bool s_ohosScriptStartPending{false};
 static std::atomic_uint64_t s_ohosScriptStartGeneration{0};
 // Device pose samples supersede one another. Keeping a dedicated latest-value
@@ -935,7 +1858,6 @@ static double s_gyroTransitionStartSec = 0.0;
 static constexpr double OHOS_GYRO_HANDOFF_SECONDS = 0.35;
 // A gyro pose and a selected-object screen anchor both own the camera
 // direction. While the sensor drives the view, leave the anchor suspended.
-static bool s_gyroViewActive = false;
 // --- Manual view-control modes (OHOS bridge) -------------------------------
 // s_viewLock ("固定目标位置"): keeps a selected body's last released screen
 // position as the zoom anchor. Manual panning remains available.
@@ -974,6 +1896,14 @@ static double s_ohosPanInertiaElapsedSec = 0.0;
 static double s_ohosPanInertiaTravelPixels = 0.0;
 static double s_ohosPanInertiaMaxTravelPixels = 0.0;
 static bool s_ohosCaptureSelectedAnchorAfterPan = false;
+// A pinch ends at a discrete touch sample. Keep a short, low-energy tail on
+// the Qt render thread so the final zoom does not stop abruptly. The anchor
+// mode is retained during this tail, so the gesture never jumps to center.
+static bool s_ohosPinchSettleActive = false;
+static double s_ohosPinchSettleVelocity = 0.0; // log scale per second
+static double s_ohosPinchSettleElapsedSec = 0.0;
+static double s_ohosPinchLastLogScale = 0.0;
+static double s_ohosPinchLastSampleSec = 0.0;
 
 static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 {
@@ -1073,14 +2003,54 @@ static void ohosUpdatePanInertia(double dtSec)
 	ohosApplyPanDelta(StelApp::getInstance().getCore(), stepX, stepY);
 	s_ohosPanInertiaTravelPixels += std::hypot(stepX, stepY);
 	s_ohosPanInertiaElapsedSec += safeDtSec;
-	const double decay = std::pow(0.955, dtMs / 16.667);
+	const double decay = std::pow(0.965, dtMs / 16.667);
 	s_ohosPanInertiaVx *= decay;
 	s_ohosPanInertiaVy *= decay;
 	const double speed = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy);
-	if (speed < 0.010 || s_ohosPanInertiaElapsedSec > 1.8 || s_ohosPanInertiaTravelPixels >= s_ohosPanInertiaMaxTravelPixels)
+	if (speed < 0.006 || s_ohosPanInertiaElapsedSec > 2.2 || s_ohosPanInertiaTravelPixels >= s_ohosPanInertiaMaxTravelPixels)
 		s_ohosPanInertiaActive = false;
 	else
 		markOhosInteraction();
+}
+
+static void ohosUpdatePinchSettle(double dtSec)
+{
+	if (!s_ohosPinchSettleActive || s_ohosPinchActive)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized())
+		return;
+	if (s_gyroViewActive)
+	{
+		s_ohosPinchSettleActive = false;
+		s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+		return;
+	}
+	StelCore* core = app->getCore();
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : nullptr;
+	if (!movementMgr)
+	{
+		s_ohosPinchSettleActive = false;
+		s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+		return;
+	}
+	const double safeDtSec = qBound(0.001, dtSec, 0.080);
+	const double velocity = s_ohosPinchSettleVelocity;
+	const double currentFov = movementMgr->getCurrentFov();
+	const double nextFov = currentFov * std::exp(-velocity * safeDtSec);
+	if (std::abs(velocity) < 0.035 || s_ohosPinchSettleElapsedSec > 0.42 ||
+		std::abs(nextFov - currentFov) < 0.0005)
+	{
+		s_ohosPinchSettleActive = false;
+		s_ohosPinchSettleVelocity = 0.0;
+		s_ohosPinchSettleElapsedSec = 0.0;
+		s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+		return;
+	}
+	movementMgr->setFov(nextFov);
+	s_ohosPinchSettleElapsedSec += safeDtSec;
+	s_ohosPinchSettleVelocity *= std::exp(-safeDtSec / 0.14);
+	markOhosInteraction();
 }
 static void markQtLoopRunning();
 
@@ -1095,8 +2065,7 @@ static void ohosDrainCommandQueue()
 		QMutexLocker lock(&s_ohosCmdQueueMutex);
 		if (s_ohosCmdQueue.isEmpty() && !s_pendingGyroCommand)
 			return;
-		batch = s_ohosCmdQueue;
-		s_ohosCmdQueue.clear();
+		batch.swap(s_ohosCmdQueue);
 		if (s_pendingGyroCommand)
 		{
 			batch.append(std::move(s_pendingGyroCommand));
@@ -1104,11 +2073,39 @@ static void ohosDrainCommandQueue()
 		}
 	}
 	markQtLoopRunning();
-	// 只在批量大时才打日志，避免每帧一条 WARN 日志造成 IO 开销
-	if (batch.size() > 4)
-		OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "ohosDrainCommandQueue ran n=%{public}d", (int)batch.size());
-	for (auto& fn : batch)
-		fn();
+	if (s_ohosCommandQueueLogCooldown > 0)
+		--s_ohosCommandQueueLogCooldown;
+	QElapsedTimer budgetTimer;
+	budgetTimer.start();
+	QList<std::function<void()>> deferred;
+	int executed = 0;
+	for (int index = 0; index < batch.size(); ++index)
+	{
+		if (executed >= OHOS_MAX_COMMANDS_PER_FRAME ||
+			(executed > 0 && budgetTimer.elapsed() >= OHOS_COMMAND_BUDGET_MS))
+		{
+			deferred.append(std::move(batch[index]));
+			continue;
+		}
+		batch[index]();
+		++executed;
+	}
+	const int deferredCount = deferred.size();
+	if (!deferred.isEmpty())
+	{
+		QMutexLocker lock(&s_ohosCmdQueueMutex);
+		QList<std::function<void()>> newlyQueued;
+		newlyQueued.swap(s_ohosCmdQueue);
+		deferred.append(std::move(newlyQueued));
+		s_ohosCmdQueue.swap(deferred);
+	}
+	if ((batch.size() > 4 || deferredCount > 0) && s_ohosCommandQueueLogCooldown == 0)
+	{
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StellariumCpp",
+			"ohosDrainCommandQueue batch=%{public}d deferred=%{public}d executed=%{public}d",
+			(int)batch.size(), deferredCount, executed);
+		s_ohosCommandQueueLogCooldown = 30;
+	}
 }
 
 // Gradually fade the landscape as the observer zooms in and tilts the view
@@ -1283,6 +2280,12 @@ static void ohosUpdateSelectedScreenProjection()
 		ohosInvalidateSelectedScreenProjection();
 		return;
 	}
+	const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(objectMgr->getSelectedObject().constFirst());
+	if (satellite && !satellite->isOrbitValid())
+	{
+		ohosInvalidateSelectedScreenProjection();
+		return;
+	}
 	const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
 	if (!projector)
 	{
@@ -1394,7 +2397,8 @@ static void ohosUpdatePinchTarget(double touchX, double touchY, double touchWidt
 
 static void ohosMaintainPinchSkyAnchor()
 {
-	if (!s_ohosPinchActive || s_ohosPinchAnchorMode != OhosPinchAnchorMode::SkyPoint || s_gyroViewActive)
+	if ((!s_ohosPinchActive && !s_ohosPinchSettleActive) ||
+		s_ohosPinchAnchorMode != OhosPinchAnchorMode::SkyPoint || s_gyroViewActive)
 		return;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
@@ -1454,6 +2458,8 @@ static void ohosMaintainSelectedZoomAnchor()
 	if (movementMgr->getFlagTracking())
 		return;
 	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+	const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(selectedObject);
+	if (satellite && !satellite->isOrbitValid()) return;
 	if (selectedObject->getEnglishName() != s_ohosZoomAnchorObject)
 	{
 		ohosCaptureSelectedZoomAnchor();
@@ -1728,9 +2734,60 @@ QJsonObject constellationCultureDescriptionJson(const StelObjectP& object, StelC
 	return result;
 }
 
-QJsonObject objectDetailModelJson(const StelObjectP& object, const QJsonObject& fallbackMedia)
+QJsonObject objectDetailModelJson(const StelObjectP& object, const QJsonObject& fallbackMedia, StelCore* core)
 {
 	QJsonObject result;
+	const PlanetP planet = qSharedPointerDynamicCast<Planet>(object);
+	if (planet && core)
+	{
+		const Vec3d center = planet->getHeliocentricEclipticPos();
+		Vec3d observer = core->getObserverHeliocentricEclipticPos() - center;
+		Vec3d sunlight = GETSTELMODULE(SolarSystem)->getSun()->getHeliocentricEclipticPos() - center;
+		const bool emissive = planet->getEnglishName() == QLatin1String("Sun");
+		if (observer.normSquared() < 1e-24 || (!emissive && sunlight.normSquared() < 1e-24))
+			return result;
+		observer.normalize();
+		if (emissive) sunlight = observer;
+		else sunlight.normalize();
+		const Mat4d toVsop = planet->getRotEquatorialToVsop87()
+			* Mat4d::zrotation((planet->getAxisRotation() + 90.) * M_PI_180);
+		const Mat4d toLocal = toVsop.inverse();
+		Vec3d up = StelCore::matJ2000ToVsop87 * core->altAzToJ2000(Vec3d(0., 0., 1.), StelCore::RefractionOff);
+		Vec3d right = up ^ observer;
+		if (right.normSquared() < 1e-12)
+			right = (StelCore::matJ2000ToVsop87 * Vec3d(0., 0., 1.)) ^ observer;
+		if (right.normSquared() < 1e-12)
+			right = Vec3d(1., 0., 0.) ^ observer;
+		right.normalize();
+		up = observer ^ right;
+		const auto textureVector = [&toLocal](const Vec3d& direction) {
+			const Vec3d local = toLocal.multiplyWithoutTranslation(direction);
+			return Vec3d(local[0], local[2], -local[1]);
+		};
+		const Vec3d bodyRight = textureVector(right);
+		const Vec3d bodyUp = textureVector(up);
+		const Vec3d bodyObserver = textureVector(observer);
+		const Vec3d bodySun = textureVector(sunlight);
+		QJsonArray viewToBody;
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			viewToBody.append(bodyRight[axis]);
+			viewToBody.append(bodyUp[axis]);
+			viewToBody.append(bodyObserver[axis]);
+		}
+		result["schemaVersion"] = 1;
+		result["state"] = "available";
+		result["format"] = "textured-sphere";
+		result["assetKey"] = planet->getEnglishName();
+		result["offline"] = true;
+		result["coordinateFrame"] = "texture-body; observer local zenith up";
+		result["source"] = "Stellarium ephemeris and planet rotation";
+		result["lighting"] = QJsonObject{{"viewToBody", viewToBody},
+			{"sunDirectionBody", QJsonArray{bodySun[0], bodySun[1], bodySun[2]}},
+			{"jd", core->getJD()}, {"illuminatedFraction", (1. + observer.dot(sunlight)) * 0.5},
+			{"emissive", emissive}};
+		return result;
+	}
 	if (!object || object->getType() != Constellation::CONSTELLATION_TYPE)
 		return result;
 
@@ -1765,6 +2822,9 @@ QString selectedObjectInfoMode()
 		return QStringLiteral("default");
 
 	const StelObject::InfoStringGroup flags = gui->getInfoTextFilters();
+	if (StelApp::getInstance().getSettings()->value("gui/selected_object_info").toString() == QLatin1String("custom")
+		&& flags == GETSTELMODULE(StelObjectMgr)->getCustomInfoStrings())
+		return QStringLiteral("custom");
 	if (flags == StelObject::InfoStringGroup(StelObject::AllInfo))
 		return QStringLiteral("all");
 	if (flags == StelObject::InfoStringGroup(StelObject::ShortInfo))
@@ -1784,6 +2844,8 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	result["ok"] = true;
 	const QString infoMode = selectedObjectInfoMode();
 	result[QStringLiteral("infoMode")] = infoMode;
+	if (infoMode == QLatin1String("custom"))
+		result["customInfoMask"] = static_cast<int>(dynamic_cast<const StelGui*>(StelApp::getInstance().getGui())->getInfoTextFilters());
 
 	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
 	if (!objectMgr || objectMgr->getSelectedObject().isEmpty())
@@ -1792,11 +2854,15 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		return result;
 	}
 
-		const StelObjectP object = objectMgr->getSelectedObject().constFirst();
+	const StelObjectP object = objectMgr->getSelectedObject().constFirst();
 	const QString selectedType = object->getType();
+	const QString catalogIdentity = object->getID().trimmed();
+	const QString englishName = object->getEnglishName().trimmed();
+	const QString localizedName = object->getNameI18n().trimmed();
 	result["found"] = true;
-	result["name"] = object->getNameI18n();
-	result["englishName"] = object->getEnglishName();
+	result["englishName"] = englishName.isEmpty() ? catalogIdentity : englishName;
+	result["name"] = localizedName.isEmpty() ? result.value("englishName").toString() : localizedName;
+	if (englishName.isEmpty() && !catalogIdentity.isEmpty()) result["catalogId"] = catalogIdentity;
 	result["type"] = object->getObjectTypeI18n();
 	result["objectType"] = object->getObjectType();
 	if (object->getType() == QLatin1String("Nebula"))
@@ -1812,13 +2878,21 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	const QJsonObject cultureDescription = constellationCultureDescriptionJson(object, core);
 	for (auto it = cultureDescription.constBegin(); it != cultureDescription.constEnd(); ++it)
 		result[it.key()] = it.value();
-	const QJsonObject detailModel = objectDetailModelJson(object, detailMedia);
+	const QJsonObject detailModel = objectDetailModelJson(object, detailMedia, core);
 	if (!detailModel.isEmpty())
 		result[QStringLiteral("detailModel")] = detailModel;
 
 	if (core && includeDynamic)
 	{
 		const QVariantMap m = object->getInfoMap(core);
+		if (selectedType == QLatin1String("Satellite"))
+		{
+			result["orbitValid"] = m.value("orbit-valid").toBool();
+			result["propagationStatus"] = m.value("propagation-status").toString();
+			result["tleAgeDays"] = m.value("tle-age-days").toDouble();
+			result["tleOutdated"] = m.value("tle-outdated").toBool();
+			result["sgp4Error"] = m.value("sgp4-error").toInt();
+		}
 		if (selectedType.compare(QStringLiteral("Satellite"), Qt::CaseInsensitive) == 0)
 			qInfo() << "[StellariumOhos][selection-info] satellite getInfoMap elapsedMs=" << infoTimer.elapsed();
 		// Keep tap and heartbeat responses lightweight. Satellite records contain
@@ -1826,12 +2900,21 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		// frame makes the ArkUI detail tree rebuild alongside the sky frame.
 		// The configured information level is applied to the explicit details
 		// request, not to the lightweight selection response.
-		const bool includeConfiguredDetails = includeDetails && infoMode != QStringLiteral("none")
+		const bool includeConfiguredDetails = infoMode != QStringLiteral("none")
 			&& (infoMode == QStringLiteral("all") || infoMode == QStringLiteral("default")
 			|| infoMode == QStringLiteral("custom"));
 		if (includeConfiguredDetails)
 		{
 			QJsonArray detailFields;
+			QJsonArray liveDetailFields;
+			static const QSet<QString> liveSections = {
+				QStringLiteral("orbit"), QStringLiteral("surface"), QStringLiteral("lunar"), QStringLiteral("comet")
+			};
+			static const QSet<QString> liveKeys = {
+				QStringLiteral("positionAngle"), QStringLiteral("range"), QStringLiteral("rangeRate"),
+				QStringLiteral("height"), QStringLiteral("subpoint"), QStringLiteral("sunReflectionAngle"),
+				QStringLiteral("visibility"), QStringLiteral("meteorStatus")
+			};
 			QSet<QString> emittedKeys;
 			// The desktop configuration uses DefaultInfo as a curated subset of
 			// AllInfo. Keep the same distinction in the structured bridge payload.
@@ -1840,7 +2923,10 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				QStringLiteral("eclipticJ2000"), QStringLiteral("galactic"),
 				QStringLiteral("supergalactic")
 			};
-			auto appendField = [&detailFields, &emittedKeys, &infoMode, &defaultExcludedKeys](const QString& key, const QString& section, QString value) {
+			auto appendField = [&detailFields, &liveDetailFields, &emittedKeys, &infoMode, &defaultExcludedKeys, includeDetails](const QString& key, const QString& section, QString value) {
+				const bool live = liveSections.contains(section) || liveKeys.contains(key);
+				if (!includeDetails && !live)
+					return;
 				if (infoMode == QStringLiteral("short") || infoMode == QStringLiteral("none")
 					|| (infoMode == QStringLiteral("default") && defaultExcludedKeys.contains(key)))
 					return;
@@ -1853,7 +2939,11 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				field[QStringLiteral("key")] = key;
 				field[QStringLiteral("section")] = section;
 				field[QStringLiteral("value")] = value;
-				detailFields.append(field);
+				field[QStringLiteral("live")] = live;
+				if (includeDetails)
+					detailFields.append(field);
+				if (live)
+					liveDetailFields.append(field);
 				emittedKeys.insert(key);
 			};
 			auto appendText = [&m, &appendField](const QString& key, const QString& section, const QString& mapKey) {
@@ -1959,7 +3049,8 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			appendText(QStringLiteral("spectralClass"), QStringLiteral("physical"), QStringLiteral("spectral-class"));
 			appendText(QStringLiteral("starType"), QStringLiteral("physical"), QStringLiteral("star-type"));
 			appendText(QStringLiteral("morphology"), QStringLiteral("physical"), QStringLiteral("morpho"));
-			appendNumber(QStringLiteral("redshift"), QStringLiteral("physical"), QStringLiteral("redshift"), 6);
+			if (selectedType != QLatin1String("Quasar") || m.value("redshift").toDouble() > 0.)
+				appendNumber(QStringLiteral("redshift"), QStringLiteral("physical"), QStringLiteral("redshift"), 6);
 			if (m.contains(QStringLiteral("axis-major-dms")) || m.contains(QStringLiteral("axis-minor-dms")))
 			{
 				const QString major = m.value(QStringLiteral("axis-major-dms")).toString();
@@ -1973,7 +3064,7 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			if (m.contains(QStringLiteral("variable-star")))
 			{
 				appendText(QStringLiteral("variabilityType"), QStringLiteral("stellar"), QStringLiteral("variable-star"));
-				appendPositiveNumber(QStringLiteral("stellarParallax"), QStringLiteral("stellar"), QStringLiteral("parallax"), 3, QStringLiteral(" mas"));
+				appendScaledPositiveNumber(QStringLiteral("stellarParallax"), QStringLiteral("stellar"), QStringLiteral("parallax"), 1000., 3, QStringLiteral(" mas"));
 				appendNumber(QStringLiteral("stellarAbsoluteMagnitude"), QStringLiteral("stellar"), QStringLiteral("absolute-mag"), 2);
 				appendPositiveNumber(QStringLiteral("stellarDistance"), QStringLiteral("stellar"), QStringLiteral("distance-ly"), 2, QStringLiteral(" 光年"));
 				appendPositiveNumber(QStringLiteral("variabilityPeriod"), QStringLiteral("stellar"), QStringLiteral("period"), 6, QStringLiteral(" 天"));
@@ -2096,7 +3187,9 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 			appendText(QStringLiteral("parentBody"), QStringLiteral("plugin"), QStringLiteral("parent"));
 			appendText(QStringLiteral("maximumZhr"), QStringLiteral("plugin"), QStringLiteral("zhr-max"));
 
-			result[QStringLiteral("detailFields")] = detailFields;
+			if (includeDetails)
+				result[QStringLiteral("detailFields")] = detailFields;
+			result[QStringLiteral("liveDetailFields")] = liveDetailFields;
 			if (includeDetails && object->getType() == QLatin1String("Satellite"))
 			{
 				result[QStringLiteral("satellitePassesPending")] = true;
@@ -2104,9 +3197,11 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				result[QStringLiteral("satellitePassSource")] = QStringLiteral("local TLE propagation");
 			}
 		}
-		else if (includeDetails)
+		else
 		{
-			result[QStringLiteral("detailFields")] = QJsonArray();
+			if (includeDetails)
+				result[QStringLiteral("detailFields")] = QJsonArray();
+			result[QStringLiteral("liveDetailFields")] = QJsonArray();
 		}
 
 		// Normalized magnitude (visual, no extinction)
@@ -2205,18 +3300,9 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 				result["temperatureK"] = tk;
 		}
 
-		// Distance (in AU for solar system, else light-years or parsecs if available)
-		if (m.contains("distance"))
-		{
-			double distAu = m["distance"].toDouble();
-			if (distAu > 0)
-			{
-				if (distAu < 1000.)
-					result["distance"] = QString::number(distAu, 'f', 4) + " AU";
-				else
-					result["distance"] = QString::number(distAu / 63241.077, 'f', 2) + " ly";
-			}
-		}
+		const QJsonObject distanceInfo = ohosObjectDistance(selectedType, m);
+		for (auto entry = distanceInfo.constBegin(); entry != distanceInfo.constEnd(); ++entry)
+			result[entry.key()] = entry.value();
 
 		// Angular size (DSO / planets / Moon), formatted string
 		if (m.contains("size-dms"))
@@ -2242,6 +3328,44 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 	return result;
 }
 
+QString formattedSimulationTime(double jd)
+{
+	const StelCore* core = StelApp::getInstance().getCore();
+	const StelLocaleMgr& locale = StelApp::getInstance().getLocaleMgr();
+	const double offset = core->getUTCOffset(jd);
+	return locale.getPrintableDateLocal(jd, offset) + " " + locale.getPrintableTimeLocal(jd, offset);
+}
+
+QJsonObject timeSettingsJson()
+{
+	const StelCore* core = StelApp::getInstance().getCore();
+	const StelLocaleMgr& locale = StelApp::getInstance().getLocaleMgr();
+	QJsonObject result;
+	result["ok"] = true;
+	result["dateFormat"] = locale.getDateFormatStr();
+	result["timeFormat"] = locale.getTimeFormatStr();
+	result["formattedTime"] = formattedSimulationTime(core->getJD());
+	result["timeZone"] = core->getCurrentTimeZone();
+	result["startupTimeMode"] = core->getStartupTimeMode();
+	result["startupTimeStop"] = core->getStartupTimeStop();
+	result["todayTime"] = core->getInitTodayTime().toString("HH:mm:ss");
+	result["presetSkyTime"] = core->getPresetSkyTime();
+	result["presetLocalTime"] = StelUtils::julianDayToISO8601String(core->getPresetSkyTime());
+	result["deltaTAlgorithm"] = core->getCurrentDeltaTAlgorithmKey();
+	QTextDocument description;
+	description.setHtml(core->getCurrentDeltaTAlgorithmDescription());
+	result["deltaTDescription"] = description.toPlainText();
+	QJsonArray algorithms;
+	const QMetaEnum enumeration = QMetaEnum::fromType<StelCore::DeltaTAlgorithm>();
+	for (int index = 0; index < enumeration.keyCount(); ++index) algorithms.append(enumeration.key(index));
+	result["deltaTAlgorithms"] = algorithms;
+	const Vec3d coefficients = core->getDeltaTCustomEquationCoefficients();
+	result["deltaTCustom"] = QString("%1,%2,%3,%4,%5").arg(core->getDeltaTCustomYear(), 0, 'g', 15)
+		.arg(core->getDeltaTCustomNDot(), 0, 'g', 15).arg(coefficients[0], 0, 'g', 15)
+		.arg(coefficients[1], 0, 'g', 15).arg(coefficients[2], 0, 'g', 15);
+	return result;
+}
+
 QJsonObject currentStateJson()
 {
 	QJsonObject result;
@@ -2261,6 +3385,7 @@ QJsonObject currentStateJson()
 		result["timeRate"] = core->getTimeRate();
 		result["jd"] = core->getJD();
 		result["timeText"] = StelUtils::julianDayToISO8601String(core->getJD() + core->getUTCOffset(core->getJD()) / 24.0);
+		result["formattedTime"] = formattedSimulationTime(core->getJD());
 		result["locationName"] = location.name;
 		result["locationRegion"] = location.region;
 		result["planetName"] = location.planetName;
@@ -2678,15 +3803,428 @@ static void bookmarksSave()
 	}
 }
 
+// ---- Sky Culture Maker draft store (OHOS bridge) ----
+// The touch UI and CLI share one versioned, offline draft. The desktop plugin
+// remains responsible for its Qt mouse workflow; this store provides the same
+// portable sky-culture files without depending on Qt Widgets.
+static QList<QJsonObject> g_skyCultureMakerHistory;
+
+static QString skyCultureMakerDir()
+{
+	const QString path = StelFileMgr::getUserDir() + "/sky-culture-maker";
+	QDir().mkpath(path);
+	return path;
+}
+
+static QString skyCultureMakerDraftPath()
+{
+	return QDir(skyCultureMakerDir()).filePath("draft.json");
+}
+
+static QString skyCultureMakerAssetsDir()
+{
+	const QString path = QDir(skyCultureMakerDir()).filePath("assets");
+	QDir().mkpath(path);
+	return path;
+}
+
+static bool isSafeSkyCultureAssetPath(const QString& path)
+{
+	const QString cleanPath = QDir::cleanPath(path);
+	return !cleanPath.isEmpty() && !QDir::isAbsolutePath(cleanPath) && cleanPath != QLatin1String("..") && !cleanPath.startsWith("../");
+}
+
+static QJsonObject defaultSkyCultureMakerDraft()
+{
+	QJsonObject draft;
+	draft["schemaVersion"] = 1;
+	draft["id"] = "";
+	draft["name"] = "";
+	draft["author"] = "";
+	draft["license"] = "CC BY 4.0";
+	draft["region"] = "";
+	draft["classification"] = QJsonArray{QStringLiteral("traditional")};
+	draft["native_lang"] = "zh_CN";
+	draft["beginTime"] = 0;
+	draft["endTime"] = 0;
+	draft["introduction"] = "";
+	draft["description"] = "";
+	draft["constellations"] = QJsonArray();
+	draft["updatedAt"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+	return draft;
+}
+
+static QJsonArray skyCultureMakerClassifications(const QJsonValue& value)
+{
+	QJsonArray result;
+	if (value.isArray())
+	{
+		for (const QJsonValue& item : value.toArray())
+		{
+			const QString classification = item.toString().trimmed().toLower();
+			if (!classification.isEmpty() && !result.contains(classification)) result.append(classification);
+		}
+	}
+	else
+	{
+		const QString classification = value.toString().trimmed().toLower();
+		if (!classification.isEmpty()) result.append(classification);
+	}
+	if (result.isEmpty()) result.append(QStringLiteral("traditional"));
+	return result;
+}
+
+static QJsonObject normalizeSkyCultureMakerDraft(const QJsonObject& input)
+{
+	QJsonObject draft = defaultSkyCultureMakerDraft();
+	for (auto iterator = input.constBegin(); iterator != input.constEnd(); ++iterator)
+		draft[iterator.key()] = iterator.value();
+	draft["schemaVersion"] = 1;
+	draft["id"] = draft.value("id").toString().trimmed().toLower();
+	draft["name"] = draft.value("name").toString().trimmed();
+	draft["author"] = draft.value("author").toString().trimmed();
+	draft["license"] = draft.value("license").toString().trimmed();
+	draft["region"] = draft.value("region").toString().trimmed();
+	draft["native_lang"] = draft.value("native_lang").toString("zh_CN").trimmed();
+	draft["classification"] = skyCultureMakerClassifications(draft.value("classification"));
+	if (!draft.value("constellations").isArray()) draft["constellations"] = QJsonArray();
+	draft["updatedAt"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+	return draft;
+}
+
+static QJsonObject loadSkyCultureMakerDraft()
+{
+	QFile file(skyCultureMakerDraftPath());
+	if (!file.open(QIODevice::ReadOnly)) return defaultSkyCultureMakerDraft();
+	QJsonParseError error;
+	const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &error);
+	if (error.error != QJsonParseError::NoError || !document.isObject()) return defaultSkyCultureMakerDraft();
+	return normalizeSkyCultureMakerDraft(document.object());
+}
+
+static bool writeSkyCultureMakerDraft(const QJsonObject& draft, QString* error = nullptr)
+{
+	QFile file(skyCultureMakerDraftPath());
+	if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+	{
+		if (error) *error = file.errorString();
+		return false;
+	}
+	const QByteArray data = QJsonDocument(normalizeSkyCultureMakerDraft(draft)).toJson(QJsonDocument::Indented);
+	if (file.write(data) != data.size())
+	{
+		if (error) *error = file.errorString();
+		return false;
+	}
+	return true;
+}
+
+static void rememberSkyCultureMakerDraft(const QJsonObject& draft)
+{
+	g_skyCultureMakerHistory.append(draft);
+	while (g_skyCultureMakerHistory.size() > 30) g_skyCultureMakerHistory.removeFirst();
+}
+
+static void appendSkyCultureMakerIssue(QJsonArray& issues, const QString& severity, const QString& code,
+	                                    const QString& field, const QString& message)
+{
+	issues.append(QJsonObject{{"severity", severity}, {"code", code}, {"field", field}, {"message", message}});
+}
+
+static QJsonObject validateSkyCultureMakerDraft(const QJsonObject& input)
+{
+	const QJsonObject draft = normalizeSkyCultureMakerDraft(input);
+	QJsonArray errors;
+	QJsonArray warnings;
+	const QString id = draft.value("id").toString();
+	if (!QRegularExpression(QStringLiteral("^[a-z0-9_]+$")).match(id).hasMatch())
+		appendSkyCultureMakerIssue(errors, "error", "invalid_culture_id", "id", "Culture ID must contain only lowercase letters, digits, and underscores.");
+	for (const QString& field : {QStringLiteral("name"), QStringLiteral("author"), QStringLiteral("license"), QStringLiteral("region")})
+	{
+		if (draft.value(field).toString().trimmed().isEmpty())
+			appendSkyCultureMakerIssue(errors, "error", "required", field, field + " is required.");
+	}
+	if (draft.value("classification").toArray().isEmpty())
+		appendSkyCultureMakerIssue(errors, "error", "required", "classification", "At least one classification is required.");
+	const int beginTime = draft.value("beginTime").toInt();
+	const int endTime = draft.value("endTime").toInt();
+	if (beginTime != 0 && endTime != 0 && beginTime > endTime)
+		appendSkyCultureMakerIssue(errors, "error", "invalid_time_range", "beginTime", "The start year must not be later than the end year.");
+	if (draft.value("introduction").toString().trimmed().isEmpty())
+		appendSkyCultureMakerIssue(warnings, "warning", "missing_introduction", "introduction", "The introduction is empty.");
+	if (draft.value("description").toString().trimmed().isEmpty())
+		appendSkyCultureMakerIssue(warnings, "warning", "missing_description", "description", "The culture description is empty.");
+
+	StarMgr* starManager = GETSTELMODULE(StarMgr);
+	const QJsonArray constellations = draft.value("constellations").toArray();
+	if (constellations.isEmpty())
+		appendSkyCultureMakerIssue(errors, "error", "no_constellations", "constellations", "At least one constellation is required.");
+	QSet<QString> constellationIds;
+	int lineCount = 0;
+	int starReferenceCount = 0;
+	for (int constellationIndex = 0; constellationIndex < constellations.size(); ++constellationIndex)
+	{
+		const QJsonObject constellation = constellations.at(constellationIndex).toObject();
+		const QString fieldPrefix = QStringLiteral("constellations[%1]").arg(constellationIndex);
+		const QString constellationId = constellation.value("id").toString().trimmed();
+		if (constellationId.isEmpty())
+			appendSkyCultureMakerIssue(errors, "error", "required", fieldPrefix + ".id", "Constellation ID is required.");
+		else if (constellationIds.contains(constellationId))
+			appendSkyCultureMakerIssue(errors, "error", "duplicate_constellation_id", fieldPrefix + ".id", "Constellation IDs must be unique.");
+		else constellationIds.insert(constellationId);
+		const QJsonArray lines = constellation.value("lines").toArray();
+		if (lines.isEmpty())
+			appendSkyCultureMakerIssue(errors, "error", "no_lines", fieldPrefix + ".lines", "A constellation needs at least one line.");
+		for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex)
+		{
+			const QJsonArray line = lines.at(lineIndex).toArray();
+			const QString lineField = QStringLiteral("%1.lines[%2]").arg(fieldPrefix).arg(lineIndex);
+			if (line.size() < 2)
+				appendSkyCultureMakerIssue(errors, "error", "short_line", lineField, "A line needs at least two HIP stars.");
+			++lineCount;
+			for (int starIndex = 0; starIndex < line.size(); ++starIndex)
+			{
+				const int hip = line.at(starIndex).toInt();
+				++starReferenceCount;
+				if (hip <= 0 || !starManager || !starManager->searchHP(hip))
+					appendSkyCultureMakerIssue(errors, "error", "unknown_hip", QStringLiteral("%1[%2]").arg(lineField).arg(starIndex), QStringLiteral("HIP %1 is not available in the installed star catalog.").arg(hip));
+			}
+		}
+		const QJsonObject image = constellation.value("image").toObject();
+		if (!image.isEmpty())
+		{
+			const QString assetPath = image.value("file").toString();
+			if (!isSafeSkyCultureAssetPath(assetPath) || !QFileInfo::exists(QDir(skyCultureMakerAssetsDir()).filePath(assetPath)))
+				appendSkyCultureMakerIssue(errors, "error", "missing_artwork", fieldPrefix + ".image.file", "The referenced artwork file is missing from the local draft.");
+			const QJsonArray anchors = image.value("anchors").toArray();
+			if (anchors.size() != 3)
+				appendSkyCultureMakerIssue(errors, "error", "invalid_artwork_anchors", fieldPrefix + ".image.anchors", "Artwork needs exactly three star anchors.");
+			for (int anchorIndex = 0; anchorIndex < anchors.size(); ++anchorIndex)
+			{
+				const QJsonObject anchor = anchors.at(anchorIndex).toObject();
+				const int hip = anchor.value("hip").toInt();
+				if (hip <= 0 || !starManager || !starManager->searchHP(hip))
+					appendSkyCultureMakerIssue(errors, "error", "unknown_hip", QStringLiteral("%1.image.anchors[%2].hip").arg(fieldPrefix).arg(anchorIndex), QStringLiteral("HIP %1 is not available in the installed star catalog.").arg(hip));
+				if (anchor.value("pos").toArray().size() != 2)
+					appendSkyCultureMakerIssue(errors, "error", "invalid_artwork_anchor_position", QStringLiteral("%1.image.anchors[%2].pos").arg(fieldPrefix).arg(anchorIndex), "Artwork anchor positions need x and y values.");
+			}
+		}
+	}
+	QJsonObject result;
+	result["ok"] = errors.isEmpty();
+	result["valid"] = errors.isEmpty();
+	result["errors"] = errors;
+	result["warnings"] = warnings;
+	result["errorCount"] = errors.size();
+	result["warningCount"] = warnings.size();
+	result["constellationCount"] = constellations.size();
+	result["lineCount"] = lineCount;
+	result["starReferenceCount"] = starReferenceCount;
+	return result;
+}
+
+static QJsonObject skyCultureMakerIndex(const QJsonObject& input)
+{
+	const QJsonObject draft = normalizeSkyCultureMakerDraft(input);
+	QJsonObject index;
+	index["id"] = draft.value("id");
+	index["region"] = draft.value("region");
+	index["classification"] = draft.value("classification");
+	index["fallback_to_international_names"] = draft.value("fallback_to_international_names").toBool(false);
+	if (draft.value("beginTime").toInt() != 0) index["beginTime"] = draft.value("beginTime");
+	if (draft.value("endTime").toInt() != 0) index["endTime"] = draft.value("endTime");
+	if (!draft.value("native_lang").toString().isEmpty()) index["native_lang"] = draft.value("native_lang");
+	QJsonArray outputConstellations;
+	for (const QJsonValue& value : draft.value("constellations").toArray())
+	{
+		QJsonObject constellation = value.toObject();
+		const QString shortId = constellation.value("id").toString().trimmed();
+		const QString fullId = shortId.startsWith("CON ") || shortId.startsWith("DSC ")
+			? shortId : QStringLiteral("%1 %2 %3").arg(constellation.value("dark").toBool(false) ? "DSC" : "CON", draft.value("id").toString(), shortId);
+		constellation["id"] = fullId;
+		if (!constellation.value("common_name").isObject())
+		{
+			QJsonObject commonName;
+			commonName["english"] = constellation.value("english").toString();
+			commonName["native"] = constellation.value("native").toString();
+			commonName["pronounce"] = constellation.value("pronounce").toString();
+			commonName["transliteration"] = constellation.value("transliteration").toString();
+			commonName["IPA"] = constellation.value("IPA").toString();
+			constellation["common_name"] = commonName;
+		}
+		for (const QString& editorField : {QStringLiteral("english"), QStringLiteral("native"), QStringLiteral("pronounce"), QStringLiteral("transliteration"), QStringLiteral("IPA"), QStringLiteral("dark")})
+			constellation.remove(editorField);
+		outputConstellations.append(constellation);
+	}
+	index["constellations"] = outputConstellations;
+	return index;
+}
+
+static QByteArray skyCultureMakerDescription(const QJsonObject& draft)
+{
+	QString markdown;
+	markdown += QStringLiteral("# %1\n\n").arg(draft.value("name").toString());
+	markdown += QStringLiteral("## Introduction\n\n%1\n\n").arg(draft.value("introduction").toString().trimmed());
+	markdown += QStringLiteral("## Description\n\n%1\n\n").arg(draft.value("description").toString().trimmed());
+	markdown += QStringLiteral("## Authors\n\n%1\n\n").arg(draft.value("author").toString());
+	markdown += QStringLiteral("## License\n\n%1\n").arg(draft.value("license").toString());
+	return markdown.toUtf8();
+}
+
+static QJsonObject exportSkyCultureMakerDraft(const QJsonObject& draft)
+{
+	QJsonObject result = validateSkyCultureMakerDraft(draft);
+	if (!result.value("valid").toBool())
+	{
+		result["error"] = "sky culture draft is not valid";
+		return result;
+	}
+	const QString id = draft.value("id").toString();
+	const QString fileName = id + ".zip";
+	const QString archivePath = QDir(skyCultureMakerDir()).filePath(fileName);
+	Stel::QZipWriter writer(archivePath);
+	writer.setCompressionPolicy(Stel::QZipWriter::AutoCompress);
+	writer.addFile("index.json", QJsonDocument(skyCultureMakerIndex(draft)).toJson(QJsonDocument::Indented));
+	writer.addFile("description.md", skyCultureMakerDescription(draft));
+	writer.addFile("maker-draft.json", QJsonDocument(normalizeSkyCultureMakerDraft(draft)).toJson(QJsonDocument::Indented));
+	for (const QJsonValue& value : skyCultureMakerIndex(draft).value("constellations").toArray())
+	{
+		const QString assetPath = value.toObject().value("image").toObject().value("file").toString();
+		if (!isSafeSkyCultureAssetPath(assetPath)) continue;
+		QFile asset(QDir(skyCultureMakerAssetsDir()).filePath(assetPath));
+		if (asset.open(QIODevice::ReadOnly) && asset.size() > 0) writer.addFile(assetPath, &asset);
+	}
+	writer.close();
+	const QFileInfo archive(archivePath);
+	const bool written = writer.status() == Stel::QZipWriter::NoError && archive.isFile() && archive.size() > 0;
+	result["ok"] = written;
+	result["valid"] = true;
+	result["path"] = archive.absoluteFilePath();
+	result["fileName"] = fileName;
+	result["bytes"] = archive.size();
+	result["offline"] = true;
+	if (!written) result["error"] = "could not create sky culture archive";
+	return result;
+}
+
+static QString markdownSection(const QString& markdown, const QString& heading)
+{
+	const QRegularExpression expression(QStringLiteral("(?:^|\\n)##\\s+%1\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)").arg(QRegularExpression::escape(heading)), QRegularExpression::CaseInsensitiveOption);
+	const QRegularExpressionMatch match = expression.match(markdown);
+	return match.hasMatch() ? match.captured(1).trimmed() : QString();
+}
+
+static QJsonObject importSkyCultureMakerArchive(const QString& sourcePath)
+{
+	QJsonObject result;
+	const QFileInfo source(sourcePath);
+	if (!source.isFile() || source.suffix().compare("zip", Qt::CaseInsensitive) != 0)
+	{
+		result["ok"] = false;
+		result["error"] = "a readable .zip file is required";
+		return result;
+	}
+	Stel::QZipReader reader(source.absoluteFilePath());
+	if (reader.status() != Stel::QZipReader::NoError)
+	{
+		result["ok"] = false;
+		result["error"] = "could not read sky culture archive";
+		return result;
+	}
+	QString prefix;
+	for (const Stel::QZipReader::FileInfo& info : reader.fileInfoList())
+	{
+		if (info.isFile && (info.filePath == "index.json" || info.filePath.endsWith("/index.json")))
+		{
+			prefix = info.filePath.left(info.filePath.size() - QStringLiteral("index.json").size());
+			break;
+		}
+	}
+	const QByteArray draftData = reader.fileData(prefix + "maker-draft.json");
+	const QJsonDocument draftDocument = QJsonDocument::fromJson(draftData);
+	QJsonObject draft;
+	if (draftDocument.isObject()) draft = draftDocument.object();
+	else
+	{
+		const QJsonDocument indexDocument = QJsonDocument::fromJson(reader.fileData(prefix + "index.json"));
+		if (!indexDocument.isObject())
+		{
+			result["ok"] = false;
+			result["error"] = "archive does not contain a valid index.json";
+			return result;
+		}
+		const QJsonObject index = indexDocument.object();
+		draft = defaultSkyCultureMakerDraft();
+		draft["id"] = index.value("id");
+		draft["region"] = index.value("region");
+		draft["classification"] = skyCultureMakerClassifications(index.value("classification"));
+		draft["native_lang"] = index.value("native_lang").toString("zh_CN");
+		draft["beginTime"] = index.value("beginTime").toInt();
+		draft["endTime"] = index.value("endTime").toInt();
+		QJsonArray constellations;
+		for (const QJsonValue& value : index.value("constellations").toArray())
+		{
+			QJsonObject constellation = value.toObject();
+			const QStringList idParts = constellation.value("id").toString().split(' ', Qt::SkipEmptyParts);
+			constellation["id"] = idParts.size() >= 3 ? idParts.mid(2).join(' ') : constellation.value("id");
+			constellation["dark"] = idParts.value(0) == QLatin1String("DSC");
+			const QJsonObject commonName = constellation.value("common_name").toObject();
+			constellation["english"] = commonName.value("english");
+			constellation["native"] = commonName.value("native");
+			constellation["pronounce"] = commonName.value("pronounce");
+			constellation["transliteration"] = commonName.value("transliteration");
+			constellation["IPA"] = commonName.value("IPA");
+			constellations.append(constellation);
+		}
+		draft["constellations"] = constellations;
+		const QString markdown = QString::fromUtf8(reader.fileData(prefix + "description.md"));
+		const QRegularExpression titleExpression(QStringLiteral("^#\\s+(.+)$"), QRegularExpression::MultilineOption);
+		const QRegularExpressionMatch titleMatch = titleExpression.match(markdown);
+		draft["name"] = titleMatch.hasMatch() ? titleMatch.captured(1).trimmed() : index.value("id").toString();
+		draft["introduction"] = markdownSection(markdown, "Introduction");
+		draft["description"] = markdownSection(markdown, "Description");
+		draft["author"] = markdownSection(markdown, "Authors");
+		draft["license"] = markdownSection(markdown, "License");
+	}
+	const QJsonArray importedConstellations = skyCultureMakerIndex(draft).value("constellations").toArray();
+	for (const QJsonValue& value : importedConstellations)
+	{
+		const QString assetPath = value.toObject().value("image").toObject().value("file").toString();
+		if (!isSafeSkyCultureAssetPath(assetPath)) continue;
+		const QByteArray assetData = reader.fileData(prefix + assetPath);
+		if (assetData.isEmpty()) continue;
+		const QString targetPath = QDir(skyCultureMakerAssetsDir()).filePath(assetPath);
+		QDir().mkpath(QFileInfo(targetPath).absolutePath());
+		QFile target(targetPath);
+		if (target.open(QIODevice::WriteOnly | QIODevice::Truncate)) target.write(assetData);
+	}
+	draft = normalizeSkyCultureMakerDraft(draft);
+	QString writeError;
+	if (!writeSkyCultureMakerDraft(draft, &writeError))
+	{
+		result["ok"] = false;
+		result["error"] = writeError;
+		return result;
+	}
+	rememberSkyCultureMakerDraft(loadSkyCultureMakerDraft());
+	result["ok"] = true;
+	result["draft"] = draft;
+	result["sourcePath"] = source.absoluteFilePath();
+	result["offline"] = true;
+	return result;
+}
+
 // ---- Script recordings store (OHOS bridge) ----
 // 把 ArkTS 侧录制的命令序列（searchObject / setTimeRate / ...）持久化到
 // userDir/recordings/<name>.json，供「脚本录制 / 回放」面板保存与重放。
 struct RecordingItem
 {
 	QString file;    // 文件名（不含目录），如 20260723-203000.json
+	QString path;    // 可供 ArkTS 导出/分享的应用沙箱绝对路径
 	QString name;    // 显示名
 	QString created; // 创建时间字符串
 	int count = 0;   // 命令条数
+	qint64 bytes = 0;
 };
 static QString recordingsDir()
 {
@@ -2705,9 +4243,11 @@ static QList<RecordingItem> recordingsList()
 	{
 		RecordingItem it;
 		it.file = f;
-		QFile file(dir.filePath(f));
+		it.path = dir.filePath(f);
+		QFile file(it.path);
 		if (file.open(QIODevice::ReadOnly))
 		{
+			it.bytes = file.size();
 			const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
 			file.close();
 			const QJsonObject o = doc.object();
@@ -2729,7 +4269,9 @@ struct VideoRecorder
 	bool recording = false;
 	QString dir;
 	int fps = 1;
+	int attemptedFrames = 0;
 	int frameCount = 0;
+	int failedFrames = 0;
 	int maxFrames = 0;
 	QTimer* timer = nullptr;
 };
@@ -2739,15 +4281,21 @@ static void videoCaptureFrame()
 {
 	if (!g_videoRecorder.recording)
 		return;
-	if (g_videoRecorder.frameCount >= g_videoRecorder.maxFrames)
+	if (g_videoRecorder.attemptedFrames >= g_videoRecorder.maxFrames)
 	{
 		g_videoRecorder.recording = false;
 		if (g_videoRecorder.timer)
 			g_videoRecorder.timer->stop();
 		return;
 	}
-	QString prefix = QString("frame_%1").arg(g_videoRecorder.frameCount++, 5, 10, QChar('0'));
+	const QString prefix = QString("frame_%1").arg(g_videoRecorder.attemptedFrames++, 5, 10, QChar('0'));
 	StelMainView::getInstance().saveScreenShot(prefix, g_videoRecorder.dir, true);
+	const QString format = StelMainView::getInstance().getScreenshotFormat();
+	const QFileInfo frame(QDir(g_videoRecorder.dir).filePath(prefix + "." + format));
+	if (frame.isFile() && frame.size() > 0)
+		++g_videoRecorder.frameCount;
+	else
+		++g_videoRecorder.failedFrames;
 }
 
 static QString videosDir()
@@ -2769,6 +4317,48 @@ static int countVideoFrames(const QString& dir)
 	QStringList entries = d.entryList(QStringList() << "frame_*.jpg" << "frame_*.jpeg" << "frame_*.png", QDir::Files);
 	n = entries.size();
 	return n;
+}
+
+static QJsonObject archiveVideoFrames()
+{
+	QJsonObject result;
+	const QDir source(g_videoRecorder.dir);
+	if (!source.exists())
+	{
+		result["ok"] = false;
+		result["error"] = "video frame directory not found";
+		return result;
+	}
+
+	const QString archiveFileName = source.dirName() + ".zip";
+	const QString archivePath = QDir(videosDir()).filePath(archiveFileName);
+	Stel::QZipWriter writer(archivePath);
+	writer.setCompressionPolicy(Stel::QZipWriter::AutoCompress);
+	QJsonObject manifest;
+	manifest["schemaVersion"] = 1;
+	manifest["createdAt"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+	manifest["fps"] = g_videoRecorder.fps;
+	manifest["frameCount"] = countVideoFrames(g_videoRecorder.dir);
+	manifest["failedFrames"] = g_videoRecorder.failedFrames;
+	manifest["format"] = StelMainView::getInstance().getScreenshotFormat();
+	writer.addFile("manifest.json", QJsonDocument(manifest).toJson(QJsonDocument::Indented));
+	const QStringList frames = source.entryList(QStringList() << "frame_*.jpg" << "frame_*.jpeg" << "frame_*.png", QDir::Files, QDir::Name);
+	for (const QString& frameName : frames)
+	{
+		QFile frame(source.filePath(frameName));
+		if (frame.open(QIODevice::ReadOnly) && frame.size() > 0)
+			writer.addFile(frameName, &frame);
+	}
+	writer.close();
+	const QFileInfo archive(archivePath);
+	const bool written = writer.status() == Stel::QZipWriter::NoError && archive.isFile() && archive.size() > 0;
+	result["ok"] = written;
+	result["archivePath"] = archive.absoluteFilePath();
+	result["archiveFileName"] = archiveFileName;
+	result["archiveBytes"] = archive.size();
+	if (!written)
+		result["error"] = "could not create video frame archive";
+	return result;
 }
 
 }
@@ -3206,9 +4796,31 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 	if (commandName == "saveScreenShot")
 		{
-			StelMainView::getInstance().saveScreenShot();
-			result["ok"] = true;
-			result["message"] = "screenshot saved";
+			StelMainView& mainView = StelMainView::getInstance();
+			const QString exportDir = StelFileMgr::getUserDir() + "/screenshot-export";
+			if (!QDir().mkpath(exportDir))
+			{
+				result["ok"] = false;
+				result["error"] = "could not create screenshot export directory";
+				return result;
+			}
+
+			const QString format = mainView.getScreenshotFormat();
+			const QString prefix = "stellarium-" + QDateTime::currentDateTimeUtc().toString("yyyyMMdd-HHmmss-zzz");
+			const QString fileName = prefix + "." + format;
+			const QString filePath = QDir(exportDir).filePath(fileName);
+			mainView.saveScreenShot(prefix, exportDir, true);
+
+			const QFileInfo screenshot(filePath);
+			const bool written = screenshot.isFile() && screenshot.size() > 0;
+			result["ok"] = written;
+			result["path"] = screenshot.absoluteFilePath();
+			result["fileName"] = fileName;
+			result["format"] = format;
+			result["bytes"] = screenshot.size();
+			result["message"] = written ? QString("screenshot ready for export") : QString("screenshot write failed");
+			if (!written)
+				result["error"] = "screenshot file was not written";
 			return result;
 		}
 
@@ -3249,7 +4861,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				// belongs to StarMgr itself, so normalise the subset suffix first.
 				preferredModule = moduleId.section(':', 0, 0).toLower();
 				query = objectId;
-				const auto objects = objectMgr->listAllModuleObjects(moduleId, true);
+				QVector<QPair<QString, StelObjectP>> objects;
+				if (moduleId == QLatin1String("ArtificialObjects"))
+				{
+					objects = objectMgr->listAllModuleObjects(QStringLiteral("SolarSystem:artificial"), true);
+					if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+						objects += satellites->listAllObjectsForCatalog(true);
+				}
+				else
+					objects = objectMgr->listAllModuleObjects(moduleId, true);
 				qInfo() << "[StellariumOhos][catalog-select] module=" << moduleId
 						<< "id=" << objectId << "candidates=" << objects.size();
 				for (const auto& pair : objects)
@@ -3326,7 +4946,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (auto* skyLayerMgr = GETSTELMODULE(StelSkyLayerMgr))
 					skyLayerMgr->setFlagShow(true);
 			}
-			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty() && !selectedObserverPlanet)
+			const SatelliteP selectedSatellite = found && !objectMgr->getSelectedObject().isEmpty()
+				? qSharedPointerDynamicCast<Satellite>(objectMgr->getSelectedObject().constFirst()) : SatelliteP();
+			const bool selectedInvalidOrbit = selectedSatellite && !selectedSatellite->isOrbitValid();
+			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty() && !selectedObserverPlanet && !selectedInvalidOrbit)
 			{
 				const StelObjectP target = objectMgr->getSelectedObject().first();
 				const QString type = target->getType().toLower();
@@ -3676,7 +5299,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			offset = qMax(0, requestedOffset);
 		const QString visibilityFilter = options.value(3).trimmed().toLower();
 		const QString instrumentFilter = options.value(4).trimmed().toLower();
-		const auto list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
+		QVector<QPair<QString, StelObjectP>> list;
+		if (moduleId == QLatin1String("ArtificialObjects"))
+		{
+			list = objectMgr->listAllModuleObjects(QStringLiteral("SolarSystem:artificial"), inEnglish);
+			if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+				list += satellites->listAllObjectsForCatalog(inEnglish);
+		}
+		else
+			list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
 		QJsonArray items;
 		QJsonArray keys;
 		QJsonArray types;
@@ -3735,6 +5366,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["catalogReady"] = starMgr && starMgr->getLoadedCatalogCount() > 0;
 			result["catalogLevels"] = starMgr ? starMgr->getLoadedCatalogCount() : 0;
 		}
+		else if (moduleId == QStringLiteral("Planes") && list.isEmpty())
+		{
+			result["catalogReady"] = false;
+			result["catalogStatus"] = QStringLiteral("offline-unavailable");
+			result["catalogMessage"] = q_("Live aircraft data is unavailable in offline mode.");
+		}
 		else
 		{
 			result["listKind"] = QStringLiteral("indexed");
@@ -3756,6 +5393,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QStringLiteral("HighlightMgr"), QStringLiteral("CustomObjectMgr")
 		};
 		QJsonArray categories;
+		QJsonObject artificialCategory;
+		artificialCategory["moduleId"] = QStringLiteral("ArtificialObjects");
+		artificialCategory["label"] = q_("Artificial objects");
+		artificialCategory["group"] = QStringLiteral("ArtificialObjects");
+		artificialCategory["isCoreSubset"] = false;
+		artificialCategory["isPluginCatalog"] = false;
+		categories.append(artificialCategory);
 		for (auto it = modules.cbegin(); it != modules.cend(); ++it)
 		{
 			const QString moduleId = it.key();
@@ -3996,7 +5640,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s_ohosPanInertiaElapsedSec = 0.0;
 			s_ohosPanInertiaTravelPixels = 0.0;
 			const double fovRadians = movementMgr->getCurrentFov() * M_PI / 180.0;
-			s_ohosPanInertiaMaxTravelPixels = pixelsPerRad * qBound(0.025, fovRadians * 0.25, 0.22);
+			s_ohosPanInertiaMaxTravelPixels = pixelsPerRad * qBound(0.08, fovRadians * 0.72, 0.65);
 			s_ohosPanInertiaActive = std::hypot(s_ohosPanInertiaVx, s_ohosPanInertiaVy) >= 0.05;
 			markOhosInteraction();
 			result["ok"] = true;
@@ -4080,6 +5724,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "invalid zoom scale";
 				return result;
 			}
+			// scale is absolute for a pinch. Estimate logarithmic velocity so
+			// endPinch can add only a short render-thread tail.
+			const double sampleSec = StelApp::getTotalRunTime();
+			if (started)
+			{
+				s_ohosPinchSettleActive = false;
+				s_ohosPinchSettleVelocity = 0.0;
+				s_ohosPinchSettleElapsedSec = 0.0;
+				s_ohosPinchLastLogScale = std::log(scale);
+				s_ohosPinchLastSampleSec = sampleSec;
+			}
+			else if (s_ohosPinchActive && sampleSec > s_ohosPinchLastSampleSec)
+			{
+				const double sampleDt = qBound(0.004, sampleSec - s_ohosPinchLastSampleSec, 0.120);
+				const double logScale = std::log(scale);
+				const double sampleVelocity = (logScale - s_ohosPinchLastLogScale) / sampleDt;
+				s_ohosPinchSettleVelocity = s_ohosPinchSettleVelocity * 0.35 + sampleVelocity * 0.65;
+				s_ohosPinchLastLogScale = logScale;
+				s_ohosPinchLastSampleSec = sampleSec;
+			}
 			if (started)
 			{
 				// A pinch takes ownership of the camera immediately. Invalidate
@@ -4115,8 +5779,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				ohosMaintainPinchSkyAnchor();
 			else if (s_ohosPinchAnchorMode == OhosPinchAnchorMode::SelectedObject)
 				ohosMaintainSelectedZoomAnchor();
+			const bool wasPinchActive = s_ohosPinchActive;
+			const bool hasSettleVelocity = wasPinchActive && std::abs(s_ohosPinchSettleVelocity) >= 0.08 &&
+				s_ohosPinchLastSampleSec > 0.0;
 			s_ohosPinchActive = false;
-			s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+			s_ohosPinchSettleActive = hasSettleVelocity;
+			s_ohosPinchSettleElapsedSec = 0.0;
+			if (!hasSettleVelocity)
+				s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
 			s_ohosPinchAnchorRelaxUntilSec = StelApp::getTotalRunTime() + 0.18;
 			s_ohosCaptureSelectedAnchorAfterPan = true;
 			result["ok"] = true;
@@ -4144,6 +5814,20 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result[QStringLiteral("selectedName")] = selected.value(QStringLiteral("name"));
 			result[QStringLiteral("selectedEnglishName")] = selected.value(QStringLiteral("englishName"));
 			return result;
+		}
+
+		if ((commandName == "moveToSelectedAt" || commandName == "moveToSelected"
+			|| (commandName == "setTracking" && (arg == "1" || arg.toLower() == "true")))
+			&& objectMgr && !objectMgr->getSelectedObject().isEmpty())
+		{
+			const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(objectMgr->getSelectedObject().constFirst());
+			if (satellite && !satellite->isOrbitValid())
+			{
+				result["ok"] = false;
+				result["error"] = "selected satellite has no valid position at this time";
+				result["errorCode"] = "invalid_orbit";
+				return result;
+			}
 		}
 
 		if (commandName == "moveToSelectedAt")
@@ -4563,29 +6247,52 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getState")
 			return currentStateJson();
 
+		if (commandName == "getTelescopeControl")
+			return lx200EndpointInfo(arg);
+
+		if (commandName == "getTelescopeProfiles")
+			return telescopeProfilesJson();
+
+		if (commandName == "saveTelescopeProfile")
+			return saveTelescopeProfileJson(arg);
+
+		if (commandName == "deleteTelescopeProfile")
+			return deleteTelescopeProfileJson(arg);
+
+		if (commandName == "selectTelescopeProfile")
+			return selectTelescopeProfileJson(arg);
+
+		if (commandName == "testTelescopeConnection")
+			return testTelescopeConnectionJson(arg);
+
+		if (commandName == "getTelescopePosition")
+			return telescopePositionJson(arg);
+
+		if (commandName == "centerScreenOnTelescope")
+			return centerScreenOnTelescopeJson(arg);
+
 		if (commandName == "telescopeLx200GotoSelected")
-			return lx200GotoSelected(arg, false);
+			return lx200GotoTarget(arg, false);
 
 		if (commandName == "telescopeLx200SyncSelected")
-			return lx200GotoSelected(arg, true);
+			return lx200GotoTarget(arg, true);
 
 		if (commandName == "telescopeLx200Abort")
 		{
-			const QStringList parts = arg.split('|');
-			if (parts.size() < 2)
+			OhosTelescopeProfile profile;
+			QJsonObject options;
+			QString error;
+			if (!resolveTelescopeProfile(arg, profile, options, error))
 			{
-				result["error"] = "expects host|port";
+				result["error"] = error;
+				result["errorCode"] = QStringLiteral("coordinate_response_invalid");
+				result["state"] = QStringLiteral("unavailable");
+				setTelescopeRuntimeState(profile.slot, QStringLiteral("unavailable"), error);
 				return result;
 			}
-			bool okPort = false;
-			const QString host = parts[0].trimmed();
-			const int portInt = parts[1].toInt(&okPort);
-			if (host.isEmpty() || !okPort || portInt <= 0 || portInt > 65535)
-			{
-				result["error"] = "invalid LX200 endpoint";
-				return result;
-			}
-			return sendLx200Commands(host, quint16(portInt), {"#:Q#"});
+			QJsonObject abortResult = sendLx200Commands(profile, {"#:Q#"});
+			abortResult["mode"] = QStringLiteral("abort");
+			return abortResult;
 		}
 
 		// ========== Phase 2: New bridge commands ==========
@@ -5000,6 +6707,46 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "importLandscape")
+		{
+			const QString requestedPath = arg.trimmed();
+			const QFileInfo sourceInfo(requestedPath);
+			const QString userDir = QDir(StelFileMgr::getUserDir()).absolutePath();
+			const QString canonicalPath = sourceInfo.canonicalFilePath();
+			const QString canonicalUserDir = QFileInfo(userDir).canonicalFilePath();
+			const bool insideUserDir = !canonicalPath.isEmpty() && !canonicalUserDir.isEmpty()
+				&& (canonicalPath == canonicalUserDir || canonicalPath.startsWith(canonicalUserDir + QDir::separator()));
+			if (requestedPath.isEmpty() || !sourceInfo.exists() || !sourceInfo.isFile() || !insideUserDir)
+			{
+				result["ok"] = false;
+				result["error"] = "landscape archive must be inside the Stellarium user directory";
+				return result;
+			}
+			if (sourceInfo.suffix().compare(QStringLiteral("zip"), Qt::CaseInsensitive) != 0)
+			{
+				result["ok"] = false;
+				result["error"] = "only .zip landscape archives are supported";
+				return result;
+			}
+			if (sourceInfo.size() <= 0 || sourceInfo.size() > 256LL * 1024LL * 1024LL)
+			{
+				result["ok"] = false;
+				result["error"] = "landscape archive must be between 1 byte and 256 MiB";
+				return result;
+			}
+			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			const QString id = lmgr != Q_NULLPTR ? lmgr->installLandscapeFromArchive(canonicalPath, false) : QString();
+			result["ok"] = !id.isEmpty();
+			if (id.isEmpty())
+			{
+				result["error"] = "archive does not contain a valid unique landscape";
+				return result;
+			}
+			result["id"] = id;
+			result["path"] = canonicalPath;
+			return result;
+		}
+
 		// playScript
 		if (commandName == "playScript")
 		{
@@ -5051,6 +6798,48 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelApp::getInstance().getScriptMgr().stopScript();
 			LabelMgr::setOhosScriptUiVisible(false);
 			result["ok"] = true;
+			return result;
+		}
+
+		// continueScript releases a script blocked in waitForKeypress().
+		if (commandName == "continueScript")
+		{
+			StelApp::getInstance().getScriptMgr().continueScript();
+			result["ok"] = true;
+			result["continued"] = true;
+			return result;
+		}
+
+		// sendKey provides a small, explicit touch/CLI bridge for legacy scripts
+		// whose state machine is driven by Stellarium keyboard shortcuts.
+		if (commandName == "sendKey")
+		{
+			const QString key = arg.trimmed().toUpper();
+			int keyCode = 0;
+			if (key == QStringLiteral("N")) keyCode = Qt::Key_N;
+			else if (key == QStringLiteral("B")) keyCode = Qt::Key_B;
+			else if (key == QStringLiteral("F")) keyCode = Qt::Key_F;
+			else if (key == QStringLiteral("S")) keyCode = Qt::Key_S;
+			else if (key == QStringLiteral("+")) keyCode = Qt::Key_Plus;
+			else if (key == QStringLiteral("-")) keyCode = Qt::Key_Minus;
+			else if (key == QStringLiteral("[")) keyCode = Qt::Key_BracketLeft;
+			else if (key == QStringLiteral("]")) keyCode = Qt::Key_BracketRight;
+			else if (key == QStringLiteral("SPACE")) keyCode = Qt::Key_Space;
+			else if (key == QStringLiteral("PAGEUP")) keyCode = Qt::Key_PageUp;
+			else if (key == QStringLiteral("PAGEDOWN")) keyCode = Qt::Key_PageDown;
+			if (keyCode == 0)
+			{
+				result["ok"] = false;
+				result["error"] = "unsupported script key";
+				return result;
+			}
+			QKeyEvent press(QEvent::KeyPress, keyCode, Qt::NoModifier);
+			StelApp::getInstance().handleKeyEvent(&press);
+			QKeyEvent release(QEvent::KeyRelease, keyCode, Qt::NoModifier);
+			StelApp::getInstance().handleKeyEvent(&release);
+			result["ok"] = true;
+			result["key"] = key;
+			result["accepted"] = press.isAccepted() || release.isAccepted();
 			return result;
 		}
 
@@ -5420,6 +7209,364 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["celestialPositions"] = items;
 			result["coordinateMode"] = horizontal ? QStringLiteral("horizontal") : QStringLiteral("equatorial");
 			result["positionTime"] = StelUtils::julianDayToISO8601String(core->getJD() + core->getUTCOffset(core->getJD()) / 24.0);
+			return result;
+		}
+
+		// Sky Culture Maker: versioned offline draft shared by ArkUI and CLI.
+		if (commandName == "getSkyCultureMakerDraft")
+		{
+			const QJsonObject draft = loadSkyCultureMakerDraft();
+			result["ok"] = true;
+			result["draft"] = draft;
+			result["draftPath"] = skyCultureMakerDraftPath();
+			result["canUndo"] = !g_skyCultureMakerHistory.isEmpty();
+			result["offline"] = true;
+			return result;
+		}
+		if (commandName == "saveSkyCultureMakerDraft")
+		{
+			QJsonParseError parseError;
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8(), &parseError);
+			if (parseError.error != QJsonParseError::NoError || !document.isObject())
+			{
+				result["error"] = "saveSkyCultureMakerDraft expects a JSON object";
+				return result;
+			}
+			const QJsonObject previous = loadSkyCultureMakerDraft();
+			const QJsonObject draft = normalizeSkyCultureMakerDraft(document.object());
+			QString error;
+			if (!writeSkyCultureMakerDraft(draft, &error))
+			{
+				result["error"] = error;
+				return result;
+			}
+			rememberSkyCultureMakerDraft(previous);
+			result["ok"] = true;
+			result["draft"] = draft;
+			result["validation"] = validateSkyCultureMakerDraft(draft);
+			result["canUndo"] = true;
+			return result;
+		}
+		if (commandName == "resetSkyCultureMakerDraft")
+		{
+			const QJsonObject previous = loadSkyCultureMakerDraft();
+			const QJsonObject draft = defaultSkyCultureMakerDraft();
+			QString error;
+			if (!writeSkyCultureMakerDraft(draft, &error))
+			{
+				result["error"] = error;
+				return result;
+			}
+			rememberSkyCultureMakerDraft(previous);
+			result["ok"] = true;
+			result["draft"] = draft;
+			result["canUndo"] = true;
+			return result;
+		}
+		if (commandName == "undoSkyCultureMakerEdit")
+		{
+			if (g_skyCultureMakerHistory.isEmpty())
+			{
+				result["error"] = "no sky culture maker edit to undo";
+				result["canUndo"] = false;
+				return result;
+			}
+			const QJsonObject draft = g_skyCultureMakerHistory.takeLast();
+			QString error;
+			if (!writeSkyCultureMakerDraft(draft, &error))
+			{
+				result["error"] = error;
+				return result;
+			}
+			result["ok"] = true;
+			result["draft"] = draft;
+			result["canUndo"] = !g_skyCultureMakerHistory.isEmpty();
+			return result;
+		}
+		if (commandName == "validateSkyCultureMakerDraft")
+		{
+			QJsonObject draft = loadSkyCultureMakerDraft();
+			if (!arg.trimmed().isEmpty())
+			{
+				const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+				if (document.isObject()) draft = document.object();
+			}
+			return validateSkyCultureMakerDraft(draft);
+		}
+		if (commandName == "exportSkyCultureMaker")
+		{
+			return exportSkyCultureMakerDraft(loadSkyCultureMakerDraft());
+		}
+			if (commandName == "importSkyCultureMaker")
+		{
+			const QJsonObject previous = loadSkyCultureMakerDraft();
+			QJsonObject imported = importSkyCultureMakerArchive(arg.trimmed());
+			if (imported.value("ok").toBool())
+			{
+				if (!g_skyCultureMakerHistory.isEmpty()) g_skyCultureMakerHistory.removeLast();
+				rememberSkyCultureMakerDraft(previous);
+				imported["canUndo"] = true;
+			}
+				return imported;
+			}
+			if (commandName == "importSkyCultureMakerArtwork" || commandName == "setSkyCultureMakerArtworkAnchor" ||
+				commandName == "removeSkyCultureMakerArtwork")
+			{
+				const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+				const QJsonObject options = document.isObject() ? document.object() : QJsonObject();
+				const QString requestedId = options.value("constellationId").toString(options.value("id").toString()).trimmed();
+				QJsonObject draft = loadSkyCultureMakerDraft();
+				const QJsonObject previous = draft;
+				QJsonArray constellations = draft.value("constellations").toArray();
+				int constellationIndex = -1;
+				for (int index = 0; index < constellations.size(); ++index)
+				{
+					if (constellations.at(index).toObject().value("id").toString() == requestedId)
+					{
+						constellationIndex = index;
+						break;
+					}
+				}
+				if (constellationIndex < 0)
+				{
+					result["error"] = "constellation not found";
+					return result;
+				}
+				QJsonObject constellation = constellations.at(constellationIndex).toObject();
+				if (commandName == "importSkyCultureMakerArtwork")
+				{
+					const QString sourcePath = options.value("sourcePath").toString().trimmed();
+					QImageReader reader(sourcePath);
+					const QSize imageSize = reader.size();
+					if (!QFileInfo::exists(sourcePath) || !reader.canRead() || !imageSize.isValid())
+					{
+						result["error"] = "a readable local image is required";
+						return result;
+					}
+					QString suffix = QFileInfo(sourcePath).suffix().toLower();
+					if (suffix.isEmpty()) suffix = QStringLiteral("png");
+					QString baseName = requestedId.toLower();
+					baseName.replace(QRegularExpression(QStringLiteral("[^a-z0-9_-]+")), QStringLiteral("_"));
+					if (baseName.isEmpty()) baseName = QStringLiteral("constellation");
+					const QString assetPath = QStringLiteral("illustrations/%1-%2.%3")
+						.arg(baseName, QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMddHHmmsszzz")), suffix);
+					const QString targetPath = QDir(skyCultureMakerAssetsDir()).filePath(assetPath);
+					QDir().mkpath(QFileInfo(targetPath).absolutePath());
+					QFile sourceFile(sourcePath);
+					QFile targetFile(targetPath);
+					if (!sourceFile.open(QIODevice::ReadOnly) || !targetFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+					{
+						result["error"] = QStringLiteral("could not copy artwork into the local draft: %1")
+							.arg(!sourceFile.isOpen() ? sourceFile.errorString() : targetFile.errorString());
+						return result;
+					}
+					const QByteArray imageData = sourceFile.readAll();
+					if (imageData.isEmpty() || targetFile.write(imageData) != imageData.size())
+					{
+						targetFile.remove();
+						result["error"] = QStringLiteral("could not copy artwork into the local draft: %1").arg(targetFile.errorString());
+						return result;
+					}
+					targetFile.close();
+					QJsonObject image;
+					image["file"] = assetPath;
+					image["size"] = QJsonArray{imageSize.width(), imageSize.height()};
+					image["anchors"] = QJsonArray();
+					constellation["image"] = image;
+					result["assetPath"] = targetPath;
+					result["width"] = imageSize.width();
+					result["height"] = imageSize.height();
+				}
+				else if (commandName == "removeSkyCultureMakerArtwork")
+				{
+					const QString assetPath = constellation.value("image").toObject().value("file").toString();
+					constellation.remove("image");
+					if (isSafeSkyCultureAssetPath(assetPath)) QFile::remove(QDir(skyCultureMakerAssetsDir()).filePath(assetPath));
+				}
+				else
+				{
+					QJsonObject image = constellation.value("image").toObject();
+					const QJsonArray size = image.value("size").toArray();
+					if (image.isEmpty() || size.size() != 2)
+					{
+						result["error"] = "import artwork before setting anchors";
+						return result;
+					}
+					const int anchorIndex = options.value("anchorIndex").toInt(-1);
+					const double x = options.value("x").toDouble(-1.0);
+					const double y = options.value("y").toDouble(-1.0);
+					if (anchorIndex < 0 || anchorIndex > 2 || x < 0.0 || y < 0.0 ||
+						x > size.at(0).toDouble() || y > size.at(1).toDouble())
+					{
+						result["error"] = "anchor index or image position is invalid";
+						return result;
+					}
+					int hip = options.value("hip").toInt();
+					if (hip <= 0)
+					{
+						if (!objectMgr)
+						{
+							result["error"] = "object manager is not ready";
+							return result;
+						}
+						const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+						if (selected.isEmpty())
+						{
+							result["error"] = "no star is selected";
+							return result;
+						}
+						const QRegularExpressionMatch hipMatch = QRegularExpression(QStringLiteral("^HIP\\s+(\\d+)")).match(selected.first()->getID());
+						if (!hipMatch.hasMatch())
+						{
+							result["error"] = "the selected object is not a HIP star";
+							return result;
+						}
+						hip = hipMatch.captured(1).toInt();
+					}
+					StarMgr* starManager = GETSTELMODULE(StarMgr);
+					if (!starManager || !starManager->searchHP(hip))
+					{
+						result["error"] = "the HIP star is not available in the installed catalog";
+						return result;
+					}
+					QJsonArray anchors = image.value("anchors").toArray();
+					while (anchors.size() <= anchorIndex) anchors.append(QJsonObject{{"hip", 0}, {"pos", QJsonArray{0, 0}}});
+					anchors[anchorIndex] = QJsonObject{{"hip", hip}, {"pos", QJsonArray{x, y}}};
+					image["anchors"] = anchors;
+					constellation["image"] = image;
+					result["selectedHip"] = hip;
+					result["anchorIndex"] = anchorIndex;
+				}
+				constellations[constellationIndex] = constellation;
+				draft["constellations"] = constellations;
+				QString error;
+				if (!writeSkyCultureMakerDraft(draft, &error))
+				{
+					result["error"] = error;
+					return result;
+				}
+				rememberSkyCultureMakerDraft(previous);
+				result["ok"] = true;
+				result["draft"] = normalizeSkyCultureMakerDraft(draft);
+				result["validation"] = validateSkyCultureMakerDraft(draft);
+				result["canUndo"] = true;
+				return result;
+			}
+			if (commandName == "addSkyCultureMakerConstellation" || commandName == "updateSkyCultureMakerConstellation" ||
+			commandName == "removeSkyCultureMakerConstellation" || commandName == "addSkyCultureMakerLine" ||
+			commandName == "addSkyCultureMakerSelectedStar")
+		{
+			const QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+			QJsonObject options = document.isObject() ? document.object() : QJsonObject();
+			if (commandName == "removeSkyCultureMakerConstellation" && options.isEmpty()) options["id"] = arg.trimmed();
+			QJsonObject draft = loadSkyCultureMakerDraft();
+			const QJsonObject previous = draft;
+			QJsonArray constellations = draft.value("constellations").toArray();
+			const QString requestedId = options.value("id").toString(options.value("constellationId").toString()).trimmed();
+			int constellationIndex = -1;
+			for (int index = 0; index < constellations.size(); ++index)
+			{
+				if (constellations.at(index).toObject().value("id").toString() == requestedId)
+				{
+					constellationIndex = index;
+					break;
+				}
+			}
+			if (commandName == "addSkyCultureMakerConstellation")
+			{
+				if (requestedId.isEmpty() || constellationIndex >= 0)
+				{
+					result["error"] = requestedId.isEmpty() ? "constellation id is required" : "constellation id already exists";
+					return result;
+				}
+				QJsonObject constellation = options;
+				constellation["id"] = requestedId;
+				if (!constellation.value("lines").isArray()) constellation["lines"] = QJsonArray();
+				constellations.append(constellation);
+				constellationIndex = constellations.size() - 1;
+			}
+			else if (constellationIndex < 0)
+			{
+				result["error"] = "constellation not found";
+				return result;
+			}
+			else if (commandName == "updateSkyCultureMakerConstellation")
+			{
+				QJsonObject constellation = constellations.at(constellationIndex).toObject();
+				for (auto iterator = options.constBegin(); iterator != options.constEnd(); ++iterator)
+				{
+					if (iterator.key() != QLatin1String("constellationId")) constellation[iterator.key()] = iterator.value();
+				}
+				constellations[constellationIndex] = constellation;
+			}
+			else if (commandName == "removeSkyCultureMakerConstellation")
+			{
+				constellations.removeAt(constellationIndex);
+				constellationIndex = -1;
+			}
+			else
+			{
+				QJsonObject constellation = constellations.at(constellationIndex).toObject();
+				QJsonArray lines = constellation.value("lines").toArray();
+				if (commandName == "addSkyCultureMakerLine")
+				{
+					QJsonArray hips = options.value("hips").toArray();
+					if (hips.isEmpty() && options.value("line").isArray()) hips = options.value("line").toArray();
+					if (hips.isEmpty())
+					{
+						result["error"] = "addSkyCultureMakerLine expects a non-empty hips array";
+						return result;
+					}
+					lines.append(hips);
+				}
+					else
+					{
+						if (!objectMgr)
+						{
+							result["error"] = "object manager is not ready";
+							return result;
+						}
+						const QList<StelObjectP>& selected = objectMgr->getSelectedObject();
+					if (selected.isEmpty())
+					{
+						result["error"] = "no star is selected";
+						return result;
+					}
+					const QRegularExpressionMatch hipMatch = QRegularExpression(QStringLiteral("^HIP\\s+(\\d+)")).match(selected.first()->getID());
+					if (!hipMatch.hasMatch())
+					{
+						result["error"] = "the selected object is not a HIP star";
+						return result;
+					}
+					const int hip = hipMatch.captured(1).toInt();
+					int lineIndex = options.value("lineIndex").toInt(lines.size() - 1);
+					if (lineIndex < 0 || lineIndex >= lines.size())
+					{
+						lines.append(QJsonArray());
+						lineIndex = lines.size() - 1;
+					}
+					QJsonArray line = lines.at(lineIndex).toArray();
+					line.append(hip);
+					lines[lineIndex] = line;
+					result["selectedHip"] = hip;
+					result["lineIndex"] = lineIndex;
+				}
+				constellation["lines"] = lines;
+				constellations[constellationIndex] = constellation;
+			}
+			draft["constellations"] = constellations;
+			QString error;
+			if (!writeSkyCultureMakerDraft(draft, &error))
+			{
+				result["error"] = error;
+				return result;
+			}
+			rememberSkyCultureMakerDraft(previous);
+			result["ok"] = true;
+			result["draft"] = normalizeSkyCultureMakerDraft(draft);
+			result["validation"] = validateSkyCultureMakerDraft(draft);
+			result["constellationIndex"] = constellationIndex;
+			result["canUndo"] = true;
 			return result;
 		}
 
@@ -5835,7 +7982,90 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// setPluginLoadAtStartup — persist whether a plugin should load on the next launch
+		// NebulaTextures — offline custom deep-sky texture management.
+		if (commandName == "getNebulaTextureStatus" || commandName == "listNebulaTextures" ||
+			commandName == "setNebulaTexturesVisible" || commandName == "setNebulaTextureConflictAvoidance" ||
+			commandName == "refreshNebulaTextures" || commandName == "gotoNebulaTexture" ||
+			commandName == "removeNebulaTexture" || commandName == "validateNebulaTexture" ||
+			commandName == "importNebulaTexture")
+		{
+			NebulaTextures* textures = static_cast<NebulaTextures*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("NebulaTextures"), true));
+			if (!textures)
+			{
+				result["ok"] = false;
+				result["error"] = "NebulaTextures plugin not loaded";
+				return result;
+			}
+			if (commandName == "getNebulaTextureStatus")
+			{
+				result = textures->getTextureStatus();
+				result["ok"] = true;
+				return result;
+			}
+			if (commandName == "listNebulaTextures")
+			{
+				result["ok"] = true;
+				result["items"] = textures->listTextures();
+				result["count"] = result.value("items").toArray().size();
+				result["offline"] = true;
+				return result;
+			}
+			if (commandName == "setNebulaTexturesVisible")
+			{
+				const bool enabled = arg == "1" || arg.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0;
+				textures->setShow(enabled);
+				result = textures->getTextureStatus();
+				result["ok"] = true;
+				return result;
+			}
+			if (commandName == "setNebulaTextureConflictAvoidance")
+			{
+				const bool enabled = arg == "1" || arg.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0;
+				textures->setAvoidAreaConflict(enabled);
+				result = textures->getTextureStatus();
+				result["ok"] = true;
+				return result;
+			}
+			if (commandName == "refreshNebulaTextures")
+			{
+				QString error;
+				result["ok"] = textures->refreshCustomTextures(&error);
+				if (!error.isEmpty()) result["error"] = error;
+				result["status"] = textures->getTextureStatus();
+				return result;
+			}
+			if (commandName == "gotoNebulaTexture")
+			{
+				QString error;
+				result["ok"] = textures->gotoTexture(arg.trimmed(), &error);
+				if (!error.isEmpty()) result["error"] = error;
+				return result;
+			}
+			if (commandName == "removeNebulaTexture")
+			{
+				QString error;
+				result["ok"] = textures->removeTexture(arg.trimmed(), &error);
+				if (!error.isEmpty()) result["error"] = error;
+				return result;
+			}
+			if (commandName == "validateNebulaTexture")
+			{
+				result = textures->validateTexture(arg.trimmed());
+				result["ok"] = result.value("ready").toBool();
+				return result;
+			}
+			QJsonParseError parseError;
+			const QJsonDocument requestDocument = QJsonDocument::fromJson(arg.toUtf8(), &parseError);
+			if (parseError.error != QJsonParseError::NoError || !requestDocument.isObject())
+			{
+				result["ok"] = false;
+				result["error"] = "payload must be a JSON object";
+				return result;
+			}
+			return textures->importTexture(requestDocument.object());
+		}
+
+		// setPluginLoadAtStartup — retained for CLI compatibility; bundled plugins always load
 		if (commandName == "setPluginLoadAtStartup")
 		{
 			const QStringList parts = arg.split('|');
@@ -5868,7 +8098,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			moduleMgr.setPluginLoadAtStartup(pluginId, enabled);
 			result["ok"] = true;
 			result["id"] = pluginId;
-			result["loadAtStartup"] = enabled;
+			result["loadAtStartup"] = true;
+			result["policy"] = "all_bundled_plugins";
 			return result;
 		}
 
@@ -5926,21 +8157,24 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			const StelObjectP& obj = sel[0];
-			Vec3d altaz = obj->getAltAzPosApparent(StelApp::getInstance().getCore());
-			Vec3d radec = obj->getEquinoxEquatorialPos(StelApp::getInstance().getCore());
+			const QVariantMap objectInfo = obj->getInfoMap(core);
 			// `name` is the display contract used by the HarmonyOS detail UI.
 			// Keep the stable English identifier separate so a localized catalog
 			// name can never be accidentally replaced by it.
 			info["name"] = obj->getNameI18n();
 			if (info["name"].toString().isEmpty()) info["name"] = obj->getEnglishName();
+			if (info["name"].toString().isEmpty()) info["name"] = obj->getID();
 			info["nameI18"] = obj->getNameI18n();
 			info["englishName"] = obj->getEnglishName();
 			info["type"] = obj->getObjectTypeI18n();
 			info["typeId"] = obj->getType();
-			info["ra"] = radec[0] * 180.0 / M_PI;
-			info["dec"] = radec[1] * 180.0 / M_PI;
-			info["alt"] = altaz[1] * 180.0 / M_PI;
-			info["az"] = altaz[0] * 180.0 / M_PI;
+			info["ra"] = objectInfo.value("ra").toDouble();
+			info["dec"] = objectInfo.value("dec").toDouble();
+			info["alt"] = objectInfo.value("altitude").toDouble();
+			info["az"] = objectInfo.value("azimuth").toDouble();
+			const QJsonObject distanceInfo = ohosObjectDistance(obj->getType(), objectInfo);
+			for (auto entry = distanceInfo.constBegin(); entry != distanceInfo.constEnd(); ++entry)
+				info[entry.key()] = entry.value();
 			info["magnitude"] = obj->getVMagnitude(StelApp::getInstance().getCore());
 			QString magStr = QString::number(obj->getVMagnitude(StelApp::getInstance().getCore()), 'f', 2);
 			info["magStr"] = magStr;
@@ -5972,6 +8206,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			};
 
 			QString name = obj->getNameI18n();
+			if (name.isEmpty()) name = obj->getEnglishName();
+			if (name.isEmpty()) name = obj->getID();
 			QString typeI18 = obj->getObjectTypeI18n();
 			double mag = obj->getVMagnitude(core);
 
@@ -5998,18 +8234,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					  .arg(QString::number(alt, 'f', 0))
 					  .arg(azToCompass(az));
 
-			if (m.contains("distance"))
+			const QJsonObject distanceInfo = ohosObjectDistance(obj->getType(), m);
+			QString distanceText = distanceInfo.value("distance").toString();
+			if (!distanceText.isEmpty())
 			{
-				double distAu = m["distance"].toDouble();
-				if (distAu > 0)
-				{
-					if (distAu < 0.01)
-						spoken += QString("，距离 %1 天文单位").arg(QString::number(distAu, 'f', 4));
-					else if (distAu < 1000.)
-						spoken += QString("，距离 %1 天文单位").arg(QString::number(distAu, 'f', 2));
-					else
-						spoken += QString("，距离 %1 光年").arg(QString::number(distAu / 63241.077, 'f', 1));
-				}
+				distanceText.replace(" G ly", " 十亿光年").replace(" M ly", " 百万光年")
+					.replace(" ly", " 光年").replace(" AU", " 天文单位").replace(" km", " 千米");
+				spoken += QString("，距离 %1").arg(distanceText);
 			}
 
 			out["ok"] = true;
@@ -6138,6 +8369,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["calendarSystem"] = jd < 2299161.0 ? "julian" : "gregorian";
 			result["julianDateStep"] = 0.00001;
 			result["jdOfToday"] = jd;
+			result["formattedTime"] = formattedSimulationTime(jd);
 			result["timeRate"] = core->getTimeRate();
 			result["year"] = year;
 			return result;
@@ -6436,36 +8668,40 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// getDateFormat / setDateFormat — date display format
 		if (commandName == "getDateFormat")
 		{
-			QSettings* conf = StelApp::getInstance().getSettings();
 			result["ok"] = true;
-			result["format"] = conf->value("localization/date_display_format", "yyyymmdd").toString();
+			result["format"] = StelApp::getInstance().getLocaleMgr().getDateFormatStr();
 			return result;
 		}
 
 		if (commandName == "setDateFormat")
 		{
+			if (!QStringList{"system_default", "yyyymmdd", "ddmmyyyy", "mmddyyyy", "wwyyyymmdd", "wwddmmyyyy", "wwmmddyyyy"}.contains(arg))
+			{ result["error"] = "invalid date format"; return result; }
 			QSettings* conf = StelApp::getInstance().getSettings();
 			conf->setValue("localization/date_display_format", arg);
 			StelApp::getInstance().getLocaleMgr().setDateFormatStr(arg);
-			result["ok"] = true;
+			conf->sync();
+			result = timeSettingsJson();
 			return result;
 		}
 
 		// getTimeFormat / setTimeFormat — time display format
 		if (commandName == "getTimeFormat")
 		{
-			QSettings* conf = StelApp::getInstance().getSettings();
 			result["ok"] = true;
-			result["format"] = conf->value("localization/time_display_format", "24h").toString();
+			result["format"] = StelApp::getInstance().getLocaleMgr().getTimeFormatStr();
 			return result;
 		}
 
 		if (commandName == "setTimeFormat")
 		{
+			if (!QStringList{"system_default", "24h", "12h"}.contains(arg))
+			{ result["error"] = "invalid time format"; return result; }
 			QSettings* conf = StelApp::getInstance().getSettings();
 			conf->setValue("localization/time_display_format", arg);
 			StelApp::getInstance().getLocaleMgr().setTimeFormatStr(arg);
-			result["ok"] = true;
+			conf->sync();
+			result = timeSettingsJson();
 			return result;
 		}
 
@@ -6687,9 +8923,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelScriptMgr& sm = StelApp::getInstance().getScriptMgr();
 			result["ok"] = true;
 			result["running"] = sm.scriptIsRunning();
+			result["waiting"] = sm.isWaitingForKeypress();
+			result["waitMessage"] = sm.waitForKeypressMessage();
 			LabelMgr::setOhosScriptUiVisible(sm.scriptIsRunning());
 			result["scriptId"] = sm.runningScriptId();
 			result["scriptRate"] = sm.getScriptRate();
+			return result;
+		}
+
+		// getScriptCaptions — expose translated script screen labels to ArkUI.
+		if (commandName == "getScriptCaptions")
+		{
+			result["ok"] = true;
+			result["captions"] = GETSTELMODULE(LabelMgr)->getOhosScriptCaptions();
 			return result;
 		}
 
@@ -7095,7 +9341,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const StelObject::InfoStringGroup flags = currentGui->getInfoTextFilters();
 			result["ok"] = true;
 			result["infoMode"] = selectedObjectInfoMode();
-			result["customInfoMask"] = static_cast<int>(flags);
+			result["customInfoMask"] = static_cast<int>(GETSTELMODULE(StelObjectMgr)->getCustomInfoStrings());
+			result["activeInfoMask"] = static_cast<int>(flags);
 			return result;
 		}
 
@@ -7112,10 +9359,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				else if (value == "default") flags = StelObject::DefaultInfo;
 				else if (value == "short") flags = StelObject::ShortInfo;
 				else if (value == "none") flags = StelObject::None;
-				else if (value == "custom") flags = currentGui->getInfoTextFilters();
+				else if (value == "custom") flags = GETSTELMODULE(StelObjectMgr)->getCustomInfoStrings();
 				else { result["error"] = "unknown information mode"; return result; }
 				currentGui->setInfoTextFilters(flags);
-				StelApp::immediateSave("gui/selected_object_info", value);
+				StelApp::getInstance().getSettings()->setValue("gui/selected_object_info", value);
 			}
 			else if (key == "mask")
 			{
@@ -7124,29 +9371,30 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const int allowed = static_cast<int>(StelObject::AllInfo);
 				if (!parsed || mask < 0 || (mask & ~allowed) != 0) { result["error"] = "invalid information mask"; return result; }
 				flags = static_cast<StelObject::InfoStringGroupFlags>(mask);
+				const QStringList fieldKeys = {
+					"name", "catalognumber", "magnitude", "radecj2000", "radecofdate", "altaz", "distance",
+					"elongation", "size", "velocity", "propermotion", "extra", "hourangle", "absolutemagnitude",
+					"galcoord", "supergalcoord", "othercoord", "type", "eclcoordj2000", "eclcoordofdate",
+					"constellation", "cultural_constellation", "sidereal_time", "rts_time", "solar_lunar"
+				};
+				QSettings* settings = StelApp::getInstance().getSettings();
+				for (int index = 0; index < fieldKeys.size(); ++index)
+					settings->setValue("custom_selected_info/flag_show_" + fieldKeys.at(index), (mask & (1 << index)) != 0);
 				currentGui->setInfoTextFilters(flags);
-				StelApp::immediateSave("gui/selected_object_info", "custom");
+				settings->setValue("gui/selected_object_info", "custom");
 			}
 			else { result["error"] = "unknown information setting"; return result; }
+			StelApp::getInstance().getSettings()->sync();
 			result["ok"] = true;
 			result["infoMode"] = selectedObjectInfoMode();
-			result["customInfoMask"] = static_cast<int>(currentGui->getInfoTextFilters());
+			result["customInfoMask"] = static_cast<int>(GETSTELMODULE(StelObjectMgr)->getCustomInfoStrings());
+			result["activeInfoMask"] = static_cast<int>(currentGui->getInfoTextFilters());
 			return result;
 		}
 
 		if (commandName == "getTimeSettings")
 		{
-			StelCore* core = StelApp::getInstance().getCore();
-			result["ok"] = true;
-			result["startupTimeMode"] = core->getStartupTimeMode();
-			result["startupTimeStop"] = core->getStartupTimeStop();
-			result["todayTime"] = core->getInitTodayTime().toString("HH:mm:ss");
-			result["presetSkyTime"] = core->getPresetSkyTime();
-			result["deltaTAlgorithm"] = core->getCurrentDeltaTAlgorithmKey();
-			QTextDocument description;
-			description.setHtml(core->getCurrentDeltaTAlgorithmDescription());
-			result["deltaTDescription"] = description.toPlainText().simplified();
-			return result;
+			return timeSettingsJson();
 		}
 
 		if (commandName == "setTimeSetting")
@@ -7156,22 +9404,77 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QString value = arg.section('|', 1, 1).trimmed();
 			if (!core || value.isEmpty()) { result["error"] = "usage: startupMode|actual/today/preset; startupStop|0/1; todayTime|HH:mm:ss; deltaT|key; presetCurrent|1"; return result; }
 			if (key == "startupmode" && (value == "actual" || value == "today" || value == "preset")) core->setStartupTimeMode(value);
-			else if (key == "startupstop") core->setStartupTimeStop(value == "1" || value.compare("true", Qt::CaseInsensitive) == 0);
+			else if (key == "startupstop")
+			{
+				if (!QStringList{"0", "1", "true", "false"}.contains(value.toLower()))
+				{ result["error"] = "startupStop must be 0/1 or true/false"; return result; }
+				core->setStartupTimeStop(value == "1" || value.compare("true", Qt::CaseInsensitive) == 0);
+			}
 			else if (key == "todaytime")
 			{
-				const QTime time = QTime::fromString(value, "HH:mm:ss");
+				const QTime time = QTime::fromString(value, value.size() == 5 ? "HH:mm" : "HH:mm:ss");
 				if (!time.isValid()) { result["error"] = "today time must be HH:mm:ss"; return result; }
 				core->setInitTodayTime(time);
 			}
-			else if (key == "presetcurrent") core->setPresetSkyTime(core->getJD());
+			else if (key == "presetcurrent" && value == "1")
+			{
+				core->setPresetSkyTime(core->getJD() + core->getUTCOffset(core->getJD()) * StelCore::JD_HOUR);
+				core->setStartupTimeMode("preset");
+			}
+			else if (key == "presetlocal")
+			{
+				bool valid = false;
+				const double localJD = StelUtils::getJulianDayFromISO8601String(value, &valid);
+				if (!valid || !std::isfinite(localJD) || StelUtils::julianDayToISO8601String(localJD) != value)
+				{ result["error"] = "presetLocal must be a valid local YYYY-MM-DDTHH:mm:ss"; return result; }
+				core->setPresetSkyTime(localJD);
+			}
+			else if (key == "applystartup" && value == "1")
+			{
+				if (core->getStartupTimeMode() == "actual") core->setTimeNow();
+				else if (core->getStartupTimeMode() == "today") core->setTodayTime(core->getInitTodayTime());
+				else core->setJD(core->getPresetSkyTime() - core->getUTCOffset(core->getPresetSkyTime()) * StelCore::JD_HOUR);
+				core->setTimeRate(core->getStartupTimeStop() ? 0.0 : StelCore::JD_SECOND);
+			}
+			else if (key == "deltacustom")
+			{
+				const QStringList parts = value.split(',');
+				if (parts.size() != 5) { result["error"] = "deltaCustom requires year,ndot,a,b,c"; return result; }
+				QVector<double> parameters;
+				for (const QString& part : parts)
+				{
+					bool valid = false;
+					const double number = part.toDouble(&valid);
+					if (!valid || !std::isfinite(number) || std::abs(number) > 1e6)
+					{ result["error"] = "invalid custom DeltaT parameter"; return result; }
+					parameters.append(number);
+				}
+				core->setDeltaTCustomYear(parameters[0]);
+				core->setDeltaTCustomNDot(parameters[1]);
+				core->setDeltaTCustomEquationCoefficients(Vec3d(parameters[2], parameters[3], parameters[4]));
+				core->setJD(core->getJD());
+			}
 			else if (key == "deltat")
 			{
 				const QMetaEnum algorithms = QMetaEnum::fromType<StelCore::DeltaTAlgorithm>();
 				if (algorithms.keyToValue(value.toLatin1().constData()) < 0) { result["error"] = "unknown DeltaT algorithm"; return result; }
 				core->setCurrentDeltaTAlgorithmKey(value);
+				core->setJD(core->getJD());
 			}
 			else { result["error"] = "unknown time setting"; return result; }
-			result["ok"] = true;
+			QSettings* conf = StelApp::getInstance().getSettings();
+			conf->setValue("navigation/startup_time_mode", core->getStartupTimeMode());
+			conf->setValue("navigation/startup_time_stop", core->getStartupTimeStop());
+			conf->setValue("navigation/today_time", core->getInitTodayTime().toString("HH:mm:ss"));
+			conf->setValue("navigation/preset_sky_time", core->getPresetSkyTime());
+			conf->setValue("navigation/time_correction_algorithm", core->getCurrentDeltaTAlgorithmKey());
+			conf->setValue("custom_time_correction/year", core->getDeltaTCustomYear());
+			conf->setValue("custom_time_correction/ndot", core->getDeltaTCustomNDot());
+			const Vec3d coefficients = core->getDeltaTCustomEquationCoefficients();
+			conf->setValue("custom_time_correction/coefficients", QString("%1,%2,%3").arg(coefficients[0], 0, 'g', 15)
+				.arg(coefficients[1], 0, 'g', 15).arg(coefficients[2], 0, 'g', 15));
+			conf->sync();
+			result = timeSettingsJson();
 			result["setting"] = key;
 			return result;
 		}
@@ -8538,8 +10841,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "no object selected";
 				return result;
 			}
+			result = ohosObjectDistance(sel.first()->getType(), sel.first()->getInfoMap(core));
+			if (result.contains("distance"))
+			{
+				result["distanceText"] = result.value("distance");
+				result["distance"] = result.value("distanceValue");
+			}
 			result["ok"] = true;
-			result["distance"] = (qSharedPointerCast<Planet>(sel.first())) ? qSharedPointerCast<Planet>(sel.first())->getDistance() : 0.0;
+			result["selectedEnglishName"] = sel.first()->getEnglishName().isEmpty()
+				? sel.first()->getID() : sel.first()->getEnglishName();
 			return result;
 		}
 
@@ -9313,7 +11623,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					movementMgr->setViewDirectionJ2000(Vec3d(v[0].toDouble(), v[1].toDouble(), v[2].toDouble()));
 			}
 			if (s.contains("fovDeg") && s["fovDeg"].isDouble())
-				movementMgr->setFov(s["fovDeg"].toDouble() * M_PI / 180.0);
+				movementMgr->setFov(s["fovDeg"].toDouble());
 			if (s.contains("flags") && s["flags"].isObject())
 			{
 				const QJsonObject flags = s["flags"].toObject();
@@ -9602,7 +11912,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			state["ra"] = camera->getCurrentRA();
 			state["dec"] = camera->getCurrentDec();
 			state["rotation"] = camera->getCurrentRotation();
-			state["visible"] = camera->getCurrentVisibility();
+			state["visible"] = camera->getCurrentVisibility() != 0;
 			QJsonArray names;
 			for (const QString& name : camera->getCameraNames()) names.append(name);
 			state["names"] = names;
@@ -9627,7 +11937,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			else if (setting == "visible") camera->setCurrentVisibility(enabled);
 			else if (setting == "setToView") camera->setRADecToView();
-			else if (setting == "setToSelected") camera->setRADecToObject();
+			else if (setting == "setToSelected")
+			{
+				if (GETSTELMODULE(StelObjectMgr)->getSelectedObject().isEmpty())
+				{ result["error"] = "Select an object before positioning the camera"; return result; }
+				camera->setRADecToObject();
+			}
 			else if (setting == "viewToCamera") camera->setViewToCamera();
 			else if (setting == "ra" || setting == "dec" || setting == "rotation")
 			{
@@ -9793,8 +12108,225 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		// ========== Satellites plugin (卫星) ==========
+		if (commandName == "getSatelliteSources" || commandName == "setSatelliteSources" ||
+			commandName == "setSatelliteUpdateSetting" || commandName == "importSatelliteTle" ||
+			commandName == "refreshSatelliteCatalog")
+		{
+			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
+			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
+
+			auto sourceInfo = [](const QString& encoded, int index) {
+				QString value = encoded.trimmed();
+				bool addNew = false;
+				if (value.startsWith(QStringLiteral("1,")) || value.startsWith(QStringLiteral("0,")))
+				{
+					addNew = value.startsWith(QStringLiteral("1,"));
+					value.remove(0, 2);
+				}
+				const QUrl url(value);
+				const QString scheme = url.scheme().toLower();
+				const bool local = scheme == QStringLiteral("file");
+				const bool remote = scheme == QStringLiteral("http") || scheme == QStringLiteral("https");
+				const bool valid = url.isValid() && !url.isEmpty() &&
+					((local && !url.path().isEmpty()) || (remote && !url.host().isEmpty() && url.userInfo().isEmpty()));
+				QJsonObject item;
+				item["index"] = index;
+				item["url"] = value;
+				item["addNew"] = addNew;
+				item["local"] = local;
+				item["network"] = remote;
+				item["scheme"] = scheme;
+				item["valid"] = valid;
+				return item;
+			};
+
+			auto settings = [&]() {
+				QJsonObject value;
+				value["updatesEnabled"] = sats->getUpdatesEnabled();
+				value["autoAddEnabled"] = sats->isAutoAddEnabled();
+				value["autoRemoveEnabled"] = sats->isAutoRemoveEnabled();
+				value["autoDisplayEnabled"] = sats->isAutoDisplayEnabled();
+				value["updateFrequencyHours"] = sats->getUpdateFrequencyHours();
+				value["secondsToUpdate"] = sats->getSecondsToUpdate();
+				value["updateState"] = static_cast<int>(sats->getUpdateState());
+				return value;
+			};
+			auto boolValue = [](const QJsonValue& value) {
+			if (value.isBool()) return value.toBool();
+			const QString text = value.toString().trimmed().toLower();
+			return text == QStringLiteral("1") || text == QStringLiteral("true") || text == QStringLiteral("yes");
+		};
+
+			if (commandName == "getSatelliteSources")
+			{
+				QJsonArray sources;
+				const QStringList configured = sats->getTleSources();
+				for (int index = 0; index < configured.size(); ++index)
+					sources.append(sourceInfo(configured.at(index), index));
+				result["ok"] = true;
+#ifdef STELLARIUM_OHOS_OFFLINE
+				result["offline"] = true;
+#else
+				result["offline"] = false;
+#endif
+				result["sources"] = sources;
+				result["settings"] = settings();
+				result["remoteSourcesAreDormant"] = result["offline"];
+				return result;
+			}
+
+			if (commandName == "setSatelliteSources")
+			{
+				QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+				QJsonArray input;
+				if (document.isObject()) input = document.object().value("sources").toArray();
+				else if (document.isArray()) input = document.array();
+				if (document.isNull() && !arg.trimmed().isEmpty())
+					for (const QString& line : arg.split('\n', Qt::SkipEmptyParts)) input.append(line.trimmed());
+				QStringList normalized;
+				QSet<QString> unique;
+				QJsonArray rejected;
+				for (const QJsonValue& value : input)
+				{
+					QString url;
+					bool addNew = false;
+					if (value.isObject())
+					{
+						const QJsonObject object = value.toObject();
+						url = object.value("url").toString().trimmed();
+						addNew = object.value("addNew").toBool(false);
+					}
+					else url = value.toString().trimmed();
+					if (url.startsWith(QStringLiteral("1,")) || url.startsWith(QStringLiteral("0,")))
+					{
+						addNew = url.startsWith(QStringLiteral("1,"));
+						url.remove(0, 2);
+					}
+					const QJsonObject checked = sourceInfo((addNew ? QStringLiteral("1,") : QStringLiteral("0,")) + url, normalized.size());
+					const QString canonical = checked.value("url").toString();
+					if (!checked.value("valid").toBool() || unique.contains(canonical))
+					{
+						QJsonObject bad;
+						bad["url"] = url;
+						bad["reason"] = checked.value("valid").toBool() ? QStringLiteral("duplicate") : QStringLiteral("unsupported_or_invalid_url");
+						rejected.append(bad);
+						continue;
+					}
+					unique.insert(canonical);
+					normalized.append((addNew ? QStringLiteral("1,") : QString()) + canonical);
+				}
+				if (normalized.isEmpty() && !input.isEmpty())
+				{
+					result["ok"] = false;
+					result["error"] = "no valid satellite sources";
+					result["rejected"] = rejected;
+					return result;
+				}
+				sats->setTleSources(normalized);
+				QJsonArray acceptedSources;
+				for (int index = 0; index < normalized.size(); ++index)
+					acceptedSources.append(sourceInfo(normalized.at(index), index));
+				result["ok"] = true;
+				result["accepted"] = normalized.size();
+				result["rejected"] = rejected;
+				result["sources"] = acceptedSources;
+				return result;
+			}
+
+			if (commandName == "setSatelliteUpdateSetting")
+			{
+				QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+				QJsonObject values = document.isObject() ? document.object() : QJsonObject();
+				if (values.isEmpty())
+				{
+					const QString key = arg.section(':', 0, 0).trimmed();
+					const QString raw = arg.section(':', 1, 1).trimmed();
+					if (!key.isEmpty()) values[key] = raw;
+				}
+				bool changed = false;
+				for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+				{
+					const QString key = it.key();
+					if (key == QStringLiteral("updatesEnabled")) { sats->setUpdatesEnabled(boolValue(it.value())); changed = true; }
+					else if (key == QStringLiteral("autoAddEnabled")) { sats->setAutoAddEnabled(boolValue(it.value())); changed = true; }
+					else if (key == QStringLiteral("autoRemoveEnabled")) { sats->setAutoRemoveEnabled(boolValue(it.value())); changed = true; }
+					else if (key == QStringLiteral("autoDisplayEnabled")) { sats->setAutoDisplayEnabled(boolValue(it.value())); changed = true; }
+					else if (key == QStringLiteral("updateFrequencyHours"))
+					{
+						bool parsed = it.value().isDouble();
+						const int hours = it.value().isDouble() ? it.value().toInt() : it.value().toString().toInt(&parsed);
+						if (!parsed) { result["ok"] = false; result["error"] = "invalid updateFrequencyHours"; return result; }
+						sats->setUpdateFrequencyHours(qBound(1, hours, 8760));
+						changed = true;
+					}
+					else { result["ok"] = false; result["error"] = "unknown satellite update setting: " + key; return result; }
+				}
+				if (!changed) { result["ok"] = false; result["error"] = "no satellite update setting supplied"; return result; }
+				sats->saveSettingsToConfig();
+				result["ok"] = true;
+#ifdef STELLARIUM_OHOS_OFFLINE
+				result["offline"] = true;
+#else
+				result["offline"] = false;
+#endif
+				result["settings"] = settings();
+				return result;
+			}
+
+			if (commandName == "importSatelliteTle")
+			{
+				QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
+				QJsonObject options = document.isObject() ? document.object() : QJsonObject();
+				QStringList paths;
+				if (options.contains("paths"))
+					for (const QJsonValue& value : options.value("paths").toArray()) paths.append(value.toString().trimmed());
+				else if (!arg.trimmed().isEmpty() && !document.isObject()) paths.append(arg.trimmed());
+				QStringList validPaths;
+				QJsonArray rejected;
+				for (const QString& path : paths)
+				{
+					const QFileInfo info(path);
+					if (!info.exists() || !info.isFile() || !info.isReadable()) rejected.append(path);
+					else validPaths.append(info.absoluteFilePath());
+				}
+				if (validPaths.isEmpty())
+				{
+					result["ok"] = false;
+					result["error"] = "no readable local TLE files";
+					result["rejected"] = rejected;
+					return result;
+				}
+				const int before = sats->listAllIds().size();
+				sats->updateFromFiles(validPaths, options.value("deleteFiles").toBool(false));
+				const int after = sats->listAllIds().size();
+				result["ok"] = true;
+				result["importedFiles"] = validPaths.size();
+				result["rejected"] = rejected;
+				result["catalogCountBefore"] = before;
+				result["catalogCountAfter"] = after;
+				result["updateState"] = static_cast<int>(sats->getUpdateState());
+				result["offline"] = true;
+				return result;
+			}
+
+			if (commandName == "refreshSatelliteCatalog")
+			{
+#ifdef STELLARIUM_OHOS_OFFLINE
+				result["ok"] = false;
+				result["offline"] = true;
+				result["error"] = "satellite refresh is disabled in the offline build; import a local TLE file";
+#else
+				sats->updateFromOnlineSources();
+				result["ok"] = true;
+				result["offline"] = false;
+#endif
+				return result;
+			}
+		}
 		if (commandName == "getSatellites")
 		{
+			QElapsedTimer catalogTimer;
+			catalogTimer.start();
 			Satellites* sats = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true));
 			if (!sats) { result["ok"] = false; result["error"] = "Satellites plugin not loaded"; return result; }
 			const QStringList options = arg.split('|');
@@ -9828,18 +12360,26 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s["outdatedCount"] = catalog.value("outdatedCount").toInt();
 			s["matchedCount"] = catalog.value("matchedCount").toInt();
 			s["catalogSource"] = "plugins/Satellites/resources/satellites.json";
-			QFile bundledCatalog(":/satellites/satellites.json");
-			if (bundledCatalog.open(QIODevice::ReadOnly))
-			{
+			static const QJsonObject bundledCatalogMetadata = []() {
+				QJsonObject metadata;
+				QFile bundledCatalog(":/satellites/satellites.json");
+				if (!bundledCatalog.open(QIODevice::ReadOnly))
+					return metadata;
 				const QJsonDocument catalogDocument = QJsonDocument::fromJson(bundledCatalog.readAll());
-				if (catalogDocument.isObject())
-				{
-					const QJsonObject catalogObject = catalogDocument.object();
-					s["catalogCreator"] = catalogObject.value("creator").toString();
-					s["catalogSnapshot"] = catalogObject.value("offlineSnapshot").toString();
-				}
-			}
+				if (!catalogDocument.isObject())
+					return metadata;
+				const QJsonObject catalogObject = catalogDocument.object();
+				metadata["creator"] = catalogObject.value("creator").toString();
+				metadata["offlineSnapshot"] = catalogObject.value("offlineSnapshot").toString();
+				return metadata;
+			}();
+			s["catalogCreator"] = bundledCatalogMetadata.value("creator").toString();
+			s["catalogSnapshot"] = bundledCatalogMetadata.value("offlineSnapshot").toString();
 			s["items"] = QJsonArray::fromVariantList(catalog.value("items").toList());
+			const auto selectedSatellites = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
+			if (!selectedSatellites.isEmpty())
+				s["selectedOrbit"] = QJsonObject::fromVariantMap(qSharedPointerCast<Satellite>(selectedSatellites.first())->getOrbitLineStatus());
+			s["elapsedMs"] = catalogTimer.elapsed();
 			result["ok"] = true;
 			result["satellites"] = s;
 			return result;
@@ -9925,7 +12465,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			response["calculatedAt"] = StelUtils::julianDayToISO8601String(core->getJD());
 			response["offline"] = true;
 			response["source"] = "local TLE propagation";
-			response["dataStatus"] = "local";
+			const QVariantMap propagationInfo = satellite->getInfoMap(core);
+			response["orbitValid"] = satellite->isOrbitValid();
+			response["propagationStatus"] = propagationInfo.value("propagation-status").toString();
+			response["tleAgeDays"] = propagationInfo.value("tle-age-days").toDouble();
+			response["dataStatus"] = !satellite->isOrbitValid() ? "invalid_orbit"
+				: propagationInfo.value("tle-outdated").toBool() ? "stale" : "local";
 			response["elapsedMs"] = passTimer.elapsed();
 			qInfo() << "[StellariumOhos][satellite-pass] id=" << satellite->getCatalogNumberString()
 			       << "hours=" << hours << "limit=" << limit << "elapsedMs=" << passTimer.elapsed();
@@ -10722,9 +13267,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				QJsonObject o;
 				o["file"] = it.file;
+				o["path"] = it.path;
 				o["name"] = it.name;
 				o["created"] = it.created;
 				o["count"] = it.count;
+				o["bytes"] = it.bytes;
 				items.append(o);
 			}
 			result["ok"] = true;
@@ -10762,10 +13309,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				root["commands"] = incoming.object().value("commands");
 			else
 				root["commands"] = QJsonArray();
-			f.write(QJsonDocument(root).toJson());
+			const qint64 bytes = f.write(QJsonDocument(root).toJson());
 			f.close();
+			const QString path = QDir(recordingsDir()).filePath(file);
 			result["ok"] = true;
 			result["file"] = file;
+			result["fileName"] = file;
+			result["path"] = path;
+			result["bytes"] = bytes;
 			result["name"] = name;
 			return result;
 		}
@@ -10783,6 +13334,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
 			f.close();
 			result["ok"] = true;
+			result["file"] = arg;
+			result["fileName"] = QFileInfo(f).fileName();
+			result["path"] = QFileInfo(f).absoluteFilePath();
+			result["bytes"] = QFileInfo(f).size();
 			result["name"] = doc.object().value("name").toString(arg);
 			result["commands"] = doc.object().value("commands").toArray();
 			return result;
@@ -10821,7 +13376,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			g_videoRecorder.recording = true;
 			g_videoRecorder.dir = dir;
 			g_videoRecorder.fps = fps;
+			g_videoRecorder.attemptedFrames = 0;
 			g_videoRecorder.frameCount = 0;
+			g_videoRecorder.failedFrames = 0;
 			g_videoRecorder.maxFrames = fps * duration;
 			if (!g_videoRecorder.timer)
 			{
@@ -10843,12 +13400,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			g_videoRecorder.recording = false;
 			if (g_videoRecorder.timer)
 				g_videoRecorder.timer->stop();
-			int disk = countVideoFrames(g_videoRecorder.dir);
+			const int disk = countVideoFrames(g_videoRecorder.dir);
+			const QJsonObject archive = archiveVideoFrames();
 			result["ok"] = true;
 			result["dir"] = g_videoRecorder.dir;
-			result["frameCount"] = g_videoRecorder.frameCount;
+			result["frameCount"] = disk;
 			result["diskFrames"] = disk;
+			result["attemptedFrames"] = g_videoRecorder.attemptedFrames;
+			result["failedFrames"] = g_videoRecorder.failedFrames;
 			result["fps"] = g_videoRecorder.fps;
+			result["archivePath"] = archive.value("archivePath");
+			result["archiveFileName"] = archive.value("archiveFileName");
+			result["archiveBytes"] = archive.value("archiveBytes");
+			result["archiveReady"] = archive.value("ok");
+			if (!archive.value("ok").toBool())
+				result["archiveError"] = archive.value("error");
 			return result;
 		}
 
@@ -10858,6 +13424,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["recording"] = g_videoRecorder.recording;
 			result["dir"] = g_videoRecorder.dir;
 			result["frameCount"] = g_videoRecorder.frameCount;
+			result["attemptedFrames"] = g_videoRecorder.attemptedFrames;
+			result["failedFrames"] = g_videoRecorder.failedFrames;
 			result["maxFrames"] = g_videoRecorder.maxFrames;
 			result["fps"] = g_videoRecorder.fps;
 			return result;
@@ -14585,7 +17153,7 @@ void StelMainView::renderOhosFrameNow()
 	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();
 	ohosUpdateGyroTransition();
-		ohosUpdatePanInertia(dt);
+	ohosUpdatePanInertia(dt);
 		if (s_ohosCaptureSelectedAnchorAfterPan)
 		{
 			s_ohosCaptureSelectedAnchorAfterPan = false;
@@ -14595,7 +17163,8 @@ void StelMainView::renderOhosFrameNow()
 		// advances. The maintainer below then compensates this very frame instead
 		// of anchoring one time-step late and visibly drifting after release.
 		app.update(dt);
-		if (s_ohosPinchActive && s_ohosPinchAnchorMode == OhosPinchAnchorMode::SkyPoint)
+		ohosUpdatePinchSettle(dt);
+		if ((s_ohosPinchActive || s_ohosPinchSettleActive) && s_ohosPinchAnchorMode == OhosPinchAnchorMode::SkyPoint)
 			ohosMaintainPinchSkyAnchor();
 		else
 			ohosMaintainSelectedZoomAnchor();
@@ -14603,9 +17172,10 @@ void StelMainView::renderOhosFrameNow()
 		ohosUpdateSelectedScreenProjection();
 	const double t3 = StelApp::getTotalRunTime();
 		app.draw();
-		// Oculars draws its reticle in the native draw pass. Keep the polar scope
-		// on this same render thread so the overlay cannot lag behind the sky.
+		// Keep instrument overlays on this render thread so they cannot lag behind
+		// the native sky projection while the user pans, zooms or flips the view.
 		drawOhosPolarScopeOverlay(app.getCore());
+		drawOhosTelescopeOverlay(app.getCore());
 		const double t4 = StelApp::getTotalRunTime();
 	submitOhosFramebuffer(gl);
 	const double t5 = StelApp::getTotalRunTime();
@@ -14807,7 +17377,7 @@ bool StelMainView::needsMaxFPS() const
 	// The fps is also kept to max if the timerate is higher than normal speed.
 	const double timeRate = stelApp->getCore()->getTimeRate();
 #if defined(__OHOS__)
-	return (now - lastEventTimeSec < 0.8) || fabs(timeRate) > StelCore::JD_SECOND;
+	return (now - lastEventTimeSec < 0.8) || ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;
 #else
 	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;
 #endif

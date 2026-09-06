@@ -19,7 +19,10 @@
 
 #include "TextureConfigManager.hpp"
 #include <QFile>
+#include <QDir>
 #include <QJsonDocument>
+#include <QJsonParseError>
+#include <QSaveFile>
 #include <QDebug>
 
 /**
@@ -36,6 +39,7 @@ TextureConfigManager::TextureConfigManager(const QString& configFilePath, const 
  */
 bool TextureConfigManager::load()
 {
+	lastError.clear();
 	QFile file(filePath);
 	// Check if file exists and can be opened for reading
 	if (!file.exists())
@@ -44,17 +48,35 @@ bool TextureConfigManager::load()
 		return true;
 	}
 
-	if (!file.open(QIODevice::ReadOnly)) return false;
+	if (!file.open(QIODevice::ReadOnly))
+	{
+		lastError = file.errorString();
+		return false;
+	}
 
 	// Parse JSON content
-	QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+	QJsonParseError parseError;
+	QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
 	file.close();
+	if (parseError.error != QJsonParseError::NoError)
+	{
+		lastError = parseError.errorString();
+		return false;
+	}
 
 	// Check if root element is a JSON object
 	if (!doc.isObject())
+	{
+		lastError = QStringLiteral("Texture configuration root must be an object.");
 		return false;
+	}
 
 	rootObject = doc.object();
+	if (!rootObject.value(QStringLiteral("subTiles")).isArray())
+	{
+		lastError = QStringLiteral("Texture configuration is missing the subTiles array.");
+		return false;
+	}
 	return true;
 }
 
@@ -64,15 +86,27 @@ bool TextureConfigManager::load()
  */
 bool TextureConfigManager::save() const
 {
-	QFile file(filePath);
+	lastError.clear();
+	if (!QDir().mkpath(QFileInfo(filePath).absolutePath()))
+	{
+		lastError = QStringLiteral("Unable to create the texture configuration directory.");
+		return false;
+	}
+	QSaveFile file(filePath);
 	// Open file for writing
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+	{
+		lastError = file.errorString();
 		return false;
+	}
 
 	// Write JSON document to file
 	QJsonDocument doc(rootObject);
-	file.write(doc.toJson(QJsonDocument::Indented));
-	file.close();
+	if (file.write(doc.toJson(QJsonDocument::Indented)) < 0 || !file.commit())
+	{
+		lastError = file.errorString();
+		return false;
+	}
 	return true;
 }
 
@@ -230,4 +264,9 @@ QJsonObject TextureConfigManager::getSubTileByImageUrl(const QString& imageUrl) 
 QString TextureConfigManager::getConfigPath() const
 {
 	return filePath;
+}
+
+QString TextureConfigManager::getLastError() const
+{
+	return lastError;
 }

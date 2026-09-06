@@ -59,6 +59,11 @@ public:
 	//! @brief This operation update Epoch timestamp for gSatTEME object
 	//! from Stellarium Julian Date.
 	void setEpoch(double ai_julianDaysEpoch);
+	QString getPropagationStatus() const
+	{
+		return pSatellite ? QString::fromLatin1(pSatellite->getPropagationStatus()) : QStringLiteral("uninitialized");
+	}
+	int getPropagationError() const { return pSatellite ? pSatellite->getErrorCode() : -1; }
 
 	// Operation getTEMEPos
 	//! @brief This operation isolate gSatTEME getPos operation.

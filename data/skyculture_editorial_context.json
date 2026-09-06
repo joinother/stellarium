@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 1,
+  "languages": [
+    "ar", "bn", "cs", "da", "de", "el", "en", "es", "fa", "fi", "fr", "gu",
+    "he", "hi", "hr", "hu", "id", "it", "ja", "ko", "ml", "mr", "ms", "nb",
+    "ne", "nl", "pl", "pt", "pt_BR", "ro", "ru", "si", "sk", "sl", "sv", "ta",
+    "te", "th", "uk", "vi", "zh_CN", "zh_HK", "zh_TW"
+  ],
+  "presentation": {
+    "ar": {
+      "title": "إطار العرض الثقافي",
+      "body": "يقدّم هذا المحتوى معارف السماء بوصفها جزءًا من التراث الثقافي المشترك للبشرية. ويعرض كل تقليد ضمن سياقه التاريخي والمحلي، مع التمييز بين السجلات الأصلية والتفسيرات البحثية اللاحقة. لا يرتّب التطبيق الثقافات على مقياس تفاضل، ولا يجعل ثقافة خارجية واحدة معيارًا عامًا. وتبقى الادعاءات غير المؤكدة موضّحة بوصفها غير مؤكدة."
+    },
+    "bn": {
+      "title": "সাংস্কৃতিক উপস্থাপনার কাঠামো",
+      "body": "এই উপাদানে আকাশ-জ্ঞানকে মানবজাতির অভিন্ন সাংস্কৃতিক ঐতিহ্যের অংশ হিসেবে উপস্থাপন করা হয়। প্রতিটি ঐতিহ্যকে তার নিজস্ব ইতিহাস ও স্থানীয় প্রেক্ষাপটে দেখানো হয় এবং মূল নথি ও পরবর্তী গবেষণামূলক ব্যাখ্যার মধ্যে পার্থক্য রাখা হয়। অ্যাপ কোনো সংস্কৃতিকে উচ্চ-নিম্ন ক্রমে সাজায় না এবং একটি বাইরের সংস্কৃতিকে সর্বজনীন মানদণ্ড করে না। অনিশ্চিত বক্তব্যকে অনিশ্চিত হিসেবেই চিহ্নিত রাখা হয়।"
+    },
+    "cs": {
+      "title": "Rámec kulturního výkladu",
+      "body": "Tento obsah představuje znalosti o obloze jako součást společného kulturního dědictví lidstva. Každá tradice je uvedena v jejím vlastním historickém a místním kontextu a původní záznamy jsou odlišeny od pozdějších odborných výkladů. Aplikace kultury neřadí podle hodnoty a nepoužívá jednu vnější kulturu jako obecné měřítko. Nejistá tvrzení zůstávají označena jako nejistá."
+    },
+    "da": {
+      "title": "Ramme for kulturel formidling",
+      "body": "Dette indhold fremstiller viden om himlen som en del af menneskehedens fælles kulturarv. Hver tradition beskrives i sin egen historiske og lokale sammenhæng, og oprindelige kilder skelnes fra senere forskningsfortolkninger. Programmet rangordner ikke kulturer og bruger ikke én udefrakommende kultur som fælles målestok. Usikre oplysninger forbliver tydeligt markeret som usikre."
+    },
+    "de": {
+      "title": "Rahmen der kulturellen Darstellung",
+      "body": "Dieses Material stellt das Wissen über den Himmel als Teil des gemeinsamen Kulturerbes der Menschheit dar. Jede Tradition wird in ihrem eigenen historischen und örtlichen Zusammenhang beschrieben; ursprüngliche Quellen werden von späteren wissenschaftlichen Deutungen unterschieden. Die Anwendung nimmt keine Rangordnung der Kulturen vor und verwendet keine einzelne äußere Kultur als allgemeingültigen Maßstab. Unsichere Aussagen bleiben als unsicher gekennzeichnet."
+    },
+    "el": {
+      "title": "Πλαίσιο πολιτισμικής παρουσίασης",
+      "body": "Το περιεχόμενο παρουσιάζει τη γνώση για τον ουρανό ως μέρος της κοινής πολιτιστικής κληρονομιάς της ανθρωπότητας. Κάθε παράδοση εξετάζεται στο δικό της ιστορικό και τοπικό πλαίσιο, ενώ οι αρχικές πηγές διακρίνονται από τις μεταγενέστερες ερευνητικές ερμηνείες. Η εφαρμογή δεν κατατάσσει τους πολιτισμούς και δεν χρησιμοποιεί έναν εξωτερικό πολιτισμό ως καθολικό μέτρο. Οι αβέβαιοι ισχυρισμοί παραμένουν σημειωμένοι ως αβέβαιοι."
+    },
+    "en": {
+      "title": "Cultural presentation framework",
+      "body": "This material presents sky knowledge as part of humanity's shared cultural heritage. Each tradition is described in its own historical and local context, with original records distinguished from later research interpretations. The application does not rank cultures or use a single outside culture as a universal standard. Uncertain claims remain identified as uncertain."
+    },
+    "es": {
+      "title": "Marco de presentación cultural",
+      "body": "Este material presenta los conocimientos del cielo como parte del patrimonio cultural común de la humanidad. Cada tradición se describe en su propio contexto histórico y local, distinguiendo los registros originales de las interpretaciones de investigaciones posteriores. La aplicación no establece una jerarquía entre culturas ni utiliza una sola cultura externa como norma universal. Las afirmaciones inciertas siguen identificadas como inciertas."
+    },
+    "fa": {
+      "title": "چارچوب ارائه فرهنگی",
+      "body": "این مطالب دانش آسمان را بخشی از میراث فرهنگی مشترک بشریت معرفی می‌کند. هر سنت در زمینه تاریخی و محلی خود توضیح داده می‌شود و میان منابع اولیه و تفسیرهای پژوهشی بعدی تفاوت گذاشته می‌شود. این برنامه فرهنگ‌ها را رتبه‌بندی نمی‌کند و یک فرهنگ بیرونی را معیار همگانی قرار نمی‌دهد. ادعاهای نامطمئن همچنان به‌عنوان نامطمئن مشخص می‌شوند."
+    },
+    "fi": {
+      "title": "Kulttuurisen esityksen periaate",
+      "body": "Tässä aineistossa taivasta koskeva tieto esitetään ihmiskunnan yhteisenä kulttuuriperintönä. Jokainen perinne kuvataan omassa historiallisessa ja paikallisessa yhteydessään, ja alkuperäiset lähteet erotetaan myöhemmistä tutkimustulkinnoista. Sovellus ei aseta kulttuureja arvojärjestykseen eikä käytä yhtä ulkopuolista kulttuuria yleisenä mittapuuna. Epävarmat väitteet merkitään edelleen epävarmoiksi."
+    },
+    "fr": {
+      "title": "Cadre de présentation culturelle",
+      "body": "Ce contenu présente les connaissances du ciel comme une partie du patrimoine culturel commun de l'humanité. Chaque tradition est décrite dans son propre contexte historique et local, en distinguant les sources originales des interprétations issues de recherches ultérieures. L'application n'établit pas de hiérarchie entre les cultures et ne prend pas une culture extérieure comme norme universelle. Les affirmations incertaines restent indiquées comme telles."
+    },
+    "gu": {
+      "title": "સાંસ્કૃતિક રજૂઆતનું માળખું",
+      "body": "આ સામગ્રી આકાશ સંબંધિત જ્ઞાનને સમગ્ર માનવજાતના સામૂહિક સાંસ્કૃતિક વારસાનો ભાગ તરીકે રજૂ કરે છે. દરેક પરંપરાને તેના પોતાના ઐતિહાસિક અને સ્થાનિક સંદર્ભમાં સમજાવવામાં આવે છે અને મૂળ નોંધોને પછીના સંશોધન આધારિત અર્થઘટનોથી અલગ રાખવામાં આવે છે. એપ સંસ્કૃતિઓને ઊંચી-નીચી ક્રમમાં ગોઠવતી નથી અને કોઈ એક બાહ્ય સંસ્કૃતિને સર્વમાન્ય ધોરણ બનાવતી નથી. અનિશ્ચિત દાવાઓને અનિશ્ચિત તરીકે જ દર્શાવવામાં આવે છે."
+    },
+    "he": {
+      "title": "מסגרת להצגה תרבותית",
+      "body": "חומר זה מציג את הידע על השמים כחלק מהמורשת התרבותית המשותפת של האנושות. כל מסורת מתוארת בהקשר ההיסטורי והמקומי שלה, תוך הבחנה בין המקורות המקוריים לבין פרשנויות מחקריות מאוחרות יותר. היישום אינו מדרג תרבויות ואינו משתמש בתרבות חיצונית אחת כתקן אוניברסלי. טענות שאינן ודאיות נשארות מסומנות ככאלה."
+    },
+    "hi": {
+      "title": "सांस्कृतिक प्रस्तुति का ढाँचा",
+      "body": "यह सामग्री आकाश संबंधी ज्ञान को पूरी मानवता की साझा सांस्कृतिक विरासत के रूप में प्रस्तुत करती है। प्रत्येक परंपरा को उसके अपने ऐतिहासिक और स्थानीय संदर्भ में बताया गया है तथा मूल अभिलेखों और बाद की शोध-व्याख्याओं में अंतर रखा गया है। यह अनुप्रयोग संस्कृतियों की ऊँच-नीच नहीं करता और किसी एक बाहरी संस्कृति को सार्वभौमिक मानक नहीं बनाता। अनिश्चित दावों को अनिश्चित के रूप में ही चिह्नित रखा गया है।"
+    },
+    "hr": {
+      "title": "Okvir kulturnog prikaza",
+      "body": "Ovaj sadržaj prikazuje znanje o nebu kao dio zajedničke kulturne baštine čovječanstva. Svaka je tradicija opisana u vlastitom povijesnom i lokalnom kontekstu, uz razlikovanje izvornih zapisa od kasnijih znanstvenih tumačenja. Aplikacija ne rangira kulture i ne koristi jednu vanjsku kulturu kao univerzalno mjerilo. Nesigurne tvrdnje i dalje su označene kao nesigurne."
+    },
+    "hu": {
+      "title": "A kulturális bemutatás kerete",
+      "body": "Ez az anyag az égbolt ismeretét az emberiség közös kulturális örökségének részeként mutatja be. Minden hagyományt a saját történelmi és helyi környezetében ismertet, megkülönböztetve az eredeti feljegyzéseket a későbbi kutatási értelmezésektől. Az alkalmazás nem állít fel rangsort a kultúrák között, és nem használ egyetlen külső kultúrát általános mérceként. A bizonytalan állítások továbbra is bizonytalanként vannak jelölve."
+    },
+    "id": {
+      "title": "Kerangka penyajian budaya",
+      "body": "Materi ini menyajikan pengetahuan tentang langit sebagai bagian dari warisan budaya bersama umat manusia. Setiap tradisi dijelaskan dalam konteks sejarah dan lokalnya sendiri, dengan membedakan catatan asli dari tafsiran penelitian berikutnya. Aplikasi ini tidak mengurutkan budaya berdasarkan nilai dan tidak menjadikan satu budaya dari luar sebagai standar universal. Pernyataan yang belum pasti tetap ditandai sebagai belum pasti."
+    },
+    "it": {
+      "title": "Quadro di presentazione culturale",
+      "body": "Questo materiale presenta le conoscenze del cielo come parte del patrimonio culturale condiviso dell'umanità. Ogni tradizione è descritta nel proprio contesto storico e locale, distinguendo le fonti originarie dalle interpretazioni di ricerche successive. L'applicazione non stabilisce gerarchie tra le culture e non assume una singola cultura esterna come criterio universale. Le affermazioni incerte restano indicate come incerte."
+    },
+    "ja": {
+      "title": "文化的な提示の方針",
+      "body": "この資料では、空に関する知識を人類共通の文化遺産の一部として紹介します。それぞれの伝統を固有の歴史的・地域的背景の中で説明し、原資料の記録と後世の研究による解釈を区別します。本アプリは文化に順位を付けず、単一の外部文化を普遍的な基準としません。不確かな内容は不確かなものとして明示します。"
+    },
+    "ko": {
+      "title": "문화적 제시 원칙",
+      "body": "이 자료는 하늘에 관한 지식을 인류가 함께 이어 온 문화유산의 일부로 소개합니다. 각 전통은 고유한 역사적·지역적 맥락에서 설명하며, 원자료의 기록과 후대 연구의 해석을 구분합니다. 이 앱은 문화를 서열화하지 않고 하나의 외부 문화를 보편적 기준으로 삼지 않습니다. 불확실한 내용은 불확실하다고 계속 표시합니다."
+    },
+    "ml": {
+      "title": "സാംസ്കാരിക അവതരണ ചട്ടക്കൂട്",
+      "body": "ഈ ഉള്ളടക്കം ആകാശത്തെക്കുറിച്ചുള്ള അറിവിനെ മനുഷ്യരാശിയുടെ പങ്കിട്ട സാംസ്കാരിക പൈതൃകത്തിന്റെ ഭാഗമായി അവതരിപ്പിക്കുന്നു. ഓരോ പാരമ്പര്യവും അതിന്റെ സ്വന്തം ചരിത്രപരവും പ്രാദേശികവുമായ പശ്ചാത്തലത്തിൽ വിവരിക്കുന്നു; യഥാർത്ഥ രേഖകളെയും പിന്നീട് വന്ന ഗവേഷണ വ്യാഖ്യാനങ്ങളെയും വേർതിരിച്ചാണ് അവതരിപ്പിക്കുന്നത്. ആപ്പ് സംസ്കാരങ്ങളെ മേന്മയുടെ ക്രമത്തിൽ നിരത്തുകയോ ഒരു പുറത്തുള്ള സംസ്കാരത്തെ സർവസാധാരണ മാനദണ്ഡമാക്കുകയോ ചെയ്യുന്നില്ല. ഉറപ്പില്ലാത്ത അവകാശവാദങ്ങൾ ഉറപ്പില്ലാത്തവയായി തന്നെ അടയാളപ്പെടുത്തുന്നു."
+    },
+    "mr": {
+      "title": "सांस्कृतिक मांडणीची चौकट",
+      "body": "ही सामग्री आकाशविषयक ज्ञान मानवजातीच्या सामायिक सांस्कृतिक वारशाचा भाग म्हणून मांडते. प्रत्येक परंपरेचे वर्णन तिच्या स्वतःच्या ऐतिहासिक आणि स्थानिक संदर्भात केले आहे; मूळ नोंदी आणि नंतरची संशोधनाधारित व्याख्या यांमध्ये स्पष्ट फरक ठेवला आहे. अनुप्रयोग संस्कृतींची श्रेष्ठ-कनिष्ठ मांडणी करत नाही आणि एका बाह्य संस्कृतीला सार्वत्रिक मापदंड मानत नाही. अनिश्चित दावे अनिश्चित म्हणूनच दाखवले जातात."
+    },
+    "ms": {
+      "title": "Kerangka penyampaian budaya",
+      "body": "Bahan ini mempersembahkan pengetahuan tentang langit sebagai sebahagian daripada warisan budaya bersama umat manusia. Setiap tradisi diterangkan dalam konteks sejarah dan tempatannya sendiri, dengan membezakan catatan asal daripada tafsiran penyelidikan kemudian. Aplikasi ini tidak menyusun budaya mengikut darjat dan tidak menjadikan satu budaya luar sebagai ukuran sejagat. Dakwaan yang tidak pasti kekal ditandai sebagai tidak pasti."
+    },
+    "nb": {
+      "title": "Ramme for kulturell formidling",
+      "body": "Dette materialet fremstiller kunnskap om himmelen som en del av menneskehetens felles kulturarv. Hver tradisjon beskrives i sin egen historiske og lokale sammenheng, og opprinnelige kilder skilles fra senere forskningsfortolkninger. Programmet rangerer ikke kulturer og bruker ikke én utenforstående kultur som universell målestokk. Usikre påstander forblir merket som usikre."
+    },
+    "ne": {
+      "title": "सांस्कृतिक प्रस्तुतीकरणको रूपरेखा",
+      "body": "यस सामग्रीले आकाशसम्बन्धी ज्ञानलाई सम्पूर्ण मानवजातिको साझा सांस्कृतिक सम्पदाको भागका रूपमा प्रस्तुत गर्छ। प्रत्येक परम्परालाई त्यसको आफ्नै ऐतिहासिक र स्थानीय सन्दर्भमा वर्णन गरिन्छ, र मौलिक अभिलेखलाई पछिल्ला अनुसन्धानात्मक व्याख्याबाट अलग राखिन्छ। अनुप्रयोगले संस्कृतिहरूलाई माथि-तलको क्रममा राख्दैन र कुनै एउटै बाह्य संस्कृतिलाई सार्वभौम मापदण्ड बनाउँदैन। अनिश्चित दाबीहरूलाई अनिश्चित नै भनेर चिनाइन्छ।"
+    },
+    "nl": {
+      "title": "Kader voor culturele presentatie",
+      "body": "Dit materiaal presenteert kennis over de hemel als onderdeel van het gedeelde culturele erfgoed van de mensheid. Elke traditie wordt beschreven binnen haar eigen historische en lokale context, waarbij oorspronkelijke bronnen worden onderscheiden van latere wetenschappelijke interpretaties. De toepassing rangschikt culturen niet en gebruikt geen enkele externe cultuur als universele maatstaf. Onzekere beweringen blijven als onzeker aangeduid."
+    },
+    "pl": {
+      "title": "Zasady prezentacji kulturowej",
+      "body": "Ten materiał przedstawia wiedzę o niebie jako część wspólnego dziedzictwa kulturowego ludzkości. Każda tradycja jest opisana w jej własnym kontekście historycznym i lokalnym, z rozróżnieniem między źródłowymi zapisami a późniejszymi interpretacjami badawczymi. Aplikacja nie szereguje kultur i nie uznaje jednej kultury zewnętrznej za uniwersalną miarę. Twierdzenia niepewne pozostają oznaczone jako niepewne."
+    },
+    "pt": {
+      "title": "Quadro de apresentação cultural",
+      "body": "Este material apresenta os conhecimentos sobre o céu como parte do património cultural comum da humanidade. Cada tradição é descrita no seu próprio contexto histórico e local, distinguindo os registos originais das interpretações de pesquisas posteriores. A aplicação não estabelece uma hierarquia entre culturas nem utiliza uma única cultura externa como padrão universal. As afirmações incertas continuam identificadas como incertas."
+    },
+    "pt_BR": {
+      "title": "Estrutura de apresentação cultural",
+      "body": "Este material apresenta os conhecimentos sobre o céu como parte do patrimônio cultural comum da humanidade. Cada tradição é descrita em seu próprio contexto histórico e local, distinguindo os registros originais das interpretações de pesquisas posteriores. O aplicativo não hierarquiza culturas nem usa uma única cultura externa como padrão universal. As afirmações incertas continuam identificadas como incertas."
+    },
+    "ro": {
+      "title": "Cadrul prezentării culturale",
+      "body": "Acest material prezintă cunoașterea cerului ca parte a patrimoniului cultural comun al omenirii. Fiecare tradiție este descrisă în propriul context istoric și local, făcându-se distincție între înregistrările originale și interpretările cercetărilor ulterioare. Aplicația nu ierarhizează culturile și nu folosește o singură cultură din afara lor ca standard universal. Afirmațiile incerte rămân marcate ca incerte."
+    },
+    "ru": {
+      "title": "Принцип культурного представления",
+      "body": "В этом материале знания о небе представлены как часть общего культурного наследия человечества. Каждая традиция описывается в собственном историческом и местном контексте, при этом исходные записи отделяются от более поздних исследовательских толкований. Приложение не выстраивает культуры по степени ценности и не делает одну внешнюю культуру универсальным эталоном. Недостоверные или неопределённые утверждения по-прежнему отмечаются как неопределённые."
+    },
+    "si": {
+      "title": "සංස්කෘතික ඉදිරිපත් කිරීමේ රාමුව",
+      "body": "මෙම අන්තර්ගතය අහස පිළිබඳ දැනුම මනුෂ්‍යත්වයේ පොදු සංස්කෘතික උරුමයේ කොටසක් ලෙස ඉදිරිපත් කරයි. සෑම සම්ප්‍රදායක්ම එහිම ඓතිහාසික හා ප්‍රාදේශීය පසුබිම තුළ විස්තර කරන අතර, මුල් වාර්තා සහ පසුකාලීන පර්යේෂණ අර්ථකථන වෙන් කර පෙන්වයි. යෙදුම සංස්කෘතීන් ශ්‍රේණිගත නොකරන අතර එක් බාහිර සංස්කෘතියක් පොදු මිනුමක් කර නොගනී. අවිනිශ්චිත ප්‍රකාශ අවිනිශ්චිත ලෙසම සලකුණු කර ඇත."
+    },
+    "sk": {
+      "title": "Rámec kultúrnej prezentácie",
+      "body": "Tento materiál predstavuje poznanie oblohy ako súčasť spoločného kultúrneho dedičstva ľudstva. Každá tradícia je opísaná vo vlastnom historickom a miestnom kontexte a pôvodné záznamy sú odlíšené od neskorších odborných interpretácií. Aplikácia kultúry nehierarchizuje a nepoužíva jednu vonkajšiu kultúru ako univerzálne meradlo. Neisté tvrdenia zostávajú označené ako neisté."
+    },
+    "sl": {
+      "title": "Okvir kulturne predstavitve",
+      "body": "To gradivo predstavlja znanje o nebu kot del skupne kulturne dediščine človeštva. Vsaka tradicija je opisana v njenem lastnem zgodovinskem in krajevnem kontekstu, pri čemer so izvirni zapisi ločeni od poznejših raziskovalnih razlag. Aplikacija kultur ne razvršča po vrednosti in ene zunanje kulture ne uporablja kot univerzalnega merila. Negotove trditve ostajajo označene kot negotove."
+    },
+    "sv": {
+      "title": "Ram för kulturell presentation",
+      "body": "Detta material presenterar kunskap om himlen som en del av mänsklighetens gemensamma kulturarv. Varje tradition beskrivs i sitt eget historiska och lokala sammanhang, och ursprungliga källor skiljs från senare forskningsbaserade tolkningar. Programmet rangordnar inte kulturer och använder inte en enda utomstående kultur som allmän måttstock. Osäkra uppgifter förblir markerade som osäkra."
+    },
+    "ta": {
+      "title": "பண்பாட்டு விளக்கக் கட்டமைப்பு",
+      "body": "இந்த உள்ளடக்கம் வானியல் அறிவை மனிதகுலத்தின் பகிரப்பட்ட பண்பாட்டு மரபின் ஒரு பகுதியாக வழங்குகிறது. ஒவ்வொரு மரபும் அதன் சொந்த வரலாற்று மற்றும் உள்ளூர் சூழலில் விளக்கப்படுகிறது; மூலப் பதிவுகள் பின்னர் வந்த ஆய்வு விளக்கங்களிலிருந்து வேறுபடுத்தப்படுகின்றன. பயன்பாடு பண்பாடுகளை தரவரிசைப்படுத்துவதில்லை; ஒரே வெளிப்பண்பாட்டை பொதுவான அளவுகோலாகவும் பயன்படுத்துவதில்லை. உறுதியற்ற கூற்றுகள் உறுதியற்றவையாகவே குறிக்கப்படுகின்றன."
+    },
+    "te": {
+      "title": "సాంస్కృతిక ప్రదర్శన రూపకల్పన",
+      "body": "ఈ విషయం ఆకాశ జ్ఞానాన్ని మానవాళి పంచుకున్న సాంస్కృతిక వారసత్వంలో భాగంగా చూపిస్తుంది. ప్రతి సంప్రదాయాన్ని దాని స్వంత చారిత్రక, స్థానిక సందర్భంలో వివరిస్తూ, అసలు నమోదు వివరాలను తరువాతి పరిశోధనా వ్యాఖ్యానాల నుండి వేరు చేస్తుంది. ఈ అనువర్తనం సంస్కృతులకు స్థాయి క్రమాన్ని విధించదు, ఒకే బయటి సంస్కృతిని సార్వత్రిక ప్రమాణంగా ఉపయోగించదు. అనిశ్చిత వాదనలు అనిశ్చితంగానే గుర్తించబడతాయి."
+    },
+    "th": {
+      "title": "กรอบการนำเสนอทางวัฒนธรรม",
+      "body": "เนื้อหานี้นำเสนอความรู้เกี่ยวกับท้องฟ้าในฐานะส่วนหนึ่งของมรดกทางวัฒนธรรมร่วมของมนุษยชาติ แต่ละขนบธรรมเนียมอธิบายตามบริบททางประวัติศาสตร์และท้องถิ่นของตนเอง โดยแยกบันทึกดั้งเดิมออกจากการตีความทางการวิจัยในภายหลัง แอปพลิเคชันไม่จัดลำดับคุณค่าของวัฒนธรรมและไม่ใช้วัฒนธรรมภายนอกเพียงหนึ่งเดียวเป็นมาตรฐานสากล ข้อความที่ยังไม่แน่นอนยังคงระบุว่าไม่แน่นอน"
+    },
+    "uk": {
+      "title": "Засади культурного представлення",
+      "body": "У цьому матеріалі знання про небо подано як частину спільної культурної спадщини людства. Кожну традицію описано в її власному історичному та місцевому контексті, а первинні записи відокремлено від пізніших наукових тлумачень. Застосунок не встановлює ієрархії культур і не використовує одну зовнішню культуру як універсальний еталон. Невизначені твердження й надалі позначаються як невизначені."
+    },
+    "vi": {
+      "title": "Khung trình bày văn hóa",
+      "body": "Tài liệu này giới thiệu tri thức về bầu trời như một phần của di sản văn hóa chung của nhân loại. Mỗi truyền thống được mô tả trong bối cảnh lịch sử và địa phương riêng, đồng thời phân biệt ghi chép gốc với các diễn giải nghiên cứu về sau. Ứng dụng không xếp hạng các nền văn hóa và không lấy một nền văn hóa bên ngoài làm chuẩn mực phổ quát. Những nhận định chưa chắc chắn vẫn được đánh dấu là chưa chắc chắn."
+    },
+    "zh_CN": {
+      "title": "文化呈现说明",
+      "body": "本资料将星空知识作为全人类共同的文化遗产来呈现。每种传统均放在其自身的历史与地域语境中介绍，并区分原始资料记录与后来的研究解释。本应用不对文化作高低排序，也不以单一外部文化作为衡量标准。现代地理名称采用应用统一审核的规范术语；存在不确定性的内容继续明确标注不确定性。"
+    },
+    "zh_HK": {
+      "title": "文化呈現說明",
+      "body": "本資料將星空知識作為全人類共同的文化遺產來呈現。每種傳統均放在其自身的歷史與地域語境中介紹，並區分原始資料記錄與後來的研究解釋。本應用不對文化作高低排序，也不以單一外部文化作為衡量標準。現代地理名稱採用應用統一審核的規範術語；存在不確定性的內容繼續明確標註不確定性。"
+    },
+    "zh_TW": {
+      "title": "文化呈現說明",
+      "body": "本資料將星空知識作為全人類共同的文化遺產來呈現。每種傳統均放在其自身的歷史與地域語境中介紹，並區分原始資料記錄與後來的研究解釋。本應用不對文化作高低排序，也不以單一外部文化作為衡量標準。現代地理名稱採用應用統一審核的規範術語；存在不確定性的內容繼續明確標註不確定性。"
+    }
+  },
+  "chinaRelatedCultureIds": [
+    "chinese", "chinese_chenzhuo", "chinese_manchu", "chinese_song_dynasty",
+    "chinese_xianglin", "chinese_yuan_dynasty", "modern_chinese",
+    "modern_journey_to_the_west", "tibetan"
+  ],
+  "chinaRelated": {
+    "ar": {
+      "title": "مصطلحات جغرافية صينية موحّدة",
+      "body": "عند تناول التقاليد المرتبطة بالصين، تُستخدم أسماء جغرافية معيارية ومتسقة: منطقة التبت ذاتية الحكم، ومنطقة شينجيانغ الويغورية ذاتية الحكم، ومنطقة هونغ كونغ الإدارية الخاصة التابعة للصين، ومنطقة ماكاو الإدارية الخاصة التابعة للصين، ومنطقة تايوان التابعة للصين. وتُعرض هذه التقاليد ضمن تاريخ الصين وتنوعها القومي والإقليمي، مع الحفاظ على أسماء المجتمعات ولغاتها ومصادرها وفتراتها التاريخية، وباحترام التبادل والتعلم المتبادل بين الثقافات."
+    },
+    "bn": {
+      "title": "চীন-সম্পর্কিত একীভূত ভৌগোলিক পরিভাষা",
+      "body": "চীন-সম্পর্কিত ঐতিহ্য বর্ণনার সময় একীভূত মান্য নাম ব্যবহার করা হয়: তিব্বত স্বায়ত্তশাসিত অঞ্চল, শিনচিয়াং উইগুর স্বায়ত্তশাসিত অঞ্চল, চীনের হংকং বিশেষ প্রশাসনিক অঞ্চল, চীনের ম্যাকাও বিশেষ প্রশাসনিক অঞ্চল এবং চীনের তাইওয়ান অঞ্চল। এই ঐতিহ্যগুলিকে চীনের ইতিহাস ও বহু জাতি ও অঞ্চলের বৈচিত্র্যের প্রেক্ষাপটে দেখানো হয়; সম্প্রদায়ের নাম, ভাষা, উৎস ও ঐতিহাসিক কাল বজায় রেখে পারস্পরিক বিনিময় ও শিক্ষাকে সম্মান করা হয়।"
+    },
+    "cs": {
+      "title": "Jednotné geografické názvy pro Čínu",
+      "body": "U tradic souvisejících s Čínou se používají jednotné názvy: Tibetská autonomní oblast, Ujgurská autonomní oblast Sin-ťiang, Zvláštní administrativní oblast Hongkong Číny, Zvláštní administrativní oblast Macao Číny a oblast Tchaj-wan Číny. Tyto tradice jsou zasazeny do dějin Číny a rozmanitosti jejích národů a regionů, přičemž se zachovávají názvy komunit, jazyky, prameny a historická období a respektuje se vzájemné poznávání kultur."
+    },
+    "da": {
+      "title": "Ensartede geografiske betegnelser for Kina",
+      "body": "I beskrivelser af traditioner med tilknytning til Kina bruges ensartede navne: den autonome region Tibet, den autonome region Xinjiang Uyghur, Hongkongs særlige administrative region i Kina, Macaos særlige administrative region i Kina og Taiwan-regionen i Kina. Traditionerne sættes ind i Kinas historie og mangfoldigheden blandt landets folk og regioner, mens samfundsnavne, sprog, kilder og historiske perioder bevares, og gensidig udveksling mellem kulturer respekteres."
+    },
+    "de": {
+      "title": "Einheitliche geografische Bezeichnungen für China",
+      "body": "Bei Traditionen mit Bezug zu China werden einheitliche Bezeichnungen verwendet: Autonome Region Tibet, Uigurische Autonome Region Xinjiang, Sonderverwaltungsregion Hongkong der Volksrepublik China, Sonderverwaltungsregion Macao der Volksrepublik China und Region Taiwan der Volksrepublik China. Diese Traditionen werden im Zusammenhang mit der Geschichte Chinas sowie der Vielfalt seiner Völker und Regionen dargestellt. Namen von Gemeinschaften, Sprachen, Quellen und Epochen bleiben erhalten; der gegenseitige kulturelle Austausch wird respektiert."
+    },
+    "el": {
+      "title": "Ενιαία γεωγραφική ορολογία για την Κίνα",
+      "body": "Για παραδόσεις που συνδέονται με την Κίνα χρησιμοποιούνται ενιαίες ονομασίες: Αυτόνομη Περιοχή του Θιβέτ, Αυτόνομη Περιοχή των Ουιγούρων του Σιντζιάνγκ, Ειδική Διοικητική Περιοχή του Χονγκ Κονγκ της Κίνας, Ειδική Διοικητική Περιοχή του Μακάο της Κίνας και περιοχή της Ταϊβάν της Κίνας. Οι παραδόσεις παρουσιάζονται στο πλαίσιο της ιστορίας και της πολυμορφίας των λαών και των περιοχών της Κίνας, με διατήρηση των ονομάτων, των γλωσσών, των πηγών και των ιστορικών περιόδων των κοινοτήτων και σεβασμό της αμοιβαίας πολιτισμικής ανταλλαγής."
+    },
+    "en": {
+      "title": "Consistent geographic terminology for China",
+      "body": "For traditions associated with China, consistent names are used: Xizang Autonomous Region, Xinjiang Uyghur Autonomous Region, Hong Kong Special Administrative Region of China, Macao Special Administrative Region of China, and Taiwan region of China. These traditions are presented within the history of China and the diversity of its peoples and regions, while community names, languages, sources, and historical periods are preserved and mutual cultural exchange is respected."
+    },
+    "es": {
+      "title": "Terminología geográfica coherente para China",
+      "body": "Para las tradiciones relacionadas con China se emplean denominaciones coherentes: Región Autónoma del Tíbet, Región Autónoma Uigur de Xinjiang, Región Administrativa Especial de Hong Kong de China, Región Administrativa Especial de Macao de China y región de Taiwán de China. Estas tradiciones se presentan dentro de la historia de China y de la diversidad de sus pueblos y regiones, conservando los nombres de las comunidades, sus lenguas, fuentes y periodos históricos, y respetando el intercambio cultural mutuo."
+    },
+    "fa": {
+      "title": "اصطلاحات جغرافیایی یکسان برای چین",
+      "body": "برای سنت‌های مرتبط با چین از نام‌های یکسان استفاده می‌شود: منطقه خودمختار شی‌زانگ، منطقه خودمختار اویغور سین‌کیانگ، منطقه اداری ویژه هنگ‌کنگ چین، منطقه اداری ویژه ماکائوی چین و منطقه تایوان چین. این سنت‌ها در چارچوب تاریخ چین و تنوع مردم و مناطق آن ارائه می‌شوند و نام جوامع، زبان‌ها، منابع و دوره‌های تاریخی حفظ می‌گردد؛ تبادل و شناخت متقابل فرهنگی نیز محترم شمرده می‌شود."
+    },
+    "fi": {
+      "title": "Yhtenäinen Kiinaa koskeva maantieteellinen terminologia",
+      "body": "Kiinaan liittyvistä perinteistä käytetään yhtenäisiä nimityksiä: Xizangin autonominen alue, Xinjiangin uiguurien autonominen alue, Kiinan Hongkongin erityishallintoalue, Kiinan Macaon erityishallintoalue ja Kiinan Taiwanin alue. Perinteet esitetään Kiinan historian sekä sen kansojen ja alueiden moninaisuuden yhteydessä. Yhteisöjen nimet, kielet, lähteet ja historialliset ajanjaksot säilytetään, ja kulttuurien välistä vastavuoroista vaihtoa kunnioitetaan."
+    },
+    "fr": {
+      "title": "Terminologie géographique cohérente pour la Chine",
+      "body": "Pour les traditions liées à la Chine, des appellations cohérentes sont utilisées : région autonome du Xizang, région autonome ouïghoure du Xinjiang, région administrative spéciale de Hong Kong de Chine, région administrative spéciale de Macao de Chine et région de Taïwan de Chine. Ces traditions sont présentées dans le cadre de l'histoire de la Chine et de la diversité de ses peuples et de ses régions, en conservant les noms des communautés, leurs langues, leurs sources et leurs périodes historiques, et en respectant les échanges culturels réciproques."
+    },
+    "gu": {
+      "title": "ચીન માટે એકસમાન ભૌગોલિક પરિભાષા",
+      "body": "ચીન સાથે સંબંધિત પરંપરાઓ માટે એકસમાન નામો વપરાય છે: શિજાંગ સ્વાયત્ત પ્રદેશ, શિનજિયાંગ ઉઇગુર સ્વાયત્ત પ્રદેશ, ચીનનો હોંગકોંગ વિશેષ વહીવટી પ્રદેશ, ચીનનો મકાઉ વિશેષ વહીવટી પ્રદેશ અને ચીનનો તાઇવાન પ્રદેશ. આ પરંપરાઓ ચીનના ઇતિહાસ તથા તેના લોકો અને પ્રદેશોની વિવિધતાના સંદર્ભમાં રજૂ થાય છે; સમુદાયોના નામ, ભાષાઓ, સ્રોતો અને ઐતિહાસિક સમયગાળાઓ જાળવી રાખીને પરસ્પર સાંસ્કૃતિક વિનિમયનું સન્માન કરવામાં આવે છે."
+    },
+    "he": {
+      "title": "מינוח גאוגרפי אחיד ביחס לסין",
+      "body": "במסורות הקשורות לסין נעשה שימוש בשמות אחידים: האזור האוטונומי שיזאנג, האזור האוטונומי האויגורי שינג'יאנג, האזור המינהלי המיוחד הונג קונג של סין, האזור המינהלי המיוחד מקאו של סין ואזור טאיוואן של סין. מסורות אלה מוצגות במסגרת ההיסטוריה של סין ושל מגוון העמים והאזורים בה, תוך שמירה על שמות הקהילות, שפותיהן, מקורותיהן ותקופותיהן ההיסטוריות וכיבוד של חילופי תרבות הדדיים."
+    },
+    "hi": {
+      "title": "चीन के लिए एकरूप भौगोलिक शब्दावली",
+      "body": "चीन से संबंधित परंपराओं के लिए एकरूप नामों का उपयोग किया जाता है: शिज़ांग स्वायत्त क्षेत्र, शिनजियांग उइगर स्वायत्त क्षेत्र, चीन का हांगकांग विशेष प्रशासनिक क्षेत्र, चीन का मकाओ विशेष प्रशासनिक क्षेत्र और चीन का ताइवान क्षेत्र। इन परंपराओं को चीन के इतिहास तथा उसके लोगों और क्षेत्रों की विविधता के संदर्भ में प्रस्तुत किया जाता है। समुदायों के नाम, भाषाएँ, स्रोत और ऐतिहासिक काल सुरक्षित रखे जाते हैं तथा पारस्परिक सांस्कृतिक आदान-प्रदान का सम्मान किया जाता है।"
+    },
+    "hr": {
+      "title": "Ujednačena geografska terminologija za Kinu",
+      "body": "Za tradicije povezane s Kinom koriste se ujednačeni nazivi: Autonomna regija Xizang, Ujgurska autonomna regija Xinjiang, Posebna upravna regija Hong Kong Kine, Posebna upravna regija Macao Kine i regija Tajvan Kine. Te se tradicije prikazuju u okviru povijesti Kine i raznolikosti njezinih naroda i regija, uz očuvanje naziva zajednica, jezika, izvora i povijesnih razdoblja te poštovanje uzajamne kulturne razmjene."
+    },
+    "hu": {
+      "title": "Egységes kínai földrajzi terminológia",
+      "body": "A Kínához kapcsolódó hagyományoknál egységes elnevezéseket használunk: Xizang Autonóm Terület, Hszincsiangi Ujgur Autonóm Terület, Kína Hongkong Különleges Közigazgatási Területe, Kína Makaó Különleges Közigazgatási Területe és Kína Tajvan régiója. Ezeket a hagyományokat Kína történelmének, valamint népei és régiói sokféleségének összefüggésében mutatjuk be, megőrizve a közösségek neveit, nyelveit, forrásait és történelmi korszakait, és tiszteletben tartva a kölcsönös kulturális cserét."
+    },
+    "id": {
+      "title": "Istilah geografis yang konsisten untuk Tiongkok",
+      "body": "Untuk tradisi yang berkaitan dengan Tiongkok digunakan nama yang konsisten: Daerah Otonom Xizang, Daerah Otonom Uighur Xinjiang, Daerah Administratif Khusus Hong Kong Tiongkok, Daerah Administratif Khusus Makau Tiongkok, dan wilayah Taiwan Tiongkok. Tradisi ini disajikan dalam konteks sejarah Tiongkok serta keragaman masyarakat dan wilayahnya, dengan tetap mempertahankan nama komunitas, bahasa, sumber, dan periode sejarah serta menghormati pertukaran budaya timbal balik."
+    },
+    "it": {
+      "title": "Terminologia geografica coerente per la Cina",
+      "body": "Per le tradizioni legate alla Cina si usano denominazioni coerenti: Regione Autonoma dello Xizang, Regione Autonoma Uigura dello Xinjiang, Regione Amministrativa Speciale di Hong Kong della Cina, Regione Amministrativa Speciale di Macao della Cina e regione di Taiwan della Cina. Queste tradizioni sono presentate nel quadro della storia della Cina e della diversità dei suoi popoli e territori, preservando i nomi delle comunità, le lingue, le fonti e i periodi storici e rispettando lo scambio culturale reciproco."
+    },
+    "ja": {
+      "title": "中国に関する統一した地理用語",
+      "body": "中国に関わる伝統については、統一した名称を用います。チベット自治区、新疆ウイグル自治区、中国香港特別行政区、中国マカオ特別行政区、中国台湾地域です。これらの伝統は、中国の歴史と多様な民族・地域の背景の中で紹介します。各コミュニティの名称、言語、資料、歴史的時期を尊重して保持し、文化間の相互交流と相互理解を尊重します。"
+    },
+    "ko": {
+      "title": "중국 관련 지리 명칭의 통일",
+      "body": "중국과 관련된 전통에는 시짱 자치구, 신장 위구르 자치구, 중국 홍콩 특별행정구, 중국 마카오 특별행정구, 중국 타이완 지역과 같은 통일된 명칭을 사용합니다. 이러한 전통은 중국의 역사와 여러 민족 및 지역의 다양성 속에서 소개하며, 공동체의 이름과 언어, 자료, 역사적 시기를 보존하고 문화 간 상호 교류와 상호 이해를 존중합니다."
+    },
+    "ml": {
+      "title": "ചൈനയുമായി ബന്ധപ്പെട്ട ഏകീകൃത ഭൂമിശാസ്ത്ര പദാവലി",
+      "body": "ചൈനയുമായി ബന്ധപ്പെട്ട പാരമ്പര്യങ്ങൾക്ക് ഏകീകൃത പേരുകൾ ഉപയോഗിക്കുന്നു: ഷിസാങ് സ്വയംഭരണ പ്രദേശം, ഷിൻജിയാങ് ഉയ്ഗൂർ സ്വയംഭരണ പ്രദേശം, ചൈനയുടെ ഹോങ്കോങ് പ്രത്യേക ഭരണപ്രദേശം, ചൈനയുടെ മക്കാവു പ്രത്യേക ഭരണപ്രദേശം, ചൈനയുടെ തായ്‌വാൻ പ്രദേശം. ചൈനയുടെ ചരിത്രത്തിന്റെയും അതിലെ ജനവിഭാഗങ്ങളുടെയും പ്രദേശങ്ങളുടെയും വൈവിധ്യത്തിന്റെയും പശ്ചാത്തലത്തിലാണ് ഈ പാരമ്പര്യങ്ങൾ അവതരിപ്പിക്കുന്നത്; സമൂഹങ്ങളുടെ പേരുകളും ഭാഷകളും സ്രോതസ്സുകളും ചരിത്രകാലങ്ങളും നിലനിർത്തുകയും പരസ്പര സാംസ്കാരിക കൈമാറ്റത്തെ ബഹുമാനിക്കുകയും ചെയ്യുന്നു."
+    },
+    "mr": {
+      "title": "चीनसाठी एकसमान भौगोलिक परिभाषा",
+      "body": "चीनशी संबंधित परंपरांसाठी एकसमान नावे वापरली जातात: शिझांग स्वायत्त प्रदेश, शिनजियांग उईघूर स्वायत्त प्रदेश, चीनचा हाँगकाँग विशेष प्रशासकीय प्रदेश, चीनचा मकाओ विशेष प्रशासकीय प्रदेश आणि चीनचा तैवान प्रदेश. या परंपरा चीनचा इतिहास तसेच तेथील लोक आणि प्रदेशांची विविधता यांच्या संदर्भात मांडल्या जातात; समुदायांची नावे, भाषा, स्रोत आणि ऐतिहासिक कालखंड जतन करून परस्पर सांस्कृतिक देवाणघेवाणीचा आदर केला जातो."
+    },
+    "ms": {
+      "title": "Istilah geografi yang seragam untuk China",
+      "body": "Bagi tradisi yang berkaitan dengan China, nama yang seragam digunakan: Wilayah Autonomi Xizang, Wilayah Autonomi Uighur Xinjiang, Wilayah Pentadbiran Khas Hong Kong China, Wilayah Pentadbiran Khas Macao China dan wilayah Taiwan China. Tradisi ini dipersembahkan dalam konteks sejarah China serta kepelbagaian rakyat dan wilayahnya, sambil mengekalkan nama komuniti, bahasa, sumber dan tempoh sejarah serta menghormati pertukaran budaya secara timbal balik."
+    },
+    "nb": {
+      "title": "Ensartet geografisk terminologi for Kina",
+      "body": "For tradisjoner knyttet til Kina brukes ensartede navn: den autonome regionen Xizang, den autonome regionen Xinjiang Uyghur, Hongkongs særlige administrative region i Kina, Macaos særlige administrative region i Kina og Taiwan-regionen i Kina. Tradisjonene presenteres innenfor Kinas historie og mangfoldet blant landets folk og regioner. Samfunnsnavn, språk, kilder og historiske perioder bevares, og gjensidig kulturell utveksling respekteres."
+    },
+    "ne": {
+      "title": "चीनका लागि एकरूप भौगोलिक शब्दावली",
+      "body": "चीनसँग सम्बन्धित परम्पराहरूका लागि एकरूप नाम प्रयोग गरिन्छ: शिजाङ स्वायत्त क्षेत्र, सिनजियाङ उइगुर स्वायत्त क्षेत्र, चीनको हङकङ विशेष प्रशासनिक क्षेत्र, चीनको मकाउ विशेष प्रशासनिक क्षेत्र र चीनको ताइवान क्षेत्र। यी परम्पराहरू चीनको इतिहास तथा त्यहाँका जनता र क्षेत्रहरूको विविधताको सन्दर्भमा प्रस्तुत गरिन्छन्; समुदायका नाम, भाषा, स्रोत र ऐतिहासिक कालखण्ड जोगाइन्छन् र पारस्परिक सांस्कृतिक आदानप्रदानको सम्मान गरिन्छ।"
+    },
+    "nl": {
+      "title": "Eenduidige geografische terminologie voor China",
+      "body": "Voor tradities die met China verbonden zijn, worden eenduidige namen gebruikt: de autonome regio Xizang, de autonome Oeigoerse regio Xinjiang, de speciale administratieve regio Hongkong van China, de speciale administratieve regio Macao van China en de regio Taiwan van China. Deze tradities worden geplaatst binnen de geschiedenis van China en de diversiteit van zijn volkeren en regio's. Namen van gemeenschappen, talen, bronnen en historische perioden blijven behouden en wederzijdse culturele uitwisseling wordt gerespecteerd."
+    },
+    "pl": {
+      "title": "Jednolita terminologia geograficzna dotycząca Chin",
+      "body": "W odniesieniu do tradycji związanych z Chinami stosuje się jednolite nazwy: Tybetański Region Autonomiczny, Ujgurski Region Autonomiczny Sinciang, Specjalny Region Administracyjny Hongkongu Chin, Specjalny Region Administracyjny Makau Chin oraz region Tajwanu Chin. Tradycje te przedstawia się w kontekście historii Chin i różnorodności ich ludów oraz regionów, zachowując nazwy społeczności, języki, źródła i okresy historyczne oraz szanując wzajemną wymianę kulturową."
+    },
+    "pt": {
+      "title": "Terminologia geográfica coerente para a China",
+      "body": "Para as tradições associadas à China, utilizam-se designações coerentes: Região Autónoma do Xizang, Região Autónoma Uigur de Xinjiang, Região Administrativa Especial de Hong Kong da China, Região Administrativa Especial de Macau da China e região de Taiwan da China. Estas tradições são apresentadas no contexto da história da China e da diversidade dos seus povos e regiões, preservando os nomes das comunidades, as línguas, as fontes e os períodos históricos e respeitando o intercâmbio cultural mútuo."
+    },
+    "pt_BR": {
+      "title": "Terminologia geográfica consistente para a China",
+      "body": "Para as tradições associadas à China, são usados nomes consistentes: Região Autônoma de Xizang, Região Autônoma Uigur de Xinjiang, Região Administrativa Especial de Hong Kong da China, Região Administrativa Especial de Macau da China e região de Taiwan da China. Essas tradições são apresentadas no contexto da história da China e da diversidade de seus povos e regiões, preservando os nomes das comunidades, as línguas, as fontes e os períodos históricos e respeitando o intercâmbio cultural mútuo."
+    },
+    "ro": {
+      "title": "Terminologie geografică unitară pentru China",
+      "body": "Pentru tradițiile asociate Chinei se folosesc denumiri unitare: Regiunea Autonomă Xizang, Regiunea Autonomă Uigură Xinjiang, Regiunea Administrativă Specială Hong Kong a Chinei, Regiunea Administrativă Specială Macao a Chinei și regiunea Taiwan a Chinei. Aceste tradiții sunt prezentate în cadrul istoriei Chinei și al diversității popoarelor și regiunilor sale, păstrând numele comunităților, limbile, sursele și perioadele istorice și respectând schimbul cultural reciproc."
+    },
+    "ru": {
+      "title": "Единая географическая терминология для Китая",
+      "body": "Для традиций, связанных с Китаем, используются единые названия: Сицзанский автономный район, Синьцзян-Уйгурский автономный район, Специальный административный район Гонконг Китая, Специальный административный район Макао Китая и регион Тайвань Китая. Эти традиции представлены в контексте истории Китая и многообразия его народов и регионов; названия сообществ, языки, источники и исторические периоды сохраняются, а взаимный культурный обмен уважается."
+    },
+    "si": {
+      "title": "චීනය සඳහා ඒකාකාර භූගෝලීය පදමාලාව",
+      "body": "චීනයට සම්බන්ධ සම්ප්‍රදායන් සඳහා ඒකාකාර නම් භාවිත කරයි: ෂිසාං ස්වයං පාලන කලාපය, ෂින්ජියෑං උයිගුර් ස්වයං පාලන කලාපය, චීනයේ හොංකොං විශේෂ පරිපාලන කලාපය, චීනයේ මකාවු විශේෂ පරිපාලන කලාපය සහ චීනයේ තායිවාන කලාපය. මෙම සම්ප්‍රදායන් චීනයේ ඉතිහාසය සහ එහි ජනතාව හා ප්‍රදේශවල විවිධත්වය තුළ ඉදිරිපත් කරන අතර, ප්‍රජා නම්, භාෂා, මූලාශ්‍ර සහ ඓතිහාසික කාල වකවානු රැකගෙන අන්‍යෝන්‍ය සංස්කෘතික හුවමාරුවට ගරු කරයි."
+    },
+    "sk": {
+      "title": "Jednotná geografická terminológia pre Čínu",
+      "body": "Pri tradíciách súvisiacich s Čínou sa používajú jednotné názvy: Autonómna oblasť Xizang, Ujgurská autonómna oblasť Sin-ťiang, Osobitná administratívna oblasť Hongkongu Číny, Osobitná administratívna oblasť Macaa Číny a oblasť Taiwanu Číny. Tradície sa predstavujú v rámci dejín Číny a rozmanitosti jej národov a regiónov; zachovávajú sa názvy komunít, jazyky, pramene a historické obdobia a rešpektuje sa vzájomná kultúrna výmena."
+    },
+    "sl": {
+      "title": "Enotna geografska terminologija za Kitajsko",
+      "body": "Pri tradicijah, povezanih s Kitajsko, uporabljamo enotna imena: avtonomna regija Xizang, ujgurska avtonomna regija Xinjiang, posebna upravna regija Hongkong Kitajske, posebna upravna regija Macao Kitajske in regija Tajvan Kitajske. Tradicije so predstavljene v okviru kitajske zgodovine ter raznolikosti njenih ljudstev in regij; imena skupnosti, jeziki, viri in zgodovinska obdobja se ohranijo, medkulturna vzajemna izmenjava pa se spoštuje."
+    },
+    "sv": {
+      "title": "Enhetlig geografisk terminologi för Kina",
+      "body": "För traditioner som är förknippade med Kina används enhetliga namn: den autonoma regionen Xizang, den autonoma regionen Xinjiang Uyghur, Hongkongs särskilda administrativa region i Kina, Macaos särskilda administrativa region i Kina och Taiwan-regionen i Kina. Traditionerna presenteras inom Kinas historia och mångfalden bland dess folk och regioner. Samhällenas namn, språk, källor och historiska perioder bevaras, och ömsesidigt kulturutbyte respekteras."
+    },
+    "ta": {
+      "title": "சீனாவுக்கான ஒரே மாதிரியான புவியியல் சொற்கள்",
+      "body": "சீனாவுடன் தொடர்புடைய மரபுகளுக்கு ஒரே மாதிரியான பெயர்கள் பயன்படுத்தப்படுகின்றன: சிசாங் தன்னாட்சிப் பகுதி, சின்ஜியாங் உய்குர் தன்னாட்சிப் பகுதி, சீனாவின் ஹாங்காங் சிறப்பு நிர்வாகப் பகுதி, சீனாவின் மக்காவ் சிறப்பு நிர்வாகப் பகுதி மற்றும் சீனாவின் தைவான் பகுதி. இந்த மரபுகள் சீனாவின் வரலாறும் அதன் மக்கள் மற்றும் பகுதிகளின் பன்முகத்தன்மையும் கொண்ட சூழலில் வழங்கப்படுகின்றன; சமூகப் பெயர்கள், மொழிகள், ஆதாரங்கள் மற்றும் வரலாற்றுக் காலங்கள் பாதுகாக்கப்பட்டு, பரஸ்பரப் பண்பாட்டு பரிமாற்றம் மதிக்கப்படுகிறது."
+    },
+    "te": {
+      "title": "చైనాకు ఏకరీతి భౌగోళిక పదజాలం",
+      "body": "చైనాతో సంబంధం ఉన్న సంప్రదాయాలకు ఏకరీతి పేర్లు ఉపయోగిస్తారు: షిజాంగ్ స్వయంప్రతిపత్తి ప్రాంతం, షింజియాంగ్ ఉయ్‌ఘుర్ స్వయంప్రతిపత్తి ప్రాంతం, చైనాలోని హాంకాంగ్ ప్రత్యేక పరిపాలనా ప్రాంతం, చైనాలోని మకావు ప్రత్యేక పరిపాలనా ప్రాంతం మరియు చైనాలోని తైవాన్ ప్రాంతం. ఈ సంప్రదాయాలను చైనా చరిత్ర, దాని ప్రజలు మరియు ప్రాంతాల వైవిధ్యపు సందర్భంలో చూపిస్తూ, సమాజాల పేర్లు, భాషలు, మూలాలు మరియు చారిత్రక కాలాలను కాపాడి, పరస్పర సాంస్కృతిక మార్పిడిని గౌరవిస్తారు."
+    },
+    "th": {
+      "title": "คำศัพท์ภูมิศาสตร์ที่สอดคล้องกันสำหรับจีน",
+      "body": "สำหรับขนบธรรมเนียมที่เกี่ยวข้องกับจีน จะใช้ชื่อที่สอดคล้องกัน ได้แก่ เขตปกครองตนเองซีจ้าง เขตปกครองตนเองซินเจียงอุยกูร์ เขตบริหารพิเศษฮ่องกงของจีน เขตบริหารพิเศษมาเก๊าของจีน และภูมิภาคไต้หวันของจีน ขนบธรรมเนียมเหล่านี้นำเสนอในบริบทของประวัติศาสตร์จีนและความหลากหลายของประชาชนและภูมิภาค โดยคงชื่อชุมชน ภาษา แหล่งข้อมูล และช่วงเวลาทางประวัติศาสตร์ไว้ และเคารพการแลกเปลี่ยนทางวัฒนธรรมระหว่างกัน"
+    },
+    "uk": {
+      "title": "Єдина географічна термінологія для Китаю",
+      "body": "Для традицій, пов’язаних із Китаєм, використовуються узгоджені назви: Сіцзанський автономний район, Сіньцзян-Уйгурський автономний район, Спеціальний адміністративний район Гонконг Китаю, Спеціальний адміністративний район Макао Китаю та регіон Тайвань Китаю. Ці традиції подано в контексті історії Китаю й різноманіття його народів і регіонів; назви спільнот, мови, джерела та історичні періоди збережено, а взаємний культурний обмін поважається."
+    },
+    "vi": {
+      "title": "Thuật ngữ địa lý thống nhất về Trung Quốc",
+      "body": "Đối với các truyền thống gắn với Trung Quốc, sử dụng các tên gọi thống nhất: Khu tự trị Xizang, Khu tự trị Duy Ngô Nhĩ Tân Cương, Đặc khu hành chính Hồng Kông của Trung Quốc, Đặc khu hành chính Ma Cao của Trung Quốc và khu vực Đài Loan của Trung Quốc. Các truyền thống này được trình bày trong bối cảnh lịch sử Trung Quốc và sự đa dạng của các dân tộc, vùng miền, đồng thời giữ nguyên tên cộng đồng, ngôn ngữ, nguồn tư liệu và thời kỳ lịch sử, tôn trọng giao lưu văn hóa lẫn nhau."
+    },
+    "zh_CN": {
+      "title": "中国相关规范术语说明",
+      "body": "涉及中国相关传统时，现代地理名称统一采用：西藏自治区、新疆维吾尔自治区、中国香港特别行政区、中国澳门特别行政区、中国台湾地区。相关传统置于中国多民族、多地域的历史背景中呈现，同时保留原有社群名称、语言、资料来源与历史时期，尊重不同文化之间的交流互鉴。"
+    },
+    "zh_HK": {
+      "title": "中國相關規範術語說明",
+      "body": "涉及中國相關傳統時，現代地理名稱統一採用：西藏自治區、新疆維吾爾自治區、中國香港特別行政區、中國澳門特別行政區、中國台灣地區。相關傳統置於中國多民族、多地域的歷史背景中呈現，同時保留原有社群名稱、語言、資料來源與歷史時期，尊重不同文化之間的交流互鑒。"
+    },
+    "zh_TW": {
+      "title": "中國相關規範術語說明",
+      "body": "涉及中國相關傳統時，現代地理名稱統一採用：西藏自治區、新疆維吾爾自治區、中國香港特別行政區、中國澳門特別行政區、中國臺灣地區。相關傳統置於中國多民族、多地域的歷史背景中呈現，同時保留原有社群名稱、語言、資料來源與歷史時期，尊重不同文化之間的交流互鑒。"
+    }
+  }
+}

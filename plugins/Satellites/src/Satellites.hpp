@@ -277,6 +277,7 @@ public:
 	QVector<QPair<QString,StelObjectP>> listMatchingObjects(const QString& objPrefix, int maxNbItem=5, bool useStartOfWords=false) const override;
 
 	QVector<QPair<QString,StelObjectP>> listAllObjects(bool inEnglish) const override;
+	QVector<QPair<QString,StelObjectP>> listAllObjectsForCatalog(bool inEnglish) const;
 
 	QString getName() const override { return "Satellites"; }
 	QString getStelObjectType() const override { return Satellite::SATELLITE_TYPE; }

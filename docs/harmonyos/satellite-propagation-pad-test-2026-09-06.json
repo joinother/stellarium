@@ -1,0 +1,1340 @@
+{
+  "device": "192.168.1.34:33805",
+  "startupAttempts": 1,
+  "checks": [
+    {
+      "name": "STARLINK-37238 remains discoverable in the catalogue",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 rejects divergent propagation",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 does not publish invented range or sky coordinates",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 exposes actual per-object TLE age",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 does not generate false passes",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 distance CLI also rejects this orbit",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 rejects moveToSelected without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 rejects moveToSelectedAt without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37238 rejects setTracking without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 remains discoverable in the catalogue",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 rejects divergent propagation",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 does not publish invented range or sky coordinates",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 exposes actual per-object TLE age",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 does not generate false passes",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 distance CLI also rejects this orbit",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 rejects moveToSelected without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 rejects moveToSelectedAt without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37365 rejects setTracking without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 remains discoverable in the catalogue",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 rejects divergent propagation",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 does not publish invented range or sky coordinates",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 exposes actual per-object TLE age",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 does not generate false passes",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 distance CLI also rejects this orbit",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 rejects moveToSelected without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 rejects moveToSelectedAt without a valid position",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-37489 rejects setTracking without a valid position",
+      "ok": true
+    },
+    {
+      "name": "observation page explains that invalid markers are hidden",
+      "ok": true
+    },
+    {
+      "name": "returning to TLE epoch recovers without restart or toggling visibility",
+      "ok": true
+    },
+    {
+      "name": "TLE epoch retains fractional UTC day",
+      "ok": true
+    },
+    {
+      "name": "epoch+0s has LEO radius and orbital speed",
+      "ok": true
+    },
+    {
+      "name": "epoch+1s has LEO radius and orbital speed",
+      "ok": true
+    },
+    {
+      "name": "epoch+2s has LEO radius and orbital speed",
+      "ok": true
+    },
+    {
+      "name": "epoch+10s has LEO radius and orbital speed",
+      "ok": true
+    },
+    {
+      "name": "one simulated second moves several kilometres, not millions",
+      "ok": true
+    },
+    {
+      "name": "returning to present suppresses the divergent orbit again",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-36933 selects the correct object",
+      "ok": true
+    },
+    {
+      "name": "STARLINK-36933 healthy orbit remains available",
+      "ok": true
+    },
+    {
+      "name": "new September TLE replaces old June TLE on existing installation",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE selects the correct object",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE healthy orbit remains available",
+      "ok": true
+    },
+    {
+      "name": "ISS (ZARYA) selects the correct object",
+      "ok": true
+    },
+    {
+      "name": "ISS (ZARYA) healthy orbit remains available",
+      "ok": true
+    },
+    {
+      "name": "Rhyolite 3 selects the correct object",
+      "ok": true
+    },
+    {
+      "name": "Rhyolite 3 healthy orbit remains available",
+      "ok": true
+    },
+    {
+      "name": "Vortex 1 selects the correct object",
+      "ok": true
+    },
+    {
+      "name": "Vortex 1 healthy orbit remains available",
+      "ok": true
+    },
+    {
+      "name": "application process stays alive throughout regression",
+      "ok": true
+    }
+  ],
+  "samples": [
+    {
+      "detailFields": [
+        {
+          "key": "catalogNumber",
+          "live": false,
+          "section": "identity",
+          "value": "69247"
+        },
+        {
+          "key": "internationalDesignator",
+          "live": false,
+          "section": "identity",
+          "value": "2026-117K"
+        },
+        {
+          "key": "launchDate",
+          "live": false,
+          "section": "satellite",
+          "value": "2026"
+        },
+        {
+          "key": "tleEpoch",
+          "live": false,
+          "section": "satellite",
+          "value": "24 六月 2026, 6h00m UTC"
+        },
+        {
+          "key": "tleLine1",
+          "live": false,
+          "section": "satellite",
+          "value": "1 00000U 26117K 26175.25002315 -.02627835 00000+0 -19948-1 0 9992"
+        },
+        {
+          "key": "tleLine2",
+          "live": false,
+          "section": "satellite",
+          "value": "2 00000 53.1592 208.0053 0001099 61.1031 331.5877 15.74953730 5313"
+        },
+        {
+          "key": "inclination",
+          "live": false,
+          "section": "satellite",
+          "value": "53.16°"
+        },
+        {
+          "key": "orbitalPeriod",
+          "live": false,
+          "section": "satellite",
+          "value": "91.44 分"
+        },
+        {
+          "key": "perigeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "344 km"
+        },
+        {
+          "key": "apogeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "346 km"
+        },
+        {
+          "key": "operationalStatus",
+          "live": false,
+          "section": "satellite",
+          "value": "未知"
+        }
+      ],
+      "distanceReference": "observer",
+      "distanceStatus": "invalid_orbit",
+      "englishName": "STARLINK-37238",
+      "found": true,
+      "infoMode": "all",
+      "liveDetailFields": [],
+      "name": "STARLINK-37238",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": false,
+      "propagationStatus": "divergent_extrapolation",
+      "satellitePassSource": "local TLE propagation",
+      "satellitePassesOffline": true,
+      "satellitePassesPending": true,
+      "sgp4Error": 0,
+      "tleAgeDays": 74.13297685002908,
+      "tleOutdated": true,
+      "type": "人造卫星"
+    },
+    {
+      "detailFields": [
+        {
+          "key": "catalogNumber",
+          "live": false,
+          "section": "identity",
+          "value": "69186"
+        },
+        {
+          "key": "internationalDesignator",
+          "live": false,
+          "section": "identity",
+          "value": "2026-114E"
+        },
+        {
+          "key": "launchDate",
+          "live": false,
+          "section": "satellite",
+          "value": "2026"
+        },
+        {
+          "key": "tleEpoch",
+          "live": false,
+          "section": "satellite",
+          "value": "24 六月 2026, 6h00m UTC"
+        },
+        {
+          "key": "tleLine1",
+          "live": false,
+          "section": "satellite",
+          "value": "1 00000U 26114E 26175.25002315 -.03304243 00000+0 -59188-1 0 9995"
+        },
+        {
+          "key": "tleLine2",
+          "live": false,
+          "section": "satellite",
+          "value": "2 00000 53.1587 167.6276 0001770 135.0601 47.9301 15.53186335 5950"
+        },
+        {
+          "key": "inclination",
+          "live": false,
+          "section": "satellite",
+          "value": "53.16°"
+        },
+        {
+          "key": "orbitalPeriod",
+          "live": false,
+          "section": "satellite",
+          "value": "92.72 分"
+        },
+        {
+          "key": "perigeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "406 km"
+        },
+        {
+          "key": "apogeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "409 km"
+        },
+        {
+          "key": "operationalStatus",
+          "live": false,
+          "section": "satellite",
+          "value": "未知"
+        }
+      ],
+      "distanceReference": "observer",
+      "distanceStatus": "invalid_orbit",
+      "englishName": "STARLINK-37365",
+      "found": true,
+      "infoMode": "all",
+      "liveDetailFields": [],
+      "name": "STARLINK-37365",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": false,
+      "propagationStatus": "divergent_extrapolation",
+      "satellitePassSource": "local TLE propagation",
+      "satellitePassesOffline": true,
+      "satellitePassesPending": true,
+      "sgp4Error": 0,
+      "tleAgeDays": 74.13297685002908,
+      "tleOutdated": true,
+      "type": "人造卫星"
+    },
+    {
+      "detailFields": [
+        {
+          "key": "catalogNumber",
+          "live": false,
+          "section": "identity",
+          "value": "69251"
+        },
+        {
+          "key": "internationalDesignator",
+          "live": false,
+          "section": "identity",
+          "value": "2026-117P"
+        },
+        {
+          "key": "launchDate",
+          "live": false,
+          "section": "satellite",
+          "value": "2026"
+        },
+        {
+          "key": "tleEpoch",
+          "live": false,
+          "section": "satellite",
+          "value": "24 六月 2026, 6h00m UTC"
+        },
+        {
+          "key": "tleLine1",
+          "live": false,
+          "section": "satellite",
+          "value": "1 00000U 26117P 26175.25002315 -.02573002 00000+0 -17496-1 0 9994"
+        },
+        {
+          "key": "tleLine2",
+          "live": false,
+          "section": "satellite",
+          "value": "2 00000 53.1587 207.9185 0000913 91.6004 343.6185 15.77958161 5382"
+        },
+        {
+          "key": "inclination",
+          "live": false,
+          "section": "satellite",
+          "value": "53.16°"
+        },
+        {
+          "key": "orbitalPeriod",
+          "live": false,
+          "section": "satellite",
+          "value": "91.26 分"
+        },
+        {
+          "key": "perigeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "336 km"
+        },
+        {
+          "key": "apogeeAltitude",
+          "live": false,
+          "section": "satellite",
+          "value": "337 km"
+        },
+        {
+          "key": "operationalStatus",
+          "live": false,
+          "section": "satellite",
+          "value": "未知"
+        }
+      ],
+      "distanceReference": "observer",
+      "distanceStatus": "invalid_orbit",
+      "englishName": "STARLINK-37489",
+      "found": true,
+      "infoMode": "all",
+      "liveDetailFields": [],
+      "name": "STARLINK-37489",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": false,
+      "propagationStatus": "divergent_extrapolation",
+      "satellitePassSource": "local TLE propagation",
+      "satellitePassesOffline": true,
+      "satellitePassesPending": true,
+      "sgp4Error": 0,
+      "tleAgeDays": 74.13297685002908,
+      "tleOutdated": true,
+      "type": "人造卫星"
+    },
+    {
+      "TEME-km-X": 6665.912208956984,
+      "TEME-km-Y": -1236.389774929739,
+      "TEME-km-Z": -294.22178150516083,
+      "TEME-speed-X": 0.5846722201788176,
+      "TEME-speed-Y": 4.56968561924804,
+      "TEME-speed-Z": -6.129204404162411,
+      "above-horizon": false,
+      "airmass": -1,
+      "allPasses": [],
+      "altitude": -59.37894131822402,
+      "altitude-geometric": -59.37894131822402,
+      "apogee-altitude": 408.6333288910688,
+      "appSidTm": "7h55m16.2s",
+      "appSidTm-dd": 118.8174088034071,
+      "azimuth": 295.9436971874227,
+      "azimuth-geometric": 295.9436971874227,
+      "calculatedAt": "2026-06-24T06:00:02",
+      "catalog": "69186",
+      "dataStatus": "local",
+      "dec": -22.405206516732335,
+      "decJ2000": -22.530254196941865,
+      "description": "",
+      "ecliptic-obliquity": 23.435834727499785,
+      "elapsedMs": 19,
+      "elat": -9.071857110305757,
+      "elatJ2000": -9.068732068093947,
+      "elong": 322.9767138163932,
+      "elongJ2000": 322.6039803646958,
+      "englishName": "STARLINK-37365",
+      "glat": -49.36342506831647,
+      "glong": 29.2575174844757,
+      "height": 407.8902073077907,
+      "hourAngle-dd": 150.30216076289034,
+      "hourAngle-hms": "10h01m12.5s",
+      "hours": 1,
+      "iauConstellation": "Cap",
+      "inclination": 53.15870000000001,
+      "international-designator": "2026-114E",
+      "internationalDesignator": "2026-114E",
+      "launch-date": "2026",
+      "launch-date-precision": "year",
+      "launch-year": 2026,
+      "localized-name": "STARLINK-37365",
+      "meanSidTm": "7h55m15.7s",
+      "meanSidTm-dd": 118.81548559071962,
+      "minimumElevation": 10,
+      "name": "STARLINK-37365",
+      "nextPass": null,
+      "nextVisiblePass": null,
+      "object-type": "artificial satellite",
+      "offline": true,
+      "operational-status": "未知",
+      "orbit-valid": true,
+      "orbitValid": true,
+      "parallacticAngle": 48.253681391685134,
+      "passes": [],
+      "pd": 112.40520651673233,
+      "pdJ2000": 112.53025419694187,
+      "perigee-altitude": 406.23123750641594,
+      "period": 92.71786194758216,
+      "phase-angle": 0.8867131650017207,
+      "phase-angle-deg": "50.8049°",
+      "phase-angle-dms": "+50°48'18\"",
+      "propagation-status": "valid",
+      "propagationStatus": "valid",
+      "ra": -31.484751959483226,
+      "raJ2000": -31.858871347564882,
+      "range": 11450.388323201185,
+      "rangerate": 0.7541842534497822,
+      "rise": "23h15m",
+      "rise-dhr": 23.243333333333336,
+      "satelliteId": "69186",
+      "set": "8h42m",
+      "set-dhr": 8.706388888888888,
+      "sglat": 32.11971009681788,
+      "sglong": 256.16918771257724,
+      "sgp4-error": 0,
+      "size": 9.519327809897697e-06,
+      "size-dd": 0.0005454173073086513,
+      "size-deg": "0.00055°",
+      "size-dms": "+0°00'01.96\"",
+      "source": "local TLE propagation",
+      "subpoint-lat": -2.5006813739277125,
+      "subpoint-long": -12.926047491704878,
+      "tle-age-days": 0,
+      "tle-epoch": "24 六月 2026, 6h00m UTC",
+      "tle-epoch-jd": 2461215.75002315,
+      "tle-outdated": false,
+      "tle1": "1 00000U 26114E   26175.25002315 -.03304243  00000+0 -59188-1 0  9995",
+      "tle2": "2 00000  53.1587 167.6276 0001770 135.0601  47.9301 15.53186335  5950",
+      "tleAgeDays": 0,
+      "tleEpoch": "24 六月 2026, 6h00m UTC",
+      "transit": "4h00m",
+      "transit-dhr": 4.0075,
+      "type": "Satellite",
+      "visibility": "The satellite is below the horizon",
+      "visibleOnly": true,
+      "vmag": 17,
+      "vmage": 17.16429328918457
+    },
+    {
+      "TEME-km-X": 6666.492648787229,
+      "TEME-km-Y": -1231.8193381642875,
+      "TEME-km-Z": -300.350750096202,
+      "TEME-speed-X": 0.5761571127884109,
+      "TEME-speed-Y": 4.571262078114857,
+      "TEME-speed-Z": -6.12882366418138,
+      "above-horizon": false,
+      "airmass": -1,
+      "allPasses": [],
+      "altitude": -59.386018205200074,
+      "altitude-geometric": -59.386018205200074,
+      "apogee-altitude": 408.6333288910688,
+      "appSidTm": "7h55m17.2s",
+      "appSidTm-dd": 118.82158685534426,
+      "azimuth": 295.8729067740333,
+      "azimuth-geometric": 295.8729067740333,
+      "calculatedAt": "2026-06-24T06:00:03",
+      "catalog": "69186",
+      "dataStatus": "local",
+      "dec": -22.43682704271118,
+      "decJ2000": -22.561908629704394,
+      "description": "",
+      "ecliptic-obliquity": 23.43583472749566,
+      "elapsedMs": 14,
+      "elat": -9.109307869531126,
+      "elatJ2000": -9.10618366914806,
+      "elong": 322.98718237421883,
+      "elongJ2000": 322.61444574192814,
+      "englishName": "STARLINK-37365",
+      "glat": -49.39377035483436,
+      "glong": 29.220254083215778,
+      "height": 407.8994214173477,
+      "hourAngle-dd": 150.28191950230092,
+      "hourAngle-hms": "10h01m07.7s",
+      "hours": 1,
+      "iauConstellation": "Cap",
+      "inclination": 53.15870000000001,
+      "international-designator": "2026-114E",
+      "internationalDesignator": "2026-114E",
+      "launch-date": "2026",
+      "launch-date-precision": "year",
+      "launch-year": 2026,
+      "localized-name": "STARLINK-37365",
+      "meanSidTm": "7h55m16.7s",
+      "meanSidTm-dd": 118.81966364267828,
+      "minimumElevation": 10,
+      "name": "STARLINK-37365",
+      "nextPass": null,
+      "nextVisiblePass": null,
+      "object-type": "artificial satellite",
+      "offline": true,
+      "operational-status": "未知",
+      "orbit-valid": true,
+      "orbitValid": true,
+      "parallacticAngle": 48.30688173513036,
+      "passes": [],
+      "pd": 112.43682704271119,
+      "pdJ2000": 112.56190862970439,
+      "perigee-altitude": 406.23123750641594,
+      "period": 92.71786194758216,
+      "phase-angle": 0.8869770954983457,
+      "phase-angle-deg": "50.8200°",
+      "phase-angle-dms": "+50°49'12\"",
+      "propagation-status": "valid",
+      "propagationStatus": "valid",
+      "ra": -31.46033264695664,
+      "raJ2000": -31.834481473102954,
+      "range": 11451.141339353355,
+      "rangerate": 0.7518089527075981,
+      "rise": "23h15m",
+      "rise-dhr": 23.243333333333336,
+      "satelliteId": "69186",
+      "set": "8h42m",
+      "set-dhr": 8.706388888888888,
+      "sglat": 32.08260173739101,
+      "sglong": 256.1556052849274,
+      "sgp4-error": 0,
+      "size": 9.518701827964008e-06,
+      "size-dd": 0.0005453814411857994,
+      "size-deg": "0.00055°",
+      "size-dms": "+0°00'01.96\"",
+      "source": "local TLE propagation",
+      "subpoint-lat": -2.5528033726369697,
+      "subpoint-long": -12.891351531589132,
+      "tle-age-days": 1.157401129603386e-05,
+      "tle-epoch": "24 六月 2026, 6h00m UTC",
+      "tle-epoch-jd": 2461215.75002315,
+      "tle-outdated": false,
+      "tle1": "1 00000U 26114E   26175.25002315 -.03304243  00000+0 -59188-1 0  9995",
+      "tle2": "2 00000  53.1587 167.6276 0001770 135.0601  47.9301 15.53186335  5950",
+      "tleAgeDays": 1.157401129603386e-05,
+      "tleEpoch": "24 六月 2026, 6h00m UTC",
+      "transit": "4h00m",
+      "transit-dhr": 4.0075,
+      "type": "Satellite",
+      "visibility": "The satellite is below the horizon",
+      "visibleOnly": true,
+      "vmag": 17,
+      "vmage": 17.16427993774414
+    },
+    {
+      "TEME-km-X": 6667.064573181113,
+      "TEME-km-Y": -1227.247327920723,
+      "TEME-km-Z": -306.4793339745873,
+      "TEME-speed-X": 0.5676413025099409,
+      "TEME-speed-Y": 4.572832691827035,
+      "TEME-speed-Z": -6.128435074654429,
+      "above-horizon": false,
+      "airmass": -1,
+      "allPasses": [],
+      "altitude": -59.393074778325136,
+      "altitude-geometric": -59.393074778325136,
+      "apogee-altitude": 408.6333288910688,
+      "appSidTm": "7h55m18.2s",
+      "appSidTm-dd": 118.82576490728326,
+      "azimuth": 295.802096287125,
+      "azimuth-geometric": 295.802096287125,
+      "calculatedAt": "2026-06-24T06:00:04",
+      "catalog": "69186",
+      "dataStatus": "local",
+      "dec": -22.46845344925035,
+      "decJ2000": -22.593568908141794,
+      "description": "",
+      "ecliptic-obliquity": 23.43583472749154,
+      "elapsedMs": 10,
+      "elat": -9.146760970147405,
+      "elatJ2000": -9.143637610197006,
+      "elong": 322.9976322802348,
+      "elongJ2000": 322.62489246593316,
+      "englishName": "STARLINK-37365",
+      "glat": -49.42408852363157,
+      "glong": 29.182922785922646,
+      "height": 407.90866574885655,
+      "hourAngle-dd": 150.26168704311345,
+      "hourAngle-hms": "10h01m02.8s",
+      "hours": 1,
+      "iauConstellation": "Cap",
+      "inclination": 53.15870000000001,
+      "international-designator": "2026-114E",
+      "internationalDesignator": "2026-114E",
+      "launch-date": "2026",
+      "launch-date-precision": "year",
+      "launch-year": 2026,
+      "localized-name": "STARLINK-37365",
+      "meanSidTm": "7h55m17.7s",
+      "meanSidTm-dd": 118.82384169463876,
+      "minimumElevation": 10,
+      "name": "STARLINK-37365",
+      "nextPass": null,
+      "nextVisiblePass": null,
+      "object-type": "artificial satellite",
+      "offline": true,
+      "operational-status": "未知",
+      "orbit-valid": true,
+      "orbitValid": true,
+      "parallacticAngle": 48.36009573895393,
+      "passes": [],
+      "pd": 112.46845344925035,
+      "pdJ2000": 112.5935689081418,
+      "perigee-altitude": 406.23123750641594,
+      "period": 92.71786194758216,
+      "phase-angle": 0.8872409938018331,
+      "phase-angle-deg": "50.8352°",
+      "phase-angle-dms": "+50°50'07\"",
+      "propagation-status": "valid",
+      "propagationStatus": "valid",
+      "ra": -31.43592213583018,
+      "raJ2000": -31.81010036617377,
+      "range": 11451.891979751164,
+      "rangerate": 0.7494327683361157,
+      "rise": "23h15m",
+      "rise-dhr": 23.243333333333336,
+      "satelliteId": "69186",
+      "set": "8h42m",
+      "set-dhr": 8.706388888888888,
+      "sglat": 32.04550081020519,
+      "sglong": 256.14201175700526,
+      "sgp4-error": 0,
+      "size": 9.518077902927054e-06,
+      "size-dd": 0.0005453456929144495,
+      "size-deg": "0.00055°",
+      "size-dms": "+0°00'01.96\"",
+      "source": "local TLE propagation",
+      "subpoint-lat": -2.6049240193967633,
+      "subpoint-long": -12.856652543475683,
+      "tle-age-days": 2.314802259206772e-05,
+      "tle-epoch": "24 六月 2026, 6h00m UTC",
+      "tle-epoch-jd": 2461215.75002315,
+      "tle-outdated": false,
+      "tle1": "1 00000U 26114E   26175.25002315 -.03304243  00000+0 -59188-1 0  9995",
+      "tle2": "2 00000  53.1587 167.6276 0001770 135.0601  47.9301 15.53186335  5950",
+      "tleAgeDays": 2.314802259206772e-05,
+      "tleEpoch": "24 六月 2026, 6h00m UTC",
+      "transit": "4h00m",
+      "transit-dhr": 4.0075,
+      "type": "Satellite",
+      "visibility": "The satellite is below the horizon",
+      "visibleOnly": true,
+      "vmag": 17,
+      "vmage": 17.16426658630371
+    },
+    {
+      "TEME-km-X": 6671.333351347108,
+      "TEME-km-Y": -1190.6151182180022,
+      "TEME-km-Z": -355.4934600124293,
+      "TEME-speed-X": 0.4994904893546029,
+      "TEME-speed-Y": 4.585187001697993,
+      "TEME-speed-Z": -6.1250438261666815,
+      "above-horizon": false,
+      "airmass": -1,
+      "allPasses": [],
+      "altitude": -59.4487938918806,
+      "altitude-geometric": -59.4487938918806,
+      "apogee-altitude": 408.6333288910688,
+      "appSidTm": "7h55m26.2s",
+      "appSidTm-dd": 118.8591894908935,
+      "azimuth": 295.23489169041,
+      "azimuth-geometric": 295.23489169041,
+      "calculatedAt": "2026-06-24T06:00:12",
+      "catalog": "69186",
+      "dataStatus": "local",
+      "dec": -22.721676832480792,
+      "decJ2000": -22.84706201654985,
+      "description": "",
+      "ecliptic-obliquity": 23.43583472745856,
+      "elapsedMs": 11,
+      "elat": -9.446470711841108,
+      "elatJ2000": -9.44335402512827,
+      "elong": 323.08056136385534,
+      "elongJ2000": 322.70779604224697,
+      "englishName": "STARLINK-37365",
+      "glat": -49.665652830417024,
+      "glong": 28.881816953852052,
+      "height": 407.98370662928914,
+      "hourAngle-dd": 150.10014173457233,
+      "hourAngle-hms": "10h00m24.0s",
+      "hours": 1,
+      "iauConstellation": "Cap",
+      "inclination": 53.15870000000001,
+      "international-designator": "2026-114E",
+      "internationalDesignator": "2026-114E",
+      "launch-date": "2026",
+      "launch-date-precision": "year",
+      "launch-year": 2026,
+      "localized-name": "STARLINK-37365",
+      "meanSidTm": "7h55m25.7s",
+      "meanSidTm-dd": 118.85726627842087,
+      "minimumElevation": 10,
+      "name": "STARLINK-37365",
+      "nextPass": null,
+      "nextVisiblePass": null,
+      "object-type": "artificial satellite",
+      "offline": true,
+      "operational-status": "未知",
+      "orbit-valid": true,
+      "orbitValid": true,
+      "parallacticAngle": 48.7863507695815,
+      "passes": [],
+      "pd": 112.7216768324808,
+      "pdJ2000": 112.84706201654986,
+      "perigee-altitude": 406.23123750641594,
+      "period": 92.71786194758216,
+      "phase-angle": 0.8893510184368355,
+      "phase-angle-deg": "50.9561°",
+      "phase-angle-dms": "+50°57'22\"",
+      "propagation-status": "valid",
+      "propagationStatus": "valid",
+      "ra": -31.240952243678823,
+      "raJ2000": -31.615364488312203,
+      "range": 11457.81149956351,
+      "rangerate": 0.7303915805775139,
+      "rise": "23h15m",
+      "rise-dhr": 23.243333333333336,
+      "satelliteId": "69186",
+      "set": "8h42m",
+      "set-dhr": 8.706388888888888,
+      "sglat": 31.748959513508776,
+      "sglong": 256.0328642722026,
+      "sgp4-error": 0,
+      "size": 9.513160519644641e-06,
+      "size-dd": 0.000545063947606119,
+      "size-deg": "0.00055°",
+      "size-dms": "+0°00'01.96\"",
+      "source": "local TLE propagation",
+      "subpoint-lat": -3.021839585091995,
+      "subpoint-long": -12.578942564423894,
+      "tle-age-days": 0.0001157405786216259,
+      "tle-epoch": "24 六月 2026, 6h00m UTC",
+      "tle-epoch-jd": 2461215.75002315,
+      "tle-outdated": false,
+      "tle1": "1 00000U 26114E   26175.25002315 -.03304243  00000+0 -59188-1 0  9995",
+      "tle2": "2 00000  53.1587 167.6276 0001770 135.0601  47.9301 15.53186335  5950",
+      "tleAgeDays": 0.0001157405786216259,
+      "tleEpoch": "24 六月 2026, 6h00m UTC",
+      "transit": "4h00m",
+      "transit-dhr": 4.0075,
+      "type": "Satellite",
+      "visibility": "The satellite is below the horizon",
+      "visibleOnly": true,
+      "vmag": 17,
+      "vmage": 17.16416358947754
+    },
+    {
+      "aboveHorizon": false,
+      "altitude": -49.11657020621373,
+      "angularSizeDegrees": 0.000609404064950826,
+      "apparentAltAz": "-49.117°, 67.734°",
+      "apparentMagnitude": 17.189180374145508,
+      "apparentSiderealTime": "15h59m02.0s",
+      "azimuth": 67.73391238735253,
+      "constellation": "鲸鱼座",
+      "constellationAbbreviation": "Cet",
+      "dec": "-17°08'44.0\"",
+      "decJ2000Degrees": -17.286640502828924,
+      "distance": "10248.1 km",
+      "distanceKm": 10248.110122749245,
+      "distanceLightYears": 1.0832260946922055e-09,
+      "distanceMethod": "orbital_range",
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "distanceUnit": "km",
+      "distanceValue": 10248.110122749245,
+      "eclipticCurrent": "11.897°, -23.771°",
+      "eclipticJ2000": "11.519°, -23.773°",
+      "englishName": "STARLINK-36933",
+      "equatorialJ2000": "   1h20m22.1s  -17°17'11.9\"",
+      "equatorialOfDate": "   1h21m41.0s  -17°08'44.0\"",
+      "extinction": 0.1891803741455078,
+      "found": true,
+      "galactic": "158.604°, -78.104°",
+      "geometricAltAz": "-49.117°, 67.734°",
+      "geometricAltitude": -49.11657020621373,
+      "geometricAzimuth": 67.73391238735253,
+      "hourAngle": "14h37m21.0s",
+      "hourAngleDegrees": 219.33754554348334,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+36°09'43\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "10248.1 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "4.383 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "462.4 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "8.876°, -130.293°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星在地平线以下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "15h59m01.5s",
+      "name": "STARLINK-36933",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": true,
+      "parallacticAngle": "-47.98°",
+      "polarDistanceDegrees": 107.1455508253576,
+      "polarDistanceJ2000Degrees": 107.28664050282892,
+      "propagationStatus": "valid",
+      "ra": "   1h21m41.0s",
+      "raJ2000Degrees": 20.09209739057574,
+      "rise": "21h30m",
+      "set": "7h39m",
+      "sgp4Error": 0,
+      "size": "+0°00'02.19\"",
+      "supergalactic": "281.268°, -10.482°",
+      "tleAgeDays": 0.5515938000753522,
+      "tleOutdated": false,
+      "transit": "2h37m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": false,
+      "altitude": -34.3229256257258,
+      "angularSizeDegrees": 0.0007019361923416349,
+      "apparentAltAz": "-34.323°, 92.478°",
+      "apparentMagnitude": 17.26211166381836,
+      "apparentSiderealTime": "15h59m02.0s",
+      "azimuth": 92.47831384535476,
+      "constellation": "宝瓶座",
+      "constellationAbbreviation": "Aqr",
+      "dec": "-22°54'02.7\"",
+      "decJ2000Degrees": -23.04977674246067,
+      "distance": "8897.2 km",
+      "distanceKm": 8897.16192865616,
+      "distanceLightYears": 9.404307579041616e-10,
+      "distanceMethod": "orbital_range",
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "distanceUnit": "km",
+      "distanceValue": 8897.16192865616,
+      "eclipticCurrent": "347.049°, -19.421°",
+      "eclipticJ2000": "346.672°, -19.420°",
+      "englishName": "STARLETTE",
+      "equatorialJ2000": "  23h43m14.5s  -23°02'59.2\"",
+      "equatorialOfDate": "  23h44m38.4s  -22°54'02.7\"",
+      "extinction": 0.2621116638183594,
+      "found": true,
+      "galactic": "43.982°, -74.045°",
+      "geometricAltAz": "-34.323°, 92.478°",
+      "geometricAltitude": -34.3229256257258,
+      "geometricAzimuth": 92.47831384535476,
+      "hourAngle": "16h14m23.6s",
+      "hourAngleDegrees": 243.59835552135135,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+19°40'49\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "8897.2 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "4.684 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "1094.3 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "4.693°, -163.304°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星在地平线以下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "15h59m01.5s",
+      "name": "STARLETTE",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": true,
+      "parallacticAngle": "-56.30°",
+      "polarDistanceDegrees": 112.90075139191785,
+      "polarDistanceJ2000Degrees": 113.04977674246066,
+      "propagationStatus": "valid",
+      "ra": "  23h44m38.4s",
+      "raJ2000Degrees": -4.189496486992374,
+      "rise": "20h16m",
+      "set": "5h40m",
+      "sgp4Error": 0,
+      "size": "+0°00'02.53\"",
+      "supergalactic": "269.056°, 9.607°",
+      "tleAgeDays": 74.13450883002952,
+      "tleOutdated": true,
+      "transit": "1h00m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": false,
+      "altitude": -48.545461765592286,
+      "angularSizeDegrees": 0.0006188469016637624,
+      "apparentAltAz": "-48.545°, 210.666°",
+      "apparentMagnitude": 17.190996170043945,
+      "apparentSiderealTime": "15h59m02.0s",
+      "azimuth": 210.666194574075,
+      "constellation": "飞鱼座",
+      "constellationAbbreviation": "Vol",
+      "dec": "-66°35'00.0\"",
+      "decJ2000Degrees": -66.51534760948638,
+      "distance": "10091.7 km",
+      "distanceKm": 10091.736663906706,
+      "distanceLightYears": 1.0666974070506177e-09,
+      "distanceMethod": "orbital_range",
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "distanceUnit": "km",
+      "distanceValue": 10091.736663906706,
+      "eclipticCurrent": "192.951°, -78.988°",
+      "eclipticJ2000": "192.604°, -78.987°",
+      "englishName": "ISS (ZARYA)",
+      "equatorialJ2000": "   7h51m34.3s  -66°30'55.3\"",
+      "equatorialOfDate": "   7h51m43.3s  -66°35'00.0\"",
+      "extinction": 0.1909961700439453,
+      "found": true,
+      "galactic": "278.907°, -19.039°",
+      "geometricAltAz": "-48.545°, 210.666°",
+      "geometricAltitude": -48.545461765592286,
+      "geometricAzimuth": 210.666194574075,
+      "hourAngle": "8h07m18.8s",
+      "hourAngleDegrees": 121.82824251141876,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+99°36'16\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "10091.7 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "-3.695 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "439.0 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "-49.887°, 65.649°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星在地平线以下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "15h59m01.5s",
+      "name": "国际空间站  (ZARYA)",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": true,
+      "parallacticAngle": "100.11°",
+      "polarDistanceDegrees": 156.58334439297818,
+      "polarDistanceJ2000Degrees": 156.51534760948635,
+      "propagationStatus": "valid",
+      "ra": "   7h51m43.3s",
+      "raJ2000Degrees": 117.8931241548098,
+      "rise": "---",
+      "set": "---",
+      "sgp4Error": 0,
+      "size": "+0°00'02.23\"",
+      "supergalactic": "199.321°, -38.340°",
+      "tleAgeDays": 10.239205880090594,
+      "tleOutdated": false,
+      "transit": "9h06m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": true,
+      "airmass": 5.422239780426025,
+      "altitude": 10.4287182822894,
+      "angularSizeDegrees": 2.7777777777777782e-05,
+      "apparentAltAz": "10.429°, 98.271°",
+      "apparentMagnitude": 17.698347091674805,
+      "apparentSiderealTime": "15h59m02.0s",
+      "azimuth": 98.27120757987497,
+      "constellation": "宝瓶座",
+      "constellationAbbreviation": "Aqr",
+      "dec": "+0°22'45.7\"",
+      "decJ2000Degrees": 0.2726677306153008,
+      "distance": "40478.2 km",
+      "distanceKm": 40478.21783927959,
+      "distanceLightYears": 4.2785510015948594e-09,
+      "distanceMethod": "orbital_range",
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "distanceUnit": "km",
+      "distanceValue": 40478.21783927959,
+      "eclipticCurrent": "319.122°, 16.236°",
+      "eclipticJ2000": "318.748°, 16.240°",
+      "englishName": "Rhyolite 3",
+      "equatorialJ2000": "  21h04m49.3s  +0°16'21.6\"",
+      "equatorialOfDate": "  21h06m11.7s  +0°22'45.7\"",
+      "extinction": 0.6983470916748047,
+      "found": true,
+      "galactic": "49.900°, -29.146°",
+      "geometricAltAz": "10.343°, 98.271°",
+      "geometricAltitude": 10.342565484363488,
+      "geometricAzimuth": 98.27120757987497,
+      "hourAngle": "18h52m50.3s",
+      "hourAngleDegrees": 283.20963542408623,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+29°15'45\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "40478.2 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "-0.037 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "35715.7 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "5.921°, -173.354°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星与观测者均位于阳光下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "15h59m01.5s",
+      "name": "Rhyolite 3",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": true,
+      "parallacticAngle": "-49.39°",
+      "polarDistanceDegrees": 89.62064187430455,
+      "polarDistanceJ2000Degrees": 89.7273322693847,
+      "propagationStatus": "valid",
+      "ra": "  21h06m11.7s",
+      "raJ2000Degrees": -43.794778807128466,
+      "rise": "16h15m",
+      "set": "4h25m",
+      "sgp4Error": 0,
+      "size": "+0°00'00.10\"",
+      "supergalactic": "273.802°, 54.450°",
+      "tleAgeDays": 564.9404144999571,
+      "tleOutdated": true,
+      "transit": "22h18m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": true,
+      "airmass": 1.8541890382766724,
+      "altitude": 32.632802846921486,
+      "angularSizeDegrees": 2.7777777777777782e-05,
+      "apparentAltAz": "32.633°, 160.097°",
+      "apparentMagnitude": 17.240421295166016,
+      "apparentSiderealTime": "15h59m02.0s",
+      "azimuth": 160.0966631449363,
+      "constellation": "蛇夫座",
+      "constellationAbbreviation": "Oph",
+      "dec": "-15°10'51.7\"",
+      "decJ2000Degrees": -15.144786282007182,
+      "distance": "44750.6 km",
+      "distanceKm": 44750.573076874214,
+      "distanceLightYears": 4.7301393065335545e-09,
+      "distanceMethod": "orbital_range",
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "distanceUnit": "km",
+      "distanceValue": 44750.573076874214,
+      "eclipticCurrent": "257.389°, 7.690°",
+      "eclipticJ2000": "257.014°, 7.695°",
+      "englishName": "Vortex 1",
+      "equatorialJ2000": "  17h06m38.7s  -15°08'41.2\"",
+      "equatorialOfDate": "  17h08m10.8s  -15°10'51.7\"",
+      "extinction": 0.24042129516601562,
+      "found": true,
+      "galactic": "6.697°, 15.078°",
+      "geometricAltAz": "32.607°, 160.097°",
+      "geometricAltitude": 32.60685280251607,
+      "geometricAzimuth": 160.0966631449363,
+      "hourAngle": "22h50m51.3s",
+      "hourAngleDegrees": 342.713661364845,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+86°26'57\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "44750.6 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "0.073 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "42118.5 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "-9.082°, 131.942°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星与观测者均位于阳光下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "15h59m01.5s",
+      "name": "Vortex 1",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "orbitValid": true,
+      "parallacticAngle": "-15.70°",
+      "polarDistanceDegrees": 105.18101679849246,
+      "polarDistanceJ2000Degrees": 105.14478628200717,
+      "propagationStatus": "valid",
+      "ra": "  17h08m10.8s",
+      "raJ2000Degrees": -103.33872706840737,
+      "rise": "13h11m",
+      "set": "23h30m",
+      "sgp4Error": 0,
+      "size": "+0°00'00.10\"",
+      "supergalactic": "164.212°, 49.158°",
+      "tleAgeDays": 449.13949604984373,
+      "tleOutdated": true,
+      "transit": "18h20m",
+      "type": "人造卫星"
+    }
+  ]
+}

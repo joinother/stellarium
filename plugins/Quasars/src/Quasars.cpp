@@ -341,8 +341,7 @@ StelObjectP Quasars::searchByNameI18n(const QString& nameI18n) const
 QVector<QPair<QString,StelObjectP>> Quasars::listMatchingObjects(const QString& objPrefix, int maxNbItem, bool useStartOfWords) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (flagShowQuasars)
-		result = StelObjectModule::listMatchingObjects(objPrefix, maxNbItem, useStartOfWords);
+	result = StelObjectModule::listMatchingObjects(objPrefix, maxNbItem, useStartOfWords);
 	return result;
 }
 
@@ -350,9 +349,6 @@ QVector<QPair<QString,StelObjectP>> Quasars::listMatchingObjects(const QString& 
 QVector<QPair<QString,StelObjectP>> Quasars::listAllObjects(bool inEnglish) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (!flagShowQuasars)
-		return result;
-
 	if (inEnglish)
 	{
 		for (const auto& quasar : QSO)

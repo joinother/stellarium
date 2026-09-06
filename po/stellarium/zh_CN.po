@@ -38354,3 +38354,108 @@ msgstr "下弦月"
 #: plugins/TimeNavigator/src/gui/TimeNavigatorDialog.cpp:395
 msgid "Earth"
 msgstr "地球"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "eruptive variable star"
+msgstr "爆发变星"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "pulsating variable star"
+msgstr "脉动变星"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "rotating variable star"
+msgstr "自转变星"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "cataclysmic variable star"
+msgstr "激变变星"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "eclipsing binary system"
+msgstr "食双星系统"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "variable star"
+msgstr "变星"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Photometric system"
+msgstr "测光系统"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration, alternatives"
+msgid "either %1 or %2"
+msgstr "%1 或 %2"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its magnitude range goes from %1 to %2 in the Photometric system %3."
+msgstr "在 %3 测光系统中，其星等变化范围为 %1 至 %2。"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Next maximum light"
+msgstr "下次极大亮度"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Next minimum light"
+msgstr "下次极小亮度"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "light curve"
+msgid "Rising time"
+msgstr "增亮时间"
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Duration of eclipse"
+msgstr "食持续时间"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its Spectral Type is %1"
+msgstr "其光谱型为 %1"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "It has a period of %1 days"
+msgstr "其周期为 %1 天"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Next minimum light will be at %1 UTC"
+msgstr "下次极小亮度时间为 %1 UTC"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Next maximum light will be at %1 UTC"
+msgstr "下次极大亮度时间为 %1 UTC"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "The duration fraction of an eclipse is %1 percent, that is, %2"
+msgstr "食持续时间占周期的 %1%，即 %2"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration: light curve"
+msgid "The rising time fraction is %1 percent, that is, %2"
+msgstr "增亮时间占周期的 %1%，即 %2"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its proper motion is %1 milli-arcseconds per year towards %2 degrees, or, by axes, %3 milli-arcseconds per year in right ascension and %4 in declination."
+msgstr "其自行大小为每年 %1 毫角秒，方向角为 %2 度；赤经、赤纬方向的自行分别为每年 %3、%4 毫角秒。"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its distance is %1 ± %2 light years."
+msgstr "其距离为 %1 ± %2 光年。"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its parallax is %1 ± %2 milli-arcseconds."
+msgstr "其视差为 %1 ± %2 毫角秒。"
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its parallax is %1 milli-arcseconds."
+msgstr "其视差为 %1 毫角秒。"

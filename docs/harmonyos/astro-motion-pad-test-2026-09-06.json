@@ -1,0 +1,732 @@
+{
+  "date": "2026-09-06",
+  "device": "192.168.1.34:33805",
+  "hapSha256": "dbe21c80f8d172573fb32ffb86ac19bd9552db484029affd004e51afdf42d8bf",
+  "build": {
+    "native": true,
+    "CompileArkTS": true,
+    "assembleHap": true,
+    "resourceAuditCount": 10,
+    "commandCatalogCount": 352,
+    "existingAuditWarnings": 4
+  },
+  "regressionTests": {
+    "passed": 21,
+    "failed": 0
+  },
+  "cli": {
+    "device": "192.168.1.34:33805",
+    "checks": [
+      {
+        "name": "tab 5 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 5 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 2 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 2 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 4 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 4 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 9 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 9 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 0 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 0 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 1 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 1 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 6 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 6 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 3 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 3 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 7 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 7 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 8 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 8 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "tab 5 finishes with correct group",
+        "ok": true
+      },
+      {
+        "name": "tab 5 is idempotent",
+        "ok": true
+      },
+      {
+        "name": "group 1 opens its first page",
+        "ok": true
+      },
+      {
+        "name": "group 2 opens its first page",
+        "ok": true
+      },
+      {
+        "name": "group 0 opens its first page",
+        "ok": true
+      },
+      {
+        "name": "semantic scroll reaches tonight filters",
+        "ok": true
+      },
+      {
+        "name": "period changes in actual UI state",
+        "ok": true
+      },
+      {
+        "name": "period does not jump the scroll",
+        "ok": true
+      },
+      {
+        "name": "altitude changes in actual UI state",
+        "ok": true
+      },
+      {
+        "name": "altitude does not jump the scroll",
+        "ok": true
+      },
+      {
+        "name": "magnitude changes in actual UI state",
+        "ok": true
+      },
+      {
+        "name": "magnitude does not jump the scroll",
+        "ok": true
+      },
+      {
+        "name": "direction changes in actual UI state",
+        "ok": true
+      },
+      {
+        "name": "direction does not jump the scroll",
+        "ok": true
+      },
+      {
+        "name": "setAstroTab rejects -1",
+        "ok": true
+      },
+      {
+        "name": "setAstroTab rejects 10",
+        "ok": true
+      },
+      {
+        "name": "setAstroGroup rejects 3",
+        "ok": true
+      },
+      {
+        "name": "setAstroFilter rejects period|invalid",
+        "ok": true
+      },
+      {
+        "name": "setAstroFilter rejects altitude|-90",
+        "ok": true
+      },
+      {
+        "name": "setAstroScroll rejects -1",
+        "ok": true
+      },
+      {
+        "name": "panel can reopen after navigation",
+        "ok": true
+      },
+      {
+        "name": "app process remains alive without restart",
+        "ok": true
+      }
+    ],
+    "samples": [
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 13,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 380
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 2,
+        "requestedTab": -1,
+        "transitionId": 14,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 4,
+        "requestedTab": -1,
+        "transitionId": 15,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 9,
+        "requestedTab": -1,
+        "transitionId": 16,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 1,
+        "tab": 0,
+        "requestedTab": -1,
+        "transitionId": 17,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 1,
+        "tab": 1,
+        "requestedTab": -1,
+        "transitionId": 18,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 1,
+        "tab": 6,
+        "requestedTab": -1,
+        "transitionId": 19,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 2,
+        "tab": 3,
+        "requestedTab": -1,
+        "transitionId": 20,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 2,
+        "tab": 7,
+        "requestedTab": -1,
+        "transitionId": 21,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 2,
+        "tab": 8,
+        "requestedTab": -1,
+        "transitionId": 22,
+        "transitioning": false,
+        "loading": false,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 23,
+        "transitioning": false,
+        "loading": true,
+        "period": "midnight",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 0
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 26,
+        "transitioning": false,
+        "loading": false,
+        "period": "morning",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 380
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 26,
+        "transitioning": false,
+        "loading": false,
+        "period": "morning",
+        "altitude": 20,
+        "magnitude": 6,
+        "direction": "all",
+        "scrollY": 380
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 26,
+        "transitioning": false,
+        "loading": false,
+        "period": "morning",
+        "altitude": 20,
+        "magnitude": 8,
+        "direction": "all",
+        "scrollY": 380
+      },
+      {
+        "ok": true,
+        "group": 0,
+        "tab": 5,
+        "requestedTab": -1,
+        "transitionId": 26,
+        "transitioning": false,
+        "loading": false,
+        "period": "morning",
+        "altitude": 20,
+        "magnitude": 8,
+        "direction": "east",
+        "scrollY": 380
+      }
+    ]
+  },
+  "video": {
+    "video": "/tmp/astro-motion-final-video.mp4",
+    "before": {
+      "astro-filter-period-night": [
+        559,
+        1091,
+        669,
+        1163
+      ],
+      "astro-filter-period-morning": [
+        434,
+        1091,
+        545,
+        1163
+      ],
+      "astro-filter-period-midnight": [
+        310,
+        1091,
+        421,
+        1163
+      ],
+      "astro-filter-period-evening": [
+        186,
+        1091,
+        297,
+        1163
+      ]
+    },
+    "after": {
+      "astro-filter-period-night": [
+        559,
+        1091,
+        669,
+        1163
+      ],
+      "astro-filter-period-morning": [
+        434,
+        1091,
+        545,
+        1163
+      ],
+      "astro-filter-period-midnight": [
+        310,
+        1091,
+        421,
+        1163
+      ],
+      "astro-filter-period-evening": [
+        186,
+        1091,
+        297,
+        1163
+      ]
+    },
+    "marks": [
+      {
+        "command": "setAstroFilter",
+        "payload": "period|morning",
+        "secondsAfterStartCommand": 4.004865000000001
+      },
+      {
+        "command": "setAstroFilter",
+        "payload": "period|midnight",
+        "secondsAfterStartCommand": 6.386983541000001
+      },
+      {
+        "command": "setAstroTab",
+        "payload": "0",
+        "secondsAfterStartCommand": 8.784187999999999
+      },
+      {
+        "command": "setAstroTab",
+        "payload": "5",
+        "secondsAfterStartCommand": 11.223353333
+      }
+    ],
+    "stableBounds": true
+  },
+  "select": {
+    "video": "/tmp/astro-motion-final-video.mp4",
+    "region": [
+      489,
+      1101,
+      8,
+      4
+    ],
+    "start": 3.4,
+    "end": 3.95,
+    "passed": true,
+    "intermediateFrameCount": 4,
+    "colors": [
+      [
+        26,
+        28,
+        31
+      ],
+      [
+        26,
+        28,
+        31
+      ],
+      [
+        26,
+        28,
+        31
+      ],
+      [
+        26,
+        28,
+        31
+      ],
+      [
+        26,
+        28,
+        31
+      ],
+      [
+        70,
+        76,
+        81
+      ],
+      [
+        90,
+        108,
+        119
+      ],
+      [
+        93,
+        116,
+        132
+      ],
+      [
+        91,
+        126,
+        153
+      ],
+      [
+        82,
+        130,
+        164
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ],
+      [
+        81,
+        130,
+        168
+      ]
+    ],
+    "progress": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.43996521523075965,
+      0.7371886452574694,
+      0.8229703708304864,
+      0.9405863718243369,
+      0.984688489968321,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "deselect": {
+    "video": "/tmp/astro-motion-final-video.mp4",
+    "region": [
+      489,
+      1101,
+      8,
+      4
+    ],
+    "start": 5.8,
+    "end": 6.35,
+    "passed": true,
+    "intermediateFrameCount": 5,
+    "colors": [
+      [
+        80,
+        131,
+        168
+      ],
+      [
+        80,
+        131,
+        168
+      ],
+      [
+        80,
+        131,
+        168
+      ],
+      [
+        80,
+        131,
+        168
+      ],
+      [
+        80,
+        131,
+        168
+      ],
+      [
+        94,
+        120,
+        141
+      ],
+      [
+        84.75,
+        97.75,
+        108.25
+      ],
+      [
+        67,
+        72,
+        76
+      ],
+      [
+        45,
+        47,
+        51
+      ],
+      [
+        35,
+        38,
+        39
+      ],
+      [
+        26,
+        28,
+        30
+      ],
+      [
+        26,
+        28,
+        30
+      ],
+      [
+        26,
+        28,
+        30
+      ],
+      [
+        26,
+        28,
+        30
+      ],
+      [
+        26,
+        28,
+        30
+      ],
+      [
+        26,
+        28,
+        30
+      ]
+    ],
+    "progress": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0.12597869139365656,
+      0.35044827903834935,
+      0.5979612514968221,
+      0.8194295188676348,
+      0.9153182474131843,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "physicalTouch": {
+    "target": "astro-filter-period-morning",
+    "bounds": [
+      434,
+      1091,
+      545,
+      1163
+    ],
+    "before": "midnight",
+    "after": "morning",
+    "scrollBefore": 380,
+    "scrollAfter": 380,
+    "restored": true,
+    "passed": true
+  },
+  "limits": [
+    "Pad only; phone and large-font configurations not device-tested",
+    "102 click definitions and 64 selected background definitions audited in source, not every generated control physically tapped",
+    "recorded bidirectional page transitions visually inspected; no claim of constant 60fps"
+  ]
+}

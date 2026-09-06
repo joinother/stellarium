@@ -2007,6 +2007,9 @@ QList<Constellation*> ConstellationMgr::isObjectIn(const StelObject *s, bool use
 {
 	StelCore *core = StelApp::getInstance().getCore();
 	QList<Constellation*> result;
+	if (!s) return result;
+	const Vec3d direction = s->getJ2000EquatorialPos(core);
+	if (!std::isfinite(direction.norm()) || direction.norm() <= 0.) return result;
 	if (useHull)
 	{
 		for (auto* constellation : constellations)

@@ -29,6 +29,11 @@
 #include <QFile>
 #include <QDir>
 #include <QDebug>
+#include <QPointer>
+
+namespace {
+QList<QPointer<StelSkyImageTile>> conflictHiddenTiles;
+}
 
 //! Constructor for TileManager.
 //! Initializes an empty TileManager instance.
@@ -61,6 +66,7 @@ bool TileManager::setTileVisible(const QString& key, bool visible)
 {
 	StelSkyImageTile* tile = getTile(key);
 	if (!tile) return false;
+	if (key == QStringLiteral("Custom Textures")) GETSTELMODULE(StelSkyLayerMgr)->showLayer(key, visible);
 
 	for (auto subTile : tile->getSubTiles())
 	{
@@ -94,8 +100,8 @@ bool TileManager::insertTileFromConfig(const QString& configFilePath, const QStr
 		skyLayerMgr->removeSkyLayer(texName);
 
 	// Insert new tile using provided config
-	skyLayerMgr->insertSkyImage(fullPath, QString(), show, 1);
-	return true;
+	const QString insertedKey = skyLayerMgr->insertSkyImage(fullPath, texName, show, 1);
+	return !insertedKey.isEmpty();
 }
 
 
@@ -142,8 +148,16 @@ bool TileManager::hasConflict(StelSkyImageTile* tileA, StelSkyImageTile* tileB)
 //! Hide parts of the default texture that conflict with custom texture overlays.
 //! @param defaultTexName Name of the default texture group.
 //! @param customTexName Name of the custom texture group.
+void TileManager::restoreConflicts()
+{
+	for (const auto& tile : conflictHiddenTiles)
+		if (tile) tile->setVisible(true);
+	conflictHiddenTiles.clear();
+}
+
 void TileManager::resolveConflicts(const QString& defaultTexName, const QString& customTexName)
 {
+	restoreConflicts();
 	StelSkyImageTile* defTile = getTile(defaultTexName);
 	StelSkyImageTile* cusTile = getTile(customTexName);
 
@@ -168,6 +182,7 @@ void TileManager::resolveConflicts(const QString& defaultTexName, const QString&
 			{
 				// Hide the default tile if it overlaps with custom tile
 				tileDef->setVisible(false);
+				conflictHiddenTiles.append(tileDef);
 				break;
 			}
 		}

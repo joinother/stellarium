@@ -1,0 +1,214 @@
+{
+  "checks": [
+    {
+      "label": "one category entry and one filter entry",
+      "passed": true
+    },
+    {
+      "label": "no extension block or duplicate filter",
+      "passed": true
+    },
+    {
+      "label": "core categories retained",
+      "passed": true
+    },
+    {
+      "label": "no duplicate module IDs",
+      "passed": true
+    },
+    {
+      "label": "extensions remain in unified list",
+      "passed": true
+    },
+    {
+      "label": "visible rows do not overlap",
+      "passed": true
+    },
+    {
+      "label": "real back returns to browser",
+      "passed": true
+    },
+    {
+      "label": "real row click returns to results",
+      "passed": true
+    },
+    {
+      "label": "extension rows reachable by vertical scrolling",
+      "passed": true
+    },
+    {
+      "label": "scrolling does not accidentally select a row",
+      "passed": true
+    },
+    {
+      "label": "extension selection preserves filters",
+      "passed": true
+    },
+    {
+      "label": "satellite remains selectable",
+      "passed": true
+    },
+    {
+      "label": "short filter page remains top aligned",
+      "passed": true
+    },
+    {
+      "label": "filter page does not duplicate category list",
+      "passed": true
+    },
+    {
+      "label": "invalid category rejected",
+      "passed": true
+    },
+    {
+      "label": "invalid filter rejected",
+      "passed": true
+    }
+  ],
+  "categories": [
+    {
+      "code": "planet",
+      "label": "行星",
+      "moduleId": "SolarSystem:planet",
+      "iconKey": "catalog_planet"
+    },
+    {
+      "code": "moon",
+      "label": "卫星",
+      "moduleId": "SolarSystem:moon",
+      "iconKey": "catalog_moon"
+    },
+    {
+      "code": "comet",
+      "label": "彗星",
+      "moduleId": "SolarSystem:comet",
+      "iconKey": "catalog_comet"
+    },
+    {
+      "code": "asteroid",
+      "label": "小行星",
+      "moduleId": "SolarSystem:asteroid",
+      "iconKey": "catalog_asteroid"
+    },
+    {
+      "code": "star",
+      "label": "恒星",
+      "moduleId": "StarMgr",
+      "iconKey": "catalog_star"
+    },
+    {
+      "code": "variable",
+      "label": "有趣的变星",
+      "moduleId": "StarMgr:1",
+      "iconKey": "catalog_variable_star"
+    },
+    {
+      "code": "constellation",
+      "label": "星座",
+      "moduleId": "ConstellationMgr",
+      "iconKey": "catalog_constellation"
+    },
+    {
+      "code": "galaxy",
+      "label": "亮星系",
+      "moduleId": "NebulaMgr:0",
+      "iconKey": "catalog_galaxy"
+    },
+    {
+      "code": "cluster",
+      "label": "星团",
+      "moduleId": "NebulaMgr:5",
+      "iconKey": "catalog_cluster"
+    },
+    {
+      "code": "nebula",
+      "label": "星云",
+      "moduleId": "NebulaMgr:200",
+      "iconKey": "catalog_nebula"
+    },
+    {
+      "code": "messier",
+      "label": "梅西叶星云星团表",
+      "moduleId": "NebulaMgr:100",
+      "iconKey": "catalog_messier"
+    },
+    {
+      "code": "artificial",
+      "label": "人造天体",
+      "moduleId": "ArtificialObjects",
+      "iconKey": "catalog_satellite"
+    },
+    {
+      "code": "satellite",
+      "label": "人造卫星",
+      "moduleId": "Satellites",
+      "iconKey": "catalog_satellite"
+    },
+    {
+      "code": "module:Supernovae",
+      "label": "历史上的超新星",
+      "moduleId": "Supernovae",
+      "iconKey": "catalog_supernova",
+      "group": "Supernovae",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:Exoplanets",
+      "label": "太阳系外行星",
+      "moduleId": "Exoplanets",
+      "iconKey": "catalog_exoplanet",
+      "group": "Exoplanets",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:Novae",
+      "label": "明亮新星",
+      "moduleId": "Novae",
+      "iconKey": "catalog_nova",
+      "group": "Novae",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:MeteorShowers",
+      "label": "流星雨",
+      "moduleId": "MeteorShowers",
+      "iconKey": "meteor",
+      "group": "MeteorShowers",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:Quasars",
+      "label": "类星体",
+      "moduleId": "Quasars",
+      "iconKey": "catalog_quasar",
+      "group": "Quasars",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:Pulsars",
+      "label": "脉冲星",
+      "moduleId": "Pulsars",
+      "iconKey": "catalog_pulsar",
+      "group": "Pulsars",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    },
+    {
+      "code": "module:Planes",
+      "label": "飞机",
+      "moduleId": "Planes",
+      "iconKey": "catalog_aircraft",
+      "group": "Planes",
+      "isCoreSubset": false,
+      "isPluginCatalog": true
+    }
+  ],
+  "hapSha256": "fdb42637ff9eb4911cafdd59c608e993e22bb036ffa15c28798136afdf68ab88",
+  "device": "MatePad Mini",
+  "unitTestsPassed": 34
+}

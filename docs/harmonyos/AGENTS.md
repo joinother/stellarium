@@ -398,6 +398,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 | 命令 | 功能 | 参数 |
 |------|------|------|
+| `getTelescopeControl` | 校验 LX200 TCP 端点并返回连接范围，不连接 | host\|port |
 | `telescopeLx200GotoSelected` | LX200 转到选中天体 | - |
 | `telescopeLx200SyncSelected` | LX200 同步选中天体 | - |
 | `telescopeLx200Abort` | LX200 中止 | - |

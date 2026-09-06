@@ -13,7 +13,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
-"POT-Creation-Date: 2026-08-28 15:38+0800\n"
+"POT-Creation-Date: 2026-08-31 19:21+0800\n"
 "PO-Revision-Date: 2022-10-05 14:25+0000\n"
 "Last-Translator: 殳玮 孙 <itun@qq.com>, 2026\n"
 "Language-Team: Chinese (China) (https://app.transifex.com/stellarium/teams/"
@@ -2474,6 +2474,161 @@ msgstr "非常暗淡，是最难观测到的目标！"
 msgid "cannot be seen now"
 msgstr "现在看不到了"
 
+#: scripts/solar_eclipse.ssc:66
+msgid "Place: Rangpur, Bangladesh"
+msgstr "地点：孟加拉国朗布尔"
+
+#: scripts/solar_eclipse.ssc:67
+msgid "Date: 2009-07-21, just before dawn."
+msgstr "日期：2009年7月21日，黎明前"
+
+#: scripts/solar_eclipse.ssc:68
+msgid "Orion and Gemini climb into the dawn sky"
+msgstr "猎户座和双子座升入黎明的天空"
+
+#: scripts/solar_eclipse.ssc:69
+msgid "fading from view as the sky brightens with"
+msgstr "随着天空变亮而逐渐隐去"
+
+#: scripts/solar_eclipse.ssc:70
+msgid "the appearance of the Sun"
+msgstr "太阳的出现"
+
+#: scripts/solar_eclipse.ssc:85
+msgid "The Sun has a companion this morning..."
+msgstr "今天早晨，太阳有一位伴侣……"
+
+#: scripts/solar_eclipse.ssc:86
+msgid "The Moon."
+msgstr "月球。"
+
+#: scripts/solar_eclipse.ssc:91
+msgid "The Moon starts to obscure the Sun's disc"
+msgstr "月球开始遮挡太阳圆面"
+
+#: scripts/solar_eclipse.ssc:92
+msgid "and the sky becomes a little darker"
+msgstr "天空也变得稍暗"
+
+#: scripts/solar_eclipse.ssc:113
+msgid "As the last of the Sun is covered by the Moon"
+msgstr "当太阳最后的光芒被月球遮住时"
+
+#: scripts/solar_eclipse.ssc:114
+msgid "the sky darkens quickly, and the brighter stars"
+msgstr "天空迅速变暗，较亮的恒星"
+
+#: scripts/solar_eclipse.ssc:115
+msgid "and planets become visible"
+msgstr "和行星开始显现"
+
+#: scripts/solar_eclipse.ssc:129
+msgid "At totality, the Sun is completely hidden behind the Moon"
+msgstr "全食时，太阳完全隐藏在月球之后"
+
+#: scripts/solar_eclipse.ssc:149
+msgid "The Sun emerges from behind the Moon"
+msgstr "太阳从月球后方重新出现"
+
+#: scripts/solar_eclipse.ssc:150
+msgid "The sky brightens once more"
+msgstr "天空再次变亮"
+
+#: scripts/solar_eclipse.ssc:159
+msgid "The End"
+msgstr "结束"
+
+#: scripts/transit_of_venus.ssc:61 scripts/transit_of_venus.ssc:139
+msgid "NEVER look directly at the Sun!"
+msgstr "绝不要直视太阳！"
+
+#: scripts/transit_of_venus.ssc:67 scripts/transit_of_venus.ssc:90
+#: scripts/transit_of_venus.ssc:148
+msgid "Sydney Australia"
+msgstr "澳大利亚悉尼"
+
+#: scripts/transit_of_venus.ssc:68 scripts/transit_of_venus.ssc:91
+#: scripts/transit_of_venus.ssc:149
+msgid "2012-06-06"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:68
+msgid "Sunrise"
+msgstr "日出"
+
+#: scripts/transit_of_venus.ssc:80
+msgid "just below the Sun."
+msgstr "就在太阳下方。"
+
+#: scripts/transit_of_venus.ssc:81 scripts/transit_of_venus.ssc:144
+msgid "The planet Venus"
+msgstr "金星"
+
+#: scripts/transit_of_venus.ssc:90
+msgid "Dobsonian Telescope"
+msgstr "多布森望远镜"
+
+#: scripts/transit_of_venus.ssc:90
+msgid "as seen through a"
+msgstr "通过以下设备看到的"
+
+#: scripts/transit_of_venus.ssc:91 scripts/transit_of_venus.ssc:149
+msgid "Transit of Venus"
+msgstr "金星凌日"
+
+#: scripts/transit_of_venus.ssc:102 scripts/transit_of_venus.ssc:169
+msgid "First Contact approx 8:12 a.m."
+msgstr "初亏，约上午8:12"
+
+#: scripts/transit_of_venus.ssc:107 scripts/transit_of_venus.ssc:174
+msgid "Second Contact approx 8:30 a.m."
+msgstr "食既，约上午8:30"
+
+#: scripts/transit_of_venus.ssc:112 scripts/transit_of_venus.ssc:179
+msgid "for approximately 6 hours."
+msgstr "持续约6小时。"
+
+#: scripts/transit_of_venus.ssc:113 scripts/transit_of_venus.ssc:180
+msgid "across the face of the Sun"
+msgstr "横穿太阳表面"
+
+#: scripts/transit_of_venus.ssc:113 scripts/transit_of_venus.ssc:180
+msgid "Venus continues to transit"
+msgstr "金星继续凌日"
+
+#: scripts/transit_of_venus.ssc:121 scripts/transit_of_venus.ssc:189
+msgid "Third Contact approx 2:20 p.m."
+msgstr "生光，约下午2:20"
+
+#: scripts/transit_of_venus.ssc:126 scripts/transit_of_venus.ssc:194
+msgid "Fourth Contact approx 2:39 p.m."
+msgstr "复圆，约下午2:39"
+
+#: scripts/transit_of_venus.ssc:130 scripts/transit_of_venus.ssc:197
+msgid "than a century away. "
+msgstr "要再等一个多世纪。"
+
+#: scripts/transit_of_venus.ssc:131 scripts/transit_of_venus.ssc:198
+msgid "The next Transit of Venus is more "
+msgstr "下一次金星凌日还要"
+
+#: scripts/transit_of_venus.ssc:143
+msgid "just above the Sun."
+msgstr "就在太阳上方。"
+
+#: scripts/transit_of_venus.ssc:148
+msgid "Equatorial Telescope"
+msgstr "赤道仪望远镜"
+
+#: scripts/transit_of_venus.ssc:148
+#, fuzzy
+msgid "as seen through an"
+msgstr "通过以下设备看到的"
+
+#: scripts/transit_of_venus.ssc:201
+msgid "Returning to current time and date."
+msgstr "正在返回当前日期和时间。"
+
 #~ msgid "Supernova remnant"
 #~ msgstr "超新星遗迹"
 
@@ -2632,102 +2787,3 @@ msgstr "现在看不到了"
 
 #~ msgid "Cassiopeia"
 #~ msgstr "仙后座"
-
-#~ msgid "Place: Rangpur, Bangladesh"
-#~ msgstr "地点：孟加拉国朗布尔"
-
-#~ msgid "Date: 2009-07-21, just before dawn."
-#~ msgstr "日期：2009年7月21日，黎明前"
-
-#~ msgid "Orion and Gemini climb into the dawn sky"
-#~ msgstr "猎户座和双子座升入黎明的天空"
-
-#~ msgid "fading from view as the sky brightens with"
-#~ msgstr "随着天空变亮而逐渐隐去"
-
-#~ msgid "the appearance of the Sun"
-#~ msgstr "太阳的出现"
-
-#~ msgid "The Sun has a companion this morning..."
-#~ msgstr "今天早晨，太阳有一位伴侣……"
-
-#~ msgid "The Moon."
-#~ msgstr "月球。"
-
-#~ msgid "The Moon starts to obscure the Sun's disc"
-#~ msgstr "月球开始遮挡太阳圆面"
-
-#~ msgid "and the sky becomes a little darker"
-#~ msgstr "天空也变得稍暗"
-
-#~ msgid "As the last of the Sun is covered by the Moon"
-#~ msgstr "当太阳最后的光芒被月球遮住时"
-
-#~ msgid "the sky darkens quickly, and the brighter stars"
-#~ msgstr "天空迅速变暗，较亮的恒星"
-
-#~ msgid "and planets become visible"
-#~ msgstr "和行星开始显现"
-
-#~ msgid "At totality, the Sun is completely hidden behind the Moon"
-#~ msgstr "全食时，太阳完全隐藏在月球之后"
-
-#~ msgid "The Sun emerges from behind the Moon"
-#~ msgstr "太阳从月球后方重新出现"
-
-#~ msgid "The sky brightens once more"
-#~ msgstr "天空再次变亮"
-
-#~ msgid "The End"
-#~ msgstr "结束"
-
-#~ msgid "NEVER look directly at the Sun!"
-#~ msgstr "绝不要直视太阳！"
-
-#~ msgid "Sydney Australia"
-#~ msgstr "澳大利亚悉尼"
-
-#~ msgid "just below the Sun."
-#~ msgstr "就在太阳下方。"
-
-#~ msgid "just above the Sun."
-#~ msgstr "就在太阳上方。"
-
-#~ msgid "Dobsonian Telescope"
-#~ msgstr "多布森望远镜"
-
-#~ msgid "as seen through a"
-#~ msgstr "通过以下设备看到的"
-
-#~ msgid "First Contact approx 8:12 a.m."
-#~ msgstr "初亏，约上午8:12"
-
-#~ msgid "Second Contact approx 8:30 a.m."
-#~ msgstr "食既，约上午8:30"
-
-#~ msgid "for approximately 6 hours."
-#~ msgstr "持续约6小时。"
-
-#~ msgid "across the face of the Sun"
-#~ msgstr "横穿太阳表面"
-
-#~ msgid "Venus continues to transit"
-#~ msgstr "金星继续凌日"
-
-#~ msgid "Third Contact approx 2:20 p.m."
-#~ msgstr "生光，约下午2:20"
-
-#~ msgid "Fourth Contact approx 2:39 p.m."
-#~ msgstr "复圆，约下午2:39"
-
-#~ msgid "than a century away. "
-#~ msgstr "要再等一个多世纪。"
-
-#~ msgid "The next Transit of Venus is more "
-#~ msgstr "下一次金星凌日还要"
-
-#~ msgid "Returning to current time and date."
-#~ msgstr "正在返回当前日期和时间。"
-
-#~ msgid "Equatorial Telescope"
-#~ msgstr "赤道仪望远镜"

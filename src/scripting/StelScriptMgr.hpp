@@ -30,6 +30,9 @@
 #include <QPair>
 #include <QSet>
 
+#include "StelLocation.hpp"
+#include "StelObjectType.hpp"
+
 #ifdef ENABLE_SCRIPT_QML
 #include <QMutex>
 #include <QJSValue>
@@ -244,6 +247,20 @@ public slots:
 	//! @return false if no script was running, true otherwise.
 	void stopScript();
 
+	//! Releases a script waiting in waitForKeypress() without requesting termination.
+	void continueScript();
+
+	//! Whether the script is currently waiting for a presenter/touch continue action.
+	bool isWaitingForKeypress() const;
+
+	//! Message shown while the script waits for a continue action.
+	QString waitForKeypressMessage() const { return waitMessage; }
+
+	//! Set or clear the message mirrored to the HarmonyOS ArkUI shell.
+	void setWaitForKeypressMessage(const QString& message) { waitMessage = message; }
+	void clearWaitForKeypressMessage() { waitMessage.clear(); }
+	void setWaitingForKeypress(bool waiting) { waitingForKeypress = waiting; }
+
 	//! Changes the rate at which the script executes as a multiple of real time.
 	//! Note that this is not the same as the rate at which simulation time passes
 	//! because the script running at normal rate might set the simulation time rate
@@ -337,6 +354,9 @@ private:
 	//! the script file (i.e. before there is a non-comment line).
 	QString getHeaderSingleLineCommentText(const QString& s, const QString& id, const QString& notFoundText="");
 
+	void captureSessionState();
+	void restoreSessionState();
+
 #ifdef ENABLE_SCRIPT_QML
 	QJSEngine *engine;
 	QMutex mutex; // we need to lock this while a script is running.
@@ -355,8 +375,36 @@ private:
 	//! Event filter to detect keypress for waitForKeypress()
 	QObject* keypressEventFilter;
 	bool flagShowContinueMessage; // property flag deciding whether to show the continue... message in waitForKeypress()
+	bool waitingForKeypress;
 
 	QString scriptFileName;
+	QString waitMessage;
+
+	struct ScriptSessionState
+	{
+		bool valid = false;
+		double jd = 0.0;
+		double timeRate = 0.0;
+		StelLocation location;
+		QString timeZone;
+		bool useCustomTimeZone = false;
+		bool useDST = false;
+		QString projectionKey;
+		Vec3d viewDirection;
+		Vec3d viewUp;
+		Vec3d viewDirectionMountFrame;
+		Vec3d viewUpMountFrame;
+		double fov = 0.0;
+		double viewportHorizontalOffset = 0.0;
+		double viewportVerticalOffset = 0.0;
+		bool tracking = false;
+		bool lockEquatorialPosition = false;
+		int mountMode = 0;
+		float movementSpeedFactor = 1.0f;
+		QMap<QString, QVariant> properties;
+		QList<QPair<QString, QString>> selectedObjects;
+		QStringList selectedObjectNames;
+	} sessionState;
 	
 
 	// Map line numbers of output to <path>:<line>
@@ -376,4 +424,3 @@ private:
 };
 
 #endif // STELSCRIPTMGR_HPP
-

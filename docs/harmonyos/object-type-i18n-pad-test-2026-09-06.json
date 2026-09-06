@@ -1,0 +1,232 @@
+{
+  "checks": [
+    {
+      "label": "zh_CN search localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN live detail localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN full info localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN raw classification stable",
+      "passed": true
+    },
+    {
+      "label": "zh_CN constellation localized",
+      "passed": true
+    },
+    {
+      "label": "en search localized",
+      "passed": true
+    },
+    {
+      "label": "en live detail localized",
+      "passed": true
+    },
+    {
+      "label": "en full info localized",
+      "passed": true
+    },
+    {
+      "label": "en raw classification stable",
+      "passed": true
+    },
+    {
+      "label": "zh_HK search localized",
+      "passed": true
+    },
+    {
+      "label": "zh_HK live detail localized",
+      "passed": true
+    },
+    {
+      "label": "zh_HK full info localized",
+      "passed": true
+    },
+    {
+      "label": "zh_HK raw classification stable",
+      "passed": true
+    },
+    {
+      "label": "zh_TW search localized",
+      "passed": true
+    },
+    {
+      "label": "zh_TW live detail localized",
+      "passed": true
+    },
+    {
+      "label": "zh_TW full info localized",
+      "passed": true
+    },
+    {
+      "label": "zh_TW raw classification stable",
+      "passed": true
+    },
+    {
+      "label": "zh_CN search localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN live detail localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN full info localized",
+      "passed": true
+    },
+    {
+      "label": "zh_CN raw classification stable",
+      "passed": true
+    },
+    {
+      "label": "zh_CN constellation localized",
+      "passed": true
+    },
+    {
+      "label": "Algol found",
+      "passed": true
+    },
+    {
+      "label": "Algol localized",
+      "passed": true
+    },
+    {
+      "label": "Mira found",
+      "passed": true
+    },
+    {
+      "label": "Mira localized",
+      "passed": true
+    },
+    {
+      "label": "Sirius found",
+      "passed": true
+    },
+    {
+      "label": "Sirius localized",
+      "passed": true
+    },
+    {
+      "label": "Sun found",
+      "passed": true
+    },
+    {
+      "label": "Sun localized",
+      "passed": true
+    },
+    {
+      "label": "M31 found",
+      "passed": true
+    },
+    {
+      "label": "M31 localized",
+      "passed": true
+    },
+    {
+      "label": "M42 found",
+      "passed": true
+    },
+    {
+      "label": "M42 localized",
+      "passed": true
+    },
+    {
+      "label": "catalog|Quasars|MS 23574-3520|selectOnly found",
+      "passed": true
+    },
+    {
+      "label": "catalog|Quasars|MS 23574-3520|selectOnly localized",
+      "passed": true
+    },
+    {
+      "label": "catalog|Pulsars|PSR J0437-4715|selectOnly found",
+      "passed": true
+    },
+    {
+      "label": "catalog|Pulsars|PSR J0437-4715|selectOnly localized",
+      "passed": true
+    },
+    {
+      "label": "navigation stars remain off",
+      "passed": true
+    }
+  ],
+  "samples": [
+    {
+      "language": "zh_CN",
+      "target": "Betelgeuse",
+      "type": "双星, 脉动变星",
+      "rawType": "double star, pulsating variable star"
+    },
+    {
+      "language": "en",
+      "target": "Betelgeuse",
+      "type": "double star, pulsating variable star",
+      "rawType": "double star, pulsating variable star"
+    },
+    {
+      "language": "zh_HK",
+      "target": "Betelgeuse",
+      "type": "雙星, 脈動變星",
+      "rawType": "double star, pulsating variable star"
+    },
+    {
+      "language": "zh_TW",
+      "target": "Betelgeuse",
+      "type": "雙星, 脈動變星",
+      "rawType": "double star, pulsating variable star"
+    },
+    {
+      "language": "zh_CN",
+      "target": "Betelgeuse",
+      "type": "双星, 脉动变星",
+      "rawType": "double star, pulsating variable star"
+    },
+    {
+      "language": "zh_CN",
+      "target": "Algol",
+      "type": "双星, 食双星系统"
+    },
+    {
+      "language": "zh_CN",
+      "target": "Mira",
+      "type": "双星, 脉动变星"
+    },
+    {
+      "language": "zh_CN",
+      "target": "Sirius",
+      "type": "双星"
+    },
+    {
+      "language": "zh_CN",
+      "target": "Sun",
+      "type": "恒星"
+    },
+    {
+      "language": "zh_CN",
+      "target": "M31",
+      "type": "星系"
+    },
+    {
+      "language": "zh_CN",
+      "target": "M42",
+      "type": "电离氢区"
+    },
+    {
+      "language": "zh_CN",
+      "target": "catalog|Quasars|MS 23574-3520|selectOnly",
+      "type": "类星体"
+    },
+    {
+      "language": "zh_CN",
+      "target": "catalog|Pulsars|PSR J0437-4715|selectOnly",
+      "type": "脉冲星"
+    }
+  ]
+}

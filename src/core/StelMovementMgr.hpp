@@ -193,6 +193,10 @@ public slots:
 	void setFlagTracking(bool b=true);
 	//! Stop a running automatic move while preserving the current camera pose.
 	void cancelAutoMove();
+	//! Stop the smooth FOV transition without changing the current FOV.
+	void cancelAutoZoom();
+	//! Restore the tracking flag without starting a centering animation.
+	void restoreTrackingState(bool enabled);
 	//! Get current object tracking status.
 	bool getFlagTracking(void) const {return flagTracking;}
 
@@ -313,6 +317,8 @@ public slots:
 	//! Return the current viewing direction in the equatorial J2000 frame.
 	//! See StelMovementMgr::moveToJ2000 for an explanation of the return value.
 	Vec3d getViewDirectionJ2000() const {return viewDirectionJ2000;}
+	void restoreViewState(const Vec3d& directionJ2000, const Vec3d& upJ2000,
+						 const Vec3d& directionMountFrame, const Vec3d& upMountFrame);
 	//! Set the current viewing direction in the equatorial J2000 frame.
 	void setViewDirectionJ2000(const Vec3d& v);
 

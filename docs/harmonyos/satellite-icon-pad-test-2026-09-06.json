@@ -1,0 +1,83 @@
+{
+  "checks": [
+    {
+      "label": "ISS (ZARYA) selected",
+      "passed": true
+    },
+    {
+      "label": "ISS (ZARYA) reuses satellite icon",
+      "passed": true
+    },
+    {
+      "label": "ISS (ZARYA) no false 3D model",
+      "passed": true
+    },
+    {
+      "label": "ISS (ZARYA) category disclaimer displayed",
+      "passed": true
+    },
+    {
+      "label": "ISS (ZARYA) swipe over icon scrolls details",
+      "passed": true
+    },
+    {
+      "label": "ISS (ZARYA) scrolling does not move sky",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) selected",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) reuses satellite icon",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) no false 3D model",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) category disclaimer displayed",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) swipe over icon scrolls details",
+      "passed": true
+    },
+    {
+      "label": "CSS (TIANHE) scrolling does not move sky",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 selected",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 reuses satellite icon",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 no false 3D model",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 category disclaimer displayed",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 swipe over icon scrolls details",
+      "passed": true
+    },
+    {
+      "label": "STARLINK-36933 scrolling does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Moon retains model, not artificial icon",
+      "passed": true
+    }
+  ],
+  "hapSha256": "b3256a67dd4bb7ca880fff9a55586a829e6aec7bd29997a03eeb0e4be67cdf10",
+  "device": "MatePad Mini",
+  "unitTestsPassed": 31
+}

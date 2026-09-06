@@ -340,7 +340,7 @@ StelObjectP Pulsars::searchByNameI18n(const QString& nameI18n) const
 QVector<QPair<QString,StelObjectP>> Pulsars::listMatchingObjects(const QString& objPrefix, int maxNbItem, bool useStartOfWords) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (flagShowPulsars && maxNbItem>0)
+	if (maxNbItem > 0)
 	{
 		QVector<QPair<QString,StelObjectP>> names;
 		for (const auto& pulsar : psr)
@@ -383,9 +383,6 @@ QVector<QPair<QString,StelObjectP>> Pulsars::listMatchingObjects(const QString& 
 QVector<QPair<QString,StelObjectP>> Pulsars::listAllObjects(bool inEnglish) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (!flagShowPulsars)
-		return result;
-
 	for (const auto& pulsar : psr)
 	{
 		const auto obj = StelObjectP(pulsar);

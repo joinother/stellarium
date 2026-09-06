@@ -20,6 +20,7 @@
 #include <QDialog>
 #include <QStandardItemModel>
 #include <QDebug>
+#include <QSignalBlocker>
 
 #include "StelApp.hpp"
 #include "StelGui.hpp"
@@ -43,28 +44,52 @@ bool ShortcutsFilterModel::filterAcceptsRow(int source_row, const QModelIndex &s
 #else
 	if (filterRegExp().pattern().isEmpty())
 #endif
+	{
 		return true;
-	
-	if (source_parent.isValid())
-	{
-		QModelIndex index = source_parent.model()->index(source_row, filterKeyColumn(), source_parent);
-		QString data = sourceModel()->data(index, filterRole()).toString();
-#if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
-		return data.contains(filterRegularExpression());
-#else
-		return data.contains(filterRegExp());
-#endif
 	}
-	else
+
+#if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
+	auto matches = [this](const QString& data)
 	{
-		QModelIndex index = sourceModel()->index(source_row, filterKeyColumn());
-		for (int row = 0; row < sourceModel()->rowCount(index); row++)
+		return data.contains(filterRegularExpression());
+	};
+#else
+	auto matches = [this](const QString& data)
+	{
+		return data.contains(filterRegExp());
+	};
+#endif
+
+	auto matchesRow = [this, &matches](const QModelIndex& index)
+	{
+		if (!index.isValid())
+			return false;
+		for (int column = 0; column < sourceModel()->columnCount(index); ++column)
 		{
-			if (filterAcceptsRow(row, index))
+			const QModelIndex cell = index.sibling(index.row(), column);
+			if (matches(sourceModel()->data(cell, filterRole()).toString()) ||
+			    matches(sourceModel()->data(cell, Qt::UserRole).toString()))
 				return true;
 		}
+		return false;
+	};
+
+	if (source_parent.isValid())
+	{
+		const QModelIndex groupIndex = source_parent.sibling(source_parent.row(), 0);
+		const QModelIndex actionIndex = sourceModel()->index(source_row, 0, source_parent);
+		return matchesRow(groupIndex) || matchesRow(actionIndex);
 	}
-	return QSortFilterProxyModel::filterAcceptsRow(source_row, source_parent);
+
+	const QModelIndex groupIndex = sourceModel()->index(source_row, 0, source_parent);
+	if (matchesRow(groupIndex))
+		return true;
+	for (int row = 0; row < sourceModel()->rowCount(groupIndex); ++row)
+	{
+		if (filterAcceptsRow(row, groupIndex))
+			return true;
+	}
+	return false;
 }
 
 
@@ -113,6 +138,8 @@ void ShortcutsDialog::resetCollisions()
 		mainModel->itemFromIndex(index.sibling(index.row(), 2))->setForeground(brush);
 	}
 	collisionItems.clear();
+	ui->primaryShortcutEdit->setProperty("collision", false);
+	ui->altShortcutEdit->setProperty("collision", false);
 }
 
 void ShortcutsDialog::retranslate()
@@ -130,6 +157,9 @@ void ShortcutsDialog::initEditors()
 	QModelIndex index = filterModel->mapToSource(ui->shortcutsTreeView->currentIndex());
 	index = index.sibling(index.row(), 0);
 	QStandardItem* currentItem = mainModel->itemFromIndex(index);
+	QSignalBlocker primaryBlocker(ui->primaryShortcutEdit);
+	QSignalBlocker altBlocker(ui->altShortcutEdit);
+	resetCollisions();
 	if (itemIsEditable(currentItem))
 	{
 		// current item is shortcut, not group (group items aren't selectable)
@@ -141,6 +171,9 @@ void ShortcutsDialog::initEditors()
 		ui->primaryShortcutEdit->setContents(data.value<QKeySequence>());
 		data = mainModel->data(index.sibling(index.row(), 2));
 		ui->altShortcutEdit->setContents(data.value<QKeySequence>());
+		ui->primaryBackspaceButton->setEnabled(!ui->primaryShortcutEdit->isEmpty());
+		ui->altBackspaceButton->setEnabled(!ui->altShortcutEdit->isEmpty());
+		ui->applyButton->setEnabled(false);
 	}
 	else
 	{
@@ -149,9 +182,10 @@ void ShortcutsDialog::initEditors()
 		ui->altShortcutEdit->setEnabled(false);
 		ui->applyButton->setEnabled(false);
 		ui->restoreDefaultsButton->setEnabled(false);
-		// https://wiki.qt.io/Technical_FAQ#Why_does_the_memory_keep_increasing_when_repeatedly_pasting_text_and_calling_clear.28.29_in_a_QLineEdit.3F
-		ui->primaryShortcutEdit->setText("");
-		ui->altShortcutEdit->setText("");
+		ui->primaryShortcutEdit->setContents(QKeySequence());
+		ui->altShortcutEdit->setContents(QKeySequence());
+		ui->primaryBackspaceButton->setEnabled(false);
+		ui->altBackspaceButton->setEnabled(false);
 	}
 	polish();
 }
@@ -197,31 +231,40 @@ QList<QStandardItem*> ShortcutsDialog::findCollidingItems(QKeySequence ks)
 
 void ShortcutsDialog::handleCollisions(ShortcutLineEdit *currentEdit)
 {
+	if (!currentEdit)
+		return;
 	resetCollisions();
-	
-	// handle collisions
-	QString text = currentEdit->text();
-	collisionItems = findCollidingItems(QKeySequence(text));
+
 	QModelIndex index =
 	        filterModel->mapToSource(ui->shortcutsTreeView->currentIndex());
 	index = index.sibling(index.row(), 0);
 	QStandardItem* currentItem = mainModel->itemFromIndex(index);
+	QList<QStandardItem*> currentCollisions = findCollidingItems(currentEdit->getKeySequence());
+	QList<QStandardItem*> primaryCollisions = findCollidingItems(
+	        ui->primaryShortcutEdit->getKeySequence());
+	QList<QStandardItem*> altCollisions = findCollidingItems(
+	        ui->altShortcutEdit->getKeySequence());
+	collisionItems = primaryCollisions;
+	for (auto* item : altCollisions)
+	{
+		if (!collisionItems.contains(item))
+			collisionItems.append(item);
+	}
 	collisionItems.removeOne(currentItem);
+	currentCollisions.removeOne(currentItem);
+	primaryCollisions.removeOne(currentItem);
+	altCollisions.removeOne(currentItem);
+	ui->primaryShortcutEdit->setProperty("collision", !primaryCollisions.isEmpty());
+	ui->altShortcutEdit->setProperty("collision", !altCollisions.isEmpty());
 	if (!collisionItems.isEmpty())
 	{
 		drawCollisions();
-		ui->applyButton->setEnabled(false);		
-		// scrolling to first collision item
-		QModelIndex first = filterModel->mapFromSource(collisionItems.first()->index());
-		ui->shortcutsTreeView->scrollTo(first);
-		currentEdit->setProperty("collision", true);
-	}
-	else
-	{
-		// scrolling back to current item
-		QModelIndex current = filterModel->mapFromSource(index);
-		ui->shortcutsTreeView->scrollTo(current);
-		currentEdit->setProperty("collision", false);
+		const QList<QStandardItem*>& scrollItems = currentCollisions.isEmpty() ? collisionItems : currentCollisions;
+		if (!scrollItems.isEmpty())
+		{
+			QModelIndex first = filterModel->mapFromSource(scrollItems.first()->index());
+			ui->shortcutsTreeView->scrollTo(first);
+		}
 	}
 }
 
@@ -241,18 +284,20 @@ void ShortcutsDialog::handleChanges()
 	}
 	// updating apply button
 	QModelIndex index = filterModel->mapToSource(ui->shortcutsTreeView->currentIndex());
-	if (!index.isValid() ||
-	    (isPrimary && editor->text() == mainModel->data(index.sibling(index.row(), 1))) ||
-	    (!isPrimary && editor->text() == mainModel->data(index.sibling(index.row(), 2))))
-	{
-		// nothing to apply
-		ui->applyButton->setEnabled(false);		
-	}
-	else
-	{
-		ui->applyButton->setEnabled(true);		
-	}
 	handleCollisions(editor);
+	bool changed = false;
+	if (index.isValid())
+	{
+		const QKeySequence storedPrimary = mainModel->data(
+		        index.sibling(index.row(), 1)).value<QKeySequence>();
+		const QKeySequence storedAlt = mainModel->data(
+		        index.sibling(index.row(), 2)).value<QKeySequence>();
+		changed = ui->primaryShortcutEdit->getKeySequence() != storedPrimary ||
+		          ui->altShortcutEdit->getKeySequence() != storedAlt;
+	}
+	const bool hasCollision = ui->primaryShortcutEdit->property("collision").toBool() ||
+	                         ui->altShortcutEdit->property("collision").toBool();
+	ui->applyButton->setEnabled(changed && !hasCollision);
 	polish();
 }
 
@@ -267,6 +312,8 @@ void ShortcutsDialog::applyChanges()
 	QString actionId = currentItem->data(Qt::UserRole).toString();
 
 	StelAction* action = actionMgr->findAction(actionId);
+	if (!action)
+		return;
 	action->setShortcut(ui->primaryShortcutEdit->getKeySequence().toString());
 	action->setAltShortcut(ui->altShortcutEdit->getKeySequence().toString());
 	updateShortcutsItem(action);
@@ -460,6 +507,7 @@ void ShortcutsDialog::restoreAllDefaultShortcuts()
 	if (askConfirmation())
 	{
 		qDebug() << "[Shortcuts] restore defaults...";
+		resetCollisions();
 		resetModel();
 		actionMgr->restoreDefaultShortcuts();
 		updateTreeData();
@@ -484,11 +532,16 @@ void ShortcutsDialog::restoreDefaultShortcuts()
 	{
 		actionMgr->restoreDefaultShortcut(action);
 		updateShortcutsItem(action);
-		ui->primaryShortcutEdit->setText(action->getShortcut().toString());
-		ui->altShortcutEdit->setText(action->getAltShortcut().toString());
-		// nothing to apply until edits' content changes
+		QSignalBlocker primaryBlocker(ui->primaryShortcutEdit);
+		QSignalBlocker altBlocker(ui->altShortcutEdit);
+		ui->primaryShortcutEdit->setContents(action->getShortcut());
+		ui->altShortcutEdit->setContents(action->getAltShortcut());
+		ui->primaryBackspaceButton->setEnabled(!ui->primaryShortcutEdit->isEmpty());
+		ui->altBackspaceButton->setEnabled(!ui->altShortcutEdit->isEmpty());
+		resetCollisions();
 		ui->applyButton->setEnabled(false);
 		ui->restoreDefaultsButton->setEnabled(false);
+		polish();
 	}
 }
 

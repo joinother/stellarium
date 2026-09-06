@@ -77,6 +77,7 @@ constexpr double kFeetToMeters = 0.3048;
 constexpr double kKnotsToMetersPerSecond = 0.514444;
 constexpr double kFeetPerMinuteToMetersPerSecond = 0.00508;
 const QString kRealtimeOnlyStatus = QStringLiteral("Live aircraft are shown only in real-time mode.");
+const QString kOfflineBuildStatus = QStringLiteral("Live ADS-B updates are disabled in this offline build.");
 
 ProviderDefinition providerDefinition(const QString& providerId)
 {
@@ -307,6 +308,9 @@ void Planes::init()
 #endif
 	if (enabled)
 	{
+	#ifdef STELLARIUM_OHOS_OFFLINE
+		updateStatus(kOfflineBuildStatus);
+	#else
 		fetchTimer->start();
 		if (lastRealtimeState)
 		{
@@ -317,6 +321,7 @@ void Planes::init()
 		{
 			updateStatus(kRealtimeOnlyStatus);
 		}
+	#endif
 	}
 	else
 	{
@@ -400,6 +405,10 @@ void Planes::applyProviderDefaults(bool clampRadius)
 
 void Planes::fetchAircraft()
 {
+	#ifdef STELLARIUM_OHOS_OFFLINE
+	updateStatus(kOfflineBuildStatus);
+	return;
+	#endif
 	if (!networkMgr || !enabled)
 		return;
 
@@ -587,6 +596,9 @@ void Planes::setEnabled(bool value)
 	}
 	else
 	{
+	#ifdef STELLARIUM_OHOS_OFFLINE
+		updateStatus(kOfflineBuildStatus);
+	#else
 		if (fetchTimer)
 			fetchTimer->start();
 		if (isRealtimeMode(StelApp::getInstance().getCore()))
@@ -598,6 +610,7 @@ void Planes::setEnabled(bool value)
 		{
 			updateStatus(kRealtimeOnlyStatus);
 		}
+	#endif
 	}
 	emit enabledChanged(enabled);
 }

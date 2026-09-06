@@ -38981,3 +38981,108 @@ msgstr ""
 #: plugins/ObjectVisibility/src/gui/ObjectVisibilityDialog.cpp:557
 msgid "Astro-Geo-GIS website"
 msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "eruptive variable star"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "pulsating variable star"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "rotating variable star"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "cataclysmic variable star"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "eclipsing binary system"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "variable star"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Photometric system"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration, alternatives"
+msgid "either %1 or %2"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its magnitude range goes from %1 to %2 in the Photometric system %3."
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Next maximum light"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Next minimum light"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "light curve"
+msgid "Rising time"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgid "Duration of eclipse"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its Spectral Type is %1"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "It has a period of %1 days"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Next minimum light will be at %1 UTC"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Next maximum light will be at %1 UTC"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "The duration fraction of an eclipse is %1 percent, that is, %2"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration: light curve"
+msgid "The rising time fraction is %1 percent, that is, %2"
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its proper motion is %1 milli-arcseconds per year towards %2 degrees, or, by axes, %3 milli-arcseconds per year in right ascension and %4 in declination."
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its distance is %1 ± %2 light years."
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its parallax is %1 ± %2 milli-arcseconds."
+msgstr ""
+
+#: src/core/modules/StarWrapper.hpp
+msgctxt "object narration"
+msgid "Its parallax is %1 milli-arcseconds."
+msgstr ""

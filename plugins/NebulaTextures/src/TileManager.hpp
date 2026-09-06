@@ -48,6 +48,7 @@ public:
 
 	//! Hides default tile regions that overlap with custom tiles.
 	void resolveConflicts(const QString& defaultTexName, const QString& customTexName);
+	void restoreConflicts();
 
 	//! Deletes image files listed in the configuration.
 	void deleteImagesFromConfig(TextureConfigManager* configManager, const QString& pluginDir);

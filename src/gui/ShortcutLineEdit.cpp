@@ -58,12 +58,12 @@ void ShortcutLineEdit::backspace()
 
 void ShortcutLineEdit::setContents(QKeySequence ks)
 {
-	// Avoiding infinite loop of same signal-slot emitting/calling
-	if (ks.toString(QKeySequence::NativeText) == text())
+	if (getKeySequence() == ks &&
+	    ks.toString(QKeySequence::NativeText) == text())
 		return;
 	
-	// Set the keys from the given key sequence
-	clear();
+	keys.clear();
+	QLineEdit::setText("");
 	for (int i = 0; i < ks.count(); ++i)
 	{
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)

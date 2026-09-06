@@ -1,0 +1,1087 @@
+{
+  "checks": [
+    {
+      "name": "Sirius selected",
+      "ok": true
+    },
+    {
+      "name": "Sirius explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "Sirius inline resolution",
+      "ok": true
+    },
+    {
+      "name": "Sirius rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "Sirius fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "Sirius close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "Sirius close retains target",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse selected",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse inline resolution",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse close retains target",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly selected",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly inline resolution",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly close retains target",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly selected",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly inline resolution",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly close retains target",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 selected",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 inline resolution",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "NGC 6256 close retains target",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 selected",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 explicitly schematic",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 inline resolution",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 rotates in 3D",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 fullscreen resolution",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 close retains rotation",
+      "ok": true
+    },
+    {
+      "name": "NGC 188 close retains target",
+      "ok": true
+    },
+    {
+      "name": "M31 keeps photograph instead of invented model",
+      "ok": true
+    },
+    {
+      "name": "NGC 7006 keeps photograph instead of invented model",
+      "ok": true
+    },
+    {
+      "name": "Moon retains physical texture model",
+      "ok": true
+    },
+    {
+      "name": "Moon retains ephemeris lighting",
+      "ok": true
+    },
+    {
+      "name": "inline model responds to real upward touch",
+      "ok": true
+    },
+    {
+      "name": "inline model touch does not move sky",
+      "ok": true
+    },
+    {
+      "name": "real upward touch rotates the model upward",
+      "ok": true
+    },
+    {
+      "name": "model swipe leaves sky view unchanged",
+      "ok": true
+    },
+    {
+      "name": "real close button retains Moon selection",
+      "ok": true
+    },
+    {
+      "name": "real close button leaves sky view unchanged",
+      "ok": true
+    },
+    {
+      "name": "lighting still refreshes after real model touches",
+      "ok": true
+    },
+    {
+      "name": "lighting refresh retains inspection rotation",
+      "ok": true
+    },
+    {
+      "name": "clearing selection removes model feedback",
+      "ok": true
+    },
+    {
+      "name": "app process did not restart",
+      "ok": true
+    }
+  ],
+  "frames": [
+    {
+      "query": "Sirius",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "HIP 32349",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693631055,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 8050,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "HIP 32349",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693632589,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 8050,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "HIP 32349",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693633727,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 8050,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "HIP 32349",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693635110,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 8050,
+        "immersive": false
+      }
+    },
+    {
+      "query": "Betelgeuse",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "HIP 27989",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693635987,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 3282,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "HIP 27989",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693637252,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 3282,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "HIP 27989",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693638114,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 3282,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "HIP 27989",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693639469,
+        "kind": "star",
+        "schematic": true,
+        "temperatureK": 3282,
+        "immersive": false
+      }
+    },
+    {
+      "query": "catalog|Quasars|MS 23574-3520|selectOnly",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "MS 23574-3520",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          0.6967067093471654,
+          -0.7173560908995228,
+          0,
+          0.7173560908995228,
+          0.6967067093471654
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          0.6967067093471654,
+          -0.7173560908995228,
+          0,
+          0.7173560908995228,
+          0.6967067093471654
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693640406,
+        "kind": "quasar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "MS 23574-3520",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693641689,
+        "kind": "quasar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "MS 23574-3520",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693642729,
+        "kind": "quasar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "MS 23574-3520",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          -0.19824540775195498,
+          0.3732369808655239,
+          -0.9063072957996365,
+          0.19253883452060538,
+          0.9214730224545931,
+          0.33736666416503586
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693644217,
+        "kind": "quasar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "query": "catalog|Pulsars|PSR J0437-4715|selectOnly",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "PSR J0437-4715",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693645221,
+        "kind": "pulsar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "PSR J0437-4715",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693646625,
+        "kind": "pulsar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "PSR J0437-4715",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693647879,
+        "kind": "pulsar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "PSR J0437-4715",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693649325,
+        "kind": "pulsar",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "query": "NGC 6256",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "NGC 6256",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693650259,
+        "kind": "globular-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "NGC 6256",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693651571,
+        "kind": "globular-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "NGC 6256",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693652800,
+        "kind": "globular-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "NGC 6256",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693654714,
+        "kind": "globular-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "query": "NGC 188",
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "Polarissima Cluster",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693655478,
+        "kind": "open-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "Polarissima Cluster",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693656964,
+        "kind": "open-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "full": {
+        "ok": true,
+        "selectedEnglishName": "Polarissima Cluster",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 640,
+        "renderedAt": 1788693657761,
+        "kind": "open-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": true
+      },
+      "closed": {
+        "ok": true,
+        "selectedEnglishName": "Polarissima Cluster",
+        "rotation": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "viewToBody": [
+          0.9610554383107709,
+          -0.10761795855146918,
+          -0.2545404083647746,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0.27635564856411376,
+          0.37425261565369394,
+          0.8851906773023971
+        ],
+        "renderSize": 320,
+        "renderedAt": 1788693659233,
+        "kind": "open-cluster",
+        "schematic": true,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "inlineTouchBeforeView": {
+        "altitude": -23.29735232755925,
+        "azimuth": 191.5661028989343,
+        "ok": true
+      },
+      "inlineTouchAfterView": {
+        "altitude": -23.29735232755968,
+        "azimuth": 191.566102898934,
+        "ok": true
+      },
+      "inlineTouchFrame": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          0.9945530739126616,
+          -0.10423139244429272,
+          0,
+          0.10423139244429272,
+          0.9945530739126616
+        ],
+        "viewToBody": [
+          0.9954747516019136,
+          -0.09328537906829641,
+          0.01810682123380159,
+          0.09501452584359177,
+          0.9801275118521131,
+          -0.17413299626809087,
+          -0.0015029310782697994,
+          0.17506541223973904,
+          0.9845556574594977
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.26314027792311645,
+          "jd": 2461289.972082118,
+          "sunDirectionBody": [
+            -0.8836453273560607,
+            -0.007124021494700736,
+            -0.46810274914760214
+          ],
+          "viewToBody": [
+            0.9954747516019136,
+            -0.09466455969342107,
+            0.008284929761882208,
+            0.09501452584359177,
+            0.9929389544104075,
+            -0.07102445137474603,
+            -0.0015029310782697994,
+            0.07149023676291018,
+            0.9974401672510268
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693668464,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "inlineBounds": [
+        1560,
+        1032,
+        2455,
+        1329
+      ]
+    }
+  ]
+}

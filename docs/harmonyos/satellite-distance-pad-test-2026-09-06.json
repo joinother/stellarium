@@ -1,0 +1,348 @@
+{
+  "checks": [
+    {
+      "name": "satellite distance is a finite positive km value",
+      "ok": true
+    },
+    {
+      "name": "distance explicitly refers to the observer",
+      "ok": true
+    },
+    {
+      "name": "summary distance equals the native slant range, not orbital height",
+      "ok": true
+    },
+    {
+      "name": "visible card distance matches the paused native calculation",
+      "ok": true
+    },
+    {
+      "name": "satellite distance changes while simulation runs",
+      "ok": true
+    },
+    {
+      "name": "visible summary distance also changes",
+      "ok": true
+    },
+    {
+      "name": "natural satellite keeps the solar-system AU distance",
+      "ok": true
+    },
+    {
+      "name": "cleared selection does not retain a distance",
+      "ok": true
+    }
+  ],
+  "samples": [
+    {
+      "aboveHorizon": false,
+      "altitude": -54.95245921068813,
+      "angularSizeDegrees": 0.0005333955846584927,
+      "apparentAltAz": "-54.952°, 78.873°",
+      "apparentMagnitude": 17.173437118530273,
+      "apparentSiderealTime": "14h19m46.9s",
+      "azimuth": 78.87304405066257,
+      "constellation": "玉夫座",
+      "constellationAbbreviation": "Scl",
+      "dec": "-26°07'02.7\"",
+      "decJ2000Degrees": -26.266418266110588,
+      "distance": "11708.5 km",
+      "distanceKm": 11708.458312191302,
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "eclipticCurrent": "345.513°, -22.301°",
+      "eclipticJ2000": "345.136°, -22.299°",
+      "englishName": "STARLETTE",
+      "equatorialJ2000": "  23h42m54.3s  -26°15'59.1\"",
+      "equatorialOfDate": "  23h44m18.4s  -26°07'02.7\"",
+      "extinction": 0.17343711853027344,
+      "found": true,
+      "galactic": "32.259°, -74.681°",
+      "geometricAltAz": "-54.952°, 78.873°",
+      "geometricAltitude": -54.95245921068813,
+      "geometricAzimuth": 78.87304405066257,
+      "hourAngle": "14h35m28.5s",
+      "hourAngleDegrees": 218.86859483008715,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+22°22'06\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "11708.5 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "3.234 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "1071.9 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "-8.415°, -127.126°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星在地平线以下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "14h19m46.3s",
+      "name": "STARLETTE",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "parallacticAngle": "-56.96°",
+      "polarDistanceDegrees": 116.11741357521637,
+      "polarDistanceJ2000Degrees": 116.26641826611058,
+      "ra": "  23h44m18.4s",
+      "raJ2000Degrees": -4.273726530421403,
+      "rise": "20h30m",
+      "set": "5h25m",
+      "size": "+0°00'01.92\"",
+      "supergalactic": "266.007°, 8.473°",
+      "transit": "0h59m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": false,
+      "altitude": -55.05890455603216,
+      "angularSizeDegrees": 0.0005328574689180592,
+      "apparentAltAz": "-55.059°, 78.919°",
+      "apparentMagnitude": 17.17319107055664,
+      "apparentSiderealTime": "14h19m50.6s",
+      "azimuth": 78.91869256153069,
+      "constellation": "玉夫座",
+      "constellationAbbreviation": "Scl",
+      "dec": "-26°11'50.5\"",
+      "decJ2000Degrees": -26.34637942339191,
+      "distance": "11720.3 km",
+      "distanceKm": 11720.282310317638,
+      "distanceReference": "observer",
+      "distanceStatus": "computed",
+      "eclipticCurrent": "345.563°, -22.411°",
+      "eclipticJ2000": "345.185°, -22.410°",
+      "englishName": "STARLETTE",
+      "equatorialJ2000": "  23h43m18.1s  -26°20'47.0\"",
+      "equatorialOfDate": "  23h44m42.2s  -26°11'50.5\"",
+      "extinction": 0.17319107055664062,
+      "found": true,
+      "galactic": "31.998°, -74.779°",
+      "geometricAltAz": "-55.059°, 78.919°",
+      "geometricAltitude": -55.05890455603216,
+      "geometricAzimuth": 78.91869256153069,
+      "hourAngle": "14h35m08.4s",
+      "hourAngleDegrees": 218.78503209973107,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+22°28'55\""
+        },
+        {
+          "key": "range",
+          "live": true,
+          "section": "satellite",
+          "value": "11720.3 km"
+        },
+        {
+          "key": "rangeRate",
+          "live": true,
+          "section": "satellite",
+          "value": "3.225 km/s"
+        },
+        {
+          "key": "height",
+          "live": true,
+          "section": "satellite",
+          "value": "1071.6 km"
+        },
+        {
+          "key": "subpoint",
+          "live": true,
+          "section": "satellite",
+          "value": "-8.571°, -127.007°"
+        },
+        {
+          "key": "visibility",
+          "live": true,
+          "section": "satellite",
+          "value": "此卫星在地平线以下"
+        }
+      ],
+      "magnitude": 17,
+      "meanSiderealTime": "14h19m50.0s",
+      "name": "STARLETTE",
+      "objectType": "artificial satellite",
+      "ok": true,
+      "parallacticAngle": "-57.03°",
+      "polarDistanceDegrees": 116.19735258615619,
+      "polarDistanceJ2000Degrees": 116.3463794233919,
+      "ra": "  23h44m42.2s",
+      "raJ2000Degrees": -4.174763297375072,
+      "rise": "20h30m",
+      "set": "5h25m",
+      "size": "+0°00'01.92\"",
+      "supergalactic": "265.966°, 8.360°",
+      "transit": "0h59m",
+      "type": "人造卫星"
+    },
+    {
+      "aboveHorizon": true,
+      "airmass": 31.34728240966797,
+      "altitude": 0.5352763095372203,
+      "angularSizeDegrees": 0.5405279792102723,
+      "apparentAltAz": "0.535°, 305.286°",
+      "apparentMagnitude": -5.25651741027832,
+      "apparentSiderealTime": "14h19m53.6s",
+      "azimuth": 305.2862692403528,
+      "constellation": "双子座",
+      "constellationAbbreviation": "Gem",
+      "dec": "+26°21'07.3\"",
+      "decJ2000Degrees": 26.376798866215957,
+      "distance": "0.0025 AU",
+      "eclipticCurrent": "99.511°, 3.266°",
+      "eclipticJ2000": "99.136°, 3.260°",
+      "elongation": 64.27960247190991,
+      "englishName": "Moon",
+      "equatorialJ2000": "   6h40m45.9s  +26°22'36.5\"",
+      "equatorialOfDate": "   6h42m26.0s  +26°21'07.3\"",
+      "extinction": 4.035152435302734,
+      "found": true,
+      "galactic": "188.084°, 9.524°",
+      "geometricAltAz": "0.069°, 305.286°",
+      "geometricAltitude": 0.06893809407541732,
+      "geometricAzimuth": 305.2862692403528,
+      "hourAngle": "7h37m27.6s",
+      "hourAngleDegrees": 114.36488310762881,
+      "infoMode": "all",
+      "liveDetailFields": [
+        {
+          "key": "heliocentricDistance",
+          "live": true,
+          "section": "orbit",
+          "value": "1.0070 AU"
+        },
+        {
+          "key": "phaseAngle",
+          "live": true,
+          "section": "orbit",
+          "value": "+115°35'39\""
+        },
+        {
+          "key": "illuminationTrend",
+          "live": true,
+          "section": "orbit",
+          "value": "waning"
+        },
+        {
+          "key": "orbitalSpeed",
+          "live": true,
+          "section": "orbit",
+          "value": "1.065 km/s"
+        },
+        {
+          "key": "heliocentricSpeed",
+          "live": true,
+          "section": "orbit",
+          "value": "29.104 km/s"
+        },
+        {
+          "key": "centralLongitude",
+          "live": true,
+          "section": "surface",
+          "value": "359.62°"
+        },
+        {
+          "key": "centralLatitude",
+          "live": true,
+          "section": "surface",
+          "value": "-5.16°"
+        },
+        {
+          "key": "rotationAxisAngle",
+          "live": true,
+          "section": "surface",
+          "value": "3.51°"
+        },
+        {
+          "key": "subsolarLongitude",
+          "live": true,
+          "section": "surface",
+          "value": "115.98°"
+        },
+        {
+          "key": "subsolarLatitude",
+          "live": true,
+          "section": "surface",
+          "value": "-0.40°"
+        },
+        {
+          "key": "moonPhaseName",
+          "live": true,
+          "section": "lunar",
+          "value": "残月"
+        },
+        {
+          "key": "moonAge",
+          "live": true,
+          "section": "lunar",
+          "value": "24.31 天"
+        },
+        {
+          "key": "librationLongitude",
+          "live": true,
+          "section": "lunar",
+          "value": "-359.62°"
+        },
+        {
+          "key": "librationLatitude",
+          "live": true,
+          "section": "lunar",
+          "value": "-5.16°"
+        },
+        {
+          "key": "colongitude",
+          "live": true,
+          "section": "lunar",
+          "value": "90.04°"
+        }
+      ],
+      "magnitude": -9.291669845581055,
+      "meanSiderealTime": "14h19m53.1s",
+      "name": "月",
+      "objectType": "moon",
+      "ok": true,
+      "parallacticAngle": "44.49°",
+      "phase": 28.40029001235962,
+      "polarDistanceDegrees": 63.647960703844646,
+      "polarDistanceJ2000Degrees": 63.623201133784036,
+      "ra": "   6h42m26.0s",
+      "raJ2000Degrees": 100.19121913934379,
+      "rise": "---",
+      "set": "15h39m",
+      "size": "+0°32'25.90\"",
+      "supergalactic": "21.699°, -47.772°",
+      "transit": "7h39m",
+      "type": "卫星"
+    }
+  ],
+  "restoredRate": 1.1574074074074073e-05
+}

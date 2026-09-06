@@ -125,6 +125,21 @@ public:
 		return satrec.error;
 	}
 
+	const char* getPropagationStatus() const
+	{
+		if (satrec.error != 0) return "sgp4_error";
+		const double radius = m_Position.norm();
+		const double speed = m_Vel.norm();
+		const double maximumRadius = 2. * (EARTH_RADIUS + getPerigeeApogee()[1]);
+		if (!std::isfinite(radius) || !std::isfinite(speed) || !std::isfinite(maximumRadius))
+			return "non_finite";
+		if (radius < EARTH_RADIUS + 80.) return "below_atmosphere_limit";
+		if (radius > maximumRadius) return "divergent_extrapolation";
+		return "valid";
+	}
+
+	double getTleEpochJD() const { return satrec.jdsatepoch; }
+
 	double getPeriod() const
 	{
 		// Get orbital period from mean motion (rad/min)

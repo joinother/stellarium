@@ -1,0 +1,138 @@
+{
+  "checks": [
+    {
+      "name": "visibility is boolean",
+      "ok": true
+    },
+    {
+      "name": "camera flags True",
+      "ok": true
+    },
+    {
+      "name": "camera flags False",
+      "ok": true
+    },
+    {
+      "name": "camera flags True",
+      "ok": true
+    },
+    {
+      "name": "camera flags False",
+      "ok": true
+    },
+    {
+      "name": "camera selection LSSTCam",
+      "ok": true
+    },
+    {
+      "name": "camera selection DECam",
+      "ok": true
+    },
+    {
+      "name": "camera selection HSC",
+      "ok": true
+    },
+    {
+      "name": "camera selection MegaPrime",
+      "ok": true
+    },
+    {
+      "name": "camera selection LATISS",
+      "ok": true
+    },
+    {
+      "name": "camera selection JWST",
+      "ok": true
+    },
+    {
+      "name": "camera selection HST",
+      "ok": true
+    },
+    {
+      "name": "camera selection Roman",
+      "ok": true
+    },
+    {
+      "name": "camera selection Euclid",
+      "ok": true
+    },
+    {
+      "name": "reject invalid ra",
+      "ok": true
+    },
+    {
+      "name": "reject invalid dec",
+      "ok": true
+    },
+    {
+      "name": "reject invalid rotation",
+      "ok": true
+    },
+    {
+      "name": "reject invalid camera",
+      "ok": true
+    },
+    {
+      "name": "offline import valid",
+      "ok": true
+    },
+    {
+      "name": "texture flags without reload False",
+      "ok": true
+    },
+    {
+      "name": "texture flags without reload True",
+      "ok": true
+    },
+    {
+      "name": "texture flags without reload True",
+      "ok": true
+    },
+    {
+      "name": "texture flags without reload False",
+      "ok": true
+    },
+    {
+      "name": "texture flags without reload True",
+      "ok": true
+    },
+    {
+      "name": "collection completion does not rebuild the layer",
+      "ok": true
+    },
+    {
+      "name": "explicit refresh rebuilds once without decoding unchanged images",
+      "ok": true
+    },
+    {
+      "name": "fixture validation uses the cache",
+      "ok": true
+    }
+  ],
+  "initialCamera": {
+    "currentCamera": "LSSTCam",
+    "dec": 0,
+    "enabled": false,
+    "names": [
+      "LSSTCam",
+      "DECam",
+      "HSC",
+      "MegaPrime",
+      "LATISS",
+      "JWST",
+      "HST",
+      "Roman",
+      "Euclid"
+    ],
+    "ra": 0,
+    "rotation": 0,
+    "visible": false
+  },
+  "initialTextureCount": 0,
+  "probes": {
+    "imageDecodeCount": 1,
+    "layerRebuildCount": 1
+  },
+  "restored": true,
+  "fixtureRemoved": true
+}

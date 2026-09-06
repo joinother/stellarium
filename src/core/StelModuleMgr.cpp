@@ -220,10 +220,11 @@ void StelModuleMgr::unloadAllPlugins()
 void StelModuleMgr::setPluginLoadAtStartup(const QString& key, bool b)
 {
 	QSettings* conf = StelApp::getInstance().getSettings();
-	conf->setValue("plugins_load_at_startup/"+key, b);
+	Q_UNUSED(b);
+	conf->setValue("plugins_load_at_startup/"+key, true);
 	if (pluginDescriptorList.contains(key))
 	{
-		pluginDescriptorList[key].loadAtStartup=b;
+		pluginDescriptorList[key].loadAtStartup=true;
 	}
 }
 
@@ -337,16 +338,14 @@ QList<StelModuleMgr::PluginDescriptor> StelModuleMgr::getPluginsList()
 		}
 	}
 
-	// Load for each plugin if it should be loaded at startup
 	QSettings* conf = StelApp::getInstance().getSettings();
 	Q_ASSERT(conf);
 	conf->beginGroup("plugins_load_at_startup");
 	for (auto iter = pluginDescriptorList.begin(); iter != pluginDescriptorList.end(); ++iter)
 	{
-		bool startByDefault = iter.value().info.startByDefault;
-		iter->loadAtStartup = conf->value(iter.key(), startByDefault).toBool();
-		// Save the value in case no such key exists
-		conf->setValue(iter.key(), iter->loadAtStartup);
+		Q_UNUSED(iter.value().info.startByDefault);
+		iter->loadAtStartup = true;
+		conf->setValue(iter.key(), true);
 	}
 	conf->endGroup();
 

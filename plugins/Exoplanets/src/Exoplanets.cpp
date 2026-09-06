@@ -371,7 +371,7 @@ StelObjectP Exoplanets::searchByNameI18n(const QString& nameI18n) const
 QVector<QPair<QString,StelObjectP>> Exoplanets::listMatchingObjects(const QString& objPrefix, int maxNbItem, bool useStartOfWords) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (!flagShowExoplanets || maxNbItem <= 0)
+	if (maxNbItem <= 0)
 	{
 		return result;
 	}
@@ -414,9 +414,6 @@ QVector<QPair<QString,StelObjectP>> Exoplanets::listMatchingObjects(const QStrin
 QVector<QPair<QString,StelObjectP>> Exoplanets::listAllObjects(bool inEnglish) const
 {
 	QVector<QPair<QString,StelObjectP>> result;
-	if (!flagShowExoplanets)
-		return result;
-
 	for (const auto& planet : ep)
 		for(const auto& name : planet->getExoplanetsDesignations())
 			result.append({name, StelObjectP(planet)});

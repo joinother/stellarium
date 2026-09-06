@@ -58,10 +58,14 @@ public:
 	//! Returns the file path of the configuration.
 	QString getConfigPath() const;
 
+	//! Returns the most recent load or save failure reason.
+	QString getLastError() const;
+
 private:
 	QString filePath;  //!< Path to the configuration file.
 	QString texname;  //!< Group Name of configuration file.
 	QJsonObject rootObject;  //!< The root JSON object for the config.
+	mutable QString lastError;
 };
 
 #endif // TEXTURECONFIGMANAGER_HPP

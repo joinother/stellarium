@@ -39,6 +39,8 @@
 #include <QMap>
 #include <QMapIterator>
 #include <QDir>
+#include <QFile>
+#include <QIODevice>
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QRegularExpression>
@@ -927,6 +929,67 @@ QString StelSkyCultureMgr::descriptionMarkdownToNarration(const QString& markdow
 	return text;
 }
 
+static QJsonObject skyCultureEditorialContext()
+{
+	static const QJsonObject context = [] {
+		const QString path = StelFileMgr::findFile(QStringLiteral("data/skyculture_editorial_context.json"));
+		if (path.isEmpty())
+		{
+			qWarning() << "Can't find sky-culture editorial context";
+			return QJsonObject();
+		}
+
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly))
+		{
+			qWarning().nospace() << "Can't open sky-culture editorial context " << path
+			                    << ": " << file.errorString();
+			return QJsonObject();
+		}
+
+		QJsonParseError parseError;
+		const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+		if (parseError.error != QJsonParseError::NoError || !document.isObject())
+		{
+			qWarning().nospace() << "Invalid sky-culture editorial context " << path
+			                    << ": " << parseError.errorString();
+			return QJsonObject();
+		}
+		return document.object();
+	}();
+	return context;
+}
+
+static QJsonObject skyCultureEditorialSection(const QJsonObject& context, const QString& sectionName,
+	                                             const QString& language)
+{
+	const QJsonObject translations = context.value(sectionName).toObject();
+	QStringList candidates;
+	candidates << language;
+	const int separator = language.indexOf('_');
+	if (separator > 0)
+		candidates << language.left(separator);
+	candidates << QStringLiteral("en");
+
+	for (const QString& candidate : candidates)
+	{
+		const QJsonObject translation = translations.value(candidate).toObject();
+		if (!translation.isEmpty())
+			return translation;
+	}
+	return QJsonObject();
+}
+
+static bool skyCultureHasEditorialContext(const QJsonObject& context, const QString& cultureId)
+{
+	for (const QJsonValue& value : context.value(QStringLiteral("chinaRelatedCultureIds")).toArray())
+	{
+		if (value.toString() == cultureId)
+			return true;
+	}
+	return false;
+}
+
 QString StelSkyCultureMgr::getCurrentSkyCultureHtmlDescription()
 {
 	const QString descPath = currentSkyCulture.path + "/description.md";
@@ -957,6 +1020,26 @@ QString StelSkyCultureMgr::getCurrentSkyCultureHtmlDescription()
 	description.append(getCurrentSkyCultureHtmlLicense());
 	description.append(getCurrentSkyCultureHtmlClassification());
 	description.append(getCurrentSkyCultureHtmlRegion());
+
+	const QString language = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+	const QJsonObject context = skyCultureEditorialContext();
+	const QJsonObject presentation = skyCultureEditorialSection(context, QStringLiteral("presentation"), language);
+	if (!presentation.isEmpty())
+	{
+		description += QStringLiteral("<h2>%1</h2><p>%2</p>")
+			.arg(presentation.value(QStringLiteral("title")).toString().toHtmlEscaped(),
+			     presentation.value(QStringLiteral("body")).toString().toHtmlEscaped());
+	}
+	if (skyCultureHasEditorialContext(context, currentSkyCulture.id))
+	{
+		const QJsonObject china = skyCultureEditorialSection(context, QStringLiteral("chinaRelated"), language);
+		if (!china.isEmpty())
+		{
+			description += QStringLiteral("<h2>%1</h2><p>%2</p>")
+				.arg(china.value(QStringLiteral("title")).toString().toHtmlEscaped(),
+				     china.value(QStringLiteral("body")).toString().toHtmlEscaped());
+		}
+	}
 
 
 	return description;
@@ -992,6 +1075,22 @@ QString StelSkyCultureMgr::getCurrentSkyCultureNarration()
 	//description.append(getCurrentSkyCultureHtmlLicense());
 	//description.append(getCurrentSkyCultureHtmlClassification());
 	//description.append(getCurrentSkyCultureHtmlRegion());
+
+	const QString language = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+	const QJsonObject context = skyCultureEditorialContext();
+	const QJsonObject presentation = skyCultureEditorialSection(context, QStringLiteral("presentation"), language);
+	if (!presentation.isEmpty())
+		 description += QStringLiteral("%1. . . %2 ")
+			.arg(presentation.value(QStringLiteral("title")).toString(),
+			     presentation.value(QStringLiteral("body")).toString());
+	if (skyCultureHasEditorialContext(context, currentSkyCulture.id))
+	{
+		const QJsonObject china = skyCultureEditorialSection(context, QStringLiteral("chinaRelated"), language);
+		if (!china.isEmpty())
+			 description += QStringLiteral("%1. . . %2 ")
+				.arg(china.value(QStringLiteral("title")).toString(),
+				     china.value(QStringLiteral("body")).toString());
+	}
 
 	return description;
 }

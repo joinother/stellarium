@@ -1019,23 +1019,36 @@ void StelMainScriptAPI::waitFor(const QString& dt, const QString& spec)
 void StelMainScriptAPI::waitForKeypress(const QString message)
 {
 	StelScriptMgr* scriptMgr = &StelApp::getInstance().getScriptMgr();
-	LabelMgr* labelMgr = GETSTELMODULE(LabelMgr);
-	int labelId;
-
 	QCoreApplication::processEvents();
 	QEventLoop* loop = scriptMgr->getWaitEventLoop();
 	KeypressFilter filter(loop);
+	scriptMgr->setWaitingForKeypress(true);
 	qApp->installEventFilter(&filter);
+#if defined(__OHOS__)
+	// The HarmonyOS shell owns script text and the continue affordance. Keep the
+	// message in the native state bridge instead of drawing a second fixed label
+	// behind the ArkUI safe area.
+	scriptMgr->setWaitForKeypressMessage(message);
+#else
+	LabelMgr* labelMgr = GETSTELMODULE(LabelMgr);
+	int labelId;
 	if (scriptMgr->getFlagShowContinueMessage())
 		labelId = labelMgr->labelScreen(message, 30, 30, true, 20, "#ffffff", false, 0);
+#endif
 
 	if( loop->exec() != 0 )
 	{
 		emit requestExit();
 	}
+
+#if defined(__OHOS__)
+	scriptMgr->clearWaitForKeypressMessage();
+#else
 	if (scriptMgr->getFlagShowContinueMessage())
 		labelMgr->deleteLabel(labelId);
+#endif
 	qApp->removeEventFilter(&filter);
+	scriptMgr->setWaitingForKeypress(false);
 }
 
 void StelMainScriptAPI::selectObjectByName(const QString& name, bool pointer)

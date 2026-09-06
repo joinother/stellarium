@@ -15,6 +15,7 @@
 - 地图 SDK 当前按项目决定暂缓，不接入花瓣地图或其他地图 SDK。
 - 本轮复核新增 `docs/harmonyos/OFFLINE-FEATURE-MATRIX.md`：明确区分“可随包内置”“只能构建机更新”“需要用户主动联网/设备连接”，并补齐六类静态目录的构建机更新命令；不能因为存在镜像路径就宣称客户端已完成本地化。
 - 本轮再次核对网络类调用后，补登记星表下载页、帮助页检查更新、卫星自定义 TLE 导入和 Vts 本机连接；“打开外部网页”“局域网控制”和“公网数据请求”分开记录，不能只用“无 INTERNET 权限”作为唯一结论。
+- `NebulaTextures` 的 HarmonyOS 入口只接受本地文件并复制到应用用户目录，纹理配置、映射和解码均在本机完成；`importNebulaTexture`、`refreshNebulaTextures` 和 `validateNebulaTexture` 不发起网络请求。上游 Plate Solver 仍保留在桌面插件代码中，但鸿蒙 ArkUI 与 CLI 均明确禁用图像上传，不能把它描述为已本地化。
 
 ## 研发参考网址（不属于运行时联网）
 
@@ -28,7 +29,17 @@
 - `local` 模式读取仓库相对路径下的审核缓存，`mirror` 和 `upstream` 只允许出现在开发/构建阶段；清单记录来源模式、解析端点、字节数和 SHA-256，不记录设备标识、位置或用户查询。
 - 这套注册表是替换接口和审计边界，不等同于所有桌面插件已经完成本地化；每个新接入项仍需单独核对授权、隐私字段、缓存和失败回退。
 
+## 预研但未接入的本地设备通信
+
+星闪望远镜控制目前只完成接口预研，未加入生产代码、未申请 `ACCESS_NEARLINK`、未扫描或连接设备。星闪属于本地无线设备通信，不等于公网联网，但仍需单独记录权限、设备标识和控制数据边界。设计与分阶段路线见 `docs/harmonyos/TELESCOPE-NEARLINK-RESEARCH-2026-09-02.md`。
+
+| 功能 | 当前状态 | 计划触发方式 | 本地数据 | 网络边界 |
+| --- | --- | --- | --- | --- |
+| 星闪望远镜控制（SSAP） | 预研，未接入 | 用户主动发现、配对、连接并选择设备；不会自动扫描或后台连接 | 星闪设备地址、名称、服务 UUID、设备能力、目标 RA/Dec 和设备回传位置；默认脱敏日志 | 不访问互联网，不通过星闪转发公网请求；接入前需用户授权、错误/超时/断开处理和能力握手 |
+
 ## 运行时联网台账
+
+2026-09-06 卫星异常排查：开发机手动访问 `https://celestrak.org/NORAD/elements/gp.php?CATNR=69196&FORMAT=TLE`，仅外发公开 NORAD 编号/返回格式，取得并校验 STARLINK-36933 的 2026-09-05 TLE 后写入内置资源。没有外发用户观测位置或设备标识，没有新增应用网络请求。来源、文件哈希及单条更新范围见 `SATELLITE-PROPAGATION-AUDIT.md`；其余目录未因此视为已更新。
 
 | 功能/插件 | 默认状态 | 触发方式 | 当前地址或来源 | 传输/返回内容 | 国内镜像或替代评估 |
 | --- | --- | --- | --- | --- | --- |
@@ -43,8 +54,8 @@
 | Supernovae | HarmonyOS 严格离线 | 运行时无更新入口；开发/构建机显式更新后重新打包 | `plugins/Supernovae/resources/supernovae.json`；上游 `https://stellarium.org/json/supernovae.json` | HAP 内置超新星目录 JSON | 可做国内静态镜像；先核对数据许可 |
 | Pulsars | HarmonyOS 严格离线 | 运行时无更新入口；开发/构建机显式更新后重新打包 | `plugins/Pulsars/resources/pulsars.json`；上游 `https://stellarium.org/json/pulsars.json` | HAP 内置脉冲星目录 JSON | 可做国内静态镜像；先核对数据许可 |
 | Quasars | HarmonyOS 严格离线 | 运行时无更新入口；开发/构建机显式更新后重新打包 | `plugins/Quasars/resources/quasars.json`；上游 `https://stellarium.org/json/quasars.json` | HAP 内置类星体目录 JSON | 可做国内静态镜像；先核对数据许可 |
-| Satellites | HarmonyOS 运行时严格离线 | 应用内无更新入口；仅开发/构建机显式运行 `scripts/update-ohos-astronomy-data.mjs --update-satellites` | CelesTrak GP 3LE：`stations`、`visual`、`active`；SatNOGS TLE API 作补充 | 构建机下载公开 TLE，验证后写入下一次 HAP 内置目录；运行时不请求、不保存远程响应 | 构建机可后续评估合规镜像；当前保留来源、时间、校验和和失败回退，部分源失败时标记 `partial`，不把旧数据伪称最新 |
-| Planes | 默认关闭 | 用户开启飞机图层且处于实时模式；默认约每 15 秒请求 | `https://opendata.adsb.fi/api/v2/lat/%1/lon/%2/dist/%3`；备用 `https://api.airplanes.live/v2/point/%1/%2/%3` | 当前观测纬度、经度、半径；返回实时航空器信息 | 不建议简单镜像，数据时效性决定必须访问实时服务；目前没有已验证的国内公开等价 API |
+| Satellites | HarmonyOS 运行时严格离线 | 应用内可查看/保存 TLE 来源；`importSatelliteTle` 只导入本地文件；`refreshSatelliteCatalog` 在离线包中拒绝网络；仅开发/构建机显式运行 `scripts/update-ohos-astronomy-data.mjs --update-satellites` | CelesTrak GP 3LE：`stations`、`visual`、`active`；SatNOGS TLE API 作补充；用户可保存自定义 `file/http/https` 来源 | 构建机下载公开 TLE，验证后写入下一次 HAP 内置目录；运行时不请求、不保存远程响应；远程 URL 仅作为休眠配置展示 | 构建机可后续评估合规镜像；当前保留来源、时间、校验和和失败回退，部分源失败时标记 `partial`，不把旧数据伪称最新；本地导入不需要镜像 |
+| Planes | HarmonyOS 离线包强制禁用；桌面版默认关闭 | 桌面版用户开启飞机图层且处于实时模式；默认约每 15 秒请求。HarmonyOS 离线包在编译门禁下不创建请求 | `https://opendata.adsb.fi/api/v2/lat/%1/lon/%2/dist/%3`；备用 `https://api.airplanes.live/v2/point/%1/%2/%3` | 桌面版外发当前观测纬度、经度、半径；返回实时航空器信息 | 不建议简单镜像，数据时效性决定必须访问实时服务；当前 HarmonyOS 离线包不接入；未来若备案后接入，需单独评估国内服务或受控镜像 |
 | HiPS 远程星图层（在线巡天） | 默认不显示 | 鸿蒙端“视图/巡天”页打开“HiPS 巡天”，或恢复了已保存的可见远程图层；页面提示“在线巡天需要网络连接” | 默认目录源：`http://alasky.u-strasbg.fr/MocServer/query?*/P/*&get=record`、`https://data.stellarium.org/surveys/hipslist`；每个图层还请求图层根目录下的 `properties`、不同层级的 `Norder.../Dir.../Npix...` 瓦片及可能的缩略图 | 巡天目录、图层元数据、当前视场对应的多级图像瓦片；请求路径中可能包含当前天区坐标/瓦片编号 | 适合自建合规 HiPS 镜像，但工作量大，需同步目录、元数据和多级瓦片；先确认上游数据许可、署名和更新策略；不接地图 SDK |
 | DSS/TOAST 数字化巡天（在线巡天） | 默认不显示 | 鸿蒙端“视图/巡天”页打开“DSS/TOAST 巡天”开关后，按当前视场加载图像 | 默认 `http://dss.stellarium.org/survey/{level}/{x}_{y}.jpg` | 当前天区对应层级、横纵坐标的 JPG 图像瓦片 | 可部署完整瓦片镜像，但需确认原始数据许可、瓦片生成方式和存储成本；目前未验证国内等价公开服务 |
 | SolarSystemEditor：MPC 小行星/彗星在线导入 | 不自动请求 | 用户在太阳系编辑器打开 MPC 导入窗口，手动选择下载列表、输入 URL 或执行在线 MPES 查询 | MPC 列表和轨道文件：`https://www.minorplanetcenter.net/iau/Ephemerides/...`、`https://www.minorplanetcenter.net/iau/MPCORB/...`、`https://www.minorplanetcenter.net/iau/ECS/MPCAT/...`；部分编号小行星列表使用 `http://dss.stellarium.org/MPC/mpn-{01..90}.txt`、`mpu-{01..62}.txt`；在线 MPES 查询：`https://www.minorplanetcenter.net/cgi-bin/mpeph2.cgi` | 用户选择的对象列表、轨道根数文件或查询参数；返回小行星/彗星轨道元素和星历数据，并可保存到本地 | 这不是巡天图像图层。优先保留手动导入和内置数据；不建议未经授权镜像 MPC 数据，国内部署前需确认 MPC/IAU 数据许可、服务条款、更新频率和查询接口合规性 |
@@ -54,6 +65,7 @@
 | 卫星自定义 TLE 导入 | HarmonyOS 应改为本地导入 | 用户在卫星导入页触发源列表下载 | `plugins/Satellites/src/gui/SatellitesImportDialog.cpp` 使用用户配置的 TLE URL | TLE 文本并写入用户目录 | 可保留本地文件导入；不能把实时 TLE 静态镜像宣称为实时，镜像必须走构建期或备案后的显式更新 |
 | RemoteControl | 默认不启动 | 用户/命令行启动本机 HTTP 服务 | 本机监听，默认端口 `8090` | 局域网请求可读取或控制应用状态；不是公网数据源 | 无需公网镜像；必须记录监听地址、密码、CORS 和局域网风险 |
 | RemoteSync | 默认空闲 | 用户启动服务端或连接到指定主机 | TCP 局域网连接，端口由设置决定 | 会话状态、时间、位置、视角和同步属性 | 无需公网镜像；必须记录连接目标、认证和局域网暴露范围 |
+| TelescopeControl 轻量 LX200 桥 | 不自动连接；默认新配置为离线模拟器 | 用户主动点击测试、转向、同步、停止、读取位置或居中到望远镜，显式调用对应 CLI，或主动开启面板内“实时位置” | 真实设备使用用户保存的回环或私网 IP 与 TCP 端口；离线模拟器不建立连接 | 测试发送只读 `:GR#` 赤经探针并校验 LX200 响应后断开；控制会发送目标 RA/Dec 和 LX200 指令；位置读取发送 `:GR`/`:GD`；实时位置仅在开关开启、应用前台且望远镜面板可见时约每秒读取一次，每次仍为短连接；不发送 SN、观测位置或隐私状态 | 不需要公网镜像。只允许本机/私网/链路本地地址；公网、主机名和未分类地址在 socket 前拒绝；不扫描、不监听、不在后台连接。离线模拟器明确标注，不冒充真实硬件 |
 
 ### 位置和隐私字段
 

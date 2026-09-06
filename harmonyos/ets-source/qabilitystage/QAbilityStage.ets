@@ -22,7 +22,7 @@ export default class QAbilityStage extends AbilityStage {
 
   public static releasePrivacyGate(): void {
     QAbilityStage.privacyGateReleased = true;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] Qt initialization gate released after consent');
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-host-gate-released-for-final-page');
   }
 
   private static forwardStageCreateIfNeeded(): void {
@@ -30,9 +30,10 @@ export default class QAbilityStage extends AbilityStage {
       QAbilityStage.stageInstance === undefined) {
       return;
     }
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=stage-create-forward-start');
     qpa.handleAbilityStageOnCreate(QAbilityStage.stageInstance);
     QAbilityStage.stageCreateForwarded = true;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] forwarded AbilityStage create to Qt after consent');
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=stage-create-forward-finish');
   }
 
   private static async initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): Promise<void> {
@@ -41,12 +42,15 @@ export default class QAbilityStage extends AbilityStage {
       throw new Error('Qt application context initialization requires privacy consent');
     }
     if (!QAbilityStage.setupQtApplicationCalled) {
-      hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: init');
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-context-init-start');
       const preparationStartedAt = Date.now();
       await prepareStellariumResourcesAsync(appContext);
+      hilog.info(LOG_DOMAIN, LOG_TAG,
+        `[privacy-probe] phase=resource-prepare-finish; elapsedMs=${Date.now() - preparationStartedAt}`);
       prepareStellariumResources(appContext);
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `[startup] Qt resource preparation completed in ${Date.now() - preparationStartedAt} ms`);
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-setup-start');
       qpa.setupQtApplication({
         appContext: appContext,
         modulesFactories: QtUtils.getModulesFactoriesMapForQt(),
@@ -56,6 +60,7 @@ export default class QAbilityStage extends AbilityStage {
         _unusedQChildProcess: new QChildProcess(),
       });
       QAbilityStage.setupQtApplicationCalled = true;
+      hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-setup-finish');
       QAbilityStage.forwardStageCreateIfNeeded();
     } else {
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbilityStage::initQtAppContextImpl: already initialized');

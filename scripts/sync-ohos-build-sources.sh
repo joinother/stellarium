@@ -28,6 +28,12 @@ SOURCES=(
   "harmonyos/ets-source/pages/location_names_zh.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/location_names_zh.ts"
   "harmonyos/ets-source/pages/StellariumAudio.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/StellariumAudio.ets"
   "harmonyos/ets-source/pages/StellariumTypes.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/StellariumTypes.ets"
+  "harmonyos/ets-source/pages/DetailModelGeometry.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/DetailModelGeometry.ets"
+  "harmonyos/ets-source/pages/ProceduralDetailModel.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/ProceduralDetailModel.ets"
+  "harmonyos/ets-source/pages/DetailModelRenderTypes.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/DetailModelRenderTypes.ets"
+  "harmonyos/ets-source/pages/DetailModelRasterizer.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/DetailModelRasterizer.ets"
+  "harmonyos/ets-source/pages/DetailModelWorker.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/DetailModelWorker.ets"
+  "harmonyos/ets-source/pages/DetailModelRenderClient.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/DetailModelRenderClient.ets"
   "harmonyos/ets-source/pages/FloatWindowNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/FloatWindowNativeNode.ets"
   "harmonyos/ets-source/pages/SubWindowNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/SubWindowNativeNode.ets"
   "harmonyos/ets-source/pages/UiExtensionNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/UiExtensionNativeNode.ets"
@@ -38,6 +44,7 @@ SOURCES=(
   "harmonyos/ets-source/qability/StellariumResourceBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/StellariumResourceBootstrap.ets"
   "harmonyos/ets-source/resources/base/media/ic_audio.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_audio.svg"
   "harmonyos/ets-source/resources/base/media/ic_back.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_back.svg"
+  "harmonyos/ets-source/resources/base/media/ic_chevron_right.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_chevron_right.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_planet.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_planet.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_moon.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_moon.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_star.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_star.svg"
@@ -55,6 +62,7 @@ SOURCES=(
   "harmonyos/ets-source/resources/base/media/ic_catalog_nova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_nova.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_supernova.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_supernova.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_quasar.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_quasar.svg"
+  "harmonyos/ets-source/resources/base/media/ic_catalog_aircraft.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_aircraft.svg"
   "harmonyos/ets-source/resources/base/media/ic_catalog_plugin.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_catalog_plugin.svg"
   "harmonyos/ets-source/resources/base/media/ic_gyro.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_gyro.svg"
   "harmonyos/ets-source/resources/base/media/ic_oculars.svg:build/libstellarium-harmonyos/entry/src/main/resources/base/media/ic_oculars.svg"
@@ -82,6 +90,7 @@ SOURCES=(
 )
 
 echo "Synced:"
+node "$REPO_ROOT/scripts/configure-ohos-model-worker.mjs"
 for item in "${SOURCES[@]}"; do
   SRC="$REPO_ROOT/${item%%:*}"
   DST="$REPO_ROOT/${item#*:}"

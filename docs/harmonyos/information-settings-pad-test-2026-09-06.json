@@ -1,0 +1,51 @@
+{
+  "initial": {
+    "activeInfoMask": 33554431,
+    "customInfoMask": 0,
+    "infoMode": "all",
+    "ok": true
+  },
+  "checks": [
+    {
+      "name": "custom mask 0",
+      "ok": true
+    },
+    {
+      "name": "restore custom mask 0",
+      "ok": true
+    },
+    {
+      "name": "custom mask 33554431",
+      "ok": true
+    },
+    {
+      "name": "restore custom mask 33554431",
+      "ok": true
+    },
+    {
+      "name": "custom mask 5",
+      "ok": true
+    },
+    {
+      "name": "restore custom mask 5",
+      "ok": true
+    },
+    {
+      "name": "reject unsupported bits",
+      "ok": true
+    },
+    {
+      "name": "invalid mask preserves choices",
+      "ok": true
+    },
+    {
+      "name": "restart retains mode and fields",
+      "ok": true
+    },
+    {
+      "name": "original settings restored",
+      "ok": true
+    }
+  ],
+  "restored": true
+}

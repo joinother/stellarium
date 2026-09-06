@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: stellarium@googlegroups.com\n"
-"POT-Creation-Date: 2026-08-28 15:38+0800\n"
+"POT-Creation-Date: 2026-08-31 19:21+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -2447,4 +2447,158 @@ msgstr ""
 
 #: scripts/messier_marathon.ssc:274
 msgid "cannot be seen now"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:66
+msgid "Place: Rangpur, Bangladesh"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:67
+msgid "Date: 2009-07-21, just before dawn."
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:68
+msgid "Orion and Gemini climb into the dawn sky"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:69
+msgid "fading from view as the sky brightens with"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:70
+msgid "the appearance of the Sun"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:85
+msgid "The Sun has a companion this morning..."
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:86
+msgid "The Moon."
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:91
+msgid "The Moon starts to obscure the Sun's disc"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:92
+msgid "and the sky becomes a little darker"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:113
+msgid "As the last of the Sun is covered by the Moon"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:114
+msgid "the sky darkens quickly, and the brighter stars"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:115
+msgid "and planets become visible"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:129
+msgid "At totality, the Sun is completely hidden behind the Moon"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:149
+msgid "The Sun emerges from behind the Moon"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:150
+msgid "The sky brightens once more"
+msgstr ""
+
+#: scripts/solar_eclipse.ssc:159
+msgid "The End"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:61 scripts/transit_of_venus.ssc:139
+msgid "NEVER look directly at the Sun!"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:67 scripts/transit_of_venus.ssc:90
+#: scripts/transit_of_venus.ssc:148
+msgid "Sydney Australia"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:68 scripts/transit_of_venus.ssc:91
+#: scripts/transit_of_venus.ssc:149
+msgid "2012-06-06"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:68
+msgid "Sunrise"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:80
+msgid "just below the Sun."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:81 scripts/transit_of_venus.ssc:144
+msgid "The planet Venus"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:90
+msgid "Dobsonian Telescope"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:90
+msgid "as seen through a"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:91 scripts/transit_of_venus.ssc:149
+msgid "Transit of Venus"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:102 scripts/transit_of_venus.ssc:169
+msgid "First Contact approx 8:12 a.m."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:107 scripts/transit_of_venus.ssc:174
+msgid "Second Contact approx 8:30 a.m."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:112 scripts/transit_of_venus.ssc:179
+msgid "for approximately 6 hours."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:113 scripts/transit_of_venus.ssc:180
+msgid "across the face of the Sun"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:113 scripts/transit_of_venus.ssc:180
+msgid "Venus continues to transit"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:121 scripts/transit_of_venus.ssc:189
+msgid "Third Contact approx 2:20 p.m."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:126 scripts/transit_of_venus.ssc:194
+msgid "Fourth Contact approx 2:39 p.m."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:130 scripts/transit_of_venus.ssc:197
+msgid "than a century away. "
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:131 scripts/transit_of_venus.ssc:198
+msgid "The next Transit of Venus is more "
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:143
+msgid "just above the Sun."
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:148
+msgid "Equatorial Telescope"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:148
+msgid "as seen through an"
+msgstr ""
+
+#: scripts/transit_of_venus.ssc:201
+msgid "Returning to current time and date."
 msgstr ""

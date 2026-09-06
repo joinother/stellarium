@@ -206,7 +206,18 @@ QString StelLocaleMgr::getPrintableTimeLocal(double JD, double utcOffsetHrs) con
 	switch (timeFormat)
 	{
 		case STimeSystemDefault:
-			return t.toString();
+		{
+			const QLocale locale;
+			const QString pattern = locale.timeFormat(QLocale::LongFormat);
+			QString clockPattern;
+			bool quoted = false;
+			for (const QChar character : pattern)
+			{
+				if (character == QLatin1Char('\'')) quoted = !quoted;
+				if (quoted || character != QLatin1Char('t')) clockPattern.append(character);
+			}
+			return locale.toString(t, clockPattern.trimmed());
+		}
 		case STime24h:
 			return t.toString("hh:mm:ss");
 		case STime12h:

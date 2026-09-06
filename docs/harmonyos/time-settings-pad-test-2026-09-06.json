@@ -1,0 +1,224 @@
+{
+  "initial": {
+    "dateFormat": "system_default",
+    "deltaTAlgorithm": "EspenakMeeusModified",
+    "deltaTAlgorithms": [
+      "WithoutCorrection",
+      "Schoch",
+      "Clemence",
+      "IAU",
+      "AstronomicalEphemeris",
+      "TuckermanGoldstine",
+      "MullerStephenson",
+      "Stephenson1978",
+      "SchmadelZech1979",
+      "MorrisonStephenson1982",
+      "StephensonMorrison1984",
+      "StephensonHoulden",
+      "Espenak",
+      "Borkowski",
+      "SchmadelZech1988",
+      "ChaprontTouze",
+      "StephensonMorrison1995",
+      "Stephenson1997",
+      "ChaprontMeeus",
+      "JPLHorizons",
+      "MeeusSimons",
+      "MontenbruckPfleger",
+      "ReingoldDershowitz",
+      "MorrisonStephenson2004",
+      "Reijs",
+      "EspenakMeeus",
+      "EspenakMeeusModified",
+      "EspenakMeeusZeroMoonAccel",
+      "Banjevic",
+      "IslamSadiqQureshi",
+      "KhalidSultanaZaidi",
+      "StephensonMorrisonHohenkerk2016",
+      "Henriksson2017",
+      "Custom"
+    ],
+    "deltaTCustom": "1820,-26,-20,0,32",
+    "deltaTDescription": "此校正由F. Espenak和J. Meeus提供，以Morrison & Stephenson (2004)为基础对1600年—2000年间的列表值进行多项式拟合求得。2015年—2033年间的值由IERS Rapid Service/Prediction Center的观测和预测插值求得。 有效使用范围：-1999年到3000年。 默认使用。 这个ṅ(月球的长期加速度) 解的值-25.8580\"/cy2，需要修正，详见用户手册。",
+    "formattedTime": "2026/9/6 14:10:52",
+    "ok": true,
+    "presetLocalTime": "1999-12-01T18:00:01",
+    "presetSkyTime": 2451514.250011574,
+    "startupTimeMode": "actual",
+    "startupTimeStop": false,
+    "timeFormat": "system_default",
+    "timeZone": "Asia/Shanghai",
+    "todayTime": "22:00:00"
+  },
+  "checks": [
+    {
+      "name": "format system_default/system_default",
+      "ok": true
+    },
+    {
+      "name": "format system_default/24h",
+      "ok": true
+    },
+    {
+      "name": "format system_default/12h",
+      "ok": true
+    },
+    {
+      "name": "format yyyymmdd/system_default",
+      "ok": true
+    },
+    {
+      "name": "format yyyymmdd/24h",
+      "ok": true
+    },
+    {
+      "name": "format yyyymmdd/12h",
+      "ok": true
+    },
+    {
+      "name": "format ddmmyyyy/system_default",
+      "ok": true
+    },
+    {
+      "name": "format ddmmyyyy/24h",
+      "ok": true
+    },
+    {
+      "name": "format ddmmyyyy/12h",
+      "ok": true
+    },
+    {
+      "name": "format mmddyyyy/system_default",
+      "ok": true
+    },
+    {
+      "name": "format mmddyyyy/24h",
+      "ok": true
+    },
+    {
+      "name": "format mmddyyyy/12h",
+      "ok": true
+    },
+    {
+      "name": "format wwyyyymmdd/system_default",
+      "ok": true
+    },
+    {
+      "name": "format wwyyyymmdd/24h",
+      "ok": true
+    },
+    {
+      "name": "format wwyyyymmdd/12h",
+      "ok": true
+    },
+    {
+      "name": "format wwddmmyyyy/system_default",
+      "ok": true
+    },
+    {
+      "name": "format wwddmmyyyy/24h",
+      "ok": true
+    },
+    {
+      "name": "format wwddmmyyyy/12h",
+      "ok": true
+    },
+    {
+      "name": "format wwmmddyyyy/system_default",
+      "ok": true
+    },
+    {
+      "name": "format wwmmddyyyy/24h",
+      "ok": true
+    },
+    {
+      "name": "format wwmmddyyyy/12h",
+      "ok": true
+    },
+    {
+      "name": "reject invalid without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject 25h without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject todayTime|25:30 without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject startupStop|maybe without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject startupMode|wrong without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject presetLocal|2026-02-30T10:00:00 without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject deltaCustom|1820,-26,nan,0,32 without changing settings",
+      "ok": true
+    },
+    {
+      "name": "reject deltaT|Unknown without changing settings",
+      "ok": true
+    },
+    {
+      "name": "normalize HH:mm input",
+      "ok": true
+    },
+    {
+      "name": "capture observation-local preset and select mode",
+      "ok": true
+    },
+    {
+      "name": "saving startup settings does not jump the sky",
+      "ok": true
+    },
+    {
+      "name": "apply preset without timezone shift",
+      "ok": true
+    },
+    {
+      "name": "restart retains formats, preset, and pause",
+      "ok": true
+    },
+    {
+      "name": "editable preset applied",
+      "ok": true
+    },
+    {
+      "name": "today uses saved clock time",
+      "ok": true
+    },
+    {
+      "name": "DeltaT algorithm changes the computed value",
+      "ok": true
+    },
+    {
+      "name": "custom DeltaT editable",
+      "ok": true
+    },
+    {
+      "name": "editing active custom parameters refreshes the description",
+      "ok": true
+    },
+    {
+      "name": "restart retains today and custom DeltaT",
+      "ok": true
+    },
+    {
+      "name": "actual time resumes at real-time speed",
+      "ok": true
+    },
+    {
+      "name": "original settings restored",
+      "ok": true
+    }
+  ],
+  "restored": true
+}

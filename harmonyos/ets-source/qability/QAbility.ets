@@ -37,6 +37,8 @@ export default class QAbility extends UIAbility {
   private privacyWaitingForSystemForeground: boolean = false;
   private privacyHandoffBackgroundObserved: boolean = false;
   private privacyHandoffGeneration: number = 0;
+  private privacyProbeStartedAt: number = 0;
+  private privacyProbeSequence: number = 0;
   private cliRequests: StellariumCliRequest[] = [];
   private safeAreaWindow: Window.Window | null = null;
   private safeAreaTopPixels: number = 0;
@@ -70,9 +72,17 @@ export default class QAbility extends UIAbility {
       return;
     }
     const encodedPayload = this.readCliString(parameters, 'skyinstrument.cli.payload');
-    const payload = encodedPayload.startsWith('__STEL_CLI_PAYLOAD__')
-      ? encodedPayload.substring('__STEL_CLI_PAYLOAD__'.length)
-      : encodedPayload;
+    let payload = encodedPayload;
+    if (encodedPayload.startsWith('__STEL_CLI_PAYLOAD_URI__')) {
+      try {
+        payload = decodeURIComponent(encodedPayload.substring('__STEL_CLI_PAYLOAD_URI__'.length));
+      } catch (error) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] rejected malformed percent-encoded payload');
+        return;
+      }
+    } else if (encodedPayload.startsWith('__STEL_CLI_PAYLOAD__')) {
+      payload = encodedPayload.substring('__STEL_CLI_PAYLOAD__'.length);
+    }
     if (payload.length > 32768) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, '[cli] rejected payload larger than 32768 bytes');
       return;
@@ -97,7 +107,13 @@ export default class QAbility extends UIAbility {
   }
 
   private isUiCliCommand(commandName: string): boolean {
-    return commandName === 'openUiPanel' || commandName === 'closeUiPanel' || commandName === 'backUiPanel';
+    if (commandName === 'setSearchBrowserPage' || commandName === 'selectSearchCategory' || commandName === 'setSearchBrowserFilter') return true;
+    if (commandName === 'setAstroTab' || commandName === 'setAstroGroup' || commandName === 'setAstroFilter' || commandName === 'setAstroScroll') return true;
+    if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll') return true;
+    if (commandName === 'setObjectDetailTab') return true;
+    if (commandName === 'setObjectModelView') return true;
+    return commandName === 'openUiPanel' || commandName === 'openPluginFeature' || commandName === 'closeUiPanel' || commandName === 'backUiPanel' ||
+      commandName === 'setLayerTab' || commandName === 'setSkyCultureMakerTab' || commandName === 'setGyroscopeEnabled' || commandName === 'setTelescopeLivePosition';
   }
 
   private drainCliRequests(): void {
@@ -106,10 +122,88 @@ export default class QAbility extends UIAbility {
     }
     const request = this.cliRequests[0];
     request.attempts += 1;
+    if (request.commandName === 'getSearchBrowserState') {
+      const state = JSON.parse(AppStorage.get<string>('stellariumSearchBrowserState') ??
+        JSON.stringify({ ok: false, error: 'search browser has not loaded' })) as Record<string, Object>;
+      state['scrollY'] = AppStorage.get<number>('stellariumSearchBrowserScrollY') ?? 0;
+      this.finishCliRequest(request, JSON.stringify(state));
+      return;
+    }
+    if (request.commandName === 'getAstroPanelState') {
+      this.finishCliRequest(request, AppStorage.get<string>('stellariumAstroPanelState') ??
+        JSON.stringify({ ok: false, error: 'astronomy panel has not loaded' }));
+      return;
+    }
+    if (request.commandName === 'getSatellitePanelState') {
+      this.finishCliRequest(request, AppStorage.get<string>('stellariumSatellitePanelState') ??
+        JSON.stringify({ ok: false, error: 'satellite panel has not loaded' }));
+      return;
+    }
+    if (request.commandName === 'getObjectModelView') {
+      const model = JSON.parse(AppStorage.get<string>('stellariumObjectModelView') ??
+        JSON.stringify({ ok: false, error: 'model has not rendered' })) as Record<string, Object>;
+      model['detailScrollY'] = AppStorage.get<number>('stellariumObjectDetailScrollY') ?? 0;
+      this.finishCliRequest(request, JSON.stringify(model));
+      return;
+    }
     if (this.isUiCliCommand(request.commandName)) {
-      const response = request.commandName === 'openUiPanel' && request.payload.trim().length === 0
+      const value = request.payload.trim();
+      if (request.commandName === 'setSearchBrowserPage' && !['browse', 'categories', 'root', 'visibility', 'instrument'].includes(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected browse, categories, root, visibility, instrument' }));
+        return;
+      }
+      if (request.commandName === 'selectSearchCategory') {
+        const state = JSON.parse(AppStorage.get<string>('stellariumSearchBrowserState') ?? '{}') as Record<string, Object>;
+        const categories = state['categories'] as Array<Record<string, Object>> | undefined;
+        if (!categories?.some((category: Record<string, Object>) => category['code'] === value)) {
+          this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'unknown category; open search browser first' }));
+          return;
+        }
+      }
+      if (request.commandName === 'setSearchBrowserFilter' &&
+        !/^(visibility\|(all|above|good)|instrument\|(all|naked|binocular|telescope))$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'invalid search filter' }));
+        return;
+      }
+      if (request.commandName === 'setAstroScroll' &&
+        (value.length === 0 || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected non-negative scroll offset' }));
+        return;
+      }
+      if (request.commandName === 'setAstroFilter' &&
+        !/^(period\|(evening|midnight|morning|night)|altitude\|(0|10|20|30|45)|magnitude\|(4|6|8|10)|direction\|(all|north|east|south|west))$/.test(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'invalid tonight filter key or value' }));
+        return;
+      }
+      if ((request.commandName === 'setAstroTab' && !/^[0-9]$/.test(value)) ||
+        (request.commandName === 'setAstroGroup' && !/^[0-2]$/.test(value))) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected tab 0..9 or group 0..2' }));
+        return;
+      }
+      if (request.commandName === 'setSatellitePanelScroll' &&
+        (value.length === 0 || !Number.isFinite(Number(value)) || Number(value) < 0)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected non-negative scroll offset' }));
+        return;
+      }
+      if (request.commandName === 'setObjectDetailTab' && !['0', '1', '2', '3'].includes(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected tab index 0..3' }));
+        return;
+      }
+      if (request.commandName === 'setObjectModelView' && !['reset', 'open', 'immersive', 'close'].includes(value)) {
+        const parts = value.split('|');
+        if (parts.length !== 2 || parts.some((part: string) => part.trim().length === 0 ||
+          !Number.isFinite(Number(part)) || Math.abs(Number(part)) > 1000)) {
+          this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected open, immersive, close, reset, or dx|dy (finite, <=1000)' }));
+          return;
+        }
+      }
+      const response = request.commandName === 'openUiPanel' && value.length === 0
         ? JSON.stringify({ ok: false, error: 'panel name is required' })
-        : JSON.stringify({ ok: true, accepted: true, panel: request.payload.trim() });
+        : request.commandName === 'setTelescopeLivePosition' && !['1', 'true', 'on', '0', 'false', 'off'].includes(value.toLowerCase())
+          ? JSON.stringify({ ok: false, error: 'expected on or off' })
+          : request.commandName === 'setTelescopeLivePosition'
+            ? JSON.stringify({ ok: true, accepted: true, enabled: ['1', 'true', 'on'].includes(value.toLowerCase()) })
+            : JSON.stringify({ ok: true, accepted: true, panel: value });
       this.finishCliRequest(request, response);
       return;
     }
@@ -180,19 +274,29 @@ export default class QAbility extends UIAbility {
       return;
     }
     if (request.commandName !== 'searchObject' && request.commandName !== 'selectAt' &&
-      request.commandName !== 'clearSelection' && request.commandName !== 'getSelectedObjectInfo') {
+      request.commandName !== 'clearSelection' && request.commandName !== 'getSelectedObjectInfo' &&
+      request.commandName !== 'setSkyCulture' && request.commandName !== 'setLanguage' && request.commandName !== 'setSatellitesFlag' &&
+      request.commandName !== 'setInformationSetting' && request.commandName !== 'getInformationSettings' &&
+      request.commandName !== 'setTimeSetting' && request.commandName !== 'getTimeSettings' &&
+      request.commandName !== 'setMosaicCamera' && request.commandName !== 'getMosaicCamera' &&
+      request.commandName !== 'getNebulaTextureStatus' && request.commandName !== 'setNebulaTexturesVisible' &&
+      request.commandName !== 'setNebulaTextureConflictAvoidance' &&
+      request.commandName !== 'setDateFormat' && request.commandName !== 'setTimeFormat' && request.commandName !== 'playScript' &&
+      request.commandName !== 'continueScript' && request.commandName !== 'stopScript' &&
+      request.commandName !== 'setScriptRate') {
       if (request.commandName !== 'setObjectDetailConnector' && request.commandName !== 'getObjectDetailConnector') {
         return;
       }
     }
     try {
       const parsed = JSON.parse(response) as Record<string, Object>;
-      if (parsed['pending'] === true) {
+      if (parsed['pending'] === true && request.commandName !== 'playScript') {
         return;
       }
       AppStorage.setOrCreate('stellariumCliUiEvent', JSON.stringify({
         requestId: request.requestId,
         commandName: request.commandName,
+        payload: request.payload,
         response: parsed,
       }));
     } catch (err) {
@@ -203,6 +307,18 @@ export default class QAbility extends UIAbility {
   private logPrivacyGate(stage: string): void {
     hilog.info(LOG_DOMAIN, LOG_TAG,
       `[privacy-gate] ${stage}; accepted=${this.privacyAccepted}; qtAbilityCreated=${this.qtAbilityCreated}; qtInitialized=${this.qtInitialized}`);
+  }
+
+  private logPrivacyProbe(phase: string, detail: string = ''): void {
+    if (this.privacyProbeStartedAt === 0) {
+      this.privacyProbeStartedAt = Date.now();
+    }
+    this.privacyProbeSequence += 1;
+    const suffix = detail.length > 0 ? `; ${detail}` : '';
+    hilog.info(LOG_DOMAIN, LOG_TAG,
+      `[privacy-probe] seq=${this.privacyProbeSequence}; phase=${phase}; elapsedMs=${Date.now() - this.privacyProbeStartedAt}; ` +
+      `foreground=${this.isForeground}; accepted=${this.privacyAccepted}; qtAbilityCreated=${this.qtAbilityCreated}; ` +
+      `qtInitialized=${this.qtInitialized}; windowPrepared=${this.qtWindowPrepared}${suffix}`);
   }
 
   private waitForStablePrivacyReturn(): void {
@@ -242,18 +358,23 @@ export default class QAbility extends UIAbility {
     }
 
     try {
-      // Keep privacy consent and the Qt page in separate ArkUI roots. Qt must
-      // load its page once to inject the native-node createInfo; preloading
-      // that page here made it remount after consent and exposed the launcher
-      // between two copies of the launch screen on physical devices.
+      this.logPrivacyProbe('final-page-prepare-start');
+      // Privacy Manager documents that one Ability must not call loadContent()
+      // more than once. Prepare the final Qt page once before the system
+      // dialog, but keep the native sky node gated until consent is accepted.
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', false);
-      const pageLoadStartedAt = Date.now();
-      await windowStage.loadContent('pages/PrivacyBootstrap');
-      hilog.info(LOG_DOMAIN, LOG_TAG,
-        `[privacy-gate] privacy bootstrap page loaded in ${Date.now() - pageLoadStartedAt} ms`);
+      await this.initializeQtAbilityIfNeeded();
+      if (!this.qtAbilityCreated) {
+        this.logPrivacyProbe('final-page-prepare-failed', 'qt ability was not created');
+        return false;
+      }
+      this.logPrivacyProbe('qt-host-ready-before-consent');
+      qpa.handleAbilityOnWindowStageCreate(this, windowStage);
       this.qtWindowPrepared = true;
+      this.logPrivacyProbe('final-page-requested', 'single loadContent owner is Qt bridge');
       return true;
     } catch (err) {
+      this.logPrivacyProbe('final-page-prepare-failed', `error=${JSON.stringify(err)}`);
       hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy host page preparation failed: ${JSON.stringify(err)}`);
       return false;
     }
@@ -265,9 +386,11 @@ export default class QAbility extends UIAbility {
     }
 
     this.privacyRequestStarted = true;
+    this.logPrivacyProbe('privacy-request-start');
     this.logPrivacyGate('requesting system privacy consent');
     const consent = await requestPrivacyConsent(this.context);
     this.privacyRequestStarted = false;
+    this.logPrivacyProbe('privacy-request-finish', `accepted=${consent.accepted}; dialogShown=${consent.dialogShown}`);
     if (!consent.accepted) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
       return;
@@ -277,7 +400,6 @@ export default class QAbility extends UIAbility {
     // the system dialog. Start Qt from that official completion point.
     this.privacyAccepted = true;
     if (consent.dialogShown) {
-      await this.restoreHostWindowAfterPrivacy();
       this.waitForStablePrivacyReturn();
       return;
     }
@@ -286,29 +408,13 @@ export default class QAbility extends UIAbility {
     void this.startQtIfReady();
   }
 
-  private async restoreHostWindowAfterPrivacy(): Promise<void> {
-    if (this.pendingWindowStage === null) {
-      return;
-    }
-    try {
-      const mainWindow = await this.pendingWindowStage.getMainWindow();
-      mainWindow.setWindowBackgroundColor('#070b12');
-      await mainWindow.showWindow();
-      this.isForeground = true;
-      this.logPrivacyGate('privacy host window restored before Qt hand-off');
-    } catch (err) {
-      // The host can already be visible on some Privacy Manager versions.
-      // Continue in that state instead of treating it as a failed consent.
-      this.logPrivacyGate('privacy host window already visible or unavailable');
-    }
-  }
-
   private async requestPrivacyAfterWindowReady(windowStage: Window.WindowStage): Promise<void> {
     if (!await this.preparePrivacyHostPage(windowStage)) {
       return;
     }
     await this.enterImmersive(windowStage);
-    this.logPrivacyGate('privacy bootstrap is ready; requesting system privacy consent');
+    this.logPrivacyProbe('privacy-host-ready', 'system dialog will cover an already prepared opaque host');
+    this.logPrivacyGate('privacy host page is ready; requesting system privacy consent');
     await this.requestPrivacyThenStart();
   }
 
@@ -339,25 +445,19 @@ export default class QAbility extends UIAbility {
         return;
       }
       AppStorage.setOrCreate('stellariumStartupPreparing', true);
+      this.logPrivacyProbe('qt-start-transfer-start');
       const contextInitializationStartedAt = Date.now();
       await this.initializeQtAbilityIfNeeded();
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `[startup] Qt application context initialized in ${Date.now() - contextInitializationStartedAt} ms`);
-      // The Qt template normally receives this lifecycle callback directly
-      // from onWindowStageCreate(). We defer it until consent so Qt cannot
-      // initialize before the policy decision, but it still must run to put
-      // the native XComponent createInfo into the page's shared storage.
-      qpa.handleAbilityOnWindowStageCreate(this, this.pendingWindowStage);
-      hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] requested Qt window-stage page injection');
-      // handleAbilityOnWindowStageCreate() schedules loadContent() internally.
-      // Allow it to remount the already prepared ArkUI page before releasing
-      // the native-node gate, otherwise the visible page has no createInfo.
       await this.enterImmersive(this.pendingWindowStage);
       await new Promise<void>((resolve) => setTimeout(resolve, 160));
       AppStorage.setOrCreate('stellariumStartupPreparing', false);
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', true);
+      this.logPrivacyProbe('native-node-gate-released');
       hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] released Qt native-node gate');
       qpa.handleAbilityOnForeground(this);
+      this.logPrivacyProbe('qt-foreground-requested');
     } catch (err) {
       // Keep the ability alive if the native bridge reports a synchronous
       // startup error, so the consent page does not turn into a home-screen flash.
@@ -388,6 +488,7 @@ export default class QAbility extends UIAbility {
       });
     }, 1200);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Qt startup completed after privacy consent');
+    this.logPrivacyProbe('qt-start-transfer-finish');
     this.drainCliRequests();
   }
 
@@ -445,6 +546,8 @@ export default class QAbility extends UIAbility {
   }
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam) {
+    this.privacyProbeStartedAt = Date.now();
+    this.logPrivacyProbe('ability-create');
     hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ability created; Qt initialization is blocked pending consent');
     AppStorage.setOrCreate('stellariumStartupPreparing', false);
     this.pendingWant = want;
@@ -471,11 +574,13 @@ export default class QAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: Window.WindowStage) {
     this.pendingWindowStage = windowStage;
+    this.logPrivacyProbe('window-stage-create');
     void this.requestPrivacyAfterWindowReady(windowStage);
   }
 
   onWindowStageRestore(windowStage: Window.WindowStage): void {
     this.pendingWindowStage = windowStage;
+    this.logPrivacyProbe('window-stage-restore');
     if (this.qtInitialized) {
       qpa.handleAbilityOnWindowStageRestore(this, windowStage);
       this.enterImmersive(windowStage);
@@ -498,6 +603,7 @@ export default class QAbility extends UIAbility {
   onForeground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     this.isForeground = true;
+    this.logPrivacyProbe('ability-foreground');
     setDeepSkyImageExtractionForeground(true);
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
@@ -522,6 +628,7 @@ export default class QAbility extends UIAbility {
   onBackground() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
     this.isForeground = false;
+    this.logPrivacyProbe('ability-background');
     setDeepSkyImageExtractionForeground(false);
     if (!this.qtInitialized) {
       if (this.privacyWaitingForSystemForeground) {
@@ -544,6 +651,7 @@ export default class QAbility extends UIAbility {
 
   onWindowStageDestroy() {
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
+    this.logPrivacyProbe('window-stage-destroy');
     if (this.qtAbilityCreated) {
       qpa.handleAbilityOnWindowStageDestroy(this);
     }

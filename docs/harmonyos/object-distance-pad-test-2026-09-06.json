@@ -1,0 +1,3712 @@
+{
+  "device": "192.168.1.34:33805",
+  "checks": [
+    {
+      "name": "Sirius selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "Sirius legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "Sirius legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "Sirius selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "Sirius status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "Sirius source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "Sirius distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "Sirius CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "Sirius full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "Sirius is at approximately 8.6 light years",
+      "ok": true
+    },
+    {
+      "name": "stellar parallax is in mas, not arcseconds mislabeled mas",
+      "ok": true
+    },
+    {
+      "name": "stellar absolute magnitude matches desktop formula",
+      "ok": true
+    },
+    {
+      "name": "stellar distance includes its parallax uncertainty",
+      "ok": true
+    },
+    {
+      "name": "Sirius distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "Vega selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "Vega legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "Vega legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "Vega selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "Vega status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "Vega source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "Vega distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "Vega CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "Vega full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "Vega distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "Betelgeuse information panel remains readable",
+      "ok": true
+    },
+    {
+      "name": "M31 selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "M31 legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "M31 legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "M31 selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "M31 status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "M31 source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "M31 distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "M31 CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "M31 full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "M31 distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "M42 selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "M42 legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "M42 legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "M42 selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "M42 status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "M42 source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "M42 distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "M42 CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "M42 full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "M42 distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "M45 selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "M45 legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "M45 legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "M45 selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "M45 status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "M45 source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "M45 distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "M45 CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "M45 full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "M45 distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "Moon selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "Moon legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "Moon legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "Moon selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "Moon status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "Moon source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "Moon distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "Moon CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "Moon full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "Moon distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "Sun selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "Sun legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "Sun legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "Sun selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "Sun status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "Sun source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "Sun distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "Sun CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "Sun full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "Sun distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "STARLETTE distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "catalog|Exoplanets|51 Peg|selectOnly distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "catalog|Pulsars|PSR J0437-4715|selectOnly distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A converts catalogue distance correctly",
+      "ok": true
+    },
+    {
+      "name": "spoken distance is also corrected to light years",
+      "ok": true
+    },
+    {
+      "name": "SN 1987A distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly source unit is correct",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly distance is finite and positive",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly CLI keeps numeric distance with explicit unit",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly full and compact distance agree",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly converts catalogue distance correctly",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|GK Per|selectOnly distance appears in the visible summary",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "missing nova distance is explicit, not zero AU",
+      "ok": true
+    },
+    {
+      "name": "catalog|Novae|T Aur|selectOnly information panel remains readable",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly selects the requested catalogue object",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly legacy object info shares distance status",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly legacy altitude is an angle, not vector component",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly selected title has a name or catalogue ID",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly status agrees between summary and distance CLI",
+      "ok": true
+    },
+    {
+      "name": "quasar is redshift-only, without invented distance",
+      "ok": true
+    },
+    {
+      "name": "quasar keeps its structured redshift",
+      "ok": true
+    },
+    {
+      "name": "catalog|Quasars|MS 23574-3520|selectOnly information panel remains readable",
+      "ok": true
+    }
+  ],
+  "samples": [
+    {
+      "query": "Sirius",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -45.803486093573895,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-45.803°, 288.738°",
+        "apparentMagnitude": -1.2594619989395142,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 288.73844381747034,
+        "constellation": "大犬座",
+        "constellationAbbreviation": "CMa",
+        "dec": "-16°44'55.2\"",
+        "decJ2000Degrees": -16.721262952703373,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "9h05m39.8s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "6h46m19.2s -16°44'55.2\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-45.803°, 288.738°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "6h45m07.2s -16°43'16.5\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-45.803°, 288.738°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "104.447°, -39.606°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "104.073°, -39.611°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "227.232°, -8.899°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "273.029°, -87.418°"
+          },
+          {
+            "key": "colorIndex",
+            "live": false,
+            "section": "observation",
+            "value": "0.00"
+          },
+          {
+            "key": "spectralClass",
+            "live": false,
+            "section": "physical",
+            "value": "A0mA1Va"
+          },
+          {
+            "key": "starType",
+            "live": false,
+            "section": "physical",
+            "value": "double-star"
+          },
+          {
+            "key": "variabilityType",
+            "live": false,
+            "section": "stellar",
+            "value": "no"
+          },
+          {
+            "key": "stellarParallax",
+            "live": false,
+            "section": "stellar",
+            "value": "379.200 mas"
+          },
+          {
+            "key": "stellarAbsoluteMagnitude",
+            "live": false,
+            "section": "stellar",
+            "value": "1.43"
+          },
+          {
+            "key": "stellarDistance",
+            "live": false,
+            "section": "stellar",
+            "value": "8.60 光年"
+          },
+          {
+            "key": "doubleStarObservationYear",
+            "live": false,
+            "section": "stellar",
+            "value": "2011"
+          },
+          {
+            "key": "doubleStarPositionAngle",
+            "live": false,
+            "section": "stellar",
+            "value": "61.0°"
+          },
+          {
+            "key": "doubleStarSeparation",
+            "live": false,
+            "section": "stellar",
+            "value": "125.70″"
+          }
+        ],
+        "distance": "8.60 ± 0.04 ly",
+        "distanceCompact": "8.60 ly",
+        "distanceErrorLightYears": 0.035838209574982426,
+        "distanceLightYears": 8.601170297995782,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceUnit": "ly",
+        "distanceValue": 8.601170297995782,
+        "eclipticCurrent": "104.447°, -39.606°",
+        "eclipticJ2000": "104.073°, -39.611°",
+        "englishName": "HIP 32349",
+        "equatorialJ2000": "   6h45m07.2s  -16°43'16.5\"",
+        "equatorialOfDate": "   6h46m19.2s  -16°44'55.2\"",
+        "extinction": 0.2005380392074585,
+        "found": true,
+        "galactic": "227.232°, -8.899°",
+        "geometricAltAz": "-45.803°, 288.738°",
+        "geometricAltitude": -45.803486093573895,
+        "geometricAzimuth": 288.73844381747034,
+        "hourAngle": "9h05m39.8s",
+        "hourAngleDegrees": 136.41602866219355,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": -1.4600000381469727,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "天狼 Sirius",
+        "objectType": "double star",
+        "ok": true,
+        "polarDistanceDegrees": 106.74866990746571,
+        "polarDistanceJ2000Degrees": 106.72126295270338,
+        "ra": "   6h46m19.2s",
+        "raJ2000Degrees": 101.27990924415496,
+        "rise": "2h56m",
+        "set": "13h04m",
+        "size": "+0°00'00.00\"",
+        "spType": "A0mA1Va",
+        "supergalactic": "273.029°, -87.418°",
+        "temperatureK": 8050,
+        "transit": "8h00m",
+        "type": "双星"
+      },
+      "distance": {
+        "distance": 8.601170297995782,
+        "distanceCompact": "8.60 ly",
+        "distanceErrorLightYears": 0.035838209574982426,
+        "distanceLightYears": 8.601170297995782,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceText": "8.60 ± 0.04 ly",
+        "distanceUnit": "ly",
+        "distanceValue": 8.601170297995782,
+        "ok": true,
+        "selectedEnglishName": "HIP 32349"
+      }
+    },
+    {
+      "query": "Vega",
+      "selection": {
+        "aboveHorizon": true,
+        "airmass": 1.1763628721237183,
+        "altitude": 58.219898833510356,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "58.220°, 78.369°",
+        "apparentMagnitude": 0.18285465240478516,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 78.36941760384151,
+        "constellation": "天琴座",
+        "constellationAbbreviation": "Lyr",
+        "dec": "+38°48'45.0\"",
+        "decJ2000Degrees": 38.79043778347728,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "21h14m07.5s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "18h37m51.6s +38°48'45.0\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "58.220°, 78.369°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "18h36m57.5s +38°47'25.6\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "58.210°, 78.369°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "285.698°, 61.734°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "285.326°, 61.739°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "67.456°, 19.236°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "35.330°, 66.581°"
+          },
+          {
+            "key": "colorIndex",
+            "live": false,
+            "section": "observation",
+            "value": "0.00"
+          },
+          {
+            "key": "spectralClass",
+            "live": false,
+            "section": "physical",
+            "value": "A0V"
+          },
+          {
+            "key": "starType",
+            "live": false,
+            "section": "physical",
+            "value": "double-star"
+          },
+          {
+            "key": "variabilityType",
+            "live": false,
+            "section": "stellar",
+            "value": "pulsating"
+          },
+          {
+            "key": "stellarParallax",
+            "live": false,
+            "section": "stellar",
+            "value": "130.220 mas"
+          },
+          {
+            "key": "stellarAbsoluteMagnitude",
+            "live": false,
+            "section": "stellar",
+            "value": "0.60"
+          },
+          {
+            "key": "stellarDistance",
+            "live": false,
+            "section": "stellar",
+            "value": "25.05 光年"
+          },
+          {
+            "key": "variabilityPeriod",
+            "live": false,
+            "section": "stellar",
+            "value": "0.190000 天"
+          },
+          {
+            "key": "doubleStarObservationYear",
+            "live": false,
+            "section": "stellar",
+            "value": "2002"
+          },
+          {
+            "key": "doubleStarPositionAngle",
+            "live": false,
+            "section": "stellar",
+            "value": "71.0°"
+          },
+          {
+            "key": "doubleStarSeparation",
+            "live": false,
+            "section": "stellar",
+            "value": "27.00″"
+          }
+        ],
+        "distance": "25.05 ± 0.07 ly",
+        "distanceCompact": "25.05 ly",
+        "distanceErrorLightYears": 0.06924254053623465,
+        "distanceLightYears": 25.046565635079098,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceUnit": "ly",
+        "distanceValue": 25.046565635079098,
+        "eclipticCurrent": "285.698°, 61.734°",
+        "eclipticJ2000": "285.326°, 61.739°",
+        "englishName": "HIP 91262",
+        "equatorialJ2000": "  18h36m57.5s  +38°47'25.6\"",
+        "equatorialOfDate": "  18h37m51.6s  +38°48'45.0\"",
+        "extinction": 0.1528546530753374,
+        "found": true,
+        "galactic": "67.456°, 19.236°",
+        "geometricAltAz": "58.210°, 78.369°",
+        "geometricAltitude": 58.20954853736919,
+        "geometricAzimuth": 78.36941760384151,
+        "hourAngle": "21h14m07.5s",
+        "hourAngleDegrees": 318.5311059894356,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 0.029999999329447746,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "织女一 Vega",
+        "objectType": "double star, pulsating variable star",
+        "ok": true,
+        "polarDistanceDegrees": 51.18750406065917,
+        "polarDistanceJ2000Degrees": 51.20956221652272,
+        "ra": "  18h37m51.6s",
+        "raJ2000Degrees": -80.7604312199077,
+        "rise": "10h57m",
+        "set": "4h47m",
+        "size": "+0°00'00.00\"",
+        "spType": "A0V",
+        "supergalactic": "35.330°, 66.581°",
+        "temperatureK": 8050,
+        "transit": "19h50m",
+        "type": "双星, pulsating variable star"
+      },
+      "distance": {
+        "distance": 25.046565635079098,
+        "distanceCompact": "25.05 ly",
+        "distanceErrorLightYears": 0.06924254053623465,
+        "distanceLightYears": 25.046565635079098,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceText": "25.05 ± 0.07 ly",
+        "distanceUnit": "ly",
+        "distanceValue": 25.046565635079098,
+        "ok": true,
+        "selectedEnglishName": "HIP 91262"
+      }
+    },
+    {
+      "query": "Betelgeuse",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -34.62117902321519,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-34.621°, 321.428°",
+        "apparentMagnitude": 0.6798776388168335,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 321.42771744489283,
+        "constellation": "猎户座",
+        "constellationAbbreviation": "Ori",
+        "dec": "+7°24'49.0\"",
+        "decJ2000Degrees": 7.4086445804002174,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "9h55m21.7s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h56m37.3s +7°24'49.0\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-34.621°, 321.428°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h55m10.0s +7°24'31.1\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-34.621°, 321.428°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "89.129°, -16.020°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "88.753°, -16.025°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "199.785°, -8.959°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "352.724°, -62.540°"
+          },
+          {
+            "key": "colorIndex",
+            "live": false,
+            "section": "observation",
+            "value": "1.85"
+          },
+          {
+            "key": "spectralClass",
+            "live": false,
+            "section": "physical",
+            "value": "M1-M2Ia-Iab"
+          },
+          {
+            "key": "starType",
+            "live": false,
+            "section": "physical",
+            "value": "double-star"
+          },
+          {
+            "key": "variabilityType",
+            "live": false,
+            "section": "stellar",
+            "value": "pulsating"
+          },
+          {
+            "key": "stellarParallax",
+            "live": false,
+            "section": "stellar",
+            "value": "6.560 mas"
+          },
+          {
+            "key": "stellarAbsoluteMagnitude",
+            "live": false,
+            "section": "stellar",
+            "value": "-5.50"
+          },
+          {
+            "key": "stellarDistance",
+            "live": false,
+            "section": "stellar",
+            "value": "497.19 光年"
+          },
+          {
+            "key": "variabilityPeriod",
+            "live": false,
+            "section": "stellar",
+            "value": "2335.000000 天"
+          },
+          {
+            "key": "doubleStarObservationYear",
+            "live": false,
+            "section": "stellar",
+            "value": "2014"
+          },
+          {
+            "key": "doubleStarPositionAngle",
+            "live": false,
+            "section": "stellar",
+            "value": "47.0°"
+          },
+          {
+            "key": "doubleStarSeparation",
+            "live": false,
+            "section": "stellar",
+            "value": "148.70″"
+          }
+        ],
+        "distance": "497.19 ± 62.91 ly",
+        "distanceCompact": "497.19 ly",
+        "distanceErrorLightYears": 62.906610994897,
+        "distanceLightYears": 497.189600152439,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceUnit": "ly",
+        "distanceValue": 497.189600152439,
+        "eclipticCurrent": "89.129°, -16.020°",
+        "eclipticJ2000": "88.753°, -16.025°",
+        "englishName": "HIP 27989",
+        "equatorialJ2000": "   5h55m10.0s  +7°24'31.1\"",
+        "equatorialOfDate": "   5h56m37.3s  +7°24'49.0\"",
+        "extinction": 0.25987765192985535,
+        "found": true,
+        "galactic": "199.785°, -8.959°",
+        "geometricAltAz": "-34.621°, 321.428°",
+        "geometricAltitude": -34.62117902321519,
+        "geometricAzimuth": 321.42771744489283,
+        "hourAngle": "9h55m21.7s",
+        "hourAngleDegrees": 148.84057338111586,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 0.41999998688697815,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "参宿四 Betelgeuse",
+        "objectType": "double star, pulsating variable star",
+        "ok": true,
+        "polarDistanceDegrees": 82.58640204800895,
+        "polarDistanceJ2000Degrees": 82.59135541959978,
+        "ra": "   5h56m37.3s",
+        "raJ2000Degrees": 88.79170922127034,
+        "rise": "0h44m",
+        "set": "13h38m",
+        "size": "+0°00'00.00\"",
+        "spType": "M1-M2Ia-Iab",
+        "supergalactic": "352.724°, -62.540°",
+        "temperatureK": 3282,
+        "transit": "7h11m",
+        "type": "双星, pulsating variable star"
+      },
+      "distance": {
+        "distance": 497.189600152439,
+        "distanceCompact": "497.19 ly",
+        "distanceErrorLightYears": 62.906610994897,
+        "distanceLightYears": 497.189600152439,
+        "distanceMethod": "inverse_parallax",
+        "distanceStatus": "estimated",
+        "distanceText": "497.19 ± 62.91 ly",
+        "distanceUnit": "ly",
+        "distanceValue": 497.189600152439,
+        "ok": true,
+        "selectedEnglishName": "HIP 27989"
+      }
+    },
+    {
+      "query": "M31",
+      "selection": {
+        "aboveHorizon": true,
+        "airmass": 18.730405807495117,
+        "altitude": 2.1027370292252057,
+        "angularSizeDegrees": 3.1516668796539307,
+        "apparentAltAz": "2.103°, 33.242°",
+        "apparentMagnitude": 5.8590006828308105,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 33.242341536479515,
+        "catalogId": "M 31",
+        "constellation": "仙女座",
+        "constellationAbbreviation": "And",
+        "dec": "+41°24'57.8\"",
+        "decJ2000Degrees": 41.268770033782125,
+        "detailFields": [
+          {
+            "key": "designations",
+            "live": false,
+            "section": "identity",
+            "value": "M 31 - NGC 224 - PGC 2557 - UGC 454"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h07m45.1s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "0h44m13.9s +41°24'57.8\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "2.103°, 33.242°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "0h42m45.8s +41°16'07.6\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "1.812°, 33.242°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "28.226°, 33.349°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "27.854°, 33.346°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "121.179°, -21.573°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "336.194°, 12.548°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-34.25°"
+          },
+          {
+            "key": "blueMagnitude",
+            "live": false,
+            "section": "observation",
+            "value": "4.36"
+          },
+          {
+            "key": "surfaceBrightness",
+            "live": false,
+            "section": "observation",
+            "value": "13.31 等/平方角分"
+          },
+          {
+            "key": "colorIndex",
+            "live": false,
+            "section": "observation",
+            "value": "0.96"
+          },
+          {
+            "key": "morphology",
+            "live": false,
+            "section": "physical",
+            "value": "SA(s)b"
+          },
+          {
+            "key": "redshift",
+            "live": false,
+            "section": "physical",
+            "value": "-0.001000"
+          },
+          {
+            "key": "angularAxes",
+            "live": false,
+            "section": "physical",
+            "value": "+3°09'06.00\" × +1°01'42.00\""
+          },
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "45.0°"
+          }
+        ],
+        "distance": "2.54 ± 0.11 M ly",
+        "distanceCompact": "2.54 M ly",
+        "distanceErrorLightYears": 107631.60464100001,
+        "distanceLightYears": 2537496.6185060004,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "kpc",
+        "distanceValue": 778,
+        "eclipticCurrent": "28.226°, 33.349°",
+        "eclipticJ2000": "27.854°, 33.346°",
+        "englishName": "Andromeda Galaxy",
+        "equatorialJ2000": "   0h42m45.8s  +41°16'07.6\"",
+        "equatorialOfDate": "   0h44m13.9s  +41°24'57.8\"",
+        "extinction": 2.459000587463379,
+        "found": true,
+        "galactic": "121.179°, -21.573°",
+        "geometricAltAz": "1.812°, 33.242°",
+        "geometricAltitude": 1.8121403491473442,
+        "geometricAzimuth": 33.242341536479515,
+        "hourAngle": "15h07m45.1s",
+        "hourAngleDegrees": 226.93801939358661,
+        "infoMode": "all",
+        "liveDetailFields": [
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "45.0°"
+          }
+        ],
+        "magnitude": 3.4000000953674316,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "仙女座星系",
+        "objectType": "galaxy",
+        "ok": true,
+        "parallacticAngle": "-34.25°",
+        "polarDistanceDegrees": 48.583934858871935,
+        "polarDistanceJ2000Degrees": 48.731229966217875,
+        "ra": "   0h44m13.9s",
+        "raJ2000Degrees": 10.690849517296716,
+        "rise": "16h41m",
+        "set": "11h14m",
+        "size": "+3°09'06.00\"",
+        "supergalactic": "336.194°, 12.548°",
+        "transit": "1h59m",
+        "type": "星系"
+      },
+      "distance": {
+        "distance": 778,
+        "distanceCompact": "2.54 M ly",
+        "distanceErrorLightYears": 107631.60464100001,
+        "distanceLightYears": 2537496.6185060004,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "2.54 ± 0.11 M ly",
+        "distanceUnit": "kpc",
+        "distanceValue": 778,
+        "ok": true,
+        "selectedEnglishName": "Andromeda Galaxy"
+      }
+    },
+    {
+      "query": "M42",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -48.20702080025108,
+        "angularSizeDegrees": 1.5000000000000002,
+        "apparentAltAz": "-48.207°, 318.812°",
+        "apparentMagnitude": 4.192099094390869,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 318.81205974136867,
+        "catalogId": "M 42",
+        "constellation": "猎户座",
+        "constellationAbbreviation": "Ori",
+        "dec": "-5°22'13.9\"",
+        "decJ2000Degrees": -5.388466554085723,
+        "detailFields": [
+          {
+            "key": "designations",
+            "live": false,
+            "section": "identity",
+            "value": "M 42 - NGC 1976 - SH 2-281 - LBN 974 - Ced 55d"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "10h15m22.7s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h36m36.3s -5°22'13.9\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-48.207°, 318.812°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h35m17.1s -5°23'18.5\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-48.207°, 318.812°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "83.360°, -28.672°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "82.984°, -28.677°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "209.011°, -19.381°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "322.103°, -67.881°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "30.49°"
+          },
+          {
+            "key": "surfaceBrightness",
+            "live": false,
+            "section": "observation",
+            "value": "13.07 等/平方角分"
+          },
+          {
+            "key": "morphology",
+            "live": false,
+            "section": "physical",
+            "value": "EN+RN; 3, 2, 3"
+          },
+          {
+            "key": "redshift",
+            "live": false,
+            "section": "physical",
+            "value": "0.000096"
+          },
+          {
+            "key": "angularAxes",
+            "live": false,
+            "section": "physical",
+            "value": "+1°30'00.00\" × +1°00'00.00\""
+          },
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "90.0°"
+          }
+        ],
+        "distance": "1343.76 ± 58.71 ly",
+        "distanceCompact": "1343.76 ly",
+        "distanceErrorLightYears": 58.70814545874345,
+        "distanceLightYears": 1343.764277679235,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.41200000047683716,
+        "eclipticCurrent": "83.360°, -28.672°",
+        "eclipticJ2000": "82.984°, -28.677°",
+        "englishName": "Great Orion Nebula",
+        "equatorialJ2000": "   5h35m17.1s  -5°23'18.5\"",
+        "equatorialOfDate": "   5h36m36.3s  -5°22'13.9\"",
+        "extinction": 0.19209909439086914,
+        "found": true,
+        "galactic": "209.011°, -19.381°",
+        "geometricAltAz": "-48.207°, 318.812°",
+        "geometricAltitude": -48.20702080025108,
+        "geometricAzimuth": 318.81205974136867,
+        "hourAngle": "10h15m22.7s",
+        "hourAngleDegrees": 153.84460309636142,
+        "infoMode": "all",
+        "liveDetailFields": [
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "90.0°"
+          }
+        ],
+        "magnitude": 4,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "猎户座大星云",
+        "objectType": "HII region",
+        "ok": true,
+        "parallacticAngle": "30.49°",
+        "polarDistanceDegrees": 95.37053627154657,
+        "polarDistanceJ2000Degrees": 95.38846655408572,
+        "ra": "   5h36m36.3s",
+        "raJ2000Degrees": 83.82110681475507,
+        "rise": "1h07m",
+        "set": "12h35m",
+        "size": "+1°30'00.00\"",
+        "supergalactic": "322.103°, -67.881°",
+        "transit": "6h51m",
+        "type": "电离氢区"
+      },
+      "distance": {
+        "distance": 0.41200000047683716,
+        "distanceCompact": "1343.76 ly",
+        "distanceErrorLightYears": 58.70814545874345,
+        "distanceLightYears": 1343.764277679235,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "1343.76 ± 58.71 ly",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.41200000047683716,
+        "ok": true,
+        "selectedEnglishName": "Great Orion Nebula"
+      }
+    },
+    {
+      "query": "M45",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -25.88726860322041,
+        "angularSizeDegrees": 1.8333333730697634,
+        "apparentAltAz": "-25.887°, 0.856°",
+        "apparentMagnitude": 1.5516119003295898,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 0.8561613032107845,
+        "catalogId": "M 45",
+        "constellation": "金牛座",
+        "constellationAbbreviation": "Tau",
+        "dec": "+24°12'01.4\"",
+        "decJ2000Degrees": 24.116926110883227,
+        "detailFields": [
+          {
+            "key": "designations",
+            "live": false,
+            "section": "identity",
+            "value": "M 45 - Cr 42 - Mel 22"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "12h03m22.7s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "3h48m36.4s +24°12'01.4\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-25.887°, 0.856°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "3h47m00.4s +24°07'00.9\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-25.887°, 0.856°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "60.263°, 4.091°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "59.888°, 4.086°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "166.572°, -23.520°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "336.537°, -29.246°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-0.72°"
+          },
+          {
+            "key": "surfaceBrightness",
+            "live": false,
+            "section": "observation",
+            "value": "11.14 等/平方角分"
+          },
+          {
+            "key": "morphology",
+            "live": false,
+            "section": "physical",
+            "value": "I3rn"
+          },
+          {
+            "key": "angularAxes",
+            "live": false,
+            "section": "physical",
+            "value": "+1°50'00.00\" × +1°50'00.00\""
+          },
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "90.0°"
+          }
+        ],
+        "distance": "444.22 ± 3.91 ly",
+        "distanceCompact": "444.22 ly",
+        "distanceErrorLightYears": 3.9138767182991603,
+        "distanceLightYears": 444.224972974619,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.13619999587535858,
+        "eclipticCurrent": "60.263°, 4.091°",
+        "eclipticJ2000": "59.888°, 4.086°",
+        "englishName": "Pleiades",
+        "equatorialJ2000": "   3h47m00.4s  +24°07'00.9\"",
+        "equatorialOfDate": "   3h48m36.4s  +24°12'01.4\"",
+        "extinction": 0.351611852645874,
+        "found": true,
+        "galactic": "166.572°, -23.520°",
+        "geometricAltAz": "-25.887°, 0.856°",
+        "geometricAltitude": -25.88726860322041,
+        "geometricAzimuth": 0.8561613032107845,
+        "hourAngle": "12h03m22.7s",
+        "hourAngleDegrees": 180.84446248569785,
+        "infoMode": "all",
+        "liveDetailFields": [
+          {
+            "key": "positionAngle",
+            "live": true,
+            "section": "physical",
+            "value": "90.0°"
+          }
+        ],
+        "magnitude": 1.2000000476837158,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "昴星团",
+        "objectType": "cluster associated with nebulosity",
+        "ok": true,
+        "parallacticAngle": "-0.72°",
+        "polarDistanceDegrees": 65.79960959978752,
+        "polarDistanceJ2000Degrees": 65.88307388911677,
+        "ra": "   3h48m36.4s",
+        "raJ2000Degrees": 56.75159265537329,
+        "rise": "21h29m",
+        "set": "12h34m",
+        "size": "+1°50'00.00\"",
+        "supergalactic": "336.537°, -29.246°",
+        "transit": "5h03m",
+        "type": "与星云相关的星团"
+      },
+      "distance": {
+        "distance": 0.13619999587535858,
+        "distanceCompact": "444.22 ly",
+        "distanceErrorLightYears": 3.9138767182991603,
+        "distanceLightYears": 444.224972974619,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "444.22 ± 3.91 ly",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.13619999587535858,
+        "ok": true,
+        "selectedEnglishName": "Pleiades"
+      }
+    },
+    {
+      "query": "Moon",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -12.390654501892545,
+        "angularSizeDegrees": 0.5385460720405794,
+        "apparentAltAz": "-12.391°, 320.472°",
+        "apparentMagnitude": -8.384291648864746,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 320.47237308665586,
+        "constellation": "双子座",
+        "constellationAbbreviation": "Gem",
+        "dec": "+26°07'04.7\"",
+        "decJ2000Degrees": 26.145807866098117,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "9h04m44.7s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "6h47m14.4s +26°07'04.7\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-12.391°, 320.472°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "6h45m34.5s +26°08'44.9\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-12.391°, 320.472°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "100.605°, 3.116°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "100.230°, 3.110°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "188.766°, 10.399°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "23.278°, -48.082°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "32.94°"
+          },
+          {
+            "key": "albedo",
+            "live": false,
+            "section": "physical",
+            "value": "0.120"
+          },
+          {
+            "key": "heliocentricDistance",
+            "live": true,
+            "section": "orbit",
+            "value": "1.0069 AU"
+          },
+          {
+            "key": "phaseAngle",
+            "live": true,
+            "section": "orbit",
+            "value": "+116°37'46\""
+          },
+          {
+            "key": "illuminationTrend",
+            "live": true,
+            "section": "orbit",
+            "value": "waning"
+          },
+          {
+            "key": "orbitalSpeed",
+            "live": true,
+            "section": "orbit",
+            "value": "1.065 km/s"
+          },
+          {
+            "key": "heliocentricSpeed",
+            "live": true,
+            "section": "orbit",
+            "value": "29.090 km/s"
+          },
+          {
+            "key": "centralLongitude",
+            "live": true,
+            "section": "surface",
+            "value": "359.54°"
+          },
+          {
+            "key": "centralLatitude",
+            "live": true,
+            "section": "surface",
+            "value": "-5.08°"
+          },
+          {
+            "key": "rotationAxisAngle",
+            "live": true,
+            "section": "surface",
+            "value": "3.89°"
+          },
+          {
+            "key": "subsolarLongitude",
+            "live": true,
+            "section": "surface",
+            "value": "116.76°"
+          },
+          {
+            "key": "subsolarLatitude",
+            "live": true,
+            "section": "surface",
+            "value": "-0.41°"
+          },
+          {
+            "key": "moonPhaseName",
+            "live": true,
+            "section": "lunar",
+            "value": "残月"
+          },
+          {
+            "key": "moonAge",
+            "live": true,
+            "section": "lunar",
+            "value": "24.38 天"
+          },
+          {
+            "key": "librationLongitude",
+            "live": true,
+            "section": "lunar",
+            "value": "-359.54°"
+          },
+          {
+            "key": "librationLatitude",
+            "live": true,
+            "section": "lunar",
+            "value": "-5.08°"
+          },
+          {
+            "key": "colongitude",
+            "live": true,
+            "section": "lunar",
+            "value": "90.04°"
+          }
+        ],
+        "detailModel": {
+          "assetKey": "Moon",
+          "coordinateFrame": "texture-body; observer local zenith up",
+          "format": "textured-sphere",
+          "lighting": {
+            "emissive": false,
+            "illuminatedFraction": 0.2758900134832811,
+            "jd": 2461289.878117442,
+            "sunDirectionBody": [
+              -0.8928490282290948,
+              -0.007074299924197314,
+              -0.45030052972536344
+            ],
+            "viewToBody": [
+              0.8722757884596956,
+              -0.4890141279792699,
+              -0.0003626343758005207,
+              0.4876512270265637,
+              0.8698995733064577,
+              -0.0739662973301299,
+              0.036486019877523965,
+              0.06434217122476212,
+              0.9972606757290594
+            ]
+          },
+          "offline": true,
+          "schemaVersion": 1,
+          "source": "Stellarium ephemeris and planet rotation",
+          "state": "available"
+        },
+        "distance": "0.0025 AU",
+        "distanceLightYears": 3.9075245489478026e-08,
+        "distanceMethod": "ephemeris",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceUnit": "AU",
+        "distanceValue": 0.0024711606120867077,
+        "eclipticCurrent": "100.605°, 3.116°",
+        "eclipticJ2000": "100.230°, 3.110°",
+        "elongation": 63.24490187798623,
+        "englishName": "Moon",
+        "equatorialJ2000": "   6h45m34.5s  +26°08'44.9\"",
+        "equatorialOfDate": "   6h47m14.4s  +26°07'04.7\"",
+        "extinction": 0.851496696472168,
+        "found": true,
+        "galactic": "188.766°, 10.399°",
+        "geometricAltAz": "-12.391°, 320.472°",
+        "geometricAltitude": -12.390654501892545,
+        "geometricAzimuth": 320.47237308665586,
+        "hourAngle": "9h04m44.7s",
+        "hourAngleDegrees": 136.18608396229035,
+        "infoMode": "all",
+        "liveDetailFields": [
+          {
+            "key": "heliocentricDistance",
+            "live": true,
+            "section": "orbit",
+            "value": "1.0069 AU"
+          },
+          {
+            "key": "phaseAngle",
+            "live": true,
+            "section": "orbit",
+            "value": "+116°37'46\""
+          },
+          {
+            "key": "illuminationTrend",
+            "live": true,
+            "section": "orbit",
+            "value": "waning"
+          },
+          {
+            "key": "orbitalSpeed",
+            "live": true,
+            "section": "orbit",
+            "value": "1.065 km/s"
+          },
+          {
+            "key": "heliocentricSpeed",
+            "live": true,
+            "section": "orbit",
+            "value": "29.090 km/s"
+          },
+          {
+            "key": "centralLongitude",
+            "live": true,
+            "section": "surface",
+            "value": "359.54°"
+          },
+          {
+            "key": "centralLatitude",
+            "live": true,
+            "section": "surface",
+            "value": "-5.08°"
+          },
+          {
+            "key": "rotationAxisAngle",
+            "live": true,
+            "section": "surface",
+            "value": "3.89°"
+          },
+          {
+            "key": "subsolarLongitude",
+            "live": true,
+            "section": "surface",
+            "value": "116.76°"
+          },
+          {
+            "key": "subsolarLatitude",
+            "live": true,
+            "section": "surface",
+            "value": "-0.41°"
+          },
+          {
+            "key": "moonPhaseName",
+            "live": true,
+            "section": "lunar",
+            "value": "残月"
+          },
+          {
+            "key": "moonAge",
+            "live": true,
+            "section": "lunar",
+            "value": "24.38 天"
+          },
+          {
+            "key": "librationLongitude",
+            "live": true,
+            "section": "lunar",
+            "value": "-359.54°"
+          },
+          {
+            "key": "librationLatitude",
+            "live": true,
+            "section": "lunar",
+            "value": "-5.08°"
+          },
+          {
+            "key": "colongitude",
+            "live": true,
+            "section": "lunar",
+            "value": "90.04°"
+          }
+        ],
+        "magnitude": -9.235788345336914,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "月",
+        "objectType": "moon",
+        "ok": true,
+        "parallacticAngle": "32.94°",
+        "phase": 27.58900225162506,
+        "polarDistanceDegrees": 63.88203983438974,
+        "polarDistanceJ2000Degrees": 63.85419213390188,
+        "ra": "   6h47m14.4s",
+        "raJ2000Degrees": 101.39354986112346,
+        "rise": "---",
+        "set": "15h39m",
+        "size": "+0°32'18.77\"",
+        "supergalactic": "23.278°, -48.082°",
+        "transit": "7h39m",
+        "type": "卫星"
+      },
+      "distance": {
+        "distance": 0.0024711606120867077,
+        "distanceLightYears": 3.9075245489478026e-08,
+        "distanceMethod": "ephemeris",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceText": "0.0025 AU",
+        "distanceUnit": "AU",
+        "distanceValue": 0.0024711606120867077,
+        "ok": true,
+        "selectedEnglishName": "Moon"
+      }
+    },
+    {
+      "query": "Sun",
+      "selection": {
+        "aboveHorizon": true,
+        "airmass": 3.368044853210449,
+        "altitude": 17.21415181571379,
+        "angularSizeDegrees": 0.5288901189307912,
+        "apparentAltAz": "17.214°, 263.862°",
+        "apparentMagnitude": -26.29010581970215,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 263.86198754867246,
+        "constellation": "狮子座",
+        "constellationAbbreviation": "Leo",
+        "dec": "+6°22'08.3\"",
+        "decJ2000Degrees": 6.512776125621196,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "4h51m41.0s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "11h00m18.0s +6°22'08.3\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "17.214°, 263.862°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "10h58m54.3s +6°30'46.0\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "17.161°, 263.862°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "163.801°, -0.001°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "163.426°, -0.003°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "245.442°, 56.253°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "101.024°, -25.683°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "50.13°"
+          }
+        ],
+        "detailModel": {
+          "assetKey": "Sun",
+          "coordinateFrame": "texture-body; observer local zenith up",
+          "format": "textured-sphere",
+          "lighting": {
+            "emissive": true,
+            "illuminatedFraction": 1,
+            "jd": 2461289.878117442,
+            "sunDirectionBody": [
+              -0.975061345543579,
+              0.12616894110406754,
+              -0.18258359928379006
+            ],
+            "viewToBody": [
+              -0.10493188451620222,
+              0.19556245048225307,
+              -0.975061345543579,
+              0.4628432731201975,
+              0.8774152396830479,
+              0.12616894110406754,
+              0.8802075915028569,
+              -0.4380614399069104,
+              -0.18258359928379006
+            ]
+          },
+          "offline": true,
+          "schemaVersion": 1,
+          "source": "Stellarium ephemeris and planet rotation",
+          "state": "available"
+        },
+        "distance": "1.0080 AU",
+        "distanceLightYears": 1.5939278559042224e-05,
+        "distanceMethod": "ephemeris",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceUnit": "AU",
+        "distanceValue": 1.008017144019982,
+        "eclipticCurrent": "163.801°, -0.001°",
+        "eclipticJ2000": "163.426°, -0.003°",
+        "englishName": "Sun",
+        "equatorialJ2000": "  10h58m54.3s  +6°30'46.0\"",
+        "equatorialOfDate": "  11h00m18.0s  +6°22'08.3\"",
+        "extinction": 0.43470001220703125,
+        "found": true,
+        "galactic": "245.442°, 56.253°",
+        "geometricAltAz": "17.161°, 263.862°",
+        "geometricAltitude": 17.16137953472004,
+        "geometricAzimuth": 263.86198754867246,
+        "hourAngle": "4h51m41.0s",
+        "hourAngleDegrees": 72.92078634298207,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": -26.72480583190918,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "日",
+        "objectType": "star",
+        "ok": true,
+        "parallacticAngle": "50.13°",
+        "polarDistanceDegrees": 83.63101967720635,
+        "polarDistanceJ2000Degrees": 83.4872238743788,
+        "ra": "  11h00m18.0s",
+        "raJ2000Degrees": 164.72629491248244,
+        "rise": "5h47m",
+        "set": "18h38m",
+        "size": "+0°31'44.00\"",
+        "supergalactic": "101.024°, -25.683°",
+        "transit": "12h13m",
+        "type": "恒星"
+      },
+      "distance": {
+        "distance": 1.008017144019982,
+        "distanceLightYears": 1.5939278559042224e-05,
+        "distanceMethod": "ephemeris",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceText": "1.0080 AU",
+        "distanceUnit": "AU",
+        "distanceValue": 1.008017144019982,
+        "ok": true,
+        "selectedEnglishName": "Sun"
+      }
+    },
+    {
+      "query": "STARLETTE",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -20.724703616959555,
+        "angularSizeDegrees": 0.0009208584712922631,
+        "apparentAltAz": "-20.725°, 86.665°",
+        "apparentMagnitude": 17.451324462890625,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 86.66481070240793,
+        "constellation": "宝瓶座",
+        "constellationAbbreviation": "Aqr",
+        "dec": "-10°40'41.3\"",
+        "decJ2000Degrees": -10.822685928631753,
+        "detailFields": [
+          {
+            "key": "catalogNumber",
+            "live": false,
+            "section": "identity",
+            "value": "7646"
+          },
+          {
+            "key": "internationalDesignator",
+            "live": false,
+            "section": "identity",
+            "value": "1975-010A"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "16h47m20.3s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "23h04m38.7s -10°40'41.3\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-20.725°, 86.665°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "23h03m14.3s -10°49'21.7\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-20.725°, 86.665°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "343.130°, -4.389°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "342.754°, -4.387°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "60.356°, -59.786°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "277.061°, 23.094°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-51.19°"
+          },
+          {
+            "key": "phaseAngle",
+            "live": true,
+            "section": "orbit",
+            "value": "+4°26'27\""
+          },
+          {
+            "key": "launchDate",
+            "live": false,
+            "section": "satellite",
+            "value": "1975"
+          },
+          {
+            "key": "tleEpoch",
+            "live": false,
+            "section": "satellite",
+            "value": "24 六月 2026, 5h58m UTC"
+          },
+          {
+            "key": "tleLine1",
+            "live": false,
+            "section": "satellite",
+            "value": "1 00000U 75010A 26175.24849117 -.00000151 00000+0 -46200-5 0 9995"
+          },
+          {
+            "key": "tleLine2",
+            "live": false,
+            "section": "satellite",
+            "value": "2 00000 49.8239 76.7217 0205597 86.3870 276.0509 13.82350447595518"
+          },
+          {
+            "key": "range",
+            "live": true,
+            "section": "satellite",
+            "value": "6782.0 km"
+          },
+          {
+            "key": "rangeRate",
+            "live": true,
+            "section": "satellite",
+            "value": "5.303 km/s"
+          },
+          {
+            "key": "height",
+            "live": true,
+            "section": "satellite",
+            "value": "1106.6 km"
+          },
+          {
+            "key": "subpoint",
+            "live": true,
+            "section": "satellite",
+            "value": "22.204°, -177.620°"
+          },
+          {
+            "key": "inclination",
+            "live": false,
+            "section": "satellite",
+            "value": "49.82°"
+          },
+          {
+            "key": "orbitalPeriod",
+            "live": false,
+            "section": "satellite",
+            "value": "104.19 分"
+          },
+          {
+            "key": "perigeeAltitude",
+            "live": false,
+            "section": "satellite",
+            "value": "805 km"
+          },
+          {
+            "key": "apogeeAltitude",
+            "live": false,
+            "section": "satellite",
+            "value": "1106 km"
+          },
+          {
+            "key": "operationalStatus",
+            "live": false,
+            "section": "satellite",
+            "value": "未知"
+          },
+          {
+            "key": "visibility",
+            "live": true,
+            "section": "satellite",
+            "value": "此卫星在地平线以下"
+          }
+        ],
+        "distance": "6782.0 km",
+        "distanceKm": 6781.975907793346,
+        "distanceLightYears": 7.168554190872415e-10,
+        "distanceMethod": "orbital_range",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceUnit": "km",
+        "distanceValue": 6781.975907793346,
+        "eclipticCurrent": "343.130°, -4.389°",
+        "eclipticJ2000": "342.754°, -4.387°",
+        "englishName": "STARLETTE",
+        "equatorialJ2000": "  23h03m14.3s  -10°49'21.7\"",
+        "equatorialOfDate": "  23h04m38.7s  -10°40'41.3\"",
+        "extinction": 0.451324462890625,
+        "found": true,
+        "galactic": "60.356°, -59.786°",
+        "geometricAltAz": "-20.725°, 86.665°",
+        "geometricAltitude": -20.724703616959555,
+        "geometricAzimuth": 86.66481070240793,
+        "hourAngle": "16h47m20.3s",
+        "hourAngleDegrees": 251.83465710468593,
+        "infoMode": "all",
+        "liveDetailFields": [
+          {
+            "key": "phaseAngle",
+            "live": true,
+            "section": "orbit",
+            "value": "+4°26'27\""
+          },
+          {
+            "key": "range",
+            "live": true,
+            "section": "satellite",
+            "value": "6782.0 km"
+          },
+          {
+            "key": "rangeRate",
+            "live": true,
+            "section": "satellite",
+            "value": "5.303 km/s"
+          },
+          {
+            "key": "height",
+            "live": true,
+            "section": "satellite",
+            "value": "1106.6 km"
+          },
+          {
+            "key": "subpoint",
+            "live": true,
+            "section": "satellite",
+            "value": "22.204°, -177.620°"
+          },
+          {
+            "key": "visibility",
+            "live": true,
+            "section": "satellite",
+            "value": "此卫星在地平线以下"
+          }
+        ],
+        "magnitude": 17,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "STARLETTE",
+        "objectType": "artificial satellite",
+        "ok": true,
+        "parallacticAngle": "-51.19°",
+        "polarDistanceDegrees": 100.67813677690481,
+        "polarDistanceJ2000Degrees": 100.82268592863174,
+        "ra": "  23h04m38.7s",
+        "raJ2000Degrees": -14.190225244264198,
+        "rise": "18h50m",
+        "satellitePassSource": "local TLE propagation",
+        "satellitePassesOffline": true,
+        "satellitePassesPending": true,
+        "set": "5h46m",
+        "size": "+0°00'03.32\"",
+        "supergalactic": "277.061°, 23.094°",
+        "transit": "0h20m",
+        "type": "人造卫星"
+      },
+      "distance": {
+        "distance": 6781.975907793346,
+        "distanceKm": 6781.975907793346,
+        "distanceLightYears": 7.168554190872415e-10,
+        "distanceMethod": "orbital_range",
+        "distanceReference": "observer",
+        "distanceStatus": "computed",
+        "distanceText": "6782.0 km",
+        "distanceUnit": "km",
+        "distanceValue": 6781.975907793346,
+        "ok": true,
+        "selectedEnglishName": "STARLETTE"
+      }
+    },
+    {
+      "query": "catalog|Exoplanets|51 Peg|selectOnly",
+      "selection": {
+        "aboveHorizon": true,
+        "airmass": 21.282249450683594,
+        "altitude": 1.6485979224547147,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "1.649°, 63.499°",
+        "apparentMagnitude": 8.282519340515137,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 63.49853443904333,
+        "constellation": "飞马座",
+        "constellationAbbreviation": "Peg",
+        "dec": "+20°54'53.3\"",
+        "decJ2000Degrees": 20.771268952040014,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "16h53m10.5s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "22h58m48.5s +20°54'53.3\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "1.649°, 63.499°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "22h57m29.7s +20°46'16.6\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "1.320°, 63.499°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "354.665°, 25.186°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "354.292°, 25.186°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "90.071°, -34.729°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "311.377°, 32.521°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-47.39°"
+          },
+          {
+            "key": "hostStarName",
+            "live": false,
+            "section": "plugin",
+            "value": "Helvetios"
+          },
+          {
+            "key": "hostStarAliases",
+            "live": false,
+            "section": "plugin",
+            "value": "HD 217014"
+          },
+          {
+            "key": "hostSpectralType",
+            "live": false,
+            "section": "plugin",
+            "value": "G2IV-V"
+          },
+          {
+            "key": "hostDistance",
+            "live": false,
+            "section": "plugin",
+            "value": "15.46 pc"
+          },
+          {
+            "key": "hostMass",
+            "live": false,
+            "section": "plugin",
+            "value": "1.030 M☉"
+          },
+          {
+            "key": "hostMetallicity",
+            "live": false,
+            "section": "plugin",
+            "value": "0.180"
+          },
+          {
+            "key": "hostRadius",
+            "live": false,
+            "section": "plugin",
+            "value": "1.176 R☉"
+          },
+          {
+            "key": "effectiveTemperature",
+            "live": false,
+            "section": "plugin",
+            "value": "5758 K"
+          },
+          {
+            "key": "hasHabitablePlanets",
+            "live": false,
+            "section": "plugin",
+            "value": "no"
+          }
+        ],
+        "distance": "50.43 ly",
+        "distanceCompact": "50.43 ly",
+        "distanceLightYears": 50.4283421817078,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "pc",
+        "distanceValue": 15.4614,
+        "eclipticCurrent": "354.665°, 25.186°",
+        "eclipticJ2000": "354.292°, 25.186°",
+        "englishName": "Helvetios",
+        "equatorialJ2000": "  22h57m29.7s  +20°46'16.6\"",
+        "equatorialOfDate": "  22h58m48.5s  +20°54'53.3\"",
+        "extinction": 2.7925195693969727,
+        "found": true,
+        "galactic": "90.071°, -34.729°",
+        "geometricAltAz": "1.320°, 63.499°",
+        "geometricAltitude": 1.3203356729773306,
+        "geometricAzimuth": 63.49853443904333,
+        "hourAngle": "16h53m10.5s",
+        "hourAngleDegrees": 253.2939347858363,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 5.489999771118164,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "室宿增一 Helvetios",
+        "objectType": "planetary system",
+        "ok": true,
+        "parallacticAngle": "-47.39°",
+        "polarDistanceDegrees": 69.08519872181468,
+        "polarDistanceJ2000Degrees": 69.22873104795998,
+        "ra": "  22h58m48.5s",
+        "raJ2000Degrees": -15.626193383590248,
+        "rise": "16h53m",
+        "set": "7h31m",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "311.377°, 32.521°",
+        "transit": "0h14m",
+        "type": "行星系统"
+      },
+      "distance": {
+        "distance": 15.4614,
+        "distanceCompact": "50.43 ly",
+        "distanceLightYears": 50.4283421817078,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "50.43 ly",
+        "distanceUnit": "pc",
+        "distanceValue": 15.4614,
+        "ok": true,
+        "selectedEnglishName": "Helvetios"
+      }
+    },
+    {
+      "query": "catalog|Pulsars|PSR J0437-4715|selectOnly",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -78.94287248100764,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-78.943°, 225.014°",
+        "apparentMagnitude": 6.281586647033691,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 225.01395300094393,
+        "catalogId": "PSR J0437-4715",
+        "constellation": "绘架座",
+        "constellationAbbreviation": "Pic",
+        "dec": "-47°11'33.5\"",
+        "decJ2000Degrees": -47.247346799518276,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "11h13m56.5s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "4h38m02.5s -47°11'33.5\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-78.943°, 225.014°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "4h37m16.0s -47°14'50.4\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-78.943°, 225.014°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "50.858°, -67.864°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "50.474°, -67.868°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "253.387°, -41.963°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "241.108°, -47.541°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "127.02°"
+          },
+          {
+            "key": "notes",
+            "live": false,
+            "section": "plugin",
+            "value": "HE"
+          },
+          {
+            "key": "annualParallax",
+            "live": false,
+            "section": "plugin",
+            "value": "6.430 mas"
+          },
+          {
+            "key": "binaryPeriod",
+            "live": false,
+            "section": "plugin",
+            "value": "5.741046 天"
+          },
+          {
+            "key": "pulseFrequency",
+            "live": false,
+            "section": "plugin",
+            "value": "173.687946 Hz"
+          },
+          {
+            "key": "frequencyDerivative",
+            "live": false,
+            "section": "plugin",
+            "value": "-1.7283626e-15 Hz/s"
+          },
+          {
+            "key": "pulsePeriod",
+            "live": false,
+            "section": "plugin",
+            "value": "0.005757452 s"
+          },
+          {
+            "key": "dispersionMeasure",
+            "live": false,
+            "section": "plugin",
+            "value": "2.645 pc/cm³"
+          },
+          {
+            "key": "eccentricity",
+            "live": false,
+            "section": "plugin",
+            "value": "0.000019"
+          },
+          {
+            "key": "electronDensityDistance",
+            "live": false,
+            "section": "plugin",
+            "value": "0.139 kpc"
+          },
+          {
+            "key": "distanceEstimate",
+            "live": false,
+            "section": "plugin",
+            "value": "0.157 kpc"
+          },
+          {
+            "key": "profileWidth50",
+            "live": false,
+            "section": "plugin",
+            "value": "0.14 ms"
+          },
+          {
+            "key": "glitchCount",
+            "live": false,
+            "section": "plugin",
+            "value": "0"
+          },
+          {
+            "key": "flux400",
+            "live": false,
+            "section": "plugin",
+            "value": "550.00 mJy"
+          },
+          {
+            "key": "flux600",
+            "live": false,
+            "section": "plugin",
+            "value": "300.00 mJy"
+          },
+          {
+            "key": "flux1400",
+            "live": false,
+            "section": "plugin",
+            "value": "150.20 mJy"
+          }
+        ],
+        "distance": "453.36 ly",
+        "distanceCompact": "453.36 ly",
+        "distanceLightYears": 453.35736033729563,
+        "distanceMethod": "electron_density_model",
+        "distanceStatus": "estimated",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.13899999856948853,
+        "eclipticCurrent": "50.858°, -67.864°",
+        "eclipticJ2000": "50.474°, -67.868°",
+        "englishName": "PSR J0437-4715",
+        "equatorialJ2000": "   4h37m16.0s  -47°14'50.4\"",
+        "equatorialOfDate": "   4h38m02.5s  -47°11'33.5\"",
+        "extinction": 0.14258670806884766,
+        "found": true,
+        "galactic": "253.387°, -41.963°",
+        "geometricAltAz": "-78.943°, 225.014°",
+        "geometricAltitude": -78.94287248100764,
+        "geometricAzimuth": 225.01395300094393,
+        "hourAngle": "11h13m56.5s",
+        "hourAngleDegrees": 168.48539401707006,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 6.138999938964844,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "PSR J0437-4715",
+        "objectType": "pulsar",
+        "ok": true,
+        "parallacticAngle": "127.02°",
+        "polarDistanceDegrees": 137.1926322694181,
+        "polarDistanceJ2000Degrees": 137.24734679951828,
+        "ra": "   4h38m02.5s",
+        "raJ2000Degrees": 69.31676266268236,
+        "rise": "4h01m",
+        "set": "7h44m",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "241.108°, -47.541°",
+        "transit": "5h52m",
+        "type": "脉冲星"
+      },
+      "distance": {
+        "distance": 0.13899999856948853,
+        "distanceCompact": "453.36 ly",
+        "distanceLightYears": 453.35736033729563,
+        "distanceMethod": "electron_density_model",
+        "distanceStatus": "estimated",
+        "distanceText": "453.36 ly",
+        "distanceUnit": "kpc",
+        "distanceValue": 0.13899999856948853,
+        "ok": true,
+        "selectedEnglishName": "PSR J0437-4715"
+      }
+    },
+    {
+      "query": "SN 1987A",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -57.62957573380146,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-57.630°, 196.755°",
+        "apparentMagnitude": 365.18963623046875,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 196.75471555710328,
+        "constellation": "剑鱼座",
+        "constellationAbbreviation": "Dor",
+        "dec": "-69°14'45.1\"",
+        "decJ2000Degrees": -69.26416643843227,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "10h16m43.2s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h35m15.9s -69°14'45.1\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-57.630°, 196.755°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h35m27.3s -69°15'51.0\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-57.630°, 196.755°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "308.102°, -86.453°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "307.666°, -86.449°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "279.697°, -31.939°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "214.908°, -35.010°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "141.39°"
+          },
+          {
+            "key": "supernovaType",
+            "live": false,
+            "section": "plugin",
+            "value": "IIPec"
+          },
+          {
+            "key": "maximumMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "2.90"
+          },
+          {
+            "key": "peakJulianDay",
+            "live": false,
+            "section": "plugin",
+            "value": "2446851.000"
+          },
+          {
+            "key": "transientDistance",
+            "live": false,
+            "section": "plugin",
+            "value": "160000.00 光年"
+          }
+        ],
+        "distance": "160000.00 ly",
+        "distanceCompact": "160000.00 ly",
+        "distanceLightYears": 160000,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "kly",
+        "distanceValue": 160,
+        "eclipticCurrent": "308.102°, -86.453°",
+        "eclipticJ2000": "307.666°, -86.449°",
+        "englishName": "SN 1987A",
+        "equatorialJ2000": "   5h35m27.3s  -69°15'51.0\"",
+        "equatorialOfDate": "   5h35m15.9s  -69°14'45.1\"",
+        "extinction": 0.16766357421875,
+        "found": true,
+        "galactic": "279.697°, -31.939°",
+        "geometricAltAz": "-57.630°, 196.755°",
+        "geometricAltitude": -57.62957573380146,
+        "geometricAzimuth": 196.75471555710328,
+        "hourAngle": "10h16m43.2s",
+        "hourAngleDegrees": 154.1798947500323,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 365.02197265625,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "SN 1987A",
+        "objectType": "supernova",
+        "ok": true,
+        "parallacticAngle": "141.39°",
+        "polarDistanceDegrees": 159.2458568845323,
+        "polarDistanceJ2000Degrees": 159.26416643843226,
+        "ra": "   5h35m15.9s",
+        "raJ2000Degrees": 83.86374758002675,
+        "rise": "---",
+        "set": "---",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "214.908°, -35.010°",
+        "transit": "6h49m",
+        "type": "超新星"
+      },
+      "distance": {
+        "distance": 160,
+        "distanceCompact": "160000.00 ly",
+        "distanceLightYears": 160000,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "160000.00 ly",
+        "distanceUnit": "kly",
+        "distanceValue": 160,
+        "ok": true,
+        "selectedEnglishName": "SN 1987A"
+      }
+    },
+    {
+      "query": "catalog|Novae|GK Per|selectOnly",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -5.989887175658366,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-5.990°, 3.424°",
+        "apparentMagnitude": 16.3660945892334,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 3.4235234997284487,
+        "constellation": "英仙座",
+        "constellationAbbreviation": "Per",
+        "dec": "+43°59'38.7\"",
+        "decJ2000Degrees": 43.90232787685553,
+        "detailFields": [
+          {
+            "key": "designation",
+            "live": false,
+            "section": "identity",
+            "value": "GK Per"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "12h18m56.5s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "3h33m02.5s +43°59'38.7\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-5.990°, 3.424°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "3h31m12.6s +43°54'08.4\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-5.990°, 3.424°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "61.878°, 24.079°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "61.504°, 24.074°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "150.959°, -10.105°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "351.154°, -14.431°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-3.65°"
+          },
+          {
+            "key": "novaType",
+            "live": false,
+            "section": "plugin",
+            "value": "NA+XP"
+          },
+          {
+            "key": "maximumMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "0.20"
+          },
+          {
+            "key": "minimumMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "14.00"
+          },
+          {
+            "key": "peakJulianDay",
+            "live": false,
+            "section": "plugin",
+            "value": "2415439.000"
+          },
+          {
+            "key": "declineTwoMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "6.00 天"
+          },
+          {
+            "key": "declineThreeMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "13.00 天"
+          },
+          {
+            "key": "declineSixMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "179.00 天"
+          },
+          {
+            "key": "declineNineMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "444.00 天"
+          },
+          {
+            "key": "transientDistance",
+            "live": false,
+            "section": "plugin",
+            "value": "1500.00 光年"
+          }
+        ],
+        "distance": "1500.00 ly",
+        "distanceCompact": "1500.00 ly",
+        "distanceLightYears": 1500,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceUnit": "kly",
+        "distanceValue": 1.5,
+        "eclipticCurrent": "61.878°, 24.079°",
+        "eclipticJ2000": "61.504°, 24.074°",
+        "englishName": "Nova Persei 1901",
+        "equatorialJ2000": "   3h31m12.6s  +43°54'08.4\"",
+        "equatorialOfDate": "   3h33m02.5s  +43°59'38.7\"",
+        "extinction": 2.3660945892333984,
+        "found": true,
+        "galactic": "150.959°, -10.105°",
+        "geometricAltAz": "-5.990°, 3.424°",
+        "geometricAltitude": -5.989887175658366,
+        "geometricAzimuth": 3.4235234997284487,
+        "hourAngle": "12h18m56.5s",
+        "hourAngleDegrees": 184.73537508395248,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 14,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "新星 英仙座 1901",
+        "objectType": "nova",
+        "ok": true,
+        "parallacticAngle": "-3.65°",
+        "polarDistanceDegrees": 46.005918111423846,
+        "polarDistanceJ2000Degrees": 46.09767212314447,
+        "ra": "   3h33m02.5s",
+        "raJ2000Degrees": 52.802492165687866,
+        "rise": "19h03m",
+        "set": "14h28m",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "351.154°, -14.431°",
+        "transit": "4h48m",
+        "type": "新星"
+      },
+      "distance": {
+        "distance": 1.5,
+        "distanceCompact": "1500.00 ly",
+        "distanceLightYears": 1500,
+        "distanceMethod": "catalog",
+        "distanceStatus": "catalog",
+        "distanceText": "1500.00 ly",
+        "distanceUnit": "kly",
+        "distanceValue": 1.5,
+        "ok": true,
+        "selectedEnglishName": "Nova Persei 1901"
+      }
+    },
+    {
+      "query": "catalog|Novae|T Aur|selectOnly",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -15.773464899494167,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-15.773°, 337.380°",
+        "apparentMagnitude": 16.125770568847656,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 337.38022507521595,
+        "constellation": "御夫座",
+        "constellationAbbreviation": "Aur",
+        "dec": "+30°27'55.1\"",
+        "decJ2000Degrees": 30.445372046104172,
+        "detailFields": [
+          {
+            "key": "designation",
+            "live": false,
+            "section": "identity",
+            "value": "T Aur"
+          },
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "10h18m16.6s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h33m42.4s +30°27'55.1\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-15.773°, 337.380°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "5h31m58.8s +30°26'43.3\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-15.773°, 337.380°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "84.293°, 7.160°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "83.917°, 7.154°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "177.143°, -1.700°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "3.048°, -39.705°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "20.02°"
+          },
+          {
+            "key": "novaType",
+            "live": false,
+            "section": "plugin",
+            "value": "NB+EA"
+          },
+          {
+            "key": "maximumMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "4.10"
+          },
+          {
+            "key": "minimumMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "15.50"
+          },
+          {
+            "key": "peakJulianDay",
+            "live": false,
+            "section": "plugin",
+            "value": "2412088.000"
+          },
+          {
+            "key": "declineTwoMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "80.00 天"
+          },
+          {
+            "key": "declineThreeMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "84.00 天"
+          },
+          {
+            "key": "declineSixMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "96.00 天"
+          },
+          {
+            "key": "declineNineMagnitudes",
+            "live": false,
+            "section": "plugin",
+            "value": "6300.00 天"
+          }
+        ],
+        "distanceStatus": "unavailable",
+        "eclipticCurrent": "84.293°, 7.160°",
+        "eclipticJ2000": "83.917°, 7.154°",
+        "englishName": "Nova Aurigae 1892",
+        "equatorialJ2000": "   5h31m58.8s  +30°26'43.3\"",
+        "equatorialOfDate": "   5h33m42.4s  +30°27'55.1\"",
+        "extinction": 0.6257705688476562,
+        "found": true,
+        "galactic": "177.143°, -1.700°",
+        "geometricAltAz": "-15.773°, 337.380°",
+        "geometricAltitude": -15.773464899494167,
+        "geometricAzimuth": 337.38022507521595,
+        "hourAngle": "10h18m16.6s",
+        "hourAngleDegrees": 154.56937313508843,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 15.5,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "新星 御夫座 1892",
+        "objectType": "nova",
+        "ok": true,
+        "parallacticAngle": "20.02°",
+        "polarDistanceDegrees": 59.53468995934552,
+        "polarDistanceJ2000Degrees": 59.554627953895825,
+        "ra": "   5h33m42.4s",
+        "raJ2000Degrees": 82.9951929820222,
+        "rise": "22h43m",
+        "set": "14h48m",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "3.048°, -39.705°",
+        "transit": "6h48m",
+        "type": "新星"
+      },
+      "distance": {
+        "distanceStatus": "unavailable",
+        "ok": true,
+        "selectedEnglishName": "Nova Aurigae 1892"
+      }
+    },
+    {
+      "query": "catalog|Quasars|MS 23574-3520|selectOnly",
+      "selection": {
+        "aboveHorizon": false,
+        "altitude": -44.74019121687277,
+        "angularSizeDegrees": 0,
+        "apparentAltAz": "-44.740°, 102.795°",
+        "apparentMagnitude": 17.204641342163086,
+        "apparentSiderealTime": "15h51m59.0s",
+        "azimuth": 102.79454113579531,
+        "constellation": "玉夫座",
+        "constellationAbbreviation": "Scl",
+        "dec": "-34°54'25.1\"",
+        "decJ2000Degrees": -35.056516983357035,
+        "detailFields": [
+          {
+            "key": "hourAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h50m31.9s"
+          },
+          {
+            "key": "meanSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m58.5s"
+          },
+          {
+            "key": "apparentSiderealTime",
+            "live": false,
+            "section": "coordinates",
+            "value": "15h51m59.0s"
+          },
+          {
+            "key": "equatorialOfDate",
+            "live": false,
+            "section": "coordinates",
+            "value": "0h01m27.2s -34°54'25.1\""
+          },
+          {
+            "key": "apparentAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-44.740°, 102.795°"
+          },
+          {
+            "key": "equatorialJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "0h00m04.3s -35°03'23.5\""
+          },
+          {
+            "key": "geometricAltAz",
+            "live": false,
+            "section": "coordinates",
+            "value": "-44.740°, 102.795°"
+          },
+          {
+            "key": "eclipticCurrent",
+            "live": false,
+            "section": "coordinates",
+            "value": "344.799°, -31.810°"
+          },
+          {
+            "key": "eclipticJ2000",
+            "live": false,
+            "section": "coordinates",
+            "value": "344.420°, -31.809°"
+          },
+          {
+            "key": "galactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "353.944°, -76.463°"
+          },
+          {
+            "key": "supergalactic",
+            "live": false,
+            "section": "coordinates",
+            "value": "259.160°, 1.811°"
+          },
+          {
+            "key": "parallacticAngle",
+            "live": false,
+            "section": "coordinates",
+            "value": "-65.80°"
+          },
+          {
+            "key": "colorIndex",
+            "live": false,
+            "section": "observation",
+            "value": "-99.00"
+          },
+          {
+            "key": "redshift",
+            "live": false,
+            "section": "physical",
+            "value": "0.508000"
+          },
+          {
+            "key": "absoluteMagnitude",
+            "live": false,
+            "section": "plugin",
+            "value": "-25.00"
+          },
+          {
+            "key": "radioFlux6cm",
+            "live": false,
+            "section": "plugin",
+            "value": "-9999.00 Jy"
+          },
+          {
+            "key": "radioFlux20cm",
+            "live": false,
+            "section": "plugin",
+            "value": "-9999.00 Jy"
+          }
+        ],
+        "distanceStatus": "redshift_only",
+        "eclipticCurrent": "344.799°, -31.810°",
+        "eclipticJ2000": "344.420°, -31.809°",
+        "englishName": "MS 23574-3520",
+        "equatorialJ2000": "   0h00m04.3s  -35°03'23.5\"",
+        "equatorialOfDate": "   0h01m27.2s  -34°54'25.1\"",
+        "extinction": 0.20464134216308594,
+        "found": true,
+        "galactic": "353.944°, -76.463°",
+        "geometricAltAz": "-44.740°, 102.795°",
+        "geometricAltitude": -44.74019121687277,
+        "geometricAzimuth": 102.79454113579531,
+        "hourAngle": "15h50m31.9s",
+        "hourAngleDegrees": 237.63272467325763,
+        "infoMode": "all",
+        "liveDetailFields": [],
+        "magnitude": 17,
+        "meanSiderealTime": "15h51m58.5s",
+        "name": "MS 23574-3520",
+        "objectType": "quasar",
+        "ok": true,
+        "parallacticAngle": "-65.80°",
+        "polarDistanceDegrees": 124.90695879880353,
+        "polarDistanceJ2000Degrees": 125.05651698335704,
+        "ra": "   0h01m27.2s",
+        "raJ2000Degrees": 0.017758654359061078,
+        "redshift": 0.5080000162124634,
+        "rise": "21h32m",
+        "set": "4h58m",
+        "size": "+0°00'00.00\"",
+        "supergalactic": "259.160°, 1.811°",
+        "transit": "1h17m",
+        "type": "类星体"
+      },
+      "distance": {
+        "distanceStatus": "redshift_only",
+        "ok": true,
+        "redshift": 0.5080000162124634,
+        "selectedEnglishName": "MS 23574-3520"
+      }
+    }
+  ]
+}

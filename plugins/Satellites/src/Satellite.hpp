@@ -218,6 +218,10 @@ public:
 	}
 	//! Returns the (NORAD) catalog number. (For now, the ID string.)
 	QString getCatalogNumberString() const {return id;}
+	bool isOrbitValid() const { return initialized && orbitValid; }
+	bool shouldDisplayOrbit() const { return orbitDisplayed || orbitPreview; }
+	QVariantMap getOrbitLineStatus() const;
+	void updateOrbitLines();
 	//! Returns the (COSPAR) International Designator.
 	QString getInternationalDesignator() const {return internationalDesignator;}
 	//! Returns when this satellite record was last refreshed in the bundled catalogue.
@@ -238,7 +242,7 @@ public:
 	//! calculate faders, new position
 	//! @param core current StelCore
 	//! @param JD Julian day, UTC. (Satellites don't use JDE!)
-	void update(const StelCore *core, const double JD);
+	void update(const StelCore *core, const double JD, bool updateOrbit = true);
 
 	double getDoppler(double freq) const;
 	static bool showLabels;
@@ -311,6 +315,9 @@ private:
 	bool displayed;
 	//! Flag indicating whether an orbit section should be displayed.
 	bool orbitDisplayed;  // draw orbit enabled/disabled
+	bool orbitPreview = false;
+	int orbitDrawCount = 0;
+	double orbitLastDrawJD = 0.;
 	//! Flag indicating that the satellite is user-defined.
 	//! This means that its TLE set shouldn't be updated and the satellite
 	//! itself shouldn't be removed if auto-remove is enabled.
@@ -318,6 +325,7 @@ private:
 	//! Flag indicating that the satellite was added during the current session.
 	bool newlyAdded;
 	bool orbitValid;
+	QString propagationStatus = QStringLiteral("uninitialized");
 
 	//! Identifier of the satellite, must be unique within the list.
 	//! Currently, the Satellite Catalog Number/NORAD Number is used,

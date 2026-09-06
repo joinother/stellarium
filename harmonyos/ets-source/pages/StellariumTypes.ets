@@ -292,6 +292,15 @@ export interface ObjectDetailField {
   key: string
   value: string
   section: string
+  live?: boolean
+}
+
+export interface BodyModelLighting {
+  viewToBody: number[]
+  sunDirectionBody: number[]
+  jd: number
+  illuminatedFraction: number
+  emissive: boolean
 }
 
 export interface ObjectDetailModel {
@@ -306,6 +315,7 @@ export interface ObjectDetailModel {
   interactions?: string[]
   offline: boolean
   source?: string
+  lighting?: BodyModelLighting
 }
 
 export interface SatellitePass {
@@ -382,6 +392,7 @@ export interface StellariumBridgeResponse {
   namedCount?: number
   catalogTotal?: number
   catalogReady?: boolean
+  catalogMessage?: string
   catalogLevels?: number
   locations?: Object[]
   timeZone?: string
@@ -445,6 +456,12 @@ export interface StellariumBridgeResponse {
   de441Active?: boolean
   customInfoMask?: number
   startupTimeMode?: string
+  formattedTime?: string
+  dateFormat?: string
+  timeFormat?: string
+  presetLocalTime?: string
+  deltaTAlgorithms?: string[]
+  deltaTCustom?: string
   startupTimeStop?: boolean
   todayTime?: string
   presetSkyTime?: number
@@ -595,6 +612,18 @@ export interface StellariumBridgeResponse {
   spType?: string
   temperatureK?: number
   distance?: string
+  distanceCompact?: string
+  distanceMethod?: string
+  distanceLightYears?: number
+  distanceErrorLightYears?: number
+  distanceKm?: number
+  distanceReference?: string
+  distanceStatus?: string
+  orbitValid?: boolean
+  propagationStatus?: string
+  tleAgeDays?: number
+  tleOutdated?: boolean
+  sgp4Error?: number
   // 富化后的天体详情字段（selectedObjectJson 扩展）
   size?: string
   rise?: string
@@ -608,6 +637,7 @@ export interface StellariumBridgeResponse {
   satellitePassesOffline?: boolean
   satellitePassSource?: string
   detailFields?: Array<ObjectDetailField>
+  liveDetailFields?: Array<ObjectDetailField>
   keys?: string[]
   ids?: string[]
   typeIds?: string[]
@@ -777,15 +807,24 @@ export interface StellariumBridgeResponse {
   dir?: string
   frameCount?: number
   diskFrames?: number
+  attemptedFrames?: number
+  failedFrames?: number
   maxFrames?: number
   recording?: boolean
   fps?: number
   duration?: number
+  archivePath?: string
+  archiveFileName?: string
+  archiveBytes?: number
+  archiveReady?: boolean
+  archiveError?: string
   planets?: string[]
   tonight?: TonightEvents
 }
 
 export interface SessionSnapshot {
+  schemaVersion?: number
+  exportedAt?: string
   viewJ2000?: number[]
   fovDeg?: number
   jd?: number

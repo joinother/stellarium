@@ -1,0 +1,277 @@
+{
+  "scope": "Six revised passages and editorial notes, not full-corpus translation certification",
+  "checks": [
+    {
+      "language": "zh_CN",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "translated"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "translated"
+        }
+      ]
+    },
+    {
+      "language": "zh_CN",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "translated"
+        }
+      ]
+    },
+    {
+      "language": "zh_CN",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "translated"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "translated"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "translated"
+        }
+      ]
+    },
+    {
+      "language": "en",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "source"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "en",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "en",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "fa",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "source"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "fa",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "fa",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "ml",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "source"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "ml",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "ml",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "si",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "source"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "si",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "si",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "te",
+      "culture": "japanese",
+      "issues": [],
+      "passages": [
+        {
+          "id": "japanese_life",
+          "mode": "source"
+        },
+        {
+          "id": "japanese_nature",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "te",
+      "culture": "tibetan",
+      "issues": [],
+      "passages": [
+        {
+          "id": "tibetan_author",
+          "mode": "source"
+        }
+      ]
+    },
+    {
+      "language": "te",
+      "culture": "chinese_manchu",
+      "issues": [],
+      "passages": [
+        {
+          "id": "manchu_worship",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_calendar",
+          "mode": "source"
+        },
+        {
+          "id": "manchu_cosmology",
+          "mode": "source"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "restored": true
+}

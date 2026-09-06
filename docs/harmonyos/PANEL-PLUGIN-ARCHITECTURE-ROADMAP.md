@@ -33,7 +33,7 @@ Pad、手机和后续桌面端只保留一套动作语义，响应式布局只�
 
 ### 已有原生端面板
 
-`Oculars`、`AngleMeasure`、`NavStars`、`Satellites`、`MeteorShowers`、`Scenery3d`、`TelescopeControl`、`MosaicCamera`、`ArchaeoLines`、`PointerCoordinates` 和 `TextUserInterface` 已有对应桥接或面板。它们现在从工作区进入，避免在“更多功能”、设置和图层同时出现相同入口。
+`Oculars`、`AngleMeasure`、`NavStars`、`Satellites`、`MeteorShowers`、`Scenery3d`、`MosaicCamera`、`ArchaeoLines`、`PointerCoordinates` 和 `TextUserInterface` 已有对应桥接或面板；望远镜入口当前是独立的轻量 LX200 TCP 桥，不等同于完整 `TelescopeControl` 插件。它们现在从工作区进入，避免在“更多功能”、设置和图层同时出现相同入口。
 
 ### 已归并到核心任务页
 
@@ -77,9 +77,25 @@ Pad、手机和后续桌面端只保留一套动作语义，响应式布局只�
 | P0 | `Oculars`、`AngleMeasure`、`PointerCoordinates`、`Satellites`、`MeteorShowers`、`TimeNavigator`、`EquationOfTime` | 已有统一功能页；继续补齐动态状态、失败反馈和 CLI 命令，不再新增重复入口 |
 | P1 | `Observability`、`Calendars`、`ArchaeoLines`、`NavStars`、`Scenery3d`、`TelescopeControl`、`MosaicCamera` | 已有桥接或预留页；优先做异步计算、设备交互和离线资源状态 |
 | P2 | `NebulaTextures`、`Exoplanets`、`Pulsars`、`Quasars`、`Novae`、`Supernovae`、`ObjectVisibility` | 先作为搜索分类、图层或天文计算数据源；暂不复制桌面插件窗口 |
-| P3 | `SkyCultureMaker`、`SolarSystemEditor`、`LensDistortionEstimator`、`Planes`、`Vts`、`SimpleDrawLine`、`HelloStelModule` | 评估触摸编辑、模型或开发者用途后再决定是否开放；不放入普通用户的更多功能首页 |
+| P3 | `SkyCultureMaker`、`SolarSystemEditor`、`LensDistortionEstimator`、`Vts`、`SimpleDrawLine`、`HelloStelModule` | 评估触摸编辑、模型或开发者用途后再决定是否开放；不放入普通用户的更多功能首页 |
+| 联网插件 | `Planes` | 通过 `QNetworkAccessManager` 请求 `adsb.fi` 或 `airplanes.live` 的实时 ADS-B 飞机数据；没有随插件提供的离线位置快照，未备案离线包中明确不可用，不伪装成搜索星表 |
 | 离线禁用 | `OnlineQueries`、`RemoteControl`、`RemoteSync` | 未备案版本不联网；未来若开放，必须单独登记权限、端口、认证、外发字段和国内镜像/替代方案 |
 
 插件功能与 ArkUI 功能页不是一对一复制关系：源码模块负责计算和渲染生命周期，ArkUI 负责统一交互。任何新增插件先登记唯一功能页、网络属性、CLI 命令和资源依赖，再决定是否进入菜单。
+
+## 插件入口路由规则（2026-08-31）
+
+插件管理页现在使用单一的 `pluginFeatureRoute` 路由表。每个插件只允许归入以下一种入口：
+
+- `control`：进入已经移植的独立 ArkUI 控制页，例如目镜、卫星、流星雨、导航星、3D 地景和角度测量。
+- `catalog`：进入搜索页并直接选中插件星表，例如系外行星、脉冲星、类星体、新星和超新星；动态分类尚未返回时由待处理模块 ID 衔接，避免落到上一次搜索分类。
+- `network`：需要实时网络数据的插件，例如 `Planes`；离线包只显示数据来源和不可用原因，不执行请求，也不跳转到无关页面。当前 HarmonyOS 离线构建通过 `STELLARIUM_OHOS_OFFLINE` 在 C++ 请求入口再次封口，避免 CLI 或原生 action 绕过 ArkUI。未来若要支持本地飞机数据，应增加明确的快照导入接口并显示时间戳，不能把过期快照标成实时 ADS-B。
+- `host`：进入统一宿主页，例如时间方程/时间导航器、历法、可观测性和文本命令控制；插件页不重复实现业务面板。
+- `offline`：当前离线版本禁用网络或远程服务，不提供误导性跳转。
+- `unavailable`：源码模块已随包载入，但尚无对应 ArkUI 控制页，卡片明确显示移植状态。
+
+新增插件时必须先补这张路由表和对应 CLI/资源说明，不能把它临时映射到相近但语义不同的页面。插件卡片同时显示实际目的地，按钮文案区分“打开控制页”和“浏览插件星表”。
+
+卫星插件的下一阶段实现已落到统一数据契约：控制页负责显示、筛选和轨道参数；`getSatelliteSources`/`setSatelliteSources` 负责来源配置；`importSatelliteTle` 负责设备上的本地 TLE/CSV 导入；`setSatelliteUpdateSetting` 负责自动添加、自动删除、自动显示和更新周期；`refreshSatelliteCatalog` 只在允许联网的桌面构建调用。HarmonyOS 未备案包保留远程 URL 配置能力以便迁移，但远程来源处于休眠状态，不能由 UI、CLI 或旧插件动作触发网络请求。
 
 本轮使用的 ArkUI 实现遵循项目现有的响应式 Shell、状态驱动刷新和异步命令桥。当前运行环境未暴露用户配置的 `harmonyos_developer_knowledge` MCP 工具，因此没有把未验证的 MCP 返回内容写入实现或文档。

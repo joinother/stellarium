@@ -1,0 +1,173 @@
+{
+  "date": "2026-09-06",
+  "design": "Bounded free-orbit inline model with scrollable side gutters",
+  "device": "MatePad Mini",
+  "hapSha256": "c9621b565c65132f1dacf9301bea0709384c4cee0952e58f2e71eaa54f46342e",
+  "unitTestsPassed": 30,
+  "physicalChecks": [
+    {
+      "label": "Moon selected",
+      "passed": true
+    },
+    {
+      "label": "Moon horizontal drag rotates",
+      "passed": true
+    },
+    {
+      "label": "Moon horizontal drag does not scroll",
+      "passed": true
+    },
+    {
+      "label": "Moon horizontal drag does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Moon vertical drag over model rotates",
+      "passed": true
+    },
+    {
+      "label": "Moon vertical drag does not scroll",
+      "passed": true
+    },
+    {
+      "label": "Moon vertical drag leaves sky unchanged",
+      "passed": true
+    },
+    {
+      "label": "Moon left gutter scrolls",
+      "passed": true
+    },
+    {
+      "label": "Moon left gutter does not rotate",
+      "passed": true
+    },
+    {
+      "label": "Moon left gutter does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Moon right gutter scrolls",
+      "passed": true
+    },
+    {
+      "label": "Moon right gutter does not rotate",
+      "passed": true
+    },
+    {
+      "label": "Moon right gutter does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Moon can scroll back up",
+      "passed": true
+    },
+    {
+      "label": "Moon full screen retains vertical rotation",
+      "passed": true
+    },
+    {
+      "label": "Moon full screen does not scroll underlying details",
+      "passed": true
+    },
+    {
+      "label": "Moon real close retains rotation",
+      "passed": true
+    },
+    {
+      "label": "Moon real close leaves sky unchanged",
+      "passed": true
+    },
+    {
+      "label": "Moon scroll still works after leaving full screen",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse selected",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse horizontal drag rotates",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse horizontal drag does not scroll",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse horizontal drag does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse vertical drag over model rotates",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse vertical drag does not scroll",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse vertical drag leaves sky unchanged",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse left gutter scrolls",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse left gutter does not rotate",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse left gutter does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse right gutter scrolls",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse right gutter does not rotate",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse right gutter does not move sky",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse can scroll back up",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse full screen retains vertical rotation",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse full screen does not scroll underlying details",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse real close retains rotation",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse real close leaves sky unchanged",
+      "passed": true
+    },
+    {
+      "label": "Betelgeuse scroll still works after leaving full screen",
+      "passed": true
+    },
+    {
+      "label": "process stayed alive",
+      "passed": true
+    }
+  ],
+  "limits": [
+    "Phone gutter widths checked by sizing tests, not on physical phone",
+    "Pinch and cancellation verified by handler unit tests, not physical multi-touch injection"
+  ],
+  "screenshots": [
+    "/tmp/model-scroll-Moon-scrolled.jpeg",
+    "/tmp/model-scroll-Betelgeuse-scrolled.jpeg"
+  ]
+}

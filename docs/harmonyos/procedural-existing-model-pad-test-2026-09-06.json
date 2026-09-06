@@ -1,0 +1,910 @@
+{
+  "device": "192.168.1.34:33805",
+  "checks": [
+    {
+      "name": "Moon physical view is orthonormal",
+      "ok": true
+    },
+    {
+      "name": "Moon solar direction is normalized",
+      "ok": true
+    },
+    {
+      "name": "Moon phase matches view/solar geometry",
+      "ok": true
+    },
+    {
+      "name": "Moon native lighting reaches rendered UI",
+      "ok": true
+    },
+    {
+      "name": "Moon static render resolution retained",
+      "ok": true
+    },
+    {
+      "name": "Venus physical view is orthonormal",
+      "ok": true
+    },
+    {
+      "name": "Venus solar direction is normalized",
+      "ok": true
+    },
+    {
+      "name": "Venus phase matches view/solar geometry",
+      "ok": true
+    },
+    {
+      "name": "Venus native lighting reaches rendered UI",
+      "ok": true
+    },
+    {
+      "name": "Venus static render resolution retained",
+      "ok": true
+    },
+    {
+      "name": "Saturn physical view is orthonormal",
+      "ok": true
+    },
+    {
+      "name": "Saturn solar direction is normalized",
+      "ok": true
+    },
+    {
+      "name": "Saturn phase matches view/solar geometry",
+      "ok": true
+    },
+    {
+      "name": "Saturn native lighting reaches rendered UI",
+      "ok": true
+    },
+    {
+      "name": "Saturn static render resolution retained",
+      "ok": true
+    },
+    {
+      "name": "Uranus physical view is orthonormal",
+      "ok": true
+    },
+    {
+      "name": "Uranus solar direction is normalized",
+      "ok": true
+    },
+    {
+      "name": "Uranus phase matches view/solar geometry",
+      "ok": true
+    },
+    {
+      "name": "Uranus native lighting reaches rendered UI",
+      "ok": true
+    },
+    {
+      "name": "Uranus static render resolution retained",
+      "ok": true
+    },
+    {
+      "name": "Sun physical view is orthonormal",
+      "ok": true
+    },
+    {
+      "name": "Sun solar direction is normalized",
+      "ok": true
+    },
+    {
+      "name": "Sun phase matches view/solar geometry",
+      "ok": true
+    },
+    {
+      "name": "Sun native lighting reaches rendered UI",
+      "ok": true
+    },
+    {
+      "name": "Sun static render resolution retained",
+      "ok": true
+    },
+    {
+      "name": "upward drag rotates toward negative screen Y",
+      "ok": true
+    },
+    {
+      "name": "rotation keeps sun fixed to body, not screen",
+      "ok": true
+    },
+    {
+      "name": "screen terminator moves during rotation",
+      "ok": true
+    },
+    {
+      "name": "reset restores observer view",
+      "ok": true
+    },
+    {
+      "name": "time updates light without resetting manual rotation",
+      "ok": true
+    },
+    {
+      "name": "ephemeris time is refreshed in rendered model",
+      "ok": true
+    },
+    {
+      "name": "changed date changes body-fixed light",
+      "ok": true
+    },
+    {
+      "name": "model control rejects malformed input",
+      "ok": true
+    },
+    {
+      "name": "clearing selection invalidates the old rendered model probe",
+      "ok": true
+    }
+  ],
+  "samples": [
+    {
+      "target": "Moon",
+      "native": {
+        "assetKey": "Moon",
+        "coordinateFrame": "texture-body; observer local zenith up",
+        "format": "textured-sphere",
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.26313788581521247,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435937152838,
+            -0.007124027224963249,
+            -0.46810602166820764
+          ],
+          "viewToBody": [
+            0.9954829429975858,
+            -0.0945782295589928,
+            0.008286657610382584,
+            0.0949285385909761,
+            0.9929472048851513,
+            -0.07102408656045794,
+            -0.0015108811491368567,
+            0.07148990700967725,
+            0.9974401788748541
+          ]
+        },
+        "offline": true,
+        "ok": true,
+        "schemaVersion": 1,
+        "selectedEnglishName": "Moon",
+        "selectedName": "月",
+        "source": "Stellarium ephemeris and planet rotation",
+        "state": "available"
+      },
+      "frame": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          0.9954829429975858,
+          -0.0945782295589928,
+          0.008286657610382584,
+          0.0949285385909761,
+          0.9929472048851513,
+          -0.07102408656045794,
+          -0.0015108811491368567,
+          0.07148990700967725,
+          0.9974401788748541
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.26313788581521247,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435937152838,
+            -0.007124027224963249,
+            -0.46810602166820764
+          ],
+          "viewToBody": [
+            0.9954829429975858,
+            -0.0945782295589928,
+            0.008286657610382584,
+            0.0949285385909761,
+            0.9929472048851513,
+            -0.07102408656045794,
+            -0.0015108811491368567,
+            0.07148990700967725,
+            0.9974401788748541
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693689231,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "target": "Venus",
+      "native": {
+        "assetKey": "Venus",
+        "coordinateFrame": "texture-body; observer local zenith up",
+        "format": "textured-sphere",
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.3508176144771895,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            0.13592215201233604,
+            0.044846302051988834,
+            0.9897039849291286
+          ],
+          "viewToBody": [
+            -0.11840437115195,
+            0.15443831743828437,
+            -0.9808818537412867,
+            0.4121605251009028,
+            0.9063573639213043,
+            0.09295176391103172,
+            0.9033848052965353,
+            -0.3932748847466053,
+            -0.1709700517251045
+          ]
+        },
+        "offline": true,
+        "ok": true,
+        "schemaVersion": 1,
+        "selectedEnglishName": "Venus",
+        "selectedName": "金星",
+        "source": "Stellarium ephemeris and planet rotation",
+        "state": "available"
+      },
+      "frame": {
+        "ok": true,
+        "selectedEnglishName": "Venus",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          -0.11840437115195,
+          0.15443831743828437,
+          -0.9808818537412867,
+          0.4121605251009028,
+          0.9063573639213043,
+          0.09295176391103172,
+          0.9033848052965353,
+          -0.3932748847466053,
+          -0.1709700517251045
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.3508176144771895,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            0.13592215201233604,
+            0.044846302051988834,
+            0.9897039849291286
+          ],
+          "viewToBody": [
+            -0.11840437115195,
+            0.15443831743828437,
+            -0.9808818537412867,
+            0.4121605251009028,
+            0.9063573639213043,
+            0.09295176391103172,
+            0.9033848052965353,
+            -0.3932748847466053,
+            -0.1709700517251045
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693692573,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "target": "Saturn",
+      "native": {
+        "assetKey": "Saturn",
+        "coordinateFrame": "texture-body; observer local zenith up",
+        "format": "textured-sphere",
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.9993059868051312,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            0.07235399001806213,
+            -0.12685303382930635,
+            -0.9892791355005757
+          ],
+          "viewToBody": [
+            -0.6141817116642947,
+            -0.7888233248345544,
+            0.023207482717332594,
+            -0.7826746164987121,
+            0.6051035440962671,
+            -0.1458428798767036,
+            0.10100133536597719,
+            -0.10773793723241266,
+            -0.9890355236973005
+          ]
+        },
+        "offline": true,
+        "ok": true,
+        "schemaVersion": 1,
+        "selectedEnglishName": "Saturn",
+        "selectedName": "土星",
+        "source": "Stellarium ephemeris and planet rotation",
+        "state": "available"
+      },
+      "frame": {
+        "ok": true,
+        "selectedEnglishName": "Saturn",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          -0.6141817116642947,
+          -0.7888233248345544,
+          0.023207482717332594,
+          -0.7826746164987121,
+          0.6051035440962671,
+          -0.1458428798767036,
+          0.10100133536597719,
+          -0.10773793723241266,
+          -0.9890355236973005
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.9993059868051312,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            0.07235399001806213,
+            -0.12685303382930635,
+            -0.9892791355005757
+          ],
+          "viewToBody": [
+            -0.6141817116642947,
+            -0.7888233248345544,
+            0.023207482717332594,
+            -0.7826746164987121,
+            0.6051035440962671,
+            -0.1458428798767036,
+            0.10100133536597719,
+            -0.10773793723241266,
+            -0.9890355236973005
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693695919,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "target": "Uranus",
+      "native": {
+        "assetKey": "Uranus",
+        "coordinateFrame": "texture-body; observer local zenith up",
+        "format": "textured-sphere",
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.9993414959796396,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.1346819161124127,
+            0.9562864040422597,
+            0.25957098242332954
+          ],
+          "viewToBody": [
+            0.9128823440077497,
+            -0.3972929043865754,
+            -0.09383056070916239,
+            0.17626757157555167,
+            0.17630237276859362,
+            0.9684251218173869,
+            -0.36820587883652006,
+            -0.9005974802764236,
+            0.23097317876754156
+          ]
+        },
+        "offline": true,
+        "ok": true,
+        "schemaVersion": 1,
+        "selectedEnglishName": "Uranus",
+        "selectedName": "天王星",
+        "source": "Stellarium ephemeris and planet rotation",
+        "state": "available"
+      },
+      "frame": {
+        "ok": true,
+        "selectedEnglishName": "Uranus",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          0.9128823440077497,
+          -0.3972929043865754,
+          -0.09383056070916239,
+          0.17626757157555167,
+          0.17630237276859362,
+          0.9684251218173869,
+          -0.36820587883652006,
+          -0.9005974802764236,
+          0.23097317876754156
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.9993414959796396,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.1346819161124127,
+            0.9562864040422597,
+            0.25957098242332954
+          ],
+          "viewToBody": [
+            0.9128823440077497,
+            -0.3972929043865754,
+            -0.09383056070916239,
+            0.17626757157555167,
+            0.17630237276859362,
+            0.9684251218173869,
+            -0.36820587883652006,
+            -0.9005974802764236,
+            0.23097317876754156
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693699674,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "target": "Sun",
+      "native": {
+        "assetKey": "Sun",
+        "coordinateFrame": "texture-body; observer local zenith up",
+        "format": "textured-sphere",
+        "lighting": {
+          "emissive": true,
+          "illuminatedFraction": 1,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.970876545967332,
+            0.12617885505920046,
+            -0.20366057307808152
+          ],
+          "viewToBody": [
+            -0.1316482710681457,
+            0.2001685919801388,
+            -0.970876545967332,
+            0.42926032179310974,
+            0.8943234720558471,
+            0.12617885505920046,
+            0.8935347272819585,
+            -0.40014755042941785,
+            -0.20366057307808152
+          ]
+        },
+        "offline": true,
+        "ok": true,
+        "schemaVersion": 1,
+        "selectedEnglishName": "Sun",
+        "selectedName": "日",
+        "source": "Stellarium ephemeris and planet rotation",
+        "state": "available"
+      },
+      "frame": {
+        "ok": true,
+        "selectedEnglishName": "Sun",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          -0.1316482710681457,
+          0.2001685919801388,
+          -0.970876545967332,
+          0.42926032179310974,
+          0.8943234720558471,
+          0.12617885505920046,
+          0.8935347272819585,
+          -0.40014755042941785,
+          -0.20366057307808152
+        ],
+        "lighting": {
+          "emissive": true,
+          "illuminatedFraction": 1,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.970876545967332,
+            0.12617885505920046,
+            -0.20366057307808152
+          ],
+          "viewToBody": [
+            -0.1316482710681457,
+            0.2001685919801388,
+            -0.970876545967332,
+            0.42926032179310974,
+            0.8943234720558471,
+            0.12617885505920046,
+            0.8935347272819585,
+            -0.40014755042941785,
+            -0.20366057307808152
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693703226,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "rotationCheckInitial": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          0.9954829427273473,
+          -0.0945782330704051,
+          0.008286649997481924,
+          0.0949285415458884,
+          0.992947204758631,
+          -0.07102408437981811,
+          -0.001510873545726172,
+          0.07148990412149894,
+          0.9974401790933766
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.2631378857985936,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435900135152,
+            -0.007124030667528968,
+            -0.46810602860364325
+          ],
+          "viewToBody": [
+            0.9954829427273473,
+            -0.0945782330704051,
+            0.008286649997481924,
+            0.0949285415458884,
+            0.992947204758631,
+            -0.07102408437981811,
+            -0.001510873545726172,
+            0.07148990412149894,
+            0.9974401790933766
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693706016,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotationCheckResult": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0,
+          0.3894183423086505,
+          0.9210609940028851
+        ],
+        "viewToBody": [
+          0.9954829427273473,
+          -0.08388534785755246,
+          0.044463008824393045,
+          0.0949285415458884,
+          0.8869068582041925,
+          -0.4520893682341343,
+          -0.001510873545726172,
+          0.45426806324590496,
+          0.8908637628593626
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.2631378857985936,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435900135152,
+            -0.007124030667528968,
+            -0.46810602860364325
+          ],
+          "viewToBody": [
+            0.9954829427273473,
+            -0.0945782330704051,
+            0.008286649997481924,
+            0.0949285415458884,
+            0.992947204758631,
+            -0.07102408437981811,
+            -0.001510873545726172,
+            0.07148990412149894,
+            0.9974401790933766
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693707286,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    },
+    {
+      "initial": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          0.9954829427273473,
+          -0.0945782330704051,
+          0.008286649997481924,
+          0.0949285415458884,
+          0.992947204758631,
+          -0.07102408437981811,
+          -0.001510873545726172,
+          0.07148990412149894,
+          0.9974401790933766
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.2631378857985936,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435900135152,
+            -0.007124030667528968,
+            -0.46810602860364325
+          ],
+          "viewToBody": [
+            0.9954829427273473,
+            -0.0945782330704051,
+            0.008286649997481924,
+            0.0949285415458884,
+            0.992947204758631,
+            -0.07102408437981811,
+            -0.001510873545726172,
+            0.07148990412149894,
+            0.9974401790933766
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693706016,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "rotated": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          0.9210609940028851,
+          -0.3894183423086505,
+          0,
+          0.3894183423086505,
+          0.9210609940028851
+        ],
+        "viewToBody": [
+          0.9954829427273473,
+          -0.08388534785755246,
+          0.044463008824393045,
+          0.0949285415458884,
+          0.8869068582041925,
+          -0.4520893682341343,
+          -0.001510873545726172,
+          0.45426806324590496,
+          0.8908637628593626
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.2631378857985936,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435900135152,
+            -0.007124030667528968,
+            -0.46810602860364325
+          ],
+          "viewToBody": [
+            0.9954829427273473,
+            -0.0945782330704051,
+            0.008286649997481924,
+            0.0949285415458884,
+            0.992947204758631,
+            -0.07102408437981811,
+            -0.001510873545726172,
+            0.07148990412149894,
+            0.9974401790933766
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693707286,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "reset": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          1
+        ],
+        "viewToBody": [
+          0.9954829427273473,
+          -0.0945782330704051,
+          0.008286649997481924,
+          0.0949285415458884,
+          0.992947204758631,
+          -0.07102408437981811,
+          -0.001510873545726172,
+          0.07148990412149894,
+          0.9974401790933766
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.2631378857985936,
+          "jd": 2461289.9720994676,
+          "sunDirectionBody": [
+            -0.8836435900135152,
+            -0.007124030667528968,
+            -0.46810602860364325
+          ],
+          "viewToBody": [
+            0.9954829427273473,
+            -0.0945782330704051,
+            0.008286649997481924,
+            0.0949285415458884,
+            0.992947204758631,
+            -0.07102408437981811,
+            -0.001510873545726172,
+            0.07148990412149894,
+            0.9974401790933766
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693708330,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      },
+      "advanced": {
+        "ok": true,
+        "selectedEnglishName": "Moon",
+        "rotation": [
+          0.9800665778412416,
+          0.03165164149152155,
+          -0.19613178373086207,
+          0,
+          0.9872272833756269,
+          0.15931820661424598,
+          0.19866933079506122,
+          -0.15614244954422793,
+          0.9675484651694564
+        ],
+        "viewToBody": [
+          0.9156246031762465,
+          -0.3557709788450099,
+          -0.1872394100343314,
+          0.3903356938614992,
+          0.8982161499388082,
+          0.20210342423315436,
+          0.09627892893049324,
+          -0.2581370926480109,
+          0.9612989177374687
+        ],
+        "lighting": {
+          "emissive": false,
+          "illuminatedFraction": 0.277835326484102,
+          "jd": 2461299.9720994676,
+          "sunDirectionBody": [
+            0.8677625619136731,
+            -0.011538390896981696,
+            -0.4968450479541152
+          ],
+          "viewToBody": [
+            0.9228359354214466,
+            -0.3810574639632259,
+            0.056294275488174075,
+            0.37134607815892023,
+            0.9189422446876288,
+            0.13284291913553894,
+            -0.10235197375142689,
+            -0.10168756111922925,
+            0.9895371207705195
+          ]
+        },
+        "renderSize": 320,
+        "renderedAt": 1788693710465,
+        "kind": "textured-sphere",
+        "schematic": false,
+        "temperatureK": null,
+        "immersive": false
+      }
+    }
+  ]
+}

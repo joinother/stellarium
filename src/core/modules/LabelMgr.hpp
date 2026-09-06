@@ -25,6 +25,9 @@
 #include "VecMath.hpp"
 #include <QMap>
 #include <QString>
+#if defined(__OHOS__)
+#include <QJsonArray>
+#endif
 
 class StelCore;
 class StelPainter;
@@ -47,6 +50,7 @@ public:
 #if defined(__OHOS__)
 	static void setOhosScreenSafeAreaTop(int pixels);
 	static void setOhosScriptUiVisible(bool visible);
+	QJsonArray getOhosScriptCaptions() const;
 #endif
  
 	///////////////////////////////////////////////////////////////////////////

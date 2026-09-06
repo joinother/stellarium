@@ -10,6 +10,7 @@ const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
 const MULTILINGUAL_SEARCH_INDEX = 'data/search/multilingual-sky-aliases.tsv';
 const CATALOG_MANIFEST = 'data/ohos/catalog-manifest.json';
 const SKYCULTURE_ART_COMPAT_MARKER = 'data/ohos/.skyculture_art_rgba_v1';
+const SKYCULTURE_EDITORIAL_MARKER = 'data/ohos/.skyculture_editorial_20260906_v1';
 const DEEP_STAR_CATALOG = 'stars/hip_gaia3/stars_4_1v0_6.cat';
 const DEEP_STAR_CATALOG_BYTES = 55759776;
 const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
@@ -260,6 +261,45 @@ function refreshTextureCompatibility(
   writeMarker(markerPath);
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] normalized planet textures ready in ${Date.now() - startedAt} ms`);
+}
+
+function refreshObjectTypeTranslations(appContext: common.ApplicationContext, installRoot: string): void {
+  const markerPath = `${installRoot}/data/ohos/.object_type_translations_20260906_v1`;
+  const languages: string[] = ['zh_CN', 'zh_HK', 'zh_TW'];
+  const paths = languages.map((language: string) => `translations/stellarium/${language}.qm`);
+  if (exists(markerPath) && paths.every((path: string) => fileSize(`${installRoot}/${path}`) > 0)) {
+    return;
+  }
+  for (const path of paths) {
+    writeRawFile(appContext, `${RAW_ROOT}/${path}`, `${installRoot}/${path}`);
+  }
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] object type translations refreshed: ${paths.length}`);
+}
+
+function refreshSkyCultureEditorialResources(appContext: common.ApplicationContext, installRoot: string): void {
+  const descriptionDomain = 'translations/stellarium-skycultures-descriptions';
+  const paths: Array<string> = [
+    'data/skyculture_editorial_context.json',
+    'skycultures/japanese/description.md',
+    'skycultures/chinese_manchu/description.md',
+    'skycultures/tibetan/description.md',
+  ];
+  const catalogs = appContext.resourceManager.getRawFileListSync(`${RAW_ROOT}/${descriptionDomain}`);
+  for (const name of catalogs) {
+    if (/^[A-Za-z0-9_@-]+\.qm$/.test(name)) {
+      paths.push(`${descriptionDomain}/${name}`);
+    }
+  }
+  const markerPath = `${installRoot}/${SKYCULTURE_EDITORIAL_MARKER}`;
+  if (exists(markerPath) && paths.every((path: string) => fileSize(`${installRoot}/${path}`) > 0)) {
+    return;
+  }
+  for (const path of paths) {
+    writeRawFile(appContext, `${RAW_ROOT}/${path}`, `${installRoot}/${path}`);
+  }
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] sky-culture editorial resources refreshed: ${paths.length}`);
 }
 
 function refreshDetailModelTextures(
@@ -788,6 +828,9 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
     hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
     extractRawTree(appContext, RAW_ROOT, installRoot);
   }
+
+  refreshSkyCultureEditorialResources(appContext, installRoot);
+  refreshObjectTypeTranslations(appContext, installRoot);
 
   // HAP updates preserve filesDir. Refresh these small, mandatory records on
   // every start so upgraded installs can browse the restored categories even

@@ -4,7 +4,7 @@
 
 *This is unfinished work and only a tentative solution. Please help us improve! (see below)*
 
-During a travel to the Tibetan Autonomous Region of China (TAR) in 2019, I was confronted with a highly complex system of astronomy and calendar computations which has a long tradition in Tibet.
+The author, Georg Zotti, reports encountering a complex system of astronomy and calendar calculations during a visit to the Xizang Autonomous Region of China in 2019. This system has a long local tradition.
 
 Traditional Tibetan astronomy is largely influenced by the Kalacakra Tantra which has been imported from India, mixed with some Chinese influence.
 

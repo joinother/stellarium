@@ -22,6 +22,9 @@
 
 
 #include "StelModule.hpp"
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QHash>
 
 class NebulaTexturesDialog;
 
@@ -46,16 +49,32 @@ public:
 
 	bool configureGui(bool show=true) override;
 
+	QJsonObject getTextureStatus() const;
+	QJsonArray listTextures() const;
+	QJsonObject validateTexture(const QString& imageUrl) const;
+	bool refreshCustomTextures(QString* error = Q_NULLPTR);
+	bool gotoTexture(const QString& imageUrl, QString* error = Q_NULLPTR) const;
+	bool removeTexture(const QString& imageUrl, QString* error = Q_NULLPTR);
+	QJsonObject importTexture(const QJsonObject& request);
+	bool getAvoidAreaConflict() const;
+	void setAvoidAreaConflict(bool enabled);
+
 public slots:
-	bool getShow();
+	bool getShow() const;
 
 	void setShow(bool b);
+	void handleCollectionLoaded();
 
 signals:
 	void showChanged(bool b);
 
 private:
 	NebulaTexturesDialog* configDialog;
+	QString customConfigPath() const;
+	QJsonObject textureItemStatus(const QJsonObject& tile) const;
+	mutable QHash<QString, QJsonObject> imageValidationCache;
+	mutable quint64 imageDecodeCount = 0;
+	quint64 layerRebuildCount = 0;
 };
 
 

@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "scope": "Six specific passages across all 84 PO locales; empty translations remain explicit fallbacks to revised source, not claimed translations.",
+  "reviewStatus": "editorial-draft; native-language publication review pending",
+  "principles": [
+    "文化平等、交流互鉴、人类共同文化遗产",
+    "准确呈现中华民族多元一体历史与各文化主体性",
+    "人类命运共同体：尊重、理解与合作，不替代具体史实和作者归因"
+  ],
+  "rules": [
+    {
+      "id": "japanese_life",
+      "culture": "japanese",
+      "sourceBefore": "Like myths and traditions in Western cultures, these views still wield influence in the daily life of people in China, Korea, and Japan (this despite quite prominent scientific literacy). However, it should be pointed out that astrological divination in China, Korea and Japan was and is rather complex.",
+      "sourceAfter": "These traditional ideas continue to influence cultural life in China, Korea, and Japan. The associated astrological and divinatory systems have their own historical contexts; they are presented here as cultural history, without judging the scientific literacy of local communities.",
+      "translations": {
+        "be": {
+          "before": "Як і ў заходняй культуры, міты й традыцыі ўсё яшчэ маюць уплыў на штодзённае жыцьцё людзей у Кітаі, Карэі й Японіі (нягледзячы на відавочную навукавую абазнанасьць). Аднак, варта адзначыць, што астраляґічнае гаданьне ў Кітаі, Карэі й Японіі было й ёсьць даволі складаным.",
+          "after": "Гэтыя традыцыйныя ўяўленні працягваюць уплываць на культурнае жыццё ў Кітаі, Карэі і Японіі. Звязаныя з імі астралагічныя і варажбітныя сістэмы маюць уласны гістарычны кантэкст; тут яны разглядаюцца як частка гісторыі культуры, без ацэнкі навуковай пісьменнасці мясцовых супольнасцей."
+        },
+        "en": {
+          "before": "These traditional ideas continue to influence cultural life in China, Korea, and Japan. The associated astrological and divinatory systems have their own historical contexts; they are presented here as cultural history, without judging the scientific literacy of local communities.",
+          "after": "These traditional ideas continue to influence cultural life in China, Korea, and Japan. The associated astrological and divinatory systems have their own historical contexts; they are presented here as cultural history, without judging the scientific literacy of local communities."
+        },
+        "gl": {
+          "before": "Do mesmo xeito que os mitos e tradicións nas culturas occidentais, estes puntos de vista aínda exercen influencia na vida cotiá das persoas en China, Corea e Xapón (isto a pesar da alfabetización científica bastante destacada). Non obstante, hai que sinalar que a adiviñación astrolóxica en China, Corea e Xapón era e é bastante complexa.",
+          "after": "Estas ideas tradicionais seguen influíndo na vida cultural da China, Corea e Xapón. Os sistemas astrolóxicos e adiviñatorios asociados teñen os seus propios contextos históricos; preséntanse aquí como historia cultural, sen xulgar a formación científica das comunidades locais."
+        },
+        "lt": {
+          "before": "Kaip ir mitai bei tradicijos Vakarų kultūrose, šie įsitikinimai vis dar daro įtaką Kinijos, Korėjos ir Japonijos žmonių kasdieniam gyvenimui (nepaisant gana aukšto mokslinio raštingumo lygio). Tačiau reikėtų pažymėti, kad astrologinis spėjimas Kinijoje, Korėjoje ir Japonijoje buvo ir tebėra gana sudėtingas.",
+          "after": "Šios tradicinės sampratos tebedaro įtaką Kinijos, Korėjos ir Japonijos kultūriniam gyvenimui. Susijusios astrologinės ir būrimo sistemos turi savitą istorinį kontekstą; čia jos pristatomos kaip kultūros istorijos dalis, nevertinant vietos bendruomenių mokslinio raštingumo."
+        },
+        "nl": {
+          "before": "Net als mythen en tradities in westerse culturen oefenen deze opvattingen nog steeds invloed uit op het dagelijks leven van mensen in China, Korea en Japan (ondanks een vrij hoog niveau van wetenschappelijke geletterdheid). Er moet echter op worden gewezen dat astrologische waarzeggerij in China, Korea en Japan vrij complex was en is.",
+          "after": "Deze traditionele opvattingen blijven van invloed op het culturele leven in China, Korea en Japan. De bijbehorende astrologische en waarzegkundige systemen hebben hun eigen historische context; ze worden hier als cultuurgeschiedenis beschreven, zonder een oordeel over de wetenschappelijke geletterdheid van lokale gemeenschappen."
+        },
+        "uk": {
+          "before": "Like myths and traditions in Western cultures, these views still wield influence in the daily life of people in China, Korea, and Japan (this despite quite prominent scientific literacy). However, it should be pointed out that astrological divination in China, Korea and Japan was and is rather complex.",
+          "after": "Ці традиційні уявлення й далі впливають на культурне життя Китаю, Кореї та Японії. Пов’язані з ними астрологічні та ворожильні системи мають власний історичний контекст; тут вони представлені як частина історії культури, без оцінювання наукової грамотності місцевих спільнот."
+        },
+        "zh_CN": {
+          "before": "这些传统观念至今仍影响着中国、韩国和日本的文化生活。相关占星与占卜体系具有各自的历史背景；本文将其作为文化史内容介绍，不据此评价当地民众的科学素养。",
+          "after": "这些传统观念至今仍影响着中国、韩国和日本的文化生活。相关占星与占卜体系具有各自的历史背景；本文将其作为文化史内容介绍，不据此评价当地民众的科学素养。"
+        }
+      }
+    },
+    {
+      "id": "japanese_nature",
+      "culture": "japanese",
+      "sourceBefore": "The lore related to moon stations is one of the most interesting aspects of Asian Ethnoastronomy. Japanese interpretations of these associations tended to revolve around agricultural needs and animistic views of nature. Unlike many Western myths and traditions, japanese gods in the similitude of the talismanic animals can be seen as manifestations of nature.",
+      "sourceAfter": "Lore related to lunar lodges is one subject of Asian ethnoastronomy. Interpretations in the Japanese traditions described here involve agricultural needs and beliefs in the spiritual qualities of nature; deities associated with the four symbolic animals can be understood as representations of nature.",
+      "translations": {
+        "be": {
+          "before": "Веды, зьвязаныя са стаянкамі Месяца — гэта адзін з найцікавейшых бакоў азіяцкай этнаастраноміі. Японскія інтэрпрэтацыі гэтых прывязак абарачаліся вакол сельскагаспадарчых патрэб і анімістычнага бачаньня прыроды. У адрозьненьне ад шмат якіх заходніх мітаў і традыцый, японскіх багоў у іх падабенстве да жывёл-талісманаў можна разгладаць як праявы прыроды.",
+          "after": "Паданні пра месяцовыя стаянкі — адзін з прадметаў азіяцкай этнаастраноміі. Іх тлумачэнні ў апісаных тут японскіх традыцыях звязаны з патрэбамі земляробства і ўяўленнямі пра духоўныя ўласцівасці прыроды; бажаствы, звязаныя з чатырма сімвалічнымі жывёламі, можна разумець як увасабленні прыроды."
+        },
+        "en": {
+          "before": "Lore related to lunar lodges is one subject of Asian ethnoastronomy. Interpretations in the Japanese traditions described here involve agricultural needs and beliefs in the spiritual qualities of nature; deities associated with the four symbolic animals can be understood as representations of nature.",
+          "after": "Lore related to lunar lodges is one subject of Asian ethnoastronomy. Interpretations in the Japanese traditions described here involve agricultural needs and beliefs in the spiritual qualities of nature; deities associated with the four symbolic animals can be understood as representations of nature."
+        },
+        "gl": {
+          "before": "A tradición relacionada coas estacións lun\nares é un dos aspectos máis interesantes da etnoastronomía asiática. As interpretacións xaponesas destas asociacións tendían a xirar arredor das necesidades agrícolas e das visións animistas da natureza. A diferenza de moitos mitos e tradicións occidentais, os deuses xaponeses a semellanza dos animais talismáns pódense ver como manifestacións da natureza.",
+          "after": "As tradicións sobre as estacións lunares son un tema de estudo da etnoastronomía asiática. As interpretacións nas tradicións xaponesas aquí descritas están relacionadas coas necesidades agrícolas e coas crenzas nas calidades espirituais da natureza; as divindades asociadas cos catro animais simbólicos poden entenderse como representacións da natureza."
+        },
+        "lt": {
+          "before": "Su mėnulio fazėmis susijusios žinios yra vienas įdomiausių Azijos etnoastronomijos aspektų. Japonų interpretacijos šių sąsajų dažniausiai sukosi aplink žemės ūkio poreikius ir animistinius gamtos vaizdinius. Skirtingai nei daugelis Vakarų mitų ir tradicijų, talismaninių gyvūnų pavidalu pasirodantys japonų dievai gali būti vertinami kaip gamtos apraiškos.",
+          "after": "Su Mėnulio stotimis susiję padavimai yra viena Azijos etnoastronomijos tyrimų temų. Čia aprašytose Japonijos tradicijose jų aiškinimai siejami su žemdirbystės poreikiais ir tikėjimu dvasinėmis gamtos savybėmis; su keturiais simboliniais gyvūnais siejamos dievybės gali būti suprantamos kaip gamtos įvaizdžiai."
+        },
+        "nl": {
+          "before": "De overleveringen met betrekking tot maanstations vormen een van de meest interessante aspecten van de Aziatische Etnoastronomie. Japanse interpretaties van deze verbanden draaiden doorgaans om landbouwbehoeften en animistische opvattingen over de natuur. In tegenstelling tot veel westerse mythen en tradities kunnen Japanse goden, die de gedaante aannemen van talismanische dieren, worden gezien als manifestaties van de natuur.",
+          "after": "Overleveringen over maanstations zijn een onderwerp van de Aziatische etnoastronomie. In de hier beschreven Japanse tradities houden de interpretaties verband met landbouwbehoeften en overtuigingen over de geestelijke eigenschappen van de natuur; godheden die met de vier symbolische dieren verbonden zijn, kunnen als verbeeldingen van de natuur worden begrepen."
+        },
+        "uk": {
+          "before": "The lore related to moon stations is one of the most interesting aspects of Asian Ethnoastronomy. Japanese interpretations of these associations tended to revolve around agricultural needs and animistic views of nature. Unlike many Western myths and traditions, japanese gods in the similitude of the talismanic animals can be seen as manifestations of nature.",
+          "after": "Перекази про місячні стоянки є одним із предметів азійської етноастрономії. В описаних тут японських традиціях їх тлумачення пов’язані з потребами землеробства та віруваннями в духовні властивості природи; божества, пов’язані з чотирма символічними тваринами, можна розуміти як уособлення природи."
+        },
+        "zh_CN": {
+          "before": "与宿有关的传说是亚洲民族天文学的研究内容之一。本文所述日本传统对这些联系的解释涉及农业需求及自然万物具有灵性的观念；其中与四象相关的神祇可被理解为自然的具象表达。",
+          "after": "与宿有关的传说是亚洲民族天文学的研究内容之一。本文所述日本传统对这些联系的解释涉及农业需求及自然万物具有灵性的观念；其中与四象相关的神祇可被理解为自然的具象表达。"
+        }
+      }
+    },
+    {
+      "id": "tibetan_author",
+      "culture": "tibetan",
+      "sourceBefore": "During a travel to the Tibetan Autonomous Region of China (TAR) in 2019, I was confronted with a highly complex system of astronomy and calendar computations which has a long tradition in Tibet.",
+      "sourceAfter": "The author, Georg Zotti, reports encountering a complex system of astronomy and calendar calculations during a visit to the Xizang Autonomous Region of China in 2019. This system has a long local tradition.",
+      "translations": {
+        "es": {
+          "before": "Durante un viaje a la Región Autónoma del Tíbet en China (TAR) durante el 2019, me enfrenté a un sistema altamente complejo de astonomía y cáculo del calendario que tenían una larga tradición en el Tíbet.",
+          "after": "El autor, Georg Zotti, relata que durante una visita a la Región Autónoma del Tíbet de China en 2019 conoció un complejo sistema de astronomía y cálculos calendáricos con una larga tradición local."
+        },
+        "es_419": {
+          "before": "Durante un viaje a la Región Autónoma del Tíbet en China (TAR) durante el 2019, me enfrenté a un sistema altamente complejo de astonomía y cáculo del calendario que tenían una larga tradición en el Tíbet.",
+          "after": "El autor, Georg Zotti, relata que durante una visita a la Región Autónoma del Tíbet de China en 2019 conoció un complejo sistema de astronomía y cálculos calendáricos con una larga tradición local."
+        },
+        "gl": {
+          "before": "Durante unha viaxe á Rexión Autónoma do Tíbet de China (TAR) en 2019, atoipeime cun sistema altamente complexo de cálculos astronómicos e de calendario que ten unha longa tradición no Tíbet.",
+          "after": "O autor, Georg Zotti, relata que durante unha visita á Rexión Autónoma do Tíbet da China en 2019 coñeceu un complexo sistema de astronomía e cálculos calendáricos cunha longa tradición local."
+        },
+        "lt": {
+          "before": " 2019 m. keliaudamas į Kinijos Tibeto autonominį regioną (TAR) susidūriau su labai sudėtinga astronomijos ir kalendoriaus skaičiavimo sistema, kuri Tibete turi senas tradicijas.",
+          "after": "Autorius Georg Zotti pasakoja, kad 2019 m. lankydamasis Kinijos Tibeto autonominiame regione susipažino su sudėtinga astronomijos ir kalendoriaus skaičiavimų sistema, turinčia senas vietos tradicijas."
+        },
+        "nl": {
+          "before": "Tijdens een reis naar de Tibetaanse Autonome Regio van China (TAR) in 2019 werd ik geconfronteerd met een zeer complex systeem van astronomie en kalenderberekeningen dat een lange traditie heeft in Tibet.",
+          "after": "De auteur, Georg Zotti, beschrijft hoe hij tijdens een bezoek aan de autonome regio Xizang in China in 2019 kennismaakte met een complex stelsel van astronomie en kalenderberekeningen dat een lange plaatselijke traditie heeft."
+        },
+        "ru": {
+          "before": "Во время поездки в Тибетский автономный район Китая (ТАР) в 2019 году я столкнулся с очень сложной системой астрономических и календарных вычислений, которая имеет давнюю традицию в Тибете.",
+          "after": "Автор Георг Цотти сообщает, что во время поездки в Сицзанский автономный район Китая в 2019 году познакомился со сложной системой астрономии и календарных вычислений, имеющей давнюю местную традицию."
+        },
+        "sk": {
+          "before": "Počas cesty do Tibetskej autonómne oblasti (TAO) v Číne v roku 2019, som sa zoznámil s veľmi komplexnými systémami astronomických a kalendárnych výpočtov, ktoré majú v Tibete dlhú tradíciu.",
+          "after": "Autor Georg Zotti uvádza, že počas návštevy Tibetskej autonómnej oblasti v Číne v roku 2019 spoznal zložitý systém astronómie a kalendárnych výpočtov s dlhou miestnou tradíciou."
+        },
+        "sv": {
+          "before": "Under en resa till den tibetanska autonoma regionen i Kina (TAR) 2019 konfronterades jag med ett mycket komplext system för astronomi och kalenderberäkningar som har en lång tradition i Tibet.",
+          "after": "Författaren Georg Zotti berättar att han under ett besök i den autonoma regionen Xizang i Kina 2019 mötte ett komplext system för astronomi och kalenderberäkningar med en lång lokal tradition."
+        },
+        "uk": {
+          "before": "Під час подорожі до Тибетського автономного району (ТАР) у 2019 року, автор зустрівся із дуже складною системою астрономічних та календарних обчислень, які мають довгу традицію у Тибеті.",
+          "after": "Автор Георг Цотті повідомляє, що під час відвідування Сіцзанського автономного району Китаю у 2019 році ознайомився зі складною системою астрономії та календарних обчислень, що має давню місцеву традицію."
+        },
+        "zh_CN": {
+          "before": "原作者 Georg Zotti 记述，他于2019年在中国西藏自治区考察时，接触到当地传承已久、内容复杂的天文与历法计算体系。",
+          "after": "原作者 Georg Zotti 记述，他于2019年在中国西藏自治区考察时，接触到当地传承已久、内容复杂的天文与历法计算体系。"
+        }
+      }
+    },
+    {
+      "id": "manchu_worship",
+      "culture": "chinese_manchu",
+      "sourceBefore": "The oldest and most primitive form of worship in Shamanism is",
+      "sourceAfter": "One form of worship in these shamanic traditions is",
+      "translations": {
+        "es": {
+          "before": "La forma más antigua y primitiva de adoración en el chamanismo es",
+          "after": "Una forma de adoración en estas tradiciones chamánicas es"
+        },
+        "es_419": {
+          "before": "La forma más antigua y primitiva de adoración en el chamanismo es",
+          "after": "Una forma de adoración en estas tradiciones chamánicas es"
+        },
+        "gl": {
+          "before": "A forma de culto máis antiga e primitiva no xamanismo é",
+          "after": "Unha forma de culto nestas tradicións xamánicas é"
+        },
+        "lt": {
+          "before": "Senoji ir primityviausia šamanizmo garbinimo forma yra",
+          "after": "Viena garbinimo formų šiose šamanizmo tradicijose yra"
+        },
+        "nl": {
+          "before": "De oudste en meest primitieve vorm van aanbidding in het sjamanisme is",
+          "after": "Een vorm van verering binnen deze sjamanistische tradities is"
+        },
+        "uk": {
+          "before": "Найдавнішою та найпримітивнішою формою поклоніння в шаманізмі є",
+          "after": "Однією з форм поклоніння в цих шаманських традиціях є"
+        },
+        "zh_CN": {
+          "before": "萨满教最古老、最原始的崇拜形式就是",
+          "after": "相关萨满教传统中的一种崇拜形式是"
+        }
+      }
+    },
+    {
+      "id": "manchu_calendar",
+      "culture": "chinese_manchu",
+      "sourceBefore": "an effective primitive calendrical system",
+      "sourceAfter": "a traditional calendrical system serving everyday and subsistence activities",
+      "translations": {
+        "es": {
+          "before": "un eficaz sistema calendárico primitivo",
+          "after": "un sistema calendárico tradicional al servicio de la vida cotidiana y las actividades de subsistencia"
+        },
+        "es_419": {
+          "before": "un eficaz sistema calendárico primitivo",
+          "after": "un sistema calendárico tradicional al servicio de la vida cotidiana y las actividades de subsistencia"
+        },
+        "gl": {
+          "before": "un sistema calendárico primitivo eficaz",
+          "after": "un sistema calendárico tradicional ao servizo da vida cotiá e das actividades de subsistencia"
+        },
+        "lt": {
+          "before": "veiksmingą primityvią kalendoriaus sistemą",
+          "after": "tradicinę kalendoriaus sistemą, skirtą kasdieniam gyvenimui ir pragyvenimo veiklai"
+        },
+        "nl": {
+          "before": "een effectief primitief kalendersysteem",
+          "after": "een traditioneel kalendersysteem voor het dagelijks leven en de bestaansmiddelen"
+        },
+        "zh_CN": {
+          "before": "一套有效的原始历法系统",
+          "after": "一套服务于生产生活的传统历法系统"
+        }
+      }
+    },
+    {
+      "id": "manchu_cosmology",
+      "culture": "chinese_manchu",
+      "sourceBefore": "This reflects a naive imagination of the chaotic state before the separation of heaven and earth.",
+      "sourceAfter": "This describes a traditional account of the chaotic state before the separation of heaven and earth.",
+      "translations": {
+        "es": {
+          "before": "Esto refleja una visión ingenua del estado caótico anterior a la separación del cielo y la tierra.",
+          "after": "Esto describe un relato tradicional del estado caótico anterior a la separación del cielo y la tierra."
+        },
+        "es_419": {
+          "before": "Esto refleja una visión ingenua del estado caótico anterior a la separación del cielo y la tierra.",
+          "after": "Esto describe un relato tradicional del estado caótico anterior a la separación del cielo y la tierra."
+        },
+        "gl": {
+          "before": "Isto reflicte unha imaxinación inxenua do estado caótico antes da separación do ceo e a terra.",
+          "after": "Isto describe un relato tradicional do estado caótico antes da separación do ceo e a terra."
+        },
+        "lt": {
+          "before": "Tai atspindi naivų chaotiškos būsenos, buvusios prieš dangaus ir žemės atsiskyrimą, įsivaizdavimą.",
+          "after": "Tai perteikia tradicinį pasakojimą apie chaotišką būseną prieš dangaus ir žemės atsiskyrimą."
+        },
+        "nl": {
+          "before": "Dit weerspiegelt een naïeve voorstelling van de chaotische toestand vóór de scheiding van hemel en aarde.",
+          "after": "Dit beschrijft een traditionele voorstelling van de chaotische toestand vóór de scheiding van hemel en aarde."
+        },
+        "zh_CN": {
+          "before": "这反映了对天地未分时混沌状态的朴素想象。",
+          "after": "这是有关天地未分时混沌状态的传统叙述。"
+        }
+      }
+    }
+  ]
+}

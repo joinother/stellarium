@@ -18,7 +18,7 @@ function blockText(textArray)
 	ids = new Array();
 	for(i=0; i<textArray.length; i++)
 	{
-		ids[i] = LabelMgr.labelScreen(textArray[i], 30, y, false, fontSize, "#ff0000");
+		ids[i] = LabelMgr.labelScreen(tr(textArray[i]), 30, y, false, fontSize, "#ff0000");
 		y = y - lineSep;
 	}
 
@@ -58,14 +58,14 @@ StelMovementMgr.zoomTo(180, 5);
 core.setDate("2012:06:05T21:06:50","utc");
 core.setObserverLocation("Sydney, Australia");
 
-ids = blockText(Array("NEVER look directly at the Sun!"));
+ids = blockText(Array(tr("NEVER look directly at the Sun!")));
 core.wait(5);
 clearLabels(ids);
 
 core.selectObjectByName("Sun", false);
 
-ids = blockText(Array("Sydney Australia",
-                      "2012-06-06", "Sunrise"));
+ids = blockText(Array(tr("Sydney Australia"),
+					  tr("2012-06-06"), tr("Sunrise")));
 core.wait(5);
 
 //Advance an hour
@@ -77,8 +77,8 @@ core.selectObjectByName("Venus", true);
 StelMovementMgr.setFlagTracking(true);
 StelMovementMgr.zoomTo(1.04, 5);
 clearLabels(ids);
-ids = blockText(Array("just below the Sun.",
-                      "The planet Venus"));
+ids = blockText(Array(tr("just below the Sun."),
+					  tr("The planet Venus")));
 core.wait(5);
 
 //Turn off Landscape, Atmosphere and Fog
@@ -87,8 +87,8 @@ LandscapeMgr.setFlagAtmosphere(false);
 LandscapeMgr.setFlagFog(false);
 clearLabels(ids);
 
-ids = blockText(Array("Dobsonian Telescope","as seen through a","Sydney Australia",
-                      "2012-06-06", "Transit of Venus"));
+ids = blockText(Array(tr("Dobsonian Telescope"), tr("as seen through a"), tr("Sydney Australia"),
+					  tr("2012-06-06"), tr("Transit of Venus")));
 // Set display to a suitable size for viewing the Sun
 StelMovementMgr.zoomTo(0.875, 5);
 core.selectObjectByName("Sun", false);
@@ -99,18 +99,18 @@ core.wait(5);
 core.setTimeRate(60);
 core.waitFor("2012:06:05T22:10:00", "utc");
 clearLabels(ids);
-ids = blockText(Array("First Contact approx 8:12 a.m."));
+ids = blockText(Array(tr("First Contact approx 8:12 a.m.")));
 core.wait(15);
 core.waitFor("2012:06:05T22:30:00", "utc");
 clearLabels(ids);
 
-ids = blockText(Array("Second Contact approx 8:30 a.m."));
+ids = blockText(Array(tr("Second Contact approx 8:30 a.m.")));
 core.wait(15);
 
 //Speed up for remainder of Transit until third contact
 clearLabels(ids);
-ids = blockText(Array("for approximately 6 hours.",
-	"across the face of the Sun","Venus continues to transit"));
+ids = blockText(Array(tr("for approximately 6 hours."),
+	tr("across the face of the Sun"), tr("Venus continues to transit")));
 core.setTimeRate(800);
 core.wait(25);
 core.setTimeRate(60);
@@ -118,17 +118,17 @@ core.setTimeRate(60);
 //Prepare for third contact
 core.waitFor("2012:06:06T4:24:00","utc");
 clearLabels(ids);
-ids = blockText(Array("Third Contact approx 2:20 p.m."));
+ids = blockText(Array(tr("Third Contact approx 2:20 p.m.")));
 core.wait(10);
 core.waitFor("2012:06:06T4:44:00", "utc");
 
 clearLabels(ids);
-ids = blockText(Array("Fourth Contact approx 2:39 p.m."));
+ids = blockText(Array(tr("Fourth Contact approx 2:39 p.m.")));
 core.wait(5);
 clearLabels(ids);
 
-ids = blockText(Array("than a century away. ",
-		"The next Transit of Venus is more "));
+ids = blockText(Array(tr("than a century away. "),
+		tr("The next Transit of Venus is more ")));
 core.wait(5);
 clearLabels(ids);
 
@@ -136,17 +136,17 @@ clearLabels(ids);
 core.setDate("2012:06:05T21:06:50","utc");
 core.setObserverLocation("Sydney, Australia");
 core.setMountMode("equatorial");
-ids = blockText(Array("NEVER look directly at the Sun!"));
+ids = blockText(Array(tr("NEVER look directly at the Sun!")));
 core.wait(5);
 
 clearLabels(ids);
-ids = blockText(Array("just above the Sun.",
-                      "The planet Venus"));
+ids = blockText(Array(tr("just above the Sun."),
+					  tr("The planet Venus")));
 core.wait(5);
 clearLabels(ids);
 
-ids = blockText(Array("Equatorial Telescope","as seen through an","Sydney Australia",
-                      "2012-06-06", "Transit of Venus"));
+ids = blockText(Array(tr("Equatorial Telescope"), tr("as seen through an"), tr("Sydney Australia"),
+					  tr("2012-06-06"), tr("Transit of Venus")));
 core.selectObjectByName("Sun",false);
 core.wait(5);
 clearLabels(ids);
@@ -166,18 +166,18 @@ core.setTimeRate(60);
 core.waitFor("2012:06:05T22:10:00", "utc");
 core.setMountMode("equatorial");
 clearLabels(ids);
-ids = blockText(Array("First Contact approx 8:12 a.m."));
+ids = blockText(Array(tr("First Contact approx 8:12 a.m.")));
 core.wait(15);
 core.waitFor("2012:06:05T22:30:00", "utc");
 core.setMountMode("equatorial");
 clearLabels(ids);
-ids = blockText(Array("Second Contact approx 8:30 a.m."));
+ids = blockText(Array(tr("Second Contact approx 8:30 a.m.")));
 core.wait(15);
 
 //Speed up for remainder of Transit until third contact
 clearLabels(ids);
-ids = blockText(Array("for approximately 6 hours.",
-	"across the face of the Sun","Venus continues to transit"));
+ids = blockText(Array(tr("for approximately 6 hours."),
+	tr("across the face of the Sun"), tr("Venus continues to transit")));
 core.setTimeRate(800);
 core.wait(25);
 core.setTimeRate(60);
@@ -186,19 +186,19 @@ core.setTimeRate(60);
 core.waitFor("2012:06:06T4:24:00","utc");
 core.setMountMode("equatorial");
 clearLabels(ids);
-ids = blockText(Array("Third Contact approx 2:20 p.m."));
+ids = blockText(Array(tr("Third Contact approx 2:20 p.m.")));
 core.wait(15);
 core.waitFor("2012:06:06T4:44:00", "utc");
 core.setMountMode("equatorial");
 clearLabels(ids);
-ids = blockText(Array("Fourth Contact approx 2:39 p.m."));
+ids = blockText(Array(tr("Fourth Contact approx 2:39 p.m.")));
 core.wait(10);
 clearLabels(ids);
-ids = blockText(Array("than a century away. ",
-		"The next Transit of Venus is more "));
+ids = blockText(Array(tr("than a century away. "),
+		tr("The next Transit of Venus is more ")));
 core.wait(5);
 clearLabels(ids);
-ids = blockText(Array("Returning to current time and date."));
+ids = blockText(Array(tr("Returning to current time and date.")));
 core.setTimeRate(1);
 StelMovementMgr.setFlagTracking(false);
 StelMovementMgr.zoomTo(180, 5);

@@ -10,9 +10,9 @@ Determination of the talismanic animals and associated star "palaces" together w
 
 According to some scientists, the talismanic animals with their associated sei shuku were probably used in conjunction with the direction to which the handle of the big dipper (often called the "North Seven Stars" in China, Korea, and Japan) pointed at the equinoxes and solstices. Before the Christian Era, when the sei shuku were created, the big dipper did not appear to set, because they had a relatively "higher" position than now.
 
-Like myths and traditions in Western cultures, these views still wield influence in the daily life of people in China, Korea, and Japan (this despite quite prominent scientific literacy). However, it should be pointed out that astrological divination in China, Korea and Japan was and is rather complex.
+These traditional ideas continue to influence cultural life in China, Korea, and Japan. The associated astrological and divinatory systems have their own historical contexts; they are presented here as cultural history, without judging the scientific literacy of local communities.
 
-The lore related to moon stations is one of the most interesting aspects of Asian Ethnoastronomy. Japanese interpretations of these associations tended to revolve around agricultural needs and animistic views of nature. Unlike many Western myths and traditions, japanese gods in the similitude of the talismanic animals can be seen as manifestations of nature.
+Lore related to lunar lodges is one subject of Asian ethnoastronomy. Interpretations in the Japanese traditions described here involve agricultural needs and beliefs in the spiritual qualities of nature; deities associated with the four symbolic animals can be understood as representations of nature.
 
 Below is an example of a star chart from Edo Era Japan.
 

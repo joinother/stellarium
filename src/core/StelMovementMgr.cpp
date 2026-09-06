@@ -1421,11 +1421,23 @@ void StelMovementMgr::setFlagTracking(bool b)
 
 void StelMovementMgr::cancelAutoMove()
 {
-	if (!flagAutoMove)
-		return;
 	flagAutoMove = false;
 	move.coef = 1.f;
 	move.targetObject.clear();
+}
+
+void StelMovementMgr::cancelAutoZoom()
+{
+	flagAutoZoom = false;
+	zoomingMode = ZoomNone;
+}
+
+void StelMovementMgr::restoreTrackingState(bool enabled)
+{
+	if (flagTracking == enabled)
+		return;
+	flagTracking = enabled;
+	emit flagTrackingChanged(enabled);
 }
 
 
@@ -1580,6 +1592,15 @@ void StelMovementMgr::setViewDirectionJ2000(const Vec3d& v)
 	core->lookAtJ2000(v, getViewUpVectorJ2000());
 	viewDirectionJ2000 = v;
 	viewDirectionMountFrame = j2000ToMountFrame(v);
+}
+
+void StelMovementMgr::restoreViewState(const Vec3d& directionJ2000, const Vec3d& upJ2000,
+										const Vec3d& directionMountFrame, const Vec3d& upMountFrame)
+{
+	viewDirectionJ2000 = directionJ2000;
+	viewDirectionMountFrame = directionMountFrame;
+	upVectorMountFrame = upMountFrame;
+	core->lookAtJ2000(directionJ2000, upJ2000);
 }
 
 void StelMovementMgr::panView(const double deltaAz, const double deltaAlt)
@@ -1828,7 +1849,9 @@ void StelMovementMgr::moveViewport(double offsetX, double offsetY, const float d
 
 	if (duration<=0.0f)
 	{
-		//avoid using the timeline to minimize overhead
+		// Stop a previous animated transition before applying an immediate value.
+		// Otherwise its next valueChanged signal can overwrite the restored offset.
+		viewportOffsetTimeline->stop();
 		core->setViewportOffset(offsetX, offsetY);
 		return;
 	}

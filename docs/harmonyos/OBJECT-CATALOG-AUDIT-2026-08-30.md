@@ -32,6 +32,11 @@
 
 - 平板 `192.168.1.30:33805` 已覆盖安装最新签名 HAP；`getStarCount` 返回 `visible=4566`、`catalogTotal=2328377`、`named=649`，`getStarCountFull` 返回 `total=2328377`、`catalogLevels=5`、`catalogReady=true`。
 - 代表性分类均能返回原生目录总量：行星 8、天然卫星 66、小行星 344、彗星 115、太阳系人造天体 1、人造卫星 3134、流星雨 44、新星 66、星系 74、星团 313、梅西叶目录 110。
-- `Exoplanets` 和 `NebulaMgr:10` 本次返回 0 条，是当前离线目录本身没有匹配条目；接口仍返回 `ok=true`、`catalogReady=true`，界面应显示“目录为空”，不能显示“加载失败”。
+- `Exoplanets` 和精确类型 `NebulaMgr:10` 本次返回 0 条，是当前离线目录本身没有匹配条目；星云总目录应使用 `NebulaMgr:200`，本轮已验证返回 354 条。接口仍返回 `ok=true`、`catalogReady=true`，界面应显示真实目录状态，不能把精确空类型误当成全部星云。
 - `getObjectCatalogCategories` 返回 192 个已注册细分类（SolarSystem 12、StarMgr 9、NebulaMgr 67、NomenclatureMgr 100，以及 4 个插件目录）；核心分类固定显示，其余分类在“筛选/浏览分类”展开后的可滚动网格中显示，避免单行横向栏隐藏分类。
 - `scripts/smoke-test-ohos-cli.mjs`：19/19 通过；`scripts/check-ohos.sh`：HAP 编译通过，仅保留工程既有 4 条 `setTimeout` 静态提示。未修改签名、隐私、联网策略或 `build-profile.json5`。
+
+## 2026-08-31 修正
+
+- 浏览器新增虚拟分类 `ArtificialObjects`，把 SolarSystem 人工航天器与 Satellites 离线目录合并；当前平板验证总数为 3,135（含 Tesla Roadster 和 3,134 颗卫星）。
+- ArkTS 核心分类与筛选菜单复用同一分类源，插件目录不再和原生内部细分类混在核心浏览区。

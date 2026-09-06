@@ -15,7 +15,7 @@ function blockText(textArray)
 	ids = new Array();
 	for(i=0; i<textArray.length; i++)
 	{
-		ids[i] = LabelMgr.labelScreen(textArray[i], 30, y, false, fontSize, "#0044ff");
+		ids[i] = LabelMgr.labelScreen(tr(textArray[i]), 30, y, false, fontSize, "#0044ff");
 		y += lineSep;
 	}
 
@@ -63,11 +63,11 @@ core.moveToAltAzi(20, 90, 3);
 StelMovementMgr.zoomTo(60, 4);
 core.wait(3);
 
-ids = blockText(Array("Place: Rangpur, Bangladesh",
-                      "Date: 2009-07-21, just before dawn.",
-                      "Orion and Gemini climb into the dawn sky",
-                      "fading from view as the sky brightens with",
-                      "the appearance of the Sun"));
+ids = blockText(Array(tr("Place: Rangpur, Bangladesh"),
+					  tr("Date: 2009-07-21, just before dawn."),
+					  tr("Orion and Gemini climb into the dawn sky"),
+					  tr("fading from view as the sky brightens with"),
+					  tr("the appearance of the Sun")));
 
 core.wait(1);
 // slowly ramp up the time rate
@@ -82,14 +82,14 @@ clearLabels(ids);
 ConstellationMgr.setFlagLines(false);
 ConstellationMgr.setFlagLabels(false);
 core.waitFor("2009:07:21T23:30:00");
-ids = blockText(Array("The Sun has a companion this morning...",
-                      "The Moon."));
+ids = blockText(Array(tr("The Sun has a companion this morning..."),
+					  tr("The Moon.")));
 core.waitFor("2009:07:21T23:54:00");
 clearLabels(ids);
 
 core.waitFor("2009:07:22T00:09:00");
-ids = blockText(Array("The Moon starts to obscure the Sun's disc",
-                      "and the sky becomes a little darker"));
+ids = blockText(Array(tr("The Moon starts to obscure the Sun's disc"),
+					  tr("and the sky becomes a little darker")));
 core.waitFor("2009:07:22T00:15:00");
 for(t=250; t>150; t--)
 {
@@ -110,9 +110,9 @@ for(t=25; t>8; t--)
 	core.setTimeRate(t);
 	core.wait(0.007);
 }
-ids = blockText(Array("As the last of the Sun is covered by the Moon",
-                      "the sky darkens quickly, and the brighter stars",
-                      "and planets become visible"));
+ids = blockText(Array(tr("As the last of the Sun is covered by the Moon"),
+					  tr("the sky darkens quickly, and the brighter stars"),
+					  tr("and planets become visible")));
 core.waitFor("2009:07:22T00:58:20");
 for(t=8; t>5; t--)
 {
@@ -126,7 +126,7 @@ SolarSystem.setLabelsAmount(4);
 StarMgr.setFlagLabels(true);
 SolarSystem.setFlagLabels(true);
 core.waitFor("2009:07:22T00:59:30");
-ids = blockText(Array("At totality, the Sun is completely hidden behind the Moon"));
+ids = blockText(Array(tr("At totality, the Sun is completely hidden behind the Moon")));
 core.selectObjectByName("Moon", false);
 StelMovementMgr.setFlagTracking(true);
 StelMovementMgr.zoomTo(4, 5);
@@ -146,8 +146,8 @@ for(t=5; t>2; t--)
 	core.wait(0.007);
 }
 clearLabels(ids);
-ids = blockText(Array("The Sun emerges from behind the Moon",
-                      "The sky brightens once more"));
+ids = blockText(Array(tr("The Sun emerges from behind the Moon"),
+					  tr("The sky brightens once more")));
 core.waitFor("2009:07:22T01:02:50");
 for(t=3; t<150; t++)
 {
@@ -156,8 +156,7 @@ for(t=3; t<150; t++)
 }
 clearLabels(ids);
 core.wait(3);
-ids = blockText(Array("The End"));
+ids = blockText(Array(tr("The End")));
 core.wait(4);
 clearLabels(ids);
-
 

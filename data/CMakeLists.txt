@@ -2,8 +2,8 @@
 ########### install files ###############
 INSTALL(FILES ssystem_major.ini ssystem_minor.ini ssystem_1000comets.ini 
 	base_locations.bin.gz default_cfg.ini languages.tab iso3166.tab 
-	regions-geoscheme.tab constellations_spans.dat
-        nomenclature.dat asteroid_elements.json DESTINATION ${SDATALOC}/data)
+	regions-geoscheme.tab constellations_spans.dat skyculture_editorial_context.json
+	nomenclature.dat asteroid_elements.json DESTINATION ${SDATALOC}/data)
 # install fonts
 INSTALL(FILES NotoSans-Regular.ttf NotoSansMono-Regular.ttf NotoSansSC-Regular.otf 
 	DejaVuSans.ttf DejaVuSansMono.ttf DESTINATION ${SDATALOC}/data)
@@ -17,6 +17,7 @@ IF(STELLARIUM_RELEASE_BUILD)
 ELSE()
 	INSTALL(FILES splash-gray.png DESTINATION ${SDATALOC}/data RENAME splash.png)
 ENDIF()
+
 
 # install icon
 IF(MACOS)
@@ -54,4 +55,3 @@ IF(UNIX AND NOT MACOS)
 	INSTALL(FILES icons/256x256/stellarium.png DESTINATION share/icons/hicolor/256x256/apps)
 	INSTALL(FILES icons/512x512/stellarium.png DESTINATION share/icons/hicolor/512x512/apps)
 ENDIF()
-

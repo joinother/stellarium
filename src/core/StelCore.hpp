@@ -391,6 +391,8 @@ public:
 	//! Dialog closing or moving, zooming, moving view etc.
 	void setClearSkyOnce();
 
+	void refreshTransformMatrices();
+
 public slots:
 	//! Smoothly move the observer to the given location
 	//! @param target the target location
