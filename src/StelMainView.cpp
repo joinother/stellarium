@@ -2184,11 +2184,12 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		if (m.contains("size-dd"))
 			result["angularSizeDegrees"] = m["size-dd"].toDouble();
 
-		// Constellation (IAU abbreviation, full name via i18n if available)
 		if (m.contains("iauConstellation"))
 		{
-			QString abbrev = m["iauConstellation"].toString();
-			result["constellation"] = abbrev;
+			const QString abbreviation = m["iauConstellation"].toString().trimmed();
+			const QString localizedName = ConstellationMgr::getIAUconstellationName(abbreviation);
+			result["constellation"] = localizedName.isEmpty() ? abbreviation : localizedName;
+			result["constellationAbbreviation"] = abbreviation;
 		}
 
 		// 音乐引擎所需：英文类型(便于分支) + 光谱型 + 推算温度(越热音越高)
