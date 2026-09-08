@@ -8,6 +8,7 @@ import hilog from '@ohos.hilog';
 import qpa from 'libqohos.so';
 import {APP_LIBRARY_NAME, LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
 import { prepareStellariumResources, prepareStellariumResourcesAsync } from '../qability/StellariumResourceBootstrap';
+import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent';
 
 export default class QAbilityStage extends AbilityStage {
 
@@ -21,8 +22,12 @@ export default class QAbilityStage extends AbilityStage {
   private static stageCreateForwarded: boolean = false;
 
   public static releasePrivacyGate(): void {
+    if (!hasCurrentPrivacyConsent()) {
+      QAbilityStage.privacyGateReleased = false;
+      throw new Error('Current privacy statement is not accepted');
+    }
     QAbilityStage.privacyGateReleased = true;
-    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-host-gate-released-for-final-page');
+    hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-host-gate-released-after-consent');
   }
 
   private static forwardStageCreateIfNeeded(): void {
@@ -37,7 +42,7 @@ export default class QAbilityStage extends AbilityStage {
   }
 
   private static async initQtAppContextImpl(appContext: common.ApplicationContext, abilityClassName: string): Promise<void> {
-    if (!QAbilityStage.privacyGateReleased) {
+    if (!QAbilityStage.privacyGateReleased || !hasCurrentPrivacyConsent()) {
       hilog.error(LOG_DOMAIN, LOG_TAG, '[privacy-gate] blocked Qt application context initialization before consent');
       throw new Error('Qt application context initialization requires privacy consent');
     }
@@ -45,6 +50,10 @@ export default class QAbilityStage extends AbilityStage {
       hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-probe] phase=qt-context-init-start');
       const preparationStartedAt = Date.now();
       await prepareStellariumResourcesAsync(appContext);
+      if (!hasCurrentPrivacyConsent()) {
+        QAbilityStage.privacyGateReleased = false;
+        throw new Error('Privacy consent changed during resource preparation');
+      }
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `[privacy-probe] phase=resource-prepare-finish; elapsedMs=${Date.now() - preparationStartedAt}`);
       prepareStellariumResources(appContext);
@@ -70,9 +79,10 @@ export default class QAbilityStage extends AbilityStage {
   public static initQtAppContextIfNeeded(appContext: common.ApplicationContext): Promise<void> {
     if (QAbilityStage.setupQtApplicationPromise === undefined) {
       QAbilityStage.setupQtApplicationPromise = QAbilityStage.initQtAppContextImpl(appContext, QAbility.name)
-        .catch(() => {
+        .catch((error: Error) => {
           QAbilityStage.setupQtApplicationPromise = undefined;
-          throw new Error('Qt application context initialization failed');
+          hilog.error(LOG_DOMAIN, LOG_TAG, `Qt application context initialization failed: ${error.message}`);
+          throw error;
         });
     }
     return QAbilityStage.setupQtApplicationPromise;

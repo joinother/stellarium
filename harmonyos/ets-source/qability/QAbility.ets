@@ -8,7 +8,10 @@ import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
 import { notifyLifecycle } from '../common/StellariumLifecycle';
 import {LOG_DOMAIN, LOG_TAG} from '../common/QtAppConstants';
-import { requestPrivacyConsent } from './PrivacyConsent';
+import { hasCurrentPrivacyConsent } from './PrivacyConsent';
+import { writeClipboardText } from './ClipboardService';
+import QtWindowStageAdapter from './QtWindowStageAdapter';
+import { setConsentAcceptedListener, setStartupCanvasReadyListener } from '../common/PrivacyStartup';
 import { scheduleDeepSkyImageExtraction, setDeepSkyImageExtractionForeground } from './StellariumResourceBootstrap';
 
 interface StellariumCliRequest {
@@ -30,13 +33,36 @@ export default class QAbility extends UIAbility {
   private pendingWindowStage: Window.WindowStage | null = null;
   private privacyRequestStarted: boolean = false;
   private privacyAccepted: boolean = false;
+  private rootContentLoaded: boolean = false;
+  private rootStorage: LocalStorage = new LocalStorage();
+  private qtWindowStage: QtWindowStageAdapter | undefined = undefined;
   private qtAbilityCreated: boolean = false;
   private qtInitialized: boolean = false;
+  private qtStartupInProgress: boolean = false;
+  private inputStallProbeTimer: number = -1;
+
+  private stopInputStallProbe(): void {
+    if (this.inputStallProbeTimer >= 0) {
+      clearInterval(this.inputStallProbeTimer);
+      this.inputStallProbeTimer = -1;
+    }
+  }
+
+  private startInputStallProbe(): void {
+    if (!this.privacyAccepted || !this.isForeground || this.inputStallProbeTimer >= 0) return;
+    let previousTick = Date.now();
+    this.inputStallProbeTimer = setInterval(() => {
+      const now = Date.now();
+      const delayedMs = now - previousTick - 500;
+      previousTick = now;
+      if (this.isForeground && delayedMs > 1000) {
+        hilog.warn(LOG_DOMAIN, LOG_TAG,
+          `[input-stall-probe] delayMs=${delayedMs}; starting=${this.qtStartupInProgress}; qtReady=${this.qtInitialized}`);
+      }
+    }, 500);
+  }
   private isForeground: boolean = true;
   private qtWindowPrepared: boolean = false;
-  private privacyWaitingForSystemForeground: boolean = false;
-  private privacyHandoffBackgroundObserved: boolean = false;
-  private privacyHandoffGeneration: number = 0;
   private privacyProbeStartedAt: number = 0;
   private privacyProbeSequence: number = 0;
   private cliRequests: StellariumCliRequest[] = [];
@@ -107,6 +133,7 @@ export default class QAbility extends UIAbility {
   }
 
   private isUiCliCommand(commandName: string): boolean {
+    if (commandName === 'startGuide' || commandName === 'guideAction') return true;
     if (commandName === 'setSearchBrowserPage' || commandName === 'selectSearchCategory' || commandName === 'setSearchBrowserFilter') return true;
     if (commandName === 'setAstroTab' || commandName === 'setAstroGroup' || commandName === 'setAstroFilter' || commandName === 'setAstroScroll') return true;
     if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll') return true;
@@ -122,6 +149,18 @@ export default class QAbility extends UIAbility {
     }
     const request = this.cliRequests[0];
     request.attempts += 1;
+    if (request.commandName === 'copyTextToClipboard') {
+      if (request.attempts > 1) return;
+      writeClipboardText(request.payload).then((result) => {
+        this.finishCliRequest(request, JSON.stringify(result));
+      });
+      return;
+    }
+    if (request.commandName === 'getGuideState') {
+      this.finishCliRequest(request, AppStorage.get<string>('stellariumGuideState') ??
+        '{"ok":true,"state":{"active":false,"phase":"idle"},"initialized":false}');
+      return;
+    }
     if (request.commandName === 'getSearchBrowserState') {
       const state = JSON.parse(AppStorage.get<string>('stellariumSearchBrowserState') ??
         JSON.stringify({ ok: false, error: 'search browser has not loaded' })) as Record<string, Object>;
@@ -321,57 +360,24 @@ export default class QAbility extends UIAbility {
       `qtInitialized=${this.qtInitialized}; windowPrepared=${this.qtWindowPrepared}${suffix}`);
   }
 
-  private waitForStablePrivacyReturn(): void {
-    this.privacyWaitingForSystemForeground = true;
-    this.privacyHandoffBackgroundObserved = false;
-    const generation = ++this.privacyHandoffGeneration;
-    this.logPrivacyGate('privacy dialog accepted; waiting for lifecycle restore');
-    setTimeout(() => {
-      if (generation !== this.privacyHandoffGeneration || !this.privacyWaitingForSystemForeground ||
-        this.privacyHandoffBackgroundObserved || !this.isForeground || this.qtInitialized) {
-        return;
-      }
-      // Some Privacy Manager versions keep the host Ability foreground for the
-      // entire consent flow and therefore emit no lifecycle pair. Starting
-      // from this settled callback avoids leaving those devices on black.
-      this.privacyWaitingForSystemForeground = false;
-      this.logPrivacyGate('privacy lifecycle callback absent; starting Qt after settled fallback');
-      void this.startQtIfReady();
-    }, 420);
-  }
-
-  private startQtAfterStablePrivacyForeground(): void {
-    const generation = ++this.privacyHandoffGeneration;
-    this.privacyWaitingForSystemForeground = false;
-    setTimeout(() => {
-      if (generation !== this.privacyHandoffGeneration || !this.isForeground || this.qtInitialized) {
-        return;
-      }
-      this.logPrivacyGate('privacy foreground restored; starting Qt');
-      void this.startQtIfReady();
-    }, 80);
-  }
-
   private async preparePrivacyHostPage(windowStage: Window.WindowStage): Promise<boolean> {
-    if (this.qtWindowPrepared) {
+    if (this.rootContentLoaded) {
       return true;
     }
 
     try {
-      this.logPrivacyProbe('final-page-prepare-start');
-      // Privacy Manager documents that one Ability must not call loadContent()
-      // more than once. Prepare the final Qt page once before the system
-      // dialog, but keep the native sky node gated until consent is accepted.
+      this.logPrivacyProbe('privacy-window-prepare-start');
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', false);
-      await this.initializeQtAbilityIfNeeded();
-      if (!this.qtAbilityCreated) {
-        this.logPrivacyProbe('final-page-prepare-failed', 'qt ability was not created');
-        return false;
-      }
-      this.logPrivacyProbe('qt-host-ready-before-consent');
-      qpa.handleAbilityOnWindowStageCreate(this, windowStage);
-      this.qtWindowPrepared = true;
-      this.logPrivacyProbe('final-page-requested', 'single loadContent owner is Qt bridge');
+      AppStorage.setOrCreate('stellariumStartupSkyReady', false);
+      AppStorage.setOrCreate('stellariumStartupArtComplete', false);
+      AppStorage.setOrCreate('stellariumQtContentReady', false);
+      AppStorage.setOrCreate('stellariumPrivacyHostReady', false);
+      await windowStage.getMainWindow();
+      this.qtWindowStage = new QtWindowStageAdapter(windowStage, this.rootStorage);
+      await windowStage.loadContent('pages/ApplicationRoot', this.rootStorage);
+      this.rootContentLoaded = true;
+      await this.enterImmersive(windowStage);
+      this.logPrivacyProbe('privacy-window-ready', 'Qt context and resource preparation remain blocked');
       return true;
     } catch (err) {
       this.logPrivacyProbe('final-page-prepare-failed', `error=${JSON.stringify(err)}`);
@@ -385,24 +391,18 @@ export default class QAbility extends UIAbility {
       return;
     }
 
+    if (!hasCurrentPrivacyConsent()) return;
+
     this.privacyRequestStarted = true;
     this.logPrivacyProbe('privacy-request-start');
     this.logPrivacyGate('requesting system privacy consent');
-    const consent = await requestPrivacyConsent(this.context);
     this.privacyRequestStarted = false;
-    this.logPrivacyProbe('privacy-request-finish', `accepted=${consent.accepted}; dialogShown=${consent.dialogShown}`);
-    if (!consent.accepted) {
+    if (!hasCurrentPrivacyConsent()) {
       hilog.warn(LOG_DOMAIN, LOG_TAG, 'Privacy consent was not accepted; Qt startup remains blocked');
       return;
     }
 
-    // Privacy Manager resolves its Promise only after the user has acted on
-    // the system dialog. Start Qt from that official completion point.
     this.privacyAccepted = true;
-    if (consent.dialogShown) {
-      this.waitForStablePrivacyReturn();
-      return;
-    }
     this.logPrivacyGate('system privacy consent accepted');
     hilog.info(LOG_DOMAIN, LOG_TAG, 'Privacy consent accepted; starting Qt');
     void this.startQtIfReady();
@@ -412,13 +412,15 @@ export default class QAbility extends UIAbility {
     if (!await this.preparePrivacyHostPage(windowStage)) {
       return;
     }
-    await this.enterImmersive(windowStage);
-    this.logPrivacyProbe('privacy-host-ready', 'system dialog will cover an already prepared opaque host');
+    this.logPrivacyProbe('privacy-host-ready', 'single ApplicationRoot loaded; Qt content will bind in place');
     this.logPrivacyGate('privacy host page is ready; requesting system privacy consent');
-    await this.requestPrivacyThenStart();
+    AppStorage.setOrCreate('stellariumPrivacyHostReady', true);
   }
 
   private async initializeQtAbilityIfNeeded(): Promise<void> {
+    if (!this.privacyAccepted || !hasCurrentPrivacyConsent()) {
+      throw new Error('Qt ability initialization requires current privacy consent');
+    }
     if (this.qtAbilityCreated || this.pendingWant === null || this.pendingLaunchParam === null) {
       return;
     }
@@ -432,28 +434,37 @@ export default class QAbility extends UIAbility {
   }
 
   private async startQtIfReady(): Promise<void> {
-    if (!this.privacyAccepted || this.qtInitialized || this.pendingWant === null ||
+    if (!this.privacyAccepted || this.qtInitialized || this.qtStartupInProgress || this.pendingWant === null ||
       this.pendingLaunchParam === null || this.pendingWindowStage === null || !this.isForeground) {
       return;
     }
 
-    this.qtInitialized = true;
+    this.qtStartupInProgress = true;
+    this.startInputStallProbe();
     try {
-      if (!this.qtWindowPrepared) {
-        this.qtInitialized = false;
-        hilog.error(LOG_DOMAIN, LOG_TAG, 'Qt startup deferred because its single ArkUI host is not prepared');
-        return;
-      }
       AppStorage.setOrCreate('stellariumStartupPreparing', true);
       this.logPrivacyProbe('qt-start-transfer-start');
       const contextInitializationStartedAt = Date.now();
       await this.initializeQtAbilityIfNeeded();
+      if (!this.isForeground || !hasCurrentPrivacyConsent()) {
+        return;
+      }
+      if (!this.qtWindowPrepared) {
+        if (this.qtWindowStage === undefined) throw new Error('Qt single-window adapter is missing');
+        qpa.handleAbilityOnWindowStageCreate(this, this.qtWindowStage);
+        this.qtWindowPrepared = true;
+        this.logPrivacyProbe('final-page-requested', 'Qt content bound into the existing root after consent');
+      }
       hilog.info(LOG_DOMAIN, LOG_TAG,
         `[startup] Qt application context initialized in ${Date.now() - contextInitializationStartedAt} ms`);
       await this.enterImmersive(this.pendingWindowStage);
       await new Promise<void>((resolve) => setTimeout(resolve, 160));
+      if (!this.isForeground || !hasCurrentPrivacyConsent()) {
+        return;
+      }
       AppStorage.setOrCreate('stellariumStartupPreparing', false);
       AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', true);
+      this.qtInitialized = true;
       this.logPrivacyProbe('native-node-gate-released');
       hilog.info(LOG_DOMAIN, LOG_TAG, '[startup] released Qt native-node gate');
       qpa.handleAbilityOnForeground(this);
@@ -463,8 +474,13 @@ export default class QAbility extends UIAbility {
       // startup error, so the consent page does not turn into a home-screen flash.
       this.qtInitialized = false;
       AppStorage.setOrCreate('stellariumStartupPreparing', false);
-      hilog.error(LOG_DOMAIN, LOG_TAG, `Qt startup hand-off failed: ${JSON.stringify(err)}`);
+      hilog.error(LOG_DOMAIN, LOG_TAG, `Qt startup hand-off failed: ${(err as Error).message}; ${JSON.stringify(err)}`);
       return;
+    } finally {
+      this.qtStartupInProgress = false;
+      if (!this.qtInitialized) {
+        AppStorage.setOrCreate('stellariumStartupPreparing', false);
+      }
     }
     notifyLifecycle(true);
     try {
@@ -503,7 +519,7 @@ export default class QAbility extends UIAbility {
       if (canIUse('SystemCapability.Window.SessionManager')) {
         await mainWindow.setSpecificSystemBarEnabled('navigationIndicator', false);
       }
-      this.registerScreenSafeArea(mainWindow);
+      if (this.qtAbilityCreated && hasCurrentPrivacyConsent()) this.registerScreenSafeArea(mainWindow);
       hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() success');
     } catch (err) {
       hilog.error(LOG_DOMAIN, LOG_TAG, 'QAbility::enterImmersive() failed: ' + JSON.stringify(err));
@@ -550,12 +566,24 @@ export default class QAbility extends UIAbility {
     this.logPrivacyProbe('ability-create');
     hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ability created; Qt initialization is blocked pending consent');
     AppStorage.setOrCreate('stellariumStartupPreparing', false);
+    setConsentAcceptedListener(() => { void this.requestPrivacyThenStart(); });
+    setStartupCanvasReadyListener(() => {
+      if (this.pendingWindowStage === null) return;
+      void this.pendingWindowStage.removeStartingWindow().then(() => {
+        this.logPrivacyProbe('startup-cover-removed');
+      }).catch((error: Error) => {
+        hilog.warn(LOG_DOMAIN, LOG_TAG, `Startup cover removal failed: ${error.message}`);
+      });
+    });
     this.pendingWant = want;
     this.pendingLaunchParam = launchParam;
     this.queueCliRequest(want);
   }
 
   onDestroy(): void | Promise<void> {
+    setConsentAcceptedListener(undefined);
+    setStartupCanvasReadyListener(undefined);
+    this.stopInputStallProbe();
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onDestroy()');
     if (this.qtAbilityCreated) {
       return qpa.handleAbilityOnDestroy(this);
@@ -582,8 +610,13 @@ export default class QAbility extends UIAbility {
     this.pendingWindowStage = windowStage;
     this.logPrivacyProbe('window-stage-restore');
     if (this.qtInitialized) {
-      qpa.handleAbilityOnWindowStageRestore(this, windowStage);
-      this.enterImmersive(windowStage);
+      void this.preparePrivacyHostPage(windowStage).then((ready: boolean) => {
+        if (ready && this.qtWindowStage !== undefined && hasCurrentPrivacyConsent()) {
+          qpa.handleAbilityOnWindowStageRestore(this, this.qtWindowStage);
+          AppStorage.setOrCreate('stellariumPrivacyNativeStartupAllowed', true);
+          void this.enterImmersive(windowStage);
+        }
+      });
     } else {
       void this.requestPrivacyAfterWindowReady(windowStage);
     }
@@ -601,15 +634,13 @@ export default class QAbility extends UIAbility {
   }
 
   onForeground() {
+    AppStorage.setOrCreate('stellariumStartupForeground', true);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onForeground()');
     this.isForeground = true;
+    this.startInputStallProbe();
     this.logPrivacyProbe('ability-foreground');
     setDeepSkyImageExtractionForeground(true);
     if (!this.qtInitialized) {
-      if (this.privacyWaitingForSystemForeground) {
-        this.startQtAfterStablePrivacyForeground();
-        return;
-      }
       void this.startQtIfReady();
       return;
     }
@@ -626,17 +657,13 @@ export default class QAbility extends UIAbility {
   }
 
   onBackground() {
+    AppStorage.setOrCreate('stellariumStartupForeground', false);
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onBackground()');
     this.isForeground = false;
+    this.stopInputStallProbe();
     this.logPrivacyProbe('ability-background');
     setDeepSkyImageExtractionForeground(false);
     if (!this.qtInitialized) {
-      if (this.privacyWaitingForSystemForeground) {
-        // A real background/foreground pair owns the hand-off. It invalidates
-        // the no-lifecycle fallback until onForeground restores the host.
-        this.privacyHandoffBackgroundObserved = true;
-        this.privacyHandoffGeneration++;
-      }
       return;
     }
     // Release page-owned sensor subscriptions before Qt transitions hidden.
@@ -650,6 +677,8 @@ export default class QAbility extends UIAbility {
   }
 
   onWindowStageDestroy() {
+    this.rootContentLoaded = false;
+    this.qtWindowStage = undefined;
     hilog.info(LOG_DOMAIN, LOG_TAG, 'QAbility::onStageDestroy()');
     this.logPrivacyProbe('window-stage-destroy');
     if (this.qtAbilityCreated) {

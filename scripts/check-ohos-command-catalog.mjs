@@ -7,6 +7,7 @@ const source = readFileSync(new URL('../src/StelMainView.cpp', import.meta.url),
 const catalogSource = readFileSync(new URL('../src/StelOhosCommandCatalog.hpp', import.meta.url), 'utf8');
 const sourceCommands = new Set([...source.matchAll(/commandName\s*==\s*"([A-Za-z][A-Za-z0-9_]*)"/g)].map((match) => match[1]));
 const uiCommands = new Set(['backUiPanel', 'closeUiPanel', 'openPluginFeature', 'openUiPanel', 'setLayerTab', 'setSkyCultureMakerTab',
+  'copyTextToClipboard', 'startGuide', 'guideAction', 'getGuideState',
   'setAstroTab', 'setAstroGroup', 'setAstroFilter', 'setAstroScroll', 'getAstroPanelState', 'setTelescopeLivePosition']);
 const catalogBlock = catalogSource.match(/return QStringLiteral\(([\s\S]*?)\)\.split\(','\);/);
 if (!catalogBlock) {

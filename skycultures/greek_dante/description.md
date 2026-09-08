@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, we chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.
+Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, the compiling team chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.
 
 Dante Alighieri was a citizen of Florence, Italy, who was later banned and lived at several places in Northern Italy. The comedia was written around 1300 but finished only short before his death in 1321. It is commonly assumed that the story plays in around the Christian festival of Easter in 1300 CE.
 

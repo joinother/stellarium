@@ -10,6 +10,7 @@ namespace StellariumOhosCommandCatalog
 inline QStringList names()
 {
 	return QStringLiteral(
+		"copyTextToClipboard,getGuideState,startGuide,guideAction,beginGuidedSession,endGuidedSession,"
 		"setAstroTab,setAstroGroup,setAstroFilter,setAstroScroll,getAstroPanelState,"
 		"addBookmark,addDay,addHour,addMinute,addMonth,addYear,advanceTime,angleMeasurePoint,applySessionState,"
 		"beginGyroViewTransition,beginSkyGesture,cancelGyroViewTransition,clearSelection,cycleCCD,cycleLens,cycleOcular,cycleTelescope,"
@@ -87,6 +88,19 @@ inline QJsonObject item(const QString& name)
 	value["requiresConfirmation"] = isRestricted(name);
 	value["offline"] = name != "downloadStarCatalog";
 	value["payload"] = QJsonObject{{"type", "string"}, {"required", false}, {"encoding", "legacy-or-json"}};
+	if (name == "copyTextToClipboard")
+	{
+		value["transport"] = QStringLiteral("ArkUI");
+		value["description"] = QStringLiteral("主动复制指定文本到系统剪贴板；要求有效隐私同意且应用前台，只写不读，响应返回实际完成结果，不回显文本。CLI 文本上限 32768 字符。");
+	}
+	if (name == "startGuide" || name == "guideAction" || name == "getGuideState")
+	{
+		value["category"] = QStringLiteral("交互式天文导览");
+		value["executionLayer"] = QStringLiteral("ArkUI");
+		value["description"] = QStringLiteral("startGuide: solar-neighbours / deep-sky-discovery; guideAction: next, previous, pause, resume, explore, return, closer, wider, center, auto-on, auto-off, retry, stop. accepted仅受理，getGuideState返回state及lastRequestId/result核对实际完成。");
+		if (name == "startGuide") value["examplePayload"] = "solar-neighbours";
+		if (name == "guideAction") value["examplePayload"] = "explore";
+	}
 	if (name == "getAstroPanelState" || name == "setAstroTab" || name == "setAstroGroup" || name == "setAstroFilter" || name == "setAstroScroll")
 	{
 		value["category"] = QStringLiteral("ArkUI 天文计算");

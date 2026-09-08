@@ -29,6 +29,9 @@
         "name": "QAbility",
         "srcEntry": "./ets/qability/QAbility.ets",
         "launchType": "singleton",
+        "metadata": [
+          { "name": "enable.remove.starting.window", "value": "true" }
+        ],
         "supportWindowMode": [
           "fullscreen",
           "split",

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 
 #include "napi/native_api.h"
+#include "PresentationGeometry.h"
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
@@ -9,6 +10,7 @@
 #include <hilog/log.h>
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 #include <dlfcn.h>
@@ -44,6 +46,7 @@ struct EglState
 EglState g_egl;
 OH_NativeXComponent_Callback g_xcomponentCallback;
 std::mutex g_renderMutex;
+std::atomic<std::uint64_t> g_presentationState {0};
 
 struct StarVertex
 {
@@ -398,7 +401,9 @@ bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_BLEND);
-    glViewport(0, 0, g_egl.width > 0 ? g_egl.width : frameWidth, g_egl.height > 0 ? g_egl.height : frameHeight);
+    const auto viewport = fitPresentationFrame(frameWidth, frameHeight,
+        g_egl.width > 0 ? g_egl.width : frameWidth, g_egl.height > 0 ? g_egl.height : frameHeight);
+    glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(g_egl.frameProgram);
@@ -412,6 +417,8 @@ bool renderSubmittedTexture(GLuint texture, int frameWidth, int frameHeight,
         restorePreviousContext();
         return false;
     }
+    g_presentationState.store(nextPresentationState(g_presentationState.load(), frameWidth, frameHeight,
+        g_egl.width, g_egl.height));
     restorePreviousContext();
     if (!g_egl.submittedFrame) {
         OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
@@ -487,7 +494,9 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_BLEND);
-    glViewport(0, 0, g_egl.width > 0 ? g_egl.width : frameWidth, g_egl.height > 0 ? g_egl.height : frameHeight);
+    const auto viewport = fitPresentationFrame(frameWidth, frameHeight,
+        g_egl.width > 0 ? g_egl.width : frameWidth, g_egl.height > 0 ? g_egl.height : frameHeight);
+    glViewport(viewport.left, viewport.bottom, viewport.width, viewport.height);
     glClearColor(0.f, 0.f, 0.f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
     glUseProgram(g_egl.frameProgram);
@@ -509,6 +518,8 @@ void renderSubmittedFrame(const unsigned char* rgba, int frameWidth, int frameHe
         restorePreviousContext();
         return;
     }
+    g_presentationState.store(nextPresentationState(g_presentationState.load(), frameWidth, frameHeight,
+        g_egl.width, g_egl.height));
     restorePreviousContext();
     if (!g_egl.submittedFrame) {
         OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG,
@@ -540,6 +551,7 @@ void destroyEgl()
 
 void onSurfaceCreated(OH_NativeXComponent* component, void* window)
 {
+    g_presentationState.store(0);
     uint64_t width = 0;
     uint64_t height = 0;
     OH_NativeXComponent_GetXComponentSize(component, window, &width, &height);
@@ -553,6 +565,7 @@ void onSurfaceCreated(OH_NativeXComponent* component, void* window)
 
 void onSurfaceChanged(OH_NativeXComponent* component, void* window)
 {
+    g_presentationState.store(0);
     uint64_t width = 0;
     uint64_t height = 0;
     OH_NativeXComponent_GetXComponentSize(component, window, &width, &height);
@@ -566,6 +579,7 @@ void onSurfaceChanged(OH_NativeXComponent* component, void* window)
 
 void onSurfaceDestroyed(OH_NativeXComponent*, void*)
 {
+    g_presentationState.store(0);
     OH_LOG_Print(LOG_APP, LOG_INFO, STEL_ENTRY_LOG_DOMAIN, STEL_ENTRY_LOG_TAG, "surface destroyed");
     destroyEgl();
 }
@@ -716,7 +730,12 @@ static napi_value Command(napi_env env, napi_callback_info info)
         && (argc < 2 || getStringArg(env, args[1], payload));
 
     std::string response = R"({"ok":false,"error":"invalid arguments"})";
-    if (hasArgs) {
+    if (hasArgs && commandName == "getPresentationState") {
+        const auto state = g_presentationState.load();
+        response = std::string("{\"ok\":true,\"ready\":") + ((state & 0xffff) >= 2 ? "true" : "false") +
+            ",\"width\":" + std::to_string(state >> 32) +
+            ",\"height\":" + std::to_string((state >> 16) & 0xffff) + "}";
+    } else if (hasArgs) {
         StellariumCommandFunc command = resolveStellariumCommand();
         if (command) {
             // Continuous view commands are intentionally silent. Logging each

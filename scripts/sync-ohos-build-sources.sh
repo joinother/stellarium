@@ -11,6 +11,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+node "$SCRIPT_DIR/check-ohos-platform-patch.mjs" --sync
+
 SOURCES=(
   # DevEco owns build-profile.json5 and its local signing credentials; never sync it here.
   "harmonyos/AppScope/app.json5:build/libstellarium-harmonyos/AppScope/app.json5"
@@ -19,10 +21,13 @@ SOURCES=(
   "harmonyos/AppScope/resources/base/media/app_icon.png:build/libstellarium-harmonyos/AppScope/resources/base/media/app_icon.png"
   "harmonyos/AppScope/resources/base/media/app_icon.png:build/libstellarium-harmonyos/entry/src/main/resources/base/media/app_icon.png"
   "harmonyos/cpp-source/hello.cpp:build/libstellarium-harmonyos/entry/src/main/cpp/hello.cpp"
+  "harmonyos/cpp-source/PresentationGeometry.h:build/libstellarium-harmonyos/entry/src/main/cpp/PresentationGeometry.h"
   "harmonyos/ets-source/common/QtAppConstants.ets:build/libstellarium-harmonyos/entry/src/main/ets/common/QtAppConstants.ets"
+  "harmonyos/ets-source/qability/ClipboardService.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/ClipboardService.ets"
   "harmonyos/ets-source/common/StellariumLifecycle.ets:build/libstellarium-harmonyos/entry/src/main/ets/common/StellariumLifecycle.ets"
   "harmonyos/ets-source/pages/PrivacyBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/PrivacyBootstrap.ets"
   "harmonyos/ets-source/pages/MainWindowNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets"
+  "harmonyos/ets-source/pages/AstronomyGuide.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/AstronomyGuide.ts"
   "harmonyos/ets-source/pages/location_hierarchy.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/location_hierarchy.ts"
   "harmonyos/ets-source/pages/location_countries.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/location_countries.ts"
   "harmonyos/ets-source/pages/location_names_zh.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/location_names_zh.ts"
@@ -39,6 +44,11 @@ SOURCES=(
   "harmonyos/ets-source/pages/UiExtensionNativeNode.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/UiExtensionNativeNode.ets"
   "harmonyos/ets-source/pages/I18n.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets"
   "harmonyos/ets-source/qability/QAbility.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/QAbility.ets"
+  "harmonyos/ets-source/qability/QtWindowStageAdapter.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/QtWindowStageAdapter.ets"
+  "harmonyos/ets-source/common/PrivacyStartup.ets:build/libstellarium-harmonyos/entry/src/main/ets/common/PrivacyStartup.ets"
+  "harmonyos/ets-source/pages/ApplicationRoot.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/ApplicationRoot.ets"
+  "harmonyos/ets-source/pages/StartupSky.ets:build/libstellarium-harmonyos/entry/src/main/ets/pages/StartupSky.ets"
+  "harmonyos/ets-source/pages/StartupStarGeometry.ts:build/libstellarium-harmonyos/entry/src/main/ets/pages/StartupStarGeometry.ts"
   "harmonyos/ets-source/qabilitystage/QAbilityStage.ets:build/libstellarium-harmonyos/entry/src/main/ets/qabilitystage/QAbilityStage.ets"
   "harmonyos/ets-source/qability/PrivacyConsent.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/PrivacyConsent.ets"
   "harmonyos/ets-source/qability/StellariumResourceBootstrap.ets:build/libstellarium-harmonyos/entry/src/main/ets/qability/StellariumResourceBootstrap.ets"

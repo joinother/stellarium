@@ -1,0 +1,65 @@
+--- a/src/plugins/platforms/ohos/qohosclipboardobject.cpp
++++ b/src/plugins/platforms/ohos/qohosclipboardobject.cpp
+@@ -44,17 +44,6 @@
+     return "<illegal-Pasteboard_NotifyType>";
+ }
+ 
+-const char *getPasteboardDataSourceAsString(QOhosClipboardObject::PasteboardDataSource dataSource)
+-{
+-    switch (dataSource) {
+-    case QOhosClipboardObject::PasteboardDataSource::OurProcess:
+-        return "OurProcess";
+-    case QOhosClipboardObject::PasteboardDataSource::OtherProcess:
+-        return "OtherProcess";
+-    }
+-    return "<illegal-PasteboardDataSource>";
+-}
+-
+ std::shared_ptr<::OH_PasteboardObserver> createPasteboardDataObserver()
+ {
+     return std::shared_ptr<::OH_PasteboardObserver>(
+@@ -160,28 +149,15 @@
+                 });
+             auto sharedPasteboardUpdatesNotifier = QtOhos::moveToSharedPtr(
+                 std::move(pasteboardUpdatesNotifier));
+-
+-            auto pasteboardDataChangedJsThreadListener = std::make_shared<std::function<void()>>(
+-                [this, weakPasteboardUpdatesNotifier = QtOhos::makeWeakPtr(sharedPasteboardUpdatesNotifier)]() {
+-                    auto optPasteboardUdmfData = tryGetUdmfDataFromPasteboard(m_pasteboard.get());
+-                    auto pasteboardDataSource =
+-                        optPasteboardUdmfData
+-                            ? makeQOhosOptional(
+-                                isQOhosUdmfDataConvertedFromThisProcessMimeData(*optPasteboardUdmfData)
+-                                    ? PasteboardDataSource::OurProcess
+-                                    : PasteboardDataSource::OtherProcess)
+-                            : makeEmptyQOhosOptional();
+ 
+-                    qOhosPrintfDebug(
+-                        "%s: Pasteboard data source: %s",
+-                        Q_FUNC_INFO,
+-                        qTransform(pasteboardDataSource, &getPasteboardDataSourceAsString).value_or("<empty>"));
+-
++            auto pasteboardDataChangedJsThreadListener = std::make_shared<std::function<void()>>(
++                [weakPasteboardUpdatesNotifier = QtOhos::makeWeakPtr(sharedPasteboardUpdatesNotifier)]() {
++                    qOhosPrintfInfo("[clipboard-probe] change-notified; contentRead=false; patch=20260908");
+                     QtOhos::invokeInQtThread(
+-                        [weakPasteboardUpdatesNotifier, pasteboardDataSource]() {
++                        [weakPasteboardUpdatesNotifier]() {
+                             auto sharedPasteboardUpdatesNotifier = weakPasteboardUpdatesNotifier.lock();
+                             if (sharedPasteboardUpdatesNotifier)
+-                                (*sharedPasteboardUpdatesNotifier)(pasteboardDataSource);
++                                (*sharedPasteboardUpdatesNotifier)(makeEmptyQOhosOptional());
+                         });
+                 });
+ 
+--- a/src/plugins/platforms/ohos/qohosjsmain.cpp
++++ b/src/plugins/platforms/ohos/qohosjsmain.cpp
+@@ -1515,3 +1515,4 @@
+ void initDeviceInfo(JsState &jsState)
+ {
++    qOhosPrintfInfo("[privacy-probe] phase=sdk-device-info-read-start; valuesLogged=false");
+     using Type = QOhosDeviceInfo::Type;
+@@ -1567,2 +1568,3 @@
+     QOhosDeviceInfo::init(std::move(deviceInfo));
++    qOhosPrintfInfo("[privacy-probe] phase=sdk-device-info-read-finish; valuesLogged=false");
+ }

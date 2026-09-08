@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The names of the constellations of Siberian peoples is rather poorly studied. This region has the large territory and the knowledge about constellations are difficult to reconcile in a single integrated picture. In this culture of the sky marked only specific names and objects, which typical for the whole of Siberia.
+The names of the constellations of Siberian peoples are rather poorly studied. This region covers a large territory, and knowledge about constellations is difficult to reconcile in a single integrated picture. This sky culture marks only selected names and objects from the cited sources; it should not be taken as representing all of Siberia.
 
 ## Description
 

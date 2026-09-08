@@ -17,6 +17,11 @@ NC='\033[0m'
 ERRORS=0
 WARNINGS=0
 
+if ! node "$SCRIPT_DIR/check-ohos-platform-patch.mjs"; then
+  echo "Qt platform patch validation failed; run scripts/build-ohos-platform-patch.sh before packaging."
+  exit 1
+fi
+
 echo "=== HarmonyOS 提交前检查 ==="
 echo ""
 

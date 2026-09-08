@@ -1,0 +1,3158 @@
+{
+  "cultureCount": 63,
+  "languageCount": 10,
+  "matchedChecks": 630,
+  "scope": "Compiled introductory text and packaged resources; not device rendering or full-body translation certification",
+  "checks": [
+    {
+      "culture": "tibetan",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "zh_CN",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "zh_TW",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "en",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "es",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "fr",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "de",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "ru",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "ja",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "ko",
+      "result": "matched"
+    },
+    {
+      "culture": "tibetan",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "anutan",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "boorong",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "hawaiian_starlines",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "inuit",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "kamilaroi",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "khoi-san",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "maori",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "navajo",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "sami",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "samoan",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "sardinian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "tongan",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "tupi",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "vanuatu_netwar",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "xhosa",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "zulu",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "aztec",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "lokono",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "maya",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_hlad",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_iau",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_journey_to_the_west",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_rey",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_st",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "northern_andes",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "ruanui_sky_tahiti_and_society_islands",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "seri",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "tikuna",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "tukano",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_al-sufi",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_arabian_peninsula",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "arabic_indigenous",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "balinese",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_chenzhuo",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_manchu",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_song_dynasty",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_xianglin",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "chinese_yuan_dynasty",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "indian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "indian_nakshatras",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "japanese",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "korean",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "mongolian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "armintxe",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_mulapin",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "babylonian_seleucid",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "belarusian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "egyptian_dendera",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_almagest",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_dante",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_farnese",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "greek_leidenAratea",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "macedonian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "norse_edda",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "romanian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "russian_siberian",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_chinese",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "modern_sternenkarten",
+      "language": "pt_BR",
+      "result": "matched"
+    },
+    {
+      "culture": "norse",
+      "language": "pt_BR",
+      "result": "matched"
+    }
+  ]
+}

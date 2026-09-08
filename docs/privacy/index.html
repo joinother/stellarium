@@ -1,29 +1,29 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>星象仪 (Stellarium) 隐私政策</title>
-  <style>
-    body { max-width: 760px; margin: 40px auto; padding: 0 20px; color: #1f2933; font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    h1, h2 { color: #14213d; }
-    a { color: #1b6ca8; }
-  </style>
-</head>
-<body>
-  <h1>星象仪 (Stellarium) 隐私政策</h1>
-  <p>最后更新日期：2026-08-06</p>
-  <h2>数据收集</h2>
-  <p>本应用不收集、不存储、不上传任何用户个人信息，不包含广告或第三方追踪 SDK。</p>
-  <h2>设备序列号（SN）和外接设备标识</h2>
-  <p>本应用不读取、存储或上传手机硬件序列号（SN）。仅在您同意本政策后，并主动连接外接观测设备或定位设备时，系统或连接组件可能提供有限的外设标识（审核中可能被归类为 SN），其仅用于当前设备的本机连接和故障排查，不会保存、上传或用于追踪；不连接外设时不会触发此处理。</p>
-  <h2>权限使用</h2>
-  <p>定位权限仅在用户主动使用自动定位时用于本机匹配观测地点。加速度计和陀螺仪仅在用户主动开启相关功能时用于调整星图视角。相关数据仅在设备本地实时处理。</p>
-  <h2>离线运行</h2>
-  <p>上架版本不申请网络权限，不进行网络通信。观测地点、书签和设置仅保存在设备本地。</p>
-  <h2>开源许可</h2>
-  <p>本应用基于 Stellarium 开源项目，遵循 GPLv2 许可证。完整源代码见 <a href="https://github.com/joinother/stellarium/tree/release/v1.0-offline-candidate">GitHub</a>。</p>
-  <h2>联系我们</h2>
-  <p>如有隐私相关问题，请通过 <a href="https://github.com/joinother/stellarium/issues">GitHub Issues</a> 联系我们。</p>
-</body>
-</html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>星象仪隐私政策（整改草案）</title><style>body{max-width:760px;margin:40px auto;padding:0 20px;color:#1f2933;font:16px/1.7 system-ui}h1,h2{color:#14213d}</style></head><body>
+<h1>星象仪 (Stellarium) 隐私政策</h1>
+<p><strong>最后更新日期：</strong> 2026-09-08</p>
+<p><strong>修订状态：</strong> 审核整改草案。基础运行组件的 SN 调用尚需核验，完成核验与相应整改后才能用于重新提交审核；当前 AppGallery Connect 托管政策未由本地文件自动更新。</p>
+<p>星象仪基于 Stellarium 开源项目，遵循 GPLv2 许可证。星图计算在设备本地完成；主动使用定位、设备转向、保存和分享时，会在本机处理下述数据。“不上传”不等于“不读取、不处理”。</p>
+<h2>1. 观测地点</h2>
+<ul><li><strong>用途和数据：</strong> 读取系统提供的经纬度及可用海拔，用于计算当前地点可见的星空。</li><li><strong>获取时机：</strong> 同意隐私政策后，主动点击自动定位并授权定位权限时获取一次。相关权限为 ohos.permission.APPROXIMATELY_LOCATION 和 ohos.permission.LOCATION。</li><li><strong>控制：</strong> 拒绝或获取失败时保留原观测地点，可继续离线城市搜索和手动选点；不后台持续定位或建立轨迹。</li><li><strong>保存：</strong> 选定地点保存在设备本地，不向本应用服务器上传。清除应用数据可删除本地保存的地点；自行导出的文件需另行删除。</li></ul>
+<h2>2. 设备姿态传感器</h2>
+<p>“转动设备浏览星空”功能根据设备支持情况读取以下类型的数据：</p>
+<ul><li><strong>重力传感器：</strong> 三轴重力分量，用于辨别设备上下方向、稳定地平线。</li><li><strong>磁场传感器：</strong> 三轴磁场分量，用于罗盘方向校准。</li><li><strong>旋转矢量传感器：</strong> 旋转分量，用于计算设备姿态并调整星图视角。</li><li><strong>方向传感器：</strong> 在旋转矢量不可用时提供方向角，用于设备朝向计算。</li><li>系统融合姿态数据可能使用加速度计、陀螺仪和磁场传感器。应用声明的相关权限为 ohos.permission.ACCELEROMETER 和 ohos.permission.GYROSCOPE；权限名称不能代替具体数据类型的说明。</li></ul>
+<p><strong>获取时机：</strong> 同意本政策后，主动开启上述功能时订阅。关闭功能、进入后台或撤回同意时停止订阅；不开启时仍可通过触摸浏览星图。</p>
+<p><strong>处理方式：</strong> 测量值在本机内存实时计算，不建立传感器采样文件，不向本应用服务器上传。常规姿态诊断仅保留功能状态、调用次数等信息，不记录原始方向角、重力或磁场测量值。主动导出配置、会话或诊断资料时，请检查其中包含的观测位置和视角等内容后再分享。</p>
+<h2>3. 设备序列号（SN）及基础运行组件</h2>
+<p>星图、观测地点和设备转向功能不需要以硬件序列号识别用户。应用不以设备标识建立用户画像或进行广告追踪。基础运行组件初始化仅允许在同意当前隐私政策后执行。</p>
+<p>审核发现 Qt 基础运行组件初始化链存在 SN 相关接口调用；该调用不能描述为仅在连接外设时发生。字段来源、实际返回数据及调用必要性仍须核验。本修订稿不会将尚未证实的“不读取 SN”写成保证，完成核验及整改前不作为最终发布政策。</p>
+<h2>4. 本地保存、导出和分享</h2>
+<p>配置、观测列表等默认存储在应用沙箱；主动保存到相册、选择导出目录或分享时，按系统选择结果交给相应位置或应用。本应用不自动上传这些文件。接收应用如何处理分享内容，适用其隐私规则及您的后续操作。清除应用数据可删除沙箱资料，相册和导出文件需在对应位置另行删除。</p>
+<h2>5. 离线及诊断说明</h2>
+<p>当前离线版本不申请 ohos.permission.INTERNET，不提供应用内星表自动下载，不包含广告或第三方追踪 SDK。系统定位、应用市场隐私服务及用户主动选择的分享接收应用由系统或相应服务提供方处理，本应用不代其承诺完全不联网。</p>
+<p>应用保留本机运行日志用于排查启动、输入阻塞等故障，不自动上传；本轮新增输入阻塞探针仅记录耗时与初始化状态，不记录触摸坐标、位置或设备序列号。请勿在公开反馈中提交未经检查的原始日志。</p>
+<h2>6. 隐私选择</h2>
+<p>可在设置中撤回隐私同意，应用停止设备姿态订阅并退出；再次启动须重新确认。定位权限可在系统设置中管理。政策更新涉及已同意内容变化时，通过应用市场隐私管理服务更新版本并重新取得相应同意。</p>
+<p>儿童使用定位和分享功能时建议由监护人指导；本应用不进行广告追踪或用户画像。</p>
+<h2>7. 开源与联系</h2>
+<p>源代码：https://github.com/joinother/stellarium</p>
+<p>隐私问题反馈：https://github.com/joinother/stellarium/issues</p>
+<p>请勿在公开反馈中填写身份证件、详细住址、设备序列号或密钥。上游项目：https://stellarium.org/</p>
+</body></html>

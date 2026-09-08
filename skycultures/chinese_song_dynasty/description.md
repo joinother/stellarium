@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This sky culture is based on the observation data from the 4th year of the Huangyou era (1052 AD), and aims to faithfully reconstruct the star map of China during the Song Dynasty. This sky culture comprises 283 Xingguans (星官, Chinese Constellations) and 1464 stars (including clusters M7, M44) from the *Xinyixiangfayao Star Map*. 
+This sky culture is based on the observation data from the 4th year of the Huangyou era (1052 AD), and aims to faithfully reconstruct the star map of China during the Song Dynasty. This sky culture comprises 283 Xingguans (星官, Chinese Constellations) and 1464 stars (including clusters M7, M44) from the *Xinyixiangfayao Star Map*.
 
 ## Description
 

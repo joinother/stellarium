@@ -26,6 +26,7 @@
 #include "StelLogger.hpp"
 #include "StelProjector.hpp"
 #include "StelPainter.hpp"
+#include "PolarScopeGeometry.hpp"
 #include "StelGui.hpp"
 #include "SkyGui.hpp"
 #include "StelTranslator.hpp"
@@ -305,13 +306,13 @@ void markOhosInteraction()
 		StelMainView::getInstance().thereWasAnEvent();
 }
 
-double ohosPolarScopeSafeRadius(const StelProjectorP& projector, const Vec3d& poleScreen)
+QRectF ohosPolarScopeLabelBounds(const StelProjectorP& projector)
 {
 	if (!projector)
-		return 0.0;
+		return QRectF();
 	const Vec4i viewport = projector->getViewport();
 	if (viewport[2] <= 0 || viewport[3] <= 0)
-		return 0.0;
+		return QRectF();
 	const double topRatio = qBound(0.0, s_ohosPolarScopeSafeTopRatio.load(), 0.45);
 	const double bottomRatio = qBound(0.0, s_ohosPolarScopeSafeBottomRatio.load(), 0.45);
 	const double measuredTopRatio = qBound(0.0,
@@ -320,9 +321,7 @@ double ohosPolarScopeSafeRadius(const StelProjectorP& projector, const Vec3d& po
 	const double right = viewport[0] + viewport[2];
 	const double bottom = viewport[1] + viewport[3] * bottomRatio;
 	const double top = viewport[1] + viewport[3] * (1.0 - qMax(topRatio, measuredTopRatio));
-	const double safeRadius = 0.92 * qMin(qMin(poleScreen[0] - left, right - poleScreen[0]),
-		qMin(poleScreen[1] - bottom, top - poleScreen[1]));
-	return qMax(0.0, safeRadius - 34.0);
+	return QRectF(left + 8.0, bottom + 8.0, qMax(0.0, right - left - 16.0), qMax(0.0, top - bottom - 16.0));
 }
 
 void drawOhosPolarScopeOverlay(StelCore* core)
@@ -342,11 +341,8 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 	if (viewport[2] <= 0 || viewport[3] <= 0)
 		return;
 	Vec3d poleScreen;
-	if (!projector->project(poleJ2000, poleScreen) || !projector->checkInViewport(poleScreen))
-	{
-		poleScreen.set(viewport[0] + viewport[2] * 0.5,
-			viewport[1] + viewport[3] * 0.5, 0.0);
-	}
+	if (!projector->project(poleJ2000, poleScreen))
+		return;
 
 	if (!s_ohosPolarScopeStar || s_ohosPolarScopeStarNorth != north)
 	{
@@ -389,51 +385,73 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 
 	Vec3d starScreen;
 	const bool hasStar = s_ohosPolarScopeStar &&
-		projector->project(s_ohosPolarScopeStar->getJ2000EquatorialPos(core), starScreen) &&
-		projector->checkInViewport(starScreen);
+		projector->project(s_ohosPolarScopeStar->getJ2000EquatorialPos(core), starScreen);
 	const double centerX = poleScreen[0];
 	const double centerY = poleScreen[1];
 	const double poleStarRadius = hasStar
-		? std::hypot(starScreen[0] - centerX, starScreen[1] - centerY)
+		? polarScopeRadius(centerX, centerY, starScreen[0], starScreen[1])
 		: projector->getPixelPerRadAtCenter() * (0.63 * M_PI / 180.0);
-	const double scopeRadius = qMin(poleStarRadius, ohosPolarScopeSafeRadius(projector, poleScreen));
-	if (scopeRadius < 80.0 || poleStarRadius < 12.0)
+	const double scopeRadius = poleStarRadius;
+	if (!std::isfinite(scopeRadius) || scopeRadius < 12.0)
 		return;
 
 	const double horizontalSign = core->getFlipHorz() ? -1.0 : 1.0;
 	const double verticalSign = core->getFlipVert() ? -1.0 : 1.0;
 	const Vec3f reticleColor(1.0f, 0.34f, 0.31f);
-	StelPainter painter(projector);
+	StelPainter painter(core->getProjection2d());
+	QFont reticleFont;
+	reticleFont.setPixelSize(12);
+	painter.setFont(reticleFont);
+	QFont measuredFont(reticleFont);
+	measuredFont.setPixelSize(qMax(1, qRound(reticleFont.pixelSize() * projector->getDevicePixelsPerPixel())));
+	const QFontMetrics metrics(measuredFont);
+	const QRectF labelBounds = ohosPolarScopeLabelBounds(projector);
+	QVector<QRectF> occupiedLabels;
+	if (hasStar)
+		occupiedLabels.append(QRectF(starScreen[0] - 18, starScreen[1] - 18, 36, 36));
+	auto drawLabel = [&](double x, double y, const QString& label) {
+		const double width = metrics.horizontalAdvance(label);
+		const double height = metrics.height();
+		const QRectF bounds(x - width / 2 - 4, y - height / 2 - 4, width + 8, height + 8);
+		if (!labelBounds.contains(bounds)) return;
+		for (const QRectF& occupied : occupiedLabels)
+			if (occupied.intersects(bounds)) return;
+		occupiedLabels.append(bounds);
+		painter.drawText(static_cast<float>(x - width / 2),
+			static_cast<float>(y - height / 2 + metrics.descent()), label);
+	};
 	painter.setBlending(true);
 	painter.setLineSmooth(true);
 	painter.setLineWidth(2.0f);
 	painter.setColor(reticleColor, 0.88f);
 	painter.drawCircle(static_cast<float>(centerX), static_cast<float>(centerY), static_cast<float>(scopeRadius));
 
+	const int labelStep = polarScopeLabelStep(scopeRadius, metrics.horizontalAdvance(QStringLiteral("23")));
 	for (int hour = 0; hour < 24; ++hour)
 	{
 		const double angle = -hour * 15.0 * M_PI / 180.0;
 		const bool major = hour % 6 == 0;
-		const double inner = scopeRadius - (major ? 14.0 : 8.0);
+		const double inner = qMax(0.0, scopeRadius - (major ? 14.0 : 8.0));
 		const double x1 = centerX + std::sin(angle) * inner * horizontalSign;
 		const double y1 = centerY + std::cos(angle) * inner * verticalSign;
 		const double x2 = centerX + std::sin(angle) * scopeRadius * horizontalSign;
 		const double y2 = centerY + std::cos(angle) * scopeRadius * verticalSign;
 		painter.drawLine2d(static_cast<float>(x1), static_cast<float>(y1), static_cast<float>(x2), static_cast<float>(y2));
-		const double labelRadius = scopeRadius + 28.0;
-		painter.drawText(static_cast<float>(centerX + std::sin(angle) * labelRadius * horizontalSign),
-			static_cast<float>(centerY + std::cos(angle) * labelRadius * verticalSign),
-			QString::number(hour));
+		const double labelRadius = scopeRadius + metrics.height() * 1.1;
+		if (labelStep < 24 && hour % labelStep == 0)
+			drawLabel(centerX + std::sin(angle) * labelRadius * horizontalSign,
+				centerY + std::cos(angle) * labelRadius * verticalSign, QString::number(hour));
 	}
 
 	painter.setColor(reticleColor, 0.78f);
-	const double innerLabelRadius = qMax(18.0, poleStarRadius - 30.0);
+	const double innerLabelRadius = scopeRadius - metrics.height() * 1.8;
 	for (int hour = 0; hour < 12; ++hour)
 	{
+		if (innerLabelRadius < metrics.height() * 3 || labelStep > 2) break;
 		const double angle = hour * 30.0 * M_PI / 180.0;
 		const QString label = hour == 0 ? QStringLiteral("12") : QString::number(hour);
-		painter.drawText(static_cast<float>(centerX + std::sin(angle) * innerLabelRadius * horizontalSign),
-			static_cast<float>(centerY + std::cos(angle) * innerLabelRadius * verticalSign), label);
+		drawLabel(centerX + std::sin(angle) * innerLabelRadius * horizontalSign,
+			centerY + std::cos(angle) * innerLabelRadius * verticalSign, label);
 	}
 
 	painter.setColor(reticleColor, 0.62f);
@@ -457,9 +475,9 @@ void drawOhosPolarScopeOverlay(StelCore* core)
 		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 11.0f);
 		painter.setColor(reticleColor, 0.72f);
 		painter.drawCircle(static_cast<float>(starX), static_cast<float>(starY), 3.0f);
-		const float labelX = static_cast<float>(starX + (starX < centerX ? 42.0 : -96.0));
-		const float labelY = static_cast<float>(starY + (starY >= centerY ? -60.0 : 60.0));
-		painter.drawText(labelX, labelY, north ? QStringLiteral("北极星") : QStringLiteral("南极座σ"));
+		const QString starName = s_ohosPolarScopeStar->getNameI18n().isEmpty()
+			? s_ohosPolarScopeStar->getEnglishName() : s_ohosPolarScopeStar->getNameI18n();
+		drawLabel(starX, starY + (starY >= centerY ? -1.0 : 1.0) * metrics.height() * 2.5, starName);
 	}
 	painter.setLineWidth(1.0f);
 	painter.setLineSmooth(false);
@@ -3455,6 +3473,7 @@ QJsonObject currentStateJson()
 			"actionShow_MilkyWay",
 			"actionShow_Fog",
 			"actionShow_Ground",
+			"actionShow_MistHorizon",
 			"actionShow_LandscapeIllumination",
 			"actionShow_LandscapeLabels",
 			"actionShow_Constellation_Lines",
@@ -6433,7 +6452,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setLandscape")
 		{
 			LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
-			bool ok = lmgr->setCurrentLandscapeID(arg);
+			const bool setsLocation = lmgr->getFlagLandscapeSetsLocation();
+			if (!lmgr->getFlagLandscape()) lmgr->setFlagLandscapeSetsLocation(false);
+			const bool ok = lmgr->getCurrentLandscapeID() == arg || lmgr->setCurrentLandscapeID(arg);
+			lmgr->setFlagLandscapeSetsLocation(setsLocation);
 			result["ok"] = ok;
 			result["current"] = lmgr->getCurrentLandscapeID();
 			return result;
@@ -6747,6 +6769,17 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "beginGuidedSession" || commandName == "endGuidedSession")
+		{
+			StelScriptMgr& manager = StelApp::getInstance().getScriptMgr();
+			const bool begin = commandName == "beginGuidedSession";
+			result["ok"] = begin ? (!s_ohosScriptStartPending.load() && manager.beginGuidedSession())
+				: manager.endGuidedSession();
+			result["active"] = manager.guidedSessionActive();
+			if (!result["ok"].toBool()) result["error"] = "session busy or core unavailable";
+			return result;
+		}
+
 		// playScript
 		if (commandName == "playScript")
 		{
@@ -6756,7 +6789,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "script name is empty";
 				return result;
 			}
-			if (smgr.scriptIsRunning() || s_ohosScriptStartPending.exchange(true))
+			if (smgr.guidedSessionActive() || smgr.scriptIsRunning() || s_ohosScriptStartPending.exchange(true))
 			{
 				result["error"] = "a script is already running or starting";
 				return result;
@@ -9725,6 +9758,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getLandscapeInfo")
 		{
 			const LandscapeMgr* lmgr = GETSTELMODULE(LandscapeMgr);
+			result["mistHorizonEnabled"] = lmgr->getMistHorizonEnabled();
+			result["mistHorizonOpacity"] = lmgr->getMistHorizonOpacity();
+			result["mistHorizonDecorative"] = true;
 			result["ok"] = true;
 			result["id"] = lmgr->getCurrentLandscapeID();
 			result["name"] = lmgr->getCurrentLandscapeName();
@@ -13629,11 +13665,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				if (projector && projector->project(poleJ2000, poleProjected)
 					&& projector->project(poleStar.object->getJ2000EquatorialPos(core), poleStarProjected))
 				{
-					result["poleStarRadiusPixels"] = std::hypot(poleStarProjected[0] - poleProjected[0],
-						poleStarProjected[1] - poleProjected[1]);
-					result["scopeRadiusPixels"] = qMin(
-						result.value(QStringLiteral("poleStarRadiusPixels")).toDouble(),
-						ohosPolarScopeSafeRadius(projector, poleProjected));
+					result["poleStarRadiusPixels"] = polarScopeRadius(poleProjected[0], poleProjected[1],
+						poleStarProjected[0], poleStarProjected[1]);
+					result["scopeRadiusPixels"] = result.value(QStringLiteral("poleStarRadiusPixels"));
 				}
 				appendScreenPosition(poleStar.object->getJ2000EquatorialPos(core),
 					QStringLiteral("poleStarScreenValid"), QStringLiteral("poleStarScreenXRatio"),

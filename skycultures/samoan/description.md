@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Formerly known as the *Navigator Islands*, the Samoan archipelago has been the launch site for countless ocean voyages since its settlement 3,000 years ago by the ancestors of today’s Polynesians. Like other Pacific Islander societies, the Samoans possessed an incredible body of astronomical knowledge, cultivated through generations of scientific observational study (tofāmamao). Over time, indigenous wayfinding science has been almost completely replaced by digital navigation technologies, but the names and stories attached to some celestial features have persisted through oral traditions and colonial era publications. Beside their value as nautical aids, the moon, stars, and planets also marked the lunar months, annual socioreligious festivals, and the timing of agricultural cycles.
+Formerly known as the *Navigator Islands*, the Samoan archipelago has been the launch site for countless ocean voyages since its settlement 3,000 years ago by the ancestors of today’s Polynesians. Like other Pacific Islander societies, the Samoans possessed an incredible body of astronomical knowledge, cultivated through generations of scientific observational study (tofāmamao). The author describes indigenous wayfinding science as having been almost completely replaced over time by digital navigation technologies, but the names and stories attached to some celestial features have persisted through oral traditions and colonial era publications. Beside their value as nautical aids, the moon, stars, and planets also marked the lunar months, annual socioreligious festivals, and the timing of agricultural cycles.
 
 ## Description
 

@@ -1,0 +1,271 @@
+{
+  "schemaVersion": 1,
+  "group": "main",
+  "reviewStatus": "editorial-draft; native review pending",
+  "cultures": [
+    {
+      "id": "modern_chinese",
+      "bodyReviewStatus": "targeted-revisions",
+      "sourceReview": [
+        {
+          "line": 5,
+          "decision": "revise",
+          "reason": "Describe this implementation without equating modern astronomy with Western culture or generalising all Chinese naming practices."
+        },
+        {
+          "line": 11,
+          "decision": "revise",
+          "reason": "Traditional Xingguans are not obsolete because they differ from IAU bounded regions."
+        }
+      ]
+    },
+    {
+      "id": "modern_sternenkarten",
+      "bodyReviewStatus": "targeted-revisions",
+      "sourceReview": [
+        {
+          "line": 9,
+          "decision": "revise",
+          "reason": "An agreed astronomical coordinate partition is not a universal cultural standard."
+        }
+      ]
+    },
+    {
+      "id": "tibetan",
+      "bodyReviewStatus": "prior-introduction-complete; body-attribution-pending",
+      "sourceReview": [
+        {
+          "line": 325,
+          "decision": "pending",
+          "reason": "Readers should not be presumed Western; preserve transliteration systems and specialist uncertainty."
+        }
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "modern_chinese_intro_priority10",
+      "culture": "modern_chinese",
+      "section": "Introduction",
+      "reason": "Describe this implementation without equating modern astronomy with Western culture or generalising all Chinese naming practices.",
+      "sourceBefore": "The Modern (Chinese) Skyculture is a combination of Chinese traditions and Western constellations. The Chinese use combinations of modern constellations and Chinese star names in astronomy. This is the skyculture that the Chinese actually use now, with a great practical value.",
+      "sourceAfter": "This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice.",
+      "requiredLanguages": [
+        "zh_CN",
+        "zh_TW",
+        "en",
+        "es",
+        "fr",
+        "de",
+        "ru",
+        "ja",
+        "ko",
+        "pt_BR"
+      ],
+      "translations": {
+        "en": [
+          "This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice."
+        ],
+        "en_GB": [
+          "This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice."
+        ],
+        "zh_CN": [
+          "本套星空文化将中国传统星名、星官与现代天文学使用的国际天文学联合会星座体系结合展示。两种体系可以同时显示以便对照；本资料并不代表当代中国所有的星空命名实践。"
+        ],
+        "zh_TW": [
+          "本套星空文化將中國傳統星名、星官與現代天文學使用的國際天文學聯合會星座體系結合展示。兩種體系可以同時顯示以便對照；本資料並不代表當代中國所有的星空命名實踐。"
+        ],
+        "zh_HK": [
+          "本套星空文化將中國傳統星名、星官與現代天文學使用的國際天文學聯合會星座體系結合展示。兩種體系可以同時顯示以便對照；本資料並不代表當代中國所有的星空命名實踐。"
+        ],
+        "es": [
+          "Esta cultura celeste combina los nombres tradicionales chinos de estrellas y los Xingguans con el sistema de constelaciones de la UAI utilizado en la astronomía moderna. Ambos sistemas pueden mostrarse juntos para compararlos; esta presentación no pretende representar todas las prácticas contemporáneas de denominación del cielo en China."
+        ],
+        "fr": [
+          "Cette culture céleste associe les noms traditionnels chinois des étoiles et les Xingguans au système de constellations de l’UAI utilisé en astronomie moderne. Les deux systèmes peuvent être affichés ensemble pour être comparés ; cette présentation ne prétend pas représenter toutes les pratiques contemporaines de dénomination du ciel en Chine."
+        ],
+        "de": [
+          "Diese Himmelskultur verbindet traditionelle chinesische Sternnamen und Xingguans mit dem in der modernen Astronomie verwendeten IAU-Sternbildsystem. Beide Systeme können zum Vergleich gemeinsam angezeigt werden; diese Darstellung beansprucht nicht, sämtliche heutigen chinesischen Benennungspraktiken des Himmels zu repräsentieren."
+        ],
+        "ru": [
+          "Эта культура неба объединяет традиционные китайские названия звёзд и сингуань с системой созвездий МАС, используемой в современной астрономии. Обе системы можно отобразить вместе для сравнения; это представление не претендует на охват всех современных практик именования небесных объектов в Китае."
+        ],
+        "ja": [
+          "この星空文化では、中国の伝統的な星名・星官と、現代天文学で使われる国際天文学連合の星座体系を組み合わせて表示します。両体系を同時に表示して比較できますが、この資料は現代中国におけるすべての星空の命名慣行を代表するものではありません。"
+        ],
+        "ko": [
+          "이 하늘 문화는 중국의 전통 별 이름과 성관을 현대 천문학에서 사용하는 국제천문연맹의 별자리 체계와 함께 보여 줍니다. 두 체계를 동시에 표시하여 비교할 수 있으며, 이 자료가 오늘날 중국의 모든 천체 명명 관행을 대표하는 것은 아닙니다."
+        ],
+        "pt_BR": [
+          "Esta cultura celeste combina os nomes tradicionais chineses das estrelas e os Xingguans com o sistema de constelações da UAI utilizado na astronomia moderna. Os dois sistemas podem ser exibidos juntos para comparação; esta apresentação não pretende representar todas as práticas contemporâneas de nomeação do céu na China."
+        ],
+        "lt": [
+          "Ši dangaus kultūra sujungia tradicinius kinų žvaigždžių pavadinimus ir Xingguan su šiuolaikinėje astronomijoje naudojama IAU žvaigždynų sistema. Abi sistemas galima rodyti kartu ir palyginti; šis pristatymas nepretenduoja atspindėti visų šiuolaikinių dangaus objektų įvardijimo būdų Kinijoje."
+        ],
+        "uk": [
+          "Ця картина зоряного неба поєднує традиційні китайські назви зірок і сінгуань із системою сузір’їв МАС, яку використовує сучасна астрономія. Обидві системи можна показувати разом для порівняння; це представлення не претендує на охоплення всіх сучасних практик найменування небесних об’єктів у Китаї."
+        ],
+        "cs": [
+          "Tato kultura oblohy spojuje tradiční čínská jména hvězd a sing-kuany se systémem souhvězdí IAU používaným v moderní astronomii. Oba systémy lze zobrazit společně a porovnat; tento přehled si neklade za cíl zastupovat všechny současné čínské způsoby pojmenovávání oblohy."
+        ],
+        "nl": [
+          "Deze hemelcultuur combineert traditionele Chinese sternamen en Xingguans met het IAU-sterrenbeeldsysteem dat in de moderne astronomie wordt gebruikt. Beide systemen kunnen samen worden weergegeven om ze te vergelijken; deze presentatie beoogt niet alle hedendaagse Chinese naamgevingspraktijken voor de hemel te vertegenwoordigen."
+        ],
+        "sv": [
+          "Denna himmelskultur kombinerar traditionella kinesiska stjärnnamn och Xingguan med IAU:s stjärnbildssystem som används inom modern astronomi. Båda systemen kan visas tillsammans för jämförelse; presentationen gör inte anspråk på att representera alla nutida kinesiska sätt att namnge himlen."
+        ],
+        "sk": [
+          "Táto kultúra oblohy spája tradičné čínske názvy hviezd a Xingguany so systémom súhvezdí IAU používaným v modernej astronómii. Oba systémy možno zobraziť spolu na porovnanie; tento prehľad nemá predstavovať všetky súčasné čínske spôsoby pomenúvania oblohy."
+        ],
+        "bn": [
+          "এই আকাশ-সংস্কৃতিতে ঐতিহ্যবাহী চীনা তারার নাম ও শিংগুয়ানের সঙ্গে আধুনিক জ্যোতির্বিজ্ঞানে ব্যবহৃত আন্তর্জাতিক জ্যোতির্বিজ্ঞান সংঘের নক্ষত্রমণ্ডল ব্যবস্থা একত্রে দেখানো হয়। তুলনার জন্য দুটি ব্যবস্থা একসঙ্গে প্রদর্শন করা যায়; এই উপস্থাপনা চীনের সমসাময়িক সব আকাশ-নামকরণ রীতির প্রতিনিধিত্ব করে না।"
+        ],
+        "gl": [
+          "Esta cultura celeste combina os nomes tradicionais chineses das estrelas e os Xingguans co sistema de constelacións da UAI empregado na astronomía moderna. Ambos os sistemas poden mostrarse xuntos para comparalos; esta presentación non pretende representar todas as prácticas contemporáneas de denominación do ceo en China."
+        ],
+        "hr": [
+          "Ova nebeska kultura povezuje tradicionalne kineske nazive zvijezda i Xingguane sa sustavom zviježđa IAU-a koji se koristi u suvremenoj astronomiji. Oba se sustava mogu prikazati zajedno radi usporedbe; ovaj prikaz ne predstavlja sve suvremene kineske načine imenovanja neba."
+        ],
+        "fi": [
+          "Tämä taivaskulttuuri yhdistää perinteiset kiinalaiset tähtien nimet ja Xingguanit nykyisessä tähtitieteessä käytettyyn IAU:n tähdistöjärjestelmään. Molemmat järjestelmät voidaan näyttää yhdessä vertailua varten; esitys ei pyri edustamaan kaikkia nykyisiä kiinalaisia taivaan nimeämiskäytäntöjä."
+        ],
+        "es_419": [
+          "Esta cultura celeste combina los nombres tradicionales chinos de estrellas y los Xingguans con el sistema de constelaciones de la UAI utilizado en la astronomía moderna. Ambos sistemas pueden mostrarse juntos para compararlos; esta presentación no pretende representar todas las prácticas contemporáneas de denominación del cielo en China."
+        ]
+      },
+      "previousTranslationHashes": {
+        "lt": "4942f4895df120e994972ea12b0d9635f92ce227cf61243107e0211d314b2c2f",
+        "uk": "958e333b5b1f86259bd75a66d243e07c827356e126d9455d00debbdd00bc4546",
+        "cs": "26d264aa40223a2f39aafee933ff616c06438957fae4b0315841bc0190356ab4",
+        "nl": "7b2952d51459fa170657c9f90007189941b67763f859d115c47addf2f5a5c508",
+        "zh_CN": "fc9f6e65696cfd248d426e283d7568ae9517a5410e8d27731aca43e5906a21f4",
+        "sv": "d2b43fc4299074e8d04bbbbc0d783253a10d4ab4fee6a438ff7b17422dc16b29",
+        "zh_TW": "83dc8a84a3afe335f667bbe3068ec0b4c06005f9f83667512b1d89f10a2f4353",
+        "sk": "733279ffaaa99a992ab703a665716ecdee626a0eb3ac9f63deb9aac5675cb578",
+        "es": "70af7938c066beb2b96878b67c0d3871d2c344141f8830578aff92208a558e27",
+        "bn": "2d87760aaa5251f83ea68f4169be0ccd1bd082dec13642011a066107d691a14d",
+        "en_GB": "9894e6bc53a0897bd85e1ef4c7453e378ebc4da6fd8cc91840630cf1e6762f36",
+        "es_419": "70af7938c066beb2b96878b67c0d3871d2c344141f8830578aff92208a558e27",
+        "de": "b93238850b830067a4133a5b2a52f2daab751feda5d19dd0531cde4f75a9a243",
+        "ja": "1d9991879b50bdb6cb43095126708326f38883f1c1e1c6197b23c09f78da24d6",
+        "gl": "7eeee418cb532454f041b1142042c73eb73fb7894c8f570f1ae633ae2177ec80",
+        "zh_HK": "c8771e8ad30513d06d2b40c3221ef15ddafda5486a31410100a9c374205697d9",
+        "ru": "a0d2861f7869448294b640d7fe8b124d9e01e413cf7f36fbfcc71ef9be991075",
+        "hr": "a4c3c9c387584f0db5b03cc509617c4f0d971712dd86d71384ef48cbb8b5ab1e",
+        "fi": "9dd4116064248a6ac000d19d4def2e6f2fc7ff7b64d55f0f4a52e21733114191"
+      }
+    },
+    {
+      "id": "modern_sternenkarten_intro_priority10",
+      "culture": "modern_sternenkarten",
+      "section": "Introduction",
+      "reason": "An agreed astronomical coordinate partition is not a universal cultural standard.",
+      "sourceBefore": "### Figures in the sky\n\nPeople have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.\n\nEach culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. This western sky culture established itself as the standard in modern astronomy.",
+      "sourceAfter": "### Figures in the sky\n\nPeople have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.\n\nEach culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects.",
+      "requiredLanguages": [
+        "zh_CN",
+        "zh_TW",
+        "en",
+        "es",
+        "fr",
+        "de",
+        "ru",
+        "ja",
+        "ko",
+        "pt_BR"
+      ],
+      "translations": {
+        "en": [
+          "### Figures in the sky",
+          "People have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.",
+          "Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects."
+        ],
+        "zh_TW": [
+          "### 天空中的圖像",
+          "人類或許自古以來就仰望星空。有些人可能會好奇：那些散布在天幕上的微小光點，究竟意味著甚麼？他們在想像中將星辰彼此連接，勾勒出各種圖案，從而創造出屬於自己的星座。",
+          "不同的文化對夜空中的景象有著不同的理解，因此各自在天幕上描繪出迥異的圖形。在西方世界，一種星空文化逐漸形成，它在多種文化影響下，尤其深受希臘神話的塑造。現代天文學使用國際天文學聯合會約定的星座名稱與邊界定位天體。"
+        ],
+        "fr": [
+          "### Figures dans le ciel",
+          "Les êtres humains ont probablement toujours levé les yeux vers les étoiles. Certains se demandaient peut-être ce que signifiaient ces petits points lumineux, là-haut. En reliant mentalement les étoiles pour former des images, ils créaient leurs propres constellations.",
+          "Chaque culture avait ses propres idées sur le ciel nocturne et y dessinait donc des figures différentes. Dans le monde occidental s’est développée une culture céleste fortement marquée, entre autres influences, par la mythologie grecque. L’astronomie moderne utilise les noms et les limites de constellations convenus par l’UAI pour localiser les objets."
+        ],
+        "ja": [
+          "### 空に描かれる姿",
+          "人々はおそらく古くから星を見上げてきました。空にある小さな光の点に、どんな意味があるのかと考えた人もいたでしょう。想像の中で星を結んで形を作り、それぞれの星座を生み出しました。",
+          "夜空の出来事についての考え方は文化ごとに異なり、空に描く姿もさまざまでした。西洋では、他の影響とともにギリシャ神話の強い影響を受けた星空文化が発達しました。現代天文学は天体の位置を示すために国際天文学連合で合意された星座名と境界を使います。"
+        ],
+        "ko": [
+          "### 하늘에 그린 모습",
+          "사람들은 아마 아주 오래전부터 별을 올려다보았을 것입니다. 하늘의 작은 빛점들이 무엇을 뜻하는지 궁금해한 사람들도 있었겠지요. 사람들은 상상 속에서 별들을 이어 그림을 만들며 자신들만의 별자리를 만들어 냈습니다.",
+          "밤하늘에 대한 생각은 문화마다 달랐기에 하늘에 그린 모습도 서로 달랐습니다. 서양에서는 다른 영향들과 더불어 그리스 신화의 영향을 크게 받은 하늘 문화가 발달했습니다. 현대 천문학은 천체의 위치를 나타내기 위해 국제천문연맹이 합의한 별자리 이름과 경계를 사용합니다."
+        ],
+        "pt_BR": [
+          "### Figuras no céu",
+          "As pessoas provavelmente sempre olharam para as estrelas. Algumas talvez se perguntassem o que significavam aqueles pequenos pontos de luz lá em cima. Em seus pensamentos, ligavam as estrelas para formar imagens e assim criavam suas próprias constelações.",
+          "Cada cultura tinha ideias diferentes sobre o que acontecia no céu noturno e, assim, desenhava figuras diferentes no céu. No mundo ocidental, desenvolveu-se uma cultura celeste fortemente influenciada pela mitologia grega, entre outras influências. A astronomia moderna utiliza os nomes e limites de constelações acordados pela UAI para localizar objetos."
+        ],
+        "lt": [
+          "### Figūros danguje\nŽmonės tikriausiai visada žvelgė į žvaigždes. Kai kurie iš jų galėjo susimąstyti, ką reiškia tie maži šviesos taškeliai viršuje. Savo mintyse jie sujungė žvaigždes, kad sudarytų vaizdus, ir taip sukūrė savo unikalius žvaigždynus.",
+          "Kiekviena kultūra turėjo skirtingų idėjų apie tai, kas vyksta naktiniame danguje. Todėl kiekviena kultūra „nutapė“ skirtingas figūras danguje. Vakarų pasaulyje susiformavo dangaus kultūra, kuri, be kitų įtakų, buvo stipriai paveikta Graikų mitologijos. Šiuolaikinė astronomija objektams nustatyti naudoja IAU sutartus žvaigždynų pavadinimus ir ribas."
+        ],
+        "uk": [
+          "### Фігури на небі",
+          "Напевно, люди завжди дивилися на зірки. Дехто з них міг би запитати, що означають ті маленькі крапки світла там, нагорі. У своїх думках вони з’єднували зірки в образи і таким чином створювали свої власні сузір’я.",
+          "У кожній культурі були власні уявлення щодо того, що відбувається на нічному небі. Тому кожна культура малювала різні фігури на небі. У західному світі виникла картина зоряного неба, яку, разом із іншими впливами, було значною мірою засновано на грецькій міфології. Сучасна астрономія використовує узгоджені МАС назви й межі сузір’їв для визначення положення об’єктів."
+        ],
+        "nl": [
+          "### Figuren in de hemel",
+          "Mensen hebben waarschijnlijk altijd naar de sterren gekeken. Sommigen vroegen zich misschien af wat die kleine lichtpuntjes daarboven betekenden. In gedachten verbonden ze de sterren tot beelden en creëerden zo hun eigen sterrenbeelden.",
+          "Elke cultuur had andere ideeën over wat er aan de nachtelijke hemel gebeurde. En dus schilderde elke cultuur andere figuren aan de hemel. In de westerse wereld ontstond een hemelcultuur die, samen met andere invloeden, sterk beïnvloed was door de Griekse mythologie. De moderne astronomie gebruikt de overeengekomen sterrenbeeldnamen en -grenzen van de IAU om objecten te lokaliseren."
+        ],
+        "zh_CN": [
+          "### 天空中的图像",
+          "人类或许自古以来就仰望星空。有些人可能会好奇：那些散布在天幕上的微小光点，究竟意味着什么？他们在想象中将星辰彼此连接，勾勒出各种图案，从而创造出属于自己的星座。",
+          "不同的文化对夜空中的景象有着不同的理解，因此各自在天幕上描绘出迥异的图形。在西方世界，一种星空文化逐渐形成，它在多种文化影响下，尤其深受希腊神话的塑造。现代天文学使用国际天文学联合会约定的星座名称与边界定位天体。"
+        ],
+        "sv": [
+          "### Figurer på himlen",
+          "Människor har förmodligen alltid tittat upp mot stjärnorna. En del av dem kanske undrade vad de små ljuspunkterna där uppe betydde. I sina tankar kopplade de ihop stjärnorna till bilder och skapade på så sätt sina alldeles egna konstellationer.",
+          "Varje kultur hade olika idéer om vad som hände på natthimlen. Och därför målade varje kultur olika figurer på himlen. I västvärlden växte det fram en himmelskultur som bland annat var starkt influerad av den grekiska mytologin. Modern astronomi använder IAU:s överenskomna stjärnbildsnamn och gränser för att lokalisera objekt."
+        ],
+        "es": [
+          "### Figuras en el cielo",
+          "Probablemente, la gente siempre haya mirado hacia las estrellas. Algunos de ellos podrían preguntarse qué significaban esos pequeños puntos de luz allí arriba. En sus pensamientos unieron las estrellas para formar imágenes y crearon así sus propias constelaciones.",
+          "Cada cultura tenía ideas diferentes sobre lo que sucedía en el cielo nocturno. Y así cada cultura pintó diferentes figuras en el cielo. En el mundo occidental surgió una cultura estelar que, junto con otras influencias, estuvo fuertemente influida por la mitología griega. La astronomía moderna utiliza los nombres y límites de constelaciones acordados por la UAI para localizar objetos."
+        ],
+        "es_419": [
+          "### Figuras en el cielo",
+          "Probablemente, la gente siempre haya mirado hacia las estrellas. Algunos de ellos podrían preguntarse qué significaban esos pequeños puntos de luz allí arriba. En sus pensamientos unieron las estrellas para formar imágenes y crearon así sus propias constelaciones.",
+          "Cada cultura tenía ideas diferentes sobre lo que sucedía en el cielo nocturno. Y así cada cultura pintó diferentes figuras en el cielo. En el mundo occidental surgió una cultura estelar que, junto con otras influencias, estuvo fuertemente influida por la mitología griega. La astronomía moderna utiliza los nombres y límites de constelaciones acordados por la UAI para localizar objetos."
+        ],
+        "de": [
+          "### Figuren am Himmel",
+          "Die Menschen haben wohl schon immer zu den Sternen hinaufgesehen. Einige von ihnen fragten sich vielleicht, was diese kleinen Lichtpunkte dort droben zu bedeuten hätten. Sie verbanden die Sterne in Gedanken zu Bildern und schufen damit ihre ureigenen Sternbilder.",
+          "Jeder Kulturkreis hatte andere Vorstellungen von dem, was sich am Nachthimmel abspielte. Und so malte jede Kultur andere Figuren in den Himmel. In der westlichen Welt entstand eine Sternbildkultur, die neben anderen Einflüssen stark von der griechischen Mythologie geprägt war. Die moderne Astronomie verwendet die vereinbarten Sternbildnamen und -grenzen der IAU zur Ortsangabe."
+        ],
+        "gl": [
+          "### Figuras no ceo ",
+          "A xente probablemente sempre mirou para as estrelas. Algúns poderían preguntarse que significaban eses pequenos puntos de luz, alí arriba. Nos seus pensamentos conectaron as estrelas para formar imaxes e así crearon as súas propias constelacións. \nCada cultura tiña ideas diferentes sobre o que pasaba no ceo nocturno. E así cada cultura pintou diferentes figuras no ceo. No mundo occidental xurdiu unha cultura do ceo que, xunto con outras influencias, estivo fortemente influenciada pola mitoloxía grega. A astronomía moderna emprega os nomes e límites das constelacións acordados pola UAI para localizar obxectos."
+        ],
+        "ru": [
+          "### Фигуры в небе",
+          "Люди, вероятно, всегда смотрели на звезды. Некоторые из них могли бы задаться вопросом, что означают эти маленькие точки света там, наверху. В своих мыслях они соединяли звезды, чтобы сформировать образы, и таким образом создавали свои собственные созвездия",
+          "У каждой культуры были разные представления о том, что происходит в ночном небе. И поэтому каждая культура рисовала разные фигуры на небе. В западном мире возникла культура неба, которая, наряду с другими влияниями, находилась под сильным влиянием греческой мифологии. Современная астрономия использует согласованные МАС названия и границы созвездий для определения положения объектов."
+        ]
+      },
+      "previousTranslationHashes": {
+        "lt": "3fd153d0e255aa59a020fd8dd57541ac79713d67981999c37394f940c5eab491",
+        "uk": "a7acd92fddf0a4f787017e67724315b063f8ed325fe53db69dc97df9bb334d56",
+        "nl": "18b631be41add5c56ed15bb20900d4770a07354315d06062ea2087defea97282",
+        "zh_CN": "5bf4627efba00ba76b94701765538f4fbae8d7a450c3015715cf626586358b0b",
+        "sv": "c3a12f82429018fdb7b4bf33cbd1e166c60bdd6130e8faabd6fb0ee5db60ed8d",
+        "es": "df076389393d417a71f42119de64a97b4c0db55a521b3a9ba8e0cc518aa38a48",
+        "es_419": "df076389393d417a71f42119de64a97b4c0db55a521b3a9ba8e0cc518aa38a48",
+        "de": "7f5d9cb06784506e95c1e267c6b3693e31468189dd6a3b35502a29c8404b5a72",
+        "gl": "ebc17e8667e7d2b7bfbd72fec26e358edc288779e67e646f23f2407d1648301c",
+        "ru": "4c15f07b597952ebe76ad89d5c32947955bcaa7c74b4e2f2e73caf90ddf43022"
+      }
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import html
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -13,11 +15,21 @@ def normalized(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
+def prose(text):
+    text = re.sub(r'!\[[^\]]*\]\([^)]*\)', '', text)
+    text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r'^#+\s*', '', text, flags=re.M)
+    text = re.sub(r'\[#\d+\]', '', text)
+    return normalized(html.unescape(text).replace('**', '').replace('*', '').replace('_', ''))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Live CLI regression for shipped culture editorial resources")
     parser.add_argument("--device", required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--languages", nargs="+", help="Optional shipped-language subset; defaults to all 43")
+    parser.add_argument("--languages", nargs="+", help="Optional shipped-language subset; defaults to the ten priority languages")
+    parser.add_argument("--cultures", nargs="+", help="Optional bundled-culture subset; defaults to all bundled descriptions")
     args = parser.parse_args()
 
     def command(name, payload=None):
@@ -34,20 +46,27 @@ def main():
         return response
 
     context = json.loads((ROOT / "data/skyculture_editorial_context.json").read_text())
-    languages = args.languages or context["languages"]
+    languages = args.languages or context["priorityLanguages"]
     if any(language not in context["languages"] for language in languages):
         parser.error("--languages must contain only shipped languages")
-    rules = json.loads((ROOT / "docs/harmonyos/skyculture-passage-revisions.json").read_text())["rules"]
+    spec = importlib.util.spec_from_file_location('reviews', ROOT / 'scripts/review-skyculture-passages.py')
+    reviews = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(reviews)
+    rules, sections = reviews.load_reviews()
+    available_cultures = sorted(file.parent.name for file in (ROOT / 'skycultures').glob('*/description.md'))
+    cultures = args.cultures or available_cultures
+    if any(culture not in available_cultures for culture in cultures):
+        parser.error("--cultures must contain only bundled cultures")
     initial_language = command("getAppState")["language"]
     initial_culture = command("getSkyCultureDetails")["id"]
-    report = {"scope": "Six revised passages and editorial notes, not full-corpus translation certification",
+    report = {"scope": "Priority-language introductions, registered passages and source attribution across bundled cultures; not full-body or native-language certification",
               "checks": [], "errors": [], "restored": False}
     try:
         for language in languages:
             response = command("setLanguage", language)
             if response.get("appLanguage") != language:
                 raise RuntimeError(f"Language mismatch: {language}: {response}")
-            for culture in dict.fromkeys(rule["culture"] for rule in rules):
+            for culture in cultures:
                 command("setSkyCulture", culture)
                 details = command("getSkyCultureDetails")
                 description = normalized(details.get("description", ""))
@@ -60,17 +79,37 @@ def main():
                     "narration": normalized(details.get("narration", "")),
                 }
                 for surface, text in surfaces.items():
+                    attribution = context['sourceAttribution'].get(language, context['sourceAttribution']['en'])['body']
+                    if normalized(attribution) not in text:
+                        issues.append(f"{surface}: source attribution missing")
                     if normalized(context["presentation"][language]["body"]) not in text:
                         issues.append(f"{surface}: localized presentation note missing")
                     if culture in context["chinaRelatedCultureIds"]:
                         if normalized(context["chinaRelated"][language]["body"]) not in text:
                             issues.append(f"{surface}: localized China-related note missing")
                 passages = []
+                for section in sections:
+                    if section["culture"] != culture:
+                        continue
+                    for paragraph in section["translations"].get(language, []):
+                        expected = prose(paragraph)
+                        if not expected or '<table' in paragraph or '|---' in paragraph:
+                            continue
+                        if expected not in prose(description):
+                            issues.append(f"{section['id']}: translated paragraph missing")
                 for rule in rules:
                     if rule["culture"] != culture:
                         continue
                     translation = rule["translations"].get(language, {})
                     revised = translation.get("after", rule["sourceAfter"])
+                    for section in sections:
+                        if section["culture"] == culture:
+                            for index, paragraph in enumerate(section["sourceAfter"].split('\n\n')):
+                                if paragraph == rule["sourceAfter"]:
+                                    paragraphs = section["translations"].get(language, [])
+                                    if len(paragraphs) > index:
+                                        revised = paragraphs[index]
+                                        translation = {"after": revised}
                     if normalized(revised) in description:
                         mode = "translated" if translation and language != "en" else "source"
                     elif normalized(rule["sourceAfter"]) in description:

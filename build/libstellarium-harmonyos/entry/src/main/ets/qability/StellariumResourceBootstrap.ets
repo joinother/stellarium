@@ -9,8 +9,8 @@ const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
 const MULTILINGUAL_SEARCH_INDEX = 'data/search/multilingual-sky-aliases.tsv';
 const CATALOG_MANIFEST = 'data/ohos/catalog-manifest.json';
-const SKYCULTURE_ART_COMPAT_MARKER = 'data/ohos/.skyculture_art_rgba_v1';
-const SKYCULTURE_EDITORIAL_MARKER = 'data/ohos/.skyculture_editorial_20260906_v1';
+const SKYCULTURE_ART_COMPAT_MARKER = 'data/ohos/skyculture_art_rgba_v1.txt';
+const SKYCULTURE_EDITORIAL_MARKER = 'data/ohos/.skyculture_editorial_20260908_v4';
 const DEEP_STAR_CATALOG = 'stars/hip_gaia3/stars_4_1v0_6.cat';
 const DEEP_STAR_CATALOG_BYTES = 55759776;
 const RAW_NEBULAE_ROOT = `${RAW_ROOT}/nebulae/default`;
@@ -281,10 +281,17 @@ function refreshSkyCultureEditorialResources(appContext: common.ApplicationConte
   const descriptionDomain = 'translations/stellarium-skycultures-descriptions';
   const paths: Array<string> = [
     'data/skyculture_editorial_context.json',
-    'skycultures/japanese/description.md',
-    'skycultures/chinese_manchu/description.md',
-    'skycultures/tibetan/description.md',
   ];
+  const cultures = appContext.resourceManager.getRawFileListSync(`${RAW_ROOT}/skycultures`);
+  for (const culture of cultures) {
+    if (!/^[A-Za-z0-9_-]+$/.test(culture)) {
+      continue;
+    }
+    const files = appContext.resourceManager.getRawFileListSync(`${RAW_ROOT}/skycultures/${culture}`);
+    if (files.includes('description.md')) {
+      paths.push(`skycultures/${culture}/description.md`);
+    }
+  }
   const catalogs = appContext.resourceManager.getRawFileListSync(`${RAW_ROOT}/${descriptionDomain}`);
   for (const name of catalogs) {
     if (/^[A-Za-z0-9_@-]+\.qm$/.test(name)) {
@@ -383,11 +390,22 @@ async function extractRawTreeAsync(appContext: common.ApplicationContext, rawDir
   }
 }
 
+function hasStartupResourceFiles(installRoot: string): boolean {
+  const required: Array<string> = [
+    MARKER, SKYCULTURE_ART_COMPAT_MARKER,
+    'translations/stellarium/zh_CN.qm', 'translations/stellarium-sky/zh_CN.qm',
+    'translations/stellarium-skycultures/zh_CN.qm', 'translations/stellarium-scripts/zh_CN.qm',
+    'skycultures/modern/index.json', 'skycultures/modern/illustrations/andromeda.png',
+    'scripts/constellations_tour.ssc', 'data/default_cfg.ini'
+  ];
+  return required.every((path: string) => exists(`${installRoot}/${path}`));
+}
+
 export async function prepareStellariumResourcesAsync(appContext: common.ApplicationContext): Promise<void> {
   const installRoot = `${appContext.filesDir}/stellarium`;
   const manifestPath = `${installRoot}/${CATALOG_MANIFEST}`;
   const deepStarPath = `${installRoot}/${DEEP_STAR_CATALOG}`;
-  if (exists(`${installRoot}/${MARKER}`)) {
+  if (hasStartupResourceFiles(installRoot)) {
     await writeRawFileAsync(appContext, `${RAW_ROOT}/${CATALOG_MANIFEST}`, manifestPath);
     await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`,
       `${installRoot}/translations/stellarium-scripts/zh_CN.qm`);
@@ -416,6 +434,9 @@ export async function prepareStellariumResourcesAsync(appContext: common.Applica
   await writeRawFileAsync(appContext, `${RAW_ROOT}/${DEEP_STAR_CATALOG}`, deepStarPath);
   if (fileSize(deepStarPath) !== DEEP_STAR_CATALOG_BYTES) {
     throw new Error(`Deep star catalogue size mismatch: ${fileSize(deepStarPath)}`);
+  }
+  if (!hasStartupResourceFiles(installRoot)) {
+    throw new Error('Startup resources are incomplete after asynchronous extraction');
   }
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] asynchronous Stellarium resource extraction completed in ${Date.now() - startedAt} ms`);
@@ -825,8 +846,7 @@ export function prepareStellariumResources(appContext: common.ApplicationContext
   }
 
   if (needExtract) {
-    hilog.info(LOG_DOMAIN, LOG_TAG, `Extracting Stellarium raw resources to ${installRoot}`);
-    extractRawTree(appContext, RAW_ROOT, installRoot);
+    throw new Error('Startup resources require asynchronous repair before Qt initialization');
   }
 
   refreshSkyCultureEditorialResources(appContext, installRoot);

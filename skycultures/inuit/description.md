@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Inuit are the native population of the Arctic. 
+Inuit are among the Indigenous peoples of the Arctic.
 
 ## Description
 

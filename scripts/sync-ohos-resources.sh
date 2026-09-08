@@ -167,6 +167,7 @@ if [ -n "$FFMPEG_BIN" ]; then
     esac
   done < <(find "$DST/skycultures" -type f -path '*/illustrations/*' -iname '*.png' -print0)
   echo "Sky-culture illustration compatibility pass: converted $art_converted grayscale/indexed PNG(s)"
+  printf 'sky-culture-art-rgba-v1\n' > "$DST/data/ohos/skyculture_art_rgba_v1.txt"
 else
   echo "WARNING: ffmpeg not found; 16-bit texture previews may fail on some devices" >&2
 fi

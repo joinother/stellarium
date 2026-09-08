@@ -265,6 +265,7 @@ class LandscapeMgr : public StelModule
 		   READ getCurrentLandscapeID
 		   WRITE setCurrentLandscapeID
 		   NOTIFY currentLandscapeChanged)
+	Q_PROPERTY(bool mistHorizonEnabled READ getMistHorizonEnabled WRITE setMistHorizonEnabled NOTIFY mistHorizonEnabledChanged)
 	Q_PROPERTY(QStringList allLandscapeNames
 		   READ getAllLandscapeNames
 		   NOTIFY landscapesChanged)
@@ -454,6 +455,9 @@ public slots:
 	bool getFlagLandscape() const;
 	//! Set flag for displaying Landscape.
 	void setFlagLandscape(const bool displayed);
+	bool getMistHorizonEnabled() const { return mistHorizonEnabled; }
+	void setMistHorizonEnabled(bool enabled);
+	float getMistHorizonOpacity() const { return mistHorizon.opacity; }
 
 	//! Get whether the landscape is currently visible. If true, objects below landscape's limiting altitude limit can be omitted.
 	bool getIsLandscapeFullyVisible() const;
@@ -753,6 +757,7 @@ signals:
 	void defaultMinimalBrightnessChanged(const double value);
 	void setFlagEnvironmentAutoEnableChanged(const bool enabled);
 	void landscapeTransparencyChanged(const double value);
+	void mistHorizonEnabledChanged(bool enabled);
 	void flagLandscapeUseTransparencyChanged(const bool value);
 
 	//! Emitted whenever the default landscape is changed
@@ -833,6 +838,8 @@ private:
 	Cardinals* cardinalPoints;		// Cardinals points
 	Landscape* landscape;			// The landscape i.e. the fog, the ground and "decor"
 	Landscape* oldLandscape;		// Used only during transitions to newly loaded landscape.
+	LandscapeMist mistHorizon;
+	bool mistHorizonEnabled = true;
 
 	// Used to display error messages: e.g. when atmosphere model fails
 	LinearFader messageFader;

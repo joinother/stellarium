@@ -1,5 +1,7 @@
 # Stellarium HarmonyOS 签名与打包说明
 
+> **当前流程（2026-09-06）：请使用 [RELEASE-PACKAGING.md](RELEASE-PACKAGING.md)。** 本机已有独立发布签名，当前产品已由用户授权切换到 `release`。下文是 2026-07 的历史排障档案，其中旧包名、旧签名状态及命令不适用于当前发布，勿照抄执行或恢复旧密钥。
+
 给 WorkBuddy / 新 Agent 使用。
 日期：2026-07-21（原始由 Codex 撰写，2026-07-22 由 WorkBuddy 校正签名材料章节）
 目标分支：`openharmony-preview-v1`

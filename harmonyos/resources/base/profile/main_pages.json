@@ -1,7 +1,6 @@
 {
   "src": [
-    "pages/PrivacyBootstrap",
-    "pages/MainWindowNativeNode",
+    "pages/ApplicationRoot",
     "pages/FloatWindowNativeNode",
     "pages/SubWindowNativeNode",
     "pages/UiExtensionNativeNode"

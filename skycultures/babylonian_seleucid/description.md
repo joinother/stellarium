@@ -7,7 +7,7 @@ The Seleucid Era in Babylonian history is the era of the successors of Alexander
 <p>This <em>Seleucid</em> or <em>Late Babylonian sky culture</em> is supposed to show the (estimated) state of Babylonian constellations contemporary to the Greek culture. There is no description of the full sky. Changes with regard to the MUL.APIN version have certainly applied in the zodiac since several centuries. This can be stated for sure because in this time, there is a blossoming zodiacal astrology. Since there had been no zodiac in MUL.APIN and the zodiac developed around the middle of the -1st millennium, in the 2nd half of the 1st millennium BCE, there had been different versions of the constellations around the ecliptic.
  </p>
 
- However, we do not know much about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture.
+ However, the available evidence provides little information about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture.
 
 ## Description
 

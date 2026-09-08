@@ -40,6 +40,7 @@
 #include <QRegularExpression>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
+#include <QOpenGLTexture>
 
 namespace
 {
@@ -518,6 +519,178 @@ LandscapeOldStyle::~LandscapeOldStyle()
 	landscapeLabels.clear();
 }
 
+LandscapeMist::LandscapeMist() = default;
+LandscapeMist::~LandscapeMist() = default;
+
+void LandscapeMist::prepareResources()
+{
+	if (ridgeTexture && noiseTexture) return;
+	constexpr int samples = 1024;
+	constexpr int layers = 5;
+	constexpr int noiseSize = 128;
+	const auto fraction = [](double value) { return value - std::floor(value); };
+	const auto hash = [&fraction](double horizontal, double vertical) {
+		const double first = fraction(horizontal * .1031);
+		const double second = fraction(vertical * .1031);
+		const double dot = first * (second + 33.33) + second * (first + 33.33) + first * (first + 33.33);
+		return fraction((first + second + 2. * dot) * (first + dot));
+	};
+	const auto ridgeNoise = [&hash, &fraction](double longitude, int layer, int count) {
+		const double position = (longitude / (2. * M_PI) + .5) * count;
+		const int cell = static_cast<int>(std::floor(position));
+		const int first = (cell % count + count) % count;
+		const int next = (first + 1) % count;
+		const double blend = fraction(position);
+		const double weight = blend * .65 + blend * blend * (3. - 2. * blend) * .35;
+		return hash(first, layer) * (1. - weight) + hash(next, layer) * weight - .5;
+	};
+	QVector<float> heights(samples * layers);
+	for (int layer = 0; layer < layers; ++layer)
+		for (int sample = 0; sample < samples; ++sample)
+		{
+			const double longitude = (static_cast<double>(sample) / samples - .5) * (2. * M_PI);
+			heights[layer * samples + sample] = static_cast<float>(
+				ridgeNoise(longitude, layer + 7, 17) * .065 + ridgeNoise(longitude, layer + 19, 41) * .022 +
+				ridgeNoise(longitude, layer + 37, 83) * .007 + std::sin(longitude * 2. + layer * 2.1) * .016);
+		}
+	ridgeTexture.reset(new QOpenGLTexture(QOpenGLTexture::Target2D));
+	ridgeTexture->setSize(samples, layers);
+	ridgeTexture->setFormat(QOpenGLTexture::R16F);
+	ridgeTexture->setMipLevels(1);
+	ridgeTexture->allocateStorage(QOpenGLTexture::Red, QOpenGLTexture::Float32);
+	ridgeTexture->setData(QOpenGLTexture::Red, QOpenGLTexture::Float32, heights.constData());
+	ridgeTexture->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
+	ridgeTexture->setWrapMode(QOpenGLTexture::DirectionS, QOpenGLTexture::Repeat);
+	ridgeTexture->setWrapMode(QOpenGLTexture::DirectionT, QOpenGLTexture::ClampToEdge);
+	QVector<quint8> noise(noiseSize * noiseSize);
+	for (int row = 0; row < noiseSize; ++row)
+		for (int column = 0; column < noiseSize; ++column)
+			noise[row * noiseSize + column] = static_cast<quint8>(hash(column, row) * 255.);
+	noiseTexture.reset(new QOpenGLTexture(QOpenGLTexture::Target2D));
+	noiseTexture->setSize(noiseSize, noiseSize);
+	noiseTexture->setFormat(QOpenGLTexture::R8_UNorm);
+	noiseTexture->setMipLevels(1);
+	noiseTexture->allocateStorage(QOpenGLTexture::Red, QOpenGLTexture::UInt8);
+	noiseTexture->setData(QOpenGLTexture::Red, QOpenGLTexture::UInt8, noise.constData());
+	noiseTexture->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
+	noiseTexture->setWrapMode(QOpenGLTexture::Repeat);
+	if (!ridgeTexture->isStorageAllocated() || !noiseTexture->isStorageAllocated())
+		qWarning() << "Mist horizon cache allocation failed";
+}
+
+void LandscapeMist::draw(StelCore* core, bool onlyPolygon)
+{
+	if (onlyPolygon || !core->getFlagClearSky()) return;
+	if (!initialized) initGL();
+	prepareResources();
+	if (!ridgeTexture->isStorageAllocated() || !noiseTexture->isStorageAllocated()) return;
+	const StelProjectorP projector = core->getProjection(core->getAltAzModelViewTransform(StelCore::RefractionOff));
+	if (!renderProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
+	{
+		prevProjector = projector;
+		renderProgram.reset(new QOpenGLShaderProgram);
+		const auto vertexShader = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + QByteArray(R"(
+ATTRIBUTE highp vec2 vertex;
+VARYING highp vec2 position;
+void main() { position = vertex; gl_Position = vec4(vertex, 0., 1.); }
+)");
+		const auto fragmentShader = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + QByteArray(R"(
+#ifdef GL_ES
+precision highp float;
+#endif
+)") + projector->getUnProjectShader() + QByteArray(R"(
+VARYING highp vec2 position;
+uniform mat4 inverseProjection;
+uniform float clockTime;
+uniform float opacity;
+uniform float daylight;
+uniform bool nightVision;
+uniform vec3 sunDirection;
+uniform highp sampler2D ridgeTexture;
+uniform highp sampler2D noiseTexture;
+float softNoise(vec2 point) {
+    vec2 cell = floor(point);
+    vec2 blend = fract(point);
+    blend = blend * blend * (3. - 2. * blend);
+    return texture(noiseTexture, (cell + blend + .5) / 128.).r;
+}
+void main() {
+    vec4 projected = inverseProjection * vec4(position, 0., 1.);
+    bool valid = false;
+    vec3 direction = normalize(unProject(projected.x, projected.y, valid).xyz);
+    float altitude = asin(clamp(direction.z, -1., 1.));
+    float pixelWidth = fwidth(altitude);
+    if (!valid || direction.z > .14 || direction.z < -.976) { FRAG_COLOR = vec4(0.); return; }
+    float twilight = (1. - smoothstep(.02, .24, abs(sunDirection.z))) * smoothstep(-.22, -.04, sunDirection.z);
+    float sunward = .4 + .6 * pow(max(0., dot(direction.xy, sunDirection.xy)), 2.);
+    vec3 farTint = mix(vec3(.055, .075, .125), vec3(.30, .39, .52), daylight);
+    farTint = mix(farTint, vec3(.37, .25, .27), twilight * sunward * .72);
+    vec3 nearTint = mix(vec3(.006, .010, .021), vec3(.085, .13, .21), daylight);
+    nearTint = mix(nearTint, vec3(.13, .075, .095), twilight * sunward * .45);
+    vec3 color = vec3(0.);
+    float coverage = 0.;
+    float ridgePosition = atan(direction.y, direction.x) / 6.28318530718 + .5 + .5 / 1024.;
+    for (int layer = 0; layer < 5; ++layer) {
+        float depth = float(layer);
+        float ridgeHeight = texture(ridgeTexture, vec2(ridgePosition, (depth + .5) / 5.)).r;
+        float height = .012 - depth * .032 - depth * depth * .008 + ridgeHeight * (1. + depth * .32);
+        float softness = max(pixelWidth * .85, .0008 + depth * .0007);
+        float density = (1. - smoothstep(height - softness, height + softness, altitude)) * .88;
+        float aerialFade = smoothstep(-.65, -.08, altitude);
+        density *= aerialFade;
+        vec3 tint = mix(farTint, nearTint, pow(depth / 4., .7));
+        color = tint * density + color * (1. - density);
+        coverage = density + coverage * (1. - density);
+    }
+    vec2 wind = vec2(clockTime * .012, -clockTime * .007);
+    vec2 cloudPoint = direction.xy * 9. + vec2(altitude * 7., altitude * 11.);
+    float billow = softNoise(cloudPoint * .5 + wind);
+    float detail = softNoise(cloudPoint * 1.15 - wind * .35 + billow * .8);
+    float cloudField = billow * .72 + detail * .28;
+    float fogWindow = smoothstep(-.72, -.38, altitude) * (1. - smoothstep(-.19, -.045, altitude));
+    float fogDensity = smoothstep(.36, .72, cloudField) * fogWindow * (.20 + daylight * .12);
+    vec3 fogTint = mix(farTint, nearTint, .35) * (.9 + detail * .1);
+    color = fogTint * fogDensity + color * (1. - fogDensity);
+    coverage = fogDensity + coverage * (1. - fogDensity);
+    float lowerFade = smoothstep(-1.35, -.36, altitude);
+    if (nightVision) color = vec3(dot(color, vec3(.3, .59, .11)), 0., 0.);
+    FRAG_COLOR = vec4(color / max(coverage, .001), coverage * opacity * lowerFade);
+}
+)");
+		if (!renderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShader) ||
+			!renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShader))
+		{
+			qWarning() << "Mist horizon shader:" << renderProgram->log();
+			return;
+		}
+		renderProgram->bindAttributeLocation("vertex", SKY_VERTEX_ATTRIB_INDEX);
+		if (!StelPainter::linkProg(renderProgram.get(), "Mist horizon")) return;
+	}
+	if (!renderProgram->isLinked() || opacity <= 0.001f) return;
+	renderProgram->bind();
+	renderProgram->setUniformValue("inverseProjection", projector->getProjectionMatrix().toQMatrix().inverted());
+	renderProgram->setUniformValue("clockTime", animationTime);
+	renderProgram->setUniformValue("opacity", opacity);
+	renderProgram->setUniformValue("daylight", static_cast<float>(qBound(0.0, getBrightness(), 1.0)));
+	renderProgram->setUniformValue("nightVision", StelApp::getInstance().getVisionModeNight());
+	renderProgram->setUniformValue("sunDirection", sunDirection.toQVector());
+	renderProgram->setUniformValue("ridgeTexture", 0);
+	renderProgram->setUniformValue("noiseTexture", 1);
+	ridgeTexture->bind(0);
+	noiseTexture->bind(1);
+	projector->setUnProjectUniforms(*renderProgram);
+	auto& functions = *QOpenGLContext::currentContext()->functions();
+	functions.glEnable(GL_BLEND);
+	functions.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	bindVAO();
+	functions.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	releaseVAO();
+	noiseTexture->release(1);
+	ridgeTexture->release(0);
+	functions.glDisable(GL_BLEND);
+	renderProgram->release();
+}
+
 void LandscapeOldStyle::load(const QSettings& landscapeIni, const QString& landscapeId)
 {
 	// TODO: put values into hash and call create() method to consolidate code
@@ -803,6 +976,11 @@ void main()
 
 		const auto frag =
 			StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+			R"(
+#ifdef GL_ES
+precision highp float;
+#endif
+)" +
 			prj->getUnProjectShader() +
 			R"(
 VARYING highp vec3 ndcPos;
@@ -906,16 +1084,15 @@ void main(void)
 	}
 	else
 	{
-		float azimuth = atan(viewDir.x, viewDir.y);
-		if(azimuth<0.) azimuth += 2.*PI;
 		float sideAngularWidth = 2.*PI/float(totalNumberOfSides);
-		int currentSide = int(azimuth/sideAngularWidth);
+		float sidePosition = fract(atan(viewDir.x, viewDir.y)/(2.*PI)) * float(totalNumberOfSides);
+		int currentSide = min(int(sidePosition), totalNumberOfSides-1);
 		int currentSideInBatch = currentSide%numberOfSidesInBatch;
-		float leftBorderAzimuth = float(currentSide)*sideAngularWidth;
 		float texCoordLeft  = perSideTexCoords[currentSideInBatch][0];
 		float texCoordRight = perSideTexCoords[currentSideInBatch][2];
 		float deltaS = texCoordRight - texCoordLeft;
-		float s = texCoordLeft + (azimuth-leftBorderAzimuth)/sideAngularWidth * deltaS;
+		float sideFraction = clamp(sidePosition-float(currentSide), 0., 1.);
+		float s = mix(texCoordLeft, texCoordRight, sideFraction);
 
 		float elevation = asin(viewDir.z);
 		float texCoordBottom  = perSideTexCoords[currentSideInBatch][1];
@@ -956,8 +1133,8 @@ void main(void)
 		// gradAzimuth vector.
 		vec2 gradModelPosX = vec2(dFdx(modelPos.x), dFdy(modelPos.x));
 		vec2 gradModelPosY = vec2(dFdx(modelPos.y), dFdy(modelPos.y));
-		float texTdx = dFdx(t);
-		float texTdy = dFdy(t);
+		float texTdx = dFdx(texCoordInUnitRange) * deltaT;
+		float texTdy = dFdy(texCoordInUnitRange) * deltaT;
 
 		// Now that all dFdx/dFdy are computed, we can early return if needed.
 		int lastSideInBatch = firstSideInBatch+numberOfSidesInBatch-1;
@@ -980,7 +1157,7 @@ void main(void)
 		vec2 gradAzimuth   = vec2(modelPos.y*gradModelPosX.s-modelPos.x*gradModelPosY.s,
 								  modelPos.y*gradModelPosX.t-modelPos.x*gradModelPosY.t)
 															/
-												 dot(modelPos, modelPos);
+												 max(dot(modelPos.xy, modelPos.xy), 1e-12);
 		vec2 texDx = vec2(gradAzimuth.s/sideAngularWidth*deltaS, texTdx);
 		vec2 texDy = vec2(gradAzimuth.t/sideAngularWidth*deltaS, texTdy);
 		color = sampleSideTexture(currentSide, vec2(s,t), texDx, texDy);

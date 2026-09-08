@@ -2,7 +2,9 @@
 
 ## Introduction
 
-Mongolian constellations and cosmogony were inherited from the occidental civilisation notably by the contact with Alexander the Great and was largely influenced by Chinese civilisation and Buddhist religion, resulting in numerous myths and beliefs linked with what surrounds them. The local wild and fauna are the main themes of this skyculture. The wealth of Mongolian cosmogony is probably to link with the observation conditions for whom they benefit even now. In the past, the necessity for them to move and to get one's bearing even during the night and at different seasons, by searching the weather's mildness, is probably one of the element which developed their imagination facing the sky.
+The original contributors, Anthony Lagain and Batiste Rousseau, describe Mongolian constellations and cosmogony as influenced by Chinese civilisation and Buddhism, and propose an inheritance from occidental civilisation through contact with Alexander the Great. They describe numerous myths and beliefs connected with the surrounding world, with local wildlife and fauna as the main themes of this sky culture. They suggest that the richness of this cosmogony may be linked to the observing conditions available to the communities described, including in their own time. They also suggest that the historical need to travel and find one's bearings at night and in different seasons, in search of milder weather, may have helped shape these communities' interpretations of the sky.
+
+**Editorial note:** The proposed connection with Alexander the Great requires historical source verification and is not presented here as an established origin of Mongolian sky traditions.
 
 ## Description
 

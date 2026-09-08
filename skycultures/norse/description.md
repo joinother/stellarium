@@ -2,6 +2,8 @@
 
 ## Introduction
 
+This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below.
+
 ## Description
 
 ## References

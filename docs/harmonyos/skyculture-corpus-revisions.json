@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "reviewStatus": "editorial-draft; native-language publication review pending",
+  "rules": [
+    {
+      "id": "modern_chinese_asterism_purpose",
+      "culture": "modern_chinese",
+      "reason": "Different purposes of traditional star groups and IAU bounded regions do not make Chinese traditions inapplicable to astronomy.",
+      "sourceBefore": "The modern Chinese use the constellations of the International Astronomical Union. The traditional Chinese constellations have no specific boundaries between them. They only represent the corresponding set of bright stars, and do not have the role of dividing the celestial sphere into different areas, so they are no longer applicable in astronomy.",
+      "sourceAfter": "Modern astronomy in China uses the constellation regions defined by the International Astronomical Union. Traditional Chinese Xingguans describe groups of stars rather than a partition of the entire celestial sphere into bounded regions. This sky culture allows the two systems to be compared.",
+      "translations": {
+        "bn": {
+          "before": "চৈনিক নক্ষত্রমন্ডলগুলি প্রধানত কিছু উজ্জ্বল তারার সমষ্টি মাত্র, সেগুলি আকাশকে কোনো বিভাগে বিভক্তও করে না । ফলত এগুলি এখনকার যুগে আর ব্যবহৃত নয় না এবং মূলত পশ্চিমী নক্ষত্রমন্ডলগুলি সে জায়গায় স্থান পেয়েছে ।",
+          "after": "চীনের আধুনিক জ্যোতির্বিজ্ঞানে আন্তর্জাতিক জ্যোতির্বিজ্ঞান সংঘের নির্ধারিত নক্ষত্রমণ্ডল অঞ্চল ব্যবহৃত হয়। ঐতিহ্যবাহী চীনা শিংগুয়ান হলো তারার গুচ্ছ; এগুলি সম্পূর্ণ আকাশকে সীমানাযুক্ত অঞ্চলে ভাগ করে না। এই আকাশ-সংস্কৃতিতে দুটি পদ্ধতির তুলনা করা যায়।"
+        },
+        "cs": {
+          "before": "Dnešní Číňané používají souhvězdí Mezinárodní astronomické unie. Tradiční čínská souhvězdí nemají mezi sebou určené žádné hranice. Představují pouze související skupiny jasných hvězd a nemají za úkol rozdělovat nebeskou sféru na různé oblasti, takže v astronomii již nejsou použitelné.",
+          "after": "Moderní astronomie v Číně používá oblasti souhvězdí vymezené Mezinárodní astronomickou unií. Tradiční čínské sing-kuany popisují skupiny hvězd, nikoli rozdělení celé nebeské sféry na ohraničené oblasti. Tato kultura oblohy umožňuje oba systémy porovnat."
+        },
+        "de": {
+          "before": "Heutige Chinesen verwenden die Sternbilder der Internationalen Astronomischen Union. Die traditionellen chinesischen Sternbilder haben keine Begrenzungslinien. Sie werden nur aus Sternen gebildet und haben nicht die Aufgabe, den Himmel in begrenzte Flächen aufzuteilen, sodass sie für moderne Astronomie nicht geeignet sind.",
+          "after": "Die moderne Astronomie in China verwendet die von der Internationalen Astronomischen Union festgelegten Sternbildgebiete. Traditionelle chinesische Xingguans beschreiben Sterngruppen, nicht eine Aufteilung der gesamten Himmelskugel in abgegrenzte Gebiete. Diese Himmelskultur ermöglicht den Vergleich beider Systeme."
+        },
+        "es": {
+          "before": "Los chinos modernos usan las constelaciones de la Unión Astronómica Internacional. Las constelaciones chinas tradicionales no tienen límites específicos entre ellas. Solo representan el conjunto correspondiente de estrellas brillantes, y no tienen el papel de dividir la esfera celeste en diferentes áreas, por lo que ya no son aplicables en astronomía.",
+          "after": "La astronomía moderna en China utiliza las regiones de las constelaciones definidas por la Unión Astronómica Internacional. Los Xingguans chinos tradicionales describen grupos de estrellas, no una división de toda la esfera celeste en regiones delimitadas. Esta cultura celeste permite comparar ambos sistemas."
+        },
+        "es_419": {
+          "before": "Los chinos modernos usan las constelaciones de la Unión Astronómica Internacional. Las constelaciones chinas tradicionales no tienen límites específicos entre ellas. Solo representan el conjunto correspondiente de estrellas brillantes, y no tienen el papel de dividir la esfera celeste en diferentes áreas, por lo que ya no son aplicables en astronomía.",
+          "after": "La astronomía moderna en China utiliza las regiones de las constelaciones definidas por la Unión Astronómica Internacional. Los Xingguans chinos tradicionales describen grupos de estrellas, no una división de toda la esfera celeste en regiones delimitadas. Esta cultura celeste permite comparar ambos sistemas."
+        },
+        "gl": {
+          "before": "Os chineses modernos usan as constelacións da Unión Astronómica Internacional. As constelacións tradicionais chinesas non teñen límites específicos entre elas. Só representan o correspondente conxunto de estrelas brillantes, e non teñen a función de dividir a esfera celeste en diferentes áreas, polo que xa non son aplicables en astronomía.",
+          "after": "A astronomía moderna en China emprega as rexións das constelacións definidas pola Unión Astronómica Internacional. Os Xingguans chineses tradicionais describen grupos de estrelas, non unha división de toda a esfera celeste en rexións delimitadas. Esta cultura celeste permite comparar ambos os sistemas."
+        },
+        "hr": {
+          "before": "Suvremeni Kinezi koriste zviježđa Međunarodne astronomske unije. Tradicionalna kineska zviježđa nemaju određene granice. Zviježđa samo predstavljaju odgovarajući skup svijetlih zvijezda i nemaju ulogu dijeljenja nebeske sfere na različita područja, tako da više nisu primjenjive u astronomiji.",
+          "after": "Suvremena astronomija u Kini koristi područja zviježđa koja je odredila Međunarodna astronomska unija. Tradicionalni kineski Xingguani opisuju skupine zvijezda, a ne podjelu cijele nebeske sfere na omeđena područja. Ova nebeska kultura omogućuje usporedbu obaju sustava."
+        },
+        "ja": {
+          "before": "現代中国では国際天文学連合の星座を使用しています。伝統的な中国の星座(星官)には特定の境界はありません。星官は対応する明るい星の組み合わせを表すだけで、天球をさまざまな領域に分割する役割がないため、天文学では使用されません。",
+          "after": "中国の現代天文学では、国際天文学連合が定めた星座の領域を使用しています。中国の伝統的な星官は星の集まりを表し、天球全体を境界のある領域に分割するものではありません。この星空文化では両方の体系を比較できます。"
+        },
+        "lt": {
+          "before": "Šiuolaikiniai kinai naudoja Tarptautinės astronomų sąjungos žvaigždynus. Tradiciniai kinų žvaigždynai neturi konkrečių ribų. Jie atspindi tik atitinkamą ryškių žvaigždžių rinkinį ir neatlieka dangaus sferos padalijimo į skirtingas sritis funkcijos, todėl astronomijoje nebenaudojami.",
+          "after": "Šiuolaikinėje Kinijos astronomijoje naudojamos Tarptautinės astronomų sąjungos apibrėžtos žvaigždynų sritys. Tradiciniai kinų Xingguan aprašo žvaigždžių grupes, o ne visos dangaus sferos padalijimą į ribotas sritis. Ši dangaus kultūra leidžia palyginti abi sistemas."
+        },
+        "nl": {
+          "before": "De moderne Chinezen gebruiken de sterrenbeelden van de Internationale Astronomische Unie. De traditionele Chinese sterrenbeelden hebben geen specifieke onderlinge grenzen. Zij stellen alleen de overeenkomstige reeks heldere sterren voor, en hebben niet de functie om de hemelbol in verschillende gebieden te verdelen, zodat zij niet langer van toepassing zijn in de astronomie.",
+          "after": "De moderne astronomie in China gebruikt de sterrenbeeldgebieden die zijn vastgelegd door de Internationale Astronomische Unie. Traditionele Chinese Xingguans beschrijven groepen sterren, niet een verdeling van de hele hemelbol in begrensde gebieden. Deze hemelcultuur maakt een vergelijking van beide systemen mogelijk."
+        },
+        "ru": {
+          "before": "Современные китайцы используют созвездия Международного астрономического союза. Традиционные китайские созвездия не имеют между собой определенных границ. Они лишь представляют собой соответствующий набор ярких звезд и не выполняют роли деления небесной сферы на различные области, поэтому в астрономии они уже неприменимы.",
+          "after": "В современной астрономии Китая используются области созвездий, определённые Международным астрономическим союзом. Традиционные китайские сингуань описывают группы звёзд, а не разделение всей небесной сферы на области с установленными границами. Эта культура неба позволяет сравнить обе системы."
+        },
+        "sk": {
+          "before": "Dnešní Číňania používajú súhvezdia Medzinárodnej astronomickej únie (IAU). Tradičné čínske súhvezdia nemajú medzi sebou žiadne vlastné hranice. Predstavujú len súvisiace skupiny jasných hviezd a nemajú za úlohu rozdeľovať nebeskú sféru na rôzne oblasti, takže pre astronómiu sú už nepoužiteľné.",
+          "after": "Moderná astronómia v Číne používa oblasti súhvezdí vymedzené Medzinárodnou astronomickou úniou. Tradičné čínske Xingguany opisujú skupiny hviezd, nie rozdelenie celej nebeskej sféry na ohraničené oblasti. Táto kultúra oblohy umožňuje porovnať oba systémy."
+        },
+        "sv": {
+          "before": "De moderna kineserna använder sig av Internationella astronomiska unionens konstellationer. De traditionella kinesiska konstellationerna har inga specifika gränser mellan sig. De representerar bara motsvarande uppsättning ljusstarka stjärnor och har inte till uppgift att dela in den himmelska sfären i olika områden, så de är inte längre tillämpliga inom astronomin.",
+          "after": "Modern astronomi i Kina använder de stjärnbildsområden som fastställts av Internationella astronomiska unionen. Traditionella kinesiska Xingguan beskriver grupper av stjärnor, inte en uppdelning av hela himmelssfären i avgränsade områden. Denna himmelskultur gör det möjligt att jämföra båda systemen."
+        },
+        "uk": {
+          "before": "У сучасній китайській астрономії використовують сузір'я, які визначено Міжнародним астрономічним союзом. Між традиційними китайськими сузір'ями немає визначених меж. Вони є лише наборами яскравих зірок і не ділять небесну сферу на окремі області, тому їх вже не використовують із астрономічною метою.",
+          "after": "Сучасна астрономія в Китаї використовує області сузір’їв, визначені Міжнародним астрономічним союзом. Традиційні китайські сінгуань описують групи зірок, а не поділ усієї небесної сфери на області з установленими межами. Ця картина зоряного неба дає змогу порівняти обидві системи."
+        },
+        "zh_CN": {
+          "before": "现代中国人使用国际天文联合会的星座。中国星官之间没有特定的界限。它们只代表相应的一组亮星，不具有将天球划分为不同区域的作用，因此在天文学中已不再适用。",
+          "after": "中国现代天文学使用国际天文学联合会划定的星座区域。中国传统星官描述恒星的组合，并不将整个天球划分为具有明确边界的区域。本套星空文化可将两种体系对照展示。"
+        },
+        "zh_HK": {
+          "before": "當代中國採用國際天文聯合會的星座對天球進行劃分。傳統的星官由於相互之間也沒有具體的界限，僅僅表示其對應的肉眼可見的恒星的集合，不具有劃分天球區域的作用，因此不再在天文上適用。星官現在的地位實際上是一種星群。在這個星空文化裡，星座是指國際天文聯合會的88星座，星群則是指中國傳統星官。將星座和星群同時選取可以方便的做中國星官和西方星座的對照。",
+          "after": "中國現代天文學使用國際天文學聯合會劃定的星座區域。中國傳統星官描述恆星的組合，並不將整個天球劃分為具有明確邊界的區域。本套星空文化可將兩種體系對照展示：星座選項顯示聯合會的88星座，星群選項顯示中國傳統星官。"
+        },
+        "zh_TW": {
+          "before": "現代中國人使用國際天文聯合會的星座。中國星官之間沒有特定的界限。它們只代表相應的一組亮星，不具有將天球划分爲不同區域的作用，因此在天文學中已不再適用。",
+          "after": "中國現代天文學使用國際天文學聯合會劃定的星座區域。中國傳統星官描述恆星的組合，並不將整個天球劃分為具有明確邊界的區域。本套星空文化可將兩種體系對照展示。"
+        }
+      }
+    },
+    {
+      "id": "sternenkarten_standard_scope",
+      "culture": "modern_sternenkarten",
+      "reason": "An agreed astronomical coordinate partition is not a universal cultural standard.",
+      "sourceBefore": "This western sky culture established itself as the standard in modern astronomy.",
+      "sourceAfter": "Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects.",
+      "translations": {
+        "de": {
+          "before": "Diese westliche Sternbildkultur etablierte sich in der modernen Astronomie als Standard.",
+          "after": "Die moderne Astronomie verwendet die vereinbarten Sternbildnamen und -grenzen der IAU zur Ortsangabe."
+        },
+        "es": {
+          "before": "Esta cultura occidental del cielo se estableció como estándar en la astronomía moderna.",
+          "after": "La astronomía moderna utiliza los nombres y límites de constelaciones acordados por la UAI para localizar objetos."
+        },
+        "es_419": {
+          "before": "Esta cultura occidental del cielo se estableció como estándar en la astronomía moderna.",
+          "after": "La astronomía moderna utiliza los nombres y límites de constelaciones acordados por la UAI para localizar objetos."
+        },
+        "gl": {
+          "before": "Esta cultura do ceo occidental estableceuse como o estándar da astronomía moderna.",
+          "after": "A astronomía moderna emprega os nomes e límites das constelacións acordados pola UAI para localizar obxectos."
+        },
+        "lt": {
+          "before": "Ši vakarų dangaus kultūra tapo šiuolaikinės astronomijos standartu.",
+          "after": "Šiuolaikinė astronomija objektams nustatyti naudoja IAU sutartus žvaigždynų pavadinimus ir ribas."
+        },
+        "nl": {
+          "before": "Deze westerse hemelcultuur vestigde zich als de standaard in de moderne astronomie.",
+          "after": "De moderne astronomie gebruikt de overeengekomen sterrenbeeldnamen en -grenzen van de IAU om objecten te lokaliseren."
+        },
+        "ru": {
+          "before": "Эта западная культура неба утвердилась как стандарт в современной астрономии.",
+          "after": "Современная астрономия использует согласованные МАС названия и границы созвездий для определения положения объектов."
+        },
+        "sv": {
+          "before": "Denna västerländska himmelskultur etablerade sig som standard inom den moderna astronomin.",
+          "after": "Modern astronomi använder IAU:s överenskomna stjärnbildsnamn och gränser för att lokalisera objekt."
+        },
+        "uk": {
+          "before": "Ця західна картина зоряного неба стала стандартною у сучасній астрономії.",
+          "after": "Сучасна астрономія використовує узгоджені МАС назви й межі сузір’їв для визначення положення об’єктів."
+        },
+        "zh_CN": {
+          "before": "这种西方星空文化最终成为现代天文学中的标准体系。",
+          "after": "现代天文学使用国际天文学联合会约定的星座名称与边界定位天体。"
+        }
+      }
+    },
+    {
+      "id": "tukano_knowledge_not_deficiency",
+      "culture": "tukano",
+      "reason": "Remove the inference that a different knowledge organisation implies a deficient conception of the Universe. Preserve the documented research context and uncertainty.",
+      "sourceBefore": "Their conceptions about sky and Universe are different when compared with ours. They don’t organize and conceive ideas about the Universe as a whole, like us.",
+      "sourceAfter": "The researchers describe how Tukano people organise their knowledge of the sky.",
+      "translations": {
+        "es": {
+          "before": "Sus concepciones sobre el cielo y el Universo son diferentes en comparación con las nuestras. No organizan ni conciben ideas sobre el Universo en su conjunto, como nosotros.",
+          "after": "Los investigadores describen cómo el pueblo tukano organiza su conocimiento del cielo."
+        },
+        "es_419": {
+          "before": "Sus concepciones sobre el cielo y el Universo son diferentes en comparación con las nuestras. No organizan ni conciben ideas sobre el Universo en su conjunto, como nosotros.",
+          "after": "Los investigadores describen cómo el pueblo tukano organiza su conocimiento del cielo."
+        },
+        "gl": {
+          "before": "A súa concepción sobre o ceo e o Universo son diferentes da nosa. Non organizan e conciben ideas sobre o Universo no seu conxunto, coma nós.",
+          "after": "Os investigadores describen como o pobo tukano organiza o seu coñecemento do ceo."
+        },
+        "lt": {
+          "before": "Jų sampratos apie dangų ir Visatą yra kitokios, palyginti su mūsiškėmis. Jie neorganizuoja ir nesuvokia idėjų apie Visatą kaip visumą, kaip mes.",
+          "after": "Tyrėjai aprašo, kaip tukano tauta sistemina savo žinias apie dangų."
+        },
+        "nl": {
+          "before": "Hun ideeën over de hemel en het universum verschillen van die van ons. Zij organiseren en bedenken geen ideeën over het universum als geheel, zoals wij dat doen.",
+          "after": "De onderzoekers beschrijven hoe de Tukano hun kennis van de hemel ordenen."
+        },
+        "ru": {
+          "before": "Их представления о небе и Вселенной отличаются от наших. Они не организуют и не создают представления о Вселенной в целом, как мы.",
+          "after": "Исследователи описывают, как народ тукано организует свои знания о небе."
+        },
+        "sv": {
+          "before": "Deras föreställningar om himlen och universum är annorlunda jämfört med våra. De organiserar inte och skapar inte idéer om universum som helhet, som vi gör.",
+          "after": "Forskarna beskriver hur tukanofolket organiserar sin kunskap om himlen."
+        },
+        "uk": {
+          "before": "Їхня концепція неба та всесвіту відрізняється від нашої. Вони не впорядковують і не сприймають ідеї щодо цілісності всесвіту, як ми.",
+          "after": "Дослідники описують, як народ тукано впорядковує свої знання про небо."
+        },
+        "zh_CN": {
+          "before": "但图卡诺人本身的知识体系组织方式与我们不同——他们对天空和宇宙的认知观念与我们的整体性宇宙观存在根本差异。",
+          "after": "研究者记录了图卡诺人组织星空知识的方式。"
+        }
+      }
+    }
+  ]
+}

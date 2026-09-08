@@ -1023,6 +1023,14 @@ QString StelSkyCultureMgr::getCurrentSkyCultureHtmlDescription()
 
 	const QString language = StelApp::getInstance().getLocaleMgr().getAppLanguage();
 	const QJsonObject context = skyCultureEditorialContext();
+	const QString attribution = skyCultureEditorialSection(context, QStringLiteral("sourceAttribution"), language)
+		.value(QStringLiteral("body")).toString();
+	if (pathExists && !attribution.isEmpty())
+	{
+		const qsizetype headingEnd = description.indexOf(QStringLiteral("</h1>"));
+		description.insert(headingEnd < 0 ? 0 : headingEnd + 5,
+			QStringLiteral("<p class=\"source-attribution\">%1</p>").arg(attribution.toHtmlEscaped()));
+	}
 	const QJsonObject presentation = skyCultureEditorialSection(context, QStringLiteral("presentation"), language);
 	if (!presentation.isEmpty())
 	{
@@ -1078,6 +1086,10 @@ QString StelSkyCultureMgr::getCurrentSkyCultureNarration()
 
 	const QString language = StelApp::getInstance().getLocaleMgr().getAppLanguage();
 	const QJsonObject context = skyCultureEditorialContext();
+	const QString attribution = skyCultureEditorialSection(context, QStringLiteral("sourceAttribution"), language)
+		.value(QStringLiteral("body")).toString();
+	if (pathExists && !attribution.isEmpty())
+		description.append(QStringLiteral(" . . . ") + attribution);
 	const QJsonObject presentation = skyCultureEditorialSection(context, QStringLiteral("presentation"), language);
 	if (!presentation.isEmpty())
 		 description += QStringLiteral("%1. . . %2 ")

@@ -164,6 +164,8 @@ cp -r /tmp/harmony-test/entry/libs /Users/jiexuanyang/stellarium-src/build/libst
 
 ### 4.2 构建 HAP
 
+只验证 ArkTS、且不执行签名打包时，先同步源码，在生成工程根目录使用 `--mode module -p product=default -p module=entry@default -p buildMode=debug default@CompileArkTS --no-daemon`。任务名必须有 `default@`；不要用裸 `CompileArkTS`，也不要把日志中的前导冒号复制成 `:entry:default@CompileArkTS`。当前 Hvigor 惰性任务可能不出现在 `tasks` 列表中，不要因此修改签名配置或重建工程。完整安全命令、实测与适用边界见 [CompileArkTS 独立构建诊断](culture-review-batches/BUILD-CHECK.md)。
+
 ```bash
 cd /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos
 

@@ -1,5 +1,24 @@
 # Stellarium 鸿蒙 CLI
 
+## 剪贴板写入回归（2026-09-08）
+
+- `copyTextToClipboard` 的 payload 为待复制文本（CLI 最多 32768 字符）。仅当前隐私同意且前台可用，调用与界面复制按钮相同的异步服务，不读取现有剪贴板。
+- 完成返回 `{ok:true,characters:字符数}`，失败返回通用错误；不返回被复制内容。会覆盖系统当前剪贴板，测试只使用无敏感信息的固定文本。
+- 配合 Qt 原生 `[clipboard-probe] ... contentRead=false` 验证变化通知不再同步读取；响应成功不代表未来任意原生 Qt 粘贴功能已验收。
+
+## 动态雾山地景（2026-09-08）
+
+- `setActionChecked actionShow_MistHorizon|1` 开雾山同时关地面/三维场景，`|0` 关闭雾山；`actionShow_Ground|1` 开地面同时关雾山。两项都关为无地景。首次没有照片地景与保存偏好时雾山默认开，保留用户之后的明确关闭。
+- `setLandscape <id>` 在地面关闭时只预选资源，不启用地面、不随资源移动观测位置；相同 ID 幂等成功，实际失败才返回 false。
+- `getLandscapeInfo` 新增 `mistHorizonEnabled`、`mistHorizonOpacity`、`mistHorizonDecorative`，区分开关偏好、渐变状态与装饰用途；opacity 不替代 GPU 视觉验收。
+- `openUiPanel layers` 后 `setLayerTab 4` 打开同一设置入口。实现和测试见 `MIST-HORIZON.md`。
+
+## 启动呈现诊断（2026-09-08）
+
+- `getPresentationState` 是鸿蒙呈现桥的只读命令，返回 `ok`、`ready`、`width`、`height`；通过现有 `stellarium-cli.mjs --command getPresentationState --json` 调用，无参数、无联网。
+- `ready` 只在两次真正成功提交且与当前 Surface 比例匹配的星图帧后为真；创建、调整或销毁 Surface 时清零。不以启动背景、FPS 数字、固定计时器或待处理的 Qt 命令响应冒充首帧就绪。
+- 状态通过单个原子快照读取，不等待 Qt 命令队列、不加载 Qt 库、不获取设备标识；目前为鸿蒙专有诊断入口，桌面核心的命令目录尚不包含它。
+
 ## 详情模型检查（2026-09-06）
 
 - `setObjectModelView open` 打开选中目标的资料模型区；`immersive` 全屏查看，`close` 关闭全屏返回原详情，`reset` 重置视角，`dx|dy` 旋转。
@@ -239,6 +258,7 @@ node scripts/stellarium-cli.mjs --command openUiPanel --payload time
 node scripts/stellarium-cli.mjs --command openUiPanel --payload dataHub
 node scripts/stellarium-cli.mjs --command openUiPanel --payload settingsInformation
 node scripts/stellarium-cli.mjs --command openUiPanel --payload settingsTime
+node scripts/stellarium-cli.mjs --command openUiPanel --payload settingsPrivacy
 node scripts/stellarium-cli.mjs --command backUiPanel
 node scripts/stellarium-cli.mjs --command closeUiPanel
 ```
@@ -253,6 +273,8 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command setGyroscopeEnable
 `openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。
 
 `settingsInformation`、`settingsTime` 是设置子页语义入口，复用 `selectConfigTab` 的正常转场；不需要寻找标签坐标。打开后可用 `setInformationSetting`、`setDateFormat`、`setTimeFormat`、`setTimeSetting` 修改选项，以对应查询命令确认结果。`accepted` 仍只代表路由请求已接收，截图/布局树用于确认子页实际呈现，不能把该回执当成动画已完成。
+
+`settingsPrivacy` 打开设备与隐私子页，复用 `selectConfigTab(-1)`；不会撤回或授予同意，隐私决定仍由用户操作。隐私尚未同意时，普通 CLI 不得绕过启动门禁进入 Qt。
 
 插件入口也可以通过同一条本机 UI 命令回归：
 
@@ -388,3 +410,7 @@ UI 空闲时按 180ms 周期尝试更新；桥接未返回或用户拖动星图�
 # 天文计算动效操作补充（2026-09-06）
 
 `openUiPanel astro` 后使用 `setAstroGroup 0..2`、`setAstroTab 0..9`；今晚筛选使用 `setAstroFilter`（如 `period|morning`）。`getAstroPanelState` 返回最近面板状态，等待 `transitioning=false` 和目标 tab 一致才表示页面切换完成，不代表计算完成或动画帧率。完整参数与边界见 `ASTRO-CALC-MOTION.md`。
+
+## 交互式天文导览（2026-09-08）
+
+`startGuide solar-neighbours` 或 `startGuide deep-sky-discovery` 启动原生触屏导览；`guideAction` 接受 `next/previous/pause/resume/explore/return/closer/wider/center/auto-on/auto-off/retry/stop`。`getGuideState` 返回状态、导览清单和最近请求结果：必须核对 `lastRequestId`、`result.ok` 与 `state.phase`，不能把命令 accepted 当作完成。导览默认手动推进，后台暂停，退出恢复原生完整脚本快照。`beginGuidedSession/endGuidedSession` 是播放器内部快照接口，不直接替代 startGuide/guideAction。详见 `INTERACTIVE-ASTRONOMY-GUIDES.md`。

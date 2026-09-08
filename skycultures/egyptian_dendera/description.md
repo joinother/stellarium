@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The sculptured Dendera zodiac (or Denderah zodiac) is a widely known Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun in the late Ptolemaic period when Egypt was ruled by (Greek) successors of Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall in front of the holy chamber) was added by the Roman emperor Tiberius (14-37 CE). This led Jean-François Champollion (18th century) to date the relief to the Greco-Roman period (while most of his contemporaries believed it to be of a millennium earlier because of the Egyptian style of the figures - this is not believed anymore). Today, French archaeologists date it to exactly 54 BCE [#1].  The relief is now on display at the Musée du Louvre, Paris (France).
+The sculptured Dendera zodiac (or Denderah zodiac) is a widely known Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun in the late Ptolemaic period when Egypt was ruled by (Greek) successors of Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall in front of the holy chamber) was added by the Roman emperor Tiberius (14-37 CE). This led Jean-François Champollion (1790-1832) to date the relief to the Greco-Roman period (while most of his contemporaries believed it to be of a millennium earlier because of the Egyptian style of the figures - this is not believed anymore). The Louvre collection catalogue dates it to June-August 50 BCE [#1].  The relief is now on display at the Musée du Louvre, Paris (France).
 
 ## Description
 
@@ -269,4 +269,3 @@ This sky culture originates from research. We provide this for free but the auth
 ## License
 
 CC BY-ND 4.0
-

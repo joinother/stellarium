@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Balinese people have had a strong connection to the cosmos since ancient times. They rely on the cosmos because they believe that every celestial body has power and will impact what they will or have done. Therefore, in carrying out all activities, from social to civil and ritual, they must know the right time to do so, guided by the celestial conditions.
+The Balinese traditions described here have linked human life with the cosmos since ancient times. In these traditions, celestial bodies are believed to have power and to affect past and future human activities. Celestial conditions therefore guide the choice of appropriate times for social, civil, and ritual activities.
 
 ## Description
 

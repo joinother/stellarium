@@ -9,7 +9,8 @@ import { media } from '@kit.MediaKit'
 import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { systemShare } from '@kit.ShareKit'
 import { privacyManager } from '@kit.AppGalleryKit'
-import { pasteboard } from '@kit.BasicServicesKit'
+import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
+import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
@@ -22,7 +23,8 @@ import { LOCATION_ZH_NAMES } from './location_names_zh'
 import { modelIdentity, modelMultiply, modelDrag } from './DetailModelGeometry'
 import { proceduralModelKind, proceduralParticles } from './ProceduralDetailModel'
 import { DetailModelRenderClient } from './DetailModelRenderClient'
-import { DetailModelResources, DetailModelFrame, DetailModelResult } from './DetailModelRenderTypes'
+import { ASTRONOMY_GUIDES, AstronomyGuide, GuidePlayer, GuideState, GuideResult, GuideStep } from './AstronomyGuide'
+import { DetailModelResources, DetailModelFrame, DetailModelResult, DetailModelRing, DetailModelLight } from './DetailModelRenderTypes'
 
 import { StellariumBridgeResponse, SessionSnapshot, TonightEvents, TonightPlanet, TonightShower, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, CatOption, NameItem, SearchSug, WindowNativeNodeCreateInfo, TabItem, ChipItem, LandscapeItem, ScriptMetadata, PlanetPosition, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, SatellitePass, PolarScopeData } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
@@ -320,7 +322,7 @@ const CONTENT_LAYER_ACTION_IDS: string[] = [
   'actionShow_Planets_EnlargeMoon', 'actionShow_Planets_EnlargePlanets',
   'actionShow_Planets_EnlargeSun', 'actionShow_Planets_ShowMinorBodyMarkers',
   'actionShow_Planets_Nomenclature', 'actionShow_Nebulas', 'actionShow_DSO_Textures',
-  'actionShow_MilkyWay', 'actionShow_Fog', 'actionShow_Ground',
+  'actionShow_MilkyWay', 'actionShow_Fog', 'actionShow_Ground', 'actionShow_MistHorizon',
   'actionShow_LandscapeIllumination', 'actionShow_LandscapeLabels',
   'actionShow_Constellation_Lines', 'actionShow_Constellation_Labels',
   'actionShow_Constellation_Boundaries', 'actionShow_Constellation_Art', 'actionShow_Constellation_Hulls', 'actionShow_Zodiac',
@@ -382,14 +384,6 @@ interface TonightPlanetRow {
   line: string
   jd: number
   lock: string
-}
-
-// 启动动画里的星点（百分比坐标 + 半径vp + 是否亮星，用于交错闪烁）
-interface StarDot {
-  xPct: number
-  yPct: number
-  r: number
-  bright: boolean
 }
 
 // 星表下载（C++ 桥 getStarCatalogs / downloadStarCatalog / getStarCatalogStatus）
@@ -808,9 +802,8 @@ class OcularSelInfo {
   countText: string = ''
 }
 
-@Entry
 @Component
-struct WindowNativeNode {
+export struct WindowNativeNode {
   @State private createInfo: WindowNativeNodeCreateInfo | undefined = undefined
   @Watch('onPrivacyNativeStartupAllowedChanged')
   @StorageLink('stellariumPrivacyNativeStartupAllowed')
@@ -1175,35 +1168,13 @@ struct WindowNativeNode {
   @State private panelMaxHeight: number = 660
   // 离屏幕边框的安全留白(vp)：约 0.7cm，避免 UI 贴边
   private readonly EDGE_MARGIN: number = 44
-  // 启动动画星空（百分比坐标，自适应各种屏幕尺寸）
-  private readonly splashStars: StarDot[] = [
-    { xPct: 8, yPct: 12, r: 1.5, bright: true }, { xPct: 17, yPct: 28, r: 1, bright: false },
-    { xPct: 26, yPct: 9, r: 2, bright: true }, { xPct: 33, yPct: 22, r: 1, bright: false },
-    { xPct: 41, yPct: 14, r: 1.5, bright: true }, { xPct: 49, yPct: 30, r: 1, bright: false },
-    { xPct: 57, yPct: 11, r: 2, bright: true }, { xPct: 64, yPct: 25, r: 1, bright: false },
-    { xPct: 72, yPct: 16, r: 1.5, bright: true }, { xPct: 80, yPct: 9, r: 1, bright: false },
-    { xPct: 88, yPct: 23, r: 2, bright: true }, { xPct: 93, yPct: 14, r: 1, bright: false },
-    { xPct: 12, yPct: 42, r: 1, bright: false }, { xPct: 23, yPct: 55, r: 1.5, bright: true },
-    { xPct: 35, yPct: 48, r: 1, bright: false }, { xPct: 46, yPct: 60, r: 2, bright: true },
-    { xPct: 54, yPct: 44, r: 1, bright: false }, { xPct: 63, yPct: 53, r: 1.5, bright: true },
-    { xPct: 73, yPct: 47, r: 1, bright: false }, { xPct: 84, yPct: 58, r: 2, bright: true },
-    { xPct: 91, yPct: 49, r: 1, bright: false }, { xPct: 15, yPct: 70, r: 1.5, bright: true },
-    { xPct: 28, yPct: 82, r: 1, bright: false }, { xPct: 38, yPct: 73, r: 2, bright: true },
-    { xPct: 50, yPct: 86, r: 1, bright: false }, { xPct: 60, yPct: 76, r: 1.5, bright: true },
-    { xPct: 70, yPct: 84, r: 1, bright: false }, { xPct: 82, yPct: 72, r: 2, bright: true },
-    { xPct: 90, yPct: 83, r: 1, bright: false }, { xPct: 6, yPct: 64, r: 1, bright: false },
-  ]
   @State private observingList: string[] = []
   @State private observingListReady: boolean = false
   @State private stars: boolean = true
   @State private skyCultures: string[] = []
   @State private isLoading: boolean = true
-  // 启动动画：星空淡入 + 核心就绪后整体淡出
   @State private splashGone: boolean = false
-  @State private splashOpacity: number = 0
-  @State private splashIn: boolean = false
-  @State private twPhase: boolean = false
-  private twTimer: number = 0
+  private startupViewportCheckedAt: number = 0
   @State private currentSkyCulture: string = ""
   @State private planets: boolean = true
   @State private enlargePlanets: boolean = false
@@ -1769,6 +1740,7 @@ struct WindowNativeNode {
   @State private nebulae: boolean = false
   @State private milkyWay: boolean = true
   @State private ground: boolean = true
+  @State private mistHorizon: boolean = true
   @State private constellationLines: boolean = false
   @State private constellationLabels: boolean = false
   @State private constellationBoundaries: boolean = false
@@ -2070,6 +2042,13 @@ struct WindowNativeNode {
   @State private scriptLaunching: boolean = false
   @State private scriptLaunchingName: string = ''
   @State private scriptFocusActive: boolean = false
+  @State private guideState: GuideState = { active: false, phase: 'idle', guideId: '', index: 0, count: 0, automatic: false, remaining: 0, error: '' }
+  private guidePlayer?: GuidePlayer
+  private guideTimer: number = -1
+  private guideGyroWasEnabled: boolean = false
+  private guidePanelWasVisible: boolean = false
+  private guideLastRequest: string = ''
+  private guideLastResult: GuideResult = { ok: true }
   @State private scriptRunning: boolean = false
   @State private scriptWaiting: boolean = false
   @State private scriptWaitMessage: string = ''
@@ -2459,6 +2438,7 @@ struct WindowNativeNode {
     "actionShow_Galactic_Grid",
     "actionShow_Galactic_Poles",
     "actionShow_Ground",
+    "actionShow_MistHorizon",
     "actionShow_Hips_Surveys",
     "actionShow_Horizon_Line",
     "actionShow_Intercardinal_Points",
@@ -2502,47 +2482,36 @@ struct WindowNativeNode {
     "actionVertical_Flip"
   ]
 
-  // 启动动画：星空淡出并卸载（核心就绪或用户点击跳过时调用）
   private dismissSplash(): void {
-    if (this.splashGone) { return }
+    if (this.splashGone) return
+    if (this.skyWidth < 2 || this.skyHeight < 2 || Date.now() - this.startupViewportCheckedAt < 80) return
+    this.startupViewportCheckedAt = Date.now()
+    const viewport = this.callNative('getPresentationState', '')
+    if (viewport.ok !== true || (viewport as Record<string, Object>)['ready'] !== true) return
+    const viewportWidth = Number((viewport as Record<string, Object>)['width'])
+    const viewportHeight = Number((viewport as Record<string, Object>)['height'])
+    const matching = viewport.ok === true && viewportWidth > 0 && viewportHeight > 0 &&
+      Math.abs(viewportWidth / viewportHeight / (this.skyWidth / this.skyHeight) - 1) < 0.008
+    if (!matching) return
     this.isLoading = false
-    this.getUIContext().animateTo({ duration: 650, curve: Curve.EaseInOut, onFinish: () => { this.splashGone = true; this.stopTwinkle() } }, () => {
-      this.splashOpacity = 0
-    })
+    this.splashGone = true
+    this.stopTwinkle()
+    hilog.info(0, 'StellariumArkUI', '[startup] presented-frame-ready width=%{public}d height=%{public}d',
+      viewportWidth, viewportHeight)
+    AppStorage.setOrCreate('stellariumStartupSkyReady', true)
   }
 
-  // 星空交错闪烁：每 1 秒翻转一次相位，让亮星/暗星交替明暗
   private startTwinkle(): void {
-    if (this.twTimer !== 0) { return }
-    this.twTimer = setInterval(() => { this.twPhase = !this.twPhase }, 2000)
-    // FPS monitor: poll C++ getFPS every 1s for real render frame rate
+    if (this.fpsTimer !== 0) { return }
     this.fpsTimer = setInterval(() => {
       try {
-        const r = this.callNative('getFPS', '')
-        if (r && r.ok && typeof r.fps === 'number' && r.fps > 0) {
-          this.fpsDisplay = Math.round(r.fps)
-          // A positive native FPS means Qt has rendered a real frame.  This is
-          // an independent readiness signal for devices where the optional
-          // sky-culture query does not return during startup.
-          this.dismissSplash()
-        } else if (r && r.pending) {
-          // If pending, try again after a short delay
-          setTimeout(() => {
-            const r2 = this.callNative('getFPS', '')
-            if (r2 && r2.ok && typeof r2.fps === 'number' && r2.fps > 0) {
-              this.fpsDisplay = Math.round(r2.fps)
-              this.dismissSplash()
-            }
-          }, 100)
-        }
+        this.dismissSplash()
       } catch (e) {
-        // Silent error to avoid log spam
       }
-    }, 500) as number
+    }, 100) as number
   }
 
   private stopTwinkle(): void {
-    if (this.twTimer !== 0) { clearInterval(this.twTimer); this.twTimer = 0 }
     if (this.fpsTimer !== 0) { clearInterval(this.fpsTimer); this.fpsTimer = 0 }
   }
 
@@ -2735,6 +2704,10 @@ struct WindowNativeNode {
       this.lastCliUiEventId = requestId
       const commandName = event['commandName'] as string
       const response = event['response'] as StellariumBridgeResponse
+      if (commandName === 'startGuide' || commandName === 'guideAction') {
+        this.executeGuideRequest(commandName, String(event['payload'] ?? ''), requestId)
+        return
+      }
       if (commandName === 'setSatellitesFlag' && response.ok === true) {
         const parts = String(event['payload'] ?? '').split(':')
         const enabled = parts[1] === '1' || parts[1] === 'true'
@@ -2991,7 +2964,7 @@ struct WindowNativeNode {
       'observing', 'bookmarks', 'oculars', 'angleMeasure', 'navStars', 'polarScope', 'telescope',
       'astro', 'satellites', 'meteorshowers', 'scenery3d', 'catalogs', 'settings', 'tools',
       'scripts', 'commands', 'audio', 'skyCultureMaker', 'mosaicCamera', 'nebulaTextures', 'help',
-      'settingsInformation', 'settingsTime'
+      'settingsInformation', 'settingsTime', 'settingsPrivacy'
     ].includes(panel)
   }
 
@@ -3000,6 +2973,7 @@ struct WindowNativeNode {
       return
     }
     this.privacyPageStartupStarted = true
+    this.startTwinkle()
     // Keep the old AppStorage value as a migration fallback while the durable
     // preferences store is opened asynchronously.
     const stored = AppStorage.get<string>("observingList")
@@ -3183,6 +3157,11 @@ struct WindowNativeNode {
   }
 
   aboutToDisappear(): void {
+    if (this.guideTimer >= 0) clearInterval(this.guideTimer)
+    this.guideTimer = -1
+    this.guideGyroWasEnabled = false
+    this.guidePanelWasVisible = false
+    this.guidePlayer?.stop()
     if (this.skyCultureMakerSaveTimer > 0) {
       clearTimeout(this.skyCultureMakerSaveTimer)
       this.skyCultureMakerSaveTimer = 0
@@ -3234,6 +3213,7 @@ struct WindowNativeNode {
 
   private handleApplicationLifecycle = (foreground: boolean): void => {
     this.applicationInForeground = foreground
+    if (!foreground && this.guideState.phase === 'observing') this.guidePlayer?.action('pause')
     this.objectInspectorModelRenderClient?.setSuspended(!foreground)
     if (foreground) {
       if (this.foregroundRefreshPaused) {
@@ -3569,8 +3549,8 @@ struct WindowNativeNode {
 
   private syncNativePolarScopeOverlay(active: boolean): void {
     const height = Math.max(1, this.skyHeight)
-    const safeTopRatio = (this.isExpandedLayout ? 62 : 58) / height
-    const safeBottomRatio = (this.isExpandedLayout ? 132 : 172) / height
+    const safeTopRatio = (this.polarScopeTopInset() + 68) / height
+    const safeBottomRatio = (this.polarScopeFooterHeight() + 20) / height
     const payload = (active ? '1' : '0') + '|' + (this.polarScopeHorizontalFlip ? '1' : '0') + '|' +
       (this.polarScopeVerticalFlip ? '1' : '0') + '|' + safeTopRatio.toString() + '|' + safeBottomRatio.toString() +
       '|' + Math.max(0, Math.round(this.screenSafeTopPixels)).toString()
@@ -3580,6 +3560,21 @@ struct WindowNativeNode {
   private polarScopeTopInset(): number {
     const safeTop = this.getUIContext().px2vp(Math.max(0, this.screenSafeTopPixels))
     return Math.max(8, safeTop + 8)
+  }
+
+  private polarScopeControlWidth(): number {
+    return Math.max(0, Math.min(520, this.skyWidth - 32))
+  }
+
+  private polarScopeFooterHeight(): number {
+    return this.isExpandedLayout ? 148 : 176
+  }
+
+  private recenterPolarScope(): void {
+    if (this.polarScopeTransitionPending) return
+    this.callInteractive('centerPolarScope', '', () => {
+      this.callInteractive('setFOV', '4', () => { this.loadPolarScopeData(false) })
+    })
   }
 
   private mediaPreviewTopInset(): number {
@@ -3618,9 +3613,9 @@ struct WindowNativeNode {
   }
 
   private openPanelFromCli(panel: string): void {
-    if (panel === 'settingsInformation' || panel === 'settingsTime') {
+    if (panel === 'settingsInformation' || panel === 'settingsTime' || panel === 'settingsPrivacy') {
       this.openPanelFromCli('settings')
-      this.selectConfigTab(panel === 'settingsInformation' ? 1 : 3)
+      this.selectConfigTab(panel === 'settingsInformation' ? 1 : (panel === 'settingsTime' ? 3 : -1))
       return
     }
     const parent = this.panelRouteParent(panel)
@@ -4272,7 +4267,7 @@ struct WindowNativeNode {
     this.callNativeWhenReady('getStarCatalogs', '', (r: StellariumBridgeResponse) => {
       const resp = r as StarCatalogsResponse
       const list = resp.catalogs ?? []
-      this.catalogList = list.map((c: StarCatalogRaw) => ({
+      this.catalogList = list.map((c: StarCatalogRaw): StarCatalogItem => ({
         id: c.id ?? '',
         name: c.name ?? (c.id ?? I18n.t('catalog_fallback')),
         size: c.size ?? '',
@@ -4435,7 +4430,7 @@ struct WindowNativeNode {
     this.callNativeWhenReady('getBookmarks', '', (r: StellariumBridgeResponse) => {
       const resp = r as BookmarksResponse
       const list = resp.items ?? []
-      this.bookmarkList = list.map((b: BookmarkRaw) => ({
+      this.bookmarkList = list.map((b: BookmarkRaw): BookmarkItem => ({
         id: b.id ?? '',
         name: b.name ?? I18n.t('bookmark_fallback'),
         fov: b.fov ?? 60,
@@ -4684,7 +4679,7 @@ struct WindowNativeNode {
   }
 
   private scriptPlaybackVisible(): boolean {
-    return this.scriptFocusActive || this.scriptLaunching || this.replaying
+    return this.guideState.active || this.scriptFocusActive || this.scriptLaunching || this.replaying
   }
 
   private scriptSessionActive(): boolean {
@@ -4736,8 +4731,13 @@ struct WindowNativeNode {
     }
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.scriptControlDragging = false
-      this.scriptControlOffsetX = this.scriptControlX() - 12
-      this.scriptControlOffsetY = this.scriptControlY() - this.scriptControlSafeTop()
+      if (this.guideState.active) {
+        this.scriptControlOffsetX = this.guideCardX() - (this.isExpandedLayout ? 12 : (this.skyWidth - this.guideCardWidth()) / 2)
+        this.scriptControlOffsetY = this.guideCardY() - (this.skyHeight - this.guideCardHeight() - 16)
+      } else {
+        this.scriptControlOffsetX = this.scriptControlX() - 12
+        this.scriptControlOffsetY = this.scriptControlY() - this.scriptControlSafeTop()
+      }
     }
   }
 
@@ -4782,7 +4782,7 @@ struct WindowNativeNode {
   }
 
   private refreshScriptStatus(): void {
-    if (this.scriptStatusRequestPending || !this.scriptPlaybackVisible()) { return }
+    if (this.guideState.active || this.scriptStatusRequestPending || !this.scriptPlaybackVisible()) { return }
     this.scriptStatusRequestPending = true
     this.callInteractive('getScriptStatus', '', (r: StellariumBridgeResponse) => {
       this.scriptStatusRequestPending = false
@@ -4852,6 +4852,10 @@ struct WindowNativeNode {
   }
 
   private stopScriptPlayback(): void {
+    if (this.guideState.active) {
+      this.executeGuideRequest('guideAction', 'stop')
+      return
+    }
     if (this.replaying) {
       this.finishRecordingReplay('回放已停止')
     }
@@ -6162,7 +6166,7 @@ struct WindowNativeNode {
       this.msCatalogSource = m.catalogSource ?? ''
       // Parse active shower list
       if (resp.showerList && resp.showerList.length > 0) {
-        this.msShowerList = resp.showerList.map((s) => ({
+        this.msShowerList = resp.showerList.map((s): MeteorShowerItem => ({
           name: s.name ?? '',
           englishName: s.englishName ?? '',
           zhr: s.zhr ?? 0,
@@ -6260,16 +6264,13 @@ struct WindowNativeNode {
       this.flashHint(I18n.t('clipboard_copy_empty'))
       return false
     }
-    try {
-      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)
-      await pasteboard.getSystemPasteboard().setData(data)
+    const result = await writeClipboardText(text)
+    if (result.ok) {
       this.flashHint(successHint)
       return true
-    } catch (error) {
-      hilog.error(0x0000, 'StellariumArkUI', 'Clipboard write failed: %{public}s', String(error))
-      this.flashHint(I18n.t('clipboard_copy_failed'))
-      return false
     }
+    this.flashHint(I18n.t('clipboard_copy_failed'))
+    return false
   }
 
   private importConfig(): void {
@@ -6340,6 +6341,7 @@ struct WindowNativeNode {
     this.nebulae = result.actionShow_Nebulas === true
     this.milkyWay = result.actionShow_MilkyWay === true
     this.ground = result.actionShow_Ground === true
+    this.mistHorizon = result.actionShow_MistHorizon === true
     this.constellationLines = result.actionShow_Constellation_Lines === true
     this.constellationLabels = result.actionShow_Constellation_Labels === true
     this.constellationBoundaries = result.actionShow_Constellation_Boundaries === true
@@ -7173,7 +7175,7 @@ struct WindowNativeNode {
       if (requestId !== this.rtsRequestSequence) return
       this.rtsLoading = false
       if (r.ok === true && r.rts !== undefined) {
-        const rv: Object = r.rts as Object
+        const rv = r.rts as Record<string, Object>
         const data = new Map<string, string>()
         data.set('name', rv['name'] !== undefined ? rv['name'] as string : 'N/A')
         data.set('nextRiseJD', rv['nextRiseJD'] !== undefined ? String(rv['nextRiseJD']) : '0')
@@ -9045,7 +9047,7 @@ struct WindowNativeNode {
       if (requestId !== this.almanacRequestSequence) return
       this.almanacLoading = false
       if (r.ok === true && r.almanac !== undefined) {
-        const av: Object = r.almanac as Object
+        const av = r.almanac as Record<string, Object>
         const textValue = (name: string): string => av[name + 'Text'] !== undefined ? String(av[name + 'Text']) : (av[name] !== undefined ? String(av[name]) : '0')
         const data = new Map<string, string>()
         data.set('sunRise', textValue('sunRise'))
@@ -10657,32 +10659,38 @@ struct WindowNativeNode {
   private polarScopeOverlay() {
     if (this.polarScopeVisible) {
       Stack() {
-        Column() {
-          Stack() {
-            Row() {
-              Blank()
-              Stack() {
+          Stack() { }
+            .width('100%').height('100%')
+            .hitTestBehavior(HitTestMode.Default)
+            .onTouch((event: TouchEvent) => { this.handleSkyTouch(event) })
+          Row({ space: 8 }) {
+            Text(I18n.t('polar_scope_title'))
+              .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#F7F7F8')
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1).margin({ left: 12 })
+              .hitTestBehavior(HitTestMode.None)
+            Button({ type: ButtonType.Circle }) {
+              Image(this.getIcon('polar_scope', false)).width(22).height(22).fillColor('#F4A7A1')
+            }.width(48).height(48).backgroundColor('rgba(244,111,107,0.12)')
+              .accessibilityText(I18n.t('btn_center'))
+              .id('polar-scope-center').onClick(() => { this.recenterPolarScope() })
+            Button({ type: ButtonType.Circle }) {
                 Image(this.getIcon('close', false)).width(22).height(22).fillColor('#F4F4F5')
-              }
-                .width(48).height(48).borderRadius(UI_RADIUS_PILL)
+            }
+                .width(48).height(48)
                 .backgroundColor('rgba(255,255,255,0.12)')
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .hitTestBehavior(HitTestMode.Block)
+                .id('polar-scope-close').accessibilityText(I18n.t('polar_scope_close'))
                 .onClick(() => { this.closePolarScope() })
-            }.width('100%').height('100%').padding({ left: 8, right: 8 })
-            Text(I18n.t('polar_scope_title'))
-              .fontSize(this.isExpandedLayout ? 19 : 17)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#F7F7F8')
-              .hitTestBehavior(HitTestMode.None)
           }
-            .width('100%')
-            .height(this.isExpandedLayout ? 62 : 58)
-            .margin({ top: this.polarScopeTopInset() })
-            .backgroundColor('rgba(3, 4, 7, 0.94)')
-            .hitTestBehavior(HitTestMode.Transparent)
-
-          Blank()
+            .width(this.polarScopeControlWidth()).height(60)
+            .padding({ left: 8, right: 6 })
+            .position({ x: (this.skyWidth - this.polarScopeControlWidth()) / 2, y: this.polarScopeTopInset() })
+            .backgroundColor('rgba(15, 20, 30, 0.82)')
+            .backdropBlur(16).borderRadius(UI_RADIUS_PANEL)
+            .border({ width: 1, color: 'rgba(255,255,255,0.10)' })
+            .hitTestBehavior(HitTestMode.Default)
 
           if (this.polarScopeLoading) {
             Column({ space: 10 }) {
@@ -10702,8 +10710,6 @@ struct WindowNativeNode {
               .borderRadius(UI_RADIUS_PANEL)
               .hitTestBehavior(HitTestMode.Block)
           }
-
-          Blank()
 
           Column({ space: this.isExpandedLayout ? 5 : 8 }) {
             Text(I18n.t(this.polarScopeData?.hemisphere === 'south' ? 'polar_scope_south_position' : 'polar_scope_north_position'))
@@ -10725,10 +10731,12 @@ struct WindowNativeNode {
             }.width('100%')
             Row({ space: 18 }) {
               Row({ space: 8 }) {
-                Text(I18n.t('polar_scope_flip_horizontal')).fontSize(10).fontColor('rgba(255, 221, 219, 0.72)').layoutWeight(1)
+                Text(I18n.t('polar_scope_flip_horizontal')).fontSize(12).fontColor('rgba(255, 221, 219, 0.82)').layoutWeight(1)
                 Toggle({ type: ToggleType.Switch, isOn: this.polarScopeHorizontalFlip })
                   .width(42).height(24).selectedColor('#C44949')
+                  .id('polar-scope-flip-horizontal')
                   .onChange((value: boolean) => {
+                    if (value === this.polarScopeHorizontalFlip) return
                     this.polarScopeHorizontalFlip = value
                     this.syncNativePolarScopeOverlay(true)
                     this.callInteractive('setActionChecked', 'actionHorizontal_Flip|' + (value ? '1' : '0'), () => {
@@ -10739,10 +10747,12 @@ struct WindowNativeNode {
                   })
               }.layoutWeight(1)
               Row({ space: 8 }) {
-                Text(I18n.t('polar_scope_flip_vertical')).fontSize(10).fontColor('rgba(255, 221, 219, 0.72)').layoutWeight(1)
+                Text(I18n.t('polar_scope_flip_vertical')).fontSize(12).fontColor('rgba(255, 221, 219, 0.82)').layoutWeight(1)
                 Toggle({ type: ToggleType.Switch, isOn: this.polarScopeVerticalFlip })
                   .width(42).height(24).selectedColor('#C44949')
+                  .id('polar-scope-flip-vertical')
                   .onChange((value: boolean) => {
+                    if (value === this.polarScopeVerticalFlip) return
                     this.polarScopeVerticalFlip = value
                     this.syncNativePolarScopeOverlay(true)
                     this.callInteractive('setActionChecked', 'actionVertical_Flip|' + (value ? '1' : '0'), () => {
@@ -10755,19 +10765,20 @@ struct WindowNativeNode {
             }.width('100%')
           }
             .width('100%')
-            .height(this.isExpandedLayout ? 132 : 172)
+            .height(this.polarScopeFooterHeight())
             .padding({ left: this.isExpandedLayout ? 28 : 18, right: this.isExpandedLayout ? 28 : 18,
               top: this.isExpandedLayout ? 10 : 14, bottom: this.isExpandedLayout ? 10 : 16 })
-            .backgroundColor('rgba(3, 4, 7, 0.95)')
-            .hitTestBehavior(HitTestMode.Transparent)
-        }
-          .width('100%').height('100%')
-          .alignItems(HorizontalAlign.Center)
-          .hitTestBehavior(HitTestMode.Transparent)
+            .width(this.polarScopeControlWidth())
+            .position({ x: (this.skyWidth - this.polarScopeControlWidth()) / 2,
+              y: this.skyHeight - this.polarScopeFooterHeight() - 12 })
+            .backgroundColor('rgba(15, 20, 30, 0.82)')
+            .backdropBlur(16).borderRadius(UI_RADIUS_PANEL)
+            .border({ width: 1, color: 'rgba(255,255,255,0.10)' })
+            .hitTestBehavior(HitTestMode.Default)
       }
         .width('100%').height('100%')
         .backgroundColor('rgba(0,0,0,0)')
-        .hitTestBehavior(HitTestMode.Transparent)
+        .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
         .zIndex(101)
     }
   }
@@ -11310,7 +11321,7 @@ struct WindowNativeNode {
     this.callInteractive('getPluginList', '', (r: StellariumBridgeResponse) => {
       this.pluginListLoading = false
       if (r.ok === true && r.items !== undefined && Array.isArray(r.items)) {
-        const arr = r.items as Array<Object>;
+        const arr = r.items as Array<Record<string, Object>>;
         const list: Array<PluginItem> = [];
         for (let i = 0; i < arr.length; i++) {
           const obj = arr[i];
@@ -11600,7 +11611,7 @@ struct WindowNativeNode {
 private loadDSOCounts(): void {
     this.callInteractive('getDSOCounts', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.dsoCounts !== undefined) {
-        const d = r.dsoCounts as Object;
+        const d = r.dsoCounts as Record<string, Object>;
         this.dsoTotalCount = (d['total'] as number) ?? 0;
         this.dsoGalaxies = (d['galaxies'] as number) ?? 0;
         this.dsoClusters = (d['clusters'] as number) ?? 0;
@@ -11612,7 +11623,7 @@ private loadDSOCounts(): void {
 private loadObjectInfo(): void {
     this.callInteractive('getObjectInfo', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.objectInfoData !== undefined) {
-        const obj = r.objectInfoData as Object;
+        const obj = r.objectInfoData as Record<string, Object>;
         const m = new Map<string, string>();
         if (obj['name'] !== undefined) m.set('name', obj['name'] as string);
         if (obj['nameI18'] !== undefined) m.set('nameI18', obj['nameI18'] as string);
@@ -11637,7 +11648,7 @@ private loadPlanetPositions(): void {
       if (requestId !== this.planetPositionsRequestSequence) return
       this.planetPositionsLoading = false
       if (r.ok === true && Array.isArray(r.items)) {
-        this.planetPositions = (r.items as Array<PlanetPosition>).map((p: PlanetPosition) => ({
+        this.planetPositions = (r.items as Array<PlanetPosition>).map((p: PlanetPosition): PlanetPosition => ({
           name: p.name,
           englishName: p.englishName,
           rightAscension: p.rightAscension,
@@ -11675,7 +11686,7 @@ private loadPlanetPositions(): void {
       if (requestId !== this.hecPositionsRequestSequence) return
       this.hecPositionsLoading = false
       if (r.ok === true && r.hecPositions !== undefined) {
-        const positions = (r.hecPositions as Array<HeliocentricPosition>).map((p: HeliocentricPosition) => ({
+        const positions = (r.hecPositions as Array<HeliocentricPosition>).map((p: HeliocentricPosition): HeliocentricPosition => ({
           name: p.name,
           englishName: p.englishName,
           latitude: p.latitude,
@@ -11727,7 +11738,11 @@ private loadPlanetPositions(): void {
   }
 
   private selectLandscape(id: string, name: string): void {
-    this.callInteractive('setLandscape', id, () => {
+    this.callInteractive('setLandscape', id, (response: StellariumBridgeResponse) => {
+      if (response.ok !== true) {
+        this.flashHint(I18n.t('msg_apply_failed'))
+        return
+      }
       this.currentLandscapeId = id
       this.selectedLandscapeName = name
       this.landscapeDetailOpen = false
@@ -11802,7 +11817,7 @@ private loadPlanetPositions(): void {
         return
       }
       const entries: Array<CommandCatalogEntry> = []
-      const raw = catalogResponse.commands as Array<Object>
+      const raw = catalogResponse.commands as Array<Record<string, Object>>
       for (let i = 0; i < raw.length; i++) {
         const item = raw[i]
         if (typeof item['name'] !== 'string') continue
@@ -11952,7 +11967,7 @@ private loadPlanetPositions(): void {
     this.callNativeWhenReady('getObjectCatalogCategories', '', (result: StellariumBridgeResponse) => {
       if (this.languageRefreshSerial !== languageSerial) return
       if (result.ok !== true || !Array.isArray(result.items)) return
-      const items = result.items as Array<Object>
+      const items = result.items as Array<Record<string, Object>>
       const categories: CatOption[] = []
       for (let index = 0; index < items.length; index++) {
         const item = items[index]
@@ -11985,7 +12000,7 @@ private loadPlanetPositions(): void {
     this.callNativeWhenReady('getConstellationList', '', (result: StellariumBridgeResponse) => {
       if (this.languageRefreshSerial !== languageSerial) return
       if (result.ok !== true || !Array.isArray(result.items)) return
-      const rawItems = result.items as Array<Object>
+      const rawItems = result.items as Array<Record<string, Object>>
       const localizedByEnglish: Record<string, string> = {}
       for (let index = 0; index < rawItems.length; index++) {
         const rawItem = rawItems[index]
@@ -13048,7 +13063,7 @@ private loadPlanetPositions(): void {
     const label = mark === 'sunRise' ? '日出' : (mark === 'sunTransit' ? '太阳中天' : (mark === 'sunSet' ? '日落' : '天文昏影'))
     this.timeMarkLoading = true
     this.callInteractive('getAlmanac', '', (response: StellariumBridgeResponse) => {
-      const almanac: Object | undefined = response.almanac
+      const almanac = response.almanac as Record<string, Object> | undefined
       const targetJD = almanac !== undefined ? Number(almanac[mark]) : Number.NaN
       if (response.ok !== true || !Number.isFinite(targetJD) || targetJD <= 0) {
         this.timeMarkLoading = false
@@ -13682,6 +13697,7 @@ private loadPlanetPositions(): void {
     try {
       this.stopGyroscope(false)
       privacyManager.disableService()
+      AppStorage.setOrCreate('stellariumPrivacyHostReady', false)
       this.privacyNativeStartupAllowed = false
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext
       void context.terminateSelf().catch((err: Error) => {
@@ -13694,7 +13710,7 @@ private loadPlanetPositions(): void {
   }
 
   private startGyroscope(): void {
-    if (!this.applicationInForeground) {
+    if (!this.privacyNativeStartupAllowed || !this.applicationInForeground || !hasCurrentPrivacyConsent()) {
       return
     }
     if (this.gyroscopeEnabled) {
@@ -14134,13 +14150,6 @@ private loadPlanetPositions(): void {
     this.gyroRawAz = targetAz
     this.gyroRawAlt = targetAlt
     this.emitGyroPoseProbe('sample', [forwardX, forwardY, forwardZ], rawUp, targetAz, targetAlt)
-    const diagnosticNow = Date.now()
-    if (diagnosticNow - this.gyroLastDiagnosticMs >= 750) {
-      this.gyroLastDiagnosticMs = diagnosticNow
-      hilog.info(0x0000, 'StellariumArkUI', '[GYRO_ORIENTATION] alpha=' + data.alpha.toFixed(2) +
-        ' beta=' + data.beta.toFixed(2) + ' gamma=' + data.gamma.toFixed(2) +
-        ' absAz=' + targetAz.toFixed(2) + ' absAlt=' + targetAlt.toFixed(2))
-    }
     if (this.gyroFirstReading) {
       this.gyroFirstReading = false
       this.calibrateGyroscope()
@@ -14517,45 +14526,9 @@ private loadPlanetPositions(): void {
     const now = Date.now()
     if (now - this.gyroLastProbeMs < 1000) { return }
     this.gyroLastProbeMs = now
-    const q = this.gyroLastRawQ
-    const qNorm = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3])
-    const fwd = rawForward.length === 3 ? rawForward : this.gyroFwd
-    const up = rawUp.length === 3 ? rawUp : this.gyroUp
-    const fwdNorm = fwd.length === 3 ? Math.sqrt(this.gyroDot(fwd, fwd)) : Number.NaN
-    const upNorm = up.length === 3 ? Math.sqrt(this.gyroDot(up, up)) : Number.NaN
-    const orthogonal = fwd.length === 3 && up.length === 3 ? this.gyroDot(fwd, up) : Number.NaN
-    const horizontalStrength = fwd.length === 3 ? Math.sqrt(fwd[0] * fwd[0] + fwd[1] * fwd[1]) : Number.NaN
-    const smoothed = this.gyroFwd.length === 3 ? this.gyroVectorAltAz(this.gyroFwd) : [Number.NaN, Number.NaN]
-    const elapsedMs = this.gyroStartMs > 0 ? Math.max(1, now - this.gyroStartMs) : 1
-    const callbackHz = this.gyroCallbackCount * 1000 / elapsedMs
-    const dispatchHz = this.gyroDispatchCount * 1000 / elapsedMs
-    const gravityNorm = this.gyroFilteredGravityDevice.length === 3
-      ? Math.sqrt(this.gyroDot(this.gyroFilteredGravityDevice, this.gyroFilteredGravityDevice)) : Number.NaN
-    const magneticNorm = this.gyroFilteredMagneticDevice.length === 3
-      ? Math.sqrt(this.gyroDot(this.gyroFilteredMagneticDevice, this.gyroFilteredMagneticDevice)) : Number.NaN
-    const format = (value: number): string => Number.isFinite(value) ? value.toFixed(3) : 'nan'
-    const message = '[GYRO_PROBE] reason=' + reason +
-      ' mode=' + (this.gyroUsingRotationVector ? 'rotation-vector' : 'orientation-fallback') +
-      ' qNorm=' + format(qNorm) +
-      ' rawFNorm=' + format(fwdNorm) +
-      ' rawUNorm=' + format(upNorm) +
-      ' fwdUpDot=' + format(orthogonal) +
-      ' rawAz=' + format(rawAz) +
-      ' rawAlt=' + format(rawAlt) +
-      ' displayRotation=' + this.gyroDisplayRotation.toString() +
-      ' horizontal=' + format(horizontalStrength) +
-      ' polarAmbiguous=' + (Number.isFinite(horizontalStrength) && horizontalStrength < 0.12).toString() +
-      ' smoothAz=' + format(smoothed[0]) +
-      ' smoothAlt=' + format(smoothed[1]) +
-      ' callbacks=' + this.gyroCallbackCount.toString() +
-      ' valid=' + this.gyroRawEventCount.toString() +
-      ' dispatch=' + this.gyroDispatchCount.toString() +
-      ' invalid=' + this.gyroInvalidEventCount.toString() +
-      ' gravity=' + format(gravityNorm) +
-      ' magnetic=' + format(magneticNorm) +
-      ' callbackHz=' + format(callbackHz) +
-      ' dispatchHz=' + format(dispatchHz)
-    hilog.info(0x0000, 'StellariumArkUI', '%{public}s', message)
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[GYRO_PROBE] reason=%{public}s callbacks=%{public}d dispatch=%{public}d invalid=%{public}d',
+      reason, this.gyroCallbackCount, this.gyroDispatchCount, this.gyroInvalidEventCount)
   }
 
   private gyroEffectiveAzOffset(): number {
@@ -15083,12 +15056,13 @@ private loadPlanetPositions(): void {
     }
     if (this.polarScopeVisible) {
       const headerTop = this.polarScopeTopInset()
-      const headerHeight = this.isExpandedLayout ? 62 : 58
-      obstacles.push({ label: 'polar-scope-header', left: 0, top: headerTop,
-        right: this.skyWidth, bottom: headerTop + headerHeight })
-      obstacles.push({ label: 'polar-scope-footer', left: 0,
-        top: this.skyHeight - (this.isExpandedLayout ? 132 : 172), right: this.skyWidth,
-        bottom: this.skyHeight })
+      const left = (this.skyWidth - this.polarScopeControlWidth()) / 2
+      const right = left + this.polarScopeControlWidth()
+      obstacles.push({ label: 'polar-scope-header', left: left, top: headerTop,
+        right: right, bottom: headerTop + 60 })
+      obstacles.push({ label: 'polar-scope-footer', left: left,
+        top: this.skyHeight - this.polarScopeFooterHeight() - 12, right: right,
+        bottom: this.skyHeight - 12 })
     }
     if (this.gyroscopeEnabled && this.gyroCalibPanelOpen) {
       const calibrationLeft = this.isExpandedLayout ? this.EDGE_MARGIN + 64 : 16
@@ -16306,7 +16280,12 @@ private loadPlanetPositions(): void {
     return false
   }
 
+  private deviceLocationRequestInProgress: boolean = false
+
   private async useDeviceLocation(): Promise<void> {
+    if (this.deviceLocationRequestInProgress || !this.privacyNativeStartupAllowed ||
+      !this.applicationInForeground || !hasCurrentPrivacyConsent()) return
+    this.deviceLocationRequestInProgress = true
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.locationPickerStatus = I18n.t('m_req_location_perm')
     try {
@@ -16316,7 +16295,12 @@ private loadPlanetPositions(): void {
         'ohos.permission.APPROXIMATELY_LOCATION',
         'ohos.permission.LOCATION'
       ]
-      await atManager.requestPermissionsFromUser(context, permissions)
+      const permissionResult = await atManager.requestPermissionsFromUser(context, permissions)
+      if (!this.privacyNativeStartupAllowed || !this.applicationInForeground || !hasCurrentPrivacyConsent()) return
+      if (!permissionResult.authResults.some((result: number) => result === 0)) {
+        this.locationPickerStatus = I18n.t('m_gps_unavailable')
+        return
+      }
       this.locationPickerStatus = I18n.t('m_getting_location')
       const current = await geoLocationManager.getCurrentLocation({
         priority: geoLocationManager.LocationRequestPriority.ACCURACY,
@@ -16324,6 +16308,7 @@ private loadPlanetPositions(): void {
         maxAccuracy: 2000,
         timeoutMs: 5000
       })
+      if (!this.privacyNativeStartupAllowed || !this.applicationInForeground || !hasCurrentPrivacyConsent()) return
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
       this.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude, I18n.t('m_device_loc_synced'))
       this.applyPickerLocation()
@@ -16335,13 +16320,9 @@ private loadPlanetPositions(): void {
     } catch (err) {
       const errMsg: string = err instanceof Error ? err.message : JSON.stringify(err)
       hilog.warn(0x0000, 'StellariumArkUI', 'device location failed: %{public}s', errMsg)
-      if (this.locationPickerLatitude === 0 && this.locationPickerLongitude === 0) {
-        this.setPickerLocation(I18n.t('city_beijing'), 39.9, 116.4, 43, I18n.t('m_gps_sim_default'))
-        this.applyPickerLocation()
-      } else {
-        this.locationPickerStatus = I18n.t('m_gps_unavailable')
-        this.applyPickerLocation()
-      }
+      this.locationPickerStatus = I18n.t('m_gps_unavailable')
+    } finally {
+      this.deviceLocationRequestInProgress = false
     }
   }
 
@@ -17084,7 +17065,7 @@ private loadPlanetPositions(): void {
       this.tonightSun = I18n.t('tn_rise') + ' ' + this.fmtIso(t.sun?.rise ?? '') + ' · ' + I18n.t('tn_transit') + ' ' + this.fmtIso(t.sun?.transit ?? '') + ' · ' + I18n.t('tn_set') + ' ' + this.fmtIso(t.sun?.set ?? '')
       this.tonightDark = I18n.t('tn_astro_dusk') + ' ' + this.fmtIso(t.sun?.astroTwilightEnd ?? '') + ' → ' + I18n.t('tn_astro_dawn') + ' ' + this.fmtIso(t.sun?.astroTwilightStart ?? '')
         + (t.sun?.darkWindowHours !== undefined ? (' (' + I18n.t('tn_dark_hours') + ' ~' + t.sun.darkWindowHours.toFixed(1) + ' ' + I18n.t('tn_hours') + ')') : '')
-      this.tonightPlanetRows = (t.planets ?? []).map((p) => {
+      this.tonightPlanetRows = (t.planets ?? []).map((p): TonightPlanetRow => {
         const vis = p.visible === true ? I18n.t('tn_visible') : I18n.t('tn_below_horizon')
         return {
           name: p.name ?? (p.englishName ?? ''),
@@ -17785,13 +17766,19 @@ private loadPlanetPositions(): void {
   }
 
   private isUiPoint(x: number, y: number): boolean {
+    if (this.guideState.active) {
+      return x >= this.guideCardX() && x <= this.guideCardX() + this.guideCardWidth() &&
+        y >= this.guideCardY() && y <= this.guideCardY() + this.guideCardHeight()
+    }
     if (this.polarScopeVisible) {
       const headerTop = this.polarScopeTopInset()
-      const headerHeight = this.isExpandedLayout ? 62 : 58
-      const closeLeft = Math.max(0, this.skyWidth - 76)
-      if (x >= closeLeft && y >= headerTop - 8 && y <= headerTop + headerHeight + 8) {
+      const left = (this.skyWidth - this.polarScopeControlWidth()) / 2
+      if (x >= left && x <= left + this.polarScopeControlWidth() &&
+        ((y >= headerTop && y <= headerTop + 60) ||
+          (y >= this.skyHeight - this.polarScopeFooterHeight() - 12 && y <= this.skyHeight - 12))) {
         return true
       }
+      return false
     }
     if (this.recording && !this.scriptPlaybackVisible() &&
       x >= 16 && x <= Math.max(266, this.skyWidth - 16) &&
@@ -17875,11 +17862,16 @@ private loadPlanetPositions(): void {
     }
     if (this.polarScopeVisible) {
       const headerTop = this.polarScopeTopInset()
-      const headerHeight = this.isExpandedLayout ? 62 : 58
-      const closeLeft = Math.max(0, this.skyWidth - 76)
-      if (x >= closeLeft && y >= headerTop - 8 && y <= headerTop + headerHeight + 8) {
-        this.closePolarScope()
-        return true
+      const right = (this.skyWidth + this.polarScopeControlWidth()) / 2 - 6
+      if (y >= headerTop + 6 && y <= headerTop + 54) {
+        if (x >= right - 48 && x <= right) {
+          this.closePolarScope()
+          return true
+        }
+        if (x >= right - 104 && x <= right - 56) {
+          this.recenterPolarScope()
+          return true
+        }
       }
     }
 	    // 顶部搜索栏已移除，搜索功能通过左侧图标进入分类面板
@@ -18638,13 +18630,6 @@ private loadPlanetPositions(): void {
       if (!this.scriptPlaybackVisible() && this.recording && !this.recordingUiExpanded) {
         this.recordingFocusShell()
       }
-      if (!this.scriptPlaybackVisible() && !(this.recording && !this.recordingUiExpanded) && this.polarScopeVisible) {
-        Stack() { }
-          .width('100%')
-          .height('100%')
-          .hitTestBehavior(HitTestMode.Default)
-          .onTouch((event: TouchEvent) => { this.handleSkyTouch(event) })
-      }
       if (!this.scriptPlaybackVisible() && !(this.recording && !this.recordingUiExpanded) && !this.polarScopeVisible) {
         this.harmonyShell()
       }
@@ -18682,58 +18667,6 @@ private loadPlanetPositions(): void {
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
-      // 启动动画：星空淡入 + 核心就绪后整体淡出（不阻挡首帧交互太久）
-      if (!this.splashGone) {
-        Stack() {
-          // 星空背景：亮星/暗星交错闪烁
-          ForEach(this.splashStars, (s: StarDot) => {
-            Circle({ width: s.r, height: s.r })
-              .fill("#FFFFFFFF")
-              .opacity(s.bright ? (this.twPhase ? 0.95 : 0.45) : (this.twPhase ? 0.4 : 0.18))
-              .position({ x: s.xPct + '%', y: s.yPct + '%' })
-              .animation({ duration: 1000, curve: Curve.EaseInOut })
-          }, (s: StarDot, idx: number) => 'star' + idx)
-          // 中央内容：标题 + 副标题 + 加载指示
-          Column() {
-            Text("Stellarium")
-              .fontSize(34).fontWeight(FontWeight.Bold).fontColor("#E5FFFFFF").letterSpacing(2)
-              .opacity(this.splashIn ? 1 : 0)
-              .translate({ y: this.splashIn ? 0 : 16 })
-              .animation({ duration: 600, curve: Curve.EaseOut })
-              .margin({ bottom: 10 })
-            LoadingProgress()
-              .width(38).height(38)
-              .color("#5B93BF")
-              .opacity(this.splashIn ? 1 : 0)
-              .animation({ duration: 600, curve: Curve.EaseOut, delay: 300 })
-            Text("正在唤醒星空…")
-              .fontSize(12).fontColor("#99FFFFFF")
-              .margin({ top: 14 })
-              .opacity(this.splashIn ? 1 : 0)
-              .animation({ duration: 600, curve: Curve.EaseOut, delay: 400 })
-          }
-          .align(Alignment.Center)
-        }
-        .width("100%").height("100%")
-        .backgroundColor("#05070F")
-        .opacity(this.splashOpacity)
-        .zIndex(100)
-
-        .onAppear(() => {
-          this.startTwinkle()
-          if (this.startupPreparing) {
-            // Qt remounts this page to inject createInfo after consent. Keep
-            // the opaque launch surface instead of replaying its entrance.
-            this.splashIn = true
-            this.splashOpacity = 1
-            return
-          }
-          this.getUIContext().animateTo({ duration: 700, curve: Curve.EaseOut }, () => {
-            this.splashIn = true
-            this.splashOpacity = 1
-          })
-        })
-      }
       // Native night mode colors the Qt sky. These permanent, input-transparent
       // layers extend the same low-luminance red treatment to the ArkUI tree.
       Stack()
@@ -18792,8 +18725,205 @@ private loadPlanetPositions(): void {
         }
       })
   }
+  private publishGuideState(): void {
+    AppStorage.setOrCreate('stellariumGuideState', JSON.stringify({
+      ok: true, state: this.guideState, lastRequestId: this.guideLastRequest,
+      result: this.guideLastResult, guides: ASTRONOMY_GUIDES
+    }))
+  }
+
+  private async executeGuideRequest(commandName: string, payload: string, requestId: string = ''): Promise<void> {
+    if (!this.guidePlayer) {
+      this.guidePlayer = new GuidePlayer((name: string, value: string): Promise<GuideResult> => {
+        return new Promise<GuideResult>((resolve) => {
+          this.callInteractive(name, value,
+            (response: StellariumBridgeResponse) => resolve({ ok: response.ok === true, error: response.error }),
+            () => resolve({ ok: false, error: 'bridge_timeout' }))
+        })
+      }, (state: GuideState) => {
+        const ended = this.guideState.active && !state.active
+        if (this.guideState.phase !== state.phase || this.guideState.index !== state.index) {
+          this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, () => { this.guideState = state })
+        } else {
+          this.guideState = state
+        }
+        this.publishGuideState()
+        if (ended) {
+          if (this.guideTimer >= 0) clearInterval(this.guideTimer)
+          this.guideTimer = -1
+          this.panelVisible = this.guidePanelWasVisible
+          if (this.guideGyroWasEnabled && this.applicationInForeground) {
+            this.gyroscopeEnabled = true
+            this.startGyroscope()
+          }
+          this.guideGyroWasEnabled = false
+          this.refreshState()
+          this.loadObserverInfo(true)
+        }
+      })
+    }
+    let result: GuideResult
+    if (commandName === 'startGuide') {
+      if (this.scriptSessionActive() || this.polarScopeVisible || !ASTRONOMY_GUIDES.some((guide: AstronomyGuide) => guide.id === payload)) {
+        result = { ok: false, error: 'session_busy_or_unknown_guide' }
+      } else {
+        this.guidePanelWasVisible = this.panelVisible
+        this.guideGyroWasEnabled = this.gyroscopeEnabled
+        this.stopGyroscope(false)
+        this.gyroscopeEnabled = false
+        this.stopSkyInertia()
+        this.panelVisible = false
+        this.infoWinVisible = false
+        this.stopDetailAutoRefresh()
+        this.stopTimePanelTimers()
+        this.stopSkyCultureTimeFollowTimer()
+        this.stopAstroCalcContextTimer()
+        this.stopTelescopeLivePosition(false)
+        this.guideTimer = setInterval(() => {
+          if (this.applicationInForeground) this.guidePlayer?.tick(0.25)
+        }, 250) as number
+        result = await this.guidePlayer.start(payload)
+      }
+    } else {
+      if (['return', 'next', 'previous', 'stop', 'retry', 'center', 'closer', 'wider'].includes(payload)) {
+        this.stopSkyInertia()
+      }
+      result = await this.guidePlayer.action(payload)
+    }
+    this.guideLastRequest = requestId
+    this.guideLastResult = result
+    this.publishGuideState()
+    if (!result.ok) this.flashHint(I18n.t('guide_error'))
+  }
+
+  private currentGuide(): AstronomyGuide {
+    return ASTRONOMY_GUIDES.find((guide: AstronomyGuide) => guide.id === this.guideState.guideId) ?? ASTRONOMY_GUIDES[0]
+  }
+
+  private currentGuideStep(): GuideStep { return this.currentGuide().steps[this.guideState.index] }
+  private guideCardWidth(): number { return Math.max(200, Math.min(440, this.skyWidth - 24)) }
+  private guideCardHeight(): number { return Math.max(160, Math.min(390, this.skyHeight - this.scriptControlSafeTop() - 24)) }
+  private guideCardX(): number {
+    return this.clamp((this.isExpandedLayout ? 12 : (this.skyWidth - this.guideCardWidth()) / 2) + this.scriptControlOffsetX, 8, Math.max(8, this.skyWidth - this.guideCardWidth() - 8))
+  }
+  private guideCardY(): number {
+    return this.clamp(this.skyHeight - this.guideCardHeight() - 16 + this.scriptControlOffsetY,
+      this.scriptControlSafeTop(), Math.max(this.scriptControlSafeTop(), this.skyHeight - this.guideCardHeight() - 12))
+  }
+
+  @Builder
+  guideButton(label: string, action: string) {
+    Button(I18n.t(label), { type: ButtonType.Normal })
+      .id('guide-' + action).fontSize(14).fontColor('#EDF7FF')
+      .backgroundColor(action === 'next' || action === 'return' ? '#356C92' : 'rgba(255,255,255,0.09)')
+      .borderRadius(UI_RADIUS_CONTROL).height(48).layoutWeight(1)
+      .enabled(this.guideState.phase !== 'preparing' && this.guideState.phase !== 'restoring' &&
+        (action !== 'previous' || this.guideState.index > 0) &&
+        (action !== 'explore' || this.guideState.phase === 'observing'))
+      .stateEffect(true).onClick(() => { this.executeGuideRequest('guideAction', action) })
+  }
+
+  @Builder
+  guideLibrary() {
+    Text(I18n.t('guide_library')).fontSize(17).fontWeight(FontWeight.Medium).fontColor(this.nmText()).width('100%')
+    Text(I18n.t('guide_library_hint')).fontSize(13).fontColor(this.nmSub()).width('100%')
+    ForEach(ASTRONOMY_GUIDES, (guide: AstronomyGuide) => {
+      Button({ type: ButtonType.Normal }) {
+        Column({ space: 6 }) {
+          Text(I18n.t(guide.title)).fontSize(15).fontColor(this.nmText()).width('100%')
+          Text(guide.steps.length.toString() + ' · ' + I18n.t('guide_stations')).fontSize(12).fontColor(this.nmSub()).width('100%')
+        }.width('100%').padding(14)
+      }.id('guide-start-' + guide.id).width('100%').backgroundColor(this.nmBg()).borderRadius(UI_RADIUS_CONTROL)
+        .enabled(!this.scriptSessionActive()).onClick(() => { this.executeGuideRequest('startGuide', guide.id) })
+    }, (guide: AstronomyGuide) => guide.id)
+    Text(I18n.t('guide_legacy')).fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 12 })
+  }
+
+  @Builder
+  interactiveGuideShell() {
+    Stack() {
+      Stack() { }.width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
+        .onTouch((event: TouchEvent) => {
+          if (this.guideState.phase === 'exploring') this.handleSkyTouch(event)
+        })
+      Column({ space: 8 }) {
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text(I18n.t(this.currentGuide().title)).fontSize(13).fontColor('#A8BDD1').width('100%')
+            Text((this.guideState.index + 1).toString() + ' / ' + this.guideState.count.toString() + ' · ' + this.planetZh(this.currentGuideStep().title))
+              .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#EFF8FF').width('100%')
+          }.layoutWeight(1).hitTestBehavior(HitTestMode.Block)
+            .onTouch((event: TouchEvent) => { this.handleScriptControlDragTouch(event) })
+          Button({ type: ButtonType.Circle }) { Image(this.getIcon('close', false)).width(20).height(20) }
+            .id('guide-stop').width(44).height(44).backgroundColor('rgba(255,255,255,0.10)')
+            .accessibilityText(I18n.t('guide_exit')).enabled(this.guideState.phase !== 'restoring')
+            .onClick(() => { this.executeGuideRequest('guideAction', 'stop') })
+        }.width('100%').constraintSize({ minHeight: 52 }).hitTestBehavior(HitTestMode.Default)
+        Scroll() {
+          Column({ space: 12 }) {
+            Text(I18n.t('guide_phase_' + this.guideState.phase)).fontSize(12).fontColor('#9CD6D3').width('100%')
+            ForEach([this.currentGuideStep()], (step: GuideStep) => {
+              Text(I18n.t(step.text)).fontSize(15).lineHeight(23).fontColor('#EFF8FF').width('100%')
+                .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
+            }, (step: GuideStep) => step.target)
+            Text(I18n.t('guide_simulation')).fontSize(12).fontColor('#A8BDD1').width('100%')
+            if (this.guideState.phase === 'error') {
+              Text(I18n.t('guide_error')).fontSize(13).fontColor('#FFD2B6').width('100%')
+            } else if (this.guideState.phase === 'exploring') {
+              Text(I18n.t('guide_explore_hint')).fontSize(13).fontColor('#A8BDD1').width('100%')
+            } else {
+              Row({ space: 8 }) {
+                this.guideButton('guide_closer', 'closer')
+                this.guideButton('guide_wider', 'wider')
+                this.guideButton('guide_explore', 'explore')
+              }.width('100%')
+              Row() {
+                if (this.guideState.automatic) {
+                  this.guideButton('guide_manual', 'auto-off')
+                } else {
+                  this.guideButton('guide_auto', 'auto-on')
+                }
+                if (this.guideState.automatic) {
+                  Text(Math.ceil(this.guideState.remaining).toString() + ' s').fontSize(13).fontColor('#A8BDD1').margin({ left: 12 })
+                }
+              }.width('100%')
+            }
+            Text(I18n.t(this.currentGuide().credit)).fontSize(11).fontColor('#A8BDD1').width('100%')
+          }.width('100%').padding({ bottom: 8 })
+        }.id('guide-content').width('100%').layoutWeight(1).scrollBar(BarState.Auto).hitTestBehavior(HitTestMode.Default)
+        Row({ space: 8 }) {
+          if (this.guideState.phase === 'exploring') {
+            this.guideButton('guide_return', 'return')
+          } else if (this.guideState.phase === 'error') {
+            this.guideButton('guide_retry', 'retry')
+          } else {
+            this.guideButton('guide_previous', 'previous')
+            if (this.guideState.phase === 'paused') {
+              this.guideButton('btn_resume', 'resume')
+            } else {
+              this.guideButton('script_pause', 'pause')
+            }
+            if (this.guideState.index + 1 === this.guideState.count) {
+              this.guideButton('guide_finish', 'next')
+            } else {
+              this.guideButton('guide_next', 'next')
+            }
+          }
+        }.width('100%').height(48).hitTestBehavior(HitTestMode.Default)
+      }.width(this.guideCardWidth()).height(this.guideCardHeight()).padding(14)
+        .position({ x: this.guideCardX(), y: this.guideCardY() })
+        .backgroundColor('rgba(10,18,30,0.92)').borderRadius(UI_RADIUS_PANEL)
+        .border({ width: 1, color: 'rgba(147,215,255,0.20)' })
+        .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
+        .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
+    }.width('100%').height('100%').hitTestBehavior(HitTestMode.Transparent)
+  }
+
   @Builder
   scriptFocusShell() {
+    if (this.guideState.active) {
+      this.interactiveGuideShell()
+    } else {
     Stack() {
       Stack() { }
         .width('100%')
@@ -18999,6 +19129,8 @@ private loadPlanetPositions(): void {
           .combine(TransitionEffect.translate({ x: 0, y: -6 }).animation({ duration: 160, curve: Curve.EaseIn }))
       ))
   }
+  }
+
   }
 
   @Builder
@@ -20270,6 +20402,7 @@ private loadPlanetPositions(): void {
   }
 
   private isDockPoint(x: number, y: number): boolean {
+    if (this.polarScopeVisible) return false
     const left = this.dockLeft()
     const right = left + this.dockWidthPixels()
     const top = this.dockTop()
@@ -21388,6 +21521,13 @@ private loadPlanetPositions(): void {
     this.objectInspectorModelLastLighting = lighting === undefined ? [] :
       lighting.viewToBody.concat(lighting.sunDirectionBody)
     if (this.objectInspectorModelPixelMap === undefined) this.objectInspectorMediaDecoding = true
+    const ring = this.objectInspectorPlanetRingSpec()
+    const renderRing: DetailModelRing | undefined = ring === undefined ? undefined : {
+      innerRadius: ring.innerRadius, outerRadius: ring.outerRadius, opacity: ring.opacity
+    }
+    const renderLighting: DetailModelLight | undefined = lighting === undefined ? undefined : {
+      viewToBody: lighting.viewToBody, sunDirectionBody: lighting.sunDirectionBody, emissive: lighting.emissive
+    }
     const resources: DetailModelResources = {
       texture: this.objectInspectorModelTexturePixels,
       textureWidth: this.objectInspectorModelTextureWidth,
@@ -21396,13 +21536,13 @@ private loadPlanetPositions(): void {
       ringTexture: this.objectInspectorModelRingTexturePixels,
       ringWidth: this.objectInspectorModelRingTextureWidth,
       ringHeight: this.objectInspectorModelRingTextureHeight,
-      ringSpec: this.objectInspectorPlanetRingSpec(),
+      ringSpec: renderRing,
       kind: this.objectInspectorProceduralKind,
       temperature: this.selectedTemperatureK,
       particles: this.objectInspectorProceduralParticles
     }
     const frame: DetailModelFrame = {
-      renderSize: renderSize, scale: this.objectInspectorModelScale, transform: transform, lighting: lighting
+      renderSize: renderSize, scale: this.objectInspectorModelScale, transform: transform, lighting: renderLighting
     }
     if (this.objectInspectorModelRenderClient === undefined) {
       this.objectInspectorModelRenderClient = new DetailModelRenderClient()
@@ -28841,6 +28981,7 @@ private loadPlanetPositions(): void {
       // 脚本面板：脚本列表 + 录制 / 回放（#39）
       Scroll() {
         Column({ space: 10 }) {
+          this.guideLibrary()
           // ===== 脚本播放列表 =====
           Text(I18n.t('i0123')).fontSize(15).fontColor(this.nmText()).width('100%').margin({ top: 4 })
           Row({ space: 8 }) {
@@ -29994,7 +30135,7 @@ private loadPlanetPositions(): void {
         .width(72)
       Scroll() {
         Row({ space: 6 }) {
-          ForEach(SUPPORTED_LANGUAGES.map((code: string) => ({
+          ForEach(SUPPORTED_LANGUAGES.map((code: string): LangOption => ({
             code: code,
             name: LANGUAGE_DISPLAY[code] ?? code
           })), (lang: LangOption) => {
@@ -30846,12 +30987,15 @@ private loadPlanetPositions(): void {
         .fontSize(14)
         .fontColor('#E5FFFFFF')
         .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: enabled })
+      Toggle({ type: ToggleType.Switch, isOn: actionId === 'actionShow_Ground' ? this.ground :
+        (actionId === 'actionShow_MistHorizon' ? this.mistHorizon : enabled) })
         .width(46)
         .height(28)
         .selectedColor('#5B93BF')
         .clickEffect({ level: ClickEffectLevel.LIGHT })
         .onChange((value: boolean) => {
+          if (actionId === 'actionShow_Ground' && value === this.ground) return
+          if (actionId === 'actionShow_MistHorizon' && value === this.mistHorizon) return
           if (cmd) {
             if (cmd.indexOf('setSkyDisplay') === 0) {
               this.setSkyDisplaySetting(actionId, value)
@@ -30867,8 +31011,10 @@ private loadPlanetPositions(): void {
       .height(42)
       .width('100%')
       .padding({ left: 10, right: 8 })
-      .backgroundColor(enabled ? 'rgba(107, 163, 214, 0.12)' : 'rgba(255, 255, 255, 0.04)')
-      .border({ width: 1, color: enabled ? 'rgba(107, 163, 214, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
+      .backgroundColor((actionId === 'actionShow_Ground' ? this.ground :
+        (actionId === 'actionShow_MistHorizon' ? this.mistHorizon : enabled)) ? 'rgba(107, 163, 214, 0.12)' : 'rgba(255, 255, 255, 0.04)')
+      .border({ width: 1, color: (actionId === 'actionShow_Ground' ? this.ground :
+        (actionId === 'actionShow_MistHorizon' ? this.mistHorizon : enabled)) ? 'rgba(107, 163, 214, 0.18)' : 'rgba(255, 255, 255, 0.05)' })
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ bottom: 6 })
       .animation({ duration: 200, curve: curves.springMotion(0.45, 0.9) })
@@ -31735,6 +31881,11 @@ private loadPlanetPositions(): void {
   // View 面板 Landscape 标签页内容
   @Builder viewLandscapeTab() {
     this.switchRow(I18n.t('s0306'), this.ground, 'actionShow_Ground')
+    this.switchRow(I18n.t('mist_horizon'), this.mistHorizon, 'actionShow_MistHorizon')
+    Text(I18n.t('mist_horizon_hint')).fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+    if (!this.ground) {
+      Text(I18n.t('landscape_preselect_hint')).fontSize(12).fontColor(this.nmSub()).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+    }
     this.switchRow(I18n.t('s0520'), this.landscapeIllum, 'actionShow_LandscapeIllumination')
     this.switchRow(I18n.t('s0521'), this.landscapeLabels, 'actionShow_LandscapeLabels')
     this.switchRow(I18n.t('s0307'), this.fogEffect, 'actionShow_Fog')
@@ -31933,7 +32084,7 @@ private loadPlanetPositions(): void {
           Column({ space: 10 }) {
             Row({ space: 8 }) {
               Row().width(3).height(20).backgroundColor(this.nmAccent()).borderRadius(2)
-              Text('文化概述').fontSize(12).fontColor(this.nmText()).fontWeight(FontWeight.Medium).layoutWeight(1)
+              Text(I18n.t('culture_constellation_intro')).fontSize(12).fontColor(this.nmText()).fontWeight(FontWeight.Medium).layoutWeight(1)
             }.width('100%')
             Column({ space: 11 }) {
               ForEach(this.skyCultureNarrationExpanded ? this.skyCultureNarrationParagraphs() : this.skyCultureNarrationParagraphs().slice(0, 2), (paragraph: string) => {
@@ -31941,7 +32092,7 @@ private loadPlanetPositions(): void {
               }, (paragraph: string, index: number) => 'narration-' + index + '-' + paragraph)
             }.width('100%')
             Row() {
-              Button(this.skyCultureNarrationExpanded ? '收起说明' : '展开说明').fontSize(10).fontColor(this.nmAccent())
+              Button(I18n.t(this.skyCultureNarrationExpanded ? 'culture_collapse_intro' : 'culture_expand_intro')).fontSize(10).fontColor(this.nmAccent())
                 .backgroundColor(this.nmInput()).borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 11, right: 11 })
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
                 .onClick(() => { this.skyCultureNarrationExpanded = !this.skyCultureNarrationExpanded })

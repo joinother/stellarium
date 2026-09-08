@@ -767,6 +767,8 @@ QString StelScriptMgr::getDescription(const QString& s)
 
 bool StelScriptMgr::runPreprocessedScript(const QString &preprocessedScript, const QString& scriptId)
 {
+	if (guidedSession)
+		return false;
 #ifdef ENABLE_SCRIPT_QML
 	if (!mutex.tryLock())
 #else
@@ -1016,6 +1018,26 @@ double StelScriptMgr::getScriptRate() const
 	return engine->globalObject().property("scriptRateReadOnly").toNumber();
 }
 
+bool StelScriptMgr::beginGuidedSession()
+{
+	if (guidedSession || scriptIsRunning())
+		return false;
+	captureSessionState();
+	guidedSession = sessionState.valid;
+	return guidedSession;
+}
+
+bool StelScriptMgr::endGuidedSession()
+{
+	if (!guidedSession)
+		return true;
+	if (!StelApp::isInitialized())
+		return false;
+	restoreSessionState(false);
+	guidedSession = false;
+	return true;
+}
+
 void StelScriptMgr::captureSessionState()
 {
 	StelCore* core = StelApp::getInstance().getCore();
@@ -1065,7 +1087,7 @@ void StelScriptMgr::captureSessionState()
 	sessionState.valid = true;
 }
 
-void StelScriptMgr::restoreSessionState()
+void StelScriptMgr::restoreSessionState(bool deferred)
 {
 	if (!sessionState.valid || !StelApp::isInitialized())
 		return;
@@ -1198,8 +1220,11 @@ void StelScriptMgr::restoreSessionState()
 	// A script can leave a pending zoom or observer notification in the event
 	// queue. Apply once immediately and once after that queue has drained.
 	applyRestoredState();
-	QTimer::singleShot(0, qApp, applyRestoredState);
-	QTimer::singleShot(120, qApp, applyRestoredState);
+	if (deferred)
+	{
+		QTimer::singleShot(0, qApp, applyRestoredState);
+		QTimer::singleShot(120, qApp, applyRestoredState);
+	}
 	qInfo() << "[Scripting] restored pre-script session state; JD=" << sessionState.jd
 		<< "timeRate=" << sessionState.timeRate << "projection=" << sessionState.projectionKey
 		<< "fov=" << sessionState.fov;

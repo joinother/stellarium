@@ -98,6 +98,9 @@ public:
 	~StelScriptMgr() override;
 
 	QStringList getScriptList() const;
+	bool beginGuidedSession();
+	bool endGuidedSession();
+	bool guidedSessionActive() const { return guidedSession; }
 
 	//! Find out if a script is running
 	//! @return true if a script is running, else false
@@ -355,7 +358,8 @@ private:
 	QString getHeaderSingleLineCommentText(const QString& s, const QString& id, const QString& notFoundText="");
 
 	void captureSessionState();
-	void restoreSessionState();
+	void restoreSessionState(bool deferred = true);
+	bool guidedSession = false;
 
 #ifdef ENABLE_SCRIPT_QML
 	QJSEngine *engine;

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "group": "norse-intro",
+  "reviewStatus": "editorial-draft; native review pending",
+  "sections": [
+    {
+      "id": "norse_intro_priority10",
+      "culture": "norse",
+      "section": "Introduction",
+      "sourceWasEmpty": true,
+      "reason": "Describe the supplied incomplete six-figure collection and identify its contributor without inventing missing historical narratives.",
+      "sourceBefore": "This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below.",
+      "sourceAfter": "This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below.",
+      "requiredLanguages": [
+        "en",
+        "zh_CN",
+        "zh_TW",
+        "es",
+        "fr",
+        "de",
+        "ru",
+        "ja",
+        "ko",
+        "pt_BR"
+      ],
+      "translations": {
+        "en": [
+          "This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below."
+        ],
+        "zh_CN": [
+          "这套尚未完成的北欧星空文化资料由 Jonas Persson 提供，包含六组星座图形。原始资源包尚未提供这些图形的叙述性介绍；已有参考资料与贡献者署名保留在下文中。"
+        ],
+        "zh_TW": [
+          "這套尚未完成的北歐星空文化資料由 Jonas Persson 提供，包含六組星座圖形。原始資源包尚未提供這些圖形的敘述性介紹；已有參考資料與貢獻者署名保留在下文中。"
+        ],
+        "es": [
+          "Esta colección incompleta de cultura celeste nórdica fue aportada por Jonas Persson y contiene seis figuras de constelaciones. El paquete original aún no incluye una descripción narrativa de estas figuras. Las referencias y la atribución al colaborador se conservan a continuación."
+        ],
+        "fr": [
+          "Cette collection incomplète de culture céleste nordique a été fournie par Jonas Persson et contient six figures de constellations. Le contenu d’origine ne comprend pas encore de description narrative de ces figures. Les références et l’attribution au contributeur sont conservées ci-dessous."
+        ],
+        "de": [
+          "Diese unvollständige Sammlung zur nordischen Himmelskultur wurde von Jonas Persson beigetragen und enthält sechs Sternbildfiguren. Das ursprüngliche Ressourcenpaket enthält noch keine erzählende Beschreibung dieser Figuren. Die vorhandenen Quellenangaben und die Nennung des Mitwirkenden bleiben unten erhalten."
+        ],
+        "ru": [
+          "Эта незавершённая коллекция скандинавской культуры неба предоставлена Йонасом Перссоном (Jonas Persson) и содержит шесть фигур созвездий. В исходном пакете ещё нет повествовательного описания этих фигур. Имеющиеся ссылки и сведения об авторстве сохранены ниже."
+        ],
+        "ja": [
+          "この未完成の北欧の星空文化資料は Jonas Persson が提供したもので、六つの星座図形を含みます。元の資料には、これらの図形についての物語的な説明はまだありません。提供された参考資料と貢献者の情報は下記に残しています。"
+        ],
+        "ko": [
+          "이 미완성 북유럽 하늘 문화 자료는 Jonas Persson이 제공했으며 여섯 개의 별자리 도형을 담고 있습니다. 원본 자료에는 아직 이 도형들에 관한 서술형 설명이 없습니다. 제공된 참고 자료와 기여자 정보는 아래에 보존되어 있습니다."
+        ],
+        "pt_BR": [
+          "Esta coleção incompleta de cultura celeste nórdica foi fornecida por Jonas Persson e contém seis figuras de constelações. O pacote original ainda não inclui uma descrição narrativa dessas figuras. As referências e a atribuição ao colaborador são mantidas abaixo."
+        ]
+      },
+      "previousTranslationHashes": {},
+      "preservedTranslations": {}
+    }
+  ]
+}

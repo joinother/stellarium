@@ -6,7 +6,7 @@
 
 People have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.
 
-Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. This western sky culture established itself as the standard in modern astronomy.
+Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects.
 
 ## Description
 

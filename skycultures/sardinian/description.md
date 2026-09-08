@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Like all peoples of the world, even the ancient Sardinians, turned their eyes to the sky that marked the time and the seasons. The peasant's world has given its name to the stars and the constellations of the Sardinian culture.
+The ancient Sardinians turned their eyes to the sky that marked the time and the seasons. The peasant's world has given its name to the stars and the constellations of the Sardinian culture.
 
 ## Description
 

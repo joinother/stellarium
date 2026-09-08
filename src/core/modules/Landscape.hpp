@@ -275,6 +275,24 @@ protected:
 	bool initialized = false;
 };
 
+class QOpenGLTexture;
+
+class LandscapeMist : public Landscape
+{
+public:
+	LandscapeMist();
+	~LandscapeMist() override;
+	void load(const QSettings&, const QString&) override {}
+	void draw(StelCore* core, bool onlyPolygon) override;
+	float opacity = 0.f;
+	float animationTime = 0.f;
+	Vec3f sunDirection = Vec3f(0.f, 0.f, -1.f);
+private:
+	void prepareResources();
+	std::unique_ptr<QOpenGLTexture> ridgeTexture;
+	std::unique_ptr<QOpenGLTexture> noiseTexture;
+};
+
 //! @class LandscapeOldStyle
 //! This was the original landscape, introduced for decorative purposes. It segments the horizon in several tiles
 //! (usually 4 or 8), therefore allowing very high resolution horizons also on limited hardware,

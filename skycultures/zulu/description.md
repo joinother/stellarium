@@ -2,7 +2,7 @@
 
 ## Introduction
 
-A wide spread African concept is that the sky is a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves.
+In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves.
 
 ## Description
 

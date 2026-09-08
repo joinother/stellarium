@@ -8,6 +8,23 @@ export interface PrivacyConsentResult {
   dialogShown: boolean;
 }
 
+export function hasCurrentPrivacyConsent(): boolean {
+  try {
+    const management = privacyManager.getAppPrivacyMgmtInfo();
+    if (management.type !== privacyManager.AppPrivacyMgmtType.FULL_MODE) {
+      return false;
+    }
+    const statement = management.privacyInfo.find((item) =>
+      item.type === privacyManager.AppPrivacyLinkType.PRIVACY_STATEMENT_LINK);
+    return statement !== undefined && privacyManager.getAppPrivacyResult().some((result) =>
+      result.type === privacyManager.AppPrivacyType.PRIVACY_AGREEMENT &&
+      result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED &&
+      result.id === statement.id && result.versionCode === statement.versionCode);
+  } catch (_) {
+    return false;
+  }
+}
+
 export async function requestPrivacyConsent(
   context: common.UIAbilityContext,
 ): Promise<PrivacyConsentResult> {
@@ -46,8 +63,10 @@ export async function requestPrivacyConsent(
       `[privacy-probe] phase=dialog-request-finish; resultCount=${consent.results.length}`);
     const acceptedAfterRequest = consent.results.some((result) =>
       result.type === privacyManager.AppPrivacyType.PRIVACY_AGREEMENT &&
-      result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED,
-    );
+      result.result === privacyManager.AppPrivacyResultType.FULL_MODE_AGREED &&
+      privacyStatement !== undefined && result.id === privacyStatement.id &&
+      result.versionCode === privacyStatement.versionCode,
+    ) && hasCurrentPrivacyConsent();
     return { accepted: acceptedAfterRequest, dialogShown: true };
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Privacy Manager request failed; Qt startup remains blocked: ${JSON.stringify(err)}`);

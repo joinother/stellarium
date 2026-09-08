@@ -438,6 +438,14 @@ double LandscapeMgr::getCallOrder(StelModuleActionName actionName) const
 
 void LandscapeMgr::update(double deltaTime)
 {
+	const StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
+	const bool sceneActive = scenery && scenery->property("enableScene").toBool();
+	const bool mistVisible = mistHorizonEnabled && !getFlagLandscape() && !sceneActive &&
+		StelApp::getInstance().getCore()->getCurrentPlanet()->getEnglishName() == "Earth";
+	const float step = static_cast<float>(qBound(0.0, deltaTime, 0.1));
+	mistHorizon.opacity += ((mistVisible ? 1.f : 0.f) - mistHorizon.opacity) * qMin(1.f, step * 5.f);
+	if (mistHorizon.opacity > 0.001f)
+		mistHorizon.animationTime += step;
 	if(needToRecreateAtmosphere && !loadingAtmosphere)
 		createAtmosphere();
 
@@ -715,11 +723,21 @@ void LandscapeMgr::draw(StelCore* core)
 		Landscape::setTransparency(pushed);
 	}
 
-	if (oldLandscape)
+	if (oldLandscape && getFlagLandscape())
 	{
 		oldLandscape->draw(core, flagPolyLineDisplayedOnly);
 	}
-	landscape->draw(core, flagPolyLineDisplayedOnly);
+	if (getFlagLandscape())
+		landscape->draw(core, flagPolyLineDisplayedOnly);
+	if (mistHorizon.opacity > 0.001f)
+	{
+		Vec3d sunDirection = GETSTELMODULE(SolarSystem)->getSun()->getAltAzPosApparent(core);
+		sunDirection.normalize();
+		mistHorizon.sunDirection = sunDirection.toVec3f();
+		const double daylight = qBound(0.0, (sunDirection[2] + 0.1) / 0.4, 1.0);
+		mistHorizon.setBrightness(daylight * daylight * (3.0 - 2.0 * daylight));
+	}
+	mistHorizon.draw(core, flagPolyLineDisplayedOnly);
 
 	// Draw the cardinal points
 	cardinalPoints->draw(core, static_cast<double>(StelApp::getInstance().getCore()->getCurrentLocation().getLatitude()));
@@ -876,7 +894,10 @@ void LandscapeMgr::init()
 	setCurrentLandscapeID(defaultLandscapeID);
 	setFlagLandscapeSetsLocation(shouldThenSetLocation);
 	setFlagUseLightPollutionFromDatabase(conf->value("viewing/flag_light_pollution_database", false).toBool());
-	setFlagLandscape(conf->value("landscape/flag_landscape", conf->value("landscape/flag_ground", true).toBool()).toBool());
+	const bool showLandscape = conf->value("landscape/flag_landscape", conf->value("landscape/flag_ground", true).toBool()).toBool();
+	const bool showMist = !showLandscape && conf->value("landscape/mist_horizon_enabled", true).toBool();
+	setFlagLandscape(showLandscape);
+	setMistHorizonEnabled(showMist);
 	setFlagFog(conf->value("landscape/flag_fog",true).toBool());
 	setFlagIllumination(conf->value("landscape/flag_enable_illumination_layer", true).toBool());
 	setFlagLabels(conf->value("landscape/flag_enable_labels", true).toBool());
@@ -921,6 +942,7 @@ void LandscapeMgr::init()
 	addAction("actionShow_Secondary_Intercardinal_Points", displayGroup, N_("Secondary Intercardinal points"), "ordinal16WRPointsDisplayed");
 	addAction("actionShow_Tertiary_Intercardinal_Points", displayGroup, N_("Tertiary Intercardinal points"), "ordinal32WRPointsDisplayed");
 	addAction("actionShow_Ground", displayGroup, N_("Ground"), "landscapeDisplayed", "G");
+	addAction("actionShow_MistHorizon", displayGroup, N_("Animated mist horizon"), "mistHorizonEnabled");
 	addAction("actionShow_LandscapeIllumination", displayGroup, N_("Landscape illumination"), "illuminationDisplayed", "Shift+G");
 	addAction("actionShow_LandscapeLabels", displayGroup, N_("Landscape labels"), "labelsDisplayed", "Ctrl+Shift+G");
 	addAction("actionShow_LightPollutionFromDatabase", displayGroup, N_("Light pollution data from locations database"), "flagUseLightPollutionFromDatabase");
@@ -1133,6 +1155,11 @@ void LandscapeMgr::updateI18n()
 
 void LandscapeMgr::setFlagLandscape(const bool displayed)
 {
+	if (displayed)
+	{
+		setMistHorizonEnabled(false);
+		mistHorizon.opacity = 0.f;
+	}
 	if (oldLandscape && !displayed)
 		oldLandscape->setFlagShow(false);
 	if(landscape->getFlagShow() != displayed) {
@@ -1140,6 +1167,21 @@ void LandscapeMgr::setFlagLandscape(const bool displayed)
 		emit landscapeDisplayedChanged(displayed);
 	}
 	StelApp::immediateSave("landscape/flag_landscape", displayed);
+}
+
+void LandscapeMgr::setMistHorizonEnabled(bool enabled)
+{
+	if (enabled)
+	{
+		setFlagLandscape(false);
+		StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
+		if (scenery && scenery->property("enableScene").toBool())
+			scenery->setProperty("enableScene", false);
+	}
+	if (mistHorizonEnabled == enabled) return;
+	mistHorizonEnabled = enabled;
+	StelApp::immediateSave("landscape/mist_horizon_enabled", enabled);
+	emit mistHorizonEnabledChanged(enabled);
 }
 
 bool LandscapeMgr::getFlagLandscape() const

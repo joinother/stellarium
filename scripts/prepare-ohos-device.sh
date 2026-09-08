@@ -27,6 +27,19 @@ case "$ACTION" in
 		"$HDC_BIN" -t "$DEVICE_ID" shell power-shell wakeup
 		# HarmonyOS exposes brightness through the minimum brightness key event.
 		"$HDC_BIN" -t "$DEVICE_ID" shell uinput -K -d 2724 -u 2724
+		for attempt in {1..30}; do
+			display_state=$("$HDC_BIN" -t "$DEVICE_ID" shell hidumper -s DisplayPowerManagerService)
+			brightness=$(printf '%s\n' "$display_state" | sed -n 's/^DeviceBrightness=\([0-9]*\).*/\1/p' | head -n 1)
+			minimum=$(printf '%s\n' "$display_state" | sed -n 's/.*Brightness Limits:.*Min=\([0-9]*\).*/\1/p' | head -n 1)
+			if [[ -z "$brightness" || -z "$minimum" ]]; then
+				echo "无法核验最低亮度，请检查设备显示设置。" >&2
+				break
+			fi
+			if (( brightness <= minimum )); then
+				break
+			fi
+			"$HDC_BIN" -t "$DEVICE_ID" shell uinput -K -d 41 -u 41 >/dev/null
+		done
 		"$HDC_BIN" -t "$DEVICE_ID" shell hidumper -s DisplayPowerManagerService
 		;;
 	restore)

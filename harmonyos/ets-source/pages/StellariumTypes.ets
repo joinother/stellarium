@@ -702,6 +702,7 @@ export interface StellariumBridgeResponse {
   actionShow_Nebulas?: boolean
   actionShow_MilkyWay?: boolean
   actionShow_Ground?: boolean
+  actionShow_MistHorizon?: boolean
   actionShow_Constellation_Lines?: boolean
   actionShow_Constellation_Labels?: boolean
   actionShow_Constellation_Boundaries?: boolean

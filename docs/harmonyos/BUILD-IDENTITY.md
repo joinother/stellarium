@@ -1,5 +1,7 @@
 # HarmonyOS Build Identity
 
+Current review-fix build (2026-09-08): `1.0.9` / `1000050`, after AGC build `1000049`. The Pad test uses an independent Debug-signed project with this same identity; the main generated project's existing Release signing is unchanged. The development metadata examples below describe the older July workflow, not the currently installed September build. Follow `RELEASE-PACKAGING.md` and the tracked AppScope version for this release.
+
 The AppGallery release identity is the tracked source of truth:
 
 - Name: `星象仪` (`Stellarium` fallback)
@@ -24,16 +26,18 @@ Consequently, the development build replaces the release app on a device. Do not
 
 ## Release build
 
+Current signing, build-mode and upload instructions: [RELEASE-PACKAGING.md](RELEASE-PACKAGING.md). Identity preparation alone does not select release signing or make a package eligible for submission.
+
 ```sh
 ./scripts/prepare-ohos-release.sh
 cd build/libstellarium-harmonyos
-/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
+/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
 ```
 
-Only a HAP built after `prepare-ohos-release.sh` is eligible for store submission. The usual output is:
+Store submission requires a Release-mode `.app` with valid distribution signing, not merely a HAP built after identity preparation. App Pack output is under:
 
 ```text
-build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap
+build/libstellarium-harmonyos/build/outputs/default/
 ```
 
 ## Side-by-side installation

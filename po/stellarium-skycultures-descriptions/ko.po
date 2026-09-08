@@ -31,10 +31,7 @@ msgid ""
 "navigational aids are called 'petuu vare' (foolish, common, or "
 "undistinguished)."
 msgstr ""
-"아누타섬은 멜라네시아의 솔로몬 제도 안에 있지만 폴리네시아인들이 거주하는 작은 화산섬입니다. 별은 아누타인들의 장거리 항해에 가장 중요한"
-" 도구를 제공합니다. 주요 안내별과 별자리는 '카벤가'로 알려져 있습니다. 한 섬에서 다음 섬으로 이어지는 별 경로(떠나지 않았거나 이미"
-" 설정되어 있더라도)을 '카우 파노냐 포라우'라고 합니다. 주요 항법 보조 도구로 사용되지 않는 이름 없는 별들은 '페투 바레' "
-"(멍청하거나 흔하거나 구별되지 않는 별들)라고 불립니다."
+"아누타는 멜라네시아의 솔로몬 제도에 속하지만 폴리네시아인들이 거주하는 아주 작은 화산섬입니다. 별은 아누타 사람들의 장거리 항해에서 가장 중요한 도구입니다. 주요 길잡이별과 별자리는 'kaavenga'라고 합니다. 한 섬에서 다음 섬으로 갈 때 따르는 별의 길은 관련 별들이 아직 뜨지 않았거나 이미 졌더라도 'kau panogna porau'라고 합니다. 주요 항해 길잡이로 쓰이지 않는 이름 없는 별들은 'petuu vare'(어리석은, 흔한 또는 두드러지지 않는)라고 합니다."
 
 #. Anutan sky culture description section in markdown format
 msgid ""
@@ -134,6 +131,7 @@ msgid ""
 "within the 6 magnitudes that were neglected by Ptolemy, but he did not "
 "catalogue them and was faithful to Ptolemy star catalog."
 msgstr ""
+"『항성의 서』는 서기 964년 직전에 쓰였습니다. 파울 쿠니치 박사는 이 책을 다음과 같이 설명했습니다. “알수피로 알려진 저명한 천문학자 아부 알후사인 압드 알라흐만 이븐 우마르 알수피(903년 라이에서 출생, 986년 사망)의 저작 가운데 가장 뛰어난 작품이다. 알수피는 이 책에서 프톨레마이오스의 『알마게스트』에 정립되어 전해진 48개의 고전 별자리를 다룬다. 각 별자리의 설명은 다음 네 부분으로 이루어진다. 첫째는 별자리와 개별 별에 대한 일반적인 논의이며, 프톨레마이오스 전통에 대한 알수피의 비판과 자신의 관측에 관한 기록도 포함된다. 둘째는 그 별자리에 속한 별들의 아랍 고유 이름을 기록하고, 각각을 프톨레마이오스의 해당 별과 정확하게 동정한 것이다. 셋째는 천구의에서 본 모습과 실제 하늘에서 본 모습을 나타내는 두 장의 별자리 그림이다. 넷째는 별자리를 구성하는 별들의 표로, 각 별의 위치를 말로 설명하고 경도, 위도, 등급을 제시한다. 이 표는 『알마게스트』에 있는 프톨레마이오스 성표의 배열을 충실히 따른다.” [#1]. 쿠니치 박사가 언급한 각 별자리의 네 부분 외에도, 알수피는 프톨레마이오스가 빠뜨린 6등급까지의 별들을 식별했지만 성표에 추가하지는 않았으며, 프톨레마이오스의 성표에 충실했습니다."
 
 #. Arabic (Al-Sufi) sky culture description section in markdown format
 msgid ""
@@ -251,6 +249,7 @@ msgid ""
 "of star names and asterisms in the Arabian Peninsula, primarily found "
 "scattered in poetry and proverbs."
 msgstr ""
+"아랍(아라비아반도) 하늘 문화는 아라비아반도의 별 이름과 성군에 관한 민간 구전 전통을 보여 줍니다. 이러한 지식은 주로 시와 속담에 흩어져 전해집니다."
 
 #. Arabic (Arabian Peninsula) sky culture description section in markdown
 #. format
@@ -554,6 +553,7 @@ msgid ""
 " Arabs living in the Arabian Peninsula prior to the Greek astronomy "
 "influence in the ninth century."
 msgstr ""
+"이 아랍 하늘 문화는 9세기에 그리스 천문학의 영향을 받기 이전, 아라비아반도에 살던 고대 아랍인들의 고유한 별 지식을 보여 줍니다."
 
 #. Arabic (Indigenous) sky culture description section in markdown format
 msgid ""
@@ -597,6 +597,7 @@ msgid ""
 "located deep in the cave. This panel is more visible than others, and if you"
 " have a lateral light, the vision is very impressive."
 msgstr ""
+"아르민체 동굴은 도시 개발로 그 위치를 잊게 된 곳입니다. 2016년 5월 1일 동굴 탐사 단체 ADES가 동굴에 들어가 마들렌 문화기의 장관을 이루는 새김 그림 벽면을 발견했습니다. 이 그림들은 현재로부터 약 12,000~17,000년 전(BP)에 제작된 것으로 추정됩니다. 이러한 새김 그림은 동굴 예술의 한 종류로, 동굴 깊숙한 곳에 있으며 대개 식별하기가 매우 어렵고 때로는 거의 보이지 않습니다. 이 벽면은 다른 것들보다 잘 보이며, 측면에서 빛을 비추면 매우 인상적인 모습을 볼 수 있습니다."
 
 #. Armintxe Cave sky culture description section in markdown format
 msgid ""
@@ -651,6 +652,20 @@ msgid ""
 "\n"
 "Now, in this work we have an explanation of some Aztec stellar figures for Stellarium."
 msgstr ""
+"<p><img src=\"illustrations/aztec0.png\" width=\"150\" height=\"146\" align=\"left\" />고대 아스테카인들에게 밤하늘과 별의 움직임에 관한 지식은 달력과 농경·의례 주기를 측정하는 데 매우 중요했습니다. 그러나 16세기에 아메리카 대륙에서 이루어진 스페인의 정복으로 이 지식의 많은 부분이 사라졌습니다.</p>\n"
+"\n"
+"아스테카 사회의 문화, 경제, 과학 등의 요소는 _tlacuilos_ 에 보존되어 있습니다. 이 말은 “그림으로 쓰기”를 뜻하는 옛 나와틀어 _tlacuiloa_ 에서 유래합니다. 이 Tlacuilos는 _amoxcalli_ 에 보관되었는데, amoxtli는 책, calli는 집을 뜻합니다. 나중에는 쓰인 책을 뜻하는 라틴어 Codex에서 유래한 _codices_ 라는 이름으로 알려졌습니다.\n"
+"\n"
+"스페인 정복 이후 정복 이전 시기의 코덱스 상당수가 파괴되었습니다. 이들은 사슴 가죽, _amate_ 종이, 면직물 등 다양한 재료에 그렸으며, 글이 아니라 그림이나 _glifos_ 만으로 이루어졌다는 특징이 있습니다. 그러나 일부 원주민과 스페인 성직자들의 작업 덕분에 정복 이전 메소아메리카 관습의 기록은 계속되었습니다. 이 코덱스들은 식민지 시대 코덱스로 알려져 있습니다. 유럽에서 도입된 새로운 그림 기법과 재료, 그리고 스페인어와 나와틀어 설명문의 추가로 그리는 방식에도 변화가 생겼습니다.\n"
+"\n"
+"<p><img src=\"illustrations/edificios.png\" width=\"321\" height=\"156\" /><br />\n"
+"<em>천문 관련 건축물</em></p>\n"
+"\n"
+"안타깝게도 현존하는 코덱스에 남은 아스테카 천문 지식은 매우 적습니다. 다음 그림은 아스테카인들이 식별했던 일부 별자리와 천문 현상의 이름을 적은 몇 안 되는 그림 중 하나입니다. 16세기에 베르나르디노 데 사아군 수사가 쓴 식민지 시대 필사본 _Primeros Memoriales_ (최초의 비망록)에 실려 있습니다.\n"
+"\n"
+"<p align=\"center\"><img src=\"illustrations/Primeros_Memoriales.png\" width=\"399\" height=\"351\" /></p>\n"
+"\n"
+"이 작업은 Stellarium을 위해 아스테카의 별 형상 일부를 설명합니다."
 
 #. Description of Aztec constellation The New fire
 msgid ""
@@ -768,6 +783,11 @@ msgid ""
 "and the list of constellations in the lunar path.\n"
 "The second tablet contains intercalary rules for the calendar, rules for the sundial and rules for omina."
 msgstr ""
+"<p>이 <em>바빌로니아 별자리 문화</em>는 그리스의 것보다 앞서 사용되었으며, 기원전 12세기로 거슬러 올라가는 (아마도 거의) 정형화된 상태로 전해집니다. 알려진 가장 오래된 단편은 기원전 7세기의 것이지만, 본문의 천문 자료는 관측 기반의 기원이 훨씬 이르며, 아마도 -1350년에서 -1150년 사이였음을 시사합니다.</p>\n"
+"<p><img width=\"800\" src=\"illustrations/800px-MulApin-BritishMuseum.jpg\"/></p>\n"
+"<p><br/><i>종이 한 장만 한 크기의 점토판 가운데 하나를 찍은 사진(대영박물관 수탁위원회 제공).</i></p>\n"
+"\n"
+"MUL.APIN 편람은 큰 점토판 두 장으로 이루어지며, 각 판에는 내용이 서로 다른 목록이 각각 여섯 개와 다섯 개 있습니다. 첫 번째 판에는 이른바 “별 목록”(별과 별자리 이름의 목록)이 있고, 그 뒤에 태양과 관련된 별의 출몰인 헬리아칼 출몰 목록 세 개, ziqpu(자오선을 통과하는) 성군 목록, 달의 경로에 있는 별자리 목록이 나옵니다. 두 번째 판에는 달력의 윤달 삽입 규칙, 해시계 규칙, 징조 해석 규칙이 담겨 있습니다."
 
 #. Babylonian (MUL.APIN) sky culture description section in markdown format
 msgid ""
@@ -1319,8 +1339,14 @@ msgid ""
 "<p>This <em>Seleucid</em> or <em>Late Babylonian sky culture</em> is supposed to show the (estimated) state of Babylonian constellations contemporary to the Greek culture. There is no description of the full sky. Changes with regard to the MUL.APIN version have certainly applied in the zodiac since several centuries. This can be stated for sure because in this time, there is a blossoming zodiacal astrology. Since there had been no zodiac in MUL.APIN and the zodiac developed around the middle of the -1st millennium, in the 2nd half of the 1st millennium BCE, there had been different versions of the constellations around the ecliptic.\n"
 " </p>\n"
 "\n"
-" However, we do not know much about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture."
+" However, the available evidence provides little information about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture."
 msgstr ""
+"바빌로니아 역사에서 셀레우코스 시대는 기원전 331년에 바빌론을 정복한 알렉산드로스 대왕의 후계자들이 활동하던 시대입니다. 당시 이미 천 년 된 MUL.APIN은 계속 필사되었으므로, 오래되었지만 여전히 유효한 기준으로 자리 잡은 듯합니다. 또한 후기 바빌로니아 시대에는 MUL.APIN에 견줄 만한 대체 편람이 없습니다.\n"
+"\n"
+"<p>이 <em>셀레우코스</em> 또는 <em>후기 바빌로니아 별자리 문화</em>는 그리스 문화와 동시대인 바빌로니아 별자리의 추정 모습을 보여 주려는 것입니다. 하늘 전체에 대한 기록은 없습니다. 황도대에서는 MUL.APIN 판본에 비해 이미 수 세기에 걸쳐 변화가 일어났음이 분명합니다. 당시 황도대 점성술이 번성했다는 점이 그 근거입니다. MUL.APIN에는 황도대가 없었고 황도대가 기원전 첫 번째 천년기의 중반 무렵에 발달했으므로, 그 후반에는 황도 주변 별자리의 여러 형태가 존재했습니다.\n"
+" </p>\n"
+"\n"
+"그러나 현재 이용 가능한 자료는 하늘의 나머지 부분에 관해 거의 알려 주지 않습니다. 따라서 황도대에서 멀리 떨어진 별자리에는 다시 MUL.APIN의 별자리를 기준으로 삼을 수 있습니다. 자세한 내용은 MUL.APIN 별자리 문화를 참조하고, 그 별자리를 통해 고바빌로니아 또는 중기 바빌로니아의 별자리 문화를 살펴보십시오."
 
 #. Babylonian (Seleucid) sky culture description section in markdown format
 msgid ""
@@ -1782,12 +1808,9 @@ msgstr ""
 
 #. Balinese sky culture introduction section in markdown format
 msgid ""
-"Balinese people have had a strong connection to the cosmos since ancient "
-"times. They rely on the cosmos because they believe that every celestial "
-"body has power and will impact what they will or have done. Therefore, in "
-"carrying out all activities, from social to civil and ritual, they must know"
-" the right time to do so, guided by the celestial conditions."
+"The Balinese traditions described here have linked human life with the cosmos since ancient times. In these traditions, celestial bodies are believed to have power and to affect past and future human activities. Celestial conditions therefore guide the choice of appropriate times for social, civil, and ritual activities."
 msgstr ""
+"여기서 소개하는 발리의 전통은 예로부터 인간의 삶을 우주와 연결해 왔습니다. 이러한 전통에서는 천체가 힘을 지니며 과거와 미래의 인간 활동에 영향을 미친다고 여깁니다. 따라서 천체의 상태는 사회 활동, 민사 활동, 의례를 위한 적절한 시기를 정하는 지침이 됩니다."
 
 #. Balinese sky culture description section in markdown format
 msgid ""
@@ -2082,15 +2105,9 @@ msgstr "벨라루스"
 
 #. Belarusian sky culture introduction section in markdown format
 msgid ""
-"Belarus is a country in Eastern Europe bordered by Russia to the northeast, "
-"Ukraine to the south, Poland to the west, and Lithuania and Latvia to the "
-"northwest. Belarus is landlocked and contains large tracts of marshy land "
-"and thousands of lakes. Forests cover about 40% of the country. Belarus is "
-"exceptional in that people in the villages have preserved their traditional "
-"knowledge about the stars and related beliefs, right through to the present "
-"time. The illustrations are by no means exhaustive. In fact, many asterisms "
-"have multiple recorded meanings, ranging from ancient to Christianized."
+"Belarus is a country in Eastern Europe bordered by Russia to the northeast, Ukraine to the south, Poland to the west, and Lithuania and Latvia to the northwest. Belarus is landlocked and contains large tracts of marshy land and thousands of lakes. Forests cover about 40% of the country. In Belarusian villages, traditional knowledge about the stars and related beliefs has been documented as surviving into the present. The illustrations are by no means exhaustive. In fact, many asterisms have multiple recorded meanings, ranging from ancient to Christianized."
 msgstr ""
+"벨라루스는 동유럽의 내륙국으로 북동쪽은 러시아, 남쪽은 우크라이나, 서쪽은 폴란드, 북서쪽은 리투아니아 및 라트비아와 접합니다. 넓은 습지와 수천 개의 호수가 있으며, 숲이 국토의 약 40%를 덮고 있습니다. 벨라루스의 마을에서는 별에 관한 전통 지식과 관련 신앙이 오늘날까지 이어진 사례가 기록되어 있습니다. 여기에 실린 그림은 결코 모든 내용을 망라하지 않습니다. 실제로 많은 성군에는 오래된 해석부터 기독교의 영향을 받은 해석까지 여러 의미가 기록되어 있습니다."
 
 #. Belarusian sky culture description section in markdown format
 msgid "Shown here are some interesting folk astronomy constellations."
@@ -2185,6 +2202,9 @@ msgid ""
 "\n"
 "The Boorong were very much acquainted with the night sky, and William Stanbridge wrote in 1857 that they &quot;Pride themselves upon knowing more of Astronomy than any other tribe&quot;."
 msgstr ""
+"140년 전, 오스트레일리아 빅토리아주 북서부의 티렐호에 살던 한 부롱(Boorong) 가족이 윌리엄 스탠브리지(William Stanbridge)에게 밤하늘에 관한 이야기 일부를 들려주었습니다. 약 40개의 별, 별자리 및 다른 천체 현상에 이름과 위치가 제시되었습니다. 그는 이를 기록하고 1857년 멜버른의 철학 학회(Philosophical Institute)에 이 내용을 알렸습니다. 논문에는 원주민 용어와 그에 대응하는 유럽의 명칭을 적었습니다. 존 모리슨(John Morieson)은 이 천체 현상들을 자세히 살펴보고, 이를 적절히 식별하며 부롱 사람들이 보았을 법한 모습을 재현하고자 했습니다. 존의 해석은 Stellarium의 별자리 그림을 만드는 데 사용되었습니다.\n"
+"\n"
+"부롱 사람들은 밤하늘을 매우 잘 알고 있었으며, 윌리엄 스탠브리지는 1857년에 그들이 “다른 어느 부족보다 천문학을 더 많이 안다는 것을 자랑스러워한다”고 썼습니다."
 
 #. Boorong sky culture description section in markdown format
 msgid ""
@@ -2255,13 +2275,7 @@ msgid ""
 "current Xingguans and star names was finalized in the 17th to 19th "
 "centuries."
 msgstr ""
-"Chinese astronomy was developed independently and Chinese had its own system"
-" to connect the stars, known as \"Xingguan\" (Chinese: 星官; pinyin: xīngguān,"
-" meaning: Star officials). Chinese Traditional Sky Culture has far-reaching "
-"implications in East Asia. In ancient China, Xingguans and planets were "
-"associated with astrology. After thousands of years of evolution, the "
-"current Xingguans and star names was finalized in the 17th to 19th "
-"centuries."
+"중국 천문학은 독자적으로 발전했으며, 별들을 연결하는 고유한 체계인 ‘성관’(중국어: 星官, 병음: xīngguān, ‘별의 관리’라는 뜻)을 갖추고 있었습니다. 중국의 전통 하늘 문화는 동아시아에 깊은 영향을 미쳤습니다. 고대 중국에서 성관과 행성은 점성술과 관련이 있었습니다. 수천 년의 변천을 거쳐 현재의 성관과 별 이름은 17세기부터 19세기 사이에 확립되었습니다."
 
 #. Chinese sky culture description section in markdown format
 msgid ""
@@ -2807,6 +2821,7 @@ msgid ""
 " represents the earliest state of the constellations (or star officials, "
 "xingguan星官) compiled by Chen Zhuo."
 msgstr ""
+"이 하늘 문화는 진탁(陳卓)의 성표, 『삼가성경』, 『천상열차분야지도』 및 다른 성도를 바탕으로 서기 3세기의 하늘을 충실히 복원하고자 합니다. 진탁이 집대성한 별자리, 즉 성관(xingguan星官)의 가장 초기 모습을 나타냅니다."
 
 #. Chinese Chenzhuo Sky (3rd Century) sky culture description section in
 #. markdown format
@@ -2863,6 +2878,7 @@ msgstr ""
 msgid ""
 "Fishing and hunting peoples represented by the Manchus have held traditions of stellar veneration since ancient times. One form of worship in these shamanic traditions is the sacred reverence for celestial phenomena such as the cosmic dome, the sun, moon, and stars, often referred to as \"worship of Heaven.\" Under the specific geographical and climatic conditions of northern China, the Manchu ancestors, through sustained and meticulous observation of the night sky over long-term production and life practices, developed a unique system of astronomical cognition and veneration."
 msgstr ""
+"만주족으로 대표되는 어로·수렵 민족에게는 예로부터 별을 숭배하는 전통이 있었습니다. 이러한 샤머니즘 전통의 한 숭배 형태는 하늘의 궁륭, 해, 달, 별과 같은 천체 현상을 신성하게 경배하는 것으로, 흔히 ‘하늘 숭배’라고 합니다. 중국 북부의 특수한 지리적·기후적 조건 속에서 만주족의 선조들은 오랜 생산 활동과 일상생활을 통해 밤하늘을 지속적이고 세밀하게 관찰하며 독자적인 천문 인식과 숭배 체계를 발전시켰습니다."
 
 #. Chinese Manchu sky culture description section in markdown format
 msgid ""
@@ -3104,6 +3120,7 @@ msgid ""
 " Chinese Constellations) and 1464 stars (including clusters M7, M44) from "
 "the *Xinyixiangfayao Star Map*."
 msgstr ""
+"이 하늘 문화는 황우 4년(서기 1052년)의 관측 자료에 근거하여 중국 송나라 시대의 성도를 충실히 복원하고자 합니다. 『신의상법요 성도』에 있는 283개의 성관(星官, 중국 별자리)과 1464개의 별(성단 M7, M44 포함)을 담고 있습니다."
 
 #. Chinese Song Dynasty Sky sky culture description section in markdown format
 msgid ""
@@ -3202,6 +3219,7 @@ msgid ""
 "*Xianglin* chart is a crucial document for understanding indigenous Chinese "
 "astronomy on the eve of its major transformation."
 msgstr ""
+"이 하늘 문화는 명나라 말기의 학자 **Chen Jinmo**(陈荩谟)가 **서기 1634년**에 편찬한 *상림*(象林, ‘별자리의 숲’) 성도를 바탕으로 합니다. 서양 천문학의 상당한 영향으로 후대의 성도가 바뀌기 전, 중국의 전통 별자리 체계를 정밀하게 그린 마지막 시기의 성도 중 하나입니다. 당시 예수회의 영향을 받은 공식 성표와는 독립적으로 제작된 *상림* 성도는 큰 변화를 앞둔 중국 고유 천문학을 이해하는 데 중요한 문헌입니다."
 
 #. Chinese Xianglin Star Chart sky culture description section in markdown
 #. format
@@ -5288,6 +5306,7 @@ msgid ""
 "dates from Ptolemaic times, probably the first century BCE, and has a "
 "wonderful illustration of the sky that illustrates this point."
 msgstr ""
+"후기 이집트의 천문학과 점성술은 그리스·로마 문화의 전통을 따릅니다. 별이 인간의 운명에 영향을 줄 수 있다는 믿음은 프톨레마이오스 왕조 시대에 이르러서야 이집트에 전해진 것으로 보입니다. 덴데라의 하토르 신전은 프톨레마이오스 왕조 시대, 아마도 기원전 1세기의 것으로, 이러한 점을 보여 주는 훌륭한 하늘 그림이 있습니다."
 
 #. Egyptian sky culture description section in markdown format
 msgid ""
@@ -5322,19 +5341,9 @@ msgstr "이집트 (덴데라)"
 
 #. Egyptian (Dendera) sky culture introduction section in markdown format
 msgid ""
-"The sculptured Dendera zodiac (or Denderah zodiac) is a widely known "
-"Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel"
-" dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun "
-"in the late Ptolemaic period when Egypt was ruled by (Greek) successors of "
-"Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall "
-"in front of the holy chamber) was added by the Roman emperor Tiberius (14-37"
-" CE). This led Jean-François Champollion (18th century) to date the relief "
-"to the Greco-Roman period (while most of his contemporaries believed it to "
-"be of a millennium earlier because of the Egyptian style of the figures - "
-"this is not believed anymore). Today, French archaeologists date it to "
-"exactly 54 BCE [#1].  The relief is now on display at the Musée du Louvre, "
-"Paris (France)."
+"The sculptured Dendera zodiac (or Denderah zodiac) is a widely known Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun in the late Ptolemaic period when Egypt was ruled by (Greek) successors of Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall in front of the holy chamber) was added by the Roman emperor Tiberius (14-37 CE). This led Jean-François Champollion (1790-1832) to date the relief to the Greco-Roman period (while most of his contemporaries believed it to be of a millennium earlier because of the Egyptian style of the figures - this is not believed anymore). The Louvre collection catalogue dates it to June-August 50 BCE [#1].  The relief is now on display at the Musée du Louvre, Paris (France)."
 msgstr ""
+"덴데라 황도대(Dendera 또는 Denderah zodiac) 조각은 덴데라 하토르 신전 안에서 오시리스에게 봉헌된 예배당의 전실(프로나오스 또는 주랑) 천장에 있던 널리 알려진 이집트의 얕은 부조입니다. 이 예배당은 알렉산드로스 대왕의 (그리스계) 후계자들이 이집트를 통치하던 프톨레마이오스 왕조 말기에 건축되기 시작했습니다(헬레니즘 시대 이집트: 기원전 305~30년). _프로나오스_(성실 앞의 홀)는 로마 황제 티베리우스(서기 14~37년)가 증축했습니다. 이에 따라 장프랑수아 샹폴리옹(1790~1832년)은 부조의 제작 시기를 그리스·로마 시대로 보았습니다(반면 동시대인 대부분은 인물들의 이집트 양식을 근거로 그보다 천 년 앞선 것으로 여겼으나, 현재는 이 견해를 받아들이지 않습니다). 루브르 소장품 목록은 제작 시기를 기원전 50년 6~8월로 제시합니다[#1]. 이 부조는 현재 프랑스 파리의 루브르 박물관에 전시되어 있습니다."
 
 #. Egyptian (Dendera) sky culture description section in markdown format
 msgid ""
@@ -5613,16 +5622,17 @@ msgid ""
 "astronomical knowledge of former astronomers including results from\n"
 "observations and mathematical astronomy. Pieced together by Claudius\n"
 "Ptolemy, using older, as well as his own, observations, it was written\n"
-"in Greek, published in the Second Century and remained the main\n"
-"astronomical work for the following 1500 years. It was originally written\n"
+"in Greek, published in the Second Century and remained a major\n"
+"astronomical work in the traditions that transmitted it for the following 1500 years. It was originally written\n"
 "with the title <i>Mathematike Syntaxis</i>, in Ancient Greek.\n"
 "The name <i>Almagest</i>, meaning &ldquo;The Largest [Book]&rdquo;, was\n"
-"developed from Arabian translations. To create this sky culture we used\n"
+"developed from Arabian translations. To create this sky culture the compiling team used\n"
 "the English translation by Toomer (1984), reworked it in some details\n"
 "(e.g. using more literal translations from Greek instead of Latin terms that\n"
-"are common today) and we made use of computer readable tables prepared\n"
+"are common today) and the team made use of computer readable tables prepared\n"
 "by Ernie Wright.</p>"
 msgstr ""
+"<p>이 고대 그리스의 별자리 문화는 오늘날 아랍어 제목인 “알마게스트”로 알려진 책에 집대성되어 있습니다. 이 책은 로마 시대(하드리아누스 황제 재위기)에 아프리카의 알렉산드리아에서 그리스어로 작성되었으며, 날짜에는 이집트의 달 이름을, 연도에는 바빌로니아 왕을 기준으로 한 기년법을 사용했습니다. 따라서 여러 문화의 지식을 모은 편람임이 분명합니다. 이 책은 이전 천문학자들의 지식, 특히 관측 결과와 수리천문학을 모은 것입니다. 클라우디오스 프톨레마이오스가 선행 관측과 자신의 관측을 활용해 그리스어로 편찬하여 2세기에 발표했으며, 이후 1,500년 동안 이 책을 전승한 전통에서 중요한 천문학 저술로 남았습니다. 원래의 고대 그리스어 제목은 <i>Mathematike Syntaxis</i>였습니다. “가장 큰 [책]”을 뜻하는 <i>알마게스트</i>라는 이름은 아랍어 번역에서 발전했습니다. 이 별자리 문화를 만들기 위해 편찬팀은 Toomer의 영어 번역(1984)을 사용하고 일부 세부 내용을 수정했으며(예를 들어 오늘날 흔히 쓰이는 라틴어 용어 대신 그리스어를 더 직역한 표현을 사용), Ernie Wright가 준비한 컴퓨터 판독용 표도 활용했습니다.</p>"
 
 #. Greek (Almagest) sky culture description section in markdown format
 msgid ""
@@ -6125,10 +6135,13 @@ msgstr "그리스 (단테)"
 
 #. Greek (Dante) sky culture introduction section in markdown format
 msgid ""
-"Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, we chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.\n"
+"Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, the compiling team chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.\n"
 "\n"
 "Dante Alighieri was a citizen of Florence, Italy, who was later banned and lived at several places in Northern Italy. The comedia was written around 1300 but finished only short before his death in 1321. It is commonly assumed that the story plays in around the Christian festival of Easter in 1300 CE."
 msgstr ""
+"단테 알리기에리는 여러 별과 몇몇 별자리, 특히 황도 별자리인 쌍둥이자리를 언급합니다. 쌍둥이는 『신곡』과 시를 비롯한 그의 글에 등장합니다. 단테는 천문학자가 아니라 폭넓은 지식을 갖춘 인물이었으므로, 그의 별자리 관념은 하늘 관측보다 읽었던 필사본에 근거했을 가능성이 매우 큽니다. 따라서 편찬팀은 단테 시대에 매우 인기 있던 미카엘 스코투스의 필사본에서 황도 별자리 그림을 채택했습니다.\n"
+"\n"
+"단테 알리기에리는 이탈리아 피렌체의 시민이었으나 나중에 추방되어 이탈리아 북부 여러 곳에서 살았습니다. 『신곡』은 1300년 무렵부터 집필되었지만, 1321년 그가 죽기 직전에야 완성되었습니다. 이야기의 배경 시점은 일반적으로 서기 1300년 기독교 부활절 무렵으로 여겨집니다."
 
 #. Greek (Dante) sky culture description section in markdown format
 msgid ""
@@ -6174,6 +6187,7 @@ msgid ""
 "century AD, i.e. Roman times. However, it is a copy of an older Greek model,"
 " which itself has not survived."
 msgstr ""
+"이 고대 그리스의 별자리 문화는 파르네세 저택(나폴리)에 있는 아틀라스 조각상의 대리석 천구에 기반합니다. 이 조각상은 서기 2세기, 즉 로마 시대의 것입니다. 그러나 이는 현존하지 않는 더 오래된 그리스 원형의 복제품입니다."
 
 #. Greek (Farnese + Almagest) sky culture description section in markdown
 #. format
@@ -6508,6 +6522,9 @@ msgid ""
 "\n"
 "The manuscript was probably created around 816 to 825 in Aachen or Metz (Lorraine) and was made with such expensive material that a royal patron is suspected. It comprises 99 parchment leaves, each of which measures 22.5 by 20.0 cm (i.e. approximately square with the width of DIN A4). In addition to graphic representations of planetary orbits and other didactic visualisations, this manuscript also contains 35 full-page miniatures depicting the ancient figures behind the constellations."
 msgstr ""
+"이것은 카롤루스 왕조 시대의 필사본으로, 지금까지 두 사본이 알려져 있습니다. 하나는 메스(프랑스)에서, 다른 하나는 레이던(네덜란드)에서 발견되었습니다. 카롤루스 왕조의 왕 루이 경건왕(778~840년)의 통치기에 속하며, 왕 자신이나 그의 아내가 후원자였을 가능성이 있습니다.\n"
+"\n"
+"필사본은 아마도 816~825년 무렵 아헨이나 메스(로렌)에서 제작되었을 것입니다. 재료가 매우 비싸 왕실 후원자가 있었을 것으로 추정됩니다. 양피지 99장으로 이루어져 있으며, 한 장의 크기는 22.5×20.0cm로, DIN A4 용지의 너비와 비슷한 거의 정사각형입니다. 행성 궤도의 도해와 그 밖의 교육용 시각 자료 외에도 별자리에 담긴 고대 형상을 묘사한 전면 세밀화 35점이 포함되어 있습니다."
 
 #. Greek (Leiden Aratea + Almagest) sky culture description section in
 #. markdown format
@@ -6829,6 +6846,7 @@ msgid ""
 "memorize the position of stars throughout the celestial sphere by dividing "
 "the sky into four evenly sized star lines."
 msgstr ""
+"이 별의 선들은 나이노아 톰프슨(Nainoa Thompson)이 개발했으며, 폴리네시아 항해 협회가 계기를 사용하지 않는 전통 항법으로 폴리네시아 범주 카누를 이끌어 수천 마일의 대양을 건너는 데 사용합니다. 오랫동안 하와이 항해자들은 자신의 방향을 알기 위해 별이 뜨고 지는 위치를 외워 왔습니다. 항해자 나이노아 톰프슨은 하늘을 크기가 고른 네 개의 별의 선으로 나누어 천구 전체에 걸친 별의 위치를 쉽게 기억할 수 있도록 체계화했습니다."
 
 #. Hawaiian Starlines sky culture description section in markdown format
 msgid ""
@@ -6917,6 +6935,7 @@ msgid ""
 "Vedic sky culture with some commonly known constellations related to "
 "Nakṣatra-s."
 msgstr ""
+"나크샤트라(Nakṣatra)와 관련된 널리 알려진 별자리 일부를 포함한 베다 하늘 문화."
 
 #. Indian Vedic sky culture description section in markdown format
 msgid ""
@@ -6992,6 +7011,9 @@ msgid ""
 "\n"
 "The number of stars per nakshatra-constellations may vary in different sources. In this sky culture, we present only one single historical source: the depictions in Tirupperunthurai (Athmanathaswamy temple) near Aranthangi, India, 10th century CE. There, they are drawn at two occasions in exactly the same way: engraved in a doorway of stone, and imprinted in a tiruvasi, a silver arch from the temple's main chamber."
 msgstr ""
+"나크샤트라(nakṣatra)에 관한 최초의 역사적 증거는 기원전 1000년 이전 인더스 계곡에서 고고학적으로 확인되는 베다 문화에서 나타납니다[#1],[#2],[#5],[#6]. 전통 종교 문헌과 의례를 통해 당시 천문학이 시간 측정에 사용되었음을 알 수 있습니다. 인더스 문화가 기후와 동식물이 다른 갠지스 고원으로 퍼지기 시작하면서 베다의 문화천문학도 재구성되었습니다. 당시의 새로운 종교 문헌인 『아타르바베다』(Arthavaveda, 기원전 900~600년)는 ‘nakṣatra’(नक्षत्र)라는 별자리의 완전한 체계를 보존하고 있습니다. 최초의 완전한 비종교적 서술인 『베당가 죠티샤』(Vedāṅgajyotiṣa)는 대략 기원전 300년으로 거슬러 올라가며, 아슈비니를 첫 번째로 삼는 표준화된 시작점은 기원전 1세기 또는 서기 1세기에 정해졌습니다. 힌두교는 나크샤트라를 계승했습니다. 서기 초기 몇 세기 동안, 황도를 열두 등분한 황도대 체계를 비롯한 그리스·바빌로니아 세계의 점성술 관념이 더 오래된 베다의 나크샤트라 구분에 추가되었습니다. 서기 첫 번째 천년기 중엽부터 이 체계는 현재의 형태로 사용되고 있습니다.\n"
+"\n"
+"각 나크샤트라 별자리에 포함되는 별의 수는 자료에 따라 다를 수 있습니다. 이 하늘 문화는 단 하나의 역사 자료만을 제시합니다. 그것은 인도 아란탕기 근처 티루페룬투라이의 아트마나타스와미 사원에 있는 서기 10세기의 도상입니다. 이 도상은 두 곳에 정확히 같은 방식으로 표현되어 있습니다. 하나는 돌 출입구에 새겨져 있고, 다른 하나는 사원 중심 방의 은제 아치인 티루바시에 찍혀 있습니다."
 
 #. Indian (Nakshatras) sky culture description section in markdown format
 msgid ""
@@ -7202,8 +7224,10 @@ msgid "Inuit"
 msgstr "이누이트"
 
 #. Inuit sky culture introduction section in markdown format
-msgid "Inuit are the native population of the Arctic."
+msgid ""
+"Inuit are among the Indigenous peoples of the Arctic."
 msgstr ""
+"이누이트는 북극 지역의 원주민 집단 중 하나입니다."
 
 #. Inuit sky culture description section in markdown format
 msgid ""
@@ -7315,6 +7339,7 @@ msgid ""
 "period of the moon's orbit. Origins of these associations are obscure and "
 "even controversial."
 msgstr ""
+"메이지 유신 이전 일본에서 이루어진 천문 관측의 대부분은 점성술적 목적과 밀접하게 관련되어 있었습니다. 고대 중국과 이후 한반도 및 일본의 성도 제작자들은 사계절과 네 방위를 네 수호 동물로 나타냈습니다. 동쪽의 청룡은 봄, 남쪽의 주작은 여름, 서쪽의 백호는 가을, 북쪽의 ‘겐부’(검은 거북, 현무)는 겨울에 해당합니다. 각 수호 동물에 대응하는 하늘의 ‘궁’에는 일곱 *세이슈쿠*(sei shuku)가 있었으며, 때로 ‘달의 거처’라고도 불립니다. 이러한 달의 ‘머무는 곳’ 또는 ‘거처’는 달뿐 아니라 태양과 행성의 위치를 정하는 데 사용되었을 가능성이 있습니다. 그 수가 달의 공전 주기와 관련되었는지는 확실하지 않습니다. 이러한 대응 관계의 기원은 분명하지 않으며 논쟁의 대상이기도 합니다."
 
 #. Japanese Yasui Map sky culture description section in markdown format
 msgid ""
@@ -7413,6 +7438,7 @@ msgid ""
 "Their culture and connection to country remains strong, including an "
 "extensive cultural astronomy first recorded in the 1860s."
 msgstr ""
+"카밀라로이(Kamilaroi, 고메로이 Gomeroi라고도 함)와 유알라이(Euahlayi)는 오스트레일리아 뉴사우스웨일스주 북부에 사는 원주민 문화 집단입니다. 이들은 유럽인의 침략과 고향 땅 대부분의 상실을 겪고도 살아남았습니다. 이들의 문화와 땅에 대한 유대는 여전히 강하며, 여기에는 1860년대에 처음 기록된 풍부한 문화 천문 지식도 포함됩니다."
 
 #. Kamilaroi/Euahlayi sky culture description section in markdown format
 msgid ""
@@ -7575,6 +7601,21 @@ msgid ""
 "\n"
 " Another Khoikhoi legend tells of some &#8220;great celestial beast&#8221; with the pointer stars of the Southern Cross referred to as Mura, &#8220;the eyes&#8221; of the beast."
 msgstr ""
+"##### 별의 길 &mdash; 은하수\n"
+"\n"
+"의지가 강한 한 소녀는 어머니가 맛있게 구운 뿌리를 조금도 주지 않자 몹시 화가 나 불 속에서 굽고 있던 뿌리들을 움켜쥐었습니다. 소녀는 뿌리와 재를 하늘로 던졌고, 붉고 흰 뿌리는 이제 붉고 흰 별로 빛나며 재는 은하수, 곧 별의 길이 되었습니다.\n"
+"\n"
+"##### 사냥길 &mdash; 플레이아데스, 알데바란과 오리온\n"
+"\n"
+"나마콰 사람들의 전승에 따르면 플레이아데스는 하늘 신의 딸들이었습니다. 그들의 남편(알데바란)은 얼룩말 세 마리(오리온의 허리띠)를 향해 화살(오리온의 검)을 쏘았지만 빗나갔습니다. 이제 그는 꼼짝할 수 없습니다. 가족에게 줄 고기를 구하지 못해 집으로 돌아갈 수 없고, 얼룩말들을 지켜보는 사나운 사자(베텔게우스) 때문에 화살도 가져올 수 없습니다.\n"
+"\n"
+"##### 그 밖의 전설\n"
+"\n"
+"Xam 부시먼은 카노푸스를 “개미 알의 별”이라고 불렀고, Gwi 부시먼은 베가를 수컷 스틴복으로 보았습니다. Nyae Naye Kung 부시먼은 석탄자루 성운을 “밤의 낡은 자루”라고 부릅니다.\n"
+"\n"
+"Xu 부시먼은 밝고 붉은빛을 띠는 안타레스를 “불이 다하는 별”이라고 불렀습니다. 이 별은 붉은빛을 띨 뿐 아니라, 일 년 중 특정 시기에는 모닥불이 꺼진 뒤인 아주 늦은 밤에 집니다.\n"
+"\n"
+"또 다른 코이코이 전설에는 “거대한 하늘의 짐승”이 등장합니다. 남십자자리의 길잡이별들은 Mura, 곧 그 짐승의 “눈”이라고 불립니다."
 
 #. Khoikhoi and San sky culture authors section in markdown format
 #. Xhosa sky culture authors section in markdown format
@@ -7655,6 +7696,7 @@ msgid ""
 "including information extracted from historical sources about all the "
 "celestial objects named in the table below."
 msgstr ""
+"<img src=\"illustrations/lokono_map_1.png\" width=\"277\" height=\"375\" align=\"left\"/>*로코노*(*Lokono*)는 *아라와크*(*Arawak*)라고도 불리는 기아나 지역의 원주민입니다. 그들의 지역은 대서양 연안을 따라 가이아나 북서부에서 수리남을 거쳐 프랑스령 기아나 북서부까지 이어집니다(지도 참조).[#1] 로코노어는 대륙에서 가장 큰 언어 집단 중 하나인 아라와크어족에 속합니다. 언어적으로 친연관계가 있는 여러 민족처럼 로코노 사람들은 카사바(*Manihot esculenta*) 재배를 중심으로 농사를 짓고, 어로, 사냥, 야생 식물 채집도 합니다. 그러나 정복기에 유럽인들과 일찍 접촉한 원주민 집단 중 하나로서, 비원주민 인구와의 접촉은 500년 넘게 이어져 왔습니다.[#2] 지난 한 세기 동안 접촉이 심화되면서 로코노어와 전통적 물질·비물질 문화의 상당한 상실, 생계 방식의 변화, 특히 *전통 치유사*의 소멸로 이어졌습니다. 이들은 영적 지식의 전통적 전승자로, 그 지식에는 민족천문학 지식도 포함되었을 가능성이 높습니다. 그 결과 현재의 천체 지식은 로코노 사람들이 과거에 알던 별 지식의 일부에 지나지 않는 것으로 보입니다. 오래된 자료에 언급된 몇몇 별자리는 잊혔거나 이름만 남아 있고, 그 별자리를 구성하는 별의 조합과 기원·의미를 설명하는 구전 전통은 잊혔습니다. 여기 제시하는 별자리 문화에는 식별된 별자리만 포함되지만, 아래 설명에서는 표에 이름을 실은 모든 천체에 대해 역사 자료에서 얻은 정보까지 포함하여 로코노 천문 지식을 더욱 폭넓게 소개합니다."
 
 #. Lokono sky culture description section in markdown format
 msgid ""
@@ -7954,6 +7996,7 @@ msgid ""
 "constellations known to elderly inhabitants of Macedonian villages (Cenev "
 "G., 2000)."
 msgstr ""
+"마케도니아 사람들을 대상으로 한 민족천문학 연구는 청년문화센터 천문관의 주관으로 1982년에 시작되었습니다. 이후 여러 해에 걸쳐 마케도니아 공화국의 약 140개 마을을 방문했고, 1,500명이 넘는 주민을 면담하고 설문 조사했습니다. 주민들에게서 수집한 모든 정보는 『Sky over Macedonia』(Cenev G., 2004)에 실렸습니다. 이 책의 중요한 일부인 마케도니아 사람들의 하늘 지도는 마케도니아 마을의 고령 주민들이 알고 있는 별자리에 관한 설명을 바탕으로 복원되었습니다(Cenev G., 2000)."
 
 #. Macedonian sky culture description section in markdown format
 msgid ""
@@ -8111,6 +8154,7 @@ msgid ""
 "navigation. Along with most other cultures, the rising and setting of "
 "prominent stars were used to signal planting and harvesting seasons."
 msgstr ""
+"마오리(뉴질랜드)의 밤하늘은 폴리네시아의 밤하늘과 비슷하지만, 별도의 하늘 문화로 다룰 만큼 차이가 있습니다. 바다에 관한 주제는 마오리 하늘 문화의 중심을 이루며 항해에 널리 쓰였습니다. 다른 문화 대부분과 마찬가지로 눈에 띄는 별이 뜨고 지는 것을 파종과 수확의 계절을 알리는 표지로 삼았습니다."
 
 #. Maori sky culture description section in markdown format
 msgid ""
@@ -8189,22 +8233,9 @@ msgstr "마야"
 
 #. Maya sky culture introduction section in markdown format
 msgid ""
-"Maya culture was one of the most sophisticated civilizations in the pre-"
-"columbian american continent. They developed a writing system which let them"
-" store and use their knowledge in a variety of forms: e.g. on how to perform"
-" rituals or delivering particular messages to an audience (political and "
-"sacred facts from rulers to the people, sculpted in monuments and stelae). "
-"These records allow us explore, through the laborious work of many "
-"researchers, their cosmovision and how they thought the cosmos came to be. "
-"Their knowledge was recorded in books (academically known as “codex”), like "
-"the Dresden codex (which describes the dates that Venus would pass through "
-"each of its visibility phases and also a table of lunar and solar eclipses),"
-" the Paris codex (which is believed to describe some of their "
-"constellations), the Madrid codex (which relates astronomy and agriculture "
-"data) and lately, the Grolier codex (it was thought that it was an "
-"abbreviated version of the Dresden codex, but it is not accepted yet as "
-"original by some scholars)."
+"Maya civilization developed on the pre-Columbian American continent. They developed a writing system which let them store and use their knowledge in a variety of forms: e.g. on how to perform rituals or delivering particular messages to an audience (political and sacred facts from rulers to the people, sculpted in monuments and stelae). These records allow us explore, through the laborious work of many researchers, their cosmovision and how they thought the cosmos came to be. Their knowledge was recorded in books (academically known as “codex”), like the Dresden codex (which describes the dates that Venus would pass through each of its visibility phases and also a table of lunar and solar eclipses), the Paris codex (which is believed to describe some of their constellations), the Madrid codex (which relates astronomy and agriculture data) and lately, the Grolier codex (it was thought that it was an abbreviated version of the Dresden codex, but it is not accepted yet as original by some scholars)."
 msgstr ""
+"마야 문명은 콜럼버스 이전의 아메리카 대륙에서 발달했습니다. 마야 사람들은 의식의 수행 방법이나 청중에게 특정 메시지를 전달하는 방법 등 여러 형태로 지식을 보존하고 활용할 수 있는 문자 체계를 발전시켰습니다. 기념물과 석비에는 통치자가 사람들에게 전하는 정치적·신성한 사실들이 새겨져 있습니다. 수많은 연구자의 끈기 있는 작업을 통해 이러한 기록은 마야의 우주관과 우주가 어떻게 생겨났다고 여겼는지 살펴볼 수 있게 합니다. 그들의 지식은 학술적으로 “코덱스”라 부르는 책에 기록되었습니다. 여기에는 금성의 각 가시 단계에 해당하는 날짜와 월식·일식 표를 기록한 드레스덴 코덱스, 일부 별자리를 묘사한 것으로 여겨지는 파리 코덱스, 천문과 농업 자료를 연관 짓는 마드리드 코덱스, 그리고 보다 최근에 알려진 그롤리에 코덱스가 있습니다. 그롤리에 코덱스는 드레스덴 코덱스의 축약본으로 여겨졌지만, 일부 학자는 아직 진본으로 인정하지 않습니다."
 
 #. Maya sky culture description section in markdown format
 msgid ""
@@ -8368,6 +8399,7 @@ msgid ""
 "historical roots in Ancient Greek astronomy, with influences from Islamic "
 "astronomy."
 msgstr ""
+"현대 별자리 문화는 오늘날 천문학자들이 국제적으로 사용하며 국제천문연맹의 공식 체계입니다. 고대 그리스 천문학에 역사적 뿌리를 두고 있으며 이슬람 천문학의 영향도 받았습니다."
 
 #. Modern sky culture description section in markdown format
 msgid ""
@@ -9183,17 +9215,15 @@ msgstr "현대 (중국)"
 
 #. Modern (Chinese) sky culture introduction section in markdown format
 msgid ""
-"The Modern (Chinese) Skyculture is a combination of Chinese traditions and "
-"Western constellations. The Chinese use combinations of modern "
-"constellations and Chinese star names in astronomy. This is the skyculture "
-"that the Chinese actually use now, with a great practical value."
+"This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice."
 msgstr ""
+"이 하늘 문화는 중국의 전통 별 이름과 성관을 현대 천문학에서 사용하는 국제천문연맹의 별자리 체계와 함께 보여 줍니다. 두 체계를 동시에 표시하여 비교할 수 있으며, 이 자료가 오늘날 중국의 모든 천체 명명 관행을 대표하는 것은 아닙니다."
 
 #. Modern (Chinese) sky culture description section in markdown format
 msgid ""
 "### Constellations\n"
 "\n"
-"The modern Chinese use the constellations of the International Astronomical Union. The traditional Chinese constellations have no specific boundaries between them. They only represent the corresponding set of bright stars, and do not have the role of dividing the celestial sphere into different areas, so they are no longer applicable in astronomy.\n"
+"Modern astronomy in China uses the constellation regions defined by the International Astronomical Union. Traditional Chinese Xingguans describe groups of stars rather than a partition of the entire celestial sphere into bounded regions. This sky culture allows the two systems to be compared.\n"
 "\n"
 "### Star names\n"
 "\n"
@@ -9235,6 +9265,7 @@ msgid ""
 "Constellations according to classical Czech publication: *Hvězdná obloha "
 "2000.0*[#1]."
 msgstr ""
+"체코의 고전적인 간행물 *Hvězdná obloha 2000.0*[#1]에 따른 별자리입니다."
 
 #. Modern (O. Hlad) sky culture description section in markdown format
 msgid ""
@@ -9340,8 +9371,18 @@ msgid ""
 "This sky culture is based on *Journey to the West*, in which the author replaces the figures of Greek mythology with characters, demons, and magical artifacts from the novel. For example, Sun Wukong substitutes for Hercules, and Zhu Bajie takes the place of Perseus. Similar to how Arab and Persian figures replaced Greco-Roman images in the Book of Fixed Stars, this can be seen as an effort to localize constellation imagery within a Chinese cultural context.\n"
 "Just to let you know, this unique sky culture is not related to the historical journey of Xuanzang to India, nor was it created in the 16th century when the novel was published. It never existed historically and is purely an artistic reinterpretation of modern constellations. When switching to \"byname\" display mode, you can still view the standard IAU constellation names（The *Journey to the West* sky culture includes 84 of the 88 IAU standard constellations. The four constellations Circinus, Pictor, Pyxis, and Telescopium have no corresponding figures or elements in the story.）\n"
 "\n"
-"The purpose of creating this sky culture is to attract more children—especially in China and East Asia—to learn about constellations. Journey to the West holds greater influence in these regions than Greek mythology, and the author hopes it will enhance beginners' interest and memorization, much like how H. A. Rey used imaginative constellation lines and English labels to make the stars more accessible."
+"The purpose of creating this sky culture is to attract more children—especially in China and East Asia—to learn about constellations. The author hopes that using Journey to the West will enhance beginners' interest and memorization, much like how H. A. Rey used imaginative constellation lines and English labels to make the stars more accessible."
 msgstr ""
+"《서유기》는 중국 신마소설의 고전으로, 16세기 명나라 때 쓰였습니다. 주로 승려 현장(삼장법사)이 불교 경전을 얻기 위해 서쪽으로 떠나는 장대한 순례를 이야기합니다. 반항적이며 강력한 힘을 지닌 원숭이 왕 손오공, 익살스럽지만 종종 먹을 것을 탐하는 저팔계, 그리고 굳건한 사오정이라는 세 명의 뛰어난 제자가 동행합니다. 일행은 여정에서 다채로운 천상의 존재, 요괴와 신들을 만나고, 온갖 어려움과 여든한 번의 시련을 이겨 내어 마침내 목표에 도달합니다.\n"
+"\n"
+"《서유기》에 대한 자세한 소개는 다음을 참조하세요.\n"
+"\n"
+"https://en.wikipedia.org/wiki/Journey_to_the_West\n"
+"\n"
+"이 별자리 문화는 《서유기》를 바탕으로, 제작자가 그리스 신화의 형상을 소설 속 인물, 요괴와 신비한 보물로 바꾼 것입니다. 예를 들어 손오공이 헤라클레스를, 저팔계가 페르세우스를 대신합니다. 《항성의 서》에서 아랍과 페르시아의 형상이 그리스·로마의 이미지를 대신한 것과 비슷하게, 별자리 이미지를 중국 문화의 맥락에 맞게 현지화하려는 시도로 볼 수 있습니다.\n"
+"이 독특한 별자리 문화는 현장이 실제로 인도를 방문한 역사적 여정과 관련이 없으며, 소설이 출판된 16세기에 만들어진 것도 아닙니다. 역사적으로 존재했던 체계가 아니라 현대 별자리를 순수하게 예술적으로 재해석한 것입니다. “byname” 표시 모드로 전환하면 IAU의 표준 별자리 이름도 계속 볼 수 있습니다(《서유기》 별자리 문화에는 IAU 표준 88개 별자리 중 84개가 포함됩니다. 컴퍼스자리, 화가자리, 나침반자리, 망원경자리에 해당하는 형상이나 요소는 이야기 속에 없습니다).\n"
+"\n"
+"이 별자리 문화를 만든 목적은 특히 중국과 동아시아의 어린이를 비롯해 더 많은 어린이가 별자리를 배우도록 관심을 끄는 것입니다. 제작자는 《서유기》가 초보자의 흥미와 기억에 도움이 되기를 바랍니다. 이는 H. A. 레이가 상상력 있는 별자리 선과 영어 표기를 통해 별을 더 친숙하게 만든 것과 비슷합니다."
 
 #. Modern (Journey to the West) sky culture description section in markdown
 #. format
@@ -10009,6 +10050,7 @@ msgid ""
 "figures they were named after and appeared incomprehensible to beginning "
 "stargazers in the middle of the 20th century."
 msgstr ""
+"19세기에 들어 정교하게 새긴 신화 속 형상으로 풍성하게 꾸민 성도의 사용과 재출판은 유행에서 멀어졌습니다. 당시 성도에서는 별자리의 별들을 선으로 이은 무늬(“막대 그림”)로 나타내기 시작했지만, 때로는 어떤 별이 어느 별자리에 속하는지만 표시한 것으로 보입니다. 수십 년이 지나면서 그림은 별자리 이름의 바탕이 된 형상과 닮지 않게 되었고, 20세기 중반의 초보 관측자들에게는 이해하기 어려워 보였습니다."
 
 #. Modern (H.A. Rey) sky culture description section in markdown format
 msgid ""
@@ -10064,6 +10106,7 @@ msgid ""
 "definitions, and should be familiar to users of Sky & Telescope's Pocket Sky"
 " Atlas, Sky Atlas 2000.0, and the figures in Sky & Telescope magazine."
 msgstr ""
+"현대 별자리 문화는 오늘날 천문학자들이 국제적으로 사용하며 국제천문연맹의 공식 체계입니다. 고대 그리스 천문학에 역사적 뿌리를 두고 있으며 이슬람 천문학의 영향도 받았습니다. 별자리 형상과 별 이름은 Sky & Telescope의 정의를 따르므로, Sky & Telescope의 Pocket Sky Atlas, Sky Atlas 2000.0과 Sky & Telescope 잡지의 별자리 그림을 이용하는 독자에게 익숙할 것입니다."
 
 #. Modern (Sky & Telescope) sky culture description section in markdown format
 msgid ""
@@ -10107,8 +10150,13 @@ msgid ""
 "\n"
 "People have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.\n"
 "\n"
-"Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. This western sky culture established itself as the standard in modern astronomy."
+"Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects."
 msgstr ""
+"### 하늘에 그린 모습\n"
+"\n"
+"사람들은 아마 아주 오래전부터 별을 올려다보았을 것입니다. 하늘의 작은 빛점들이 무엇을 뜻하는지 궁금해한 사람들도 있었겠지요. 사람들은 상상 속에서 별들을 이어 그림을 만들며 자신들만의 별자리를 만들어 냈습니다.\n"
+"\n"
+"밤하늘에 대한 생각은 문화마다 달랐기에 하늘에 그린 모습도 서로 달랐습니다. 서양에서는 다른 영향들과 더불어 그리스 신화의 영향을 크게 받은 하늘 문화가 발달했습니다. 현대 천문학은 천체의 위치를 나타내기 위해 국제천문연맹이 합의한 별자리 이름과 경계를 사용합니다."
 
 #. Modern (Sternenkarten) sky culture description section in markdown format
 msgid ""
@@ -10210,17 +10258,13 @@ msgstr "몽골"
 
 #. Mongolian sky culture introduction section in markdown format
 msgid ""
-"Mongolian constellations and cosmogony were inherited from the occidental "
-"civilisation notably by the contact with Alexander the Great and was largely"
-" influenced by Chinese civilisation and Buddhist religion, resulting in "
-"numerous myths and beliefs linked with what surrounds them. The local wild "
-"and fauna are the main themes of this skyculture. The wealth of Mongolian "
-"cosmogony is probably to link with the observation conditions for whom they "
-"benefit even now. In the past, the necessity for them to move and to get "
-"one's bearing even during the night and at different seasons, by searching "
-"the weather's mildness, is probably one of the element which developed their"
-" imagination facing the sky."
+"The original contributors, Anthony Lagain and Batiste Rousseau, describe Mongolian constellations and cosmogony as influenced by Chinese civilisation and Buddhism, and propose an inheritance from occidental civilisation through contact with Alexander the Great. They describe numerous myths and beliefs connected with the surrounding world, with local wildlife and fauna as the main themes of this sky culture. They suggest that the richness of this cosmogony may be linked to the observing conditions available to the communities described, including in their own time. They also suggest that the historical need to travel and find one's bearings at night and in different seasons, in search of milder weather, may have helped shape these communities' interpretations of the sky.\n"
+"\n"
+"**Editorial note:** The proposed connection with Alexander the Great requires historical source verification and is not presented here as an established origin of Mongolian sky traditions."
 msgstr ""
+"원저자 Anthony Lagain과 Batiste Rousseau는 몽골의 별자리와 우주 기원에 관한 관념이 중국 문명과 불교의 영향을 받았다고 설명하며, 알렉산드로스 대왕과의 접촉을 통해 서양 문명을 이어받았다는 견해도 제시합니다. 두 저자는 주변 세계와 관련된 수많은 신화와 신앙을 소개하며, 지역의 자연과 동물상이 이 하늘 문화의 주요 주제라고 설명합니다. 또한 이러한 우주관의 풍부함이 저자들의 조사 당시를 포함하여, 서술된 공동체가 누리는 관측 조건과 관련될 수 있다고 봅니다. 더 온화한 날씨를 찾아 밤이나 여러 계절에 이동하고 방향을 파악해야 했던 역사적 필요가 이 공동체들의 하늘 해석을 형성하는 데 기여했을 가능성도 제시합니다.\n"
+"\n"
+"**편집자 주:** 알렉산드로스 대왕과의 연관성에 관한 견해는 역사 자료를 통한 검증이 필요하며, 여기서는 몽골 하늘 전통의 확립된 기원으로 제시하지 않습니다."
 
 #. Mongolian sky culture description section in markdown format
 msgid ""
@@ -10328,6 +10372,7 @@ msgid ""
 "Navajo Nation extends across northeastern Arizona, southeastern Utah, and "
 "northwestern New Mexico."
 msgstr ""
+"나바호는 미국에서 가장 큰 아메리카 원주민 부족입니다. 나바호 네이션의 영토는 애리조나주 북동부, 유타주 남동부, 뉴멕시코주 북서부에 걸쳐 있습니다."
 
 #. Navajo sky culture references section in markdown format
 msgid ""
@@ -10367,15 +10412,9 @@ msgstr ""
 
 #. Norse (Edda) sky culture introduction section in markdown format
 msgid ""
-"In the 13th century, Snorri Sturluson provided the most comprehensive "
-"documentation of myths from Old Norse culture that we know of today in his "
-"Edda. In this sky culture, the Eddic myths are to be brought into the sky in"
-" the form of constellations. Since there are no records of constellations "
-"from this time and region, the reconstruction of these constellations is not"
-" always certain (in some cases even speculative). In our visualisations we "
-"follow various literary scholars who found parallels to Norse mythology in "
-"the Edda."
+"In the 13th century, Snorri Sturluson provided the most comprehensive documentation of myths from Old Norse culture known today in his Edda. In this sky culture, the Eddic myths are to be brought into the sky in the form of constellations. Since there are no records of constellations from this time and region, the reconstruction of these constellations is not always certain (in some cases even speculative). In these visualisations, the compiling team follows various literary scholars who found parallels to Norse mythology in the Edda."
 msgstr ""
+"13세기에 스노리 스투를루손은 『에다』에 오늘날 알려진 고대 노르드 문화 신화의 가장 포괄적인 기록을 남겼습니다. 이 별자리 문화는 에다 신화를 별자리의 형태로 하늘에 나타내려는 것입니다. 이 시대와 지역의 별자리에 관한 기록이 없으므로, 이 별자리들의 복원은 항상 확실한 것은 아니며 일부는 추측에 가깝습니다. 이러한 시각화에서 편찬팀은 『에다』에서 북유럽 신화와의 유사점을 찾아낸 여러 문학 연구자의 연구를 따릅니다."
 
 #. Norse (Edda) sky culture description section in markdown format
 msgid ""
@@ -10643,6 +10682,7 @@ msgid ""
 "other elements emit constantly. Then the wise learned to warn about the "
 "changes that affect living beings."
 msgstr ""
+"북부 안데스는 인류가 역사 속에서 탐구해 온 여러 과학을 배울 수 있는 복잡한 실험실과 같습니다. 종과 계보의 생존을 이어 가야 했던 인간은 주변의 다양한 요소를 관찰하는 데서 출발하여 우주, 식물, 동물, 기후와 그 밖의 요소가 끊임없이 보내는 신호를 이해하는 법을 배웠습니다. 이어서 지혜로운 이들은 생명체에 영향을 미치는 변화를 미리 알리는 법을 배웠습니다."
 
 #. Northern Andes sky culture description section in markdown format
 msgid ""
@@ -10688,7 +10728,7 @@ msgid ""
 "\n"
 "Our planet belongs to the galaxy of the Milky Way, whose shape is that of a large disk with two bulging arms; this form and the rotation of the earth means that at the evenings of the equinoxes and solstices we can appreciate a specific part of it, thus becoming a signal that the ancestors appreciated to measure the times. Called in the Andes as the \"Muyun\" for many peoples, it represents a gigantic life-giving serpent.\n"
 "\n"
-"Contrary to the West, the constellations are not made up of bright points or stars; the astral beings are housed in the \"dark spots\" existing in the brilliance of the Milky Way, so at each of the turning points in our annual path around the sun (Solstices and Equinoxes), we will find a guiding constellation in each \"visible end\" of the galaxy. As with lunar or solar movements, the movements of the constellations in the Northern Andes marked the beginning or end of specific eras, agricultural, civil, reproductive or festive. They determined the fate of beings, receiving respect and veneration for those who came for their wisdom; thus developing a religious thought similar to that of the sun or the moon throughout the continent.\n"
+"The dark constellations described here are not made up of bright points or stars; the astral beings are housed in the \"dark spots\" existing in the brilliance of the Milky Way, so at each of the turning points in our annual path around the sun (Solstices and Equinoxes), we will find a guiding constellation in each \"visible end\" of the galaxy. As with lunar or solar movements, the movements of the constellations in the Northern Andes marked the beginning or end of specific eras, agricultural, civil, reproductive or festive. They determined the fate of beings, receiving respect and veneration for those who came for their wisdom; thus developing a religious thought similar to that of the sun or the moon throughout the continent.\n"
 "\n"
 "Here we describe the constellations decoded to date:\n"
 "\n"
@@ -10720,6 +10760,7 @@ msgid ""
 "Considered as a whole, Romanian popular stellar mythology has three "
 "essential components."
 msgstr ""
+"전체적으로 보면 루마니아의 민간 별 신화에는 세 가지 핵심 구성 요소가 있습니다."
 
 #. Romanian sky culture description section in markdown format
 msgid ""
@@ -10775,6 +10816,7 @@ msgid ""
 " of French Polynesia to another, and that the sky culture presented here is "
 "that of the Society Islands."
 msgstr ""
+"프랑스령 폴리네시아는 약 500만 제곱킬로미터의 해역에 흩어진 118개의 섬을 포함합니다. 소시에테 제도, 오스트랄 제도, 투아모투 제도, 감비에 제도, 마르키즈 제도의 다섯 군도로 나뉩니다. 6개의 섬과 8개의 환초로 이루어진 소시에테 제도는 다시 윈드워드 제도와 리워드 제도의 두 집단으로 구분됩니다. 이 제도는 타히티를 중심으로 고유한 별자리 문화를 발전시켰습니다. 타히티는 가장 큰 섬(1,500제곱킬로미터)이자 경제·정치의 중심지입니다. 타푸타푸아테아 유적이 있는 라이아테아는 종교의 중심지였고, 보라보라는 항해 지식과 뛰어난 항해술로 유명했습니다. 따라서 프랑스령 폴리네시아에서는 군도마다 별 이름이 다를 수 있으며, 여기서 소개하는 별자리 문화는 소시에테 제도의 것임을 밝혀 둡니다."
 
 #. Ruanui sky: Tahiti and Society islands sky culture description section in
 #. markdown format
@@ -10834,12 +10876,9 @@ msgstr "러시아 (시베리아)"
 
 #. Russian (Siberian) sky culture introduction section in markdown format
 msgid ""
-"The names of the constellations of Siberian peoples is rather poorly "
-"studied. This region has the large territory and the knowledge about "
-"constellations are difficult to reconcile in a single integrated picture. In"
-" this culture of the sky marked only specific names and objects, which "
-"typical for the whole of Siberia."
+"The names of the constellations of Siberian peoples are rather poorly studied. This region covers a large territory, and knowledge about constellations is difficult to reconcile in a single integrated picture. This sky culture marks only selected names and objects from the cited sources; it should not be taken as representing all of Siberia."
 msgstr ""
+"시베리아 여러 민족의 별자리 이름에 관한 연구는 아직 비교적 부족합니다. 이 지역은 광대한 영토에 걸쳐 있어 별자리에 관한 지식을 하나의 통합된 모습으로 정리하기 어렵습니다. 이 별자리 문화에는 인용한 자료에서 선택한 일부 이름과 천체만 표시하며, 시베리아 전체를 대표하는 것으로 보아서는 안 됩니다."
 
 #. Russian (Siberian) sky culture description section in markdown format
 msgid ""
@@ -10878,6 +10917,7 @@ msgid ""
 "Norway, Sweden, Finland and West Russia (the Kola Peninsula). More "
 "information can be found at [#1] and [#2]."
 msgstr ""
+"사미 사람들은 노르웨이, 스웨덴, 핀란드의 북부와 러시아 서부(콜라반도)의 원주민으로 여겨집니다. 자세한 내용은 [#1]과 [#2]에서 확인할 수 있습니다."
 
 #. Sami sky culture description section in markdown format
 msgid ""
@@ -10925,18 +10965,9 @@ msgstr "사모아"
 
 #. Samoan sky culture introduction section in markdown format
 msgid ""
-"Formerly known as the *Navigator Islands*, the Samoan archipelago has been "
-"the launch site for countless ocean voyages since its settlement 3,000 years"
-" ago by the ancestors of today’s Polynesians. Like other Pacific Islander "
-"societies, the Samoans possessed an incredible body of astronomical "
-"knowledge, cultivated through generations of scientific observational study "
-"(tofāmamao). Over time, indigenous wayfinding science has been almost "
-"completely replaced by digital navigation technologies, but the names and "
-"stories attached to some celestial features have persisted through oral "
-"traditions and colonial era publications. Beside their value as nautical "
-"aids, the moon, stars, and planets also marked the lunar months, annual "
-"socioreligious festivals, and the timing of agricultural cycles."
+"Formerly known as the *Navigator Islands*, the Samoan archipelago has been the launch site for countless ocean voyages since its settlement 3,000 years ago by the ancestors of today’s Polynesians. Like other Pacific Islander societies, the Samoans possessed an incredible body of astronomical knowledge, cultivated through generations of scientific observational study (tofāmamao). The author describes indigenous wayfinding science as having been almost completely replaced over time by digital navigation technologies, but the names and stories attached to some celestial features have persisted through oral traditions and colonial era publications. Beside their value as nautical aids, the moon, stars, and planets also marked the lunar months, annual socioreligious festivals, and the timing of agricultural cycles."
 msgstr ""
+"이전에 *항해자 제도*로 알려졌던 사모아 제도는 오늘날 폴리네시아인의 조상들이 3,000년 전 정착한 이래 수많은 대양 항해의 출발점이었습니다. 다른 태평양 섬 사회와 마찬가지로 사모아 사람들은 여러 세대에 걸친 과학적 관측 연구(tofāmamao)를 통해 축적한 놀랍도록 풍부한 천문 지식을 지녔습니다. 원저자는 시간이 흐르면서 원주민의 길찾기 과학이 디지털 항법 기술로 거의 완전히 대체되었다고 설명하지만, 일부 천체에 얽힌 이름과 이야기는 구전 전통과 식민지 시대 출판물을 통해 이어져 왔습니다. 달, 별, 행성은 항해를 도울 뿐 아니라 음력의 달, 해마다 열리는 사회·종교 축제, 농사 주기의 시점을 알려 주기도 했습니다."
 
 #. Samoan sky culture description section in markdown format
 msgid ""
@@ -11172,11 +11203,9 @@ msgstr "사르데냐"
 
 #. Sardinian sky culture introduction section in markdown format
 msgid ""
-"Like all peoples of the world, even the ancient Sardinians, turned their "
-"eyes to the sky that marked the time and the seasons. The peasant's world "
-"has given its name to the stars and the constellations of the Sardinian "
-"culture."
+"The ancient Sardinians turned their eyes to the sky that marked the time and the seasons. The peasant's world has given its name to the stars and the constellations of the Sardinian culture."
 msgstr ""
+"고대 사르데냐 사람들은 시간과 계절을 알려 주는 하늘을 바라보았습니다. 농민들의 생활 세계는 사르데냐 문화의 별과 별자리에 이름을 주었습니다."
 
 #. Sardinian sky culture references section in markdown format
 msgid ""
@@ -11203,6 +11232,7 @@ msgid ""
 "The [Seri people](https://en.wikipedia.org/wiki/Seri_people) are an "
 "indigenous group in Mexico."
 msgstr ""
+"[세리족](https://en.wikipedia.org/wiki/Seri_people)은 멕시코의 원주민 집단입니다."
 
 #. Seri sky culture description section in markdown format
 msgid ""
@@ -11362,12 +11392,17 @@ msgstr ""
 
 #. Tibetan sky culture introduction section in markdown format
 msgid ""
-"*This is unfinished work and only a tentative solution. Please help us improve! (see below)*\n"
+"*This is unfinished work and a tentative reconstruction. Its identifications remain open to revision.*\n"
 "\n"
 "The author, Georg Zotti, reports encountering a complex system of astronomy and calendar calculations during a visit to the Xizang Autonomous Region of China in 2019. This system has a long local tradition.\n"
 "\n"
-"Traditional Tibetan astronomy is largely influenced by the Kalacakra Tantra which has been imported from India, mixed with some Chinese influence."
+"This account describes the influence of the Kalacakra Tantra transmitted from India, alongside exchanges with other astronomical traditions in China."
 msgstr ""
+"*이 작업은 아직 완성되지 않은 잠정적 복원입니다. 별의 식별 결과는 앞으로 수정될 수 있습니다.*\n"
+"\n"
+"원저자 Georg Zotti는 2019년 중국의 티베트 자치구를 방문했을 때 오랜 지역 전통을 지닌 복잡한 천문학 및 역법 계산 체계를 접했다고 기록합니다.\n"
+"\n"
+"이 자료는 인도에서 전해진 칼라차크라 탄트라의 영향과 중국의 다른 천문 전통과의 교류를 설명합니다."
 
 #. Tibetan sky culture description section in markdown format
 msgid ""
@@ -11385,7 +11420,7 @@ msgid ""
 "\n"
 "### The Zodiac\n"
 "\n"
-"The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. Note the unexpected appearance of Cancer. Is it a frog?\n"
+"The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. The author asks whether the figure corresponding to Cancer depicts a frog.\n"
 " <table class=\"layout\">\n"
 "<tr><th colspan=\"2\">IAU</th><th>Tibetan</th><th>Indian</th><th>Platform Illustration</th>\n"
 "</tr>\n"
@@ -11479,9 +11514,9 @@ msgid ""
 "\n"
 "The Men Tsee Khang emblem shows 27 stick figures for the Lunar mansions arranged in a circle around the central figure. The same figures are also laid out in cement with bright stones connected by black lines in the circular platform which has been erected when the observatory was rebuilt. These 27 *gyukar* figures are described as being equal to the Indian *Nakṣatras* and represent sections of 13°20' longitude along the ecliptic. Actually, one of the *gyukars* consists of 2 asterisms, therefore 28 *lunar asterisms* are named.\n"
 "\n"
-"However, not much is known of the exact identification of the Tibetan Lunar Stations outside of Tibet. Most literature is Tibetan or Chinese only, and there were no Tibetan star maps available. Also our guides could not explain any of the following to us.\n"
+"The author reports that, during the research described here, the available material did not enable a secure identification of the Tibetan lunar stations. Most of the literature encountered was in Tibetan or Chinese, and the author had no Tibetan star maps available. The guides consulted during the visit could not clarify the identifications discussed below. These are limitations of this account, not a claim about what is known elsewhere.\n"
 "\n"
-"The following table was taken from Cornu. Note that Tibetans start counting at zero, while the Indians count from 1.\n"
+"The following table was taken from Cornu. In this table, the Tibetan series is numbered from zero and the Indian series from 1.\n"
 " <table class=\"layout\">\n"
 "<tr><th colspan=\"2\">Gyukar</th><th colspan=\"2\">Nakshatra</th><th>Stars</th>\n"
 "</tr>\n"
@@ -11675,7 +11710,7 @@ msgid ""
 "\t<td> &sigma; Psc</td>\n"
 "</tr>\n"
 "</table>\n"
-"The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. It is assumed that most originate from the Indian traditions, esp. Kalacakra Tantra, but it appears that some Chinese influence is also present, e.g. Nr. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. We have no information about their names, relevance or even publicity of these in Tibet.\n"
+"The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. The author tentatively relates most of these figures to Indian traditions, especially Kalacakra Tantra, and suggests possible connections with other astronomical traditions in China, for example in No. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. For these additional figures, the author had no information about their names, significance or familiarity within Tibetan tradition.\n"
 "\n"
 "### Please help us\n"
 "\n"
@@ -11717,13 +11752,9 @@ msgstr "티쿠나"
 
 #. Tikuna sky culture introduction section in markdown format
 msgid ""
-"The Tikuna indigenous people have inhabited the region of the Upper Solimões"
-" river for the past 2,000 years. They currently occupy a territory where the"
-" political borders of three countries converge: Brazil, Colombia, and Peru. "
-"This is the reason why the Tikuna recognize themselves as a differentiated "
-"indigenous group, while also identifying with the national identities "
-"related to these three countries."
+"The Tikuna indigenous people have inhabited the region of the Upper Solimões river for the past 2,000 years. They currently occupy a territory where the political borders of three countries converge: Brazil, Colombia, and Peru. This account describes how the Tikuna recognize themselves as a distinct indigenous group while also identifying with the national identities associated with these three countries."
 msgstr ""
+"티쿠나 원주민은 지난 2,000년 동안 솔리몽이스강 상류 지역에 살아왔습니다. 현재 거주 지역은 브라질, 콜롬비아, 페루 세 나라의 정치적 경계가 만나는 곳에 있습니다. 이 글은 티쿠나 사람들이 자신을 독자적인 원주민 집단으로 인식하면서도 이 세 나라와 관련된 국민 정체성을 함께 지니는 양상을 설명합니다."
 
 #. Tikuna sky culture description section in markdown format
 msgid ""
@@ -11759,7 +11790,7 @@ msgid ""
 "\n"
 "Although dependent on weather variability, at the September Equinox the Tikuna observe how fog affects how they see in early morning; the Pleiades star cluster disappears on the morning horizon in early June and reappears in the evening, in late November. The goal of the Tikuna is to predict the intensity of the coming rains in order to negotiate with the entity Mawü, the “Master of Rain,” the effects of the floods on their subsistence activities.\n"
 "\n"
-"According to the explanations found in Enepü (a Tikuna community in the indigenous Land Eware II, in the Brazilian State of Amazon, in Western Amazonia), the influence of seasonality upon Tikuna subsistence activities is more prevalent along the Solimões. In the headwaters of the igarapés, where Enepü is situated, plenty of food exists all year long. In Enepü, trees and palms, such as the ingá and açaí, are fertile all year long due to the “virginity” and the enrichment of the soil by natural compost. The same thing occurs with the fishing in Lake Preto, within the limits of Enepü, where they can supply themselves abundantly with fish all year long. On the Solimões, however, one finds fish only from April to July, when the water level drops. Abundance in the hunt is also from April to July (or September, at most), along the Solimões. Fishing becomes more difficult when the river is high. The fruit of the native açaí palm is collected in summer, and customarily saved for preparation during winter—time of poor hunting and fishing. Through planning and regular gardening, harvests are available all year long. The harvest of cultivated plants also occurs during the drought months. There is a certain degree of flexibility in adapting the agricultural calendar to the rainy season (when fishing and hunting are not productive) and the dry season, (when fishing is more abundant); however, difficulties involving navigation and transport grow as the water level drops along the igarapés linking the river. Traditional culture, however, is not prepared for unforeseen alterations in the rainy season, such as it occurred in 2002. In that year, July saw the beginning of the repiquete (the rise on water levels), which normally occurs in September. This destroyed the short-range agricultural cycle and made the fish scarcer, changing alimentary habits.\n"
+"According to the explanations found in Enepü (a Tikuna community in the indigenous Land Eware II, in the Brazilian State of Amazon, in Western Amazonia), the influence of seasonality upon Tikuna subsistence activities is more prevalent along the Solimões. In the headwaters of the igarapés, where Enepü is situated, plenty of food exists all year long. In Enepü, trees and palms, such as the ingá and açaí, are fertile all year long due to the “virginity” and the enrichment of the soil by natural compost. The same thing occurs with the fishing in Lake Preto, within the limits of Enepü, where they can supply themselves abundantly with fish all year long. On the Solimões, however, one finds fish only from April to July, when the water level drops. Abundance in the hunt is also from April to July (or September, at most), along the Solimões. Fishing becomes more difficult when the river is high. The fruit of the native açaí palm is collected in summer, and customarily saved for preparation during winter—time of poor hunting and fishing. Through planning and regular gardening, harvests are available all year long. The harvest of cultivated plants also occurs during the drought months. There is a certain degree of flexibility in adapting the agricultural calendar to the rainy season (when fishing and hunting are not productive) and the dry season, (when fishing is more abundant); however, difficulties involving navigation and transport grow as the water level drops along the igarapés linking the river. The account describes how an unforeseen alteration in the rainy season disrupted these subsistence practices in 2002. In that year, July saw the beginning of the repiquete (the rise on water levels), which normally occurs in September. This destroyed the short-range agricultural cycle and made the fish scarcer, changing alimentary habits.\n"
 " <p id=\"cit1\"><notr><a href=\"#cit1a\"><B>1</B></a></notr><cite>This work adopts linguistic convention when writing Tikuna, even though several Anthropologists and Indigenous experts use the vernacular form (Ticuna).</cite></p>\n"
 "\n"
 " <p id=\"cit2\"><notr><a href=\"#cit2a\"><B>2</B></a></notr><cite> According to socioambiental.org, consulted on 08/05/2019.</cite></p>"
@@ -11797,15 +11828,15 @@ msgstr "통가"
 
 #. Tongan sky culture introduction section in markdown format
 msgid ""
-"As in all Polynesian star lore, Tongan sky culture descends from the "
-"practical application of nautical navigation."
+"Like other Polynesian star traditions, Tongan sky culture includes star lore used in nautical navigation."
 msgstr ""
+"다른 폴리네시아의 별 전통과 마찬가지로 통가의 하늘 문화에는 항해에 쓰이는 별에 관한 지식이 포함되어 있습니다."
 
 #. Tongan sky culture description section in markdown format
 msgid ""
 "In some circumstances separation of individual star names from &quot;star path&quot; names cannot be resolved. A star may have multiple names 1) if the star is part of numerous star paths and 2) since the naming of stars can differ depending on which Tongan island group it originates from. The nomenclature of stars is approximated based on the limited resources available.\n"
 "\n"
-"Whilst the most-notable/common stars and constellations (i.e. Orion, Pleiades, Crux) are identified in Tongan star lore there are two notable exceptions. There is an absence of naming of the North star (Polaris: &alpha; UMi). This is peculiar considering the latitude of the Tongan islands and the prominence of this star at certain times of the year. In the event of any northerly journeys from Tonga such an important navigational landmark could not have possibly gone unnoticed. The constellation of Scorpio (parts in, or stars of) are also absent from Tongan star lore. This is surprising since the vast majority of star lore &ndash; globally and Polynesian &ndash; has Scorpio as a central constellation due to it being easily identified and that it is nearly directly opposite Orion in the night sky. [Stellarium would welcome any further knowledge on these two anomalies.]\n"
+"The sources used for this compilation identify stars and constellations corresponding to Orion, the Pleiades and Crux, but do not provide names for Polaris (&alpha; UMi) or for Scorpius and its parts or stars. This is a limitation of the available documentation, not evidence that Tongan communities lacked such knowledge. [Editorial clarification: Polaris remains below the horizon at Tonga's southern latitudes; its visibility on voyages farther north depends on the observer's latitude.] Scorpius is readily recognizable and lies roughly opposite Orion in the sky, but its prominence in other traditions does not establish its naming or interpretation in Tonga. Further information from Tongan knowledge holders and documented sources would help clarify these identifications.\n"
 "\n"
 "Common ancestry of Polynesian star lore's is evident in the similarities in the labelling of stars. For example the Pleiades is called Mataliki in Tongan, Matariki in Maori and Makali`i in Hawaiian.\n"
 "\n"
@@ -11871,12 +11902,17 @@ msgid ""
 "\n"
 " *One circular calendar developed in 2007.*"
 msgstr ""
+"[투카노](https://en.wikipedia.org/wiki/Tucano_people)는 콜롬비아와 베네수엘라에 가까운 브라질 북서부 일대에 거주하는 원주민 부족 집단의 통칭입니다. 이 자료에서 소개하는 집단은 브라질 아마조나스주 네그루강 유역의 티키에강 연안에 살고 있습니다.\n"
+"\n"
+"<img src=\"illustrations/Calendario_Tukano.png\" width=\"400\" height=\"400\" />\n"
+"\n"
+" *2007년에 제작한 원형 달력의 한 예.*"
 
 #. Tukano sky culture description section in markdown format
 msgid ""
 "### Constellations\n"
 "\n"
-"Constellations within Tukano astronomical culture are related with natural phenomena as a whole. We gathered twelve constellations with a group who speaks Tukano language. This is not the definitive number of constellations. There are, surely, more constellations to be described. We presented here essentially “the main cycle” (CARDOSO, 2007) of the Tukano constellations. Sometimes someone relate new discoveries about these Indians sky conceptions or presents new constellation descriptions. Though we are establishing limits and configurations to these constellations that are new to us (non- Indians), they don’t organize this body of knowledge in the same way. Their conceptions about sky and Universe are different when compared with ours. They don’t organize and conceive ideas about the Universe as a whole, like us.\n"
+"Constellations within Tukano astronomical culture are related with natural phenomena as a whole. We gathered twelve constellations with a group who speaks Tukano language. This is not the definitive number of constellations. There are, surely, more constellations to be described. We presented here essentially “the main cycle” (CARDOSO, 2007) of the Tukano constellations. Sometimes someone relate new discoveries about these Indians sky conceptions or presents new constellation descriptions. Though we are establishing limits and configurations to these constellations that are new to us (non- Indians), they don’t organize this body of knowledge in the same way. The researchers describe how Tukano people organise their knowledge of the sky.\n"
 "\n"
 "Hereby we present few data from a research carried out with living people and this data may be variable in near future. We worked with basic school students, elders and story tellers comparing the talks and summarizing it as you’ll see below.\n"
 "\n"
@@ -11986,6 +12022,7 @@ msgid ""
 "Tupi-Guarani is a name given to a family of languages spoken by the "
 "indigenous peoples of Brazil and other South American countries."
 msgstr ""
+"투피과라니는 브라질과 다른 남아메리카 국가들의 원주민들이 사용하는 언어 계통에 붙여진 이름입니다."
 
 #. Tupi-Guarani sky culture description section in markdown format
 msgid ""
@@ -12034,6 +12071,7 @@ msgid ""
 "constellations are strikingly similar with other languages of Vanuatu, "
 "although names and meanings vary to some extent."
 msgstr ""
+"Stellarium의 Netwar 하늘 문화는 도미니크 M. 라미크(Dominik M. Ramík)가 바누아투 주민들을 대상으로 수행한 연구에서 비롯되었으며, 연구 내용은 [온라인에 발표되어 있습니다](http://dominicweb.eu/en/vanuatu-sky/). Netwar어는 바누아투 타나섬의 언어 중 하나입니다. Netwar는 이 언어의 토착 명칭이며, 이 지역의 주요 마을 이름을 따서 “Lenakel어”라고도 합니다. 그 별자리들은 바누아투의 다른 언어 전통에 나타나는 별자리와 놀라울 정도로 비슷하지만, 이름과 의미에는 어느 정도 차이가 있습니다."
 
 #. Vanuatu (Netwar) sky culture description section in markdown format
 msgid ""
@@ -12101,14 +12139,21 @@ msgstr "호사"
 
 #. Xhosa sky culture introduction section in markdown format
 msgid ""
-"A wide spread African concept is that the sky is a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.\n"
+"In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.\n"
 "\n"
 "Although planets are &#8220;wanderers&#8221; of the night skies, and therefore vary their positions relative to the stars, they often feature in Xhosa starlore.\n"
 "\n"
 "Jupiter was interpreted as people around a fire. Venus, as the evening star, is associated with the time the boys milked the cows\n"
 "\n"
-"Venus was also called the dating star, &#8220;Madingeni&#8221;. Boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening."
+"Venus was also called the dating star, &#8220;Madingeni&#8221;. In this account, boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening."
 msgstr ""
+"여기에 소개된 기록에서 하늘은 대지 위에 받쳐진 단단한 돔으로 묘사되며, 아마 푸른 바위로 이루어져 있고 그 위로 태양이 움직인다고 합니다. 코사어로 별은 “inkwenkwezi”라고 합니다.\n"
+"\n"
+"행성은 밤하늘의 “방랑자”여서 별에 대한 상대적 위치가 바뀌지만, 코사의 별 전승에 자주 등장합니다.\n"
+"\n"
+"목성은 불 주위에 모인 사람들로 해석되었습니다. 저녁별인 금성은 소년들이 소젖을 짜던 시간과 연관됩니다.\n"
+"\n"
+"금성은 만남의 별인 “Madingeni”라고도 불렸습니다. 이 기록에 따르면 소년과 소녀는 공개적으로 교제할 수 없었지만, 저녁에 금성이 보이면 소녀들이 물을 길어 오는 샘에서 만났습니다."
 
 #. Xhosa sky culture description section in markdown format
 msgid ""
@@ -12141,9 +12186,9 @@ msgstr "줄루"
 
 #. Zulu sky culture introduction section in markdown format
 msgid ""
-"A wide spread African concept is that the sky is a solid dome, perhaps made "
-"of blue rock resting on the Earth, upon which the Sun moves."
+"In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves."
 msgstr ""
+"여기에 소개된 기록에서 하늘은 대지 위에 받쳐진 단단한 돔으로 묘사되며, 아마 푸른 바위로 이루어져 있고 그 위로 태양이 움직인다고 합니다."
 
 #. Zulu sky culture description section in markdown format
 msgid ""
@@ -12169,3 +12214,17 @@ msgid ""
 "\n"
 "Umthala Wezinkanyezi means &#8220;the stream of stars.&#8221; This is related to the way the Nguni people used to fight before Shaka Zulu&#8217;s revolutionary close-combat strategy. The strong warriors used to throw spears like javelin and the stream of spears would be seen in the air."
 msgstr ""
+
+#. Norse sky culture introduction: editorial account of the incomplete source package
+msgid "This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below."
+msgstr "이 미완성 북유럽 하늘 문화 자료는 Jonas Persson이 제공했으며 여섯 개의 별자리 도형을 담고 있습니다. 원본 자료에는 아직 이 도형들에 관한 서술형 설명이 없습니다. 제공된 참고 자료와 기여자 정보는 아래에 보존되어 있습니다."
+
+#. Reviewed sky culture section: chinese_yuan_dynasty_intro_priority10
+msgid "The *Tianwen Huichao*(天文汇钞) star catalog is an important record of stellar observations completed in the late Yuan Dynasty (around 1363 CE). It adopts a unique \"chart-plus-table\" format, in which data are attached beneath the plotted stars, recording high-precision positional data for 741 stars. This format is unparalleled in ancient Chinese star catalogs. This catalog  represents one of the highest achievements of traditional Chinese stellar observation before the introduction of Western astronomy."
+msgstr ""
+"*천문휘초*(天文汇钞) 성표는 원나라 말기(서기 1363년경)에 완성된 중요한 항성 관측 기록입니다. 그려진 별 아래에 자료를 붙이는 독특한 ‘성도와 표의 결합’ 형식을 채택하여 741개 항성의 정밀한 위치 자료를 기록했습니다. 이러한 형식은 중국 고대 성표에서 유례가 없습니다. 이 성표는 서양 천문학이 도입되기 이전 중국의 전통 항성 관측이 이룬 가장 높은 성과 중 하나를 보여 줍니다."
+
+#. Reviewed sky culture section: korean_intro_priority10
+msgid "The *Cheonsang Yeolcha Bunyajido* (天象列次分野之圖, \"Chart of Constellations, Each Star Division, and Their Field Allocations\") is one of the oldest and most representative ancient star maps existing in Korea. It was first carved on stone in 1396 AD (the 3rd year of King Taejo of the Joseon Dynasty), but its original source can be traced back to the Unified Silla and Goryeo period, and even directly to Chinese star charts from the Tang Dynasty (or earlier). Today, it serves not only as an important physical artifact for studying East Asian ancient astronomy, but also as a testament to the long-term exchange and integration among East Asian countries in the fields of astronomy, calendrics, and astrology."
+msgstr ""
+"*천상열차분야지도*(天象列次分野之圖, ‘별자리와 각각의 별 구역 및 그에 대응하는 지상의 분야를 배치한 그림’)는 한국에 현존하는 가장 오래되고 대표적인 고대 성도 가운데 하나입니다. 서기 1396년(조선 태조 3년)에 처음 돌에 새겨졌지만, 그 바탕이 된 자료는 통일신라와 고려 시기, 나아가 중국 당나라 또는 그 이전의 성도까지 직접 거슬러 올라갈 수 있습니다. 오늘날 이 지도는 동아시아 고대 천문학을 연구하는 중요한 실물 자료일 뿐 아니라, 동아시아 각국이 천문학·역법·점성술 분야에서 오랫동안 교류하고 융합해 온 역사를 보여 주는 증거이기도 합니다."

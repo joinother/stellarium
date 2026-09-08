@@ -2,13 +2,13 @@
 
 ## Introduction
 
-As in all Polynesian star lore, Tongan sky culture descends from the practical application of nautical navigation.
+Like other Polynesian star traditions, Tongan sky culture includes star lore used in nautical navigation.
 
 ## Description
 
 In some circumstances separation of individual star names from &quot;star path&quot; names cannot be resolved. A star may have multiple names 1) if the star is part of numerous star paths and 2) since the naming of stars can differ depending on which Tongan island group it originates from. The nomenclature of stars is approximated based on the limited resources available.
 
-Whilst the most-notable/common stars and constellations (i.e. Orion, Pleiades, Crux) are identified in Tongan star lore there are two notable exceptions. There is an absence of naming of the North star (Polaris: &alpha; UMi). This is peculiar considering the latitude of the Tongan islands and the prominence of this star at certain times of the year. In the event of any northerly journeys from Tonga such an important navigational landmark could not have possibly gone unnoticed. The constellation of Scorpio (parts in, or stars of) are also absent from Tongan star lore. This is surprising since the vast majority of star lore &ndash; globally and Polynesian &ndash; has Scorpio as a central constellation due to it being easily identified and that it is nearly directly opposite Orion in the night sky. [Stellarium would welcome any further knowledge on these two anomalies.]
+The sources used for this compilation identify stars and constellations corresponding to Orion, the Pleiades and Crux, but do not provide names for Polaris (&alpha; UMi) or for Scorpius and its parts or stars. This is a limitation of the available documentation, not evidence that Tongan communities lacked such knowledge. [Editorial clarification: Polaris remains below the horizon at Tonga's southern latitudes; its visibility on voyages farther north depends on the observer's latitude.] Scorpius is readily recognizable and lies roughly opposite Orion in the sky, but its prominence in other traditions does not establish its naming or interpretation in Tonga. Further information from Tongan knowledge holders and documented sources would help clarify these identifications.
 
 Common ancestry of Polynesian star lore's is evident in the similarities in the labelling of stars. For example the Pleiades is called Mataliki in Tongan, Matariki in Maori and Makali`i in Hawaiian.
 

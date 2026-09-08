@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Belarus is a country in Eastern Europe bordered by Russia to the northeast, Ukraine to the south, Poland to the west, and Lithuania and Latvia to the northwest. Belarus is landlocked and contains large tracts of marshy land and thousands of lakes. Forests cover about 40% of the country. Belarus is exceptional in that people in the villages have preserved their traditional knowledge about the stars and related beliefs, right through to the present time. The illustrations are by no means exhaustive. In fact, many asterisms have multiple recorded meanings, ranging from ancient to Christianized.
+Belarus is a country in Eastern Europe bordered by Russia to the northeast, Ukraine to the south, Poland to the west, and Lithuania and Latvia to the northwest. Belarus is landlocked and contains large tracts of marshy land and thousands of lakes. Forests cover about 40% of the country. In Belarusian villages, traditional knowledge about the stars and related beliefs has been documented as surviving into the present. The illustrations are by no means exhaustive. In fact, many asterisms have multiple recorded meanings, ranging from ancient to Christianized.
 
 ## Description
 

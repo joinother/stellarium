@@ -1,11 +1,24 @@
 {
   "schemaVersion": 1,
+  "priorityLanguages": ["zh_CN", "zh_TW", "en", "es", "fr", "de", "ru", "ja", "ko", "pt_BR"],
   "languages": [
     "ar", "bn", "cs", "da", "de", "el", "en", "es", "fa", "fi", "fr", "gu",
     "he", "hi", "hr", "hu", "id", "it", "ja", "ko", "ml", "mr", "ms", "nb",
     "ne", "nl", "pl", "pt", "pt_BR", "ro", "ru", "si", "sk", "sl", "sv", "ta",
     "te", "th", "uk", "vi", "zh_CN", "zh_HK", "zh_TW"
   ],
+  "sourceAttribution": {
+    "zh_CN": {"body": "资料来源说明：正文中的第一人称叙述属于文末署名的原作者或资料提供者，不代表本应用或当前用户的亲身经历。引文与口述故事保留原说话者的声音。"},
+    "zh_TW": {"body": "資料來源說明：正文中的第一人稱敘述屬於文末署名的原作者或資料提供者，不代表本應用或目前使用者的親身經歷。引文與口述故事保留原說話者的聲音。"},
+    "en": {"body": "Source attribution: first-person accounts in this text belong to the original authors or contributors credited at the end, not to this application or its current user. Quotations and oral narratives retain the original speakers' voices."},
+    "es": {"body": "Atribución de las fuentes: los relatos en primera persona pertenecen a los autores o colaboradores originales acreditados al final, no a esta aplicación ni a su usuario actual. Las citas y narraciones orales conservan la voz de quienes las expresaron."},
+    "fr": {"body": "Attribution des sources : les récits à la première personne sont ceux des auteurs ou contributeurs d’origine mentionnés à la fin du texte, et non de cette application ou de son utilisateur actuel. Les citations et récits oraux conservent la voix de leurs locuteurs."},
+    "de": {"body": "Quellenzuordnung: Ich- und Wir-Berichte in diesem Text stammen von den am Ende genannten ursprünglichen Autoren oder Mitwirkenden, nicht von dieser Anwendung oder der sie nutzenden Person. Zitate und mündliche Erzählungen bewahren die Stimme der ursprünglichen Sprechenden."},
+    "ru": {"body": "Об источниках: повествование от первого лица в этом тексте принадлежит первоначальным авторам или участникам, указанным в конце, а не этому приложению или его текущему пользователю. Цитаты и устные рассказы сохраняют голос исходных рассказчиков."},
+    "ja": {"body": "出典について：本文の一人称による記述は、末尾に記載された原著者または資料提供者のものであり、本アプリや現在の利用者自身の経験を述べたものではありません。引用や口承の物語では、元の語り手の言葉を保っています。"},
+    "ko": {"body": "출처 안내: 본문의 일인칭 서술은 글 끝에 명시된 원저자나 자료 제공자의 이야기이며, 이 앱이나 현재 사용자의 직접적인 경험을 뜻하지 않습니다. 인용문과 구전 이야기는 원래 화자의 목소리를 보존합니다."},
+    "pt_BR": {"body": "Atribuição das fontes: os relatos em primeira pessoa pertencem aos autores ou colaboradores originais creditados ao final, não a este aplicativo nem ao usuário atual. As citações e narrativas orais preservam a voz de quem as proferiu."}
+  },
   "presentation": {
     "ar": {
       "title": "إطار العرض الثقافي",

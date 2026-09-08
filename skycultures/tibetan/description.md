@@ -2,11 +2,11 @@
 
 ## Introduction
 
-*This is unfinished work and only a tentative solution. Please help us improve! (see below)*
+*This is unfinished work and a tentative reconstruction. Its identifications remain open to revision.*
 
 The author, Georg Zotti, reports encountering a complex system of astronomy and calendar calculations during a visit to the Xizang Autonomous Region of China in 2019. This system has a long local tradition.
 
-Traditional Tibetan astronomy is largely influenced by the Kalacakra Tantra which has been imported from India, mixed with some Chinese influence.
+This account describes the influence of the Kalacakra Tantra transmitted from India, alongside exchanges with other astronomical traditions in China.
 
 ## Description
 
@@ -24,7 +24,7 @@ Traditional Tibetan astronomy is largely influenced by the Kalacakra Tantra whic
 
 ### The Zodiac
 
-The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. Note the unexpected appearance of Cancer. Is it a frog?
+The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. The author asks whether the figure corresponding to Cancer depicts a frog.
  <table class="layout">
 <tr><th colspan="2">IAU</th><th>Tibetan</th><th>Indian</th><th>Platform Illustration</th>
 </tr>
@@ -120,9 +120,9 @@ Ancient Indian literature records two traditions regarding the number of lunar m
 
 The Men Tsee Khang emblem shows 27 stick figures for the Lunar mansions arranged in a circle around the central figure. The same figures are also laid out in cement with bright stones connected by black lines in the circular platform which has been erected when the observatory was rebuilt. These 27 *gyukar* figures are described as being equal to the Indian *Nakṣatras* and represent sections of 13°20' longitude along the ecliptic. Actually, one of the *gyukars* consists of 2 asterisms, therefore 28 *lunar asterisms* are named.
 
-However, not much is known of the exact identification of the Tibetan Lunar Stations outside of Tibet. Most literature is Tibetan or Chinese only, and there were no Tibetan star maps available. Also our guides could not explain any of the following to us.
+The author reports that, during the research described here, the available material did not enable a secure identification of the Tibetan lunar stations. Most of the literature encountered was in Tibetan or Chinese, and the author had no Tibetan star maps available. The guides consulted during the visit could not clarify the identifications discussed below. These are limitations of this account, not a claim about what is known elsewhere.
 
-The following table was taken from Cornu. Note that Tibetans start counting at zero, while the Indians count from 1.
+The following table was taken from Cornu. In this table, the Tibetan series is numbered from zero and the Indian series from 1.
  <table class="layout">
 <tr><th colspan="2">Gyukar</th><th colspan="2">Nakshatra</th><th>Stars</th>
 </tr>
@@ -316,15 +316,15 @@ The following table was taken from Cornu. Note that Tibetans start counting at z
 	<td> &sigma; Psc</td>
 </tr>
 </table>
-The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. It is assumed that most originate from the Indian traditions, esp. Kalacakra Tantra, but it appears that some Chinese influence is also present, e.g. Nr. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. We have no information about their names, relevance or even publicity of these in Tibet.
+The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. The author tentatively relates most of these figures to Indian traditions, especially Kalacakra Tantra, and suggests possible connections with other astronomical traditions in China, for example in No. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. For these additional figures, the author had no information about their names, significance or familiarity within Tibetan tradition.
 
 ### Please help us
 
 The figures are my own attempt of identification of the Lunar mansion figures. We can be sure about the placement of only those which can also be found in other sky cultures, e.g. Japanese Moon Stations which stem from Chinese tradition. Many stars are rather dim, and the figures in the emblem apparently have to be rotated in arbitrary ways, like *gyukar 3*=Hyades. Others require considerable liberties to accept a topological match. Alternative matches with stars in similar topology arranged in the orientation shown in the emblem (north=outer circle) have been found only in neighboring areas of the sky, making a match rather unlikely. Others appear to have been taken over from Chinese tradition, e.g. Nr. 11. LM21 can be explained only if we accept two separate figures which are not aligned as shown in the concrete figure. Then they represent Chinese constellations *Ox* and *Girl* (which is also Japanese Lunar station *Woman*).
 
-We have supplemented the Tibetan names with native script (Dung dkar Blo bzang 'phrin las, 2002, p. 328), transliteration, and IPA. The "native" field contains the original Tibetan spelling in Tibetan characters. It should be noted that many fonts do not render Tibetan script correctly; we have preserved the correct Unicode codepoints in the file for reference. The "transliteration" follows the Tibetan Pinyin system (Zangyu Hanyu Pinyin Zimu Yinyi Zhuanxie Fa), which is based on the Lhasa pronunciation and adopts a Hanyu Pinyin-like scheme for transcribing Tibetan pronunciation. Several different romanisation systems exist for Tibetan; the scheme adopted here, while close to Hanyu Pinyin, may not be the most intuitive for Western readers. The "sci. translit." field uses the Wylie transliteration system, which is specifically designed for Tibetan orthography and allows a lossless conversion of Tibetan script into Latin letters. It is important to note that Tibetan pronunciation and spelling are not consistent — Tibet has not undergone systematic orthographic reform for over a millennium, and the current spelling reflects Old Tibetan pronunciation. We therefore use Wylie to represent the written form and Tibetan Pinyin to represent the contemporary Lhasa pronunciation.
+We have supplemented the Tibetan names with native script (Dung dkar Blo bzang 'phrin las, 2002, p. 328), transliteration, and IPA. The "native" field contains the original Tibetan spelling in Tibetan characters. It should be noted that many fonts do not render Tibetan script correctly; we have preserved the correct Unicode codepoints in the file for reference. The "transliteration" follows the Tibetan Pinyin system (Zangyu Hanyu Pinyin Zimu Yinyi Zhuanxie Fa), which is based on the Lhasa pronunciation and adopts a Hanyu Pinyin-like scheme for transcribing Tibetan pronunciation. Several different romanisation systems exist for Tibetan; the scheme adopted here is close to Hanyu Pinyin, but may require explanation for readers unfamiliar with its conventions. The "sci. translit." field uses the Wylie transliteration system, which is specifically designed for Tibetan orthography and allows a lossless conversion of Tibetan script into Latin letters. It is important to note that Tibetan pronunciation and spelling are not consistent — Tibet has not undergone systematic orthographic reform for over a millennium, and the current spelling reflects Old Tibetan pronunciation. We therefore use Wylie to represent the written form and Tibetan Pinyin to represent the contemporary Lhasa pronunciation.
 
-We would welcome input from native Tibetan speakers regarding the meanings of the Tibetan lunar mansion names. So far, we have been able to determine the semantics of only a few, for example མགོ (mgo, go) meaning "head." The Tibetan lunar stations are closely related to both the Indian Nakṣatras and the Chinese lunar mansion traditions, and they share some semantic parallels with both—yet they are not entirely identical to either, each displaying distinctive cultural characteristics. At present, the mansions are identified by their numerical designations; we hope to replace these with their actual semantic names in the future.
+We would welcome input from native Tibetan speakers regarding the meanings of the Tibetan lunar mansion names. So far, we have been able to determine the semantics of only a few, for example མགོ (mgo, go) meaning "head." The Tibetan lunar stations are closely related to both the Indian Nakṣatras and other lunar mansion traditions in China, and they share some semantic parallels with both—yet they are not entirely identical to either, each displaying distinctive cultural characteristics. At present, the mansions are identified by their numerical designations; we hope to replace these with their actual semantic names in the future.
 
 Alternative figures can be found in the old configuration files. We would welcome verification and corrections from experts in Tibetan astronomy, covering both the identification of the lunar mansions and the review of Tibetan script, transliteration, and IPA.
 

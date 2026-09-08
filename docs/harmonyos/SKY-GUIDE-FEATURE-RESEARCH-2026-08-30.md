@@ -88,11 +88,13 @@
 
 ### 3.4 多光谱滤镜
 
+2026-09-08 根据用户 X 射线圆窗录屏、原生 HiPS 审计及公开数据实查，调整落地顺序，详见 [多波段天空预研](MULTIWAVELENGTH-SKY-RESEARCH-2026-09-08.md)。优先少量真实离线巡天，不以模拟染色充当已支持波段。
+
 官方 Creating filters 页面明确列出：Gamma Ray、X-Ray、Ultraviolet、Visible、Hydrogen Alpha、Infrared、Microwave、Radio。交互包括长按新建滤镜、拖动主体移动、拖边缘调整大小、拉伸至全屏、把滤镜甩出屏幕关闭、点击外部关闭，以及旋转滤镜切换波长；创建时会短暂出现信息标题。
 
 这是当前项目最值得吸收的交互之一，但不能在没有数据的情况下冒充真实紫外线或红外线观测：
 
-- 第一阶段实现为**波段可视化会话**，有清晰标签“模拟显示/本地示意”，只对内置图层、颜色映射和对比度做变换。
+- 第一阶段实现为**真实离线波段可视化会话**，优先核验 RASS、GALEX NUV 和一种红外产品。模型示意独立标识，不作为缺少观测数据时的默认替代。
 - 如果没有对应波段资源，显示“无匹配离线波段资源”，不把可见光图片伪装成 UV/IR 数据。
 - `visible`、`hydrogen-alpha` 等可以连接真实本地资源；`gamma-ray`、`x-ray`、`ultraviolet`、`infrared`、`microwave`、`radio` 先只开放有数据清单的资源。
 - 过滤器生命周期由 `SpectralFilterSession` 管理，不能让每个页面各自创建一套叠加层。

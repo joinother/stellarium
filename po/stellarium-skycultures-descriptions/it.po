@@ -1499,7 +1499,7 @@ msgid ""
 "<p>This <em>Seleucid</em> or <em>Late Babylonian sky culture</em> is supposed to show the (estimated) state of Babylonian constellations contemporary to the Greek culture. There is no description of the full sky. Changes with regard to the MUL.APIN version have certainly applied in the zodiac since several centuries. This can be stated for sure because in this time, there is a blossoming zodiacal astrology. Since there had been no zodiac in MUL.APIN and the zodiac developed around the middle of the -1st millennium, in the 2nd half of the 1st millennium BCE, there had been different versions of the constellations around the ecliptic.\n"
 " </p>\n"
 "\n"
-" However, we do not know much about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture."
+" However, the available evidence provides little information about the rest of the sky. Hence, for the constellations far away from the zodiac, again the constellations of MUL.APIN can be taken as state of the art. Please see MUL.APIN sky culture for more information and use the MUL.APIN constellations for an impression of the Old Babylonian (or Middle Babylonian) sky culture."
 msgstr ""
 
 #. Babylonian (Seleucid) sky culture description section in markdown format
@@ -1962,11 +1962,7 @@ msgstr ""
 
 #. Balinese sky culture introduction section in markdown format
 msgid ""
-"Balinese people have had a strong connection to the cosmos since ancient "
-"times. They rely on the cosmos because they believe that every celestial "
-"body has power and will impact what they will or have done. Therefore, in "
-"carrying out all activities, from social to civil and ritual, they must know"
-" the right time to do so, guided by the celestial conditions."
+"The Balinese traditions described here have linked human life with the cosmos since ancient times. In these traditions, celestial bodies are believed to have power and to affect past and future human activities. Celestial conditions therefore guide the choice of appropriate times for social, civil, and ritual activities."
 msgstr ""
 
 #. Balinese sky culture description section in markdown format
@@ -2262,14 +2258,7 @@ msgstr "Bielorusso"
 
 #. Belarusian sky culture introduction section in markdown format
 msgid ""
-"Belarus is a country in Eastern Europe bordered by Russia to the northeast, "
-"Ukraine to the south, Poland to the west, and Lithuania and Latvia to the "
-"northwest. Belarus is landlocked and contains large tracts of marshy land "
-"and thousands of lakes. Forests cover about 40% of the country. Belarus is "
-"exceptional in that people in the villages have preserved their traditional "
-"knowledge about the stars and related beliefs, right through to the present "
-"time. The illustrations are by no means exhaustive. In fact, many asterisms "
-"have multiple recorded meanings, ranging from ancient to Christianized."
+"Belarus is a country in Eastern Europe bordered by Russia to the northeast, Ukraine to the south, Poland to the west, and Lithuania and Latvia to the northwest. Belarus is landlocked and contains large tracts of marshy land and thousands of lakes. Forests cover about 40% of the country. In Belarusian villages, traditional knowledge about the stars and related beliefs has been documented as surviving into the present. The illustrations are by no means exhaustive. In fact, many asterisms have multiple recorded meanings, ranging from ancient to Christianized."
 msgstr ""
 
 #. Belarusian sky culture description section in markdown format
@@ -5520,18 +5509,7 @@ msgstr "Egiziano (Dendera)"
 
 #. Egyptian (Dendera) sky culture introduction section in markdown format
 msgid ""
-"The sculptured Dendera zodiac (or Denderah zodiac) is a widely known "
-"Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel"
-" dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun "
-"in the late Ptolemaic period when Egypt was ruled by (Greek) successors of "
-"Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall "
-"in front of the holy chamber) was added by the Roman emperor Tiberius (14-37"
-" CE). This led Jean-François Champollion (18th century) to date the relief "
-"to the Greco-Roman period (while most of his contemporaries believed it to "
-"be of a millennium earlier because of the Egyptian style of the figures - "
-"this is not believed anymore). Today, French archaeologists date it to "
-"exactly 54 BCE [#1].  The relief is now on display at the Musée du Louvre, "
-"Paris (France)."
+"The sculptured Dendera zodiac (or Denderah zodiac) is a widely known Egyptian bas-relief from the ceiling of the pronaos (or portico) of a chapel dedicated to Osiris in the Hathor temple at Dendera. This chapel was begun in the late Ptolemaic period when Egypt was ruled by (Greek) successors of Alexander the Great (hellenistic Egypt: 305-30 BCE). Its _pronaos_ (a hall in front of the holy chamber) was added by the Roman emperor Tiberius (14-37 CE). This led Jean-François Champollion (1790-1832) to date the relief to the Greco-Roman period (while most of his contemporaries believed it to be of a millennium earlier because of the Egyptian style of the figures - this is not believed anymore). The Louvre collection catalogue dates it to June-August 50 BCE [#1].  The relief is now on display at the Musée du Louvre, Paris (France)."
 msgstr ""
 
 #. Egyptian (Dendera) sky culture description section in markdown format
@@ -5811,14 +5789,14 @@ msgid ""
 "astronomical knowledge of former astronomers including results from\n"
 "observations and mathematical astronomy. Pieced together by Claudius\n"
 "Ptolemy, using older, as well as his own, observations, it was written\n"
-"in Greek, published in the Second Century and remained the main\n"
-"astronomical work for the following 1500 years. It was originally written\n"
+"in Greek, published in the Second Century and remained a major\n"
+"astronomical work in the traditions that transmitted it for the following 1500 years. It was originally written\n"
 "with the title <i>Mathematike Syntaxis</i>, in Ancient Greek.\n"
 "The name <i>Almagest</i>, meaning &ldquo;The Largest [Book]&rdquo;, was\n"
-"developed from Arabian translations. To create this sky culture we used\n"
+"developed from Arabian translations. To create this sky culture the compiling team used\n"
 "the English translation by Toomer (1984), reworked it in some details\n"
 "(e.g. using more literal translations from Greek instead of Latin terms that\n"
-"are common today) and we made use of computer readable tables prepared\n"
+"are common today) and the team made use of computer readable tables prepared\n"
 "by Ernie Wright.</p>"
 msgstr ""
 
@@ -6323,7 +6301,7 @@ msgstr "Greco (Dante)"
 
 #. Greek (Dante) sky culture introduction section in markdown format
 msgid ""
-"Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, we chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.\n"
+"Dante Alighieri mentions several stars and a few constellations: predominantly, the zodiacal constellation of Gemini. The Twins occurs in his texts (in the comedia as well as his poems). As Dante is not an astronomer but a person with broad knowledge, his view of the constellations is highly like not based upon observations of the sky but on manuscripts that he read. Therefore, the compiling team chose to take the zodiacal constellation images from Michael Scotus whose manuscript was very popular in Dante's time.\n"
 "\n"
 "Dante Alighieri was a citizen of Florence, Italy, who was later banned and lived at several places in Northern Italy. The comedia was written around 1300 but finished only short before his death in 1321. It is commonly assumed that the story plays in around the Christian festival of Easter in 1300 CE."
 msgstr ""
@@ -7400,7 +7378,8 @@ msgid "Inuit"
 msgstr "Inuit"
 
 #. Inuit sky culture introduction section in markdown format
-msgid "Inuit are the native population of the Arctic."
+msgid ""
+"Inuit are among the Indigenous peoples of the Arctic."
 msgstr ""
 
 #. Inuit sky culture description section in markdown format
@@ -8405,21 +8384,7 @@ msgstr "Maya"
 
 #. Maya sky culture introduction section in markdown format
 msgid ""
-"Maya culture was one of the most sophisticated civilizations in the pre-"
-"columbian american continent. They developed a writing system which let them"
-" store and use their knowledge in a variety of forms: e.g. on how to perform"
-" rituals or delivering particular messages to an audience (political and "
-"sacred facts from rulers to the people, sculpted in monuments and stelae). "
-"These records allow us explore, through the laborious work of many "
-"researchers, their cosmovision and how they thought the cosmos came to be. "
-"Their knowledge was recorded in books (academically known as “codex”), like "
-"the Dresden codex (which describes the dates that Venus would pass through "
-"each of its visibility phases and also a table of lunar and solar eclipses),"
-" the Paris codex (which is believed to describe some of their "
-"constellations), the Madrid codex (which relates astronomy and agriculture "
-"data) and lately, the Grolier codex (it was thought that it was an "
-"abbreviated version of the Dresden codex, but it is not accepted yet as "
-"original by some scholars)."
+"Maya civilization developed on the pre-Columbian American continent. They developed a writing system which let them store and use their knowledge in a variety of forms: e.g. on how to perform rituals or delivering particular messages to an audience (political and sacred facts from rulers to the people, sculpted in monuments and stelae). These records allow us explore, through the laborious work of many researchers, their cosmovision and how they thought the cosmos came to be. Their knowledge was recorded in books (academically known as “codex”), like the Dresden codex (which describes the dates that Venus would pass through each of its visibility phases and also a table of lunar and solar eclipses), the Paris codex (which is believed to describe some of their constellations), the Madrid codex (which relates astronomy and agriculture data) and lately, the Grolier codex (it was thought that it was an abbreviated version of the Dresden codex, but it is not accepted yet as original by some scholars)."
 msgstr ""
 
 #. Maya sky culture description section in markdown format
@@ -9399,17 +9364,14 @@ msgstr ""
 
 #. Modern (Chinese) sky culture introduction section in markdown format
 msgid ""
-"The Modern (Chinese) Skyculture is a combination of Chinese traditions and "
-"Western constellations. The Chinese use combinations of modern "
-"constellations and Chinese star names in astronomy. This is the skyculture "
-"that the Chinese actually use now, with a great practical value."
+"This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice."
 msgstr ""
 
 #. Modern (Chinese) sky culture description section in markdown format
 msgid ""
 "### Constellations\n"
 "\n"
-"The modern Chinese use the constellations of the International Astronomical Union. The traditional Chinese constellations have no specific boundaries between them. They only represent the corresponding set of bright stars, and do not have the role of dividing the celestial sphere into different areas, so they are no longer applicable in astronomy.\n"
+"Modern astronomy in China uses the constellation regions defined by the International Astronomical Union. Traditional Chinese Xingguans describe groups of stars rather than a partition of the entire celestial sphere into bounded regions. This sky culture allows the two systems to be compared.\n"
 "\n"
 "### Star names\n"
 "\n"
@@ -9556,7 +9518,7 @@ msgid ""
 "This sky culture is based on *Journey to the West*, in which the author replaces the figures of Greek mythology with characters, demons, and magical artifacts from the novel. For example, Sun Wukong substitutes for Hercules, and Zhu Bajie takes the place of Perseus. Similar to how Arab and Persian figures replaced Greco-Roman images in the Book of Fixed Stars, this can be seen as an effort to localize constellation imagery within a Chinese cultural context.\n"
 "Just to let you know, this unique sky culture is not related to the historical journey of Xuanzang to India, nor was it created in the 16th century when the novel was published. It never existed historically and is purely an artistic reinterpretation of modern constellations. When switching to \"byname\" display mode, you can still view the standard IAU constellation names（The *Journey to the West* sky culture includes 84 of the 88 IAU standard constellations. The four constellations Circinus, Pictor, Pyxis, and Telescopium have no corresponding figures or elements in the story.）\n"
 "\n"
-"The purpose of creating this sky culture is to attract more children—especially in China and East Asia—to learn about constellations. Journey to the West holds greater influence in these regions than Greek mythology, and the author hopes it will enhance beginners' interest and memorization, much like how H. A. Rey used imaginative constellation lines and English labels to make the stars more accessible."
+"The purpose of creating this sky culture is to attract more children—especially in China and East Asia—to learn about constellations. The author hopes that using Journey to the West will enhance beginners' interest and memorization, much like how H. A. Rey used imaginative constellation lines and English labels to make the stars more accessible."
 msgstr ""
 
 #. Modern (Journey to the West) sky culture description section in markdown
@@ -10323,7 +10285,7 @@ msgid ""
 "\n"
 "People have probably always looked up to the stars. Some of them might wonder, what those little dots of light meant, up there. In their thoughts they connected the stars to form images and thus created their very own constellations.\n"
 "\n"
-"Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. This western sky culture established itself as the standard in modern astronomy."
+"Each culture had different ideas about what was going on in the night sky. And so each culture painted different figures in the sky. In the western world, a sky culture emerged that, along with other influences, was strongly influenced by Greek mythology. Modern astronomy uses the IAU's agreed constellation names and boundaries for locating objects."
 msgstr ""
 
 #. Modern (Sternenkarten) sky culture description section in markdown format
@@ -10426,16 +10388,9 @@ msgstr "Mongolo"
 
 #. Mongolian sky culture introduction section in markdown format
 msgid ""
-"Mongolian constellations and cosmogony were inherited from the occidental "
-"civilisation notably by the contact with Alexander the Great and was largely"
-" influenced by Chinese civilisation and Buddhist religion, resulting in "
-"numerous myths and beliefs linked with what surrounds them. The local wild "
-"and fauna are the main themes of this skyculture. The wealth of Mongolian "
-"cosmogony is probably to link with the observation conditions for whom they "
-"benefit even now. In the past, the necessity for them to move and to get "
-"one's bearing even during the night and at different seasons, by searching "
-"the weather's mildness, is probably one of the element which developed their"
-" imagination facing the sky."
+"The original contributors, Anthony Lagain and Batiste Rousseau, describe Mongolian constellations and cosmogony as influenced by Chinese civilisation and Buddhism, and propose an inheritance from occidental civilisation through contact with Alexander the Great. They describe numerous myths and beliefs connected with the surrounding world, with local wildlife and fauna as the main themes of this sky culture. They suggest that the richness of this cosmogony may be linked to the observing conditions available to the communities described, including in their own time. They also suggest that the historical need to travel and find one's bearings at night and in different seasons, in search of milder weather, may have helped shape these communities' interpretations of the sky.\n"
+"\n"
+"**Editorial note:** The proposed connection with Alexander the Great requires historical source verification and is not presented here as an established origin of Mongolian sky traditions."
 msgstr ""
 
 #. Mongolian sky culture description section in markdown format
@@ -10598,14 +10553,7 @@ msgstr ""
 
 #. Norse (Edda) sky culture introduction section in markdown format
 msgid ""
-"In the 13th century, Snorri Sturluson provided the most comprehensive "
-"documentation of myths from Old Norse culture that we know of today in his "
-"Edda. In this sky culture, the Eddic myths are to be brought into the sky in"
-" the form of constellations. Since there are no records of constellations "
-"from this time and region, the reconstruction of these constellations is not"
-" always certain (in some cases even speculative). In our visualisations we "
-"follow various literary scholars who found parallels to Norse mythology in "
-"the Edda."
+"In the 13th century, Snorri Sturluson provided the most comprehensive documentation of myths from Old Norse culture known today in his Edda. In this sky culture, the Eddic myths are to be brought into the sky in the form of constellations. Since there are no records of constellations from this time and region, the reconstruction of these constellations is not always certain (in some cases even speculative). In these visualisations, the compiling team follows various literary scholars who found parallels to Norse mythology in the Edda."
 msgstr ""
 
 #. Norse (Edda) sky culture description section in markdown format
@@ -10919,7 +10867,7 @@ msgid ""
 "\n"
 "Our planet belongs to the galaxy of the Milky Way, whose shape is that of a large disk with two bulging arms; this form and the rotation of the earth means that at the evenings of the equinoxes and solstices we can appreciate a specific part of it, thus becoming a signal that the ancestors appreciated to measure the times. Called in the Andes as the \"Muyun\" for many peoples, it represents a gigantic life-giving serpent.\n"
 "\n"
-"Contrary to the West, the constellations are not made up of bright points or stars; the astral beings are housed in the \"dark spots\" existing in the brilliance of the Milky Way, so at each of the turning points in our annual path around the sun (Solstices and Equinoxes), we will find a guiding constellation in each \"visible end\" of the galaxy. As with lunar or solar movements, the movements of the constellations in the Northern Andes marked the beginning or end of specific eras, agricultural, civil, reproductive or festive. They determined the fate of beings, receiving respect and veneration for those who came for their wisdom; thus developing a religious thought similar to that of the sun or the moon throughout the continent.\n"
+"The dark constellations described here are not made up of bright points or stars; the astral beings are housed in the \"dark spots\" existing in the brilliance of the Milky Way, so at each of the turning points in our annual path around the sun (Solstices and Equinoxes), we will find a guiding constellation in each \"visible end\" of the galaxy. As with lunar or solar movements, the movements of the constellations in the Northern Andes marked the beginning or end of specific eras, agricultural, civil, reproductive or festive. They determined the fate of beings, receiving respect and veneration for those who came for their wisdom; thus developing a religious thought similar to that of the sun or the moon throughout the continent.\n"
 "\n"
 "Here we describe the constellations decoded to date:\n"
 "\n"
@@ -11065,11 +11013,7 @@ msgstr "Russo (siberiano)"
 
 #. Russian (Siberian) sky culture introduction section in markdown format
 msgid ""
-"The names of the constellations of Siberian peoples is rather poorly "
-"studied. This region has the large territory and the knowledge about "
-"constellations are difficult to reconcile in a single integrated picture. In"
-" this culture of the sky marked only specific names and objects, which "
-"typical for the whole of Siberia."
+"The names of the constellations of Siberian peoples are rather poorly studied. This region covers a large territory, and knowledge about constellations is difficult to reconcile in a single integrated picture. This sky culture marks only selected names and objects from the cited sources; it should not be taken as representing all of Siberia."
 msgstr ""
 
 #. Russian (Siberian) sky culture description section in markdown format
@@ -11156,17 +11100,7 @@ msgstr ""
 
 #. Samoan sky culture introduction section in markdown format
 msgid ""
-"Formerly known as the *Navigator Islands*, the Samoan archipelago has been "
-"the launch site for countless ocean voyages since its settlement 3,000 years"
-" ago by the ancestors of today’s Polynesians. Like other Pacific Islander "
-"societies, the Samoans possessed an incredible body of astronomical "
-"knowledge, cultivated through generations of scientific observational study "
-"(tofāmamao). Over time, indigenous wayfinding science has been almost "
-"completely replaced by digital navigation technologies, but the names and "
-"stories attached to some celestial features have persisted through oral "
-"traditions and colonial era publications. Beside their value as nautical "
-"aids, the moon, stars, and planets also marked the lunar months, annual "
-"socioreligious festivals, and the timing of agricultural cycles."
+"Formerly known as the *Navigator Islands*, the Samoan archipelago has been the launch site for countless ocean voyages since its settlement 3,000 years ago by the ancestors of today’s Polynesians. Like other Pacific Islander societies, the Samoans possessed an incredible body of astronomical knowledge, cultivated through generations of scientific observational study (tofāmamao). The author describes indigenous wayfinding science as having been almost completely replaced over time by digital navigation technologies, but the names and stories attached to some celestial features have persisted through oral traditions and colonial era publications. Beside their value as nautical aids, the moon, stars, and planets also marked the lunar months, annual socioreligious festivals, and the timing of agricultural cycles."
 msgstr ""
 
 #. Samoan sky culture description section in markdown format
@@ -11403,15 +11337,9 @@ msgstr "Sardo"
 
 #. Sardinian sky culture introduction section in markdown format
 msgid ""
-"Like all peoples of the world, even the ancient Sardinians, turned their "
-"eyes to the sky that marked the time and the seasons. The peasant's world "
-"has given its name to the stars and the constellations of the Sardinian "
-"culture."
+"The ancient Sardinians turned their eyes to the sky that marked the time and the seasons. The peasant's world has given its name to the stars and the constellations of the Sardinian culture."
 msgstr ""
-"Come tutti i popoli del mondo, anche gli antichi sardi, volgevano gli occhi "
-"al cielo che scandiva il tempo e il susseguirsi delle stagioni. Il mondo "
-"agropastorale ha dato il nome alle stelle ed alle costellazioni della "
-"cultura sarda."
+"Gli antichi sardi volgevano gli occhi al cielo che scandiva il tempo e il susseguirsi delle stagioni. Il mondo agropastorale ha dato il nome alle stelle ed alle costellazioni della cultura sarda."
 
 #. Sardinian sky culture references section in markdown format
 msgid ""
@@ -11605,12 +11533,17 @@ msgstr ""
 
 #. Tibetan sky culture introduction section in markdown format
 msgid ""
-"*This is unfinished work and only a tentative solution. Please help us improve! (see below)*\n"
+"*This is unfinished work and a tentative reconstruction. Its identifications remain open to revision.*\n"
 "\n"
 "The author, Georg Zotti, reports encountering a complex system of astronomy and calendar calculations during a visit to the Xizang Autonomous Region of China in 2019. This system has a long local tradition.\n"
 "\n"
-"Traditional Tibetan astronomy is largely influenced by the Kalacakra Tantra which has been imported from India, mixed with some Chinese influence."
+"This account describes the influence of the Kalacakra Tantra transmitted from India, alongside exchanges with other astronomical traditions in China."
 msgstr ""
+"*Questo lavoro è incompleto e costituisce una ricostruzione provvisoria. Le identificazioni proposte restano aperte a revisione.*\n"
+"\n"
+"L’autore Georg Zotti riferisce di aver conosciuto, durante una visita nella Regione autonoma del Tibet in Cina nel 2019, un complesso sistema di astronomia e calcoli calendariali con una lunga tradizione locale.\n"
+"\n"
+"Questa descrizione illustra l’influenza del Kalacakra Tantra trasmesso dall’India, insieme agli scambi con altre tradizioni astronomiche della Cina."
 
 #. Tibetan sky culture description section in markdown format
 msgid ""
@@ -11628,7 +11561,7 @@ msgid ""
 "\n"
 "### The Zodiac\n"
 "\n"
-"The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. Note the unexpected appearance of Cancer. Is it a frog?\n"
+"The zodiac is partitioned into 12 figures largely identical to the classical figures of the zodiac known in Europe. The following table is from Cornu, with photographs showing the figures illustrated in the circular platform. The author asks whether the figure corresponding to Cancer depicts a frog.\n"
 " <table class=\"layout\">\n"
 "<tr><th colspan=\"2\">IAU</th><th>Tibetan</th><th>Indian</th><th>Platform Illustration</th>\n"
 "</tr>\n"
@@ -11722,9 +11655,9 @@ msgid ""
 "\n"
 "The Men Tsee Khang emblem shows 27 stick figures for the Lunar mansions arranged in a circle around the central figure. The same figures are also laid out in cement with bright stones connected by black lines in the circular platform which has been erected when the observatory was rebuilt. These 27 *gyukar* figures are described as being equal to the Indian *Nakṣatras* and represent sections of 13°20' longitude along the ecliptic. Actually, one of the *gyukars* consists of 2 asterisms, therefore 28 *lunar asterisms* are named.\n"
 "\n"
-"However, not much is known of the exact identification of the Tibetan Lunar Stations outside of Tibet. Most literature is Tibetan or Chinese only, and there were no Tibetan star maps available. Also our guides could not explain any of the following to us.\n"
+"The author reports that, during the research described here, the available material did not enable a secure identification of the Tibetan lunar stations. Most of the literature encountered was in Tibetan or Chinese, and the author had no Tibetan star maps available. The guides consulted during the visit could not clarify the identifications discussed below. These are limitations of this account, not a claim about what is known elsewhere.\n"
 "\n"
-"The following table was taken from Cornu. Note that Tibetans start counting at zero, while the Indians count from 1.\n"
+"The following table was taken from Cornu. In this table, the Tibetan series is numbered from zero and the Indian series from 1.\n"
 " <table class=\"layout\">\n"
 "<tr><th colspan=\"2\">Gyukar</th><th colspan=\"2\">Nakshatra</th><th>Stars</th>\n"
 "</tr>\n"
@@ -11918,7 +11851,7 @@ msgid ""
 "\t<td> &sigma; Psc</td>\n"
 "</tr>\n"
 "</table>\n"
-"The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. It is assumed that most originate from the Indian traditions, esp. Kalacakra Tantra, but it appears that some Chinese influence is also present, e.g. Nr. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. We have no information about their names, relevance or even publicity of these in Tibet.\n"
+"The star figures for Lunar Mansions in this skyculture are shown as asterisms among the traditional 12 Ptolemaic zodiacal constellations. The author tentatively relates most of these figures to Indian traditions, especially Kalacakra Tantra, and suggests possible connections with other astronomical traditions in China, for example in No. 11. Only for the Zodiacal constellations artwork is provided. A few more constellations in Ptolemaic tradition are displayed in the northern sky to allow easier orientation, but with their names suppressed. For these additional figures, the author had no information about their names, significance or familiarity within Tibetan tradition.\n"
 "\n"
 "### Please help us\n"
 "\n"
@@ -11960,12 +11893,7 @@ msgstr ""
 
 #. Tikuna sky culture introduction section in markdown format
 msgid ""
-"The Tikuna indigenous people have inhabited the region of the Upper Solimões"
-" river for the past 2,000 years. They currently occupy a territory where the"
-" political borders of three countries converge: Brazil, Colombia, and Peru. "
-"This is the reason why the Tikuna recognize themselves as a differentiated "
-"indigenous group, while also identifying with the national identities "
-"related to these three countries."
+"The Tikuna indigenous people have inhabited the region of the Upper Solimões river for the past 2,000 years. They currently occupy a territory where the political borders of three countries converge: Brazil, Colombia, and Peru. This account describes how the Tikuna recognize themselves as a distinct indigenous group while also identifying with the national identities associated with these three countries."
 msgstr ""
 
 #. Tikuna sky culture description section in markdown format
@@ -12002,7 +11930,7 @@ msgid ""
 "\n"
 "Although dependent on weather variability, at the September Equinox the Tikuna observe how fog affects how they see in early morning; the Pleiades star cluster disappears on the morning horizon in early June and reappears in the evening, in late November. The goal of the Tikuna is to predict the intensity of the coming rains in order to negotiate with the entity Mawü, the “Master of Rain,” the effects of the floods on their subsistence activities.\n"
 "\n"
-"According to the explanations found in Enepü (a Tikuna community in the indigenous Land Eware II, in the Brazilian State of Amazon, in Western Amazonia), the influence of seasonality upon Tikuna subsistence activities is more prevalent along the Solimões. In the headwaters of the igarapés, where Enepü is situated, plenty of food exists all year long. In Enepü, trees and palms, such as the ingá and açaí, are fertile all year long due to the “virginity” and the enrichment of the soil by natural compost. The same thing occurs with the fishing in Lake Preto, within the limits of Enepü, where they can supply themselves abundantly with fish all year long. On the Solimões, however, one finds fish only from April to July, when the water level drops. Abundance in the hunt is also from April to July (or September, at most), along the Solimões. Fishing becomes more difficult when the river is high. The fruit of the native açaí palm is collected in summer, and customarily saved for preparation during winter—time of poor hunting and fishing. Through planning and regular gardening, harvests are available all year long. The harvest of cultivated plants also occurs during the drought months. There is a certain degree of flexibility in adapting the agricultural calendar to the rainy season (when fishing and hunting are not productive) and the dry season, (when fishing is more abundant); however, difficulties involving navigation and transport grow as the water level drops along the igarapés linking the river. Traditional culture, however, is not prepared for unforeseen alterations in the rainy season, such as it occurred in 2002. In that year, July saw the beginning of the repiquete (the rise on water levels), which normally occurs in September. This destroyed the short-range agricultural cycle and made the fish scarcer, changing alimentary habits.\n"
+"According to the explanations found in Enepü (a Tikuna community in the indigenous Land Eware II, in the Brazilian State of Amazon, in Western Amazonia), the influence of seasonality upon Tikuna subsistence activities is more prevalent along the Solimões. In the headwaters of the igarapés, where Enepü is situated, plenty of food exists all year long. In Enepü, trees and palms, such as the ingá and açaí, are fertile all year long due to the “virginity” and the enrichment of the soil by natural compost. The same thing occurs with the fishing in Lake Preto, within the limits of Enepü, where they can supply themselves abundantly with fish all year long. On the Solimões, however, one finds fish only from April to July, when the water level drops. Abundance in the hunt is also from April to July (or September, at most), along the Solimões. Fishing becomes more difficult when the river is high. The fruit of the native açaí palm is collected in summer, and customarily saved for preparation during winter—time of poor hunting and fishing. Through planning and regular gardening, harvests are available all year long. The harvest of cultivated plants also occurs during the drought months. There is a certain degree of flexibility in adapting the agricultural calendar to the rainy season (when fishing and hunting are not productive) and the dry season, (when fishing is more abundant); however, difficulties involving navigation and transport grow as the water level drops along the igarapés linking the river. The account describes how an unforeseen alteration in the rainy season disrupted these subsistence practices in 2002. In that year, July saw the beginning of the repiquete (the rise on water levels), which normally occurs in September. This destroyed the short-range agricultural cycle and made the fish scarcer, changing alimentary habits.\n"
 " <p id=\"cit1\"><notr><a href=\"#cit1a\"><B>1</B></a></notr><cite>This work adopts linguistic convention when writing Tikuna, even though several Anthropologists and Indigenous experts use the vernacular form (Ticuna).</cite></p>\n"
 "\n"
 " <p id=\"cit2\"><notr><a href=\"#cit2a\"><B>2</B></a></notr><cite> According to socioambiental.org, consulted on 08/05/2019.</cite></p>"
@@ -12040,15 +11968,14 @@ msgstr "Tongano"
 
 #. Tongan sky culture introduction section in markdown format
 msgid ""
-"As in all Polynesian star lore, Tongan sky culture descends from the "
-"practical application of nautical navigation."
+"Like other Polynesian star traditions, Tongan sky culture includes star lore used in nautical navigation."
 msgstr ""
 
 #. Tongan sky culture description section in markdown format
 msgid ""
 "In some circumstances separation of individual star names from &quot;star path&quot; names cannot be resolved. A star may have multiple names 1) if the star is part of numerous star paths and 2) since the naming of stars can differ depending on which Tongan island group it originates from. The nomenclature of stars is approximated based on the limited resources available.\n"
 "\n"
-"Whilst the most-notable/common stars and constellations (i.e. Orion, Pleiades, Crux) are identified in Tongan star lore there are two notable exceptions. There is an absence of naming of the North star (Polaris: &alpha; UMi). This is peculiar considering the latitude of the Tongan islands and the prominence of this star at certain times of the year. In the event of any northerly journeys from Tonga such an important navigational landmark could not have possibly gone unnoticed. The constellation of Scorpio (parts in, or stars of) are also absent from Tongan star lore. This is surprising since the vast majority of star lore &ndash; globally and Polynesian &ndash; has Scorpio as a central constellation due to it being easily identified and that it is nearly directly opposite Orion in the night sky. [Stellarium would welcome any further knowledge on these two anomalies.]\n"
+"The sources used for this compilation identify stars and constellations corresponding to Orion, the Pleiades and Crux, but do not provide names for Polaris (&alpha; UMi) or for Scorpius and its parts or stars. This is a limitation of the available documentation, not evidence that Tongan communities lacked such knowledge. [Editorial clarification: Polaris remains below the horizon at Tonga's southern latitudes; its visibility on voyages farther north depends on the observer's latitude.] Scorpius is readily recognizable and lies roughly opposite Orion in the sky, but its prominence in other traditions does not establish its naming or interpretation in Tonga. Further information from Tongan knowledge holders and documented sources would help clarify these identifications.\n"
 "\n"
 "Common ancestry of Polynesian star lore's is evident in the similarities in the labelling of stars. For example the Pleiades is called Mataliki in Tongan, Matariki in Maori and Makali`i in Hawaiian.\n"
 "\n"
@@ -12119,7 +12046,7 @@ msgstr ""
 msgid ""
 "### Constellations\n"
 "\n"
-"Constellations within Tukano astronomical culture are related with natural phenomena as a whole. We gathered twelve constellations with a group who speaks Tukano language. This is not the definitive number of constellations. There are, surely, more constellations to be described. We presented here essentially “the main cycle” (CARDOSO, 2007) of the Tukano constellations. Sometimes someone relate new discoveries about these Indians sky conceptions or presents new constellation descriptions. Though we are establishing limits and configurations to these constellations that are new to us (non- Indians), they don’t organize this body of knowledge in the same way. Their conceptions about sky and Universe are different when compared with ours. They don’t organize and conceive ideas about the Universe as a whole, like us.\n"
+"Constellations within Tukano astronomical culture are related with natural phenomena as a whole. We gathered twelve constellations with a group who speaks Tukano language. This is not the definitive number of constellations. There are, surely, more constellations to be described. We presented here essentially “the main cycle” (CARDOSO, 2007) of the Tukano constellations. Sometimes someone relate new discoveries about these Indians sky conceptions or presents new constellation descriptions. Though we are establishing limits and configurations to these constellations that are new to us (non- Indians), they don’t organize this body of knowledge in the same way. The researchers describe how Tukano people organise their knowledge of the sky.\n"
 "\n"
 "Hereby we present few data from a research carried out with living people and this data may be variable in near future. We worked with basic school students, elders and story tellers comparing the talks and summarizing it as you’ll see below.\n"
 "\n"
@@ -12348,13 +12275,13 @@ msgstr "Xhosa"
 
 #. Xhosa sky culture introduction section in markdown format
 msgid ""
-"A wide spread African concept is that the sky is a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.\n"
+"In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.\n"
 "\n"
 "Although planets are &#8220;wanderers&#8221; of the night skies, and therefore vary their positions relative to the stars, they often feature in Xhosa starlore.\n"
 "\n"
 "Jupiter was interpreted as people around a fire. Venus, as the evening star, is associated with the time the boys milked the cows\n"
 "\n"
-"Venus was also called the dating star, &#8220;Madingeni&#8221;. Boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening."
+"Venus was also called the dating star, &#8220;Madingeni&#8221;. In this account, boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening."
 msgstr ""
 
 #. Xhosa sky culture description section in markdown format
@@ -12388,8 +12315,7 @@ msgstr "Zulu"
 
 #. Zulu sky culture introduction section in markdown format
 msgid ""
-"A wide spread African concept is that the sky is a solid dome, perhaps made "
-"of blue rock resting on the Earth, upon which the Sun moves."
+"In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves."
 msgstr ""
 
 #. Zulu sky culture description section in markdown format
@@ -12415,4 +12341,16 @@ msgid ""
 "##### Umthala Wezinkanyezi &mdash; The Milky Way\n"
 "\n"
 "Umthala Wezinkanyezi means &#8220;the stream of stars.&#8221; This is related to the way the Nguni people used to fight before Shaka Zulu&#8217;s revolutionary close-combat strategy. The strong warriors used to throw spears like javelin and the stream of spears would be seen in the air."
+msgstr ""
+
+#. Norse sky culture introduction: editorial account of the incomplete source package
+msgid "This incomplete Norse sky-culture collection was contributed by Jonas Persson and contains six constellation figures. The source package does not yet include a narrative description of these figures. The supplied references and contributor attribution are retained below."
+msgstr ""
+
+#. Reviewed sky culture section: chinese_yuan_dynasty_intro_priority10
+msgid "The *Tianwen Huichao*(天文汇钞) star catalog is an important record of stellar observations completed in the late Yuan Dynasty (around 1363 CE). It adopts a unique \"chart-plus-table\" format, in which data are attached beneath the plotted stars, recording high-precision positional data for 741 stars. This format is unparalleled in ancient Chinese star catalogs. This catalog  represents one of the highest achievements of traditional Chinese stellar observation before the introduction of Western astronomy."
+msgstr ""
+
+#. Reviewed sky culture section: korean_intro_priority10
+msgid "The *Cheonsang Yeolcha Bunyajido* (天象列次分野之圖, \"Chart of Constellations, Each Star Division, and Their Field Allocations\") is one of the oldest and most representative ancient star maps existing in Korea. It was first carved on stone in 1396 AD (the 3rd year of King Taejo of the Joseon Dynasty), but its original source can be traced back to the Unified Silla and Goryeo period, and even directly to Chinese star charts from the Tang Dynasty (or earlier). Today, it serves not only as an important physical artifact for studying East Asian ancient astronomy, but also as a testament to the long-term exchange and integration among East Asian countries in the fields of astronomy, calendrics, and astrology."
 msgstr ""

@@ -2,13 +2,13 @@
 
 ## Introduction
 
-The Modern (Chinese) Skyculture is a combination of Chinese traditions and Western constellations. The Chinese use combinations of modern constellations and Chinese star names in astronomy. This is the skyculture that the Chinese actually use now, with a great practical value.
+This sky culture combines traditional Chinese star names and Xingguans with the IAU constellation system used in modern astronomy. The two systems can be displayed together for comparison; this presentation is not intended to represent every contemporary Chinese naming practice.
 
 ## Description
 
 ### Constellations
 
-The modern Chinese use the constellations of the International Astronomical Union. The traditional Chinese constellations have no specific boundaries between them. They only represent the corresponding set of bright stars, and do not have the role of dividing the celestial sphere into different areas, so they are no longer applicable in astronomy.
+Modern astronomy in China uses the constellation regions defined by the International Astronomical Union. Traditional Chinese Xingguans describe groups of stars rather than a partition of the entire celestial sphere into bounded regions. This sky culture allows the two systems to be compared.
 
 ### Star names
 

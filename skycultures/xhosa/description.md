@@ -2,13 +2,13 @@
 
 ## Introduction
 
-A wide spread African concept is that the sky is a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.
+In the account presented here, the sky is described as a solid dome, perhaps made of blue rock resting on the Earth, upon which the Sun moves. In Xhosa, a star is called &#8220;inkwenkwezi&#8221;.
 
 Although planets are &#8220;wanderers&#8221; of the night skies, and therefore vary their positions relative to the stars, they often feature in Xhosa starlore.
 
 Jupiter was interpreted as people around a fire. Venus, as the evening star, is associated with the time the boys milked the cows
 
-Venus was also called the dating star, &#8220;Madingeni&#8221;. Boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening.
+Venus was also called the dating star, &#8220;Madingeni&#8221;. In this account, boys and girls were not allowed to date in public, but met at the fountain where the girls fetched water when Venus was visible in the evening.
 
 ## Description
 
