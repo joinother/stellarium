@@ -5,7 +5,7 @@ import { join } from 'node:path';
 
 const device = process.argv[2];
 if (!device) throw new Error('Usage: node scripts/test-ohos-screen-anchor-pad.mjs <device> [report.json]');
-const root = new URL('../', import.meta.url).pathname;
+const root = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const report = { device, cases: [], results: {}, startedAt: new Date().toISOString() };
 const pause = milliseconds => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 const call = (command, payload) => {

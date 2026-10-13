@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import time
 
+from ohos_test_bundle import default_bundle
+
 ROOT = Path(__file__).resolve().parents[1]
 HDC = '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc'
 
@@ -12,12 +14,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--bundle', default=default_bundle(), help='device bundle name (default: AppScope/app.json5)')
     args = parser.parse_args()
     checks = []
     samples = []
 
     def command(name, payload=None, allow_error=False):
-        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device,
+        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device, '--bundle', args.bundle,
                       '--command', name, '--json']
         if payload is not None:
             invocation += ['--payload', str(payload)]
@@ -42,7 +45,7 @@ def main():
 
     def pid():
         return subprocess.check_output([HDC, '-t', args.device, 'shell', 'pidof',
-                                        'com.joinother.skyinstrument'], text=True).strip()
+                                        args.bundle], text=True).strip()
 
     def snapshot(name):
         remote = '/data/local/tmp/astro-' + name + '.jpeg'

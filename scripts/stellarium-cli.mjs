@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import readline from 'node:readline';
 import process from 'node:process';
 
-const DEFAULT_BUNDLE = 'com.joinother.skyinstrument';
+const DEFAULT_BUNDLE = process.env.STELLARIUM_BUNDLE || 'com.joinother.skyinstrument';
 const DEFAULT_ABILITY = 'QAbility';
 const DEFAULT_MODULE = 'entry';
 const DEFAULT_HDC = '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc';
@@ -21,7 +21,7 @@ function usage(exitCode = 0) {
 
 选项：
   --device <设备ID>       hdc 设备标识；不填时使用当前唯一设备
-  --bundle <包名>         默认 ${DEFAULT_BUNDLE}
+  --bundle <包名>         默认 ${DEFAULT_BUNDLE}（可用 STELLARIUM_BUNDLE 覆盖）
   --ability <名称>        默认 ${DEFAULT_ABILITY}
   --module <模块名>       默认 ${DEFAULT_MODULE}
   --hdc <路径>            默认 DevEco 自带 hdc

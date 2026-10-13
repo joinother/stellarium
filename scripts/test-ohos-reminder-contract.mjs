@@ -27,7 +27,9 @@ assert.match(service, /reminderAgentManager/);
 assert.match(service, /getAllValidReminders/);
 assert.match(service, /publishReminder/);
 assert.match(manifest, /ohos\.permission\.PUBLISH_AGENT_REMINDER/);
-assert.match(sync, /AstronomyReminderService\.ets/);
+assert.ok(fs.existsSync(path.join(root, 'harmonyos/ets-source/qability/AstronomyReminderService.ets')));
+// sync-ohos-build-sources.sh mirrors the whole harmonyos/ets-source tree.
+assert.match(sync, /mirror_ets_sources/);
 assert.match(ability, /nestedResult/);
 assert.match(ability, /Array\.isArray\(rawTerms\)/);
 assert.match(ability, /Number\(String\(rawCurrentJD/);

@@ -7,8 +7,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const hierarchyPath = path.join(root, 'harmonyos/ets-source/pages/location_hierarchy.ts')
-const outputPath = path.join(root, 'harmonyos/ets-source/pages/location_names_zh.ts')
+const hierarchyPath = path.join(root, 'harmonyos/ets-source/common/location/hierarchy.ts')
+const outputPath = path.join(root, 'harmonyos/ets-source/common/location/names_zh.ts')
 const cachePath = path.join(root, 'tmp/location-zh-cache.json')
 const maxBatchChars = 1800
 const concurrency = 6

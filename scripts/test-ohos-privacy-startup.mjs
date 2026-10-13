@@ -6,7 +6,7 @@ import test from 'node:test';
 const root = new URL('../harmonyos/ets-source/', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 const logger = { info() {}, warn() {}, error() {} };
-const plain = source => stripTypeScriptTypes(source.replace(/^import .*\n/gm, '').replaceAll('export default ', '').replaceAll('export ', ''));
+const plain = source => stripTypeScriptTypes(source.replace(/^import .*\r?\n/gm, '').replaceAll('export default ', '').replaceAll('export ', ''));
 const source = read('qability/QAbility.ets');
 
 function manager() {
@@ -34,12 +34,14 @@ function ability(accepted = false) {
   const qpa = new Proxy({}, { get: (_target, key) => () => calls.push(key) });
   const storage = new Map();
   const Stage = { releasePrivacyGate() { calls.push('release'); }, async initQtAppContextIfNeeded() { calls.push('init'); } };
-  const Class = new Function('UIAbility', 'QAbilityStage', 'hasCurrentPrivacyConsent', 'qpa', 'hilog', 'LOG_DOMAIN', 'LOG_TAG', 'AppStorage', 'setInterval', 'clearInterval', 'setDeepSkyImageExtractionForeground', 'LocalStorage', 'QtWindowStageAdapter', 'canIUse', 'notifyLifecycle', 'command',
+  const Class = new Function('UIAbility', 'QAbilityStage', 'hasCurrentPrivacyConsent', 'qpa', 'hilog', 'LOG_DOMAIN', 'LOG_TAG', 'AppStorage', 'setInterval', 'clearInterval', 'setDeepSkyImageExtractionForeground', 'LocalStorage', 'QtWindowStageAdapter', 'canIUse', 'notifyLifecycle', 'command', 'deviceInfo', 'BuildProfile',
     plain(source) + ';return QAbility;')(class {}, Stage, () => accepted, qpa, logger, 0, 'test',
       { setOrCreate: (key, value) => storage.set(key, value) },
       (callback, delay) => { const key = nextTimer++; timers.set(key, { callback, delay }); return key; },
       key => timers.delete(key), enabled => effects.push(['extraction', enabled]), class extends Map {}, class {}, () => false,
-      enabled => effects.push(['lifecycle', enabled]), (name, payload) => effects.push([name, payload]));
+      enabled => effects.push(['lifecycle', enabled]), (name, payload) => effects.push([name, payload]),
+      // 真机（非模拟器）release 配置：engineLessEmulatorUiOnly() 必须保持为 false。
+      { productModel: 'phone', abiList: 'arm64-v8a' }, { DEBUG: false });
   const instance = new Class();
   instance.context = { getApplicationContext: () => ({}) };
   instance.pendingWant = {};
@@ -160,7 +162,7 @@ test('current consent requires matching policy id and version and agreed result'
 
 test('Qt child process cannot enter the SDK without current policy consent', () => {
   const syncScript = readFileSync(new URL('../scripts/sync-ohos-build-sources.sh', import.meta.url), 'utf8');
-  assert.ok(syncScript.includes('harmonyos/ets-source/process/QChildProcess.ets:build/libstellarium-harmonyos/entry/src/main/ets/process/QChildProcess.ets'));
+  assert.ok(syncScript.includes('harmonyos/ets-source'), 'sync script must mirror the ets-source tree (including process/QChildProcess.ets)');
   const fixture = manager();
   const calls = [];
   const Child = new Function('ChildProcess', 'QtUtils', 'hasCurrentPrivacyConsent', 'qpa', 'hilog', 'LOG_DOMAIN', 'LOG_TAG',
@@ -624,20 +626,29 @@ test('reentrant startup is serialized and background return cannot release nativ
 
 test('sensor and location entrypoints gate privacy and location rechecks after awaits', () => {
   const page = read('pages/MainWindowNativeNode.ets');
-  const sensorStart = page.slice(page.indexOf('  private startGyroscope()'), page.indexOf('  private probeGyroSensor('));
-  assert.ok(sensorStart.indexOf('hasCurrentPrivacyConsent()') < sensorStart.indexOf('sensor.on('));
-  const location = page.slice(page.indexOf('  private async useDeviceLocation()'), page.indexOf('  private applyPickerLocation()'));
-  assert.equal((location.match(/hasCurrentPrivacyConsent\(\)/g) ?? []).length, 3);
-  assert.match(location, /permissionResult.authResults.some/);
-  assert.match(location, /finally\s*\{\s*this.deviceLocationRequestInProgress = false/);
+  // M1-B 子组①：startGyroscope/stopGyroscope 已下沉 capability/SensorController.ets；
+  // 隐私门禁经 hooks.canUseSensors() 回注，必须早于任何传感器订阅。
+  const sensor = read('capability/SensorController.ets');
+  const sensorStart = sensor.slice(sensor.indexOf('  startGyroscope()'), sensor.indexOf('  stopGyroscope('));
+  assert.ok(sensorStart.indexOf('canUseSensors()') < sensorStart.indexOf('subscribeRotationVector('));
+  // §15.12：useDeviceLocation/applyPickerLocation 已下沉 capability/LocationController.ets；权限与
+  // 定位 NAPI 收在宿主具名适配器 HostLocationPort，隐私门禁经 hooks 回注（仍是 3 处复检）。
+  const locationController = read('capability/LocationController.ets');
+  const location = locationController.slice(
+    locationController.indexOf('  async useDeviceLocation()'),
+    locationController.indexOf('  applyPickerLocation()'));
+  assert.equal((location.match(/hasPrivacyConsent\(\)/g) ?? []).length, 3);
+  assert.match(page, /permissionResult\.authResults\.some/);
+  assert.match(location, /finally\s*\{\s*this\.deviceLocationRequestInProgress = false/);
 });
 
 test('incomplete installations are repaired asynchronously, never by full sync extraction', () => {
   const resources = read('qability/StellariumResourceBootstrap.ets');
   const method = resources.match(/function hasStartupResourceFiles\([^)]*\): boolean \{[\s\S]*?\n\}/)[0];
   let missing = '';
-  const check = new Function('exists', 'MARKER', 'SKYCULTURE_ART_COMPAT_MARKER', plain(method) + ';return hasStartupResourceFiles;')(
-    path => !missing || !path.endsWith(missing), 'marker', 'compat');
+  const check = new Function('exists', 'fileSize', 'hilog', 'LOG_DOMAIN', 'LOG_TAG', 'MARKER', 'SKYCULTURE_ART_COMPAT_MARKER', plain(method) + ';return hasStartupResourceFiles;')(
+    path => !missing || !path.endsWith(missing), path => (!missing || !path.endsWith(missing)) ? 1 : 0,
+    logger, 0, 'test', 'marker', 'compat');
   assert.equal(check('/sandbox'), true);
   for (const file of ['marker', 'compat', 'data/default_cfg.ini', 'translations/stellarium/zh_CN.qm', 'skycultures/modern/illustrations/andromeda.png']) {
     missing = file;
@@ -651,10 +662,11 @@ test('incomplete installations are repaired asynchronously, never by full sync e
 });
 
 test('normal sensor probes contain counts rather than raw orientation measurements', () => {
-  const page = read('pages/MainWindowNativeNode.ets');
-  const probe = page.match(/  private emitGyroPoseProbe\([^\n]*\n[\s\S]*?\n  \}/)[0];
+  // M1-B 子组①：emitGyroPoseProbe 已下沉 capability/SensorController.ets。
+  const sensor = read('capability/SensorController.ets');
+  const probe = sensor.match(/  private emitGyroPoseProbe\([^\n]*\n[\s\S]*?\n  \}/)[0];
   assert.doesNotMatch(probe, /rawAz=|rawAlt=|gravity=|magnetic=|qNorm=/);
-  assert.doesNotMatch(page, /\[GYRO_ORIENTATION\]/);
+  assert.doesNotMatch(sensor, /\[GYRO_ORIENTATION\]/);
 });
 
 test('both policy artifacts name the actual sensor types and remain marked as drafts', () => {
@@ -675,7 +687,8 @@ test('startup compatibility marker is visible to the HAP packager and emitted af
 
 test('privacy settings are reachable through the existing CLI navigation route', () => {
   const page = read('pages/MainWindowNativeNode.ets');
-  assert.match(page, /'settingsInformation', 'settingsTime', 'settingsPrivacy'/);
+  const cliPanels = read('common/derive/skycult.ets');
+  assert.match(cliPanels, /'settingsInformation', 'settingsTime', 'settingsPrivacy'/);
   assert.match(page, /panel === 'settingsTime' \? 3 : -1/);
 });
 

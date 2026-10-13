@@ -4,9 +4,16 @@ import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { createHash } from 'node:crypto';
 
-const directory = new URL('../harmonyos/ets-source/pages/', import.meta.url);
-const source = name => readFileSync(new URL(name + '.ets', directory), 'utf8');
-const plain = text => stripTypeScriptTypes(text.replace(/^import .*\n/gm, '').replace(/export /g, ''));
+const sourceRoot = new URL('../harmonyos/ets-source/', import.meta.url);
+const sourcePaths = {
+  ProceduralDetailModel: 'common/derive/ProceduralDetailModel',
+  DetailModelGeometry: 'common/derive/DetailModelGeometry',
+  DetailModelRasterizer: 'capability/DetailModelRasterizer',
+  DetailModelRenderClient: 'capability/DetailModelRenderClient',
+  MainWindowNativeNode: 'pages/MainWindowNativeNode'
+};
+const source = name => readFileSync(new URL(sourcePaths[name] + '.ets', sourceRoot), 'utf8');
+const plain = text => stripTypeScriptTypes(text.replace(/^import .*\r?\n/gm, '').replace(/export /g, ''));
 const procedural = new Function(plain(source('ProceduralDetailModel')) + ';return { renderProceduralModel, proceduralParticles };')();
 const geometry = new Function(plain(source('DetailModelGeometry')) + ';return { modelIdentity, modelDrag };')();
 const render = new Function('renderProceduralModel', plain(source('DetailModelRasterizer')) + ';return renderDetailModel;')(procedural.renderProceduralModel);
@@ -121,11 +128,13 @@ test('background suspends watchdog without losing the frame or creating another 
 });
 
 test('UI submits snapshots, never executes pixel loops; selection generation guards completed frames', () => {
+  // M2-A：渲染管线整体下沉 capability/ObjectModelRenderer.ets，断言改读控制器文件。
   const ui = source('MainWindowNativeNode');
-  const renderMethod = ui.slice(ui.indexOf('  private renderObjectInspectorModel(highQuality:'), ui.indexOf('  private objectInspectorModelReady()'));
+  const controller = readFileSync(new URL('../harmonyos/ets-source/capability/ObjectModelRenderer.ets', import.meta.url), 'utf8');
+  const renderMethod = controller.slice(controller.indexOf('  private renderObjectInspectorModel(highQuality:'), controller.indexOf('  resetObjectInspectorModelView()'));
   assert.doesNotMatch(renderMethod, /for \(|renderProceduralModel\(|renderDetailModel\(/);
   assert.match(renderMethod, /render\(resources, frame\)/);
   assert.equal((renderMethod.match(/generation !== this.objectInspectorModelRenderGeneration/g) ?? []).length, 3);
-  assert.match(ui, /objectInspectorModelRenderClient\?\.dispose\(\)/);
+  assert.match(controller, /objectInspectorModelRenderClient\?\.dispose\(\)/);
   assert.doesNotMatch(ui, /@State private objectInspectorModelRendering/);
 });

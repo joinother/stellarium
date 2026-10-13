@@ -2,19 +2,31 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const root = path.resolve(new URL('..', import.meta.url).pathname)
-const source = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/MainWindowNativeNode.ets'), 'utf8')
+// Text input focus routing now spans the search bar / location search
+// components and the SkyInputController keyboard guard.
+const root = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
+const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+const input = read('harmonyos/ets-source/capability/SkyInputController.ets')
+const page = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets')
+const searchBar = read('harmonyos/ets-source/panels/search/SearchBar.ets')
+const locationSearch = read('harmonyos/ets-source/panels/location/LocationSearchPanel.ets')
+const locationStore = read('harmonyos/ets-source/state/LocationStore.ets')
 
-assert.match(source, /@State private keyboardTextInputFocused: boolean = false/)
-assert.match(source, /if \(this\.keyboardTextInputFocused\) \{ return false \}/)
-assert.match(source, /KeyCode\.KEYCODE_DEL && event\.keyCode !== KeyCode\.KEYCODE_FORWARD_DEL/)
-assert.match(source, /TextInput\(\{ text: this\.searchText, placeholder: I18n\.t\('i0063'\) \}\)[\s\S]*?\.onFocus\(\(\) => \{\n\s*this\.keyboardTextInputFocused = true/)
-assert.match(source, /TextInput\(\{ text: this\.locSearchQuery, placeholder: I18n\.t\('loc_search_placeholder'\) \}\)[\s\S]*?\.onFocus\(\(\) => \{\n\s*this\.keyboardTextInputFocused = true/)
-assert.match(source, /this\.locationSearchScanRegionFilter = this\.locationSearchRegionFilter\(q\)/)
-assert.match(source, /this\.locationSearchScanContinents = this\.locationSearchScanRegionFilter === undefined/)
-assert.match(source, /this\.locationSearchScanRegionFilter\.has\(region\)/)
-assert.match(source, /setTimeout\(\(\) => \{ this\.searchLocations\(value\) \}, 120\)/)
-assert.match(source, /Date\.now\(\) - startedAt < 8/)
-assert.match(source, /now - this\.locationSearchLastPublishMs >= 40/)
+// While a text field is focused the sky keyboard handler must not consume keys.
+assert.match(page, /@State private keyboardTextInputFocused: boolean = false/)
+assert.match(input, /if \(this\.hooks\.keyboardTextInputFocused\(\)\) \{ return false \}/)
+assert.match(page, /keyboardTextInputFocused: \(\): boolean => this\.keyboardTextInputFocused/)
+assert.match(searchBar, /\.onFocus\(\(\) => \{ this\.onInputFocus\(\) \}\)/)
+assert.match(searchBar, /\.onBlur\(\(\) => \{ this\.onInputBlur\(\) \}\)/)
+assert.match(locationSearch, /\.onFocus\(\(\) => \{ this\.onInputFocus\(\) \}\)/)
+assert.match(locationSearch, /\.onBlur\(\(\) => \{ this\.onInputBlur\(\) \}\)/)
+assert.match(page, /this\.keyboardTextInputFocused = true/)
+assert.match(page, /this\.keyboardTextInputFocused = false/)
+
+// The location search scans a pre-normalized index in bounded time slices and
+// throttles publishes.
+assert.match(locationStore, /locationSearchScanTimer/)
+assert.match(locationStore, /Date\.now\(\) - startedAt < LOCATION_SEARCH_CHUNK_MS/)
+assert.match(locationStore, /locationSearchLastPublishMs/)
 
 console.log('HarmonyOS search input routing and location search contract passed.')

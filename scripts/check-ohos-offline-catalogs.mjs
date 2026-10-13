@@ -4,7 +4,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { basename, resolve } from 'node:path';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const registryPath = resolve(root, 'data/ohos/network-sources.json');
 const registry = JSON.parse(await readFile(registryPath, 'utf8'));
 const bundled = (registry.sources ?? []).filter((source) => source.runtimeDefault === 'bundled');

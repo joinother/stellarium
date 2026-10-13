@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(new URL('..', import.meta.url).pathname)
-const hierarchySource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/location_hierarchy.ts'), 'utf8')
-const nameSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/location_names_zh.ts'), 'utf8')
+const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)))
+const hierarchySource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/common/location/hierarchy.ts'), 'utf8')
+const nameSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/common/location/names_zh.ts'), 'utf8')
 const mainSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/MainWindowNativeNode.ets'), 'utf8')
+const locationStoreSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/state/LocationPickerStore.ets'), 'utf8')
+const actionsSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/common/derive/actions.ets'), 'utf8')
 
 function loadLiteral(source) {
   const index = source.indexOf('=')
@@ -70,8 +73,16 @@ const unresolved = cities.filter((city) => !names[city.n] || names[city.n] === '
 if (unresolved.length > 0) {
   throw new Error(`Chinese location names unresolved: ${unresolved.slice(0, 10).map((city) => city.n).join(', ')}`)
 }
-for (const token of ['normalizeLocationSearchText', 'matchesLocationSearch', 'officialLocationAliases', 'locationResultContext', 'country.zh']) {
-  if (!mainSource.includes(token)) throw new Error(`location search integration missing: ${token}`)
+for (const [token, source] of [
+  ['officialLocationAliases', mainSource],
+  ['LOCATION_COUNTRY_NAMES', mainSource],
+  ['normalizeLocationSearchText', actionsSource],
+  ['matchesLocationSearch', actionsSource],
+  ['locationSearchMatchScore', actionsSource],
+  ['locationResultContext', locationStoreSource],
+  ['quickLocationSearch', locationStoreSource],
+]) {
+  if (!source.includes(token)) throw new Error(`location search integration missing: ${token}`)
 }
 
 console.log(`OK: ${cities.length} offline locations have Chinese display entries`)

@@ -4,7 +4,9 @@ set -euo pipefail
 root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 build_dir="${OHOS_BUILD_DIR:-$root_dir/build}"
 module_file="$root_dir/harmonyos/module.json5"
-arkui_main_file="$root_dir/harmonyos/ets-source/pages/MainWindowNativeNode.ets"
+# OFFLINE_APPGALLERY_BUILD now lives in the shared types module (post-refactor),
+# not in the page shell.
+arkui_types_file="$root_dir/harmonyos/ets-source/common/types/MainWindowModels.ets"
 
 usage() {
   cat <<'EOF'
@@ -23,12 +25,12 @@ read_cache_mode() {
 }
 
 read_arkui_mode() {
-  perl -ne 'if (/const OFFLINE_APPGALLERY_BUILD: boolean = (true|false)/) { print "$1\n"; exit }' "$arkui_main_file"
+  perl -ne 'if (/const OFFLINE_APPGALLERY_BUILD: boolean = (true|false)/) { print "$1\n"; exit }' "$arkui_types_file"
 }
 
 set_arkui_mode() {
   local offline="$1"
-  perl -0pi -e "s/const OFFLINE_APPGALLERY_BUILD: boolean = (true|false)/const OFFLINE_APPGALLERY_BUILD: boolean = ${offline}/" "$arkui_main_file"
+  perl -0pi -e "s/const OFFLINE_APPGALLERY_BUILD: boolean = (true|false)/const OFFLINE_APPGALLERY_BUILD: boolean = ${offline}/" "$arkui_types_file"
 }
 
 has_internet_permission() {

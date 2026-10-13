@@ -6,6 +6,8 @@ import subprocess
 import time
 
 
+from ohos_test_bundle import default_bundle
+
 ROOT = Path(__file__).resolve().parents[1]
 HDC = '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc'
 
@@ -14,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--bundle', default=default_bundle(), help='device bundle name (default: AppScope/app.json5)')
     args = parser.parse_args()
     report = {'checks': [], 'samples': []}
 
@@ -21,7 +24,7 @@ def main():
         return subprocess.check_output([HDC, '-t', args.device, *map(str, values)], text=True, timeout=50)
 
     def command(name, payload=None):
-        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device,
+        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device, '--bundle', args.bundle,
                       '--command', name, '--json']
         if payload is not None:
             invocation += ['--payload', str(payload)]
@@ -88,7 +91,7 @@ def main():
 
     original_time = command('getSimulationTime')
     original_selection = command('getSelectedObjectInfo')
-    original_pid = hdc('shell', 'pidof', 'com.joinother.skyinstrument').strip()
+    original_pid = hdc('shell', 'pidof', args.bundle).strip()
     try:
         command('setTimeRate', 0)
         for query in ['Moon', 'Betelgeuse']:
@@ -157,7 +160,7 @@ def main():
             expect(query + ' scroll still works after leaving full screen', resumed['detailScrollY'] > closed['detailScrollY'] + 10)
             report['samples'].append({'target': query, 'before': before, 'horizontal': horizontal,
                                       'vertical': vertical, 'closed': closed, 'resumed': resumed})
-        expect('process stayed alive', hdc('shell', 'pidof', 'com.joinother.skyinstrument').strip() == original_pid)
+        expect('process stayed alive', hdc('shell', 'pidof', args.bundle).strip() == original_pid)
     finally:
         command('setObjectModelView', 'close')
         command('setTimeRate', original_time['timeRate'])

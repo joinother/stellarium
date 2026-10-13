@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const page = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
+const page = readFileSync(new URL('../harmonyos/ets-source/common/derive/labels.ets', import.meta.url), 'utf8');
+const panel = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SatellitesPanel.ets', import.meta.url), 'utf8');
 const manager = readFileSync(new URL('../plugins/Satellites/src/Satellites.cpp', import.meta.url), 'utf8');
 
 const families = [
@@ -18,7 +19,7 @@ test('Chinese satellite display names cover common pinyin and constellation fami
     assert.match(page, new RegExp(`label: .*${localized}`));
   }
   assert.match(page, /const suffix = value\.substring\(item\.token\.length\)/);
-  assert.match(page, /this\.satelliteLocalizedName\(value\)/);
+  assert.match(page, /satelliteLocalizedName\(value\)/);
 });
 
 test('Chinese satellite search aliases resolve to the original TLE family', () => {
@@ -29,6 +30,6 @@ test('Chinese satellite search aliases resolve to the original TLE family', () =
 });
 
 test('official identifiers remain available as secondary satellite metadata', () => {
-  assert.match(page, /Text\(item\.englishName\)/);
-  assert.match(page, /Text\('NORAD ' \+ item\.id/);
+  assert.match(panel, /Text\(item\.englishName\)/);
+  assert.match(panel, /Text\('NORAD ' \+ item\.id/);
 });

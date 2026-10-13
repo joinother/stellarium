@@ -22,7 +22,7 @@
 
 ## 2026-09-30 全量联网本地化复核
 
-本工程当前为联网构建：`ohos.permission.INTERNET` 已声明、`STELLARIUM_OHOS_OFFLINE=OFF`、`OFFLINE_APPGALLERY_BUILD=false`。这只打开了权限和已实现代码路径，不代表所有第三方数据源、华为开放能力或资源服务器已经上线。逐项状态以 `data/ohos/network-localization.json` 为准，审计命令为 `node scripts/check-ohos-network-localization.mjs`，完整说明见 `NETWORK-LOCALIZATION-MATRIX.md`。
+本工程当前为联网构建：`ohos.permission.INTERNET` 已声明、`STELLARIUM_OHOS_OFFLINE=OFF`、`OFFLINE_APPGALLERY_BUILD=false`。这只打开了权限和已实现代码路径，不代表所有第三方数据源、华为开放能力或资源服务器已经上线。逐项状态以 `data/ohos/network-localization.json` 为准，审计命令为 `node scripts/check-ohos-network-localization.mjs`，完整说明见 `policy/NETWORK-LOCALIZATION-MATRIX.md`。
 
 - 已完成本地化：卫星内置 TLE、系外行星、流星雨、新星、超新星、脉冲星、类星体、基础星表、高清资源、地景、天空文化、脚本和本地设备能力；断网使用随包数据。
 - 可做境内静态镜像：卫星 TLE 和六类小型 JSON。镜像只提供版本化静态文件，不接收 SN、UDID、位置、查询词或账号；应用必须保留随包回退。
@@ -34,7 +34,7 @@
 
 ## 2026-09-23 应用服务部署核查
 
-完整分类、七份目录压缩体积、备案展示缺失和落地顺序见 `NETWORK-DEPLOYMENT-PLAN-2026-09-23.md`。22 个来源不等于 22 个服务：优先统一 TLE/六类目录静态更新，基础图像/文化继续随包；查询、瓦片、天气、推送、IAP 分别治理，局域网望远镜/基础本地提醒无需公网后端。
+完整分类、七份目录压缩体积、备案展示缺失和落地顺序见 `server/NETWORK-DEPLOYMENT-PLAN-2026-09-23.md`。22 个来源不等于 22 个服务：优先统一 TLE/六类目录静态更新，基础图像/文化继续随包；查询、瓦片、天气、推送、IAP 分别治理，局域网望远镜/基础本地提醒无需公网后端。
 
 资源服务实测仍 staging/非公开。2026-09-23 从阿里云“我的备案 → App”核实星象仪 APP 号为 `新ICP备2026008516号-2A`，网站号为 `新ICP备2026008516号-1`。应用设置/关于展示 APP 号；点击号码才由系统打开 `https://beian.miit.gov.cn/`，不自动请求、不附加号码、SN、位置或账号参数。浏览器正常访问会发送 IP/标准请求头；官方查询不使用镜像。已加入本地代理提醒权限和代码，但未开放应用资源下载、未新增 INTERNET 权限，也未部署数据代理/支付/远程推送服务。
 
@@ -63,7 +63,7 @@
 - 当前仅准备华为数字商品协议签约和 IAP Kit 沙盒接入，正式支付、订单校验和权益服务尚未接入运行包。
 - 计划由用户主动打开付费页后调用华为收银台；客户端不保存商户密钥，不把 SN/UDID、精确位置或观测查询词作为订单参数。
 - 若后续增加自有订单/权益服务，必须登记境内 HTTPS 地址、传输字段、保存期限、退款/恢复流程和失败回退；订单号幂等校验应在服务端完成。
-- 数字商品服务开通不等于自动开放其他地图、推送、实况窗、接续或第三方数据源；每项能力仍单独走 AGC、隐私和 Profile 门禁。路线详见 `DIGITAL-GOODS-AND-IAP-ROADMAP-2026-09.md`。
+- 数字商品服务开通不等于自动开放其他地图、推送、实况窗、接续或第三方数据源；每项能力仍单独走 AGC、隐私和 Profile 门禁。路线详见 `research/DIGITAL-GOODS-AND-IAP-ROADMAP-2026-09.md`。
 
 ### 2026-09-23 备案后的分层开放边界
 
@@ -82,7 +82,7 @@
 - 当前鸿蒙 `module.json5` 未声明 `ohos.permission.INTERNET`，因此已生成 HAP 没有系统授予的公网访问权限；这属于运行时权限边界，不等同于源码中所有网络请求代码都已移除。
 - 严格“整个应用绝对不联网”尚未完成代码级封口：HiPS/TOAST、OnlineQueries、NebulaTextures Plate Solver、Planes、MPC 导入和 RemoteSync 的网络实现仍编译保留，必须在提交未备案版本前禁用入口并增加统一离线构建门禁；本台账不会把“未声明 INTERNET 权限”冒充为所有网络代码已经删除。
 - 地图 SDK 当前按项目决定暂缓，不接入花瓣地图或其他地图 SDK。
-- 本轮复核新增 `docs/harmonyos/OFFLINE-FEATURE-MATRIX.md`：明确区分“可随包内置”“只能构建机更新”“需要用户主动联网/设备连接”，并补齐六类静态目录的构建机更新命令；不能因为存在镜像路径就宣称客户端已完成本地化。
+- 本轮复核新增 `docs/harmonyos/specs/OFFLINE-FEATURE-MATRIX.md`：明确区分“可随包内置”“只能构建机更新”“需要用户主动联网/设备连接”，并补齐六类静态目录的构建机更新命令；不能因为存在镜像路径就宣称客户端已完成本地化。
 - 本轮再次核对网络类调用后，补登记星表下载页、帮助页检查更新、卫星自定义 TLE 导入和 Vts 本机连接；“打开外部网页”“局域网控制”和“公网数据请求”分开记录，不能只用“无 INTERNET 权限”作为唯一结论。
 - `NebulaTextures` 的 HarmonyOS 入口只接受本地文件并复制到应用用户目录，纹理配置、映射和解码均在本机完成；`importNebulaTexture`、`refreshNebulaTextures` 和 `validateNebulaTexture` 不发起网络请求。上游 Plate Solver 仍保留在桌面插件代码中，但鸿蒙 ArkUI 与 CLI 均明确禁用图像上传，不能把它描述为已本地化。
 
@@ -95,23 +95,23 @@
 - 将来离线包/境内镜像复用现有资源 provider；本地包必须禁止 properties 外链逃逸。中国虚拟天文台 HiPS 已见 CDS 注册记录，但本站实测、内容授权、覆盖与服务保障未验，不能宣称完整替代。
 - 后续开放时分别登记清单/瓦片请求、SIMBAD 元数据补齐；数据提供方可从远程瓦片路径推断感兴趣的天区，应披露且不附加观测位置或设备标识。本轮仅设计，不改服务部署。
 
-2026-09-07 服务器准备：用户购入阿里云上海 ECS，并授权创建 Workbench 官方服务关联角色管理实例。仅准备服务器本机 `127.0.0.1:8080` 健康检查服务；系统依赖通过实例现有官方软件源安装，外发服务器 IP/软件包请求，不上传用户天文数据。此阶段不开放公网服务、不修改安全组、不新增客户端联网权限、不自动抓取上游资源。阶段状态及上线门禁见 `SERVER-PREPARATION.md`。
+2026-09-07 服务器准备：用户购入阿里云上海 ECS，并授权创建 Workbench 官方服务关联角色管理实例。仅准备服务器本机 `127.0.0.1:8080` 健康检查服务；系统依赖通过实例现有官方软件源安装，外发服务器 IP/软件包请求，不上传用户天文数据。此阶段不开放公网服务、不修改安全组、不新增客户端联网权限、不自动抓取上游资源。阶段状态及上线门禁见 `server/SERVER-PREPARATION.md`。
 
-同日后续用户授权安全加固：安全组 SSH 从全网收紧为 Workbench `100.104.0.0/16`，删除 TCP 3389 入站放行，保留 ICMP 与既有出站规则；全新 CLI 连接通过。通过 Workbench/OSS 上传两个不含秘密的审计及普通用户部署脚本，哈希验证后执行；审计日志仅存服务器本地，不新增日志外发或应用联网。最新边界见 `SERVER-SECURITY.md`。
+同日后续用户授权安全加固：安全组 SSH 从全网收紧为 Workbench `100.104.0.0/16`，删除 TCP 3389 入站放行，保留 ICMP 与既有出站规则；全新 CLI 连接通过。通过 Workbench/OSS 上传两个不含秘密的审计及普通用户部署脚本，哈希验证后执行；审计日志仅存服务器本地，不新增日志外发或应用联网。最新边界见 `server/SERVER-SECURITY.md`。
 
 同日 19:48 用户批准安全更新：通过 Workbench/OSS 上传不含秘密的安全更新脚本，服务器使用已配置的 alinux3 官方源下载元数据和 35 个安全更新包，启用 GPG 校验、不使用 EPEL；外发软件包请求和服务器网络信息，不上传备份、用户资料或应用数据。完成一次批准的重启，资源仍不对公网提供服务。配置备份仅存服务器 0700 目录，未新增收费存储、日志投递或自动更新计划。
 
-同日开发机安装 Workbench CLI 1.0.1：从用户指定的阿里云 `workbench-cli.oss-cn-hangzhou.aliyuncs.com` 获取 ARM64 二进制并校验 SHA-256；从 `aliyun/alibabacloud-aiops-skills` 核对官方 Skill。CLI 使用阿里云 API/WebSocket，外发认证请求、实例/地域及运维命令，返回状态输出；文件传输经过 OSS 中转。19:29 用户配置凭据后指定实例只读 exec 已通过，未传输文件或应用数据。密钥不进入聊天和仓库。这些仅为开发运维工具，不打包进 APP；当前安全组及后续收紧项见 `SERVER-PREPARATION.md`。
+同日开发机安装 Workbench CLI 1.0.1：从用户指定的阿里云 `workbench-cli.oss-cn-hangzhou.aliyuncs.com` 获取 ARM64 二进制并校验 SHA-256；从 `aliyun/alibabacloud-aiops-skills` 核对官方 Skill。CLI 使用阿里云 API/WebSocket，外发认证请求、实例/地域及运维命令，返回状态输出；文件传输经过 OSS 中转。19:29 用户配置凭据后指定实例只读 exec 已通过，未传输文件或应用数据。密钥不进入聊天和仓库。这些仅为开发运维工具，不打包进 APP；当前安全组及后续收紧项见 `server/SERVER-PREPARATION.md`。
 
-同日单实例 RAM 授权准备：用户创建 `skyinstrument-cli` 并批准单台上海 ECS 的查询/命令运维权限；向阿里云 RAM 提交的策略仅涉及该云账号和实例标识，不含 APP 用户数据。官方说明首次有效 CLI 连接可能自动添加 `100.104.0.0/16 → TCP 22` 内网安全组规则，因此须先核对现状、必要时另行确认；当前未执行此安全组变更。权限策略和凭据验证状态见 `SERVER-PREPARATION.md`。
+同日单实例 RAM 授权准备：用户创建 `skyinstrument-cli` 并批准单台上海 ECS 的查询/命令运维权限；向阿里云 RAM 提交的策略仅涉及该云账号和实例标识，不含 APP 用户数据。官方说明首次有效 CLI 连接可能自动添加 `100.104.0.0/16 → TCP 22` 内网安全组规则，因此须先核对现状、必要时另行确认；当前未执行此安全组变更。权限策略和凭据验证状态见 `server/SERVER-PREPARATION.md`。
 
-2026-09-07 通过华为开发文档 MCP 和华为云/NADC/LAMOST 官方网页继续复核，报告见 [国产化、分发与资源下载](DOMESTIC-RESOURCE-DISTRIBUTION-RESEARCH-2026-09-07.md)。仅开发机查询公开文档，未请求私人观测数据、账号或设备标识，未新增运行时 URL、权限、下载任务或云服务配置。
+2026-09-07 通过华为开发文档 MCP 和华为云/NADC/LAMOST 官方网页继续复核，报告见 [国产化、分发与资源下载](research/DOMESTIC-RESOURCE-DISTRIBUTION-RESEARCH-2026-09-07.md)。仅开发机查询公开文档，未请求私人观测数据、账号或设备标识，未新增运行时 URL、权限、下载任务或云服务配置。
 
 后续候选机制明确分开：AppGallery Kit 按需应用模块、request.agent 普通资源下载、游戏资源加速、构建用 ohpm-repo。均未接入生产。普通资源拟用国内对象存储/CDN，地址未定；访问会暴露 IP/时间/资源 ID，瓦片还可推断天区，不以“国内镜像”宣称零外发。游戏服务的非游戏接入资格、当前 SDK 不支持的 API 26 暂停模块下载能力都不得预设可用。
 
 合规表述修订：华为核准指引包含单机 APP 的申报情形，运行时离线是当前项目决策，不把“未备案”简化为一律不可分发；新增公网资源下载需重新核对申报和隐私，不能通过系统代下载绕开。当前构建镜像尚缺可信远端清单校验，详见新报告与已知问题。
 
-2026-08-30 对 Sky Guide/Fifth Star Labs 官方官网、News 和 Support 的只读调研仅用于产品设计参考，不会被打包进应用运行时请求列表，也不会因此新增公网权限、网页跳转或数据外发。调研记录见 `docs/harmonyos/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md`。其官方页面确认了滤镜、卫星过境、离线运行、AR、时间控制、对象引导、桌面摘要和星声等交互思路；本项目只复用业务抽象和视觉原则，不复制专有图标、照片、插画或代码。
+2026-08-30 对 Sky Guide/Fifth Star Labs 官方官网、News 和 Support 的只读调研仅用于产品设计参考，不会被打包进应用运行时请求列表，也不会因此新增公网权限、网页跳转或数据外发。调研记录见 `docs/harmonyos/research/SKY-GUIDE-FEATURE-RESEARCH-2026-08-30.md`。其官方页面确认了滤镜、卫星过境、离线运行、AR、时间控制、对象引导、桌面摘要和星声等交互思路；本项目只复用业务抽象和视觉原则，不复制专有图标、照片、插画或代码。
 
 ## 统一数据源替换契约
 
@@ -143,9 +143,9 @@ bash scripts/set-ohos-network-mode.sh offline
 
 ## 预研但未接入的本地设备通信
 
-2026-10-01新增研究：[Seestar S50 Pro 接入](SEESTAR-S50-PRO-INTEGRATION-RESEARCH-2026-10.md)和[GT5/Watch 5 穿戴路线](WEARABLE-GT5-WATCH5-ROADMAP-2026-10.md)。当前只记录方案，不新增运行时请求或开放端口：Seestar 优先用户主动连接的本地 Alpaca，具体 IP/端口通过实机确认；设备发现、指向/曝光、图像传输、穿戴消息和可选云分享分别登记。原始照片本地优先，不默认外传地点、设备序列号或主机 SN/UDID；服务器与收费存储服务未因本次预研启用。
+2026-10-01新增研究：[Seestar S50 Pro 接入](research/SEESTAR-S50-PRO-INTEGRATION-RESEARCH-2026-10.md)和[GT5/Watch 5 穿戴路线](research/WEARABLE-GT5-WATCH5-ROADMAP-2026-10.md)。当前只记录方案，不新增运行时请求或开放端口：Seestar 优先用户主动连接的本地 Alpaca，具体 IP/端口通过实机确认；设备发现、指向/曝光、图像传输、穿戴消息和可选云分享分别登记。原始照片本地优先，不默认外传地点、设备序列号或主机 SN/UDID；服务器与收费存储服务未因本次预研启用。
 
-星闪望远镜控制目前只完成接口预研，未加入生产代码、未申请 `ACCESS_NEARLINK`、未扫描或连接设备。星闪属于本地无线设备通信，不等于公网联网，但仍需单独记录权限、设备标识和控制数据边界。设计与分阶段路线见 `docs/harmonyos/TELESCOPE-NEARLINK-RESEARCH-2026-09-02.md`；OnStep开发板验证至单板产品的路线见[产品路线图](ONSTEP-NEARLINK-PRODUCT-ROADMAP.md)。不依赖手机/Pad的SN或UDID；控制器自身设备ID与用户终端标识分离。
+星闪望远镜控制目前只完成接口预研，未加入生产代码、未申请 `ACCESS_NEARLINK`、未扫描或连接设备。星闪属于本地无线设备通信，不等于公网联网，但仍需单独记录权限、设备标识和控制数据边界。设计与分阶段路线见 `docs/harmonyos/TELESCOPE-NEARLINK-RESEARCH-2026-09-02.md`；OnStep开发板验证至单板产品的路线见[产品路线图](research/ONSTEP-NEARLINK-PRODUCT-ROADMAP.md)。不依赖手机/Pad的SN或UDID；控制器自身设备ID与用户终端标识分离。
 
 | 功能 | 当前状态 | 计划触发方式 | 本地数据 | 网络边界 |
 | --- | --- | --- | --- | --- |
@@ -249,7 +249,7 @@ SIMBAD、AAVSO/GCVS/Wikipedia、实时飞机数据目前没有在本项目中验
 
 ## 2026-09-08 天文通调研：候选联网能力，尚未启用
 
-- 研究报告：`STARGAZING-HUB-RESEARCH-2026-09-08.md`。本轮仅操作用户已安装的第三方应用、查阅公开资料与华为文档；不改变星象仪运行时联网行为、签名、权限或服务端配置。第三方应用页面的联网不等于星象仪已经接入这些服务；未对该应用抓包，不能宣称掌握其完整外发字段。
+- 研究报告：`research/STARGAZING-HUB-RESEARCH-2026-09-08.md`。本轮仅操作用户已安装的第三方应用、查阅公开资料与华为文档；不改变星象仪运行时联网行为、签名、权限或服务端配置。第三方应用页面的联网不等于星象仪已经接入这些服务；未对该应用抓包，不能宣称掌握其完整外发字段。
 - 研究来源：`laysky.com`、`stargazinghub.com`、Apple App Store、Google Play、`github.com/esa/tetra3`、`github.com/dstndstn/astrometry.net`、华为开发知识 MCP。仅开发阶段查阅，不写入应用下载白名单，也不调用天文通私有接口。
 
 | 候选功能 | 未来触发/默认状态 | 预计外发字段，实施前再审计 | 离线回退与国内化边界 |

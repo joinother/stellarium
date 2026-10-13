@@ -3,7 +3,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const path = resolve(root, 'data/ohos/network-sources.json');
 const registry = JSON.parse(await readFile(path, 'utf8'));
 const errors = [];

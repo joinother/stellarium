@@ -63,6 +63,8 @@
 - 区分“查询原生计算结果”与“改变 ArkUI 筛选状态”：如 `getWutTargets` 能返回结果，不代表同时更新菜单中的类别、时段或展开状态。发现缺口必须记录并补接共用业务入口，不能把坐标操作作为长期替代。
 - CLI 返回 `accepted` 只表示请求已接收，不能替代完成状态或错误反馈。回归应核对最终结构化状态；现有 UI 通道缺少最终回执时明确记录限制。
 - 截图、布局树用于排版、裁切和动画验证。仅在专门验证触摸命中、滚动或手势时才模拟触摸，不用它完成普通导航和参数配置；测试报告分别记录 CLI 业务验证与触摸验证。
+- 设备上同时装有发布身份与开发身份时，`scripts/stellarium-cli.mjs` 的默认包名是**发布身份**（`DEFAULT_BUNDLE = 'com.joinother.skyinstrument'`，可用 `--bundle` 或 `STELLARIUM_BUNDLE` 覆盖），而本机调试构建可能装成**另一个已注册包名**（由 DevEco 自动签名决定；`build-ohos-hap-windows.ps1 -Install` 会从 `pack.info` 打印它）。不带 `--bundle` 的 CLI 调用（含 `openUiPanel`）会启动并操作**另一个 app**，其后的 `devecocli ui screenshot` / `layout` 全在拍错对象。走查一律显式加 `--bundle <构建脚本打印的包名>`，或用 `devecocli run` 按构建产物安装与启动。
+- `devecocli ui layout` 只返回**视口内**节点，Scroll 折叠区不出现；要看面板末行须先滚动，或改由 CLI 命令面与结构化状态覆盖。
 
 推荐验证顺序：
 

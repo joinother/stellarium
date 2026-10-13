@@ -1,0 +1,11 @@
+# 本项目源码/文档的行尾策略：git 内存 LF、工作区 checkout 为 CRLF（即 core.autocrlf=true 的语义，
+# 这里显式钉死，使效果与本地 git 配置无关，并消除 "LF will be replaced by CRLF" 告警）。
+#
+# 只钉本仓库自己的源码与文档；**不动**上游 Stellarium 的 cmake/ISL/skycultures 等数据文件
+# （那些文件的 CRLF 属上游原样，改之会偏离上游）。
+#
+# `text=auto` 让 git 自动识别二进制（png/jpg/zip… 不会被当作文本做行尾转换），仅对文本施加 eol=crlf。
+harmonyos/ets-source/**  text=auto eol=crlf
+harmonyos/*.json5        text=auto eol=crlf
+docs/harmonyos/**        text=auto eol=crlf
+scripts/**               text=auto eol=crlf

@@ -1,0 +1,12 @@
+{
+  "UniformDataTypeDeclarations": [
+    {
+      "TypeId": "com.joinother.skyinstrument.stellarium-cat",
+      "BelongingToTypes": ["general.file"],
+      "FilenameExtensions": [".cat"],
+      "MIMETypes": ["application/x-stellarium-cat"],
+      "Description": "Stellarium star catalogue",
+      "ReferenceURL": "https://sourceforge.net/projects/stellarium/files/Extra-data-files/stars-3.0/"
+    }
+  ]
+}

@@ -57,29 +57,55 @@ OpenGL ES → XComponent → Framebuffer
 
 ### 2.2 文档结构
 
+**先读这 9 个（根目录），其余按需要再进子目录：**
+
+| 文件 | 用途 |
+| --- | --- |
+| `AGENTS.md` | 你正在读的这个文件：约定、环境、构建命令 |
+| `HANDOFF.md` | 项目交接（给新 Agent 的快速入门） |
+| `KNOWN-ISSUES.md` | 已知问题列表（Bug 追踪） |
+| `CHANGELOG.md` | 修改日志（每次变更必须追加） |
+| `DEVELOPMENT-MCP-WORKFLOW.md` | 官方文档查询与设备验证流程 |
+| `BUILD-WINDOWS.md` | Windows 构建与装机指南（必需编译参数、报错速查、离线依赖） |
+| `DEBUGGING-GUIDE.md` | 调试与日志查看 |
+| `CLI.md` | 命令目录契约（语义 CLI 的 payload / 返回 / 错误码） |
+| `NETWORK-INVENTORY.md` | 联网台账（合规必需） |
+
 ```
 docs/harmonyos/
-├── AGENTS.md                  ← 你正在读的这个文件
-├── HANDOFF.md                 ← 项目交接文档（给新 Agent 的快速入门）
-├── CHANGELOG.md               ← 修改日志（每次变更必须追加）
-├── KNOWN-ISSUES.md            ← 已知问题列表（Bug 追踪）
-├── codex/                     ← Codex Agent 的工作记录
-│   ├── Stellarium-HarmonyOS-交接文档.md
-│   └── ohos_patch/            ← Codex 编写的补丁代码
-├── workbuddy/                 ← WorkBuddy Agent 的工作记录
-│   ├── memory/                ← Agent 记忆文件
-│   ├── phase2/                ← 第二阶段进度
-│   └── outputs/               ← 测试截图
-├── trae/                      ← TRAE Agent 的工作记录
-│   └── memory/                ← Agent 记忆文件
-├── harmonyos-project/         ← HarmonyOS 工程源码快照
-│   ├── ets-source/            ← ArkUI/ETS 源码
-│   ├── cpp-source/            ← C++ Native 源码
-│   └── *.json5                ← 构建配置
-└── signing/                   ← 签名证书和配置
-    ├── stellarium-app-keypair.p12
-    ├── stellarium-app-cert-chain.cer
-    └── stellarium-ca-release-profile.p7b
+├── （上面 9 个常读文档）
+├── release/      ← 构建·发布·签名·上架·备案·软著：RELEASE-PACKAGING、BUILD-IDENTITY、SIGNING-GUIDE、
+│                    APP-STORE-SUBMISSION、STORE-LISTING-DRAFT、DEVECO-COLLAB、BUILD-CHECK、
+│                    BUNDLE-IDENTITY-CLEANUP、AGC-CAPABILITY-*（能力申请/材料/审核）、SOFTWARE-COPYRIGHT-*
+├── policy/       ← 合规与政策：COMPLIANCE-GUIDE、LOCALIZATION-POLICY、
+│                    SKY-CULTURE-EDITORIAL-GUIDELINES、PRIVACY-REVIEW-2026-09-08、QT-CLIPBOARD-REVIEW-FIX、
+│                    PRIVACY-AGREEMENT-RENEWAL、PRIVACY-DOUBLE-DIALOG-*、PRIVACY-STARTUP-UI-*、
+│                    SN-CALL-BOUNDARY-AUDIT-*、NETWORK-LOCALIZATION-MATRIX
+├── server/       ← 服务器与联网部署：SERVER-SECURITY（运维安全基线）、SERVER-PREPARATION、
+│                    NETWORK-DEPLOYMENT-PLAN-*（联网服务部署与备案号核查）
+├── specs/        ← 现行实现规格：UI-ARCHITECTURE（界面与窗口层级）、CODEBASE-OVERVIEW.html（工程代码库总览）、
+│                    MIST-HORIZON、POLAR-SCOPE-OVERLAY、PROCEDURAL-OBJECT-MODELS、DETAIL-MODEL-*、
+│                    SATELLITE-PANEL-ORBIT-UX、SEARCH-BROWSER-UX、SCRIPT-DESIGN、I18N-ARCHITECTURE、
+│                    STARTUP-MOTION-DESIGN、INTERACTIVE-ASTRONOMY-GUIDES、ASTRO-CALC-MOTION、
+│                    OFFLINE-*、DEEP-SKY-RESOURCE-INVENTORY、MAP-KIT-INTEGRATION-PLAN、
+│                    PC-TOUCHPAD-AND-KEYBOARD-GUIDE、SCREEN-ANCHOR-*、STARTUP-TEXTURE-BUDGET-*
+├── research/     ← 预研与路线图：CELESTIA-INTEGRATION、MULTIWAVELENGTH-SKY、
+│                    SKY-GUIDE-FEATURE、TELESCOPE-NEARLINK、DESKTOP-GUI-ASSET-REUSE-PLAN、ROADMAP-*、
+│                    PANEL-PLUGIN-ARCHITECTURE-ROADMAP（面板/插件产品级归属）、
+│                    ARKTS-PAGES-REFACTOR-PLAN（pages/ 代码结构重构方案）、
+│                    AR-ENGINE-PORTAL-ROADMAP-*、CARD-UI-RESEARCH-*、COLLABORATION-AND-CONTINUATION-ROADMAP、
+│                    DIGITAL-GOODS-AND-IAP-ROADMAP-*、DOMESTIC-RESOURCE-DISTRIBUTION-RESEARCH-*、
+│                    ONSTEP-NEARLINK-PRODUCT-ROADMAP、SEESTAR-S50-PRO-INTEGRATION-RESEARCH-*、
+│                    STARGAZING-HUB-RESEARCH-*、UPSTREAM-INTEGRATION-PLAN-*、WEARABLE-GT5-WATCH5-ROADMAP-*
+├── testing/      ← 验证环境与测试平台：PLATFORM-MATRIX（模拟器/真机/云调试各自能验什么、约束与证据）
+├── json/         ← 全部保留的数据文件（星空文化修订/复核数据、各轮 pad 实测记录）
+│   └── culture-review-batches/   ← 被 scripts/review-skyculture-passages.py 读取
+├── archive/      ← 历史留存量：audits/（各轮审计与复核报告，含 PC-UX-AUDIT-*、
+│                    SATELLITE-PLUGIN-ALIGNMENT-AUDIT-*）、design/（早期设计稿）、MOBILE-UI-HANDOVER.md
+├── workbuddy/    ← WorkBuddy Agent 记录：memory/（Qt for OHOS 踩坑）、phase2/（工具包与补丁）、
+│                    workbench-single-instance-policy.template.json
+├── skills/       ← 可复制到 Agent 运行时的技能包
+└── signing/      ← 签名证书和配置（不入库，见 .gitignore）
 ```
 
 ### 2.3 CHANGELOG.md 格式
@@ -118,6 +144,12 @@ docs/harmonyos/
 2. 在 `KNOWN-ISSUES.md` 标记当前正在处理的问题（标注"进行中"）
 3. 如果代码改了一半导致编译失败，**立即回滚**（`git checkout .`），不要留半成品
 4. 如果代码改了一半但逻辑正确，在 `CHANGELOG.md` 精确记录改了哪些行、下一步该做什么
+
+### 2.6 提交策略
+
+1. Agent 完成改动并验证后，**不得自动执行 `git commit` / `git push`**，改动保留在工作区并向用户汇报结果
+2. 仅当用户**明确要求**「整理代码并提交」时才提交；届时一并整理 `CHANGELOG.md` 记录、复核暂存内容
+3. （推送目标仍遵循第 7 节第 3 条：推自己的 fork，不推上游 `Stellarium/stellarium`）
 
 ---
 
@@ -164,7 +196,7 @@ cp -r /tmp/harmony-test/entry/libs /Users/jiexuanyang/stellarium-src/build/libst
 
 ### 4.2 构建 HAP
 
-只验证 ArkTS、且不执行签名打包时，先同步源码，在生成工程根目录使用 `--mode module -p product=default -p module=entry@default -p buildMode=debug default@CompileArkTS --no-daemon`。任务名必须有 `default@`；不要用裸 `CompileArkTS`，也不要把日志中的前导冒号复制成 `:entry:default@CompileArkTS`。当前 Hvigor 惰性任务可能不出现在 `tasks` 列表中，不要因此修改签名配置或重建工程。完整安全命令、实测与适用边界见 [CompileArkTS 独立构建诊断](culture-review-batches/BUILD-CHECK.md)。
+只验证 ArkTS、且不执行签名打包时，先同步源码，在生成工程根目录使用 `--mode module -p product=default -p module=entry@default -p buildMode=debug default@CompileArkTS --no-daemon`。任务名必须有 `default@`；不要用裸 `CompileArkTS`，也不要把日志中的前导冒号复制成 `:entry:default@CompileArkTS`。当前 Hvigor 惰性任务可能不出现在 `tasks` 列表中，不要因此修改签名配置或重建工程。完整安全命令、实测与适用边界见 [CompileArkTS 独立构建诊断](release/BUILD-CHECK.md)。
 
 ```bash
 cd /Users/jiexuanyang/stellarium-src/build/libstellarium-harmonyos
@@ -489,7 +521,7 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 
 ## 7. 注意事项
 
-1. **不要修改 build 目录下的文件后忘记同步到 `docs/harmonyos/harmonyos-project/`**
+1. **ArkTS/资源只改 `harmonyos/ets-source/` 等镜像目录**，再用 `scripts/sync-ohos-build-sources.sh` 同步到生成工程 `build/libstellarium-harmonyos/`；不要只在生成工程里改（生成目录不入库，会被下次同步覆盖）
 2. **HAP 文件不要上传到 git（太大），只上传签名证书和配置**
 3. **不要推送到上游 `Stellarium/stellarium`**，推送到你自己的 fork
 4. **`entry/libs/` 目录不要删除！** 其中 .so 文件不在 git 中，丢失后只能通过 `harmonydeployqt` 重新生成
@@ -497,3 +529,4 @@ $HDC -t 127.0.0.1:5555 shell uitest dumpLayout
 6. **ArkTS 限制：** `@Builder` 内不能有 `const/let` 赋值；属性链式调用必须在容器组件 `}` 之后；`Blank()` 只能放在 `Column/Row/Flex` 中
 7. **坐标单位：** `onAreaChange` 返回 vp；`TouchObject.windowX/Y` 是 vp；C++ 侧 `selectAt` 需要 vp
 8. **action ID 必须与 C++ 源码一致**，不能凭记忆编造。修改前必须 grep C++ 源码验证
+9. **仅改 ArkTS 界面布局/文案的调试装机**：hvigor 构建成功 + hdc 安装启动成功即算验证通过，无需再拉星图渲染链日志（StelRootItem paint / frame bridge / sky-revealed）或截图确认；涉及 C++/引擎、桥接协议、渲染管线、权限、资源的改动仍需完整启动链验证

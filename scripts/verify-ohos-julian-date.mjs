@@ -24,11 +24,18 @@ assert.throws(() => toJulianDay('mjd', Number.POSITIVE_INFINITY));
 const core = readFileSync(new URL('../src/StelMainView.cpp', import.meta.url), 'utf8');
 const catalog = readFileSync(new URL('../src/StelOhosCommandCatalog.hpp', import.meta.url), 'utf8');
 const ui = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
+// D16：syncJulianDateFields / applyJulianDateInput / adjustJulianDate 已并入 state/JulianDateStore.ets。
+const julianStoreUi = readFileSync(new URL('../harmonyos/ets-source/state/JulianDateStore.ets', import.meta.url), 'utf8');
+const timePanelUi = readFileSync(new URL('../harmonyos/ets-source/panels/panels/TimePanel.ets', import.meta.url), 'utf8');
 assert.match(core, /commandName == "setJulianDate"/);
 assert.match(core, /result\["mjd"\] = jd - 2400000\.5/);
 assert.match(core, /jd < 2299161\.0 \? "julian" : "gregorian"/);
 assert.match(catalog, /setJulianDate/);
-assert.match(ui, /this\.julianDateControls\(\)/);
-assert.match(ui, /setJulianDate', scale \+ '\|' \+ value\.toString\(\)/);
+// 儒略日控件已从参数化 @Builder julianDateControls 改为 JulianDateControls 组件；
+// Phase 4c 起该组件的调用点随 `time` 分支下沉到 panels/panels/TimePanel.ets。
+assert.match(timePanelUi, /JulianDateControls\(\{/);
+assert.match(julianStoreUi, /setJulianDate', scale \+ '\|' \+ value\.toString\(\)/);
+// 宿主经 store 方法调用（不再持有儒略日行为）。
+assert.match(ui, /this\.julianStore\.applyJulianDateInput/);
 
 console.log('Julian Day checks passed: JD/MJD conversion, calendar boundary, command, catalog, and UI wiring.');

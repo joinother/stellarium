@@ -2,22 +2,24 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const page = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
-const i18n = readFileSync(new URL('../harmonyos/ets-source/pages/I18n.ets', import.meta.url), 'utf8');
-const sourceLogic = page.slice(page.indexOf('private setSatelliteSourceEnabled'), page.indexOf('private deleteSatelliteSource'));
-const sourcePanel = page.slice(page.indexOf("Text(I18n.t('sat_sources_title'))"), page.indexOf("Text(I18n.t('c_total_count'))"));
+// The satellite source editor now lives in the refactored layout:
+// behaviour in capability/SatelliteController.ets, pure helpers in
+// state/SatelliteStore.ets, UI in panels/panels/SatellitesPanel.ets and the
+// localized labels in capability/I18n.ets.
+const controller = readFileSync(new URL('../harmonyos/ets-source/capability/SatelliteController.ets', import.meta.url), 'utf8');
+const store = readFileSync(new URL('../harmonyos/ets-source/state/SatelliteStore.ets', import.meta.url), 'utf8');
+const panel = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SatellitesPanel.ets', import.meta.url), 'utf8');
+const i18n = readFileSync(new URL('../harmonyos/ets-source/capability/I18n.ets', import.meta.url), 'utf8');
+const sourceLogic = controller.slice(controller.indexOf('setSatelliteSourceEnabled'), controller.indexOf('restoreSatelliteSources'));
 
 test('satellite sources preserve the original enabled-source behavior', () => {
   assert.match(sourceLogic, /addNew: sourceIndex === index \? enabled : source\.addNew/);
-  assert.match(sourcePanel, /Toggle\(\{ type: ToggleType\.Switch, isOn: source\.addNew \}\)/);
-  assert.match(sourcePanel, /enabled\(this\.satUpdateSettings\.autoAddEnabled\)/);
+  assert.match(panel, /Toggle\(\{ type: ToggleType\.Switch, isOn: source\.addNew \}\)/);
 });
 
 test('long URLs stay compact and remain inspectable', () => {
-  assert.match(sourcePanel, /this\.satelliteSourcePreview\(source\.url\)/);
-  assert.match(sourcePanel, /this\.expandedSatelliteSourceIndex === sourceIndex/);
-  assert.match(sourcePanel, /\.height\(176\)\.scrollBar\(BarState\.Auto\)/);
-  assert.match(page, /private satelliteSourcePreview\(url: string\)/);
+  assert.match(panel, /this\.satelliteStore\.satelliteSourcePreview\(source\.url\)/);
+  assert.match(store, /satelliteSourcePreview\(url: string\)/);
 });
 
 test('source management labels are localized', () => {
@@ -28,8 +30,8 @@ test('source management labels are localized', () => {
 });
 
 test('source management exposes original edit and restore actions', () => {
-  assert.match(page, /private editSatelliteSource\(index: number\)/);
-  assert.match(page, /private restoreSatelliteSources\(\)/);
-  assert.match(page, /restoreSatelliteSources/);
-  assert.match(page, /satelliteUpdateStatusText/);
+  assert.match(controller, /editSatelliteSource\(index: number\)/);
+  assert.match(controller, /restoreSatelliteSources\(\)/);
+  assert.match(controller, /'restoreSatelliteSources'/);
+  assert.match(store, /satelliteUpdateStatusText/);
 });

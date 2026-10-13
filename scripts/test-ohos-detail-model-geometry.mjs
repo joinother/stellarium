@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync(new URL('../harmonyos/ets-source/pages/DetailModelGeometry.ets', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../harmonyos/ets-source/common/derive/DetailModelGeometry.ets', import.meta.url), 'utf8');
 const geometry = await import('data:text/javascript,' + encodeURIComponent(source.replace(/: number\[\]|: number/g, '')));
 const { modelIdentity, modelMultiply, modelVector, modelDrag } = geometry;
 const transpose = matrix => [matrix[0], matrix[3], matrix[6], matrix[1], matrix[4], matrix[7], matrix[2], matrix[5], matrix[8]];
@@ -59,15 +59,16 @@ test('rings stay in body equatorial plane under the same view matrix', () => {
 });
 
 test('render integration uses physical vectors, original resolution and a throttled refresh', () => {
-  const ui = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
-  const rasterizer = readFileSync(new URL('../harmonyos/ets-source/pages/DetailModelRasterizer.ets', import.meta.url), 'utf8');
+  // M2-A：渲染/光照/触摸整合整体下沉 capability/ObjectModelRenderer.ets，断言改读控制器文件。
+  const controller = readFileSync(new URL('../harmonyos/ets-source/capability/ObjectModelRenderer.ets', import.meta.url), 'utf8');
+  const rasterizer = readFileSync(new URL('../harmonyos/ets-source/capability/DetailModelRasterizer.ets', import.meta.url), 'utf8');
   assert.match(rasterizer, /objectX \* lightX \+ objectY \* lightY \+ objectZ \* lightZ/);
-  assert.doesNotMatch(ui, /objectInspectorModelIllumination|ModelPitch - deltaY/);
-  assert.match(ui, /highQuality \? \(immersive \? 640 : 320\) : 224/);
-  assert.match(ui, /const immersive = this\.objectInspectorModelImmersive/);
-  assert.match(ui, /immersive: immersive/);
-  assert.match(ui, /LastRenderTime >= 250/);
-  assert.match(ui, /this\.objectInspectorModelTouchCount !== points.length/);
+  assert.doesNotMatch(controller, /objectInspectorModelIllumination|ModelPitch - deltaY/);
+  assert.match(controller, /highQuality \? \(immersive \? 640 : 320\) : 224/);
+  assert.match(controller, /const immersive = this\.mediaStore\.objectInspectorModelImmersive/);
+  assert.match(controller, /immersive: immersive/);
+  assert.match(controller, /LastRenderTime >= 250/);
+  assert.match(controller, /this\.objectInspectorModelTouchCount !== points.length/);
   const native = readFileSync(new URL('../src/StelMainView.cpp', import.meta.url), 'utf8');
   assert.match(native, /getObserverHeliocentricEclipticPos\(\) - center/);
   assert.match(native, /getRotEquatorialToVsop87\(\)/);

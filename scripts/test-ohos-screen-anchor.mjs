@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
-const root = new URL('../', import.meta.url).pathname;
+const root = new URL('../', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const source = readFileSync(join(root, 'src/StelMainView.cpp'), 'utf8');
 const section = (begin, end) => source.slice(source.indexOf(begin), source.indexOf(end, source.indexOf(begin)));
 

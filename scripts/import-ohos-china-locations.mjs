@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// Merge the mainland-China location set into the offline location tables.
+//
+// Why: hierarchy.ts keeps only the ~40 largest places per IANA timezone bucket,
+// which left China with 80 entries (40 in Asia/Shanghai out of 1942 upstream).
+// Prefecture-level cities such as Zhanjiang were cut off. The data file next to
+// this script carries every official county-level-or-above division that has an
+// upstream coordinate, named from the Ministry of Civil Affairs national toponym
+// database, so the picker reaches city/county level without dropping the cap for
+// the rest of the world.
+//
+// Run: node scripts/import-ohos-china-locations.mjs
+
+import { readFile, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const hierarchyPath = path.join(root, 'harmonyos/ets-source/common/location/hierarchy.ts')
+const namesPath = path.join(root, 'harmonyos/ets-source/common/location/names_zh.ts')
+const dataPath = path.join(root, 'scripts/data/ohos-china-locations.json')
+
+const CONTINENT = '亚洲'
+const BUCKET_OF_TIMEZONE = {
+  'Asia/Shanghai': 'Shanghai',
+  'Asia/Urumqi': 'Urumqi',
+}
+// 北京市 -> 北京, 湛江市 -> 湛江; 东城区 / 延边朝鲜族自治州 keep their suffix.
+const displayName = (official) => official.replace(/市$/u, '')
+
+const toCrlf = (text) => text.replace(/\r?\n/gu, '\n').replace(/\n/gu, '\r\n')
+
+function loadLiteral(source, marker) {
+  const index = source.indexOf(marker)
+  if (index < 0) throw new Error(`literal was not found: ${marker}`)
+  return Function(`"use strict"; return (${source.slice(index).replace(/;\s*$/, '')})`)()
+}
+
+const data = JSON.parse(await readFile(dataPath, 'utf8'))
+const hierarchySource = await readFile(hierarchyPath, 'utf8')
+const hierarchy = loadLiteral(hierarchySource.slice(hierarchySource.indexOf('=') + 1), '{')
+
+const continent = hierarchy[CONTINENT]
+if (!continent) throw new Error(`continent missing: ${CONTINENT}`)
+
+const at = (name, lat, lon) => `${name}|${lat.toFixed(2)}|${lon.toFixed(2)}`
+const present = new Set()
+const existingNames = new Set()
+for (const cities of Object.values(continent)) {
+  for (const city of cities) {
+    present.add(at(city.n, city.la, city.lo))
+    if (city.country === 'CN') existingNames.add(city.n)
+  }
+}
+
+// Same-name places are disambiguated with the upstream Stellarium suffix
+// " (Province)" so that a name maps to exactly one entry in the name table.
+const nameCount = new Map()
+for (const name of existingNames) nameCount.set(name, (nameCount.get(name) ?? 0) + 1)
+const toAdd = []
+for (const entry of data.entries) {
+  if (present.has(at(entry.n, entry.la, entry.lo))) continue
+  toAdd.push(entry)
+  nameCount.set(entry.n, (nameCount.get(entry.n) ?? 0) + 1)
+}
+
+let added = 0
+const finalNameOf = new Map()
+for (const entry of toAdd) {
+  const bucket = BUCKET_OF_TIMEZONE[entry.tz]
+  if (!bucket) throw new Error(`unexpected timezone: ${entry.tz}`)
+  if (!continent[bucket]) continent[bucket] = []
+  const finalName = (nameCount.get(entry.n) ?? 0) > 1 ? `${entry.n} (${entry.province})` : entry.n
+  if (finalNameOf.has(finalName) || existingNames.has(finalName)) {
+    throw new Error(`ambiguous location name after disambiguation: ${finalName}`)
+  }
+  continent[bucket].push({
+    n: finalName,
+    la: entry.la,
+    lo: entry.lo,
+    al: entry.al,
+    p: entry.p,
+    country: 'CN',
+    province: entry.province,
+    planet: 'Earth',
+  })
+  finalNameOf.set(at(entry.n, entry.la, entry.lo), finalName)
+  added += 1
+}
+
+// keep the biggest places first, matching how the base list was ordered
+for (const bucket of Object.values(BUCKET_OF_TIMEZONE)) {
+  continent[bucket].sort((a, b) => b.p - a.p)
+}
+
+const hierarchyLines = [
+  '// Auto-generated from Stellarium base_locations.txt (continent -> country -> region -> cities).',
+  '// The mainland-China buckets are augmented from scripts/data/ohos-china-locations.json;',
+  '// re-run scripts/import-ohos-china-locations.mjs after changing that file.',
+  'export const LOCATION_HIERARCHY: Record<string, Record<string, Array<{n:string;la:number;lo:number;al:number;p:number;country:string;province?:string;planet?:string}>>> =',
+  JSON.stringify(hierarchy, null, 1),
+  ';',
+  '',
+]
+await writeFile(hierarchyPath, toCrlf(hierarchyLines.join('\n')))
+
+// --- names_zh.ts ---
+const namesSource = await readFile(namesPath, 'utf8')
+const names = loadLiteral(namesSource.slice(namesSource.indexOf('{'), namesSource.lastIndexOf('}') + 1), '{')
+let renamed = 0
+for (const entry of data.entries) {
+  // entries that were already in the hierarchy keep their key but still take the
+  // official name, which fixes machine-translated ones such as Shenyang/沉阳
+  const key = finalNameOf.get(at(entry.n, entry.la, entry.lo)) ?? entry.n
+  const value = displayName(entry.zh)
+  if (names[key] === undefined) renamed += 1
+  names[key] = value
+}
+const nameLines = [
+  '// Generated by scripts/generate-ohos-location-zh.mjs.',
+  '// Mainland-China entries are overridden with official names by scripts/import-ohos-china-locations.mjs.',
+  '// Upstream Latin names are retained as keys for native Stellarium lookups.',
+  'export const LOCATION_ZH_NAMES: Record<string, string> = {',
+  ...Object.keys(names).sort((a, b) => a.localeCompare(b))
+    .map((key) => `  ${JSON.stringify(key)}: ${JSON.stringify(names[key])},`),
+  '}',
+  '',
+]
+await writeFile(namesPath, toCrlf(nameLines.join('\n')))
+
+process.stdout.write(`Added ${added} China locations to ${CONTINENT}; ${renamed} new Chinese names.\n`)

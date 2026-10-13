@@ -480,6 +480,9 @@ public:
 	//! @return false in case of failure.
 	bool checkAndLoadCatalog(const QVariantMap& m, bool load);
 
+	//! Set the checked flag of a catalog by id (e.g. after a successful manual import).
+	void setCheckFlag(const QString& catalogId, bool b);
+
 	//! Get the list of all Hipparcos stars.
 	const QList<StelObjectP>& getHipparcosStars() const { return hipparcosStars; }	
 	const QList<QPair<StelObjectP, float>>& getHipparcosHighPMStars() const { return hipStarsHighPM; }
@@ -514,8 +517,6 @@ signals:
 	void labelsAmountChanged(double a);
 
 private:
-	void setCheckFlag(const QString& catalogId, bool b);
-
 	void copyDefaultConfigFile();
 
 	typedef struct

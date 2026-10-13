@@ -339,6 +339,27 @@ async function refreshDetailModelTextures(
     `[startup] detail-model textures ready in ${Date.now() - startedAt} ms`);
 }
 
+// Listing a raw path succeeds only for directories and the resource manager has no
+// stat-like probe, so "is this entry a directory?" can only be answered by the
+// listing call itself. It is therefore wrapped so that a failure is reported as
+// "not a directory" instead of an exception, which previously unwound out of the
+// whole walk and left every remaining file uncopied.
+function tryListRawDir(appContext: common.ApplicationContext, rawPath: string): Array<string> | undefined {
+  try {
+    return appContext.resourceManager.getRawFileListSync(rawPath);
+  } catch (_err) {
+    return undefined;
+  }
+}
+
+async function tryListRawDirAsync(appContext: common.ApplicationContext, rawPath: string): Promise<Array<string> | undefined> {
+  try {
+    return await appContext.resourceManager.getRawFileList(rawPath);
+  } catch (_err) {
+    return undefined;
+  }
+}
+
 function extractRawTree(appContext: common.ApplicationContext, rawDir: string, outputDir: string): void {
   ensureDir(outputDir);
   let entries: Array<string>;
@@ -360,11 +381,19 @@ function extractRawTree(appContext: common.ApplicationContext, rawDir: string, o
     if (isDeferredStartupAsset(rawPath)) {
       continue;
     }
-    try {
-      appContext.resourceManager.getRawFileListSync(rawPath);
+    if (tryListRawDir(appContext, rawPath) !== undefined) {
       extractRawTree(appContext, rawPath, outputPath);
-    } catch (_err) {
+      continue;
+    }
+    try {
       writeRawFile(appContext, rawPath, outputPath);
+    } catch (err) {
+      // One unreadable or unwritable entry must not abandon the rest of the walk.
+      // Previously it did: every later file silently stayed missing while the
+      // completion guard (which samples only a handful of paths) could still pass
+      // on the next launch, so the full extraction was never re-run and assets the
+      // renderer needs - planet shaders, planet textures - were lost permanently.
+      hilog.error(LOG_DOMAIN, LOG_TAG, `[startup] skipped raw resource ${rawPath}: ${JSON.stringify(err)}`);
     }
   }
 }
@@ -388,24 +417,53 @@ async function extractRawTreeAsync(appContext: common.ApplicationContext, rawDir
     if (isDeferredStartupAsset(rawPath)) {
       continue;
     }
-    try {
-      await appContext.resourceManager.getRawFileList(rawPath);
+    const nested = await tryListRawDirAsync(appContext, rawPath);
+    if (nested !== undefined) {
       await extractRawTreeAsync(appContext, rawPath, outputPath);
-    } catch (_err) {
+      continue;
+    }
+    try {
       await writeRawFileAsync(appContext, rawPath, outputPath);
+    } catch (err) {
+      hilog.error(LOG_DOMAIN, LOG_TAG, `[startup] skipped raw resource ${rawPath}: ${JSON.stringify(err)}`);
     }
   }
 }
 
 function hasStartupResourceFiles(installRoot: string): boolean {
-  const required: Array<string> = [
-    MARKER, SKYCULTURE_ART_COMPAT_MARKER,
-    'translations/stellarium/zh_CN.qm', 'translations/stellarium-sky/zh_CN.qm',
-    'translations/stellarium-skycultures/zh_CN.qm', 'translations/stellarium-scripts/zh_CN.qm',
+  // Evidence files written by the syncer: their mere presence is the contract, and
+  // they are intentionally tiny (skyculture_art_rgba_v1.txt is 24 bytes), so they
+  // are checked for existence rather than size.
+  const requiredMarkers: Array<string> = [MARKER, SKYCULTURE_ART_COMPAT_MARKER];
+  // Assets the engine actually loads. The markers above say nothing about the
+  // renderer, so before this list covered them a first-run extraction that died
+  // partway through `data/` could leave the planet shaders - or the planet
+  // textures - uncopied while still satisfying the guard. Planet::initShader()
+  // would then fail and every planet disk would stay missing for the whole life of
+  // that sandbox, because this predicate is the only thing that decides whether the
+  // full-tree extraction ever runs again: it is re-run on the next launch when this
+  // returns false, so listing the real assets here is also what makes a partially
+  // extracted sandbox self-heal instead of staying broken until a reinstall.
+  const requiredAssets: Array<string> = [
+    'data/ssystem_major.ini', 'data/ssystem_minor.ini', 'data/default_cfg.ini',
+    'data/shaders/planet.vert', 'data/shaders/planet.frag',
+    'textures/sun.png', 'textures/moon.png', 'textures/jupiter.png',
+    'textures/saturn.png', 'textures/saturn_rings_radial.png',
     'skycultures/modern/index.json', 'skycultures/modern/illustrations/andromeda.png',
-    'scripts/constellations_tour.ssc', 'data/default_cfg.ini'
+    'scripts/constellations_tour.ssc',
+    'translations/stellarium/zh_CN.qm', 'translations/stellarium-sky/zh_CN.qm',
+    'translations/stellarium-skycultures/zh_CN.qm', 'translations/stellarium-scripts/zh_CN.qm'
   ];
-  return required.every((path: string) => exists(`${installRoot}/${path}`));
+  const missingMarkers = requiredMarkers.filter((path: string) => !exists(`${installRoot}/${path}`));
+  const missingAssets = requiredAssets.filter((path: string) => fileSize(`${installRoot}/${path}`) <= 0);
+  if (missingMarkers.length > 0 || missingAssets.length > 0) {
+    // Report what is actually absent: without this the skipped repair pass was
+    // completely silent, which is why a broken sandbox could survive unnoticed.
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `[startup] resource verification failed: markers=[${missingMarkers.join(',')}] assets=[${missingAssets.join(',')}]`);
+    return false;
+  }
+  return true;
 }
 
 export async function prepareStellariumResourcesAsync(appContext: common.ApplicationContext): Promise<void> {
@@ -923,28 +981,30 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
     `stellarium-skycultures/zh_CN.qm=${exists(keyQmSkyCultures)} ` +
     `stellarium-scripts/zh_CN.qm=${exists(keyQmScripts)}`);
 
-  const envSet = setEnv('STELLARIUM_DATA_ROOT', installRoot);
+  // setEnv comes from the native libentry.so module, whose return type is not
+  // visible to ArkTS; annotate it explicitly so the value is not inferred as any.
+  const envSet: boolean = setEnv('STELLARIUM_DATA_ROOT', installRoot);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_DATA_ROOT=${installRoot}, setEnv=${envSet}`);
   // Qt's default home directory is not a stable writable app-data location on
   // every HarmonyOS release. The star manager stores starsConfig.json there;
   // when that copy silently fails it starts with zero HIP stars and therefore
   // no constellations. Keep it in the app sandbox on every supported API.
-  const userDirSet = setEnv('STEL_USERDIR', userDir);
+  const userDirSet: boolean = setEnv('STEL_USERDIR', userDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STEL_USERDIR=${userDir}, setEnv=${userDirSet}`);
-  const frameDirSet = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
+  const frameDirSet: boolean = setEnv('STELLARIUM_OHOS_FRAME_DIR', appContext.filesDir);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_FRAME_DIR=${appContext.filesDir}, setEnv=${frameDirSet}`);
   const locale = stellariumSystemLocale();
-  const localeSet = setEnv('STELLARIUM_OHOS_LOCALE', locale);
+  const localeSet: boolean = setEnv('STELLARIUM_OHOS_LOCALE', locale);
   hilog.info(LOG_DOMAIN, LOG_TAG, `STELLARIUM_OHOS_LOCALE=${locale}, setEnv=${localeSet}`);
-  const widgetsRhiSet = setEnv('QT_WIDGETS_RHI', '0');
+  const widgetsRhiSet: boolean = setEnv('QT_WIDGETS_RHI', '0');
   hilog.info(LOG_DOMAIN, LOG_TAG, `QT_WIDGETS_RHI=0, setEnv=${widgetsRhiSet}`);
-  const childRhiSet = setEnv('QT_WIDGETS_NO_CHILD_RHI', '1');
+  const childRhiSet: boolean = setEnv('QT_WIDGETS_NO_CHILD_RHI', '1');
   hilog.info(LOG_DOMAIN, LOG_TAG, `QT_WIDGETS_NO_CHILD_RHI=1, setEnv=${childRhiSet}`);
-  const glBackingStoreSet = setEnv('io.qt.experimental.enableGlBackingStore', '1');
+  const glBackingStoreSet: boolean = setEnv('io.qt.experimental.enableGlBackingStore', '1');
   hilog.info(LOG_DOMAIN, LOG_TAG, `io.qt.experimental.enableGlBackingStore=1, setEnv=${glBackingStoreSet}`);
-  const vsyncSoftwareBackingStoreSet = setEnv('io.qt.experimental.enableVsyncOnSoftwareBackingStore', '1');
+  const vsyncSoftwareBackingStoreSet: boolean = setEnv('io.qt.experimental.enableVsyncOnSoftwareBackingStore', '1');
   hilog.info(LOG_DOMAIN, LOG_TAG, `io.qt.experimental.enableVsyncOnSoftwareBackingStore=1, setEnv=${vsyncSoftwareBackingStoreSet}`);
-  const onscreenPaintSet = setEnv('QT_ONSCREEN_PAINT', '1');
+  const onscreenPaintSet: boolean = setEnv('QT_ONSCREEN_PAINT', '1');
   hilog.info(LOG_DOMAIN, LOG_TAG, `QT_ONSCREEN_PAINT=1, setEnv=${onscreenPaintSet}`);
   return installRoot;
 }

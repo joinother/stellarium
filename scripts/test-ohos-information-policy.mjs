@@ -2,15 +2,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const source = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
-const match = source.match(/private applyCustomInformationMask\(\): void \{([\s\S]*?)\n  \}/);
+// 2026-10-05：解散 capability/SettingsController.ets 时，applyCustomInformationMask 按「字段所在处即归宿」
+// 并入 state/ObjectDetailStore.ets（30 个被清字段全在该 store）；信息模式 / 掩码判定由调用方以谓词传入。
+const source = readFileSync(new URL('../harmonyos/ets-source/state/ObjectDetailStore.ets', import.meta.url), 'utf8');
+const match = source.match(/applyCustomInformationMask\(informationMode: string, informationMaskHas: \(key: string\) => boolean\): void \{([\s\S]*?)\n  \}/);
 assert.ok(match);
-const apply = new Function(match[1].replace('new Map<string, string>', 'new Map').replace('field: ObjectDetailField', 'field'));
+const apply = new Function('informationMode', 'informationMaskHas', match[1].replace('new Map<string, string>', 'new Map').replace('field: ObjectDetailField', 'field'));
 
+// 选中天体的信息字段由 ObjectDetailStore 承载；夹具即该 store 的明细字段快照。
 function state(enabled, mode = 'custom') {
   return {
-    informationMode: mode,
-    informationMaskHas: key => enabled.includes(key),
     selectedMagnitude: '3.40', selectedDistance: '2.5 Mly', selectedConstellation: '仙女座',
     selectedCoordEq: '00h42m', selectedCoordGalactic: '121°', selectedName: '仙女座星系',
     selectedDetailFields: [
@@ -19,10 +20,11 @@ function state(enabled, mode = 'custom') {
     ]
   };
 }
+const maskHas = enabled => key => enabled.includes(key);
 
 test('custom empty mask clears information values but preserves selection identity', () => {
   const selected = state([]);
-  apply.call(selected);
+  apply.call(selected, 'custom', maskHas([]));
   assert.equal(selected.selectedMagnitude, '');
   assert.equal(selected.selectedConstellation, '');
   assert.equal(selected.selectedCoordEq, '');
@@ -32,7 +34,7 @@ test('custom empty mask clears information values but preserves selection identi
 
 test('custom groups filter both overview values and structured detail rows', () => {
   const selected = state(['magnitude', 'galactic']);
-  apply.call(selected);
+  apply.call(selected, 'custom', maskHas(['magnitude', 'galactic']));
   assert.equal(selected.selectedMagnitude, '3.40');
   assert.equal(selected.selectedCoordGalactic, '121°');
   assert.equal(selected.selectedDistance, '');
@@ -42,6 +44,6 @@ test('custom groups filter both overview values and structured detail rows', () 
 test('preset information modes are not filtered by saved custom choices', () => {
   const selected = state([], 'all');
   const original = JSON.stringify(selected);
-  apply.call(selected);
+  apply.call(selected, 'all', maskHas([]));
   assert.equal(JSON.stringify(selected), original);
 });

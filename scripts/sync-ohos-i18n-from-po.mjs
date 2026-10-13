@@ -145,8 +145,8 @@ function syncFile(file, translationCatalogs) {
 function main() {
   const translationCatalogs = loadTranslations()
   const files = [
-    path.join(root, 'harmonyos/ets-source/pages/I18n.ets'),
-    path.join(root, 'build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets'),
+    path.join(root, 'harmonyos/ets-source/capability/I18n.ets'),
+    path.join(root, 'build/libstellarium-harmonyos/entry/src/main/ets/capability/I18n.ets'),
   ]
   let updated = 0
   for (const file of files) updated += syncFile(file, translationCatalogs)

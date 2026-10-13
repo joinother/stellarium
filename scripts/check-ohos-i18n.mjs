@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const root = path.resolve(new URL('..', import.meta.url).pathname)
+const root = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))
 const languages = [
   'ar', 'bn', 'cs', 'da', 'de', 'el', 'en', 'es', 'fa', 'fi', 'fr', 'gu',
   'he', 'hi', 'hr', 'hu', 'id', 'it', 'ja', 'ko', 'ml', 'mr', 'ms', 'nb',
@@ -12,8 +12,8 @@ const languages = [
 
 const errors = []
 const strictUiCoverage = process.argv.includes('--strict-ui')
-const source = path.join(root, 'harmonyos/ets-source/pages/I18n.ets')
-const mirror = path.join(root, 'build/libstellarium-harmonyos/entry/src/main/ets/pages/I18n.ets')
+const source = path.join(root, 'harmonyos/ets-source/capability/I18n.ets')
+const mirror = path.join(root, 'build/libstellarium-harmonyos/entry/src/main/ets/capability/I18n.ets')
 const sourceText = fs.readFileSync(source, 'utf8')
 const mirrorText = fs.readFileSync(mirror, 'utf8')
 if (sourceText !== mirrorText) errors.push('I18n.ets source and build mirror differ')
@@ -63,7 +63,7 @@ for (const domain of upstreamDomains) {
   }
 }
 
-const countryNames = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/location_countries.ts'), 'utf8')
+const countryNames = fs.readFileSync(path.join(root, 'harmonyos/ets-source/common/location/countries.ts'), 'utf8').replace(/\r\n/g, '\n')
 for (const [code, name] of [['TW', '中国台湾地区'], ['HK', '中国香港特别行政区'], ['MO', '中国澳门特别行政区']]) {
   if (!countryNames.includes(`"${code}": {\n  "zh": "${name}"`)) {
     errors.push(`Chinese location catalog must name ${code} as ${name}`)

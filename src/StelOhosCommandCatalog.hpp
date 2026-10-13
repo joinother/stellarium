@@ -11,7 +11,7 @@ inline QStringList names()
 {
 	return QStringLiteral(
 		"copyTextToClipboard,getAppFilingInfo,getNotificationStatus,requestNotificationAuthorization,publishAstronomyNotification,cancelAstronomyNotification,getAstronomyReminderStatus,getAstronomyReminders,scheduleAstronomyReminder,scheduleNextSolarTermReminder,cancelAstronomyReminder,clearAstronomyReminders,getGuideState,startGuide,guideAction,beginGuidedSession,endGuidedSession,"
-		"setAstroTab,setAstroGroup,setAstroFilter,setAstroScroll,getAstroPanelState,getFormSnapshot,refreshFormSnapshot,"
+		"setAstroTab,setAstroGroup,setAstroFilter,setAstroScroll,getAstroPanelState,getUiPanelState,getFormSnapshot,refreshFormSnapshot,"
 		"addBookmark,addDay,addHour,addMinute,addMonth,addYear,advanceTime,angleMeasurePoint,applyCollaborationSession,applySessionState,"
 		"beginGyroViewTransition,beginSkyGesture,cancelGyroViewTransition,clearSelection,cycleCCD,cycleLens,cycleOcular,cycleTelescope,getViewAnchorState,setViewAnchorProbe,"
 		"deleteBookmark,deleteRecording,downloadStarCatalog,dragView,endPinch,exportConfig,getAboutInfo,"
@@ -33,9 +33,9 @@ inline QStringList names()
 		"getSelectedObjectInfo,getSelectedObjects,getSelectedType,getObjectDetailModel,getObjectDetailConnector,getCollaborationState,getSessionState,getSiderealTime,getSimulationTime,"
 		"getSkyCultureDetails,getSkyCultureInfo,getSkyCultureList,getSkyCultureMakerDraft,getSkyCultureState,getSkyCultureTerritoryGeometry,getSkyCultureVisualSettings,getLocationMapState,"
 		"getSkyCultures,getSolarElongation,getSolarSystemFlags,getStarCatalogStatus,getStarCatalogs,getStarCount,"
-        "getStarCountFull,getStarFlags,getStarScale,getState,getSurveyState,getSpectralDatasets,listSpectralDatasets,getSpectralState,getTimeFormat,getTimeInfo,getTimeNavigationTarget,getTonightEvents,"
+		"getStarCountFull,getStarFlags,getStarScale,getState,getSurveyState,getSpectralDatasets,listSpectralDatasets,getSpectralState,getTimeFormat,getTimeInfo,getTimeNavigationTarget,getTonightEvents,"
 		"getTracking,getTrailDisplaySettings,getVMagnitude,getVideoRecordingState,getViewCenterCoordinates,getViewDirection,getViewportOffset,getNavigationSettings,getKeyboardShortcuts,getInformationSettings,getTimeSettings,getEphemerisSettings,"
-		"getViewportSize,getUiLayout,getWutTargets,gotoBookmark,gotoNebulaTexture,gotoRADec,gyroDiagnostic,importCollaborationSession,importConfig,importNebulaTexture,importScript,listMatchingObjects,listNebulaTextures,listObjects,"
+		"getViewportSize,getUiLayout,getWutTargets,gotoBookmark,gotoNebulaTexture,gotoRADec,gyroDiagnostic,importCollaborationSession,importConfig,importNebulaTexture,importScript,importStarCatalog,listMatchingObjects,listNebulaTextures,listObjects,"
 		"listRecordings,loadPlugin,loadRecording,moveToAltAz,moveToSelected,moveToSelectedAt,panBy,pauseScript,playScript,"
 		"pointAtSky,pointAtSkyStop,refreshNebulaTextures,reloadSkyCulture,removeNebulaTexture,resetAngleMeasure,retryDeepSkyImages,resumeScript,saveRecording,saveScreenShot,searchObject,"
 		"selectAt,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,"
@@ -44,7 +44,7 @@ inline QStringList names()
 		"setFieldOfView,setFlagClearSky,setFlagGravityLabels,setFlatHorizon,setFovMarkerSetting,setGridFlag,setGyroView,"
 		"setJD,setLandscape,setLandscapeFadeWithZoom,setLandscapeOpacity,setLandscapeTransparency,setLandscapeUseTransparency,"
 		"setLanguage,setLightPollution,setLimitMagnitude,setLocation,setLocationByName,setLocationCoords,setMeteorShowersFlag,setPolarScopeOverlay,centerPolarScope,setScreenSafeArea,"
-		"setSatelliteSources,setSatelliteUpdateSetting,importSatelliteTle,refreshSatelliteCatalog,"
+		"setSatelliteSources,setSatelliteUpdateSetting,importSatelliteTle,refreshSatelliteCatalog,restoreSatelliteSources,"
 		"setMeteors,setMilkyWayFlag,setMilkyWayIntensity,setMountMode,setNebulaFlag,setNebulaTextureConflictAvoidance,setNebulaTexturesVisible,setNightMode,setObserverPlanet,"
 		"selectOcularInstrument,setOcularMode,setOcularSetting,rotateOcularReticle,resetOcularInstrument,setMosaicCamera,setEquationOfTime,setArchaeoLineSetting,setNavStarsSetting,setOrbitDisplaySetting,setPluginLoadAtStartup,setPointerCoordinates,setProjectionType,setSatellitesFlag,setScenery3dEnabled,setScenery3dScene,setScriptRate,setSkyCulture,"
 		"setSkyCultureCommonNames,setSkyCultureDefault,setSkyCultureLabelStyle,setSkyCultureScreenLabelStyle,"
@@ -71,7 +71,7 @@ inline QString categoryFor(const QString& name)
 
 inline bool isRestricted(const QString& name)
 {
-	return name == "setConfigString" || name == "importConfig" || name == "importScript" || name == "exportConfig" || name == "applyCollaborationSession" || name == "importCollaborationSession" ||
+	return name == "setConfigString" || name == "importConfig" || name == "importScript" || name == "importStarCatalog" || name == "exportConfig" || name == "applyCollaborationSession" || name == "importCollaborationSession" ||
 		name == "downloadStarCatalog" || name == "loadPlugin" || name == "unloadPlugin" || name == "setPluginLoadAtStartup" ||
 		name.startsWith("telescope") || name == "setTelescopeLivePosition" || name == "startVideoRecording" || name == "stopVideoRecording" ||
 		name == "requestNotificationAuthorization" || name == "publishAstronomyNotification" || name == "cancelAstronomyNotification" ||
@@ -124,6 +124,12 @@ inline QJsonObject item(const QString& name)
 		else if (name == "setAstroGroup") value["examplePayload"] = "0";
 		else if (name == "setAstroFilter") value["examplePayload"] = "period|morning";
 		else if (name == "setAstroScroll") value["examplePayload"] = "380";
+	}
+	if (name == "getUiPanelState")
+	{
+		value["category"] = QStringLiteral("ArkUI 面板");
+		value["executionLayer"] = QStringLiteral("ArkUI");
+		value["description"] = QStringLiteral("鸿蒙 UI 命令：回读主窗口当前面板状态（panel/visible/expanded/navigationDepth/editable）。openUiPanel 与 closeUiPanel 只返回 accepted，断言面板是否真的打开/关闭需要读这一条。");
 	}
 	else if (name == "searchObject") value["examplePayload"] = "M31";
 	else if (name == "setFOV" || name == "setFieldOfView") value["examplePayload"] = "45";
@@ -248,6 +254,11 @@ inline QJsonObject item(const QString& name)
 	{
 		value["description"] = QStringLiteral("从设备可读路径导入离线 .ssc 脚本到用户脚本目录；不执行脚本内容");
 		value["examplePayload"] = "/data/local/tmp/example.ssc";
+	}
+	else if (name == "importStarCatalog")
+	{
+		value["description"] = QStringLiteral("手动导入本地星表 .cat 并热加载；按 MD5 识别目标级（不看文件名），并校验前置级，识别或加载失败即拒绝（payload 为沙箱内源文件路径）");
+		value["examplePayload"] = "/data/storage/el2/base/files/imports/stars_6_1v0_4.cat";
 	}
 	else if (name == "getSkyCultureMakerDraft")
 		value["description"] = QStringLiteral("读取离线星空文化制作器草稿、撤销状态和草稿路径");

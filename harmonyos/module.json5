@@ -74,6 +74,19 @@
                 "maxFileSupported": 10
               }
             ]
+          },
+          {
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "file",
+                "utd": "com.joinother.skyinstrument.stellarium-cat",
+                "linkFeature": "FileOpen",
+                "maxFileSupported": 10
+              }
+            ]
           }
         ],
         "metadata": [
@@ -101,9 +114,6 @@
       }
     ],
     "requestPermissions": [
-      {
-        "name": "ohos.permission.INTERNET"
-      },
       {
         "name": "ohos.permission.APPROXIMATELY_LOCATION",
         "reason": "$string:stellarium_permission_reason_location",

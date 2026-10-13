@@ -2,6 +2,11 @@ __
 builds
 build
 installers
+# Local agent/tooling scratch directories (never upstream)
+.deveco/
+.iis/
+__pycache__/
+*.pyc
 .DS_Store
 CMakeLists.txt.user*
 CMakeFiles
@@ -89,7 +94,14 @@ docs/harmonyos/signing/
 .release-signing/
 *.p12
 *.p7b
+*.csr
+**/local.properties
 
 # === HarmonyOS 移植：hvigor 本地产物目录 ===
 .hvigor/
 tmp/location-zh-cache.json
+harmonyos/.appanalyzer
+harmonyos/.codegenie/
+# DevEco Studio 打开 harmonyos/ 镜像时自动生成，内容与工程无关
+harmonyos/.gitignore
+.cache/

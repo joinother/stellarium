@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const source = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../harmonyos/ets-source/common/derive/skycult.ets', import.meta.url), 'utf8');
 
 for (const method of ['cleanSkyCultureNarration', 'cleanSkyCultureDescription']) {
-  const match = source.match(new RegExp(`private ${method}\\(text: string\\): string \\{([\\s\\S]*?)\\n  \\}`));
+  const match = source.match(new RegExp(`export function ${method}\\(text: string\\): string \\{([\\s\\S]*?)\\n\\}`));
   assert.ok(match, `Missing ${method}`);
   const clean = new Function('text', match[1]);
   test(`${method} preserves word boundaries and shaping controls`, () => {

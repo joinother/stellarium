@@ -9,7 +9,7 @@ const qAbilitySource = readFileSync(new URL('../harmonyos/ets-source/qability/QA
 const sourceCommands = new Set([...source.matchAll(/commandName\s*==\s*"([A-Za-z][A-Za-z0-9_]*)"/g)].map((match) => match[1]));
 const uiCommands = new Set(['backUiPanel', 'closeUiPanel', 'openPluginFeature', 'openUiPanel', 'setLayerTab', 'setSkyCultureMakerTab',
   'copyTextToClipboard', 'startGuide', 'guideAction', 'getGuideState',
-  'setAstroTab', 'setAstroGroup', 'setAstroFilter', 'setAstroScroll', 'getAstroPanelState', 'setTelescopeLivePosition']);
+  'setAstroTab', 'setAstroGroup', 'setAstroFilter', 'setAstroScroll', 'getAstroPanelState', 'getUiPanelState', 'setTelescopeLivePosition']);
 const bridgeCommands = new Set([
   ...qAbilitySource.matchAll(/(?:request\.commandName|commandName)\s*===\s*'([A-Za-z][A-Za-z0-9_]*)'/g)
 ].map((match) => match[1]));

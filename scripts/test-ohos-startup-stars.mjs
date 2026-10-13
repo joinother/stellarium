@@ -48,7 +48,13 @@ test('slow loading keeps the swarm moving until native readiness, then settles e
   assert.notDeepEqual(earlier, later);
   assert.notDeepEqual(later, target);
   assert.deepEqual(geometry.startupParticle(50, target, 1000, 600, 15000, 1500), target);
-  assert.match(read('pages/StartupSky.ets'), /this.skyPrepared && this.assemblyElapsed >= STARTUP_REVEAL_AT_MS/);
+  // The wordmark assembles from the first frame (during resource loading); only
+  // the scatter/reveal waits for the sky gate AND a finished gather.
+  const sky = read('pages/StartupSky.ets');
+  assert.match(sky, /this\.assemblyElapsed \+= step/);
+  assert.match(sky, /this\.skyPrepared && !this\.releaseStarted && this\.assemblyElapsed >= STARTUP_GATHER_MS/);
+  assert.match(sky, /startupEase\(this\.releaseElapsed \/ STARTUP_REVEAL_MS\)/);
+  assert.doesNotMatch(sky, /this\.skyPrepared \? this\.assemblyElapsed : -1/);
 });
 
 test('title formation overlaps consented core loading without revealing an unready sky', () => {
@@ -57,28 +63,30 @@ test('title formation overlaps consented core loading without revealing an unrea
   let tick;
   let now = 0;
   const published = [];
-  const Motion = new Function('setInterval', 'Date', 'STARTUP_REVEAL_AT_MS', 'AppStorage', 'hilog',
+  const Motion = new Function('setInterval', 'Date', 'STARTUP_GATHER_MS', 'STARTUP_REVEAL_MS', 'AppStorage', 'hilog',
     stripTypeScriptTypes(`class Motion { ${method} };`) + 'return Motion;')(
-    callback => { tick = callback; return 1; }, { now: () => now }, geometry.STARTUP_REVEAL_AT_MS,
+    callback => { tick = callback; return 1; }, { now: () => now }, geometry.STARTUP_GATHER_MS, geometry.STARTUP_REVEAL_MS,
     { setOrCreate: (key, value) => published.push([key, value]) }, { info() {} });
   const motion = Object.assign(new Motion(), { ready: true, foreground: true, nativeStartupAllowed: false,
-    skyPrepared: false, assemblyElapsed: 0, elapsed: 0, artComplete: false, stopMotion() {}, draw() {} });
+    skyPrepared: false, assemblyElapsed: 0, elapsed: 0, releaseElapsed: 0, releaseStarted: false, artComplete: false, stopMotion() {}, draw() {} });
   motion.updateMotion();
   const advance = () => { now += 100; tick(); };
   advance();
+  // Consent gate: nothing assembles until the native startup is allowed.
   assert.equal(motion.assemblyElapsed, 0);
   motion.nativeStartupAllowed = true;
   for (let frame = 0; frame < 100; frame++) advance();
-  assert.equal(motion.assemblyElapsed, geometry.STARTUP_REVEAL_AT_MS);
+  assert.ok(motion.assemblyElapsed > 0);
+  // The scatter/reveal must wait for the sky gate even once the title is formed.
   assert.equal(motion.artComplete, false);
   assert.deepEqual(published, []);
   motion.skyPrepared = true;
-  advance();
+  for (let frame = 0; frame < 200; frame++) advance();
   assert.equal(motion.artComplete, true);
   assert.deepEqual(published, [['stellariumStartupArtComplete', true]]);
   advance();
   assert.equal(published.length, 1);
-  assert.match(source, /const reveal = this.skyPrepared \? startupReveal\(this.assemblyElapsed\) : 0/);
+  assert.match(source, /const reveal = this\.skyPrepared \? startupEase\(this\.releaseElapsed \/ STARTUP_REVEAL_MS\) : 0/);
 });
 
 test('independent drift fills the centre, varies direction and never jumps between frames', () => {
@@ -202,7 +210,8 @@ test('only a ready actually presented frame with matching aspect reveals the cha
     { setOrCreate: (key, value) => published.set(key, value) }, { info() {} });
   const fixture = new Fixture();
   Object.assign(fixture, { skyWidth: 1078, skyHeight: 674, splashGone: false,
-    startupViewportCheckedAt: 0, stopTwinkle() {} });
+    startupViewportCheckedAt: 0, stopTwinkle() {},
+    objectInspectorMediaCtl: () => ({ startBodyDetailWarmup() {} }) });
   for (const response of [{ pending: true }, { ok: true, ready: true, width: 1023, height: 767 },
     { ok: true, ready: false, width: 2560, height: 1600 }, { pending: true }]) {
     fixture.startupViewportCheckedAt = 0;
@@ -215,6 +224,72 @@ test('only a ready actually presented frame with matching aspect reveals the cha
   fixture.dismissSplash();
   assert.equal(fixture.splashGone, true);
   assert.equal(published.get('stellariumStartupSkyReady'), true);
+});
+
+test('sky-texture loading banner is driven by live status instead of a timer', () => {
+
+  // D11：状态机（常量 / 三态文案 / updateSkyTextureStatus / pollSkyTextureStatus）已下沉
+  // capability/SkyTextureStatusController.ets，故断言改读控制器文件。
+  const page = read('capability/SkyTextureStatusController.ets');
+
+  // 常量：快轮询 24 次后转慢轮询，90 次仍未就绪则升级为可操作的错误态
+
+  assert.match(page, /const SKY_TEXTURE_STATUS_FAST_POLLS: number = 24/);
+
+  assert.match(page, /const SKY_TEXTURE_STATUS_SLOW_INTERVAL_MS: number = \d+/);
+
+  assert.match(page, /const SKY_TEXTURE_STATUS_STALL_POLLS: number = \d+/);
+
+  // 不再有"按时间收起"的老常量
+
+  assert.doesNotMatch(page, /SKY_TEXTURE_STATUS_FINAL_HIDE_MS|SKY_TEXTURE_STATUS_SETTLE_POLLS/);
+
+  // 三条状态文案：加载中 / 真失败 / 停滞升级
+
+  assert.match(page, /正在载入当前视野资料图 · '/);
+
+  assert.match(page, /项待完成/);
+
+  assert.match(page, /项资料图加载失败/);
+
+  assert.match(page, /当前视野资料图仍在准备，可稍后重试/);
+
+
+
+  const update = page.match(/  private updateSkyTextureStatus\(result: StellariumBridgeResponse\): void \{[\s\S]*?\n  \}/)[0];
+
+  // 有 pending / loading → 显示并报出待完成项数
+
+  assert.match(update, /if \(pending > 0 \|\| status === 'loading'\)/);
+
+  assert.match(update, /this\.tools\.skyTextureStatusVisible = true/);
+
+  assert.match(update, /this\.tools\.skyTextureStatusError = false/);
+
+  // 真失败 → 错误态（保留重试入口由视图提供）
+
+  assert.match(update, /if \(errors > 0 \|\| status === 'error' \|\| status === 'partial-error'\)/);
+
+  assert.match(update, /this\.tools\.skyTextureStatusError = true/);
+
+  // 就绪 → 立即收起（不是按时间）
+
+  assert.match(update, /this\.hideSkyTextureStatus\(\)/);
+
+
+
+  const poll = page.match(/  private pollSkyTextureStatus\(\): void \{[\s\S]*?\n  \}/)[0];
+
+  // 超时升级为错误态并停止轮询，且带重试入口语义
+
+  assert.match(poll, /this\.skyTextureStatusSlow && this\.skyTextureStatusPolls >= SKY_TEXTURE_STATUS_STALL_POLLS/);
+
+  assert.match(poll, /this\.stopSkyTextureStatusObserver\(\)/);
+
+  // 关键回归守卫：不得出现"仍在加载却按时间收起"的分支
+
+  assert.doesNotMatch(poll, /skyTextureStatusPolls < 24\)/);
+
 });
 
 test('withdrawing privacy stops the host before removing native content', () => {

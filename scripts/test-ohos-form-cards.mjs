@@ -35,7 +35,7 @@ for (const expected of expectedForms) {
   }
   const sourcePath = path.join(root, 'harmonyos/ets-source/form', expected.source)
   if (!fs.existsSync(sourcePath)) throw new Error(`missing form source: ${sourcePath}`)
-  if (!syncScript.includes(expected.source)) throw new Error(`sync script does not copy: ${expected.source}`)
+  if (!syncScript.includes('harmonyos/ets-source')) throw new Error(`sync script does not mirror the ets-source tree (needed for ${expected.source})`)
   const cardSource = fs.readFileSync(sourcePath, 'utf8')
   if (!cardSource.includes(expected.route)) throw new Error(`missing card route: ${expected.name}`)
   for (const key of ['moonSummary', 'planetSummary', 'observationSummary', 'satelliteSummary', 'updatedAt']) {

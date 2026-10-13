@@ -434,6 +434,11 @@ hdc -t 7LZBB26323200303 shell uitest uiInput keyEvent 2050
 
 上述 `uitest` 命令属于设备端调试工具，不是应用运行时能力；正式包不会因此增加端口或网络权限。官方文档：[`aa工具`](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/aa-tool)、[`SDK命令行工具简介`](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/command-line-tools-overview)、[`UI测试`](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/uitest-guidelines)。
 
+> 包名解析：`stellarium-cli.mjs` 的默认包名取跟踪真源 `harmonyos/AppScope/app.json5` 的发布身份
+> （`com.joinother.skyinstrument`）。本机调试签名若用其它包名，请显式 `--bundle <包名>` 或设环境变量
+> `STELLARIUM_BUNDLE`；`scripts/build-ohos-hap-windows.ps1 -Install` 会打印并从 `pack.info` 读取它实际安装的
+> 包名，不写死任何签名身份。
+
 ## 限制
 
 - CLI 需要已连接、已授权的 `hdc` 设备和可调试安装包。
@@ -504,7 +509,7 @@ node scripts/stellarium-cli.mjs --command applyCollaborationSession --payload '<
 - ArkUI“分享接续包”会生成临时本地 JSON 后调用系统分享面板；分享内容先脱敏，临时文件只用于分享，不作为完整配置备份。
 - ArkUI“分享备份”只在用户主动点击时调用系统分享面板；完整配置可能包含位置和插件设置，因此不与“接续包”混用，也不后台发送。
 
-完整设计、配对、局域网和未来云端边界见 `COLLABORATION-AND-CONTINUATION-ROADMAP.md`。
+完整设计、配对、局域网和未来云端边界见 `research/COLLABORATION-AND-CONTINUATION-ROADMAP.md`。
 
 ## PC 响应式布局与触控诊断
 

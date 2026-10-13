@@ -4,7 +4,7 @@ import { stripTypeScriptTypes } from 'node:module';
 import { test } from 'node:test';
 
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
-const source = read('harmonyos/ets-source/pages/I18n.ets');
+const source = read('harmonyos/ets-source/capability/I18n.ets');
 const tables = ['OBJECT_TYPES', 'RICH_PHRASES'].map(name => {
   const begin = source.indexOf('const ' + name + ':');
   return source.slice(begin, source.indexOf('\n}', begin) + 2);

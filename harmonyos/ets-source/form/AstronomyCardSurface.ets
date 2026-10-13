@@ -188,6 +188,8 @@ export struct AstronomyCardSurface {
         }
         .width(this.visualSize() * 0.80)
         .height(this.visualSize() * 0.80)
+        .borderRadius(this.visualSize() * 0.40)
+        .clip(true)
         .border({ width: 1, color: 'rgba(245,229,202,0.40)' })
       } else {
         Circle()

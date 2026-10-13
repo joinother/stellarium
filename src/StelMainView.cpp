@@ -117,6 +117,7 @@
 #include <QGraphicsWidget>
 #include <QGraphicsEffect>
 #include <QFileInfo>
+#include <QCryptographicHash>
 #include <QIcon>
 #include <QImageWriter>
 #include <QImageReader>
@@ -1833,6 +1834,13 @@ struct OhosWutJob
 
 static OhosWutJob* s_ohosWutJob = nullptr;
 static constexpr qint64 OHOS_WUT_SLICE_MS = 18;
+// "Stars" is the only uncurated star category a what's-up-tonight pass is asked
+// for, and the full Hipparcos set is ~118k objects: every one of them costs a
+// visibility evaluation inside the 18 ms/frame job, so the category ran for
+// seconds - far longer than the ArkTS 100 ms poll window, which is what let a
+// stale poll loop outlive it. Cap the candidate list by magnitude while it is
+// built instead of filtering every star afterwards.
+static constexpr double OHOS_WUT_STAR_MAGNITUDE_CUTOFF = 3.0;
 
 // Cross-thread command queue drained by the OHOS render pump
 // (renderOhosFrameNow) on the Qt main thread every frame. OHOS Qt may
@@ -1901,6 +1909,16 @@ static bool s_ohosPanInertiaActive = false;
 static bool s_ohosPinchActive = false;
 static bool s_ohosPinchEndPending = false;
 static double s_ohosPinchStartFov = 60.0;
+// A discrete zoom step (the ArkUI +/- buttons, the keyboard +/- shortcuts) must
+// pivot about the SELECTED BODY, not about the optical centre of the viewport.
+// The app deliberately parks a selected object at a "safe target" that clears
+// the detail card and the dock (see moveToSelectedAt), so the body normally sits
+// off the reticle; zooming about the reticle then magnifies that offset and
+// flings the body out of frame (measured: Venus 0.0139 deg below the view
+// centre at FOV 0.05 deg, i.e. ~780 px). While this hold is armed the render
+// loop keeps re-pinning the body to its captured screen position, so a zoom
+// step changes only the FOV. Armed by the zoomStep handler.
+static double s_ohosStepAnchorHoldUntilSec = 0.0;
 static bool s_ohosAnchorProbeEnabled = false;
 static int s_ohosAnchorProbeSamples = 0;
 static double s_ohosAnchorProbeMaxErrorPixels = 0.0;
@@ -2525,19 +2543,20 @@ static void ohosMaintainSelectedZoomAnchor()
 	// anchoring keeps the user's released screen position. Never let the
 	// anchoring pass overwrite an active tracking move.
 	if (!s_viewLock && !((s_ohosPinchActive || s_ohosPinchSettleActive) &&
-		s_ohosPinchAnchorMode == OhosPinchAnchorMode::SelectedObject))
+		s_ohosPinchAnchorMode == OhosPinchAnchorMode::SelectedObject) &&
+		s_ohosStepAnchorHoldUntilSec <= 0.0)
 		return;
 	if (s_gyroViewActive)
 		return;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
 		return;
-	// Script tours own selection, zoom and camera movement. Applying the
-	// user's manual selection anchor here would fight autoZoomIn/zoomTo and
-	// leave each scripted target off-center.
 	if (app->getScriptMgr().scriptIsRunning())
 		return;
-	if (StelApp::getTotalRunTime() < s_ohosSelectedAnchorHoldUntilSec)
+	const double nowSec = StelApp::getTotalRunTime();
+	if (!s_viewLock && nowSec >= s_ohosStepAnchorHoldUntilSec)
+		return;
+	if (nowSec < s_ohosSelectedAnchorHoldUntilSec)
 		return;
 	StelCore* core = app->getCore();
 	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
@@ -5029,6 +5048,131 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		return result;
 	}
 
+	if (commandName == "importStarCatalog")
+	{
+		// 本地手动导入（纯本地操作，不受 STELLARIUM_OHOS_OFFLINE 守卫限制）：
+		// payload 为已落到沙箱的源文件绝对路径；按 **MD5** 识别目标星表（不看文件名），
+		// 再按上游做法校验前置级并热加载。识别/校验/格式失败即拒绝。
+		StarMgr* sm = GETSTELMODULE(StarMgr);
+		if (!sm)
+		{
+			result["ok"] = false;
+			result["error"] = "no StarMgr";
+			result["reason"] = "io";
+			return result;
+		}
+		const QString sourcePath = arg.trimmed();
+		const QFileInfo sourceInfo(sourcePath);
+		if (!sourceInfo.isFile() || sourceInfo.size() == 0)
+		{
+			result["ok"] = false;
+			result["error"] = "source file not found or empty";
+			result["reason"] = "io";
+			return result;
+		}
+		// 轮询重发会让本命令被重复入队；同一文件（路径+大小+修改时间未变）已成功导入过则
+		// 直接返回，避免重复计算 MD5 与重复加载。
+		static QString s_lastCatalogImportPath;
+		static qint64 s_lastCatalogImportSize = -1;
+		static qint64 s_lastCatalogImportMtime = -1;
+		static QString s_lastCatalogImportId;
+		static bool s_lastCatalogImportLoaded = false;
+		const qint64 sourceMtime = sourceInfo.lastModified().toMSecsSinceEpoch();
+		if (s_lastCatalogImportLoaded && sourcePath == s_lastCatalogImportPath
+		    && sourceInfo.size() == s_lastCatalogImportSize && sourceMtime == s_lastCatalogImportMtime)
+		{
+			result["ok"] = true;
+			result["loaded"] = true;
+			result["id"] = s_lastCatalogImportId;
+			return result;
+		}
+		// 1) 计算源文件 MD5
+		QFile sourceFile(sourcePath);
+		if (!sourceFile.open(QIODevice::ReadOnly))
+		{
+			result["ok"] = false;
+			result["error"] = "cannot open source file";
+			result["reason"] = "io";
+			return result;
+		}
+		QCryptographicHash md5Hash(QCryptographicHash::Md5);
+		const bool hashed = md5Hash.addData(&sourceFile);
+		sourceFile.close();
+		if (!hashed)
+		{
+			result["ok"] = false;
+			result["error"] = "failed to hash source file";
+			result["reason"] = "io";
+			return result;
+		}
+		const QByteArray actualMd5 = md5Hash.result().toHex();
+		// 2) 按 MD5 匹配配置里的星表（不按文件名）
+		QVariantMap catDesc;
+		for (const QVariant& v : sm->getCatalogsDescription())
+		{
+			const QVariantMap m = v.toMap();
+			if (m.value("checksum").toByteArray() == actualMd5) { catDesc = m; break; }
+		}
+		if (catDesc.isEmpty())
+		{
+			result["ok"] = false;
+			result["error"] = "no star catalog matches this file's checksum";
+			result["reason"] = "checksum_mismatch";
+			return result;
+		}
+		const QString catalogId = catDesc.value("id").toString();
+		result["id"] = catalogId;
+		// 3) 前置级守卫：catalogsDescription 有序（stars0…stars8），更高级别需前置级全已加载。
+		bool prereqOk = true;
+		for (const QVariant& v : sm->getCatalogsDescription())
+		{
+			const QVariantMap m = v.toMap();
+			if (m.value("id").toString() == catalogId) break;
+			if (!m.value("checked").toBool()) { prereqOk = false; break; }
+		}
+		if (!prereqOk)
+		{
+			result["ok"] = false;
+			result["error"] = "prerequisite catalog not loaded";
+			result["reason"] = "prerequisite";
+			return result;
+		}
+		// 4) 归位到用户目录配置里的 fileName（同盘 rename，否则 copy + 删源）
+		const QString fileName = catDesc.value("fileName").toString();
+		const QString destDir = StelFileMgr::getUserDir() + "/stars/hip_gaia3";
+		StelFileMgr::makeSureDirExistsAndIsWritable(destDir);
+		const QString destPath = destDir + "/" + fileName;
+		if (sourceInfo.absoluteFilePath() != QFileInfo(destPath).absoluteFilePath())
+		{
+			if (QFile::exists(destPath)) QFile::remove(destPath);
+			if (!QFile::rename(sourcePath, destPath))
+			{
+				if (!QFile::copy(sourcePath, destPath))
+				{
+					result["ok"] = false;
+					result["error"] = "copy failed";
+					result["reason"] = "io";
+					return result;
+				}
+				QFile::remove(sourcePath);
+			}
+		}
+		QFile::setPermissions(destPath, QFile::permissions(destPath) | QFileDevice::ReadOwner);
+		// 5) 源文件 MD5 已在上文校验并匹配，直接加载（避免重复计算），并显式置 checked 标志。
+		catDesc["checked"] = true;
+		const bool loaded = sm->checkAndLoadCatalog(catDesc, true);
+		if (loaded) sm->setCheckFlag(catalogId, true);
+		s_lastCatalogImportPath = sourcePath;
+		s_lastCatalogImportSize = sourceInfo.size();
+		s_lastCatalogImportMtime = sourceMtime;
+		s_lastCatalogImportId = catalogId;
+		s_lastCatalogImportLoaded = loaded;
+		result["ok"] = loaded;
+		result["loaded"] = loaded;
+		if (!loaded) { result["error"] = "catalog load failed (unsupported format?)"; result["reason"] = "format"; }
+		return result;
+	}
+
 	if (commandName == "saveScreenShot")
 		{
 			StelMainView& mainView = StelMainView::getInstance();
@@ -6561,7 +6705,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			movementMgr->cancelAutoMove();
 			s_ohosSelectedAnchorHoldUntilSec = 0.0;
 			ohosCaptureSelectedZoomAnchor();
-			// Use the pending aim FOV so rapid button taps compose continuously
+			// Pin the captured body for the whole zoom animation (0.18 s) plus a
+			// short tail, so the step changes the FOV without walking the body
+			// away from the safe target the app parked it at. Without this the
+			// step pivots about the reticle and the offset grows with every tap.
+			s_ohosStepAnchorHoldUntilSec = StelApp::getTotalRunTime() + 0.45;
 			// instead of repeatedly restarting from the in-between current FOV.
 			double aim = movementMgr->getAimFov() * factor;
 			if (aim < 0.001) aim = 0.001;
@@ -13431,11 +13579,39 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
-			const QString requestKey = arg;
-			if (s_ohosWutJob && s_ohosWutJob->key != requestKey)
+			// Explicit cancellation, sent by the ArkTS side when the user changes
+			// category. A deliberate switch drops the superseded job here instead
+			// of relying on a key mismatch to do it.
+			if (options.value(QStringLiteral("cancel")).toBool(false))
 			{
 				delete s_ohosWutJob;
 				s_ohosWutJob = nullptr;
+				result["ok"] = true;
+				result["cancelled"] = true;
+				return result;
+			}
+
+			// Key the job on the semantic parameters only, so an unrelated payload
+			// difference cannot restart work that is already running.
+			const QString requestKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
+				.arg(category, period, direction)
+				.arg(minimumAltitude)
+				.arg(maximumMagnitude)
+				.arg(limitAngularSize ? 1 : 0)
+				.arg(minimumAngularSizeArcmin)
+				.arg(maximumAngularSizeArcmin);
+			if (s_ohosWutJob && s_ohosWutJob->key != requestKey)
+			{
+				// A request for a different job while one is running is a stale poll
+				// from a superseded category, not a reason to throw the running work
+				// away. Deleting it here let two poll loops cancel each other forever
+				// (the newest job was destroyed on every tick of the older loop, so
+				// neither ever reached a result). Report "pending" and let the real
+				// owner finish; a deliberate switch cancels first, above.
+				result["ok"] = false;
+				result["pending"] = true;
+				result["superseded"] = true;
+				return result;
 			}
 			if (!s_ohosWutJob)
 			{
@@ -13830,9 +14006,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			else if (starMgr && (category == QStringLiteral("stars") || category == QStringLiteral("carbonStars") || category == QStringLiteral("bariumStars")))
 			{
+				const bool isUncuratedStars = category == QStringLiteral("stars");
 				const QList<StelObjectP> stars = category == QStringLiteral("carbonStars") ? starMgr->getHipparcosCarbonStars()
 					: (category == QStringLiteral("bariumStars") ? starMgr->getHipparcosBariumStars() : starMgr->getHipparcosStars());
-				for (const StelObjectP& star : stars) appendTarget(star, QString(), false, false);
+				for (const StelObjectP& star : stars)
+				{
+					if (!star) continue;
+					if (isUncuratedStars && star->getVMagnitudeWithExtinction(core) > OHOS_WUT_STAR_MAGNITUDE_CUTOFF)
+						continue;
+					appendTarget(star, QString(), false, false);
+				}
 			}
 			else if (starMgr && (category == QStringLiteral("variableStars") || category == QStringLiteral("algolVariables") || category == QStringLiteral("cepheidVariables") || category == QStringLiteral("highProperMotion")))
 			{
@@ -17923,6 +18106,23 @@ void StelMainView::renderOhosFrameNow()
 		drawOhosTelescopeOverlay(app.getCore());
 		const double t4 = StelApp::getTotalRunTime();
 	submitOhosFramebuffer(gl);
+
+	// The per-frame texture-upload budget must be reset exactly once per rendered
+	// frame. On the Qt desktop path StelMainView::drawEnded() does that by emitting
+	// frameFinished(), which StelTextureMgr::onFrameFinished() turns into
+	// "totalLoadTimeTaken = 0". The OHOS render pump below is the only frame driver
+	// on device and never runs drawEnded(), so that counter grew without bound: as
+	// soon as it passed the per-frame allowance (max(1e9/(2*fps), 1e9/120) ≈ 8.3 ms)
+	// every throttled StelTexture::bind() - the default, prioritizeUpload == false -
+	// started returning false permanently.
+	//
+	// Planet::drawSphere() uses exactly that call (texMap->bind(0)) and bails out
+	// silently when it fails, so the symptom was planets losing their disks for the
+	// rest of the session while halos, labels, star catalogues and all other texture
+	// users kept working - and with no diagnostic in the log at all. Emitting the
+	// same signal the desktop path emits restores the once-per-frame reset.
+	emit frameFinished();
+
 	const double t5 = StelApp::getTotalRunTime();
 
 	const int intervalMs = currentOhosRenderIntervalMs();

@@ -110,12 +110,8 @@ export default class QtWindowStageAdapter implements Window.WindowStage {
   setSupportedWindowModes(modes: Array<bundleManager.SupportWindowMode>, grayOutMaximizeButton?: boolean): Promise<void> {
     return grayOutMaximizeButton === undefined ? this.stage.setSupportedWindowModes(modes) : this.stage.setSupportedWindowModes(modes, grayOutMaximizeButton);
   }
-
   setImageForRecent(imageResource: number | image.PixelMap, value: ImageFit): Promise<void> {
     return this.stage.setImageForRecent(imageResource, value);
   }
-
-  removeImageForRecent(): Promise<void> {
-    return this.stage.removeImageForRecent();
-  }
+  removeImageForRecent(): Promise<void> { return this.stage.removeImageForRecent(); }
 }

@@ -8,10 +8,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const hierarchyPath = path.join(root, 'harmonyos/ets-source/pages/location_hierarchy.ts')
+const hierarchyPath = path.join(root, 'harmonyos/ets-source/common/location/hierarchy.ts')
 const locationsPath = path.join(root, 'data/base_locations.txt')
 const countriesPath = path.join(root, 'data/iso3166.tab')
-const outputCountriesPath = path.join(root, 'harmonyos/ets-source/pages/location_countries.ts')
+const outputCountriesPath = path.join(root, 'harmonyos/ets-source/common/location/countries.ts')
 
 const zoneTableCandidates = [
   '/usr/share/zoneinfo/zone1970.tab',

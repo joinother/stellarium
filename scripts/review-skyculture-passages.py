@@ -8,20 +8,20 @@ import re
 
 
 ROOT = Path(__file__).resolve().parent.parent
-RULES = ROOT / 'docs/harmonyos/skyculture-passage-revisions.json'
-SECTIONS = ROOT / 'docs/harmonyos/skyculture-section-translations.json'
-CORPUS_RULES = ROOT / 'docs/harmonyos/skyculture-corpus-revisions.json'
-BATCHES = ROOT / 'docs/harmonyos/culture-review-batches'
+RULES = ROOT / 'docs/harmonyos/json/skyculture-passage-revisions.json'
+SECTIONS = ROOT / 'docs/harmonyos/json/skyculture-section-translations.json'
+CORPUS_RULES = ROOT / 'docs/harmonyos/json/skyculture-corpus-revisions.json'
+BATCHES = ROOT / 'docs/harmonyos/json/culture-review-batches'
 FIELD = re.compile(r'^(msgid|msgstr) (".*")(?:\n".*")*', re.M)
 
 
 def load_reviews(batch_names=None):
-    rules = json.loads(RULES.read_text())['rules'] + json.loads(CORPUS_RULES.read_text())['rules']
-    sections = json.loads(SECTIONS.read_text())['sections']
+    rules = json.loads(RULES.read_text(encoding='utf-8'))['rules'] + json.loads(CORPUS_RULES.read_text(encoding='utf-8'))['rules']
+    sections = json.loads(SECTIONS.read_text(encoding='utf-8'))['sections']
     for file in sorted(BATCHES.glob('*.json')):
         if batch_names is not None and file.stem not in batch_names:
             continue
-        batch = json.loads(file.read_text())
+        batch = json.loads(file.read_text(encoding='utf-8'))
         rules.extend(batch.get('rules', []))
         sections.extend(batch.get('sections', []))
     if len({rule['id'] for rule in rules}) != len(rules):
@@ -160,7 +160,7 @@ def main():
     args = parser.parse_args()
     rules, sections = load_reviews(args.batches)
     unique_sections = catalog_sections(sections)
-    shipped = set(json.loads((ROOT / 'data/skyculture_editorial_context.json').read_text())['languages'])
+    shipped = set(json.loads((ROOT / 'data/skyculture_editorial_context.json').read_text(encoding='utf-8'))['languages'])
     for section in sections:
         required = set(section.get('requiredLanguages', shipped))
         if not required.issubset(section['translations']):
@@ -174,7 +174,7 @@ def main():
     patches = []
     coverage = {}
     for file in files:
-        content = file.read_text()
+        content = file.read_text(encoding='utf-8')
         updated = content
         if file.suffix == '.md':
             for rule in rules:
@@ -196,7 +196,7 @@ def main():
     if args.patch_dir:
         args.patch_dir.mkdir(parents=True, exist_ok=True)
         for index, (file, patch) in enumerate(patches):
-            (args.patch_dir / f'{index:03d}.patch').write_text(patch)
+            (args.patch_dir / f'{index:03d}.patch').write_text(patch, encoding='utf-8')
     for section in sections:
         missing = set(section['translations']) - set(coverage)
         if missing:

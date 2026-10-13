@@ -1,7 +1,7 @@
 # Stellarium HarmonyOS 调试经验手册
 
-给 WorkBuddy / TRAE / 后续接手者使用。  
-日期：2026-07-22  
+给 WorkBuddy / TRAE / 后续接手者使用。
+日期：2026-07-22
 分支：`openharmony-preview-v1`
 
 这份文档记录的是实战调试经验，不是最终产品说明。重点是帮助下一个人少绕路：先确认环境，再确认签名，再确认应用是否真的启动、是否真的渲染、ArkUI 是否真的把事件送到了 Qt/Stellarium。
@@ -73,12 +73,13 @@ OpenHarmony/HarmonyOS 的 HAP 不是一个普通 zip 包。安装时 Bundle Mana
 
 常见错误和含义：
 
-| 现象 | 真实含义 | 处理 |
-|---|---|---|
-| `install sign info inconsistent` | 设备上已有同 bundle，但签名 fingerprint 不同 | 用同一套材料重签后覆盖，或卸载旧包 |
-| `verify-app` 找不到 signing block | 这是 unsigned HAP 或签名过程没完成 | 重新跑 `hap-sign-tool.jar sign-app` |
-| profile bundle-name 不匹配 | profile 不是给 `org.qtproject.example.stellarium` 的 | 换正确 profile |
-| `keytool` 打不开 DevEco 字段 | `build-profile.json5` 里的字段不等于普通明文密码 | 不要把那串值直接喂给 `keytool` |
+
+| 现象                              | 真实含义                                            | 处理                               |
+| ----------------------------------- | ----------------------------------------------------- | ------------------------------------ |
+| `install sign info inconsistent`  | 设备上已有同 bundle，但签名 fingerprint 不同        | 用同一套材料重签后覆盖，或卸载旧包 |
+| `verify-app` 找不到 signing block | 这是 unsigned HAP 或签名过程没完成                  | 重新跑`hap-sign-tool.jar sign-app` |
+| profile bundle-name 不匹配        | profile 不是给`org.qtproject.example.stellarium` 的 | 换正确 profile                     |
+| `keytool` 打不开 DevEco 字段      | `build-profile.json5` 里的字段不等于普通明文密码    | 不要把那串值直接喂给`keytool`      |
 
 当前本机实测结论：
 
@@ -89,7 +90,7 @@ OpenHarmony/HarmonyOS 的 HAP 不是一个普通 zip 包。安装时 Bundle Mana
 
 所以不要简单得出“模拟器只接受 debug profile，release profile 命令行必失败”的结论。至少当前环境不是这样。
 
-详细命令见 `docs/harmonyos/SIGNING-GUIDE.md`。
+详细命令见 `docs/harmonyos/release/SIGNING-GUIDE.md`。
 
 ### 2.1 安全注意
 
@@ -352,6 +353,46 @@ $HDC -t 127.0.0.1:5555 file recv /data/local/tmp/stel.jpeg /tmp/stel.jpeg
 - 星图空白触摸是否仍然 `selectAt`。
 - `selectAt` 传给 C++ 的坐标是否和实际屏幕一致。
 - 状态栏/底部手势条是否沉浸，是否占用内容区域。
+
+### 4.10 选中天体后，星等 / 距离比天体名称晚一拍才出现
+
+**现象**：点星后名称（含类型胶囊）立刻出现，但星等、大气消光后星等、距离要等约 0.5–1s 才填上。
+
+**这条不是"某个定时器写得不好"，是桥的传输模型 + 回包分级两层叠加的结果：**
+
+**第一层：桥是「入队 + 轮询」，天生就有约一帧 + 100ms 的下限。**
+ArkUI/JS 线程和 OHOS 渲染泵（`renderOhosFrameNow` → `ohosDrainCommandQueue`）**是同一条线程**，
+所以 `StelMainView.cpp` 的 off-thread 分支**绝不能阻塞**：一阻塞，drain 永远轮不到，命令就永久超时、
+首帧之后整屏冻结（hilog 里表现为 1.5s 一轮的重试、且完全没有 `ohosDrainCommandQueue ran`）。
+于是所有交互命令都是：入队 → 立刻返回 `{pending}` → 渲染泵下一帧执行 → ArkUI 侧**再轮询**取回结果
+（C++ 侧是 consume-on-read 结果仓库，读一次即擦除，否则会「点两次才选中」）。
+轮询参数在 `BridgeClient.requestInteractive()`：**100ms × 15**（源码注释里写的 50ms×40 是历史值，已过期）。
+所以任何一次交互命令的往返 = ≥1 帧 + 最多 100ms。
+
+**第二层：`selectAt` 的回包是刻意轻量的，星等不在里面。**
+`selectAt` 走 `selectedObjectJson(core, false, false)` —— `includeDynamic = false`。原因写在源码注释里：
+`StelObject::getInfoMap()`（尤其卫星的 TLE 传播 / 升落 / 遥测）是**在渲染线程同步算**的，
+而渲染线程正是画天空的那条线程；把它塞进点选回包会让「选中」本身变慢。
+所以点选回包只有名称 / 类型 / 媒体，动态值等下一跳再取。
+
+**合起来 = 原来的坑**：唯一会取动态值的请求是 `requestSelectedDetails()` 里那条 **550ms 定时器**，
+而且它带 `details`（要等**结构化字段全量收集**完，那份数据是给详情卡四个页签用的，重得多）；
+更糟的是 180ms 的实时值轮询在这条请求在途时被显式关掉
+（`if (!selectedDetailLoaded && selectedDetailTimer !== 0) return`，注释是 "Do not race it with a second request"）。
+于是星等只能等「550ms + 全量收集 + ≤100ms 轮询」，自然比名称晚一大截。
+
+**为什么搜索不觉得慢**：`searchObject` 走的是 `selectedObjectJson(core, false)` ——
+`includeDynamic` 默认 **true**，名称和星等在**同一个回包**里到达。只有点星这条路是轻量回包。
+
+**修法**：选中回包落地后立刻补一次 **`getSelectedObjectInfo` 但不带 `details`**
+（`refreshSelectedDynamicValues()`）—— 动态值随即可用；全量结构化字段仍走原来那条 550ms 的路，
+两者不互相覆盖（不带 `details` 的回包**没有** `detailFields` 键，所以不会清空已加载的结构化字段）。
+这里刻意**不**做 `isDetailRefreshing()` 短路：每次选中都会换 `skySelectionRequestSerial`，
+上一轮轮询的在途回包本就会被丢弃，若等它收尾，点选恰好落在轮询在途窗口时补拉会被挡掉。
+
+**教训**：桥的「轻量回包」只该省掉**渲染线程上昂贵的那部分**（`getInfoMap` 的卫星遥测），
+**不该**顺手把星等这种便宜字段一起省掉；而「重请求用定时器错峰」时，必须确认没有别的数据
+被顺带绑在它后面。
 
 ## 5. ArkTS / ArkUI 经验
 

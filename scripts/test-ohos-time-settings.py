@@ -6,6 +6,8 @@ import subprocess
 import time
 
 
+from ohos_test_bundle import default_bundle
+
 ROOT = Path(__file__).resolve().parents[1]
 HDC = '/Applications/DevEco-Studio.app/Contents/sdk/default/openharmony/toolchains/hdc'
 
@@ -14,11 +16,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--bundle', default=default_bundle(), help='device bundle name (default: AppScope/app.json5)')
     parser.add_argument('--restart', action='store_true')
     args = parser.parse_args()
 
     def command(name, payload=None, allow_error=False):
-        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device,
+        invocation = ['node', str(ROOT / 'scripts/stellarium-cli.mjs'), '--device', args.device, '--bundle', args.bundle,
                       '--command', name, '--json']
         if payload is not None:
             invocation.extend(['--payload', str(payload)])
@@ -39,7 +42,7 @@ def main():
 
     def restart():
         subprocess.run([HDC, '-t', args.device, 'shell', 'aa', 'force-stop',
-                        'com.joinother.skyinstrument'], check=True, capture_output=True)
+                        args.bundle], check=True, capture_output=True)
         return command('getTimeSettings')
 
     saved_keys = ['dateFormat', 'timeFormat', 'startupTimeMode', 'startupTimeStop',

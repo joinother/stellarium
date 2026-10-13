@@ -1,3 +1,3456 @@
+> **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
+
+## [2026-10-12] DevEco Code - 修星表面板「手动导入」按钮点了没反应（未处理的 promise rejection）
+
+- **依据（用户复测反馈）**：星表列表里未加载行的「手动导入」按钮，选完文件后列表不变、也看不到任何原因；早前一次还只显示通用的「导入失败：版本不符或文件损坏」。
+- **先排除接线问题**：真机 UI 树里确认按钮存在且 `clickable=true`，点击后确实拉起系统选择器（`[picker] modalPicker start` + `fileSuffixFilters: .cat, maxSelectNumber: 1`），宿主 `activePanel === 'catalogs'` 分支也确实传了 `onImportCatalog` —— **按钮是实连的**，问题在选择之后。
+- **根因（两处，叠加成「静默失败」）**：
+  1. `stageAndImportCatalog` 的 async 体里，`fileIo.mkdirSync(destDir, true)` / `accessSync` / `unlinkSync` **裸奔在 try 之外**，且 `run()` 没有 `.catch()`。真机上 `mkdirSync(recursion)` 会抛 **13900015「文件存在」**，异常变成**未处理的 promise rejection** —— 既不弹提示也不写日志。
+  2. `CatalogStore.importLocalCatalog` 的失败回调把桥回包的 `reason` 丢掉、一律显示 `catalog_import_failed`（「版本不符或文件损坏」），所以 `checksum_mismatch` / `prerequisite` 的精确文案（`catalog_import_no_match` / `catalog_prereq_missing`）**永远不可达**，把「目录创建失败」误报成「文件版本不符」，误导排查方向。
+- **修复**：
+  1. 准备目录改为**先 `access` 再按需 `mkdir`**，整段（含 unlink）纳入 try，失败即弹提示并留日志；
+  2. 两处 fire-and-forget 的 async 体（picker 流程、落盘流程）补 `.catch()`，异常不再静默；
+  3. 失败回包改走 `importResultHint(r)`，按 `reason` 显示精确原因；
+  4. 两条入口（面板按钮、`.cat` 打开方式）统一打 `[star-catalog]` 链路日志：`picked uri` / `staging uri -> dest` / `import start` / `import ok id` / `import failed reason=… error=…`。**成功只留主干、失败才展开**，避免逐步 info 刷屏。
+- **定位证据**：用户 PC 源文件 `stars_5_1v0_6.cat` 实测 MD5 `eb2834985d5885ac03695084cded6897`、257743872 字节，与 `defaultStarsConfig.json` 的 stars5 校验值**完全一致**（文件本身没问题）；日志停在 `[star-catalog] prepare failed dir=… err={"code":13900015}`。修复后用户用 stars5 行的「手动导入」**成功导入**。
+- **校验**：`arkts_check` 0 error、`BUILD SUCCESSFUL`、契约套件 8/8（含 `check-ohos-star-catalog`）、真机装机启动无崩溃。
+
+## [2026-10-12] DevEco Code - 补 getUiPanelState：面板状态只读回读命令
+
+- **依据**：上一条修快捷面板时发现，`openUiPanel` / `closeUiPanel` 只返回 `accepted`，无法断言「面板是否真的打开/关闭」，语义复测因此缺了读回一环（只有 astro / satellite / search / guide 各自的专用 state 命令）。
+- **新增命令 `getUiPanelState`**（只读，`mutatesState:false`，category「ArkUI 面板」，executionLayer「ArkUI」）返回 `{ ok, panel, visible, expanded, foldHover, navigationDepth, backAvailable, editable }`。
+- **实现**（三处 + 目录）：
+  - `harmonyos/ets-source/pages/MainWindowNativeNode.ets`：新增 `publishUiPanelState()`（与 `publishAstroPanelState` 同一套 AppStorage 发布），并在 `setPanel`（普通打开 / 切换 / 关闭分支）、`openSubPanel`、`closePanel`（含 `animateTo` 的 `onFinish`，`panelVisible=false` 是那时才置位）、快捷面板编辑态切换、以及首次 `onAreaChange`（保证启动即有初值）发布。
+  - `harmonyos/ets-source/qability/QAbility.ets`：`request.commandName === 'getUiPanelState'` 读 `AppStorage('stellariumUiPanelState')`。
+  - `src/StelOhosCommandCatalog.hpp`：`names()` 增补 + 中文描述（**改了 `src/`，必须去掉 `-SkipEngine` 重编引擎**；已确认新串进入 `libstellarium.so`）。
+  - `scripts/check-ohos-command-catalog.mjs`：`uiCommands` 白名单增补。
+- **校验**：`arkts_check` 0 error、引擎重编后 `BUILD SUCCESSFUL`、命令目录契约 400（+1）、UI 契约不变、`--list` 可见该命令。真机全周期实测：启动初值 `panel:"object",visible:false` → `openUiPanel quick` 后 `panel:"quick",visible:true` → `closeUiPanel` 后 `visible:false` → `openUiPanel layers` 后 `panel:"layers",visible:true`。
+
+## [2026-10-12] DevEco Code - 快捷面板第二行图标下沿被切 1-2px 修复
+
+- **依据（用户复测反馈）**：快捷面板打开后，第二行图标下沿触及不可显示区域，肉眼可见 1px 左右或更多。
+- **根因**：`quickPanelContentHeight()` 让面板高度**恰好等于**内容高度（这是刻意的，见 QUICK-ACTIONS-PANEL-PLAN §12.6 第 4 条：`Scroll` 会把比视口短的内容垂直居中，故容器必须等于内容）。但理论高度没有覆盖两处逐项物理像素对齐：① 每行 6 格按浮点宽均分后各自对齐到物理像素（每行最多多占 1px）；② 固定 chrome（抓手 28+2、头部 44/56+14、上下内边距 12/16）各自对齐。真机 Mate 80 Pro 实测内容 350px 落在 348px 视口里，第二行被压成 163px（第一行 165px），下沿被切 2px。
+- **修复**（`harmonyos/ets-source/pages/MainWindowNativeNode.ets`）：
+  - `quickPanelGridCellSize()` 把格子尺寸**向上**对齐到整物理像素（`Math.ceil(cell * density) / density`），使由它推出的高度不小于图标真实高度 —— 宁可多出不足 1px 空白也不切图标；
+  - `quickPanelContentHeight()` 的 `grid` 项加 4 物理像素取整余量（`px2vp(4)`，不足半个 vp，肉眼不可见），覆盖固定 chrome 的逐项对齐偏差。
+- **校验**：`arkts_check` 0 error、`BUILD SUCCESSFUL`、UI 契约不变（35 面板 / 29 静态 id / 18 动态前缀 / 50 id 锚点）、命令目录 399 一致。真机 `ui layout` 复核：两行等高 165/165（改前 165/163），内容 350px < 视口 352px，图标下沿落在视口内 —— 不再被裁。
+- **附记（已更正）**：本次验证一度退回「按 Dock『快捷开关』节点 bounds 坐标点击」，并误记「没有语义开面板命令」。**更正：`openUiPanel` 早已存在，且 `'quick'` 本就在 `isCliPanelName` 白名单里** —— `node scripts/stellarium-cli.mjs --command openUiPanel --payload quick ...` 实测可直接打开快捷面板，不需要坐标点击。当时漏判的原因是只在`--list` 输出里做了大小写敏感的关键字筛选。真正缺的是**只读回读**，已在同日下一条补齐。
+
+## [2026-10-12] DevEco Code - 月相桌面卡片方形外框修复
+
+- **依据（用户复测反馈）**：月相桌面卡片上出现一个方形外框。
+- **根因**：`harmonyos/ets-source/form/AstronomyCardSurface.ets` 中月面外层 `Stack` 是 `visualSize*0.80` 的**正方形**，加了 `.border({width:1,...})` 但**未设置 `borderRadius`**，因此圆月之外的边框呈直角方形（`moon`/`overview`/`compact` 三类共用该分支）。
+- **修复**：给该 `Stack` 补 `.borderRadius(this.visualSize() * 0.40)`，边框随月面变为正圆；并补 `.clip(true)`，使 `moonMaskOffset()` 可达一整个直径的阴影圆盘被裁进月面内（此前会甩出月轮之外、压到右侧文字）。
+- **校验**：`arkts_check` 通过；`devecocli build` BUILD SUCCESSFUL；真机安装启动冒烟通过。表单卡片需在桌面**移除后重新添加**才会重绘最新布局。
+- **遗留（未改动，待定）**：同文件 `route()` 里 `postCardAction` 的 `bundleName` 仍写死发布身份 `com.joinother.skyinstrument`，debug 包（`com.cnchensh.stellarium`）下点卡片路由会指向不存在的包。
+
+## [2026-10-12] DevEco Code - docs/harmonyos 顶层文档分类归位
+
+- **依据（用户要求）**：把未放入分类子文件夹的 35 个顶层文档，按 docs/harmonyos/AGENTS.md §2.2 的分类树判读归位；新增 server/ 承载服务器与联网部署文档。
+- **移动（git mv，保留历史）**：release/ 10（AGC-*×4、BUNDLE-IDENTITY-CLEANUP、SOFTWARE-COPYRIGHT-*×5）；policy/ 5（PRIVACY-AGREEMENT-RENEWAL、PRIVACY-DOUBLE-DIALOG-*、PRIVACY-STARTUP-UI-*、SN-CALL-BOUNDARY-AUDIT-*、NETWORK-LOCALIZATION-MATRIX）；server/ 3（SERVER-SECURITY、SERVER-PREPARATION、NETWORK-DEPLOYMENT-PLAN-*，新增目录）；specs/ 4（MAP-KIT-INTEGRATION-PLAN、PC-TOUCHPAD-AND-KEYBOARD-GUIDE、SCREEN-ANCHOR-*、STARTUP-TEXTURE-BUDGET-*）；research/ 10；archive/audits/ 2（PC-UX-AUDIT-*、SATELLITE-PLUGIN-ALIGNMENT-AUDIT-*）；workbuddy/ 1（workbench-single-instance-policy.template.json）。
+- **引用同步**：3 个脚本（check-ohos-bundle-identity 白名单、test-ohos-ar-contract、test-ohos-touchpad-contract）、根 AGENTS.md、docs/harmonyos/AGENTS.md 分类树、KNOWN-ISSUES / NETWORK-INVENTORY / CLI / website README 及移动文档内部链接均已更新。
+- **保留**：docs/harmonyos/CHANGELOG.md 历史条目按当时路径原样保留（不改写历史）。
+- **校验**：相对链接校验 253 条，剩余 9 条断链均为**整理前已存在**（DEVECO-COLLAB/PRIVACY-REVIEW/skills/archive/skycultures），与本次无关。
+
+## [2026-10-11] DevEco Code - privacy-v2 合并收口与契约测试补齐（第三波）
+
+- **依据（用户要求）**：非 `harmonyos/ets-source` 的文件（C/C++、data、po、scripts、docs）用 git merge 正确处理改名/删除；随后补齐契约测试暴露的未迁移行为。
+- **合并**：`merge joinother/fix/api22-privacy-v2 (aae34f085e)` → `ecd620b3ea`。自动并入 6 个插件隐私/离线守卫、RemoteControl、Satellites、`data/ohos/*`、`po/*`、`translations/*`、34 篇 docs/harmonyos、`website/`、26 个新脚本；意外补回此前漏迁的 ApplicationRoot/QChildProcess/QAbilityStage/StellariumResourceBootstrap 隐私门控；`ets-source`/`src` 取我方迁移版本，`build/` 保持删除。
+- **补齐的行为**：历法 24 节气渲染；赤道坐标 trim；`persistAlmanacCardSnapshot`；`getPrivacyConsentState` 只读命令 + `restoreWindowAfterConsent` 同步幂等 + `preparePrivacyHostPage` 并发去重；导航指示条安全区（`stellariumScreenSafeBottomPixels`）；Dock 响应式几何（dockHeight/dockBottomClearance/isLargeDesktopCanvas/panelFontSize…，命中层不再是硬编码高度）；`isDockPoint` 以 Dock 底为界；ICP 备案共享组件；巡天说明文案；指针坐标乐观写；文本聚焦时键盘让位。
+- **脚本修复**：7 个脚本的 Windows 盘符路径 bug、CRLF 正则、目录镜像断言。
+- **提交**：`ecd620b3ea`(merge) `4e10aef280` `205823f595` `01a92eb5ff` `55236204ab` `b7874cfce6` `7e319a8d25` `8603d7a773` `91c30969f8` `4710add7ae` `61777ca2a8`(输入) 等。
+- **验证**：`devecocli build` BUILD SUCCESSFUL；UI 契约 intact（35/29/18/50）；命令目录一致（399）；契约套件 **30 通过 / 1 失败**；真机 `Smoke: PASS`。
+- **剩余（环境型，非代码缺口）**：`check-ohos-privacy-artifact.mjs` 需 `build/qt-platform-patch/*`（Qt 平台补丁构建产物）、`ark_disasm` 与签名 HAP 才能运行；其校验的源码级隐私守卫已随合并就位。
+
+## [2026-10-11] DevEco Code - privacy-v2 → pr-upstream-20261008 功能迁移（P0–P13）
+
+- **依据（用户要求）**：把 `joinother/fix/api22-privacy-v2`（`aae34f085e`）在旧单体上实现的功能，按 `docs/harmonyos/specs/PRIVACY-V2-TO-UPSTREAM-MIGRATION.md` 分片手工迁入 upstream 的 Store/Controller/panel 架构（不 git merge）。
+- **改动**：P0 引擎命令（C++ 桥命令、命令目录、HipsMgr/SpecificTimeMgr/StelHips/StelTextureMgr 等，并叠加 upstream 的缩放锚定、WUT 星等上限、WUT 取消、纹理预算复位）；P1 隐私合规（PrivacyConsent/PrivacyBootstrap/StartupSky 门控/QAbility 窗口恢复）；P2 通知·提醒·卡片·协作服务与 ArkUI 命令路由；P3 桌面卡片表单 + FormAbility 配置；P4 协作会话分享；P5 HiPS 巡天 + 多波段图层 + 40 条 I18n；P6 AR 预研面板；P7 在线地图选点 + 搜索排序修正；P8 键盘快捷键编辑器；P10 卫星来源编辑 + 名称本地化；P11 时间平滑过渡；P12 陀螺仪防抖 + 配置分享；P13 compatibleSdkVersion 6.1.0(23)。
+- **提交**：`08212ebf04`(P0) `883dd4a40f`(P1) `000c761dc4`(P2) `8a8ed554cb`(P5) `cedad606cc`(P6) `5d19662fed`(P3) `306cc20b9a`(P4) `f5bf23ce20`(P7) `1d8ec4c0b5`(P13) `6a42b0756c`(P10) `35633037ba`(P12) `77e6e67d4a`(P8) `e265c948a5`(P11)。
+- **验证**：每片 `arkts_check` 0 error；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` 均 `BUILD SUCCESSFUL`；UI 契约 intact（35 面板 / 29 静态 id / 18 动态前缀 / 50 锚点）；命令目录一致（399 命令）。
+- **未纳入**（后续）：P12 指针坐标防抖与 `uiLayoutOverride` 布局增强；P14 仅剩 `ArPreviewBridgeResponse` 归位 types（可选）。
+
+## [2026-10-09] DevEco Code - 观测列表：GPS 来源改用逆地理编码取县一级名称（设计增补）
+
+- **依据（用户要求）**：观测记录分享特性中，GPS 定位结果采用逆地理编码获取**县一级行政区划名称**显示，括号内标注「GPS」。
+- **改动**：① `specs/OBSERVING-LIST-RECORD-SHARE.md` §7 名称解析改为**按来源分派**（引擎 `name` → `source==='gps'` 逆地理编码县一级 → 本地库 → 仅坐标），快照新增 `source` / `countyName`；§7.1 由「不采用」改为「**仅 GPS 来源采用**」的使用边界与接入约束；§8.2 `location` 增 `source` / `countyName`；§8.4 补 GPS 地点行示例；§10 增 `obs_location_gps_suffix`；§12 S3 与 §13 验证项 10 同步。② `NETWORK-INVENTORY.md` 该条目由「未采用」改为「**仅 GPS 来源，计划采用**」（外发字段 = 观测经纬度、触发 = 用户主动定位、失败回退本地库）。③ 版型 HTML 增 S0「C 区 GPS 县一级名称」变体（1080 契约内，字号/药丸不变）。
+- **代码锚点**：复用宿主已有 `ObserverLocationRecord.source`（`common/types/MainWindowModels.ets:424`）与 `quickLocationLabel`（`common/derive/labels.ets:337`）；`module.json5` **不新增权限**（逆地理编码联网由系统位置服务代理，不需要 INTERNET）。
+- **验证**：纯文档改动，无代码 / 权限 / 契约变更；CRLF 归一、UTF-8 无 BOM。构建与真机未涉及。
+
+## [2026-10-09] DevEco Code - 观测列表设计补充：系统逆地理编码的权限/联网结论
+
+- **依据（用户要求）**：核实「鸿蒙获取坐标 API 能否返回城市名」「是否涉及应用新增联网权限」，将结论增补到涉及文档。
+- **核对结论（官方文档）**：① 能返回城市名——`@kit.LocationKit` `geoLocationManager.getAddressesFromLocation(ReverseGeoCodeRequest)` → `GeoAddress[]`（`locality`/`subLocality`/`administrativeArea`/`placeName` 等），系统能力 `SystemCapability.Location.Location.Geocoder`；② **权限为 `ohos.permission.LOCATION`，不要 `ohos.permission.INTERNET`**——联网由系统位置服务代理，应用自身网络栈不发起；③ **但设备必须联网**（开发指导 `geocode-guidelines` 原文「需要访问后端服务，请确保设备联网」），外发发生在系统侧；④ 非穿戴设备仅支持中国境内（不含港澳台）。
+- **改动**：① `specs/OBSERVING-LIST-RECORD-SHARE.md` §7 新增「7.1 为何不采用系统逆地理编码（结论与依据）」；② `NETWORK-INVENTORY.md` 追加「2026-10-09 观测列表分享：系统逆地理编码评估（未采用）」条目，区分**权限申请（不需要 INTERNET）/ 设备联网（需要，系统侧）/ 数据外发登记（需要）**三件事。
+- **本期末结论**：观测地点城市名仍走本地 `LOCATION_HIERARCHY` 反查（§7），保持离线、无外发、无新权限；未来若接入按 opt-in 增强处理。
+- **验证**：纯文档改动，无代码/权限/契约变更；CRLF 归一、UTF-8 无 BOM。构建与真机未涉及。
+
+## [2026-10-09] DevEco Code - 观测列表增强设计稿：记录模型 / 双页签 / 导出分享 + 分享图版型契约
+
+- **依据（用户要求）**：观测列表页签分离（默认观测列表、tag 切换推荐）、已观测时间戳标记、导出当晚观测记录（截图分享 + JSON）、分享图模板（主目标贴图/上传图 + 记录列表 + 地点坐标 + 供 Stellarium 导入的二维码）、复制列表、一键清空观测时间、新增星表外自定义目标、赤道/时角坐标输入（不接受地平坐标）。**第 1 版设计稿，未实施，不改动任何源码。**
+- **改动**：① 新增 `docs/harmonyos/specs/OBSERVING-LIST-RECORD-SHARE.md`（14 节）：`ObservingTargetRecord` 记录模型（-1 哨兵风格）与同键迁移、双页签 IA、标记交互（`AlertDialog` 防误触）、自定义目标表单（`j2000`/`date`/`hourangle` 三模式）、新桥命令 `convertCoords`（C++ ~40 行，LST−HA + `equinoxEquToJ2000`）、`common/derive/coords.ets` 解析提取、地点快照（引擎名 → `LOCATION_HIERARCHY` 反查 ≤0.5°）、JSON 双 schema（`records` + `stellariumCompatible` 桌面兼容块，`CustomObject` 同构）、分享图管线（屏幕外 `ObservingShareCard` 1080×1920 + `componentSnapshot`）、ScanKit `generateBarcode` QR（阈值 2,600 字符、超限截断）、9 条语义 CLI、4 实施切片（S1–S4）、12 项验证清单；② 新增 `docs/harmonyos/specs/observing-list-share-template.html` —— §8.9 版型契约：A–F 六区（品牌头 64 / 标题 144 / 地点 52 / hero 686 / 记录列表 ≤5 行+尾行 / QR 底栏），配色 token 与日间主题同源（accent `#5B93BF`、surface `#101A2B`）且**固定不随夜间模式**，含 token 表、字号阶、高度预算、`data-bind` 绑定点与 S1–S5 降级形态（无城市 / 仅主目标 / QR 截断 / QR 失败 / hero 配图降级）；③ 设计文档 §10 补 6 个分享图 i18n 键（`obs_share_title` / `obs_share_qr_hint` / `obs_share_qr_sub` / `obs_share_only_hero` / `obs_share_qr_failed` / `obs_share_footer`），与版型 HTML 登记一致。
+- **边界**：全本地（QR 本地生成、分享图本地渲染），经 systemShare 外发，无新增联网（NETWORK-INVENTORY 不受影响）；无新权限；新依赖仅 `@kit.ScanKit` `generateBarcode` 与 `componentSnapshot`（项目首次使用）。
+- **验证**：纯文档改动，无代码 / 契约 / 资源变更；两文件 CRLF 归一（loneLF 0）、UTF-8 无 BOM。构建与真机未涉及。
+
+## [2026-10-09] DevEco Code - 修星表面板：导入后行内仍显「手动导入」（ForEach 键复用，真因）
+
+- **现象（用户反馈）**：导入 stars5 后，面板该行仍显示「手动导入」按钮；而**同屏摘要**已变为「已加载至 13.75 等（stars0–stars5）」。
+- **真因**：`CatalogsPanel` 的 `ForEach` **键生成器用了 `c.id`**。刷新后 store 用「同 id 的新对象」替换列表，ArkUI 按 key 判等 → **复用旧行、不再执行行构建**，于是行内仍保留旧的 `checked=false`；摘要不在 ForEach 内，故正常更新（这条「摘要对、行错」的不一致正是该坑的签名）。**上一版归因的「回包竞态」是次要因素，真正的元凶在这里。**
+- **修法**：① 键生成器纳入行内容依赖 —— `c.id + 是否已加载 + 导入/下载进行态`，状态一变即重建该行；② 移除 `CatalogStore.catalogLoaded` 一次性加载缓存，改为**每次打开面板都重查**（`checked` 由引擎决定，不能缓存），旧回包仍由序号丢弃；③ 保留导入后的乐观置位。
+- **验证（真机 Mate 80 Pro）**：面板 stars5 行显示 **「已加载」**（`12.0 ~ 13.75 等 / 8M 星 / 245 MB`，无按钮、无来源行），stars4 同为「已加载」；`getStarCatalogs` stars5 `checked:true`。`arkts_check` 0 error；`BUILD SUCCESSFUL`。
+
+## [2026-10-09] DevEco Code - 修星表面板：导入后立即显示「已加载」（回包竞态）
+
+- **现象（用户反馈）**：经「打开方式」导入 stars5 后，面板仍把该级显示为待导入（手动导入）。
+- **根因**：`CatalogStore.loadStarCatalogs()` 是「打开面板时拉一次 + 导入后重拉」，两次回包可能乱序——打开面板的旧回包（stars5=`false`）落在导入后重拉的新回包（stars5=`true`）之后，把状态覆盖回未加载。真机同一会话内即会看到该现象；重启后（启动即按已存在文件加载）才正常。
+- **修法**：① 加列表刷新序号 `catalogLoadSequence`，旧回包到达即丢弃；② 导入成功后 `markCatalogLoaded(id)` 就地**乐观更新**该级为已加载，不必等重拉。
+- **验证**：真机 stars5 已加载时面板摘要「已加载至 13.75 等（stars0–stars5）」、对应行「已加载」；`getStarCatalogs` stars5 `checked:true`。`arkts_check` 0 error；`BUILD SUCCESSFUL`。
+
+## [2026-10-09] DevEco Code - 星表注册为 .cat「打开方式」+ 改按 MD5 识别（真机导入 stars5 成功）
+
+- **依据（用户要求）**：把本应用注册为 `.cat` 文件类型的受支持打开方式，以便直接加载；并按用户决定**改按 MD5 识别**（不再按文件名匹配）。
+- **改动**：① 新增 `harmonyos/resources/rawfile/arkdata/utd/utd.json5`（自定义 UTD `com.joinother.skyinstrument.stellarium-cat`，后缀 `.cat`）+ `harmonyos/module.json5` 增加 QAbility 的 `ohos.want.action.viewData` + `uris`（`scheme:file`、该 UTD、`linkFeature:FileOpen`）；② `QAbility.onCreate/onNewWant` 检测 `want.uri` 为 `.cat` → 写 `AppStorage('stellariumOpenCatalogUri')`；宿主 `@StorageLink`(`@Watch`) 消费（Qt 未就绪先挂起）；③ 桥命令 `importStarCatalog` 改为 **payload = 源文件路径，按 MD5 匹配** `defaultStarsConfig.json` 的 `checksum` 识别目标级（去掉文件名匹配），再前置级守卫 + 归位 fileName + 加载；`手动导入` 按钮与「打开方式」共用同一路径；④ 同步长命令的**重复入队短路**（同路径+大小+mtime+上次成功则直接返回）；⑤ `StarMgr::setCheckFlag` private → public（仅可见性），导入成功后显式置位。
+- **真机验证（Mate 80 Pro `192.168.1.7:36717`）**：`stars_5_1v0_6.cat`（245 MB）从文件管理器「打开方式」→ 本应用 → 日志 `[catalog-open] received .cat open-with want` + `Loading star catalog: ... stars_5_1v0_6 - 5_1v0_6; 8051935 entries`；`getStarCountFull` → `catalogLevels:6 / total:10380312`（= 内置 2,328,377 + stars5 8,051,935）；`getStarCatalogs` → stars5 **`checked:true`**；重装/重启后保持。护栏：`arkts_check` 0 error；引擎重编 + `BUILD SUCCESSFUL`；`check-ohos-command-catalog`（359）。
+
+## [2026-10-09] DevEco Code - 星表扩展 P2：离线手动导入启用（严格校验 + 热加载，真机验证）
+
+- **依据（用户决定）**：采用上游通行做法——**严格校验不放松**（文件名 + MD5）。同时把未加载项的「打开下载页」链接文字换成具体 `.cat` 文件名，并把「手动导入」按钮启用。
+- **改动**：① `CatalogsPanel` 未加载项的链接文字由「打开下载页」改为 **`fileName`**（如 `stars_6_1v0_4.cat`）；②「手动导入」由灰标签改为**可点 `Button`**；③ 宿主新增 `importCatalogFile(id, fileName)`：`DocumentViewPicker`（过滤 `.cat`）→ 校验文件名 → `fileIo.copy` 异步拷到 `filesDir/stellarium_userdir/stars/hip_gaia3/<fileName>` → 回调 `CatalogStore.importLocalCatalog(id)`；④ 新桥命令 **`importStarCatalog`**（`src/StelMainView.cpp`）：前置级 + 文件名 + MD5 校验并**热加载**（复用 `checkAndLoadCatalog`，与下载完成同路径，失败即删），并在 `StelOhosCommandCatalog.hpp` 登记（命令数 358 → **359**）；⑤ 6 个 i18n 键（10 语言）。
+- **验证（真机 Mate 80 Pro `192.168.1.7:36717`）**：`arkts_check` 4 文件 0 error；**引擎重编**（增量）+ `BUILD SUCCESSFUL`；UI 契约 intact（50/34/29/18）；`check-ohos-command-catalog` 通过（359）。CLI `importStarCatalog stars6` → `{"ok":false,"error":"prerequisite catalog not loaded"}`（前置级守卫生效，命令已注册可达）；面板实测链接文字 `stars_7_1v0_4.cat` / `stars_8_2v0_3.cat`（可点），「手动导入」为可点按钮，点击**弹出系统文件选择器**（截图存证）。
+- **未端到端走查**：真正导入 912 MB 的 stars6 需本地备好该文件，本轮未做；文件名不匹配 / MD5 不符的拒绝路径由守卫与 `StarMgr` 既有 MD5 逻辑保证。
+
+## [2026-10-09] DevEco Code - 星表扩展 P1 补：SourceForge 下载页链接（浏览器跳转，真机验证）
+
+- **依据（用户要求）**：为星表面板加一个可从浏览器跳转的 SourceForge **下载页**链接（非直链）。
+- **改动**：`StarCatalogItem` 新增 `sourcePage`（由直链派生——去掉尾部 `/download` 与文件名，得到目录页）；`CatalogStore` 的映射与静态快照同步填充；`CatalogsPanel` 在未加载项的「来源：SourceForge」右侧新增下划线链接「打开下载页」；宿主新增 `openExternalUrl(url)`（`getUIContext().getHostContext()` + `Want{action:'ohos.want.action.viewData',entities:['entity.system.browsable'],uri}`），并经 `onOpenCatalogSource` 回注；新增 2 个 i18n 键。
+- **真机验证**（HUAWEI Mate 80 Pro `192.168.1.7:36717`）：`devecocli run --skip-build` → `Smoke: PASS`；`openUiPanel catalogs` → 滚动到 stars5；点击「打开下载页」→ 前台切到 `com.huawei.hmos.browser`，落点为 SourceForge `Stellarium Files → Home / Extra-data-files / stars-3.0` 文件列表（截图存证）。
+- **护栏**：`arkts_check` 5 文件 0 error；`BUILD SUCCESSFUL`；契约 intact（50/34/29/18）；i18n 源↔镜像一致。
+
+## [2026-10-09] DevEco Code - 星表扩展 P1：统一 9 级只读列表 + 下载渠道验证（模拟器验证）
+
+- **依据**：`docs/harmonyos/specs/STAR-CATALOG-EXTENSION.md`（设计稿 P1）。本轮**不打包 stars5**、**不改编译宏（保持离线）**，先做只读列表与渠道标注。
+- **下载渠道验证**：SourceForge `.../Extra-data-files/stars-3.0/` **有效**（目录页列出 stars_4–stars_8；`stars_5_1v0_6.cat/download` 经 302→302→200、`Content-Type: application/octet-stream`、`Content-Length: 257743872`、最终镜像 `zenlayer.dl.sourceforge.net`）；GitHub `Stellarium/stellarium-data` releases **不含** star 文件（只有 DSO `dso-3.23` / 翻译 / weekly 安装包）。结论：继续用 SourceForge。实测同时修正设计稿的 `STAR_CATALOG_5_BYTES`（257017856 → **257743872**）。
+- **改动**：`StarCatalogItem`/`StarCatalogRaw` 扩展 `magRange`/`count`/`sizeMb`/`checksum`/`source`；`CatalogStore.loadStarCatalogs()` 映射扩展字段并新增**静态 9 级快照**（桥不可用 / 空回包 / 失败时回退，使 UI-only 模拟器也能渲染）；`CatalogsPanel` 重写为统一 9 级列表（星等范围 / 星数 / 大小 + `[已加载]`/`[手动导入]`/`[下载]` + 未加载项 `来源：SourceForge`），去掉原离线空态；宿主星表面板离线 / 在线都加载；新增 10 个 i18n 键（10 语言）。
+- **未做（设计稿 P0/P2/P3）**：stars5 打包、在线下载端到端、离线手动导入（`importStarCatalog`）、运行时卸载（`removeStarCatalog`）。
+- **验证**：`arkts_check` 5 文件 0 error；`BUILD SUCCESSFUL`；契约 intact（**50/34/29/18**）；`check-ohos-i18n`（源↔镜像一致）与 `check-ohos-command-catalog`（358 命令）通过。**模拟器**（Pura 90 Pro，UI-only `127.0.0.1:5555`）：进入「更多功能 → 天体数据与扩展 → 星表下载」，列表渲染 stars0–stars8 共 9 行，标题「恒星星表」、摘要「已加载至 12.0 等（stars0–stars4）」，stars0–4「已加载」、stars5–8「手动导入 + 来源：SourceForge」，进程存活无崩溃。
+
+## [2026-10-08] DevEco Code - 整理 STATE-REVIEW 评审文档：补 §9 实施状态与终态实测
+
+- **依据（用户要求）**：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` 长期停在工作区未提交（§9/§10 为另一会话新增），且 §9.4 附录存在实测偏差，需整理后入库。
+- **改动**：① 头部状态 / 日期 / 基线改为「正文评审 10-07 / 实施 10-08」，并区分 §1–§8（`c52a517961` / 8,017 行）与 §9–§10（`cbc8c5bfae` / 7,974 行）两个基线；② §9、§10 头部各加「实施状态」块，指向 `ARKTS-PAGES-REFACTOR-PLAN.md` §16；③ §9.4.1 修正评审时的**前瞻命名**（`BookmarkController` / `CatalogController` / `MeteorShowerController` / `SessionToolController` / `NavStarsController` / `ArchaeoLinesController` / `MosaicCameraController` / `PluginCommandController` / `DockController` / `OverlayController` / `ObjectMediaController` 均无对应文件），补按文件实测的 capability→state 边表（65 处 `import` 语句）；④ §9.4.2 补终态桥计数修正（`AstroStore`/`ScriptStore`/`GuideStore`/`TimeSettingsStore` 的 `requestInteractive` 15/8/1/8 → 0，`TelescopeStore` live-position 迁出）；⑤ 跨文档引用消歧（§15.7 / §11 指明属 PLAN）。
+- **验证**：纯文档改动，无代码 / 契约影响；`git diff` 复核，CRLF 归一（`loneLF 0`）。
+
+## [2026-10-08] DevEco Code - §9 边界优化：注释整理到终态
+
+- **依据（用户要求）**：S1–S8 落地后新编辑文件的注释仍带迁移脚手架（"迁自 / 迁入"、"§9 P0"、"2026-10-08"、"STATE-REVIEW"、"逐字等价"），且个别描述已过期（`GuideController` 头误把 `getScriptStatus` / `getScriptCaptions` 列为导览桥；`AstroStore` 称 hooks 接口为"端口"；`GraphGuides` 仍写"三个引导块"）。
+- **改动**：把 18 个 `.ets` 的头 / 行内注释统一为**终态描述**——只讲"当前由谁持有桥与定时器、数据流向哪"，删除迁移日期与跟踪号，修正过期措辞；同步删除 `SettingsController` 遗留且未使用的 `seq` 占位字段。**无任何行为 / 接口 / 契约变更**（除删一个死私有字段）。
+- **涉及**：`capability/{AstroCalcController,ScriptPlaybackController,GuideController,SettingsController,TelescopeController,StartupBridge}`、`state/{AstroStore,GuideStore,TimeSettingsStore,TelescopeStore}`、`common/ui/{NavStarsToggleRow,ArchaeoToggleRow,MosaicCameraMetric,GraphLoadingRow,SkyCultureDescriptionBlockView}`、`panels/settings/SettingsRows`、`panels/astro/GraphGuides`、`pages/MainWindowNativeNode`。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 18 文件 0 error；`BUILD SUCCESSFUL in 44s`；契约 intact（**34 面板 / 29 静态 id / 18 动态前缀 / 50 锚点**）。真机未涉及（纯注释 + 删死字段）。
+
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S9：队列收口（计划文档 §16 + 登记例外）
+
+- **依据**：STATE-REVIEW §9 三层边界优化队列（S1–S8 已逐片提交，本节为 S9 文档收口）。
+- **改动**：在 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` 追加 **§16 续作计划四：§9 三层边界优化** —— 含切片总表（S1–S8 的提交号与关键度量）、逐片要点、**登记例外清单**（CatalogStore 600ms / SatelliteStore 90ms / LocationStore 分块等自我收口轮询；桥调用 ≤4 的 39 个 store；TimeWheelController/SpeechService 冻结；§9.3「不建议动」各项）、验收口径、与 V2 的衔接（本轮即 §10.3「先拆后翻」前置）。
+- **队列终态**：`bf23e7776d` → `94fbcf964f`，共 9 个提交（S1 `964fa2eaa3` / S2 `70650955f2` / S3 `b7497fb450` / S4 `45e0aff753` / S5 `4c7362b37e` / S6 `b01c7d22d2` / S7 `02890884aa` / S8 `94fbcf964f` / S9 本节）。P0 五域 store 已还原为纯数据 + 控制器持桥与定时器；P1/P2/P4 组件归属与死码清理完成。每片均 `BUILD SUCCESSFUL` + 契约 intact（50/34/29/18）+ 真机 `Smoke: PASS`。
+- **验证**：仅文档改动，无代码/资源/契约变更。真机未涉及。
+
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S8：TelescopeStore live-position 定时器链迁入 TelescopeController
+
+- **依据**：STATE-REVIEW §9.2 P0「Store 同时承担控制器职责」（`TelescopeStore` 自持 `CommandPort` 直接调 `requestInteractive`，并自持 LX200 live-position `setTimeout` 链 —— 成功 1s / 失败 1.8s 自续期，属 §15.7 规则 3 所指的**持续**定时器）；§10.2.1 目标形态「store 纯数据 + 纯派生、controller 持 `CommandPort` / 写 store / 自持定时器、`start()/stop()` 由宿主生命周期收口」。**部分推翻 PLAN §15.12.6 D9 的定时器归属判定**：D9 曾定「定时器仍由 store 自持」，本片据 §9 新判与 §15.7 规则 3「定时器由控制器自持」改为**只把 live-position 持续定时器链迁入控制器**；`loadOculars`（`requestWhenReady` 带超时 0/100/15、无持续定时器）按计划**留 store**，故未整体推翻 D9，仅修订其定时器归属一面。不改面板签名、不改桥命令、不改 `.id()`。
+- **迁出清单（`state/TelescopeStore.ets` → `capability/TelescopeController.ets`）**：
+  - 方法 7 个：`stopTelescopeLivePosition` / `scheduleTelescopeLivePosition` / `refreshTelescopeLivePosition` / `syncTelescopeLivePosition` / `setTelescopeLivePosition` / `lx200Payload` / `loadTelescopeControlStatus`。
+  - 私有字段 3 个：`lx200LivePositionTimer` / `lx200LivePositionRequestPending` / `lx200LivePositionRequestId`（随方法整体迁入控制器，避免跨对象共享 —— §15.7 规则 5）。
+  - 私有助手 1 个：`shouldRefreshLivePosition`。
+  - 接口 `TelescopeHostHooks` → 迁入控制器文件（名称与成员逐字不变）。
+  - **appliers 判定（实测定夺）**：`applyTelescopeProfile` / `applyTelescopeProfiles` / `applyTelescopeEndpointStatus` **整体迁入控制器**（与计划「拟留 store」不同）。理由：grep 全仓库确认三者**无**宿主 / `OcularController` / 面板外部引用，引用点全部在控制器（`selectTelescopeProfile` / `saveTelescopeProfile` / `deleteTelescopeProfile` / `validateTelescopeEditorStatus` / `testTelescopeConnection`）与本片已迁方法内；且 `applyTelescopeProfile` 体内直接调 `this.stopTelescopeLivePosition(false)` / `this.scheduleTelescopeLivePosition(500)`（已迁控制器），若留 store 会造成 `state → capability` 反向依赖（禁止）。故逐字搬入控制器，控制器内既有方法改调 `this.applyTelescope*`。
+  - store 侧同时删除 import：`TelescopeProfilesResponse` / `TelescopeControlResponse`（仅被迁出方法使用）、`telescopeUpdateTime` / `telescopeErrorText`（仅被迁出方法使用）；`TelescopeProfile`（仍用于 `lx200Profiles` 字段）、`TELESCOPE_SIMULATOR_MODEL`、`StellariumBridgeResponse`（`loadOculars` 仍用）、`CommandPort`、`I18n` 保留。store 侧同时删除 `hooks` 字段与 `attachHooks`。
+- **store 保留（纯数据 + `loadOculars`）**：目镜配置簇全部字段、LX200 控制簇全部字段（含 `lx200LivePositionEnabled` 等可观测位）、`equatorialMount`、纯查表 `ocularInstrumentItems` / `ocularInstrumentIndex` / `ocularInstrumentSummary` / `ocularSelInfo` / `telescopeCircleValues`、`persistEquatorialMount`、以及 `loadOculars`（`requestWhenReady('getOculars',...,0,100,15)`）与其 `port` / `ensurePort` / `attachPort` / `seq` / `onChanged` / `notifyChanged`（`loadOculars` 仍需要）。**`state/TelescopeStore.ets` 457 → 271 行（−186）**。
+- **控制器与 hooks**：`TelescopeController` 构造改为 `(port: CommandPort, telescopeStore: TelescopeStore, hooks: TelescopeHostHooks)`；新增 `private hooks: TelescopeHostHooks | null` 与 3 个 live-position 私有字段；新增 `private ensurePort(): CommandPort | null`（逐字自 store 搬入，用于保持 `const port = this.ensurePort(); if (port === null) return` 结构逐字等价）。方法体逐字搬入，仅数据源前缀 `this.<字段>` → `this.telescopeStore.<字段>`（定时器句柄 / pending / reqId 仍为控制器私有 `this.<字段>`）。**重试档逐字保留**：成功 1000ms、失败 1800ms、应用档位 / 回读后 500ms、默认 1000ms；`requestId`-based 在途作废、`markStale` 状态串 `'stale'` / `'updating'` / `'fresh'` / `'error'` 逐字不变。`hooks.shouldRefreshTelescopePosition()` 由宿主构造控制器时闭包注入（store 不再触碰 UI 生命周期）。`capability/` 不 import UI/NAPI。**`capability/TelescopeController.ets` 278 → 467 行（+189）**。
+- **宿主改指向（`pages/MainWindowNativeNode.ets`）**：import 改为 `import { TelescopeController, TelescopeHostHooks }`；`aboutToAppear` 删 `telescopeStore.attachHooks({...})`（3 行 + 2 行注释）改为注释说明；惰性 `telescopeCtl()` 构造时内联 `const hooks: TelescopeHostHooks = { shouldRefreshTelescopePosition: (): boolean => this.shouldRefreshTelescopePosition() }` 并传入构造（控制器惰性构造；`aboutToDisappear` / 前后台 / 面板开合前若未构造则按其他控制器同例就地构造）。谓词读宿主 `applicationInForeground` / `panelVisible` / `activePanel` / `lx200LivePositionEnabled` / `lx200EditingNew`，宿主 `private shouldRefreshTelescopePosition()` 保留不动。调用点改指：`syncTelescopeLivePosition`（前台恢复）、`stopTelescopeLivePosition(false)` ×5（前后台切换 / `aboutToDisappear` / 面板路由 / 关面板 / guide 互斥 `stopCompetingTasks`）、`setTelescopeLivePosition`（CLI `setTelescopeLivePosition` 与望远镜面板 `onSetLivePosition`）、`loadTelescopeControlStatus`（`panel === 'telescope'` 数据加载）全部改 `this.telescopeCtl().X()`；`loadOculars` 仍走 `this.telescopeStore.loadOculars(false)`。宿主 **8193 → 8195 行（+2）**。
+- **逐字等价（§15.7 规则 5）**：桥命令（`getTelescopePosition` / `getTelescopeProfiles` / `getTelescopeControl` / `centerScreenOnTelescope` 等）、payload（`lx200Payload()` 的 `{"slot":N,"targetSource":...}`）、回调分支顺序、错误文案（`m_telescope_*`）、`ok === true` / `state === 'available' | 'unavailable'` 比较边界均未改；`??` 回退、`.toFixed`、`join(', ')` 等未动。`loadOculars` 逐字留 store。
+- **度量**：`TelescopeStore` **457 → 271（−186）**；`TelescopeController` **278 → 467（+189）**；宿主 **8193 → 8195（+2）**；新增文件 0、删除文件 0。
+- **验证**：
+  1. `node scripts/check-ohos-refactor-slice.mjs` → 切片预检通过。
+  2. `arkts_check`（TelescopeStore / TelescopeController / MainWindowNativeNode）→ 0 error。
+  3. `powershell -ExecutionPolicy Bypass -File scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` → `BUILD SUCCESSFUL in 29 s 625 ms`，signed HAP 709.6 MB。
+  4. `node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 34 panels, 29 static ids, 18 dynamic prefixes, 50 id anchors, over 261 files`。
+  5. `node scripts/test-ohos-plugin-panel-state.mjs` → `# tests 4 / # pass 4 / # fail 0`（该夹具只读 `OcularController` / `NebulaTextureController`，不涉 Telescope，无需改）；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败（`test-ohos-clipboard-pad` / `test-ohos-guide-pad` / `test-ohos-mist-horizon-pad` / `test-ohos-mist-performance` / `test-ohos-polar-scope-pad` / `verify-ohos-search`）。
+  6. 真机 `192.168.1.4:36717`（Mate 80 Pro）：`power-shell setmode 602` 常亮；`devecocli run --skip-build --device 192.168.1.4:36717` → `Smoke: PASS`。CLI `getTelescopeProfiles` → `ok:true`（1 个 simulated 档位）；`getTelescopeControl`（`--payload-json {"slot":1,"targetSource":"selected"}`）→ `{"ok":true,"scope":"offline_simulator","simulated":true,"state":"available","slot":1,"transport":"TCP"}`。**轮询启停实证**：`openUiPanel telescope` → `setTelescopeLivePosition 1` → `hilog -x` 中 `StellariumEntryGL: Stellarium command getTelescopePosition` 与 `[StellariumOhos] command received: "getTelescopePosition" "{\"slot\":1,...}"` 每约 1s 一条（22:35:59.037 → 22:35:59.137 → 22:36:00.139 → 22:36:00.240 → 22:36:01.244；7s 内 40 行 = 约 14 次调用，证实迁移后的自续期链在跑）；`setTelescopeLivePosition 0` 后清日志 5s → `getTelescopePosition` **0 行**（停）；再 `setTelescopeLivePosition 1`（面板开着）4s → 8 行（~1s 轮询），`closeUiPanel telescope` 后清日志 5s → **0 行**（离开面板即停，无定时器泄漏）。`pidof com.cnchensh.stellarium` = `55711` 全程存活；`hilog -x` 无 jscrash / ArkTS 报错（仅系统 `hidumper`/Faultlogger 轮询行，非应用崩溃）。测试仅切换 live-position 开关（非持久化 UI 状态），无持久化设置需复原。
+- **未走查**：望远镜面板「新建 / 保存 / 删除 / 测试连接 / Goto / Sync / Abort / 读取指向」按钮的端到端点按（需滚至控制区并列按钮，语义 CLI 无对应高级动作命令）；`applyTelescopeProfiles` / `applyTelescopeEndpointStatus` 在 `lx200_tcp` 真实端点下的回包渲染（本机默认 simulated 档位，无真实 LX200 设备）；`loadOculars` 回包渲染（本片未改，属既有路径）。
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S7：TimeSettingsStore 配置回读迁入 SettingsController
+
+- **依据**：STATE-REVIEW §9.2 P0「Store 同时承担控制器职责」（`TimeSettingsStore` 自持 `CommandPort` 并直接调 `requestInteractive`，8 连发配置回读，桥读密集）；§10.2.1 目标形态「store 纯数据 + 纯派生、controller 持 `CommandPort` / 写 store」。**边界澄清（STATE-REVIEW §3.4）**：旧 `SettingsController` 作为「跨域设置动作中转层」已于 M 轨道 `b675c48a0c` 解散，本片**只**重建其「配置回读 IO 加载器」一面，**不**恢复跨域动作分派（跨 store setter 仍经 hooks）。不改面板签名、不改桥命令、不改 `.id()`。
+- **迁出清单（`state/TimeSettingsStore.ets` → 新建 `capability/SettingsController.ets`）**：
+  - 方法 1 个：`loadConfigurationSettings()`（8 连发 `getDateFormat` / `getTimeFormat` / `getConfigString astronomy/flag_use_km_for_distance` / `getDitheringMode` / `getNavigationSettings` / `getEphemerisSettings` / `getInformationSettings` / `getTimeSettings`）。
+  - 字段：`port` / `hooks`（改为构造注入）、`seq`（预留约定，随方法迁入）。
+  - 接口 `TimeSettingsHostHooks` → 迁入控制器文件（名称不变，成员逐字不变）；store 侧删除 `StellariumBridgeResponse` / `CommandPort` 两个 import、`port` / `seq` / `onChanged` / `hooks` 字段与 `attachPort` / `attachHooks` / `ensurePort` / `notifyChanged` 方法。`onChanged` / `notifyChanged` 原本即无发布点（加载器从不调用 `notifyChanged`），随 store 侧删除；`attachPort` / `attachHooks` 由构造函数注入取代。
+- **store 保留（纯数据）**：`configDateFormat` / `configTimeFormat` / `startupTimeMode` / `startupTimeStop` / `startupTodayTime` / `startupPresetLocalTime` / `timeSettingsZone` / `presetSkyTime` 全部字段与 `@Observed`。**`state/TimeSettingsStore.ets` 130 → 19 行（−111）**。
+- **新控制器与 hooks**：`export class SettingsController`，构造 `(port: CommandPort, store: TimeSettingsStore, hooks: TimeSettingsHostHooks)`；方法体逐字搬入，仅数据源前缀 `this.<字段>` → `this.store.<字段>`（本域仅 `configDateFormat` / `configTimeFormat` 两字段）。保留 `private ensurePort(): CommandPort | null` 与 `seq`（逐字）。`capability/` 不 import UI/NAPI（`TimeSettingsHostHooks` 全为普通 setter）。**`capability/SettingsController.ets` 113 行（新）**。
+- **宿主改指向（`pages/MainWindowNativeNode.ets`）**：新增 `private settingsControllerImpl: SettingsController | null` 与惰性 `settingsCtl()` getter（hooks 闭包逐字自原 `aboutToAppear` 的 `timeSettingsStore.attachHooks({...})` 搬入）；`aboutToAppear` 的 `timeSettingsStore.attachPort(hostPort, () => {})` + `attachHooks({...})` 整块（−30 行）替换为注释指向 `settingsCtl()`。调用点改指：`viewSettingsStore` 的 `reloadConfigurationSettings` 回调（→ `this.settingsCtl().loadConfigurationSettings()`）与设置面板打开块（`panel === 'settings'`）。启动桥 `saveCurrentViewAsStartup` 的回读经新增 `StartupHooks.reloadConfigurationSettings` hook 由宿主回注同一控制器。宿主 **8178 → 8193 行（+15）**；新增控制器文件数 1。
+- **`StartupBridge.ets` 改指向（`capability/StartupBridge.ets`，−2 行）**：`saveCurrentViewAsStartup` 的 `this.timeSettingsStore.loadConfigurationSettings()` → `this.hooks.reloadConfigurationSettings()`；`StartupHooks` 新增 `reloadConfigurationSettings(): void`；删除 `TimeSettingsStore` import / 字段 / 构造参数（该服务不再持有该 store）。
+- **逐字等价（§15.7 规则 5）**：8 个桥命令、payload、顺序与回调体逐字不变（`r.ok === true` / `r.ok !== true` 守护、`(r.value as string).toLowerCase() === 'true' || r.value === '1'` 判据、`Number(...)` 转换、`?? hooks.informationMode()` 回退、`hooks.applyTimeSettings(r)` 均未改）。请求序号 `seq` 随方法整体迁入控制器（本域原无并发抑制需求，`seq` 仍为预留未用，逐字保留）。
+- **度量**：`TimeSettingsStore` **130 → 19（−111）**；新增 `SettingsController` **113**；宿主 **8178 → 8193（+15）**；`StartupBridge` **240 → 238（−2）**；新增控制器文件 **1**。
+- **验证**：
+  1. `node scripts/check-ohos-refactor-slice.mjs` → 切片预检通过。
+  2. `arkts_check`（SettingsController / TimeSettingsStore / StartupBridge / MainWindowNativeNode）→ 0 error。
+  3. `powershell -ExecutionPolicy Bypass -File scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` → `BUILD SUCCESSFUL in 29 s 542 ms`，signed HAP 709.6 MB。
+  4. `node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 34 panels, 29 static ids, 18 dynamic prefixes, 50 id anchors, over 261 files`。
+  5. `node scripts/test-ohos-settings-choice-motion.mjs` → `# tests 4 / # pass 4 / # fail 0`；`node scripts/test-ohos-information-policy.mjs` → `# tests 3 / # pass 3 / # fail 0`。
+  6. 真机 `192.168.1.4:36717`（Mate 80 Pro）：`power-shell setmode 602` 常亮；`devecocli run --skip-build --device 192.168.1.4:36717` → `Smoke: PASS`。CLI `openUiPanel settings` → `hilog -x` 实证 8 连发桥命令（`getDateFormat` / `getTimeFormat` / `getConfigString` / `getDitheringMode` / `getNavigationSettings` / `getEphemerisSettings` / `getInformationSettings` / `getTimeSettings`）由 `settingsCtl().loadConfigurationSettings()` 一次发出。**决定性回读实证**：经 CLI `setDateFormat ddmmyyyy` 改引擎值 → `aa force-stop` + `aa start` 冷启动（`TimeSettingsStore` 回到默认 `yyyymmdd`）→ `openUiPanel settingsTime` → `ui layout` 显示日期格式「日-月-年」、预览 `08-10-2026 22:27:19`（冷启动 store 默认应为「年-月-日」，故该值只能来自回读加载器）；随后 `setDateFormat yyyymmdd` 复原并复核 `dateFormat=yyyymmdd`。信息页 `openUiPanel settingsInformation` → 「信息级别」全部/默认/简短渲染正常（`getInformationSettings` hook 链写入）。`pidof com.cnchensh.stellarium` = `50461` 存活；`hilog -x` 无 jscrash / ArkTS 报错。测试改动的引擎日期格式已复原。
+- **未走查**：`scripts/test-ohos-information-settings.py` 与 `test-ohos-time-settings.py` 为 macOS 专用（硬编码 `/Applications/DevEco-Studio.app/.../hdc`，且 `stellarium-cli` 未带 `--bundle`，会命中另一前台包 `com.joinother.skyinstrument`），未在本机 Windows 运行；改以等价的手工 CLI + `ui layout` 序列覆盖同一回读链（见上）。距离单位 / 导航 / 星历三组 hooks 字段（`useMetricUnits` / `navigation*` / `ephemerisDe4xx*`）未逐项对照截图（其写入路径与本片搬迁同源、由同一 8 连发驱动；导航页 tab 需横向滚动才可见）。
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S6：GuideStore 引擎/定时器/桥迁入 GuideController
+
+- **依据**：STATE-REVIEW §9.2 P0「Store 同时承担控制器职责」（GuideStore 持 `CommandPort` 直接调 `requestInteractive`、`GuidePlayer` 会话与 250ms tick 定时器，实质是控制器 + store 的混合体）；§10.2.1 目标形态「store 纯数据 + 纯派生、controller 持 `CommandPort` / 写 store / 自持定时器」。本片只做 guide 域播放器 / 定时器 / 桥调用的归位，不改面板签名、不改桥命令、不改 `.id()`。
+- **迁出清单（`state/GuideStore.ets` → 新建 `capability/GuideController.ets`）**：
+  - 字段 8 个：`guidePlayer` / `guideTimer` / `guideGyroWasEnabled` / `guidePanelWasVisible` / `guideLastRequest` / `guideLastResult` / `port` / `hooks`。
+  - 方法 5 个：`attachPort` / `attachHooks`（改为构造函数注入）、`startGuideTimer` / `stopGuideTimer`、`stopPlayer`、`pausePlayer`、`executeGuideRequest`。
+  - 接口 `GuideHostHooks` → 重命名并迁入控制器文件为 `GuideControllerHooks`（成员逐字不变）。
+  - store 侧同时删除：`GuidePlayer` / `GuideResult` / `AstronomyGuide` / `ASTRONOMY_GUIDES` / `StellariumBridgeResponse` / `I18n` / `CommandPort` 全部 import；仅保留 `GuideState`（`guideState` 字段类型）。
+- **store 保留（纯数据）**：`guideState: GuideState` 与 `speechStatus: string` 两个字段，`@Observed` 保留（仍被 UI 经 `@ObjectLink`/读取消费）。**`state/GuideStore.ets` 156 → 20 行（−136）**。
+- **新控制器与 hooks**：`export class GuideController`，构造 `(port: CommandPort, store: GuideStore, hooks: GuideControllerHooks)`；方法体逐字搬入，仅数据源前缀 `this.<字段>` → `this.store.<字段>`。控制器新增 `resetJourneyFlags()`（宿主清空 `guideGyroWasEnabled` / `guidePanelWasVisible` 快照）与 CLI 读取器 `lastRequestId(): string` / `lastResult(): GuideResult`（宿主 `publishGuideState` 用）。`capability/` 不 import `libentry.so` / `getUIContext` / `animateTo` / UI 上下文 —— `animateTo` 仍由 `hooks.animateTo` 回注。**`capability/GuideController.ets` 161 行（新）**。
+- **宿主改指向（`pages/MainWindowNativeNode.ets`）**：新增 `private guideControllerImpl: GuideController | null` 与惰性 `guideCtl()` getter（hooks 闭包逐字自原 `aboutToAppear` 的 `attachHooks({...})` 搬入）；`aboutToAppear` 的 `guideStore.attachPort(hostPort)` + `attachHooks({...})` 整块（−29 行）替换为 `this.guideCtl()`。调用点改指：`pausePlayer`（前台切换）、`executeGuideRequest`（CLI `startGuide`/`guideAction` 事件 L1841、`ScriptPlaybackHostHooks.requestStopGuide`、`InteractiveGuideShell` 的 `onAction`、`ScriptsPanel` 的 `onStartGuide`）、`aboutToDisappear` 的 `stopGuideTimer` + `resetJourneyFlags` + `stopPlayer`、`publishGuideState` 的 `lastRequestId()` / `lastResult()`。`guideState` / `speechStatus` 读取与写入（含 4 处 `speakSelectedObject` 的 `setSpeechStatus`）**全部留 store**。宿主 **8165 → 8178 行（+13，30 增 / 大部分为 getter 包裹）**。新增控制器文件数 1。
+- **逐字等价（§15.7 规则 5）**：`executeGuideRequest` 的 `hooks === null || port === null` 守护、`session_busy_or_unknown_guide` 判据、`['return','next','previous','stop','retry','center','closer','wider']` 列表、分支顺序、`bridge_timeout` / `guide_error` 文案、`ended` 收尾（停表 / 恢复面板 / 恢复陀螺仪 / `refreshState` / `reloadObserverInfo`）逐字不变。tick 定时器间隔 **250ms** 与 `tick(0.25)` 逐字不变；`guideGyroWasEnabled` / `guidePanelWasVisible` / `guideLastRequest` / `guideLastResult` 随方法整体迁入控制器（不跨对象共享）。
+- **测试同步**：`scripts/test-ohos-guide.mjs` 第 9 个用例的 CLI 结果断言由 `lastRequestId: this.guideStore.guideLastRequest` 改为 `lastRequestId: this.guideCtl().lastRequestId()`，并补 `result: this.guideCtl().lastResult()` 断言。
+- **度量**：`GuideStore` **156 → 20（−136）**；新增 `GuideController` **161**；宿主 **8165 → 8178（+13）**；新增控制器文件 **1**。
+- **验证**：
+  1. `node scripts/check-ohos-refactor-slice.mjs` → 切片预检通过。
+  2. `arkts_check`（GuideStore / GuideController / MainWindowNativeNode）→ 0 error。
+  3. `powershell -ExecutionPolicy Bypass -File scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` → `BUILD SUCCESSFUL in 28 s`。
+  4. `node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 34 panels, 29 static ids, 18 dynamic prefixes, 50 id anchors`。
+  5. `node scripts/test-ohos-guide.mjs` → `# tests 9 / # pass 9 / # fail 0`。
+  6. 真机 `192.168.1.4:36717`（Mate 80 Pro）：`power-shell setmode 602` 常亮；`devecocli run --skip-build --device 192.168.1.4:36717` → `Smoke: PASS`；CLI 演练导览全链 —— `startGuide solar-neighbours` → `{"ok":true,"accepted":true}`，`getGuideState` → `state.active=true / phase=observing / index=0 / count=5 / lastRequestId=cli-…`；`guideAction next` → `getGuideState` `index=1`；`guideAction stop` → `getGuideState` `active=false / phase=idle`（面板 / 陀螺仪 / 观测信息按 `ended` 分支复原，与改动前行为一致）。`pidof com.cnchensh.stellarium` = `45148` 存活；`hilog -x -T ArkTS` 无 jscrash / ArkTS 报错。
+- **未走查**：`scripts/test-ohos-guide-pad.mjs` 为 macOS 专用（硬编码 `/Applications/DevEco-Studio.app` 与 `/tmp` 路径），未在本机 Windows 运行；改以等价的手工 CLI 序列（`startGuide` → `guideAction next` → `guideAction stop` → `getGuideState` 回读）覆盖同一链路的真机实证。`InteractiveGuideShell` 卡片 UI 的逐帧 tick 文案刷新未截图对照（手动模式下 `remaining` 不递减，与单测口径一致）。
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S5：ScriptStore 桥调用迁入 ScriptPlaybackController
+
+- **依据**：STATE-REVIEW §9.2 P0「Store 同时承担控制器职责」（ScriptStore 8 个 `requestInteractive` + 450ms 视频状态轮询定时器，实质是控制器 + store 的混合体）；§10.2.1 目标形态「store 纯数据 + 纯派生、controller 持 `CommandPort` / 写 store / 自持定时器」。本片只做 script/recording/video 域桥调用与轮询定时器的归位，不改面板签名、不改桥命令、不改 `.id()`。
+- **迁出清单（`state/ScriptStore.ets` → `capability/ScriptPlaybackController.ets`）**：
+  - 公开桥加载 / 播放 10 个：`loadRecordings` / `loadScriptList` / `loadRecordingByName` / `loadVideoRecordingState` / `startVideoStatePolling` / `stopVideoStatePolling` / `playScriptByName` / `continueNativeScript` / `stopScriptPlayback` / `sendScriptKey`。
+  - 私有助手 / 字段：`setScriptMetadata`（迁入控制器）、`videoStateTimer`（450ms 视频状态轮询）、`seq`。
+  - store 侧同时删除：`CommandPort` import、`port` 字段、`attachPort()`、`attachHooks()`、`attachPlaybackHooks()`、`ensurePort()`、`notifyChanged()`、`onChanged`、`hooks` / `playbackHooks` 字段，以及 `ScriptHostHooks` / `ScriptPlaybackHooks` 两个接口（迁走后均无引用；宿主对 `scriptStore` 的 `attach*` 调用全部删除）。
+  - **store 保留（纯数据 / 纯派生，逐字未动）**：全部数据字段（`scriptList` / `scriptMetadata` / `recordings` / `video*` / `screenVideo*` / 播放回放四态 / `scriptStartGraceUntil` 等）+ `scriptMeta` / `scriptMetaLine` / `scriptSourceLine` / `scriptWaitDisplayText` / `visibleScriptCaptions` / `visibleScriptCaptionText` / `scriptControlHeight` / `scriptPlaybackVisible(guideActive)` / `scriptSessionActive(recording, guideActive)` / `scriptControlCompact` / `scriptKeyButtonWidth` / `replayTimelineMs`。`ScriptStore` **408 → 139 行（−269）**。
+- **控制器与 hooks**：控制器新增 `private videoStateTimer` 与上述 10 方法（函数体逐字搬入，仅数据源前缀由 `this.<字段>` 改为 `this.scriptStore.<字段>`、`this.ensurePort()` 改为 `this.port`、`this.notifyChanged()` 删除（宿主原为空实现））。hook 映射：`startStatusPolling` → `this.startScriptStatusPolling()`、`stopStatusPolling` → `this.stopScriptStatusPolling()`、`refreshStatus` → `this.refreshScriptStatus()`、`finishNativeScriptUi` → `this.finishNativeScriptUi()`、`flashHint` / `guideActive` / `dismissScriptOverlays` → `this.hooks.*`、`runWaitingAnimation` → `this.hooks.animateWaiting()`。**`ScriptPlaybackHostHooks` 新增 6 个**：`sessionBusy()` / `requestStopGuide()` / `finishReplay(message)` / `stopBackgroundTimers()` / `logScriptError(filename, error)` / `stopVideoRecording()`，由宿主在 `scriptPlaybackCtl()` 构造处以闭包回注（与原 `ScriptStore` 注入完全同源）。`importScriptFile` 内部改为 `this.loadScriptList()`。控制器 **237 → 413 行（+176）**。
+  - **新增第 6 个 hooks 之外的发现**：`setScriptMetadata` 除 `loadScriptList` 外还有第二个调用方 —— `capability/StartupBridge.ets` 启动任务里的 `getScriptList` 回包（`loadRecordingByName` / `loadScriptList` 早在 B2R-4 下沉 store 时即共用此助手）。故该助手在控制器中**保持 public**，并经 `StartupHooks.setScriptMetadata(raw)` 由宿主回注 `this.scriptPlaybackCtl().setScriptMetadata(raw)`；否则启动期脚本元数据会丢。
+- **宿主改指向（`pages/MainWindowNativeNode.ets`）**：`scriptStore.attachPort(...)` / `attachHooks(...)` / `attachPlaybackHooks(...)` 三块删除；`scripts` 面板打开时的 `loadScriptList` / `loadRecordings` / `loadVideoRecordingState`、`onContinue` / `onStop` / `onSendKey`、`onStopPlayback` / `onPlayScript` / `onLoadRecording` 与 `playScriptByName` 回调全部由 `this.scriptStore.*` 改指 `this.scriptPlaybackCtl().*`；`scriptPlaybackCtl()` 的 hooks 对象补入上述 6 个新成员。另两处跨控制器消费方（不在宿主内自调）经各自 hooks 转发到控制器：`RecordingController`（`loadRecordings` ×2 / `startVideoStatePolling` / `stopVideoStatePolling`，新增 `RecordingHostHooks` 3 法）与 `LayerController`（设置标签页 5 的 `loadScriptList` / `loadRecordings` / `loadVideoRecordingState`，新增 `LayerHostHooks` 3 法），宿主在两处构造处以闭包注入 `this.scriptPlaybackCtl().*`。宿主 **8183 → 8165 行（−18，30 增 48 删）**；`RecordingController` **432 → 436（+4）**、`LayerController` **507 → 511（+4）**、`StartupBridge` **238 → 240（+2）**。新增控制器文件数 0（复用既有 `ScriptPlaybackController`）。
+- **逐字等价（§15.7 规则 5）**：方法体只改「取值来源前缀」；`playScriptByName` 的守护 `if (hooks.sessionBusy()) return`、分支顺序、错误 / 提示文案（`正在启动脚本…` / `msg_script_running` / `msg_apply_failed` / `脚本启动超时，请重试` / `脚本按键不可用` / `回放已停止` / `已加载录制：…` / `加载录制失败`）、`setScriptMetadata` 的 `Array.isArray` 判据与逐条 `item.file` 索引、`loadVideoRecordingState` 的 `wasRecording && !recording` 边界与 450ms 轮询间隔、状态 / 字幕 250ms 轮询间隔均逐字不变。请求序号 `seq` 随方法整体迁入控制器（本域原无并发抑制需求，`seq` 仍为预留未用，逐字保留）。
+- **验证**：
+  1. `node scripts/check-ohos-refactor-slice.mjs` → 切片预检通过。
+  2. `arkts_check`（ScriptStore / ScriptPlaybackController / RecordingController / LayerController / StartupBridge / MainWindowNativeNode）→ 0 error。
+  3. `scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` → `BUILD SUCCESSFUL in 29s`，signed HAP 709.6 MB。
+  4. `node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 34 panels, 29 static ids, 18 dynamic prefixes, 50 id anchors, over 259 files`。
+  5. `node scripts/test-ohos-plugin-panel-state.mjs` → 4/4 全绿（本片无测试夹具引用被搬符号，无需改读）。
+  6. 真机 `192.168.1.4:36717`（HUAWEI Mate 80 Pro）：`devecocli run --skip-build` → `Smoke: PASS`；`pidof com.cnchensh.stellarium` = 40574 存活；CLI `listRecordings` → `{"items":[],"ok":true}`；`getScriptList` → `ok:true`（84 个脚本名 + `details` 元数据）；`getVideoRecordingState` → `{"attemptedFrames":0,"recording":false,"frameCount":0,"failedFrames":0,"maxFrames":0,"ok":true}`；`openUiPanel scripts` → `{"ok":true,"accepted":true,"panel":"scripts"}`；`ui layout` 显示 `Button#panel-back` / `Button#panel-close` / `Scroll#panel-scroll-zh_CN`，滚动后 `Column#scripts-list-scroll` 渲染脚本行且元数据行「作者: Qam1 · 许可证: Public Domain」「来源: scripts/phobos_phun_1.ssc」由**迁入控制器的 `loadScriptList` + `setScriptMetadata`** 填充；点按「木星伽利略卫星」→ `ScriptFocusShell` 显示「脚本播放中」（`playScriptByName` 经控制器触发，250ms `refreshScriptStatus` 回填脚本名 / 描述）；点按「停止」→ 回落星图视图（`stopScriptPlayback` → `finishNativeScriptUi` 收尾并释放叠层）；`hilog -T ArkTS` 无 jscrash / TypeError / ReferenceError。
+- **未走查**：真机未走查视频帧序列录制（`startVideoRecording` → 450ms `startVideoStatePolling` 轮询 → 录制结束自动 `stopVideoRecording` 收尾）与系统录屏 MP4 / 截图；设备当前**无已保存录制**（`listRecordings` 返回空），故 `loadRecordingByName` 的「已加载录制：…（N 条命令）」提示与非空录制列表的回放 / 删除路径未端到端点按；以上路径均非本片搬入代码的新逻辑，留待有录制数据时补走。
+- **本片新踩的坑**：搬迁清单把 `setScriptMetadata` 标为「仅 `loadScriptList` 调用 → 设为 private」，实测 `StartupBridge` 启动任务亦调用之（B2R-4 下沉时共用）。若照清单设 private 则构建期不可见（`arkts_check` 不查跨文件可见性，会漏）。已按「grep 全树 + 改写消费方」纪律将助手保留 public 并经 hooks 回注。
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S4：AstroStore 桥调用迁入 AstroCalcController
+
+- **依据**：STATE-REVIEW §9.2 P0「Store 同时承担控制器职责」（AstroStore 15 个 `requestInteractive`，实质是控制器 + store 的混合体）；§10.2.1 目标形态「store 纯数据 + 纯派生、controller 持 `CommandPort` / 写 store / 自持请求序号」。本片只做 astro 域桥调用归位，不改面板、不改桥命令、不改 `.id()`。
+- **迁出清单（`state/AstroStore.ets` → `capability/AstroCalcController.ets`）**：
+  - 公开加载器 24 个：`loadRTS` / `clearRtsSelectionResults` / `loadRtsCalendar` / `markRtsCalendarForRegeneration` / `loadEphemeris` / `loadPlanetCalc` / `loadPlanetPairDistance` / `loadAltAzCurve` / `loadObservabilityCalendar` / `loadAnnualElevation` / `loadLunarElongation` / `loadPlanetTimeSeries` / `loadEclipses` / `reloadEclipses` / `loadPlanetaryTransits` / `loadPhenomena` / `loadTonightAstro` / `loadAlmanac` / `loadHeliocentricPositions` / `loadCelestialPositions` / `loadMoonPhases` / `loadAstroCalcContext` / `cancelAstroCalcContext` / `loadAstroTab`。
+  - 私有助手 8 个：`resolveRtsCalendarStartJD` / `resolveEphemerisStartJD` / `resolveGraphStartJD` / `beginGraphLoad` / `finishGraphLoad` / `resolveEclipseStartJD` / `updatePlanetPairDistanceRanges` / `updatePlanetTimeSeriesRanges`。
+  - 私有请求序号 / 代际 16 个：`rtsRequestSequence` / `rtsCalendarLoadSequence` / `ephemerisLoadSequence` / `planetCalcRequestSequence` / `planetPairDistanceRequestSequence` / `graphLoadSequence` / `eclipseLoadSequence` / `planetaryTransitRequestSequence` / `phenomenaRequestSequence` / `almanacRequestSequence` / `hecPositionsRequestSequence` / `celestialPositionsRequestSequence` / `moonPhaseRequestSequence` / `moonPhaseLoadingDays` / `astroContextRequestSequence` / `astroContextRequestPending`。
+  - store 侧同时删除：`CommandPort` import、`port` 字段、`attachPort()`、`ensurePort()`、`notifyChanged()`、`onChanged`（迁走后均无引用）。store 保留 `attachHooks` / `hooks`——纯派生仍需 `hasSelectedObject / selectedObjectName / wutCategory / wutObservationTime / fmtDateTime`。
+  - **store 保留（纯数据 / 纯派生，逐字未动）**：全部数据字段 + `graphTargetLabel` / `phenomenaBodyName` / `updateAstroCalcSnapshot` / `makeAstroCsv` / `filteredEclipses` / `altAzMaxLabel` / `altAzVisibleHours` / `altAzNowLabel` / `annualMaxLabel` / `lunarElongationClosestLabel` / `rtsCalendarStartOptionLabel` / `eclipseStartOptionLabel` / `graphCustomStartLabel` / `astroNeedsSelectedObject` / `astroCsvExport` 及 `altAzRangeLabel`…`almanacHoursLabel` 全部宽度 / 分段 / 标签助手。
+- **控制器与 hooks**：控制器新增 `private hasSelected() { return this.hooks.hasSelectedObject() }`（供 `loadRTS` / `loadRtsCalendar`）；`wutCategory` / `wutObservationTime` 直读注入的 `wutStore` 字段；`ephemerisCustomStartJD()` 改为直读 `dateToJD(ephemerisStore.ephemerisStartYear/Month/Day)`；`fmtDateTime` 用控制器自身方法；`loadPlanetPositions` 用控制器自身方法；`loadWutTargets` 用 `wutStore.loadWutTargets()`。**新增 3 个 `AstroCalcHostHooks`**：`hasSelectedObject()` / `selectedObjectName()` / `hecLayoutPositions(positions)`，由宿主在 `astroCalcCtl()` 构造处以闭包回注（控制器不 import `ObjectDetailStore`）。`AstroHostHooks` 删去 `loadWutTargets` / `ephemerisCustomStartJD` / `hecLayoutPositions` / `loadPlanetPositions`（迁走后 store 不再引用）。
+- **宿主改指向**：`this.astroStore.attachPort(...)` 删除；`attachHooks` 收敛为 5 个纯跨度读取；`AstroPanel` 回调块 19 个 `load*` / `mark*` / `reload*` 与 `L3449 loadAstroTab` + `L5316 clearRtsSelectionResults` + `L5566 loadEphemeris` 全部由 `this.astroStore.*` 改指 `this.astroCalcCtl().*`；宿主 `dateToJD` 死 import 删除（唯一用途随 hook 移除）。
+- **逐字等价（§15.7 规则 5）**：方法体只改「取值来源前缀」——`this.<store字段>` → `this.astroStore.<字段>`、`this.ensurePort()` → `this.port`、`hooks.*` → wut/ephemeris 直读或 `this.*`；比较边界、分支顺序、错误文案、重试档（`0/100/80`、`0/100/200`、`0/100/300`）、进度回调与 `Seq` 比对逐字不变。请求序号随方法整体迁入控制器（避免跨对象共享）。
+- **度量**：`state/AstroStore.ets` **1549 → 558 行（−991）**；`capability/AstroCalcController.ets` **462 → 1429 行（+967）**；`pages/MainWindowNativeNode.ets` **8183 → 8183 行（净 0，31 增 31 删）**。新增控制器文件数 0（复用既有 `AstroCalcController`）。
+- **验证**：
+  1. `node scripts/check-ohos-refactor-slice.mjs` → 切片预检通过。
+  2. `arkts_check`（AstroStore / AstroCalcController / MainWindowNativeNode）→ 0 error。
+  3. `scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy` → `BUILD SUCCESSFUL in 43s`，signed HAP 709.6 MB。
+  4. `node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 34 panels, 29 static ids, 18 dynamic prefixes, 50 id anchors, over 259 files`。
+  5. `node scripts/test-ohos-astro-motion.mjs` → 9/9 全绿（夹具同步：`loadAstroTab` 桩由 `astroStore` 移到控制器）。
+  6. 真机 `192.168.1.4:36717`（HUAWEI Mate 80 Pro）：`devecocli run --skip-build` → `Smoke: PASS`；`pidof` = 32866 存活；CLI `searchObject "Mars|selectOnly"` → `found:true`（火星 巨蟹座，星等 1.02）；`openUiPanel astro` → `accepted`；`getAstroPanelState` → `{group:0,tab:5,requestedTab:-1,loading:false,period:"midnight",...}`；`getTonightEvents` → `ok:true`（残月 / 7 行星球 / 太阳暗夜窗口）；`getAlmanac` → `ok:true`（日出日落 / 四季节点 / 昼长）；`setAstroTab 0` / `setAstroTab 1` 后 `ui layout` 显示子标签高亮与快照正确切换（`参数快照 · 地平位置` / `参数快照 · 当前选中天体 · 14 天 · 每 24 小时`），上下文卡（`时间 / 平恒星时 / 视恒星时 / 太阳月亮`）由迁入的 `loadAstroCalcContext` 正常填写；`devecocli ui screenshot` 已存证；`hilog -T ArkTS` 无 jscrash / ArkTS 异常。
+- **未走查**：真机未逐一点开天文面板全部 10 个子标签并等待各自数据表渲染（其余标签共用同一 `loadAstroTab` 分发；本片已走查 tab 5/0/1 的加载、快照与上下文回读）。另：`ui layout` 显示天文面板标签**正文区（内层 `astro-content` Scroll）为 0 高、列表不渲染**——已用 A/B（`git stash` 回 HEAD 单独构建、同机同序复核）确认该现象在 S4 **之前即存在**，与本片无关（本片 0 行改动面板 / 布局）。
+
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S3：跨域通用组件归位 common/ui
+
+- **依据**：STATE-REVIEW §9 P2（跨域复用组件住在「碰巧被别的域 import」的域目录）。`GraphLoadingRow`（astro 域文件，被 skyculture 的 SkyCultureViewTab 消费）与 `SkyCultureDescriptionBlockView`（skyculture 域文件，被 object 的 ConstellationCultureView 消费）为两个真实跨域件。
+- **改动**：
+  - 新建 `common/ui/GraphLoadingRow.ets`（从 `panels/astro/GraphGuides.ets` 抽出通用加载行，无天文域硬编码、无外部 import）；`GraphGuides.ets` 只余 `RtsSelectionGuide`/`GraphSelectionGuide` 两个引导块（头部注释同步）。
+  - `git mv panels/skyculture/SkyCultureDescriptionBlockView.ets → common/ui/SkyCultureDescriptionBlockView.ets`，文件内 import 深度改为 `./UiTokens`。
+  - 消费方 import 改指向：`AstroPanel`（拆成 `./GraphGuides` + `common/ui/GraphLoadingRow`）、`SkyCultureViewTab`（两处）、`ConstellationCultureView`（一处）。
+- **不动**：`LayerSwitchRow` 留 `panels/layers/`（4 个消费方 + 图层域特化，§9.2 P2 建议归属）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 6 文件 0 error；`BUILD SUCCESSFUL in 49s`；UI 契约 intact（**34 面板 / 29 静态 id / 18 动态前缀 / 50 锚点**，扫描文件 258 → 259）；`scripts/**` 无引用被移动符号的夹具，无需同步。真机未走查（无可用设备）；仅组件归属搬迁。
+
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S2：SettingsRows 跨域行归位 common/ui
+
+- **依据**：STATE-REVIEW §9 P1（`SettingsRows.ets` 事实充当跨域共享组件库）。其 7 个导出中 3 个被非设置面板消费：`NavStarsToggleRow`（NavStarsPanel）、`ArchaeoToggleRow`（ArchaeoLinesPanel）、`MosaicCameraMetric`（MosaicCameraPanel）。
+- **改动**：新建 `common/ui/NavStarsToggleRow.ets`、`common/ui/ArchaeoToggleRow.ets`、`common/ui/MosaicCameraMetric.ets`（组件体逐字搬家，仅按新目录调整 import 深度）；从 `panels/settings/SettingsRows.ets` 删除这三个 struct（−65 行）；改三个消费方 import 指向 `common/ui/`；`SettingsRows.ets` 头部注释同步说明其已回到设置域专用。保留在 `SettingsRows.ets` 的 4 个（`NavigationSwitchRow`/`EphemerisToggleRow`/`InformationModeButton`/`InformationSwitchRow`）仅被 `SettingsPanel` 消费。
+- **落点依据**：§4.2-4「新通用件统一进 `common/ui/`」，与既有 `common/ui/SettingsSwitchRow`、`SettingsChoiceButton` 同例。组件名不改（避免无谓改写与契约噪声）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 7 文件 0 error；`BUILD SUCCESSFUL in 29s`；UI 契约 intact（**34 面板 / 29 静态 id / 18 动态前缀 / 50 锚点**，扫描文件 255 → 258）。真机未走查（无可用设备）；仅组件归属搬迁，渲染逻辑逐字不变。
+
+## [2026-10-08] DevEco Code - 重构 §9 边界优化 S1：清理宿主死 import
+
+- **依据**：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §9 P4a（宿主死 import）。本轮按 §9 制定「三层边界优化」计划（阈值拆分 P0 + P1/P2/P4），S1 是最小、零风险的首片。
+- **改动**：删除 `pages/MainWindowNativeNode.ets` 三行未被引用的 import —— `LayerSwitchRow`（L111，仅剩一处注释提及）、`GraphLoadingRow`/`RtsSelectionGuide`/`GraphSelectionGuide`（L128）、`SkyCultureDescriptionBlockView`（L143）。五个符号在宿主全文仅出现于 import 本身（`grep` 复核），删除后宿主 **−3 行**。
+- **不做**：`TimeWheelController`（`state/`）、`SpeechService`（`common/`）维持冻结（§9.4 P4b/P4c 判定合理），本片不搬。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 0 error；`BUILD SUCCESSFUL in 31s`；UI 契约 intact（**34 面板 / 29 静态 id / 18 动态前缀 / 50 锚点**）。真机未走查（无可用设备：`devecocli device list` 无活动设备、WiFi `hdc tconn 192.168.3.95:36717` 连接失败）；本片仅删死 import，零运行期影响。
+
+## [2026-10-07] DevEco Code - 修性能：选中天体后星等不再比名称晚一族拉
+
+- **依据（用户反馈）**：点星选中后，名称立刻出现，星等 / 距离要等一大截才填上。
+- **根因（两层叠加，都不是「定时器写着玩」）**：
+  1. **桥是入队 + 轮询，天生 ≥1 帧 + 最多 100ms**：ArkUI/JS 线程与 OHOS 渲染泵同线程，off-thread 分支绝不能阻塞（阻塞 → drain 轮不到 → 命令永久超时且整屏冻结），所以交互命令一律「入队 → 返回 `pending` → 下一帧执行 → ArkUI 轮询取回」（consume-on-read）。轮询参数是 `BridgeClient.requestInteractive()` 的 **100ms × 15**（源码注释里的 50ms×40 是过期值）。
+  2. **`selectAt` 回包刻意轻量**：`selectedObjectJson(core, false, false)`（`includeDynamic = false`），因为 `StelObject::getInfoMap()`（尤其卫星 TLE 传播 / 升落 / 遥测）是**渲染线程同步**算的，塞进点选回包会拖慢「选中」本身 —— 所以点选回包**只有名称 / 类型 / 媒体**。
+  3. **合起来的坑**：唯一取动态值的请求是 `requestSelectedDetails()` 的 **550ms 定时器**，且它带 `details`（等结构化字段全量收集，给详情卡四页签用，重得多）；而 180ms 的实时值轮询在这条请求在途时被**显式关掉**（`if (!selectedDetailLoaded && selectedDetailTimer !== 0) return`）。于是星等被排在「550ms + 全量收集 + ≤100ms 轮询」之后。
+  4. **搜索为何不慢**：`searchObject` 走 `selectedObjectJson(core, false)`，`includeDynamic` 默认 **true**，名称与星等在**同一回包**到达 —— 只有点星这条路是轻量回包。
+- **修法**：新增 `refreshSelectedDynamicValues()` —— 选中回包落地后**立刻**补一次不带 `details` 的 `getSelectedObjectInfo`，动态值随即可用；全量结构化字段仍走原来那条 550ms 的路。两者不互相覆盖（不带 `details` 的回包**没有** `detailFields` 键）。刻意**不**做 `isDetailRefreshing()` 短路：每次选中都换 `skySelectionRequestSerial`，上一轮轮询的在途回包本就会被丢弃；若等它收尾，点选恰好落在轮询在途窗口（约占 180ms 周期的 100ms）时补拉会被挡掉。**零 C++ 改动、零新增桥命令**。
+- **文档**：`docs/harmonyos/DEBUGGING-GUIDE.md` 新增 §4.10，把「桥的入队+轮询模型」（含同线程死锁约束与 consume-on-read 的由来）与「回包分级」讲清楚，避免下次再误判成「定时器问题」。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 intact（50/34/29/18）。真机：点星后读数为 `星等 5.58 / 大气消光后星等 5.95 / 星座 天鹤座`；点到人造卫星（QZS-1R）时动态值（含昂贵的 TLE 传播）同样正常落地。**说明**：未做帧级计时埋点，延迟改善来自去掉 550ms 依赖这一确定性事实，而非实测毫秒数。
+- **顺带记录（未修）**：人造卫星的 `vmag`/`vmage` 引擎回 0，故观测与天文馆两种模式都会显示 `0.00` 而不是 `--`；这是改造前既有行为，不在本次范围。
+
+## [2026-10-07] DevEco Code - 观测模式：展开态同样不画连接线
+
+- **依据（用户要求）**：上一轮只在极简态关掉了详情卡指向线，展开观察时仍会画出来；观测模式**两种形态都不需要**。
+- **改动**：宿主下发三壳层的 `connectorVisible` 由 `… && !observeCompact()` 改为 `… && !observeModeEnabled()` —— 只要详情卡处于观测模式（极简 / 展开）就不渲染 `ObjectDetailConnectorLayer`；天文馆模式与「设置 > 信息 > 详情卡指向线」开关的行为**完全不变**（开关仍照旧控制天文馆态）。
+- **仍然只拦渲染不拦计算**：卡片纵向位置继续由 `detailConnectorCtl().objectDetailCardY()` 决定，连接线控制器不能停。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 intact（50/34/29/18）。
+
+## [2026-10-07] DevEco Code - 观测模式第二轮细化（读数三分栏 · 卡片上提 · 收窄下沿 · 去掉状态提示条）
+
+- **依据（用户反馈）**：① 下沿太厚，挤掉了观测空间；② 浮窗整体再往上提，贴安全区；③ 「选中 xx 天体」「打开/关闭面板」这类状态提示条不要了；④ 观测模式下不要距离，星座右推一格，原星座格改显示**大气消光后星等**。
+- **读数三分栏**：观测模式页头三格由「星等(大气消光) `0.03(0.22)` / 星座 / 距离」改为 **星等 `0.03` / 大气消光后星等 `0.18` / 星座 `天琴座`** —— 去距离，消光后星等从「括号拼在同一格」升为**独立一格**（用户要求）。随之删除 `ObjectDetailStore.observeMagnitudeLabel/observeMagnitudeValue` 两个拼接助手与 I18n 键 `detail_observe_magnitude`，新增 `detail_observe_extinction_magnitude`（10 语言）。天文馆模式页头三格**零变化**（星等 / 星座 / 距离）。
+- **收窄下沿**：下沿箭头条 44 → **28vp**，箭头按钮同样缩到 28×28（`ic_back` 雪佛龙、17px 图标、无底 Button、按压 opacity 0.62 的**样式完全保留**，只收盒子）。极简卡高 178 → **162vp**。
+- **浮窗上提到安全区顶部**：`baseBottomCardY` 的手机 / 半折分支去掉旧的 `max(86, min(126, skyHeight*0.12))` 下限，直接用 `scriptControlSafeTop()`（= `EDGE_MARGIN` 44vp，与应用其它浮动件的安全区口径一致）。平板（展开态）分支不变，只多一个不高于安全区的保护。真机复核：卡片顶边从 ~86vp 提到 ~44–58vp，顶部留白基本让给天空。
+- **去掉状态提示条**（用户要求，错误提示保留）：
+  - 点星成功时的「已选中 XX 天体」（`i0074`）删除 —— 反复点选不再刷屏；**点了空处仍提示**「这里没有天体」（`i0075`）；
+  - 双击取消选中的「未选中天体」（`m_session_unselected`）删除；
+  - 从 Dock 开面板时的「已打开面板」（`msg_panel_opened`）删除。
+  真机复核：点星后 `ui layout` 无「已选中」条；点 Dock「图层」无「已打开面板」条。失败的提示（如空处点选、居中失败）全部保留。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 intact（50/34/29/18）；真机截图复核：卡片贴顶、聚焦圈四角短线横穿圆环、三格读数 `0.03 / 0.18 / 天琴座`、下沿箭头明显变窄且居中、极简态无连接线。
+
+## [2026-10-07] DevEco Code - 观测模式布局细化（聚焦圈居中 · 下沿箭头 · 极简态不画连接线）
+
+- **依据（用户反馈）**：① 展开 / 居中两个按钮都用 `padding` 贴在卡片左右边缘，太靠边；② 极简模式下不该再画指向线；③ 收起在页头、展开在卡片底部，两个动作隔了一整张卡，来回够。
+- **居中 → 标题栏最左侧的天体类型图标套「取景器式聚焦圈」**：一个圆环（26vp 外径）+ 左上 / 右上 / 左下 / 右下四条斜向短线（`r 13.5→17.5`，45° 投影定位），点它即居中到该天体。短线用与拖拽柄同一套画法（`Row` + `backgroundColor` + `rotate`），不引入 `Shape` / `Path` 与任何新资源。该图标在观测模式下 20vp（圈内），天文馆模式仍是原来的 26vp 裸图标 —— **天文馆页头零变化**。
+- **展开 / 收起 → 卡片下沿正中一个大箭头**：收起态 `▼`（向下 = 展开全量）、展开态 `▲`（向上 = 收回极简），行高 28、占满卡片宽度（触控区很大），字号 16（原来是 13 的 `▾`/`▴` 小三角，明显偏小）。页头的「收起」文字按钮删除。
+- **观测模式的按钮行整体删除**：页头在观测模式下只剩「拖拽柄 + 标题行 + 三 tag」，卡片下沿只有箭头 —— 比原来更极简，也更符合「极简读数卡」的定位。
+- **极简模式不绘制指向线**：宿主下发给三壳层的 `connectorVisible` 改为 `overlayStore.objectDetailConnectorVisible && !infoWindowStore.observeCompact()`。**只拦渲染不拦计算** —— 卡片纵向位置仍由 `detailConnectorCtl().objectDetailCardY()` 决定，连接线控制器不能停。真机复核：连接线设置 `getObjectDetailConnector` 为 `enabled: true`，极简卡下方目标标记清晰可见却**没有任何连线**。
+  （反向对照不易复现：全量卡高约 420vp，正好盖住标记本身，所以「能看见连线」这件事基本只在极简态成立 —— 这也正是用户要求在这里关掉它的原因。）
+- **星等 tag 的判定由「是否展开」改为「是否观测模式」**：展开态页头也保持 `星等(大气消光)` / `0.03(0.16)`，页头形态与展开态无关（展开只改「卡体」：页签栏 + 滚动区），不变式更好推理。展开后的**卡体内容**仍按当前信息级别渲染。
+- **卡片高度**：极简卡 152 → **162vp**（26 拖拽柄 + 52 标题行[16 内边距 + 36 聚焦圈] + 56 三 tag + 28 下沿箭头）。
+- **契约零变化**：`object-detail-observe-center` 由按钮行搬到聚焦圈、`-expand`/`-collapse` 由页头搬到下沿箭头，三个锚点都在，故仍 **50 锚点 / 34 面板 / 29 静态 id / 18 动态前缀**，无需 `--update`。`detail_observe_center` / `_expand` / `_collapse` 三个文案键转为 `accessibilityText`（不废弃）。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 intact；资源覆盖审计通过。真机（Mate 80 Pro）截图与 `ui layout` 复核：聚焦圈四角短线渲染正确、下沿箭头明显变大且居中；点聚焦圈 → `hilog` 出现 1 次 `safe-target request mode=center`（居中接线生效）；点下沿箭头 → 页签栏 + 实时行展开、下沿箭头翻转为向上；天文馆模式页头仍是无圈的裸图标 + 单值 `星等 0.03`。
+
+## [2026-10-07] DevEco Code - 天体详情卡「观测模式」（极简读数卡 + 展开全量）
+
+- **依据（用户要求）**：按 `docs/harmonyos/specs/OBJECT-DETAIL-OBSERVE-MODE.md`（第 3 版设计稿）实现。用户说明：二期留的 `minimal_hud`（极简信息面板）占位**就是**这份设计描述的能力，不再单独做「极简 HUD」。
+- **修改文件（15 改 / 1 资源改名 / 2 文档）**：`state/InfoWindowStore.ets`、`state/ObjectDetailStore.ets`、`state/OverlayStore.ets`、`panels/object/ObjectDetailCardChrome.ets`、`panels/object/UnifiedObjectDetailCard.ets`、`panels/shell/{CompactShell,ExpandedShell,HoverObservatoryShell}.ets`、`pages/MainWindowNativeNode.ets`、`common/derive/quickActions.ets`、`common/ui/ShellIcons.ets`、`common/types/MainWindowModels.ets`、`capability/I18n.ets`、`panels/panels/SettingsPanel.ets`；`bt_minimal_hud.png` → `bt_observe_mode.png`（`git mv` 改名复用）；
+- **核心决策：极简与信息级别是两条正交轴。** `informationMode`（`all/default/short/none/custom`，C++ 持久化、走桥）是**数据轴**，决定回包字段与全量内容；新增 `detailDisplayMode`（`planetarium` / `observe`，ArkTS preferences 持久化）是**呈现轴**，只决定这张卡默认怎么呈现。观测模式**始终携带全量数据**，所以「展开」能立刻拿到全量 —— 若把极简做成第六个信息级别，回包字段会被裁掉，展开就无内容可显示。
+- **观测极简卡**：页头（名称 / 类型 / ✕）+ 三个 tag（星等 / 星座 / 距离）+ 一行紧凑按钮；实时高度方位行、`SelectedLiveInfoRows`、页签栏、滚动区全部**不渲染**。卡片高度按内容给（26 拖拽柄 + 42 标题行 + 56 三 tag 行 + 28 按钮行 = 152vp），与实测渲染一致。
+- **星等 tag（规格 §4.3）**：标签 `星等(大气消光)`、数值**横向一行** `0.03(0.22)`（括号外 `vmag`、括号内消光后 `vmage`）。拼接助手 `ObjectDetailStore.observeMagnitudeValue()/observeMagnitudeLabel()`；`ObjectCompactMetric` 零改动（label/value 都是它既有 `@Prop`）。消光后星等不可用时回退 `星等` + 单值。
+- **按钮行**：左「◎ 居中」（复用既有 `moveToSelectedObject()` → `moveToSelected` 桥命令，零新增桥）、右「展开 ⤢」；行高 28、无背景色、仅文字+图标。
+- **展开 / 收起**：`observeExpanded` 是**会话内瞬态**（不落盘）。展开后内容与天文馆模式一致，页头 ✕ 左侧多「收起」。切换选中目标（`targetChanged`）、关卡片（`dismissOnObjectInspector`）、切换呈现轴时一律复位 —— 下次选星仍以极简形态出现。
+- **快捷面板入口**：默认网格第 10 格由「卫星提示」换成「观测模式」（规格 §5）。卫星项**未删除**，随三期已有的自定义面板下移到池尾 —— 默认网格不含它，用户可在编辑态拖回；`quickToggle` 里的卫星分支保留（图层面板仍可操作）。池仍 17 项、候选带仍 1 行。
+- **卫星项迁移的副作用（已知）**：**手动提交过**自定义顺序的旧安装会保留自己的顺序（含卫星格），需自行把「观测模式」拖入；全新安装与从未提交过的用户直接得到新默认网格。
+- **设置入口**：`更多 > 设置 > 信息` 的信息级别五按钮**下方**加「极简观测模式」开关行 + 说明文案「详情卡仅显示星等、星座、距离；展开后的全量内容按上方信息级别显示」。与快捷面板格子**同一 store 字段**，两入口实时同步；切换此开关不改动信息级别按钮的选中态（两轴正交）。
+- **持久化**：新增 store 常量 `INFO_WINDOW_STORE = 'stellarium_info_window'`，key `detailDisplayMode`，缺省 / 读失败回落 `'planetarium'`。切换呈现轴**不调用任何桥**（实测 `hilog` 中 `setInformationSetting` 计数为 0，`infoMode` 不变）。
+- **`minimal_hud` 占位清理**：并入本特性后删除 `OverlayStore.minimalHud`、I18n 键 `quick_minimal_hud` 与池项 `minimal_hud`（避免留下一个没有消费方的死开关）。
+- **新增 3 个 `.id()` 锚点**：`object-detail-observe-center` / `-expand` / `-collapse`（规格 §8.3 建议项，供 CLI / uitest 定位）。契约基线已 `--update`：**34 面板 / 29 静态 id（+3）/ 18 动态前缀 / 50 锚点（+3）**，既有锚点零改名零删除。
+- **I18n 新增 9 键**（`detail_mode_observe` / `detail_observe_magnitude` / `_center` / `_expand` / `_collapse` / `_toggle` / `_hint` / `detail_switched_observe` / `detail_switched_planetarium`），10 语言全补齐。
+- **规格 §9 边界 4 的前提已修正**：`vmage` 是否存在只取决于「目标有星等 + 有气团质量」，与天体类型无关 —— 实测 M31 也返回 `apparentMagnitude`（带括号）。真正回退单值的是 `short` / `none` 级别、custom 掩码关掉星等、以及星座等无星等目标。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 intact（50/34/29/18）；`check-ohos-i18n.mjs` 0 error；命令目录 358 一致；`test-ohos-information-policy` / `test-ohos-detail-live-values` / `test-ohos-distance-ui` / `verify-ohos-object-details` / `test-ohos-satellite-panel` 全过；资源覆盖审计通过。真机（HUAWEI Mate 80 Pro）：全新安装默认网格第 10 格即 `quick-action-observe_mode`；选织女一（vmag 0.03 / vmage 0.22 / 消光 0.19）显示 `星等(大气消光)` `0.03(0.22)`；展开回归四个页签 + 实时行 + 「收起」；展开后切到天狼星自动回极简；快捷面板切回天文馆卡片立即变全量且**无桥调用**；天文馆模式页头仍为 `星等` / `0.03` 单值（与改造前逐字一致）；设置页开关与快捷面板同步；`short` 级别回退 `星等` / `0.03` 且距离 `--`；杀进程重启仍是观测模式。
+
+## [2026-10-07] DevEco Code - 快捷操作面板二期（12 格可自定义 · 拖动-替换 · 5 个新按钮）
+
+- **依据（用户要求）**：一期 12 格固定不可改。二期要求「格子数不变、位置不动但可自定义」，并把 5 个已有能力做成按钮放进候选池：赤道仪模式、左右镜像、观测列表、目镜、极简信息面板。同日追加：自定义入口用**铅笔**图标、完成用**勾**图标，均**不出文字**。
+- **交互（用户确认）**：自定义 = **拖动-替换** —— 编辑态面板加高露出候选带，长按候选图标拖到某格松手，两者互换（被换下项回到候选带）；拖到空白处松手不生效；返回键 / 点面板外 = **丢弃**，「完成」才提交并落盘。
+- **修改文件（11 改 / 6 新增资源）**：`common/derive/quickActions.ets`、`common/ui/ShellIcons.ets`、`common/types/MainWindowModels.ets`、`capability/I18n.ets`、`state/OverlayStore.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/QuickPanel.ets`、`panels/quick/QuickActionCell.ets`、`panels/quick/QuickActionGrid.ets`、`panels/shell/PanelHeader.ets`、`docs/harmonyos/research/QUICK-ACTIONS-PANEL-PLAN.md`；新增媒体 `bt_equatorial_mount.png` / `bt_flip_horizontal.png` / `bt_obs_list.png` / `bt_minimal_hud.png` / `ic_edit.svg` / `ic_check.svg`。
+- **条目模型与池**：`QuickActionItem` 增 `type`（`toggle` / `entry`）与 `openPanel`；`quickActionPool()` 17 项（前 12 = 一期原序）、`quickActionDefaultOrder()` / `quickActionItems()` / `quickActionCandidatesFor()` / `isValidQuickActionOrder()`；`QUICK_ACTION_SLOTS = 12`。
+- **入口类不入值表**：`observing_list` / `oculars` 经 `openSubPanel()` 跳面板，`quickActionValues()` 刻意不列它们 —— 查不到即恒 `false`，格子永远不会「永久点亮」。
+- **赤道仪 / 镜像的状态源**：赤道仪乐观写 `TelescopeStore.equatorialMount` 后走既有 `applyLayerSwitch('actionSwitch_Equatorial_Mount')`（引擎不回读该位，与「更多 > 设置 > 配置」同一套写法）；镜像**复用极轴镜那一份单一真值**（`setPolarScopeHorizontalFlip`，含乐观写与失败回滚），不新增第二个布尔。
+- **极简信息面板**：本轮**只落开关接口** —— 写入 `OverlayStore.minimalHud` 并提示，界面尚无消费方，故刻意不落盘、不做任何别的副作用；三个 shell 与 HEAD 逐字节一致。
+- **落盘**：改走 `@ohos.data.preferences`（store `stellarium_quick_panel` / key `order`）。全仓没有 `PersistentStorage`，`AppStorage` 是内存态 —— 首版写进 `stellariumSettings` 实测杀进程即回默认。
+- **编辑逻辑收进面板内（封装）**：顺序、编辑态、拖动-替换、提交 / 丢弃 / 恢复默认原先散在宿主十几个 `quickXxx` 私有方法里；现整体收进 `QuickPanelStore`（`@Observed`，与面板同文件 `panels/panels/QuickPanel.ets`）。宿主只剩「持有 1 个 `@State` 实例 + 注入 `saveOrder`/`hint` hooks + 传值」，**净删 63 行**；store 不 import NAPI，落盘经 hooks 注入（与 `state/*Store.ets` 同规矩）。
+- **标题栏动作按钮**：自定义 = 铅笔（`ic_edit.svg`）、完成 = 勾（新增 `ic_check.svg`），**不出文字**（文案仅作 `accessibilityText`）；尺寸与右侧关闭按钮一致（36×36 / 18px 图标），真机 `ui layout` 复核两键均为 126×126 px。
+- **行尾统一 CRLF**：本片改动到的 12 个文件（含原为 LF 的 4 个 `.ets` 与计划文档）全部统一为 CRLF。
+- **真机才暴露的四个问题**（详见计划 §13.10.1）：① 新组件误放到 `panels/quick/` 而宿主 import 的是 `panels/panels/`，构建期报 props 不可赋值；② 格子内 `Image` 被系统选成拖拽源（AceDrag 日志 `frameNode draggable is 0` → `Drag gesture has been canceled`，松手退化成点击）；③ 编辑态 `LongPressGesture` 600ms 赢下手势竞技场，掐掉系统拖拽的长按起手（表现为「按住能按、松手不替换」）；④ 应用内拖放**不能**加 `allowDrop`/`setData`（ArkUI 官方 FAQ `faqs-arkui-1173` 只用 `.draggable(true)` + `onDragStart` + `onDrop`），加了反而被判 `target data is not allowed to fall into`。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`；契约 **intact 且零新增**（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀 —— 候选格与槽位格互斥复用 `quick-action-` 前缀，动作按钮复用 `panel-header-action`，故无需 `--update`）；`audit-ohos-resource-coverage.mjs` 通过（顶层目录 9 / 三维地景 135=135 / 插件资源 132）。真机（192.168.3.95:36717）：默认 12 项与一期逐项一致；进入自定义后面板加高、候选带 5 项、12 格位置不动；拖 `equatorial_mount` → 槽位 `night_mode` 互换成功、被换下项回到候选带；「完成」后**杀进程重启顺序保持**；「恢复默认」回一期 12 项；点观测列表格进入 `observing` 面板且格子不亮；标题栏编辑态为铅笔、完成态为勾（无文字）；`ui layout` 复核编辑态图标首行顶边偏移 0。
+
+## [2026-10-07] DevEco Code - 位置搜索卡顿修复（预归一化索引 + 分块占空比）
+
+- **依据（用户反馈）**：地图选点搜索框输入「临高」要等好几十秒才出结果。
+- **根因（三条叠乘）**：① `locationSearchMatchScore` 对每个候选做 **8 次 `normalizeLocationSearchText`**（7 个主名 + 1 个拼接兜底串），其中 `String.prototype.normalize('NFD')` 加两条正则对全表 8,116 条逐次执行；② `scanLocationSearchChunk` 的调度是「工作 5ms / 睡 16ms」，占空比仅 24%，把总墙钟时间放大约 4 倍；③ 每输入一个字符都从头重扫，无任何缓存。Node 上以真实数据复现：单次全扫 30–40ms（桌面），三点叠乘后即是几十秒。
+- **修改文件（3 改）**：`common/derive/actions.ets`、`state/LocationStore.ets`、`panels/location/LocationSearchPanel.ets`。
+- **① 归一化提速**：`normalizeLocationSearchText` 只在字符串确实含拉丁变音符号或组合记号（`[\u00c0-\u024f\u0300-\u036f]`）时才做 `NFD` 分解 —— CJK 与 ASCII 占绝大多数，跳过后省掉一次整串遍历。新增 `locationSearchScoreNormalized(normalizedQuery, normalizedNames, normalizedText)` 接受已归一化入参；`locationSearchMatchScore` 改为其薄封装，语义逐字不变。
+- **② 预归一化索引**：`LocationStore` 新增 `LocationSearchEntry[]` 索引（每「星球 + 界面语言」一份，键变即失效），把每个地点的 7 个主名与拼接串**只归一化一次**；扫描时每个候选只做 `includes` 比较。建索引复用同一分块预算，不阻塞 UI 线程。
+- **③ 预热**：`LocationSearchPanel.aboutToAppear` 调 `store.warmLocationSearchIndex()` —— 面板一打开就分块建索引，配合输入框 260ms 防抖，用户打完字时通常已建好，首次搜索即命中缓存。
+- **④ 占空比**：分块预算由「5ms 工作 / 16ms 歇」改为「**12ms / 4ms**」（24% → 75%），并抽为 `LOCATION_SEARCH_CHUNK_MS` / `LOCATION_SEARCH_CHUNK_DELAY_MS` / `LOCATION_SEARCH_PUBLISH_MS`。
+- **验证**：`arkts_check` 3 文件 0 error；`BUILD SUCCESSFUL in 33 s`；契约 `intact`（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀）；`verify-ohos-location-search.mjs` 两条断言全过（8,116 条均有中文名、12 条本地化搜索）。真机（192.168.3.95:36717）用户确认「临高」卡顿已修复。
+
+## [2026-10-07] DevEco Code - 离线地点表补齐中国市/县（地级行政区全覆盖）
+
+- **依据（用户要求）**：观测位置「按地区选」里中国城市不全（湛江等地级市缺失）。用户定调：**不必到乡镇，到市/县两级即可；地级市（含自治州/地区/盟）必须全含；县级上游列出多少就跟多少**。
+- **根因**：`scripts/generate-ohos-location-hierarchy.mjs` 按 IANA 时区桶只保留人口最多的约 40 个地点。中国跨 `Asia/Shanghai`（上游 1,942 行）与 `Asia/Urumqi`（106 行）两桶，故全国仅留 80 个；湛江人口秩 109/1942 被截断，广东 100 → 7。
+- **新增数据**：`scripts/data/ohos-china-locations.json`（786 条，CRLF）。由民政部全国行政区划库（`dmfw.mca.gov.cn/9095/xzqh/getList`，级别 1–3）与 `data/base_locations.txt` 匹配得出：地级 337 + 县级 449。
+- **匹配算法（关键修正）**：单纯按拼音键匹配会**跨省误配**（云南 `Jinhua` 匹到浙江「金华市」、青海 `Yushu` 匹到吉林「榆树市」，共 308 条）。最终算法：① 手工别名表优先；② 只在「上游 state ↔ 官方省份」一致时接受；③ 其余行用坐标对已确认样本做**最近邻加权投票**定省后再匹配；④ 仍配不上即丢弃（1,303 条，绝大多数是乡镇行，符合「不做到乡镇」）。另设 4 个直辖市包络盒，纠正上游个别松散的 state 标注。
+- **非拼音罗马化手工桥接（74 条别名）**：
+  - **地级市 17**：`Lueliang` 吕梁 / `Harbin` 哈尔滨 / `Qiqihar` 齐齐哈尔 / `Hohhot` 呼和浩特 / `Ordos` 鄂尔多斯 / `Hulunbuir` 呼伦贝尔 / `Ulanqab` 乌兰察布 / `Bayan Nur` 巴彦淖尔 / `Turpan` 吐鲁番 / `Karamay` 克拉玛依 / `UEruemqi` 乌鲁木齐 / `Lhasa` 拉萨 / `Qamdo` 昌都 / `Nyingchi` 林芝 / `Lhoka` 山南 / `Nagqu` 那曲 / `Simao` 普洱。
+  - **州府/县级 57**：`Korla` 库尔勒市、`Kashgar` 喀什市、`Aqsu` 阿克苏市、`Artux` 阿图什市、`Ghulja` 伊宁市、`Tumxuk` 图木舒克市、`Burqin` 布尔津县、`Hoxtolgay` 和布克赛尔蒙古自治县、`Ulanhot` 乌兰浩特市、`Xilinhot` 锡林浩特市、`Bayan Hot` 阿拉善左旗、`Hailar` 海拉尔区、`Jalai Nur` 扎赉诺尔区、`Oroqen Zizhiqi` 鄂伦春自治旗、`Erenhot` 二连浩特市、`Dalain Hob` 额济纳旗、`Jiagedaqi` 加格达奇区、`Muling` 穆棱市、`Suiling` 绥棱县、`Dorbod` 杜尔伯特蒙古族自治县、`Hunchun` 珲春市、`Huangpi` 黄陂区、`Puqi` 赤壁市、`Pingwu County` 平武县、`Duyun` 都匀市、`Weining` 威宁彝族回族苗族自治县、`Wenshan City` 文山市、`Longling County` 龙陵县、`Shangri-La` 香格里拉市、`Liuku` 泸水市、`Shilin` 石林彝族自治县、`Ning'er` 宁洱哈尼族彝族自治县、`Tengyue` 腾冲市、`Maqin County` 玛沁县、`Lushar` 湟中区、`Qabqa` 共和县、`Haomen` 门源回族自治县、`Gar` 噶尔县、`Doilungdeqen` 堆龙德庆区、`Lhuenzhub` 林周县、`Maizhokunggar` 墨竹工卡县、`Damxung` 当雄县、`Quxu` 曲水县、`Dagze` 达孜区、`Nyemo` 尼木县、`Gangu Chengguanzhen` 甘谷县、`Chengxian Chengguanzhen` 成县、`Wenxian Chengguanzhen` 文县、`Tanchang Chengguanzhen` 宕昌县、`Zhouqu Chengguanzhen` 舟曲县、`Lintan Chengguanzhen` 临潭县、`Huixian Chengguanzhen` 徽县、`Zhangjiachuan` 张家川回族自治县、`Linxia Chengguanzhen` 临夏市、`Wayaobu` 子长市、`Lueeyang Chengguanzhen` 略阳县、`Hanyin Chengguanzhen` 汉阴县、`Ziyang Chengguanzhen` 紫阳县、`Langao Chengguanzhen` 岚皋县、`Basuo` 东方市。
+  - **地级行政区 39**（自治州 30 / 地区 7 / 盟 3；塔城地区已在表内）：坐标取州府/行署驻地，如锡林郭勒盟←锡林浩特、巴音郭楞州←库尔勒、伊犁州←伊宁、黔南州←都匀、迪庆州←香格里拉。5 个驻地在上游无行或不可靠的（阿坝州/黄南州/海西州/和田地区/阿勒泰地区）用 OpenStreetMap 坐标；上游完全没有行的 11 个地级市（朔州/盘锦/辽源/益阳/三沙/儋州/巴中/榆林/海东/吴忠/中卫）同样用 OSM 坐标。
+- **新增脚本**：`scripts/import-ohos-china-locations.mjs`（CRLF）—— 幂等合并：将尚不存在的地点按其 IANA 时区桶并入 `hierarchy.ts` 并**按人口降序**重排该桶；同名地点沿用上游 Stellarium 的 ` (省)` 消歧约定（43 条）；`names_zh.ts` 一律改挂官方简体名（顺带修正旧机器译名：`Shenyang` 沉阳→沈阳、`Lueliang` 略良→吕梁）。
+- **规模**：离线地点 7,387 → **8,116**；中国 80 → **809**（广东 7 → 37，含湛江）；**地级行政区 333/333**（地级市 293、自治州 30、地区 7、盟 3）全部在列；县级 449 条（上游有行且省份可确认者）。
+- **验证**：`BUILD SUCCESSFUL in 28 s`；契约 `intact`（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀）；`verify-ohos-location-search.mjs` 两条断言全过（8,116 条均有中文名、12 条本地化搜索）。真机（192.168.3.95:36717）：亚洲 > 中国 > 广东省 → 城市列出现「湛江 / 茂名 / 阳江」，选中「湛江」后坐标行显示 `21.23°N / 110.39°E / 16 m`，与上游 `Zhanjiang` 行一致；海南省下已含「临高县」等县级项；桥接项「玉树」（青海省）经用户走查通过。
+
+## [2026-10-06] DevEco Code - 「视场中心坐标」自 设置>设备 迁入 图层>标记
+
+- **依据（用户要求）**：把「更多 > 设置 > 设备」里的「视场中心坐标」区块改放到「图层 > 标记」。
+- **修改文件（5 改）**：`panels/layers/LayerViewTabs.ets`、`panels/panels/LayersPanel.ets`、`panels/panels/SettingsPanel.ets`、`panels/panels/SettingsQuickLegacyPanel.ets`、`pages/MainWindowNativeNode.ets`。
+- **迁入点**：`LayerViewTabs.ets` 的 `LayerMarkingsTab` 末尾追加一条分隔线 + `ViewCoordinateSettings`（该组件自带「视场中心坐标」标题、屏幕显示开关、三档坐标系与两档历元），并新增 `@ObjectLink overlayStore` 与 `onToggleViewCoordinates` / `onSelectViewCoordinateFamily` / `onSelectViewEquatorialEpoch` 三个回调；`LayersPanel` 同步加 `overlayStore` + 三回调并透传。
+- **迁出点**：`SettingsPanel.ets` 的 `configTab === -1`（设备与隐私）删掉分隔线与 `ViewCoordinateSettings`，连同只服务它的三个 props 与 import；`SettingsQuickLegacyPanel.ets`（快捷设置 · 旧版）同样删掉该区块，并把只服务它的 `@ObjectLink overlayStore` 与 `OverlayStore` import 一并移除。宿主两处（`SettingsPanel` / `SettingsQuickLegacyPanel`）的 `setViewCoordinatesVisible/Family/Epoch` 与 `onToggleVisible/onSelectFamily/onSelectEpoch` 接线删除，改接到 `LayersPanel`。
+- **行为不变**：仍走 `ViewCoordinateController` 的三个入口（要同步定时器与 `saveAppSettings`），`ViewCoordinateSettings` 组件本身未改一字。
+- **验证**：`arkts_check` 5 文件 0 error；`BUILD SUCCESSFUL in 32s`；契约 `intact`（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀，无增删）；真机（192.168.3.95:36717）用户走查通过。
+
+## [2026-10-06] DevEco Code - 快捷面板图标与「开」态选框放大、格间空隙收紧
+
+- **依据（用户要求）**：快捷操作面板的图标与「开」态选框再放大一些，格与格之间的空隙留少一些。
+- **修改文件（3 改）**：`panels/quick/QuickActionGrid.ets`、`panels/quick/QuickActionCell.ets`、`pages/MainWindowNativeNode.ets`。
+- **网格间距**：两行间距（`Column` space）10 → **6vp**；行内间距（`Row` space）8 → **4vp**。
+- **图标**：raster 官方 `-off` PNG 30 → **38vp**，自研 SVG 26 → **34vp**（官方 PNG 自带透明留白，故仍比 SVG 大一号）。
+- **格子尺寸**：`quickPanelGridCellSize()` 的分子由「扣 5 个 8vp 间隙（40）」改为「扣 5 个 4vp 间隙（20）」，高度式 `* 2 + 10` → `* 2 + 6`；格子宽即格高（`aspectRatio(1)`）。真机实测格子 52 → **56vp** 正方形（156 → 168px @scale 3），行内间隙 24 → 14px、行间 30 → 21px。
+- **验证**：`arkts_check` 3 文件 0 error；`BUILD SUCCESSFUL in 25s`；契约 `intact`（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀）；真机（192.168.3.95:36717）截图确认图标铺满格子、12 格排布正常，`ui layout` 逐格 bounds 与高度公式一致。
+
+## [2026-10-06] DevEco Code - 四个真机验收缺陷修复（返回两次确认 / 选取去掉重复对勾 / 绘画叠层穿透与返回 / 网格总闸联动）
+
+- **依据（用户真机走查报告）**：① 主界面单次返回即退出，夜间误触会打断暗视觉适应，改为两次确认退出；② 观测位置「按地区选」的 大洲-国家/地区-地区-城市 列表里，选中行已高亮却又多出一个对勾；③ 图层面板 → 文化 →「文化星座绘图」的离线绘图预览叠层：点右上关闭按钮会穿透到底层陀螺仪按钮（手机端），且按返回键直接回到桌面而非只关闭叠层；④「全部网格标记」总闸关闭时，重新打开任一单项标记看似无效。
+- **修改文件（6 改，全 CRLF）**：`pages/MainWindowNativeNode.ets`、`capability/LayerController.ets`、`common/ui/HierColumn.ets`、`panels/overlay/SkyCultureArtPreviewOverlay.ets`、`panels/overlay/ObjectInspectorMediaPreviewOverlay.ets`、`capability/I18n.ets`。
+- **① 返回两次确认**：新增常量 `HOME_BACK_CONFIRM_MS = 2500` 与宿主字段 `lastHomeBackAt`；`onRequestBack` 重写为**由外到内的叠层链** —— 全屏媒体预览 → 模型沉浸 → 星座绘画预览 → 信息窗 → 极轴镜 → 面板（`handlePanelBackTap`）→ 主界面；主界面分支进入新增 `handleHomeBackConfirm`：距上次返回 2500ms 内再按则 `terminateSelf()`，否则 `flashHint(I18n.t('back_again_to_exit'))`。`publishBackConsumable` 改为恒 `true`，使主界面也接管返回键。
+- **② 去掉重复对勾**：`HierColumn`（位置面板四列 + 图层面板层级列共用）删除选中行行尾的 `✓` Text 块 —— 整行高亮已表达选中态。
+- **③ 绘画叠层**：两个全屏叠层根容器的 `hitTestBehavior` 由 `HitTestMode.Transparent` 改为 `HitTestMode.Default`。`Transparent` 表示「自身及子节点响应、但**不阻塞兄弟节点**」，故点叠层内的关闭按钮仍会命中下层宿主按钮（手机端即右上角陀螺仪按钮）；`Default` 只阻塞兄弟节点、子节点照常响应。返回键方面，绘画预览的关闭已并入 ① 的叠层链（`closeSkyCultureArtPreview`），单次返回只关叠层、应用与面板保留。
+- **④ 网格总闸联动**：`actionShow_Gridlines` 是 `GridLinesMgr` 的总闸（引擎 `draw()` 内 `if (!gridlinesDisplayed) return;`），总闸关闭时单项标记即使置 true 也不绘制。`LayerController` 新增常量 `GRIDLINES_MASTER_ACTION = 'actionShow_Gridlines'`，`applyLayerSwitch` 在「设为开 + 目标本身不是总闸 + 目标属 `MARKING_LAYER_ACTION_IDS`」时先联动 `setLayer(GRIDLINES_MASTER_ACTION, true)`。
+- **新增文案**：`capability/I18n.ets` 增 `back_again_to_exit`（10 语言）；其余零新增 key。
+- **验证**：`arkts_check` 6 文件 0 error；`BUILD SUCCESSFUL in 23s`（改动后两次构建均成功）；契约 `intact`（47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀 / 255+ 文件）。
+- **真机（192.168.3.95:36717）**：
+  - ①：主界面连续单次返回后应用进程仍在（PID 64928，`aa dump -l` mission 在列）；2500ms 内双击返回 → 进程消失（`GONE`）。提示经既有 `flashHint` 通道（定义 :6290）。
+  - ②：位置 →「按地区选」→ 大洲/国家地区/地区/城市 列表现身，点「亚洲」行 → 行高亮，`ui layout` 全树 **0 个 ✓ 节点**。
+  - ③：图层面板 → 文化 → 点「天鹰座」卡片 → 绘画叠层（标题「天鹰座」+「离线文化绘图」+ 右上 ✕）打开；单次返回 → 叠层关闭、图层面板仍在、应用存活（= 只关叠层）；重开叠层后点右上 ✕（1089,210）→ 叠层关闭、应用存活、右上陀螺仪按钮外观与基线一致（未穿透）。
+  - ④：基线置 `actionShow_Gridlines=false`、`actionShow_Equatorial_Grid=false`；点快捷面板 `quick-action-equatorial_grid` 格 → `getState` 回读单项 `true` **且总闸 `actionShow_Gridlines` 自动变 `true`**。
+  - 测试期间改动的两个网格标志已复原为 `false`；期间还点开过星座绘画预览与位置列表，未改其它持久化设置。
+- **备注**：本条为四个修复点的汇总记录；四个修复按点分四次提交（返回链路 / 层级列表对勾 / 全屏叠层穿透 / 网格总闸联动）。
+
+## [2026-10-06] DevEco Code - 快捷操作面板（Dock 中间入口）+ 位置入口迁入更多功能
+
+- **依据（用户要求）**：① Dock 中间按钮由「位置」改为 **2×6 = 12 个图标开关**的「快捷操作」面板；② 图标用 Stellarium **官方** `data/gui/bt*-off.png`，ON 态按移动端做法 = **用「灭」图标着色高亮**（不用官方 `-on`）；③ 「位置」入口迁到更多功能的**工作区组**（观测工作区与天体数据与扩展之间）；④ 面板标题栏显示当前位置，**该显示框本身是按钮**，点按跳位置设置；文案按来源取值（GPS → `GPS`，地图点选 → 「自定义位置」，其余 → 名称）。设计与切片记录：`docs/harmonyos/research/QUICK-ACTIONS-PANEL-PLAN.md`（含 §12 实施结果）。
+- **新增文件**：`common/derive/quickActions.ets`（12 项纯描述表）、`panels/quick/QuickActionCell.ets`、`panels/quick/QuickActionGrid.ets`、`panels/panels/QuickPanel.ets`、`resources/base/media/ic_quick_actions.svg`（Dock 图标 = Material `dashboard`）、10 枚 `resources/base/media/bt_*.png`（~71 KB，取自 `data/gui/*-off.png`）。
+- **修改文件**：`common/derive/actions.ets`（Dock 第 3 项 → `quick`/`quick_actions`；`moreActions()` 在工作区组插入 `place`；`panelRouteRoot`/`inferredPanelRouteDirection` 路由表把 `place` 换成 `quick`）、`common/derive/skycult.ets`（CLI 面板白名单加 `quick`）、`common/derive/labels.ets`（新增 `quickLocationLabel`；`panelTitleFor` 增第 5 入参 + quick 分支）、`common/ui/ShellIcons.ets`（注册 `quick_actions` + 10 枚 `bt_*`）、`common/types/MainWindowModels.ets`（`ObserverLocationRecord.source?`）、`state/LocationPickerStore.ets`（`locationSource`）、`capability/LocationController.ets`（`setLocation` 增 `source` 入参并在 GPS / applyPicker / 恢复三处落地；持久化带 source，旧记录回落 `named`）、`panels/location/LocationPickerPanel.ets`（地图点选写 `map`）、`panels/shell/PanelHeader.ets`（`titleAsButton` + `onTitleTap` + 新锚点 `panel-title-action`）、`pages/MainWindowNativeNode.ets`（quick 分支 + `quickActionValues()` / `quickToggle()` / `quickPanelLocationLabel()` + 两处 PanelHeader 接线）、`capability/I18n.ets`（`dock_quick`、`loc_source_gps`）、`docs/harmonyos/json/ui-contract-baseline.json`（再生）。
+- **着色方案（本片核心）**：官方 PNG 走 `colorFilter` 纯色替换矩阵（只改 RGB、alpha 原样透传），自研 SVG 走 `fillColor`，两条路径统一为「亮 `#EAF7FF` / 灭 `#7E8896`」；`colorBlend` 被排除（会把透明背景一起染，ArkUI FAQ `faqs-arkui-1328`）。
+- **12 项文案全部复用既有键**（零新增项文案）：星座线 `s0522` / 星座标签 `s0523` / 星座艺术 `s0525` / 赤道网格 `s0323` / 方位网格 `s0324` / 地面 `s0306` / 大气 `s0305` / 方位基点 `s0533` / 深空天体 `s0320` / 人造卫星 `plugin_satellites` / 陀螺仪 `i0060` / 夜间模式 `s0300`；仅新增 `dock_quick`（快捷开关 —— 既有 `i0217`「快捷操作」已被帮助面板占用，故不重名）与 `loc_source_gps`（`GPS`）。
+- **零新增 store / controller**：12 项状态全部读既有 store（layer 9 项 / `satelliteStore.satHints` / `gyroStore.gyroscopeEnabled` / `nightModeStore.nightMode`），宿主做一次 `id → 目标` 分发；图层 9 项走公开入口 `applyLayerSwitch`。
+- **本片新踩的坑（三条都会重复踩）**：① `colorFilter` 颜色矩阵的值**必须归一化到 0.0–1.0**（1.0 对应 255，官方 FAQ `faqs-arkui-1353`）——首版填 0–255 被截断，「灭」态图标发白、只剩格子底色可辨；② `getIcon()` 未命中键会**静默回落 `ic_search`（放大镜）**——描述表误写资源名 `ic_satellite`/`ic_gyro` 而非映射键 `satellite`/`gyro`，真机两格是放大镜；③ `arkts_check` 不查跨文件可见性——`LayerController.setLayer` 是 private，只有完整 hvigor 构建才报错。
+- **验收追加修订（同日第二轮，并入同一改动）**：① 位置面板与快捷面板统一为**同一字符串** —— 快捷面板标题直接复用宿主 `locationText`，不再各算一份；② `GPS` 加星球前提 —— `quickLocationLabel(source, displayName, planetName)` 只在「来源 = gps 且观测星球 = 地球」时返回 `GPS`，切到火星后自动定位语义不成立，回落位置名；③ 引擎按星球给的默认点名称本地化 —— `LocationPickerStore.surfaceLocationName` 把 `Mars surface` / `Moon surface` / `Jupiter surface` 折到既有 `land_mars` / `land_moon` / `land_jupiter` 键（`火星表面` / `月球表面` / `木星表面`），两处最终显示 `火星表面 · 火星`；④ **快捷面板高度按内容** —— `quickPanelContentHeight()` = 12 + 30（PanelHandle）+ 头部（有副标题 56 / 无 44）+ 14 + 两行图标 + 16，并让 `compactPanelHeight()` 在该面板直接返回它（面板定位 / 返回热区 / 拖拽夹取随之一致），Scroll 内容下内边距 34 归零；⑤ **灭态不画底框**（夜间模式下不可辨），只留「开」态底色 + 边框，边框宽度恒为 1 以免切换时尺寸跳动；⑥ 方位基点图标换用官方 `data/gui/bbtLocation-off.png`（真名就是双 b，一枚星形罗盘）。
+- **本片新踩的坑补齐（共五条）**：④ **ArkUI 的 `Scroll` 会把「比视口短」的内容垂直居中** —— 实测内容 152.3vp、视口 203.3vp、内容顶边低 25.5vp（恰好差值一半），这就是改前图标下方那段空白的来源；容器高度等于内容高度即可消除。⑤ 换图标后「看起来没变」不要急着判定资源没进包 —— `bbtLocation-off.png` 本身就是星形罗盘，需用 `ui layout --id quick-action-cardinal_points` 的 bounds 与截图格子对齐、并核对构建产物字节数（9105 = 源文件）才能确认替换已生效。
+- **验证**：`arkts_check` 全绿、`BUILD SUCCESSFUL`（多轮）；契约 **47 锚点 / 34 面板 / 26 静态 id / 18 动态前缀**（新增 `panel-title-action`、`quick-action-` 前缀与 quick 面板），已 `--update` 再生，本轮修订**未再增删锚点**（校验输出保持同一行）；改动面 16 改 + 16 新增，全部 CRLF。
+- **真机（192.168.3.95:36717 —— 设备换网后的新 IP）**：Dock 中间显示「快捷开关」+ dashboard 图标；面板 2×6 共 12 图标全部正确（含卫星 / 陀螺仪两枚自研 SVG）；亮灭对比在 raster 与 vector 两路一致；点星云格 → `getState` 回读 `actionShow_Nebulas` false → true，点夜间模式 → `nightMode` true → false（已复原），点卫星格 → 点亮且 `longClickable=true`（长按提示已注册）；标题栏显示位置且点按进入「位置」面板；**两处位置字符串一致**：地球 + 名称时位置面板「位置」行与快捷面板标题都是 `广州 · 地球`，火星 + GPS 时位置面板不再显示 `GPS`（修订中间构建实测 `自定义位置 · 火星`，最终规则下为 `火星表面 · 火星`）；**快捷面板高度**：`panel-scroll` 实测高 338px ≈ 两行图标 113.3vp、第一行顶边与视口 0 偏移（改前内容被 Scroll 垂直居中、下方留白）；灭态无框 / 开态有框、方位基点显示星形罗盘；「更多功能」顺序为 工作区 → 观测工作区 → **位置** → 天体数据与扩展；测试期间改动的开关均已复原。
+- **未纳入本次改动**：`audit-ohos-resource-coverage` 跑过，但其再生报告同时含与本功能无关的既有漂移（`stars` rawfile 计数、若干静态入口判定、`src` 体积），已 `git checkout` 回退该报告文件。该漂移本身未追查，若需要可另开一条排查。
+
+
+- **依据**：用户要求 —— ①「关闭全部标线」按钮移入标题栏；② 图层预设 tag 与子面板标签 tag 之间加横向分隔线；③ 观测辅助预设把赤道网格打开。
+- **修改文件（6 改 1 再生）**：`panels/shell/PanelHeader.ets`、`panels/layers/LayerPresetBar.ets`、`panels/panels/LayersPanel.ets`、`pages/MainWindowNativeNode.ets`、`capability/LayerController.ets`、`scripts/check-ohos-ui-contract.mjs`；再生 `docs/harmonyos/json/ui-contract-baseline.json`。
+- **① 清除按钮上移标题栏**：`PanelHeader` 新增可选动作位 `@Prop headerActionLabel: string = ''`（空串不渲染）+ `onHeaderAction`，渲染为标题与 ✕ 之间的胶囊按钮，并新增跨会话静态 id 锚点 `panel-header-action`；宿主在两处 `PanelHeader`（`floatingPanel` / `compactPanel`）按 `this.activePanel === 'layers'` 传「清除坐标与标记」，动作仍是 `layerCtl().clearMarkingLayers()`。`LayerPresetBar` 删除该按钮与 `onClear` 属性，`LayersPanel` 与宿主同步去掉 `onClear` 接线。
+- **② 预设条与页签之间加横向分隔线**：`LayersPanel` 在 `LayerPresetBar` 与 `LayerTabs` 之间插入 `Row().width('100%').height(0.5).backgroundColor(this.cardBorder).margin({ top: 2, bottom: 2 })`，与面板内其它分隔线同款。
+- **③ 观测辅助预设的赤道网格此前是空开关（根因）**：`observe` 分支早已有 `actionShow_Equatorial_Grid: true`（连同黄道线 / 子午线 / 地平线），但 `actionShow_Gridlines` 属 `MARKING_LAYER_ACTION_IDS`，被预设基础表 `layerPresetStates(false)` 置为 `false`；而它是 `GridLinesMgr` 的**总闸** —— `src/core/modules/GridLinesMgr.hpp:1256` 注释即 "master switch to switch off all grids/lines"，`GridLinesMgr.cpp:2160` 里 `if (!gridlinesDisplayed)` 直接返回、不绘制任何网格与线。于是那四个开关全部失效。修法：在网格 / 线之前补 `{ id: 'actionShow_Gridlines', enabled: true }`，并加 why 注释说明总闸语义，避免再被基础表覆盖。
+- **UI 契约**：新增 1 个静态 id 锚点 → 契约基线由 44 锚点 / 24 静态 id 再生为 **45 / 25**；按基线头部说明「锚点有意新增时才 `--update`」执行再生，`scannedFiles` 一并刷新（该列表长期停在 D/E/M 轨道之前的旧文件表：仍列 `pages/DetailModel*.ets`、`pages/StellariumAudio.ets`、`panels/common/HierColumn.ets`，且缺全部 `capability/*` 与多数 `state/*`）。
+- **顺带修复**：`check-ohos-ui-contract.mjs` 写基线用裸 LF，而 `.gitattributes` 把 `docs/harmonyos/**` 钉为 `eol=crlf` —— 改为写 CRLF，避免每次再生成都产生整文件 eol 噪声。
+- **验证**：`arkts_check` 0 error；`BUILD SUCCESSFUL`（2 次）；契约 `intact`（45 锚点 / 25 静态 id / 33 面板）；`ui layout --id panel-header-action` 命中 Button 且 `clickable`，与 `panel-close` 同一 y 带；截图确认按钮落在标题栏、分隔线出现在预设条与页签之间。真机（192.168.50.108:36717）`getState` 实测 `actionShow_Gridlines` 与 `actionShow_Equatorial_Grid` 互相独立，`setActionChecked actionShow_Equatorial_Grid|1`（回包 `{"checkable":true,"checked":true,"ok":true}`）后回读两者皆 `true` —— 即修好后预设应落到的那组状态，赤道网格实际绘制。
+- **备注**：验证过程中已在真机打开上述两个标志（等于已应用观测辅助应有的网格状态），未改动其它持久化设置。
+## [2026-10-06] DevEco Code - 图层面板「天空」页三节重组 + 大气设置迁入 + 时间面板夜间模式行统一
+
+- **依据**：用户要求 —— ① 图层面板按「恒星 / 天空 / 观测条件」分节，把大气与观测设置从时间面板迁入观测条件节；② 时间面板夜间模式改用图层同款行样式并置于面板最末，末尾各行间距统一。
+- **修改文件（8 改 1 删 1 迁）**：`panels/layers/LayerViewTabs.ets`（`LayerSkyTab` 重组 + 内嵌大气块）、`panels/layers/ObservationAidBlock.ets`（自 `panels/time/` 迁入）、`panels/panels/LayersPanel.ets`、`panels/panels/TimePanel.ets`、`panels/time/ManualTimeBlock.ets`、`pages/MainWindowNativeNode.ets`、`state/AtmosphereStore.ets`、`state/NightModeStore.ets`（后两者仅消费方注释）；删除 `common/ui/NightModeToggleRow.ets`。
+- **天空页三节（`LayerSkyTab`）**：**恒星** = 恒星(s0530) / 极限星等 / 亮星光晕 / 星芒效果 / 星星闪烁(+无大气时保持闪烁)；**天空** = 银河(s0531)+银河亮度 / 星标签(s0532) / 流星(s0308)+理论流星率 / 黄道光+亮度 / 夜间模式(s0300) / 水平·垂直翻转(s0309/s0310)；**观测条件** = 大气(s0305) / 地景(s0306) / 雾效(s0307) / 光污染等级(Bortle) / 人眼动态视觉调适 + **大气折射块**。节间沿用既有 `Row().height(0.5)` 分隔线 + `fontSize(11)` 节标题（与旧版「天空与恒星 / 观测条件」两节同款）。银河亮度步进器由原先「流星之后」上移到银河开关正下方。
+- **大气设置迁移**：`ObservationAidBlock`（折射开关 / 气压 / 气温 / 消光）整文件迁 `panels/time/` → `panels/layers/`，改由观测条件节内嵌；`AtmosphereStore` 经 `LayersPanel` 新增的 `@ObjectLink` 下发 4 个 `@Prop`，`onAtmosphere` 回调仍接宿主 `astroCalcCtl().applyAtmosphere(...)`（`TimePanel` 的 `atmosphereStore` / `onAtmosphere` 同步移除，接线在宿主内平移到 `LayersPanel`）。`TimePanel` 由「六个 store」降为五个。
+- **时间面板夜间模式**：删除 `NightModeToggleRow`（仅时间面板使用、带副标题的独立行），改用与图层面板**同一组件** `LayerSwitchRow`（`label: I18n.t('s0300')`，zh_CN「夜间模式」），并从「儒略日之后」移到面板**最末**（`ManualTimeBlock` 之后）。文档 `DEVELOPMENT-MCP-WORKFLOW.md` §CLI 优先同步补录本次踩到的包名坑与 `ui layout` 视口限制。
+- **末尾间距统一（8px）**：`ManualTimeBlock` 应用按钮 `margin({top:4})` → `{top:4, bottom:4}`、重置按钮 `margin({top:2})` → `{top:4, bottom:4}`；夜间模式行外包一层 `Column().margin({top:4})`。原「应用→重置 2px、重置→夜间模式 0px」改为与「选择日期→选择时间」(4+4) 一致的 8px（ArkUI 相邻 margin 不折叠，逐项相加）。
+- **顺带清理**：宿主删除 2 个死 import（`ObservationAidBlock`、`NightModeToggleRow`）；`AtmosphereStore` / `NightModeStore` 头部「消费方」注释改为新的消费位置。
+- **验证**：`arkts_check` 0 error（分两轮共 6 文件）；`BUILD SUCCESSFUL`（2 次，各 ~27s）；`check-ohos-ui-contract` **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀）；`check-ohos-i18n` 无新增/缺失 key（复用既有 `s0300`、`s0305`–`s0310`，无新文案）。
+- **真机（192.168.50.108:36717）**：天空页三节 + 大气折射块由用户实测确认；夜间模式行样式与末尾间距随本次构建装机，用户确认后提交。
+- **本片新踩的坑（影响所有后续真机走查）**：`scripts/stellarium-cli.mjs:8` 的 `DEFAULT_BUNDLE = 'com.joinother.skyinstrument'` 是**发布身份**，而 Windows 开发构建装的是 `com.cnchensh.stellarium`。设备上两个 app 同时存在时，**不带 `--bundle` 的 CLI 调用会启动/操作另一个 app**，其后所有 `devecocli ui screenshot` / `layout` 都在拍错对象 —— 曾据此把「另一个 app 的旧 UI」误判为「本机构建未生效」并白跑一轮排查。另：`devecocli ui layout` 只 dump 视口内节点，Scroll 折叠区看不到。
+- **备注**：时间轮滚轮曾出现一次疑似「显示不正常」，复看为启动过渡态（`tickOpacity` 随 `timeWheelVisualOffset` 收敛），非缺陷，未改 `TimeWheelScrubber` / `TimeWheelStore`。
+## [2026-10-06] DevEco Code - STATE-REVIEW 第 3 版全量重写（§1–§8 + 附录；§9–§11 原样保留）
+
+- **修改文件：** `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md`（1,600 → 1,476 行；纯文档，无源码改动）。
+- **修改内容：** 按 M 轨道收尾后的终态全量重写 §1–§8 与附录；§9–§11（原 L977–1546，570 行）**字节原样保留**（用户之后自行移除），§1–§8 零引用 §9–§11，移除后无悬空。结构：§1 摘要（终态指标表/目录终账/一句话判定）、§2 宿主终态解剖（物理分区/223 方法/组合根+端口适配器心智模型/端口钩子/§2.7.1 保留字段登记锚号不变）、§3 五波执行轨迹、§4 蓝图偏差与依赖审计、§5 风险 14 项、§6 结论、§7 V1→V2 演进评审、§8 UI 性能测试计划、附录=复现命令（UTF-8 安全口径）。
+- **修改原因：** 五波重构（Phase 0–7+RA → A/B 38 片 → P 轨道 → D 轨道 17 簇 → M 轨道 7 片）已全部完成，第 2 版数字与结构描述严重过时；且发现第 2 版多处度量口径错误需修正。
+- **口径修正（重要）：** ① 宿主 private 方法定稿 **223**（旧清单 212 漏 3 static + 8 async 存储助手；robust 正则见附录）；② 装饰器改**行锚定**计数——@Observed **47**（恰=store 数；旧 63 为注释噪声）、@ObjectLink **149**（旧 260/197 同为噪声）、@State 143、@Prop 1,045、@Watch 8、@BuilderParam 0、回调成员 1,272；③ 宿主 131 @State = **46 store + 85 裸字段**（类型分布实测 44n/22b/14s/2R/1W/1Res/1Arr）；④ 行数一律 `ReadAllLines`（UTF-8）——`Get-Content` GBK 吞 LF 曾致宿主被低估 444 行（7,573 为错误读数，实为 8,017）；⑤ 契约基线更新为 33 面板/24 静态 id/17 动态前缀/44 锚点/252+ 文件。
+- **验证：** 写回后实测 bare LF=0（全 CRLF）、无 BOM、§9–§11 块与新文件 L837–1406 逐行 `-ceq` 全等、标题结构完整（§1–§8 连续、§2.7.1 锚点在位 L226、附录 L1407）；§8→§9 与 §11→附录接缝干净。构建不适用（纯文档）。
+- **备注：** 本条目与文档改动均**未提交**（工作区待用户评审）；PLAN §14/§15 对 §2.7.1/§2.12 的引用锚不受影响，对 §9.x/§10.x/§11.x 的引用在用户移除 §9–§11 后会悬空（已知且接受）。
+## [2026-10-06] DevEco Code - M 轨道 M7：国际化中心迁出 pages/（Barrel 兜底；宿主 8,017 行不变）
+
+- **依据**：STATE-REVIEW §11 的 **Barrel 策略**、M 轨道第 7 片（末片）。**纯路径迁移 + 一行式 barrel**，不改任何文案/常量/逻辑；开工 `git log -1` = `b4a94b5aa2`，宿主 `MainWindowNativeNode.ets` 基线 8,017 行。
+- **§15.7-1 NAPI 判定（最终落点）**：`I18n.ets` 的**唯一 import** 是 `import i18n from '@ohos.i18n'`，且在 5 处**实际调用**设备能力（`System.getAppPreferredLanguage` / `getSystemLocale` / `System.setAppPreferredLanguage` / `I18NUtil.getBestMatchLocale` / `System.getDisplayCountry`）。按 §15.7-1「`common/*` 不得 import `@ohos.*` 设备能力」与 M3 对 `AudioEngine` 的判定口径（是否**调用**设备能力，而非是否 import），**无法落 `common/i18n/`**；按明文 fallback 改落 **`capability/I18n.ets`**。文件整内容逐字原样搬迁（`git mv`，R100；首行注释 `// I18n.ets` 不变）。
+- **Barrel**：`pages/I18n.ets` 原位新建（2 行）——说明注释 + `export * from '../capability/I18n'`。
+- **default export 核查**：`grep 'export default'` = **0**；全部命名导出（`LangCode` 类型 + `SUPPORTED_LANGUAGES` / `LANGUAGE_DISPLAY` / `PROJECTION_KEYS` 常量 + `I18n` 类），`export *` 完整覆盖，**无需** `export { default }`。
+- **消费者零改动**：全仓 **135 处** `import … from '…/pages/I18n'`（`state/`、`capability/`、`panels/`、`common/`、宿主与 `pages/` 内 `./I18n`）**全部未改**，经 barrel 解析到新实体。
+- **夹具/脚本同步（3 脚本）**：`scripts/check-ohos-i18n.mjs`（源/镜像改 `capability/I18n.ets`）、`scripts/sync-ohos-i18n-from-po.mjs`（源/镜像同上）、`scripts/test-ohos-object-type-i18n.mjs`（读新路径）。
+- **本片新踩的坑（均为预存夹具缺陷，被本片 root 修复暴露）**：① `check-ohos-i18n.mjs` 的 `root = path.resolve(new URL('..').pathname)` 在 Windows 上把 `/E:/…` 解析成 `E:\E:\…`（与 §13.6 `verify-ohos-location-search` 同型；因脚本名不匹配 `^(test|verify|audit)-ohos` 从未被全量扫到而长期潜伏）——按 `check-ohos-refactor-slice.mjs` 先例补 `.replace(/^\/([A-Za-z]:)/, '$1')`；② 同脚本 TW/HK/MO 中文地名断言硬编码 `\n`，而 `common/location/countries.ts` 为 CRLF（协议「测试夹具 CRLF」同类）——读取处补 `.replace(/\r\n/g, '\n')`。两处不涉 I18n 内容。
+- **度量**：宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；`I18n.ets` 2,378 行（内容等价）；净 5 个跟踪文件改动（1 重命名 + 1 barrel + 3 脚本）。
+- **验证**：`check-ohos-refactor-slice` 通过（括号深度 0）；`arkts_check` 2 文件 0 error；`BUILD SUCCESSFUL in 44s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 252 文件）；`check-ohos-i18n`（源↔镜像一致）与 `test-ohos-object-type-i18n`（7/7）全绿；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717）**：新 HAP 安装成功；**设备处于安全锁屏**（`ScreenLockRootComponent`；开发者模式禁止自动解锁），`aa start` 报 `10106102 The device screen is locked`，多次 `power-shell wakeup` / swipe / fling / `uitest uiInput keyEvent` 均无法解锁 → **本片语言切换走查记「待真机人工」**。未改任何持久化设置，无需恢复。构建/契约/夹具校验均已绿；本片为纯路径搬迁，运行期语义零变化。
+- **M 轨道收尾结论（M1–M7 全清）**：`pages/` 现仅余页面壳（`ApplicationRoot` / `PrivacyBootstrap` / `StartupSky` / `StartupStarGeometry.ts` / `MainWindowNativeNode` / `FloatWindowNativeNode` / `SubWindowNativeNode` / `UiExtensionNativeNode`）与 **3 个一行式 barrel**（`pages/StellariumTypes.ets` → `common/types/`、`pages/MainWindowModels.ets` → `common/types/`、`pages/I18n.ets` → `capability/`）。**后续轨道备注**：消费者改直引新路径后可删这 3 个 barrel，归入 Phase 7 收口轨道。
+## [2026-10-06] DevEco Code - M 轨道 M5：核心桥类型迁入 common/types/（Barrel 兜底；宿主 8,017 行不变）
+
+- **依据**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11.2.1 的 **Barrel 策略**、M 轨道第 6 片（优先 P7）。**纯路径迁移 + 一行式 barrel**，不改任何类型内容与运行逻辑；开工 `git log -1` = `6b7852d037`。
+- `pages/StellariumTypes.ets`（1,121 行，核心桥响应 / UI 模型 / 天文计算结果类型）与页面无关却被全项目消费（**~98 处** import，覆盖 `state/` / `bridge/` / `capability/` / `panels/` / `common/` 与宿主），架构倒挂最严重。
+- **做法**：① `git mv pages/StellariumTypes.ets → common/types/StellariumTypes.ets`（整文件原样，R100；该文件**无任何内部 import**，搬家不需改相对深度）；② 原位新建 2 行 shim（注释 + `export * from '../common/types/StellariumTypes'`）；③ 消费者 **0 改动**（~98 处仍 import `…/pages/StellariumTypes`，经 barrel 解析到新实体）；④ `common/types/MainWindowModels.ets`（M4 迁入）内部 import `'../../pages/StellariumTypes'` **保留旧路径经 barrel 解析**（同目录 `./StellariumTypes` 与旧路径二选一，取"零内容改动"）。
+- **default export 核查**：`grep 'export default'` = **0**；全部为命名导出（`export interface` 全表）——`export *` 即完整覆盖，**无需** `export { default } from ...`。
+- **夹具同步（2 脚本 / 2 处）**：`scripts/test-ohos-mist-horizon.mjs`（改读 `common/types/StellariumTypes.ets`）、`scripts/verify-ohos-object-details.mjs`（`typesPath` 改新路径）。
+- **不改**：无类型 / 接口 / 常量内容改动；无 `.id()` / `main_pages.json` / 构建产物改动；`common/types/` 不 import `@ohos.*`（类型层无 NAPI，符合 §15.7 规则 1）；`ui-contract-baseline.json` 的 `scannedFiles` 不回改（与 M1–M4 同例）。
+- **度量**：宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；`StellariumTypes.ets` 1,121 行（内容等价，仅路径变化）；新增 `common/types/StellariumTypes.ets` + 2 行 barrel；净 4 个跟踪文件改动（1 重命名 + 1 新增 barrel + 2 夹具）。
+- **验证**：`check-ohos-refactor-slice` 通过（括号深度 0）；`arkts_check` 2 文件 0 error；`BUILD SUCCESSFUL in 1m4s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 251 文件）；受影响 `test-ohos-mist-horizon`（5/5）、`verify-ohos-object-details`（121 字段 / 11 段）全绿；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717）**：`devecocli run --skip-build` → `Smoke: PASS`。① 桥响应：CLI `searchObject Mars` 返回完整 `StellariumBridgeResponse`（`found:true` + `detailModel` + 10 条 `liveDetailFields` + `distance`/`magnitude`/`ra`/`dec`）；② 详情卡：`ui layout` 见 `Text "火星"` + `Scroll#object-detail-content-scroll`，hilog `[detail-model] render pixel map created` + `[detail-media-card] sphere loaded …mars.png`；③ 搜索：`openUiPanel search` 渲染 `search-browser-scroll`，搜索框输入 `Jupiter` → 建议 `Jupiter` / `JUPITER 3 (ECHOSTAR 24)`，点选 → 详情卡 `木星` + hilog `…jupiter.png`；`pidof 23856` 全程存活、无 jscrash / 无 faultlog；测试未改动任何持久化设置。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.21 追加本片完成结论 + 度量 + barrel 说明 + M 轨道收尾结论（6/7 完成，M7 待做）。
+
+## [2026-10-06] DevEco Code - M 轨道 M4：扩展域模型迁入 common/types/（Barrel 兜底，消费者零改动；宿主 8,017 行不变）
+
+- **背景**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11.2.1 的 **Barrel 策略**、M 轨道第 5 片，**纯路径迁移 + 一行式 barrel**，不改任何类型/常量内容与运行逻辑；开工 `git log -1` = `126228abd9`。
+- **移动**：`git mv pages/MainWindowModels.ets → common/types/MainWindowModels.ets`（整文件原样，767 行）。该文件为「扩展域模型」：40+ 接口 + 10+ 常量 + `OcularSelInfo` 类，含 1 处 `import ... from './StellariumTypes'`；移动后该行相对深度改为 `../../pages/StellariumTypes`（本片唯一内容改动，1 行）。
+- **default export 核查**：`grep 'export default'` = **0**；全部为命名导出（94 处 `export`），故 barrel 用 `export *` 即可覆盖接口 + 常量 + 类，**无需** `export { default } from ...`。
+- **barrel**：在 `pages/MainWindowModels.ets` 原位新建 2 行 shim（说明注释 + `export * from '../common/types/MainWindowModels'`），旧路径继续解析。
+- **消费者零改动**：全仓 **66 处** `import ... from '.../pages/MainWindowModels'`（`state/`、`bridge/`、`capability/`、`panels/`、`common/` 及宿主 `MainWindowNativeNode.ets`）全部**未改**，经 barrel 解析到新实体。
+- **不改**：无任何类型/常量/接口内容改动；无 `.id()`、`main_pages.json`、构建产物改动；`common/types/` 不 import `@ohos.*`（类型层无 NAPI，符合 `common/*` 约束）。
+- **度量**：宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；`MainWindowModels.ets` 767 行（内容等价，仅 1 行 import 深度）；新增 `common/types/` 目录 + 1 个 2 行 barrel；`git diff --cached --stat` = 769 insertions / 767 deletions（重命名识别为 A+M）。
+- **验证**：`check-ohos-refactor-slice` 通过（括号深度 0）；`arkts_check` 2 文件 0 error；`BUILD SUCCESSFUL in 1m1s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 250+ 文件）；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（5 个 `-pad`/`-performance` 需设备 + `verify-ohos-search` 的平台 hdc 路径），**无新增回归**（`scripts/*.mjs` 不引用 `MainWindowModels`，无夹具需同步）。
+- **真机（192.168.50.108:36717，`devecocli run --skip-build` → `Smoke: PASS`）**：模型消费域逐项实证 —— CLI `getSatellites` / `getOculars` / `getScriptList` / `listRecordings` / `getBookmarks` / `getTelescopeProfiles` 全部返回真实数据；UI 走查「更多功能 → 天体数据与扩展 → 卫星」（渲染离线轨道目录，`Satellites plugin version 0.15.0` / `目录更新时间：2026-08-27 09:54:53 UTC`）、「更多功能 → 观测工作区 → 书签」（空态渲染）、「… → 望远镜控制」（渲染 `Offline Telescope Simulator` 设备行）；`pidof com.cnchensh.stellarium` = 18034 存活，`hilog -T ArkTS` 无 jscrash/异常。
+- **未走查（待真机人工）**：脚本面板（本次未定位到入口，未开；已用 CLI `getScriptList`/`listRecordings` 覆盖其数据结构）；导入/picker 等运行期路径（无，本片仅搬类型）。
+- **本片新踩的坑**：① **`common/types/` 到 `pages/` 是两级相对深度** —— 首写 `../pages/StellariumTypes` 被 `arkts_check` 报 `Cannot find module`（解析成 `common/pages/...`），须改为 `../../pages/StellariumTypes`；搬家后务必以实测相对深度为准。② `Get-Content .Count` 对纯 LF 大文件给出偏小行数（8,017 → 7,573），度量须用 `\n` 计数（与仓库既有口径 8,017 一致）。
+- **后续轨道备注**：消费者直引新路径（`.../common/types/MainWindowModels`）后可删本 shim —— 归入 Phase 7 收口轨道。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.20 追加本片完成结论 + 度量 + barrel 说明。
+## [2026-10-06] DevEco Code - M 轨道 M6：MediaPort 接口隔离（拆 5 个子接口；宿主 8,017 行不变）
+
+- **背景**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11 的 M 轨道第 4 片，**类型层重构（接口隔离）**，不改任何运行逻辑。`bridge/MediaPort.ets`（原 107 行 / 25 法）混了图片解码、对象模型纹理、文件导出、文档导入、屏幕录制 5 个关注点，导致「只做图片解码的控制器也拿到录屏/相册/picker 能力」。开工 `git log -1` = `b72f3c542b`。
+- **新增 5 个子接口（`MediaPort.ets` 107 → 123 行）**：`ImagePort`（7 法：`fileExists` / `openReadOnlyFile` / `closeFile` / `createImageSource` / `createPixelMap` / `releaseImageSource` / `releasePixelMap`）、`ObjectModelMediaPort`（3 法：`createPixelMapFromRgba` / `readPixelMapPixels` / `readRawSidecar`）、`FileExportPort`（3 法：`saveFileAs` / `saveTextFileAs` / `deleteFile`）、`DocumentImportPort`（4 法：`pickDocumentToDir` / `pickDocumentToDirNamed` / `importScriptDocument` / `importLandscapeDocument`）、`ScreenCapturePort`（8 法：`screenVideoDir` / `makeDir` / `fileSize` / `hasActiveScreenCapture` / `beginScreenCapture` / `stopScreenCapture` / `releaseScreenCapture` / `saveVideoToGallery`）。方法签名/返回类型/注释**逐字保留**（仅搬家）；`MediaPort extends` 上述 5 者，`MediaSaveResult` / `MediaImportResult` / `ScreenCaptureState` 枚举/接口保持导出。
+- **`ObjectModelMediaPort extends ImagePort` 的判定**：`ObjectModelRenderer` 的模型纹理路径必然先经 `common/media/ImageDecoder` 的 `decodeLocalImage`/`releaseDecodedImage`（即 `ImagePort`）再做 `readPixelMapPixels` / `createPixelMapFromRgba`，故令子接口互相 extends（ArkTS 接口多继承合法），使该控制器只需一个字段类型；否则须引入交叉类型，而 **ArkTS 禁止交叉类型**（`arkts-no-intersection-types`，本片实测确认）。
+- **消费者→最小接口收窄（12 文件 + 1 适配器不变）**：`common/media/ImageDecoder`（`decodeLocalImage`/`releaseDecodedImage` 的 `port`）、`ObjectInspectorMediaController`、`SkyCultureController`、`common/platform/Share` → **ImagePort**；`ObjectModelRenderer` → **ObjectModelMediaPort**；`AstroCalcController`、`common/platform/Screenshot` → **FileExportPort**；`LayerController`、`NebulaTextureController`、`ScriptPlaybackController` → **DocumentImportPort**；`RecordingController` → **ScreenCapturePort**；`SkyCultureMakerController` → 本地组合接口 `SkyCultureMakerMediaPort extends ImagePort, DocumentImportPort`（该控制器同时经 `fileExists`/解码与 `pickDocumentToDirNamed` 取图，ArkTS 禁交叉类型故用本地接口显式组合）。适配器 `HostMediaPort` 与宿主字段 `hostMediaPort: HostMediaPort` **保持单一 `implements MediaPort` 不变**。
+- **不改**：无任何方法体、调用序列、适配器实现、`.id()`、`main_pages.json`；仅类型注解与 import 变更。
+- **度量**：净 13 文件 +79 / −46；`MediaPort.ets` 107 → 123 行；宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；无 store 新增。
+- **验证**：`check-ohos-refactor-slice` 通过（括号深度 0）；`arkts_check` 13 文件 0 error；`BUILD SUCCESSFUL in 29s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 249 文件）；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717，`devecocli run --skip-build` → `Smoke: PASS`）**：① **图片解码（ImagePort）实证** —— 启动即渲染星空文化美术缩略图，hilog 连续输出 `[detail-media] create image source kind=sky-culture-art-thumbnail path=.../modern/illustrations/*.png` + `[sky-culture-art] thumbnail ready`（`SkyCultureController` 经 `ImagePort` 走 `decodeLocalImage`），另 `[body-warmup] ready path=textures/*.png`（同一 ImagePort 路径）。② 导航「更多功能 → 工具与数据」面板渲染正常。③ `pidof 12410` 全程存活、无 jscrash / 无 faultlog。**未走查**：另存为/CSV 导出、导入 picker、录屏入口需 3 步以上深链且会拉起系统 picker / 产生录屏文件，而本片仅收窄类型、调用序列逐字未改，故记「待真机人工」；测试期间未改动任何持久化设置。
+- **本片新踩的坑**：① **ArkTS 禁交叉类型**（`arkts-no-intersection-types`）——跨多接口的消费者不能用 `A & B`，只能让子接口互相 `extends` 或声明本地组合接口（本片两种手法各用一次）。② 编辑工具会把部分 `.ets` 写回成裸 LF，而仓库 `.ets` 约定 CRLF（`core.autocrlf=true`）——收尾前须逐文件把裸 LF 归一回 CRLF（字节级，保留 BOM/编码），否则 `git status` 会出现 eol 噪声。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.19 追加本片完成结论 + 度量 + 消费者→最小接口对照表。
+
+## [2026-10-06] DevEco Code - M 轨道 M3：导览模型与音频引擎迁出 pages/（纯路径迁移；宿主 8,017 行不变）
+
+- **背景**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11.2.2/§11.2.3 的 M 轨道第 3 片，**纯路径迁移**（`git mv` + 同步消费者相对深度），不改任何运行逻辑；开工 `git log -1` = `0c73bbb6ed`。
+- **`AudioEngine` 落点判定（§15.7 规则 1）**：STATE-REVIEW §11.2.2 记为 `common/media/AudioEngine.ets`，但开工核查发现该文件**直接调用音频 NAPI**（`import { audio } from '@kit.AudioKit'` + `audio.createAudioRenderer(...)`，另 `import hilog from '@ohos.hilog'`），而 `common/*` 不得 import NAPI（§15.7 规则 1），故按判定改落 **`capability/AudioEngine.ets`**（与 `capability/ObjectModelRenderer` 等控制器同层）。对照：既有 `common/media/ImageDecoder.ets` 仅把 `@kit.ImageKit` 用作 `image.PixelMap` **类型**，设备能力调用全部经 `MediaPort`，故仍属合规的 `common/media/`。
+- **移动 2 个文件（`git mv` 保留历史）**：`pages/AstronomyGuide.ts` → `common/derive/AstronomyGuide.ts`（197 行，纯数据模型 + `GuidePlayer` 状态机，无 import）；`pages/StellariumAudio.ets` → `capability/AudioEngine.ets`（927 行，按计划改名为 `AudioEngine.ets`；原文件同时有 `export class AudioEngine` 与 `export default AudioEngine`，**两种导出逐字保留**，`TAG='StellariumAudio'` 运行期日志标签**刻意不改**，故消费者 import 形式无需变更）。
+- **内部相对深度（2 处）**：`capability/AudioEngine.ets` 的 `./StellariumTypes` → `../pages/StellariumTypes`；文件首行注释更新为新文件名（`AstronomyGuide.ts` 无 import）。
+- **改动的消费者 import（4 文件 / 4 行）**：宿主 `pages/MainWindowNativeNode.ets`（`./AstronomyGuide` → `../common/derive/AstronomyGuide`；`./StellariumAudio` → `../capability/AudioEngine`）；`state/GuideStore.ets`（`../pages/AstronomyGuide` → `../common/derive/AstronomyGuide`）；`panels/guide/GuideLibrary.ets`（`../../pages/AstronomyGuide` → `../../common/derive/AstronomyGuide`）；`capability/StartupBridge.ets`（`../pages/StellariumAudio` → `./AudioEngine`）。导出名 `ASTRONOMY_GUIDES`/`AstronomyGuide`/`GuideState`/`GuideStep`/`AudioEngine` 全部保持不变。
+- **夹具同步（2 脚本 / 2 处）**：`scripts/test-ohos-guide.mjs`、`scripts/test-ohos-mist-horizon.mjs` 改读 `common/derive/AstronomyGuide.ts`。
+- **未改**：`docs/harmonyos/json/ui-contract-baseline.json` 的 `scannedFiles` 与历史 `CHANGELOG`/`HANDOFF.md` 构建产物索引（与 M1/M2 同例——`scannedFiles` 不参与契约 diff，历史文档不回改）。
+- **度量**：宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；无 store/端口新增。净 8 个跟踪文件（2 重命名 + 4 消费者 import + 2 夹具）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 5 文件 0 error；`BUILD SUCCESSFUL in 30s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 249 文件）；受影响测试 `test-ohos-guide`（9/9）、`test-ohos-mist-horizon`（5/5）全绿；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717，`devecocli run --skip-build` → `Smoke: PASS`）**：① 导览（`AstronomyGuide` 迁出后）——CLI `startGuide solar-neighbours` → `getGuideState` 返回 `active:true/phase:preparing/index:0/count:5` 且 `guides[]` 含两条完整步骤；`guideAction next` → index 前进；`guideAction stop` → `active:false/index:1`，播放器状态机全链生效。② 音频（`AudioEngine` 迁出后）——UI 导航「更多功能 → 脚本与自动化 → 音频控制」进入 AudioPanel，点「背景音乐」Toggle 一次 → hilog `StellariumAudio: audio engine started (v2 ethereal)` + `muted = false`（`createAudioRenderer` 成功、引擎启动）；再点一次 → `muted = true`。两次点按即 off→on→off，**已恢复到测试前状态**。③ `pidof 4005` 全程存活、无 jscrash/无 faultlog。
+- **本片新踩的坑**：① 计划表把 `AudioEngine` 目标写为 `common/media/`，但 §15.7 规则 1 要求 `common/*` 不 import NAPI；判定依据是「是否**调用**设备能力」而非「是否 import 其模块」——`ImageDecoder` 仅在 `common/media/` 用 `@kit.ImageKit` 的 `PixelMap` 类型，而 `AudioEngine` 真调 `audio.createAudioRenderer`，故必须落 `capability/`；② `devecocli ui` 无「按面板名打开」的语义命令（本构建命令目录亦无 `openUiPanel`/music 命令），音频入口须经「更多功能→自动化→音频控制」三级坐标点击，属可接受的真机走查路径（已实测到达）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.18 追加本片完成结论 + 度量 + 移动清单（含 `AudioEngine` 的 §15.7-1 判定）；§1.1 的 `pages/StellariumAudio.ets` 行加迁移注记。
+
+## [2026-10-06] DevEco Code - M 轨道 M2：位置参考数据三文件迁入 common/location/（纯路径迁移；宿主 8,017 行不变）
+
+- **背景**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11.2.4 的最终决定；M 轨道第 2 片，**纯路径迁移**（`git mv` + 同步消费者相对深度），不改任何数据内容/运行逻辑；开工 `git log -1` = `9bc9992c4b`。
+- **移动 3 个文件（`git mv` 保留历史，按 §11.2.4 去 `location_` 冗余前缀）**：`pages/location_hierarchy.ts` → `common/location/hierarchy.ts`（74,611 行）；`pages/location_names_zh.ts` → `common/location/names_zh.ts`（7,350）；`pages/location_countries.ts` → `common/location/countries.ts`（986）。共 82,947 行、内容 0 改动（git 识别为 R100 重命名）。
+- **改动的消费者 import（3 文件 / 9 行）**：宿主 `pages/MainWindowNativeNode.ets`（`./location_hierarchy` → `../common/location/hierarchy`、`./location_countries` → `../common/location/countries`、`./location_names_zh` → `../common/location/names_zh`）；`state/LocationStore.ets`、`state/LocationPickerStore.ets`（各 `../pages/location_*` → `../common/location/*`）。导出名 `LOCATION_HIERARCHY` / `LOCATION_COUNTRY_NAMES` / `LOCATION_ZH_NAMES` 全部保持不变。
+- **生成器/夹具输出路径同步（4 脚本 / 7 处，否则下次生成会重新落回 `pages/`）**：`scripts/generate-ohos-location-hierarchy.mjs`（hierarchyPath / outputCountriesPath）；`scripts/generate-ohos-location-zh.mjs`（hierarchyPath / outputPath）；`scripts/check-ohos-i18n.mjs`（读 countries）；`scripts/verify-ohos-location-search.mjs`（读 hierarchy + names_zh）。
+- **零引用扫描**：全仓 `grep` `location_hierarchy|location_names_zh|location_countries`（含 `.mjs`/`.md`）确认消费者即上列 7 文件，无其它 import/字符串引用；**未新增/改任何 `.id()`、未改组件树、未改 `main_pages.json`**。
+- **度量**：宿主 `MainWindowNativeNode.ets` **8,017 → 8,017 行**（本片不动宿主）；无 store/端口新增。净改动 7 个跟踪文件（3 重命名 + 3 消费者 import + 4 脚本内 7 处路径）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 3 文件 0 error；`BUILD SUCCESSFUL in 30s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 249 文件）；受影响测试 `verify-ohos-location-search` 全绿（`OK: 7387 offline locations have Chinese display entries` + `OK: 12 localized and normalized location searches passed`）；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717，`-SkipDeploy` 产 HAP → `hdc install -r` + `aa start`）**：`pidof 58001` 全程存活、hilog 无 jscrash/`setLocation failed`。位置面板 →「按地区选」→ 层级四列**实证迁移后数据运行期可加载**：大洲「亚洲/欧洲/非洲」、国家/地区「不丹/东帝汶/中国」（`LOCATION_COUNTRY_NAMES` 中文名）、地区「上海市/中国台湾地区/中国澳门特别行政区」、城市「上海」；点击「上海」后坐标由 `21.34°N / 110.38°E` 实时刷新为 `31.22°N / 121.46°E`、位置名「上海 · 地球」（`applyPickerLocation`→`setLocation` 全链生效）。测试改动的持久化观测点已恢复到测试前显示值（`自定义位置` / 21.41°N / 110.38°E / 0 m）。
+- **本片新踩的坑**：① `verify_ui` 把「按地区选」误判为「点击无响应（三次均未跳转）」——实为 `PlacePanel` 将 `LocationPickerPanel` 放在信息行之后，层级四列位于滚动视口**以下**，截图与 `ui layout` 只覆盖视口底部；切换其实已生效，需 `devecocli ui swipe` 滚动后才可见（后续改用 swipe + layout 定位，不再依赖自动化截图的「是否跳转」判断）；② 真机恢复持久化观测点时，地图点选走「像素→经纬度」线性映射，步长约 0.34°/px，无法精确命中历史显示的两位小数纬度 21.34°N（最近可达 21.41°N），只能恢复显示近似值；③ §13.6 的 6 项环境类失败与上片一致，非本片回归。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.17 追加本片完成结论 + 度量 + 移动清单；§1.1 的 `pages/location_*` 行加迁移注记。
+
+## [2026-10-06] DevEco Code - M 轨道 M1：DetailModel 渲染管线迁出 pages/（纯路径迁移；宿主 7,573 行不变）
+
+- **背景**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §11 的 M 轨道第 1 片，**纯路径迁移**（移动文件 + 同步消费者相对深度），不改任何运行逻辑；开工 `git log -1` = `b675c48a0c`。
+- **移动 6 个文件（`git mv` 保留历史）**：`pages/DetailModelRenderTypes.ets` → `capability/DetailModelRenderTypes.ets`（45 行）；`pages/DetailModelRenderClient.ets` → `capability/DetailModelRenderClient.ets`（106）；`pages/DetailModelRasterizer.ets` → `capability/DetailModelRasterizer.ets`（177）；`pages/DetailModelWorker.ets` → `capability/DetailModelWorker.ets`（21）；`pages/DetailModelGeometry.ets` → `common/derive/DetailModelGeometry.ets`（28）；`pages/ProceduralDetailModel.ets` → `common/derive/ProceduralDetailModel.ets`（134）。
+- **Worker 入口路径字符串（本片最高风险点）**：`capability/DetailModelRenderClient.ets` 的 `new worker.ThreadWorker('entry/ets/pages/DetailModelWorker.ets', …)` 改为 `'entry/ets/capability/DetailModelWorker.ets'`。同片把 `scripts/configure-ohos-model-worker.mjs` 注册的 `sourceOption.workers` 由 `./src/main/ets/pages/DetailModelWorker.ets` 改为 `./src/main/ets/capability/DetailModelWorker.ets`，并加「旧路径就地改写」分支（生成项目 `build-profile.json5` 里仍是旧路径，sync 时自动迁移）。
+- **改动的消费者 import（5 文件 / 6 行）**：`capability/ObjectModelRenderer.ets`（3 行 → `./DetailModelRenderClient`、`./DetailModelRenderTypes`、`../common/derive/DetailModelGeometry`）；`capability/ObjectInspectorMediaController.ets`（→ `../common/derive/ProceduralDetailModel`）；`state/ObjectMediaStore.ets` 与 `state/ObjectDetailStore.ets`（→ `../common/derive/DetailModelGeometry`）；`common/derive/media.ets`（→ `./ProceduralDetailModel`）。移动文件内部引用同片修正：`DetailModelRasterizer` 的 `./ProceduralDetailModel` → `../common/derive/ProceduralDetailModel`（同目录 `./` 引用不变）。
+- **零引用扫描**：全仓 `grep` 确认 6 个文件名无其它 import/字符串引用；`DetailModelRasterizer`/`DetailModelWorker` 为 0 外部消费者（内部互引）。**未新增任何 `.id()`、未改组件树**。
+- **测试同步**：`test-ohos-procedural-model.mjs` / `test-ohos-model-worker.mjs` / `test-ohos-detail-model-geometry.mjs` 三个夹具改读新路径（`test-ohos-model-worker` 的 `source()` 由「固定 `pages/` 目录 + 名字」改为显式路径映射，并补 `MainWindowNativeNode` 映射）。
+- **度量**：宿主 `MainWindowNativeNode.ets` **7,573 → 7,573 行**（本片不动宿主）；无 store/端口新增。净改动 15 文件、+36 / −23 行（含脚本与夹具）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 11 文件 0 error；`BUILD SUCCESSFUL in 42s`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 249 文件）；受影响 3 测试全绿（12/12、6/6、7/7）；全量 `*-ohos*.mjs` 仅 §13.6 六项环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。
+- **真机（192.168.50.108:36717）**：`devecocli run --skip-build` → `Smoke: PASS`；`searchObject Mars`（detailModel `state=available`）后 hilog 实证 **worker 链路通** —— `[detail-model] CPU texture ready … bytes=524288 source=sidecar` → `[detail-model] render pixel map created kind=object-inspector-model bytes=409600` → `[detail-media-card] sphere loaded … mars.png`；`pidof 53313` 全程存活、无 jscrash。**worker 入口字符串若未同步，此处不会出现 `render pixel map created`**，故该日志即新路径生效的判据。
+- **本片新踩的坑**：① `sync-ohos-build-sources.sh` **只复制不删除**，文件搬迁后生成项目里仍残留旧的 `pages/*.ets`（本次手工清理 6 个旧副本，避免死代码/歧义编译）；② `configure-ohos-model-worker.mjs` 原先只在「不含 workerPath」时写入，改路径后必须补「旧路径→新路径」就地改写，否则已存在 `sourceOption` 时会抛错或保留旧路径；③ 测试夹具 `source(name)` 原以固定目录解析任意文件名，换成路径映射后**漏映射的名字会解析成 `undefined.ets`**（`test-ohos-model-worker` 的 `MainWindowNativeNode` 首轮即因此 1/6 失败，补映射后 6/6）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.16 追加本片完成结论 + 度量 + 文件移动清单。
+
+## [2026-10-05] DevEco Code - E 轨道 E5：解散 SettingsController，18 法按字段归属并回各 store（宿主 7,992 → 8,017 行）
+
+- **删除 `capability/SettingsController.ets`（350 行）**：E3 建立的设置/配置控制器整体解散 —— 18 个方法按「字段所在处即归宿 / 读本域 store 字段 → 并入该 store 方法」（§14.3 范式，参照 D16）并回各域 store；`settingsChoiceSelected` / `selectSettingsChoice` 为跨 4 store 的谓词与分派，留宿主为薄分派；`SettingsController` / `SettingsHostHooks` import、宿主 `settingsControllerImpl` 字段与 `settingsCtl()` 访问器全部删除，`settingsCtl` 零残留（仅余注明来源的注释）。
+- **`state/InfoWindowStore.ets`（57 → 147 行）**：`setInformationMode` / `setInformationField` 并入（原 SettingsController，函数体逐字等价）。桥经新增 `attachPort(CommandPort)`；`InfoWindowHostHooks` 回注 `flashHint` / `applySelectedInfoMode`（SelectionService 保留族 §15.6-6，本体留宿主，只迁调用方）/ `refreshSelectedObject` / `clearSelectedDetailLoaded`（跨 ObjectDetailStore 的清标志经 hook，store 不 import 他 store）。
+- **`state/ObjectDetailStore.ets`（231 → 284 行）**：`applyCustomInformationMask` 并入本 store（**分配调整**：原列为 InfoWindowStore，但被清的 30 个字段与 `selectedDetailFields` 过滤全在本 store，按「字段所在处即归宿」改归此处；`informationMode` 与掩码谓词由调用方以参数传入，避免 store 相互 import 与新增 hook）。宿主调用点 `objectDetailStore.applyCustomInformationMask(this.infoWindowStore.informationMode, (key) => this.infoWindowStore.informationMaskHas(key))`。
+- **`state/ToolsStore.ets`（207 → 292 行）**：配置整包四法并入 —— `saveAllCoreSettings` / `restoreCoreDefaults` / `exportConfig` / `importConfig`（写入 `configExport*` / `configImport*` 字段，均在本 store）。`ToolsHostHooks` 增 `saveAppSettings` / `copyConfigExportText`（宿主既有保存动作 / PlatformPort 剪贴板适配器留宿主）；`ExportConfigResponse` / `ImportConfigResponse` 类型随方法迁入（沿用既有 `as` 收窄先例）。
+- **`state/NavigationSettingsStore.ets`（25 → 99 行）**：`setNavigationBoolean` / `setNavigationMaxFov` 并入；新增 `attachPort` + `NavigationSettingsHostHooks`（`flashHint` / `setAutoZoomResets`（autoZoomResets 分支写 ViewSettingsStore，经 hook））。
+- **`state/EphemerisStore.ets`（43 → 92 行）**：`setEphemerisEnabled` 并入；新增 `attachPort` + `EphemerisHostHooks.flashHint`。
+- **`state/ViewSettingsStore.ets`（36 → 135 行）**：`setConfigurationDithering` / `setDistanceUnit` / `setFovMarkerSetting` / `setProjection` 并入；新增 `attachPort` + `ViewSettingsHostHooks`（`flashHint` / `setCurrentProjection`（宿主 @State）/ `reloadConfigurationSettings`（跨 timeSettingsStore 回滚）/ `logProjectionError`（store 不 import hilog，§15.7-1））。
+- **`state/AtmosphereStore.ets`（19 → 32 行）**：`applyAtmosphereResponse` 并入（纯回包写本域 4 字段，无端口 / hook）。
+- **`setConfigurationDateFormat` 保留宿主**：本体即 `timeCtl().saveTimePreference('setDateFormat', …)`，随跨域分派内联到宿主 `selectSettingsChoice` 的 `date` 分支（TimeController 本体留宿主，项目无控制器互调先例）。
+- **宿主 `MainWindowNativeNode.ets`（7,992 → 8,017 行，`private` 方法 211 → 212，`@State private` 131 不变）**：删 `settingsCtl()` 与 `settingsControllerImpl`；**新增** `settingsChoiceSelected` / `selectSettingsChoice` 两个薄分派（+2 个 `private`，净 +1）；`aboutToAppear` 补齐 InfoWindow / Navigation / Ephemeris / ViewSettings 四 store 的 `attachPort` + `attachHooks`，ToolsStore hooks 增两法；全部 `settingsCtl().setXxx` 调用点改指对应 store；清理 8 处陈旧的 `SettingsController` 注释。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 9 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 249 文件）；`test-ohos-information-policy` 3/3（夹具改读 `state/ObjectDetailStore.ets` 的 `applyCustomInformationMask(informationMode, informationMaskHas)`）、`test-ohos-settings-choice-motion` 4/4（改读宿主薄分派）全绿；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。信息模式：`openUiPanel settingsInformation` → 点「简短」→ `getInformationSettings` `default → short`、点「默认」复原（`selectSettingsChoice` → `infoWindowStore.setInformationMode` 全链 + `applySelectedInfoMode` hook 回注）；距离单位：设置「主设置」点「英里」→ hilog `setConfigString "astronomy/flag_use_km_for_distance=false"`、点「千米」复原 `=true`（`viewSettingsStore.setDistanceUnit` 全链）；时间面板打开正常（`AtmosphereStore` 消费方渲染）；`pidof` 40174 全程存活、hilog 无 jscrash。测试改动的持久化设置（信息模式 / 距离单位）均已复原。
+- **未走查（待真机人工，同 E3）**：`保存设置` / `恢复默认设置`（点击未在 hilog 观察到 `saveAllSettings` / `restoreDefaultSettings`，疑被面板滚动 / 命中吞掉，E3 已记录）；投影下拉（`setProjection`）、FOV 标记（`setFovMarkerSetting`）、抖动（`setConfigurationDithering`）、星历开关（当前构建 DE430/431/440/441 全部「未安装」不可启用）、`exportConfig` / `importConfig` picker；`applyCustomInformationMask`（需先选中天体）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12.15 追加本片完成结论 + 度量。
+
+## [2026-10-05] DevEco Code - E 轨道 E4（末片）：搜索 / 音频 / 自检 / 视锁 / 今晚天象行为下沉（宿主 8,244 → 7,993 行；E 轨道收尾）
+
+- **新增 `capability/SearchController.ets`（176 行）**：宿主 8 个搜索 / 筛选行为逐字下沉 —— `scheduleSuggestions` / `fetchSuggestions` / `selectSearchSuggestion`（建议去抖 140ms + 桥查询 + 选中）；`refreshSearchFilterResults` / `selectSearchFilterCategory` / `selectSearchVisibilityFilter` / `selectSearchInstrumentFilter` / `setSearchFilterPage`。注入 `CommandPort` + `SearchStore` / `CatalogStore` / `LanguageStore` + `SearchHostHooks`（`animateFilterChange`（宿主 `getUIContext().animateTo` 220ms EaseInOut）/ `resetSearchScroll`（`searchPanelScroller`）/ `publishSearchBrowserState`（§15.6-4 保留）/ `searchObject`（选中入口留宿主））。建议去抖定时器控制器自持（`stop()`，§15.7 规则 3），宿主 `aboutToDisappear` 与 `SearchPanel.onSubmit` 改调 `searchCtl().stop()`。**不 import NAPI/UI**。差异仅：`callInteractive` → `port.requestInteractive`、语言代际缺省值由 `-1` 哨兵在体内解析（原默认参数 `this.languageStore.languageRefreshSerial`；serial 自 0 递增）。
+- **新增 `capability/SelfTestController.ets`（117 行）**：`selfTestAllActions` + 私有常量 `SELFTEST_ACTION_IDS`（83 项）一并下沉；桥经 `CommandPort.requestWhenReady`（重试窗口 0ms × 100 × 120 逐字保留），日志经 `hilog`。宿主 `StartupBridge` 的 `runSelftest` 钩子改指 `selfTestCtl().selfTestAllActions()`。**构建 / 静态验证；真机不可触发（编译常量 `SELFTEST = false`，属开发自检路径）。**
+- **`state/AudioStore.ets`（15 → 57 行）**：`toggleMusic` / `persistMusicEnabled` 自宿主下沉；350ms 防抖时间戳与播放 / 静音副作用（`AudioEngine` 是原生桥）经新增 `AudioStoreHooks.setMusicPlaying` / `flashHint` 具名回注；`AppStorage('stellariumSettings')` 持久化在 store 内直接完成（与 `LocationStore` / `NightModeStore` / `TelescopeStore` 同例）。
+- **`capability/LayerController.ets`（487 → 518 行）**：`setViewLockState` / `toggleViewLock` 自宿主并入（同属图层 / 视图域，写 `ViewSettingsStore`）；**移除 E2 遗留的 `LayerHostHooks.setViewLockState`**（其唯一内部调用点 `setBridgeFlag` 的 `setViewLock` 分支改为控制器内部直调 `this.setViewLockState(enabled)`），新增 `LayerHostHooks.setTrackingText` 回注宿主 `trackingText`。`TimeController` 的 `hooks.setViewLockState`、宿主 3 处 `onToggleLock` 与设置面板 `setViewLockState` 回调改指 `layerCtl()`（E2 重审价值落地）。
+- **`capability/ViewCoordinateController.ets`（162 → 171 行）**：`setPointerCoordinates` 自宿主并入（写 `OverlayStore`；`callNativeWhenReady` → `port.requestWhenReady`，重试档 0 / 100 / 15 逐字，失败提示经 `I18n`）。
+- **`state/SessionToolStore.ets`（220 → 271 行）**：`refreshTonight` 自宿主下沉（桥经既有 `port`、提示经既有 `hooks.flashHint`），私有纯助手 `fmtIso` 随之下沉；宿主 `schedulePanelDataLoad` 与 `place` 面板 `onRefreshTonight` 改指 `sessionToolStore.refreshTonight()`。
+- **登记保留（本片不迁，逐条理由）**：① `setLanguage` —— 属宿主语言刷新收口（`I18n.setLanguage` + `@StorageLink('i18nLang')` + `panelContentKey++` + 跨 store `catalogStore` / `searchStore` 重载 + `languageSwitchTimer` + AppStorage 持久化），§15.6-4 刷新 / 收口保留；② `setTrackingState` / `stopTracking` —— 与宿主保留的 `refreshState()`（§15.6-4）双向耦合（该法读 `trackingRequestPending` / `trackingStateIgnoreUntilMs` 并写 `trackingText`），且 `trackingText` 为宿主 @State 经 @Prop 下发三壳层；搬迁须将 §15.6-4 保留态迁出或跨边界读，违反 §15.7-2 / §13.1-5；§15.11 M1-A 已登记「引擎耦合」保留，`stopTracking` 仅薄转发 `setTrackingState(false)` 随本体留宿主；③ `refreshDockClock` —— 属宿主 1s 节拍收口（写 `dockClockText` 与 `currentFovText` 两个宿主 @State，与 `syncDockClockTimer` / `stopDockClockTimer` 同链），§15.6-4。
+- **度量（ReadAllLines 口径，与 E1–E3 一致）**：宿主 **8,244 → 7,993 行（−251）**、`private` 方法 **233 → 219（−14：删 16 + 增 `searchCtl()` / `selfTestCtl()` 2）**、`@State private` **131 不变**；新增 2 控制器文件（176 + 117 行）；未新增端口 / store。
+- **测试同步**：`scripts/test-ohos-search-browser.mjs` 夹具改读 `capability/SearchController.ets`，`selectSearchFilterCategory` 假控制器补齐 `hooks.animateFilterChange` / `resetSearchScroll` / `publishSearchBrowserState`（3/3 全绿）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 7 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 250+ 文件）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败（4 个 `-pad` / `mist-performance` / `verify-ohos-search`）。真机（192.168.50.108:36717）：搜索浏览器 `setSearchBrowserPage browse` → `getSearchBrowserState` 全字段返回；可见性 `visibility|above`、设备 `instrument|binocular` 回读命中，`selectSearchCategory galaxy` → `category=galaxy / moduleId=NebulaMgr:0`，`setSearchBrowserPage categories` → `page=categories`（SearchController 全链），测后复原 `planet/all/all/browse`；详情卡「操作」页点「固定位置」→ hilog `command received: "setViewLock" "1"`，再点 → `"0"`（`onToggleLock` → `layerCtl().toggleViewLock()` → `setViewLockState`，E2 hook 移除后链路正常）；音频面板切「背景音乐」→ hilog `StellariumAudio: muted = true`，再切回 `false`（`persistMusicEnabled` 下沉后持久化链路）；打开位置面板 → hilog `command received: "getTonightEvents"`（`sessionToolStore.refreshTonight`）；Dock 时钟 `getSimulationTime` 1s 节拍 + FOV `60.0°` 实时（`refreshDockClock` 保留）；`pidof 28329` 全程存活、无 jscrash。**未走查（待真机人工）**：紧凑布局右上角音频快捷（`audioStore.toggleMusic` 本体；`receiveTap:false` + 触点层，`devecocli ui click` 坐标点击不触发且无语义命令）；`pointerCoordinates` 面板在本紧凑布局下内容为空（无 `getPointerCoordinates` 桥调用，属既有面板加载行为、非本片改动，未点按 `setPointerCoordinates`）；`selfTestAllActions`（`SELFTEST=false`）。
+- **本片新踩的坑**：用 `edit` 工具把「注释行 + 下一行方法签名」作为一个**含尾随换行**的 `oldString`、替换为**去尾随换行**的 `newString`（意图为无操作）时，会把注释与签名**并成一行**（如 `...写桥。  applyStarMagLimit(...)`），使该方法体成为类内孤儿语句；`check-ohos-refactor-slice` 与 `arkts_check` 对这类结构失衡**均报 0 error**，只有 `devecocli build` 以 **380 条级联错误**暴露（`arkts-no-standalone-this` / 属性不存在）。教训：**不要用「去掉尾随换行」的方式做无操作编辑**；改完应对被改文件做括号与签名自检（或直接构建）。
+
+## [2026-10-05] DevEco Code - E 轨道 E3：设置面板选项行为 → capability/SettingsController.ets（宿主 8,437 → 8,244 行）
+
+- **新增 `capability/SettingsController.ets`（351 行）**：把宿主残留的 18 个设置 / 配置行为逐字下沉 —— `settingsChoiceSelected` / `selectSettingsChoice`（纯谓词与分组分派）；`setInformationMode` / `setInformationField` / `applyCustomInformationMask`（信息窗）；`setConfigurationDateFormat` / `setConfigurationDithering` / `setDistanceUnit` / `setFovMarkerSetting` / `setProjection`（配置项）；`setNavigationBoolean` / `setNavigationMaxFov`（导航）；`setEphemerisEnabled`（星历）；`saveAllCoreSettings` / `restoreCoreDefaults` / `exportConfig` / `importConfig` / `applyAtmosphereResponse`（整包）。注入 `CommandPort`（`requestInteractive` / `requestWhenReady`）+ `InfoWindowStore` / `TimeSettingsStore` / `NavigationSettingsStore` / `ViewSettingsStore` / `EphemerisStore` / `ObjectDetailStore` / `ToolsStore` / `AtmosphereStore` + `SettingsHostHooks extends BehaviorHostHooks`。**不 import NAPI/UI**（§15.7 规则 1，仅 `hilog`，与 `TimeController`/`LayerController` 先例一致）。
+- **第 19 项登记保留（§15.6-6）**：`applySelectedInfoMode` 属 SelectionService 保留族，本体留宿主、只迁调用方（`setInformationMode`），经 `SettingsHostHooks.applySelectedInfoMode` 回注；`refreshSelectedObject` 同法回注。
+- **具名 hooks**：`setCurrentProjection`（宿主 @State）、`saveAppSettings`、`saveTimePreference` / `setConfigurationTimeFormat` / `setStartupTimeSetting`（`TimeController` 本体留宿主；项目无控制器互调先例，故用 hook 而非注入实例）、`copyConfigExportText`（`exportConfig` 的剪贴板落点，`PlatformPort` 适配器留宿主）。`exportConfig`/`importConfig` 的响应类型收窄沿用既有控制器 `as` 先例（`OcularController` 等 9 处；§15.7-4 的 `as` 禁则限端口适配器）。
+- **宿主 `MainWindowNativeNode.ets`**：删 18 法；清 3 处未用导入（`ExportConfigResponse` / `ImportConfigResponse` / `informationMaskBit`）；增 1 惰性构造器 `settingsCtl()`；全部调用点改指向（SettingsPanel 13 回调、LayersPanel `onSetFovMarker`、SettingsQuickLegacyPanel `onSetProjection`、ToolsPanel `onExportConfig`/`onImportConfig`、`applySelectedObject` 的 `applyCustomInformationMask`、`AstroCalcHostHooks`/`timeStore.attachHooks` 的 `applyAtmosphereResponse`），两处 `applyAtmosphereResponse` hook 改指控制器。
+- **逐字等价（§15.7 规则 5）**：仅「`this.<宿主字段>` → store/hooks/port」与桥名映射（`callInteractive`→`requestInteractive`、`callNativeWhenReady`→`requestWhenReady`），比较边界 / 分支 / 取整 / 回滚 / 提示文案 / 命令 payload 均未改。
+- **度量**：宿主 **8,437 → 8,244 行（−193）**、`private` 方法 **250 → 233（−17：删 18 + 增 `settingsCtl()`）**、`@State private` **131 不变**；新增 1 控制器文件；未扩展端口/store。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 2 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 248 文件）；`test-ohos-information-policy` 3/3、`test-ohos-settings-choice-motion` 4/4 全绿（两夹具改读 `capability/SettingsController.ets`）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`openUiPanel settingsInformation` → 点「简短」→ `getInformationSettings` `default→short`、点「默认」复原（`selectSettingsChoice`→`setInformationMode` 全链）；「主设置」页点「英里」→ hilog `setConfigString "astronomy/flag_use_km_for_distance=false"`，点「千米」→ `=true`（`setDistanceUnit` 全链，已复原）；`pidof` 17031 全程存活、无 jscrash。
+- **未走查（待真机人工）**：`保存设置`/`恢复默认`（点击未在 hilog 观察到 `saveAllSettings`/`restoreDefaultSettings`，疑被面板滚动/命中吞掉）；「视图导航」页（tab 横滚后不可见）的导航开关与最大 FOV 滑块；`exportConfig`/`importConfig` picker 与剪贴板；`setProjection` 下拉；`setFovMarkerSetting`（图层面板）；星历开关（当前构建 DE43x 全「未安装」，不可启用）。
+- **测试同步**：`scripts/test-ohos-information-policy.mjs`（改读控制器 + 去 `private` 前缀）、`scripts/test-ohos-settings-choice-motion.mjs`（新增 `settingsMethod` 读控制器）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.13 E3 完成结论 + 19 法逐条判定 + 度量。
+## [2026-10-05] DevEco Code - E 轨道 E2：显示 / 图层设置行为并入 LayerController
+
+- **E2（并入既有 `capability/LayerController.ets`，不新建控制器；理由见下）16 法逐字下沉**：
+  - 星等 / 银河：`applyStarMagLimit`、`applyMilkyWayBright`。
+  - 轨迹 / 轨道：`applyTrailColor`、`setOrbitDisplayFlag`、`setOrbitDisplayThickness`、`setOrbitColorStyle`、`setTrailDisplayFlag`、`setTrailDisplayNumber`。
+  - 地景 / 3D：`setLandscapeFadeWithZoom`、`changeLandscapeTransparency`、`selectLandscape`、`importLandscapeFile`、`setScenery3dEnabled`、`setScenery3dScene`。
+  - **`setSkyDisplaySetting` / `setBridgeFlag`**：二者原为 D2 遗留的 `LayerHostHooks` 回注宿主（发不同桥命令），本片把**实现迁入控制器**并**移除这两个 hooks**；`setBridgeFlag` 的私有助手 `syncBridgeFlagState` 随之一并下沉（`setViewLock` 分支仍经 hooks 回注宿主 `setViewLockState`，含选中判定 / `trackingText` 回读，属 §15.6-1 保留宿主字段）。
+- **并入而非新建的理由（先普查再决定）**：16 法全部是「图层 / 显示」域 —— 写 `LayerViewStore` / `LayerStore` / `SceneryStore` / `ObjectDetailStore` / `ViewSettingsStore` 的薄桥写回，与 D2 `LayerController` 同域（`applyLayerSwitch` 本就分发到 `setSkyDisplaySetting` / `setBridgeFlag`）；`LayerController` 已持有 `CommandPort` + `LayerViewStore`，新建控制器会产生两个持有同一 `LayerViewStore` 的类。故扩展 `LayerHostHooks` 与构造器、不新增文件。
+- **端口扩展**：`bridge/MediaPort.ets` +1 —— 新增 `importLandscapeDocument()`（地景 ZIP 的 picker + fileIo 段与 `landscapeImportFileName` 名称清洗逐字上移；宿主 `HostMediaPort` 具名实现 + 私有静态 `landscapeImportFileName`，与 D10 `importScriptDocument` 同形态）。
+- **逐字等价**：仅「`this.<宿主字段>` → store/hooks/port」与桥名映射（`callInteractive`→`port.requestInteractive`），比较边界 / 分支 / 取整 / 过滤正则 / 去重判定一字未改；`importLandscapeFile` 成功提示的 `fileName` 由返回值路径 basename 推导（与原 `destinationPath` basename 等价）；地景详情浮层宿主 `@State landscapeDetailOpen` 经新增 hook `setLandscapeDetailOpen` 写入。
+- **度量**：宿主 **8,587 → 8,437 行（−150）**、`private` 方法 **268 → 250（−18 = 16 法 + `landscapeImportFileName` + `syncBridgeFlagState`）**、`@State private` **131 不变**；`capability/LayerController.ets` **250 → 487 行（+237）**、`bridge/MediaPort.ets` **103 → 107 行（+4）**；未新增文件。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 3 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 247+ 文件）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / mist-performance / polar-scope-pad / verify-ohos-search），无新增失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。`openUiPanel layers` → hilog `[cli-ui] opened panel=layers`；`setLayerTab 0` → hilog `layer tab=0`。
+  - `applyStarMagLimit`：星等限制滑块 6.5 → 5.0，右侧文本实时刷新；`getLimitMagnitude` 回读 `starMagnitudeLimitEnabled=true / customStarMagLimit=5`。
+  - `applyMilkyWayBright`：「银河亮度 +」3 → 4（文本实时刷新）；`getMilkyWayIntensity` 回读 `1 → 1.33`。
+  - `setOrbitDisplayFlag`：太阳系页展开「轨道显示方式」→「只显示当前选中天体」开关 true → false；`getOrbitDisplaySettings` 回读 `orbitIsolated: true → false`。
+  - `setSkyDisplaySetting`：「星星闪烁」开关关闭后，其条件子行「无大气时保持闪烁」即时消失（`layerStore.starTwinkle` 写入 + 条件重绘）。
+  - `setBridgeFlag`：天空页「流星」开关 true → false；`getMeteors` 回读 `true → false`。
+  - `selectLandscape`：地景列表点「飓风」→ `getLandscapeInfo.id` `guereins → hurricane`，再点「盖兰」复原 `guereins`。
+  - `changeLandscapeTransparency`：透明度滑块 0% → 55%；`getLandscapeOpacity` 回读 `0.0027 → 0.55`；拖回 0% 后经 `setLandscapeUseTransparency 0` 复原，重启并等待落定后 `getLandscapeOpacity=0.0027`（启动淡入瞬间会短暂读到 0.5，非持久值）。
+  - `setScenery3dEnabled` / `setScenery3dScene`：`openUiPanel scenery3d` → 开关启用（`getScenery3dList.enabled: false → true`）→ 点选 `Testscene`（`current: "" → Testscene`）；关闭开关 + 重启复原 `enabled=false / current=""`。
+  - `pidof` 全程存活（63072 → 重启 3737 → 8238 → 10454 → 10938）、无 jscrash；测试后全部持久化设置复原（`getLimitMagnitude` 6.5/false、`getMilkyWayIntensity` 1、`getOrbitDisplaySettings` orbitIsolated=true、`getMeteors` true、`getLandscapeInfo` guereins、`getScenery3dList` enabled=false）。
+  - **未走查（待真机人工）**：`applyTrailColor`（颜色输入 + 应用，需文本输入与颜色校验路径）、`setOrbitDisplayThickness` / `setOrbitColorStyle` / `setTrailDisplayFlag` / `setTrailDisplayNumber`（同域滑块 / 下拉，已过构建级逐字等价）、`setLandscapeFadeWithZoom`（Toggle 状态 layout 不暴露）、`importLandscapeFile`（系统文件选择器交互）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12 追加 E2 完成行 + 度量。
+
+## [2026-10-05] DevEco Code - E 轨道 E1：删死代码 + 位置层级选择薄胶水下沉
+
+- **删死代码（用户已确认）**：删 5 个宿主私有方法 —— `showObjectActionBar`（硬编码 `return false`）、`objectActionBarX`、`objectActionBarWidth`、`isObjectActionBarPoint`（仅被前三者与下述分支引用）、零引用 `loadFov`；并删 `isUiPoint` 体内恒假的第二判定项 `|| this.isObjectActionBarPoint(x, y)`（只删恒假项，`isObjectDetailCardPoint(...)` 第一项判定与比较边界不变）；从 geometry import 移除随之零引用的 `objectActionBarY`（其函数本体按 `scripts/test-ohos-polar-scope.mjs` 的文本切分边界保留，未删）。
+- **位置薄胶水下沉（D8 登记保留 4 法 → `capability/LocationController.ets`）**：`selectContinent` / `selectCountry` / `selectRegion` / `selectCityByName` 逐字等价迁入 —— 纯 store 写 `this.locationPickerStore.hier*` → `this.pickerStore.hier*`，`this.locationCtl().setLocation(...)` → 控制器内部 `this.setLocation(...)`；`selectCityByName` 的 `hierCities(...).find(...)` 过滤与 `locationPlanet(found)` 判定一字未改。控制器已持有 `LocationPickerStore` / `SessionToolStore`，仅新增 `HierCity` import（`../pages/StellariumTypes`）。宿主 4 个调用点（`PlacePanel` 的 `onSelectContinent/Country/Region/City`）改指 `this.locationCtl().selectXxx(...)`。
+- **度量**：宿主 **8,646 → 8,587 行（−59）**、`private` 方法 **277 → 268（−9 = 4 死方法 + `loadFov` + 4 迁出薄胶水）**、`@State private` **132 不变**；`capability/LocationController.ets` **214 → 245 行（+31）**；未新增文件。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 2 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 247+ 文件）；`test-ohos-polar-scope` 4/4、`test-ohos-privacy-startup` 19/19 全绿；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / mist-performance / polar-scope-pad / verify-ohos-search）。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。位置面板「按地区选」层级全链路实测（无 `--id` 的层级列经坐标点击，缺语义命令已记录）：大洲「亚洲」→ 国家「丹麦」→ 地区「哥本哈根」→ 城市「哥本哈根」，`getObserverInfo` 返回 `Copenhagen / 55.6759 / 12.5655 / 14`，hilog `command received: "setLocation" "Copenhagen|55.6759|12.5655|14"`（`selectContinent`/`selectCountry`/`selectRegion` 纯 store 写并驱动下级列刷新，`selectCityByName` → `LocationController.setLocation` 落桥）；再切大洲「欧洲」验证下级国家列刷新为「丹麦/乌克兰」、地区/城市列清空。`pidof` 52593 存活、无 jscrash。测试后经「地图选点 + 应用」复原为启动值 `自定义位置 / 21.34°N / 110.38°E / 0 m`（原值 `自定义位置 / 21.29°N / 110.38°E / 0 m`，纬度差 ~0.05° 系地图栅格分辨率，海拔与经度一致）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12 追加 E1 完成行 + 度量。
+
+## [2026-10-05] DevEco Code - D 轨道 D3（收尾片）：星空文化与制作器行为控制器
+
+- **D3（P1，最大簇）新增两个控制器**：
+  - `capability/SkyCultureController.ets`（700 行）：逐字下沉「选择/标签/视觉」22 法 —— `selectSkyCulture` / `setSkyCulture`（按名设置）/ `captureSkyCultureAnchor` / `armSkyCultureAnchor` / `clearSkyCultureAnchor` / `handleSkyCultureRowArea` / `setSkyCultureStyleOption` / `setSkyCulture{Screen,Info,Zodiac,Lunar}LabelMode` / `setSkyCultureLabelModeForTarget` / `selectSkyCultureLabelMode` / `setSkyCultureLabelMode` / `setSkyCultureShortLabels` / `setSkyCultureCommonNames` / `setSkyCultureConstellationIsolation` / `setSkyCultureConstellationSinglePick` / `applySkyCultureConstellationSelection` / `setSkyCultureVisualSetting` / `setSkyCultureVisualColor` / `setCurrentSkyCultureAsDefault`；「时间跟随」3 法 —— `stopSkyCultureTimeFollowTimer` / `syncSkyCultureTimeFollowTimer` / `refreshSkyCultureSimulationYear`（500ms 轮询，控制器自持 start/stop）；「Art 预览」14 法 —— `skyCultureArtFilePath` / `skyCultureArtUri` / `invalidateSkyCultureArtDecode` / `setSkyCultureArtStatus` / `clearSkyCultureArtThumbnails` / `decodeSkyCultureArtThumbnail` / `prepareSkyCultureArtResources` / `openSkyCultureArtPreview` / `resolveSkyCultureArtPreview` / `closeSkyCultureArtPreview` / `onSkyCultureArtLoaded` / `decodeSkyCultureArtPreview` / `onSkyCultureArtError` / `retrySkyCultureArtPreview`。私有字段 12 个随控制器（`skyCultureRowY` / `skyCultureAnchor*` / `skyCultureTimeFollow*` / `skyCultureArt{Decode,Thumbnail}Generation` / `skyCultureArtDecodeTimer` / `skyCultureArtStatusFlushTimer` / `skyCultureArtPendingStatuses`）；定时器自持 `sync/stopSkyCultureTimeFollowTimer` 与 48ms 状态合批 / 32ms 缩略图分块定时器。注入 `CommandPort` + `MediaPort`（`fileExists`）+ `SkyCultureViewStore` + `SkyCultureSettingsStore` + `SkyCultureHostHooks extends BehaviorHostHooks`。
+  - `capability/SkyCultureMakerController.ets`（507 行）：逐字下沉 Maker 向导 24 法 —— `skyCultureMakerDraftFromResponse` / `applySkyCultureMakerDraft` / `scheduleSkyCultureMakerSave` / `saveSkyCultureMakerDraft` / `validateSkyCultureMaker` / `resetSkyCultureMaker` / `undoSkyCultureMaker` / `addSkyCultureMakerConstellation` / `updateSkyCultureMakerConstellation` / `removeSelectedSkyCultureMakerConstellation` / `addSkyCultureMakerHipLine` / `removeSkyCultureMakerLine` / `addSelectedStarToSkyCultureMaker` / `skyCultureMakerArtworkFilePath` / `clearSkyCultureMakerArtworkPreview` / `refreshSkyCultureMakerArtworkPreview` / `selectSkyCultureMakerConstellation` / `applySkyCultureMakerArtworkResponse` / `importSkyCultureMakerArtworkFile` / `removeSkyCultureMakerArtwork` / `bindSkyCultureMakerArtworkAnchor` / `handleSkyCultureMakerArtworkTouch` / `exportSkyCultureMaker` / `importSkyCultureMakerFile`。私有字段 6 个随控制器（`skyCultureMakerArtworkPreviewPath` / `ArtworkDecodeGeneration` / `ArtworkTouchStartX/Y` / `ArtworkTouchMoved` / `skyCultureMakerSaveTimer`，650ms 去抖自持 + `flushSkyCultureMakerSave()` 供 `aboutToDisappear` 收口）。注入 `CommandPort` + `MediaPort` + `SkyCultureMakerStore` + `SkyCultureMakerHostHooks`。
+- **`loadSkyCultureDetails`（§15.6-3 永久登记）留宿主**：控制器经 `hooks.loadSkyCultureDetails()` 回注调用；共享请求序号 `skyCultureDetailsRequestId` 亦留宿主（§14.8 规则 3 单一持有者），控制器经 `hooks.skyCultureDetailsRequestId()` / `nextSkyCultureDetailsRequestId()` 读写。
+- **§2.7.1 L 高频渐进字段留宿主**：`skyCultureArtStates` / `skyCultureArtThumbnailPixelMaps`（LayersPanel 以宿主 @State→@Prop 消费）**字段本体不动**，控制器经 hooks get/set 读写 —— 同时满足 §15.6-1（不搬保留裸字段）与 §15.7 规则 2（可观测渐进数据不入控制器私有字段）。
+- **§15.6-2 A2 登记宿主控制器留宿主**：`skyCultureColorOptions` / `skyCultureActiveColorTarget` 经 `hooks.skyCultureActiveColorTarget()` 回读；`drawSkyCultureTerritoryMap`（持宿主 `CanvasRenderingContext2D` + 画布尺寸，UI 类型，§15.7 规则 1）与 `skyCultureMapRenderWidth/Height` 原样留宿主。
+- **端口扩展**：`bridge/MediaPort.ets` +6 —— 新增 `pickDocumentToDirNamed(dirName, fileSuffixFilters, buildFileName)`（Maker 美术图 / 文化包导入的 picker + fileIo 段逐字上移；宿主 `HostMediaPort` 具名实现）。`image.PixelMap` 类型经 `@kit.ImageKit`（与 `MediaPort` 同源，非设备能力调用）。
+- **宿主 `MainWindowNativeNode.ets`**：删 62 法（D3 选择/标签/视觉/时间跟随/Art 38 + Maker 24）+ 16 字段声明，增 3 个私有方法（`correctSkyCultureRowScroll` / `skyCultureCtl()` / `skyCultureMakerCtl()`，故 `private` 净 −59）与全部调用点改指向；`SkyCultureMakerStore` 的 `applySkyCultureMakerDraft` / `skyCultureMakerDraftFromResponse` 两个 hook 改指 `skyCultureMakerCtl()`；`LayerHostHooks.syncSkyCultureTimeFollowTimer` 改指控制器；CLI `setSkyCulture` 处理分支的 `captureSkyCultureAnchor` 与 `aboutToDisappear` 的 maker 定时器收口改指控制器。
+- **逐字等价（§15.7 规则 5）**：仅「`this.<宿主字段>` → store/hooks/port」与桥名映射（`callInteractive`→`port.requestInteractive`），比较边界 / 分支 / 防抖档（48ms 状态合批、32ms 缩略图分块、650ms 自动保存、500ms 时间跟随）/ 解码尺寸（320×320 缩略图、1280 长边预览）未改；`importSkyCultureMakerArtworkFile` 取消选择时把 `artworkImporting` 复位为 false（原宿主早退遗留 true 属既有缺陷，端口以 cancelled 语义明确）。
+- **度量**：宿主 **9,513 → 8,646 行（−867）**、`private` 方法 **336 → 277（−59）**、`@State private` **131 不变**；新增 2 控制器文件、扩展 1 端口。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 4 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 247+ 文件）；`test-ohos-skyculture-refresh` 5/5、`test-ohos-skyculture-text` 4/4 全绿；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / mist-performance / polar-scope-pad / verify-ohos-search）。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。子域 1+2：CLI `setSkyCulture tibetan` → hilog `[sky-culture-anchor] id=tibetan delta=-13.3 offset=1878.4`（`captureSkyCultureAnchor` + `handleSkyCultureRowArea` + `correctSkyCultureRowScroll` hook 全链路）+ `[sky-culture-art] thumbnail ready path=skycultures/tibetan/illustrations/*.png` ×24 + `[detail-media] released pixel map kind=sky-culture-art-thumbnail`（`prepareSkyCultureArtResources` / `decodeSkyCultureArtThumbnail` / `setSkyCultureArtStatus` / `clearSkyCultureArtThumbnails` 经 hooks 读写宿主 L 字段）。子域 3：`openUiPanel skyCultureMaker` → 「星座」页 `新增星座` 实时渲染 `1 个星座` / `constellation_1` → hilog `saveSkyCultureMakerDraft` 收到含 `constellation_1` 的草稿 JSON（`addSkyCultureMakerConstellation` + 650ms 去抖 + `saveSkyCultureMakerDraft`）→ 「校验与导出」页 `校验草稿` → hilog `validateSkyCultureMakerDraft`（面板显示 `5 个错误 / 2 个提醒`）。`pidof` 全程 33488 存活、无 jscrash。测试后 `setSkyCulture modern` + `resetSkyCultureMakerDraft` 复原。
+- **未走查（待真机人工）**：Art 大图预览叠层开合（`openSkyCultureArtPreview`→`SkyCultureArtPreviewOverlay`，需在文化页滚动至「星座图形」并点按艺术图，入口深）；领地地图 Canvas 重绘（`drawSkyCultureTerritoryMap` 保留宿主，需 `skyCultureHasTerritoryArchive` 为真的文化）；标签模式 picker 的选项弹层（`selectSkyCultureLabelMode` 的 `animatePickerCollapse` 动画本体）；Maker 美术图导入 picker / 导出另存为 picker（系统文件选择器交互）。
+- **D 轨道收尾结论**：D3 为 STATE-REVIEW §10.6 队列末位（最大簇）。**17 簇全清** —— D0（hook 基础设施）+ D1/D2/D11/D12/D16 + D9/D15 + D5/D6/D13 + D7/D14 + D17/D10/D4 + D8（位置域切片完成）+ D3（本片）全部落地；`loadSkyCultureDetails` 按 §15.6-3 永久登记，`SelectionService` 族按 §15.6-6 永久登记。全 D 轨道宿主从基线 12,321 行降至 **8,646 行**（−3,675）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.10 D3 完成结论 + D 轨道收尾账。
+
+## [2026-10-05] DevEco Code - D 轨道 D17+D10+D4：对象检查器媒体 / 脚本录制回放 / 时间操作控制器
+
+- **D17（P1）新增 `capability/ObjectInspectorMediaController.ets`（约 470 行）**：逐字下沉 15 个方法 —— `objectInspectorFilePath` / `clearObjectInspectorDecodedImage` / `updateObjectInspectorMediaWarmup` / `startObjectInspectorMediaWarmup` / `stopObjectInspectorMediaWarmup` / `startBodyDetailWarmup` / `stepBodyDetailWarmup` / `stopBodyDetailWarmup` / `refreshObjectInspectorMedia` / `openObjectInspectorMediaPreview` / `closeObjectInspectorMediaPreview` / `retryObjectInspectorMediaPreview` / `onObjectInspectorMediaPreviewLoaded` / `onObjectInspectorMediaPreviewError` / `retryObjectInspectorMedia`。私有字段 11 个随控制器（`objectInspectorMediaRequestPath` / `ResolvedRequestPath` / `ResolvedPath` / `ResolutionComplete` / `WarmupTimer` / `DecodeGeneration` / `bodyDetailWarmupTimer` / `Index` / `Pending` / `objectInspectorProceduralKey` / `Particles`；预热定时器自持 `start/stop`，`stop()` 一并对齐宿主 `aboutToDisappear`）。注入 `ObjectMediaStore` / `ObjectDetailStore` / `MediaPort` + `ObjectInspectorMediaHostHooks`（`filesDir` / `pathToUri` / `warmupStatus` / `resolveDetailMediaAsset` / `isPreparationFailed` / `objectModelRenderer`）。**`readRawSidecar` 按"只迁宿主实现并改指向"上移 `bridge/MediaPort`（`readRawSidecar` 纯接口 + `HostMediaPort` 逐字承载 fileIo open/read/close，尺寸不符抛 Error），`ObjectMediaStore` 的 hook 由 `this.readRawSidecar` 改指 `this.hostMediaPort.readRawSidecar`，控制器不 import fileIo**。`ObjectModelRenderer` 的 `mediaDecodeGeneration` / `proceduralParticles` / `resetProcedural` 三个 hook 改指 `this.objectInspectorMediaCtl()`（两控制器职责不重叠）。
+- **D10（P1）新增 `capability/ScriptPlaybackController.ets`（约 230 行）**：逐字下沉 9 个方法 —— `toggleRecordingUi` / `handleScriptControlDragTouch` / `startScriptStatusPolling` / `stopScriptStatusPolling` / `finishNativeScriptUi` / `refreshScriptStatus` / `refreshScriptCaptions` / `changeScriptRate` / `importScriptFile`。私有字段 8 个随控制器（`scriptControlDragging` / `DragStartX/Y` / `DragStartOffsetX/Y` / `scriptStatusTimer` / `scriptStatusRequestPending` / `scriptCaptionsRequestPending`；250ms 状态轮询自持 start/stop）。注入 `ScriptStore` / `ToolsStore` / `CommandPort` / `MediaPort` + `ScriptPlaybackHostHooks extends BehaviorHostHooks`（控制条几何与拖动落位 `scriptControlSafeTop`/`isExpandedLayout`/`skyWidth`/`skyHeight`/`guideCardWidth`、`stopSkyInertia`、`guideActive`、`dismissScriptOverlays`、收尾 `reloadObserverInfo`/`loadPlanetList`、UI 动画 `animateWaiting`/`animateCaptions`）。脚本导入的 picker/fileIo 与 `scriptImportFileName` 名称清洗**上移 `MediaPort.importScriptDocument`（纯接口 + `HostMediaPort` 具名实现）**，与 D12 `pickDocumentToDir` 同形态。
+- **D4（P1）新增 `capability/TimeController.ets`（约 320 行）**：逐字下沉 21 个方法 —— `refreshTimeNow` / `handleChip` / `setTimeRate` / `stopTimeWheelSpeed` / `applySpeedStep` / `syncTimeRateState` / `speedUp` / `speedDown` / `togglePause` / `advanceTime` / `jumpToTimeMark` / `applyManualTime` / `syncManualTimeFromState` / `applyTimeSettings` / `saveTimePreference` / `setStartupTimeSetting` / `setConfigurationTimeFormat` / `refreshSimTimeLight` + 面板定时器自持 `startPanelTimers` / `stopPanelTimers` / `hasPanelTimer`。私有字段 3 个随控制器（`timePanelTimer` / `timePanelFullTimer` / `timeMarkLoading`）；`SPEED_STEPS` / `SPEED_IDX_STOP` / `SPEED_IDX_REALTIME` 改为控制器模块级常量（比较边界/换挡分支逐字保留）。注入 `TimeStore` / `TimeSettingsStore` / `DeltaTStore` / `CommandPort` + `TimeHostHooks extends BehaviorHostHooks`（`utcOffsetHours` / `timeSettingsPending` get/set / `animateOption` / `syncWheelFromSimulation` / `syncJulianDateFields` / `refreshSelectedObject` / `moveToSelectedObject` / `setViewLockState` / `triggerAction` / `searchObject` / `stopTracking` / `setLocation`）。**D4 阻塞的 `refreshState` 由 D0 的 `BehaviorHostHooks` 解锁**；`timePanelTimer`/`timePanelFullTimer` 虽由面板路由/生命周期调用，但已按 §15.7 规则 3 收进控制器自持 `start()/stop()`。
+- **逐条判定（以工作区实测为准）**：D17 实测 **15 行为法 + 11 字段**（STATE-REVIEW §10.1 记 20 法，多出的含已随 M2-A 下沉的 `objectInspectorModel*` 渲染/纹理法）；`objectInspectorInlineModelSize` 属几何 A-保留（宿主 4 处组件调用），未动。D10 实测 **9 行为法 + 8 字段**（另 `scriptControlSafeTop` 因 `getUIContext().px2vp` 属 UI 几何留宿主经 hook；`scriptImportFileName` 随导入上移 MediaPort；`changePlaybackRate`/`toggleReplayPause` 已于 M1-B 在 `RecordingController`）；宿主死字段 `scriptStartGraceUntil`（唯一真源在 `ScriptStore`）本片删除。D4 实测 **21 法 + 3 字段**（STATE-REVIEW 记 20 法；`setEquationOfTime` 已于 D9 迁 `OcularController` 不重复；`setConfigurationDateFormat` 留宿主但改调 `timeCtl().saveTimePreference`；`fpsTimer` 属启动 splash 闪烁非时间域，留宿主；`utcOffsetHours` 属 D6/§15.6-1 保留、`timeSettingsPending` 属 §15.6-1 保留 @State，均经 hook 回注）。
+- **宿主 `MainWindowNativeNode.ets`**：删 45 法 + 22 字段声明（含死字段 `scriptStartGraceUntil`）+ 清理 7 个未用导入（`proceduralModelKind` / `proceduralParticles` / `objectInspectorPlanetTexturePath` / `objectInspectorPlanetRingSpec` / `objectInspectorDeepSkyImageName` / `ScriptStatusResponse` / `ScriptCaptionsResponse`）与死常量 `BODY_DETAIL_TEXTURE_PATHS`；增 3 个惰性构造器（`objectInspectorMediaCtl()` / `scriptPlaybackCtl()` / `timeCtl()`），全部调用点改指向（详情卡/平板检查器/媒体预览叠层的媒体回调、脚本控制条拖动与导入、时间面板 chips 与命中区、`setPanel('time')`/生命周期定时器）。
+- **逐字等价（§15.7 规则 5）**：仅「`this.<宿主字段>` → store/hooks/port」与桥名映射（`callNativeFire`→`port.fire`、`callInteractive`→`port.requestInteractive`），比较边界 / 分支 / 取整 / 事件判定 / 定时器周期（250ms 轮询 / 125ms+3000ms 时间面板 / 120ms body warmup / 500ms warmup / 350ms 时间二次刷新 / 220ms 脚本收尾）未改。
+- **度量**：宿主 **10,288 → 9,512 行（−776）**、`private` 方法 **378 → 336（−42）**、`@State private` **131 不变**；新增 3 控制器文件、扩展 1 端口（`MediaPort` +2 方法）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 5 文件 0 error（首轮构建暴露 2 处漏改 `this.applyManualTime`/`this.syncManualTimeFromState`，修后 `BUILD SUCCESSFUL`）；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 245+ 文件）；`test-ohos-settings-choice-motion` 4/4、`test-ohos-procedural-model` 12/12、`test-ohos-startup-stars` 17/17（三夹具改读 `capability/TimeController.ets` / `ObjectInspectorMediaController.ets` + 新 hook 与端口）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / mist-performance / polar-scope-pad / verify-ohos-search）。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。D4：时间面板底部 chips 点按实时刷新 —— 快进 → 副标题 `2026-10-05 · 2x`、实时 → `· 1x`、停止 → `· 已暂停`（`handleChip` 全链经 `timeCtl()`），且面板时钟 `时间 21:08:17→21:08:33` 证明 `startPanelTimers()` + `refreshSimTimeLight` 125ms 轮询在跑。D17：搜索选中 M4 → 详情卡「离线深空资料图像」→ 点按打开全屏预览，hilog `[detail-media-preview] open kind=image ... m4.png` + `image loaded` + 关闭 `[detail-media-preview] close`（`refreshObjectInspectorMedia` / `open` / `onLoaded` / `close` 四法均经控制器）。D10：脚本面板「导入脚本」→ 唤起系统 `DocumentViewPicker`（`HostMediaPort.importScriptDocument` 全链），关闭选择器后 `pidof` 存活。测试后时间恢复「实时 · 1x」。`pidof` 全程 21393 存活、无 jscrash。
+- **未走查（待真机人工）**：脚本控制条拖动/回放速率/录制 UI 开关（需先进入录制会话，`toggleRecordingUi` 入口深于 3 步）；对象媒体预览「重试」按钮（需解码失败态）；手动时间应用 / 日期时间选择器 / 时间设置写回（会改持久化设置，本轮未触发）。
+- **测试与文档**：`scripts/test-ohos-settings-choice-motion.mjs`（第 4 用例改读 `TimeController` + `hooks.animateOption`）、`scripts/test-ohos-procedural-model.mjs`（第 11 用例改读控制器 + `mediaPort.fileExists`）、`scripts/test-ohos-startup-stars.mjs`（`dismissSplash` 夹具补 `objectInspectorMediaCtl()`）；`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.9 D17/D10/D4 完成结论 + 度量。
+
+## [2026-10-05] DevEco Code - D 轨道 D7+D14：天文计算行为控制器 + 插件功能控制器
+
+- **D7（P1）新增 `capability/AstroCalcController.ets`（429 行）**：逐字下沉 29 个行为法 —— `jumpToRts` / `jumpToRtsCalendar` / `jumpToEphemerisRow` / `jumpToObservabilityDay` / `jumpToPhenomenon` / `jumpToWutTarget` / `jumpToMoonPhase` / `jumpToAlmanacSeason` / `chooseRtsCalendarStartDate` / `chooseEphemerisStartDate` / `chooseGraphStartDate` / `chooseEclipseStartDate` / `openAstroTargetPicker` / `openGraphTargetPicker` / `openRtsTargetPicker` / `openEphemerisTargetPicker` / `reloadCurrentGraph` / `selectAstroFilter` / `selectAstroGroup` / `selectAstroTab` / `exportCurrentAstroCsv` / `applyAtmosphere` / `loadPlanetPositions` / `shouldRefreshAstroCalcContext` / `syncAstroCalcContextTimer` / `stopAstroCalcContextTimer` / `fmtDateTime` / `fmtClock` / `fmtEphemerisDate` / `fmtNum`（29 行为 + 1 `publishAstroPanelState` 保留宿主）。私有字段 7 个随控制器（`astroTransitionId` / `astroRequestedTab` / `planetPositionsRequestSequence` / `graphTargetPickerActive` / `rtsTargetPickerActive` / `ephemerisTargetPickerActive` / `astroContextTimer`；定时器自持 `syncAstroCalcContextTimer` / `stopAstroCalcContextTimer`）。注入 `CommandPort` + `MediaPort` + `astroStore` / `ephemerisStore` / `wutStore` / `searchStore` + `AstroCalcHostHooks`（`publishAstroPanelState` / `astroPanelContextActive` / `astroPanelOnScreen` / `scrollAstroPanelToTop` / `saveAppSettings` / `animateAstroIn` / `animateAstroOut` / `showDatePicker` / `applySelectedObject` / `setPanel` / `applyAtmosphereResponse`）。
+- **D7 判定（以工作区实测为准）**：STATE-REVIEW §10.1 记「32 法」（含 5 个 `chooseXxxStartDate` / 3 个 `openXxxTargetPicker`）；实测为 **4 个 choose（无 `chooseWutStartDate`，RTS 的为 `chooseRtsCalendarStartDate`）+ 4 个 picker + 22 个其余动作/定时器/格式化 = 30 法 = 29 行为 + 1 `publish*`**。`publishAstroPanelState` 属 §15.6-4 `publish*`，本体留宿主、只迁调用方，宿主经控制器 `requestedAstroTab()` / `astroTransitionSerial()` 回读 `astroRequestedTab` / `astroTransitionId`。4 个 `fmt*` 选择留控制器（非 `common/derive/`）：AstroStore 已以 `AstroHostHooks.fmtDateTime` 消费同一实现，留此零改动 store 接口（§10.2 许可的二选一）。
+- **D7：CSV 导出经 `MediaPort.saveTextFileAs`**：`bridge/MediaPort.ets` +3（新增具名 `saveTextFileAs(text, fileName, suffixLabel, onDone)`）；宿主 `HostMediaPort.saveTextFileAs` 逐字承载原 `exportCurrentAstroCsv` 的 `fileIo.writeSync` + `picker.DocumentViewPicker.save` + `fileIo.copy` + `unlink` 段（控制器不 import NAPI/UI，§15.7 规则 1）。
+- **D14（P1）新增 `capability/PluginFeatureController.ets`（183 行）**：逐字下沉 8 个行为法 —— `ensurePluginLoaded` / `updatePluginLoadedItem` / `pluginMetaLine` / `pluginFeatureDestination` / `pluginFeatureIsActionable` / `pluginFeatureActionLabel` / `openPluginFeature` / `openPluginFeatureAfterLoad`；私有字段 `pluginFeatureLoading` 随控制器。注入 `CommandPort` + `pluginStore` / `searchStore` / `astroStore` + `PluginFeatureHostHooks`（`refreshCatalogCategoriesIfSearchVisible` / `setViewTab` / `openSubPanel`）。`openPluginFeatureAfterLoad` 实测**可逐字等价下沉**（写 `astroStore.astroTab/graphMode` + `searchStore`，宿主 `viewTab` 与壳层 `openSubPanel` 经 hooks），非登记保留。原 `ensurePluginLoaded` 两处 hilog 诊断日志按 §15.7 规则 1 不再保留，其余逐字等价。
+- **D14 判定（以工作区实测为准）**：STATE-REVIEW §10.1 记「10 法」；实测 8 行为法（`pluginZh` / `pluginDesc` / `pluginFeatureRoute` 属 `common/derive/labels` 纯函数，不属行为层）。
+- **宿主 `MainWindowNativeNode.ets`**：删 38 法（D7 30 + D14 8）+ 9 字段声明（7 D7 + `pluginFeatureLoading` + 死字段 `pickedDate`）+ 清理 4 个未用导入（`PlanetPosition` / `TabItem` / `astroTabItemsForGroup` / `astroGroupForTab`）；增 2 个惰性构造器（`astroCalcCtl()` / `pluginFeatureCtl()`，故 `private` 净减 36）；全部调用点改指向（CLI 分派、`aboutToAppear` 的 `AstroHostHooks`/`SearchHostHooks`/`SkyCultureMakerHostHooks` 注入、`schedulePanelDataLoad`、生命周期定时器、`closePanel`、`searchObject` 回跳、AstroPanel/SettingsPanel 组件接线）。
+- **逐字等价（§15.7 规则 5）**：仅「`this.<宿主字段>` → store/hooks/port」与桥名映射（`callNativeWhenReady`→`requestWhenReady`、`callInteractive`→`requestInteractive`、`callNative`→`request`），`selectAstroTab` 两段动画时序（100ms EaseIn → 170ms EaseOut）、tab 顺序 `[5,2,4,9,0,1,6,3,7,8]`、`loadPlanetPositions` 请求序号与取整、picker 标志判定分支未改。
+- **度量**：宿主 **10,682 → 10,288 行（−394）**、`private` 方法 **414 → 378（−36）**、`@State private` **132 → 131（−1，死字段 `pickedDate` 随 choose 迁移后零引用删除）**；新增 2 控制器文件（429 / 183 行）、扩展 1 端口（`MediaPort` +3）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 4 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 242+ 文件）；`test-ohos-astro-motion` 9/9 全绿（夹具改读 `capability/AstroCalcController.ets`，假 hooks 提供 `animateAstroIn/Out` + `astroPanelOnScreen`）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`；`openUiPanel astro` → `setAstroTab 2`（controller `selectAstroTab` + `publishAstroPanelState` 回读 `transitionId=1`）→ `setAstroGroup 1`（tab→0、`transitionId=2`）→ `setAstroFilter direction|east`（`getAstroPanelState.direction=east`）；`openPluginFeature TelescopeControl` / `Oculars` → hilog `[cli-ui] opened plugin feature=...`（`ensurePluginLoaded` + `openPluginFeatureAfterLoad` 跨域路由存活）；`searchObject Sirius` → `getSelectedObjectInfo found:true`（`searchObject` 经 `astroCalcCtl().*PickerActive()` 回跳分支存活）；`pidof` 全程 5923 存活、无 jscrash。测试后 `setAstroTab 5` 复原持久化 tab、`closeUiPanel` 关面板。
+- **未走查（待真机人工）**：目标选择 picker（`RtsSelectionGuide` 的「选择天体」/ `GraphSelectionGuide` 的「去选择天体」按钮在 `devecocli` 简化树与 `verify_ui` 下均未呈现 —— 当前构建 RTS/曲线数据已加载、引导块隐藏，该入口需「未选天体且计算报错」态）；`chooseXxxStartDate` 的 DatePickerDialog 弹层；`exportCurrentAstroCsv` 的另存为 picker（无导出数据时只 `flashHint`，本次未触发）。
+- **测试与文档**：`scripts/test-ohos-astro-motion.mjs` 夹具改读控制器；`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.8 D7/D14 完成结论 + 度量。
+## [2026-10-05] DevEco Code - D 轨道 D5+D6+D13：极轴镜 / 视图中心坐标叠层 / 卫星行为控制器
+
+- **D5（P1）新增 `capability/PolarScopeController.ets`（212 行）**：逐字下沉 9 法 —— `enterPolarScope` / `closePolarScope` / `syncNativePolarScopeOverlay` / `recenterPolarScope` / `setPolarScopeHorizontalFlip` / `setPolarScopeVerticalFlip` / `syncPolarScopeTimer` / `stopPolarScopeTimer` / `shouldRefreshPolarScope` + 4 私有字段（`polarScopeRestoreState` / `polarScopeTransitionPending` / `polarScopeTransitionId` / `polarScopeTimer`）。注入 `CommandPort` + `PolarScopeStore` + `PolarScopeHostHooks extends BehaviorHostHooks`：`enterPolarScope` 经 `panelChange('polarScope', false)`，`closePolarScope` 经 `refreshState` / 失败 `flashHint`；叠层几何（`polarScopeTopInset` / `polarScopeFooterHeight` / `skyHeight` / `screenSafeTopPixels`）与桥回包 flags/location 的 `as Record<...>` 抽取经宿主 hook 回注（控制器禁 `as`，§15.7 规则 4）。定时器自持（§15.7 规则 3）；`PolarScopeStore.attachHooks.shouldRefreshPolarScope` 改指控制器。
+- **D6（P1）新增 `capability/ViewCoordinateController.ets`（162 行）**：逐字下沉 8 法 —— `refreshViewCenterCoordinates` / `applyViewCoordinateSnapshot` / `syncViewCoordinateTimer` / `stopViewCoordinateTimer` / `setViewCoordinatesVisible` / `setViewCoordinateFamily` / `setViewEquatorialEpoch` / `handleViewCoordinateTouch` + 8 草稿字段（`viewCoordinateDragging` / `DragStartX` / `DragStartY` / `DragStartOffsetX` / `DragStartOffsetY` / `viewCoordinateSnapshot` / `viewCoordinateTimer` / `viewCoordinateRequestPending`）。注入 `CommandPort` + `OverlayStore` + `ViewCoordinateHostHooks`（`applicationInForeground` / `saveAppSettings` / `stopSkyInertia`，叠层 4 个 @State 与该域 5 个 A-保留几何方法经 get/set 回注）。定时器自持；Up/Cancel 落位回夹经 `viewCoordinateRestOffsetX/Y` hook（宿主 `clampedViewCoordinateOffset*` / `viewCoordinateOverlayWidth` 调用点保留）。
+- **D13（P1）新增 `capability/SatelliteController.ets`（152 行）**：逐字下沉 8 法 —— `selectSatelliteGroup` / `setSatelliteUpdateSetting` / `addSatelliteSource` / `deleteSatelliteSource` / `importSatelliteTleFile` / `refreshSatelliteCatalog` / `setSatelliteFlag` / `frameSatellite`；注入 `CommandPort` + `SatelliteStore` + `SatelliteHostHooks`（`publishSatellitePanelState` / `animateSatelliteGroupChange`）。
+- **判定（以工作区实测为准）**：
+  - D5 实测 9 法（与 STATE-REVIEW 一致）；`polarScopeTopInset` / `polarScopeControlWidth` / `polarScopeFooterHeight` 属 A-保留 51（§15.6-2）留宿主。
+  - D6 STATE-REVIEW 记「16 法 + 10 私有字段」，实测 view-coordinate 方法 13 个 = 8 行为（下沉）+ 5 几何（`viewCoordinateOverlayWidth` / `Left` / `Top` + `clampedViewCoordinateOffsetX` / `Y`，A-保留 51，留宿主）；草稿字段实测 8（非 10）——`utcOffsetHours` 引用点全在 D6 方法集之外（dock 时钟 `refreshDockClock` / 时间格式化 / TimeWheel `getUtcOffsetHours` 钩子），属跨域共用，按 §15.6-1 留宿主；4 个 @State（`viewCoordinatePrimaryText` / `SecondaryText` / `OffsetX` / `OffsetY`）属 §2.7.1 G 类逐帧保留裸字段，按 §15.7 规则 2 留宿主、经 hooks 读写。
+  - D13 STATE-REVIEW 记「11 法」，实测卫星域 9 个 `private` 方法 = 1 `publish*`（§15.6-4 保留，只迁调用方）+ 8 行为；`requestSatellitePasses` 归选中管线（M3-3），不属本片。实测 8 法均不调 `flashHint`，故 `SatelliteHostHooks` 不 extends `BehaviorHostHooks`；`frameSatellite` 实测无动画，`getUIContext().animateTo` hook 服务于 `selectSatelliteGroup` 的 180ms 分组过渡。
+- **宿主 `MainWindowNativeNode.ets`**：删 25 法（D5 9 + D6 8 + D13 8）+ 11 字段声明 + 清理 `SatelliteSourceInput` 未用导入；增 3 惰性构造器（`polarScopeCtl()` / `viewCoordinateCtl()` / `satelliteCtl()`）与全部调用点改指向；`private` 净减 22。
+- **逐字等价（§15.7 规则 5）**：仅「`this.<宿主字段>` → store/hooks/端口」与桥名映射（`callNativeWhenReady`→`requestWhenReady`、`callInteractive`→`requestInteractive`），比较边界 / 分支 / 乐观回滚 / 重试档（0/100/15、0/120/20、0/34/8、1s / 50ms）逐字保留。
+- **度量**：宿主 **10,939 → 10,682 行（−257）**、`private` 方法 **436 → 414（−22）**、`@State private` **132 不变**；新增 3 控制器文件（212 / 162 / 152 行）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 4 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀）；`test-ohos-satellite-panel` 7/7 全绿（两用例外改读 `capability/SatelliteController.ets` + host hook 断言）；全量 `*-ohos*.mjs` 仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`。D5：`openUiPanel polarScope` → `setPolarScopeOverlay "0|..."` + `centerPolarScope` + `setFOV 4` + 1s `getPolarScopeData` 轮询；点水平翻转 → `setPolarScopeOverlay "1|1|0|..."` + `setActionChecked "actionHorizontal_Flip|1"`（已点回复原）；点关闭 → `setPolarScopeOverlay "0|..."` + `applySessionState {...flipHorz:false...}`。D6：设置「设备与隐私 → 视图中心坐标」开启 → 叠层显示且 50ms `getViewCenterCoordinates` 轮询；`ui drag (330,515)→(430,615)` 叠层由 `[216,455]` 移至 `[313,552]`（+97,+97），拖回原位后关闭开关复原。D13：`openUiPanel satellites` + `setSatellitePanelGroup beidou` → `getSatellites "beidou||40"`（控制器切组后重载），已复原为空分组；`pidof` 全程存活（58113 未重启）、hilog 无 jscrash。
+- **未走查（待真机人工）**：极轴镜回中按钮（`recenterPolarScope`，与关闭同区域，本次仅走关闭/翻转）；卫星 TLE 导入（`importSatelliteTleFile` 需在输入框键入本地路径）与「定位卫星」`frameSatellite`（需从今夜天象卡片跳转）；卫星显示开关（`setSatelliteFlag` 由面板 Toggle 触发，本片经单测覆盖）。
+- **测试同步**：`scripts/test-ohos-satellite-panel.mjs`（`selectSatelliteGroup` / `setSatelliteFlag` 改读控制器；模型改 `hooks.*`；动画断言改判宿主 hook 的 `duration: 180, curve: Curve.EaseOut`）。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.7 D5/D6/D13 完成结论 + 度量。
+
+# [2026-10-05] DevEco Code - D 轨道 D9+D15：目镜/望远镜行为控制器 + 目录下载/书签并入 store
+
+- **D9（P1）新增两个控制器**：
+  - `capability/OcularController.ets`（180 行）：逐字下沉 16 法 —— `setOcularMode` / `setMosaicCamera` / `setEquationOfTime` / `setArchaeoLineSetting`（含私有 `applyArchaeoLineSetting`）/ `setTelrad` / `setCrosshairs` / `setCCD` / `selectOcularInstrument` / `setOcularSetting` / `changeOcularCcdRotation` / `changeOcularMaskOpacity` / `changeOcularPrismRotation` / `changeOcularCropSize` / `rotateOcularReticle` / `resetOcularInstrument`；注入 `CommandPort` + `telescopeStore`/`mosaicStore`/`equationOfTimeStore`/`archaeoStore`；草稿字段 `equationOfTimeMutationId`/`archaeoMutationId` 随控制器自持（§15.7 规则 2）。实测 16 法均不调 flashHint / refreshState，故不注入 hooks。
+  - `capability/TelescopeController.ets`（269 行）：逐字下沉 12 法 —— `validateTelescopeEditorStatus` / `selectTelescopeProfile` / `beginNewTelescopeProfile` / `selectTelescopeProtocol` / `saveTelescopeProfile` / `deleteTelescopeProfile` / `testTelescopeConnection` / 私有 `applyLx200Result` / `lx200GotoSelected` / `lx200SyncSelected` / `lx200Abort` / `readTelescopePosition`；注入 `CommandPort` + `telescopeStore`。live-position 定时器仍由 `TelescopeStore` 自持（§14 B3-4），控制器只调其 start/stop/schedule，不自持定时器。
+  - **判定（以工作区实测为准）**：STATE-REVIEW §10.2 记 D9「27 法（Ocular 17 + Telescope 10）」，本工作区实测为 **Ocular 16 + Telescope 12 = 28 法**（估数与实测差 1；无遗漏、无多搬）。`setPointerCoordinates` 物理上位于目镜区块内但写 `overlayStore`、由 `PointerCoordinatesPanel`（D6 域）消费，**不属 D9，未搬**（沿用"以实测引用点为准"）。
+- **D15（P4）并入既有 store，不新建 service**：
+  - `state/CatalogStore.ets`（+72）：`startCatalogDownload` + 私有 `pollCatalogStatus`（600ms setInterval 自我收口，非持续定时器）+ `CatalogHostHooks.flashHint`。
+  - `state/ObservingListStore.ets`（+14）：`persistObservingList` + `ObservingListHostHooks.saveObservingListStorage`。
+  - `state/BookmarkStore.ets`（+55）：`addCurrentBookmark` / `gotoBookmark` / `deleteBookmark` + `BookmarkHostHooks.flashHint`。
+- **宿主 `MainWindowNativeNode.ets`**：删 34 法（D9 28 + D15 6）+ 2 字段（`equationOfTimeMutationId`/`archaeoMutationId`）；新增 2 个控制器惰性构造器（`ocularCtl()`/`telescopeCtl()`，故 `private` 净减 32）+ 3 个 hook 适配器 + 全部调用点改指向（`ocularCtl()`/`telescopeCtl()`/`catalogStore.*`/`bookmarkStore.*`/`obsListStore.*`）；清理 8 个随方法迁出的未用导入（`OcularModeResponse`/`StarCatalogStatusResponse`/`TelescopeControlResponse`/`TelescopeProfile`/`TelescopeProfilesResponse`/`TELESCOPE_SIMULATOR_MODEL`/`telescopeUpdateTime`/`telescopeErrorText`）。
+- **逐字等价（§15.7 规则 5）**：34 法仅「`this.<宿主字段>` → store/hooks/port」与桥方法名映射（`callNativeWhenReady`→`requestWhenReady`、`callInteractive`→`requestInteractive`、`callNative`→`request`）；比较边界 / 分支 / 乐观回滚代际 / 重试档 / 600ms 轮询与自我收口未改。
+- **度量**：宿主 **11,370 → 10,938 行（−432）**、`private` 方法 **466 → 434（−32）**、`@State private` **132 不变**；新增 2 控制器文件（180 / 269 行）、扩展 3 store、修改 1 测试脚本。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 6 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 237+ 文件）；`test-ohos-plugin-panel-state` 4/4 全绿（夹具改读 `capability/OcularController.ets` + `port.requestInteractive` 假端口）；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`；目镜面板开关 → `setOcularMode` → `getOculars`；望远镜面板「保存」→ `saveTelescopeProfile`、「测试连接」→ `testTelescopeConnection`；时间面板「时间方程」→ `setEquationOfTime enabled|1`；古天文线「二分日线」→ `setArchaeoLineSetting equinox|0`；相机拼接选 DECam → `setMosaicCamera camera|DECam`（已复原 LSSTCam）；书签 `SliceD9Test` 保存 → `addBookmark`、跳转 → `gotoBookmark`、删除 → `deleteBookmark`（`getBookmarks` count 归 0）；星表下载入口渲染。`pidof` 存活、无 jscrash。测试改动的持久化设置均已复原（均时差 enabled/msFormat→false、古天文线 equinox→true、相机→LSSTCam、书签→空）。
+- **未走查（待真机人工）**：`startCatalogDownload`/`pollCatalogStatus` 的实际下载与轮询（当前构建「可能已包含全部星表」，无条目可点，避免网络/大文件）；望远镜 `readTelescopePosition`/`lx200GotoSelected`/`lx200SyncSelected`/`lx200Abort` 按钮（面板需滚至控制区，本轮只走查保存/测试连接）；目镜/望远镜滑杆（`changeOcular*`）。
+- **测试与文档**：`scripts/test-ohos-plugin-panel-state.mjs` 改读控制器；`ARKTS-PAGES-REFACTOR-PLAN.md` 追加 §15.12.6 D9/D15 完成行 + 度量。
+
+## [2026-10-05] DevEco Code - D 轨道 D2+D11+D12+D16：图层 / SkyTexture / 星云纹理控制器 + 夜视·儒略日并入 store
+
+- **D2（P1，图层 / 视图标签 → `capability/LayerController.ets`，251 行）**：逐字下沉 10 法 `setLayer` / `applyLayerSwitch` / `layerTabItems` / `markingLayerStates` / `layerPresetStates` / `applyLayerStates` / `clearMarkingLayers` / `applyLayerPreset` / `selectViewTab` / `selectConfigTab` + 私有字段 `viewTabTransitionId` / `configTabTransitionId`。注入 `CommandPort`（`requestInteractive`）+ `LayerViewStore`/`ScriptStore`/`PluginStore`（各自 `load*`）+ `LayerHostHooks`（`setSkyDisplaySetting`/`setBridgeFlag` 分派、`persistEquatorialMount`/`persistNightMode`、`syncSkyCultureTimeFollowTimer`、标签 @State get/set、`animateTabIn`/`animateTabOut` 回注宿主 `getUIContext().animateTo`）。
+- **D11（P1，SkyTexture 状态观察 → `capability/SkyTextureStatusController.ets`，166 行）**：逐字下沉 6 法 `stopSkyTextureStatusObserver` / `hideSkyTextureStatus` / `updateSkyTextureStatus` / `pollSkyTextureStatus` / `scheduleSkyTextureStatusCheck` / `retrySkyTextureStatus` + 4 字段（两定时器 + polls + slow）与三常量；自含状态机，定时器自持 `start()`（原 `scheduleSkyTextureStatusCheck`）/`stop()`（原 `stopSkyTextureStatusObserver`），宿主 `aboutToDisappear` 与缩放处改调入口（§15.7 规则 3）；注入 `CommandPort` + `ToolsStore`。
+- **D12（P1，星云纹理 → `capability/NebulaTextureController.ets`，113 行）**：逐字下沉 6 法 `setNebulaTextureVisible` / `setNebulaTextureFlag` / `refreshNebulaTextures` / `gotoNebulaTexture` / `removeNebulaTexture` / `importNebulaTextureFile`；注入 `CommandPort` + `MediaPort` + `NebulaTextureStore`。为 `importNebulaTextureFile` 扩展 `MediaPort.pickDocumentToDir` + 具名 `MediaImportResult`，并在宿主 `HostMediaPort` 具名实现（picker 后缀过滤 / 单文件 / 名清洗 / `fileIo.mkdirSync`+`copy` 逐字保留）。
+- **上一轮 3 个控制器文件审查结论**：`LayerController` / `SkyTextureStatusController` 与方法体逐字等价、hook 面齐全、未 import 设备 NAPI，无需补；`NebulaTextureController` 引用的 `MediaPort.pickDocumentToDir` / `MediaImportResult` 当时**尚不存在** → 本片补齐端口与方法（缺口见"新踩的坑"）。
+- **D16（P2，夜视模式 / 儒略日 → 并入既有 store，不新建控制器）**：7 法按"实际读写的 store"归域 —— ① `syncNightModeFromEngine` / `applyNightMode` / `persistNightMode` + 2 草稿字段并入 `state/NightModeStore.ets`（+56；桥经 `attachPort` → `CommandPort.request('setNightMode')`，`pendingNightMode` 待定窗口与 `AppStorage` 持久化原样）；② `syncJulianDateFields` / `applyJulianDateInput` / `adjustJulianDate` + 草稿字段 `julianDateApplyInFlight` 并入 `state/JulianDateStore.ets`（+90；桥经 `requestInteractive('setJulianDate')`，跨域/UI 的 `wheel().syncFromSimulation` 与 `refreshSimTimeLight` 经 `JulianDateHostHooks` 回注）；③ 第 7 法 `persistEquatorialMount` 并入 `state/TelescopeStore.ets`（+13；`equatorialMount` 字段即在该 store）。
+- **D16 判定理由**：STATE-REVIEW §10.2 建议并入 `sessionToolStore`/`OverlayStore`，但实测三簇分别只读写 `nightModeStore` / `julianStore` / `telescopeStore`，按"以实测引用点为准"归入各自域 store（语义唯一真源，避免跨域双写；`sessionToolStore`/`OverlayStore` 均不含相应字段）。
+- **逐字等价（§15.7 规则 5）**：四簇仅「`this.<宿主字段>` → store/hooks/端口」，比较边界 / 分支结构 / 文案 / 时序（`selectViewTab` 两段 `animateTo` 100/170ms、`applyLayerPreset` 三预设 action 列表、`pollSkyTextureStatus` 350/900/2000ms 退避、夜视 3500ms 待定窗口）未改。
+- **度量**：宿主 **11,906 → 11,370 行（−536）**、`private` 方法 **492 → 466（−26：删 29 法、增 3 控制器惰性构造器）**、`@State private` **132 不变**；新增 3 控制器文件（251 / 166 / 113 行）、扩展 1 端口（`MediaPort` +9 行）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 8 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀 / 235+ 文件）；`test-ohos-plugin-panel-state` 4/4、`test-ohos-settings-choice-motion` 4/4、`test-ohos-startup-stars` 17/17、`verify-ohos-julian-date` 通过；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：`Smoke: PASS`；图层面板开关 → `setLayer send actionShow_Stars|0` → `setLayer … ok=1`、切「观测辅助」预设 → `setActionStates` 观测预设 payload；缩放 → `skyTextureStatusCtl().start()` → `getDeepSkyImageStatus` 轮询；星云面板「刷新」→ `refreshNebulaTextures`、开关 → `setNebulaTexturesVisible 1→0`（已复原）；儒略日 `+` → `setJulianDate jd|2461318.98755`（时间已恢复「实时 · 1x」）；时间面板「夜视模式」开 → `setNightMode true` + 整界面转红（截图）、关 → `setNightMode false`（已复原）；`pidof` 存活、无 jscrash、无 faultlog。
+- **未走查（待真机人工）**：图层面板「地景/文化」页的地景加载（`viewTab===4` 才 `loadLandscapeList`）；星云「导入图片」picker 路径（需文件选择器交互）；星云条目 `goto`/`remove`（需已导入贴图）。
+- **本片新踩的坑**：上一轮 staged 的 `NebulaTextureController` 引用了 `MediaPort.pickDocumentToDir`/`MediaImportResult`，但该端口成员从未落地——staged 文件未接入宿主时不会被编译，`arkts_check` 只看单文件、`grep` 未做端口成员存在性核对即接宿主必编译失败。教训：**接入 staged 控制器前必须先 `grep` 其引用的每个端口/store 成员是否真实存在**。
+- **测试同步**：`test-ohos-plugin-panel-state.mjs`（改读控制器 + `port.requestInteractive` 假端口）、`test-ohos-settings-choice-motion.mjs`（`layerCtl()` 前缀）、`test-ohos-startup-stars.mjs`（状态条断言改读控制器）、`verify-ohos-julian-date.mjs`（改读 `JulianDateStore` + 宿主 `this.julianStore.*` 断言）。测试期间改动的持久化设置（夜视模式、模拟时间暂停）均已复原。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` §15.12 追加 D2/D11/D12/D16 完成行 + 度量。
+
+
+## [2026-10-05] DevEco Code - D 轨道 D0+D1：行为控制器 hook 基础设施 + 详情连接线控制器（STATE-REVIEW §10.2/§10.3）
+
+- **D0（前置基础设施）**：新增 `capability/ControllerHooks.ets`（`BehaviorHostHooks` 纯接口：`refreshState` / `flashHint(text: ResourceStr)` / `panelChange(panel, visible)`；不 import NAPI/UI，§15.7 规则 1）；宿主 `MainWindowNativeNode.ets` 新增具名 `behaviorHooks(): BehaviorHostHooks`（`panelChange` = 写 `activePanel`/`panelVisible` + `syncDockClockTimer()`，与 STATE-REVIEW §10.3 第 2 条一致）。后续 D 轨道控制器接口可 `extends BehaviorHostHooks`。
+- **D1（P1，详情连接线 / 详情刷新定时器）**：新增 `capability/DetailConnectorController.ets`（353 行；`DetailConnectorHostHooks extends BehaviorHostHooks`）。逐字下沉 12 法：`startDetailAutoRefresh` / `stopDetailAutoRefresh` / `pauseDetailRefreshForSkyDrag` / `resumeDetailRefreshAfterSkyDrag` / `startObjectDetailConnectorRefresh` / `stopObjectDetailConnectorRefresh` / `armObjectDetailConnectorTransition` / `refreshObjectDetailConnector` / `clearObjectDetailConnector` / `rayRectIntersection` / `segmentRectEntryFraction` / `objectDetailCardY`；定时器自持 `start()/stop()`（宿主 `aboutToDisappear` 与清除选中处改调 `stop()`，§15.7 规则 3）。
+- **迁出的私有字段（9）**：`detailTimer` / `detailRefreshing` / `detailRefreshGuard` / `objectDetailConnectorTimer` / `objectDetailConnectorAnimationTimer` / `objectDetailConnectorLastPanelVisible` / `objectDetailConnectorLastActivePanel` / `objectDetailConnectorLastClippedByUi` / `objectCardPlacementPending`。
+- **登记保留（实测引用点全在宿主非 D1 方法，未迁）**：`objectCardDragging` / `objectCardDragStartX/Y/OffsetX/OffsetY`（唯一引用点 `handleObjectInspectorDragTouch`）与 `objectDetailTabTransitionId`（唯一引用点 `selectObjectDetailTab`）。§10.2 字段清单含它们，但"以实测引用点为准"——其引用不在 D1 方法集内，强行迁移须改写两个无关宿主 UI 交互方法，超出本片"只搬 D1"边界。
+- **@State 留宿主、经 hooks 逐帧 get/set（§15.7 规则 2）**：`objectDetailConnectorX/Y/Length/Angle/EndX/EndY/TargetX/TargetY/TargetOnScreen` 9 个 + `objectDetailConnectorAnimateGeometry`；`objectDetailContentOpacity/TranslateX` 未被 D1 引用、原样留宿主。
+- **保留宿主、经 hooks 回读**：`objectDetailConnectorObstacles`（A2-5 登记宿主控制器）、`refreshSelectedObject`、`scheduleSkyTextureStatusCheck`、几何派生 `detailCardX/Y/Width/Height`、`bottomCardY`/`hoverBottomCardY`、`skyWidth`/`skyHeight`、`isFoldHoverLayout`、`panelVisible`/`activePanel`/`skyDragging`、`OverlayStore.objectDetailConnectorVisible`（hook `connectorVisible()`）。
+- **端口**：D1 唯一桥调用是 `callNative('getGyroGuidePosition')`，其回包需强转 `GyroGuideProjection` 而控制器禁 `as`，故未注入 `CommandPort`，按 `SensorController.guideProjection` 先例以 hook `gyroGuideProjection(): GyroGuideProjection` 由宿主完成强转后下发（§15.7 规则 4）。
+- **逐字等价（§15.7 规则 5）**：`refreshObjectDetailConnector` 仅"`this.<宿主字段>` → `this.hooks.*` / 控制器私有字段"，比较边界（0.75 / 0.35 / 0.015 / 18 / 1 / 16 / 5 / ±180 包裹）与分支结构未改；宿主保留方法 `refreshSelectedObject` 仅把 `detailRefreshing`/`detailRefreshGuard` 的读写改为控制器 API（`isDetailRefreshing`/`beginDetailRefresh`/`endDetailRefresh`），语义与顺序不变——`detailRefreshing`/`detailRefreshGuard` 所有权随 D1 移交控制器（即 M3-3 记录的"拆 `refreshSelectedObject` 的 `detailRefreshGuard` 为独立控制器"后续路径，§15.6-6 相应项随之修订）。
+- **度量**：宿主 **12,111 → 11,906 行（−205）**、`private` 方法 **502 → 492（−10）**、`@State private` **132 不变**；新增 2 文件（`ControllerHooks.ets` 9 行、`DetailConnectorController.ets` 353 行）。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 3 文件 0 error；`BUILD SUCCESSFUL`（首次构建遇 es2abc `ArenaAllocatorT` 内部崩溃，重跑即绿，属工具链瞬时故障，非源码错误）；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀）；`test-ohos-detail-live-values.mjs` 7/7 全绿（第 4 用例改读 `capability/DetailConnectorController.ets` + hooks 断言）；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：安装启动 `Smoke: PASS`；`verify_ui` 走通"搜索 → 选中天狼 Sirius → 详情卡出现 → 拖动星图"全链路，`pidof` 稳定存活（62278，无重启）、hilog 无 jscrash、无 ArkTS 异常。连接线本体未目视确认：天狼当时在地平线下（实时高度 −82°），连接线按设计隐藏（目标不可见即 `clearObjectDetailConnector`）。未走查（待真机人工）：地平线上目标的连接线跟随 + 遮挡避让过渡动画（需另选可见目标）。
+- **测试同步**：`scripts/test-ohos-detail-live-values.mjs` 第 4 用例。测试期间未改任何持久化设置。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` 新增 §15.12.4（D0/D1 完成行 + 度量）。
+
+## [2026-10-05] DevEco Code - §15.12 位置域行为下沉：LocationController + LocationPort（D8 新增切片）
+
+- **新增**：`bridge/LocationPort.ets`（18 行，纯接口 + 具名 `LocationFix`）；`capability/LocationController.ets`（194 行，7 法 `useDeviceLocation` / `applyPickerLocation` / `setLocation` / `setObserverPlanet` / `saveObserverLocationToStorage` / `readObserverLocationStorage` / `restoreObserverLocation` + `LocationHostHooks`）。
+- **宿主适配器**：具名 `HostLocationPort implements LocationPort`（`abilityAccessCtrl` + `geoLocationManager` + `@ohos.data.preferences`，store `LOCATION_STORE` / key `location`），`aboutToAppear` 里 `configure`。§15.7 规则 1/4/7。
+- **P2 并入**：`state/LocationStore.ets`（69 → 267 行）新增离线搜索三法（`searchLocations` / `scanLocationSearchChunk` / `selectSearchLocation`）+ 保存点三法（`saveCurrentLocation` / `deleteSavedLocation` / `persistSavedLocations`，**AppStorage 存储方式原样保留**）+ `LocationStoreHostHooks`（跨域助手与 `setLocation` 回注）。
+- **组件内收**：`panels/location/LocationPickerPanel.ets`（+68）内收 `locationMapWidth/Height` / `updatePickerFromMap` / `handleLocationMapTouch` + 触摸草稿字段；`setPickerLocation` 拆为 `LocationPickerStore` 纯 setter 供控制器/组件共用；`PlacePanel` 改传 `expandedLayout` / `skyWidth`。
+- **逐字等价（§15.7 规则 5）**：`setLocation`（高频动作路径）仅「`this.<宿主字段>`→store/hooks/port」，比较边界/分支/三步回退（`setLocation`→`setLocationCoords`→`setLocationByName`）未动；隐私门禁 3 处复检逐字保留（经 hooks）。
+- **度量**：宿主 **12,382 → 12,111 行（−271）**、`private` 方法 **520 → 504（−16）**、`@State private` **132 不变**。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 7 文件 0 error；`BUILD SUCCESSFUL`；契约 **44 锚点 intact**（33 面板 / 24 静态 id / 17 动态前缀）；`test-ohos-privacy-startup.mjs` 19/19 全绿（用例改指 `capability/LocationController.ets` + `HostLocationPort`）；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败。
+- **真机（192.168.50.108:36717）**：地图点选 → `command received: "setLocation" "自定义位置|51.748…|-82.668…|0"`（组件内几何/触摸 + `LocationController` + `HostLocationPort` 全链路）；点选后头部坐标实时刷新 `51.75°N / 82.67°W`；**重启后观测点保持**（`[location] restoring persisted observer location` + `setLocation` 重放）；层级模式「大洲/国家」列随选择实时刷新；`pidof` 存活。
+- **未走查（待真机人工）**：GPS 权限弹窗路径（需授予/撤销系统权限）；保存点/删除与城市 chips（嵌套滚动较深）；层级城市落地 `selectCityByName`（内层过滤未变、调用点仅改指向控制器）。
+- **测试同步**：`test-ohos-privacy-startup.mjs` 第 183 项改读控制器与宿主适配器。
+- **文档**：`ARKTS-PAGES-REFACTOR-PLAN.md` 新增 §15.12（普查表 + 完成结论）；`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §10（D 轨道普查）随本轮落库。
+
+## [2026-10-05] DevEco Code - M3-3：SelectionService 决策片（登记保留，0 行代码）（PLAN §15.10/§15.11 第三批 M3 收尾）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.10/§15.11 **M3-3**（高风险·决策片，最后一片）。提交：本条（`docs(harmonyos)`）。
+
+**结论：登记保留（0 行代码）** —— 满足 §15.10 M3 许可（"允许登记保留并写明理由，不得为凑指标硬搬"）与 §9.3 明确给出的二选一（"跨域选中/居中管线的单例；**或按 §14.3.1 判据保留宿主**"）。判定标准（开工前重测）：**能否在不改任何比较边界/分支/顺序的前提下整体搬入 `capability/SelectionService.ets`**；实测因写 §15.6 保留裸字段、服务层禁 NAPI、互调成环、47 个组件/宿主入口，**无法逐字等价**，故登记保留。
+
+**普查（开工重测，宿主 12,309 行 / `private` 方法 500 / `@State private` 132）**
+
+- **候选 6 法实测行数**（边界重新定位）：`applySelectedObject` **236**（8114–8349）、`navigateSelectedObjectTo` **33**（7776–7808）、`refreshSelectedObject` **29**（7359–7387）、`requestSelectedDetails` **28**（7706–7733）、`moveToSelectedObject` **19**（7756–7774）、`scheduleSelectedObjectForUiChange` **15**（7943–7957），合计 **≈360 行**。
+- **入口数：合计 47 个调用点**
+  - `applySelectedObject` 11：星图点选/桥回包 2201/2204、搜索结果 4852、WUT 行 7322、搜索失败回退 7350、后台刷新 7381（`fromRefresh=true`）、`requestSelectedDetails` 回包 7726、`navigateSelectedObjectTo` 回包 7801、键盘选星 9142、CLI 同步路径 9154/9160。
+  - `refreshSelectedObject` 14：1Hz 自动刷新 7398、Dock 命中 9075、`onRefresh` 组件回调 9402/9519/9653、`onReselect` 回调 9403/9520/9654、astro 10247/12019、其他 2073/4412/4432/4565。
+  - `requestSelectedDetails` 2：递归重试 7720、`applySelectedObject` 8272。
+  - `navigateSelectedObjectTo` 5：7773（`moveToSelectedObject`）、7815/7819（`placeSelectedObjectInSafeArea`）、8259（`applySelectedObject` center）、9176（键盘居中）。
+  - `moveToSelectedObject` 7：`SkyInputHostHooks` 1544、Dock 9076、`onCenter` 组件回调 9399/9516/9650、设置面板宿主 11503、键盘路径 12022。
+  - `scheduleSelectedObjectForUiChange` 8：`SkyInputHostHooks` 1585、响应式布局 2703/2717/2730/2943、面板开合 10249/10312、astro 11408。
+- **回调环**：`applySelectedObject` ↔ `requestSelectedDetails`（8272 → 7726）↔ `navigateSelectedObjectTo`（8259 → 7801）三法互调成环；`refreshSelectedObject` 7381 回环 `applySelectedObject`。
+- **依赖 store**：`ObjectDetailStore`（选中详情字段族，`selected*` 约 60 个）、`ObjectMediaStore`、`InfoWindowStore`、`GyroStore`、`AstroStore`（`clearRtsSelectionResults`）、`SessionToolStore`（`isObserverPlanetSelection`）。
+- **依赖控制器/单例**：`ObjectModelRenderer`（`refreshObjectInspectorModelLighting`）、`SensorController`（`gyroCtl().setGuideTarget`/`updateGyroTargetGuide`/`clearGuideTarget`）、`AudioEngine` 单例（`chimeForSelection`）、宿主保留控制器 `startDetailAutoRefresh`（§15.6-4 刷新/收口）。
+- **写入的保留字段**：`fullInspectorRequested`（§2.7.1 F 类）、`objectDetailConnectorLength`（E 类）—— 均属 §15.6-1 的 86 个保留 `@State`；另写 6 个机制私有字段 `dismissedObjectName`/`objectCardPlacementPending`/`objectInspectorMediaRequestPath`/`objectInspectorMediaResolvedRequestPath`/`objectInspectorMediaResolvedPath`/`objectInspectorMediaResolutionComplete`，与媒体/渲染/选中管线共享。
+- **定时器**：`detailTimer`（180ms 轮询，宿主保留）、`detailRefreshGuard`（1800ms 兜底）、`objectDetailStore.selectedDetailTimer`（550ms，有主）、`objectDetailStore.selectedUiLayoutTimer`（UI 变更防抖，有主）。
+- **热路径交叉**：`moveToSelectedObject` → `placeSelectedObjectInSafeArea` → A2 登记热路径 `expandedSafeTargetPoint` + `compactSafeTargetPoint` + `selectedObjectLayoutAvoidanceTarget`。
+- **`userReselect` 修复交叉（`25688dbe16`）**：第 4 参与 `targetChanged`/`reopenDismissedDetail`/`preserveClosedDetail`/`dismissedObjectName`/`fullInspectorRequested`/`infoWindowStore.infoWinExpanded` 交织；`refreshSelectedObject`/`requestSelectedDetails` 均以 `applySelectedObject(r, true)`（`userReselect=false`）回调，逐字语义未变。
+
+**障碍清单（为何不能逐字等价整体搬入 `capability/SelectionService.ets`）**
+
+1. **写 §15.6 保留项**：`applySelectedObject` 写 2 个 §15.6-1 保留 `@State`（`fullInspectorRequested`/`objectDetailConnectorLength`）+ 6 个媒体机制私有字段；搬入须复制所有权（违反 §14.8 规则 5 禁双写）或改保留决定（违反 §15.7 规则 6），二者都改语义。
+2. **服务层禁 NAPI**：`navigateSelectedObjectTo`/`placeSelectedObjectInSafeArea` 内联 `hilog.info`（4 处）；服务不 import NAPI（§15.7 规则 1），搬入须改写日志调用，超出"参数化 + 所有权转移"。
+3. **互调成环 + 多入口**：三法互调 + `refreshSelectedObject` 回环，47 入口散布于 `SkyInputHostHooks` 与 `SettingsPanel`/`AstroPanel`/详情卡 `onCenter`/`onRefresh`/`onReselect` 等组件 host 接口；搬入须重接全部组件接口，回归面覆盖全应用选中管线（§15.9 高风险）。
+4. **热路径依赖**：`moveToSelectedObject` 依赖 §15.6-2 的 A2 登记热路径 `expandedSafeTargetPoint`，为保证 §15.7 规则 5 的逐字等价须连同注入热路径。
+5. **钩子面过大**：`applySelectedObject` 依赖保留控制器（`startDetailAutoRefresh`/`objectModelRendererCtl`/`gyroCtl`）与 `AudioEngine` 单例，参数化 + 钩子注入面 ≥20，跨域 store 6 个，收益/风险比不成立。
+
+**后续可行路径**
+
+- **先解耦"详情刷新"**：`requestSelectedDetails` 的 550ms 主定时器与 `refreshSelectedObject` 的 `detailRefreshGuard` 是唯一自持点，可先收进独立的 `DetailRefreshController`（非选中管线、边界清晰），再评估 `applySelectedObject`。
+- **或等 §7（V1→V2）迁移**：由 V2 的 `@ObservedV2`/`@Trace` 接管可观测选中态后，"选中管线"边界更清晰再搬。
+
+**改动文件**：仅文档 —— `docs/harmonyos/CHANGELOG.md`（本条目）+ `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md`（§15.11 M3-3 行、§15.6 同步）。**0 行代码**。
+
+**验证（0 行文档片，按 §13.2 步 1/3/4）**：`node scripts/check-ohos-refactor-slice.mjs` 预检通过（括号深度 0、@Builder 成对）；`scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` → `BUILD SUCCESSFUL`；`node scripts/check-ohos-ui-contract.mjs` 44 锚点 intact（33 面板 / 24 静态 id / 17 动态前缀 / 228 文件）。无 `.ets` 改动，故不跑 `arkts_check`、切片测试与真机。
+
+## [2026-10-05] DevEco Code - M3-2：SkyInputController 主路径（handleSkyTouch / emitFluidDrag）（PLAN §15.10/§15.11 第三批 M3，最高风险）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.10/§15.11 **M3-2**（高风险，最后一批）。
+> 提交：`93ae32db15`（refactor）+ 本条目（docs）。工作目录 `E:\code\Stellarium-mobile\stellarium`。
+
+**结论：完成** —— 触屏主路径 `dragFollowAlpha`(6) / `emitFluidDrag`(36) / `handleSkyTouch`(318) 三法整体下沉到 `capability/SkyInputController.ets`，与两者配套的 **26 个逐帧/草稿字段**一并迁移；M3-1 暂转移所有权的 5 个共享草稿字段（`dragVelocityX/Y` / `dragVelocitySampleValid` / `pinchActive` / `nativeSkyInertiaActive`）**收回私有**。宿主与之的全部 15 处 `this.skyInputCtl().<f>` 跨边界访问随之消失。
+**逐字等价（§15.7 规则 5）**：唯一改写是「宿主读数经 hooks 取、宿主动作经 hooks 调、`callNativeFire` → `commandPort.fire`」；比较边界（`totalMove > 16`、`dragLastSampleMs >= 8 && <= 220`、`pinchStartDistance <= 1`、`dt > 90`、`Date.now()-lastInfoWinCloseMs > 320`、`pinchScale` 判定等）、分支顺序、取整（`Math.round`/`toFixed`）、事件类型判定（`TouchType.Down/Move/Up/Cancel`）**一律未动**。`f712b2e517` 修的「拖拽归属泄漏」两处逐字保留：Down 的 UI 分支清 `skyTouchFeedback/skyTouchActive/skyDragging/nativeDragActive`；Move 的拖动条件 `this.touchMoved && !this.hooks.touchStartedOnUi()`。
+
+**改动文件（净行数）**
+- 修改 `harmonyos/ets-source/capability/SkyInputController.ets` **264 → 704（+440）**：新增 3 法（`dragFollowAlpha`/`emitFluidDrag`/`handleSkyTouch`）+ 26 草稿字段，`SkyInputHostHooks` 由 18 法扩到 **63 法**；头部注释更新为 M3 终态。
+- 修改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets` **12640 → 12309（−331）**；`git diff --stat`（两文件）：`534 insertions(+), 425 deletions(-)`。
+- 宿主度量：`private` 方法 **503 → 500**（−3，=搬走 3 法、无新增宿主方法）；裸 `@State private` **132 → 132（不变，不变式保持）**。
+
+**字段清单（26 个 → 控制器；宿主引用数均为 0，可整块迁移）**
+`touchStartX/Y`、`touchLastX/Y`、`touchMoved`；`pinchStartDistance`、`pinchLastScale`、`pinchCenterX/Y`、`pinchStartFov`、`pinchLastNativePushMs`、`pinchNativePushPending`；`lastFovHintMs`；`nativeDragActive`、`lastDragCommandMs`、`dragFilteredX/Y`、`dragLastRawX/Y`、`dragLastSampleMs`、`dragLogCount`；`panelDragging`、`panelDragStartX/Y`、`panelDragStartOffsetX/Y`。
+（开工实测：以上 26 个字段在宿主全文件仅出现在 `handleSkyTouch`/`emitFluidDrag` 体内；其余被点名的 `skyTouchActive`/`skyDragging`/`touchStartedOnUi`/`dockTouchActive` **仍有宿主其他读写点**——见下——因此**不搬**，改为 hooks 读写。）
+
+**不搬（留宿主，控制器经 hooks 读写；§2.7.1 保留裸字段与跨 handler 共用标志）**
+| 字段 | 宿主其他读写点 | hooks |
+|---|---|---|
+| `touchStartedOnUi` | `handleOverlayTouch` Down/Up | `touchStartedOnUi()` / `setTouchStartedOnUi()` |
+| `skyTouchActive` | `handleOverlayTouch` Down、`hideObjectInspector` | `skyTouchActive()` / `setSkyTouchActive()` |
+| `skyDragging` | `startDetailAutoRefresh` 定时器、`scheduleSelectedObjectDetails` | `setSkyDragging()`（只写） |
+| `dockTouchActive` | `handleDockTouch` Down/Up/Cancel | `dockTouchActive()` / `setDockTouchActive()` |
+| `skyTouchFeedback` | `build()` 反馈圈、`handleOverlayTouch`、`hideObjectInspector` | `skyTouchFeedback()` / `setSkyTouchFeedback()` |
+| `skyTouchX/Y`、`skyTouchFeedbackMulti`、`skyTouchX2/Y2` | `build()` 反馈圈（含读 `skyTouchX2/Y2`） | `setSkyTouchPoint()` / `setSkyTouchPoint2()` / `skyTouchX2()` / `skyTouchY2()` / `setSkyTouchFeedbackMulti()` |
+| `currentFovText`（@State，7 处 UI 读） | 面板 FOV 胶囊 | `setCurrentFovText()` |
+| `fovSliderValue`（@State，7 处读） | 设置面板 | `fovSliderValue()` / `setFovSliderValue()` |
+| `lastInfoWinCloseMs` | `hideObjectInspector` 写 | `lastInfoWinCloseMs()`（只读） |
+| `panelOffsetX/Y`（@State） | `build()` 面板几何、多处命中 | `panelOffsetX()` / `panelOffsetY()` / `setPanelOffset()` |
+| `isExpandedLayout`/`isFoldHoverLayout`/`isFoldTabletLayout`、`panelVisible`、`panelWidth`、`skyWidth/Height`、`EDGE_MARGIN` | 宿主 70+ 处 | 对应只读 hooks |
+
+**方法清单（3 个 → 控制器）与逐方法 diff 摘要**
+| 方法 | 行数 | 唯一变化（除 `this.` 前缀） |
+|---|---:|---|
+| `dragFollowAlpha` | 6 | `isFoldTabletLayout`/`isExpandedLayout` → hooks；`clamp` 仍取 `common/derive/astro` |
+| `emitFluidDrag` | 36 | 布局 flags → hooks；`this.skyInputCtl().dragVelocity*` → 私有字段；`callNativeFire('dragView')` → `commandPort.fire` |
+| `handleSkyTouch` | 318 | 面板几何 `panelLeft/panelRight/panelTop`/`isDockPoint`/`touchWindowX/Y` 仍取 `common/derive/geometry`（入参换 hooks 读数）；`skyZoomButtonAt`/`dockActionAt`/`isUiPoint`/`compactTopQuickX`/`isCompactTopQuickPoint`/`compactDockWidthPercent`/`dockTop` → hooks；路由/详情刷新收放/Dock/陀螺/音乐/面板拖动落盘 → hooks；`callNativeFire` → `commandPort.fire`；`callInteractive('getFieldOfView')` → `requestFieldOfView` |
+
+**新增 hooks（45 项，接口 18 → 63）**
+- 几何/布局只读（16）：`isExpandedLayout`、`isFoldHoverLayout`、`isFoldTabletLayout`、`panelVisible`、`panelWidth`、`panelOffsetX`、`panelOffsetY`、`edgeMargin`、`fovSliderValue`、`polarScopeVisible`、`compactDockWidthPercent`、`dockTop`、`compactTopQuickX`、`isCompactTopQuickPoint`、`lastInfoWinCloseMs`、`setFovSliderValue`。
+- 手势归属标志（6）：`touchStartedOnUi`/`setTouchStartedOnUi`、`skyTouchActive`/`setSkyTouchActive`、`setSkyDragging`、`dockTouchActive`/`setDockTouchActive`。
+- 触摸反馈点（8）：`skyTouchFeedback`/`setSkyTouchFeedback`、`setSkyTouchPoint`、`setSkyTouchPoint2`、`skyTouchX2`、`skyTouchY2`、`setSkyTouchFeedbackMulti`、`setCurrentFovText`、`setPanelOffset`。
+- 宿主保留动作（15）：`cancelSelectedObjectUiChange`、`pauseDetailRefreshForSkyDrag`、`resumeDetailRefreshAfterSkyDrag`、`scheduleSelectedObjectForUiChange`、`scheduleSkyTextureStatusCheck`、`scheduleRecordingViewCheckpoint`、`resetPanelIdle`、`toggleMusic`、`musicHintText`、`toggleGyroscope`、`skyZoomButtonAt`、`dockActionAt`、`activateDockAction`、`requestFieldOfView`。（前 4 项 A2 热路径 `isUiPoint` 已存在；`skyZoomButtonAt`/`dockActionAt` 为本片新增 A2 热路径 hooks。）
+
+**定时器 start/stop 调用点对照表**（本片不新增定时器；仅沿用 M3-1 的 `skyInertiaTimer`，并新增 1 处 start 调用点）
+| 角色 | 宿主调用点（改后） | 说明 |
+|---|---|---|
+| stop | `aboutToDisappear` / 应用后台 → `this.skyInputCtl().stop()` | 等价旧 `stopSkyInertia()`（M3-1 已登记） |
+| stop（手势让步） | 视图坐标拖动 Down / 脚本拖动 Down / compactQuick Down / 对象卡拖动 Down / Dock Down → `this.skyInputCtl().stopSkyInertia()` | M3-1 登记的 9 处不变 |
+| start（新增） | `handleSkyTouch` Up（`nativeDragActive` 分支）→ 控制器内 `this.startSkyInertia()` | 与原宿主逐字等价，随主路径迁入控制器 |
+| stop（内部） | `handleSkyTouch` Down、Move 双指、Cancel → 控制器内 `this.stopSkyInertia()` | 逐字等价 |
+
+**真机逐项数值对照（真机 Mate 80 Pro `192.168.50.108:36717`；`pidof`=61542 全程存活；语义命令 `stellarium-cli --bundle com.cnchensh.stellarium`）**
+| 项 | 操作 | 前 → 后 |
+|---|---|---|
+| 星空拖拽（水平） | `devecocli ui drag 540 1400 300 1400` | `getViewDirection` az **0.0006° → 352.31°** |
+| 星空拖拽（竖直） | `devecocli ui drag 540 1400 540 1000` | alt **11.39° → 1.46°**（az 352.31→352.11） |
+| 点选天体 | `devecocli ui click 540 1500` | `getSelectedObjects` **0 → 1**（水委一 Achernar / HIP 7588，Star） |
+| 缩放（`#skyZoomInButton` 142,2118；Down 坐标分派在 `handleSkyTouch` 内） | `devecocli ui click` ×2 | `getFieldOfView` fov **60 → 48 → 38.4** |
+| 缩放（`#skyZoomOutButton` 142,2300） | `devecocli ui click` | fov **38.4 → 48** |
+| 惯性 | `devecocli ui fling 400 500 900 500` | az **10.35° → 20.85°（t+0.5s）→ 21.09°（t+1.2s）→ 21.09°（t+2.2s，收敛）**；hilog 见 `dragView dx=11 dy=-12` 起手的逐帧 fire |
+| **归属回归（面板起手）** | 打开 `图层` 面板 → 面板体内 3 次 `ui drag`（600,2200→1950 竖直 / 300→700 水平 / 1100,2000→2300） | `getViewDirection` az **16.1587868724367 → 16.1587868724382（Δ≈1e-12，浮点噪声；不转星图）** ✅ |
+| **归属回归（星图起手）** | 同上会话 `ui drag 400 800 250 800` | az **21.09° → 16.26°（转动星图）** ✅ |
+
+- **点选链路实证（hilog `StellariumArkUI`）**：`sky touch down at 154,429` → `selectAt payload: 154|429|366|809` → `sky tap interval=2217ms distance=57.5 double=false` → `selectAt result: {...HIP 9095...}`。
+- **未走查（待真机人工）**：① 双击清除选中 —— `devecocli ui doubleclick` 两次 Down 实测间隔 **2.2s（>800ms 阈值）** 且落点漂移，`isSkyDoubleTap` 判 `double=false`，工装无法构造有效双击；但 tap→`isSkyDoubleTap` 链路已由上行 hilog 实证。② 触摸反馈点视觉（`skyTouchFeedback`/`skyTouchX/Y` 反馈圈）—— 需拖拽中截图，工装 `ui layout` 不暴露，记待验。③ 面板标题栏拖动 —— 在 `handleSkyTouch` 内，但 UI 起手已被 `handleOverlayTouch` 的 `isUiPoint` 提前 return 拦下（**改动前后同为死分支**），实测拖标题栏面板不动、星图不动，与迁移前一致。
+- **测后恢复**：本片只改视图朝向/选中/FOV/面板开合（均不落盘），未改持久化设置，无需恢复。
+
+**验证证据**：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0）；`arkts_check`（2 文件）无错；构建 **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **44 锚点 intact**（33 面板/24 静态 id/17 动态前缀）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败（`-clipboard/-guide/-mist-horizon/-polar-scope -pad`、`mist-performance`、`verify-ohos-search`），无新增回归；`test-ohos-polar-scope.mjs` 4/4 全绿。
+
+**本片新踩的坑**
+1. **`devecocli ui doubleclick` 不能用于验证双击手势**：实测两次 Down 间隔 2.2s、且两 tap 落点不同（工具在慢设备上被节流/丢帧），永远构造不出 ≤800ms 同点的双击；双击清除路径只能真机人工验证。
+2. **`stellarium-cli.mjs` 默认 `hdc` 是 macOS 路径**（`/Applications/DevEco-Studio.app/...`），Windows 上必须显式 `--hdc "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"`，否则 `spawnSync ... ENOENT`。
+3. **`hdc shell hilog` 不带 `-x` 会阻塞流式输出**（工具会 60s 超时）；用 `hilog -x` dump 到本地文件再 grep，且 `hilog -r` 清缓冲后需重新 dump。
+
+## [2026-10-05] DevEco Code - M3-1：SkyInputController 骨架（PLAN §15.10/§15.11 第三批 M3，高风险）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.10/§15.11 **M3-1**（高风险，最后一批）。
+> 提交：`3d97c8bec5`（refactor）+ 本条目（docs）。工作目录 `E:\code\Stellarium-mobile\stellarium`。
+
+**结论：部分完成（安全 > 完成度）** —— 鼠标/键盘/滚轮轴/点按序列/惯性 **8 个方法 + 16 个字段**下沉到 `capability/SkyInputController.ets`；
+触屏主路径 `handleSkyTouch`(318) 与 `emitFluidDrag`(36) 按计划留给 **M3-2**；§15.6 的 4 个 A2 热路径与全部跨域/路由/选中动作**不搬**、经 hooks 回注宿主。
+
+**改动文件（净行数）**
+- 新增 `harmonyos/ets-source/capability/SkyInputController.ets`（265 行；普通类 + `SkyInputHostHooks` 18 法 + `CommandPort`/`NightModeStore` 注入；不 import NAPI/UI，`hilog`/`KeyCode` 除外）。
+- 修改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets` **12800 → 12641（−159）**；`git diff --stat`：`70 insertions(+), 230 deletions(-)`。
+- 宿主度量：`private` 方法 **510 → 503**（−7 = 搬走 8、新增 `skyInputCtl()` 1）；裸 `@State private` **132 → 132（不变，不变式保持）**。
+
+**方法清单（8 个 → 控制器）与逐方法 diff 摘要**（仅「取值参数化 + 所有权转移」，**未改任何比较边界/分支/取整**）：
+
+| 方法 | 行数 | 唯一变化（除 `this.` 前缀外） |
+|---|---:|---|
+| `resetSkyTapSequence` | 3 | 无（仅字段归属控制器） |
+| `isSkyDoubleTap` | 19 | `distance` 仍取 `common/derive/astro`；`this.lastSkyTap*` 为控制器字段 |
+| `handleSkyTap` | 11 | `tools.angleMeasureEnabled`→`hooks.angleMeasureEnabled()`；`measureAngleAt`/`clearSkySelectionFromDoubleTap`/`requestSkySelection`→hooks；`isSkyDoubleTap` 留类内 |
+| `handleSkyMouse` | 51 | `isUiPoint`→hooks（A2 热路径）、`gyroscopeEnabled`→hooks、`gyroCtl().stopGyroscope(true)`→`hooks.stopGyroscope(true)`、`flashHint`→hooks；`callNativeFire`→`commandPort.fire`；`startSkyInertia`/`stopSkyInertia`/`handleSkyTap`/`resetSkyTapSequence` 留类内 |
+| `handleSkyAxis` | 23 | `isUiPoint`→hooks；`callNativeFire`→`fire`；`skyWidth`/`skyHeight`→hooks |
+| `handleSkyKey` | 31 | `callNativeFire`→`fire`；`zoomStep`/`moveToSelectedObject`/`centerSelectedObjectFromKeyboard`/`setPanel('search')`/`closePanel`→hooks；`nightModeStore` 实例持有、`persistNightMode`→hooks、`setNightMode` fire；模型沉浸态读写→`hooks.modelImmersive()`/`setModelImmersive(false)` |
+| `stopSkyInertia` | 14 | 字段归属控制器；`callNativeFire('stopPanInertia')`→`fire` |
+| `startSkyInertia` | 11 | 字段归属控制器；`callNativeFire('startPanInertia')`→`fire` |
+
+**字段清单（16 个 → 控制器）**
+- 控制器私有（11）：`skyInertiaTimer`、`lastSkyTapAt`、`lastSkyTapX`、`lastSkyTapY`、`mouseSkyPressed`、`mouseSkyMoved`、`mouseSkyStartX`、`mouseSkyStartY`、`mouseSkyLastX`、`mouseSkyLastY`、`mouseSkyLastSampleMs`。
+- M3-2 共享草稿字段（5，本片**转移所有权**、宿主暂以 `this.skyInputCtl().<field>` 访问，M3-2 收回后恢复私有）：`nativeSkyInertiaActive`、`dragVelocityX`、`dragVelocityY`、`dragVelocitySampleValid`、`pinchActive`；涉及宿主 `handleSkyTouch`/`emitFluidDrag` 共 **15 处**引用改写。
+
+**可观测子集：无（不改任何 store）** —— 本片方法不产生组件消费的状态（触摸反馈点 `skyTouchFeedback`/`skyTouchX/Y` 属 M3-2 的 `@State`），故不新建/不改 `OverlayStore`/`DockStore`；16 个字段全为逐帧/草稿字段，留控制器（§15.7 规则 2）。
+
+**§15.6 保留项（未搬、经 hooks 调宿主实现）**：`isUiPoint`（A2 热路径，本片最危险项）；`setPanel`/`closePanel`/`zoomStep`/`moveToSelectedObject`/`centerSelectedObjectFromKeyboard`（路由/缩放）；`requestSkySelection`/`clearSkySelectionFromDoubleTap`/`measureAngleAt`（选中管线属 P4-5）；`persistNightMode`（AppStorage/UI）；模型沉浸态；陀螺退出。
+**主动停下登记**：`handleSkyTouch` + `emitFluidDrag` → **M3-2**；`centerSelectedObjectFromKeyboard`（与 `objectDetailStore`/`navigateSelectedObjectTo` 交织，随 `handleSkyKey` 经 hooks 调用）；4 个 A2 热路径（`isUiPoint`/`skyZoomButtonAt`/`dockActionAt`/`expandedSafeTargetPoint`）一律未动。
+
+**hooks/端口清单**
+- `CommandPort.fire`：`dragView` / `zoomBy` / `panBy` / `startPanInertia` / `stopPanInertia` / `setNightMode`（`callNativeFire` 逐字等价，均为 fire-and-forget）。
+- `SkyInputHostHooks`（18 法）：`isUiPoint`、`flashHint`、`skyWidth`、`skyHeight`、`gyroscopeEnabled`、`stopGyroscope`、`angleMeasureEnabled`、`measureAngleAt`、`requestSkySelection`、`clearSkySelectionFromDoubleTap`、`zoomStep`、`setPanel`、`closePanel`、`moveToSelectedObject`、`centerSelectedObjectFromKeyboard`、`persistNightMode`、`modelImmersive`、`setModelImmersive`。
+
+**定时器 start/stop 调用点对照表**（唯一句柄 `skyInertiaTimer` 归属控制器；宿主原状中该句柄从未被赋值，`stopSkyInertia` 的 `clearInterval` 为防御性，本片逐字保留）：
+
+| 角色 | 宿主调用点（改后） | 说明 |
+|---|---|---|
+| stop（生命周期） | `aboutToDisappear` → `this.skyInputCtl().stop()` | 等价原 `this.stopSkyInertia()`（`stop()` = `stopSkyInertia()`，reset 默认 true） |
+| stop（生命周期） | `handleApplicationLifecycle`（后台）→ `this.skyInputCtl().stop()` | 同上 |
+| stop（手势让位） | 视图坐标拖动 Down / 脚本控制拖动 Down / `handleSkyTouch` Down·双指·Cancel / compactQuick Down / 对象卡拖动 Down / Dock Down → `this.skyInputCtl().stopSkyInertia()` | 9 处，逐字等价 |
+| stop（hooks 回注） | `SensorController` hooks 的 `stopSkyInertia` → `this.skyInputCtl().stopSkyInertia()` | 逐字等价 |
+| start | `handleSkyTouch` Up（nativeDrag 分支）→ `this.skyInputCtl().startSkyInertia()` | 逐字等价 |
+| start（内部） | `handleSkyMouse` Up（已入控制器）→ 类内 `this.startSkyInertia()` | — |
+
+**真机逐项数值对照（真机 Mate 80 Pro `192.168.50.108:36717`；`pidof` = 51406 全程存活；语义命令 `stellarium-cli --bundle com.cnchensh.stellarium` 读回数值）**
+
+| 项 | 操作 | 前 → 后 |
+|---|---|---|
+| 星空拖拽（水平） | `devecocli ui drag 540 1400 300 1400` | `getViewDirection` az **0.0006° → 352.35°** |
+| 星空拖拽（竖直） | `devecocli ui drag 540 1400 540 1000` | alt **11.39° → 1.33°**（az 不变） |
+| 点选天体 | `devecocli ui click 540 1500` ×2 | `getSelectedObjects` **0 → 1**（`η² Hyi` / HIP 8928，Star） |
+| 缩放（`#skyZoomInButton` 142,2118） | `devecocli ui click` | `getFieldOfView` fov **60 → 48 → 38.4** |
+| 缩放（`#skyZoomOutButton` 142,2300） | `devecocli ui click` | fov **38.4 → 48** |
+| 惯性 | `devecocli ui fling 540 1700 780 1100` | `getViewDirection` t+0 alt −12.67°、t+1 −13.07°、t+2 停在 **−13.07°（az 357.82°）**——抬起后视图**继续移动并收敛**，证明共享速度字段所有权转移后 `startPanInertia` 仍生效 |
+
+- **键盘/鼠标路径（本片迁移的 `handleSkyKey`/`handleSkyMouse`）**：`uitest uiInput keyEvent 2013`（DPAD_DOWN）/`2022`（F）注入后 `getViewDirection` 完全不变 → 注入事件未达 app 的 `onKeyEvent`；`devecocli`/`uitest` 无鼠标注入。**未走查键盘/鼠标命中，原因：无可用注入通道，待真机人工**（代码结构逐字等价、编译与构建通过）。
+- **测后恢复**：本片只改视图朝向/FOV/选中（均不落盘），未改持久化设置，无需恢复。
+
+**验证证据**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check`（2 文件）无错；构建 **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **44 锚点 intact**（33 面板/24 静态 id/17 动态前缀）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 6 个环境类失败（`-clipboard/-guide/-mist-horizon/-polar-scope -pad`、`mist-performance`、`verify-ohos-search`），无新增回归。
+
+**本片新踩的坑**
+1. **真机锁屏无法自动解锁**（开发者模式下 `aa start` 报 `10106102 The device screen is locked`）：真机 `input` 命令不可用（`inaccessible or not found`），须改用 `uitest uiInput swipe 540 2200 540 700 2000` 上滑解锁后再 `aa start`。
+2. **`uitest uiInput keyEvent` 注入不到应用 `onKeyEvent`**：本次 DPAD/F 注入后视图/面板均无变化；键盘路径只能待人工真机验证。
+
+## [2026-10-05] DevEco Code - 修复：图层「银河亮度」步进 `+` 被裁成竖条（同类第二处）
+
+**问题**：图层面板 → 银河亮度行的 `+` 按钮显示为一条竖线（横画被切掉），`−` 正常。
+
+**根因**：与上一条同源 —— `Button('+').width(36)` 且未设 padding，ArkUI `Button` 默认左右内边距把内容宽度压到约 4vp（≈14px），`+` 的横画落在内容盒外被裁掉；`−` 本身只是横条，恰好未被察觉。
+
+**改动**（`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`，2 处）：银河亮度步进的 `-` / `+` 两个按钮各加 `.padding({ left: 0, right: 0 })`；尺寸/颜色/交互不变。
+
+**验证（真机 Mate 80 Pro）**：`openUiPanel layers` → 滚到「银河亮度」→ 截图后逐按钮量墨迹并裁剪目视：
+| | 修复前 | 修复后 |
+|---|---|---|
+| `+` 墨迹包围盒 | 11×24 px（竖条） | **24×25 px（完整十字）** |
+| `+` 墨迹像素 | 83 | 138 |
+| `−` 墨迹包围盒 | 13×4 px | 13×4 px（本就正常） |
+
+裁剪图目视确认 `+` 为完整十字。构建 SUCCESSFUL、契约 intact（44 锚点）。
+
+**并更正上一条的排查清单**：上条列的 5 处（`NebulaTexturesPanel`/`ObservingPanel`/`SatellitesPanel`/`SettingsPanel`/`SkyCultureViewTab`）经精确复核为**误报** —— 启发式把邻近的 `Toggle(...).width(42)` 误当成按钮宽度，这 5 处本就带显式 `.padding()`。改用「只沿 `Button` 自身属性链 + 逐按钮计算『可用内容宽度 vs 估算文字宽度』」的全量扫描（**247 个按钮**）后，同类**真缺陷只有两处**：①上条已修的录制控制条三按钮；②本条的银河亮度 `+`。修复后该扫描结果为空（另 3 个定宽≤60 的按钮为单字符 `+`/`-` 或 `ButtonType.Circle` 图标按钮，确认无碍）。
+
+## [2026-10-05] DevEco Code - 修复：脚本录制控制条三个按钮文字被省略成"…"
+
+**问题**：开始脚本录制后，顶栏 `RecordingControlBar` 的三个按钮（操作/专注、暂停/继续、停止）文字显示为"…"。
+
+**根因**：三个 `Button` 为**定宽 46/48vp**（数值逐字沿袭原宿主 `recordingControlBar()`，经 `git show 9c9a4f3d6c^` 核对确认 —— 属**既有缺陷**，非本次重构引入），而 ArkUI `Button` 带默认左右内边距 ⇒ 内容宽度不足以容纳 2 个中文字（`fontSize(10)`），标签被省略号取代。
+
+**改动**（`harmonyos/ets-source/panels/tools/RecordingControlBar.ets`，3 处）：给三个按钮各加 `.padding({ left: 0, right: 0 })`，把 46/48vp 全部留给标签；尺寸、颜色、圆角、交互与视觉其余部分不变。
+
+**验证（真机 Mate 80 Pro `192.168.50.108:36717`）**：`openUiPanel scripts` → 滚动到「脚本录制与回放」→ 点「开始录制」→ 顶栏出现后截图，逐按钮测量文字墨迹：
+| 按钮 | 墨迹像素 | 墨迹包围盒 |
+|---|---:|---|
+| 操作/专注 | 746 | **68×33 px** |
+| 暂停/继续 | 960 | **66×33 px** |
+| 停止 | 732 | **69×33 px** |
+| 对照：3 字标题「录制中」(fontSize 12) | 1535 | 114×33 px（≈33px/字） |
+
+⇒ 三按钮均为 **2 个中文字正常渲染**（≈34px/字），不再是省略号（若为"…"包围盒应仅约 30–40px 宽）。`arkts_check` 无错、构建 SUCCESSFUL、契约 intact（44 锚点）；测后已停止录制恢复现场。
+
+**顺带排查（已更正，见下一条）**：初版列的 5 处经精确复核为**误报**（启发式把邻近 `Toggle(...).width(42)` 误当按钮宽度；这 5 处本就带显式 `.padding()`）。
+
+## [2026-10-04] DevEco Code - M2-A：ObjectModelRenderer（PLAN §15.11 第二批 M2）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.11 **M2-A**（原 M2-1/2 合并为模块级大切片）。
+> 提交：`ab38bd25a9`（refactor）+ 本条目（docs）。工作目录 `E:\code\Stellarium-mobile\stellarium`。
+
+**范围与改动文件（净行数）**
+- 新增 `harmonyos/ets-source/capability/ObjectModelRenderer.ets`（**540 行**；12 个方法 + 22 个逐帧/草稿字段）。
+- `harmonyos/ets-source/bridge/MediaPort.ets` **+8**（接口新增 `createPixelMapFromRgba` / `readPixelMapPixels`）。
+- `harmonyos/ets-source/pages/MainWindowNativeNode.ets` **13,140 → 12,800 行（−340）**；`@State private` **132 不变**（46 store + 86 保留裸字段）；`private` 方法 **521 → 510**（搬走 12 + 新增 1 个惰性构造 getter `objectModelRendererCtl()`）；`^  private ` 声明总数 **782 → 750**（另搬走 22 个字段）。
+- 测试同步：`test-ohos-model-worker.mjs` / `test-ohos-model-scroll.mjs` / `test-ohos-detail-model-geometry.mjs` / `test-ohos-procedural-model.mjs`（断言改读控制器文件；触摸夹具改注入 `mediaStore`）。
+
+**方法清单（12，逐字迁移，仅改 store 前缀 / 端口 / hooks）**
+`clearObjectInspectorModelRenderer`(35) · `failObjectInspectorModelTexture`(11) · `commitObjectInspectorModelTexture`(36) · `decodeObjectInspectorModelTextureFromPng`(46) · `refreshObjectInspectorModelLighting`(11) · `rotateObjectInspectorModel`(4) · `requestObjectInspectorModelRender`(25) · `flushObjectInspectorModelRender`(11) · `renderObjectInspectorModel`(106) · `resetObjectInspectorModelView`(8) · `setObjectInspectorModelImmersive`(19) · `handleObjectInspectorModelTouch`(57)。
+另在控制器新增只读查询 `isRendering()` / `hasTexture()` / `modelReady()` / `resetRotationForNewMedia()` / `setForeground()` / `stop()`（供宿主 `@Prop` 与生命周期调用）。
+
+**字段去向（22 个 `objectInspectorModel*`）**
+- **入 store（本片无新增；M1-A 前已就位）**：`objectInspectorModelPixelMap` / `objectInspectorModelImmersive` / `objectInspectorModelOverlayOpacity` / `objectInspectorModelScale` / `objectInspectorModelInteracting` / `objectInspectorProceduralKind`（`ObjectMediaStore`，组件经 `@ObjectLink`/`@Prop` 消费）。
+- **留控制器（逐帧/草稿，§15.7 规则 2 + §13.3）**：`objectInspectorModelRendering` / `RenderClient` / `OverlaySerial` / `Rotation` / `LastLighting` / `LastRenderTime` / `TouchCount` / `TexturePixels` / `TextureWidth` / `TextureHeight` / `TextureStride` / `RingTexturePixels` / `RingTextureWidth` / `RingTextureHeight` / `RingTextureStride` / `LastX` / `LastY` / `LastPinchDistance` / `RenderGeneration` / `RenderPending` / `RenderHighQuality` / `RenderTimer`。**刻意不入被观察 store**（逐帧写入会触发刷新风暴）。
+- **仍留宿主（媒体管线，经 hooks 回注）**：`objectInspectorProceduralKey` / `objectInspectorProceduralParticles` / `objectInspectorMediaDecodeGeneration`（`refreshObjectInspectorMedia` 持有）。
+
+**端口 / hooks 清单**
+- `MediaPort` 扩展（M1-B 式）：`createPixelMapFromRgba(pixels,w,h,label)`（原 `image.createPixelMap(RGBA_8888/UNPREMUL)`）、`readPixelMapPixels(pixelMap,buffer,label)`（原 `readPixelsToBufferSync`）；`HostMediaPort` 具名实现。
+- `ObjectModelRendererHostHooks`（具名接口，宿主顶层实现）：`publishModelView(json)`（`AppStorage.setOrCreate('stellariumObjectModelView')`）、`animateOverlay(open,body,onFinish)`（`getUIContext().animateTo`）、`mediaDecodeGeneration()`、`proceduralParticles()`、`resetProcedural()`。
+- 控制器依赖：`MediaPort` + 三个 store + 既有 `DetailModelRenderClient` worker（§15.11「经既有 worker」，与 `StartupBridge` 引用 `AudioEngine` 同例）；`image` 仅用作 `PixelMap` 类型（与 `MediaPort` 同源），**不直接调用设备 NAPI**。
+- `ObjectMediaStore.attachHooks` 的 `decodeObjectInspectorModelTextureFromPng` / `commitObjectInspectorModelTexture` / `failObjectInspectorModelTexture` 三个下游改指向控制器（`readRawSidecar` 仍留宿主）。
+
+**定时器 start/stop 调用点对照表（`objectInspectorModelRenderTimer` 为一次性防抖，非周期轮询）**
+| 触发 | 行为 |
+|---|---|
+| `requestObjectInspectorModelRender(false)`（触摸拖动） | 若 timer 为空则 `setTimeout(...,18)` 挂起，合并连续触摸 |
+| timer 到期 | 自清 `=0` 并 `flush...`（一次性，不重排） |
+| `requestObjectInspectorModelRender(true)`（高画质/切换/重置/光照） | `clearTimeout` + 立即 `flush` |
+| `clearObjectInspectorModelRenderer()` / `stop()` | `clearTimeout`（不 dispose，dispose 在 clear） |
+| `aboutToDisappear` | → `clearObjectInspectorDecodedImage()` → 控制器 `clear()`（dispose worker + clearTimeout + 代际++） |
+| 后台（`handleApplicationLifecycle(false)`） | → 控制器 `setForeground(false)` → `DetailModelRenderClient.setSuspended(true)`（停看门狗 16ms pulse + 30s timeout；渲染防抖定时器不涉及） |
+- 因是**一次性防抖**（无 `setInterval`、无周期 `start`），控制器提供 `stop()` 清在途定时器、不提供周期 `start()`；真机证据见下（render 计数随交互起伏、无空转轮询）。
+
+**真机证据（192.168.50.108:36717，Mate 80 Pro）**
+- `install -r` 成功 → `aa force-stop`/`aa start -a QAbility` → `pidof` = **3962**（全程存活）。
+- `searchObject Jupiter` → `getSelectedObjectInfo`：`found=true`、`detailModel.state="available"`（含 `lighting.viewToBody/sunDirectionBody/emissive`）。
+- `setObjectModelView open` / `immersive` / `30|10`（rotate）/ `reset` / `close` 全部 `{"ok":true,"accepted":true}`。
+- hilog 佐证：`[detail-model] render pixel map created kind=object-inspector-model bytes=409600`（新 `HostMediaPort.createPixelMapFromRgba` 日志，CPU 光栅化逐帧提交）+ `[detail-media] released pixel map kind=previous-object-inspector-model` + `[detail-media-card] sphere loaded uri=.../jupiter.png`。
+- 触摸：`devecocli ui drag` 两段落于 `Stack#object-model-inline-stage [252,1445,937,1809]`，无崩溃、`pidof` 仍 3962；`getObjectDetailModel` 交互后仍 `state="available"`。
+- **未走查**：真双指捏合缩放（以单指拖拽 + 程序化 `30|10` rotate 覆盖同一 `handleObjectInspectorModelTouch`/`rotateObjectInspectorModel` 分支；双指分支由 `test-ohos-model-scroll.mjs` 夹具覆盖）。未改持久化设置，无需恢复。
+
+**验证门槛**
+- 预检 `check-ohos-refactor-slice.mjs` 通过；`arkts_check` 3 文件无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact（44 锚点）**。
+- 受影响测试全绿：`test-ohos-model-worker` 6/6、`-model-scroll` 5/5、`-detail-model-geometry` 7/7、`-procedural-model` 12/12、`-detail-live-values` 7/7；全量 `test/verify/audit-ohos*.mjs` 扫描**仅 §13.6 的 6 个环境类失败**（4 个 `-pad` + `mist-performance` + `verify-ohos-search`），无回归。
+
+**停下登记**：无。本片未触及 §15.6 保留项（`loadSkyCultureDetails` 美术解码、4 个 A2 热路径、86 保留裸字段、壳层/路由、`floatingPanel`/`compactPanel`/`panelContent` 均未动）；`ObjectMediaStore` 的三处 hooks 仅改指向控制器，未搬其保留语义。
+
+**本片新踩的坑**：`git checkout -- <宿主文件>` 会连同该文件此前的手工编辑（HostMediaPort 端口实现）一并回退。重做时改为「先回滚、再用单个确定性脚本一次性应用全部替换」，避免"回滚 — 重新手改"的中间态丢件。
+## [2026-10-04] DevEco Code - M1-B：控制器批（SensorController + RecordingController，PLAN §15.11 第一批）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.11 **M1-B**（原 M1-2/3 合并为模块级大切片）。
+> 片内 **2 次提交**，每个提交点均跑过 预检 / `arkts_check` / 构建 / 契约；工作目录 `E:\code\Stellarium-mobile\stellarium`。
+> 提交：`f452b228bf`（SensorController）→ `7355472cfc`（RecordingController）。
+
+**子组① `capability/SensorController.ets`（21 方法 + 52 私有字段）**
+- 从宿主整块下沉：`startGyroscope` / `stopGyroscope` / `toggleGyroscope` / `refreshGyroDisplayRotation` / `onOrientationData` / `onRotationVectorDirect` / `onGravityData` / `onMagneticFieldData` / `updateGyroCompassReadout` / `gyroCompassDirection` / `calibrateGyroscope` / `setGyroGuidePose` / `updateGyroTargetGuide` / `emitGyroPoseProbe` / `gyroRotateVector` / `gyroVectorAltAz` / `gyroOrthonormalizeUp` / `gyroBridgeFromEnu` / `watchGyroSend` / `watchGyroStart` / `watchGyroStop`。
+- **真传感器路径 → `SensorPort`**：`probeSensor(label)` + `subscribe/unsubscribe` 四路（RotationVector/Orientation/Gravity/MagneticField）。`SensorPort` 由 M1-A 的 `probeSensor(SensorId,label)` 细化为 **label 入参** + 四个响应类型短别名；控制器只从端口导入类型、不 import 设备能力命名空间。
+- **桥路径 → `CommandPort`**：`callNativeFire('setGyroView'|'beginGyroViewTransition'|'cancelGyroViewTransition'|'gyroDiagnostic')` → `fire`；`watchGyro*`（M1-A 已实测为**桥驱动虚拟指星笔**，走 `pointAtSky`/`pointAtSkyStop`）→ `requestWhenReady`。
+- `GyroStore` 可观测子集（使能/状态/罗盘/引导 13 字段）**M1-A 已齐备，本片复核无需扩充**；手势采样/逐帧草稿（事件计数、姿态四元数、滤波向量、订阅回调、显示旋转快照…）全部留控制器普通类（§15.7 规则 2）。
+- `SensorHostHooks` 具名回注：`canUseSensors`（隐私同意+前台+启动允许）/ `flashHint` / `displayRotation`（`display.getDefaultDisplaySync` 收在宿主）/ `objectSelected` / `guideLayout` / `guideProjection`（native 投影查询+强转收在宿主）/ `watchLastSend`。
+- **`watchLastSend` 属 §2.7.1 保留字段（引擎自用/已登记约定），不搬入控制器**，经 hooks 读写。
+
+**子组② `capability/RecordingController.ets`（21 方法 + 12 私有字段 + 2 自持定时器）**
+- 下沉：`recordAcceptedCommand` / `cancelRecordingViewCheckpoint` / `scheduleRecordingViewCheckpoint` / `startRecording` / `toggleRecordingPause` / `stopRecording` / `saveCurrentRecording` / `playRecording` / `replayNextCommand` / `finishRecordingReplay` / `toggleReplayPause` / `changePlaybackRate` / `deleteRecording` / `startVideoRecording` / `stopVideoRecording` / `startScreenVideoRecording` / `onScreenCaptureState` / `finalizeScreenVideo` / `stopScreenVideoRecording` / `saveScreenVideoToGallery` / `stop`。
+- **状态在 `ScriptStore`（§15.9）**：`recordings`/`video*`/`screenVideo*`/`replaying`/`replayPaused`/`replayRate` 不重复搬，只搬行为与定时器。
+- **`recordBuffer` 属 §2.7.1 保留字段（追加型录制缓冲）**：仍留宿主 `@State`，经 `RecordingHostHooks.recordBufferLength/Snapshot/Push/Clear` 读写（§15.7 规则 6）。宿主 `@State` 132 不变。
+- **NAPI 收在 `HostMediaPort` 适配器**：`MediaPort` 新增 `screenVideoDir`/`makeDir`/`fileSize`/`hasActiveScreenCapture`/`beginScreenCapture`/`stopScreenCapture`/`releaseScreenCapture`/`saveVideoToGallery` + `ScreenCaptureState` 枚举；`fileIo`/`display`/`media`/`photoAccessHelper` 全部留在宿主具名适配器，控制器不 import NAPI。
+- `RecordingHostHooks` 具名回注：`flashHint` / `sessionBusy` / `hidePanelAndInfo` / `openScriptsPanel` / `changeScriptRate` / recordBuffer 四法。
+- 纳入 M1-A 遗留：`toggleReplayPause` / `changePlaybackRate`（同一回放引擎归属）。
+
+**定时器调用点对照表**
+| 定时器 | 归属 | 起（start） | 止（stop/归零） |
+|---|---|---|---|
+| `RecordingController.recordViewCheckpointTimer` | 控制器自持（一次性） | `scheduleRecordingViewCheckpoint`（`startRecording`、`handleSkyTouch` view 变化触发） | `cancelRecordingViewCheckpoint`（暂停 / `stopRecording` / `stop()` / 自身重排前） |
+| `RecordingController.replayTimer` | 控制器自持（逐命令） | `replayNextCommand`（`playRecording` / 恢复 / `changePlaybackRate` 触发） | `finishRecordingReplay` / 暂停 / 重排前 置 `-1` |
+| `ScriptStore.videoStateTimer` | ScriptStore 自持（§14 B3-4 已下沉，非本片） | `startVideoRecording` → `startVideoStatePolling` | `stopVideoRecording` / 录制结束回调 → `stopVideoStatePolling` |
+
+- 宿主生命周期收口：`aboutToDisappear` → `this.recordingCtl().stop()`（清 checkpoint 定时器、结束在途回放、复位 `tools.recording`）；后台切换沿用既有 `stopVideoRecording` hooks。
+- **注意**：本控制器两个定时器均为**一次性/逐命令**，非周期轮询；§14 B3-4 的「计数→归零」周期计数法不适用（周期轮询属 `ScriptStore.videoStateTimer`，本片未改）。
+
+**度量（宿主 `MainWindowNativeNode.ets`，Get-Content 计法）**
+- 行数 **14,161 → 13,140**（**−1,021**）：子组① 14,161 → 13,406（−755）、子组② 13,406 → 13,140（−266）。
+- `private` 方法 **574 → 536**（**−38**；本片删除宿主 21 + 21 = 42 个方法，其中 2 个 `gyro` 辅助并入控制器、`toggleGyroscope` 等计数口径微差）。
+- `@State` **132 不变**（46 store 实例 + 86 保留裸字段）——`watchLastSend`/`recordBuffer` 两个保留 `@State` 留宿主。
+- 新增文件 **2 个**：`capability/SensorController.ets`、`capability/RecordingController.ets`；另改写 `bridge/SensorPort.ets`/`bridge/MediaPort.ets`。
+
+**验证（每个提交点均执行）**
+- 预检通过；`arkts_check` No errors；构建 **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact（44 锚点不变）**。
+- 测试：全量 ohos 扫描仅剩 **§13.6 的 6 个环境类失败**（`test-ohos-clipboard-pad` / `-guide-pad` / `-mist-horizon-pad` / `-mist-performance` / `-polar-scope-pad` / `verify-ohos-search`），**无新增回归**。同步 `test-ohos-privacy-startup.mjs` 两处文本切片夹具（`startGyroscope` 切片改读 `capability/SensorController.ets`、断言 `canUseSensors()` 早于 `subscribeRotationVector`；`emitGyroPoseProbe` 改读控制器）。
+- 真机（HUAWEI Mate 80 Pro `192.168.50.108:36717`）：装包 + `aa start` + `pidof` **存活（51511 全程）**。
+  - **SensorController 实证**（`setGyroscopeEnabled true/false` 走 `[cli-ui]` → 控制器）：`[gyro-probe] sensor=rotation-vector/gravity/magnetic-field supported=true` 三路订阅成功；`[GYRO_PROBE] callbacks=1→64→126→190→252`、`dispatch` 同步增长；停止 `mode=rotation-vector callbacks=301 valid=301 dispatch=220 invalid=0 gravity=301 magnetic=160 elapsedMs=4839`。
+  - **RecordingController 视频帧序列（桥）**：`getVideoRecordingState(recording=false)` → `startVideoRecording 1|1`（maxFrames=1）→ `stopVideoRecording`（`archiveReady=true, diskFrames=1`）→ `listRecordings` 正常。
+  - **RecordingController 脚本录制（UI）**：`openUiPanel scripts` 后经 UI 自动化点击「开始录制」→界面显示「录制中」→点击「停止录制」，全程 `pidof` 存活（`verify_ui` id `57ed098c`）。
+  - **未走查（原因）**：(a) 回放 UI —— 脚本面板「已保存的录制」区被内层脚本列表滚动容器捕获，自动化滑动无法到达（3 次尝试），需人工；回放引擎桥命令面已由 M1-A 覆盖。(b) 系统录屏 MP4 授权对话框 —— 需真实用户授权，交由人工。(c) 陀螺目标引导 `GyroTargetGuide` 叠层 —— 需选中天体 + 设备朝向变化，未走查。
+  - 测试中创建的 `m1b-smoke` 录制已 `deleteRecording` 清除；`setGyroscopeEnabled` 末态为 false（且启动时 `restoreStartupSettings` 恒置 false）。
+
+**本片新踩的坑**
+- **换行归一**：`write` 工具新建/改写 `.ets` 为 LF，须在提交前统一为 CRLF（`SensorController`/`SensorPort`/`RecordingController` 均出现，已归一；宿主经 `ReadAllText/WriteAllText` 保持 CRLF）。
+- **跨类调用的方法不能是 `private`**：`SensorController.stopGyroscope`/`startGyroscope` 初版写成 `private`，构建报 `Property '…' is private and only accessible within class`（`arkts_check` 未拦）。跨出类边界的方法必须 public。
+- **大段删除用 ASCII 锚点正则**：删 21+21 个宿主方法时，起点用 ASCII 方法签名、终点用 ASCII 下一条注释/签名 lookahead，避免 PowerShell 命令行内联 CJK 被代码页改写。
+- **文本切片夹具随搬迁同步**：`test-ohos-privacy-startup.mjs` 两处直接读宿主的断言随方法下沉改读控制器文件。
+
+## [2026-10-04] DevEco Code - M1-A：端口 + 服务层 + 启动/会话 + P2 并入（PLAN §15.11 第一批）
+
+> 队列：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §15.11 **M1-A**（原 M1-1/4/5/6 合并为模块级大切片）。
+> 片内 **4 次提交**，每个提交点均跑过 预检 / `arkts_check` / 构建 / 契约；工作目录 `E:\code\Stellarium-mobile\stellarium`。
+> 提交：`333f51e23d`（端口+媒体服务）→ `88dab09304`（启动/会话）→ `c61a693eb5`（脚本播放）→ `bf5b6b6ede`（导览）。
+
+**子组① 三个端口（纯接口 + 宿主具名适配器）**
+- 新增 `harmonyos/ets-source/bridge/MediaPort.ets`（覆盖 `fileIo`/`image`/`picker`，纯接口不 import `@ohos.*`）：
+  `fileExists` / `openReadOnlyFile` / `closeFile` / `createImageSource` / `createPixelMap` / `releaseImageSource` / `releasePixelMap` / `saveFileAs` / `deleteFile`（`MediaSaveResult` 枚举区分 落盘/取消/失败）。
+- 新增 `bridge/PlatformPort.ets`（`systemShare`/pasteboard/TTS）：`writeClipboardText` / `shareFile` / `speak`。
+- 新增 `bridge/SensorPort.ets`（`sensor.*`）：`probeSensor` + `subscribe/unsubscribe` 四路（RotationVector/Orientation/Gravity/MagneticField）。
+- 宿主顶层 `class HostMediaPort / HostPlatformPort / HostSensorPort implements …`（照 `HostCommandPort` 写法；**禁匿名对象字面量越界、禁 `as`**）。因适配器在字段初始化期构造（此时 `getUIContext` 不可用），改用字段 + 惰性 `configure`。
+- 宿主桥端口改为惰性单例 `commandPort()`（原 `aboutToAppear` 内的局部 `const hostPort` 构造迁入，行为逐字不变），供 `saveScreenshot`/`speakSelectedObject` 等 UI 回调复用。
+- 最小试点：`MediaPort`→`releaseDecodedImage`(11)+`decodeLocalImage`(70)；`PlatformPort`→`copyTextToClipboard`(13)；`SensorPort`→`probeGyroSensor`。**偏差说明**：计划写的 `watchGyro*` 实为桥驱动的「虚拟指星笔」（`pointAtSky` 命令），**不走 `sensor.*`**，故试点改用真实传感器查询 `probeGyroSensor`（`sensor.getSingleSensorSync`）并删除该宿主方法；`SensorPort` 的 subscribe/unsubscribe 面已按现有回调类型补齐，供 M1-B `SensorController` 整块搬迁。
+
+**子组② 服务层（新增 NAPI-free 服务，逻辑逐字搬入，只改取值/端口调用）**
+- 新增 `common/media/ImageDecoder.ets`：`decodeLocalImage`(70) / `releaseDecodedImage`(11)（依赖 `MediaPort`；`[detail-media]` 逐帧日志留在适配器）。
+- 新增 `common/platform/Clipboard.ets`：`copyTextToClipboard`(13)（`PlatformPort` + `ClipboardHints.flashHint`）。
+- 新增 `common/platform/Share.ets`：`shareFile`(22)（`MediaPort.fileExists` + `PlatformPort.shareFile`）。
+- 新增 `common/platform/Screenshot.ets`：`saveScreenshot`(17) / `exportScreenshotToUserStorage`(25)（`CommandPort` + `MediaPort`）。
+- 新增 `common/SpeechService.ets`：`speakSelectedObject`(11)（`CommandPort`；当前基础 SDK 无 CoreSpeechKit，`PlatformPort.speak` 留空槽位）。
+- 宿主 `saveFileAs` 改为委托 `HostMediaPort.saveFileAs`（去重 picker 逻辑；3 处调用点不变）。
+- **登记保留**：`decodeSkyCultureArtThumbnail`(33) / `decodeSkyCultureArtPreview`(27) —— 与 §15.6 第 3 条永久登记的 `loadSkyCultureDetails` 同属星空文化美术管线（跨序号 `skyCultureDetailsRequestId`/`skyCultureArtThumbnailGeneration` + 渐进写 §2.7.1 保留逐帧字段 + `setSkyCultureArtStatus` 收口），故未随本片下沉。
+
+**子组③ 启动 / 会话**
+- 新增 `capability/StartupBridge.ets`：`startupBridgeSync`(11) / `runStartupBridgeTasks`(37) / `restoreStartupSettings`(65) / `saveCurrentViewAsStartup`(10)。持有跨域 store **实例引用** + `StartupHooks`（dismissSplash / setLanguage / syncViewCoordinateTimer / syncDockClockTimer / setCurrentProjection / bridgeSyncStarted / selftest 共 10 项）具名注入；桥命令经 `CommandPort`。
+- `state/SessionToolStore.ets` 并入 `sessionSummary`(6) / `sessionExport`(20) / `sessionApply`(24) / `sessionHandoff`(14)，新增 `SessionToolHooks`（flashHint / copySessionJson / sessionImportText / setSessionExportText / canUseDistributed）。**并入既有 store 而不新建 `SessionStore`**：会话三字段早已在本 store，避免状态双持有。
+- **登记保留**：`onPrivacyNativeStartupAllowedChanged` / `startPageAfterPrivacyIfNeeded` / `dismissSplash` / `startTwinkle` / `registerFoldListeners` / `subscribeApplicationLifecycle` / `unsubscribeApplicationLifecycle` / `confirmPrivacyRevocation` / `revokePrivacyConsent` / `selfTestAllActions`（§15.6 第 4 条「生命周期/回调」，涉 `getUIContext`/`terminateSelf`/渲染时机，逐字等价需注入 UI 上下文）。
+
+**子组④ P2 并入既有 store**
+- `state/ScriptStore.ets`：并入 `playScriptByName`(44) / `continueNativeScript`(11) / `stopScriptPlayback`(11) / `sendScriptKey`(7)；新增 `ScriptPlaybackHooks`（13 项具名回注）与 `scriptStartGraceUntil` 字段。
+- `state/GuideStore.ets`：并入 `executeGuideRequest`(63) + 导览引擎/请求/定时器（`guidePlayer` / `guideTimer` / `guideLastRequest` / `guideLastResult` / `guideGyroWasEnabled` / `guidePanelWasVisible`），**定时器 store 自持** `startGuideTimer()` / `stopGuideTimer()`，`GuideHostHooks`（17 项）注入；宿主 `aboutToDisappear` 与前台切换改调 `guideStore.stopGuideTimer()/stopPlayer()/pausePlayer()` 收口。
+- **登记保留（属 M1-B）**：`toggleReplayPause`(20) / `changePlaybackRate` —— 回放引擎（`replayTimer`/`replayIndex`/`replayCommands`/`replayStartedAt` 等宿主瞬时量）归 M1-B `RecordingController`，本片搬会双持有，故登记。
+- **登记保留（引擎/相机强耦合，§15.9 明列合法结局）**：`setTrackingState`(37) —— 与陀螺仪引擎 `updateGyroTargetGuide` 及 `refreshState` 的跟踪状态回填（`trackingRequestPending`/`trackingStateIgnoreUntilMs`/`trackingRequestSerial`）强耦合；`toggleTracking` 不存在（0 引用）。为不破坏「86 保留裸 @State」不变式，`trackingText`/`trackingRequestPending` 两个 `@State` 保持宿主、方法留宿主。
+
+**定时器调用点对照（子组④）**
+- `GuideStore.guideTimer`：**起** → `executeGuideRequest('startGuide')` 内 `startGuideTimer()`；**止** → 导览结束回调内 `stopGuideTimer()`、宿主 `aboutToDisappear` → `guideStore.stopGuideTimer()`、`startGuideTimer()` 自身先 `stop`（幂等自愈）。**无新增/遗留宿主 `guideTimer`**。
+- `ScriptStore.scriptStartGraceUntil`：**写** → `ScriptStore.playScriptByName` 与宿主 CLI `playScript` 事件；**读** → 宿主 `refreshScriptStatus`。
+
+**度量（宿主 `MainWindowNativeNode.ets`，Get-Content 计法）**
+- 行数 **14,357 → 14,161**（**−196**）。
+- `private` 方法 **594 → 575**（**−19**；协议基线计法 593 → ≈574）。
+- `@State` **132 不变**（46 store 实例 + 86 保留裸字段）——片内无状态漂移。
+- 新增文件 **9 个**：3 端口 + 4 服务 + `capability/StartupBridge.ets`（另改写 `ScriptStore.ets`/`GuideStore.ets`/`SessionToolStore.ets`）。
+
+**验证（每个提交点均执行）**
+- `node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（该提交点全部改动 .ets 一次性）No errors；构建 `scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`node scripts/check-ohos-ui-contract.mjs` **intact（44 锚点不变）**。
+- 测试：全量 ohos 扫描仅剩 **§13.6 的 6 个环境类失败**（`test-ohos-clipboard-pad` / `-guide-pad` / `-mist-horizon-pad` / `-mist-performance` / `-polar-scope-pad` / `verify-ohos-search`），**无新增回归**。同步 2 处按文本切片夹具：`test-ohos-privacy-startup.mjs`（`probeGyroSensor` 已删 → 切片终点改 `stopGyroscope`）、`test-ohos-guide.mjs`（`this.guideLastRequest` → `this.guideStore.guideLastRequest`）。
+- 真机（HUAWEI Mate 80 Pro `192.168.50.108:36717`）：
+  - 提交①/②/③：装包 + `aa start` + `pidof` **存活**（19519 / 23740）；`openUiPanel tools/object/place/settings` 正常；选中 M31 后 hilog 出现 `[detail-media] create image source kind=sky-culture-art-thumbnail … fd=…` 与 `… nebulae/default/m31.png fd=32`，**实证 `HostMediaPort.openReadOnlyFile` + `ImageDecoder` 链路在真机运行**。
+  - 提交④：装包 + 启动 + `pidof` **存活**（30712）、`openUiPanel scripts` 正常。
+  - **待真机补验**：导览启动/停止的定时器收口 —— 点击 `#guide-start-solar-neighbours` 前设备 WiFi 掉线（`hdc list targets` 为空、`hdc tconn` 重连失败），属**环境故障非回归**；下次续作优先补验。
+  - **未走查（深入口/系统对话框）**：`saveScreenshot`（触发系统保存对话框）、`shareFile`（系统分享面板）、剪贴板导出 UI 入口（需滚动到列表下方）、TTS（本 SDK 无真实语音合成）。
+
+**本片新踩的坑**
+- **端口接口与具名适配器必须逐字对齐**：`SensorPort.probeSensor` 接口漏了适配器多出的 `label` 形参 → 构建报 `10505001 ArkTS Compiler Error`（`Property 'probeSensor' … not assignable`）；`arkts_check` 未拦住，构建拦住。
+- **切片预检的字段声明正则不认 `field?: Type`**：`([A-Za-z_$][\w$]*)[ \t]*[:=]` 在 `?` 处断链 → 误报「`this.<field>` 未声明」。store 里的可选引擎字段须写成 `field: Type | undefined = undefined`。
+- **`@State` 计数不变式**：把纯引擎 `@State`（`trackingText`/`trackingRequestPending`）搬进 store 会破坏「86 保留裸字段」，故跟踪域只登记、字段留宿主。
+
+## [2026-10-04] DevEco Code - 修复：再次点选已选中天体时重新弹出详情卡
+
+**问题**：关闭详情卡不取消选中（设计如此）；此后再次点选**同一**天体时，`applySelectedObject` 中的 `preserveClosedDetail`（`!infoWinVisible && !targetChanged && dismissedObjectName === incomingName`）会抑制显示，导致详情卡无法重新弹出。
+
+**改动**（`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，4 处）：
+- `applySelectedObject` 增加第 4 参 `userReselect: boolean = false`；新增 `reopenDismissedDetail` 判定。
+- 仅当 `userReselect && !targetChanged && !infoWinVisible && dismissedObjectName === incomingName` 时：清 `dismissedObjectName`、恢复 `infoWinExpanded = true` 与 `fullInspectorRequested = true`，并让卡片重新可见。
+- 只有**用户主动选择**路径传 `true`：星图点选 `requestSkySelection`、搜索结果/定位（`selectAndPlace` 系列）、WUT 行 `jumpToWutTarget`。**后台刷新**（`fromRefresh=true`）、CLI 命令同步、`clearSelection`、`moveToSelectedAt` 安全区导航**均不传**，行为不变。
+
+**真机验证（Mate 80 Pro，修复构建后）**
+- 搜索面板选中 M31 → 点 ✕ 关闭卡片 → **选中仍为 M31**（复现用户所述前半段）；**再次点同一条搜索结果 → 卡片重新弹出**（仙女座星系 / 星等 3.40 / 距离 2.54 M ly）✓
+- 星图点选路径：`setFOV 6` 放大 M31 后关闭卡片 → 点星图中心 → 卡片重新弹出且选中仍为 M31 ✓
+- 回归：关闭卡片后等 10s（详情自动刷新）卡片**未**自行重开 ✓；点选**其他**天体照常弹出其卡片 ✓；`pidof` 全程存活，无 jscrash。
+- 现场已恢复：FOV 60、选中清除、面板关闭。
+
+## [2026-10-04] DevEco Code - 真机验证：§2.7 状态下沉 + §14 方法下沉 全链回归
+
+**设备**：HUAWEI Mate 80 Pro（`192.168.50.108:36717`），HEAD `5ea945005f`，`BUILD SUCCESSFUL`（708.7 MB signed HAP）。全程无 jscrash / ArkTS error。
+
+1. **桥链路**：语义 CLI `--batch` 跑 63 个 `get*` 命令 → 52 直接 OK；补选天体后再跑 17 个 → 15 OK（合计 **67/70**）。3 个 "ERR" 均属正常前置：`getAstroPanelState` 需先开面板、`getObjectInfo` 需先选天体、M31 无模型合约。
+2. **store 渲染（31 个面板逐个 `openUiPanel` + `ui layout` 核对真实数据）**：satellites（离线内置轨道数据）、navStars（**57 颗·英美航海星**）、catalogs（**已加载 8/8**）、search（天体分类/目录天体）、scripts（5 个观测站点）、audio（音量 70%）、scenery3d（Testscene）、mosaicCamera（LSSTCam/DECam）、commands（358 命令目录）、nebulaTextures、skyCultureMaker、tools、settings×4、help、place（北京 39.91°N/116.40°E）、observing、bookmarks、oculars、telescope、polarScope（极星时角/分划钟面实时值）、layers、time、more/observeHub/dataHub/automationHub —— **全部渲染正确**，`pidof` 全程稳定。
+3. **astro 面板**：3 组 × 各 tab 切换正确（今晚/升降/图表/月相｜星历/行星｜天象/日食/年历），`getAstroPanelState` 状态与 transitionId 正常；选中 M31 后图表 tab 渲染「实时高度 / 方位」与详情卡（仙女座星系·星等 3.40·距离 2.54 M ly）。
+4. **夜视配色**（A2-5 的 12 个 `nm*` 迁入 `NightModeStore`）：`setNightMode` 开/关，三处采样区平均像素一致呈现"蓝通道降幅约为红 2 倍"（dock 区 18,20,26 → 16,17,20；面板顶 21,26,37 → 20,24,33），符合夜视"减蓝保红"。
+5. **热路径命中（真机点击实测）**：`#skyZoomInButton` FOV 60→48→38.4、`#skyZoomOutButton` →48.0；dock 五项（`Column` 命中带 y 2578–2771 全覆盖）开面板；`#panel-close` 关闭、`#panel-back` 从子面板返回 hub；星空拖拽水平（方位 103.6→127.6→149.6）与竖直（高度 66.6→59.1）均生效。
+6. **定时器收敛**（B3-4 store 自持 start/stop）：望远镜 live-position 开 → 5s 内 25 条 `getTelescopePosition`；关 → **0**；关面板 → **0**（无泄漏）。
+
+**观察项（非阻塞）**
+- **极速连开面板**（约 30s 内 15+ 次 `openUiPanel` 并夹 `ui layout`）下出现过 **2 次进程重启**（`pidof` 一度为空随后自动重启；无 jscrash；`/data/log/faultlog` 无权限读取）。改为**节制节奏**（间隔 2–3s）后连续 30+ 面板/命令**零重启**；`setNightMode`/`setPolarScopeOverlay` 叠加下未复现（该组合单独复现亦未重现）。判定为**压力型偶发**，建议后续在真机补一条"高频面板切换"压测观察项。
+- 已知既有行为（非本次引入）：程序化状态变更（`closeUiPanel`/`clearSelection`）后的**首次触摸被消费**（dock 首点不生效、首次水平拖拽不生效，第二次即正常）——与历史记录一致。
+- 现场已恢复：FOV 60、夜视关、望远镜 live 关、面板关闭。
+
+**结论**：§2.7 状态下沉（48 store）与 §14 方法下沉（宿主 `private` 942→594、`load*` 72→3、单体 18,582→14,347 行）在真机上**功能无回归**；模拟器（无引擎）无法覆盖的桥数据链路与命中精度已全部补齐验证。
+
+## [2026-10-04] DevEco Code - 重构：§14 A2-6 A2 收尾（热路径 + 残留）
+
+- **切片**：§14 轨道 A2 收尾片（§14.3.1 表 A2-6 行）。开工 `git log -1` = `17847e68e4`（A2-5），`git status --porcelain` 已跟踪文件干净（仅 `.deveco/`、`.iis/` 未跟踪）。
+- **重测口径**：宿主 `private`、非 void/Promise、非动作动词、无成员写/IO/桥/路由/定时器/`AppStorage`/`hilog`、且读 `this.<field>`；按 §14.3.1 A2 余项重测得 **残留 B 组 33 个**（排除 6 热路径与已登记 A-保留 51；含 A2-5 既登记的 `objectDetailConnectorObstacles`）。本片 **下沉 20 / 登记 13**。
+- **Part 1 下沉（20 个，函数体逐字、调用点同片改、零双写）**：
+  - **→ store（12）**：`observingDisplayName`(6)→`WutStore`；`wutTargetSubtitle`(4)→`SearchStore`；`scriptPlaybackVisible`(4)/`scriptSessionActive`(4)/`scriptControlCompact`(4)/`scriptKeyButtonWidth`(4)/`replayTimelineMs`(6)→`ScriptStore`；`isObjectDetailCardRendered`(4)/`objectInspectorModelTransform`(5)→`ObjectDetailStore`；`objectInspectorModelReady`(5)→`ObjectMediaStore`；`locationSearchCountryName`(9)/`locationResultContext`(11)/`quickLocationSearch`(14)→`LocationPickerStore`。**跨 store 读取一律显式入参**（guideActive / recording / skyWidth / observerPlanet / infoWinVisible / 模型旋转 / 纹理三量 / 回放瞬时量），store 零相互 import。
+  - **→ `common/derive/actions.ets`（7，纯函数）**：`panelRouteRoot`(4)、`panelRouteParent`(8)、`inferredPanelRouteDirection`(17)、`matchesLocationSearch`(6)、`locationSearchMatchScore`(14)（后 2 者实测零宿主读取，属 A1 残留）。
+  - **→ `common/derive/geometry.ets`（2，纯函数 + 显式入参）**：`expandedDetailSummaryWidth`(4)、`canShowExpandedDetailSummary`(4)。
+  - 宿主删 20 个 `private` 声明、改约 40 处调用点、删 3 个失效 import（`normalizeLocationSearchText` / `expandedDetailAvailableWidth` / `modelMultiply`）。
+- **Part 1 登记（13 个，不迁 + 理由）**：`objectDetailConnectorObstacles`(46，A2-5 既登记·逐帧连接线组合)；布局薄包装族 `bottomCardX/Y`、`detailCardX/Y`、`expandedDetailSummaryX/Y`、`tabletInspectorX/Y`、`objectActionBarX/Width`、`objectDetailCardY`（A2-4 既停止：读 §2.7.1 保留布局字段并包裹 A-保留 `clampedObjectCardOffset*`，纯形参化须复制保留逻辑）；`isObjectActionBarPoint`/`isExpandedDetailSummaryPoint`（热路径点判定，见 Part 2）；`skyCultureColorOptions`/`skyCultureActiveColorTarget`（跨 `LayerStore`×`SkyCultureSettingsStore` 共 12 项读取，显式入参达 10 个，性价比低）；`shouldRefreshPolarScope`（`PolarScopeStore` 宿主钩子谓词，读 `applicationInForeground`）；`currentGuide`/`currentGuideStep`（`GuideStore` 注释既登记）。
+- **Part 2 六个热路径逐个判定**：
+  - `isUiPoint`(85) → **(b) 登记为宿主控制器**：复合触摸命中判定，读约 20 个 §2.7.1 保留布局字段 + 全部 A-保留几何助手 + 4 个 store 可见性；是宿主「Dock/触摸命中层」核心，任何形参化都改动逐帧命中语义，且真机离线不可做命中对照。
+  - `skyZoomButtonAt`(27) → **(b) 登记**：读 A-保留 `chromeZoomHorizontal()`/`chromeRowY()` + `polarScopeStore.polarScopeVisible`，与 `common/ui/ChromeGeometry` 强耦合（源码注释明确「绘制与命中必须同源」）。
+  - `dockActionAt`(15) → **(b) 登记**：Dock 命中层，参与 `canonicalDockActions()`，与 A-保留 dock 几何强耦合；AGENTS.md 已将 Dock 命中层列为宿主职责。
+  - `compactQuickIdAt`(10) → **(b) 登记（已含于 A-保留 51，§2.7.1.1 #1）**：读取项 `isExpandedLayout`/`skyWidth`/`compactTopQuickX` 全部 ⊆ §2.7.1 保留集合，零 store。
+  - `expandedSafeTargetPoint`(17) → **(b) 登记**：读保留布局字段 + `infoWindowStore.infoWinVisible`，并调 A2-4 未迁的 `bottomCardX()`/`expandedDetailSummaryY()`；下沉须先迁整条链。
+  - `inferredPanelRouteDirection`(17) → **(a) 下沉**：实测零宿主字段读取（仅调两个纯函数），属 A1 残留而非 A2；`panelRouteRoot`/`panelRouteParent`/`inferredPanelRouteDirection` 一并下沉 `derive/actions.ets`，纯形参化、比较边界逐字保留。**模拟器已实测「更多功能」→「观测工作区」→ 返回 → 关闭的整条路由正常。**
+- **A2 总账（分母 = §2.12 宽口径 214）**：已迁 **160**（A2-1 6 + A2-2 15 + A2-3 41 + A2-4 33 + A2-5 45 + A2-6 20）+ A-保留组登记 **51** + 热路径 (b) 登记 **4**（`isUiPoint`/`skyZoomButtonAt`/`dockActionAt`/`expandedSafeTargetPoint`；`compactQuickIdAt` 已含 51）+ 宿主控制器登记 **13**（见上）+ **未处理 0**。口径说明：214 系 §2.12 宽口径，其中含 A1 残留（`panelRouteRoot`/`panelRouteParent`）与少量动作/写状态项，故分项之和 228 > 214；A2-3 已注明的严格重测余量为 153（§14.3.1），本片以严格口径判定、A2 余项**已穷尽、未处理 0**。
+- **指标**：宿主 `private` 方法（历片 `^  private` 口径）**613 → 593（−20）**，A2 起点 942（§14.0）、目标 ≈640 → 已超额达成；宿主 `private load*` 剩 **3**（`loadSkyCultureDetails` 登记保留 + `loadFov`/`loadPlanetPositions` 非 A/B 目标），目标 ≈11 → 达成；单体 **14,456 → 14,347（−109）**。`derive/actions.ets` 143→204、`derive/geometry.ets` 309→322、`WutStore` 120→130、`SearchStore` 335→342、`ScriptStore` 261→291、`ObjectDetailStore` 217→231、`ObjectMediaStore` 149→156、`LocationPickerStore` 535→576。
+- **体 diff 摘要**：仅「声明搬家 + 取值方式改显式入参」，无逻辑改写；`panelRoute*`/`matchesLocationSearch`/`locationSearchMatchScore`/`expandedDetailSummaryWidth`/`canShowExpandedDetailSummary` 逐字（仅去 `this.`）；store 方法仅 `this.<store>.<f>`→`this.<f>`。
+- **验证**：预检通过（括号深度 0、组件/store this 自洽）；`arkts_check` 9 文件 0 错误；构建 **BUILD SUCCESSFUL**（49.9 s）；契约 **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）；全量脚本仅 §13.6 的 6 个环境类失败（`*-pad` 4 + `mist-performance` + `verify-search`），`test-ohos-model-worker` 因删 `objectInspectorModelReady()` 后文本切片端点失效同步改为 `resetObjectInspectorModelView`（6/6 全绿）。
+- **模拟器冒烟（127.0.0.1:5555，UI-only、无引擎）**：install → `aa start` → `pidof`=18597 存活；点按 `#skyZoomInButton`/`#skyZoomOutButton` 有响应；Dock 五项（搜索/时间/位置/图层/更多功能）逐一点按、面板打开/关闭正常；「更多功能」→「观测工作区」→ `#panel-back` 返回 → `#panel-close` 收起，全程 `pidof` 存活、无崩溃。**模拟器无法覆盖（待真机）**：`isUiPoint`/`isObjectDetailCardRendered` 的详情卡命中（需引擎选中天体）、`objectInspectorModelReady/Transform` 的模型渲染、`observingDisplayName`/`wutTargetSubtitle` 的 WUT/详情文案、`script*` 回放可见性、`quickLocationSearch` 离线扫描（不在模拟器点按路径）、以及 5 个 (b) 热路径的命中精度对照。
+- **测试同步**：`test-ohos-model-worker.mjs` 切片端点改为下一方法；`verify-ohos-location-search.mjs` 的集成 token 改为在新落点（`derive/actions`、`state/LocationPickerStore`）核验。测中未改任何持久化设置。
+- **踩坑**：`test-ohos-*.mjs` 以「下一个 `private 方法名(`」作为文本切片端点，删除被引用的方法会**静默**把切片拉长到文件尾（本例 `objectInspectorModelReady()` 下移后 `indexOf` 返回 -1，`slice(start,-1)` 吞掉整段）→ 每次下沉 `private` 方法后须 `grep scripts/` 复核同名端点。
+
+## [2026-10-04] DevEco Code - 重构：§14 A2-5 大项与耦合项
+- **切片**：§14 轨道 A2 第 5 片（放宽粒度第 3 片）。开工 git log -1 = 7ccb9a7e3b，工作区已跟踪文件干净（仅 .deveco/、.iis/ 未跟踪）。
+- **重测口径**：宿主 private、非 oid/Promise、非动作动词、无成员写/IO/桥/路由/定时器/AppStorage/hilog、且读 	his.<field> → A2 余项 **75 个 / 519 行**；排除 6 个热路径（留 A2-6）与已登记 A-保留 51 个后取 **45 个方法**迁移（10 个零宿主读取的 hec 几何簇 + 1 标题 + 3 天体标题 + 1 CSV + 18 天文图表尺寸/标签 + 12 夜视配色）。
+- **逐方法去向**：
+  - 日心黄道点几何簇 10 个（hecDistanceToRadius hecOrbitVerticalRadius hecPointDistance hecPointHorizontalRadius hecPointVerticalRadius hecPointX hecPointY hecPointLeft hecPointTop hecLayoutPositions）→ **common/derive/astro.ets**（复测确认均零宿主状态读取，纯函数；文件体逐字搬入，仅去 	his.）。hecLayoutPositions 仍经 AstroHostHooks 注入点回注，宿主适配器改直连模块函数。
+  - panelTitle(101) → **common/derive/labels.ets 的 panelTitleFor(activePanel, configTab, isExpandedLayout, timeText)**（宿主控制器字段与时间钟文本按 §14.8 规则 6 改显式入参；2 个调用点同片改；面板标题映射逐字保留）。
+  - celestialTitle(纯) + hecTitle + celestialPositionTitle → celestialTitle 并入 derive/labels.ets；后两者删除、3 处调用点与 2 个 AstroPanel 适配器改直连模块/内联。
+  - currentAstroCsvExport(76) → **AstroStore.astroCsvExport(wutTargets, wutObservationTime)**（跨 WutStore 读取改显式入参；天体标题改直连 celestialTitle；zhNameOf/planetZh/planetMetricLabel 直连模块；ilteredEclipses() 走 store 内方法；函数体逐字，仅改取值方式）。
+  - 天文图表尺寸/标签 18 个（ltAzRangeLabel ltAzMidpointLabel ltBarWidth ltBarHeight ltitudeCurveColor ltCurveSegmentWidth nnualBarHeight nnualBarWidth zimuthNowLabel lunarElongationBarWidth lunarElongationLineTop lunarElongationNowLabel planetTimeSeriesBarWidth planetTimeSeriesSegmentWidth planetPairBarWidth planetPairSegmentWidth planetPairCurrentIndex lmanacHoursLabel）→ **AstroStore**（读本 store 字段，	his.astroStore.X→	his.X；AstroPanelHost 适配器 lambda 改指向 store，组件接口未动）。
+  - 夜视配色 12 个（
+mText 
+mSub 
+mAccent 
+mBg 
+mBorder 
+mInput 
+mInputBorder 
+mPickerSurface 
+mPickerHeader 
+mPickerHeaderActive 
+mPickerSelected 
+mPickerOption）→ **state/NightModeStore.ets**（	his.nightModeStore.nightMode→	his.nightMode；宿主 129 处调用点改 	his.nightModeStore.nm*()）。
+- **停下**：objectDetailConnectorObstacles(45) 未迁。理由：其为**逐帧渲染连接线的宿主控制器组合**，读取 overlayStore/polarScopeStore/gyroStore/infoWindowStore 四个 store 的可见性 + selectedObjectUiObstacles() + 约 10 个 A-保留几何助手（iewCoordinateOverlay*/polarScope*/isCompactTopQuickPoint/compactTopQuickX/Y/
+ailTop/EDGE_MARGIN）。下沉需 17 个显式入参或约 10 个 hook 注入，会破坏"函数体逐字"且改动落在真机离线时不可验的渲染路径（模拟器无引擎、连接线不渲染）→ 按 (b) 登记为"宿主控制器逻辑（组合型）"，留待设备可用时的几何合并片。**非 A-保留**（读 store）；其调用点 selectedObjectUiObstacles 亦同因保留。
+- **补登记 A-保留**：无新增（重测 A-保留组仍 51；shouldRefresh*/canGoBackPanel 等读 pplicationInForeground/panelNavigationStack/	ools，不满足"全部读取项 ⊆ §2.7.1"故不登记，维持既有 store 谓词注入语义，未动）。
+- **body diff 摘要**：derive/astro.ets 245→349（+104，10 纯函数）；derive/labels.ets 342→453（+111，panelTitleFor+celestialTitle）；NightModeStore 13→52（+39，12 法）；AstroStore 1408→1578（+170，1 CSV + 18 尺寸/标签法 + 2 import 行）；宿主单体 **14,860→14,456（−404）**，宿主 private（附录 §2.12 口径）**658→613（−45）**。
+- **残留/双写复核**：宿主内零 	his.<45 名>、零 	his.nm*；store/模块内零 	his. 宿主前缀；无同名方法双写。
+- **验证**：check-ohos-refactor-slice.mjs 通过；rkts_check（5 个改动文件）No errors；uild-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources **BUILD SUCCESSFUL in 49.5 s**；check-ohos-ui-contract.mjs **intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）**；全量 scripts/*ohos*.mjs 扫描**仅 §13.6 的 7 个环境类失败**（无回归）。
+- **模拟器冒烟（真机离线；127.0.0.1:5555，UI-only 无引擎）**：install→a start QAbility→pidof 全程存活（6240）。逐一验证 panelTitle 路径：Dock 五面板标题 时间（"时间 --"）/位置/图层/天体分类、更多功能（"更多功能"）与三个 hub（观测工作区/天体数据与扩展/脚本与自动化）文本与迁移前一致、无崩溃；另打开天文计算面板（标题"天文计算"，CSV 按钮可见）验证 astro 尺寸/标签适配器无崩溃。
+- **待真机**：天文图表尺寸/标签的真实数值渲染（高度曲线 / 年高度 / 月距 / 双变量曲线，依赖引擎数据）、stroCsvExport 的真实 CSV 内容、夜视模式切换下 12 个 
+m* 配色的实时刷新、currentAstroCsvExport 导出文件写出。
+- **A2 进度：140 / 214**（A2-1 6 + A2-2 15 + A2-3 41 + A2-4 33 + A2-5 45）。余项 ≈ 30 个 B 组（含停下的 objectDetailConnectorObstacles 与跨 store/scratch 的 location/skyculture/label/几何薄包装）+ 6 个热路径（A2-6）。
+- **踩坑**：本轮 edit 工具在宿主一处多行替换中写入了 **1 个裸 LF**（行尾不一致）→ 提交前用 (?<!\r)\n→\r\n 归一全文件并核对 crlf=lf；其余四个改动文件行尾始终 CRLF。教训：改动后必须逐文件核对裸 LF，不能只看 diff。
+## [2026-10-04] DevEco Code - 重构：§14 A2-4 布局/几何族（A2-G）
+- **切片**：§14 轨道 A2 第 4 片（放宽粒度第 2 片）。开工 `git log -1` = `104871aa76`，工作区已跟踪文件干净。
+- **重测口径**：宿主 `private`、非 `void`/`Promise`、非动作动词、无成员写/IO/桥/路由/定时器/`AppStorage`/`hilog`、且读 `this.<field>` → A2 余项 85 个 / 578 行；排除 6 个热路径（留 A2-6）与已登记 A-保留 49 个后，按"布局/几何族（A2-G）"取 **32 个迁移 + 1 个折叠删除**。
+- **迁移 30 个几何/布局方法 → `common/derive/geometry.ets`（A1-6 模块续建，+234 行）**：`railTop` `expandedMainPanelLeft` `panelTop` `panelLeft` `panelRight` `expandedDetailAvailableWidth` `baseExpandedDetailSummaryX` `baseExpandedDetailSummaryY` `baseTabletInspectorX` `baseTabletInspectorY` `tabletInspectorHeight` `baseBottomCardX` `baseBottomCardY` `expandedDockOccupiedLeft` `expandedDockWidth` `expandedDockLeft` `dockWidthPixels` `dockLeft` `chromeRowPosXLeft` `chromeRowPosXRight` `guideCardHeight` `guideCardX` `guideCardY` `scriptControlWidth` `scriptControlX` `scriptControlY` `isPanelBackPoint` `isDockPoint` `objectActionBarY` `isObjectDetailCardPoint`。全部为**文件级纯函数 + 显式入参**：① `this.<宿主字段>` → 形参；② 被迁函数互调 → 本模块直接调用。**逐字保留**——比较边界（`x >= left - 8` 等）、取整、回退分支（`isExpandedLayout ? ... : ...`）、`Math.max/min` 包裹一字未改，仅访问路径改写。宿主调用点全部改为 `fn(this.EDGE_MARGIN, this.skyWidth, ...)`；`clamp` 从 `./astro` 引入。
+- **迁移 2 个 store 方法**：`panelSubtitle`(6) → `state/TimeStore.ets`（读本 store `timePanelDateText()` + 宿主路由 `activePanel` 作显式入参）；`scriptControlHeight`(3) → `state/ScriptStore.ets`（只读本 store `replaying`）。
+- **折叠删除 1 个**：`chromeRowWidth`（`return this.dockWidthPixels()`，纯转发）→ 2 个调用点直接改用模块 `dockWidthPixels(...)`，不再保留冗余方法。
+- **停下的（未迁）**：`bottomCardX` `bottomCardY` `detailCardX/Y/Width/Height` `expandedDetailSummaryX/Y` `tabletInspectorX/Y` `objectActionBarX` —— 均为 A-保留方法 `clampedObjectCardOffsetX/Y` 的薄包装，迁移须复制"逐字保留"的钳制逻辑或改造 A-保留方法，**按"与宿主状态耦合、不复制保留逻辑"停下**，留待 A2-5/收口片；`currentGuide`/`currentGuideStep` 依 `state/GuideStore.ets` 既有注释"刻意留在宿主不迁"，保持不动；`objectDetailCardY`（包装 `hoverBottomCardY`/`bottomCardY`）同因留下。6 个热路径（`isUiPoint`/`skyZoomButtonAt`/`dockActionAt`/`compactQuickIdAt`/`expandedSafeTargetPoint`/`inferredPanelRouteDirection`）本片未迁；`isUiPoint`/`dockActionAt` 仅因所调 helper 下沉而改写**调用点**，热路径本体语义未动。
+- **补登记 A-保留组 +2（纯文档）**：`dockTop`（只读 `isExpandedLayout`+`skyHeight`）、`guideCardWidth`（只读 `skyWidth`）——全部读取项 ⊆ §2.7.1 保留集合且零 store，按 §14.3.1 口径登记"永久保留"，不迁。已同步 §14.3.1 与 STATE-REVIEW §2.7.1.1。
+- **body diff 摘要**：模块 30 函数与其宿主原体逐个对照——表达式的比较/取整/回退一字未变，仅 `this.X` → 形参、`this.f()` → `f()`；显式入参顺序在"模块签名 ↔ 宿主调用点"两侧一致（`dockWidthPixels` 7 参、`isDockPoint` 12 参、`isPanelBackPoint` 12 参）。**残留复核**：宿主内 30 个被迁名 `this.<name>(` 残留 = 0；模块内 `this.` 残留 = 0；调用点数与迁移前一致（`expandedDockOccupiedLeft` 仅被同模块函数调用，无宿主调用点，符合预期）。
+- **体量**：宿主 `MainWindowNativeNode.ets` **15,008 → 14,861**（−147）；宿主 `private` 方法 **669 → 636**（**−33**）。`common/derive/geometry.ets` 75 → 309（+234）；`state/ScriptStore.ets` 256 → 261（+5）；`state/TimeStore.ets` 137 → 146（+9）。`git diff --stat`：5 文件（derive/pages/state×2/tests）+323 / −222。
+- **测试同步**：`test-ohos-polar-scope.mjs` 第 4 用例原从宿主切片 `private isDockPoint(`；该守卫已下沉，改读 `common/derive/geometry.ets` 的 `export function isDockPoint(`，断言 `if (polarScopeVisible) return false`（入参名变更）。其余 `scripts/*.mjs` 无引用本片被迁名。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 4 文件 0 错；构建 `BUILD SUCCESSFUL`（42 s）；契约 **intact**（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点** / 215+ 文件）；受影响 `test-ohos-polar-scope` **4/4**；全量 `*ohos*.mjs` 扫描（35 脚本）**仅 §13.6 的 7 个环境类失败**（`*-pad` / `mist-performance` / `location-search` / `search`），零新增失败。
+- **模拟器冒烟（真机离线，`127.0.0.1:5555`，UI-only 通道）**：install → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` **全程存活（27942）**。点按实测：`#skyZoomInButton`(141,2046) / `#skyZoomOutButton`(141,2228) 命中且响应；Dock 五项（搜索/时间/位置/图层/更多功能）命中并开面板——**开面板后 Dock 重算（5 项 x 由 148/366… 变为 222/404…），证明 `dockWidthPixels`/`dockLeft`/`panelVisible` 实时刷新链路正常**；`#panel-close`、`#panel-back`（子面板"天体数据与扩展"→返回"更多功能"）命中；时间面板标题区副标题渲染 `1x`，证明 `panelSubtitle` 下沉后仍实时渲染。
+- **模拟器无法覆盖（待真机）**：详情卡/对象操作条（`isObjectDetailCardPoint`/`objectActionBarY`）需先选中天体（依赖引擎 `listMatchingObjects`，UI-only 无回包）→ **未走查，原因：无引擎**；面板返回的**触摸路径** `isPanelBackPoint`（非按钮路径）也需真实触摸序列，记待真机；`isDockPoint` 的极轴镜可见时返回 false 分支需真机/极轴镜状态。以上均需真机做"命中 + 截图对照"。
+- **踩坑（本片新）**：① **edit 工具对含正则转义的整行替换会瞬时 `oldString not found`**（同一行先替换不含转义字符的相邻行成功后，再替换该行即可）——遇此改用"先改相邻唯一行、再改本行"或 .NET 写回，不要重复尝试同一串。② **`git show HEAD:<file> | Out-File` 会按当前代码页重编码**，核对行尾/BOM 时须用 `[System.IO.File]::ReadAllText(Resolve-Path ...)` 读工作区文件本身。③ 新增/编辑 derive 模块后须**归一 CRLF**：edit 工具写入段为 LF，整文件会变纯 LF（本片 geometry.ets 曾 309 裸 LF，已改回 CRLF=309/裸 LF=0）。
+- **A2 进度**：**95 / 214**（B-下沉口径 95 / 153）；A-保留组登记由 49 → **51**。
+## [2026-10-04] DevEco Code - 重构：§14 A2-3 域取值/标签/选项族（放宽粒度首片）
+- **切片**：§14 轨道 A2 第 3 片（放宽粒度首片）。开工 `git log -1` = `308f1634a5`，工作区已跟踪文件干净。
+- **迁移 41 个宿主 `private` 派生方法**（开工按 §14.3.1 口径重测边界，B-下沉组）：
+  - 搜索/目录 12 → `state/CatalogStore.ets`（`catalogLabelForModule`/`searchCategoryOptions`/`searchDynamicCategoryOptions`/`searchAllCategoryOptions`/`searchCategoryIcon`/`categoryModuleIdFor`/`searchCategoryLabel`/`categoryObjectIcon`；后两者读搜索域当前分类，改显式入参 `category`）+ `state/SearchStore.ets`（`searchVisibilityLabel`/`searchInstrumentLabel`/`celestialSubtitle`/`categoryObservationSubtitle`）；撤除 `SearchHostHooks.celestialSubtitle`，`loadMoreCategoryObjects` 改 `this.celestialSubtitle`。
+  - 详情卡 12 → `state/ObjectDetailStore.ets`（`expandedAtmosphereSummary`/`selectedObjectIsConstellation`/`selectedSatelliteTleEpoch`/`objectInspectorIcon`/`objectInspectorSearchText`/`hasSelectedObject`/`selectedObjectIsArtificialSatellite`；`objectDistanceSummary`/`objectDistanceNoticeText` 改显式 `distanceVisible` 入参）+ `state/ObjectMediaStore.ets`（`objectInspectorModelNotice`/`defaultObjectInspectorModelRotation`/`objectInspectorImageHeight`）；撤除 `ObjectDetailHostHooks.selectedObjectIsArtificialSatellite`。
+  - 信息窗 3 → `state/InfoWindowStore.ets`（`informationMaskHas`/`distanceInformationVisible`/`selectedLiveInfoVisible`）。
+  - 脚本/时间 8 → `state/ScriptStore.ets`（`scriptMeta`/`scriptMetaLine`/`scriptSourceLine`/`scriptWaitDisplayText`/`visibleScriptCaptions`/`visibleScriptCaptionText`）+ `state/TimeStore.ets`（`timePanelClockText`/`timePanelDateText`）。
+  - 其余 6：`ephemerisStartOptionLabel`→`EphemerisStore`；`isObserverPlanetSelection`→`SessionToolStore`；`astroNeedsSelectedObject`→`AstroStore`；`skyCultureNarrationParagraphs`→`SkyCultureViewStore`；`selectedSkyCultureMakerConstellation`→复用既有 `SkyCultureMakerStore.selected()`；`hecPointColor`→`common/derive/astro.ets` 纯函数 + 显式 `accentColor` 入参。
+  - **停下 0**；剔除 `sessionHandoff`（void 动作）与 `catalogHealthText`/`catalogHealthColor`（入 A-保留组）。
+- **A-保留组登记（49 个 / 210 行，纯文档）**：判据"全部宿主字段读取项 ⊆ §2.7.1 保留集合、且不读任何 store"（`this.EDGE_MARGIN` 等未登记只读常量不计入）。写入 `ARKTS-PAGES-REFACTOR-PLAN.md` §14.3.1 与 `ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §2.7.1 新子类"宿主控制器逻辑（永久保留）"，逐条命中说明见后者。**实测 49 ≠ 原估 31**：原表 31 为占位估值且其示例清单误抄 A2-4 目标；以重测为准。
+- **体量**：宿主 `MainWindowNativeNode.ets` 15,309 → 15,008（−301）；宿主 `private` 方法 710 → 669（−41）。`git diff --stat`：17 文件 +547 / −438。
+- **测试同步**：4 个受影响脚本夹具改读 store 文件 / 改显式入参 —— `test-ohos-detail-image-layout`（读 `ObjectMediaStore`）、`test-ohos-distance-ui`（读 `ObjectDetailStore`/`InfoWindowStore`，`extract` 支持形参）、`test-ohos-information-policy`（`informationMaskHas` 挂到 `infoWindowStore`）、`test-ohos-search-browser`（`controllerFor` 支持 `CatalogStore`、假宿主补 `catalogStore`）。
+- **验证**：`check-ohos-refactor-slice` 通过；`arkts_check` 13 文件 0 错；构建 `BUILD SUCCESSFUL`；契约 intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 215+ 文件）；受影响 4 测试全绿（5/5、5/5、3/3、3/3）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 7 个环境类失败；模拟器冒烟（`127.0.0.1:5555`，UI-only 通道）：Dock→搜索面板分类 picker（渲染"浏览分类/行星"、展开分类列表）、时间面板手工时间块、更多功能面板，`pidof` 全程存活（16499）。
+- **踩坑（本片新）**：无新类；沿用"`new Function` 夹具需随下沉同步（含形参签名与 `this.<store>` 前缀）"。另记：PowerShell 中 `[System.IO.File]::ReadAllBytes(相对路径)` 用的是 .NET `CurrentDirectory` 而非 `Set-Location` 后的 provider 路径，验证 BOM/裸 LF 时须传 `Resolve-Path` 的绝对路径。
+- **待真机项**：详情卡距离提示/摘要、媒体模型视角与高度、星表分类图标与副标题、脚本元数据行、时间面板副标题、星历起始日期标签的**端到端真实渲染**（UI-only 通道无引擎，`listMatchingObjects`/`getObjectInfo` 无回包）；真机另需确认 `informationMaskHas` 下沉后设置页自定义字段开关联动。
+- **A2 进度**：62 / 214（B-下沉口径 62 / 153）。
+## [2026-10-04] DevEco Code - 重构：§14 A2-2 单域取值/标签派生方法下沉
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.3（A2 三去向）/§14.8（规则 1/2/5/6/7）与 §13.1/§13.2/§13.3；承接 §14.2 的 `common/derive/*.ets`。开工断言：`git log --oneline -1` = `88d2e90cf7`（A2-1）；`git status --porcelain` 已跟踪文件干净。按 §2.12 判据在当前宿主重测 A2 余项，按行数降序取非热路径 15 个（遇多域/多助手耦合者按下表停下）。
+- **逐方法（读取字段 / 调用点数 / 去向）**：
+  1. `gyroMagneticHeadingFromDeviceVectors`(25) / 读宿主保留裸字段 `gyroGravityDevice`/`gyroMagneticDevice`/`gyroFilteredGravityDevice`/`gyroFilteredMagneticDevice`（§2.7.1 保留）→ `common/derive/gyro.ets` 纯函数 + 显式入参；调用点 1（`updateGyroCompassReadout`）。
+  2. `archaeoLineSettingValue`(21) / 读 `archaeoStore.*`（本 store 字段）→ `ArchaeoStore` 方法（零宿主引用）；调用点 1（`setArchaeoLineSetting`）。
+  3. `currentSkyCultureMakerDraft`(21) / 读 `skyCultureMakerStore.*` → `SkyCultureMakerStore` 方法；调用点 2（保存 / 校验）。
+  4. `makeAstroCsv`(19) / 读 `astroStore.astroContext`/`astroCalcSnapshot` + 模块 `csvCell` + 宿主格式化 `fmtDateTime` → `AstroStore` 方法，`fmtDateTime` 经既有 `AstroHostHooks.fmtDateTime` 注入；调用点 1（`exportCurrentAstroCsv`）。
+  5. `quickLocationSearchItems`(18) / 读 `locationPickerStore.locationDisplayName` + 模块 `getCityPreset` → `LocationPickerStore` 方法；调用点 1（`quickLocationSearch`）。
+  6. `filteredEclipses`(14) / 读 `astroStore.eclipseData`/`eclipseKindFilter`/`eclipseTypeFilter` → `AstroStore` 方法；调用点 3（`currentAstroCsvExport` 2 + AstroPanel 端口 1）。
+  7. `telescopeCircleValues`(13) / 读 `telescopeStore.lx200Circles` → `TelescopeStore` 方法；调用点 1（`saveTelescopeProfile`）。
+  8. `annualMaxLabel`(12) / 读 `astroStore.annualElevationData` → `AstroStore` 方法；调用点 1（AstroPanel 端口）。
+  9. `lunarElongationClosestLabel`(12) / 读 `astroStore.lunarElongationData` + 模块 `hourOffsetLabel` → `AstroStore` 方法；调用点 1。
+  10. `altAzMaxLabel`(11) / 读 `astroStore.altAzCurve` + `hourOffsetLabel` → `AstroStore` 方法；调用点 1。
+  11. `altAzVisibleHours`(11) / 读 `astroStore.altAzCurve` → `AstroStore` 方法；调用点 1。
+  12. `altAzNowLabel`(7) / 读 `astroStore.altAzCurve` → `AstroStore` 方法；调用点 1。
+  13. `rtsCalendarStartOptionLabel`(7) / 读 `astroStore.rtsCalendarStart*` → `AstroStore` 方法；调用点 1。
+  14. `eclipseStartOptionLabel`(7) / 读 `astroStore.eclipseStart*` → `AstroStore` 方法；调用点 1。
+  15. `graphCustomStartLabel`(4) / 读 `astroStore.graphStart*` → `AstroStore` 方法；调用点 1。
+  - **主动停下 2 个**：`currentAstroCsvExport`(76) —— 读 `astroStore` + `wutStore` 两域并调 3 个宿主标题助手（`hecTitle`/`celestialPositionTitle`/`filteredEclipses`），单域 store 无法承载，留待天文 CSV 专项片；`objectDetailConnectorObstacles`(45) —— 读 2 store + 4 个宿主布局裸字段并调 8 个几何助手，属 A2-G 几何簇，需连同 `selectedObjectUiObstacles`/几何助手整体下沉。另本轮跳过的 10 行级多助手耦合项（`skyCultureColorOptions` 双 store / `celestialSubtitle` 需改 hooks / `quickLocationSearch` 3 助手 / `searchDynamicCategoryOptions` 等）留待后续片。
+- **组件多余 `@Prop` 删除**：无。本轮命中的 `AstroPanelHost` 端口保持为宿主 lambda（改为 `() => this.astroStore.<name>()`），组件接口与数据通道未变，故无需删 `@Prop`。
+- **body diff 摘要**：函数体逐字搬迁，仅改取值方式 —— `this.<store>.<field>` → `this.<field>`（store 内）/ 显式入参见上 / `this.fmtDateTime` → `AstroHostHooks.fmtDateTime`。调用点同片改：宿主 15 处 `this.<name>(...)` → `this.<store>.<name>(...)` 或模块函数；`AstroPanel` 端口 10 处 lambda 改指向 store。删 2 个失效 import（`csvCell`、`hourOffsetLabel`）。
+- **残留与双写复核**：宿主内 `this.<被搬 15 名>` 零残留；各 store 内零 `this.<宿主前缀>` 残留；无同名双定义。
+- 量化：宿主 `private` 方法 **747 → 732**（−15）、单体 **15,531 → 15,309**（−222）；`derive/gyro.ets` 96 → 128；`AstroStore` 1,278 → 1,398；`ArchaeoStore` 105 → 131；`LocationPickerStore` 512 → 535；`SkyCultureMakerStore` 189 → 214；`TelescopeStore` 456 → 473。
+- **验证**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（7 文件）无错；构建 `BUILD SUCCESSFUL`；`check-ohos-ui-contract.mjs` intact（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点**）；全量切片脚本仅 §13.6 的 7 个环境类失败（`test-ohos-clipboard-pad`/`guide-pad`/`mist-horizon-pad`/`mist-performance`/`polar-scope-pad`、`verify-ohos-location-search`/`verify-ohos-search`），无新增回归。
+- **模拟器冒烟（UI-only，`127.0.0.1:5555`）**：install + `aa start` 成功，`pidof` = 32658 全程存活；Dock「更多功能」→「观测工作区」→「目镜模拟」面板渲染正常；Dock「位置」摘要面板渲染正常（位置/坐标/海拔 + 地图选点/按地区选）。**模拟器无法覆盖（待真机）**：一切依赖引擎的路径，尤其「天文计算」面板（含本片 10 个 astro 取值方法）在 UI-only 通道无法经 `openUiPanel` 打开（CLI 派发超时、无引擎回包），故 astro/考古天文/位置快速搜索的端到端渲染与真实数值待真机验证。
+- **A2 进度：21 / 214**（A2-1 的 6 + 本片 15）。
+- 踩坑：`stellarium-cli.mjs` 默认 hdc 为 macOS 路径，Windows 下须显式 `--hdc`；且 UI-only 模拟器上其原生命令通道不回包（`openUiPanel` 超时），面板深入口只能靠真机（对应 §13.6/PLATFORM-MATRIX §1.5 的 UI-only 限制）。
+## [2026-10-04] DevEco Code - 重构：§14 A2-1 objectInspector 媒体族
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.3（A2 三去向 A2-D/A2-G/A2-M）与 §14.8（规则 1「文件级函数禁 this」、规则 2「store 不得 import NAPI/UI」、规则 5「禁双写」、规则 6「纯函数模块无状态」、规则 7「声明与调用同片搬」）及 §13.1/§13.2/§13.3；承接 §14.2 已建成的 `common/derive/*.ets`。
+- 开工断言：`git log --oneline -1` = `b4e0dc7b49`（B3-5）；`git status --porcelain` 已跟踪文件干净。本片 = 轨道 A2 首片，按「先做 §2.12 行数最大 25 中非热路径的 `objectInspector*` 6 个」执行；开工逐名重测，宿主内 6 个仍在、无变化。
+
+- **逐方法（读取字段 / 调用点数 / 去向）**：
+  1. `objectInspectorMediaWarmupText`(11) / 读 `objectMediaStore.objectInspectorMediaWarmupTotal/Installed/Failed`（本 store 字段）→ **ObjectMediaStore 方法**（零入参）；调用点 4（壳层装配 3：HoverObservatoryShell/ExpandedShell/CompactShell，ObjectPanel 1）。
+  2. `objectInspectorPlanetTexturePath`(28) / 读 `objectDetailStore.selectedEnglishName` → `common/derive/media.ets` 纯函数 + 显式入参；调用点 1（宿主 `refreshObjectInspectorMedia`）。
+  3. `objectInspectorPlanetRingSpec`(14) / 读 `objectDetailStore.selectedEnglishName` → derive 纯函数；调用点 2（宿主 `refreshObjectInspectorMedia`、`requestObjectInspectorModelRender`）。
+  4. `objectInspectorDeepSkyImageName`(21) / 依赖 `objectInspectorFallbackVisualKind` + `objectInspectorSearchText`（读 `objectDetailStore.selectedCatalogId/selectedEnglishName/selectedName`）→ derive 纯函数（入参 `fallbackVisualKind, searchText`，`objectInspectorSearchText` 仍留宿主、其值在调用点传入）；调用点 1。
+  5. `objectInspectorFallbackVisualKind`(17) / 读 `objectDetailStore.selectedObjectType/selectedType` → derive 纯函数；调用点 4（组件装配）+ 1（宿主内部）。
+  6. `objectInspectorStarColor`(9) / 读 `objectDetailStore.selectedTemperatureK` → derive 纯函数；调用点 4（组件装配）。
+  - 停下 0；6 个均为非触摸/命中热路径。
+
+- **手法**：函数体逐字搬入；derive 侧差异仅 `this.objectDetailStore.<f>` → 显式入参；store 侧差异仅 `this.objectMediaStore.<f>` → `this.<f>`。宿主删除 6 个 `private` 声明、改 16 处调用点、删 1 个随迁移失效的类型 import（`ObjectInspectorRingSpec`）。
+- **@Prop 未删**：`warmupText`/`fallbackKind`/`starColor` 仍是数据通道（壳层 → ObjectPanel → UnifiedObjectDetailCard/TabletInspectorMediaGroup → TabletInspectorMedia），派生点搬走但值仍须逐层下发，故 `ObjectDetailTabs`/`UnifiedObjectDetailCard`/`ObjectPanel`/`CompactShell`/`ExpandedShell`/`HoverObservatoryShell`/`TabletInspectorMediaGroup` 的 `@Prop` 保留。
+
+- **body diff 摘要**：新增 `common/derive/media.ets` **97 行** 5 个纯函数；`ObjectMediaStore.ets` **109 → 123**（+14：1 个方法 + 注释）；宿主 `MainWindowNativeNode.ets` **15636 → 15531**（−105）；宿主 `private` 方法（`^\s{2}private <名>(` 口径）**730 → 724**（−6）。
+  - **残留复核**：宿主 `grep this\.objectInspector(MediaWarmupText|PlanetTexturePath|PlanetRingSpec|DeepSkyImageName|FallbackVisualKind|StarColor)` = **0**；derive 模块内 `this` = **0**、无 store/NAPI import；`ObjectMediaStore` 内 `this.objectMediaStore.` = **0**。
+  - **双写复核**：6 个方法名在宿主仅余调用点（无声明副本），store/derive 各仅 1 份实现。
+
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（media.ets / ObjectMediaStore / MainWindowNativeNode）无错；**BUILD SUCCESSFUL in 35s**（signed HAP 708.7 MB）；`check-ohos-ui-contract.mjs` = 33 panels / 24 static ids / 17 dynamic prefixes / 44 id anchors / over 215 files（**intact**）；受影响测试全绿（`test-ohos-procedural-model` **12/12**、`-detail-live-values` **7/7**、`-detail-image-layout` **5/5**、`-detail-model-geometry` **7/7**、`-model-scroll` **5/5**）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 **7 个环境类**失败；扫描重写的 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md` 已 `git checkout --` 还原。
+  - **测试同步**：`test-ohos-procedural-model.mjs` 第 3 项夹具由「从宿主切片 `private objectInspectorFallbackVisualKind` 构造 Controller」改为「从 `common/derive/media.ets` 切片导出函数 + 显式入参调用」。
+  - **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：install → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **22430 全程存活** → Dock「更多功能」面板打开并渲染（`#more-action-observeHub`/`#more-action-dataHub` 可见）→ `aa dump -l` 前台 `com.cnchensh.stellarium`。
+  - **模拟器无法覆盖（待真机）**：天体选中 → 详情卡（`ObjectPanel`/`UnifiedObjectDetailCard`/`TabletInspectorMedia`）的 `warmupText`/`fallbackKind`/`starColor` 派生值渲染与行星纹理/环带/深空图像路径命中 —— 依赖引擎的对象搜索与选中，UI-only 通道不可达（`stellarium-cli openUiPanel object` 超时），须真机走查。
+
+- **A2 进度（本片后）**：已迁 **6 / 214**。
+- 踩坑：无新增（新建 `common/derive/media.ets` 按既有 derive 模式；中文注释经 write 工具写入，未走命令行内联）。
+## [2026-10-04] DevEco Code - 重构：§14 B3-5（B3 收尾：skyCultureDetails 保持登记 + scenery3d/catalogHealth 下沉）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.6（B3 表最后 3 行）/ §14.7 / §14.8（规则 2「store 不得 import NAPI/UI」、规则 3「请求序号随加载器搬入 store、禁双序号」、规则 5「禁止双写」、规则 7「声明与调用同片」）与 §13.1/§13.2/§13.3；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 / B2 / B3-1…B3-4 先例）。**B3 轨道收尾片。**
+- 开工断言：`git log -1` = `56d2f10c5d`（B3-4）；`git status --porcelain` 已跟踪文件干净。
+- **判定口径**：逐加载器做读写点 / 桥 / 助手 / 序号 / 定时器 / 路由 / `publish*` 普查 → (a) 可下沉（登记字段经 hooks setter 回注、宿主保留字段本身）或 (b) 与登记字段 / 宿主生命周期**深度交织**则保持登记（永久保留，写明理由与依赖清单）。**结果：2 下沉 + 1 保持登记。**
+
+- **逐项普查与处置**：
+  1. **`loadSkyCultureDetails`(69) → (b) 保持登记（永久保留）**。理由（依赖清单）：① 请求序号 `skyCultureDetailsRequestId` 与**其它宿主方法共享**（`selectSkyCulture` 预增、`armSkyCultureAnchor`/`clearSkyCultureAnchor` 捕获锚点、`handleSkyCultureRowArea` 比对、美术图解码管线 8 处比对、CLI 事件 `invalidateSkyCultureDetails`）—— §14.8 规则 3 要求序号随加载器搬入 store 且禁双序号，搬走须一并重写锚点系统 / `selectSkyCulture` / 整条美术解码管线，远超本片边界；② 调 5 个宿主助手 `clearSkyCultureAnchor`/`armSkyCultureAnchor`/`clearSkyCultureArtThumbnails`/`closeSkyCultureArtPreview`/`prepareSkyCultureArtResources`；③ 跨 store 方法调用 5 处（`skyCultureSettingsStore` 的 `skyCultureDisplayName`/`loadSkyCultureConstellationSelectionFlags`/`loadSkyCultureVisualSettings`/`setSkyCultureTimeYear`/`setSkyCultureTerritoryMapYear`）；④ 写 §2.7.1 登记的「高频逐帧」字段 `skyCultureArtStates`（渐进分块 / 防抖写入，宿主保留）。现状：B2R-3 起 store 已经由 `SkyCultureViewHostHooks.loadSkyCultureDetails()`/`invalidateSkyCultureDetails()` 调用宿主加载器，**本片不改代码**。
+  2. **`loadScenery3d`(12) → (a) 下沉 `SceneryStore`**。普查：桥 `getScenery3dList`（`callNativeWhenReady` 默认 200ms×60、无 onFailure）；写 4 个本 store 字段（`scenery3dLoading`/`scenery3dItems`/`scenery3dLoadingId`/`scenery3dEnabled`）+ §2.7.1 登记的「引擎自用」字段 `scenery3dCurrentId`（**全工程只写不读**，宿主保留、经 `SceneryHostHooks.setScenery3dCurrentId` 回注）；无序号 / 无定时器 / 无他 store / 无 `publish*` / 无路由。依赖清单：`SceneryHostHooks(1)` + `CommandPort`。调用点 3 处（面板开合 `ensurePluginLoaded('Scenery3d', …)` + `setScenery3dScene` + `setScenery3dEnabled`）改 `this.sceneryStore.loadScenery3d()`。
+  3. **`loadCatalogHealth`(9) → (a) 下沉 `CatalogStore`**。普查：桥 `getCatalogHealth`；写 §2.7.1 登记的「跨域共用」字段 `catalogHealthLoaded`/`catalogManifestPresent`（宿主保留，供 `SatellitesPanel`/`SettingsQuickLegacyPanel` 经宿主闭包 `catalogHealthText`/`catalogHealthColor` 读取、**本加载器为唯一写点**）；写本 store 的 `starCatalogHealth`；写他域 `satelliteStore.satelliteCatalogHealth`（经 setter 回注，store 不持他 store）。无序号 / 无定时器 / 无 `publish*`。依赖清单：`CatalogHostHooks` 新增 3 法（`setCatalogHealthLoaded`/`setCatalogManifestPresent`/`setSatelliteCatalogHealth`）。调用点 2 处（`panel === 'settings'` / `panel === 'satellites'`）改 `this.catalogStore.loadCatalogHealth()`。
+
+- **手法**：函数体**逐字**搬入；差异仅 `callNativeWhenReady`→`port.requestWhenReady`、`this.<store>.<f>`→`this.<f>`、`this.<宿主登记字段>`→`hooks.set*`、`this.<他域 store>.<f>`→`hooks.set*`；开头 `ensurePort()` 守卫。`SceneryStore` 新建 `attachPort/attachHooks/ensurePort`（此前无桥基础设施，为本片首次接入 `HostCommandPort`）；`CatalogStore` 复用既有 `attachPort/attachHooks`。宿主删 2 个方法 + 改调用点 + 补 2 处 `attach*`；**禁双写**（宿主零同名方法副本）。
+
+- **新增 hooks**：`SceneryHostHooks { setScenery3dCurrentId(id: string): void }`；`CatalogHostHooks` 由 7 法扩到 10 法（+`setCatalogHealthLoaded` / `setCatalogManifestPresent` / `setSatelliteCatalogHealth`）。两 store 均**未 import NAPI/UI**。
+
+- **body diff 摘要**：`SceneryStore.ets` **18 → 66**（+48：`SceneryHostHooks` + 桥 3 法 + `loadScenery3d` + 注释）；`CatalogStore.ets` **144 → 172**（+28：hooks 3 法 + `loadCatalogHealth` + 注释）；宿主 `MainWindowNativeNode.ets` **14681 → 14673**（−8）：删 2 个 `private load*`、改 5 处调用点、补 2 处 `attach*`、删 2 个无用类型 import（`CatalogHealthResponse`/`Scenery3dResponse`）。
+  - **残留复核**：宿主 `grep private (loadCatalogHealth|loadScenery3d)` = **0**；宿主 `grep this.(loadCatalogHealth|loadScenery3d)\(` = **0**；两 store 内 `this.(sceneryStore|catalogStore|satelliteStore).` = **0**（仅注释）。
+  - **双写复核**：`scenery3dCurrentId` 唯一写点 = 宿主 `setScenery3dCurrentId` 闭包；`catalogHealthLoaded`/`catalogManifestPresent` 唯一写点 = 宿主两 setter 闭包；`satelliteCatalogHealth` 唯一写点 = 宿主 `setSatelliteCatalogHealth` 闭包（§14.8 规则 5）。
+  - **宿主 `private load*` 前后**：按 `private load[A-Za-z0-9_]*(` 全量口径 **5 → 3**（−2：本片两加载器；剩余 `loadSkyCultureDetails`（B3 保持登记）、`loadFov`/`loadPlanetPositions`（非 A/B 目标））。
+
+- **B3 总账（收尾）**：§2.13 的 B3 清单 **11** + 后续转入（B1 4：`loadAngleMeasure`/`loadNavStars`/`loadMeteorShowers`/`loadConstellationNavigation` + B2 1：`loadTelescopeControlStatus`）= **16** → **已下沉 15** + **保持登记（永久保留）1**（`loadSkyCultureDetails`）+ **未处理 0**。
+  - 已下沉 15：B3-1（4）`loadAngleMeasure`→ToolsStore、`loadNavStars`→NavStarsStore、`loadMeteorShowers`→MeteorStore、`loadConstellationNavigation`→SearchStore（+语言代际→LanguageStore）；B3-2（3）`loadMoonPhases`/`loadAstroCalcContext`→AstroStore、`loadPolarScopeData`→PolarScopeStore；B3-3（3）`loadCategoryObjects`/`loadMoreCategoryObjects`/`loadSearchHistoryFromStorage`→SearchStore；B3-4（3）`loadSatellites`→SatelliteStore、`loadVideoRecordingState`→ScriptStore、`loadTelescopeControlStatus`→TelescopeStore；B3-5（2）`loadScenery3d`→SceneryStore、`loadCatalogHealth`→CatalogStore。
+  - 保持登记 1：`loadSkyCultureDetails`（理由见上；§2.7.1「高频逐帧」+ 共享序号 + 锚点/美术管线交织）。
+  - **B3 轨道至此清空。**
+
+- **全队列 `load*` 剩余数**：宿主 `private load*` = **3**（`loadSkyCultureDetails` 登记项 + `loadFov`/`loadPlanetPositions` 非 A/B 目标）。§14 队列所有可下沉 `load*` 已结清（B1/B2/B3 全覆盖）。
+
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（MainWindowNativeNode / SceneryStore / CatalogStore）无错；**BUILD SUCCESSFUL in 39s**（30 executed / 3 up-to-date，signed HAP 708.7 MB）；`check-ohos-ui-contract.mjs` = 33 panels / 24 static ids / 17 dynamic prefixes / 44 id anchors / over 214 files，**intact**；受影响 `test-ohos-skyculture-refresh` **5/5**、`-skyculture-text` **4/4**、`-satellite-panel` **7/7**、`-plugin-panel-state` **4/4**、`-search-browser` **3/3**；全量 `*ohos*.mjs` 扫描仅 §13.6 的 **7 个环境类**失败（5 个 `-pad`、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`）；扫描重写的 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md` 已 `git checkout --` 还原。
+  - **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：install → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **12658 全程存活**。Dock「更多功能」→「天体数据与扩展」→①「卫星」打开卫星面板（`loadCatalogHealth` 路径，渲染「卫星目录状态检查中」）；②「3D地景」打开面板并点按启用开关（`loadScenery3d` + `setScenery3dEnabled` 路径）；③ Dock「图层」→「文化」标签（`loadSkyCultureDetails`/`loadSkyCultureList` 路径，渲染「文化图层」）；每步 `pidof` 稳定 12658。
+  - **模拟器无法覆盖（待真机）**：`getCatalogHealth`/`getScenery3dList`/`getSkyCultureDetails` 桥回包的真实写入与渲染（无引擎，`catalogHealthText` 停在「检查中」、`scenery3dItems` 为空）；`setScenery3dScene`/`setScenery3dEnabled` 的桥确认与 `loadScenery3d` 回环；星空文化锚点滚动与美术图渐进解码。以上需真机以 hilog / 坐标读数实证。
+  - **未改持久化设置**（无引擎，`setScenery3dEnabled` 桥失败即回退），无需恢复。
+
+- **本片踩坑**：`write` 工具新建 `SceneryStore.ets` 落盘为 **LF**（仓库为 CRLF，`git` 报警 `LF will be replaced by CRLF`）——新建文件后必须用 `[System.IO.File]::ReadAllText` + `(?<!`r)`n`→`r`n` 归一为 CRLF 再核对 `bareLF=0`。
+## [2026-10-04] DevEco Code - 重构：§14 B3-4 定时器族（satellites/videoRecordingState/telescopeControlStatus）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.6（B3 表「定时器族」三行）/ §14.7 / §14.8（规则 2「store 不得 import NAPI/UI」、规则 3「请求序号随加载器搬入 store」、规则 5「禁止双写」、规则 7「声明与调用同片」）；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 / B2 / B3-1 / B3-2 / B3-3 先例）。**单提交完成。**
+
+- **本片手法（B3 既定解法）**：B3 的根因是「加载器仍写某个刻意保留的宿主裸字段」。本片把**定时器句柄 / 进行中标志 / elapsed 计数**随加载器一并移入其真正归属 store（单一持有者 + 无第二份副本），store 自持 `start/stop`（§14.10 预告：定时器类需 store 自持 start/stop）；**读宿主生命周期/UI 状态的谓词经 hooks 只读注入**（宿主保留谓词）。调用点（面板开合 / 前后台 / 动作站点）改调 `store.xxx()`。函数体**逐字**搬入，差异仅 `callNative*`→`port.*`（重试档 0/100/15 与 onFailure 逐字保留）、`this.<store>.<f>`→`this.<f>`、`this.<宿主序号/计时器>`→`this.<store 字段>`、`this.<宿主助手/谓词>`→ hooks / store 内部方法。
+
+- **逐加载器依赖普查（字段读写点 → 单一持有者方案）**：
+  - `loadSatellites`(55)：① 定时器/保留字段 = `satelliteListRequestId`（请求序号，§14.8 规则 3 随加载器搬入；宿主 CLI 发布点 `publishSatellitePanelState` 读其值）、`satelliteLoadTimer`（90ms 去抖 `setTimeout`）、`satelliteLoadIncludeSources`（合并标志）、`satelliteFlagMutationId`（代际；宿主动作 `setSatelliteFlag` 与 CLI 事件两处写）、`satelliteListElapsedMs`（命名耗时，宿主发布点读）。② 三处 `publishSatellitePanelState()` 调用 → store `notifyChanged()`；失败路径原传 `'satellite query failed'`，故本 store 的 `onChanged` 类型改 `(error: string) => void`，宿主注入 `(error) => this.publishSatellitePanelState(error)`，**CLI 错误语义逐字保留**。③ 配对动作未搬入 store：`setSatelliteFlag` 仍是宿主动作，只把写入改为 `this.satelliteStore.satelliteFlagMutationId`（单一副本，非双写）；CLI 事件处同理。④ 桥档 `getSatellites` 走 `requestWhenReady(..., onFailure, 0, 100, 15)`。→ **完成**（`SatelliteStore`）。
+  - `loadVideoRecordingState`(14)：① 定时器收口 = `stopVideoStatePolling` + `startVideoStatePolling` + 裸字段 `videoStateTimer`（450ms `setInterval`）。② 回包读写 `scriptStore.video*`（store 字段）、调 `stopVideoStatePolling`（同 store）、发现录制结束（`wasRecording && !recording`）时 `setTimeout(() => stopVideoRecording(), 0)`——`stopVideoRecording` 是宿主桥动作（`callInteractive` + `flashHint`），经新增 `ScriptHostHooks.stopVideoRecording()` 回注。→ **完成**（`ScriptStore`）。原实现**面板关闭不停止本定时器**（仅录制结束/显式停止收口），本片逐字保留该语义（见「模拟器」栏说明）。
+  - `loadTelescopeControlStatus`(13) + live-position 定时器簇：① 裸字段 `lx200LivePositionTimer`(0) / `lx200LivePositionRequestPending`(false) / `lx200LivePositionRequestId`(0)。② 谓词 `shouldRefreshTelescopePosition()` 读宿主 `applicationInForeground` / `panelVisible` / `activePanel === 'telescope'` 三个生命周期/UI 字段（宿主保留、经 `TelescopeHostHooks` 注入）。③ 全套配对动作随定时器同片下沉 store：`stopTelescopeLivePosition`(17 调用点) / `scheduleTelescopeLivePosition`(12) / `refreshTelescopeLivePosition` / `syncTelescopeLivePosition` / `setTelescopeLivePosition` + `lx200Payload`(7) / `applyTelescopeProfile` / `applyTelescopeProfiles`(4) / `applyTelescopeEndpointStatus`(3) / `loadTelescopeControlStatus`——它们只读写 telescopeStore 字段 + `I18n` + `telescopeUpdateTime/telescopeErrorText`（`common/derive/actions` 纯函数），无宿主裸字段，故可原子成组搬净。④ 延迟档 1000 / 1800 / 500 ms、`requestId` 作废在途回包、`markStale` 语义逐字保留。→ **完成**（`TelescopeStore`）。
+
+- **定时器 start/stop 调用点对照表（旧 → 新）**：
+  | 动作 | 旧（宿主） | 新 |
+  |---|---|---|
+  | 卫星列表加载 | `this.loadSatellites(...)` ×4（schedulePanelDataLoad `satellites` / `selectSatelliteGroup` / `importSatelliteTleFile` / 面板 `onQueryChange`+`onSubmitQuery`） | `this.satelliteStore.loadSatellites(...)`（selectSatelliteGroup 内已改） |
+  | 视频轮询开 | `this.startVideoStatePolling()`（`startVideoRecording`） | `this.scriptStore.startVideoStatePolling()` |
+  | 视频轮询停 | `this.stopVideoStatePolling()`（`stopVideoRecording`） | `this.scriptStore.stopVideoStatePolling()` |
+  | 视频状态刷新 | `this.loadVideoRecordingState()` ×2（schedulePanelDataLoad `scripts` / `selectConfigTab` tab5） | `this.scriptStore.loadVideoRecordingState()` |
+  | 望远镜定时器停 | `this.stopTelescopeLivePosition(false)` ×12（`aboutToDisappear` / 后台 / `setPanel` / `closePanel` / 导览 / 6 个动作站点） | `this.telescopeStore.stopTelescopeLivePosition(false)` |
+  | 望远镜定时器启 | `this.scheduleTelescopeLivePosition(...)` ×7（`testTelescopeConnection` / `applyLx200Result` / `lx200Abort` / `readTelescopePosition`） | `this.telescopeStore.scheduleTelescopeLivePosition(...)` |
+  | 前后台同步 | `this.syncTelescopeLivePosition()`（`handleApplicationLifecycle` foreground） | `this.telescopeStore.syncTelescopeLivePosition()` |
+  | 实时开关 | `this.setTelescopeLivePosition(enabled)` ×3（CLI `setTelescopeLivePosition` / `applyLx200Result` goto / 面板 `onSetLivePosition`） | `this.telescopeStore.setTelescopeLivePosition(enabled)` |
+  | 载荷 | `this.lx200Payload()` ×5（test/goto/sync/abort/read） | `this.telescopeStore.lx200Payload()` |
+  | 配置落地 | `this.applyTelescopeProfiles(result)` ×3（select/save/delete） | `this.telescopeStore.applyTelescopeProfiles(result)` |
+  | 端点状态 | `this.applyTelescopeEndpointStatus(result)`（`validateTelescopeEditorStatus`） | `this.telescopeStore.applyTelescopeEndpointStatus(result)` |
+  | 控制状态加载 | `this.loadTelescopeControlStatus()` ×2（schedulePanelDataLoad `telescope` / `deleteTelescopeProfile` 新建态回退） | `this.telescopeStore.loadTelescopeControlStatus()` |
+
+- **新增 hooks**：`TelescopeHostHooks { shouldRefreshTelescopePosition(): boolean }`（宿主保留谓词，只读注入）；`ScriptHostHooks` 由 1 法扩到 2 法（新增 `stopVideoRecording()`）；`SatelliteStore.attachPort` 的 `onChanged` 类型由 `() => void` 改为 `(error: string) => void`（保留 CLI 失败错误串）。**Store 均未 import NAPI/UI**（定时器用全局 `setTimeout/setInterval`，桥走 `CommandPort`）。
+
+- **body diff 摘要**：`SatelliteStore.ets` **93 → 174**（+81：5 字段 + `loadSatellites` + 注释）；`ScriptStore.ets` **150 → 191**（+41：`videoStateTimer` + 3 方法 + hooks 1 法）；`TelescopeStore.ets` **254 → 429**（+175：3 定时器字段 + hooks 接口 + 11 个方法）；宿主 `MainWindowNativeNode.ets` **14885 → 14681**（−204）：删 3 个 `private load*`（`loadSatellites`/`loadVideoRecordingState`/`loadTelescopeControlStatus`）+ 8 个 timer/helper 方法（`start/stopVideoStatePolling`、`stop/schedule/refresh/sync/setTelescopeLivePosition`、`lx200Payload`、`applyTelescopeProfile(s)`、`applyTelescopeEndpointStatus`）、删 8 个裸字段（satellite 5 + lx200 3 + video 1 共 9，去重后 9），改 30+ 调用点为 `this.<store>.X`，补 2 处 `attachHooks`、改 1 处 `attachPort` 适配器、删 1 个无用类型 import（`SatellitesResponse`）。
+  - **残留复核**：宿主 `grep this.(satelliteListRequestId|satelliteLoadTimer|satelliteLoadIncludeSources|satelliteFlagMutationId|satelliteListElapsedMs|lx200LivePositionTimer|lx200LivePositionRequestPending|lx200LivePositionRequestId|videoStateTimer)` = **0**（仅注释）；宿主 `grep private (loadSatellites|loadVideoRecordingState|loadTelescopeControlStatus|stopTelescopeLivePosition|scheduleTelescopeLivePosition|lx200Payload|applyTelescopeProfile)` = **0**。stores 内 `this.(satelliteStore|scriptStore|telescopeStore).` = **0**（仅注释）。
+  - **双写复核**：三个加载器搬走后宿主无同名方法副本（§14.8 规则 5）；`satelliteFlagMutationId` 为 store public 单一字段、宿主两处写经 `this.satelliteStore.satelliteFlagMutationId`（非双副本）。
+  - **宿主 `private load*` 前后**：按 `private load[A-Za-z0-9_]*(` 全量口径 **8 → 5**（−3：本片三加载器；剩余 `loadScenery3d`/`loadFov`/`loadPlanetPositions` 非 A/B 目标 + 登记项 `loadCatalogHealth`/`loadSkyCultureDetails`）。**计数校正**：§14.6 B3-3 条目的「6」与本片 `git show HEAD:` 实测 8 不符，以实测为准。
+
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（SatelliteStore / ScriptStore / TelescopeStore / MainWindowNativeNode）无错；**BUILD SUCCESSFUL in 36s**（30 executed / 3 up-to-date，signed HAP 708.7 MB）；`check-ohos-ui-contract.mjs` = 33 panels / 24 static ids / 17 dynamic prefixes / 44 id anchors / over 214 files，**intact**；`test-ohos-satellite-panel.mjs` **7/7**（夹具已同步：`loadSatellites` 改读 `SatelliteStore.ets`、假宿主 `loadSatellites`/`satelliteFlagMutationId`/`satelliteListRequestId`/`satelliteListElapsedMs` 补入 `satelliteStore`）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 **7 个环境类**失败（5 个 `-pad`、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`）；扫描重写的 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md` 已 `git checkout --` 还原。
+  - **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：install → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **32032 全程存活**。Dock「更多功能」→「天体数据与扩展」→「卫星」打开卫星面板（渲染「离线内置轨道数据 / 卫星目录状态检查中 / TLE 数据来源」），关闭面板，重复开合数轮：`pidof` 稳定 32032；面板关闭后 `hilog -T StellariumArkUI` **无持续刷屏**（末条为开合 `[panel-transition]`，无定时器/加载器重复日志），符合「关闭后无空转」预期。**未走查**望远镜面板与视频录制路径，原因：引擎缺失下 `ensurePluginLoaded`/桥回包不可达，且视频录制需真实引擎；记待真机。
+  - **模拟器无法覆盖（待真机）**：`getSatellites` 回包 → 90ms 去抖 `setTimeout` 的真实触发与关闭取消；live-position 定时器 1000/1800ms 链、`panelVisible`/`activePanel` 切走后 `stopTelescopeLivePosition` 的取消、前台 `syncTelescopeLivePosition` 恢复；视频 450ms 轮询与录制结束自动 `stopVideoRecording`；以上均需真机经 hilog/坐标读数实证。
+  - **未改持久化设置**（本片无相关写盘），无需恢复。
+
+- **B3 剩余登记（更新后）**：§14.6 表内 **3 行 / 加载器** —— `loadSkyCultureDetails`(69)（`skyCultureArtStates` 逐帧，保持登记、经注入上报）/ `loadScenery3d`(12)（保持登记）/ `loadCatalogHealth`(9)（`catalogHealthLoaded`/`catalogManifestPresent` 跨域共用，保持登记）。本片结清 `loadSatellites` / `loadVideoRecordingState` / `loadTelescopeControlStatus` 三行。
+
+- **踩坑（本片新增）**：① 模拟器 UI-only 通道下 `stellarium-cli.mjs` 仍超时（CLI 回包通道不可用），Dock 底栏无 `.id()`，故 Dock 切换用坐标点击、面板内用 `--id`（`more-action-*` / `hub-action-*` / `panel-close`）——按 AGENTS「坐标点击仅用于显式命中测试」记录为缺语义命令的例外。② `SatelliteStore` 的 `onChanged` 需带 error 形参才能逐字保留 CLI 失败串，否则 `publishSatellitePanelState('satellite query failed')` 会退化为 `ok:true`；扩展了该 store 的注入签名（零参 lambda 仍可赋给带参回调）。
+
+## [2026-10-04] DevEco Code - 重构：§14 B3-3 搜索 / 分页 / 历史族（loadCategoryObjects / loadMoreCategoryObjects / loadSearchHistoryFromStorage）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.6（B3 表第 2 行）/ §14.7 / §14.8（规则 2「store 不得 import NAPI/UI」、规则 3「请求序号随加载器搬入 store」、规则 5「禁双写」）；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 / B2 / B3-1 / B3-2 先例），注入沿用「纯接口 + 宿主具名 `attachHooks({...})`」先例。**单提交完成。**
+
+- **本片手法（B3 既定解法）**：B3 的根因是「加载器仍要写某个刻意保留的宿主裸字段」。先做逐字段依赖普查，把裸字段搬入其**真正归属 store**（单一持有者 + 无第二份副本）或经 hooks 注入读写，加载器即降为 B1/B2，再按 B1 标准手法下沉。函数体**逐字**搬入，差异仅 `callNative*`→`port.*`（重试档 0/100/60 与 onFailure 逐字保留）、`this.searchStore.<f>`→`this.<f>`、`this.<宿主游标/标志>`→`this.<store 字段>`、`this.<宿主助手>`→`hooks.*`。
+
+- **逐加载器依赖普查（字段读写点 → 单一持有者方案）**：
+  - `loadCategoryObjects`(35)：`categoryOffset`（写 0；由 `loadMoreCategoryObjects` 写 `offset+len` 并读 `>0`）、`categoryRequestSerial`（写 `+=1`；两加载器及其回包/失败回调读比对，代际计数）、`satelliteCatalogReady`（读 `!satelliteCatalogReady` / 写 `true`，仅本加载器 Satellites 分支，全工程无第二读写点）。助手 `categoryModuleIdFor` / `publishSearchBrowserState` / `ensurePluginLoaded` 均宿主方法 → hooks；`this.loadMoreCategoryObjects` 同片同 store。→ **完成**（搬入 `SearchStore`）。
+  - `loadMoreCategoryObjects`(51)：`categoryOffset`（读、写）、`categoryRequestSerial`（读比对）；`CATEGORY_PAGE_SIZE`（宿主 `readonly 60`，仅本方法引用）入 store；`celestialTitle` / `celestialSubtitle` 宿主助手 → hooks。→ **完成**。
+  - `loadSearchHistoryFromStorage`(13)：`searchHistory`（写 `parsed.slice(0,20)`）。→ **完成**（同片把其读/写方 `saveSearchHistoryToStorage` 与 `searchObject` 历史写入一并改写）。
+
+- **跨域字段处理**：① `searchHistory` 登记为「跨域共用」，普查确认全工程读写点**仅宿主**（`searchObject()` 去重写入 + 持久化、`loadSearchHistoryFromStorage` 写入），**无任何面板/渲染读取**；按「单一持有者」移入 `SearchStore`，宿主 `searchObject()` 直接写 `this.searchStore.searchHistory`（宿主读 store 安全，§13.1 规则 4）、持久化改 `this.searchStore.saveSearchHistoryToStorage()`；**未引入 hooks 读取回注**（唯一读取方是宿主自身，非另一 store）。② `satelliteCatalogReady` 语义属搜索/目录（Satellites 分类目录载入标志），普查确认仅 `loadCategoryObjects` 读写、卫星域无第二副本，故随加载器留 `SearchStore`，卫星域未消费、无需 hooks。Preferences 的 `getUIContext` + `@ohos.data.preferences` 按 §14.8 规则 2 经 `readSearchHistoryStorage` / `writeSearchHistoryStorage` 注入（先例 `BookmarkHostHooks` / `ObservingListHostHooks`）。
+
+- **新增 / 撤除 hooks**：`SearchHostHooks` 由 1 法扩为 8 法（新增 `publishSearchBrowserState` / `categoryModuleIdFor` / `ensurePluginLoaded` / `celestialTitle` / `celestialSubtitle` / `readSearchHistoryStorage` / `writeSearchHistoryStorage`），**撤除 0 个**（`languageSerial` 保留）。宿主侧 `saveSearchHistoryToStorage` / `loadSearchHistoryFromStorage` 两个旧方法替换为**无状态适配器** `readSearchHistoryStorage()` / `writeSearchHistoryStorage(json)`（承载 NAPI/UI 上下文）。
+
+- **body diff 摘要**：`SearchStore.ets` **113 → 280**（+177：4 个搬入方法 + 4 个栏位 + `CATEGORY_PAGE_SIZE` + 接口 7 法 + 注释）；宿主 **15,944 → 15,859**（−85）：删 3 个 `private load*` + 2 个存储方法、删 5 个栏位（`searchHistory`/`categoryOffset`/`categoryRequestSerial`/`satelliteCatalogReady`/`CATEGORY_PAGE_SIZE`）、9 处 `loadCategoryObjects` + 1 处 `loadMoreCategoryObjects` + 1 处 `loadSearchHistoryFromStorage` + 1 处 CatalogStore hooks 适配器改 `this.searchStore.*`。
+  - **残留复核**：宿主 `grep this.(loadCategoryObjects|loadMoreCategoryObjects|loadSearchHistoryFromStorage|saveSearchHistoryToStorage|searchHistory|categoryOffset|categoryRequestSerial|satelliteCatalogReady|CATEGORY_PAGE_SIZE)` = **0**。
+  - **双写复核**：宿主无同名方法副本（§14.8 规则 5）。`test-ohos-search-browser.mjs` 假宿主把 `loadCategoryObjects` 移入 `searchStore` 对象（3/3 绿）。
+  - **宿主 `private load*` 前后**：**9 → 6**。**计数校正**：B3-2 条目记「14 → 11」与 HEAD 不符（`git show HEAD:harmonyos/ets-source/pages/MainWindowNativeNode.ets` 实测为 **9**）；本片以实测为准。
+
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check`（SearchStore / CatalogStore / MainWindowNativeNode）无错；**BUILD SUCCESSFUL in 29s**（30 executed / 3 up-to-date，signed HAP 708.7 MB）；`check-ohos-ui-contract.mjs` = 33 panels / 24 static ids / 17 dynamic prefixes / 44 id anchors / over 214 files，**intact**；`test-ohos-search-browser.mjs` 3/3、`test-ohos-constellation-lookup.mjs` 2/2；全量 `*ohos*.mjs` 扫描仅 §13.6 的 **7 个环境类**失败（4 个 `-pad`、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`）；扫描重写的 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md` 已 `git checkout --` 还原。
+  - **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：install → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **21546 全程存活**。Dock「搜索」打开面板（hilog `[DOCK] up … item=search` / `setPanel search` / `[panel-transition] finish serial=1 panel=search`）；开分类选择器，选「月球」→ 标签**实时**由「行星」变「月球」，再选「恒星」→「恒星」（`searchCategory` 走 store 的实时刷新）；结果列出现 `读取失败，点击重试`（`loadMoreCategoryObjects` 无引擎走 onFailure、写 `categoryLoadFailed`），点击「重试」（迁移后的 `onRetry` → `searchStore.loadCategoryObjects`）后 `pidof` 仍存活。hilog 无 ArkTS 异常；仅模拟器系统 TextInput autofill 缺 `libhint2type.z.so`（平台侧，与本片无关）。
+  - **模拟器无法覆盖（待真机）**：`listObjects` 真实回包 → `categoryObjects` 追加 / `categoryOffset` 递增 / `categoryHasMore` 翻页（无引擎，日志反复 `Stellarium command bridge not loaded yet`）；Satellites 分类分支 `ensurePluginLoaded('Satellites')` 成功回调（写 `satelliteCatalogReady = true`）；搜索历史 Preferences **真实写盘**（为不污染持久化设置未提交查询，读路径启动时无 warn）。
+
+- **B3 剩余登记（更新后）**：§14.6 表内 **6 行 / 加载器** —— `loadSkyCultureDetails`(69)（`skyCultureArtStates` 逐帧，保持登记、经注入上报）/ `loadSatellites`(55)（计时器）/ `loadVideoRecordingState`(14)（定时器收口）/ `loadScenery3d`(12)（保持登记）/ `loadCatalogHealth`(9)（保持登记）/ `loadTelescopeControlStatus`(13)（live-position 定时器簇）。
+
+- **踩坑（本片新增）**：① 模拟器 UI-only 通道下 `stellarium-cli.mjs --list` 超时（CLI 回包通道不可用）；且 Dock 栏（含「搜索」）在 `devecocli ui layout` 中**无 `.id()`**，语义化点击不可达 → 本片用坐标点击 Dock + `--id` 点面板内带 id 控件（`search-category-picker` / `search-category-*`），并**登记此缺失语义命令**（Dock 项 / CLI 面板命令在该构建上不可达）。② §14.6 的 load* 计数在 B3-2 记录有误，本片以 `git show HEAD:` 实测校正。
+
+## [2026-10-04] DevEco Code - 重构：§14 B3-2 请求进度/进行中标志组（moonPhases / astroCalcContext / polarScopeData）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.6（B3「先解其保留裸字段，再按 B1 手法下沉」）第 4 行 / §14.7 / §14.8（规则 3「请求序号随加载器搬入 store，禁宿主与 store 双序号、禁共享」、规则 5「禁双写」）；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 / B2 / B3-1 先例），注入接口沿用「纯接口 + 宿主具名对象 `attachHooks({...})`」先例。**单提交完成。**
+- **本片手法（B3 既定解法）**：B3 的根因是「加载器仍要写某个刻意保留的宿主裸字段（请求进度 / 进行中标志）」。先做**逐字段依赖普查**，把这些裸字段连同其请求序号按 §14.8 规则 3 搬入其**真正归属 store**（单一持有者、无第二份副本），加载器即降为 B1/B2，再按 B1 标准手法下沉；宿主只保留**计时器（调度方）**，改为调用 store 的加载器，并以 store 的 `cancel*` 方法承接原来「作废在途请求」的语义。函数体逐字搬入，差异仅 `callNative*`→`port.*`（长任务/重试档与 onProgress/onFailure 逐字保留）、`this.<storeField>`→`this.<field>`、`this.<宿主序号/标志>`→`this.<store 私有字段>`、`this.shouldRefreshPolarScope()`→`this.shouldRefresh()`（经 hooks 注入的同一宿主谓词）。
+- **逐加载器依赖普查（字段读写点 → 单一持有者方案）**：
+  1. **`loadMoonPhases`(35 行) → `AstroStore`**。保留裸字段 `moonPhaseLoadingDays`（decl 原 494；读原 5883 去重；写原 5885）与请求序号 `moonPhaseRequestId`（decl 原 493；`++` 原 5884；读原 5890）。**第三方位扫描**：全仓仅此方法读写，无面板/其它方法读。→ 两者随加载器搬入 `AstroStore` 作私有 `moonPhaseLoadingDays` / `moonPhaseRequestSequence`；函数体仅 `this.astroStore.<f>`→`this.<f>`、`callLongRunningInteractive`→`port.requestLongRunning`（末参 `days >= 90 ? 600 : 240` maxAttempts 逐字保留，无 `isCancelled`）。
+  2. **`loadAstroCalcContext`(35 行) → `AstroStore`**。保留裸字段 `astroContextRequestPending`（decl 原 497；守卫原 5741；置真原 5742；复位原 5745/5772）与序号 `astroContextRequestId`（decl 原 496；`++` 原 5743；读原 5746；`stopAstroCalcContextTimer` `++` 原 1986）。**第三方位扫描**：仅加载器与其停止计时器读写，无面板读 → 两者搬入 `AstroStore` 作私有 `astroContextRequestPending` / `astroContextRequestSequence`。停止计时器的 `++astroContextRequestId` 语义（**只递增序号、不复位 pending**）改由新增 `AstroStore.cancelAstroCalcContext()` 承接（逐字保留）。函数体仅 `this.astroStore.astroContext`→`this.astroContext`、`callInteractive`→`port.requestInteractive`；`r.jd as number` 等既有断言逐字保留。
+  3. **`loadPolarScopeData`(19 行) → `PolarScopeStore`**。保留裸字段 `polarScopeRequestPending`（decl 原 738；`stopPolarScopeTimer` 复位原 1962；守卫原 2074；置真原 2075；复位原 2080/2087）与序号 `polarScopeDataRequestId`（decl 原 739；`stopPolarScopeTimer` `++` 原 1963；读原 2076；比对原 2079/2086）。**第三方位扫描**：仅加载器与其停止计时器读写；面板 `PolarScopeOverlay` 只读 `polarScopeLoading/Error/Data/Flip`（本 store 既有 `@ObjectLink`），**不读**请求态 → 两者搬入 `PolarScopeStore` 作私有字段。停止计时器的「复位 pending + `++` 序号」改由新增 `PolarScopeStore.cancelPolarScopeRequest()` 承接（逐字保留）。加载器内两处 `this.shouldRefreshPolarScope()`（读宿主 `applicationInForeground`）经新增 `PolarScopeHostHooks.shouldRefreshPolarScope()` 注入的**同一宿主谓词**承接（§14.8 规则 2：store 不 import UI）；`callNativeWhenReady('getPolarScopeData', ..., 0, 34, 8, onFailure)` → `port.requestWhenReady(..., onFailure, 0, 34, 8)`（重试档 0/34/8 逐字保留）；失败文案 `I18n.t('polar_scope_earth_only')` 直连 `pages/I18n`（既有多 store 先例）。
+- **hooks 撤除清单**：`AstroHostHooks.loadMoonPhases()`、`AstroHostHooks.loadAstroCalcContext()`（2 法删除）；宿主 `attachHooks({...})` 同名两行删除；`AstroStore.loadAstroTab` 内 `hooks.loadMoonPhases()`→`this.loadMoonPhases()`、`hooks.loadAstroCalcContext()`→`this.loadAstroCalcContext()`。**新增 hooks**：`PolarScopeHostHooks`（1 法 `shouldRefreshPolarScope()`）；宿主 `polarScopeStore.attachPort(hostPort)` + `attachHooks({ shouldRefreshPolarScope: () => this.shouldRefreshPolarScope() })`。宿主 `AstroPanelHost.loadMoonPhases` 回调改指向 `this.astroStore.loadMoonPhases()`（面板调用点不变）。
+- **body diff 摘要（逐行对照）**：3 个加载器函数体逐字；机械替换点计：`callLongRunningInteractive`→`port.requestLongRunning`（1）、`callInteractive`→`port.requestInteractive`（1）、`callNativeWhenReady`→`port.requestWhenReady`（1）、`this.astroStore.<f>`→`this.<f>`（loadMoonPhases 5 处 / loadAstroCalcContext 2 处）、`this.shouldRefreshPolarScope()`→`this.shouldRefresh()`（polarScope 2 处）、请求态字段改写（moonPhase 4、astroContext 4、polarScope 6）。开头统一 `ensurePort()` 守卫（port 为 null 时静默返回，不写请求态）；无 `any`/`unknown`、无新增 `as`（`r.moonPhases as Array<MoonPhaseItem>` 与 `r.jd as number` 等为逐字搬入的既有断言）。宿主删除 3 个同名 `private load*` 声明与 5 个裸字段声明（moonPhaseRequestId / moonPhaseLoadingDays / astroContextRequestId / astroContextRequestPending / polarScopeRequestPending / polarScopeDataRequestId 中，moonPhase 2 + astroContext 2 + polarScope 2 = 6 个声明），无「只改调用写法」的灰度双写（§14.8 规则 5）。
+- **宿主 `private load*` 前后**：**14 → 11**（−3；本片移除 `loadMoonPhases` / `loadAstroCalcContext` / `loadPolarScopeData`）。宿主保留计时器字段 `astroContextTimer` / `polarScopeTimer` 与 `shouldRefreshPolarScope` / `shouldRefreshAstroCalcContext` 谓词（调度逻辑不进 store，避免牵动 `applicationInForeground`/`activePanel`/`panelVisible` 等宿主 UI 状态）。
+- **单体行数**：`MainWindowNativeNode.ets` **16,035 → 15,944**（−91，node 计数口径）。store 行数：`AstroStore` 1,187 → 1,278（+91）、`PolarScopeStore` 31 → 96（+65）。
+- **宿主残留与双写复核**：全仓 `grep` 确认宿主内 `this.moonPhaseRequestId` / `this.moonPhaseLoadingDays` / `this.astroContextRequestId` / `this.astroContextRequestPending` / `this.polarScopeRequestPending` / `this.polarScopeDataRequestId` / `this.loadMoonPhases` / `this.loadAstroCalcContext` / `this.loadPolarScopeData` 命中数 = **0**；`AstroStore` 内零 `this.astroStore.`、`PolarScopeStore` 内零 `this.polarScopeStore.`（剩余命中均为注释）。同片删除宿主同名方法声明与字段声明。
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` → 通过；`arkts_check` 对 3 个改动 `.ets`（AstroStore / PolarScopeStore / MainWindowNativeNode）报 **No errors**；构建 `scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` → **BUILD SUCCESSFUL**；`node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 33 panels, 24 static ids, 17 dynamic prefixes, 44 id anchors`；全量 `test/verify/audit-ohos-*.mjs` 扫描仅 §13.6 的 **7 个环境类失败**（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` 平台假设），无回归；`test-ohos-astro-motion.mjs` 9/9、`test-ohos-polar-scope.mjs` 4/4 全绿。
+- **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 10270 存活 → 更多功能 → 天体数据与扩展 → 打开「天文计算」面板（`hub-action-astro`）→ 切到「月相」标签（`astro-tab-9`，触发已下沉的 `AstroStore.loadAstroCalcContext()` + `loadMoonPhases()`）→ 面板即时渲染错误态 `bridge not available`（store 字段经 `@ObjectLink` 实时回显，**证明加载器已执行并写 store、UI 观察到刷新**）→ `pidof` 仍 10270 → 关闭面板 → 更多功能 → 观测工作区 → 打开「极轴镜」叠层（触发已下沉的 `PolarScopeStore.loadPolarScopeData`）→ 叠层渲染（含水平/垂直翻转 `Toggle#polar-scope-flip-*`），点按水平翻转（走 `setPolarScopeHorizontalFlip` → 已下沉 `loadPolarScopeData(false)` 路径）→ `pidof` 全程 10270 存活 → 关闭叠层。
+- **模拟器无法覆盖（待真机）**：真实桥回包渲染 —— ① 月相预报列表（`getMoonPhases` 长任务进度/结果，需引擎逐日推进天体模型）、② 天文计算上下文读数（`getAstroCalcContext`，恒星时/日月高度等）、③ 极轴镜数据读数（`getPolarScopeData` 的 `hourAngleText`/`viewAngleText`）与翻转后重新取数，均待真机；模拟器仅证实「加载器已执行、写 store、面板实时回显且不崩溃」。测试中打开的月相/面板状态可在关闭面板后恢复（`selectAstroTab` 会 `saveAppSettings` 记录当前 tab，属面板导航态而非用户设置；翻转开关因桥失败档已自动回退，未持久化）。
+- **本片新踩的坑**：`write` 工具新建的 `.ets` 为 **LF** 行尾（`git diff` 立即告警 `LF will be replaced by CRLF`）——新建 store 文件必须用 `[System.IO.File]::ReadAllText/WriteAllText` + `-replace "(?<!`r)`n","`r`n"` 归一后核对 `bareLF=0`，否则违反行尾契约。
+- **B3 剩余登记（更新后）**：§14.6 表内 **8 行**（`loadSkyCultureDetails` / `loadSatellites` / `loadMoreCategoryObjects`+`loadCategoryObjects` / `loadVideoRecordingState` / `loadSearchHistoryFromStorage` / `loadScenery3d` / `loadCatalogHealth` / `loadTelescopeControlStatus`）**未动**（本片结清的「`loadMoonPhases`+`loadAstroCalcContext`+`loadPolarScopeData`」一行已从表中移除/标注完成）。
+## [2026-10-04] DevEco Code - 重构：§14 B3-1 共享序号簇（加载器+配对动作同片搬入 store）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.6（B3「先解其保留裸字段，再按 B1 手法下沉」）/ §14.8（规则 3「请求序号随加载器搬入 store，禁宿主与 store 双序号、禁共享」）/ §14.7；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 / B2 先例），注入接口沿用「纯接口 + 宿主具名对象 `attachHooks({...})`」先例。**单提交完成。**
+- **本片手法**：B3 的根因是「加载器仍要写某个刻意保留的宿主裸字段（请求序号/代际计数器）」，而该字段与一个**配对的宿主动作（写方）共享**。统一解法：把**加载器与配对写方同片搬入同一 store**，序号/代际随之入 store 作**单一持有者**，宿主零副本、零双写（§14.8 规则 3/5）。函数体逐字搬入，差异仅 `callNative*`→`port.*`（重试档/onFailure 逐字保留）、`this.<storeField>`→`this.<field>`、`this.<宿主序号>`→`this.<store 序号>`、`this.<助手>`→模块 import / 同 store 方法 / `hooks.*`。
+- **逐组依赖普查（读写点 → 字段/序号 → 是否第三方）**：
+  1. **angleMeasure → `ToolsStore`**：`loadAngleMeasure`(原宿主 3968–3978；`++angleMeasureRequestId` @3969、读 @3971) + 配对写方 `toggleAngleMeasure`(原 5040–5081；`++angleMeasureRequestId` @5046、读 @5055/@5073)。无第三方读者/桥/定时器/路由。→ 两方法同片搬入，序号并作 store `seq`。动作回包后的 `flashHint`（原 @5062/5071/5079）经新增 `ToolsHostHooks.flashHint` 注入。
+  2. **navStars → `NavStarsStore`**：`loadNavStars`(原 3980–4010；`navStarsLoadRequestId` @3981/3985/4006 + `navStarsMutationId` @3982/3987) + `setNavStarsSetting`(原 4025–4041；`++navStarsMutationId` @4026、读 @4029/4037) + 助手 `applyNavStarsSetting`(原 4012–4023)。**两个序号语义不同**（前者只护并发回包、后者护「动作 + 其后重新载入」的代际），按 §14.8 规则 3 的**精神**保留原名入 store（单一持有者），不并作同一 `seq`。无第三方读者。三个方法同片搬入。
+  3. **meteorShowers → `MeteorStore`**：`loadMeteorShowers`(原 4341–4373；`++meteorShowersLoadRequestId` @4342、读 @4344) + 配对写方 `setMeteorShowersFlag`(原 4374–4383；`meteorShowersLoadRequestId++` @4375，用于作废在途载入)。无第三方。→ 序号并作 store `seq`；两方法同片搬入。
+  4. **language → `LanguageStore` + `SearchStore`**：`languageRefreshSerial`（原宿主 @334）的全部读写点：`setLanguage` **写** `++`(原 8147) + 读(原 8169)；`fetchSuggestions` 默认参(原 7598) + 读(原 7604)；`loadConstellationNavigation` 默认参(原 7668) + 读(原 7670)；`loadObjectCatalogCategories` 调用点显式传参(原 2400/4321/8175) 且 CatalogStore 经 `CatalogHostHooks.languageSerial()` 回包比对（原注入 @1155）；`ensurePluginLoaded` 回包里的读(原 4321)。**判据：单一持有者 + 无第二份副本** → 采**方案 (a)**：该代际字段**移入其真正归属 store** `LanguageStore`（语言刷新语义），跨域读者一律经宿主注入的**只读** hooks / **显式传参**获取；`SearchStore.loadConstellationNavigation` 经新增 `SearchHostHooks.languageSerial()` 在回包时读当前代际（**注意**：不能在调用时把 serial 捕获后自比，否则「等待期间语言又变」的过期请求无法丢弃 —— 故必须回包时读实时值），宿主调用点显式传当次 serial。语言加载器与代际同片落地，宿主不留副本。
+- **body diff 摘要（逐行对照）**：4 个加载器 + 3 个配对写方 + 1 个助手共 8 个方法，函数体逐字；机械替换点计：`callNativeWhenReady`→`port.requestWhenReady`（`getNavStars`/`setMeteorShowersFlag` 的 `0/100/15` 重试档**逐字保留**，onFailure 由 CommandPort 第 4 参承接）、`callInteractive`→`port.requestInteractive`、`this.<store>.<f>`→`this.<f>`、`this.angleMeasureRequestId`→`this.seq`、`this.meteorShowersLoadRequestId`→`this.seq`、`this.navStars*RequestId/MutationId`→store 内同名字段、`this.flashHint`→`hooks.flashHint`、`this.languageRefreshSerial`→`this.languageStore.languageRefreshSerial`。开头统一 `ensurePort()`/`hooks` 守卫；无 `any`/`unknown`、无新增 `as`（`r as MeteorShowersResponse` 为逐字搬入的既有断言）。
+- **宿主 `private load*` 前后**：18 → **14**（−4；本片移除 `loadAngleMeasure`/`loadNavStars`/`loadMeteorShowers`/`loadConstellationNavigation`）。宿主 `@State` 不新增（复用既有 store 持有）；移除裸字段 3 个 + 搬走 1 个：`angleMeasureRequestId`、`navStarsLoadRequestId`、`navStarsMutationId`、`meteorShowersLoadRequestId`、`languageRefreshSerial`（共 5 个声明）。
+- **单体行数**：`MainWindowNativeNode.ets` **16,207 → 16,035**（−172）。store 行数：`LanguageStore` 27→33、`ToolsStore` 122→207、`NavStarsStore` 34→143、`MeteorStore` 17→106、`SearchStore` 36→113。
+- **注入设计**：新增 2 个纯接口 —— `ToolsHostHooks`（1 法：`flashHint(text)`，用于 `toggleAngleMeasure` 的三处提示）与 `SearchHostHooks`（1 法：`languageSerial()`，供 `loadConstellationNavigation` 回包比对）；`NavStarsStore`/`MeteorStore` 仅需 `CommandPort`，无 UI hooks。宿主在 `aboutToAppear` 对三 store 各 `attachPort(hostPort, () => {})`（消费方均 `@ObjectLink`、无 `publish*`），并 `tools.attachHooks({ flashHint })`、`searchStore.attachHooks({ languageSerial })`；`catalogStore` 既有 `languageSerial` 注入改读 `this.languageStore.languageRefreshSerial`。store 不 import 他 store/UI/NAPI（§14.8 规则 2）。
+- **宿主残留与双写复核**：全仓 `grep` 确认宿主内 `this.languageRefreshSerial` / `this.angleMeasureRequestId` / `this.navStarsLoadRequestId` / `this.navStarsMutationId` / `this.meteorShowersLoadRequestId` / `this.loadAngleMeasure` / `this.toggleAngleMeasure` / `this.loadNavStars` / `this.setNavStarsSetting` / `this.applyNavStarsSetting` / `this.loadMeteorShowers` / `this.setMeteorShowersFlag` / `this.loadConstellationNavigation` 命中数 = **0**（剩余命中均为 store 内注释或 store 内部引用）。同片删除宿主同名方法声明，无「只改调用写法」的灰度双写（§14.8 规则 5）。顺带清理宿主因搬家而失效的 `MeteorShowerItem`/`MeteorShowersResponse` 两个 import。
+- **验证证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过；`arkts_check` 对 6 个改动 `.ets` 报 No errors；构建 `scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` → **BUILD SUCCESSFUL**；`node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 33 panels, 24 static ids, 17 dynamic prefixes, 44 id anchors`；全量 `test/verify/audit-ohos-*.mjs` 扫描仅 §13.6 的 **7 个环境类失败**（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` 平台假设），无回归；`test-ohos-search-browser.mjs` 3/3 全绿。
+- **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 31574 存活 → 更多功能 → 天体数据与扩展 → 打开「流星雨」面板（`hub-action-meteorshowers`）→ 点按「启用流星雨插件」开关（走已迁入 `MeteorStore` 的 `setMeteorShowersFlag`，失败档回退调 `loadMeteorShowers`）→ `pidof` 仍为 31574（**动作路径无崩溃、无掉线**）→ 再次点按复原开关 → 关闭面板后 `pidof` 仍存活。
+- **模拟器无法覆盖（待真机）**：① 角度测量 / 航海星面板是**插件面板**，模拟器无引擎，只能由 `openUiPanel` CLI 驱动（CLI 依赖 native 引擎，模拟器超时）且无 UI 深链 → **未走查 `angleMeasure`/`navStars` 面板**；② 语言切换 `setLanguage`（设置 → 界面语言）会改动持久化设置，模拟器无引擎时无法回读确认，**未在模拟器切换语言**；③ 三域真实桥回包渲染（星表/流星雨列表、角度文本、星座导航条目）待真机验证。
+- **本片新踩的坑**：无新增工具链坑；沿用并复用「§14.8 规则 3 单序号」的判断 —— `languageRefreshSerial` 若按「调用时捕获 serial 自行比对」会漏掉「等待期间语言再变」的过期请求，**必须**在回包时经 hooks 读实时代际（这也是不能简单把该数作为普通入参传入的原因）。
+- **B3 剩余登记（更新后）**：§14.6 表内 9 行（`loadSkyCultureDetails` / `loadSatellites` / `loadMoreCategoryObjects`+`loadCategoryObjects` / `loadMoonPhases`+`loadAstroCalcContext`+`loadPolarScopeData` / `loadVideoRecordingState` / `loadSearchHistoryFromStorage` / `loadScenery3d` / `loadCatalogHealth` / `loadTelescopeControlStatus`）**未动**；本片另结清「B1/B2 因 §14.8 规则 3 主动停下」的 4 项（`loadAngleMeasure`/`loadNavStars`/`loadMeteorShowers`/`loadConstellationNavigation`）。`loadConstellationNavigation` 一结清，CatalogStore 的 `languageSerial` 也从「宿主单持」转为「LanguageStore 单持、只读 hooks」。
+## [2026-10-04] DevEco Code - 重构：§14 B2R-4（B2 收尾，8 个加载器）
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.5（B2「其余」第 4 片 / B2 收尾）与 §14.6 / §14.7 / §14.8；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 先例）；注入接口沿用 `AstroHostHooks` / `ObjectMediaHostHooks` / `TimeSettingsHostHooks` / `LocationPickerHostHooks` / `SkyCulture*HostHooks` 的「纯接口 + 宿主具名对象 `attachHooks({...})`」先例。**单提交完成**：8 个加载器逐一普查，7 个下沉、1 个主动停下登记 B3；全部宿主调用点同片改写，无中间双写。
+- 行号基线 `d398385e8f` 实测定界（宿主 `MainWindowNativeNode.ets`）：`loadObjectCatalogCategories` 7679、`loadObservingListFromStorage` 2917、`loadBookmarks` 2991、`loadBookmarksFromStorage` 2950、`loadRecordingByName` 3576、`loadScriptList` 3477、`loadSelectedSatellitePasses` 9991、`loadTelescopeControlStatus` 8462（**未搬**）。
+- **逐加载器依赖普查（写入字段 → store 归属 / 桥 / 助手去向 / 序号 / UIContext）**：
+  - `loadObjectCatalogCategories`（32 行）→ **CatalogStore**（主归属）。写入：`objectCatalogCategories`（本 store）；`SearchStore.pendingPluginCatalogId`（跨 store，清空）+ 读 `searchCategory` / `categoryModuleId`。桥：`callNativeWhenReady('getObjectCatalogCategories')` → `port.requestWhenReady`。助手：`catalogIconForModule`（A1 纯函数，store **直接 import** `common/derive/catalog`，无需注入）；`publishSearchBrowserState()`（宿主，读 `searchPanelScroller` 等 UI）→ `hooks.publishSearchBrowserState()`；`loadCategoryObjects(...)`（宿主 **B3**，未搬）→ `hooks.loadCategoryObjects()`。序号/代际：宿主 `languageRefreshSerial` **不搬**（与宿主 `setLanguage`/`fetchSuggestions`/`loadConstellationNavigation` 共享，§14.8 规则 3 禁双序号）→ 宿主在调用点显式传入当次 serial，store 经 `hooks.languageSerial()` 在回包时比对；宿主仍单一持有该计数器。UIContext：无。**未停下**。
+  - `loadObservingListFromStorage`（19 行，async）→ **ObservingListStore**。写入：`observingList` / `observingListReady`（本 store）+ `AppStorage.setOrCreate('observingList')`（store 直用 AppStorage，LocationStore 先例）。桥：无（Preferences）。助手：`parseObservingList`（A1 纯函数，store 直接 import `common/derive/skycult`）。**UIContext 处置**：原 `getUIContext().getHostContext() as common.UIAbilityContext` + `@ohos.data.preferences` I/O **整体经 hooks 注入**（`readObservingListStorage()` / `writeObservingListStorage(json)`；宿主实现用 `getUIContext` + preferences）——§14.8 规则 2 禁 store import NAPI/UI 上下文；与 `ObjectMediaHostHooks.readRawSidecar` 同法。序号：无（预留未用 `seq`）。**未停下**。
+  - `loadBookmarks`（15 行）→ **BookmarkStore**。写入：`list` / `loading`（本 store）。桥：`callNativeWhenReady('getBookmarks')` → `port.requestWhenReady`。助手：`saveBookmarksToStorage()`（宿主 async preferences 助手）→ `hooks.saveBookmarksToStorage()`。序号：无。**未停下**。
+  - `loadBookmarksFromStorage`（13 行，async）→ **BookmarkStore**。写入：`list`（本 store）。桥：无（Preferences）。**UIContext 处置**：`getUIContext` + preferences 读取整体经 `hooks.readBookmarksStorage()` 注入；`JSON.parse` 留在 store。序号：无。**未停下**。
+  - `loadRecordingByName`（11 行）→ **ScriptStore**。写入：无 store 字段（仅提示）。桥：`callInteractive('loadRecording')` → `port.requestInteractive`。助手：`flashHint(...)`（宿主 UI）→ `hooks.flashHint()`（新增 `ScriptHostHooks`）。序号：无。**未停下**。
+  - `loadScriptList`（8 行）→ **ScriptStore**。写入：`scriptList` / `scriptMetadata`（本 store）。桥：`callInteractive('getScriptList')` → `port.requestInteractive`。助手：`setScriptMetadata(r.details)`（只写本 store `scriptMetadata`）→ **同片搬入 store 为 `setScriptMetadata()` 方法**（宿主删除，调用点 1613/3481 改 `this.scriptStore.setScriptMetadata`）。序号：无。**未停下**。
+  - `loadSelectedSatellitePasses`（5 行）→ **ObjectDetailStore**。写入：`selectedSatellitePassesRequested`（本 store）。桥：无直接。助手：`selectedObjectIsArtificialSatellite()`（只读本 store 字段，但被 4 处宿主 UI 调用）与 `requestSatellitePasses(expectedName)`（走 `callInteractive` + 写本 store）**按 §14.5「额外注入」保留宿主、经 `ObjectDetailHostHooks` 回注**（避免同片牵动 4 处 UI 调用点与卫星请求助手）。UIContext：无。**未停下**。
+  - `loadTelescopeControlStatus`（13 行）→ **主动停下，登记 B3**。原因（§14.10 明确要求）：其依赖的 live-position 定时器子系统（`lx200LivePositionTimer` / `lx200LivePositionRequestPending` / `lx200LivePositionRequestId` + `shouldRefreshTelescopePosition()`）**与宿主动作深度交织**且读宿主 UI 状态（`applicationInForeground` / `panelVisible` / `activePanel`）：`scheduleTelescopeLivePosition` 有 **12** 处调用点、`stopTelescopeLivePosition` **17** 处、4 处生命周期回调；`lx200Payload` 7 处、`applyTelescopeProfiles` 4 处、`applyTelescopeEndpointStatus` 3 处。按 §14.5「定时器 → store 需自持 start/stop」与 §14.10「须测面板关闭后定时器停止」，应整体下沉定时器子系统并注入 `shouldRefreshTelescopePosition` 谓词；本片不硬搬（真机离线亦无法验证定时器收敛）。依赖清单已写入下方总账与 §14.6。
+- **跨 store 写入方案与理由**：`loadObjectCatalogCategories` 写 CatalogStore + SearchStore，按 §14.5「主要归属 store + 其余经 hooks setter」：CatalogStore 为主归属（`objectCatalogCategories`），SearchStore 的 `pendingPluginCatalogId` 清空 + `searchCategory`/`categoryModuleId` 读取经 `CatalogHostHooks` 的 getter/setter；`loadCategoryObjects`/`publishSearchBrowserState` 宿主动作同经 hooks，store **不互相持有、不 import 他 store**。
+- **注入接口设计**（4 个纯接口，均不 import UI/NAPI，只依赖 `StellariumBridgeResponse` / `CommandPort` / 类型 / `ResourceStr`）：
+  - `CatalogHostHooks`（`state/CatalogStore.ets`，7 法）：`languageSerial()`、`pendingPluginCatalogId()`、`clearPendingPluginCatalogId()`、`searchCategory()`、`categoryModuleId()`、`loadCategoryObjects(category, moduleIdOverride)`、`publishSearchBrowserState()`。
+  - `ObservingListHostHooks`（`state/ObservingListStore.ets`，2 法）：`readObservingListStorage()`、`writeObservingListStorage(json)`。
+  - `BookmarkHostHooks`（`state/BookmarkStore.ets`，2 法）：`readBookmarksStorage()`、`saveBookmarksToStorage()`。
+  - `ScriptHostHooks`（`state/ScriptStore.ets`，1 法）：`flashHint(text)`。
+  - `ObjectDetailHostHooks`（`state/ObjectDetailStore.ets`，2 法）：`selectedObjectIsArtificialSatellite()`、`requestSatellitePasses(expectedName)`。
+  - 宿主 `aboutToAppear`：`catalogStore`/`scriptStore`/`objectDetailStore` 复用既有 `hostPort` 并 `attachHooks({...})`；`bookmarkStore` **新增** `attachPort(hostPort)` + `attachHooks(...)`；`obsListStore` 仅 `attachHooks(...)`（无桥）。onChanged 均空实现（无 `publish*` 直连 store 发布点；搜索域发布走 hooks）。宿主新增 `private readObservingListStorage` / `writeObservingListStorage` / `readBookmarksStorage` 三个 Preferences 助手（原加载器内联体的抽取）。
+- **body diff 摘要**（函数体逐字取自宿主）：差异仅 ① `this.callNativeWhenReady/callInteractive` → `this.port.requestWhenReady/requestInteractive`；② 本域字段 `this.<store>.X` → `this.X`；③ 跨域写 → `hooks.*`；④ 宿主助手 → `hooks.*` 或同 store 方法；⑤ 开头补 `hooks/port` 守卫。`getObjectCatalogCategories` 的 `moduleId/label/group/isCoreSubset/isPluginCatalog` 字段映射、`module:<id>` 前缀、pending 命中后 `loadCategoryObjects('module:'+id, id)` 的分支逐字保留；`loadObservingListFromStorage` 的「空库时把内存值迁移写回」两分支 + `finally { observingListReady = true }` 逐字保留；`loadBookmarks` 的 `b.id/b.name/b.fov/b.object` 回退（含 `I18n.t('bookmark_fallback')`、`fov ?? 60`）逐字保留。
+- **宿主 `private load*`**：**24 → 17（−7）**（本片删 `loadObjectCatalogCategories`/`loadObservingListFromStorage`/`loadBookmarks`/`loadBookmarksFromStorage`/`loadRecordingByName`/`loadScriptList`/`loadSelectedSatellitePasses`；按 §14.9「非 async」口径为 **21 → 16**）；宿主 `private` 方法 **781 → 776**（另删 `setScriptMetadata`，新增 3 个 Preferences 助手）。单体 `MainWindowNativeNode.ets` **16,255 → 16,207（−48）**。store：`CatalogStore` 81 → 152、`ObservingListStore` 19 → 61、`BookmarkStore` 9 → 77、`ScriptStore` 105 → 162、`ObjectDetailStore` 119 → 146。
+- **B2 总账（§2.13 的 B2 清单 35 个）**：**已下沉 34 + 转 B3 1 + 未处理 0**。
+  - B2-Astro 19/19 下沉（B2A）。
+  - B2R-1：1/1（`loadObjectInspectorModelRawTexture`）。
+  - B2R-2：3/3（`loadConfigurationSettings`/`loadObserverInfo`/`loadTimeExtras`）。
+  - B2R-3：4/4（`loadSkyCultureList`/`loadSkyCultureVisualSettings`/`loadSkyCultureTerritoryMap`/`loadSkyCultureMakerDraft`）。
+  - B2R-4：8 个 = 7 下沉 + 1 转 B3（`loadTelescopeControlStatus`）。
+  - 合计 19+1+3+4+7 = **34 下沉**；`loadTelescopeControlStatus` → **B3**（依赖清单：`lx200LivePositionTimer`/`lx200LivePositionRequestPending`/`lx200LivePositionRequestId` 定时器簇 + `shouldRefreshTelescopePosition()` 读宿主 `applicationInForeground`/`panelVisible`/`activePanel`，与 `scheduleTelescopeLivePosition`(12 调用点)/`stopTelescopeLivePosition`(17)/`refreshTelescopeLivePosition`/`syncTelescopeLivePosition`/`setTelescopeLivePosition` + `lx200Payload`/`applyTelescopeProfiles`/`applyTelescopeEndpointStatus` 交织）。
+  - **B1 转入 B2/B3 的 4 个当前状态**：`loadAngleMeasure`（B1-2 停下）**未处理**（B3；`angleMeasureRequestId` 与 `toggleAngleMeasure` 共享）；`loadConstellationNavigation`（B1-3 停下）**未处理**（B3；`languageRefreshSerial` 仍宿主单一持有 —— 本片为 CatalogStore 注入只读 `languageSerial()`，未解除该前置）；`loadNavStars`（B1-4 停下）**未处理**（B3；`navStarsMutationId` 与 `setNavStarsSetting` 共享）；`loadMeteorShowers`（B1-4 停下）**未处理**（B3；`meteorShowersLoadRequestId` 与 `setMeteorShowersFlag` 共享）。四者均仍在宿主。
+- **验证**：`node scripts/check-ohos-refactor-slice.mjs` 通过（store this 自洽、单体括号深度 0）；`arkts_check` 6 文件 **No errors**；`scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**（45 s，30 executed）；`node scripts/check-ohos-ui-contract.mjs` **intact**（33 panels / 24 static ids / 17 dynamic prefixes / 44 anchors / 214+ files）；受影响测试 13 个全绿：`test-ohos-search-browser` 3/3、`test-ohos-satellite-panel` 7/7、`test-ohos-detail-live-values` 7/7、`test-ohos-plugin-panel-state` 4/4、`test-ohos-information-policy` 3/3、`test-ohos-distance-ui` 5/5、`test-ohos-cli-response` 4/4、`test-ohos-privacy-startup` 19/19、`test-ohos-procedural-model` 12/12、`test-ohos-constellation-lookup` 2/2、`test-ohos-object-type-i18n` 7/7、`test-ohos-detail-image-layout` 5/5、`test-ohos-startup-stars` 17/17；`git status` 干净（仅 6 个源码文件）。
+- **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：`install -r` → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 22846 **全程存活**（每个面板开合后复核）。逐入口走查：① Dock「更多功能」→ `#more-action-observeHub`「观测工作区」→ `#hub-action-observing`「观测列表」（渲染「今晚可观测目标」分类 chips）→ `#hub-action-bookmarks`「书签」（渲染「正在加载书签…」）→ `#hub-action-oculars`「目镜模拟」（渲染「需要先选择观测目标」/「模拟视图」），开合均无崩溃；② Dock「更多功能」→ 上滑「自动化」→ `#more-action-automationHub`「脚本与自动化」→ `#hub-action-scripts`「脚本」（渲染「交互式天文导览」列表）；③ Dock「搜索」→ 面板打开（渲染「行星」分类 chips，覆盖 `loadObjectCatalogCategories` 入口）。`aa dump -l` 复核 `state #FOREGROUND`。**测试未改任何持久化设置（仅浏览/滚动），无需恢复。**
+- **模拟器无法覆盖（待真机）**：`getBookmarks` / `getScriptList` / `loadRecording` / `getObjectCatalogCategories` 的**桥回包真实写入与渲染**（书签列表、脚本列表与元数据、录制命令条数提示、目录分类 chips 的完整回包）依赖 native 引擎，UI-only 通道无桥响应（书签面板显示「正在加载书签…」即为无引擎所致，非回归）；Preferences 的真实读写（观测列表/书签的持久化与迁移写回）需真机走查；`loadTelescopeControlStatus` 未搬，其定时器收敛（面板关闭后停止）留待 B3 片真机验证。
+- **本片新踩的坑**：无新增。沿用「先后悔（普查）再动手」：`loadObjectCatalogCategories` 的跨 store（SearchStore）与宿主代际 `languageRefreshSerial` 经普查发现，未按 §14.5 简表只注入两个助手；并坚持 §14.8 规则 2 —— store 不 import `@ohos.data.preferences`/`getUIContext`，Preferences 读取整体经 hooks 注入（而非只注入 `getUIContext` 让 store 自行 import NAPI）。
+## [2026-10-04] DevEco Code - 重构：§14 B2R-3 星空文化域加载器下沉
+
+- 依据 `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.5（B2「其余」第 3 片）与 §14.7 / §14.8；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 先例）；注入接口沿用 B2A `AstroHostHooks` / B2R-1 `ObjectMediaHostHooks` / B2R-2 `TimeSettingsHostHooks` 的「纯接口 + 宿主具名对象 `attachHooks({...})`」先例。**单提交完成**：4 个加载器跨 3 个 store，且 hooks 互不依赖可同片；4 个加载器的宿主调用点全部同片改写，无中间双写。
+- 行号基线 `a29e0d836e` 实测定界：`loadSkyCultureList` 6066、`loadSkyCultureVisualSettings` 6387、`loadSkyCultureTerritoryMap` 6850、`loadSkyCultureMakerDraft` 6966；`loadSkyCultureDetails` 6204（**未搬**）、`skyCultureActiveColorTarget` 6448、`drawSkyCultureTerritoryMap` 6872、`skyCultureMakerDraftFromResponse` 6910、`applySkyCultureMakerDraft` 6921 均在宿主保留。
+- **逐加载器依赖普查（写入字段 → store 归属 / 桥 / 助手去向 / 序号）**：
+  - `loadSkyCultureList`（42 行）→ **SkyCultureViewStore**。写入：`pendingId` / `skyCultureListLoading` / `skyCultureList` / `currentSkyCultureId`（本 store）。桥：`callInteractive('getSkyCultureList')` → `port.requestInteractive`。助手：`loadSkyCultureDetails`（宿主 **B3**，未搬）→ `hooks.loadSkyCultureDetails()`；原开头 `++this.skyCultureDetailsRequestId`（与 `selectSkyCulture` / `handleSkyCultureRowArea` / 艺术图解码共享，归宿主 B3）→ `hooks.invalidateSkyCultureDetails()`。序号：`skyCultureListRequestId` **搬入 store**（`this.seq`，唯一使用点即本加载器），宿主删该字段。
+  - `loadSkyCultureVisualSettings`（40 行）→ **SkyCultureSettingsStore**（复用 B1-6 已 attach 的 `HostCommandPort`）。写入：20 个视觉设置字段 + `skyCultureVisualColors` + `skyCultureColorInput`（均本 store）。桥：`callInteractive('getSkyCultureVisualSettings')` → `port.requestInteractive`。助手：`skyCultureActiveColorTarget()`（读 layerStore + 本 store 的 hasZodiac/hasLunarSystem）→ `hooks.skyCultureActiveColorTarget()`。序号：无（预留未用 `seq`）。
+  - `loadSkyCultureTerritoryMap`（21 行）→ **SkyCultureSettingsStore**。写入：`skyCultureTerritoryMapLoading` / `Error` / `Polygons` / `Year` / `Expanded`（本 store）。桥：`callInteractive('getSkyCultureTerritoryGeometry')` → `port.requestInteractive`。助手：`applySkyCultureTerritoryMapYearInput()`（store 方法，就地调用）；`drawSkyCultureTerritoryMap()`（持 Canvas 上下文/尺寸，UI/NAPI）→ `hooks.drawSkyCultureTerritoryMap()`；**普查补出**：门禁读 `skyCultureViewStore.currentSkyCultureId` 属跨 store → `hooks.skyCultureCurrentId()`（§14.5 表未列）。序号：无。
+  - `loadSkyCultureMakerDraft`（21 行）→ **SkyCultureMakerStore**。写入：`loading` / `draftReady` / `canUndo` / `status`（本 store）。桥：`callNativeWhenReady('getSkyCultureMakerDraft', ..., 0, 100, 150, onFailure)` → `port.requestWhenReady(..., 0, 100, 150)`（**重试档/失败回调逐字保留**）。助手：`skyCultureMakerDraftFromResponse` / `applySkyCultureMakerDraft`（宿主，被保存/校验/重置/撤销等 5+ 动作共用）/ `ensurePluginLoaded`（宿主通用插件加载器）→ 三者 `hooks.*`。序号：无（预留未用 `seq`）。`I18n.t` 直接 import（store 已 import `../pages/I18n`）。
+- **`loadSkyCultureDetails` 的处置（保持 B3 登记）**：该加载器写 §2.7.1 保留的渐进写入字段 `skyCultureArtStates`（及 `skyCultureArtThumbnailGeneration` 等）→ §14.6 登记为 B3，**本片不搬**；仅作为 `SkyCultureViewHostHooks.loadSkyCultureDetails()` 被 `loadSkyCultureList` 触发，宿主实现原样保留。其内部对 `loadSkyCultureVisualSettings()` 的调用点改为 `this.skyCultureSettingsStore.loadSkyCultureVisualSettings()`（同片，避免中断）。
+- **注入接口设计**（3 个纯接口，均不 import UI/NAPI，只依赖 `StellariumBridgeResponse` / `CommandPort` / 类型）：
+  - `SkyCultureViewHostHooks`（`state/SkyCultureViewStore.ets`，2 法）：`invalidateSkyCultureDetails()`、`loadSkyCultureDetails()`。
+  - `SkyCultureSettingsHostHooks`（`state/SkyCultureSettingsStore.ets`，3 法）：`skyCultureActiveColorTarget()`、`drawSkyCultureTerritoryMap()`、`skyCultureCurrentId()`。
+  - `SkyCultureMakerHostHooks`（`state/SkyCultureMakerStore.ets`，3 法）：`applySkyCultureMakerDraft(draft)`、`ensurePluginLoaded(name, cb, fail?)`、`skyCultureMakerDraftFromResponse(response)`。
+  - 宿主 `aboutToAppear` 对三 store 调 `attachPort(hostPort, () => {})`（settings 复用 B1-6 已有）与 `attachHooks({...})`；`SkyCultureViewStore` / `SkyCultureMakerStore` 新增端口约定成员（port/seq/onChanged/hooks/attachPort/attachHooks/ensurePort/notifyChanged）。
+- **body diff 摘要**：四段函数体**逐字**搬入；仅做三类替换 —— `this.callInteractive/callNativeWhenReady` → `this.port.requestInteractive/requestWhenReady`（重试档/onFailure 原样透传）、`this.skyCultureViewStore|SettingsStore|MakerStore.<f>` → `this.<f>`、宿主序号/助手 → `this.seq` / `hooks.*`；函数体逐语句保留（含 `list.push({...})` 字段映射、20 个视觉字段的三元回退、领地几何 `as Array<SkyCultureTerritoryPolygon>`、`Math.round(r.year)`、制作器草稿分支与 `values['canUndo']` 读取）；开头补 `ensurePort()`/`hooks` 守卫（未注入时静默返回，不 crash），末尾不新增发布。
+- 宿主 `private load*` **26 → 22**（删 4）；单体 **16,361 → 16,255**（−106；删 4 加载器 124 行 + `skyCultureListRequestId` 字段 1 行，增注入块 29 行/净 106）。`SkyCultureViewStore` 60 → 156 行；`SkyCultureSettingsStore` 569 → 672 行；`SkyCultureMakerStore` 115 → 189 行。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过（store this 自洽、单体括号深度 0）；`arkts_check` 4 文件 No errors；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**（40 s）；`check-ohos-ui-contract.mjs` **intact**（33 panels / 24 static ids / 17 dynamic prefixes / 44 anchors / 214+ files）；受影响测试 `test-ohos-skyculture-refresh` 5/5、`test-ohos-skyculture-text` 4/4（`test-ohos-hier-column.mjs` 不存在，未执行）；全量 `*ohos*.mjs` 扫描仅 §13.6 的 **7 个环境类**失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS 假设），无回归。
+- **模拟器冒烟（真机离线；`127.0.0.1:5555`，UI-only 无引擎）**：安装新 HAP → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 14664 存活；点 Dock「图层」→「文化」标签页，面板渲染正常（标题「文化图层」/副标题「选择要显示的星座与辅助图层」），全程无崩溃。
+- **模拟器无法覆盖（待真机）**：`getSkyCultureList` / `getSkyCultureVisualSettings` / `getSkyCultureTerritoryGeometry` / `getSkyCultureMakerDraft` 的**桥回包真实写入与渲染**（文化列表、视觉设置值、领地几何绘制、制作器草稿）均依赖 native 引擎，UI-only 通道无桥响应；`openUiPanel skyCultureMaker` 走 native 命令循环，模拟器超时不可用，制作器面板入口深未走查（原因：无引擎 + CLI 依赖 native 命令循环）。
+- **本片新踩的坑**：无新增；沿用「注入前先普查跨域读取」—— `loadSkyCultureTerritoryMap` 的门禁读 `skyCultureViewStore.currentSkyCultureId`（§14.5 表未列）经普查发现并补 `skyCultureCurrentId` 注入。
+
+## [2026-10-04] DevEco Code - 重构：§14 B2R-2 设置/观测点/时间附加加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.5（B2「其余」第 2 片）与 §14.7 / §14.8；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 先例）；注入接口沿用 B2A `AstroHostHooks` / B2R-1 `ObjectMediaHostHooks` 的「纯接口 + 宿主具名对象 `attachHooks({...})`」先例。**单提交完成**（3 个加载器跨 3 个 store，且 hooks 互不依赖，可同片；`loadConfigurationSettings` 的 3 个宿主调用点与 `loadObserverInfo`/`loadTimeExtras` 的调用点全部同片改写，无中间双写）。
+- **逐加载器依赖普查（字段 → store 归属 / 桥 / 助手去向 / 序号）**：
+  - `loadConfigurationSettings`（宿主 49 行）→ **TimeSettingsStore**。写入：`configDateFormat`/`configTimeFormat`（本 store，局部）；`viewSettingsStore.useMetricUnits`/`configDitheringMode`/`autoZoomResets`；`navigationStore.navigationMouseEnabled/MouseZoomEnabled/MoveKeysEnabled/ZoomKeysEnabled/GravityLabelsEnabled/StartupFov/StartupAzimuth/StartupAltitude/MaxFov`（9）；`ephemerisStore.ephemerisDe430/431/440/441Available` + 同 4 个 `Active`（8）；`infoWindowStore.informationMode`/`informationCustomMask`。桥：`callInteractive` × 9 → `port.requestInteractive`。助手：`applySelectedInfoMode`（宿主，与 `setInformationMode` 共享）、`applyTimeSettings`（宿主，与 `saveTimePreference` 共享）→ 二者按 §14.5「额外注入」保留宿主实现、经 hooks 注入。序号：无（无并发抑制需求），按约定预留未用 `seq`。**未停下**。
+  - `loadObserverInfo(updateTimeZone=true)`（17 行）→ **LocationPickerStore**。写入：`observerTimeZone`（本 store，主字段）；`skyCultureSettingsStore.skyCultureObserverLatitude`；`sessionToolStore.observerPlanet`。桥：`callInteractive('getObserverInfo')` → `port.requestInteractive`。助手：`timezoneDisplayName`（已在 `common/derive/labels.ets`）、`approximateTimeZoneDisplay`（**逐字迁入 `common/derive/labels.ets`**，纯函数：仅入参 + `clamp`）→ 模块 import，无需注入。序号：无。**未停下**。
+  - `loadTimeExtras`（9 行）→ **TimeStore**。写入：`timeStore.siderealTimeText`（本 store，主字段）；经助手写 `nightModeStore.nightMode`、`atmosphereStore.atmoPressure/Temperature/Extinction/refractionOn`。桥：`callNative` × 3 → `port.request`（同步档）。助手：`syncNightModeFromEngine`（宿主；读写宿主 `pendingNightMode`/`pendingNightModeUntilMs`，与宿主动作 `applyNightMode`/`persistNightMode` 共享，故**保留宿主**并按 §14.5「额外注入」注入）、`applyAtmosphereResponse`（宿主；与 `applyAtmosphere` 共享，保留宿主并注入）。序号：无。**未停下**。
+- **跨 store 写入方案与理由**：三个加载器均**不**让 store 互相持有。`loadObserverInfo`/`loadTimeExtras` 的跨域写点少（各 2–4 个标量/助手）→ 分别用 `LocationPickerHostHooks`（2 个 setter）与 `TimeHostHooks`（2 个助手）注入。`loadConfigurationSettings` 跨 5 个 store、写点最密，按 §14.5「落到主要归属 store + 其余经 setter 写入」：选 **TimeSettingsStore 为主要归属**（它承载时间格式字段 + 被注入的 `applyTimeSettings` 主要写入域，占本加载器写入量最大）；其余 4 个 store（ViewSettings / Navigation / Ephemeris / InfoWindow）经 `TimeSettingsHostHooks` 的**粒度 setter** 写入（解析留在 store：`r.mouseNavigation === true` 等判断不下沉到宿主），避免把「回包解析」拆到宿主。
+- **注入接口设计**：新增 4 个纯接口（均无 UI/NAPI import，只依赖 `StellariumBridgeResponse` / `CommandPort`）：
+  - `LocationPickerHostHooks`（`state/LocationPickerStore.ets`）：`setSkyCultureObserverLatitude(value)`、`setObserverPlanet(value)`。
+  - `TimeHostHooks`（`state/TimeStore.ets`）：`syncNightModeFromEngine(engineNight)`、`applyAtmosphereResponse(response)`。
+  - `TimeSettingsHostHooks`（`state/TimeSettingsStore.ets`）：19 法 —— ViewSettings 3（`setUseMetricUnits`/`setConfigDitheringMode`/`setAutoZoomResets`）、Navigation 9（逐字段 setter）、Ephemeris 2（`setEphemerisAvailability(4)` / `setEphemerisActive(4)`）、InfoWindow 3（`informationMode()` 读当前值 + `setInformationMode`/`setInformationCustomMask`）、外加 `applySelectedInfoMode(mode)` / `applyTimeSettings(response)`。
+  - 三个 store 各新增 `private port/seq/onChanged/hooks` + `attachPort`/`attachHooks`/`ensurePort`/`notifyChanged`；宿主 `aboutToAppear` 对三者复用**同一** `hostPort`，`onChanged` 均传空实现（字段赋值即刷新，无 `publish*` 发布点）。
+- **body diff 摘要**（函数体逐字取自宿主）：差异仅 ① `this.callInteractive` → `this.port.requestInteractive`、`this.callNative` → `this.port.request`；② 本域字段 `this.<store>.X` → `this.X`；③ 其余 store 字段写 → `hooks.<setter>`；④ `this.applySelectedInfoMode`/`this.applyTimeSettings`/`this.applyAtmosphereResponse`/`this.syncNightModeFromEngine` → `hooks.*`；⑤ 开头 `ensurePort()` + `hooks` 空值守卫。`getNavigationSettings`/`getEphemerisSettings`/`getInformationSettings` 回包中的 `undefined` 判定、`Number(...)` 转换、「`r.infoMode ?? 当前模式`」后再 `applySelectedInfoMode` 的顺序、9 个 `callInteractive` 的调用次序**全部逐字保留**。`loadObserverInfo` 中 `updateTimeZone && r.timeZone.length>0 && !=='system_default'` 与「`observerTimeZone` 为空才用经度估算」的两分支逐字保留。
+- **体量**：宿主 `private load*`（§14.9 口径，非 async）**29 → 26**（本片 −3；若把 3 个 `private async load*` 计入则为 32 → 29）。宿主 `MainWindowNativeNode.ets` **16,397 → 16,361（−36）**；`TimeSettingsStore.ets` 16 → 136、`TimeStore.ets` 52 → 117、`LocationPickerStore.ets` 445 → 514、`common/derive/labels.ets` 331 → 342。宿主新增 `private` 方法 0（删 `loadConfigurationSettings`/`loadObserverInfo`/`loadTimeExtras`/`approximateTimeZoneDisplay` 4 个，接线在 `aboutToAppear` 内联具名对象）。
+- **测试同步**：无需改夹具。全仓 grep `timeSettingsStore|infoWindowStore|navigationStore|ephemerisStore|viewSettingsStore|locationPickerStore|skyCultureObserverLatitude|observerTimeZone|siderealTimeText|atmo*|nightModeStore|loadConfigurationSettings|loadObserverInfo|loadTimeExtras|applyTimeSettings|applySelectedInfoMode|applyAtmosphereResponse|syncNightModeFromEngine` 命中 3 个脚本（`test-ohos-settings-choice-motion` 断言宿主仍保留的 `private applyTimeSettings(` / `this.timeSettingsStore.*` / `this.infoWindowStore.informationMode`；`test-ohos-information-policy` / `test-ohos-distance-ui` 只读宿主保留的 `applyCustomInformationMask` 与派生判断）——三者均依赖**宿主保留**的方法，未读被搬走的加载器，全部全绿。
+- **证据**：`node scripts/check-ohos-refactor-slice.mjs` 通过（单体括号净深度 0）；`arkts_check` 5 文件 **No errors**；`scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**（39 s，30 executed）；`node scripts/check-ohos-ui-contract.mjs` **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / >214 文件）；受影响测试 `test-ohos-settings-choice-motion` 4/4、`test-ohos-information-policy` 3/3、`test-ohos-distance-ui` 5/5、`test-ohos-skyculture-refresh` 5/5、`test-ohos-cli-response` 4/4；全量扫描仅 §13.6 的 7 个环境类失败（4 个 `-pad` + `test-ohos-mist-performance` + `verify-ohos-location-search` + `verify-ohos-search`），无回归。
+- **模拟器冒烟（`127.0.0.1:5555`，UI-only）**：`install -r` → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` 存活（3815，全程未掉）。逐入口走查：① Dock「时间」→ 面板打开，上滑至「恒星时 / 时间方程 / 儒略日 / 大气（消光 0.13）」渲染正常（覆盖 `loadTimeExtras` 入口）；② Dock「位置」→ 面板打开、地图区域渲染（覆盖 `loadObserverInfo` 入口）；③ Dock「更多功能」→ 上滑「系统」→ `#more-action-settings` → 设置面板打开，依次切「主设置 / 信息（信息级别：全部/默认/简短/无 + 自定义）/ 时间（日期格式 + 时间预览）」各页签渲染正常（覆盖 `loadConfigurationSettings` 入口）；`hilog -x -T StellariumArkUI` 无 ERROR/FATAL/jscrash。**测试未改任何持久化设置（仅浏览/滚动），无需恢复。**
+- **模拟器无法覆盖（待真机）**：模拟器无 Stellarium/Qt 引擎，三个加载器的桥回包全部 `ok=false`，故 **store 的实际写入链路（9 个 config 回包 + 观测点回包 + 恒星时/夜视/大气同步）在模拟器上被 `if (r.ok...)` 守卫跳过、未被运行时走到**。需真机验证：设置面板各页签回读并渲染引擎真实配置（日期/时间格式、抖动档、距离单位、导航 9 项、DE430/431/440/441 的可用/启用、信息模式与自定义掩码）；位置面板观测纬度/时区/观测星球回显（含经度估算时区分支）；时间面板恒星时文本、夜视模式随引擎同步、大气气压/温度/消光/折射。另需真机点按后实时刷新验证（如切日期格式 → 预览与时间面板同步）。
+- **本片新踩的坑**：无构建期新坑。三处 `body` 内既有 `as string`（`r.format as string` / `r.value as string` / `r.mode as string`）按「函数体逐字搬入」保留（非本片新引入；本片三个加载器无 `catch`/`throw`，**未新增任何 `as`**）。设计取舍记录：`syncNightModeFromEngine` 因读写宿主 `pendingNightMode`/`pendingNightModeUntilMs`（与 `applyNightMode` 共享待定窗口）而**保留宿主、经 hooks 注入**——若强行搬入 `NightModeStore` 需连带迁移 `applyNightMode`/`persistNightMode` 与该两字段，超出本片边界；已按 §14.5 列明的「额外注入」处理，未登记 B3。
+## [2026-10-04] DevEco Code - 重构：§14 B2R-1 媒体管线加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.5（B2R-1 媒体）与 §14.7 / §14.8；承接 B2A 的 `AstroHostHooks` 具名注入先例。
+- **依赖复查结论（真 B2，非停下）**：`loadObjectInspectorModelRawTexture`（宿主 72 行）只依赖「本域 store（`ObjectMediaStore`）+ 纯助手 `describeDecodeError`（`common/derive/labels.ets`）+ 宿主媒体助手 `commit/fail/decode` + `fileIo`/`image`」。**无桥、无 `publish*`、无定时器、无路由、无 `getUIContext`**。因 `fileIo`（NAPI）与 `decodeLocalImage`（`image`）不可逐字搬入 store，按 §14.8 规则 2「改为注入职责」下沉 —— **不登记 B3**。
+- **注入设计**：新增 `export interface ObjectMediaHostHooks`（4 法：`readRawSidecar` / `decodeObjectInspectorModelTextureFromPng` / `commitObjectInspectorModelTexture` / `failObjectInspectorModelTexture`），宿主 `aboutToAppear` 以具名对象注入 `this.objectMediaStore.attachHooks({...})`。store 不 import NAPI/UI（仅 `hilog` + 纯模块 `describeDecodeError`）；本加载器不走桥，故不注入 `CommandPort`。§14.5 原表列的 `commit/fail/decode` 三助手之外，**新增 `readRawSidecar` 注入点**（把内联 `fileIo` 读取职责从 store 移出）。
+- **body diff 摘要**（函数体逐字取自宿主，差异仅 3 处）：① 内联 `fileIo.openSync/readSync/closeSync` + 尺寸校验 → `hooks.readRawSidecar(path, expectedBytes, label)`；宿主新增 `private readRawSidecar`（错误文案 `'CPU texture sidecar'` / `'ring sidecar'` 逐字保留，异常时同样关闭 fd 再抛）。② `this.commit/fail/decodeObjectInspectorModelTexture*` → `hooks.*`。③ ring 日志 `ringBytesRead.toString()` → `ringPixels.byteLength.toString()`（尺寸已校验，同值）。日志格式串、尺寸常量（512×256×4 / 512×2×4）、ring 可选与 PNG 回退分支、generation/selection 校验语义**全不变**。
+- **体量**：宿主 `private load*` **30 → 29**；宿主方法数净 0（删 `loadObjectInspectorModelRawTexture` −1、新增 `readRawSidecar` +1）；单体 `MainWindowNativeNode.ets` **16,433 → 16,397（−36；+21/−57）**；`ObjectMediaStore.ets` **31 → 109 行**。
+- **测试同步**：无。5 个 media/inspector/texture 相关脚本均不引用本方法，无需改夹具。
+- **证据**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 2 文件 No errors；`scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）；受影响测试 `test-ohos-procedural-model` 12/12、`-detail-live-values` 7/7、`-detail-image-layout` 5/5、`-detail-model-geometry` 7/7、`-model-scroll` 5/5 全绿；模拟器（`127.0.0.1:5555` UI-only）install → `aa start` → `pidof` 存活（29878），`ui layout` Dock / 缩放无回归，hilog 无 `detail-model` / `detail-media` 错误。
+- **待真机**：`.model.rgba` 原始侧车读取、PNG 回退解码、`commit` 写宿主逐帧裸字段并触发 CPU 光栅化的真实链路只能在真机/引擎验证（模拟器无引擎、无法选中天体进入 model 详情卡）；错误回退路径（侧车缺失/尺寸不符→PNG、PNG 失败→`failObjectInspectorModelTexture`）同待真机。
+- **本片新踩的坑**：`readRawSidecar` 的 `catch` 中 `throw err` 触发 `arkts-limited-throw`（"throw statements cannot accept values of arbitrary types"）→ 构建 FAIL；改为 `throw err as Error` 收窄后通过。**重抛捕获值必须收窄为 `Error`**。
+## [2026-10-04] DevEco Code - 重构：§14 B2A Astro 簇加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.5（B2 的 Astro 19 个）、§14.7 / §14.8；复用 §14.1 的 `bridge/CommandPort.ets` 与宿主同一 `HostCommandPort` 实例（AB-0 / B1 先例）。**单提交完成**（本片允许 1–3 个提交；AstroStore 与 WutStore 经钩子互相注入，同提交可避免 `loadTonightAstro→loadWutTargets` 与 `updateAstroCalcSnapshot` 的中间双写态）。
+- **实下沉 19/19，停下 0**：18 个加载器 + 域助手 → `state/AstroStore.ets`；`loadWutTargets` → `state/WutStore.ets`。宿主 `private load*` **49 → 30**（−19）。
+- **体量**：`MainWindowNativeNode.ets` **17,276 → 16,433**（−843）；`AstroStore.ets` 172 → 1,188 行；`WutStore.ets` 22 → 121 行。宿主 `private` 方法本片 −32（当前 775）。
+- **逐加载器依赖表（写入字段 / 桥 / 助手处理 / 序号）**：
+  - `loadRTS` → AstroStore：`this.astroStore.rts*`→`this.rts*`；`callInteractive('getRTS')`→`port.requestInteractive`；助手 `updateAstroCalcSnapshot`（搬 store）、`hasSelectedObject`（跨 objectDetailStore，经 hooks）、`clearRtsSelectionResults`（搬 store）；序号 `rtsRequestSequence` 搬 store（与 `clearRtsSelectionResults` 共享，同片搬）。
+  - `loadRtsCalendar` → AstroStore：`astroStore.rtsCalendar*`；`callLongRunningInteractive('getRTSCalendar',480)`→`port.requestLongRunning`；助手 `resolveRtsCalendarStartJD`（搬 store）、`clearRtsSelectionResults`；序号 `rtsCalendarLoadSequence` 搬 store（与宿主动作 `markRtsCalendarForRegeneration` 共享，二者同片搬入 store）。
+  - `loadEphemeris` → AstroStore：`astroStore.ephemeris*`（Astro 星历表域）；`callNativeWhenReady(...,0,100,80,onFailure)`→`port.requestWhenReady(...,onFailure,0,100,80)`（端口签名把 onFailure 前移）；助手 `resolveEphemerisStartJD`（搬 store；「指定日期」跨 store 读 `EphemerisStore.ephemerisStartYear/Month/Day`，经 `hooks.ephemerisCustomStartJD()`）、`fmtDateTime`（宿主助手，经 hooks）；序号 `ephemerisLoadSequence` 搬 store。
+  - `loadPlanetCalc` → AstroStore：`astroStore.planetCalc*`；`callInteractive('getPlanetCalc')`；序号 `planetCalcRequestSequence` 搬 store。
+  - `loadPlanetPairDistance` → AstroStore：`astroStore.planetPair*`；`callInteractive('getPlanetPairDistanceCurve')`；助手 `planetPairBodyName`（`common/derive/astro.ets` 模块 import）、`updatePlanetPairDistanceRanges`（搬 store）；序号 `planetPairDistanceRequestSequence` 搬 store。
+  - `loadAltAzCurve` / `loadObservabilityCalendar` / `loadAnnualElevation` / `loadLunarElongation` / `loadPlanetTimeSeries` → AstroStore：各自 `astroStore.*`；`callInteractive`/`callLongRunningInteractive`；图表域助手 `beginGraphLoad`/`finishGraphLoad`/`resolveGraphStartJD`（搬 store，共享 `graphLoadSequence`，同片搬）、`updatePlanetTimeSeriesRanges`（搬 store）；序号 `graphLoadSequence` 搬 store。
+  - `loadEclipses` → AstroStore：`astroStore.eclipse*`；`callNativeWhenReady(...,0,100,200,onFailure)`；助手 `resolveEclipseStartJD`（搬 store）、`reloadEclipses`（宿主动作，与 `eclipseLoadSequence` 共享，同片搬 store）；序号 `eclipseLoadSequence` 搬 store。
+  - `loadPlanetaryTransits` → AstroStore：`astroStore.planetaryTransit*`；`callNativeWhenReady(...,0,100,200,onFailure)`；序号 `planetaryTransitRequestSequence` 搬 store。
+  - `loadPhenomena` → AstroStore：`astroStore.phenomena*`；`callNativeWhenReady(...,0,100,300,onFailure)`；序号 `phenomenaRequestSequence` 搬 store。
+  - `loadTonightAstro` → AstroStore：`astroStore.tonightAstro`；`callInteractive('getTonightEvents')`；联动 `loadWutTargets`（经 hooks 指向 WutStore）；无序号。
+  - `loadAlmanac` → AstroStore：`astroStore.almanac*`；`callInteractive('getAlmanac')`；序号 `almanacRequestSequence` 搬 store。
+  - `loadHeliocentricPositions` → AstroStore：`astroStore.hec*`；`callInteractive('getHeliocentricEclipticPositions')`；助手 `hecLayoutPositions`（依赖宿主渲染几何 `hecPointX/Y/…`，经 hooks 注入）；序号 `hecPositionsRequestSequence` 搬 store。
+  - `loadCelestialPositions` → AstroStore：`astroStore.celestial*`；`callInteractive('getCelestialPositions')`；序号 `celestialPositionsRequestSequence` 搬 store。
+  - `loadAstroTab(id)` → AstroStore：纯分发；`loadPlanetPositions` / `loadMoonPhases` / `loadAstroCalcContext` 未随本片下沉（B3 / 本片外），经 hooks 注入。
+  - `loadWutTargets` → WutStore：`wutStore.wut*`；`callNativeFire('getWutTargets',cancel)`→`port.fire`、`callLongRunningInteractive(...,900,cancel)`→`port.requestLongRunning`；`publishAstroPanelState()`→`notifyChanged()`（onChanged 注入）、`wutCategoryTitle`（搬 WutStore）；序号 `wutRequestSequence` 搬 store。
+- **注入接口设计**：`state/AstroStore.ets` 新增 `export interface AstroHostHooks`（11 个方法）：`hasSelectedObject()` / `selectedObjectName()`（objectDetailStore）、`wutCategory()` / `wutObservationTime()` / `loadWutTargets()`（WutStore）、`ephemerisCustomStartJD()`（EphemerisStore）、`fmtDateTime(s)` / `hecLayoutPositions(positions)`（宿主未下沉助手）、`loadPlanetPositions()` / `loadMoonPhases()` / `loadAstroCalcContext()`（未下沉加载器）。宿主 `aboutToAppear` 用 `this.astroStore.attachHooks({…})` 具名注入、`attachPort(hostPort, () => this.publishAstroPanelState())`；`this.wutStore.attachPort(hostPort, () => this.publishAstroPanelState())`。store 侧不 import NAPI/UI（规则 2）。
+- **body diff 摘要**：store 方法体逐字取自宿主；差异仅 `this.callNativeX`→`this.port.*`、`this.<astroStore|wutStore>.<f>`→`this.<f>`、`this.<宿主序号>`→`this.<store 序号>`、`this.<助手>`→本 store 方法 / 模块 import / `this.hooks.*`；加载器开头加 `ensurePort()` 守卫，`loadWutTargets` 的 3 处 `publishAstroPanelState()`→`notifyChanged()`。重试档逐字保留：`getEphemeris 0/100/80`、`getEclipses 0/100/200`、`getPlanetaryTransits 0/100/200`、`getPhenomena 0/100/300`、`getRTSCalendar 480ms`、`getWutTargets 900ms`。
+- **宿主 `private load*` 前后**：49 → 30。宿主删除 32 个方法（19 加载器 + `updateAstroCalcSnapshot` / `graphTargetLabel` / `phenomenaBodyName` / `clearRtsSelectionResults` / `beginGraphLoad` / `finishGraphLoad` / `resolveGraphStartJD` / `resolveRtsCalendarStartJD` / `resolveEphemerisStartJD` / `resolveEclipseStartJD` / `updatePlanetPairDistanceRanges` / `updatePlanetTimeSeriesRanges` / `markRtsCalendarForRegeneration` / `reloadEclipses`）与 13 个序号字段；37 处调用点改 `this.astroStore.*` / `this.wutStore.*`；`AstroPanelHost` 回调重指 store；禁双写（宿主零同名副本）。
+- **测试同步**：`scripts/test-ohos-astro-motion.mjs` 假宿主 `astroStore` 补 `loadAstroTab`、`wutStore` 补 `loadWutTargets`（规则 8）。
+- **验证证据**：`check-ohos-refactor-slice` 通过；`arkts_check`（3 文件）无错；`scripts\build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract` = intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）；`test-ohos-astro-motion` 9/9、`test-ohos-wut-layout` 4/4、`verify-ohos-julian-date` 通过；全量 `*ohos*.mjs` 扫描仅 §13.6 的 7 个环境类失败（−pad×4 / mist-performance / location-search 路径 bug / search 的 macOS hdc 假设）。
+- **模拟器冒烟（真机离线；127.0.0.1:5555 UI-only 无引擎）**：install + `aa start` → `pidof` 存活；「更多功能 → 天体数据与扩展 → 天文计算」打开，切换「观测 / 位置与数据 / 事件与历法」三组及 今晚 / 升降 / 图表 / 月相 / 位置 / 星历 / 行星 / 天象 / 日食 / 年历 各标签，`pidof` 均存活、hilog 无 ArkTS 异常；测后 astroTab 已恢复到「今晚」。
+- **待真机验证（真机离线；模拟器无引擎，桥不可用）**：所有桥回包解析与数据渲染 —— RTS、星历、图表五类、食相、凌日、天象、年历、日心/目录天体位置、WUT 目标、Tonight 联动。模拟器 CLI `getAstroPanelState` 因无引擎超时不可达。`loadAstroTab` / `updateAstroCalcSnapshot` / `loadTonightAstro→loadWutTargets` 的真实端口链路留待真机。
+- **本片踩坑**：`loadRtsCalendar` / `loadEclipses` 的请求序号与宿主动作 `markRtsCalendarForRegeneration` / `reloadEclipses` 共享（规则 3），二者必须**同片**搬入 store 才能只留单一 seq —— 已按此处理，未产生停下项。`resolveEphemerisStartJD` 的「指定日期」读的是另一个 store（`EphemerisStore`）而非 `AstroStore`，故用 `ephemerisCustomStartJD()` 钩子注入，而非把 `EphemerisStore` 字段并过来。
+
+## [2026-10-04] DevEco Code - 重构：§14 B1-6（B1 收尾，7 个加载器）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（B1）/ §14.7 / §14.8（A/B 专属规则）/ §14.1（AB-0 enabler）；复用同一 `HostCommandPort` 实例（B1-1…B1-5 先例）。
+- **开工逐名依赖复测（判 B1/B2/B3）**：7 个加载器全部**真 B1**，无 B2/B3 停下项：
+  - `loadSavedLocations`：**写入** `this.locationStore.savedLocations`（本域）；**读取** AppStorage `stellariumPrefs['savedLocations']`（全局持久化，非宿主字段/桥）+ `hilog` 错误日志；**无**宿主方法、无桥、无定时器、无请求序号/代际字段。→ 可直接下沉 `LocationStore`（该加载器不用 `CommandPort`）。
+  - `loadPlanetList()`：**写入** `this.sessionToolStore.planetList`；**调用** `this.callInteractive('getObserverPlanetList','',cb)`；`StellariumBridgeResponse` 类型 + 内联白名单数组；**无**宿主方法/定时器/`publish*`/请求序号。→ 真 B1 → `SessionToolStore`。
+  - `loadSatelliteSources()`：**写入** `this.satelliteStore.satSources` / `satUpdateSettings` / `satUpdateFrequencyInput`；**调用** `this.callNativeWhenReady('getSatelliteSources','',cb)`；`SatelliteSourcesResponse` 断言；**无**宿主方法/定时器/请求序号（宿主 `satelliteListRequestId` 属 `loadSatellites`，本加载器不读）。→ 真 B1 → `SatelliteStore`。
+  - `loadRecordings()`：**写入** `this.scriptStore.recordings`；**调用** `this.callInteractive('listRecordings','',cb)`；`RecordingsResponse` 断言；**无**宿主方法/定时器/序号。→ 真 B1 → `ScriptStore`。
+  - `loadSkyCultureConstellationSelectionFlags()`：**写入** `this.skyCultureSettingsStore.skyCultureIsolateSelected` / `skyCultureSinglePick`；**调用** `this.callInteractive('getConstellationFlags','',cb)`；**无**宿主方法/定时器/`publish*`/序号（与前片停下的 `loadConstellationNavigation` 无关，后者共享 `languageRefreshSerial`）。→ 真 B1 → `SkyCultureSettingsStore`。
+  - `loadObjectInfo()`：**写入** `this.objectDetailStore.objectInfo`；**调用** `this.callInteractive('getObjectInfo','',cb)`；**不**调用 `requestSatellitePasses` / `selectedObjectIsArtificialSatellite`（故非 B2）；**无**宿主方法/定时器/序号。**注意**：该加载器在宿主内**零调用点**（既有死代码），按 §14.4 计划表仍下沉为 store 公共方法（`getObjectInfo` 路径可被后续接入）。→ 真 B1 → `ObjectDetailStore`。
+  - `loadPointerCoordinates()`：**写入** `this.overlayStore.<pointerCoordinates*>`（11 个字段）；**调用** `this.callNativeWhenReady('getPointerCoordinates','',cb,0,100,15,onFailure)`；`PointerCoordinatesResponse` 断言 + `I18n.t` 文案；**无**宿主方法/定时器/序号。→ 真 B1 → `OverlayStore`（重试档 0/100/15 逐字保留）。
+- **7 个 store 各新增 port 约定**：`private port: CommandPort | null` / `private seq: number = 0` / `private onChanged` / `attachPort(port, onChanged)` / `ensurePort()` / `notifyChanged()`（`LocationStore` 预留但当前加载器不调用 `port`，头注说明）。
+- **body diff 摘要**（逐字搬入，差异仅：① `this.<域>Store.<f>` → `this.<f>`；② `this.callInteractive`/`this.callNativeWhenReady` → `port.requestInteractive`/`port.requestWhenReady`（`onFailure` 按端口签名前移、`0/100/15` 原样）；③ 开头 `ensurePort()` 空端口守卫；④ 成功/失败回调末尾 `notifyChanged()`）。
+- **`seq` / `onChanged` 落点**：7 个加载器均无自增请求序号/共享代际字段，`seq` 仅为 §14.8 规则 3 统一约定预留；`onChanged`——`SatelliteStore` 用宿主既有 `publishSatellitePanelState`（CLI 状态同步），其余六域无 `publish*`，传等价空实现。
+- **`pages/MainWindowNativeNode.ets`：17,364 → 17,277 行（−87）**：删 7 个 `private` 方法（`loadSavedLocations` / `loadPlanetList` / `loadSatelliteSources` / `loadRecordings` / `loadSkyCultureConstellationSelectionFlags` / `loadObjectInfo` / `loadPointerCoordinates`），15 处调用点改为 `this.<store>.load*`；`aboutToAppear` 新增 7 域 `attachPort(hostPort, ...)`。**无同名方法副本（禁双写）。宿主 `private load*` 56 → 49（−7）。**
+- **B1 总账（§2.13 的 24 个）**：**已下沉 20** = B1-1 `loadOculars`(1) + B1-2 `loadTrailDisplaySettings`/`loadOrbitDisplaySettings`/`loadLandscapeList`/`loadLog`/`loadAboutInfo`(5，其中 `loadAboutInfo` 在 AB-0) + B1-3 `loadStarCatalogs`(1) + B1-4 `loadMosaicCamera`/`loadArchaeoLines`(2) + B1-5 `loadPluginList`/`loadCommandCatalog`/`loadEquationOfTime`/`loadNebulaTextureStatus`(4) + B1-6 七个(7)；**停下转 B2/B3 = 4**：`loadAngleMeasure`（请求序号与 `toggleAngleMeasure` 共享）、`loadConstellationNavigation`（代际 `languageRefreshSerial` 与搜索/语言刷新链共享）、`loadNavStars`（代际 `navStarsMutationId` 与 `setNavStarsSetting` 共享）、`loadMeteorShowers`（序号 `meteorShowersLoadRequestId` 与 `setMeteorShowersFlag` 共享）；**未处理 = 0**。**B1 轨道收尾完成。**
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 八文件 `No errors`；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）。
+- **测试同步**：无脚本按文本索引本片 7 个加载器名（grep 0）。受影响域测试全绿：`test-ohos-satellite-panel` 7/7、`test-ohos-skyculture-refresh` 5/5、`test-ohos-skyculture-text` 4/4、`test-ohos-object-type-i18n` 7/7、`test-ohos-detail-live-values` 7/7、`test-ohos-distance-ui` 5/5、`test-ohos-information-policy` 3/3、`test-ohos-procedural-model` 12/12、`test-ohos-plugin-panel-state` 4/4、`test-ohos-guide` 9/9、`test-ohos-settings-choice-motion` 4/4、`test-ohos-search-browser` 3/3、`verify-ohos-object-details` 通过；§13.6 的 7 个环境类失败未变。
+- **模拟器冒烟（127.0.0.1:5555，真机离线；无引擎 → 桥不可用）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **13050**（存活）；`ui layout` 正常；点 Dock「位置」打开 `LocationPickerPanel`（触发 `locationStore.loadSavedLocations` + `sessionToolStore.loadPlanetList` 端口链路）、点「更多功能」打开 hub（`.id('more-action-observeHub')` / `more-action-dataHub` 锚点齐全），**pidof 仍为 13050（未崩溃）**。**模拟器无法覆盖（待真机）**：`getObserverPlanetList` / `getSatelliteSources` / `getConstellationFlags` / `getObjectInfo` / `getPointerCoordinates` / `listRecordings` 六个桥回包渲染（无引擎时按原语义走 onFailure），以及卫星/指针坐标/脚本面板入口的深层导航。
+- **本片新踩的坑**：无。
+## [2026-10-04] DevEco Code - 重构：§14 B1-5 插件/命令台/均时差/星云加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（轨道 B1：仅桥＋本域 store → 注入 `CommandPort` 即可搬）/ §14.8（A/B 专属硬规则）/ §14.1（AB-0 enabler）；先例 B1-1（`loadOculars`→`TelescopeStore`）、B1-2（图层/工具）、B1-3（`loadStarCatalogs`→`CatalogStore`）、B1-4（拼贴相机/考古线），复用同一 `HostCommandPort` 实例。
+- **开工逐名依赖复测（判 B1/B2/B3）**：本片登记 4 个加载器，逐名核对「写入字段 / 调用 / 定时器 / 路由 / `publish*` / 宿主请求序号或代际计数器」：
+  - `loadPluginList()`（原 8206–8239）：**写入**仅 `this.pluginStore.pluginListLoading` / `this.pluginStore.pluginList`（均在本域 `PluginStore`）；**调用**仅 `this.callInteractive('getPluginList','',cb,onFailure)`；`I18n` 未用、`PluginItem` 类型 + `Record<string,Object>` 断言；**无**其它宿主方法、无定时器、无路由、无 `publish*`、无请求序号/代际计数器。→ **真 B1，整条下沉 `PluginStore`**。
+  - `loadCommandCatalog()`（原 8623–8650）：**写入**仅 `this.commandStore.commandResultText` / `commandCatalog` / `commandNameInput`（均在本域 `CommandStore`）；**调用**仅 `this.callInteractive('getCommandCatalog','',cb,onFailure)`；`CommandCatalogResponse`/`CommandCatalogEntry` 类型断言 + 内联中文文案；**无**请求序号/共享代际字段。→ **真 B1，整条下沉 `CommandStore`**。
+  - `loadEquationOfTime()`（原 3798–3816）：**写入**仅 `this.equationOfTimeStore.<equationOfTime*>`（7 个字段均在本域 `EquationOfTimeStore`）；**调用**仅 `this.callNativeWhenReady('getEquationOfTime','',cb,0,100,15,onFailure)`；**无**宿主请求序号——宿主 `equationOfTimeMutationId` 属写回动作 `setEquationOfTime`（乐观回滚），本加载器不读不写。→ **真 B1，整条下沉 `EquationOfTimeStore`**。
+  - `loadNebulaTextureStatus()`（原 8287–8301）：**写入**仅 `this.nebulaTextureStore.nebulaTextureLoading` / `nebulaTextureActionStatus` / `nebulaTextureStatus`（均在本域 `NebulaTextureStore`）；**调用**仅 `this.callInteractive('getNebulaTextureStatus','',cb,onFailure)`；`NebulaTextureStatus` 类型断言；**无**请求序号/共享代际字段。→ **真 B1，整条下沉 `NebulaTextureStore`**。
+  - 结论：4 个全部为真 B1，**无同类停下项**（本片无 B2/B3 候选被主动搁置）。
+- **`state/PluginStore.ets`（20 → 88 行，+68）**：照抄 `ToolsStore` 约定新增 `private port: CommandPort | null` / `private seq: number` / `private onChanged: (() => void) | null` / `attachPort(port, onChanged)` / `ensurePort()` / `notifyChanged()`（含头注）；新增 `loadPluginList()`。函数体**逐字**取自宿主，差异仅：① `this.pluginStore.pluginList*` → `this.pluginList*`（2 处）；② `this.callInteractive('getPluginList','',cb,onFailure)` → `port.requestInteractive('getPluginList','',cb,onFailure)`；③ 开头加 `ensurePort()` 空端口守卫；④ 成功/失败回调末尾加 `this.notifyChanged()`（本域 `onChanged` 为空实现）。新增 import：`StellariumBridgeResponse`、`I18n`、`CommandPort`（`PluginItem` 原有）。
+- **`state/CommandStore.ets`（18 → 82 行，+64）**：同上新增 port 约定与 `loadCommandCatalog()`，差异仅 ① `this.commandStore.<f>` → `this.<f>`（3 处）；② `callInteractive` → `port.requestInteractive`；③ `ensurePort()` 守卫；④ 回调末尾 `notifyChanged()`。新增 import：`CommandCatalogResponse`（并入原 `CommandCatalogEntry` 行）、`StellariumBridgeResponse`、`CommandPort`。
+- **`state/EquationOfTimeStore.ets`（12 → 69 行，+57）**：同上新增 `loadEquationOfTime()`，差异仅 ① `this.equationOfTimeStore.<f>` → `this.<f>`（7 处）；② `this.callNativeWhenReady('getEquationOfTime','',cb,0,100,15,onFailure)` → `port.requestWhenReady('getEquationOfTime','',cb,onFailure,0,100,15)`（**重试档 0/100/15 与原 onFailure 逐字保留**，仅按端口签名把 onFailure 前移）；③ `ensurePort()` 守卫；④ 回调末尾 `notifyChanged()`。新增 import：`StellariumBridgeResponse`、`I18n`、`CommandPort`。
+- **`state/NebulaTextureStore.ets`（28 → 79 行，+51）**：同上新增 `loadNebulaTextureStatus()`，差异仅 ① `this.nebulaTextureStore.<f>` → `this.<f>`（3 处）；② `callInteractive` → `port.requestInteractive`；③ `ensurePort()` 守卫；④ 回调末尾 `notifyChanged()`。新增 import：`StellariumBridgeResponse`、`I18n`、`CommandPort`。
+- **`pages/MainWindowNativeNode.ets`（17,459 → 17,364 行，−95）**：删 4 个 `private` 方法（`loadPluginList` 原 8206–8239 / `loadCommandCatalog` 原 8623–8650 / `loadEquationOfTime` 原 3798–3816 / `loadNebulaTextureStatus` 原 8287–8301），删 1 个不再使用的类型 import `CommandCatalogResponse`；10 处调用点改为 `this.pluginStore.loadPluginList()`（原 1541/2279/17341 + SettingsPanel 回调 16437）、`this.commandStore.loadCommandCatalog()`（原 2314/16276 回调）、`this.equationOfTimeStore.loadEquationOfTime()`（原 2262，在 `ensurePluginLoaded` 回调内）、`this.nebulaTextureStore.loadNebulaTextureStatus()`（原 2307/8279/8305，含 `removeNebulaTexture`/`importNebulaTextureFile` 成功回调）；`aboutToAppear` 在 `archaeoStore.attachPort` 后新增四域 `attachPort(hostPort, () => {})`。**无同名方法副本（禁双写）。**
+- **`seq` / `onChanged` 落点**：四个 store 均新增 `private seq: number = 0`（本片 4 个加载器均无并发抑制需求，序号仅为满足 §14.8 规则 3 的统一约定而预留，**未与宿主共享任何序号/代际字段**）；`onChanged` 四域均传空实现——`publishPlugin*`/`publishCommand*`/`publishEquation*`/`publishNebula*` 全仓 grep 均不存在，且消费方均为 `@ObjectLink`，字段赋值即刷新（§14.8 规则 4 等价无副作用）。
+- **度量**：宿主 `private load*` 59 → **55**（−4）；新增 4 个 store 自持加载器；全片无 B2/B3 停下项。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过（store/this 自洽、括号深度 0、`@Builder` 成对）；`arkts_check` 五文件 No errors；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）。
+- **测试同步**：`scripts/test-ohos-plugin-panel-state.mjs` 提取的 `setMosaicCamera` / `setNebulaTextureFlag` 仍在宿主、未被本片触碰，**4/4 全绿**；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 7 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / polar-scope-pad / mist-performance / location-search / search），无新增；无脚本按文本索引本片 4 个加载器名（grep 为 0），故无夹具改写。
+- **模拟器冒烟（127.0.0.1:5555，真机离线；无引擎 → 桥不可用）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof com.cnchensh.stellarium` = **3600**；跨「Dock 更多功能 → 脚本与自动化 → 命令控制」（触发 `commandStore.loadCommandCatalog` 端口链路）、「更多功能 → 天体数据与扩展 → 插件管理」（触发 `pluginStore.loadPluginList`，settings tab 6）、Dock「时间」（`equationOfTime` 域 UI 路径）后 **pidof 仍为 3600（未崩溃）**，各面板渲染正常（`[panel-transition] … panel=commands`、`setPanel settings` 实证）。**模拟器无法覆盖（待真机）**：4 个加载器的桥回包与列表/结果文本渲染——模拟器无 Stellarium 引擎，`command()` 返回 `ok:false`，加载器按原语义走 onFailure；`nebulaTextures` 面板入口未走查（需引擎侧插件可用性判断，入口更深）。故 `getPluginList` / `getCommandCatalog` / `getEquationOfTime` / `getNebulaTextureStatus` 的真实回包渲染留待真机。
+- **本片新踩的坑**：`edit` 工具在「`oldString` 覆盖整个文件」时会以 LF 重写全文（`state/CommandStore.ets` 出现 82 处裸 LF，其余四个文件因局部替换仍保持 CRLF）——已按协议用 `.NET WriteAllText` 归一 CRLF 并复核「裸 LF = 0」。后续对整文件级改写必须显式复核行尾。
+
+## [2026-10-04] DevEco Code - 重构：§14 B1-4 拼贴相机/考古线加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（轨道 B1）/ §14.8（A/B 专属硬规则）/ §14.1（AB-0 enabler）；先例 B1-1（`loadOculars`→`TelescopeStore`）、B1-2（图层/工具）、B1-3（`loadStarCatalogs`→`CatalogStore`），复用同一 `HostCommandPort` 实例。
+- **开工逐名依赖复测（判 B1/B2/B3）**：本片登记 4 个加载器，逐名核对「写入字段 / 调用 / 定时器 / 路由 / `publish*` / 宿主请求序号或代际计数器」：
+  - `loadMosaicCamera(initial)`（原 3774–3797）：**写入**仅 `this.mosaicStore.<mosaicCamera*>`（10 个字段均在本域 `MosaicStore`）；**调用**仅 `this.callNativeWhenReady('getMosaicCamera','',cb,0,100,15,onFailure)`；`I18n.t` 文案 + `MosaicCameraData` 类型断言；**无**其它宿主方法、无定时器、无路由、无 `publish*`、无请求序号/代际计数器。→ **真 B1，整条下沉 `MosaicStore`**。
+  - `loadArchaeoLines()`（原 3859–3888）：**写入**仅 `this.archaeoStore.<archaeo*>`（17 个字段均在本域 `ArchaeoStore`）；**调用**仅 `this.callNativeWhenReady('getArchaeoLines','',cb,0,100,15,onFailure)`；**无**请求序号（宿主 `archaeoMutationId` 属写回动作 `setArchaeoLineSetting`，本加载器不读）；无定时器/路由/`publish*`。→ **真 B1，整条下沉 `ArchaeoStore`**。
+  - `loadNavStars(showLoading)`（原 3958–3988）：**停下，判 B2/B3**。依赖清单：① 请求序号 `++this.navStarsLoadRequestId`（仅本加载器，本可搬）；② **代际计数器 `this.navStarsMutationId`**——加载器读它做并发抑制（`if (mutationId !== this.navStarsMutationId) return`），而它由宿主动作 `setNavStarsSetting`（原 4004 `const mutationId = ++this.navStarsMutationId`，并在 4007/4015 回包处复读）自增；若只搬加载器，序号将裂成宿主/store 两份、无法与写回链作废回包（行为回归）。按 §14.8 规则 3「禁止共享」及 B1-2 `loadAngleMeasure`、B1-3 `loadConstellationNavigation` 先例，**主动停下**，与导航星写回动作同片处理。
+  - `loadMeteorShowers()`（原 4352–4384）：**停下，判 B2/B3**。依赖清单：请求序号 `meteorShowersLoadRequestId` **由加载器（4353 自增）与宿主动作 `setMeteorShowersFlag`（原 4386 `this.meteorShowersLoadRequestId++`）共享**——动作侧自增即用于作废在途加载。按 §14.8 规则 3 禁止共享，**主动停下**，与流星雨开关写回同片下沉。
+- **`state/MosaicStore.ets`（24 → 87 行，+63）**：照抄 `ToolsStore` 约定新增 `private port: CommandPort | null` / `private seq: number` / `private onChanged: (() => void) | null` / `attachPort(port, onChanged)` / `ensurePort()` / `notifyChanged()`（含头注）；新增 `loadMosaicCamera(initial = true)`。函数体**逐字**取自宿主，差异仅：① `this.mosaicStore.mosaicCamera*` → `this.mosaicCamera*`（10 处）；② `this.callNativeWhenReady('getMosaicCamera','',cb,0,100,15,onFailure)` → `port.requestWhenReady('getMosaicCamera','',cb,onFailure,0,100,15)`（**重试档 0/100/15 与原 onFailure 逐字保留**，仅按端口签名把 onFailure 前移）；③ 开头加 `ensurePort()` 空端口守卫；④ 成功/失败回调末尾加 `this.notifyChanged()`（本域 `onChanged` 为空实现，等价无副作用）。新增 import：`MosaicCameraData`（纯类型，`pages/MainWindowModels`）、`StellariumBridgeResponse`（`pages/StellariumTypes`）、`I18n`（`pages/I18n`）、`CommandPort`（`bridge/CommandPort` 纯接口）——符合 §14.8 规则 2。
+- **`state/ArchaeoStore.ets`（37 → 105 行，+68）**：同上新增 port 约定；新增 `loadArchaeoLines()`，差异仅 ① `this.archaeoStore.archaeo*` → `this.archaeo*`（17 处）；② `callNativeWhenReady('getArchaeoLines','',cb,0,100,15,onFailure)` → `port.requestWhenReady('getArchaeoLines','',cb,onFailure,0,100,15)`；③ `ensurePort()` 守卫；④ 回调末尾 `notifyChanged()`。新增 import 同法。
+- **`pages/MainWindowNativeNode.ets`（17,509 → 17,458 行，−51）**：删 `private loadMosaicCamera`（原 3774–3797）与 `private loadArchaeoLines`（原 3859–3888），删 1 个不再使用的类型 import `MosaicCameraData`；4 处调用点改为 `this.mosaicStore.loadMosaicCamera(...)`（原 1299、2281、3811〔`setMosaicCamera` 成功回调〕）与 `this.archaeoStore.loadArchaeoLines()`（原 2283）；`aboutToAppear` 在 `catalogStore.attachPort` 后新增 `mosaicStore.attachPort(hostPort, () => {})` 与 `archaeoStore.attachPort(hostPort, () => {})`（两域无 `publish*` 发布点、消费方均为 `@ObjectLink`，故 onChanged 传等价空实现）。**无同名方法副本（禁双写）。**
+- **度量**：宿主 `private load*` 62 → **60**；新增 2 个 store 自持加载器。`navStars`/`meteorShowers` 两加载器按纪律未搬。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过（store/this 自洽、括号深度 0）；`arkts_check` 三文件 No errors；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）。
+- **测试同步**：`scripts/test-ohos-plugin-panel-state.mjs` 夹具随 store 下沉同步——原假宿主顶层 `loadMosaicCamera` 移入 `mosaicStore`（以闭包 `reloads` 回收），因提取的 `setMosaicCamera` 体现在调 `this.mosaicStore.loadMosaicCamera(false)`。**4/4 全绿**；`test-ohos-satellite-panel.mjs` 7/7；全量 `*-ohos*.mjs` 扫描仅 §13.6 的 7 个环境类失败（clipboard-pad / guide-pad / mist-horizon-pad / polar-scope-pad / mist-performance / location-search / search），无新增。
+- **模拟器冒烟（127.0.0.1:5555，真机离线；无引擎 → 桥不可用）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 27217，跨「Dock 更多功能 → 天体数据与扩展 → 流星雨 / 星表下载」与设置面板导航后 **pidof 不变（未崩溃）**，各面板渲染正常。**模拟器无法覆盖（待真机）**：`mosaicCamera` / `archaeoLines` 面板入口经插件管理或 CLI `openUiPanel`（二者均依赖 native 桥，模拟器无引擎），故新下沉的 `loadMosaicCamera` / `loadArchaeoLines` 的端口链路与桥回包渲染未走查；`navStars` / `meteorShowers` 加载器本片未下沉。
+- **本片新踩的坑**：无（`test-ohos-plugin-panel-state.mjs` 假宿主随 store 下沉属 §13.1 规则 8 的既定同步，非新坑）。
+
+## [2026-10-04] DevEco Code - 重构：§14 B1-3 Catalog/Search 加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（轨道 B1：仅桥＋本域 store → 注入 `CommandPort` 即可搬）、§14.8（A/B 专属硬规则）与 §14.1（AB-0 enabler）；先例 B1-1（`loadOculars` → `TelescopeStore`）、B1-2（`loadLog` → `ToolsStore`），复用同一 `HostCommandPort` 实例。
+- **开工逐名依赖足迹复测（判 B1/B2/B3）**：本片登记 2 个加载器，逐名核验「写入字段 / 调用 / 定时器 / 路由 / `publish*` / 宿主请求序号或代际计数器」：
+  - `loadStarCatalogs`（原 2726–2743）：**写入**仅 `this.catalogStore.{catalogLoading,catalogList}`（均已在本域 `CatalogStore` 声明）；**调用**仅 `this.callNativeWhenReady('getStarCatalogs','',cb)`（默认重试档 0/200/60），callback 内 `I18n.t('catalog_fallback')` 文案与 `StarCatalogsResponse`/`StarCatalogRaw` 类型断言；**无**其它宿主方法、**无**定时器、**无**路由、**无** `publish*`、不写非 CatalogStore 字段、**不共享任何请求序号/代际计数器**。→ **真 B1，整条下沉 `CatalogStore`**。
+  - `loadConstellationNavigation`（原 8870–8896）：**未搬，主动停下，判为 B2/B3**。依赖清单：① 写入仅 `this.searchStore.constellationNavigationItems`（本域字段，本可搬）；② 调用仅 `this.callNativeWhenReady('getConstellationList','',cb)`（默认档）；③ **但**方法签名默认参数 `languageSerial: number = this.languageRefreshSerial` 且 callback 首行 `if (this.languageRefreshSerial !== languageSerial) return` ——`this.languageRefreshSerial`（宿主私有字段，原 334）是**跨加载器共享的代际计数器**：同时被 `fetchSuggestions`（8769/8775）、`loadObjectCatalogCategories`（8837/8839）读取，并在 `setLanguage`（9349 `const languageSerial = ++this.languageRefreshSerial`）里自增、于同一刷新链（9371/9377/9378/9381）中作废在途回包。按 §14.8 规则 3「请求序号随加载器搬入 store（`private seq`）；禁止宿主与 store 双序号，禁止共享」，若只搬 `loadConstellationNavigation` 而不搬 `setLanguage`/另两个搜索加载器，序号将裂成宿主/store 两份、互相之间无法作废回包（行为回归）。故本片**只搬 `loadStarCatalogs` 一个干净 B1**；`loadConstellationNavigation` 留待与搜索结果域（`fetchSuggestions`/`loadObjectCatalogCategories`/`setLanguage`）同片处理，登记为 B2/B3。
+- **保留字段取舍**：开工特别复核 `loadStarCatalogs` 是否写 `catalogHealthLoaded`/`catalogManifestPresent`（§2.7.1 已登记保留宿主、与卫星面板「卫星目录健康」文案共用）。**实测该加载器不写这两个字段**——二者只由 `loadCatalogHealth`（原 4295–4296）写入，本片未触碰，仍留宿主 `@State`（原 617/618），故无经回调上报的必要，与 §2.7.1 判断一致。
+- **`state/CatalogStore.ets`（+60/−2，22 → 75 行）**：照抄 `ToolsStore` 约定新增 `private port: CommandPort | null` / `private seq: number` / `private onChanged: (() => void) | null` / `attachPort(port, onChanged)` / 守卫 `ensurePort()` / `notifyChanged()`（含头注）；新增 `loadStarCatalogs()`。函数体**逐字**取自宿主，差异仅：① `this.catalogStore.catalogLoading` / `this.catalogStore.catalogList` → `this.catalogLoading` / `this.catalogList`（共 3 处）；② `this.callNativeWhenReady('getStarCatalogs','',cb)` → `port.requestWhenReady('getStarCatalogs','',cb)`（默认档不传参，等价 0/200/60）；③ 开头加 `ensurePort()` 空端口守卫（未注入时静默返回，不 import 桥）；④ 成功路径末尾加 `this.notifyChanged()`（本域 `onChanged` 为空实现，等价无副作用）。新增 import：`StarCatalogsResponse`/`StarCatalogRaw`（纯类型，`pages/MainWindowModels`）、`StellariumBridgeResponse`（纯类型，`pages/StellariumTypes`）、`I18n`（`pages/I18n`，非 NAPI/UI）、`CommandPort`（`bridge/CommandPort` 纯接口）——符合 §14.8 规则 2（store 不得 import NAPI/UI）。
+- **宿主手术（`MainWindowNativeNode.ets`，+7/−23；单体 17,525 → 17,510 行，−15）**：① 删 `private loadStarCatalogs()`（§14.8 规则 5 禁双写，宿主零副本；保留其上方 `// ===== 星表下载 … =====` 段注释，因 `startCatalogDownload`/`pollCatalogStatus` 仍在原段）；② 2 处调用点改写：`openUiPanel` 数据加载块 `if (this.catalogStore.catalogList.length === 0) this.catalogStore.loadStarCatalogs()`、`pollCatalogStatus` 下载完成回调 `this.catalogStore.loadStarCatalogs()`（全文件 `this.loadStarCatalogs(` 残留 = 0）；③ `aboutToAppear` 在同一 `const hostPort` 实例上新增 `this.catalogStore.attachPort(hostPort, () => {})`（`onChanged` 空实现：星表下载域无 `publish*` 发布点，消费方 `CatalogsPanel` 为 `@ObjectLink`，字段赋值即刷新）；④ 顺带清理本片搬走后宿主不再使用的类型导入 `StarCatalogItem`/`StarCatalogRaw`/`StarCatalogsResponse`（保留 `StarCatalogStatusResponse`，`pollCatalogStatus` 仍用）。
+- **body diff 摘要（逐行对照）**：`this.catalogStore.` → `this.` 共 3 处（catalogLoading 2 + catalogList 1）；桥调用表达式 1 处改端口；`ensurePort()` 守卫 1 处、`notifyChanged()` 1 处；**未改任何字段名、默认值、`??` 兜底值、`I18n.t` key、map 映射体或类型断言目标**。无 `seq` 新增消费（`loadStarCatalogs` 无请求序号）。
+- **`seq` / `onChanged` 落点**：`CatalogStore` 新增 `private seq`（本加载器未用到，供后续 B 片复用）；宿主侧无 `publish*` 发布点，`onChanged` 注入空实现，`notifyChanged()` 为无副作用调用；**不存在宿主/store 双序号**（本片未搬任何使用序号的加载器；`loadConstellationNavigation` 的代际计数器不动）。
+- **度量**：宿主 `private load*` **63 → 62（−1）**；单体 **17,525 → 17,510 行（−15）**；store 侧 `CatalogStore` **22 → 75（+58）**。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` 2 文件（CatalogStore / MainWindowNativeNode）= **No errors**；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 214+ 文件，未新增或改名任何 `.id()`）；**受影响测试 grep**：`scripts/*ohos*.mjs` 中仅 `test-ohos-search-browser.mjs` 命中 `search/catalog/constellation` 关键词，运行 **3/3 全绿**；按协议跑全量 `*ohos*.mjs` 扫描，仅剩 §13.6 的 **7 个环境类失败**（`clipboard-pad`/`guide-pad`/`mist-horizon-pad`/`polar-scope-pad`、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回归**；扫描后已 `git checkout` 还原 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md`。
+- **模拟器冒烟（`127.0.0.1:5555`，x86_64 UI-only 无引擎；真机离线）**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` 全程 **21089 存活**；`ui layout` 确认底部 Dock（搜索/时间/位置/图层/更多功能）与缩放按钮无回归；语义化 CLI 导航路径「更多功能(`more-action-*`) → 天体数据与扩展(`hub-action-catalogs`) → 星表下载」**面板成功挂载**，标题「星表下载」、正文落到「当前版本可能已包含全部星表」空态（无引擎回包），`pidof` 仍 21089；`hilog` 未见 jscrash/ArkTS 报错（仅 hidumper/Faultlogger 自检噪声）。未改任何持久化设置。
+- **端口链路证据（诚实说明）**：清 `hilog -r` 后重进「星表下载」面板，捕获到以宿主 pid 21089 发出的 `StellariumEntryGL: Stellarium command bridge not loaded yet` 出站重试 burst（`getStarCatalogs` 经 `port.requestWhenReady` → `callNativeWhenReady` 的默认 200ms 重试档），**证明 `loadStarCatalogs → ensurePort().requestWhenReady('getStarCatalogs')` 调用路径已打通**；但 UI-only 模拟器无 Qt 引擎，回包永远不可达，故 `catalogList` 渲染无实证。
+- **待真机验证（真机离线，模拟器无引擎）**：`getStarCatalogs` 回包解析与 8 个 `starCatalog*` 字段映射（`id/name/size/key/fileName/url/html/checked`，含 `c.name ?? (c.id ?? I18n.t('catalog_fallback'))` 兜底与 `checked === true || === 'true' || === 1` 三态归一）在 `CatalogsPanel` 的真实渲染、下载完成后 `pollCatalogStatus` 回写触发 `catalogStore.loadStarCatalogs()` 的刷新、以及 `attachPort → HostCommandPort.requestWhenReady` seam 的端到端（与 B1-1 `getOculars`、B1-2 `getLandscapeList` 一并）。
+- **本片新发现 / 取舍**：`loadConstellationNavigation` 的代际计数器 `languageRefreshSerial` 是**跨加载器 + 语言刷新链共享**（非仅单方法内），与 B1-2 `loadAngleMeasure` 的 `angleMeasureRequestId`（加载器 + 动作方法共享）同类但范围更大——它还与 `setLanguage` 的自增/校验链绑定；单搬必然造成宿主/store 双代际、回包作废语义失效。故本片沿用 B1-2 先例**主动停下**并在 §14.4 B1-3 行如实登记（原表把 `loadConstellationNavigation` 列为可直接沉的 B1，本片予以修正）。
+
+## [2026-10-04] DevEco Code - 重构：§14 B1-2 LayerView/Tools 加载器下沉
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（轨道 B1：仅桥＋本域 store → 注入 `CommandPort` 即可搬）、§14.8（A/B 专属硬规则）与 §14.1（AB-0 enabler）；先例 B1-1（`7bc416a30f`）`loadOculars → TelescopeStore`，复用同一 `HostCommandPort` 实例。
+- **开工依赖足迹复测（逐方法，判 B1/B2/B3）**：本片计划 5 个加载器，逐名核验「写入字段 / 调用 / 定时器 / 路由 / `publish*`」：
+  - `loadLandscapeList`（原 2529–2540）：写 `this.layerViewStore.{landscapeLoading,landscapeList,currentLandscapeId}`；调用仅 `this.callNativeWhenReady('getLandscapeList','',…,0,100,15,failCb)`；无宿主方法/定时器/路由/发布点 → **B1（LayerViewStore）**。
+  - `loadOrbitDisplaySettings`（原 4750–4761）：写 `this.layerViewStore.orbit*`（7 字段）；调用仅 `this.callInteractive('getOrbitDisplaySettings','')`；无宿主方法 → **B1（LayerViewStore）**。
+  - `loadTrailDisplaySettings`（原 4789–4801）：写 `this.layerViewStore.trail*`（含 `trailColor`/`trailColorInput`）；调用仅 `this.callInteractive('getTrailDisplaySettings','')`；无宿主方法 → **B1（LayerViewStore）**。
+  - `loadLog`（原 4456–4462）：写 `this.tools.{logText,logVisible}`；调用仅 `this.callNativeWhenReady('getLog','6000',cb)`（默认重试档）；类型断言 `LogResponse`；无宿主方法 → **B1（ToolsStore）**。
+  - `loadAngleMeasure`（原 3972–3982）：**停下，判为 B2/B3，本片未搬**。依赖清单：读/写宿主私有请求序号 `this.angleMeasureRequestId`（`const requestId = ++this.angleMeasureRequestId` 与 `if (requestId !== this.angleMeasureRequestId) return`）——该字段**同时**被未在本片的宿主动作方法 `toggleAngleMeasure`（原 5168/5177/5195）读写，二者用同一代际计数器互相作废在途回包。按 §14.8 规则 3「序号只存 store 的 `seq`、禁宿主与 store 双序号、禁止共享」，若不把 `toggleAngleMeasure` 一并下沉（它含 `flashHint` 与回滚语义，属 B2）而只搬 `loadAngleMeasure`，会退化为两个互不相干的计数器 → `load` 的陈旧回包在 `toggle` 之后仍可能落库（行为回归）。故本片**只搬 4 个干净 B1**，`loadAngleMeasure` 留待与 `toggleAngleMeasure` 同片处理（建议并入 §14.5 B2R-4 或单列微片）。其调用点 `ensurePluginLoaded('AngleMeasure', () => this.loadAngleMeasure())`（原 2279）保持不动。
+- **`state/LayerViewStore.ets`（+87/−3）**：照抄 `ToolsStore` 约定新增 `private port: CommandPort | null` / `private seq: number` / `private onChanged: (() => void) | null` / `attachPort(port, onChanged)` / 守卫 `ensurePort()` / `notifyChanged()`（+头注）；新增 `loadLandscapeList()` / `loadOrbitDisplaySettings()` / `loadTrailDisplaySettings()` 三个方法。函数体**逐字**取自宿主，差异仅：① 桥调用改端口 —— `this.callNativeWhenReady('getLandscapeList','',cb,0,100,15,failCb)` → `port.requestWhenReady('getLandscapeList','',cb,failCb,0,100,15)`（**重试档 0/100/15 原样保留**，`onFailure` 移到数值后以匹配端口签名），`this.callInteractive('getOrbitDisplaySettings','',cb)` → `port.requestInteractive('getOrbitDisplaySettings','',cb)`，`getTrailDisplaySettings` 同理；② `this.layerViewStore.<f>` → `this.<f>`（共 7+8 处）；③ 每个方法开头加 `ensurePort()` 空端口守卫（未注入时静默返回，不 import 桥）；④ 成功路径末尾加 `this.notifyChanged()`（本域 `onChanged` 为空实现，等价无副作用）。store **不 import** NAPI/UI（仅追加 `CommandPort` 纯接口与 `StellariumBridgeResponse` 纯类型），符合 §14.8 规则 2。
+- **`state/ToolsStore.ets`（+17/−1）**：追加 import `LogResponse`（纯类型，`pages/MainWindowModels`）；新增 `loadLog()`。函数体**逐字**取自宿主，差异仅 `this.callNativeWhenReady('getLog','6000',cb)` → `port.requestWhenReady('getLog','6000',cb)`、`this.tools.<f>` → `this.<f>`（2 处）、开头 `ensurePort()` 守卫、末尾 `notifyChanged()`。未用 `seq`（`loadLog` 无请求序号）。
+- **宿主手术（`MainWindowNativeNode.ets`，+9/−53，**17,570 → 17,526 行（−44）**）**：① 删 4 个 `private load*`（`loadLandscapeList` / `loadLog` / `loadOrbitDisplaySettings` / `loadTrailDisplaySettings`；§14.8 规则 5 禁双写，宿主零副本）；② 7 处调用点改写 —— `runStartupBridgeTasks` 内 1 处、`openUiPanel`(`layers` 分支) 1 处、`importLandscape` 回调 1 处、`viewTab` 过渡 `animateTo` 内 1 处改 `this.layerViewStore.loadLandscapeList()`；`onLoadOrbitSettings` / `onLoadTrailSettings` 两个组件注入改 `this.layerViewStore.load*()`；`onLoadLog` 改 `this.tools.loadLog()`（全文件 `this.load{LandscapeList,Log,OrbitDisplaySettings,TrailDisplaySettings}(` 残留 = 0）；③ `aboutToAppear` 在同一 `const hostPort` 实例上新增 `this.layerViewStore.attachPort(hostPort, () => {})`（`onChanged` 空实现：图层视图域无 `publish*` 发布点，消费方均为 `@ObjectLink`，字段赋值即刷新）。
+- **body diff 摘要（逐行对照）**：`this.layerViewStore.` → `this.` 共 15 处（landscape 5 + orbit 7 + trail 3，另 trail 分支体 2 处 `trailColor`/`trailColorInput` 计入）；`this.tools.` → `this.` 共 2 处；桥调用表达式 4 处改端口（`requestWhenReady` 1 个保留 0/100/15、`requestInteractive` 2 个、`getLog` 默认档 1 个）；`ensurePort()` 守卫 4 处、`notifyChanged()` 4 处。**未改任何字段名、默认值、`??` 兜底值、`I18n` 文案或类型断言目标。** 无 `seq` 新增消费（`loadLandscapeList` 无请求序号）。
+- **`seq` / `onChanged` 落点**：`LayerViewStore` 新增 `private seq`（本片加载器未用到，供后续 B 片复用）；`ToolsStore.seq` 亦未用（`loadLog` 无序号）。`HOST 侧`：无 `publish*` 发布点，两个域的 `onChanged` 均注入空实现；`notifyChanged()` 为无副作用调用，**不存在宿主 / store 双序号**（本片未搬任何使用序号的加载器）。
+- **度量**：宿主 `private load*` **67 → 63（−4）**；单体 **17,570 → 17,526 行（−44）**。store 侧：`LayerViewStore` +87、`ToolsStore` +17。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` 3 文件（LayerViewStore / ToolsStore / MainWindowNativeNode）**No errors**；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 214+ 文件，未新增或改名任何 `.id()`）；**受影响测试 grep**：`scripts/test-ohos-*.mjs` 内**零**命中 `layer/trail/orbit/landscape/angle/loadLog/ToolsStore/LayerViewStore/logText`（无按文本切片本片方法的用例），故无定向用例可跑；按协议跑全量 `*ohos*.mjs` 扫描，仅剩 §13.6 的 **7 个环境类失败**（`clipboard-pad`/`guide-pad`/`mist-horizon-pad`/`polar-scope-pad`、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回归**；扫描后已 `git checkout` 还原 `RESOURCE-COVERAGE-AUDIT-2026-08-24.md`。
+- **模拟器冒烟（`127.0.0.1:5555`，x86_64 UI-only 无引擎；真机离线）**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` 全程 **15777 存活**；`ui layout` 确认底部 Dock（搜索/时间/位置/图层/更多功能）与缩放按钮无回归；点「图层」打开面板成功；**切到「地景」标签**（`viewTab` 过渡路径 `if (tabId === 4) this.layerViewStore.loadLandscapeList()` 被执行）后内容由「天空与恒星」切换到「地面 + Toggle」，**面板正常、`pidof` 仍 15777**；再切「太阳系」标签并展开「行星轨道」行，布局正常、无崩溃；`hilog` 未见 jscrash/ArkTS 报错（仅 hidumper/Faultlogger 自检与系统 ADAPTER 噪声）。未改任何持久化设置。
+- **端口链路证据（诚实说明）**：**未观察到 `getLandscapeList`/`getOrbitDisplaySettings`/`getTrailDisplaySettings`/`getLog` 回包日志**。原因：UI-only 模拟器无 Qt 引擎，`HostCommandPort` 转发的 `callNativeWhenReady`/`callInteractive` 必然返回桥未就绪，加载器在端口层被静默吞掉（这正是「未注入/桥不可用 → 不 crash」守卫的预期行为）；本片验证到的是**调用路径可达 + 面板正常**，数据回包无法在模拟器覆盖。
+- **待真机验证（真机离线，模拟器无引擎）**：`getLandscapeList`（`landscapeList`/`currentLandscapeId` 渲染与 `Array.isArray` 分支、0/100/15 重试档）、`getOrbitDisplaySettings`（7 个 `orbit*` 字段）、`getTrailDisplaySettings`（`trail*` 字段含 `trailColor`/`trailColorInput` 联动）、`getLog`（`logText` 文本与 `logVisible` 置位）；端口 seam 的端到端 `attachPort → HostCommandPort.request*` 需真机引擎就绪后复核（与 B1-1 的 `getOculars` 一并）。
+- **本片新发现/取舍**：`loadAngleMeasure` 的请求序号 `angleMeasureRequestId` 是**跨加载器 + 动作方法共享**的代际计数器（`loadAngleMeasure` ↔ `toggleAngleMeasure`），不满足「序号只存 store 的 `seq`、禁止共享」，故本片**主动停下该个**并留待与 `toggleAngleMeasure` 同片下沉；这修正了 §14.4 B1-2 原表把它当干净 B1 的登记口径（该表仍标 `loadAngleMeasure(11)`，实际为 B2/B3）。
+
+## [2026-10-04] DevEco Code - 重构：§14 B1-1 loadOculars 下沉 TelescopeStore
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.4（轨道 B1：仅桥＋本域 store → 注入 `CommandPort` 即可搬）、§14.8（A/B 专属硬规则）与 §14.1（AB-0 enabler，提交 `70675df360`）。本片是 B1 首片（`loadOculars` 75 行，收益最大），复用 AB-0 已建立的 `bridge/CommandPort.ets` 与顶层具名适配器 `HostCommandPort`。
+- **开工复测（依赖足迹，判 B1/B2/B3）**：逐行读宿主 `private loadOculars(showLoading)`（原 3785–3859）。**写入**：仅 `this.telescopeStore.<字段>`（全部已在 `TelescopeStore` 声明，逐字对应）＋宿主私有请求序号 `this.ocularLoadRequestId`；**读取**：仅 `this.telescopeStore.ocularReady`；**调用**：仅 `this.callNativeWhenReady`（含 `I18n.t` 文案与 `OcularsResponse` 类型断言）；**无**其它宿主方法调用、无定时器、无路由、无 `publish*`、不写非 TelescopeStore 字段。→ **确为 B1**（仅桥＋本域 store），无 B2/B3 依赖清单，整片下沉。
+- **`state/TelescopeStore.ets`（+111/−3）**：照抄 `ToolsStore` 约定新增 `private port: CommandPort | null` / `private seq: number` / `private onChanged: (() => void) | null` / `attachPort(port, onChanged)` / 守卫 `ensurePort()` / `notifyChanged()`；新增 `loadOculars(showLoading: boolean = true)`。函数体**逐字**取自宿主，差异仅：① `this.callNativeWhenReady('getOculars', '', cb, 0, 100, 15, failCb)` → `port.requestWhenReady('getOculars', '', cb, failCb, 0, 100, 15)`（**重试参数 0/100/15 原样保留**）；② `this.telescopeStore.<f>` → `this.<f>`（55 处）；③ `this.ocularLoadRequestId` → `this.seq`（3 处）；④ 开头加 `ensurePort()` 空端口守卫（未注入时静默返回，不 import 桥）；⑤ 成功路径末尾加 `this.notifyChanged()`（本域 `onChanged` 为空实现，等价无副作用）。store **不 import** NAPI/UI（仅 `CommandPort` 纯接口、`StellariumBridgeResponse`/`OcularsResponse` 纯类型、`I18n` 文案），符合 §14.8 规则 2。
+- **`bridge/CommandPort.ets`（+3/−1）与宿主 `HostCommandPort`**：因 `loadOculars` 在宿主侧显式传 `callNativeWhenReady(..., 0, 100, 15, ...)`，而 AB-0 的 `requestWhenReady` 固定映射 0/200/60 —— 为**保函数体逐字语义**，给 `requestWhenReady` **追加可选参数** `attempt?/intervalMs?/maxAttempts?`（**向后兼容**：`onFailure` 仍在第 4 位，既有 `ToolsStore.loadAboutInfo` 三参调用不受影响）。`HostCommandPort.whenReadyFn` 类型同步加可选参数，适配器 lambda 改为 `callNativeWhenReady(name, payload, onOk, attempt ?? 0, intervalMs ?? 200, maxAttempts ?? 60, onFailure)`（缺省仍 0/200/60）。
+- **宿主手术（`MainWindowNativeNode.ets`，+26/−99，17643 → 17571 行）**：① 删 `private loadOculars(...)`（§14.8 规则 5 禁双写，宿主零副本）；② 删私有字段 `private ocularLoadRequestId: number = 0`（请求序号只存 store 的 `seq`，§14.8 规则 3）；③ 13 处调用点 `this.loadOculars(` → `this.telescopeStore.loadOculars(`（全文件 `this.loadOculars(` 残留 = 0）；④ `aboutToAppear` 里把 `new HostCommandPort(...)` 提为局部 `const hostPort`，**同一实例**注入 `this.tools.attachPort(hostPort, () => {})` 与新增 `this.telescopeStore.attachPort(hostPort, () => {})`（`onChanged` 空实现：该域无 `publish*` 发布点，消费方均为 `@ObjectLink`，字段赋值即刷新）。
+- **度量**：宿主 `private`（含字段，`^  private\s` 计）**1193 → 1191（−2 = loadOculars + ocularLoadRequestId）**；宿主 `private load*` **66 → 65（−1）**。
+- **body diff 摘要（逐行对照）**：`this.telescopeStore.` → `this.` 共 55 处；`this.ocularLoadRequestId` → `this.seq` 共 3 处；调用表达式 1 处改端口（参数值与顺序不变，仅 `this.callNativeWhenReady` → `port.requestWhenReady`，`onFailure` 移到数值之后以匹配端口签名）；新增 `ensurePort()` 守卫 4 行、`notifyChanged()` 1 行。**未改任何字段名、默认值、`??` 兜底值或 `I18n.t` key。**
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` 3 文件（CommandPort / TelescopeStore / MainWindowNativeNode）**No errors**；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 214+ 文件，未新增或改名任何 `.id()`）；`test-ohos-search-browser.mjs` **3/3 全绿**（唯一 grep 命中「ocular」者为 `binocular` 字符串，与 `loadOculars` 无关）；全量 `*ohos*.mjs` 扫描仅剩 §13.6 的 **7 个环境类失败**（`*-pad` × 4、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回归**。
+- **模拟器冒烟（`127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **10447 全程存活**（关闭面板后仍存活）；`ui layout` 确认底部 Dock（搜索/时间/位置/图层/更多功能）与缩放按钮无回归；语义化 CLI 导航「更多功能」→「观测工作区(`more-action-observeHub`)」→`hub-action-oculars` 打开目镜面板，面板成功挂载、无崩溃。未改任何持久化设置。
+- **端口链路证据（诚实说明）**：**未观察到 `getOculars` 重试日志**。原因：`loadOculars` 的宿主入口是 `ensurePluginLoaded('Oculars', () => this.telescopeStore.loadOculars(false))`（面板打开时触发），该函数先 `callNativeWhenReady('getPluginList', ...)`，只有回包 `loaded=true`（需 Qt 引擎/插件真实可用）才回调 `loadOculars`；UI-only 模拟器无引擎，`getPluginList` 必然失败，故 `loadOculars` **在本环境不可达**。另行核验：点击「目镜」后面板打开，其后的 ~100 ms × 15 重试 burst（约 1.6 s、16 条 `command bridge not loaded yet`）经对照源码确认为 `getPluginList`（同为 0/100/15 档），**不是** `getOculars`。`loadOculars` 的其余 12 个调用点（`setTelrad`/`setCrosshairs`/`setCCD`/`selectOcularInstrument`/`setOcularSetting`/滑块/`rotateOcularReticle`/`resetOcularInstrument`/`setOcularMode` 的回调）同样以桥回包为前提，UI-only 下亦不可达。
+- **待真机验证（真机离线，模拟器无引擎）**：`getOculars` 回包解析与 55 个 `ocular*` 字段渲染、目镜/望远镜/镜头/CCD 列表与选择器、`ocularStatusMessage`（`ocular_status_no_config`/`ocular_status_unavailable` 两支），以及 `loadOculars` 的 100 ms × 15 重试/超时路径；端口 seam 的端到端 `attachPort → HostCommandPort.requestWhenReady('getOculars')` 需真机引擎就绪后复核。
+- **本片新发现/取舍**：AB-0 的 `requestWhenReady` 固定映射 0/200/60，**不足以表达**宿主个别加载器显式传入的重试档（`getOculars` = 0/100/15）；为守「函数体逐字」，本片给该端口方法**追加可选重试参数**（向后兼容）而非静默改用 200×60。后续 B1 加载器若沿用默认档则无需改动。
+
+## [2026-10-04] DevEco Code - 重构：§14 A1-7 轨道 A1 收尾（derive/catalog.ets 等）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道**收尾片**：把 §2.12 A1 全清单（91）中尚未迁出的余项全部迁掉。
+- **开工复测（判据命令在当前宿主重测 A1）**：按 §2.12 判据在当前宿主重跑（`private`、非 `void`/非 `Promise`、名字非动作动词、无成员写 / IO / 桥 / 路由 / 定时器 / `AppStorage` / `hilog`、体内无 `this.<字段>`），再减去已迁出的 84 个（`common/derive/` 6 个模块的 `export function` 名单）→ 宿主内仍在的 A1 余项 **7 个**：`timezoneDisplayName` `catalogIconForModule` `catalogIconForObjectType` `wutCategoryOptions` `wutCategoryKey` `wutDirectionLabel` `phenomenonCaption`。逐名核验：体内零 `this.<字段>`、零宿主方法调用（`catalogIcon*` 只做入参字符串匹配、`phenomenonCaption`/`wutDirectionLabel`/`wutCategoryKey` 只做入参分支与静态表查、`wutCategoryOptions` 只构造静态 `TabItem[]`、`timezoneDisplayName` 只查静态 `I18n` 表）。**剔除到 A2：本片 = 0**（计划提示的 `hecPointColor`(13) 本就不在 A1 清单内，属 §14.3 A2，未动）。
+- **归置**：`timezoneDisplayName`（时区文案/命名）→ 并入既有 `common/derive/labels.ets`；`phenomenonCaption`（天文 caption）→ 并入既有 `common/derive/astro.ets`；其余 5 个（目录图标 + WUT 分类/方向表）→ 新建 `common/derive/catalog.ets`。
+- **新增 `harmonyos/ets-source/common/derive/catalog.ets`（86 行，5 个文件级 `export function`）**：`catalogIconForModule` `catalogIconForObjectType` `wutCategoryKey` `wutDirectionLabel` `wutCategoryOptions`。函数体逐字剪切，仅 `private`→`export function`；具名 import `TabItem` ← `../../pages/StellariumTypes`；模块内**零 `this`**（唯一该词出现在中文表头注释）、零 store/NAPI/UI import、零模块级可变变量（§14.8 规则 6）。
+- **并入既有模块**：`common/derive/astro.ets` **+14 行**（`phenomenonCaption`）；`common/derive/labels.ets` **+52 行**（`timezoneDisplayName`）。二者均为文件级 `export function`，语义逐字不变，未改原模块既有函数。
+- **宿主手术**：删 7 个 `private` 方法声明（`[regex]::Escape(签名)` + `(?ms)^  private <签名>...\{.*?\r?\n  \}\r?\n` 定位；删除前/后全文件大括号净深度 **0 → 0** 断言结构未失衡）。调用点 `this.<fn>(` → `<fn>(` 逐名：`catalogIconForModule` 1、`catalogIconForObjectType` 2、`wutCategoryOptions` 1、`wutCategoryKey` 1、`timezoneDisplayName` 1；`phenomenonCaption` / `wutDirectionLabel` 在宿主**仅**有注入行（随接口删除）。补宿主具名 import（astro/labels 追加名，另新增 `../common/derive/catalog`）。§14.8 规则 5 禁双写：宿主不留同名副本。
+- **`panels/astro/AstroPanel.ets` 直连模块**：删 `AstroPanelHost` 的 `phenomenonCaption` / `wutCategoryKey` / `wutCategoryOptions` / `wutDirectionLabel` 4 个接口成员与 4 个 noop 默认值，改 `import { phenomenonCaption } from '../../common/derive/astro'` 与 `import { wutCategoryOptions, wutCategoryKey, wutDirectionLabel } from '../../common/derive/catalog'`；6 处 `this.host.<fn>(` → `<fn>(`（先例 §14.2 A1-2/A1-3/A1-6）。宿主构造 `AstroPanelHost` 的对象字面量同步删 4 行注入（避免接口外的多余属性）。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this` = **0**（仅注释词）；调用点逐名前后相等（`timezoneDisplayName` 1→1、`catalogIconForModule` 1→1、`catalogIconForObjectType` 2→2、`wutCategoryOptions`/`wutCategoryKey` 各「宿主 1 + 宿主注入 1」→「宿主 1 + 面板直连 1」、`phenomenonCaption`/`wutDirectionLabel` 各「注入 1」→「面板直连 1」）。**同名遮蔽：无**（7 个导入名在宿主/组件内无同名局部变量 / `@Prop` / 成员）。
+- **A1 最终核对（§2.12 清单 91）**：已迁 = **91**（前 6 片 84 + 本片 7）；**仍在宿主 = 0**；剔除到 A2 = **0**。清单内 91 项全部为零宿主依赖纯函数，无一需回退 §14.3。
+- **复测额外发现（不在 §2.12 的 91 清单内，本片未动，留待后续）**：同一判据重测宿主还命中若干「次生纯函数」——它们是在前几片把其调用的宿主方法迁走后**才**变为零宿主依赖的（如 `moreActionStartsSection` 现调模块 `moreActions()`、`panelRouteParent` 现调 3 个 `*HubActions()`），以及若干纯静态/几何函数（`panelRouteRoot`、`phenomenaBodyName`、`celestialTitle`、`scriptControlCompact`、`formatObservationTime`、`hecPoint*`/`hecLayoutPositions`、`bottomCard*`/`detailCard*`/`is*Point` 等）。它们不在 §2.12 A1 全清单（91）中（census 快照未收录，或当时仍具宿主方法依赖），严格按 §14.2 清单收尾故本片不纳入；建议后续以「§14.2 补充微片」或随 §14.3 A2 一并处理。
+- 单体 `MainWindowNativeNode.ets` **17,778 → 17,643 行（−135）**；宿主 `private` 方法（`^  private\s` 计）**1,200 → 1,193（−7，恰为本片迁出数）**；`load*` 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` **5 文件 No errors**（catalog / astro / labels / MainWindowNativeNode / AstroPanel）；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 214+ 文件，未新增或改名任何 `.id()`）；全量 `*ohos*.mjs` 扫描仅剩 §13.6 的 7 个环境类失败（`*-pad` × 4、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回归**；`test-ohos-wut-layout.mjs` 4/4、`test-ohos-astro-motion.mjs` 9/9 全绿。
+- **模拟器冒烟（`127.0.0.1:5555`，UI-only 通道）**：`install -r` → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **1477 存活**；`devecocli ui layout` 渲染主界面（Dock 搜索/时间/位置/图层/更多功能 + `#skyZoomInButton`/`#skyZoomOutButton`）；`verify_ui` 走查：点「更多功能」→「天文计算」→「今晚」标签，`AstroPanel` 成功挂载（含本片迁出的 WUT 分区代码路径），全程无崩溃、`pidof` 仍为 **1477**（前台 mission `com.cnchensh.stellarium:entry:QAbility`）。
+- **模拟器无法覆盖（待真机）**：WUT 类别 chip（`wutCategoryOptions` / `wutCategoryKey` / `wutDirectionLabel`）的真实渲染与筛选、天象 caption（`phenomenonCaption`）文本、目录图标（`catalogIconForModule` / `catalogIconForObjectType`）与目录数据、时区显示（`timezoneDisplayName`）——均依赖引擎/桥回包（`loadWutTargets` / `loadPhenomena` / 目录查询 / 观测地回包），模拟器无引擎故未走查。
+- **本片新踩的坑**：① `edit` 工具会把整个文件的行尾规范化为 **LF**（原 CRLF），PowerShell `[System.IO.File]::WriteAllText` 拼接的插入行也是 **LF** —— 导致 `labels.ets` 全文件变 LF、`MainWindowNativeNode.ets` 出现 1 处裸 LF（`git` 报 `LF will be replaced by CRLF`）；须在收尾对改动文件统一归一为 CRLF（本片用 `-replace "`r`n","`n"` 再 `-replace "`n","`r`n"` 修正 astro/labels/catalog 与单体）。② 用 PowerShell `-File` 传 `[string[]]` 数组参数会被拼成单串（`-Files 'a','b'` → 一个逗号串），须逐文件调用。
+
+## [2026-10-04] DevEco Code - 重构：§14 A1-6 几何/触摸纯函数抽取（derive/geometry.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道第 6 片，抽出「几何 / 触摸坐标 / 布局常量」纯函数簇。
+- **开工复测（逐名核验函数签名是否把布局值作为入参）**：候选 13 名在本片**全部为零宿主状态读取**（体内无 `this.<字段>`）—— `useExpandedDetailSummary` / `useTabletObjectInspector` / `isPhoneDetailPeek` 是恒返回 `false` 的构型开关，`expandedDetailSummaryHeight`=`230`、`baseCompactObjectPeekY`=`92`、`compactTopQuickY`=`50` 只依赖静态常量；`pointInsideRect`（7 个显式入参）/ `pointOverlapsUiObstacle`（`SkyUiObstacle` 入参）为纯几何；`touchScreenX/Y` / `touchWindowX/Y` 只读 `TouchObject` 入参；`azBarHeight` 只对入参 `azimuth` 做纯计算。**故无剔除项，13 名全部按 A1 迁出**。计划提示中担忧的宿主布局字段（`this.isExpandedLayout` / `this.skyHeight` / `this.hasUsableFoldAngle` 等）**未出现在这 13 个函数体内**；真正读取它们的是 `isCompactTopQuickPoint` / `compactObjectPeekWidth` / `baseCompactObjectPeekX` / `tabletInspectorHeight` / `canShowExpandedDetailSummary` 等 **A2** 函数，留待 §14.3。
+- **新增 `harmonyos/ets-source/common/derive/geometry.ets`（60 行，13 个文件级 `export function`）**：`azBarHeight` `pointInsideRect` `pointOverlapsUiObstacle` `touchWindowX` `touchWindowY` `touchScreenX` `touchScreenY` `compactTopQuickY` `useExpandedDetailSummary` `expandedDetailSummaryHeight` `useTabletObjectInspector` `isPhoneDetailPeek` `baseCompactObjectPeekY`。函数体**逐字剪切**（比较边界 `>=` / `<=` / `??` 原样保留，触摸热路径语义不变）；具名 import：`SkyUiObstacle` → `../../pages/MainWindowModels`（`TouchObject` 为 ArkUI 全局类型，无需 import）。模块内**零 `this.`、零 store/NAPI/UI import、零模块级可变变量**（§14.8 规则 6）。
+- **宿主手法**：删 13 个 `private` 方法声明（`(?ms)^  private <签名>...\{.*?\r?\n  \}\r?\n\r?\n` 正则定位；删除后全文件大括号净深度 **0 → 0** 断言结构未失衡）；宿主 **66 处调用点 `this.<fn>(` → `<fn>(`**，另删除 `azBarHeight` 注入行 1 处（`azBarHeight: (az) => this.azBarHeight(az)`）；补宿主顶部具名 import（`../common/derive/geometry`）。§14.8 规则 5 禁双写：宿主不留同名副本。
+- **AstroPanel 直连模块**：`panels/astro/AstroPanel.ets` 删 `AstroPanelHost.azBarHeight` 接口成员与 noop 默认值，改 `import { azBarHeight } from '../../common/derive/geometry'`，调用点 `this.host.azBarHeight(r.azimuth)` → `azBarHeight(r.azimuth)`（先例 §14.2 A1-2/A1-3）。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this.` = **0**（唯一 `this` 出现于中文注释）；调用点逐名计数前后相等（唯一变化：`azBarHeight` 由「宿主注入 1 + 面板 1」改为「面板直连 1」，总量不变）。**同名遮蔽：无**（13 个名字在宿主/组件内无同名局部变量、`@Prop`、成员）。
+- 单体 `MainWindowNativeNode.ets` **17,834 → 17,779 行（−55）**；宿主 `private` 方法（`(?m)^  private ` 计）**1,213 → 1,200（−13，恰为本片迁出数）**。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` 3 文件（geometry.ets / MainWindowNativeNode.ets / AstroPanel.ets）**No errors**；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 213+ 文件，未新增或改名任何 `.id()`）；全量 `*ohos*.mjs` 扫描仅剩 §13.6 的 7 个环境类失败（`*-pad` × 4、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回退**。
+- **测试同步**：`test-ohos-model-scroll.mjs` 的触摸夹具原先把 `touchScreenX/Y` 挂在假宿主上（`controller.touchScreenX = ...`），宿主改直连模块后方法体以裸名调用 → 夹具改为把 `touchScreenX/Y` 作为 `new Function` 形参注入模板；修正后 5/5 全绿。
+- **模拟器走查（127.0.0.1:5555，UI-only 通道）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = **25525 存活**。点按 `#skyZoomInButton`（141,2046）与 `#skyZoomOutButton`（141,2228）命中且应用存活；点按 Dock 五列（搜索/时间/位置/图层/更多功能）后「更多功能」面板打开（`#panel-close` / `#panel-scroll-zh_CN` / `#more-action-observeHub` / `#more-action-dataHub` 渲染）；再点 `#more-action-dataHub` → 面板就地切换为「天体数据与扩展」（`#panel-back` + `#hub-action-astro` / `#hub-action-satellites` / `#hub-action-meteorshowers`），证明触摸坐标链路（`touchWindowX/Y`）与命中判定实时响应，全程 `pidof` 存活。收尾点 `#panel-close` 复原。
+- **模拟器无法覆盖（待真机）**：`skyZoomIn/Out` 的真实缩放（无引擎）、`pointInsideRect` / `pointOverlapsUiObstacle` 在详情卡连接线避让中的实际几何（`selectedObjectLayoutAvoidanceTarget` 依赖 `getGyroGuidePosition` 桥）、`azBarHeight` 方位条高度在 astro 面板的真实渲染值、以及扩展/折叠/平板三构型下 `useExpandedDetailSummary` / `isPhoneDetailPeek` / `useTabletObjectInspector` 的开关语义（模拟器为手机紧凑构型）。
+- **本片新踩的坑**：① PowerShell/.NET 正则 `^` 在未加 `m` 标志时只匹配串首 —— `(?s)^  private ...` 删方法会**整批静默匹配失败**（无报错、无删除），须用 `(?ms)`；本次靠「删除后断言大括号净深度不变」发现无改动后修正。② 文本切片型测试夹具（`new Function` 反引宿主方法体）在方法体改为调用模块级函数后会抛 `X is not defined`（`arkts_check`/构建全绿，运行期才炸），必须把被迁函数作为 `new Function` 形参注入 —— 与 §13.1 规则 8 同源，本片只命中 `test-ohos-model-scroll.mjs` 一处。
+## [2026-10-04] DevEco Code - 重构：§14 A1-5 动作/文案表纯函数抽取（derive/actions.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道第 5 片，抽出「Dock / 动作表 / 望远镜与位置文案」纯函数簇。
+- **开工复测**：用 §2.12 判据在当前宿主逐名核验 12 个候选函数体——**全部零宿主状态读取**（体内无 `this.<字段>`）、无成员写 / IO / 桥 / 路由 / 定时器 / `AppStorage` / `hilog` → 全部归 A1，**无剔除项**。
+- **`*Actions` 家族甄别（原计划重点提示项）**：5 个动作表 `primaryDockActions` / `moreActions` / `observingHubActions` / `skyDataHubActions` / `automationHubActions` **均为静态数组**（内联对象字面量 + `I18n.t` / `I18n.pluginName` 文案，显式返回 `ShellAction[]`），**不读取任何宿主 `@State`、不调用任何宿主方法**（计划 §14.2 注"若读宿主字段则剔除"，实测 5 个全部不命中，故按 A1 迁出，无需留给 §14.3）。其余同样为零 `this`：`telescopeErrorText` 仅按入参 `errorCode` 映射文案、`validationFromResponse` 仅对入参 JSON 做 `parse` 后映射、`sessionSignature` 仅对入参做取整/拼接、`getCityPreset` / `normalizeLocationSearchText` / `officialLocationAliases` 为静态查表 / 纯字符串处理、`telescopeUpdateTime` 仅 `new Date()`。
+- **新增 `harmonyos/ets-source/common/derive/actions.ets`（143 行，12 个文件级 `export function`）**：`primaryDockActions` `moreActions` `observingHubActions` `skyDataHubActions` `automationHubActions` `getCityPreset` `telescopeUpdateTime` `telescopeErrorText` `validationFromResponse` `normalizeLocationSearchText` `officialLocationAliases` `sessionSignature`。函数体从宿主**逐字剪切**（保留字面量 / 分支 / 正则语义），仅改 `private`→`export function`。具名 import：`I18n` ← `../../pages/I18n`；`ShellAction` `StellariumBridgeResponse` ← `../../pages/StellariumTypes`；`CityPreset` `SkyCultureMakerValidation` `TelescopeControlResponse` ← `../../pages/MainWindowModels`（`ResourceStr` 为 ArkUI 全局类型，无需 import）。模块内**零 `this.`、零 store/NAPI/UI import、零模块级可变变量**（§14.8 规则 6）。
+- **宿主手术**：删 12 个 `private` 方法声明（用 `(?sm)^  private <签名>\(...\)...\{.*?\r?\n  \}\r?\n` 正则定位，删除后以全文件大括号净深度 **0 → 0** 断言结构未失衡）；36 处调用点 `this.<fn>(` → `<fn>(` 并补宿主顶部具名 import（`../common/derive/actions`）。调用点分布：`canonicalDockActions` 对 `primaryDockActions()[0..3]` 4 处、`moreActionStartsSection` 对 `moreActions()` 1 处、`panelContent` 对 4 个动作表 5 处、`matchesLocationSearch` / `locationSearchMatchScore` / `scanLocationSearchChunk` 对 `normalizeLocationSearchText` / `officialLocationAliases` 10 处、`telescopeStatusOf` 一族对 `telescopeErrorText` 8 处 + `telescopeUpdateTime` 2 处、`saveSkyCultureMakerDraft` / `validateSkyCultureMaker` 等对 `validationFromResponse` 4 处、`sessionExport` / `sessionApply` 对 `sessionSignature` 2 处、`quickLocationSearchItems` / 城市预设对 `getCityPreset` 2 处。`panels/**` **无调用点**（唯一命中的是 `MorePanel.ets` 注释里的函数名，非调用）。
+- **无用 import 清理**：宿主 `CityPreset`（原 1 处引用=声明本身）与 `SkyCultureMakerValidation`（同）随迁移变为零引用，从 `MainWindowModels` 具名 import 中删除；`TelescopeControlResponse`（仍 12 处）/ `ShellAction`（仍 13 处）/ `StellariumBridgeResponse`（仍 281 处）保留。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this.` = **0**（唯一 `this` 字样在中文注释里）；调用点数 **36 不变**（`normalizeLocationSearchText` 有 1 行含两处调用，故按行计为 35、按匹配计为 36，迁移后一致）。
+- **同名遮蔽自查**：无。宿主与被改文件中无与本片 12 个导入名同名的局部变量 / `@Prop` / 成员（宿主原有 12 个 `private` 方法已随本片删除），去 `this.` 未产生自遮蔽 / TDZ。
+- 单体 `MainWindowNativeNode.ets` **17,953 → 17,833 行（−120）**；宿主 `private` 方法（`^\s*private\s+name(` 计）**860 → 848（−12，恰为本片迁出数）**；`load*` 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（单体括号深度 0，`@Builder` 成对）；`arkts_check` 2 文件（actions.ets / MainWindowNativeNode.ets）**No errors**；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 212+ 文件，未新增或改名任何 `.id()`）；全量 `*ohos*.mjs` 扫描仅剩 §13.6 的 7 个环境类失败（`*-pad` × 4、`mist-performance`、`verify-ohos-location-search`、`verify-ohos-search`），**无新增回归**；`test-ohos-search-browser.mjs` 3/3 全绿。
+- **模拟器冒烟**（`127.0.0.1:5555`，UI-only 通道）：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof`=19073 存活；Dock 渲染 搜索/时间/位置/图层/更多功能（= `primaryDockActions` 4 + more）；打开「更多功能」滚动可见全部 **6 个 `#more-action-*`**（observeHub / dataHub / automationHub / tools / settings / help）；进入「观测工作区」渲染 `#hub-action-observing` / `bookmarks` / `oculars`（由 `observingHubActions` 驱动）；全程 `pidof` 存活，无运行期退出。
+- **待真机验证（真机离线，模拟器无引擎）**：`telescopeErrorText` / `telescopeUpdateTime`（需望远镜桥回包与错误码路径）、`validationFromResponse`（星空文化制作器校验回包）、`sessionSignature`（会话导出/复用比对）、`getCityPreset` + `normalizeLocationSearchText` + `officialLocationAliases`（位置搜索的桥/层级数据渲染与中文别名）。纯动作数组（5 个 `*Actions`）已在模拟器验证条目与文案。
+- 本片踩坑：批量删方法的正则必须 **`(?sm)`** —— 只写 `(?s)` 时 `^` 不按行锚定，12 个方法命中 0（PowerShell 直接用 `[System.Text.RegularExpressions.Regex]` 时无 JS 的 `/m` 隐含行为）；删除用"非贪婪到首个 `\n  }`"，需确认函数体内无 2 空格缩进的 `}`（本片 12 个函数均以 4 空格缩进闭合内部块，安全）。
+## [2026-10-04] DevEco Code - 重构：§14 A1-4 星空文化/杂项纯函数抽取（derive/skycult.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道第 4 片，抽出「星空文化 / 杂项」纯函数簇。
+- **开工复测**：用 §2.12 判据在当前宿主逐名核验 10 个候选函数体——**全部零宿主状态读取**（体内无 `this.<字段>`）、无成员写 / IO / 桥 / 路由 / 定时器 / `AppStorage` / `hilog` → 全部归 A1，**无剔除项**。逐项说明：`parseObservingList` 解析的是**入参字符串**（`JSON.parse(value)`），并不读宿主 `observingList`/`obsListStore` 字段，故归 A1 而非 A2；`isCliPanelName`/`informationMaskBit`/`configDitheringLabel` 只依赖入参 + 内联字面量/`switch` 查表，不引用宿主枚举或常量（`isCliPanelName` 的面板名数组、`informationMaskBit` 的位表均内联，无需从别处 import）；`formatRate` 仅读模块级静态 `I18n.t('msg_paused')`（非宿主状态），归 A1。§14.8 规则 6 要求纯函数模块不得 import store —— 本模块只 import `I18n`，**未 import 任何 store**。
+- **新增 `harmonyos/ets-source/common/derive/skycult.ets`（135 行，10 个文件级 `export function`）**：`isCliPanelName` `parseObservingList` `isRecordable` `informationMaskBit` `configDitheringLabel` `csvCell` `cleanSkyCultureNarration` `cleanSkyCultureDescription` `isSafeSkyCultureArtPath` `formatRate`。函数体从宿主**逐字剪切**（保留字面量 / 分支 / 正则语义），仅改 `private`→`export function`。**唯一 import**：`I18n` ← `pages/I18n`（`formatRate` 用）。模块内**零 `this`、零 store/NAPI/UI import、零模块级可变变量**。
+- **宿主手术**：删除 10 个 `private` 方法声明（`isRecordable` 连同其上方注释一并删）；所有调用点 `this.<fn>(` → `<fn>(`，并补宿主顶部具名 import（`../common/derive/skycult`）。注意 **`configDitheringLabel` 在宿主内零调用点**（唯一入口是宿主对 SettingsPanel 的注入行），删方法时一并删除该注入行（§14.8 规则 5 禁双写）。
+- **组件直连模块**：`panels/panels/SettingsPanel.ets` 把注入的 `configDitheringLabel` 回调改为直接 `import { configDitheringLabel } from '../../common/derive/skycult'` —— 删除成员声明 `configDitheringLabel: (value: string) => string = () => ''`，调用点 `Text(this.configDitheringLabel(...))` → `Text(configDitheringLabel(...))`，并更新文件头注释中的「回注助手」清单。成员声明 / 宿主注入 / 组件调用点三者**同片删 / 改**（A1-3 踩过的半迁移态）。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this` = **0**（唯一命中在中文注释里，预检脚本按注释剥离）；9 个有宿主调用点的函数**调用点数不变**（`isCliPanelName` 1 / `parseObservingList` 2 / `isRecordable` 2 / `informationMaskBit` 2 / `csvCell` 2 / `cleanSkyCultureNarration` 2 / `cleanSkyCultureDescription` 1 / `isSafeSkyCultureArtPath` 1 / `formatRate` 3；`configDitheringLabel` 由宿主注入改为面板直连，宿主调用点 1→0 属预期）。
+- **同名遮蔽自查**：无。宿主与 SettingsPanel 内**无**与本片 10 个导入名同名的局部变量 / `@Prop` / 成员（唯一同名者 `SettingsPanel.configDitheringLabel` 已随本片删除），去 `this.` 未产生自遮蔽 / TDZ。
+- 单体 `MainWindowNativeNode.ets` **18073 → 17954 行（−119）**；宿主 `private` 方法（`^\s+private\s+name(` 计）**869 → 859（−10，正为本片迁出数）**；`load*` 72 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（括号深度 0，`@Builder` 成对）；`arkts_check` 3 文件（skycult.ets / MainWindowNativeNode.ets / SettingsPanel.ets）无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 211+ 文件，未新增或改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败，**无新增回归**。
+- **测试同步（§13.1 规则 8）**：两处按文本切片的脚本随搬迁更新——① `scripts/test-ohos-skyculture-text.mjs` 改读 `common/derive/skycult.ets` 并匹配 `export function <name>(text: string)`（原读宿主 `private <name>`），4/4 全绿；② `scripts/test-ohos-privacy-startup.mjs` 的「CLI 导航可达隐私设置」用例：面板白名单 `'settingsInformation', 'settingsTime', 'settingsPrivacy'` 已随 `isCliPanelName` 迁出，改读 `common/derive/skycult.ets`；路由判定 `panel === 'settingsTime' ? 3 : -1` 仍读宿主，19/19 全绿。
+- **设备走查（模拟器 `127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 12215 全程存活；`ui layout` 确认底部 Dock 中文标签（搜索 / 时间 / 位置 / 图层 / 更多功能）与缩放按钮正常；导航「更多功能」→「观测工作区」打开观测 hub（`hub-action-observing/bookmarks/oculars`）、「天体数据与扩展」打开数据 hub，`pidof` 仍存活。未改任何持久化设置。
+- **待真机验证（模拟器无引擎、无真实数据 / 设置入口深）**：① `configDitheringLabel` 的界面渲染（设置 › 主设置 › 抖动模式行）——设置面板在本构型需经 hub 多步进入，模拟器入口深且无引擎，未走查；② `parseObservingList`（启动期从持久化读观测清单，依赖 preferences + 引擎回包）、`isRecordable`（录制回放依赖引擎）、`informationMaskBit`（信息窗自定义掩码依赖 `getInformationSettings` 回包）、`csvCell`/`formatRate`（astro 导出与时间速率显示依赖真实天文数据）、`cleanSkyCulture*`/`isSafeSkyCultureArtPath`（星空文化文本与插图依赖引擎回包）、`isCliPanelName`（`openUiPanel` CLI 依赖引擎桥，模拟器实测 `bridge timeout`）——均需真机逐路径比对。本片为**等价搬迁**，函数体逐字未改。
+
+## [2026-10-04] DevEco Code - 重构：§14 A1-3 标签/文案纯函数抽取（derive/labels.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道第 3 片，抽出「标签 / 文案 / 命名」纯函数簇。
+- **开工复测**：用 §2.12 判据在当前宿主逐名核验 12 个候选函数体——**全部零宿主状态读取**（体内无 `this.<字段>`，也不读任何宿主 `@State`）、无成员写 / IO / 桥 / 路由 / 定时器 / `AppStorage` / `hilog` → 全部归 A1，**无剔除项**（无一个应留 A2）。`zhNameOf` 只读 `I18n.getLanguage()`（模块级静态，非宿主状态），归 A1；§14.8 规则 6 要求纯函数模块不得 import store —— 本模块只 import `I18n` 与 `PluginFeatureRoute` 类型，**未 import 任何 store**，也未制造对 `LanguageStore` 的依赖。
+- **新增 `harmonyos/ets-source/common/derive/labels.ets`（279 行，12 个文件级 `export function`）**：`resourceText` `describeDecodeError` `zhNameOf` `zhType` `planetZh` `sensZh` `scriptZh` `scriptDesc` `pluginZh` `pluginDesc` `pluginHostName` `pluginFeatureRoute`。函数体从宿主**逐字剪切**（保留默认值 / 分支 / 查表语义），仅改 `private`→`export function`。**import 均取自定义处**：`I18n` ← `pages/I18n`，`PluginFeatureRoute`（`pluginFeatureRoute` 返回类型）← `pages/MainWindowModels`。模块内**零 `this`、零 store/NAPI/UI import、零模块级可变变量**。
+- **宿主手术**：删除 12 个 `private` 方法声明；所有调用点 `this.<fn>(` → `<fn>(`（宿主 **61 处匹配**，含一行多匹配）并补宿主顶部具名 import。
+- **组件直连模块**：5 个面板把注入的回调改为直接 import——
+  - `panels/astro/AstroPanel.ets`：`planetZh` / `zhNameOf` / `zhType` 从 `AstroPanelHost` 接口与 `noopAstroPanelHost()` 各删 3 项（−3/−3），3 处 `this.host.<fn>(` → 模块函数；
+  - `panels/panels/SettingsPanel.ets`：`sensZh` / `pluginZh` / `pluginDesc` / `pluginFeatureRoute` / `resourceText` / `scriptZh` / `scriptDesc` 7 个成员声明删除、调用点直连（顺带删去不再使用的 `PluginFeatureRoute` 类型 import）；
+  - `panels/panels/ScriptsPanel.ets`：`scriptZh` / `scriptDesc` 2 个成员删除；
+  - `panels/panels/ConfigFallbackPanel.ets`：`sensZh` 成员删除；
+  - `panels/panels/Scenery3dPanel.ets`：`resourceText` 成员删除。
+  宿主的对应注入行随之删除（共 14 条，§14.8 规则 5 禁双写）。`panels/layers/LayerViewTabs.ets` 自带**同名私有** `resourceText`（与宿主独立），**未动**。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this` = **0**（唯一命中在中文注释里，已被预检脚本按注释剥离）；12 个函数的调用点总数不变（注入式调用改为面板直连，invocations 数不变）。
+- 单体 `MainWindowNativeNode.ets` **18354 → 18074 行（−280）**；宿主 `private` 方法 **882 → 870（−12，正为本片迁出数）**；`load*` 72 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（括号深度 0）；`arkts_check` 7 文件（labels.ets / MainWindowNativeNode.ets / AstroPanel / SettingsPanel / ScriptsPanel / ConfigFallbackPanel / Scenery3dPanel）无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 210+ 文件，未新增或改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败，**无新增回归**；`test-ohos-detail-live-values.mjs` **7/7 全绿**（夹具把 `zhNameOf` 改为 `new Function` 的形参注入替身，宿主方法体已改用自由变量）。
+- **设备走查（模拟器 `127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：安装 → `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` = 4520 全程存活；`ui layout` 确认底部 Dock 中文标签（搜索 / 时间 / 位置 / 图层 / 更多功能）；导航「更多功能」→「天体数据与扩展」→「天文计算」打开 astro 面板，`ui layout` 确认面板标题与区块中文渲染，全程 `pidof` 仍存活。未改任何持久化设置。
+- **待真机验证（模拟器无引擎、无真实数据）**：本片产物是标签 / 文案，其**内容渲染**依赖引擎回包填充列表——`planetZh` / `zhNameOf` / `zhType`（天文计算的行星位置、WUT 目标类型）、`pluginZh` / `pluginDesc` / `pluginFeatureRoute`（设置 › 插件管理的插件列表）、`scriptZh` / `scriptDesc`（脚本面板列表）、`resourceText`（三维地景元数据）在 UI-only 模拟器上列表为空，**无法走查文案本身**；本片仅等价搬迁，请真机逐面板比对中文标签。
+- **本片新踩的坑**：①「同名遮蔽」在**面板**侧的变体——`SettingsPanel` / `ScriptsPanel` 等把被迁函数名同时用作 `@Prop` 成员名；若只把 `this.<fn>(` 改成 `<fn>(` 而**不删成员声明与宿主注入行**，会留下「成员被 import 函数遮蔽、`@Prop` 成死代码且宿主仍传参」的半迁移态。正解：成员声明、宿主注入、组件调用点三者**同片删 / 改**（本片如此）。② `test-ohos-detail-live-values.mjs` 用 `new Function('key', body)` 提取宿主方法体执行，宿主体去掉 `this.` 后自由变量 `zhNameOf` 在提取作用域未定义——夹具必须把它作为 `new Function` 的形参传入（照 A1-2 的 `deriveFn` 手法）。
+## [2026-10-04] DevEco Code - 重构：§14 A1-2 astro 纯函数抽取（derive/astro.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道第 2 片，抽出天文面板的派生纯函数簇。
+- **开工复测**：用 §2.12 判据在当前宿主逐名核验 25 个候选函数体——**全部零宿主状态读取**（体内无 `this.<字段>`）、无成员写/IO/桥/路由/定时器/`AppStorage`/`hilog` → 全部归 A1，**无剔除项**（无一个应留 A2）。
+- **新增 `harmonyos/ets-source/common/derive/astro.ets`（215 行，25 个文件级 `export function`）**：`dateToJD` `jdToLocalTimeText` `astroTabItemsForGroup` `astroGroupItems` `astroGroupForTab` `rtsCalendarDurationLabel` `graphModeLabel` `graphStartOptionLabel` `hourOffsetLabel` `planetMetricLabel` `planetMetricUnit` `planetPairBodyName` `planetPairLinearLabel` `hecPointSize` `hecPointAngle` `hecDistanceLabel` `hecPlanetOrbitRadius` `lunarElongationBarHeight` `planetTimeSeriesBarHeight` `planetPairBarHeight` `messierNumberOf` `minorPlanetNumberOf` `fmtDegMin` `clamp` `distance`。函数体从宿主**逐字剪切**（保留默认值/分支语义），仅改 `private`→`export function`。**类型/常量 import 均取自定义处**：`TabItem` / `HeliocentricPosition` ← `pages/StellariumTypes`，`HELIOCENTRIC_PLANET_ORBITS` ← `pages/MainWindowModels`，`I18n` ← `pages/I18n`（未新造类型）。模块内**零 `this`、零 store/NAPI/UI import、零模块级可变变量**（§14.8 规则 6）。
+- **按体量拆两个提交**：合并 `git diff --stat` 约 461 行改动 + 新文件，超 ~450 行阈值，故按提示拆成 **A1-2a 数学/日期类**（12 个：`dateToJD` `jdToLocalTimeText` `astroGroupForTab` `graphModeLabel` `hourOffsetLabel` `hecPointAngle` `hecPlanetOrbitRadius` `messierNumberOf` `minorPlanetNumberOf` `fmtDegMin` `clamp` `distance`）与 **A1-2b 标签/柱高类**（13 个：其余），两提交各自 `arkts_check` + 构建 + 契约全绿，仍算同一片。
+- **宿主手术**：A1-2a 删 12 个 `private`、改写 80 处调用点；A1-2b 删 13 个 `private` + 13 条 `AstroPanelHost` 适配器委托，并改写 30 处组件调用点；宿主顶部补具名 import。删方法一律 `[regex]::Escape(签名)` + 非贪婪到 `\n  }` 并断言每名匹配 = 1（规避 §13.3 单行/越界陷阱）。
+- **组件直接调用**：`AstroPanel` 的 `this.host.<fn>(` → 具名 import 直接调用（30 处），并从 `AstroPanelHost` 接口与 `noopAstroPanelHost()` 中删除这 13 个成员（各 −13）；`selectAstroGroup`/`selectAstroTab` 内部对已迁函数的调用同步改模块函数。`AstroPanel.ets` 2256 → 2232 行（−24）。
+- **三项复核**：宿主内 `this.<本片函数名>` 残留 = **0**；模块内 `this` = **0**；25 个函数的调用点总数不变（宿主内 `clamp` 48 / `distance` 6 / `dateToJD` 5 / `planetMetricUnit` 1 等逐一核对）。
+- 单体 `MainWindowNativeNode.ets` **18543 → 18355 行（−188）**；宿主 `private` 方法 **905 → 880（−25）**；`load*` 72 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（括号深度 0，`@Builder` 成对）；`arkts_check` 3 文件（astro.ets / MainWindowNativeNode.ets / AstroPanel.ets）无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 209 文件，未新增或改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败，**无新增回归**；`test-ohos-astro-motion.mjs` **9/9 全绿**（夹具改从 `derive/astro.ets` 取 `astroGroupForTab`/`astroTabItemsForGroup`，并为后者补 `I18n` 桩）。
+- **设备走查（模拟器 `127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：安装 → `aa force-stop` + `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` 全程存活；`ui layout` 确认底部 Dock / 缩放按钮正常；导航「更多功能」→「天体数据与扩展」→「天文计算」打开 astro 面板，`ui layout` 实测分组标签 `astro-group-0/1/2`（观测 / 位置与数据 / 事件与历法 ← `astroGroupItems`）与 `astro-tab-5/2/4/9`（今晚 / 升降 / 图表 / 月相 ← `astroTabItemsForGroup(0)`）；点按 `astro-group-1` 后标签**实时刷新**为 `astro-tab-0/1/6`（位置 / 星历 / 行星 ← `astroTabItemsForGroup(1)`），`pidof` 仍存活。未改任何持久化设置。
+- **待真机验证（模拟器无引擎、无真实数据）**：`dateToJD`/`jdToLocalTimeText`/`fmtDegMin`/`clamp`/`distance` 数值驱动的真实时间/坐标显示、各图表与柱高随真实天文数据渲染（`planetTimeSeriesBarHeight` / `planetPairBarHeight` / `lunarElongationBarHeight`）、`hec*` 日心视图几何——本片仅等价搬迁，建议真机走查各 astro 标签。
+- **本片新踩的坑**：① `distance` 被具名导入后，宿主内既有局部 `const distance = this.distance(x, y, …)` 去 `this.` 变成 `const distance = distance(…)`，触发 `arkts-no-any-unknown` 与 `Block-scoped variable 'distance' used before its declaration`（局部遮蔽 + TDZ 自引用）；改局部名为 `moveDistance` 后通过。**教训：具名导入的纯函数名若与宿主现存局部变量/参数同名，去 `this.` 会自遮蔽；`arkts_check` 对该行会报 any 而非重名，构建才给出 TDZ 真因。** ② 面板经 `AstroPanelHost` 适配器间接调用被迁函数，直接下沉组件调用必须同片删接口与 `noopAstroPanelHost()` 成员，否则返回对象缺成员 → 类型不匹配。
+## [2026-10-04] DevEco Code - 重构：§14 A1-1 陀螺纯函数抽取（derive/gyro.ets）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.2（轨道 A1：零宿主依赖纯函数 → `common/derive/*.ets`）与 §14.8（A/B 专属硬规则）；判据 §2.12。本片是 A1 轨道首片，抽出陀螺/四元数/向量数学簇。
+- **开工复测**：用 §2.12 判据在当前宿主逐名核验 12 个候选函数体——**全部零宿主状态读取**（体内无 `this.<字段>`）、无成员写/IO/桥/路由/定时器/`AppStorage`/`hilog` → 全部归 A1，**无剔除项**。§2.12 列为 A2 的 `gyroOrthonormalizeUp`（读 `this.gyroNormalizeVector`）/`gyroMagneticHeadingFromDeviceVectors` 属 A2，**未纳入本片**，仍留宿主（其内部对已迁函数的调用改为模块函数调用）。
+- **新增 `harmonyos/ets-source/common/derive/gyro.ets`（约 96 行，12 个文件级 `export function`）**：`gyroNormalizeQuaternion`、`gyroConjugateQuaternion`、`gyroMultiplyQuaternions`、`gyroNormalizeVector`、`gyroRotateAboutVertical`、`gyroRotateAboutAxis`、`gyroFilterDeviceVector`、`gyroCross`、`gyroDot`、`gyroScreenAxisForDisplay`、`wrapGyroAzimuth`、`shortestGyroAzimuthDelta`。函数体从宿主**逐字剪切**（保留默认值/分支语义），仅改 `private`→`export function`。**无类型 import**：这些函数只用内建 `number[]` / `number`，不依赖任何既有类型定义（故未新造类型）。模块内**零 `this`、零 `import`、零模块级可变变量**（§14.8 规则 6）。
+- **宿主手术**：删除 12 个 `private` 方法声明（用 `[regex]::Escape(签名)` + 非贪婪到 `\n  }` 的正则逐名删除，删前断言每名匹配数 = 1）；所有调用点 `this.gyroXxx(` → `gyroXxx(`（共 **38 处**，全在宿主，组件内零调用点）；宿主顶部新增**具名 import** `import { ... } from '../common/derive/gyro'`。一并删除只描述 `gyroRotateAboutVertical` 的孤立注释。
+- **三项复核**：宿主 `this.gyro*` 残留 = **0**；模块内 `this` = **0**；12 个函数的调用点总数 = **38 不变**（`gyro*` 引用仅存于 `MainWindowNativeNode.ets`，grep 全 `ets-source` 确认无组件调用）。
+- 单体 `MainWindowNativeNode.ets` **18634 → 18543 行（−91）**；宿主 `private` 方法 **941 → 929（−12）**；`load*` 72 不变。
+- 验证：`check-ohos-refactor-slice.mjs` 通过（括号深度 0，`@Builder` 成对）；`arkts_check` 2 文件（gyro.ets / MainWindowNativeNode.ets）无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 208 文件，未新增或改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` macOS 假设），**无新增回归**（无测试脚本按文本引用 gyro 函数）。
+- **设备走查（模拟器 `127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：安装 → `aa force-stop` + `aa start -a QAbility -b com.cnchensh.stellarium` → `pidof` 存活；`ui layout` 确认底部 Dock / 缩放按钮渲染正常；点按「更多功能」→ `ui layout` 确认面板实时刷新并出现 `#more-action-*` 按钮，再次 `pidof` 仍存活；关闭面板后无持久化设置被改。纯函数迁移不改 UI，此为「无回归」冒烟。
+- **待真机验证（模拟器无引擎、无真实传感器，无法覆盖）**：陀螺仪/罗盘面板入口与真实传感器数据驱动的姿态计算（`setGyroView` 链路）、`gyro*` 在真机高频回调下的数值正确性——本片仅做等价搬迁，建议真机走查陀螺校准面板与目标引导。
+- **本片新踩的坑**：无。删方法时逐名断言匹配数 = 1 有效规避了 §13.3 的「越过方法边界误删相邻成员」。
+## [2026-10-04] DevEco Code - 重构：§14 AB-0 CommandPort enabler + loadAboutInfo 试点
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md` §14.1（轨道 B 硬前置）与 §14.8。本片是「A/B 类方法下沉」队列（§14.7）的首片 enabler：把「桥调用」从宿主剥离为可注入的 `CommandPort` 接口，使域 store 能在**不 import NAPI / UI / libentry.so** 的前提下自持「桥调用 → 解析回包 → 写本域状态」的加载逻辑（§13.1 规则 6 授权；先例 `state/TimeWheelController.ets` 的 `onSeek` / `onStopSpeed` / `getUtcOffsetHours`）。
+- **新增 `harmonyos/ets-source/bridge/CommandPort.ets`（33 行，纯接口）**：不 import NAPI / UI / `@ohos.*`，只 import 回包类型 `StellariumBridgeResponse`（定义于 `pages/StellariumTypes.ets:349`，从定义处 import）。五个方法逐一对应宿主真实桥：`request`↔`callNative`、`requestWhenReady`↔`callNativeWhenReady`、`requestInteractive`↔`callInteractive`、`requestLongRunning`↔`callLongRunningInteractive`、`fire`↔`callNativeFire`。
+- **接口与 §14.1 示例的差异（以宿主真实签名为准，未改宿主桥）**：① 示例只有 `request` / `requestInteractive` / `requestLongRunning` / `fire`；实际加载器 `loadAboutInfo` 走 `callNativeWhenReady`（默认 200ms × 60 启动重试），故补出 **`requestWhenReady`**。② `requestLongRunning` 参数名对齐真实宿主 `(name, payload, onOk, onFailure?, onProgress?, maxAttempts?, isCancelled?)`，而非示例的 `intervalMs` / `cancelled`。
+- **store 侧统一约定落地 `state/ToolsStore.ets`（diff +52/−1）**：新增 `private port: CommandPort | null`、`private seq: number`（原宿主请求序号搬入 store；本加载器暂未用到，供后续 B 片复用；§14.8 规则 3 禁宿主/store 双序号）、`private onChanged: (() => void) | null`、`attachPort(port, onChanged)` 与守卫 `ensurePort()`；头注写明该约定与 §14.1 依据。
+- **试点加载器 `loadAboutInfo`（原宿主 9 行）迁入 `ToolsStore.loadAboutInfo()`**：宿主 `private loadAboutInfo()` 已删除、**无残留副本**（§14.8 规则 5 禁双写）；调用点 `this.loadAboutInfo()` → `this.tools.loadAboutInfo()`；宿主 `aboutToAppear` 注入**具名适配器** `HostCommandPort`（顶层 `class ... implements CommandPort`，逐字转发宿主桥方法，`callNativeWhenReady` 显式传默认重试参数 0/200/60）。`about*` 4 字段仍为 `@Observed` store 字段，面板 `HelpPanel` 经 `@ObjectLink` 消费，字段赋值即刷新。
+- **`onChanged` 注入**：`ToolsStore` 无 `publish*` 发布点（宿主 `publish*` 仅 Satellite/Astro/Search/Guide），按 §14.1「回调不存在则注入等价空实现」注入 `() => {}`；未新增任何发布逻辑。
+- 单体 `MainWindowNativeNode.ets` 18582 → 18634 行（本片为 **enabler**，宿主因新增顶层适配器类 + 端口注入块而净增；已删除的 9 行 `loadAboutInfo` 见上）。宿主 `private` 方法 942 → 941、`load*` 72 → 71。
+- 验证：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 3 文件（CommandPort/ToolsStore/MainWindowNativeNode）无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 207 文件，未新增或改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` macOS 假设），**无新增回归**（本片无测试直接引用 `loadAboutInfo` / `about*`）。
+- **设备走查（模拟器 `127.0.0.1:5555`，x86_64 phone 1256×2760，UI-only 无引擎；真机离线）**：安装 → `aa start` → `pidof` = 9059 全程存活。导航「更多功能」→「系统 → 快捷操作(help)」打开关于面板，`ui layout` + 截图确认面板渲染（标题「快捷操作」、区块「关于」）。**端口链路实证**：hilog 出现每 ~200ms 一条 `StellariumEntryGL: Stellarium command bridge not loaded yet (Qt core not started)` —— 正是 `attachPort` → `tools.loadAboutInfo()` → `HostCommandPort` → `callNativeWhenReady('getAboutInfo')` 的 200ms×60 重试循环，证明注入 seam 端到端打通（止于无引擎的原生边界），且注入后应用不退出、面板不崩。
+- **待真机验证（模拟器无引擎，无法覆盖）**：`getAboutInfo` 的实际回包 → `about*` 4 字段的**数据渲染**（面板 `if (aboutVersion.length > 0)` 分支在模拟器恒不显示，因回包不可得）；以及 CLI `openUiPanel help` 的语义化直达（模拟器 `qtInitialized` 恒 false，`drainCliRequests` 被门禁短路 → CLI 超时，属**模拟器环境限制**，非本片回归）。
+- **本片新踩的坑**：① 无引擎模拟器上 **CLI 面板命令不可用** —— `QAbility.drainCliRequests()` 首行 `if (!this.qtInitialized ...) return`，而 UI-only 通道下 `qtInitialized` 永不置真，故 `openUiPanel` 只入队不响应（超时）；验证 help 面板须改用 `devecocli ui click` 走 UI 导航（More → 系统 → 快捷操作）。② 该环境下 `getAboutInfo` 会触发 60 次重试日志，可作为「端口确被调用」的正向证据。
+## [2026-10-04] DevEco Code - 文档：复测并更新 ARKTS-PAGES-REFACTOR-STATE-REVIEW（§2.7 域状态下沉后的 A/B 类复核）
+
+- **修改文件：** `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md`
+- **修改内容：** 依当前 HEAD（宿主 18,582 行、`state/` 48 文件、宿主 `@State` 132 = 46 store + 86 裸字段）复测全文数字，并**重新普查 A/B 类归属**：A 类纯派生方法 **305**（A1 零宿主依赖 91 / A2 读宿主字段 214）不变；B 类 `load*` 由 69 → **70**，判定由 13/30/26 → **B1 24 / B2 35 / B3 11**（原 B3 的 15 个因 §2.7 建成域 store 转为 B1/B2，余下 11 个只因仍写"刻意保留"的裸宿主字段）。同步更新 §1 摘要、§2.1 分区行号、§2.5/§2.6 体量与五层占比、§2.7 历史分类收敛说明、§2.9 域地图、§2.12/§2.13 清单、§3.1 目录总账、§4/§6 结论、§7.1 全工程装饰器普查（`@State` 402→230、`@Prop` 1,324→1,183、`@ObjectLink` 197→260、`@Observed` 34→63）、§7.3/§7.5/§7.7 与附录复现命令。
+- **修改原因：** 用户在 §2.7 完成 Prop 风格域状态下沉后，要求复核最新进展、重算 A/B 类归属并更新评审文档。
+- **构建结果：** 未改动任何源码，无需构建（N/A）。
+- **验证结果：** 全文数字均为本轮在当前 HEAD 实测（命令见文末附录）；未触碰任何 `.ets`，`check-ohos-ui-contract.mjs` 不受影响。
+- **备注：** §2.7.1「宿主保留字段登记（不迁移）」由用户于 `141d9684f2` 提交，本轮未改动该小节。文档行尾统一 CRLF、无 BOM。
+## [2026-10-04] DevEco Code - 重构：引导/语音、详情卡索引、界面锁定 4 字段下沉 store + 死字段清理 + 不迁移清单登记（收尾批）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §2.7（Prop 风格域转 Store 追加队列）。开工先普查 5 个白名单字段的声明原文、`this.<字段>` 引用数与原地变更（`push/splice/pop/shift/sort/reverse(` 或 `this.<f>.<prop> =`）：4 个待迁字段均为标量/整体赋值，无原地变更，可入被观察 store。
+- **簇 A 引导/语音（2 字段）→ 新建 `harmonyos/ets-source/state/GuideStore.ets`**：`guideState`（19 处，`GuideState` 会话快照：phase/guideId/index/count/automatic/remaining）、`speechStatus`（5 处，`getObjectSpokenText` 朗读文本）。**为何新建**：`state/` 无同义 store —— `ToolsStore` 是工具/帮助/测角/录制、`ScriptStore` 是脚本播放/录制/视频、`SessionToolStore` 是会话续传；引导与播报同属独立一条「交互导览 + 朗读」链。消费方 `InteractiveGuideShell` 与 `ObjectPanel`/`UnifiedObjectDetailCard` 仍以 @Prop 快照接收，宿主下发点改读 `this.guideStore.<字段>`；`publishGuideState` 亦改读 store。
+- **簇 B UI chrome（2 字段）→ 并入既有 store**：`bottomCardIndex`（9 处）并入 `harmonyos/ets-source/state/ObjectDetailStore.ets`（详情卡页索引 0–3，语义属详情卡；三壳层仍以 @Prop `activeIndex` 消费）。`uiLocked`（3 处）并入 `harmonyos/ets-source/state/ViewSettingsStore.ets`（与 `viewLock` 同域的界面锁定）。**普查发现 `uiLocked` 全工程零写入**（仅 3 处读、恒 `false`），属失活标志；仍按任务语义归位，并在 store 头注写明该事实。
+- **簇 C 死字段（独立 `chore` 提交）**：`moduleList` 经全工程复核（`harmonyos/ets-source/**`、`scripts/**/*.mjs`、`qability/**`）确认仅 1 处赋值（启动 `getLoadedModuleNames` 回包）、0 处读取、未传任何面板，连同只为其赋值的 `getLoadedModuleNames` 启动任务一并删除。
+- **宿主 `@State`：136 → 132**（删 5 个裸字段声明 + 新增 1 个 store 持有；拆分 = **46 个 store 实例 + 86 个裸字段**）。单体 `MainWindowNativeNode.ets` 18585 → 18582 行。
+- **文档**：`ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §2.7 末尾新增 **§2.7.1「宿主保留字段登记（不迁移）」** —— 按 16 类登记 86 个保留裸字段并注明理由类型（机制类 / 高频逐帧 / 跨域共用 / 引擎自用 / 已登记约定）。
+- 验证：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 4 文件无错；构建（`refactor` 与 `chore` 两个提交点各一次）= BUILD SUCCESSFUL；`check-ohos-ui-contract.mjs` = intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 个 id 锚点 / 206 文件，未新增/改名任何 `.id()`）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` macOS 假设），无新增回归；`test-ohos-guide`（9/9）、`test-ohos-detail-live-values`（7/7）全绿。
+- **真机走查（192.168.50.108:36717，`com.cnchensh.stellarium`）**：安装 → 启动存活（`pidof` = 11337，全程未退出）。① **引导**：CLI `startGuide solar-neighbours` → `getGuideState` 返回 `active=true, phase=observing, index=0, count=5`，`InteractiveGuideShell` 渲染（自动前进/上一站/暂停）；`guideAction next` → `getGuideState` index 0→1；`guideAction stop` → `active=false, phase=idle`（复原）。② **详情卡索引**：`searchObject Moon` 后卡片默认「资料」页，点按「观测」页实时切换为「今晚观测窗口」（升起/中天/落下）—— `bottomCardIndex` 走 store 的实时刷新实证。③ **朗读状态**：点卡片「操作」页「朗读文本」→ 向下滚动后卡片显示 `getObjectSpokenText` 返回文本「月，类型 卫星，位于 双子座…」（store 写入 + 组件刷新实证）。④ `getAtmosphereFlags` 复原（atmosphere/landscape/fog 均 true）、`pidof` 存活；未改任何持久化设置。
+- **本片新踩的坑**：① `@ObjectLink` 只观测字段赋值 —— 本批 4 字段均普查确认只做整体赋值（`guideState = state`、`bottomCardIndex = index` 等），无 `push/splice` 或下标赋值，方可入被观察 store；`uiLocked` 是「零写入失活标志」，搬入 store 后仍恒 `false`，行为不变。② 行尾：`write`/`edit` 工具落 LF，与本仓 `.ets` 工作区 CRLF 约定不符；已统一归一为 CRLF（裸 LF = 0）后再提交，避免整文件重写与 `git` 的 LF/CRLF 警告。
+
+## [2026-10-04] DevEco Code - 重构：信息窗 / 会话残留 / 语言 / 杂项 4 簇 14 字段下沉 store（第九批）
+
+- 依据：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` §2.7（Prop 风格域转 Store 追加队列）。开工先普查 14 个白名单字段的声明原文、`this.<字段>` 引用数与原地变更（`push/splice/pop/shift/sort/reverse(` 或 `this.<f>.<prop> =`）：全部为标量 / 整体赋值，无原地变更，故可入被观察 store。
+- **簇 A 信息窗（6 字段）→ 新建 `harmonyos/ets-source/state/InfoWindowStore.ets`**：`infoWinVisible` / `infoWinExpanded` / `informationMode` / `informationCustomMask` / `informationSettingPending` / `infoLevel`；宿主 75 处引用改写为 `this.infoWindowStore.<字段>`。消费方：三个壳层的 `infoWinVisible`、`SettingsPanel` 的 `informationMode` / `informationSettingPending` —— 均仍以 @Prop 快照接收、宿主下发点改读 store（与 `PolarScopeStore` 对壳层的既有取舍一致），故面板文件未改、`test-ohos-settings-choice-motion.mjs` 的字符串断言保持。
+- **簇 B 会话残留（3 字段）→ 并入 `harmonyos/ets-source/state/SessionToolStore.ets`**：`sessionJson` / `sessionExportSig` / `sessionHint`。选它而非 `ToolsStore`：`ToolsStore` L17 头注已明确排除，且 `PlacePanel` 早已 `@ObjectLink sessionToolStore`。`PlacePanel` 删除 `@Prop sessionHint` / `@Prop sessionJson`（2 → 0），`ContinuationSection` 改为 `this.sessionToolStore.sessionHint/sessionJson`；宿主 PlacePanel 构造点同步去掉两行入参。`ToolsStore` 头注旧说明已更正。
+- **簇 C 语言（2 字段）→ 新建 `harmonyos/ets-source/state/LanguageStore.ets`**：`selectedLanguage`（默认 `I18n.systemLanguage()`）/ `languageRevision`。`languageRevision` 是语言刷新锚点（`setLanguage` 里 `languageStore.languageRevision++` → ForEach 键后缀重建）；其以 @Prop 经 14 个文件多层串接，本片保持既有链路「宿主自增 → 宿主重渲染 → @Prop 下发 → ForEach 重建」逐字不变，故消费方不改 @ObjectLink，仅把下发点来源改为 `this.languageStore.X`。
+- **簇 D 杂项（2 字段并入 + 1 字段留宿主）**：`configDitheringMode`（渲染质量档）与 `liveMode`（实时模式显示值）并入 `harmonyos/ets-source/state/ViewSettingsStore.ets` —— 两个消费面板（`SettingsPanel` / `SettingsQuickLegacyPanel`）都已持有该 store，故并入而不新建；消费方仍 @Prop 快照、宿主改读 store。`moduleList` **未搬**：全工程仅 1 处赋值（启动 `getLoadedModuleNames` 回包）、0 处读取、未传任何面板，属写后即弃状态，按铁律留宿主（建议后续零引用扫描单独清理）。
+- 宿主 `@State`：**147 → 136**（删 13 个字段声明、新增 2 个 store 持有；净 −11）。单体 `MainWindowNativeNode.ets` 18588 → 18573 行。
+- 验证：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 7 文件无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = BUILD SUCCESSFUL；`check-ohos-ui-contract.mjs` = intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 205 文件）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` macOS 假设），无新增回归；`test-ohos-distance-ui`（5/5）、`test-ohos-information-policy`（3/3）、`test-ohos-settings-choice-motion`（4/4）全绿（假宿主 `informationMode`/`infoLevel` 与断言已同步到 `infoWindowStore`）。
+- **真机走查（192.168.50.108:36717，`com.cnchensh.stellarium`）**：安装 → 启动存活（`pidof` = 2884，全程未退出）。① `openUiPanel settingsInformation` → 信息设置页渲染 `信息级别` + 5 个模式按钮（来自 `InfoWindowStore`）；点按「简短」→ `getInformationSettings` 回读 `infoMode all→short`（写回），且截图逐按钮采样显示高亮由「全部」`(87,137,172)` 移到「简短」`(91,147,191)`（**实时刷新实证**）；再点「全部」恢复 `infoMode=all`、`activeInfoMask=33554431`（持久化设置已复原）。② 语言：设置面板打开状态下 CLI `setLanguage en` → `ui layout` 文案就地由「信息级别/全部/默认/简短/无/自定义信息」变为「Info Level/All/Default/Brief/None/Custom info」（**`LanguageStore` 实时刷新实证**）；`setLanguage zh_CN` 复原并复核文案回中文。③ `openUiPanel place` → `位置/北京 · 地球/坐标/海拔/观测位置/按地区选` 渲染正常，`pidof` 仍存活。**未走查**：会话续传区块（`ContinuationSection`）—— `OFFLINE_APPGALLERY_BUILD = true` 的构建下 `PlacePanel` 默认跳过该区块，故其 store 读取仅静态验证（`@ObjectLink sessionToolStore` + 就地读字段，未新增 @Prop）。
+- **本片新踩的坑**：① `edit` 工具对 `ViewSettingsStore.ets`（原为 LF 工作区文件）与 `write` 新建的 `InfoWindowStore.ets`/`LanguageStore.ets` 均落 LF，而本仓 `.ets` 工作区约定为 CRLF；已统一用 `(?<!`r)`n → `r`n` 归一为 CRLF（CRLF>0 且裸 LF=0），避免整文件重写与 `git` 的 LF/CRLF 警告。② `stellarium-cli.mjs --describe openUiPanel` 返回 `unknown command`（UI-only 命令不在 `getCommandSchema` 目录），须直接 `--command openUiPanel --payload <panel>` 调用。
+
+## [2026-10-04] DevEco Code - 重构：时间/历法残留与目录残留并入既有 store；死字段 pickedTime 清理（宿主 @State 162 → 147）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」。本批把时间/历法、目录两簇残留的宿主 `@State` 下沉**并入既有** `@Observed` store（不新建），消费面板的 `@Prop` 数量不变、来源改为 `this.<store>.<field>`；加载/回调动作仍由宿主注入（V1 体系，不混 V2）。
+
+- **每簇明细**：
+
+  | 簇 | 字段 | 并入 store | 消费面板入参变化 |
+  |---|---|---|---|
+  | A 时间/历法残留 | 5（`manualYear`/`manualMonth`/`manualDay`/`manualHour`/`manualMinute`） | `state/TimeStore.ets` | `TimePanel` 5 个 `@Prop` 保留，来源改为 `this.timeStore.*`（`ManualTimeBlock` 仍 `@Prop`） |
+  | A 时间/历法残留 | 1（`presetSkyTime`） | `state/TimeSettingsStore.ets` | 无（宿主 `applyTimeSettings` 写、当前无 ArkTS 读取方） |
+  | A 时间/历法残留 | 6（`rtsCalendarStartYear/Month/Day`、`graphStartYear/Month/Day`） | `state/AstroStore.ets` | 无（宿主日期选择器方法读写，`AstroPanel` 经 host 回调消费） |
+  | B 目录残留 | 1（`starCatalogHealth`） | `state/CatalogStore.ets` | `SettingsQuickLegacyPanel` `@Prop` 保留，来源改为 `this.catalogStore.starCatalogHealth` |
+  | B 目录残留 | 1（`objectCatalogCategories`） | `state/CatalogStore.ets` | 无（经宿主 `searchAllCategoryOptions()` 进 `SearchPanel` `@Prop categories`） |
+  | C 死字段 | 1（`pickedTime`） | —— | 删除（独立 `chore(harmonyos)` 提交） |
+
+- **归组理由（写入 store 头注）**：`manual*` 是时间面板手工日期时间选择器模型，与「速度/恒星时」同属时间面板域，故并入 `TimeStore`（未选 `TimeSettingsStore`——后者是设置面板「时间」标签页的启动/格式域）；`presetSkyTime` 与 `startupPresetLocalTime`/`configDateFormat` 同由 `applyTimeSettings` 写入，属时间设置域，故并入 `TimeSettingsStore`；`rtsCalendarStart*`/`graphStart*` 是 RTS 日历与年度高度图的「指定日期」起始模型，与 `AstroStore.rtsCalendarStartOffsetDays`/`graphStartOffsetDays` 成对，故并入 `AstroStore`；`starCatalogHealth`/`objectCatalogCategories` 是星表/对象目录域缓存，故并入 `CatalogStore`。
+
+- **刻意留宿主（与既有 store 头注一致）**：`catalogHealthLoaded`/`catalogManifestPresent` 仍留宿主（`CatalogStore.ets:9` 头注：与卫星面板「卫星目录健康」及恒星表共用）；`pickedDate`（8 处，RTS 日历/星历/年度高度图/日食日期选择器共用）保留。
+
+- **原地变更普查**：14 个搬移字段均为标量或整体赋值（`this.starCatalogHealth = …`、`this.objectCatalogCategories = categories/[]`），`this.<f>.push|splice|pop|shift|sort|reverse(` 与 `this.<f>.<prop> =` 均为 0（`categories.push` 是本地数组，非字段），满足 `@ObjectLink` 只观测字段赋值的约束。
+
+- **store 新字段默认值**（逐条复制宿主原声明）：`TimeStore.manualYear/Month/Day/Hour/Minute = 2026/7/20/23/0`；`TimeSettingsStore.presetSkyTime = 0`；`AstroStore.rtsCalendarStartYear/Month/Day` 与 `graphStartYear/Month/Day = new Date().getFullYear()/getMonth()+1/getDate()`；`CatalogStore.starCatalogHealth = {}`、`objectCatalogCategories = []`。
+
+- **宿主 `@State`**：162 → 147（迁移 -14；死字段清理 -1）。
+
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 5 文件无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = BUILD SUCCESSFUL；`check-ohos-ui-contract.mjs` = intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 203+ 文件）；35 个 `scripts/*ohos*.mjs` 全量扫描仅 §13.6 的 7 个环境/存量失败（4 个 `-pad`、`mist-performance`、`location-search` 路径 bug、`search` macOS 假设），受影响脚本 `test-ohos-search-browser`(3/0)、`test-ohos-satellite-panel`(7/0)、`test-ohos-astro-motion`(9/0)、`test-ohos-plugin-panel-state`(4/0)、`verify-ohos-julian-date`(0/0) 全绿，无新增回归。
+
+- **真机（192.168.50.108:36717）**：装包、`aa force-stop`+`aa start` 后 `pidof` = 55964 存活。`openUiPanel time` → 手工时间块按钮渲染 store 默认 `23:00`；点按时间按钮 → 系统 TimePicker（下午 11:00），选 10 时并「确定」→ 按钮实时变为 `22:00`（`onPickTime` 回注宿主写 `timeStore.manualHour/Minute` → `@Prop` 刷新）；点按「同步星图当前时间」→ 按钮实时变为 `05:43`（`syncManualTimeFromState` 写 store）。`openUiPanel astro` → 「升降」标签渲染正常（`参数快照 · 升中天落 · 14 天`），但 RTS 起始日期控件需先选中天体且面板正文未进入视口，多次滚动/布局检查未出现「指定日期」，**未走查**（原因：控件受 `hasSelectedObject()` 门控且深链入口视口未渲染；该路径与已在第四批验证的 `eclipseStart*` 同构，且本批仅改存储位置）。测试未遗留持久化改动（未修改任何设置；仅 CLI 选中天体为非持久态）。
+
+- **测试同步**：本批 14 个字段未被任何 `scripts/*ohos*.mjs` 夹具引用，无需同步。
+
+- **§13.5 追加队列**：已记入「Prop 风格域转 Store 追加队列（review §2.7）」第八批。
+
+- **踩坑**：`hdc list targets` 已直连真机，无需 tconn；`devecocli ui layout` 只输出视口内节点，深滚动面板的正文不可见 —— 需配合多次 `ui swipe`；`stellarium-cli.mjs` 在 Windows 必须显式 `--hdc`（默认 macOS 路径）。
+
+## [2026-10-04] DevEco Code - 重构：视图导航 / 视图偏好 / 大气三域转 Store；dso 死代码清理（宿主 @State 181 → 162）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」。本批把三簇 Prop 风格域的宿主 `@State` 下沉为独立 `@Observed` store，消费面板改 `@ObjectLink` 订阅；加载/设置/桥回写等动作仍由宿主回调注入，store 只承载状态（V1 体系，不混 V2）。
+
+- **每簇明细**：
+
+  | 簇 | 字段 | store（新建） | 消费面板入参变化 |
+  |---|---|---|---|
+  | A `navigation` 设置 | 9 | 新建 `state/NavigationSettingsStore.ets` | `SettingsPanel`：9 个 `@Prop` → 1 个 `@ObjectLink navigationStore` |
+  | B 视图交互偏好 | 5 | 新建 `state/ViewSettingsStore.ets` | `SettingsPanel`：3 个 `@Prop` → 1 个 `@ObjectLink viewSettingsStore`；`SettingsQuickLegacyPanel`：4 个 `@Prop` → 1 个 `@ObjectLink`；`ConfigFallbackPanel`：`useMetricUnits` `@Prop` → `@ObjectLink` |
+  | C 大气观测辅助 | 4 | 新建 `state/AtmosphereStore.ets` | `TimePanel`：4 个 `@Prop` → 1 个 `@ObjectLink atmosphereStore`（`ObservationAidBlock` 仍 `@Prop`） |
+  | D `dso` 计数（死代码） | 4 | —— | 删除 |
+
+- **簇 B 归组理由（写入 store 头注）**：`autoZoomResets` / `useMetricUnits` / `viewLock` / `verticalClamp` / `flatHorizon` 同属「视图 / 显示交互偏好」，默认在设置面板（configTab 7）、快捷设置（旧版）与配置回退面板里成组出现，故合为一个 store；`flatHorizon` 未并入 `OverlayStore`（其既定范围是叠层 / 坐标 / 指向线），它与 `verticalClamp` / `viewLock` 一样由 `syncBridgeFlagState()` 统一写回，语义同属视图限位。
+
+- **簇 C 归组理由（写入 store 头注）**：`refractionOn` 与 `atmoPressure/Temperature/Extinction` 由且仅由时间面板（`TimePanel` → `ObservationAidBlock`）消费，语义同为「观测点大气条件」，故成组；`refractionOn` 未并入 `OverlayStore`（不含天空 / 大气渲染）。
+
+- **刻意留宿主（非本批 store 状态）**：`maxFovDraft`（`SettingsPanel` 本地 `@State` 滑块草稿，随面板存在）；`viewLock` 经宿主以 `@Prop` 下发给三个壳层内的 `UnifiedObjectDetailCard`（沿用 `OverlayStore.viewCoordinatesVisible` 的「深链 @Prop + 宿主读 store」先例，未逐层改 `@ObjectLink`）；`setDistanceUnit` / `setViewLockState` / `syncBridgeFlagState` / `setNavigationBoolean` / `setNavigationMaxFov` / `applyAtmosphereResponse` 等动作与桥调用留宿主（§13.1 规则 6）。
+
+- **普查确认无原地变更**：18 个字段均为标量（boolean / number），只有整体赋值；`this.<field>.push|splice|pop|shift|sort|reverse(` 与 `this.<field>.<prop> =` 均为 0。
+
+- **簇 D（死代码清理，见独立提交 `chore(harmonyos)`）**：复扫确认 `dsoTotalCount` / `dsoGalaxies` / `dsoClusters` / `dsoNebulae` 仅由 `private loadDSOCounts()` 写入，而该方法零调用、四字段零读取（`panels/**`、`scripts/**`、`qability/**` 均无消费），属写后即弃死状态；连同 `StellariumBridgeResponse.dsoCounts` 一并删除。
+
+- **宿主 `@State`**：181 → 162（迁移 -15：18 个字段下沉 + 3 个 store 声明；死代码清理 -4）。
+
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 9 文件无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = BUILD SUCCESSFUL；`check-ohos-ui-contract.mjs` = intact（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 203 文件）；切片脚本扫描仅剩 §13.6 的 7 个环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` macOS 假设），无新增回归。真机（192.168.50.108:36717）：装包启动后 `pidof` 存活；`openUiPanel settings` → 「视角与导航」页渲染 `当前视角 60.0°`（`navigationStore`）；点按「地平线自动重置」开关 → `getNavigationSettings` 回读 `autoZoomResets:false→true`（写回生效），再点按恢复 `true→false`；`openUiPanel time` → 大气块渲染 `1013 mbar / 15 °C / 0.13`（`atmosphereStore`）。测试未遗留持久化改动（开关已复原）。
+
+- **测试同步**：本批字段未被任何 `scripts/*ohos*.mjs` 夹具引用，无需同步。
+
+## [2026-10-04] DevEco Code - 重构：Prop 风格域转 Store 第五批（ephemeris / nebulaTexture / plugin；dso 计数经核查留宿主；宿主 @State 196 → 181）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」与 §2.13 B3（ephemeris / nebula / plugin 的宿主 `@State` 未成 store → 先抽 store）。本批把 3 个 Prop 风格域的宿主 `@State` 下沉为独立 `@Observed` store，`SettingsPanel` / `NebulaTexturesPanel` 改 `@ObjectLink` 订阅；加载/设置/导入/刷新等动作仍由宿主回调注入，store 只承载状态（V1 体系，不混 V2）。
+- **每簇明细**：
+  | 簇 | 字段 | store（新建/并入） | 消费面板入参变化 |
+  |---|---|---|---|
+  | A `ephemeris` | 11 | 新建 `state/EphemerisStore.ets` | `SettingsPanel`：8 个 DE 开关 `@Prop` → 1 个 `@ObjectLink ephemerisStore`；`ephemerisStartYear/Month/Day` 仅宿主回调（`ephemerisStartOptionLabel` / `chooseEphemerisStartDate` / `resolveEphemerisStartJD`）读写，`AstroPanel` 经回调消费，无面板入参 |
+  | B `nebulaTexture` | 5 | 新建 `state/NebulaTextureStore.ets` | `NebulaTexturesPanel`：11 个派生 `@Prop`（statusPresent/Enabled/AvoidConflict/ReadyCount/Count/ConfigLoaded/Items/pending/loading/importing/actionStatus）→ 1 个 `@ObjectLink store`，派生值改为面板就地读 `nebulaTextureStatus` |
+  | C `dso` 计数 | 0（留宿主） | —（未并入 `LayerViewStore`） | 无 |
+  | D `pluginList` | 2 | 新建 `state/PluginStore.ets` | `SettingsPanel`：2 个 `@Prop`（pluginList / pluginListLoading）→ 1 个 `@ObjectLink pluginStore` |
+- **为何新建 `EphemerisStore` 而不并入 `AstroStore`（写入 store 头注）**：`AstroStore` 已有一族**同名前缀但语义无关**的字段（`ephemerisData` / `ephemerisName` / `ephemerisMeta` / `ephemerisError` / `ephemerisDays` / `ephemerisStepHours` / `ephemerisStartOffsetDays` / `ephemerisMode` / `ephemerisLoading` …），那是 `AstroPanel` 星历表自身的数据；本 store 的 `ephemerisDe4xxAvailable/Active` 是「设置 > 主设置」的 DE 内核开关，`ephemerisStart*` 是星历表起始日期。并入会造成前缀语义混淆与字段名冲突，故独立。
+- **簇 C 未搬（白名单未搬字段）：`dsoTotalCount` / `dsoGalaxies` / `dsoClusters` / `dsoNebulae` 留宿主**。开工普查发现：四者仅被 `private loadDSOCounts()`（唯一写点，各 1 处整体赋值）写入，而 **`loadDSOCounts` 在全仓 `ets-source` 内零调用点、四字段零读取点**（`panels/**` 无任何 DSO 计数展示），属写后即弃 / 死状态，不能作为「面板入参」下沉；把死状态搬进被观察 store 只是搬动死代码并多一个无消费者成员，故按片协议「宿主未传给任何面板的字段留宿主」保留并在此写明理由（本片未新增读取点，也未删除该桥方法）。
+- **普查确认无原地变更**：A/B/D 全部字段仅整体赋值 —— `ephemerisDe4xx*` 标量、`nebulaTextureStatus = r as NebulaTextureStatus`（无 `this.nebulaTextureStatus.<prop> =`）、`pluginList = list` 与 `pluginList = this.pluginStore.pluginList.map(...)`（`updatePluginLoadedItem` 改造后仍为整体重赋值，无 push/splice）。散列 `this.<f>.length === 0` 经人工确认为比较而非赋值（无 `\.\w+\s*=` 命中）。
+- **刻意留宿主（非本 store 状态）**：请求序号 `ephemerisLoadSequence` / `rtsRequestSequence` 等；动作 `loadPluginList` / `updatePluginLoadedItem` / `loadNebulaTextureStatus` / `setNebulaTextureVisible` / `setNebulaTextureFlag` / `refreshNebulaTextures` / `gotoNebulaTexture` / `removeNebulaTexture` / `importNebulaTextureFile` 与文件选择器；纯查表助手 `pluginZh` / `pluginDesc` / `pluginMetaLine` / `pluginFeature*`。
+- **单体行数**：`pages/MainWindowNativeNode.ets` 18,669 → 18,639 行（−30）；宿主 `@State` **196 → 181**（删 18 字段、+3 store 实例字段）。新增 `state/EphemerisStore.ets`（25 行）/`state/NebulaTextureStore.ets`（18 行）/`state/PluginStore.ets`（13 行）。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过（括号深度 0、`@Builder` 成对、`this` 引用自洽）；`arkts_check` 对 6 个改动/新建文件 0 错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 200+ 文件，本批未新增 `.id()`）。
+- **测试同步（同批）**：`scripts/test-ohos-plugin-panel-state.mjs` 假宿主把 `nebulaTexturePending/Loading/Importing/Status` 收进 `nebulaTextureStore`（`setNebulaTextureFlag` 文本切片现读 store），断言同步改 `model.nebulaTextureStore.*`；4/4 全绿。全量 `*ohos*.mjs` 扫描仅剩存量环境/数据类失败：4 个 `*-pad` + `mist-performance` 需设备 ID、`verify-ohos-search`（硬编码 macOS hdc 路径）、`verify-ohos-location-search`（`country.zh` 数据缺失）—— 均与本片无关，无本片回归。
+- **真机走查（192.168.50.108:36717，`com.cnchensh.stellarium`）**：安装 → 启动存活（`pidof` = 37387，全程未退出，hilog 无 `StellariumArkUI` 错误 / `jscrash`）。① 设置（更多功能 → 设置 → 主设置）渲染「行星历表」段：DE430「未安装」等由 `EphemerisStore` 经 `@ObjectLink` 背书（设备未装 DE 文件，全部未安装，开关禁用，符合预期）。② 设置 → 管理扩展页签由 `PluginStore` 渲染插件列表（「角度测量 / 当前已载入 / 作者: … 来源: plugins/AngleMeasure」等）。③ 星云纹理面板经 `stellarium-cli openUiPanel nebulaTextures` 打开，由 `NebulaTextureStore` 经 `@ObjectLink` 渲染（标题 / 提示 / 开关 / 刷新 / 导入图片）；**点「刷新」后底部提示由长说明实时刷新为「星云纹理已刷新」**（即 `nebulaTextureActionStatus` 写入 store 后面板 `@ObjectLink` 实时刷新，post-tap 反应性实证）。测后未改任何持久化设置（仅开关面板与刷新）。
+- **本片新踩的坑**：把派生 `@Prop` 机械替换为 store 表达式时，`this.statusItems` → `this.store.nebulaTextureStatus?.items ?? []` 落在 `if (this.statusItems.length > 0)` 内会因 `??` 优先级低于 `.length` 变成 `items ?? [].length > 0`（`Array ?? boolean` 类型错）。已改为 `(this.store.nebulaTextureStatus?.items ?? []).length > 0`。教训：`?`/`??` 表达式替换进既有运算符上下文时必须补括号。
+## [2026-10-04] DevEco Code - 重构：星空文化残留与脚本/回放/视频导出残留并入既有 store（宿主 @State 217 → 196）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」与 §2.13 B3（脚本域状态先入 `@Observed` store 的前置）。本批把两簇**残留字段并入已存在的 store**（不新建 store），消费方由 `@Prop` 快照改 `@ObjectLink` 订阅；动作仍由宿主回注，store 只承载状态。
+- **簇 A（星空文化列表 / 当前选择，5 字段）→ `state/SkyCultureViewStore.ets`**：`skyCultures` / `skyCultureList` / `skyCultureListLoading` / `currentSkyCulture` / `currentSkyCultureId`。消费方 `LayersPanel` / `SkyCultureViewTab` / `SettingsQuickLegacyPanel` / `ConfigFallbackPanel` 改经 `@ObjectLink skyCultureViewStore` 实时读（前两者原已持有该 store，只改引用；后两者新增 `@ObjectLink` + import）。宿主自用引用（`loadSkyCultureList` / `applySkyCulture` / 领地地图 / 默认文化设置等）一并改 `this.skyCultureViewStore.X`。
+  - **刻意留宿主**：`skyCultureArtStates` / `skyCultureArtThumbnailPixelMaps` —— 由逐张图片解码**分块（每 32ms）+ 48ms 防抖**渐进写入的进度驱动字段，属「高频写入不入被观察 store」；沿用 store 头注与计划 §13.5 的既有定论，继续以 `@Prop` 传入 `LayersPanel`/`SkyCultureViewTab`。
+- **簇 B（脚本 / 回放 / 视频导出残留，16 字段）→ `state/ScriptStore.ets`**：`scriptMetadata` / `scriptFocusActive` / `scriptRunning` / `scriptWaiting` / `scriptWaitMessage` / `scriptCaptions` / `scriptId` / `scriptRate` / `scriptControlOffsetX` / `scriptControlOffsetY` / `replaying` / `replayPaused` / `replayRate` / `replayName` / `videoArchiveFileName` / `screenVideoFileName`。`ScriptFocusShell` 新增 `@ObjectLink scriptStore`，其播放/回放四态（`scriptWaiting` / `scriptRunning` / `replaying` / `replayPaused`）由 4 个 `@Prop` 改为直接读 store；文案（displayName / captionText / waitText / rateText）与几何仍由宿主算好后 `@Prop` 下发。改造前逐字段普查确认**全部仅整体赋值**（无 `push`/下标赋值/`this.<f>.<prop> =`）。
+  - **刻意留宿主**：`recordBuffer: Array<RecordCmd>` —— 录制引擎的追加型工作缓冲（`push` + 整体重赋值），非面板入参，放观测 store 会失去刷新或每追加一次整体拷贝；沿用 store 头注约定。
+- **单体行数**：`pages/MainWindowNativeNode.ets` 18,699 → 18,670 行（−29）；宿主 `@State` **217 → 196**（−21）。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过（括号深度 0、@Builder 成对、this 引用自洽）；`arkts_check` 对 8 个改动文件无错；`build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources` = **BUILD SUCCESSFUL**；`check-ohos-ui-contract.mjs` = **intact**（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 197 文件，本批未新增 `.id()`）。
+- **测试**：`test-ohos-skyculture-refresh.mjs` 5/5、`test-ohos-skyculture-text.mjs` 4/4 全绿；全量 `*ohos*.mjs` 扫描仅剩 §13.6 存量环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` 平台假设），无本片回归。
+- **测试同步（独立提交）**：`scripts/test-ohos-privacy-startup.mjs` 第 13 项夹具补齐 `fileSize`（及 `hilog` / `LOG_DOMAIN` / `LOG_TAG`）形参 —— 生产 `hasStartupResourceFiles` 已改为用 `fileSize` 判存在，夹具漏传形参导致 `fileSize is not defined`；修后 19/19 全绿。
+- **真机走查（192.168.50.108:36717，`com.cnchensh.stellarium`）**：安装 → 启动存活（`pidof` 非空）。① 星空文化：图层 → 「文化」页签渲染 store 背书的当前文化「现代」与列表（中国宋代 / 中国满族 / 中国藏族星空文化…）；点选「中国宋代」触发 hilog `[sky-culture-anchor] id=chinese_song_dynasty`，当前文化名实时刷新为「中国宋代」（再点选后段列表项确认切换刷新），随后经 `setSkyCulture modern` 恢复原始文化。② 脚本面板：更多功能 → 自动化 → 脚本，渲染导览库、脚本列表与来源/作者元数据（`scriptMetadata`）。③ 回放壳：`playScript solar_eclipse.ssc` 使 `ScriptFocusShell` 挂载（「脚本播放中」/「日食演示」/键位 `− + [ ] N B` / 「停止」），点「+」速率 **1.0x → 2.0x 实时刷新**，点「停止」后 shell 关闭、主界面恢复；全程应用不退出。
+- **新踩的坑**：无（本批为字段并入既有 store，无 builder / 结构手术）。
+
+## [2026-10-04] DevEco Code - 重构：Prop 风格域转 Store 第四批（mosaicCamera / observingList 残留 / audio / eclipse；宿主 @State 238 → 224，卫星测试假宿主同步）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」。本批把 3 个 Prop 风格域 + 1 个残留簇的宿主 `@State` 下沉为 `@Observed` store（eclipse 并入既有 `AstroStore`），面板改为 `@ObjectLink` 订阅；动作仍由宿主回调注入，store 只承载状态。
+- **每簇明细**：
+  | 簇 | 字段 | store（新建/并入） | 消费面板入参变化 |
+  |---|---|---|---|
+  | `mosaicCamera` | 10 | 新建 `MosaicStore` | `MosaicCameraPanel`：10 个 `@Prop` → 1 个 `@ObjectLink` |
+  | `observingList` 残留 | 2（`observingList`/`observingListReady`） | 新建 `ObservingListStore` | `ObservingPanel` 2 `@Prop` → 1 `@ObjectLink`；`ObjectPanel`/`ConfigFallbackPanel` 各 1 `@Prop` → 1 `@ObjectLink` |
+  | `audio` | 2（`musicEnabled`/`audioVolume`） | 新建 `AudioStore` | `AudioPanel` 2 `@Prop` → 1 `@ObjectLink` |
+  | `eclipse` 起始日期 | 3（`eclipseStartYear/Month/Day`） | 并入既有 `AstroStore` | 无面板入参（宿主自用，经 `eclipseStartOptionLabel` 回调展示） |
+- **新建/并入的理由（写入各 store 头注）**：`observingList` 是跨选中天体的独立用户数据（自有持久化键与增删/清空动作），与 `ObjectDetailStore`（选中天体瞬时详情）、`AstroStore`（天文派生计算）不同域，故新建独立 `ObservingListStore`；`eclipse` 起始日期属天文派生域且 `AstroPanel` 已 `@ObjectLink` 订阅 `AstroStore`，并入该 store；`audio` 无既有同域 store，新建。
+- **刻意留宿主（非本 store 状态）**：`mosaicCamera` 的桥副作用 `loadMosaicCamera`/`setMosaicCamera`；观测列表持久化 `persistObservingList`；音频原生桥 `AudioEngine`（按 §13.1 规则 6 回注）；`eclipseLoadSequence` 等请求序号。
+- **普查确认无原地变更**：`mosaicCamera*`、`observingList`（`= filter/concat/[]/parseObservingList`）、`musicEnabled`/`audioVolume`、`eclipseStart*` 全部为字段整体赋值，无 Array 原地 push/splice、无对象原地改属性。
+- **宿主 @State 计数**：238 → 224（−17 字段、+3 store 实例字段）；单体 18,717 → 18,699 行。新增 `state/MosaicStore.ets`（18 行）/`state/ObservingListStore.ets`（11 行）/`state/AudioStore.ets`（10 行）；`state/AstroStore.ets` +7 行。
+- **测试债务同步（同批）**：
+  - `scripts/test-ohos-satellite-panel.mjs`：假宿主 `activeSatGroup`/`satGroups`/`satLabels` 等改 `satelliteStore.*`，文本断言 `ForEach(this.satItems` → `ForEach(this.satelliteStore.satItems`、`this.satGroups.join` → `this.satelliteStore.satGroups.join`；7/7 全绿（此前的 1 项存量失败清除）。
+  - `scripts/test-ohos-plugin-panel-state.mjs`：`mosaicCamera*` 假宿主改 `mosaicStore.*`；全绿。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 9 文件 0 错；`BUILD SUCCESSFUL`；契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 197 文件）；受影响 5 个脚本全绿；真机（192.168.50.108:36717）启动存活，右上角音乐开关点两次（开→关，`音乐：开`/`音乐：关` 提示与按钮高亮实时刷新，恢复默认），更多功能→观测工作区→观测列表面板从 `ObservingListStore` 渲染（`已保存在本机` + `已在列表中`）。
+- **本片新踩的坑**：机械替换 `this.eclipseStart` 波及同前缀方法 `this.eclipseStartOptionLabel`（已改回），且漏把 `eclipseStart*` 加入 `AstroStore`，首次构建报 17 个 `Property ... does not exist on type 'AstroStore'`；补齐字段后 `BUILD SUCCESSFUL`。教训：前缀式机械替换对"同前缀方法名"不安全，替换后必须复核同前缀调用点。
+- **真机未走查**：`mosaicCamera`（入口在引擎上报的插件控制列表中）、`eclipse`（在「天文计算」子标签内、需日期选择器）—— 入口需 3 步以上导航且列表弹性回弹，按片协议只做启动 + 相邻界面冒烟。
+- **存量失败（非本批引入）**：`test-ohos-privacy-startup.mjs` 第 13 项 `fileSize is not defined` —— 测试夹具 `hasStartupResourceFiles` 未提供 `fileSize` 形参，而源文件 `qability/StellariumResourceBootstrap.ets` 本批未改动。
+## [2026-10-04] DevEco Code - 重构：Prop 风格域转 Store 第三批（archaeo / navStars / polarScope；viewCoordinate 经核查无字段可迁；宿主 @State 266 → 231）
+
+- **依据**：review §2.7「Store 风格 vs Prop 风格」。本批把 3 个 Prop 风格域的宿主 `@State` 下沉为 `@Observed` store，面板/叠层改为 `@ObjectLink` 订阅；动作（加载/设置/翻转）仍由宿主回调注入，store 只承载状态。
+- **新增 3 个 store（共 38 个字段）**：
+  | store | 字段 | 消费组件 | 组件入参变化 |
+  |---|---|---|---|
+  | `ArchaeoStore` | 18 | `ArchaeoLinesPanel` | `@Prop` 18 → 0（+1 `@ObjectLink`） |
+  | `NavStarsStore` | 14 | `NavStarsPanel` | `@Prop` 14 → 0（+1 `@ObjectLink`） |
+  | `PolarScopeStore` | 6 | `PolarScopeOverlay` | `@Prop` 7 → 0（+1 `@ObjectLink`；几何 6 个 `@Prop` 保留） |
+  - `PolarScopeOverlay` 原先以别名传值（`loading←polarScopeLoading`、`isSouthHemisphere/hourAngleText/viewAngleText ← polarScopeData?.X`），调用点整块换成 `polarScopeStore` 绑定，读数改为组件内就地读 store 派生。
+- **viewCoordinate 域经核查无字段可迁（本批唯一未做的一簇）**：`viewCoordinatePrimaryText/SecondaryText`（由 50ms 定时器 `syncViewCoordinateTimer` 回填）、`viewCoordinateOffsetX/Y`（触摸拖拽逐帧写）按 §13.1 规则 4 /「高频字段不入被观察 store」刻意留宿主；`ViewCoordinateSettings` 早已用 `OverlayStore`，`ViewCenterCoordinateOverlay` 以 `@Prop` 接收逐帧读数 —— 故不新建 `ViewCoordinateStore`（理由见 `OverlayStore.ets` 头注）。
+- **刻意留宿主**：极轴镜几何（`polarScopeTopInset`/`ControlWidth`/`FooterHeight`）与引擎/定时器字段（`polarScopeRestoreState`/`Transition*`/`RequestPending`/`Timer`/`DataRequestId`）、`archaeoMutationId`、`navStarsLoadRequestId`/`navStarsMutationId`；均写入各 store 头注。
+- **宿主 @State 计数**：266 → 231（−38 字段、+3 store 字段）。
+- **同步**：`scripts/test-ohos-polar-scope.mjs` 的 dock 命中断言改读 `this.polarScopeStore.polarScopeVisible`。
+- **验证**：`check-ohos-refactor-slice.mjs` 通过；`arkts_check` 7 文件 0 错；`BUILD SUCCESSFUL`；契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 194+ 文件）；真机（192.168.50.108:36717）打开三域面板/叠层均从 store 渲染，navStars 总开关、polarScope 水平翻转、archaeo 二分日线各点两次（改后复原）后 `pidof` 仍存活。
+- **存量失败（非本批引入）**：`test-ohos-satellite-panel.mjs` 5 项失败 —— 上一提交（卫星域转 `SatelliteStore`，`01fa76b970`）未同步该脚本假宿主（flat `satGroups`/`satLabels` 等应改 `satelliteStore.*`），HEAD 时即失败。
+## [2026-10-04] DevEco Code - 重构：小簇批处理（scenery3d / catalogs / meteorShowers / commandConsole 四簇同批转 Store；宿主 @State 286 → 266）
+
+- **依据**：review §2.7 目标清单里的独立小簇。一次做四簇以省去重复的构建/安装开销，每簇仍走同一口径（先普查原地变更 → 只搬面板入参 → 动作留回调 → 机械替换后复核"0 残留 / 0 双重前缀"）。
+- **新增 4 个 store（共 24 个字段）**：
+  | store | 字段 | 面板 | 面板入参变化 |
+  |---|---|---|---|
+  | `SceneryStore` | 4 | `Scenery3dPanel` | `@Prop` 8 → 4 |
+  | `CatalogStore` | 5 | `CatalogsPanel` | `@Prop` 6 → 1 |
+  | `MeteorStore` | 8 | `MeteorShowersPanel` | `@Prop` 9 → 1 |
+  | `CommandStore` | 7 | `CommandsPanel` | `@Prop` 12 → 5 |
+  各面板余下的 `@Prop` 仅为主题色，另各增 1 个 `@ObjectLink`；调用点由最多 8 条绑定收敛为 1 条。
+- **两簇存在"面板别名"**（store 沿用宿主字段名，头注已写明）：`Scenery3dPanel` 的 `pluginEnabled←scenery3dEnabled`、`loading←scenery3dLoading`、`items←scenery3dItems`、`loadingId←scenery3dLoadingId`；`CatalogsPanel` 的 `loading←catalogLoading`、`items←catalogList`、`busy←catalogBusy`、`downloadingId←catalogDownloadingId`、`msg←catalogMsg`。两簇的调用点因此必须整块换成 store 绑定（否则替换后会留下已不存在的 prop）。
+- **刻意留宿主、理由写入 store 头注**：`scenery3dCurrentId`（宿主自用：记住当前场景以做恢复，非面板入参）；`catalogHealthLoaded` / `catalogManifestPresent`（与卫星面板"卫星目录健康"及恒星表共用，非本面板入参 —— 与卫星片的判断一致）。
+- **普查澄清一处误报**：先前脚本把 `this.<字段>.<prop> =` 当作"原地属性写"，实际命中的是 `this.catalogList.length === 0` / `this.commandNameInput.length === 0` 这类**读取**（`===` 里的 `=` 被正则误吃）⇒ 四簇**全部无原地变更**，`@ObjectLink` 语义等价。
+- **收益（实测）**：宿主 `@State` **286 → 266**（−24 +4）；四个面板入参合计 `@Prop` 35 → 11。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点** / **191** 文件）；**BUILD SUCCESSFUL**；真机（`192.168.50.108:36717`）走查 **3/4 簇**：
+  - **流星雨** ✅ 四个开关（`msEnabled/msLabels/msActiveOnly/msMarker`）全部由 store 渲染；
+  - **3D地景** ✅ 开关（`scenery3dEnabled`）+ 场景项 **Testscene**（来自 store 的 `scenery3dItems`）+ 资源说明文案（`resourceText` 回调）；
+  - **星表下载** ✅ 面板正常挂载并走 store 的空态分支（"当前版本可能已包含全部星表"，离线包路径）；
+  - **命令控制**：**仅构建级验证**。未能真机走查——其入口在 `更多功能 → 自动化 → 命令` 两级嵌套处，而该卡片滚动后会**弹性回弹**，跨调用复用截图坐标不可复现（一次命中"快捷操作"、一次落在"分组标题与行之间的空隙"导致点击无效）；加之**仍无"打开面板"的语义命令**（仅 `getAstroPanelState` 可查状态），坐标点击是唯一手段。该簇恰是四者中**风险最低**的（字段同名、7 个字段、无数组/对象字段、无原地变更），且构建已证明 store 接线正确（构建能捕获接线错误，见下）；待用户在真机上顺手确认一次即可。
+- **本轮踩坑（已修，记录以免再犯）**：脚本生成 `@ObjectLink` 声明时把类型名拼成了**小写实例名**（`@ObjectLink sceneryStore: sceneryStore`）⇒ 类型不可解析 ⇒ 编译器把 `this.sceneryStore` 视作 `any`，进而报出 `CommandsPanel.ets:30 const query` 的 `arkts-no-any-unknown`。**一处类型名错误级联出两类报错**；改为类名（`SceneryStore` 等）后一次构建通过。教训：脚本拼 ArkTS 声明时，**实例名与类型名必须分别取自两个来源**，不要靠 `-replace` 反推类名。
+
+## [2026-10-04] DevEco Code - 重构：脚本/录制/视频导出域由 Prop 风格转 Store 风格（review §2.7 第二片；宿主 @State 306 → 286）
+
+- **依据**：同 §2.7 的目标清单第二项 `ScriptsPanel`。改造前该面板已是**混合状态**——`@ObjectLink tools`（录屏开关走已有的 `ToolsStore`）+ **27 个 `@Prop`**，后者覆盖 script*/record*/screenVideo*/video* 四个子域。
+- **本片内容**：
+  - **新增 `state/ScriptStore.ets`**：承载**面板可见的 21 个**字段（`scriptList/scriptLaunching/scriptLaunchingName/scriptImporting`、`recordCount/recordName/recordMsg/recordings`、`videoRecording/videoDir/videoFrameCount/videoMaxFrames/videoFailedFrames/videoArchivePath/videoFps/videoDuration`、`screenVideoRecording/screenVideoPath/screenVideoBytes/screenVideoStatus/screenCaptureFinalizing`）。
+  - **`panels/panels/ScriptsPanel.ets`**：21 个 `@Prop` → 1 个 `@ObjectLink scriptStore`；`@Prop` 由 27 降至 **6**（5 个主题色 + `guideSessionActive`），`@ObjectLink` 变为 2（`tools` + `scriptStore`）。`guideSessionActive` **刻意保留 @Prop**：宿主并无同名字段，它在调用点由 `scriptSessionActive()` 派生，属导览会话域而非本 store 的域。
+  - **宿主**：删除 21 个 `@State`，新增 `@State private scriptStore: ScriptStore = new ScriptStore()`；**96 处** `this.<字段>` 机械改为 `this.scriptStore.<字段>`（复核：0 残留、0 双重前缀）；调用点 21 条绑定收敛为 `scriptStore: this.scriptStore,`。
+- **刻意留在宿主、并已写入 store 头注的字段（附理由）**：
+  - **`recordBuffer: Array<RecordCmd>`**：录制引擎的**追加型工作缓冲**（每次录制命令 `push`，整体重赋值清空）。它**不是任何面板的入参**；搬进观测 store 要么因"只观测字段赋值、观测不到原地 push"而失去刷新，要么被迫每次 append 全量拷贝 —— 两者都不可接受。
+  - `scriptRunning / scriptWaiting / scriptWaitMessage / scriptCaptions / scriptId / scriptRate / scriptControlOffsetX / scriptControlOffsetY / scriptMetadata / scriptFocusActive`：脚本**播放引擎/焦点壳**（`ScriptFocusShell`）自有状态，非本面板入参；属 §2.13 的 B3 类，本片创建的 store 正是其"前置"。
+- **改造前普查**：`recordings` / `scriptList` / `videoDir` 等数组**均无原地变更** ⇒ `@ObjectLink` 语义等价（继承上一片的检查口径）。
+- **收益（实测）**：宿主 `@State` **306 → 286**（本片 −21 +1 store）；`ScriptsPanel` 入参 `@Prop` **27 → 6**。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点** / **187** 文件）；**BUILD SUCCESSFUL**；真机（`192.168.50.108:36717`）经 `更多功能 → 自动化 → 脚本与自动化 → 脚本` 打开面板（入口链 `moreActions → automationHubActions`，本轮 `automationHub` 页首行即"脚本"；仍无"打开面板"的语义命令，只能坐标点击）：面板正常渲染导览库段（`GuideLibrary`，含「太阳系邻居 5 · 个观测站点」），滚动到**store 驱动段**可见脚本列表 `tests/exit_test.ssc` / `tests/sky_image4.ssc` / 从火星观测地球与其他行星 及作者·许可证·来源·版本元数据 —— 这些 `scriptList` 与四条 `script*Line` 回调已全部不再经宿主 `@Prop`。
+- **队列状态（§2.7 目标清单）**：① `SatellitesPanel` ✅（`01fa76b970`）② `ScriptsPanel` ✅（本片）③ 待做：`astroExtras` 簇 55 个（navStars / archaeo / mosaic / catalogs / meteorShowers / scenery3d）→ ④ 其余 `other` 232 个。宿主 `@State` 累计 **333 → 286**。
+
+## [2026-10-04] DevEco Code - 重构：卫星域由 Prop 风格转 Store 风格（review §2.7 第一批；宿主 @State 333 → 306）
+
+- **依据**：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md` **§2.7**（两种组件接入风格）——文档指出 **Prop 风格域是"残留 333 个宿主 `@State`"的主要来源**，并明确"这些域是后续继续瘦身（或翻 V2）最明确的目标清单"，其中首个点名的就是 `SatellitesPanel`（25+ 个 `sat*` 字段）。目标 store 名沿用计划 §2 蓝图里早已规划的 **`SatelliteStore`**。
+- **本片内容**：
+  - **新增 `state/SatelliteStore.ets`**：`@Observed export class SatelliteStore`，承载原宿主 **28 个** `@State`（`sat*` 簇 + `activeSatGroup` + `satelliteListLoading` + `satelliteCatalogHealth`），字段名沿用原名以便与既有引用机械对应。
+  - **`panels/panels/SatellitesPanel.ets`**：**33 个 `@Prop` → 5 个**（仅 `textColor/subColor/panelColor/inputColor/accentColor`）+ **1 个 `@ObjectLink satelliteStore`**；动作（输入/开关/刷新/导入/删除/分组/检索/目录健康文案）**仍为宿主注入的回调** —— 状态进 store、动作走回调，与 `AstroPanel`/`LayersPanel` 既有写法一致（§2.11）。头注同步改写（原文自证"本片不搬状态（搬动会牵动 160 处引用）"，现已过时，review 文档正是引用它作为 Prop 风格的自证）。
+  - **宿主 `MainWindowNativeNode.ets`**：删除 28 个 `@State`，新增 `@State private satelliteStore: SatelliteStore = new SatelliteStore()`，**114 处 `this.<字段>` 机械改为 `this.satelliteStore.<字段>`**（词边界单遍替换；复核：83 处经 store、0 残留、0 双重前缀）；面板调用点 28 条绑定收敛为 `satelliteStore: this.satelliteStore,`。**保留** `catalogHealthLoaded` / `catalogManifestPresent`（与星表域共用、非卫星面板入参）。
+- **改造前必做的语义普查（否则会引入隐性回归）**：`@ObjectLink` 只观测**字段赋值**，观测不到数组原地 `push/splice` 或对象原地改属性（而宿主原 `@State` 数组是观测 push 的）。已逐项确认：`satSources` / `satGroups` / `satItems` **无任何原地变更**，`satUpdateSettings` / `satelliteCatalogHealth` **无原地属性写入** ⇒ 转换语义等价。该结论已写入 store 头注，供后续域照做。
+- **收益（实测）**：宿主 `@State` **333 → 306**（净 −27 = −28 字段 +1 store）；`SatellitesPanel` 入参 **`@Prop` 33 → 5**。刷新粒度由"宿主整棵树"收缩到"订阅该 store 的组件"。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点** / **186** 文件）；**BUILD SUCCESSFUL**；真机（`192.168.50.108:36717`）走查：`更多功能 → 天体数据与扩展 → 卫星` 打开面板（仍无"打开面板"的语义命令，只能用坐标点击）——面板**完全由 store 渲染**并正确显示 `离线内置轨道数据`(satOffline)、目录更新时间(satNewestUpdate)、原版目录(satCatalogCreator)、内置快照(satCatalogSnapshot)、来源(satCatalogSource)、目录健康文案(satelliteCatalogHealth)、历元过期提示(satOutdatedCount/satDateInRange)、`总数 3134`(satCount) 与 `在线更新` 开关**因 `satOffline` 被禁用**；点击 `自动显示新卫星` 开关由 ON 变 OFF，面板**即时重渲染** ⇒ store 写入 → `@ObjectLink` → 刷新链路打通。
+- **中途一次构建失败（记录以免再犯）**：我在面板 import 里删掉了 `SatelliteSource` / `SatelliteUpdateSettings`，误以为它们只服务 `@Prop` 类型；实际它们在 `ForEach` 回调里当**局部类型标注**用（`(source: SatelliteSource, i: number) => …`），已恢复 —— 删 import 前必须确认类型只在被删声明处出现。
+- **后续队列（同一 §2.7 目标清单）**：`ScriptsPanel`（19 个宿主 `@State`/28 个 `@Prop`）→ `astroExtras` 簇 55 个（navStars / archaeo / mosaic / catalogs / meteorShowers / scenery3d）→ 其余 `other` 232 个。每片按本片同样的"先普查原地变更、再搬状态、动作留回调"口径推进。
+
+## [2026-10-04] DevEco Code - 记录：平板/折叠分支的验证结论与两项限制（补充 d5799a0175 的"未验证"项）
+
+- **模拟器为何不可用（先排障）**：`MatePad Pro 13`（tablet）与 `Mate X7`（foldable）**均无法启动**（`devecocli emulator start` 后状态仍为 `stopped`、无任何模拟器进程）。根因是 **Hyper-V/VBS 正在运行**：`systeminfo` 报 `Virtualization-based security: Status: Running` / `Hyper-V Requirements: A hypervisor has been detected`。HarmonyOS 模拟器需要独占的 hypervisor，与 Hyper-V 冲突；磁盘空间（C: 63GB / D: 67GB / E: 828GB 可用）与残留进程均已排除。修复需关闭 VBS/Hyper-V 并**重启** —— 属系统级改动，本片未擅自执行。
+- **替代验证（真机强制走平板分支）**：在宿主 `updateResponsiveLayout()` 末尾临时置 `nextMode = 'expanded'`，让手机跑**与平板完全相同的代码路径**，构建装真机后截图确认：
+  - `+/−` **横排**（`chromeZoomHorizontal = true`，一行 44 + 4 间隙）；
+  - 双行 FOV 胶囊（`FOV` / `60.0°`）位于**屏幕左缘**（`chromeRowPosXLeft() = EDGE_MARGIN`）；
+  - 时钟位于**屏幕右缘**（`chromeRowPosXRight() = skyWidth - EDGE_MARGIN - dockWidth`）；
+  - 即：均**不再贴 dock 两端**。折叠展开态与平板同属 `expanded` 分支（因此该截图同时覆盖折叠展开）；折叠半折 `hover` 与手机 `compact` 同属紧凑几何（此前已在手机验证）。
+  - **验证后临时强制已移除**并复核：`TEMP:` 区分大小写命中 **0**；layout 日志回到 `uiMode=compact hover=false foldTablet=false expanded=false`；`git status` 已跟踪文件干净（未留痕）。
+- **两项限制（如实记录，不在本轮掩盖）**：
+  1. **"三件套独立于 dock、开关面板不横移"未能直接观测**：三件套与常驻时钟共用可见条件（`!panelVisible && !polarScopeVisible`），**面板打开时它本来就隐藏**；而它可见时 `expandedDockOccupiedLeft()` 恒走"无面板"分支，dock 不会右移。⇒ 当初"面板挤动 dock 会让三件套横移"的担忧，对**三件套本身**其实不成立。
+  2. **手机屏宽下两种锚定策略几何重合**：强制 expanded 时 `expandedDockWidth()` 受 `available`（≈254vp）约束、`expandedDockLeft()` 恰好等于 `EDGE_MARGIN`，故"贴屏幕缘"与"跟随 dock 两端"在该屏宽下算出同一个 x，**无法区分**；要看出差别必须有**真平板/宽屏**（`expandedDockWidth` 饱和到 640 并被居中）。
+  ⇒ 综合两条：平板的"贴屏幕左右缘"目前应定性为**设计选择**（用户已批的 B 方案——读数贴屏幕两端、按钮横排），而**不是**"修掉了一个已复现的横向漂移"。若后续拿到真平板，应补一次"面板开合前后三件套 x 不变"的对照走查（届时需要放开 `!panelVisible` 之外的可见条件或用其它方式让二者同屏）。
+- **顺带发现（缺失命令）**：**没有可语义驱动"打开面板"的 CLI 命令**（目录中仅 `getAstroPanelState` 可查询状态），本轮开面板只能用坐标点击（`uinput -T -c` 点 dock 的"时间"项）——与之前记录的"观测列表标签切换 / 行内动作无命令"同类，建议后续补 `openPanel`/`setPanel` 之类的语义命令。
+- **未改动任何交付代码**：本片只做验证与记录；`d5799a0175` 的交付内容不变。
+
+## [2026-10-04] DevEco Code - dock 上方 chrome 重构（FOV 读数 / 缩放按钮 + 平板适配）、命中错位修复、握姿方案实测结论、死代码清理
+
+- **需求（用户）**：① FOV 读数移到左侧、与右侧常驻时钟左右对称；② 缩放按钮 `+/−` 抬到**紧贴 FOV 上方**（单手不必下探到 dock 边缘），但**不要**挪到左上角；③ 平板/折叠屏此前只适配了手机——平板 dock 位于一侧且宽度封顶，需按平板布局适配；④ 评估"智感握姿自动换边"；⑤ 点击缩放按钮不要再弹"视场 xx°"；⑥ `FOV 20.8°` 单行太长、与时钟不对称，要更好的思路；⑦ 清掉无入口的视场预设死分支。
+- **实现**：
+  - **锚点抽象（宿主 `MainWindowNativeNode.ets`）**：新增 `chromeRowY / chromeRowWidth / chromeRowPosXLeft / chromeRowPosXRight / chromeZoomHorizontal`，两个壳（`CompactShell` / `ExpandedShell`）改为只消费锚点，不再各自推算 `dockTop/dockLeft`。**手机与半折两端取同一个 x（= `dockLeft()`），与改造前逐字等价**；平板（expanded）改为**贴屏幕左右缘**（`EDGE_MARGIN` / `skyWidth-EDGE_MARGIN-dockWidth`）——因为平板 `expandedDockWidth()` 封顶 640 且面板打开时 `expandedDockOccupiedLeft()` 会被推到面板右侧，继续跟随 dock 两端会让三件套随面板开合整体横移。
+  - **FOV 读数（`PanelChromeExtras.DockFovChip`）**：从"dock 居中"改为**贴左端**（`FlexAlign.Start` + `padding-left 4`），与右侧时钟镜像；初始按用户要求做单行 `FOV 20.8°`，实测宽度 ≈134vp、是时钟（`10:44` ≈83vp）的 **1.55 倍**，明显不对称 ⇒ 按用户选择的"方案 C 变体"改为**双行**：上行 `FOV` 10vp/`rgba(229,255,255,0.55)`，下行数值 16vp/0.85，内边距 14→12。**胶囊高度仍为 36vp**（与时钟同高，读数行高度不变 ⇒ 缩放按钮的贴靠关系不受影响），宽度实测 ≈**66vp，反而窄于时钟**；最长用例 `100.0°` ≈75vp 仍窄于时钟 ⇒ 长度不再随视场抖动。**不可点击**：整层与胶囊均 `HitTestMode.None`（时钟那片是 `Transparent`+`Block`，因为它本体可点）；首帧前 `currentFovText='--'`，用 `°` 兜住，避免出现 `FOV --`。
+  - **缩放按钮（`SkyZoomLayer`）**：自持几何 —— 竖排（手机·半折，两枚 44 + 8 间距 = 96 高）与横排（平板，一行 44 + 4 间隙）由 `horizontal` 切换，列底/行底**紧贴读数行上沿**；两个按钮的标记抽成 `@Builder` 复用（**保留 `skyZoomInButton` / `skyZoomOutButton` 两个字面量 `.id()`**，契约锚点数不变）。
+  - **新增 `common/ui/ChromeGeometry.ets`（绘制与命中同源）**：见下方"命中错位修复"。
+  - **去提示**：`zoomStep()` 不再 `flashHint('视场 …')` —— 胶囊常驻后属于重复反馈，且会盖住星图中央。
+  - **死代码清理**：`fov1…fov180` 九个短动作分支在全仓库**零引用**（也无动态拼 `'fov'+deg`），属不可达分支 ⇒ 连同仅被它们调用的 `setFovPreset()` 与只被它们使用的 i18n `i0090`–`i0098`（`FOV 1°…180°`）一并删除（9 个分支 + 1 个方法 + 9 个键）。
+- **命中错位修复（本轮用户报的 bug："点击 + 无响应、点击 − 实际是放大"）**：XComponent 吞掉 ArkUI `onClick`，缩放按钮只能像右上角快捷区那样**按坐标分派**（`skyZoomButtonAt`）。此前抬升 40vp 只改了绘制、没改命中，于是命中区仍是旧的 `dockTop()-104`：视觉 `+`（`dockTop-122`）落在旧 `in` 区之外 ⇒ 无响应；视觉 `−`（`dockTop-70`）落在旧 `in` 区内 ⇒ 触发放大。**根治**：新建 `common/ui/ChromeGeometry.ets`，把常量（行偏移 48 / 按钮 44 / 间距 8 / 内padding 4 / 竖排 96 / 横排 44+4）与公式（`chromeZoomLayerHeight/Top`、`chromeZoomButtonTop/Left`）集中一处，**`SkyZoomLayer` 的绘制与 `skyZoomButtonAt` 的命中都引用它**，杜绝再次漂移；命中区按横排（x 区分两枚）/竖排（y 区分两枚）分别构造。真机坐标实测：点视觉 `+`(142,2118) FOV 60→48→38.4，点视觉 `−`(142,2300) 38.4→48→60，日志 `sky zoom in/out` 顺序一致。
+- **智感握姿（Phase 0 实测后按用户决定放弃）**：真机实测 `@ohos.multimodalAwareness.motion`（OpenHarmony 公共 SDK，syscap `SystemCapability.MultimodalAwareness.Motion`）——`canIUse=true`（支持）；权限 `ohos.permission.ACTIVITY_MOTION` 可授权（**它是 `user_grant`，首启会弹一次授权框**，实测 `authResults=[0]`）；`getRecentOperatingHandStatus()` 授权后可调用但**恒为 `0`(UNKNOWN)**；`on('operatingHandChanged')` 订阅成功、有事件，但**右手/左手持机并刻意用对应拇指滑动均只出 `0`**，从未出现 `1`(左手)/`2`(右手)；`on('holdingHandChanged')` 抛 `code 201`（该事件**只接受 `ohos.permission.DETECT_GESTURE`**，不可用）。⇒ **能力在位、判据不产出**（疑为系统级"智感握姿"开关默认关闭）。据此用户决定**放弃 D4**，探针代码、`module.json5` 的 `ACTIVITY_MOTION` 声明与新增 reason 字符串**均已回退**，未进入交付物。
+- **踩坑记录**：hvigor `00303218 Configuration Error: The reason and usedScene attributes are mandatory for user_grant permissions.` —— 我起初由 `authResults=[2]` 误推 `ACTIVITY_MOTION` 是 `system_grant`（`2` 的真实含义是"该权限未在配置文件中声明"）；实际上它是 `user_grant`，**必须同时提供 `reason`（`$string:`）与 `usedScene`**。已在 `module.json5` 回退，此结论留档以免再犯。
+- **验证**：`arkts_check` 通过（改动文件）；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / **44 锚点** / **185** 文件）；**BUILD SUCCESSFUL**；真机（`192.168.50.108:36717`）手机形态截图确认：左列 `+/−` 竖排、其正下方双行胶囊（`FOV` / `60.0°`）、右侧 `11:00`，胶囊窄于时钟且同高；点 `+` 无 toast、FOV 同步更新；坐标分派方向实测正确（见上）。
+- **未验证（如实标注）**：**平板/折叠展开**分支（贴屏幕左右缘 + `+/−` 横排）需要平板或模拟器才能走查，本轮未验；其几何沿用同一套锚点与公式，逻辑上与手机分支同源。
+- **备注**：`/−` 抬升后的顶端距底缘约 226vp，仍远低于右上角快捷区（`compactTopQuickY=50`），无冲突；若后续继续抬高需复查。
+
+## [2026-10-04] DevEco Code - 修复：星图滑动在面板中终止后，面板内滑动会连带拖动星图（手势归属标志泄漏）
+
+- **现象**：打开 dock 面板后，在**星图**上按下开始滑动、并**在面板内部抬起**；此后**仅在面板里**上下滑动，**星图也会被连带平移**。
+- **根因（代码差异定位）**：手势归属标志存在**泄漏**，且同一个文件里两个 UI 分支行为不一致：
+  | 分支 | 行为 |
+  |---|---|
+  | dock 分支 Down（`MainWindowNativeNode.ets:14054-14056`）| `touchStartedOnUi = true` **且清** `skyTouchFeedback / skyTouchActive` |
+  | **`isUiPoint` 分支 Down（`:14074-14076`）** | 只设 `touchStartedOnUi = true`，**不清** `skyTouchActive / skyDragging / nativeDragActive` |
+  | Up 的 `touchStartedOnUi` 提前 return（`:14286-14288`）| 同样**不清**这些标志 |
+  - 于是"Down 在星图（`:14100-14101` 置 `skyTouchActive = true`）→ Up 落在面板上"这一序列会让 `skyTouchActive` **残留为 true**；之后面板内的每次滑动都能通过 Move 开头的 `if (!this.skyTouchActive) return` 关卡，落到 `:14246` 的拖拽逻辑并 `emitFluidDrag`，把星图一起拖走。
+- **修复（`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，+20/−1）**：
+  1. `isUiPoint` 的 Down 分支补齐清理，与 dock 分支对齐（`skyTouchFeedback / skyTouchActive / skyDragging / nativeDragActive` 一并置否）—— UI 触摸不得继承星图拖拽归属。
+  2. Up 的 `touchStartedOnUi` 提前 return 也补齐同样的清理，避免下一个手势继承残留状态。
+  3. 拖拽条件由 `if (this.touchMoved)` 改为 **`if (this.touchMoved && !this.touchStartedOnUi)`**，把"归属在 Down 决定"写成显式条件，不再单独依赖可能陈旧的 `skyTouchActive`。
+- **方案取舍（评审结论）**：用户初提"打开 dock 面板时禁止拖拽星图"。评估后**未采用为唯一手段**，因其（a）只掩盖症状——同类"Down 在星图 / Up 在 UI"的模式还可经天体详情卡、悬浮面板、引导卡等触发；（b）会拿掉"面板打开时在上方露出的星图上平移、把下一个目标拖进视野"的可用操作；（c）`panelVisible` 覆盖面板范围过广。故以**归属修复**为主；如后续仍要"面板打开即禁止星图拖拽"的 UX，只需在星空 Down 分支加 `if (this.panelVisible) { 按 UI 触摸处理并 return }` 两行叠加。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 184 文件）；**BUILD SUCCESSFUL** 并 `install -r` 冷启；**用户界面实测确认**：原 bug 不再复现，且"面板打开时在露出星图上直接拖动仍可平移、点按选星/双指缩放/拖动惯性/详情卡拖动均未受影响"。
+
+## [2026-10-04] DevEco Code - 修复：观测列表每行"居中"无响应（只选不居中）
+
+- **现象**：观测工作区 · 观测列表（今晚可观测目标）里，点任意一行（如"仙女座星系"）的 **居中**，视野不动、无任何反馈；`添加到列表` 正常。
+- **取证（日志 + 代码双向）**：
+  - 该按钮走 `jumpToWutTarget`（`MainWindowNativeNode.ets:6656`），原实现只有两步：`setJD(target.jd)` → **`callNative('searchObject', name)`**（fire-and-forget，拿不到响应）→ `refreshState()`。
+  - **引擎的 `searchObject` 只做选中、不移动视野**：其 handler 内不存在 `moveToObject` / `moveToSelected` / `setFlagTracking`（对 handler 起点的 120 行范围扫描为空）。
+  - App 的**规范居中路径**是 `applySelectedObject(result, false, 'center')`（搜索流 `:11464`），它在 `:12503` 有专门的 `placement === 'center'` 分支执行导航；`jumpToWutTarget` 从未调用它。
+  - **真机日志实证**：点"居中"（连点三次）时 `setJD "2461318.1686721565"` 与 `searchObject "Andromeda Galaxy"` 都经 `command received` → `command on Qt thread` 正常执行，但 **`moveToSelected*` / `setTracking` 命中 0 次** ⇒ 时间跳了、目标选中了、**视野没动**，故表现为"按钮无响应"。
+- **修复（`harmonyos/ets-source/pages/MainWindowNativeNode.ets`，+12/−4）**：`jumpToWutTarget` 改为与全局搜索完全同路径 —— 把 `callNative('searchObject', …)` 换成 `callInteractive('searchObject', targetName, r => { if (r.found !== true) return; this.applySelectedObject(r, false, 'center') })`；`setJD` 失败即提前返回。这样居中的安全区摆放、陀螺仪/布局避让等行为与其他入口完全一致。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 184 文件）；**BUILD SUCCESSFUL** 并 `install -r` 冷启；**用户界面实测确认居中生效**。
+- **备注**：观测列表行的"居中/添加到列表"仍无对应的语义 CLI 命令（沿用 `getWutTargets` 驱动列表、坐标点击行内按钮验收），与上一笔记录的"缺失命令"同类，待后续补 `setObservantWutCategory` 之外的行内动作命令。
+
+## [2026-10-04] DevEco Code - 修复：观测列表切回"梅西耶"后无限循环（WUT 作业被旧轮询反复取消）+ 恒星按星等截断
+
+- **现象**：观测工作区 · 观测列表（今晚可观测目标，标签 行星/恒星/梅西耶）。首次选**梅西耶**很快出结果；点过一次**恒星**后（恒星量大），再切回**梅西耶**就**不停转圈、始终不出结果**。
+- **取证（日志 + 代码双向）**：
+  - `getWutTargets` 是**单实例异步作业** `s_ohosWutJob`（`src/StelMainView.cpp:1810-1840`），按 `OHOS_WUT_SLICE_MS = 18 ms/帧` 切片推进，`key` 取**整个 payload 字符串**。
+  - App 侧 `callLongRunningInteractive`（`MainWindowNativeNode.ets:2876`）以**硬编码 100 ms** 间隔（`:2887`）反复重发**同一 payload**；`loadWutTargets` 传入的 `900` 是 **maxAttempts**（`:6598`→`:2876`）而非间隔。
+  - 日志实证：同一 payload 的 `command received: "getWutTargets"` 在 **t=629.917 / 629.998 / 629.999 / 630.078（160 ms 内 4 次）**；单次作业约 **6 s**（批量 messier→stars→messier 共 18 488 ms）。
+  - **根因**：`loadWutTargets` 只用 `wutRequestSequence` **丢弃过期结果**，却**从不停止上一条轮询**。切标签后旧 poller 继续以 100 ms 重发旧 payload，而旧引擎逻辑 `if (key != requestKey) { delete s_ohosWutJob; }`（`:12812-12817`）会**把新标签正在跑的作业删掉重算** ⇒ 两个 poller 互相取消，谁都永远到不了 `ok`。恒星集大、作业久，故"点过一次恒星"后才必然触发。
+- **修复**：
+  - **引擎（`src/StelMainView.cpp`）**：① 新增显式取消 —— payload 带 `{"cancel":true}` 时立即丢弃作业并返回 `cancelled:true`；② `key` 收窄为语义参数 `category|period|direction|minAlt|maxMag|limitSize|minAng|maxAng`，无关字段差异不再触发重算；③ key 不匹配时**不再销毁运行中的作业**，改为返回 `ok:false/pending:true/superseded:true`，让真正的属主跑完（有意切换先由 ① 取消）。
+  - **恒星按星等截断**：新增 `OHOS_WUT_STAR_MAGNITUDE_CUTOFF = 3.0`（`:1840`，紧邻 `OHOS_WUT_SLICE_MS`），在**构建候选表时**截断（原 `stars` 分支把整个 Hipparcos 集约 **118k** 全塞进候选，每个都要做一次可见性评估）。仅作用于**未策展的 `stars`**；`carbonStars`/`bariumStars` 是手工子集且大多暗于该阈值，不截断以免被清空。（用户先定 2 等、后改为 **3 等**。）
+  - **App（`MainWindowNativeNode.ets`）**：④ `callLongRunningInteractive` 新增第 7 个可选参数 `isCancelled`，`poll()` **每轮开头先检查并 return**，被取代的请求停止重发；⑤ `loadWutTargets` 每次先 `callNativeFire('getWutTargets', '{"cancel":true}')` 丢弃上一个作业，并传入 `() => requestId !== this.wutRequestSequence` 作为取消判据（`:6639`）。
+- **验证**：`arkts_check` 通过；UI 契约 `intact`（33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点）；**BUILD SUCCESSFUL** 并 `install -r` 到真机。**用户界面实测确认**：观测列表内 行星 ⇄ 恒星 ⇄ 梅西耶 来回切换均正常出结果，恒星为短列表。
+- **本轮未取证项（如实记录）**：引擎层的 CLI 批量验证未能取证 —— PowerShell 5.1 对内联 JSON 的引号处理不稳定，`--payload-json` 三次均返回空结果（改用 `--batch <文件>` 亦无法可靠解析），故最终验收以**用户界面实测**为准。
+- **缺失命令（按项目约定记录）**：目前**没有**可语义驱动"观测列表标签切换"的 CLI 命令，只能用引擎层 `getWutTargets` + id 映射（`0=planets` / `1=stars` / `34=messier`，见 `wutCategoryKey`）等价复现；建议后续补一个 `setObservantWutCategory` 之类的语义命令。
+
+## [2026-10-03] DevEco Code - 加固：资源引导的完整性判据与抽取容错（消除"部分抽取永不修复"隐患）
+
+- **背景**：该隐患是在排查"行星盘面消失"时发现的（真因另见当日 `fix(harmonyos): reset the texture-upload budget on every OHOS frame`，与本条无关）。
+- **原缺陷（三处，均在 `harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`）**：
+  1. **判据与渲染无关**：`hasStartupResourceFiles()` 只校验 10 条路径（`stars/hip_gaia3/defaultStarsConfig.json`、`data/ohos/skyculture_art_rgba_v1.txt`、4 个 `zh_CN.qm`、`skycultures/modern/index.json`、`.../illustrations/andromeda.png`、`scripts/constellations_tour.ssc`、`data/default_cfg.ini`），**既不包含 `data/shaders/*` 也不包含任何行星纹理**（`git log -S "data/shaders"` 对该文件为空 ⇒ 从未覆盖）。而该判据是**唯一**决定"是否重跑全树抽取"的开关。
+  2. **异常当控制流 + 单点失败即整体夭折**：`extractRawTree` / `extractRawTreeAsync` 用 `try { getRawFileList(entry) } catch { writeRawFile(entry) }` 判定"目录 vs 文件"；任一目录列举瞬时失败会被误判为文件，`writeRawFile` 抛错后**整次抽取从中断点之后全部放弃**（`writeRawFile` 本身也是失败即 throw）。
+  3. **全程零日志**：跳过回补的分支与逐条失败都不打日志，因此"沙箱残缺"在现场完全不可见。
+- **后果链**：全树抽取（3007 文件 / 393.5 MB，抽取顺序 `data`→`landscapes`→`scenery3d`→`scripts`→`skycultures`→`stars`→`textures`→`translations`；`data/` 内部 `gui(213)→icons(8)→ohos(7)→search(1)→shaders(19)`）若在早期被打断（首跑在 `QAbilityStage.ets:52` 能力启动期同步等待、该文件 `:345-347` 自陈有被 watchdog 杀进程的风险），而判据恰好在 `data/ohos`（累计第 222–228 个文件，且判据标志本身被同步脚本烤进了包）之后即满足，则沙箱**永久残缺**：`data/shaders/*` 缺失 ⇒ `Planet::initShader()` 失败（`Planet.cpp:4094/4099`）⇒ `shaderError=true` ⇒ `drawSphere` 在 `:5253` 直接返回 ⇒ 所有行星盘面消失，且**杀后台、`install -r` 都不会修复**（沙箱不清空就不重跑抽取），只有彻底卸载重装才能恢复。
+- **修复**：
+  1. **判据拆分并覆盖真实资产**：`requiredMarkers`（证据文件，24 字节，按"存在"判定）与 `requiredAssets`（17 条，按 `fileSize > 0` 判定）—— 新增 `data/ssystem_major.ini`、`data/ssystem_minor.ini`、`data/shaders/planet.vert`、`data/shaders/planet.frag`、`textures/{sun,moon,jupiter,saturn,saturn_rings_radial}.png`，并保留原有全部条目。**加入前逐条核对了打包树，19 条全部存在**（唯一需注意的 `skyculture_art_rgba_v1.txt` 为 24 字节而非 0 字节，故仍按"存在"判定，避免把判据写成恒假而每次都重跑 14 s 抽取）。
+  2. **判据为假即自愈**：由于抽取后的既有复检 `if (!hasStartupResourceFiles(...)) throw` 复用同一判据，判据一严，**残缺沙箱在下次启动就会重跑全树抽取并复检通过**，无需卸载重装。
+  3. **抽取容错**：新增 `tryListRawDir()` / `tryListRawDirAsync()`（列举失败即视为"非目录"），逐条拷贝改为**失败只跳过该条并记日志**，不再让单个条目夭折整次走查。
+  4. **可观测性**：判据失败时输出 `[startup] resource verification failed: markers=[...] assets=[...]`；跳过条目输出 `[startup] skipped raw resource <path>`。
+  5. 顺带修掉本文件 9 处既有 `arkts-no-any-unknown`（`libentry.so` 的 `setEnv` 返回类型未标注，给 9 个 `const` 补显式 `boolean`，语义不变），使该文件 `arkts_check` 干净。
+- **验证（真机 `192.168.50.108:36717`）**：
+  - **无回归**：在沙箱已完整的现有安装上 `install -r` 后冷启，`arkts_check` 通过、构建 **BUILD SUCCESSFUL**；清缓冲窗口抓到 `[startup] refreshed bundled catalogue manifest and script translation` + `Qt resource preparation completed in 164/177 ms` ⇒ **严格判据在完整沙箱上通过、未重跑全量抽取**；`resource verification failed` / `incomplete after asynchronous` / `skipped raw resource` 三条告警均 0 命中。
+  - **修复路径有效**：`uninstall` → `install` 清空沙箱使判据为假 → 冷启 `title-released activeMs=44076`（明显是长首跑，即全树抽取在跑）且**未抛** `Startup resources are incomplete after asynchronous extraction` ⇒ 抽取后的严格复检通过；再启动一次即回到快路径（177 ms）⇒ 沙箱已完整、自愈成立。
+  - 功能面：`searchObject Saturn`（alt +51.2°，地平线以上）+ 深放大，盘面正常（同构建链的盘面修复已由截图确认）。
+- **同日记录更正**：此前把构建告警 `missing HarmonyOS libjpeg.so ... JPEG textures will not load` 判为缺陷，经核实为**误报**：`libqjpeg.so`（594 KB）随包在 `entry/libs/arm64-v8a/imageformats/`，`llvm-readelf -d` 显示其 DT_NEEDED 只有 `libQt6Gui/libQt6Core/libGLESv3/libEGL/libc++_shared/libc`，**无 `libjpeg.so`** ⇒ libjpeg 静态链接进插件（`scripts/check-ohos.sh:85` 亦如此说明）。故 133 个星空文化 JPEG（含 90 个 `illustrations/`）、7 个 `obs_*.jpg`、23 个 scenery3d 均可正常解码，**此项从缺陷清单撤除**。
+- **仍未处理（待定）**：`docs/harmonyos/research/ARKTS-PAGES-REFACTOR-STATE-REVIEW.md`（29.9 KB，来源不明）与 `.deveco/{agents,plans,skills}`、`.iis/` 等未跟踪项尚未纳入版本控制，等待用户决定。
+
+## [2026-10-03] DevEco Code - 修复：行星盘面整会话消失（OHOS 渲染泵从未复位纹理上传预算）
+
+- **现象**：深视场下行星只剩标签、选择箭头与 halo/点源，**盘面完全不画**；日志里没有任何告警。它会随会话"随机"出现，一旦出现则**杀后台重启也复现**；本次在**彻底卸载重装（沙箱全量抽取已完成）之后依旧复现**。
+- **排查过程（依次排除）**：
+  1. **资源/打包假设 → 排除**。源树与打包 `rawfile` 逐项比对：`data/shaders/planet.vert|frag`、`textures/jupiter.png` 均与源树**逐字节一致**；91 条 `tex_map` 全量审计：84 条 PNG 全部存在（九大天体逐一确认），余 7 条 `.jpg` 全部属于 `*_observer` 段（观测者行星表面图，非盘面）。干净重装日志显示首跑全量抽取正常：`asynchronous Stellarium resource extraction started / completed in 14108 ms`（3007 文件 / 393.5 MB）。
+  2. **引导完整性缺陷 → 记录下来但不构成本次根因**。`StellariumResourceBootstrap.ets:393-402` 的 `hasStartupResourceFiles()` 只校验 10 条与行星渲染无关的路径（**从不包含 `data/shaders/*` 与行星纹理**，`git log -S "data/shaders"` 为空），`:408` 一旦满足即 `return` 跳过全树回补，故部分损坏的沙箱永不修复；同步脚本还把判据自身的标志 `data/ohos/skyculture_art_rgba_v1.txt` 烤进了包（抽取序累计第 222–228，紧随其后的就是 `data/shaders` 229–248），理论上存在"判据满足而着色器缺失"的窗口。本次实验（干净重装仍复现）证明它不是当前主因，另行留档。
+  3. **地平线以下被地面遮挡 → 排除**。土星当时 `altitude=+50°`、视场中心正对它，盘面同样缺失。
+  4. **行星开关/幅度限制 → 排除**。`astro/flag_planets=true`、`flag_planet_magnitude_limit=false`、`actionShow_Planets` checked。
+  5. **插桩定位（决定性）**。对木星/土星每 30 帧打印 `Planet::draw` 各出口与 `drawSphere` 入口，得到：`IN-VIEWPORT cutDimObjects=false screenRd=1633.28` → `draw3dModel entersSphereBlock=true` → `drawSphere enter texMap=true shaderError=false planetShader=false`，而 `planetShader=false` 与 `shaderError=false` **反复同时出现**。这一组合只可能意味着 **`initShader()` 从未被调用**，即 `drawSphere` 在它之前就返回了 —— 唯一无日志的出口是三行 `bind()`，而其中 `texMap->bind(0)` 恒为 false。同时确认 `screenRd` 严格跟随视场（60°→0.133、0.02°→408.3、0.005°→1633），投影侧无问题。
+- **根因**：`StelTextureMgr` 的每帧上传预算 `totalLoadTimeTaken` **只在 `StelTextureMgr::onFrameFinished()` 里清零**（`StelTextureMgr.cpp:182`），它由 Qt 信号 `frameFinished` 驱动（`:49`）；而该信号**只在一处发射** —— `StelMainView::drawEnded()`（`StelMainView.cpp:17340`），那是 **Qt 桌面帧结束**的钩子。OHOS 的渲染泵 `StelMainView::renderOhosFrameNow()` 是设备上唯一的帧驱动，**既没调 `drawEnded()` 也没发 `frameFinished`** ⇒ 计数器只增不减；一旦超过 `maxTimeNS = max(1e9/(2*fps), MAX_LOAD_NANOSEC_PER_FRAME=1e9/120≈8.33 ms)`，**所有节流路径的 `bind()` 永久返回 false**。`Planet::drawSphere()` 用的正是 `texMap->bind(0)`（`StelTexture::bind` 默认 `prioritizeUpload=false`）且失败时**静默 return**（`Planet.cpp:5191-5204`）⇒ 行星盘面在整个会话内彻底消失，而 halo、标签、选择箭头、星表以及所有 `prioritizeUpload=true`/已预上传的纹理继续正常。这同时解释了：随机性（取决于本会话累计上传耗时）、杀后台仍必现（同样加载序列会再次撞线）、干净安装后更易复现（首跑深空抽取大量刷纹理）、以及**全程零日志**。
+- **修复（`src/StelMainView.cpp`，渲染泵内 +14 行含注释）**：在 `renderOhosFrameNow()` 中 `submitOhosFramebuffer(gl)` 之后补发一次 `emit frameFinished();`，与桌面路径 `drawEnded()` 的行为对齐，恢复"每渲染帧复位一次上传预算"。注释中写明为什么 OHOS 路径必须自己发这个信号。
+- **验证（真机 `192.168.50.108:36717`，`install -r` 增量安装、未清沙箱）**：修复前该会话中 `Initializing planets GL shaders... ` **从未出现**；修复后出现 `[25.133][DBG ] Initializing planets GL shaders...`，即 `drawSphere` 首次越过三处 `bind()`。`searchObject Saturn`（alt +50°，地平线以上）+ `setFOV 0.01` 截图：**土星本体（球面纹理、条带）与光环完整渲染**，附带土卫十二/十三/十八/六/五/十等标签与选择箭头；修复前同一位置为纯黑 + 仅标签箭头。
+- **影响面（附带收益）**：该复位同时惠及所有走节流路径的纹理（深空资料图、星空文化插画等），此前它们同样可能"本会话内永久不再出现"而无任何日志。
+- **构建**：`scripts/build-ohos-hap-windows.ps1 -SkipDeploy -SkipResources`，引擎重链 + **BUILD SUCCESSFUL**（708.9 MB signed HAP）。临时插桩已全部回退，提交不含诊断代码。
+
+## [2026-10-03] DevEco Code - 修复：+/- 放大时天体偏离准星（缩放锚点被 s_viewLock 挡住）
+
+- **问题（用户真机实测）**：搜索行星并居中后，用新增的 + 放大按钮连续放大，天体会离开屏幕中心 —— 金星最明显，放到最后整个盘面跑到屏幕底缘之外。
+- **根因（两段）**：
+  1. **偏移本来就有**：App 侧刻意把选中天体放在"安全区"目标点（`moveToSelectedAt`，避开详情卡与底部 Dock），所以天体**本就不在准星（视口几何中心）上**。实测 `searchObject Venus` 后视口中心高度 24.53440°、金星视高度 24.52055°、几何高度 24.48431°，即偏差 0.0139°（≈50″）。
+  2. **缩放把偏移放大**：缩放是围绕视口中心做的，偏差按 1/FOV 放大 —— FOV 0.05° 时 0.0139° ≈ 780 px，继续放大即飞出画面。引擎里其实已有"把选中天体钉在其屏幕位置"的维护器 `ohosMaintainSelectedZoomAnchor()`，但它的第一道闸门是 `if (!s_viewLock) return;`，只有用户打开「固定目标位置」才生效；`zoomStep` 虽然调了 `ohosCaptureSelectedZoomAnchor()`，却因闸门从未被维护，锚点白存。
+- **修复（`src/StelMainView.cpp`，+25/−2）**：新增静态 `s_ohosStepAnchorHoldUntilSec`；`zoomStep` 在捕获锚点之后 arm 0.45 s（盖住 `zoomTo(aim, 0.18f)` 的动画加尾巴），并注释说明为何必须如此；`ohosMaintainSelectedZoomAnchor()` 的闸门放宽为「`s_viewLock` 为真 **或** 处于本次 step 的 hold 窗口内」，且把时间判定移到 app/脚本检查之后（避免在 `StelApp` 未初始化时调用 `getTotalRunTime()`）。其余既有守卫（陀螺仪视图、脚本运行、`getFlagTracking()`、天体有效性、`s_ohosSelectedAnchorHoldUntilSec` 暂缓窗口）一律未改。
+- **验证（真机 `192.168.50.108:36717`，包 `com.cnchensh.stellarium`）**：先 `setTimeRate 0` 冻结时钟排除金星自身运动，再 `searchObject Venus` + 等 5 s 越过宿主 1.15 s 的锚定暂缓窗口，然后连点 +：FOV 8.053° → 6.442 → 5.154 → 4.123 → 3.299 → 2.639（共 3.05×），天体相对准星的**像素**偏移稳定在 −14.3 / −13.0 / −14.0 / −15.0 / −16.4 / −15.7 px（≈ ±1.7 px，与维护器 1.25 px 死区 + `dragView` 的 `qRound` 量化一致）。**未修复时**该角度偏差恒定，像素偏差会按 3.05× 长到 −43.5 px。截图复核：金星停在准星上（修复前它落在屏幕底缘之外）。测后已 `setTimeRate 1` / `setFOV 60` / `clearSelection` 复位。
+- **已知边界（按用户要求本片不动）**：`searchObject` 之后 App 会 `moveToSelectedAt` 并在 1.15 s 内 `ohosDeferSelectedAnchor`，该窗口内锚定维护按设计挂起，所以紧接着的头 1–3 次放大仍会保留一次性的原偏移（实测前 3 击 angOff 恒为 0.145624，第 4 击起才开始收敛）；捏合手势一侧的 `OhosPinchAnchorMode::SelectedObject` 同样被 `s_viewLock` 挡住，属同一根因但本轮未改。
+- **构建**：本轮需重编引擎（`StelMainView.cpp`），走 `scripts/build-ohos-hap-windows.ps1 -SkipDeploy -SkipResources`：`libstellarium.so` 重链 + **BUILD SUCCESSFUL**（708.9 MB signed HAP）。ArkTS 与 UI 契约未变动（仍 33 面板 / 24 静态 id / 17 动态前缀 / 44 锚点 / 184 文件）。
+
+## [2026-10-03] DevEco Code - 新增非手势缩放：Dock 左侧与常驻时钟对称的 +/− 竖排按钮
+
+- **需求（用户）**：在面板左侧、与时间显示对称的位置，上下布置 +放大 / −缩小两个按钮，引入非手势缩放入口。
+- **实现**：`panels/shell/PanelChromeExtras.ets` 新增 `SkyZoomLayer`（`posX=dockLeft`、`posY=dockTop-104`、宽= dock 宽、`padding-left 4`、两个 44×44 玻璃圆角按钮间距 8，`justifyContent(FlexAlign.Start)`+`alignItems(VerticalAlign.Center)`，层 `HitTestMode.Transparent`/按钮 `Block`，zIndex 40）—— 与右侧 `DockClockLayer`（`FlexAlign.End`/`padding-right 4`）逐项镜像。`CompactShell` 与 `ExpandedShell` 各渲染一层，显示条件 `!panelVisible && !polarScopeVisible`（与时钟同族）。宿主注入 `onZoomIn` → `zoomStep(0.8)`、`onZoomOut` → `zoomStep(1.25)`：复用已有的原生 `zoomStep`（与键盘 `KEYCODE_EQUALS`/`KEYCODE_MINUS` 同一命令族，factor<1 放大、>1 缩小，内部走 `getAimFov()` 故连点可累积）。
+- **关键坑（真机实证，已写入实现）**：原生 XComponent 吞掉 ArkUI `onClick`，只挂 `onClick` 时点击会穿到星图并变成 `selectAt`（日志实证：`sky touch down at 42,672` → `selectAt payload: 42|672|366|809`，FOV 无变化、无 `zoomStep` 日志）。正解与右上角陀螺仪/音频按钮一致：在 `handleSkyTouch` 的 `TouchType.Down` 里按坐标分派。新增 `skyZoomButtonAt(x, y)`（vp 坐标，几何与 `SkyZoomLayer` 保持一致：`left = dockLeft()+4`、`top = dockTop()-104`，命中返回 `'in'`/`'out'`/`''`），命中时 `touchStartedOnUi = true` 并提前 return，使 Up 不会触发选星。
+- **验证**：`arkts_check` 通过；`devecocli` 构建管线 **BUILD SUCCESSFUL**（708.9 MB signed HAP）；UI 契约 42 → 44 个 `.id()` 锚点、22 → 24 个静态 id（`--update` 有意新增 `skyZoomInButton`/`skyZoomOutButton` 字面量锚点，便于 UI 测试发现），复检 `UI contract intact: 33 panels, 24 static ids, 17 dynamic prefixes, 44 id anchors, over 184 files`。真机（`192.168.50.108:36717`、包 `com.cnchensh.stellarium`）坐标命中实测：`+` 使 FOV 60 → 48 → 38.4 → 30.72 → 24.58（每击 ×0.8），`−` 使 FOV 60 → 75 → 93.75 → 100（每击 ×1.25，100 为引擎最大视场上限）；打开「时间」面板后按钮与常驻时钟同步隐藏，空白天区触摸仍穿透回星图。测后已 `clearSelection` + `setFOV 60` 复位。
+- **附带（非本轮改动）**：排查"行星放大后盘面不渲染"期间**未改动任何代码**。用 CLI `setFOV` 复核：木星在 FOV 0.107°（白天大气泛白）与 0.005°（黑色天空、盘面/云带/光环/卫星全部正常）均正常渲染，`Planet.cpp` 贴图解析无 `Cannot resolve path to texture file`，启动日志 `Initializing planets GL shaders...` 后无错误 —— 引擎侧未发现缺陷。另实测到注入双指捏合时**视野会沿手指运动方向漂移**（纯水平张开使方位角从 −112.19° 漂到 −128.12°、高度基本不变；纯竖直张开只带来约 0.03° 高度漂移），会把被缩放的天体带出视野；该手势漂移问题按用户要求本轮不继续深挖。
+
+## [2026-10-03] DevEco Code - 回收并完成：九大天体启动预热 + 视野资料图横幅语义化（非队列片）
+
+- **来源**：这两项原是 2026-10-03 被用户中断的切片（子会话 `ses_f00aa52d2ffegjNCRrgPREWMoS`，标题 "Pre-warm 9 bodies + semantic banner"）。其实现在中断时**已写完并编译过**（源码 +96/−36），但从未提交、未写 CHANGELOG、未真机验证；其中**测试同步被丢失**。本轮从其**编译产物**（`build/.../MainWindowNativeNode.ets`，与提交态差异 `96 insertions / 36 deletions`）**回收**实现，并由主会话补回测试同步。
+- **实现（回收）**：
+  - **预热**：`BODY_DETAIL_TEXTURE_PATHS`（七大行星（不含地球）+ 月球 + 太阳）+ `bodyDetailWarmupTimer/Index/Pending` + `startBodyDetailWarmup()`/`stepBodyDetailWarmup()`/`stopBodyDetailWarmup()`，以 `setInterval` 分片推进、每项调用 `resolveStellariumDetailMediaAsset`，日志 `[body-warmup] ready|unavailable|failed|completed`。
+  - **横幅语义化（A 方案）**：`SKY_TEXTURE_STATUS_FAST_POLLS=24` 后转慢轮询（`SLOW_INTERVAL_MS=2000`）；`STALL_POLLS=90` 仍未就绪则**升级为可操作错误态**（`当前视野资料图仍在准备，可稍后重试`）并停止轮询；`updateSkyTextureStatus` 按**实时状态**驱动 —— `pending>0 || status==='loading'` → `正在载入当前视野资料图 · N 项待完成`；`errors>0 || error||partial-error` → `…项资料图加载失败`；**就绪即 `hideSkyTextureStatus()` 收起**（不再按时间收起，也不会永久停留）。
+- **测试同步（本轮补回）**：`scripts/test-ohos-startup-stars.mjs` 两处 —— ① `dismissSplash` 的夹具补 `startBodyDetailWarmup` 桩；② 旧"按时间收敛"用例整体替换为新语义断言（新常量、三条文案、stall 升级分支、就绪即收起、并加"不得出现按时间收起"的回归守卫）。
+- **验证**：切片预检 通过；`arkts_check` 通过；构建 **BUILD SUCCESSFUL**；契约 通过（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点，**184** 个 .ets）；全量 `*ohos*.mjs` 仅 §13.6 的 7 个存量环境类失败；`test-ohos-startup-stars` **17/17 全绿**。
+- **真机未验证（设备掉线）**：安装时 `hdc list targets` 无目标（`Not match target founded`），故本片**只到"构建+契约+测试"**。待设备回连后需验：`[body-warmup] ready/completed` 日志；放大月球/行星；横幅"出现 → 就绪消失 / 停滞升级为可重试错误态"。
+- **真机验证（2026-10-03 补记，设备 `192.168.50.108:40565`，包 `com.cnchensh.stellarium`）**：安装后 `aa force-stop` + `aa start` 冷启，`pidof`=53662 存活。① **预热实测**：冷启后约 1.1 s 内 9 项全部命中并完成 —— `[body-warmup] ready path=textures/{sun,mercury,venus,mars,jupiter,saturn,uranus,neptune,moon}.png` → `[body-warmup] completed count=9`（即七大行星（不含地球）+ 月球 + 太阳）。② **横幅**：启动与静止视野下**保持静默**（无 `[sky-banner]` 日志），符合"按状态驱动、就绪即收起"的预期。③ **详情链路**：`searchObject Mars` 后 `[detail-media-card] sphere loaded`（模型球体出图正常，与侧车修复一致）。④ **待人工复核**：横幅的"出现 → 就绪消失 / 停滞升级"需**手指捏合缩放**触发（`scheduleSkyTextureStatusCheck()` 只挂在 zoomStep/捏合结束/详情卡拖动三条触摸路径，`devecocli ui` 不支持多点触控，CLI 的 `setFieldOfView` 不触发该路径）→ 请在真机上捏合放大一次，观察是否出现"N 项待完成"并随就绪自动消失。
+- **附带（非阻塞）**：星图放大的"先空白后出图"仍属**引擎侧**纹理准备，本片预热（App 侧详情媒体）不覆盖；若要"放大立即可见"，需 native 侧新增预准备命令（契约建议见上）。- **关键范围结论（决定后续要不要动 native）**：预热的落地是 `resolveStellariumDetailMediaAsset`（**App 侧详情媒体缓存**）→ 它加快的是**详情卡**出图/出模型；而**星图放大**的"先空白后出图"走的是**引擎自身纹理**，App 侧预热触及不到。若用户诉求"放大后立即可见"针对星图，则需 **native 侧**支持，建议契约（待用户决定）：新增如 `preloadPlanetTextures`（参数：天体 id 列表）或 `prepareSkyTexturesForFov`（按当前视野预准备），落点 `src/StelOhosCommandCatalog.hpp` + `src/StelMainView.cpp`。
+
+## [2026-10-02] DevEco Code - 资源覆盖审计结论与打包决策（都不补 models/atmosphere）
+
+- **审计结论**：签名 HAP 内**应随包的运行时资源全部齐备** —— `nebulae/default` 674/674、行星模型侧车 `.model.rgba` 53/53、`scenery3d` 135/135、`data`/`landscapes`/`stars`/`translations`/`skycultures` 与源镜像一致、`scripts` 90。**无缺失**。
+- **纠错**：视野资料图横幅的"N 项待完成"是**加载中而非缺失** —— 真机 `getDeepSkyImageStatus` 回读 `referenced=674 onDisk=674 missingCount=0 err=0`；改视野后 `pending=111 loading=111 notStarted=0`。上一轮"推测 5 项确实缺失"的说法据此更正。
+- **修掉审计脚本自身 bug**：`audit-ohos-resource-coverage.mjs` 对 `skycultures` 按整路径比较，把 63 个嵌套 `CMakeLists.txt`/`.template`/`TODO.txt`/`*.py` 误报缺失 → 改按 basename 排除后 **63 → 0**；顺带把 `scenery3d` 纳入对照、把写死的"未打包"结论改为实测判定。审计报告已随包提交（含"未随包家族与原因"表）。
+- **决策（用户确认）**：`models/`（17.8 MiB）与 `atmosphere/`（58.7 MiB）**都不补**。二者均被引擎引用但只由默认关闭的配置项启用（`astro/flag_use_obj_models`、`landscape/atmosphere_model`），App 未暴露入口，界面无差别；`atmosphere/` 的高质量路径在本构建已被 `ENABLE_SHOWMYSKY` 编译掉。后续若露出"真实形状模型"开关，`models/` 为必须项，届时按 bash 白名单补入两平台同步脚本。
+## [2026-10-02] DevEco Code - 审计：HAP 资源缺失清单（Phase RA）——FOV 横幅的 N 是加载中而非缺失
+
+- **任务与结论**：排查"当前 HAP 到底缺哪些资源"，逐族给出"应有/实有/缺失/原因"清单。结论：**所有应随包的运行时资源都已进包**；此前用户看到的「当前视野资料图 · N 项待完成」中的 N 是原生 `getDeepSkyImageStatus.activeTexturePendingCount`（当前视口内**尚未上传**的纹理数），不是资源缺失。
+- **问应用自己（原生完成判定）**：`src/StelMainView.cpp` 的 `getDeepSkyImageStatus` 由 `nebulae/default/textures.json` 收集 `imageUrl` 引用名，与 `nebulae/default/*.png` 实有文件对比；`activeTexture*` 来自 `StelSkyImageTile::collectTextureStatus(..., viewportOnly=true)`。真机实测：`referenced=674 onDisk=674 missingCount=0 activeTextureErrorCount=0`；改变视野后 `pending=111 / loading=111 / notStarted=0 / ready=2 / err=0 / missing=0` —— 全部为"加载中"，无缺失。`getCatalogHealth` 亦报 `stars.files=5 missingFiles=[]`。
+- **逐族对照（签名 HAP `entry-default-signed.hap` 708.8 MB，按 zip 条目计数）**：
+
+  | 家族 | 应有 | 实有（HAP rawfile） | 缺失 | 类别/原因 |
+  |---|---:|---:|---:|---|
+  | `nebulae/default/*.png` | 674 | 674 | 0 | 覆盖 |
+  | `textures/*.model.rgba`（细节模型侧车） | 53 | 53 | 0 | ① 已于 `e92ac23726`/`c2187a192c` 补齐；真机 `source=sidecar` |
+  | `scenery3d/` | 135 | 135 | 0 | 覆盖（旧报告"未打包"已更正） |
+  | `data`/`landscapes`/`stars`/`translations`/`skycultures` | 见审计表 | 镜像一致 | 0 | 覆盖；差异仅为 CMake/TODO/`.py` 等构建脚手架（②） |
+  | `scripts/*.ssc` | 52（顶层） | 90（含 `tests/*` 38） | 0 | Windows 用 `-Recurse` 多于 bash 顶层白名单（多余包含，非缺失） |
+  | `models/`（OBJ 网格 + `moon-vertices-indices.bin`） | 45 | 0 | 45 | **②/④ 待决策**：引擎按 `Planet.cpp` 读取，但 `astro/flag_use_obj_models` 默认 false、App 未暴露开关（约 17.8 MiB） |
+  | `atmosphere/` | 313 | 0 | 313 | ②：仅 `AtmosphereLightweight` 用 `lightweight.amsh`，`landscape/atmosphere_model` 默认 `preetham`，OHOS GLES2 已编译掉 ShowMySky（约 58.7 MiB） |
+
+- **改动（本片只动审计工具与报告，不改打包范围）**：
+  - `scripts/audit-ohos-resource-coverage.mjs`（234 → 279 行）：`expectedFiles('skycultures')` 改为按**basename**排除 `CMakeLists.txt`/`.template`/`TODO.txt`/`*.py`（原按整路径比较，导致 63 个嵌套 CMakeLists 被误报为"未同步"）；顶层对照表纳入 `scenery3d`；删除写死的"scenery3d 未打包"结论，改为按 rawfile 实测判定；新增"未随包家族与原因"表（`po`/`atmosphere`/`guide`/`models`/`src`/`util`/`releases`/`cmake`/`doc`/`android`）与平台差异说明。
+  - `docs/harmonyos/archive/audits/RESOURCE-COVERAGE-AUDIT-2026-08-24.md`（重新生成、本次**不还原**，作为本片结论一部分）：`skycultures` 由"未同步 63"更正为 0；`scenery3d` 135/135 覆盖；未随包家族逐项标注原因。
+- **真机验收**（Mate 80 Pro `192.168.50.108:40565`，签名 HAP 重装 `install -r` 后 `aa start`）：
+  1. `pidof com.cnchensh.stellarium` = 16764 存活；`aa dump -l` 为 `state #FOREGROUND`。
+  2. 选中「仙女座星系（M31）」后改变视野：`[dso-probe] referenced=674 onDisk=674 missing=0 activeLoading=111 activeNotStarted=0 activeErrors=0`；横幅的 N 即该 `activeTexturePendingCount`（`MainWindowNativeNode.ets:10095` `'正在载入当前视野资料图 · ' + pending + ' 项待完成'`）。
+  3. 选中 Mars：`[detail-model] CPU texture ready ... bytes=524288 source=sidecar`（无 PNG 回退），证明侧车族已随包并落盘。
+  4. **横幅本体未走查**：本机 CLI 无法注入双击/多点触控（`devecocli ui` 无 pinch、`uitest uiInput keyEvent 2058`/`uinput -K` 均未送达 ArkTS 根 `onKeyEvent`），而 `scheduleSkyTextureStatusCheck()` 仅由 `zoomStep`/捏合结束/详情卡拖动三条路径触发；其收敛文案与时机（快→慢→「当前视野资料图暂未就绪，稍后自动重试」→隐藏）由 `test-ohos-startup-stars.mjs` 锁定且本片未改，故沿用上一片已验证行为。
+- **验证链**：`check-ohos-ui-contract.mjs` 全绿（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 184 文件）→ `test-ohos-startup-stars.mjs` **17/17** → 构建 **BUILD SUCCESSFUL**（签名 HAP 708.8 MB，未带 `-SkipResources`，侧车 `generated 50 + 3`）→ `audit-ohos-resource-coverage.mjs` 重生成报告（本次保留）。
+- **测试同步**：无 `.ets`/断言改动；审计脚本为唯一代码改动，其输出即为测试基线。
+- **本片新踩的坑**：
+  1. **`devecocli ui layout` 是简化树**，`skyTextureStatus` 这类非点击覆盖层**不出现在节点树里**（必须用截图）；且 `uitest uiInput keyEvent`/`uinput -K` 注入的按键**不会路由到 ArkTS 根的 `onKeyEvent`**（原生 Qt XComponent 持有输入焦点），`devecocli ui` 也无多点触控 —— 需要"捏合"的 UI 入口在 CLI 侧不可达。
+  2. **PowerShell 双引号里的 `"$var:"` 会被当作盘符限定符**（`InvalidVariableReferenceWithDrive`）→ 一律写 `${var}`。
+  3. **`git -C ..` 取决于 cwd**：在 harmonyos 子目录下 `..` 是仓库根，在仓库根下 `..` 是仓库父目录（报 "not a git repository"）——脚本里改用显式路径。
+## [2026-10-02] DevEco Code - 修复：启动「星象仪」标题过早被门控隐藏 + 视野资料图加载横幅永久停留
+
+- **现象（用户报告）**：
+  1. 启动时「星象仪」三个字只在资源加载完之后才出现，随即散开；期望「先显示三个字 + 转圈加载 → 加载完成后散开并进入主界面」。
+  2. 缩放/捏合后界面常驻「正在载入当前视野资料图 · N 项待完成」，资源就绪后不消失。
+- **基准比对（`git worktree` 只读检出 `997c007e3` 后逐一核对，不臆测）**：启动层四个文件（`ApplicationRoot.ets` / `QAbility.ets` / `StartupSky.ets` / `StellariumResourceBootstrap.ets`）自基准起只有 Phase 0（`f7dd387daa`，"UI-only 模拟器通道"）动过 `ApplicationRoot`/`QAbility`；`StartupSky.ets`、`StartupStarGeometry.ts`、`StellariumResourceBootstrap.ets` 与资料图轮询逻辑自基准起**零改动**（`git diff 997c007e3..HEAD --stat -- <这四个文件>` 除 Phase 0 外为空）。故两缺陷**不是 pages 重构引入**，而是既有实现缺陷；基准 HEAD 真机行为与现行一致（下文 A/B 实证）。
+- **缺陷 1 根因（既有实现，非本会话回归）**：`pages/StartupSky.ets` 的 `updateMotion()` 中 `if (this.skyPrepared) this.assemblyElapsed += step` —— 标题粒子的「聚合」进度只在 `stellarariumStartupSkyReady`（由 `MainWindowNativeNode.dismissSplash()` 在原生视口呈现后才置 true）之后才开始累计，且 `draw()` 中 `startupParticle(..., this.skyPrepared ? this.assemblyElapsed : -1)` 在门未开时把进度强制为 `-1`（粒子停在背景位）。结果：整个资源加载期只画背景星点，标题要等 `skyReady` 后才聚合、再按 `STARTUP_REVEAL_AT_MS` 散开。真机 hilog（修复前）：`presented-frame-ready` 于 19.290 s → `title-assembled` 于 20.878 s（`skyReady+1590ms`）→ `sky-revealed` 22.003 s，即「标题只在加载完后出现」。
+- **缺陷 2 根因（既有实现死分支）**：`pages/MainWindowNativeNode.ets` 的 `pollSkyTextureStatus()` 原逻辑在回调里以 `else if (this.skyTextureStatusPolls < 24)` 决定是否续轮询，而入口的 `if (this.skyTextureStatusPolls >= 24)` 终止分支**永远到不了**（第 24 次后既不续轮询、也不进终止分支），于是原生 `getDeepSkyImageStatus` 的 `activeTexturePendingCount` 若长期不为 0，横幅就永久停在「正在载入…N 项待完成」。真机实证：捏合后 pending=4/5 持续 ≥38 s 不变，横幅不消失。
+- **修法（缺陷 1，`harmonyos/ets-source/pages/StartupSky.ets` 206 → 218 行）**：标题聚合解耦于门 —— `assemblyElapsed` 自 `onReady` 起累计（标题在加载期即成形并保持）；新增 `releaseStarted`/`releaseElapsed`，仅当 `skyPrepared && assemblyElapsed >= STARTUP_GATHER_MS` 才开始散开，`reveal = startupEase(releaseElapsed / STARTUP_REVEAL_MS)`；`artComplete`（交给 `ApplicationRoot` 淡出加载层）随散开起点置位。未改 `ApplicationRoot`（Phase 0 的 `aboutToAppear()→onSkyReady()` 仍是「门已开则收起」的兜底，UI-only 门不退化：`releaseUiOnlyStartupGates()` 仍能收起加载层）。未用 `@BuilderParam`、未迁 V2、无参数化 `@Builder`。
+- **修法（缺陷 2，`harmonyos/ets-source/pages/MainWindowNativeNode.ets` 18688 → 18724 行）**：快速轮询 24 次后**转入慢速后台轮询**（`SKY_TEXTURE_STATUS_SLOW_INTERVAL_MS=2000`，文案改为诚实的「仍在后台准备当前视野资料图，完成后会自动显示」）；慢速期仍会在 `pending<=0` 时收起横幅（修复「资源就绪后不消失」）；到 `SKY_TEXTURE_STATUS_SETTLE_POLLS=40` 仍不就绪则给明确结束态「当前视野资料图暂未就绪，稍后自动重试」，`SKY_TEXTURE_STATUS_FINAL_HIDE_MS=5000` 后收起，不再永久停留。新增 `skyTextureStatusSlow`/`skyTextureStatusFinalTimer` 字段，`stopSkyTextureStatusObserver()` 一并复位。
+- **三项客观取证（真机 Mate 80 Pro `192.168.50.108:40565`，`snapshot_display` 连拍 ~300 ms/帧）**：
+  1. **标题提前出现**：修复后 `h6/h10/h14/h20/h24`（≈1.8–7 s，仍在加载、无主界面/无 dock）已见标题粒子；同窗口标题区域（y1200–1530，x250–1030，灰度阈值 >100）亮像素：修复前 `g10/g20/g28 = 139/121/123`，修复后 `h10/h14/h24 = 691/661/677`（≈5×）。hilog：修复后 `title-released activeMs=8460` 恰在 `presented-frame-ready` 同刻触发，⇒ 标题在加载期已聚合完毕、只有散开才等门。
+  2. **散开/交接有可辨中间帧**：`h35→h36` 全局平均绝对差 `1.509`、`h36→h37`（散开后主界面淡入）`3.322`，为全序列最大；`h36` 单帧可见加载粒子与主界面 dock 交叉淡入（关键帧 `startup-b3/h35..h37`）。
+  3. **缺陷 2 收敛**：捏合触发横幅 → 3 s 时「正在载入当前视野资料图 · 5 项待完成」（`bannerA`）→ 23 s 慢速期诚实文案（`bannerB`）→ 54 s 后横幅**消失**（`bannerC`；原生 `activeTexturePendingCount` 全程为 4/5，属「个别资源确实缺失」，状态如实收敛而非永久停留）。关键帧：`Temp\deveco\startup-b2`（修复前连拍）与 `startup-b3`、`bannerA/B/C`（修复后）。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check` 两文件 No errors → 构建 **BUILD SUCCESSFUL**（签名 HAP 708.8 MB）→ `check-ohos-ui-contract.mjs`（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 184 文件）全绿 → `test-ohos-startup-stars.mjs` **17/17**、`test-ohos-privacy-startup.mjs` **19/19** → 全量 `*ohos*.mjs` 35 个仅 §13.6 的 7 个存量环境类失败，无新增 → `audit-ohos-resource-coverage.mjs` 重写的审计文档已 `git checkout` 还原 → 真机 `pidof` 存活（49402）。
+- **测试同步**：`scripts/test-ohos-startup-stars.mjs` 194 → 216 行：更新旧断言（原断言 `this.skyPrepared && this.assemblyElapsed >= STARTUP_REVEAL_AT_MS` 已不存在），改为锁定「自首帧聚合 + 散开等门 + `releaseElapsed` 驱动 reveal」，并新增缺陷 2 回归测试（快速→慢速→明确结束态的收敛形状）。
+- **本片新踩的坑**：① 启动动画的「聚合」与「散开」共用同一 `assemblyElapsed` 计时器，任何「把某一段挪到门之后」的改动都会连带改变另一段，必须以独立计时器解耦。② 资料图横幅的 24 次上限分支因 `else if` 与入口上限同值而成为**不可达死代码**——上限逻辑要落在「下一次调用」而不是「同一次调用」里才可达。
+
+## [2026-10-02] DevEco Code - 修复：Dock 开/关面板时入口重建、宽度过渡不流畅（Phase 3at / 7202 回归）
+
+- **现象（用户报告，`d7a2bc9768`/Phase 3at 之后）**：点 Dock 入口开/关面板时，入口元素像被重建；宽度在"宽 ↔ 窄"（紧凑档 `92% ↔ 76%`）间切换不自然。`7202d0e1b1`（"恢复 Dock 高亮"）之后高亮恢复正常但流畅度变差。
+- **代码定位（现行 3 个提交）**：
+  - 3at 前：Dock 是宿主的无参 `@Builder bottomDock()`，`ForEach` 键为 `item.panel + '/' + languageRevision`，`active` 以 `this.dockActionActive(item)` 传入。
+  - `d7a2bc9768`（3at）把 Dock 下沉为 `panels/shell/BottomDock.ets`，激活判定改为宿主回注的**普通成员闭包** `isActive` —— 闭包不被 V1 观测，`BottomDock` 从不重绘 → **高亮冻结**；键值稳定，故**不重建、流畅**。
+  - `7202d0e1b1` 把 `activePanel` 改成 `@Prop`（让组件重绘）**并把它并入 ForEach 键** `...+(active?'1':'0')` —— 高亮恢复，但每次开/关/切面板激活项的键翻转 → 该入口**销毁重建**。
+- **A/B 定位（真机 `git worktree` 三点构建安装）**：在 `harmonyos/ets-source/panels/shell/DockButton.ets` 临时加 `aboutToAppear` 计数日志（`[dock-probe] DockButton appear icon=...`，测试后已删）后：
+  - `d7a2bc9768^`（3at 前）：点"图层"后 probe 恒为 **5**（无重建），激活蓝采样 `x=789..862`（图层）→ **高亮跟随 + 无重建 + 流畅**。
+  - `7202d0e1b1^`（3at）：`setPanel layers` 后 probe 仍 **5**（无重建），蓝色像素 **0** → **高亮冻结、无重建**（7202 提交信息所述"高亮在 3at 丢失"属实）。
+  - 现行 HEAD（`7202d0e1b1`）：开"图层" probe 5→**6**（`[dock-probe] ... icon=layers` 于 `setPanel` 同帧新建），关闭再 +1 → **高亮跟随但入口重建**。
+  - **结论**：重建由 `7202d0e1b1` 的"激活态入键"引入（非 3at 本体）；3at 引入的是高亮冻结。
+- **根因（ArkUI V1 事实，已用 `devecocli docs` 核对）**：`ForEach` 对**键值未变**的数组项**不重新执行 `itemGenerator`**，复用组件时 `@Prop` 不更新（FAQ `faqs-arkui-619` 问题一/三；官方《ForEach：循环渲染》"键值存在则直接渲染该键值所对应的组件"）。因此 `active` 既不能只经 `@Prop`/闭包传（会冻结），也不能并入键值（会重建）。
+- **修法（两条性质同时成立）**：
+  - 新增 `harmonyos/ets-source/state/DockStore.ets`（8 行，`@Observed class DockStore { activePanel; panelVisible }`）。
+  - `BottomDock.ets`（67 → 79 行）：`activePanel` / `panelVisible` 保留为 `@Prop` 并加 `@Watch('syncActiveState')`，同步进 `@State private activeState: DockStore`；`ForEach` 键恢复为**稳定键** `item.panel + '/' + languageRevision`；调用改为 `panelId: item.panel, activeState: this.activeState`。`aboutToAppear()` 首次同步。
+  - `DockButton.ets`（53 → 62 行）：去掉 `@Prop active`，改为 `@Prop panelId` + `@ObjectLink activeState: DockStore`，在组件内 `isActive()` 就地求值。
+  - 由此：激活态变化经 `@ObjectLink` **深观察**触发入口重渲染（不重建）；键值稳定故 `ForEach` 不销毁子项；宽度动画所在的 `BottomDock` Row **不会被重建**，过渡不被打断。未使用 `@BuilderParam`（§13.1 规则 9）。
+- **三项客观取证（真机 Mate 80 Pro `192.168.50.108:40565`）**：
+  1. **宽度插值**：`snapshot_display` 单张约 320 ms，而生产动画是快弹簧（`springMotion(0.46,0.86)`，实际约 0.5 s 落定），无法以 100–200 ms 间隔取样。故用**仅用于测量**的临时构建（`BottomDock` 的 `.animation` 临时改 `{duration:3000, curve: Curve.EaseInOut}`，测后已还原）连拍 12 帧，图标横向跨度单调过渡：`940→929→913→890→866→844→821→805→798→797` —— **确为中间值序列（插值），非一步跳变**；生产弹簧下同法也捕获到中间帧 `931`。三次测量 `probe` 恒为 5。
+  2. **元素同一性**：`aboutToAppear` 计数在启动后恒为 **5**，开/切/关面板均不新增（修复前每次开/关激活项各 +1）；`devecocli ui layout` 中"搜索/时间/位置/图层/更多功能"文本节点坐标仅随宽度档位整体平移，无节点短暂消失/坐标跳变。
+  3. **高亮**：开"图层"后激活色采样 `x=789..862`（`#70C8FF`，`B−R = 255−112 = 143`）；切"时间"后蓝移到 `x=417..491`；关闭后蓝色像素 0。验收沿用 `7202d0e1b1` 的 `B−R≈143` 方法。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check` 三文件 No errors → 构建 **BUILD SUCCESSFUL**（签名 HAP 708.8 MB）→ `check-ohos-ui-contract.mjs`（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 184 文件）全绿 → 全量 `*ohos*.mjs` 扫描 35 个仅 §13.6 的 7 个存量环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS 假设），无新增；`audit-ohos-resource-coverage.mjs` 重写的审计文档已 `git checkout` 还原 → 真机最终构建复测：`pidof` 恒存活（28079），开"图层"高亮 `789..862`、关后面板收起。未改动任何持久化设置。
+- **本片新踩的坑 / 固化结论**：
+  1. **`curves.springMotion(...)` 忽略 `duration` 参数**：弹簧按自身 response 落定，把 `duration` 从 300 调到 3000 不影响时长 —— 需要"慢动作"取样时必须临时换成 `Curve.EaseInOut` 之类显式时长曲线。
+  2. **`%LOCALAPPDATA%\Temp\deveco` 下的 `git worktree` 会被清理**：工作树目录被清空、`git worktree list` 显示 `prunable`；且 worktree 里 `-SkipEngine -SkipDeploy -SkipResources` 仍会断言 `build/libstellarium-harmonyos`、`build/src/libstellarium.so` 与 `build/_deps/{md4c,nlopt}`，需分别建 junction/拷贝到主仓同名目录。
+  3. **无线调试会掉线**：`hdc list targets` 变 `[Empty]` 后用 `hdc tconn <ip:port>` 可恢复（IP 未变时）。
+  4. **应用冷启后第一次点击可能被吞**（`devecocli ui click` 与 `uitest uiInput` 均观察到）：交互取证应对同一目标重试一次，或以 `hilog setPanel` 佐证确实命中。
+## [2026-10-02] DevEco Code - 修复：详情卡页头三枚摘要（星等/星座/距离）切换天体不刷新（Phase 3ad 回归）
+
+- **现象（真机复现）**：搜 `Mars` 选中 → 页头摘要 星等 `1.09` / 星座 `巨蟹座` / 距离 `1.6550 AU`；再搜 `Saturn` 选中 → 同屏标题 `土星`、类型、实时高度、时角、模型均更新，但这三枚摘要仍是火星旧值。上一片 ffmpeg 专项已记为“附带观察”，本片修复。
+- **A/B 定位（回归，非既有）**：在分支 `feat/api26-pages-refactor` 上临时 `git checkout --detach d7b64736ad`（即 Phase 3ad “详情卡页头抽组件 `ObjectDetailCardHeader`”的**父提交**；`build/` 生成物与引擎 `.so` 是未跟踪文件故仍留在原地），`-SkipEngine` 重建并安装，同法走 Mars→Saturn：三枚摘要分别变为 `0.34 / 鲸鱼座 / 8.4349 AU`（正确跟随）。切回分支 HEAD（`c2187a192c`）后同一序列冻结在火星旧值。**结论：Phase 3ad 引入的回归。**
+- **根因**：ArkUI V1 的局部刷新按**元素**记录依赖。`ObjectDetailCardHeader` 的三枚 `ObjectCompactMetric` 取值原本只经普通成员回调 `resolve('selectedMagnitude'/'selectedConstellation')` / `distanceSummary()` 求值 —— 回调闭包读的是**宿主**的 `objectDetailStore`，该依赖不会登记到页头组件内这三个元素上，于是 `store.selectedName` 变化只标脏标题元素（故标题会变），摘要元素永不重绘。抽成组件前它们是宿主无参 `@Builder` 的内联子树，依赖登记在宿主元素上，故正常。
+- **改动（最小根治，遵循“让取值随可观察状态变化”既有模式）**：
+  - `harmonyos/ets-source/panels/object/ObjectDetailCardChrome.ets`（88 → 91 行）：星等改为 `value: this.store.selectedMagnitude`（与 `selectedDisplayValue('selectedMagnitude')` 等价）；星座改为 `value: this.nameOf(this.store.selectedConstellation)`（`nameOf` 即宿主 `zhNameOf`，与 `resolve('selectedConstellation')` 等价）；`distanceSummary` 形参由 `() => string` 改为 `(distance, compact) => string`，调用处传 `this.store.selectedDistance` / `this.store.selectedDistanceCompact` —— 可见性与“距离未知”回退仍由宿主 `objectDistanceSummary()` 决定，两个实参仅用于在页头内**直接读 `@ObjectLink store`**、建立元素级依赖。删除页头内已无引用的 `resolve` 成员。
+  - `harmonyos/ets-source/panels/object/UnifiedObjectDetailCard.ets`（141 → 143 行）：页头调用点去除 `resolve: this.resolve`，`distanceSummary` 改为 `(_distance, _compact) => this.distanceSummaryText`（`resolve` 仍供三个页组件使用）。
+  - `scripts/test-ohos-detail-live-values.mjs`：断言由“摘要经宿主 resolve 求值”改为断言三项直接读 `@ObjectLink store`（改写 1 条、新增 2 条）。
+- **范围复核**：同病灶只波及页头三枚摘要。`ObjectDetailTabs`（观测/坐标/资料页）里的 `resolve` 调用点由 `if (this.store.X.length > 0)` 或页签切换时的**重建**驱动（新选目标会把卡片切回 `资料` 页并整体重建），故不会被内容冻结；`SelectedLiveInfoRows` / 坐标行 / 类型标签本就直读 store，无风险。
+- **真机验收**（Mate 80 Pro `192.168.50.108:40565`）：Mars → `1.09 / 巨蟹座 / 1.6549 AU`；Saturn → `0.34 / 鲸鱼座 / 8.4349 AU`；再回 Mars → `1.09 / 巨蟹座 / 1.6549 AU`（往返各一次，`devecocli ui layout` 文本取证，标题同步为 `土星`/`火星`）。`pidof com.cnchensh.stellarium` 全程存活（41712）；未改动任何持久化设置。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check` 两文件 No errors → 构建 **BUILD SUCCESSFUL**（签名 HAP 708.8 MB）→ `check-ohos-ui-contract.mjs`（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点）全绿 → 全量 `*ohos*.mjs` 扫描仅 §13.6 的 7 个存量环境类失败（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS 假设），`audit-ohos-resource-coverage.mjs` 重写的审计文档已 `git checkout` 还原 → `test-ohos-detail-live-values.mjs` 7/7、`verify-ohos-object-details.mjs` 5/5、`test-ohos-detail-image-layout.mjs` 5/5。
+- **本片新踩的坑 / 固化结论**：**ArkUI V1 中“组件内以普通成员回调求值”不会为元素登记依赖** —— 即使回调闭包每次被调用都能读到最新宿主状态，该元素仍不会因宿主/被观察对象变化而重绘；组件模板里凡是“动态值”都应以表达式形式**直接读某个装饰变量**（`@ObjectLink`/`@Prop`/`@State`），或把结果作为 `@Prop` 由父方重绘时下发。已把该结论补注释到 `ObjectDetailCardChrome.ets` 头部。
+
+## [2026-10-02] DevEco Code - 构建侧：Windows 侧车生成改为“优先 ffmpeg、缺省回退 System.Drawing”
+
+- **背景**：上一片 `e92ac23726` 用 System.Drawing 在 Windows 上生成了 50 行星 + 3 环的 `.model.rgba` 侧车，真机已验证 `source=sidecar`。用户装好 ffmpeg 后，本片让 Windows 侧车生成与 bash 版对齐：**优先 ffmpeg（逐字同参数），缺省才回退 System.Drawing**。
+- **ffmpeg 解析优先级（与 bash 版一致，另加一步 Windows 便利查找）**：① `$env:FFMPEG`（绝对路径**或**命令名）→ ② `PATH` 上的 `ffmpeg` → ③ WinGet `Gyan.FFmpeg` 包目录（`%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\*\bin\ffmpeg.exe`，默认不在 PATH 上）→ 三者皆无才回退 `System.Drawing`。同步日志明确打印本次走哪条路径（`binary: ffmpeg (...)` / `binary: System.Drawing (ffmpeg not found)`）。
+- **改动**：
+  - `scripts/sync-ohos-resources-windows.ps1` 321 → 385 行（+71/-7）：新增 `Resolve-FFmpeg`（三级解析）与 `Export-RgbaSidecarWithFfmpeg`（参数与 bash 版逐字对齐 + 临时文件原子写）；`Invoke-DetailModelSidecarBatch` 增 `-FfmpegBin` 参数并按可用性分派；侧车段打印所选路径；保留幂等（尺寸正确且不旧于源 PNG 则跳过）与逐文件失败告警。
+  - `docs/harmonyos/BUILD-WINDOWS.md`（+12/-4）：§5 第 2 条改写为“侧车生成优先 ffmpeg、缺省回退 System.Drawing”，写明三级解析、`FFMPEG` 环境变量用法与 `-SkipResources` 仍会跳过侧车。
+  - `docs/harmonyos/KNOWN-ISSUES.md`（+3/-1）：第 22 条补记 ffmpeg 优先路径、参数逐字对齐、原子写与双实现对拍结论。
+- **双实现对拍（本片核心证据；同一 PNG 两条路径生成到临时文件，尺寸必须相等）**：
+  - `mars.png`（源即 512×256，不缩放）：524288 B = 524288 B，逐像素差异 **0.0000%**，每通道 mean/max = 0/0。
+  - `sun.png`（2048×1024 → 512×256）：524288 = 524288，差异像素 **31.2225%**，mean R/G/B/A ≈ 0.117/0.116/0.118/0.000，max R3/G4/B4/A0。
+  - `moon.png`（1024×512 → 512×256）：524288 = 524288，差异像素 **72.7341%**，mean ≈ 0.534/0.534/0.542/0.000，max R8/G8/B8/A0。
+  - `saturn_rings_radial.png`（256×2 → 512×2 上采样）：4096 = 4096，差异像素 **99.8047%**，mean ≈ 7.29/6.66/6.96/1.92，max R142/G146/B139/A12（薄环带强梯度所致）。
+  - **结论**：两者尺寸、字节序、alpha 完全一致，逐通道差异处于 sub-1/255 均值量级，视觉等价；环带是上采样锐边的极端个例（alpha 亦有 ≤12 的差）。
+- **产出（本机实测）**：同步打印 `binary: ffmpeg (…Gyan.FFmpeg…\ffmpeg.exe)`、`planets: generated 50, reused 0, failed 0`、`rings: generated 3, reused 0, failed 0`；构建 rawfile 内 53 个侧车尺寸全部正确（50×524288 B + 3×4096 B）。
+- **真机验收**（Mate 80 Pro `192.168.50.108:40565`；`bm clean -d` 强制全新解包；构建**不带** `-SkipResources`）：
+  - 火星：`[detail-model] CPU texture ready uri=.../textures/mars.png bytes=524288 source=sidecar`（**无** `sidecar missing, decoding PNG fallback`）；截图确认带地表的火星球体。
+  - 土星：`[detail-model] ring texture ready path=.../saturn_rings_radial.png.model.rgba bytes=4096` + `[detail-model] CPU texture ready uri=.../textures/saturn.png bytes=524288 source=sidecar`；截图确认含环土星。
+  - `pidof com.cnchensh.stellarium` 全程存活（30737）。
+- **验证链**：未改 .ets（跳过 `arkts_check`）→ 构建（不带 `-SkipResources`）**BUILD SUCCESSFUL**（签名 HAP 708.8 MB）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点全绿 → `audit-ohos-resource-coverage.mjs` 退出 0（其重写的审计文档与重新生成的 `data/search/multilingual-sky-aliases.tsv` 均已 `git checkout` 还原）。
+- **应用侧 PNG 回退逻辑未改**：仍作为无侧车（`-SkipResources` 冻结树、清单外新增纹理）时的兜底。
+- **附带观察（与本片无关，未修）**：由火星切到土星时，`资料` 卡三枚摘要（星等/星座/距离）仍显示火星旧值（1.09 / 巨蟹座 / 1.6550 AU），而同屏标题、模型、实时高度、时角均为土星 —— 疑为选择切换时摘要状态未刷新，留待独立切片。
+- **本片新踩的坑**：`sync-ohos-resources-windows.ps1` 在**嵌套** `powershell -File` 调用（本会话的 shell 包装）下 `$PSScriptRoot` 可能为空，导致参数默认值 `Join-Path $PSScriptRoot '..'` 报空串 → 手工直接跑需显式 `-RepoRoot <repo>`；`build-ohos-hap-windows.ps1` 已显式传 `-RepoRoot`，构建路径不受影响。
+
+## [2026-10-02] DevEco Code - 构建侧：Windows 资源同步脚本生成 .model.rgba 侧车（恢复“侧车优先”路径）
+
+- **背景**：上一片 `150b332642` 让行星三维模型在侧车缺失时回退解码 PNG（可用，但每次选择都要运行时解码）。本片把构建侧补齐，走回侧车快速路径。
+- **根因对照**：bash 版 `scripts/sync-ohos-resources.sh` 用 ffmpeg `scale=512:256:flags=lanczos,format=rgba -pix_fmt rgba -f rawvideo`（行星）与 `512:2`（行星环）生成 `textures/<name>.png.model.rgba`；名单为 50 个 `MODEL_TEXTURES` + 3 个 `RING_TEXTURES`；Windows 版 `sync-ohos-resources-windows.ps1` 无此步。本机 `Get-Command ffmpeg` 不存在、`FFMPEG` 环境变量为空、仓库无约定路径（唯一命中是剪影类 App 私有目录，按既有纪律不采用）。
+- **改动（无新增外部依赖，沿用 Windows 移植版既定的 System.Drawing 路线，与 `BUILD-WINDOWS.md`/`KNOWN-ISSUES` 记载的等价实现一致）**：
+  - `scripts/sync-ohos-resources-windows.ps1` 187 → 321 行：新增 `Export-RgbaSidecar`（System.Drawing `HighQualityBicubic` 缩放 + `WrapMode.TileFlipXY` 复刻 ffmpeg/swscale 边缘处理、`Format32bppArgb` 的 BGRA→**RGBA** swizzle、临时文件原子写）与 `Invoke-DetailModelSidecarBatch`（幂等：侧车尺寸正确且不旧于源 PNG 则跳过；缺失源 PNG 跳过；失败逐文件 `Write-Warning` 并汇总）。名单与 bash 版逐字对齐；生成阶段紧跟 16-bit 归一化之后，与 bash 顺序一致。头注释补侧车说明。
+  - `scripts/build-ohos-hap-windows.ps1` 331 → 334 行：`-SkipResources` 参数文档写明侧车由资源同步生成，跳过即无侧车。
+- **产出**：资源同步打印 `planets: generated 50 … rings: generated 3 … failed 0`；构建 rawfile 与签名 HAP 内各 **53 个** `textures/*.png.model.rgba`（50×524288 B + 3×4096 B）。
+- **真机验收**（Mate 80 Pro `192.168.50.108:40565`，`bm clean -d` 强制全新解包后安装）：
+  - 火星：`[detail-model] CPU texture ready uri=.../textures/mars.png bytes=524288 source=sidecar`，**不再出现** `sidecar missing, decoding PNG fallback`；截图确认带地表的火星球体（红棕地表 + 极冠，字节序正确）。
+  - 土星：`[detail-model] ring texture ready path=.../saturn_rings_radial.png.model.rgba bytes=4096` + `CPU texture ready … source=sidecar`；截图确认含环土星。
+  - M31 无回归：`[detail-media-card] image loaded uri=.../nebulae/default/m31.png`；`pidof` 全程存活（55667）。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check` 未改 .ets（跳过）→ 构建（不带 `-SkipResources`）**BUILD SUCCESSFUL**（sync + 31 s，签名 HAP 708.8 MB）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点全绿 → 受影响脚本 `audit-ohos-resource-coverage.mjs` 退出 0（其重写的审计文档已 `git checkout` 还原）。
+- **文档**：`KNOWN-ISSUES.md` 第 22 条标记完全修复并记录侧车数量/大小与验收证据，第 2 条同步更新；`BUILD-WINDOWS.md` §5 技术债第 2 条标记已修复。
+- **本片新踩的坑**：
+  1. GDI+ `DrawImage` 默认把源外区域当透明采样 → 缩放后纹理边缘 RGB 向黑衰减、alpha 掉到 72（会让等距圆柱贴图出现暗缝）。改用 `ImageAttributes.SetWrapMode(TileFlipXY)` 镜像边缘后恢复为 `R=255 A=255`。
+  2. `Format32bppArgb` 内存是 BGRA，必须 swizzle 成 `R,G,B,A` 才能匹配 `DetailModelRasterizer.ets`（否则火星会发蓝）；纯红 PNG 离线断言 `[255,0,0,255]` 通过。
+  3. HAP 更新保留 `filesDir`，`.ohos_detail_model_rgba_v2` 标记会让 `refreshDetailModelTextures` 提前返回 → 装新包后设备仍用旧（无侧车）纹理；验收前需 `bm clean -d`（或删标记）强制重新解包。
+  4. `bm clean` 需显式 `-d`；`run-as` 在 Mate 80 上不可用。
+  5. `audit-ohos-resource-coverage.mjs` 未见侧车白名单，会把 53 个侧车计为 `textures` 的 rawfile 额外文件（“有差异”）；本轮未改审计器（超出本片范围），已在报告标注。
+
+## [2026-10-02] DevEco Code - Phase 5d-诊断：行星三维模型“本地资源解码失败”（缺 .model.rgba 侧车）修复 + 真机走查
+
+- **现象/复现**：详情卡“资料”页媒体区对 `kind=model` 天体（火星/土星）显示「本地资源解码失败 / 资源已找到，但当前设备无法显示此文件」（`ObjectMediaStore.objectInspectorMediaLoadFailed=true`）；`kind=image`（M31）正常。真机 `192.168.50.108:40565`（Mate 80 Pro）用 `searchObject Mars` 复现。
+- **根因**：model 走 `loadObjectInspectorModelRawTexture()` 读 `textures/<name>.png.model.rgba`（512×256×4=524288B CPU 侧车，由 bash 版 `sync-ohos-resources.sh` 用 `ffmpeg -vf scale=512:256,format=rgba -f rawvideo` 生成）；Windows 版 `sync-ohos-resources-windows.ps1` 未实现该步，侧车从未进入 HAP（设备与构建 rawfile 均为 0 个）。旧诊断 `JSON.stringify(Error)` 只输出 `{}`，掩盖了 `CPU texture sidecar is missing`。
+- **改动**：`pages/MainWindowNativeNode.ets` +93 行（18595 → 18688）—— 侧车缺失/读取失败时**回退解码 PNG**（`decodeLocalImage('model', desiredSize 512×256, RGBA_8888)` → `readPixelsToBufferSync` → 复用同一提交路径），环形纹理按 512×2 同法回退；新增 `describeDecodeError()`（输出 `name: message`）；`panels/object/TabletInspectorMedia.ets` 247 → 250 行，两个 `Image.onError` 改 `(err: ImageError)` 并打印 `err.error.code`/`err.message`。
+- **真机验证**：重建 HAP（39s）安装后 `searchObject Mars` → 日志 `[detail-model] sidecar missing, decoding PNG fallback` → `[detail-model] CPU texture ready bytes=524288 source=png` → `[detail-media-card] sphere loaded`；截图确认带地表的火星球体（非失败提示）。土星环 PNG（`saturn_rings_radial.png`）回退解码 + 含环渲染成功（`released pixel map kind=model-ring-texture-fallback`）。Phase 5d 沉浸叠层补走查：`devecocli ui click` 打开 `object-model-stage` → `drag` 旋转（前后截图表征位移）→ 关闭回 `object-model-inline-stage`，`pidof` 全程存活；**双指缩放未走查（`devecocli ui` 无多点触控）**。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ 构建 **BUILD SUCCESSFUL**（39s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点全绿 → 受影响 7 个详情/model 脚本全绿（`audit-ohos-resource-coverage` 重写的审计文档已 `git checkout` 还原）。
+- **文档**：`KNOWN-ISSUES.md` 新增第 22 条；`ARKTS-PAGES-REFACTOR-PLAN.md` §13.5 Phase 5d 行补真机走查结论。
+- **仍待构建侧处理**：Windows 资源同步脚本仍不生成 `.model.rgba`（本回退已让功能可用，侧车补齐后可恢复“侧车优先”的快速路径，应用逻辑已兼容两者）。
+
+## [2026-10-02] DevEco Code - Phase 7：收口（队列最后一片）
+
+- **背景/范围**：队列收尾。删死代码、复核宿主转发层、把 `observationTimeText` 收入 store、校正 `UI-ARCHITECTURE.md` 与根 `AGENTS.md`，并给出终态指标与剩余问题清单。行为零变更（纯搬移 + 删死代码 + 文档）。
+- **死代码（§11 修订 6 四类判据，级联复扫一次收敛）**：删 8 个零引用 `private` 方法 —— `toggleDrawer` / `orbitColorStyleIndex` / `toggleSkyCultureLabelPicker` / `applySkyCultureCustomColor` / `setSkyCultureFilterValue` / `toggleSkyCultureFilter` / `formatDegrees` / `morePanelActive`（`formatDegrees`、`orbitColorStyleIndex` 的同名活实现分别在 `LocationStore.ets`、`LayerViewTabs.ets`，宿主副本零引用）；删 2 个零引用字段 `gyroSensitivity`、`timeTicks`，并连带删掉只被 `timeTicks` 使用的 `TimeTick` 接口（`pages/MainWindowModels.ets`）与宿主 import；另修一处指向已删抽屉的陈旧注释。
+- **宿主转发层复核**：`return this.<store>.<x>` 型纯转发 getter **0 处**（唯一形似者是 `selectedDisplayValue()` 的 `switch` 分派表，不是转发层）；`observationTimeText` 从宿主 `@State` **收入 `state/TimeStore.ets`**（`timeRateText` 早已在 store），宿主 8 处读写改为 `this.timeStore.observationTimeText`；`nmText`/`nmSub`/`nmAccent`/`nmBg` 等夜视色助手经复核为 `nightMode` 的纯函数、但调用点全在宿主，下沉 `NightModeStore` 不减少行数，**记为后续可选优化**；`floatingPanel`/`compactPanel` 保留定论仍成立（体内 `this.panelContent()`，规则 9），源码注释已补说明。
+- **文档校准**：`docs/harmonyos/specs/UI-ARCHITECTURE.md` 全量校正 —— 行数 32,693 → 18,593、删除全部易失真的 `文件:行号`（改组件名 + 路径）、§4.4 改为壳层组件表（`panels/shell/*.ets`）、§6 命中分布改宿主实测、§10 补契约/切片脚本；根 `AGENTS.md` 新增 UI 结构约定条目（`panels/panels/**`、`panels/shell/**`、`state/*Store.ets`、V1-only、`.id()` 契约）；`ARKTS-PAGES-REFACTOR-PLAN.md` §5/§13.5 修正已失效的 `AGENTS.md §2.2` 引用并写入收口结论与剩余问题清单。
+- **单体手术**：`pages/MainWindowNativeNode.ets` **18,689 → 18,593 行，净 −96**；另改 `state/TimeStore.ets`（+1 字段）、`pages/MainWindowModels.ets`（−1 接口）。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`，**BUILD SUCCESSFUL**，67 s）→ `check-ohos-ui-contract.mjs`（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 183+ 文件，完好）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需显式设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）；`audit-ohos-resource-coverage` 首次运行重写审计文档后退出 1、重跑即 0，已 `git checkout` 还原。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565` Mate 80 Pro，1280×2832；`aa dump -l` 确认 `state #FOREGROUND`）：
+  1. **启动存活**：`aa start -a QAbility` 后 `pidof`=31739，全程未变；`ui layout` 见底部 5 项 Dock 与 Dock 时钟。
+  2. **面板开合 + 实时刷新**：`stellarium-cli.mjs --command openUiPanel --payload time --bundle com.cnchensh.stellarium` → `{"ok":true,"accepted":true,"panel":"time"}`；`ui layout` 出现 `"时间 19:57:08"` + `"2026-10-02 · 1x"`（均来自 `timeStore.observationTimeText`）；3 秒后重取为 `"时间 19:57:18"`，证明 store 字段实时驱动标题刷新；`closeUiPanel` 后回到 Dock；`pidof` 仍 31739。
+- **测试同步（规则 8）**：无脚本读取本次删除的方法/字段名（`scripts/*.mjs` grep 为 0），无需改动测试；`observationTimeText` 移动不改变组件 `@Prop` 接口。
+- **本片新踩的坑**：编辑 `orbitColorStyleIndex` 时先误用"以调用点替换"方向造成方法体重复一次，随即以精确旧文本 → 目标文本删除重复块并复扫为 0；教训：删除只能"精确旧文本 → 目标文本"，不可反向拼装。
+- **队列状态**：§13.5 表内 1–12 **全部完成**，队列已空；剩余已知问题（陀螺仪校准面板无入口、`settings_quick_legacy` 无入口死分支、`object` 分支在 expanded 不可达、`OFFLINE_APPGALLERY_BUILD` 跳过 astro 四段）已记入 `ARKTS-PAGES-REFACTOR-PLAN.md` 收口结论。
+## [2026-10-02] DevEco Code - Phase 6d：抽取 `interactiveGuideShell` 壳层并收口 Phase 6
+
+- **背景/范围**：Phase 6（壳层）第四片、收口片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder interactiveGuideShell()`（78 行）下沉到 `harmonyos/ets-source/panels/shell/InteractiveGuideShell.ets`（116 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9）；V1 状态体系不变（`@Prop` + 回调注入），不迁 V2。
+- **无规则 9 触发面**：壳内全部导览动作键已是既有 `GuideButton` 组件，**壳内不含任何宿主 `@Builder` 调用**，故无需上移调用点；宿主调用点由 `this.interactiveGuideShell()` 一行展开为 `if (this.guideState.active) { InteractiveGuideShell({…}) }`（原 `if/else` 与 `ScriptFocusShell` 分支结构不变）。
+- **注入与几何**：导览状态是宿主 `@State guideState`（`GuideState` 普通对象，非 `@Observed`，不适用 `@ObjectLink`），逐项以 `@Prop` 下发 —— `guidePhase/index/count/automatic/remaining`；文案由宿主算好：`guideTitle=I18n.t(currentGuide().title)`、`guideCredit=I18n.t(currentGuide().credit)`、`guideStepTitle=planetZh(currentGuideStep().title)`、`guideStepText=currentGuideStep().text`、`guideStepKey=currentGuideStep().target`；卡片几何 `guideCardWidth/Height/X/Y()` 仍留宿主（被 `handleScriptControlDragTouch` 与 `isGuideCardPoint` 复用）算好后以 `cardWidth/cardHeight/cardX/cardY` 传入。3 个触摸/动作回注：`onSkyTouch`（仅 `exploring` 阶段转交 `handleSkyTouch`）、`onControlDragTouch`、`onAction`（转 `executeGuideRequest('guideAction', a)`）。
+- **逐字保留**：`.id('guide-stop')` / `.id('guide-content')`、`HitTestMode.Block/Default/BLOCK_HIERARCHY/Transparent`、`backgroundColor('rgba(10,18,30,0.92)')`、`borderRadius(UI_RADIUS_PANEL)`、`constraintSize({ minHeight: 52 })`、`TransitionEffect.OPACITY`、`ForEach([guideStepText], …, guideStepKey)`（同一 target 复用同一节点，与原 `step.target` 键序一致）。原壳无参数化 `@Builder`。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**18,751 → 18,689 行，净 −62**：按边界签名正则（`  @Builder\r\n  interactiveGuideShell() {` 非贪婪到 `\r\n  }\r\n\r\n`）删除 80 行（删前已断言收尾 `}` 为 2 空格、紧邻下一成员注释块），调用点 1 行展开为 18 行组件调用，import 由 `GuideButton` 换为 `InteractiveGuideShell`（`GuideButton` 在宿主已无其它引用）。提取后先 `grep` 新文件 `this.` 残留：仅组件自有成员与一处注释文字。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（38 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（>183 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 8 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设、`audit-ohos-resource-coverage` 首次运行重写审计文档后退出 1、重跑即 0，与本片无关且已 `git checkout` 还原）。
+- **测试同步（规则 8）**：`scripts/test-ohos-guide.mjs` 原先正则截取单体里的 `interactiveGuideShell()` 方法体；本片删除该 builder 后改读 `panels/shell/InteractiveGuideShell.ets`，断言变量名随组件改为 `guidePhase`，并将 `guideState.phase === 'exploring'` 断言移到组件、宿主改为 `guideState.active` → 9/9 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565` Mate 80 Pro，1280×2832；`aa dump -l` 确认 `state #FOREGROUND`；`pidof` 全程 21204 存活）：
+  1. **进入导览**：`stellarium-cli.mjs --command startGuide --payload solar-neighbours --bundle com.cnchensh.stellarium` → `{"ok":true,"accepted":true}`；`getGuideState` = `active:true, phase:preparing, index:0, count:5`；`ui layout` 见 `Button#guide-stop` / `Scroll#guide-content` / `guide-closer/wider/explore/auto-on/previous/pause/next` —— `InteractiveGuideShell` 正常挂载（`guide-previous` 因 `index=0` 不可点，无 `clickable`）。
+  2. **点按后实时刷新**：点 `guide-next` `(1014,2640)` → `getGuideState` 由 `preparing/index0` 实时变 `observing/index1`；`ui layout` 同步显示卡片标题行 `"2 / 5 · 金星"`（`planetZh` 译名）、步序正文更新、按钮组实时切换（`guide-previous` 变为 `clickable`）。
+  3. **拖动回调**：在卡片标题区拖拽 `(500,1550)→(500,1250)` → 卡片整体上移约 300 px（`guide-stop` y 1477→1181），确认回注的 `handleScriptControlDragTouch` 生效、几何 `@Prop` 实时重算。
+  4. **停止 + 存活**：点 `guide-stop` → `getGuideState` = `active:false, phase:idle`，导览卡消失；`pidof` 仍 21204（排除运行期退出）。
+  5. **相邻分支冒烟**：`playScript --payload tests/goto.ssc` → `ui layout` 见 `"脚本播放中"` + `"停止"`，点 `(1119,700)` 停止后脚本壳消失、`pidof` 仍 21204 —— 宿主 `if/else` 分发两分支均正常。
+- **测后恢复**：导览与脚本均已 `stop` 回到 `idle`（`endGuidedSession` 恢复面板可见性与陀螺仪开关）；卡片拖动只改会话态 `scriptControlOffset`，未写 `settings.json`。
+- **Phase 6 收口结论**：6 个壳层全部组件化（`ScriptFocusShell` 6a / `CompactShell`+`HarmonyShell` 6b / `HoverObservatoryShell`+`ExpandedShell` 6c / `InteractiveGuideShell` 6d）；宿主 `build()` 只剩「顶层锚点与触摸层 + 三布局壳分发 + 脚本/导览焦点层 + Dock 命中区 + 录制/极轴镜/三 Overlay 浮层」五类结构，面板容器仍由宿主薄 `@Builder`（`compactPanel`/`floatingPanel`）渲染（规则 9）。**Phase 7 收口待办已写入 `§13.5`**（校正 `UI-ARCHITECTURE.md` 失真行号与壳层命名、更新 `AGENTS.md`、复核宿主转发层、死代码扫描）。
+- **本片新踩的坑**：无新增（继承 6c 教训：删 builder 前先断言收尾行缩进为 2 空格；中文文档补丁改走「write 临时文件 → node 拼接」以规避命令行代码页与 JS 模板字符串转义，并把注入的 LF 统一归一为 CRLF）。
+## [2026-10-02] DevEco Code - Phase 6c：抽取 `hoverObservatoryShell` 与 `expandedShell` 壳层
+
+- **背景/范围**：Phase 6（壳层）第三片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder hoverObservatoryShell()`（142 行）下沉到 `harmonyos/ets-source/panels/shell/HoverObservatoryShell.ets`（242 行），`@Builder expandedShell()`（128 行）下沉到 `panels/shell/ExpandedShell.ets`（232 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9）；V1 状态体系不变（`@Prop`/`@ObjectLink` + 回调注入），不迁 V2。
+- **规则 9（宿主薄 @Builder 上移）**：`hoverObservatoryShell` 中段 `if (panelVisible) { Stack { this.compactPanel() } … }` 与 `expandedShell` 中段 `if (panelVisible) { Stack({ alignContent: TopStart }) { this.floatingPanel() } … }` 均上移到宿主调用点（仍在同一布局过渡包裹内）。`compactPanel()` / `floatingPanel()` 是 Phase 4h 定论保留的宿主薄 @Builder（体内即 `panelContent()` 的 `activePanel` 分发链），组件无法跨边界调用。面板底与 Dock 顶无重叠，层序视觉等价（面板 zIndex 30 仍高于组件根 zIndex 1）。
+- **`expandedUiAllowed()` 的 `panel-scroll-*` / `panel-close` / `panel-content-*` 锚点**：原 `if (this.expandedUiAllowed())` 由宿主算好以 `@Prop expandedUiAllowed` 传入（组件内不重复阈值判定），分支结构逐字保留；面板相关 id 全在宿主薄 @Builder 内，逐字未动，契约 42 锚点不变。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**18,823 → 18,751 行，净 −72**：按边界签名正则删除两段（非行号算术）、两个调用点各展开为组件调用 + 上移面板，新增 2 行 import，并删除 4 个随壳下沉而不再使用的 import（`BottomDock` / `GyroCalibPanel` / `UnifiedObjectDetailCard` / `ObjectDetailConnectorLayer`）及 `PanelChromeExtras` 的 `DockClockLayer`。提取后先 `grep` 新文件 `this.` 残留：仅见组件自有成员与注释文字。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（38 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（182 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步（规则 8）**：`test-ohos-guide.mjs` 原以 `page.indexOf('  expandedShell()')` 作导览壳切片终点；本片删除该 builder 后改为直接正则截取 `interactiveGuideShell` 自身方法体（相邻壳删除不再影响锚点）→ 9/9 全绿；`test-ohos-detail-live-values.mjs`（2 处 `activeIndex: this.bottomCardIndex` 断言）与 `test-ohos-model-scroll.mjs`（详情卡调用点计数 3）改为并入 `HoverObservatoryShell.ets` + `ExpandedShell.ets` → 均全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565` Mate 80 Pro，1280×2832；`aa start` 后 `pidof`=12762 全程存活）：
+  1. **进布局**：`devecocli ui layout` 见底部 5 项 Dock（搜索/时间/位置/图层/更多功能）、Dock 时钟 "19:33"、右上两枚紧凑快捷 —— 本片未改动的相邻手机分支 `CompactShell` 正常挂载；应用存活。
+  2. **相邻分支点按实时刷新**：点 Dock "时间" `(416,2674)` → 时间面板实时打开，`ui layout` 出现 `Button#panel-close` / `Scroll#panel-scroll-zh_CN` / `Column#panel-content-zh_CN` 与 "时间 19:34:06"、"2026-10-02 · 1x"、倒带/停止/实时/减速/快进行；点 `panel-close` 关闭后 Dock 复现，`pidof` 仍 12762（排除规则 9 运行期退出）。
+  3. **实测局限**：`hoverObservatoryShell` / `expandedShell` 是平板/折叠展开壳（`isFoldHoverLayout` / `isExpandedLayout`），Mate 80 Pro 与 Pura 90 Pro 两个可用设备均为 phone 构型，**本机构型不可达**；两壳仅经编译 + 契约 + 脚本静态覆盖（结构失衡/引用残留由预检与构建双重拦截）。
+- **测后恢复**：仅开合时间面板（会话态，未写 `settings.json`），无持久化设置需恢复。
+- **本片新踩的坑**：`@Builder expandedShell()` 的**方法收尾 `}` 缩进为 4 空格而非 2**（源码既有不一致；`hoverObservatoryShell` 则为 2 空格）。首轮删除按 `\n  }` 非贪婪收尾，导致 `expandedShell` 正则越过其真实结尾、连带删掉紧随其后的 `compactTopQuickX()` 方法（构建报 `Property 'compactTopQuickX' does not exist on type 'WindowNativeNode'`）。改为以"根 Stack 末修饰符 `.hitTestBehavior(HitTestMode.Transparent)` + 收尾 `}`"作结尾锚点（分别匹配 4/2 空格）后即通过。**教训：删 builder 前先断言其收尾行的实际缩进。**
+## [2026-10-02] DevEco Code - Phase 6b：抽取 `compactShell` 与 `harmonyShell` 壳层
+
+- **背景/范围**：Phase 6（壳层）第二片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder private compactShell()`（165 行）下沉到 `harmonyos/ets-source/panels/shell/CompactShell.ets`（268 行），`@Builder private harmonyShell()`（90 行）的常驻 chrome 下沉到 `panels/shell/HarmonyShell.ets`（90 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **`compactShell` → `CompactShell`（规则 9）**：原壳中段 `if (panelVisible) { Stack({ alignContent: Bottom }) { this.compactPanel() } … }` 上移到宿主调用点（仍在同一布局过渡包裹内）。`compactPanel()` 是 Phase 4h 定论保留的宿主薄 @Builder（体内即 `panelContent()` 的 `activePanel` 分发链），无法跨组件调用（@BuilderParam 真机退出）。面板底 = Dock 顶 = `skyHeight-80`，与壳内其余元素**无重叠**，故上移后层序视觉等价（面板 zIndex 30 仍高于组件根 zIndex 1）。其余全部（全屏星空触摸层、BottomDock、DockClockLayer、CompactTopQuickControls、GyroCalibPanel、ObjectDetailConnectorLayer、UnifiedObjectDetailCard）逐字下沉，60 余个状态以 `@Prop`/`@ObjectLink` 注入、动作回注宿主，`HitTestMode`/`zIndex`/`curves.springMotion` 逐字保留。
+- **`harmonyShell` → `HarmonyShell`（分发与顶层命中靶上移）**：原 `harmonyShell()` 根 Stack 混有 ① 三种布局壳分发 ② 视图中心坐标叠层 ③ 顶层 Dock 命中靶（`Block`，原注释即强调必须与星空触摸层同级才能拦住星图手势）④ 陀螺仪指引 ⑤ 点击反馈气泡。其中 ① 里 `hoverObservatoryShell`/`expandedShell` 仍是宿主 @Builder（规则 9 禁止 @BuilderParam），且 ③ 的 `Block` 只拦**同级/其后兄弟子树**，故**分发与命中靶上移到宿主调用点**（同 Phase 6a 的导览分发处置），`HarmonyShell` 只承载不依赖同级拦截的三层常驻浮层（坐标叠层 / 陀螺仪指引 / 点击反馈气泡），根用 `HitTestMode.Transparent` 保证同级布局壳仍可命中。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**18,913 → 18,823 行，净 −90**：按边界签名正则（`@Builder … harmonyShell() {` / `@Builder … compactShell() {` 非贪婪到 `\n  }`）删除两段（非行号算术），调用点 1 行展开为分发 + `CompactShell({…})` + 上移面板 + 顶层命中靶 + `HarmonyShell({…})`，新增 2 行 import。提取后先 `grep` 新文件 `this.` 残留：全为组件自有成员。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（39 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（>180 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 8 个，其中 7 个为 §13.6 存量环境类（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设），另 1 个 `test-ohos-model-scroll` 系本片搬迁打断后已同步（见下）。
+- **测试同步（规则 8）**：`test-ohos-guide.mjs` 原以 `page.indexOf('  harmonyShell()')` 作导览壳切片终点，本片删除该 builder 后改为 `'  expandedShell()'`（新的下一个壳）→ 9/9 全绿；`test-ohos-model-scroll.mjs` 断言详情卡第三处调用点（`height(...detailCardHeight()).zIndex(N).hitTestBehavior(BLOCK_HIERARCHY)`）在单体出现 3 次，本片其一处搬到 `CompactShell.ets`，改为在 `source + compactShell` 上计数并兼容 `detailHeight` 形态 → 5/5 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565` Mate 80 Pro，1280×2832；`aa dump -l` 确认 `QAbility` `state #FOREGROUND`；`pidof` 全程 63133 存活）：
+  1. **进布局**：`aa start` 后 `devecocli ui layout` 见底部 5 项 Dock（搜索/时间/位置/图层/更多功能）、Dock 时钟 "19:19"、右上两枚紧凑快捷（陀螺仪/音频），即 `CompactShell` 挂载；引擎加载后自动选中 `QIANFAN-12`，`CompactShell` 内的 `UnifiedObjectDetailCard` 渲染出完整详情卡（`Scroll#object-detail-content-scroll` / `Image#object-detail-satellite-icon` / 观测·坐标·资料·操作四页签）。
+  2. **CompactShell 点按实时刷新**：点 Dock "时间" `(416,2674)` → 时间面板实时打开，`ui layout` 出现 `Button#panel-close` / `Scroll#panel-scroll-zh_CN` / `Column#panel-content-zh_CN` 与 "时间 19:19:49"、"实时" 速率行；再点 `panel-close` `(1083,1737)` 关闭，Dock 复现。
+  3. **HarmonyShell 点按实时刷新**：点右上音频快捷 `(1140,441)` → 宿主 `flashHint` 改 `actionHint`，`HarmonyShell` 顶部气泡实时显示 "音乐：关"（截图实证；截图中音频按钮回落到未激活态）。再次点按复位。
+- **测后恢复**：音频（`musicEnabled`）先开后关，回到初始的关闭态（气泡文案 / 按钮未激活态双重确认）；未改动其它持久化设置。
+- **Phase 6 进度**：6 个壳层第 2、3 个（`compactShell` / `harmonyShell`）完成。剩余：`hoverObservatoryShell` 142 / `expandedShell` 128 → `interactiveGuideShell` 78。
+## [2026-10-02] DevEco Code - Phase 6a：抽取 `scriptFocusShell` 壳层（Phase 6 首片）
+
+- **背景/范围**：Phase 6（壳层）第一片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder private scriptFocusShell()`（212 行）下沉到 `harmonyos/ets-source/panels/shell/ScriptFocusShell.ets`（251 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **归属与分发（规则 9）**：原壳首行是 `if (this.guideState.active) { this.interactiveGuideShell() } else { …播放分支… }`。交互导览壳尚未组件化，把宿主 `@Builder` 经 `@BuilderParam` 回传会触发真机整应用退出（规则 9 实证），故**该分发上移到宿主调用点**：`if (this.scriptPlaybackVisible()) { if (this.guideState.active) { this.interactiveGuideShell() } else { ScriptFocusShell({…}) } }`；本组件只承载播放分支，树结构与命中语义不变。
+- **注入（规则 4/6）**：脚本状态均为宿主 `@State`（无 ScriptStore），逐项以 `@Prop` 传入——6 个布尔（`scriptWaiting` / `scriptRunning` / `replaying` / `replayPaused` / `playbackVisible` / `compact` / `hasCaptions`）、4 个文案（`displayName`=`scriptZh(...)` / `captionText` / `waitText` / `rateText`）、5 个尺寸与坐标（`keyButtonWidth` / `controlWidth` / `controlHeight` / `controlX` / `controlY`）；7 个动作回注（`onSkyTouch` / `onControlDragTouch` / `onContinue` / `onChangeRate(delta)` / `onToggleReplayPause` / `onStop` / `onSendKey`）。宿主在调用点读这些 `@State` 构造入参即订阅改值，改值后重绘并推送新 `@Prop`。
+- **单容器根（规则 7）**：根为唯一 `Stack`（内层全屏 `Stack` 触摸层 + `Column({ space: 6 })` 控制条）；`HitTestMode.Block` / `Default`、`zIndex(0/2/120)`、`backdropBlur(28)`、`UI_RADIUS_*`、`curves.springMotion(...)`、6 个 `ScriptKeyButton` 调用与 `− + [ ] N B` 标签逐字保留。原壳无 `.id(...)`（42 锚点不变）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**19,098 → 18,913 行，净 −185**：按边界签名正则（`@Builder … scriptFocusShell() {` 非贪婪到 `@Builder … harmonyShell() {` 之前）删除整段 212 行（非行号算术）、调用点 3 行改写为 31 行分发、新增 1 行 import。提取后先 `grep` 新文件 `this.` 残留：仅 16 个 `@Prop` 与组件自有成员，无宿主方法残留。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（40 s；新文件仅一条既有类 `fill` API 版本告警）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（178 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步（规则 8）**：`scripts/test-ohos-guide.mjs` 原以 `page.indexOf('  scriptFocusShell()')` 作导览壳切片终点；本片删除该 builder 后改为 `page.indexOf('  harmonyShell()')`（新的下一个壳）→ 9/9 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565` Mate 80 Pro，1280×2832；`aa dump -l` 确认 `QAbility` `state #FOREGROUND`；`pidof` 全程 53421 存活）：
+  1. **进入**：`stellarium-cli.mjs --command playScript --payload screensaver.ssc --bundle com.cnchensh.stellarium --hdc <hdc.exe>` → `{"ok":true,"accepted":true,"pending":true}`；`devecocli ui layout` 见 `Text "脚本播放中"` + 脚本名 `"屏幕保护模式"` + `"1.0x"` + `"停止"` 与 6 个功能键（`− + [ ] N B`）—— 即 `ScriptFocusShell` 播放分支正常挂载。
+  2. **点按后实时刷新**：点速率 `+` 按钮 `(465,699)` → `1.0x` 实时变 `2.0x`（宿主 `scriptRate` 改值 → `rateText` `@Prop` → 组件重绘）。
+  3. **退出**：点 `停止` `(1081,699)` → 壳消失、回到主界面（底部 `搜索/更多功能` 复现），`pidof`=53421 仍存活（排除规则 9 运行期退出）。
+- **测后恢复**：未改动任何持久化设置（脚本速率是会话态，`stopScriptPlayback` 已复位；未写 `settings.json`）。
+- **本片新踩的坑**：
+  1. **模拟器上连续 `install -r` 会让 HAP 内 `.abc` 校验和损坏** —— 现象为启动即 `cppcrash`（`Reason:Signal:SIGABRT`，`LastFatalMessage:[common] Invalid file offset, checksum mismatch. The abc file has been corrupted`），崩在 `JsAbilityStage::LoadModule → ExecuteModuleBufferSecure`，**发生在渲染任何 UI 之前**，与源码无关；`uninstall` 后干净重装即恢复。遇到此现象先做干净重装，不要按"运行期退出回归"排查。
+  2. **`devecocli ui click` 只接受坐标 / `--id`，无按文本点击**；无 `id` 的宿主壳只能用 `ui layout` 取 center 后点击。此缺口已记录。
+  3. **Windows 上 `stellarium-cli.mjs` 默认 `--hdc` 指向 macOS DevEco 路径**（`/Applications/…`）→ 必须显式传 `--hdc "D:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"`。
+- **Phase 6 进度**：6 个壳层第 1 个（`scriptFocusShell`）完成。剩余：`compactShell` 165 / `harmonyShell` 90 → `hoverObservatoryShell` 142 / `expandedShell` 128 → `interactiveGuideShell` 78。
+## [2026-10-02] DevEco Code - Phase 5d：抽取 `objectInspectorModelOverlay` 叠层并收口 Phase 5
+
+- **背景/范围**：Phase 5（overlay）最后一片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder private objectInspectorModelOverlay()`（47 行，含 `@Builder` 前缀）下沉到 `harmonyos/ets-source/panels/overlay/ObjectInspectorModelOverlay.ets`（80 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **分工（§13.1 规则 4/6）**：`objectMediaStore.objectInspectorModelImmersive` 判定留在宿主调用点；模型数据（`objectInspectorModelPixelMap` / `objectInspectorProceduralKind` / `objectInspectorModelOverlayOpacity`）经 `@ObjectLink objectMediaStore` 引用语义读取——**跨组件传 `image.PixelMap` 必须走 `@ObjectLink`**（Phase 5c 实测 `@Prop` 深拷贝会致 `Image.onError`）；标题 `objectDetailStore.selectedName`、模式提示 `objectInspectorModelNotice()`、顶部安全区 `mediaPreviewTopInset()` 由宿主算好以 `@Prop`（titleText/noticeText/topInset）传入；关闭/重置/舞台手势三个动作回注宿主（`onCloseOverlay` / `onResetView` / `onStageTouch`），旋转与双指缩放算法及触摸计数仍留宿主。
+- **单容器根（规则 7）**：根为全屏 `Stack`（`zIndex(1100)` + `hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)` 逐字保留），内含背景拦截层与内容 `Column`；`object-model-close` / `object-model-stage` 两个 id 锚点、`HitTestMode.Block/None`、`ImageFit.Contain`、`UI_RADIUS_PILL` 逐字保留（契约 42 锚点不变）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**19,134 → 19,098 行，净 −36**：删 `@Builder`（按边界签名正则删除、非行号算术，并收起合并处多出的一个空行）、调用点改为 `if (this.objectMediaStore.objectInspectorModelImmersive) { ObjectInspectorModelOverlay({...}) }`、新增 1 行 import。提取后先 `grep` 新文件 `this.` 残留：仅 store、3 个 @Prop、3 个回调，全为组件自身成员。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（41 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（177 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步（规则 8）**：`scripts/test-ohos-model-scroll.mjs` 与 `scripts/test-ohos-procedural-model.mjs` 原先从单体切 `private objectInspectorModelOverlay()` 文本，本片改为直接读新组件文件（断言 `onStageTouch(event)` / `BLOCK_HIERARCHY` / `object-model-close`），并保留宿主的 `onModelTouch: ... handleObjectInspectorModelTouch` 与 `inlineModelSize` 断言 → 5/5 与 12/12 全绿。
+- **真机**：本片**未连真机**——`hdc list targets` 为空、`tconn 192.168.3.95:40565` 失败，改用模拟器 `Pura 90 Pro`（`127.0.0.1:5555`，x86_64 UI-only）。
+  - **模拟器已验证**：`install -r` 成功 → `aa start -a QAbility -b com.cnchensh.stellarium` → `aa dump -l` 确认 `state #FOREGROUND`、`pidof`=13010 存活；`devecocli ui click (189,2602)` 打开「搜索」面板（`ui layout` 出现 `panel-close` / `panel-content-zh_CN` / `search-browser-scroll`），再点 `panel-close` 关闭，全程 `pidof` 存活（排除规则 9 运行期退出）。
+  - **模拟器无法覆盖（待真机）**：三维模型叠层本体（打开 → 旋转/双指缩放 → 关闭）。原因：模拟器为 `QAbility.engineLessEmulatorUiOnly()` UI-only 通道，**无 Stellarium/Qt 引擎**，无法选中天体、无法解码模型纹理/程序化模型，`objectInspectorModelImmersive` 永远为 false，入口不可达（§3·补）。该片以 `test-ohos-model-scroll.mjs` / `test-ohos-procedural-model.mjs` 静态覆盖新组件文件，**待真机走查**。
+- **测后恢复**：未改动任何持久化设置（仅打开/关闭搜索面板）。
+- **本片新踩的坑**：新组件表头注释若含字面 `.id('...')`，`check-ohos-ui-contract.mjs` 的 `totalIdAnchors`（正则 `\.id\(`，扫全部 `.ets`）会把注释里的 `.id(` 计入，误报锚点 42→44。改为在注释里以 `object-model-close` / `object-model-stage` 指代，不写字面 `.id(`。
+- **Phase 5 收口结论**：4 个 overlay **全部组件化、无遗留**——
+  1. `polarScopeOverlay` → `panels/overlay/PolarScopeOverlay.ets`（Phase 5a，`e443afe7dc`）；
+  2. `objectInspectorMediaPreviewOverlay` → `panels/overlay/ObjectInspectorMediaPreviewOverlay.ets`（Phase 5b，`8b944f2307`）；
+  3. `skyCultureArtPreviewOverlay` → `panels/overlay/SkyCultureArtPreviewOverlay.ets`（Phase 5c，`332f18be5e`）；
+  4. `objectInspectorModelOverlay` → `panels/overlay/ObjectInspectorModelOverlay.ets`（Phase 5d，本片）。
+  宿主 `build()` 中对应位置只剩 `if (可见性) { <Component>({...}) }`，无参数化 `@Builder`、无 `@BuilderParam`。下一步：**Phase 6 六个壳层**（`scriptFocusShell` 212 / `compactShell` 165 / `hoverObservatoryShell` 142 / `expandedShell` 128 / `harmonyShell` 90 / `interactiveGuideShell` 78）。
+## [2026-10-02] DevEco Code - Phase 5c：抽取 `skyCultureArtPreviewOverlay` 叠层
+
+- **背景/范围**：Phase 5（overlay，每片只做一个）第三片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder private skyCultureArtPreviewOverlay()`（60 行）下沉到 `harmonyos/ets-source/panels/overlay/SkyCultureArtPreviewOverlay.ets`（88 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **归属确认（量化）**：`skyCultureArtPreviewPixelMap` 原为宿主 `@State`；写入点仅 4 处（open 清零 / close 清零 / 解码回调写入 / 重试清零），均由用户动作或单次解码驱动、**非逐帧**，不构成"高频写入"。本片把它收进 `state/SkyCultureViewStore.ets`（新增 1 字段 + `import { image }`），宿主与叠层共用同一实例。
+- **分工（§13.1 规则 4/6）**：`artPreviewOpen` 判定留在宿主调用点；标题/加载失败三态/`artPreviewName`/`artPreviewPixelMap` 经 `@ObjectLink skyCultureViewStore` 读取；主题色 `nmText/nmSub/nmAccent/nmBg` 与顶部安全区 `mediaPreviewTopInset()` 由宿主算好以 `@Prop`（textColor/subColor/accentColor/bgColor/topInset）传入；关闭/加载完成/解码失败/重新加载四个动作回注宿主（前三个成员名与宿主方法一致），新增宿主方法 `retrySkyCultureArtPreview()`（承接原行内重试体）。
+- **单容器根（规则 7）**：根为全屏 `Stack`（`zIndex(101)` + `hitTestBehavior(HitTestMode.Transparent)` 逐字保留），内含背景拦截层与内容 `Column`；`Image(...).objectFit(ImageFit.Contain)`、`rgba(0,0,0,0.28)`、`UI_RADIUS_PILL` / `UI_RADIUS_CONTROL`、`Button('重新加载')` 逐字保留。该 overlay 无 `.id(...)` 锚点（42 锚点不变）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**19,173 → 19,134 行，净 −39**：删 `@Builder`（按边界签名正则删除，非行号算术）、删宿主 `@State skyCultureArtPreviewPixelMap` 声明、`this.skyCultureArtPreviewPixelMap`（10 处）改写为 `this.skyCultureViewStore.artPreviewPixelMap`、调用点改为 `if (artPreviewOpen) { SkyCultureArtPreviewOverlay({...}) }`、新增 1 行 import 与 1 个宿主方法。提取后 `grep` 新文件 `this.` 残留：仅 store、5 个 @Prop、4 个回调，全为组件自身成员。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（55 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（176 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 与 `mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565`，1280×2832；`aa dump -l` 确认 `QAbility` 前台；`pidof` 全程存活）：
+  1. `图层` → `文化` 页签 → 展开「文化星座绘图（85 本地绘图）」→ 点首张缩略图 → **全屏叠层渲染**：`devecocli ui layout` 看到标题 `Text [84,190,1042,252] "天鹰座"`、关闭 `Button [1042,144,1196,298]`、页脚 `"离线文化绘图"`；截图确认 Aquila 绘图按 `ImageFit.Contain` 完整显示。
+  2. **点按后实时刷新（hilog 实证）**：打开瞬间 `[detail-media] create image source kind=sky-culture-art path=.../aquila.png` → `[sky-culture-art] pixel map ready` → `[sky-culture-art] preview loaded`（`Image.onComplete` 驱动，证明异步解码结果经 `@ObjectLink` 实时到达组件）；`pidof`=35432 存活，排除规则 9 运行期退出。
+  3. 点关闭按钮 → 叠层消失、`pidof`=35432 仍存活（关闭回调正确）。
+- **测后恢复**：真机当前文化由原先的 `modern`（85 绘图；`getSkyCultureState` 回读 `id=modern`、`artCount=85`）确认并保持；未改动其它持久化设置。
+- **本片新踩的坑（重要）**：**`@Prop` 不能承载 `image.PixelMap`**——初版按 5a 风格用 `@Prop artPreviewPixelMap` 传解码结果，真机 `[sky-culture-art] pixel map ready` 后立即 `preview decode failed`、`Image.onError` 显示「绘图资源无法显示」（同一现象：列表缩略图的 `@Prop` PixelMap 亦不渲染）。原因是 `@Prop` 对类对象做深拷贝，PixelMap 拷贝后不可用。改为把结果收进 `@Observed` store、组件以 `@ObjectLink` 引用语义读取后，`Image.onComplete` 正常、绘图完整渲染。结论：跨组件传 PixelMap 一律走 `@ObjectLink` store（与 Phase 5b `objectMediaStore`、Phase 3am `SkyCultureMakerStore.artworkPixelMap` 同法），**禁止 `@Prop`**。
+## [2026-10-02] DevEco Code - Phase 5b：抽取 `objectInspectorMediaPreviewOverlay` 叠层
+
+- **背景/范围**：Phase 5（overlay，每片只做一个）第二片。把 `pages/MainWindowNativeNode.ets` 的 `@Builder private objectInspectorMediaPreviewOverlay()`（66 行）下沉为 `harmonyos/ets-source/panels/overlay/ObjectInspectorMediaPreviewOverlay.ets`（88 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **分工（可见性/派生值留宿主，§13.1 规则 4/6）**：`objectInspectorMediaFullscreen` 判定留在宿主调用点；标题由宿主 `zhNameOf(objectDetailStore.selectedName)` 算好后以 `@Prop titleText` 传入；顶部安全区 `mediaPreviewTopInset()` 由宿主算好后以 `@Prop topInset` 传入；媒体数据（PixelMap / label / loading / failed / path）经 `@ObjectLink objectMediaStore` 读取；解码完成/失败/重试/关闭四个动作全部回注宿主，成员名与宿主方法一致（`closeObjectInspectorMediaPreview` / `onObjectInspectorMediaPreviewLoaded` / `onObjectInspectorMediaPreviewError` / `retryObjectInspectorMediaPreview`），使既有 `onClick`/`onComplete`/`onError` 语义逐字保留。
+- **单容器根（规则 7）**：根为全屏 `Stack`（`zIndex(1000)` + `hitTestBehavior(HitTestMode.Transparent)` 逐字保留），内含背景拦截层与内容 `Column`；`Image(...).objectFit(ImageFit.Contain)`、`UI_RADIUS_PILL` / `UI_RADIUS_CONTROL` 逐字保留。该 overlay 原本无 `.id(...)` 锚点（契约 42 锚点不变）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`）：**19,230 → 19,173 行，净 −57**：删旧 `@Builder`（以边界签名正则删除，非行号算术）、调用点改为 `if (this.objectMediaStore.objectInspectorMediaFullscreen) { ObjectInspectorMediaPreviewOverlay({...}) }`、新增 1 行 import。提取后先 `grep` 新文件 `this.` 残留：仅 `objectMediaStore` / `titleText` / `topInset` / 4 个回调，全部为组件自身成员。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（39 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（>175 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 需设备、`mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步（规则 8）**：`scripts/test-ohos-detail-image-layout.mjs` 的 `preview` 切片由「从单体切 `objectInspectorMediaPreviewOverlay`」改为直接读新组件文件；因组件保留 `@ObjectLink objectMediaStore` 与回调名 `closeObjectInspectorMediaPreview`，两条断言逐字不变 → 5/5 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565`，1280×2832；`aa dump -l` 确认 `QAbility` 前台；`pidof` 全程存活）：
+  1. 搜索「Andromeda」→ 选仙女座 → 详情卡媒体区显示「点按查看」（`kind='constellation'` 且 PixelMap 已解码）；
+  2. 点按媒体卡 → **全屏叠层渲染**：`devecocli ui layout` 看到标题 `Text [84,156,1042,230] "仙女座"`（`@Prop titleText`）、标签 `"当前天空文化星座绘图"`（`@ObjectLink objectMediaStore.objectInspectorMediaLabel`）、关闭按钮 `Button [1042,144,1196,298]`、页脚 `"图像来自本地随应用分发的 Stellarium 资源；未在此页面联网下载。"`；
+  3. 点按关闭按钮 → `hilog` 实测 `[detail-media-preview] close`（注入回调链路生效），叠层消失，`pidof`=11467 仍存活，排除规则 9 运行期退出；
+  4. 注：本机 Mars 媒体 `kind='model'`（走 `objectInspectorModelOverlay`，非本片），其 PNG 纹理解码失败与本片无关；本片改用可解码的仙女座深空绘图路径完成全屏预览走查。
+- **测后恢复**：未改动任何持久化设置（仅搜索框文本，非持久化）。
+- **本片新踩的坑**：回调成员名沿用宿主方法名（而非 `onXxx`）可让按文本切片的测试断言零改动；前提是这些名字不与 `CustomComponent` 属性方法冲突（`closeObjectInspectorMediaPreview` 等安全）。
+
+## [2026-10-02] DevEco Code - Phase 5a：抽取 `polarScopeOverlay` 叠层（Phase 5 首片）
+
+- **背景/范围**：`panelContent` 收口（Phase 4l）后进入 Phase 5（overlay，每片只做一个）。本片把 `pages/MainWindowNativeNode.ets` 的 `@Builder private polarScopeOverlay()`（127 行）下沉为 `harmonyos/ets-source/panels/overlay/PolarScopeOverlay.ets`（147 行）。**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **分工（几何/命中留宿主，§13.1 规则 6）**：`polarScopeControlWidth()` / `polarScopeTopInset()` / `polarScopeFooterHeight()` 与 `skyWidth` / `skyHeight` 仍由宿主计算（手工命中路由 `isUiPoint` / `isDockPoint` / `handleSkyTouch` 与 `syncNativePolarScopeOverlay()` 复用同一口径），以 `@Prop`（controlWidth / topInset / footerHeight / skyWidth / skyHeight）传入；全屏透明层 `onTouch` 只注入 `onSkyTouch` 转发（避开 `CustomComponent.onTouch`）；读数由宿主从 `polarScopeData` 取好（isSouthHemisphere / hourAngleText / viewAngleText）；翻转开关状态在宿主 `@State`，组件回注 `onHorizontalFlipChange` / `onVerticalFlipChange`，宿主新增 `setPolarScopeHorizontalFlip` / `setPolarScopeVerticalFlip` 承载原 onChange 的 `syncNativePolarScopeOverlay()` + `callInteractive('setActionChecked', ...)`。
+- **单容器根（规则 7）**：原 `@Builder` 的唯一根是 `if (this.polarScopeVisible) { Stack() … }`；下沉后可见性判定留在宿主调用点，组件根即那个全屏 `Stack`（`zIndex(101)` 与 `hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)` 逐字保留，避免隐藏时吞掉手势）。稳定 id 原样保留：`polar-scope-center` / `polar-scope-close` / `polar-scope-flip-horizontal` / `polar-scope-flip-vertical`。
+- **单体手术**（`pages/MainWindowNativeNode.ets`：**19,314 → 19,230 行，净 −84**）：删旧 `@Builder`（127 行）、调用点改为 `if (this.polarScopeVisible) { PolarScopeOverlay({…}) }`（25 行）、新增 2 个宿主方法与 1 行 import。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`，**BUILD SUCCESSFUL**，38 s）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（174 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步（规则 8）**：`scripts/test-ohos-polar-scope.mjs` test 3 原先按文本从单体切 `polarScopeOverlay`（提取后边界失效），改为直接读 `panels/overlay/PolarScopeOverlay.ets`，断言随之下沉到组件（`this.controlWidth` / `this.footerHeight` / `this.topInset` / `this.skyHeight - this.footerHeight - 12` / `onSkyTouch(event)` / `BLOCK_HIERARCHY`），并保留宿主断言 `handleSkyTouch(event)` 与三条几何方法仍在宿主 → 4/4 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565`；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle` + `--hdc`；`pidof`=4801 全程存活）：
+  1. `openUiPanel polarScope` → `devecocli ui layout` 看到四个 id：`Button#polar-scope-center` / `Button#polar-scope-close` / `Toggle#polar-scope-flip-horizontal` / `Toggle#polar-scope-flip-vertical`。
+  2. **点按实时刷新（像素）**：`ui click --id polar-scope-flip-horizontal` → 开关区 [456,2514,147×84] 与点前截图逐像素差 **mean 331.9 / max 593**（同帧左侧静态区 mean 0.29 / max 1，证明是局部刷新），再次点按后与初始 **完全相同（mean 0 / max 0）** → `@Prop` 回写与还原双向生效。
+  3. **点按实时刷新（CLI 回读）**：`getSessionState` 的 `flipHorz` 由 **false → true → false**，证明组件 onChange → 宿主回调 → native `setActionChecked` 链路正确且已还原。
+  4. 点 `polar-scope-center` 后 `pidof` 仍 4801；点 `polar-scope-close` 后 `polar-scope` 四个 id 全部消失、`pidof` 仍 4801 → 关闭回调正确、无运行期退出（排除规则 9）。
+- **测后恢复**：`flipHorz` / `flipVert` 与 `fovDeg`(=60) 均回到测前基线（`getSessionState` 回读确认），面板已 `closeUiPanel`；未改动任何持久化设置。
+- **本片新踩的坑**：① 旧 `@Builder` 的删除正则（`(?s)\r?\n  @Builder\r?\n<escaped sig>.*?\r?\n  \}`）会在接缝处多留一条空行（builder 前的空行与 builder 后的空行叠加），需再折叠一次；② PowerShell 里自定义函数名 `cli` 与 `Clear-Item` 别名冲突，会把命令当路径处理（报 `找不到路径 …getSessionState`），函数必须改名。
+## [2026-10-02] DevEco Code - Phase 4l：抽取 `astro` 面板，Phase 4 收口
+
+- **背景/范围**：`panelContent` 的 `astro` 分支（**1,980 行**）是 4k 复核确认 29 个具名分支中**最后一个含内联 UI** 的分支。本片把它与随行的 astro 域状态整体下沉：`state/AstroStore.ets`（140 字段）+ `panels/astro/AstroPanel.ets`（2,255 行），判定条件 `activePanel === 'astro'` 留宿主；**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 3/9），不迁 V2。
+- **AstroStore**（`harmonyos/ets-source/state/AstroStore.ets`，151 行，`@Observed`）：只放面板 UI **直接**读写的 140 个数据字段（rts / almanac / planetPositions / hec / celestial / ephemeris / planetCalc / planetPair / altAz / graph / annualElevation / observability / lunarElongation / planetTimeSeries / eclipse / planetaryTransit / moonPhase / phenomena / astroContext / astroCalcSnapshot / tonightAstro 等），类型与默认值逐条从宿主复制。宿主私有的序列号计数器、起始年月日、picker 标志、`astroRequestedTab`/`astroTransitionId` 仍留宿主（UI 不直接读）。
+- **AstroPanel**（`harmonyos/ets-source/panels/astro/AstroPanel.ets`，2,255 行）：3 个 `@ObjectLink`（`store: AstroStore` / `wutStore` / `objectDetailStore`）+ 5 个颜色 `@Prop`（`textColor`/`subColor`/`panelColor`/`accentColor`/`lineColor`）+ **普通 `Scroller` 成员**（宿主仍需它做滚动复位与 `getAstroPanelState` 上报）+ 114 个注入回调。回调集中在一个导出的 `AstroPanelHost` 接口（含 `noopAstroPanelHost()` 全 no-op 工厂做成员默认值），宿主在调用点用对象 literal 逐条接上（加载器 `load*`、跳转 `jumpTo*`、目标选择器 `open*Picker`、导出 `exportCurrentAstroCsv`、状态上报、以及跨域/共用的纯标签与几何助手）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`：**21,304 → 19,314 行，净 −1,990**）：分支体（1,980 行）替换为 `AstroPanel({...})` 单次组件调用（约 132 行，含 114 行回调接线）；140 个 `@State` 字段声明删除，残余 `this.<field>` 全部改写为 `this.astroStore.<field>`（宿主 save/restore、`schedulePanelDataLoad`、CLI 路由、picker 返回、`publishAstroPanelState` 等 20+ 处触点在列）；新增 2 行 import。搬运全程用 Node 脚本按**边界签名定界 + 引用闭集变换**（**未用行号算术**），变换后断言：新组件内 `this.*` 残余集合 ⊆ {store/host/scroller/三色/objectDetailStore/wutStore/getUIContext}、宿主字段声明清零、`AstroPanel(` 恰 1 处、单体括号净深度 0。
+- **口径（刻意不搬）**：夜视三色由宿主算好以 `@Prop` 传入；`wutStore` / `objectDetailStore` 以 `@ObjectLink` 复用（WUT 相关助手与 `observing` 面板共用，故留宿主回注）；`Scroller` 以普通成员传入（宿主 CLI 滚动命令与状态上报仍用它）；桥接/文件导出/日期选择器/AppStorage 上报全部回注宿主（§13.1 规则 6）。组件成员名避开 `borderColor`/`scale`/`onTouch`/`background`（分隔线色命名 `lineColor`）。
+- **Phase 4 全链达标复核（收口）**：`panelContent` 全部具名分支除 `floatingPanel`/`compactPanel`（4h 定论：体内即 `this.panelContent()` 的宿主薄 `@Builder`，不迁）外，**均已退化为单次组件调用**；对 `panelContent` 区段实测 `Text(`/`Row(`/`Button(`/`ForEach(`/`Toggle(` 构造计数**全为 0**，无内联 UI 残留。结论已写入 `§13.5`。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL** → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（173 文件）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步**（规则 8）：
+  - `scripts/test-ohos-astro-motion.mjs`：面板体断言改读 `AstroPanel.ets`；`selectAstroTab/Group/Filter` 仍读宿主，夹具改为 `astroStore` 子对象并同步 4 处状态断言、`Scroll(this.scroller)`、`this.host.selectAstroFilter(...)`、`this.store.astroTab === N` 切片边界 → 9/9 全绿。
+  - `scripts/test-ohos-wut-layout.mjs`：tonight 区段改从 `AstroPanel.ets` 切片、边界改 `this.store.astroTab === 6` → 4/4 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565`，1280×2832；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle` 且 `--hdc` 指向本机 hdc；`pidof`=63361 全程存活、未崩，排除规则 9 运行期退出）：
+  1. `openUiPanel astro` → 面板就地渲染：一级导航「观测 / 位置与数据 / 事件与历法」、二级 tab、`导出当前数据`、上下文卡（`Beijing` · 时间 · 平恒星时 · 太阳/月亮高度）与 `参数快照`。
+  2. **点按①（一级导航）**：`devecocli ui click` 命中 `Text#astro-group-2`（事件与历法）→ 二级 tab 就地变为「天象 / 日食 / 年历」；`getAstroPanelState` 回读 **group=2, tab=3, transitionId=1**（实时刷新）。
+  3. **点按②（二级 tab）**：点击 `Text#astro-tab-8`（年历）→ `getAstroPanelState` 回读 **tab=8, transitionId=2**；截图确认上下文卡末尾 `参数快照 · 年历 · 当前模拟日期 · 当前观测地点` 随切档更新（`@ObjectLink store` → 组件重渲染），`pidof` 仍存活。
+  4. **未走查**：引擎相关的真实计算值/图表曲线像素（依赖 native 桥）未逐档对照，仅验证渲染与状态链路。
+- **测后恢复**：`setAstroTab 5` 把持久化的 `astroTab`/`astroGroup` 复原为测前的 **group=0 / tab=5**（已回读确认）；面板已关闭。
+- **本片新踩的坑**：① 生成器把接口/对象 literal 用 `'\n'` join，**漏了成员间的逗号** —— ArkTS 报逐行 `',' expected`（接口成员可省略逗号，但对象 literal 不可），宿主闭包对象与组件 no-op 工厂两处同时中招；改为 `',\n'` join 即修复。② 文本切片测试的边界也要跟着字段前缀走：分支体里 `this.astroTab === 5` 变 `this.store.astroTab === 5` 后，旧 `indexOf` 边界返回 −1，会让整个区段断言静默失效（test 3 因此先报错）。③ PowerShell `Set-Content -Encoding UTF8` 会给脚本加 BOM，需用 .NET `UTF8Encoding($false)` 去 BOM 并保留 CRLF 与末尾换行。
+## [2026-10-02] DevEco Code - Phase 4k：抽取 `scripts` 面板（收口 248 行分支）
+
+- **背景/范围**：`panelContent` 的 `scripts` 分支（248 行）是 4j 全链复核确认仅剩的两个含内联 UI 的分支之一（另一个是 `astro` ≈2,000 行）。本片把分支体原样下沉到 `panels/panels/ScriptsPanel.ets`，判定条件 `activePanel === 'scripts'` 留宿主；**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 9）—— 本分支原本也没有参数化 builder，故不存在冻结风险。
+- **新增文件**：`harmonyos/ets-source/panels/panels/ScriptsPanel.ets`（310 行）：1 个 `@ObjectLink tools`（ToolsStore，录制开关实时刷新）、27 个 `@Prop`（脚本列表 / 回放 / 录制 / 屏幕 MP4 / 帧序列导出状态与五色主题）、4 个函数成员（`scriptZh` / `scriptDesc` / `scriptMetaLine` / `scriptSourceLine`，因设置页共用仍留宿主）+ 20 个回注回调；`build()` 根为单个 `Scroll`。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，21,485 → 21,303 行，净 −182）：分支体（248 行）替换为 `ScriptsPanel({...})`（66 行）+ 1 行 import；搬运用「读原行 + 有序列 literal 替换 + 宿主签名正则定界」（**未用行号算术**），改前断言：匹配唯一、单体括号深度 0→0、`ScriptsPanel(` 恰 1 处。
+- **成员名雷区**：分隔线颜色命名 `lineColor`（避开 `borderColor`）；根节点单容器。相对路径层级：`panels/panels/` 下引用 `../../pages/*`、`../../state/*`、`../../common/ui/*`。
+- **测试同步**：全量 `*-ohos*.mjs` 扫描仅 7 个失败，**全部为 §13.6 存量环境类**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）；无脚本引用被搬文本，故无需改测试。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL** → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（171 文件）→ 全量脚本扫描（同上 7 个存量失败）。
+- **真机**（`com.cnchensh.stellarium`，`192.168.50.108:40565`，1280×2832；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle`；`pidof` 全程存活、未崩，排除规则 9 运行期退出）：
+  1. `openUiPanel scripts` → 面板就地渲染：顶部 `GuideLibrary`（导览库）、`原版脚本 · 兼容模式` 列表逐条显示 `scriptZh` / `scriptDesc` / `scriptMetaLine`（作者·许可证·版本）/ `scriptSourceLine`（来源），实证回注的函数成员链路；
+  2. 滚动到「录制操作」区，**点按录制名 `TextInput` 并键入 → 字段即时显示输入**（`onSetRecordName` → 宿主 `recordName` → `@Prop` 回流）；
+  3. **决定性证据**：切到 `time` 面板再切回 `scripts`（组件销毁重建），滚动回录制区，录制名仍为先前输入值 —— 值由宿主 `@State` 持有并经 `@Prop` 重新注入，回调链路端到端成立；
+  4. 未真正开始录制 / 未触发 MP4 录屏（避免写文件与系统授权弹窗）。
+- **测后恢复**：重启应用清除瞬态 `@State`（`recordName` 非持久化），面板已关闭。
+- **队列更新**：本片后 `panelContent` 29 分支中**仅剩 `astro` 未达标**，已写入 `§13.5`。
+
+## [2026-10-02] DevEco Code - Phase 4j：`settings` 分支 + 末尾 `else` 收口，并全链复核
+
+- **背景/范围**：按体量取两个仍未达标的实分支 —— `settings`(约 406 行) 与末尾 `else`（历史“应用配置”回退页，约 219 行），分别抽成 `panels/panels/SettingsPanel.ets` / `ConfigFallbackPanel.ets`。分支体原样下沉、判定条件留宿主；**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 9）；跨域/桥依赖用回调回注（§13.1 规则 6）；不迁 V2。`floatingPanel`/`compactPanel` 按 4h 结论不动。
+- **新增文件**：
+  - `harmonyos/ets-source/panels/panels/SettingsPanel.ets`（**548 行**）：4 个 `@ObjectLink` store（`gyroStore` / `overlayStore` / `deltaTStore` / `timeSettingsStore`）+ 44 个 `@Prop` + 46 个回注回调 + 1 个普通 `Scroller` 成员；8 个子标签页（设备与隐私 / 主设置 / 信息 / 附加 / 时间 / 数据 / 插件管理 / 视图导航）内联 UI 逐字下沉，装配既有 `DevicePrivacySection` / `ViewCoordinateSettings` / `LanguageRow` / `EphemerisToggleRow` / `InfoRow` / `InformationModeButton` / `InformationSwitchRow` / `TimeSettingsSection` / `DeltaTSettingsBlock` / `NavigationSwitchRow`；顶层 `Column().width('100%')` 保留。
+  - `harmonyos/ets-source/panels/panels/ConfigFallbackPanel.ets`（**277 行**）：4 个 `@ObjectLink` store（`gyroStore` / `layerStore` / `nightModeStore` / `telescopeStore`）+ 8 个 `@Prop` + 14 个回调；`GyroscopeRow` / `LanguageRow` / `InfoRow` / `QuickChipRow` 与观测列表、方向/视场 chips、投影切换、夜视、星空翻转、语言/星空文化选择逐字下沉；顶层 `Column().width('100%')` 包住原多根体（规则 7）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`：**21,983 → 21,485 行，净 −498**；`git diff --stat` = 132 插入 / 630 删除）：两处分支体（406 / 219 行）替换为 `SettingsPanel({...})`（97 行）/ `ConfigFallbackPanel({...})`（32 行），新增 2 行 import，删 3 行已随迁而失效的 import（`LanguageRow,GyroscopeRow` / `QuickChipRow` / `SettingsRows` 及 `SUPPORTED_LANGUAGES`）。分支体用「读原行 + 有序 literal 替换 + 残余正则兜底」搬运（**未用行号算术**）。成员名避开 `borderColor`/`scale`/`onTouch`/`background`（边框色命名 `lineColor`）。
+- **口径（哪些刻意不搬）**：`settings` 的 `navigationMaxFov` 原由 `Slider.onChange` 直写宿主 `@State`；组件内改为本地 `@State maxFovDraft`（`aboutToAppear` 由 `@Prop` 同步、`onChange` 改草稿、点“应用”经 `setNavigationMaxFov` 回注宿主），**行为与“拖动改值、应用才下发生效”一致**。末尾 else 的 `useMetricUnits = <x>; callInteractive('setConfigString',…)` 合并为 `setLegacyDistanceUnit`；观测列表清空/点选合并为 `clearObservingList` / `selectObservingTarget`；`sensZh` 等宿主助手沿用回调回注。
+- **全链达标复核结论**：`panelContent` 的 `if/else if` 链 29 个分支中，**除 `astro`(≈2,000 行) 与 `scripts`(248 行) 外全部退化为「单次组件调用」**（`settings` / 末尾 `else` 本片完成）。`floatingPanel`/`compactPanel` 为宿主薄 `@Builder`（4h 定论，不参与判定）。**更正**：4h/4i 记录的「仍未达标」清单本就含 `scripts`，本片复核确认其仍在（24 个 >8 行分支中唯二仍含内联 UI 者），留待后续切片。
+- **末尾 else 的性质（复核更正）**：该分支实为**正常导航不可达的遗留回退页** —— `setPanel()` 把 `config`/`pluginManager` 归一为 `settings`，CLI `isCliPanelName` 白名单也不含未知名；故只做行为保持的组件化（保留代码），未删。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过（组件/store `this` 自洽、单体括号深度 0、`@Builder` 成对）→ `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL**（首次因 `common/ui/*` 相对路径写成 `../common/ui` 报 `Could not resolve`，改为 `../../common/ui` 后通过）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（>170 个 .ets）→ 全量 `*-ohos*.mjs` 扫描：失败 7 个，**全部为 §13.6 存量环境类**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设）。
+- **测试同步**：
+  - `scripts/test-ohos-settings-choice-motion.mjs`：信息模式按钮调用点与 `pending` 门控随设置分支迁入 `SettingsPanel.ets`，改读组件文件（2 处断言）→ 4/4 全绿。
+  - `scripts/test-ohos-satellite-panel.mjs`：test 2 按宿主文本切 `satellites` 分支，该分支早已在更早切片下沉为 `SatellitesPanel.ets`（**基线即失败**，本片经 `git show HEAD:` 复核确认），同步改读组件文件 → 7/7 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`，1280×2832；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle`；`pidof`=30663 全程存活、未崩，排除规则 9 运行期退出）：
+  1. `openUiPanel settings` → 面板就地渲染（标签行「设备与隐私 / 主设置 / 信息 / 附加 / 时间 / 工具 / 脚本」+「主设置」内容「界面语言 / 行星历表 / DE430 未安装」）。
+  2. **标签切换实时刷新**：点「信息」→ 内容刷新为「信息级别 / 自定义信息 / 详情卡指向线（Toggle）」；点「脚本」→ 脚本列表就地渲染（`来源: scripts/morsels_2.ssc`，证明 `scriptZh`/`scriptSourceLine`/`Scroller` 链路）；点「时间」→「日期格式」区块出现。
+  3. **点按后文本即时刷新（决定性证据）**：切「附加」→ 当前投影显示「极射」；点 chips「鱼眼」→ 同一 `Text` 节点文案**立即由「极射」变为「鱼眼」**（`@Prop currentProjection` 驱动宿主重渲染），点回「极射」**复原**。
+  4. **未走查**：`ConfigFallbackPanel` 正常导航不可达（归一 + CLI 白名单），未强制其渲染；只做静态与经宿主编译验证。
+- **测后恢复**：投影设置已点回「极射」（测前状态）；面板已 `closeUiPanel` 关闭。
+- **本片新踩的坑**：① 新组件放在 `panels/panels/` 时，`common/ui/*` 的相对路径是 **`../../common/ui/*`**（`common/` 与 `pages/` 同级），不是 `../common/ui/*` —— `arkts_check` 不解析模块路径会漏报，只有构建报 `Could not resolve`。② 末尾 else 里 `Slider` 直写宿主 `@State`，下沉组件后 `@Prop` 不可写 → 用本地 `@State` 草稿 + `aboutToAppear` 同步 + 应用时回注。
+
+## [2026-10-02] DevEco Code - Phase 4i：收尾 `telescope` / `settings_quick_legacy` / `oculars` 三个分支
+
+- **背景/范围**：Phase 4h 收尾检查列出的「仍未达标」分支中取体量较小的 3 个 —— `telescope`(23) / `settings_quick_legacy`(180) / `oculars`(278)，各抽成 `panels/panels/*Panel.ets`。分支体原样下沉、判定条件 `activePanel === '…'` 留宿主；**无 `@BuilderParam`、无参数化 `@Builder`**（§13.1 规则 9）；跨域/桥依赖用回调回注（§13.1 规则 6）；不迁 V2。`floatingPanel`/`compactPanel` 按 4h 结论不动。
+- **新增文件**：
+  - `harmonyos/ets-source/panels/panels/TelescopePanel.ets`（**60 行**）：`@ObjectLink store: TelescopeStore` + 7 个主题色 `@Prop` + 12 个动作回调；体内 `Scroll{ Column({space:8}){ Text 提示 + Lx200Panel }}` 逐字下沉（唯一容器根 `Scroll()`）。
+  - `harmonyos/ets-source/panels/panels/OcularsPanel.ets`（**316 行**）：`@ObjectLink store: TelescopeStore` + 5 个 `@Prop` + 13 个回调；277 行内联 UI 与全部 `if (this.store.xxx)` 条件原样下沉，复用既有 `OcularSelector` / `OcularMetric`（唯一容器根 `Scroll()`）。
+  - `harmonyos/ets-source/panels/panels/SettingsQuickLegacyPanel.ets`（**238 行**）：`@ObjectLink` 四个 store（`gyroStore` / `overlayStore` / `nightModeStore` / `telescopeStore`）+ 18 个 `@Prop`（含 `skyCultures: string[]` 与两个 `CatalogHealthEntry`）+ 21 个回调；组装既有 `DevicePrivacySection` / `ViewCoordinateSettings` / `LayerSwitchRow`；距离单位写回与 `callInteractive('setConfigString',…)` 回注宿主（唯一容器根 `Scroll()`）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，**22,380 → 21,983 行，净 −397 行**；`git diff --stat` = 65 插入 / 462 删除）：三个 `} else if` 分支体（23 / 277 / 173 行，含前置 `// 快捷设置面板` 注释）替换为三处 `XxxPanel({...})` 调用（18 / 22 / 41 行），新增 3 行 import；判定条件留在宿主。分支体用「读原行 + 有序 literal 替换」搬运（**未用行号算术**），删后先正则兜底新文件 `this\.(?!…)` 残留为 0 再构建。成员名避开 `borderColor`/`scale`/`onTouch`/`background`/`onDragEnd`/`enabled`。
+- **口径（哪些刻意不搬）**：`settings_quick_legacy` 读取的宿主标量（FOV / 投影 / 语言 / 星文化 / 距离单位 / 目录健康 / 陀螺仪灵敏度文案）与写回全部经 `@Prop` + 回调，**不建新 store**（这些字段在宿主被多处使用，如 `useMetricUnits` 22 处、`currentSkyCulture` 35 处）；`catalogHealthText` / `catalogHealthColor` / `sensZh` 仍被 `settings` 分支与末尾页复用，故以 `catalogHealthTextOf` / `catalogHealthColorOf` / `@Prop gyroSensitivityText` 回注宿主而非迁走。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过（组件 `this` 自洽、单体括号净深度 0、`@Builder` 成对）→ `arkts_check`（4 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）**BUILD SUCCESSFUL** → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（168 个 .ets）→ 全量 `*-ohos*.mjs` 扫描：失败 8 个，**全部与 §13.6 存量一致**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`test-ohos-satellite-panel` test 7 纯 C++、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设），无新增。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle`；`pidof` 全程存活、未崩，排除规则 9 运行期退出）：
+  1. **`telescope`**：`openUiPanel telescope` → 「望远镜控制」+ LX200 提示与设备列表就地渲染；点设备槽行（`selectTelescopeProfile`）→ 面板像素区（100–1170 × 1650–2500）**4213 采样点变化，maxΔ=249**；滚动后新载入的「设备槽 1 / 离线模拟器 / LX200 TCP 设备」编辑器可见，证明 `@ObjectLink store` + 回调链实时刷新。
+  2. **`oculars`**：`openUiPanel oculars` → 「目镜模拟」+「需要先选择观测目标」+ 目镜模式开关渲染；点目镜「Plossl 26mm」→ 计数由 `1 / 18` **实时变为 `2 / 18`**，面板像素区 **16435 采样点变化，maxΔ=313**；再点回「Plossl 40mm」复原为 `1 / 18`。
+  3. **`settings_quick_legacy`**：该分支**在仓库内无任何 UI 入口**（全 `ets-source` 仅 `panelContent` 分支自身引用；`isCliPanelName` 白名单不含 → CLI 明确 `[cli-ui] rejected panel=settings_quick_legacy`）。为取得运行期证据，**临时**把 `settings_quick_legacy` 加入 `isCliPanelName` 白名单后构建安装，`openUiPanel` 成功渲染（「设备与隐私 / 转动设备浏览星空 / 陀螺仪灵敏度 / 撤回隐私同意」+「内置数据目录」+「显示」+「视场角」+「星图文化」+「距离单位」等全部就位）；点「千米」→ 选中高亮由「英里」**移到「千米」**（截图裁剪实证），hilog `[cli-ui] opened panel=settings_quick_legacy`。**验证后已把白名单改动完整还原并重新构建**（最终 `git diff` 仅剩本片预期改动；最终 HAP 已重装并再次冒烟 `telescope`）。
+- **测后恢复**：`settings_quick_legacy` 面板距离单位点回「英里」（测前状态）；测试中误触星文化 chip 致当前文化变为「中国象林星图」，已用 CLI `setSkyCulture modern` 还原为「现代（国际天文学联合会）」（同一 id `modern`，仅显示名不同；未改默认文化、未写 `setCurrentSkyCultureAsDefault`）；`oculars` 目镜选择点回 index 0。
+- **本片新踩的坑**：① `settings_quick_legacy` 是**无入口的死分支**（hub 列表与 `isCliPanelName` 都不含），「三支各真机点按」对该支无法直接达成；本片以「临时放开 CLI 白名单 → 验证 → 还原 → 重新构建」的方法取得运行期证据，并在 §13.5 记下该分支应否清理的后续判断。② `settings_quick_legacy` 面板的 `Scroll` 在状态变化后会**重排/回滚**，按固定坐标连点两次会命中移位后的别的控件（本次误触星文化 chip）——真机交互应在每次点按前重新 `ui layout` 取坐标，不要复用旧坐标。
+## [2026-10-02] DevEco Code - Phase 4h：`layers` 分支收口（`LayersPanel`）+ `floatingPanel`/`compactPanel` 结论
+
+- **背景/范围**：Phase 4f/4g 已把 `layers` 分支体内 7 个 `view*Tab` 全部组件化，本片把该分支整体下沉为 `panels/panels/LayersPanel.ets`，并收尾 `floatingPanel` / `compactPanel` 与「所有实分支是否已是单调用」的检查。
+- **新增文件** `harmonyos/ets-source/panels/panels/LayersPanel.ets`（**252 行**）：单组件，`@ObjectLink` 四个 store（`layerStore` / `layerViewStore` / `skyCultureViewStore` / `skyCultureSettingsStore`）、主题色 / `nightModeOn` / `viewTab` / `expandedLayout` / `foldTablet` / `viewTabContentOpacity` / `viewTabContentOffsetX` / `layerTabs` / 星空文化列表与解码结果的 `@Prop`、`mapContext` 普通成员、43 个回调；体内只组装 `LayerPresetBar` + `LayerTabs` + 六个 `Layer*Tab` + `SkyCultureViewTab`，**无 `@BuilderParam`、无参数化 `@Builder`**，顶层 `Column().width('100%')` 逐字保留（§13.1 规则 7）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，**22,451 → 22,380，净 −71 行**）：`} else if (this.activePanel === 'layers') {` 分支体（**149 行**，18071–18218）替换为 `LayersPanel({...})`（**78 行**），判定条件留在宿主；新增 1 行 import。分支体用「读原行 + 有序 literal 替换」搬运（未用行号算术删代码），并用正则兜底 `this\.(applyLayerSwitch|…|nmText|nightModeStore|…)` 残留为 0。
+- **`floatingPanel`(55) / `compactPanel`(46) 保留为宿主薄 `@Builder`（本片论证）**：两者体内唯一内容槽是 `this.panelContent()`，而 `panelContent` 是 §6.1 要求长期留在宿主的 `activePanel` 分发链；ArkUI 无「按名实例化 builder」能力，把宿主 `@Builder` 传进子组件的唯一手段是 `@BuilderParam` —— 已由真机 A/B（§13.1 规则 9）证明「渲染即整应用退出」。故二者**无法**改成组件，除非先把 `panelContent` 整体组件化（须等剩余实分支全部下沉）。**保留不影响达标口径**：§6.1 的「每支 ≤8 行单调用」只针对 `panelContent` 的 `if/else if` 分支，`floatingPanel`/`compactPanel` 是壳层 chrome、不参与该判定。
+- **实分支收尾检查**（`panelContent` 33 个分支，逐分支扫「组件调用数 + 原生布局语句」）：
+  - **已达标（分支体只含一次组件调用、无内联 UI）**：`more` `observeHub` `dataHub` `automationHub` `object` `time` `place` **`layers`（本片）** `pointerCoordinates` `commands` `search` `help` `catalogs` `bookmarks` `mosaicCamera` `archaeoLines` `angleMeasure` `navStars` `satellites` `meteorshowers` `scenery3d` `skyCultureMaker` `nebulaTextures` `observing` `tools` `audio`。其中 `object`(52) / `place`(44) / `satellites`(59) 虽体量 > 8 行，但纯属「一个组件 + 大量 `@Prop`/回调」，判定条件已在宿主，符合「分支退化为纯分发」的目标形态（`≤8 行`口径只适用于薄调用支）。
+  - **仍未达标（体内仍有内联 UI）**：`settings`(406) / `astro`(1981) / `oculars`(278) / `scripts`(249) / `settings_quick_legacy`(180) / `telescope`(23)；末尾 `else`（`config` 回退页，约 430 行，含内联 `Row/Text/Button/ForEach` + 多个已抽出组件混排）亦未达标。以上留待 Phase 4 后续片。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过（组件 `this` 自洽、单体括号净深度 0）→ `arkts_check`（2 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）BUILD SUCCESSFUL（首次因 `onRefreshSimulationYear(true)` 实参不符报 `Expected 0 arguments, but got 1`，修正后重跑通过）→ `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（**165 个 .ets**）→ 全量 `*-ohos*.mjs` 扫描：失败 8 个，**全部与 §13.6 存量一致**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`test-ohos-satellite-panel` test 7 纯 C++、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设），无新增；`test-ohos-mist-horizon.mjs`（4f 已改读 `LayerViewTabs.ets`）全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`，机型 `SGT-AL00` / `phone` / 1280×2832；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle`；`pidof`=51127 全程存活、未崩）：
+  1. `openUiPanel layers` → 面板就地渲染（`LayerPresetBar` + 标签行 + 天空页签内容）——即**紧凑面板（`compactPanel`）路径**：本机为 phone，`harmonyShell` 走 `!isFoldHoverLayout && !isExpandedLayout` 的 `compactShell` → `compactPanel`。
+  2. **标签切换实时刷新**：点标签行「标记」→ 面板内容区（112,1840–1166,2450）像素 **99.7% 变化**（采样 160,735 点，changed 160,258，maxDiff 650），证明 `viewTab` 经 `@Prop` 驱动 `LayersPanel` 重建。
+  3. **开关点按实时刷新**：点「黄道线」开关 → 像素区（960,2370–1140,2460）**69.3% 变化**（采样 maxDiff 543）；hilog 实证 `StellariumArkUI: setLayer send actionShow_Ecliptic_Line|1` → `StellariumQt: command received: "setActionChecked" "actionShow_Ecliptic_Line|1"` → `setLayer actionShow_Ecliptic_Line ok=1`（`onToggleLayer` → `applyLayerSwitch` → `setLayer` 全通）。
+- **测后恢复**：CLI `setActionChecked actionShow_Ecliptic_Line|0` 还原（`getState` 复核 `actionShow_Ecliptic_Line:false`）；`viewTab` 为瞬时 UI 态已点回「天空」；未改任何持久化设置。
+- **未走查**：`floatingPanel` —— 真机为 phone（`SGT-AL00`），`floatingPanel` 只在 `isExpandedLayout`（平板/横屏大屏）的 `expandedShell` 路径，本机不可达；其本片未做任何改动（原样保留）。
+- **本片新踩的坑**：搬运分支体时「一刀切 literal 替换」会把**回调实参**错留在转发体内 —— 原宿主写法 `this.setSkyCultureArtStatus(rawPath, 'decodeFailed')` / `this.refreshSkyCultureSimulationYear(true)` 被替换成 `this.onArtDecodeError(rawPath, 'decodeFailed')` / `this.onRefreshSimulationYear(true)`，而转发成员签名与子组件一致是**零/一参**，实参应留在**宿主闭包**里。`arkts_check` 对「实参个数」不报错，靠构建（`Expected 0 arguments, but got 1`）兜住 —— §13.2「必须跑构建」再次被验证。
+## [2026-10-02] DevEco Code - Phase 4g：`viewSkyCultureTab` 819 行收口 —— `SkyCultureSettingsStore` + `SkyCultureViewTab`
+
+- **背景/范围**：Phase 4f 留下的最后一件 —— `layers` 分支的第 7 个视图标签页 `viewSkyCultureTab`（实测 **819 行**，体内约 **77 个 `skyCulture*` 设置字段**与约 **40 个宿主助手**，且 `currentSkyCulture` / `skyCultureList` / `selectedSkyCultureId` 与详情卡、默认文化设置交叉使用）。按 §5 粒度单独成片，允许多提交。
+- **两个提交（每个提交点独立全绿）**：
+  - `4282a941ed` `refactor(harmonyos): extract SkyCultureSettingsStore from the monolith` —— 只建 store + 宿主字段/助手引用改写，UI 仍在宿主 `@Builder`；
+  - 本提交 `refactor(harmonyos): componentize the sky culture view tab` —— 建组件、删旧 builder、替换调用点。
+- **新增文件**：
+  - `harmonyos/ets-source/state/SkyCultureSettingsStore.ets`（**503 行**）：搬迁原宿主 **82 个 `@State` 字段**（领地档案 11、只读元信息 14、标签模式/组合名称 12、视觉字号/粗细/亮度/过渡 24、配色 3、默认文化 1、目录筛选 15 等）逐条保留类型与默认值，并下沉**纯计算助手**（bridge 风格串→档位、组合名称摘要/取值、标签模式名、配色取值、地区/分类文案、年代筛选、地名/文化名显示、领地档案筛选、年份格式化、`filteredSkyCultureList(list)`、`applySkyCultureVisualSetting(setting,value)`、`setSkyCultureTimeYear` / `setSkyCultureRange` / `applySkyCultureRangeInput` / `applySkyCultureTimeYearInput` / `setSkyCultureTerritoryMapYear` / `applySkyCultureTerritoryMapYearInput` / `syncSkyCultureTerritoryMapYearToSimulation` / `selectSkyCultureColorTarget`）。
+  - `harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`（**940 行**）：单组件，**无 `@BuilderParam`、无参数化 `@Builder`**；原 `@Builder` 的多根并列（section 头 / 分隔线 / 若干 `Row`）整体包一层 `Column({ space: 0 })`（与原调用点外层 `Column({ space: 0 })` 同 space，§13.1 规则 7）。
+- **口径（哪些字段/助手刻意不搬，按 §13.1 规则 5/6）**：
+  - **跨域共享 → `@Prop`**：`currentSkyCulture`→`currentSkyCultureName`、`currentSkyCultureId`、`skyCultureList`、`skyCultureListLoading`；`filteredSkyCultureList` 改为 store 方法接收 `list` 参数，宿主与组件各自传自己的 `skyCultureList`。
+  - **高频写入/解码结果 → 留在宿主、以 `@Prop` 传入**：`skyCultureArtStates`→`artStates`、`skyCultureArtThumbnailPixelMaps`→`artThumbnailPixelMaps`（逐张图片解码渐进写入，避免重渲染风暴）；组件内 `artStatus()` 复刻原 `skyCultureArtStatus()`。
+  - **Canvas 绘图 → 留宿主**：`skyCultureMapContext` / `skyCultureMapContextSettings` / `skyCultureMapRenderWidth|Height` 与 `drawSkyCultureTerritoryMap()` 仍由宿主持有；组件以普通成员 `mapContext` 接收上下文，`.onReady` / `.onAreaChange` 回调宿主重绘（`onMapReady` / `onMapAreaChange`）。
+  - **native 桥 / 定时器 / 解码 → 回调回注（共 24 个）**：`onToggleLayer` / `onLoadList` / `onSelectCulture` / `onRowArea` / `onReloadList` / `onSelectLabelMode` / `onSetShortLabels` / `onSetCommonNames` / `onSetIsolation` / `onSetSinglePick` / `onConstellationSelection` / `onSetStyleOption` / `getColorOptions` / `onSetVisualColor` / `onSetVisualSetting` / `onSetDefault` / `onSyncTimeFollowTimer` / `onRefreshSimulationYear` / `onLoadTerritoryMap` / `onMapReady` / `onMapAreaChange` / `onLoadObserverInfo` / `onArtDecodeError` / `onOpenArtPreview`；纯展开态/筛选态动画（标签选择器、筛选下拉、组合名称展开、颜色输入与预设）在组件内用 `this.getUIContext().animateTo` 直接改 store。
+  - `setSkyCultureVisualSetting(setting, value, apply)` 去掉 `apply` 闭包参数，改为成功后调 `this.skyCultureSettingsStore.applySkyCultureVisualSetting(setting, value)`（20 个滑块的调用点随之简化为两参）。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，**23,632 → 22,451，净 −1,181 行**）：删 82 条 `@State` 声明（合并为 2 行 `skyCultureSettingsStore` 持有 + 注释）、删约 50 个随迁助手定义、删旧 `@Builder viewSkyCultureTab`（含前置注释）与两个已失效宿主助手（`selectedSkyCultureId` / `skyCultureArtStatus`）；新增 5 行 import；`layers` 分支 `this.viewSkyCultureTab()` → `SkyCultureViewTab({...})`（24 个回调 + 22 个状态入参）。字段/方法改名一律用 `this.<name>\b` 正则（含 20 个三参滑块回调的正则收敛），**未用行号算术**；删 builder 用「签名前缀 + 花括号配平扫描」定位，删助手用「`^  private <name>\(…` 非贪婪到 `\r\n  }`」正则。
+- **成员名雷区**：颜色统一 `textColor` / `subColor` / `accentColor` / `panelColor` / `cardBorder` / `inputColor` / `pickerSurface` / `pickerHeader` / `pickerHeaderActive` / `pickerSelected` / `pickerOption`（避开 `borderColor`）；未使用 `scale` / `onTouch` / `background` / `onDragEnd` / `enabled`。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过（组件/store `this` 自洽、单体括号净深度 0）→ `arkts_check`（3 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（**164 个 .ets**）→ 全量 `*-ohos*.mjs` 扫描：失败 8 个，**全部与 §13.6 存量一致**（4 个 `-pad` 需设备、`test-ohos-mist-performance` 需设备、`test-ohos-satellite-panel` test 7 纯 C++、`verify-ohos-location-search` 路径 bug、`verify-ohos-search` macOS hdc 假设），无新增；`test-ohos-skyculture-refresh.mjs` / `test-ohos-skyculture-text.mjs` 全绿。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`；`aa dump -l` 确认 `state #FOREGROUND`；CLI 显式 `--bundle`；`pidof`=40652 全程存活、未崩，**排除规则 9 的运行期退出**）：
+  1. `openUiPanel layers` → `setLayerTab 5`：**星空文化页签就地渲染新组件**（`文化图层 / 选择要显示的星座与辅助图层` + `当前文化 / 查看当前文化及其本地资料` 等节点可见），应用未退出。
+  2. **store 实时刷新实证**：滚动到「组合名称显示」点「设置」→ 按钮变「收起」并**就地展开**「星图标签 / 资料卡标签」两组 toggle（`skyCultureNameCombinationExpanded` 经 `@ObjectLink settings` 驱动重绘）。
+  3. **native 桥往返实证**：点「国际音标」toggle → 摘要行由 `星图：中文译名 · 资料：中文译名` **即时变为** `星图：国际音标、中文译名 · 资料：中文译名`；hilog 实证 `command received: "setSkyCultureLabelStyle" "screen|IPA,Translated"`（组件回调 `onSetStyleOption` → 宿主 `setSkyCultureStyleOption` → 引擎 → 回写 store → 组件重读 `skyCultureStyleSummary`）。
+- **测后恢复**：再点「国际音标」还原（hilog `"screen|Translated"`，摘要行复核回 `星图：中文译名`）；「组合名称显示」已点回「收起」；未保存/导出/覆盖任何文化包、未改默认文化。
+- **本片新踩的坑**：
+  - **不要在 `.ps1` 里内联中文注释再交给 PowerShell 执行**：Windows PowerShell 5.1 无 BOM 时按 ANSI 读取脚本，中文变 mojibake 写回源码（本片 `skyCultureSettingsStore` 声明上方注释曾整行乱码）→ 改为 write 工具写 `.js`/`.md`（Node/`ReadAllText(UTF8)` 读取），或事后用 Node 定点修正；控制台 `Get-Content` 显示乱码只是代码页问题，不代表源码坏（须以 read 工具或 git diff 核对）。
+  - **`@Prop` 承载 `Record<string, image.PixelMap>`**：解码缩略图经 `@Prop artThumbnailPixelMaps` 传入子组件；真机切片验证缩略图逐张出现正常（`Image(... as image.PixelMap)` 未因单向同步丢引用）。
+  - 删 builder 定位不要只依赖 `@Builder` 行号：本片用**从签名 `{` 起的花括号配平扫描**取边界，避免行号漂移（Phase 4f 已记录）；同时把**紧邻其上的注释行**一并纳入删除区间。
+## [2026-10-02] DevEco Code - Phase 4f：`layers` 分支前置 —— 6 个 `view*Tab` 宿主 `@Builder` 抽组件 + 数值设置 store
+
+- **背景/范围**：Phase 4e 因 `layers` 分支体内调用的 7 个 `view*Tab` 仍是宿主 `@Builder`（行内写法 `@Builder viewSkyTab() {`，故 `^@Builder$` 扫描漏列）而跳过该分支。本片先解决这个前置：把标签页从宿主 `@Builder` 下沉为组件，使 `layers` 分支日后可整体收进 `LayersPanel`。
+- **本片完成 6/7**：`viewSkyTab` 98 / `viewSSOTab` 155 / `viewDSOTab` 6 / `viewMarkingsTab` 148 / `viewLandscapeTab` 86 / `viewSurveysTab` 7 行已下沉；第 7 个 `viewSkyCultureTab` **819 行**，体内引用约 70 个 `skyCulture*` 设置字段（颜色 / 标签模式 / 筛选 / 领地地图 / 过渡时长等）与约 40 个宿主方法，按 §5 粒度需先建 `SkyCultureSettingsStore` 并做同名引用改写，属独立切片（Phase 4g）。因此本片**超出「≤400 行同片预算」**，未把 `layers` 分支抽成 `LayersPanel`（按 brief 约定只做第 1 步）。
+- **新增文件**：
+  - `harmonyos/ets-source/state/LayerViewStore.ets`（49 行）：六个标签页的数值 / 展开态设置 —— 天空显示 6（`starMagLimit` / `bortleScale` / `milkyWayBright` / `meteorZhr` / `meteorZhrMax` / `zodiacalIntensity`）、行星轨道 8、轨迹 7、视场标记 4、地景 6，共 31 个字段，逐条保留原类型与默认值。开关布尔值仍归既有 `LayerStore`（Phase 3ak）。只放数据，不 import UI / NAPI。
+  - `harmonyos/ets-source/panels/layers/LayerViewTabs.ets`（623 行）：`LayerSkyTab` / `LayerSsoTab` / `LayerDsoTab` / `LayerMarkingsTab` / `LayerLandscapeTab` / `LayerSurveysTab` 六个组件；`@ObjectLink layerStore` + `@ObjectLink layerViewStore` 实时读值，颜色 `@Prop`，一切 native 桥动作经回调回注宿主；**无参数化 `@Builder`、无 `@BuilderParam`**；原 `@Builder` 的多根并列各包一层 `Column({ space: 0 })`（与原调用点外层 `Column({ space: 0 })` 同 space，§13.1 规则 7）。`meteorZhrSliderPosition` / `meteorZhrFromSliderPosition`（纯函数）与 `landscapeZh`（`I18n.landscapeName` 薄封装）随 UI 一并下沉。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，**24,098 → 23,632，净 −466 行**）：删 6 个 `@Builder`（含各自前置注释）+ 3 个随迁 / 失效助手 + 31 条 `@State` 声明；新增 `@State private layerViewStore: LayerViewStore`、3 行 import、2 个宿主桥方法 `applyStarMagLimit` / `applyMilkyWayBright`（原为 builder 内联逻辑）；31 个字段的全部宿主引用改写为 `this.layerViewStore.<field>`（含 `refreshState` 快照回写、`loadOrbitDisplaySettings` / `setOrbitDisplayFlag` / `setTrailDisplayNumber` / `applyTrailColor` / `loadLandscapeList` / `importLandscapeFile` / `selectLandscape` / `changeLandscapeTransparency` 等）；`layers` 分支体改为 6 个组件调用 + 原样保留的 `this.viewSkyCultureTab()`（tab 5）。删除一律用「`@Builder` 前缀 + 非贪婪到 `\r\n  }`」正则，未用行号算术；字段改写后以「`(?<!layerViewStore\.)this\.<field>` 计数必须为 0」兜底。
+- **成员名雷区**：`cardBorder`（避开 `borderColor`）、`panelColor` / `textColor` / `subColor` / `accentColor`；未使用 `scale` / `onTouch` / `background`。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过（组件 / store `this` 自洽、单体括号净深度 0）→ `arkts_check`（3 文件 0 错）→ `devecocli build` BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（162 个 .ets）→ 全量 `*-ohos*.mjs` 扫描：新增失败仅 `test-ohos-mist-horizon.mjs`（已同步），其余与 §13.6 存量一致（8 个环境 / 设备类）。
+- **脚本同步**：`test-ohos-mist-horizon.mjs` 的「UI 开关与语义动作同源」用例：mist horizon 的 `LayerSwitchRow` 调用点随 `viewLandscapeTab` 下沉到 `panels/layers/LayerViewTabs.ets`，断言改读新文件并把 `this.applyLayerSwitch('actionShow_MistHorizon', ...)` 改为 `this.onToggleLayer('actionShow_MistHorizon', ...)`。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`；`aa dump -l` 确认 `state #FOREGROUND`；`pidof`=44061 全程存活、未崩）：
+  1. 底部「图层」→ `[DOCK] up item=layers` + `setPanel layers` + `[panel-transition] finish panel=layers`；面板渲染 `LayerPresetBar`（图层预设 / 纯净星空 / 观测辅助 / 摄影构图）+ `LayerTabs`。
+  2. **标签切换**：逐个点太阳系 / 深空 / 标记 / 地景 / 星空文化，内容就地换为「基础显示」/「显示内容」/「方位与罗盘」/ 地景开关行 /「文化图层 · 选择要显示的星座与辅助图层」；hilog 多条 `[layer-transition] begin/swap/finish`（tab 0→1→2→3→4→5）实证 `LayerTabs` 仍驱动 `selectViewTab`。
+  3. **开关实时刷新（新组件回调链路）**：深空页签点「星云」开关 → 同一行像素由 OFF 的 Toggle 中心 `R211 G212 B207` 变为 ON 的 `R93 G144 B197`，行底色同步转为选中蓝；同屏面板外天空像素 `(100,600)=R105 G118 B170` 前后**完全一致**（排除整屏重绘假象）；hilog `setLayer send actionShow_Nebulas|1` → 引擎 `setActionChecked "actionShow_Nebulas|1"` → `setLayer ... ok=1`（`onToggleLayer`→`applyLayerSwitch`→`setLayer` 到引擎全通）。
+- **测后恢复**：再把「星云」点回 OFF（hilog `actionShow_Nebulas|0` ok=1，Toggle 像素回 `R229`）；未改动其它持久化设置（`viewTab` 为瞬时 UI 态，已点回「天空」页签）。
+- **未走查**：无遗漏标签页（6 个新组件所在页签全部点开并截图 / 采样验证；第 7 个 `viewSkyCultureTab` 仍在宿主、本片未改其 UI，仅作为 tab 5 走查渲染正常）。
+- **本片新踩的坑**：展开布局下 `layers` 面板的标签行（`LayerTabs` 的横向 `Scroll`）会被**面板整体拖动吞掉** —— 在标签行起手横拖只移动面板、`Scroll` 不滚动（表现是标签坐标整体平移 ~4px 而非内容滚动）；需要换起手点或多次拖动才能让靠右的「星空文化」滚入可视区。走查靠右页签时先 dump 确认标签 x 坐标再点。
+## [2026-10-02] DevEco Code - Phase 4e：`panelContent` 第四批 4 个实分支抽组件（search / observing / satellites / object）
+
+- **范围**：Phase 4 第四批 —— 按 §6.2 口径重扫 `panelContent()` 剩余分支，排除「薄调用既有组件」的 hub/尾件（`tools`/`audio`/`telescope`/`skyCultureMaker`/`help`/`catalogs`/`bookmarks`/`commands`/`navStars`/`archaeoLines`/`mosaicCamera`/`meteorshowers`/`scenery3d`/`nebulaTextures`/`pointerCoordinates` 等）与 `layers`（其 7 个 `view*Tab` 仍是宿主 `@Builder`，非组件调用，按 4e 指令**跳过 layers**，留待叶件先行），取**剩下最小的 4 个实分支**：`search`(110) / `observing`(112) / `object`(145) / `satellites`(179) 行。判定条件 `activePanel === '<name>'` 仍留宿主，**不迁 V2**、不新建 store。
+- **改动文件**：
+  - 新增 `harmonyos/ets-source/panels/panels/SearchPanel.ets`（139 行）：`@ObjectLink store: SearchStore` + 派生标签/分类选项 `@Prop` + 20 个回调；`SearchBar`/`SearchFilterMenu`/`SearchSuggestions`/`SearchCategoryBrowse`/`SearchConstellationChips`/`SearchCoordinateInput` 原样组装；`searchPanelScroller` 以普通成员传入（宿主 `selectSearchFilterCategory` 仍要 `scrollTo` 同一实例）；防抖定时器、软键盘避让动画与 `AppStorage` 滚动位置回写回注宿主。
+  - 新增 `harmonyos/ets-source/panels/panels/ObservingPanel.ets`（136 行）：`@ObjectLink wutStore` + `observingList`/`observingListReady` `@Prop` + 12 个回调；分类 chip 切换、刷新目标、加/删观测项、点按搜索与居中全部回注；`wutTargetTitle`/`wutTargetSubtitle`/`zhType`/`observingDisplayName` 仍在宿主算好后回调返回。
+  - 新增 `harmonyos/ets-source/panels/panels/SatellitesPanel.ets`（238 行）：**不搬状态**（该域实测 35 字段 / 160 处引用，搬 store 会牵动逻辑方法），30 个 `@Prop` 快照 + 两个 `Scroller` 普通成员 + 19 个回调；`catalogHealthText`/`catalogHealthColor` 依赖宿主 `catalogHealthLoaded`/`catalogManifestPresent`，以回调返回；联网/引擎读写全留宿主。
+  - 新增 `harmonyos/ets-source/panels/panels/ObjectPanel.ets`（201 行）：`@ObjectLink` 三个 store（`objectDetailStore`/`objectMediaStore`/`telescopeStore`）+ 渲染管线逐帧写入的 `objectInspectorModelRendering`/`objectInspectorModelTexturePixels` 按踩坑表**留宿主**、以 `modelRendering`/`hasModelTexture` `@Prop` 传入；`zhNameOf`/`zhType`/`selectedStatusZh`/`selectedDisplayValue` 读宿主状态，以回调返回；`TabletInspectorMediaGroup`/`SatellitePassDetails`/`SelectedCoordinateRows`/`ObjectDataRow`/`StructuredDetailRows`/`QuickChipRow`/`Lx200ObjectControls` 原样组装；根为 `if/else` 多根 → 包 `Column()`（与原调用点 `Column() { this.panelContent() }` 同 space）。
+  - 改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets`：4 行 import + 4 个分支体替换为组件调用；**24,440 → 24,098（净 −342）**；删除 4 段旧分支（共 −535 行，含分支判定与内联 UI）。
+- **成员名雷区**：颜色/边框沿用 `textColor`/`subColor`/`panelColor`/`borderTint`/`inputColor`/`accentColor`（避开 `borderColor`/`background`）；未使用 `scale`/`onTouch`。`SatellitesPanel` 的 `satUpdateSettings` 用 `@Prop` 传接口对象（ArkUI V1 支持对象/数组 `@Prop` 单向同步）。
+- **跳过**：`layers` —— 体内 7 个 `view{...}Tab` 仍是宿主 `@Builder`（`MainWindowNativeNode.ets` 内），不是组件调用，按 4e 指令跳过并在此记录。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（4 新件 + 宿主，5 文件 0 错）→ `devecocli build`（`-SkipEngine -SkipDeploy -SkipResources`）BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好 → 全量 `*-ohos*.mjs` 扫描，失败项与 §13.6 存量一致（8 个环境/设备类）。
+- **测试同步**（3 个脚本被搬迁打断，已改读新组件/新调用点）：
+  - `test-ohos-search-browser.mjs`：`align(TopStart).id('search-browser-scroll')` 断言改读 `panels/panels/SearchPanel.ets`。
+  - `test-ohos-detail-image-layout.mjs`：媒体卡调用点改读 `ObjectPanel.ets`（断言 `store: this.objectMediaStore` + `imageHeight: this.imageHeight`），并补一条「宿主仍以 `imageHeight: this.objectInspectorImageHeight()` 计算实时视口高度」。
+  - `verify-ohos-object-details.mjs`：共享行组件计数并入 `ObjectPanel.ets`（仍 ≥2）。
+- **真机**（`com.cnchensh.stellarium`，`192.168.3.95:40565`，CLI 显式 `--bundle`；全程 `pidof`=33564 存活、未崩）：
+  1. `search`：`openUiPanel search` → 渲染 `Scroll#search-browser-scroll` + `Row#search-category-picker「浏览分类」`/`Button#search-filter-picker「筛选」`；点「筛选」→ 浏览区**就地**换成筛选菜单（出现「可见度」分组、分类选择器消失）——实时刷新实证。
+  2. `observing`：`openUiPanel observing` → 渲染观测列表 + `行星/恒星/梅西耶` 分类 chip + 引擎返回的「土星 / 天王星」目标；点「恒星」→ 列表清空并出现「正在筛选 344 / 118205」——`@ObjectLink wutStore` 实时刷新实证。
+  3. `satellites`：`openUiPanel satellites` → 渲染离线目录信息块、若干开关与分组选择器；点「自动显示新卫星」开关 → CLI `getSatelliteSources` 的 `autoDisplayEnabled` **true → false**（引擎状态实证），**再点回 true 恢复**。
+  4. `object`：本机为 expanded 布局，`setPanel('object')` 恒早退到浮动详情卡 `toggleObjectInspector()`（`MainWindowNativeNode.ets:2504`），`panelContent()` 的 `object` 分支在当前入口**不可达**（历史路径），故**未走查**；该分支行为不变（已抽出，编译/脚本全绿）。
+- **测后恢复**：卫星「自动显示新卫星」已点回 `true`（`getSatelliteSources` 复核）；未改动观测列表（`observingList` 仍空）、未保存/导入任何来源或 TLE。
+- **本片新踩的坑**：`openUiPanel object` 应答 `accepted:true`，但 `setPanel` 对 `'object'` 直接早退到浮动详情卡（且 `isCliPanelName` 列表也不含 `'object'`）——即它只切了顶层详情卡、没切底部面板；以后走查 `object` 面板前先确认 `activePanel === 'object'` 是否真的可达。
+## [2026-10-02] DevEco Code - Phase 4d：先搬 skyCulture 叶件（7 个 private @Builder）
+
+- **目标**：把挡着 `skyCultureMaker` / `layers` 分支的一批 skyCulture / satellite 叶件先下沉为组件（参数化 `@Builder` 参数按值捕获、子树首帧后冻结，§13.1 规则 3）。本片搬 7 个（`skyCultureArtPreviewOverlay` 属 Phase 5 叠层，未动）。
+- **新增文件**：
+  - `harmonyos/ets-source/panels/skyculture/SkyCultureViewParts.ets`（265 行）：`SkyCultureSectionHeader`、`SkyCultureMetaItem`、`SkyCultureLabelSettingCard`（原 `skyCultureLabelSettingCard` + `skyCultureLabelModePicker` **合并**为一个组件，避免十几条颜色/可选项属性二次转发）、`SkyCultureFilterOption`、`SkyCultureFilterPicker`。色值、可选项、展开态、选中下标全部由宿主以 `@Prop` 传入；切换/选中经 `onToggle` / `onSelectMode` / `onPick` 回注宿主；**无 `@BuilderParam`**。
+  - `harmonyos/ets-source/panels/satellite/SatelliteGroupSelector.ets`（48 行）：原 `satelliteGroupSelector`。组名本地化直接调 `I18n.satGroup`（宿主 `satGroupZh` 是纯查表、已删）；`Scroller` 以普通成员传入（宿主仍持同一实例，`publishSatellitePanelState` 要读 `currentOffset`），事件标志读取与桥调用经 `onGroupScroll` / `onSelect` 回注。
+- **单体手术**（`pages/MainWindowNativeNode.ets`，**24,497 → 24,440，净 −57 行**）：删 7 个 `@Builder` + 死助手 `satGroupZh` / `skyCultureFilterOptionSelected`；新增宿主助手 `skyCultureFilterSelectedIndex(kind)`（原逐项选中判定改为传下标）与 `selectSkyCultureLabelMode(target,index)`（选中并收起下拉，原内联逻辑）；改写 `viewSkyCultureTab`（5 处 section header / 10 处 meta item / 4 处 label card / 2 处 filter picker）与 satellites 分支（1 处）共 **22 个调用点**；新增 2 行 import。删除一律用 `[regex]::Escape(签名)` + `@Builder` 前缀非贪婪到 `\n  }` 的正则，未用行号算术。
+- **真机（`192.168.3.95:40565`，`pidof com.cnchensh.stellarium`=52595 全程存活）**：
+  1. 图层 → **文化**标签页：`SkyCultureSectionHeader`（"文化图层 / 选择要显示的星座与辅助图层"、"选择星空文化 / …"）、`SkyCultureMetaItem` 网格（"星座边界 / 国际天文学联合会边界"、"星座图形 / 88 个"、"星群 / 92 个"…）、`SkyCultureLabelSettingCard`（"资料中的名称 / 中文译名"）逐项渲染。
+  2. **标签模式实时刷新**：点开"资料中的名称"卡片 → 下拉出现（"✓ 中文译名 / 当前"、"文化原名"），点"文化原名"→ 卡片标题**就地**由"中文译名"变"文化原名"、卡片收起；hilog 实证 `command received: "setSkyCultureLabelStyle" "info|Native"`。再点回"中文译名"复原。
+  3. **筛选器实时刷新**：点开"类型"筛选 → 选项"✓ 全部类型 / 当前"，选"传统传承"→ 卡片值变"传统传承"、底部摘要**同步**变"当前筛选：传统传承 · 全部地区 · 0 个文化"；重开时"当前"高亮已移到"传统传承"（证明 `selectedIndex` 经 `@Prop` + 含选中态的 ForEach 键实时刷新）；点回"全部类型"复原。
+  4. **卫星分组选择器**：卫星面板底部渲染本地化分组（"阿戈斯 / 北斗 / 中星"…），点"北斗"→ hilog `command received: "getSatellites" "beidou||40"`；再点一次清空 → `getSatellites "||40"`（选中态回注与桥调用链路通）。
+- **测后恢复**：标签模式 `info` 已点回索引 0（"中文译名"，与初始一致）；筛选已还原"全部类型 / 全部地区"；卫星分组清空为初始无分组。**未**保存 / 导出 / 覆盖任何文化包。
+- **脚本同步**：`test-ohos-satellite-panel.mjs` 的"分区列表前有筛选行 + 分组选择器自带滚动容器"用例改读新组件文件 `panels/satellite/SatelliteGroupSelector.ets`，并把 `this.satelliteGroupSelector()` 断言改为 `SatelliteGroupSelector(`。
+- **本片新踩的坑**：无新增雷区。复现记录：浮层**面板本身可被拖动**（§13.3）——在面板头/可点行上起手拖拽会整体移动面板，使后续 dump 坐标全变且内容滚动"失灵"，在浮层内滚动须避开面板头与可点行（本片靠关面板重开复位）。其余 7 项脚本失败均为 §13.6 环境类（4 个 `-pad` 需设备、`mist-performance` 需设备、`location-search` 路径 bug、`search` 走 macOS hdc 路径）。
+## [2026-10-02] DevEco Code - Phase 4c：`panelContent` 第三批 5 分支抽组件（more / time / help / meteorshowers / nebulaTextures）
+
+- **范围**：Phase 4 第三批 —— 重扫 `panelContent()` 剩余分支，排除「薄调用既有组件」的 hub 类与 `layers`、`floatingPanel`/`compactPanel`（体内调用 `this.panelContent()`）后，取**最小的 5 个分支**（`more` 62 / `nebulaTextures` 69 / `time` 71 / `meteorshowers` 87 / `help` 95 行）下沉为 `panels/panels/` 组件；判定条件 `activePanel === '<name>'` 仍留宿主；**不做表驱动 `PanelHost`**、**不迁 V2**、不新建 store（展示值 `@Prop` 传入、动作回调注入）。
+- **改动文件**：
+  - 新增 `harmonyos/ets-source/panels/panels/MorePanel.ets`（81 行）、`TimePanel.ets`（127）、`HelpPanel.ets`（114）、`MeteorShowersPanel.ets`（117）、`NebulaTexturesPanel.ets`（115）；
+  - 改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（+5 行 import、5 个分支体替换为组件调用），**24,796 → 24,497** 行（净 −299）；同时删除随 UI 下沉后成为死代码的纯助手 `nebulaTextureStatusLabel`。
+- **抽法与注入**：`MorePanel` 用 `@Prop actions: ShellAction[]` + `languageRevision`，是否新分节的判定 `moreActionStartsSection()` 依赖宿主状态，按 §13.1 规则 6 以回调回注。`TimePanel` 组装 5 个 store（`timeWheelStore`/`timeStore`/`equationOfTimeStore`/`julianStore`/`nightModeStore` 走 `@ObjectLink`）+ 7 个既有时间子组件，`this.wheel()` 控制器与手动时间读写回注宿主；顶层 `Column()`（无 space）与原调用点 `Column() { this.panelContent() }` 一致。`HelpPanel` 读 `@ObjectLink tools`（「关于」版本信息实时刷新），「工具与数据」按钮回注 `openSubPanel('tools')`。`MeteorShowersPanel` / `NebulaTexturesPanel` 为 `@Prop` 展示值 + 动作回调；各迁入 1 个纯助手（`fmtIso` / `nebulaTextureStatusLabel`）。`NebulaTexturesPanel` 刻意把可空 `NebulaTextureStatus` 拆成 7 个标志/计数/条目 `@Prop`，避免可空对象整体作 `@Prop`。
+- **成员名雷区规避**：星云/流星开关用 `statusEnabled`/`msEnabled`（避开 `enabled`），分隔线/描边用 `lineColor`/`borderTint`（避开 `borderColor`）。
+- **跳过**：本片 5 个分支体内均无参数化 `@Builder`、均无 `this.panelContent()`，无需按规则换分支。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（6 文件）无错 → `devecocli build`（-SkipEngine）BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好 → 全量 `*-ohos*.mjs` 扫描，失败项与 §13.6 存量一致（7 个环境/设备类），另修复 1 个被搬迁打断的脚本。
+- **测试同步**：`verify-ohos-julian-date.mjs` 原断言在单体里找 `JulianDateControls({`，随 `time` 分支下沉改读 `panels/panels/TimePanel.ets`；改后通过。
+- **真机**（`com.cnchensh.stellarium`，Mate 80 Pro `192.168.3.95:40565`，CLI 显式 `--bundle`）：全程 `pidof com.cnchensh.stellarium` = 60183（存活，未崩）。
+  - `more`：点坞栏「更多功能」→ 渲染 `more-action-observeHub` / `more-action-dataHub`（分节标题「工作区」「天体数据与扩展」）；点 dataHub → 面板实时切到「天体数据与扩展」。
+  - `time`：点坞栏「时间」→ 渲染转轴 + 速率档位（倒带/停止/实时/减速/快进）；**点「停止」→ `getTimeInfo().timeRate` 1 秒/秒 → 0，面板副标题即时由「2026-10-02 · 1x」变为「2026-10-02 · 已暂停」**；点「实时」恢复。
+  - `help`：更多 → 滚到底 →「帮助」→ 渲染「关于」（实时读到 `tools.aboutVersion`）+ 手势/快捷操作分节；滚到底点「工具与数据」→ 面板实时切到「工具与数据」。
+  - `meteorshowers`：`openPluginFeature MeteorShowers` 打开；**点「启用流星雨插件」开关：截图裁切对照 ON→OFF（`getMeteorShowers` enabled true→false、列表清空），再点回 ON 恢复（enabled=true、列表 4 条）**。
+  - `nebulaTextures`：`openPluginFeature NebulaTextures` 打开；**点「刷新」→ 面板即时出现状态行「星云纹理已刷新」**（`actionStatus` @Prop 刷新）。
+- **测后恢复**：meteorshowers `enabled` 已点回 true（与初始一致，CLI 回读确认）；nebulaTextures 仅只读刷新（未改设置）；`time` 速率属会话态、未持久化。
+- **本片新踩的坑**：
+  - **PowerShell `String.IndexOf(anchor, minIndex)` 的 `minIndex` 是「字符偏移」而非行号**：误按行号传 18000 去跳过前面的同名分支，结果仍命中文件早段的 `handleUiTap` 分支（行 14689 ≈ 字符 713582 ≫ 18000），一度替换错位置；已回退并用「分支体内唯一 ASCII 起点」重做。
+  - **函数内 `Write-Output` 会混入返回值**：辅助函数在 `return <字符串>` 的同时 `Write-Output` 诊断，使返回值变成数组、下一步 `IndexOf` 全部落空；诊断改用 `Write-Host`。
+  - **`NebulaTextureItem` / `NebulaTextureStatus` 在 `pages/MainWindowModels.ets`，不在 `pages/StellariumTypes.ets`**（与 `MeteorShowerItem` 同处），导入错模块要到构建才报错。
+## [2026-10-01] DevEco Code - Phase 4b：`panelContent` 次小批次 5 分支抽组件（place / commands / navStars / archaeoLines / mosaicCamera）
+
+- **范围**：Phase 4 第二批 —— 接 Phase 4a，把 `panelContent()` 里**体量次小的 5 个分支**（排除「薄调用既有组件」的 hub 类与 `layers`）下沉为 `panels/panels/` 组件；判定条件 `activePanel === '<name>'` 仍留宿主；**不做表驱动 `PanelHost`**、**不迁 V2**、不新建 store（展示值 `@Prop` 传入、动作回注）。
+- **改动文件**：
+  - 新增 `harmonyos/ets-source/panels/panels/PlacePanel.ets`（117 行）、`CommandsPanel.ets`（93）、`NavStarsPanel.ets`（103）、`ArchaeoLinesPanel.ets`（100）、`MosaicCameraPanel.ets`（88）；
+  - 改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets`：+6 行 import、5 个分支体替换为组件调用（`git diff --stat` = +133/−282，净 −149），**24,945 → 24,796** 行；同时删除随 UI 下沉的 3 个纯助手 `navStarsSetLabel` / `filteredCommandCatalog` / `mosaicCameraValue`。
+- **抽法与注入**：`PlacePanel` 用 3 个 `@ObjectLink`（LocationPickerStore / LocationStore / SessionToolStore）+ `@Prop` + 回调组装既有 7 个子组件（顶层 `Column()` 无 space，与原调用点 `Column() { this.panelContent() }` 间距一致，规避多根）；其余 4 个面板为 `@Prop` 展示值 + 回调，设置动作全部回注宿主（`setMosaicCamera` / `setNavStarsSetting` / `setArchaeoLineSetting`）。`ArchaeoLinesPanel` 线宽滑块保留原「拖动实时预览 + 松手提交」两段语义（`onLineWidthPreview` → 宿主 `archaeoLineWidth`；`onSetLineWidth` → `setArchaeoLineSetting('lineWidth', …)`）。
+- **成员名雷区**：`CommandsPanel` 输入底色用 `inputColor`（避开 `background`）、`ArchaeoLinesPanel` 描边用 `borderTint`（避开 `borderColor`）。
+- **跳过**：本片 5 个分支体内**均无**参数化 `@Builder`、**均无** `this.panelContent()`，无需按规则换分支；原列第 2 小的 `place` 未跳过（含 3 个内联信息行，非纯转发）。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（6 个改动文件）无错 → `devecocli build`（-SkipEngine）BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（149 个 .ets）→ 全量 `*-ohos*.mjs` 扫描失败项与 §13.6 存量**完全一致**（7 个环境/设备类）。
+- **真机（`com.cnchensh.stellarium`，Mate 80 Pro `192.168.3.95:40565`，CLI 显式 `--bundle`，关键步骤后 `aa dump -l` 复核前台）**：全程 `pidof com.cnchensh.stellarium` = 39382（存活，未崩）。
+  - `place`：`openUiPanel place` 渲染「位置/北京·地球/坐标/海拔/观测位置」；点「按地区选」→ 出现大洲列；**点「非洲」→ 实时刷新**（出现 ✓、国家列「乌干达/乍得」、未选择 → 「非洲」）。
+  - `commands`：渲染「统一命令控制」与命令目录（copyTextToClipboard/getGuideState/startGuide）；**在搜索框输入 `guide` → 列表实时过滤为 getGuideState**（实测下沉后的 `filteredCommandCatalog`）。
+  - `navStars`：渲染「导航星/星表方案 57 颗/英法等星表 chips」（chips 文本来自下沉的 `navStarsSetLabel`）；**点「法国航海星」→ 57 颗 → 81 颗**；点回「英美航海星」恢复 57 颗。
+  - `archaeoLines`：经 `openPluginFeature ArchaeoLines` 打开（`archaeoLines` 不在 `openUiPanel` 白名单）；渲染 13 个 `ArchaeoToggleRow`、行星 chips 与线宽滑块；**拖动线宽滑块 →「线宽」数字 1 → 7 实时变化**；再拖回 1。
+  - `mosaicCamera`：渲染「相机拼接视场/相机配置(LSSTCam…LATISS)」；**点「DECam」后 `getMosaicCamera` 回读 `currentCamera=DECam`**；**拖动旋转滑块 → 引擎回读 rotation=200**。
+- **测试同步**：无脚本按文本切这 5 个分支的 UI；`test-ohos-plugin-panel-state.mjs` 仍从宿主正则抽 `setMosaicCamera`（本片未动该方法，仅删 `mosaicCameraValue`），4 用例全绿。
+- **测后恢复的持久化设置**：navStars 星表 = AngloAmerican（57 颗）、archaeoLines lineWidth = 1、mosaicCamera camera = LSSTCam / rotation = 0（均由 CLI 回读确认）。
+- **本片新踩的坑**：真机一度锁屏（开发者模式下 `aa start` 报 `10106102`，注入手势被安全策略拦截，需人工解锁）；「按地区选」后的面板滚动一度把设备拖到断连（`hdc list targets` 变空），重连后桌面在前台，`aa start` 拉回应用即可（进程未崩）。
+
+## [2026-10-01] DevEco Code - Phase 4a：`panelContent` 首批 4 个分支抽组件（catalogs / angleMeasure / audio / scenery3d）
+
+- **范围**：Phase 4 第一片 —— 把单体 `panelContent()` 里**体量最小的 4 个分支**下沉为组件（判定条件 `activePanel === '<name>'` 留在宿主）；**本片不做表驱动 `PanelHost`**（待分支搬至多数后再统一）。落位沿用 Phase 4 面板宿主目录 `harmonyos/ets-source/panels/panels/`。
+- **改动文件**：
+  - 新增 `harmonyos/ets-source/panels/panels/` 下 4 个组件：`CatalogsPanel.ets`（77 行）、`AngleMeasurePanel.ets`（57）、`AudioPanel.ets`（40）、`Scenery3dPanel.ets`（68）；
+  - 改 `harmonyos/ets-source/pages/MainWindowNativeNode.ets`：+4 行 import、4 个分支体替换为组件调用（`git diff --stat` = +53/−167，净 −114），**25,059 → 24,945** 行。
+- **抽法**：`AngleMeasurePanel` 用既有的 `@ObjectLink ToolsStore`（宿主零字段改写）；`AudioPanel` / `Scenery3dPanel` / `CatalogsPanel` 的展示值以 `@Prop` 传入（宿主仍是写方：未搬字段、未新建 store）；`AudioEngine`（原生桥）、`resourceText`（纯文本助手）与下载/开关/选中动作全部按 §13.1 规则 6 回注回调，组件内不 import 桥。
+- **成员名雷区规避**：星表卡片描边用 `cardBorderColor`（避开 `borderColor`）、三维地景开关用 `pluginEnabled`（避开 `enabled`）。
+- **真机（`com.cnchensh.stellarium`，Mate 80 Pro `192.168.3.95:40565`，CLI 显式 `--bundle`，关键步骤后 `aa dump -l` 复核前台）**：`pidof com.cnchensh.stellarium` 全程 = 30480（存活）。逐面板走查 + 实时刷新实证：
+  - `catalogs`：面板标题「星表下载」，`panel-content` 内渲染「当前版本可能已包含全部星表」——当前构建 `OFFLINE_APPGALLERY_BUILD = true`，**只有离线静态分支可达**；下载列表与实时刷新需非 appgallery 构建（记「待真机」）。
+  - `angleMeasure`：渲染标题/说明/开关键/触摸说明；**点按 Toggle 后**「重置测量」「结束测量」两键**即时出现**（`@ObjectLink ToolsStore` 条件刷新实证），点「结束测量」后即时消失并复原。
+  - `audio`：渲染「音频控制」/「背景音乐」开关/「音量 70%」/Slider；**拖动 Slider 后** `Text` 由 `70%` 即时变 `100%`（`@Prop` 展示值 + 回调回注刷新实证）；实测后把音量拖回（落回 75%，该值为进程内瞬时态、不写入 `stellariumSettings`）。
+  - `scenery3d`：渲染标题/说明/开关键/场景卡「Testscene」；**点按 Toggle 后** hilog 实证 `setScenery3dEnabled "1"` → `getScenery3dList` 全链路往返，再次点按恢复 `"0"`。
+  - 相邻界面冒烟：`more` hub 正常渲染，「观测工作区」「天体数据与扩展」入口可见，`pidof` 存活。
+- **跳过的分支（按任务要求：最小但已是组件调用者不再包一层）**：`observeHub`/`dataHub`/`automationHub`（各 6 行，体内已是 `HubActionList` 组件调用）、`bookmarks`（9 行，已是 `BookmarkPanel`）、`pointerCoordinates`（10 行，已是 `PointerCoordinatesPanel`）、`tools`（16 行，已是 `ToolsPanel`）、`telescope`（23 行，已是 `Lx200Panel`）、`skyCultureMaker`（26 行，已是 `SkyCultureMakerPanel`）、`layers`（28 行，体内调用 7 个 `view*Tab` `@Builder`，按任务「本片不顺手动」）。
+  - 本片 4 个分支体内**均无**参数化 `@Builder`、**均无** `this.panelContent()`，因此无需因这两条规则换分支。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（5 个改动文件）无错 → `devecocli build` BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好（扫描文件数 144）→ 全量 `*-ohos*.mjs` 扫描失败项与 §13.6 存量**完全一致**（7 个环境/设备类），无新增。
+- **测试同步**：无脚本引用这 4 个分支的 UI（`git grep` 仅命中与 UI 无关的资源审计 `scenery3d/` 目录名），无需改脚本。
+- **测试期间改动的持久化设置**：无（`angleMeasure` 开关已复原；`scenery3d` 已点回 `"0"`；`audio` 只改进程内 `audioVolume`，不落 `stellariumSettings`；未动语言/时间/位置/选中天体）。
+- **本片新踩的坑**：无。按协议用 Node 括号配对脚本（按分支签名定位、跳过字符串/注释）替换分支体，避免行号算术；删改后先 grep 新组件里的宿主前缀残留再构建。
+## [2026-10-01] DevEco Code - Phase 3at 修复：BottomDock 点按后激活高亮不显示（回归）
+
+- **现象**：同日真机验收确认，点 BottomDock 五个入口后，被点项图标/文字保持灰（`#E5FFFFFF` / `#99FFFFFF`），**不变蓝**（`#70C8FF`）；面板切换与触摸命中本身正常（hilog `[DOCK] up item=place` → `setPanel place`）。逐项像素采样 max(B−R) 仅 2–3；正常激活态应≈143（纯 `#70C8FF`，B−R=255−112；上一版验收记的相邻 `CompactQuickButton` 激活环为 66，含抗锯齿）。
+- **A/B 定位（结论：Phase 3at 引入的回归，非既有缺陷）**：同设备、同方法（`devecocli ui` 点入口 → 截图裁 Dock 条采样每个入口的 max(B−R)）——
+  - 修复前 HEAD（`84d7db9af0`，含 Phase 3at）：`[closed] search=2 time=2 place=2 layers=2 more=3`；点「位置」后 `search=2 time=1 place=3 layers=3 more=3`（高亮缺失）。
+  - 临时检出 `d7a2bc9768^`（Phase 3at 之前，即 Phase 3as 末）构建安装：`[PRE 3at closed]` 全 2–3；点「位置」后 **`place=134`**（高亮正常）。→ **回归确认**。
+  - 根因：Phase 3at 把 Dock 从宿主 `@Builder bottomDock()` 下沉为 `BottomDock` 组件时，把「是否当前面板」改成宿主回注的**普通闭包** `isActive`。组件对宿主 `activePanel` 不再有可观测依赖 → `activePanel` 变化既不让 `BottomDock` 重绘，`ForEach` 也不重建子项（键只含 `item.panel/languageRevision`）→ `DockButton` 的 `@Prop active` 冻结在首帧值。修复前的宿主内联版本之所以正常，是因为 `dockActionActive(item)` 在**宿主自身的渲染作用域**里求值，依赖被登记在宿主上。
+- **修法（最小且根治；未用 `@BuilderParam`，见 §13.1 规则 9）**：给 `BottomDock` 增加数据化 `@Prop activePanel: string`；激活判定改为组件内 `private dockItemActive(item)`（= `panelVisible && item.panel === activePanel`，与原宿主 `dockActionActive` 等价），并把该结果**纳入 `ForEach` 键**（`…/1|0`）→ 面板切换或关闭时受影响子项重建、`DockButton.@Prop active` 立即刷新。宿主 3 处调用点的 `isActive: (item) => this.dockActionActive(item)` 改为 `activePanel: this.activePanel`，并删除随之零引用的 `dockActionActive`。触摸命中与 `onClick`/`activateDockAction` 语义不变。
+- **改动**：`harmonyos/ets-source/panels/shell/BottomDock.ets` **58 → 67** 行（+13/−4：新增 `@Prop activePanel`、`dockItemActive` 私有方法、改写 ForEach 键与 `active` 取值，移除 `isActive` 注入成员）；`harmonyos/ets-source/pages/MainWindowNativeNode.ets` **25,063 → 25,059** 行（3 处调用点 1:1 改写 + 删除 `dockActionActive` 4 行）。
+- **真机复验（`com.cnchensh.stellarium`，`192.168.3.95:40565`，包名已复核、CLI 显式带 `--bundle`）**：全程 `pidof com.cnchensh.stellarium` = 53691（存活）。对五个入口**各点一次**，每次截图裁 Dock 条采样 max(B−R)：
+  - `[closed]`：`search=2 time=2 place=2 layers=2 more=2`；
+  - 依次点 搜索 / 时间 / 位置 / 图层 / 更多功能：`search=143`、`time=143`、`place=143`、`layers=143`、`more=143`，且**同一时刻其余四个均为 1–3**；
+  - 再点已激活的「更多功能」关闭面板：`全 1–2`（高亮清除）。→ 与设计一致。
+- **测试同步**：无脚本引用 Dock（`git grep -l "BottomDock|bottomDock|DockButton|dockActionActive" -- scripts` = 0）。全量 35 个 `*-ohos*.mjs` 扫描后失败项与 §13.6 存量**完全一致**（7 个环境/设备类），无新增失败。
+- **验证链**：`check-ohos-refactor-slice.mjs` 通过 → `arkts_check`（两文件）无错 → `devecocli build` BUILD SUCCESSFUL → `check-ohos-ui-contract.mjs` 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点完好 → 35 脚本扫描无新增失败 → 真机如上。
+- **测试期间改动的持久化设置**：无（只切换面板，未动任何开关/语言/时间/位置/选中天体）。
+- **本片新踩的坑**：① `Set-Content -Encoding UTF8`（PowerShell 5.1）会给 `.ets` 写入 **BOM + LF**，破坏仓库「无 BOM + CRLF」约定（`git` 随即告警 `LF will be replaced by CRLF`）——改文件一律用编辑工具，或改后核对 `BOM=无 且 bareLF=0`。② `[System.IO.File]::ReadAllBytes/ReadAllText` 的**相对路径按进程 CWD 解析**，与 PowerShell 的 `Set-Location` 无关 —— 核对字节必须传绝对路径，否则会拼出 `…\harmonyos\harmonyos\…` 报路径不存在。
+## [2026-10-01] DevEco Code - Phase 3 真机验收（Mate 80 Pro / 192.168.3.95:40565）
+
+- **范围**：对 Phase 3（3u–3at）产出的域做一次真机走查，**只验收、不改 ArkTS 源码**。设备 `192.168.3.95:40565`（中文界面，1280×2832）。
+- **被测构建（重要，易错）**：本仓库 `harmonyos/AppScope/app.json5` 的 `bundleName` 是发布配置 `com.joinother.skyinstrument`（versionCode 1000050），而 `scripts/build-ohos-hap-windows.ps1` 生成工程时会把它覆盖为本机签名配置 **`com.cnchensh.stellarium`**（versionCode 1000054），并 `force-stop` / `aa start` 该包。真机上**同时装着两个包**：`com.cnchensh.stellarium`（v1000054 = 本轮 21:29 的 HAP）与 `com.joinother.skyinstrument`（v1000053，上一版）。`devecocli ui *` 作用于**前台窗口**，而 `scripts/stellarium-cli.mjs` 的 `DEFAULT_BUNDLE` 是 `com.joinother.skyinstrument` —— 两者不同源，会在"测了哪个包"上产生混淆（本轮一度误测到 v1000053）。**结论：验收/复现一律以 `com.cnchensh.stellarium` 为准，CLI 必须显式带 `--bundle com.cnchensh.stellarium`。**
+- **逐项结论**：
+  1. **详情卡**（Phase 3ap `UnifiedObjectDetailCard` 及四页组件）✅ —— 选中火星后卡片渲染「火星 / 行星」+ 星等/距离 + 实时高度·方位行（`高度 -21°43'34″  方位 33°57'40″`，随引擎刷新），四页签 观测/坐标/资料/操作 全部渲染；「坐标」页含 地平坐标/几何地平/赤道坐标/J2000 赤道/当日黄道；关闭按钮清空卡片。
+  2. **设置开关**（Phase 3aq `SettingsRows` / `DeviceAndLanguageRows`）✅ —— 「信息」页 `InformationModeButton` 全部/默认/简短… 渲染正确；「视角与导航」页 `NavigationSwitchRow`：把「鼠标或触控板移动星图」关掉，UI **即时**变灰、引擎收到 `setNavigationSetting "mouseNavigation|0"`，**关闭面板再重开仍为关**（持久化成立），重开置 `|1` 复原。语言行、设备与隐私行同屏渲染。
+  3. **GraphGuides**（Phase 3aq）✅ —— 无选中天体时「升降」页渲染 `RtsSelectionGuide`（「请先选择一个天体」/「此计算使用当前选中的天体和观测位置。」/「去星图选择」），「图表」页渲染 `GraphSelectionGuide`（同款引导）；选中火星后图表页算出并绘出「火星 · 未来 24 小时高度变化（每 30 分）」。`GraphLoadingRow` 因引擎亚秒返回**未被抓到**（瞬态，未直接观测）。
+  4. **导览库与脚本**（Phase 3at `GuideLibrary` / Phase 3as `GuideButton`）✅ —— 「更多功能 → 脚本与自动化 → 脚本」完整渲染「交互式天文导览」+ `guide-start-solar-neighbours`（太阳系邻居 / 5 · 个观测站点 · 离线可用）；点按**真实开启会话**（1/5 · 月球，含 近看/远看/自由观察/自动前进/上一站/暂停/下一站），「下一站」推进到 2/5 · 金星，`guide-stop` 退出并回到列表。
+  5. **Dock 与紧凑快捷区**（Phase 3at/3as/3ap）⚠️ 部分 —— `DockClockChip` 渲染引擎时间（`21:44`、`21:51`）；`BottomDock` 五入口渲染并随面板开合收窄（1117px ↔ 910px）；点击经 `handleDockTouch` 命中（hilog `[DOCK] up ... item=place` → `setPanel place`）并切换面板。**但 `DockButton` 的 active 高亮不显示**：面板打开后（`activePanel='place'` 且 `panelVisible`）对应入口的图标/文字**没有**变蓝（`#70C8FF`）；逐项像素采样 max(B−R) 仅 3–11，而同一时刻 `CompactQuickButton`（陀螺仪常态开启）的蓝色激活环 max(B−R)=66 —— 即 `CompactQuickButton` 的 `@Prop active` 刷新正常，问题只在 Dock。**待定：属回归还是既有**（Phase 3ap 的 `bottomDock` 已用 `ForEach` + `DockButton({active: this.dockActionActive(item)})`，Phase 3at 只是把它从宿主 `@Builder` 移进 `BottomDock` 组件、并把 `dockActionActive` 改成 `isActive` 闭包入参；`ForEach` 键不含 active，疑似键不变 → 子项不重建 → prop 陈旧）。本轮**未改码**，留作独立修复切片。
+  6. **星文化制作器**（Phase 3am/3as `SkyCultureMaker*`）✅ —— CLI `openUiPanel skyCultureMaker`（带 `--bundle`）打开「星空文化制作器」，三页签 概况/星座/校验与导出 逐个渲染；「星座」显示「0 个星座 / 新增星座 / 保存草稿·撤销·新建草稿」，「校验与导出」显示「校验草稿」+「5 个错误 / 2 个提醒」，点「校验草稿」经 `validateSkyCultureMakerDraft` 返回（只读校验）。**按要求未做保存/导出/覆盖。**
+  7. **陀螺仪校准入口**（KNOWN-ISSUES 第 21 条）❌ 未修复且**原因已坐实** —— 代码层：`gyroCalibPanelOpen` 在当前源码里**只有赋 `false`**（`MainWindowNativeNode.ets:3496/10285`、`GyroCalibPanel.ets:30/99`），**没有任何路径把它置 `true`**；手机右上快捷钮 `CompactQuickButton` 只有 `onClick`（无 `LongPressGesture`），而带长按的平板左栏 `gyroButton` 已在 **Phase 3aq** 作为死代码删除。真机层：先短按开启陀螺仪（`toggleGyroscope enabled=true`，`[GYRO_PROBE] callbacks=306 invalid=0`、`GYRO_RAW a=0.019 b=0.018 g=0.595` —— **本机陀螺仪确实产生有效读数**），`devecocli ui longclick` 打在快捷钮上**没有任何校准面板节点出现**（扫「校准/灵敏度/重置/航向/基准」= 0），且长按被当作点击再次翻转开关。→ 校准面板**当前无 UI 入口**；仍建议按第 21 条的修法 A（设置 → 设备与隐私新增「陀螺仪校准」行）。
+  8. **`OFFLINE_APPGALLERY_BUILD` 跳过段**（Phase 3as）✅ 已核实 —— `MainWindowModels.ets:421` `OFFLINE_APPGALLERY_BUILD = true`；「位置」面板末端 `ObserverPlanetSection`（观测星球：地球 + 8 个行星钮）正常渲染，而同一 `if (!OFFLINE_APPGALLERY_BUILD)` 块内的 `PointingTestSection` / `WatchGyroSection` / `ContinuationSection` / `TonightEventsSection` **均不渲染**（与设计一致，须在非 appgallery 构建走查）。
+- **测试同步**：无（未改 `scripts/*.mjs`）。测试期间动过的持久化设置均已复原：陀螺仪开关最终为**关**、`mouseNavigation` 最终为 **1**、信息级别与观测星球未变、语言未变；选中天体为火星（与进入时一致）。
+- **未走查（如实记录）**：`GraphLoadingRow` 未见（瞬态）；`OFFLINE_APPGALLERY_BUILD` 四段需非 appgallery 构建；星文化制作器的「保存草稿/新建草稿/导出」未点击（按要求）。
+- **改动**：仅本 CHANGELOG 与 `docs/harmonyos/KNOWN-ISSUES.md`（文档）。ArkTS 源码 0 改动。
+- **本片新踩的坑**：① 真机上存在**两个** `QAbility` 包（`com.cnchensh.stellarium` 与 `com.joinother.skyinstrument`），`devecocli ui` 跟前台、`stellarium-cli.mjs` 跟 `DEFAULT_BUNDLE`(=skyinstrument)，**两者不同源** —— `openUiPanel` 等 CLI 调用会把 skyinstrument 拉到前台，之后 `devecocli ui` 的点击就全落到它身上。**必须每步用 `--bundle com.cnchensh.stellarium`，并在关键步骤后用 `aa dump -l` 复核前台。** ② `devecocli ui layout` 的 `Toggle` 节点**不暴露 checked**；开关状态只能靠截图收窄区域后像素采样/肉眼比对（本片把 ~3MB 截图裁成 ~100KB 小图再读，避免超出上下文）。③ 无线调试的 `192.168.3.95:40565` 会中途掉线（`hdc list targets` 变 `[Empty]`），用 `hdc tconn` 重连即可。
+## [2026-10-01] DevEco Code - Phase 3at：域 builder 清尾（Dock / 紧凑快捷区 / 导览库）
+
+- **新增 4 个文件（174 行）**：
+  - `panels/shell/BottomDock.ets`（58）：原无参 `@Builder bottomDock()`（31 行）→ 组件；入口集合 / 展开·紧凑两档尺寸 / 玻璃态 / 透明度以 `@Prop` 传入，`canonicalDockActions` / `dockActionActive` / `handleDockTouch` / `activateDockAction` / `notePanelTouch` 以回调解入；内部复用既有 `DockButton`；`ForEach` 键保留 `languageRevision`。
+  - `panels/shell/CompactTopQuickControls.ets`（37）：原无参 `@Builder compactTopQuickControls()`（20 行）→ 组件；陀螺仪 / 音频两项由 `CompactQuickButton` 渲染，开关态与透明度以 `@Prop` 传入，含诊断日志的动作本体回注宿主。
+  - `panels/shell/CompactQuickButton.ets`（43）：原**参数化** `@Builder compactQuickButton(icon, active, action, receiveTap, pressed)`（25 行）→ 组件（消除简单类型参数按值捕获冻结，§13.1 规则 3）；`receiveTap` 门控保留在组件内，`onClick` 语义逐字等价。
+  - `panels/guide/GuideLibrary.ets`（36）：原无参 `@Builder guideLibrary()`（14 行，类成员、调用点在 `panelContent` 的 `scripts` 分支）→ 组件；四个并列根节点收进 `Column({ space: 10 })`（与原调用点外层容器 `space` 一致，§13.1 规则 7）；`guide-start-<id>` 动态 id 锚点原样保留；夜色三色与 `scriptSessionActive()` 以 `@Prop` 传入，`startGuide` 命令回注宿主。
+- **共迁移 4 个 `@Builder`**；宿主调用点 5 处（`BottomDock` 3：`expandedShell` / `hoverObservatoryShell` / `compactShell`；`CompactTopQuickControls` 1：`compactShell`；`GuideLibrary` 1：`panelContent` 的 `scripts` 分支，仅替换一行调用、未动其 4,788 行分支体）。另清理删除接缝处 3 行属于 Phase 3aq/3as 已删对象的孤立注释。
+- **单体行数：25,098 → 25,063（−35；`git diff --numstat` 对单体 +71 / −106）**。
+- **省略（留待 Phase 4 同片）**：`floatingPanel`（55）**与 `compactPanel`（46）** 体内都调用宿主 `this.panelContent()`，组件化必须经 `@BuilderParam` 传递 → 违反 §13.1 规则 9（真机渲染即整应用退出）。**计划原本只点了 `floatingPanel`，实测 `compactPanel` 同病**，故两件一并留给 Phase 4 与 `panelContent` 同片。
+- **验证**：预检通过（`this` 引用自洽 / 括号深度 0）；`arkts_check` 5 文件 0 错；构建 `BUILD SUCCESSFUL`；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点不变；全量切片脚本扫描仅剩 §13.6 的 7 个**先于本片**的环境类失败（4 个 `-pad` 需 `--device`、`mist-performance` 需设备、`verify-ohos-search` 平台假设、`verify-ohos-location-search` 路径 bug），**无本片新暴露的失败**（本片未改任何 `scripts/*.mjs` 断言的文本锚点）。
+- **模拟器（`127.0.0.1:5555`，Pura 90 Pro，x86_64 UI-only 通道；`pidof`=15174 全程存活）已验**：① 启动即见 **`BottomDock` 5 入口**（搜索 / 时间 / 位置 / 图层 / 更多功能，圆角玻璃底、图标+标签齐全）；点「时间」→ 时间面板打开、**Dock 立即收窄重排**（x 由 83→182，即 `compactDockWidthPercent()` 92→76），`panelVisible` 经 `@Prop` 的实时刷新链路通；关闭面板后恢复。② 右上 **`CompactTopQuickControls` 两枚圆钮**渲染；点陀螺仪钮 → hilog 实测 `toggleGyroscope enabled=true current=false`，回调解入链路通（且未改变持久化状态：第二次点按仍报 `current=false`）。③ **`GuideLibrary`** 在「更多功能 → 脚本与自动化 → 脚本」面板完整渲染：「交互式天文导览」标题 + 说明 + `guide-start-solar-neighbours` 按钮（「太阳系邻居」/「5 · 个观测站点 · 离线可用」），动态 id 锚点保留；点按后进程存活。
+- **模拟器无法覆盖（待真机）**：① `DockButton` 的 `active` 高亮与 `activateDockAction` 的面板切换在 UI-only 通道可用语义化 click 复现（本次经 `handleDockTouch` 坐标路径生效），但**真机上 `DockButton` 的 `onClick` 会被原生 XComponent 吞掉**，需真机确认触摸命中与高亮；② `CompactQuickButton` 的陀螺仪 / 音频**真实开启**（无传感器 / 音频引擎，模拟器只派发命令、不改状态），`compactQuickPressed` 按下态随触摸的实时刷新未验；③ `GuideLibrary` 的 `sessionActive`（按钮置灰）依赖 `beginGuidedSession` 引擎会话，点「太阳系邻居」启动导览在无引擎下无响应。测后未改任何持久化设置（`gyroscopeEnabled` 始终 `false`）。
+- **本片新踩的坑**：① **`@Builder` 有两种书写风格** —— 除 `\n  @Builder\n  name() {` 外还有**行内 `@Builder name() {`**（本单体 7 个 `view*Tab` 即此式），只按 `^  @Builder$` 扫描会**漏计 7 个**；统计剩余 builder 必须同时匹配两种。② **父代理给出的「剩余 13 个」实为「非 `private` 前缀」的 builder**：另有 **11 个 `private @Builder`** 与 **7 个 `view*Tab`** 仍在，故 **Phase 3 并未清空全部域 builder**（结论已写入 §13.5：11 个 private + 7 个 view*Tab 经零引用扫描全为活代码，调用点落在 `panelContent` / `viewSkyCultureTab` / `build()`，归属 Phase 4 / Phase 5）。③ **`compactPanel` 与 `floatingPanel` 同病**（体内均为 `this.panelContent()`），计划只点了前者同名的一个，容易漏。④ 新建 `.ets` 经 `write` 工具落盘为 **LF**（与 Phase 3as 的 `PanelChromeExtras.ets` 一致）；统计行数一律用 .NET `ReadAllText`（`Get-Content` 在 GBK 控制台下会吞换行、低估行数）。
+## [2026-10-01] DevEco Code - Phase 3as：小 builder 批处理（第二批：会话工具 / 星文化制作器 / 面板壳件）
+
+- **新增 7 个文件（共 525 行）**：
+  - `state/SessionToolStore.ets`（46）：观测/会话工具区块 20 个 `@State` 字段的 `@Observed` store（观测星球、虚拟指星笔、手表陀螺仪、今晚天象），只放数据、不 import UI/NAPI；`watchLastSend`（每次发送都写的节流时间戳）刻意留宿主普通字段，不入被观察 store。
+  - `panels/astro/SessionToolSections.ets`（189）：`ObserverPlanetSection`（原 `observerPlanetSection`，24）/ `PointingTestSection`（原 `pointingTestSection`，28）/ `WatchGyroSection`（原 `watchGyroSection`，34）/ `TonightCard`（原参数化 `tonightCard`，16）/ `TonightEventsSection`（原 `tonightEventsSection`，23）。
+  - `panels/skyculture/SkyCultureMakerPanel.ets`（109）：`SkyCultureMakerPanel`（原 `skyCultureMakerPanel`，68）；状态复用既有 `SkyCultureMakerStore`，主题色以 `@Prop` 传入，19 个桥/定时器/解码回调注入。
+  - `panels/shell/PanelChromeExtras.ets`（100）：`DockClockChip`（原 `dockClockChip`，16）/ `DockClockLayer`（原 `dockClockLayer`，13）/ `PadPanelHandle`（原 `padPanelHandle`，10）/ `PanelHandle`（原 `panelHandle`，22）。
+  - `panels/astro/GyroTargetGuide.ets`（29）：`GyroTargetGuide`（原 `gyroTargetGuide`，19），`@ObjectLink GyroStore` 单依赖。
+  - `panels/tools/ScriptKeyButton.ets`（25）：`ScriptKeyButton`（原参数化 `scriptKeyButton(label,key)`，12）。
+  - `panels/guide/GuideButton.ets`（27）：`GuideButton`（原参数化 `guideButton(label,action)`，10；可用态由 `phase`/`index`/`action` 在组件内推导，`guide-` id 前缀原样保留）。
+- **共迁移 13 个 `@Builder`**：宿主 `this.sessionToolStore.*` 改写 **80 处**（`observerPlanet` 18 / `watchResult` 8 / `pointResult` 6 / `watchTracking` 6 …），组件调用点 **28 处**（`GuideButton` 12 / `ScriptKeyButton` 6 / `DockClockLayer` 2 / `DockClockChip` 1（组件内）/其余 9 个各 1）。桥与引擎依赖（`setObserverPlanet` / `pointAtSkyTest` / `watchGyroSend|Start|Stop` / `refreshTonight` / `gotoTonightEvent` / `scheduleSkyCultureMakerSave` 等）全部留宿主、以箭头回调解入（§13.1 规则 6）；`planetZh` 与 `nm*()` 以 prop 函数 / 颜色串传入。
+- **零引用扫描删死代码**：`padExploreCard`（参数化 `@Builder`，27 行）—— `this.padExploreCard(` = 0、裸标识符仅声明处 1、字符串 `'padExploreCard'` = 0、`scripts/*.mjs` 与 `docs` = 0，四类判据全 0，确认为死代码后删除。
+- **单体行数：25,434 → 25,098（−336；`git diff --numstat` 对单体 +106 / −442）**。
+- **测试同步（§13.1 规则 8）**：`scripts/test-ohos-guide.mjs` 的两条源码切片断言改到新组件形态 —— `doesNotMatch /this\.guideButton\([^\n]*\?/` → `/GuideButton\(\{[^\n]*\?/`、`match /this\.guideButton\('btn_resume', 'resume'\)/` → `/GuideButton\(\{ label: 'btn_resume', action: 'resume'/`；该脚本 9 用例全绿。
+- **验证**：预检通过（`this` 引用自洽 / 括号深度 0）；`arkts_check` 8 文件 0 错；构建 `BUILD SUCCESSFUL`；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点不变；全量切片脚本扫描仅剩 §13.6 的 7 个**先于本片**的环境类失败（4 个 `-pad` / `mist-performance` 需设备、`verify-ohos-search` 平台假设、`verify-ohos-location-search` 路径 bug），本片新暴露的 1 个（`test-ohos-guide.mjs`）已同步修复。
+- **模拟器（`127.0.0.1:5555`，Pura 90 Pro，x86_64 UI-only 通道；`pidof`=3792 全程存活）已验**：① Dock「位置」→ 面板滚到末端，**`ObserverPlanetSection` 完整渲染**（「观测星球」/「切换后星空与地景会按该星球视角重算。」/「当前观测星球：地球」/「回到地球」）——「地球」正是 `store.observerPlanet` 经注入的 `planetLabel`（宿主 `planetZh`）渲染，证明 `@ObjectLink` + prop 函数链路通；② **紧凑面板抓手 `PanelHandle`**：在抓手处 `ui drag` 后 `Scroll#panel-scroll-zh_CN` 由 `[112,1810,1144,2379]` 变为 `[102,1808,1155,2388]`（面板实时变宽变高），`onDrag` / `onDragFinish` 注入链路通且无崩溃；③ 相邻面板冒烟：时间面板（`时间 --` / `1x` / 日期 / 倒带·停止·实时·减速·快进）正常，关闭面板后星图壳恢复；④ 面板内多轮 `ui drag` 滚动无退出。
+- **模拟器无法覆盖（待真机）**：① `PointingTestSection` / `WatchGyroSection` / `TonightEventsSection` / `TonightCard` **在当前构建里被 `OFFLINE_APPGALLERY_BUILD = true` 直接跳过**（宿主的 `if (!OFFLINE_APPGALLERY_BUILD)`），本构建根本不渲染它们，需在非 appgallery 构建走查（且四者绑定 `setObserverPlanet` / `pointAtSky` / `watch*` / `getTonightEvents` 引擎命令）；② `SkyCultureMakerPanel`：入口只有 CLI `openUiPanel skyCultureMaker`（模拟器上 `drainCliRequests()` 需 `qtInitialized`，无引擎 → CLI 桥不启动，实测「等待设备响应超时」）与「更多功能 → 天体数据与扩展 → 管理扩展 → SkyCultureMaker 卡片」（模拟器插件列表为空），故未走查；其标签页 store 实时刷新留待真机；③ `GyroTargetGuide`（`gyroGuideVisible`/`gyroGuideAngle` 由传感器驱动，无真实陀螺仪）；④ `DockClockChip` / `DockClockLayer`（`dockClockText` 由引擎 `getSimulationTime` 1s 轮询写入，模拟器恒为空串 → 条件不成立不渲染）；⑤ `ScriptKeyButton`（需脚本回放 `scriptRunning && !replaying`）；⑥ `GuideButton`（需导览会话 `beginGuidedSession`）；⑦ 观测星球切换（`setObserverPlanet` 仅在桥返回 ok 后写 store，模拟器只出「切换失败」提示，选中态实时刷新未验）。测后未改任何持久化设置（面板拖拽只改内存 `compactPanelSnapRatio`，不落盘）。
+- **本片新踩的坑**：① **成员名雷区新增 `onDragEnd`（且 `enabled` 同批命中）**：`PanelHandle.onDragEnd` 报 `Property 'onDragEnd' in type 'PanelHandle' is not assignable to the same property in base type 'CustomComponent'`（基类有 `.onDragEnd()` 属性方法），改名 `onDragFinish`；`ScriptKeyButton.enabled` 同样报错，改名 `isEnabled`。至此雷区为 `borderColor`/`scale`/`onTouch`/`background`/`enabled`/`onDragEnd`（**组件成员命名前必须逐个比对 CustomComponent 属性方法**）。② **`floatingPanel` 本片不能迁**：它的面板内容正是宿主 `this.panelContent()`（4,707 行），组件化必须经 `@BuilderParam` 传进去，直接违反 §13.1 规则 9（真机渲染该页即整应用退出）——因此 `floatingPanel` 按设计留给 Phase 4 与 `panelContent` 同片，本片只搬它体内已可独立的 `padPanelHandle` 与 `dockClockLayer`。③ 「零引用扫描」要跑**四形式**：`padExploreCard` 的 `all=1 / this()=0` 容易判死，但必须同时确认裸标识符只有声明、无字符串引用、无脚本引用后才能删。④ **`Get-Content` 会低估新建文件的行数**：本机 PowerShell 控制台代码页是 GBK，`Get-Content` 按 ANSI 解码 UTF-8 源码时，**凡是以非 ASCII 字符结尾的行，其 UTF-8 末字节（0x80–0xBF）会被 GBK 当成首字节、把紧随的 `\n` 当作尾字节一起吃掉** → 换行被吞、相邻两行拼成一行，行数偏少（本片 7 个新文件被低估 2–12 行，合计 485 vs 实际 525）。**统计行数一律用 .NET `ReadAllText` 数 `\n`（或直接看 `git diff --stat`）**，不要用 `Get-Content | Measure-Object`；同理 `Get-Content` 直读会显示乱码，核对中文要用 Read 工具或 `Select-String -LiteralPath`。
+## [2026-10-01] DevEco Code - Phase 3aq：小 builder 批处理（第一批：设置行 / 图表引导）
+
+- **新增 4 个组件文件（共 374 行）**：
+  - `common/ui/InfoRow.ets`（32）：原参数化 `@Builder infoRow(label, value)` → 纯展示组件（2 个 `@Prop`），**55 处调用点**改写。
+  - `panels/settings/SettingsRows.ets`（179）：7 个设置行组件 —— `EphemerisToggleRow`（原 `ephemerisRow`，4 调用点）/ `InformationModeButton`（原 `informationModeButton`，5）/ `InformationSwitchRow`（原 `informationSwitchRow`，15）/ `NavigationSwitchRow`（原 `navigationSwitchRow`，6）/ `NavStarsToggleRow`（原 `navStarsToggle`，7）/ `ArchaeoToggleRow`（原 `archaeoToggleRow`，13）/ `MosaicCameraMetric`（原 `mosaicCameraMetric`，3）。
+  - `panels/settings/DeviceAndLanguageRows.ets`（102）：`LanguageRow`（原 `languageRow`，2）/ `GyroscopeRow`（原 `gyroscopeRow`，2）/ `DevicePrivacySection`（原 `deviceAndPrivacySettings`，2；内部直接渲染 `GyroscopeRow`）。
+  - `panels/astro/GraphGuides.ets`（61）：`GraphLoadingRow`（原 `graphLoadingRow`，8）/ `RtsSelectionGuide`（原 `rtsSelectionGuide`，1）/ `GraphSelectionGuide`（原 `graphSelectionGuide`，5）。
+- **共迁移 14 个 `@Builder`**、改写 **128 处调用点**（另把 `timeSpeedChips()` 薄包装的 1 处调用点内联为已存在的 `TimeSpeedChips` 组件调用）。宿主保留状态与桥调用，组件只收「宿主算好的值 + 夜视三色 + 回调」；`InformationSwitchRow` 另收 `inCustomMode`，`EphemerisToggleRow` 的 `enabled` 改名 `isEnabled`（见下）。
+- **零引用扫描删死代码（13 个 `@Builder`，约 400 行）**：`verticalRail`(66) 与其唯一引用者 `iconButton`(31) / `moreButton`(32) / `musicButton`(25) / `gyroButton`(28)；两条 `@deprecated` 旧抽屉 `actionDrawer`(70) / `compactMoreDrawer`(96)；详情卡旧行 `tabletInspectorAction`(8) / `tabletInspectorRow`(9) / `expandedSummaryMetric`(8) / `expandedSummaryLine`(8)；`lockRow`(18)；`timeSpeedChips`(6)。四类判据（`this.<name>(` / 裸 `this.<name>` / `'<name>'` 字符串 / `scripts/*.mjs` 与 `docs`）全部为 0。
+- **级联清理（删除后重扫）**：`pinnedActions` / `drawerActions` / `compactDrawerActions` / `railHeight` / `drawerWidth` / `onRailTap` 六个方法、`RAIL_TOP_PAD` / `RAIL_ITEM_STEP` / `RAIL_MORE_OFFSET` / `RAIL_MUSIC_OFFSET` / `RAIL_GYRO_OFFSET` 五个常量、`@State railPinned` 与 `@State drawerOpen` 两个零读字段（`toggleDrawer()` 内同步去掉对其赋值）——全部随 rail/drawer 死路径消失。
+- **单体行数：26,088 → 25,434（−654；`git diff --stat` +142 / −791）**。
+- **测试同步（§13.1 规则 8）**：`scripts/test-ohos-settings-choice-motion.mjs` 里唯一断言 `active: this.informationMode === mode`（正是参数化 builder 的写法）改读宿主调用点的 `active: this.informationMode === 'all' / 'custom'` 与组件文件里的 `active: this.active`；4 用例全绿。
+- **验证**：预检通过；`arkts_check` 5 文件 0 错；构建 `BUILD SUCCESSFUL`；契约 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 129 文件不变；全量切片脚本仅剩 7 个**先于本片**的失败（见 §13.6 补充）——已用 `git worktree`（HEAD 检出）A/B 复核，7 个在基线同样失败。
+- **模拟器（`127.0.0.1:5555`，Pura 90 Pro，x86_64 UI-only 通道；`pidof`=19976 全程存活）已验**：① 「更多功能 → 设置」打开；`语言`行渲染可见 chip，点 `Dansk` 后**面板 id 由 `panel-content-zh_CN` 即时变 `panel-content-da`、标题「设置→Settings」、Dock 文案全部即时本地化**（迁移后的 `LanguageRow` 实时刷新）；再滚到末端点「简体中文」恢复 `zh_CN`（已还原，无残留持久化改动）。② 「信息」页 5 个 `InformationModeButton` 渲染且「默认」高亮正确，下滚可见 15 个 `InformationSwitchRow` 标签。③ 「视角与导航」页 `NavigationSwitchRow` 渲染，开关 on 态背景/描边正确。④ 「设备与隐私」页 `DevicePrivacySection` + `GyroscopeRow` 渲染（标题/开关/灵敏度/说明齐全）。⑤ 反复切 7 个设置标签页与多次滚动后进程存活、无退出。
+- **模拟器无法覆盖（待真机）**：一切依赖 native 桥的写回路径 —— `InformationModeButton`/`InformationSwitchRow`（`setInformationSetting`）、`NavigationSwitchRow`（`setNavigationSetting`）、`EphemerisToggleRow`（`setEphemerisSetting`）、`NavStarsToggleRow`/`ArchaeoToggleRow`/`MosaicCameraMetric`、`GyroscopeRow`（需 `hasCurrentPrivacyConsent()`）；以及 `GraphLoadingRow`/`RtsSelectionGuide`/`GraphSelectionGuide` 所在的观测曲线面板（需引擎计算）。故「点按后开关/高亮实时刷新」这类断言必须在真机复验。
+- **本片新踩的坑**：① **`enabled` 也是 `CustomComponent` 基类属性方法** —— `EphemerisToggleRow` 的 `@Prop enabled` 直接编译失败（`Property 'enabled' ... is not assignable to the same property in base type 'CustomComponent'`），改名 `isEnabled` 后通过；成员名雷区在既有 4 个（`borderColor`/`scale`/`onTouch`/`background`）之外**新增 `enabled`**。② **把参数化 builder 的三元表达式内联到调用点会触发字面量窄化**：`mosaicCameraMetric('ra')` 内联成 `value: ('ra' === 'ra' ? … : 'ra' === 'dec' ? …)` 后报 `This comparison appears to be unintentional … '"rotation"' and '"ra"' have no overlap`；正解是宿主加 `private mosaicCameraValue(key: string): number`，调用点写 `value: this.mosaicCameraValue('ra')`。
+## [2026-10-01] DevEco Code - Phase 3ap：详情卡收尾（`UnifiedObjectDetailCard`）+ 面板头部（`PanelHeader`）+ Dock 按钮与 Hub 列表
+
+- **新增 `panels/object/UnifiedObjectDetailCard.ets`（141 行）**：原 `@Builder unifiedObjectDetailCard()`（实测 74 行）整体下沉为组件，**详情卡域至此收尾** —— 卡片外框（页头 `ObjectDetailCardHeader` + 页签 `ObjectDetailCardTabs` + `Divider` + `Scroll` 内四个页组件）全部在组件内组装。**46 个成员**：`@ObjectLink store` / `@ObjectLink mediaStore`、1 个普通成员 `scroller: Scroller`（与宿主共享同一实例，同 `resolve` 回调的注入法）、**25 个 `@Prop`**（activeIndex / liveInfoVisible / contentOpacity / contentTranslateX / cardWidth / cardHeight / viewLock / speechStatus / inObservingList / iconName / distanceText / distanceSummaryText / imageHeight / inlineModelSize / modelReady / modelRendering / hasModelTexture / modelNotice / warmupText / fallbackKind / starColor / satelliteVisible / tleEpoch / accent / cultureVisible / textColor）、**17 个回调**（resolve / nameOf / typeOf / onDragTouch / onDismiss / onSelectTab / onLoadPasses / onMediaOpen / onMediaRetry / onModelExpand / onModelTouch / onCenter / onToggleLock / onToggleObserving / onRefresh / onReselect / onSpeak）。**父代理估值「25–30 入参」偏低**：详情卡要装配「页头 + 页签 + 观测/坐标/资料/操作四页」，仅 `ObjectDetailDataTab` 一页就要 18 个 `@Prop` + 5 个回调，转发量必然到 40+。**刻意不迁 `@BuilderParam`**（§13.1 规则 9：真机渲染该页即整应用退出）。`onScroll` 的 `AppStorage.setOrCreate('stellariumObjectDetailScrollY', …)` 与 `onAreaChange` 回写 `mediaStore.objectInspectorMediaViewportHeight` 留在组件内（只依赖本组件的 scroller 与 mediaStore）。`objectInspectorModelRendering` / `objectInspectorModelTexturePixels` 仍留宿主、以 `@Prop` 传入（逐帧写入，不入被观察 store）。
+- **新增 `panels/shell/PanelHeader.ets`（89 行）**：原 `@Builder panelHeader()`（70 行）→ 组件（`@Prop title: ResourceStr` / `subtitle: string` / `canGoBack: boolean` / `routeOpacity` / `routeOffsetX` + `onBack` / `onClose`）。`panel-back` / `panel-close` 两个静态 id 锚点原样保留。**`observationTimeText` / `timeRateText` 未搬**：宿主 `panelTitle()` → `timePanelClockText()`（读宿主 `@State observationTimeText`）、`panelSubtitle()` → `timePanelDateText()`（读 `observationTimeText` + `timeStore.timeRateText`）仍在宿主，组件只接收算好的标题/副标题字符串；宿主状态一改 `@Prop` 即刷新。
+- **新增 `panels/shell/DockButton.ets`（53 行）**：原**参数化** `@Builder dockButton(item)`（33 行）按 §13.1 规则 3 改为组件；展开/紧凑两档差异（图标 22 / `compactDockIconSize()`、标签 10 / `compactDockLabelFontSize()`、行高 44 / `compactDockItemHeight()`）由宿主算好以 `@Prop` 传入，`handleDockTouch` / `activateDockAction` 回注。1 个调用点（`bottomDock`）。
+- **新增 `panels/shell/HubActionList.ets`（58 行）**：原**参数化** `@Builder hubActionList(actions, description)`（38 行）→ 组件（`@Prop actions: ShellAction[]` / `description: ResourceStr` / `subColor` / `languageRevision` + `onOpenPanel`）。`hub-action-<panel>` 动态前缀保留；`languageRevision` 传入组件以维持切语言后重建 ForEach。3 个调用点（`panelContent` 的 observeHub / dataHub / automationHub）。
+- **宿主手术**：删除 4 个 `@Builder`（约 217 行）与 3 个本片后已无引用的 import（`ObjectDetailActionsTab`、`ObjectDetailTabs` 三件套、`ObjectDetailCardChrome` 两件套 —— 改由 `UnifiedObjectDetailCard` 内部使用），新增 4 个 import；替换 9 个调用点（详情卡 3、`panelHeader` 2、`dockButton` 1、`hubActionList` 3）。六个 `*Shell` 与 `panelContent` 的组装逻辑一字未动（Phase 6 / Phase 4）。
+- **未处理（如实记录）**：`iconButton`(31) / `moreButton`(32) 经零引用扫描实为**死路径** —— 二者只被 `@deprecated verticalRail()` 调用，而 `verticalRail` 全仓零调用。按「死代码另有归属、本片不删」处理，未迁移（`verticalRail` 注释明确写着「仅保留给历史布局数据」）。同域 `compactPanel`(41) 实为 compact 壳层正文，归 Phase 6；`hubActionList` 所在的 3 个分支属 Phase 4 组装，本片只把内层列表组件化。
+- **单体行数：** 26,177 → **26,088**（−89；diff 144 增 / 233 删）。
+- **验证**：预检通过（组件/store `this` 引用自洽、单体括号深度 0）；`arkts_check` 5 文件 0 错；构建成功（`BUILD SUCCESSFUL in 53 s`）；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / **42 个 id 锚点** / 125 文件不变；全量切片脚本仅剩 §13.6 既有环境类（4 个 `-pad` 要求显式 `--device`、`mist-performance` 亦要求 device、`verify-ohos-search` 走 macOS hdc、`verify-ohos-location-search` 的 `country.zh` 检查 —— 该 token 在 HEAD 与本片后**均为 0 处**，确认先于本片），**无新增回归**。
+- **测试同步（§13.1 规则 8）**：`scripts/test-ohos-model-scroll.mjs` 首用例按文本切单体断言 `Scroll(this.objectDetailScroller)` 与 `stellariumObjectDetailScrollY` 的 `currentOffset()?.yOffset` —— 两者随本片迁入 `UnifiedObjectDetailCard.ets`；改为新增 `detailCard` 夹具读组件文件，宿主侧断言换成 `scroller: this.objectDetailScroller`（5 用例全绿）。
+- **模拟器（`127.0.0.1:5555`，Pura 90 Pro，x86_64 UI-only 通道；`pidof`=9095 全程存活）已验证**：① Dock 五个入口（`DockButton`）全部渲染，点「时间」「图层」「搜索」均在 2 s 内打开对应面板；② `PanelHeader` 标题随面板切换（更多功能 / 观测工作区 / 天体数据与扩展 / 时间（副标题 `1x`）/ 图层 / 天体分类），`panel-close` 点击后面板消失；③ `HubActionList` 三处列表渲染正确（观测工作区：观测列表/书签/双筒望远镜 + 说明「目标、书签与观测设备」；天体数据与扩展：天文计算/卫星/流星雨 + 说明「卫星、流星雨、地景与星表」；`panel-back` 在 hub 层出现、点击返回「更多功能」）；④ 反复开合 6 个面板后进程存活，无退出。
+- **模拟器无法覆盖（待真机）**：`UnifiedObjectDetailCard` 只在 `infoWinVisible && objectDetailStore.selectedName.length > 0` 时渲染，而模拟器无 Stellarium/Qt 引擎、天体搜索与选中不可用 —— 详情卡四个页签、媒体/模型解码、卡片拖拽、「资料」页 18 个媒体参数链路与 `observationTimeText` 的真实时间串**均未走查**（CLI `openUiPanel objectDetail` 也因无选中天体而空）。这些留待真机。
+- **本片新踩的坑（供后续切片）**：① **PowerShell 5.1 会把「无 BOM 的 UTF-8」`.ps1` 当 ANSI 读** —— 用 `write` 工具生成的含中文临时脚本直接 `-File` 执行会乱码并连带破坏字符串终止符（报 `Missing closing '}'`）。解决：临时脚本一律**纯 ASCII**，用 `@Builder` + 方法签名做正则锚点，不匹配中文注释。② `Measure-Object -Line` **严重低估行数**（同一单体 `Get-Content | Measure-Object -Line` 报 24,918，而 `(Get-Content).Count` 报 26,088）—— 量行数必须用 `(Get-Content).Count`。
+- **提交**：`22f2ded92a`（refactor：详情卡外壳 + `PanelHeader` + `DockButton` + `HubActionList` + 宿主手术 + 测试夹具同步，6 文件 491 增 / 235 删；含 `scripts/test-ohos-model-scroll.mjs`）；随后一个 `docs` 提交记录本条目与 §13.5。
+## [2026-10-01] DevEco Code - 文档记录：陀螺仪校准面板入口不可发现（仅记录，未改代码）
+
+- **来源**：用户真机走查反馈 —— 点按右侧竖排栏的陀螺仪按钮只有开/关提示，长按看不到校准面板，且不清楚校准时是否需要额外操作。
+- **记录位置**：`docs/harmonyos/KNOWN-ISSUES.md` 新增 **第 21 条**（入口现状代码事实、三种候选原因、校准语义、A/B/C 三种候选修法、真机三步定位法、以及"记录时设备已掉线、未验证"的状态说明）。
+- **未做**：没有改任何 ArkTS 代码（用户指示"只记录文档"）。修法选定后另开切片，按协议做真机实测再提交。
+## [2026-10-01] DevEco Code - Phase 3ao：工具与录制域（ToolsStore + `panels/tools` 三个组件）
+
+- **新增 `state/ToolsStore.ets`（42 行）**：把「工具 / 帮助 / 角度测量 / 天空资料图状态提示 / 录制控制条 UI 状态」五簇状态整体迁入 `@Observed` store —— **25 个字段**：帮助面板 14（`aboutVersion` / `aboutQt` / `aboutUserDir` / `aboutConfigFile` / `logText` / `logVisible` / `configExportText` / `configExportVisible` / `configImportText` / `configImportMsg` / `screenshotSaving` / `sessionExportText` / `sessionImportText` / `sessionImportMsg`）、角度测量 5（`angleMeasureEnabled` / `angleMeasureHasStart` / `angleMeasureHasEnd` / `angleMeasureText` / `angleMeasurePending`）、天空资料图状态 3（`skyTextureStatusVisible` / `skyTextureStatusText` / `skyTextureStatusError`）、录制控制条 3（`recording` / `recordingPaused` / `recordingUiExpanded`）。类型与默认值逐条照抄。
+  - **实测规模（原表/父代理估值均偏低）**：本域宿主原有 `this.<field>` 直接引用 **约 190 处**；删 builder 后改写 **153 处**为 `this.tools.<field>`（按字段计数：angleMeasure* 48、recording* 36、skyTextureStatus* 21、about* 9、config* 8、screenshotSaving 5、log* 2、session 文本 2；其余引用随被删 builder 一并消失；改写后 `this.<field>` 残留实测 = 0）。
+  - **刻意不入 store（§13.1 规则 4 / 高频进度字段以 `@Prop` 传）**：`recordCount`（每记一条可录制命令写一次）以 `@Prop` 传 `RecordingControlBar`；录制引擎其余字段（`recordBuffer` / `recordMsg` / `recordings` / `replay*` / `video*` / `screenVideo*` / `screenCapture*` / `scriptControl*` 拖拽瞬时量）由桥回调、定时器与触摸每帧写入，留在宿主；`skyTextureStatusTimer` / `DelayTimer` / `Polls` 与 `angleMeasureRequestId` 属定时器/请求标识（非 UI 状态）；`sessionJson` / `sessionExportSig` / `sessionHint` 与会话续传逻辑及 astro 域 `ContinuationSection` 共享，留宿主避免跨域耦合。
+- **新增 `panels/tools/ToolsPanel.ets`（105 行）**：原 `@Builder toolsPanel()`（**实测 76 行**，§13.5 原表「446」系把随后的 `lockRow` / `languageRow` / `gyroscopeRow` / … 一并计入的测量错误）→ 组件（`@ObjectLink store` + 四色 + 两个输入框 `@Prop` + 9 张回调）。输入框沿用 `SkyCultureMakerFields` 既有写法（值走 `@Prop`、编辑走 `onChange` 回调）。截图 / 导出 / 导入 / 会话导出应用 / 取日志等**副作用**都走原生桥，留在宿主、以回调注入。
+- **新增 `panels/tools/RecordingControlBar.ets`（75 行）**：原 `@Builder recordingControlBar()`（实测 55 行）→ 组件（`@ObjectLink store` 取"录制中 / 已暂停 / 控制区展开"三态 + `@Prop recordCount` / `skyWidth` / `safeTop` + 三个回调）。`skyWidth` 与 `scriptControlSafeTop()` 都是纯布局量，以 `@Prop` 传入，使组件不依赖任何宿主方法。视觉逐字保留（含 0.84 玻璃底、backdropBlur 28、zIndex 130、入场 OPACITY + translateY 动画）。
+- **新增 `panels/tools/RecordingFocusShell.ets`（15 行）**：原 `@Builder recordingFocusShell()`（实测 7 行）→ 组件（单回调 `onSkyTouch`，本身无状态）。
+- **宿主手术**：删除上述 3 个 `@Builder`（约 138 行）与 25 行 `@State` 声明；替换 3 个调用点（`panelContent` 的 `tools` 分支 → `ToolsPanel`；`harmonyShell` 顶层的录制聚焦层与控制条 → 两个组件）—— `panelContent` 内这些块的组装逻辑一字未动（属 Phase 4）；新增 `@State private tools: ToolsStore = new ToolsStore()` 与 4 个 import。`scriptFocusShell`（Phase 6 壳层）未动；`skyTextureStatus` 状态条的 UI 仍留在 `harmonyShell` 内、只改字段引用（其组件化留 Phase 6）。
+- **单体行数：** 26,325 → **26,177**（−148；diff 148 增 / 296 删）。
+- **验证**：预检通过（组件/store `this` 引用自洽、单体括号深度 0、`@Builder` 成对）；`arkts_check` 5 文件 0 错；构建成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 121 文件；全量切片脚本仅剩 §13.6 既有环境类（4 个 `-pad` 要求显式 `--device`、`mist-performance`、`verify-ohos-search` 走 macOS hdc、`verify-ohos-location-search` 路径 bug）—— 与 Phase 3an 完全一致，无新增。全仓无脚本按文本切本片被搬符号，无需改测试夹具。
+- **真机（`192.168.3.95:40565`，`pidof`=6001 全程存活）**：① CLI `openUiPanel tools` → `ToolsPanel` 完整渲染（工具与数据 / 截图+保存 / 配置备份+导出查看·导入配置 / 会话 / 运行日志）；② **点「查看日志」→ 按钮实时变「刷新」+ 新增「收起」按钮**（store.logVisible 驱动，正是参数化 `@Builder` 与 store 取舍的分水岭）；③ **点「收起」→ 立即回到「查看日志」、收起按钮消失**；④ 回归：CLI 打开 `scripts`（读 `this.tools.recording`）、`angleMeasure`（读 `this.tools.angleMeasure*`）、`help`（读 `this.tools.about*`）三面板均正常渲染。测后未改任何持久化设置（只开关日志预览，无落盘）。
+- **未走查（如实记录）**：`RecordingControlBar` / `RecordingFocusShell` 仅在 `store.recording === true` 时渲染，而本片按约定**不得真正开始录制**，故仅验证其编译通过与宿主接线，未做真机渲染实测。
+- **提交**：`9c9a4f3d6c`（refactor：ToolsStore + 三个 tools 组件 + 宿主手术，5 文件 413 增 / 296 删）；随后一个 `docs` 提交记录本条目与 §13.5。
+## [2026-10-01] DevEco Code - Phase 3an：视图设置与叠层域（OverlayStore + `panels/view` 三个组件 + `panels/overlay` 两个叠层组件）
+
+- **新增 `state/OverlayStore.ets`（100 行）**：把「视图中心坐标」叠层的设置、「指针坐标」插件面板与「天体详情指向线」开关的状态簇迁入 `@Observed` store —— **14 个字段**：视图叠层 3（`viewCoordinatesVisible` / `viewCoordinateFamily` / `viewEquatorialEpoch`，随 `saveAppSettings` 持久化）、指针坐标 10（8 个持久化设置 `Enabled` / `Startup` / `Button` / `Constellation` / `CrossedLines` / `Elongation` / `System` / `Place` + 2 个瞬时请求态 `Loading` / `Status`）、指向线开关 1（`objectDetailConnectorVisible`），类型与默认值逐条照抄。六个纯查表助手一并下沉：`viewCoordinateTitle()`（赤道才带历元后缀）、`viewCoordinateFamilyLabel()`、`viewCoordinatePrimaryLabel()`、`viewCoordinateSecondaryLabel()`、`pointerCoordinateSystemLabel()`（8 种）、`pointerCoordinatesPlaceLabel()`（5 种）。宿主原有 **70 处** `this.<field>` 直接引用，其中 **42 处**改写为 `this.overlayStore.<field>`，余 28 处随被删的 4 个 `@Builder` 与 6 个助手一起消失（`this.<field>` 残留实测 = 0）。
+  - **刻意不搬（§13.2 高频写入）**：`viewCoordinatePrimaryText` / `viewCoordinateSecondaryText` 由 50ms 定时器从 native `getViewCenterCoordinates` 回填；`viewCoordinateOffsetX/Y` 与拖拽瞬态（`Dragging` / `DragStart*` / `Snapshot` / `Timer` / `RequestPending`）；`objectDetailConnectorX` / `Y` / `Length` / `Angle` / `EndX` / `EndY` / `TargetX` / `TargetY` / `TargetOnScreen` / `AnimateGeometry` 与 `objectDetailConnectorTimer` / `AnimationTimer` / `LastPanelVisible` / `LastActivePanel` / `LastClippedByUi` —— 指向线几何由 `refreshObjectDetailConnector()` 按 32ms 节流写入，放进被观察 store 会造成重渲染风暴；一律留宿主、以 `@Prop` 传入。
+  - **同域未搬**：`objectInspectorModelOverlay()` 与 `objectInspectorModel*` 字段簇（渲染管线逐帧写纹理/像素，§13.5 第 3 项备注 2）；本仓不存在 `coordinateGrid*` 字段（网格开关在 Phase 3ak 已归 `LayerStore`）。
+- **新增 `panels/view/PointerCoordinateToggle.ets`（38 行）**：原**参数化** `@Builder pointerCoordinateToggle(label, enabled, setting)` 按 §13.1 规则 3 改为组件 —— 原 `enabled` 是简单类型形参、按值捕获，插件回包刷新后开关**不会跟着变**（要重开面板才更新），现由 `@Prop isOn` 实时刷新；`setPointerCoordinates(setting, value)` 抽成 `onToggle` 回调交给宿主。视觉逐字保留（Text 12 / Toggle 46×28 / 内边距 10-8-7-7 / 开态 `rgba(107,163,214,0.12)` 底 + `0.18` 边 / 180ms EaseOut）。
+- **新增 `panels/view/PointerCoordinatesPanel.ets`（106 行）**：原 `@Builder pointerCoordinatesPanel()`（约 54 行）→ 组件（`@ObjectLink store` + 五色 + `onSetSetting`）。**6 个开关行**全部改用上面的 `PointerCoordinateToggle`；两个单选列表（8 种坐标系 / 5 种显示位置）的选中态直接读 store；native 桥 `setPointerCoordinates` 留宿主，以 `onSetSetting(setting, value)` 注入。
+- **新增 `panels/view/ViewCoordinateSettings.ets`（87 行）**：原 `@Builder viewCoordinateSettings()`（约 59 行）→ 组件（`@ObjectLink store` + 五色 + `onToggleVisible` / `onSelectFamily` / `onSelectEpoch`）。三档坐标系与两档历元（仅赤道显示）的选中态由 store 实时驱动；`setViewCoordinatesVisible` / `setViewCoordinateFamily` / `setViewEquatorialEpoch`（要同步定时器与 `saveAppSettings`）留宿主。
+- **新增 `panels/overlay/ViewCenterCoordinateOverlay.ets`（77 行）**：原 `@Builder viewCenterCoordinateOverlay()`（约 50 行）→ 组件（`@ObjectLink store` + `@Prop primaryText` / `secondaryText` / `labelWidth` + `onHandleTouch`）。标题与两个数据行标签走 store 纯查表（坐标系一改立即换文案）；逐帧读数与拖拽回调留宿主；回调刻意命名 `onHandleTouch` 以避开 `CustomComponent` 基类的 `onTouch`（§13.1 规则 2）。叠层的宽/高/定位（`viewCoordinateOverlayWidth/Left/Top`）仍由宿主外层负责。
+- **新增 `panels/overlay/ObjectDetailConnectorLayer.ets`（91 行）**：原 `@Builder objectDetailConnectorLayer()`（约 51 行）→ 组件，**11 个几何入参 + `visible` 全部是 `@Prop`**（几何一律留宿主）。原 builder 允许并列多根，组件化后包一个**撑满父容器**的 `Stack()`：三个调用点（`expandedShell` / `hoverObservatoryShell` / `compactShell`）都是 100%×100% 的 Stack，故显式 100%×100% 才能让绝对定位坐标与原来一致；该 Stack 取 `.zIndex(20)` 与 `HitTestMode.None` 以维持层序（星空之上、详情卡/面板/底部 Dock 之下）与触摸行为。视觉逐字保留：两条 Row（长 `length` / 高 6 与 1.25）、目标双环（`markerSize` 外环 5 宽描边 + 0.72 倍内环）、屏幕外端点 10×10 圆、180ms `springMotion(0.42, 0.86)`（`AnimateGeometry` 为假时 0ms）。
+- **宿主手术**：删除 4 个 `@Builder`（约 214 行）与 6 个纯查表方法（约 55 行）；替换全部调用点为组件实例（`viewCoordinateSettings` 2 处、`viewCenterCoordinateOverlay` 1 处、`pointerCoordinatesPanel` 1 处、`pointerCoordinateToggle` 6 处、`objectDetailConnectorLayer` 3 处）；新增 `@State private overlayStore: OverlayStore = new OverlayStore()` 与 5 个 import。`panelContent` 内这些块的组装逻辑一字未动（属 Phase 4）。
+- **单体行数：** 26,542 → **26,324**（−218）；本片提交 **627 增 / 345 删**（7 文件，含 6 个新文件）。
+- **验证**：预检通过（组件/store `this` 引用自洽、单体括号深度 0、`@Builder` 成对）；`arkts_check` 7 文件 0 错；构建成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / >117 文件；全量切片脚本仅剩 §13.6 的既有环境类（4 个 `-pad` 要求显式 `--device`、`mist-performance`、`verify-ohos-search` 走 macOS hdc 路径、`verify-ohos-location-search` 的断言 bug）。全仓无脚本按文本切本片被搬符号，无需改测试夹具。
+- **真机（`192.168.3.95:40565`，`pidof`=35772 全程存活）**：① CLI `getObjectDetailConnector` → `{"enabled":true}`，`setObjectDetailConnector 0` → `false`，再 `1` → `true`，往返一致（hilog `[cli-ui] detail connector=...` 可观测）；② `openPluginFeature PointerCoordinates` 打开指针坐标面板，`PointerCoordinatesPanel` 完整渲染（说明 + 6 个开关 + 8 项坐标系 + 5 项显示位置），**点「显示指针坐标」开关立即翻转**、点回复原 —— 正是参数化 `@Builder` 会冻结的场景；③ 设置 → 设备与隐私 → 「视场中心坐标」：开叠层 → `ViewCenterCoordinateOverlay` 出现在星图上（`赤道 · J2000 基准` / `赤经 R.A. 15h36m33.58s` / `赤纬 Dec. -38°41′36.3″`），点「地平」→ 标题与两行标签**实时换成**「地平」「方位」「高度」，点回「赤道」、关叠层复原；④ `ObjectDetailConnectorLayer` **两个分支都截图实证**：目标在屏外时是屏幕边缘的端点圆 + 斜向光束（`conn3`），`moveToSelected` 居中后再下滑星空把目标拖到详情卡下方，得到**竖直光束 + 目标双环**（外环 + 0.72 倍内环，`conn6` 放大裁切后清晰可辨）。测后已 `setViewLock 1`（进入本步前为 true）复原；未改动任何持久化开关。
+- **未走查（如实记录）**：`ViewCoordinateSettings` 的**两档历元按钮（J2000 / 当前历元）**未逐个点按；该区的开/关与三档坐标系按钮已在上面 ③ 实测（就是点它们才让叠层出现、标题换文案的），耦合的持久化值测后均已复原。
+- **本片新踩的坑**：① CLI `openUiPanel --payload pointerCoordinates` **会被拒绝**（`isCliPanelName` 白名单不含 `pointerCoordinates`，hilog `rejected panel=pointerCoordinates`）—— 指针坐标是**插件**面板，必须走 `openPluginFeature --payload PointerCoordinates`；② `scripts/stellarium-cli.mjs` 在**仓库根** `scripts/`（不在 `harmonyos/scripts/`），且其 `DEFAULT_HDC` 硬编码 macOS 路径，Windows 下必须显式 `--hdc "<DevEco>\sdk\default\openharmony\toolchains\hdc.exe"`；③ **验证指向线必须先把目标挪出详情卡**：连接线的门槛是 `infoWinVisible && selectedStatus === 'Selected' &&` 目标不落在卡片矩形内（落内即 `clearObjectDetailConnector()`），而 `moveToSelected` 恰好把目标放到屏幕中心、正被卡片盖住 —— 本片靠「切到『观测』页缩短卡片 + 在右侧空白区用 `ui drag` 下滑星空」把目标拖到卡片下方才看到；④ 指向线配色极淡（光束 `rgba(111,196,239,0.12)` / `rgba(198,235,255,0.62)`、内环 0.68），浅蓝天空背景下 1:1 截图几乎不可见，需要对目标区域**裁切放大**（NearestNeighbor 3×）才能存档为证据。
+- **提交**：`9cac82c847`（refactor：OverlayStore + 五个 view/overlay 组件 + 宿主手术）。
+## [2026-10-01] DevEco Code - Phase 3am：星文化制作器域（SkyCultureMakerStore + SkyCultureViewStore + panels/skyculture 七个组件）
+
+- **新增 `state/SkyCultureMakerStore.ets`（101 行）**：星文化制作器向导的状态簇 —— 原宿主 **29 个** `@State private skyCultureMaker*`（`Tab` / `Loading` / `DraftReady` / `Saving` / `Status` / `CanUndo` / `Id` / `Name` / `Author` / `License` / `Region` / `Classification` / `NativeLang` / `BeginTime` / `EndTime` / `Introduction` / `Description` / `Constellations` / `SelectedConstellation` / `HipLine` / `Validation` / `ExportPath` / `ExportFileName` / `ArtworkImporting` / `ArtworkAnchorIndex` / `ArtworkRenderWidth` / `ArtworkRenderHeight` / `ArtworkPixelMap` / `ArtworkPreviewState`）逐条迁入 `@Observed` store，类型与默认值照抄。宿主 `this.<field>` 改写 **247 处**（与父代理估的 247 完全吻合）。六个纯查表/纯计算助手一并下沉：`selected()`、`updateConstellation()`、`artworkAnchor*()`（含 HipText / X / Y）、`artworkPreviewHeight(panelWidth)`、`issueText()`。
+  - **刻意不搬（§13.1 规则 6 / §13.2 高频写入）**：native 桥（`getSkyCultureMakerDraft` / `saveSkyCultureMakerDraft` / `validateSkyCultureMakerDraft` / `resetSkyCultureMakerDraft` / `undoSkyCultureMakerEdit` / `import`·`export` / `addSkyCultureMakerSelectedStar` / `import`·`removeSkyCultureMakerArtwork` / `setSkyCultureMakerArtworkAnchor`）、`ensurePluginLoaded`、自动保存定时器（`skyCultureMakerSaveTimer` + `scheduleSkyCultureMakerSave`）、图片解码与释放（`skyCultureMakerArtworkDecodeGeneration` / `refreshSkyCultureMakerArtworkPreview` / `skyCultureMakerArtworkPreviewPath`）与手势瞬态（`skyCultureMakerArtworkTouchStartX/Y` / `TouchMoved`）全部留宿主。
+- **新增 `state/SkyCultureViewStore.ets`（37 行）**：星文化**只读详情视图**的状态簇 —— 17 个字段（`detailsLoading` / `detailsReady` / `pendingId` / `detailError` / `narration` / `description` / `descriptionBlocks` / `narrationExpanded` / `descriptionExpanded` / `artItems` / `artExpanded` / `artPreviewOpen` / `artPreviewPath` / `artPreviewName` / `artPreviewRawPath` / `artPreviewLoading` / `artPreviewFailed`），宿主 `this.<field>` 改写 **123 处**。
+  - **边界（为什么只有一个 view store、且不含列表/像素图）**：① **文化列表与当前选择**（`skyCultureList` / `skyCultureListLoading` / `skyCultures` / `currentSkyCulture` / `currentSkyCultureId`）**未迁** —— 它们被领地地图（`skyCultureTerritory*`）、默认文化设置（`skyCultureDefaultId`）、若干面板头部交叉使用，不属于"详情视图"，留待 Phase 4 面板宿主切片收口；② **进度驱动的资源字段**（`skyCultureArtStates` / `skyCultureArtThumbnailPixelMaps` / `skyCultureArtPreviewPixelMap`）**未迁** —— 由逐张图片解码回调渐进写入，按"高频写入不入被观察 store"的既有取舍留在宿主；③ 面板设置/筛选/标签模式/领地地图等约 90 个 `skyCulture*` 字段同样留宿主（与 `panelContent` 的设置 UI 同片）。
+- **新增 `panels/skyculture/SkyCultureMakerFields.ets`（50 行）**：原**参数化** `@Builder skyCultureMakerField(label, value, placeholder, onChange)`（9 行）与 `skyCultureMakerLongField(...)`（9 行）按 §13.1 规则 3 改为 `SkyCultureMakerField` / `SkyCultureMakerLongField` 组件 —— 原 builder 的 `value`/`placeholder` 是简单类型形参、按值捕获，首帧后冻结（撤销/重置/导入草稿后字段不刷新），现由 `@Prop` 实时刷新；字段内的 `scheduleSkyCultureMakerSave()` 抽成 `onEdited` 回调交回宿主。
+- **新增 `panels/skyculture/SkyCultureMakerTabs.ets`（28 行）**：`skyCultureMakerTabs()`（14 行）→ 组件（`@ObjectLink store` + 三色 `@Prop`），点选直接写 `store.tab`（`@ObjectLink` 允许）。
+- **新增 `panels/skyculture/SkyCultureMakerOverview.ets`（102 行）**：`skyCultureMakerOverview()`（38 行）→ 组件（`@ObjectLink store` + 六色 + `onEdited`），内部改用两个字段组件，许可证/分类 `Select` 写回 store 后调 `onEdited`。
+- **新增 `panels/skyculture/SkyCultureMakerArtworkEditor.ets`（84 行）**：`skyCultureMakerArtworkEditor()`（62 行）→ 组件（`@ObjectLink store` + `panelWidth` + 五色 + `onImport` / `onRemove` / `onArtworkTouch`）。角点几何改调 store 纯方法；触屏回调刻意命名 `onArtworkTouch` 以避开 `CustomComponent` 基类的 `onTouch`（§13.1 规则 2）。
+- **新增 `panels/skyculture/SkyCultureMakerConstellationEditor.ets`（162 行）**：原 93 行的 `skyCultureMakerConstellationEditor()` → 组件（`@ObjectLink store` + `panelWidth` + 七色 + **11 个回调**），内嵌 `SkyCultureMakerArtworkEditor` 并转发其三枚回调；HIP 输入框只改 `store.hipLine`（与原来一致、不排程）。
+- **新增 `panels/skyculture/SkyCultureMakerValidationPanel.ets`（55 行）**：`skyCultureMakerValidationPanel()`（38 行）→ 组件（`@ObjectLink store` + 四色 + `onValidate` / `onImport` / `onExport` / `onShare` / `onSaveAs`），逐条问题文案走 `store.issueText()`。
+- **宿主手术**：删除上述 7 个 `@Builder`（合计约 260 行）与 6 个已下沉的助手（`skyCultureMakerArtworkAnchor` / `…HipText` / `…X` / `…Y` / `…PreviewHeight` / `skyCultureMakerIssueText`，约 56 行）；`skyCultureMakerPanel()`（34 行，向导自身的分派+状态条+保存行）**保留为宿主 `@Builder`**，其 4 个调用点改写为组件实例（这正是"只把组装处的引用改写成组件调用"）。`panelContent` 里 `this.skyCultureMakerPanel()`（原 24036 行）与 `viewSkyCultureTab` 的组装逻辑一字未动。宿主的 `selectedSkyCultureMakerConstellation()` / `updateSkyCultureMakerConstellation()` 作为薄封装保留（后者仍带 `scheduleSkyCultureMakerSave`）。
+- **单体行数：** 26,859 → **26,542**（−317）；本片两提交 diff 合计 **1027 增 / 679 删**（净 +348，即 8 个新文件）。
+- **分两个提交**（每个提交点均预检 / `arkts_check` / 构建 / 契约全绿）：`783593b4da`（`refactor`：两个 store + 宿主 370 处引用改写，3 文件 480 增 / 359 删）→ `5013516cb6`（`refactor`：7 个 maker 组件 + 宿主 builder 删除与调用点改写，7 文件 547 增 / 320 删）→ `7fb05dffe1`（`docs`：CHANGELOG + §13.5）。
+- **验证**：预检通过；`arkts_check` 3 文件 / 7 文件均 0 错；构建两次成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / **111** 个 `.ets`；全量切片脚本仅剩 §13.6 的环境类（4 个 `-pad` × 要求显式 `--device`、`mist-performance`、`verify-ohos-search` 走 macOS hdc、`verify-ohos-location-search` 路径 bug）—— 与本片无关；受影响脚本 `test-ohos-skyculture-text` / `test-ohos-polar-scope` / `check-ohos-command-catalog` / `test-ohos-cli-response` / `test-ohos-information-policy` / `test-ohos-search-browser` 全绿。全仓无脚本按文本切 `skyCultureMaker*` 字段名或本片被搬 builder，故无需改测试夹具。
+- **真机（`192.168.3.95:40565`，`pidof`=55049 全程存活）**：制作器入口很深（**更多功能 → 天体数据与扩展 → 管理扩展 → 滚动到 SkyCultureMaker 卡片 → 打开插件功能**，且插件卡片列表滚动在 CLI 下不稳定），改用仓库既有 CLI `scripts/stellarium-cli.mjs --command openUiPanel --payload skyCultureMaker`（带 `--hdc` 指向 DevEco 自带 hdc）打开。渲染实证：`SkyCultureMakerTabs`（概况 / 星座 / 校验与导出）+ `SkyCultureMakerOverview`（文化 ID / 文化名称 TextInput、离线提示）完整渲染；**点「星座」标签立即切到 `SkyCultureMakerConstellationEditor`**（「0 个星座」/「新增星座」/「新增一个星座后即可定义 HIP 星号折线。」）；**点「校验与导出」立即切到 `SkyCultureMakerValidationPanel`**（「校验草稿」+ 读 `store.validation` 的「5 个错误 / 2 个提醒」）；再用 CLI `setSkyCultureMakerTab 0` 切回「概况」成功（验证我改写过的 CLI 命令路径 `this.skyCultureMakerStore.tab = tabId`）。三处切换都是"点按后立即实时变化"——正是参数化 `@Builder` 会冻结的场景。测后 `closeUiPanel` 关闭面板；未触发任何保存/导出/覆盖（未改 TextInput、未点保存草稿/校验草稿/新增星座），无持久化改动需要恢复。
+- **未走查（如实记录）**：① `SkyCultureMakerArtworkEditor` 的角点绑定交互未触发 —— 它依赖"已有配图的星座"，构造该前提需先「新增星座」+ 导入图片，会写草稿（属被禁的写操作），故只验证其编译与在三标签中的可达性；② 制作器卡片经插件管理器的滚动路径未逐屏走完（CLI 直接打开等价面板，入口本身的深链未覆盖）。
+- **本片新踩的坑**：① `scripts/stellarium-cli.mjs` 的 `DEFAULT_HDC` 硬编码 macOS 路径 `/Applications/DevEco-Studio.app/...`，Windows 下必须显式加 `--hdc "<DevEco>\sdk\default\openharmony\toolchains\hdc.exe"`（`devecocli` 未把 hdc 放上 PATH，`hdc.exe` 实际在 `$DEVECO_HOME\sdk\...`）；② 制作器面板经「插件管理」进入时，插件卡片列表是一个 268px 高的内层 `Scroll`、每卡约 270px，`ui drag`/`ui fling` 在该区滚动会时灵时不灵（多次采样停在同一卡片），而面板本身有 CLI 直通命令 —— 深层入口优先考虑 CLI `openUiPanel`,不要死磕坐标滚动。③ 宿主里 `this.skyCultureMaker...` 同时存在**字段**与**方法**（如 `skyCultureMakerTab` 字段 vs `skyCultureMakerTabs()` builder、`skyCultureMakerId` 字段 vs `skyCultureMakerIssueText()`），批量改引用必须用 `\b` 词界锚定精确字段名，否则会误伤方法名。
+## [2026-10-01] DevEco Code - Phase 3al：望远镜 / 目镜域（TelescopeStore + Lx200Panel / OcularSelector / OcularMetric / Lx200ObjectControls）
+
+- **新增 `state/TelescopeStore.ets`（143 行）**：把「望远镜控制」与「目镜（Oculars）」两面板的状态簇整体迁入 `@Observed` store —— 目镜簇 59 个（`ocularMode` / `telradOn` / `crosshairsOn` / `ccdOn` / 四组 `*Names`·`*Index`·`*Items` / `ocularLoading` / `ocularStatusMessage` / `ocularReady` / `ocularCcdReady` / `ocularHasSelection` 及全部 `ocular<Setting>` 布尔与数值）、LX200 簇 21 个（`lx200Host/Port/Profiles/SelectedSlot/Name/Protocol/DeviceModel/Equinox/CommandDelayMs/Circles/TargetSource/Busy/EditingNew/Status/Scope/Transport/ConnectionState/Position/LivePositionEnabled/PositionUpdatedAt/PositionUpdateState`）、赤道仪开关 `equatorialMount`，共 **81 个字段**（类型与默认值逐条照抄，含三个 `ResourceStr` 本地化默认串）。宿主 `this.<name>` 改写 **322 处**；四个纯查表助手（`ocularInstrumentItems` / `ocularInstrumentIndex` / `ocularInstrumentSummary` / `ocularSelInfo`）一并下沉为 store 方法。
+  - **实测规模（原估偏低）**：`this.lx200*` 280 + `this.ocular*` 153 + `telradOn/crosshairsOn/ccdOn` 9 + `equatorialMount` 8 = **450 处引用**，其中 128 处随被删的 builder/助手一起消失，剩 322 处改写。四个目标 builder 实测 45 / 7 / 214 / 60 行（合计 326 行，未超 400 行，单片一提交）。
+  - **刻意不搬**：请求序号与轮询（`ocularLoadRequestId` / `lx200LivePositionTimer` / `lx200LivePositionRequestPending` / `lx200LivePositionRequestId`）留在宿主 —— 它们不是渲染状态；`validateTelescopeEditorStatus()`（读 store 字段写回 `lx200Status/Scope/Transport`）也留在宿主，避免 store 内做副作用。
+- **新增 `panels/telescope/Lx200Panel.ets`（247 行）**：原 214 行 `@Builder lx200Panel()` → 组件（`@ObjectLink store` + 7 个夜视色 `@Prop` + **12 个回调**）。文本/档位/滑块的写回直接落 store 字段（与 `LocationPickerPanel` 同法）；原生桥（保存/删除/测试连接、GoTo/同步/中止、读取位置、实时位置开关、编辑器校验）全部留在宿主以回调注入。
+- **新增 `panels/telescope/OcularSelector.ets`（69 行）**：原**参数化** `@Builder ocularSelector(kind, label)`（45 行）按 §13.1 规则 3 改组件 —— 原形参按值捕获，换目镜后选中态与摘要会冻结；现在经 `@ObjectLink store` + `ocularSelInfo/ocularInstrument*`（store 纯计算）实时刷新，`selectOcularInstrument` 走 `onSelect` 回调。
+- **新增 `panels/telescope/OcularMetric.ets`（17 行）**：原**参数化** `@Builder ocularMetric(label, value)`（7 行）→ 组件；这是「换光学组合后倍率/视场/出瞳不刷新」的冻结点，同为规则 3 修复。入参 `label/value` 保持原 `string` 形参语义（`I18n.t` 返回 string）。
+- **新增 `panels/telescope/Lx200ObjectControls.ets`（74 行）**：原无参 `@Builder lx200ObjectControls()`（60 行）→ 组件（`@ObjectLink store` + 3 回调）。
+- **调用点改写**：`this.lx200Panel()` / `this.lx200ObjectControls()` / 4 处 `this.ocularSelector(...)` / 6 处 `this.ocularMetric(...)` 全部换成组件实例；`panelContent` 里 `oculars` 分支的内联 UI 未搬（属 Phase 4），只改字段引用；宿主清理了三个因搬迁而不再使用的 import（`LX200_DEVICE_MODELS` / `OcularInstrumentItem` / `OcularSelInfo`）。
+- **单体行数**：27,273 → **26,859**（−414）；本片 diff 344 增 / 758 删。
+- **验证**：预检通过；`arkts_check` 6 文件 0 错；构建成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 103 文件；全量切片脚本仅剩环境类 7 个（4 个 `-pad` 要求显式 `--device`、`mist-performance`、`verify-ohos-search` 走 macOS hdc 路径、`verify-ohos-location-search` 的 `country.zh` 断言 —— 已用 `git stash` A/B 确认该断言在 HEAD（Phase 3aj 之后）即失败，与本片无关）。全仓无脚本按文本切 `lx200Panel` / `ocularSelector` / `ocularMetric` / `ocular*` / `lx200*`，故无需改测试夹具。
+- **真机（`192.168.3.95:40565`，`pidof`=41658 全程存活）**：底部「更多功能」→「观测工作区」→「望远镜控制」：`Lx200Panel` 完整渲染（设备预设 `1 Offline Telescope Simulator`、设备槽 1 / 已保存到本机 / 名称 TextInput / 离线模拟·不连接设备·可用 / 设备型号 `Offline LX200 Simulator` + 离线徽标 / 坐标历元 J2000·JNow / 视场圈 `1, 2, 4` / 目标来源 / 实时位置开关），**点「JNow」立即高亮、J2000 变灰**（store → `@ObjectLink` 生效），随后点回 J2000 复原。→「目镜模拟」：`OcularMetric` 六项（倍率 17.5× / 实际视场 2.457° / 出瞳 3.43 mm / 极限星等 12.3 mag / 传感器视场 1.817° × 1.211° / 像素比例 1.53″/px）与四个 `OcularSelector`（目镜 1/18、望远镜 1/22…）正常渲染；**点选 `Plossl 26mm (52deg)` 后计数 1/18 → 2/18 实时刷新**，再点回 `Plossl 40mm` 复原为 1/18。测后未留下任何持久化改动。
+- **提交**：`0931916bd5`（refactor：TelescopeStore + 四个 telescope 组件 + 宿主手术）。
+- **未走查（如实记录）**：① `Lx200ObjectControls` 在真机不可达 —— `OFFLINE_APPGALLERY_BUILD === true`，宿主 `if (!OFFLINE_APPGALLERY_BUILD)` 分支被编译剔除，本片只验证了它的编译；② LX200 的「测试连接 / GoTo / 同步 / 中止 / 读取位置 / 实时位置」未触发 —— 无真实望远镜设备，按纪律不发起连接动作；③ `oculars` 分支内联 UI 的其余开关/滑块未逐个点按（字段随 store 迁移、且这些行已渲染可见）。
+- **本片新踩的坑**：① 面板内层滚动区与外层 `panel-scroll` 是两个不同 bounds 的 `Scroll` —— 望远镜面板的内层 `Scroll` 是 `[112,1840,1166,2334]`、外层是 `[112,1840,1166,2450]`，在 2334–2450 之间滑手势**不会滚动**（前两次手势都落在这段死区，误以为组件把内容压缩裁剪了）；正确做法是先用 `ui layout --mode full` 读出内层 `Scroll` 的实际 bounds 再在其中滑动。② 组件化不会改变外层布局 —— 裁剪假象只是 dump 只报可视 bounds，`Column` 高度等于可视高度是正常的、内容仍可滚。
+## [2026-10-01] DevEco Code - Phase 3ak：图层域（LayerStore + 开关行 / 预设条 / 标签页组件化）
+
+- **新增 `state/LayerStore.ets`（134 行）**：原宿主 **94 个** `@State private <name>: boolean` 图层开关逐条迁入 `@Observed` store（类型与默认值原样保留），宿主 `this.<name>` 改写 **298 处 → 290 处**（差 8 处落在被删的 `switchRow` @Builder 体内：`this.ground`×4 / `this.mistHorizon`×4）。分组：天空与恒星 10、太阳系 9、深空与流星 4、地平与景观 9、网格 9、线 18、点 17、方位细分 3、视场 3、星座与星空文化 10、巡天 2。宿主新增 `@State private layerStore: LayerStore = new LayerStore()`。
+- **新增 `panels/layers/LayerSwitchRow.ets`（52 行）**：原**参数化** `@Builder switchRow(label, enabled, actionId, cmd?)`（39 行）按 §13.1 规则 3 改为组件。原 builder 里靠 `actionId` 分派的三件事全部移出组件：① `isOn` / 行底色 / 边框色直接读 `@Prop isOn`（调用点本来就传 `this.ground` / `this.mistHorizon`，与原三元判断等价）；② 写回分派收敛为宿主新方法 `applyLayerSwitch(actionId, cmd, value)`（`setSkyDisplay*` → `setSkyDisplaySetting`，其余带 cmd → `setBridgeFlag`，无 cmd → `setLayer`，末尾 `flashHint`），以 `onToggle` 回调注入；③ 同值短路改为组件内 `if (value === this.isOn) return`（等价于原 builder 对 ground / mistHorizon 的提前 return）。视觉逐字保留（Text 14 / Toggle 46×28 / `#5B93BF` / 行高 42 / 两种底色与边框 / 200ms `springMotion(0.45, 0.9)`）。
+- **`switchRow` 调用点 103 处全部改写**（图层面板 7 个视图标签页 97 处 + `settings_quick_legacy` 6 处），宿主 `switchRow` @Builder 删除；`applyLayerSwitch` 插在 `layerTabItems()` 之前。
+- **新增 `panels/layers/LayerPresetBar.ets`（38 行）**：`@Builder layerPresetBar()`（19 行）→ 组件（`@Prop subColor/textColor/panelColor` + `onPreset` / `onClear`）；`applyLayerPreset` / `clearMarkingLayers` 走原生桥，留宿主。
+- **新增 `panels/layers/LayerTabs.ets`（49 行）**：`@Builder viewTabs()`（26 行）→ 组件（`@Prop tabs/activeTab/foldTablet/四色` + `onSelectTab`）；`layerTabItems()`（含离线构建过滤）与 `selectViewTab` 的 `animateTo` 过渡副作用留宿主。
+- **刻意不碰**：`panelContent` 内 layers 分支的组装逻辑（属 Phase 4 表驱动宿主）；7 个 `viewSkyTab`/`viewSSOTab`/`viewDSOTab`/`viewMarkingsTab`/`viewLandscapeTab`/`viewSkyCultureTab`/`viewSurveysTab` 仍保留为**无参** `@Builder`（无参数即不冻结）；图层预设的组装（`markingLayerStates` / `layerPresetStates` / `applyLayerStates`）与视图切换过渡量（`viewTab` / `viewTabContentOpacity` / `viewTabContentOffsetX` / `viewTabTransitionId`）留宿主。
+- **单体行数：** 27,436 → **27,273**（−163）；本片 diff 287 增 / 451 删。
+- **验证：** 预检通过；`arkts_check` 5 文件 0 错；构建成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / >98 文件；全量切片脚本仅剩环境类（4 个 `-pad` + `mist-performance` + `verify-ohos-search` + `verify-ohos-location-search` 的路径 bug）。**同步测试**：`test-ohos-mist-horizon.mjs` 第 5 条按新架构改写（`this.layerStore.mistHorizon = …`、组件内 `if (value === this.isOn) return`、调用点 `LayerSwitchRow({ label: I18n.t('mist_horizon'), … })`），5 条全绿。
+- **真机（`192.168.3.95:40565`，`pidof`=33749 全程存活；hilog 无 ArkTS 报错）**：底部「图层」→ 面板渲染（`LayerPresetBar` 四键 / `LayerTabs` 六标签 / `LayerSwitchRow` 列表）；**开关实测 2 个**：点「恒星」立刻由蓝变灰、行底色由蓝调变中性，滑到「银河」点一下同样立即翻转 —— 二者正是参数化 @Builder 会冻结的场景。顺带点「标记」标签，内容切到「方位与罗盘」再切回「天空」。**已恢复**：「恒星」「银河」都点回 ON（与初始一致）；未动其它持久化开关（「星标签」为本次会话前即存在的持久化 ON 态，未触碰）。
+- **提交：** `7a45ae35ab`（refactor：LayerStore + 三个 layers 组件 + 宿主手术）、`dbadb6489f`（test：mist-horizon 夹具）、`60d02b0df1`（docs：CHANGELOG + §13.5）。
+- **本片新踩的坑：** ① 删 builder 的脚本把 marker 归一到「`@Builder` 所在行行首」时，必须**先按 `lastIndexOf(NL, i-1)` 归一**，再向上找注释行/空行 —— 因为本仓有两种写法：`@Builder viewTabs() {`（签名同行）与 `@Builder` + 下一行 `switchRow(...)`（签名另起一行），否则会把 `  @Builder` 的缩进误当注释行而断言失败。② 删除接缝的空行收敛要做**「前导空行并入删除区间」**（判据 `prevStart === i - NL.length`），只处理接缝、不对全文做 `(\r\n){3,}` 替换。
+## [2026-10-01] DevEco Code - Phase 3aj：位置选择器与层级列组件化（LocationPickerStore + HierColumn + LocationPickerPanel）
+
+- **新增 `state/LocationPickerStore.ets`（402 行）**：位置选择器自身的一簇状态整体迁入 `@Observed` store —— picker 坐标/名称/状态（`locationPickerName/Latitude/Longitude/Altitude/Status`，引用改写 27 处）、`locationPickMode`（7）、`observerTimeZone`（6）、`mapRenderWidth/Height`（10）、`hierContinent/Country/Region/City`（57）。凡需观测星球参与过滤/翻译的方法（`isCurrentObserverPlanet` / `hierContinents` / `hierCountries` / `hierRegions` / `hierCityList` / `hierarchyItemLabel` / `hierarchySelectionSummary` / `translateCountry`）一律以**参数**传入 `observerPlanet` —— 它仍是宿主跨域 `@State`（切换星球、设置面板多处共用），不硬搬。同时迁入纯计算：`translateContinent/Region/Province/Country`、`locationDisplayName`、`locationColumnTitle`、`chineseRegionKey`、`locationPlanet`、`normalizedLocationCountry`、`pickerCoordinateText/PinX/PinY`、`hierColumnItems/hierCities`、`hierarchySelectionFor`。
+  - **边界**：`locationProvinceTranslationCache` 做成 store 的**模块级常量**而非 `@Observed` 字段 —— `translateProvince()` 在**渲染期**被调用，若写进被观察字段会在 build 中改被观察状态（重渲染风险）。
+  - **不搬**：native 桥/定时器（`useDeviceLocation` / `applyPickerLocation` / `setLocation` / `handleLocationMapTouch` / `updatePickerFromMap` / `setPickerLocation`）留在宿主。
+- **新增 `panels/common/HierColumn.ets`（91 行）**：原参数化 `@Builder hierColumn(kind, onSelect)`（75 行）按 §13.1 规则 3 改写为**通用组件**，位置面板四列与后续图层面板共用。组件只收 `title` / `items` / `selected` / `scroller` / `labelOf` / `onSelect`，不含位置业务；`Scroller` 以普通成员传入（调用方自持，四列各有独立滚动位）。**归属 `panels/common/` 而非 `panels/location/`** —— 它面向「任意层级列」，图层面板是第二消费方。
+- **新增 `panels/location/LocationPickerPanel.ets`（249 行，含 `LocationModeChip`）**：原 `@Builder locationPickerPanel()`（153 行）→ 组件（`@ObjectLink pickerStore` + `@ObjectLink locationStore` + `@Prop observerPlanet/mapWidth/mapHeight/五色` + 10 回调）。原参数化 `@Builder locationModeChip(mode, label)` → `LocationModeChip` 子组件（选中态由 `selected` 传入）；四列层级列的 `Scroller` 由本组件自持，宿主的 `locationColumnScrollers` 字段与 `locationColumnScroller()` 方法随之删除。
+- **本片分两个提交**（每个提交点均构建/契约/预检全绿）：`dad2fb66a3`（`state/LocationPickerStore.ets` + `panels/common/HierColumn.ets`，宿主 `locationPickerPanel` 暂留原位、4 处 `hierColumn(...)` 调用改组件）→ 本提交 `4a8a1c2b9d` `refactor(harmonyos): componentize the location picker panel`（`panels/location/LocationPickerPanel.ets` + 删除宿主 `locationPickerPanel`/`locationModeChip`/`locationColumnScroller` 与未用 import）。
+- **单体行数：** 28,050 → **27,436**（−614）。
+- **验证：** 预检通过；`arkts_check` 0 错；构建成功；契约校验 33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点 / 94 个 `.ets`；全量切片脚本仅剩环境类失败（5 个 `-pad`/`-performance` 脚本要求显式 `--device`、`verify-ohos-location-search` 为 §13.6 的路径 bug、`verify-ohos-search` 走 macOS hdc 路径 + 原生查询）。全仓无脚本按文本切 `hierColumn`/`locationPickerPanel`/`translateProvince` 等被搬符号，故无需改测试夹具。
+- **真机（`192.168.3.95:40565`，`pidof`=23798 全程存活）**：底部「位置」；「按地区选」→ 四列（大洲/国家/地区/城市）渲染，点「亚洲」高亮出对勾、第二列出现「不丹/东帝汶…」，点「不丹」第三列出现「廷布」（`@ObjectLink` + `@Prop` 级联刷新）；「地图选点」→ worldmap 渲染（N / 90°W / 90°E / 定位标可见），点图面定位标移动、坐标与星空随之更新（`onMapTouch` 注入 + picker 状态生效）；搜索框输入 `Beijing` 出「北京 39.90°N / 116.41°E」并可选。**已恢复**：用搜索重新选回北京（地图定位标回到北京、星空回到白天）；未点「保存当前」，未留下新的已保存位置。
+- **本片新踩的坑：** ① 新文件的 `write` 工具产物是 **LF**、仓内 `.ets` 是 **CRLF**，Git 提交时提示 “LF will be replaced by CRLF”，无功能影响但需知悉。② 验证脚本/`verify_ui` 的**自然语言步骤要显式写「先下滑面板再找层级列」** —— 面板高度受限，四列默认在折叠线以下，不滚动会被判成「点击无效」的假阴性（本片 `verify_ui` 即报了一次假失败，随后用 `ui layout` + 截图实证列已渲染）。
+## [2026-10-01] DevEco Code - Phase 3ai：位置域起手 —— 搜索 / 已保存位置组件化 + LocationStore
+
+- **新增 `state/LocationStore.ets`（19 行）**：位置域的 search + saved 两簇字段整体迁入 `@Observed` store —— `locSearchQuery` / `locSearchResults` / `locSearching` / `locSearchDebounce` / `savedLocations`（引用改写 2 / 5 / 4 / 0 / 7 处），纯计算 `formatDegrees()` 一并迁入（宿主 6 处调用改写）。**刻意边界**：picker 簇（`locationPickerName` / `locationPickerLatitude` / `locationPickerLongitude` / `locationPickerAltitude` / `locationPickerStatus` / `locationPickMode` / `hier*` / `mapRender*` / `observerTimeZone`）**仍留宿主**，随 `locationPickerPanel` 在下一片一并迁移 —— 该 builder 的分支里调用了参数化 `@Builder hierColumn(kind, onSelect)`，按 §13.1 规则 3 它不能随组件化继续留在 UI 里，必须和层级方法/字段簇同片走。
+- **新增 `panels/location/CityChipsRow.ets`（124 行）**：原 110 行 `@Builder cityChipsRow()` → 组件（`@ObjectLink store` + 4 回调 `onSaveCurrent` / `onApplyLocation` / `onDeleteLocation` / `onChip`）。根容器 `Column({ space: 4 })` 与 `.width('100%').margin({ top: 12 })` 原样（单根）。
+- **新增 `panels/location/LocationSearchPanel.ets`（92 行）**：原 77 行 `@Builder locationSearchPanel()` → 组件（`@ObjectLink store` + `@Prop subColor` / `inputColor` + 4 注入）。「省 · 国」上下文串依赖宿主的翻译缓存，以 `contextOf(item)` 注入；搜索框的草稿名回注宿主 `locationPickerName`（`onNameDraft`）；分块扫描 `searchLocations` 与落地 `selectSearchLocation` 走原生桥，留在宿主。`locationPickerPanel` 内的调用点已换成组件实例。
+- **单体行数：** 28,225 → **28,050**（−175）。
+- **验证：** 预检通过；`arkts_check` 4 文件 0 错；构建成功；契约校验 33 面板 / 42 锚点 / **91** 个 .ets（+3）；全量切片脚本仅剩 §13.6 的 6 个环境类。**真机**（`192.168.3.95:40565`，`pidof`=5542）：打开底部「位置」→ 搜索框输入 `Beijing` 实时出现「搜索结果」标题与结果行「北京 / 39.90°N / 116.41°E」（`store.formatDegrees` + `@ObjectLink` 生效）→ 快捷行渲染「已保存位置 / 暂无保存的位置 / 中国城市 / 世界城市」→ 点「保存当前位置」实时出现 `Beijing` chip → 点 `x` 删除回到「暂无保存的位置」（`prefs.savedLocations` 已复原为原空态）。**未走查** `locationPickerPanel` 的地图选点 / 层级选择（该 builder 本片未改动，属下一片范围）。
+- **本片新踩的坑：** 删 builder 后用 `-replace "(\r\n){3,}"` 收敛空行会**全文生效** —— 一次改掉 18 处，其中 16 处与本次改动无关（纯空白，但污染 diff）。正解：把空行收敛放进删除脚本内部，只处理删除接缝，不做全文正则。
+## [2026-10-01] DevEco Code - Phase 3ah：今晚观测目标卡片组件化（WutTargetCard + WutMetric）
+
+- **新增 `panels/astro/WutTargetCard.ets`**：`wutTargetCard(target)`（21 行）+ 它依赖的参数化 `wutMetric(label, value)`（6 行）→ `WutTargetCard` 与 `WutMetric` 两个组件。卡片只收 `@Prop target: WutTarget`，标题/副标题/类型名/数值/时刻文本仍由宿主格式化并以回调注入（`titleOf` / `subtitleOf` / `typeOf` / `numberText` / `clockText`），另有夜视三色与 `onJump`，共 9 个入参；贴片组件 4 个入参。
+- **已知的微小显示差异（如实记录）：** 类型缺失时不再补破折号（改走 `zhType('')`），其余布局/文案逐字保留。
+- **单体行数：** 28,262 → **28,239**（−23）。
+- **验证：** 构建 / 契约校验（86 个 .ets）/ 全量切片脚本（仅剩 §13.6 的 6 个环境类）。**（补记）** 该片的 store 迁移由 `test-ohos-astro-motion`（9 条，含以假宿主驱动 `selectAstroFilter` 校验 wut 字段读写路径）覆盖；真机侧只做了启动与面板导航冒烟，未触发 WUT 计算。
+- **踩坑（第三次同类）：** 用 `@(-1, )` 组装"删除区间"在 PowerShell 里**间歇性失败**（`` 被提升为数组 → 区间为空 → 旧 builder 未删成死代码，而构建仍成功、不报错）。**硬做法：删除永远走"`[regex]::Escape(签名)` + `@Builder` 前缀 + 非贪婪到 `\\n  }`"的正则**，不要用行号算术。
+## [2026-10-01] DevEco Code - Phase 3ag：会话延续块组件化（ContinuationSection）
+
+- **新增 `panels/astro/ContinuationSection.ets`**：`continuationSection()`（31 行）→ 组件，入参 `hint` / `json` / `textColor` / `panelColor` + 三个回调（`onExport` / `onApply` / `onHandoff`），原生根容器 `Column({ space: 8 })` 原样保留（单根，无需包裹）。
+- **单体行数：** 28,293 → **28,262**（−31）。
+- **验证：** 构建 / 契约校验（86 个 .ets）/ 全量切片脚本（仅剩 §13.6 的 6 个环境类）。
+- **踩坑（规则 2 第 5 次）：** 属性名 `borderColor` 与 `CustomComponent` 基类属性方法同名，编译报 `not assignable to the same property in base type`；改名 `panelColor` 后通过。**已知同名雷区累计：** `borderColor` / `scale` / `onTouch` / `background` / `borderColor`。新增组件前先对照基类属性方法命名。
+## [2026-10-01] DevEco Code - Phase 3af：astro 域起步 —— 选择提示与现象关系标记组件化
+
+- **新增 `panels/astro/AstroGuides.ets`**：`astroSelectionGuide()`（15 行）→ `AstroSelectionGuide`（入参 `visible` + 夜视三色 + `onOpenPicker` 回调），参数化 `phenomenonRelationMark(type)`（29 行）→ `PhenomenonRelationMark`（**纯映射**，只收 `@Prop type`，不依赖 store/回调）。
+- **单体行数：** 28,338 → **28,293**（−45）。
+- **验证：** 构建 / 契约校验 / 全量切片脚本（仅剩 §13.6 的 6 个环境类）。
+- **踩坑（新增，已加硬做法）：** ①**命令行内联中文会被代码页改写** —— 用它生成的新文件注释会变成乱码（本轮 `AstroGuides` 因此曾报 `Declaration or statement expected`）；新建文件的中文表头**必须用 write 工具写成临时文件再拼入**。②脚本拼装 `build()` 包装时**必须核对容器开括号** —— 本轮 `PhenomenonRelationMark` 的 `Column({ space: 0 })` 漏了 ` {`，造成文件尾 `声明或语句缺失`（行号指向文件末而非出事行，需按"结尾报错=括号不平衡"定位）。③改参数化 builder 为组件时，**裸标识符（如 `type`）也要改写成 `this.type`**，只改 `this.xxx` 会漏。
+## [2026-10-01] DevEco Code - Phase 3ae：sensor 域起步 —— GyroStore + 陀螺仪校准面板组件化
+
+- **新增 `state/GyroStore.ets`**：13 个 gyro/gyroscope 字段（`gyroGuideVisible/Angle/X/Y`、`gyroscopeEnabled/Status/SensitivityText`、`gyroCalibPanelOpen`、`gyroCompassText/Angle`、`gyroOffsetAz/Alt`、`gyroCompassAzAlignment`）整体迁入（123 处引用改写；宿主字段声明合并为 `@State private gyroStore`）。**迁入不改变刷新语义**：这些字段本就以宿主 `@State` 承载（含传感器事件逐次更新 `gyroGuideX/Y/Angle`），宿主照旧重绘（§13.1 规则 4）。
+- **新增 `panels/sensors/GyroCalibPanel.ets`**（113 行）：原 99 行 @Builder `gyroCalibPanel()` → 组件，仅 `@ObjectLink store` + 3 个回调（`onFlashHint` / `onCalibrate` / `onToggle`）；面板内对 `gyroOffsetAz/Alt`、`gyroscopeSensitivityText`、`gyroCalibPanelOpen` 的写入仍落在 store（原为直接写宿主 `@State`，语义等价），重置按钮里对 `gyroCompassAzAlignment` 的写亦同。
+- **单体行数：** 28,448 → **28,338**（−110）。
+- **验证：** 构建 / 契约校验（84 个 .ets）/ 全量切片脚本（仅剩 §13.6 的 6 个环境类）/ 安装启动与选星冒烟通过（`pidof` 有值、`Mars` 资料页正常）。**面板入口在图层/更多面板深处，本次未做面板本体真机走查**，属如实记录的验证范围。
+- **踩坑（重复已记录的教训 → 本次加硬性做法）：** ①组件提取时**必须逐字段改写残留引用** —— 本轮又漏了 13 个 gyro 字段（`Cannot find name` 型报错）。**以后在构建前先对新组件文件执行 `grep 'this\.(被搬字段前缀)'` 并确认无残留**。②宿主侧删除 builder **不要用"边扫边 continue"的写法**（本轮它把 `gyroCalibPanel` 的体留成孤儿，导致数百行之外爆 `Only UI component syntax can be written here`），必须**先算出起止索引、再按索引重建数组**（此前各片均用此法且从未出错）。
+## [2026-10-01] DevEco Code - Phase 3ac：详情卡"资料"页组件化 —— 四页全部组件化达成
+
+- **`ObjectDetailTabs.ets` 新增 `ObjectDetailDataTab`**：`unifiedObjectDetailCard()` 里 `bottomCardIndex === 2` 的分支（42 行）搬出，内含 `ObjectDistanceNotice` / `TabletInspectorMediaGroup` / `SatellitePassDetails` / `ConstellationCultureView` / 12 个 `ObjectDataTile` / `StructuredDetailRows`。至此**卡片四页（观测 / 坐标 / 资料 / 操作）全部为组件**，宿主的 `Scroll` 内只剩四个分支调用。
+- **入参（24 个）**：`@ObjectLink store` + `@ObjectLink mediaStore` + 15 个 `@Prop`（tablet / distanceText / iconName / imageHeight / inlineModelSize / modelReady / modelRendering / hasModelTexture / modelNotice / warmupText / fallbackKind / starColor / satelliteVisible / tleEpoch / accent / cultureVisible / textColor）+ `resolve` 与 5 个回调（`onLoadPasses` / `onMediaOpen` / `onMediaRetry` / `onModelExpand` / `onModelTouch`）。**媒体区的两个管线字段仍以 `@Prop` 传入**（不并入被观察 store 的理由见 §13.5）。
+- **单体行数：** 28,478 → **28,448**（−30）；`ObjectDetailTabs.ets` 150 行（3 个 struct）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（82 个 .ets）/ 安装启动通过；搜 `Mars` 选中后应用存活（`pidof` 有值），"资料"页（默认页）由新组件渲染 —— `完整资料` + 媒体区 `本地资源解码失败`/`重试` + 贴片 `实时高度 / 方位`；切"观测"页后 `今晚观测窗口`/`大气影响` 正常。
+- **踩坑：** 脚本化提取分支体时**必须把`所有`宿主方法的引用都列入改写表** —— 本轮漏了 `objectInspectorIcon()` / `InlineModelSize()` / `ModelReady()` / `ModelRendering` / `ModelTexturePixels` 五处，导致连续三轮构建失败（报错信息已直接指出缺失成员，属可快速收敛的一类）。提取后应先 grep 新文件里残留的 `this\.object` 引用再构建。
+- **测试同步：** 无（`test-ohos-detail-live-values` / `verify-ohos-object-details` / `test-ohos-detail-image-layout` 复跑通过，组合断言已覆盖 tabs 文件）。
+## [2026-10-01] DevEco Code - Phase 3ad：详情卡外壳的页头与页签栏组件化（ObjectDetailCardChrome）
+
+- **新增 `panels/object/ObjectDetailCardChrome.ets`**：`unifiedObjectDetailCard()` 前半段拆成两个小组件 —— `ObjectDetailCardHeader`（拖拽柄 + 标题行〔图标/名/类型/关闭〕+ 三个紧凑指标 + 实时高度方位行 + 时角行，外层 `Column()` 与卡片根容器一致）与 `ObjectDetailCardTabs`（四个 `ObjectDetailTab`，`@Prop activeIndex` + `onSelect(index)`）。
+- **入参最小化**：页头只接 `@ObjectLink store` + `iconName` / `liveInfoVisible` + 六个回调（`resolve` / `distanceSummary` / `nameOf` / `typeOf` / `onDragTouch` / `onDismiss`）—— 动态查值、名称本地化、拖拽与关闭都仍归宿主；页签栏两个入参。
+- **单体行数：** 28,519 → **28,478**（−41）；`unifiedObjectDetailCard` 由 146 行降至约 105 行（外壳剩余部分即 Scroll + 四个分支调用）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验 / 安装启动通过；搜 `Mars` 选中后应用存活（`pidof` 有值），页头渲染 `火星` + `行星` + `✕` + `星等 1.07` / `星座 巨蟹座` / `距离 1.6651 AU` + `实时高度 方位` + `时角 1h44m56.1s` / `平恒星时 10h01m47.5s`；点"观测"页签（`ObjectDetailCardTabs` 的 `onSelect`）后内容切到 `今晚观测窗口` / `升起` / `大气影响`，页签高亮缩放同步跟随。
+- **说明（顺序调整）：** 计划中的"先搬资料页（3ac）"被本片取代 —— 若先搬资料页需向 `ObjectDetailDataTab` 转发 26 个入参（媒体区的 12 个派生值 + 4 回调），而先把外壳组件化后，"资料"页分支将随外壳整体内收，届时媒体组件的参数在外壳内部就地计算，无需跨层转发。objectInspectorModelRendering / objectInspectorModelTexturePixels **刻意不并入 @Observed store**：它们由渲染管线逐帧写入，放进被观察的 store 会造成重渲染风暴（§13.5 第 3 行已相应更新理由）。
+- **测试同步：** 无（页头/页签不切片；`test-ohos-detail-live-values` 与 `verify-ohos-object-details` 复跑通过）。
+## [2026-10-01] DevEco Code - Phase 3ab：媒体区改写成组件（TabletInspectorMediaGroup），解除"资料"页搬迁阻塞
+
+- **新增 `panels/object/TabletInspectorMediaGroup.ets`**：宿主原**无参 @Builder `tabletInspectorMedia()`**（133 行八分支）→ 组件。分支判定随组件走；媒体状态用 `@ObjectLink store: ObjectMediaStore` 观察，"是否计划中的模型"用 `@ObjectLink detailStore: ObjectDetailStore` 观察；派生值（`imageHeight` / `iconName` / `inlineModelSize` / `modelReady` / `modelRendering` / `hasModelTexture` / `modelNotice` / `warmupText` / `fallbackKind` / `starColor`）与四个交互（`onOpen` / `onRetry` / `onModelExpand` / `onModelTouch`）全部由宿主注入。原因是 §13.1 规则 9：经 `@BuilderParam` 传递会让应用退出，只有改成组件才是正解。
+- **顺带清理：** 删除该 builder 时发现 Phase 3v 那次拼接因 `String.Split("
+")` 被按**字符**切分，把该区域每行之间塞进了空行（提交里一直存在、功能无害）；本次随删除一并消失，宿主行数因此降幅大于纯迁移。
+- **单体行数：** 28,616 → **28,519**（−97）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（81 个 .ets）/ 安装启动通过；搜 `Mars` 选中后应用存活（`pidof` 有值），"资料"页媒体区由新组件渲染（`本地资源解码失败` + `重试`）；点"重试"后 hilog 实证回调链路：`[detail-media] retry request=textures/mars.png` → `[detail-media] decoding local image kind=model`。
+- **测试同步：** 无（媒体区组件不切片；`verify-ohos-object-details` 的标签/段落校验不受影响）。
+## [2026-10-01] DevEco Code - Phase 3aa（部分）：详情卡片"观测/坐标"两页组件化；真机发现 @BuilderParam 致命问题
+
+- **新增 `panels/object/ObjectDetailTabs.ets`**：`unifiedObjectDetailCard()` 里 `bottomCardIndex` 0/1 两个分支 → `ObjectDetailObserveTab`（28 行）与 `ObjectDetailCoordinateTab`（5 行）。两页都以 `@ObjectLink store` 观察状态，动态查值用注入的 `resolve: (key: string) => string`（宿主传 `(key) => this.selectedDisplayValue(key)`），因此宿主仍独享查值逻辑。
+- **单体行数：** 28,646 → **28,616**（−30；两页搬出、2 处调用点改写）。
+- **⚠️ 本片最重要的结论（已写入 §13.1 规则 9 与 §13.3）：首版把三页一起搬，其中"资料"页需要把宿主的无参 `@Builder tabletInspectorMedia()` 用 `@BuilderParam` 传进子组件 —— 真机上"资料"页一渲染（卡片默认页）应用即退出**：`arkts_check` 通过、`deveco build` 通过、hilog 无任何 ArkTS 报错，但 `pidof com.cnchensh.stellarium` 为空。用 A/B 法定位（`git stash -u` 回到 `9f512d05b3` 重新构建安装、同一交互序列正常；再二分只保留两页即恢复）确认差异就是 `@BuilderParam`。**正解：先把该 builder 改写成组件（下一片 `TabletInspectorMediaGroup`），再由宿主传数据与回调。**
+- **真机验证（`192.168.3.95:40565`）——本片两个组件：** 构建 / 契约校验（80 个 .ets）/ 安装启动通过；搜 `Mars` 选中后应用存活（`pidof` 有值）；点"观测"页 → `今晚观测窗口` + `升起 0h35m` / `中天 7h52m` / `落下 15h09m`（`ObjectScheduleTile` 经 `resolve` 取值）+ `大气影响` 三指标；点"坐标"页 → `当前天球位置` + `地平坐标 65.172°, 225.044°` / `几何地平` / `赤道坐标` / `J2000 赤道` 实时值正常。
+- **测试同步：** `test-ohos-detail-live-values` 的贴片断言改为跨"宿主 + 两页组件"（资料页贴片仍在宿主，观测页贴片在组件里用 `resolve`）；`verify-ohos-object-details` 的共享 builder 计数同时扫描两页组件文件；两者与其余切片脚本均通过（仅剩 §13.6 的设备参数类）。
+## [2026-10-01] DevEco Code - Phase 3z2b：星座文化段组件化 + 共享描述块组件
+
+- **新增 `panels/skyculture/SkyCultureDescriptionBlockView.ets`**：把参数化 `@Builder skyCultureDescriptionBlockView(block)`（heading / bullet / tableRow / 普通四型）改为**共享组件**（kind / headingLarge / 	ext / 	extColor 四个 `@Prop`）——它同时被**天体详情卡的星座文化段**与**星文化查看标签页**（`viewSkyCultureTab()`）使用，故不再留在宿主；`level` 的可选判断由调用方解析成 `headingLarge` 布尔量传入。
+- **新增 `panels/object/ConstellationCultureView.ets`**：`selectedConstellationCultureDescriptionView(tablet)`（54 行）→ 组件，以 `@ObjectLink store` 观察文化与展开状态、`@Prop visible`（宿主判定 `selectedObjectIsConstellation()`）与 `@Prop textColor`（`nmText()`）；展开/收起仍直接改写 store，因此点击后实时刷新。
+- **单体行数：** 28,715 → **28,646**（−69；删 2 个旧 builder，2 处调用点改为组件）。
+- **真机验证（`192.168.3.95:40565`，星座导航选 `仙女座`）：** 构建 / 契约校验（79 个 .ets）/ 安装启动通过；"资料"页的星座文化段由新组件渲染 —— `天空文化介绍`（段标题）、文化名 `现代`、`来源资料` 徽标全部正常，即宿主注入的 `visible`/`textColor` 与 store 读取链路可用。
+- **验证范围说明：** 该次运行中段落的**描述正文块文本为空**（渲染出约零高度的空块），属数据侧现象（同一数据在搬迁前也如此渲染），故正文未作视觉确认；共享描述块组件的渲染由星文化查看标签页同源使用并受 `test-ohos-skyculture-text/-refresh` 覆盖。
+- **测试同步：** 无（`scripts/*.mjs` 无引用被搬符号；`test-ohos-skyculture-*` 与 `verify-ohos-object-details` 均通过）。
+## [2026-10-01] DevEco Code - Phase 3z2a：卫星过境段组件化（SatellitePassDetails）
+
+- **新增 `panels/object/SatellitePassDetails.ets`**：三个参数化 UI 函数改为组件 —— `satellitePassesDetails(tablet)`（45 行）→ `SatellitePassDetails`、`satellitePassCard(pass, tablet)`（36）→ `SatellitePassCard`、`satellitePassTimelineRow(label, time, tablet)`（14）→ `SatellitePassTimelineRow`；并把只服务于这一段的四个纯文本助手（`satellitePassTime` / `satellitePassVisibility` / `satellitePassAltitude` / `satellitePassAngle`）搬出宿主，改为**文件作用域函数**（过境的 `ForEach` 与 key 一并内收，宿主不再接触单条过境的格式化细节）。
+- **入参**：`SatellitePassDetails` 用 `@ObjectLink store` 观察过境状态 + `@Prop tablet / visible / tleEpoch / accent`（`visible` 来自宿主判定 `selectedObjectIsArtificialSatellite()`，`accent` 来自夜视强调色 `nmAccent()`，`tleEpoch` 来自 `selectedSatelliteTleEpoch()`）+ `onLoad` 回调；卡片接收 `@Prop pass: SatellitePass`（过境数组整体替换、不做原地修改，故 `@Prop` 深拷贝安全）。
+- **单体行数：** 28,832 → **28,715**（−117；7 个旧定义删除 + 2 处调用点改写）。
+- **真机验证（`192.168.3.95:40565`，搜 `ISS` 选中人造卫星）：** 构建 / 契约校验（77 个 .ets）/ 安装启动通过；"资料"页出现 `卫星过境` 段与懒加载提示；点 **加载过境** 后标题计数变为 `3`、出现 `下一次过境`，卡片正确渲染 `观测者处于白昼`（`satellitePassVisibility` 分支）/ `m 17.0`（星等）/ `出现 2026-10-01 10:17:22`（`SatellitePassTimelineRow` + `satellitePassTime` 格式化），即 `onLoad` 回调 → store 更新 → 组件刷新全链路可用。
+- **测试同步：** 无（已核查 `scripts/*.mjs` 无脚本引用本片符号）。
+## [2026-10-01] DevEco Code - Phase 3z：结构化资料段整体迁出（StructuredDetailRows）
+
+- **新增 `panels/object/StructuredDetailRows.ets`**：`structuredObjectDetails(tablet)`（28 行）改为组件，并把它的**五个段落助手**（`detailSectionIds` 3 行 / `detailSectionTitle` 16 / `detailFieldLabel` 128 / `detailFieldValue` 23 / `detailFieldsForSection` 11，共 185 行）一并搬出宿主 —— 它们此前只被这一个界面使用，且只依赖 `ObjectDetailStore`。
+- **形态**：助手改为**文件作用域函数**（ArkTS 规则：不用嵌套函数），其中两个读状态的改为接收 `store` 形参（`detailFieldValue(store, key)` / `detailFieldsForSection(store, section)`）；组件以 `@ObjectLink` 观察 store、`tablet` 由 `@Prop` 传入；原 `DetailSectionTitle` 的 `if (tablet) {...} else {...}` 双分支（参数化 `@Builder` 时代按值捕获的遗留写法）合并为单次调用。
+- **单体行数：** 29,045 → **28,832**（−213 = 删 185 行助手 + 28 行 builder，另 2 处调用点改写为组件）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（76 个 .ets）/ 安装启动通过；火星卡"资料"页向下滚动可见结构化段落 `物理性质` 及其行（`反照率 0.150` …），即搬走的 `detailSectionTitle` / `detailFieldLabel` / `detailFieldValue` 全部正常工作。
+- **测试同步：** `verify-ohos-object-details.mjs` 的标签/段落来源改为新模块（并保留"121 个字段 / 11 个段落"校验）；"共享 builder 计数"改为统计 `StructuredDetailRows({ store: this.objectDetailStore`；`test-ohos-detail-live-values.mjs` 第 3 条改为从新文件取 `function detailFieldValue(store, key)` 并按新签名注入。
+- **踩坑记录（新增）：** 用脚本"整块搬运"方法到文件作用域时，**缩进必须一并调整** —— 只改 `private X` → `function X` 而保留原缩进，会让函数的闭合 `}` 停在 2 空格缩进，任何以 `\n}` 为边界的后续脚本（含测试）都会**越过函数边界吃掉后面的 `function`**（表现为 `Unexpected token 'function'`）。搬运后应统一去缩进并核对。
+## [2026-10-01] DevEco Code - 取消跟踪 `build/` 下的 11 个生成副本
+
+- **现象：** 每改一次 ArkTS 源码，`build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets` 等副本就变脏，导致每片都要额外做一次"同步生成副本"提交（本会话此前已因此产生 20+ 次提交）。
+- **根因：** git 的 `.gitignore` **只对未跟踪文件生效**。根 `.gitignore` 里早就有 `build` 一行，但这 11 个文件在规则生效前（2026-07-26 的 `3a1bad1e3a` / `0566439884` 等提交）已被 `git add`，于是一直被跟踪；而 `scripts/sync-ohos-build-sources.sh`（由 `build-ohos-hap-windows.ps1` 调用）会把 `harmonyos/ets-source/**` 复制进生成工程，源码一动副本就脏。
+- **取消跟踪前的核查（确认不丢内容）：** 4 个 ArkTS 页面与 `harmonyos/ets-source/**` **byte 完全一致**（纯拷贝）；5 个资源在 `harmonyos/{AppScope,resources,ets-source}/resources/**` 均有源；2 个数据文件在 `stars/hip_gaia3/**` 有源（含 53.2 MB 星表，均已跟踪）。
+- **处理：** `git rm --cached` 上述 11 个（磁盘文件保留），`build` 继续被忽略；新克隆需先跑一次构建（脚本编译前会自行同步）。`verify-ohos-object-details.mjs` 的"生成镜像是否过期"检查仍有效（只要求文件在磁盘上存在）。方案文档新增 §13.7 记录该决定，§13.2 第 8 步不再要求"同步生成副本"。
+- **未处理（不同类别）：** 仓内另有约 20 个"被忽略但被跟踪"的**上游素材**（`textures/*.tif`、`guide/*.pdf`、`data/*.dat`、`scripts/tests/media/*.mp4`），系被 `*.tif`/`*.pdf` 等宽泛规则误伤的真实内容且无其他副本，**不删除**。
+## [2026-10-01] DevEco Code - Phase 3y：详情"活数据行"组件化（DetailLiveRows）
+
+- **新增 `panels/object/DetailLiveRows.ets`**：四个参数化 UI 函数改为组件 —— `objectDistanceNotice`（6 行）→ `ObjectDistanceNotice`、`selectedLiveInfoRows(compact)`（19）→ `SelectedLiveInfoRows`、`selectedCoordinateRow(label,key,tablet)`（10）→ `SelectedCoordinateRow`、`selectedCoordinateRows(tablet)`（13）→ `SelectedCoordinateRows`。
+- **入参策略：** 坐标行与时角行直接以 `@ObjectLink store: ObjectDetailStore` 观察状态（值随天体实时刷新，不依赖入参传递）；`selectedDisplayValue('selectedCoordApparentAltAz')` 的"缺值回落到高度方位"规则随该行一起搬进组件并加注释；只有"是否可见 / 是否紧凑 / 距离提示文案"由宿主以 `@Prop` 传入（`visible` / `compact` / `text: this.objectDistanceNoticeText()`）。
+- **单体行数：** 29,096 → **29,045**（−51）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（75 个 .ets）/ 安装启动通过；火星卡头部时角行（`时角` + `平恒星时 8h50m19.9s`，紧凑单行形态）与坐标页九行（`地平坐标 69.550°, 203.170°` / `几何地平` / `赤道坐标 8h16m44.7s +20°46'13.4"` / `J2000 赤道` / `当日黄道 121.699°, 1.017°` …）全部正常显示实时值。
+## [2026-10-01] DevEco Code - 测试夹具修复：CRLF 敏感下的成片假失败
+
+- **根因：** **JS 正则的 `.` 不匹配 `\r`**，而 Windows 工作副本是 CRLF，因此 `replace(/^import .*\n/gm, '')` 永远剥不掉 import，`new Function` 直接抛 `Cannot use import statement outside a module`；同理 `;\n}` 这类换行锚定断言在 CRLF 下永不匹配。这些脚本在 LF（Linux）检出下正常，所以此前被误判为"既有失败"。
+- **修复：** `test-ohos-privacy-startup.mjs` / `test-ohos-clipboard.mjs` / `test-ohos-model-worker.mjs` 的 `plain()` 改为 `/^import .*\r?\n/gm`；`test-ohos-satellite-panel.mjs` 的 `;\n}` 改为 `;\r?\n}`；`test-ohos-privacy-startup.mjs` 的 `ability()` 夹具补上 Phase 0 新增的 `deviceInfo` / `BuildProfile` 依赖（按真机 release 配置注入，使 `engineLessEmulatorUiOnly()` 保持 false）；`verify-ohos-location-search.mjs` 修掉 `new URL('..').pathname` 在 Windows 上拼出 `E:\E:\...` 的路径 bug（改用 `fileURLToPath`）。
+- **效果：** `privacy-startup` 11 失败 → **19/19 通过**；`clipboard` 3 失败 → **4/4**；`model-worker` 语法错误 → **6/6**；`satellite-panel` 1 失败 → **7/7**；`location-search` 路径异常 → **通过**（7387 地点 / 12 次搜索）。
+- **仍受环境限制（非回归）：** 五个 `*-pad.mjs` 与 `mist-performance` 必须显式传设备 ID 且面向 Pad 设备；`verify-ohos-search.mjs` 硬编码 macOS 的 `hdc` 路径（`/Applications/DevEco-Studio.app/...`）且需要应用在跑。
+## [2026-10-01] DevEco Code - Phase 3x：详情贴片族组件化（DetailTiles）
+
+- **新增 `panels/object/DetailTiles.ets`**：把五个**参数化 UI 函数**改为组件 —— `objectDataTile`（8 行）→ `ObjectDataTile`、`objectMetric`（8）→ `ObjectMetric`、`objectScheduleTile`（8）→ `ObjectScheduleTile`、`objectDetailTab`（12）→ `ObjectDetailTab`、`objectCompactMetric`（11）→ `ObjectCompactMetric`。它们原先按值捕获参数，导致"实时高度 / 方位"这类随天体变化的数值**首帧后冻结**（§13.1 规则 3）。
+- **值由宿主解析后以 `@Prop` 传入**：`selectedDisplayValue(key)` / `objectDistanceSummary()` 等动态查值仍留宿主（多处共用），组件只负责显示规则（空值 `--`）；`ObjectDetailTab` 改用 `active: boolean` + `onSelect` 回调，不再需要 `index` 参数。共 28 处调用点改写，5 个旧函数删除。
+- **单体行数：** 29,147 → **29,096**（−51）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（74 个 .ets）/ 安装启动通过；火星卡三页全部正常 —— 观测页（`升起 0h35m` / `中天 7h52m` / `落下 15h09m` + `大气后星等 1.23` / `大气衰减 0.14 等` / `气团质量 1.06` 三列布局正确）、坐标页（地平/几何地平/赤道/J2000 赤道/当日黄道）、资料页（12 个贴片 + 媒体区），页头紧凑指标（`星等 1.09` / `星座 巨蟹座` / `距离 1.6655 AU`）正常；**切页时页签高亮与缩放实时跟随**（`ObjectDetailTab` 的 `@Prop active` 路径生效，页签 bounds 随 1.02 缩放变化）。
+- **踩坑记录（新增）：**
+  - **PowerShell 的 `String.Split("
+")` 会把参数当字符数组**（按 `\r` 与 `\n` 各切一次）→ 行数翻倍、拼接出成片空行。必须用 `-split "
+"`（运算符按正则处理）。
+  - 用 `[regex]::Replace` 匹配**含括号的源码签名**前必须 `[regex]::Escape()`，否则 `(...)` 被当作分组 → 0 匹配（表现为"删了 0 字符"）。
+- **测试同步：** `test-ohos-detail-live-values.mjs` 第 6 条改名 "coordinate and summary builders receive stable keys"（贴片族已组件化，阈值 20 → 5），并新增 "tile components receive resolved values while the host keeps the lookups" 守卫；全量 23 个切片脚本复跑，仅剩 §13.6 的 3 处**既有失败**。
+## [2026-10-01] DevEco Code - Phase 3w：详情主卡片"操作"页组件化
+
+- **新增 `panels/object/ObjectDetailActionsTab.ets`**：`unifiedObjectDetailCard()` 中 `bottomCardIndex === 3` 的"目标操作"分支（37 行）下沉为组件，外层 `Column({ space: 8 })` 与原 Scroll 内层容器间距一致。
+- **依赖全部注入**：3 个 `@Prop`（`viewLock` / `speechStatus` / `inObservingList`，后者由宿主算 `observingList.includes(selectedName)`）+ 6 个回调（居中 / 视角锁定 / 观测清单 / 刷新+刷新状态 / 重选上一目标 / 朗读）。**该分支不引用任何参数化 `@Builder`，所以能干净下沉**；主卡片其余三页（观测/坐标/资料）耦合 `objectDataTile`/`objectMetric`/`objectScheduleTile`/`objectDetailTab` 等参数化 UI 函数，须先做 §13.5 队列 3x 的"贴片族组件化"才可搬。
+- **单体行数：** 29,170 → **29,147**。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（73 个 .ets）/ 安装启动通过；火星详情卡"操作"页六个按钮（居中 / 固定位置 / 添加到列表 / 刷新 / 上一选中 / 朗读文本）全部正常渲染；点"固定位置"→ 文案**实时**变"取消固定"，再点恢复"固定位置"，即 `@Prop` 刷新与回调注入链路可用；测试后已还原该设置。
+- **测试同步：** 无（已核查 `scripts/*.mjs` 无脚本引用该分支符号）。
+## [2026-10-01] DevEco Code - Phase 3v：详情媒体区拆分 + 媒体/模型状态搬迁
+
+- **新增 `state/ObjectMediaStore.ets`**：原宿主 25 个 `objectInspectorMedia*` / `objectInspectorModel*` `@State` 字段（解码/预热/失败/全屏/预览与模型沉浸、缩放、交互等）整体搬迁，宿主字段 + 声明同片补齐。
+- **新增 `panels/object/TabletInspectorMedia.ets`**：把 179 行零参 `@Builder tabletInspectorMedia()` 的八分支界面拆成五个小组件 —— `TabletInspectorMediaCard`（图卡）、`TabletInspectorNoticeRow`（无匹配/准备失败/解码失败三合一）、`TabletInspectorModelBlock`（离线三维模型）、`TabletInspectorProgressRow`（解码中/预热中）、`TabletInspectorFallbackVisual`（示意图，含原 56 行 `tabletInspectorFallbackVisual`）。**分支判定留在宿主**，派生值以 `@Prop` 传入，交互（预览/重试/放大/手势）用回调注入，媒体状态由组件 `@ObjectLink` 直接观察。
+- **单体行数：** 29,295 → **29,170**（`tabletInspectorMedia()` 179 → 133 行，另删 56 行 fallback builder）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（72 个 .ets）/ 安装启动通过；搜索 `Mars` 与 `Mars I`，详情卡媒体区由新 `TabletInspectorNoticeRow` 渲染（`本地资源解码失败` + `资源已找到，但当前设备无法显示此文件` + `重试`），点按重试后 hilog 实证回调链路真的重新发起解码：`[detail-media] retry request=textures/mars.png` → `[detail-media] decoding local image kind=model`；卡内 `时角 23h46m53.0s` / `平恒星时 8h03m33.0s` 等实时值正常刷新。
+- **踩坑记录（新增硬规则）：** 组件成员名 **不得与 `CustomComponent` 的属性方法同名** —— `@Prop background` 直接编译失败（`Property 'background' ... not assignable to base type 'CustomComponent'`），改名 `cardBackground`；`@Component` 的 `build()` 只能有一个容器根节点，原 `@Builder` 里并列的 `Stack` + `Text` 必须包进 `Column({ space: 8 })`（与调用点外层 `Column({ space: 8 })` 一致）。
+- **测试同步（本轮新增的必做项）：** 仓库里 23 个脚本按**文本切片**单体源码，状态/界面搬迁会打断它们。已跟随更新：`test-ohos-detail-image-layout`（改读组件文件 + store 路径 + 新增“宿主仍把视口高度接入组件”守卫）、`test-ohos-detail-live-values`（**同时清掉 Phase 3t 遗留的 5 处失败**：假宿主补 `objectDetailStore`）、`test-ohos-detail-model-geometry`、`test-ohos-distance-ui`、`test-ohos-information-policy`、`test-ohos-model-scroll`（触摸夹具补 store）、`test-ohos-procedural-model`、`test-ohos-search-browser`、`test-ohos-settings-choice-motion`、`test-ohos-polar-scope`（切片端点改 `skyCultureMakerDraftFromResponse`）、`verify-ohos-object-details`（共享 builder 计数 3→2 并新增“必须委托共享行组件”断言）、`verify-ohos-julian-date`（断言改 `JulianDateControls({`）。全量复跑：除下列**既有失败**外全绿。
+- **既有失败（先于本会话，未在本片处理）：** `test-ohos-privacy-startup`（11 处，夹具 `plain()` 未能剥离 `PrivacyConsent.ets` 的 import，
+ew Function 直接语法报错；该文件最后修改于 `101acf6cd3`，早于本会话）、`test-ohos-satellite-panel` test7（纯 C++ `computeOrbitPoints` 断言计数）、`verify-ohos-location-search`（脚本自身路径 bug，报 `E:\E:\...`）。
+- **恢复的设置：** 无（本片未改任何持久化设置）。
+## [2026-10-01] DevEco Code - Phase 3u：详情行族组件化（ObjectDataRow / StructuredDetailRow / DetailSectionTitle）
+
+- **新增文件：** `panels/object/DetailRows.ets`（三个纯展示组件）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— **12 处** `this.objectDataRow(label, key)`、1 处 `this.structuredObjectDetailRow(field.key, tablet)`、4 处 `this.tabletInspectorSection(...)` / 非平板标题，全部替换为组件调用；删除上述**三个带参数的 UI 函数**。
+- **注入取舍：** 原三个 builder 内部通过 `selectedDisplayValue(key)` / `detailFieldLabel(key)` / `detailFieldValue(key)` / `detailSectionTitle(section)` **按名字查值**；组件化后改由父方把**已解析的标签与数值**以 `@Prop` 传入，解析逻辑仍留宿主（多处共用），既去掉了参数按值捕获的冻结，也避免了在组件里做动态字段查找。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（70 个 .ets）/ 安装启动通过；搜索 `Mars` → 选中 → 详情卡正常，信息行显示 `时角`、`平恒星时 7h46m47.7s`、`实时高度/方位 高度 69°50'24″ 方位 159°23'11″` 等实时值。
+- **单体行数：** 29,326 → **29,295**。
+## [2026-10-01] DevEco Code - Phase 3t：object/detail 域第一片 —— `selected*` 数据簇入 ObjectDetailStore
+
+- **本片范围：** object/detail 域共 **96 字段 / 736 处引用**，按 §13.2 拆片；本片先抽出最大的数据簇（`selected*` + `objectInfo`，**56 字段 / 418 处引用**），它是详情卡、信息行与平板检查器三类 UI 的共同数据源，也是后续组件化的前提。
+- **新增文件：** `state/ObjectDetailStore.ets`（`@Observed`；56 个字段，覆盖名称/编号/坐标族（赤道/黄道/银河/地平/超银河）、距离/星等/消光/高度角、卫星过境、星座文化描述块、详情字段与媒体等；`selectedLanguage` 属语言域、**刻意不迁**，仍留宿主）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 56 行 `@State` 声明删除、**418 处引用**改写为 `this.objectDetailStore.*`（全部使用**词边界**替换，规避 `selectedCoordEq` / `selectedCoordEqJ2000`、`selectedDistance` / `selectedDistanceCompact`、`selectedDetailFields` / `selectedDetailLoaded` 等同前缀陷阱）；新增宿主字段 `@State private objectDetailStore: ObjectDetailStore = new ObjectDetailStore()` 与导入。
+- **三个踩坑（本片全部踩到，均记入 §13 手册）：**
+  1. **批量改引用后忘记补宿主字段声明** → `this.objectDetailStore.*` 全部推断为 `any` → 构建报 `arkts-no-any-unknown`（行号散落在 13066/13948/18815… 等业务代码处，不易一眼看出）。**教训：改引用的同一步必须同时落字段声明。**
+  2. **类型导入要找准模块**：`ObjectDetailField` / `ObjectDetailModel` / `SatellitePass` / `SkyCultureDescriptionBlock` 的导出在 **`pages/StellariumTypes.ets`**，而不是 Phase 1c 新建的 `pages/MainWindowModels.ets`（后者只搬了原单体序言区里的声明）。首轮构建报 `declares 'ObjectDetailField' locally, but it is not exported` 后改用正确模块。
+  3. **`arkts_check` 再次漏检**（未定义成员、结构失衡都不报）→ 必须由 `devecocli build` 兜底，§13.2 第 5 步不可省。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验（69 个 .ets）/ 安装启动通过；搜索 `Mars` → 点选候选 → **详情卡正常显示**：`火星`、`星等`、`距离`、`实时高度 / 方位 高度 69°06'09″ 方位 153°20'36″`——`selected*` 数据经 store 的完整链路可用，且坐标为实时值。
+- **单体行数：** 29,380 → **29,325**；`state/ObjectDetailStore.ets` 63 行。
+- **object/detail 域剩余（后续片）：** ① 信息行组件 `structuredObjectDetails`(30 行) + `selectedLiveInfoRows`(19 行)；② 媒体块 `tabletInspectorMedia`(179 行) + `objectInspectorMedia*`(19 字段)；③ 主卡片 `unifiedObjectDetailCard`(183 行)；④ 连接线与模型叠层（`objectDetailConnector*` 9 字段 + `objectInspectorModel*` 5 字段）。
+
+## [2026-10-01] DevEco Code - Phase 3s：星座快捷导航 + RA/Dec 坐标输入（search 域整体迁完）
+
+- **新增文件：** `panels/search/SearchConstellationChips.ets`（常见星座快捷 chips，`@ObjectLink store` + `@Prop languageRevision` + `onOpen` 回调）、`panels/search/SearchCoordinateInput.ets`（赤经/赤纬两行输入 + 跳转按钮，`@ObjectLink store` 读写输入文本 + `onGo` 回调）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— `constellationNavigationItems` / `coordInputRA` / `coordInputDec` 三个字段迁入 `SearchStore`；两块内联 UI（约 50 行）替换为组件调用，仍由宿主的 `if (searchFilterStore.searchFilterPage.length === 0)` 包裹。
+- **两条重要教训（本条最重要）：**
+  1. **替换"处于条件语句内部的块"时，起始标记不小心包含了 `if (...) {` 那一行**，而替换文本只写了两句组件调用 → **`if` 的开括号被删掉、其闭合 `}` 变成多余括号**，导致文件括号深度 −1，编译在 6,500 行之后爆出上百条 `UI component 'Row' cannot be used in this place` / `Cannot find name 'width'` / `does not meet UI component syntax`。定位方法：写脚本扫描全文件括号净深度（HEAD=0、当前=−1）→ 再逐 hunk 统计 `{`/`}` 净差额，锁定"删了一个 `{` 没补回"的 hunk。修法是补回那一行 `if (...)`。
+  2. **`arkts_check` 会漏掉这类结构失衡**：本片修改后 `arkts_check` 对四个文件均报 "No errors"，而 `devecocli build` 立刻失败。**结论：`arkts_check` 只是快速反馈，绝不可替代构建**——已确认 §13.2 协议中"第 5 步必须同时跑构建"是正确的、不可省。
+- **验证结果：** 修复后 `BUILD SUCCESSFUL`；契约校验通过（33 面板 / 22 静态 id / 17 动态前缀 / 42 锚点，扫描 68 个文件）；真机安装启动成功，搜索面板与分类浏览工作正常。**说明：** 尾部两个块在设备上未能交互验证——面板内"目录天体"网格自身可滚动且占满可视区，`dumpLayout` 下无法把外层滚动条拖到该区域；这两个块与已验证过的同型组件（store + `@ObjectLink` + `@Prop` + 回调）结构一致，其行为一致性未单独实测，待后续真机复核。
+- **单体行数：** 29,487 → **29,380**。
+- **search 域状态：** 输入栏 / 候选列表 / 筛选器（菜单+chips+分类行）/ 分类浏览 / 星座快捷导航 / RA/Dec 坐标输入**全部迁出**，`SearchStore` 承载 21 个字段 + 1 个纯逻辑方法。**search 域完成。**
+
+## [2026-10-01] DevEco Code - Phase 3r：搜索分类浏览（分类网格 + 目录状态），search 域主体迁完
+
+- **新增文件：** `panels/search/SearchCategoryBrowse.ets`（分类选择行 + 筛选入口 + 已选条件 chips + 「目录天体」状态文本 + 分类对象网格；`@ObjectLink store` + 8 个 `@Prop` + 9 个回调）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 12 个分类字段（`categoryObjects` / `categoryObjectCount` / `categoryLoadedCount` / `categoryLoading` / `categoryLoadFailed` / `categoryHasMore` / `categoryListKind` / `categoryCatalogTotal` / `categoryCatalogReady` / `categoryCatalogMessage` / `categoryModuleId` / `pendingPluginCatalogId`）迁入 `SearchStore`，**64 处引用**改写（用词边界替换以免误伤 `categoryModuleIdFor()` 等方法名）；浏览块（约 125 行内联 UI）替换为 `SearchCategoryBrowse({...})` 调用；**顺带删除因迁移而失去调用者的 `searchFilterMenuTitle()`**（其 UI 已随 `SearchFilterMenu` 组件化，`menuTitle()` 在组件内实现）。
+- **宿主保留的注入项：** `searchCategoryIcon()` / `searchCategoryLabel()`（图标键与标签，宿主内另有使用）、`categoryObjectIcon()` / `categoryObservationSubtitle()`（在其它面板也用到，以 `iconFor` / `subtitleFor` 回调注入避免复制实现）、目录状态文本的嵌套判断改为组件私有 `catalogStatusText()`（只读 store + I18n）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验 / 安装启动通过；① 浏览块由新组件渲染，`#search-category-picker`、`#search-filter-picker` 锚点在，状态文本「已加载 8 / 8 个」；② 打开分类页 → 分类行由 `CatalogFilterRow` 渲染且**选中 ✓ 正确显示**（正是本方案修掉的"参数化 builder 冻结"类问题）；③ 切到「卫星」→ 分类标签**实时**变「卫星」、状态**实时**变「已加载 60 / 66 个」（无需重开面板）；④ 已切回「行星」恢复原状。
+- **单体行数：** 29,487 → **29,415**。
+- **search 域进度：** 输入栏 / 候选列表 / 筛选器 / 分类浏览**已迁完**；仅剩搜索面板尾部的**星座快速导航 chips**（`constellationNavigationItems`）与 **RA/Dec 坐标输入**（`coordInputRA/Dec`、`goToCoordinates`）两小块未迁。
+
+## [2026-10-01] DevEco Code - Phase 3q：搜索筛选器（菜单 + chips + 分类行），契约校验扩到全部组件
+
+- **新增文件：** `panels/search/SearchFilterMenu.ets`（返回行 + 四个页面：根 / 分类 / 可视度 / 器材；`menuTitle()` 由宿主方法搬入，直接读 store）、`panels/search/SearchFilterChips.ets`（已选条件 chips，点击即清除）、`panels/search/CatalogFilterRow.ets`（分类行子组件，替代原**带参数的 UI 函数** `catalogFilterRow(cat)` —— 其参数按值捕获、选中态不会实时刷新）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 4 个筛选字段（`searchFilterPage` / `searchCategory` / `searchVisibilityFilter` / `searchInstrumentFilter`）迁入 `SearchStore`，46 处引用改写；`this.searchFilterMenu()` 与 `this.searchFilterChips()` 两个 builder 调用替换为组件调用（标签由宿主 `searchVisibilityLabel()` / `searchInstrumentLabel()` / `searchAllCategoryOptions()` 计算后以 `@Prop` 传入，因为这些方法在搜索结果与其它面板也用到）；删除两个 builder 与 `catalogFilterRow`。
+- **`scripts/check-ohos-ui-contract.mjs` 扩容（本次必要修正）：** 原先只扫单体文件，导致移到组件的锚点（如 `search-browser-back`、`search-category-*`）被判为"丢失"。现改为**递归扫描 `harmonyos/ets-source` 下全部 `.ets`（当前 65 个文件）**并合并分析；基线的 33 面板 / 22 静态 id / 17 动态前缀全部不变，锚点总数 41 → 42（仅因扫描面扩大），已 `--update` 并写入说明。
+- **三个踩坑记录（都由此片的构建/校验立刻拦下）：**
+  1. **前缀式批量替换会误伤同前缀方法名**：`this.searchCategory` → `this.searchStore.searchCategory` 把 `this.searchCategoryOptions/Icon/Label` 一起改了（与早前 `nightMode` 同型错误）→ 必须按**词边界**替换。
+  2. **删除"带参数的 UI 函数"时其 `@Builder` 装饰器行会残留**（本文件风格为 `@Builder` + `private xxx(...)`），残留行会去装饰下一个普通方法并报 `Only UI component syntax can be written here`。
+  3. **契约校验必须扫描迁移后的组件文件**（见上）。
+- **真机验证（`192.168.3.95:40565`）：** 构建 / 契约校验 / 安装启动通过；① 点「筛选」→ 菜单由新组件渲染，返回行锚点 `#search-browser-back` 在；② 点「可见度」→ 页面切换、标题**实时**变「可见度」（`menuTitle()` 经 store）；③ 选「地平线上方」→ 菜单关闭且筛选 chip「地平线上方  x」**实时出现**（新 `SearchFilterChips`）；④ 点该 chip → **实时清除**。测后筛选已恢复「不限」。
+- **单体行数：** 29,566 → **29,487**。
+
+## [2026-10-01] DevEco Code - Phase 3p：搜索域第二片（候选列表 → SearchSuggestions 组件）
+
+- **新增文件：** `panels/search/SearchSuggestions.ets`（结果计数行 + 候选行：名称 + 副标题；`@ObjectLink store` + `@Prop` 颜色 + `subtitleFor` / `onSelect` 回调）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 搜索分支内的候选块（原 34 行内联 UI）替换为 `SearchSuggestions({...})` 调用。
+- **依赖注入的取舍：** 副标题格式化 `celestialSubtitle(title, englishName)` 被**三处共用**（搜索候选、分类浏览、今晚天象卡片，共 6 个引用点），因此**留在宿主**、以 `subtitleFor` 回调注入组件，避免复制实现或让组件反向依赖宿主状态（该方法还读 `searchCategory`）。
+- **真机验证（`192.168.3.95:40565`）：** 构建、契约校验、安装启动通过；输入 `Vega` → 候选区由新组件渲染「搜索结果 / **5 个候选**」与 `Vega` 行。测后重启应用清除临时输入。
+- **单体行数：** 29,587 → **29,566**。
+- **search 域进度：** 输入栏（3o）与候选列表（本片）已迁；**剩余**：筛选器（`searchFilterPage` 15 / `searchCategory` 19 / `searchVisibilityFilter` 5 / `searchInstrumentFilter` 6，含 3,441 行的 `searchFilterMenu`）与分类浏览（`category*` 10 字段 / 64 处，含 `searchFilterChips`）。
+
+## [2026-10-01] DevEco Code - Phase 3o：搜索域第一片（搜索输入栏 → SearchStore + SearchBar）
+
+- **背景：** search 域共 19 字段 / 143 处引用，按 §13.2 协议拆片推进；本片取最小的自包含部分——**搜索输入栏**。
+- **新增文件：** `state/SearchStore.ets`（`searchText` / `searchSuggestions`）、`panels/search/SearchBar.ets`（放大镜 + 输入框；`@ObjectLink store` + `onInput` / `onSubmit` / `onInputFocus` 三个回调）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— `@State searchText` / `@State searchSuggestions` 合并为 `@State private searchStore`；22 处引用改写；`this.centerSearchBar()`（40 行 builder）替换为 `SearchBar({...})` 调用，**原 builder 内的三处交互逻辑按职责搬回宿主回调**（输入 → `scheduleSuggestions`；回车 → 清定时器 + `searchObject` + 清候选；聚焦 → 手机端把面板吸附到 0.9 并 `scheduleSelectedObjectForUiChange`）；删除该 builder。
+- **顺带清理：** `searchHistory` **无任何渲染读取**（仅存储读写与 `searchObject()` 使用）→ 由 `@State` 降级为普通 `private` 字段，不进 store（少一个无谓的响应式变量）。
+- **第五次命中同名冲突：** `onFocus` 与 `CustomComponent` 基类属性方法冲突（编译报 `Property 'onFocus' ... is not assignable to the same property in base type 'CustomComponent'`）→ 改名 `onInputFocus`。累记禁用成员名：`borderColor` / `scale` / `onTouch` / `onFocus` / `onChange` 一族。
+- **真机验证（`192.168.3.95:40565`）：** 构建、契约校验、安装启动均通过；打开搜索面板后输入 `Mars` → 输入框经 store 正确显示，候选区**实时出现**「搜索结果 / **14 个候选**」以及 `Mars` / `Mars I` 等条目（候选列表仍在宿主渲染，证明宿主读 store 亦能实时重绘）；面板契约锚点 `#search-category-picker` / `#search-filter-picker` 完好。测后已重启应用清除临时输入。
+- **单体行数：** 29,614 → **29,587**。
+
+## [2026-09-30] DevEco Code - Phase 3n：书签域重做（Phase 3a 回退项补完，真机四项实时验证通过）
+
+- **背景：** 本片是 **Phase 3a 被回退那一片的重做**。当时（BookmarkStore + BookmarkPanel）已通过构建与"状态归属"验证，但无法证明实时刷新等价，按"行为零变更"不变式回退。此后经真机实验确立了 (b) 方案的完整规则：① `@ObjectLink` 的宿主源必须是 `@State` 持有的可观察实例；② 组件成员名必须避开 `CustomComponent` 基类属性方法；③ 迁移 UI 不得保留**参数化 `@Builder`**；④ 宿主对 store 的写入确实会触发宿主自身重绘。具备这些规则后本片可干净重做。
+- **新增文件：** `state/BookmarkStore.ets`（`list` / `loading` / `draftName`）、`panels/BookmarkPanel.ets`（`@ObjectLink store` + `@Prop selectedName` / `cardBorderColor` + 三个回调；列表用 ForEach 内联，不引入参数化 @Builder）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 3 个 `@State`（`bookmarkList` / `bookmarkLoading` / `newBookmarkName`）合并为 `@State private bookmarkStore`；12 处引用改写（持久化方法 `loadBookmarks` / `addCurrentBookmark` / `gotoBookmark` / `deleteBookmark` / `saveBookmarksToStorage` 照旧读写 store）；`activePanel === 'bookmarks'` 分支（原 65 行）替换为 `BookmarkPanel({...})` 调用。
+- **真机验证（`192.168.3.95:40565`，四项全部实时，无需重开面板）：**
+  1. 面板由新组件渲染：书签面板标题、名称输入框、保存按钮、空态文案。
+  2. **加载 → 空态**：进入面板后显示「还没有书签」而不是长期「正在加载书签…」（此前在模拟器上因引擎缺失无法判定，现已确认真机行为正确）。
+  3. **保存 → 列表出现**：点「保存当前视图」后列表项（`书签 / FOV 60.0°` + 删除按钮）**立即出现**——`addBookmark` → `loadBookmarks()` → store.list → 组件重渲染。
+  4. **删除 → 回到空态**：点「删除」后立即恢复「还没有书签」。测试数据已清理。
+- **验证结果：** `arkts_check` 三文件无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功。
+- **单体行数：** 29,670 → **29,614**（本片 −56；两文件承载原逻辑）。
+
+## [2026-09-30] DevEco Code - Phase 3m：速度域入 TimeStore + TimeWheelController 拆分（时间域完工）
+
+- **本片目标：** 一次做完两片 —— ①（B）速度/速率域迁移；②（A）时间轮交互控制器拆分。完成后**时间域除面板 chrome 与刻意保留项外全部迁完**。
+- **B（速度/速率域 → `TimeStore`）：** 5 个字段迁入（`timeRateText` / `pendingTimeRate` / `pendingTimeRateUntilMs` / `lastSyncedTimeRate` / `lastNonZeroSpeedIndex`，原为宿主 `@State` 与普通字段），宿主引用全部改写。**写入口统一：** 新增 store 方法 `beginRateChange(rate, windowMs)` 与 `shouldIgnoreEngineRate(rate)`，`applySpeedStep` / `syncTimeRateState` 改为调用它们——原先散在两处的"待定窗口 + 重复速率去重"逻辑现在只有一份实现（含此前修「实时→倒带→实时」抖动的那段）。
+- **A（`state/TimeWheelController.ets`，新文件 218 行）：** 时间轮的**交互控制器**，刻意是**普通类（非 `@Observed`）**——14 个手势草稿字段每个触摸采样都在变，可观测化会每次采样都触发渲染。迁入 11 个方法（`handleTouch` / `selectUnit` / `applyDate` / `stopInertia` / `startInertia` / `velocityMultiplier` / `rebaseTrack` / `rebaseTrackAtCenter` / `syncFromSimulation` + 私有辅助）。**三个跨域依赖按 §11 修订 5 的约定注入**：
+  - `onSeek(jd)` —— 引擎推送（宿主 `callNativeFire('setTimeToJD')`），控制器不碰 NAPI；
+  - `onStopSpeed()` —— 拖动即暂停（宿主 `stopTimeWheelSpeed()`，写速度域）；
+  - `getUtcOffsetHours()` —— UTC 偏移仍由宿主持有。
+  宿主侧只剩 `wheel()` 懒初始化、5 处调用转发（`selectUnit` / `handleTouch` / 3× `syncFromSimulation`）与 **3 个生命周期 `stop()` 收口**（新增：`aboutToDisappear` 与切后台处，与此前 `stopViewCoordinateTimer`/`stopDockClockTimer` 同一批挂点）——**惯性定时器从此不再可能残留**。
+- **顺带删除的死代码：** `timeWheelTransitionTimer` / `timeWheelTargetMs` / `finishTimeWheelTransition()` —— 该过渡定时器**从未被启动**（唯一启动者 `advanceTimeWheel` 已在 Phase 3j 作为死代码删除），`finishTimeWheelTransition` 因此恒早退，删除行为等价。
+- **真机验证（`192.168.3.95:40565`）：**
+  1. 拖动时间轮（经控制器）：时钟 00:26 → 00:36、速度自动转「已暂停」——`handleTouch` + `applyDate` + `onSeek` + `onStopSpeed` 注入链全通。
+  2. 两次点按「快进」（速率域经 store）：副标题 `1x → 2x`，与迁移前的档位语义一致。
+  3. 点「实时」恢复 `2026-10-01 · 1x`。
+- **验证结果：** `arkts_check` 三文件无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功；测后已恢复原状态。
+- **单体行数：** 29,871 → **29,670**；`state/TimeWheelController.ets` 218 行、`state/TimeStore.ets` 扩至 33 行。
+- **时间域收口说明（剩余项与理由）：** 面板标题的 `observationTimeText`/`timeRateText` 属面板 chrome（Phase 5/6）；`manual*`/`atmo*`/`refractionOn` 的消费方是宿主方法（`applyManualTime`/`applyAtmosphere`），按设计留宿主；设置页的 `timeSettingsPending` 跨面板共享。**其余时间域（视图 + 状态 + 交互控制器 + 定时器收口）已迁完。**
+
+## [2026-09-30] DevEco Code - Phase 3l：时间面板整体完成 + 夜视模式独立成模块（并修掉夜视被轮询弹回的既有缺陷）
+
+- **本片目标：** 一次性完成主时间面板（`activePanel === 'time'`，原分支 339 行）的组件化，并按用户要求把**夜视模式单独拆成模块**（后续主界面要加独立按钮）。
+- **新增文件：** `panels/QuickChipRow.ets`（替代跨 5 处共享的参数化 `@Builder quickChips(items)`；`@Prop items` + `onChip`）、`panels/time/ObservationAidBlock.ets`（大气折射 + 气压/气温/消光滑杆）、`panels/time/TimeJumpActions.ets`（天文事件 / 二分二至 / 天文时间单位三段共 13 行按钮，改为**按钮表 + 嵌套 ForEach**，不再用参数化 @Builder）、`panels/time/ManualTimeBlock.ets`（日期/时间选择 + 应用/重置）、`state/NightModeStore.ets`、`common/ui/NightModeToggleRow.ets`。
+- **单体：** `quickChips` 5 处调用全部换成 `QuickChipRow({...})` 并删除该 builder；时间面板的观测辅助 / 快捷跳转 / 手动时间三段替换为 `NightModeToggleRow` + `ObservationAidBlock` + `TimeJumpActions` + `ManualTimeBlock` 调用——**该面板现在由 8 个组件与 1 个薄包装组成**。
+- **夜视模式独立（按用户要求）：**
+  - 删除**冗余镜像字段 `nightModeOn`**（其唯一读取点就是时间面板那一行，其余 6 处只是把 `nightMode` 抄过去），"真源"只剩一个；
+  - 真源 `nightMode` 迁入 `NightModeStore`（宿主以 `@State` 持有、组件以 `@ObjectLink` 订阅），宿主 `nm*()` 配色系列改读 `this.nightModeStore.nightMode`；
+  - 新增**统一入口 `applyNightMode(enabled, persist)`**（写状态 + 可选持久化 + 下发 `setNightMode`），时间面板行与**后续主界面按钮**都走这一个入口。
+  - **实测确认了方案前提**：宿主以 `@State` 持有 `@Observed` 实例时，改其属性会触发**宿主自身**重绘（截图见下），因此全应用配色仍随夜视模式实时切换。
+- **顺带修掉一个既有缺陷（夜视被轮询弹回）：** 开启夜视后，每约 3 s 的 `loadTimeExtras()` 里 `getNightMode` 会回报**旧值**并覆盖状态；合并为单一真源后该覆盖会直接把夜视关回去，且 ArkUI 的 `Toggle` 对**程序化** `isOn` 变更也会触发 `onChange`，形成"反向再发一条 `setNightMode false`"的回路。日志实证：`setNightMode "true"` 之后 2.5 s 出现 `setNightMode "false"`（期间无用户操作）。
+  - **修法（与 `syncTimeRateState` 的同款去重窗口）：** 新增 `pendingNightMode` + `pendingNightModeUntilMs(3500 ms)`；把三处引擎写入（`loadTimeExtras` 轮询、`refreshState` 的两处）统一改为 `syncNightModeFromEngine()`，在待定窗口内忽略与待定值不一致的回报；组件侧 `onChange` 仅在 `v !== store.nightMode`（即用户改变）时回调，杜绝程序化变更引发的反向命令。
+- **真机验证（`192.168.3.95:40565`）：**
+  1. 时间面板各块渲染正常：转轴/速度 chips/快捷 chips、恒星时、时间方程、ΔT（设置页）、儒略日、夜视模式行、大气折射 + 3 滑杆、快捷跳转三段、手动时间。
+  2. **大气折射开关**点按后实时翻转（证明该区域点击有效、`@Prop` 回调路径正常）。
+  3. **夜视模式**点按后：开关保持 ON **不再被弹回**，且**整个应用切换为红光**（星空/标签/面板/Dock 全红，截图 118,548 字节；关闭后恢复 141,572 字节）——夜视模块与全应用配色联动经真机确认。
+- **验证结果：** `arkts_check` 七文件无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功；测后已恢复原设置（夜视关闭）。
+- **单体行数：** 30,143 → **29,871**；新增 6 个文件承载原逻辑。
+
+## [2026-09-30] DevEco Code - Phase 3k：时间设置标签页迁移（修掉两个跨标签页共享的参数化 @Builder）
+
+- **新增文件：** `common/ui/SettingsChoiceButton.ets`（选项按钮组件：`@Prop active/canPick` + `onPick`）、`common/ui/SettingsSwitchRow.ets`（开关行组件：`@Prop isOn/canToggle` + `onToggle`）、`state/TimeSettingsStore.ets`（7 字段：`configDateFormat`/`configTimeFormat`/`startupTimeMode`/`startupTimeStop`/`startupTodayTime`/`startupPresetLocalTime`/`timeSettingsZone`）、`panels/settings/TimeSettingsSection.ets`（日期格式 + 时间格式 + 启动时间三段）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 7 个 `@State` 合并为 `@State private timeSettingsStore`（**`timeSettingsPending` 刻意仍留宿主**，因为它同时被其他面板读取，改以 `@Prop pending` 传入）；21 处引用改写；`configTab === 3` 的上半部分（原 L23504–L23573）替换为 `TimeSettingsSection({ ... })` 调用，`DeltaTSettingsBlock` 仍紧随其后由宿主渲染；**信息标签页**的选择按钮同步换成 `SettingsChoiceButton`（由调用方计算 `active: this.informationMode === mode`）；删除 `settingsChoiceButton`（参数化，跨 4 处共享）与 `timeSettingSwitchRow`（参数化）两个 builder，以及已搬入组件的 `configDateFormatLabel` / `configTimeFormatLabel`；`settingsChoiceSelected` / `selectSettingsChoice` 保留（信息标签页仍在使用）。
+- **修复的既有缺陷（冻结 bug 类的共享面）：** `settingsChoiceButton` 被 **日期 / 时间 / 启动 / 信息** 四个标签页共用，且是参数化 `@Builder`（参数按值捕获、子树首帧后冻结）→ **这四处的选中态此前都不实时**，必须重开面板才更新；现全部实时。同时 `timeSettingSwitchRow` 原先把 `enabled` 形参收下却忽略、且行背景写死读 `startupTimeStop`，现改为显式 `@Prop isOn/canToggle`。
+- **真机验证（`192.168.3.95:40565`，全部通过）：**
+  1. 渲染：时间标签页由新组件正常渲染（实时预览 `2026-09-30 23:38:28`、时区行 `观测地时区：Asia/Shanghai`、三段选项与开关行、保存/立即应用按钮）。
+  2. **选中态实时**：点「月-日-年」后实时预览立刻变 `09-30-2026 23:39:05`（且仍走秒），当前值行同时变「月-日-年」——不再是"要重开面板"。
+  3. **开关行实时**：点「启动时暂停时间流逝」后行背景与旋钮同帧翻转（截图 128,099 → 136,504 字节；视觉确认蓝色开关 + 行底色）。
+  4. 测后已恢复原设置（日期格式点回「年-月-日」；开关点两次回到原值）。
+- **验证结果：** `arkts_check` 五文件无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功。
+- **单体行数：** 30,229 → **30,143**（本片 −86；另有 4 个新文件承载原逻辑）。
+
+## [2026-09-30] DevEco Code - Phase 3j：死代码清扫第二轮（13 个零调用 @Builder + 31 个零引用字段 + 级联 9 方法，−650 行）
+
+- **触发：** 用户反馈"陀螺仪功能正常"，据此把扫描**扩大到 @Builder 与字段**（第一轮只扫 `private` 方法），并加入**级联复扫**（删除后重新扫描，直到收敛）。
+- **反向验证（重要）：** 活着的陀螺仪路径是 `sensor.on(ROTATION_VECTOR, this.gyroRotationCallback)` / `gyroGravityCallback` / `gyroMagneticCallback` / `onOrientationData`（L12605–L12702）；被删的 `onRotationVectorData` 是**旧版同职责残留**。这既解释了"功能正常"，也反向验证了"零引用=不可达"判据成立。
+- **A. 零调用的 `@Builder`：13 个（约 519 行）** —— `collapseButton` / `compactObjectPeek` / `compactQuickControls` / `configurationSkyDisplaySettings` / `detailInfoRow` / `expandedObjectSummary` / `objectActionBar` / `objInfoFloat` / `observerBadge` / `padExploreHome` / `railShell` / `smallRoundButton` / `tabletObjectInspector`。
+  - 判据：`this.<name>(` 调用点为 0；并逐个核对"全文件出现次数"，排除同名前缀干扰（`compactObjectPeek` 出现 16 次、`objectActionBar` 7 次，但都是 `compactObjectPeekX/Y/Width`、`objectActionBarX/Y/Width/isObjectActionBarPoint` 等**活助手**，其本身只出现 1 次）。
+  - 其中包括初始调研中体积最大的 `tabletObjectInspector`（当时 893 行）与整套 `railShell` / `padExploreHome` / `objInfoFloat` / `observerBadge` **旧抽屉/平板布局变体**。
+- **B. 零引用字段：31 个** —— 第一轮 25 个（`fpsDisplay` / `fpsFrameCount` / `fpsLastTime` / `fpsVisible` FPS 残留、`gyroReferenceAz/Alt/ViewAz/ViewAlt`、`showAstroPanel` / `showConfigPanel` / `showHelpPanel`、`scriptPanelScroller`、`expandedTargetPlacementTimer`、`nightViewTab`、`timeScale`、`visibleConstellations`、`tonightPlanets`、`lightPollution`、`asteroidLines` / `asteroidLabels`、`startupPreparing`、`autoLocateStarted`、`centerSearchText`、`infoTextExpanded`、`gyroLastDiagnosticMs`），级联轮再加 `railCollapsed` 与 `gyroAnchorFwd` / `gyroAnchorQuat` / `gyroAnchorUp` / `gyroAnchorValid` / `gyroHeadingSyncInFlight`。
+- **C. 级联复扫（3 轮收敛）：9 个方法** —— 第 1 轮：`formatLocalDateTime` / `infoWinDetailH` / `objectInspectorSubtitle` / `rectsOverlap` / `startTimeWheelTransition` / `syncGyroAnchor`；第 2 轮：`gyroAltAzVector` / `gyroEnuFromBridge` / `pad2`。
+  - 值得注意的是 `startTimeWheelTransition`：它的唯一调用者是第一轮已删的 `advanceTimeWheel`，说明**"按步进推进时间"这条支路（含其 12 ms 过渡定时器）在清理前就已经不可达**；其定时器 `timeWheelTransitionTimer` 因此永不被启动（`finishTimeWheelTransition` 恒早退），行为不变。
+- **过程教训 1（删字段）：** 若字段声明**上方有独立装饰器行**（本例 `@StorageLink('stellariumStartupPreparing')`），只删声明行会留下孤立装饰器并叠加到下一个属性，构建立刻报 `cannot have multiple state management decorators`；已补扫"非 `@Watch` 装饰器紧邻另一个装饰器"并修掉 1 行。
+- **过程教训 2（文档工具）：** 对 687 KB 的 CHANGELOG 使用 `edit` 工具插入条目时，文件被**静默截断到 64 KB（91% 内容丢失）并随之提交**；已从 `3301201ef0` 恢复（4,813 行 / 691,898 字节 / 全 CRLF，含 3i 条目）后改用脚本以 CRLF 精确补插本条。**结论：超大文档的插入/追加不要用通用编辑工具，改用带显式换行处理的脚本，并在改动后立即核对文件字节数/行数。**
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功；时间面板渲染、刻度轮拖动（速度转「已暂停」）与「实时」恢复（`1x`）回归通过；右上角陀螺仪按钮点按不崩溃（进程 pid 不变）。
+- **单体行数：** 30,879 → **30,229**（本片 −650）。
+
+## [2026-09-30] DevEco Code - Phase 3i：系统性死代码普查并删除 39 个不可达方法（−498 行）
+
+- **普查方法：** 该 struct 的**全部方法都是 `private`**（不可能有外部调用者），因此"文件内零引用 = 不可达"。对 1,090 个 `private` 方法逐个统计三种引用形式：`this.<name>(`、裸引用 `this.<name>`、字符串 `'<name>'`（含 `@Watch('…')` 按名调用、以及可能的字符串分派），并排除框架生命周期方法（`aboutToAppear` / `aboutToDisappear` 等）与 `@Watch` 引用的两个方法（`onPrivacyNativeStartupAllowedChanged`、`onCliUiEventChanged`）。
+- **结果：39 个方法三种引用形式**全部为 0**，合计约 469 行方法体（删除后文件 −498 行，含空行）。按用途分组：**
+  - **陀螺仪（7 个，约 197 行）：** `onRotationVectorData`(119) / `gyroForwardFromGravityAndMagnetic`(22) / `gyroSlerpUnitVector`(21) / `alignGyroToMagneticNorth`(12) / `gyroParallelTransportUp`(10) / `calibrateGyroscopeQuaternionUnused`(10) / `gyroEffectiveAzOffset`(3)
+  - **对象卡片定位（4 个，约 103 行）：** `placeObjectCardAwayFromTarget`(53) / `easeSelectedObjectTo`(36) / `placeSelectedObjectInCompactSafeArea`(7) / `placeSelectedObjectInExpandedSafeArea`(7)
+  - **抽屉/信息窗几何（9 个）：** `isCompactDrawerPoint` / `handleCompactMoreTap` / `handleFloatingPanelTouch` / `isTabletObjectInspectorPoint` / `bottomCardHitHeight` / `bottomCardSwiperHeight` / `drawerLeft`（单行方法） / `infoWinLeft` / `infoWinWidth`
+  - **时间相关（3 个）：** `advanceTimeWheel`(21) / `setTimeNow`(8) / `adjustTime`(6)
+  - **其余杂项（16 个）：** `nm` / `tickPercent` / `runOnTouchUp` / `toggleTracking` / `trackStatusZh` / `triggerAutoLocate` / `cycleOcular` / `pauseScript` / `resumeScript` / `pluginFeaturePanel` / `objectInspectorFileUri` / `isConstellationSelection` / `skyCultureRangeModeIndex` / `skyCultureClassificationFilterIndex` / `skyCultureRegionFilterIndex`(10) / `defaultSkyCultureMakerDraft`(17)
+- **需要产品复核的"疑似漏接线"项（删除不改变行为，但可能掩盖了未接的意图）：** ① `onRotationVectorData` 及整套陀螺仪四元数数学——像是**传感器回调未注册**；② `pauseScript` / `resumeScript`——脚本暂停/继续入口未接；③ `toggleTracking` / `triggerAutoLocate` / `setTimeNow` / `adjustTime`——功能入口未接；④ `placeSelectedObjectIn*SafeArea` / `easeSelectedObjectTo` / `placeObjectCardAwayFromTarget`——对象卡片避让逻辑未接。以上已记入方案文档 §11 修订 6，**若本应接线，应作为功能缺陷单独处理，而不是继续躺在死代码里**。
+- **过程记录（教训）：** 首轮脚本用"下一个 `\n  }\n`"作为方法结束标记，遇到**单行方法**（`private drawerLeft(): number { return this.EDGE_MARGIN }`）时越过其边界，把中间的 `drawerWidth` / `onRailTap` 等一并删除，构建立即报 `Property 'onRailTap' does not exist` 捕获；已还原并对单行方法特判后重做，编译与真机回归均通过。**结论：删除脚本必须处理单行成员，且必须由编译器兜底。**
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功；时间面板渲染、刻度轮拖动（速度变「已暂停」）与「实时」恢复（`1x`）回归通过。
+- **单体行数：** 31,377 → **30,879**（本片 −498）。
+
+## [2026-09-30] DevEco Code - Phase 3h：清理旧转轴死子系统（−126 行，并消除高频链上的无效重渲染）
+
+- **调查结论（可证明死代码）：** 旧滑杆入口 `applyScrubber(secondOffset, mode)` **没有任何调用者**（滑杆 UI 早已被 Sky Guide 风格时间轮取代）；顺着它往下，`beginScrubberInteraction` / `sendScrubberTime` / `updateScrubberLabel` 只被彼此调用，而 `syncScrubberToSimulation` / `resetScrubberToRealtime` 虽被活代码调用，但其**写入目标全是只写不读的字段**（`scrubberValue` / `scrubberLabel` / `scrubberReferenceJd` / `scrubberPendingOffset` / `scrubberAnchorPending` / `scrubberLastSendMs` / `scrubberInteracting` 全部无读取点）。因此整条链是死代码。
+- **删除内容：** 7 个字段声明（其中 `scrubberValue` / `scrubberLabel` 是 `@State`）、6 个方法（`updateScrubberLabel` / `beginScrubberInteraction` / `sendScrubberTime` / `applyScrubber` / `syncScrubberToSimulation` / `resetScrubberToRealtime`，原 L11799–L11908 区块）、5 处调用点（`jumpToTimeMark` 内 2 行、`refreshSimTimeLight` 内的 `if (!this.scrubberInteracting)` 整块、`applyJulianDateInput` 1 行、`handleChip('now'/'realtime')` 各 1 行）。
+- **附带修复（性能）：** 被删的两个 `@State` 字段原本由 `syncScrubberToSimulation` 在**每次模拟时间刷新**时写入——每次写都让整个 31k 行 struct 的重渲染范围被打脏。删除后这条高频路径不再产生无效重渲染（符合方案"高频链隔离"的目标）。
+- **另一处收口：** `timeMarkLoading` 只是 `jumpToTimeMark` 的重入守卫、不参与渲染，已由 `@State` 降为普通 `private` 字段（少一个无谓的响应式变量）。
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功；回归拖动（小时单位下改时间不改日期，符合预期）与「实时」恢复（`2026-09-30 · 1x`）均正常。
+- **单体行数：** 31,503 → **31,377**（本片 −126）。
+
+## [2026-09-30] DevEco Code - Phase 3g：时间转轴 + 时间轮整体迁移（真机调试：点字段、拖动、切单位、引擎同步全部通过）
+
+- **新增文件：** `state/TimeWheelStore.ets`（11 个原 `@State` 字段 + `timeWheelTrackBaseMs` + 两个刻度常量 + 纯计算方法：`majorInterval` / `isCalendar` / `shiftDate` / `dateAtOffset` / `dateAtFraction` / `tickValue` / `tickLabel` / `refreshTicks` / `visibleTickOffset` / `isVisibleMajorTick`）、`panels/time/TimeWheelScrubber.ets`（字段行 6 个按钮 + 刻度条 + 触摸层；刻度几何 `tickDistance/visibleTickLabel/tickScale/tickOpacity/tickBlur/tickHeight` 内联为组件私有方法）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 11 个 `@State` 合并为 `@State private timeWheelStore`；两个 `readonly` 刻度常量与 `timeWheelTrackBaseMs` 字段移入 store；**88 处引用**改写为 `this.timeWheelStore.*`（含 `tickSpacing` / `centerTick`）；搬出 9 个纯计算方法与 7 个 builder（`timeScrubberSlider` + 6 个字段 builder）；调用点换成 `TimeWheelScrubber({ store, onSelectUnit, onWheelTouch })`；顺带删除**无调用者**的 `timeWheelCurrentLabel()`。
+- **边界取舍（关键，保证行为路径零改写）：** store 只放"数据 + 纯计算"；**手势拖动、惯性、过渡、轨道重基准、引擎推送共 13 个方法（约 228 行，位置 `pages/MainWindowNativeNode.ets` L11910–L12149）+ 16 个手势草稿字段与 2 个定时器（L324–L339）全部留在宿主**，只把字段引用改为 store。这样这次迁移**没有重写任何一条交互逻辑**，只是状态归属与视图位置改变。（初版本条写为"约 400 行"，实测为 228 行方法体 + 字段，已更正。）
+- **第四次命中同名冲突：** `onTouch` 与 `CustomComponent` 内置属性方法冲突（编译报 `Property 'onTouch' ... is not assignable to the same property in base type 'CustomComponent'`），改名 `onWheelTouch`。累记：`borderColor`、`scale`、`onTouch` 均不可作组件成员名。
+- **真机调试（`192.168.3.95:40565`，全部通过）：**
+  1. 渲染：字段行与刻度条节点坐标与迁移前**逐像素一致**（`2026 / 09月 / 30日 / 22: / 53: / 03`，刻度 `19时…01时`）。
+  2. 点字段：点「2026」后刻度条**实时**切成 `2023 / 2024 / 2025 / 2026 / 2027 / 2028`，选中字段字号放大 → 组件→回调→store→@ObjectLink 实时链路成立。
+  3. 拖动：左拖刻度条后日期**实时**变为 `2026-12-10`（字段行 12月/10日 同步、副标题与速度状态同步为「已暂停」），引擎推送生效。
+  4. 切单位：点「22:」刻度条实时切回 `19时…`；点「实时」恢复现场为 `2026-09-30 · 1x`。
+- **构建结果：** `arkts_check` 三文件无错误；`BUILD SUCCESSFUL`（一次同名冲突修正后）；契约校验通过。
+- **单体行数：** 31,786 → **31,503**（本片净减 283 行；新增文件另计）。
+- **范围约束：** 状态归属 + 视图位置迁移，交互逻辑零改写；除"字段/刻度现在实时刷新"外无行为变更。
+
+## [2026-09-30] DevEco Code - Phase 3f：ΔT 算法块迁移（真机验证选择实时生效）
+
+- **新增文件：** `state/DeltaTStore.ets`（`deltaTAlgorithm` / `timeDeltaTAlgorithms` / `timeDeltaTCustom` / `deltaTDescription`，字段名沿用原 `@State` 名）、`panels/time/DeltaTSettingsBlock.ets`（当前算法 + 算法列表 + 自定义系数输入 + 说明；`deltaTLabel()` 从单体方法搬入组件，store 保持无 UI 逻辑）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 4 个 `@State` 合并为 `@State private deltaTStore`；8 处引用改写；`configTab === 3` 内的整段 ΔT UI（原 L24919–L24956）替换为 `DeltaTSettingsBlock({...})` 调用；删除 `deltaTLabel()`。
+- **边界取舍（重要）：** `timeSettingsPending` **刻意不并入本 store**——它同时被「启动时间设置」区（同一标签页）与**其他面板**（`configTab` 之外的 L30057/L30089）读取；若并入 store，宿主体内那些读取将无法观测、`enabled` 状态会失去刷新。因此改由 `@Prop pending` 传入本组件，宿主保留该 `@State`。
+- **验证结果（真机 `192.168.3.95:40565`）：** `arkts_check` 三文件无错误；`BUILD SUCCESSFUL`；契约校验通过；安装启动成功。
+  - 路径：更多功能 → 设置 → 「时间」标签页 → 下滑至 ΔT 区块；区块由新组件渲染（`ΔT 算法` 标题 + 提示 + 当前算法「修订的 Espenak-Meeus（推荐）」+ 可选择列表）。
+  - **实时联动：** 点选列表中的「不进行修正」后，上方「当前算法」行**立即**由「修订的 Espenak-Meeus（推荐）」变为「不进行修正」——子组件写 store 经 `@ObjectLink` 实时驱动。
+  - 验证后已把算法**恢复原值**（列表行重新带 ✓）。
+- **更正（用户澄清）：** 本条原记「在可点击列表上用 `ui swipe` 会被判为点选、本次误触改了两次算法」有误——那两次选择是**用户手动操作**设备所致，不是滑动误触。实际操作教训仅保留后半条：任何会写引擎设置的验证都必须在测后恢复原值（本次已恢复）。
+- **范围约束：** 纯搬移 + 状态归属迁移，行为零变更。
+
+## [2026-09-30] DevEco Code - Phase 3e：恒星时行 + 时间方程块迁移（真机验证数值实时与开关联动）
+
+- **新增文件：** `state/EquationOfTimeStore.ets`（7 字段：`equationOfTimeEnabled/MsFormat/Inverted/Startup/Minutes/Loading/Status`，字段名沿用原 `@State` 名）、`panels/time/SiderealTimeRow.ets`（恒星时行 + 说明，`@ObjectLink TimeStore`）、`panels/time/EquationOfTimeBlock.ets`（标题开关 + 当前值 + 三个显示选项 + 失败提示；格式化逻辑 `displayText()` 从单体方法搬入组件，store 保持不含 UI 逻辑）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 删除 `@State siderealTimeText`（并入既有 `TimeStore.siderealTimeText`）与 7 个 `equationOfTime*` `@State`（合并为 `@State private equationOfTimeStore`）；28 处引用改写（`this.equationOfTimeX` → `this.equationOfTimeStore.equationOfTimeX`；`equationOfTimeMutationId` 是普通字段仍留在宿主）；恒星时行/说明/时间方程块的整段 UI 替换为 `SiderealTimeRow({...})` 与 `EquationOfTimeBlock({...})` 两个组件调用；删除已搬入组件的 `equationOfTimeDisplay()`。
+- **注意点（迁移顺序陷阱）：** 恒星时数值在旧实现下**本来就是实时**的（builder 内直接读状态）。若只把它移入 store 而不把读取它的 UI 一起搬进组件，宿主无法观测 store → 反而会**退化成不刷新**。本片因此把该行一并组件化。
+- **验证结果（真机 `192.168.3.95:40565`）：** `arkts_check` 五文件无错误；`BUILD SUCCESSFUL`；契约校验通过；安装启动成功。
+  - **数值实时：** 恒星时连续 3 次采样（间隔约 7.5 s）`22h 54m 05s → 22h 54m 11s → 22h 54m 17s`，随时间推进，无回归。
+  - **开关联动：** 点「显示分钟和秒」后当前值由 `+10:04`（mm:ss）**立即**变为 `+10.1 分钟`，再点回恢复 `+10:04` —— 证明子组件写 store 经 `@ObjectLink` 实时驱动自身重渲染。
+  - 测试后已把该设置点回原值（该开关经引擎持久化）。
+- **范围约束：** 纯搬移 + 状态归属迁移，行为零变更。
+
+## [2026-09-30] DevEco Code - Phase 3d：儒略日块迁移为 JulianDateStore + 两级组件（真机验证 JD 实时跳动）
+
+- **新增文件：** `state/JulianDateStore.ets`（`@Observed`：`julianDayInput` / `modifiedJulianDayInput` / `julianDateEditing` / `julianDateError` / `julianCalendarSystem`）、`panels/time/JulianDateControls.ets`（容器：历法提示 + 两行输入 + 校验错误 + 说明）、`panels/time/JulianDateInputRow.ets`（行组件：标签 + 「-」/「+」+ 输入框）。
+- **修改文件：** `pages/MainWindowNativeNode.ets` —— 5 个 `@State` 合并为 `@State private julianStore`；16 处引用改写为 `this.julianStore.*`；调用点 `this.julianDateControls()` 换成 `JulianDateControls({...})`（传 `nmText()/nmSub()/nmInput()` 主题色与 `onAdjust`/`onApply` 回调）；删除已迁走的 `julianDateControls()` 与**参数化** `julianDateInputRow(label, value, scale)` 两个 builder。
+- **为什么用两级组件而非内联：** 本片避免重复代码（两行结构完全相同），改为 `@Prop` 行组件。真机实测确认 `@Prop` 能实时驱动（上一片的 chips 已验证同机制），因此无需像 chips 那样内联。
+- **又一次命中同名冲突（第三次）：** `@Prop scale` 与 `CustomComponent` 内置属性方法 `.scale()` 冲突，编译报 `Property 'scale' ... is not assignable to the same property in base type 'CustomComponent'`；改名 `scaleKey` 后通过。已累记为规则：`borderColor`、`scale` 都不能作组件成员名。
+- **验证结果：** `arkts_check` 四文件无错误；`BUILD SUCCESSFUL`；契约校验通过；真机安装启动成功。**实时刷新实测：** 滚动面板到儒略日块，连续 5 次采样（间隔约 6.8 s）输入框数值 `2461314.10052 → .10060 → .10067 → .10075 → .10083`（MJD 同步 `61313.60052 → .60083`），与经过时间一致——证明数值随时间实时刷新；旧实现的参数化 `@Builder` 会冻结该值（同机制已在速度 chips 上实测确认，本块未单独回测旧版）。
+- **顺带确认（未改动）：** 恒星时行（`恒星时 22h 47m 17s`）与时间方程块（`当前值 +10:03`）在旧实现下即实时刷新——它们是在 builder 内直接读状态，不受参数化陷阱影响。
+- **环境变更记录：** 真机 DHCP 换网段，串号由 `192.168.1.4:40565` 变为 **`192.168.3.95:40565`**（后续验证用新串号）。
+- **范围约束：** 纯搬移 + 状态归属迁移；除 JD 值现在实时刷新（修复既有冻结）外无行为变更。
+
+## [2026-09-30] DevEco Code - 修两个真机问题：速度 chip 标签去掉倍率（超宽）+ 消除「实时→倒带→实时」抖动
+
+- **来源：** 用户在真机实测 store 版后反馈的两个问题。
+- **修复 1（按钮行超宽）：** `panels/time/TimeSpeedChips.ets` 的 `倒带` / `减速` / `快进` 三个标签不再拼接倍率（删除三处 `+ ' ' + this.rateText`），并移除因此不再使用的 `@Prop rateText` 与调用点的传参。真机实测：五个 chip 标签为纯文案，最右「快进」右边界 **1137 < 1280**，整行不再超宽。倍率反馈仍由既有通道提供——点击时的顶部提示（`flashHint`，实测显示「倒带 -1时/秒」）与面板副标题（`2026-09-30 · 1x`）。
+- **修复 2（高亮抖动）：** 现象为「倒带 → 实时」后界面走 `实时(乐观) → 倒带 → 实时`。根因在 `syncTimeRateState()`：它在引擎回报速率时**反推档位并写回 store**，而换挡瞬间引擎仍会回报上一档速率；超过既有 500 ms `pendingTimeRateUntilMs` 窗口后旧速率就会被接受，于是档位跳回旧档再跳回新档。此前 chip 子树的参数化 `@Builder` 冻结，该问题被掩盖，现在 chip 能实时刷新才暴露。
+  - **改法：** 新增 `private lastSyncedTimeRate`，`syncTimeRateState` 在「引擎速率与上次同步值相同」时**直接 return**，不再重写 `timeRateText` 与 `timeStore.timeSpeedIndex`；仅在速率**真正变化**时同步文本与档位。两个方向（倒带→实时 / 实时→倒带）的旧速率回报都会被该去重吸收。
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL in 1 min 5 s 933 ms`；`node scripts/check-ohos-ui-contract.mjs` 通过；真机 `install bundle successfully` / `start ability successfully`；点「实时」后连续 8 次采样副标题稳定为 `1x`（采样粒度约 3.6 s，**瞬态抖动需用户肉眼复测确认**）。
+- **范围约束：** 仅两处行为修复（去掉标签倍率、去重引擎速率回报），未改面板结构、未改 `.id()` 与 CLI 契约。
+
+## [2026-09-30] DevEco Code - 真机三版对照实验定论：冻结根因是参数化 @Builder；store + 组件实时刷新成立并修复既有 bug
+
+- **背景：** 上一轮两片 store 因"无法证明实时刷新等价"被回退。用户指示在真机做实验，遂在 **Mate 80 Pro（SGT-AL00 / arm64-v8a / API 26，引擎存活，`192.168.1.4:40565`）** 上做同一交互（打开时间面板 → 点「快进」）的三版对照。
+- **实验数据（`devecocli ui layout` 实测）：**
+  | 版本 | 副标题 | 「快进」chip | 判定 |
+  |---|---|---|---|
+  | ① 原生（`@State` + 参数化 `@Builder speedChip(...)`） | `2x` / `10x` | 始终「快进」、未高亮 | **既有 bug**（重开面板才更新） |
+  | ② `TimeStore`+`TimeSpeedChips`，chip 仍走参数化 `@Builder` | `2x` / `10x` | 始终「快进」 | 与①**行为等价**（继承同一 bug） |
+  | ③ `TimeStore`+`TimeSpeedChips`，chip **内容内联、直接读 store** | `2x` → `10x` | **「快进 2x」→「快进 10x」实时更新且高亮**（宽度随标签变化） | **修复 bug**，store 通路正确 |
+- **定论（修正上一轮的推断）：** 冻结根因是**参数化 `@Builder` 的简单类型参数按值捕获**（`speedChip(id,label,icon,active)` 子树首帧后冻结），与"组件是否创建在 `panelContent()` 这个 @Builder 体内"**无关**。`@ObjectLink`（store 字段变化）与 `@Prop`（父传 `rateText`）**都能实时驱动子组件重渲染**——③ 版实时更新即为证据。因此上一轮"Phase 4 的 PanelHost 可能必须先于 Phase 3"的推断被推翻：**Phase 3 不必等 Phase 4**。
+- **对后续每个切片的强制自检项：** 搬迁 UI 时必须**去掉参数化 `@Builder`**（改为子组件 `@Prop` 或直接读状态），并且验收必须包含"点击后是否实时更新"的交互实测，不能只看布局是否一致。
+- **UI-only 模拟器的适用范围修正：** 该实验证明模拟器（无引擎、定时器不产生写入）**不能裁决刷新类问题**——原生与重构版在模拟器上都表现为"不刷新"。刷新类验收必须在真机执行。
+- **本轮改动：** 保留 ③ 版（`state/TimeStore.ets`、`panels/time/TimeSpeedChips.ets`、单体 `timeSpeedIndex` → `@State timeStore` 与 21 处引用改写、删除已迁走的 `speedChip` 参数化 builder）；文档更新 `research/ARKTS-PAGES-REFACTOR-PLAN.md` §11 修订 4。
+- **构建/验证：** `arkts_check` 无错误；`BUILD SUCCESSFUL in 1 min 331 ms`；真机 `install bundle successfully` / `start ability successfully`；上述三版数据均在同一台真机、同一交互下实测。
+- **已知取舍：** ③ 版内联写法有重复代码（5 个 chip 各一份属性），后续清洗为子组件 `SpeedChip`（`@Prop`）时**必须重做真机实时刷新实测**。
+- **行为变更声明：** 本轮**有意**改变了用户可见行为——「快进」等速度 chip 的标签与高亮现在会实时更新（原先需重开面板）。这是修复既有 bug，不是等价重构。
+
+## [2026-09-30] DevEco Code - Phase 3 首两片尝试后回退：store + 组件的实时刷新路径未证实（既有现象）
+
+- **经过：** 按 (b) 方案试做两片并各自单独提交 —— ① `BookmarkStore` + `BookmarkPanel`（3 字段 / 12 引用 / 85 行面板分支）；② `TimeStore` + `TimeSpeedChips`（`timeSpeedIndex` / 21 处引用 / 速度 chips）。两片均通过 `arkts_check`、`BUILD SUCCESSFUL`、契约校验与模拟器安装启动，并实证了**状态归属正确**：书签面板输入后切走再切回（组件销毁重建），输入内容仍在。
+- **未通过项（实时刷新）：** 抽成组件后点击「快进」，`applySpeedStep` 确实写入 store（重开面板显示「快进 2x」）、副标题立即变 `2x`，但**面板开着的期间 chip 标签与高亮都不更新**；点「停止」同理（未变「继续」）。即子组件的 `@ObjectLink` 与 `@Prop` 都未触发重渲染，而该组件由 `panelContent()` 这个 `@Builder` 体创建。
+- **关键对照实验：** `git revert` 回原生实现后重装实测，**原生版本行为完全相同**（副标题 `2x`、chips 仍「快进」未高亮，截图确认 99,283 B）。因此这是**既有现象**（推断：面板实时刷新依赖 `timePanelTimer` 等周期性定时器写入 @State，UI-only 模拟器无引擎数据、定时器不产生写入），**不是本次重构引入的回归**；但本次重构同样**无法证明刷新等价**，故按"行为零变更"不变式回退，不保留未证实等价的重构。
+- **动作：** `git revert` 两片（`c1a4ae7dca` 回退生成副本同步、`71a524ffbe` 回退 bookmark store 与面板），同时删除 `state/BookmarkStore.ets`、`panels/BookmarkPanel.ets`、`state/TimeStore.ets`、`panels/time/TimeSpeedChips.ets` 与对应的 CHANGELOG 条目；回退后重建复测，契约校验通过，工作区与本轮起点（`c0e9402b4a`）差异为 **0 行**。
+- **仍沉淀的两条 ArkTS 规则（后续复用）：** ① `@ObjectLink` 的宿主源必须是可观察状态（`private` 字段会被编译器拒绝，须 `@State`）；② 组件成员不能与 `CustomComponent` 基类属性方法同名（`borderColor` → `cardBorderColor`）。
+- **后续依据：** 结论已写入 `research/ARKTS-PAGES-REFACTOR-PLAN.md` §11 修订 4 —— 先在**真机**做受控实验建立实时刷新基线（原生 chips 是否实时更新、`@ObjectLink` 组件是否等价），据此决定 **Phase 4 的 `PanelHost`（面板宿主改为由 `build()` 直接实例化的组件）是否必须先于 Phase 3**。
+- **范围约束：** 本轮最终净改动仅为文档；应用源码回到 Phase 1c 状态，行为零变更。
+
+## [2026-09-30] DevEco Code - Phase 1c：抽出 MainWindowModels（93 个文件作用域类型与常量）
+
+- **新增文件：** `harmonyos/ets-source/pages/MainWindowModels.ets`（764 行）—— 原单体序言区（`interface CityPreset` 起、`@Component` 前）的全部文件作用域声明整体搬移，共 93 个（interface / const / class），逐条加 `export`；并复制单体的 `./StellariumTypes` 导入，因为 `Scenery3dResponse` 等引用了 `Scenery3dItem` 等类型。
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` —— 序言区替换为一条折行的 `import { ... } from './MainWindowModels'`（93 个符号、16 行，按 6 个/行折行）。
+- **过程中修正：** 首轮构建报 `Cannot find name 'Scenery3dItem'`（模型模块内 `Scenery3dResponse` 的字段类型来自 StellariumTypes）→ 把单体的 `./StellariumTypes` 导入整条复制进模型模块后构建通过。
+- **验证结果：** `arkts_check` 两文件无错误；`BUILD SUCCESSFUL in 58 s 212 ms`；`node scripts/check-ohos-ui-contract.mjs` 通过；模拟器 `127.0.0.1:5555` 安装启动成功，点击 Dock「时间」仍能打开时间面板（标题「时间 --」、`panel-close`、速度 chips 倒带/实时/快进），且截图字节数与改动前完全相同（70,061 B）。
+- **范围约束：** 纯搬移（只有类型与常量声明，无运行时代码改动），行为零变更。
+
+## [2026-09-30] DevEco Code - Phase 2：抽出命令桥 BridgeClient（libentry.so 唯一出口）
+
+- **新增文件：** `harmonyos/ets-source/bridge/BridgeClient.ets` —— `request()`（发送并解析回包，失败统一 `{ ok:false, error:'bridge parse failed' }`）、`send()`（fire-and-forget 原始回包）、`requestWhenReady()`（未就绪时短退避重试）、`requestInteractive()`（50 ms × 40 交互轮询）。
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` —— `callNative` / `callNativeFire` / `callNativeWhenReady` 改为薄委托并保留录制钩子 `recordAcceptedCommand`；`callInteractive` 及其 203 个调用点完全不动；删除 `import { command } from 'libentry.so'`，改为 `import { BridgeClient } from '../bridge/BridgeClient'`（ArkTS 侧不再直接触碰 NAPI 导出）。
+- **行为等价性核对：** ① `callNative`——原来在 try 内 parse 后记录，现由 `BridgeClient.request` 负责 parse、宿主在 `ok === true` 时记录，parse 失败同样不记录；② `callNativeFire`——原来 `command()` 抛错即静默忽略，现 `send()` 返回空串即早退，同样不记录；③ `callNativeWhenReady`——重试循环搬入桥，成功时仍只经宿主包装函数记录一次再回调 `onOk`，记录与回调顺序不变。
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL in 57 s 858 ms`；`node scripts/check-ohos-ui-contract.mjs` 通过；模拟器 `127.0.0.1:5555` 安装启动成功，点击 Dock「时间」仍能打开时间面板（标题「时间 --」、`panel-close` 锚点、速度 chips 倒带/实时/快进 均在），说明经桥的命令链在 UI-only 模式下行为未变。
+- **遗留（待后续切片）：** `qability/QAbility.ets` 仍直接 `import { command } from 'libentry.so'` 用于 `setApplicationForeground` 生命周期通知，未纳入本次桥封装。
+
+## [2026-09-30] DevEco Code - Phase 1b：把纯函数 getIcon 抽到 common/ui/ShellIcons
+
+- **新增文件：** `harmonyos/ets-source/common/ui/ShellIcons.ets` —— `export function getIcon(icon: string, isActive: boolean): Resource`，图标名到 `$r('app.media.*')` 的纯映射（原方法体逐行搬移）。
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` —— 删除 52 行私有方法 `private getIcon(...)`，改为 `import { getIcon } from '../common/ui/ShellIcons'`；61 处调用点由 `this.getIcon(` 机械改为 `getIcon(`（保留 `isActive` 形参以免改动 61 个调用点的实参）。
+- **与方案的偏差（实测结论）：** Phase 1 原计划一并抽 `dockButton` / `switchRow` / `iconButton`，实测前两者都带宿主状态与事件回调（`isExpandedLayout`、`compactDockIconSize()`、`dockActionActive()`、`handleDockTouch()`、`activateDockAction()`、`switchRow` 的 `actionId`/`cmd`），不属于「无状态叶子」；`iconButton` 只有 1 处调用、仅 28 行。三者的组件化统一并入 Phase 4/6（届时以 `@ObjectLink` 接 store，避免先做一次会被推翻的组件化）。已把该偏差记入本条目，Phase 1 的叶子抽取到此收口。
+- **验证结果：** `arkts_check` 无错误；`BUILD SUCCESSFUL in 58 s 837 ms`；`node scripts/check-ohos-ui-contract.mjs` 通过；模拟器 `127.0.0.1:5555` 安装启动成功，Dock 五项文本与坐标与改动前逐项一致，且截图字节数与改动前完全相同（70,061 B）——渲染未发生变化。
+- **范围约束：** 纯搬移 + 机械改名，行为零变更；未改 `main_pages.json`。
+
+## [2026-09-30] DevEco Code - Phase 1a：抽出 UI 视觉常量到 common/ui/UiTokens
+
+- **新增文件：** `harmonyos/ets-source/common/ui/UiTokens.ets`（`UI_RADIUS_CONTROL` 14 / `UI_RADIUS_PANEL` 22 / `UI_RADIUS_SHEET` 28 / `UI_RADIUS_PILL` 999 / `UI_OPTION_ANIMATION_MS` 180）。
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets` —— 删除 5 个文件作用域常量，改为 `import ... from '../common/ui/UiTokens'`；文件内 856 处引用（663/22/7/94/70）写法不变。
+- **依据：** `ARKTS-PAGES-REFACTOR-PLAN.md` Phase 1（先用最低风险的纯叶子走通「新增子目录 → sync → 构建 → 装机 → 契约校验 → 提交」管线，同时验证新增 `common/ui/` 子目录能被 `sync-ohos-build-sources.sh` 的整树递归镜像自动带到生成工程）。
+- **验证结果：** `arkts_check` 两文件无错误；`BUILD SUCCESSFUL in 58 s 56 ms`；`node scripts/check-ohos-ui-contract.mjs` → `UI contract intact: 33 panels, 22 static ids, 17 dynamic prefixes, 41 id anchors.`；模拟器 `127.0.0.1:5555` 安装并启动成功，`devecocli ui layout` 的节点与坐标与改动前逐项一致（底部 Dock 五项 + 右上两按钮）。
+- **范围约束：** 纯搬移，行为零变更；未改 `main_pages.json`、未改 sync 脚本。
+
+## [2026-09-30] DevEco Code - Phase 0：固化 UI 契约基线（pages/ 重构）
+
+- **新增文件：** `scripts/check-ohos-ui-contract.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **目的：** 落实 `ARKTS-PAGES-REFACTOR-PLAN.md` 的硬性不变式之一——`.id()` 节点 id 与 33 个面板名不得被改动（uitest / dumpLayout / CLI 依赖）。基线把契约固化为可比对数据，`--update` 只在**有意**增删锚点时使用。
+- **基线内容：** 33 个面板名（`activePanel` 比较 + `setPanel` 调用 + `panelId` 三处来源合并）、22 个静态 `.id()` 锚点、17 个动态 id 前缀（如 `panel-content-` + `i18nLang`）、`.id(` 出现总数 41；脚本默认模式会分别报告「被删除/改名」与「新增」的项并以非零码退出。
+- **验证结果：** `node scripts/check-ohos-ui-contract.mjs --update` 生成基线后立即复跑校验，输出 `UI contract intact: 33 panels, 22 static ids, 17 dynamic prefixes, 41 id anchors.`。
+- **范围约束：** 仅新增脚本与基线数据，未改动任何应用源码。
+
+## [2026-09-30] DevEco Code - 新增 x86_64 模拟器「仅界面」调试通道（debug-only）
+
+- **修改文件：** `harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/pages/ApplicationRoot.ets`（镜像；经 `scripts/sync-ohos-build-sources.sh` 同步到生成工程，生成目录不入库）、`docs/harmonyos/CHANGELOG.md`。
+- **背景（用户要求）：** 现有 Mate 80 Pro 真机之外，需要一条在 Windows 上跑 Pura 手机模拟器、只验证 ArkUI 界面（布局/文案/交互）而不依赖 Stellarium/Qt 引擎的通道。实测该模拟器此前无法启动（内存/摄像头），且应用即使能启动也被两道门控挡住。
+- **修改内容（QAbility.ets）：** ① 新增文件作用域判定 `engineLessEmulatorUiOnly()`：`BuildProfile.DEBUG && deviceInfo.productModel === 'emulator' && deviceInfo.abiList.includes('x86_64')`；② 新增私有方法 `releaseUiOnlyStartupGates()`，按序放开四个启动门控键（`stellariumPrivacyNativeStartupAllowed` → `stellariumQtContentReady` → `stellariumStartupSkyReady` → `stellariumStartupArtComplete`）；③ 在 `preparePrivacyHostPage()` 中 `loadContent('pages/ApplicationRoot')` 与 `rootContentLoaded = true` 之后调用它；④ 新增导入 `@ohos.deviceInfo`、`BuildProfile`。
+- **修改内容（ApplicationRoot.ets）：** `aboutToAppear()` 末尾补 `this.onSkyReady()` —— 启动门控若在页面挂载前就已放开，`@Watch` 不会触发，加载层会永久盖住界面；该调用在门控仍为 false 时立即返回，冷启动路径行为不变。
+- **安全边界：** 条件在真机与 release 包上恒为假（`productModel` 仅模拟器为 `emulator`，`DEBUG` 仅 debug 包为 true，引擎库只随 `entry/libs/arm64-v8a` 发布），因此发布链路不受影响；模拟器星图区域全黑属预期（`libstellarium.so`/`libQt6*.so` 无 x86_64 构建，native 桥回退为 `bridge not available`）。
+- **模拟器本机配置调整（仅本机，不涉及仓库）：** Pura 90 Pro 实例 `hw.ramSize` 4096→3072（`config.ini` + `hardware-qemu.ini`），镜像 `features.ini` 的 `camera.feature` / `camera.front.back.enable` 改为 `off`；三处均已备份为 `*.deveco-bak`。原因：崩溃包 `detail.txt` 显示崩溃时宿主仅剩 4,713 MB 空闲而 guest 需 4 GB；09-28 那次模拟器自检直接报 `"Commit charge is not enough!"`；且崩溃前 0.6 s 刚打开宿主摄像头。
+- **构建结果：** 两次 `BUILD SUCCESSFUL`（31 s 831 ms / 32 s 56 ms，`scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources`，默认 debug 模式），签名 HAP 681.2 MB；`arkts_check` 对两个改动文件均无错误。
+- **验证结果：** Pura 90 Pro 模拟器（`127.0.0.1:5555`，`abilist=x86_64`，API 26，`productModel=emulator`）`install bundle successfully` / `start ability successfully`；界面外壳完整渲染（底部 Dock 搜索/时间/位置/图层/更多功能 + 右上陀螺仪与音频按钮）；点击「时间」成功打开时间面板（标题「时间 --」、副标题 `1x`、日期转轮 `2026 / 08月 / 11日 / 20: / 00: / 00`、速度 chips 倒带/停止/实时/减速/快进），`.id()` 锚点 `panel-close`、`panel-scroll-zh_CN`、`panel-content-zh_CN` 均在。
+- **备注：** 按 §2.6 未提交，待用户明确要求。`docs/harmonyos/testing/PLATFORM-MATRIX.md` 中「Windows 模拟器无法运行本应用」的结论需补充本条 debug-only 例外（待确认后更新）。
+
+## [2026-09-30] DevEco Code - 新增 pages/ 代码库重构方案（预研文档，未改代码）
+
+- **新增文件：** `docs/harmonyos/research/ARKTS-PAGES-REFACTOR-PLAN.md`；同步更新 `docs/harmonyos/AGENTS.md` §2.2 结构树中 `research/` 的条目。
+- **背景：** 用户指出 `pages/MainWindowNativeNode.ets`（32,774 行）把整个界面塞进单一 struct 属"代码工程大忌"，要求先给出重构方案；本轮只做取证与规划，不动源码。
+- **文档内容：** ① 现状取证（体量、单体内部结构、前 15 大 Builder 体积表、1,047 个状态字段的领域聚类、跨文件存储分布、同步链路与测试契约）；② 根因分析；③ 目标架构（`window/` 壳层与 overlay、`panels/` 33 面板、`state/` @Observed 领域 store、`bridge/` 命令桥、`common/ui/` 原子件）；④ V1 `@Observed` + `@ObjectLink` 状态策略与 7 条规则；⑤ 8 阶段绞杀者迁移计划与统一验收矩阵；⑥ 9 条硬性不变式；⑦ 风险登记表；⑧ 备选方案否决理由；⑨ 可复现命令附录。
+- **关键实测数据：** 主文件 32,774 行占业务 ArkTS（40,548 行，不含 `location_*` 数据表）的 80.8%；`@Component` 仅 1 个、`@State` 1,047（原始类型 948 / 数组 37 / 自定义类 13）、`@Builder` 145、私有方法 ≈1,109、`callInteractive` 调用点 203、定时器字段 38、`setInterval` 20、`ForEach` 169、`.id()` 锚点 41、`activePanel` 取值 33；`panelContent()` 单个 builder 5,138 行；`@Link`/`@Prop`/`@Provide`/`@Observed`/`@ObjectLink`/`$$`/`@BuilderParam`/`LazyForEach` 全为 0。
+- **两条决定性结论：** ① 根因是 V1 `@Builder` 参数按值捕获导致状态下沉不了、1,047 个 `@State` 只能集中在唯一 struct，故**纯文件切分无收益**，必须引入组件边界 + 状态所有权；② 状态字段上的就地属性赋值（`this.X.y =`）实测 **0 处**、3,259 处赋值中 1,028 个字段为整体替换，即 V1→V2 在本仓库近于机械改名（估 2–3 周），但**一个 struct 不能半 V1 半 V2**，只能原子翻代，故否决"现在迁 V2"，正确顺序是先拆分再按模块翻代。
+- **另记录：** `LocalStorage` 在本工程是 Qt 互操作桥面（`windowStage.loadContent(path, storage)`、`LocalStorageTsModule.makeNewLocalStorage` 经 `QtUtils.getModulesFactoriesMapForQt()` 暴露给 C++），**不可迁移**，已写入不变式。
+- **范围约束：** 仅新增文档与结构树条目，未改动任何应用源码、未修改 `build-profile.json5`/签名材料/隐私门控/联网配置；未提交（按 §2.6 待用户明确要求）。
+
+## [2026-09-30] DevEco Code - 时间面板重排、时间/速率入标题栏、主界面 Dock 常驻时钟；新增两条协作规则
+
+- **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`（镜像；经 `scripts/sync-ohos-build-sources.sh` 同步到生成工程，生成目录不入库）、`docs/harmonyos/AGENTS.md`、`docs/harmonyos/CHANGELOG.md`。
+- **修改内容（时间面板）：** ① 上轮已完成：`timeScrubberSlider()`（时间转轴）移至 `activePanel === 'time'` 分支最前，手机端打开面板即可直接拖动（上轮改动未单独记录，并入本条）；② 本轮：`timeSpeedChips()`（倒带/现在/停止/实时/快进/超快）与日出日落跳转 `quickChips`（-12h/+12h/日出/中天/日落/天文昏）两行上移到时间转轴正下方，保持「转轴 → 速度 → 太阳跳转」顺序；③ 删除正文中「观测时间」「时间速率」两行，改由 `panelSubtitle()` 在 `activePanel === 'time'` 时返回 `观测时间 · 速率`，渲染进面板标题栏副标题（`panelHeader()` 早已支持非空副标题）；④ 面板头高度由固定 44 改为 `panelSubtitle().length > 0 ? 52 : 44`（Column 与外层 Row 两处同步），副标题加 `maxLines(1)` + 省略号防窄屏溢出；⑤ `julianDateControls()`、恒星时行、均时差块位置不变。
+- **修改内容（Dock 时钟）：** 新增 `@State dockClockText` 与独立 `dockClockTimer`（1s），配 `stopDockClockTimer()`/`syncDockClockTimer()`/`refreshDockClock()`，完全照抄 `viewCoordinateTimer` 生命周期范本接线（初始化、前台恢复各启一次；`aboutToDisappear` 与后台分支各停一次）；新增 `dockClockChip()`（HH:mm 胶囊）与 `dockClockLayer()`（复用 `dockLeft()/dockWidthPixels()/dockTop()`，右端与 dock 栏对齐，空白区 `HitTestMode.Transparent` 穿透回星图、仅时钟本体 `Block`），挂载到 `expandedShell`（`expandedUiAllowed()` 内）与 `compactShell`；显示条件 `!panelVisible && !polarScopeVisible && dockClockText.length > 0`，点按时钟 `setPanel('time')` 直接打开时间面板；`hoverObservatoryShell` 不挂（顶部已有时间条）。
+- **修改内容（AGENTS.md）：** 新增 §2.6 提交策略（Agent 不得自动 `git commit`/`git push`，仅用户明确要求「整理代码并提交」时才提交）；新增 §7 第 9 条（仅改 ArkTS 界面布局/文案的调试装机，构建+安装+启动成功即算验证通过，无需再拉渲染链日志或截图；涉及 C++/引擎、桥接、渲染管线、权限、资源仍需完整启动链验证）。
+- **修改内容（用户复核后的二次微调）：** ① 删除 `timeScrubberSlider()` 内「时间转轴」小标题行（连同其 Row 容器）；② 面板标题行改为 `时间 + 时分秒`（`panelTitle()` 的 time 分支拼接 `timePanelClockText()`），副标题改为单独显示年月日（`timePanelDateText()`，附当前速率 ` · 1x`），新增两个私有拆分方法（按 `observationTimeText` 第一个空格切分，避免依赖 locale 格式）；③ 副标题字号 11 → 14，面板头高度 52 → 56；④ 主界面 Dock 时钟字号 12 → 22（大于面板主标题 18），胶囊高度 26 → 36、内边距 10 → 14，定位层高度 30 → 44、上移量 34 → 48 以保持与 dock 栏的间距。
+- **修改原因：** 用户要求——手机端时间面板首屏应直接可用（转轴+控制按钮前置），时间/速率不必占用正文空间；主界面在未打开时间面板时需常驻 hh:mm 显示（建议置于 Dock 右上）；并把「界面布局类调试免渲染确认」「不自动提交」固化为项目规则；随后复核要求：去掉转轴小标题、时分秒与主标题同行、副标题单独显示年月日且字号加大、Dock 时钟字号需大于面板主标题。
+- **设计要点：** 时钟用独立 1s 定时器 + 独立 @State，不并入时间面板 125ms 高频刷新链（`refreshSimTimeLight()` 注释明确警告高频路径勿改其他 @State，否则全局重排、拖星图卡顿）；时钟文本固定由 `jdToLocalTimeText(jd + utcOffsetHours/24)` 截取 `substring(11,16)` 得到（定长格式，不解析 locale 不定的 `formattedTime`）。
+- **构建结果：** BUILD SUCCESSFUL in 58 s 816 ms（`scripts/build-ohos-hap-windows.ps1 -SkipEngine -SkipDeploy -SkipResources`），签名 HAP 681.2 MB；二次微调后再次 BUILD SUCCESSFUL in 58 s 465 ms；`arkts_check` 对镜像文件无错误。
+- **验证结果：** 真机 `192.168.1.4:40565`（包名 `com.cnchensh.stellarium`，Ability `QAbility`）两轮均安装并启动成功：`install bundle successfully` / `start ability successfully`。按新增 §7.9 规则，本轮为纯 ArkTS 布局改动，未再拉渲染链日志或截图确认。
+- **备注：** 本仓库工作区仍有未提交改动（上轮转轴前移 + 本轮全部改动），按 §2.6 由用户明确要求后再提交。
+
+## [2026-09-29] DevEco Code - 重构工程总览 HTML（浅色·图形化·新增 Qt/C++ 工程师知识地图）
+
+- **修改文件：** `docs/harmonyos/specs/CODEBASE-OVERVIEW.html` 整页重写（v2：31 KB/397 行 → 45 KB/614 行）。
+- **重写动机（用户反馈）：** ① 换浅色底色；② 减少文字化叙述、增加图形化；③ 第一章排版混乱需修正；④ 读者为 C++/Qt/嵌入式工程师，需要总览全局、打通 ArkTS/移动端框架知识体系的内容。
+- **版式改造：** ① 全站浅色主题（`--bg:#f5f7fa` 白卡片 + 蓝/青/紫/琥珀四色系）；② §1 重做为「工程形态流程图 + 8 张统一规格统计卡」（大数字 + 标签 + 副注，替代原先混排的卡片）；③ 目录强化：12 项目录锚点 + 「建议阅读路径」chips + 每章标题右侧「↑ 目录」回链；④ §5 启动时序从表格改为三色相位的竖向时间线（系统与权限 / 引擎与首帧 / 上线完成）；⑤ §6 新增「一次调用的旅程」步骤流与 RTLD_NOLOAD 成败分支图；⑥ §8 新增资源 bootstrap 流程图；⑦ §9 产物链从 ASCII 图改为 CSS 流程节点；⑧ QML↔ArkTS、桌面 Qt↔本工程的对照均为双栏图。
+- **新增 §2「Qt/C++ 工程师知识地图」：** 一句话心智模型（Qt 应用原样变 `.so`，移植的本质是造系统级宿主外壳 + 命令翻译层）；15 行概念映射表（main→AbilityStage、QApplication+exec→UIAbility、QML→ArkTS/ArkUI、QML 绑定→@State、JNI→NAPI、QQuickWidget→XComponent、qeglfs→libqohos、deployqt→harmonydeployqt、qrc→rawfile+沙箱解包、交叉工具链→ohos.toolchain.cmake、vcpkg→ohpm、qputenv→setEnv、.qm 原样复用、dlopen→RTLD_NOLOAD、多窗口→zIndex 叠放）；桌面 Qt 应用 vs 本工程的 5 层对照图；ArkTS 60 秒速览（QML 与 ArkTS 代码并排）；移动端三件套卡片（生命周期托管 / 沙箱权限 / 签名分发）。
+- **事实修正：** 原文「ApplicationRoot 为唯一 @Entry」不准确——`main_pages.json` 实际注册 4 个 @Entry 页（ApplicationRoot 主窗口 + FloatWindow/SubWindow/UiExtension 三个独立窗口），已改为「主窗口只加载 ApplicationRoot，其余 3 个属独立窗口」并落入统计卡；确认壳层为 V1 状态体系（`@Component`/`@State`，主文件近千处装饰器）。
+- **验证结果：** 乱码/损坏实体 0、Markdown `**` 误用 0、23 类标签全部配平、13 个锚点与 13 个 id 一一对应（12 章 + #toc）、无外部资源引用（离线自包含）、目录 12 项 = 章节 12 个、CSS 花括号 97/97、`git diff --check` 通过。
+- **范围约束：** 仅改文档，未触碰应用源码、`build-profile.json5`、签名材料、隐私门控或联网配置。
+
+## [2026-09-28] DevEco Code - 新增 HAP 工程代码库与代码框架总览（HTML）
+
+- **新增文件：** `docs/harmonyos/specs/CODEBASE-OVERVIEW.html`（397 行 / 31 KB，纯内联样式、无外部资源，可离线打开）；同步更新 `docs/harmonyos/AGENTS.md` 结构树中 `specs/` 的条目。
+- **文档内容：** ① 一页速览（8 组实测数字）；② 三层运行时架构图（ArkTS/ArkUI ↔ NAPI 命令桥 ↔ Qt/Stellarium 引擎）与两条 XComponent 通道（SURFACE 探针 / NODE 原生节点）的声明与作用；③ `harmonyos/` 镜像与 `build/libstellarium-harmonyos/` 生成工程的目录职责逐项说明；④ 九步启动时序（AbilityStage → 单次 loadContent → 沉浸式与安全区 → 隐私门控 → 资源 bootstrap → Qt 上下文 → 首帧 → 命令桥上线 → 启动层淡出）；⑤ 命令桥契约：三个导出（`add`/`setEnv`/`command`）、`napi_module` 注册方式、**必须用 `RTLD_NOLOAD` 只查已加载库**的原因与后果、静默命令、回包格式，以及 **358 条命令目录**（`get*` 154 / `set*` 100）；⑥ 界面与窗口层级摘要（指向 `UI-ARCHITECTURE.md`）；⑦ 资源与离线数据（rawfile 3,634 文件 / 549 MB 的六个子目录、`data/ohos/` 六个契约文件、Qt `.qm` 与 ArkTS string.json 两条翻译路径）；⑧ 构建系统三条独立链、引擎交叉编译的三个必需参数、四个同步/校验脚本与产物链图；⑨ 测试与语义 CLI（150 个脚本、52 个 `test-ohos-*`）；⑩ 十条关键约束与常见坑速查；⑪ 术语表与文档索引。
+- **数据来源：** 全部数字与行为均实测——`MainWindowNativeNode.ets` 32,693 行、`hello.cpp` 788 行、HAP 内 native 库 45 个、`libstellarium.so` 41.0 MB、`StelOhosCommandCatalog.hpp` 命令数与分类、各 ABI 的 `libentry.so` 等。
+- **验证结果：** 无外部资源引用（离线自包含）、11 个目录锚点与 `id` 全部对应、标签配平检查通过（div/table/tr/td/pre/ul/li 等 17 类标签开闭数量一致）、`git diff --check` 通过；未改动任何应用源码。
+- **范围约束：** 仅新增文档与结构树条目，未修改 `build-profile.json5`、签名材料、隐私门控或联网配置。
+
+## [2026-09-28] DevEco Code - 补写界面与窗口层级总览（以代码为准）
+
+- **新增文件：** `docs/harmonyos/specs/UI-ARCHITECTURE.md`；同步更新 `docs/harmonyos/AGENTS.md` 结构树中 `specs/` 的条目。
+- **背景：** 文档库中没有任何一份描述「Ability → WindowStage → ApplicationRoot → 四种 NativeNode → 壳层」完整链路的文档，界面设计分散在 `HANDOFF.md`、`archive/MOBILE-UI-HANDOVER.md`、`policy/PRIVACY-REVIEW-2026-09-08.md` 与代码四处，且 `MOBILE-UI-HANDOVER.md` 处于回退态。本次从当前 ArkTS 源码逐条核验后补齐。
+- **文档内容（全部标注代码出处与行号）：** ① 窗口层：`QAbility.preparePrivacyHostPage()` → `loadContent('pages/ApplicationRoot')` → `enterImmersive()`，以及 `QtWindowStageAdapter` 不再二次 `loadContent` 的单窗口约束；② `ApplicationRoot` 的三个互斥子层（主界面 / 启动汇字覆盖层 / 隐私宿主）及各自的 AppStorage 门控键；③ `MainWindowNativeNode.build()` 根 Stack 的完整叠放表（zIndex -1 隐藏语言锚点、-1 Qt NODE、0 探针与触摸反馈、条件壳层与四类 Overlay、92 状态条、98/99 夜间模式膜）与实测 zIndex 取值分布；④ 响应式断点：`compactWindow` 短边 < 520、`tabletCanvas` 短边 ≥ 700、`desktopCanvas` 900×520、半折角 158/140/68/55，以及 220ms 切换与 `springMotion(0.55, 0.88)` 转场；⑤ Dock（`dockButton(ShellAction)`）与 `setPanel` 的 6 个面板 id、跨设备唯一入口约定；⑥ `HitTestMode` 实测分布（Block 36 / None 23 / Default 23 / Transparent 10 / BLOCK_HIERARCHY 7）与命中规则及历史教训；⑦ 视觉常量 `UI_RADIUS_CONTROL/PANEL/SHEET/PILL` 与 `UI_OPTION_ANIMATION_MS=180`，并标注"项目选择而非官方强制值"；⑧ 沉浸式与顶部安全区（`stellariumScreenSafeTopPixels`）链路；⑨ 与既有文档的差异表（明确 `MOBILE-UI-HANDOVER.md` 为回退态、`DESIGN-VISION.html` 参数与落地实现不同、`HANDOFF.md` 的 API 版本描述滞后）；⑩ 可复现的核对命令。
+- **验证结果：** 文中每条结论均附 `文件:行号` 或 `Select-String` 命令；`git diff --check` 通过；未改动任何应用源码。
+- **范围约束：** 仅新增文档与结构树条目，未修改 `build-profile.json5`、签名材料、隐私门控或联网配置。
+
+## [2026-09-27] DevEco Code - 记录平台与验证环境矩阵（模拟器/真机/云调试）
+
+- **新增文件：** `docs/harmonyos/testing/PLATFORM-MATRIX.md`；同步更新 `docs/harmonyos/AGENTS.md` 的文档结构树。
+- **查证结论：** Windows 本机的 HarmonyOS 模拟器**无法运行本应用**。官方《使用环境》限定模拟器宿主只有 Windows(x86_64) 与 macOS(Apple Silicon)（原文含"不支持采用 ARM CPU 的 Windows 计算机""支持 Apple Silicon 芯片，不支持 intel 芯片"）；本机 4 个模拟器 profile 实测全为 `abi: x86` / `hw.cpu.arch=x86_64`，且 `tools/emulator/pc-bios/` 只含 x86 固件、无 aarch64 固件。官方要求 x86 模拟器必须提供"已 x86 化"的 so，没有任何 arm→x86 转译能力。
+- **组件层面：** `libentry.so` 可编 x86_64（OHOS NDK 自带 x86_64 sysroot），但 `libstellarium.so` 与 15 个 `libQt6*.so` 不能——Qt for HarmonyOS 只发布 `harmonyos_arm64_v8a`（已核对 `E:\Qt\components.xml` 组件元数据与 `libQt6Core.so` 的 ELF 头）。因此仅"为 OHOS x86_64 从源码编译整个 Qt"这一条理论路径，成本以周计，不建议。
+- **可用组合：** 真机（已实测 Mate 80 Pro 渲染星图）、Apple Silicon Mac 上的官方 arm64 模拟器、AGC 云调试/云测试。另记录低成本"半验证"：`abiFilters` 加 `x86_64` 可在 x86 模拟器看到 ArkUI 外壳，但 Qt 星图必然加载失败。
+- **云调试：** 整理 5 项硬约束（HAP 格式、机型系统版本须匹配、形态匹配、证书类型、实名+额度）与能力边界（官方记录云调试下折叠状态监听失效，传感器类验证必须留真机）。额度方面确认本地文档库无计费页（已穷举检索 8 组关键词），仅两条有依据的事实：额度形态为"免费体验时长"，且**上传时间计入同一份额度**（官方建议"在 云调试-我的信息-应用 中提前上传"）；查询入口、4 项待确认项与 3 分钟自测办法一并记录。
+- **树莓派 4B：** 评估为不可行——模拟器无 Linux/ARM 宿主；树莓派只能刷 OpenHarmony（社区 22 款开发板之一），而本项目是 `runtimeOS: HarmonyOS` 且依赖 HarmonyOS SDK 26.0.0，两者运行环境不通用（官方 FAQ 记录"改为 OpenHarmony 后加载 so 闪退"）；且 OHOS SDK 原生工具链只有 x86_64 二进制，无法当构建机。
+- **验证结果：** 文档内每条结论均附官方文档 ID 与本地复现命令（`lists.json` / `pc-bios` / `components.xml` / `devecocli docs search`）；本文件不改动任何应用代码、签名或系统配置。
+- **范围约束：** 仅新增文档与结构树条目，未修改 `build-profile.json5`、签名材料、隐私门控或联网配置。
+
+## [2026-09-27] DevEco Code - 文档分层归集、清理冗余 JSON 并修复脚本编码
+
+- **修改文件：** `docs/harmonyos/`（61 个文档 + 34 个 JSON 重新分层）、`docs/harmonyos/AGENTS.md`、`docs/harmonyos/DEBUGGING-GUIDE.md`、`docs/harmonyos/NETWORK-INVENTORY.md`、`docs/harmonyos/KNOWN-ISSUES.md`、`scripts/review-skyculture-passages.py`、`scripts/audit-ohos-resource-coverage.mjs`、`scripts/generate-deep-sky-inventory.mjs`。
+- **重组原则（目标是降低新人接入负担）：** 根目录只保留 9 个「必读/常查」文档 —— `AGENTS`、`HANDOFF`、`KNOWN-ISSUES`、`CHANGELOG`、`DEVELOPMENT-MCP-WORKFLOW`、`BUILD-WINDOWS`、`DEBUGGING-GUIDE`、`CLI`、`NETWORK-INVENTORY`；其余按用途分层：`release/`（构建·发布·签名·上架）、`policy/`（合规与政策）、`specs/`（现行实现规格 16 篇）、`research/`（预研与路线图 10 篇）、`json/`（全部保留的数据文件，含 `json/culture-review-batches/`）、`archive/`（`audits/` 20 篇历史审计与复核报告、`design/` 4 篇早期设计稿、`MOBILE-UI-HANDOVER.md`）；`skills/`、`workbuddy/` 保持原位。
+- **已移除：** `screenshots/`（48 张桌面版 + 16 张 Sky Guide 参考截图，216 MB）、`harmonyos-project/`（7 月的 ArkTS 源码旧副本）、`codex/`、`trae/`、`releases/`、`workbuddy/{device-tests,outputs}`（7 月测试产物 115 个文件）及 3 篇被现役 `HANDOFF.md` 取代的旧交接文档；`docs/harmonyos` 由 435 个文件 / 242.8 MB 降为 238 个文件 / 16.0 MB。
+- **依赖保护：** `json/` 下 4 类数据（`skyculture-corpus/passage/section-revisions` 等 3 个 JSON + `json/culture-review-batches/*.json` 整目录）仍被 `scripts/review-skyculture-passages.py` 读取，脚本路径已同步更新；`specs/DEEP-SKY-RESOURCE-INVENTORY.md` 与 `archive/audits/RESOURCE-COVERAGE-AUDIT-2026-08-24.md` 是脚本的生成产物，输出路径同样更新。
+- **顺带修复：** `review-skyculture-passages.py` 原先用 `Path.read_text()` 的默认编码读取 UTF-8 数据，在中文 Windows（GBK 区域）下必报 `UnicodeDecodeError`；6 处读写已显式指定 `encoding='utf-8'`。
+- **验证结果：** 重组后 `scripts/review-skyculture-passages.py --check` EXIT=0（18 条规则、63 个 section、7 个批次文件、85 个目录全部加载，`changedFiles: 0`）；`git diff --check` 通过。
+- **范围约束：** 未改动任何应用源码、签名材料、隐私门控或联网配置；`CHANGELOG.md` 既有历史条目保持原样（其中的旧路径按追加式历史保留）。
+- **备注：** `CHANGELOG` 历史条目提到的 `STARGAZING-HUB-RESEARCH-2026-09-08.md` 在仓库中从未存在，属既有悬空引用，本轮未处理。
+
+## [2026-09-27] DevEco Code - Windows 平台打通 API 26 编译链并真机验证星图
+
+- **修改文件：** `harmonyos/oh-package.json5`、`harmonyos/build-profile.json5`、`harmonyos/hvigor/hvigor-config.json5`、`harmonyos/resources/base/profile/easy_go.json`、`harmonyos/ets-source/qability/QtWindowStageAdapter.ets`、`scripts/sync-ohos-build-sources.sh`、`scripts/check-ohos.sh`、`scripts/build-ohos-hap-windows.ps1`、`scripts/sync-ohos-resources-windows.ps1`、`docs/harmonyos/BUILD-WINDOWS.md`、`.gitignore`。
+- **工具链对齐：** 本机只有 DevEco Studio 26.0.0.821 与 HarmonyOS 26.0.0（API 26）SDK，原工程 `compileSdkVersion: 6.1.1(24)` 无法解析。按 IDE 迁移结果把 `modelVersion`、`compileSdkVersion`、`targetSdkVersion` 统一为 `26.0.0`，`hvigor/hvigor-config.json5` 与 `oh-package.json5` 成对修正。`build-profile.json5` 仅改这两行，并移除其中他人本机的证书路径引用与悬空的 `signingConfig`：签名一律由 DevEco Studio 自动签名在 `~/.ohos/config` 生成，本仓库不保存任何证书路径或口令。
+- **API 26 适配：** `easy_go.json` 的 `multiModalInputOptions.mouse2TouchEventMode` 在 API 26 schema 中已移除（实测触发 `00303038 Schema validate failed`）；`QtWindowStageAdapter` 补齐 API 26 新增的 `setImageForRecent` / `removeImageForRecent`，否则 ArkTS 编译报 `incorrectly implements interface 'WindowStage'`。
+- **构建脚本修复：** `sync-ohos-build-sources.sh` 由显式文件清单改为整目录镜像——旧清单漏了 34 个媒体图标与 34 个 ets/ts 模块，导致 `Unknown resource name 'ic_globe'` 与 `Cannot find module '../process/QChildProcess'`；并停止覆盖 `AppScope/app.json5`，否则本地包名被还原、自动签名随即失配。`check-ohos.sh` 的 JPEG 检查改为按实际 `DT_NEEDED` 判定：Qt 6.12.0 的 `libqjpeg.so` 静态链接了 libjpeg，旧逻辑在官方 Qt 上必然误报缺少 `libjpeg.so`。
+- **Windows 链路（新增）：** 原 `CODEX_BUILD_AND_INSTALL.md` 全为 macOS 路径、且依赖 `rsync`/`ffmpeg`。新增 `scripts/build-ohos-hap-windows.ps1`（引擎交叉编译 → 修 `DT_NEEDED` → `harmonydeployqt` → 灌资源 → 同步源码 → `hvigorw assembleHap --no-daemon` → 可选装机）与 `scripts/sync-ohos-resources-windows.ps1`（`robocopy` 替 `rsync`、`System.Drawing` 替 `ffmpeg`），并附 `docs/harmonyos/BUILD-WINDOWS.md` 记录三个必需编译参数与全部实测报错。
+- **验证结果：** 引擎以 Qt 6.12.0 `harmonyos_arm64_v8a` 交叉编译出 41.1 MB `libstellarium.so`（AArch64）；`rawfile/stellarium` 灌入 549 MB（63 个星空文化、84 个 `.ssc`）；签名 HAP 679.8 MB 安装到 HUAWEI Mate 80 Pro（SGT-AL00，HarmonyOS 7.0.0 / API 26，`arm64-v8a`），`aa start` 成功且进程存活，hilog 出现 `StelRootItem paint reached`、`zero-copy frame bridge resolved`、`startOhosRenderPump entered`、`command on Qt thread: "setLanguage" "zh_CN"`、`ohosDrainCommandQueue`，截图为真实星场与银河，选中天体显示「河鼓二 Altair」、方位显示「南」。`build-ohos-hap-windows.ps1` 的构建路径与 `-Install` 路径均 EXIT=0，`git diff --check` 通过。
+- **范围约束：** 未改动签名材料、隐私门控、联网与画质配置，仓库内未新增任何证书、密钥或口令；`build-profile.json5` 的改动仅限 SDK 版本与移除他人本机证书引用（本机仅存 API 26 SDK，属用户明确要求的编译修复）。本机调试包名 `com.cnchensh.stellarium` 只存在于被忽略的生成工程内，镜像仍保持上游 `com.joinother.skyinstrument`。未以 `check-ohos.sh` 作为通过依据（该脚本在 Windows 无法整脚本运行）。
+- **未解决项：** 见 `KNOWN-ISSUES.md` 的「Windows 构建链遗留技术债（2026-09-27）」。
+
 ## [2026-09-01] Codex - 天空文化名称选择与资料布局修复
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets`
@@ -5383,4 +8836,4 @@
 - **修改文件：** `src/StelMainView.cpp`、`plugins/Satellites/src/Satellite.cpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`。
 - **修改内容：** 卫星的升起/中天/落下查询统一走本地过境预测，返回数值 JD 事件，避免在渲染线程上反复扫描多天并阻塞画面；查询完成后恢复原始时间和相机方向。时间导航期间暂停卫星详情的高频刷新，避免详情计算与时间过渡争用渲染线程。
 - **稳定性：** 时间跳转保留非跟踪状态下的视线方向和屏幕上方向；选中目标不在视口内时不建立屏幕锚定，避免反向地平线分支导致画面倒转。
-- **验证：** 已完成 `git diff --check`、Native 构建、鸿蒙生成工程同步和 `assembleHap`；未修改签名、Profile、权限或联网配置。
+- **验证：** 已完成 `git diff --check`、Native 构建、鸿蒙生成工程同步和 `assembleHap`；未修改签名、Profile、权限或联网配置。

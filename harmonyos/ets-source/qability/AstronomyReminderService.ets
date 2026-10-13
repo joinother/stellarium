@@ -52,6 +52,12 @@ export class AstronomyReminderService {
   private static errorResult(error: BusinessError, fallback: string): AstronomyReminderResult {
     const failure = error as BusinessError
     const code = typeof failure?.code === 'number' ? failure.code : undefined
+    if (code === 1700001) {
+      return { ok: false, error: '尚未开启通知权限，请在系统设置中允许本应用发送通知。', code: code, notificationEnabled: false }
+    }
+    if (code === 1700002) {
+      return { ok: false, error: '本应用未获得「代理提醒」使用权限（需在 AGC 申请该受限权限并使用对应签名），当前提醒上限为 0。', code: code }
+    }
     return { ok: false, error: failure?.message ?? fallback, code: code }
   }
 
@@ -79,7 +85,7 @@ export class AstronomyReminderService {
     }
   }
 
-  public static async schedule(payload: AstronomyReminderRequest): Promise<AstronomyReminderResult> {
+  public static async schedule(payload: AstronomyReminderRequest, bundleName: string = ''): Promise<AstronomyReminderResult> {
     if (payload.title.trim().length === 0 || payload.content.trim().length === 0) {
       return { ok: false, error: 'title and content are required' }
     }
@@ -110,7 +116,8 @@ export class AstronomyReminderService {
       groupId: AstronomyReminderService.GROUP_ID,
       tapDismissed: true,
       wantAgent: {
-        pkgName: AstronomyReminderService.BUNDLE_NAME,
+        // 点击提醒要拉起「当前安装的」包：debug 包名与发布包名不同，必须运行时派生。
+        pkgName: bundleName.length > 0 ? bundleName : AstronomyReminderService.BUNDLE_NAME,
         abilityName: AstronomyReminderService.ABILITY_NAME,
         uri: 'skyinstrument://astronomy/reminder',
         parameters: parameters
@@ -127,7 +134,7 @@ export class AstronomyReminderService {
   public static async list(): Promise<AstronomyReminderListResult> {
     try {
       const reminders = await reminderAgentManager.getAllValidReminders()
-      const items = reminders.map((item) => {
+      const items = reminders.map((item): AstronomyReminderItem => {
         const request = item.reminderReq
         const dateTime = request.reminderType === reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR
           ? (request as reminderAgentManager.ReminderRequestCalendar).dateTime

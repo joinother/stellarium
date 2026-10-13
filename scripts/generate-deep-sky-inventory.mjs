@@ -10,7 +10,7 @@ const textureFile = path.join(imageRoot, 'textures.json');
 const catalogFile = path.join(imageRoot, 'catalog.txt');
 const namesFile = path.join(imageRoot, 'names.dat');
 const hapFile = path.join(root, 'build/libstellarium-harmonyos/entry/build/default/outputs/default/entry-default-signed.hap');
-const outputFile = path.join(root, 'docs/harmonyos/DEEP-SKY-RESOURCE-INVENTORY.md');
+const outputFile = path.join(root, 'docs/harmonyos/specs/DEEP-SKY-RESOURCE-INVENTORY.md');
 
 function readText(file) {
   return fs.readFileSync(file, 'utf8');

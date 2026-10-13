@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const registryPath = resolve(root, 'data/ohos/network-sources.json');
 
 export async function loadOhosSourceRegistry() {

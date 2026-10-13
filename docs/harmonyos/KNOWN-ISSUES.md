@@ -3,29 +3,29 @@
 ## 托管协议版本更新（2026-09-09，已精简并安装Pad）
 
 - 按用户提供的华为说明，将更新提示交给AGC托管规则；撤回30秒轮询、应用自制重签遮罩和整应用暂停/恢复，不清除旧同意或用户设置。启动、子进程及敏感功能核验保留。
-- 72项精简后回归及构建通过；重连无线Pad后覆盖安装，最终星图ready=true、2560×1600。启动资源准备约27秒仍待性能排查；AGC“需要/不需要重新授权”的实际下发、版本结果迁移、多协议及离线场景仍待验证，详见 `PRIVACY-AGREEMENT-RENEWAL.md`。
+- 72项精简后回归及构建通过；重连无线Pad后覆盖安装，最终星图ready=true、2560×1600。启动资源准备约27秒仍待性能排查；AGC“需要/不需要重新授权”的实际下发、版本结果迁移、多协议及离线场景仍待验证，详见 `policy/PRIVACY-AGREEMENT-RENEWAL.md`。
 
 ## 默认选中固定与快速缩放回弹（2026-09-09，已安装并完成定点验收）
 
 - 新选择统一默认启用屏幕固定，手动取消当前固定仍保留；脚本和陀螺仪不与固定争用相机。
 - 修正上一帧投影、旧缩放终点、松手前过早重采样和任意天区惯性结束后拉回旧位置的问题；锚定改用同帧、亚像素相机旋转。
-- 65项检查和225组原生旋转数值案例通过。Pad四组CLI场景通过，真实220ms双指放大及惯性确认目标保持原位置，锚定求解最高约0.10ms。未降低画质，Default签名未改。整体绘制负载仍有优化空间，详见 `SCREEN-ANCHOR-2026-09-09.md`。
+- 65项检查和225组原生旋转数值案例通过。Pad四组CLI场景通过，真实220ms双指放大及惯性确认目标保持原位置，锚定求解最高约0.10ms。未降低画质，Default签名未改。整体绘制负载仍有优化空间，详见 `specs/SCREEN-ANCHOR-2026-09-09.md`。
 
 ## 星图贴图跨帧上传限额未重置（2026-09-09，M31/月球真机部分回归通过）
 
 - Pad 旧包 1000050 的 674 张深空图片全部在本地，但居中 M31 后持续 loading。鸿蒙独立 render pump 不走原 frameFinished 清零路径，纹理上传总耗时可能跨帧超限，使已解码贴图无法上传；行星共用同一管理器。
-- 已将清零放到核心每次 draw 开头，保留每帧限额与原画质；汇字动画与同意后的核心加载并行。C++ 编译及 60 项检查通过。1000052 已覆盖安装，M31 探针 ready 且星图截图可见，月球球面地貌可见；火星仅确认详情球体，星图放大检查受到视角/标签变动干扰，完整时延及冷启动矩阵未通过验收。详见 `STARTUP-TEXTURE-BUDGET-2026-09-08.md`。
+- 已将清零放到核心每次 draw 开头，保留每帧限额与原画质；汇字动画与同意后的核心加载并行。C++ 编译及 60 项检查通过。1000052 已覆盖安装，M31 探针 ready 且星图截图可见，月球球面地貌可见；火星仅确认详情球体，星图放大检查受到视角/标签变动干扰，完整时延及冷启动矩阵未通过验收。详见 `specs/STARTUP-TEXTURE-BUDGET-2026-09-08.md`。
 
 ## 托管隐私等待提示闪现（2026-09-09，状态修复已安装）
 
 - 修复“未决定被判失败”和“同意后未清旧错误”；同一星点背景等待系统弹窗，核验同意直接进入加载反馈，不修改原生隐私门禁。
 - 58项回归通过；无线Pad未同意期间Qt未启动，系统取消可退出，用户亲自同意后星图ready=true。异常服务恢复按钮未做真机故障注入，同意瞬间没有连续视频，保留后续视觉复测边界。
-- 详见 `PRIVACY-STARTUP-UI-2026-09-09.md`。签名和1000052构建号不变。
+- 详见 `policy/PRIVACY-STARTUP-UI-2026-09-09.md`。签名和1000052构建号不变。
 
 ## 托管隐私双弹窗（2026-09-08 23:14，代码已安装；9月9日单弹窗场景复测通过）
 
 - MatePad Mini 1000050、debug=false：一次应用主动请求与系统托管启动弹窗叠加，主窗口包含两个独立隐私 UIExtension。上一轮应用内请求合并不能阻止系统另一条弹窗路径。
-- 按华为 MCP 官方指南，启动改为监听签署结果并核验当前协议，不再自动主动弹窗；保留手动重试、请求合并、根页面加载锁及 SN 主/子进程门禁。32 项启动回归通过；1000052 已安装，启动日志确认 observer-ready、hosted-consent-verified 在 Qt 门禁放行之前。本轮没有代用户撤回或签署协议，不能据此断言未同意场景的双弹窗专项已通过。证据与验收范围见 `PRIVACY-DOUBLE-DIALOG-2026-09-08.md`。
+- 按华为 MCP 官方指南，启动改为监听签署结果并核验当前协议，不再自动主动弹窗；保留手动重试、请求合并、根页面加载锁及 SN 主/子进程门禁。32 项启动回归通过；1000052 已安装，启动日志确认 observer-ready、hosted-consent-verified 在 Qt 门禁放行之前。本轮没有代用户撤回或签署协议，不能据此断言未同意场景的双弹窗专项已通过。证据与验收范围见 `policy/PRIVACY-DOUBLE-DIALOG-2026-09-08.md`。
 
 ## AGC 9 月 8 日审核结果与协议修订（继续整改）
 
@@ -49,13 +49,13 @@
 - 同意前 Qt 初始化链触发 SN：已延后并加入当前协议 ID/版本验证。Qt 官方 dev 源码已定位 setupQtApplicationImpl → initAppData → initDeviceInfo，字段表包含 serial/udid，缓存入 QOhosDeviceInfo。Pad 同意后存在 IDeviceInfo IPC 失败；不能视为读取成功，也不能宣布已完全停止尝试。用户最新要求暂不移除清单、保留同意后初始化；未实现按具体业务功能按需读取。继续核对实际 SDK 行为、披露及 AGC 检测，不扩大权限。
 - 重力/磁场/旋转矢量披露缺失：9 月 8 日实际核对，AGC 完成态仍是旧政策，先前草稿已不在列表。用户要求先修故障、最后处理协议；正文及发布关联仍为阻塞，不以数据标签代替正文。
 - 审核 ZIP 中 1000049 的 APP_INPUT_BLOCK 主线程为 libqohos → OH_Pasteboard_GetData → Binder 等待。已按 SDK SBOM 精确修订重建平台插件，剪贴板变化通知只失效缓存，不同步读取内容；生成工程校验防止旧库回流。Pad 独立 Debug 1000050 连续 20 次复制、图层切换和查询，83 个响应通过，原生探针确认新路径，本轮未检出 AppFreeze。QtMainThread 原栈驱动等待和另一次 BUSSINESS_THREAD_BLOCK_6S 不能据此认定完全解决，Release 系统隐私/压力复测仍需做。见 `QT-CLIPBOARD-REVIEW-FIX.md`。
-- 编译与 10 项测试通过不等于真机通过；隐私服务不支持模拟器。详见 `PRIVACY-REVIEW-2026-09-08.md`。
+- 编译与 10 项测试通过不等于真机通过；隐私服务不支持模拟器。详见 `policy/PRIVACY-REVIEW-2026-09-08.md`。
 
 ## Workbench 会话跨用户名复用与服务器安全维护（2026-09-07）
 
 - Workbench 1.0.1：已有 root 会话时，`exec --user-name skyops` 实际复用 root。关闭旧会话再连接才能切换；本地 `resource-server-cli.sh` 已对所有操作增加真实用户检查，不符退出 77。此为防误操作保护，不是云端 root 禁用。
 - 审计检索在非交互 CLI 必须显式 `ausearch -if /var/log/audit/audit.log`，否则管道输入可能导致误报无匹配；实际日志事件已验证。
-- 原 20 条安全公告已在用户批准后完成 35 包更新，刷新官方源后无待安装安全更新，重启后服务正常；公网独立阻断测试、救援演练、异机备份、主账号 MFA/临时凭据、强制限制 OS 身份仍待处理。详见 `SERVER-SECURITY.md`，不能概括为整机安全完成。
+- 原 20 条安全公告已在用户批准后完成 35 包更新，刷新官方源后无待安装安全更新，重启后服务正常；公网独立阻断测试、救援演练、异机备份、主账号 MFA/临时凭据、强制限制 OS 身份仍待处理。详见 `server/SERVER-SECURITY.md`，不能概括为整机安全完成。
 - kdump 的 `No memory reserved for crash kernel` 在更新前后均存在；不影响在线资源服务，但内核崩溃转储不可用。未用禁用服务消除告警，后续需评估 2 GiB 规格的内存代价，不能在本轮追加第二次重启。
 
 ## 发布前资源校验缺口（2026-09-07，只读调研发现，待修）
@@ -63,7 +63,38 @@
 - **现象：** `plugins/Satellites/resources/satellites.json` SHA-256 为 `cab4048a008dc2c77b763d773247bf66e299f03635e04bc43daa52116e2a6c14`，但 `data/ohos/catalog-manifest.json` 仍记录 `f82d11a95714c7c8d21b72cd6d3a25ba49f175309fc4ce66bab27f4ef7a69670`。额外只读比较确认不一致。
 - **检查缺口：** 更新器 `--check` 与离线目录 QRC 检查均打印哈希但不与清单比较，所以退出成功不能代表数据链路完整。镜像下载亦尚无可信远端清单认证，单文件 rename 不保证整批事务。
 - **处理方向：** 发布前补强资源/清单一致性门禁、补丁来源记录和整批恢复。保留 8 月 27 日批量抓取、partial=true 与 9 月 6 日单条更新的不同语义；不能刷新时间或 verified 字段冒充全部最新。本轮未修改数据、清单或签名。
-- **详情：** `DOMESTIC-RESOURCE-DISTRIBUTION-RESEARCH-2026-09-07.md`；未因此认定当前卫星计算不可用，也不将格式通过等同于轨道精度已验证。
+- **详情：** `research/DOMESTIC-RESOURCE-DISTRIBUTION-RESEARCH-2026-09-07.md`；未因此认定当前卫星计算不可用，也不将格式通过等同于轨道精度已验证。
+
+## Windows 构建链遗留技术债（2026-09-27，DevEco Code，待处理）
+
+### 1. 引擎依赖名依赖二进制补丁 — 【严重：每次重编引擎都必须重打】
+
+- **现象：** `libstellarium.so` 的 `DT_NEEDED` 被写成构建树路径 `_deps/md4c-build/src/libmd4c-html.so`、`_deps/md4c-build/src/libmd4c.so`、`_deps/nlopt-build/libnlopt.so`。装机后 `dlopen` 失败：`Error loading shared library _deps/md4c-build/src/libmd4c-html.so (needed by libstellarium.so)`，Qt 上下文初始化随即退出（ArkUI 外壳仍在，无星图）。
+- **原因：** Qt 的 OHOS 工具链设置 `CMAKE_PLATFORM_NO_VERSIONED_SONAME`，而 `md4c`/`nlopt` 由 CPM 引入且没有 `SOVERSION`，链接器于是把链接时路径写入 `DT_NEEDED`。
+- **当前处理：** `scripts/build-ohos-hap-windows.ps1` 的 `Repair-NeededPaths` 在 `.dynstr` 内等长改写为普通库名（NUL 填充），并把三个库补进 `entry/libs/arm64-v8a`，随后自检不允许残留路径形式的 `NEEDED`（注意只检查 `NEEDED`，`RPATH`/`RUNPATH` 里的路径在设备上会被忽略）。
+- **根治方向：** 在 CMake 层给这些目标加 `SOVERSION`（或改为静态链接），由链接器直接写普通库名，去掉二进制补丁这一环。
+
+### 2. 行星细节模型纹理缺失（`.model.rgba` 未生成）— 【2026-10-02 已修复（Windows 同步脚本生成侧车）】
+
+- 上游 `sync-ohos-resources.sh` 用 `ffmpeg` 生成 512×256（行星）与 512×2（行星环）的 RGBA 侧车；Windows 移植版 `sync-ohos-resources-windows.ps1` 现已用 `System.Drawing` 生成同口径侧车（50 + 3 个），无 ffmpeg 依赖。详见第 22 条。
+- **影响：** （修复前）打开「细节模型」时纹理缺失或异常；主星图、星空文化、深空天体不受影响。修复后已走"侧车优先"路径。
+- **补齐（已落地）：** 无需安装 ffmpeg；`System.Drawing` 等价缩放，字节序为裸 `R,G,B,A`（与 `DetailModelRasterizer.ets` 读取一致）。
+
+### 3. 平台插件补丁与已安装 Qt 版本不匹配 — 【P1：剪贴板修复进不了包】
+
+- `scripts/build-ohos-platform-patch.sh` 写死 qtbase `REVISION=97575d35c0cecdc0fb4e12fc3575afaa9fd9d3f1`（Qt 6.12.0 Beta2），而本机安装的是 6.12.0 Release（`sbom` 记录 revision 为 `a2c0b1ea39aad5c9600a7bd9ca605a58a5bada30`）→ 脚本在版本校验处硬失败。
+- **后果：** 剪贴板通知补丁版的 `libqohos.so` 编不出来，当前 HAP 使用原版平台插件，`policy/QT-CLIPBOARD-REVIEW-FIX.md` 记录的 AppFreeze 修复未在本次构建中生效。
+- **处理方向：** 更新脚本的 revision 与 SHA，并把 `harmonyos/qt-platform-patch/clipboard-notification.patch` rebase 到 6.12.0 Release 源码。
+
+### 4. `check-ohos.sh` 无法在 Windows 整脚本运行 — 【P3：工具可用性】
+
+- 该脚本依赖 `rsync` / `ffmpeg` / `du`，Windows 上都不存在；ETS 同步检查与 ArkTS 反模式检查可单独运行，JPEG 检查本轮已改为按 `DT_NEEDED` 判定。
+- 本轮 Windows 验证以 `scripts/build-ohos-hap-windows.ps1` 端到端 EXIT=0 + 真机 install/start + hilog + 截图为准。
+
+### 5. 离线依赖需要人工预置 — 【P3：换机器时要注意】
+
+- `github.com` 不可达时 CPM/FetchContent 无法克隆 `fast_float`（OHOS libc++ 不支持浮点 `std::from_chars`，该依赖必需）、`md4c`、`nlopt`。本次用可达的 `codeload.github.com` 拉 tarball 填回 `build/_deps/{fastfloat,md4c,nlopt}-src`，再以 `-DFETCHCONTENT_FULLY_DISCONNECTED=ON` 离线配置。
+- 另注意：`qt-cmake.bat` 会优先使用 `E:\Qt\Tools\CMake_64`，中途更换 CMake 版本会让 CMake 判定现有 `_deps` 失效并触发重新克隆。步骤见 `BUILD-WINDOWS.md` §4.1。
 
 > 格式：每个 Bug 一条记录，标注优先级和状态。新 Agent 从这里选任务。
 
@@ -434,3 +465,57 @@
 - **性能边界：** 640 像素复杂模型仍可能计算数百毫秒；实测三行星为 531–936ms，期间主线程探针继续运行（最大超期 1–7ms）。后续高帧率应替换 GPU/原生后端，不以降画质代替。
 - **待观察：** 一次右留白滑动发生模型姿态变化断言；保留断言、补齐边界/触点与前后帧记录后重跑通过，原因尚未确定。不得将一次复测通过写成彻底排除所有偶发手势问题。
 - **记录：** `DETAIL-MODEL-PERFORMANCE.md`、`model-worker-pad-test-2026-09-06.json`。签名与离线策略不变。
+
+### 21. 陀螺仪校准面板入口不可发现、且长按未复现成功 — 【2026-10-01 待修，仅记录，未改代码】
+
+- **现象（用户真机走查反馈）**：手指点按右侧竖排栏的陀螺仪按钮只会切换开/关并弹提示，**长按看不到校准面板**；用户不清楚校准是否需要额外操作。
+- **入口现状（代码事实）**：`MainWindowNativeNode.ets:18403-18418` —— 同一个按钮上挂了
+  `onClick`（切换 `gyroscopeEnabled` + `flashHint('陀螺仪：开/关')`）与
+  `LongPressGesture({ repeat: false, duration: 600 })`，**只有长按且此时 `gyroscopeEnabled === true`** 才切 `gyroCalibPanelOpen`。
+  面板渲染条件 `gyroscopeEnabled && gyroCalibPanelOpen`（`:16300` 与第二处 `:16498`），手机布局位置固定 `(16, 80)`、宽 `≤ min(360, skyWidth-32)`（见 `:12806` 的障碍表）。**面板本身路径正常，问题在入口触发。**
+- **三种候选原因（未证实，待真机定位）**：① 长按被祖先容器的拖拽/Pan 手势抢占（侧栏可拖动、`railPinned`），ArkUI 默认手势优先级下父级 pan 先识别；② `duration: 600` 要求按住 600 ms 且中途不滑动，而按钮仅 44×44，轻微抖动即被判为拖动；③ 长按时 `gyroscopeEnabled` 仍为关（先长按未先短按开启），守卫条件直接跳过。
+- **校准语义（供文档/帮助面板使用）**：面板内「重置」= 清零方位角/高度角偏移并调用 `calibrateGyroscope()`，其语义是**把设备当前朝向当作基准**（重置航向与绝对位姿参考，状态随后变为「已校准」）。正确用法：**先把手机摆到期望的基准方向（通常正北、水平），再点重置**；无需输入数值。前置条件是陀螺仪已开启且已开始产生读数，否则 `calibrateGyroscope()` 直接返回、不生效。
+- **候选修法（用户尚未选定，选定后再做切片）**：
+  - A（推荐）：设置面板新增一行「陀螺仪校准」，点开即打开面板（保留长按作快捷）——最可靠、最可发现；
+  - B：去掉隐式长按，改为短按弹小菜单（开/关、校准、灵敏度），并在提示文案里说明；
+  - C：仅改提示文案（最小改动；若原因是①则等于没修）。
+- **验证状态**：本条目记录时真机已掉线（`hdc list targets` 为空），**未做真机复现与验证**。设备恢复后的定位三步：`devecocli ui longclick` 打在按钮坐标 + `devecocli ui layout` 看 `gyroCalibPanelOpen` 是否置真 + `hilog` 查报错。
+
+**2026-10-01 真机复核结论（设备 `192.168.3.95:40565`，已复现）**：
+
+- **入口不是左侧竖排栏**：手机（compact）布局下左侧 rail 淡隐、布局树中不可见；真正的入口是**右上角悬浮按钮**，布局树中是 `Row [1063,175,1217,329]`（下方 `Row [1063,364,1217,518]` 是音量按钮），截图像素约 `(1127, 261)`。先前"右侧竖排栏"的表述以此为准修正。
+- **已复现"长按不弹面板"**：`devecocli ui longclick 1127 261` 命中该按钮后，`ui layout` 节点数仍为 15、无任何新面板节点（校准面板若出现会在此处多出标题/灵敏度/两个滑块/两个按钮/状态行）；短按 `click` 亦无可见变化（提示 toast 不进布局树）。
+- **无法读到陀螺仪内部状态**：应用自带 CLI `--command gyroDiagnostic --json` 只返回派发确认 `{"ok":true,"accepted":true,"pending":true}`，**未同步返回诊断结果**，因此无法用它区分"陀螺仪未开启/无读数"与"手势被抢占"；`devecocli ui longclick` 也没有时长参数，无法排除 600 ms 阈值因素。
+- **候选原因收敛为三条（仍未证实）**：① 长按时 `gyroscopeEnabled` 仍为关（短按开关注释：先短按再长按才有效）；② `LongPressGesture({ duration: 600 })` 阈值偏长，CLI/finger 的按压时长可能不足；③ 长按被祖先容器的拖拽手势抢占。
+- **对修法的直接影响**：三条候选里没有一个能靠"改文案"解决，**因此建议直接采用 A（设置面板 → 设备与隐私里新增「陀螺仪校准」行）**：该面板已有 `deviceAndPrivacySettings()` 承载 `gyroscopeRow()` 与灵敏度行，天然是校准入口的位置；实现时需注意打开前先收起设置面板（`panelVisible`），否则 (16,80) 处的校准面板会被设置面板遮住。
+
+**2026-10-01 真机验收复核（本机调试包名 v1000054，原因已坐实）**：
+
+- **代码事实（决定性）**：`gyroCalibPanelOpen` 在全仓**只有赋 `false`**（`MainWindowNativeNode.ets:3496`、`:10285`；`GyroCalibPanel.ets:30`、`:99`），**没有任何一处把它置 `true`** → 校准面板（渲染条件 `gyroscopeEnabled && gyroCalibPanelOpen`，`:12720` / `:16047` / `:16358`）在当前构建**无任何 UI 入口**。手机右上快捷钮 `CompactQuickButton`（Phase 3at）只有 `onClick`、**无 `LongPressGesture`**；原带长按的平板左栏 `gyroButton` 已在 **Phase 3aq** 作为死代码（零引用）删除 —— 即上面的"候选原因①②③"已不适用：不是手势被抢占或阈值过长，而是**触发代码已不存在**。
+- **陀螺仪本身工作正常**：短按开启后 `toggleGyroscope enabled=true`，`[GYRO_PROBE] ... invalid=0`、`GYRO_RAW a=0.019 b=0.018 g=0.595`（读数连续）。因此"陀螺仪未开启/无读数"也不是原因。
+- **真机复现**：`devecocli ui longclick` 打在快捷钮 `(1140, 252)` 上，布局树**没有**任何校准面板节点（扫「校准/灵敏度/重置/航向/基准」= 0），且长按被当作点击使开关再次翻转。
+- **结论**：维持修法 **A**（设置 → 设备与隐私新增「陀螺仪校准」行）；实现时先收起设置面板，以免 `(16, 80)` 的校准面板被遮住。本轮验收**未改码**。
+
+**2026-10-01 验收附带记录（非第 21 条本身，新开条目）**：`BottomDock` 的 `DockButton` active 高亮在真机上不显示（面板打开后对应入口不变蓝 `#70C8FF`；像素采样 max(B−R)=3–11，而同刻 `CompactQuickButton` 激活态为 66）。疑因 `ForEach` 键不含 `active`（键不变 → 子项不重建 → `@Prop active` 陈旧），或 Phase 3at 把 `dockActionActive` 改为 `isActive` 闭包入参后依赖无法追踪；未确认属回归还是既有，留待独立切片。
+
+### 22. 行星三维模型显示"本地资源解码失败"（构建期缺 `.model.rgba` 侧车）— 【2026-10-02 完全修复：应用内 PNG 回退 + Windows 构建脚本生成侧车，真机验证通过】
+
+- **现象（用户真机）**：详情卡"资料"页媒体区（`objectInspectorMediaKind === 'model'` 的天体，如火星、土星）显示 `TabletInspectorNoticeRow` 的**「本地资源解码失败 / 资源已找到，但当前设备无法显示此文件」+「重试」**，即 `ObjectMediaStore.objectInspectorMediaLoadFailed === true`。`kind === 'image'` 的深空天体（实测 M31）正常，故**仅 model 路径受影响**。
+- **真机复现与日志**（Mate 80 Pro `192.168.50.108:40565`，本机调试包名，`searchObject Mars`）：
+  - `[detail-media] decoding local image kind=model uri=.../stellarium/textures/mars.png`
+  - `[detail-model] CPU texture load failed path= error={}` —— 旧代码用 `JSON.stringify(Error)` 输出 `{}`，**丢失了错误 message**（这正是本轮补的诊断）。
+- **失败文件与真实格式**：`textures/mars.png` 存在、169665 字节（`hdc shell ls -l`），真实格式为普通 PNG；`textures/` 下**没有任何 `.model.rgba` 侧车**（`ls | grep model.rgba` 为空；构建 rawfile 中 0 个）。
+- **根因**：`refreshObjectInspectorMedia` 对 model 走 `loadObjectInspectorModelRawTexture()`，读的是同目录 **`textures/<name>.png.model.rgba`**（512×256×4 = 524288 字节 CPU 侧车，由 `scripts/sync-ohos-resources.sh` 用 `ffmpeg -vf scale=512:256,format=rgba -f rawvideo` 生成）。Windows 移植脚本 `sync-ohos-resources-windows.ps1` **未实现该 ffmpeg 步骤**（本机无 ffmpeg），侧车从未进入 HAP → `objectInspectorFilePath(name + '.model.rgba')` 返回 `''` → 旧代码直接抛 `CPU texture sidecar is missing` → `objectInspectorMediaLoadFailed = true`。与 KNOWN-ISSUES P2「行星细节模型纹理缺失（`.model.rgba` 未生成）」同源，本次把它定性为**用户可见的阻断**。
+- **修法（应用内回退，不改构建产物）**：`loadObjectInspectorModelRawTexture()` 在侧车缺失/读取失败时改为**回退用鸿蒙图像框架解码 PNG**：`decodeLocalImage(png, 'model', ..., { width: 512, height: 256 })`（`RGBA_8888`，专为 model 准备的既有分支）→ `pixelMap.readPixelsToBufferSync()` 读回 524288 字节 RGBA → 复用同一提交路径设置 `objectInspectorModelTexturePixels` 并触发 CPU 光栅化。环形纹理同法按 `512×2` 回退（土星环实测生效）。侧车存在时优先走原快速路径，行为不变。CPU 光栅化器按 `[R,G,B,A]` 读取（`DetailModelRasterizer.ets`），与 `RGBA_8888` readback 字节序一致，颜色实测正确。
+- **诊断增强**：`describeDecodeError()` 显式输出 `err.name + ': ' + err.message`（取代丢失 message 的 `JSON.stringify`）；`TabletInspectorMedia.ets` 两个 `Image.onError` 改为 `(err: ImageError)` 并打印 `err.error.code` 与 `err.message`。
+- **真机验证**：重建 HAP（39s）安装后 `searchObject Mars` → `[detail-model] sidecar missing, decoding PNG fallback` → `[detail-model] CPU texture ready bytes=524288 source=png` → `[detail-media-card] sphere loaded`；截图确认**带地表的火星球体**（非失败提示）。土星含环同样渲染成功（`satellite rings_radial.png` 解码 + `released pixel map kind=model-ring-texture-fallback`）。沉浸叠层（Phase 5d）复测：`devecocli ui click` 打开 `object-model-stage` → `drag` 旋转（前后截图地表特征位移）→ 关闭回到 `object-model-inline-stage`；**双指缩放未用 CLI 走查（`devecocli ui` 无多点触控）**。
+- **构建侧补齐（2026-10-02）**：`sync-ohos-resources-windows.ps1` 新增 `Export-RgbaSidecar` / `Invoke-DetailModelSidecarBatch`，导出裸 RGBA 侧车，字节序 `R,G,B,A`、行星环为 `512×2`；名单与 bash 版 `MODEL_TEXTURES`/`RING_TEXTURES` 逐字对齐（50 + 3）。幂等：侧车尺寸正确且不旧于源 PNG 时跳过；失败逐文件 `Write-Warning`。
+  - **生成器优先级（2026-10-02 更新，本片）**：**优先 ffmpeg，缺省回退 System.Drawing**。解析顺序 ① `$env:FFMPEG` → ② `PATH` 上的 `ffmpeg` → ③ WinGet `Gyan.FFmpeg` 包目录 → 三者皆无才用 `System.Drawing`（`HighQualityBicubic` + `WrapMode.TileFlipXY`）。ffmpeg 参数与 bash 版逐字对齐：`-hide_banner -loglevel error -y -i <png> -vf 'scale=<w>:<h>:flags=lanczos,format=rgba' -frames:v 1 -pix_fmt rgba -f rawvideo <out>`；同步日志打印本次走哪条路径。两条路径都用临时文件 + 替换的原子写。
+  - **双实现对拍（本片核心证据）**：同一 PNG 分别用两条路径生成 → 尺寸必等（524288 / 环 4096）。逐像素统计：`mars.png`（512×256，不缩放）diff=0%；`sun.png`（2048×1024→512×256）差异像素 31.22%、每通道 mean≈0.12、max≤4；`moon.png`（1024×512→512×256）差异像素 72.73%、mean≈0.53、max≤8；`saturn_rings_radial.png`（256×2→512×2 上采样）差异像素 99.80%、mean≈7.0、max≈142（薄环强梯度所致）——两者视觉等价，Lanczos 与 Bicubic 的差距量化为 sub-1/255 均值量级。
+  - **产出**：构建 rawfile 与签名 HAP 内各 **53 个** `textures/*.png.model.rgba`（50×524288 B + 3×4096 B），`mars.png.model.rgba` 与 `saturn_rings_radial.png.model.rgba` 均已核对。
+  - **真机验收**（Mate 80 Pro `192.168.50.108:40565`，`bm clean -d` 后全新解包）：
+    - 火星：`[detail-model] CPU texture ready uri=.../textures/mars.png bytes=524288 source=sidecar`（**无** `sidecar missing, decoding PNG fallback`）；截图确认带地表的火星球体。
+    - 土星：`[detail-model] ring texture ready path=.../saturn_rings_radial.png.model.rgba bytes=4096` + `source=sidecar`；截图确认含环土星。
+    - M31 回归：`[detail-media-card] image loaded uri=.../nebulae/default/m31.png`，进程存活。
+  - ⚠️ 侧车在资源同步阶段生成，`build-ohos-hap-windows.ps1 -SkipResources` 会跳过着一步。
+- **应用内 PNG 回退保留**：作为无侧车（如 `-SkipResources` 冻结树、或清单外新增纹理）时的兜底，二者共用同一提交路径。

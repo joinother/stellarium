@@ -1,27 +1,16 @@
 {
   "app": {
-    "signingConfigs": [
-      {
-        "name": "default",
-        "material": {
-          "certpath": "/Users/jiexuanyang/.ohos/config/openharmony/default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "***REMOVED_ROTATED***",
-          "profile": "/Users/jiexuanyang/.ohos/config/openharmony/default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.p7b",
-          "signAlg": "SHA256withECDSA",
-          "storeFile": "/Users/jiexuanyang/.ohos/config/openharmony/default_libstellarium-harmonyos_BOVLsyGJ3Wytlsmvgmsjd9Xkw0JjlZi4qM4hj__q8Q8=.p12",
-          "storePassword": "***REMOVED_ROTATED***"
-        }
-      }
-    ],
+    /* 签名材料由 DevEco Studio 的「Automatically generate signature」按机器生成，
+       保存在 ~/.ohos/config（不在本仓库）。此处刻意不保留任何证书路径或口令；
+       生成工程 build/libstellarium-harmonyos/build-profile.json5 里的签名配置
+       属于本机调试配置，同样不入库。 */
     "products": [
       {
         "name": "default",
-        "signingConfig": "default",
         "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",
         "compileSdkVersion": "26.0.0",
-        "targetSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0"
         /* %%INSERT_TARGET_SDK_VERSION%% */
         /* %%INSERT_COMPILE_SDK_VERSION%% */
       }

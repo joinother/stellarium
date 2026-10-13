@@ -1,6 +1,6 @@
 import { I18n } from './I18n'
-import { StartupPoint, StartupStarAppearance, startupParticle, startupDepthPoint, startupReleasePoint, startupReveal, startupAppearance, startupSeed, startupEase } from './StartupStarGeometry'
-import { STARTUP_GATHER_MS, STARTUP_REVEAL_AT_MS } from './StartupStarGeometry'
+import { StartupPoint, StartupStarAppearance, startupParticle, startupDepthPoint, startupReleasePoint, startupAppearance, startupSeed, startupEase } from './StartupStarGeometry'
+import { STARTUP_GATHER_MS, STARTUP_REVEAL_MS } from './StartupStarGeometry'
 import { FrameCallback } from '@kit.ArkUI'
 import hilog from '@ohos.hilog'
 import { notifyStartupCanvasReady } from '../common/PrivacyStartup'
@@ -22,6 +22,8 @@ export struct StartupSky {
   private timer: number = -1
   private elapsed: number = 0
   private assemblyElapsed: number = 0
+  private releaseElapsed: number = 0
+  private releaseStarted: boolean = false
   private lastTick: number = 0
   private ready: boolean = false
   private coverReleased: boolean = false
@@ -119,15 +121,30 @@ export struct StartupSky {
       const now = Date.now()
       const step = Math.min(100, now - this.lastTick)
       this.elapsed += step
-      if (this.nativeStartupAllowed) {
-        this.assemblyElapsed = this.skyPrepared ? this.assemblyElapsed + step :
-          Math.min(STARTUP_REVEAL_AT_MS, this.assemblyElapsed + step)
+      if (!this.nativeStartupAllowed) {
+        this.lastTick = now
+        this.draw()
+        return
       }
+      if (!this.skyPrepared && this.assemblyElapsed < STARTUP_GATHER_MS) {
+        this.assemblyElapsed += Math.min(step, 33)
+        this.lastTick = now
+        this.draw()
+        return
+      }
+      this.assemblyElapsed += step
+      // The scatter/reveal waits for the sky gate; it is the hand-off signal
+      // ("resources ready, enter the main UI"), so it must not run on a timer
+      // decoupled from actual readiness.
+      if (this.skyPrepared && !this.releaseStarted && this.assemblyElapsed >= STARTUP_GATHER_MS) {
+        this.releaseStarted = true
+      }
+      if (this.releaseStarted) this.releaseElapsed += step
       this.lastTick = now
       this.draw()
-      if (!this.artComplete && this.skyPrepared && this.assemblyElapsed >= STARTUP_REVEAL_AT_MS) {
+      if (!this.artComplete && this.releaseStarted) {
         this.artComplete = true
-        hilog.info(0, 'StellariumStartup', '[startup] title-assembled activeMs=%{public}d', this.elapsed)
+        hilog.info(0, 'StellariumStartup', '[startup] title-released activeMs=%{public}d', this.elapsed)
         AppStorage.setOrCreate('stellariumStartupArtComplete', true)
       }
     }, 33)
@@ -135,7 +152,7 @@ export struct StartupSky {
 
   private draw(): void {
     const pen = this.context
-    const reveal = this.skyPrepared ? startupReveal(this.assemblyElapsed) : 0
+    const reveal = this.skyPrepared ? startupEase(this.releaseElapsed / STARTUP_REVEAL_MS) : 0
     pen.globalAlpha = 1
     pen.fillStyle = '#05070F'
     pen.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
@@ -167,7 +184,7 @@ export struct StartupSky {
       for (let index = 0; index < this.targets.length; index++) {
         if (this.letterGroups[index] !== group) continue
         const assembled = startupParticle(index, this.targets[index], this.canvasWidth, this.canvasHeight,
-          this.elapsed, this.nativeStartupAllowed ? this.assemblyElapsed : -1)
+          this.elapsed, this.assemblyElapsed)
         const point = startupReleasePoint(index, assembled, this.canvasWidth, this.canvasHeight, reveal)
         pen.moveTo(point.x + radius, point.y)
         pen.arc(point.x, point.y, radius, 0, Math.PI * 2)

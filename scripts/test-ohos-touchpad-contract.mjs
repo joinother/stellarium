@@ -2,31 +2,32 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+// The touchpad / mouse / keyboard input path now lives in
+// capability/SkyInputController.ets and uses the current ArkUI axis API
+// (getPinchAxisScaleValue / scrollStep) instead of the older axisPinch fields.
 const root = process.cwd();
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const source = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+const input = read('harmonyos/ets-source/capability/SkyInputController.ets');
 const native = read('src/StelMainView.cpp');
 const catalog = read('src/StelOhosCommandCatalog.hpp');
-const i18n = read('harmonyos/ets-source/pages/I18n.ets');
-const guide = read('docs/harmonyos/PC-TOUCHPAD-AND-KEYBOARD-GUIDE.md');
+const i18n = read('harmonyos/ets-source/capability/I18n.ets');
+const guide = read('docs/harmonyos/specs/PC-TOUCHPAD-AND-KEYBOARD-GUIDE.md');
 
 for (const token of [
-  'event.axisPinch',
-  'AxisType.PINCH_AXIS',
-  "callNativeFire('zoomBy'",
-  "'|1|'",
-  "callNativeFire('endPinch'",
-  'typeof event.scrollStep',
-  'axisPanActive',
-  'finishAxisPan',
-  "callNativeFire('startPanInertia'",
-  "callNativeFire('zoomStep'",
-  "callNativeFire('panBy'",
-  'getModifierKeyState',
-  "callInteractive('sendKey'",
-  'keyboardToken'
+  'event.getPinchAxisScaleValue()',
+  'event.scrollStep',
+  "commandPort.fire('zoomBy'",
+  "commandPort.fire('endPinch'",
+  "commandPort.fire('startPanInertia'",
+  "commandPort.fire('panBy'",
+  'KeyCode.KEYCODE_SPACE',
+  'KeyCode.KEYCODE_ESCAPE',
+  'keyboardToken(event)',
+  'keyboardModifierPrefix(event)',
+  "requestInteractive('sendKey'",
+  'fallbackKeyboardToken(token)'
 ]) {
-  assert.ok(source.includes(token), `${token} missing from touchpad input path`);
+  assert.ok(input.includes(token), `${token} missing from the touchpad/keyboard input path`);
 }
 
 for (const token of ['zoomBy', 'endPinch', 'zoomStep', 'startPanInertia']) {

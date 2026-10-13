@@ -9,7 +9,7 @@ const view = read('src/StelMainView.cpp');
 const texture = read('src/core/StelTexture.cpp');
 
 test('each initialized core draw resets its upload budget before any render pass', () => {
-  const draw = app.match(/void StelApp::draw\(\)\n\{[\s\S]*?\n\}/)[0];
+  const draw = app.match(/void StelApp::draw\(\)\r?\n\{[\s\S]*?\r?\n\}/)[0];
   assert.equal((draw.match(/textureMgr->beginFrame\(\)/g) ?? []).length, 1);
   assert.ok(draw.indexOf('return;') < draw.indexOf('textureMgr->beginFrame()'));
   assert.ok(draw.indexOf('textureMgr->beginFrame()') < draw.indexOf('prepareRenderBuffer()'));

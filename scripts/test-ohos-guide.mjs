@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
 
-const source = readFileSync(new URL('../harmonyos/ets-source/pages/AstronomyGuide.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../harmonyos/ets-source/common/derive/AstronomyGuide.ts', import.meta.url), 'utf8');
 const { GuidePlayer, ASTRONOMY_GUIDES } = await import(`data:text/javascript,${encodeURIComponent(stripTypeScriptTypes(source))}`);
 const setup = (run = async () => ({ ok: true })) => {
   const calls = [];
@@ -133,15 +133,21 @@ test('guide bridge actions use implemented commands and atmosphere payloads', as
 
 test('UI and CLI share semantic player, scrollable text and actual result', () => {
   const page = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
-  const guideUI = page.slice(page.indexOf('  interactiveGuideShell()'), page.indexOf('  scriptFocusShell()'));
-  assert.match(guideUI, /Scroll\(\)/);
-  assert.doesNotMatch(guideUI, /maxLines|sendKey/);
-  assert.doesNotMatch(guideUI, /this\.guideButton\([^\n]*\?/);
-  assert.match(guideUI, /if \(this\.guideState\.phase === 'paused'\)/);
-  assert.match(guideUI, /this\.guideButton\('btn_resume', 'resume'\)/);
-  assert.match(guideUI, /minHeight: 52.*HitTestMode\.Default/);
-  assert.match(page, /lastRequestId: this.guideLastRequest/);
-  assert.match(page, /guideState.phase === 'exploring'/);
+  // Phase 6d 把 interactiveGuideShell 抽成 `panels/shell/InteractiveGuideShell.ets`；
+  // UI 断言随之改读组件文件（导览 shell 本体），宿主只保留 `guideState.active` 分发。
+  const guideShell = readFileSync(new URL('../harmonyos/ets-source/panels/shell/InteractiveGuideShell.ets', import.meta.url), 'utf8');
+  assert.match(guideShell, /Scroll\(\)/);
+  assert.doesNotMatch(guideShell, /maxLines|sendKey/);
+  assert.doesNotMatch(guideShell, /GuideButton\(\{[^\n]*\?/);
+  assert.match(guideShell, /if \(this\.guidePhase === 'paused'\)/);
+  assert.match(guideShell, /GuideButton\(\{ label: 'btn_resume', action: 'resume'/);
+  assert.match(guideShell, /minHeight: 52.*HitTestMode\.Default/);
+  assert.match(guideShell, /guidePhase === 'exploring'/);
+  // §9 P0 S6：导览引擎/请求序号/定时器迁入 capability/GuideController；
+  // CLI 结果读取随之改经控制器 getter（宿主 publishGuideState）。
+  assert.match(page, /lastRequestId: this\.guideCtl\(\)\.lastRequestId\(\)/);
+  assert.match(page, /result: this\.guideCtl\(\)\.lastResult\(\)/);
+  assert.match(page, /guideState\.active/);
   const core = readFileSync(new URL('../src/scripting/StelScriptMgr.cpp', import.meta.url), 'utf8');
   assert.match(core, /restoreSessionState\(false\)/);
   assert.match(core, /if \(guidedSession\)\s*return false/);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import test from 'node:test';
 
@@ -7,7 +7,7 @@ const root = new URL('../harmonyos/ets-source/', import.meta.url);
 const read = path => readFileSync(new URL(path, root), 'utf8');
 const page = read('pages/MainWindowNativeNode.ets');
 const resources = read('qability/StellariumResourceBootstrap.ets');
-const plain = source => stripTypeScriptTypes(source.replace(/^import .*\n/gm, '').replaceAll('export ', ''));
+const plain = source => stripTypeScriptTypes(source.replace(/^import [^\n]*\r?\n/gm, '').replaceAll('export ', ''));
 
 function layout(expanded, height, bottomPixels, density) {
   const names = ['isLargeDesktopCanvas', 'dockHeight', 'dockBottomClearance', 'dockTop', 'compactPanelBottom', 'compactPanelUsableHeight'];
@@ -40,10 +40,14 @@ test('Dock reserves navigation height and 28vp after the existing 2vp idle trans
 
 test('visual Dock and independent touch layer share geometry; navigation strip is not swallowed', () => {
   assert.doesNotMatch(page, /y: this\.skyHeight - (62|80)/);
-  assert.match(page, /\.height\(this\.dockHeight\(\)\)\s*\.position\(\{ x: this\.dockLeft\(\), y: this\.dockTop\(\) \}\)/);
-  const hit = page.match(/  private isDockPoint\([^\n]*\n[\s\S]*?\n  \}/)[0];
-  assert.match(hit, /const bottom = top \+ this\.dockHeight\(\)/);
-  assert.doesNotMatch(hit, /const bottom = this.skyHeight/);
+  assert.match(page, /\.height\(this\.dockHeight\(\)\)\s*\.position\(\{ x: dockLeft\([\s\S]*?y: this\.dockTop\(\) \}\)/);
+  // isDockPoint is a pure helper in common/derive/geometry.ets; its hit rectangle
+  // is bounded by the Dock's own bottom instead of the sky height, so the
+  // navigation strip under the Dock is not swallowed by the blocking layer.
+  const geometry = read('common/derive/geometry.ets');
+  const hit = geometry.match(/export function isDockPoint\([\s\S]*?\r?\n\}/)[0];
+  assert.match(hit, /const bottom = top \+ dockHeightValue/);
+  assert.doesNotMatch(hit, /const bottom = skyHeight/);
 });
 
 test('large PC typography and panel baseline use the same responsive geometry', () => {
@@ -65,10 +69,31 @@ test('large PC typography and panel baseline use the same responsive geometry', 
 });
 
 test('all fixed shell font sizes and adaptive minima meet 10fp', () => {
-  const values = [...page.matchAll(/\.(?:fontSize|minFontSize)\((\d+(?:\.\d+)?)\)/g)];
-  assert.ok(values.length > 500);
-  for (const match of values) assert.ok(Number(match[1]) >= 10, match[0]);
-  assert.doesNotMatch(page, /\.(?:fontSize|minFontSize)\([^)]*\?\s*\d+\s*:\s*[0-9]\s*\)/);
+  // Every fixed font size in the refactored UI (page + panels + shared ui) must
+  // meet the 10fp accessibility minimum.
+  const files = [new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url)];
+  const walk = (url) => {
+    for (const entry of readdirSync(url, { withFileTypes: true })) {
+      const child = new URL(entry.name + (entry.isDirectory() ? '/' : ''), url);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.name.endsWith('.ets')) files.push(child);
+    }
+  };
+  walk(new URL('../harmonyos/ets-source/panels/', import.meta.url));
+  walk(new URL('../harmonyos/ets-source/common/ui/', import.meta.url));
+  let count = 0;
+  for (const file of files) {
+    const text = readFileSync(file, 'utf8');
+    assert.doesNotMatch(text, /\.(?:fontSize|minFontSize)\([^)]*\?\s*\d+\s*:\s*[0-9]\s*\)/);
+    for (const match of text.matchAll(/\.(?:fontSize|minFontSize)\((\d+(?:\.\d+)?)\)/g)) {
+      // The language-refresh anchor is an invisible 0-size element (opacity 0,
+      // width/height 0); it is not a rendered font size.
+      if (Number(match[1]) === 0.1) continue;
+      count++;
+      assert.ok(Number(match[1]) >= 10, `${file.pathname}: ${match[0]}`);
+    }
+  }
+  assert.ok(count > 500, `expected the shell to declare fixed sizes, got ${count}`);
 });
 
 test('navigation avoid-area changes replace old insets, including hiding the indicator', () => {

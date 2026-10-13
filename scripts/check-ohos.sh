@@ -22,6 +22,16 @@ if ! node "$SCRIPT_DIR/check-ohos-platform-patch.mjs"; then
   exit 1
 fi
 
+if ! node "$SCRIPT_DIR/check-ohos-bundle-identity.mjs"; then
+  echo "Bundle identity check failed; remove any local Debug signing identity from tracked files."
+  exit 1
+fi
+
+if ! node "$SCRIPT_DIR/check-ohos-star-catalog.mjs"; then
+  echo "Star catalog MD5 check failed; re-sync the bundled .cat files with defaultStarsConfig.json."
+  exit 1
+fi
+
 echo "=== HarmonyOS 提交前检查 ==="
 echo ""
 
@@ -81,15 +91,41 @@ echo ""
 echo "[2.5/3] 检查 JPEG 解码运行库..."
 JPEG_PLUGIN="build/libstellarium-harmonyos/entry/libs/arm64-v8a/imageformats/libqjpeg.so"
 JPEG_RUNTIME="build/libstellarium-harmonyos/entry/libs/arm64-v8a/libjpeg.so"
-if [ -f "$JPEG_PLUGIN" ] && [ -f "$JPEG_RUNTIME" ]; then
+
+# Qt 6.12.0 的 libqjpeg.so 静态链接了 libjpeg，不再需要单独的 libjpeg.so。
+# 按实际 DT_NEEDED 判定，而不是无条件要求运行库存在，否则会在官方 Qt 上误报。
+READELF_BIN=""
+for base in "${OHOS_NATIVE_ROOT:-}" "${OHOS_BASE_SDK_HOME:-}/native" "$DEVECO_SDK_HOME/default/openharmony/native"; do
+  [ -n "$base" ] || continue
+  if [ -x "$base/llvm/bin/llvm-readelf" ]; then
+    READELF_BIN="$base/llvm/bin/llvm-readelf"
+    break
+  fi
+done
+
+JPEG_NEEDS_RUNTIME="unknown"
+if [ -n "$READELF_BIN" ] && [ -f "$JPEG_PLUGIN" ]; then
+  if "$READELF_BIN" -d "$JPEG_PLUGIN" 2>/dev/null | grep -q 'libjpeg'; then
+    JPEG_NEEDS_RUNTIME="yes"
+  else
+    JPEG_NEEDS_RUNTIME="no"
+  fi
+fi
+
+if [ ! -f "$JPEG_PLUGIN" ]; then
+  echo -e "${YELLOW}  ⚠️  未找到 libqjpeg.so，跳过 JPEG 依赖检查${NC}"
+  WARNINGS=$((WARNINGS + 1))
+elif [ "$JPEG_NEEDS_RUNTIME" = "no" ]; then
+  echo -e "${GREEN}  ✅ libqjpeg.so 自带 JPEG 解码（静态链接），无需 libjpeg.so${NC}"
+elif [ -f "$JPEG_RUNTIME" ]; then
   echo -e "${GREEN}  ✅ libqjpeg.so 的 libjpeg.so 依赖已准备${NC}"
-elif [ -f "$JPEG_PLUGIN" ]; then
+elif [ "$JPEG_NEEDS_RUNTIME" = "unknown" ]; then
+  echo -e "${YELLOW}  ⚠️  无法解析 libqjpeg.so 的依赖（缺少 llvm-readelf），请手动确认 JPEG 解码可用${NC}"
+  WARNINGS=$((WARNINGS + 1))
+else
   echo -e "${RED}  ❌ 缺少 libjpeg.so，行星 JPEG 纹理无法解码${NC}"
   echo "     修复: scripts/sync-ohos-build-sources.sh"
   ERRORS=$((ERRORS + 1))
-else
-  echo -e "${YELLOW}  ⚠️  未找到 libqjpeg.so，跳过 JPEG 依赖检查${NC}"
-  WARNINGS=$((WARNINGS + 1))
 fi
 
 echo ""

@@ -6,7 +6,7 @@ import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { getSource, loadOhosSourceRegistry, resolveSource } from './ohos-data-sources.mjs';
 
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
 const cataloguePath = resolve(root, 'plugins/Satellites/resources/satellites.json');
 const manifestPath = resolve(root, 'data/ohos/catalog-manifest.json');
 const celestrakSourceIds = [

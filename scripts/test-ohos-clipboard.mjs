@@ -16,7 +16,7 @@ function fixture() {
     createData: (type, text) => ({ type, text }),
     getSystemPasteboard: () => ({ setData() { writes++; return new Promise(resolve => { complete = resolve; }); } }),
   };
-  const plain = stripTypeScriptTypes(source.replace(/^import .*\n/gm, '').replaceAll('export ', ''));
+  const plain = stripTypeScriptTypes(source.replace(/^import .*\r?\n/gm, '').replaceAll('export ', ''));
   const write = new Function('pasteboard', 'hasCurrentPrivacyConsent', 'AppStorage',
     plain + ';return writeClipboardText;')(pasteboard, () => accepted, { get: () => foreground });
   return { write, pasteboard, setAccepted(value) { accepted = value; }, setForeground(value) { foreground = value; },
