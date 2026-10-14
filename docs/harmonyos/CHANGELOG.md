@@ -1,5 +1,14 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-14] DevEco Code - 天文事件通知类型目录与文案模板设计文档
+
+- **新增文件：** `docs/harmonyos/specs/NOTIFICATION-EVENT-CATALOG-DESIGN.md`
+- **修改内容：** 新增通知事件类型目录设计稿：22 个事件类型（日月食、分至点、月相、行星动态、流星雨、彗星、合相、卫星八类，约 40 个类型×变体组合）、四维文案模板规范（时间关系/呈现方式/发生时段/半球）、离线可见性过滤规则、与 `AstronomyReminderService`/代理提醒滚动窗口的对接方案和四步实施切片。
+- **修改原因：** 现有通知链路 `kind` 仅有单一值 `'astronomy'`，订阅、文案和调度缺少类型化设计；本设计稿为后续实施提供契约基线。
+- **构建结果：** 未构建（纯文档变更，未修改任何代码或构建配置）。
+- **验证结果：** 未验证（设计稿状态，实施前须按文档第 7 节切片落地并逐片验证）。
+- **备注：** 未修改签名、证书、Profile、隐私、联网配置；代理提醒开放能力仍以 AGC 审批与新 Profile 为正式启用门槛。
+
 ## [2026-10-12] DevEco Code - 修星表面板「手动导入」按钮点了没反应（未处理的 promise rejection）
 
 - **依据（用户复测反馈）**：星表列表里未加载行的「手动导入」按钮，选完文件后列表不变、也看不到任何原因；早前一次还只显示通用的「导入失败：版本不符或文件损坏」。
