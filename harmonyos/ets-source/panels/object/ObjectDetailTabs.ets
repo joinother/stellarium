@@ -8,6 +8,8 @@ import { ConstellationCultureView } from './ConstellationCultureView'
 import { StructuredDetailRows } from './StructuredDetailRows'
 import { TabletInspectorMediaGroup } from './TabletInspectorMediaGroup'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 详情主卡片的"观测""坐标""资料"三页。
 //
@@ -18,18 +20,21 @@ import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 export struct ObjectDetailObserveTab {
   @ObjectLink store: ObjectDetailStore
   @Prop distanceText: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   resolve: (key: string) => string = () => ''
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 8 }) {
-      Text('今晚观测窗口').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
+      Text('今晚观测窗口').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
       Row({ space: 6 }) {
         ObjectScheduleTile({ label: I18n.t('s0700'), value: this.resolve('selectedRise') })
         ObjectScheduleTile({ label: I18n.t('s0701'), value: this.resolve('selectedTransit') })
         ObjectScheduleTile({ label: I18n.t('s0702'), value: this.resolve('selectedSet') })
       }.width('100%')
       if (this.store.selectedApparentMagnitude.length > 0 || this.store.selectedAirmass.length > 0 || this.store.selectedExtinction.length > 0) {
-        Text('大气影响').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%').margin({ top: 3 })
+        Text('大气影响').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%').margin({ top: 3 })
         Row({ space: 8 }) {
           if (this.store.selectedApparentMagnitude.length > 0) { ObjectMetric({ label: '大气后星等', value: this.resolve('selectedApparentMagnitude') }) }
           if (this.store.selectedExtinction.length > 0) { ObjectMetric({ label: '大气衰减', value: this.resolve('extinctionUnits') }) }
@@ -47,7 +52,7 @@ export struct ObjectDetailObserveTab {
         ObjectDistanceNotice({ text: this.distanceText })
       }
       if (this.store.selectedInfo.length > 0) {
-        Text(this.store.selectedInfo).fontSize(12).fontColor('#C3DDEB').lineHeight(18).width('100%')
+        Text(this.store.selectedInfo).fontSize(12).fontColor(this.c.detailSub).lineHeight(18).width('100%')
           .padding({ top: 8, bottom: 2 })
       }
     }
@@ -58,15 +63,18 @@ export struct ObjectDetailObserveTab {
 export struct ObjectDetailCoordinateTab {
   @ObjectLink store: ObjectDetailStore
   @Prop distanceText: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   resolve: (key: string) => string = () => ''
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 8 }) {
-      Text('当前天球位置').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
+      Text('当前天球位置').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
       ObjectDistanceNotice({ text: this.distanceText })
       SelectedCoordinateRows({ store: this.store, tablet: false })
       ObjectDataRow({ label: I18n.t('i0010'), value: this.resolve('selectedConstellation') })
-      Text('坐标会跟随时间、位置与视角更新。').fontSize(11).fontColor('#8FBBD6').lineHeight(16).width('100%').margin({ top: 4 })
+      Text('坐标会跟随时间、位置与视角更新。').fontSize(11).fontColor(this.c.tertiary).lineHeight(16).width('100%').margin({ top: 4 })
     }
   }
 }
@@ -86,12 +94,10 @@ export struct ObjectDetailDataTab {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
   @Prop cultureVisible: boolean
-  @Prop textColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   resolve: (key: string) => string = () => ''
   onLoadPasses: () => void = () => {}
   onMediaOpen: () => void = () => {}
@@ -99,9 +105,11 @@ export struct ObjectDetailDataTab {
   onModelExpand: () => void = () => {}
   onModelTouch: (event: TouchEvent) => void = () => {}
 
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
   build() {
     Column({ space: 8 }) {
-            Text('完整资料').fontSize(12).fontWeight(FontWeight.Medium).fontColor('#D9F2FF').width('100%')
+            Text('完整资料').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
             ObjectDistanceNotice({ text: this.distanceText })
             TabletInspectorMediaGroup({
   store: this.mediaStore,
@@ -116,14 +124,13 @@ export struct ObjectDetailDataTab {
   modelNotice: this.modelNotice,
   warmupText: this.warmupText,
   fallbackKind: this.fallbackKind,
-  starColor: this.starColor,
   onOpen: () => { this.onMediaOpen() },
   onRetry: () => { this.onMediaRetry() },
   onModelExpand: () => { this.onModelExpand() },
   onModelTouch: (event: TouchEvent) => { this.onModelTouch(event) }
 })
-            SatellitePassDetails({ store: this.store, tablet: false, visible: this.satelliteVisible, tleEpoch: this.tleEpoch, accent: this.accent, onLoad: () => { this.onLoadPasses() } })
-            ConstellationCultureView({ store: this.store, tablet: false, visible: this.cultureVisible, textColor: this.textColor })
+            SatellitePassDetails({ store: this.store, tablet: false, visible: this.satelliteVisible, tleEpoch: this.tleEpoch, onLoad: () => { this.onLoadPasses() } })
+            ConstellationCultureView({ store: this.store, tablet: false, visible: this.cultureVisible })
             Row({ space: 8 }) {
               Column({ space: 7 }) {
                 if (this.store.selectedCoordAlt.length > 0) { ObjectDataTile({ label: '实时高度 / 方位', value: this.resolve('selectedCoordAlt') }) }

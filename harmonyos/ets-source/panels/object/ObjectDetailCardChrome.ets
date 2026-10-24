@@ -1,12 +1,11 @@
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
-import { getIcon } from '../../common/ui/ShellIcons'
+import { getCatalogIcon } from '../../common/ui/ShellIcons'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectCompactMetric, ObjectDetailTab } from './DetailTiles'
 import { SelectedLiveInfoRows } from './DetailLiveRows'
-
-// 观测模式「聚焦圈」的描边色（圆环 + 四个斜向短线共用）。
-const OBSERVE_RING_COLOR: string = 'rgba(143,187,214,0.88)'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 详情卡外壳的页头与页签栏。
 //
@@ -28,12 +27,15 @@ export struct ObjectDetailCardHeader {
   // 呈现轴（信息窗 store 读后下发）：'planetarium' | 'observe'。
   // 页头只关心「是否观测模式」：展开 / 收起不在此渲染（改到卡片下沿的箭头，见 UnifiedObjectDetailCard）。
   @Prop detailDisplayMode: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   distanceSummary: (distance: string, compact: string) => string = () => ''
   nameOf: (name: string) => string = () => ''
   typeOf: (type: string) => string = () => ''
   onDragTouch: (event: TouchEvent) => void = () => {}
   onDismiss: () => void = () => {}
   onCenterObject: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   // 观测模式：星等 tag 用「两值一行」格式，且天体类型图标套一个可点的聚焦圈（点它 = 居中到该天体）。
   private observeMode(): boolean {
@@ -44,7 +46,7 @@ export struct ObjectDetailCardHeader {
     Column() {
       Stack({ alignContent: Alignment.Center }) {
         Row()
-          .width(40).height(4).backgroundColor('rgba(225,241,250,0.34)').borderRadius(2)
+          .width(40).height(4).backgroundColor(this.c.dragHandle).borderRadius(2)
       }
         .width('100%').height(26)
         .hitTestBehavior(HitTestMode.Block)
@@ -59,18 +61,18 @@ export struct ObjectDetailCardHeader {
           // → 两端 r 11.5 与 17.5，正好**穿过**环带。短线必须**沿半径**方向（即垂直于该处圆周），
           // 否则两端半径相同就成了与圆环平行的「虚线弧」：NE 用 −45°、NW 用 +45°（`rotate` 顺时针为正）。
           Stack() {
-            Image(getIcon(this.iconName, false))
-              .width(20).height(20).fillColor('#73C8FF')
+            Image(getCatalogIcon(this.iconName, this.c.isNight))
+              .width(20).height(20).fillColor(this.c.dockActive)
             Row()
               .width(26).height(26).borderRadius(13)
-              .border({ width: 1.5, color: OBSERVE_RING_COLOR })
-            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(OBSERVE_RING_COLOR)
+              .border({ width: 1.5, color: this.c.ringStroke })
+            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(this.c.ringStroke)
               .position({ x: 25.3, y: 7.0 }).rotate({ angle: -45 })
-            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(OBSERVE_RING_COLOR)
+            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(this.c.ringStroke)
               .position({ x: 4.7, y: 7.0 }).rotate({ angle: 45 })
-            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(OBSERVE_RING_COLOR)
+            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(this.c.ringStroke)
               .position({ x: 4.7, y: 27.5 }).rotate({ angle: -45 })
-            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(OBSERVE_RING_COLOR)
+            Row().width(6).height(1.5).borderRadius(0.75).backgroundColor(this.c.ringStroke)
               .position({ x: 25.3, y: 27.5 }).rotate({ angle: 45 })
           }
             .width(36).height(36)
@@ -81,18 +83,20 @@ export struct ObjectDetailCardHeader {
               this.onCenterObject()
             })
         } else {
-          Image(getIcon(this.iconName, false))
-            .width(26).height(26).fillColor('#73C8FF').margin({ right: 7 })
+          Image(getCatalogIcon(this.iconName, this.c.isNight))
+            .width(26).height(26).fillColor(this.c.dockActive).margin({ right: 7 })
         }
         Text(this.nameOf(this.store.selectedName))
-          .fontSize(18).fontWeight(FontWeight.Bold).fontColor('#FFFFFFFF')
-          .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .maxFontSize(18).minFontSize(12).fontWeight(FontWeight.Bold).fontColor(this.c.textStrong)
+          .layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Start)
         Text(this.typeOf(this.store.selectedType))
-          .fontSize(11).fontColor('#BDE8FF')
+          .fontSize(11).fontColor(this.c.iconSecondary)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           .padding({ left: 9, right: 9, top: 4, bottom: 4 })
-          .backgroundColor('rgba(91,147,191,0.18)').borderRadius(UI_RADIUS_CONTROL)
+          .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
         Text('✕')
-          .fontSize(15).fontColor('#B8CAD7').padding({ left: 12, right: 4, top: 4, bottom: 4 })
+          .fontSize(15).fontColor(this.c.detailSub).padding({ left: 12, right: 4, top: 4, bottom: 4 })
           .onClick(() => {
             this.onDismiss()
           })
@@ -118,9 +122,9 @@ export struct ObjectDetailCardHeader {
         Row() {
           // 标签不固定宽度（固定 72 会让 9 字标签自身被截断）；数值已含方位/高度，
           // 无需额外的"已定位/等待定位"标签——它只挤占宽度导致数值被省略号截断。
-          Text('实时高度 / 方位').fontSize(10).fontColor('#8FBBD6')
+          Text('实时高度 / 方位').fontSize(10).fontColor(this.c.tertiary)
           Text(this.store.selectedCoordAlt.length > 0 ? this.store.selectedCoordAlt : '--')
-            .fontSize(11).fontColor('#E2F5FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontSize(11).fontColor(this.c.fourth).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ left: 6 })
         }
           .height(24).width('100%').padding({ left: 16, right: 16, bottom: 4 })

@@ -70,3 +70,23 @@ export function getIcon(icon: string, isActive: boolean): Resource {
   }
   return map[icon] || $r('app.media.ic_search')
 }
+
+// 目录类双色图标（描边 + 填充）：夜间变体只把描边改为暗红，填充保持白色，
+// 由调用方的 fillColor 决定星球/星体颜色。纯填充图标没有描边，无需变体。
+export function getCatalogIcon(icon: string, night: boolean): Resource {
+  if (!night) return getIcon(icon, false)
+  const nightMap: Record<string, Resource> = {
+    'catalog_planet': $r('app.media.ic_catalog_planet_night'),
+    'catalog_satellite': $r('app.media.ic_catalog_satellite_night'),
+    'catalog_exoplanet': $r('app.media.ic_catalog_exoplanet_night'),
+    'catalog_galaxy': $r('app.media.ic_catalog_galaxy_night'),
+    'catalog_constellation': $r('app.media.ic_catalog_constellation_night'),
+    'catalog_messier': $r('app.media.ic_catalog_messier_night'),
+    'catalog_pulsar': $r('app.media.ic_catalog_pulsar_night'),
+    'catalog_supernova': $r('app.media.ic_catalog_supernova_night'),
+    'catalog_quasar': $r('app.media.ic_catalog_quasar_night'),
+    'catalog_plugin': $r('app.media.ic_catalog_plugin_night'),
+    'satellite': $r('app.media.ic_satellite_night'),
+  }
+  return nightMap[icon] ?? getIcon(icon, false)
+}

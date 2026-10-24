@@ -1636,18 +1636,126 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 		s_readbackH = readH;
 	}
 
+	// Night-vision post-process. The native render pump bypasses the
+	// QGraphicsEffect attached to the scene root, so tint the submitted frame on
+	// the GPU while keeping the zero-copy texture path intact.
+	static GLuint s_nightFBO = 0;
+	static GLuint s_nightTex = 0;
+	static GLuint s_nightVBO = 0;
+	static QOpenGLShaderProgram* s_nightProgram = nullptr;
+	static int s_nightW = 0;
+	static int s_nightH = 0;
+	static bool s_nightInitFailed = false;
+	const bool nightVision = StelApp::getInstance().getVisionModeNight();
+	if (nightVision && !s_nightInitFailed && s_nightProgram == nullptr)
+	{
+		s_nightProgram = new QOpenGLShaderProgram();
+		const auto vs = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
+			"ATTRIBUTE highp vec4 a_pos;\n"
+			"ATTRIBUTE highp vec2 a_texCoord;\n"
+			"VARYING highp vec2 v_texCoord;\n"
+			"void main(void)\n"
+			"{\n"
+			"    v_texCoord = a_texCoord;\n"
+			"    gl_Position = a_pos;\n"
+			"}\n";
+		const auto fs = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
+			"VARYING highp vec2 v_texCoord;\n"
+			"uniform sampler2D u_source;\n"
+			"void main(void)\n"
+			"{\n"
+			"    mediump vec3 color = texture2D(u_source, v_texCoord).rgb;\n"
+			"    mediump float luminance = max(max(color.r, color.g), color.b);\n"
+			"    FRAG_COLOR = vec4(luminance, luminance * 0.3, 0.0, 1.0);\n"
+			"}\n";
+		if (s_nightProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vs) &&
+			s_nightProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fs) &&
+			s_nightProgram->link())
+		{
+			s_nightProgram->bind();
+			const GLfloat quad[] = {
+				-1.f, -1.f, 0.f, 0.f,
+				 1.f, -1.f, 1.f, 0.f,
+				-1.f,  1.f, 0.f, 1.f,
+				 1.f,  1.f, 1.f, 1.f
+			};
+			gl->glGenBuffers(1, &s_nightVBO);
+			gl->glBindBuffer(GL_ARRAY_BUFFER, s_nightVBO);
+			gl->glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+			s_nightProgram->release();
+		}
+		else
+		{
+			s_nightInitFailed = true;
+			delete s_nightProgram;
+			s_nightProgram = nullptr;
+		}
+	}
+	const bool tintNight = nightVision && s_nightProgram != nullptr;
+	if (tintNight)
+	{
+		if (s_nightFBO == 0)
+		{
+			gl->glGenFramebuffers(1, &s_nightFBO);
+			gl->glGenTextures(1, &s_nightTex);
+		}
+		if (s_nightW != readW || s_nightH != readH)
+		{
+			glBindTexture(GL_TEXTURE_2D, s_nightTex);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, readW, readH, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			s_nightW = readW;
+			s_nightH = readH;
+		}
+	}
+
 	// Get QOpenGLExtraFunctions for glBlitFramebuffer
 	QOpenGLExtraFunctions* extraFns = QOpenGLContext::currentContext()->extraFunctions();
 
-	// Blit (downsample) from main framebuffer to readback FBO
+	// Blit (downsample) from main framebuffer to the source/readback FBO
 	GLint mainFBO = 0;
 	gl->glGetIntegerv(GL_FRAMEBUFFER_BINDING, &mainFBO);
+	const GLuint blitFBO = tintNight ? s_nightFBO : s_readbackFBO;
+	const GLuint blitTex = tintNight ? s_nightTex : s_readbackTex;
 	gl->glBindFramebuffer(GL_READ_FRAMEBUFFER, mainFBO);
-	gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_readbackFBO);
-	gl->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_readbackTex, 0);
+	gl->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, blitFBO);
+	gl->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blitTex, 0);
 	if (extraFns)
 	{
 		extraFns->glBlitFramebuffer(0, 0, width, height, 0, 0, readW, readH, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	}
+
+	if (tintNight)
+	{
+		const GLboolean depthWasEnabled = gl->glIsEnabled(GL_DEPTH_TEST);
+		const GLboolean blendWasEnabled = gl->glIsEnabled(GL_BLEND);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, s_readbackFBO);
+		gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_readbackTex, 0);
+		gl->glViewport(0, 0, readW, readH);
+		gl->glDisable(GL_DEPTH_TEST);
+		gl->glDisable(GL_BLEND);
+		s_nightProgram->bind();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, s_nightTex);
+		s_nightProgram->setUniformValue("u_source", 0);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, s_nightVBO);
+		const int posLoc = s_nightProgram->attributeLocation("a_pos");
+		const int uvLoc = s_nightProgram->attributeLocation("a_texCoord");
+		gl->glEnableVertexAttribArray(posLoc);
+		gl->glVertexAttribPointer(posLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const void*>(0));
+		gl->glEnableVertexAttribArray(uvLoc);
+		gl->glVertexAttribPointer(uvLoc, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const void*>(2 * sizeof(GLfloat)));
+		gl->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		gl->glDisableVertexAttribArray(uvLoc);
+		gl->glDisableVertexAttribArray(posLoc);
+		gl->glBindBuffer(GL_ARRAY_BUFFER, 0);
+		s_nightProgram->release();
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, mainFBO);
+		gl->glViewport(0, 0, width, height);
+		if (depthWasEnabled) gl->glEnable(GL_DEPTH_TEST); else gl->glDisable(GL_DEPTH_TEST);
+		if (blendWasEnabled) gl->glEnable(GL_BLEND); else gl->glDisable(GL_BLEND);
 	}
 
 	// When both EGL contexts can join the same share group, the XComponent can
@@ -1698,6 +1806,7 @@ void submitOhosFramebuffer(QOpenGLFunctions* gl)
 
 	if (!rgba)
 		return;
+
 	++observedFrames;
 	if (submittedFrames == 0)
 	{
@@ -2385,6 +2494,58 @@ static void ohosCaptureSelectedZoomAnchor()
 	s_ohosZoomAnchorYRatio = (viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3];
 }
 
+// Canonical screen-up for the current mount frame, mirroring
+// StelMovementMgr::panView(): the mount frame's +Z projected onto the view plane,
+// with the same polar clamp. The projection degenerates near the pole (its length
+// is sin(angle to the pole), so its direction amplifies any view jitter by
+// 1/sin), therefore the roll there is taken from the stored up vector instead.
+// No mountMode branch: the frame conversions already express the mount type
+// (Alt-Az -> zenith, equatorial -> celestial pole, galactic -> galactic pole).
+static Vec3d ohosMountCanonicalUp(Vec3d& viewMount, const Vec3d& previousUpMount, bool freezeRoll)
+{
+	// panView() clamps the mount-frame latitude so the view can never cross the
+	// pole, where the +Z projection would reverse.
+	const double latLimit = M_PI_2 - 1e-6;
+	double lon = 0.0;
+	double lat = 0.0;
+	StelUtils::rectToSphe(&lon, &lat, viewMount);
+	lat = qBound(-latLimit, lat, latLimit);
+	StelUtils::spheToRect(lon, lat, viewMount);
+
+	Vec3d transported = previousUpMount;
+	transported -= viewMount * transported.dot(viewMount);
+	if (transported.normSquared() < 1e-9)
+	{
+		transported = Vec3d(1., 0., 0.);
+		transported -= viewMount * transported.dot(viewMount);
+	}
+	if (transported.normSquared() < 1e-9)
+	{
+		transported = Vec3d(0., 1., 0.);
+		transported -= viewMount * transported.dot(viewMount);
+	}
+	if (transported.normSquared() < 1e-9)
+		return Vec3d(0., 0., 1.);
+	transported.normalize();
+
+	if (freezeRoll)
+		return transported;
+
+	Vec3d canonical(0., 0., 1.);
+	canonical -= viewMount * canonical.dot(viewMount);
+	const double strength = std::sqrt(canonical.normSquared());
+	if (strength < 1e-9)
+		return transported;
+	canonical /= strength;
+	if (canonical.dot(transported) < 0.)
+		canonical = -canonical;
+	// Same hand-over window ohosApplyPanDelta() uses for its horizon blend.
+	const double blend = qBound(0.0, (strength - 0.05) / 0.20, 1.0);
+	Vec3d up = transported * (1.0 - blend) + canonical * blend;
+	up.normalize();
+	return up;
+}
+
 static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, double yRatio)
 {
 	// Do not solve an anchor that is outside the viewport. Inverse projection
@@ -2417,6 +2578,12 @@ static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, d
 	desiredDirection.normalize();
 	targetDirection.normalize();
 	const double cosine = qBound(-1.0, desiredDirection.dot(targetDirection), 1.0);
+	// Sub-pixel anchor errors must not drive the camera. The two-finger centroid
+	// jitters by about a pixel per sample; at high zoom (and especially near the
+	// pole or the zenith) that tiny rotation is amplified into a visible shake.
+	const double pixelsPerRad = static_cast<double>(projector->getPixelPerRadAtCenter());
+	if (pixelsPerRad > 1e-9 && std::acos(cosine) * pixelsPerRad < 0.5)
+		return;
 	const Vec3d rotationAxis = desiredDirection ^ targetDirection;
 	if (cosine < -0.999999 || rotationAxis.normSquared() < 1e-24)
 		return;
@@ -2424,34 +2591,24 @@ static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, d
 		return vector + (rotationAxis ^ vector) + (rotationAxis ^ (rotationAxis ^ vector)) / (1.0 + cosine);
 	};
 	Vec3d view = rotate(core->j2000ToAltAz(movementMgr->getViewDirectionJ2000(), StelCore::RefractionOff));
-	// Rebuild the screen-up vector from the local zenith instead of rotating
-	// the previous inertial up vector.  The latter is mathematically valid for
-	// a fixed J2000 camera, but it makes the horizon roll whenever simulation
-	// time changes while a selected object is kept at a fixed screen position.
-	// Keeping zenith in the image plane makes the selected-object anchor and
-	// the horizon-level interaction model agree. Near zenith, retain the old
-	// vector because the horizon direction is undefined there.
-	Vec3d up = Vec3d(0., 0., 1.) - view * view[2];
-	if (up.normSquared() < 1e-18)
-		up = rotate(core->j2000ToAltAz(movementMgr->getViewUpVectorJ2000(), StelCore::RefractionOff));
-	view.normalize();
-	up -= view * up.dot(view);
-	if (up.normSquared() < 1e-18)
+	if (view.normSquared() < 1e-18)
 		return;
-	up.normalize();
-	// Keep the local-zenith solution on the same screen-up branch as the
-	// previous frame. Without this sign continuity, a time-wheel update near
-	// the zenith can select the mathematically equivalent opposite vector and
-	// make the horizon appear to roll or flip for one frame.
-	Vec3d previousUp = core->j2000ToAltAz(movementMgr->getViewUpVectorJ2000(), StelCore::RefractionOff);
-	if (previousUp.normSquared() > 1e-18)
-	{
-		previousUp.normalize();
-		if (up.dot(previousUp) < 0.0)
-			up = -up;
-	}
-	movementMgr->setViewUpVectorJ2000(core->altAzToJ2000(up, StelCore::RefractionOff));
-	movementMgr->setViewDirectionJ2000(core->altAzToJ2000(view, StelCore::RefractionOff));
+	view.normalize();
+	// Same split as StelMovementMgr::panView(): resolve the view and its up in the
+	// mount frame, then write both through the movement manager. This keeps the
+	// camera's roll convention identical to the kernel's, so an equatorial mount
+	// keeps its polar tilt instead of being levelled to the local zenith.
+	Vec3d viewMount = movementMgr->j2000ToMountFrame(core->altAzToJ2000(view, StelCore::RefractionOff));
+	viewMount.normalize();
+	const Vec3d previousUpMount = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
+	// Zooming must never rotate the camera. While a pinch (or its settle tail)
+	// owns the view, keep the stored roll and only transport it, so the 1/sin
+	// sensitivity of the canonical up near a pole/zenith cannot shake the image.
+	const bool freezeRoll = s_ohosPinchActive || s_ohosPinchSettleActive;
+	const Vec3d upMount = ohosMountCanonicalUp(viewMount, previousUpMount, freezeRoll);
+	// Order matters: setViewDirectionJ2000() re-reads the current up vector.
+	movementMgr->setViewUpVector(upMount);
+	movementMgr->setViewDirectionJ2000(movementMgr->mountFrameToJ2000(viewMount));
 	if (s_ohosAnchorProbeEnabled)
 	{
 		Vec3d projected;
@@ -2564,6 +2721,9 @@ static void ohosMaintainSelectedZoomAnchor()
 	if (!core || !objectMgr || !movementMgr || objectMgr->getSelectedObject().isEmpty())
 		return;
 	if (movementMgr->getFlagTracking())
+		return;
+	// A centering animation owns the camera while it runs; never anchor against it.
+	if (movementMgr->getFlagAutoMove())
 		return;
 	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
 	const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(selectedObject);
@@ -2956,6 +3116,15 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		const QString catalogId = nebula->getDSODesignationWIC();
 		if (!catalogId.isEmpty())
 			result["catalogId"] = catalogId;
+	}
+	// Stars always carry a Hipparcos/Gaia identifier. Expose it even when the
+	// localized name is already non-empty, so the detail card can show both the
+	// proper name and the catalog number.
+	if (object->getType() == QLatin1String("Star"))
+	{
+		const QString starId = object->getID().trimmed();
+		if (!starId.isEmpty())
+			result["catalogId"] = starId;
 	}
 	const QJsonObject detailMedia = constellationDetailMediaJson(object);
 	for (auto it = detailMedia.constBegin(); it != detailMedia.constEnd(); ++it)
@@ -3607,7 +3776,10 @@ QJsonObject currentStateJson()
 				"actionShow_Quadrature_Line",
 				"actionShow_Ray_Helpers",
 			"actionShow_Hips_Surveys",
-			"actionShow_Toast_Survey"
+			"actionShow_Toast_Survey",
+			"actionShow_Night_Mode",
+			"actionHorizontal_Flip",
+			"actionVertical_Flip"
 		};
 		for (const QString& id : ids)
 		{
@@ -3618,6 +3790,8 @@ QJsonObject currentStateJson()
 
 		if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
 			result["meteors"] = mmgr->getFlagShow();
+		if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+			result["satHints"] = satellites->getFlagHintsVisible();
 		if (NebulaMgr* nmgr = GETSTELMODULE(NebulaMgr))
 			result["dsoLabels"] = nmgr->getDesignationUsage();
 		if (movementMgr)
@@ -4449,6 +4623,14 @@ static QJsonObject archiveVideoFrames()
 
 }
 
+// Cheap readiness probe for ArkUI: no Qt round-trip, no command queue. ArkTS
+// must not queue bridge commands before StelApp::init() finishes, otherwise the
+// 200ms retry chains pile up and block the UI thread (appfreeze at startup).
+extern "C" __attribute__((visibility("default"))) bool StellariumOhos_isInitialized()
+{
+	return StelApp::isInitialized();
+}
+
 extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_command(const char* command, const char* payload)
 {
 	static QByteArray response;
@@ -4714,8 +4896,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				// Event lookup is read-only. Restoring both camera vectors prevents
 				// a satellite pass query from changing the horizon or selecting the
 				// opposite roll branch before the UI starts its animated jump.
-				movementMgr->setViewDirectionJ2000(originalView);
+				// Up first: setViewDirectionJ2000() re-reads the up vector, so the
+				// previous order applied the old roll and only stored the new one.
 				movementMgr->setViewUpVectorJ2000(originalUp);
+				movementMgr->setViewDirectionJ2000(originalView);
 			};
 			double targetJD = 0.0;
 			int year = 0, month = 0, day = 0;
@@ -5971,14 +6155,19 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			qInfo() << "[StellariumOhos][selectAt] candidate elapsedMs=" << selectTimer.elapsed();
 			}
 
-			objectMgr->setObjectSearchRadius(44.0);
+			objectMgr->setObjectSearchRadius(60.0);
 			found = objectMgr->findAndSelect(core, sx, sy);
 			objectMgr->setObjectSearchRadius(25.0);
 			if (!found && constellationAtTap)
 			{
-				found = objectMgr->setSelectedObject(constellationAtTap);
-				qInfo() << "[StellariumOhos][selectAt] constellation fallback"
-						<< constellationAtTap->getID() << constellationAtTap->getNameI18n();
+				auto* constellationMgr = GETSTELMODULE(ConstellationMgr);
+				if (constellationMgr
+					&& (constellationMgr->getFlagLines() || constellationMgr->getFlagLabels()))
+				{
+					found = objectMgr->setSelectedObject(constellationAtTap);
+					qInfo() << "[StellariumOhos][selectAt] constellation fallback"
+							<< constellationAtTap->getID() << constellationAtTap->getNameI18n();
+				}
 			}
 			qInfo() << "[StellariumOhos][selectAt] found" << found;
 			qInfo() << "[StellariumOhos][selectAt] object-search elapsedMs=" << selectTimer.elapsed();
@@ -6179,7 +6368,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				s_ohosPanInertiaActive = false;
 				movementMgr->cancelAutoZoom();
 				movementMgr->setFlagTracking(false);
-				movementMgr->setFlagLockEquPos(false);
 				s_ohosPinchStartFov = movementMgr->getCurrentFov();
 				s_ohosPinchSettleVelocity = 0.0;
 				s_ohosPinchSettleElapsedSec = 0.0;
@@ -6544,6 +6732,25 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["maxErrorPixels"] = s_ohosAnchorProbeMaxErrorPixels;
 			result["maxSolveMs"] = s_ohosAnchorProbeMaxSolveMs;
 			result["fov"] = movementMgr ? movementMgr->getCurrentFov() : 0.0;
+			if (movementMgr)
+			{
+				// Roll error against the mount frame's canonical up. 0 means the camera
+				// matches panView()/moveToObject(); a jump towards 90-|lat| means some
+				// path still rebuilt the up vector from the local zenith.
+				Vec3d viewJ2000 = movementMgr->getViewDirectionJ2000();
+				Vec3d mountUpJ2000 = movementMgr->mountFrameToJ2000(Vec3d(0., 0., 1.));
+				Vec3d cameraUpJ2000 = movementMgr->getViewUpVectorJ2000();
+				viewJ2000.normalize();
+				mountUpJ2000 -= viewJ2000 * mountUpJ2000.dot(viewJ2000);
+				cameraUpJ2000 -= viewJ2000 * cameraUpJ2000.dot(viewJ2000);
+				if (mountUpJ2000.normSquared() > 1e-18 && cameraUpJ2000.normSquared() > 1e-18)
+				{
+					mountUpJ2000.normalize();
+					cameraUpJ2000.normalize();
+					result["rollErrorDeg"] =
+						std::acos(qBound(-1.0, mountUpJ2000.dot(cameraUpJ2000), 1.0)) * 180.0 / M_PI;
+				}
+			}
 			return result;
 		}
 
@@ -6646,9 +6853,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const Vec3d viewUp = movementMgr->getViewUpVectorJ2000();
 			const bool preserveDirection = !movementMgr->getFlagTracking();
 			core->setJD(core->getJD() + hours / 24.0);
+			// Up first: setViewDirectionJ2000() re-reads the up vector.
+			movementMgr->setViewUpVectorJ2000(viewUp);
 			if (preserveDirection)
 				movementMgr->setViewDirectionJ2000(viewDirection);
-			movementMgr->setViewUpVectorJ2000(viewUp);
 			markOhosInteraction();
 			result["ok"] = true;
 			result["jd"] = core->getJD();
@@ -6679,9 +6887,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setLanguage")
 		{
 			StelLocaleMgr& localeMgr = StelApp::getInstance().getLocaleMgr();
+			// Language is an engine behavior: persist it as the authoritative
+			// localization/app_locale entry, not only in the ArkUI mirror.
+			StelApp::immediateSaveNow("localization/app_locale", arg);
 			localeMgr.setAppLanguage(arg);
 			markOhosInteraction();
 			result["ok"] = true;
+			result["saved"] = true;
 			result["appLanguage"] = localeMgr.getAppLanguage();
 			result["skyLanguage"] = localeMgr.getSkyLanguage();
 			return result;
@@ -9021,9 +9233,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const Vec3d viewUp = movementMgr->getViewUpVectorJ2000();
 			const bool preserveDirection = !movementMgr->getFlagTracking();
 			core->setJD(jd);
+			// Up first: setViewDirectionJ2000() re-reads the up vector.
+			movementMgr->setViewUpVectorJ2000(viewUp);
 			if (preserveDirection)
 				movementMgr->setViewDirectionJ2000(viewDirection);
-			movementMgr->setViewUpVectorJ2000(viewUp);
 			core->setTimeRate(0.0);
 			result["ok"] = true;
 			result["jd"] = jd;
@@ -10214,8 +10427,16 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "saveAllSettings")
 		{
-			StelApp::getInstance().getSettings()->sync();
-			result["ok"] = true;
+			const bool ok = StelApp::flushSettings("manual");
+			result["ok"] = ok;
+			if (ok)
+			{
+				result["configPath"] = StelApp::getInstance().getSettings()->fileName();
+			}
+			else
+			{
+				result["error"] = "config write failed";
+			}
 			return result;
 		}
 
@@ -10698,7 +10919,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				// The custom value alone is inert in Stellarium. It takes effect only
 				// while the explicit user magnitude-limit flag is enabled.
 				drawer->setFlagStarMagnitudeLimit(true);
-				drawer->setCustomStarMagnitudeLimit(std::clamp(mag, 2.0, 9.0));
+				drawer->setCustomStarMagnitudeLimit(std::clamp(mag, 2.0, 21.0));
+				// Keep the limit across restarts: the setters above use the
+				// gated immediateSave(), which is disabled by default on OHOS.
+				StelApp::immediateSaveNow("astro/flag_star_magnitude_limit", true);
+				StelApp::immediateSaveNow("astro/star_magnitude_limit",
+					drawer->getCustomStarMagnitudeLimit());
 				result["ok"] = true;
 				result["customStarMagLimit"] = drawer->getCustomStarMagnitudeLimit();
 				result["starMagnitudeLimitEnabled"] = drawer->getFlagStarMagnitudeLimit();
@@ -11341,8 +11567,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				// Rise/transit/set is a read-only query. It must not leave the
 				// camera in a different orientation after probing neighbouring
 				// dates, especially while a selected satellite is screen-anchored.
-				movementMgr->setViewDirectionJ2000(originalView);
+				// Up first: setViewDirectionJ2000() re-reads the up vector.
 				movementMgr->setViewUpVectorJ2000(originalUp);
+				movementMgr->setViewDirectionJ2000(originalView);
 			};
 
 			const SatelliteP satellite = qSharedPointerDynamicCast<Satellite>(object);
@@ -13335,6 +13562,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else if (name == "iconicMode") sats->setFlagIconicMode(val);
 			else if (name == "hideInvisible") sats->setFlagHideInvisible(val);
 			else ok = false;
+			if (ok) sats->saveSettingsToConfig();
 			result["ok"] = ok;
 			if (!ok) result["error"] = "unknown satellite flag: " + name;
 			return result;
@@ -13402,6 +13630,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			else if (name == "activeOnly") ms->setActiveRadiantOnly(val);
 			else if (name == "marker") ms->setEnableMarker(val);
 			else ok = false;
+			if (ok) ms->saveSettings();
 			result["ok"] = ok;
 			if (!ok) result["error"] = "unknown meteor showers flag: " + name;
 			return result;
@@ -14568,7 +14797,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setNightMode")
 		{
 			bool on = (arg.trimmed() == "1" || arg.trimmed().toLower() == "true");
-			StelApp::getInstance().setVisionModeNight(on);
+			// Keep the QAction and the StelApp property in sync. Setting only the
+			// property leaves actionShow_Night_Mode unchecked, and the action/property
+			// reconciliation can silently flip the property back a moment later.
+			StelActionMgr* nightActionMgr = StelApp::getInstance().getStelActionManager();
+			StelAction* nightAction = nightActionMgr ? nightActionMgr->findAction("actionShow_Night_Mode") : nullptr;
+			if (nightAction && nightAction->isCheckable())
+				nightAction->setChecked(on);
+			else
+				StelApp::getInstance().setVisionModeNight(on);
 			result["ok"] = true;
 			result["night"] = StelApp::getInstance().getVisionModeNight();
 			return result;
@@ -17417,6 +17654,7 @@ void StelMainView::init()
 	stelApp->setGui(gui);
 	stelApp->init(configuration);
 #if defined(__OHOS__)
+	stelApp->setFlagImmediateSave(true);
 	connect(&stelApp->getStelObjectMgr(), &StelObjectMgr::selectedObjectChanged, this,
 		[this](StelModule::StelModuleSelectAction) {
 			if (stelApp->getScriptMgr().scriptIsRunning()) return;
@@ -17991,6 +18229,11 @@ void StelMainView::setOhosApplicationForeground(bool foreground)
 
 	if (!foreground)
 	{
+		if (StelApp::isInitialized())
+		{
+			emit StelApp::getInstance().getCore()->configurationDataSaved();
+			StelApp::getInstance().getSettings()->sync();
+		}
 		// The app has no background task. Stop every continuous render activity
 		// while retaining the OpenGL scene so returning to the foreground is fast.
 		fpsTimer->stop();
@@ -18064,8 +18307,47 @@ void StelMainView::renderOhosFrameNow()
 
 	StelApp& app = StelApp::getInstance();
 	app.setDevicePixelsPerPixel(devicePixelRatioF());
-	gl->glBindFramebuffer(GL_FRAMEBUFFER, glWidget->defaultFramebufferObject());
+	const GLuint targetFbo = glWidget->defaultFramebufferObject();
+	gl->glBindFramebuffer(GL_FRAMEBUFFER, targetFbo);
 	gl->glViewport(0, 0, width, height);
+	// During the launch transition OHOS may hand us a surface whose framebuffer
+	// has no complete attachments yet. Drawing into it makes every GL call fail
+	// (Planet.cpp asserts on the first GL error) even though the next resize
+	// would fix it, so skip the frame until the target is complete.
+	if (QOpenGLExtraFunctions* extraFunctions = currentContext->extraFunctions())
+	{
+		const GLenum status = extraFunctions->glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		const bool incomplete = status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT ||
+			status == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT ||
+#if defined(GL_FRAMEBUFFER_UNDEFINED)
+			// GLES3 returns this for the default framebuffer while the OHOS
+			// surface has no buffers yet (the 105x231 launch window).
+			status == GL_FRAMEBUFFER_UNDEFINED ||
+#endif
+#if defined(GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS)
+			status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS ||
+#endif
+			status == GL_FRAMEBUFFER_UNSUPPORTED ||
+#if defined(GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE)
+			status == GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE ||
+#endif
+#if defined(GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS)
+			status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS ||
+#endif
+			false;
+		if (incomplete)
+		{
+			static int s_incompleteFboSkips = 0;
+			if (s_incompleteFboSkips < 3)
+			{
+				qWarning().nospace() << "OHOS framebuffer incomplete (0x" << Qt::hex << status
+					<< "), skipping frame " << glWidget->width() << "x" << glWidget->height();
+				++s_incompleteFboSkips;
+			}
+			requestOhosSceneRepaint();
+			return;
+		}
+	}
 
 	const double t2 = StelApp::getTotalRunTime();
 	ohosUpdatePointTracking();

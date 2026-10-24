@@ -1,4 +1,6 @@
+import { Theme } from '@kit.ArkUI'
 import { CompactQuickButton } from './CompactQuickButton'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 手机端右上角常驻快捷区：陀螺仪 + 音频控制。
 //
@@ -11,20 +13,24 @@ export struct CompactTopQuickControls {
   @Prop audioActive: boolean
   @Prop pressedId: string
   @Prop chromeOpacity: number
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onGyro: () => void = () => {}
   onAudio: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 10 }) {
       CompactQuickButton({
         iconName: 'gyro', active: this.gyroActive, receiveTap: false,
-        pressedState: this.pressedId === 'gyro', textColor: this.textColor,
+        pressedState: this.pressedId === 'gyro',
         onAction: () => { this.onGyro() }
       })
       CompactQuickButton({
         iconName: 'audio', active: this.audioActive, receiveTap: false,
-        pressedState: this.pressedId === 'audio', textColor: this.textColor,
+        pressedState: this.pressedId === 'audio',
         onAction: () => { this.onAudio() }
       })
     }

@@ -1,4 +1,6 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 星文化制作器的单行文本字段。
 //
@@ -10,19 +12,20 @@ export struct SkyCultureMakerField {
   @Prop label: ResourceStr
   @Prop value: string
   @Prop placeholder: ResourceStr
-  @Prop labelColor: string
-  @Prop textColor: string
-  @Prop inputColor: string
-  @Prop inputBorderColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onChange: (value: string) => void = () => {}
   onEdited: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 5 }) {
-      Text(this.label).fontSize(10).fontColor(this.labelColor).width('100%')
+      Text(this.label).fontSize(10).fontColor(this.c.sub).width('100%')
       TextInput({ text: this.value, placeholder: this.placeholder })
-        .height(38).width('100%').fontSize(12).fontColor(this.textColor).placeholderColor(this.labelColor)
-        .backgroundColor(this.inputColor).border({ width: 1, color: this.inputBorderColor }).borderRadius(UI_RADIUS_CONTROL)
+        .height(38).width('100%').fontSize(12).fontColor(this.c.text).placeholderColor(this.c.sub)
+        .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
         .onChange((text: string) => { this.onChange(text); this.onEdited() })
     }.width('100%')
   }
@@ -34,19 +37,20 @@ export struct SkyCultureMakerLongField {
   @Prop label: ResourceStr
   @Prop value: string
   @Prop placeholder: ResourceStr
-  @Prop labelColor: string
-  @Prop textColor: string
-  @Prop inputColor: string
-  @Prop inputBorderColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onChange: (value: string) => void = () => {}
   onEdited: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 5 }) {
-      Text(this.label).fontSize(10).fontColor(this.labelColor).width('100%')
+      Text(this.label).fontSize(10).fontColor(this.c.sub).width('100%')
       TextArea({ text: this.value, placeholder: this.placeholder })
-        .height(94).width('100%').fontSize(12).fontColor(this.textColor).placeholderColor(this.labelColor)
-        .backgroundColor(this.inputColor).border({ width: 1, color: this.inputBorderColor }).borderRadius(UI_RADIUS_CONTROL)
+        .height(94).width('100%').fontSize(12).fontColor(this.c.text).placeholderColor(this.c.sub)
+        .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
         .onChange((text: string) => { this.onChange(text); this.onEdited() })
     }.width('100%')
   }

@@ -9,7 +9,7 @@
 // 控制器内保留纯逐帧/草稿字段（触摸采样 / 捏合 / 滤波），不入被观察 store。
 //
 // 不 import NAPI/UI（仅 ArkUI 事件类型与纯几何/数学 derive 模块）：桥 fire（dragView / zoomBy /
-// panBy / beginSkyGesture / endPinch / startPanInertia / stopPanInertia / setNightMode）经 CommandPort；
+// panBy / beginSkyGesture / endPinch / startPanInertia / stopPanInertia / setActionChecked）经 CommandPort；
 // 热路径 isUiPoint / skyZoomButtonAt / dockActionAt 与全部宿主保留动作（路由 setPanel/closePanel、
 // zoomStep / moveToSelectedObject / 选中入口 / 详情刷新收放 / Dock 动作 / 陀螺退出 / 音乐开关 /
 // 面板拖动落盘等）一律经 SkyInputHostHooks 具名回注；NightModeStore 以实例引用持有（键盘 N 键切换）。
@@ -348,7 +348,7 @@ export class SkyInputController {
       case 'N':
         this.nightModeStore.nightMode = !this.nightModeStore.nightMode
         this.hooks.persistNightMode()
-        this.commandPort.fire('setNightMode', this.nightModeStore.nightMode ? 'true' : 'false')
+        this.commandPort.fire('setActionChecked', 'actionShow_Night_Mode|' + (this.nightModeStore.nightMode ? '1' : '0'))
         break
       default: break
     }

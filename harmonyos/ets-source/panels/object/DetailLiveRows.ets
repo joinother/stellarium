@@ -1,20 +1,24 @@
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectDataRow } from './DetailRows'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 详情卡片的"活数据行"组件：距离提示条、时角 / 恒星时行与九条坐标行。
 //
 // 坐标行与时角行以 `@ObjectLink` 观察 `ObjectDetailStore`，数值随状态实时刷新；
 // 只有"是否可见 / 是否紧凑"这类判定由宿主以 `@Prop` 传入。
-
 @Component
 export struct ObjectDistanceNotice {
   @Prop text: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     if (this.text.length > 0) {
-      Text(this.text).fontSize(11).fontColor('#AACADB').width('100%')
-        .padding(10).backgroundColor('rgba(91,147,191,0.10)').borderRadius(UI_RADIUS_CONTROL)
+      Text(this.text).fontSize(11).fontColor(this.c.detailSub).width('100%')
+        .padding(10).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
     }
   }
 }
@@ -24,16 +28,19 @@ export struct SelectedLiveInfoRows {
   @ObjectLink store: ObjectDetailStore
   @Prop compact: boolean
   @Prop visible: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     if (this.visible) {
       if (this.compact) {
         Row() {
-          Text('时角').fontSize(10).fontColor('#8FBBD6').width(34)
+          Text('时角').fontSize(10).fontColor(this.c.tertiary).width(34)
           Text(this.store.selectedHourAngle.length > 0 ? this.store.selectedHourAngle : '--')
-            .fontSize(11).fontColor('#E2F5FF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontSize(11).fontColor(this.c.fourth).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.store.selectedMeanSiderealTime.length > 0 ? '平恒星时 ' + this.store.selectedMeanSiderealTime : '平恒星时 --')
-            .fontSize(10).fontColor('#B9D9E9').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            .fontSize(10).fontColor(this.c.detailSub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.width('100%').height(24).padding({ left: 16, right: 16 })
       } else {
         Column({ space: 3 }) {
@@ -51,16 +58,20 @@ export struct SelectedCoordinateRow {
   @Prop label: string
   @Prop value: string
   @Prop tablet: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Row({ space: 8 }) {
-      Text(this.label).fontSize(this.tablet ? 11 : 10).fontColor('#8FBBD6')
+      Text(this.label).fontSize(this.tablet ? 11 : 10).fontColor(this.c.tertiary)
         .width(this.tablet ? 100 : 76).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(this.value.length > 0 ? this.value : '--').fontSize(this.tablet ? 12 : 11).fontColor('#E0F1F8')
+      Text(this.value.length > 0 ? this.value : '--').fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
         .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
     }
       .width('100%').height(this.tablet ? 34 : 32).padding({ left: 10, right: 10 })
-      .backgroundColor('rgba(255,255,255,0.035)').borderRadius(UI_RADIUS_CONTROL)
+      .backgroundColor(this.c.soft)
+      .borderRadius(UI_RADIUS_CONTROL)
   }
 }
 

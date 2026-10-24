@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { ConstellationNavigationItem } from '../../pages/MainWindowModels'
 import { SearchStore } from '../../state/SearchStore'
@@ -11,24 +13,24 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 export struct SearchConstellationChips {
   @ObjectLink store: SearchStore
   @Prop languageRevision: number
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onOpen: (item: ConstellationNavigationItem) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Row() {
       Text(I18n.t('constellation_chips_title')
         + (this.store.constellationNavigationItems.length > 0 ? ' ' + this.store.constellationNavigationItems.length.toString() : ''))
-        .fontSize(10).fontColor(this.subColor).width(68).alignSelf(ItemAlign.Start)
+        .fontSize(10).fontColor(this.c.sub).width(68).alignSelf(ItemAlign.Start)
       Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
         ForEach(this.store.constellationNavigationItems, (item: ConstellationNavigationItem) => {
-          Text(item.localizedName).fontSize(11).fontColor(this.textColor).padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).margin({ right: 4, bottom: 4 })
+          Text(item.localizedName).fontSize(11).fontColor(this.c.text).padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ right: 4, bottom: 4 })
             .onClick(() => { this.onOpen(item) })
         }, (item: ConstellationNavigationItem) => item.englishName + '/' + this.languageRevision.toString())
         if (this.store.constellationNavigationItems.length === 0) {
-          Text(I18n.t('search_catalog_loading')).fontSize(10).fontColor(this.subColor).padding({ left: 8, right: 8 })
+          Text(I18n.t('search_catalog_loading')).fontSize(10).fontColor(this.c.sub).padding({ left: 8, right: 8 })
         }
       }.layoutWeight(1).padding({ left: 2 })
     }.width('100%').padding({ left: 10, right: 10 }).margin({ top: 6 })

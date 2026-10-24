@@ -87,6 +87,7 @@
 #include <QOpenGLContext>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
+#include <QSettings>
 #include <QOpenGLFramebufferObject>
 #include <QString>
 #include <QStringList>
@@ -977,16 +978,19 @@ void StelApp::highGraphicsModeDraw()
 {
 	const auto targetFBO = currentFbo;
 	StelProjector::StelProjectorParams params = core->getCurrentStelProjectorParams();
-	const auto w = params.viewportXywh[2] * params.devicePixelsPerPixel;
-	const auto h = params.viewportXywh[3] * params.devicePixelsPerPixel;
+	// Round instead of truncating: the pixel size is fractional during the OHOS
+	// launch transition (367.5x808.5), and a truncated QSize makes the "size
+	// changed" check fight with the FBO every frame.
+	const int sceneW = qMax(1, qRound(params.viewportXywh[2] * params.devicePixelsPerPixel));
+	const int sceneH = qMax(1, qRound(params.viewportXywh[3] * params.devicePixelsPerPixel));
 	StelOpenGL::checkGLErrors(__FILE__, __LINE__);
-	if(!sceneFBO || sceneFBO->size() != QSize(w,h))
+	if(!sceneFBO || !sceneFBO->isValid() || sceneFBO->size() != QSize(sceneW, sceneH))
 	{
 		GLint viewport[4] = {};
 		GL(gl->glGetIntegerv(GL_VIEWPORT, viewport));
 		qInfo() << "OpenGL viewport size:" << viewport[2] << "x" << viewport[3];
 
-		qInfo().nospace() << "Creating scene FBO with size " << w << "x" << h;
+		qInfo().nospace() << "Creating scene FBO with size " << sceneW << "x" << sceneH;
 
 #if QT_CONFIG(opengles2)
 		const auto internalFormat = GL_RGBA16F;
@@ -996,7 +1000,20 @@ void StelApp::highGraphicsModeDraw()
 		QOpenGLFramebufferObjectFormat format;
 		format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
 		format.setInternalTextureFormat(internalFormat);
-		sceneFBO.reset(new QOpenGLFramebufferObject(w, h, format));
+		sceneFBO.reset(new QOpenGLFramebufferObject(sceneW, sceneH, format));
+		// Some GLES drivers cannot render into RGBA16F; Qt then returns an
+		// invalid FBO, every draw fails with GL_INVALID_FRAMEBUFFER_OPERATION and
+		// the app aborts on the first GL assert. Fall back to plain RGBA8.
+		if(!sceneFBO->isValid())
+		{
+			qWarning() << "Scene FBO is not valid with the high-graphics internal format; falling back to RGBA8";
+			QOpenGLFramebufferObjectFormat fallbackFormat;
+			fallbackFormat.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+			fallbackFormat.setInternalTextureFormat(GL_RGBA8);
+			sceneFBO.reset(new QOpenGLFramebufferObject(sceneW, sceneH, fallbackFormat));
+			if(!sceneFBO->isValid())
+				qCritical() << "Scene FBO is still invalid; rendering will be skipped";
+		}
 #if !QT_CONFIG(opengles2)
 		GLint maxSamples = 1;
 		GL(gl->glGetIntegerv(GL_MAX_SAMPLES, &maxSamples));
@@ -1046,6 +1063,11 @@ void StelApp::highGraphicsModeDraw()
 	}
 	else
 	{
+		// Never draw into a framebuffer we know is incomplete: every GL call
+		// would fail with GL_INVALID_FRAMEBUFFER_OPERATION (and abort builds
+		// with GL asserts enabled).
+		if(!sceneFBO || !sceneFBO->isValid())
+			return;
 		sceneFBO->bind();
 		currentFbo = sceneFBO->handle();
 	}
@@ -1292,6 +1314,7 @@ void StelApp::setVisionModeNight(bool b)
 	if (flagNightVision!=b)
 	{
 		flagNightVision=b;
+		immediateSaveNow("viewing/flag_night", b);
 		emit visionNightModeChanged(b);
 	}
 }
@@ -1411,6 +1434,30 @@ void StelApp::immediateSave(const QString &key, const QVariant &value)
 {
 	if (getInstance().getFlagImmediateSave())
 		getInstance().getSettings()->setValue(key, value);
+}
+
+void StelApp::immediateSaveNow(const QString &key, const QVariant &value)
+{
+	QSettings* conf = getInstance().getSettings();
+	if (!conf)
+		return;
+	conf->setValue(key, value);
+	conf->sync();
+	const bool ok = conf->status() == QSettings::NoError;
+	if (!ok)
+		qWarning() << "Stellarium: failed to persist" << key << "to" << conf->fileName();
+}
+
+bool StelApp::flushSettings(const QString &reason)
+{
+	QSettings* conf = getInstance().getSettings();
+	if (!conf)
+		return false;
+	conf->sync();
+	const bool ok = conf->status() == QSettings::NoError;
+	if (!ok)
+		qWarning() << "Stellarium: failed to flush settings (" << reason << ") to" << conf->fileName();
+	return ok;
 }
 
 

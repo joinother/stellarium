@@ -199,6 +199,8 @@ public slots:
 	void restoreTrackingState(bool enabled);
 	//! Get current object tracking status.
 	bool getFlagTracking(void) const {return flagTracking;}
+	//! Get whether a moveToObject()/moveToJ2000() animation is in flight.
+	bool getFlagAutoMove(void) const {return flagAutoMove;}
 
 	//! Set whether sky position is to be locked.
 	void setFlagLockEquPos(bool b);

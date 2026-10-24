@@ -271,6 +271,15 @@ public:
 	//! Items saved with this method still need to be saved as well with ConfigurationDialog::saveAllSettings()!
 	static void immediateSave(const QString &key, const QVariant &value);
 
+	//! Save one key and flush config.ini immediately, ignoring gui/immediate_save_details.
+	//! Reserved for engine-behavior settings that must survive process death (OHOS).
+	static void immediateSaveNow(const QString &key, const QVariant &value);
+
+	//! Flush pending settings to disk.
+	//! @param reason "background" / "manual" / "export" / "language" / "shutdown" (logging only)
+	//! @return false when config.ini could not be written
+	static bool flushSettings(const QString &reason);
+
 	//! Add a progression indicator to the GUI (if applicable).
 	//! @return a controller which can be used to indicate the current status.
 	//! The StelApp instance remains the owner of the controller.

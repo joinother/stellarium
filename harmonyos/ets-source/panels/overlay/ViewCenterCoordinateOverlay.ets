@@ -1,4 +1,6 @@
 import { OverlayStore } from '../../state/OverlayStore'
+import { Theme } from '@kit.ArkUI'
+import { ThemeSlots, DEFAULT_SLOTS, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 
 // 「视图中心坐标」屏幕叠层。
@@ -11,6 +13,7 @@ import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 //   - 拖拽回调 `handleViewCoordinateTouch` 由宿主以 `onHandleTouch` 注入（避开 `CustomComponent.onTouch`）。
 //
 // 叠层的宽/高/定位（viewCoordinateOverlayWidth / Left / Top）由宿主外层 Stack 负责，不在此组件内。
+// 主题色走「机制四」：onWillApplyTheme 自取当前主题槽位，调用点不再注入颜色。
 @Component
 export struct ViewCenterCoordinateOverlay {
   @ObjectLink store: OverlayStore
@@ -18,25 +21,28 @@ export struct ViewCenterCoordinateOverlay {
   @Prop secondaryText: string
   @Prop labelWidth: number
   onHandleTouch: (event: TouchEvent) => void = (event: TouchEvent) => {}
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 4 }) {
       Text(this.store.viewCoordinateTitle())
         .fontSize(10)
         .fontWeight(FontWeight.Medium)
-        .fontColor('rgba(205, 228, 244, 0.72)')
+        .fontColor(this.c.text)
         .width('100%')
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Row() {
         Text(this.store.viewCoordinatePrimaryLabel())
           .fontSize(11)
-          .fontColor('rgba(205, 228, 244, 0.66)')
+          .fontColor(this.c.text)
           .width(this.labelWidth)
         Text(this.primaryText)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#F2F8FC')
+          .fontColor(this.c.textStrong)
           .fontFamily('monospace')
           .layoutWeight(1)
           .textAlign(TextAlign.End)
@@ -46,12 +52,12 @@ export struct ViewCenterCoordinateOverlay {
       Row() {
         Text(this.store.viewCoordinateSecondaryLabel())
           .fontSize(11)
-          .fontColor('rgba(205, 228, 244, 0.66)')
+          .fontColor(this.c.text)
           .width(this.labelWidth)
         Text(this.secondaryText)
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
-          .fontColor('#F2F8FC')
+          .fontColor(this.c.textStrong)
           .fontFamily('monospace')
           .layoutWeight(1)
           .textAlign(TextAlign.End)
@@ -61,11 +67,11 @@ export struct ViewCenterCoordinateOverlay {
     }
       .width('100%')
       .padding({ left: 13, right: 13, top: 9, bottom: 9 })
-      .backgroundColor('rgba(7, 16, 27, 0.70)')
+      .backgroundColor(this.c.overlayScrim)
       .backdropBlur(20)
-      .border({ width: 1, color: 'rgba(154, 196, 224, 0.22)' })
+      .border({ width: 1, color: this.c.border })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.24)', offsetX: 0, offsetY: 5 })
+      .shadow({ radius: 16, color: this.c.shadowSoft, offsetX: 0, offsetY: 5 })
       .hitTestBehavior(HitTestMode.Block)
       .onTouch((event: TouchEvent) => { this.onHandleTouch(event) })
   }

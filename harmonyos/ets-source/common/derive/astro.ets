@@ -59,8 +59,7 @@ export function hecPointAngle(position: HeliocentricPosition): number {
   return position.displayLongitude ?? position.longitude
 }
 
-// 日心点颜色。原宿主 hecPointColor 读 nightModeStore.nightMode（末行的 nmAccent()），
-// 按 §14.8 规则 6 改为显式入参 accentColor（调用点传 nmAccent()），其余逐字不变。
+// 日心点颜色。accentColor 由宿主经 ThemeSlots.accent 显式传入（机制四），其余逐字不变。
 export function hecPointColor(position: HeliocentricPosition, accentColor: string): string {
   if (position.isComet) return '#7CC8E8'
   if (position.isSelectedMinor) return '#C2A36B'

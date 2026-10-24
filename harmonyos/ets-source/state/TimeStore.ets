@@ -6,6 +6,10 @@
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
 
+// 模块加载（应用启动）时的本地时间，用作手动时间选择器的初值；
+// 引擎就绪后 syncManualTimeFromState 会用当前 JD 再校准一次。
+const INITIAL_MANUAL_TIME: Date = new Date()
+
 // 宿主 → TimeStore 的加载助手注入（store 不持有他域 store）。
 export interface TimeHostHooks {
   // 夜视模式随引擎回报同步（写 NightModeStore + 消费宿主 pendingNightMode 待定窗口）。
@@ -29,13 +33,13 @@ export class TimeStore {
 
   // ==== 手工日期时间选择器模型 ====
   // 时间面板（TimePanel → ManualTimeBlock）经 @Prop 消费；宿主 applyManualTime /
-  // syncManualTimeFromState 读写本簇。默认值为字面量，启动后由 syncManualTimeFromState
-  // 用当前 JD 覆盖。
-  manualYear: number = 2026
-  manualMonth: number = 7
-  manualDay: number = 20
-  manualHour: number = 23
-  manualMinute: number = 0
+  // syncManualTimeFromState 读写本簇。初值为启动时的本地时间（避免面板打开前显示
+  // 硬编码旧日期），引擎就绪后再用当前 JD 校准。
+  manualYear: number = INITIAL_MANUAL_TIME.getFullYear()
+  manualMonth: number = INITIAL_MANUAL_TIME.getMonth() + 1
+  manualDay: number = INITIAL_MANUAL_TIME.getDate()
+  manualHour: number = INITIAL_MANUAL_TIME.getHours()
+  manualMinute: number = INITIAL_MANUAL_TIME.getMinutes()
 
   // 记录一次"用户主动换挡"：待定窗口内忽略引擎回报的旧速率。
   // 与 syncTimeRateState 的既有 500 ms 窗口同源，集中在这里以免两处各写一遍。

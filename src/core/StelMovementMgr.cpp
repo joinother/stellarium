@@ -285,7 +285,6 @@ void StelMovementMgr::setEquatorialMount(bool b)
 		return;
 
 	setMountMode(b ? MountEquinoxEquatorial : MountAltAzimuthal);
-	StelApp::immediateSave("navigation/viewing_mode", b ? "equator" : "horizon");
 
 	if (getFlagIndicationMountMode())
 	{
@@ -308,11 +307,35 @@ void StelMovementMgr::setEquatorialMount(bool b)
 
 void StelMovementMgr::setMountMode(MountMode m)
 {
+	const QString wanted = (m==MountEquinoxEquatorial) ? QStringLiteral("equator") : QStringLiteral("horizon");
+	QSettings* conf = StelApp::getInstance().getSettings();
+	if (conf && conf->value("navigation/viewing_mode", "horizon").toString() != wanted)
+		StelApp::immediateSaveNow("navigation/viewing_mode", wanted);
+	// Touch adaptation (not in the desktop original): the up vector is stored in
+	// the mount frame, so after a drag it is a nontrivial vector expressed in the
+	// OLD frame. Re-reading it in the NEW frame tilts the first view until the
+	// next pan. A pan canonicalises it to the frame's own (0,0,1) in
+	// StelMovementMgr::panView(), so do the same here and re-apply the lookAt.
+	// Only for real user switches: loadConfiguration() also calls this while no
+	// view exists yet (that was the "Looks wrong on start" case).
 	mountMode = m;
+	if (StelApp::isInitialized())
+	{
+		const Vec3d dirMount = j2000ToMountFrame(viewDirectionJ2000);
+		if (std::fabs(dirMount[2]) > 0.95)
+		{
+			// Looking into a pole: up=(0,0,1) would be degenerate. Use the same
+			// horizontal fallback as panView.
+			double az, alt;
+			StelUtils::rectToSphe(&az, &alt, dirMount);
+			setViewUpVector(Vec3d(-std::cos(az), -std::sin(az), 0.) * (alt > 0. ? 1. : -1.));
+		}
+		else
+		{
+			setViewUpVector(Vec3d(0., 0., 1.));
+		}
+	}
 	setViewDirectionJ2000(viewDirectionJ2000);
-	// TODO: Decide whether re-setting Up-vector is required here.
-	//setViewUpVector(Vec3d(0., 0., 1.));
-	//setViewUpVectorJ2000(Vec3d(0., 0., 1.)); // Looks wrong on start.
 	emit equatorialMountChanged(m==MountEquinoxEquatorial);
 }
 

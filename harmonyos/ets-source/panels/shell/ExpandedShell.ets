@@ -1,4 +1,4 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { ShellAction } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { DockClockLayer, DockFovLayer, SkyZoomLayer } from './PanelChromeExtras'
@@ -9,6 +9,7 @@ import { GyroStore } from '../../state/GyroStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { OverlayStore } from '../../state/OverlayStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 平板/折叠展开壳。
 //
@@ -80,12 +81,9 @@ export struct ExpandedShell {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
   @Prop cultureVisible: boolean
-  @Prop textColor: string
   @Prop connectorVisible: boolean
   @Prop connectorLength: number
   @Prop connectorX: number
@@ -102,6 +100,7 @@ export struct ExpandedShell {
   @Prop detailY: number
   @Prop detailWidth: number
   @Prop detailHeight: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
 
   scroller: Scroller = new Scroller()
   onSkyTouch: (event: TouchEvent) => void = () => {}
@@ -134,6 +133,10 @@ export struct ExpandedShell {
   onRefresh: () => void = () => {}
   onReselect: () => void = () => {}
   onSpeak: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Stack() {
@@ -177,7 +180,7 @@ export struct ExpandedShell {
         if (!this.panelVisible && !this.polarScopeVisible && this.fovText.indexOf('°') >= 0) {
           DockFovLayer({
             fovText: this.fovText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
-            posY: this.chromeRowY, textColor: this.textColor
+            posY: this.chromeRowY
           })
         }
         // 缩放按钮：紧贴读数行上沿；平板横排（一行 44 + 4 间隙），手机·半折竖排（96 高）。
@@ -185,7 +188,6 @@ export struct ExpandedShell {
           SkyZoomLayer({
             layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
             rowY: this.chromeRowY, horizontal: this.chromeZoomHorizontal,
-            textColor: this.textColor,
             onZoomIn: () => { this.onZoomIn() },
             onZoomOut: () => { this.onZoomOut() }
           })
@@ -204,20 +206,20 @@ export struct ExpandedShell {
           ))
       }
       if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
-        ObjectDetailConnectorLayer({
-          visible: this.connectorVisible,
-          beamLength: this.connectorLength,
-          beamX: this.connectorX,
-          beamY: this.connectorY,
-          beamAngle: this.connectorAngle,
-          animateGeometry: this.connectorAnimateGeometry,
-          targetOnScreen: this.connectorTargetOnScreen,
-          targetX: this.connectorTargetX,
-          targetY: this.connectorTargetY,
-          endX: this.connectorEndX,
-          endY: this.connectorEndY,
-          markerSize: this.markerSize
-        })
+         ObjectDetailConnectorLayer({
+           visible: this.connectorVisible,
+           beamLength: this.connectorLength,
+           beamX: this.connectorX,
+           beamY: this.connectorY,
+           beamAngle: this.connectorAngle,
+           animateGeometry: this.connectorAnimateGeometry,
+           targetOnScreen: this.connectorTargetOnScreen,
+           targetX: this.connectorTargetX,
+           targetY: this.connectorTargetY,
+           endX: this.connectorEndX,
+           endY: this.connectorEndY,
+            markerSize: this.markerSize
+          })
         Stack() {
           UnifiedObjectDetailCard({
             store: this.objectDetailStore, mediaStore: this.objectMediaStore, scroller: this.scroller,
@@ -233,9 +235,9 @@ export struct ExpandedShell {
             modelReady: this.modelReady, modelRendering: this.modelRendering,
             hasModelTexture: this.hasModelTexture,
             modelNotice: this.modelNotice, warmupText: this.warmupText,
-            fallbackKind: this.fallbackKind, starColor: this.starColor,
-            satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
-            accent: this.accent, cultureVisible: this.cultureVisible, textColor: this.textColor,
+             fallbackKind: this.fallbackKind,
+             satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+             cultureVisible: this.cultureVisible,
             resolve: (key: string) => this.resolve(key),
             nameOf: (name: string) => this.nameOf(name), typeOf: (type: string) => this.typeOf(type),
             onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) },

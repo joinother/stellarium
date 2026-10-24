@@ -56,7 +56,10 @@ public:
 	bool isDisplayed() const {return fader;}
 
 private:
-	void drawFoVRect(const StelProjectorP& projector, const Mat4f& derotate,
+	// The rectangle is drawn with the painter already owned by draw(); creating a
+	// second StelPainter here aborts with "There can be only 1 instance of
+	// StelPainter at a given time" (Qt fatal, kills the OHOS process).
+	void drawFoVRect(StelPainter& sPainter, const StelProjectorP& projector, const Mat4f& derotate,
 			 double fovX, double fovY) const;
 
 	SKY_MARKER_TYPE marker_type;
@@ -82,10 +85,9 @@ SpecialSkyMarker::SpecialSkyMarker(SKY_MARKER_TYPE _marker_type) : marker_type(_
 	}
 }
 
-void SpecialSkyMarker::drawFoVRect(const StelProjectorP& projector, const Mat4f& derotate,
+void SpecialSkyMarker::drawFoVRect(StelPainter& sPainter, const StelProjectorP& projector, const Mat4f& derotate,
 				   const double fovX, const double fovY) const
 {
-	StelPainter sPainter(projector);
 	sPainter.setLineSmooth(true);
 	sPainter.setBlending(true);
 	sPainter.setColor(color, fader.getInterstate());
@@ -207,7 +209,7 @@ void SpecialSkyMarker::draw(StelCore *core) const
 			const auto derotate = Mat4f::rotation(Vec3f(0,0,1), azimuth) *
 					      Mat4f::rotation(Vec3f(0,1,0), -elevation) *
 					      Mat4f::rotation(Vec3f(1,0,0), rotationAngle * (M_PI/180));
-			drawFoVRect(proj, derotate, angularSize[0] * M_PI/180, angularSize[1] * M_PI/180);
+			drawFoVRect(sPainter, proj, derotate, angularSize[0] * M_PI/180, angularSize[1] * M_PI/180);
 		}
 			break;
 		case COMPASS_MARKS:

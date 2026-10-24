@@ -439,6 +439,7 @@ export const QUICK_PANEL_STORE: string = 'stellarium_quick_panel'
 // 详情卡「呈现轴」持久化（key `detailDisplayMode` = 'planetarium' / 'observe'）：
 // 与信息级别（数据轴，C++ 配置）正交，见 specs/OBJECT-DETAIL-OBSERVE-MODE.md §7。
 export const INFO_WINDOW_STORE: string = 'stellarium_info_window'
+export const NIGHT_MODE_STORE: string = 'night_mode_store'
 export const OFFLINE_APPGALLERY_BUILD: boolean = true
 
 

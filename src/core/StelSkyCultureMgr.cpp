@@ -1139,8 +1139,12 @@ QString StelSkyCultureMgr::skyCultureI18ToDirectory(const QString& cultureName) 
 
 void StelSkyCultureMgr::setFlagOverrideUseCommonNames(bool override)
 {
-	flagOverrideUseCommonNames=override;
-	emit flagOverrideUseCommonNamesChanged(override);
+	if (flagOverrideUseCommonNames!=override)
+	{
+		flagOverrideUseCommonNames=override;
+		StelApp::immediateSave("viewing/flag_skyculture_always_fallback_to_international_names", override);
+		emit flagOverrideUseCommonNamesChanged(override);
+	}
 }
 
 void StelSkyCultureMgr::setFlagUseAbbreviatedNames(bool b)

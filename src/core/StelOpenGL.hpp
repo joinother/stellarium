@@ -25,12 +25,23 @@
 #include <QOpenGLFunctions>
 
 #ifndef QT_NO_DEBUG
-# define GL(line) do { \
+# if defined(OHOS_PLATFORM)
+// HarmonyOS GL drivers report transient errors while the XComponent surface is
+// being created/resized (typically GL_INVALID_FRAMEBUFFER_OPERATION on the very
+// first frame). Q_ASSERT_X would abort the whole app for a recoverable frame.
+// Log them instead so debugging still works but the process survives.
+#  define GL(line) do { \
+	line;\
+	StelOpenGL::checkGLErrors(__FILE__, __LINE__);\
+	} while(0)
+# else
+#  define GL(line) do { \
 	/*for debugging, we make sure we use our main context*/\
 	Q_ASSERT(StelOpenGL::mainContext == QOpenGLContext::currentContext());\
 	line;\
 	Q_ASSERT_X(!StelOpenGL::checkGLErrors(__FILE__, __LINE__), "GL macro", "OpenGL errors encountered");\
 	} while(0)
+# endif
 #else
 # define GL(line) line
 #endif

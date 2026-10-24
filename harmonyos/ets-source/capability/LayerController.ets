@@ -31,6 +31,8 @@ export interface LayerHostHooks extends BehaviorHostHooks {
   // 持久化（跨 store / AppStorage：赤道仪开关归 TelescopeStore；夜视归 NightModeStore）。
   persistEquatorialMount(): void
   persistNightMode(): void
+  // 夜间模式开关：走 store（写 AppStorage + 通知引擎），不能走普通图层命令。
+  applyNightMode(enabled: boolean): void
   // 星空文化「时间跟随」定时器收口（宿主保留）。
   syncSkyCultureTimeFollowTimer(): void
   // 脚本列表 / 录制列表 / 视频状态桥加载（ScriptPlaybackController 持有）。
@@ -115,6 +117,11 @@ export class LayerController {
 
   // 图层开关的统一写回。
   applyLayerSwitch(actionId: string, cmd: string, value: boolean): void {
+    if (cmd.length === 0 && actionId === 'actionShow_Night_Mode') {
+      this.hooks.applyNightMode(value)
+      this.hooks.flashHint(I18n.t(value ? 'msg_shown' : 'msg_hidden'))
+      return
+    }
     if (cmd.length === 0 && value && actionId !== GRIDLINES_MASTER_ACTION &&
       MARKING_LAYER_ACTION_IDS.indexOf(actionId) >= 0) {
       // 网格/标记单项重新打开时先联动打开总闸：总闸是 GridLinesMgr 的 `gridlinesDisplayed`，

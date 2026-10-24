@@ -10,6 +10,10 @@ export interface ToolsHostHooks {
   flashHint(text: ResourceStr): void
   saveAppSettings(): void
   copyConfigExportText(text: string, successHint: ResourceStr): void
+  // 恢复默认设置时同时清空 ArkUI 侧 UI 偏好（Preferences stellarium_ui）。
+  resetUiSettings(): void
+  // 恢复默认设置成功后退出应用，让 main/restore_defaults 在下次启动生效。
+  exitAppAfterRestore(): void
 }
 
 // 「工具 / 帮助 / 角度测量 / 录制控制」域的状态簇：持有帮助 / 工具面板
@@ -219,7 +223,9 @@ export class ToolsStore {
         hooks.flashHint(I18n.t('msg_apply_failed'))
         return
       }
-      hooks.flashHint(I18n.t('settings_defaults_restart'))
+      hooks.resetUiSettings()
+      hooks.flashHint(I18n.t('settings_defaults_exiting'))
+      hooks.exitAppAfterRestore()
     })
   }
 

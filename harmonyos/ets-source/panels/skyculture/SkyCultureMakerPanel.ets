@@ -1,11 +1,13 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
-import { SkyCultureMakerStore } from '../../state/SkyCultureMakerStore'
 import { SkyCultureMakerConstellation } from '../../pages/MainWindowModels'
+import { SkyCultureMakerStore } from '../../state/SkyCultureMakerStore'
 import { SkyCultureMakerTabs } from './SkyCultureMakerTabs'
 import { SkyCultureMakerOverview } from './SkyCultureMakerOverview'
 import { SkyCultureMakerConstellationEditor } from './SkyCultureMakerConstellationEditor'
 import { SkyCultureMakerValidationPanel } from './SkyCultureMakerValidationPanel'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 星文化制作器面板主体。
 //
@@ -16,12 +18,7 @@ import { SkyCultureMakerValidationPanel } from './SkyCultureMakerValidationPanel
 export struct SkyCultureMakerPanel {
   @ObjectLink store: SkyCultureMakerStore
   @Prop panelWidth: number
-  @Prop subColor: string
-  @Prop textColor: string
-  @Prop accentColor: string
-  @Prop bgColor: string
-  @Prop inputColor: string
-  @Prop inputBorderColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onEdited: () => void = () => {}
   onAdd: () => void = () => {}
   onSelect: (index: number) => void = () => {}
@@ -42,30 +39,27 @@ export struct SkyCultureMakerPanel {
   onUndo: () => void = () => {}
   onReset: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 8 }) {
-      SkyCultureMakerTabs({
-        store: this.store,
-        subColor: this.subColor, accentColor: this.accentColor, bgColor: this.bgColor
-      })
+      SkyCultureMakerTabs({ store: this.store })
       if (this.store.loading) {
         Row({ space: 8 }) {
-          LoadingProgress().width(18).height(18).color(this.accentColor)
-          Text(I18n.t('msg_loading')).fontSize(11).fontColor(this.subColor)
+          LoadingProgress().width(18).height(18).color(this.c.accent)
+          Text(I18n.t('msg_loading')).fontSize(11).fontColor(this.c.sub)
         }.width('100%').height(80).justifyContent(FlexAlign.Center)
       } else {
         if (this.store.tab === 0) {
           SkyCultureMakerOverview({
             store: this.store,
-            subColor: this.subColor, textColor: this.textColor, accentColor: this.accentColor, bgColor: this.bgColor,
-            inputColor: this.inputColor, inputBorderColor: this.inputBorderColor,
             onEdited: () => { this.onEdited() }
           })
         } else if (this.store.tab === 1) {
           SkyCultureMakerConstellationEditor({
             store: this.store, panelWidth: this.panelWidth,
-            subColor: this.subColor, textColor: this.textColor, accentColor: this.accentColor, bgColor: this.bgColor,
-            inputColor: this.inputColor, inputBorderColor: this.inputBorderColor,
             onAdd: () => { this.onAdd() },
             onSelect: (index: number) => { this.onSelect(index) },
             onUpdate: (updated: SkyCultureMakerConstellation) => { this.onUpdate(updated) },
@@ -81,7 +75,6 @@ export struct SkyCultureMakerPanel {
         } else {
           SkyCultureMakerValidationPanel({
             store: this.store,
-            subColor: this.subColor, textColor: this.textColor, accentColor: this.accentColor, bgColor: this.bgColor,
             onValidate: () => { this.onValidate() },
             onImport: () => { this.onImport() },
             onExport: () => { this.onExport() },
@@ -91,17 +84,17 @@ export struct SkyCultureMakerPanel {
         }
       }
       if (this.store.status.length > 0) {
-        Text(this.store.status).fontSize(10).lineHeight(15).fontColor(this.subColor).width('100%')
-          .padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(this.bgColor).borderRadius(UI_RADIUS_CONTROL)
+        Text(this.store.status).fontSize(10).lineHeight(15).fontColor(this.c.sub).width('100%')
+          .padding({ left: 10, right: 10, top: 7, bottom: 7 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
       }
       Row({ space: 8 }) {
         Button(this.store.saving ? I18n.t('sky_culture_maker_saving') : I18n.t('sky_culture_maker_save'))
-          .fontSize(10).fontColor(this.textColor).backgroundColor(this.accentColor).height(32).layoutWeight(1)
+          .fontSize(10).fontColor(this.c.text).backgroundColor(this.c.accent).height(32).layoutWeight(1)
           .borderRadius(UI_RADIUS_CONTROL).enabled(!this.store.saving).onClick(() => { this.onSaveDraft() })
-        Button(I18n.t('sky_culture_maker_undo')).fontSize(10).fontColor(this.textColor).backgroundColor(this.bgColor)
+        Button(I18n.t('sky_culture_maker_undo')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
           .height(32).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).enabled(this.store.canUndo).opacity(this.store.canUndo ? 1 : 0.5)
           .onClick(() => { this.onUndo() })
-        Button(I18n.t('sky_culture_maker_reset')).fontSize(10).fontColor('#FFB7B7').backgroundColor('rgba(255,107,107,0.12)')
+        Button(I18n.t('sky_culture_maker_reset')).fontSize(10).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
           .height(32).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onReset() })
       }.width('100%').margin({ top: 6, bottom: 8 })
     }.width('100%').padding({ left: 4, right: 4 })

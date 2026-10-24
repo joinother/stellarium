@@ -648,6 +648,15 @@ export interface StellariumBridgeResponse {
   replies?: string
   sent?: string
   mode?: string
+  // getMountMode 回包：当前是否为赤道仪（true）/ 地平仪（false）
+  equatorial?: boolean
+  // getAppState 回包：引擎当前语言（权威值为 config.ini localization/app_locale）
+  language?: string
+  // getLimitMagnitude 回包：用户自定义恒星星等上限
+  customStarMagLimit?: number
+  starMagnitudeLimitEnabled?: boolean
+  // getState 回包：卫星提示开关（快捷面板 satellites 项）
+  satHints?: boolean
   // 天文计算桥接命令的返回体
   ephemeris?: Array<EphemerisRow>
   rtsCalendar?: Array<RtsCalendarDay>

@@ -1,25 +1,33 @@
+import { Theme } from '@kit.ArkUI'
+import { AstroColors, DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../state/StellariumTheme'
+
 @ComponentV2
 struct AstronomyFact {
   @Param label: string = ''
   @Param value: string = '—'
+  @Local c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 3 }) {
       Text(this.label)
         .fontSize(10)
-        .fontColor('#9DB5C4')
+        .fontColor(this.c.tertiary)
         .maxLines(1)
       Text(this.value.length > 0 ? this.value : '—')
         .fontSize(13)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F1F7FA')
+        .fontColor(this.c.textStrong)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .alignItems(HorizontalAlign.Start)
     .layoutWeight(1)
     .padding({ left: 11, right: 11, top: 8, bottom: 8 })
-    .backgroundColor('rgba(255,255,255,0.07)')
+    .backgroundColor(this.c.input)
     .borderRadius(14)
   }
 }
@@ -48,6 +56,11 @@ export struct AstronomyCardSurface {
   @Consumer() dataDate: string = ''
   @Consumer() dataStatus: string = '本地快照'
   @Consumer() updatedAt: string = '最近一次本地计算'
+  @Local c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   private compact(): boolean { return this.cardHeight < 220 }
   private tall(): boolean { return this.cardHeight >= 300 }
@@ -57,16 +70,16 @@ export struct AstronomyCardSurface {
     return 90
   }
   private accent(): string {
-    if (this.kind === 'satellite') return '#8FE4D0'
-    if (this.kind === 'meteor') return '#C9B8FF'
-    if (this.kind === 'moon') return '#F3C78B'
-    return '#86CFF1'
+    if (this.kind === 'satellite') return AstroColors.cardSatelliteAccent
+    if (this.kind === 'meteor') return AstroColors.cardMeteorAccent
+    if (this.kind === 'moon') return AstroColors.cardMoonAccent
+    return AstroColors.cardDefaultAccent
   }
   private surfaceStart(): string {
-    if (this.kind === 'satellite') return '#123741'
-    if (this.kind === 'meteor') return '#2B2349'
-    if (this.kind === 'moon') return '#403145'
-    return '#193B58'
+    if (this.kind === 'satellite') return AstroColors.cardSatelliteSurface
+    if (this.kind === 'meteor') return AstroColors.cardMeteorSurface
+    if (this.kind === 'moon') return AstroColors.cardMoonSurface
+    return AstroColors.cardDefaultSurface
   }
   private heading(): string {
     if (this.kind === 'moon') return '月相与升落'
@@ -118,7 +131,7 @@ export struct AstronomyCardSurface {
       Circle()
         .width(this.visualSize())
         .height(this.visualSize())
-        .fill('rgba(5,16,29,0.72)')
+        .fill(AstroColors.cardVisualBg)
         .stroke(this.accent())
         .strokeWidth(1.2)
       Circle()
@@ -131,7 +144,7 @@ export struct AstronomyCardSurface {
           .width(this.visualSize() * 0.92)
           .height(this.visualSize() * 0.36)
           .fill(Color.Transparent)
-          .stroke('#D5F5EF')
+          .stroke(AstroColors.cardSatelliteOrbit)
           .strokeWidth(1.2)
           .rotate({ angle: -24 })
         Ellipse()
@@ -145,13 +158,13 @@ export struct AstronomyCardSurface {
         Circle()
           .width(this.visualSize() * 0.27)
           .height(this.visualSize() * 0.27)
-          .fill('#507F8A')
-          .stroke('#D5F5EF')
+          .fill(AstroColors.cardSatelliteBody)
+          .stroke(AstroColors.cardSatelliteOrbit)
           .strokeWidth(1)
         Circle()
           .width(6)
           .height(6)
-          .fill('#FFFFFF')
+          .fill(AstroColors.starPoint)
           .offset({ x: this.visualSize() * 0.36, y: -this.visualSize() * 0.18 })
       } else if (this.kind === 'meteor') {
         Path()
@@ -159,46 +172,46 @@ export struct AstronomyCardSurface {
           .width(this.visualSize() * 0.72)
           .height(this.visualSize() * 0.72)
           .fill(Color.Transparent)
-          .stroke('#E7E0FF')
+          .stroke(AstroColors.cardMeteorTrail)
           .strokeWidth(1.7)
         Circle()
           .width(7)
           .height(7)
-          .fill('#FFFFFF')
+          .fill(AstroColors.starPoint)
           .offset({ x: this.visualSize() * 0.25, y: -this.visualSize() * 0.26 })
       } else if (this.kind === 'moon' || this.kind === 'overview' || this.kind === 'compact') {
         Stack({ alignContent: Alignment.Center }) {
           Circle()
             .width(this.visualSize() * 0.80)
             .height(this.visualSize() * 0.80)
-            .fill('#263C50')
+            .fill(AstroColors.cardMoonShadow)
           if (Number(this.moonIllumination) >= 0) {
             Circle()
               .width(this.visualSize() * 0.80)
               .height(this.visualSize() * 0.80)
-              .fill('#F5E9D4')
+              .fill(AstroColors.cardMoonLit)
             Circle()
               .width(this.visualSize() * 0.80)
               .height(this.visualSize() * 0.80)
-              .fill('#263C50')
+              .fill(AstroColors.cardMoonShadow)
               .offset({ x: this.moonMaskOffset() })
           } else {
-            Text('☾').fontSize(this.visualSize() * 0.56).fontColor('#C8DCE7')
+            Text('☾').fontSize(this.visualSize() * 0.56).fontColor(AstroColors.cardMoonGlyph)
           }
         }
         .width(this.visualSize() * 0.80)
         .height(this.visualSize() * 0.80)
         .borderRadius(this.visualSize() * 0.40)
         .clip(true)
-        .border({ width: 1, color: 'rgba(245,229,202,0.40)' })
+        .border({ width: 1, color: AstroColors.cardMoonBorder })
       } else {
         Circle()
           .width(this.visualSize() * 0.58)
           .height(this.visualSize() * 0.58)
-          .fill('#3B6880')
-          .stroke('#C5E5F2')
+          .fill(AstroColors.cardPlanetFill)
+          .stroke(AstroColors.cardPlanetStroke)
           .strokeWidth(1)
-        Circle().width(5).height(5).fill('#FFFFFF')
+        Circle().width(5).height(5).fill(AstroColors.starPoint)
           .offset({ x: this.visualSize() * 0.25, y: -this.visualSize() * 0.18 })
       }
     }
@@ -248,21 +261,21 @@ export struct AstronomyCardSurface {
       if (this.kind === 'overview' || this.kind === 'tonight') {
         Text(this.planetNames)
           .fontSize(11)
-          .fontColor('#B3CBD6')
+          .fontColor(this.c.sub)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
       } else if (this.kind === 'meteor') {
         Text('可见程度还取决于辐射点高度、月光、光污染与天气。')
           .fontSize(11)
-          .fontColor('#B3CBD6')
+          .fontColor(this.c.sub)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
       } else if (this.kind === 'moon') {
         Text('月相、月出和月落均按当前观测地计算。')
           .fontSize(11)
-          .fontColor('#B3CBD6')
+          .fontColor(this.c.sub)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
@@ -272,23 +285,23 @@ export struct AstronomyCardSurface {
             .width('92%')
             .height(142)
             .fill(Color.Transparent)
-            .stroke('rgba(143,228,208,0.26)')
+            .stroke(AstroColors.cardSatelliteOrbitSoft)
             .strokeWidth(1)
             .rotate({ angle: -12 })
           Ellipse()
             .width('70%')
             .height(100)
             .fill(Color.Transparent)
-            .stroke('rgba(143,228,208,0.42)')
+            .stroke(AstroColors.cardSatelliteOrbitStrong)
             .strokeWidth(1)
             .rotate({ angle: -12 })
           Column({ space: 4 }) {
             Text('本地轨道目录')
               .fontSize(12)
-              .fontColor('#D5F5EF')
+              .fontColor(AstroColors.cardSatelliteOrbit)
             Text(this.dataStatus + (this.dataDate.length > 0 ? ' · ' + this.dataDate : ''))
               .fontSize(11)
-              .fontColor('#B3CBD6')
+              .fontColor(this.c.sub)
           }
         }
         .width('100%')
@@ -302,22 +315,22 @@ export struct AstronomyCardSurface {
       Column()
         .width('100%')
         .height('100%')
-        .linearGradient({ angle: 138, colors: [[this.surfaceStart(), 0], ['#0C1B2A', 0.56], ['#08111D', 1]] })
+        .linearGradient({ angle: 138, colors: [[this.surfaceStart(), 0], [AstroColors.cardGradientMid, 0.56], [AstroColors.cardGradientEnd, 1]] })
       Column({ space: this.compact() ? 7 : this.tall() ? 15 : 10 }) {
         Row({ space: 9 }) {
           Stack({ alignContent: Alignment.Center }) {
-            Circle().width(24).height(24).fill('rgba(255,255,255,0.08)').stroke(this.accent()).strokeWidth(1)
+            Circle().width(24).height(24).fill(this.c.input).stroke(this.accent()).strokeWidth(1)
             Circle().width(6).height(6).fill(this.accent())
           }.width(24).height(24)
           Text(this.heading())
             .fontSize(this.compact() ? 14 : 16)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#F4F8FA')
+            .fontColor(this.c.textStrong)
             .layoutWeight(1)
             .maxLines(1)
           Text(this.dataStatus)
             .fontSize(9)
-            .fontColor('#B2C7D1')
+            .fontColor(this.c.sub)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }.width('100%')
@@ -328,12 +341,12 @@ export struct AstronomyCardSurface {
             Text(this.primaryValue())
               .fontSize(this.compact() ? 18 : this.tall() ? 27 : 21)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#F5F9FA')
+              .fontColor(this.c.textStrong)
               .maxLines(this.tall() ? 2 : 1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
             Text(this.primaryCaption())
               .fontSize(this.compact() ? 10 : 11)
-              .fontColor('#BCD1DA')
+              .fontColor(this.c.sub)
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
@@ -353,7 +366,7 @@ export struct AstronomyCardSurface {
               .layoutWeight(1)
             Text(this.updatedAt)
               .fontSize(9)
-              .fontColor('#9AB1BC')
+              .fontColor(this.c.tertiary)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .textAlign(TextAlign.End)
@@ -369,7 +382,7 @@ export struct AstronomyCardSurface {
     .height('100%')
     .borderRadius(24)
     .clip(true)
-    .border({ width: 1, color: 'rgba(190,226,236,0.34)' })
+    .border({ width: 1, color: this.c.border })
     .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.98 })
     .onClick(() => { this.route(this.actionPanel(), this.kind === 'satellite' ? '' : this.kind === 'moon' ? '9' : this.kind === 'tonight' ? '8' : '5') })
     .onSizeChange((_oldSize: SizeOptions, newSize: SizeOptions) => {

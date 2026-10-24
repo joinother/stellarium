@@ -1,8 +1,9 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { ShellAction } from '../../pages/StellariumTypes'
 import { DockButton } from './DockButton'
 import { DockStore } from '../../state/DockStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 主界面底部 Dock 栏。
 //
@@ -31,11 +32,16 @@ export struct BottomDock {
   @Prop iconSize: number
   @Prop labelFontSize: number
   @Prop itemHeight: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onDockTouch: (event: TouchEvent) => void = () => {}
   onDockTap: (item: ShellAction) => void = () => {}
   onPanelTouch: (event: TouchEvent) => void = () => {}
 
   @State private activeState: DockStore = new DockStore()
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   aboutToAppear(): void {
     this.syncActiveState()
@@ -62,11 +68,11 @@ export struct BottomDock {
       .width(this.isExpanded ? '100%' : this.widthPercent + '%')
       .padding({ left: this.isExpanded ? 4 : 6, right: this.isExpanded ? 4 : 6 })
       .justifyContent(FlexAlign.SpaceBetween)
-      .backgroundColor(this.isGlass ? 'rgba(10, 14, 26, 0.42)' : 'rgba(25, 26, 28, 0.64)')
+      .backgroundColor(this.isGlass ? this.c.bgStrong : this.c.overlayPanel)
       .backdropBlur(this.isGlass ? 40 : 26)
-      .border({ width: 0.5, color: this.isGlass ? 'rgba(147, 215, 255, 0.10)' : 'rgba(255, 255, 255, 0.08)' })
+      .border({ width: 0.5, color: this.isGlass ? this.c.border : this.c.dividerSoft })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: this.isExpanded ? 18 : 28, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: this.isExpanded ? 8 : 14 })
+      .shadow({ radius: this.isExpanded ? 18 : 28, color: this.c.shadowSoft, offsetX: 0, offsetY: this.isExpanded ? 8 : 14 })
       .alignSelf(ItemAlign.Center)
       .onTouch((event: TouchEvent) => { this.onPanelTouch(event) })
       .opacity(this.chromeOpacity * (this.panelVisible ? 1.0 : 0.985))

@@ -1,5 +1,7 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 天文面板的两个小展示组件。
 //
@@ -8,24 +10,26 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 @Component
 export struct AstroSelectionGuide {
   @Prop visible: boolean
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop accentColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onOpenPicker: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 0 }) {
     if (this.visible) {
       Row({ space: 8 }) {
         Column({ space: 2 }) {
-          Text(I18n.t('astro_selection_required')).fontSize(11).fontColor(this.textColor).width('100%')
-          Text(I18n.t('astro_selection_required_hint')).fontSize(10).fontColor(this.subColor).width('100%').maxLines(2)
+          Text(I18n.t('astro_selection_required')).fontSize(11).fontColor(this.c.text).width('100%')
+          Text(I18n.t('astro_selection_required_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Button(I18n.t('astro_select_on_map')).fontSize(10).fontColor(this.textColor).backgroundColor(this.accentColor)
+        Button(I18n.t('astro_select_on_map')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 9, right: 9 })
           .onClick(() => { this.onOpenPicker() })
       }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-        .backgroundColor('rgba(91,147,191,0.12)').border({ width: 1, color: 'rgba(143,211,255,0.24)' })
+        .backgroundColor(this.c.soft).border({ width: 1, color: this.c.accentSoft })
         .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
     }
     }

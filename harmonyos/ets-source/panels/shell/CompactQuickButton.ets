@@ -1,9 +1,12 @@
+import { Theme } from '@kit.ArkUI'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 手机端右上快捷区的单个圆形按钮。
 //
-// 图标名、激活态、按下态、文字色由宿主以 @Prop 传入；点按语义（receiveTap 门控 +
+// 图标名、激活态、按下态由宿主以 @Prop 传入；点按语义（receiveTap 门控 +
 // action）在组件内保留，动作本体由宿主回注。
 
 @Component
@@ -12,25 +15,30 @@ export struct CompactQuickButton {
   @Prop active: boolean
   @Prop receiveTap: boolean
   @Prop pressedState: boolean
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onAction: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Row() {
       Image(getIcon(this.iconName, this.active))
         .width(22)
         .height(22)
-        .fillColor(this.active ? '#FFFFFF' : this.textColor)
+        .supportSvg2(true)
+        .colorFilter(tintMatrixFor(this.active ? this.c.dockActive : this.c.idleIcon))
     }
       .width(44)
       .height(44)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor(this.pressedState ? 'rgba(169, 232, 255, 0.24)' : (this.active ? 'rgba(91, 147, 191, 0.60)' : 'rgba(18, 22, 36, 0.50)'))
+      .backgroundColor(this.pressedState ? this.c.chipActiveBg : (this.active ? this.c.chipActiveBg : this.c.bgStrong))
       .backdropBlur(this.active ? 28 : 36)
-      .border({ width: 1, color: this.active ? 'rgba(107, 163, 214, 0.42)' : 'rgba(255, 255, 255, 0.10)' })
+      .border({ width: 1, color: this.active ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 18, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
       .scale({ x: this.pressedState ? 0.90 : (this.active ? 1.05 : 1.0), y: this.pressedState ? 0.90 : (this.active ? 1.05 : 1.0) })
       .animation({ duration: this.pressedState ? 70 : 180, curve: Curve.EaseOut })
       .clickEffect({ level: ClickEffectLevel.LIGHT })

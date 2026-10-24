@@ -221,7 +221,7 @@ export class TimeController {
   }
 
   syncManualTimeFromState(): void {
-    this.port.requestInteractive('getState', '', (result) => {
+    this.port.requestWhenReady('getState', '', (result) => {
     if (result.jd !== undefined) {
       const jd = result.jd as number
       const z = Math.floor(jd + 0.5)

@@ -58,6 +58,13 @@ export function objectInspectorFallbackVisualKind(selectedObjectType: string, se
   if (procedural.length > 0) return procedural
   if (type.indexOf('comet') >= 0 || type.indexOf('彗') >= 0) return 'comet'
   if (type.indexOf('asteroid') >= 0 || type.indexOf('minor planet') >= 0 || type.indexOf('小行星') >= 0) return 'asteroid'
+  // 星云类在 Stellarium 目录里不都带 "nebula" 字样：HII 区（M42/M43）、
+  // 超新星遗迹、恒星云、Herbig-Haro 天体、博克球状体都应按星云取离线图。
+  if (type.indexOf('hii') >= 0 || type.indexOf('h ii') >= 0 || type.indexOf('电离氢') >= 0) return 'nebula'
+  if (type.indexOf('supernova remnant') >= 0 || type.indexOf('超新星遗迹') >= 0) return 'nebula'
+  if (type.indexOf('star cloud') >= 0 || type.indexOf('恒星云') >= 0) return 'nebula'
+  if (type.indexOf('herbig') >= 0 || type.indexOf('bok globule') >= 0 || type.indexOf('球状体') >= 0) return 'nebula'
+  if (type.indexOf('planetary nebula') >= 0 || type.indexOf('行星状星云') >= 0) return 'nebula'
   if (type.indexOf('galaxy') >= 0 || type.indexOf('星系') >= 0) return 'galaxy'
   if (type.indexOf('globular') >= 0 || type.indexOf('球状星团') >= 0) return 'globular-cluster'
   if (type.indexOf('cluster') >= 0 || type.indexOf('星团') >= 0) return 'open-cluster'
@@ -78,20 +85,43 @@ export function objectInspectorDeepSkyImageName(fallbackVisualKind: string, sear
     return ''
   }
   const text = searchText
-  // Some widely known objects use a Messier image while the core's primary
-  // catalog identifier is NGC. Keep these explicit rather than guessing.
-  const aliases: Record<string, string> = {
-    'ngc 224': 'm31.png', 'ngc224': 'm31.png', 'ngc 1952': 'm1dumont.png', 'ngc1952': 'm1dumont.png'
+  // 名称型别名（不含目录编号，避免 'm 1' 误匹配 'm 10' 这类前缀）。
+  const nameAliases: Record<string, string> = {
+    // Horsehead Nebula (Barnard 33) is part of the same Orion molecular cloud.
+    'horsehead': 'm42.png', '马头': 'm42.png', 'barnard 33': 'm42.png', 'barnard33': 'm42.png'
   }
-  for (const key of Object.keys(aliases)) {
+  for (const key of Object.keys(nameAliases)) {
     if (text.indexOf(key) >= 0) {
-      return aliases[key]
+      return nameAliases[key]
     }
   }
-  const match = text.match(/\b(m|ngc|ic)\s*0*(\d+)\b/i)
-  if (match === null || match.length < 3) { return '' }
-  const prefix = match[1].toLowerCase() === 'ngc' ? 'n' : match[1].toLowerCase()
-  return prefix + match[2] + '.png'
+  const catalogMatch = text.match(/\b(m|ngc|ic|barnard|b|rcw|ced|vdb|lbn|ldn|abell)\s*-?\s*0*(\d+)\b/i)
+  if (catalogMatch === null || catalogMatch.length < 3) { return '' }
+  const prefix = catalogMatch[1].toLowerCase()
+  const number = catalogMatch[2]
+  const key = prefix === 'ngc' ? 'n' + number
+    : ((prefix === 'b' || prefix === 'barnard') ? 'b' + number : prefix + number)
+  // 打包图库里这些目录编号用的是变体文件名，必须按实际文件返回。
+  const variants: Record<string, string> = {
+    'n224': 'm31.png', 'n1952': 'm1dumont.png',
+    'm1': 'm1dumont.png', 'm15': 'm15-vasey.png', 'm43': 'm42.png', 'm45': 'pleiades.png',
+    'm51': 'm51-vasey.png', 'm57': 'm57dumont.png', 'm82': 'm82-vasey.png',
+    'm101': 'm101-vasey.png', 'm105': 'm105-vasey.png', 'm106': 'm106-vasey.png',
+    'b33': 'm42.png'
+  }
+  if (variants[key] !== undefined) { return variants[key] }
+  if (key.charAt(0) === 'b') { return 'barnard' + number + '.png' }
+  return key + '.png'
+}
+
+// 无精确图时的类别代表图：保证非 3D 深空天体至少有一张图片填充，
+// 而不是落回空白/程序化视觉。
+export function objectInspectorFallbackImageName(visualKind: string): string {
+  if (visualKind === 'galaxy') { return 'm31.png' }
+  if (visualKind === 'nebula') { return 'm42.png' }
+  if (visualKind === 'globular-cluster') { return 'm13.png' }
+  if (visualKind === 'open-cluster') { return 'm44.png' }
+  return ''
 }
 
 // 恒星近似色（原 objectInspectorStarColor）：按色温档位返回十六进制颜色。

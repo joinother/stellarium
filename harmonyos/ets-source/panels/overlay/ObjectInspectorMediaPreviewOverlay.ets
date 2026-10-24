@@ -1,5 +1,7 @@
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
-import { getIcon } from '../../common/ui/ShellIcons'
+import { Theme } from '@kit.ArkUI'
+import { ThemeSlots, DEFAULT_SLOTS, slotsFromTheme } from '../../state/StellariumTheme'
+import { getCatalogIcon, getIcon } from '../../common/ui/ShellIcons'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 
 // 「天体详情·本地大图」全屏叠层。
@@ -15,6 +17,7 @@ import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 //   - 媒体数据（PixelMap / 标签 / Loading / Failed / Path）经 @ObjectLink `objectMediaStore` 读取。
 //
 // 组件根即全屏 `Stack`，内含背景拦截层与内容 `Column`。
+// 主题色走「机制四」：onWillApplyTheme 自取当前主题槽位，调用点不再注入颜色。
 @Component
 export struct ObjectInspectorMediaPreviewOverlay {
   @ObjectLink objectMediaStore: ObjectMediaStore
@@ -24,26 +27,29 @@ export struct ObjectInspectorMediaPreviewOverlay {
   onObjectInspectorMediaPreviewLoaded: () => void = () => {}
   onObjectInspectorMediaPreviewError: () => void = () => {}
   retryObjectInspectorMediaPreview: () => void = () => {}
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Stack() {
       Stack() { }
         .width('100%').height('100%')
-        .backgroundColor('rgba(2,6,12,0.99)')
+        .backgroundColor(this.c.overlayScrim)
         .hitTestBehavior(HitTestMode.Block)
       Column({ space: 0 }) {
         Row() {
           Column({ space: 3 }) {
-            Text(this.titleText).fontSize(18).fontWeight(FontWeight.Medium).fontColor('#F0FAFF')
+            Text(this.titleText).fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong)
               .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-            Text(this.objectMediaStore.objectInspectorMediaLabel).fontSize(11).fontColor('#9CC7DB').width('100%')
+            Text(this.objectMediaStore.objectInspectorMediaLabel).fontSize(11).fontColor(this.c.sub).width('100%')
           }
             .layoutWeight(1).alignItems(HorizontalAlign.Start)
           Button() {
-            Image(getIcon('close', false)).width(20).height(20).fillColor('#E4F5FC')
+            Image(getIcon('close', false)).width(20).height(20).fillColor(this.c.textStrong)
           }
             .width(44).height(44).borderRadius(UI_RADIUS_PILL)
-            .backgroundColor('rgba(255,255,255,0.10)')
+            .backgroundColor(this.c.overlayButton)
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .padding(0)
             .zIndex(10).hitTestBehavior(HitTestMode.Block)
@@ -60,26 +66,26 @@ export struct ObjectInspectorMediaPreviewOverlay {
           }
           if (this.objectMediaStore.objectInspectorMediaPreviewLoading) {
             Column({ space: 12 }) {
-              LoadingProgress().width(36).height(36).color('#8EC9E9')
-              Text('正在打开本地图像').fontSize(12).fontColor('#B8D7E6')
+              LoadingProgress().width(36).height(36).color(this.c.spinner)
+              Text('正在打开本地图像').fontSize(12).fontColor(this.c.sub)
             }
           } else if (this.objectMediaStore.objectInspectorMediaPreviewFailed ||
             (!this.objectMediaStore.objectInspectorMediaPreviewLoading && this.objectMediaStore.objectInspectorMediaPreviewPath.length === 0)) {
             Column({ space: 12 }) {
-              Image(getIcon('catalog_galaxy', false)).width(42).height(42).fillColor('#8EC9E9')
-              Text('图像暂时无法显示').fontSize(14).fontColor('#E4F5FC')
-              Button('重新加载')
-                .height(36).fontSize(12).fontColor('#E4F5FC')
-                .backgroundColor('rgba(91,147,191,0.28)').borderRadius(UI_RADIUS_CONTROL)
+              Image(getCatalogIcon('catalog_galaxy', this.c.isNight)).width(42).height(42).fillColor(this.c.spinner)
+Text('图像暂时无法显示').fontSize(14).fontColor(this.c.textStrong)
+               Button('重新加载')
+                 .height(36).fontSize(12).fontColor(this.c.textStrong)
+                 .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
                 .onClick(() => { this.retryObjectInspectorMediaPreview() })
             }
           }
         }
           .width('100%').layoutWeight(1)
-          .backgroundColor('#02060C').borderRadius(UI_RADIUS_CONTROL)
+          .backgroundColor(this.c.overlayPanel).borderRadius(UI_RADIUS_CONTROL)
 
         Text('图像来自本地随应用分发的 Stellarium 资源；未在此页面联网下载。')
-          .fontSize(11).fontColor('#9CC7DB').lineHeight(17).width('100%').height(41)
+          .fontSize(11).fontColor(this.c.sub).lineHeight(17).width('100%').height(41)
           .padding({ top: 12 })
       }
         .width('100%').height('100%')

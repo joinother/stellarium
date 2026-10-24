@@ -1,6 +1,8 @@
 import { curves } from '@kit.ArkUI'
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 「星空文化」查看器面板的五个叶件。
 //
@@ -13,16 +15,18 @@ import { I18n } from '../../pages/I18n'
 export struct SkyCultureSectionHeader {
   @Prop title: ResourceStr
   @Prop subtitle: ResourceStr
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop accentColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Row({ space: 8 }) {
-      Row().width(3).height(27).backgroundColor(this.accentColor).borderRadius(2)
+      Row().width(3).height(27).backgroundColor(this.c.accent).borderRadius(2)
       Column({ space: 2 }) {
-        Text(this.title).fontSize(13).fontColor(this.textColor).fontWeight(FontWeight.Medium).width('100%')
-        Text(this.subtitle).fontSize(10).fontColor(this.subColor).width('100%').maxLines(2)
+        Text(this.title).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).width('100%')
+        Text(this.subtitle).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }.layoutWeight(1).alignItems(HorizontalAlign.Start)
     }.width('100%').padding({ left: 2, right: 2, top: 4, bottom: 7 })
@@ -35,19 +39,19 @@ export struct SkyCultureMetaItem {
   @Prop label: ResourceStr
   @Prop value: string
   @Prop accent: boolean
-  @Prop subColor: string
-  @Prop textColor: string
-  @Prop accentColor: string
-  @Prop bgColor: string
-  @Prop cardBorder: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 5 }) {
-      Text(this.label).fontSize(10).fontColor(this.subColor).width('100%').maxLines(1)
-      Text(this.value).fontSize(12).fontColor(this.accent ? this.accentColor : this.textColor).width('100%')
+      Text(this.label).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1)
+      Text(this.value).fontSize(12).fontColor(this.accent ? this.c.accent : this.c.text).width('100%')
         .maxLines(2).lineHeight(17).textOverflow({ overflow: TextOverflow.Ellipsis })
     }.width('47.5%').height(70).padding({ left: 11, right: 11, top: 10, bottom: 9 })
-      .backgroundColor(this.bgColor).border({ width: 0.5, color: this.cardBorder })
+      .backgroundColor(this.c.bg).border({ width: 0.5, color: this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ bottom: 8 })
   }
@@ -64,37 +68,32 @@ export struct SkyCultureLabelSettingCard {
   @Prop options: string[]
   @Prop mode: number
   @Prop isOpen: boolean
-  @Prop subColor: string
-  @Prop textColor: string
-  @Prop accentColor: string
-  @Prop cardBorder: string
-  @Prop pickerSurface: string
-  @Prop pickerHeader: string
-  @Prop pickerHeaderActive: string
-  @Prop pickerSelected: string
-  @Prop pickerOption: string
-  @Prop inputColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (target: string) => void = () => {}
   onSelectMode: (target: string, index: number) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column() {
       Column() {
         Row() {
           Column({ space: 1 }) {
-            Text(this.title).fontSize(10).fontColor(this.subColor).width('100%')
+            Text(this.title).fontSize(10).fontColor(this.c.sub).width('100%')
             Text(this.options[this.mode])
-              .fontSize(12).fontColor(this.textColor).width('100%').maxLines(2).lineHeight(17)
+              .fontSize(12).fontColor(this.c.text).width('100%').maxLines(2).lineHeight(17)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }.layoutWeight(1)
           Text(this.isOpen ? I18n.t('culture_collapse') : I18n.t('culture_expand')).fontSize(10)
-            .fontColor(this.textColor).padding({ left: 7, right: 7, top: 4, bottom: 4 })
-            .backgroundColor(this.isOpen ? this.pickerSelected : this.inputColor)
-            .border({ width: 1, color: this.isOpen ? this.accentColor : this.cardBorder })
+            .fontColor(this.c.text).padding({ left: 7, right: 7, top: 4, bottom: 4 })
+            .backgroundColor(this.isOpen ? this.c.textStrong : this.c.input)
+            .border({ width: 1, color: this.isOpen ? this.c.accent : this.c.border })
             .borderRadius(UI_RADIUS_CONTROL)
             .animation({ duration: 160, curve: Curve.EaseInOut })
         }.height(52).width('100%').padding({ left: 12, right: 12 })
-          .backgroundColor(this.isOpen ? this.pickerHeaderActive : this.pickerHeader)
+          .backgroundColor(this.isOpen ? this.c.text : this.c.sub)
           .borderRadius(UI_RADIUS_CONTROL)
           .animation({ duration: 160, curve: Curve.EaseInOut })
           .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -107,16 +106,16 @@ export struct SkyCultureLabelSettingCard {
             ForEach(this.options, (option: string, index: number) => {
               Row({ space: 10 }) {
                 Stack({ alignContent: Alignment.Center }) {
-                  Circle().width(18).height(18).fill(index === this.mode ? this.accentColor : 'rgba(255,255,255,0.02)')
-                  if (index === this.mode) {
-                    Text('✓').fontSize(12).fontColor('#FFFFFFFF').fontWeight(FontWeight.Bold)
-                  }
-                }.width(20).height(20)
-                Text(option).fontSize(12).fontColor(this.textColor).layoutWeight(1)
-                  .maxLines(2).lineHeight(17).textOverflow({ overflow: TextOverflow.Ellipsis })
+Circle().width(18).height(18).fill(index === this.mode ? this.c.accent : this.c.bg)
+                    if (index === this.mode) {
+                      Text('✓').fontSize(12).fontColor(this.c.textStrong).fontWeight(FontWeight.Bold)
+                   }
+                 }.width(20).height(20)
+                 Text(option).fontSize(12).fontColor(this.c.text).layoutWeight(1)
+                   .maxLines(2).lineHeight(17).textOverflow({ overflow: TextOverflow.Ellipsis })
               }.height(44).width('100%').padding({ left: 12, right: 12 })
-                .backgroundColor(index === this.mode ? this.pickerSelected : this.pickerOption)
-                .border({ width: 0.5, color: index === this.mode ? this.accentColor : this.cardBorder })
+                .backgroundColor(index === this.mode ? this.c.textStrong : this.c.sub)
+                .border({ width: 0.5, color: index === this.mode ? this.c.accent : this.c.border })
                 .borderRadius(UI_RADIUS_CONTROL)
                 .animation({ duration: 180, curve: Curve.EaseInOut })
                 .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -133,12 +132,12 @@ export struct SkyCultureLabelSettingCard {
                 .combine(TransitionEffect.translate({ x: 0, y: -4 }).animation({ duration: 140, curve: Curve.EaseIn }))
             ))
         }
-      }.width('100%').backgroundColor(this.pickerSurface)
-        .border({ width: 1, color: this.isOpen ? this.accentColor : this.cardBorder })
+      }.width('100%').backgroundColor(this.c.input)
+        .border({ width: 1, color: this.isOpen ? this.c.accent : this.c.border })
         .borderRadius(UI_RADIUS_CONTROL)
         .animation({ duration: 180, curve: Curve.EaseInOut })
     }.width('100%')
-      .border({ width: 1, color: this.cardBorder })
+      .border({ width: 1, color: this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
       .animation({ duration: 180, curve: Curve.EaseInOut })
   }
@@ -151,29 +150,29 @@ export struct SkyCultureLabelSettingCard {
 export struct SkyCultureFilterOption {
   @Prop label: string
   @Prop selected: boolean
-  @Prop textColor: string
-  @Prop accentColor: string
-  @Prop selectedBg: string
-  @Prop optionBg: string
-  @Prop cardBorder: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onPick: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Row({ space: 10 }) {
       Stack({ alignContent: Alignment.Center }) {
-        Circle().width(18).height(18).fill(this.selected ? this.accentColor : 'rgba(255,255,255,0.02)')
+        Circle().width(18).height(18).fill(this.selected ? this.c.accent : this.c.bg)
         if (this.selected) {
-          Text('✓').fontSize(12).fontColor('#FFFFFFFF').fontWeight(FontWeight.Bold)
+          Text('✓').fontSize(12).fontColor(this.c.textStrong).fontWeight(FontWeight.Bold)
         }
       }.width(20).height(20)
-      Text(this.label).fontSize(12).fontColor(this.textColor).layoutWeight(1)
+      Text(this.label).fontSize(12).fontColor(this.c.text).layoutWeight(1)
         .maxLines(2).lineHeight(17).textOverflow({ overflow: TextOverflow.Ellipsis })
       if (this.selected) {
-        Text(I18n.t('culture_current')).fontSize(10).fontColor(this.accentColor)
+        Text(I18n.t('culture_current')).fontSize(10).fontColor(this.c.accent)
       }
     }.height(44).width('100%').padding({ left: 12, right: 12 })
-      .backgroundColor(this.selected ? this.selectedBg : this.optionBg)
-      .border({ width: 0.5, color: this.selected ? this.accentColor : this.cardBorder })
+      .backgroundColor(this.selected ? this.c.textStrong : this.c.sub)
+      .border({ width: 0.5, color: this.selected ? this.c.accent : this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
       .animation({ duration: 180, curve: curves.springMotion(0.46, 0.88) })
       .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -190,18 +189,13 @@ export struct SkyCultureFilterPicker {
   @Prop labels: string[]
   @Prop selectedIndex: number
   @Prop isOpen: boolean
-  @Prop subColor: string
-  @Prop textColor: string
-  @Prop accentColor: string
-  @Prop cardBorder: string
-  @Prop pickerSurface: string
-  @Prop pickerHeader: string
-  @Prop pickerHeaderActive: string
-  @Prop pickerSelected: string
-  @Prop pickerOption: string
-  @Prop inputColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (kind: string) => void = () => {}
   onPick: (kind: string, index: number) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   private pickerTitle(): ResourceStr {
     return this.kind === 'classification' ? I18n.t('culture_type') : I18n.t('culture_region')
@@ -212,18 +206,18 @@ export struct SkyCultureFilterPicker {
       Row() {
         Column({ space: 3 }) {
           Text(this.pickerTitle())
-            .fontSize(10).fontColor(this.subColor).width('100%')
-          Text(this.labels[this.selectedIndex]).fontSize(12).fontColor(this.textColor).width('100%')
+            .fontSize(10).fontColor(this.c.sub).width('100%')
+          Text(this.labels[this.selectedIndex]).fontSize(12).fontColor(this.c.text).width('100%')
             .maxLines(2).lineHeight(17).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Text(this.isOpen ? I18n.t('culture_collapse') : I18n.t('culture_choose')).fontSize(10).fontColor(this.accentColor)
+        Text(this.isOpen ? I18n.t('culture_collapse') : I18n.t('culture_choose')).fontSize(10).fontColor(this.c.accent)
           .padding({ left: 5, right: 5, top: 3, bottom: 3 })
-          .backgroundColor(this.isOpen ? this.pickerSelected : this.inputColor)
-          .border({ width: 1, color: this.isOpen ? this.accentColor : this.cardBorder })
+          .backgroundColor(this.isOpen ? this.c.textStrong : this.c.input)
+          .border({ width: 1, color: this.isOpen ? this.c.accent : this.c.border })
           .borderRadius(UI_RADIUS_CONTROL)
       }.height(54).width('100%').padding({ left: 12, right: 12 })
-        .backgroundColor(this.isOpen ? this.pickerHeaderActive : this.pickerHeader)
-        .border({ width: 1, color: this.isOpen ? this.accentColor : this.cardBorder })
+        .backgroundColor(this.isOpen ? this.c.text : this.c.sub)
+        .border({ width: 1, color: this.isOpen ? this.c.accent : this.c.border })
         .borderRadius(UI_RADIUS_CONTROL)
         .animation({ duration: 180, curve: Curve.EaseInOut })
         .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -232,13 +226,8 @@ export struct SkyCultureFilterPicker {
         Column({ space: 6 }) {
           ForEach(this.labels, (label: string, index: number) => {
             SkyCultureFilterOption({
-              label: label,
-              selected: index === this.selectedIndex,
-              textColor: this.textColor,
-              accentColor: this.accentColor,
-              selectedBg: this.pickerSelected,
-              optionBg: this.pickerOption,
-              cardBorder: this.cardBorder,
+               label: label,
+               selected: index === this.selectedIndex,
               onPick: () => { this.onPick(this.kind, index) }
             })
           }, (label: string, index: number) => this.kind + '-' + label + (index === this.selectedIndex ? '-s' : ''))
@@ -251,8 +240,8 @@ export struct SkyCultureFilterPicker {
           ))
       }
     }.width('100%')
-      .backgroundColor(this.isOpen ? this.pickerSurface : 'rgba(255,255,255,0.045)')
-      .border({ width: 1, color: this.isOpen ? this.accentColor : this.cardBorder })
+      .backgroundColor(this.isOpen ? this.c.input : this.c.rowBg)
+      .border({ width: 1, color: this.isOpen ? this.c.accent : this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
       .animation({ duration: 220, curve: curves.springMotion(0.46, 0.88) })
   }

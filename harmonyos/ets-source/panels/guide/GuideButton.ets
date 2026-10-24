@@ -1,5 +1,7 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 交互式导览的底部动作键。
 //
@@ -12,12 +14,17 @@ export struct GuideButton {
   @Prop action: string
   @Prop phase: string
   @Prop index: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onAction: (action: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Button(I18n.t(this.label), { type: ButtonType.Normal })
-      .id('guide-' + this.action).fontSize(14).fontColor('#EDF7FF')
-      .backgroundColor(this.action === 'next' || this.action === 'return' ? '#356C92' : 'rgba(255,255,255,0.09)')
+        .id('guide-' + this.action).fontSize(14).fontColor(this.action === 'next' || this.action === 'return' ? this.c.onAccent : this.c.fourth)
+      .backgroundColor(this.action === 'next' || this.action === 'return' ? this.c.accent : this.c.bg)
       .borderRadius(UI_RADIUS_CONTROL).height(48).layoutWeight(1)
       .enabled(this.phase !== 'preparing' && this.phase !== 'restoring' &&
         (this.action !== 'previous' || this.index > 0) &&

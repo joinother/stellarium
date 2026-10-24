@@ -1,5 +1,65 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-22] 修复恢复默认后首次启动闪退
+
+- **现象**：设置 → 主设置 → 重置 → 恢复（应用自动退出）后，再次打开应用闪退。
+- **根因**：`src/main.cpp` 的 `copyDefaultConfigFile` 用 `QFile::copy` 复制默认配置；恢复默认路径先把 `config.ini` 重命名为 `config.old`，该重命名可能失败（旧备份/文件占用），目标 `config.ini` 仍存在，而 `QFile::copy` 拒绝覆盖已存在文件 → `qFatal` → SIGABRT（`QtMainThread`）。
+- **修复**：改为用 `QFile` 以 `WriteOnly | Truncate` 打开目标后写入默认配置内容，不再依赖“目标不存在”的前提；源/目标打开失败或写入长度不符时给出明确 `qFatal` 信息。
+- **验证**：真机「重置 → 恢复」自动退出后重新启动，进程稳定（pid 存活），`config.ini` 重建为默认配置，日志无 `copyDefaultConfigFile` / `dlopen` 失败。
+
+## [2026-10-21] 设置面板：恢复默认入口与语言下拉
+
+- **主设置第一条目**：新增「恢复默认设置」row（标题 + 说明 + 右侧胶囊形「重置」大按钮，与界面语言值同高），点击弹二次确认；确认后调用 `restoreCoreDefaults`，成功回包后重置 UI 偏好并**自动退出应用**（延迟 800ms 调 `terminateSelf`），下次启动应用默认配置。移除「设备与隐私」页的临时按钮。
+- **界面语言**：由横向 chip 改为单 row + `Select`，点击当前值展开上下滚动列表；颜色沿用 ThemeSlots。
+- **验证**：`arkts_check` 通过；`devecocli build` 成功；真机布局确认第一条目为恢复默认、第二条目为界面语言，点击 Select 弹出语言 `Option` 列表；重置按钮为 40vp 高胶囊（与语言值同高）；点击「重置 → 恢复」后应用进程退出（`pidof` 无输出），`config.ini` 写入 `restore_defaults=true`。
+
+## [2026-10-21] 设置保存重构：UI 偏好统一持久化 + 引擎权威键
+
+- **依据**：按 `docs/harmonyos/specs/SETTINGS-PERSISTENCE.md` 实施 S1–S4 与 S5 的收口项。
+- **引擎行为回归 `config.ini`**：
+  - 夜间模式：`setVisionModeNight` 改用 `immediateSaveNow("viewing/flag_night")`；`night_mode_store` 仅保留首帧缓存，不再反向下发引擎。
+  - 赤道仪/地平仪：`StelMovementMgr::setMountMode` 写回 `navigation/viewing_mode`（`equator`/`horizon`）；启动改为 `getMountMode` 回读，不再从 UI 缓存下发。
+  - 语言：`setLanguage` 写入 `localization/app_locale` 并立即落盘。
+- **保存通道**：新增 `StelApp::immediateSaveNow()`（绕过 `gui/immediate_save_details` 门控）与 `flushSettings(reason)`；`saveAllSettings` 返回 `configPath`/`error`，失败不再静默。
+- **UI 偏好**：新增 `state/SettingsRepository.ets`（Preferences `stellarium_ui`、`schemaVersion=2`、迁移/读写/重置）；`AppStorage['stellariumSettings']` 降级为内存镜像，启动时由仓库加载填充；`saveAppSettings` 同步写入仓库；恢复默认时清理 UI 仓库。
+- **修复**：星云/流星/星空文化常用名等 `immediateSave` 在默认门控下失效；语言、赤道仪、音乐、单位等重启丢失。
+- **验证**：`arkts_check` 7 文件通过；引擎增量编译 `cmake --build build --target libstellarium.so` 成功（427/427）；`devecocli build` 成功（exitCode=0，HAP 已重新打包）。
+- **真机验证（HUAWEI Mate 80 Pro，192.168.43.1:36717）**：
+  - 设置赤道仪 / 夜间模式 / 语言 `en` → `aa force-stop` → 重启：`getMountMode=equatorial`、`getNightMode=true`、`language=en` 全部保持；`config.ini` 为 `viewing_mode=equator`、`flag_night=true`、`app_locale=en`。
+  - 打开天文计算面板切到 tab 4 → 强杀 → 重启：`getAstroPanelState.tab=4` 保持；`haps/entry/preferences/stellarium_ui` 中 `schemaVersion=2`。
+  - 语言 UI 缓存不再反向覆盖引擎：旧 `stellarium_ui` 中的 `selectedLanguage=en` 被忽略，重启后 `getAppState.language` 为 `zh_CN`。
+  - 测试后已恢复原状（alt-az / 夜间关 / `zh_CN` / tab 5）。
+- **未纳入**：导出/导入扩展为 JSON 全量包（S5 格式项），留作后续。
+
+## [2026-10-20] 赤道仪/天顶附近缩放抖动修复
+
+手势锚点改用挂载系规范 up，极点附近按 `sin ε` 交接 transported up，避免 `1/sin` 放大；手势期间冻结 roll；0.5 px 亚像素死区阻断质心抖动。
+
+## [2026-10-20] 夜间模式主题重构
+
+移除 zIndex 98/99 两层暴力遮罩（红色 BlendMode.COLOR + 黑色压暗），改用 ArkUI 原生 `WithTheme(CustomTheme) → onWillApplyTheme → ThemeSlots` 机制，131 个 .ets 文件接入，主题色字面量归零。架构文档见 `docs/harmonyos/specs/NIGHT-MODE-THEME-ARCHITECTURE.md`。
+
+- **核心**：`StellariumTheme.ets` 定义 DayColors/NightColors（54 令牌）+ ThemeSlots（55 槽位）+ AstroColors（天文固定色）；组件声明 `@State c: ThemeSlots = DEFAULT_SLOTS` + `onWillApplyTheme` 自动刷新，无需 prop drilling。
+- **夜间开关路径**：`LayerController.applyNightMode` → 引擎 `setNightMode` → QAction `actionShow_Night_Mode` setChecked → 属性同步，不再走普通 `setLayer`。
+- **GPU 夜间渲染**：`submitOhosFramebuffer` 新增夜间 shader pass（luminance → 红），保留零拷贝路径。
+- **视觉修复**：Toggle/Slider 默认令牌统一为 `compBackgroundPrimaryContrary`（夜间中红 `#A03020`）；选中文字用 `c.onAccent`；目录类图标 10 个 `_night.svg` 双色调变体；详情参数值亮红 `metricValue`。
+- **NightModeStore 清理**：511→69 行，移除 `nm*()` 访问器与调色板，仅保留状态与持久化。
+
+## [2026-10-16] 夜间模式主题重构计划：代码核查与全量修订
+
+- **依据（用户要求）**：对 `.deveco/plans/1790425749316-kind-nebula.md`（夜间模式主题重构执行计划）逐项代码核查后，按用户批准的修正项全量重写计划文档（**不含「星空观感」检查项**——用户明确豁免）。纯计划文档变更，无代码改动。
+- **核查发现（原计划问题）**：
+  - **范围低估 ~4 倍**：实测（2026-10-13，模式 `'#[0-9A-Fa-f]{6,8}'` + `'rgba(`）panels/ + common/ 硬编码色 **115 文件 / 1148 处**（原计划仅 260+/40+）；pages/ 宿主层另 5 文件 / 44 处未计入；范围内合计 **117 文件 / 1164 处**（`Color.*` 枚举未计入，扫描兜底）。
+  - **广域组件未评估**：LayerSwitchRow（**104 个调用文件**）、InfoRow（**56 个调用文件**）若走机制一（@ObjectLink 无默认值必须父传）会迫使全部调用文件改构造参数——不可行。
+  - 其余：4 处路径错误（RecordingControlBar→`panels/tools/`、ObjectPanel→`panels/panels/`、ConstellationCultureView→`panels/object/`、HubActionList→`panels/shell/`）；`statusRecording`≡`recordingDot` 字段重复；扫描正则漏 8 位 hex（`#E5FFFFFF`，本项目主格式）；「日间像素级一致」与对照表近色合并自相矛盾；宿主自身硬编码、已主题化五文件残留、切换动画丢失均未覆盖。
+- **修订（计划文档全量重写）**：
+  - **新增机制三**（广域组件专用，调用文件 ≥ 20）：`@StorageProp('stellariumNightMode')` + NightModeStore.ets **导出** `NightPalette`/`DAY_PALETTE`/`NIGHT_PALETTE`，命名属性访问（禁 `palette[key]` 动态取色）；store 切换时已写该 AppStorage 键（NightModeStore.ets:164/171），**调用点零改动**；键名不得变更。
+  - **Slice A 重排**：导出调色板 → 机制三先行改造 LayerSwitchRow/InfoRow（缩小删遮罩后残留面）→ 色板扩 12+4 字段 / 16 访问器（基数 42→58，不设 statusRecording）→ StellariumTheme CustomColors 增 4 令牌（fontTertiary/fontFourth/iconSecondary/compDivider，双源同值交叉注释）→ TimePanel 机制一范式验证 → 删遮罩（MainWindowNativeNode.ets:7571-7589，zIndex 98 `#A00000` @0.78 / 99 `#000000` @0.48）。
+  - **新增 Slice H**：附录 A 其余文件（66 文件 / 304 处）+ 已主题化五文件残留清扫（InteractiveGuideShell 12 / PanelChromeExtras 11 / MorePanel 8 / HubActionList 6 / DockButton 3）+ 宿主层 pages/（MainWindowNativeNode 32 处等 5 文件 44 处）+ 最终三模式扫描。
+  - **附录 A 全量实测清单**（路径逐一 Test-Path 核实，唯一权威）：A 3/13 · B 5/56 · C 7/134 · D 5/230 · E 9/175 · F 12/162 · G 10/90 · H 66/304；范围外（科学固定色）3 文件 / 28 处（MainWindowModels/astro.ets/media.ets）。
+  - **验证矩阵 / 风险 / 模板更新**：日间回归口径改「近色合并位点允许轻微变化」（nmSoft/nmDetailValue/nmDetailSubValue，重点位点人工确认）；扫描三模式补 8 位 hex 与 `Color.(White|Black|Red)`；改造模板第 6 步明确「更新全部实例化点（不只在 MainWindowNativeNode——中层组件也实例化子组件）」；切换动画（450 ms 渐变→瞬时跳变）记录为可后补项。
+- **验证**：纯计划文档；无代码 / 权限 / 契约变更；CRLF 归一、UTF-8 无 BOM；构建与真机不涉及。
+
 ## [2026-10-12] DevEco Code - 修星表面板「手动导入」按钮点了没反应（未处理的 promise rejection）
 
 - **依据（用户复测反馈）**：星表列表里未加载行的「手动导入」按钮，选完文件后列表不变、也看不到任何原因；早前一次还只显示通用的「导入失败：版本不符或文件损坏」。

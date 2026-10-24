@@ -1,9 +1,11 @@
 import { map, mapCommon, MapComponent } from '@kit.MapKit'
 import { AsyncCallback, BusinessError } from '@ohos.base'
 import { hilog } from '@kit.PerformanceAnalysisKit'
+import { Theme } from '@kit.ArkUI'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
 import { I18n } from './I18n'
 import { inverseMapPoint, MapPoint, validMapPoint } from './MapCoordinate'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../state/StellariumTheme'
 
 @Component
 export struct LocationOnlineMap {
@@ -14,6 +16,7 @@ export struct LocationOnlineMap {
   @State private prepared: boolean = false
   @State private phase: string = 'loading'
   @State private errorCode: string = ''
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   private alive: boolean = false
   private generation: number = 0
   private timeoutId: number = -1
@@ -35,6 +38,10 @@ export struct LocationOnlineMap {
     })
     events.on('mapClick', (position: mapCommon.LatLng) => { this.pickMapPosition(position) })
     events.on('error', (error: BusinessError) => { this.fail(String(error.code), 'map-load') })
+  }
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
   }
 
   private allowed(): boolean {
@@ -160,17 +167,22 @@ export struct LocationOnlineMap {
         Stack() {
           MapComponent({ mapOptions: this.options, mapCallback: this.callback })
             .width('100%').height('100%')
-          Text('+').fontSize(28).fontColor('#204C72').hitTestBehavior(HitTestMode.None)
+          Row()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.c.nightMask)
+            .hitTestBehavior(HitTestMode.None)
+          Text('+').fontSize(28).fontColor(this.c.tertiary).hitTestBehavior(HitTestMode.None)
         }.height(240).width('100%').clip(true).borderRadius(14)
       }
       if (this.phase === 'loading' || this.phase === 'converting') {
         Row({ space: 8 }) {
-          LoadingProgress().width(20).height(20).color('#A9D9F5')
-          Text(I18n.t('map_online_loading')).fontSize(12).fontColor('#A9D9F5')
+          LoadingProgress().width(20).height(20).color(this.c.sub)
+          Text(I18n.t('map_online_loading')).fontSize(12).fontColor(this.c.sub)
         }.width('100%')
       } else if (this.phase === 'error') {
-        Text(I18n.t('map_online_failed')).fontSize(12).fontColor('#FFCCAA').width('100%')
-        Text(this.errorCode).fontSize(11).fontColor('#A9D9F5').width('100%')
+        Text(I18n.t('map_online_failed')).fontSize(12).fontColor(this.c.errorText).width('100%')
+        Text(this.errorCode).fontSize(11).fontColor(this.c.sub).width('100%')
       }
       Row({ space: 8 }) {
         Button(I18n.t('map_online_choose')).layoutWeight(1).fontSize(12)

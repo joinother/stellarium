@@ -1,4 +1,6 @@
 import { curves } from '@kit.ArkUI'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 「天体详情指向线」叠层。
 //
@@ -25,6 +27,9 @@ export struct ObjectDetailConnectorLayer {
   @Prop endX: number
   @Prop endY: number
   @Prop markerSize: number
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Stack() {
@@ -32,7 +37,7 @@ export struct ObjectDetailConnectorLayer {
         Row()
           .width(this.beamLength)
           .height(6)
-          .backgroundColor('rgba(111, 196, 239, 0.12)')
+          .backgroundColor(this.c.soft)
           .borderRadius(3)
           .position({ x: this.beamX - this.beamLength / 2, y: this.beamY - 3 })
           .rotate({ angle: this.beamAngle })
@@ -42,7 +47,7 @@ export struct ObjectDetailConnectorLayer {
         Row()
           .width(this.beamLength)
           .height(1.25)
-          .backgroundColor('rgba(198, 235, 255, 0.62)')
+          .backgroundColor(this.c.accent)
           .borderRadius(1)
           .position({ x: this.beamX - this.beamLength / 2, y: this.beamY - 0.625 })
           .rotate({ angle: this.beamAngle })
@@ -52,16 +57,16 @@ export struct ObjectDetailConnectorLayer {
         if (this.targetOnScreen) {
           Circle()
             .width(this.markerSize).height(this.markerSize)
-            .fill('rgba(91,147,191,0.035)')
-            .stroke('rgba(166,224,255,0.20)').strokeWidth(5)
+            .fill(this.c.soft)
+            .stroke(this.c.softStrong).strokeWidth(5)
             .position({ x: this.targetX - this.markerSize / 2, y: this.targetY - this.markerSize / 2 })
             .animation({ duration: this.animateGeometry ? 180 : 0, curve: curves.springMotion(0.42, 0.86) })
             .hitTestBehavior(HitTestMode.None)
             .zIndex(20)
           Circle()
             .width(this.markerSize * 0.72).height(this.markerSize * 0.72)
-            .fill('rgba(0,0,0,0)')
-            .stroke('rgba(207,239,255,0.68)').strokeWidth(1.25)
+            .fill(Color.Transparent)
+            .stroke(this.c.accent).strokeWidth(1.25)
             .position({ x: this.targetX - this.markerSize * 0.36, y: this.targetY - this.markerSize * 0.36 })
             .animation({ duration: this.animateGeometry ? 180 : 0, curve: curves.springMotion(0.42, 0.86) })
             .hitTestBehavior(HitTestMode.None)
@@ -69,8 +74,8 @@ export struct ObjectDetailConnectorLayer {
         } else {
           Circle()
             .width(10).height(10)
-            .fill('rgba(180,226,250,0.34)')
-            .stroke('rgba(220,244,255,0.74)').strokeWidth(1)
+            .fill(this.c.softStrong)
+            .stroke(this.c.accent).strokeWidth(1)
             .position({ x: this.endX - 5, y: this.endY - 5 })
             .animation({ duration: this.animateGeometry ? 180 : 0, curve: curves.springMotion(0.42, 0.86) })
             .hitTestBehavior(HitTestMode.None)

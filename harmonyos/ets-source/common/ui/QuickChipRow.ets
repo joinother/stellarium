@@ -1,6 +1,7 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { ChipItem } from '../../pages/StellariumTypes'
 import { UI_RADIUS_PILL } from './UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 快捷 chips 行，多处调用共用。
 //
@@ -9,7 +10,12 @@ import { UI_RADIUS_PILL } from './UiTokens'
 @Component
 export struct QuickChipRow {
   @Prop items: ChipItem[]
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onChip: (id: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Scroll() {
@@ -17,14 +23,14 @@ export struct QuickChipRow {
         ForEach(this.items, (item: ChipItem) => {
           Button(item.label)
             .fontSize(12)
-            .fontColor('#7FB3DC')
+            .fontColor(this.c.accent)
             .fontWeight(FontWeight.Medium)
             .height(32)
             .padding({ left: 14, right: 14 })
-            .backgroundColor('rgba(107, 163, 214, 0.20)')
-            .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+            .backgroundColor(this.c.softStrong)
+            .border({ width: 1, color: this.c.softStrong })
             .borderRadius(UI_RADIUS_PILL)
-            .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 5 })
+            .shadow({ radius: 12, color: this.c.shadowSoft, offsetX: 0, offsetY: 5 })
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
             .onClick(() => { this.onChip(item.id) })

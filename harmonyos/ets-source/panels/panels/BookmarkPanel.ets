@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { BookmarkItem } from '../../pages/MainWindowModels'
 import { BookmarkStore } from '../../state/BookmarkStore'
 import { I18n } from '../../pages/I18n'
@@ -11,44 +13,46 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 export struct BookmarkPanel {
   @ObjectLink store: BookmarkStore
   @Prop selectedName: string
-  @Prop cardBorderColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onSaveView: () => void = () => {}
   onGoto: (id: string) => void = () => {}
   onDelete: (id: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 10 }) {
       Row({ space: 8 }) {
         TextInput({ text: this.store.draftName, placeholder: I18n.t('c_bookmark_name_hint') })
-          .fontSize(13).fontColor('#E5FFFFFF').placeholderColor('#99FFFFFF')
-          .backgroundColor('rgba(255,255,255,0.06)').borderRadius(UI_RADIUS_CONTROL)
+          .fontSize(13).fontColor(this.c.text).placeholderColor(this.c.sub)
+          .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
           .height(36).layoutWeight(1).padding({ left: 10, right: 10 })
           .onChange((v: string) => { this.store.draftName = v })
         Button(I18n.t('btn_save_current_view'))
-          .fontSize(12).fontColor('#E5FFFFFF')
-          .backgroundColor('rgba(107,163,214,0.35)')
+          .fontSize(12).fontColor(this.c.text)
+          .backgroundColor(this.c.softStrong)
           .borderRadius(UI_RADIUS_CONTROL).height(36).padding({ left: 14, right: 14 })
           .onClick(() => { this.onSaveView() })
       }.width('100%')
       if (this.selectedName.length > 0) {
         Row() {
           Text(I18n.t('bookmark_selected_object_hint') + ': ' + this.selectedName)
-            .fontSize(12).fontColor('#99FFFFFF').layoutWeight(1)
+            .fontSize(12).fontColor(this.c.sub).layoutWeight(1)
           Button(I18n.t('btn_bookmark_object'))
-            .fontSize(12).fontColor('#E5FFFFFF')
-            .backgroundColor('rgba(91,147,191,0.35)')
+            .fontSize(12).fontColor(this.c.text)
+            .backgroundColor(this.c.softStrong)
             .borderRadius(UI_RADIUS_CONTROL).height(36).padding({ left: 14, right: 14 })
             .onClick(() => { this.onSaveView() })
         }.width('100%').margin({ top: 4 })
       }
       if (this.store.loading) {
         Column() {
-          Text(I18n.t('c_loading_bookmarks')).fontSize(13).fontColor('#99FFFFFF')
+          Text(I18n.t('c_loading_bookmarks')).fontSize(13).fontColor(this.c.sub)
         }.width('100%').height(80).justifyContent(FlexAlign.Center)
       } else if (this.store.list.length === 0) {
         Column() {
-          Text(I18n.t('m_no_bookmarks')).fontSize(14).fontColor('#E5FFFFFF').margin({ top: 8 })
-          Text(I18n.t('m_save_view_hint')).fontSize(12).fontColor('#CC8FB6FF').margin({ top: 6 })
+          Text(I18n.t('m_no_bookmarks')).fontSize(14).fontColor(this.c.text).margin({ top: 8 })
+          Text(I18n.t('m_save_view_hint')).fontSize(12).fontColor(this.c.tertiary).margin({ top: 6 })
         }.width('100%').height(100).justifyContent(FlexAlign.Center)
       } else {
         Scroll() {
@@ -57,27 +61,27 @@ export struct BookmarkPanel {
               Row() {
                 Column() {
                   Text(b.name)
-                    .fontSize(14).fontColor('#E5FFFFFF').fontWeight(FontWeight.Medium)
+                    .fontSize(14).fontColor(this.c.text).fontWeight(FontWeight.Medium)
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text((b.object.length > 0 ? (b.object + ' · ') : '') + 'FOV ' + b.fov.toFixed(1) + '°')
-                    .fontSize(11).fontColor('#99FFFFFF').margin({ top: 2 })
+                    .fontSize(11).fontColor(this.c.sub).margin({ top: 2 })
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                   .onClick(() => { this.onGoto(b.id) })
                 Button(I18n.t('btn_delete'))
-                  .fontSize(12).fontColor('#E5FFFFFF')
-                  .backgroundColor('rgba(255,255,255,0.10)')
+                  .fontSize(12).fontColor(this.c.text)
+                  .backgroundColor(this.c.softStrong)
                   .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 14, right: 14 })
                   .onClick(() => { this.onDelete(b.id) })
               }
               .width('100%')
               .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-              .backgroundColor('rgba(255,255,255,0.04)')
+              .backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL)
-              .border({ width: 1, color: this.cardBorderColor })
+              .border({ width: 1, color: this.c.border })
             }, (b: BookmarkItem) => b.id)
           }.width('100%').padding({ left: 2, right: 2 })
-        }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
       }
     }.width('100%').layoutWeight(1)
   }

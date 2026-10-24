@@ -1,6 +1,6 @@
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectDetailField } from '../../pages/StellariumTypes'
-import { StructuredDetailRow, DetailSectionTitle } from './DetailRows'
+import { StructuredDetailRow, DetailSectionTitle, DetailNameRow } from './DetailRows'
 
 // 结构化资料区：按段落分组展示 `ObjectDetailStore.selectedDetailFields`。
 //
@@ -193,6 +193,52 @@ function detailFieldsForSection(store: ObjectDetailStore, section: string): Arra
   return fields
 }
 
+// 名称：中文名 + 英文名按顺序拼接去重，不含目录编号。
+function displayName(store: ObjectDetailStore): string {
+  const parts: Array<string> = []
+  const candidates: Array<string> = [store.selectedName, store.selectedEnglishName]
+  const catalog = store.selectedCatalogId.trim()
+  for (let index = 0; index < candidates.length; index++) {
+    const value = candidates[index].trim()
+    if (value.length === 0) { continue }
+    // 英文名常常就是目录编号（如天狼的 englishName = HIP 32349），
+    // 已在「目录编号」单独成行，不再重复进名称。
+    if (catalog.length > 0 && (value === catalog || catalog.indexOf(value) >= 0)) { continue }
+    let merged = false
+    for (let seen = 0; seen < parts.length; seen++) {
+      const existing = parts[seen]
+      if (existing === value || existing.indexOf(value) >= 0) { merged = true; break }
+      if (value.indexOf(existing) >= 0) { parts[seen] = value; merged = true; break }
+    }
+    if (!merged) { parts.push(value) }
+  }
+  return parts.join(' · ')
+}
+
+// 引擎给出的目录编号汇总（多个编号已拼接为一行）；没有该字段时返回空串，
+// 由调用方回退到 selectedCatalogId。
+function ownDesignations(store: ObjectDetailStore): string {
+  for (let index = 0; index < store.selectedDetailFields.length; index++) {
+    const field = store.selectedDetailFields[index]
+    if (field.section !== 'identity' || field.value.length === 0) { continue }
+    if (field.key === 'designations' || field.key === 'catalogNumber' || field.key === 'designation') {
+      return field.value
+    }
+  }
+  return ''
+}
+
+// 是否存在区别于目录编号的专名：恒星等只有目录名（如 HIP 12345）时返回 false，
+// 此时「编号与名称」只显示目录编号一栏。
+function hasDistinctName(store: ObjectDetailStore): boolean {
+  const name = displayName(store).trim()
+  const catalog = store.selectedCatalogId.trim()
+  if (name.length === 0) { return false }
+  if (catalog.length === 0) { return true }
+  if (name === catalog || name.indexOf(catalog) >= 0) { return false }
+  return true
+}
+
 @Component
 export struct StructuredDetailRows {
   @ObjectLink store: ObjectDetailStore
@@ -210,9 +256,20 @@ export struct StructuredDetailRows {
         .textAlign(TextAlign.Center).padding({ top: 10, bottom: 10 })
     } else {
       ForEach(detailSectionIds(), (section: string) => {
-        if (detailFieldsForSection(this.store, section).length > 0) {
+        if (detailFieldsForSection(this.store, section).length > 0 ||
+          (section === 'identity' && (hasDistinctName(this.store) || this.store.selectedCatalogId.length > 0))) {
           DetailSectionTitle({ title: detailSectionTitle(section), tablet: this.tablet })
           Column() {
+            if (section === 'identity') {
+              if (hasDistinctName(this.store)) {
+                DetailNameRow({ label: '名称', value: displayName(this.store), tablet: this.tablet })
+              }
+              // 引擎已给出拼接好的目录编号时由下方 ForEach 渲染（只保留这一栏）；
+              // 只有在引擎没有该字段时才回退到 selectedCatalogId。
+              if (ownDesignations(this.store).length === 0 && this.store.selectedCatalogId.length > 0) {
+                DetailNameRow({ label: '目录编号', value: this.store.selectedCatalogId, tablet: this.tablet })
+              }
+            }
             ForEach(detailFieldsForSection(this.store, section), (field: ObjectDetailField) => {
               StructuredDetailRow({ label: detailFieldLabel(field.key), value: detailFieldValue(this.store, field.key), tablet: this.tablet })
             }, (field: ObjectDetailField) => field.section + ":" + field.key)

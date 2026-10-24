@@ -7,6 +7,7 @@ import { AstroCsvExport } from '../pages/MainWindowModels'
 import { graphModeLabel, graphStartOptionLabel, hourOffsetLabel, planetPairBodyName, planetMetricLabel } from '../common/derive/astro'
 import { zhNameOf, planetZh, celestialTitle } from '../common/derive/labels'
 import { csvCell } from '../common/derive/skycult'
+import { AstroColors } from './StellariumTheme'
 
 // 本域 hooks 接口：store 不 import NAPI/UI，跨 store 与宿主逻辑经具名回调注入。
 export interface AstroHostHooks {
@@ -488,8 +489,8 @@ export class AstroStore {
     return Math.max(1, Math.min(96, (a - this.altAzMinimum) / range * 96))
   }
 
-  altitudeCurveColor(altitude: number | undefined, color: string): string {
-    return (altitude ?? -90) >= this.altAzMinimum ? color : '#33FFFFFF'
+  altitudeCurveColor(altitude: number | undefined, color: ResourceColor): ResourceColor {
+    return (altitude ?? -90) >= this.altAzMinimum ? color : AstroColors.altitudeFaded
   }
 
   altCurveSegmentWidth(): number {

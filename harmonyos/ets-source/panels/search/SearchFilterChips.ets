@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 
 // 已选筛选条件 chips（可视度 / 器材）：点击即清除该条件。
@@ -7,18 +9,19 @@ import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 export struct SearchFilterChips {
   @Prop visibilityLabel: string
   @Prop instrumentLabel: string
-  @Prop textColor: string
-  @Prop panelColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onClearVisibility: () => void = () => {}
   onClearInstrument: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Scroll() {
       Row({ space: 7 }) {
         if (this.visibilityLabel.length > 0) {
           Text(this.visibilityLabel + '  x')
-            .fontSize(12).fontColor(this.textColor).padding({ left: 12, right: 10, top: 7, bottom: 7 })
-            .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_PILL)
+            .fontSize(12).fontColor(this.c.text).padding({ left: 12, right: 10, top: 7, bottom: 7 })
+            .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_PILL)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             .transition(TransitionEffect.asymmetric(
               TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut })
@@ -29,8 +32,8 @@ export struct SearchFilterChips {
         }
         if (this.instrumentLabel.length > 0) {
           Text(this.instrumentLabel + '  x')
-            .fontSize(12).fontColor(this.textColor).padding({ left: 12, right: 10, top: 7, bottom: 7 })
-            .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_PILL)
+            .fontSize(12).fontColor(this.c.text).padding({ left: 12, right: 10, top: 7, bottom: 7 })
+            .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_PILL)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             .transition(TransitionEffect.asymmetric(
               TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut })

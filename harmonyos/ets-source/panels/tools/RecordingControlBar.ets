@@ -1,7 +1,8 @@
-import { curves } from '@kit.ArkUI'
+import { Theme, curves } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
 import { ToolsStore } from '../../state/ToolsStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 录制控制条。
 //
@@ -19,30 +20,35 @@ export struct RecordingControlBar {
   @Prop recordCount: number
   @Prop skyWidth: number
   @Prop safeTop: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onToggleUi: () => void = () => {}
   onTogglePause: () => void = () => {}
   onStop: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Row({ space: 6 }) {
       Circle({ width: 8, height: 8 })
-        .fill(this.store.recordingPaused ? '#F0B44D' : '#FF5E5E')
+        .fill(this.store.recordingPaused ? this.c.warning : this.c.error)
       Text(this.store.recordingPaused ? I18n.t('script_recording_paused') : I18n.t('script_recording'))
         .fontSize(12)
         .fontWeight(FontWeight.Medium)
-        .fontColor('#F1FAFF')
+        .fontColor(this.c.textStrong)
       if (this.skyWidth >= 410) {
         Text(this.recordCount.toString() + ' ' + I18n.t('script_recording_count'))
           .fontSize(10)
-          .fontColor('rgba(205, 228, 244, 0.70)')
+          .fontColor(this.c.tertiary)
           .layoutWeight(1)
       } else {
-        Text(this.recordCount.toString()).fontSize(10).fontColor('rgba(205, 228, 244, 0.70)').layoutWeight(1)
+        Text(this.recordCount.toString()).fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
       }
       Button(this.store.recordingUiExpanded ? I18n.t('script_focus_controls') : I18n.t('script_open_controls'))
         .fontSize(10)
-        .fontColor('#E8F8FF')
-        .backgroundColor('rgba(255,255,255,0.10)')
+        .fontColor(this.c.fourth)
+        .backgroundColor(this.c.overlayButton)
         .borderRadius(UI_RADIUS_CONTROL)
         .height(34)
         .width(46)
@@ -50,8 +56,8 @@ export struct RecordingControlBar {
         .onClick(() => { this.onToggleUi() })
       Button(this.store.recordingPaused ? I18n.t('btn_resume') : I18n.t('script_pause'))
         .fontSize(10)
-        .fontColor('#E8F8FF')
-        .backgroundColor('rgba(255,255,255,0.10)')
+        .fontColor(this.c.fourth)
+        .backgroundColor(this.c.overlayButton)
         .borderRadius(UI_RADIUS_CONTROL)
         .height(34)
         .width(48)
@@ -59,8 +65,8 @@ export struct RecordingControlBar {
         .onClick(() => { this.onTogglePause() })
       Button(I18n.t('script_stop'))
         .fontSize(10)
-        .fontColor('#FFFFFF')
-        .backgroundColor('rgba(192,57,43,0.82)')
+        .fontColor(this.c.onAccent)
+        .backgroundColor(this.c.error)
         .borderRadius(UI_RADIUS_CONTROL)
         .height(34)
         .width(48)
@@ -71,11 +77,11 @@ export struct RecordingControlBar {
       .height(54)
       .padding({ left: 12, right: 10 })
       .position({ x: Math.max(12, (this.skyWidth - Math.min(560, Math.max(260, this.skyWidth - 24))) / 2), y: this.safeTop })
-      .backgroundColor('rgba(10,18,30,0.84)')
+      .backgroundColor(this.c.overlayPanel)
       .backdropBlur(28)
-      .border({ width: 1, color: 'rgba(255,94,94,0.24)' })
+      .border({ width: 1, color: this.c.errorBg })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 18, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
       .zIndex(130)
       .hitTestBehavior(HitTestMode.Default)
       .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut })

@@ -205,6 +205,14 @@ export class SensorController {
     this.lastGyroUiRequestMs = now
     this.gyroStore.gyroscopePending = true
     this.gyroStore.gyroscopePendingTarget = enabled
+    // Safety net: a failed/permission-denied sensor start used to leave the
+    // pending flag set forever, making every later tap a no-op.
+    setTimeout(() => {
+      if (this.gyroStore.gyroscopePending) {
+        this.gyroStore.gyroscopePending = false
+        this.gyroStore.gyroscopePendingTarget = this.gyroStore.gyroscopeEnabled
+      }
+    }, 2500)
     this.toggleGyroscope(enabled)
     this.hooks.flashHint(enabled ? I18n.t('m_gyro_listening') : I18n.t('m_gyro_off'))
   }
@@ -227,10 +235,14 @@ export class SensorController {
 
   startGyroscope(): void {
     if (!this.hooks.canUseSensors()) {
+      this.gyroStore.gyroscopePending = false
+      this.gyroStore.gyroscopePendingTarget = false
       return
     }
     if (this.gyroStore.gyroscopeEnabled) {
       hilog.info(0x0000, 'StellariumArkUI', 'startGyroscope ignored already enabled')
+      this.gyroStore.gyroscopePending = false
+      this.gyroStore.gyroscopePendingTarget = true
       return
     }
     if (this.gyroCallback === undefined) {

@@ -1,9 +1,11 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { CatOption } from '../../pages/StellariumTypes'
 import { SearchStore } from '../../state/SearchStore'
 import { CatalogFilterRow } from './CatalogFilterRow'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 
 // 搜索筛选菜单：返回行 + 四个页面（根 / 分类 / 可视度 / 器材）。
@@ -17,13 +19,13 @@ export struct SearchFilterMenu {
   @Prop instrumentLabel: string
   @Prop categories: CatOption[]
   @Prop languageRevision: number
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onSetPage: (page: string) => void = () => {}
   onSelectCategory: (code: string) => void = () => {}
   onSelectVisibility: (filter: string) => void = () => {}
   onSelectInstrument: (filter: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   private menuTitle(): string {
     if (this.store.searchFilterPage === 'categories') return I18n.t('search_browse_categories')
@@ -35,9 +37,9 @@ export struct SearchFilterMenu {
   build() {
     Column({ space: 2 }) {
       Row({ space: 10 }) {
-        Image(getIcon('chevron_right', false)).width(18).height(18).fillColor(this.textColor).rotate({ angle: 180 })
+        Image(getIcon('chevron_right', false)).width(18).height(18).supportSvg2(true).colorFilter(tintMatrixFor(this.c.text)).rotate({ angle: 180 })
         Text(this.menuTitle())
-          .fontSize(16).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          .fontSize(16).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }
         .width('100%').height(48).padding({ left: 8, right: 8 }).id('search-browser-back')
         .onClick(() => {
@@ -46,39 +48,36 @@ export struct SearchFilterMenu {
         })
       if (this.store.searchFilterPage === 'root') {
         Row() {
-          Text(I18n.t('search_visibility')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(I18n.t('search_visibility')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.visibilityLabel.length > 0 ? this.visibilityLabel : I18n.t('search_unlimited'))
-            .fontSize(11).fontColor(this.subColor).layoutWeight(0.7).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 8 })
-          Image(getIcon('chevron_right', false)).width(16).height(16).fillColor(this.subColor)
-        }.width('100%').height(48).padding({ left: 10, right: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+            .fontSize(11).fontColor(this.c.sub).layoutWeight(0.7).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 8 })
+          Image(getIcon('chevron_right', false)).width(16).height(16).supportSvg2(true).colorFilter(tintMatrixFor(this.c.sub))
+        }.width('100%').height(48).padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
           .onClick(() => { this.onSetPage('visibility') })
         Row() {
-          Text(I18n.t('search_instrument')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(I18n.t('search_instrument')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           Text(this.instrumentLabel.length > 0 ? this.instrumentLabel : I18n.t('search_unlimited'))
-            .fontSize(11).fontColor(this.subColor).layoutWeight(0.7).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 8 })
-          Image(getIcon('chevron_right', false)).width(16).height(16).fillColor(this.subColor)
-        }.width('100%').height(48).padding({ left: 10, right: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+            .fontSize(11).fontColor(this.c.sub).layoutWeight(0.7).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ right: 8 })
+          Image(getIcon('chevron_right', false)).width(16).height(16).supportSvg2(true).colorFilter(tintMatrixFor(this.c.sub))
+        }.width('100%').height(48).padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
           .onClick(() => { this.onSetPage('instrument') })
       } else if (this.store.searchFilterPage === 'categories') {
         ForEach(this.categories, (cat: CatOption) => {
           CatalogFilterRow({
             cat: cat,
             isSelected: this.store.searchCategory === cat.code,
-            textColor: this.textColor,
-            subColor: this.subColor,
-            panelColor: this.panelColor,
             onSelect: (code: string) => { this.onSelectCategory(code) }
           })
         }, (cat: CatOption) => cat.code + '/' + this.languageRevision.toString())
       } else if (this.store.searchFilterPage === 'visibility') {
-        Row() { Text(I18n.t('search_unlimited')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('all') })
-        Row() { Text(I18n.t('search_above_horizon')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('above') })
-        Row() { Text(I18n.t('search_good_observing')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('good') })
+        Row() { Text(I18n.t('search_unlimited')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('all') })
+        Row() { Text(I18n.t('search_above_horizon')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('above') })
+        Row() { Text(I18n.t('search_good_observing')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectVisibility('good') })
       } else {
-        Row() { Text(I18n.t('search_unlimited')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('all') })
-        Row() { Text(I18n.t('search_naked_eye')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('naked') })
-        Row() { Text(I18n.t('search_binoculars')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('binocular') })
-        Row() { Text(I18n.t('search_telescope')).fontSize(14).fontColor(this.textColor).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('telescope') })
+        Row() { Text(I18n.t('search_unlimited')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('all') })
+        Row() { Text(I18n.t('search_naked_eye')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('naked') })
+        Row() { Text(I18n.t('search_binoculars')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('binocular') })
+        Row() { Text(I18n.t('search_telescope')).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }) }.width('100%').height(48).padding({ left: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSelectInstrument('telescope') })
       }
     }.width('100%').padding({ left: 4, right: 4, top: 4 })
       .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })

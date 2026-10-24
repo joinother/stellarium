@@ -2,7 +2,8 @@ import { PrivacyBootstrap } from './PrivacyBootstrap'
 import { WindowNativeNode } from './MainWindowNativeNode'
 import { StartupSky } from './StartupSky'
 import { I18n } from './I18n'
-import { STARTUP_REVEAL_MS, startupLoadingLabel } from './StartupStarGeometry'
+import { STARTUP_REVEAL_MS, startupLoadingLabel, STARTUP_BG_NORMAL, STARTUP_BG_NIGHT } from './StartupStarGeometry'
+import { slotsForNightMode, ThemeSlots } from '../state/StellariumTheme'
 import hilog from '@ohos.hilog'
 
 @Entry
@@ -15,6 +16,7 @@ struct ApplicationRoot {
   @StorageLink('stellariumQtContentReady') private qtContentReady: boolean = false
   @Watch('onSkyReady') @StorageLink('stellariumStartupSkyReady') private skyReady: boolean = false
   @Watch('onSkyReady') @StorageLink('stellariumStartupArtComplete') private artComplete: boolean = false
+  @StorageLink('stellariumNightMode') private nightMode: boolean = false
   @State private loadingVisible: boolean = true
   @State private loadingOpacity: number = 1
   @State private loadingLabel: string = ''
@@ -45,6 +47,10 @@ struct ApplicationRoot {
     return false
   }
 
+  private slots(): ThemeSlots {
+    return slotsForNightMode(this.nightMode)
+  }
+
   private onSkyReady(): void {
     if (!this.skyReady || !this.artComplete || this.loadingOpacity === 0) return
     this.getUIContext().animateTo({ duration: STARTUP_REVEAL_MS, curve: Curve.EaseInOut,
@@ -61,14 +67,30 @@ struct ApplicationRoot {
       }
       if (this.loadingVisible) {
         Stack() {
-          StartupSky().hitTestBehavior(HitTestMode.Block)
+          StartupSky({ nightMode: this.nightMode }).hitTestBehavior(HitTestMode.Block)
+          if (this.nightMode) {
+            // Old night overlay scheme: red COLOR blend + black dim.
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('#A00000')
+              .blendMode(BlendMode.COLOR, BlendApplyType.OFFSCREEN)
+              .opacity(0.78)
+              .hitTestBehavior(HitTestMode.None)
+            Row()
+              .width('100%')
+              .height('100%')
+              .backgroundColor('#000000')
+              .opacity(0.48)
+              .hitTestBehavior(HitTestMode.None)
+          }
           if (this.nativeAllowed || this.consentVerifiedUi) {
             Row({ space: 8 }) {
               Text(this.loadingLabel)
-                .fontSize(12).fontColor('#9CAEC5').maxLines(2)
+                .fontSize(12).fontColor(this.slots().text).maxLines(2)
                 .letterSpacing(1).textAlign(TextAlign.Center)
                 .constraintSize({ maxWidth: '70%' })
-              LoadingProgress().width(14).height(14).color('#9CAEC5')
+              LoadingProgress().width(14).height(14).color(this.slots().text)
                 .enableLoading(this.foreground)
             }.width('85%').justifyContent(FlexAlign.Center)
               .translate({ y: 88 }).hitTestBehavior(HitTestMode.None)
@@ -76,8 +98,8 @@ struct ApplicationRoot {
         }.width('100%').height('100%').opacity(this.loadingOpacity)
       }
       if (!this.nativeAllowed || !this.qtContentReady) {
-        PrivacyBootstrap()
+        PrivacyBootstrap({ nightMode: this.nightMode })
       }
-    }.width('100%').height('100%').backgroundColor('#05070F')
+    }.width('100%').height('100%').backgroundColor(this.nightMode ? STARTUP_BG_NIGHT : STARTUP_BG_NORMAL)
   }
 }

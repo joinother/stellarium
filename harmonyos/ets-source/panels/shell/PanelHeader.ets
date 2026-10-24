@@ -1,6 +1,8 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 面板头部 chrome：返回按钮 + 标题/副标题 + 关闭按钮。
 //
@@ -28,16 +30,21 @@ export struct PanelHeader {
   // 快捷操作面板要求「自定义=铅笔 / 完成=勾」不出现文字；图层面板仍用文字。
   @Prop headerActionIcon: string = ''
   @Prop titleAsButton: boolean = false
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onBack: () => void = () => {}
   onClose: () => void = () => {}
   onHeaderAction: () => void = () => {}
   onTitleTap: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Row() {
       if (this.canGoBack) {
         Button() {
-          Image(getIcon('back', false)).width(17).height(17).fillColor('#D9F1FF')
+          Image(getIcon('back', false)).width(17).height(17).supportSvg2(true).colorFilter(tintMatrixFor(this.c.textStrong))
         }
           .id('panel-back')
           .width(44)
@@ -63,20 +70,21 @@ export struct PanelHeader {
               Text(this.title)
                 .fontSize(15)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#E5FFFFFF')
+                .fontColor(this.c.text)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               Image(getIcon('chevron_right', false))
                 .width(15)
                 .height(15)
-                .fillColor('rgba(184, 228, 255, 0.72)')
+                .supportSvg2(true)
+                .colorFilter(tintMatrixFor(this.c.sub))
             }
               .alignItems(VerticalAlign.Center)
           }
             .id('panel-title-action')
             .height(32)
             .padding({ left: 12, right: 8 })
-            .backgroundColor('rgba(255, 255, 255, 0.06)')
+            .backgroundColor(this.c.input)
             .borderRadius(UI_RADIUS_PILL)
             .zIndex(3)
             .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -86,12 +94,12 @@ export struct PanelHeader {
           Text(this.title)
             .fontSize(18)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#E5FFFFFF')
+            .fontColor(this.c.text)
         }
         if (this.subtitle.length > 0) {
           Text(this.subtitle)
             .fontSize(14)
-            .fontColor('#99FFFFFF')
+            .fontColor(this.c.sub)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .margin({ top: 4 })
@@ -107,16 +115,16 @@ export struct PanelHeader {
         Button() {
           if (this.headerActionIcon.length > 0) {
             // 图标态与右侧关闭按钮同尺寸（36×36 / 18px 图标），两个圆形按钮视觉齐平。
-            Image(getIcon(this.headerActionIcon, false)).width(18).height(18).fillColor('#E5FFFFFF')
-          } else {
-            Text(this.headerActionLabel).fontSize(11).fontColor('#E5FFFFFF')
+            Image(getIcon(this.headerActionIcon, false)).width(18).height(18).supportSvg2(true).colorFilter(tintMatrixFor(this.c.text))
+           } else {
+             Text(this.headerActionLabel).fontSize(11).fontColor(this.c.text)
           }
         }
           .id('panel-header-action')
           .constraintSize({ minWidth: 36 })
           .height(36)
           .padding(this.headerActionIcon.length > 0 ? 0 : { left: 10, right: 10 })
-          .backgroundColor('rgba(255, 255, 255, 0.06)')
+          .backgroundColor(this.c.input)
           .borderRadius(UI_RADIUS_PILL)
           .zIndex(10)
           .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -129,14 +137,15 @@ export struct PanelHeader {
         Image($r('app.media.ic_close'))
           .width(18)
           .height(18)
-          .fillColor('#E5FFFFFF')
+          .supportSvg2(true)
+          .colorFilter(tintMatrixFor(this.c.text))
       }
       .id('panel-close')
       .width(36)
       .height(36)
       .padding(0)
       .borderRadius(UI_RADIUS_PILL)
-      .backgroundColor('rgba(255, 255, 255, 0.06)')
+      .backgroundColor(this.c.input)
       .zIndex(10)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .onClick(() => { this.onClose() })

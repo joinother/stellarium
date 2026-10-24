@@ -286,6 +286,9 @@ public slots:
 	//! Restore default settings.
 	void restoreDefaultSettings();
 
+	//! Save current settings to config. Also called by the OHOS bridge after flag changes.
+	void saveSettings();
+
 	//! Display a message. This is used for plugin-specific warnings and such
 	void displayMessage(const QString& message, const QString &hexColor="#999999");
 
@@ -294,8 +297,6 @@ private slots:
 	void updateDownloadProgress(qint64 bytesReceived, qint64 bytesTotal);
 	void downloadComplete(QNetworkReply * reply);
 	void locationChanged(const StelLocation &location);
-	//! Call when button "Save settings" in main GUI are pressed
-	void saveSettings();
 
 private:
 	MeteorShowers* m_meteorShowers;

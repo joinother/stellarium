@@ -1,4 +1,6 @@
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
+import { Theme } from '@kit.ArkUI'
+import { ThemeSlots, DEFAULT_SLOTS, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
@@ -18,6 +20,7 @@ import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 //     算法、触摸计数等内部状态仍留宿主）。
 //
 // 组件根即全屏 `Stack`（`object-model-close` / `object-model-stage` 为跨会话 id 锚点）。
+// 主题色走「机制四」：onWillApplyTheme 自取当前主题槽位，调用点不再注入颜色。
 @Component
 export struct ObjectInspectorModelOverlay {
   @ObjectLink objectMediaStore: ObjectMediaStore
@@ -27,23 +30,26 @@ export struct ObjectInspectorModelOverlay {
   onCloseOverlay: () => void = () => {}
   onResetView: () => void = () => {}
   onStageTouch: (event: TouchEvent) => void = () => {}
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      Stack() { }.width('100%').height('100%').backgroundColor('#020408')
+      Stack() { }.width('100%').height('100%').backgroundColor(this.c.overlayPanel)
         .hitTestBehavior(HitTestMode.Block)
       Column({ space: 12 }) {
         Row({ space: 12 }) {
           Column({ space: 4 }) {
-            Text(this.titleText).fontSize(20).fontColor('#F2F4F8').maxLines(1)
+            Text(this.titleText).fontSize(20).fontColor(this.c.textStrong).maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
             Text(this.objectMediaStore.objectInspectorProceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline'))
-              .fontSize(12).fontColor('#B8BDC8').width('100%')
+              .fontSize(12).fontColor(this.c.sub).width('100%')
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Button() {
-            Image(getIcon('close', false)).width(20).height(20).fillColor('#F2F4F8')
+            Image(getIcon('close', false)).width(20).height(20).fillColor(this.c.textStrong)
           }.width(44).height(44).padding(0).borderRadius(UI_RADIUS_PILL)
-            .backgroundColor('rgba(255,255,255,0.10)').zIndex(2)
+            .backgroundColor(this.c.overlayButton).zIndex(2)
             .accessibilityText(I18n.t('model_close'))
             .id('object-model-close')
             .onClick(() => { this.onCloseOverlay() })
@@ -57,12 +63,12 @@ export struct ObjectInspectorModelOverlay {
           .id('object-model-stage')
           .hitTestBehavior(HitTestMode.Block)
           .onTouch((event: TouchEvent) => { this.onStageTouch(event) })
-        Text(this.noticeText).fontSize(12).fontColor('#B8BDC8').lineHeight(19)
+        Text(this.noticeText).fontSize(12).fontColor(this.c.sub).lineHeight(19)
           .width('100%').textAlign(TextAlign.Center)
         Row({ space: 12 }) {
-          Text(I18n.t('model_gesture_hint')).fontSize(12).fontColor('#B8BDC8').layoutWeight(1).maxLines(2)
-          Button(I18n.t('model_reset')).height(44).fontSize(13).fontColor('#F2F4F8')
-            .padding({ left: 18, right: 18 }).backgroundColor('rgba(255,255,255,0.10)').borderRadius(UI_RADIUS_PILL)
+          Text(I18n.t('model_gesture_hint')).fontSize(12).fontColor(this.c.sub).layoutWeight(1).maxLines(2)
+          Button(I18n.t('model_reset')).height(44).fontSize(13).fontColor(this.c.textStrong)
+            .padding({ left: 18, right: 18 }).backgroundColor(this.c.overlayButton).borderRadius(UI_RADIUS_PILL)
             .onClick(() => { this.onResetView() })
         }.width('100%')
       }.width('100%').height('100%')

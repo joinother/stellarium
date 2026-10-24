@@ -1,4 +1,5 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { SearchStore } from '../../state/SearchStore'
 import { getIcon } from '../../common/ui/ShellIcons'
@@ -11,23 +12,26 @@ import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 @Component
 export struct SearchBar {
   @ObjectLink store: SearchStore
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onInput: (value: string) => void = () => {}
   onSubmit: (text: string) => void = () => {}
   onInputFocus: () => void = () => {}
   onInputBlur: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
   build() {
     Row({ space: 8 }) {
       Image(getIcon('search', false))
-        .width(18).height(18).fillColor('#7FB3DC')
+        .width(18).height(18).fillColor(this.c.iconTertiary)
       TextInput({ text: this.store.searchText, placeholder: I18n.t('i0063') })
         .fontSize(14)
-        .fontColor('#E5FFFFFF')
-        .placeholderColor('#8099BBCC')
+        .fontColor(this.c.text)
+        .placeholderColor(this.c.sub)
         .placeholderFont({ size: 14 })
         .layoutWeight(1)
         .maxLines(1)
-        .caretStyle({ color: '#5B93BF' })
+        .caretStyle({ color: this.c.accent })
         .borderColor(Color.Transparent)
         .backgroundColor(Color.Transparent)
         .onChange((value: string) => {
@@ -45,11 +49,11 @@ export struct SearchBar {
     .width('100%')
     .height(44)
     .padding({ left: 16, right: 16 })
-    .backgroundColor('rgba(12, 16, 28, 0.72)')
+    .backgroundColor(this.c.mediaOverlay)
     .backdropBlur(35)
-    .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+    .border({ width: 0.5, color: this.c.soft })
     .borderRadius(UI_RADIUS_PANEL)
-    .shadow({ radius: 16, color: 'rgba(0,0,0,0.25)', offsetX: 0, offsetY: 6 })
+    .shadow({ radius: 16, color: this.c.shadowSoft, offsetX: 0, offsetY: 6 })
     .animation({ duration: 260, curve: curves.springMotion(0.48, 0.90) })
   }
 }

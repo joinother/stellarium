@@ -27,6 +27,7 @@
 #include "StelSphericalIndex.hpp"
 #include "StelObjectModule.hpp"
 #include "StelTextureTypes.hpp"
+#include "StelApp.hpp"
 #include "Nebula.hpp"
 
 #include <QString>
@@ -823,7 +824,7 @@ public slots:
 	void setHintsFadeDuration(float duration) {hintsFader.setDuration(static_cast<int>(duration * 1000.f));}
 
 	//! Set flag for displaying Nebulae Hints.
-	void setFlagHints(bool b) { if (hintsFader!=b) { hintsFader=b; emit flagHintsDisplayedChanged(b);}}
+	void setFlagHints(bool b) { if (hintsFader!=b) { hintsFader=b; StelApp::immediateSave("astro/flag_nebula_name", b); emit flagHintsDisplayedChanged(b);}}
 	//! Get flag for displaying Nebulae Hints.
 	bool getFlagHints(void) const {return hintsFader;}
 
@@ -868,7 +869,7 @@ public slots:
 	bool getFlagSizeLimitsUsage(void) const;
 
 	//! Set flag used to turn on and off Nebula rendering.
-	void setFlagShow(bool b) { flagShow = b; }
+	void setFlagShow(bool b) { if (flagShow!=b) { flagShow = b; StelApp::immediateSave("astro/flag_nebula", b); } }
 	//! Get value of flag used to turn on and off Nebula rendering.
 	bool getFlagShow(void) const { return flagShow; }
 

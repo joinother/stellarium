@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { image } from '@kit.ImageKit'
 import { SkyCultureArtItem, TabItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
@@ -41,17 +43,7 @@ export struct LayersPanel {
   @Prop skyCultureArtStates: Record<string, string> = {}
   @Prop skyCultureArtThumbnailPixelMaps: Record<string, image.PixelMap> = {}
   @Prop narrationParagraphs: Array<string> = []
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop accentColor: string
-  @Prop panelColor: string
-  @Prop cardBorder: string
-  @Prop inputColor: string
-  @Prop pickerSurface: string
-  @Prop pickerHeader: string
-  @Prop pickerHeaderActive: string
-  @Prop pickerSelected: string
-  @Prop pickerOption: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   mapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
   mapContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.mapContextSettings)
   onPreset: (preset: string) => void = () => {}
@@ -105,12 +97,14 @@ export struct LayersPanel {
   onArtDecodeError: (rawPath: string) => void = () => {}
   onOpenArtPreview: (art: SkyCultureArtItem) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
   build() {
       Column() {
-        LayerPresetBar({ subColor: this.subColor, textColor: this.textColor, panelColor: this.panelColor, onPreset: (preset: string) => { this.onPreset(preset) } })
+        LayerPresetBar({ onPreset: (preset: string) => { this.onPreset(preset) } })
         // 图层预设 tag 与子面板标签 tag 之间的横向分隔线
-        Row().width('100%').height(0.5).backgroundColor(this.cardBorder).margin({ top: 2, bottom: 2 })
-        LayerTabs({ tabs: this.layerTabs, activeTab: this.viewTab, foldTablet: this.foldTablet, textColor: this.textColor, subColor: this.subColor, accentColor: this.accentColor, panelColor: this.panelColor, onSelectTab: (id: number) => { this.onSelectTab(id) } })
+        Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 2, bottom: 2 })
+        LayerTabs({ tabs: this.layerTabs, activeTab: this.viewTab, foldTablet: this.foldTablet, onSelectTab: (id: number) => { this.onSelectTab(id) } })
         Column({ space: 0 }) {
           if (this.viewTab === 0) {
             LayerSkyTab({
@@ -121,11 +115,6 @@ export struct LayersPanel {
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,
               atmoExtinction: this.atmosphereStore.atmoExtinction,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
-              cardBorder: this.cardBorder,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onSetSkyDisplay: (setting: string, value: boolean | number) => { this.onSetSkyDisplay(setting, value) },
               onStarMagLimit: (value: number) => { this.onStarMagLimit(value) },
@@ -137,10 +126,6 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               expandedLayout: this.expandedLayout,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onSetOrbitFlag: (setting: string, enabled: boolean) => { this.onSetOrbitFlag(setting, enabled) },
               onSetOrbitThickness: (value: number) => { this.onSetOrbitThickness(value) },
@@ -155,7 +140,6 @@ export struct LayersPanel {
           } else if (this.viewTab === 2) {
             LayerDsoTab({
               layerStore: this.layerStore,
-              subColor: this.subColor,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) }
             })
           } else if (this.viewTab === 3) {
@@ -163,11 +147,6 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               overlayStore: this.overlayStore,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
-              cardBorder: this.cardBorder,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onSetFovMarker: (setting: string, value: number) => { this.onSetFovMarker(setting, value) },
               onToggleViewCoordinates: (visible: boolean) => { this.onToggleViewCoordinates(visible) },
@@ -178,10 +157,6 @@ export struct LayersPanel {
             LayerLandscapeTab({
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onSetLandscapeFadeWithZoom: (isOn: boolean) => { this.onSetLandscapeFadeWithZoom(isOn) },
               onImportLandscape: () => { this.onImportLandscape() },
@@ -196,17 +171,6 @@ export struct LayersPanel {
               artStates: this.skyCultureArtStates,
               artThumbnailPixelMaps: this.skyCultureArtThumbnailPixelMaps,
               narrationParagraphs: this.narrationParagraphs,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
-              cardBorder: this.cardBorder,
-              inputColor: this.inputColor,
-              pickerSurface: this.pickerSurface,
-              pickerHeader: this.pickerHeader,
-              pickerHeaderActive: this.pickerHeaderActive,
-              pickerSelected: this.pickerSelected,
-              pickerOption: this.pickerOption,
               mapContext: this.mapContext,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onLoadList: () => { this.onLoadList() },
@@ -237,11 +201,6 @@ export struct LayersPanel {
             LayerSurveysTab({
               layerStore: this.layerStore,
               surveyStore: this.surveyStore,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
-              lineColor: this.cardBorder,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onRefreshSurvey: () => { this.onRefreshSurvey() },
               onSelectSpectral: (id: string) => { this.onSelectSpectral(id) },
@@ -256,11 +215,6 @@ export struct LayersPanel {
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,
               atmoExtinction: this.atmosphereStore.atmoExtinction,
-              textColor: this.textColor,
-              subColor: this.subColor,
-              accentColor: this.accentColor,
-              panelColor: this.panelColor,
-              cardBorder: this.cardBorder,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
               onSetSkyDisplay: (setting: string, value: boolean | number) => { this.onSetSkyDisplay(setting, value) },
               onStarMagLimit: (value: number) => { this.onStarMagLimit(value) },

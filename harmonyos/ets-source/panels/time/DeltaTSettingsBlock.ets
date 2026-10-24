@@ -1,6 +1,8 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { DeltaTStore } from '../../state/DeltaTStore'
 import { UI_RADIUS_CONTROL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // ΔT 算法块：当前算法 + 算法列表（选择）+ 自定义系数输入 + 说明。
 //
@@ -11,11 +13,7 @@ import { UI_RADIUS_CONTROL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTok
 export struct DeltaTSettingsBlock {
   @ObjectLink store: DeltaTStore
   @Prop pending: boolean
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
-  @Prop inputColor: string
-  @Prop accentColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onSelect: (key: string) => void = () => {}
   onSaveCustom: (text: string) => void = () => {}
 
@@ -30,19 +28,23 @@ export struct DeltaTSettingsBlock {
     }
   }
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column() {
-      Text('ΔT 算法').fontSize(12).fontColor(this.subColor).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
-      Text(I18n.t('time_delta_hint')).fontSize(12).fontColor(this.subColor).width('100%').padding(8)
-      Text(this.label(this.store.deltaTAlgorithm)).fontSize(13).fontColor(this.textColor).width('100%').padding(8)
+      Text('ΔT 算法').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
+      Text(I18n.t('time_delta_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
+      Text(this.label(this.store.deltaTAlgorithm)).fontSize(13).fontColor(this.c.text).width('100%').padding(8)
       Scroll() {
         Column({ space: 3 }) {
           ForEach(this.store.timeDeltaTAlgorithms, (key: string) => {
             Row() {
-              Text(this.label(key)).fontSize(10).fontColor(this.store.deltaTAlgorithm === key ? this.textColor : this.subColor).layoutWeight(1).maxLines(2)
-              if (this.store.deltaTAlgorithm === key) Text('✓').fontSize(12).fontColor(this.accentColor)
+              Text(this.label(key)).fontSize(10).fontColor(this.store.deltaTAlgorithm === key ? this.c.text : this.c.sub).layoutWeight(1).maxLines(2)
+              if (this.store.deltaTAlgorithm === key) Text('✓').fontSize(12).fontColor(this.c.accent)
             }.width('100%').padding({ left: 10, right: 10, top: 6, bottom: 6 })
-              .backgroundColor(this.store.deltaTAlgorithm === key ? this.panelColor : Color.Transparent).borderRadius(UI_RADIUS_CONTROL)
+              .backgroundColor(this.store.deltaTAlgorithm === key ? this.c.bg : Color.Transparent).borderRadius(UI_RADIUS_CONTROL)
               .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
               .clickEffect({ level: ClickEffectLevel.LIGHT })
               .enabled(!this.pending).onClick(() => { this.onSelect(key) })
@@ -51,12 +53,12 @@ export struct DeltaTSettingsBlock {
       }.width('100%').height(170).scrollBar(BarState.Auto).scrollBarWidth(4)
       if (this.store.deltaTAlgorithm === 'Custom') {
         Column({ space: 6 }) {
-          Text(I18n.t('time_delta_custom_hint')).fontSize(12).fontColor(this.subColor).width('100%').padding(8)
+          Text(I18n.t('time_delta_custom_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
           ForEach(['year', 'ndot', 'a', 'b', 'c'], (key: string, index: number) => {
             Row({ space: 8 }) {
-              Text(I18n.t('time_delta_' + key)).fontSize(12).fontColor(this.textColor).layoutWeight(1)
+              Text(I18n.t('time_delta_' + key)).fontSize(12).fontColor(this.c.text).layoutWeight(1)
               TextInput({ text: this.store.timeDeltaTCustom.split(',')[index] ?? '' }).fontSize(13).height(40).width('50%')
-                .fontColor(this.textColor).backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL)
+                .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
                 .enabled(!this.pending).onChange((value: string) => {
                   const parts = this.store.timeDeltaTCustom.split(',')
                   parts[index] = value
@@ -65,12 +67,12 @@ export struct DeltaTSettingsBlock {
             }.width('100%').margin({ bottom: 6 })
           }, (key: string) => key)
           Button(I18n.t('time_save')).fontSize(12).height(40).enabled(!this.pending)
-            .fontColor(this.textColor).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+            .fontColor(this.c.text).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
             .onClick(() => { this.onSaveCustom(this.store.timeDeltaTCustom) })
         }.width('100%').transition(TransitionEffect.OPACITY.combine(TransitionEffect.translate({ y: 6 })))
       }
       if (this.store.deltaTDescription.length > 0) {
-        Text(this.store.deltaTDescription).fontSize(12).fontColor(this.subColor).width('100%').padding(10)
+        Text(this.store.deltaTDescription).fontSize(12).fontColor(this.c.sub).width('100%').padding(10)
       }
     }.width('100%')
   }

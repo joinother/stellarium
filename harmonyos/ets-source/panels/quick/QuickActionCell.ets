@@ -1,7 +1,10 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { QuickActionItem } from '../../common/derive/quickActions'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 
 // 快捷操作面板的单个图标按钮。一个组件承担两种角色（由入参决定）：
 //   槽位（默认）—— 网格里的 12 个格子，编辑态下是**投放目标**；
@@ -10,36 +13,26 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 // 着色双路径（本组件唯一技术点）：
 //   raster —— Stellarium 官方 `-off` PNG，用 colorFilter 颜色矩阵把 RGB 统一压成目标色、保留 alpha。
 //             不能用 colorBlend：它会把透明背景一起染（ArkUI FAQ faqs-arkui-1328）。
-//   vector —— 自研 `ic_*.svg`，走 fillColor。
+//   vector —— 自研 `ic_*.svg`，同样走 supportSvg2 + colorFilter（fillColor 覆盖不了写死的白色描边）。
 // 两条路径产出同一套「亮 = 高亮 / 灭 = 暗灰」观感；官方 `-on` 图标一律不用。
 //
+// 图标名、激活态、按下态、文字色由宿主以机制四槽位传入；点按语义（receiveTap 门控 +
+// onToggle 回调）与长按提示语义由宿主注入；拖放语义（候选 onDragBegin / 槽位 onDropOnSlot）
+// 由宿主经 editable / candidate 门控。
+// 视觉：标题 12 号 #8EA0BD / 按钮高 32 / GoTo #5B93BF、同步 rgba(107,163,214,0.20)、
+// 中止 rgba(255,121,121,0.14) / 状态 11 号 #99FFFFFF 高 2 行 / 外框 rgba(107,163,214,0.12)。
 // 网格内不显示文字（对齐参考图），长按经 onHint 出名称提示。
 // **编辑态例外**：长按要让位给统一拖拽的起手（同一手势），故编辑态内长按不再出提示（见计划 §13.5）。
-// 纯色替换矩阵：把 RGB 统一压成目标色、alpha 原样透传。
-// 值必须归一化到 0.0–1.0（1.0 对应 255）——用 0–255 会被截断成近白（官方 FAQ faqs-arkui-1353）。
-// 亮 = #EAF7FF（234/247/255），灭 = #7E8896（126/136/150）。
-const TINT_ON: number[] = [
-  0, 0, 0, 0, 0.9176,
-  0, 0, 0, 0, 0.9686,
-  0, 0, 0, 0, 1,
-  0, 0, 0, 1, 0
-]
-
-const TINT_OFF: number[] = [
-  0, 0, 0, 0, 0.4941,
-  0, 0, 0, 0, 0.5333,
-  0, 0, 0, 0, 0.5882,
-  0, 0, 0, 1, 0
-]
 
 @Component
 export struct QuickActionCell {
   @Prop item: QuickActionItem
   @Prop isOn: boolean
-  // 编辑态：槽位显示可投放描边、候选格可被拖出、长按不再出提示。
+  // 编辑态：格子显示可投放描边并接收拖放。
   @Prop editable: boolean
   // 本格是候选（拖出源）而非槽位（投放目标）。
   @Prop candidate: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   // 拖拽悬停在本槽位上方（仅槽位使用）。
   @State private dragOver: boolean = false
   onToggle: (id: string, value: boolean) => void = () => {}
@@ -49,12 +42,14 @@ export struct QuickActionCell {
   // 本槽位收到投放（宿主按被拖 id 与槽位 id 做替换）。
   onDropOnSlot: (slotId: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
+
   // 注意：成员名不得与组件内置属性方法重名（`borderColor` 是内置属性），故加 cell 前缀。
   private cellBorderColor(): ResourceColor {
-    if (this.dragOver) return 'rgba(159, 232, 255, 0.85)'
-    if (this.isOn) return 'rgba(107, 163, 214, 0.18)'
+    if (this.dragOver) return this.c.accent
+    if (this.isOn) return this.c.soft
     // 编辑态给槽位一圈淡描边，示意「可以放这里」；候选格不加。
-    if (this.editable && !this.candidate) return 'rgba(159, 232, 255, 0.26)'
+    if (this.editable && !this.candidate) return this.c.accentSoft
     return Color.Transparent
   }
 
@@ -66,7 +61,8 @@ export struct QuickActionCell {
             .width(38)
             .height(38)
             .objectFit(ImageFit.Contain)
-            .colorFilter(this.isOn ? TINT_ON : TINT_OFF)
+            .supportSvg2(true)
+            .colorFilter(this.isOn ? tintMatrixFor(this.c.dockActive) : tintMatrixFor(this.c.idleIcon))
             // Image 属 ArkUI 默认可拖拽组件，必须显式关掉：否则它会被系统挑成拖拽源，
             // 我们挂在 Button 上的 onDragStart 就永远不回调（实测 AceDrag 日志
             // `require summary: general.image-24` 即由图标自身当源）。
@@ -76,7 +72,8 @@ export struct QuickActionCell {
             .width(34)
             .height(34)
             .objectFit(ImageFit.Contain)
-            .fillColor(this.isOn ? '#EAF7FF' : '#7E8896')
+            .supportSvg2(true)
+            .colorFilter(this.isOn ? tintMatrixFor(this.c.dockActive) : tintMatrixFor(this.c.idleIcon))
             .draggable(false)
         }
       }
@@ -97,13 +94,13 @@ export struct QuickActionCell {
       .padding(0)
       // 只给「开」画底框：夜间模式下灭态的浅底框在暗背景里几乎不可辨，反而糊成一团。
       // 边框宽度恒为 1（颜色透明）以免开关切换时格子尺寸跳动。
-      .backgroundColor(this.isOn || this.dragOver ? 'rgba(107, 163, 214, 0.12)' : Color.Transparent)
+      .backgroundColor(this.isOn || this.dragOver ? this.c.soft : Color.Transparent)
       .border({ width: 1, color: this.cellBorderColor() })
       .borderRadius(UI_RADIUS_CONTROL)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
       .accessibilityText(I18n.t(this.item.labelKey))
       .onClick(() => {
-        // 编辑态内点按不切换开关（改用拖动替换），避免与拖拽语义打架。
+        // 编辑态内点按不切换开关（改用拖拽替换），避免与拖拽语义打架。
         if (this.editable) return
         this.onToggle(this.item.id, !this.isOn)
       })

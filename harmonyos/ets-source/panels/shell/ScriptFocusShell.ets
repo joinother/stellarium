@@ -1,9 +1,10 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { ScriptKeyButton } from '../tools/ScriptKeyButton'
 import { ScriptStore } from '../../state/ScriptStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 脚本焦点播放壳（脚本 / 回放进行中的播放分支）。
 //
@@ -31,6 +32,7 @@ export struct ScriptFocusShell {
   @Prop controlHeight: number
   @Prop controlX: number
   @Prop controlY: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onSkyTouch: (event: TouchEvent) => void = () => {}
   onControlDragTouch: (event: TouchEvent) => void = () => {}
   onContinue: () => void = () => {}
@@ -38,6 +40,10 @@ export struct ScriptFocusShell {
   onToggleReplayPause: () => void = () => {}
   onStop: () => void = () => {}
   onSendKey: (key: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Stack() {
@@ -52,7 +58,7 @@ export struct ScriptFocusShell {
         Row({ space: 8 }) {
           Stack() {
             Circle({ width: 7, height: 7 })
-              .fill(this.scriptStore.scriptWaiting ? '#F0B44D' : '#68C8A4')
+              .fill(this.scriptStore.scriptWaiting ? this.c.warning : this.c.success)
           }
             .width(18)
             .height(18)
@@ -60,19 +66,19 @@ export struct ScriptFocusShell {
             Text(this.scriptStore.scriptWaiting ? I18n.t('script_waiting') : (this.scriptStore.scriptRunning ? I18n.t('script_playing') : (this.scriptStore.replaying ? I18n.t('script_replaying') : I18n.t('script_preparing'))))
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#F1FAFF')
+              .fontColor(this.c.textStrong)
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
             Text(this.displayName)
               .fontSize(10)
-              .fontColor('rgba(205, 228, 244, 0.70)')
+              .fontColor(this.c.tertiary)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start)
           Stack() {
-            Rect().width(18).height(3).radius(2).fill('rgba(205, 228, 244, 0.42)')
+            Rect().width(18).height(3).radius(2).fill(this.c.iconTertiary)
           }
             .width(30)
             .height(28)
@@ -87,7 +93,7 @@ export struct ScriptFocusShell {
             Text(this.captionText)
               .fontSize(this.compact ? 11 : 12)
               .lineHeight(this.compact ? 16 : 17)
-              .fontColor('#F2FAFF')
+              .fontColor(this.c.textStrong)
               .width('100%')
               .maxLines(this.scriptStore.scriptWaiting ? 1 : 4)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -96,10 +102,10 @@ export struct ScriptFocusShell {
               .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           } else if (!this.scriptStore.scriptWaiting) {
             Row({ space: 8 }) {
-              LoadingProgress().width(16).height(16).color('#7FB3DC')
+              LoadingProgress().width(16).height(16).color(this.c.spinner)
               Text(I18n.t('script_playing'))
                 .fontSize(11)
-                .fontColor('rgba(205, 228, 244, 0.72)')
+                .fontColor(this.c.iconSecondary)
             }
               .width('100%')
               .height('100%')
@@ -109,10 +115,10 @@ export struct ScriptFocusShell {
 
           if (this.scriptStore.scriptWaiting) {
             Row({ space: 8 }) {
-              Image(getIcon('info', false)).width(16).height(16).fillColor('#D6EEFF')
+              Image(getIcon('info', false)).width(16).height(16).fillColor(this.c.iconSecondary)
               Text(this.waitText)
                 .fontSize(11)
-                .fontColor('#E7F6FF')
+                .fontColor(this.c.textStrong)
                 .maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1)
@@ -122,13 +128,13 @@ export struct ScriptFocusShell {
                   Text(I18n.t('script_continue'))
                     .fontSize(11)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#F6FCFF')
+                    .fontColor(this.c.textStrong)
                     .maxLines(1)
                 }
               }
                 .height(34)
                 .width(this.compact ? 82 : 96)
-                .backgroundColor('#4E89B5')
+                .backgroundColor(this.c.accent)
                 .borderRadius(UI_RADIUS_CONTROL)
                 .stateEffect(true)
                 .enabled(this.scriptStore.scriptRunning)
@@ -137,8 +143,8 @@ export struct ScriptFocusShell {
               .width('100%')
               .height(44)
               .padding({ left: 9, right: 6 })
-              .backgroundColor('rgba(78, 137, 181, 0.30)')
-              .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.30)' })
+              .backgroundColor(this.c.accentSoft)
+              .border({ width: 0.5, color: this.c.border })
               .borderRadius(UI_RADIUS_CONTROL)
               .position({ x: 0, y: 0 })
               .transition(TransitionEffect.asymmetric(
@@ -150,8 +156,8 @@ export struct ScriptFocusShell {
         }
           .width('100%')
           .height(this.scriptStore.replaying ? 78 : 82)
-          .backgroundColor('rgba(91, 147, 191, 0.14)')
-          .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.18)' })
+          .backgroundColor(this.c.soft)
+          .border({ width: 0.5, color: this.c.border })
           .borderRadius(UI_RADIUS_CONTROL)
           .clip(true)
 
@@ -159,7 +165,7 @@ export struct ScriptFocusShell {
           Button() {
             Image(getIcon('time_slower', false)).width(18).height(18)
           }
-            .backgroundColor('rgba(255,255,255,0.10)')
+            .backgroundColor(this.c.overlayButton)
             .borderRadius(UI_RADIUS_CONTROL)
             .height(34)
             .width(36)
@@ -167,14 +173,14 @@ export struct ScriptFocusShell {
             .onClick(() => { this.onChangeRate(-1) })
           Text(this.rateText)
             .fontSize(11)
-            .fontColor('#D9F1FF')
+            .fontColor(this.c.textStrong)
             .width(44)
             .textAlign(TextAlign.Center)
             .maxLines(1)
           Button() {
             Image(getIcon('time_fast', false)).width(18).height(18)
           }
-            .backgroundColor('rgba(255,255,255,0.10)')
+            .backgroundColor(this.c.overlayButton)
             .borderRadius(UI_RADIUS_CONTROL)
             .height(34)
             .width(36)
@@ -184,7 +190,7 @@ export struct ScriptFocusShell {
             Button() {
               Image(getIcon(this.scriptStore.replayPaused ? 'time_realtime' : 'pause', false)).width(18).height(18)
             }
-              .backgroundColor('rgba(255,255,255,0.10)')
+              .backgroundColor(this.c.overlayButton)
               .borderRadius(UI_RADIUS_CONTROL)
               .height(34)
               .width(36)
@@ -196,11 +202,11 @@ export struct ScriptFocusShell {
               Image(getIcon('time_stop', false)).width(17).height(17)
               Text(I18n.t('script_stop'))
                 .fontSize(11)
-                .fontColor('#FFFFFF')
+                .fontColor(this.c.textStrong)
                 .maxLines(1)
             }
           }
-            .backgroundColor('rgba(192, 57, 43, 0.82)')
+            .backgroundColor(this.c.error)
             .borderRadius(UI_RADIUS_CONTROL)
             .height(34)
             .width(this.compact ? 68 : 76)
@@ -231,11 +237,11 @@ export struct ScriptFocusShell {
       .height(this.controlHeight)
       .padding({ left: 12, right: 10, top: 8, bottom: 8 })
       .position({ x: this.controlX, y: this.controlY })
-      .backgroundColor('rgba(10, 18, 30, 0.84)')
+      .backgroundColor(this.c.overlayPanel)
       .backdropBlur(28)
-      .border({ width: 1, color: 'rgba(147, 215, 255, 0.20)' })
+      .border({ width: 1, color: this.c.border })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: 18, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 18, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
       .zIndex(120)
       .hitTestBehavior(HitTestMode.Default)
       .transition(TransitionEffect.asymmetric(

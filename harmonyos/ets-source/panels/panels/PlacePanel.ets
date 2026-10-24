@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
 import { LocSearchItem } from '../../pages/StellariumTypes'
@@ -14,7 +16,6 @@ import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEv
 // 观测星球 +（非 appgallery 构建下的）指星笔 / 手表陀螺仪 / 会话延续 / 今晚天象。
 //
 // 三个 store 走 @ObjectLink，文本与颜色走 @Prop，native 桥/定时器/快捷键动作回调注入宿主。
-
 @Component
 export struct PlacePanel {
   @ObjectLink locationPickerStore: LocationPickerStore
@@ -23,16 +24,11 @@ export struct PlacePanel {
   @Prop locationText: string
   @Prop coordinateText: string
   @Prop altitudeText: string
-  // 地图几何由 LocationPickerPanel 自算，这里只传它依赖的布局态
   @Prop expandedLayout: boolean
+  // 地图几何由 LocationPickerPanel 自算，这里只传它依赖的布局态
   @Prop skyWidth: number
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop inputColor: string
-  @Prop accentColor: string
-  @Prop panelColor: string
-  @Prop borderTint: string
   @Prop mapAllowed: boolean
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   planetLabel: (en: string) => string = (en: string) => en
   contextOf: (item: LocSearchItem) => string = () => ''
   onUseDeviceLocation: () => void = () => {}
@@ -63,19 +59,21 @@ export struct PlacePanel {
   onRefreshTonight: () => void = () => {}
   onJump: (jd: number, lock: string, title: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
   build() {
     Column() {
       Row() {
-        Text(I18n.t('i0014')).fontSize(12).fontColor('#99FFFFFF').width(72)
-        Text(this.locationText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(I18n.t('i0014')).fontSize(12).fontColor(this.c.sub).width(72)
+        Text(this.locationText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
-        Text(I18n.t('i0015')).fontSize(12).fontColor('#99FFFFFF').width(72)
-        Text(this.coordinateText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(I18n.t('i0015')).fontSize(12).fontColor(this.c.sub).width(72)
+        Text(this.coordinateText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
-        Text(I18n.t('i0016')).fontSize(12).fontColor('#99FFFFFF').width(72)
-        Text(this.altitudeText).fontSize(14).fontColor('#E5FFFFFF').layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(I18n.t('i0016')).fontSize(12).fontColor(this.c.sub).width(72)
+        Text(this.altitudeText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       LocationPickerPanel({
         pickerStore: this.locationPickerStore,
@@ -83,11 +81,6 @@ export struct PlacePanel {
         observerPlanet: this.sessionToolStore.observerPlanet,
         expandedLayout: this.expandedLayout,
         skyWidth: this.skyWidth,
-        subColor: this.subColor,
-        inputColor: this.inputColor,
-        textColor: this.textColor,
-        accentColor: this.accentColor,
-        panelColor: this.panelColor,
         onUseDeviceLocation: () => { this.onUseDeviceLocation() },
         onSearchLocations: (query: string) => { this.onSearchLocations(query) },
         onInputFocus: () => { this.onInputFocus() },
@@ -105,10 +98,6 @@ export struct PlacePanel {
         latitude: this.locationPickerStore.locationPickerLatitude,
         longitude: this.locationPickerStore.locationPickerLongitude,
         mapAllowed: this.mapAllowed,
-        textColor: this.textColor,
-        subColor: this.subColor,
-        accentColor: this.accentColor,
-        panelColor: this.panelColor,
         onSelectProvider: (provider: string) => { this.onSelectMapProvider(provider) },
         onPick: (latitude: number, longitude: number) => { this.onPickMap(latitude, longitude) },
         onFallback: () => { this.onMapFallback() }
@@ -120,13 +109,13 @@ export struct PlacePanel {
         onDeleteLocation: (name: string) => { this.onDeleteLocation(name) },
         onChip: (id: string) => { this.onChip(id) }
       })
-      ObserverPlanetSection({ store: this.sessionToolStore, textColor: this.textColor, borderTint: this.borderTint, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
+      ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       // These are developer scaffolding screens, not release-ready features.
       if (!OFFLINE_APPGALLERY_BUILD) {
-        PointingTestSection({ store: this.sessionToolStore, textColor: this.textColor, borderTint: this.borderTint, onPoint: () => { this.onPoint() } })
-        WatchGyroSection({ store: this.sessionToolStore, textColor: this.textColor, onSend: () => { this.onSend() }, onStart: () => { this.onStart() }, onStop: () => { this.onStop() } })
-        ContinuationSection({ hint: this.sessionToolStore.sessionHint, json: this.sessionToolStore.sessionJson, textColor: this.textColor, panelColor: this.borderTint, onExport: () => { this.onExport() }, onApply: () => { this.onSessionApply() }, onHandoff: () => { this.onHandoff() } })
-        TonightEventsSection({ store: this.sessionToolStore, textColor: this.textColor, onRefresh: () => { this.onRefreshTonight() }, onJump: (jd: number, lock: string, title: string) => { this.onJump(jd, lock, title) } })
+        PointingTestSection({ store: this.sessionToolStore, onPoint: () => { this.onPoint() } })
+        WatchGyroSection({ store: this.sessionToolStore, onSend: () => { this.onSend() }, onStart: () => { this.onStart() }, onStop: () => { this.onStop() } })
+        ContinuationSection({ hint: this.sessionToolStore.sessionHint, json: this.sessionToolStore.sessionJson, onExport: () => { this.onExport() }, onApply: () => { this.onSessionApply() }, onHandoff: () => { this.onHandoff() } })
+        TonightEventsSection({ store: this.sessionToolStore, onRefresh: () => { this.onRefreshTonight() }, onJump: (jd: number, lock: string, title: string) => { this.onJump(jd, lock, title) } })
       }
     }.width('100%')
   }

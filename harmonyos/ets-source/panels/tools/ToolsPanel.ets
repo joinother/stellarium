@@ -1,6 +1,8 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
 import { ToolsStore } from '../../state/ToolsStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 「工具」面板内容。
 //
@@ -15,12 +17,9 @@ import { ToolsStore } from '../../state/ToolsStore'
 @Component
 export struct ToolsPanel {
   @ObjectLink store: ToolsStore
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
-  @Prop inputColor: string
   @Prop configImportText: string
   @Prop sessionImportText: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onScreenshot: () => void = () => {}
   onExportConfig: () => void = () => {}
   onShareConfig: () => void = () => {}
@@ -33,84 +32,88 @@ export struct ToolsPanel {
   onLoadLog: () => void = () => {}
   onCollapseLog: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Scroll() {
       Column({ space: 10 }) {
-        Text(I18n.t('panel_tools_data')).fontSize(15).fontColor(this.textColor).width('100%').margin({ top: 4 })
-        Text(I18n.t('tools_data_hint')).fontSize(10).fontColor(this.subColor).width('100%')
+        Text(I18n.t('panel_tools_data')).fontSize(15).fontColor(this.c.text).width('100%').margin({ top: 4 })
+        Text(I18n.t('tools_data_hint')).fontSize(10).fontColor(this.c.sub).width('100%')
 
         Row({ space: 8 }) {
-          Text(I18n.t('tools_screenshot')).fontSize(13).fontColor(this.textColor).layoutWeight(1)
-          Button(this.store.screenshotSaving ? I18n.t('screenshot_preparing') : I18n.t('i0251')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+          Text(I18n.t('tools_screenshot')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+          Button(this.store.screenshotSaving ? I18n.t('screenshot_preparing') : I18n.t('i0251')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 })
             .enabled(!this.store.screenshotSaving)
             .onClick(() => { this.onScreenshot() })
-        }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+        }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
 
         Column({ space: 6 }) {
           Row({ space: 8 }) {
-            Text(I18n.t('tools_config_backup')).fontSize(13).fontColor(this.textColor).layoutWeight(1)
-            Button(I18n.t('btn_export_view')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Text(I18n.t('tools_config_backup')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+            Button(I18n.t('btn_export_view')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onExportConfig() })
-            Button(I18n.t('config_share')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Button(I18n.t('config_share')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onShareConfig() })
-            Button(I18n.t('btn_import_config')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Button(I18n.t('btn_import_config')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onImportConfig() })
           }.width('100%')
           if (this.store.configExportVisible) {
             Scroll() {
-              Text(this.store.configExportText.length > 0 ? this.store.configExportText : '（配置为空）').fontSize(10).fontColor(this.subColor).width('100%').fontFamily('monospace')
-            }.width('100%').height(120).backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL).padding(8)
+              Text(this.store.configExportText.length > 0 ? this.store.configExportText : '（配置为空）').fontSize(10).fontColor(this.c.sub).width('100%').fontFamily('monospace')
+            }.width('100%').height(120).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).padding(8)
           }
           TextArea({ placeholder: I18n.t('c_config_import_hint'), text: this.configImportText })
-            .fontSize(10).fontColor(this.textColor).placeholderFont({ size: 10 }).placeholderColor(this.subColor)
-            .backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL).width('100%').height(76)
+            .fontSize(10).fontColor(this.c.text).placeholderFont({ size: 10 }).placeholderColor(this.c.sub)
+            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).width('100%').height(76)
             .onChange((value: string) => { this.onConfigImportText(value) })
-          Text(this.store.configImportMsg.length > 0 ? this.store.configImportMsg : ' ').fontSize(10).fontColor('#FFAA00').width('100%').height(16)
-        }.width('100%').padding(10).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+          Text(this.store.configImportMsg.length > 0 ? this.store.configImportMsg : ' ').fontSize(10).fontColor(this.c.warning).width('100%').height(16)
+        }.width('100%').padding(10).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
 
         Column({ space: 6 }) {
           Row({ space: 8 }) {
-            Text(I18n.t('tools_session')).fontSize(13).fontColor(this.textColor).layoutWeight(1)
-            Button(I18n.t('session_export')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Text(I18n.t('tools_session')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+            Button(I18n.t('session_export')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onSessionExport() })
-            Button(I18n.t('session_share')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Button(I18n.t('session_share')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onSessionShare() })
-            Button(I18n.t('session_import')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Button(I18n.t('session_import')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onSessionApply() })
           }.width('100%')
-          Text(I18n.t('session_hint')).fontSize(10).fontColor(this.subColor).width('100%')
+          Text(I18n.t('session_hint')).fontSize(10).fontColor(this.c.sub).width('100%')
           if (this.store.sessionExportText.length > 0) {
             Scroll() {
-              Text(this.store.sessionExportText).fontSize(10).fontColor(this.subColor).width('100%').fontFamily('monospace')
-            }.width('100%').height(100).backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL).padding(8)
+              Text(this.store.sessionExportText).fontSize(10).fontColor(this.c.sub).width('100%').fontFamily('monospace')
+            }.width('100%').height(100).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).padding(8)
           }
           TextArea({ placeholder: I18n.t('session_import_hint'), text: this.sessionImportText })
-            .fontSize(10).fontColor(this.textColor).placeholderColor(this.subColor)
-            .backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL).width('100%').height(72)
+            .fontSize(10).fontColor(this.c.text).placeholderColor(this.c.sub)
+            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).width('100%').height(72)
             .onChange((value: string) => { this.onSessionImportText(value) })
           if (this.store.sessionImportMsg.length > 0) {
-            Text(this.store.sessionImportMsg).fontSize(10).fontColor('#FFAA00').width('100%')
+            Text(this.store.sessionImportMsg).fontSize(10).fontColor(this.c.warning).width('100%')
           }
-        }.width('100%').padding(10).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+        }.width('100%').padding(10).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
 
         Column({ space: 6 }) {
           Row({ space: 8 }) {
-            Text(I18n.t('tools_logs')).fontSize(13).fontColor(this.textColor).layoutWeight(1)
-            Button(this.store.logVisible ? I18n.t('btn_refresh') : I18n.t('btn_view_logs')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+            Text(I18n.t('tools_logs')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+            Button(this.store.logVisible ? I18n.t('btn_refresh') : I18n.t('btn_view_logs')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onLoadLog() })
             if (this.store.logVisible) {
-              Button(I18n.t('btn_collapse')).fontSize(11).fontColor(this.textColor).backgroundColor(this.panelColor)
+              Button(I18n.t('btn_collapse')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
                 .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onCollapseLog() })
             }
           }.width('100%')
           if (this.store.logVisible) {
             Scroll() {
-              Text(this.store.logText.length > 0 ? this.store.logText : '（日志为空）').fontSize(10).fontColor(this.subColor).width('100%').fontFamily('monospace')
-            }.width('100%').height(180).backgroundColor(this.inputColor).borderRadius(UI_RADIUS_CONTROL).padding(8)
+              Text(this.store.logText.length > 0 ? this.store.logText : '（日志为空）').fontSize(10).fontColor(this.c.sub).width('100%').fontFamily('monospace')
+            }.width('100%').height(180).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).padding(8)
           }
-        }.width('100%').padding(10).backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+        }.width('100%').padding(10).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
       }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
-    }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor('#33FFFFFF')
+    }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
   }
 }

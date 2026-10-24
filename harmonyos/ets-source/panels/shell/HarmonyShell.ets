@@ -1,8 +1,10 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { ViewCenterCoordinateOverlay } from '../overlay/ViewCenterCoordinateOverlay'
 import { GyroTargetGuide } from '../astro/GyroTargetGuide'
 import { OverlayStore } from '../../state/OverlayStore'
 import { GyroStore } from '../../state/GyroStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 和谐桌面壳的共享 chrome：承载**不依赖同级拦截**的常驻浮层
 // （视图中心坐标叠层、陀螺仪指引、点击反馈气泡）。
@@ -27,8 +29,13 @@ export struct HarmonyShell {
   @Prop overlayTop: number
   @Prop hintTop: number
   @Prop actionHint: ResourceStr
+  @State c: ThemeSlots = DEFAULT_SLOTS
 
   onHandleViewCoordinateTouch: (event: TouchEvent) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Stack() {
@@ -68,11 +75,11 @@ export struct HarmonyShell {
           Text(this.actionHint)
             .fontSize(13)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#FFFFFF')
+            .fontColor(this.c.text)
             .padding({ left: 16, right: 16, top: 9, bottom: 9 })
-            .backgroundColor('rgba(91, 147, 191, 0.92)')
+            .backgroundColor(this.c.hintPillBg)
             .borderRadius(UI_RADIUS_PILL)
-            .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.30)', offsetX: 0, offsetY: 8 })
+            .shadow({ radius: 20, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
         }
           .hitTestBehavior(HitTestMode.None)
           .position({ x: 0, y: this.hintTop })

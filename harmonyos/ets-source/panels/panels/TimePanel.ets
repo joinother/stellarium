@@ -34,12 +34,6 @@ export struct TimePanel {
   @Prop manualDay: number
   @Prop manualHour: number
   @Prop manualMinute: number
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop accentColor: string
-  @Prop panelColor: string
-  @Prop inputColor: string
-  @Prop borderTint: string
   onSelectUnit: (unit: string) => void = () => {}
   onWheelTouch: (event: TouchEvent) => void = () => {}
   onChip: (id: string) => void = () => {}
@@ -67,22 +61,14 @@ export struct TimePanel {
         { id: 'sunSet', label: '日落' }, { id: 'astronomicalSet', label: '天文昏' }
       ], onChip: (id: string) => { this.onChip(id) } })
       SiderealTimeRow({
-        store: this.timeStore,
-        subColor: this.subColor
+        store: this.timeStore
       })
       EquationOfTimeBlock({
         store: this.equationOfTimeStore,
-        textColor: this.textColor,
-        subColor: this.subColor,
-        accentColor: this.accentColor,
-        panelColor: this.panelColor,
         onToggle: (setting: string, enabled: boolean) => { this.onEquationToggle(setting, enabled) }
       })
       JulianDateControls({
         store: this.julianStore,
-        textColor: this.textColor,
-        subColor: this.subColor,
-        inputColor: this.inputColor,
         onAdjust: (scale: string, direction: number) => { this.onAdjustJulian(scale, direction) },
         onApply: (scale: string) => { this.onApplyJulian(scale) }
       })
@@ -92,11 +78,6 @@ export struct TimePanel {
         manualDay: this.manualDay,
         manualHour: this.manualHour,
         manualMinute: this.manualMinute,
-        textColor: this.textColor,
-        subColor: this.subColor,
-        inputColor: this.inputColor,
-        panelColor: this.panelColor,
-        borderColorValue: this.borderTint,
         onPickDate: (year: number, monthIndex: number, day: number) => { this.onPickDate(year, monthIndex, day) },
         onPickTime: (hour: number, minute: number) => { this.onPickTime(hour, minute) },
         onApply: () => { this.onApplyManual() },

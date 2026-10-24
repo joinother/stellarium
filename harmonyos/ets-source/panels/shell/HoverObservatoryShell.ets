@@ -1,3 +1,4 @@
+import { Theme } from '@kit.ArkUI'
 import { ShellAction } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { ObjectDetailConnectorLayer } from '../overlay/ObjectDetailConnectorLayer'
@@ -6,6 +7,7 @@ import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { OverlayStore } from '../../state/OverlayStore'
 import { UI_RADIUS_PILL, UI_RADIUS_SHEET } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 折叠展开（hover）观测壳。
 //
@@ -17,7 +19,6 @@ import { UI_RADIUS_PILL, UI_RADIUS_SHEET } from '../../common/ui/UiTokens'
 // （会触发真机退出），故面板仍由宿主渲染。
 //
 // 所有状态以 @Prop / @ObjectLink 注入，动作回注宿主。
-
 @Component
 export struct HoverObservatoryShell {
   @ObjectLink objectDetailStore: ObjectDetailStore
@@ -64,12 +65,9 @@ export struct HoverObservatoryShell {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
   @Prop cultureVisible: boolean
-  @Prop textColor: string
   @Prop connectorVisible: boolean
   @Prop connectorLength: number
   @Prop connectorX: number
@@ -86,6 +84,7 @@ export struct HoverObservatoryShell {
   @Prop detailY: number
   @Prop detailWidth: number
   @Prop detailHeight: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
 
   scroller: Scroller = new Scroller()
   onSkyTouch: (event: TouchEvent) => void = () => {}
@@ -113,6 +112,10 @@ export struct HoverObservatoryShell {
   onReselect: () => void = () => {}
   onSpeak: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   private hoverConsoleTop(): number {
     return this.hoverSkyPaneHeight + 10
   }
@@ -131,18 +134,18 @@ export struct HoverObservatoryShell {
       Row() {
         Text(this.observationTimeText)
           .fontSize(11)
-          .fontColor('rgba(229,255,255,0.78)')
+          .fontColor(this.c.sub)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
         Text(this.currentFovText)
           .fontSize(11)
-          .fontColor('rgba(229,255,255,0.78)')
+          .fontColor(this.c.sub)
           .margin({ left: 10 })
       }
         .height(34)
         .padding({ left: 16, right: 16 })
-        .backgroundColor('rgba(10, 14, 26, 0.42)')
+        .backgroundColor(this.c.bgStrong)
         .backdropBlur(22)
         .borderRadius(UI_RADIUS_PILL)
         .position({ x: 16, y: 12 })
@@ -152,7 +155,7 @@ export struct HoverObservatoryShell {
       Row()
         .width(Math.max(120, this.skyWidth - 72))
         .height(2)
-        .backgroundColor('rgba(147, 215, 255, 0.20)')
+        .backgroundColor(this.c.border)
         .borderRadius(1)
         .position({ x: 36, y: this.hoverSkyPaneHeight + 1 })
         .hitTestBehavior(HitTestMode.None)
@@ -160,9 +163,9 @@ export struct HoverObservatoryShell {
       Column()
         .width(Math.max(240, this.skyWidth - 24))
         .height(Math.max(220, this.skyHeight - this.hoverConsoleTop() - 14))
-        .backgroundColor(this.panelIdleGlass ? 'rgba(10, 14, 26, 0.46)' : 'rgba(14, 18, 32, 0.66)')
+        .backgroundColor(this.panelIdleGlass ? this.c.bgStrong : this.c.overlayPanel)
         .backdropBlur(this.panelIdleGlass ? 42 : 30)
-        .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.12)' })
+        .border({ width: 0.5, color: this.c.border })
         .borderRadius(UI_RADIUS_SHEET)
         .position({ x: 12, y: this.hoverConsoleTop() })
         .hitTestBehavior(HitTestMode.None)
@@ -190,20 +193,20 @@ export struct HoverObservatoryShell {
         .zIndex(40)
 
       if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
-        ObjectDetailConnectorLayer({
-          visible: this.connectorVisible,
-          beamLength: this.connectorLength,
-          beamX: this.connectorX,
-          beamY: this.connectorY,
-          beamAngle: this.connectorAngle,
-          animateGeometry: this.connectorAnimateGeometry,
-          targetOnScreen: this.connectorTargetOnScreen,
-          targetX: this.connectorTargetX,
-          targetY: this.connectorTargetY,
-          endX: this.connectorEndX,
-          endY: this.connectorEndY,
-          markerSize: this.markerSize
-        })
+         ObjectDetailConnectorLayer({
+           visible: this.connectorVisible,
+           beamLength: this.connectorLength,
+           beamX: this.connectorX,
+           beamY: this.connectorY,
+           beamAngle: this.connectorAngle,
+           animateGeometry: this.connectorAnimateGeometry,
+           targetOnScreen: this.connectorTargetOnScreen,
+           targetX: this.connectorTargetX,
+           targetY: this.connectorTargetY,
+           endX: this.connectorEndX,
+           endY: this.connectorEndY,
+            markerSize: this.markerSize
+          })
         Stack() {
           UnifiedObjectDetailCard({
             store: this.objectDetailStore, mediaStore: this.objectMediaStore, scroller: this.scroller,
@@ -219,9 +222,9 @@ export struct HoverObservatoryShell {
             modelReady: this.modelReady, modelRendering: this.modelRendering,
             hasModelTexture: this.hasModelTexture,
             modelNotice: this.modelNotice, warmupText: this.warmupText,
-            fallbackKind: this.fallbackKind, starColor: this.starColor,
-            satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
-            accent: this.accent, cultureVisible: this.cultureVisible, textColor: this.textColor,
+             fallbackKind: this.fallbackKind,
+             satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+             cultureVisible: this.cultureVisible,
             resolve: (key: string) => this.resolve(key),
             nameOf: (name: string) => this.nameOf(name), typeOf: (type: string) => this.typeOf(type),
             onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) },

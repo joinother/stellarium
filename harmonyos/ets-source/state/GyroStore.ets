@@ -1,4 +1,5 @@
 import { I18n } from '../pages/I18n'
+import { AstroColors } from './StellariumTheme'
 // 传感器 / 陀螺仪域状态 store：持有导览姿态（gyroGuide*）、开关与状态（gyroscopeEnabled /
 // gyroscopeStatus / gyroscopeSensitivityText）、罗盘读数（gyroCompass*）与校准面板 / 校准偏移。
 // 消费方以 @ObjectLink 订阅；字段随传感器事件更新，宿主与组件的刷新语义不变。
@@ -28,8 +29,8 @@ export class GyroStore {
 
   // 陀螺仪指示点颜色：切换中黄、开启绿、关闭灰。
   gyroIndicatorColor(): string {
-    if (this.gyroscopePending) return '#FFD36E'
-    if (this.gyroscopeEnabled) return '#72E0A0'
-    return 'rgba(255, 255, 255, 0.42)'
+    if (this.gyroscopePending) return AstroColors.gyroPending
+    if (this.gyroscopeEnabled) return AstroColors.gyroEnabled
+    return AstroColors.gyroIdle
   }
 }

@@ -19,9 +19,10 @@
 
 #ifndef SPORADICMETEORMGR_HPP
 #define SPORADICMETEORMGR_HPP
-
 #include "SporadicMeteor.hpp"
+
 #include "StelModule.hpp"
+#include "StelApp.hpp"
 
 #include <QJsonObject>
 #include <QHash>
@@ -57,7 +58,7 @@ public slots:
 	void setZHR(int zhr);
 
 	//! Set flag used to turn on and off meteor rendering.
-	void setFlagShow(bool b) { m_flagShow = b; }
+	void setFlagShow(bool b) { if (m_flagShow!=b) { m_flagShow = b; StelApp::immediateSave("astro/flag_meteor", b); } }
 	//! Get value of flag used to turn on and off meteor rendering.
 	bool getFlagShow() const { return m_flagShow; }
 

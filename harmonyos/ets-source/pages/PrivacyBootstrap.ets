@@ -4,9 +4,11 @@ import { I18n } from './I18n'
 import hilog from '@ohos.hilog'
 import { notifyConsentAccepted } from '../common/PrivacyStartup'
 import { commonEventManager } from '@kit.BasicServicesKit'
+import { slotsForNightMode, ThemeSlots } from '../state/StellariumTheme'
 
 @Component
 export struct PrivacyBootstrap {
+  @Prop nightMode: boolean = false
   @Watch('onHostReady')
   @StorageLink('stellariumPrivacyHostReady')
   private hostReady: boolean = false
@@ -126,15 +128,19 @@ export struct PrivacyBootstrap {
     }
   }
 
+  private slots(): ThemeSlots {
+    return slotsForNightMode(this.nightMode)
+  }
+
   build() {
     Column({ space: 20 }) {
       if (this.requestFailed && !this.requesting) {
         Text(I18n.t(this.errorCode === 1006700003 ? 'privacy_service_unconfigured' :
           this.errorCode !== 0 ? 'privacy_service_unavailable' : 'privacy_start_required'))
-          .fontSize(16).fontColor('#D8E7F3').textAlign(TextAlign.Center)
+          .fontSize(16).fontColor(this.slots().text).textAlign(TextAlign.Center)
           .constraintSize({ maxWidth: 420 }).padding({ left: 24, right: 24 })
         if (this.errorCode > 0) {
-          Text(`${this.errorCode}`).fontSize(12).fontColor('#9CAEC5')
+          Text(`${this.errorCode}`).fontSize(12).fontColor(this.slots().sub)
         }
       }
       if (this.requestFailed || this.helpAvailable) {

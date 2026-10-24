@@ -256,8 +256,8 @@ export class TelescopeStore {
     return values
   }
 
-  // 赤道仪开关持久化：equatorialMount 即本 store 字段；AppStorage 读写不属 NAPI，
-  // store 内直接完成。
+  // 赤道仪/地平仪是引擎行为，权威值是 config.ini 的 navigation/viewing_mode
+  // （由 StelMovementMgr setter 写回）。此处仅维护进程内 UI 镜像，不写 UI 设置 JSON。
   persistEquatorialMount(): void {
     let obj: Record<string, boolean | string> = {}
     const cur = AppStorage.get<string>('stellariumSettings')

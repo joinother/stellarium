@@ -1,7 +1,9 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { SavedLocation } from '../../pages/StellariumTypes'
 import { LocationStore } from '../../state/LocationStore'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 本组件职责：位置面板的「已保存位置」行 + 中国城市 / 世界城市快捷 chip 行。
 //
@@ -10,21 +12,26 @@ import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 @Component
 export struct CityChipsRow {
   @ObjectLink store: LocationStore
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (name: string) => void = () => {}
   onChip: (id: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 4 }) {
       // 已保存位置
       Row() {
-        Text(I18n.t('loc_saved_locations')).fontSize(11).fontColor('#99FFFFFF').layoutWeight(1)
+        Text(I18n.t('loc_saved_locations')).fontSize(11).fontColor(this.c.sub).layoutWeight(1)
         Button(I18n.t('loc_save_current'))
-          .fontSize(10).fontColor('#7FB3DC')
+          .fontSize(10).fontColor(this.c.tertiary)
           .height(26).padding({ left: 8, right: 8 })
-          .backgroundColor('rgba(107, 163, 214, 0.15)')
-          .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+          .backgroundColor(this.c.soft)
+          .border({ width: 1, color: this.c.softStrong })
           .borderRadius(UI_RADIUS_CONTROL)
           .onClick(() => { this.onSaveCurrent() })
       }
@@ -32,21 +39,21 @@ export struct CityChipsRow {
       .margin({ top: 6 })
 
       if (this.store.savedLocations.length === 0) {
-        Text(I18n.t('loc_no_saved')).fontSize(10).fontColor('#8EA0BD').width('100%').padding({ left: 2 })
+        Text(I18n.t('loc_no_saved')).fontSize(10).fontColor(this.c.tertiary).width('100%').padding({ left: 2 })
       } else {
         Scroll() {
           Row({ space: 8 }) {
             ForEach(this.store.savedLocations, (s: SavedLocation) => {
               Row() {
                 Button(s.name)
-                  .fontSize(10).fontColor('#7FB3DC')
+                  .fontSize(10).fontColor(this.c.tertiary)
                   .height(28).padding({ left: 8, right: 8 })
-                  .backgroundColor('rgba(107, 163, 214, 0.20)')
-                  .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+                  .backgroundColor(this.c.softStrong)
+                  .border({ width: 1, color: this.c.softStrong })
                   .borderRadius(UI_RADIUS_CONTROL)
                 .onClick(() => { this.onApplyLocation(s.name, s.lat, s.lon, s.alt, s.planet) })
                 Text('x')
-                  .fontSize(10).fontColor('#FF9999')
+                  .fontSize(10).fontColor(this.c.errorText)
                   .margin({ left: 2 })
                   .onClick(() => { this.onDeleteLocation(s.name) })
               }
@@ -60,7 +67,7 @@ export struct CityChipsRow {
       }
 
       // 中国城市
-      Text('中国城市').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 6 })
+      Text('中国城市').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 6 })
       Scroll() {
         Row({ space: 8 }) {
           ForEach([
@@ -73,12 +80,12 @@ export struct CityChipsRow {
             { label: '乌鲁木齐', id: 'city_Urumqi' }, { label: '香港', id: 'city_HongKong' },
           ], (c: Record<string, string>) => {
             Button(c.label)
-              .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
+              .fontSize(11).fontColor(this.c.tertiary).fontWeight(FontWeight.Medium)
               .height(30).padding({ left: 10, right: 10 })
-              .backgroundColor('rgba(107, 163, 214, 0.20)')
-              .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+              .backgroundColor(this.c.softStrong)
+              .border({ width: 1, color: this.c.softStrong })
               .borderRadius(UI_RADIUS_PILL)
-              .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
+              .shadow({ radius: 12, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
               .onClick(() => { this.onChip(c.id) })
           }, (c: Record<string, string>) => c.id)
         }
@@ -88,7 +95,7 @@ export struct CityChipsRow {
       .scrollBar(BarState.Off)
       .width('100%')
       // 世界城市
-      Text('世界城市').fontSize(11).fontColor('#99FFFFFF').width('100%').padding({ left: 2 }).margin({ top: 4 })
+      Text('世界城市').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 4 })
       Scroll() {
         Row({ space: 8 }) {
           ForEach([
@@ -106,12 +113,12 @@ export struct CityChipsRow {
             { label: '布宜诺斯艾利斯', id: 'city_BuenosAires' }, { label: '檀香山', id: 'city_Honolulu' },
           ], (c: Record<string, string>) => {
             Button(c.label)
-              .fontSize(11).fontColor('#7FB3DC').fontWeight(FontWeight.Medium)
+              .fontSize(11).fontColor(this.c.tertiary).fontWeight(FontWeight.Medium)
               .height(30).padding({ left: 10, right: 10 })
-              .backgroundColor('rgba(107, 163, 214, 0.20)')
-              .border({ width: 1, color: 'rgba(107, 163, 214, 0.25)' })
+              .backgroundColor(this.c.softStrong)
+              .border({ width: 1, color: this.c.softStrong })
               .borderRadius(UI_RADIUS_PILL)
-              .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.18)', offsetX: 0, offsetY: 4 })
+              .shadow({ radius: 12, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
               .onClick(() => { this.onChip(c.id) })
           }, (c: Record<string, string>) => c.id)
         }

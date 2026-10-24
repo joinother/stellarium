@@ -1,7 +1,9 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { GuideButton } from '../guide/GuideButton'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 交互式导览提示壳。
 //
@@ -12,7 +14,6 @@ import { GuideButton } from '../guide/GuideButton'
 // 导览阶段文案与步序（guidePhase/index/count/stepTitle/stepText/stepKey）由宿主从
 // `guideState` 与 `currentGuide()/currentGuideStep()` 逐项算好，简单类型 @Prop 按值下发，
 // 宿主改值后重绘即可刷新。
-
 @Component
 export struct InteractiveGuideShell {
   @Prop guidePhase: string
@@ -29,10 +30,15 @@ export struct InteractiveGuideShell {
   @Prop cardHeight: number
   @Prop cardX: number
   @Prop cardY: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
 
   onSkyTouch: (event: TouchEvent) => void = () => {}
   onControlDragTouch: (event: TouchEvent) => void = () => {}
   onAction: (action: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Stack() {
@@ -43,28 +49,28 @@ export struct InteractiveGuideShell {
       Column({ space: 8 }) {
         Row({ space: 8 }) {
           Column({ space: 2 }) {
-            Text(this.guideTitle).fontSize(13).fontColor('#A8BDD1').width('100%')
+            Text(this.guideTitle).fontSize(13).fontColor(this.c.iconTertiary).width('100%')
             Text((this.guideIndex + 1).toString() + ' / ' + this.guideCount.toString() + ' · ' + this.guideStepTitle)
-              .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#EFF8FF').width('100%')
+              .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong).width('100%')
           }.layoutWeight(1).hitTestBehavior(HitTestMode.Block)
             .onTouch((event: TouchEvent) => { this.onControlDragTouch(event) })
           Button({ type: ButtonType.Circle }) { Image(getIcon('close', false)).width(20).height(20) }
-            .id('guide-stop').width(44).height(44).backgroundColor('rgba(255,255,255,0.10)')
+            .id('guide-stop').width(44).height(44).backgroundColor(this.c.overlayButton)
             .accessibilityText(I18n.t('guide_exit')).enabled(this.guidePhase !== 'restoring')
             .onClick(() => { this.onAction('stop') })
         }.width('100%').constraintSize({ minHeight: 52 }).hitTestBehavior(HitTestMode.Default)
         Scroll() {
           Column({ space: 12 }) {
-            Text(I18n.t('guide_phase_' + this.guidePhase)).fontSize(12).fontColor('#9CD6D3').width('100%')
+            Text(I18n.t('guide_phase_' + this.guidePhase)).fontSize(12).fontColor(this.c.detailSub).width('100%')
             ForEach([this.guideStepText], (step: string) => {
-              Text(I18n.t(step)).fontSize(15).lineHeight(23).fontColor('#EFF8FF').width('100%')
+              Text(I18n.t(step)).fontSize(15).lineHeight(23).fontColor(this.c.textStrong).width('100%')
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
             }, (step: string) => this.guideStepKey)
-            Text(I18n.t('guide_simulation')).fontSize(12).fontColor('#A8BDD1').width('100%')
+            Text(I18n.t('guide_simulation')).fontSize(12).fontColor(this.c.iconTertiary).width('100%')
             if (this.guidePhase === 'error') {
-              Text(I18n.t('guide_error')).fontSize(13).fontColor('#FFD2B6').width('100%')
+              Text(I18n.t('guide_error')).fontSize(13).fontColor(this.c.warning).width('100%')
             } else if (this.guidePhase === 'exploring') {
-              Text(I18n.t('guide_explore_hint')).fontSize(13).fontColor('#A8BDD1').width('100%')
+              Text(I18n.t('guide_explore_hint')).fontSize(13).fontColor(this.c.iconTertiary).width('100%')
             } else {
               Row({ space: 8 }) {
                 GuideButton({ label: 'guide_closer', action: 'closer', phase: this.guidePhase, index: this.guideIndex, onAction: (a: string) => { this.onAction(a) } })
@@ -78,11 +84,11 @@ export struct InteractiveGuideShell {
                   GuideButton({ label: 'guide_auto', action: 'auto-on', phase: this.guidePhase, index: this.guideIndex, onAction: (a: string) => { this.onAction(a) } })
                 }
                 if (this.guideAutomatic) {
-                  Text(Math.ceil(this.guideRemaining).toString() + ' s').fontSize(13).fontColor('#A8BDD1').margin({ left: 12 })
+                  Text(Math.ceil(this.guideRemaining).toString() + ' s').fontSize(13).fontColor(this.c.iconTertiary).margin({ left: 12 })
                 }
               }.width('100%')
             }
-            Text(I18n.t(this.guideCredit)).fontSize(11).fontColor('#A8BDD1').width('100%')
+            Text(I18n.t(this.guideCredit)).fontSize(11).fontColor(this.c.iconTertiary).width('100%')
           }.width('100%').padding({ bottom: 8 })
         }.id('guide-content').width('100%').layoutWeight(1).scrollBar(BarState.Auto).hitTestBehavior(HitTestMode.Default)
         Row({ space: 8 }) {
@@ -106,8 +112,8 @@ export struct InteractiveGuideShell {
         }.width('100%').height(48).hitTestBehavior(HitTestMode.Default)
       }.width(this.cardWidth).height(this.cardHeight).padding(14)
         .position({ x: this.cardX, y: this.cardY })
-        .backgroundColor('rgba(10,18,30,0.92)').borderRadius(UI_RADIUS_PANEL)
-        .border({ width: 1, color: 'rgba(147,215,255,0.20)' })
+        .backgroundColor(this.c.overlayPanel).borderRadius(UI_RADIUS_PANEL)
+        .border({ width: 1, color: this.c.border })
         .hitTestBehavior(HitTestMode.BLOCK_HIERARCHY)
         .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut }))
     }.width('100%').height('100%').hitTestBehavior(HitTestMode.Transparent)

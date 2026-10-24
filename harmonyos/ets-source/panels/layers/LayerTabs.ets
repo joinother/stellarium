@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { TabItem } from '../../pages/StellariumTypes'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 
@@ -11,11 +13,10 @@ export struct LayerTabs {
   @Prop tabs: TabItem[]
   @Prop activeTab: number
   @Prop foldTablet: boolean
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop accentColor: string
-  @Prop panelColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onSelectTab: (id: number) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Scroll() {
@@ -23,9 +24,9 @@ export struct LayerTabs {
         ForEach(this.tabs, (tab: TabItem) => {
           Text(tab.label)
             .fontSize(this.foldTablet ? 11 : 10)
-            .fontColor(this.activeTab === tab.id ? this.textColor : this.subColor)
+            .fontColor(this.activeTab === tab.id ? this.c.onAccent : this.c.sub)
             .padding({ left: this.foldTablet ? 10 : 8, right: this.foldTablet ? 10 : 8, top: 5, bottom: 5 })
-            .backgroundColor(this.activeTab === tab.id ? this.accentColor : this.panelColor)
+            .backgroundColor(this.activeTab === tab.id ? this.c.accent : this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL)
             .clickEffect({ level: ClickEffectLevel.LIGHT })
             .animation({ duration: 180, curve: Curve.EaseInOut })

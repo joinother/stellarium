@@ -2,6 +2,8 @@ import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { SatellitePass } from '../../pages/StellariumTypes'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 卫星过境段：过境卡片、时间线与加载 / 空 / 未请求态。
 //
@@ -37,18 +39,20 @@ export struct SatellitePassTimelineRow {
   @Prop label: string
   @Prop time: string
   @Prop tablet: boolean
-  @Prop accent: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Row({ space: 7 }) {
       Column() {
         Circle({ width: this.tablet ? 8 : 7, height: this.tablet ? 8 : 7 })
-          .fill(this.accent)
-        Divider().vertical(true).height(18).color('rgba(143,211,255,0.28)')
+          .fill(this.c.accent)
+        Divider().vertical(true).height(18).color(this.c.border)
       }.width(10).height(30).justifyContent(FlexAlign.Center)
       Column({ space: 1 }) {
-        Text(this.label).fontSize(this.tablet ? 10 : 10).fontColor('#8FBBD6')
-        Text(satellitePassTime(this.time)).fontSize(this.tablet ? 12 : 11).fontColor('#E1F2FA')
+        Text(this.label).fontSize(this.tablet ? 10 : 10).fontColor(this.c.tertiary)
+        Text(satellitePassTime(this.time)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.layoutWeight(1)
     }.width('100%').height(36)
@@ -59,42 +63,46 @@ export struct SatellitePassTimelineRow {
 export struct SatellitePassCard {
   @Prop pass: SatellitePass
   @Prop tablet: boolean
-  @Prop accent: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 5 }) {
       Row() {
         Text(satellitePassVisibility(this.pass)).fontSize(this.tablet ? 11 : 10).fontWeight(FontWeight.Medium)
-          .fontColor(this.pass.visible === true || this.pass.peakVisible === true ? '#A8F0C2' : '#D9C28F')
+          .fontColor(this.pass.visible === true || this.pass.peakVisible === true
+            ? this.c.success
+            : this.c.warning)
         Text(this.pass.ongoing === true ? ' · ' + I18n.t('satellite_pass_peak') : '')
-          .fontSize(10).fontColor('#8FBBD6').layoutWeight(1)
+          .fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
         Text(typeof this.pass.maxMagnitude === 'number' && Number.isFinite(this.pass.maxMagnitude) ? 'm ' + this.pass.maxMagnitude.toFixed(1) : '')
-          .fontSize(10).fontColor('#B9D9E9')
+          .fontSize(10).fontColor(this.c.detailSub)
       }.width('100%')
       Column({ space: 1 }) {
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_appearance'), time: this.pass.start ?? this.pass.appearance ?? '', tablet: this.tablet, accent: this.accent })
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_peak'), time: this.pass.peak ?? '', tablet: this.tablet, accent: this.accent })
-        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_disappearance'), time: this.pass.end ?? this.pass.disappearance ?? '', tablet: this.tablet, accent: this.accent })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_appearance'), time: this.pass.start ?? this.pass.appearance ?? '', tablet: this.tablet })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_peak'), time: this.pass.peak ?? '', tablet: this.tablet })
+        SatellitePassTimelineRow({ label: I18n.t('satellite_pass_disappearance'), time: this.pass.end ?? this.pass.disappearance ?? '', tablet: this.tablet })
       }.width('100%')
       Row({ space: 10 }) {
         Column({ space: 1 }) {
-          Text(I18n.t('satellite_pass_max_altitude')).fontSize(10).fontColor('#8FBBD6')
-          Text(satellitePassAltitude(this.pass.maxAltitude)).fontSize(this.tablet ? 12 : 11).fontColor('#E1F2FA')
+          Text(I18n.t('satellite_pass_max_altitude')).fontSize(10).fontColor(this.c.tertiary)
+          Text(satellitePassAltitude(this.pass.maxAltitude)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
         }.layoutWeight(1)
         Column({ space: 1 }) {
-          Text(I18n.t('satellite_pass_peak')).fontSize(10).fontColor('#8FBBD6')
-          Text(satellitePassAngle(this.pass.peakAzimuth)).fontSize(this.tablet ? 12 : 11).fontColor('#E1F2FA')
+          Text(I18n.t('satellite_pass_peak')).fontSize(10).fontColor(this.c.tertiary)
+          Text(satellitePassAngle(this.pass.peakAzimuth)).fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
         }.layoutWeight(1)
         Column({ space: 1 }) {
-          Text(I18n.t('satellite_pass_visibility')).fontSize(10).fontColor('#8FBBD6')
-          Text(satellitePassVisibility(this.pass)).fontSize(this.tablet ? 11 : 10).fontColor('#E1F2FA')
+          Text(I18n.t('satellite_pass_visibility')).fontSize(10).fontColor(this.c.tertiary)
+          Text(satellitePassVisibility(this.pass)).fontSize(this.tablet ? 11 : 10).fontColor(this.c.fourth)
             .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }.layoutWeight(1)
       }.width('100%')
     }
       .width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 })
-      .backgroundColor('rgba(91,147,191,0.09)')
-      .border({ width: 0.5, color: 'rgba(143,211,255,0.18)' })
+      .backgroundColor(this.c.soft)
+      .border({ width: 0.5, color: this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)
   }
 }
@@ -105,51 +113,53 @@ export struct SatellitePassDetails {
   @Prop tablet: boolean
   @Prop visible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onLoad: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     if (this.visible) {
       Column({ space: 7 }) {
         Row() {
           Text(I18n.t('satellite_passes_title')).fontSize(this.tablet ? 13 : 12).fontWeight(FontWeight.Medium)
-            .fontColor('#D9F2FF').layoutWeight(1)
+            .fontColor(this.c.fourth).layoutWeight(1)
           Text(this.store.selectedSatellitePassesLoaded ? this.store.selectedSatellitePasses.length.toString() : '')
-            .fontSize(10).fontColor('#8FBBD6')
+            .fontSize(10).fontColor(this.c.tertiary)
         }.width('100%')
         if (!this.store.selectedSatellitePassesRequested) {
           Row({ space: 8 }) {
-            Text(I18n.t('satellite_passes_lazy_hint')).fontSize(11).fontColor('#8FBBD6')
+            Text(I18n.t('satellite_passes_lazy_hint')).fontSize(11).fontColor(this.c.tertiary)
               .layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
             Button(I18n.t('satellite_passes_load'))
-              .fontSize(11).fontColor('#E1F2FA')
-              .backgroundColor('rgba(91,147,191,0.28)')
+              .fontSize(11).fontColor(this.c.fourth)
+              .backgroundColor(this.c.softStrong)
               .borderRadius(UI_RADIUS_CONTROL)
               .padding({ left: 10, right: 10, top: 6, bottom: 6 })
               .onClick(() => { this.onLoad() })
           }.width('100%').alignItems(VerticalAlign.Center).padding({ top: 6, bottom: 6 })
         } else if (!this.store.selectedSatellitePassesLoaded) {
           Row({ space: 7 }) {
-            LoadingProgress().width(16).height(16).color('#8FD3FF')
-            Text(I18n.t('satellite_pass_preparing')).fontSize(11).fontColor('#8FBBD6')
+            LoadingProgress().width(16).height(16).color(this.c.spinner)
+            Text(I18n.t('satellite_pass_preparing')).fontSize(11).fontColor(this.c.tertiary)
           }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 })
         } else if (this.store.selectedSatellitePasses.length === 0) {
-          Text(I18n.t('satellite_pass_no_data')).fontSize(11).fontColor('#8FBBD6')
+          Text(I18n.t('satellite_pass_no_data')).fontSize(11).fontColor(this.c.tertiary)
             .lineHeight(17).width('100%').padding({ top: 6, bottom: 6 })
         } else {
-          Text(I18n.t('satellite_next_pass')).fontSize(10).fontColor('#8FBBD6').width('100%')
+          Text(I18n.t('satellite_next_pass')).fontSize(10).fontColor(this.c.tertiary).width('100%')
           ForEach(this.store.selectedSatellitePasses.slice(0, 3), (pass: SatellitePass) => {
-            SatellitePassCard({ pass: pass, tablet: this.tablet, accent: this.accent })
+            SatellitePassCard({ pass: pass, tablet: this.tablet })
           }, (pass: SatellitePass, index: number) => 'satellite-pass-' + index.toString() + '-' + satellitePassTime(pass.start))
         }
         if (this.store.selectedSatellitePassesLoaded && this.tleEpoch.length > 0) {
-          Text(I18n.format('satellite_pass_offline_source', [this.tleEpoch])).fontSize(10).fontColor('#7599AD')
+          Text(I18n.format('satellite_pass_offline_source', [this.tleEpoch])).fontSize(10).fontColor(this.c.detailSub)
             .width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
       }
         .width('100%').padding({ left: 10, right: 10, top: 10, bottom: 10 })
-        .backgroundColor('rgba(91,147,191,0.08)')
-        .border({ width: 0.5, color: 'rgba(143,211,255,0.18)' })
+        .backgroundColor(this.c.soft)
+        .border({ width: 0.5, color: this.c.border })
         .borderRadius(UI_RADIUS_CONTROL)
     }
   }

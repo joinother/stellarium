@@ -1,7 +1,9 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { OcularInstrumentItem } from '../../pages/MainWindowModels'
 import { TelescopeStore } from '../../state/TelescopeStore'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 「目镜（Oculars）」面板的设备选择行。
 //
@@ -18,32 +20,32 @@ export struct OcularSelector {
   @ObjectLink store: TelescopeStore
   @Prop kind: string
   @Prop label: string
-  @Prop subColor: string
-  @Prop textColor: string
-  @Prop panelColor: string
-  @Prop accentColor: string
-  @Prop lineColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onSelect: (kind: string, index: number) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 6 }) {
       Row() {
-        Text(this.label).fontSize(12).fontColor(this.subColor).layoutWeight(1)
-        Text(this.store.ocularSelInfo(this.kind).countText).fontSize(10).fontColor(this.subColor)
+        Text(this.label).fontSize(12).fontColor(this.c.sub).layoutWeight(1)
+        Text(this.store.ocularSelInfo(this.kind).countText).fontSize(10).fontColor(this.c.sub)
       }.width('100%').padding({ left: 2, right: 2 })
       if (this.store.ocularInstrumentItems(this.kind).length === 0 && this.kind !== 'Lens') {
-        Text(I18n.t('ocular_no_devices')).fontSize(11).fontColor(this.subColor)
+        Text(I18n.t('ocular_no_devices')).fontSize(11).fontColor(this.c.sub)
           .width('100%').height(42).textAlign(TextAlign.Center)
-          .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+          .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
       } else {
         Scroll() {
           Row({ space: 7 }) {
             if (this.kind === 'Lens') {
               Button(I18n.t('ocular_no_lens'))
-                .fontSize(11).fontColor(this.store.lensIndex < 0 ? '#FFFFFF' : this.subColor)
+                .fontSize(11).fontColor(this.store.lensIndex < 0 ? this.c.onAccent : this.c.sub)
                 .height(48).padding({ left: 14, right: 14 })
-                .backgroundColor(this.store.lensIndex < 0 ? this.accentColor : this.panelColor)
-                .border({ width: 1, color: this.store.lensIndex < 0 ? this.accentColor : this.lineColor })
+                .backgroundColor(this.store.lensIndex < 0 ? this.c.accent : this.c.bg)
+                .border({ width: 1, color: this.store.lensIndex < 0 ? this.c.accent : this.c.border })
                 .borderRadius(UI_RADIUS_CONTROL)
                 .onClick(() => { this.onSelect(this.kind, -1) })
             }
@@ -51,16 +53,16 @@ export struct OcularSelector {
               Button() {
                 Column({ space: 2 }) {
                   Text(item.name.length > 0 ? item.name : this.label)
-                    .fontSize(11).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? '#FFFFFF' : this.textColor)
+                    .fontSize(11).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.onAccent : this.c.text)
                     .fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(this.store.ocularInstrumentSummary(this.kind, item))
-                    .fontSize(10).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? '#D8EEFF' : this.subColor)
+                    .fontSize(10).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.chipInactiveText : this.c.sub)
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }.alignItems(HorizontalAlign.Start)
               }
               .height(48).constraintSize({ minWidth: 116, maxWidth: 180 }).padding({ left: 12, right: 12 })
-              .backgroundColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.accentColor : this.panelColor)
-              .border({ width: 1, color: this.store.ocularInstrumentIndex(this.kind) === item.index ? this.accentColor : this.lineColor })
+              .backgroundColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.accent : this.c.bg)
+              .border({ width: 1, color: this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.accent : this.c.border })
               .borderRadius(UI_RADIUS_CONTROL)
               .onClick(() => { this.onSelect(this.kind, item.index) })
             }, (item: OcularInstrumentItem) => this.kind + '-' + item.index.toString())

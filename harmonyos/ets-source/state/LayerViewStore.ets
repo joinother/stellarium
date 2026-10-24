@@ -1,5 +1,6 @@
 import { StellariumBridgeResponse, LandscapeItem } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
+import { AstroColors } from './StellariumTheme'
 
 // 「图层」面板（activePanel === 'layers'）六个视图标签页的数值/展开态设置簇。
 //
@@ -19,6 +20,8 @@ import { CommandPort } from '../bridge/CommandPort'
 export class LayerViewStore {
   // —— 天空与恒星显示 ——
   starMagLimit: number = 6.0
+  // 星等上限随已加载星表调整（最低支持到 21 等），启动时由 StartupBridge 回读。
+  starMagLimitMax: number = 21.0
   bortleScale: number = 3
   milkyWayBright: number = 3
   meteorZhr: number = 10
@@ -41,8 +44,8 @@ export class LayerViewStore {
   trailSelectionCount: number = 1
   trailYears: number = 1
   trailThickness: number = 1
-  trailColor: string = '#FFFFFF'
-  trailColorInput: string = '#FFFFFF'
+  trailColor: string = AstroColors.starPoint
+  trailColorInput: string = AstroColors.starPoint
 
   // —— 视场标记尺寸 ——
   fovCircularMarkerSize: number = 1

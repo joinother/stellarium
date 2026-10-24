@@ -4,6 +4,11 @@ export const STARTUP_HOLD_MS: number = 220
 export const STARTUP_REVEAL_AT_MS: number = STARTUP_GATHER_MS + STARTUP_STAGGER_MS + STARTUP_HOLD_MS
 export const STARTUP_REVEAL_MS: number = 1100
 
+export const STARTUP_BG_NORMAL: string = '#05070F'
+export const STARTUP_BG_NIGHT: string = '#1A0505'
+export const STARTUP_TITLE_COLORS_NORMAL: string[] = ['#CED9EA', '#E9EEFA', '#F4F6FF', '#A5CDF4', '#F4D6AF', '#FFFFFF']
+export const STARTUP_TITLE_COLORS_NIGHT: string[] = ['#FF6644', '#CC5533', '#FF5533', '#993322', '#FF8866', '#FF4422']
+
 export function startupLoadingLabel(text: string): string {
   return text.replace(/[.…⋯]+\s*$/, '').trim()
 }
@@ -21,13 +26,15 @@ export interface StartupStarAppearance {
   period: number
 }
 
-export function startupAppearance(index: number): StartupStarAppearance {
+export function startupAppearance(index: number, nightMode: boolean = false): StartupStarAppearance {
   const prominence = Math.pow(startupSeed(index, 5), 4)
   const temperature = startupSeed(index, 6)
   return {
     radius: 0.28 + prominence * 1.5,
     brightness: 0.16 + prominence * 0.78,
-    color: temperature < 0.16 ? '#F4D6AF' : temperature < 0.4 ? '#A5CDF4' : '#E9EEFA',
+    color: nightMode
+      ? (temperature < 0.16 ? '#FF8866' : temperature < 0.4 ? '#993322' : '#FF5533')
+      : (temperature < 0.16 ? '#F4D6AF' : temperature < 0.4 ? '#A5CDF4' : '#E9EEFA'),
     phase: startupSeed(index, 7) * Math.PI * 2,
     period: 2400 + startupSeed(index, 8) * 9000
   }

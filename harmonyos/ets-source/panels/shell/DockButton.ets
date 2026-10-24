@@ -1,7 +1,9 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { DockStore } from '../../state/DockStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 底部 Dock 的单个入口按钮。
 //
@@ -10,7 +12,6 @@ import { DockStore } from '../../state/DockStore'
 //
 // 激活态经 @ObjectLink 共享 ``DockStore`` 就地求值：ForEach 复用子项时 @Prop 会被
 // 冻结，而改变键值又会重建入口，故都不能用于高亮（详见 ``BottomDock`` 头注）。
-
 @Component
 export struct DockButton {
   @Prop icon: string
@@ -20,8 +21,13 @@ export struct DockButton {
   @Prop iconSize: number
   @Prop labelFontSize: number
   @Prop itemHeight: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onTouchEvent: (event: TouchEvent) => void = () => {}
   onTap: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   private isActive(): boolean {
     return this.activeState.panelVisible && this.activeState.activePanel === this.panelId
@@ -33,11 +39,11 @@ export struct DockButton {
         .width(this.iconSize)
         .height(this.iconSize)
         .objectFit(ImageFit.Contain)
-        .fillColor(this.isActive() ? '#70C8FF' : '#E5FFFFFF')
-        .opacity(this.isActive() ? 1 : 0.78)
+        .supportSvg2(true)
+        .colorFilter(tintMatrixFor(this.isActive() ? this.c.dockActive : this.c.idleIcon))
       Text(this.label)
         .fontSize(this.labelFontSize)
-        .fontColor(this.isActive() ? '#70C8FF' : '#99FFFFFF')
+        .fontColor(this.isActive() ? this.c.dockActive : this.c.idleIcon)
         .margin({ top: 2 })
     }
       .layoutWeight(1)
@@ -52,7 +58,7 @@ export struct DockButton {
       .stateStyles({
         pressed: {
           .scale({ x: 0.97, y: 0.97 })
-          .backgroundColor('rgba(255, 255, 255, 0.10)')
+          .backgroundColor(this.c.overlayButton)
         }
       })
       .animation({ duration: 300, curve: curves.springMotion(0.46, 0.86) })

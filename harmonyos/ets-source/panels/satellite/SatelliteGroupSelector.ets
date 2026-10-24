@@ -1,5 +1,7 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 卫星面板的卫星分组选择器。
 //
@@ -11,31 +13,32 @@ export struct SatelliteGroupSelector {
   @Prop groups: string[]
   @Prop activeGroup: string
   @Prop loading: boolean
-  @Prop subColor: string
-  @Prop accentColor: string
-  @Prop textColor: string
-  @Prop bgColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   scroller: Scroller = new Scroller()
   onGroupScroll: () => void = () => {}
   onSelect: (group: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 6 }) {
       Row() {
-        Text(I18n.t('c_satellite_groups')).fontSize(12).fontColor(this.subColor).layoutWeight(1)
-        LoadingProgress().width(18).height(18).color(this.accentColor)
+        Text(I18n.t('c_satellite_groups')).fontSize(12).fontColor(this.c.sub).layoutWeight(1)
+        LoadingProgress().width(18).height(18).color(this.c.accent)
           .opacity(this.loading ? 1 : 0)
       }.width('100%').height(24)
       Scroll(this.scroller) {
         Column({ space: 6 }) {
           ForEach(this.groups, (group: string) => {
             Row({ space: 8 }) {
-              Text(I18n.satGroup(group)).fontSize(13).fontColor(this.activeGroup === group ? this.accentColor : this.textColor)
+              Text(I18n.satGroup(group)).fontSize(13).fontColor(this.activeGroup === group ? this.c.accent : this.c.text)
                 .layoutWeight(1).maxLines(2)
-              Text('✓').fontSize(14).fontColor(this.accentColor).width(20)
+              Text('✓').fontSize(14).fontColor(this.c.accent).width(20)
                 .opacity(this.activeGroup === group ? 1 : 0)
             }.width('100%').height(44).padding({ left: 12, right: 12 })
-              .backgroundColor(this.activeGroup === group ? 'rgba(107,163,214,0.18)' : this.bgColor)
+              .backgroundColor(this.activeGroup === group ? this.c.soft : this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL)
               .onClick(() => { this.onSelect(this.activeGroup === group ? '' : group) })
           }, (group: string) => group)

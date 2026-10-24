@@ -1,9 +1,11 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import {
   CHROME_ZOOM_EDGE_PADDING,
   chromeZoomLayerHeight,
   chromeZoomLayerTop
 } from '../../common/ui/ChromeGeometry'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 面板/Dock 壳层的四个小组件。
 //
@@ -13,19 +15,24 @@ import {
 @Component
 export struct DockClockChip {
   @Prop clockText: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onOpenTime: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Row() {
       Text(this.clockText)
         .fontSize(22)
-        .fontColor('rgba(229, 255, 255, 0.85)')
+        .fontColor(this.c.text)
     }
       .height(36)
       .padding({ left: 14, right: 14 })
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor('rgba(10, 14, 26, 0.55)')
+      .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
       .borderRadius(UI_RADIUS_PILL)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -67,24 +74,28 @@ export struct DockClockLayer {
 @Component
 export struct DockFovChip {
   @Prop fovText: string
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column() {
       Text('FOV')
         .fontSize(10)
         .height(12)
-        .fontColor('rgba(229, 255, 255, 0.55)')
+        .fontColor(this.c.sub)
       Text(this.fovText)
         .fontSize(16)
         .height(20)
-        .fontColor(this.textColor.length > 0 ? this.textColor : 'rgba(229, 255, 255, 0.85)')
+        .fontColor(this.c.text)
     }
       .height(36)
       .padding({ left: 12, right: 12 })
       .justifyContent(FlexAlign.Center)
       .alignItems(HorizontalAlign.Center)
-      .backgroundColor('rgba(10, 14, 26, 0.55)')
+      .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
       .borderRadius(UI_RADIUS_PILL)
       .hitTestBehavior(HitTestMode.None)
@@ -99,11 +110,10 @@ export struct DockFovLayer {
   @Prop layerWidth: number
   @Prop posX: number
   @Prop posY: number
-  @Prop textColor: string
 
   build() {
     Row() {
-      DockFovChip({ fovText: this.fovText, textColor: this.textColor })
+      DockFovChip({ fovText: this.fovText })
     }
       .width(this.layerWidth)
       .height(44)
@@ -126,20 +136,24 @@ export struct SkyZoomLayer {
   @Prop posX: number
   @Prop rowY: number
   @Prop horizontal: boolean
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onZoomIn: () => void = () => {}
   onZoomOut: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   @Builder
   zoomButtonPair() {
     Stack({ alignContent: Alignment.Center }) {
       Text('+')
         .fontSize(24)
-        .fontColor(this.textColor.length > 0 ? this.textColor : 'rgba(229, 255, 255, 0.85)')
+        .fontColor(this.c.text)
     }
       .width(44)
       .height(44)
-      .backgroundColor('rgba(10, 14, 26, 0.55)')
+      .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
       .borderRadius(22)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -148,11 +162,11 @@ export struct SkyZoomLayer {
     Stack({ alignContent: Alignment.Center }) {
       Text('−')
         .fontSize(24)
-        .fontColor(this.textColor.length > 0 ? this.textColor : 'rgba(229, 255, 255, 0.85)')
+        .fontColor(this.c.text)
     }
       .width(44)
       .height(44)
-      .backgroundColor('rgba(10, 14, 26, 0.55)')
+      .backgroundColor(this.c.bgStrong)
       .backdropBlur(20)
       .borderRadius(22)
       .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -188,11 +202,17 @@ export struct SkyZoomLayer {
 // 平板/折叠布局的面板抓手（纯装饰）。
 @Component
 export struct PadPanelHandle {
+  @State c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Row()
       .width(58)
       .height(5)
-      .backgroundColor('rgba(255, 255, 255, 0.58)')
+      .backgroundColor(this.c.dragHandle)
       .borderRadius(3)
       .alignSelf(ItemAlign.Center)
       .margin({ top: 2, bottom: 10 })
@@ -203,15 +223,20 @@ export struct PadPanelHandle {
 // 手机紧凑面板的抓手：垂直拖拽由宿主接管（更新/结算面板高度）。
 @Component
 export struct PanelHandle {
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onDrag: (offsetY: number) => void = () => {}
   onDragFinish: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
       Row()
         .width(58)
         .height(5)
-        .backgroundColor('rgba(255, 255, 255, 0.30)')
+        .backgroundColor(this.c.dragHandle)
         .borderRadius(3)
     }
       .width('100%')

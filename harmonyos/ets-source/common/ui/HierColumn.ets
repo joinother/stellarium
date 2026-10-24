@@ -1,5 +1,6 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from './UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 层级列：一列的标题、列表、选中态与点击回调，不含任何位置业务。
 //
@@ -11,23 +12,28 @@ export struct HierColumn {
   @Prop title: string
   @Prop items: string[]
   @Prop selected: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   scroller: Scroller = new Scroller()
   labelOf: (item: string) => string = (item: string) => item
   onSelect: (item: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column() {
       Row({ space: 4 }) {
         Text(this.title)
           .fontSize(11)
-          .fontColor('#8EC5E8')
+          .fontColor(this.c.accent)
           .fontWeight(FontWeight.Medium)
       }
       .width('100%')
       .height(26)
       .justifyContent(FlexAlign.Center)
       .alignItems(VerticalAlign.Center)
-      .backgroundColor('rgba(91, 147, 191, 0.12)')
+      .backgroundColor(this.c.soft)
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ bottom: 5 })
       Scroll(this.scroller) {
@@ -37,7 +43,7 @@ export struct HierColumn {
               Stack() {
                 Text(this.labelOf(item))
                   .fontSize(11)
-                  .fontColor(this.selected === item ? '#FFFFFFFF' : '#A8C4E0')
+                  .fontColor(this.selected === item ? this.c.textStrong : this.c.sub)
                   .fontWeight(this.selected === item ? FontWeight.Medium : FontWeight.Regular)
                   .width('100%')
                   .height(36)
@@ -53,10 +59,10 @@ export struct HierColumn {
               .padding({ left: 4, right: 4, top: 3, bottom: 3 })
               .width('100%')
               .height(48)
-              .backgroundColor(this.selected === item ? '#2A6694' : 'rgba(255,255,255,0.03)')
-              .border({ width: this.selected === item ? 1.5 : 1, color: this.selected === item ? '#9BD8FF' : 'rgba(107,163,214,0.10)' })
+              .backgroundColor(this.selected === item ? this.c.softStrong : this.c.bg)
+              .border({ width: this.selected === item ? 1.5 : 1, color: this.selected === item ? this.c.softStrong : this.c.soft })
               .borderRadius(UI_RADIUS_CONTROL)
-              .shadow(this.selected === item ? { radius: 8, color: 'rgba(99, 185, 255, 0.35)', offsetX: 0, offsetY: 1 } : { radius: 0, color: 'transparent', offsetX: 0, offsetY: 0 })
+              .shadow(this.selected === item ? { radius: 8, color: this.c.accentSoft, offsetX: 0, offsetY: 1 } : { radius: 0, color: Color.Transparent, offsetX: 0, offsetY: 0 })
               .stateEffect(true)
               .animation({ duration: 160, curve: curves.springMotion(0.42, 0.86) })
               .onClick(() => { this.onSelect(item) })
@@ -66,14 +72,14 @@ export struct HierColumn {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Auto)
-      .backgroundColor('rgba(8, 14, 28, 0.4)')
+      .backgroundColor(this.c.soft)
       .borderRadius(UI_RADIUS_CONTROL)
       .scrollBarWidth(3)
     }
     .layoutWeight(1)
     .padding(6)
-    .backgroundColor('rgba(10, 18, 36, 0.55)')
-    .border({ width: 1, color: 'rgba(91, 147, 191, 0.20)' })
+    .backgroundColor(this.c.mediaCard)
+    .border({ width: 1, color: this.c.softStrong })
     .borderRadius(UI_RADIUS_CONTROL)
     .margin({ right: 5 })
   }

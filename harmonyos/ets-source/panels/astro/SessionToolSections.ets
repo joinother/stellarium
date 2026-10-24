@@ -1,7 +1,9 @@
+import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
 import { TonightPlanetRow } from '../../pages/MainWindowModels'
 import { SessionToolStore } from '../../state/SessionToolStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 会话/观测工具区块。
 //
@@ -12,22 +14,25 @@ import { SessionToolStore } from '../../state/SessionToolStore'
 @Component
 export struct ObserverPlanetSection {
   @ObjectLink store: SessionToolStore
-  @Prop textColor: string
-  @Prop borderTint: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   planetLabel: (en: string) => string = (en: string) => en
   onSelectPlanet: (name: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_observing_planet')).fontSize(13).fontColor(this.textColor).width('100%').margin({ top: 10, bottom: 2 })
-      Text(I18n.t('m_planet_switch_hint')).fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
-      Text(I18n.t('m_current_planet') + '：' + this.planetLabel(this.store.observerPlanet)).fontSize(12).fontColor('#E5FFFFFF').width('100%')
+      Text(I18n.t('c_observing_planet')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
+      Text(I18n.t('m_planet_switch_hint')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
+      Text(I18n.t('m_current_planet') + '：' + this.planetLabel(this.store.observerPlanet)).fontSize(12).fontColor(this.c.text).width('100%')
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach(this.store.planetList, (p: string) => {
           Button(this.planetLabel(p))
             .fontSize(12)
-            .fontColor(this.store.observerPlanet === p ? '#FFFFFF' : '#CCFFFFFF')
-            .backgroundColor(this.store.observerPlanet === p ? '#5B93BF' : this.borderTint)
+            .fontColor(this.store.observerPlanet === p ? this.c.onAccent : this.c.text)
+            .backgroundColor(this.store.observerPlanet === p ? this.c.accent : this.c.bg)
             .borderRadius(UI_RADIUS_PILL)
             .height(32)
             .margin({ right: 8, bottom: 8 })
@@ -36,7 +41,7 @@ export struct ObserverPlanetSection {
         }, (p: string) => p)
       }.width('100%')
       Button(I18n.t('btn_back_to_earth'))
-        .fontSize(13).fontColor('#FFFFFF').backgroundColor('#2E7D32')
+        .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.actionPositive)
         .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ top: 6 })
         .onClick(() => { this.onSelectPlanet('Earth') })
     }.width('100%').padding({ left: 10, right: 10 })
@@ -47,33 +52,36 @@ export struct ObserverPlanetSection {
 @Component
 export struct PointingTestSection {
   @ObjectLink store: SessionToolStore
-  @Prop textColor: string
-  @Prop borderTint: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onPoint: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_pointing_test')).fontSize(13).fontColor(this.textColor).width('100%').margin({ top: 10, bottom: 2 })
-      Text(I18n.t('m_pointing_test_desc')).fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+      Text(I18n.t('c_pointing_test')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
+      Text(I18n.t('m_pointing_test_desc')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
       Row({ space: 4 }) {
         TextInput({ text: this.store.pointAlt, placeholder: I18n.t('c_altitude_deg') })
-          .width('50%').height(36).backgroundColor(this.borderTint).fontSize(13)
+          .width('50%').height(36).backgroundColor(this.c.input).fontSize(13)
           .onChange((v: string) => { this.store.pointAlt = v })
         TextInput({ text: this.store.pointAz, placeholder: I18n.t('c_azimuth_deg') })
-          .width('50%').height(36).backgroundColor(this.borderTint).fontSize(13)
+          .width('50%').height(36).backgroundColor(this.c.input).fontSize(13)
           .onChange((v: string) => { this.store.pointAz = v })
       }.width('100%')
       // 把结果放在按钮上方，避免被 Scroll 底部遮挡而看不到即时反馈
       if (this.store.pointResult !== '') {
-        Text(this.store.pointResult).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2 })
+        Text(this.store.pointResult).fontSize(12).fontColor(this.c.success).width('100%').margin({ top: 2 })
       }
       Row({ space: 4 }) {
         Button(I18n.t('btn_point_select'))
-          .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onPoint() })
         Button(I18n.t('btn_example_zenith'))
-          .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.borderTint)
+          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.bg)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.store.pointAlt = '89'; this.store.pointAz = '180'; this.onPoint() })
       }.width('100%').margin({ top: 4 })
@@ -85,28 +93,32 @@ export struct PointingTestSection {
 @Component
 export struct WatchGyroSection {
   @ObjectLink store: SessionToolStore
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onSend: () => void = () => {}
   onStart: () => void = () => {}
   onStop: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_watch_gyro_sim')).fontSize(13).fontColor(this.textColor).width('100%').margin({ top: 10, bottom: 2 })
+      Text(I18n.t('c_watch_gyro_sim')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
       Text(I18n.t('m_watch_gyro_desc'))
-        .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+        .fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
       if (this.store.watchResult !== '') {
-        Text(this.store.watchResult).fontSize(12).fontColor(this.store.watchTracking ? '#FFE08A' : '#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
+        Text(this.store.watchResult).fontSize(12).fontColor(this.store.watchTracking ? this.c.warning : this.c.success).width('100%').margin({ top: 2, bottom: 2 })
       }
       Row({ space: 10 }) {
-        Text(I18n.t('c_altitude')).fontSize(11).fontColor('#CCCCCC').width(48)
+        Text(I18n.t('c_altitude')).fontSize(11).fontColor(this.c.text).width(48)
         Slider({ value: this.store.watchAlt, min: 0, max: 90, step: 1 })
           .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
           .onChange((v: number) => { this.store.watchAlt = v; this.onSend() })
       }.width('100%')
       Row({ space: 10 }) {
-        Text(I18n.t('c_azimuth')).fontSize(11).fontColor('#CCCCCC').width(48)
+        Text(I18n.t('c_azimuth')).fontSize(11).fontColor(this.c.text).width(48)
         Slider({ value: this.store.watchAz, min: 0, max: 360, step: 1 })
           .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
           .layoutWeight(1)
@@ -114,11 +126,11 @@ export struct WatchGyroSection {
       }.width('100%')
       Row({ space: 4 }) {
         Button(this.store.watchTracking ? '指向中…' : '开始指向(跟踪)')
-          .fontSize(13).fontColor('#FFFFFF').backgroundColor(this.store.watchTracking ? '#C08020' : '#5B93BF')
+          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.store.watchTracking ? this.c.warningBg : this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onStart() })
         Button(I18n.t('btn_stop_lock'))
-          .fontSize(13).fontColor('#FFFFFF').backgroundColor('#3A6EA5')
+          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onStop() })
       }.width('100%').margin({ top: 4 })
@@ -133,17 +145,22 @@ export struct TonightCard {
   @Prop lines: string[]
   @Prop jd: number = 0
   @Prop lock: string = ''
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onJump: (jd: number, lock: string, title: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column({ space: 4 }) {
-      Text(this.title).fontSize(12).fontColor('#FFE9B0').width('100%')
+      Text(this.title).fontSize(12).fontColor(this.c.warning).width('100%')
       ForEach(this.lines, (ln: string) => {
-        Text(ln).fontSize(11).fontColor('#DDDDDD').width('100%')
+        Text(ln).fontSize(11).fontColor(this.c.text).width('100%')
       }, (ln: string) => ln)
-    }.width('100%').padding(8).backgroundColor('#1A2330').borderRadius(UI_RADIUS_CONTROL).margin({ top: 4 })
+    }.width('100%').padding(8).backgroundColor(this.c.bgStrong).borderRadius(UI_RADIUS_CONTROL).margin({ top: 4 })
       .stateStyles({
-        pressed: { backgroundColor: '#27384A' }
+        pressed: { .backgroundColor(this.c.bgStrong) }
       })
       .onClick(() => {
         if (this.jd > 0 && this.lock !== '') {
@@ -157,21 +174,25 @@ export struct TonightCard {
 @Component
 export struct TonightEventsSection {
   @ObjectLink store: SessionToolStore
-  @Prop textColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onRefresh: () => void = () => {}
   onJump: (jd: number, lock: string, title: string) => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_tonight_events')).fontSize(13).fontColor(this.textColor).width('100%').margin({ top: 10, bottom: 2 })
+      Text(I18n.t('c_tonight_events')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
       Text(I18n.t('m_tonight_events_hint'))
-        .fontSize(11).fontColor('#99FFFFFF').width('100%').margin({ bottom: 2 })
+        .fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
       Button(I18n.t('btn_refresh_tonight'))
-        .fontSize(13).fontColor('#FFFFFF').backgroundColor('#5B93BF')
+        .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
         .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
         .onClick(() => { this.onRefresh() })
       if (this.store.tonightHint !== '') {
-        Text(this.store.tonightHint).fontSize(12).fontColor('#CCFFCC').width('100%').margin({ top: 2, bottom: 2 })
+        Text(this.store.tonightHint).fontSize(12).fontColor(this.c.success).width('100%').margin({ top: 2, bottom: 2 })
       }
       if (this.store.tonightDate !== '') {
         TonightCard({ title: I18n.t('tn_moon_phase'), lines: [this.store.tonightMoon], jd: this.store.tonightMoonJd, lock: 'Moon', onJump: this.onJump })

@@ -1,9 +1,10 @@
 import { I18n } from './I18n'
 import { StartupPoint, StartupStarAppearance, startupParticle, startupDepthPoint, startupReleasePoint, startupAppearance, startupSeed, startupEase } from './StartupStarGeometry'
-import { STARTUP_GATHER_MS, STARTUP_REVEAL_MS } from './StartupStarGeometry'
+import { STARTUP_GATHER_MS, STARTUP_REVEAL_MS, STARTUP_BG_NORMAL, STARTUP_BG_NIGHT, STARTUP_TITLE_COLORS_NORMAL, STARTUP_TITLE_COLORS_NIGHT } from './StartupStarGeometry'
 import { FrameCallback } from '@kit.ArkUI'
 import hilog from '@ohos.hilog'
 import { notifyStartupCanvasReady } from '../common/PrivacyStartup'
+import { AstroColors } from '../state/StellariumTheme'
 
 class StartupFirstFrame extends FrameCallback {
   onIdle(_timeLeft: number): void { notifyStartupCanvasReady() }
@@ -11,6 +12,7 @@ class StartupFirstFrame extends FrameCallback {
 
 @Component
 export struct StartupSky {
+  @Prop nightMode: boolean = false
   @Watch('refreshTitle') @StorageLink('i18nLang') private language: string = ''
   @Watch('updateMotion') @StorageLink('stellariumStartupForeground') private foreground: boolean = true
   @StorageLink('stellariumStartupSkyReady') private skyPrepared: boolean = false
@@ -61,7 +63,7 @@ export struct StartupSky {
     pen.font = `400 ${maskFont}px sans-serif`
     pen.textAlign = 'center'
     pen.textBaseline = 'middle'
-    pen.fillStyle = '#FFFFFF'
+    pen.fillStyle = AstroColors.starPoint
     pen.fillText(this.title, maskWidth / 2, maskHeight / 2)
     const pixels = pen.getImageData(0, 0, maskWidth, maskHeight)
     const scale = Math.min((this.canvasWidth - 48) / maskWidth, 1.1)
@@ -154,7 +156,7 @@ export struct StartupSky {
     const pen = this.context
     const reveal = this.skyPrepared ? startupEase(this.releaseElapsed / STARTUP_REVEAL_MS) : 0
     pen.globalAlpha = 1
-    pen.fillStyle = '#05070F'
+    pen.fillStyle = this.nightMode ? STARTUP_BG_NIGHT : STARTUP_BG_NORMAL
     pen.fillRect(0, 0, this.canvasWidth, this.canvasHeight)
     for (let index = 0; index < 900; index++) {
       const point = startupDepthPoint(index + 1800, this.canvasWidth, this.canvasHeight, this.elapsed, reveal)
@@ -172,7 +174,7 @@ export struct StartupSky {
       pen.arc(point.x, point.y, appearance.radius, 0, Math.PI * 2)
       pen.fill()
     }
-    const colors: string[] = ['#CED9EA', '#E9EEFA', '#F4F6FF', '#A5CDF4', '#F4D6AF', '#FFFFFF']
+    const colors: string[] = this.nightMode ? STARTUP_TITLE_COLORS_NIGHT : STARTUP_TITLE_COLORS_NORMAL
     const radii: number[] = [0.32, 0.5, 0.8, 0.5, 0.65, 1.1]
     const brightness: number[] = [0.4, 0.65, 0.85, 0.6, 0.7, 0.95]
     const emphasis = startupEase(this.assemblyElapsed / STARTUP_GATHER_MS)
@@ -203,11 +205,11 @@ export struct StartupSky {
 
   build() {
     Canvas(this.context)
-      .width('100%').height('100%').backgroundColor('#05070F')
+      .width('100%').height('100%').backgroundColor(this.nightMode ? STARTUP_BG_NIGHT : STARTUP_BG_NORMAL)
       .accessibilityText(this.title)
       .onReady(() => {
         this.backgroundAppearance = []
-        for (let index = 0; index < 900; index++) this.backgroundAppearance.push(startupAppearance(index))
+        for (let index = 0; index < 900; index++) this.backgroundAppearance.push(startupAppearance(index, this.nightMode))
         this.ready = true
         this.canvasWidth = this.context.width
         this.canvasHeight = this.context.height

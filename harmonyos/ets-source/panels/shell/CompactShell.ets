@@ -1,4 +1,4 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { ShellAction } from '../../pages/StellariumTypes'
 import { BottomDock } from './BottomDock'
 import { CompactTopQuickControls } from './CompactTopQuickControls'
@@ -10,6 +10,7 @@ import { GyroStore } from '../../state/GyroStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { OverlayStore } from '../../state/OverlayStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 手机 / 折叠半折的紧凑壳。
 //
@@ -79,12 +80,9 @@ export struct CompactShell {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
   @Prop cultureVisible: boolean
-  @Prop textColor: string
   @Prop connectorVisible: boolean
   @Prop connectorLength: number
   @Prop connectorX: number
@@ -101,6 +99,7 @@ export struct CompactShell {
   @Prop detailY: number
   @Prop detailWidth: number
   @Prop detailHeight: number
+  @State c: ThemeSlots = DEFAULT_SLOTS
 
   scroller: Scroller = new Scroller()
   onSkyTouch: (event: TouchEvent) => void = () => {}
@@ -137,6 +136,10 @@ export struct CompactShell {
   onReselect: () => void = () => {}
   onSpeak: () => void = () => {}
 
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
+
   build() {
     Stack() {
       Column() {
@@ -153,7 +156,7 @@ export struct CompactShell {
         .zIndex(1)
 
       Row() {
-        BottomDock({
+         BottomDock({
           actions: this.actions, isExpanded: this.isExpandedLayout,
           panelVisible: this.panelVisible, chromeOpacity: this.chromeOpacity,
           isGlass: this.chromeIsGlass, widthPercent: this.dockWidthPercent,
@@ -185,7 +188,7 @@ export struct CompactShell {
       if (!this.panelVisible && !this.polarScopeVisible && this.fovText.indexOf('°') >= 0) {
         DockFovLayer({
           fovText: this.fovText, layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
-          posY: this.chromeRowY, textColor: this.textColor
+          posY: this.chromeRowY
         })
       }
 
@@ -194,7 +197,6 @@ export struct CompactShell {
         SkyZoomLayer({
           layerWidth: this.chromeRowWidth, posX: this.chromeRowPosXLeft,
           rowY: this.chromeRowY, horizontal: this.chromeZoomHorizontal,
-          textColor: this.textColor,
           onZoomIn: () => { this.onZoomIn() },
           onZoomOut: () => { this.onZoomOut() }
         })
@@ -205,7 +207,6 @@ export struct CompactShell {
         CompactTopQuickControls({
           gyroActive: this.gyroStore.gyroscopeEnabled, audioActive: this.musicEnabled,
           pressedId: this.compactQuickPressed, chromeOpacity: this.chromeOpacity,
-          textColor: this.textColor,
           onGyro: () => {
             this.onGyro()
           },
@@ -219,7 +220,12 @@ export struct CompactShell {
           .zIndex(30)
         // Keep a dedicated touch target above the Qt XComponent.  The native
         // surface otherwise intermittently captures the compact quick buttons.
-        Stack() { }
+        Stack() {
+          Row()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(Color.Transparent)
+        }
           .width(44)
           .height(98)
           .position({ x: this.quickX, y: this.quickY })
@@ -241,20 +247,20 @@ export struct CompactShell {
           ))
       }
       if (this.infoWinVisible && this.objectDetailStore.selectedName.length > 0) {
-        ObjectDetailConnectorLayer({
-          visible: this.connectorVisible,
-          beamLength: this.connectorLength,
-          beamX: this.connectorX,
-          beamY: this.connectorY,
-          beamAngle: this.connectorAngle,
-          animateGeometry: this.connectorAnimateGeometry,
-          targetOnScreen: this.connectorTargetOnScreen,
-          targetX: this.connectorTargetX,
-          targetY: this.connectorTargetY,
-          endX: this.connectorEndX,
-          endY: this.connectorEndY,
-          markerSize: this.markerSize
-        })
+         ObjectDetailConnectorLayer({
+           visible: this.connectorVisible,
+           beamLength: this.connectorLength,
+           beamX: this.connectorX,
+           beamY: this.connectorY,
+           beamAngle: this.connectorAngle,
+           animateGeometry: this.connectorAnimateGeometry,
+           targetOnScreen: this.connectorTargetOnScreen,
+           targetX: this.connectorTargetX,
+           targetY: this.connectorTargetY,
+           endX: this.connectorEndX,
+           endY: this.connectorEndY,
+            markerSize: this.markerSize
+          })
         Stack() {
           UnifiedObjectDetailCard({
             store: this.objectDetailStore, mediaStore: this.objectMediaStore, scroller: this.scroller,
@@ -270,9 +276,9 @@ export struct CompactShell {
             modelReady: this.modelReady, modelRendering: this.modelRendering,
             hasModelTexture: this.hasModelTexture,
             modelNotice: this.modelNotice, warmupText: this.warmupText,
-            fallbackKind: this.fallbackKind, starColor: this.starColor,
-            satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
-            accent: this.accent, cultureVisible: this.cultureVisible, textColor: this.textColor,
+             fallbackKind: this.fallbackKind,
+             satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+             cultureVisible: this.cultureVisible,
             resolve: (key: string) => this.resolve(key),
             nameOf: (name: string) => this.nameOf(name), typeOf: (type: string) => this.typeOf(type),
             onDragTouch: (event: TouchEvent) => { this.onDragTouch(event) },

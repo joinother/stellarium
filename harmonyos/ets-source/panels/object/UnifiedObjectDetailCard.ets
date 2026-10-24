@@ -1,11 +1,14 @@
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { ObjectDetailCardHeader, ObjectDetailCardTabs } from './ObjectDetailCardChrome'
 import { ObjectDetailObserveTab, ObjectDetailCoordinateTab, ObjectDetailDataTab } from './ObjectDetailTabs'
 import { ObjectDetailActionsTab } from './ObjectDetailActionsTab'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 天体详情主卡片的整体外壳：页头 + 页签栏 + 分隔线 + `Scroll` 内四个页组件。
 //
@@ -40,12 +43,10 @@ export struct UnifiedObjectDetailCard {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
   @Prop satelliteVisible: boolean
   @Prop tleEpoch: string
-  @Prop accent: string
   @Prop cultureVisible: boolean
-  @Prop textColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   scroller: Scroller = new Scroller()
   resolve: (key: string) => string = () => ''
   nameOf: (name: string) => string = () => ''
@@ -67,6 +68,8 @@ export struct UnifiedObjectDetailCard {
   onRefresh: () => void = () => {}
   onReselect: () => void = () => {}
   onSpeak: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   // 观测极简形态：只有页头会渲染（页签栏 + 分隔线 + 滚动区整体不渲染）。
   // 观测极简形态：页头之后只剩卡片下沿的展开箭头（页签栏 / 实时行 / 滚动区都不渲染）。
@@ -95,7 +98,7 @@ export struct UnifiedObjectDetailCard {
       if (!this.observeCompact()) {
         ObjectDetailCardTabs({ activeIndex: this.activeIndex, onSelect: (index: number) => { this.onSelectTab(index) } })
 
-        Divider().color('rgba(91,147,191,0.16)').margin({ left: 16, right: 16 })
+        Divider().color(this.c.softStrong).margin({ left: 16, right: 16 })
 
         Scroll(this.scroller) {
           Column({ space: 8 }) {
@@ -108,9 +111,9 @@ export struct UnifiedObjectDetailCard {
                 store: this.store, mediaStore: this.mediaStore, tablet: false, distanceText: this.distanceText,
                 iconName: this.iconName, imageHeight: this.imageHeight, inlineModelSize: this.inlineModelSize,
                 modelReady: this.modelReady, modelRendering: this.modelRendering, hasModelTexture: this.hasModelTexture,
-                modelNotice: this.modelNotice, warmupText: this.warmupText, fallbackKind: this.fallbackKind, starColor: this.starColor,
-                satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch, accent: this.accent,
-                cultureVisible: this.cultureVisible, textColor: this.textColor,
+                modelNotice: this.modelNotice, warmupText: this.warmupText, fallbackKind: this.fallbackKind,
+                satelliteVisible: this.satelliteVisible, tleEpoch: this.tleEpoch,
+                cultureVisible: this.cultureVisible,
                 resolve: this.resolve,
                 onLoadPasses: () => { this.onLoadPasses() }, onMediaOpen: () => { this.onMediaOpen() },
                 onMediaRetry: () => { this.onMediaRetry() }, onModelExpand: () => { this.onModelExpand() },
@@ -158,7 +161,7 @@ export struct UnifiedObjectDetailCard {
         Row() {
           if (this.observeExpanded) {
             Button() {
-              Image(getIcon('back', false)).width(17).height(17).fillColor('#D9F1FF').rotate({ angle: 90 })
+              Image(getIcon('back', false)).width(17).height(17).supportSvg2(true).colorFilter(tintMatrixFor(this.c.dockActive)).rotate({ angle: 90 })
             }
               .id('object-detail-observe-collapse')
               .width(28).height(28).padding(0).borderRadius(0)
@@ -171,7 +174,7 @@ export struct UnifiedObjectDetailCard {
               })
           } else {
             Button() {
-              Image(getIcon('back', false)).width(17).height(17).fillColor('#D9F1FF').rotate({ angle: -90 })
+              Image(getIcon('back', false)).width(17).height(17).supportSvg2(true).colorFilter(tintMatrixFor(this.c.dockActive)).rotate({ angle: -90 })
             }
               .id('object-detail-observe-expand')
               .width(28).height(28).padding(0).borderRadius(0)
@@ -191,10 +194,10 @@ export struct UnifiedObjectDetailCard {
     }
       .width(this.cardWidth)
       .height(this.cardHeight)
-      .backgroundColor('rgba(12, 16, 28, 0.72)')
+      .backgroundColor(this.c.overlayPanel)
       .backdropBlur(28)
-      .border({ width: 0.5, color: 'rgba(91, 147, 191, 0.18)' })
+      .border({ width: 0.5, color: this.c.softStrong })
       .borderRadius(UI_RADIUS_PANEL)
-      .shadow({ radius: 20, color: 'rgba(0,0,0,0.30)', offsetX: 0, offsetY: 8 })
+      .shadow({ radius: 20, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
   }
 }

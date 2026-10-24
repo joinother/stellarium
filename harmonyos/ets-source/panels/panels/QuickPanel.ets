@@ -1,3 +1,5 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import {
   QUICK_ACTION_COLUMNS, QuickActionItem, QUICK_ACTION_EMPTY_ID,
@@ -5,6 +7,7 @@ import {
   quickActionDefaultOrder, quickActionItemsFor, quickCandidateSlotsFor
 } from '../../common/derive/quickActions'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { NightModeStore } from '../../state/NightModeStore'
 import { QuickActionCell } from '../quick/QuickActionCell'
 import { QuickActionGrid } from '../quick/QuickActionGrid'
 
@@ -115,9 +118,13 @@ export class QuickPanelStore {
 @Component
 export struct QuickPanel {
   @ObjectLink store: QuickPanelStore
+  @ObjectLink nightModeStore: NightModeStore
   @Prop values: Record<string, boolean>
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (id: string, value: boolean) => void = () => {}
   onHint: (text: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
   @Builder
   candidateSlot(item: QuickActionItem) {
@@ -142,6 +149,7 @@ export struct QuickPanel {
       QuickActionGrid({
         items: this.store.items(),
         values: this.values,
+        nightModeStore: this.nightModeStore,
         editable: this.store.editable,
         onToggle: (id: string, value: boolean) => { this.onToggle(id, value) },
         onHint: (text: string) => { this.onHint(text) },
@@ -152,7 +160,7 @@ export struct QuickPanel {
         Row()
           .width('100%')
           .height(1)
-          .backgroundColor('rgba(159, 232, 255, 0.22)')
+          .backgroundColor(this.c.border)
           .margin({ top: 10 })
         Row({ space: 4 }) {
           ForEach(this.store.candidateSlots().slice(0, QUICK_ACTION_COLUMNS), (item: QuickActionItem) => {
@@ -175,14 +183,14 @@ export struct QuickPanel {
         Row() {
           Text(I18n.t('quick_customize_hint'))
             .fontSize(10)
-            .fontColor('#A8C2D8')
+            .fontColor(this.c.tertiary)
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Button(I18n.t('quick_customize_default'))
             .fontSize(11)
-            .fontColor('#E5FFFFFF')
-            .backgroundColor('rgba(255, 255, 255, 0.06)')
+            .fontColor(this.c.text)
+            .backgroundColor(this.c.input)
             .borderRadius(UI_RADIUS_PILL)
             .height(28)
             .padding({ left: 10, right: 10 })

@@ -1,7 +1,8 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
 import { SkyCultureMakerStore } from '../../state/SkyCultureMakerStore'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 星文化制作器的三个标签页：概览 / 星座 / 校验收尾。
 //
@@ -10,17 +11,19 @@ import { SkyCultureMakerStore } from '../../state/SkyCultureMakerStore'
 @Component
 export struct SkyCultureMakerTabs {
   @ObjectLink store: SkyCultureMakerStore
-  @Prop subColor: string
-  @Prop accentColor: string
-  @Prop bgColor: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Row({ space: 6 }) {
       ForEach([I18n.t('sky_culture_maker_overview'), I18n.t('sky_culture_maker_constellations'), I18n.t('sky_culture_maker_validate_export')], (label: ResourceStr, index: number) => {
-        Text(label).fontSize(11).fontColor(this.store.tab === index ? '#FFFFFFFF' : this.subColor)
+        Text(label).fontSize(11).fontColor(this.store.tab === index ? this.c.onAccent : this.c.sub)
           .fontWeight(this.store.tab === index ? FontWeight.Medium : FontWeight.Normal)
           .textAlign(TextAlign.Center).layoutWeight(1).height(34).padding({ top: 8 })
-          .backgroundColor(this.store.tab === index ? this.accentColor : this.bgColor)
+          .backgroundColor(this.store.tab === index ? this.c.accent : this.c.bg)
           .borderRadius(UI_RADIUS_CONTROL)
           .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
           .onClick(() => { this.store.tab = index })

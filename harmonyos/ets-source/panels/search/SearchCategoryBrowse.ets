@@ -1,9 +1,11 @@
-import { curves } from '@kit.ArkUI'
+import { curves, Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { NameItem } from '../../pages/StellariumTypes'
 import { SearchStore } from '../../state/SearchStore'
 import { SearchFilterChips } from './SearchFilterChips'
-import { getIcon } from '../../common/ui/ShellIcons'
+import { getCatalogIcon, getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 
 // 本组件职责：搜索面板的"分类浏览"块 —— 分类选择 + 筛选入口 + 已选条件 chips + 目录天体网格。
@@ -19,9 +21,7 @@ export struct SearchCategoryBrowse {
   @Prop categoryLabel: string
   @Prop visibilityLabel: string
   @Prop instrumentLabel: string
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   iconFor: (item: NameItem) => string = () => ''
   subtitleFor: (item: NameItem) => string = () => ''
   onOpenCategories: () => void = () => {}
@@ -31,6 +31,8 @@ export struct SearchCategoryBrowse {
   onSelectObject: (item: NameItem) => void = () => {}
   onClearVisibility: () => void = () => {}
   onClearInstrument: () => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   private catalogStatusText(): string {
     if (this.store.categoryLoadFailed) { return I18n.t('search_load_failed_retry') }
@@ -54,19 +56,19 @@ export struct SearchCategoryBrowse {
     Column() {
       Row({ space: 10 }) {
         Row({ space: 10 }) {
-          Image(getIcon(this.categoryIconKey, false)).width(22).height(22).objectFit(ImageFit.Contain).fillColor('#8FD3FF')
+          Image(getCatalogIcon(this.categoryIconKey, this.c.isNight)).width(22).height(22).objectFit(ImageFit.Contain).fillColor(this.c.accent)
           Column({ space: 3 }) {
-            Text(I18n.t('search_browse_categories')).fontSize(11).fontColor(this.subColor).width('100%')
-            Text(this.categoryLabel).fontSize(14).fontColor(this.textColor).width('100%').maxLines(2)
+            Text(I18n.t('search_browse_categories')).fontSize(11).fontColor(this.c.sub).width('100%')
+            Text(this.categoryLabel).fontSize(14).fontColor(this.c.text).width('100%').maxLines(2)
           }.layoutWeight(1)
-          Image(getIcon('chevron_right', false)).width(16).height(16).fillColor(this.subColor)
+          Image(getIcon('chevron_right', false)).width(16).height(16).supportSvg2(true).colorFilter(tintMatrixFor(this.c.sub))
         }
           .layoutWeight(1).height(66).padding({ left: 12, right: 12 })
-          .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+          .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
           .id('search-category-picker').clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.onOpenCategories() })
         Button(I18n.t('search_filter')).fontSize(13).height(48).padding({ left: 16, right: 16 })
-          .backgroundColor(this.panelColor).fontColor(this.textColor).borderRadius(UI_RADIUS_CONTROL)
+          .backgroundColor(this.c.bg).fontColor(this.c.text).borderRadius(UI_RADIUS_CONTROL)
           .id('search-filter-picker').clickEffect({ level: ClickEffectLevel.LIGHT })
           .onClick(() => { this.onOpenFilters() })
       }.width('100%').margin({ bottom: 8 })
@@ -74,36 +76,35 @@ export struct SearchCategoryBrowse {
         SearchFilterChips({
           visibilityLabel: this.visibilityLabel,
           instrumentLabel: this.instrumentLabel,
-          textColor: this.textColor,
-          panelColor: this.panelColor,
           onClearVisibility: this.onClearVisibility,
           onClearInstrument: this.onClearInstrument
         })
       }
       Row() {
-        Text(I18n.t('search_catalog_objects')).fontSize(11).fontColor(this.subColor).layoutWeight(1)
-        Text(this.catalogStatusText()).fontSize(10).fontColor(this.subColor)
+        Text(I18n.t('search_catalog_objects')).fontSize(11).fontColor(this.c.sub).layoutWeight(1)
+        Text(this.catalogStatusText()).fontSize(10).fontColor(this.c.sub)
           .onClick(() => { if (this.store.categoryLoadFailed) { this.onRetry() } })
       }.width('100%').padding({ left: 2, right: 2 }).margin({ top: 10, bottom: 6 })
       Scroll() {
         Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
           ForEach(this.store.categoryObjects, (item: NameItem) => {
             Row({ space: 8 }) {
-              Image(getIcon(this.iconFor(item), false)).width(22).height(22)
-                .fillColor(item.visibleNow === false ? this.subColor : '#91C8E8')
+              Image(getCatalogIcon(this.iconFor(item), this.c.isNight)).width(22).height(22)
+                .fillColor(this.c.iconSecondary)
+                .opacity(item.visibleNow === false ? 0.55 : 1)
               Column({ space: 2 }) {
                 Text(item.zh ?? item.name ?? '')
-                  .fontSize(12).minFontSize(10).fontColor(this.textColor).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .fontSize(12).minFontSize(10).fontColor(this.c.text).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                 if (this.subtitleFor(item).length > 0) {
                   Text(this.subtitleFor(item)).fontSize(10).minFontSize(10)
-                    .fontColor(item.visibleNow === true ? '#7FB3DC' : this.subColor).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .fontColor(item.visibleNow === true ? this.c.iconTertiary : this.c.sub).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }
               }
               .layoutWeight(1).alignItems(HorizontalAlign.Start)
             }
               .width('49%').height(78).alignItems(VerticalAlign.Center)
               .padding({ left: 10, right: 8, top: 7, bottom: 7 })
-              .backgroundColor(this.panelColor).borderRadius(UI_RADIUS_CONTROL)
+              .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
               .margin({ bottom: 6 })
               .transition(TransitionEffect.asymmetric(
                 TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut })
@@ -114,9 +115,9 @@ export struct SearchCategoryBrowse {
               .onClick(() => { this.onSelectObject(item) })
           }, (item: NameItem) => this.store.searchCategory + '/' + item.name + '/' + this.languageRevision.toString())
           if (this.store.categoryLoading && this.store.categoryObjects.length > 0) {
-            Text(I18n.t('search_loading_more')).fontSize(11).fontColor(this.subColor).padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            Text(I18n.t('search_loading_more')).fontSize(11).fontColor(this.c.sub).padding({ left: 12, right: 12, top: 8, bottom: 8 })
           } else if (this.store.categoryHasMore) {
-            Text(I18n.t('search_load_more')).fontSize(11).fontColor(this.subColor).padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            Text(I18n.t('search_load_more')).fontSize(11).fontColor(this.c.sub).padding({ left: 12, right: 12, top: 8, bottom: 8 })
           }
         }.width('100%').padding({ left: 2, right: 6 })
       }.width('100%').height(222).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)

@@ -5,10 +5,13 @@ import Want from '@ohos.app.ability.Want';
 import Window from '@ohos.window'
 import hilog from '@ohos.hilog';
 import deviceInfo from '@ohos.deviceInfo';
+import preferences from '@ohos.data.preferences';
+import { fileIo } from '@kit.CoreFileKit';
 import BuildProfile from 'BuildProfile';
 import qpa from 'libqohos.so';
 import { command } from 'libentry.so';
 import { notifyLifecycle } from '../common/StellariumLifecycle';
+import { WINDOW_BACKGROUND_COLOR } from './WindowChrome';
 import {LOG_DOMAIN, LOG_TAG, APP_ICP_FILING_NUMBER, APP_ICP_FILING_URL} from '../common/QtAppConstants';
 import { hasCurrentPrivacyConsent } from './PrivacyConsent';
 import { writeClipboardText } from './ClipboardService';
@@ -20,6 +23,7 @@ import { AstronomyReminderService, AstronomyReminderRequest } from './AstronomyR
 import { readAstronomyCard, publishAstronomyCard } from './AstronomyCardService';
 import { CardTonightData } from '../form/AstronomyCardData';
 import { CollaborationSessionOptions, collaborationNativeState, collaborationPreview, createCollaborationSession } from './CollaborationSessionService';
+import { NIGHT_MODE_STORE } from '../common/types/MainWindowModels';
 
 interface AstronomyReminderResponse {
   ok: boolean;
@@ -894,7 +898,7 @@ export default class QAbility extends UIAbility {
       const mainWindow = await windowStage.getMainWindow();
       // Qt replaces the ArkUI content asynchronously after consent. Keep the
       // native window opaque during that hand-off so the launcher cannot flash.
-      mainWindow.setWindowBackgroundColor('#070b12');
+      mainWindow.setWindowBackgroundColor(WINDOW_BACKGROUND_COLOR);
       await mainWindow.setWindowLayoutFullScreen(true);
       await mainWindow.setWindowSystemBarEnable([]);
       if (canIUse('SystemCapability.Window.SessionManager')) {
@@ -971,6 +975,7 @@ export default class QAbility extends UIAbility {
     this.privacyProbeStartedAt = Date.now();
     this.logPrivacyProbe('ability-create');
     hilog.info(LOG_DOMAIN, LOG_TAG, '[privacy-gate] ability created; Qt initialization is blocked pending consent');
+    this.readEarlyNightMode();
     AppStorage.setOrCreate('stellariumStartupPreparing', false);
     setConsentAcceptedListener(() => { void this.requestPrivacyThenStart(); });
     setStartupCanvasReadyListener(() => {
@@ -986,6 +991,40 @@ export default class QAbility extends UIAbility {
     this.queueCliRequest(want);
     this.routeCardWant(want);
     this.queueOpenCatalogWant(want);
+  }
+
+  private async readEarlyNightMode(): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, NIGHT_MODE_STORE);
+      const cached = store.getSync('nightMode', false) as boolean;
+      // The engine config is authoritative. The first-frame splash must match
+      // config.ini (viewing/flag_night), otherwise a stale preference shows a
+      // red night splash while the engine is actually in day mode.
+      const engineNight = this.readNightModeFromEngineConfig();
+      const nightMode = engineNight === undefined ? cached : engineNight;
+      if (engineNight !== undefined && engineNight !== cached) {
+        await store.put('nightMode', engineNight);
+        await store.flush();
+      }
+      AppStorage.setOrCreate('stellariumNightMode', nightMode);
+    } catch (e) {
+      AppStorage.setOrCreate('stellariumNightMode', false);
+    }
+  }
+
+  private readNightModeFromEngineConfig(): boolean | undefined {
+    try {
+      const path = this.context.filesDir + '/stellarium_userdir/config.ini';
+      const text = fileIo.readTextSync(path);
+      const match = text.match(/^\s*flag_night\s*=\s*([A-Za-z0-9]+)/m);
+      if (match === null || match.length < 2) {
+        return undefined;
+      }
+      const value = match[1].toLowerCase();
+      return value === 'true' || value === '1';
+    } catch (e) {
+      return undefined;
+    }
   }
 
   onDestroy(): void | Promise<void> {

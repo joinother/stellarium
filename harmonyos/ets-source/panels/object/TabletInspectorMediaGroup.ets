@@ -4,13 +4,14 @@ import { getIcon } from '../../common/ui/ShellIcons'
 import { ObjectMediaStore } from '../../state/ObjectMediaStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { TabletInspectorMediaCard, TabletInspectorNoticeRow, TabletInspectorModelBlock, TabletInspectorProgressRow, TabletInspectorFallbackVisual } from './TabletInspectorMedia'
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 天体检查器媒体区：按媒体状态分派图像卡、提示行、模型块与示意图，并处理加载 / 解码等中间态。
 //
 // 媒体状态以 `@ObjectLink` 观察 `ObjectMediaStore`；派生值（图像高度、模型尺寸、文案、示意图种类）
 // 与交互（打开预览 / 重试 / 展开模型 / 模型手势）由宿主注入。
 // 分派条件不能经 `@BuilderParam` 交由子组件渲染——真机上宿主 builder 传入子组件会让应用在渲染时退出。
-
 @Component
 export struct TabletInspectorMediaGroup {
   @ObjectLink store: ObjectMediaStore
@@ -25,11 +26,13 @@ export struct TabletInspectorMediaGroup {
   @Prop modelNotice: string
   @Prop warmupText: string
   @Prop fallbackKind: string
-  @Prop starColor: string
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   onOpen: () => void = () => {}
   onRetry: () => void = () => {}
   onModelExpand: () => void = () => {}
   onModelTouch: (event: TouchEvent) => void = () => {}
+
+  onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
     if ((this.store.objectInspectorMediaKind === 'image' || this.store.objectInspectorMediaKind === 'constellation') &&
@@ -43,24 +46,21 @@ export struct TabletInspectorMediaGroup {
       })
     } else if (this.store.objectInspectorMediaNoMatch) {
       TabletInspectorNoticeRow({
-        iconName: this.iconName, iconFill: '#8EC9E9',
+        iconName: this.iconName,
         title: '没有匹配的离线资源', subtitle: '当前天体没有随应用分发的对应图像或纹理',
-        cardBackground: 'rgba(91,147,191,0.08)',
         onRetry: () => { this.onRetry() }
       })
     } else if (this.store.objectInspectorMediaPreparationFailed) {
       TabletInspectorNoticeRow({
-        iconName: this.iconName, iconFill: '#F1C27D',
+        iconName: this.iconName,
         title: '离线资源准备失败', subtitle: '文件未能完整复制到本地缓存，请重试',
-        cardBackground: 'rgba(241,194,125,0.08)',
         onRetry: () => { this.onRetry() }
       })
     } else if ((this.store.objectInspectorMediaKind === 'image' || this.store.objectInspectorMediaKind === 'constellation' ||
       this.store.objectInspectorMediaKind === 'model') && this.store.objectInspectorMediaLoadFailed) {
       TabletInspectorNoticeRow({
-        iconName: this.iconName, iconFill: '#8EC9E9',
+        iconName: this.iconName,
         title: '本地资源解码失败', subtitle: '资源已找到，但当前设备无法显示此文件',
-        cardBackground: 'rgba(91,147,191,0.08)',
         onRetry: () => { this.onRetry() }
       })
     } else if (this.store.objectInspectorMediaKind === 'model' &&
@@ -86,16 +86,16 @@ export struct TabletInspectorMediaGroup {
       TabletInspectorFallbackVisual({
         store: this.store,
         kind: this.fallbackKind,
-        starColor: this.starColor,
         iconName: this.iconName
       })
     } else {
       Row({ space: 10 }) {
-        Image(getIcon(this.iconName, false)).width(24).height(24).fillColor('#8EC9E9')
-        Text('暂无与当前天体准确匹配的本地资料图像').fontSize(11).fontColor('#9EC8DC').layoutWeight(1).maxLines(2)
+        Image(getIcon(this.iconName, false)).width(24).height(24).fillColor(this.c.spinner)
+        Text('暂无与当前天体准确匹配的本地资料图像').fontSize(11)
+          .fontColor(this.c.detailSub).layoutWeight(1).maxLines(2)
       }
         .width('100%').height(54).padding({ left: 12, right: 12 })
-        .backgroundColor('rgba(91,147,191,0.08)').borderRadius(UI_RADIUS_CONTROL)
+        .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
     }
   }
 }

@@ -2,6 +2,14 @@ import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse, SkyCultureItem, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon } from '../pages/StellariumTypes'
 import { ConfigurationOption, SkyCultureVisualColors } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
+import { AstroColors } from './StellariumTheme'
+
+// 天空文化默认配色（数据色，日/夜恒定；非主题色）。
+// 供视觉配色面板的快捷色板与默认值共用，避免在 UI 内散落字面量。
+export const SKY_CULTURE_LINE_COLOR: string = AstroColors.cultureLine
+export const SKY_CULTURE_LABEL_COLOR: string = AstroColors.cultureLabel
+export const SKY_CULTURE_ZODIAC_COLOR: string = AstroColors.cultureZodiac
+export const SKY_CULTURE_LUNAR_COLOR: string = AstroColors.cultureLunar
 
 // 宿主 → SkyCultureSettingsStore 的加载助手。
 export interface SkyCultureSettingsHostHooks {
@@ -90,12 +98,12 @@ export class SkyCultureSettingsStore {
   skyCultureRayHelperFadeDuration: number = 1
   skyCultureColorsExpanded: boolean = false
   skyCultureVisualColors: SkyCultureVisualColors = {
-    constellationLines: '#B9D8FF', constellationLabels: '#D9E9FF', constellationBoundaries: '#DB8B8B',
-    constellationHulls: '#A66C6C', zodiac: '#FFE36E', lunarSystem: '#7DE7B5',
-    asterismLines: '#B1C7FF', asterismLabels: '#D5DEFF', rayHelpers: '#A9E2D2'
+    constellationLines: SKY_CULTURE_LINE_COLOR, constellationLabels: SKY_CULTURE_LABEL_COLOR, constellationBoundaries: AstroColors.cultureBoundary,
+    constellationHulls: AstroColors.cultureHull, zodiac: SKY_CULTURE_ZODIAC_COLOR, lunarSystem: SKY_CULTURE_LUNAR_COLOR,
+    asterismLines: AstroColors.cultureAsterismLine, asterismLabels: AstroColors.cultureAsterismLabel, rayHelpers: AstroColors.cultureRayHelper
   }
   skyCultureColorTarget: string = 'constellationLines'
-  skyCultureColorInput: string = '#B9D8FF'
+  skyCultureColorInput: string = SKY_CULTURE_LINE_COLOR
 
   // —— 默认文化 ——
   skyCultureDefaultId: string = ''

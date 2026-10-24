@@ -1,9 +1,12 @@
+import { Theme } from '@kit.ArkUI'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { curves } from '@kit.ArkUI'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
+import { tintMatrixFor } from '../../common/ui/IconTint'
 import { ShellAction } from '../../pages/StellariumTypes'
 
-// “更多”主菜单面板，对应 `activePanel === 'more'`。
+// "更多"主菜单面板，对应 activePanel === 'more'。
 //
 // 入口集合 moreActions() 由宿主算好后以 @Prop 传入；是否为新分节依赖宿主状态，经回调判定。
 // ForEach 键里的 languageRevision 由宿主传入，以便切语言后重建列表。
@@ -12,8 +15,11 @@ import { ShellAction } from '../../pages/StellariumTypes'
 export struct MorePanel {
   @Prop actions: ShellAction[]
   @Prop languageRevision: number
+  @State private c: ThemeSlots = DEFAULT_SLOTS
   startsSection: (item: ShellAction, index: number) => boolean = () => false
   onOpenPanel: (panel: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
   build() {
     Column({ space: 6 }) {
@@ -22,7 +28,7 @@ export struct MorePanel {
           Text(item.section === undefined ? '' : item.section)
             .fontSize(11)
             .fontWeight(FontWeight.Medium)
-            .fontColor('#8FBBD6')
+            .fontColor(this.c.sub)
             .width('100%')
             .margin({ top: index === 0 ? 0 : 10, bottom: 1 })
         }
@@ -32,25 +38,27 @@ export struct MorePanel {
               Circle()
                 .width(38)
                 .height(38)
-                .fill('rgba(91, 147, 191, 0.20)')
+                .fill(this.c.softStrong)
               Image(getIcon(item.icon, false))
                 .width(21)
                 .height(21)
-                .fillColor('#B8E4FF')
+                .supportSvg2(true)
+                .colorFilter(tintMatrixFor(this.c.iconSecondary))
             }
               .width(38)
               .height(38)
             Text(item.label)
               .fontSize(15)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#EAF7FF')
+              .fontColor(this.c.textStrong)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
             Image(getIcon('chevron_right', false))
               .width(19)
               .height(19)
-              .fillColor('rgba(184, 228, 255, 0.72)')
+              .supportSvg2(true)
+              .colorFilter(tintMatrixFor(this.c.iconSecondary))
           }
             .width('100%')
             .height('100%')
@@ -60,14 +68,14 @@ export struct MorePanel {
           .width('100%')
           .height(58)
           .padding(0)
-          .backgroundColor('rgba(255, 255, 255, 0.045)')
-          .border({ width: 0.5, color: 'rgba(147, 215, 255, 0.10)' })
+          .backgroundColor(this.c.rowBg)
+          .border({ width: 0.5, color: this.c.border })
           .borderRadius(UI_RADIUS_CONTROL)
           .clickEffect({ level: ClickEffectLevel.LIGHT })
           .stateStyles({
             pressed: {
               .scale({ x: 0.98, y: 0.98 })
-              .backgroundColor('rgba(91, 147, 191, 0.20)')
+              .backgroundColor(this.c.softStrong)
             }
           })
           .animation({ duration: 220, curve: curves.springMotion(0.42, 0.86) })

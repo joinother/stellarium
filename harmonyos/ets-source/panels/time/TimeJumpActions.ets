@@ -1,5 +1,7 @@
+import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 时间面板的快捷跳转按钮组：天文事件 / 二分二至 / 天文时间单位。
 //
@@ -47,21 +49,22 @@ const JUMP_SECTIONS: JumpSection[] = [
 
 @Component
 export struct TimeJumpActions {
-  @Prop textColor: string
-  @Prop subColor: string
-  @Prop panelColor: string
-  @Prop borderColorValue: string
+  @State c: ThemeSlots = DEFAULT_SLOTS
   onAction: (action: string) => void = () => {}
+
+  onWillApplyTheme(theme: Theme): void {
+    this.c = slotsFromTheme(theme)
+  }
 
   build() {
     Column() {
       ForEach(JUMP_SECTIONS, (section: JumpSection) => {
         Row()
           .width('100%').height(0.5)
-          .backgroundColor(this.borderColorValue)
+          .backgroundColor(this.c.border)
           .margin({ top: 6, bottom: 4 })
         Row() {
-          Text(I18n.t(section.titleKey)).fontSize(11).fontColor(this.subColor).width('100%').padding({ left: 2 })
+          Text(I18n.t(section.titleKey)).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
         }
         .height(18).width('100%')
         ForEach(section.rows, (row: JumpAction[]) => {
@@ -69,7 +72,7 @@ export struct TimeJumpActions {
             ForEach(row, (item: JumpAction) => {
               Button(I18n.t(item.labelKey))
                 .fontSize(section.pill ? 11 : 10)
-                .fontColor(this.textColor).backgroundColor(this.panelColor)
+                .fontColor(this.c.text).backgroundColor(this.c.bg)
                 .borderRadius(section.pill ? UI_RADIUS_PILL : UI_RADIUS_CONTROL)
                 .height(section.pill ? 30 : 26)
                 .padding({ left: section.pill ? 10 : 8, right: section.pill ? 10 : 8 })
