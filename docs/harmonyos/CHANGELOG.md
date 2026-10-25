@@ -8,6 +8,7 @@
 - **构建结果：** Default Debug assembleHap 成功；几何、字号、触控板静态契约及 UI anchor 检查通过。真机验收记录见 `testing/PC-MERGE-REGRESSION-2026-10-25.md`。
 - **10 月 26 日续验：** 原生与 ArkTS 完整构建成功并安装 MateBook；鼠标悬停/拖动/滚轮、系统注入捏合、方向键和 PageUp 连续导航、搜索输入 Delete/Backspace、Ctrl+N 及自定义 Ctrl+Shift+Y 均观察到预期效果。双指滚动专项另用 TestKit；系统注入与物理触控板手感分别记录。
 - **审核反馈：** 修正实况窗、代理提醒和锁屏卡片为已拒绝，新增 `release/AGC-CAPABILITY-REJECTION-REMEDIATION-2026-10-25.md`；明确真实业务范围、所缺材料和尺寸限制，未重新提交申请。
+- **验收收尾：** 临时 entry_test 模块已移除；覆盖安装同一 build6 主 HAP 后系统隐私弹窗恢复，正常确认后星图 ready=true，约 30fps。主应用和数据保留，没有改隐私门控；双指平移仍标记为待物理验收。
 
 ## [2026-10-22] 修复恢复默认后首次启动闪退
 
