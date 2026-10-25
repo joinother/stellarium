@@ -1,5 +1,4 @@
 ﻿import { curves, Theme } from '@kit.ArkUI'
-import { image } from '@kit.ImageKit'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { I18n } from '../../pages/I18n'
 import { SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureItem, SkyCultureTerritoryEntry } from '../../pages/StellariumTypes'
@@ -24,7 +23,6 @@ export struct SkyCultureViewTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink skyCultureViewStore: SkyCultureViewStore
   @Prop artStates: Record<string, string> = {}
-  @Prop artThumbnailPixelMaps: Record<string, image.PixelMap> = {}
   @Prop narrationParagraphs: Array<string> = []
   @State c: ThemeSlots = DEFAULT_SLOTS
   mapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
@@ -191,8 +189,8 @@ export struct SkyCultureViewTab {
             Flex({ wrap: FlexWrap.Wrap }) {
               ForEach(this.skyCultureViewStore.artItems.slice(0, 24), (art: SkyCultureArtItem) => {
                 Column({ space: 3 }) {
-                  if (this.artThumbnailPixelMaps[art.rawPath] !== undefined) {
-                    Image(this.artThumbnailPixelMaps[art.rawPath] as image.PixelMap).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
+                  if (this.skyCultureViewStore.artThumbnails[art.rawPath] !== undefined) {
+                    Image(this.skyCultureViewStore.artThumbnails[art.rawPath]).width('100%').aspectRatio(1).objectFit(ImageFit.Contain)
                       .backgroundColor(this.c.thumbBg).borderRadius(UI_RADIUS_CONTROL)
                       .onError(() => { this.onArtDecodeError(art.rawPath) })
                   } else if (this.artStatus(art.rawPath) === 'ready') {

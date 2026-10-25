@@ -1253,7 +1253,6 @@ export struct WindowNativeNode {
   // skyCultureMakerArtworkPPath / skyCultureMakerArtworkDecodeGeneration /
   @State private skyCultureViewStore: SkyCultureViewStore = new SkyCultureViewStore()
   @State private skyCultureArtStates: Record<string, string> = {}
-  @State private skyCultureArtThumbnailPixelMaps: Record<string, image.PixelMap> = {}
   // 控制器经 hooks 读写（+ 双重约束）。
   // 星空文化面板设置状态簇（见 state/SkyCultureSettingsStore.ets）
   @State private skyCultureSettingsStore: SkyCultureSettingsStore = new SkyCultureSettingsStore()
@@ -2941,8 +2940,8 @@ export struct WindowNativeNode {
         skyCultureActiveColorTarget: (): string => this.skyCultureActiveColorTarget(),
         skyCultureArtStates: (): Record<string, string> => this.skyCultureArtStates,
         setSkyCultureArtStates: (next: Record<string, string>): void => { this.skyCultureArtStates = next },
-        skyCultureArtThumbnailPixelMaps: (): Record<string, image.PixelMap> => this.skyCultureArtThumbnailPixelMaps,
-        setSkyCultureArtThumbnailPixelMaps: (next: Record<string, image.PixelMap>): void => { this.skyCultureArtThumbnailPixelMaps = next },
+        skyCultureArtThumbnailPixelMaps: (): Record<string, image.PixelMap> => this.skyCultureViewStore.artThumbnails,
+        setSkyCultureArtThumbnailPixelMaps: (next: Record<string, image.PixelMap>): void => { this.skyCultureViewStore.artThumbnails = next },
         stellariumFilesDir: (): string => this.stellariumFilesDir(),
         pathToUri: (path: string): string => fileUri.getUriFromPath(path),
         resolveDetailMediaAsset: (relativePath: string): Promise<string> => {
@@ -8182,7 +8181,6 @@ export struct WindowNativeNode {
         viewTabContentOffsetX: this.viewTabContentOffsetX,
         layerTabs: this.layerCtl().layerTabItems(),
         skyCultureArtStates: this.skyCultureArtStates,
-        skyCultureArtThumbnailPixelMaps: this.skyCultureArtThumbnailPixelMaps,
         narrationParagraphs: this.skyCultureViewStore.skyCultureNarrationParagraphs(),
         mapContext: this.skyCultureMapContext,
         onPreset: (preset: string) => { this.layerCtl().applyLayerPreset(preset) },
