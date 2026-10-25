@@ -4,7 +4,7 @@ import { I18n } from '../../pages/I18n'
 import {
   QUICK_ACTION_COLUMNS, QuickActionItem, QUICK_ACTION_EMPTY_ID,
   isValidQuickActionOrder, quickActionById, quickActionCandidatesFor,
-  quickActionDefaultOrder, quickActionItemsFor, quickCandidateSlotsFor
+  quickActionDefaultOrder, quickActionItemsFor, quickCandidateRowsFor, quickCandidateSlotsFor
 } from '../../common/derive/quickActions'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { NightModeStore } from '../../state/NightModeStore'
@@ -30,6 +30,8 @@ export class QuickPanelStore {
   // 12 格顺序（条目 id 序列，长度恒 12）。
   order: string[] = quickActionDefaultOrder()
   editable: boolean = false
+  // 正常态的“更多操作”区是否展开（临时 UI 状态，不落盘；每次打开面板重置为 false）。
+  expanded: boolean = false
   // 进入编辑态时的顺序快照，供「丢弃」复原。
   orderSnapshot: string[] = []
   // 被拖起的候选 id（应用内拖放的负载经组件回调传到这里）。
@@ -52,6 +54,16 @@ export class QuickPanelStore {
   // 候选带：池中「当前未列入」的项，已按 6 列补位（空位为占位项），上限两行。
   candidateSlots(): QuickActionItem[] {
     return quickCandidateSlotsFor(this.order)
+  }
+
+  // —— 正常态“更多操作”区 ——
+  setExpanded(value: boolean): void {
+    this.expanded = value
+  }
+
+  // 候选带占用的行数（与宿主高度公式同源，见 quickCandidateRowsFor）。
+  moreRows(): number {
+    return quickCandidateRowsFor(this.order)
   }
 
   // —— 编辑态 ——
@@ -136,12 +148,28 @@ export struct QuickPanel {
     } else {
       QuickActionCell({
         item: item,
-        isOn: false,
-        editable: true,
+        // 正常态直接反映开关值（候选也是可用按钮）；编辑态候选恒不点亮。
+        isOn: this.store.editable ? false : this.values[item.id] === true,
+        editable: this.store.editable,
         candidate: true,
+        onToggle: (id: string, value: boolean) => { this.onToggle(id, value) },
+        onHint: (text: string) => { this.onHint(text) },
         onDragBegin: (id: string) => { this.store.beginDrag(id) }
       })
     }
+  }
+
+  // 候选带第 rowIndex 行（6 列）。行距与宿主高度公式一致：首行 12，后续 6。
+  @Builder
+  candidateRow(rowIndex: number) {
+    Row({ space: 4 }) {
+      ForEach(this.store.candidateSlots().slice(rowIndex * QUICK_ACTION_COLUMNS, (rowIndex + 1) * QUICK_ACTION_COLUMNS),
+        (item: QuickActionItem) => { this.candidateSlot(item) },
+        (item: QuickActionItem, index: number) => 'candidate-' + rowIndex + '-' + index + '-' + item.id)
+    }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+      .margin({ top: rowIndex === 0 ? 12 : 6 })
   }
 
   build() {
@@ -156,30 +184,19 @@ export struct QuickPanel {
         onDragBegin: (id: string) => { this.store.beginDrag(id) },
         onDropOnSlot: (slotId: string) => { this.store.dropOnSlot(slotId) }
       })
-      if (this.store.editable) {
+      // 默认只有 6×2；用顶部抓手向上拖动（或进入编辑态）才显示分隔线与更多按钮。
+      if (this.store.expanded || this.store.editable) {
         Row()
           .width('100%')
           .height(1)
           .backgroundColor(this.c.border)
           .margin({ top: 10 })
-        Row({ space: 4 }) {
-          ForEach(this.store.candidateSlots().slice(0, QUICK_ACTION_COLUMNS), (item: QuickActionItem) => {
-            this.candidateSlot(item)
-          }, (item: QuickActionItem, index: number) => 'candidate-' + index + '-' + item.id)
+        this.candidateRow(0)
+        if (this.store.moreRows() > 1) {
+          this.candidateRow(1)
         }
-          .width('100%')
-          .alignItems(VerticalAlign.Top)
-          .margin({ top: 12 })
-        if (this.store.candidateSlots().length > QUICK_ACTION_COLUMNS) {
-          Row({ space: 4 }) {
-            ForEach(this.store.candidateSlots().slice(QUICK_ACTION_COLUMNS, QUICK_ACTION_COLUMNS * 2), (item: QuickActionItem) => {
-              this.candidateSlot(item)
-            }, (item: QuickActionItem, index: number) => 'candidate2-' + index + '-' + item.id)
-          }
-            .width('100%')
-            .alignItems(VerticalAlign.Top)
-            .margin({ top: 6 })
-        }
+      }
+      if (this.store.editable) {
         Row() {
           Text(I18n.t('quick_customize_hint'))
             .fontSize(10)

@@ -55,7 +55,7 @@ export struct DockClockLayer {
         .hitTestBehavior(HitTestMode.Block)
     }
       .width(this.layerWidth)
-      .height(44)
+      .height(36)
       .justifyContent(FlexAlign.End)
       .padding({ right: 4 })
       .position({ x: this.posX, y: this.posY })
@@ -116,7 +116,7 @@ export struct DockFovLayer {
       DockFovChip({ fovText: this.fovText })
     }
       .width(this.layerWidth)
-      .height(44)
+      .height(36)
       .justifyContent(FlexAlign.Start)
       .padding({ left: 4 })
       .position({ x: this.posX, y: this.posY })

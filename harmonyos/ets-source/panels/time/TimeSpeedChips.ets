@@ -103,7 +103,7 @@ export struct TimeSpeedChips {
           .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
           .onClick(() => { this.onChip('fast') })
       }
-      .padding({ left: 2, right: 10 })
+      .padding({ left: 2, right: 10, top: 2, bottom: 12 })
     }
       .width('100%')
       .scrollable(ScrollDirection.Horizontal)

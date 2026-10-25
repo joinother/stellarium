@@ -6,8 +6,14 @@
 // pages/MainWindowNativeNode.skyZoomButtonAt。两边各写一套数字必然漂移：抬升 40vp 时
 // 就出现了"点 + 无响应、点 − 变成放大"的整体错位。常量与公式放这里，两边都引用。
 
-/** 读数行（FOV / 时钟）上沿相对 dockTop 的偏移。 */
-export const CHROME_ROW_OFFSET: number = 48
+/** 读数行（FOV / 时钟）胶囊高度。 */
+export const CHROME_CHIP_HEIGHT: number = 36
+
+/** 统一的垂直间距：缩放按钮→读数行、读数行→Dock 都用它。 */
+export const CHROME_GAP: number = 10
+
+/** 读数行（FOV / 时钟）上沿相对 dockTop 的偏移（胶囊高 + 间距）。 */
+export const CHROME_ROW_OFFSET: number = CHROME_CHIP_HEIGHT + CHROME_GAP
 
 /** 单枚缩放按钮边长。 */
 export const CHROME_ZOOM_BUTTON_SIZE: number = 44
@@ -24,8 +30,8 @@ export const CHROME_ZOOM_COLUMN_HEIGHT: number = CHROME_ZOOM_BUTTON_SIZE * 2 + C
 /** 横排按钮组高：一行（= 44）。 */
 export const CHROME_ZOOM_ROW_HEIGHT: number = CHROME_ZOOM_BUTTON_SIZE
 
-/** 横排时按钮组与读数行之间的视觉间隙（竖排是紧贴读数行上沿，无间隙）。 */
-export const CHROME_ZOOM_ROW_GAP: number = 4
+/** @deprecated 统一使用 CHROME_GAP；保留别名避免外部引用断裂。 */
+export const CHROME_ZOOM_ROW_GAP: number = CHROME_GAP
 
 /** 按钮组外框高度：竖排 96，横排 44。 */
 export function chromeZoomLayerHeight(horizontal: boolean): number {
@@ -37,7 +43,8 @@ export function chromeZoomLayerHeight(horizontal: boolean): number {
  * @param rowY 读数行上沿（见宿主 chromeRowY()）
  */
 export function chromeZoomLayerTop(rowY: number, horizontal: boolean): number {
-  return horizontal ? rowY - CHROME_ZOOM_ROW_HEIGHT - CHROME_ZOOM_ROW_GAP : rowY - CHROME_ZOOM_COLUMN_HEIGHT
+  // 两种排列都让按钮组底边与读数行保持 CHROME_GAP。
+  return rowY - CHROME_GAP - chromeZoomLayerHeight(horizontal)
 }
 
 /**
