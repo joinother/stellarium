@@ -29,6 +29,7 @@ import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, isStellariumDetail
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_SHEET, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../common/ui/UiTokens'
 import { getIcon } from '../common/ui/ShellIcons'
 import {
+  CHROME_ROW_OFFSET,
   CHROME_ZOOM_BUTTON_SIZE,
   chromeZoomButtonLeft,
   chromeZoomButtonTop
@@ -200,7 +201,7 @@ import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEv
 import { GyroTargetGuide } from '../panels/astro/GyroTargetGuide'
 import { SkyCultureMakerPanel } from '../panels/skyculture/SkyCultureMakerPanel'
 import { SkyCultureViewTab } from '../panels/skyculture/SkyCultureViewTab'
-import { PadPanelHandle, PanelHandle } from '../panels/shell/PanelChromeExtras'
+import { PanelHandle } from '../panels/shell/PanelChromeExtras'
 import { ScriptFocusShell } from '../panels/shell/ScriptFocusShell'
 import { CompactShell } from '../panels/shell/CompactShell'
 import { HarmonyShell } from '../panels/shell/HarmonyShell'
@@ -1143,6 +1144,10 @@ export struct WindowNativeNode {
   @State private fullInspectorRequested: boolean = false
   @State private compactPanelSnapRatio: number = 0.6
   @State private compactPanelDragOffsetY: number = 0
+  // 平板/展开布局的快捷面板同样可上拉展开，底部与 Dock 对齐。
+  @State private expandedPanelDragOffsetY: number = 0
+  // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
+  @State private timeSpeedBlockHeight: number = 0
   private lastInfoWinCloseMs: number = 0
   private dismissedObjectName: string = ''
   @State private panelContentKey: number = 0
@@ -1224,7 +1229,6 @@ export struct WindowNativeNode {
   @State private skyWidth: number = 1
   @State private skyHeight: number = 1
   @State private panelWidth: number = 336
-  @State private panelMaxHeight: number = 660
   // 离屏幕边框的安全留白(vp)：约 0.7cm，避免 UI 贴边
   private readonly EDGE_MARGIN: number = 44
   @State private obsListStore: ObservingListStore = new ObservingListStore()
@@ -3769,6 +3773,16 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
+    // 快捷面板每次打开都回到 6×2；“更多操作”的展开态只是临时 UI 状态。
+    if (panel === 'quick' && nextVisible) {
+      this.quickPanelStore.setExpanded(false)
+    }
+    // 每次打开面板都回到默认高度（0.6），与手机一致。
+    if (nextVisible) {
+      this.compactPanelSnapRatio = 0.6
+      this.compactPanelDragOffsetY = 0
+      this.expandedPanelDragOffsetY = 0
+    }
     const switchingPanel = this.panelVisible && nextVisible && this.activePanel !== panel
     this.panelRouteDirection = resolvedRouteDirection
     if (switchingPanel) {
@@ -4244,7 +4258,7 @@ export struct WindowNativeNode {
         const pl = panelLeft(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
         const pr = panelRight(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
         const pt = this.panelTop()
-        if (x >= pl - 30 && x <= pr + 30 && y >= pt - 30 && y <= pt + this.panelMaxHeight + 30) {
+        if (x >= pl - 30 && x <= pr + 30 && y >= pt - 30 && y <= pt + this.expandedPanelHeight() + 30) {
           return true
         }
       }
@@ -4301,7 +4315,7 @@ export struct WindowNativeNode {
     const left = panelLeft(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
     const top = this.panelTop()
     const right = panelRight(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
-    if (isPanelBackPoint(x, y, this.canGoBackPanel(), this.isExpandedLayout, this.isFoldHoverLayout, this.panelWidth, this.skyWidth, this.skyHeight, this.compactPanelHeight(), this.panelOffsetX, this.panelOffsetY, this.EDGE_MARGIN)) {
+    if (isPanelBackPoint(x, y, this.canGoBackPanel(), this.isExpandedLayout, this.isFoldHoverLayout, this.panelWidth, this.skyWidth, this.skyHeight, this.compactPanelHeight(), this.panelOffsetX, this.panelOffsetY, this.EDGE_MARGIN, this.expandedPanelTop())) {
       this.handlePanelBackTap()
       return true
     }
@@ -4943,13 +4957,12 @@ export struct WindowNativeNode {
     const cell = this.quickPanelGridCellSize()
     // 槽位固定两行（行宽 6）。
     const slots = cell * 2 + 6
-    // 编辑态追加：分隔线（上距 10 + 高 1）、候选带（首行上距 12，行内径 6）、操作条（上距 8 + 高 28）。
-    // 候选带行数必须与 QuickPanel 的行渲染同源，否则高度对不上会被 Scroll 垂直居中。
-    const candidateRows = this.quickPanelStore.editable ? quickCandidateRowsFor(this.quickPanelStore.order) : 0
-    const candidates = this.quickPanelStore.editable
-      ? (candidateRows * cell + (candidateRows - 1) * 6)
-      : 0
-    const editableExtra = this.quickPanelStore.editable ? (10 + 1 + 12 + 8 + 28) : 0
+    // 展开/编辑态才出现：分隔线（上距 10 + 高 1）+ 候选带（首行上距 12，行内径 6）。
+    // 行数必须与 QuickPanel 的行渲染同源，否则高度对不上会被 Scroll 垂直居中。
+    const showMore = this.quickPanelStore.expanded || this.quickPanelStore.editable
+    const candidateRows = showMore ? quickCandidateRowsFor(this.quickPanelStore.order) : 0
+    const candidates = candidateRows > 0 ? (10 + 1 + 12 + candidateRows * cell + (candidateRows - 1) * 6) : 0
+    const editableExtra = this.quickPanelStore.editable ? (8 + 28) : 0
     // 理论高度之外再留 4 物理像素的「取整余量」：内容里有两类逐项物理像素对齐 ——
     // 每行 6 格按浮点宽均分后各自对齐（每行最多多占 1px），以及固定 chrome（抓手 / 头部 / 内外边距）
     // 各自对齐。真机 Mate 80 Pro 实测真实占用比理论值多约 2px，第二行下沿就被 Scroll 视口切掉；
@@ -4957,15 +4970,21 @@ export struct WindowNativeNode {
     const grid = slots + candidates + editableExtra + this.getUIContext().px2vp(4)
     const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
     if (this.isExpandedLayout) {
-      // PadPanelHandle 高 17（5 + margin 2 + 10），floatingPanel 内边距 18。
-      return 18 + 17 + header + 14 + grid + 18
+      // PanelHandle 高 30（28 + margin 2），floatingPanel 内边距 18。
+      const height = 18 + 30 + header + 14 + grid + 18
+      // 超出可用高度时交给面板内 Scroll。
+      return Math.min(height, this.expandedPanelUsableHeight())
     }
     // PanelHandle 高 30（28 + margin 2），compactPanel 内边距 top 12 / bottom 16。
-    return 12 + 30 + header + 14 + grid + 16
+    const height = 12 + 30 + header + 14 + grid + 16
+    // 展开后可能超出可用高度；超出部分交给面板内 Scroll，避免顶到状态栏。
+    return Math.min(height, this.compactPanelUsableHeight())
   }
 
   private compactPanelHeight(): number {
     if (this.activePanel === 'quick') {
+      // quick 的高度完全由内容决定（展开态切换时由面板的 .animation 过渡），
+      // 拖动只负责跨阈值切换展开态。
       return this.quickPanelContentHeight()
     }
     const usable = this.compactPanelUsableHeight()
@@ -4977,9 +4996,28 @@ export struct WindowNativeNode {
   private updateCompactPanelDrag(offsetY: number): void {
     const usable = this.compactPanelUsableHeight()
     this.compactPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
+    if (this.activePanel === 'quick') {
+      // 实时预览：上拖略过阈值即展开，下拖即收起（内容高度随 store 变化）。
+      if (this.compactPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
+        this.quickPanelStore.setExpanded(true)
+      } else if (this.compactPanelDragOffsetY > 8 && this.quickPanelStore.expanded) {
+        this.quickPanelStore.setExpanded(false)
+      }
+    }
   }
 
   private settleCompactPanelDrag(): void {
+    if (this.activePanel === 'quick') {
+      const expand = this.compactPanelDragOffsetY < -24
+      const collapse = this.compactPanelDragOffsetY > 24
+      this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+        if (expand) this.quickPanelStore.setExpanded(true)
+        if (collapse) this.quickPanelStore.setExpanded(false)
+        this.compactPanelDragOffsetY = 0
+      })
+      this.scheduleSelectedObjectForUiChange(350)
+      return
+    }
     const usable = this.compactPanelUsableHeight()
     const effectiveRatio = (usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY) / usable
     const nextRatio = this.compactPanelDragOffsetY > 32 ? 0.6 : (effectiveRatio >= 0.74 ? 0.9 : 0.6)
@@ -4988,6 +5026,30 @@ export struct WindowNativeNode {
       this.compactPanelDragOffsetY = 0
     })
     this.scheduleSelectedObjectForUiChange(390)
+  }
+
+  private updateExpandedPanelDrag(offsetY: number): void {
+    // 仅快捷面板需要拖拽展开；搜索/图层/设置沿用全高，不参与高度拖拽。
+    if (this.activePanel !== 'quick') return
+    const usable = this.expandedPanelUsableHeight()
+    this.expandedPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
+    if (this.expandedPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
+      this.quickPanelStore.setExpanded(true)
+    } else if (this.expandedPanelDragOffsetY > 8 && this.quickPanelStore.expanded) {
+      this.quickPanelStore.setExpanded(false)
+    }
+  }
+
+  private settleExpandedPanelDrag(): void {
+    if (this.activePanel !== 'quick') return
+    const expand = this.expandedPanelDragOffsetY < -24
+    const collapse = this.expandedPanelDragOffsetY > 24
+    this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+      if (expand) this.quickPanelStore.setExpanded(true)
+      if (collapse) this.quickPanelStore.setExpanded(false)
+      this.expandedPanelDragOffsetY = 0
+    })
+    this.scheduleSelectedObjectForUiChange(350)
   }
 
   private expandedUiAllowed(): boolean {
@@ -5105,7 +5167,7 @@ export struct WindowNativeNode {
   // 平板：改贴屏幕左右缘 —— 平板 dock 宽度封顶 640，且面板打开时会被挤到面板右侧，
   // 继续跟随 dock 两端会让三件套随面板开合整体横移，读数位置"漂"。
   private chromeRowY(): number {
-    return this.dockTop() - 48
+    return this.dockTop() - CHROME_ROW_OFFSET
   }
 
   // 竖排（手机·半折，列高 96）还是横排（平板，一行 44 高）：平板 dock 只有 54 高，
@@ -5142,11 +5204,16 @@ export struct WindowNativeNode {
   }
 
   private dockTop(): number {
+    // ExpandedShell draws the dock at skyHeight - 62 with a fixed 54vp height,
+    // so the hit target and the panels must use that same baseline.
+    if (this.isExpandedLayout) {
+      return Math.max(0, this.skyHeight - 62)
+    }
     return Math.max(0, this.skyHeight - this.dockHeight() - this.dockBottomClearance())
   }
 
   private dockHeight(): number {
-    return this.isExpandedLayout ? (this.isLargeDesktopCanvas() ? 78 : 72) : 66
+    return this.isExpandedLayout ? 54 : 66
   }
 
   private isLargeDesktopCanvas(): boolean {
@@ -5174,13 +5241,34 @@ export struct WindowNativeNode {
     return this.dockTop() - 10
   }
 
-  private expandedPanelAvailableHeight(): number {
-    const available = this.dockBottom() - this.panelTop()
-    return Math.max(220, Math.min(this.skyHeight - this.panelTop(), available))
+  private panelTop(): number {
+    return this.isExpandedLayout ? this.expandedPanelTop() : (this.EDGE_MARGIN + this.panelOffsetY)
   }
 
-  private panelTop(): number {
-    return this.EDGE_MARGIN + this.panelOffsetY
+  // 展开布局的底部面板可用高度：Dock 上沿 - 10vp 间距 - 顶部安全边距。
+  private expandedPanelUsableHeight(): number {
+    return Math.max(220, this.dockTop() - 10 - this.EDGE_MARGIN)
+  }
+
+  // 展开布局面板高度：quick 由内容决定并可拖拽展开；时间与手机一致，默认 0.6
+  // 可用高度（显示到倒带-实时一行，其余交给滚动）；搜索/图层/设置沿用平板全高。
+  private expandedPanelHeight(): number {
+    const usable = this.expandedPanelUsableHeight()
+    if (this.activePanel === 'quick') {
+      return Math.min(this.quickPanelContentHeight(), usable)
+    }
+    if (this.activePanel === 'time') {
+      const block = this.timeSpeedBlockHeight
+      if (block <= 0) return usable * 0.6
+      const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
+      return Math.min(18 + 30 + header + 14 + block + 18, usable)
+    }
+    return usable
+  }
+
+  // 底部对齐：面板下沿固定在 Dock 上方 10vp。
+  private expandedPanelTop(): number {
+    return Math.max(this.EDGE_MARGIN, this.dockTop() - 10 - this.expandedPanelHeight())
   }
 
   private objectInspectorInlineModelSize(): number {
@@ -5368,7 +5456,7 @@ export struct WindowNativeNode {
         obstacles.push({
           label: 'panel', left: expandedMainPanelLeft(this.EDGE_MARGIN, this.panelOffsetX), top: this.panelTop(),
           right: expandedMainPanelLeft(this.EDGE_MARGIN, this.panelOffsetX) + this.panelWidth,
-          bottom: this.panelTop() + this.panelMaxHeight
+          bottom: this.panelTop() + this.expandedPanelHeight()
         })
       }
       if (this.infoWindowStore.infoWinVisible) {
@@ -7501,8 +7589,9 @@ export struct WindowNativeNode {
               if (this.panelVisible) {
                 Stack({ alignContent: Alignment.TopStart }) { this.floatingPanel() }
                   .width(this.panelWidth)
-                  .height(this.panelMaxHeight)
-                  .position({ x: expandedMainPanelLeft(this.EDGE_MARGIN, this.panelOffsetX), y: this.panelTop() })
+                  .height(this.expandedPanelHeight())
+                  .position({ x: expandedMainPanelLeft(this.EDGE_MARGIN, this.panelOffsetX), y: this.expandedPanelTop() })
+                  .animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })
                   // Default keeps the panel above the sibling sky surface while still
                   // letting its deepest child (Button, Slider, Scroll, TextInput) own
                   // the gesture. Block would stop those controls at this outer shell.
@@ -7792,16 +7881,13 @@ export struct WindowNativeNode {
         if (this.polarScopeStore.polarScopeVisible) this.polarScopeCtl().syncNativePolarScopeOverlay(true)
         if (this.isFoldTabletLayout) {
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.42, 300), 340)
-          this.panelMaxHeight = Math.min(this.skyHeight * 0.70, 560)
         } else if (this.isExpandedLayout) {
           // Pad and 2-in-1 windows share the same panel. Extra-wide PC
           // canvases can use a little more room without covering the sky.
           const expandedPanelMax = this.skyWidth >= 1440 ? 480 : 420
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.33, 340), expandedPanelMax)
-          this.panelMaxHeight = Math.max(this.skyHeight - this.EDGE_MARGIN * 2, 320)
         } else {
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)
-          this.panelMaxHeight = Math.min(this.skyHeight * 0.78, 700)
         }
         // 首次布局即发布一次面板状态，保证 getUiPanelState 在用户还没开关过面板时也有可读值。
         this.publishUiPanelState()
@@ -7823,9 +7909,8 @@ export struct WindowNativeNode {
   @Builder
   floatingPanel() {
     Column() {
-      if (this.isExpandedLayout) {
-        PadPanelHandle()
-      }
+      // 平板/展开布局也用顶部抓手：快捷面板自下而上展开，上拉显示更多按钮。
+      PanelHandle({ onDrag: (offsetY: number) => { this.updateExpandedPanelDrag(offsetY) }, onDragFinish: () => { this.settleExpandedPanelDrag() } })
       PanelHeader({
         title: panelTitleFor(this.activePanel, this.configTab, this.isExpandedLayout, this.timeStore.timePanelClockText(), this.quickPanelLocationLabel()), subtitle: this.timeStore.panelSubtitle(this.activePanel), canGoBack: this.canGoBackPanel(),
         routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
@@ -7860,15 +7945,14 @@ export struct WindowNativeNode {
         .onAppear(() => { this.resetPanelScroll(this.widePanelScroller) })
     }
       .width(this.panelWidth)
-      .height(this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.panelMaxHeight)
-      .constraintSize({ maxHeight: this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.panelMaxHeight })
+      .height(this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight())
+      .constraintSize({ maxHeight: this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight() })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
       .backdropBlur(this.panelIdleGlass ? 45 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
       .shadow({ radius: 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
-      .margin({ top: 28, bottom: 28 })
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
@@ -8035,7 +8119,10 @@ export struct WindowNativeNode {
         },
         onPickTime: (hour: number, minute: number) => { this.timeStore.manualHour = hour; this.timeStore.manualMinute = minute },
         onApplyManual: () => { this.timeCtl().applyManualTime() },
-        onResetManual: () => { this.timeCtl().syncManualTimeFromState(); this.flashHint(I18n.t('i0081')) }
+        onResetManual: () => { this.timeCtl().syncManualTimeFromState(); this.flashHint(I18n.t('i0081')) },
+        onSpeedBlockHeight: (height: number) => {
+          if (Math.abs(height - this.timeSpeedBlockHeight) > 0.5) this.timeSpeedBlockHeight = height
+        }
       })
     } else if (this.activePanel === 'place') {
       PlacePanel({

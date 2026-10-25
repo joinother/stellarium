@@ -460,8 +460,9 @@ export class SkyInputController {
       const allowTouchFeedback = !this.hooks.panelVisible()
       const downX = touchWindowX(points[0])
       const downY = touchWindowY(points[0])
-      // Panel header drag detection (before isUiPoint sidebar check)
-      if (this.hooks.panelVisible()) {
+      // Panel header drag detection (before isUiPoint sidebar check).
+      // Panels are bottom-anchored on tablet, so header drag only exists in compact layouts.
+      if (this.hooks.panelVisible() && !this.hooks.isExpandedLayout()) {
         const pl = panelLeft(this.hooks.isExpandedLayout(), this.hooks.skyWidth(), this.hooks.panelWidth(), this.hooks.panelOffsetX(), this.hooks.edgeMargin())
         const pr = panelRight(this.hooks.isExpandedLayout(), this.hooks.skyWidth(), this.hooks.panelWidth(), this.hooks.panelOffsetX(), this.hooks.edgeMargin())
         const pt = panelTop(this.hooks.edgeMargin(), this.hooks.panelOffsetY())

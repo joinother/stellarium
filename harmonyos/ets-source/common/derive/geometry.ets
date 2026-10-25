@@ -273,11 +273,11 @@ export function scriptControlY(skyHeight: number, scriptControlSafeTop: number, 
 export function isPanelBackPoint(x: number, y: number, canGoBack: boolean,
   isExpandedLayout: boolean, isFoldHoverLayout: boolean, panelWidth: number, skyWidth: number,
   skyHeight: number, compactPanelHeight: number, panelOffsetX: number, panelOffsetY: number,
-  edgeMargin: number): boolean {
+  edgeMargin: number, expandedPanelTopValue: number): boolean {
   if (!canGoBack) return false
   const width = isExpandedLayout ? panelWidth : skyWidth * (isFoldHoverLayout ? 0.72 : 0.94)
   const left = isExpandedLayout ? panelLeft(isExpandedLayout, skyWidth, panelWidth, panelOffsetX, edgeMargin) : (skyWidth - width) / 2
-  const top = isExpandedLayout ? panelTop(edgeMargin, panelOffsetY) : skyHeight - 90 - compactPanelHeight
+  const top = isExpandedLayout ? expandedPanelTopValue : skyHeight - 90 - compactPanelHeight
   return x >= left - 8 && x <= left + Math.min(width * 0.52, 142) && y >= top - 10 && y <= top + 82
 }
 

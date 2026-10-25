@@ -45,16 +45,25 @@ export struct TimePanel {
   onPickTime: (hour: number, minute: number) => void = () => {}
   onApplyManual: () => void = () => {}
   onResetManual: () => void = () => {}
+  // 平板/展开布局只显示到“倒带-实时”一行：宿主据此前两块的自然高度定面板高度。
+  onSpeedBlockHeight: (height: number) => void = () => {}
 
   build() {
     Column() {
-      // Sky Guide 风格时间拖动滑块（-365天 ~ +365天）：置于面板最前，手机端打开即可直接拖动
-      TimeWheelScrubber({
-        store: this.timeWheelStore,
-        onSelectUnit: (unit: string) => { this.onSelectUnit(unit) },
-        onWheelTouch: (event: TouchEvent) => { this.onWheelTouch(event) }
-      })
-      TimeSpeedChips({ store: this.timeStore, onChip: (id: string) => { this.onChip(id) } })
+      // Sky Guide 椋庢牸鏃堕棿鎷栧姩婊戝潡锛?365澶?~ +365澶╋級锛氱疆浜庨潰鏉挎渶鍓嶏紝鎵嬫満绔墦寮€鍗冲彲鐩存帴鎷栧姩
+      Column() {
+        TimeWheelScrubber({
+          store: this.timeWheelStore,
+          onSelectUnit: (unit: string) => { this.onSelectUnit(unit) },
+          onWheelTouch: (event: TouchEvent) => { this.onWheelTouch(event) }
+        })
+        TimeSpeedChips({ store: this.timeStore, onChip: (id: string) => { this.onChip(id) } })
+      }
+        .width('100%')
+        .onAreaChange((_oldArea: Area, newArea: Area) => {
+          const height = Number(newArea.height)
+          if (height > 1) this.onSpeedBlockHeight(height)
+        })
       QuickChipRow({ items: [
         { id: '-12h', label: '-12h' }, { id: '+12h', label: '+12h' },
         { id: 'sunRise', label: '日出' }, { id: 'sunTransit', label: '中天' },
