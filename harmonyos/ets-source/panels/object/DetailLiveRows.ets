@@ -1,4 +1,5 @@
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectDataRow } from './DetailRows'
 import { Theme } from '@kit.ArkUI'
@@ -55,6 +56,7 @@ export struct SelectedLiveInfoRows {
 
 @Component
 export struct SelectedCoordinateRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @Prop tablet: boolean
@@ -64,12 +66,13 @@ export struct SelectedCoordinateRow {
 
   build() {
     Row({ space: 8 }) {
-      Text(this.label).fontSize(this.tablet ? 11 : 10).fontColor(this.c.tertiary)
-        .width(this.tablet ? 100 : 76).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      Text(this.value.length > 0 ? this.value : '--').fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth)
-        .layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.label).fontSize(Math.max(this.tablet ? 11 : 10, objectDetailFontSize(10, this.readableUi))).fontColor(this.c.tertiary)
+        .width(this.tablet ? 112 : 104).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.value.length > 0 ? this.value : '--').fontSize(Math.max(this.tablet ? 12 : 11, objectDetailFontSize(11, this.readableUi))).fontColor(this.c.fourth)
+        .layoutWeight(1).textAlign(TextAlign.Start).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).lineHeight(17)
     }
-      .width('100%').height(this.tablet ? 34 : 32).padding({ left: 10, right: 10 })
+      .width('100%').constraintSize({ minHeight: this.tablet ? 40 : 38 }).alignItems(VerticalAlign.Center)
+      .padding({ left: 10, right: 10, top: 8, bottom: 8 })
       .backgroundColor(this.c.soft)
       .borderRadius(UI_RADIUS_CONTROL)
   }

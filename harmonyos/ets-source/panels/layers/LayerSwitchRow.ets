@@ -1,4 +1,5 @@
 ﻿import { curves, Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 
@@ -10,6 +11,7 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 // 写回由 onToggle 回调交回宿主（宿主按 setting 名分派到 native 桥）；
 @Component
 export struct LayerSwitchRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: ResourceStr
   @Prop isOn: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -20,7 +22,7 @@ export struct LayerSwitchRow {
   build() {
     Row() {
       Text(this.label)
-        .fontSize(14)
+        .fontSize(panelFontSize(14, this.readableUi))
         .fontColor(this.c.text)
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: this.isOn })
@@ -33,7 +35,7 @@ export struct LayerSwitchRow {
           this.onToggle(value)
         })
     }
-      .height(42)
+      .height(this.readableUi ? 50 : 42)
       .width('100%')
       .padding({ left: 10, right: 8 })
       .backgroundColor(this.isOn ? this.c.soft : this.c.bg)

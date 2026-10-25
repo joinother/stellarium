@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { I18n } from '../../pages/I18n'
 import { OverlayStore } from '../../state/OverlayStore'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
@@ -14,6 +15,7 @@ import { PointerCoordinateToggle } from './PointerCoordinateToggle'
 //   - native 桥 `setPointerCoordinates(setting|value)` 由宿主提供，以 `onSetSetting(setting, value)` 注入。
 @Component
 export struct PointerCoordinatesPanel {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: OverlayStore
   @State c: ThemeSlots = DEFAULT_SLOTS
   onSetSetting: (setting: string, value: string) => void = () => {}
@@ -28,7 +30,7 @@ export struct PointerCoordinatesPanel {
         if (this.store.pointerCoordinatesLoading) {
           Row({ space: 8 }) {
             LoadingProgress().width(18).height(18).color(this.c.accent)
-            Text(I18n.t('pointer_coord_loading')).fontSize(11).fontColor(this.c.sub)
+            Text(I18n.t('pointer_coord_loading')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
           }.width('100%').height(42).justifyContent(FlexAlign.Center)
         }
         if (this.store.pointerCoordinatesStatus.length > 0) {
@@ -36,7 +38,7 @@ export struct PointerCoordinatesPanel {
             .padding({ left: 10, right: 10, top: 8, bottom: 8 })
             .backgroundColor(this.c.warningBg).borderRadius(UI_RADIUS_CONTROL)
         }
-        Text(I18n.t('pointer_coord_description')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
+        Text(I18n.t('pointer_coord_description')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(4)
         PointerCoordinateToggle({
           label: I18n.t('pointer_coord_enabled'), isOn: this.store.pointerCoordinatesEnabled,
           onToggle: (value: boolean) => { this.onSetSetting('enabled', value ? '1' : '0') }
@@ -52,12 +54,12 @@ export struct PointerCoordinatesPanel {
         Text(I18n.t('pointer_coord_system')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 3 })
         ForEach(['RaDecJ2000', 'RaDec', 'HourAngle', 'Ecliptic', 'EclipticJ2000', 'AltAzi', 'Galactic', 'Supergalactic'], (key: string) => {
           Row() {
-            Text(this.store.pointerCoordinateSystemLabel(key)).fontSize(12).fontColor(this.c.text).layoutWeight(1).maxLines(2)
+            Text(this.store.pointerCoordinateSystemLabel(key)).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).layoutWeight(1).maxLines(2)
             if (this.store.pointerCoordinatesSystem === key) {
               Text('✓').fontSize(15).fontColor(this.c.accent).width(24).textAlign(TextAlign.Center)
             }
           }
-            .width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+            .width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 9 : 7, bottom: this.readableUi ? 9 : 7 })
             .backgroundColor(this.store.pointerCoordinatesSystem === key ? this.c.soft : this.c.bg)
             .border({ width: 1, color: this.store.pointerCoordinatesSystem === key ? this.c.softStrong : this.c.border })
             .borderRadius(UI_RADIUS_CONTROL)
@@ -66,12 +68,12 @@ export struct PointerCoordinatesPanel {
         Text(I18n.t('pointer_coord_display_place')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 3 })
         ForEach(['TopCenter', 'TopRight', 'RightBottomCorner', 'NearMouseCursor', 'Custom'], (key: string) => {
           Row() {
-            Text(this.store.pointerCoordinatesPlaceLabel(key)).fontSize(12).fontColor(this.c.text).layoutWeight(1)
+            Text(this.store.pointerCoordinatesPlaceLabel(key)).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
             if (this.store.pointerCoordinatesPlace === key) {
               Text('✓').fontSize(15).fontColor(this.c.accent).width(24).textAlign(TextAlign.Center)
             }
           }
-            .width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+            .width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 9 : 7, bottom: this.readableUi ? 9 : 7 })
             .backgroundColor(this.store.pointerCoordinatesPlace === key ? this.c.soft : this.c.bg)
             .border({ width: 1, color: this.store.pointerCoordinatesPlace === key ? this.c.softStrong : this.c.border })
             .borderRadius(UI_RADIUS_CONTROL)

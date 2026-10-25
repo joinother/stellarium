@@ -1,4 +1,5 @@
 import { I18n } from '../../pages/I18n'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { getCatalogIcon } from '../../common/ui/ShellIcons'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
@@ -21,6 +22,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 @Component
 export struct ObjectDetailCardHeader {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: ObjectDetailStore
   @Prop iconName: string
   @Prop liveInfoVisible: boolean
@@ -87,7 +89,7 @@ export struct ObjectDetailCardHeader {
             .width(26).height(26).fillColor(this.c.dockActive).margin({ right: 7 })
         }
         Text(this.nameOf(this.store.selectedName))
-          .maxFontSize(18).minFontSize(12).fontWeight(FontWeight.Bold).fontColor(this.c.textStrong)
+          .maxFontSize(objectDetailFontSize(18, this.readableUi, true)).minFontSize(12).fontWeight(FontWeight.Bold).fontColor(this.c.textStrong)
           .layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
           .textAlign(TextAlign.Start)
         Text(this.typeOf(this.store.selectedType))

@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { I18n } from '../../pages/I18n'
 import { ConfigurationOption } from '../../pages/MainWindowModels'
 import { TimeSettingsStore } from '../../state/TimeSettingsStore'
@@ -12,6 +13,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 // ΔT 算法块是独立组件，由宿主紧随本组件之后渲染。
 @Component
 export struct TimeSettingsSection {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: TimeSettingsStore
   @Prop pending: boolean
   @Prop observationTimeText: string
@@ -33,11 +35,11 @@ export struct TimeSettingsSection {
 
   build() {
     Column() {
-      Text(I18n.t('time_format_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
-      Text(this.observationTimeText).fontSize(16).fontColor(this.c.text).width('100%')
+      Text(I18n.t('time_format_hint')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding(8)
+      Text(this.observationTimeText).fontSize(panelFontSize(16, this.readableUi)).fontColor(this.c.text).width('100%')
         .padding(12).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
-      Text(I18n.t('s0354')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 4 })
-      Text(this.dateFormatLabel(this.store.configDateFormat)).fontSize(12).fontColor(this.c.text).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+      Text(I18n.t('s0354')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 4 })
+      Text(this.dateFormatLabel(this.store.configDateFormat)).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach([
           { id: 'system_default', label: '系统' }, { id: 'yyyymmdd', label: '年-月-日' },
@@ -54,8 +56,8 @@ export struct TimeSettingsSection {
         }, (option: ConfigurationOption) => option.id)
       }.width('100%').padding({ left: 8, right: 8 })
       Row().width('100%').height(0.5).backgroundColor(this.c.dividerSoft).margin({ top: 7, bottom: 7 })
-      Text(I18n.t('s0353')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
-      Text(this.timeFormatLabel(this.store.configTimeFormat)).fontSize(12).fontColor(this.c.text).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+      Text(I18n.t('s0353')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
+      Text(this.timeFormatLabel(this.store.configTimeFormat)).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach([
           { id: 'system_default', label: '系统' }, { id: '24h', label: '24 小时制' }, { id: '12h', label: '12 小时制' },
@@ -69,9 +71,9 @@ export struct TimeSettingsSection {
         }, (option: ConfigurationOption) => option.id)
       }.width('100%').padding({ left: 8, right: 8 })
       Row().width('100%').height(0.5).backgroundColor(this.c.dividerSoft).margin({ top: 7, bottom: 7 })
-      Text(I18n.t('time_startup_title')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
-      Text(I18n.t('time_startup_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
-      Text(I18n.t('time_zone_label') + this.store.timeSettingsZone).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
+      Text(I18n.t('time_startup_title')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ bottom: 4 })
+      Text(I18n.t('time_startup_hint')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding(8)
+      Text(I18n.t('time_zone_label') + this.store.timeSettingsZone).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding(8)
       Flex({ wrap: FlexWrap.Wrap }) {
         ForEach([
           { id: 'actual', label: '系统当前时间' }, { id: 'today', label: '今天指定时刻' }, { id: 'preset', label: '预设时间' }
@@ -92,9 +94,9 @@ export struct TimeSettingsSection {
       })
       if (this.store.startupTimeMode === 'today') {
         Column({ space: 6 }) {
-          Text(I18n.t('time_today_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
+          Text(I18n.t('time_today_hint')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding(8)
           Row({ space: 6 }) {
-            TextInput({ text: this.store.startupTodayTime, placeholder: 'HH:mm:ss' }).height(40).layoutWeight(1).fontSize(14).fontColor(this.c.text)
+            TextInput({ text: this.store.startupTodayTime, placeholder: 'HH:mm:ss' }).height(40).layoutWeight(1).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text)
               .enabled(!this.pending)
               .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
               .onChange((value: string) => { this.store.startupTodayTime = value })

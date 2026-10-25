@@ -1,4 +1,5 @@
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -29,6 +30,7 @@ export struct ObjectDataTile {
 
 @Component
 export struct ObjectMetric {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -37,7 +39,7 @@ export struct ObjectMetric {
 
   build() {
     Column() {
-      Text(this.label).fontSize(10).fontColor(this.c.tertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.label).fontSize(objectDetailFontSize(10, this.readableUi)).fontColor(this.c.tertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value.length > 0 ? this.value : '--').fontSize(14).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 3 })
     }
       .height(58).padding({ left: 10, right: 10, top: 8, bottom: 8 }).layoutWeight(1)
@@ -49,6 +51,7 @@ export struct ObjectMetric {
 
 @Component
 export struct ObjectScheduleTile {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -57,7 +60,7 @@ export struct ObjectScheduleTile {
 
   build() {
     Column() {
-      Text(this.label).fontSize(10).fontColor(this.c.tertiary)
+      Text(this.label).fontSize(objectDetailFontSize(10, this.readableUi)).fontColor(this.c.tertiary)
       Text(this.value.length > 0 ? this.value : '--').fontSize(15).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).margin({ top: 4 })
     }
       .height(62).layoutWeight(1).alignItems(HorizontalAlign.Center).justifyContent(FlexAlign.Center)
@@ -90,6 +93,7 @@ export struct ObjectDetailTab {
 
 @Component
 export struct ObjectCompactMetric {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -99,7 +103,7 @@ export struct ObjectCompactMetric {
   build() {
     Column() {
       Text(this.label)
-        .fontSize(10).fontColor(this.c.tertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .fontSize(objectDetailFontSize(10, this.readableUi)).fontColor(this.c.tertiary).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value.length > 0 ? this.value : '--')
         .fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.c.metricValue).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).margin({ top: 1 })
     }

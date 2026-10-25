@@ -36,6 +36,8 @@ export struct PolarScopeOverlay {
   @Prop skyHeight: number
   @Prop isExpandedLayout: boolean
   onSkyTouch: (event: TouchEvent) => void = (event: TouchEvent) => {}
+  onSkyMouse: (event: MouseEvent) => void = () => {}
+  onSkyAxis: (event: AxisEvent) => void = () => {}
   onRecenter: () => void = () => {}
   onClose: () => void = () => {}
   onHorizontalFlipChange: (value: boolean) => void = (value: boolean) => {}
@@ -50,6 +52,8 @@ export struct PolarScopeOverlay {
         .width('100%').height('100%')
         .hitTestBehavior(HitTestMode.Default)
         .onTouch((event: TouchEvent) => { this.onSkyTouch(event) })
+        .onMouse((event: MouseEvent) => { this.onSkyMouse(event) })
+        .onAxisEvent((event: AxisEvent) => { this.onSkyAxis(event) })
       Row({ space: 8 }) {
         Text(I18n.t('polar_scope_title'))
           .fontSize(18).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong)

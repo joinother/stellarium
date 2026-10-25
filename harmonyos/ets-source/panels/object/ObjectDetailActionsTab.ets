@@ -1,6 +1,7 @@
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { Theme } from '@kit.ArkUI'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 天体详情主卡片的"操作"页。
@@ -11,6 +12,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 @Component
 export struct ObjectDetailActionsTab {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop viewLock: boolean
   @Prop speechStatus: string
   @Prop inObservingList: boolean
@@ -26,7 +28,7 @@ export struct ObjectDetailActionsTab {
 
   build() {
     Column({ space: 8 }) {
-      Text('目标操作').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong).width('100%')
+      Text('目标操作').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.textStrong).width('100%')
       Row({ space: 8 }) {
         Button(I18n.t('btn_center'))
           .fontSize(12).fontColor(this.c.textStrong).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)

@@ -103,6 +103,8 @@ export struct CompactShell {
 
   scroller: Scroller = new Scroller()
   onSkyTouch: (event: TouchEvent) => void = () => {}
+  onSkyMouse: (event: MouseEvent) => void = () => {}
+  onSkyAxis: (event: AxisEvent) => void = () => {}
   onDockTouch: (event: TouchEvent) => void = () => {}
   onDockTap: (item: ShellAction) => void = () => {}
   onPanelTouch: (event: TouchEvent) => void = () => {}
@@ -150,6 +152,8 @@ export struct CompactShell {
           .onTouch((event: TouchEvent) => {
             this.onSkyTouch(event)
           })
+          .onMouse((event: MouseEvent) => { this.onSkyMouse(event) })
+          .onAxisEvent((event: AxisEvent) => { this.onSkyAxis(event) })
       }
         .width('100%')
         .height('100%')
@@ -161,9 +165,9 @@ export struct CompactShell {
           panelVisible: this.panelVisible, chromeOpacity: this.chromeOpacity,
           isGlass: this.chromeIsGlass, widthPercent: this.dockWidthPercent,
           languageRevision: this.languageRevision,
-          iconSize: this.isExpandedLayout ? 22 : this.dockIconSize,
-          labelFontSize: this.isExpandedLayout ? 10 : this.dockLabelFontSize,
-          itemHeight: this.isExpandedLayout ? 44 : this.dockItemHeight,
+          iconSize: this.dockIconSize,
+          labelFontSize: this.dockLabelFontSize,
+          itemHeight: this.dockItemHeight,
           activePanel: this.activePanel,
           onDockTouch: (event: TouchEvent) => { this.onDockTouch(event) },
           onDockTap: (item: ShellAction) => { this.onDockTap(item) },
@@ -173,7 +177,7 @@ export struct CompactShell {
         .width('100%')
         .height(66)
         .justifyContent(FlexAlign.Center)
-        .position({ x: 0, y: this.skyHeight - 80 })
+        .position({ x: 0, y: this.dockTop })
         .hitTestBehavior(HitTestMode.Block)
         .zIndex(40)
 

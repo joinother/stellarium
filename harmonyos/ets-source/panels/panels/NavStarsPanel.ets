@@ -1,4 +1,5 @@
 ﻿import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { NavStarsStore } from '../../state/NavStarsStore'
@@ -12,6 +13,7 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 
 @Component
 export struct NavStarsPanel {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink navStarsStore: NavStarsStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onSetSetting: (setting: string, value: string) => void = () => {}
@@ -49,8 +51,8 @@ export struct NavStarsPanel {
       Column({ space: 10 }) {
         Row() {
           Column({ space: 3 }) {
-            Text(I18n.t('panel_nav_stars')).fontSize(15).fontColor(this.c.text).width('100%')
-            Text(I18n.t('nav_stars_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
+            Text(I18n.t('panel_nav_stars')).fontSize(panelFontSize(15, this.readableUi)).fontColor(this.c.text).width('100%')
+            Text(I18n.t('nav_stars_hint')).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(2)
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           if (this.navStarsStore.navStarsLoading) { LoadingProgress().width(20).height(20).color(this.c.accent) }
           Toggle({ type: ToggleType.Switch, isOn: this.navStarsStore.navStarsEnabled })
@@ -59,13 +61,13 @@ export struct NavStarsPanel {
         }.width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
         if (this.navStarsStore.navStarsStatus.length > 0) { Text(this.navStarsStore.navStarsStatus).fontSize(11).fontColor(this.c.warning).width('100%') }
         Row() {
-          Text(I18n.t('nav_stars_set')).fontSize(12).fontColor(this.c.text).layoutWeight(1)
-          Text(this.navStarsStore.navStarsCount.toString() + ' ' + I18n.t('nav_stars_count')).fontSize(11).fontColor(this.c.sub)
+          Text(I18n.t('nav_stars_set')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Text(this.navStarsStore.navStarsCount.toString() + ' ' + I18n.t('nav_stars_count')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
         }.width('100%')
         Scroll() {
           Row({ space: 6 }) {
             ForEach(this.navStarsStore.navStarsSetKeys, (key: string) => {
-              Text(this.navStarsSetLabel(key)).fontSize(10)
+              Text(this.navStarsSetLabel(key)).fontSize(panelFontSize(10, this.readableUi))
                 .fontColor(this.navStarsStore.navStarsSetKey === key ? this.c.onAccent : this.c.sub)
                 .padding({ left: 9, right: 9, top: 7, bottom: 7 })
                 .backgroundColor(this.navStarsStore.navStarsSetKey === key ? this.c.accent : this.c.bg)
@@ -75,7 +77,7 @@ export struct NavStarsPanel {
           }.padding({ left: 2, right: 2 })
         }.width('100%').height(42).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
         if (this.navStarsStore.navStarsSetDescription.length > 0) {
-          Text(this.navStarsStore.navStarsSetDescription.replace(/<[^>]+>/g, '')).fontSize(10).fontColor(this.c.sub)
+          Text(this.navStarsStore.navStarsSetDescription.replace(/<[^>]+>/g, '')).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub)
             .width('100%').maxLines(4).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         NavStarsToggleRow({ label: I18n.t('nav_stars_highlight'), isOn: this.navStarsStore.navStarsHighlight, canToggle: !this.navStarsStore.navStarsLoading, onToggle: (v: boolean) => { this.onSetSetting('highlightWhenVisible', v ? '1' : '0') } })

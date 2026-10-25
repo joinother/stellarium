@@ -243,6 +243,7 @@ static double s_ohosZoomAnchorYRatio = 0.5;
 // Automatic selection navigation owns the camera until its safe-area movement
 // settles. Capturing an anchor before that would cancel the centering motion.
 static double s_ohosSelectedAnchorHoldUntilSec = 0.0;
+static QSet<int> s_ohosKeyboardPanKeys;
 static Vec3d s_gyroPreviousUp(0., 0., 1.);
 static bool s_gyroHasPreviousUp = false;
 
@@ -2803,6 +2804,16 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 	// execution and return pending; the caller ignores the return value.
 	{
 		const QString cmdName = key.section('|', 0, 0);
+		const QString keyPhase = key.section('|', 2, 2).trimmed().toLower();
+		if (cmdName == "sendKey" && key.count('|') == 2 &&
+			(keyPhase == "down" || keyPhase == "up"))
+		{
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_ohosCmdQueue.append([command]() { command(); });
+			result["ok"] = true;
+			result["queued"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
 		if (cmdName == "setGyroView")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
@@ -7517,7 +7528,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// whose state machine is driven by Stellarium keyboard shortcuts.
 		if (commandName == "sendKey")
 		{
-			const QString key = arg.trimmed().toUpper();
+			const QStringList keyArguments = arg.split('|', Qt::KeepEmptyParts);
+			const QString phase = keyArguments.value(1).trimmed().toLower();
+			if (keyArguments.size() > 2 || (keyArguments.size() == 2 && phase != "down" && phase != "up"))
+			{
+				result["ok"] = false;
+				result["error"] = "usage: key or key|down or key|up";
+				return result;
+			}
+			const QString key = keyArguments.first().trimmed().toUpper();
 			QStringList parts = key.split('+', Qt::SkipEmptyParts);
 			QString base = parts.isEmpty() ? key : parts.takeLast().trimmed();
 			Qt::KeyboardModifiers modifiers = Qt::NoModifier;
@@ -7571,6 +7590,68 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				result["ok"] = false;
 				result["error"] = "unsupported script key";
+				return result;
+			}
+			if (!phase.isEmpty())
+			{
+				static QHash<int, Qt::KeyboardModifiers> pressedKeys;
+				result["ok"] = true;
+				result["key"] = key;
+				result["phase"] = phase;
+				const auto pressed = pressedKeys.constFind(keyCode);
+				if (phase == "down")
+				{
+					if (pressed != pressedKeys.constEnd())
+					{
+						result["accepted"] = false;
+						result["duplicate"] = true;
+						return result;
+					}
+					pressedKeys.insert(keyCode, modifiers);
+					const bool verticalKey = keyCode == Qt::Key_Up || keyCode == Qt::Key_Down;
+					bool panKey = movementMgr && movementMgr->getFlagEnableMoveKeys() &&
+						(keyCode == Qt::Key_Left || keyCode == Qt::Key_Right ||
+						 (verticalKey && !modifiers.testFlag(Qt::ControlModifier)));
+					if (panKey && actionMgr)
+					{
+						const QKeySequence sequence(keyCode | int(modifiers));
+						for (StelAction* action : actionMgr->getActionList())
+						{
+							if (action && action->matches(sequence) != QKeySequence::NoMatch)
+							{
+								panKey = false;
+								break;
+							}
+						}
+					}
+					QKeyEvent press(QEvent::KeyPress, keyCode, modifiers);
+					StelApp::getInstance().handleKeyEvent(&press);
+					result["accepted"] = press.isAccepted();
+					if (panKey && press.isAccepted())
+					{
+						s_ohosKeyboardPanKeys.insert(keyCode);
+						++s_ohosNavigationSerial;
+						movementMgr->cancelAutoMove();
+						s_ohosPanInertiaActive = false;
+						s_ohosSelectedAnchorHoldUntilSec = 0.0;
+					}
+				}
+				else
+				{
+					if (pressed == pressedKeys.constEnd())
+					{
+						result["accepted"] = false;
+						return result;
+					}
+					const Qt::KeyboardModifiers originalModifiers = pressed.value();
+					pressedKeys.remove(keyCode);
+					if (s_ohosKeyboardPanKeys.remove(keyCode) > 0)
+						s_ohosCaptureSelectedAnchorAfterPan = true;
+					QKeyEvent release(QEvent::KeyRelease, keyCode, originalModifiers);
+					StelApp::getInstance().handleKeyEvent(&release);
+					result["accepted"] = release.isAccepted();
+				}
+				markOhosInteraction();
 				return result;
 			}
 			QKeyEvent press(QEvent::KeyPress, keyCode, modifiers);
@@ -10384,8 +10465,21 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			if (key == "mouseNavigation") mvmgr->setFlagEnableMouseNavigation(enabled);
 			else if (key == "mouseZooming") mvmgr->setFlagEnableMouseZooming(enabled);
-			else if (key == "moveKeys") mvmgr->setFlagEnableMoveKeys(enabled);
-			else if (key == "zoomKeys") mvmgr->setFlagEnableZoomKeys(enabled);
+			else if (key == "moveKeys")
+			{
+				if (!enabled)
+				{
+					mvmgr->turnLeft(false);
+					mvmgr->turnUp(false);
+					s_ohosKeyboardPanKeys.clear();
+				}
+				mvmgr->setFlagEnableMoveKeys(enabled);
+			}
+			else if (key == "zoomKeys")
+			{
+				if (!enabled) mvmgr->zoomIn(false);
+				mvmgr->setFlagEnableZoomKeys(enabled);
+			}
 			else if (key == "gravityLabels") StelApp::getInstance().getCore()->setFlagGravityLabels(enabled);
 			else if (key == "autoZoomResets") mvmgr->setFlagAutoZoomOutResetsDirection(enabled);
 			else if (key == "maxFov")
@@ -18363,6 +18457,8 @@ void StelMainView::renderOhosFrameNow()
 		// of anchoring one time-step late and visibly drifting after release.
 		ohosUpdatePinchSettle(dt);
 		app.update(dt);
+		if (!s_ohosKeyboardPanKeys.isEmpty())
+			ohosCaptureSelectedZoomAnchor();
 		if ((s_ohosPinchActive || s_ohosPinchSettleActive) && s_ohosPinchAnchorMode == OhosPinchAnchorMode::SkyPoint)
 			ohosMaintainPinchSkyAnchor();
 		else

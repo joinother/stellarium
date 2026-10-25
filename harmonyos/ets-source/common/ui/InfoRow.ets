@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from './UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 详情/设置面板的「标签 : 值」两列行（原宿主参数化 `@Builder infoRow(label, value)`）。
@@ -8,6 +9,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 // 标签/数值变化由 @Prop 驱动实时刷新（设置面板、历表、观测曲线、年鉴、今晚天象等共用本行）。
 @Component
 export struct InfoRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: ResourceStr
   @Prop value: ResourceStr
   @State c: ThemeSlots = DEFAULT_SLOTS
@@ -19,19 +21,19 @@ export struct InfoRow {
   build() {
     Row() {
       Text(this.label)
-        .fontSize(11)
+        .fontSize(panelFontSize(11, this.readableUi))
         .fontColor(this.c.sub)
         .width(64)
         .textAlign(TextAlign.Start)
       Text(this.value)
-        .fontSize(13)
+        .fontSize(panelFontSize(13, this.readableUi))
         .fontColor(this.c.text)
         .layoutWeight(1)
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.End)
     }
-      .height(24)
+      .constraintSize({ minHeight: this.readableUi ? 30 : 24 })
       .width('100%')
       .padding({ left: 8, right: 8 })
       .backgroundColor(Color.Transparent)

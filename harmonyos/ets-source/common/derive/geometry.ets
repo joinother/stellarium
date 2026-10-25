@@ -182,7 +182,8 @@ export function expandedDockWidth(skyWidth: number, panelVisible: boolean, panel
   const right = edgeMargin
   const available = Math.max(280, skyWidth - expandedDockOccupiedLeft(panelVisible, panelWidth, panelOffsetX, edgeMargin) - right)
   const squeeze = Math.max(0, expandedDockOccupiedLeft(panelVisible, panelWidth, panelOffsetX, edgeMargin) - edgeMargin)
-  return clamp(640 - squeeze * 0.55, 320, Math.min(640, available))
+  const target = skyWidth >= 520 ? 720 : 640
+  return clamp(target - squeeze * 0.55, Math.min(360, available), Math.min(target, available))
 }
 
 // 展开态 Dock 左缘（原宿主 expandedDockLeft）。
@@ -272,12 +273,12 @@ export function scriptControlY(skyHeight: number, scriptControlSafeTop: number, 
 // 面板返回命中（原宿主 isPanelBackPoint）。
 export function isPanelBackPoint(x: number, y: number, canGoBack: boolean,
   isExpandedLayout: boolean, isFoldHoverLayout: boolean, panelWidth: number, skyWidth: number,
-  skyHeight: number, compactPanelHeight: number, panelOffsetX: number, panelOffsetY: number,
+  compactPanelTop: number, panelOffsetX: number,
   edgeMargin: number, expandedPanelTopValue: number): boolean {
   if (!canGoBack) return false
   const width = isExpandedLayout ? panelWidth : skyWidth * (isFoldHoverLayout ? 0.72 : 0.94)
   const left = isExpandedLayout ? panelLeft(isExpandedLayout, skyWidth, panelWidth, panelOffsetX, edgeMargin) : (skyWidth - width) / 2
-  const top = isExpandedLayout ? expandedPanelTopValue : skyHeight - 90 - compactPanelHeight
+  const top = isExpandedLayout ? expandedPanelTopValue : compactPanelTop
   return x >= left - 8 && x <= left + Math.min(width * 0.52, 142) && y >= top - 10 && y <= top + 82
 }
 

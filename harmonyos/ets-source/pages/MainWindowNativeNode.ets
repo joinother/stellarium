@@ -28,6 +28,7 @@ import { I18n, LANGUAGE_DISPLAY, PROJECTION_KEYS } from './I18n'
 import { DeepSkyWarmupStatus, getDeepSkyResourceWarmupStatus, isStellariumDetailMediaPreparationFailed, resolveStellariumDetailMediaAsset } from '../qability/StellariumResourceBootstrap'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_SHEET, UI_RADIUS_PILL, UI_OPTION_ANIMATION_MS } from '../common/ui/UiTokens'
 import { getIcon } from '../common/ui/ShellIcons'
+import { dockItemIndex } from '../common/ui/DockGeometry'
 import {
   CHROME_ROW_OFFSET,
   CHROME_ZOOM_BUTTON_SIZE,
@@ -61,7 +62,7 @@ import { SensorController, GyroGuideLayout, SensorHostHooks } from '../capabilit
 import { NotificationController, NotificationHostHooks } from '../capability/NotificationController'
 import { SurveyController, SurveyHostHooks } from '../capability/SurveyController'
 import { ARController, ARHostHooks } from '../capability/ARController'
-import { KeyboardShortcutController, KeyboardShortcutHostHooks } from '../capability/KeyboardShortcutController'
+import { KeyboardShortcutController, KeyboardShortcutHostHooks, KeyboardShortcutInputHooks } from '../capability/KeyboardShortcutController'
 import { TimeTransitionController, TimeTransitionHostHooks } from '../capability/TimeTransitionController'
 import { publishAstronomyCard } from '../qability/AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData'
@@ -1039,6 +1040,7 @@ export struct WindowNativeNode {
   // a half-folded device back into the tablet shell.
   @State private hasUsableFoldAngle: boolean = false
   @State private responsiveLayoutMode: string = 'compact'
+  @State private uiLayoutOverride: string = 'auto'
   @State private activePanel: string = 'object'
   // 面板可见性变化时同步"返回可消费"镜像（系统返回手势据此决定接管还是退出），见 publishBackConsumable。
   @Watch('publishBackConsumable') @State private panelVisible: boolean = false
@@ -1423,6 +1425,7 @@ export struct WindowNativeNode {
     this.telescopeCtl().stopTelescopeLivePosition(false)
     this.detailConnectorCtl().stopDetailAutoRefresh()
     this.skyInputCtl().stop()
+    this.keyboardShortcutCtl().setSkyFocused(false)
     void AudioEngine.getInstance().stop()
     this.gyroCtl().pauseForBackground()
   }
@@ -1565,15 +1568,24 @@ export struct WindowNativeNode {
       nextMode = 'compact'
     }
 
+    if (this.uiLayoutOverride === 'compact' || this.uiLayoutOverride === 'expanded') {
+      nextMode = this.uiLayoutOverride
+    }
     const applyLayout = (): void => {
       this.responsiveLayoutMode = nextMode
       this.isFoldHoverLayout = nextMode === 'hover'
       this.isFoldTabletLayout = this.isFoldableDevice && nextMode === 'expanded' && shortSide < 760
       this.isExpandedLayout = nextMode === 'expanded'
+      AppStorage.setOrCreate('stellariumReadableUi', this.isLargeDesktopCanvas())
+      this.publishUiLayoutState()
     }
     if (nextMode !== prevMode) {
       try {
-        this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, applyLayout)
+        if (source === 'onAreaChange') {
+          applyLayout()
+        } else {
+          this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, applyLayout)
+        }
       } catch (e) {
         applyLayout()
       }
@@ -1905,6 +1917,14 @@ export struct WindowNativeNode {
       this.lastCliUiEventId = requestId
       const commandName = event['commandName'] as string
       const response = event['response'] as StellariumBridgeResponse
+      if (commandName === 'setUiLayoutMode') {
+        const mode = String(event['payload'] ?? '').trim().toLowerCase()
+        if (mode === 'auto' || mode === 'compact' || mode === 'expanded') {
+          this.uiLayoutOverride = mode
+          this.updateResponsiveLayout('cli')
+        }
+        return
+      }
       if (commandName === 'startGuide' || commandName === 'guideAction') {
         this.guideCtl().executeGuideRequest(commandName, String(event['payload'] ?? ''), requestId)
         return
@@ -2267,6 +2287,7 @@ export struct WindowNativeNode {
     this.searchCtl().stop()
     this.saveAppSettings()
     this.skyInputCtl().stop()
+    this.keyboardShortcutCtl().setSkyFocused(false)
     this.gyroCtl().stopGyroscope(false)
     this.detailConnectorCtl().stop()
     this.objectInspectorMediaCtl().stopObjectInspectorMediaWarmup()
@@ -2664,6 +2685,8 @@ export struct WindowNativeNode {
         flashHint: (text: string): void => this.flashHint(text),
         skyWidth: (): number => this.skyWidth,
         skyHeight: (): number => this.skyHeight,
+        navigationMouseEnabled: (): boolean => this.navigationStore.navigationMouseEnabled,
+        navigationMouseZoomEnabled: (): boolean => this.navigationStore.navigationMouseZoomEnabled,
         gyroscopeEnabled: (): boolean => this.gyroStore.gyroscopeEnabled,
         stopGyroscope: (updateStatus: boolean): void => this.gyroCtl().stopGyroscope(updateStatus),
         angleMeasureEnabled: (): boolean => this.tools.angleMeasureEnabled,
@@ -3614,9 +3637,13 @@ export struct WindowNativeNode {
   // 断言「面板确实开了」需要这条命令（此前只能退回坐标点击验证）。与 getAstroPanelState 同一套
   // AppStorage 发布方式，由页面在面板状态变化时写入。
   private publishUiPanelState(): void {
+    this.publishUiLayoutState()
     AppStorage.setOrCreate('stellariumUiPanelState', JSON.stringify({
       ok: true, panel: this.activePanel, visible: this.panelVisible,
       expanded: this.isExpandedLayout, foldHover: this.isFoldHoverLayout,
+      panelTop: this.isExpandedLayout ? this.expandedPanelTop() : this.compactPanelTop(),
+      panelHeight: this.isExpandedLayout ? this.expandedPanelHeight() : this.compactPanelHeight(),
+      dockTop: this.dockTop(),
       navigationDepth: this.panelNavigationDepth, backAvailable: this.canGoBackPanel(),
       editable: this.activePanel === 'quick' ? this.quickPanelStore.editable : false
     }))
@@ -4266,7 +4293,7 @@ export struct WindowNativeNode {
     if (this.panelVisible) {
       const panelW = this.isFoldHoverLayout ? this.skyWidth * 0.72 : this.skyWidth * 0.94
       const panelX = (this.skyWidth - panelW) / 2
-      const panelBottom = this.skyHeight - 90
+      const panelBottom = this.compactPanelBottom()
       const panelY = panelBottom - this.compactPanelHeight()
       if (x >= panelX - 12 && x <= panelX + panelW + 12 && y >= panelY - 18 && y <= panelBottom + 10) {
         return true
@@ -4314,7 +4341,7 @@ export struct WindowNativeNode {
     const left = panelLeft(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
     const top = this.panelTop()
     const right = panelRight(this.isExpandedLayout, this.skyWidth, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN)
-    if (isPanelBackPoint(x, y, this.canGoBackPanel(), this.isExpandedLayout, this.isFoldHoverLayout, this.panelWidth, this.skyWidth, this.skyHeight, this.compactPanelHeight(), this.panelOffsetX, this.panelOffsetY, this.EDGE_MARGIN, this.expandedPanelTop())) {
+    if (isPanelBackPoint(x, y, this.canGoBackPanel(), this.isExpandedLayout, this.isFoldHoverLayout, this.panelWidth, this.skyWidth, this.compactPanelTop(), this.panelOffsetX, this.EDGE_MARGIN, this.expandedPanelTop())) {
       this.handlePanelBackTap()
       return true
     }
@@ -4375,6 +4402,7 @@ export struct WindowNativeNode {
   }
 
   private handleOverlayTouch(event: TouchEvent): void {
+    if (event.source === SourceType.Mouse) { return }
     try {
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) {
@@ -4405,10 +4433,43 @@ export struct WindowNativeNode {
       }
       return
     }
-    this.skyInputCtl().handleSkyTouch(event)
+    this.handleSkySurfaceTouch(event)
     } catch (e) {
       hilog.error(0x0000, 'StellariumArkUI', 'handleOverlayTouch crash: ' + (e instanceof Error ? e.message : String(e)))
     }
+  }
+
+  private focusSkyKeyboard(x: number, y: number): void {
+    if (!this.isUiPoint(x, y)) {
+      this.getUIContext().getFocusController().requestFocus('sky-keyboard-target')
+    }
+  }
+
+  private handleSkySurfaceTouch(event: TouchEvent): void {
+    if (event.type === TouchType.Down && event.source !== SourceType.Mouse && event.touches.length > 0) {
+      this.focusSkyKeyboard(event.touches[0].x, event.touches[0].y)
+    }
+    this.skyInputCtl().handleSkyTouch(event)
+  }
+
+  private handleSkySurfaceMouse(event: MouseEvent): void {
+    if (event.action === MouseAction.Press) { this.focusSkyKeyboard(event.x, event.y) }
+    this.skyInputCtl().handleSkyMouse(event)
+  }
+
+  private handleSkyKeyboard(event: KeyEvent, panelOnly: boolean = false): boolean {
+    const hooks: KeyboardShortcutInputHooks = {
+      skyWidth: (): number => this.skyWidth,
+      skyHeight: (): number => this.skyHeight,
+      zoomStep: (factor: number): void => this.zoomStep(factor),
+      centerSelectedObjectFromKeyboard: (): void => this.centerSelectedObjectFromKeyboard(),
+      moveToSelectedObject: (): void => this.moveToSelectedObject(),
+      closeKeyboardOverlay: (): void => {
+        if (this.objectMediaStore.objectInspectorModelImmersive) this.objectModelRendererCtl().setObjectInspectorModelImmersive(false)
+        else this.closePanel()
+      }
+    }
+    return panelOnly ? this.keyboardShortcutCtl().handlePanelKey(event, hooks) : this.keyboardShortcutCtl().handleSkyKey(event, hooks)
   }
 
   private requestSkySelection(x: number, y: number): void {
@@ -4632,8 +4693,9 @@ export struct WindowNativeNode {
     if (actions.length === 0) {
       return null
     }
-    const usableLeft = dockLeft(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()) + 4
-    const usableWidth = Math.max(1, dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()) - 8)
+    const padding = this.isExpandedLayout ? 8 : 12
+    const usableLeft = dockLeft(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()) + padding
+    const usableWidth = Math.max(1, dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()) - padding * 2)
     const itemWidth = usableWidth / actions.length
     const index = Math.floor((x - usableLeft) / itemWidth)
     return index >= 0 && index < actions.length ? actions[index] : null
@@ -4657,7 +4719,15 @@ export struct WindowNativeNode {
     this.setPanel(item.panel)
   }
 
-  private handleDockTouch(event: TouchEvent): void {
+  private activateDockAtLocal(x: number, y: number): void {
+    const actions = this.canonicalDockActions()
+    const width = dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent())
+    const index = dockItemIndex(x, y, width, this.dockHeight(), actions.length, this.isExpandedLayout ? 8 : 12)
+    if (index >= 0) this.activateDockAction(actions[index])
+  }
+
+  private handleDockTouch(event: TouchEvent, localToDock: boolean = false): void {
+    event.stopPropagation()
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) { return }
     this.notePanelTouch(event)
@@ -4672,6 +4742,10 @@ export struct WindowNativeNode {
     if (event.type === TouchType.Up) {
       if (this.dockTouchActive) {
         this.dockTouchActive = false
+        if (localToDock) {
+          this.activateDockAtLocal(points[0].x, points[0].y)
+          return
+        }
         const item = this.dockActionAt(x, y)
         hilog.info(0x0000, 'StellariumArkUI', '[DOCK] up screen=%{public}d,%{public}d item=%{public}s', Math.round(x), Math.round(y), item === null ? 'none' : item.panel)
         if (item !== null) { this.activateDockAction(item) }
@@ -4796,7 +4870,9 @@ export struct WindowNativeNode {
   }
 
   private clampedObjectCardOffsetY(base: number, height: number): number {
-    return clamp(this.cardOffsetY, 8 - base, this.skyHeight - height - 8 - base)
+    const top = this.scriptControlSafeTop()
+    const bottom = this.isExpandedLayout ? this.skyHeight - 8 : this.compactPanelBottom()
+    return clamp(this.cardOffsetY, top - base, Math.max(top, bottom - height) - base)
   }
 
   private bottomCardWidth(): number {
@@ -4814,8 +4890,9 @@ export struct WindowNativeNode {
       return this.observeCompactCardHeight()
     }
     if (this.isExpandedLayout) { return Math.min(440, Math.max(360, this.skyHeight - 176)) }
-    if (this.isFoldHoverLayout) { return Math.min(380, Math.max(320, this.skyHeight - this.hoverConsoleTop() - 104)) }
-    return clamp(this.skyHeight * 0.56, 320, 420)
+    const available = Math.max(120, this.compactPanelBottom() - this.scriptControlSafeTop())
+    if (this.isFoldHoverLayout) { return Math.min(380, available, Math.max(120, this.compactPanelBottom() - this.hoverConsoleTop() - 20)) }
+    return Math.min(available, clamp(this.skyHeight * 0.56, 320, 420))
   }
 
   // 观测极简卡高度 = 拖拽柄 26 + 标题行 (16 内边距 + 36 聚焦圈) + 三 tag 行 (3+46+7) + 下沿箭头条 28。
@@ -4878,14 +4955,14 @@ export struct WindowNativeNode {
   }
 
   private baseHoverBottomCardY(): number {
-    return Math.max(this.hoverConsoleTop() + 20, this.skyHeight - this.bottomCardHeight() - 92)
+    return Math.max(this.scriptControlSafeTop(), this.compactPanelBottom() - this.bottomCardHeight())
   }
 
   private compactPanelUsableHeight(): number {
     if (this.isFoldHoverLayout) {
-      return Math.max(Math.min(this.skyHeight * 0.46, 520), 320)
+      return Math.max(120, Math.min(520, this.compactPanelBottom() - this.hoverConsoleTop() - 12))
     }
-    return Math.min(Math.max(160, this.compactPanelBottom() - 70), Math.max(this.skyHeight - 318, 320))
+    return Math.max(120, this.compactPanelBottom() - this.scriptControlSafeTop() - 16)
   }
 
   private hoverSkyPaneHeight(): number {
@@ -4899,7 +4976,7 @@ export struct WindowNativeNode {
   }
 
   private hoverPanelTop(): number {
-    return Math.max(this.hoverConsoleTop() + 12, this.skyHeight - 90 - this.compactPanelHeight())
+    return this.compactPanelTop()
   }
 
   // ── 快捷面板二期：自定义（拖动-替换）──
@@ -4987,9 +5064,8 @@ export struct WindowNativeNode {
       return this.quickPanelContentHeight()
     }
     const usable = this.compactPanelUsableHeight()
-    const minH = usable * 0.6
-    const maxH = usable * 0.9
-    return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH - 28, maxH + 22)
+    const minH = Math.min(usable, 280)
+    return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
   }
 
   private updateCompactPanelDrag(offsetY: number): void {
@@ -5187,14 +5263,17 @@ export struct WindowNativeNode {
   }
 
   private compactDockLabelFontSize(): number {
+    if (this.isExpandedLayout) return this.isLargeDesktopCanvas() ? 14 : 12
     return this.isFoldHoverLayout ? 11 : 12
   }
 
   private compactDockIconSize(): number {
+    if (this.isExpandedLayout) return this.isLargeDesktopCanvas() ? 28 : 24
     return this.isFoldHoverLayout ? 22 : 23
   }
 
   private compactDockItemHeight(): number {
+    if (this.isExpandedLayout) return this.isLargeDesktopCanvas() ? 68 : 62
     return this.isFoldHoverLayout ? 52 : 56
   }
 
@@ -5203,16 +5282,11 @@ export struct WindowNativeNode {
   }
 
   private dockTop(): number {
-    // ExpandedShell draws the dock at skyHeight - 62 with a fixed 54vp height,
-    // so the hit target and the panels must use that same baseline.
-    if (this.isExpandedLayout) {
-      return Math.max(0, this.skyHeight - 62)
-    }
     return Math.max(0, this.skyHeight - this.dockHeight() - this.dockBottomClearance())
   }
 
   private dockHeight(): number {
-    return this.isExpandedLayout ? 54 : 66
+    return this.isExpandedLayout ? (this.isLargeDesktopCanvas() ? 78 : 72) : 66
   }
 
   private isLargeDesktopCanvas(): boolean {
@@ -5223,9 +5297,17 @@ export struct WindowNativeNode {
     return this.isExpandedLayout && (this.skyWidth >= 520 || (this.skyWidth >= 700 && this.skyHeight >= 500))
   }
 
-  private panelFontSize(base: number): number {
-    if (!this.isLargeDesktopCanvas()) return base
-    return Math.min(base + 2, Math.round(base * 1.22))
+  private publishUiLayoutState(): void {
+    AppStorage.setOrCreate('stellariumUiLayoutState', JSON.stringify({
+      ok: true, ready: this.skyWidth > 1 && this.skyHeight > 1,
+      width: this.skyWidth, height: this.skyHeight, mode: this.responsiveLayoutMode,
+      override: this.uiLayoutOverride, expanded: this.isExpandedLayout,
+      readable: this.isLargeDesktopCanvas(), touchCoordinateSpace: 'component',
+      dockLeft: dockLeft(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
+      dockTop: this.dockTop(), dockHeight: this.dockHeight(),
+      dockWidth: dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
+      dockLabelFontSize: this.compactDockLabelFontSize()
+    }))
   }
 
   private dockBottomClearance(): number {
@@ -5238,6 +5320,10 @@ export struct WindowNativeNode {
 
   private compactPanelBottom(): number {
     return this.dockTop() - 10
+  }
+
+  private compactPanelTop(): number {
+    return this.compactPanelBottom() - this.compactPanelHeight()
   }
 
   private panelTop(): number {
@@ -5482,8 +5568,8 @@ export struct WindowNativeNode {
     }
 
     if (this.panelVisible) {
-      const sheetTop = this.isFoldHoverLayout ? this.hoverPanelTop() : this.skyHeight - 90 - this.compactPanelHeight()
-      obstacles.push({ label: 'sheet', left: 0, top: sheetTop, right: this.skyWidth, bottom: this.skyHeight - 90 })
+      const sheetTop = this.compactPanelTop()
+      obstacles.push({ label: 'sheet', left: 0, top: sheetTop, right: this.skyWidth, bottom: this.compactPanelBottom() })
     }
     if (!this.panelVisible && this.infoWindowStore.infoWinVisible) {
       if (isPhoneDetailPeek()) {
@@ -5595,7 +5681,7 @@ export struct WindowNativeNode {
     // open sheet. The centre x is clear of the left zoom controls and the
     // right quick controls.
     let top = 38
-    let bottom = this.skyHeight - 100 // compact bottom dock plus breathing room
+    let bottom = this.compactPanelBottom()
 
     // Compact panels replace the detailed object card. Reserving the hidden
     // card's area made a 9/10 sheet calculate a target underneath itself.
@@ -5608,7 +5694,7 @@ export struct WindowNativeNode {
     }
     let sheetTop = -1
     if (this.panelVisible) {
-      sheetTop = this.skyHeight - 90 - this.compactPanelHeight()
+      sheetTop = this.compactPanelTop()
       bottom = Math.min(bottom, sheetTop - 32)
     }
 
@@ -7253,6 +7339,18 @@ export struct WindowNativeNode {
         .width(0)
         .height(0)
         .zIndex(-1)
+      Text('')
+        .fontSize(1)
+        .width(1)
+        .height(1)
+        .position({ x: 0, y: 0 })
+        .id('sky-keyboard-target')
+        .hitTestBehavior(HitTestMode.None)
+        .focusable(true)
+        .defaultFocus(true)
+        .onFocus(() => { this.keyboardShortcutCtl().setSkyFocused(true) })
+        .onBlur(() => { this.keyboardShortcutCtl().setSkyFocused(false) })
+        .onKeyEvent((event: KeyEvent): boolean => this.handleSkyKeyboard(event))
       XComponent({
         type: XComponentType.SURFACE,
         id: 'stellarium_entry_gl_probe',
@@ -7341,7 +7439,9 @@ export struct WindowNativeNode {
             cardHeight: guideCardHeight(this.skyHeight, this.scriptControlSafeTop()),
             cardX: guideCardX(this.isExpandedLayout, this.skyWidth, this.guideCardWidth(), this.scriptStore.scriptControlOffsetX),
             cardY: guideCardY(this.skyHeight, guideCardHeight(this.skyHeight, this.scriptControlSafeTop()), this.scriptControlSafeTop(), this.scriptStore.scriptControlOffsetY),
-            onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+            onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+            onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+            onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
             onControlDragTouch: (event: TouchEvent) => { this.scriptPlaybackCtl().handleScriptControlDragTouch(event) },
             onAction: (action: string) => { this.guideCtl().executeGuideRequest('guideAction', action) }
           })
@@ -7360,7 +7460,9 @@ export struct WindowNativeNode {
             controlHeight: this.scriptStore.scriptControlHeight(),
             controlX: scriptControlX(this.skyWidth, this.scriptStore.replaying, this.scriptStore.scriptControlOffsetX),
             controlY: scriptControlY(this.skyHeight, this.scriptControlSafeTop(), this.scriptStore.scriptControlHeight(), this.scriptStore.scriptControlOffsetY),
-            onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+            onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+            onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+            onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
             onControlDragTouch: (event: TouchEvent) => { this.scriptPlaybackCtl().handleScriptControlDragTouch(event) },
             onContinue: () => { this.scriptPlaybackCtl().continueNativeScript() },
             onChangeRate: (delta: number) => { this.recordingCtl().changePlaybackRate(delta) },
@@ -7371,7 +7473,11 @@ export struct WindowNativeNode {
         }
       }
       if (!this.scriptStore.scriptPlaybackVisible(this.guideStore.guideState.active) && this.tools.recording && !this.tools.recordingUiExpanded) {
-        RecordingFocusShell({ onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) } })
+        RecordingFocusShell({
+          onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+          onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+          onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) }
+        })
       }
       if (!this.scriptStore.scriptPlaybackVisible(this.guideStore.guideState.active) && !(this.tools.recording && !this.tools.recordingUiExpanded) && !this.polarScopeStore.polarScopeVisible) {
         Stack() {
@@ -7386,6 +7492,7 @@ export struct WindowNativeNode {
                 skyWidth: this.skyWidth,
                 skyHeight: this.skyHeight,
                 hoverSkyPaneHeight: this.hoverSkyPaneHeight(),
+                dockTop: this.dockTop(),
                 panelIdleGlass: this.panelIdleGlass,
                 panelVisible: this.panelVisible,
                 isExpandedLayout: this.isExpandedLayout,
@@ -7441,7 +7548,9 @@ export struct WindowNativeNode {
                 detailWidth: this.detailCardWidth(),
                 detailHeight: this.detailCardHeight(),
                 scroller: this.objectDetailScroller,
-                onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+                onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+                onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+                onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
                 onDockTouch: (event: TouchEvent) => { this.handleDockTouch(event) },
                 onDockTap: (item: ShellAction) => { this.activateDockAction(item) },
                 onPanelTouch: (event: TouchEvent) => { this.notePanelTouch(event) },
@@ -7502,6 +7611,7 @@ export struct WindowNativeNode {
                 dockLeft: dockLeft(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
                 dockTop: this.dockTop(),
                 expandedDockWidth: expandedDockWidth(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN),
+                dockHeight: this.dockHeight(),
                 expandedDockLeft: expandedDockLeft(this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN),
                 gyroPanelLeft: this.EDGE_MARGIN + 64,
                 gyroPanelTop: railTop(this.EDGE_MARGIN) + 120,
@@ -7548,7 +7658,9 @@ export struct WindowNativeNode {
                 detailWidth: this.detailCardWidth(),
                 detailHeight: this.detailCardHeight(),
                 scroller: this.objectDetailScroller,
-                onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+                onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+                onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+                onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
                 onDockTouch: (event: TouchEvent) => { this.handleDockTouch(event) },
                 onDockTap: (item: ShellAction) => { this.activateDockAction(item) },
                 onPanelTouch: (event: TouchEvent) => { this.notePanelTouch(event) },
@@ -7673,7 +7785,9 @@ export struct WindowNativeNode {
                 detailWidth: this.detailCardWidth(),
                 detailHeight: this.detailCardHeight(),
                 scroller: this.objectDetailScroller,
-                onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+                onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+                onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+                onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
                 onDockTouch: (event: TouchEvent) => { this.handleDockTouch(event) },
                 onDockTap: (item: ShellAction) => { this.activateDockAction(item) },
                 onPanelTouch: (event: TouchEvent) => { this.notePanelTouch(event) },
@@ -7729,7 +7843,7 @@ export struct WindowNativeNode {
                 }
                   .width('100%')
                   .height(this.compactPanelHeight() + 10)
-                  .position({ x: 0, y: this.skyHeight - 90 - this.compactPanelHeight() })
+                  .position({ x: 0, y: this.compactPanelTop() })
                   .hitTestBehavior(HitTestMode.Transparent)
                   .zIndex(30)
               }
@@ -7748,7 +7862,7 @@ export struct WindowNativeNode {
             .hitTestBehavior(HitTestMode.Block)
             .zIndex(80)
             .onTouch((event: TouchEvent) => {
-              this.handleDockTouch(event)
+              this.handleDockTouch(event, true)
             })
 
             HarmonyShell({
@@ -7789,7 +7903,9 @@ export struct WindowNativeNode {
             skyWidth: this.skyWidth,
             skyHeight: this.skyHeight,
             isExpandedLayout: this.isExpandedLayout,
-            onSkyTouch: (event: TouchEvent) => { this.skyInputCtl().handleSkyTouch(event) },
+            onSkyTouch: (event: TouchEvent) => { this.handleSkySurfaceTouch(event) },
+            onSkyMouse: (event: MouseEvent) => { this.handleSkySurfaceMouse(event) },
+            onSkyAxis: (event: AxisEvent) => { this.skyInputCtl().handleSkyAxis(event) },
             onRecenter: () => { this.polarScopeCtl().recenterPolarScope() },
             onClose: () => { this.polarScopeCtl().closePolarScope() },
             onHorizontalFlipChange: (value: boolean) => { this.polarScopeCtl().setPolarScopeHorizontalFlip(value) },
@@ -7858,17 +7974,7 @@ export struct WindowNativeNode {
       .width('100%')
       .height('100%')
       .backgroundColor(AstroColors.windowBase)
-      .focusable(true)
-      .defaultFocus(true)
-      .onKeyEvent((event: KeyEvent): boolean => {
-        return this.skyInputCtl().handleSkyKey(event)
-      })
-      .onMouse((event: MouseEvent) => {
-        this.skyInputCtl().handleSkyMouse(event)
-      })
-      .onAxisEvent((event: AxisEvent) => {
-        this.skyInputCtl().handleSkyAxis(event)
-      })
+      .onKeyEvent((event: KeyEvent): boolean => this.handleSkyKeyboard(event, true))
       .onAreaChange((oldArea: Area, newArea: Area) => {
         // 布局硬回调：稳定触发。冷启动期 ArkUI setTimeout 重试不可靠，
         // 这里借 onAreaChange 反复尝试把启动命令送到 Qt 线程。
@@ -7883,7 +7989,7 @@ export struct WindowNativeNode {
         } else if (this.isExpandedLayout) {
           // Pad and 2-in-1 windows share the same panel. Extra-wide PC
           // canvases can use a little more room without covering the sky.
-          const expandedPanelMax = this.skyWidth >= 1440 ? 480 : 420
+          const expandedPanelMax = this.isLargeDesktopCanvas() ? 520 : (this.skyWidth >= 1440 ? 480 : 420)
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.33, 340), expandedPanelMax)
         } else {
           this.panelWidth = Math.min(Math.max(this.skyWidth * 0.28, 280), 400)

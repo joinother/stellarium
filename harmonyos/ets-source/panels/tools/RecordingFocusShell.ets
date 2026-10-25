@@ -7,6 +7,8 @@
 @Component
 export struct RecordingFocusShell {
   onSkyTouch: (event: TouchEvent) => void = () => {}
+  onSkyMouse: (event: MouseEvent) => void = () => {}
+  onSkyAxis: (event: AxisEvent) => void = () => {}
 
   build() {
     Stack() { }
@@ -14,5 +16,7 @@ export struct RecordingFocusShell {
       .height('100%')
       .hitTestBehavior(HitTestMode.Default)
       .onTouch((event: TouchEvent) => { this.onSkyTouch(event) })
+      .onMouse((event: MouseEvent) => { this.onSkyMouse(event) })
+      .onAxisEvent((event: AxisEvent) => { this.onSkyAxis(event) })
   }
 }

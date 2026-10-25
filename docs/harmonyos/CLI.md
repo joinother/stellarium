@@ -397,6 +397,12 @@ node scripts/stellarium-cli.mjs --command setJulianDate --payload 'mjd|51544.500
 
 脚本和插件也通过同一命令总线调用：脚本使用 `playScript`/`stopScript`/`setScriptRate`；插件清单使用 `getPluginList`，当前进程载入使用 `loadPlugin`/`unloadPlugin`。内置插件统一随应用启动载入，旧客户端仍可调用 `setPluginLoadAtStartup`（例如 `Satellites|1`）但该命令只保留兼容性，不再允许 `|0` 关闭内置插件；各插件功能则使用自己的命令。三类状态不得混用。未备案版本保持离线，网络更新和外部设备命令必须继续受目录权限标记约束。
 
+### sendKey 键盘阶段扩展（2026-10-25）
+
+`sendKey` 已在原生命令目录登记，名称与原有键名/修饰键保持不变。旧 payload `CTRL+N`、`LEFT` 等仍在一次调用中发送 KeyPress + KeyRelease，返回 `ok/key/accepted`。可选新 payload 为 `LEFT|down`、`LEFT|up`、`CTRL+UP|down`、`CTRL+UP|up`：down 仅按下，up 仅释放；重复 down 不再次触发动作，未按下的 up 不分发。原生按键码保存初始修饰键，释放仍使用初始值。调用者必须为每次 down 配对 up，并在失焦/进入后台时释放所有持有键。
+
+阶段命令从 ArkUI/CLI 线程进入有序无缓存队列，立即返回 `{"ok":true,"queued":true}`，仅表示入队，不表示动作接受或画面已变化；不要轮询同一个阶段 payload。Qt 线程直接执行时返回 `ok/key/phase/accepted`，重复 down 另有 `duplicate=true`。未知阶段或多余字段在执行端返回 `usage: key or key|down or key|up`；异步 queued 回包不承诺键名有效。`getNavigationSettings` 的 `moveKeys/zoomKeys` 控制原生导航，动作绑定仍优先执行；关闭这些开关会停止相应持续移动。验收读取视角/FOV，并在 finally/测试收尾释放按键。示例：`--command sendKey --payload 'LEFT|down'`，经过渲染帧后查询视角，最后 `--command sendKey --payload 'LEFT|up'`。这不等同于向 ArkUI 输入框输入字符；输入框 N/Delete 回归使用实体键盘或 uinput，见 `testing/KEYBOARD-ROUTING-2026-10-25.md`。
+
 `getPluginList` 的每个条目还返回原版 `StelPluginInfo` 的 `description`、`authors`、`contact`、`version`、`license`、`acknowledgements`、`hasPreviewImage` 和 `source`。`getLandscapeList` 的每个条目返回 `landscape.ini` 中的 `author`、`description`、`source`、地点/星球/时区字段；`getLandscapeInfo` 返回当前地景的完整说明。`getScriptList` 的 `items` 仍是旧的 `.ssc` 文件名数组，同时新增 `details` 数组，逐项返回 `Name`、`Author`、`License`、`Version`、`Description`、`Shortcut` 和来源路径，旧 CLI 无需改动即可继续使用。
 
 导入脚本使用系统文档选择器，应用只接受 `.ssc` 文件并复制到应用沙箱中的用户脚本目录，完成后立即刷新脚本列表。CLI 或自动化流程也可以调用：

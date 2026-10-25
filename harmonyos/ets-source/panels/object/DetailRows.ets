@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -18,11 +19,12 @@ export struct ObjectDataRow {
 
   build() {
     Row({ space: 10 }) {
-      Text(this.label).fontSize(11).fontColor(this.c.tertiary).width(68)
+      Text(this.label).fontSize(11).fontColor(this.c.tertiary).width(104).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value.length > 0 ? this.value : '--')
-        .fontSize(12).fontColor(this.c.fourth).layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+        .fontSize(12).fontColor(this.c.fourth).layoutWeight(1).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).lineHeight(17)
     }
-      .width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 })
+      .width('100%').constraintSize({ minHeight: 40 }).alignItems(VerticalAlign.Center)
+      .padding({ left: 10, right: 10, top: 9, bottom: 9 })
       .backgroundColor(this.c.soft)
       .borderRadius(UI_RADIUS_CONTROL)
   }
@@ -30,6 +32,7 @@ export struct ObjectDataRow {
 
 @Component
 export struct StructuredDetailRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @Prop tablet: boolean
@@ -42,14 +45,15 @@ export struct StructuredDetailRow {
   build() {
     Row({ space: 12 }) {
       Text(this.label)
-        .fontSize(this.tablet ? 11 : 10).fontColor(this.c.tertiary).width(this.tablet ? 108 : 104)
+        .fontSize(Math.max(this.tablet ? 11 : 10, objectDetailFontSize(10, this.readableUi))).fontColor(this.c.tertiary).width(this.tablet ? 112 : 104)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value)
-        .fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth).layoutWeight(1)
+        .fontSize(Math.max(this.tablet ? 12 : 11, objectDetailFontSize(11, this.readableUi))).fontColor(this.c.fourth).layoutWeight(1)
         .textAlign(TextAlign.Start).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
         .lineHeight(this.tablet ? 18 : 17)
     }
-      .width('100%').height(this.tablet ? 46 : 44).alignItems(VerticalAlign.Center)
+      .width('100%').constraintSize({ minHeight: this.tablet ? 46 : 44 }).alignItems(VerticalAlign.Center)
+      .padding({ left: 10, right: 10, top: 8, bottom: 8 })
   }
 }
 
@@ -57,6 +61,7 @@ export struct StructuredDetailRow {
 // 用于「优化名称」场景（恒星名/目录编号拼起来可能很长），不做省略。
 @Component
 export struct DetailNameRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop value: string
   @Prop tablet: boolean
@@ -69,10 +74,10 @@ export struct DetailNameRow {
   build() {
     Row({ space: 12 }) {
       Text(this.label)
-        .fontSize(this.tablet ? 11 : 10).fontColor(this.c.tertiary).width(this.tablet ? 108 : 104)
+        .fontSize(Math.max(this.tablet ? 11 : 10, objectDetailFontSize(10, this.readableUi))).fontColor(this.c.tertiary).width(this.tablet ? 112 : 104)
         .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       Text(this.value)
-        .fontSize(this.tablet ? 12 : 11).fontColor(this.c.fourth).layoutWeight(1)
+        .fontSize(Math.max(this.tablet ? 12 : 11, objectDetailFontSize(11, this.readableUi))).fontColor(this.c.fourth).layoutWeight(1)
         .textAlign(TextAlign.Start).maxLines(4)
         .lineHeight(this.tablet ? 18 : 17)
     }
@@ -82,6 +87,7 @@ export struct DetailNameRow {
 
 @Component
 export struct DetailSectionTitle {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop title: string
   @Prop tablet: boolean
   @State c: ThemeSlots = DEFAULT_SLOTS
@@ -92,7 +98,7 @@ export struct DetailSectionTitle {
 
   build() {
     if (this.tablet) {
-      Text(this.title).fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.tertiary).width('100%')
+      Text(this.title).fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.tertiary).width('100%')
         .padding({ top: 4, bottom: 4 })
         .border({ width: { bottom: 0.5 }, color: { bottom: this.c.border } })
     } else {

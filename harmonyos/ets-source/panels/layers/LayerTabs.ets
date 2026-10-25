@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { TabItem } from '../../pages/StellariumTypes'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
@@ -10,6 +11,7 @@ import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 // loadLandscapeList / syncSkyCultureTimeFollowTimer 等副作用。
 @Component
 export struct LayerTabs {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop tabs: TabItem[]
   @Prop activeTab: number
   @Prop foldTablet: boolean
@@ -23,9 +25,12 @@ export struct LayerTabs {
       Row({ space: this.foldTablet ? 5 : 6 }) {
         ForEach(this.tabs, (tab: TabItem) => {
           Text(tab.label)
-            .fontSize(this.foldTablet ? 11 : 10)
+            .fontSize(panelFontSize(12, this.readableUi))
             .fontColor(this.activeTab === tab.id ? this.c.onAccent : this.c.sub)
-            .padding({ left: this.foldTablet ? 10 : 8, right: this.foldTablet ? 10 : 8, top: 5, bottom: 5 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .constraintSize({ minWidth: this.readableUi ? 76 : 60, minHeight: this.readableUi ? 40 : 36 })
+            .padding({ left: this.readableUi ? 13 : 10, right: this.readableUi ? 13 : 10, top: 6, bottom: 6 })
             .backgroundColor(this.activeTab === tab.id ? this.c.accent : this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL)
             .clickEffect({ level: ClickEffectLevel.LIGHT })
@@ -38,7 +43,7 @@ export struct LayerTabs {
       .padding({ left: 2, right: 12 })
     }
     .width('100%')
-    .height(38)
+    .height(this.readableUi ? 46 : 42)
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)

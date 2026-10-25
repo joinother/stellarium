@@ -34,6 +34,8 @@ export struct ScriptFocusShell {
   @Prop controlY: number
   @State c: ThemeSlots = DEFAULT_SLOTS
   onSkyTouch: (event: TouchEvent) => void = () => {}
+  onSkyMouse: (event: MouseEvent) => void = () => {}
+  onSkyAxis: (event: AxisEvent) => void = () => {}
   onControlDragTouch: (event: TouchEvent) => void = () => {}
   onContinue: () => void = () => {}
   onChangeRate: (delta: number) => void = () => {}
@@ -53,6 +55,8 @@ export struct ScriptFocusShell {
         .hitTestBehavior(HitTestMode.Block)
         .zIndex(0)
         .onTouch((event: TouchEvent) => { this.onSkyTouch(event) })
+        .onMouse((event: MouseEvent) => { this.onSkyMouse(event) })
+        .onAxisEvent((event: AxisEvent) => { this.onSkyAxis(event) })
 
       Column({ space: 6 }) {
         Row({ space: 8 }) {

@@ -1,4 +1,5 @@
 import { curves, Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { getIcon } from '../../common/ui/ShellIcons'
 import { tintMatrixFor } from '../../common/ui/IconTint'
@@ -20,6 +21,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 @Component
 export struct PanelHeader {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop title: ResourceStr
   @Prop subtitle: string
   @Prop canGoBack: boolean
@@ -92,7 +94,7 @@ export struct PanelHeader {
             .onClick(() => { this.onTitleTap() })
         } else {
           Text(this.title)
-            .fontSize(18)
+            .fontSize(panelFontSize(18, this.readableUi))
             .fontWeight(FontWeight.Medium)
             .fontColor(this.c.text)
         }

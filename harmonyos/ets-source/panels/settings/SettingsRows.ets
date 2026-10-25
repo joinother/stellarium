@@ -1,4 +1,5 @@
 ﻿import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { I18n } from '../../pages/I18n'
 import { SettingsChoiceButton } from '../../common/ui/SettingsChoiceButton'
 import { UI_RADIUS_CONTROL, UI_OPTION_ANIMATION_MS } from '../../common/ui/UiTokens'
@@ -66,6 +67,7 @@ export struct InformationModeButton {
 // `canToggle` 额外要求 !informationSettingPending。
 @Component
 export struct InformationSwitchRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop isOn: boolean
   @Prop inCustomMode: boolean
@@ -79,11 +81,11 @@ export struct InformationSwitchRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(11).fontColor(this.c.text).layoutWeight(1).maxLines(2)
+      Text(this.label).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text).layoutWeight(1).maxLines(2)
       Toggle({ type: ToggleType.Switch, isOn: this.isOn }).width(42).height(24)
         .enabled(this.canToggle)
         .onChange((value: boolean) => { this.onToggle(value) })
-    }.width('100%').padding({ left: 10, right: 8, top: 5, bottom: 5 })
+    }.width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 8 : 5, bottom: this.readableUi ? 8 : 5 })
       .backgroundColor(this.inCustomMode && this.isOn ? this.c.bg : Color.Transparent)
       .border({ width: 1, color: this.c.border })
       .animation({ duration: UI_OPTION_ANIMATION_MS, curve: Curve.EaseOut })
@@ -94,6 +96,7 @@ export struct InformationSwitchRow {
 // 视口/导航开关行（鼠标、键盘、重力标签、自动缩放复位等）。
 @Component
 export struct NavigationSwitchRow {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: ResourceStr
   @Prop isOn: boolean
   @State c: ThemeSlots = DEFAULT_SLOTS
@@ -105,12 +108,12 @@ export struct NavigationSwitchRow {
 
   build() {
     Row() {
-      Text(this.label).fontSize(13).fontColor(this.c.text).layoutWeight(1).maxLines(2)
+      Text(this.label).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1).maxLines(2)
       Toggle({ type: ToggleType.Switch, isOn: this.isOn })
         .width(46).height(28)
         .onChange((value: boolean) => { this.onToggle(value) })
     }
-      .width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+      .width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 9 : 7, bottom: this.readableUi ? 9 : 7 })
       .backgroundColor(this.isOn ? this.c.soft : this.c.bg)
       .border({ width: 1, color: this.isOn ? this.c.softStrong : this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)

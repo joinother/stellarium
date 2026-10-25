@@ -1,4 +1,5 @@
 import { I18n } from '../../pages/I18n'
+import { objectDetailFontSize } from '../../common/ui/UiTypography'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { ObjectDataTile, ObjectMetric, ObjectScheduleTile } from './DetailTiles'
 import { ObjectDataRow } from './DetailRows'
@@ -18,6 +19,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 
 @Component
 export struct ObjectDetailObserveTab {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: ObjectDetailStore
   @Prop distanceText: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -27,14 +29,14 @@ export struct ObjectDetailObserveTab {
 
   build() {
     Column({ space: 8 }) {
-      Text('今晚观测窗口').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
+      Text('今晚观测窗口').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
       Row({ space: 6 }) {
         ObjectScheduleTile({ label: I18n.t('s0700'), value: this.resolve('selectedRise') })
         ObjectScheduleTile({ label: I18n.t('s0701'), value: this.resolve('selectedTransit') })
         ObjectScheduleTile({ label: I18n.t('s0702'), value: this.resolve('selectedSet') })
       }.width('100%')
       if (this.store.selectedApparentMagnitude.length > 0 || this.store.selectedAirmass.length > 0 || this.store.selectedExtinction.length > 0) {
-        Text('大气影响').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%').margin({ top: 3 })
+        Text('大气影响').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%').margin({ top: 3 })
         Row({ space: 8 }) {
           if (this.store.selectedApparentMagnitude.length > 0) { ObjectMetric({ label: '大气后星等', value: this.resolve('selectedApparentMagnitude') }) }
           if (this.store.selectedExtinction.length > 0) { ObjectMetric({ label: '大气衰减', value: this.resolve('extinctionUnits') }) }
@@ -61,6 +63,7 @@ export struct ObjectDetailObserveTab {
 
 @Component
 export struct ObjectDetailCoordinateTab {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: ObjectDetailStore
   @Prop distanceText: string
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -70,7 +73,7 @@ export struct ObjectDetailCoordinateTab {
 
   build() {
     Column({ space: 8 }) {
-      Text('当前天球位置').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
+      Text('当前天球位置').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
       ObjectDistanceNotice({ text: this.distanceText })
       SelectedCoordinateRows({ store: this.store, tablet: false })
       ObjectDataRow({ label: I18n.t('i0010'), value: this.resolve('selectedConstellation') })
@@ -81,6 +84,7 @@ export struct ObjectDetailCoordinateTab {
 
 @Component
 export struct ObjectDetailDataTab {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: ObjectDetailStore
   @ObjectLink mediaStore: ObjectMediaStore
   @Prop tablet: boolean
@@ -109,7 +113,7 @@ export struct ObjectDetailDataTab {
 
   build() {
     Column({ space: 8 }) {
-            Text('完整资料').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
+            Text('完整资料').fontSize(objectDetailFontSize(12, this.readableUi)).fontWeight(FontWeight.Medium).fontColor(this.c.fourth).width('100%')
             ObjectDistanceNotice({ text: this.distanceText })
             TabletInspectorMediaGroup({
   store: this.mediaStore,

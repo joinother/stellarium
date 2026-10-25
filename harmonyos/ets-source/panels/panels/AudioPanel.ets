@@ -1,4 +1,5 @@
 ﻿import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
@@ -12,6 +13,7 @@ import { AudioStore } from '../../state/AudioStore'
 
 @Component
 export struct AudioPanel {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink audioStore: AudioStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleMusic: (enabled: boolean) => void = () => {}
@@ -22,15 +24,15 @@ export struct AudioPanel {
   build() {
     Scroll() {
       Column({ space: 10 }) {
-        Text(I18n.t('panel_audio_ctrl')).fontSize(15).fontColor(this.c.text).width('100%').margin({ top: 4 })
+        Text(I18n.t('panel_audio_ctrl')).fontSize(panelFontSize(18, this.readableUi)).fontColor(this.c.text).width('100%').margin({ top: 4 })
         Row() {
-          Text(I18n.t('audio_toggle')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
+          Text(I18n.t('audio_toggle')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.audioStore.musicEnabled })
             .onChange((isOn: boolean) => { this.onToggleMusic(isOn) })
         }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
         Row() {
-          Text(I18n.t('audio_volume')).fontSize(13).fontColor(this.c.text).width(72)
-          Text(Math.round(this.audioStore.audioVolume * 100) + '%').fontSize(13).fontColor(this.c.text).margin({ right: 8 })
+          Text(I18n.t('audio_volume')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(84)
+          Text(Math.round(this.audioStore.audioVolume * 100) + '%').fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).margin({ right: 8 })
           Slider({ value: this.audioStore.audioVolume, min: 0, max: 1, step: 0.05, style: SliderStyle.OutSet })
             .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
             .width('40%')

@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { WutTarget } from '../../pages/StellariumTypes'
@@ -14,6 +15,7 @@ import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 
 @Component
 export struct ObservingPanel {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink wutStore: WutStore
   @ObjectLink observingListStore: ObservingListStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
@@ -35,7 +37,7 @@ export struct ObservingPanel {
   build() {
     Column({ space: 8 }) {
       Row({ space: 8 }) {
-        Text(I18n.t('panel_observing_list')).fontSize(15).fontColor(this.c.text).layoutWeight(1)
+        Text(I18n.t('panel_observing_list')).fontSize(panelFontSize(16, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
         if (this.observingListStore.observingListReady) {
           Text(I18n.t('observing_list_saved')).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
         }
@@ -48,11 +50,11 @@ export struct ObservingPanel {
             .onClick(() => { this.onClearAll() })
         }
       }.width('100%').padding({ left: 4, right: 4 })
-      Text(I18n.t('i0130')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4 }).margin({ top: 2 })
+      Text(I18n.t('i0130')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 4 }).margin({ top: 2 })
       Row({ space: 6 }) {
         ForEach(['planets', 'stars', 'messier'], (category: string) => {
           Text(category === 'planets' ? I18n.t('s0743') : (category === 'stars' ? I18n.t('s0744') : '梅西耶'))
-            .fontSize(10).fontColor(this.wutStore.wutCategory === category ? this.c.onAccent : this.c.sub)
+            .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.wutStore.wutCategory === category ? this.c.onAccent : this.c.sub)
             .padding({ left: 10, right: 10, top: 5, bottom: 5 })
             .backgroundColor(this.wutStore.wutCategory === category ? this.c.accent : this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL)
@@ -73,41 +75,41 @@ export struct ObservingPanel {
           Row({ space: 9 }) {
             Column({ space: 2 }) {
               Row({ space: 6 }) {
-                Text(this.targetTitleOf(target)).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                Text(this.typeOf(target.type ?? '')).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.targetTitleOf(target)).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.typeOf(target.type ?? '')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               }.width('100%')
               if (this.targetSubtitleOf(target).length > 0) {
-                Text(this.targetSubtitleOf(target)).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(this.targetSubtitleOf(target)).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
               }
               Text('高度 ' + (target.altitude ?? 0).toFixed(0) + '°  方位 ' + (target.azimuth ?? 0).toFixed(0) + '°  ' + (target.magnitude ?? 0).toFixed(1) + ' 等')
-                .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(1)
+                .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%').maxLines(1)
             }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-            Button(I18n.t('btn_center')).fontSize(10).fontColor(this.c.accent).backgroundColor(this.c.bg)
-              .borderRadius(UI_RADIUS_CONTROL).height(29).padding({ left: 8, right: 8 })
+            Button(I18n.t('btn_center')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.accent).backgroundColor(this.c.bg)
+              .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 10, right: 10 })
               .onClick(() => { this.onJumpTarget(target) })
             if (this.observingListStore.observingList.includes(target.englishName ?? '')) {
               Text(I18n.t('s0739')).fontSize(10).fontColor(this.c.accent).padding({ left: 5, right: 5, top: 7, bottom: 7 })
             } else {
-              Button(I18n.t('s0738')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(29).padding({ left: 9, right: 9 })
+              Button(I18n.t('s0738')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.text).backgroundColor(this.c.bg)
+                .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 10, right: 10 })
                 .onClick(() => { this.onAddTarget(target) })
             }
           }.width('100%').padding({ left: 10, right: 8, top: 8, bottom: 8 })
             .backgroundColor(this.c.bg).border({ width: 1, color: this.c.border }).borderRadius(UI_RADIUS_CONTROL)
         }, (target: WutTarget, index: number) => target.englishName ?? index.toString())
       } else if (this.wutStore.wutHint.length > 0) {
-        Text(this.wutStore.wutHint).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 8, top: 8, bottom: 8 })
+        Text(this.wutStore.wutHint).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 8, top: 8, bottom: 8 })
       }
       Text(I18n.t('panel_observing_list') + ' (' + this.observingListStore.observingList.length.toString() + ')')
-        .fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4 }).margin({ top: 8 })
+        .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 4 }).margin({ top: 8 })
       if (!this.observingListStore.observingListReady) {
         Row({ space: 8 }) {
           LoadingProgress().width(18).height(18).color(this.c.accent)
-          Text(I18n.t('observing_list_loading')).fontSize(11).fontColor(this.c.sub)
+          Text(I18n.t('observing_list_loading')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub)
         }.width('100%').height(100).justifyContent(FlexAlign.Center)
       } else if (this.observingListStore.observingList.length === 0) {
         Column() {
-          Text(I18n.t('obs_list_empty')).fontSize(13).fontColor(this.c.sub).margin({ top: 12 })
+          Text(I18n.t('obs_list_empty')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.sub).margin({ top: 12 })
           Button(I18n.t('dock_search')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 }).margin({ top: 8 })
             .onClick(() => { this.onOpenSearch() })
@@ -116,14 +118,14 @@ export struct ObservingPanel {
         ForEach(this.observingListStore.observingList, (name: string) => {
           Row({ space: 8 }) {
             Column({ space: 2 }) {
-              Text(this.displayNameOf(name)).fontSize(14).fontColor(this.c.text).fontWeight(FontWeight.Medium)
+              Text(this.displayNameOf(name)).fontSize(panelFontSize(15, this.readableUi)).fontColor(this.c.text).fontWeight(FontWeight.Medium)
                 .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
             }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-            Button(I18n.t('btn_center')).fontSize(11).fontColor(this.c.accent).backgroundColor(this.c.softStrong)
-              .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
+            Button(I18n.t('btn_center')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.accent).backgroundColor(this.c.softStrong)
+              .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 12, right: 12 })
               .onClick(() => { this.onSearchName(name) })
-            Button(I18n.t('observing_remove')).fontSize(10).fontColor(this.c.sub).backgroundColor(this.c.bg)
-              .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
+            Button(I18n.t('observing_remove')).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).backgroundColor(this.c.bg)
+              .borderRadius(UI_RADIUS_CONTROL).height(34).padding({ left: 10, right: 10 })
               .onClick(() => { this.onRemoveTarget(name) })
           }
           .width('100%')

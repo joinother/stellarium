@@ -1,4 +1,5 @@
 ﻿import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -9,6 +10,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 // 写回由 `onToggle` 回调交回宿主（宿主按 setting 名分派到 native 桥）。
 @Component
 export struct PointerCoordinateToggle {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop label: string
   @Prop isOn: boolean
   @State c: ThemeSlots = DEFAULT_SLOTS
@@ -20,12 +22,12 @@ export struct PointerCoordinateToggle {
 
   build() {
     Row() {
-      Text(this.label).fontSize(12).fontColor(this.c.text).layoutWeight(1).maxLines(2)
+      Text(this.label).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).layoutWeight(1).maxLines(2)
       Toggle({ type: ToggleType.Switch, isOn: this.isOn })
         .width(46).height(28)
         .onChange((value: boolean) => { this.onToggle(value) })
     }
-      .width('100%').padding({ left: 10, right: 8, top: 7, bottom: 7 })
+      .width('100%').padding({ left: 10, right: 8, top: this.readableUi ? 9 : 7, bottom: this.readableUi ? 9 : 7 })
       .backgroundColor(this.isOn ? this.c.soft : this.c.bg)
       .border({ width: 1, color: this.isOn ? this.c.soft : this.c.border })
       .borderRadius(UI_RADIUS_CONTROL)

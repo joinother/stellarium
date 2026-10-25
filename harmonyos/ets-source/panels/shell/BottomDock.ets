@@ -103,7 +103,7 @@ export struct BottomDock {
         .opacity(this.glowOpacity)
         .hitTestBehavior(HitTestMode.None)
     }
-      .height(this.isExpanded ? 48 : 66)
+      .height(this.isExpanded ? this.itemHeight + 10 : 66)
       .width(this.isExpanded ? '100%' : this.widthPercent + '%')
       .backgroundEffect({
         radius: this.isGlass ? 30 : 24,
@@ -117,8 +117,6 @@ export struct BottomDock {
       .shadow({ radius: this.isExpanded ? 18 : 28, color: this.c.shadowSoft, offsetX: 0, offsetY: this.isExpanded ? 8 : 14 })
       .alignSelf(ItemAlign.Center)
       .opacity(this.chromeOpacity * (this.panelVisible ? 1.0 : 0.985))
-      .scale({ x: this.chromeOpacity < 1 ? 0.98 : (this.panelVisible ? 1.0 : 0.985), y: this.chromeOpacity < 1 ? 0.98 : (this.panelVisible ? 1.0 : 0.985) })
-      .translate({ y: this.panelVisible ? 0 : 2 })
       .animation({ duration: 300, curve: curves.springMotion(0.46, 0.86) })
       .onTouch((event: TouchEvent) => {
         this.updateGlow(event)

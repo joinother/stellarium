@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import { panelFontSize } from '../../common/ui/UiTypography'
 import { I18n } from '../../pages/I18n'
 import { OcularInstrumentItem } from '../../pages/MainWindowModels'
 import { TelescopeStore } from '../../state/TelescopeStore'
@@ -17,6 +18,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 // 按钮高 48（minWidth 116、maxWidth 180）/ 选中 #FFFFFF 与 #D8EEFF。
 @Component
 export struct OcularSelector {
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @ObjectLink store: TelescopeStore
   @Prop kind: string
   @Prop label: string
@@ -30,8 +32,8 @@ export struct OcularSelector {
   build() {
     Column({ space: 6 }) {
       Row() {
-        Text(this.label).fontSize(12).fontColor(this.c.sub).layoutWeight(1)
-        Text(this.store.ocularSelInfo(this.kind).countText).fontSize(10).fontColor(this.c.sub)
+        Text(this.label).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.sub).layoutWeight(1)
+        Text(this.store.ocularSelInfo(this.kind).countText).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
       }.width('100%').padding({ left: 2, right: 2 })
       if (this.store.ocularInstrumentItems(this.kind).length === 0 && this.kind !== 'Lens') {
         Text(I18n.t('ocular_no_devices')).fontSize(11).fontColor(this.c.sub)
@@ -53,10 +55,10 @@ export struct OcularSelector {
               Button() {
                 Column({ space: 2 }) {
                   Text(item.name.length > 0 ? item.name : this.label)
-                    .fontSize(11).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.onAccent : this.c.text)
+                    .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.onAccent : this.c.text)
                     .fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                   Text(this.store.ocularInstrumentSummary(this.kind, item))
-                    .fontSize(10).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.chipInactiveText : this.c.sub)
+                    .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.store.ocularInstrumentIndex(this.kind) === item.index ? this.c.chipInactiveText : this.c.sub)
                     .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
                 }.alignItems(HorizontalAlign.Start)
               }

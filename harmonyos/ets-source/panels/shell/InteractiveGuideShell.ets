@@ -33,6 +33,8 @@ export struct InteractiveGuideShell {
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onSkyTouch: (event: TouchEvent) => void = () => {}
+  onSkyMouse: (event: MouseEvent) => void = () => {}
+  onSkyAxis: (event: AxisEvent) => void = () => {}
   onControlDragTouch: (event: TouchEvent) => void = () => {}
   onAction: (action: string) => void = () => {}
 
@@ -45,6 +47,12 @@ export struct InteractiveGuideShell {
       Stack() { }.width('100%').height('100%').hitTestBehavior(HitTestMode.Block)
         .onTouch((event: TouchEvent) => {
           if (this.guidePhase === 'exploring') this.onSkyTouch(event)
+        })
+        .onMouse((event: MouseEvent) => {
+          if (this.guidePhase === 'exploring') this.onSkyMouse(event)
+        })
+        .onAxisEvent((event: AxisEvent) => {
+          if (this.guidePhase === 'exploring') this.onSkyAxis(event)
         })
       Column({ space: 8 }) {
         Row({ space: 8 }) {

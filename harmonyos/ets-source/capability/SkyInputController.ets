@@ -1,6 +1,6 @@
 // 天空输入控制器。
 //
-// 统一处理天空区域的鼠标 / 键盘 / 滚轮轴 / 点按序列 / 惯性，以及触屏主路径
+// 统一处理天空区域的鼠标 / 滚轮轴 / 点按序列 / 惯性，以及触屏主路径
 // （dragFollowAlpha / emitFluidDrag / handleSkyTouch）。
 //
 // 可观测状态（触摸反馈点 skyTouchFeedback / skyTouchX/Y 等）与跨 handler 共用的手势归属标志
@@ -12,12 +12,11 @@
 // panBy / beginSkyGesture / endPinch / startPanInertia / stopPanInertia / setActionChecked）经 CommandPort；
 // 热路径 isUiPoint / skyZoomButtonAt / dockActionAt 与全部宿主保留动作（路由 setPanel/closePanel、
 // zoomStep / moveToSelectedObject / 选中入口 / 详情刷新收放 / Dock 动作 / 陀螺退出 / 音乐开关 /
-// 面板拖动落盘等）一律经 SkyInputHostHooks 具名回注；NightModeStore 以实例引用持有（键盘 N 键切换）。
+// 面板拖动落盘等）一律经 SkyInputHostHooks 具名回注。
 import hilog from '@ohos.hilog'
-import { KeyCode } from '@kit.InputKit'
 import { CommandPort } from '../bridge/CommandPort'
 import { NightModeStore } from '../state/NightModeStore'
-import { ShellAction, StellariumBridgeResponse } from '../pages/StellariumTypes'
+import { ShellAction } from '../pages/StellariumTypes'
 import { clamp, distance } from '../common/derive/astro'
 import { touchWindowX, touchWindowY, panelTop, panelLeft, panelRight, isDockPoint, compactTopQuickY } from '../common/derive/geometry'
 
@@ -27,6 +26,8 @@ export interface SkyInputHostHooks {
   flashHint(text: string): void
   skyWidth(): number
   skyHeight(): number
+  navigationMouseEnabled(): boolean
+  navigationMouseZoomEnabled(): boolean
   gyroscopeEnabled(): boolean
   stopGyroscope(updateStatus: boolean): void
   angleMeasureEnabled(): boolean
@@ -103,7 +104,6 @@ enum SkyGestureOwner { None, Sky, Ui, PanelDrag }
 
 export class SkyInputController {
   private commandPort: CommandPort
-  private nightModeStore: NightModeStore
   private hooks: SkyInputHostHooks
 
   // ── 逐帧/草稿字段（留控制器，不入被观察 store）──
@@ -158,17 +158,23 @@ export class SkyInputController {
   private mouseSkyLastX: number = 0
   private mouseSkyLastY: number = 0
   private mouseSkyLastSampleMs: number = 0
+  private lastPointerPositionMs: number = 0
+  private axisOwner: SkyGestureOwner = SkyGestureOwner.None
+  private axisPinchActive: boolean = false
+  private axisChanged: boolean = false
+  private axisPinchLastScale: number = 1
+  private axisBoundaryLogCount: number = 0
 
-  constructor(commandPort: CommandPort, nightModeStore: NightModeStore, hooks: SkyInputHostHooks) {
+  constructor(commandPort: CommandPort, _nightModeStore: NightModeStore, hooks: SkyInputHostHooks) {
     this.commandPort = commandPort
-    this.nightModeStore = nightModeStore
     this.hooks = hooks
   }
 
   // ── 宿主生命周期收口 ──
   // 唯一的定时器句柄 skyInertiaTimer 仅在 stopSkyInertia() 内被 clearInterval；
-  // stop() 为生命周期钩子（面板/后台/ aboutToDisappear 等价于 stopSkyInertia()）。
   stop(): void {
+    this.finishSkyAxis(true)
+    this.finishSkyMouse(true)
     this.stopSkyInertia()
   }
 
@@ -209,9 +215,27 @@ export class SkyInputController {
   }
 
   handleSkyMouse(event: MouseEvent): void {
-    const x = event.windowX
-    const y = event.windowY
-    if (event.action === 0 && event.button === 0) {
+    if (event.action === MouseAction.CANCEL) {
+      this.finishSkyMouse(true)
+      return
+    }
+    const x = event.x
+    const y = event.y
+    if (!Number.isFinite(x) || !Number.isFinite(y)) { return }
+    if (event.action === MouseAction.Move && !this.hooks.isUiPoint(x, y)) {
+      const now = Date.now()
+      if (now - this.lastPointerPositionMs >= 32) {
+        this.lastPointerPositionMs = now
+        this.commandPort.fire('setPointerPosition', Math.round(x).toString() + '|' + Math.round(y).toString())
+      }
+    }
+    if (!this.hooks.navigationMouseEnabled()) {
+      this.finishSkyMouse(true)
+      return
+    }
+    if (event.action === MouseAction.Press && event.button === MouseButton.Left) {
+      this.finishSkyAxis(true)
+      this.finishSkyMouse(true)
       this.mouseSkyPressed = !this.hooks.isUiPoint(x, y)
       if (!this.mouseSkyPressed) { this.resetSkyTapSequence() }
       this.mouseSkyMoved = false
@@ -220,10 +244,20 @@ export class SkyInputController {
       this.mouseSkyLastX = x
       this.mouseSkyLastY = y
       this.mouseSkyLastSampleMs = Date.now()
-      if (this.mouseSkyPressed) { this.stopSkyInertia() }
+      this.dragVelocitySampleValid = false
+      if (this.mouseSkyPressed) {
+        this.stopSkyInertia()
+        this.hooks.cancelSelectedObjectUiChange()
+        this.commandPort.fire('beginSkyGesture')
+        this.hooks.pauseDetailRefreshForSkyDrag()
+      }
       return
     }
-    if (event.action === 2 && this.mouseSkyPressed) {
+    if (event.action === MouseAction.Move && this.mouseSkyPressed) {
+      if (event.pressedButtons !== undefined && event.pressedButtons.indexOf(MouseButton.Left) < 0) {
+        this.finishSkyMouse(true)
+        return
+      }
       const moveDistance = distance(x, y, this.mouseSkyStartX, this.mouseSkyStartY)
       if (moveDistance > 3) {
         this.resetSkyTapSequence()
@@ -238,6 +272,7 @@ export class SkyInputController {
         const vy = (y - this.mouseSkyLastY) / dt
         this.dragVelocityX = this.dragVelocityX * 0.35 + vx * 0.65
         this.dragVelocityY = this.dragVelocityY * 0.35 + vy * 0.65
+        this.dragVelocitySampleValid = dt >= 8 && dt <= 220
         this.commandPort.fire('dragView', Math.round(this.mouseSkyLastX).toString() + '|' +
           Math.round(this.mouseSkyLastY).toString() + '|' + Math.round(x).toString() + '|' + Math.round(y).toString())
         this.mouseSkyLastX = x
@@ -246,8 +281,7 @@ export class SkyInputController {
       }
       return
     }
-    if (event.action === 1 && this.mouseSkyPressed) {
-      this.mouseSkyPressed = false
+    if (event.action === MouseAction.Release && event.button === MouseButton.Left && this.mouseSkyPressed) {
       if (!this.mouseSkyMoved && !this.hooks.isUiPoint(x, y)) {
         this.handleSkyTap(x, y)
       } else if (this.mouseSkyMoved) {
@@ -257,121 +291,131 @@ export class SkyInputController {
         }
         this.startSkyInertia()
       }
+      this.finishSkyMouse(false)
     }
+  }
+
+  private finishSkyMouse(cancelled: boolean): void {
+    if (!this.mouseSkyPressed) { return }
+    this.mouseSkyPressed = false
+    if (cancelled) {
+      this.stopSkyInertia()
+      this.resetSkyTapSequence()
+    } else if (this.mouseSkyMoved) {
+      this.hooks.scheduleRecordingViewCheckpoint(this.nativeSkyInertiaActive ? 1100 : 180)
+    }
+    this.mouseSkyMoved = false
+    this.hooks.resumeDetailRefreshAfterSkyDrag()
+  }
+
+  private finishSkyAxis(cancelled: boolean): void {
+    if (this.axisPinchActive) {
+      this.commandPort.fire('endPinch')
+      this.hooks.scheduleSkyTextureStatusCheck()
+      this.hooks.requestFieldOfView((fov: number): void => {
+        this.hooks.setFovSliderValue(fov)
+        this.hooks.setCurrentFovText(fov.toFixed(1) + '°')
+      })
+    }
+    if (this.axisOwner === SkyGestureOwner.Sky) {
+      this.hooks.resumeDetailRefreshAfterSkyDrag()
+      if (!cancelled && this.axisChanged) { this.hooks.scheduleRecordingViewCheckpoint(180) }
+    }
+    this.axisOwner = SkyGestureOwner.None
+    this.axisPinchActive = false
+    this.axisPinchLastScale = 1
+    this.axisChanged = false
+  }
+
+  private skyAxisPinchScale(event: AxisEvent): number {
+    let scale = event.axisPinch ?? 0
+    if (!Number.isFinite(scale) || scale <= 0) {
+      try { scale = event.getPinchAxisScaleValue() } catch (_) { scale = 0 }
+    }
+    return Number.isFinite(scale) && scale > 0 ? scale : 0
   }
 
   handleSkyAxis(event: AxisEvent): void {
-    const x = event.windowX
-    const y = event.windowY
-    if (this.hooks.isUiPoint(x, y)) { return }
-    const pinchScale = event.getPinchAxisScaleValue()
-    if (pinchScale > 0 && Math.abs(pinchScale - 1) > 0.001) {
-      this.commandPort.fire('zoomBy', pinchScale.toFixed(4) + '|0')
+    if (this.axisBoundaryLogCount < 32 &&
+      (event.action === AxisAction.BEGIN || event.action === AxisAction.END || event.action === AxisAction.CANCEL)) {
+      this.axisBoundaryLogCount += 1
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[SKY_AXIS] sourceTool=%{public}d action=%{public}d pinch=%{public}s horizontal=%{public}s vertical=%{public}s x=%{public}s y=%{public}s owner=%{public}d ui=%{public}s',
+        event.sourceTool, event.action, this.skyAxisPinchScale(event).toString(),
+        event.getHorizontalAxisValue().toString(), event.getVerticalAxisValue().toString(),
+        event.x.toString(), event.y.toString(), this.axisOwner, this.hooks.isUiPoint(event.x, event.y).toString())
+    }
+    if (event.action === AxisAction.CANCEL) {
+      this.finishSkyAxis(true)
       return
     }
+    const ending = event.action === AxisAction.END
+    if (!ending && event.action !== AxisAction.BEGIN && event.action !== AxisAction.UPDATE) { return }
+    if (event.action === AxisAction.BEGIN) { this.finishSkyAxis(true) }
+    const x = event.x
+    const y = event.y
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      if (ending) { this.finishSkyAxis(false) }
+      return
+    }
+    const pinchScale = this.skyAxisPinchScale(event)
     const horizontal = event.getHorizontalAxisValue()
     const vertical = event.getVerticalAxisValue()
-    if (event.scrollStep !== undefined) {
-      if (Math.abs(vertical) > 0.001) {
-        const scale = vertical > 0 ? 1.12 : 0.89
-        this.commandPort.fire('zoomBy', scale.toFixed(3) + '|0')
+    const wheel = event.sourceTool === SourceTool.MOUSE ||
+      (event.sourceTool === SourceTool.Unknown && Number.isFinite(event.scrollStep ?? 0) && (event.scrollStep ?? 0) > 0)
+    if (wheel && pinchScale === 0 && !this.axisPinchActive) {
+      if (ending) { this.finishSkyAxis(false); return }
+      if (this.hooks.navigationMouseZoomEnabled() && !this.hooks.isUiPoint(x, y) &&
+        Number.isFinite(vertical) && Math.abs(vertical) > 0.001) {
+        this.stopSkyInertia()
+        this.resetSkyTapSequence()
+        this.hooks.cancelSelectedObjectUiChange()
+        this.hooks.zoomStep(vertical > 0 ? 1.12 : 0.89)
       }
       return
     }
-    if (Math.abs(horizontal) > 0.001 || Math.abs(vertical) > 0.001) {
-      this.commandPort.fire('panBy', (-horizontal * 28).toFixed(2) + '|' +
-        (-vertical * 28).toFixed(2) + '|' + Math.round(this.hooks.skyWidth()).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
-    }
-  }
-
-  // 提取 Ctrl/Alt/Shift 前缀，拼成引擎 StelActionMgr 认识的组合键名。
-  private keyboardModifierPrefix(event: KeyEvent): string {
-    const modifiers: string[] = []
-    try {
-      if (event.getModifierKeyState && event.getModifierKeyState(['Ctrl'])) modifiers.push('CTRL')
-      if (event.getModifierKeyState && event.getModifierKeyState(['Alt'])) modifiers.push('ALT')
-      if (event.getModifierKeyState && event.getModifierKeyState(['Shift'])) modifiers.push('SHIFT')
-    } catch (_) { }
-    return modifiers.length === 0 ? '' : modifiers.join('+') + '+'
-  }
-
-  // 把 ArkUI 键码折算成与快捷键编辑器一致的键名。
-  private keyboardToken(event: KeyEvent): string {
-    switch (event.keyCode) {
-      case KeyCode.KEYCODE_DPAD_UP: return 'UP'
-      case KeyCode.KEYCODE_DPAD_DOWN: return 'DOWN'
-      case KeyCode.KEYCODE_DPAD_LEFT: return 'LEFT'
-      case KeyCode.KEYCODE_DPAD_RIGHT: return 'RIGHT'
-      case KeyCode.KEYCODE_PAGE_UP: return 'PAGEUP'
-      case KeyCode.KEYCODE_PAGE_DOWN: return 'PAGEDOWN'
-      case KeyCode.KEYCODE_PLUS: return 'PLUS'
-      case KeyCode.KEYCODE_EQUALS: return 'EQUALS'
-      case KeyCode.KEYCODE_MINUS: return 'MINUS'
-      case KeyCode.KEYCODE_SPACE: return 'SPACE'
-      case KeyCode.KEYCODE_ENTER: return 'ENTER'
-      case KeyCode.KEYCODE_ESCAPE: return 'ESC'
-      case KeyCode.KEYCODE_DEL: return 'BACKSPACE'
-      case KeyCode.KEYCODE_FORWARD_DEL: return 'DELETE'
-      default: {
-        const text = String(event.keyText ?? '').trim().toUpperCase()
-        if (text === 'ARROWUP') return 'UP'
-        if (text === 'ARROWDOWN') return 'DOWN'
-        if (text === 'ARROWLEFT') return 'LEFT'
-        if (text === 'ARROWRIGHT') return 'RIGHT'
-        if (text === ' ') return 'SPACE'
-        if (text.length > 0) return text.replace(/\s+/g, '')
-        return ''
+    if (event.sourceTool !== SourceTool.TOUCHPAD && event.sourceTool !== SourceTool.Unknown && !wheel) { return }
+    if (this.axisOwner === SkyGestureOwner.None) {
+      if (ending) { return }
+      const disabled = !this.hooks.navigationMouseEnabled() && !this.hooks.navigationMouseZoomEnabled()
+      this.axisOwner = disabled || this.hooks.isUiPoint(x, y) ? SkyGestureOwner.Ui : SkyGestureOwner.Sky
+      if (this.axisOwner === SkyGestureOwner.Sky) {
+        this.finishSkyMouse(true)
+        this.stopSkyInertia()
+        this.resetSkyTapSequence()
+        this.hooks.cancelSelectedObjectUiChange()
+        this.commandPort.fire('beginSkyGesture')
+        this.hooks.pauseDetailRefreshForSkyDrag()
       }
     }
+    if (this.axisOwner === SkyGestureOwner.Sky) {
+      const dimensions = Math.max(1, Math.round(this.hooks.skyWidth())).toString() + '|' +
+        Math.max(1, Math.round(this.hooks.skyHeight())).toString()
+      if (pinchScale > 0 && this.hooks.navigationMouseZoomEnabled()) {
+        const anchor = '|' + x.toFixed(2) + '|' + y.toFixed(2) + '|' + dimensions
+        if (!this.axisPinchActive) {
+          this.commandPort.fire('zoomBy', '1|1' + anchor)
+          this.axisPinchActive = true
+        }
+        if (pinchScale !== this.axisPinchLastScale) {
+          this.commandPort.fire('zoomBy', pinchScale.toString() + '|0' + anchor)
+          this.axisPinchLastScale = pinchScale
+          this.axisChanged = true
+        }
+      } else if (pinchScale === 0 && !this.axisPinchActive && this.hooks.navigationMouseEnabled() &&
+        Number.isFinite(horizontal) && Number.isFinite(vertical) &&
+        (Math.abs(horizontal) > 0.001 || Math.abs(vertical) > 0.001)) {
+        if (this.hooks.gyroscopeEnabled()) {
+          this.hooks.stopGyroscope(true)
+          this.hooks.flashHint('已退出陀螺仪')
+        }
+        this.commandPort.fire('panBy', (-horizontal).toFixed(2) + '|' + (-vertical).toFixed(2) + '|' + dimensions)
+        this.axisChanged = true
+      }
+    }
+    if (ending) { this.finishSkyAxis(false) }
   }
 
-  // 引擎未接受该键（无绑定动作）时的本地回落。
-  private fallbackKeyboardToken(token: string): void {
-    const width = Math.round(this.hooks.skyWidth()).toString()
-    const height = Math.round(this.hooks.skyHeight()).toString()
-    const pan = (x: number, y: number): void => {
-      this.commandPort.fire('panBy', x.toString() + '|' + y.toString() + '|' + width + '|' + height)
-    }
-    switch (token) {
-      case 'UP': pan(0, -80); break
-      case 'DOWN': pan(0, 80); break
-      case 'LEFT': pan(-80, 0); break
-      case 'RIGHT': pan(80, 0); break
-      case 'PAGEUP': this.hooks.zoomStep(0.8); break
-      case 'PAGEDOWN': this.hooks.zoomStep(1.25); break
-      case 'PLUS':
-      case 'EQUALS': this.hooks.zoomStep(0.8); break
-      case 'MINUS': this.hooks.zoomStep(1.25); break
-      case 'SPACE': this.hooks.centerSelectedObjectFromKeyboard(); break
-      case 'ENTER': this.hooks.moveToSelectedObject(); break
-      case 'F': this.hooks.setPanel('search'); break
-      case 'N':
-        this.nightModeStore.nightMode = !this.nightModeStore.nightMode
-        this.hooks.persistNightMode()
-        this.commandPort.fire('setActionChecked', 'actionShow_Night_Mode|' + (this.nightModeStore.nightMode ? '1' : '0'))
-        break
-      default: break
-    }
-  }
-
-  handleSkyKey(event: KeyEvent): boolean {
-    if (this.hooks.keyboardTextInputFocused()) { return false }
-    if (event.type !== 0) { return false }
-    const token = this.keyboardToken(event)
-    if (token.length === 0) return false
-    if (token === 'ESC') {
-      if (this.hooks.modelImmersive()) this.hooks.setModelImmersive(false)
-      else this.hooks.closePanel()
-      return true
-    }
-    // 先把组合键交给引擎的 StelActionMgr（用户自定义快捷键在此生效）；
-    // 引擎未接受时回落到本地默认行为。
-    const payload = this.keyboardModifierPrefix(event) + token
-    this.commandPort.requestInteractive('sendKey', payload, (result: StellariumBridgeResponse) => {
-      if (result.accepted !== true) this.fallbackKeyboardToken(token)
-    }, () => { this.fallbackKeyboardToken(token) })
-    return true
-  }
 
   // The floating panel sits above the sky touch surface.  Keep its gestures
   // owned by ArkUI so a Slider/Scroll drag can never become a sky pan.
@@ -450,12 +494,15 @@ export class SkyInputController {
   }
 
   handleSkyTouch(event: TouchEvent): void {
+    if (event.source === SourceType.Mouse) { return }
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
     if (points.length === 0) {
       return
     }
 
     if (event.type === TouchType.Down) {
+      this.finishSkyAxis(true)
+      this.finishSkyMouse(true)
       this.stopSkyInertia()
       const allowTouchFeedback = !this.hooks.panelVisible()
       const downX = touchWindowX(points[0])

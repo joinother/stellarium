@@ -69,7 +69,7 @@
     "common/ui/AppFilingInfo.ets",
     "common/ui/ArchaeoToggleRow.ets",
     "common/ui/ChromeGeometry.ets",
-    "common/ui/GlassMaterial.ets",
+    "common/ui/DockGeometry.ets",
     "common/ui/GraphLoadingRow.ets",
     "common/ui/HierColumn.ets",
     "common/ui/IconTint.ets",
@@ -82,6 +82,7 @@
     "common/ui/ShellIcons.ets",
     "common/ui/SkyCultureDescriptionBlockView.ets",
     "common/ui/UiTokens.ets",
+    "common/ui/UiTypography.ets",
     "form/AstronomyCardSurface.ets",
     "form/SkyInstrumentCard.ets",
     "form/SkyInstrumentCompactCard.ets",
@@ -359,6 +360,7 @@
     "search-browser-scroll",
     "search-category-picker",
     "search-filter-picker",
+    "sky-keyboard-target",
     "skyZoomInButton",
     "skyZoomOutButton",
     "video-frames-share"
@@ -383,11 +385,11 @@
     "recording-share-",
     "search-category-"
   ],
-  "totalIdAnchors": 50,
+  "totalIdAnchors": 51,
   "count": {
     "panels": 35,
-    "staticIds": 29,
+    "staticIds": 30,
     "dynamicIdPrefixes": 18,
-    "totalIdAnchors": 50
+    "totalIdAnchors": 51
   }
 }

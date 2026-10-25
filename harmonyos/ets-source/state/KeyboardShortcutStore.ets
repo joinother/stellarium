@@ -10,4 +10,5 @@ export class KeyboardShortcutStore {
   keyboardShortcutPrimary: string = ''
   keyboardShortcutAlternate: string = ''
   keyboardShortcutsLoading: boolean = false
+  skyKeyboardFocused: boolean = false
 }

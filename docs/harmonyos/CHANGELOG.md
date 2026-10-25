@@ -1,5 +1,14 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-25] Codex - PR 合并与 PC Dock/字体回退修复
+
+- **修改内容：** 合并 fork PR #6 的天空文化引用修复和遗漏的 10 月 14 日研究文档；恢复 Dock 局部坐标命中、共享绘制几何、展开态字号/图标尺寸，以及拆分组件丢失的 PC 文本适配。
+- **后续修复：** 手机布局的面板/详情卡和 Dock 共享安全底线；鼠标/触控板绑定到星图表面，悬停坐标实时更新，区分双指平移与滚轮缩放并补齐捏合生命周期；独立 Text 键盘焦点叶子隔离编辑输入，原生方向/缩放键保持到松开，教程十种语言同步校正。
+- **修改原因：** 用户报告合并后 Dock 难以触摸、字体再次变小。旧备份仍在历史中，问题是组件拆分时遗漏适配；#6 本身不修改 Dock。
+- **构建结果：** Default Debug assembleHap 成功；几何、字号、触控板静态契约及 UI anchor 检查通过。真机验收记录见 `testing/PC-MERGE-REGRESSION-2026-10-25.md`。
+- **10 月 26 日续验：** 原生与 ArkTS 完整构建成功并安装 MateBook；鼠标悬停/拖动/滚轮、系统注入捏合、方向键和 PageUp 连续导航、搜索输入 Delete/Backspace、Ctrl+N 及自定义 Ctrl+Shift+Y 均观察到预期效果。双指滚动专项另用 TestKit；系统注入与物理触控板手感分别记录。
+- **审核反馈：** 修正实况窗、代理提醒和锁屏卡片为已拒绝，新增 `release/AGC-CAPABILITY-REJECTION-REMEDIATION-2026-10-25.md`；明确真实业务范围、所缺材料和尺寸限制，未重新提交申请。
+
 ## [2026-10-22] 修复恢复默认后首次启动闪退
 
 - **现象**：设置 → 主设置 → 重置 → 恢复（应用自动退出）后，再次打开应用闪退。
