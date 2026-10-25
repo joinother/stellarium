@@ -26,8 +26,9 @@ export interface SkyCultureSettingsHostHooks {
 // 目录筛选、领地地图与详情元信息字段及其纯计算，由面板组件经 @ObjectLink 观察；桥经 attachPort
 // 注入 CommandPort，本 store 自持三类加载器，配色目标 / 地图重绘 / 当前文化 id 经 hooks 回注。
 //
-// 只放数据与纯计算，不 import ArkUI / NAPI。进度驱动的分张解码结果（skyCultureArtStates /
-// skyCultureArtThumbnailPixelMaps）因高频渐进写入不入被观察 store，留宿主以 @Prop 传入。
+// 只放数据与纯计算，不 import ArkUI / NAPI。进度驱动的分张解码状态 skyCultureArtStates
+// 因高频渐进写入不入被观察 store，留宿主以 @Prop 传入；缩略图 PixelMap 走
+// SkyCultureViewStore.artThumbnails（@ObjectLink 引用语义）。
 // 文化列表与当前选择跨域共享，亦留宿主。
 @Observed
 export class SkyCultureSettingsStore {

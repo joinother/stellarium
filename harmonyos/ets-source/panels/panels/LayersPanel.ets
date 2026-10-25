@@ -1,6 +1,5 @@
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
-import { image } from '@kit.ImageKit'
 import { SkyCultureArtItem, TabItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
 import { AtmosphereStore } from '../../state/AtmosphereStore'
@@ -41,7 +40,6 @@ export struct LayersPanel {
   @Prop viewTabContentOffsetX: number
   @Prop layerTabs: TabItem[]
   @Prop skyCultureArtStates: Record<string, string> = {}
-  @Prop skyCultureArtThumbnailPixelMaps: Record<string, image.PixelMap> = {}
   @Prop narrationParagraphs: Array<string> = []
   @State private c: ThemeSlots = DEFAULT_SLOTS
   mapContextSettings: RenderingContextSettings = new RenderingContextSettings(true)
@@ -169,7 +167,6 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               skyCultureViewStore: this.skyCultureViewStore,
               artStates: this.skyCultureArtStates,
-              artThumbnailPixelMaps: this.skyCultureArtThumbnailPixelMaps,
               narrationParagraphs: this.narrationParagraphs,
               mapContext: this.mapContext,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },

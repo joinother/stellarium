@@ -19,9 +19,9 @@ export interface SkyCultureViewHostHooks {
 // 详情加载与失效经 hooks 回注。
 //
 // 只放数据与纯计算，不 import UI / NAPI（image 仅用于 PixelMap 类型）。分张解码的
-// skyCultureArtStates / skyCultureArtThumbnailPixelMaps 因高频渐进写入留宿主；
-// 单张大图 artPreviewPixelMap 每张只写一次，且叠层必须以引用语义拿到 PixelMap——
-// @Prop 会拷贝 PixelMap，真机实测导致 Image.onError，故收进本 store。
+// skyCultureArtStates 因高频渐进写入留宿主；缩略图 artThumbnails 与单张大图
+// artPreviewPixelMap 一样必须以引用语义拿到 PixelMap——@Prop 会拷贝 PixelMap，
+// 真机实测导致 Image 空白/onError，故收进本 store。
 @Observed
 export class SkyCultureViewStore {
   // —— 详情加载三态 ——
@@ -40,6 +40,8 @@ export class SkyCultureViewStore {
   // —— 离线艺术图列表 ——
   artItems: Array<SkyCultureArtItem> = []
   artExpanded: boolean = false
+  // 缩略图：以 @ObjectLink store 字段持有 PixelMap 引用；@Prop 会拷贝 PixelMap，真机实测导致 Image 空白/onError。
+  artThumbnails: Record<string, image.PixelMap> = {}
 
   // —— 艺术图预览弹层标记与解码结果 ——
   artPreviewOpen: boolean = false
