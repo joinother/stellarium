@@ -50,7 +50,7 @@ export struct OcularsPanel {
                 Text(I18n.t('ocular_select_target_title')).fontSize(12).fontColor(this.c.text).fontWeight(FontWeight.Medium)
                 Text(I18n.t('ocular_select_target_hint')).fontSize(10).fontColor(this.c.sub).maxLines(2)
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              Button(I18n.t('ocular_choose_target')).fontSize(11).fontColor(this.c.textStrong).height(32)
+              Button(I18n.t('ocular_choose_target')).fontSize(11).fontColor(this.c.onAccent).height(32)
                 .padding({ left: 12, right: 12 }).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
                 .onClick(() => { this.onOpenSubPanel('search') })
             }.width('100%').padding({ left: 12, right: 10, top: 10, bottom: 10 })

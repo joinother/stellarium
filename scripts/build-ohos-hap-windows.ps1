@@ -79,7 +79,7 @@ $RepoRoot     = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $ProjectRoot  = Join-Path $RepoRoot 'build\libstellarium-harmonyos'
 $EngineBuild  = Join-Path $RepoRoot 'build'
 
-$DevecoHome   = if ($env:DEVECO_HOME)     { $env:DEVECO_HOME }     else { 'D:\Program Files\Huawei\DevEco Studio' }
+$DevecoHome   = if ($env:DEVECO_HOME)     { $env:DEVECO_HOME }     else { 'E:\code\Huawei\DevEco Studio' }
 $QtOhos       = if ($env:QT_OHOS_PREFIX)  { $env:QT_OHOS_PREFIX }  else { 'E:\Qt\6.12.0\harmonyos_arm64_v8a' }
 $QtHost       = if ($env:QT_HOST_PATH)    { $env:QT_HOST_PATH }    else { 'E:\Qt\6.12.0\mingw_64' }
 $SdkNative    = if ($env:OHOS_NATIVE_ROOT){ $env:OHOS_NATIVE_ROOT }else { Join-Path $DevecoHome 'sdk\default\openharmony\native' }

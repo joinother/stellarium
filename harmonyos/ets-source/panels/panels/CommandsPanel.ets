@@ -68,7 +68,7 @@ export struct CommandsPanel {
         .onChange((value: string) => { this.onPayloadInputChange(value) })
       Row({ space: 6 }) {
         Button(this.commandStore.commandBusy ? '执行中…' : '执行命令').fontSize(11).height(32).padding({ left: 12, right: 12 })
-          .fontColor(this.c.textStrong).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
+          .fontColor(this.c.onAccent).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
           .enabled(!this.commandStore.commandBusy && this.commandStore.commandPendingConfirmation.length === 0)
           .onClick(() => { this.onExecute(false) })
         if (this.commandStore.commandPendingConfirmation.length > 0) {

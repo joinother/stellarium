@@ -121,7 +121,7 @@ export struct TimeSettingsSection {
           .borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onSetStartup('presetCurrent', '1') })
       }.width('100%').padding({ left: 10, right: 8 }).margin({ bottom: 8 })
       Button(I18n.t('time_apply_startup')).fontSize(14).height(42).width('100%')
-        .enabled(!this.pending).fontColor(this.c.textStrong).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
+        .enabled(!this.pending).fontColor(this.c.onAccent).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
         .onClick(() => { this.onSetStartup('applyStartup', '1') })
       Text(I18n.t('time_apply_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding(8)
     }.width('100%')

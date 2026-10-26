@@ -46,7 +46,7 @@ export struct Lx200Panel {
           Text(I18n.t('m_telescope_devices_hint')).fontSize(10).fontColor(this.c.sub).maxLines(2)
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Text('+')
-          .fontSize(20).fontColor(this.c.text).textAlign(TextAlign.Center)
+          .fontSize(20).fontColor(this.c.onAccent).textAlign(TextAlign.Center)
           .width(34).height(34).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_PILL)
           .onClick(() => { this.onBeginNew() })
       }.width('100%')
@@ -170,7 +170,7 @@ export struct Lx200Panel {
         Text(I18n.t('m_telescope_fov_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
 
         Row({ space: 8 }) {
-          Button(I18n.t('m_telescope_save')).fontSize(11).fontColor(this.c.textStrong).height(34).layoutWeight(1)
+          Button(I18n.t('m_telescope_save')).fontSize(11).fontColor(this.c.onAccent).height(34).layoutWeight(1)
             .backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL).enabled(!this.store.lx200Busy)
             .onClick(() => { this.onSave() })
           Button(this.store.lx200EditingNew ? I18n.t('m_telescope_cancel') : I18n.t('m_telescope_delete'))
@@ -199,7 +199,7 @@ export struct Lx200Panel {
             .onClick(() => { this.store.lx200TargetSource = 'screen_center' })
         }.width('100%')
         Row({ space: 8 }) {
-          Button(I18n.t('i0049')).height(34).fontSize(11).fontColor(this.c.textStrong).layoutWeight(1)
+          Button(I18n.t('i0049')).height(34).fontSize(11).fontColor(this.c.onAccent).layoutWeight(1)
             .backgroundColor(this.c.accent).borderRadius(UI_RADIUS_PILL).enabled(!this.store.lx200Busy && !this.store.lx200EditingNew)
             .onClick(() => { this.onGoto() })
           Button(I18n.t('i0050')).height(34).fontSize(11).fontColor(this.c.tertiary).layoutWeight(1)

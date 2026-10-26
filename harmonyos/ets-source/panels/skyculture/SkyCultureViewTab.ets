@@ -600,7 +600,7 @@ export struct SkyCultureViewTab {
                 .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).textAlign(TextAlign.Center)
                 .onChange((value: string) => { this.settings.skyCultureColorInput = value.toUpperCase() })
                 .onSubmit(() => { this.applyCustomColor() })
-              Button('应用').fontSize(10).fontColor(this.c.textStrong).height(30).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
+              Button('应用').fontSize(10).fontColor(this.c.onAccent).height(30).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL)
                 .padding({ left: 9, right: 9 }).onClick(() => { this.applyCustomColor() })
             }.height(34).width('100%').padding({ left: 8, right: 8 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
             Row({ space: 8 }) {

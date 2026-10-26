@@ -66,7 +66,7 @@ export struct MosaicCameraPanel {
           Button(I18n.t('mosaic_camera_use_selected')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1).onClick(() => { this.onSetSetting('setToSelected', '') })
         }.width('100%')
-        Button(I18n.t('mosaic_camera_view')).fontSize(11).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+        Button(I18n.t('mosaic_camera_view')).fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').onClick(() => { this.onSetSetting('viewToCamera', '') })
         Text(I18n.t('mosaic_camera_rotation')).fontSize(12).fontColor(this.c.sub).width('100%')
         Slider({ value: this.mosaicStore.mosaicCameraRotation, min: -360, max: 360, step: 1 })

@@ -35,7 +35,7 @@ export struct AngleMeasurePanel {
             Button(I18n.t('angle_measure_reset')).fontSize(11).fontColor(this.c.text)
               .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).height(32).layoutWeight(1)
               .onClick(() => { this.onReset() })
-            Button(I18n.t('angle_measure_finish')).fontSize(11).fontColor(this.c.textStrong)
+            Button(I18n.t('angle_measure_finish')).fontSize(11).fontColor(this.c.onAccent)
               .backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL).height(32).layoutWeight(1)
               .enabled(!this.store.angleMeasurePending)
               .onClick(() => { this.onToggle(false) })
