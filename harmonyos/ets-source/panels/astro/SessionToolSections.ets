@@ -77,7 +77,7 @@ export struct PointingTestSection {
       }
       Row({ space: 4 }) {
         Button(I18n.t('btn_point_select'))
-          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+          .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onPoint() })
         Button(I18n.t('btn_example_zenith'))
@@ -126,11 +126,11 @@ export struct WatchGyroSection {
       }.width('100%')
       Row({ space: 4 }) {
         Button(this.store.watchTracking ? '指向中…' : '开始指向(跟踪)')
-          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.store.watchTracking ? this.c.warningBg : this.c.accent)
+          .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.store.watchTracking ? this.c.warningBg : this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onStart() })
         Button(I18n.t('btn_stop_lock'))
-          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+          .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onStop() })
       }.width('100%').margin({ top: 4 })
@@ -188,7 +188,7 @@ export struct TonightEventsSection {
       Text(I18n.t('m_tonight_events_hint'))
         .fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
       Button(I18n.t('btn_refresh_tonight'))
-        .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+        .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
         .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
         .onClick(() => { this.onRefresh() })
       if (this.store.tonightHint !== '') {

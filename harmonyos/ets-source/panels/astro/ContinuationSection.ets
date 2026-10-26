@@ -31,7 +31,7 @@ export struct ContinuationSection {
       }
       Row({ space: 8 }) {
         Button(I18n.t('btn_export_session'))
-          .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+          .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
           .onClick(() => { this.onExport() })
         Button(I18n.t('btn_apply_local'))
@@ -40,7 +40,7 @@ export struct ContinuationSection {
           .onClick(() => { this.onApply() })
       }.width('100%').margin({ top: 4 })
       Button(I18n.t('btn_start_continuation'))
-        .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+        .fontSize(13).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
         .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ top: 4 })
         .onClick(() => { this.onHandoff() })
       if (this.json !== '') {

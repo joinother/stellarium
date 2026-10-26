@@ -38,7 +38,7 @@ export struct SkyCultureMakerConstellationEditor {
       Row({ space: 8 }) {
         Text(I18n.format('sky_culture_maker_constellation_count', [this.store.constellations.length.toString()]))
           .fontSize(11).fontColor(this.c.sub).layoutWeight(1)
-        Button(I18n.t('sky_culture_maker_add_constellation')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.accent)
+        Button(I18n.t('sky_culture_maker_add_constellation')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .height(30).borderRadius(UI_RADIUS_CONTROL).padding({ left: 10, right: 10 }).onClick(() => { this.onAdd() })
       }.width('100%')
       if (this.store.constellations.length > 0) {
@@ -136,7 +136,7 @@ export struct SkyCultureMakerConstellationEditor {
           .border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
           .onChange((value: string) => { this.store.hipLine = value })
         Row({ space: 8 }) {
-          Button(I18n.t('sky_culture_maker_add_line')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.accent)
+          Button(I18n.t('sky_culture_maker_add_line')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
             .height(32).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onAddHipLine() })
           Button(I18n.t('sky_culture_maker_add_selected_star')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
             .height(32).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onAddSelectedStar() })

@@ -32,7 +32,7 @@ export struct Lx200ObjectControls {
         Button(I18n.t('i0049'))
           .height(32)
           .fontSize(12)
-          .fontColor(this.c.textStrong)
+          .fontColor(this.c.onAccent)
           .backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_PILL)
           .margin({ right: 8 })
