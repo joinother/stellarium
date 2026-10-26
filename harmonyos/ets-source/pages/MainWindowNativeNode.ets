@@ -1184,6 +1184,9 @@ export struct WindowNativeNode {
   private stateRefreshTimer: number = -1
   private stateRefreshRequestPending: boolean = false
   private stateRefreshQueued: boolean = false
+  // getState 的请求序号：作为 payload 附在命令后，使桥的 consume-on-read 缓存键
+  // 每次刷新唯一。被放弃的轮询链留下的旧快照因此不会被后续刷新消费。
+  private stateRefreshSerial: number = 0
   /** 主界面 Dock 右上的常驻时钟文本（HH:mm），面板未打开时显示。 */
   @State private dockClockText: string = ''
   /** Dock 时钟的独立轻量刷新定时器（1s），不并入时间面板 125ms 高频刷新。 */
@@ -1838,7 +1841,9 @@ export struct WindowNativeNode {
     this.locationCtl().restoreObserverLocation()
     this.timeStore.attachPort(hostPort, () => {})
     this.timeStore.attachHooks({
-      syncNightModeFromEngine: (engineNight: boolean): void => this.nightModeStore.syncNightModeFromEngine(engineNight),
+      // TimeStore 在 getNightMode 首次入队时记录该序号，回包到达时用它校验快照年龄。
+      nightModeEpoch: (): number => this.nightModeStore.nightModeEpoch(),
+      syncNightModeFromEngine: (engineNight: boolean, requestEpoch: number): void => this.nightModeStore.syncNightModeFromEngine(engineNight, requestEpoch),
       applyAtmosphereResponse: (response: StellariumBridgeResponse): void => this.atmosphereStore.applyAtmosphereResponse(response)
     })
     // 设置「配置回读」加载在 settingsCtl()：TimeSettingsStore 为纯数据，
@@ -6910,7 +6915,9 @@ export struct WindowNativeNode {
       return
     }
     this.stateRefreshRequestPending = true
-    this.callInteractive('getState', '', (result) => {
+    const nightEpoch = this.nightModeStore.nightModeEpoch()
+    const stateNonce = (++this.stateRefreshSerial).toString()
+    this.callInteractive('getState', stateNonce, (result) => {
     if (result.selectedInfoMode !== undefined) {
       this.applySelectedInfoMode(result.selectedInfoMode)
     }
@@ -7028,9 +7035,9 @@ export struct WindowNativeNode {
     // The native Stellarium property is authoritative. The QAction is not
     // guaranteed to update when the time-panel uses the direct bridge command.
     if (result.nightMode !== undefined) {
-      this.nightModeStore.syncNightModeFromEngine(result.nightMode === true)
+      this.nightModeStore.syncNightModeFromEngine(result.nightMode === true, nightEpoch)
           } else if (result.actionShow_Night_Mode !== undefined) {
-      this.nightModeStore.syncNightModeFromEngine(result.actionShow_Night_Mode === true)
+      this.nightModeStore.syncNightModeFromEngine(result.actionShow_Night_Mode === true, nightEpoch)
           }
     this.layerStore.flipHoriz = result.actionHorizontal_Flip === true
     this.layerStore.flipVert = result.actionVertical_Flip === true

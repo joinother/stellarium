@@ -14890,7 +14890,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 		if (commandName == "setNightMode")
 		{
-			bool on = (arg.trimmed() == "1" || arg.trimmed().toLower() == "true");
+			// ArkTS 侧在参数后追加 "|<requestEpoch>" 作为请求级缓存键；只解析第一段，
+			// 兼容 CLI 与旧调用（纯 "true"/"1"）。
+			const QString modeArg = arg.section('|', 0, 0).trimmed();
+			bool on = (modeArg == "1" || modeArg.toLower() == "true");
 			// Keep the QAction and the StelApp property in sync. Setting only the
 			// property leaves actionShow_Night_Mode unchecked, and the action/property
 			// reconciliation can silently flip the property back a moment later.

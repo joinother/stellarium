@@ -1,5 +1,11 @@
 # 已知问题列表
 
+## 桥读缓存无 revision，未带请求序号的读仍可能消费旧快照（2026-10-27）
+
+- 夜间模式路径已改为请求级缓存键：宿主的 `getState` payload 带刷新序号；`TimeStore` 在 `getNightMode` 首次入队时记录切换序号，回包到达时用入队序号校验；`setNightMode` payload 追加 `|<requestEpoch>`（C++ 只解析第一段）。旧快照/旧回执不会再被后续逻辑请求消费。
+- 但桥缓存本身仍按 `cmd|arg` 消费，没有全局 revision；`AstroCalcController` / `TimeController` 等直接使用空 payload 的 `getState` 调用仍共享 `getState|` 键，被放弃的轮询链留下的快照可能被后续调用消费，影响它们各自读取的字段。
+- 根治仍需 native 侧给快照加状态 revision，或在 mutation 执行时清读缓存；新增读命令若不带请求序号，会重新引入同类竞态。
+
 ## 托管协议版本更新（2026-09-09，已精简并安装Pad）
 
 - 按用户提供的华为说明，将更新提示交给AGC托管规则；撤回30秒轮询、应用自制重签遮罩和整应用暂停/恢复，不清除旧同意或用户设置。启动、子进程及敏感功能核验保留。

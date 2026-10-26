@@ -235,7 +235,9 @@ UI 开关 → LayerController.applyNightMode → NightModeStore.applyNightMode
 - `LayerController.applyNightMode` 将 `actionShow_Night_Mode` 分流到专用 `applyNightMode` 钩子，**不走**普通 `setLayer` 命令。
 - `setNightMode` C++ 实现优先走 `actionShow_Night_Mode->setChecked(on)`，使 QAction 与 `StelApp` 属性始终一致。
 - `NightModeStore.applyNightMode` 使用 `requestInteractive` + 失败自动重试一次；用回执里的 `night` 直接回写 store。
-- Pending 保护窗口：1 秒（防止旧 `getState` 回包覆盖本地状态）。
+- 新旧判定以 `requestEpoch` 序号为准：每次本地切换递增。宿主 `getState` 的 payload 带刷新序号，使缓存键每次刷新唯一；`TimeStore` 在 `getNightMode` 首次入队时记录序号，回包到达时用入队序号校验；`setNightMode` payload 追加 `|<requestEpoch>`，C++ 只解析第一段。序号过期一律丢弃。
+- `setNightMode` 成功回执与失败重试同样校验序号；终态失败会清空待定窗口。
+- Pending 保护窗口：4 秒（`NIGHT_MODE_PENDING_GUARD_MS`，覆盖两轮 100ms × 15 的轮询预算；仅作兜底，主判据是 `requestEpoch` 与请求级缓存键）。
 
 ## 7. 设置持久化（OHOS 桥接）
 

@@ -12,8 +12,11 @@ const INITIAL_MANUAL_TIME: Date = new Date()
 
 // 宿主 → TimeStore 的加载助手注入（store 不持有他域 store）。
 export interface TimeHostHooks {
+  // 读取当前夜间模式序号：本 store 在 getNightMode 首次入队时记录，
+  // 回包到达时用入队序号校验，过期快照直接丢弃。
+  nightModeEpoch(): number
   // 夜视模式随引擎回报同步（写 NightModeStore + 消费宿主 pendingNightMode 待定窗口）。
-  syncNightModeFromEngine(engineNight: boolean): void
+  syncNightModeFromEngine(engineNight: boolean, requestEpoch: number): void
   // 大气参数回包写入 AtmosphereStore（与宿主 applyAtmosphere 共用同一实现）。
   applyAtmosphereResponse(response: StellariumBridgeResponse): void
 }
@@ -71,6 +74,9 @@ export class TimeStore {
   private seq: number = 0
   private onChanged: (() => void) | null = null
   private hooks: TimeHostHooks | null = null
+  // getNightMode 是同步读取：首次返回 pending（已入队）时记录当时的切换序号，
+  // 下次 tick 消费到缓存回包时用这个序号判断快照是否产生于本地切换之前。
+  private pendingNightReadEpoch: number = -1
 
   // 宿主在 aboutToAppear 注入端口与发布回调；重复注入会覆盖旧值（幂等）。
   attachPort(port: CommandPort, onChanged: () => void): void {
@@ -107,7 +113,18 @@ export class TimeStore {
     if (st.ok === true && st.text !== undefined) this.siderealTimeText = st.text
 
     const nm: StellariumBridgeResponse = port.request('getNightMode', '')
-    if (nm.ok === true) hooks.syncNightModeFromEngine(nm.night === true)
+    if (nm.ok === true) {
+      // 只有本 store 记录过入队的那次读取才可信：回包可能来自上一次 tick 入队、
+      // 之后才执行完的快照，必须用它入队时的序号，而不是消费时的当前序号。
+      // 没有入队记录的回包（例如页面重建前遗留的缓存）直接丢弃，下一 tick 重新读。
+      if (this.pendingNightReadEpoch >= 0) {
+        const nightEpoch = this.pendingNightReadEpoch
+        this.pendingNightReadEpoch = -1
+        hooks.syncNightModeFromEngine(nm.night === true, nightEpoch)
+      }
+    } else if (this.pendingNightReadEpoch < 0) {
+      this.pendingNightReadEpoch = hooks.nightModeEpoch()
+    }
 
     hooks.applyAtmosphereResponse(port.request('getAtmosphereParams', ''))
   }
