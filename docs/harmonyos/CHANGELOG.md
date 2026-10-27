@@ -1,5 +1,14 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-28] Claude Code - 合并上游 Stellarium 26.3 到 OHOS 分支
+
+- **修改文件：** 合并提交 `556bfa45ca`（672 files changed, 1,618,376 insertions(+), 1,305,323 deletions(-)）；关键冲突文件 `CMakeLists.txt`、`src/StelMainView.cpp`、`src/main.cpp`、`src/core/StelSkyCultureMgr.cpp`、`plugins/RemoteControl/*`、`skycultures/egyptian_dendera/description.md`、`po/*`
+- **修改内容：** 基于 `ohos-master` 新建 `merge/upstream-26.3`，合并上游 26.3（`master` `3f23cf3a1a`）；解决 29 个冲突（22 个 po、2 个 RemoteControl、1 个 CMake、1 个 skyculture、3 个 src），保留 OHOS 渲染/启动/构建定制，合并 26.3 的 Object Visibility、AstroCalc/Eclipses、Satellites、RemoteControl OpenAPI、sky culture、脚本与核心改进。
+- **修改原因：** 引入上游 26.3 版本与新特性，同时保持 OHOS 分支现有功能。
+- **构建结果：** 完整引擎交叉编译 + `assembleHap` **BUILD SUCCESSFUL**；signed HAP 720.0 MB；`check-ohos-ui-contract.mjs` 与 `check-ohos-i18n.mjs` 通过。
+- **验证结果：** Windows x86_64 模拟器 Mate 90 Pro 安装/启动成功，UI-only 外壳、Dock、时间面板、快捷面板、中文 UI 正常，无崩溃；星图/Qt 命令桥因 arm64 引擎与 x86_64 模拟器限制不可用。真机测试清单见 `testing/UPSTREAM-26.3-MERGE-SMOKE-2026-10-28.md`，尚未执行真机。
+- **备注：** 合并分支未推送；egyptian 描述中文翻译待补；Object Visibility 插件需确认 OHOS 构建/入口；`data/search/multilingual-sky-aliases.tsv` 构建时重新生成后已在源码树还原，HAP 使用构建时版本。
+
 ## [2026-10-27] Claude Code - 补齐夜间模式切换竞态的请求级缓存键
 
 - **修改文件：** `harmonyos/ets-source/state/NightModeStore.ets`、`harmonyos/ets-source/state/TimeStore.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/ConfigFallbackPanel.ets`、`src/StelMainView.cpp`、`docs/harmonyos/specs/NIGHT-MODE-THEME-ARCHITECTURE.md`、`docs/harmonyos/KNOWN-ISSUES.md`
