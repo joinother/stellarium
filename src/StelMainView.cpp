@@ -17514,8 +17514,8 @@ void StelMainView::resizeEvent(QResizeEvent* event)
 		#if !defined(__OHOS__)
 		if (StelApp::isInitialized() && !isFullScreen())
 		{
-			StelApp::immediateSave("video/screen_w", sz.width());
-			StelApp::immediateSave("video/screen_h", sz.height());
+			StelApp::immediateSave("video/screen_w", int(std::lround(sz.width() *devicePixelRatio())));
+			StelApp::immediateSave("video/screen_h", int(std::lround(sz.height()*devicePixelRatio())));
 		}
 		#endif
 		emit sizeChanged(sz);
@@ -18711,25 +18711,24 @@ bool StelMainView::needsMaxFPS() const
 
 void StelMainView::moveEvent(QMoveEvent * event)
 {
-	const QPoint &pos=event->pos();
 #if defined(__OHOS__)
-	Q_UNUSED(pos);
-#endif
-
-	// We use the glWidget instead of the event, as we want the screen that shows most of the widget.
-	QWindow* win = glWidget->windowHandle();
-	if(win)
-	{
-		stelApp->setDevicePixelsPerPixel(win->devicePixelRatio());
-	}
-
+	Q_UNUSED(event);
 	if (StelApp::isInitialized())
 	{
-#if !defined(__OHOS__)
-		StelApp::immediateSave("video/screen_x", pos.x());
-		StelApp::immediateSave("video/screen_y", pos.y());
-#endif
+		QWindow* win = glWidget ? glWidget->windowHandle() : nullptr;
+		if (win)
+			stelApp->setDevicePixelsPerPixel(win->devicePixelRatio());
 	}
+#else
+	const QPoint &pos=frameGeometry().topLeft(); // including frame!
+	if (StelApp::isInitialized())
+	{
+		const qreal dpp = devicePixelRatio();
+		stelApp->setDevicePixelsPerPixel(dpp);
+		StelApp::immediateSave("video/screen_x", int(std::lround(pos.x()*dpp)));
+		StelApp::immediateSave("video/screen_y", int(std::lround(pos.y()*dpp)));
+	}
+#endif
 }
 
 void StelMainView::closeEvent(QCloseEvent* event)
