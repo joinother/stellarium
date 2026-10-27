@@ -75,10 +75,12 @@ export struct PlacePanel {
         Text(I18n.t('i0016')).fontSize(12).fontColor(this.c.sub).width(72)
         Text(this.altitudeText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
+      ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       LocationPickerPanel({
         pickerStore: this.locationPickerStore,
         locationStore: this.locationStore,
         observerPlanet: this.sessionToolStore.observerPlanet,
+        mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
         expandedLayout: this.expandedLayout,
         skyWidth: this.skyWidth,
         onUseDeviceLocation: () => { this.onUseDeviceLocation() },
@@ -93,23 +95,25 @@ export struct PlacePanel {
         onSelectRegion: (r: string) => { this.onSelectRegion(r) },
         onSelectCity: (c: string) => { this.onSelectCity(c) }
       })
-      LocationMapSection({
-        provider: this.locationStore.locationMapProvider,
-        latitude: this.locationPickerStore.locationPickerLatitude,
-        longitude: this.locationPickerStore.locationPickerLongitude,
-        mapAllowed: this.mapAllowed,
-        onSelectProvider: (provider: string) => { this.onSelectMapProvider(provider) },
-        onPick: (latitude: number, longitude: number) => { this.onPickMap(latitude, longitude) },
-        onFallback: () => { this.onMapFallback() }
-      })
+      if (this.sessionToolStore.observerPlanet === 'Earth') {
+        LocationMapSection({
+          provider: this.locationStore.locationMapProvider,
+          latitude: this.locationPickerStore.locationPickerLatitude,
+          longitude: this.locationPickerStore.locationPickerLongitude,
+          mapAllowed: this.mapAllowed,
+          onSelectProvider: (provider: string) => { this.onSelectMapProvider(provider) },
+          onPick: (latitude: number, longitude: number) => { this.onPickMap(latitude, longitude) },
+          onFallback: () => { this.onMapFallback() }
+        })
+      }
       CityChipsRow({
         store: this.locationStore,
+        observerPlanet: this.sessionToolStore.observerPlanet,
         onSaveCurrent: () => { this.onSaveCurrent() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.onApplyLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (name: string) => { this.onDeleteLocation(name) },
         onChip: (id: string) => { this.onChip(id) }
       })
-      ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       // These are developer scaffolding screens, not release-ready features.
       if (!OFFLINE_APPGALLERY_BUILD) {
         PointingTestSection({ store: this.sessionToolStore, onPoint: () => { this.onPoint() } })
