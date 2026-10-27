@@ -52,6 +52,8 @@ export struct LocationPickerPanel {
   @ObjectLink pickerStore: LocationPickerStore
   @ObjectLink locationStore: LocationStore
   @Prop observerPlanet: string
+  @Prop @Watch('resetMapError') mapTexture: string = ''
+  @State mapFailed: boolean = false
   // 地图几何：是否展开由宿主布局态决定。
   @Prop expandedLayout: boolean
   @Prop skyWidth: number
@@ -88,7 +90,11 @@ export struct LocationPickerPanel {
   }
 
   private locationMapHeight(): number {
-    return this.expandedLayout ? 146 : 156
+    return this.locationMapWidth() / 2
+  }
+
+  private resetMapError(): void {
+    this.mapFailed = false
   }
 
   // 地图点选 → 反算经纬度并写入 picker。
@@ -143,7 +149,8 @@ export struct LocationPickerPanel {
           .fontWeight(FontWeight.Medium)
           .fontColor(this.c.text)
           .layoutWeight(1)
-        Row() {
+        if (this.observerPlanet === 'Earth') {
+          Row() {
             Image($r('app.media.ic_location')).width(14).height(14).supportSvg2(true).colorFilter(tintMatrixFor(this.c.onAccent))
             Text(I18n.t('i0052')).fontSize(11).fontColor(this.c.onAccent).margin({ left: 4 })
           }
@@ -152,6 +159,7 @@ export struct LocationPickerPanel {
           .backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_PILL)
           .onClick(() => { this.onUseDeviceLocation() })
+        }
       }
         .width('100%')
 
@@ -180,10 +188,20 @@ export struct LocationPickerPanel {
 
       if (this.pickerStore.locationPickMode === 'map') {
         Stack() {
-          Image($rawfile('worldmap.jpg'))
-            .width('100%')
-            .height('100%')
-            .objectFit(ImageFit.Contain)
+          if (this.observerPlanet === 'Earth') {
+            Image($rawfile('worldmap.jpg'))
+              .width('100%')
+              .height('100%')
+              .objectFit(ImageFit.Fill)
+          } else if (this.mapTexture.length > 0 && !this.mapFailed) {
+            Image($rawfile('stellarium/textures/' + this.mapTexture))
+              .width('100%').height('100%').objectFit(ImageFit.Fill)
+              .sourceSize({ width: 1240, height: 620 })
+              .onError(() => { this.mapFailed = true })
+          } else {
+            Text(I18n.t('m_planet_map_unavailable')).fontSize(12).fontColor(this.c.sub)
+              .width('76%').textAlign(TextAlign.Center)
+          }
           Row()
             .width('100%')
             .height('100%')
@@ -213,6 +231,7 @@ export struct LocationPickerPanel {
             this.pickerStore.mapRenderHeight = Number(newArea.height)
           })
           .onTouch((event: TouchEvent) => this.handleLocationMapTouch(event))
+          .id('observer-planet-map')
         Text(this.pickerStore.pickerCoordinateText())
           .fontSize(12)
 .fontColor(this.c.sub)

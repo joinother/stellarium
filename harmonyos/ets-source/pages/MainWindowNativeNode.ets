@@ -1954,6 +1954,10 @@ export struct WindowNativeNode {
         this.locationCtl().setLocationMapProvider(String(event['payload'] ?? '').trim())
         return
       }
+      if ((commandName === 'setObserverPlanet' || commandName === 'setLocation' || commandName === 'setLocationCoords' || commandName === 'setLocationByName') && response.ok === true) {
+        this.locationCtl().syncObserverFromNative()
+        return
+      }
       if (commandName === 'setSearchBrowserPage' || commandName === 'selectSearchCategory') {
         if (!this.panelVisible || this.activePanel !== 'search') this.openPanelFromCli('search')
         this.searchStore.searchText = ''

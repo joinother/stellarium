@@ -4632,6 +4632,60 @@ static QJsonObject archiveVideoFrames()
 	return result;
 }
 
+static bool parseOhosLocationCoordinates(const QStringList& parts, int offset, StelLocation& location, QJsonObject& result)
+{
+	bool latitudeOk = false;
+	bool longitudeOk = false;
+	bool altitudeOk = false;
+	const double latitude = parts[offset].toDouble(&latitudeOk);
+	const double longitude = parts[offset + 1].toDouble(&longitudeOk);
+	const int altitude = parts[offset + 2].toInt(&altitudeOk);
+	if (!latitudeOk || !longitudeOk || !altitudeOk
+		|| !std::isfinite(latitude) || !std::isfinite(longitude)
+		|| latitude < -90.0 || latitude > 90.0 || longitude < -180.0 || longitude > 180.0)
+	{
+		result["error"] = "expected finite latitude [-90,90], longitude [-180,180] and integer altitude (metres, int32)";
+		return false;
+	}
+	location.setLatitude(static_cast<float>(latitude));
+	location.setLongitude(static_cast<float>(longitude));
+	location.altitude = altitude;
+	return true;
+}
+
+static void resolveOhosEarthLocation(StelLocation& location)
+{
+	location.region.clear();
+	location.state.clear();
+	location.ianaTimeZone = QStringLiteral("system_default");
+	StelLocationMgr& locationMgr = StelApp::getInstance().getLocationMgr();
+	StelLocation match = locationMgr.locationForString(location.name);
+	if (!match.isValid())
+	{
+		const LocationMap nearby = locationMgr.pickLocationsNearby("Earth", location.getLongitude(true), location.getLatitude(true), 0.5f);
+		double nearestDistance = std::numeric_limits<double>::max();
+		for (const StelLocation& candidate : nearby)
+		{
+			if (candidate.name.compare(location.name, Qt::CaseInsensitive) != 0)
+				continue;
+			const double distance = StelLocation::distanceDegrees(location.getLongitude(true), location.getLatitude(true), candidate.getLongitude(true), candidate.getLatitude(true));
+			if (distance < nearestDistance)
+			{
+				match = candidate;
+				nearestDistance = distance;
+			}
+		}
+	}
+	if (match.isValid() && match.planetName == "Earth"
+		&& StelLocation::distanceDegrees(location.getLongitude(true), location.getLatitude(true), match.getLongitude(true), match.getLatitude(true)) <= 0.5)
+	{
+		location.region = match.region;
+		location.state = match.state;
+		if (!match.ianaTimeZone.isEmpty() && match.ianaTimeZone != "LMST" && match.ianaTimeZone != "LTST")
+			location.ianaTimeZone = match.ianaTimeZone;
+	}
+}
+
 }
 
 // Cheap readiness probe for ArkUI: no Qt round-trip, no command queue. ArkTS
@@ -6792,32 +6846,22 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			const QStringList parts = arg.split('|');
-			if (parts.size() < 4)
+			if (parts.size() != 4)
 			{
 				result["error"] = "setLocation expects name|lat|lon|alt";
 				return result;
 			}
-			bool okLat = false;
-			bool okLon = false;
-			bool okAlt = false;
-			const double lat = parts[1].toDouble(&okLat);
-			const double lon = parts[2].toDouble(&okLon);
-			const int alt = parts[3].toInt(&okAlt);
-			if (!okLat || !okLon || !okAlt)
-			{
-				result["error"] = "invalid location payload";
+			StelLocation location = core->getCurrentLocation();
+			if (!parseOhosLocationCoordinates(parts, 1, location, result))
 				return result;
-			}
-
-			StelLocation location;
 			location.name = parts[0].trimmed().isEmpty() ? QStringLiteral("Custom") : parts[0].trimmed();
 			location.region = QStringLiteral("User");
-			location.planetName = QStringLiteral("Earth");
-			location.setLatitude(static_cast<float>(lat));
-			location.setLongitude(static_cast<float>(lon));
-			location.altitude = alt;
-			location.role = QChar('X');
-			location.ianaTimeZone = QStringLiteral("system_default");
+			location.state.clear();
+			location.landscapeKey.clear();
+			if (location.role != QChar('o'))
+				location.role = QChar('X');
+			if (location.planetName == "Earth")
+				resolveOhosEarthLocation(location);
 			core->moveObserverTo(location, 0.0, 0.0);
 			markOhosInteraction();
 			result = currentStateJson();
@@ -9372,42 +9416,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		// setLocationCoords — move observer to lat/lon/alt
 		if (commandName == "setLocationCoords")
 		{
-			QStringList parts = arg.split(",");
-			if (parts.size() >= 2) {
-				double lat = parts[0].toDouble();
-				double lon = parts[1].toDouble();
-				double alt = parts.size() >= 3 ? parts[2].toDouble() : 0.0;
-				StelCore* core = StelApp::getInstance().getCore();
-				StelLocation loc;
-				loc.setLatitude(lat);
-				loc.setLongitude(lon);
-				loc.altitude = alt;
-				loc.name = QString("Custom %1,%2").arg(lat).arg(lon);
-				core->moveObserverTo(loc);
-				result["ok"] = true;
-				result["latitude"] = lat;
-				result["longitude"] = lon;
-				result["altitude"] = alt;
-			} else {
-				result["ok"] = false;
-				result["error"] = "expected lat,lon[,alt]";
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
 			}
+			QStringList parts = arg.contains('|') ? arg.split('|') : arg.split(',');
+			if (parts.size() != 2 && parts.size() != 3)
+			{
+				result["error"] = "expected lat,lon[,alt] or lat|lon[|alt]";
+				return result;
+			}
+			if (parts.size() == 2)
+				parts.append(QStringLiteral("0"));
+			StelLocation loc = core->getCurrentLocation();
+			if (!parseOhosLocationCoordinates(parts, 0, loc, result))
+				return result;
+			loc.name = QString("Custom %1,%2").arg(loc.getLatitude(true)).arg(loc.getLongitude(true));
+			loc.state.clear();
+			loc.region.clear();
+			loc.landscapeKey.clear();
+			if (loc.role != QChar('o'))
+				loc.role = QChar('X');
+			core->moveObserverTo(loc, 0.0, 0.0);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["planetName"] = loc.planetName;
+			result["locationName"] = loc.name;
+			result["latitude"] = loc.getLatitude(true);
+			result["longitude"] = loc.getLongitude(true);
+			result["altitude"] = loc.altitude;
 			return result;
 		}
 
-		// getObserverPlanetList — list bodies the observer can stand on
+		// getObserverPlanetList — list LocationDialog observer destinations
 		if (commandName == "getObserverPlanetList")
 		{
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
-			QJsonArray list;
-			if (ssys)
+			if (!ssys)
 			{
-				const QStringList names = ssys->getAllPlanetEnglishNames();
-				for (const QString& n : names)
-					list.append(n);
+				result["error"] = "solar system not ready";
+				return result;
+			}
+			QJsonArray list;
+			QJsonArray observerPlanets;
+			for (const auto& planet : ssys->getAllPlanets())
+			{
+				const QString name = planet->getEnglishName();
+				list.append(name);
+				QJsonObject entry;
+				entry["name"] = name;
+				entry["displayName"] = planet->getNameI18n();
+				entry["mapTexture"] = name == "Earth" ? QString() : planet->getTextMapName();
+				observerPlanets.append(entry);
 			}
 			result["ok"] = true;
 			result["planets"] = list;
+			result["observerPlanets"] = observerPlanets;
 			return result;
 		}
 
@@ -9421,44 +9486,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			const QStringList parts = arg.split('|');
 			const QString planetName = parts.size() > 0 ? parts[0].trimmed() : QString();
-			if (planetName.isEmpty())
+			if (planetName.isEmpty() || (parts.size() != 1 && parts.size() != 4 && parts.size() != 5))
 			{
-				result["error"] = "setObserverPlanet expects planetName[|lat|lon|alt]";
+				result["error"] = "setObserverPlanet expects planetName[|lat|lon|alt[|name]]";
 				return result;
 			}
 			SolarSystem* ssys = GETSTELMODULE(SolarSystem);
-			if (!ssys || !ssys->searchByEnglishName(planetName))
+			const PlanetP planet = ssys ? ssys->searchByEnglishName(planetName) : PlanetP();
+			if (!planet)
 			{
 				result["error"] = "unknown planet: " + planetName;
 				return result;
 			}
-			const double lat = parts.size() > 1 ? parts[1].toDouble() : 0.0;
-			const double lon = parts.size() > 2 ? parts[2].toDouble() : 0.0;
-			const double alt = parts.size() > 3 ? parts[3].toDouble() : 0.0;
-			StelLocation loc;
-			loc.name = planetName + " surface";
-			loc.region = QStringLiteral("User");
+			StelLocation loc = core->getCurrentLocation();
+			if (parts.size() >= 4 && !parseOhosLocationCoordinates(parts, 1, loc, result))
+				return result;
+			const bool planetChanged = loc.planetName != planetName;
+			if (planetChanged)
+			{
+				loc.name = planet->getNameI18n();
+				loc.state.clear();
+				loc.region.clear();
+				loc.landscapeKey.clear();
+				loc.population = 0;
+				loc.lightPollutionLuminance = QVariant();
+			}
+			if (parts.size() == 5 && !parts[4].trimmed().isEmpty())
+				loc.name = parts[4].trimmed();
 			loc.planetName = planetName;
-			loc.setLatitude(static_cast<float>(lat));
-			loc.setLongitude(static_cast<float>(lon));
-			loc.altitude = alt;
-			loc.role = QChar('X');
-			loc.ianaTimeZone = QStringLiteral("system_default");
-			// Best-effort landscape mapping (extraterrestrial landscapes are bundled)
-			QString landscapeID;
-			if (planetName == "Moon") landscapeID = "moon";
-			else if (planetName == "Mars") landscapeID = "mars";
-			else if (planetName == "Jupiter") landscapeID = "jupiter";
-			else if (planetName == "Saturn") landscapeID = "saturn";
-			else if (planetName == "Uranus") landscapeID = "uranus";
-			else if (planetName == "Neptune") landscapeID = "neptune";
-			else if (planetName == "Sun") landscapeID = "sun";
-			else if (planetName == "Earth") landscapeID = "garching";
-			core->moveObserverTo(loc, 0.0, 0.0, landscapeID);
+			loc.role = planet->getPlanetType() == Planet::isObserver ? QChar('o') : QChar('X');
+			if (planetName == "Earth" && (planetChanged || parts.size() >= 4))
+				resolveOhosEarthLocation(loc);
+			else if (planetChanged)
+				loc.ianaTimeZone = QStringLiteral("LMST");
+			if (planetChanged && loc.role != QChar('o'))
+			{
+				if (movementMgr)
+					movementMgr->resetInitViewPos();
+				if (objectMgr)
+				{
+					const QList<StelObjectP>& selection = objectMgr->getSelectedObject();
+					if (!selection.isEmpty() && selection[0]->getEnglishName() == loc.planetName)
+						objectMgr->unSelect();
+				}
+			}
+			LandscapeMgr* landscapeMgr = GETSTELMODULE(LandscapeMgr);
+			const QString landscapeHint = planetChanged && landscapeMgr && landscapeMgr->getFlagLandscapeAutoSelection() ? loc.planetName : QString();
+			if (planetChanged || parts.size() >= 4)
+				core->moveObserverTo(loc, 0.0, 0.0, landscapeHint);
 			markOhosInteraction();
+			const StelLocation& actual = core->getCurrentLocation();
 			result["ok"] = true;
-			result["planetName"] = planetName;
-			result["landscapeID"] = landscapeID;
+			result["planetName"] = actual.planetName;
+			result["locationName"] = actual.name;
+			result["latitude"] = actual.getLatitude(true);
+			result["longitude"] = actual.getLongitude(true);
+			result["altitude"] = actual.altitude;
+			result["landscapeID"] = landscapeMgr ? landscapeMgr->getCurrentLandscapeID() : QString();
 			return result;
 		}
 
