@@ -4,6 +4,8 @@ build
 installers
 # Local agent/tooling scratch directories (never upstream)
 .deveco/
+.claude/
+.mcp.json
 .iis/
 __pycache__/
 *.pyc
