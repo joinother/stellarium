@@ -179,9 +179,11 @@ export struct ConfigFallbackPanel {
           .padding({ left: 10, right: 10 }).backgroundColor(this.c.input)
           .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1).margin({ left: 8 })
           .onClick(() => {
-            this.nightModeStore.nightMode = !this.nightModeStore.nightMode
-            this.triggerAction('actionShow_Night_Mode')
-            this.flashHint(this.nightModeStore.nightMode ? I18n.t('s0707') : I18n.t('s0708'))
+            const next = !this.nightModeStore.nightMode
+            // 走统一写回路径：递增 requestEpoch、打开 pending 窗口并发送带回执的
+            // setNightMode；直接改 store + triggerAction 会绕开过期回包守卫。
+            this.nightModeStore.applyNightMode(next, true)
+            this.flashHint(next ? I18n.t('s0707') : I18n.t('s0708'))
           })
       }
       .width('100%').margin({ top: 4, bottom: 4 })

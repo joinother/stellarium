@@ -163,7 +163,7 @@ export struct ScriptsPanel {
                   .fontSize(10).fontColor(this.c.sub).width('100%')
               }.layoutWeight(1)
               Button(I18n.t('btn_playback'))
-                .fontSize(11).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+                .fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
                 .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 })
                 .onClick(() => { this.onPlayRecording(rec.file) })
               Button('加载')

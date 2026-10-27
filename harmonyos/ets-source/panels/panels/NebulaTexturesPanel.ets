@@ -51,7 +51,7 @@ export struct NebulaTexturesPanel {
           Button(I18n.t('act_refresh')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).enabled(!this.store.nebulaTextureLoading)
             .onClick(() => { this.onRefresh() })
-          Button(I18n.t('nebula_texture_import')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+          Button(I18n.t('nebula_texture_import')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
             .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).enabled(!this.store.nebulaTextureImporting)
             .onClick(() => { this.onImport() })
           if (this.store.nebulaTextureLoading || this.store.nebulaTextureImporting) LoadingProgress().width(18).height(18).color(this.c.accent)
@@ -91,7 +91,7 @@ export struct NebulaTexturesPanel {
               }
               if (item.decodeError !== undefined) Text(item.decodeError).fontSize(10).fontColor(this.c.warning).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
               Row({ space: 6 }) {
-                Button(I18n.t('btn_center')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL).height(26).layoutWeight(1)
+                Button(I18n.t('btn_center')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent).borderRadius(UI_RADIUS_CONTROL).height(26).layoutWeight(1)
                   .enabled(item.ready === true).onClick(() => { this.onGoto(item.imageUrl) })
                 Button(I18n.t('nebula_texture_remove')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).height(26).layoutWeight(1)
                   .onClick(() => { this.onRemove(item.imageUrl) })

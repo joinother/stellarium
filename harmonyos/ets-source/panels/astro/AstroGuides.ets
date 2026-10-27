@@ -25,7 +25,7 @@ export struct AstroSelectionGuide {
           Text(I18n.t('astro_selection_required')).fontSize(11).fontColor(this.c.text).width('100%')
           Text(I18n.t('astro_selection_required_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
         }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-        Button(I18n.t('astro_select_on_map')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+        Button(I18n.t('astro_select_on_map')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 9, right: 9 })
           .onClick(() => { this.onOpenPicker() })
       }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })

@@ -65,7 +65,7 @@ export struct KeyboardShortcutSection {
           .fontSize(11).fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
           .onChange((value: string) => { this.onAlternate(value) })
         Row({ space: 6 }) {
-          Button(I18n.t('settings_shortcuts_save')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+          Button(I18n.t('settings_shortcuts_save')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
             .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).onClick(() => { this.onSave() })
           Button(I18n.t('settings_shortcuts_restore')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
             .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).onClick(() => { this.onResetSelected() })

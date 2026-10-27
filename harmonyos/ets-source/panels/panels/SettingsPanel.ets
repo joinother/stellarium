@@ -280,7 +280,7 @@ export struct SettingsPanel {
           } else if (this.configTab === 2) {
             Text('天空显示设置已统一到"图层 > 天空"').fontSize(11).fontColor(this.c.sub)
               .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).maxLines(2)
-            Button('打开图层 > 天空').fontSize(11).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+            Button('打开图层 > 天空').fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
               .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
               .onClick(() => { this.onOpenLayersSky() })
             Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 8, bottom: 8 })
@@ -345,7 +345,7 @@ export struct SettingsPanel {
             })
           } else if (this.configTab === 4) {
             Text(I18n.t('tools_data_hint')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 8, right: 8 }).margin({ top: 4, bottom: 8 })
-            Button(I18n.t('panel_tools_data')).fontSize(12).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+            Button(I18n.t('panel_tools_data')).fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
               .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').onClick(() => { this.onOpenTools() })
             Text(I18n.t('tools_single_entry_hint')).fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 8, right: 8 }).margin({ top: 8 })
           } else if (this.configTab === 5) {
@@ -456,7 +456,7 @@ export struct SettingsPanel {
                       Button() {
                         Text(this.pluginFeatureActionLabel(pl.id))
                           .fontSize(11)
-                          .fontColor(this.c.text)
+                          .fontColor(this.c.onAccent)
                           .maxLines(1)
                           .textOverflow({ overflow: TextOverflow.Ellipsis })
                       }
@@ -517,7 +517,7 @@ export struct SettingsPanel {
               Text(I18n.format('settings_view_startup_direction', [this.navigationStore.navigationStartupAzimuth.toFixed(1), this.navigationStore.navigationStartupAltitude.toFixed(1)])).fontSize(10).fontColor(this.c.sub).width('100%')
             }.width('100%').padding({ left: 10, right: 10, top: 7, bottom: 7 })
               .backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
-            Button(I18n.t('settings_view_save_current')).fontSize(11).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+            Button(I18n.t('settings_view_save_current')).fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
               .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ bottom: 8 })
               .onClick(() => { this.saveCurrentViewAsStartup() })
 

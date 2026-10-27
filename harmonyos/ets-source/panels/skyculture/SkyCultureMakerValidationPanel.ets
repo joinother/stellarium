@@ -26,7 +26,7 @@ export struct SkyCultureMakerValidationPanel {
   build() {
     Column({ space: 9 }) {
       Text(I18n.t('sky_culture_maker_validate_hint')).fontSize(10).lineHeight(15).fontColor(this.c.sub).width('100%')
-      Button(I18n.t('sky_culture_maker_validate')).fontSize(11).fontColor(this.c.text).backgroundColor(this.c.accent)
+      Button(I18n.t('sky_culture_maker_validate')).fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
         .height(34).width('100%').borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onValidate() })
       if (this.store.validation !== undefined) {
         Row({ space: 8 }) {
@@ -45,7 +45,7 @@ export struct SkyCultureMakerValidationPanel {
       Row({ space: 8 }) {
         Button(I18n.t('sky_culture_maker_import')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
           .height(34).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onImport() })
-        Button(I18n.t('sky_culture_maker_export')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.accent)
+        Button(I18n.t('sky_culture_maker_export')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
           .height(34).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).onClick(() => { this.onExport() })
       }.width('100%')
       if (this.store.exportPath.length > 0) {

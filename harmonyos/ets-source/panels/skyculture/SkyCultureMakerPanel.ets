@@ -89,7 +89,7 @@ export struct SkyCultureMakerPanel {
       }
       Row({ space: 8 }) {
         Button(this.store.saving ? I18n.t('sky_culture_maker_saving') : I18n.t('sky_culture_maker_save'))
-          .fontSize(10).fontColor(this.c.text).backgroundColor(this.c.accent).height(32).layoutWeight(1)
+          .fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent).height(32).layoutWeight(1)
           .borderRadius(UI_RADIUS_CONTROL).enabled(!this.store.saving).onClick(() => { this.onSaveDraft() })
         Button(I18n.t('sky_culture_maker_undo')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
           .height(32).layoutWeight(1).borderRadius(UI_RADIUS_CONTROL).enabled(this.store.canUndo).opacity(this.store.canUndo ? 1 : 0.5)

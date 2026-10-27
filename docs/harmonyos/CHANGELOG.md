@@ -1,5 +1,25 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-27] Claude Code - 补齐夜间模式切换竞态的请求级缓存键
+
+- **修改文件：** `harmonyos/ets-source/state/NightModeStore.ets`、`harmonyos/ets-source/state/TimeStore.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/ConfigFallbackPanel.ets`、`src/StelMainView.cpp`、`docs/harmonyos/specs/NIGHT-MODE-THEME-ARCHITECTURE.md`、`docs/harmonyos/KNOWN-ISSUES.md`
+- **修改内容：**
+  - 宿主 `getState` payload 带自增刷新序号，使桥的 consume-on-read 缓存键每次刷新唯一；`TimeStore` 在 `getNightMode` 首次入队时记录 `requestEpoch`，回包到达时用入队序号校验；`setNightMode` payload 追加 `|<requestEpoch>`，C++ 端只解析第一段（兼容 CLI 的纯 `true` / `false`）。
+  - `syncNightModeFromEngine` 的 epoch 参数改为必选并去掉 `-1` 放行；`ConfigFallbackPanel` 改走 `applyNightMode`；待定窗口改为 4000ms（覆盖两轮 1.5s 轮询并留余量，终态失败仍立即清空）。
+- **修改原因：** 2026-10-26 的 review 确认 epoch 在 ArkTS 发起/消费时采样：`TimeStore` 消费缓存时取的始终是当前 epoch，守卫恒过；宿主 `getState` 的旧快照可被后续刷新消费；`setNightMode` 的旧回执可被后续同名切换复用；`ConfigFallbackPanel` 直接改 store 绕过守卫；3000ms 与两轮重试预算重合。
+- **构建结果：** 完整引擎交叉编译 + `assembleHap` 成功（`src/StelMainView.cpp` 已重新编译；CompileArkTS 非 UP-TO-DATE）；签名 HAP 710.7 MB。
+- **验证结果：** 安装至 192.168.1.5:36717 并启动，`getAppState` 返回 fps≈30.45；`setNightMode` 的 `true|9001` / `false|9002` 与旧 `true` / `false` 均回包正确；8 轮“开时间面板→开快捷面板→点夜间开关→立即回时间面板”后，`getState` 的 `nightMode` 与截图主题 8/8 一致；`check-ohos-ui-contract.mjs` 通过。
+- **备注：** 桥缓存仍无全局 revision；`AstroCalcController` / `TimeController` 等空 payload 的 `getState` 调用仍共享 `getState|` 键，见 `KNOWN-ISSUES.md`。快捷面板夜间开关没有语义 CLI 命令，本次通过 `devecocli ui click --id quick-action-night_mode` 命中既有 id 锚点验证；建议后续补一条 ArkUI 命令，避免回归只能靠 UI 注入。
+
+## [2026-10-26] Claude Code - 修复快速切换面板后夜间主题回退
+
+- **现象：** 切换日夜模式后立即快速切换面板，面板配色偶发回到切换前的模式。
+- **根因：** 面板打开会触发 `getState` / `getNightMode` 回读，桥的 consume-on-read 快照不带版本号；旧快照在 `pendingNightMode` 1 秒窗口外到达时被当作新值写回 `NightModeStore`，`WithTheme` 随之回到旧主题，新建面板经 `onWillApplyTheme` 缓存旧配色。
+- **修复：** `NightModeStore` 引入 `requestEpoch` 序号：本地切换递增，`getState` / `getNightMode` 在发请求前采样并随回包带回，过期序号直接丢弃；`setNightMode` 回执与失败重试同样校验序号，终态失败清空待定窗口；成功提交统一走 `commitNightMode`（含首帧 Preferences 持久化）；兜底窗口提为常量 `NIGHT_MODE_PENDING_GUARD_MS = 3000`（后于 2026-10-27 调整为 4000）。
+- **其余配色修复：** `backgroundColor(this.c.accent)` 的按钮前景统一改为 `onAccent`（夜间 `#FF2222` 压在 `#F00000` 上对比度仅约 1.17:1，文字不可见）；星空文化标签卡/筛选行的选中底改为语义槽位。
+- **遗留：** 桥缓存无 revision，同一份过期 `getState` 快照里的 `actionShow_*` / FOV / timeRate 仍会无条件应用；根治需在 native 侧给快照加 revision 或 mutation 后清读缓存（见 `KNOWN-ISSUES.md`）。
+- **验证：** 第一轮 `arkts_check` 通过；23:56 的 `devecocli build` 基于 23:19/23:25 的旧镜像，未覆盖最终源码；完整构建与验证见 2026-10-27 条目。
+
 ## [2026-10-25] Codex - PR 合并与 PC Dock/字体回退修复
 
 - **修改内容：** 合并 fork PR #6 的天空文化引用修复和遗漏的 10 月 14 日研究文档；恢复 Dock 局部坐标命中、共享绘制几何、展开态字号/图标尺寸，以及拆分组件丢失的 PC 文本适配。

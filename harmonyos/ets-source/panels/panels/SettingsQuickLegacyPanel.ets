@@ -80,7 +80,7 @@ export struct SettingsQuickLegacyPanel {
             Button(I18n.t('i0142')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
               .onClick(() => { this.onSpeedDown() })
-            Button(I18n.t('i0245')).fontSize(10).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+            Button(I18n.t('i0245')).fontSize(10).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
               .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
               .onClick(() => { this.onTogglePause() })
             Button(I18n.t('i0246')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)

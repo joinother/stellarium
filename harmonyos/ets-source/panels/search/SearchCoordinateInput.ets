@@ -43,7 +43,7 @@ export struct SearchCoordinateInput {
             .borderRadius(UI_RADIUS_CONTROL)
             .onChange((v: string) => { this.store.coordInputDec = v })
           Button(I18n.t('s_coord_go'))
-            .height(36).fontSize(12).fontColor(this.c.textStrong).backgroundColor(this.c.accent)
+            .height(36).fontSize(12).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
             .borderRadius(UI_RADIUS_CONTROL)
             .padding({ left: 12, right: 12 })
             .onClick(() => { this.onGo() })
