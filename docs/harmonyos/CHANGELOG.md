@@ -1,5 +1,17 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-10-30] Claude Code - 26.3 新功能 ArkUI 适配：十进制度拆分、星空文化哨兵、Potawatomi 升级补抽
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/state/ViewSettingsStore.ets`、`harmonyos/ets-source/state/SkyCultureSettingsStore.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/testing/UPSTREAM-26.3-UI-ADAPTATION-SMOKE-2026-10-30.md`
+- **修改内容：**
+  - **十进制度拆分**：新增原生命令 `setDecimalDegrees coords|other`，写入 `gui/flag_use_decimal_degrees_coords` / `..._other` 并返回实际值；`getState` 同步返回 `decimalDegreesCoords` / `decimalDegreesOther`。设置 → 附加页新增“角度显示”分组的两个开关；`ViewSettingsStore` 采用乐观更新、请求序号与失败回退，避免 Toggle 视觉状态与引擎状态脱节，也避免快速连点时旧回执互相覆盖。
+  - **星空文化时间哨兵**：`SkyCultureSettingsStore` 按 `StelSkyCulture::unknownBeginTime = -100000` / `presentEndTime = 9146` 精确识别“未知/至今”（0 仍作 ArkTS 缺省值），不再把 -100000 显示成“公元前 100000 年”；时间匹配与筛选语义同步。
+  - **Potawatomi 升级补抽**：`StellariumResourceBootstrap` 在异步资源准备入口定向补抽 `skycultures/potawatomi`（index.json / description.md / territory.geojson 三项哨兵），并把这几个文件加入全树重抽闸门与最终检查。修复旧安装覆盖升级时异步准备提前返回、随后检查抛错导致 Qt 不初始化的问题。
+- **修改原因：** 26.3 把十进制度拆成坐标/其它两个开关、星空文化时间跨度改为 territory 推导并使用未知/至今哨兵、新增 Potawatomi 文化；OHOS 需要对应的 UI、显示语义与升级资源提取路径。
+- **构建结果：** 引擎交叉编译 **568/568 成功**，`libstellarium.so` 链接完成；`assembleHap` **BUILD SUCCESSFUL**，签名 HAP **720.1 MB**；`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（402 命令）通过；`CompileArkTS` 成功。
+- **验证结果：** Windows x86_64 模拟器 Mate 90 Pro 覆盖安装并启动成功，设置 → 附加页显示“角度显示”两个开关与说明；无引擎时点击开关会先乐观切换、随后回退并提示“应用失败”，无崩溃。真机 HUAWEI SGT-AL00（Mate 80 Pro，HarmonyOS 7.0.0.109）覆盖安装并启动成功，星图正常，fps≈25；`getSkyCultureList` 返回 **64 条**，包含 Potawatomi（1667–至今）；“现代”文化显示“年代范围未标注 / 该文化未标注适用年代”；`setDecimalDegrees 1|0` 回包与 `getState`、`config.ini` 一致，随后恢复 `0|0`。测试后天空文化已恢复 `modern`。详见 `testing/UPSTREAM-26.3-UI-ADAPTATION-SMOKE-2026-10-30.md`。
+- **备注：** 未提交、未推送；真机 UI 开关交互与对象资料格式仍建议补测：两个十进制度开关独立开关/重启保持、RA/Dec 与其它角度格式变化。
+
 ## [2026-10-28] Claude Code - 合并上游 Stellarium 26.3 到 OHOS 分支
 
 - **修改文件：** 合并提交 `556bfa45ca`（672 files changed, 1,618,376 insertions(+), 1,305,323 deletions(-)）；关键冲突文件 `CMakeLists.txt`、`src/StelMainView.cpp`、`src/main.cpp`、`src/core/StelSkyCultureMgr.cpp`、`plugins/RemoteControl/*`、`skycultures/egyptian_dendera/description.md`、`po/*`

@@ -84,6 +84,8 @@ export struct SettingsPanel {
   setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => void = () => {}
   setDistanceUnit: (useMetric: boolean) => void = () => {}
   setConfigurationDithering: (value: string) => void = () => {}
+  setDecimalDegreesCoords: (enabled: boolean) => void = () => {}
+  setDecimalDegreesOther: (enabled: boolean) => void = () => {}
   setProjection: (name: string) => void = () => {}
   saveAppSettings: () => void = () => {}
   flashHint: (text: ResourceStr) => void = () => {}
@@ -327,6 +329,19 @@ export struct SettingsPanel {
               }.padding({ left: 8, right: 8 })
             }.width('100%').height(31).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
             Text('抖动用于低色深屏幕的颜色过渡；通常保持 8/8/8 位。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 4, bottom: 8 })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 2, bottom: 8 })
+            Text(I18n.t('settings_decimal_degrees_title')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
+            NavigationSwitchRow({
+              label: I18n.t('settings_decimal_degrees_coords'),
+              isOn: this.viewSettingsStore.decimalDegreesCoords,
+              onToggle: (v: boolean) => { this.setDecimalDegreesCoords(v) }
+            })
+            NavigationSwitchRow({
+              label: I18n.t('settings_decimal_degrees_other'),
+              isOn: this.viewSettingsStore.decimalDegreesOther,
+              onToggle: (v: boolean) => { this.setDecimalDegreesOther(v) }
+            })
+            Text(I18n.t('settings_decimal_degrees_hint')).fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 8 }).maxLines(2)
             InfoRow({ label: I18n.t('s0351'), value: 'Stellarium for HarmonyOS' })
             InfoRow({ label: I18n.t('s0352'), value: 'OpenHarmony / HarmonyOS NEXT' })
           } else if (this.configTab === 3) {

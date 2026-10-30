@@ -316,6 +316,29 @@ async function refreshSkyCultureEditorialResources(appContext: common.Applicatio
   hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] sky-culture editorial resources refreshed: ${paths.length}`);
 }
 
+// 26.3 首次引入新的星空文化。旧安装的 one-time marker 仍在，异步准备原本会
+// 提前返回；这里只补抽这一个目录，避免为了 21 个文件重走整棵资源树。
+// 若补抽中断，三项哨兵仍缺失，下次启动重试；hasStartupResourceFiles 也把
+// 它们列为必需资源，作为整树重抽的兜底。
+async function refreshNewSkyCultures(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): Promise<void> {
+  const culture = 'potawatomi';
+  const cultureRoot = `${installRoot}/skycultures/${culture}`;
+  const sentinels = ['index.json', 'description.md', 'territory.geojson'];
+  // 全新安装由后面的整树抽取处理，这里只服务“旧资源树 + 新 HAP”的升级路径。
+  if (!exists(installRoot) || sentinels.every((name: string) => exists(`${cultureRoot}/${name}`))) {
+    return;
+  }
+  const startedAt = Date.now();
+  hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] installing new sky culture: ${culture}`);
+  await extractRawTreeAsync(appContext, `${RAW_ROOT}/skycultures/${culture}`,
+    `${installRoot}/skycultures/${culture}`);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] new sky culture ${culture} ready in ${Date.now() - startedAt} ms`);
+}
+
 async function refreshDetailModelTextures(
   appContext: common.ApplicationContext,
   installRoot: string,
@@ -450,6 +473,13 @@ function hasStartupResourceFiles(installRoot: string): boolean {
     'textures/sun.png', 'textures/moon.png', 'textures/jupiter.png',
     'textures/saturn.png', 'textures/saturn_rings_radial.png',
     'skycultures/modern/index.json', 'skycultures/modern/illustrations/andromeda.png',
+    // 26.3 新增文化。必须放在这个“是否重抽全树”的闸门上，否则旧安装
+    // 异步准备会提前返回，随后 prepareStellariumResources 的检查抛错，
+    // Qt 永远不会初始化（表现为安装后进程起不来）。description / territory
+    // 一并检查，避免只复制到 index.json 的半成品目录被当成已安装。
+    'skycultures/potawatomi/index.json',
+    'skycultures/potawatomi/description.md',
+    'skycultures/potawatomi/territory.geojson',
     'scripts/constellations_tour.ssc',
     'translations/stellarium/zh_CN.qm', 'translations/stellarium-sky/zh_CN.qm',
     'translations/stellarium-skycultures/zh_CN.qm', 'translations/stellarium-scripts/zh_CN.qm'
@@ -470,6 +500,7 @@ export async function prepareStellariumResourcesAsync(appContext: common.Applica
   const installRoot = `${appContext.filesDir}/stellarium`;
   const manifestPath = `${installRoot}/${CATALOG_MANIFEST}`;
   const deepStarPath = `${installRoot}/${DEEP_STAR_CATALOG}`;
+  await refreshNewSkyCultures(appContext, installRoot);
   if (hasStartupResourceFiles(installRoot)) {
     await writeRawFileAsync(appContext, `${RAW_ROOT}/${CATALOG_MANIFEST}`, manifestPath);
     await writeRawFileAsync(appContext, `${RAW_ROOT}/translations/stellarium-scripts/zh_CN.qm`,
@@ -860,6 +891,10 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
   const skycultureMarker = `${installRoot}/skycultures/modern/index.json`;
   const skycultureArtworkMarker = `${installRoot}/skycultures/modern/illustrations/andromeda.png`;
   const skycultureArtCompatibilityMarker = `${installRoot}/${SKYCULTURE_ART_COMPAT_MARKER}`;
+  // 26.3 新增星空文化；旧安装的 extraction marker 存在时也必须补抽，
+  // 否则 Potawatomi 会留在 HAP rawfile 而不会进入 filesDir。
+  const potawatomiRoot = `${installRoot}/skycultures/potawatomi`;
+  const potawatomiSentinels = ['index.json', 'description.md', 'territory.geojson'];
   // Sky-tour scripts. Builds made before the scripts/ rawfile fix shipped zero
   // .ssc files, so an upgraded install would keep an empty Scripts panel forever
   // unless the missing directory itself forces a re-extract.
@@ -896,6 +931,13 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but skyculture artwork compatibility is outdated ` +
       `(${skycultureArtCompatibilityMarker}); forcing re-extract`);
+    needExtract = true;
+  }
+  const missingPotawatomi = potawatomiSentinels.filter((name: string) => !exists(`${potawatomiRoot}/${name}`));
+  if (!needExtract && missingPotawatomi.length > 0) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but 26.3 skyculture is incomplete ` +
+      `(${potawatomiRoot}/${missingPotawatomi.join(',')}); forcing re-extract`);
     needExtract = true;
   }
   if (!needExtract && !exists(scriptMarker)) {

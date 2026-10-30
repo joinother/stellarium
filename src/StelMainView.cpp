@@ -3639,6 +3639,8 @@ QJsonObject currentStateJson()
 	// The ArkUI shell is rendered separately from Stellarium's Qt scene.  Return
 	// the authoritative property here instead of inferring night mode from a UI action.
 	result["nightMode"] = StelApp::getInstance().getVisionModeNight();
+	result["decimalDegreesCoords"] = StelApp::getInstance().getFlagUseDecDegreesCoords();
+	result["decimalDegreesOther"] = StelApp::getInstance().getFlagUseDecDegreesOther();
 
 	StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
 	StelCore* core = StelApp::getInstance().getCore();
@@ -14905,6 +14907,28 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				StelApp::getInstance().setVisionModeNight(on);
 			result["ok"] = true;
 			result["night"] = StelApp::getInstance().getVisionModeNight();
+			return result;
+		}
+
+		// setDecimalDegrees — 设置坐标/其它数据是否使用十进制度
+		if (commandName == "setDecimalDegrees")
+		{
+			const QString coordsArg = arg.section('|', 0, 0).trimmed().toLower();
+			const QString otherArg = arg.section('|', 1, 1).trimmed().toLower();
+			if (otherArg.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "usage: coords|other";
+				return result;
+			}
+			const bool coords = coordsArg == "1" || coordsArg == "true";
+			const bool other = otherArg == "1" || otherArg == "true";
+			StelApp& app = StelApp::getInstance();
+			app.setFlagUseDecDegreesCoords(coords);
+			app.setFlagUseDecDegreesOther(other);
+			result["ok"] = true;
+			result["decimalDegreesCoords"] = app.getFlagUseDecDegreesCoords();
+			result["decimalDegreesOther"] = app.getFlagUseDecDegreesOther();
 			return result;
 		}
 

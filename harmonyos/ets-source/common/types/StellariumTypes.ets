@@ -688,6 +688,8 @@ export interface StellariumBridgeResponse {
   text?: string
   night?: boolean
   nightMode?: boolean
+  decimalDegreesCoords?: boolean
+  decimalDegreesOther?: boolean
   luminanceAdaptation?: boolean
   starTwinkle?: boolean
   forcedStarTwinkle?: boolean

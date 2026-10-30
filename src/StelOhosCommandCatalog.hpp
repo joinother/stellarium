@@ -40,7 +40,7 @@ inline QStringList names()
 		"pointAtSky,pointAtSkyStop,refreshNebulaTextures,reloadSkyCulture,removeNebulaTexture,resetAngleMeasure,retryDeepSkyImages,resumeScript,saveRecording,saveScreenShot,searchObject,"
 		"selectAt,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,"
 		"setARMode,setARRevealProgress,setAtmosphereFlag,setAtmosphereParams,setAutoMoveDuration,setAutoZoom,setAutoZoomResets,setBortleScale,setCCD,"
-		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDitheringMode,setDsoLabels,setFOV,"
+		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDecimalDegrees,setDitheringMode,setDsoLabels,setFOV,"
 		"setFieldOfView,setFlagClearSky,setFlagGravityLabels,setFlatHorizon,setFovMarkerSetting,setGridFlag,setGyroView,"
 		"setJD,setLandscape,setLandscapeFadeWithZoom,setLandscapeOpacity,setLandscapeTransparency,setLandscapeUseTransparency,"
 		"setLanguage,setLightPollution,setLimitMagnitude,setLocation,setLocationByName,setLocationCoords,setMeteorShowersFlag,setPolarScopeOverlay,centerPolarScope,setScreenSafeArea,"

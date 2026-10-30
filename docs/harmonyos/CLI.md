@@ -489,6 +489,13 @@ UI 空闲时按 180ms 周期尝试更新；桥接未返回或用户拖动星图�
 - `deltaT|算法键` 即时应用。`deltaCustom|基准年,ndot,a,b,c` 编辑并保存自定义公式参数（有限数值，绝对值不超过 1e6）；仅选中 Custom 时用于计算。ΔT 秒数 = a+b·u+c·u²，u=(年份−基准年)/100。
 - 写入后返回权威设置快照并同步 ArkTS；错误输入不改变已保存设置。`getState`/`getSimulationTime` 同时返回 `formattedTime`，保持全量与轻量刷新一致，原始 `timeText`/`jd` 不变。
 - 真机回归：`python3 scripts/test-ohos-time-settings.py --device <设备> --restart --output <报告.json>`，测试结束恢复原始时间偏好和模拟时刻/流速。
+
+## 角度显示格式（2026-10-30）
+
+- `setDecimalDegrees coords|other`：`coords`/`other` 均为 `0/1` 或 `false/true`。分别对应 `StelApp.flagUseDecDegreesCoords` 与 `flagUseDecDegreesOther`；坐标（RA/Dec、Alt/Az、时角、黄道/银河/超银河）与其它角度值（黄赤交角、视差角、自行、角直径、距角等）可独立使用十进制度。命令立即生效并写入 `gui/flag_use_decimal_degrees_coords` / `..._other`，回包返回两个实际值。
+- `getState` 同时返回 `decimalDegreesCoords` / `decimalDegreesOther`，ArkUI 设置面板“更多功能 → 设置 → 附加”用它们显示当前状态。
+- 兼容旧配置 `gui/flag_show_decimal_degrees`：首次启动时两个新键都继承旧值。
+
 # 天文计算动效操作补充（2026-09-06）
 
 `openUiPanel astro` 后使用 `setAstroGroup 0..2`、`setAstroTab 0..9`；今晚筛选使用 `setAstroFilter`（如 `period|morning`）。`getAstroPanelState` 返回最近面板状态，等待 `transitioning=false` 和目标 tab 一致才表示页面切换完成，不代表计算完成或动画帧率。完整参数与边界见 `ASTRO-CALC-MOTION.md`。
