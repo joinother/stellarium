@@ -172,8 +172,11 @@ export struct LocationOnlineMap {
             .height('100%')
             .backgroundColor(this.c.nightMask)
             .hitTestBehavior(HitTestMode.None)
-          Text('+').fontSize(28).fontColor(this.c.tertiary).hitTestBehavior(HitTestMode.None)
-        }.height(240).width('100%').clip(true).borderRadius(14)
+        }
+          // MapComponent 是独立的原生图层：给它套 clip/圆角会强制每帧离屏合成，
+          // 拖动地图立刻掉帧，所以这里只留直角边框。
+          .height(240).width('100%')
+          .border({ width: 1, color: this.c.border })
       }
       if (this.phase === 'loading' || this.phase === 'converting') {
         Row({ space: 8 }) {

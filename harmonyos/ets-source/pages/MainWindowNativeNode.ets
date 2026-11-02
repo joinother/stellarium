@@ -1054,6 +1054,8 @@ export struct WindowNativeNode {
   private lastHomeBackAt: number = 0
   @State private searchStore: SearchStore = new SearchStore()
   @State private objectDetailStore: ObjectDetailStore = new ObjectDetailStore()
+  // 在线地图可见时是否已把 Qt 渲染泵降频（见 syncMapRenderThrottle）
+  private mapOverlayThrottled: boolean = false
   @State private gyroStore: GyroStore = new GyroStore()
   @State private notificationStore: NotificationStore = new NotificationStore()
   @State private surveyStore: SurveyStore = new SurveyStore()
@@ -3889,7 +3891,19 @@ export struct WindowNativeNode {
     this.finishPanelRouteTransition(routeSerial)
   }
 
+  // 在线地图铺在 Qt 视图之上时，合成器要同时合成两个持续刷新的原生层；把 Qt 侧降到
+  // 4 FPS（C++ setPanelOverlayActive）才腾得出带宽给地图手势。
+  private syncMapRenderThrottle(): void {
+    const want = this.activePanel === 'place' && this.panelVisible &&
+      this.locationStore.locationMapProvider === 'huawei' &&
+      this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent()
+    if (want === this.mapOverlayThrottled) return
+    this.mapOverlayThrottled = want
+    this.callNativeFire('setPanelOverlayActive', want ? '1' : '0')
+  }
+
   private schedulePanelDataLoad(panel: string, visible: boolean): void {
+    this.syncMapRenderThrottle()
     if (this.panelDataLoadTimer >= 0) {
       clearTimeout(this.panelDataLoadTimer)
       this.panelDataLoadTimer = -1
@@ -8261,7 +8275,7 @@ export struct WindowNativeNode {
         onInputBlur: () => { this.keyboardTextInputFocused = false },
         onPickSearchItem: (item: LocSearchItem) => { this.locationStore.selectSearchLocation(item) },
         onApply: () => { this.locationCtl().applyPickerLocation() },
-        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider) },
+        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider); this.syncMapRenderThrottle() },
         onPickMap: (latitude: number, longitude: number) => { this.locationPickerStore.applyPickedCoordinates(latitude, longitude) },
         onMapFallback: () => { this.locationCtl().setLocationMapProvider('offline') },
         onSelectContinent: (c: string) => { this.locationCtl().selectContinent(c) },
