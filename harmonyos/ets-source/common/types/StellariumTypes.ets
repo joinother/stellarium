@@ -416,6 +416,9 @@ export interface StellariumBridgeResponse {
   latitude?: number
   longitude?: number
   altitude?: number
+  url?: string
+  lanIp?: string
+  usePassword?: boolean
   planet?: string
   equatorialOfDate?: string
   equatorialJ2000?: string

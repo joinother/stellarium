@@ -1054,8 +1054,10 @@ export struct WindowNativeNode {
   private lastHomeBackAt: number = 0
   @State private searchStore: SearchStore = new SearchStore()
   @State private objectDetailStore: ObjectDetailStore = new ObjectDetailStore()
-  // 在线地图可见时是否已把 Qt 渲染泵降频（见 syncMapRenderThrottle）
-  private mapOverlayThrottled: boolean = false
+  // 无线控制（RemoteControl 插件对内网暴露 HTTP/WebSocket）
+  @State private remoteControlEnabled: boolean = false
+  @State private remoteControlPort: string = '8090'
+  @State private remoteControlStatus: string = ''
   @State private gyroStore: GyroStore = new GyroStore()
   @State private notificationStore: NotificationStore = new NotificationStore()
   @State private surveyStore: SurveyStore = new SurveyStore()
@@ -3659,8 +3661,6 @@ export struct WindowNativeNode {
   // 断言「面板确实开了」需要这条命令（此前只能退回坐标点击验证）。与 getAstroPanelState 同一套
   // AppStorage 发布方式，由页面在面板状态变化时写入。
   private publishUiPanelState(): void {
-    // 面板可见性变化时同步 Qt 渲染节流（见 syncMapRenderThrottle）。
-    this.syncMapRenderThrottle(this.panelVisible)
     this.publishUiLayoutState()
     AppStorage.setOrCreate('stellariumUiPanelState', JSON.stringify({
       ok: true, panel: this.activePanel, visible: this.panelVisible,
@@ -3904,20 +3904,28 @@ export struct WindowNativeNode {
     this.finishPanelRouteTransition(routeSerial)
   }
 
-  // 在线地图铺在 Qt 视图之上时，合成器要同时合成两个持续刷新的原生层；把 Qt 侧降到
-  // 4 FPS（C++ setPanelOverlayActive）才腾得出带宽给地图手势。
-  private syncMapRenderThrottle(visible: boolean = this.panelVisible): void {
-    // 任何左侧面板打开时都节流：面板会盖住大半星空，而 Qt 侧 30 FPS 的整窗重绘
-    // 会和 ArkUI 抢同一个合成器，表现就是面板本身滚动/点击发涩。
-    // 关闭路径要显式传 visible=false：那时 panelVisible 还是 true（关闭动画结束后才置 false）。
-    const want = visible && this.applicationInForeground
-    if (want === this.mapOverlayThrottled) return
-    this.mapOverlayThrottled = want
-    this.callNativeFire('setPanelOverlayActive', want ? '1' : '0')
+  // 无线控制：把 RemoteControl 插件暴露到局域网（http://<平板IP>:8090）。
+  private applyRemoteControl(enabled: boolean): void {
+    const port = Number(this.remoteControlPort.trim())
+    const portText = Number.isFinite(port) && port > 0 && port < 65536 ? String(Math.round(port)) : '8090'
+    const reply = this.callNative('setRemoteControl', (enabled ? '1' : '0') + '|0.0.0.0|' + portText + '|')
+    if (reply.ok !== true) {
+      this.remoteControlEnabled = false
+      this.remoteControlStatus = '开启失败：' + (reply.error ?? '未知错误')
+      return
+    }
+    this.remoteControlEnabled = reply.enabled === true
+    const url = typeof reply.url === 'string' ? reply.url : ''
+    if (this.remoteControlEnabled) {
+      this.remoteControlStatus = url.length > 0
+        ? '控制地址：' + url + '（同一 Wi-Fi 下的电脑/手机用浏览器打开）'
+        : '服务已开启，但没拿到局域网 IP，请连上 Wi-Fi 后再试'
+    } else {
+      this.remoteControlStatus = '服务已关闭'
+    }
   }
 
   private schedulePanelDataLoad(panel: string, visible: boolean): void {
-    this.syncMapRenderThrottle(visible)
     if (this.panelDataLoadTimer >= 0) {
       clearTimeout(this.panelDataLoadTimer)
       this.panelDataLoadTimer = -1
@@ -4194,8 +4202,6 @@ export struct WindowNativeNode {
     this.polarScopeCtl().stopPolarScopeTimer()
     this.astroCalcCtl().stopAstroCalcContextTimer()
     this.telescopeCtl().stopTelescopeLivePosition(false)
-    // 面板一关就恢复 30 FPS，别等 170ms 关闭动画跑完。
-    this.syncMapRenderThrottle(false)
     if (this.panelDataLoadTimer >= 0) {
       clearTimeout(this.panelDataLoadTimer)
       this.panelDataLoadTimer = -1
@@ -8291,7 +8297,7 @@ export struct WindowNativeNode {
         onInputBlur: () => { this.keyboardTextInputFocused = false },
         onPickSearchItem: (item: LocSearchItem) => { this.locationStore.selectSearchLocation(item) },
         onApply: () => { this.locationCtl().applyPickerLocation() },
-        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider); this.syncMapRenderThrottle() },
+        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider) },
         onPickMap: (latitude: number, longitude: number) => { this.locationPickerStore.applyPickedCoordinates(latitude, longitude) },
         onMapFallback: () => { this.locationCtl().setLocationMapProvider('offline') },
         onSelectContinent: (c: string) => { this.locationCtl().selectContinent(c) },
@@ -8499,6 +8505,14 @@ export struct WindowNativeNode {
         notificationStore: this.notificationStore,
         keyboardShortcutStore: this.keyboardShortcutStore,
         scroller: this.scriptListScroller,
+        remoteControlEnabled: this.remoteControlEnabled,
+        remoteControlStatus: this.remoteControlStatus,
+        remoteControlPort: this.remoteControlPort,
+        onToggleRemoteControl: (enabled: boolean, port: string) => {
+          this.remoteControlPort = port.length > 0 ? port : '8090'
+          this.applyRemoteControl(enabled)
+        },
+        onRemotePortInput: (port: string) => { this.remoteControlPort = port },
         configTab: this.configTab,
         configTabContentOpacity: this.configTabContentOpacity,
         configTabContentOffsetX: this.configTabContentOffsetX,

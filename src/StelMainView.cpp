@@ -63,6 +63,10 @@
 #include "../plugins/NavStars/src/NavStars.hpp"
 #include "../plugins/PointerCoordinates/src/PointerCoordinates.hpp"
 #include "../plugins/Satellites/src/Satellites.hpp"
+#include "../plugins/RemoteControl/src/RemoteControl.hpp"
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QNetworkInterface>
+#endif
 #include "../plugins/NebulaTextures/src/NebulaTextures.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShower.hpp"
@@ -187,10 +191,6 @@ constexpr int OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS = 8; // 120 FPS on h
 // 120 FPS on every device, but it must never trade image sharpness for speed.
 constexpr int OHOS_FALLBACK_INTERACTIVE_RENDER_INTERVAL_MS = 8;
 constexpr int OHOS_IDLE_RENDER_INTERVAL_MS = 33;        // 30 FPS once the scene settles.
-// 在线地图（MapComponent）铺在 Qt 视图之上时，桌面合成器必须同时合成两个持续刷新的
-// 原生层。把 Qt 这一侧的刷新降到 4 FPS，合成器才腾得出带宽给地图手势，否则拖动地图会
-// 明显发涩。由 ArkTS 在华为地图可见时切进来，隐藏后立刻切回。
-constexpr int OHOS_PANEL_OVERLAY_RENDER_INTERVAL_MS = 100;
 constexpr int OHOS_MAX_COMMANDS_PER_FRAME = 8;
 constexpr qint64 OHOS_COMMAND_BUDGET_MS = 4;
 
@@ -202,7 +202,6 @@ static bool s_ohosZeroCopyActive = false;
 static bool s_ohosZeroCopySupported = true;
 static std::atomic<bool> s_ohosApplicationForeground{true};
 static std::atomic<bool> s_ohosScriptRenderHeartbeat{false};
-static std::atomic<bool> s_ohosPanelOverlayActive{false};
 // Device-pose tracking remains interactive even without touch events. Keeping
 // this flag beside the render scheduler prevents the pump from dropping back
 // to the 30 FPS idle cadence while the user is physically turning the device.
@@ -302,8 +301,6 @@ int currentOhosRenderIntervalMs()
 {
 	if (!StelApp::isInitialized())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
-	if (s_ohosPanelOverlayActive.load())
-		return OHOS_PANEL_OVERLAY_RENDER_INTERVAL_MS;
 	if (!s_gyroViewActive.load() && !StelMainView::getInstance().needsMaxFPS())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
 	return s_ohosZeroCopyActive
@@ -4746,28 +4743,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		response = QString::fromUtf8(QJsonDocument(connectorResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
-	if (commandName == "setPanelOverlayActive")
-	{
-		// 面板盖住星空（目前只有在线地图）时为 true：把 Qt 渲染泵降到 4 FPS，
-		// 把合成带宽让给地图层。
-		const bool overlay = arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0;
-		const bool changed = s_ohosPanelOverlayActive.exchange(overlay) != overlay;
-		if (changed)
-		{
-			if (qApp && StelApp::isInitialized())
-			{
-				QMetaObject::invokeMethod(qApp, []() {
-					if (StelApp::isInitialized())
-						StelMainView::getInstance().thereWasAnEvent();
-				}, Qt::QueuedConnection);
-			}
-		}
-		QJsonObject overlayResult;
-		overlayResult["ok"] = true;
-		overlayResult["overlay"] = overlay;
-		response = QString::fromUtf8(QJsonDocument(overlayResult).toJson(QJsonDocument::Compact)).toUtf8();
-		return response.constData();
-	}
 	if (commandName == "setApplicationForeground")
 	{
 		const bool foreground = arg == "1" || arg.compare("true", Qt::CaseInsensitive) == 0;
@@ -9142,6 +9117,63 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		// loadPlugin / unloadPlugin
+		if (commandName == "setRemoteControl" || commandName == "getRemoteControlState")
+		{
+			// 「无线控制」：把 RemoteControl 插件的 HTTP/WebSocket 服务暴露到局域网，
+			// 内网设备用浏览器打开 http://<平板IP>:8090 就能操作星图。
+			// arg 形如 "1|0.0.0.0|8090|password"（enable|host|port|password）。
+			auto lanAddress = []() -> QString {
+				const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
+				for (const QNetworkInterface& iface : interfaces)
+				{
+					const auto flags = iface.flags();
+					if (!(flags & QNetworkInterface::IsUp) || !(flags & QNetworkInterface::IsRunning)) continue;
+					if (flags & QNetworkInterface::IsLoopBack) continue;
+					for (const QNetworkAddressEntry& entry : iface.addressEntries())
+					{
+						const QHostAddress address = entry.ip();
+						if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback())
+							return address.toString();
+					}
+				}
+				return QString();
+			};
+
+			auto* remote = qobject_cast<RemoteControl*>(
+				StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("RemoteControl"), true));
+			if (!remote)
+			{
+				result["ok"] = false;
+				result["error"] = "RemoteControl 插件不可用";
+				return result;
+			}
+			if (commandName == "setRemoteControl")
+			{
+				const QStringList parts = arg.split('|');
+				const bool enable = parts.value(0).trimmed() == "1" || parts.value(0).trimmed().compare("true", Qt::CaseInsensitive) == 0;
+				const QString host = parts.value(1).trimmed().isEmpty() ? QStringLiteral("0.0.0.0") : parts.value(1).trimmed();
+				bool portOk = false;
+				const int port = parts.value(2).trimmed().toInt(&portOk);
+				const QString password = parts.value(3);
+				remote->setHost(host);
+				if (portOk && port > 0 && port < 65536) remote->setPort(port);
+				remote->setPassword(password);
+				remote->setFlagUsePassword(!password.isEmpty());
+				remote->setFlagAutoStart(enable);
+				remote->setFlagEnabled(enable);
+				remote->saveSettings();
+			}
+			const QString lan = lanAddress();
+			result["ok"] = true;
+			result["enabled"] = remote->getFlagEnabled();
+			result["host"] = remote->getHost();
+			result["port"] = remote->getPort();
+			result["lanIp"] = lan;
+			result["url"] = lan.isEmpty() ? QString() : QStringLiteral("http://%1:%2").arg(lan).arg(remote->getPort());
+			result["usePassword"] = remote->getFlagUsePassword();
+			return result;
+		}
+
 		if (commandName == "loadPlugin")
 		{
 			QString pname = arg.trimmed();

@@ -38,7 +38,7 @@ inline QStringList names()
 		"getViewportSize,getUiLayout,getWutTargets,gotoBookmark,gotoNebulaTexture,gotoRADec,gyroDiagnostic,importCollaborationSession,importConfig,importNebulaTexture,importScript,importStarCatalog,listMatchingObjects,listNebulaTextures,listObjects,"
 		"listRecordings,loadPlugin,loadRecording,moveToAltAz,moveToSelected,moveToSelectedAt,panBy,pauseScript,playScript,"
 		"pointAtSky,pointAtSkyStop,refreshNebulaTextures,reloadSkyCulture,removeNebulaTexture,resetAngleMeasure,retryDeepSkyImages,resumeScript,saveRecording,saveScreenShot,searchObject,"
-		"selectAt,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,setPanelOverlayActive,"
+		"selectAt,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,setRemoteControl,getRemoteControlState,"
 		"setARMode,setARRevealProgress,setAtmosphereFlag,setAtmosphereParams,setAutoMoveDuration,setAutoZoom,setAutoZoomResets,setBortleScale,setCCD,"
 		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDitheringMode,setDsoLabels,setFOV,"
 		"setFieldOfView,setFlagClearSky,setFlagGravityLabels,setFlatHorizon,setFovMarkerSetting,setGridFlag,setGyroView,"

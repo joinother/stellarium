@@ -48,6 +48,12 @@ export struct SettingsPanel {
   @ObjectLink viewSettingsStore: ViewSettingsStore
   @ObjectLink notificationStore: NotificationStore
   @ObjectLink keyboardShortcutStore: KeyboardShortcutStore
+  // 无线控制（内网设备用浏览器/CLI 操作星图）
+  @Prop remoteControlEnabled: boolean
+  @Prop @Watch('onRemoteStatusChanged') remoteControlStatus: string
+  onToggleRemoteControl: (enabled: boolean, port: string) => void = () => {}
+  onRemotePortInput: (port: string) => void = () => {}
+  remoteControlPort: string = '8090'
   @Prop configTab: number
   @Prop configTabContentOpacity: number
   @Prop configTabContentOffsetX: number
@@ -123,6 +129,8 @@ export struct SettingsPanel {
   }
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
+  private onRemoteStatusChanged(): void {}
 
   build() {
 
@@ -231,6 +239,31 @@ export struct SettingsPanel {
             Button(I18n.t('i0251') + '设置').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 }).margin({ top: 6, left: 8 })
               .onClick(() => { this.saveAppSettings(); this.flashHint('设置已保存') })
+            Text('无线控制').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 12, bottom: 4 })
+            Text('打开后，同一局域网内的电脑/手机用浏览器访问下面的地址即可操作星图（远端 API 与桌面版一致）。')
+              .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
+            Row() {
+              Column() {
+                Text('允许内网设备控制').fontSize(13).fontColor(this.c.text).width('100%')
+                Text(this.remoteControlEnabled ? '服务已开启' : '服务已关闭').fontSize(10).fontColor(this.c.sub).width('100%')
+              }.layoutWeight(1).alignItems(HorizontalAlign.Start).padding({ left: 10 })
+              Toggle({ type: ToggleType.Switch, isOn: this.remoteControlEnabled }).width(44).height(26)
+                .margin({ right: 10 })
+                .onChange((value: boolean) => { this.onToggleRemoteControl(value, this.remoteControlPort) })
+            }.height(46).width('100%').margin({ bottom: 4 })
+            if (this.remoteControlEnabled) {
+              Row({ space: 8 }) {
+                Text('端口').fontSize(12).fontColor(this.c.sub).width(48)
+                TextInput({ text: this.remoteControlPort, placeholder: '8090' }).height(32).fontSize(11)
+                  .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).layoutWeight(1)
+                  .type(InputType.Number)
+                  .onChange((value: string) => { this.onRemotePortInput(value) })
+              }.width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+            }
+            if (this.remoteControlStatus.length > 0) {
+              Text(this.remoteControlStatus).fontSize(10).fontColor(this.c.sub).width('100%')
+                .padding({ left: 10, right: 10 }).margin({ bottom: 6 })
+            }
           } else if (this.configTab === 1) {
             Row() {
               Text(I18n.t('i0120')).fontSize(12).fontColor(this.c.sub).width(72)
