@@ -416,6 +416,7 @@ export interface StellariumBridgeResponse {
   latitude?: number
   longitude?: number
   altitude?: number
+  planet?: string
   equatorialOfDate?: string
   equatorialJ2000?: string
   apparentAltAz?: string

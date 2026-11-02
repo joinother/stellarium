@@ -193,7 +193,7 @@ export class LocationController {
   syncObserverFromNative(): void {
     this.port.requestInteractive('getObserverInfo', '', (response: StellariumBridgeResponse) => {
       if (response.ok !== true || response.latitude === undefined || response.longitude === undefined) return
-      const planet = response.planetName ?? response.planet ?? 'Earth'
+      const planet: string = response.planet ?? 'Earth'
       this.commitLocation(response.name ?? I18n.t('custom_location'), response.latitude, response.longitude,
         response.altitude ?? 0, planet, planet === 'Earth' ? this.pickerStore.locationSource : 'map')
       this.hooks.refreshState()
