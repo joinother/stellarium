@@ -1,5 +1,13 @@
 # HarmonyOS 联网功能台账
 
+## 2026-11-02 设置-关于面板外链
+
+- 新增“设置 → 关于”标签页中的用户主动点击外链：Stellarium 上游官网、上游源代码、上游贡献者页面、星空文化目录、本发行版源代码与提交历史、开发者隐私政策入口（跳转华为应用市场详情页 `https://appgallery.huawei.com/app/detail?id=com.joinother.skyinstrument`）、GNU GPL v2、Qt LGPL、md4c、NLopt、fast_float 和论文 DOI。
+- AGC 隐私政策由协议服务按 `agreementId` 托管；政策内容更新/新版本会生成新的协议 ID 与链接，因此应用内不硬编码某一版 `agreement` 链接，统一跳转应用市场详情页由系统展示当前生效版本。
+- 这些链接仅在用户点击后由系统浏览器打开；应用不自动请求、不附加 SN/UDID、观测位置、账号或查询词。浏览器正常访问会发送 IP 和标准请求头。
+- APP 备案号与工信部核验链接沿用 2026-09-23 登记，不新增参数。
+- 运行时 INTERNET 权限、离线构建开关和资源下载策略均未改变。
+
 ## 2026-10-01 备案后联网服务再审
 
 本轮重新核对了构建开关和已部署官网：`scripts/set-ohos-network-mode.sh status` 显示当前是联网构建（`INTERNET` 已声明、`STELLARIUM_OHOS_OFFLINE=OFF`、`OFFLINE_APPGALLERY_BUILD=false`）。但联网构建只表示网络代码和权限边界已打开，不表示所有服务已经上线或默认运行。

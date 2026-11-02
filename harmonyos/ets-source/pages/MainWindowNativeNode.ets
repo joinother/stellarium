@@ -3966,8 +3966,6 @@ export struct WindowNativeNode {
       } else if (panel === 'observing') {
       } else if (panel === 'commands') {
         this.commandStore.loadCommandCatalog()
-      } else if (panel === 'help') {
-        this.tools.loadAboutInfo()
       } else if (panel === 'scripts') {
         this.scriptPlaybackCtl().loadScriptList()
         this.scriptPlaybackCtl().loadRecordings()
@@ -8472,6 +8470,7 @@ export struct WindowNativeNode {
         viewSettingsStore: this.viewSettingsStore,
         notificationStore: this.notificationStore,
         keyboardShortcutStore: this.keyboardShortcutStore,
+        toolsStore: this.tools,
         scroller: this.scriptListScroller,
         configTab: this.configTab,
         configTabContentOpacity: this.configTabContentOpacity,
@@ -8538,7 +8537,8 @@ export struct WindowNativeNode {
         triggerAction: (actionId: string) => { this.triggerAction(actionId) },
         moveToSelectedObject: () => { this.moveToSelectedObject() },
         onOpenLayersSky: () => { this.viewTab = 0; this.openSubPanel('layers') },
-        onOpenTools: () => { this.openSubPanel('tools') }
+        onOpenTools: () => { this.openSubPanel('tools') },
+        openExternalUrl: (url: string) => { this.openExternalUrl(url) }
       })
     } else if (this.activePanel === 'astro') {
       AstroPanel({
@@ -8644,7 +8644,6 @@ export struct WindowNativeNode {
       })
         } else if (this.activePanel === 'help') {
       HelpPanel({
-        tools: this.tools,
         onOpenTools: () => { this.openSubPanel('tools') }
       })
 	    } else if (this.activePanel === 'catalogs') {

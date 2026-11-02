@@ -101,6 +101,7 @@ feature/online-services             → 备案后再恢复网络地图/API/下�
 - [ ] **隐私政策：** 创建 `docs/PRIVACY-POLICY.md` 并用 GitHub Pages 托管
   - 内容：位置信息使用说明、不收集用户数据声明、无第三方追踪SDK
   - URL: `https://joinother.github.io/stellarium/privacy`
+  - 若使用 AGC 隐私托管，以 AGC 协议链接为准；发布前同步 `harmonyos/module.json5` 的 `appgallery_privacy_link_privacy_statement`，应用内“关于”跳转应用市场详情页查看当前版本。
 
 - [ ] **华为发布签名：**
   1. 登录 [AppGallery Connect](https://developer.huawei.com/consumer/cn/agconnect/)

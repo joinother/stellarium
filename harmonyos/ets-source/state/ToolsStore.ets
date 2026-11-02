@@ -42,6 +42,7 @@ export class ToolsStore {
   aboutQt: string = ''
   aboutUserDir: string = ''
   aboutConfigFile: string = ''
+  aboutLogFile: string = ''
   logText: string = ''
   logVisible: boolean = false
   configExportText: string = ''
@@ -111,6 +112,7 @@ export class ToolsStore {
       this.aboutQt = resp.qtVersion ?? ''
       this.aboutUserDir = resp.userDir ?? ''
       this.aboutConfigFile = resp.configFile ?? ''
+      this.aboutLogFile = resp.logFile ?? ''
       this.notifyChanged()
     })
   }

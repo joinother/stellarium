@@ -797,10 +797,6 @@
       "value": "Online surveys need network"
     },
     {
-      "name": "i0216",
-      "value": "About"
-    },
-    {
       "name": "i0217",
       "value": "Shortcuts"
     },
@@ -911,22 +907,6 @@
     {
       "name": "i0260",
       "value": "Transit"
-    },
-    {
-      "name": "i0261",
-      "value": "Stellarium for HarmonyOS"
-    },
-    {
-      "name": "i0262",
-      "value": "Community port of Stellarium 26.2"
-    },
-    {
-      "name": "i0263",
-      "value": "Renderer: OpenGL ES via XComponent"
-    },
-    {
-      "name": "i0264",
-      "value": "ArkTS-N-API-C-C++ bridge"
     },
     {
       "name": "i0265",

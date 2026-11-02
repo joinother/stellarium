@@ -89,6 +89,7 @@ git push myfork v1.0.0
 1. **在 GitHub fork 仓库中创建隐私政策页面**：
    - 路径：`docs/PRIVACY-POLICY.md`
    - 使用 GitHub Pages 托管为网页：`https://joinother.github.io/stellarium/privacy`
+   - 若使用 AGC 隐私托管，则以 AGC 生成的协议链接为准；发布新版本时必须同步 `harmonyos/module.json5` 的 `appgallery_privacy_link_privacy_statement`，不能把某一版 `agreementId` 当作永久链接。应用内“设置 → 关于 → 开发者隐私政策”跳转应用市场详情页查看当前生效版本。
    
 2. **隐私政策需涵盖**：
    - 离线版不申请网络权限

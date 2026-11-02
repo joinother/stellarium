@@ -20,6 +20,7 @@
         "value": "1"
       },
       {
+        // AGC 隐私政策更新会生成新的 agreementId；此值必须与当前生效协议同步，并重新提交 HAP。
         "name": "appgallery_privacy_link_privacy_statement",
         "value": "https://agreement-drcn.hispace.dbankcloud.cn/index.html?lang=zh&agreementId=2004631976732052288"
       }
