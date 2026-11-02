@@ -333,7 +333,10 @@ export function pluginFeatureRoute(id: string): PluginFeatureRoute {
   if (id === 'Exoplanets' || id === 'Pulsars' || id === 'Quasars' || id === 'Novae' || id === 'Supernovae') {
     return { panel: 'search', kind: 'catalog', catalogModuleId: id }
   }
-  if (id === 'OnlineQueries' || id === 'RemoteControl' || id === 'RemoteSync') {
+  // 无线控制已经在「设置 → 主设置」里落地（开关 + 端口 + 访问地址），这里直接跳过去，
+  // 别再报"离线构建不支持"。
+  if (id === 'RemoteControl') return { panel: 'settings', kind: 'host' }
+  if (id === 'OnlineQueries' || id === 'RemoteSync') {
     return { panel: '', kind: 'offline' }
   }
   if (id === 'LensDistortionEstimator' || id === 'SolarSystemEditor' || id === 'Vts' ||
