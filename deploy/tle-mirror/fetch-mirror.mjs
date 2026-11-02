@@ -88,7 +88,8 @@ for (const source of mirrors) {
 }
 
 if (!dryRun) {
-  await writeFile(join(root, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  await mkdir(join(root, 'v1'), { recursive: true })
+  await writeFile(join(root, 'v1', 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 const failed = manifest.sources.filter((s) => !s.ok).length
 console.log(`\n${manifest.sources.length - failed}/${manifest.sources.length} 个源已刷新，失败 ${failed} 个`)

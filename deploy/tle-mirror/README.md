@@ -78,3 +78,30 @@ node scripts/update-ohos-astronomy-data.mjs --all \
 ```
 
 镜像地址与 `data/ohos/network-sources.json` 里的 `mirrorPath` 一一对应，改域名只改 `--mirror-base-url`。
+
+## 已部署实例（2026-11-03）
+
+| 项 | 值 |
+|---|---|
+| 实例 | `i-uf68vk358s8l58afzswt`（cn-shanghai，2 vCPU / 1.8 GiB / 40 GiB，Alibaba Cloud Linux 3） |
+| 脚本 | `/opt/tle-mirror/`（`fetch-mirror.mjs` + `sources.json`） |
+| 数据 | `/srv/tle-mirror/`（约 7.7 MB） |
+| 对外 | `https://skyinstrument.cn/v1/...`（挂在既有站点的 apex server 块里） |
+| 刷新 | `tle-mirror.timer`，每 3 小时；`systemctl list-timers tle-mirror.timer` |
+| 配置备份 | `/etc/skyinstrument-website/nginx.conf.bak-20261103015512` |
+
+注意这台机器上跑了**两个** nginx 实例，pid 文件不同，别混：
+
+- `/etc/skyinstrument-website/nginx.conf` → 80/443，site（`skyinstrument.cn`），镜像就挂在这里
+- `/etc/skyinstrument/nginx.conf` → 仅 127.0.0.1:8080
+
+改完配置只重载站点那个：
+
+```bash
+nginx -t -c /etc/skyinstrument-website/nginx.conf && \
+  nginx -s reload -c /etc/skyinstrument-website/nginx.conf
+```
+
+回滚：把 `.bak-*` 覆盖回去再 reload 即可（`/v1/` 那一块是唯一改动）。
+
+已知：`catalog.mpc` 一直格式不符被拒；CelesTrak 的 `active` 分组在短时间内重复抓取会返回 403（3 小时间隔不会触发），失败时保留上一版。

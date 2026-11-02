@@ -53,14 +53,14 @@
     },
     "satellites": {
       "source": "CelesTrak GP 3LE with SatNOGS supplement",
-      "sourceMode": "upstream",
+      "sourceMode": "mirror",
       "sources": [
         {
           "sourceId": "satellites.tle.stations",
           "role": "primary",
           "format": "tle-3le",
-          "sourceMode": "upstream",
-          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=3LE",
+          "sourceMode": "mirror",
+          "resolvedEndpoint": "https://skyinstrument.cn/v1/catalogs/satellites/stations.3le",
           "bytes": 2688,
           "entries": 16,
           "sha256": "4286eae4cacc94523da674166849ef2246990af2250d9d42c84a3c97f4508500",
@@ -70,8 +70,8 @@
           "sourceId": "satellites.tle.visual",
           "role": "primary",
           "format": "tle-3le",
-          "sourceMode": "upstream",
-          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=3LE",
+          "sourceMode": "mirror",
+          "resolvedEndpoint": "https://skyinstrument.cn/v1/catalogs/satellites/visual.3le",
           "bytes": 26208,
           "entries": 156,
           "sha256": "4f9b62d54751bcde160b33b74e8ef9d64103646bde96841b339131c9e5514203",
@@ -81,8 +81,8 @@
           "sourceId": "satellites.tle.active",
           "role": "primary",
           "format": "tle-3le",
-          "sourceMode": "upstream",
-          "resolvedEndpoint": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=3LE",
+          "sourceMode": "mirror",
+          "resolvedEndpoint": "https://skyinstrument.cn/v1/catalogs/satellites/active.3le",
           "bytes": 2670864,
           "entries": 15898,
           "sha256": "c5b2717457482f51627347a7665f0eb069cf2fb0bef76ddb9028f86c20ddaa86",
@@ -92,17 +92,17 @@
           "sourceId": "satellites.tle.satnogs",
           "role": "supplement",
           "format": "satnogs-json",
-          "sourceMode": "upstream",
-          "resolvedEndpoint": "https://db.satnogs.org/api/tle/?format=json",
-          "bytes": 537573,
+          "sourceMode": "mirror",
+          "resolvedEndpoint": "https://skyinstrument.cn/v1/catalogs/satellites/satnogs.json",
+          "bytes": 537601,
           "entries": 1736,
-          "sha256": "af75dd86d572669e3de992c2542acb007a59b481c51038e1e4de961cee7e7bbf",
+          "sha256": "516f451893b34d5dc2332e01f84ac44e5660af68e92b35dcd7aca6c2ef9f50a3",
           "ok": true
         }
       ],
       "sourceErrors": [],
-      "fetchedAt": "2026-11-02T17:09:34.716Z",
-      "sha256": "5ac4eab28cb89d355baf6b91be92d62afad7fecdd43ddc5d2134b35bf21f4347",
+      "fetchedAt": "2026-11-02T17:57:10.799Z",
+      "sha256": "8db4f2eb63036abd02e7bbfb24b9ddfcb1e02c995e9a8d8794830387efdf699a",
       "bytes": 1944603,
       "entries": 3134,
       "validTleEntries": 3134,
@@ -180,5 +180,5 @@
       "verified": true
     }
   },
-  "generatedAt": "2026-11-02T17:09:34.730Z"
+  "generatedAt": "2026-11-02T17:57:10.799Z"
 }
