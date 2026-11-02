@@ -117,6 +117,24 @@ export class SatelliteController {
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
   }
 
+  // 一键开/关全部来源（镜像分组一次到位，省得逐个点）。
+  setAllSatelliteSourcesEnabled(enabled: boolean): void {
+    const sources: SatelliteSourceInput[] = []
+    for (let i = 0; i < this.satelliteStore.satSources.length; i++) {
+      sources.push({ url: this.satelliteStore.satSources[i].url, addNew: enabled })
+    }
+    if (sources.length === 0) return
+    this.port.requestInteractive('setSatelliteSources', JSON.stringify({ sources: sources }), (r: StellariumBridgeResponse) => {
+      if (r.ok === true) {
+        this.satelliteStore.satSourceStatus = enabled
+          ? '已全部开启（' + sources.length + ' 组）'
+          : '已全部关闭'
+        this.satelliteStore.loadSatelliteSources()
+        this.satelliteStore.loadSatellites(true, true)
+      } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')
+    }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
+  }
+
   // 恢复默认 TLE 来源（清空编辑态后重载）。
   restoreSatelliteSources(): void {
     this.port.requestInteractive('restoreSatelliteSources', '', (r: StellariumBridgeResponse) => {

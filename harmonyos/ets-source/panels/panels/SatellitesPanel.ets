@@ -32,6 +32,7 @@ export struct SatellitesPanel {
   onTleFileInput: (value: string) => void = () => {}
   onImportTle: () => void = () => {}
   onPickTleFile: () => void = () => {}
+  onSetAllSources: (enabled: boolean) => void = () => {}
   onSetUpdateSetting: (key: string, value: boolean | number) => void = () => {}
   onUpdateFrequencyInput: (value: string) => void = () => {}
   onSubmitUpdateFrequency: () => void = () => {}
@@ -76,6 +77,20 @@ export struct SatellitesPanel {
           }.width('100%')
           Text(I18n.t('sat_sources_offline_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
           if (!OFFLINE_APPGALLERY_BUILD && this.satelliteStore.satSources.length > 0) {
+            // 镜像分组一键开关：47 个源逐个点太折磨，这里给一个总闸。
+            Row({ space: 8 }) {
+              Column({ space: 2 }) {
+                Text('镜像数据源').fontSize(12).fontColor(this.c.text)
+                Text('已启用 ' + this.satelliteStore.satSourceEnabledCount() + ' / ' + this.satelliteStore.satSources.length + ' 组')
+                  .fontSize(10).fontColor(this.c.sub)
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceEnabledCount() === this.satelliteStore.satSources.length })
+                .width(44).height(24)
+                .onChange((value: boolean) => { this.onSetAllSources(value) })
+            }
+            .width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 })
+            .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+            .margin({ bottom: 4 })
             ForEach(this.satelliteStore.satSources, (source: SatelliteSource, sourceIndex: number) => {
               Column({ space: 4 }) {
                 Row({ space: 6 }) {

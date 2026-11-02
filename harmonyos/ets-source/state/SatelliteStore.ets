@@ -112,6 +112,15 @@ export class SatelliteStore {
   }
 
   // 卫星面板「数据源」：桥拉取 TLE 源列表与更新设置。
+  // 已启用的来源数量（“自动加入新卫星”为真的条目）。
+  satSourceEnabledCount(): number {
+    let n = 0
+    for (let i = 0; i < this.satSources.length; i++) {
+      if (this.satSources[i].addNew) n++
+    }
+    return n
+  }
+
   loadSatelliteSources(): void {    const port = this.ensurePort()
     if (port === null) {
       return

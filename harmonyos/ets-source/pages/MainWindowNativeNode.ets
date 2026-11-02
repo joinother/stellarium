@@ -8760,6 +8760,8 @@ export struct WindowNativeNode {
         onImportTle: () => { this.satelliteCtl().importSatelliteTleFile() },
         // 平板/手机上没法手输沙箱路径：弹出系统文件选择器，把选中的 TLE/CSV 拷进沙箱再导入。
         onPickTleFile: () => { this.pickTleDocumentAndImport() },
+        // 一键开/关全部 TLE 来源（镜像分组多时省事）
+        onSetAllSources: (enabled: boolean) => { this.satelliteCtl().setAllSatelliteSourcesEnabled(enabled) },
         onSetUpdateSetting: (key: string, value: boolean | number) => { this.satelliteCtl().setSatelliteUpdateSetting(key, value) },
         onUpdateFrequencyInput: (value: string) => { this.satelliteStore.satUpdateFrequencyInput = value },
         onSubmitUpdateFrequency: () => {
