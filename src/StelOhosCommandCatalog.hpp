@@ -138,7 +138,25 @@ inline QJsonObject item(const QString& name)
 		value["description"] = QStringLiteral("设置模拟时间；payload 使用 jd|数值 或 mjd|数值，MJD = JD - 2400000.5");
 		value["examplePayload"] = "mjd|51544.50000";
 	}
-	else if (name == "setLocationCoords") value["examplePayload"] = "39.9042|116.4074|43";
+	else if (name == "getObserverPlanetList")
+	{
+		value["description"] = QStringLiteral("返回原版 LocationDialog 的全部天体：planets 为英文名数组；observerPlanets 为 {name,displayName,mapTexture} 数组，地图使用引擎纹理相对文件名，Earth 为空串。");
+	}
+	else if (name == "setObserverPlanet")
+	{
+		value["description"] = QStringLiteral("planetName[|lat|lon|alt[|name]]；只传天体名保留当前坐标。经纬度须有限且在 ±90/±180 度内，海拔为 int32 整数米。跨天体复用引擎自动地景及 observer 跟踪，同天体微调保留地景。返回 planetName/locationName/latitude/longitude/altitude 和实际 landscapeID。");
+		value["examplePayload"] = "Mars|18.65|77.58|-2500|Jezero";
+	}
+	else if (name == "setLocation")
+	{
+		value["description"] = QStringLiteral("name|lat|lon|alt；在当前观测天体上设置坐标，保留地景。经纬度须有限且在 ±90/±180 度内，海拔为 int32 整数米；返回全局状态。");
+		value["examplePayload"] = "Beijing|39.9042|116.4074|43";
+	}
+	else if (name == "setLocationCoords")
+	{
+		value["description"] = QStringLiteral("lat,lon[,alt] 或 lat|lon[|alt]；在当前观测天体微调坐标，保留地景；省略海拔为 0。经纬度须有限且在 ±90/±180 度内，海拔为 int32 整数米。");
+		value["examplePayload"] = "39.9042|116.4074|43";
+	}
 	else if (name == "setPluginLoadAtStartup")
 	{
 		value["description"] = QStringLiteral("兼容旧客户端的插件启动命令；当前内置插件统一随应用启动加载，payload 中的 0 不再关闭插件");

@@ -4,16 +4,17 @@ import { I18n } from '../../pages/I18n'
 import { TonightPlanetRow } from '../../pages/MainWindowModels'
 import { SessionToolStore } from '../../state/SessionToolStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
+import { panelFontSize } from '../../common/ui/UiTypography'
 
 // 会话/观测工具区块。
 //
 // 滑块/输入/结果文案由 store + @Prop 驱动实时刷新。
 // 引擎与桥依赖仍在宿主，以回调解入。
 
-// 观测星球：可站立星球标签网格 + 回到地球。
 @Component
 export struct ObserverPlanetSection {
   @ObjectLink store: SessionToolStore
+  @StorageProp('stellariumReadableUi') readable: boolean = false
   @State c: ThemeSlots = DEFAULT_SLOTS
   planetLabel: (en: string) => string = (en: string) => en
   onSelectPlanet: (name: string) => void = () => {}
@@ -24,26 +25,28 @@ export struct ObserverPlanetSection {
 
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_observing_planet')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
-      Text(I18n.t('m_planet_switch_hint')).fontSize(11).fontColor(this.c.sub).width('100%').margin({ bottom: 2 })
-      Text(I18n.t('m_current_planet') + '：' + this.planetLabel(this.store.observerPlanet)).fontSize(12).fontColor(this.c.text).width('100%')
-      Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(this.store.planetList, (p: string) => {
-          Button(this.planetLabel(p))
-            .fontSize(12)
-            .fontColor(this.store.observerPlanet === p ? this.c.onAccent : this.c.text)
-            .backgroundColor(this.store.observerPlanet === p ? this.c.accent : this.c.bg)
-            .borderRadius(UI_RADIUS_PILL)
-            .height(32)
-            .margin({ right: 8, bottom: 8 })
-            .padding({ left: 14, right: 14 })
-            .onClick(() => { this.onSelectPlanet(p) })
-        }, (p: string) => p)
-      }.width('100%')
-      Button(I18n.t('btn_back_to_earth'))
-        .fontSize(13).fontColor(this.c.textStrong).backgroundColor(this.c.actionPositive)
-        .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ top: 6 })
-        .onClick(() => { this.onSelectPlanet('Earth') })
+      Text(I18n.t('c_observing_planet')).fontSize(panelFontSize(13, this.readable)).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
+      Select(this.store.observerPlanetOptions())
+        .selected(Math.max(0, this.store.planetList.indexOf(this.store.observerPlanet)))
+        .value(this.store.observerPlanetLabel(this.store.observerPlanet))
+        .font({ size: panelFontSize(14, this.readable) })
+        .fontColor(this.c.text)
+        .backgroundColor(this.c.input)
+        .borderRadius(UI_RADIUS_CONTROL)
+        .width('100%').height(44)
+        .enabled(!this.store.observerPlanetPending)
+        .id('observer-planet-select')
+        .onSelect((index: number) => {
+          if (index >= 0 && index < this.store.planetList.length) this.onSelectPlanet(this.store.planetList[index])
+        })
+      Text(I18n.t('m_observer_map_hint')).fontSize(panelFontSize(11, this.readable)).fontColor(this.c.sub).width('100%')
+      if (this.store.observerPlanet !== 'Earth') {
+        Button(I18n.t('btn_back_to_earth'))
+          .fontSize(panelFontSize(12, this.readable)).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+          .borderRadius(UI_RADIUS_CONTROL).height(36).width('100%')
+          .enabled(!this.store.observerPlanetPending)
+          .onClick(() => { this.onSelectPlanet('Earth') })
+      }
     }.width('100%').padding({ left: 10, right: 10 })
   }
 }

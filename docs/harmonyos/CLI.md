@@ -1,5 +1,18 @@
 # Stellarium 鸿蒙 CLI
 
+## 原生观测天体与坐标命令
+
+- `getObserverPlanetList` 返回 `{ok:true, planets:string[], observerPlanets:Array<{name:string, displayName:string, mapTexture:string}>}`。两个数组按引擎相同顺序覆盖 `LocationDialog` 的全部天体，包含卫星、小天体和 observer 虚拟观测点；不做八星白名单过滤。`name` 是命令使用的英文名，`displayName` 来自 `getNameI18n()`，随当前引擎语言和天空文化变化。
+- `mapTexture` 是 `getTextMapName()` 的原始相对文件名，不带 `assets/` 或 `stellarium/textures/` 前缀。Earth 返回空串，使用内置 worldmap；其他天体可使用 `$rawfile('stellarium/textures/' + mapTexture)`。这是地图纹理引用，不保证具有真实地表，也不宣称每个天体都有独立实测地图。
+- `setObserverPlanet` 接受 `planetName`、`planetName|lat|lon|alt` 或 `planetName|lat|lon|alt|name`。只传天体名时保留当前经纬度、海拔；跨天体未传名称或名称为空白时使用本地化天体名，避免沿用旧城市名或把气态天体称为实体地表。同天体未传名称时保留当前地点名；第五项可指定已保存地点的名称，前后空白会被去掉。名称不能包含分隔符 `|`。
+- `setObserverPlanet` 成功返回 `{ok:true, planetName:string, locationName:string, latitude:number, longitude:number, altitude:number, landscapeID:string}`，来自移动完成后的实际引擎状态。经纬度读取原始观测坐标（observer 虚拟点也不替换为内部视角用的极点），`landscapeID` 是实际生效地景 ID。只传当前天体名为幂等操作；同天体调坐标不重置视角或地景。
+- 跨天体且开启自动选择时，第四个引擎参数传英文天体名；关闭时传空参数，避免自定义地景 ID 恰好同名而绕过开关。地景、环境自动启用及大气/雾偏好由 `LandscapeMgr::onTargetLocationChanged` 处理；无匹配地景由引擎回退到 zero horizon。不强制映射到某个地景 ID。普通天体按原版重置初始视角，若所选目标就是新观测天体则取消选择；observer 虚拟点通过 `role='o'` 复用 `StelCore::moveObserverTo` 的父天体选择和跟踪。
+- `setLocation name|lat|lon|alt` 和 `setLocationCoords lat,lon[,alt]` 现在都保留当前观测天体；后者同时接受 `lat|lon[|alt]`，省略海拔仍取 `0`。二者均在原地景中微调，不强制回地球。`setLocation` 保留原全局状态响应；`setLocationCoords` 返回 `ok/planetName/locationName/latitude/longitude/altitude`。`setLocationByName` 仍按位置数据库中记录的天体移动。
+- `setObserverPlanet` 返回 Earth（含只传天体名）或设置 Earth 显式坐标时，与 `setLocation` 共用地名元数据解析：数据库 ID/地名匹配且角距离不超过 `0.5°` 时采用记录的 region/state/ianaTimeZone，保留输入坐标、海拔和地点名。纯地名存在多个近邻时选最近记录；没有合理匹配时清空旧 region/state 并使用 `system_default`，不继承 Moon 等天体的 `LMST`。新切换到非 Earth 天体时地点时区设为 `LMST`。引擎自定义时区开关保持不变，启用时有效显示时区仍由用户的自定义设置决定。
+- 三条坐标命令统一要求有限十进制数、纬度 `[-90,90]`、经度 `[-180,180]`，海拔为 int32 整数米（可为负）。拒绝空字段、非数字、NaN/Infinity、越界、海拔小数/溢出、缺项和多余参数；失败返回 `{ok:false,error:string}`，不移动或清理选择。`setLocationCoords` 不接受混合分隔符。
+
+独立源码契约回归：`node --test scripts/test-ohos-observer-planet-contract.mjs`。该测试核对原生命令与上游委托契约，不构建应用、不连接设备，不能代替真机渲染或地景视觉验收。
+
 ## APP 备案查询（2026-09-23）
 
 - `getAppFilingInfo` 为 ArkUI CLI 只读入口，返回 `type=app`、`number=新ICP备2026008516号-2A`、`verificationUrl=https://beian.miit.gov.cn/`。与设置/关于共用常量，不请求网络、不读取个人信息。

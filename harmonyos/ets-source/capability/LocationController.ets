@@ -60,7 +60,7 @@ export class LocationController {
   // 切到在线需隐私同意 + 前台；状态经 AppStorage 发布给 getLocationMapState 命令。
   setLocationMapProvider(provider: string): void {
     if (provider !== 'offline' && provider !== 'huawei') return
-    if (provider === 'huawei' && (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent())) return
+    if (provider === 'huawei' && (this.sessionToolStore.observerPlanet !== 'Earth' || !this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent())) return
     this.locationStore.locationMapProvider = provider
     AppStorage.setOrCreate('stellariumLocationMapState', JSON.stringify({
       ok: true, provider: provider, phase: provider === 'offline' ? 'ready' : 'requested',
@@ -119,7 +119,7 @@ export class LocationController {
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
       this.pickerStore.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude, I18n.t('m_device_loc_synced'))
       this.pickerStore.locationSource = 'gps'
-      this.applyPickerLocation()
+      this.setLocation(this.pickerStore.locationPickerName, current.latitude, current.longitude, altitude, 'Earth', false, 'gps')
       this.pickerStore.locationPickMode = 'map'
       this.pickerStore.hierContinent = ''
       this.pickerStore.hierCountry = ''
@@ -134,83 +134,70 @@ export class LocationController {
     }
   }
 
-  // 应用当前 picker 坐标并延迟刷新时区。
   applyPickerLocation(): void {
     // 来源沿用 picker 暂存值（GPS / 地图点选各自设过）；其余经本路径应用的场景默认 named。
-    this.setLocation(this.pickerStore.locationPickerName, this.pickerStore.locationPickerLatitude, this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, 'Earth', false, this.pickerStore.locationSource)
-    setTimeout((): void => { this.hooks.loadObserverInfo() }, 500)
+    this.setLocation(this.pickerStore.locationPickerName, this.pickerStore.locationPickerLatitude, this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, this.sessionToolStore.observerPlanet, false, this.pickerStore.locationSource)
   }
 
-  // 写 picker/观测星球/持久化/头部三行 + setObserverPlanet 分支 +
-  // setLocation→setLocationCoords→setLocationByName 三步回退。
   setLocation(name: string, latitude: number, longitude: number, altitude: number, planet: string = 'Earth', silent: boolean = false, source: string = 'named'): void {
+    if (this.sessionToolStore.observerPlanetPending) return
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(altitude) ||
+      latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return
     const targetPlanet = planet.length > 0 ? planet : 'Earth'
-    const currentPlanet = this.sessionToolStore.observerPlanet
-    // Update picker UI immediately (non-blocking, gives instant feedback)
+    this.sessionToolStore.observerPlanetPending = true
+    const complete = (response: StellariumBridgeResponse): void => {
+      this.sessionToolStore.observerPlanetPending = false
+      if (response.ok !== true) {
+        this.hooks.flashHint(I18n.t('m_observer_switch_failed'))
+        this.hooks.loadObserverInfo()
+        return
+      }
+      this.commitLocation(response.locationName ?? name, response.latitude ?? latitude,
+        response.longitude ?? longitude, response.altitude ?? Math.round(altitude), response.planetName ?? targetPlanet, source)
+      this.hooks.refreshState()
+      this.hooks.loadObserverInfo()
+      if (!silent) this.hooks.flashHint(I18n.t('i0073').replace('%s', this.pickerStore.locationDisplayName(name)))
+    }
+    this.port.requestWhenReady('setObserverPlanet', `${targetPlanet}|${latitude}|${longitude}|${Math.round(altitude)}|${name.replace(/\|/g, ' ')}`, complete, complete, 0, 100, 10)
+  }
+
+  private commitLocation(name: string, latitude: number, longitude: number, altitude: number, targetPlanet: string, source: string): void {
+    const planetChanged = targetPlanet !== this.sessionToolStore.observerPlanet
     this.pickerStore.setPickerLocation(name, latitude, longitude, altitude, I18n.t('m_synced_to_sky'))
     this.pickerStore.locationSource = source
     this.hooks.setObserverPlanetCrossStore(targetPlanet)
-    // 持久化观测点：GPS / 选点后的位置跨重启保留（否则重启回退引擎默认北京）。
+    if (planetChanged) {
+      this.pickerStore.hierContinent = ''
+      this.pickerStore.hierCountry = ''
+      this.pickerStore.hierRegion = ''
+      this.pickerStore.hierCity = ''
+      this.locationStore.locSearchQuery = ''
+      this.locationStore.searchLocations('')
+      if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
+    }
     this.saveObserverLocationToStorage()
-      this.hooks.setLocationTexts(
+    this.hooks.setLocationTexts(
         quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet) + ' · ' + planetZh(targetPlanet),
       this.locationStore.formatDegrees(latitude, 'N', 'S') + ' / ' + this.locationStore.formatDegrees(longitude, 'E', 'W'),
       altitude.toFixed(0) + ' m')
     this.pickerStore.observerTimeZone = targetPlanet === 'Earth' ? approximateTimeZoneDisplay(longitude) : I18n.t('tz_system')
-    if (!silent) {
-      this.hooks.flashHint(I18n.t('i0073').replace('%s', this.pickerStore.locationDisplayName(name)))
-    }
-    if (targetPlanet !== currentPlanet || targetPlanet !== 'Earth') {
-      this.port.requestWhenReady('setObserverPlanet', `${targetPlanet}|${latitude}|${longitude}|${altitude}`, (r: StellariumBridgeResponse) => {
-        if (r.ok === true) {
-          this.hooks.refreshState()
-          setTimeout((): void => { this.hooks.loadObserverInfo() }, 300)
-        } else {
-          this.hooks.setObserverPlanetCrossStore(currentPlanet)
-          this.hooks.flashHint('切换观测星球失败')
-        }
-      }, undefined, 0, 100, 10)
-      return
-    }
-    // 经纬度是地图选点和层级城市的共同事实源，先写坐标，避免名称查库失败或读回旧位置。
-    this.port.requestWhenReady('setLocation', `${name}|${latitude}|${longitude}|${altitude}`, (r: StellariumBridgeResponse) => {
-      if (r.ok === true) {
-        this.hooks.refreshState()
-        setTimeout((): void => { this.hooks.loadObserverInfo() }, 300)
-      } else {
-        hilog.info(0x0000, 'StellariumArkUI', 'setLocation failed, fallback to setLocationCoords')
-        this.port.requestWhenReady('setLocationCoords', `${latitude},${longitude},${altitude}`, (r2: StellariumBridgeResponse) => {
-          if (r2.ok === true) {
-            this.hooks.refreshState()
-            setTimeout((): void => { this.hooks.loadObserverInfo() }, 300)
-          } else {
-            hilog.info(0x0000, 'StellariumArkUI', 'setLocationCoords failed, fallback to setLocationByName')
-            this.port.requestWhenReady('setLocationByName', name, (r3: StellariumBridgeResponse) => {
-              if (r3.ok === true) {
-                this.hooks.refreshState()
-                setTimeout((): void => { this.hooks.loadObserverInfo() }, 300)
-              }
-            })
-          }
-        })
-      }
-    }, undefined, 0, 100, 10)
   }
 
   // 切换观测星球（本 store 只读 observerPlanet，写经 hooks）。
   setObserverPlanet(name: string): void {
-    this.port.requestInteractive('setObserverPlanet', name, (r: StellariumBridgeResponse) => {
-      if (r.ok === true) {
-        this.hooks.setObserverPlanetCrossStore(name)
-        this.pickerStore.hierContinent = ''
-        this.pickerStore.hierCountry = ''
-        this.pickerStore.hierRegion = ''
-        this.pickerStore.hierCity = ''
-        this.hooks.refreshState()
-        this.hooks.flashHint('已切换观测星球：' + name)
-      } else {
-        this.hooks.flashHint('切换失败：' + (r.error ?? 'unknown'))
-      }
+    if (name === this.sessionToolStore.observerPlanet) return
+    this.setLocation(I18n.t('custom_location'), this.pickerStore.locationPickerLatitude,
+      this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, name, false, 'map')
+  }
+
+  syncObserverFromNative(): void {
+    this.port.requestInteractive('getObserverInfo', '', (response: StellariumBridgeResponse) => {
+      if (response.ok !== true || response.latitude === undefined || response.longitude === undefined) return
+      const planet = response.planetName ?? response.planet ?? 'Earth'
+      this.commitLocation(response.name ?? I18n.t('custom_location'), response.latitude, response.longitude,
+        response.altitude ?? 0, planet, planet === 'Earth' ? this.pickerStore.locationSource : 'map')
+      this.hooks.refreshState()
+      this.hooks.loadObserverInfo()
     })
   }
 

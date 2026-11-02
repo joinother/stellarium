@@ -3,6 +3,12 @@
 
 export interface LangOption { code: string; name: ResourceStr }
 
+export interface ObserverPlanetItem {
+  name: string
+  displayName: string
+  mapTexture: string
+}
+
 export interface HierCity {
   n: string
   la: number
@@ -831,6 +837,7 @@ export interface StellariumBridgeResponse {
   archiveReady?: boolean
   archiveError?: string
   planets?: string[]
+  observerPlanets?: ObserverPlanetItem[]
   tonight?: TonightEvents
   datasets?: SpectralDataset[]
   spectral?: SpectralState

@@ -1,5 +1,5 @@
 import { TonightPlanetRow } from '../pages/MainWindowModels'
-import { StellariumBridgeResponse, SessionSnapshot, TonightEvents } from '../pages/StellariumTypes'
+import { StellariumBridgeResponse, SessionSnapshot, TonightEvents, ObserverPlanetItem } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
 import { sessionSignature } from '../common/derive/actions'
 import { planetZh } from '../common/derive/labels'
@@ -34,6 +34,8 @@ export class SessionToolStore {
   // —— 观测星球（可站立星球切换）——
   observerPlanet: string = 'Earth'
   planetList: string[] = []
+  observerPlanets: ObserverPlanetItem[] = []
+  observerPlanetPending: boolean = false
 
   // —— 虚拟指星笔（多设备联动）——
   pointAlt: string = '45'
@@ -96,8 +98,6 @@ export class SessionToolStore {
     }
   }
 
-  // 「位置」面板观测星球列表：桥拉取全部星球名，仅保留有专属地景、可站立观天的 8 颗。
-  // 本域无发布点，onChanged 为空实现。
   loadPlanetList(): void {
     const port = this.ensurePort()
     if (port === null) {
@@ -105,14 +105,26 @@ export class SessionToolStore {
     }
     port.requestInteractive('getObserverPlanetList', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.planets) {
-        // 只保留"有专属地景、能站着看天+换地景"的星球；getAllPlanetEnglishNames
-        // 还会返回大量彗星/矮行星，列出来既冗长又无对应地景，对切星球毫无意义。
-        const standable = ['Earth', 'Moon', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Sun']
-        const all = r.planets as string[]
-        this.planetList = standable.filter((s) => all.indexOf(s) >= 0)
+        this.planetList = r.planets
+        this.observerPlanets = r.observerPlanets ?? []
         this.notifyChanged()
       }
     })
+  }
+
+  observerPlanetLabel(name: string): string {
+    const translated = planetZh(name)
+    if (translated !== name) return translated
+    return this.observerPlanets.find((item: ObserverPlanetItem) => item.name === name)?.displayName ?? name
+  }
+
+  observerPlanetMapTexture(): string {
+    const texture = this.observerPlanets.find((item: ObserverPlanetItem) => item.name === this.observerPlanet)?.mapTexture ?? ''
+    return /^[a-zA-Z0-9_.-]+\.(png|jpg|jpeg)$/i.test(texture) ? texture : ''
+  }
+
+  observerPlanetOptions(): SelectOption[] {
+    return this.planetList.map((name: string): SelectOption => ({ value: this.observerPlanetLabel(name) }))
   }
 
   // 选中天体是否为当前观测星球。

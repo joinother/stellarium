@@ -12,6 +12,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 @Component
 export struct CityChipsRow {
   @ObjectLink store: LocationStore
+  @Prop observerPlanet: string = 'Earth'
   @State c: ThemeSlots = DEFAULT_SLOTS
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
@@ -67,6 +68,7 @@ export struct CityChipsRow {
       }
 
       // 中国城市
+      if (this.observerPlanet === 'Earth') {
       Text('中国城市').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 6 })
       Scroll() {
         Row({ space: 8 }) {
@@ -127,6 +129,7 @@ export struct CityChipsRow {
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)
       .width('100%')
+      }
     }
     .width('100%')
     .margin({ top: 12 })

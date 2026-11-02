@@ -100,9 +100,12 @@ export class LocationPickerStore {
         } else if (updateTimeZone && this.observerTimeZone.length === 0 && r.longitude !== undefined) {
           this.observerTimeZone = approximateTimeZoneDisplay(Number(r.longitude))
         }
-        if (r.planetName) {
-          hooks.setObserverPlanet(r.planetName)
+        const planet = r.planetName ?? r.planet
+        if (planet) hooks.setObserverPlanet(planet)
+        if (r.latitude !== undefined && r.longitude !== undefined) {
+          this.setPickerLocation(r.name ?? I18n.t('custom_location'), r.latitude, r.longitude, r.altitude ?? 0, this.locationPickerStatus)
         }
+        if (planet !== 'Earth') this.observerTimeZone = ''
       }
     })
   }

@@ -346,6 +346,8 @@
     "object-model-expand",
     "object-model-inline-stage",
     "object-model-stage",
+    "observer-planet-map",
+    "observer-planet-select",
     "panel-back",
     "panel-close",
     "panel-header-action",
@@ -385,11 +387,11 @@
     "recording-share-",
     "search-category-"
   ],
-  "totalIdAnchors": 51,
+  "totalIdAnchors": 53,
   "count": {
     "panels": 35,
-    "staticIds": 30,
+    "staticIds": 32,
     "dynamicIdPrefixes": 18,
-    "totalIdAnchors": 51
+    "totalIdAnchors": 53
   }
 }
