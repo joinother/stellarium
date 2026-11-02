@@ -27,7 +27,7 @@ SET(STELLARIUM_RELEASE_BUILD 0 CACHE BOOL "Set 1 to build as an official release
 # features have their own consent and review flow. Plugin network code remains
 # available for explicitly enabled, separately reviewed features.
 IF(OHOS)
-     SET(STELLARIUM_OHOS_OFFLINE 1 CACHE BOOL "Disable core network paths in the HarmonyOS build.")
+     SET(STELLARIUM_OHOS_OFFLINE 0 CACHE BOOL "Disable core network paths in the HarmonyOS build.")
      IF(STELLARIUM_OHOS_OFFLINE)
           ADD_DEFINITIONS(-DSTELLARIUM_OHOS_OFFLINE)
      ENDIF()
