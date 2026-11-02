@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "id": "satellites.tle.stations",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/stations.3le",
+      "format": "tle-3le"
+    },
+    {
+      "id": "satellites.tle.visual",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/visual.3le",
+      "format": "tle-3le"
+    },
+    {
+      "id": "satellites.tle.active",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=3LE",
+      "mirrorPath": "/v1/catalogs/satellites/active.3le",
+      "format": "tle-3le"
+    },
+    {
+      "id": "satellites.tle.satnogs",
+      "upstreamUrl": "https://db.satnogs.org/api/tle/?format=json",
+      "mirrorPath": "/v1/catalogs/satellites/satnogs.json",
+      "format": "satnogs-json"
+    },
+    {
+      "id": "catalog.exoplanets",
+      "upstreamUrl": "https://www.stellarium.org/json/exoplanets.json",
+      "mirrorPath": "/v1/catalogs/exoplanets.json",
+      "format": "json"
+    },
+    {
+      "id": "catalog.meteor-showers",
+      "upstreamUrl": "https://stellarium.org/json/MeteorShowers.json",
+      "mirrorPath": "/v1/catalogs/meteor-showers.json",
+      "format": "json"
+    },
+    {
+      "id": "catalog.novae",
+      "upstreamUrl": "https://stellarium.org/json/novae.json",
+      "mirrorPath": "/v1/catalogs/novae.json",
+      "format": "json"
+    },
+    {
+      "id": "catalog.supernovae",
+      "upstreamUrl": "https://stellarium.org/json/supernovae.json",
+      "mirrorPath": "/v1/catalogs/supernovae.json",
+      "format": "json"
+    },
+    {
+      "id": "catalog.pulsars",
+      "upstreamUrl": "https://stellarium.org/json/pulsars.json",
+      "mirrorPath": "/v1/catalogs/pulsars.json",
+      "format": "json"
+    },
+    {
+      "id": "catalog.quasars",
+      "upstreamUrl": "https://stellarium.org/json/quasars.json",
+      "mirrorPath": "/v1/catalogs/quasars.json",
+      "format": "json"
+    },
+    {
+      "id": "survey.hips.directory",
+      "upstreamUrl": "https://data.stellarium.org/surveys/hipslist",
+      "mirrorPath": "/v1/surveys/hips/index.json",
+      "format": "ivoa-hips-json"
+    },
+    {
+      "id": "survey.dss.tiles",
+      "upstreamUrl": "http://dss.stellarium.org/survey/{level}/{x}_{y}.jpg",
+      "mirrorPath": "/v1/surveys/dss/{level}/{x}_{y}.jpg",
+      "format": "jpg-tiles"
+    },
+    {
+      "id": "survey.hips.tiles",
+      "upstreamUrl": "https://data.stellarium.org/surveys/{survey}/{tilePath}",
+      "mirrorPath": "/v1/surveys/hips/{survey}/{tilePath}",
+      "format": "hips-properties-and-tiles"
+    },
+    {
+      "id": "query.simbad",
+      "upstreamUrl": "https://simbad.u-strasbg.fr/",
+      "mirrorPath": "/v1/query/simbad",
+      "format": "simbad-response"
+    },
+    {
+      "id": "query.online.exoplanets",
+      "upstreamUrl": "https://ase.exopla.net/index.php/{object}",
+      "mirrorPath": "/v1/query/exoplanets/{object}",
+      "format": "html-or-text"
+    },
+    {
+      "id": "query.online.aavso",
+      "upstreamUrl": "https://www.aavso.org/vsx/index.php?view=api.object&ident={object}",
+      "mirrorPath": "/v1/query/aavso/{object}",
+      "format": "html-or-text"
+    },
+    {
+      "id": "query.online.gcvs",
+      "upstreamUrl": "http://www.sai.msu.su/gcvs/cgi-bin/ident.cgi?cat=Hip+&num={object}",
+      "mirrorPath": "/v1/query/gcvs/{object}",
+      "format": "html-or-text"
+    },
+    {
+      "id": "query.online.wikipedia",
+      "upstreamUrl": "https://en.wikipedia.org/wiki/{object}",
+      "mirrorPath": "/v1/query/wikipedia/{object}",
+      "format": "html"
+    },
+    {
+      "id": "query.plate-solver.astrometry",
+      "upstreamUrl": "http://nova.astrometry.net/api/",
+      "mirrorPath": "/v1/query/plate-solver",
+      "format": "astrometry-api"
+    },
+    {
+      "id": "core.ip-location",
+      "upstreamUrl": "https://freegeoip.stellarium.org/json/",
+      "mirrorPath": "/v1/location/ip",
+      "format": "json"
+    },
+    {
+      "id": "catalog.mpc",
+      "upstreamUrl": "https://www.minorplanetcenter.net/",
+      "mirrorPath": "/v1/catalogs/mpc",
+      "format": "mpc-orbit-elements"
+    },
+    {
+      "id": "realtime.planes",
+      "upstreamUrl": "https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius}",
+      "mirrorPath": "/v1/realtime/planes/{lat}/{lon}/{radius}",
+      "format": "aircraft-json"
+    }
+  ]
+}

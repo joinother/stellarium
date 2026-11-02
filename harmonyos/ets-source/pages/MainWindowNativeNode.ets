@@ -3659,6 +3659,8 @@ export struct WindowNativeNode {
   // 断言「面板确实开了」需要这条命令（此前只能退回坐标点击验证）。与 getAstroPanelState 同一套
   // AppStorage 发布方式，由页面在面板状态变化时写入。
   private publishUiPanelState(): void {
+    // 面板可见性变化时同步 Qt 渲染节流（见 syncMapRenderThrottle）。
+    this.syncMapRenderThrottle(this.panelVisible)
     this.publishUiLayoutState()
     AppStorage.setOrCreate('stellariumUiPanelState', JSON.stringify({
       ok: true, panel: this.activePanel, visible: this.panelVisible,
@@ -3904,17 +3906,18 @@ export struct WindowNativeNode {
 
   // 在线地图铺在 Qt 视图之上时，合成器要同时合成两个持续刷新的原生层；把 Qt 侧降到
   // 4 FPS（C++ setPanelOverlayActive）才腾得出带宽给地图手势。
-  private syncMapRenderThrottle(): void {
-    const want = this.activePanel === 'place' && this.panelVisible &&
-      this.locationStore.locationMapProvider === 'huawei' &&
-      this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent()
+  private syncMapRenderThrottle(visible: boolean = this.panelVisible): void {
+    // 任何左侧面板打开时都节流：面板会盖住大半星空，而 Qt 侧 30 FPS 的整窗重绘
+    // 会和 ArkUI 抢同一个合成器，表现就是面板本身滚动/点击发涩。
+    // 关闭路径要显式传 visible=false：那时 panelVisible 还是 true（关闭动画结束后才置 false）。
+    const want = visible && this.applicationInForeground
     if (want === this.mapOverlayThrottled) return
     this.mapOverlayThrottled = want
     this.callNativeFire('setPanelOverlayActive', want ? '1' : '0')
   }
 
   private schedulePanelDataLoad(panel: string, visible: boolean): void {
-    this.syncMapRenderThrottle()
+    this.syncMapRenderThrottle(visible)
     if (this.panelDataLoadTimer >= 0) {
       clearTimeout(this.panelDataLoadTimer)
       this.panelDataLoadTimer = -1
@@ -4191,6 +4194,8 @@ export struct WindowNativeNode {
     this.polarScopeCtl().stopPolarScopeTimer()
     this.astroCalcCtl().stopAstroCalcContextTimer()
     this.telescopeCtl().stopTelescopeLivePosition(false)
+    // 面板一关就恢复 30 FPS，别等 170ms 关闭动画跑完。
+    this.syncMapRenderThrottle(false)
     if (this.panelDataLoadTimer >= 0) {
       clearTimeout(this.panelDataLoadTimer)
       this.panelDataLoadTimer = -1

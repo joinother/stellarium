@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh SkyInstrument mirror every 3 hours
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=3h
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

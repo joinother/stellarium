@@ -1,0 +1,11 @@
+[Unit]
+Description=SkyInstrument online-data mirror refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tle-mirror
+ExecStart=/usr/bin/node /opt/tle-mirror/fetch-mirror.mjs --root /srv/tle-mirror
+TimeoutStartSec=900
+Nice=10

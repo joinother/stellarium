@@ -1,7 +1,7 @@
 ﻿import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
-import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHealthEntry } from '../../pages/MainWindowModels'
+import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHealthEntry, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
 import { SatelliteGroupSelector } from '../satellite/SatelliteGroupSelector'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { SatelliteStore } from '../../state/SatelliteStore'
@@ -75,7 +75,7 @@ export struct SatellitesPanel {
             Text(this.satelliteStore.satSources.length.toString()).fontSize(11).fontColor(this.c.sub)
           }.width('100%')
           Text(I18n.t('sat_sources_offline_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
-          if (this.satelliteStore.satSources.length > 0) {
+          if (!OFFLINE_APPGALLERY_BUILD && this.satelliteStore.satSources.length > 0) {
             ForEach(this.satelliteStore.satSources, (source: SatelliteSource, sourceIndex: number) => {
               Column({ space: 4 }) {
                 Row({ space: 6 }) {
@@ -99,17 +99,19 @@ export struct SatellitesPanel {
               }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
             }, (source: SatelliteSource) => source.index.toString() + ':' + source.url)
           }
-          TextInput({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
-            .height(36).fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).width('100%')
-            .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
-            .onChange((value: string) => { this.onSourceInput(value) })
-          Row({ space: 6 }) {
-            Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew }).width(42).height(24)
-              .onChange((value: boolean) => { this.onSourceAddNew(value) })
-            Text(I18n.t('sat_source_add_new')).fontSize(10).fontColor(this.c.chipInactiveText).layoutWeight(1)
-            Button(this.satelliteStore.editingSatelliteSourceIndex >= 0 ? I18n.t('sat_source_save') : I18n.t('sat_source_add')).fontSize(11).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
-              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onAddSource() })
-          }.width('100%')
+          if (!OFFLINE_APPGALLERY_BUILD) {
+            TextInput({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
+              .height(36).fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).width('100%')
+              .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
+              .onChange((value: string) => { this.onSourceInput(value) })
+            Row({ space: 6 }) {
+              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew }).width(42).height(24)
+                .onChange((value: boolean) => { this.onSourceAddNew(value) })
+              Text(I18n.t('sat_source_add_new')).fontSize(10).fontColor(this.c.chipInactiveText).layoutWeight(1)
+              Button(this.satelliteStore.editingSatelliteSourceIndex >= 0 ? I18n.t('sat_source_save') : I18n.t('sat_source_add')).fontSize(11).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onAddSource() })
+            }.width('100%')
+          }
           Row({ space: 6 }) {
             Button(I18n.t('sat_refresh')).fontSize(10).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
               .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).onClick(() => { this.onRefreshCatalog() })
