@@ -1093,6 +1093,24 @@ void Satellites::restoreDefaults(void)
 	loadSettings();
 }
 
+#if defined(__OHOS__)
+// HarmonyOS：CelesTrak 在国内直连经常超时或 403，把它的分组源改走自建镜像
+// （https://skyinstrument.cn/v1/catalogs/satellites/<group>.csv）。非 CelesTrak 的源原样保留。
+static QString ohosMirrorTleUrl(const QString& url)
+{
+	static const QString mirrorBase = QStringLiteral("https://skyinstrument.cn/v1/catalogs/satellites/");
+	static const QRegularExpression groupRE(QStringLiteral("GROUP=([A-Za-z0-9\\-]+)"),
+		QRegularExpression::CaseInsensitiveOption);
+	if (!url.contains(QStringLiteral("celestrak.org"), Qt::CaseInsensitive))
+		return url;
+	const QRegularExpressionMatch match = groupRE.match(url);
+	if (!match.hasMatch())
+		return url;
+	QString group = match.captured(1);
+	return mirrorBase + group + QStringLiteral(".csv");
+}
+#endif
+
 void Satellites::restoreDefaultTleSources()
 {
 	// Format: group name, auto-add flag
@@ -1121,6 +1139,9 @@ void Satellites::restoreDefaultTleSources()
 	for (auto group = celestrak.begin(); group != celestrak.end(); ++group)
 	{
 		QString url = celestrackBaseURL.arg(group.key());
+#if defined(__OHOS__)
+		url = ohosMirrorTleUrl(url);
+#endif
 		if (group.value()) // Auto-add ON!
 			urls << QString("1,%1").arg(url);
 		else
@@ -1309,6 +1330,30 @@ void Satellites::loadSettings()
 			conf->beginGroup("Satellites");
 		}
 	}
+
+#if defined(__OHOS__)
+	// 老配置里存的是 celestrak.org 直连地址；迁移到镜像，避免国内刷新超时/403。
+	{
+		QStringList migrated;
+		bool changed = false;
+		for (const QString& entry : updateUrls)
+		{
+			const bool autoAdd = entry.startsWith(QStringLiteral("1,"));
+			const QString url = autoAdd ? entry.mid(2) : entry;
+			const QString mirrored = ohosMirrorTleUrl(url);
+			if (mirrored != url)
+				changed = true;
+			migrated << (autoAdd ? QStringLiteral("1,") + mirrored : mirrored);
+		}
+		if (changed)
+		{
+			conf->endGroup();
+			saveTleSources(migrated);
+			qWarning() << "[Satellites] migrated CelesTrak sources to the OHOS mirror";
+			conf->beginGroup("Satellites");
+		}
+	}
+#endif
 	
 	// NOTE: Providing default values AND using restoreDefaultSettings() to create the section seems redundant. --BM 
 	

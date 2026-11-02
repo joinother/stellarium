@@ -56,20 +56,25 @@ export struct CatalogsPanel {
                   .fontSize(11).fontColor(this.c.iconTertiary)
                   .padding({ left: 8, right: 8, top: 3, bottom: 3 })
                   .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).margin({ left: 8 })
-              } else if (!OFFLINE_APPGALLERY_BUILD) {
-                Button(this.catalogStore.catalogBusy && this.catalogStore.catalogDownloadingId === c.id ? I18n.t('catalog_downloading') : I18n.t('catalog_download'))
-                  .fontSize(12).fontColor(this.c.text)
-                  .backgroundColor(this.catalogStore.catalogBusy ? this.c.softStrong : this.c.softStrong)
-                  .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 14, right: 14 }).margin({ left: 8 })
-                  .enabled(!this.catalogStore.catalogBusy)
-                  .onClick(() => { this.onDownload(c.id) })
               } else {
-                Button(this.catalogStore.catalogImporting ? I18n.t('catalog_importing') : I18n.t('catalog_import'))
-                  .fontSize(11).fontColor(this.c.text)
-                  .backgroundColor(this.catalogStore.catalogImporting ? this.c.softStrong : this.c.softStrong)
-                  .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 14, right: 14 }).margin({ left: 8 })
-                  .enabled(!this.catalogStore.catalogImporting)
-                  .onClick(() => { this.onImportCatalog() })
+                // 联网版两个入口都给：在线下载 + 本地导入。导入不能因为开了网络就消失
+                // （国内直连下载经常失败，本地导入是兜底路径）。
+                Row({ space: 6 }) {
+                  if (!OFFLINE_APPGALLERY_BUILD) {
+                    Button(this.catalogStore.catalogBusy && this.catalogStore.catalogDownloadingId === c.id ? I18n.t('catalog_downloading') : I18n.t('catalog_download'))
+                      .fontSize(11).fontColor(this.c.text)
+                      .backgroundColor(this.c.softStrong)
+                      .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 12, right: 12 })
+                      .enabled(!this.catalogStore.catalogBusy)
+                      .onClick(() => { this.onDownload(c.id) })
+                  }
+                  Button(this.catalogStore.catalogImporting ? I18n.t('catalog_importing') : I18n.t('catalog_import'))
+                    .fontSize(11).fontColor(this.c.text)
+                    .backgroundColor(this.c.softStrong)
+                    .borderRadius(UI_RADIUS_CONTROL).height(32).padding({ left: 12, right: 12 })
+                    .enabled(!this.catalogStore.catalogImporting)
+                    .onClick(() => { this.onImportCatalog() })
+                }.margin({ left: 8 })
               }
             }.width('100%')
             Row({ space: 10 }) {

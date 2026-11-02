@@ -132,6 +132,321 @@
       "upstreamUrl": "https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius}",
       "mirrorPath": "/v1/realtime/planes/{lat}/{lon}/{radius}",
       "format": "aircraft-json"
+    },
+    {
+      "id": "satellites.csv.last-30-days",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=last-30-days&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/last-30-days.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.stations",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/stations.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.visual",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=visual&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/visual.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.active",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/active.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.analyst",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=analyst&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/analyst.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.weather",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=weather&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/weather.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.resource",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=resource&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/resource.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.sarsat",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=sarsat&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/sarsat.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.dmc",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=dmc&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/dmc.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.tdrss",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=tdrss&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/tdrss.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.argos",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=argos&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/argos.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.planet",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=planet&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/planet.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.spire",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=spire&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/spire.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.geo",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=geo&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/geo.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.gpz",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gpz&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/gpz.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.gpz-plus",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gpz-plus&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/gpz-plus.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.intelsat",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=intelsat&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/intelsat.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.eutelsat",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=eutelsat&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/eutelsat.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.starlink",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/starlink.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.qianfan",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=qianfan&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/qianfan.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.kuiper",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=kuiper&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/kuiper.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.orbcomm",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=orbcomm&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/orbcomm.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.amateur",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/amateur.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.x-comm",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=x-comm&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/x-comm.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.ses",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=ses&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/ses.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.telesat",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=telesat&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/telesat.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.oneweb",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=oneweb&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/oneweb.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.hulianwang",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=hulianwang&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/hulianwang.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.iridium-NEXT",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-NEXT&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/iridium-NEXT.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.globalstar",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=globalstar&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/globalstar.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.satnogs",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=satnogs&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/satnogs.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.other-comm",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=other-comm&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/other-comm.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.gnss",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gnss&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/gnss.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.gps-ops",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/gps-ops.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.galileo",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/galileo.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.glo-ops",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/glo-ops.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.beidou",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=beidou&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/beidou.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.sbas",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=sbas&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/sbas.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.science",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=science&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/science.csv",
+      "format": "csv",
+      "autoAdd": true
+    },
+    {
+      "id": "satellites.csv.geodetic",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=geodetic&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/geodetic.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.engineering",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=engineering&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/engineering.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.education",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=education&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/education.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.military",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=military&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/military.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.radar",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=radar&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/radar.csv",
+      "format": "csv",
+      "autoAdd": false
+    },
+    {
+      "id": "satellites.csv.cubesat",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=cubesat&FORMAT=CSV",
+      "mirrorPath": "/v1/catalogs/satellites/cubesat.csv",
+      "format": "csv",
+      "autoAdd": false
     }
   ]
 }
