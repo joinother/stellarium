@@ -130,9 +130,9 @@ export class SatelliteController {
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
   }
 
-  // 把输入框路径导入为 TLE 来源。
-  importSatelliteTleFile(): void {
-    const path = this.satelliteStore.satTleFileInput.trim()
+  // 导入本地 TLE：pathOverride 优先（文件选择器落盘后的沙箱路径），否则用输入框里的路径。
+  importSatelliteTleFile(pathOverride: string = ''): void {
+    const path = (pathOverride.length > 0 ? pathOverride : this.satelliteStore.satTleFileInput).trim()
     if (path.length === 0) { this.satelliteStore.satSourceStatus = I18n.t('sat_tle_path_empty'); return }
     this.port.requestInteractive('importSatelliteTle', JSON.stringify({ paths: [path] }), (r: StellariumBridgeResponse) => {
       if (r.ok === true) {

@@ -2381,6 +2381,17 @@ export struct WindowNativeNode {
 
 // ===== 桥包装 =====
 
+  // 选本地 TLE/CSV → 拷进 filesDir/stellarium_tle → 交给卫星模块导入。
+  private pickTleDocumentAndImport(): void {
+    if (this.privacyNativeStartupAllowed === false) return
+    this.hostMediaPort.pickDocumentToDir('stellarium_tle', ['TLE 文件|.tle', '文本|.txt', 'CSV|.csv'], 'imported.tle')
+      .then((result: MediaImportResult) => {
+        if (result.cancelled === true || result.path.length === 0) return
+        this.satelliteCtl().importSatelliteTleFile(result.path)
+      })
+      .catch(() => { this.satelliteStore.satSourceStatus = I18n.t('sat_tle_import_failed') })
+  }
+
   private callNative(name: string, payload: string = ''): StellariumBridgeResponse {
     const r = BridgeClient.request(name, payload)
     // 录制：仅在录制开启、非回放、且命令可录制时记录，并对短时重试用去重窗口避免重复。
@@ -8728,6 +8739,8 @@ export struct WindowNativeNode {
         onRefreshCatalog: () => { this.satelliteCtl().refreshSatelliteCatalog() },
         onTleFileInput: (value: string) => { this.satelliteStore.satTleFileInput = value },
         onImportTle: () => { this.satelliteCtl().importSatelliteTleFile() },
+        // 平板/手机上没法手输沙箱路径：弹出系统文件选择器，把选中的 TLE/CSV 拷进沙箱再导入。
+        onPickTleFile: () => { this.pickTleDocumentAndImport() },
         onSetUpdateSetting: (key: string, value: boolean | number) => { this.satelliteCtl().setSatelliteUpdateSetting(key, value) },
         onUpdateFrequencyInput: (value: string) => { this.satelliteStore.satUpdateFrequencyInput = value },
         onSubmitUpdateFrequency: () => {

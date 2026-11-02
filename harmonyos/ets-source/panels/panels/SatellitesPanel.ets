@@ -31,6 +31,7 @@ export struct SatellitesPanel {
   onRefreshCatalog: () => void = () => {}
   onTleFileInput: (value: string) => void = () => {}
   onImportTle: () => void = () => {}
+  onPickTleFile: () => void = () => {}
   onSetUpdateSetting: (key: string, value: boolean | number) => void = () => {}
   onUpdateFrequencyInput: (value: string) => void = () => {}
   onSubmitUpdateFrequency: () => void = () => {}
@@ -116,7 +117,11 @@ export struct SatellitesPanel {
               .fontColor(this.c.text).placeholderColor(this.c.sub).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).layoutWeight(2)
               .onChange((value: string) => { this.onTleFileInput(value) })
             Button(I18n.t('sat_tle_import')).fontSize(10).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
-              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 8, right: 8 }).onClick(() => { this.onImportTle() })
+              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 8, right: 8 }).onClick(() => {
+                // 输入框里没有路径时（平板/手机基本不会手输沙箱路径）直接开系统文件选择器。
+                if (this.satelliteStore.satTleFileInput.trim().length === 0) this.onPickTleFile()
+                else this.onImportTle()
+              })
           }.width('100%')
           Row({ space: 6 }) {
             Button(I18n.t('sat_source_restore')).fontSize(10).fontColor(this.c.warning).backgroundColor(this.c.errorBg)
