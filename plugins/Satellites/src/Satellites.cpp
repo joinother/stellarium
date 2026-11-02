@@ -1141,8 +1141,15 @@ void Satellites::restoreDefaultTleSources()
 		QString url = celestrackBaseURL.arg(group.key());
 #if defined(__OHOS__)
 		url = ohosMirrorTleUrl(url);
+		// 随包目录就是这四组合并出来的，默认勾选它们，其余分组留给用户按需开启。
+		const bool ohosDefaultOn = group.key() == QStringLiteral("stations") ||
+			group.key() == QStringLiteral("visual") ||
+			group.key() == QStringLiteral("active") ||
+			group.key() == QStringLiteral("satnogs");
+#else
+		const bool ohosDefaultOn = false;
 #endif
-		if (group.value()) // Auto-add ON!
+		if (group.value() || ohosDefaultOn) // Auto-add ON!
 			urls << QString("1,%1").arg(url);
 		else
 			urls << url;
@@ -2871,7 +2878,8 @@ void Satellites::setUpdateFrequencyHours(int hours)
 
 void Satellites::checkForUpdate(void)
 {
-#if defined(STELLARIUM_OHOS_OFFLINE) || defined(Q_OS_OHOS)
+#if defined(STELLARIUM_OHOS_OFFLINE)
+	// 离线包不联网；联网包按 update_frequency_hours 自动刷新（默认 72 小时）。
 	return;
 #else
 	if (updatesEnabled && (updateState != Updating)

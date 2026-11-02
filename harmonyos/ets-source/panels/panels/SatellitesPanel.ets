@@ -82,7 +82,10 @@ export struct SatellitesPanel {
                   Column({ space: 2 }) {
                     Text((source.local ? I18n.t('sat_source_local') : I18n.t('sat_source_remote')) + ' · ' + source.scheme.toUpperCase())
                       .fontSize(11).fontColor(source.valid ? this.c.fourth : this.c.warning).maxLines(1)
-                    Text(source.url).fontSize(10).fontColor(this.c.sub).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                    // 单行省略：这里以前用了 layoutWeight(1)，在垂直 Column 里会撑满剩余高度，
+                    // 每条来源被拉成半屏高，列表看着“特别大”。
+                    Text(source.url).fontSize(10).fontColor(this.c.sub)
+                      .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
                   }.alignItems(HorizontalAlign.Start).layoutWeight(1)
                   if (source.addNew) Text(I18n.t('sat_source_add_new')).fontSize(10).fontColor(this.c.chipInactiveText)
                   Toggle({ type: ToggleType.Switch, isOn: source.addNew }).width(40).height(22)
@@ -95,7 +98,7 @@ export struct SatellitesPanel {
                     .onClick(() => { this.onDeleteSource(sourceIndex) })
                 }.width('100%')
                 Text(this.satelliteStore.satelliteSourcePreview(source.url)).fontSize(10).fontColor(this.c.sub).width('100%')
-                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).height(14)
               }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
             }, (source: SatelliteSource) => source.index.toString() + ':' + source.url)
           }
