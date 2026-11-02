@@ -61,6 +61,11 @@ export class SessionToolStore {
   tonightSunJd: number = 0
   tonightShowerJd: number = 0
   tonightPlanetRows: TonightPlanetRow[] = []
+  // 今晚天象的缓存时间戳与在途标记。getTonightEvents 要跑太阳/月亮/行星共约 10 次
+  // 升落搜索，是同步桥调用（JS 线程直接阻塞），所以只在数据过期后才重算，避免每次
+  // 打开「位置」页都卡一下。
+  private tonightFetchedAt: number = 0
+  private tonightInFlight: boolean = false
 
   // —— 会话导出 / 应用 / 迁移 ——
   // sessionJson 与 sessionExportSig 供 sessionApply 500ms 后二次比对，验证无缝还原；
@@ -233,14 +238,25 @@ export class SessionToolStore {
   }
 
   // 「位置」面板今晚天象：桥拉取并本地化各卡片文案。
-  refreshTonight(): void {
+  // force=false（面板打开时的自动刷新）10 分钟内复用缓存；force=true（用户点「刷新」）强制重算。
+  refreshTonight(force: boolean = false): void {
     const port = this.ensurePort()
     const hooks = this.hooks
     if (port === null || hooks === null) {
       return
     }
+    if (this.tonightInFlight) {
+      return
+    }
+    const TONIGHT_TTL_MS: number = 10 * 60 * 1000
+    if (!force && this.tonightFetchedAt > 0 && Date.now() - this.tonightFetchedAt < TONIGHT_TTL_MS) {
+      return
+    }
+    this.tonightInFlight = true
     port.requestWhenReady('getTonightEvents', '', (r: StellariumBridgeResponse) => {
+      this.tonightInFlight = false
       if (!r.ok || !r.tonight) { hooks.flashHint(I18n.t('msg_fetch_failed')); return }
+      this.tonightFetchedAt = Date.now()
       const t = r.tonight as TonightEvents
       this.tonightDate = this.fmtIso(t.date ?? '')
       this.tonightMoon = I18n.t('tn_phase') + ': ' + (t.moon?.phaseName ?? I18n.t('m_unknown')) + ' (' + I18n.t('tn_illumination') + ' ' + Math.round(t.moon?.illumination ?? 0) + '% · ' + I18n.t('tn_moon_age') + ' ' + (t.moon?.age ?? 0).toFixed(1) + ' ' + I18n.t('tn_days') + ')\n'
@@ -265,8 +281,9 @@ export class SessionToolStore {
       this.tonightSunJd = t.sun?.astroTwilightEndJd ?? 0
       this.tonightShowerJd = (t.meteorShowers && t.meteorShowers.length > 0) ? (t.meteorShowers[0].primeJd ?? this.tonightSunJd) : this.tonightSunJd
       this.tonightHint = I18n.t('tn_updated') + ' · ' + this.fmtIso(t.date ?? '')
-      hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
-    })
+      // 只有用户主动点「刷新」才弹提示；面板打开时的自动刷新静默完成。
+      if (force) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
+    }, (): void => { this.tonightInFlight = false })
   }
 
   // ISO 字符串 → 'MM-DD HH:mm'。

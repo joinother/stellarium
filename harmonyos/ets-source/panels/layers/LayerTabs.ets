@@ -29,6 +29,8 @@ export struct LayerTabs {
             .fontColor(this.activeTab === tab.id ? this.c.onAccent : this.c.sub)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
+            // 框宽由 minWidth 撑开，文字必须显式居中，否则短标签（天空/深空/标记）会贴左。
+            .textAlign(TextAlign.Center)
             .constraintSize({ minWidth: this.readableUi ? 76 : 60, minHeight: this.readableUi ? 40 : 36 })
             .padding({ left: this.readableUi ? 13 : 10, right: this.readableUi ? 13 : 10, top: 6, bottom: 6 })
             .backgroundColor(this.activeTab === tab.id ? this.c.accent : this.c.bg)

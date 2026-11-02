@@ -88,6 +88,29 @@ bash scripts/sync-ohos-build-sources.sh
 grep -c "你的关键字" build/libstellarium-harmonyos/entry/src/main/ets/pages/MainWindowNativeNode.ets
 ```
 
+### 5.1 星表补齐（全新安装会卡在「正在加载」）
+
+`rawfile/stellarium/stars/hip_gaia3/` 是 `scripts/sync-ohos-resources.sh` 用 rsync 从仓库
+`stars/hip_gaia3/` 复制过来的**生成目录**，不随 git 走。星表扩容后如果只跑了
+`sync-ohos-build-sources.sh`（它只补 ArkTS/资源，不补 rawfile），HAP 里就会缺
+`stars_4_1v0_6.cat` 和 `defaultStarsConfig.json`：老设备靠旧数据目录还能启动，
+**全新安装（或 uninstall 后重装）会直接卡在启动页**，日志里是
+
+```
+E ohosQtTemplate: Failed to asynchronously write raw resource stellarium/stars/hip_gaia3/stars_4_1v0_6.cat
+E ohosQtTemplate: Qt application context initialization failed
+```
+
+补法（幂等）：
+
+```bash
+cp -p stars/hip_gaia3/stars_4_1v0_6.cat stars/hip_gaia3/defaultStarsConfig.json \
+  build/libstellarium-harmonyos/entry/src/main/resources/rawfile/stellarium/stars/hip_gaia3/
+node scripts/check-ohos-star-catalog.mjs   # 应输出「星表 MD5 一致性检查通过」
+```
+
+更稳的做法是打包前跑一次 `bash scripts/sync-ohos-resources.sh`（全量 rsync rawfile）。
+
 ---
 
 ## 6. 打包 HAP

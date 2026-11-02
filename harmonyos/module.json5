@@ -98,21 +98,13 @@
         "continuable": false
       }
     ],
-    "extensionAbilities": [
-      {
-        "name": "SkyInstrumentFormAbility",
-        "srcEntry": "./ets/form/SkyInstrumentFormAbility.ets",
-        "label": "$string:QAbility_label",
-        "description": "$string:QAbility_desc",
-        "type": "form",
-        "metadata": [
-          {
-            "name": "ohos.extension.form",
-            "resource": "$profile:form_config"
-          }
-        ]
-      }
-    ],
+    // 「桌面小组件（服务卡片）」入口暂时下线（2026-11）：不再声明 form 扩展，
+    // 桌面/负一屏的卡片选择器里就不会出现星象仪。ETS 侧实现全部保留，恢复时把下面
+    // 这段 extensionAbilities 放回来即可（同时确认 resources/base/profile/form_config.json 还在）。
+    //   { "name": "SkyInstrumentFormAbility", "srcEntry": "./ets/form/SkyInstrumentFormAbility.ets",
+    //     "label": "$string:QAbility_label", "description": "$string:QAbility_desc", "type": "form",
+    //     "metadata": [ { "name": "ohos.extension.form", "resource": "$profile:form_config" } ] }
+    "extensionAbilities": [],
     "requestPermissions": [
       {
         "name": "ohos.permission.APPROXIMATELY_LOCATION",

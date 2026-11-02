@@ -3901,7 +3901,9 @@ export struct WindowNativeNode {
       this.skyCultureCtl().syncSkyCultureTimeFollowTimer()
       this.polarScopeCtl().syncPolarScopeTimer()
       if (panel === 'place') {
-        this.sessionToolStore.refreshTonight()
+        // getTonightEvents 是同步桥调用（约 10 次升落搜索），放到面板进场动画之后再算，
+        // 否则会在打开「位置」页的瞬间掉帧；10 分钟内的重复打开由 store 的 TTL 缓存短路。
+        setTimeout(() => { this.sessionToolStore.refreshTonight() }, 320)
       }
       if (panel === 'observing' && !this.wutStore.wutHasResult && !this.wutStore.wutLoading) {
         this.wutStore.loadWutTargets()
@@ -8278,7 +8280,7 @@ export struct WindowNativeNode {
         onExport: () => { this.sessionToolStore.sessionExport() },
         onSessionApply: () => { this.sessionToolStore.sessionApply() },
         onHandoff: () => { this.sessionToolStore.sessionHandoff() },
-        onRefreshTonight: () => { this.sessionToolStore.refreshTonight() },
+        onRefreshTonight: () => { this.sessionToolStore.refreshTonight(true) },
         onJump: (jd: number, lock: string, title: string) => { this.gotoTonightEvent(jd, lock, title) }
       })
     } else if (this.activePanel === 'layers') {
