@@ -1,5 +1,56 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-03] Claude Code - 关于页发行版定位定稿并清理旧 About 文案
+
+- **修改文件：** `harmonyos/ets-source/panels/settings/AboutSection.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/common/QtAppConstants.ets`、`harmonyos/ets-source/resources/*/element/string.json`、`harmonyos/resources/*/element/string.json`、`README.md`、`docs/harmonyos/release/STORE-LISTING-DRAFT.md`、`docs/harmonyos/release/APP-STORE-SUBMISSION.md`、`docs/harmonyos/policy/COMPLIANCE-GUIDE.md`、`docs/harmonyos/NETWORK-INVENTORY.md`
+- **修改内容：**
+  - “关于”页按发行版定位重写：中文名 `Stellarium·星象仪`，英文环境名 `Stellarium for OHOS`；副标题为“基于上游 Stellarium 的 HarmonyOS 发行版 / A HarmonyOS distribution based on upstream Stellarium”。
+  - 发行版信息新增上游版本 `26.3`、维护者 `joinother（杨杰轩）`、许可证 `GPL-2.0-or-later`；明确本发行版与上游使用相同开源许可证。
+  - 项目区拆为“上游项目 / 本发行版 / 致谢与引用”：上游官网、上游源代码、上游贡献者、Stellarium 目录；本发行版源代码、提交历史、维护者与其他社区贡献者；学术引用与 DOI。
+  - 不再使用“OHOS 移植仓库 / HarmonyOS 移植 / 社区移植版 / 非官方发行版”等表述；不修改桌面图标名称和应用商店名称。
+  - 删除无 UI 调用的旧 About 字符串 `i0216`、`i0261`–`i0264`（含 `Stellarium 26.2`、`Community port` 等过期内容），同步清理两套资源树（`harmonyos/ets-source/resources` 与 `harmonyos/resources`）的所有语言 `string.json`。
+  - 第三方许可列表移除 Stellarium 本体，仅保留 Qt 6.12.0、md4c、NLopt、fast_float；Stellarium 归入上游项目。
+  - 文档同步：README 明确 HarmonyOS distribution 与 GPL-2.0-or-later；商店资料更新简介、许可证、源代码地址；AGC 隐私托管与 `module.json5` 协议链接维护要求补充到上架/合规文档。
+- **修改原因：** 用户要求把鸿蒙星象仪描述为 Stellarium 的一个发行版，项目与致谢采用软件工程/开源项目常用结构；明确 joinother（杨杰轩）为维护者且仍有其他社区贡献者；许可证与上游一致。
+- **构建结果：** `CompileArkTS` **BUILD SUCCESSFUL**；`assembleHap` **BUILD SUCCESSFUL**，签名 HAP **720.2 MB**；`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（402 命令）通过。
+- **验证结果：** 模拟器中/英文切换验证：中文显示 `Stellarium·星象仪` 与“基于上游 Stellarium 的 HarmonyOS 发行版”；英文显示 `Stellarium for OHOS` 与 `A HarmonyOS distribution based on upstream Stellarium`。真机 HUAWEI SGT-AL00 安装后版本 `26.3.306-390c07c [merge/upstream-26.3]`、Qt `6.12.0`、平台 `OpenHarmony-7.0.0.105` 正常加载；发行版信息、维护者、许可证、项目/致谢区渲染正常。测试后模拟器语言已恢复简体中文。
+- **备注：** 变更未提交、未推送。`harmonyos/module.json5` 的 `appgallery_privacy_link_privacy_statement` 保留 AGC 协议链接；每次 AGC 隐私政策更新必须同步该 `agreementId` 并重新提交 HAP，应用内“关于”则跳转应用市场详情页查看当前版本。
+
+## [2026-11-02] Claude Code - 设置新增“关于”标签并清理帮助面板
+
+- **修改文件：** `harmonyos/ets-source/panels/settings/AboutSection.ets`（新增）、`panels/panels/SettingsPanel.ets`、`panels/panels/HelpPanel.ets`、`panels/settings/DeviceAndLanguageRows.ets`、`state/ToolsStore.ets`、`capability/I18n.ets`、`common/QtAppConstants.ets`、`common/derive/actions.ets`、`common/derive/labels.ets`、`common/ui/AppFilingInfo.ets`、`pages/MainWindowNativeNode.ets`、`docs/harmonyos/NETWORK-INVENTORY.md`
+- **修改内容：**
+  - 设置新增第 9 个标签“关于”，集中版本（引擎 / Qt / 平台）、应用名 **Stellarium·星象仪**、APP 备案号、开发者隐私政策入口、开源许可（Stellarium GPL-2.0-or-later、Qt LGPL-3.0、md4c MIT、NLopt LGPL-2.1-or-later、fast_float 三许可）、项目链接与引用、诊断路径、版权及 GPL 声明。
+  - 项目链接明确区分：上游官网 `stellarium.org`、上游源代码 `Stellarium/stellarium`、项目发起人 joinother 的 OHOS 移植仓库，并注明“基于上游 Stellarium 的 HarmonyOS 移植”。
+  - **隐私政策链接不硬编码 AGC agreementId**：AGC 协议服务每次生成/更新隐私政策会分配新的 `agreementId` 和链接（本地记录：现行 `2004631976732052288`，整改草稿 `2034771717422854080`），因此改为跳转华为应用市场详情页 `https://appgallery.huawei.com/app/detail?id=com.joinother.skyinstrument`，由用户在应用市场查看当前生效版本。
+  - 移除“主设置”和“附加”里的版本行、设备与隐私里的备案组件，避免同一信息多处维护。
+  - 修正误导入口：More 菜单和面板标题原先把帮助面板标成“快捷操作”（`i0217`）；现改为“帮助”（新增 `c_help`），并删除 HelpPanel 顶部和底部的 About 信息，HelpPanel 只保留手势/键盘/面板说明与“工具与数据”。
+- **修改原因：** 用户要求把备案、版本、开源许可等软件条目集中到“关于”；同时反馈“快捷操作”入口实际打开的是带 About 信息的帮助面板，真正的帮助入口难以发现。
+- **构建结果：** `CompileArkTS` **BUILD SUCCESSFUL**；`assembleHap` **BUILD SUCCESSFUL**，签名 HAP **720.2 MB**；`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（402 命令）通过。
+- **验证结果：** 真机 HUAWEI SGT-AL00（HarmonyOS 7.0.0.109）覆盖安装并启动，版本 `26.3.306-390c07c [merge/upstream-26.3]`、Qt `6.12.0`、平台 `OpenHarmony-7.0.0.105` 均从 `getAboutInfo` 加载；“关于”页渲染应用名、版本、备案、许可、OHOS 仓库关系说明、引用和诊断路径。模拟器与真机 More → 系统 → **帮助** 可打开帮助面板，标题为“帮助”，不再出现 About 块。真机启动前曾因锁屏返回 `10106102`，解锁后复测通过。
+- **备注：** 变更未提交、未推送。隐私政策入口和许可/项目外链均为用户主动点击；已登记 `NETWORK-INVENTORY.md`。系统桌面图标名称仍为“星象仪”，本次仅将“关于”页展示名改为 Stellarium·星象仪；如需全局改名需另行处理多语言 AppScope/module 标签。
+
+## [2026-10-30] Claude Code - 26.3 新功能 ArkUI 适配：十进制度拆分、星空文化哨兵、Potawatomi 升级补抽
+
+- **修改文件：** `src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/state/ViewSettingsStore.ets`、`harmonyos/ets-source/state/SkyCultureSettingsStore.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/SETTINGS-PERSISTENCE.md`、`docs/harmonyos/testing/UPSTREAM-26.3-UI-ADAPTATION-SMOKE-2026-10-30.md`
+- **修改内容：**
+  - **十进制度拆分**：新增原生命令 `setDecimalDegrees coords|other`，写入 `gui/flag_use_decimal_degrees_coords` / `..._other` 并返回实际值；`getState` 同步返回 `decimalDegreesCoords` / `decimalDegreesOther`。设置 → 附加页新增“角度显示”分组的两个开关；`ViewSettingsStore` 采用乐观更新、请求序号与失败回退，避免 Toggle 视觉状态与引擎状态脱节，也避免快速连点时旧回执互相覆盖。
+  - **星空文化时间哨兵**：`SkyCultureSettingsStore` 按 `StelSkyCulture::unknownBeginTime = -100000` / `presentEndTime = 9146` 精确识别“未知/至今”（0 仍作 ArkTS 缺省值），不再把 -100000 显示成“公元前 100000 年”；时间匹配与筛选语义同步。
+  - **Potawatomi 升级补抽**：`StellariumResourceBootstrap` 在异步资源准备入口定向补抽 `skycultures/potawatomi`（index.json / description.md / territory.geojson 三项哨兵），并把这几个文件加入全树重抽闸门与最终检查。修复旧安装覆盖升级时异步准备提前返回、随后检查抛错导致 Qt 不初始化的问题。
+- **修改原因：** 26.3 把十进制度拆成坐标/其它两个开关、星空文化时间跨度改为 territory 推导并使用未知/至今哨兵、新增 Potawatomi 文化；OHOS 需要对应的 UI、显示语义与升级资源提取路径。
+- **构建结果：** 引擎交叉编译 **568/568 成功**，`libstellarium.so` 链接完成；`assembleHap` **BUILD SUCCESSFUL**，签名 HAP **720.1 MB**；`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（402 命令）通过；`CompileArkTS` 成功。
+- **验证结果：** Windows x86_64 模拟器 Mate 90 Pro 覆盖安装并启动成功，设置 → 附加页显示“角度显示”两个开关与说明；无引擎时点击开关会先乐观切换、随后回退并提示“应用失败”，无崩溃。真机 HUAWEI SGT-AL00（Mate 80 Pro，HarmonyOS 7.0.0.109）覆盖安装并启动成功，星图正常，fps≈25；`getSkyCultureList` 返回 **64 条**，包含 Potawatomi（1667–至今）；“现代”文化显示“年代范围未标注 / 该文化未标注适用年代”；`setDecimalDegrees 1|0` 回包与 `getState`、`config.ini` 一致，随后恢复 `0|0`。测试后天空文化已恢复 `modern`。详见 `testing/UPSTREAM-26.3-UI-ADAPTATION-SMOKE-2026-10-30.md`。
+- **备注：** 未提交、未推送；真机 UI 开关交互与对象资料格式仍建议补测：两个十进制度开关独立开关/重启保持、RA/Dec 与其它角度格式变化。
+
+## [2026-10-28] Claude Code - 合并上游 Stellarium 26.3 到 OHOS 分支
+
+- **修改文件：** 合并提交 `556bfa45ca`（672 files changed, 1,618,376 insertions(+), 1,305,323 deletions(-)）；关键冲突文件 `CMakeLists.txt`、`src/StelMainView.cpp`、`src/main.cpp`、`src/core/StelSkyCultureMgr.cpp`、`plugins/RemoteControl/*`、`skycultures/egyptian_dendera/description.md`、`po/*`
+- **修改内容：** 基于 `ohos-master` 新建 `merge/upstream-26.3`，合并上游 26.3（`master` `3f23cf3a1a`）；解决 29 个冲突（22 个 po、2 个 RemoteControl、1 个 CMake、1 个 skyculture、3 个 src），保留 OHOS 渲染/启动/构建定制，合并 26.3 的 Object Visibility、AstroCalc/Eclipses、Satellites、RemoteControl OpenAPI、sky culture、脚本与核心改进。
+- **修改原因：** 引入上游 26.3 版本与新特性，同时保持 OHOS 分支现有功能。
+- **构建结果：** 完整引擎交叉编译 + `assembleHap` **BUILD SUCCESSFUL**；signed HAP 720.0 MB；`check-ohos-ui-contract.mjs` 与 `check-ohos-i18n.mjs` 通过。
+- **验证结果：** Windows x86_64 模拟器 Mate 90 Pro 安装/启动成功，UI-only 外壳、Dock、时间面板、快捷面板、中文 UI 正常，无崩溃；星图/Qt 命令桥因 arm64 引擎与 x86_64 模拟器限制不可用。真机测试清单见 `testing/UPSTREAM-26.3-MERGE-SMOKE-2026-10-28.md`，尚未执行真机。
+- **备注：** 合并分支未推送；egyptian 描述中文翻译待补；Object Visibility 插件需确认 OHOS 构建/入口；`data/search/multilingual-sky-aliases.tsv` 构建时重新生成后已在源码树还原，HAP 使用构建时版本。
+
 ## [2026-10-27] Claude Code - 补齐夜间模式切换竞态的请求级缓存键
 
 - **修改文件：** `harmonyos/ets-source/state/NightModeStore.ets`、`harmonyos/ets-source/state/TimeStore.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/ConfigFallbackPanel.ets`、`src/StelMainView.cpp`、`docs/harmonyos/specs/NIGHT-MODE-THEME-ARCHITECTURE.md`、`docs/harmonyos/KNOWN-ISSUES.md`

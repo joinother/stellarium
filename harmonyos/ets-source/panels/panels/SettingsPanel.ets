@@ -14,9 +14,10 @@ import { PluginStore } from '../../state/PluginStore'
 import { NavigationSettingsStore } from '../../state/NavigationSettingsStore'
 import { ViewSettingsStore } from '../../state/ViewSettingsStore'
 import { NotificationStore } from '../../state/NotificationStore'
-import { InfoRow } from '../../common/ui/InfoRow'
+import { ToolsStore } from '../../state/ToolsStore'
 import { EphemerisToggleRow, InformationModeButton, InformationSwitchRow, NavigationSwitchRow } from '../settings/SettingsRows'
 import { LanguageRow, DevicePrivacySection } from '../settings/DeviceAndLanguageRows'
+import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
 import { KeyboardShortcutSection } from '../settings/KeyboardShortcutSection'
 import { KeyboardShortcutStore } from '../../state/KeyboardShortcutStore'
@@ -27,10 +28,10 @@ import { sensZh, pluginZh, pluginDesc, pluginFeatureRoute, resourceText, scriptZ
 import { configDitheringLabel } from '../../common/derive/skycult'
 
 // 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 天空 /
-// 时间 / 数据 / 插件管理 / 视图导航 8 个子标签页。
+// 时间 / 数据 / 插件管理 / 视图导航 / 关于 9 个子标签页。
 //
-// 实时状态集中在八个 @Observed store（gyro / overlay / deltaT / timeSettings / ephemeris /
-// plugin / navigation / viewSettings，均 @ObjectLink），其余标量与主题色走 @Prop；
+// 实时状态集中在九个 @Observed store（gyro / overlay / deltaT / timeSettings / ephemeris /
+// plugin / navigation / viewSettings / tools，均 @ObjectLink），其余标量与主题色走 @Prop；
 // 标签/文案纯函数多数直连 common/derive/labels，宿主私有助手与全部动作经回调注入。
 // 最大视场用本地草稿 maxFovDraft（aboutToAppear 与 store 同步）：拖动只改草稿，
 // 点"应用"才经 setNavigationMaxFov 下发生效。
@@ -54,6 +55,7 @@ export struct SettingsPanel {
   onToggleRemoteControl: (enabled: boolean, port: string) => void = () => {}
   onRemotePortInput: (port: string) => void = () => {}
   remoteControlPort: string = '8090'
+  @ObjectLink toolsStore: ToolsStore
   @Prop configTab: number
   @Prop configTabContentOpacity: number
   @Prop configTabContentOffsetX: number
@@ -90,6 +92,8 @@ export struct SettingsPanel {
   setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => void = () => {}
   setDistanceUnit: (useMetric: boolean) => void = () => {}
   setConfigurationDithering: (value: string) => void = () => {}
+  setDecimalDegreesCoords: (enabled: boolean) => void = () => {}
+  setDecimalDegreesOther: (enabled: boolean) => void = () => {}
   setProjection: (name: string) => void = () => {}
   saveAppSettings: () => void = () => {}
   flashHint: (text: ResourceStr) => void = () => {}
@@ -125,6 +129,7 @@ export struct SettingsPanel {
   moveToSelectedObject: () => void = () => {}
   onOpenLayersSky: () => void = () => {}
   onOpenTools: () => void = () => {}
+  openExternalUrl: (url: string) => void = () => {}
 
   aboutToAppear(): void {
     this.maxFovDraft = this.navigationStore.navigationMaxFov
@@ -149,6 +154,7 @@ export struct SettingsPanel {
             { label: I18n.t('c0005'), id: 5 },
             { label: I18n.t('more_plugins_manage'), id: 6 },
             { label: I18n.t('settings_view_navigation'), id: 7 },
+            { label: I18n.t('c_about'), id: 8 },
           ] as TabItem[], (tab: TabItem) => {
             Text(tab.label)
               .fontSize(10)
@@ -239,7 +245,6 @@ export struct SettingsPanel {
                   })
               }
             }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
-            InfoRow({ label: I18n.t('s0350'), value: 'Stellarium 26.2 for HarmonyOS' })
             Button(I18n.t('i0251') + '设置').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.bg)
               .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 12, right: 12 }).margin({ top: 6, left: 8 })
               .onClick(() => { this.saveAppSettings(); this.flashHint('设置已保存') })
@@ -364,8 +369,19 @@ export struct SettingsPanel {
               }.padding({ left: 8, right: 8 })
             }.width('100%').height(31).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
             Text('抖动用于低色深屏幕的颜色过渡；通常保持 8/8/8 位。').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 4, bottom: 8 })
-            InfoRow({ label: I18n.t('s0351'), value: 'Stellarium for HarmonyOS' })
-            InfoRow({ label: I18n.t('s0352'), value: 'OpenHarmony / HarmonyOS NEXT' })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 2, bottom: 8 })
+            Text(I18n.t('settings_decimal_degrees_title')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 8 }).margin({ top: 2, bottom: 5 })
+            NavigationSwitchRow({
+              label: I18n.t('settings_decimal_degrees_coords'),
+              isOn: this.viewSettingsStore.decimalDegreesCoords,
+              onToggle: (v: boolean) => { this.setDecimalDegreesCoords(v) }
+            })
+            NavigationSwitchRow({
+              label: I18n.t('settings_decimal_degrees_other'),
+              isOn: this.viewSettingsStore.decimalDegreesOther,
+              onToggle: (v: boolean) => { this.setDecimalDegreesOther(v) }
+            })
+            Text(I18n.t('settings_decimal_degrees_hint')).fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ top: 2, bottom: 8 }).maxLines(2)
           } else if (this.configTab === 3) {
             TimeSettingsSection({
               store: this.timeSettingsStore,
@@ -595,6 +611,11 @@ export struct SettingsPanel {
               Button(I18n.t('settings_restore_defaults')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
                 .borderRadius(UI_RADIUS_CONTROL).height(32).layoutWeight(1).onClick(() => { this.restoreCoreDefaults() })
             }.width('100%').margin({ top: 2, bottom: 8 })
+          } else if (this.configTab === 8) {
+            AboutSection({
+              tools: this.toolsStore,
+              onOpenUrl: (url: string) => { this.openExternalUrl(url) }
+            })
           }
         }
           .width('100%')

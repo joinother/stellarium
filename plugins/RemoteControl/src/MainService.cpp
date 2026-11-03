@@ -498,7 +498,7 @@ void MainService::post(const QByteArray& operation, const APIParameters &paramet
 			response.setData("ok");
 		}
 		else
-			response.writeRequestError("requires at least one of az,alt,j2000,jNow parameters");
+			response.writeRequestError("requires at least one of az,alt,j2000,jNow,altAz parameters");
 	}
 
 	else if (operation == "fov")
@@ -556,7 +556,7 @@ QString MainService::getInfoString()
 	StelObjectP selectedObject = getSelectedObject();
 	if(selectedObject.isNull())
 		return QString();
-	return selectedObject->getInfoString(core,StelObject::AllInfo | StelObject::NoFont);
+	return selectedObject->getInfoString(core,StelObject::AllInfo);
 }
 
 bool MainService::focusObject(const QString &name, MainService::SelectionMode mode)

@@ -797,10 +797,6 @@
       "value": "オンラインサーベイには通信が必要"
     },
     {
-      "name": "i0216",
-      "value": "情報"
-    },
-    {
       "name": "i0217",
       "value": "ショートカット"
     },
@@ -911,22 +907,6 @@
     {
       "name": "i0260",
       "value": "凌日"
-    },
-    {
-      "name": "i0261",
-      "value": "Stellarium for HarmonyOS"
-    },
-    {
-      "name": "i0262",
-      "value": "Stellarium 26.2 をベースにしたコミュニティ移植版"
-    },
-    {
-      "name": "i0263",
-      "value": "レンダラ: OpenGL ES via XComponent"
-    },
-    {
-      "name": "i0264",
-      "value": "ArkTS-N-API-C-C++ ブリッジ"
     },
     {
       "name": "i0265",

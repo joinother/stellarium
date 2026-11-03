@@ -797,10 +797,6 @@
       "value": "온라인 탐사는 네트워크 필요"
     },
     {
-      "name": "i0216",
-      "value": "정보"
-    },
-    {
       "name": "i0217",
       "value": "단축키"
     },
@@ -911,22 +907,6 @@
     {
       "name": "i0260",
       "value": "엄격"
-    },
-    {
-      "name": "i0261",
-      "value": "Stellarium for HarmonyOS"
-    },
-    {
-      "name": "i0262",
-      "value": "Stellarium 26.2 C++ 핵심 기반 커뮤니티 이식판"
-    },
-    {
-      "name": "i0263",
-      "value": "렌더러: OpenGL ES via XComponent"
-    },
-    {
-      "name": "i0264",
-      "value": "ArkTS-N-API-C-C++ 브리지"
     },
     {
       "name": "i0265",

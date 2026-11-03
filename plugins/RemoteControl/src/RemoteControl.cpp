@@ -285,6 +285,28 @@ void RemoteControl::setPort(const int port)
 	}
 }
 
+void RemoteControl::setMaxRequestSize(const int size)
+{
+	if (size != maxRequestSize)
+	{
+		maxRequestSize = size;
+		if (maxRequestSize>maxMultipartSize)
+			setMaxMultipartSize(maxRequestSize);
+		emit maxRequestSizeChanged(size);
+	}
+}
+
+void RemoteControl::setMaxMultipartSize(const int size)
+{
+	if (size != maxMultipartSize)
+	{
+		maxMultipartSize = size;
+		if (maxRequestSize>maxMultipartSize)
+			setMaxRequestSize(maxMultipartSize);
+		emit maxMultipartSizeChanged(size);
+	}
+}
+
 bool RemoteControl::startServer()
 {
 	Q_ASSERT(httpListener == nullptr);
@@ -308,6 +330,9 @@ bool RemoteControl::startServer()
 	settings.port = port;
 	settings.minThreads = minThreads;
 	settings.maxThreads = maxThreads;
+	settings.maxRequestSize = maxRequestSize;
+	settings.maxMultipartSize = maxMultipartSize;
+	settings.readTimeout = 60000;
 	httpListener = new HttpListener(settings,requestHandler);
 	if (!httpListener->isListening())
 	{
@@ -350,6 +375,8 @@ void RemoteControl::loadSettings()
 	setPort(conf->value("port", 8090).toInt());
 	minThreads = conf->value("min_threads", 1).toInt();
 	maxThreads = conf->value("max_threads", 30).toInt();
+	maxRequestSize = conf->value("maxRequestSize", 16384).toInt();
+	maxMultipartSize = conf->value("maxMultipartSize", 1048576).toInt();
 	conf->endGroup();
 }
 
@@ -365,5 +392,7 @@ void RemoteControl::saveSettings()
 	conf->setValue("port", port);
 	conf->setValue("min_threads", minThreads);
 	conf->setValue("max_threads", maxThreads);
+	conf->setValue("maxRequestSize", maxRequestSize);
+	conf->setValue("maxMultipartSize", maxMultipartSize);
 	conf->endGroup();
 }

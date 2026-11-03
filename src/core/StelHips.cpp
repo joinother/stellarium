@@ -45,6 +45,14 @@ public:
 	StelTextureSP allsky; // allsky low res version of the texture.
 	StelTextureSP normalAllsky; // allsky low res version of the texture.
 	StelTextureSP horizonAllsky; // allsky low res version of the texture.
+
+	bool isLoading() const
+	{
+		if (!texture || texture->isLoading()) return true;
+		if (normalTexture && normalTexture->isLoading()) return true;
+		if (horizonTexture && horizonTexture->isLoading()) return true;
+		return false;
+	}
 };
 
 static QString getExt(const QString& format)
@@ -385,7 +393,11 @@ void HipsSurvey::setNormalsSurvey(const HipsSurveyP& normals)
 	this->normals = normals;
 	// Resetting normals should result in clearing normal maps from all
 	// the tiles. The easiest way to do this is to remove the tiles.
-	if (!normals) tiles.clear();
+	if (!normals)
+	{
+		cachedTiles.clear();
+		tiles.clear();
+	}
 }
 
 void HipsSurvey::setHorizonsSurvey(const HipsSurveyP& horizons)
@@ -398,7 +410,11 @@ void HipsSurvey::setHorizonsSurvey(const HipsSurveyP& horizons)
 	this->horizons = horizons;
 	// Resetting horizons should result in clearing horizon maps from all
 	// the tiles. The easiest way to do this is to remove the tiles.
-	if (!horizons) tiles.clear();
+	if (!horizons)
+	{
+		cachedTiles.clear();
+		tiles.clear();
+	}
 }
 
 void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallback callback, bool withAtmosphericExtinction)
@@ -560,6 +576,9 @@ void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallb
 	if (!planetarySurvey)
 		sPainter->resetTextureDisplayAdjustment();
 	updateProgressBar(nbLoadedTiles, nbVisibleTiles);
+
+	dropUnfinishedInvisibleTiles();
+	visibleTiles.clear();
 }
 
 void HipsSurvey::updateProgressBar(int nb, int total)
@@ -579,10 +598,26 @@ void HipsSurvey::updateProgressBar(int nb, int total)
 	progressBar->setValue(100 * nb / total);
 }
 
+void HipsSurvey::dropUnfinishedInvisibleTiles()
+{
+	QSet<qint64> tilesToEvict;
+	for (const auto uid : cachedTiles)
+	{
+		if (visibleTiles.contains(uid)) continue;
+		const auto& tile = tiles[uid];
+		if (!tile) continue;
+		if (!tile->isLoading()) continue;
+		tilesToEvict.insert(uid);
+	}
+	for (const auto uid : tilesToEvict)
+		tiles.remove(uid);
+	cachedTiles -= tilesToEvict;
+}
+
 HipsTile* HipsSurvey::getTile(int order, int pix)
 {
 	int nside = 1 << order;
-	long int uid = pix + 4L * nside * nside;
+	const auto uid = pix + qint64(4) * nside * nside;
 	int orderMin = getPropertyInt("hips_order_min", 3);
 	HipsTile* tile = tiles[uid];
 	if (!tile)
@@ -595,7 +630,7 @@ HipsTile* HipsSurvey::getTile(int order, int pix)
 		const bool isShifted = planetarySurvey && properties["type"].toString().isEmpty();
 		const int texturePix = isShifted ? shiftPix180deg(order, pix) : pix;
 		QUrl path = getUrlFor(QString("Norder%1/Dir%2/Npix%3.%4").arg(order).arg((texturePix / 10000) * 10000).arg(texturePix).arg(ext));
-		const StelTexture::StelTextureParams texParams(true, GL_LINEAR, GL_CLAMP_TO_EDGE, true);
+		const StelTexture::StelTextureParams texParams(true, GL_LINEAR, GL_CLAMP_TO_EDGE, true, 1, false);
 		tile->texture = texMgr.createTextureThread(path.url(), texParams, false);
 
 		// Use the allsky image until we load the full texture.
@@ -609,7 +644,8 @@ HipsTile* HipsSurvey::getTile(int order, int pix)
 			tile->allsky = texMgr.createTexture(image, texParams);
 		}
 		int tileWidth = getPropertyInt("hips_tile_width", 512);
-		tiles.insert(uid, tile, static_cast<long>(tileWidth) * tileWidth);
+		tiles.insert(uid, tile, static_cast<qint64>(tileWidth) * tileWidth);
+		cachedTiles.insert(uid);
 	}
 
 	if (tile && normals && !tile->normalTexture)
@@ -631,6 +667,8 @@ HipsTile* HipsSurvey::getTile(int order, int pix)
 			tile->horizonAllsky = horizonsTile->allsky;
 		}
 	}
+
+	visibleTiles.insert(uid);
 
 	return tile;
 }

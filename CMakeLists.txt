@@ -21,7 +21,7 @@ SET_PROPERTY(GLOBAL PROPERTY USE_FOLDERS ON)
 ########### Project name ###########
 PROJECT(Stellarium C CXX)
 
-SET(STELLARIUM_RELEASE_BUILD 0 CACHE BOOL "Set 1 to build as an official release (0 for development snapshots).")
+SET(STELLARIUM_RELEASE_BUILD 1 CACHE BOOL "Set 1 to build as an official release (0 for development snapshots).")
 
 # The HarmonyOS AppGallery build keeps core network paths offline until online
 # features have their own consent and review flow. Plugin network code remains
@@ -37,6 +37,8 @@ ENDIF()
 SET(ENABLE_QT6 1 CACHE BOOL "Whether to try building with Qt6. If Qt6 is not found, Qt5 will be used.")
 IF(ENABLE_QT6)
      FIND_PACKAGE(Qt6 COMPONENTS Core QUIET)
+     # Suppressing warning for GuiPrivate component (required since Qt 6.10+)
+     SET(QT_NO_PRIVATE_MODULE_WARNING ON)
 ENDIF()
 if (NOT Qt6_FOUND)
      FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Core)
@@ -53,7 +55,7 @@ ENDIF()
 # Note: Use integer versions instead of strings for easier handling if required
 SET(STELLARIUM_MAJOR 26)
 # Number of the release (0 is used before first release)
-SET(STELLARIUM_MINOR 2)
+SET(STELLARIUM_MINOR 3)
 IF(STELLARIUM_RELEASE_BUILD)
      ADD_DEFINITIONS(-DSTELLARIUM_RELEASE_BUILD)
      SET(CMAKE_BUILD_TYPE Release)
@@ -74,8 +76,7 @@ SET(VERSION "${STELLARIUM_MAJOR}.${STELLARIUM_MINOR}.${STELLARIUM_PATCH}")
 SET(STELLARIUM_SERIES "${STELLARIUM_MAJOR}.0")
 SET(STELLARIUM_PUBLIC_VERSION "${STELLARIUM_MAJOR}.${STELLARIUM_MINOR}")
 SET(PACKAGE stellarium)
-STRING(TIMESTAMP CURRENTYEAR "%Y")
-SET(COPYRIGHT_YEARS "2000-${CURRENTYEAR}")
+SET(COPYRIGHT_YEARS "2000-20${STELLARIUM_MAJOR}")
 
 SET(STELLARIUM_URL "https://stellarium.org/")
 ADD_DEFINITIONS(-DSTELLARIUM_URL="${STELLARIUM_URL}")
@@ -136,6 +137,7 @@ ENDIF()
 # Use customized cmake macros
 SET(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 INCLUDE(CPM)
+INCLUDE(StellariumPlatform)
 
 # Show platform info
 MESSAGE(STATUS "Platform: ${CMAKE_SYSTEM} (${CMAKE_SYSTEM_PROCESSOR})")
@@ -453,10 +455,7 @@ SET(ENABLE_SHOWMYSKY 1 CACHE BOOL "Define whether to support ShowMySky atmospher
 # Activate support for XLSX (Excel) files
 SET(ENABLE_XLSX 1 CACHE BOOL "Define whether to support XLSX (Excel) files")
 IF(ENABLE_XLSX)
-     ADD_DEFINITIONS(-DENABLE_XLSX)
-     IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10)
-          FIND_PACKAGE(Qt6 COMPONENTS GuiPrivate REQUIRED)
-     ENDIF()
+     ADD_DEFINITIONS(-DENABLE_XLSX)     
 ENDIF()
 
 # Activate support for INDI client in Telescope Control plugin
@@ -641,21 +640,22 @@ ELSE()
 ENDIF()
 FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Concurrent Gui Network Widgets Charts REQUIRED)
 IF(Qt6_FOUND)
-     FIND_PACKAGE(Qt6 REQUIRED COMPONENTS SvgWidgets)
+     FIND_PACKAGE(Qt6 COMPONENTS SvgWidgets REQUIRED)
+     # Qt 6.10 split off FooPrivate from Foo.
+     # https://code.qt.io/cgit/qt/qtreleasenotes.git/about/qt/6.10.0/release-note.md
+     # > ad7b94e163a: User projects must now call find_package(Qt6 COMPONENTS FooPrivate) to make use of the Qt6::FooPrivate target.
+     # For the case of Qt5 this condition evaluates to false.
+     IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10)
+          FIND_PACKAGE(Qt6 COMPONENTS GuiPrivate REQUIRED)
+     ENDIF()
 ELSEIF(Qt5_FOUND)
-     FIND_PACKAGE(Qt5 REQUIRED COMPONENTS Svg)
+     FIND_PACKAGE(Qt5 COMPONENTS Svg REQUIRED)
 ENDIF()
 SET(USE_BUNDLED_QTCOMPRESS 1 CACHE BOOL "Use bundled version of qtcompress")
-# Qt 6.10 split off FooPrivate from Foo.
-# https://code.qt.io/cgit/qt/qtreleasenotes.git/about/qt/6.10.0/release-note.md
-# > ad7b94e163a: User projects must now call find_package(Qt6 COMPONENTS FooPrivate) to make use of the Qt6::FooPrivate target.
-# For the case of Qt5 this condition evaluates to false.
-IF(Qt6_VERSION VERSION_GREATER_EQUAL 6.10)
-     FIND_PACKAGE(Qt6 COMPONENTS GuiPrivate REQUIRED)
-ENDIF()
 IF(USE_PLUGIN_TELESCOPECONTROL OR ENABLE_GPS)
      FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS SerialPort REQUIRED)
 ENDIF()
+
 IF(WIN32)
      FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Svg REQUIRED)
      IF(${QT_VERSION_MAJOR} EQUAL 5)
@@ -785,8 +785,7 @@ ENDIF(ENABLE_SCRIPTING)
 
 IF(ENABLE_MEDIA)
      ADD_DEFINITIONS(-DENABLE_MEDIA)
-     FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Multimedia REQUIRED)
-     FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS MultimediaWidgets REQUIRED)
+     FIND_PACKAGE(Qt${QT_VERSION_MAJOR} COMPONENTS Multimedia MultimediaWidgets REQUIRED)
 ENDIF()
 
 IF(ENABLE_GPS)
@@ -1119,10 +1118,16 @@ ENDIF()
 
 include("cmake/Check-from_chars.cmake")
 IF(NOT FROM_CHARS_WORKS)
-     CPMFindPackage(NAME FastFloat
-          GIT_REPOSITORY https://github.com/fastfloat/fast_float
-          VERSION 6.1.0
-          EXCLUDE_FROM_ALL yes)
+     # Required FastFloat v6.1.0 or later
+     FIND_PACKAGE(FastFloat QUIET)
+     IF(FastFloat_FOUND AND FastFloat_VERSION VERSION_GREATER_EQUAL 6.1.0)
+          MESSAGE(STATUS "Using system-provided FastFloat ${FastFloat_VERSION}")
+     ELSE()
+          CPMAddPackage(NAME FastFloat
+               GIT_REPOSITORY https://github.com/fastfloat/fast_float
+               VERSION 8.2.0
+               EXCLUDE_FROM_ALL yes)
+     ENDIF()
      GET_TARGET_PROPERTY(FastFloat_INCLUDE_DIRECTORIES
           FastFloat::fast_float INTERFACE_INCLUDE_DIRECTORIES)
      INCLUDE_DIRECTORIES(${FastFloat_INCLUDE_DIRECTORIES})

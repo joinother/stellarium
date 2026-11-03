@@ -453,7 +453,7 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
     return I18n.t('i0274')
   }
   if (activePanel === 'help') {
-    return I18n.t('i0217')
+    return I18n.t('c_help')
   }
   if (activePanel === 'settings') {
     if (configTab === 6) return I18n.t('more_plugins_manage')

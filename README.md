@@ -1,8 +1,8 @@
 # Stellarium for OHOS
 
-This repo is also a free and open source planetarium with GPL license, but it build for OpenHarmony OS / Huawei Harmony NEXT, for both Phone/Pad/Watch, even include the Harmony PC.
+Stellarium for OHOS (Chinese name: Stellarium·星象仪) is a HarmonyOS distribution based on upstream Stellarium. It is maintained by joinother (杨杰轩), with contributions from other community members, and is licensed under GPL-2.0-or-later, the same as upstream Stellarium.
 
-The GUI is rebuild by ArkTS for Harmony mobile device, and the core is still the open source Qt base Stellarium PC version, which have all the function we love! Thanks for the Stellarium Porject!
+The GUI is rebuilt with ArkTS for HarmonyOS devices, while the core remains the upstream open-source Stellarium Qt engine. Thanks to the Stellarium project and all contributors.
 
 # Stellarium Upstream Project Introduction
 
@@ -28,7 +28,7 @@ If you are new to Stellarium, go to [www.stellarium.org](https://www.stellarium.
 
 ## Installation Instructions & Quick Start
 
-Please refer to the [User Guide, Getting Started section](https://github.com/Stellarium/stellarium/releases/download/v26.2/stellarium_user_guide-26.2-1.pdf).
+Please refer to the [User Guide, Getting Started section](https://github.com/Stellarium/stellarium/releases/download/v26.3/stellarium_user_guide-26.3-1.pdf).
 
 ## Get & build the code
 

@@ -797,10 +797,6 @@
       "value": "注意：在线巡天需要网络连接"
     },
     {
-      "name": "i0216",
-      "value": "关于"
-    },
-    {
       "name": "i0217",
       "value": "快捷操作"
     },
@@ -911,22 +907,6 @@
     {
       "name": "i0260",
       "value": "凌日"
-    },
-    {
-      "name": "i0261",
-      "value": "Stellarium for HarmonyOS"
-    },
-    {
-      "name": "i0262",
-      "value": "基于 Stellarium 26.2 C++ 核心的社区移植版"
-    },
-    {
-      "name": "i0263",
-      "value": "渲染引擎：OpenGL ES via XComponent"
-    },
-    {
-      "name": "i0264",
-      "value": "ArkTS-N-API-C-C++ 桥接架构"
     },
     {
       "name": "i0265",

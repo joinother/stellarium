@@ -249,7 +249,7 @@ Preferences 写失败多数只 `hilog.warn`；`QSettings::sync()` 的返回值/�
 | `navigation/*` | `viewing_mode`、`startup_time_mode`、`preset_sky_time`、`today_time` | `viewing_mode` 为 **S0**，其余 S2 | `viewing_mode` = `equator` / `horizon`，是赤道仪/地平仪**权威键** |
 | `projection/*` | `type`、`flip_horz`、`flip_vert`、`viewport` | S2 | |
 | `video/*` | `fullscreen`、`screen_w/h`、`viewport_effect`、`dithering_mode` | S2 | 屏幕尺寸类可考虑 S0 |
-| `gui/*` | `selected_object_info`、`flag_show_decimal_degrees`、`screen_font_size` | S2 | 字体大小类 S1 |
+| `gui/*` | `selected_object_info`、`flag_use_decimal_degrees_coords`、`flag_use_decimal_degrees_other`（旧 `flag_show_decimal_degrees` 启动时兼容迁移）、`screen_font_size` | S2 | 字体大小类 S1 |
 | `localization/*` | `app_locale`、`time_display_format`、`date_display_format` | **S0** | 当前 `app_locale` 未写入（P3） |
 | `color/*` | `const_lines_color`、`object_trails_color` 等 | S2 | 颜色选择器关闭时 flush |
 | `landscape/*`、`stars/*`、插件分组 | 各模块配置 | S2 | |

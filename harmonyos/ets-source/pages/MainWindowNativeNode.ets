@@ -1663,7 +1663,8 @@ export struct WindowNativeNode {
       reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
       logProjectionError: (name: string, error: string): void => {
         hilog.error(0x0000, 'StellariumArkUI', 'setProjectionType rejected %{public}s err=%{public}s', name, error)
-      }
+      },
+      refreshSelectedObject: (): void => { this.refreshSelectedObject() }
     })
     // 望远镜/目镜域复用同一个 HostCommandPort 实例。其消费方均为 @ObjectLink，
     // 字段赋值即刷新，且该域无 publish* 发布点，故 onChanged 传空实现。
@@ -4008,8 +4009,6 @@ export struct WindowNativeNode {
       } else if (panel === 'observing') {
       } else if (panel === 'commands') {
         this.commandStore.loadCommandCatalog()
-      } else if (panel === 'help') {
-        this.tools.loadAboutInfo()
       } else if (panel === 'scripts') {
         this.scriptPlaybackCtl().loadScriptList()
         this.scriptPlaybackCtl().loadRecordings()
@@ -7079,6 +7078,11 @@ export struct WindowNativeNode {
     if (result.zodiacalLight !== undefined) this.layerStore.zodiacalLight = result.zodiacalLight === true
     if (result.zodiacalIntensity !== undefined) this.layerViewStore.zodiacalIntensity = result.zodiacalIntensity as number
     this.viewSettingsStore.autoZoomResets = result.autoZoomResets === true
+    if (result.decimalDegreesCoords !== undefined || result.decimalDegreesOther !== undefined) {
+      this.viewSettingsStore.syncDecimalDegreesFromState(
+        result.decimalDegreesCoords !== undefined ? result.decimalDegreesCoords === true : this.viewSettingsStore.decimalDegreesCoords,
+        result.decimalDegreesOther !== undefined ? result.decimalDegreesOther === true : this.viewSettingsStore.decimalDegreesOther)
+    }
     // The native Stellarium property is authoritative. The QAction is not
     // guaranteed to update when the time-panel uses the direct bridge command.
     if (result.nightMode !== undefined) {
@@ -8509,6 +8513,7 @@ export struct WindowNativeNode {
         viewSettingsStore: this.viewSettingsStore,
         notificationStore: this.notificationStore,
         keyboardShortcutStore: this.keyboardShortcutStore,
+        toolsStore: this.tools,
         scroller: this.scriptListScroller,
         remoteControlEnabled: this.remoteControlEnabled,
         remoteControlStatus: this.remoteControlStatus,
@@ -8550,6 +8555,8 @@ export struct WindowNativeNode {
         setEphemerisEnabled: (key: string, available: boolean, enabled: boolean) => { this.ephemerisStore.setEphemerisEnabled(key, available, enabled) },
         setDistanceUnit: (useMetric: boolean) => { this.viewSettingsStore.setDistanceUnit(useMetric) },
         setConfigurationDithering: (value: string) => { this.viewSettingsStore.setConfigurationDithering(value) },
+        setDecimalDegreesCoords: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(enabled, this.viewSettingsStore.decimalDegreesOther) },
+        setDecimalDegreesOther: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(this.viewSettingsStore.decimalDegreesCoords, enabled) },
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },
@@ -8583,7 +8590,8 @@ export struct WindowNativeNode {
         triggerAction: (actionId: string) => { this.triggerAction(actionId) },
         moveToSelectedObject: () => { this.moveToSelectedObject() },
         onOpenLayersSky: () => { this.viewTab = 0; this.openSubPanel('layers') },
-        onOpenTools: () => { this.openSubPanel('tools') }
+        onOpenTools: () => { this.openSubPanel('tools') },
+        openExternalUrl: (url: string) => { this.openExternalUrl(url) }
       })
     } else if (this.activePanel === 'astro') {
       AstroPanel({
@@ -8689,7 +8697,6 @@ export struct WindowNativeNode {
       })
         } else if (this.activePanel === 'help') {
       HelpPanel({
-        tools: this.tools,
         onOpenTools: () => { this.openSubPanel('tools') }
       })
 	    } else if (this.activePanel === 'catalogs') {

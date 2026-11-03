@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>夜间模式修复后的剩余风险敞口</title>
+<style>
+  :root {
+    --ink: #1f2937;
+    --muted: #5b6575;
+    --line: #d8dee8;
+    --bg: #f3f5f8;
+    --card: #ffffff;
+    --blue: #2563eb;
+    --green: #15803d;
+    --amber: #b45309;
+    --red: #b91c1c;
+    --red-bg: #fef2f2;
+    --green-bg: #f0fdf4;
+    --amber-bg: #fffbeb;
+    --blue-bg: #eff6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.65;
+  }
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 40px 28px 56px;
+  }
+  header {
+    border-left: 6px solid var(--red);
+    padding: 4px 0 4px 18px;
+    margin-bottom: 28px;
+  }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: .2px; }
+  header p { margin: 0; color: var(--muted); font-size: 15px; }
+  .verdict {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 26px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  }
+  .verdict strong { color: var(--red); }
+  h2 {
+    font-size: 19px;
+    margin: 34px 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--blue-bg);
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr 44px 1fr 44px 1fr;
+    gap: 0;
+    align-items: stretch;
+  }
+  .lane {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    min-height: 190px;
+  }
+  .lane h3 {
+    font-size: 15px;
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .lane ul { margin: 0; padding-left: 18px; }
+  .lane li { margin: 6px 0; font-size: 13.5px; }
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 24px;
+    font-weight: 700;
+  }
+  .tag {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    vertical-align: 1px;
+  }
+  .tag.ok { background: var(--green-bg); color: var(--green); border: 1px solid #bbf7d0; }
+  .tag.warn { background: var(--amber-bg); color: var(--amber); border: 1px solid #fde68a; }
+  .tag.bad { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca; }
+  .tag.info { background: var(--blue-bg); color: var(--blue); border: 1px solid #bfdbfe; }
+  .callout {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    border: 1px dashed var(--line);
+    background: #fafbfc;
+  }
+  .callout.red { border-color: #fca5a5; background: var(--red-bg); }
+  .timeline {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-top: 8px;
+  }
+  .step {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 13px 12px;
+    position: relative;
+    min-height: 150px;
+  }
+  .step::before {
+    content: "";
+    position: absolute;
+    top: 18px; left: -15px;
+    width: 14px; height: 2px;
+    background: var(--line);
+  }
+  .step:first-child::before { display: none; }
+  .step .t {
+    display: inline-block;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--blue);
+    background: var(--blue-bg);
+    border-radius: 999px;
+    padding: 1px 8px;
+    margin-bottom: 7px;
+  }
+  .step h4 { font-size: 13.5px; margin: 0 0 6px; }
+  .step p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .step.bad { border-color: #fca5a5; background: var(--red-bg); }
+  .step.bad .t { color: var(--red); background: #fee2e2; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { background: #f8fafc; font-size: 12px; color: var(--muted); font-weight: 700; }
+  tr:last-child td { border-bottom: none; }
+  code {
+    font-family: "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+    font-size: 12px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 5px;
+    padding: 0 4px;
+  }
+  .fix-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .fix {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 15px;
+  }
+  .fix h4 { margin: 0 0 6px; font-size: 14px; }
+  .fix p { margin: 0; font-size: 12.8px; color: var(--muted); }
+  .footer {
+    margin-top: 32px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    color: var(--muted);
+  }
+  @media (max-width: 860px) {
+    .pipeline { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); padding: 6px 0; }
+    .timeline { grid-template-columns: 1fr; }
+    .step::before { display: none; }
+    .fix-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>夜间模式修复后的剩余风险敞口</h1>
+    <p>桥的 consume-on-read 命令缓存没有全局版本号：旧快照可以被后来的逻辑请求当成新回包消费。</p>
+  </header>
+
+  <div class="verdict">
+    <strong>一句话：</strong>夜间模式的请求级缓存键已经把这个竞态封住；但桥本身仍按
+    <code>cmd|arg</code> 消费且没有 revision/TTL，其它使用固定 payload 的读命令（尤其
+    <code>AstroCalcController</code> / <code>TimeController</code> 的 <code>getState('')</code>）
+    仍可能把“切换前/修改前”的快照应用回来。
+  </div>
+
+  <h2><span class="num">1</span>风险存在点</h2>
+
+  <div class="pipeline">
+    <div class="lane">
+      <h3>ArkTS / UI 逻辑</h3>
+      <ul>
+        <li><span class="tag ok">已隔离</span> <code>MainWindowNativeNode</code> 的 <code>getState</code> 带刷新序号</li>
+        <li><span class="tag ok">已隔离</span> <code>TimeStore</code> 的 <code>getNightMode</code> 用入队 epoch 校验</li>
+        <li><span class="tag ok">已隔离</span> <code>NightModeStore</code> 的 <code>setNightMode</code> 带 <code>|epoch</code></li>
+        <li><span class="tag bad">敞口</span> <code>AstroCalcController</code> 4 处 <code>getState('')</code></li>
+        <li><span class="tag bad">敞口</span> <code>TimeController</code> 1 处 <code>getState('')</code></li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="lane">
+      <h3>桥缓存（native）</h3>
+      <ul>
+        <li>key = <code>cmd|arg</code>，例如 <code>getState|</code></li>
+        <li>consume-on-read：读到即删除</li>
+        <li><strong>没有 revision</strong>：无法判断快照年龄</li>
+        <li><strong>没有 TTL</strong>：旧结果可以一直留到下次同名请求</li>
+        <li>轮询链放弃后，结果仍会写入缓存</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="lane">
+      <h3>Qt 渲染泵 / 引擎</h3>
+      <ul>
+        <li>命令在 Qt 线程按队列执行</li>
+        <li>长任务会阻塞队列（<code>getMoonPhases</code> 等）</li>
+        <li>快照在“执行那一刻”产生</li>
+        <li>ArkTS 侧的轮询预算约 1.5s，超时就放弃</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout red">
+    <strong>关键错位：</strong>ArkTS 的 epoch 只能证明“我什么时候发起/消费了这个请求”，
+    不能证明“这份快照是什么时候产生的”。只要旧快照能被同一个 <code>cmd|arg</code> 再次消费，
+    版本判断就会失效。
+  </div>
+
+  <h2><span class="num">2</span>触发场景（时间线）</h2>
+
+  <div class="timeline">
+    <div class="step">
+      <div class="t">t0</div>
+      <h4>请求 A 入队</h4>
+      <p><code>getState|</code> 被 AstroCalc 或 TimeController 发出；桥返回 pending。</p>
+    </div>
+    <div class="step bad">
+      <div class="t">t0 + 1.5s</div>
+      <h4>轮询链放弃</h4>
+      <p>Qt 线程被长任务卡住，ArkTS 不再轮询；A 之后才执行完。</p>
+    </div>
+    <div class="step">
+      <div class="t">t0 + 2s</div>
+      <h4>状态被修改</h4>
+      <p>用户改 FOV / timeRate / 图层；引擎状态已经变化。</p>
+    </div>
+    <div class="step">
+      <div class="t">t0 + 3s</div>
+      <h4>请求 B 消费旧缓存</h4>
+      <p>另一个 <code>getState|</code> 调用命中 A 留下的快照，读到即删除。</p>
+    </div>
+    <div class="step bad">
+      <div class="t">t0 + 3.1s</div>
+      <h4>旧值写回 UI</h4>
+      <p>FOV / timeRate / actionShow_* 回到修改前；用户看到回退/闪烁。</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>最小触发条件：</strong>轮询链超时放弃 + 之后有另一个同名 <code>cmd|arg</code> 请求
+    + 两者之间发生过状态修改。三个条件同时成立时，旧快照会被当成新回包。
+  </div>
+
+  <h2><span class="num">3</span>当前边界：哪些已封住，哪些仍暴露</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>路径</th>
+        <th>缓存键</th>
+        <th>状态</th>
+        <th>仍可能受影响的字段</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>MainWindow <code>getState</code></td>
+        <td><code>getState|&lt;nonce&gt;</code></td>
+        <td><span class="tag ok">已隔离</span></td>
+        <td>夜间模式及其它 getState 字段</td>
+      </tr>
+      <tr>
+        <td>TimeStore <code>getNightMode</code></td>
+        <td><code>getNightMode|</code> + 入队 epoch</td>
+        <td><span class="tag ok">已隔离</span></td>
+        <td>夜间模式</td>
+      </tr>
+      <tr>
+        <td>NightModeStore <code>setNightMode</code></td>
+        <td><code>setNightMode|true|&lt;epoch&gt;</code></td>
+        <td><span class="tag ok">已隔离</span></td>
+        <td>夜间模式回执</td>
+      </tr>
+      <tr>
+        <td>AstroCalcController <code>getState('')</code></td>
+        <td><code>getState|</code></td>
+        <td><span class="tag bad">敞口</span></td>
+        <td>FOV、timeRate、actionShow_* 等</td>
+      </tr>
+      <tr>
+        <td>TimeController <code>getState('')</code></td>
+        <td><code>getState|</code></td>
+        <td><span class="tag bad">敞口</span></td>
+        <td>同上，且与 AstroCalc 共享同一个键</td>
+      </tr>
+      <tr>
+        <td>未来新增读命令</td>
+        <td>取决于 payload</td>
+        <td><span class="tag warn">需约定</span></td>
+        <td>只要使用固定 payload，就会重复同类竞态</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2><span class="num">4</span>根治方向</h2>
+
+  <div class="fix-grid">
+    <div class="fix">
+      <h4>方案 A：native 状态 revision（推荐）</h4>
+      <p>每次 mutation 递增 revision；所有回包带 revision。调用方拒绝
+        <code>reply.revision &lt; lastKnownMutationRevision</code> 的快照。与命令名、字段无关，覆盖所有读路径。</p>
+    </div>
+    <div class="fix">
+      <h4>方案 B：mutation 执行时清读缓存</h4>
+      <p>在 <code>setNightMode</code> / <code>setFOV</code> / <code>setTimeRate</code> 等 mutation
+        执行时清掉 <code>getState|</code>、<code>getNightMode|</code> 等读缓存。实现小，但需要维护 mutation 列表。</p>
+    </div>
+    <div class="fix">
+      <h4>方案 C：所有逻辑请求带唯一键</h4>
+      <p>像现在的 MainWindow <code>getState</code> 一样，每个逻辑请求用 nonce/epoch 作为 payload，
+        旧快照永远对不上新键。改动集中在调用方，但每个新读命令都必须遵守。</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    代码位置：<code>src/StelMainView.cpp</code>（<code>s_ohosCmdCache</code> / consume-on-read）、
+    <code>AstroCalcController.ets</code> 4 处 <code>getState('')</code>、
+    <code>TimeController.ets:224</code>、
+    <code>MainWindowNativeNode.ets</code> 的 <code>stateRefreshSerial</code>、
+    <code>TimeStore.ets</code> 的 <code>pendingNightReadEpoch</code>、
+    <code>NightModeStore.ets</code> 的 <code>|<i>epoch</i></code> payload。
+    本文档只做架构说明，不改变应用的离线/隐私边界。
+  </div>
+
+</div>
+</body>
+</html>

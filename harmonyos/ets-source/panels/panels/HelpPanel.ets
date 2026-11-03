@@ -1,18 +1,16 @@
 import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
-import { ToolsStore } from '../../state/ToolsStore'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
-import { AppFilingInfo } from '../../common/ui/AppFilingInfo'
 
-// 帮助面板，对应 `activePanel === 'help'`：静态说明文字 + 手势/快捷操作图例。
+// 帮助面板，对应 `activePanel === 'help'`：手势、键盘与面板入口说明。
 //
-// “关于”一节的版本信息读 ToolsStore（@ObjectLink）；“数据与工具”按钮经回调打开工具面板。
+// 版本、备案、开源许可统一放在「设置 → 关于」，本面板不再重复 About 信息；
+// “数据与工具”按钮经回调打开工具面板。
 // 主题色走「机制四」：onWillApplyTheme 自取当前主题槽位，调用点不再注入颜色。
 
 @Component
 export struct HelpPanel {
-  @ObjectLink tools: ToolsStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onWillApplyTheme(theme: Theme) {
     this.c = slotsFromTheme(theme)
@@ -22,11 +20,6 @@ export struct HelpPanel {
   build() {
     Scroll() {
       Column({ space: 8 }) {
-        Text(I18n.t('i0216')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 4 })
-        Text(I18n.t('i0261')).fontSize(11).fontColor(this.c.sub).width('100%')
-        Text(I18n.t('i0262')).fontSize(10).fontColor(this.c.sub).width('100%')
-        Text(I18n.t('i0263')).fontSize(10).fontColor(this.c.sub).width('100%')
-        Text(I18n.t('i0264')).fontSize(10).fontColor(this.c.sub).width('100%')
         // ===== 手势指南 =====
         Row()
           .width('100%').height(0.5)
@@ -88,20 +81,6 @@ export struct HelpPanel {
         Text(I18n.t('i0272')).fontSize(10).fontColor(this.c.sub).width('100%')
         Text(I18n.t('i0273')).fontSize(10).fontColor(this.c.sub).width('100%')
         Text(I18n.t('i0274')).fontSize(10).fontColor(this.c.sub).width('100%')
-        // ===== 关于 =====
-        Row()
-          .width('100%').height(0.5)
-          .backgroundColor(this.c.border)
-          .margin({ top: 8, bottom: 4 })
-        Text(I18n.t('c_about')).fontSize(13).fontColor(this.c.text).width('100%')
-        AppFilingInfo()
-        if (this.tools.aboutVersion.length > 0) {
-          Text('Stellarium ' + this.tools.aboutVersion + ' · Qt ' + this.tools.aboutQt).fontSize(10).fontColor(this.c.sub).width('100%')
-          Text(I18n.t('c_user_dir') + ': ' + this.tools.aboutUserDir).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(I18n.t('c_config_file') + ': ' + this.tools.aboutConfigFile).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-        } else {
-          Text(I18n.t('c_loading')).fontSize(10).fontColor(this.c.sub).width('100%')
-        }
         Row()
           .width('100%').height(0.5)
           .backgroundColor(this.c.border)

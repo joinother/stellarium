@@ -5,7 +5,7 @@ import { APP_ICP_FILING_NUMBER, APP_ICP_FILING_URL } from '../QtAppConstants'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // APP 备案信息（ICP 备案号 + 工信部核验链接）。
-// 设置面板「设备与隐私」与帮助面板「关于」两处共用同一组件与常量。
+// 设置面板「关于」标签页使用本组件与常量，避免备案号在多个面板重复维护。
 @Component
 export struct AppFilingInfo {
   @State c: ThemeSlots = DEFAULT_SLOTS

@@ -3643,6 +3643,8 @@ QJsonObject currentStateJson()
 	// The ArkUI shell is rendered separately from Stellarium's Qt scene.  Return
 	// the authoritative property here instead of inferring night mode from a UI action.
 	result["nightMode"] = StelApp::getInstance().getVisionModeNight();
+	result["decimalDegreesCoords"] = StelApp::getInstance().getFlagUseDecDegreesCoords();
+	result["decimalDegreesOther"] = StelApp::getInstance().getFlagUseDecDegreesOther();
 
 	StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
 	StelCore* core = StelApp::getInstance().getCore();
@@ -15053,6 +15055,28 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		// setDecimalDegrees — 设置坐标/其它数据是否使用十进制度
+		if (commandName == "setDecimalDegrees")
+		{
+			const QString coordsArg = arg.section('|', 0, 0).trimmed().toLower();
+			const QString otherArg = arg.section('|', 1, 1).trimmed().toLower();
+			if (otherArg.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "usage: coords|other";
+				return result;
+			}
+			const bool coords = coordsArg == "1" || coordsArg == "true";
+			const bool other = otherArg == "1" || otherArg == "true";
+			StelApp& app = StelApp::getInstance();
+			app.setFlagUseDecDegreesCoords(coords);
+			app.setFlagUseDecDegreesOther(other);
+			result["ok"] = true;
+			result["decimalDegreesCoords"] = app.getFlagUseDecDegreesCoords();
+			result["decimalDegreesOther"] = app.getFlagUseDecDegreesOther();
+			return result;
+		}
+
 		// getAtmosphereParams / setAtmosphereParams — 大气折射与消光参数
 		// Stellarium 没有全局的“折射开关”，折射由大气参数驱动：气压设为 0 mbar 即等价于关闭折射。
 		if (commandName == "getAtmosphereParams")
@@ -17659,8 +17683,8 @@ void StelMainView::resizeEvent(QResizeEvent* event)
 		#if !defined(__OHOS__)
 		if (StelApp::isInitialized() && !isFullScreen())
 		{
-			StelApp::immediateSave("video/screen_w", sz.width());
-			StelApp::immediateSave("video/screen_h", sz.height());
+			StelApp::immediateSave("video/screen_w", int(std::lround(sz.width() *devicePixelRatio())));
+			StelApp::immediateSave("video/screen_h", int(std::lround(sz.height()*devicePixelRatio())));
 		}
 		#endif
 		emit sizeChanged(sz);
@@ -18856,25 +18880,24 @@ bool StelMainView::needsMaxFPS() const
 
 void StelMainView::moveEvent(QMoveEvent * event)
 {
-	const QPoint &pos=event->pos();
 #if defined(__OHOS__)
-	Q_UNUSED(pos);
-#endif
-
-	// We use the glWidget instead of the event, as we want the screen that shows most of the widget.
-	QWindow* win = glWidget->windowHandle();
-	if(win)
-	{
-		stelApp->setDevicePixelsPerPixel(win->devicePixelRatio());
-	}
-
+	Q_UNUSED(event);
 	if (StelApp::isInitialized())
 	{
-#if !defined(__OHOS__)
-		StelApp::immediateSave("video/screen_x", pos.x());
-		StelApp::immediateSave("video/screen_y", pos.y());
-#endif
+		QWindow* win = glWidget ? glWidget->windowHandle() : nullptr;
+		if (win)
+			stelApp->setDevicePixelsPerPixel(win->devicePixelRatio());
 	}
+#else
+	const QPoint &pos=frameGeometry().topLeft(); // including frame!
+	if (StelApp::isInitialized())
+	{
+		const qreal dpp = devicePixelRatio();
+		stelApp->setDevicePixelsPerPixel(dpp);
+		StelApp::immediateSave("video/screen_x", int(std::lround(pos.x()*dpp)));
+		StelApp::immediateSave("video/screen_y", int(std::lround(pos.y()*dpp)));
+	}
+#endif
 }
 
 void StelMainView::closeEvent(QCloseEvent* event)

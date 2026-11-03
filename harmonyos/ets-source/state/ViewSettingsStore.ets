@@ -16,6 +16,8 @@ export interface ViewSettingsHostHooks {
   reloadConfigurationSettings(): void
   // setProjectionType 被拒时的 hilog（store 不 import @ohos.hilog）。
   logProjectionError(name: string, error: string): void
+  // 角度显示切换后重取选中天体资料，让已打开的详情卡立即使用新的格式。
+  refreshSelectedObject(): void
 }
 
 @Observed
@@ -28,6 +30,18 @@ export class ViewSettingsStore {
   configDitheringMode: string = 'Color888'
   liveMode: boolean = true
   uiLocked: boolean = false
+  // 与 StelApp.flagUseDecDegreesCoords / flagUseDecDegreesOther 同步。
+  // coords/other 采用乐观更新：点击后立即改本地镜像，桥回执再校准；
+  // 失败时回退到最后一次确认值，避免 Toggle 视觉状态与引擎状态脱节。
+  decimalDegreesCoords: boolean = false
+  decimalDegreesOther: boolean = false
+  private decimalDegreesConfirmedCoords: boolean = false
+  private decimalDegreesConfirmedOther: boolean = false
+  private decimalDegreesRequestSeq: number = 0
+  private decimalDegreesPending: boolean = false
+  // 成功后短暂忽略 getState 快照，避免请求前发出的旧快照把开关顶回去。
+  private decimalDegreesAppliedAt: number = 0
+  private static readonly DECIMAL_DEGREES_STATE_GUARD_MS: number = 1500
 
   // —— 桥 / 宿主回注 ——
   private port: CommandPort | null = null
@@ -77,6 +91,60 @@ export class ViewSettingsStore {
         hooks.flashHint(r.error ?? I18n.t('msg_apply_failed'))
         hooks.reloadConfigurationSettings()
       }
+    })
+  }
+
+  // 引擎 / config.ini 是权威源；getState 回读也走这里，确保确认值同步。
+  // 写入请求在途时忽略轮询快照，否则旧快照会把乐观更新顶回旧值。
+  syncDecimalDegreesFromState(coords: boolean, other: boolean): void {
+    if (this.decimalDegreesPending) return
+    if (Date.now() - this.decimalDegreesAppliedAt < ViewSettingsStore.DECIMAL_DEGREES_STATE_GUARD_MS) return
+    this.decimalDegreesCoords = coords
+    this.decimalDegreesOther = other
+    this.decimalDegreesConfirmedCoords = coords
+    this.decimalDegreesConfirmedOther = other
+  }
+
+  private syncDecimalDegrees(coords: boolean, other: boolean): void {
+    this.decimalDegreesCoords = coords
+    this.decimalDegreesOther = other
+    this.decimalDegreesConfirmedCoords = coords
+    this.decimalDegreesConfirmedOther = other
+  }
+
+  // 坐标 / 其它角度值是否使用十进制度。乐观更新，回执后校准；只让最新一次
+  // 请求的失败生效，避免快速连点时旧回执把两个开关互相覆盖。
+  setDecimalDegrees(coords: boolean, other: boolean): void {
+    const port = this.ensurePort()
+    const hooks = this.hooks
+    if (port === null || hooks === null) {
+      return
+    }
+    const seq = ++this.decimalDegreesRequestSeq
+    this.decimalDegreesPending = true
+    this.decimalDegreesCoords = coords
+    this.decimalDegreesOther = other
+    const revert = (): void => {
+      if (seq !== this.decimalDegreesRequestSeq) return
+      this.decimalDegreesPending = false
+      this.decimalDegreesCoords = this.decimalDegreesConfirmedCoords
+      this.decimalDegreesOther = this.decimalDegreesConfirmedOther
+    }
+    const payload = (coords ? '1' : '0') + '|' + (other ? '1' : '0')
+    port.requestInteractive('setDecimalDegrees', payload, (r: StellariumBridgeResponse) => {
+      if (seq !== this.decimalDegreesRequestSeq) return
+      if (r.ok !== true) {
+        revert()
+        hooks.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+        return
+      }
+      this.decimalDegreesPending = false
+      this.decimalDegreesAppliedAt = Date.now()
+      this.syncDecimalDegrees(r.decimalDegreesCoords === true, r.decimalDegreesOther === true)
+      hooks.refreshSelectedObject()
+    }, () => {
+      revert()
+      hooks.flashHint(I18n.t('msg_apply_failed'))
     })
   }
 

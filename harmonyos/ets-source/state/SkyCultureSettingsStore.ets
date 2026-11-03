@@ -546,22 +546,42 @@ export class SkyCultureSettingsStore {
     return '未定义边界'
   }
 
+  // 引擎用 StelSkyCulture::unknownBeginTime / presentEndTime 表示“未知 / 至今”
+  // （src/core/StelSkyCultureMgr.hpp）。旧代码只判断 0，会把 -100000 显示成
+  // “公元前 100000 年”；0 仍是 ArkTS 侧缺省值，按未知处理。
+  private static readonly SKY_CULTURE_UNKNOWN_BEGIN: number = -100000
+  private static readonly SKY_CULTURE_PRESENT_END: number = 9146
+
+  private skyCultureBeginUnknown(): boolean {
+    return this.skyCultureBeginTime === 0 ||
+      this.skyCultureBeginTime === SkyCultureSettingsStore.SKY_CULTURE_UNKNOWN_BEGIN
+  }
+
+  private skyCultureEndPresent(): boolean {
+    return this.skyCultureEndTime === 0 ||
+      this.skyCultureEndTime === SkyCultureSettingsStore.SKY_CULTURE_PRESENT_END
+  }
+
   skyCultureTimeRange(): string {
-    if (this.skyCultureBeginTime === 0 && this.skyCultureEndTime === 0) return '年代范围未标注'
-    const start = this.skyCultureBeginTime === 0 ? '早期' : this.skyCultureFormatYear(this.skyCultureBeginTime)
-    const end = this.skyCultureEndTime >= 9000 ? '至今' : (this.skyCultureEndTime === 0 ? '至今' : this.skyCultureFormatYear(this.skyCultureEndTime))
+    const beginUnknown = this.skyCultureBeginUnknown()
+    const endPresent = this.skyCultureEndPresent()
+    if (beginUnknown && endPresent) return '年代范围未标注'
+    const start = beginUnknown ? '未知' : this.skyCultureFormatYear(this.skyCultureBeginTime)
+    const end = endPresent ? '至今' : this.skyCultureFormatYear(this.skyCultureEndTime)
     return start + ' 至 ' + end
   }
 
   skyCultureSimulationTimeMatches(): boolean {
-    if (this.skyCultureBeginTime === 0 && this.skyCultureEndTime === 0) return true
-    const beginsBeforeYear = this.skyCultureBeginTime === 0 || this.skyCultureSimulationYear >= this.skyCultureBeginTime
-    const endsAfterYear = this.skyCultureEndTime === 0 || this.skyCultureEndTime >= 9000 || this.skyCultureSimulationYear <= this.skyCultureEndTime
+    const beginUnknown = this.skyCultureBeginUnknown()
+    const endPresent = this.skyCultureEndPresent()
+    if (beginUnknown && endPresent) return true
+    const beginsBeforeYear = beginUnknown || this.skyCultureSimulationYear >= this.skyCultureBeginTime
+    const endsAfterYear = endPresent || this.skyCultureSimulationYear <= this.skyCultureEndTime
     return beginsBeforeYear && endsAfterYear
   }
 
   skyCultureSimulationTimeStatus(): string {
-    if (this.skyCultureBeginTime === 0 && this.skyCultureEndTime === 0) return '当前模拟时间：该文化未标注适用年代'
+    if (this.skyCultureBeginUnknown() && this.skyCultureEndPresent()) return '当前模拟时间：该文化未标注适用年代'
     return this.skyCultureSimulationTimeMatches()
       ? '当前模拟时间：在该文化适用年代内'
       : '当前模拟时间：不在该文化适用年代内'

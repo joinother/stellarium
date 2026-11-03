@@ -43,12 +43,13 @@ class InfoPanel : public QGraphicsTextItem
 		void setInfoTextFilters(const StelObject::InfoStringGroup& aflags) {infoTextFilters=aflags;}
 		const StelObject::InfoStringGroup& getInfoTextFilters(void) const {return infoTextFilters;}
 		void setTextFromObjects(const QList<StelObjectP>&);
-		QString getSelectedText() const;
-		QString getSelectedHTML() const;
+		QString getSelectedText() const; //! same as toPlainText()
+		QString getSelectedHTML() const; //! returns HTML formatted object InfoString
 
 	private:
 		QString infoHTML;
 		StelObject::InfoStringGroup infoTextFilters;
+		int opacity; // allows dimming text background. Negative numbers force opacity even for daylight.
 };
 
 //! The class managing the layout for button bars, selected object info and loading bars.
@@ -76,6 +77,10 @@ public:
 	qreal getBottomBarHeight() const;
 	//! return width of left Bar when fully shown
 	qreal getLeftBarWidth() const;
+	//! return the bounding rectangle of the bottom Bar in SkyGui coordinates (without help label)
+	QRectF getBottomBarRect() const;
+	//! return the bounding rectangle of the left Bar in SkyGui coordinates (without help label)
+	QRectF getLeftBarRect() const;
 	
 protected:
 	void resizeEvent(QGraphicsSceneResizeEvent* event) override;
@@ -112,6 +117,11 @@ private:
 
 	bool autoHideBottomBar;
 	bool autoHideLeftBar;
+
+	//! If true, the tool bar and dialog bar are docked to the top edge instead of the bottom.
+	bool toolbarAtTop;
+	//! If true, the tool bar and dialog bar are docked to the right edge instead of the left.
+	bool toolbarAtRight;
 	
 	StelGui* stelGui;
 };

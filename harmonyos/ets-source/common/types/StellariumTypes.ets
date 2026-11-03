@@ -698,6 +698,8 @@ export interface StellariumBridgeResponse {
   text?: string
   night?: boolean
   nightMode?: boolean
+  decimalDegreesCoords?: boolean
+  decimalDegreesOther?: boolean
   luminanceAdaptation?: boolean
   starTwinkle?: boolean
   forcedStarTwinkle?: boolean
@@ -839,6 +841,7 @@ export interface StellariumBridgeResponse {
   archiveReady?: boolean
   archiveError?: string
   planets?: string[]
+  planet?: string
   observerPlanets?: ObserverPlanetItem[]
   tonight?: TonightEvents
   datasets?: SpectralDataset[]
