@@ -114,6 +114,9 @@ export struct SettingsPanel {
   scheduleNextSolarTermReminder: () => void = () => {}
   scheduleNextMoonPhaseReminder: () => void = () => {}
   scheduleNextMeteorReminder: () => void = () => {}
+  scheduleCountdownReminder: (minutes: number) => void = () => {}
+  scheduleCalendarReminder: (timestamp: number) => void = () => {}
+  scheduleDailyAlarmReminder: (hour: number, minute: number) => void = () => {}
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -181,6 +184,9 @@ export struct SettingsPanel {
               onScheduleNextSolarTerm: () => { this.scheduleNextSolarTermReminder() },
               onScheduleNextMoonPhase: () => { this.scheduleNextMoonPhaseReminder() },
               onScheduleNextMeteor: () => { this.scheduleNextMeteorReminder() },
+              onScheduleCountdown: (minutes: number) => { this.scheduleCountdownReminder(minutes) },
+              onScheduleCalendarAt: (timestamp: number) => { this.scheduleCalendarReminder(timestamp) },
+              onScheduleAlarm: (hour: number, minute: number) => { this.scheduleDailyAlarmReminder(hour, minute) },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
           } else if (this.configTab === 0) {

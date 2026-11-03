@@ -2,10 +2,19 @@ import { reminderAgentManager } from '@kit.BackgroundTasksKit'
 import { notificationManager } from '@kit.NotificationKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 
+// 代理提醒支持的三类：倒计时 / 日历 / 闹钟（对应 reminderAgentManager 的三种类型）。
+export type AstronomyReminderKind = 'timer' | 'calendar' | 'alarm'
+
 export interface AstronomyReminderRequest {
+  // timer: 秒数；calendar: ISO 时间；alarm: 忽略（用 hour/minute）
   at: string
   title: string
   content: string
+  reminderType?: AstronomyReminderKind
+  triggerSeconds?: number
+  hour?: number
+  minute?: number
+  daysOfWeek?: Array<number>
   eventId?: string
   kind?: string
   panel?: string
@@ -93,7 +102,7 @@ export class AstronomyReminderService {
     }
     const date = new Date(payload.at)
     if (!Number.isFinite(date.getTime())) return { ok: false, error: 'at must be an ISO date-time' }
-    if (date.getTime() <= Date.now() + 30 * 1000) {
+    if ((payload.reminderType ?? 'calendar') === 'calendar' && date.getTime() <= Date.now() + 30 * 1000) {
       return { ok: false, error: 'reminder must be at least 30 seconds in the future' }
     }
 
@@ -109,25 +118,58 @@ export class AstronomyReminderService {
       eventId: payload.eventId ?? '',
       kind: payload.kind ?? 'astronomy'
     }
-    const request: reminderAgentManager.ReminderRequestCalendar = {
-      reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
-      dateTime: AstronomyReminderService.localDateTime(date),
-      title: payload.title.trim(),
-      content: payload.content.trim(),
-      expiredContent: '天象提醒已过期，可打开星象仪查看年历。',
-      groupId: AstronomyReminderService.GROUP_ID,
-      tapDismissed: true,
-      wantAgent: {
-        // 用运行时派生的包名，保证与「当前安装的」包一致。
-        // 现状：debug 与 release 共用 com.joinother.skyinstrument（AppScope/app.json5），
-        // 常量本来也对得上；但将来若引入 debug 后缀或渠道包（不同 bundleName），
-        // 这里不需要再改，也不会出现「点通知打不开」的问题。
-        pkgName: bundleName.length > 0 ? bundleName : AstronomyReminderService.BUNDLE_NAME,
-        abilityName: AstronomyReminderService.ABILITY_NAME,
-        uri: 'skyinstrument://astronomy/reminder',
-        parameters: parameters
-      }
+    const kind = payload.reminderType ?? 'calendar'
+    // 用运行时派生的包名，保证与「当前安装的」包一致。
+    // 现状：debug 与 release 共用 com.joinother.skyinstrument（AppScope/app.json5），
+    // 常量本来也对得上；将来若引入 debug 后缀或渠道包，这里也不需要改。
+    const wantAgent: reminderAgentManager.WantAgent = {
+      pkgName: bundleName.length > 0 ? bundleName : AstronomyReminderService.BUNDLE_NAME,
+      abilityName: AstronomyReminderService.ABILITY_NAME,
+      uri: 'skyinstrument://astronomy/reminder',
+      parameters: parameters
     }
+    let request: reminderAgentManager.ReminderRequest
+    if (kind === 'timer') {
+      const seconds = Math.max(60, Math.round(payload.triggerSeconds ?? 1800))
+      const timerRequest: reminderAgentManager.ReminderRequestTimer = {
+        reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_TIMER,
+        triggerTimeInSeconds: seconds,
+        title: payload.title.trim(),
+        content: payload.content.trim(),
+        expiredContent: '倒计时提醒已结束，可打开星象仪继续观测。',
+        groupId: AstronomyReminderService.GROUP_ID,
+        tapDismissed: true,
+        wantAgent: wantAgent
+      }
+      request = timerRequest
+    } else if (kind === 'alarm') {
+      const alarmRequest: reminderAgentManager.ReminderRequestAlarm = {
+        reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_ALARM,
+        hour: payload.hour ?? 21,
+        minute: payload.minute ?? 0,
+        daysOfWeek: payload.daysOfWeek ?? [1, 2, 3, 4, 5, 6, 7],
+        title: payload.title.trim(),
+        content: payload.content.trim(),
+        expiredContent: '每日提醒已过期，可打开星象仪重新设置。',
+        groupId: AstronomyReminderService.GROUP_ID,
+        tapDismissed: true,
+        wantAgent: wantAgent
+      }
+      request = alarmRequest
+    } else {
+      const calendarRequest: reminderAgentManager.ReminderRequestCalendar = {
+        reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
+        dateTime: AstronomyReminderService.localDateTime(date),
+        title: payload.title.trim(),
+        content: payload.content.trim(),
+        expiredContent: '天象提醒已过期，可打开星象仪查看年历。',
+        groupId: AstronomyReminderService.GROUP_ID,
+        tapDismissed: true,
+        wantAgent: wantAgent
+      }
+      request = calendarRequest
+    }
+
     try {
       const reminderId = await reminderAgentManager.publishReminder(request)
       return { ok: true, reminderId: reminderId, notificationEnabled: true }

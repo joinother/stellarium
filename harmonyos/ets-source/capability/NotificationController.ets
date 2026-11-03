@@ -184,6 +184,62 @@ export class NotificationController {
     })
   }
 
+  // 倒计时提醒：用户选择分钟数，交给系统在 N 分钟后提醒（REMINDER_TYPE_TIMER）。
+  scheduleCountdown(minutes: number): void {
+    const mins = Math.max(1, Math.round(minutes))
+    this.scheduleOne({
+      at: new Date(Date.now() + mins * 60000).toISOString(),
+      title: '星象仪 · 观测倒计时',
+      content: mins + ' 分钟后提醒你回到观测。',
+      eventId: 'countdown-' + mins,
+      kind: 'countdown',
+      panel: 'astro',
+      tab: 0,
+      reminderType: 'timer',
+      triggerSeconds: mins * 60
+    })
+  }
+
+  // 日历提醒：用户在时间选择器里指定日期时间（REMINDER_TYPE_CALENDAR）。
+  scheduleAtDateTime(timestamp: number): void {
+    if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
+      this.hooks.flashHint('请选择晚于当前时间的时间')
+      return
+    }
+    const d = new Date(timestamp)
+    const label = d.getMonth() + 1 + ' 月 ' + d.getDate() + ' 日 ' +
+      String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+    this.scheduleOne({
+      at: d.toISOString(),
+      title: '星象仪 · 观测提醒',
+      content: label + ' 的观测计划，打开星象仪开始。',
+      eventId: 'calendar-' + timestamp,
+      kind: 'calendar',
+      panel: 'astro',
+      tab: 0,
+      reminderType: 'calendar'
+    })
+  }
+
+  // 闹钟提醒：用户指定每天的时刻（REMINDER_TYPE_ALARM，七天重复）。
+  scheduleDailyAlarm(hour: number, minute: number): void {
+    const hh = Math.min(23, Math.max(0, Math.round(hour)))
+    const mm = Math.min(59, Math.max(0, Math.round(minute)))
+    this.scheduleOne({
+      at: new Date().toISOString(),
+      title: '星象仪 · 每日观星提醒',
+      content: '每天 ' + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0') + ' 提醒你抬头看看星空。',
+      eventId: 'alarm-daily',
+      kind: 'alarm',
+      panel: 'astro',
+      tab: 0,
+      reminderType: 'alarm',
+      hour: hh,
+      minute: mm,
+      daysOfWeek: [1, 2, 3, 4, 5, 6, 7]
+    })
+  }
+
   // 清除全部已注册的天象提醒。
   clearReminders(): void {
     if (this.store.astronomyNotificationBusy) return
