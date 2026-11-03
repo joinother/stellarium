@@ -48,7 +48,9 @@ node "$SCRIPT_DIR/build-ohos-multilingual-search-index.mjs"
 # `scripts` holds Stellarium's .ssc sky-tour scripts. It also happens to hold this
 # repo's own build shell scripts, so it gets an allow-list filter below — without
 # it, StelScriptMgr::getScriptList() finds nothing and the Scripts panel is empty.
-DIRS=(data textures landscapes nebulae stars translations skycultures scenery3d scripts)
+# atmosphere/ 是 26.x 新增的物理大气散射模型（params.atmo + .f32 LUT），
+# 缺它时 flag_atmosphere 仍为 true 但天空渲染成全黑（地景和太阳照常显示）。
+DIRS=(data textures landscapes nebulae stars translations skycultures scenery3d scripts atmosphere)
 
 # Non-culture files living directly inside skycultures/ (CMake scaffolding).
 # They must not be copied into the rawfile (they would be treated as junk).
@@ -83,7 +85,9 @@ for d in "${DIRS[@]}"; do
   SRC="$REPO_ROOT/$d"
   [ -d "$SRC" ] || { echo "SKIP (missing): $SRC"; continue; }
   echo "==> syncing $d -> $DST/$d"
-  if [ "$d" = "skycultures" ]; then
+  if [ "$d" = "atmosphere" ]; then
+    rsync -a --delete --exclude='/CMakeLists.txt' "$SRC/" "$DST/$d/"
+  elif [ "$d" = "skycultures" ]; then
     rsync -a --delete --delete-excluded "${SKYCULTURE_EXCLUDES[@]}" "$SRC/" "$DST/$d/"
   elif [ "$d" = "nebulae" ]; then
     rsync -a --delete --delete-excluded "${NEBULAE_INCLUDES[@]}" "$SRC/" "$DST/$d/"

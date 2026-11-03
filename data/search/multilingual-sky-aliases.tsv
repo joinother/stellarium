@@ -1627,6 +1627,7 @@ Anthead Sterrenstelsel	Anthead Galaxy	nl
 Anthead-galaksi	Anthead Galaxy	fi
 Anties galvos ūkas	Duck Head Nebula	lt
 Anties ūkas	Duck Nebula	lt
+Antinojus	Antinous	lt
 Antínous	Antinous	ca
 Antínous	Antinous	ca@valencia
 Antinoüs	Antinous	fr
@@ -2641,8 +2642,8 @@ Cabello Negro de Bart	Black Bart's Hair	es_419
 Cabelo de Ariadne	Ariadne's Hair	pt_BR
 Cabelo de Black Bart	Black Bart's Hair	gl
 Cabelo de Black Bart	Black Bart's Hair	pt_BR
-Cabeza de pájaro	Bird's Head	es
-Cabeza de pájaro	Bird's Head	es_419
+Cabeza de Pájaro	Bird's Head	es
+Cabeza de Pájaro	Bird's Head	es_419
 Cabeza de Paxaro	Bird's Head	gl
 Cabide	Coathanger	pt_BR
 Cabo da Espada	Sword Handle	pt_BR
@@ -4934,6 +4935,7 @@ Diadém	Diadem	sk
 Diadema	Diadem	es
 Diadema	Diadem	es_419
 Diadema	Diadem	lt
+Diadema	Diadem	pt_BR
 Diadema	Diadem	ro
 Diadema de Haley	Haley's Coronet	pt_BR
 Diadème de Nefertiti	Nefertiti's headpiece	fr
@@ -5216,6 +5218,7 @@ Duch kráľa Hamleta	King Hamlet's Ghost	sk
 Duch Mirach	Mirach's Ghost	pl
 Duch Mirachu	Mirach's Ghost	cs
 Duchova čaša	Ghost's Goblet	sk
+Duchův pohár	Ghost's Goblet	cs
 Duck Head Maglica	Duck Head Nebula	hr
 Duck Maglica	Duck Nebula	hr
 Dudučio spiečius	Tweedledum Cluster	lt
@@ -8284,6 +8287,7 @@ Galaxie v Andromedě	Andromeda Galaxy	cs
 Galaxie v Sochaři	Sculptor Galaxy	cs
 Galaxie v Trojúhelníku	Triangulum Galaxy	cs
 Galaxie Větrník	Pinwheel Galaxy	cs
+galaxie Větrník v Sochaři	Sculptor Pinwheel Galaxy	cs
 Galaxie Virgo	Virgo Galaxy	fr
 Galaxie X Comae	X Comae Galaxy	fr
 Galaxie Zámotek	Cocoon Galaxy	cs
@@ -9429,7 +9433,7 @@ Hammaslääkärin tuoli	The Dentist's Chair	fi
 Hampurilaisgalaksi	Hamburger Galaxy	fi
 Hampurilaisgalaksi	The Hamburger Galaxy	fi
 Hamsterhjulsnebulosan	Hamster Wheel Nebula	sv
-Hamsterradnebel	Hamster Wheel Nebula	de
+Hamsterrad-Nebel	Hamster Wheel Nebula	de
 Hamsterwiel Nevel	Hamster Wheel Nebula	nl
 Hand skup	Hand Cluster	hr
 Hand-Haufen	Hand Cluster	de
@@ -12550,7 +12554,6 @@ Loch Ness Moster-Haufen	Loch Ness Moster Cluster	de
 Loch Ness-monstrets hop	Loch Ness Moster Cluster	sv
 Loch Nessin hirviöryhmä	Loch Ness Moster Cluster	fi
 Lochneso pabaisos spečius	Loch Ness Moster Cluster	lt
-Lodní kýl	Carina	cs
 Lófej-köd	Horsehead Nebula	hu
 Loftnetin	Antennae	is
 Lohikäärmeen	Draconis	fi
@@ -14632,8 +14635,6 @@ Nebulosa Brasa Ardent	Burning Ember Nebula	ca@valencia
 Nebulosa Broche Encadenado	Chained Brooch Nebula	es
 Nebulosa Broche Encadenado	Chained Brooch Nebula	es_419
 Nebulosa Bucco della Serratura	Keyhole Nebula	it
-Nebulosa burbuja de jabón	Soap Bubble Nebula	es
-Nebulosa burbuja de jabón	Soap Bubble Nebula	es_419
 Nebulosa Burbulla Dobre	Double Bubble Nebula	gl
 Nebulosa Butterfly	Butterfly Nebula	ca@valencia
 Nebulosa Cabaza	Calabash Nebula	gl
@@ -14982,8 +14983,6 @@ Nebulosa de Antares	Antares Nebula	es_419
 Nebulosa de Antares	Antares Nebula	gl
 Nebulosa de Antares	Antares Nebula	pt_BR
 Nebulosa de Atlas	Atlas Nebula	pt_BR
-Nebulosa de Barbell	Barbell Nebula	es
-Nebulosa de Barbell	Barbell Nebula	es_419
 Nebulosa de Bode	Bode's Nebula	ca
 Nebulosa de Bode	Bode's Nebula	ca@valencia
 Nebulosa de Bode	Bode's Nebula	gl
@@ -15136,6 +15135,8 @@ Nebulosa de la Araña Roja	Red spider Nebula	es
 Nebulosa de la Araña Roja	Red spider Nebula	es_419
 Nebulosa de la Banana	Banana Nebula	ca
 Nebulosa de la Barra amb Peses	Barbell Nebula	ca
+Nebulosa de la Barra de Pesas	Barbell Nebula	es
+Nebulosa de la Barra de Pesas	Barbell Nebula	es_419
 Nebulosa de la Bestiola	Bug Nebula	ca@valencia
 Nebulosa de la Bola de Neu	Snowball Nebula	ca
 Nebulosa de la Bola de Neu	Snowball Nebula	ca@valencia
@@ -15145,6 +15146,8 @@ Nebulosa de la Brasa Ardiente	Burning Ember Nebula	es
 Nebulosa de la Brasa Ardiente	Burning Ember Nebula	es_419
 Nebulosa de la Burbuja	Bubble Nebula	es
 Nebulosa de la Burbuja	Bubble Nebula	es_419
+Nebulosa de la Burbuja de Jabón	Soap Bubble Nebula	es
+Nebulosa de la Burbuja de Jabón	Soap Bubble Nebula	es_419
 Nebulosa de la Cabeza de bruja	Witch Head Nebula	es
 Nebulosa de la Cabeza de bruja	Witch Head Nebula	es_419
 Nebulosa de la Cabeza de caballo	Horsehead Nebula	es
@@ -15230,6 +15233,8 @@ Nebulosa de la Mariposa Albina	Albino Butterfly Nebula	es_419
 Nebulosa de la Mariposa Carmesí	Crimson Butterfly Nebula	es
 Nebulosa de la Mariposa Carmesí	Crimson Butterfly Nebula	es_419
 Nebulosa de la Màscara Vudú	Voodoo Mask Nebula	ca
+Nebulosa de la Máscara Vudú	Voodoo Mask Nebula	es
+Nebulosa de la Máscara Vudú	Voodoo Mask Nebula	es_419
 Nebulosa de la Mèdula	Medulla Nebula	ca
 Nebulosa de la Medusa	Celestial Jellyfish	es
 Nebulosa de la Medusa	Celestial Jellyfish	es_419
@@ -15251,6 +15256,8 @@ Nebulosa de la Papallona Carmesí	Crimson Butterfly Nebula	ca@valencia
 Nebulosa de la Paparra	Tick Nebula	ca
 Nebulosa de la Pell de la Guineu	Fox Fur Nebula	ca
 Nebulosa de la Pell de la Rabosa	Fox Fur Nebula	ca@valencia
+Nebulosa de la Pequeña Mancuerna	Little Dumbbell Nebula	es
+Nebulosa de la Pequeña Mancuerna	Little Dumbbell Nebula	es_419
 Nebulosa de la Petita Rosassa	Little Rosette Nebula	ca
 Nebulosa de la Petjada	Footprint Nebula	ca
 Nebulosa de la Petjada	Footprint Nebula	ca@valencia
@@ -15271,6 +15278,7 @@ Nebulosa de la Retina	Retina Nebula	ca
 Nebulosa de la Retina	Retina Nebula	ca@valencia
 Nebulosa de la Retina	Retina Nebula	es
 Nebulosa de la Retina	Retina Nebula	es_419
+Nebulosa de la Roda de Hàmster	Hamster Wheel Nebula	ca
 Nebulosa de la Rosa de Sant Valentí	Valentine Rose Nebula	ca
 Nebulosa de la Roseta	Rosette Nebula	ca@valencia
 Nebulosa de la Rueda del Hámster	Hamster Wheel Nebula	es
@@ -15317,6 +15325,8 @@ Nebulosa de Lower	Lower's Nebula	es
 Nebulosa de Lower	Lower's Nebula	es_419
 Nebulosa de Lower	Lower's Nebula	pt
 Nebulosa de Lower	Lower's Nebula	pt_BR
+Nebulosa de Maia	Maia Nebula	es
+Nebulosa de Maia	Maia Nebula	es_419
 Nebulosa de Mairan	de Mairan's Nebula	ca
 Nebulosa de Mairan	de Mairan's Nebula	ca@valencia
 Nebulosa de Mairan	de Mairan's Nebula	gl
@@ -15485,8 +15495,8 @@ Nebulosa del Cranc	Crab Nebula	ca
 Nebulosa del Cranc	Crab Nebula	ca@valencia
 Nebulosa del Cranc del Sud	Southern Crab Nebula	ca
 Nebulosa del Cranc del Sud	Southern Crab Nebula	ca@valencia
-Nebulosa del cráneo	Skull Nebula	es
-Nebulosa del cráneo	Skull Nebula	es_419
+Nebulosa del Cráneo	Skull Nebula	es
+Nebulosa del Cráneo	Skull Nebula	es_419
 Nebulosa del Crani i ossos creuats	Skull and Crossbones Nebula	ca
 Nebulosa del Creciente	Crescent Nebula	es
 Nebulosa del Creciente	Crescent Nebula	es_419
@@ -15555,6 +15565,8 @@ Nebulosa del Gran Bucle	Great Looped Nebula	ca@valencia
 Nebulosa del Gran Bucle	Great Looped Nebula	es
 Nebulosa del Gran Bucle	Great Looped Nebula	es_419
 Nebulosa del home corrent	Running Man Nebula	ca
+Nebulosa del Huevo de Petirrojo	Robin's Egg Nebula	es
+Nebulosa del Huevo de Petirrojo	Robin's Egg Nebula	es_419
 Nebulosa del Huevo Podrido	Rotten Egg Nebula	es
 Nebulosa del Huevo Podrido	Rotten Egg Nebula	es_419
 Nebulosa del Insecto	Bug Nebula	es
@@ -15562,6 +15574,7 @@ Nebulosa del Insecto	Bug Nebula	es_419
 Nebulosa del la Llacuna	Lagoon Nebula	ca@valencia
 Nebulosa del la Llacuna del Nord	Northern Lagoon Nebula	ca
 Nebulosa del la Llacuna del Nord	Northern Lagoon Nebula	ca@valencia
+Nebulosa del Lagarto Volador	Flying Lizard Nebula	es_419
 Nebulosa del Lago	Lagoon Nebula	es
 Nebulosa del Lago	Lagoon Nebula	es_419
 Nebulosa del Lago del Norte	Northern Lagoon Nebula	es
@@ -15606,6 +15619,8 @@ Nebulosa del Ojo	Eye Nebula	es
 Nebulosa del Ojo	Eye Nebula	es_419
 Nebulosa del Ojo  Negro	Black Eye Nebula	es
 Nebulosa del Ojo  Negro	Black Eye Nebula	es_419
+Nebulosa del Ojo Brillante	Glowing Eye Nebula	es
+Nebulosa del Ojo Brillante	Glowing Eye Nebula	es_419
 Nebulosa del Ojo Volador	Flying Eye Nebula	es
 Nebulosa del Ojo Volador	Flying Eye Nebula	es_419
 Nebulosa del Pato	Duck Nebula	es
@@ -15680,6 +15695,8 @@ Nebulosa del Vel de l'Oest	West Veil Nebula	ca
 Nebulosa del Vel de l'Oest	West Veil Nebula	ca@valencia
 Nebulosa del Velo	Veil Nebula	es
 Nebulosa del Velo	Veil Nebula	es_419
+Nebulosa del Vilano del Diente de León	Dandelion Puffball Nebula	es
+Nebulosa del Vilano del Diente de León	Dandelion Puffball Nebula	es_419
 Nebulosa del Vil·là del Dent de Lleó	Dandelion Puffball Nebula	ca@valencia
 Nebulosa Delfino	Dolphin Nebula	it
 Nebulosa dels Auriculars	Headphone Nebula	ca
@@ -16198,7 +16215,6 @@ Nebulosa la Calavera i Tíbies Creuades	Skull and Crossbones Nebula	ca@valencia
 Nebulosa Lagarto Negro	Black Lizard Nebula	es
 Nebulosa Lagarto Negro	Black Lizard Nebula	es_419
 Nebulosa Lagarto Volador	Flying Lizard Nebula	es
-Nebulosa Lagarto Volador	Flying Lizard Nebula	es_419
 Nebulosa Lagoa	Lagoon Nebula	pt
 Nebulosa Lagoon	Lagoon Nebula	pt_BR
 Nebulosa Lágrima	Teardrop Nebula	es
@@ -16228,8 +16244,6 @@ Nebulosa Macchia d'Inchiostro	Ink Spot Nebula	it
 Nebulosa Mago	The Wizard Nebula	it
 Nebulosa Maia	Maia Nebula	ca
 Nebulosa Maia	Maia Nebula	ca@valencia
-Nebulosa Maia	Maia Nebula	es
-Nebulosa Maia	Maia Nebula	es_419
 Nebulosa Maia	Maia Nebula	gl
 Nebulosa Maia	Maia Nebula	pt
 Nebulosa Maia	Maia Nebula	pt_BR
@@ -16250,8 +16264,6 @@ Nebulosa Maragda	Emerald Nebula	ca
 Nebulosa Maragda	Emerald Nebula	ca@valencia
 Nebulosa Marte Verde	Green Mars Nebula	es
 Nebulosa Marte Verde	Green Mars Nebula	es_419
-Nebulosa Máscara Vudú	Voodoo Mask Nebula	es
-Nebulosa Máscara Vudú	Voodoo Mask Nebula	es_419
 Nebulosa Mascella Volante	Flying Jaw Nebula	it
 Nebulosa Maschera Voodoo	Voodoo Mask Nebula	it
 Nebulosa Màsquera de Vudú	Voodoo Mask Nebula	ca@valencia
@@ -16307,8 +16319,6 @@ Nebulosa Occhio di Gatto	Cat's Eye Nebula	it
 Nebulosa Occhio Nero	Black Eye Nebula	it
 Nebulosa Ocho Estallidos	Eight-Burst Nebula	es
 Nebulosa Ocho Estallidos	Eight-Burst Nebula	es_419
-Nebulosa Ojo Brillante	Glowing Eye Nebula	es
-Nebulosa Ojo Brillante	Glowing Eye Nebula	es_419
 Nebulosa Ojo de Camello	Camel's Eye Nebula	es
 Nebulosa Ojo de Camello	Camel's Eye Nebula	es_419
 Nebulosa Ojo de Cerradura	Keyhole Nebula	es
@@ -16419,8 +16429,8 @@ Nebulosa Planetaria Cometa	Comet Planetary Nebula	it
 Nebulosa Planetária da Ampulheta	Hourglass Planetary Nebula	pt_BR
 Nebulosa Planetaria das Oito Explosións	Eight-Burst Planetary Nebula	gl
 Nebulosa Planetária das Oito Explosões	Eight-Burst Planetary Nebula	pt_BR
-Nebulosa planetaria de cometa	Comet Planetary Nebula	es
-Nebulosa planetaria de cometa	Comet Planetary Nebula	es_419
+Nebulosa Planetaria de Cometa	Comet Planetary Nebula	es
+Nebulosa Planetaria de Cometa	Comet Planetary Nebula	es_419
 Nebulosa Planetària del Cometa	Comet Planetary Nebula	ca
 Nebulosa Planetària del Cometa	Comet Planetary Nebula	ca@valencia
 Nebulosa Planetària del Rellotge de Sorra	Hourglass Planetary Nebula	ca
@@ -16461,8 +16471,6 @@ Nebulosa Príncipe de Asturias	Principes de Asturias Nebula	es
 Nebulosa Príncipe de Asturias	Principes de Asturias Nebula	es_419
 Nebulosa Príncipes de Asturias	Principes de Asturias Nebula	pt_BR
 Nebulosa Proboscide di Elefante	Elephant's Trunk Nebula	it
-Nebulosa Puffball Diente de León	Dandelion Puffball Nebula	es
-Nebulosa Puffball Diente de León	Dandelion Puffball Nebula	es_419
 Nebulosa Pulcino d'Aquila	Baby Eagle Nebula	it
 Nebulosa Pulsante Cappotto	Coat Button Nebula	it
 Nebulosa Punto Negro	Black Spot Nebula	es
@@ -16513,8 +16521,6 @@ Nebulosa Rim	Rim Nebula	ca
 Nebulosa Rim	Rim Nebula	ca@valencia
 Nebulosa Rim	Rim Nebula	es
 Nebulosa Rim	Rim Nebula	es_419
-Nebulosa Robin's Egg	Robin's Egg Nebula	es
-Nebulosa Robin's Egg	Robin's Egg Nebula	es_419
 Nebulosa Rociador de Césped	Lawn Sprinkler Nebula	es
 Nebulosa Rociador de Césped	Lawn Sprinkler Nebula	es_419
 Nebulosa Roda de Recanvi	Spare Tyre Nebula	ca
@@ -16642,8 +16648,8 @@ Nebulosa variabile di Hind	Hind's Variable Nebula	it
 Nebulosa variabile di Hubble	Hubble's Variable Nebula	it
 Nebulosa variable de Hind	Hind's Variable Nebula	ca
 Nebulosa variable de Hind	Hind's Variable Nebula	ca@valencia
-Nebulosa variable de Hind	Hind's Variable Nebula	es
-Nebulosa variable de Hind	Hind's Variable Nebula	es_419
+Nebulosa Variable de Hind	Hind's Variable Nebula	es
+Nebulosa Variable de Hind	Hind's Variable Nebula	es_419
 Nebulosa Variable de Hubble	Hubble's Variable Nebula	ca
 Nebulosa Variable de Hubble	Hubble's Variable Nebula	ca@valencia
 Nebulosa variable de Hubble	Hubble's Variable Nebula	es
@@ -17759,7 +17765,6 @@ Ostoskärryjoukko	Shopping Cart Cluster	fi
 Östra Slöjnebulosan	East Veil Nebula	sv
 Ostronnebulosan	Oyster Nebula	sv
 Osztriga-köd	Oyster Nebula	hu
-Otevřená hvězdokupa NGC 559	Ghost's Goblet	cs
 Otrera 星	Otrera	zh_TW
 Otréré	Otrera	fr
 Otroliga krympande nebulosan	Incredible Shrinking Nebula	sv
@@ -18164,8 +18169,6 @@ Pequeña Nebulosa de Roseta	Little Rosette Nebula	es_419
 Pequena Nebulosa do Anel	Little Ring Nebula	gl
 Pequena Nebulosa do Haltere	Baby Dumbbell Nebula	pt_BR
 Pequena Nebulosa do Haltere	Little Dumbbell Nebula	pt_BR
-Pequeña Nebulosa Dumbbell	Little Dumbbell Nebula	es
-Pequeña Nebulosa Dumbbell	Little Dumbbell Nebula	es_419
 Pequena nube de estrelas de Arqueiro	Small Sagittarius Star Cloud	gl
 Pequeña Nube de Magallanes	Small Magellanic Cloud	es
 Pequeña Nube de Magallanes	Small Magellanic Cloud	es_419
@@ -20732,7 +20735,6 @@ Spiralna meglica	Spiral Nebula	sl
 Spiralna Mgławica Planetarna	Spiral Planetary Nebula	pl
 Spiralna planetarna meglica	Spiral Planetary Nebula	sl
 Spiralnebulosan	Spiral Nebula	sv
-Spirální galaxie NGC 300	Sculptor Pinwheel Galaxy	cs
 Špirálová hmlovina	Helical Nebula	sk
 Špirálova hmlovina	Spiral Nebula	sk
 Špirálová plantárna hmlovina	Spiral Planetary Nebula	sk
@@ -23667,6 +23669,7 @@ Zwillinge-Haufen	Gemini Cluster	de
 ω সেন্টুরাস তারকাগুচ্ছ	ω Cen Cluster	bn
 ω సెన్ సమూహం	ω Cen Cluster	te
 ω 星雲	Omega Nebula	zh_TW
+Ωμέγα Κενταύρου	Omega Centauri	el
 ω星団	ω Cen Cluster	ja
 Аб'ект Вульфа-Лундмарка-Мэлёта (ВЛМ)	Wolf-Lundmark-Melotte Object (WLM)	be
 Аб'ект Гоаґа	Hoag's Object	be
@@ -41690,6 +41693,7 @@ Zwillinge-Haufen	Gemini Cluster	de
 人魚の小物入れ	Mermaid's Purse	ja
 人魚の小物入れ星雲	Mermaid's Purse Nebula	ja
 仄費 Zephyr 星	Zephyr	zh_TW
+仓鼠轮星云	Hamster Wheel Nebula	zh_CN
 仙人掌星系	Perseus Lenticular Galaxy	zh_HK
 仙后 矮橢球星系	Cassiopeia Dwarf Spheroidal Galaxy	zh_TW
 仙后座	Cassiopeiae	zh_CN

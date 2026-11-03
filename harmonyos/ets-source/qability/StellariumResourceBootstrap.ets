@@ -946,6 +946,15 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
       `(${scriptMarker}); forcing re-extract`);
     needExtract = true;
   }
+  // 26.x 新增物理大气散射模型（atmosphere/default/params.atmo + LUT）。
+  // 旧安装的 extraction marker 存在时不会补抽，结果是天空渲染全黑：
+  // 地景和太阳照常显示，但大气层、黄昏渐变、夜间天光全部缺失。
+  const atmosphereMarker = `${installRoot}/atmosphere/default/params.atmo`;
+  if (!needExtract && !exists(atmosphereMarker)) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG,
+      `Marker present but atmosphere model is missing (${atmosphereMarker}); forcing re-extract`);
+    needExtract = true;
+  }
   if (!needExtract && !exists(defaultConfigPath)) {
     hilog.warn(LOG_DOMAIN, LOG_TAG,
       `Marker present but default configuration is missing (${defaultConfigPath}); forcing re-extract`);
