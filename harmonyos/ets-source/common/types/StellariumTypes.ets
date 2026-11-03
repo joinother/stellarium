@@ -841,7 +841,6 @@ export interface StellariumBridgeResponse {
   archiveReady?: boolean
   archiveError?: string
   planets?: string[]
-  planet?: string
   observerPlanets?: ObserverPlanetItem[]
   tonight?: TonightEvents
   datasets?: SpectralDataset[]

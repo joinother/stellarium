@@ -149,12 +149,28 @@ fi
 # making catalog updates reproducible.
 RAWFILE_ROOT="$REPO_ROOT/build/libstellarium-harmonyos/entry/src/main/resources/rawfile/stellarium"
 if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
+  # catalog-manifest.json 只覆盖星表/目录，反映不了“新增资源目录”。
+  # 上游合并会带来新的 skyculture（例如 26.3 的 potawatomi）；这类目录没同步进
+  # rawfile 时 Qt 会在启动阶段 GetRawFileList 失败并整包卡在加载页。
+  # 因此除 manifest 比对之外，再抽查 skyculture 是否齐全。
+  MISSING_SKYCULTURES=0
+  for _sc in "$REPO_ROOT"/skycultures/*/; do
+    _name=$(basename "$_sc")
+    [ -f "$_sc/index.json" ] || continue
+    [ -f "$RAWFILE_ROOT/skycultures/$_name/index.json" ] || MISSING_SKYCULTURES=$((MISSING_SKYCULTURES + 1))
+  done
+
   if [ "${OHOS_SYNC_RESOURCES:-auto}" = "1" ] || \
-    ! cmp -s "$REPO_ROOT/data/ohos/catalog-manifest.json" "$RAWFILE_ROOT/data/ohos/catalog-manifest.json"; then
-    echo "Resource manifest changed; synchronizing HAP rawfile resources"
+    ! cmp -s "$REPO_ROOT/data/ohos/catalog-manifest.json" "$RAWFILE_ROOT/data/ohos/catalog-manifest.json" || \
+    [ "$MISSING_SKYCULTURES" -gt 0 ]; then
+    if [ "$MISSING_SKYCULTURES" -gt 0 ]; then
+      echo "HAP rawfile 缺少 $MISSING_SKYCULTURES 个 skyculture 目录；全量同步资源"
+    else
+      echo "Resource manifest changed; synchronizing HAP rawfile resources"
+    fi
     "$SCRIPT_DIR/sync-ohos-resources.sh"
   else
-    echo "HAP rawfile resources already match data/ohos/catalog-manifest.json"
+    echo "HAP rawfile resources already match data/ohos/catalog-manifest.json (skycultures complete)"
   fi
 fi
 
