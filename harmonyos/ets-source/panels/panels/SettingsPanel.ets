@@ -108,6 +108,8 @@ export struct SettingsPanel {
   confirmPrivacyRevocation: () => void = () => {}
   requestNotificationAccess: () => void = () => {}
   scheduleNextSolarTermReminder: () => void = () => {}
+  scheduleNextMoonPhaseReminder: () => void = () => {}
+  scheduleNextMeteorReminder: () => void = () => {}
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -171,6 +173,8 @@ export struct SettingsPanel {
               statusText: this.notificationStore.astronomyNotificationStatus,
               onRequestAccess: () => { this.requestNotificationAccess() },
               onScheduleNextSolarTerm: () => { this.scheduleNextSolarTermReminder() },
+              onScheduleNextMoonPhase: () => { this.scheduleNextMoonPhaseReminder() },
+              onScheduleNextMeteor: () => { this.scheduleNextMeteorReminder() },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
           } else if (this.configTab === 0) {

@@ -6,9 +6,10 @@
 // 上下文与年历节气数据经 NotificationHostHooks 回注。
 import { common } from '@kit.AbilityKit'
 import { AstronomyNotificationService } from '../qability/AstronomyNotificationService'
-import { AstronomyReminderService } from '../qability/AstronomyReminderService'
+import { AstronomyReminderService, AstronomyReminderRequest } from '../qability/AstronomyReminderService'
 import { NotificationStore } from '../state/NotificationStore'
-import { SeasonEvent } from '../common/types/StellariumTypes'
+import { MoonPhaseItem, SeasonEvent } from '../common/types/StellariumTypes'
+import { MeteorShowerItem } from '../common/types/MainWindowModels'
 
 // 宿主 → 控制器回注：UI 提示、UIAbility 上下文、年历节气快照与加载触发。
 export interface NotificationHostHooks {
@@ -16,6 +17,10 @@ export interface NotificationHostHooks {
   hostContext(): common.UIAbilityContext
   almanacSolarTerms(): SeasonEvent[]
   loadAlmanac(): void
+  moonPhases(): MoonPhaseItem[]
+  loadMoonPhases(): void
+  meteorShowers(): MeteorShowerItem[]
+  loadMeteorShowers(): void
 }
 
 export class NotificationController {
@@ -96,6 +101,78 @@ export class NotificationController {
       this.store.astronomyNotificationBusy = false
       if (result.ok === true) {
         this.hooks.flashHint('下一节气提醒已交给系统管理。')
+        this.refreshStatus()
+      } else {
+        this.store.astronomyNotificationStatus = result.error ?? '提醒注册失败'
+        this.hooks.flashHint(this.store.astronomyNotificationStatus)
+      }
+    }).catch(() => {
+      this.store.astronomyNotificationBusy = false
+      this.hooks.flashHint('提醒注册失败，请检查通知权限。')
+    })
+  }
+
+  // 订阅下一次满月：用月相表里下一个 illumination 最大的“满月”条目。
+  scheduleNextMoonPhase(): void {
+    const list = this.hooks.moonPhases()
+    const now = Date.now() + 30 * 1000
+    const next = list.find((item: MoonPhaseItem): boolean => {
+      const time = new Date(item.date ?? '').getTime()
+      if (!Number.isFinite(time) || time <= now) return false
+      const label = item.phase ?? ''
+      return label.indexOf('满月') >= 0 || label.toLowerCase().indexOf('full') >= 0
+    })
+    if (next === undefined) {
+      this.hooks.flashHint('正在计算月相…请在月相页加载后重试')
+      this.hooks.loadMoonPhases()
+      return
+    }
+    this.scheduleOne({
+      at: String(next.date),
+      title: '星象仪 · 满月',
+      content: '今晚满月，打开星象仪查看月亮升起时间与方位。',
+      eventId: 'moon-phase-' + String(next.date),
+      kind: 'moon-phase',
+      panel: 'astro',
+      tab: 2
+    })
+  }
+
+  // 订阅下一场流星雨：取峰值时间最近且尚未过期的一场。
+  scheduleNextMeteorShower(): void {
+    const list = this.hooks.meteorShowers()
+    const now = Date.now() + 30 * 1000
+    let best: MeteorShowerItem | undefined = undefined
+    let bestTime = Number.MAX_VALUE
+    for (let i = 0; i < list.length; i++) {
+      const time = new Date(list[i].peakDate ?? '').getTime()
+      if (!Number.isFinite(time) || time <= now) continue
+      if (time < bestTime) { bestTime = time; best = list[i] }
+    }
+    if (best === undefined) {
+      this.hooks.flashHint('正在加载流星雨目录…请稍后重试')
+      this.hooks.loadMeteorShowers()
+      return
+    }
+    this.scheduleOne({
+      at: String(best.peakDate),
+      title: '星象仪 · ' + best.name,
+      content: best.name + ' 今夜达到峰值（ZHR 约 ' + best.zhr.toString() + '），打开星象仪查看辐射点方位。',
+      eventId: 'meteor-' + best.name,
+      kind: 'meteor-shower',
+      panel: 'astro',
+      tab: 4
+    })
+  }
+
+  // 统一的单条代理提醒注册 + 结果回写。
+  private scheduleOne(payload: AstronomyReminderRequest): void {
+    if (this.store.astronomyNotificationBusy) return
+    this.store.astronomyNotificationBusy = true
+    AstronomyReminderService.schedule(payload, this.hooks.hostContext().abilityInfo.bundleName).then((result) => {
+      this.store.astronomyNotificationBusy = false
+      if (result.ok === true) {
+        this.hooks.flashHint('已订阅，交给系统提醒。')
         this.refreshStatus()
       } else {
         this.store.astronomyNotificationStatus = result.error ?? '提醒注册失败'

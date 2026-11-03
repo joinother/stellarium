@@ -15,6 +15,8 @@ export struct NotificationSection {
   @State c: ThemeSlots = DEFAULT_SLOTS
   onRequestAccess: () => void = () => {}
   onScheduleNextSolarTerm: () => void = () => {}
+  onScheduleNextMoonPhase: () => void = () => {}
+  onScheduleNextMeteor: () => void = () => {}
   onClearReminders: () => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
@@ -34,12 +36,25 @@ export struct NotificationSection {
       }.width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
       Text('当前已注册 ' + this.reminderCount.toString() + ' 条；只在用户主动订阅后安排。')
         .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 6 })
+      // 可订阅的天象类别：每类都是一次用户主动点击，注册一条系统代理提醒。
       Row({ space: 8 }) {
-        Button('订阅下一节气提醒')
+        Button('下一节气')
           .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.dividerSoft)
           .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 36 : 30).layoutWeight(1)
           .enabled(!this.notificationBusy && this.notificationEnabled)
           .onClick(() => { this.onScheduleNextSolarTerm() })
+        Button('下一次满月')
+          .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.dividerSoft)
+          .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 36 : 30).layoutWeight(1)
+          .enabled(!this.notificationBusy && this.notificationEnabled)
+          .onClick(() => { this.onScheduleNextMoonPhase() })
+      }.width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 8 })
+      Row({ space: 8 }) {
+        Button('下一场流星雨')
+          .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.dividerSoft)
+          .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 36 : 30).layoutWeight(1)
+          .enabled(!this.notificationBusy && this.notificationEnabled)
+          .onClick(() => { this.onScheduleNextMeteor() })
         Button('清除全部提醒')
           .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
           .border({ width: 1, color: this.c.errorBg })

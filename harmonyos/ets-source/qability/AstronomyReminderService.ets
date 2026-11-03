@@ -45,6 +45,8 @@ interface AstronomyReminderListResult {
 }
 
 export class AstronomyReminderService {
+  // 兜底常量：正常路径用运行时 getBundleName() 派生；这里只在调用方没拿到上下文时使用。
+  // 当前 debug 与 release 共用同一 bundleName（见 AppScope/app.json5）。
   private static readonly BUNDLE_NAME = 'com.joinother.skyinstrument'
   private static readonly ABILITY_NAME = 'QAbility'
   private static readonly GROUP_ID = 'skyinstrument-astronomy'
@@ -116,7 +118,10 @@ export class AstronomyReminderService {
       groupId: AstronomyReminderService.GROUP_ID,
       tapDismissed: true,
       wantAgent: {
-        // 点击提醒要拉起「当前安装的」包：debug 包名与发布包名不同，必须运行时派生。
+        // 用运行时派生的包名，保证与「当前安装的」包一致。
+        // 现状：debug 与 release 共用 com.joinother.skyinstrument（AppScope/app.json5），
+        // 常量本来也对得上；但将来若引入 debug 后缀或渠道包（不同 bundleName），
+        // 这里不需要再改，也不会出现「点通知打不开」的问题。
         pkgName: bundleName.length > 0 ? bundleName : AstronomyReminderService.BUNDLE_NAME,
         abilityName: AstronomyReminderService.ABILITY_NAME,
         uri: 'skyinstrument://astronomy/reminder',

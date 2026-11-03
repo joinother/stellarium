@@ -256,7 +256,8 @@ import {
   MeteorShowersData, LogResponse,
   ScreenshotResponse, SpokenTextResponse, RecordCmd,
   RecordingEntry, RecordingsResponse, RecordingDetailResponse, ScriptCaption,
-  CommandCatalogEntry, ExportConfigResponse
+  CommandCatalogEntry, ExportConfigResponse,
+  MeteorShowerItem
 } from './MainWindowModels'
 
 // Sky-texture status banner. Its visibility is driven purely by the live
@@ -2582,7 +2583,11 @@ export struct WindowNativeNode {
         flashHint: (text: ResourceStr): void => this.flashHint(text),
         hostContext: (): common.UIAbilityContext => this.getUIContext().getHostContext() as common.UIAbilityContext,
         almanacSolarTerms: (): SeasonEvent[] => this.astroStore.almanacSolarTerms,
-        loadAlmanac: (): void => { this.astroCalcCtl().loadAlmanac() }
+        loadAlmanac: (): void => { this.astroCalcCtl().loadAlmanac() },
+        moonPhases: (): MoonPhaseItem[] => this.astroStore.moonPhaseData,
+        loadMoonPhases: (): void => { this.astroCalcCtl().loadMoonPhases() },
+        meteorShowers: (): MeteorShowerItem[] => this.meteorStore.msShowerList,
+        loadMeteorShowers: (): void => { this.meteorStore.loadMeteorShowers() }
       }
       this.notificationControllerImpl = new NotificationController(this.notificationStore, hooks)
     }
@@ -8562,6 +8567,8 @@ export struct WindowNativeNode {
         confirmPrivacyRevocation: () => { this.confirmPrivacyRevocation() },
         requestNotificationAccess: () => { this.notificationCtl().requestAccess() },
         scheduleNextSolarTermReminder: () => { this.notificationCtl().scheduleNextSolarTerm() },
+        scheduleNextMoonPhaseReminder: () => { this.notificationCtl().scheduleNextMoonPhase() },
+        scheduleNextMeteorReminder: () => { this.notificationCtl().scheduleNextMeteorShower() },
         clearAstronomyReminders: () => { this.notificationCtl().clearReminders() },
         keyboardShortcutQueryChange: (value: string) => { this.keyboardShortcutStore.keyboardShortcutQuery = value; this.keyboardShortcutCtl().load() },
         keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => { this.keyboardShortcutCtl().select(item) },
