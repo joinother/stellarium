@@ -147,6 +147,10 @@ fi
 # the full resource mirror only when its manifest changed (or when the caller
 # explicitly requests it). This keeps ordinary ArkTS-only syncs fast while
 # making catalog updates reproducible.
+# 构建期兜底：上游新增的运行期数据目录若没进 DIRS 白名单，这里直接失败。
+# 26.3 的 atmosphere/ 和 skycultures/potawatomi 都是这样漏掉的（天空全黑 / 启动卡死）。
+node "$REPO_ROOT/scripts/check-ohos-resource-dirs.mjs"
+
 RAWFILE_ROOT="$REPO_ROOT/build/libstellarium-harmonyos/entry/src/main/resources/rawfile/stellarium"
 if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
   # catalog-manifest.json 只覆盖星表/目录，反映不了“新增资源目录”。
