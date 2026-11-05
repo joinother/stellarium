@@ -8789,6 +8789,11 @@ export struct WindowNativeNode {
         onPickTleFile: () => { this.pickTleDocumentAndImport() },
         // 一键开/关全部 TLE 来源（镜像分组多时省事）
         onSetAllSources: (enabled: boolean) => { this.satelliteCtl().setAllSatelliteSourcesEnabled(enabled) },
+        onCountdownTarget: (target: string) => { this.satelliteCtl().setCountdownTarget(target) },
+        onCountdownAdjust: (delta: number) => { this.satelliteCtl().adjustCountdown(delta) },
+        onCountdownStart: () => { this.satelliteCtl().startCountdown() },
+        onCountdownStop: () => { this.satelliteCtl().stopCountdown() },
+        onCountdownRemind: (minutes: number) => { this.notificationCtl().scheduleCountdown(minutes) },
         onSetUpdateSetting: (key: string, value: boolean | number) => { this.satelliteCtl().setSatelliteUpdateSetting(key, value) },
         onUpdateFrequencyInput: (value: string) => { this.satelliteStore.satUpdateFrequencyInput = value },
         onSubmitUpdateFrequency: () => {

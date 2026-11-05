@@ -29,6 +29,66 @@ export class SatelliteController {
     this.hooks = hooks
   }
 
+  // —— 卫星倒计时（TIMER 语义：用户设置时长后由端侧每秒递减）——
+  private countdownTimer: number = -1
+
+  setCountdownTarget(target: string): void {
+    this.satelliteStore.countdownTarget = target
+    this.satelliteStore.countdownRunning = false
+    this.stopCountdownTimer()
+  }
+
+  // 用户用 −/＋ 调整时长（分钟级，最少 1 分钟）
+  adjustCountdown(deltaSeconds: number): void {
+    const next = Math.max(60, Math.min(3600, this.satelliteStore.countdownTotalSeconds + deltaSeconds))
+    this.satelliteStore.countdownTotalSeconds = next
+    if (!this.satelliteStore.countdownRunning) {
+      this.satelliteStore.countdownRemainingSeconds = next
+    }
+  }
+
+  startCountdown(): void {
+    this.satelliteStore.countdownRemainingSeconds = this.satelliteStore.countdownTotalSeconds
+    this.satelliteStore.countdownRunning = true
+    this.stopCountdownTimer()
+    this.countdownTimer = setInterval(() => {
+      if (!this.satelliteStore.countdownRunning) {
+        this.stopCountdownTimer()
+        return
+      }
+      const left = this.satelliteStore.countdownRemainingSeconds - 1
+      this.satelliteStore.countdownRemainingSeconds = left > 0 ? left : 0
+      if (left <= 0) {
+        this.satelliteStore.countdownRunning = false
+        this.stopCountdownTimer()
+      }
+    }, 1000)
+  }
+
+  stopCountdown(): void {
+    this.satelliteStore.countdownRunning = false
+    this.satelliteStore.countdownRemainingSeconds = this.satelliteStore.countdownTotalSeconds
+    this.stopCountdownTimer()
+  }
+
+  private stopCountdownTimer(): void {
+    if (this.countdownTimer !== -1) {
+      clearInterval(this.countdownTimer)
+      this.countdownTimer = -1
+    }
+  }
+
+  // 把「还有多久」格式化成 mm:ss / h:mm:ss。
+  countdownLabel(): string {
+    const total = this.satelliteStore.countdownRemainingSeconds
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const sec = total % 60
+    const mm = String(m).padStart(2, '0')
+    const ss = String(sec).padStart(2, '0')
+    return h > 0 ? h.toString() + ':' + mm + ':' + ss : mm + ':' + ss
+  }
+
   // 校验分组 → 过渡动画切换 → 重载。
   selectSatelliteGroup(group: string): void {
     if (group.length > 0 && !this.satelliteStore.satGroups.includes(group)) {

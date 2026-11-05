@@ -197,4 +197,12 @@ export class SatelliteStore {
     if (immediate) run()
     else this.satelliteLoadTimer = setTimeout(run, 90)
   }
+
+  // —— 卫星倒计时（用户主动设置并开启）——
+  // 目标由用户选（国际空间站 / 铱星闪光），总时长由用户用 −/＋ 设定，
+  // 点「开始」后才走秒级倒计时；这是 TIMER 语义：用户设置、端侧创建与更新。
+  countdownTarget: string = 'ISS'
+  countdownTotalSeconds: number = 300
+  countdownRemainingSeconds: number = 300
+  countdownRunning: boolean = false
 }

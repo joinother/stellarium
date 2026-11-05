@@ -33,6 +33,12 @@ export struct SatellitesPanel {
   onImportTle: () => void = () => {}
   onPickTleFile: () => void = () => {}
   onSetAllSources: (enabled: boolean) => void = () => {}
+  // 卫星倒计时（用户主动设置并开启）
+  onCountdownTarget: (target: string) => void = () => {}
+  onCountdownAdjust: (deltaSeconds: number) => void = () => {}
+  onCountdownStart: () => void = () => {}
+  onCountdownStop: () => void = () => {}
+  onCountdownRemind: (minutesBefore: number) => void = () => {}
   onSetUpdateSetting: (key: string, value: boolean | number) => void = () => {}
   onUpdateFrequencyInput: (value: string) => void = () => {}
   onSubmitUpdateFrequency: () => void = () => {}
@@ -44,9 +50,67 @@ export struct SatellitesPanel {
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
+  // 倒计时文本（mm:ss / h:mm:ss）
+  private countdownText(): string {
+    const total = this.satelliteStore.countdownRemainingSeconds
+    const h = Math.floor(total / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const sec = total % 60
+    const mm = String(m).padStart(2, '0')
+    const ss = String(sec).padStart(2, '0')
+    return h > 0 ? h.toString() + ':' + mm + ':' + ss : mm + ':' + ss
+  }
+
   build() {
     Scroll(this.panelScroller) {
       Column({ space: 10 }) {
+        // —— 卫星倒计时：用户选目标、设定时长、主动开始 ——
+        Column({ space: 8 }) {
+          Text('卫星倒计时').fontSize(13).fontColor(this.c.text).width('100%').fontWeight(FontWeight.Medium)
+          Row({ space: 8 }) {
+            Button('国际空间站')
+              .fontSize(11).fontColor(this.satelliteStore.countdownTarget === 'ISS' ? '#FFFFFF' : this.c.text)
+              .backgroundColor(this.satelliteStore.countdownTarget === 'ISS' ? this.c.accent : this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1)
+              .onClick(() => { this.onCountdownTarget('ISS') })
+            Button('铱星闪光')
+              .fontSize(11).fontColor(this.satelliteStore.countdownTarget === 'IRIDIUM' ? '#FFFFFF' : this.c.text)
+              .backgroundColor(this.satelliteStore.countdownTarget === 'IRIDIUM' ? this.c.accent : this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1)
+              .onClick(() => { this.onCountdownTarget('IRIDIUM') })
+          }.width('100%')
+          Text(this.satelliteStore.countdownRunning ? '距离你设定的时刻还有' : '设定时长后点「开始」，到点前按提前量提醒。')
+            .fontSize(10).fontColor(this.c.sub).width('100%')
+          Text(this.countdownText())
+            .fontSize(40).fontColor(this.c.text).fontWeight(FontWeight.Medium).width('100%')
+            .textAlign(TextAlign.Center)
+          Row({ space: 8 }) {
+            Button('−1 分').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1)
+              .enabled(!this.satelliteStore.countdownRunning)
+              .onClick(() => { this.onCountdownAdjust(-60) })
+            Button('＋1 分').fontSize(11).fontColor(this.c.text).backgroundColor(this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1)
+              .enabled(!this.satelliteStore.countdownRunning)
+              .onClick(() => { this.onCountdownAdjust(60) })
+          }.width('100%')
+          Row({ space: 8 }) {
+            Button(this.satelliteStore.countdownRunning ? '停止' : '开始')
+              .fontSize(12).fontColor('#FFFFFF').backgroundColor(this.c.accent)
+              .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
+              .onClick(() => {
+                if (this.satelliteStore.countdownRunning) this.onCountdownStop()
+                else this.onCountdownStart()
+              })
+            Button('提前 1 分钟提醒')
+              .fontSize(11).fontColor(this.c.text).backgroundColor(this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(34).layoutWeight(1)
+              .onClick(() => { this.onCountdownRemind(1) })
+          }.width('100%')
+        }
+        .width('100%').padding(12)
+        .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+        .margin({ bottom: 4 })
         Column({ space: 3 }) {
           Text(this.satelliteStore.satOffline ? '离线内置轨道数据' : '在线轨道数据')
             .fontSize(13).fontColor(this.satelliteStore.satOffline ? this.c.chipInactiveText : this.c.warning).fontWeight(FontWeight.Medium)
