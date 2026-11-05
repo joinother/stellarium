@@ -117,6 +117,13 @@ export struct SettingsPanel {
   scheduleCountdownReminder: (minutes: number) => void = () => {}
   scheduleCalendarReminder: (timestamp: number) => void = () => {}
   scheduleDailyAlarmReminder: (hour: number, minute: number) => void = () => {}
+  toggleAstronomyEvents: (enabled: boolean) => void = () => {}
+  toggleSatellitePass: (enabled: boolean) => void = () => {}
+  toggleDigest: (enabled: boolean) => void = () => {}
+  toggleNotificationDnd: (enabled: boolean) => void = () => {}
+  setNotificationDndStart: (minutes: number) => void = () => {}
+  setNotificationDndEnd: (minutes: number) => void = () => {}
+  changePassLead: (delta: number) => void = () => {}
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -187,6 +194,20 @@ export struct SettingsPanel {
               onScheduleCountdown: (minutes: number) => { this.scheduleCountdownReminder(minutes) },
               onScheduleCalendarAt: (timestamp: number) => { this.scheduleCalendarReminder(timestamp) },
               onScheduleAlarm: (hour: number, minute: number) => { this.scheduleDailyAlarmReminder(hour, minute) },
+              astronomyEventsEnabled: this.notificationStore.astronomyEventsEnabled,
+              satellitePassEnabled: this.notificationStore.satellitePassEnabled,
+              digestEnabled: this.notificationStore.digestEnabled,
+              dndEnabled: this.notificationStore.dndEnabled,
+              dndStartMinutes: this.notificationStore.dndStartMinutes,
+              dndEndMinutes: this.notificationStore.dndEndMinutes,
+              passLeadMinutes: this.notificationStore.passLeadMinutes,
+              onToggleAstronomyEvents: (v: boolean) => { this.toggleAstronomyEvents(v) },
+              onToggleSatellitePass: (v: boolean) => { this.toggleSatellitePass(v) },
+              onToggleDigest: (v: boolean) => { this.toggleDigest(v) },
+              onToggleDnd: (v: boolean) => { this.toggleNotificationDnd(v) },
+              onDndStartChange: (m: number) => { this.setNotificationDndStart(m) },
+              onDndEndChange: (m: number) => { this.setNotificationDndEnd(m) },
+              onLeadChange: (d: number) => { this.changePassLead(d) },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
           } else if (this.configTab === 0) {

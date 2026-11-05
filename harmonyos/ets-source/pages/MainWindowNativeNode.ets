@@ -8579,6 +8579,16 @@ export struct WindowNativeNode {
         scheduleCountdownReminder: (minutes: number) => { this.notificationCtl().scheduleCountdown(minutes) },
         scheduleCalendarReminder: (timestamp: number) => { this.notificationCtl().scheduleAtDateTime(timestamp) },
         scheduleDailyAlarmReminder: (hour: number, minute: number) => { this.notificationCtl().scheduleDailyAlarm(hour, minute) },
+        toggleAstronomyEvents: (v: boolean) => { this.notificationStore.astronomyEventsEnabled = v },
+        toggleSatellitePass: (v: boolean) => { this.notificationStore.satellitePassEnabled = v },
+        toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
+        toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v },
+        setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m },
+        setNotificationDndEnd: (m: number) => { this.notificationStore.dndEndMinutes = m },
+        changePassLead: (d: number) => {
+          const next = this.notificationStore.passLeadMinutes + d
+          this.notificationStore.passLeadMinutes = Math.min(60, Math.max(1, next))
+        },
         clearAstronomyReminders: () => { this.notificationCtl().clearReminders() },
         keyboardShortcutQueryChange: (value: string) => { this.keyboardShortcutStore.keyboardShortcutQuery = value; this.keyboardShortcutCtl().load() },
         keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => { this.keyboardShortcutCtl().select(item) },

@@ -6,4 +6,13 @@ export class NotificationStore {
   astronomyNotificationBusy: boolean = false
   astronomyReminderCount: number = 0
   astronomyNotificationStatus: string = '尚未检查通知权限'
+  // 通知类别与偏好（对应设置页「通知」卡片）。目前只有「天文事件」类别会真正注册提醒，
+  // 「卫星通过」「观测建议」先持久化用户选择，等对应调度实现后再消费。
+  astronomyEventsEnabled: boolean = true
+  satellitePassEnabled: boolean = true
+  digestEnabled: boolean = true
+  dndEnabled: boolean = true
+  dndStartMinutes: number = 22 * 60 + 30
+  dndEndMinutes: number = 6 * 60 + 35
+  passLeadMinutes: number = 5
 }
