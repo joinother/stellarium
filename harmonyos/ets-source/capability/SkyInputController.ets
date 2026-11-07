@@ -32,7 +32,7 @@ export interface SkyInputHostHooks {
   stopGyroscope(updateStatus: boolean): void
   angleMeasureEnabled(): boolean
   measureAngleAt(x: number, y: number): void
-  requestSkySelection(x: number, y: number): void
+  requestSkySelection(x: number, y: number, source: string): void
   clearSkySelectionFromDoubleTap(x: number, y: number): void
   zoomStep(factor: number): void
   setPanel(panel: string): void
@@ -202,7 +202,7 @@ export class SkyInputController {
     return false
   }
 
-  handleSkyTap(x: number, y: number): void {
+  handleSkyTap(x: number, y: number, source: string = 'touch'): void {
     if (this.hooks.angleMeasureEnabled()) {
       this.hooks.measureAngleAt(x, y)
       return
@@ -211,7 +211,7 @@ export class SkyInputController {
       this.hooks.clearSkySelectionFromDoubleTap(x, y)
       return
     }
-    this.hooks.requestSkySelection(x, y)
+    this.hooks.requestSkySelection(x, y, source)
   }
 
   handleSkyMouse(event: MouseEvent): void {
@@ -283,7 +283,7 @@ export class SkyInputController {
     }
     if (event.action === MouseAction.Release && event.button === MouseButton.Left && this.mouseSkyPressed) {
       if (!this.mouseSkyMoved && !this.hooks.isUiPoint(x, y)) {
-        this.handleSkyTap(x, y)
+        this.handleSkyTap(x, y, 'mouse')
       } else if (this.mouseSkyMoved) {
         if (Date.now() - this.mouseSkyLastSampleMs > 90) {
           this.dragVelocityX *= 0.35
@@ -781,7 +781,7 @@ export class SkyInputController {
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' +
           Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' +
           Math.round(this.hooks.skyWidth()).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
-        this.handleSkyTap(this.touchStartX, this.touchStartY)
+        this.handleSkyTap(this.touchStartX, this.touchStartY, 'touch')
       }
       if (this.pinchActive) {
         if (this.pinchNativePushPending) {

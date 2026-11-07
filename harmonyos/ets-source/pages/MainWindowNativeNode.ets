@@ -2936,7 +2936,7 @@ export struct WindowNativeNode {
         stopGyroscope: (updateStatus: boolean): void => this.gyroCtl().stopGyroscope(updateStatus),
         angleMeasureEnabled: (): boolean => this.tools.angleMeasureEnabled,
         measureAngleAt: (x: number, y: number): void => this.measureAngleAt(x, y),
-        requestSkySelection: (x: number, y: number): void => this.requestSkySelection(x, y),
+        requestSkySelection: (x: number, y: number, source: string): void => this.requestSkySelection(x, y, source),
         clearSkySelectionFromDoubleTap: (x: number, y: number): void => this.clearSkySelectionFromDoubleTap(x, y),
         zoomStep: (factor: number): void => this.zoomStep(factor),
         setPanel: (panel: string): void => this.setPanel(panel),
@@ -3696,7 +3696,8 @@ export struct WindowNativeNode {
       rtsCalendarDays: this.astroStore.rtsCalendarDays,
       graphMode: this.astroStore.graphMode,
       eclipseMonths: this.astroStore.eclipseMonths,
-      moonPhaseDays: this.astroStore.moonPhaseDays
+      moonPhaseDays: this.astroStore.moonPhaseDays,
+      touchPickRadiusVp: this.viewSettingsStore.touchPickRadiusVp
     }
     return next
   }
@@ -3763,8 +3764,11 @@ export struct WindowNativeNode {
       rtsCalendarDays: settings.rtsCalendarDays.toString(),
       graphMode: settings.graphMode.toString(),
       eclipseMonths: settings.eclipseMonths.toString(),
-      moonPhaseDays: settings.moonPhaseDays.toString()
+      moonPhaseDays: settings.moonPhaseDays.toString(),
+      touchPickRadiusVp: settings.touchPickRadiusVp.toString()
     }))
+    this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
+    this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
     if (this.startupBridgeImpl !== null) {
       this.startupBridge().restoreStartupSettings()
     }
@@ -3920,9 +3924,10 @@ export struct WindowNativeNode {
 // ===== 面板路由与返回 =====
 
   private openPanelFromCli(panel: string): void {
-    if (panel === 'settingsInformation' || panel === 'settingsTime' || panel === 'settingsPrivacy') {
+    if (panel === 'settingsInformation' || panel === 'settingsExtra' || panel === 'settingsTime' || panel === 'settingsPrivacy') {
       this.openPanelFromCli('settings')
-      this.layerCtl().selectConfigTab(panel === 'settingsInformation' ? 1 : (panel === 'settingsTime' ? 3 : -1))
+      this.layerCtl().selectConfigTab(panel === 'settingsInformation' ? 1
+        : (panel === 'settingsExtra' ? 2 : (panel === 'settingsTime' ? 3 : -1)))
       return
     }
     const parent = panelRouteParent(panel)
@@ -4761,10 +4766,10 @@ export struct WindowNativeNode {
     return panelOnly ? this.keyboardShortcutCtl().handlePanelKey(event, hooks) : this.keyboardShortcutCtl().handleSkyKey(event, hooks)
   }
 
-  private requestSkySelection(x: number, y: number): void {
+  private requestSkySelection(x: number, y: number, source: string = 'touch'): void {
     const requestSerial = ++this.skySelectionRequestSerial
     const payload = Math.round(x).toString() + '|' + Math.round(y).toString() + '|' +
-      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
+      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString() + '|' + source
     this.callInteractive('selectAt', payload, (result) => {
       if (requestSerial !== this.skySelectionRequestSerial) {
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt result ignored after newer selection gesture')
@@ -6056,7 +6061,9 @@ export struct WindowNativeNode {
       return
     }
     if (result.found === true) {
-      const incomingName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
+      const incomingName = result.name && result.name.length > 0 ? result.name
+        : (result.englishName && result.englishName.length > 0 ? result.englishName
+          : (result.catalogId && result.catalogId.length > 0 ? result.catalogId : ''))
       // 核心的 type 已经由 StelObject::getObjectTypeI18n() 按官方 .qm
       // 资源本地化。objectType 只保留给音频和旧桥接数据，不应覆盖显示文本。
       const incomingType = (result.type && result.type.length > 0)
@@ -8612,6 +8619,10 @@ export struct WindowNativeNode {
         onSetOrbitThickness: (value: number) => { this.layerCtl().setOrbitDisplayThickness(value) },
         onSetOrbitColorStyle: (index: number) => { this.layerCtl().setOrbitColorStyle(index) },
         onLoadOrbitSettings: () => { this.layerViewStore.loadOrbitDisplaySettings() },
+        onLoadDsoSettings: () => { this.layerViewStore.loadNebulaDisplaySettings() },
+        onSetDsoSetting: (setting: string, value: boolean | number) => { this.layerCtl().setNebulaSetting(setting, value) },
+        onSetDsoCatalogMask: (mask: number) => { this.layerCtl().setNebulaCatalogMask(mask) },
+        onSetDsoTypeMask: (mask: number) => { this.layerCtl().setNebulaTypeMask(mask) },
         onSetTrailFlag: (setting: string, enabled: boolean) => { this.layerCtl().setTrailDisplayFlag(setting, enabled) },
         onSetTrailNumber: (setting: string, value: number) => { this.layerCtl().setTrailDisplayNumber(setting, value) },
         onLoadTrailSettings: () => { this.layerViewStore.loadTrailDisplaySettings() },
@@ -8808,6 +8819,13 @@ export struct WindowNativeNode {
         setConfigurationDithering: (value: string) => { this.viewSettingsStore.setConfigurationDithering(value) },
         setDecimalDegreesCoords: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(enabled, this.viewSettingsStore.decimalDegreesOther) },
         setDecimalDegreesOther: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(this.viewSettingsStore.decimalDegreesCoords, enabled) },
+        setTouchPickRadius: (radiusVp: number) => {
+          this.viewSettingsStore.touchPickRadiusVp = radiusVp
+          this.callInteractive('setTouchPickRadius', radiusVp.toString(), (r) => {
+            if (r.ok !== true) this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+          })
+          this.saveAppSettings()
+        },
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },

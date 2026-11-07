@@ -25,6 +25,8 @@
 #include "StelModuleMgr.hpp"
 #include "StelObject.hpp"
 #include "StelPainter.hpp"
+#include "StelProjector.hpp"
+#include "StelSkyDrawer.hpp"
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
 #include "VecMath.hpp"
@@ -1379,51 +1381,130 @@ bool Satellite::operator <(const Satellite& another) const
 	return (id < another.id);
 }
 
+StelObjectPickState Satellite::getPickState(const StelCore* core) const
+{
+	StelObjectPickState state;
+	if (!core)
+		return state;
+	const StelProjectorP projection = core->getProjection(StelCore::FrameJ2000);
+	const SatelliteRenderState render = getRenderState(core, projection.data(), true);
+	state.pickable = render.pickable();
+	state.pointDrawn = render.pointDrawn;
+	state.labelDrawn = render.labelDrawn;
+	state.outlineDrawn = false;
+	state.iconDrawn = render.iconDrawn;
+	state.landscapeVisible = render.landscapeVisible;
+	state.hasMagnitude = true;
+	state.magnitude = (render.pointDrawn || render.iconDrawn) ? render.magSat : render.txtMag;
+	return state;
+}
+
+SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk) const
+{
+	SatelliteRenderState st;
+	if (!core)
+		return st;
+
+	st.displayed = displayed;
+	st.orbitValid = initialized && orbitValid;
+	st.dateRangeOk = dateRangeOk;
+	st.timeRateOk = qAbs(core->getTimeRate()) < timeRateLimit;
+	st.afterLaunch = core->getJD() >= jdLaunchYearJan1;
+	st.visibility = visibility;
+	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch)
+		return st;
+
+	st.altitudeFilterPass = !flagVFAltitude || (minVFAltitude <= height && height <= maxVFAltitude);
+	if (!st.altitudeFilterPass)
+		return st;
+
+	st.magSat = getVMagnitudeWithExtinction(core);
+	st.limitMag = core->getSkyDrawer() ? core->getSkyDrawer()->getLimitMagnitude() : 0.f;
+	st.magnitudeFilterPass = !flagVFMagnitude
+		|| ((stdMag < 99. || RCS > 0.) && (maxVFMagnitude <= st.magSat && st.magSat <= minVFMagnitude));
+	if (!st.magnitudeFilterPass)
+		return st;
+
+	Vec3d dir = XYZ;
+	if (dir.normSquared() > 0.)
+	{
+		dir.normalize();
+		st.landscapeVisible = core->getVisibleSkyArea().contains(dir);
+	}
+
+	if (prj)
+		st.projectable = prj->projectCheck(XYZ, st.screenWin);
+
+	if (prj && moon && sun)
+	{
+		st.transitSunMoon =
+			(XYZ.angle(moon->getJ2000EquatorialPos(core)) * M_180_PI <= moon->getSpheroidAngularRadius(core))
+			|| (XYZ.angle(sun->getJ2000EquatorialPos(core)) * M_180_PI <= sun->getSpheroidAngularRadius(core));
+		if (st.transitSunMoon)
+		{
+			const int screenSizeSat = static_cast<int>(
+				getAngularRadius(core) * (2. * M_PI_180) * static_cast<double>(prj->getPixelPerRadAtCenter()));
+			st.spriteSize = qMin(screenSizeSat, 15);
+		}
+	}
+
+	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch
+		|| !st.altitudeFilterPass || !st.magnitudeFilterPass || !st.projectable)
+		return st;
+
+	if (!iconicModeFlag)
+	{
+		if (st.transitSunMoon)
+		{
+			st.pointDrawn = st.spriteSize > 0;
+			st.labelDrawn = showLabels;
+			st.txtMag = st.magSat;
+		}
+		else
+		{
+			st.pointDrawn = st.magSat <= st.limitMag;
+			float txtMag = st.magSat;
+			if (visibility == gSatWrapper::PENUMBRAL)
+				txtMag = st.magSat - 3.f;
+			else if (visibility != gSatWrapper::VISIBLE)
+				txtMag = st.magSat - 10.f;
+			st.txtMag = txtMag;
+			st.labelDrawn = showLabels && (txtMag <= st.limitMag);
+		}
+	}
+	else
+	{
+		const bool iconAllowed = !(hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE);
+		st.iconDrawn = iconAllowed;
+		st.labelDrawn = showLabels && iconAllowed;
+		st.txtMag = st.magSat;
+	}
+
+	return st;
+}
+
 void Satellite::draw(StelCore* core, StelPainter& painter)
 {
-	// Separated because first test should be very fast.
-	if (!displayed || !orbitValid)
+	const SatelliteRenderState st = getRenderState(core, painter.getProjector().data(), true);
+
+	// Keep the original early-out before orbit drawing: a satellite which is
+	// hidden by its own display/time/filter gates must not leave an orbit.
+	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch
+		|| !st.altitudeFilterPass || !st.magnitudeFilterPass)
 		return;
 
-	// 1) Do not show satellites before Space Era begins!
-	// 2) Do not show satellites when time rate is over limit (JD/sec)!
-	if (core->getJD()<jdLaunchYearJan1 || qAbs(core->getTimeRate())>=timeRateLimit)
-		return;
-
-	if (flagVFAltitude)
-	{
-		// visual filter is activated!
-		// is satellite located in valid range of altitudes?
-		// yes, but... inverse the result and skip rendering!
-		if (!(minVFAltitude<=height && height<=maxVFAltitude))
-			return;
-	}
-
-	const float magSat = getVMagnitudeWithExtinction(core);
-	if (flagVFMagnitude)
-	{
-		// visual filter is activated and he is applicable!
-		if (!(stdMag<99. || RCS>0.))
-			return;
-		if (!(maxVFMagnitude<=magSat && magSat<=minVFMagnitude))
-			return;
-	}
-
-	Vec3d win;
-	if (painter.getProjector()->projectCheck(XYZ, win))
+	if (st.projectable)
 	{
 		if (!iconicModeFlag)
 		{
-			static const Vec3f color(1.f,1.f,1.f);
-			// Special case: crossing of the satellite of the Moon or the Sun
-			if (XYZ.angle(moon->getJ2000EquatorialPos(core))*M_180_PI <= moon->getSpheroidAngularRadius(core) || XYZ.angle(sun->getJ2000EquatorialPos(core))*M_180_PI <= sun->getSpheroidAngularRadius(core))
+			static const Vec3f color(1.f, 1.f, 1.f);
+			if (st.transitSunMoon)
 			{
 				painter.setColor(transitSatelliteColor, 1.f);
-				int screenSizeSat = static_cast<int>((getAngularRadius(core)*(2.*M_PI_180))*static_cast<double>(painter.getProjector()->getPixelPerRadAtCenter()));
-				if (screenSizeSat>0)
-					painter.drawSprite2dMode(XYZ, qMin(screenSizeSat, 15));
+				if (st.pointDrawn)
+					painter.drawSprite2dMode(XYZ, st.spriteSize);
 
-				if (showLabels)
+				if (st.labelDrawn)
 				{
 					if (!core->isBrightDaylight()) // crossing of the Moon
 						painter.setColor(color, hintBrightness);
@@ -1433,51 +1514,43 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 			else
 			{
 				static StelSkyDrawer* sd = core->getSkyDrawer();
-				RCMag rcMag;
-
-				// Draw the satellite
-				if (magSat <= sd->getLimitMagnitude())
+				if (st.pointDrawn)
 				{
+					RCMag rcMag;
 					Vec3f vf(XYZ.toVec3f());
 					Vec3f altAz(vf);
 					altAz.normalize();
 					core->j2000ToAltAzInPlaceNoRefraction(&altAz);
 					sd->preDrawPointSource(&painter);
-					sd->computeRCMag(magSat, &rcMag);
+					sd->computeRCMag(st.magSat, &rcMag);
 					// allow height-dependent twinkle and suppress twinkling in higher altitudes. Keep 0.1 twinkle amount in zenith.
 					sd->drawPointSource(&painter, vf.toVec3d(), rcMag, color*hintBrightness, true, qMin(1.0f, 1.0f-0.9f*altAz[2]));
 					sd->postDrawPointSource(&painter);
 				}
 
-				float txtMag = magSat;
-				if (visibility == gSatWrapper::VISIBLE)
-					painter.setColor(hintColor, hintBrightness);
-				else if (visibility == gSatWrapper::PENUMBRAL)
+				if (st.labelDrawn)
 				{
-					txtMag = magSat - 3.f; // Oops... Artificial satellite is invisible, but let's make the label visible
-					painter.setColor(0.5f*hintColor, hintBrightness);
-				}
-				else
-				{
-					txtMag = magSat - 10.f; // Oops... Artificial satellite is invisible, but let's make the label visible
-					painter.setColor(invisibleSatelliteColor, hintBrightness);
-				}
+					if (visibility == gSatWrapper::VISIBLE)
+						painter.setColor(hintColor, hintBrightness);
+					else if (visibility == gSatWrapper::PENUMBRAL)
+						painter.setColor(0.5f*hintColor, hintBrightness);
+					else
+						painter.setColor(invisibleSatelliteColor, hintBrightness);
 
-				// Draw the label of the satellite when it enabled
-				if (txtMag <= sd->getLimitMagnitude() && showLabels)
 					painter.drawText(XYZ, name, 0, 10, 10, false);
+				}
 			}
 		}
-		else if (!(hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE))
+		else if (st.iconDrawn)
 		{
-			Vec3f drawColor = (coloredInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE) ? invisibleSatelliteColor : hintColor; // Use hintColor for visible satellites only when coloredInvisibleSatellitesFlag is true
+			Vec3f drawColor = (coloredInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE) ? invisibleSatelliteColor : hintColor;
 			if (visibility == gSatWrapper::PENUMBRAL)
-				drawColor= (invisibleSatelliteColor + hintColor)*0.5f;
+				drawColor = (invisibleSatelliteColor + hintColor)*0.5f;
 			painter.setColor(drawColor, hintBrightness);
-			if (XYZ.angle(moon->getJ2000EquatorialPos(core))*M_180_PI <= moon->getSpheroidAngularRadius(core) || XYZ.angle(sun->getJ2000EquatorialPos(core))*M_180_PI <= sun->getSpheroidAngularRadius(core))
+			if (st.transitSunMoon)
 				painter.setColor(transitSatelliteColor, 1.f);
 
-			if (showLabels)
+			if (st.labelDrawn)
 				painter.drawText(XYZ, name, 0, 10, 10, false);
 
 			painter.drawSprite2dMode(XYZ, 11);

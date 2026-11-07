@@ -30,6 +30,7 @@
 #include "StelModuleMgr.hpp"
 #include "StelCore.hpp"
 #include "StelPainter.hpp"
+#include "StelSkyDrawer.hpp"
 #include "RefractionExtinction.hpp"
 #include "StelSkyCultureMgr.hpp"
 #include "ConstellationMgr.hpp"
@@ -1438,6 +1439,59 @@ bool Nebula::objectInAllowedSizeRangeLimits(void) const
 		r = (size>=minSizeLimit && size<=maxSizeLimit);
 	}
 	return r;
+}
+
+Nebula::RenderState Nebula::getRenderState(float maxMagHints, float maxMagLabels) const
+{
+	RenderState state;
+	state.catalogVisible = objectInDisplayedCatalog();
+	state.typeVisible = objectInDisplayedType();
+	state.sizeAllowed = objectInAllowedSizeRangeLimits();
+	state.namedPass = !flagShowOnlyNamedDSO || !(getEnglishName().isEmpty() && culturalNames.isEmpty());
+
+	const StelCore* core = StelApp::getInstance().getCore();
+	const StelSkyDrawer* drawer = core ? core->getSkyDrawer() : nullptr;
+	state.visibilityLevel = getVisibilityLevelByMagnitude();
+	state.customMagnitudePass = !(drawer && drawer->getFlagNebulaMagnitudeLimit())
+		|| state.visibilityLevel <= static_cast<float>(drawer->getCustomNebulaMagnitudeLimit());
+
+	const bool base = state.catalogVisible && state.typeVisible && state.sizeAllowed
+		&& state.namedPass && state.customMagnitudePass;
+	const bool outlinesUseDrawPass = !outlineSegments.empty() && flagUseOutlines;
+	state.outlineDrawn = base && outlinesUseDrawPass && (state.visibilityLevel - 3.f <= maxMagHints);
+	state.hintDrawn = base && !outlinesUseDrawPass && (state.visibilityLevel <= maxMagHints);
+	state.labelDrawn = base && (state.visibilityLevel <= maxMagLabels);
+	state.pickable = state.hintDrawn || state.labelDrawn || state.outlineDrawn;
+	return state;
+}
+
+StelObjectPickState Nebula::getPickState(const StelCore* core) const
+{
+	StelObjectPickState state;
+	const NebulaMgr* nebulaMgr = GETSTELMODULE(NebulaMgr);
+	if (!core || !nebulaMgr)
+		return state;
+
+	const float maxMagHints = nebulaMgr->computeMaxMagHint(core->getSkyDrawer());
+	const float maxMagLabels = core->getSkyDrawer()->getLimitMagnitude() - 2.f
+		+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f;
+	const RenderState render = getRenderState(maxMagHints, maxMagLabels);
+	Vec3d direction = getJ2000EquatorialPos(core);
+	if (direction.normSquared() > 0.0)
+	{
+		direction.normalize();
+		state.landscapeVisible = core->getVisibleSkyArea().contains(direction);
+	}
+	state.pickable = render.pickable && state.landscapeVisible;
+	state.pointDrawn = render.hintDrawn;
+	state.labelDrawn = render.labelDrawn;
+	state.outlineDrawn = render.outlineDrawn;
+	state.visualRadiusRad = render.outlineDrawn ? getAngularRadius(core) * M_PI / 180.0 : 0.0;
+	const float mag = getVMagnitudeWithExtinction(core);
+	state.hasMagnitude = std::isfinite(mag) && mag < 90.f;
+	if (state.hasMagnitude)
+		state.magnitude = mag;
+	return state;
 }
 
 QString Nebula::getMorphologicalTypeString(void) const

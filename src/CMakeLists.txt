@@ -266,6 +266,10 @@ SET(stellarium_lib_SRCS
      core/modules/SpecificTimeMgr.hpp
      StelMainView.hpp
      StelMainView.cpp
+     core/TouchPicker.hpp
+     core/TouchPicker.cpp
+     core/MousePicker.hpp
+     core/MousePicker.cpp
      StelSplashScreen.hpp
      StelSplashScreen.cpp
      StelLogger.hpp
@@ -794,6 +798,16 @@ IF(ENABLE_TESTING)
      ADD_DEPENDENCIES(buildTests testStelFileMgr)
      ADD_TEST(testStelFileMgr testStelFileMgr)
      SET_TARGET_PROPERTIES(testStelFileMgr PROPERTIES FOLDER "src/tests")
+
+     SET(tests_testTouchPickerProfile_SRCS
+          tests/testTouchPickerProfile.hpp
+          tests/testTouchPickerProfile.cpp
+     )
+     ADD_EXECUTABLE(testTouchPickerProfile ${tests_testTouchPickerProfile_SRCS})
+     TARGET_LINK_LIBRARIES(testTouchPickerProfile ${TESTS_LIBRARIES})
+     ADD_DEPENDENCIES(buildTests testTouchPickerProfile)
+     ADD_TEST(testTouchPickerProfile testTouchPickerProfile)
+     SET_TARGET_PROPERTIES(testTouchPickerProfile PROPERTIES FOLDER "src/tests")
 
      SET(tests_testStelSphereGeometry_SRCS
           tests/testStelSphereGeometry.hpp

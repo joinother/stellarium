@@ -242,6 +242,7 @@ export class LayerController {
     this.hooks.animateTabIn(100, (): void => {
       if (transitionId !== this.viewTabTransitionId) return
       this.hooks.setViewTab(tabId)
+      if (tabId === 2) this.layerViewStore.loadNebulaDisplaySettings()
       if (tabId === 4) this.layerViewStore.loadLandscapeList()
       if (tabId === 6) this.hooks.loadSurveyState()
       this.hooks.setViewTabContentOffsetX(direction * 10)
@@ -295,6 +296,26 @@ export class LayerController {
   }
 
   // ===== 显示 / 图层设置行为 =====
+
+  // 深空图层设置写回（NebulaMgr；布尔/数值共用 setNebulaFlag）。
+  setNebulaSetting(setting: string, value: boolean | number): void {
+    const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
+    this.port.requestInteractive('setNebulaFlag', payload, (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) this.hooks.flashHint(r.error !== undefined ? r.error : I18n.t('msg_apply_failed'))
+    })
+  }
+
+  setNebulaCatalogMask(mask: number): void {
+    this.port.requestInteractive('setNebulaFlag', 'catalogFilters|' + mask.toString(), (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) this.hooks.flashHint(r.error !== undefined ? r.error : I18n.t('msg_apply_failed'))
+    })
+  }
+
+  setNebulaTypeMask(mask: number): void {
+    this.port.requestInteractive('setNebulaFlag', 'typeFilters|' + mask.toString(), (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) this.hooks.flashHint(r.error !== undefined ? r.error : I18n.t('msg_apply_failed'))
+    })
+  }
 
   // 星空显示设置写回（布尔项写 LayerStore，数值项写 LayerViewStore）。
   setSkyDisplaySetting(setting: string, value: boolean | number): void {

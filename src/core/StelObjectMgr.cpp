@@ -483,7 +483,7 @@ StelObjectP StelObjectMgr::cleverFind(const StelCore* core, const Vec3d& v) cons
 	{
 		const float objectLimitMag = obj->getType() == QLatin1String("Star") &&
 				!core->getSkyDrawer()->getFlagRealisticStarVisibility() ? starLimitMag : limitMag;
-		if (obj->getSelectPriority(core)<=objectLimitMag)
+		if (obj->getSelectPriority(core)<=objectLimitMag && obj->getPickState(core).pickable)
 			tmp.append(obj);
 	}
 	candidates = tmp;

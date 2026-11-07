@@ -497,6 +497,9 @@ function hasStartupResourceFiles(installRoot: string): boolean {
     'skycultures/potawatomi/index.json',
     'skycultures/potawatomi/description.md',
     'skycultures/potawatomi/territory.geojson',
+    // 26.x 物理大气模型；旧安装的 extraction marker 仍在时，async 准备必须
+    // 因它缺失而重抽全树，否则随后同步检查抛错，Qt 永远不初始化。
+    'atmosphere/default/params.atmo',
     'scripts/constellations_tour.ssc',
     'translations/stellarium/zh_CN.qm', 'translations/stellarium-sky/zh_CN.qm',
     'translations/stellarium-skycultures/zh_CN.qm', 'translations/stellarium-scripts/zh_CN.qm'

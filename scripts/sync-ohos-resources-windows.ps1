@@ -114,10 +114,15 @@ function Invoke-Mirror {
 }
 
 Write-Host '==> mirroring full data directories'
-foreach ($dir in @('data', 'textures', 'landscapes', 'stars', 'translations', 'scenery3d')) {
+foreach ($dir in @('data', 'textures', 'landscapes', 'stars', 'translations', 'scenery3d', 'atmosphere')) {
     $source = Join-Path $RepoRoot $dir
     if (-not (Test-Path -LiteralPath $source)) { Write-Host "    SKIP (missing): $dir"; continue }
-    Invoke-Mirror $source (Join-Path $Out $dir)
+    if ($dir -eq 'atmosphere') {
+        # 26.x 物理大气模型（params.atmo + .f32 LUT）必须进 rawfile；CMake 脚手架例外。
+        Invoke-Mirror $source (Join-Path $Out $dir) @('/XF', 'CMakeLists.txt')
+    } else {
+        Invoke-Mirror $source (Join-Path $Out $dir)
+    }
     Write-Host "    $dir"
 }
 

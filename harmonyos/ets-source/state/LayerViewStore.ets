@@ -1,4 +1,4 @@
-import { StellariumBridgeResponse, LandscapeItem } from '../pages/StellariumTypes'
+import { StellariumBridgeResponse, LandscapeItem, DsoFlags } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
 import { AstroColors } from './StellariumTheme'
 
@@ -61,6 +61,31 @@ export class LayerViewStore {
   landscapeTransp: number = 0
   landscapeFadeWithZoom: boolean = true
 
+  // —— 深空图层设置（NebulaMgr） ——
+  dsoCatalogExpanded: boolean = false
+  dsoTypeExpanded: boolean = false
+  dsoLabelsExpanded: boolean = false
+  dsoSizeMagnitudeExpanded: boolean = false
+  dsoHintsEnabled: boolean = true
+  dsoCatalogFilters: number = 0x20000007
+  dsoTypeFilters: number = 0x0FFF
+  dsoTypeFilterUsage: boolean = false
+  dsoLabelsAmount: number = 3
+  dsoHintsAmount: number = 3
+  dsoLabelsBrightness: number = 1
+  dsoHintsBrightness: number = 1
+  dsoDesignations: boolean = false
+  dsoAdditionalNames: boolean = true
+  dsoShowOnlyNamed: boolean = false
+  dsoOutlines: boolean = false
+  dsoHintsProportional: boolean = false
+  dsoSurfaceBrightness: boolean = false
+  dsoSizeLimits: boolean = false
+  dsoMinSizeLimit: number = 1
+  dsoMaxSizeLimit: number = 600
+  dsoNebulaMagnitudeLimit: boolean = false
+  dsoNebulaMagnitude: number = 8.5
+
   // —— 桥注入：本域加载器自持 ——
   private port: CommandPort | null = null
   // 请求序号：给加载器回包做并发抑制；当前加载器为交互读，预留复用。
@@ -112,6 +137,36 @@ export class LayerViewStore {
       this.orbitPermanent = r.orbitPermanent !== undefined ? r.orbitPermanent : this.orbitPermanent
       this.orbitThickness = r.orbitThickness !== undefined ? r.orbitThickness : this.orbitThickness
       this.orbitColorStyle = r.orbitColorStyle !== undefined ? r.orbitColorStyle : this.orbitColorStyle
+      this.notifyChanged()
+    })
+  }
+
+  // 深空图层设置加载（NebulaMgr）。
+  loadNebulaDisplaySettings(): void {
+    const port = this.ensurePort()
+    if (port === null) return
+    port.requestInteractive('getNebulaFlags', '', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true || r.flags === undefined) return
+      const f = r.flags as DsoFlags
+      this.dsoCatalogFilters = f.catalogFilters !== undefined ? f.catalogFilters : this.dsoCatalogFilters
+      this.dsoTypeFilters = f.typeFilters !== undefined ? f.typeFilters : this.dsoTypeFilters
+      this.dsoTypeFilterUsage = f.typeFilterUsage !== undefined ? f.typeFilterUsage : this.dsoTypeFilterUsage
+      this.dsoHintsEnabled = f.hints !== undefined ? f.hints : this.dsoHintsEnabled
+      this.dsoShowOnlyNamed = f.showOnlyNamed !== undefined ? f.showOnlyNamed : this.dsoShowOnlyNamed
+      this.dsoDesignations = f.designations !== undefined ? f.designations : this.dsoDesignations
+      this.dsoAdditionalNames = f.additionalNames !== undefined ? f.additionalNames : this.dsoAdditionalNames
+      this.dsoOutlines = f.outlines !== undefined ? f.outlines : this.dsoOutlines
+      this.dsoHintsProportional = f.hintsProportional !== undefined ? f.hintsProportional : this.dsoHintsProportional
+      this.dsoSurfaceBrightness = f.surfaceBrightness !== undefined ? f.surfaceBrightness : this.dsoSurfaceBrightness
+      this.dsoSizeLimits = f.sizeLimits !== undefined ? f.sizeLimits : this.dsoSizeLimits
+      this.dsoMinSizeLimit = f.minSizeLimit !== undefined ? f.minSizeLimit : this.dsoMinSizeLimit
+      this.dsoMaxSizeLimit = f.maxSizeLimit !== undefined ? f.maxSizeLimit : this.dsoMaxSizeLimit
+      this.dsoLabelsAmount = f.labelsAmount !== undefined ? f.labelsAmount : this.dsoLabelsAmount
+      this.dsoHintsAmount = f.hintsAmount !== undefined ? f.hintsAmount : this.dsoHintsAmount
+      this.dsoLabelsBrightness = f.labelsBrightness !== undefined ? f.labelsBrightness : this.dsoLabelsBrightness
+      this.dsoHintsBrightness = f.hintsBrightness !== undefined ? f.hintsBrightness : this.dsoHintsBrightness
+      this.dsoNebulaMagnitudeLimit = f.nebulaMagnitudeLimit !== undefined ? f.nebulaMagnitudeLimit : this.dsoNebulaMagnitudeLimit
+      this.dsoNebulaMagnitude = f.nebulaMagnitude !== undefined ? f.nebulaMagnitude : this.dsoNebulaMagnitude
       this.notifyChanged()
     })
   }

@@ -44,6 +44,17 @@ class Asterism : public StelObject
 	friend class AsterismMgr;
 public:
 	static const QString ASTERISM_TYPE;
+
+	//! Line segments (pairs of stars) used by drawOptim().
+	const std::vector<StelObjectP>& getLineSegments() const { return asterism; }
+	//! Label anchors used by drawNames().
+	const QList<Vec3d>& getLabelAnchors() const { return XYZname; }
+	//! Whether the name would currently be drawn (fade and object type).
+	bool isLabelDrawn() const { return flagAsterism && nameFader.getInterstate() > 0.0f; }
+	//! Whether the lines would currently be drawn (fade and object type).
+	bool isLinesDrawn() const { return flagAsterism && lineFader.getInterstate() > 0.0001f; }
+	//! Telescopic asterisms are only labeled below a 60 degree FOV.
+	bool isTelescopic() const { return typeOfAsterism == Type::TelescopicAsterism; }
 private:
 	Asterism();
 	~Asterism() override;

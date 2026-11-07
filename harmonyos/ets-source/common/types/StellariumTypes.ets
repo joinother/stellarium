@@ -352,6 +352,29 @@ export interface SatellitePass {
 }
 
 
+export interface DsoFlags {
+  show?: boolean
+  hints?: boolean
+  catalogFilters?: number
+  typeFilters?: number
+  typeFilterUsage?: boolean
+  showOnlyNamed?: boolean
+  designations?: boolean
+  additionalNames?: boolean
+  outlines?: boolean
+  hintsProportional?: boolean
+  surfaceBrightness?: boolean
+  sizeLimits?: boolean
+  minSizeLimit?: number
+  maxSizeLimit?: number
+  labelsAmount?: number
+  hintsAmount?: number
+  labelsBrightness?: number
+  hintsBrightness?: number
+  nebulaMagnitudeLimit?: boolean
+  nebulaMagnitude?: number
+}
+
 export interface StellariumBridgeResponse {
   ok?: boolean
   id?: string

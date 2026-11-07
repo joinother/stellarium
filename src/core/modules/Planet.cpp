@@ -2438,6 +2438,29 @@ float Planet::getSelectPriority(const StelCore* core) const
 	}
 }
 
+StelObjectPickState Planet::getPickState(const StelCore* core) const
+{
+	StelObjectPickState state = StelObject::getPickState(core);
+	if (hidden)
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+		return state;
+	}
+
+	// Planet::draw() applies this hard limit before drawing the disc, label or
+	// marker. Mirror it here so an invisible faint planet cannot be picked.
+	if (core && core->getSkyDrawer()->getFlagPlanetMagnitudeLimit()
+		&& getVMagnitude(core) > static_cast<float>(core->getSkyDrawer()->getCustomPlanetMagnitudeLimit()))
+	{
+		state.pickable = false;
+		state.pointDrawn = false;
+		state.visualRadiusRad = 0.0;
+	}
+	return state;
+}
+
 Vec3f Planet::getInfoColor(void) const
 {
 	return getLabelColor();

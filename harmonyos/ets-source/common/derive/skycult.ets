@@ -12,7 +12,7 @@ export function isCliPanelName(panel: string): boolean {
     'observing', 'bookmarks', 'oculars', 'angleMeasure', 'navStars', 'polarScope', 'telescope',
     'astro', 'calendar', 'satellites', 'meteorshowers', 'scenery3d', 'catalogs', 'settings', 'tools',
     'scripts', 'commands', 'audio', 'skyCultureMaker', 'mosaicCamera', 'nebulaTextures', 'help',
-    'settingsInformation', 'settingsTime', 'settingsPrivacy', 'ar'
+    'settingsInformation', 'settingsExtra', 'settingsTime', 'settingsPrivacy', 'ar'
   ].includes(panel)
 }
 
