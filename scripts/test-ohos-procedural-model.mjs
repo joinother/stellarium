@@ -43,7 +43,7 @@ test('satellite fallback reuses the catalogue icon without lunar or orbit decora
   const visual = mediaComponents.slice(mediaComponents.indexOf('export struct TabletInspectorFallbackVisual {'));
   const satellite = visual.slice(visual.indexOf("} else if (this.kind === 'satellite')"),
     visual.indexOf("} else if (this.kind === 'moon')"));
-  assert.match(satellite, /getIcon\('catalog_satellite', false\)/);
+  assert.match(satellite, /getCatalogIcon\('catalog_satellite', this\.c\.isNight\)/);
   assert.match(satellite, /objectFit\(ImageFit\.Contain\)/);
   assert.match(satellite, /HitTestMode\.None/);
   assert.doesNotMatch(satellite, /Circle\(|Ellipse\(|catalog_moon|onTouch|onClick/);

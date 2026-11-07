@@ -86,9 +86,12 @@ export function objectInspectorDeepSkyImageName(fallbackVisualKind: string, sear
   }
   const text = searchText
   // 名称型别名（不含目录编号，避免 'm 1' 误匹配 'm 10' 这类前缀）。
+  // 只允许同一对象的别名；不同天体不得借用彼此的照片。
   const nameAliases: Record<string, string> = {
-    // Horsehead Nebula (Barnard 33) is part of the same Orion molecular cloud.
-    'horsehead': 'm42.png', '马头': 'm42.png', 'barnard 33': 'm42.png', 'barnard33': 'm42.png'
+    // The Magellanic Clouds have no single catalogue photo in the bundle; these
+    // two composites are built from the packaged ESO/iceinspace tiles.
+    'large magellanic': 'lmc.png', '大麦哲伦': 'lmc.png',
+    'small magellanic': 'smc.png', '小麦哲伦': 'smc.png'
   }
   for (const key of Object.keys(nameAliases)) {
     if (text.indexOf(key) >= 0) {
@@ -103,25 +106,14 @@ export function objectInspectorDeepSkyImageName(fallbackVisualKind: string, sear
     : ((prefix === 'b' || prefix === 'barnard') ? 'b' + number : prefix + number)
   // 打包图库里这些目录编号用的是变体文件名，必须按实际文件返回。
   const variants: Record<string, string> = {
-    'n224': 'm31.png', 'n1952': 'm1dumont.png',
-    'm1': 'm1dumont.png', 'm15': 'm15-vasey.png', 'm43': 'm42.png', 'm45': 'pleiades.png',
+    'n224': 'm31.png', 'n1952': 'm1dumont.png', 'n292': 'smc.png',
+    'm1': 'm1dumont.png', 'm15': 'm15-vasey.png', 'm45': 'pleiades.png',
     'm51': 'm51-vasey.png', 'm57': 'm57dumont.png', 'm82': 'm82-vasey.png',
-    'm101': 'm101-vasey.png', 'm105': 'm105-vasey.png', 'm106': 'm106-vasey.png',
-    'b33': 'm42.png'
+    'm101': 'm101-vasey.png', 'm105': 'm105-vasey.png', 'm106': 'm106-vasey.png'
   }
   if (variants[key] !== undefined) { return variants[key] }
   if (key.charAt(0) === 'b') { return 'barnard' + number + '.png' }
   return key + '.png'
-}
-
-// 无精确图时的类别代表图：保证非 3D 深空天体至少有一张图片填充，
-// 而不是落回空白/程序化视觉。
-export function objectInspectorFallbackImageName(visualKind: string): string {
-  if (visualKind === 'galaxy') { return 'm31.png' }
-  if (visualKind === 'nebula') { return 'm42.png' }
-  if (visualKind === 'globular-cluster') { return 'm13.png' }
-  if (visualKind === 'open-cluster') { return 'm44.png' }
-  return ''
 }
 
 // 恒星近似色（原 objectInspectorStarColor）：按色温档位返回十六进制颜色。
