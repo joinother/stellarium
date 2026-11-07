@@ -44,6 +44,17 @@ export class TimeStore {
   manualHour: number = INITIAL_MANUAL_TIME.getHours()
   manualMinute: number = INITIAL_MANUAL_TIME.getMinutes()
 
+  // 用当前模拟 JD 立即校准手工时间选择器。jd 是 UTC；先加观测地偏移，
+  // 与时间轮、标题栏使用同一套本地墙钟口径。
+  syncManualTimeFromJd(jd: number, utcOffsetHours: number): void {
+    const local = new Date((jd + utcOffsetHours / 24.0 - 2440587.5) * 86400000.0)
+    this.manualYear = local.getUTCFullYear()
+    this.manualMonth = local.getUTCMonth() + 1
+    this.manualDay = local.getUTCDate()
+    this.manualHour = local.getUTCHours()
+    this.manualMinute = local.getUTCMinutes()
+  }
+
   // 记录一次"用户主动换挡"：待定窗口内忽略引擎回报的旧速率。
   // 与 syncTimeRateState 的既有 500 ms 窗口同源，集中在这里以免两处各写一遍。
   beginRateChange(rate: number, windowMs: number): void {

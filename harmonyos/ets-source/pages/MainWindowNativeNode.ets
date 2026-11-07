@@ -1306,6 +1306,8 @@ export struct WindowNativeNode {
   @State private viewCoordinateOffsetY: number = 0
   /** 观测地 UTC 偏移（小时），由 getState 的 timeText-jd 差值校准，供轻量时间刷新使用 */
   private utcOffsetHours: number = 8
+  /** 最近一次引擎模拟 JD：打开时间面板时用它立即填充时间轮与手动时间。 */
+  private lastSimulationJd: number = 0
   @State private fovSliderValue: number = 60
   @State private currentProjection: string = 'ProjectionPerspective'
   @State private panelIdleOpacity: number = 1.0
@@ -4071,6 +4073,9 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
+    // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
+    // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
+    if (panel === 'time' && nextVisible) this.prepareTimePanel()
     // 快捷面板每次打开都回到 6×2；“更多操作”的展开态只是临时 UI 状态。
     if (panel === 'quick' && nextVisible) {
       this.quickPanelStore.setExpanded(false)
@@ -6942,6 +6947,7 @@ export struct WindowNativeNode {
     this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
       if (r.ok !== true || r.jd === undefined) { return }
       const jd: number = r.jd as number
+      this.lastSimulationJd = jd
       // 固定走本地 jd 格式化：jdToLocalTimeText 返回定长 'YYYY-MM-DD HH:mm:ss'，截取后 5 位为 HH:mm
       const text: string = jdToLocalTimeText(jd + this.utcOffsetHours / 24.0).substring(11, 16)
       if (text !== this.dockClockText) {
@@ -7035,6 +7041,15 @@ export struct WindowNativeNode {
       )
     }
     return this.timeWheelController
+  }
+
+  private prepareTimePanel(): void {
+    // 引擎尚未就绪时退回设备当前时刻，至少不显示硬编码旧日期。
+    const jd = this.lastSimulationJd > 0
+      ? this.lastSimulationJd
+      : (Date.now() / 86400000.0 + 2440587.5)
+    this.wheel().seedFromSimulation(jd)
+    this.timeStore.syncManualTimeFromJd(jd, this.utcOffsetHours)
   }
 
   private zoomStep(factor: number): void {
@@ -7348,6 +7363,9 @@ export struct WindowNativeNode {
     this.layerStore.flipVert = result.actionVertical_Flip === true
     if (result.timeRate !== undefined) {
       this.timeCtl().syncTimeRateState(result.timeRate as number)
+    }
+    if (result.jd !== undefined) {
+      this.lastSimulationJd = result.jd as number
     }
     if (result.timeText !== undefined) {
       this.timeStore.observationTimeText = result.formattedTime ?? this.formatObservationTime(result.timeText)
@@ -8110,7 +8128,7 @@ export struct WindowNativeNode {
                 chromeRowY: this.chromeRowY(),
                 chromeRowWidth: dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
                 chromeRowPosXLeft: chromeRowPosXLeft(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
-                chromeRowPosXRight: chromeRowPosXRight(this.isExpandedLayout, this.skyWidth, this.EDGE_MARGIN, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
+                chromeRowPosXRight: chromeRowPosXRight(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
                 chromeZoomHorizontal: this.chromeZoomHorizontal(),
                 onGyro: () => {
                   hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroStore.gyroscopeEnabled.toString())

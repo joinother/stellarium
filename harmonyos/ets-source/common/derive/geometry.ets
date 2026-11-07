@@ -222,8 +222,9 @@ export function chromeRowPosXLeft(isExpandedLayout: boolean, edgeMargin: number,
     : dockLeft(isExpandedLayout, skyWidth, panelVisible, panelWidth, panelOffsetX, edgeMargin, compactDockWidthPercent)
 }
 
-// chrome 行右缘（原宿主 chromeRowPosXRight）。
-export function chromeRowPosXRight(isExpandedLayout: boolean, skyWidth: number, edgeMargin: number,
+// chrome 行右缘（原宿主 chromeRowPosXRight）。参数顺序与 chromeRowPosXLeft 一致，
+// 避免调用点把 edgeMargin / skyWidth 传反后把时钟层推到屏幕外。
+export function chromeRowPosXRight(isExpandedLayout: boolean, edgeMargin: number, skyWidth: number,
   panelVisible: boolean, panelWidth: number, panelOffsetX: number,
   compactDockWidthPercent: number): number {
   if (isExpandedLayout) {

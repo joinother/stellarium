@@ -131,6 +131,29 @@ export class TimeWheelController {
     }
   }
 
+  // 面板打开前用宿主缓存的模拟 JD 立即对齐字段与刻度，避免首帧显示
+  // 模块加载时的旧值、或等待 125ms 轮询后才出现刻度。
+  seedFromSimulation(jd: number): void {
+    this.stopInertia()
+    this.store.timeWheelDragging = false
+    this.store.timeWheelVisualOffset = 0
+    this.store.timeWheelAppliedSteps = 0
+    this.dragCarry = 0
+    this.gestureTickOffset = 0
+    this.gestureBaseMs = 0
+    this.gestureSteps = 0
+    this.lastInputMs = 0
+    const local = new Date((jd + this.getUtcOffsetHours() / 24.0 - 2440587.5) * 86400000.0)
+    this.store.timeWheelYear = local.getUTCFullYear()
+    this.store.timeWheelMonth = local.getUTCMonth() + 1
+    this.store.timeWheelDay = local.getUTCDate()
+    this.store.timeWheelHour = local.getUTCHours()
+    this.store.timeWheelMinute = local.getUTCMinutes()
+    this.store.timeWheelSecond = local.getUTCSeconds()
+    this.store.timeWheelTrackBaseMs = local.getTime()
+    this.store.refreshTicks()
+  }
+
   private applyDate(local: Date, refreshTicks: boolean, sendNative: boolean): void {
     this.lastInputMs = Date.now()
     this.store.timeWheelYear = local.getUTCFullYear()

@@ -3,15 +3,20 @@
 // 只在 store 里放「数据 + 纯计算」：日期/字段取值、tick 标签生成与刻度量值。
 // 交互（拖动 / 惯性 / 轨道重基准 / 引擎同步）在 TimeWheelController，视图在 TimeWheelScrubber；
 // 宿主以 @State 持有本 store，视图以 @ObjectLink 订阅。
+// 时间轮构造初值：模块加载时的设备本地时间。引擎就绪后由
+// TimeWheelController.seedFromSimulation() 用当前模拟 JD 覆盖；构造时即生成
+// 刻度标签，避免面板第一次打开先显示硬编码旧日期、再等轮询到达才刷新。
+const INITIAL_WHEEL_TIME: Date = new Date()
+
 @Observed
 export class TimeWheelStore {
   timeWheelUnit: string = 'hour'
-  timeWheelYear: number = 2026
-  timeWheelMonth: number = 8
-  timeWheelDay: number = 11
-  timeWheelHour: number = 20
-  timeWheelMinute: number = 0
-  timeWheelSecond: number = 0
+  timeWheelYear: number = INITIAL_WHEEL_TIME.getFullYear()
+  timeWheelMonth: number = INITIAL_WHEEL_TIME.getMonth() + 1
+  timeWheelDay: number = INITIAL_WHEEL_TIME.getDate()
+  timeWheelHour: number = INITIAL_WHEEL_TIME.getHours()
+  timeWheelMinute: number = INITIAL_WHEEL_TIME.getMinutes()
+  timeWheelSecond: number = INITIAL_WHEEL_TIME.getSeconds()
   timeWheelTickLabels: string[] = []
   timeWheelVisualOffset: number = 0
   timeWheelDragging: boolean = false
@@ -20,6 +25,12 @@ export class TimeWheelStore {
 
   readonly tickSpacing: number = 42
   readonly centerTick: number = 20
+
+  constructor() {
+    this.timeWheelTrackBaseMs = Date.UTC(this.timeWheelYear, this.timeWheelMonth - 1,
+      this.timeWheelDay, this.timeWheelHour, this.timeWheelMinute, this.timeWheelSecond)
+    this.refreshTicks()
+  }
 
   majorInterval(): number {
     if (this.timeWheelUnit === 'year') { return 5 }
