@@ -12579,7 +12579,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				const QString value = rawValue.toLower();
 				if (value == "all") nbmgr->setCatalogFilters(static_cast<int>(Nebula::CatAll));
-				else if (value == "standard") nbmgr->setCatalogFilters(static_cast<int>(Nebula::CatNGC | Nebula::CatIC | Nebula::CatM | Nebula::CatOther));
+				else if (value == "standard") nbmgr->setCatalogFilters(static_cast<int>(Nebula::CatNGC | Nebula::CatIC | Nebula::CatM | Nebula::CatPGC | Nebula::CatOther));
 				else if (value == "none") nbmgr->setCatalogFilters(0);
 				else
 				{

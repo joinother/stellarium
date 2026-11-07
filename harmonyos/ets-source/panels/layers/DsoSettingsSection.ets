@@ -106,7 +106,7 @@ export struct DsoSettingsSection {
 
   private catalogSummary(): string {
     if (this.layerViewStore.dsoCatalogFilters === -1) return I18n.t('dso_catalog_all')
-    if (this.layerViewStore.dsoCatalogFilters === 0x20000007) return I18n.t('dso_catalog_standard')
+    if (this.layerViewStore.dsoCatalogFilters === 0x20001007) return I18n.t('dso_catalog_standard')
     if (this.layerViewStore.dsoCatalogFilters === 0) return I18n.t('dso_catalog_none')
     return I18n.t('dso_catalog_custom')
   }
@@ -179,7 +179,7 @@ export struct DsoSettingsSection {
         Column({ space: 2 }) {
           Row({ space: 4 }) {
             SettingsChoiceButton({ label: I18n.t('dso_catalog_all'), active: this.layerViewStore.dsoCatalogFilters === -1, canPick: true, onPick: () => { this.setCatalogQuick(-1) } })
-            SettingsChoiceButton({ label: I18n.t('dso_catalog_standard'), active: this.layerViewStore.dsoCatalogFilters === 0x20000007, canPick: true, onPick: () => { this.setCatalogQuick(0x20000007) } })
+            SettingsChoiceButton({ label: I18n.t('dso_catalog_standard'), active: this.layerViewStore.dsoCatalogFilters === 0x20001007, canPick: true, onPick: () => { this.setCatalogQuick(0x20001007) } })
             SettingsChoiceButton({ label: I18n.t('dso_catalog_none'), active: this.layerViewStore.dsoCatalogFilters === 0, canPick: true, onPick: () => { this.setCatalogQuick(0) } })
           }.width('100%').padding({ left: 4 })
           Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap }) {
