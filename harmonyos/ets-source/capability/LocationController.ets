@@ -39,6 +39,8 @@ export class LocationController {
   private hooks: LocationHostHooks
   // 请求中标志：草稿字段随控制器走（不入 @Observed store）。
   private deviceLocationRequestInProgress: boolean = false
+  // 本次 GPS 定位没有可用的垂直分量；commitLocation 用它替换“已同步”状态。
+  private gpsAltitudeUnavailable: boolean = false
 
   constructor(
     port: CommandPort,
@@ -107,17 +109,23 @@ export class LocationController {
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.pickerStore.locationPickerStatus = I18n.t('m_req_location_perm')
     try {
-      const granted = await this.locationPort.requestLocationPermissions()
+      const permission = await this.locationPort.requestLocationPermissions()
       if (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
-      if (!granted) {
-        this.pickerStore.locationPickerStatus = I18n.t('m_gps_unavailable')
+      if (permission !== 'precise') {
+        this.pickerStore.locationPickerStatus = I18n.t(permission === 'approximate'
+          ? 'm_gps_precise_required' : 'm_gps_unavailable')
         return
       }
       this.pickerStore.locationPickerStatus = I18n.t('m_getting_location')
       const current = await this.locationPort.getCurrentLocation()
       if (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
-      this.pickerStore.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude, I18n.t('m_device_loc_synced'))
+      // Wireless/indoor fixes often report altitude 0 with altitudeAccuracy 0.
+      // Keep the position but tell the user that the vertical component is absent.
+      // Undefined accuracy (older location stacks) is treated as usable.
+      this.gpsAltitudeUnavailable = current.altitudeAccuracy !== undefined && current.altitudeAccuracy <= 0
+      this.pickerStore.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude,
+        this.gpsAltitudeUnavailable ? I18n.t('m_gps_altitude_unavailable') : I18n.t('m_device_loc_synced'))
       this.pickerStore.locationSource = 'gps'
       this.setLocation(this.pickerStore.locationPickerName, current.latitude, current.longitude, altitude, 'Earth', false, 'gps')
       this.pickerStore.locationPickMode = 'map'
@@ -163,7 +171,10 @@ export class LocationController {
 
   private commitLocation(name: string, latitude: number, longitude: number, altitude: number, targetPlanet: string, source: string): void {
     const planetChanged = targetPlanet !== this.sessionToolStore.observerPlanet
-    this.pickerStore.setPickerLocation(name, latitude, longitude, altitude, I18n.t('m_synced_to_sky'))
+    const status = source === 'gps' && this.gpsAltitudeUnavailable
+      ? I18n.t('m_gps_altitude_unavailable') : I18n.t('m_synced_to_sky')
+    this.pickerStore.setPickerLocation(name, latitude, longitude, altitude, status)
+    this.gpsAltitudeUnavailable = false
     this.pickerStore.locationSource = source
     this.hooks.setObserverPlanetCrossStore(targetPlanet)
     if (planetChanged) {

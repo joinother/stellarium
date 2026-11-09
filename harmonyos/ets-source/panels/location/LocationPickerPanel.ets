@@ -71,10 +71,6 @@ export struct LocationPickerPanel {
   onSelectCity: (c: string) => void = () => {}
 
   private columnScrollers: Array<Scroller> = [new Scroller(), new Scroller(), new Scroller(), new Scroller()]
-  // 地图触摸草稿（非可观测，随组件持有）。
-  private mapTouchStartX: number = 0
-  private mapTouchStartY: number = 0
-  private mapTouchMoved: boolean = false
 
   private columnScroller(kind: string): Scroller {
     const index = kind === 'continent' ? 0 : (kind === 'country' ? 1 : (kind === 'region' ? 2 : 3))
@@ -108,33 +104,11 @@ export struct LocationPickerPanel {
     this.locationStore.locSearchQuery = ''
   }
 
-  // 地图触摸处理；点选后的 apply 走 onApply 回调。
-  private handleLocationMapTouch(event: TouchEvent): boolean {
-    const points = event.touches.length > 0 ? event.touches : event.changedTouches
-    if (points.length < 1) {
-    // Do not take ownership of a vertical panel scroll. A deliberate stationary
-    // tap still chooses the map point, while swiping across the map scrolls the panel.
-    return false
-    }
-    const point = points[0]
-    if (event.type === TouchType.Down) {
-      this.mapTouchStartX = point.x
-      this.mapTouchStartY = point.y
-      this.mapTouchMoved = false
-    } else if (event.type === TouchType.Move) {
-      const deltaX = point.x - this.mapTouchStartX
-      const deltaY = point.y - this.mapTouchStartY
-      if (Math.sqrt(deltaX * deltaX + deltaY * deltaY) > 10) this.mapTouchMoved = true
-    } else if (event.type === TouchType.Up) {
-      if (!this.mapTouchMoved) {
-        this.updatePickerFromMap(point.x, point.y)
-        this.onApply()
-      }
-      this.mapTouchMoved = false
-    } else if (event.type === TouchType.Cancel) {
-      this.mapTouchMoved = false
-    }
-    return false
+  // 地图点选：用 onClick 而不是原始 onTouch，避免地图吞掉父级 Scroll 的纵向拖动。
+  // ArkUI 在手指移动超过点击阈值时会取消 click，因此滑动经过地图仍能正常滚面板。
+  private handleLocationMapClick(event: ClickEvent): void {
+    this.updatePickerFromMap(event.x, event.y)
+    this.onApply()
   }
 
   onWillApplyTheme(theme: Theme): void {
@@ -227,10 +201,13 @@ export struct LocationPickerPanel {
           .borderRadius(UI_RADIUS_CONTROL)
           .margin({ top: 10 })
           .onAreaChange((oldArea: Area, newArea: Area) => {
-            this.pickerStore.mapRenderWidth = Number(newArea.width)
-            this.pickerStore.mapRenderHeight = Number(newArea.height)
+            // 滚动只改变位置，不改变宽高；避免每帧写 @Observed store 触发无谓刷新。
+            const width = Number(newArea.width)
+            const height = Number(newArea.height)
+            if (width !== this.pickerStore.mapRenderWidth) this.pickerStore.mapRenderWidth = width
+            if (height !== this.pickerStore.mapRenderHeight) this.pickerStore.mapRenderHeight = height
           })
-          .onTouch((event: TouchEvent) => this.handleLocationMapTouch(event))
+          .onClick((event: ClickEvent) => this.handleLocationMapClick(event))
           .id('observer-planet-map')
         Text(this.pickerStore.pickerCoordinateText())
           .fontSize(12)

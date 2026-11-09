@@ -914,7 +914,7 @@ class HostLocationPort implements LocationPort {
     return factory()
   }
 
-  async requestLocationPermissions(): Promise<boolean> {
+  async requestLocationPermissions(): Promise<string> {
     const context = this.context()
     const atManager = abilityAccessCtrl.createAtManager()
     const permissions: Array<Permissions> = [
@@ -922,20 +922,36 @@ class HostLocationPort implements LocationPort {
       'ohos.permission.LOCATION'
     ]
     const permissionResult = await atManager.requestPermissionsFromUser(context, permissions)
-    return permissionResult.authResults.some((result: number) => result === 0)
+    const results = permissionResult.authResults
+    hilog.info(0x0000, 'StellariumArkUI', '[gps] permission results=%{public}s',
+      JSON.stringify(results))
+    // The second entry is precise LOCATION and is required for GNSS altitude.
+    if (results.length > 1 && results[1] === 0) return 'precise'
+    if (results.length > 0 && results[0] === 0) return 'approximate'
+    return 'denied'
   }
 
   async getCurrentLocation(): Promise<LocationFix> {
+    // Use the single-fix accuracy priority rather than the old
+    // DAILY_LIFE_SERVICE request: the low-power path may return a
+    // network-derived fix whose altitude is 0 or absent. GNSS is allowed to
+    // take a little longer here because the location panel waits explicitly.
     const current = await geoLocationManager.getCurrentLocation({
-      priority: geoLocationManager.LocationRequestPriority.ACCURACY,
-      scenario: geoLocationManager.LocationRequestScenario.DAILY_LIFE_SERVICE,
-      maxAccuracy: 2000,
-      timeoutMs: 5000
+      locatingPriority: geoLocationManager.LocatingPriority.PRIORITY_ACCURACY,
+      locatingTimeoutMs: 10000,
+      needPoi: false
     })
+    const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[gps] fix lat=%{public}s lon=%{public}s alt=%{public}s altAcc=%{public}s acc=%{public}s',
+      current.latitude.toString(), current.longitude.toString(), altitude.toString(),
+      current.altitudeAccuracy === undefined ? 'unknown' : current.altitudeAccuracy.toString(),
+      current.accuracy.toString())
     return {
       latitude: current.latitude,
       longitude: current.longitude,
-      altitude: Number.isFinite(current.altitude) ? current.altitude : 0
+      altitude,
+      altitudeAccuracy: current.altitudeAccuracy
     }
   }
 
@@ -1161,6 +1177,15 @@ export struct WindowNativeNode {
   @State private fullInspectorRequested: boolean = false
   @State private compactPanelSnapRatio: number = 0.6
   @State private compactPanelDragOffsetY: number = 0
+  // 拖动/滚动期间关闭面板 backdropBlur/shadow：整块模糊区域每帧重绘会反复重建
+  // RSFilterCache，是位置面板拖动与内容滚动掉帧的主要来源。松手/滚动停止后恢复。
+  @State private panelDragging: boolean = false
+  // 面板内容 Scroll 正在滚动（拖拽或惯性）。与 panelDragging 分开：抓手拖动改变
+  // 面板高度，内容滚动只改 Scroll offset，但两者都会让大面积模糊每帧重算。
+  @State private panelScrolling: boolean = false
+  // 手指按在面板上。空闲玻璃态（5s 无操作后 opacity 0.88 / 模糊 45）在按下瞬间恢复；
+  // 若让它走 320ms 动画，会和滚动启动抢 UI 线程，首帧出现约 50ms 卡顿。
+  @State private panelTouching: boolean = false
   // 平板/展开布局的快捷面板同样可上拉展开，底部与 Dock 对齐。
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
@@ -4073,6 +4098,9 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
+    this.panelDragging = false
+    this.panelScrolling = false
+    this.panelTouching = false
     // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
     // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
     if (panel === 'time' && nextVisible) this.prepareTimePanel()
@@ -4506,7 +4534,13 @@ export struct WindowNativeNode {
   }
 
   private notePanelTouch(event: TouchEvent): void {
-    if (event.type === TouchType.Down || event.type === TouchType.Up || event.type === TouchType.Cancel) {
+    if (event.type === TouchType.Down) {
+      // 先置位再恢复空闲态：这次 build 用 duration 0 直接切回 opacity 1 / 清晰背景，
+      // 不启动 320ms 过渡，避免与接下来的滚动争用 UI 线程。
+      this.panelTouching = true
+      this.resetPanelIdle()
+    } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.panelTouching = false
       this.resetPanelIdle()
     }
   }
@@ -5371,7 +5405,14 @@ export struct WindowNativeNode {
     return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
   }
 
+  // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
+  // 两者都先关掉模糊/阴影，静止后再恢复（见下方 Scroll 的 onScrollStart/Stop）。
+  private panelChromeBusy(): boolean {
+    return this.panelDragging || this.panelScrolling
+  }
+
   private updateCompactPanelDrag(offsetY: number): void {
+    if (!this.panelDragging) this.panelDragging = true
     const usable = this.compactPanelUsableHeight()
     this.compactPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
     if (this.activePanel === 'quick') {
@@ -5388,7 +5429,10 @@ export struct WindowNativeNode {
     if (this.activePanel === 'quick') {
       const expand = this.compactPanelDragOffsetY < -24
       const collapse = this.compactPanelDragOffsetY > 24
-      this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+      this.getUIContext().animateTo({
+        duration: 320, curve: curves.springMotion(0.46, 0.86),
+        onFinish: () => { this.panelDragging = false }
+      }, () => {
         if (expand) this.quickPanelStore.setExpanded(true)
         if (collapse) this.quickPanelStore.setExpanded(false)
         this.compactPanelDragOffsetY = 0
@@ -5399,7 +5443,10 @@ export struct WindowNativeNode {
     const usable = this.compactPanelUsableHeight()
     const effectiveRatio = (usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY) / usable
     const nextRatio = this.compactPanelDragOffsetY > 32 ? 0.6 : (effectiveRatio >= 0.74 ? 0.9 : 0.6)
-    this.getUIContext().animateTo({ duration: 360, curve: curves.springMotion(0.46, 0.86) }, () => {
+    this.getUIContext().animateTo({
+      duration: 360, curve: curves.springMotion(0.46, 0.86),
+      onFinish: () => { this.panelDragging = false }
+    }, () => {
       this.compactPanelSnapRatio = nextRatio
       this.compactPanelDragOffsetY = 0
     })
@@ -5409,6 +5456,7 @@ export struct WindowNativeNode {
   private updateExpandedPanelDrag(offsetY: number): void {
     // 仅快捷面板需要拖拽展开；搜索/图层/设置沿用全高，不参与高度拖拽。
     if (this.activePanel !== 'quick') return
+    if (!this.panelDragging) this.panelDragging = true
     const usable = this.expandedPanelUsableHeight()
     this.expandedPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
     if (this.expandedPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
@@ -5422,7 +5470,10 @@ export struct WindowNativeNode {
     if (this.activePanel !== 'quick') return
     const expand = this.expandedPanelDragOffsetY < -24
     const collapse = this.expandedPanelDragOffsetY > 24
-    this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+    this.getUIContext().animateTo({
+      duration: 320, curve: curves.springMotion(0.46, 0.86),
+      onFinish: () => { this.panelDragging = false }
+    }, () => {
       if (expand) this.quickPanelStore.setExpanded(true)
       if (collapse) this.quickPanelStore.setExpanded(false)
       this.expandedPanelDragOffsetY = 0
@@ -8377,6 +8428,8 @@ export struct WindowNativeNode {
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
+        .onScrollStop(() => { this.panelScrolling = false })
         .onAppear(() => { this.resetPanelScroll(this.widePanelScroller) })
     }
       .width(this.panelWidth)
@@ -8384,15 +8437,15 @@ export struct WindowNativeNode {
       .constraintSize({ maxHeight: this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight() })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
-      .shadow({ radius: 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
+      .shadow({ radius: this.panelChromeBusy() ? 0 : 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
-      .animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })
+      .animation({ duration: (this.panelChromeBusy() || this.panelTouching) ? 0 : 320, curve: curves.springMotion(0.46, 0.86) })
       .transition(TransitionEffect.asymmetric(
         TransitionEffect.OPACITY.animation({ duration: 260, curve: curves.springMotion(0.46, 0.86) })
           .combine(TransitionEffect.translate({ x: -22, y: 0 }).animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })),
@@ -8434,16 +8487,18 @@ export struct WindowNativeNode {
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
+        .onScrollStop(() => { this.panelScrolling = false })
         .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
     }
       .width(this.isFoldHoverLayout ? '64%' : '94%')
       .height(this.compactPanelHeight())
       .padding({ top: 12, left: this.compactPanelHorizontalPadding(), right: this.compactPanelHorizontalPadding(), bottom: 16 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
-      .shadow({ radius: 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
+      .shadow({ radius: this.panelChromeBusy() ? 0 : 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .hitTestBehavior(HitTestMode.Default)
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
@@ -8451,7 +8506,7 @@ export struct WindowNativeNode {
       .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
-      .animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })
+      .animation({ duration: (this.panelChromeBusy() || this.panelTouching) ? 0 : 320, curve: curves.springMotion(0.46, 0.86) })
   }
 
   @Builder

@@ -129,13 +129,21 @@ export function validationFromResponse(response: StellariumBridgeResponse): SkyC
 // CJK or plain ASCII, where NFD is a no-op that still costs a full string pass,
 // and this runs once per name per location on the search hot path.
 const LOCATION_DECOMPOSE_RE = /[\u00c0-\u024f\u0300-\u036f]/
+const LOCATION_SEPARATOR_RE = /[\s._'\u2019`-]/
 
 export function normalizeLocationSearchText(value: string): string {
-  const lowered = value.toLocaleLowerCase()
+  // Search folding is not locale-sensitive for our location names (ASCII/CJK).
+  // Locale-aware lowercasing goes through ICU on ArkTS and was the dominant
+  // cost of the offline location index warm-up; plain lowercasing stays in the
+  // runtime's fast path.
+  const lowered = value.toLowerCase()
   const plain = LOCATION_DECOMPOSE_RE.test(lowered)
     ? lowered.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     : lowered
-  return plain.replace(/[\s._'’`-]+/g, '')
+  // Most names have no separators; skip the replace allocation in that case.
+  return LOCATION_SEPARATOR_RE.test(plain)
+    ? plain.replace(/[\s._'’`-]+/g, '')
+    : plain
 }
 
 export function officialLocationAliases(countryCode: string): string {
@@ -192,9 +200,9 @@ export function inferredPanelRouteDirection(fromPanel: string, toPanel: string):
 // 位置搜索文本匹配（原宿主 matchesLocationSearch / locationSearchMatchScore，A2-6）：零宿主读取，
 // 只依赖入参与 normalizeLocationSearchText，属 A1 残留，故并入本模块。函数体逐字搬入。
 export function matchesLocationSearch(text: string, query: string): boolean {
-  const rawQuery = query.trim().toLocaleLowerCase()
+  const rawQuery = query.trim().toLowerCase()
   if (!rawQuery) return false
-  const rawText = text.toLocaleLowerCase()
+  const rawText = text.toLowerCase()
   return rawText.includes(rawQuery) ||
     normalizeLocationSearchText(rawText).includes(normalizeLocationSearchText(rawQuery))
 }
