@@ -146,6 +146,41 @@ export function normalizeLocationSearchText(value: string): string {
     : plain
 }
 
+// Search folding is a pure function, so its result can be reused across queries
+// and languages: a display name in a new language is simply a new raw key. The
+// old on-open index cached the whole dataset (8k entries + arrays + haystack);
+// this caches only the expensive part, which is what the scan actually needs.
+const LOCATION_FOLD_CACHE: Map<string, string> = new Map<string, string>()
+const LOCATION_FOLD_CACHE_LIMIT: number = 50000
+
+export function foldLocationSearchText(value: string): string {
+  if (value.length === 0) return ''
+  const cached = LOCATION_FOLD_CACHE.get(value)
+  if (cached !== undefined) return cached
+  const folded = normalizeLocationSearchText(value)
+  if (LOCATION_FOLD_CACHE.size >= LOCATION_FOLD_CACHE_LIMIT) {
+    LOCATION_FOLD_CACHE.clear()
+  }
+  LOCATION_FOLD_CACHE.set(value, folded)
+  return folded
+}
+
+export function locationFoldCacheSize(): number {
+  return LOCATION_FOLD_CACHE.size
+}
+
+// Scalar scoring over already-folded fields. It deliberately avoids building a
+// per-candidate name array or a concatenated haystack, so a scan only allocates
+// for entries that actually become results.
+export function locationFieldScore(folded: string, query: string, best: number): number {
+  if (query.length === 0) return 0
+  if (folded.length === 0) return best
+  if (folded === query) return 100
+  if (folded.startsWith(query)) return best > 85 ? best : 85
+  if (folded.includes(query)) return best > 70 ? best : 70
+  return best
+}
+
 export function officialLocationAliases(countryCode: string): string {
   if (countryCode === 'TW') return ' 中国台湾地区 台湾 China Taiwan'
   if (countryCode === 'HK') return ' 中国香港特别行政区 香港 China Hong Kong'

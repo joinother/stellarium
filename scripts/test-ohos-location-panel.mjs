@@ -9,6 +9,12 @@ const picker = readFileSync(
   new URL('../harmonyos/ets-source/panels/location/LocationPickerPanel.ets', import.meta.url), 'utf8');
 const actions = readFileSync(
   new URL('../harmonyos/ets-source/common/derive/actions.ets', import.meta.url), 'utf8');
+const store = readFileSync(
+  new URL('../harmonyos/ets-source/state/LocationStore.ets', import.meta.url), 'utf8');
+const pickerStore = readFileSync(
+  new URL('../harmonyos/ets-source/state/LocationPickerStore.ets', import.meta.url), 'utf8');
+const searchPanel = readFileSync(
+  new URL('../harmonyos/ets-source/panels/location/LocationSearchPanel.ets', import.meta.url), 'utf8');
 
 test('GPS asks for a precise single fix so altitude is available', () => {
   assert.match(host, /locatingPriority: geoLocationManager\.LocatingPriority\.PRIORITY_ACCURACY/);
@@ -40,6 +46,28 @@ test('panel dragging and scrolling disable the expensive backdrop blur and shado
 test('location search folding avoids ICU-backed locale lowercasing', () => {
   assert.match(actions, /export function normalizeLocationSearchText\(value: string\): string \{\s*\/\/[\s\S]*?const lowered = value\.toLowerCase\(\)/);
   assert.doesNotMatch(actions, /toLocaleLowerCase/);
+});
+
+test('location search scans on demand instead of warming an index', () => {
+  assert.doesNotMatch(store, /warmLocationSearchIndex/);
+  assert.doesNotMatch(store, /buildLocationSearchIndex/);
+  assert.doesNotMatch(store, /LocationSearchEntry/);
+  assert.doesNotMatch(searchPanel, /warmLocationSearchIndex/);
+  assert.match(actions, /export function foldLocationSearchText\(value: string\): string/);
+  assert.match(actions, /const LOCATION_FOLD_CACHE: Map<string, string>/);
+  assert.match(actions, /export function locationFieldScore\(folded: string, query: string, best: number\)/);
+  assert.match(store, /foldLocationSearchText\(q\)/);
+  assert.match(store, /locationFieldScore\(foldLocationSearchText\(city\.n\)/);
+  assert.match(store, /locationSearchScanChinese/);
+  assert.match(pickerStore, /locationDisplayNameForSearch/);
+  assert.match(pickerStore, /locationSearchCountryNameForSearch/);
+});
+
+test('location translations cache per-language maps and country names', () => {
+  assert.match(pickerStore, /let regionMapCache: Record<string, string> \| null = null/);
+  assert.match(pickerStore, /private regionNameMap\(\): Record<string, string>/);
+  assert.match(pickerStore, /const COUNTRY_DISPLAY_CACHE: Map<string, string>/);
+  assert.doesNotMatch(pickerStore, /const regionMap: Record<string, string> = \{/);
 });
 
 test('map picking uses a click instead of raw touch moves', () => {

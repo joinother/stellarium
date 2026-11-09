@@ -32,6 +32,14 @@ export interface LocationPickerHostHooks {
 // 省名翻译缓存刻意做成模块级常量而非 store 字段：translateProvince() 会在**渲染期**被调用
 // （层级列标签 / 选择摘要），若写进 @Observed store 的字段会在 build 中改被观察状态，有重渲染风险。
 const PROVINCE_TRANSLATION_CACHE: Record<string, string> = {}
+// Non-Chinese region names used to rebuild a ~140-entry Record (with ~140
+// I18n.t calls) on every translateRegion() call. That dominated the old search
+// index warm-up; build it once per UI language instead.
+let regionMapCache: Record<string, string> | null = null
+let regionMapLang: string = ''
+// System getDisplayCountry() is a locale-sensitive ICU call. Country codes are
+// few, so cache the result per language instead of calling it per city.
+const COUNTRY_DISPLAY_CACHE: Map<string, string> = new Map<string, string>()
 
 @Observed
 export class LocationPickerStore {
@@ -188,9 +196,17 @@ export class LocationPickerStore {
       // falls back to that key, so incomplete source data cannot leak Latin text.
       return LOCATION_ZH_NAMES[name] ?? '未收录地点'
     }
-    // Region names are city/timezone names from Stellarium's base_locations
-    // Use I18n for known regions, fallback to original name
-    const regionMap: Record<string, string> = {
+    // Region names are city/timezone names from Stellarium's base_locations.
+    // Build the language-specific lookup once; rebuilding it per call was the
+    // dominant cost of the old search-index warm-up on non-Chinese locales.
+    return this.regionNameMap()[name] ?? name
+  }
+
+  private regionNameMap(): Record<string, string> {
+    const lang = I18n.getLanguage()
+    if (regionMapCache !== null && regionMapLang === lang) return regionMapCache
+    regionMapLang = lang
+    const map: Record<string, string> = {
       'Tokyo': I18n.t('city_tokyo'),
       'Seoul': I18n.t('city_seoul'),
       'Shanghai': I18n.t('city_shanghai'),
@@ -332,7 +348,59 @@ export class LocationPickerStore {
       'Port Moresby': I18n.t('city_port_moresby'),
 
     }
-    return regionMap[name] ?? name
+    regionMapCache = map
+    return map
+  }
+
+  // Search-only fast paths. The scan resolves these fields for every city on
+  // every query, so they must not read AppStorage or rebuild a locale map per
+  // call; the caller passes the language snapshot taken at scan start.
+  locationDisplayNameForSearch(name: string, chinese: boolean, language: string): string {
+    if (!name) return '--'
+    if (chinese) return LOCATION_ZH_NAMES[name] ?? '未收录地点'
+    return this.regionNameMapForLanguage(language)[name] ?? name
+  }
+
+  private regionNameMapForLanguage(language: string): Record<string, string> {
+    if (regionMapCache !== null && regionMapLang === language) return regionMapCache
+    return this.regionNameMap()
+  }
+
+  translateProvinceForSearch(name: string, chinese: boolean): string {
+    if (!name) return ''
+    if (!chinese) return name
+    const cached = PROVINCE_TRANSLATION_CACHE[name]
+    if (cached !== undefined) return cached
+    return this.translateProvince(name)
+  }
+
+  locationSearchCountryNameForSearch(countryCode: string, observerPlanet: string,
+    chinese: boolean, language: string): string {
+    if (countryCode === 'ZZ') {
+      return observerPlanet === 'Earth'
+        ? I18n.t('region_unknown')
+        : this.planetZhName(observerPlanet) + '表面地点'
+    }
+    if (chinese) {
+      if (countryCode === 'TW' || countryCode === 'HK' || countryCode === 'MO') {
+        return LOCATION_COUNTRY_NAMES[countryCode]?.zh ??
+          this.translateCountry(countryCode, observerPlanet)
+      }
+      return LOCATION_COUNTRY_NAMES[countryCode]?.zh ?? countryCode
+    }
+    return this.translateCountryForLanguage(countryCode, observerPlanet, language)
+  }
+
+  private translateCountryForLanguage(code: string, observerPlanet: string, language: string): string {
+    const normalizedCode = code === 'TW' ? 'CN' : code
+    const country = LOCATION_COUNTRY_NAMES[normalizedCode]
+    if (!country) return normalizedCode
+    const key = language + '|' + normalizedCode
+    const cached = COUNTRY_DISPLAY_CACHE.get(key)
+    if (cached !== undefined) return cached
+    const display = I18n.displayCountry(normalizedCode, country.en)
+    COUNTRY_DISPLAY_CACHE.set(key, display)
+    return display
   }
 
   locationDisplayName(name: string): string {
@@ -437,7 +505,12 @@ export class LocationPickerStore {
     const country = LOCATION_COUNTRY_NAMES[normalizedCode]
     if (!country) return normalizedCode
     if (I18n.isChineseLanguage()) return country.zh
-    return I18n.displayCountry(normalizedCode, country.en)
+    const key = I18n.getLanguage() + '|' + normalizedCode
+    const cached = COUNTRY_DISPLAY_CACHE.get(key)
+    if (cached !== undefined) return cached
+    const display = I18n.displayCountry(normalizedCode, country.en)
+    COUNTRY_DISPLAY_CACHE.set(key, display)
+    return display
   }
 
   normalizedLocationCountry(code: string): string {

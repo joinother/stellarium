@@ -1850,9 +1850,13 @@ export struct WindowNativeNode {
       observerPlanet: (): string => this.sessionToolStore.observerPlanet,
       quickLocationSearch: (query: string, observerPlanet: string): Array<LocSearchItem> => this.locationPickerStore.quickLocationSearch(query, observerPlanet),
       isCurrentObserverPlanet: (city: HierCity, observerPlanet: string): boolean => this.locationPickerStore.isCurrentObserverPlanet(city, observerPlanet),
-      locationDisplayName: (name: string): string => this.locationPickerStore.locationDisplayName(name),
-      locationSearchCountryName: (countryCode: string, observerPlanet: string): string => this.locationPickerStore.locationSearchCountryName(countryCode, observerPlanet),
-      translateProvince: (name: string): string => this.locationPickerStore.translateProvince(name),
+      locationDisplayName: (name: string, chinese: boolean, language: string): string =>
+        this.locationPickerStore.locationDisplayNameForSearch(name, chinese, language),
+      locationSearchCountryName: (countryCode: string, observerPlanet: string,
+        chinese: boolean, language: string): string =>
+        this.locationPickerStore.locationSearchCountryNameForSearch(countryCode, observerPlanet, chinese, language),
+      translateProvince: (name: string, chinese: boolean): string =>
+        this.locationPickerStore.translateProvinceForSearch(name, chinese),
       locationPlanet: (city: HierCity): string => this.locationPickerStore.locationPlanet(city),
       applyLocation: (name: string, lat: number, lon: number, alt: number, planet: string): void => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
       setPickerMode: (mode: string): void => { this.locationPickerStore.locationPickMode = mode }

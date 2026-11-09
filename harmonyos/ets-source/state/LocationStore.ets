@@ -3,22 +3,17 @@ import { I18n } from '../pages/I18n'
 import { LOCATION_HIERARCHY } from '../common/location/hierarchy'
 import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
-import { locationSearchScoreNormalized, normalizeLocationSearchText, officialLocationAliases } from '../common/derive/actions'
+import { foldLocationSearchText, locationFieldScore, locationFoldCacheSize, officialLocationAliases } from '../common/derive/actions'
 import { CommandPort } from '../bridge/CommandPort'
 import hilog from '@ohos.hilog'
 
-// 分块预算：工作 12ms / 歇 4ms（原先 5ms/16ms 的占空比只有 24%，把总时长放大约 4 倍）。
-const LOCATION_SEARCH_CHUNK_MS: number = 12
-const LOCATION_SEARCH_CHUNK_DELAY_MS: number = 4
+// 分块预算：工作 32ms / 不额外等待。整表热扫描约 214ms、冷扫描约 384ms
+// （真机 SGT-AL00 实测）；6ms/2ms 的旧预算会产生约 60 个 chunk，HarmonyOS
+// 的 timer 调度把 0.2-0.4s 的工作拉长到 2.5-3.1s。增大 chunk 并让出 0ms
+// 可以把墙钟压到 0.4-0.8s；搜索只发生在 260ms 防抖之后，不和滚动重叠。
+const LOCATION_SEARCH_CHUNK_MS: number = 32
+const LOCATION_SEARCH_CHUNK_DELAY_MS: number = 0
 const LOCATION_SEARCH_PUBLISH_MS: number = 120
-
-// 一个候选的预归一化搜索数据：primary 供精确/前缀/包含匹配，text 为兜底串。
-interface LocationSearchEntry {
-  item: LocSearchItem
-  dedupeKey: string
-  primary: Array<string>
-  text: string
-}
 
 // 位置域（「位置」面板）状态：离线地点搜索簇 + 已保存位置簇。
 //
@@ -39,25 +34,27 @@ export class LocationStore {
   locationMapProvider: string = 'offline'
 
   // —— 离线分块搜索草稿（不对 UI 直接暴露）——
+  // 不再持有预归一化索引：归一化结果由 actions.ets 的纯函数 memo 按“唯一字符串”
+  // 缓存，扫描按需遍历静态地点表。这里只保存扫描游标与查询快照。
   private locSearchRequestId: number = 0
-  private locationSearchScanQuery: string = ''
-  private locationSearchScanIndex: number = 0
+  private locationSearchScanQueryFolded: string = ''
+  private locationSearchScanPlanet: string = ''
+  private locationSearchScanPlanetKey: string = ''
+  private locationSearchScanChinese: boolean = false
+  private locationSearchScanLanguage: string = ''
+  private locationSearchScanCountryNames: Map<string, string> = new Map<string, string>()
+  private locationSearchScanProvinceNames: Map<string, string> = new Map<string, string>()
+  private locationSearchScanContinents: Array<string> = []
+  private locationSearchScanContinent: number = 0
+  private locationSearchScanRegions: Array<string> = []
+  private locationSearchScanRegion: number = 0
+  private locationSearchScanCity: number = 0
   private locationSearchScanResults: Array<LocSearchItem> = []
   private locationSearchScanKeys: Set<string> = new Set<string>()
   private locationSearchScanTimer: number = -1
   private locationSearchLastPublishMs: number = 0
-
-  // —— 预归一化搜索索引（每 星球+语言 一份，分块构建）——
-  // 归一化（大小写 + 去变音符号 + 去分隔符）是搜索里最贵的一步，而地点表是静态的，
-  // 故每个候选只算一次、之后每次按键只做 includes 比较。
-  private locSearchIndex: Array<LocationSearchEntry> = []
-  private locSearchIndexKey: string = ''
-  private locSearchIndexReady: boolean = false
-  private locSearchIndexContinent: number = 0
-  private locSearchIndexRegions: Array<string> = []
-  private locSearchIndexRegion: number = 0
-  private locSearchIndexCity: number = 0
-  private locSearchIndexTimer: number = -1
+  private locationSearchScanStartedAt: number = 0
+  private locationSearchScanWorkMs: number = 0
 
   // 经纬度格式化为「绝对值°方向」（N/S、E/W），位置域共用。
   formatDegrees(value: number, positive: string, negative: string): string {
@@ -123,173 +120,173 @@ export class LocationStore {
       this.locationSearchScanTimer = -1
     }
     if (q.length < 1) {
-      this.locationSearchScanQuery = ''
       this.locSearchResults = []
       this.locSearching = false
       return
     }
-    const quickResults = hooks.quickLocationSearch(q, hooks.observerPlanet())
+    const planet = hooks.observerPlanet()
+    const quickResults = hooks.quickLocationSearch(q, planet)
     if (quickResults.length > 0) {
-      this.locationSearchScanQuery = ''
       this.locSearchResults = quickResults.slice(0, 20)
       this.locSearching = false
       return
     }
+    const foldedQuery = foldLocationSearchText(q)
+    if (foldedQuery.length === 0) {
+      this.locSearchResults = []
+      this.locSearching = false
+      return
+    }
     this.locSearching = true
-    this.locationSearchScanQuery = q
-    this.locationSearchScanIndex = 0
+    this.locationSearchScanQueryFolded = foldedQuery
+    this.locationSearchScanPlanet = planet
+    this.locationSearchScanPlanetKey = planet.toLowerCase()
+    // Snapshot locale state once per scan: per-entry AppStorage reads were the
+    // dominant cost of the first on-device scan (2.4-3.4s for 8k entries).
+    this.locationSearchScanChinese = I18n.isChineseLanguage()
+    this.locationSearchScanLanguage = I18n.getLanguage()
+    this.locationSearchScanCountryNames = new Map<string, string>()
+    this.locationSearchScanProvinceNames = new Map<string, string>()
+    this.locationSearchScanContinents = Object.keys(LOCATION_HIERARCHY)
+    this.locationSearchScanContinent = 0
+    this.locationSearchScanRegions = []
+    this.locationSearchScanRegion = 0
+    this.locationSearchScanCity = 0
     this.locationSearchScanResults = []
     this.locationSearchScanKeys = new Set<string>()
     this.locationSearchLastPublishMs = 0
+    this.locationSearchScanStartedAt = Date.now()
+    this.locationSearchScanWorkMs = 0
     this.locSearchResults = []
-    this.ensureLocationSearchIndex(hooks.observerPlanet())
-    if (this.locSearchIndexReady) {
-      this.startLocationSearchScan(requestId)
-    }
-  }
-
-  // 面板打开时预热索引，使首次输入即可命中缓存。
-  warmLocationSearchIndex(): void {
-    const hooks = this.hooks
-    if (hooks === null) return
-    this.ensureLocationSearchIndex(hooks.observerPlanet())
-  }
-
-  // 归一化索引按「星球 + 界面语言」失效；构建本身分块，不阻塞 UI 线程。
-  private ensureLocationSearchIndex(observerPlanet: string): void {
-    const key = observerPlanet + '|' + (I18n.isChineseLanguage() ? 'zh' : 'en')
-    if (key !== this.locSearchIndexKey) {
-      this.locSearchIndexKey = key
-      this.locSearchIndex = []
-      this.locSearchIndexReady = false
-      this.locSearchIndexContinent = 0
-      this.locSearchIndexRegions = []
-      this.locSearchIndexRegion = 0
-      this.locSearchIndexCity = 0
-    }
-    if (this.locSearchIndexReady || this.locSearchIndexTimer >= 0) return
-    this.locSearchIndexTimer = setTimeout(() => { this.buildLocationSearchIndexChunk() }, 0)
-  }
-
-  private buildLocationSearchIndexChunk(): void {
-    const hooks = this.hooks
-    if (hooks === null) {
-      this.locSearchIndexTimer = -1
-      return
-    }
-    const continents = Object.keys(LOCATION_HIERARCHY)
-    const planet = hooks.observerPlanet()
-    const planetKey = planet.toLowerCase()
-    const startedAt = Date.now()
-    while (this.locSearchIndexContinent < continents.length && Date.now() - startedAt < LOCATION_SEARCH_CHUNK_MS) {
-      const continent = continents[this.locSearchIndexContinent]
-      if (this.locSearchIndexRegions.length === 0) {
-        this.locSearchIndexRegions = Object.keys(LOCATION_HIERARCHY[continent])
-      }
-      if (this.locSearchIndexRegion >= this.locSearchIndexRegions.length) {
-        this.locSearchIndexContinent++
-        this.locSearchIndexRegions = []
-        this.locSearchIndexRegion = 0
-        this.locSearchIndexCity = 0
-        continue
-      }
-      const region = this.locSearchIndexRegions[this.locSearchIndexRegion]
-      const cities = LOCATION_HIERARCHY[continent][region]
-      if (this.locSearchIndexCity >= cities.length) {
-        this.locSearchIndexRegion++
-        this.locSearchIndexCity = 0
-        continue
-      }
-      const city = cities[this.locSearchIndexCity++]
-      const locationPlanet = hooks.locationPlanet(city)
-      if (locationPlanet.toLowerCase() !== planetKey) continue
-      const chinese = LOCATION_ZH_NAMES[city.n] ?? ''
-      const displayName = hooks.locationDisplayName(city.n)
-      const countryCode = city.country
-      const country = hooks.locationSearchCountryName(countryCode, planet)
-      const province = hooks.translateProvince(city.province ?? '')
-      // Search accepts the source name, official Chinese name, and the name
-      // rendered for the active language. Display itself remains single-language.
-      const sourceCountry = LOCATION_COUNTRY_NAMES[countryCode]
-      const haystack = city.n + ' ' + chinese + ' ' + displayName + ' ' +
-        (city.province ?? '') + ' ' + province + ' ' + region + ' ' + country + ' ' +
-        (sourceCountry?.zh ?? '') + ' ' + (sourceCountry?.en ?? '') + officialLocationAliases(countryCode)
-      const primary: Array<string> = [
-        normalizeLocationSearchText(city.n),
-        normalizeLocationSearchText(chinese),
-        normalizeLocationSearchText(displayName),
-        normalizeLocationSearchText(city.province ?? ''),
-        normalizeLocationSearchText(province),
-        normalizeLocationSearchText(region),
-        normalizeLocationSearchText(country),
-      ]
-      this.locSearchIndex.push({
-        item: {
-          name: city.n,
-          displayName: displayName,
-          lat: city.la,
-          lon: city.lo,
-          alt: city.al,
-          planet: locationPlanet,
-          country: countryCode,
-          region: region,
-          province: city.province ?? '',
-        },
-        dedupeKey: city.n + '|' + city.la.toFixed(4) + '|' + city.lo.toFixed(4),
-        primary: primary,
-        text: normalizeLocationSearchText(haystack),
-      })
-    }
-    if (this.locSearchIndexContinent < continents.length) {
-      this.locSearchIndexTimer =
-        setTimeout(() => { this.buildLocationSearchIndexChunk() }, LOCATION_SEARCH_CHUNK_DELAY_MS)
-      return
-    }
-    this.locSearchIndexReady = true
-    this.locSearchIndexTimer = -1
-    if (this.locationSearchScanQuery.length > 0 && this.locSearching) {
-      this.startLocationSearchScan(this.locSearchRequestId)
-    }
+    this.startLocationSearchScan(requestId)
   }
 
   private startLocationSearchScan(requestId: number): void {
-    this.locationSearchScanIndex = 0
     this.locationSearchScanTimer = setTimeout(() => { this.scanLocationSearchChunk(requestId) }, 0)
   }
 
-  // 离线搜索分块扫描：索引已预归一化，此处每个候选只做 includes 比较。
+  // 国名/省名在扫描内按唯一输入缓存：国家码约 250 个、省名约 100 个，
+  // 避免 8k 条目重复走 I18n/系统 getDisplayCountry。
+  private locationSearchScanCountryName(hooks: LocationStoreHostHooks, countryCode: string,
+    planet: string, chinese: boolean, language: string): string {
+    const key = (chinese ? 'zh' : language) + '|' + countryCode
+    const cached = this.locationSearchScanCountryNames.get(key)
+    if (cached !== undefined) return cached
+    const name = hooks.locationSearchCountryName(countryCode, planet, chinese, language)
+    this.locationSearchScanCountryNames.set(key, name)
+    return name
+  }
+
+  private locationSearchScanProvinceName(hooks: LocationStoreHostHooks, name: string,
+    chinese: boolean): string {
+    if (name.length === 0) return ''
+    const key = (chinese ? 'zh' : 'raw') + '|' + name
+    const cached = this.locationSearchScanProvinceNames.get(key)
+    if (cached !== undefined) return cached
+    const translated = hooks.translateProvince(name, chinese)
+    this.locationSearchScanProvinceNames.set(key, translated)
+    return translated
+  }
+
+  // 离线搜索分块扫描：按需遍历静态地点表，没有预建索引。每个字段串的
+  // 归一化结果由 foldLocationSearchText 按“唯一字符串”缓存；命中时才构造
+  // LocSearchItem，未命中项不产生任何数组/对象分配。
   scanLocationSearchChunk(requestId: number): void {
     if (requestId !== this.locSearchRequestId) return
+    const hooks = this.hooks
+    if (hooks === null) {
+      this.locSearching = false
+      this.locationSearchScanTimer = -1
+      return
+    }
     const startedAt = Date.now()
-    const query = normalizeLocationSearchText(this.locationSearchScanQuery)
-    const entries = this.locSearchIndex
+    const query = this.locationSearchScanQueryFolded
+    const planet = this.locationSearchScanPlanet
+    const planetKey = this.locationSearchScanPlanetKey
+    const chinese = this.locationSearchScanChinese
+    const language = this.locationSearchScanLanguage
     let changed = false
-    while (this.locationSearchScanIndex < entries.length &&
-      Date.now() - startedAt < LOCATION_SEARCH_CHUNK_MS) {
-      const entry = entries[this.locationSearchScanIndex++]
-      const matchScore = locationSearchScoreNormalized(query, entry.primary, entry.text)
-      if (matchScore <= 0) continue
-      if (this.locationSearchScanKeys.has(entry.dedupeKey)) continue
-      this.locationSearchScanKeys.add(entry.dedupeKey)
+
+    let iterations = 0
+    while (this.locationSearchScanContinent < this.locationSearchScanContinents.length) {
+      // Date.now() is a native call; checking every entry dominated short scans.
+      if ((iterations & 31) === 0 && Date.now() - startedAt >= LOCATION_SEARCH_CHUNK_MS) break
+      iterations++
+      const continent = this.locationSearchScanContinents[this.locationSearchScanContinent]
+      if (this.locationSearchScanRegions.length === 0) {
+        this.locationSearchScanRegions = Object.keys(LOCATION_HIERARCHY[continent])
+      }
+      if (this.locationSearchScanRegion >= this.locationSearchScanRegions.length) {
+        this.locationSearchScanContinent++
+        this.locationSearchScanRegions = []
+        this.locationSearchScanRegion = 0
+        this.locationSearchScanCity = 0
+        continue
+      }
+      const region = this.locationSearchScanRegions[this.locationSearchScanRegion]
+      const cities = LOCATION_HIERARCHY[continent][region]
+      if (this.locationSearchScanCity >= cities.length) {
+        this.locationSearchScanRegion++
+        this.locationSearchScanCity = 0
+        continue
+      }
+
+      const city = cities[this.locationSearchScanCity++]
+      const locationPlanet = hooks.locationPlanet(city)
+      if (locationPlanet !== planet && locationPlanet.toLowerCase() !== planetKey) continue
+
+      const cityChineseName = LOCATION_ZH_NAMES[city.n] ?? ''
+      const displayName = hooks.locationDisplayName(city.n, chinese, language)
+      const countryCode = city.country
+      const country = this.locationSearchScanCountryName(hooks, countryCode, planet, chinese, language)
+      const province = this.locationSearchScanProvinceName(hooks, city.province ?? '', chinese)
+
+      let best = 0
+      best = locationFieldScore(foldLocationSearchText(city.n), query, best)
+      best = locationFieldScore(foldLocationSearchText(cityChineseName), query, best)
+      best = locationFieldScore(foldLocationSearchText(displayName), query, best)
+      best = locationFieldScore(foldLocationSearchText(city.province ?? ''), query, best)
+      best = locationFieldScore(foldLocationSearchText(province), query, best)
+      best = locationFieldScore(foldLocationSearchText(region), query, best)
+      best = locationFieldScore(foldLocationSearchText(country), query, best)
+
+      if (best === 0) {
+        const sourceCountry = LOCATION_COUNTRY_NAMES[countryCode]
+        const sourceZh = foldLocationSearchText(sourceCountry?.zh ?? '')
+        const sourceEn = foldLocationSearchText(sourceCountry?.en ?? '')
+        const aliases = foldLocationSearchText(officialLocationAliases(countryCode))
+        if ((sourceZh.length > 0 && sourceZh.includes(query)) ||
+          (sourceEn.length > 0 && sourceEn.includes(query)) ||
+          (aliases.length > 0 && aliases.includes(query))) {
+          best = 40
+        }
+      }
+      if (best <= 0) continue
+
+      const dedupeKey = city.n + '|' + city.la.toFixed(4) + '|' + city.lo.toFixed(4)
+      if (this.locationSearchScanKeys.has(dedupeKey)) continue
+      this.locationSearchScanKeys.add(dedupeKey)
       this.locationSearchScanResults.push({
-        name: entry.item.name,
-        displayName: entry.item.displayName,
-        lat: entry.item.lat,
-        lon: entry.item.lon,
-        alt: entry.item.alt,
-        planet: entry.item.planet,
-        country: entry.item.country,
-        region: entry.item.region,
-        province: entry.item.province,
-        searchScore: matchScore,
+        name: city.n,
+        displayName: displayName,
+        lat: city.la,
+        lon: city.lo,
+        alt: city.al,
+        planet: locationPlanet,
+        country: countryCode,
+        region: region,
+        province: city.province ?? '',
+        searchScore: best
       })
       this.locationSearchScanResults.sort((left: LocSearchItem, right: LocSearchItem) =>
         (right.searchScore ?? 0) - (left.searchScore ?? 0))
       if (this.locationSearchScanResults.length > 20) this.locationSearchScanResults.pop()
       changed = true
     }
+
+    this.locationSearchScanWorkMs += Date.now() - startedAt
     if (requestId !== this.locSearchRequestId) return
-    const finished = this.locationSearchScanIndex >= entries.length
+    const finished = this.locationSearchScanContinent >= this.locationSearchScanContinents.length
     const now = Date.now()
     if (changed && (finished || now - this.locationSearchLastPublishMs >= LOCATION_SEARCH_PUBLISH_MS)) {
       this.locSearchResults = this.locationSearchScanResults.slice()
@@ -298,9 +295,14 @@ export class LocationStore {
     if (finished) {
       this.locSearching = false
       this.locationSearchScanTimer = -1
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[location-search] done ms=%{public}d work=%{public}d matches=%{public}d folds=%{public}d',
+        Date.now() - this.locationSearchScanStartedAt, this.locationSearchScanWorkMs,
+        this.locationSearchScanResults.length, locationFoldCacheSize())
       return
     }
-    this.locationSearchScanTimer = setTimeout(() => { this.scanLocationSearchChunk(requestId) }, LOCATION_SEARCH_CHUNK_DELAY_MS)
+    this.locationSearchScanTimer =
+      setTimeout(() => { this.scanLocationSearchChunk(requestId) }, LOCATION_SEARCH_CHUNK_DELAY_MS)
   }
 
   // 搜索选中落地；setLocation / pickerMode 经 hooks。
@@ -376,9 +378,10 @@ export interface LocationStoreHostHooks {
   observerPlanet(): string
   quickLocationSearch(query: string, observerPlanet: string): Array<LocSearchItem>
   isCurrentObserverPlanet(city: HierCity, observerPlanet: string): boolean
-  locationDisplayName(name: string): string
-  locationSearchCountryName(countryCode: string, observerPlanet: string): string
-  translateProvince(name: string): string
+  locationDisplayName(name: string, chinese: boolean, language: string): string
+  locationSearchCountryName(countryCode: string, observerPlanet: string,
+    chinese: boolean, language: string): string
+  translateProvince(name: string, chinese: boolean): string
   locationPlanet(city: HierCity): string
   // selectSearchLocation 的落地（宿主 this.locationCtl().setLocation）与 picker 模式写。
   applyLocation(name: string, lat: number, lon: number, alt: number, planet: string): void
