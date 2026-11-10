@@ -176,6 +176,22 @@ else
   echo "WARNING: ffmpeg not found; 16-bit texture previews may fail on some devices" >&2
 fi
 
+# The full-screen location picker switches from the 3D globe to Map Kit's 2D
+# Mercator renderer at zoom >= 4. coverageImage only paints the globe, so the
+# 2D phase needs a Web-Mercator-warped copy of the same planet texture. Generate
+# it from the PC originals just mirrored into $DST/textures instead of
+# committing a second, mobile-only texture tree.
+if [ -z "${FFMPEG_BIN:-}" ]; then
+  echo "ERROR: ffmpeg is required to generate the Web Mercator map overlays." >&2
+  echo "       Install ffmpeg (macOS: brew install ffmpeg) or set FFMPEG=/path/to/ffmpeg." >&2
+  exit 1
+fi
+echo "==> generating Web Mercator map overlays"
+node "$SCRIPT_DIR/build-ohos-mercator-textures.mjs" \
+  --source "$DST/textures" \
+  --dest "$DST/textures" \
+  --ffmpeg "$FFMPEG_BIN"
+
 echo
 echo "Done. rawfile tree size:"
 du -sh "$DST"

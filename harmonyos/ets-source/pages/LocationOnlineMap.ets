@@ -22,7 +22,10 @@ export struct LocationOnlineMap {
   private timeoutId: number = -1
   private controller?: map.MapComponentController
   private options: mapCommon.MapOptions = {
-    position: { target: { latitude: 0, longitude: 0 }, zoom: 5 },
+    position: { target: { latitude: 0, longitude: 0 }, zoom: 2 },
+    mapType: mapCommon.MapType.STANDARD,
+    sphereEnabled: true,
+    minZoom: 2,
     rotateGesturesEnabled: false, tiltGesturesEnabled: false,
     myLocationControlsEnabled: false, zoomControlsEnabled: true
   }
@@ -121,17 +124,44 @@ export struct LocationOnlineMap {
     } catch (error) { if (generation === this.generation) this.failRequest(error as BusinessError, 'observer-coordinate') }
   }
 
+  // Map click coordinates are GCJ02 in mainland China and WGS84 overseas.
+  // Invert WGS84 -> GCJ02, then verify the candidate by feeding it back as
+  // WGS84 to rectifyCoordinate (which only supports WGS84 -> GCJ02).
+  private async mapPointToWgs84(position: mapCommon.LatLng): Promise<mapCommon.LatLng> {
+    let candidate: MapPoint = position
+    try {
+      candidate = inverseMapPoint(position, (point: MapPoint): MapPoint =>
+        map.convertCoordinateSync(mapCommon.CoordinateType.WGS84, mapCommon.CoordinateType.GCJ02, point))
+    } catch (_error) {
+      candidate = position
+    }
+    try {
+      const context = this.getUIContext().getHostContext()
+      if (!context) return position
+      const points = await map.rectifyCoordinate(context, [{
+        coordinateType: mapCommon.CoordinateType.WGS84,
+        location: candidate
+      }])
+      if (points && points.length > 0 &&
+        points[0].coordinateType === mapCommon.CoordinateType.GCJ02 &&
+        Math.abs(points[0].location.latitude - position.latitude) < 0.00002 &&
+        Math.abs(points[0].location.longitude - position.longitude) < 0.00002) {
+        return candidate
+      }
+    } catch (_error) {
+      // Fall through to the original map coordinate.
+    }
+    return position
+  }
+
   private async pickMapPosition(position: mapCommon.LatLng): Promise<void> {
     if (!this.allowed() || this.phase !== 'ready' || !validMapPoint(position)) return
     const generation = ++this.generation
     this.publish('converting')
     this.timeoutId = setTimeout(() => { this.fail('coordinate-timeout') }, 10000)
     try {
-      const routing = await this.rectify(position, mapCommon.CoordinateType.GCJ02)
+      const result = await this.mapPointToWgs84(position)
       if (!this.allowed() || generation !== this.generation) return
-      const result = routing.coordinateType === mapCommon.CoordinateType.WGS84 ? position :
-        inverseMapPoint(position, (point: MapPoint): MapPoint =>
-          map.convertCoordinateSync(mapCommon.CoordinateType.WGS84, mapCommon.CoordinateType.GCJ02, point))
       if (!validMapPoint(result)) throw new Error('Coordinate conversion failed')
       this.clearTimeout()
       this.publish('ready')
@@ -146,11 +176,8 @@ export struct LocationOnlineMap {
     this.timeoutId = setTimeout(() => { this.fail('coordinate-timeout') }, 10000)
     try {
       const target = this.controller.getCameraPosition().target
-      const routing = await this.rectify(target, mapCommon.CoordinateType.GCJ02)
+      const result = await this.mapPointToWgs84(target)
       if (!this.allowed() || generation !== this.generation) return
-      const result = routing.coordinateType === mapCommon.CoordinateType.WGS84 ? target :
-        inverseMapPoint(target, (point: MapPoint): MapPoint =>
-          map.convertCoordinateSync(mapCommon.CoordinateType.WGS84, mapCommon.CoordinateType.GCJ02, point))
       const verified = await this.rectify(result, mapCommon.CoordinateType.WGS84)
       if (!this.allowed() || generation !== this.generation) return
       if (Math.max(Math.abs(verified.location.latitude - target.latitude),

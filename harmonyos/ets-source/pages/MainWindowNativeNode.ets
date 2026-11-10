@@ -133,6 +133,7 @@ import { AstroStore } from '../state/AstroStore'
 import { LocationStore } from '../state/LocationStore'
 import { CityChipsRow } from '../panels/location/CityChipsRow'
 import { LocationPickerPanel } from '../panels/location/LocationPickerPanel'
+import { LocationFullScreenMap } from '../panels/location/LocationFullScreenMap'
 import { LocationPickerStore } from '../state/LocationPickerStore'
 import { LayerStore } from '../state/LayerStore'
 import { LayerPresetBar } from '../panels/layers/LayerPresetBar'
@@ -1186,6 +1187,8 @@ export struct WindowNativeNode {
   // 手指按在面板上。空闲玻璃态（5s 无操作后 opacity 0.88 / 模糊 45）在按下瞬间恢复；
   // 若让它走 320ms 动画，会和滚动启动抢 UI 线程，首帧出现约 50ms 卡顿。
   @State private panelTouching: boolean = false
+  // 全屏地图是页面级覆盖层；放在宿主根 Stack 才能盖住浮动面板和 Dock。
+  @State private locationMapFullscreen: boolean = false
   // 平板/展开布局的快捷面板同样可上拉展开，底部与 Dock 对齐。
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
@@ -8355,6 +8358,23 @@ export struct WindowNativeNode {
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
+      if (this.locationMapFullscreen && !this.sessionToolStore.isObserverOverviewPoint()) {
+        LocationFullScreenMap({
+          locationStore: this.locationStore,
+          observerPlanet: this.sessionToolStore.observerPlanet,
+          latitude: this.locationPickerStore.locationPickerLatitude,
+          longitude: this.locationPickerStore.locationPickerLongitude,
+          mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
+          mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+          onPick: (latitude: number, longitude: number) => {
+            this.locationPickerStore.applyPickedCoordinates(latitude, longitude)
+            this.locationMapFullscreen = false
+          },
+          onClose: () => { this.locationMapFullscreen = false }
+        })
+          .width('100%').height('100%').zIndex(200)
+      }
+
     }
       .width('100%')
       .height('100%')
@@ -8633,6 +8653,8 @@ export struct WindowNativeNode {
         expandedLayout: this.isExpandedLayout,
         skyWidth: this.skyWidth,
         mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        fixedObserverPoint: this.sessionToolStore.isObserverOverviewPoint(),
+        onOpenFullMap: () => { this.locationMapFullscreen = true },
         planetLabel: (en: string) => planetZh(en),
         contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
         onUseDeviceLocation: () => { this.locationCtl().useDeviceLocation() },

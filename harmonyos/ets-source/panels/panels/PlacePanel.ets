@@ -28,8 +28,10 @@ export struct PlacePanel {
   // 地图几何由 LocationPickerPanel 自算，这里只传它依赖的布局态
   @Prop skyWidth: number
   @Prop mapAllowed: boolean
+  @Prop fixedObserverPoint: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   planetLabel: (en: string) => string = (en: string) => en
+  onOpenFullMap: () => void = () => {}
   contextOf: (item: LocSearchItem) => string = () => ''
   onUseDeviceLocation: () => void = () => {}
   onSearchLocations: (query: string) => void = () => {}
@@ -76,6 +78,10 @@ export struct PlacePanel {
         Text(this.altitudeText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
+      if (this.fixedObserverPoint) {
+        Text(I18n.t('map_fixed_overview_point')).fontSize(11).fontColor(this.c.sub)
+          .width('100%').padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      } else {
       LocationPickerPanel({
         pickerStore: this.locationPickerStore,
         locationStore: this.locationStore,
@@ -106,6 +112,12 @@ export struct PlacePanel {
           onFallback: () => { this.onMapFallback() }
         })
       }
+      Row() {
+        Button(I18n.t('map_open_fullscreen')).fontSize(12).layoutWeight(1)
+          .backgroundColor(this.c.soft).fontColor(this.c.text)
+          .onClick(() => { this.onOpenFullMap() })
+      }.width('100%').padding({ left: 4, right: 4, top: 6 })
+
       CityChipsRow({
         store: this.locationStore,
         observerPlanet: this.sessionToolStore.observerPlanet,
@@ -114,6 +126,7 @@ export struct PlacePanel {
         onDeleteLocation: (name: string) => { this.onDeleteLocation(name) },
         onChip: (id: string) => { this.onChip(id) }
       })
+      }
       // These are developer scaffolding screens, not release-ready features.
       if (!OFFLINE_APPGALLERY_BUILD) {
         PointingTestSection({ store: this.sessionToolStore, onPoint: () => { this.onPoint() } })

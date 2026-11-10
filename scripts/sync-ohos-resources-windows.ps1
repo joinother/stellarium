@@ -313,6 +313,25 @@ foreach ($png in (Get-ChildItem -LiteralPath (Join-Path $Out 'textures') -Recurs
 }
 Write-Host "    converted $textureCount 16-bit PNG(s)"
 
+# Full-screen map 2D overlays. Map Kit switches to its Mercator renderer at
+# zoom >= 4; the 3D globe's equirectangular textures must be pre-warped for
+# ImageOverlay. Generate them from the same PC originals instead of committing
+# a second, mobile-only texture tree.
+Write-Host '==> generating Web Mercator map overlays'
+$ffmpegBin = Resolve-FFmpeg
+if (-not $ffmpegBin) {
+    throw 'ffmpeg is required to generate the Web Mercator map overlays. Install ffmpeg or set FFMPEG to its path.'
+}
+if (-not $node) {
+    throw 'node is required to generate the Web Mercator map overlays.'
+}
+Write-Host "    binary: ffmpeg ($ffmpegBin)"
+& $node (Join-Path $PSScriptRoot 'build-ohos-mercator-textures.mjs') `
+    --source (Join-Path $Out 'textures') `
+    --dest (Join-Path $Out 'textures') `
+    --ffmpeg $ffmpegBin
+if ($LASTEXITCODE -ne 0) { throw "Web Mercator map overlay generation failed (exit $LASTEXITCODE)" }
+
 # Detail-model CPU textures. The list is the exact parity set of the bash
 # syncer's MODEL_TEXTURES / RING_TEXTURES arrays (and of
 # StellariumResourceBootstrap.ets DETAIL_MODEL_TEXTURE_FILES /
@@ -330,12 +349,6 @@ $detailModelTextures = @(
 $detailRingTextures = @('saturn_rings_radial.png', 'uranus_rings.png', 'neptune_rings.png')
 
 Write-Host '==> generating detail-model CPU texture sidecars'
-$ffmpegBin = Resolve-FFmpeg
-if ($ffmpegBin) {
-    Write-Host "    binary: ffmpeg ($ffmpegBin)"
-} else {
-    Write-Host '    binary: System.Drawing (ffmpeg not found)'
-}
 $modelSidecars = Invoke-DetailModelSidecarBatch -Names $detailModelTextures -Width 512 -Height 256 -FfmpegBin $ffmpegBin
 Write-Host "    planets: generated $($modelSidecars.Generated), reused $($modelSidecars.Reused), failed $($modelSidecars.Failed)"
 $ringSidecars = Invoke-DetailModelSidecarBatch -Names $detailRingTextures -Width 512 -Height 2 -FfmpegBin $ffmpegBin
@@ -375,7 +388,15 @@ $required = @(
     'skycultures/modern/index.json',
     'skycultures/modern/illustrations/andromeda.png',
     'scripts/constellations_tour.ssc',
-    'data/default_cfg.ini'
+    'data/default_cfg.ini',
+    'textures/moon_4k_mercator.jpg',
+    'textures/mars_mercator.jpg',
+    'textures/mercury_mercator.jpg',
+    'textures/venus_mercator.jpg',
+    'textures/jupiter_mercator.jpg',
+    'textures/saturn_mercator.jpg',
+    'textures/uranus_mercator.jpg',
+    'textures/neptune_mercator.jpg'
 )
 $missing = 0
 foreach ($relative in $required) {

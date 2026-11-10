@@ -128,6 +128,14 @@ export class SessionToolStore {
     return /^[a-zA-Z0-9_.-]+\.(png|jpg|jpeg)$/i.test(texture) ? texture : ''
   }
 
+  // "Earth Observer", "Mars Observer", ... are fixed solar-system overview
+  // viewpoints, not a point on a planet's surface. Editing their lat/lon is
+  // meaningless, so the location editor is disabled for them.
+  isObserverOverviewPoint(): boolean {
+    const name = this.observerPlanet.trim().toLowerCase()
+    return name.endsWith(' observer') || name.endsWith('全览点')
+  }
+
   observerPlanetOptions(): SelectOption[] {
     return this.planetList.map((name: string): SelectOption => ({ value: this.observerPlanetLabel(name) }))
   }

@@ -82,6 +82,12 @@ env NODE_HOME=/Applications/DevEco-Studio.app/Contents/tools/node \
   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw assembleHap --no-daemon
 ```
 
+> 资源同步：`scripts/sync-ohos-build-sources.sh` 会自动检测 rawfile 是否缺少 8 张
+> `textures/*_mercator.jpg`；缺失时触发 `sync-ohos-resources.sh` 从 PC 原图重新
+> 生成（需要 ffmpeg，`Brewfile` 已包含）。只直接运行上面的 `hvigorw` 不会触发资源
+> 同步；首次或拉取后请先运行 `scripts/sync-ohos-build-sources.sh`，或显式
+> `OHOS_SYNC_RESOURCES=1 scripts/sync-ohos-build-sources.sh`。
+
 ### 2.3 重编 libstellarium.so（C++ 源码修改后）
 
 ```bash

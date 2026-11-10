@@ -121,7 +121,7 @@
 - 插件自身的网络实现仍保留，后续若在 HarmonyOS 暴露对应入口，必须增加隐私说明、权限/同意流程、超时和内置数据回退。
 - 当前鸿蒙 `module.json5` 未声明 `ohos.permission.INTERNET`，因此已生成 HAP 没有系统授予的公网访问权限；这属于运行时权限边界，不等同于源码中所有网络请求代码都已移除。
 - 严格“整个应用绝对不联网”尚未完成代码级封口：HiPS/TOAST、OnlineQueries、NebulaTextures Plate Solver、Planes、MPC 导入和 RemoteSync 的网络实现仍编译保留，必须在提交未备案版本前禁用入口并增加统一离线构建门禁；本台账不会把“未声明 INTERNET 权限”冒充为所有网络代码已经删除。
-- 地图 SDK 当前按项目决定暂缓，不接入花瓣地图或其他地图 SDK。
+- 地图 SDK 已接入 HarmonyOS Map Kit 位置选点/全屏地图：默认离线底图；在线地图与 `site.searchByText` 地点搜索仅在用户主动打开全屏地图并输入查询时触发；离线回退本地城市/任务地点；非地球禁用花瓣在线搜索。
 - 本轮复核新增 `docs/harmonyos/specs/OFFLINE-FEATURE-MATRIX.md`：明确区分“可随包内置”“只能构建机更新”“需要用户主动联网/设备连接”，并补齐六类静态目录的构建机更新命令；不能因为存在镜像路径就宣称客户端已完成本地化。
 - 本轮再次核对网络类调用后，补登记星表下载页、帮助页检查更新、卫星自定义 TLE 导入和 Vts 本机连接；“打开外部网页”“局域网控制”和“公网数据请求”分开记录，不能只用“无 INTERNET 权限”作为唯一结论。
 - `NebulaTextures` 的 HarmonyOS 入口只接受本地文件并复制到应用用户目录，纹理配置、映射和解码均在本机完成；`importNebulaTexture`、`refreshNebulaTextures` 和 `validateNebulaTexture` 不发起网络请求。上游 Plate Solver 仍保留在桌面插件代码中，但鸿蒙 ArkUI 与 CLI 均明确禁用图像上传，不能把它描述为已本地化。
@@ -195,7 +195,7 @@ bash scripts/set-ohos-network-mode.sh offline
 
 2026-09-30 Map Kit 排障：地图状态向 CLI 返回 SDK 数字错误码和失败阶段，日志只记录 `phase/operation/code`，不输出经纬度、查询词、账号、证书或 SDK 原始错误正文。仍只在用户主动选用华为地图时联网；未增加定位、相机或设备标识权限。
 
-| HarmonyOS Map Kit / 华为地图位置选点 | 默认关闭 | 用户在“位置→地图”主动选择“华为地图” | HarmonyOS `@kit.MapKit` 地图组件；当前不使用应用自有 HTTP 地址 | 地图组件可能处理当前地图视口、用户主动点击的地图坐标以及服务运行所需的系统网络/地图信息；不附加 SN、UDID、账号或文化叠加数据。位置页使用 WGS84 与华为地图站点坐标纠偏，结果回写本地观测位置 | 华为地图是当前国产化系统服务选项，不做未经授权的二次镜像；默认离线 `worldmap.jpg`，超时/失败可回退。需在 AGC 开通地图服务、重新生成对应 Profile，并在隐私政策中保持可见 |
+| HarmonyOS Map Kit / 华为地图位置选点与地点搜索 | 默认关闭；地图/搜索入口需用户主动打开 | 用户在“位置→全屏选点”打开地图；Earth 在线输入地点查询时调用 `site.searchByText` | HarmonyOS `@kit.MapKit` 地图组件与 Site Kit；当前不使用应用自有 HTTP 地址 | 地图组件可能处理当前地图视口、用户主动点击的地图坐标及服务运行所需的系统网络/地图信息；在线搜索会把用户主动输入的查询词发送给华为地点服务，返回名称/地址/坐标；不附加 SN、UDID、账号或文化叠加数据。位置页使用 WGS84 与华为地图站点坐标纠偏，结果回写本地观测位置 | 华为地图是当前国产化系统服务选项，不做未经授权的二次镜像；默认离线 `worldmap.jpg`/星球底图，在线失败或非地球时回退本地城市/任务列表。需在 AGC 开通地图服务、重新生成对应 Profile，并在隐私政策中说明查询词外发 |
 
 2026-09-06 卫星异常排查：开发机手动访问 `https://celestrak.org/NORAD/elements/gp.php?CATNR=69196&FORMAT=TLE`，仅外发公开 NORAD 编号/返回格式，取得并校验 STARLINK-36933 的 2026-09-05 TLE 后写入内置资源。没有外发用户观测位置或设备标识，没有新增应用网络请求。来源、文件哈希及单条更新范围见 `SATELLITE-PROPAGATION-AUDIT.md`；其余目录未因此视为已更新。
 

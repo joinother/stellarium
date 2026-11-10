@@ -86,6 +86,13 @@ powershell -ExecutionPolicy Bypass -File scripts\build-ohos-hap-windows.ps1 `
 powershell -ExecutionPolicy Bypass -File scripts\sync-ohos-resources-windows.ps1
 ```
 
+资源同步阶段还会从 PC 原始纹理生成 8 张 Web Mercator 2D 底图
+（`textures/*_mercator.jpg`：Moon 1024×1024，其余 512×512），供全屏选点在
+zoom ≥4 时使用。该步骤依赖 ffmpeg（解析顺序见 §5 第 2 条）；缺失时同步会直接
+失败，不再静默产出缺少 2D 底图的包。`-SkipResources` 会跳过生成并保留上一次的
+产物；如果这是首次构建且 rawfile 里没有这批文件，请先去掉 `-SkipResources` 跑
+一次完整同步。
+
 ---
 
 ## 3. 三个必须显式传的编译参数
@@ -172,6 +179,10 @@ Move-Item "$work\fast_float-*" build\_deps\fastfloat-src
    同步日志会打印本次走的是哪条路径（`binary: ffmpeg (...)` 或 `binary: System.Drawing (ffmpeg not found)`）。
    待确认 ffmpeg 未装时，可显式 `$env:FFMPEG = 'C:\...\ffmpeg.exe'` 再跑脚本。
    ⚠️ 侧车由资源同步阶段生成，因此 `build-ohos-hap-windows.ps1 -SkipResources` 会跳过它。
+   ⚠️ 自 2026-11-11 起，资源同步还要求 ffmpeg 生成 8 张 Web Mercator 2D 底图；
+   三者皆无时同步会在该步骤直接失败（不再静默产出缺少 2D 底图的包），因此当前
+   路径下不会走到 System.Drawing 侧车回退。macOS 的 ffmpeg 由根目录 `Brewfile`
+   提供。
 3. **`qt-platform-patch` 版本对不上**：`scripts/build-ohos-platform-patch.sh` 写死
    qtbase `REVISION=97575d35…`（Qt 6.12.0 Beta2），而本机装的是 6.12.0 Release
    （`sbom` 里是 `a2c0b1ea…`）→ 脚本会在版本校验处硬失败，**剪贴板通知补丁版的
