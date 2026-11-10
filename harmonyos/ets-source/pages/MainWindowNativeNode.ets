@@ -60,6 +60,7 @@ import { speakSelectedObject } from '../common/SpeechService'
 import { StartupBridge, StartupHooks } from '../capability/StartupBridge'
 import { SensorController, GyroGuideLayout, SensorHostHooks } from '../capability/SensorController'
 import { NotificationController, NotificationHostHooks } from '../capability/NotificationController'
+import { PushTokenFetcher, PushTokenResult } from '../capability/PushTokenFetcher'
 import { SurveyController, SurveyHostHooks } from '../capability/SurveyController'
 import { ARController, ARHostHooks } from '../capability/ARController'
 import { KeyboardShortcutController, KeyboardShortcutHostHooks, KeyboardShortcutInputHooks } from '../capability/KeyboardShortcutController'
@@ -1060,6 +1061,7 @@ export struct WindowNativeNode {
   @State private remoteControlPort: string = '8090'
   @State private remoteControlStatus: string = ''
   @State private gyroStore: GyroStore = new GyroStore()
+  @State private pushTokenText: string = ''
   @State private notificationStore: NotificationStore = new NotificationStore()
   @State private surveyStore: SurveyStore = new SurveyStore()
   @State private arStore: ARStore = new ARStore()
@@ -8579,6 +8581,12 @@ export struct WindowNativeNode {
         scheduleCountdownReminder: (minutes: number) => { this.notificationCtl().scheduleCountdown(minutes) },
         scheduleCalendarReminder: (timestamp: number) => { this.notificationCtl().scheduleAtDateTime(timestamp) },
         scheduleDailyAlarmReminder: (hour: number, minute: number) => { this.notificationCtl().scheduleDailyAlarm(hour, minute) },
+        pushTokenText: this.pushTokenText,
+        fetchPushToken: () => {
+          PushTokenFetcher.getToken().then((r: PushTokenResult) => {
+            this.pushTokenText = r.ok ? (r.token ?? '') : ('失败 ' + (r.code ?? 0) + ' ' + (r.error ?? ''))
+          })
+        },
         toggleAstronomyEvents: (v: boolean) => { this.notificationStore.astronomyEventsEnabled = v },
         toggleSatellitePass: (v: boolean) => { this.notificationStore.satellitePassEnabled = v },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },

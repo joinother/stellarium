@@ -1,4 +1,5 @@
 import { Theme } from '@kit.ArkUI'
+import BuildProfile from 'BuildProfile'
 import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
@@ -37,6 +38,9 @@ export struct NotificationSection {
   onScheduleCountdown: (minutes: number) => void = () => {}
   onScheduleCalendarAt: (timestamp: number) => void = () => {}
   onScheduleAlarm: (hour: number, minute: number) => void = () => {}
+  // 调试用：取 Push Token（实况窗远程更新需要），仅 debug 包显示
+  onFetchPushToken: () => void = () => {}
+  @Prop pushTokenText: string
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
@@ -235,6 +239,25 @@ export struct NotificationSection {
       }
       .width('100%').padding(12)
       .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+
+      if (BuildProfile.DEBUG) {
+        Column({ space: 6 }) {
+          Row() {
+            Text('Push Token').fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).layoutWeight(1)
+            Button('获取')
+              .fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text).backgroundColor(this.c.input)
+              .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 12, right: 12 })
+              .onClick(() => { this.onFetchPushToken() })
+          }.width('100%')
+          if (this.pushTokenText.length > 0) {
+            Text(this.pushTokenText)
+              .fontSize(9).fontColor(this.c.sub).width('100%')
+              .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .width('100%').padding(12)
+        .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+      }
     }.width('100%')
   }
 }

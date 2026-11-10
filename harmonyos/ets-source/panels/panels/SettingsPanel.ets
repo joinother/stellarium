@@ -124,6 +124,8 @@ export struct SettingsPanel {
   setNotificationDndStart: (minutes: number) => void = () => {}
   setNotificationDndEnd: (minutes: number) => void = () => {}
   changePassLead: (delta: number) => void = () => {}
+  fetchPushToken: () => void = () => {}
+  @Prop pushTokenText: string
   clearAstronomyReminders: () => void = () => {}
   keyboardShortcutQueryChange: (value: string) => void = () => {}
   keyboardShortcutSelectChange: (item: KeyboardShortcutItem) => void = () => {}
@@ -208,6 +210,8 @@ export struct SettingsPanel {
               onDndStartChange: (m: number) => { this.setNotificationDndStart(m) },
               onDndEndChange: (m: number) => { this.setNotificationDndEnd(m) },
               onLeadChange: (d: number) => { this.changePassLead(d) },
+              pushTokenText: this.pushTokenText,
+              onFetchPushToken: () => { this.fetchPushToken() },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
           } else if (this.configTab === 0) {
