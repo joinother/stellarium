@@ -19,6 +19,7 @@ AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
 PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'
 MIRROR_MANIFEST = '/srv/tle-mirror/v1/manifest.json'
+IMAGE_HASHES = '/var/lib/skyinstrument/image-hashes.json'
 MIRROR_STALE_HOURS = 24      # 星历每 3 小时更新，超过 24 小时视为停更
 MIRROR_CRITICAL_HOURS = 72   # 超过 72 小时视为重大异常
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
@@ -69,6 +70,15 @@ def ai_usage_line():
     ct = day.get('completion_tokens', 0)
     return '调用 %d 次，token %d/%d，估算 %.3f 元' % (
         day.get('calls', 0), pt, ct, pt / 1e6 * 2 + ct / 1e6 * 8)
+
+
+def image_line():
+    try:
+        import json as _j
+        n = len(_j.load(open(IMAGE_HASHES, encoding='utf-8')))
+        return '已建指纹 %d 张' % n
+    except Exception:  # noqa: BLE001
+        return '无基线'
 
 
 def mirror_status():
@@ -176,6 +186,7 @@ def main():
     perf, perf_notes = audit_perf_line()
     rows = [
         ('镜像数据', mirror, mirror_notes),
+        ('图片审查', image_line(), []),
         ('巡检耗时', perf, perf_notes),
         ('AI 用量', ai_usage_line(), []),
         ('当前生效拦截', '%d 条' % len(blocks),
