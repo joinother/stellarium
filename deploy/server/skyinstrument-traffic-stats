@@ -4,6 +4,7 @@
 
 只做计数，不保存 IP。输出 /var/lib/skyinstrument/traffic-stats.json。
 """
+import hashlib
 import json
 import os
 import re
@@ -13,8 +14,50 @@ from collections import Counter
 LOG = '/var/log/skyinstrument-website/access.log'
 OUT = '/var/lib/skyinstrument/traffic-stats.json'
 QW_USAGE = '/var/lib/nightwindow/qw-usage.json'
-# 日志格式：IP [时间] 方法 路径 状态 字节
-LINE = re.compile(r'^(\S+) \[([^\]]+)\] (\S+) (\S+) (\d{3}) (\S+)')
+# 日志格式（两种）：旧 = IP [时间] 方法 路径 状态 字节
+#                   新 = 旧 + "referer" "UA" 耗时
+LINE = re.compile(r'^(\S+) \[([^\]]+)\] (\S+) (\S+) (\d{3}) (\S+)'
+                  r'(?: "([^"]*)" "([^"]*)" (\S+))?')
+
+SEARCH_ENGINES = ('baidu.', 'bing.', 'sogou.', 'google.', 'so.com', 'sm.cn',
+                  'yandex.', 'duckduckgo.', 'toutiao.', 'quark.')
+MOBILE_UA = ('iphone', 'ipad', 'android', 'mobile', 'harmony', 'openharmony')
+BOT_UA = ('bot', 'spider', 'crawler', 'curl', 'wget', 'python-requests', 'go-http')
+
+
+def ref_bucket(ref):
+    """来源归类，只保留域名，不保留完整 URL 与参数。"""
+    if not ref or ref == '-':
+        return '直接访问'
+    low = ref.lower()
+    if 'skyinstrument.cn' in low:
+        return '站内跳转'
+    for name, key in (('百度', 'baidu.'), ('必应', 'bing.'), ('搜狗', 'sogou.'),
+                      ('谷歌', 'google.'), ('360', 'so.com'), ('头条', 'toutiao.')):
+        if key in low:
+            return '搜索引擎/' + name
+    for k in SEARCH_ENGINES:
+        if k in low:
+            return '搜索引擎/其他'
+    return '站外链接'
+
+
+def ua_bucket(ua):
+    low = (ua or '').lower()
+    if not low or low == '-':
+        return '未知'
+    for b in BOT_UA:
+        if b in low:
+            return '机器人'
+    for m in MOBILE_UA:
+        if m in low:
+            return '移动端'
+    return '桌面端'
+
+
+def session_key(ip, ua, day):
+    """会话标识：IP+UA 加盐哈希，只用于当天聚合，不落盘原始值。"""
+    return hashlib.sha256(('%s|%s|%s' % (ip, ua or '', day)).encode()).hexdigest()[:16]
 
 
 def scan(path, since_ts):
@@ -24,6 +67,13 @@ def scan(path, since_ts):
     status = Counter()
     api = Counter()
     limit_hit = 0
+    refs = Counter()
+    uas = Counter()
+    entries = Counter()
+    exits = Counter()
+    flows = Counter()
+    seen = {}          # 会话 -> 上次路径
+    slow = 0
     try:
         fh = open(path, encoding='utf-8', errors='replace')
     except Exception:  # noqa: BLE001
@@ -40,10 +90,31 @@ def scan(path, since_ts):
                 continue
             if t < since_ts:
                 continue
+            p = m.group(4).split('?')[0]
+            if p.startswith('/status/'):
+                continue      # 状态页是管理入口，不计入对外访问
             total += 1
             ips.add(m.group(1))
-            p = m.group(4).split('?')[0]
             code = m.group(5)
+            ref = m.group(7) or ''
+            ua = m.group(8) or ''
+            try:
+                rt = float(m.group(9) or 0)
+            except ValueError:
+                rt = 0.0
+            if rt >= 1.0:
+                slow += 1
+            bucket = ref_bucket(ref)
+            refs[bucket] += 1
+            uas[ua_bucket(ua)] += 1
+            is_page = p in ('/', '/index.html') or p.endswith('.html') or '.' not in p
+            if is_page and code in ('200', '301', '302'):
+                sk = session_key(m.group(1), ua, ts[:10])
+                if sk not in seen:
+                    entries[p] += 1
+                else:
+                    flows[seen[sk] + ' → ' + p] += 1
+                seen[sk] = p
             paths[p] += 1
             status[code] += 1
             api_path = p[4:] if p.startswith('/nw/') else p
@@ -51,8 +122,12 @@ def scan(path, since_ts):
                 api[api_path] += 1
             if code == '429':
                 limit_hit += 1
+    for sk, last in seen.items():
+        exits[last] += 1
     return {'total': total, 'ips': len(ips), 'paths': paths,
-            'status': status, 'api': api, 'limit': limit_hit}
+            'status': status, 'api': api, 'limit': limit_hit,
+            'refs': refs, 'uas': uas, 'entries': entries, 'exits': exits,
+            'flows': flows, 'slow': slow}
 
 
 def main():
@@ -76,6 +151,12 @@ def main():
             'scan_hits': sum(v for k, v in s['status'].items() if k in ('444', '403')),
             'error_4xx': sum(v for k, v in s['status'].items() if k.startswith('4')),
             'error_5xx': sum(v for k, v in s['status'].items() if k.startswith('5')),
+            'refs': dict(s['refs'].most_common(8)),
+            'uas': dict(s['uas'].most_common(5)),
+            'entries': s['entries'].most_common(5),
+            'exits': s['exits'].most_common(5),
+            'flows': s['flows'].most_common(8),
+            'slow': s['slow'],
         }
 
     qw = {}

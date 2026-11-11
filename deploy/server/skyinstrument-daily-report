@@ -130,6 +130,12 @@ def traffic_line():
     if t.get('error_5xx'):
         notes.append('今日出现 %d 次 5xx，需检查服务' % t['error_5xx'])
     txt = 'PV %d，独立 IP %d，扫描 %d 次' % (t.get('total', 0), t.get('ips', 0), t.get('scan_hits', 0))
+    refs = t.get('refs') or {}
+    if refs:
+        txt += '；来源 ' + '、'.join('%s %d' % (k, v) for k, v in list(refs.items())[:3])
+    uas = t.get('uas') or {}
+    if uas:
+        txt += '；设备 ' + '、'.join('%s %d' % (k, v) for k, v in list(uas.items())[:3])
     if up:
         txt += '；和风 今日 %d 次 / 本月 %d 次' % (up.get('day', 0), up.get('month', 0))
     return txt, notes

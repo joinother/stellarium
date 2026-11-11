@@ -191,6 +191,15 @@ def main():
                          True))
         parts.append(row('扫描探测', '%d 次（444/403）' % tr.get('scan_hits', 0),
                          tr.get('scan_hits', 0) < 500))
+        refs = tr.get('refs') or {}
+        if refs:
+            parts.append(row('访问来源', '，'.join('%s %d' % (k, v) for k, v in list(refs.items())[:3]), True))
+        uas = tr.get('uas') or {}
+        if uas:
+            parts.append(row('设备', '，'.join('%s %d' % (k, v) for k, v in list(uas.items())[:3]), True))
+        ent = tr.get('entries') or []
+        if ent:
+            parts.append(row('主要入口', '，'.join('%s %d' % (k, v) for k, v in ent[:3]), True))
         api = tr.get('api') or {}
         if api:
             parts.append(row('接口请求', '，'.join('%s %d' % (k, v)
