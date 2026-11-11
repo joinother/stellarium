@@ -4,6 +4,9 @@
 # 用途：Gitee 免费仓库容量有限，无法镜像 6.8 GB 的完整历史。
 #       这里只镜像我们实际改动过的目录：harmonyos / deploy / docs / scripts。
 #
+# 注意：日常已由 GitHub Actions 自动同步（.github/workflows/gitee-mirror.yml），
+#       本脚本用于手动补推（Actions 失败、或需要立即同步时）。
+#
 # 用法：bash deploy/server/gitee-mirror.sh
 # 前置：环境变量 GITEE_TOKEN（Gitee 私人令牌，projects 权限）
 set -euo pipefail

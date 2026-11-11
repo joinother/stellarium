@@ -1,0 +1,77 @@
+name: Mirror source snapshot to Gitee
+
+# 把 harmonyos / deploy / docs / scripts 四个目录做成快照推送到 Gitee。
+# 完整仓库（含上游历史与资源）约 6.8 GB，超出 Gitee 容量，故只镜像我们改动的部分。
+
+on:
+  push:
+    branches: [ohos-master]
+    paths:
+      - 'harmonyos/**'
+      - 'deploy/**'
+      - 'docs/**'
+      - 'scripts/**'
+  schedule:
+    # 每周一 03:10 UTC（北京时间 11:10），兜底同步
+    - cron: '10 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: gitee-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (sparse)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            harmonyos
+            deploy
+            docs
+            scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Prepare snapshot
+        run: |
+          set -euo pipefail
+          SNAP="$RUNNER_TEMP/snapshot"
+          mkdir -p "$SNAP"
+          for d in harmonyos deploy docs scripts; do
+            cp -a "$d" "$SNAP/" 2>/dev/null || true
+          done
+          # 记录对应提交，便于日后找回版本
+          git rev-parse HEAD > "$SNAP/UPSTREAM_COMMIT.txt"
+          git log -1 --format='%H%n%ad%n%s' >> "$SNAP/UPSTREAM_COMMIT.txt"
+          # 沿用仓库里已有的说明文件
+          if [ -f docs/ops/RECOVERY.md ]; then
+            cp docs/ops/RECOVERY.md "$SNAP/RECOVERY.md" || true
+          fi
+          echo "SNAP=$SNAP" >> "$GITHUB_ENV"
+          du -sh "$SNAP"
+          find "$SNAP" -type f | wc -l
+
+      - name: Push to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 GITEE_TOKEN secret，跳过镜像"
+            exit 0
+          fi
+          cd "$SNAP"
+          git init -q -b master
+          git config user.name "skyinstrument-mirror"
+          git config user.email "mirror@skyinstrument.cn"
+          git add -A
+          git commit -q -m "snapshot: 源码快照（对应 $(head -1 UPSTREAM_COMMIT.txt)）"
+          printf 'https://yang-jiexuan000:%s@gitee.com\n' "$GITEE_TOKEN" > .git-credentials
+          chmod 600 .git-credentials
+          git remote add origin https://gitee.com/yang-jiexuan000/stellarium-ohos-source.git
+          git -c credential.helper="store --file=$PWD/.git-credentials" push -f origin master
+          rm -f .git-credentials
+          echo "已推送：$(git log --oneline -1)"

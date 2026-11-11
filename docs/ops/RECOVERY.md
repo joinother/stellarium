@@ -27,7 +27,7 @@
 | systemd 单元 | 同上备份包（`etc/systemd/system/`） | 也在 git `deploy/server/` |
 | 运维脚本 | git `deploy/server/` | 14 个脚本 |
 | 夜窗 API | git `deploy/server/nightwindow-api/server.js` | 原最大单点，已入库 |
-| 源码（我们的改动） | Gitee `yang-jiexuan000/stellarium-ohos-source` | 36 MB 快照 |
+| 源码（我们的改动） | Gitee `yang-jiexuan000/stellarium-ohos-source` | 36 MB 快照，GitHub Actions 自动推送 |
 | 安全记录 | Gitee `yang-jiexuan000/skyinstrument-ops-records`（私有） | 每日 08:30 自动推送 |
 | TLS 证书 | 重新签发（acme.sh） | 需 DNS 正常 |
 | **密钥（必须手工重填）** | 见第 6 节 | 刻意不入备份、不入 git |
