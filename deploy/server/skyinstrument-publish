@@ -39,6 +39,12 @@ touch "$LOCK"
 echo "复制到 $NEW ..."
 cp -a "$SRC"/. "$NEW"/
 
+# SEO 文件跟着每次发布补齐（源码里可能没有，统一从 /srv/skyinstrument/seo 覆盖）
+if [ -d /srv/skyinstrument/seo ]; then
+    cp -f /srv/skyinstrument/seo/robots.txt /srv/skyinstrument/seo/sitemap.xml \
+          /srv/skyinstrument/seo/favicon.ico "$NEW"/ 2>/dev/null || true
+fi
+
 # 3. 校验
 if [ ! -f "$NEW/index.html" ]; then
     echo "校验失败：缺少 index.html" >&2

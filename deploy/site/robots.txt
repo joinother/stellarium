@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /status/
+
+Sitemap: https://skyinstrument.cn/sitemap.xml
