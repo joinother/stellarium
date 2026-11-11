@@ -1,12 +1,14 @@
-# 注意：本文件是模板，未放在 .github/workflows/ 下。
-# 原因：当前 GitHub 令牌缺少 workflow 权限，无法推送该目录。
+# 说明：本文件仅为存档，当前未启用。
 #
-# 启用方式（需要时再执行）：
-#   1. gh auth refresh -s workflow        （授权 workflow 权限）
-#   2. mkdir -p .github/workflows && cp deploy/server/workflows/gitee-mirror.yml .github/workflows/
-#   3. git add .github && git commit -m "ci: 启用 Gitee 镜像自动同步" && git push
+# 实测结论（2026-11-11）：
+#   1. 从 GitHub Actions runner 推送到 Gitee 不可行——Gitee 对海外 IP 限速，
+#      36 MB 快照实测低于 1 KB/s，30 秒无进展即 RPC 失败，两次重试均失败。
+#   2. 曾尝试由服务器直接同步（稀疏克隆 GitHub → 推送 Gitee），技术上可行
+#      （37 秒完成），但按要求已移除，不在服务器上执行源码同步。
 #
-# 在此之前，源码快照由 Mac 上的 launchd 定时任务推送（见 deploy/server/mac-gitee-mirror.plist）。
+# 因此源码快照由本地 Mac 的 launchd 定时任务推送：
+#   deploy/server/mac-gitee-mirror.plist  +  deploy/server/gitee-mirror-auto.sh
+# 需要手动补推时直接跑：bash deploy/server/gitee-mirror.sh
 
 name: Mirror source snapshot to Gitee
 
