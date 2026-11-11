@@ -46,13 +46,20 @@ find "$SRC_RECORDS" -maxdepth 1 -type f \( -name '*.txt' -o -name '*.md' \) -mti
 # 处置台账
 [ -f "$SRC_RECORDS/incident-log.tsv" ] && cp -f "$SRC_RECORDS/incident-log.tsv" ledger/
 
+# AI 用量：本地记录可能被误删，异地保留一份，便于回溯与追回
+mkdir -p metrics
+if [ -f /var/lib/skyinstrument/ai-usage.json ]; then
+    cp -f /var/lib/skyinstrument/ai-usage.json metrics/ai-usage.json
+fi
+
 # 2b. 清理源端已不存在的旧副本（避免历史文件（如误放的密钥）永久阻塞同步）
-for f in records/*.txt records/*.md manifests/*.sha256; do
+for f in records/*.txt records/*.md manifests/*.sha256 metrics/*.json; do
     [ -e "$f" ] || continue
     b=$(basename "$f")
     case "$f" in
         records/*)   [ -f "$SRC_RECORDS/$b" ] || rm -f "$f" ;;
         manifests/*) [ -f "$SRC_BACKUP/$b" ]  || rm -f "$f" ;;
+        metrics/*)   : ;;   # 用量指标只增不删，本地缺失也不清理远端
     esac
 done
 

@@ -692,9 +692,26 @@ def _t(label, since):
     return time.time()
 
 
+def restore_usage_if_missing():
+    """本地用量记录缺失时，先从异地副本追回，避免用量从零开始。"""
+    if os.path.exists(AI_USAGE):
+        return
+    remote = '/srv/skyinstrument/records-repo/metrics/ai-usage.json'
+    if not os.path.exists(remote):
+        return
+    try:
+        subprocess.run(['/usr/local/sbin/skyinstrument-ai-usage-restore'],
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                       universal_newlines=True, timeout=30)
+        print('已从异地记录追回 AI 用量', file=sys.stderr)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def main():
     global _RUN_START
     _RUN_START = time.time()
+    restore_usage_if_missing()
     _t0 = time.time()
     served = discover_served_dirs()
     if not served:

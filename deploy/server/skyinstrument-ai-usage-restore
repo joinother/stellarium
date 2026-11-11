@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# 从异地记录仓库追回并合并 AI 用量：按日期取较大值，lifetime 取较大值。
+# 本地记录被误删时，先跑这个再继续巡检，用量不会从零开始。
+set -u
+REPO=/srv/skyinstrument/records-repo
+REMOTE="$REPO/metrics/ai-usage.json"
+LOCAL=/var/lib/skyinstrument/ai-usage.json
+
+[ -f "$REMOTE" ] || { echo "异地无用量记录：$REMOTE"; exit 1; }
+
+python3 - "$LOCAL" "$REMOTE" <<'PY'
+import json, os, sys
+
+local_path, remote_path = sys.argv[1], sys.argv[2]
+
+def load(p):
+    try:
+        with open(p, encoding='utf-8') as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+loc = load(local_path)
+rem = load(remote_path)
+merged = dict(loc)
+restored = 0
+
+for k, v in rem.items():
+    if k == 'lifetime' or not isinstance(v, dict):
+        continue
+    if k not in merged or merged[k].get('calls', 0) < v.get('calls', 0):
+        merged[k] = v
+        restored += 1
+
+def num(d, k):
+    return int(d.get(k, 0)) if isinstance(d, dict) else 0
+
+if isinstance(rem.get('lifetime'), dict):
+    life = merged.get('lifetime') if isinstance(merged.get('lifetime'), dict) else {}
+    for f in ('calls', 'prompt_tokens', 'completion_tokens', 'refused', 'failed', 'budget_hit'):
+        if num(rem['lifetime'], f) > num(life, f):
+            life[f] = rem['lifetime'][f]
+    merged['lifetime'] = life
+
+tmp = local_path + '.tmp'
+with open(tmp, 'w', encoding='utf-8') as fh:
+    json.dump(merged, fh, ensure_ascii=False, indent=2)
+os.replace(tmp, local_path)
+days = len([k for k in merged if k != 'lifetime'])
+print('已合并：恢复 %d 天记录，现存 %d 天' % (restored, days))
+PY

@@ -231,6 +231,11 @@ skyinstrument-incident --rollback <时间戳>
 | 处置取证 | `incidents/<时间戳>/` | 人工清理 |
 | 备份清单与比对 | `/srv/backup/` | 包 14 天、清单 365 天 |
 | 异地副本 | Gitee 私有仓库 `skyinstrument-ops-records` | 每日 08:30 自动推送 |
+| AI 用量异地累积 | 同上 `metrics/ai-usage.json` | 每日随记录推送，本地删除不影响远端 |
+
+用量口径三层：今日、本月累计、终身累计。按日明细滚动保留 90 天，终身累计永不清理。
+每次巡检开始前若本地用量文件缺失，自动从异地副本追回（`skyinstrument-ai-usage-restore`），
+不会因为误删而从零计数。
 
 推送前会扫描密钥（`sk-`、`SMTP_PASS`、`LTAI`、私钥头），命中即中止并列出文件。
 
