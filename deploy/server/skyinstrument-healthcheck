@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""星象仪站点每日安全自检。
+
+检查项：
+  1. 最近备份是否在 26 小时内生成
+  2. 最近一次哈希比对是否无差异、记录是否在 8 天内
+  3. HTTPS 证书剩余有效期是否大于 14 天
+  4. 根分区使用率是否低于 85%
+  5. 站点 nginx 服务与备份/比对定时器是否处于活动状态
+  6. 本机访问站点是否返回 200
+  7. 首页是否仍包含备案号与投诉举报邮箱（防篡改抽查）
+
+产出：/srv/skyinstrument/security-records/healthcheck-YYYYMMDD.txt
+异常时：若存在 /etc/skyinstrument/mail.conf，则向其中配置的收件人发信
+退出码：全部正常为 0，任一异常为 1（systemd 会标记该单元为 failed）
+"""
+import glob
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime
+
+RECORDS = '/srv/skyinstrument/security-records'
+BACKUP_DIR = '/srv/backup'
+MAIL_CONF = '/etc/skyinstrument/mail.conf'
+SITE_HOST = 'skyinstrument.cn'
+
+# 统一 PATH：通过云助手/不同入口执行时环境变量可能不完整，
+# 导致 openssl、curl、df、systemctl 找不到而被误判为异常。
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+results = []
+
+
+def add(name, ok, detail):
+    results.append((name, ok, detail))
+
+
+def run(cmd, timeout=20):
+    # 服务器 Python 为 3.6，不支持 capture_output/text 参数，这里用兼容写法。
+    try:
+        p = subprocess.run(cmd, shell=True, timeout=timeout,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           universal_newlines=True)
+        return p.returncode, (p.stdout or '').strip(), (p.stderr or '').strip()
+    except Exception as exc:  # noqa: BLE001
+        return 1, '', '%s: %s' % (type(exc).__name__, exc)
+
+
+# 1. 备份新鲜度
+pkgs = sorted(glob.glob(os.path.join(BACKUP_DIR, 'site-*.tar.gz')))
+if not pkgs:
+    add('最近备份存在', False, '未找到任何备份包')
+else:
+    newest = pkgs[-1]
+    age_h = (time.time() - os.path.getmtime(newest)) / 3600.0
+    add('备份在 26 小时内', age_h <= 26, '%s，距今 %.1f 小时' % (os.path.basename(newest), age_h))
+
+# 2. 哈希比对记录
+diffs = sorted(glob.glob(os.path.join(RECORDS, 'hash-diff-*.txt')))
+if not diffs:
+    add('存在哈希比对记录', False, '未找到比对记录')
+else:
+    latest = diffs[-1]
+    age_d = (time.time() - os.path.getmtime(latest)) / 86400.0
+    txt = open(latest, encoding='utf-8', errors='replace').read()
+    m = re.search(r'差异行数：(\d+)', txt)
+    n = int(m.group(1)) if m else -1
+    add('哈希比对无差异', n == 0, '%s 差异 %d 行' % (os.path.basename(latest), n))
+    add('比对记录在 8 天内', age_d <= 8, '距今 %.1f 天' % age_d)
+
+# 3. 证书有效期
+rc, out, _ = run("echo | openssl s_client -connect 127.0.0.1:443 -servername %s 2>/dev/null | openssl x509 -noout -enddate" % SITE_HOST)
+if rc != 0 or 'notAfter=' not in out:
+    add('证书可读取', False, '无法从本机 443 读取证书')
+else:
+    raw = out.split('notAfter=', 1)[1].strip()
+    try:
+        ts = time.mktime(time.strptime(raw, '%b %d %H:%M:%S %Y GMT')) - time.timezone
+        days = (ts - time.time()) / 86400.0
+        add('证书剩余大于 14 天', days > 14, '剩余 %.1f 天（到期 %s）' % (days, raw))
+    except Exception:  # noqa: BLE001
+        add('证书可读取', False, '到期时间解析失败：%s' % raw)
+
+# 4. 磁盘
+rc, out, _ = run("df --output=pcent / | tail -1 | tr -dc '0-9'")
+if rc != 0 or not out:
+    add('磁盘使用率可读', False, '无法读取')
+else:
+    used = int(out)
+    add('磁盘使用率低于 85%', used < 85, '当前 %d%%' % used)
+
+# 5. 服务与定时器
+for unit in ('skyinstrument-website.service', 'skyinstrument-backup.timer', 'skyinstrument-verify.timer'):
+    rc, out, _ = run('systemctl is-active %s' % unit)
+    add('%s 处于活动状态' % unit, out == 'active', out or 'unknown')
+
+# 6. 本机访问站点
+rc, out, _ = run("curl -s -o /dev/null -w '%%{http_code}' -H 'Host: %s' https://127.0.0.1/ --max-time 10 -k" % SITE_HOST)
+add('本机访问首页返回 200', out == '200', 'HTTP %s' % (out or 'no-response'))
+
+# 7. 内容抽查（防篡改）
+rc, body, _ = run("curl -s -H 'Host: %s' https://127.0.0.1/ --max-time 10 -k" % SITE_HOST)
+add('首页含 ICP 备案号', '新ICP备2026008516号-1' in body, '命中' if '新ICP备2026008516号-1' in body else '未命中')
+add('首页含投诉举报邮箱', '1134873571@qq.com' in body, '命中' if '1134873571@qq.com' in body else '未命中')
+
+# 输出报告
+failed = [r for r in results if not r[1]]
+today = datetime.now().strftime('%Y%m%d')
+report_path = os.path.join(RECORDS, 'healthcheck-%s.txt' % today)
+lines = [
+    '# 每日安全自检报告',
+    '',
+    '- 检查时间：%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    '- 检查项：%d，异常：%d' % (len(results), len(failed)),
+    '',
+    '| 检查项 | 结果 | 说明 |',
+    '| --- | --- | --- |',
+]
+for name, ok, detail in results:
+    lines.append('| %s | %s | %s |' % (name, '通过' if ok else '**异常**', detail))
+lines.append('')
+lines.append('**结论：** ' + ('全部通过。' if not failed else '发现 %d 项异常，需人工处理。' % len(failed)))
+report = '\n'.join(lines) + '\n'
+os.makedirs(RECORDS, exist_ok=True)
+with open(report_path, 'w', encoding='utf-8') as fh:
+    fh.write(report)
+print(report)
+
+# 发信
+if failed and os.path.exists(MAIL_CONF):
+    conf = {}
+    for line in open(MAIL_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    try:
+        import smtplib
+        from email.header import Header
+        from email.mime.text import MIMEText
+        from email.utils import formataddr
+
+        msg = MIMEText(report, 'plain', 'utf-8')
+        msg['Subject'] = Header('[星象仪告警] %d 项自检异常' % len(failed), 'utf-8')
+        msg['From'] = formataddr(('星象仪自检', conf['SMTP_USER']))
+        msg['To'] = conf['MAIL_TO']
+        port = int(conf.get('SMTP_PORT', '465'))
+        if port == 465:
+            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
+        else:
+            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
+            server.starttls()
+        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
+        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
+        server.quit()
+        print('告警邮件已发送至 %s' % conf['MAIL_TO'])
+    except Exception as exc:  # noqa: BLE001
+        print('告警邮件发送失败：%s' % exc, file=sys.stderr)
+elif failed:
+    print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
+
+sys.exit(1 if failed else 0)

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Skyinstrument self-check daily at 07:30
+
+[Timer]
+OnCalendar=*-*-* 07:30:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=skyinstrument-healthcheck.service
+
+[Install]
+WantedBy=timers.target

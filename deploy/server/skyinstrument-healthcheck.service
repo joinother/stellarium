@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyinstrument daily security self-check
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target skyinstrument-website.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-healthcheck
+Nice=10
