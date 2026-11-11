@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""星象仪应急处置：隔离单页、取证、告警、可回滚。
+
+设计原则：
+  1. 只做可逆动作——给指定路径加 503 拦截，不动文件、不改数据；
+  2. 处置前先取证——把现场文件与上下文复制到 incidents/<时间戳>/；
+  3. 默认演练——不加 --apply 只记录"本应做什么"，不真正生效；
+  4. 全程留痕——每次处置写 incident-log.tsv，并支持一键回滚。
+
+用法：
+  skyinstrument-incident --path /index.html --reason "命中涉赌违禁词" [--apply]
+  skyinstrument-incident --rollback 20261111-131500
+"""
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+NGINX_CONF = '/etc/skyinstrument-website/nginx.conf'
+CONF_DIR = '/etc/skyinstrument-website/conf.d'
+INCIDENT_CONF = os.path.join(CONF_DIR, 'incident.conf')
+SITE_DIR = '/srv/skyinstrument/website/current'
+INCIDENT_DIR = '/srv/skyinstrument/incidents'
+LOG = '/srv/skyinstrument/security-records/incident-log.tsv'
+MAIL_CONF = '/etc/skyinstrument/mail.conf'
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        for chunk in iter(lambda: fh.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def ensure_conf_dir():
+    if not os.path.isdir(CONF_DIR):
+        os.makedirs(CONF_DIR)
+    # nginx 主配置里若未 include，则提示
+    conf = open(NGINX_CONF, encoding='utf-8').read()
+    if 'conf.d/*.conf' not in conf:
+        sys.stderr.write('注意：%s 未 include %s/*.conf，需先加一行 include 才能生效\n'
+                         % (NGINX_CONF, CONF_DIR))
+
+
+def read_incident_conf():
+    if not os.path.exists(INCIDENT_CONF):
+        return ''
+    return open(INCIDENT_CONF, encoding='utf-8').read()
+
+
+def write_incident_conf(text):
+    ensure_conf_dir()
+    with open(INCIDENT_CONF, 'w', encoding='utf-8') as fh:
+        fh.write(text)
+
+
+def reload_nginx():
+    test = subprocess.run(['nginx', '-t', '-c', NGINX_CONF], stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, universal_newlines=True)
+    if test.returncode != 0:
+        return False, test.stdout[-400:]
+    rl = subprocess.run(['nginx', '-s', 'reload', '-c', NGINX_CONF], stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, universal_newlines=True)
+    return rl.returncode == 0, rl.stdout[-400:]
+
+
+def do_payload(path):
+    """取证：复制被处置文件与其上下文，生成 meta.json。"""
+    ts = time.strftime('%Y%m%d-%H%M%S')
+    d = os.path.join(INCIDENT_DIR, ts)
+    os.makedirs(d, exist_ok=True)
+    rel = path.lstrip('/')
+    src = os.path.join(SITE_DIR, rel)
+    meta = {'time': time.strftime('%Y-%m-%d %H:%M:%S'), 'path': path, 'reason': args_reason,
+            'applied': APPLY}
+    if os.path.isfile(src):
+        shutil.copy2(src, os.path.join(d, os.path.basename(rel)))
+        meta['sha256'] = sha256_of(src)
+        meta['size'] = os.path.getsize(src)
+    else:
+        meta['note'] = '文件不存在或不是普通文件'
+    for extra in ('/srv/skyinstrument/security-records/content-audit-%s.txt' % time.strftime('%Y%m%d'),):
+        if os.path.exists(extra):
+            shutil.copy2(extra, os.path.join(d, os.path.basename(extra)))
+    with open(os.path.join(d, 'meta.json'), 'w', encoding='utf-8') as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2)
+    return ts, d, meta
+
+
+def append_log(row):
+    os.makedirs(os.path.dirname(LOG), exist_ok=True)
+    new = not os.path.exists(LOG)
+    with open(LOG, 'a', encoding='utf-8') as fh:
+        if new:
+            fh.write('时间\t路径\t处置\t原因\t动作\n')
+        fh.write('\t'.join(row) + '\n')
+
+
+def send_mail(subject, body):
+    if not os.path.exists(MAIL_CONF):
+        return
+    conf = {}
+    for line in open(MAIL_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    try:
+        import smtplib
+        from email.header import Header
+        from email.mime.text import MIMEText
+        from email.utils import formataddr
+
+        msg = MIMEText(body, 'plain', 'utf-8')
+        msg['Subject'] = Header(subject, 'utf-8')
+        msg['From'] = formataddr(('星象仪应急', conf['SMTP_USER']))
+        msg['To'] = conf['MAIL_TO']
+        port = int(conf.get('SMTP_PORT', '465'))
+        s = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20) if port == 465 else smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
+        if port != 465:
+            s.starttls()
+        s.login(conf['SMTP_USER'], conf['SMTP_PASS'])
+        s.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
+        s.quit()
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write('告警邮件发送失败：%s: %s\n' % (type(exc).__name__, exc))
+
+
+args_reason = ''
+APPLY = False
+
+
+def main():
+    global args_reason, APPLY
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ('-h', '--help'):
+        print(__doc__)
+        return 0
+
+    if argv[0] == '--rollback':
+        ts = argv[1] if len(argv) > 1 else ''
+        if not ts:
+            sys.stderr.write('需要时间戳，例如 --rollback 20261111-131500\n')
+            return 2
+        text = read_incident_conf()
+        lines = [ln for ln in text.splitlines() if ts not in ln]
+        write_incident_conf('\n'.join(lines) + ('\n' if lines else ''))
+        ok, out = reload_nginx()
+        append_log([time.strftime('%Y-%m-%d %H:%M:%S'), '-', ts, '回滚', '移除拦截' if ok else '失败:' + out])
+        print('回滚 %s：%s' % (ts, '成功' if ok else '失败 ' + out))
+        return 0 if ok else 1
+
+    path = ''
+    i = 0
+    while i < len(argv):
+        if argv[i] == '--path':
+            path = argv[i + 1]; i += 2
+        elif argv[i] == '--reason':
+            args_reason = argv[i + 1]; i += 2
+        elif argv[i] == '--apply':
+            APPLY = True; i += 1
+        else:
+            i += 1
+    if not path.startswith('/'):
+        sys.stderr.write('需要 --path /xxx\n')
+        return 2
+
+    ts, payload_dir, meta = do_payload(path)
+
+    # 站点用 try_files 把 /privacy 映射到 privacy.html，两者是不同 URI，
+    # 所以必须同时拦截「带扩展名」与「不带扩展名」两种形式，否则扩展名以外访问会被漏掉。
+    variants = [path]
+    if path.endswith('.html'):
+        variants.append(path[:-5])
+    else:
+        variants.append(path.rstrip('/') + '.html')
+    snippet = '\n'.join('location = %s { return 503; }  # incident %s' % (v, ts) for v in variants)
+
+    if APPLY:
+        text = read_incident_conf()
+        if ('# incident %s' % ts) not in text:
+            write_incident_conf((text.rstrip() + '\n' if text.strip() else '') + snippet + '\n')
+        ok, out = reload_nginx()
+        action = '拦截 503' if ok else '拦截失败:' + out
+    else:
+        ok, action = True, '演练（未生效，加 --apply 才真正拦截）'
+
+    append_log([time.strftime('%Y-%m-%d %H:%M:%S'), path, ts, args_reason, action])
+    body = (
+        '处置时间：%s\n路径：%s\n原因：%s\n动作：%s\n取证目录：%s\n文件哈希：%s\n\n'
+        '回滚命令：skyinstrument-incident --rollback %s\n'
+        % (meta['time'], path, args_reason, action, payload_dir, meta.get('sha256', '-'), ts)
+    )
+    print(body)
+    send_mail('[星象仪应急] %s %s' % ('已处置' if APPLY else '演练', path), body)
+    return 0 if ok else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
