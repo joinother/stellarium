@@ -116,7 +116,10 @@ def main():
     print('%s 检测到 %d 个文件变化，示例：%s' % (now.strftime('%H:%M:%S'), len(diffs), ', '.join(diffs[:3])))
     ok, count = pace_allow()
     if not ok:
-        print('本小时已触发 %d 次巡检，达到上限，本次只记录变化' % count)
+        # 关键：限流时不更新哈希基线，否则这次变更会被"吃掉"，
+        # 下一轮看不到差异，篡改就永远不会被审计。
+        print('本小时已触发 %d 次巡检，达到上限；保留基线不动，下一轮继续触发' % count)
+        return 0
     else:
         r = subprocess.run([AUDIT_BIN], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                            universal_newlines=True, timeout=300)
