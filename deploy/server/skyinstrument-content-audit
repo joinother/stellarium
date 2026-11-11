@@ -297,6 +297,99 @@ DATA_SCAN_LIMIT = 64 * 1024   # 数据文件只扫 64 KB 以内的小文件
 # 交替）。这类文件是机器数据，不在其中写推广文案；其完整性由每日哈希清单覆盖。
 
 
+MIRROR_DIR_HINT = 'tle-mirror'
+
+
+def validate_csv(path, rel):
+    """星历 CSV 结构校验：列数一致、无控制字符、行数无异常。
+
+    镜像数据是机器数据，没有文案风险；真正的风险是"被改坏"或"被换成垃圾"。
+    """
+    try:
+        with open(path, encoding='utf-8', errors='replace') as fh:
+            header = fh.readline().rstrip('\n')
+            if not header:
+                add('中', '数据文件为空', rel, 'CSV 缺少表头')
+                return
+            expect = header.count(',') + 1
+            bad_rows = 0
+            rows = 0
+            max_line = 0
+            for line in fh:
+                rows += 1
+                max_line = max(max_line, len(line))
+                if line.count(',') + 1 != expect:
+                    bad_rows += 1
+                    if bad_rows <= 2:
+                        add('中', 'CSV 列数不一致', rel,
+                            '第 %d 行有 %d 列，表头是 %d 列' % (rows + 1, line.count(',') + 1, expect))
+                if rows >= 5000:
+                    break
+        if bad_rows > 2:
+            add('中', 'CSV 列数不一致', rel, '共 %d 行与表头列数不符' % bad_rows)
+        if max_line > 20000:
+            add('中', 'CSV 行过长', rel, '最长一行 %d 字符，疑似被注入内容' % max_line)
+    except Exception as exc:  # noqa: BLE001
+        add('中', '数据文件不可读', rel, str(exc)[:80])
+
+
+def validate_json(path, rel):
+    """JSON 目录结构校验：可解析、无 HTML/URL、字符串不过长。"""
+    import json as _json
+    try:
+        raw = open(path, encoding='utf-8', errors='replace').read()
+    except Exception as exc:  # noqa: BLE001
+        add('中', '数据文件不可读', rel, str(exc)[:80])
+        return
+    try:
+        data = _json.loads(raw)
+    except Exception as exc:  # noqa: BLE001
+        add('高', '数据文件解析失败', rel, 'JSON 结构被破坏：%s' % str(exc)[:60])
+        return
+
+    suspects = []
+
+    def walk(node, depth=0):
+        if depth > 8 or len(suspects) > 5:
+            return
+        if isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, depth + 1)
+        elif isinstance(node, list):
+            for v in node[:200]:
+                walk(v, depth + 1)
+        elif isinstance(node, str):
+            low = node.lower()
+            if '<script' in low or '<a href' in low or 'http://' in low or 'https://' in low:
+                suspects.append(('含标签或外链', node[:60]))
+            elif len(node) > 200:
+                suspects.append(('超长文本', node[:60]))
+
+    walk(data)
+    for kind, sample in suspects[:3]:
+        add('中', '数据文件含异常内容', rel, '%s：%s' % (kind, sample))
+
+
+def validate_3le(path, rel):
+    """TLE 三行格式校验：名字行 + 两行以 1/2 开头的轨道根数。"""
+    try:
+        lines = open(path, encoding='utf-8', errors='replace').read().splitlines()
+    except Exception as exc:  # noqa: BLE001
+        add('中', '数据文件不可读', rel, str(exc)[:80])
+        return
+    l1 = sum(1 for x in lines if x.startswith('1 '))
+    l2 = sum(1 for x in lines if x.startswith('2 '))
+    longest = max((len(x) for x in lines), default=0)
+    if l1 == 0 and l2 == 0:
+        add('中', 'TLE 格式异常', rel, '没有找到以 1/2 开头的轨道根数行')
+    elif l1 != l2:
+        add('中', 'TLE 行数不配对', rel, '1 行 %d 条，2 行 %d 条' % (l1, l2))
+    if longest > 300:
+        add('中', 'TLE 行过长', rel, '最长一行 %d 字符，疑似被注入内容' % longest)
+    if any('<' in x and '>' in x for x in lines[:200]):
+        add('中', 'TLE 含标签', rel, '轨道根数里出现尖括号，疑似被注入 HTML')
+
+
 def scan_text_data(text, rel):
     """对数据文件（JSON/CSV/3LE 等）执行规则检查。
 
@@ -585,6 +678,14 @@ def main():
                 scan_html_rules(raw, rel)
             else:
                 scan_text_data(text, rel)
+                # 镜像等数据文件额外做结构校验（列数、可解析性、异常字符串）
+                low = rel.lower()
+                if low.endswith('.csv'):
+                    validate_csv(p, rel)
+                elif low.endswith('.3le'):
+                    validate_3le(p, rel)
+                elif low.endswith('.json'):
+                    validate_json(p, rel)
         elif kind in ('image', 'asset', 'code'):
             if kind in ('image', 'asset'):
                 check_binary(p, rel)
