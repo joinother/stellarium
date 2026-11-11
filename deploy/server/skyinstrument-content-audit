@@ -203,6 +203,39 @@ def check_binary(path, rel):
             add('高', '资产夹带脚本', rel, '在 %s 文件中发现 %s' % (ext, sig.decode()))
 
 
+FULL2HALF = {c: c - 0xFEE0 for c in range(0xFF01, 0xFF5F)}
+TRAD2SIMP = {
+    '採': '彩', '愽': '博', '賭': '赌', '場': '场', '採': '采', '黃': '黄', '貝': '贝', '爾': '尔', '陸': '陆',
+    '黨': '党', '會': '会', '東': '东', '車': '车', '馬': '马', '鳥': '鸟', '魚': '鱼',
+    '龍': '龙', '鳳': '凤', '槍': '枪', '彈': '弹', '藥': '药', '醫': '医', '療': '疗',
+    '證': '证', '貸': '贷', '騙': '骗', '詐': '诈', '錢': '钱', '銀': '银', '幣': '币',
+    '匯': '汇', '網': '网', '絡': '络', '線': '线', '臺': '台', '灣': '湾', '館': '馆',
+    '產': '产', '業': '业', '務': '务', '員': '员', '會': '会', '兒': '儿', '媽': '妈',
+}
+NOISE_RE = re.compile(r"[\s\u200b-\u200f\u00a0·・*\-—–_~.、,，。!！?？:：;；\'\"“”‘’()（）\[\]【】<>《》/\\|+@#$%^&]+")
+
+
+def normalize(text):
+    """归一化：全角转半角、繁转简、去掉空白与常见分隔符、小写。
+
+    用于抓「博 彩」「博*彩」「博採」这类变体。因为去掉符号可能让相邻字
+    拼出词条（如「颜色情况」含「色情」），变体命中一律按「中」等待复核处理。
+    """
+    t = text.translate(FULL2HALF)
+    t = ''.join(TRAD2SIMP.get(ch, ch) for ch in t)
+    t = NOISE_RE.sub('', t)
+    return t.lower()
+
+
+NORM_WORD_CACHE = {}
+
+
+def normalized_word(w):
+    if w not in NORM_WORD_CACHE:
+        NORM_WORD_CACHE[w] = normalize(w)
+    return NORM_WORD_CACHE[w]
+
+
 def has_cjk(w):
     return any('\u4e00' <= ch <= '\u9fff' for ch in w)
 
@@ -219,7 +252,7 @@ def scan_text_data(text, rel):
                 continue
             if w in text:
                 idx = text.find(w)
-                add('高', '违禁词/%s' % cat, rel,
+                add('中', '违禁词/%s' % cat, rel,
                     '命中「%s」：…%s…' % (w, text[max(0, idx - 30):idx + 30]))
     for w in AD_WORDS:
         if w in text:
@@ -252,7 +285,7 @@ def scan_large_text(path, rel):
                 for cat, words in load_lexicon().items():
                     for w in words:
                         if w in data:
-                            add('高', '违禁词/%s' % cat, rel, '大文件分块命中「%s」' % w)
+                            add('中', '违禁词/%s' % cat, rel, '大文件分块命中「%s」' % w)
                             hit += 1
                 if hit > 20:
                     return
@@ -366,19 +399,33 @@ def scan_html_rules(raw, name):
         inner = htmllib.unescape(re.sub(r'\s+', ' ', inner)).strip()
         if inner:
             hidden_texts.append(inner[:200])
-        add('高', '隐藏内容', name, '发现隐藏元素：%s' % m.group(0)[:120])
+        add('中', '隐藏内容', name, '发现隐藏元素：%s' % m.group(0)[:120])
     if hidden_texts:
         hidden_by_page[name] = hidden_texts
 
     # 2 违禁词
     lexicon = load_lexicon()
+    hit_words = set()
     for cat, words in lexicon.items():
         for w in words:
             if w in text:
+                hit_words.add(w)
                 idx = text.find(w)
-                add('高', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
+                add('中', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
                 if any(w in ht for ht in hidden_texts):
                     hard_risk_pages.add(name)
+
+    # 归一化后再匹配一次，抓空格/符号/繁体变体；这类命中按「中」等待复核
+    norm_text = normalize(text)
+    for cat, words in lexicon.items():
+        for w in words:
+            if w in hit_words or len(normalized_word(w)) < 2:
+                continue
+            nw = normalized_word(w)
+            if nw and nw in norm_text:
+                idx = norm_text.find(nw)
+                add('中', '违禁词变体/%s' % cat, name,
+                    '变体命中「%s」：…%s…' % (w, norm_text[max(0, idx - 20):idx + 20]))
 
     # 3 广告法极限词
     for w in AD_WORDS:
@@ -561,6 +608,11 @@ def main():
                 ai_notes.append((rel, ['词库未命中，AI 待人工确认'], verdict))
 
     # 自动处置（默认演练，需 REMEDIATE_CONF 中 APPLY=1 才真正拦截）
+    # 硬风险（隐藏元素内含违禁词）：该页所有命中升为「高」，可直接即时告警与处置
+    if hard_risk_pages:
+        issues[:] = [(('高' if w in hard_risk_pages else lv), kd, w, dt)
+                     for lv, kd, w, dt in issues]
+
     # AI 不可用（未配置 / 预算耗尽）时，非硬风险的高等级命中降为「中」待复核，
     # 避免 AI 降级期间把"代理""网络"这类误报升级成即时告警。
     ai_unavailable = (not load_audit_conf().get('LLM_KEY')) or budget_left() <= 0
