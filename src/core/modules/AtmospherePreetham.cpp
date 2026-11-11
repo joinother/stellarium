@@ -18,6 +18,8 @@
  */
 
 #include "AtmospherePreetham.hpp"
+#include "AtmosphereVivid.hpp"
+#include "AtmosphereMist.hpp"
 #include "StelUtils.hpp"
 #include "Planet.hpp"
 #include "StelApp.hpp"
@@ -44,7 +46,12 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 	, colorGridBuffer(QOpenGLBuffer::VertexBuffer)
 {
 	setFadeDuration(1.5f);
+	compileShaders(nullptr);
+	GL(vao.create());
+}
 
+void AtmospherePreetham::compileShaders(const StelProjector* projector)
+{
 	QOpenGLShader vShader(QOpenGLShader::Vertex);
 	{
 		QFile vert(":/shaders/preethamAtmosphere.vert");
@@ -54,7 +61,9 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 		if(!toneRepro.open(QFile::ReadOnly))
 			qFatal("Failed to open ToneReproducer shader source");
 		if (!vShader.compileSourceCode(StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
-									   vert.readAll()+toneRepro.readAll()))
+									   "#define main originalAtmosphereMain\n" + vert.readAll() +
+									   "\n#undef main\n" + toneRepro.readAll() + AtmosphereVivid::shaderSource() +
+									   "\nvoid main() { originalAtmosphereMain(); resultSkyColor = vividAtmosphereColor(resultSkyColor, skyColor.xyz, sunPos, vividStrength); }\n"))
 			qFatal("Error while compiling atmosphere vertex shader: %s", vShader.log().toLatin1().constData());
 	}
 	if (!vShader.log().isEmpty())
@@ -64,11 +73,24 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 	QOpenGLShader fShader(QOpenGLShader::Fragment);
 	if (!fShader.compileSourceCode(
 					StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
-					"VARYING mediump vec3 resultSkyColor;\n"
-					"void main()\n"
-					"{\n"
-					 "   FRAG_COLOR = vec4(resultSkyColor, 1.);\n"
-					 "}"))
+					(projector ? QByteArray("#define MIST_WORLD_DIRECTION\n") + projector->getUnProjectShader() : QByteArray()) +
+					AtmosphereMist::shaderSource() + QByteArray(R"(
+VARYING mediump vec3 resultSkyColor;
+void main()
+{
+    highp float transmission = 1.;
+#ifdef MIST_WORLD_DIRECTION
+    if (mistUndergroundStrength > 0.)
+    {
+        bool valid = false;
+        highp vec3 worldDirection = unProject(gl_FragCoord.x, gl_FragCoord.y, valid);
+        if (!valid || !(length(worldDirection) > .00001)) { FRAG_COLOR = vec4(0.); return; }
+        transmission = mistAtmosphereTransmission(normalize(worldDirection).z);
+    }
+#endif
+    FRAG_COLOR = vec4(resultSkyColor * transmission, 1.);
+}
+)")))
 	{
 		qFatal("Error while compiling Preetham atmosphere fragment shader: %s", fShader.log().toLatin1().constData());
 	}
@@ -76,9 +98,12 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 	{
 		qCWarning(Atmo) << "Warnings while compiling Preetham atmosphere fragment shader: " << vShader.log();
 	}
+	delete atmoShaderProgram;
 	atmoShaderProgram = new QOpenGLShaderProgram();
 	atmoShaderProgram->addShader(&vShader);
 	atmoShaderProgram->addShader(&fShader);
+	atmoShaderProgram->bindAttributeLocation("skyVertex", 0);
+	atmoShaderProgram->bindAttributeLocation("skyColor", 1);
 	StelPainter::linkProg(atmoShaderProgram, "Preetham atmosphere");
 
 	GL(atmoShaderProgram->bind());
@@ -89,6 +114,8 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 	GL(shaderAttribLocations.flagUseTmGamma = atmoShaderProgram->uniformLocation("flagUseTmGamma"));
 	GL(shaderAttribLocations.brightnessScale = atmoShaderProgram->uniformLocation("brightnessScale"));
 	GL(shaderAttribLocations.sunPos = atmoShaderProgram->uniformLocation("sunPos"));
+	GL(shaderAttribLocations.vividStrength = atmoShaderProgram->uniformLocation("vividStrength"));
+	GL(shaderAttribLocations.mistUndergroundStrength = atmoShaderProgram->uniformLocation("mistUndergroundStrength"));
 	GL(shaderAttribLocations.term_x = atmoShaderProgram->uniformLocation("term_x"));
 	GL(shaderAttribLocations.Ax = atmoShaderProgram->uniformLocation("Ax"));
 	GL(shaderAttribLocations.Bx = atmoShaderProgram->uniformLocation("Bx"));
@@ -107,7 +134,6 @@ AtmospherePreetham::AtmospherePreetham(Skylight& sky)
 	GL(shaderAttribLocations.skyColor = atmoShaderProgram->attributeLocation("skyColor"));
 	GL(atmoShaderProgram->release());
 
-	GL(vao.create());
 }
 
 AtmospherePreetham::~AtmospherePreetham(void)
@@ -155,6 +181,7 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 				      const float relativeHumidity, const float extinctionCoefficient, const bool noScatter)
 {
 	const StelProjectorP prj = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
+	vividAtmosphereAllowed = currentPlanet.getEnglishName() == "Earth" && !noScatter;
 	if (viewport != prj->getViewport())
 	{
 		// The viewport changed: update the number of point of the grid
@@ -400,11 +427,20 @@ void AtmospherePreetham::draw(StelCore* core)
 	    return;
 
 	StelToneReproducer* eye = core->getToneReproducer();
+	const auto worldProjector = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
+	if (mistUndergroundStrength > 0.f && (!renderProjector || !worldProjector->isSameProjection(*renderProjector)))
+	{
+		compileShaders(worldProjector.data());
+		renderProjector = worldProjector;
+	}
 
 	StelPainter sPainter(core->getProjection2d());
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
 
 	GL(atmoShaderProgram->bind());
+	if (renderProjector && worldProjector->isSameProjection(*renderProjector))
+		worldProjector->setUnProjectUniforms(*atmoShaderProgram);
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.mistUndergroundStrength, mistUndergroundStrength));
 	float a, b, c, d;
 	bool useTmGamma, sRGB;
 	eye->getShadersParams(a, b, c, d, useTmGamma, sRGB);
@@ -420,6 +456,8 @@ void AtmospherePreetham::draw(StelCore* core)
 	float term_x, Ax, Bx, Cx, Dx, Ex, term_y, Ay, By, Cy, Dy, Ey;
 	sky.getShadersParams(sunPos, term_x, Ax, Bx, Cx, Dx, Ex, term_y, Ay, By, Cy, Dy, Ey);
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.sunPos, sunPos[0], sunPos[1], sunPos[2]));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.vividStrength,
+		flagVividAtmosphere && vividAtmosphereAllowed ? eclipseFactor : 0.f));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.term_x, term_x));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.Ax, Ax));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.Bx, Bx));

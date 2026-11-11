@@ -1329,7 +1329,7 @@ int StarMgr::getMaxSearchLevel() const
 	{
 		const float mag_min = 0.001f*z->mag_min;
 		RCMag rcmag;
-		if (StelApp::getInstance().getCore()->getSkyDrawer()->computeRCMag(mag_min, &rcmag)==false)
+		if (StelApp::getInstance().getCore()->getSkyDrawer()->computeStarRCMag(mag_min, &rcmag)==false)
 			break;
 		rval = z->level;
 	}
@@ -1395,7 +1395,7 @@ void StarMgr::draw(StelCore* core)
 		for (int i=0;i<RCMAG_TABLE_SIZE;++i)
 		{
 			const float mag = mag_min+0.05*i;  // 0.05 mag MagStepIncrement
-			if (skyDrawer->computeRCMag(mag, &rcmag_table[i])==false)
+			if (skyDrawer->computeStarRCMag(mag, &rcmag_table[i])==false)
 			{
 				if (i==0)
 					goto exit_loop;
@@ -1421,7 +1421,7 @@ void StarMgr::draw(StelCore* core)
 		if (labelsFader.getInterstate()>0.f)
 		{
 			// Adapt magnitude limit of the stars labels according to FOV and labelsAmount
-			float maxMag = (skyDrawer->getLimitMagnitude()-6.5f)*0.7f+(static_cast<float>(labelsAmount)*1.2f)-2.f;
+			float maxMag = (skyDrawer->getStarLimitMagnitude()-6.5f)*0.7f+(static_cast<float>(labelsAmount)*1.2f)-2.f;
 			int x = static_cast<int>((maxMag-mag_min)/0.05);  // 0.05 mag MagStepIncrement
 			if (x > 0)
 				maxMagStarName = x;

@@ -7297,6 +7297,9 @@ export struct WindowNativeNode {
     if (result.bortleScale !== undefined) this.layerViewStore.bortleScale = Math.round(result.bortleScale as number)
     if (result.milkyWayIntensity !== undefined) this.layerViewStore.milkyWayBright = Math.max(0, Math.min(6, Math.round((result.milkyWayIntensity as number) * 3)))
     if (result.luminanceAdaptation !== undefined) this.layerStore.luminanceAdaptation = result.luminanceAdaptation === true
+    if (result.realisticStarVisibility !== undefined) this.layerStore.realisticStarVisibility = result.realisticStarVisibility === true
+    if (result.vividAtmosphere !== undefined) this.layerStore.vividAtmosphere = result.vividAtmosphere === true
+    if (result.environmentMode !== undefined) this.layerStore.environmentMode = result.environmentMode
     if (result.starTwinkle !== undefined) this.layerStore.starTwinkle = result.starTwinkle === true
     if (result.forcedStarTwinkle !== undefined) this.layerStore.forcedStarTwinkle = result.forcedStarTwinkle === true
     if (result.bigStarHalo !== undefined) this.layerStore.bigStarHalo = result.bigStarHalo === true

@@ -69,7 +69,9 @@ private:
 	QOpenGLVertexArrayObject vao;
 
 	//! Vertex shader used for xyYToRGB computation
-	class QOpenGLShaderProgram* atmoShaderProgram;
+	class QOpenGLShaderProgram* atmoShaderProgram = nullptr;
+	StelProjectorP renderProjector;
+	void compileShaders(const StelProjector* projector);
 	struct {
 		int alphaWaOverAlphaDa;
 		int oneOverGamma;
@@ -78,6 +80,8 @@ private:
 		int flagUseTmGamma;                      // switch between their use, true to use the first expression.
 		int brightnessScale;
 		int sunPos;
+		int vividStrength;
+		int mistUndergroundStrength;
 		int term_x, Ax, Bx, Cx, Dx, Ex;
 		int term_y, Ay, By, Cy, Dy, Ey;
 		int projectionMatrix;

@@ -1,6 +1,13 @@
 # Stellarium 鸿蒙 CLI
 
+## 大气表现与白天恒星（2026-11-12）
+
+`setSkyDisplaySetting` 增加 `environmentMode|0/1/2`（无/仅地面/大气和地面）、`vividAtmosphere|0/1`（原始/绚丽大气）、`realisticStarVisibility|0/1`（教学显示/现实星等）。`getState` 回读同名字段与恒星专用 `starLimitingMagnitude`；`environmentMode=3` 是单独操作其他开关产生的“仅大气层”状态。环境组合兼容雾山、照片及当前三维场景，详细恢复规则见 [大气表现规格](specs/ATMOSPHERE-PRESENTATION.md)。两个新布尔开关保存偏好，无联网或权限申请。
+
 ## 原生观测天体与坐标命令
+
+- `moveToAltAz` 接受 `az|alt[|duration[|upX|upY|upZ]]`；零时长立即更新完整相机基，天顶/天底使用稳定切向up。显式up须包含三个可解析的有限分量、长度至少0.01且不能与视线近平行；失败返回`ok:false/error`，不改变相机或取消原来的移动。合法up先正交化、归一化。`getViewDirection`限制反三角函数输入，精确极点也返回有限高度。
+- 非零时长的 AltAz 非目标跟踪移动逐帧保持正交相机基；保留起始滚转，并按最短角连续过渡到目标 up，包括精确 ±90°。不能只凭方位/高度回读判断极点画面正常，需同时检查截图。
 
 - `getObserverPlanetList` 返回 `{ok:true, planets:string[], observerPlanets:Array<{name:string, displayName:string, mapTexture:string}>}`。两个数组按引擎相同顺序覆盖 `LocationDialog` 的全部天体，包含卫星、小天体和 observer 虚拟观测点；不做八星白名单过滤。`name` 是命令使用的英文名，`displayName` 来自 `getNameI18n()`，随当前引擎语言和天空文化变化。
 - `mapTexture` 是 `getTextMapName()` 的原始相对文件名，不带 `assets/` 或 `stellarium/textures/` 前缀。Earth 返回空串，使用内置 worldmap；其他天体可使用 `$rawfile('stellarium/textures/' + mapTexture)`。这是地图纹理引用，不保证具有真实地表，也不宣称每个天体都有独立实测地图。

@@ -168,6 +168,11 @@ inline QJsonObject item(const QString& name)
 		value["description"] = QStringLiteral("lat,lon[,alt] 或 lat|lon[|alt]；在当前观测天体微调坐标，保留地景；省略海拔为 0。经纬度须有限且在 ±90/±180 度内，海拔为 int32 整数米。");
 		value["examplePayload"] = "39.9042|116.4074|43";
 	}
+	else if (name == "setSkyDisplaySetting")
+	{
+		value["description"] = QStringLiteral("setting|value；environmentMode:0无/1仅地面/2大气和地面；realisticStarVisibility:1真实可见性/0白天恒星教学显示；vividAtmosphere:1绚丽大气/0原始渲染。其它天空参数兼容原有设置。getState回读当前值，environmentMode=3表示自定义仅大气。");
+		value["examplePayload"] = "vividAtmosphere|1";
+	}
 	else if (name == "setPluginLoadAtStartup")
 	{
 		value["description"] = QStringLiteral("兼容旧客户端的插件启动命令；当前内置插件统一随应用启动加载，payload 中的 0 不再关闭插件");

@@ -68,6 +68,7 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	starAbsoluteScaleF(1.),
 	starLinearScale(19.569f),
 	limitMagnitude(-100.f),
+	starLimitMagnitude(-100.f),
 	limitLuminance(0.f),
 	customStarMagLimit(0.0),
 	customNebulaMagLimit(0.0),
@@ -81,6 +82,7 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	coronaMeshDim(5), // low odd number: 3/5/7
 	coronaTextureCoords(),
 	flagLuminanceAdaptation(false),
+	flagRealisticStarVisibility(true),
 	daylightLabelThreshold(250.0),
 	big3dModelHaloRadius(150.f)
 {
@@ -97,6 +99,7 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	setMaxAdaptFov(conf->value("stars/mag_converter_max_fov",70.0).toFloat());
 	setMinAdaptFov(conf->value("stars/mag_converter_min_fov",0.1).toFloat());
 	setFlagLuminanceAdaptation(conf->value("viewing/use_luminance_adaptation",true).toBool());
+	setFlagRealisticStarVisibility(conf->value("viewing/flag_realistic_star_visibility", true).toBool());
 	setDaylightLabelThreshold(conf->value("viewing/sky_brightness_label_threshold", 250.0).toDouble());
 	setFlagStarMagnitudeLimit(conf->value("astro/flag_star_magnitude_limit", false).toBool());
 	setCustomStarMagnitudeLimit(conf->value("astro/star_magnitude_limit", 6.5).toDouble());
@@ -308,13 +311,14 @@ void StelSkyDrawer::update(double)
 
 	// update limit mag
 	limitMagnitude = computeLimitMagnitude();
+	starLimitMagnitude = flagRealisticStarVisibility ? limitMagnitude : computeLimitMagnitude(true);
 
 	// update limit luminance
 	limitLuminance = computeLimitLuminance();
 }
 
 // Compute the current limit magnitude by dichotomy
-float StelSkyDrawer::computeLimitMagnitude() const
+float StelSkyDrawer::computeLimitMagnitude(bool forStars) const
 {
 	float a=-26.f;
 	float b=30.f;
@@ -323,7 +327,8 @@ float StelSkyDrawer::computeLimitMagnitude() const
 	int safety=0;
 	while (std::fabs(lim-a)>0.05f)
 	{
-		computeRCMag(lim, &rcmag);
+		if (forStars) computeStarRCMag(lim, &rcmag);
+		else computeRCMag(lim, &rcmag);
 		float tmp = lim;
 		if (rcmag.radius<=0.f)
 		{
@@ -403,7 +408,31 @@ float StelSkyDrawer::luminanceToSurfacebrightness(float lum)
 // Compute RMag and CMag from magnitude for a point source.
 bool StelSkyDrawer::computeRCMag(float mag, RCMag* rcMag) const
 {
-	rcMag->radius = eye->adaptLuminanceScaledLn(pointSourceMagToLnLuminance(mag), static_cast<float>(starRelativeScale)*1.40f*0.5f);
+	return computeRCMagFromRadius(eye->adaptLuminanceScaledLn(pointSourceMagToLnLuminance(mag), static_cast<float>(starRelativeScale)*1.40f*0.5f), rcMag);
+}
+
+bool StelSkyDrawer::computeStarRCMag(float mag, RCMag* rcMag) const
+{
+	const float baselineLuminance = 3.75f;
+	if (flagRealisticStarVisibility || eye->getWorldAdaptationLuminance() <= baselineLuminance)
+		return computeRCMag(mag, rcMag);
+	const float logWorld = std::log10(baselineLuminance);
+	const float logDisplay = std::log10(eye->getDisplayAdaptationLuminance());
+	const float alphaWorld = 0.4f * logWorld + 1.619f;
+	const float alphaDisplay = 0.4f * logDisplay + 1.619f;
+	const float betaWorld = -0.4f * logWorld * logWorld + 0.218f * logWorld + 6.1642f;
+	const float betaDisplay = -0.4f * logDisplay * logDisplay + 0.218f * logDisplay + 6.1642f;
+	const float lnConversion = std::log(M_PIf * 0.0001f);
+	const float lnTerm = std::log(10.f) * (betaWorld - betaDisplay) / alphaDisplay - lnConversion;
+	const float lnLuminance = (std::log(eye->getInputScale()) + pointSourceMagToLnLuminance(mag) + lnConversion)
+		* alphaWorld / alphaDisplay + lnTerm - std::log(eye->getMaxDisplayLuminance());
+	const float radius = std::exp(lnLuminance * static_cast<float>(starRelativeScale) * 1.40f * 0.5f);
+	return computeRCMagFromRadius(radius, rcMag);
+}
+
+bool StelSkyDrawer::computeRCMagFromRadius(float radius, RCMag* rcMag) const
+{
+	rcMag->radius = radius;
 	rcMag->radius *=starLinearScale;
 	// Use now statically min_rmag = 0.5, because higher and too small values look bad
 	if (rcMag->radius < 0.3f)
@@ -1113,6 +1142,14 @@ void StelSkyDrawer::setFlagLuminanceAdaptation(bool b)
 		StelApp::immediateSave("viewing/use_luminance_adaptation", b);
 		emit flagLuminanceAdaptationChanged(b);
 	}
+}
+
+void StelSkyDrawer::setFlagRealisticStarVisibility(bool enabled)
+{
+	if (flagRealisticStarVisibility == enabled) return;
+	flagRealisticStarVisibility = enabled;
+	StelApp::immediateSave("viewing/flag_realistic_star_visibility", enabled);
+	emit flagRealisticStarVisibilityChanged(enabled);
 }
 
 void StelSkyDrawer::setDaylightLabelThreshold(double t)

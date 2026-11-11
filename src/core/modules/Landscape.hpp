@@ -276,6 +276,7 @@ protected:
 };
 
 class QOpenGLTexture;
+struct LandscapeMistResources;
 
 class LandscapeMist : public Landscape
 {
@@ -289,8 +290,7 @@ public:
 	Vec3f sunDirection = Vec3f(0.f, 0.f, -1.f);
 private:
 	void prepareResources();
-	std::unique_ptr<QOpenGLTexture> ridgeTexture;
-	std::unique_ptr<QOpenGLTexture> noiseTexture;
+	std::unique_ptr<LandscapeMistResources> mistResources;
 };
 
 //! @class LandscapeOldStyle

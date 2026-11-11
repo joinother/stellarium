@@ -3678,6 +3678,8 @@ QJsonObject currentStateJson()
 		if (drawer)
 		{
 			result["luminanceAdaptation"] = drawer->getFlagLuminanceAdaptation();
+			result["realisticStarVisibility"] = drawer->getFlagRealisticStarVisibility();
+			result["starLimitingMagnitude"] = drawer->getStarLimitMagnitude();
 			result["starTwinkle"] = drawer->getFlagTwinkle();
 			result["forcedStarTwinkle"] = drawer->getFlagForcedTwinkle();
 			result["bigStarHalo"] = drawer->getFlagDrawBigStarHalo();
@@ -3686,6 +3688,14 @@ QJsonObject currentStateJson()
 			result["bortleScale"] = StelCore::luminanceToBortleScaleIndex(
 				static_cast<float>(drawer->getLightPollutionLuminance()));
 		}
+	}
+	if (LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr))
+	{
+		StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
+		const bool ground = landscape->getFlagLandscape() || landscape->getMistHorizonEnabled() ||
+			(scenery && scenery->property("enableScene").toBool());
+		result["environmentMode"] = landscape->getFlagAtmosphere() ? (ground ? 2 : 3) : (ground ? 1 : 0);
+		result["vividAtmosphere"] = landscape->getFlagVividAtmosphere();
 	}
 	if (SporadicMeteorMgr* mmgr = GETSTELMODULE(SporadicMeteorMgr))
 	{
@@ -10417,6 +10427,58 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const bool enabled = value == "1" || value.compare("true", Qt::CaseInsensitive) == 0;
 			StelSkyDrawer* drawer = StelApp::getInstance().getCore()->getSkyDrawer();
 			if (setting == "luminanceAdaptation") drawer->setFlagLuminanceAdaptation(enabled);
+			else if (setting == "realisticStarVisibility")
+			{
+				if (value != "0" && value != "1" && value != "true" && value != "false")
+				{
+					result["ok"] = false;
+					result["error"] = "realisticStarVisibility requires a boolean";
+					return result;
+				}
+				drawer->setFlagRealisticStarVisibility(enabled);
+			}
+			else if (setting == "vividAtmosphere")
+			{
+				LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr);
+				if (!landscape || (value != "0" && value != "1" && value != "true" && value != "false"))
+				{
+					result["ok"] = false;
+					result["error"] = "vividAtmosphere requires a boolean and a loaded landscape manager";
+					return result;
+				}
+				landscape->setFlagVividAtmosphere(enabled);
+			}
+			else if (setting == "environmentMode")
+			{
+				bool valid = false;
+				const int mode = value.toInt(&valid);
+				LandscapeMgr* landscape = GETSTELMODULE(LandscapeMgr);
+				if (!valid || mode < 0 || mode > 2 || !landscape)
+				{
+					result["ok"] = false;
+					result["error"] = "environmentMode must be 0 (none), 1 (ground), or 2 (atmosphere and ground)";
+					return result;
+				}
+				StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
+				QSettings* settings = StelApp::getInstance().getSettings();
+				if (mode == 0)
+				{
+					if (landscape->getFlagLandscape() || landscape->getMistHorizonEnabled())
+						StelApp::immediateSave("landscape/environment_prefers_mist", landscape->getMistHorizonEnabled());
+					landscape->setFlagLandscape(false);
+					landscape->setMistHorizonEnabled(false);
+					landscape->setFlagFog(false);
+					if (scenery) scenery->setProperty("enableScene", false);
+				}
+				else if (!landscape->getFlagLandscape() && !landscape->getMistHorizonEnabled() &&
+					!(scenery && scenery->property("enableScene").toBool()))
+				{
+					if (settings->value("landscape/environment_prefers_mist", true).toBool())
+						landscape->setMistHorizonEnabled(true);
+					else landscape->setFlagLandscape(true);
+				}
+				landscape->setFlagAtmosphere(mode == 2);
+			}
 			else if (setting == "starTwinkle") drawer->setFlagTwinkle(enabled);
 			else if (setting == "forcedStarTwinkle") drawer->setFlagForcedTwinkle(enabled);
 			else if (setting == "bigStarHalo") drawer->setFlagDrawBigStarHalo(enabled);
@@ -10660,7 +10722,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				bool ok1, ok2;
 				double az = parts[0].toDouble(&ok1);
 				double alt = parts[1].toDouble(&ok2);
-				if (ok1 && ok2) {
+				if (ok1 && ok2 && std::isfinite(az) && std::isfinite(alt)) {
 					float duration = parts.size() > 2 ? parts[2].toFloat() : 1.0f;
 					StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
 					Vec3d aim;
@@ -10676,14 +10738,42 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 						aimUp = Vec3d(-cos(az * M_PI / 180.), -sin(az * M_PI / 180.), 0.) * (alt >= 0. ? 1. : -1.);
 					else
 						aimUp.normalize();
+					if (parts.size() > 3 && parts.size() < 6)
+					{
+						result["ok"] = false;
+						result["error"] = "explicit up requires three components";
+						return result;
+					}
 					if (parts.size() >= 6)
 					{
 						bool okUpX = false, okUpY = false, okUpZ = false;
 						aimUp = Vec3d(parts[3].toDouble(&okUpX), parts[4].toDouble(&okUpY), parts[5].toDouble(&okUpZ));
-						if (okUpX && okUpY && okUpZ && aimUp.normSquared() >= 0.0001)
-							aimUp.normalize();
+						const double upLength = std::hypot(aimUp[0], aimUp[1], aimUp[2]);
+						if (!okUpX || !okUpY || !okUpZ || !std::isfinite(upLength) || upLength < 0.01)
+						{
+							result["ok"] = false;
+							result["error"] = "explicit up must be finite and nonzero";
+							return result;
+						}
+						aimUp /= upLength;
+						aimUp -= aim * aim.dot(aimUp);
+						if (!std::isfinite(aimUp.normSquared()) || aimUp.normSquared() < 1.e-8)
+						{
+							result["ok"] = false;
+							result["error"] = "explicit up must not be parallel to the view";
+							return result;
+						}
+						aimUp.normalize();
 					}
-					mvmgr->moveToAltAzi(aim, aimUp, duration);
+					if (duration == 0.f)
+					{
+						StelCore* core = StelApp::getInstance().getCore();
+						mvmgr->cancelAutoMove();
+						mvmgr->setViewUpVectorJ2000(core->altAzToJ2000(aimUp, StelCore::RefractionOff));
+						mvmgr->setViewDirectionJ2000(core->altAzToJ2000(aim, StelCore::RefractionOff));
+					}
+					else
+						mvmgr->moveToAltAzi(aim, aimUp, duration);
 					// ArkTS app logs are not exposed on every retail device. Keep a
 					// throttled native record for validating the gyro coordinate frame.
 					static int gyroDiagnosticCount = 0;
@@ -10858,8 +10948,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			Vec3d viewDir = core->getMovementMgr()->getViewDirectionJ2000();
 			// Convert J2000 to alt/az
 			Vec3d altAz = core->j2000ToAltAz(viewDir, StelCore::RefractionAuto);
+			altAz.normalize();
 			double az = atan2(altAz[1], altAz[0]) * 180. / M_PI;
-			double alt = asin(altAz[2]) * 180. / M_PI;
+			double alt = asin(qBound(-1.0, altAz[2], 1.0)) * 180. / M_PI;
 			if (az < 0) az += 360.;
 			result["ok"] = true;
 			result["azimuth"] = az;
@@ -12826,10 +12917,12 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			QStringList activeLoading;
 			QStringList activeNotStarted;
 			QStringList activeErrors;
+			bool renderEnabled = false;
 			bool layerVisible = false;
 			int layerCount = 0;
 			if (auto* skyLayerMgr = GETSTELMODULE(StelSkyLayerMgr))
 			{
+				renderEnabled = skyLayerMgr->getFlagShow();
 				const QMap<QString, StelSkyLayerP> layers = skyLayerMgr->getAllSkyLayers();
 				for (auto iter = layers.cbegin(); iter != layers.cend(); ++iter)
 				{
@@ -12837,8 +12930,10 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (!tile)
 						continue;
 					++layerCount;
-					layerVisible = layerVisible || skyLayerMgr->getShowLayer(iter.key());
-					tile->collectTextureStatus(activeReady, activeLoading, activeNotStarted, activeErrors, true);
+					const bool showLayer = skyLayerMgr->getShowLayer(iter.key());
+					layerVisible = layerVisible || showLayer;
+					if (renderEnabled && showLayer)
+						tile->collectTextureStatus(activeReady, activeLoading, activeNotStarted, activeErrors, true);
 				}
 			}
 			activeReady.removeDuplicates();
@@ -12897,15 +12992,18 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["missingFiles"] = missingFiles;
 			result["diskBytes"] = diskBytes;
 			result["layerCount"] = layerCount;
+			result["renderEnabled"] = renderEnabled;
 			result["layerVisible"] = layerVisible;
+			result["effectiveLayerVisible"] = renderEnabled && layerVisible;
 			result["activeTextureReadyCount"] = activeReady.size();
 			result["activeTextureLoadingCount"] = activeLoading.size();
 			result["activeTextureNotStartedCount"] = activeNotStarted.size();
 			result["activeTexturePendingCount"] = activeLoading.size() + activeNotStarted.size();
 			result["activeTextureErrorCount"] = activeErrors.size();
-			result["activeTextureStatus"] = activeErrors.isEmpty()
-				? (activeLoading.isEmpty() && activeNotStarted.isEmpty() ? "ready" : "loading")
-				: (activeReady.isEmpty() ? "error" : "partial-error");
+			result["activeTextureStatus"] = !renderEnabled || !layerVisible ? "disabled"
+				: (!activeErrors.isEmpty() ? (activeReady.isEmpty() ? "error" : "partial-error")
+					: (!activeLoading.isEmpty() || !activeNotStarted.isEmpty() ? "loading"
+						: (activeReady.isEmpty() ? "idle" : "ready")));
 			result["targetOffset"] = allRequested ? targetOffset : 0;
 			result["targetLimit"] = allRequested ? targetLimit : requested.size();
 			result["targetTotal"] = diskNames.size();
@@ -12913,6 +13011,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["targets"] = targets;
 			qInfo() << "[dso-probe] deep-sky status: referenced=" << referencedNames.size()
 					<< "onDisk=" << diskNames.size() << "missing=" << missingFiles.size()
+					<< "renderEnabled=" << renderEnabled << "layerVisible=" << layerVisible
 					<< "activeReady=" << activeReady.size() << "activeLoading=" << activeLoading.size()
 					<< "activeNotStarted=" << activeNotStarted.size()
 					<< "activeErrors=" << activeErrors.size();

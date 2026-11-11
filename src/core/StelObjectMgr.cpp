@@ -475,10 +475,15 @@ StelObjectP StelObjectMgr::cleverFind(const StelCore* core, const Vec3d& v) cons
 	const float limitMag = core->getSkyDrawer()->getFlagStarMagnitudeLimit() ?
 				static_cast<float>(core->getSkyDrawer()->getCustomStarMagnitudeLimit()) :
 				core->getSkyDrawer()->getLimitMagnitude();
+	const float starLimitMag = core->getSkyDrawer()->getFlagStarMagnitudeLimit() ?
+				qMin(limitMag, core->getSkyDrawer()->getStarLimitMagnitude()) :
+				core->getSkyDrawer()->getStarLimitMagnitude();
 	QList<StelObjectP> tmp;
 	for (const auto& obj : std::as_const(candidates))
 	{
-		if (obj->getSelectPriority(core)<=limitMag)
+		const float objectLimitMag = obj->getType() == QLatin1String("Star") &&
+				!core->getSkyDrawer()->getFlagRealisticStarVisibility() ? starLimitMag : limitMag;
+		if (obj->getSelectPriority(core)<=objectLimitMag)
 			tmp.append(obj);
 	}
 	candidates = tmp;

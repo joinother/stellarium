@@ -72,6 +72,7 @@ class StelSkyDrawer : public QObject, protected QOpenGLFunctions
 	Q_PROPERTY(double customPlanetMagLimit READ getCustomPlanetMagnitudeLimit WRITE setCustomPlanetMagnitudeLimit NOTIFY customPlanetMagLimitChanged)
 
 	Q_PROPERTY(bool flagLuminanceAdaptation READ getFlagLuminanceAdaptation WRITE setFlagLuminanceAdaptation NOTIFY flagLuminanceAdaptationChanged)
+	Q_PROPERTY(bool flagRealisticStarVisibility READ getFlagRealisticStarVisibility WRITE setFlagRealisticStarVisibility NOTIFY flagRealisticStarVisibilityChanged)
 	Q_PROPERTY(double daylightLabelThreshold READ getDaylightLabelThreshold WRITE setDaylightLabelThreshold NOTIFY daylightLabelThresholdChanged)
 
 	Q_PROPERTY(double extinctionCoefficient READ getExtinctionCoefficient WRITE setExtinctionCoefficient NOTIFY extinctionCoefficientChanged)
@@ -147,6 +148,7 @@ public:
 	//! @param rcMag array of 2 floats containing the radius and luminance
 	//! @return false if the object is too faint to be displayed
 	bool computeRCMag(float mag, RCMag*) const;
+	bool computeStarRCMag(float mag, RCMag*) const;
 
 	//! Report that an object of luminance lum with an on-screen area of area pixels is currently displayed
 	//! This information is used to determine the world adaptation luminance
@@ -230,6 +232,7 @@ public slots:
 	//! It depends on the zoom level, on the eye adaptation and on the point source rendering parameters
 	//! @return the limit V mag at which a point source will be displayed
 	float getLimitMagnitude() const {return limitMagnitude;}
+	float getStarLimitMagnitude() const {return flagRealisticStarVisibility ? limitMagnitude : starLimitMagnitude;}
 
 	//! Toggle the application of user-defined star magnitude limit.
 	//! If enabled, stars fainter than the magnitude set with
@@ -275,6 +278,8 @@ public slots:
 	void setFlagLuminanceAdaptation(bool b);
 	//! Get the current value of eye adaptation flag
 	bool getFlagLuminanceAdaptation() const {return flagLuminanceAdaptation;}
+	void setFlagRealisticStarVisibility(bool enabled);
+	bool getFlagRealisticStarVisibility() const {return flagRealisticStarVisibility;}
 
 	//! Set the label brightness threshold
 	void setDaylightLabelThreshold(double t);
@@ -361,6 +366,7 @@ signals:
 
 	//! Emitted whenever the luminance adaptation flag is toggled
 	void flagLuminanceAdaptationChanged(bool b);
+	void flagRealisticStarVisibilityChanged(bool enabled);
 	//! Emitted when threshold value to draw info text in black is changed
 	void daylightLabelThresholdChanged(double t);
 
@@ -378,7 +384,8 @@ private:
 	float reverseComputeRCMag(float rmag) const;
 
 	//! Compute the current limit magnitude by dichotomy
-	float computeLimitMagnitude() const;
+	float computeLimitMagnitude(bool forStars=false) const;
+	bool computeRCMagFromRadius(float radius, RCMag* rcMag) const;
 
 	//! Compute the current limit luminance by dichotomy
 	float computeLimitLuminance() const;
@@ -467,6 +474,7 @@ private:
 
 	//! Current magnitude limit for point sources
 	float limitMagnitude;
+	float starLimitMagnitude;
 
 	//! Current magnitude luminance
 	float limitLuminance;
@@ -547,6 +555,7 @@ private:
 
 	//! Simulate the eye's luminance adaptation?
 	bool flagLuminanceAdaptation;
+	bool flagRealisticStarVisibility;
 	//! a customizable value in cd/m^2 which is used to decide when to render the InfoText in black (when sky is brighter than this)
 	double daylightLabelThreshold;
 

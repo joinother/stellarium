@@ -20,6 +20,7 @@
  */
 
 #include "Landscape.hpp"
+#include "MistTerrain.hpp"
 #include "StelApp.hpp"
 #include "StelTextureMgr.hpp"
 #include "StelFileMgr.hpp"
@@ -29,6 +30,7 @@
 #include "StelPainter.hpp"
 #include "StelLocaleMgr.hpp"
 #include "LandscapeMgr.hpp"
+#include "StelModuleMgr.hpp"
 
 #include <QDebug>
 #include <QSettings>
@@ -41,6 +43,9 @@
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLTexture>
+#include <QOpenGLFramebufferObject>
+#include <QOpenGLExtraFunctions>
+#include <QElapsedTimer>
 
 namespace
 {
@@ -519,175 +524,504 @@ LandscapeOldStyle::~LandscapeOldStyle()
 	landscapeLabels.clear();
 }
 
+struct LandscapeMistResources
+{
+	MistTerrain::Mesh mesh;
+	MistTerrain::ViewWorkspace viewWorkspace;
+	std::vector<double> viewSignature;
+	std::unique_ptr<QOpenGLBuffer> vertices;
+	std::unique_ptr<QOpenGLBuffer> indices;
+	std::unique_ptr<QOpenGLVertexArrayObject> meshVao;
+	std::unique_ptr<QOpenGLTexture> noise;
+	std::unique_ptr<QOpenGLFramebufferObject> target;
+	std::unique_ptr<QOpenGLFramebufferObject> resolved;
+	std::unique_ptr<QOpenGLShaderProgram> surfaceProgram;
+	QElapsedTimer clock;
+	double portal = 1.;
+	double flow = 0.;
+	bool portalInitialized = false;
+	int indexCount = 0;
+	int indexCapacity = 0;
+	int samples = 0;
+	bool reportedViewCost = false;
+};
+
+struct MistGLState
+{
+	QOpenGLExtraFunctions& gl;
+	GLint drawFramebuffer, readFramebuffer, viewport[4], program, vertexArray, arrayBuffer, renderbuffer;
+	GLint activeTexture, texture, depthFunction, sourceRgb, destinationRgb, sourceAlpha, destinationAlpha, equationRgb, equationAlpha;
+	GLfloat clearColor[4], clearDepth;
+	GLboolean depthMask, colorMask[4], blend, depth, cull, scissor, stencil, polygonOffset;
+
+	explicit MistGLState(QOpenGLExtraFunctions& functions) : gl(functions)
+	{
+		gl.glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer);
+		gl.glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer);
+		gl.glGetIntegerv(GL_VIEWPORT, viewport);
+		gl.glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+		gl.glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArray);
+		gl.glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuffer);
+		gl.glGetIntegerv(GL_RENDERBUFFER_BINDING, &renderbuffer);
+		gl.glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+		gl.glActiveTexture(GL_TEXTURE0);
+		gl.glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture);
+		gl.glGetIntegerv(GL_DEPTH_FUNC, &depthFunction);
+		gl.glGetIntegerv(GL_BLEND_SRC_RGB, &sourceRgb);
+		gl.glGetIntegerv(GL_BLEND_DST_RGB, &destinationRgb);
+		gl.glGetIntegerv(GL_BLEND_SRC_ALPHA, &sourceAlpha);
+		gl.glGetIntegerv(GL_BLEND_DST_ALPHA, &destinationAlpha);
+		gl.glGetIntegerv(GL_BLEND_EQUATION_RGB, &equationRgb);
+		gl.glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &equationAlpha);
+		gl.glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor);
+		gl.glGetFloatv(GL_DEPTH_CLEAR_VALUE, &clearDepth);
+		gl.glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+		gl.glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+		blend = gl.glIsEnabled(GL_BLEND);
+		depth = gl.glIsEnabled(GL_DEPTH_TEST);
+		cull = gl.glIsEnabled(GL_CULL_FACE);
+		scissor = gl.glIsEnabled(GL_SCISSOR_TEST);
+		stencil = gl.glIsEnabled(GL_STENCIL_TEST);
+		polygonOffset = gl.glIsEnabled(GL_POLYGON_OFFSET_FILL);
+	}
+
+	~MistGLState()
+	{
+		gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFramebuffer);
+		gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, readFramebuffer);
+		gl.glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+		gl.glUseProgram(program);
+		gl.glBindVertexArray(vertexArray);
+		gl.glBindBuffer(GL_ARRAY_BUFFER, arrayBuffer);
+		gl.glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+		gl.glActiveTexture(GL_TEXTURE0);
+		gl.glBindTexture(GL_TEXTURE_2D, texture);
+		gl.glActiveTexture(activeTexture);
+		gl.glDepthFunc(depthFunction);
+		gl.glDepthMask(depthMask);
+		gl.glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
+		gl.glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
+		gl.glClearDepthf(clearDepth);
+		gl.glBlendFuncSeparate(sourceRgb, destinationRgb, sourceAlpha, destinationAlpha);
+		gl.glBlendEquationSeparate(equationRgb, equationAlpha);
+		const auto restore = [&](GLenum capability, GLboolean enabled) { if (enabled) gl.glEnable(capability); else gl.glDisable(capability); };
+		restore(GL_BLEND, blend);
+		restore(GL_DEPTH_TEST, depth);
+		restore(GL_CULL_FACE, cull);
+		restore(GL_SCISSOR_TEST, scissor);
+		restore(GL_STENCIL_TEST, stencil);
+		restore(GL_POLYGON_OFFSET_FILL, polygonOffset);
+	}
+};
+
 LandscapeMist::LandscapeMist() = default;
 LandscapeMist::~LandscapeMist() = default;
 
 void LandscapeMist::prepareResources()
 {
-	if (ridgeTexture && noiseTexture) return;
-	constexpr int samples = 1024;
-	constexpr int layers = 5;
-	constexpr int noiseSize = 128;
-	const auto fraction = [](double value) { return value - std::floor(value); };
-	const auto hash = [&fraction](double horizontal, double vertical) {
-		const double first = fraction(horizontal * .1031);
-		const double second = fraction(vertical * .1031);
-		const double dot = first * (second + 33.33) + second * (first + 33.33) + first * (first + 33.33);
-		return fraction((first + second + 2. * dot) * (first + dot));
-	};
-	const auto ridgeNoise = [&hash, &fraction](double longitude, int layer, int count) {
-		const double position = (longitude / (2. * M_PI) + .5) * count;
-		const int cell = static_cast<int>(std::floor(position));
-		const int first = (cell % count + count) % count;
-		const int next = (first + 1) % count;
-		const double blend = fraction(position);
-		const double weight = blend * .65 + blend * blend * (3. - 2. * blend) * .35;
-		return hash(first, layer) * (1. - weight) + hash(next, layer) * weight - .5;
-	};
-	QVector<float> heights(samples * layers);
-	for (int layer = 0; layer < layers; ++layer)
-		for (int sample = 0; sample < samples; ++sample)
-		{
-			const double longitude = (static_cast<double>(sample) / samples - .5) * (2. * M_PI);
-			heights[layer * samples + sample] = static_cast<float>(
-				ridgeNoise(longitude, layer + 7, 17) * .065 + ridgeNoise(longitude, layer + 19, 41) * .022 +
-				ridgeNoise(longitude, layer + 37, 83) * .007 + std::sin(longitude * 2. + layer * 2.1) * .016);
-		}
-	ridgeTexture.reset(new QOpenGLTexture(QOpenGLTexture::Target2D));
-	ridgeTexture->setSize(samples, layers);
-	ridgeTexture->setFormat(QOpenGLTexture::R16F);
-	ridgeTexture->setMipLevels(1);
-	ridgeTexture->allocateStorage(QOpenGLTexture::Red, QOpenGLTexture::Float32);
-	ridgeTexture->setData(QOpenGLTexture::Red, QOpenGLTexture::Float32, heights.constData());
-	ridgeTexture->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
-	ridgeTexture->setWrapMode(QOpenGLTexture::DirectionS, QOpenGLTexture::Repeat);
-	ridgeTexture->setWrapMode(QOpenGLTexture::DirectionT, QOpenGLTexture::ClampToEdge);
-	QVector<quint8> noise(noiseSize * noiseSize);
-	for (int row = 0; row < noiseSize; ++row)
-		for (int column = 0; column < noiseSize; ++column)
-			noise[row * noiseSize + column] = static_cast<quint8>(hash(column, row) * 255.);
-	noiseTexture.reset(new QOpenGLTexture(QOpenGLTexture::Target2D));
-	noiseTexture->setSize(noiseSize, noiseSize);
-	noiseTexture->setFormat(QOpenGLTexture::R8_UNorm);
-	noiseTexture->setMipLevels(1);
-	noiseTexture->allocateStorage(QOpenGLTexture::Red, QOpenGLTexture::UInt8);
-	noiseTexture->setData(QOpenGLTexture::Red, QOpenGLTexture::UInt8, noise.constData());
-	noiseTexture->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
-	noiseTexture->setWrapMode(QOpenGLTexture::Repeat);
-	if (!ridgeTexture->isStorageAllocated() || !noiseTexture->isStorageAllocated())
-		qWarning() << "Mist horizon cache allocation failed";
+	if (mistResources) return;
+	mistResources.reset(new LandscapeMistResources);
+	auto& resources = *mistResources;
+	resources.mesh = MistTerrain::generate();
+	MistTerrain::initializeWorkspace(resources.mesh, resources.viewWorkspace);
+	resources.vertices.reset(new QOpenGLBuffer(QOpenGLBuffer::VertexBuffer));
+	resources.indices.reset(new QOpenGLBuffer(QOpenGLBuffer::IndexBuffer));
+	resources.meshVao.reset(new QOpenGLVertexArrayObject);
+	resources.vertices->create();
+	resources.indices->create();
+	resources.meshVao->create();
+	resources.vertices->setUsagePattern(QOpenGLBuffer::DynamicDraw);
+	resources.indices->setUsagePattern(QOpenGLBuffer::DynamicDraw);
+	resources.vertices->bind();
+	resources.vertices->allocate(static_cast<int>((resources.mesh.vertices.size() + 8192) * sizeof(MistTerrain::Vertex)));
+	resources.vertices->write(0, resources.mesh.vertices.data(), static_cast<int>(resources.mesh.vertices.size() * sizeof(MistTerrain::Vertex)));
+	resources.vertices->release();
+	std::vector<quint8> noise(128 * 128);
+	std::uint32_t random = 0x734f23a1u;
+	for (auto& value : noise)
+	{
+		random ^= random << 13;
+		random ^= random >> 17;
+		random ^= random << 5;
+		value = static_cast<quint8>(random >> 24);
+	}
+	resources.noise.reset(new QOpenGLTexture(QOpenGLTexture::Target2D));
+	resources.noise->setSize(128, 128);
+	resources.noise->setFormat(QOpenGLTexture::R8_UNorm);
+	resources.noise->setMipLevels(1);
+	resources.noise->allocateStorage(QOpenGLTexture::Red, QOpenGLTexture::UInt8);
+	resources.noise->setData(QOpenGLTexture::Red, QOpenGLTexture::UInt8, noise.data());
+	resources.noise->setMinMagFilters(QOpenGLTexture::Linear, QOpenGLTexture::Linear);
+	resources.noise->setWrapMode(QOpenGLTexture::Repeat);
+	resources.clock.start();
 }
 
 void LandscapeMist::draw(StelCore* core, bool onlyPolygon)
 {
-	if (onlyPolygon || !core->getFlagClearSky()) return;
+	if (onlyPolygon || !core->getFlagClearSky() || opacity <= .001f) return;
+	auto& gl = *QOpenGLContext::currentContext()->extraFunctions();
+	MistGLState state(gl);
 	if (!initialized) initGL();
 	prepareResources();
-	if (!ridgeTexture->isStorageAllocated() || !noiseTexture->isStorageAllocated()) return;
+	auto& resources = *mistResources;
+	if (!resources.vertices->isCreated() || !resources.indices->isCreated() ||
+	    !resources.meshVao->isCreated() || !resources.noise->isStorageAllocated()) return;
 	const StelProjectorP projector = core->getProjection(core->getAltAzModelViewTransform(StelCore::RefractionOff));
-	if (!renderProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
+	const Vec4i viewport = projector->getViewport();
+	if (viewport[2] <= 0 || viewport[3] <= 0) return;
+	Vec3d viewDirection;
+	const auto center = projector->getViewportCenter();
+	if (!projector->unProject(center[0] + viewport[0], center[1] + viewport[1], viewDirection) ||
+	    !std::isfinite(viewDirection[2]) || viewDirection.normSquared() < 1e-12) return;
+	viewDirection.normalize();
+	const double wideField = MistTerrain::wideFieldWeight(projector->getFov());
+	const double flowAmount = MistTerrain::flowAmount(std::asin(std::max(-1., std::min(1., viewDirection[2]))), projector->getFov());
+	const double targetPortal = MistTerrain::portalTarget(std::asin(std::max(-1., std::min(1., viewDirection[2]))), projector->getFov());
+	const double elapsed = resources.clock.restart() * .001;
+	if (!resources.portalInitialized)
+	{
+		resources.portal = targetPortal;
+		resources.flow = flowAmount;
+		resources.portalInitialized = true;
+	}
+	else
+	{
+		resources.portal = MistTerrain::advancePortal(resources.portal, targetPortal, elapsed);
+		resources.flow = MistTerrain::advanceFlow(resources.flow, flowAmount, elapsed);
+	}
+	if (resources.portal < .0001 && targetPortal == 0.) return;
+	if (!resources.surfaceProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
 	{
 		prevProjector = projector;
-		renderProgram.reset(new QOpenGLShaderProgram);
-		const auto vertexShader = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + QByteArray(R"(
-ATTRIBUTE highp vec2 vertex;
-VARYING highp vec2 position;
-void main() { position = vertex; gl_Position = vec4(vertex, 0., 1.); }
+		resources.viewSignature.clear();
+		resources.surfaceProgram.reset(new QOpenGLShaderProgram);
+		const auto vertexShader = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
+			projector->getProjectShader() + QByteArray(R"(
+ATTRIBUTE highp vec3 terrainPosition;
+ATTRIBUTE highp vec3 terrainNormal;
+ATTRIBUTE highp float terrainFlow;
+VARYING highp vec3 surfacePosition;
+VARYING highp vec3 surfaceNormal;
+VARYING highp float surfaceFlow;
+uniform highp vec4 terrainViewport;
+void main() {
+    vec3 window = project(terrainPosition);
+    float distance = length(terrainPosition);
+    vec2 clip = (window.xy - terrainViewport.xy) / terrainViewport.zw * 2. - 1.;
+    float depth = distance / (distance + 128.);
+    gl_Position = vec4(clip * distance, (depth * 2. - 1.) * distance, distance);
+    surfacePosition = terrainPosition;
+    surfaceNormal = terrainNormal;
+    surfaceFlow = terrainFlow;
+}
 )");
 		const auto fragmentShader = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + QByteArray(R"(
 #ifdef GL_ES
 precision highp float;
 #endif
 )") + projector->getUnProjectShader() + QByteArray(R"(
-VARYING highp vec2 position;
-uniform mat4 inverseProjection;
+VARYING highp vec3 surfacePosition;
+VARYING highp vec3 surfaceNormal;
+VARYING highp float surfaceFlow;
+uniform highp vec4 terrainViewport;
+uniform sampler2D noiseTexture;
 uniform float clockTime;
 uniform float opacity;
+uniform float portal;
+uniform float flowAmount;
 uniform float daylight;
 uniform bool nightVision;
+uniform bool vividAtmosphere;
 uniform vec3 sunDirection;
-uniform highp sampler2D ridgeTexture;
-uniform highp sampler2D noiseTexture;
 float softNoise(vec2 point) {
     vec2 cell = floor(point);
     vec2 blend = fract(point);
     blend = blend * blend * (3. - 2. * blend);
     return texture(noiseTexture, (cell + blend + .5) / 128.).r;
 }
+float terrainIllumination(float solarHeight) {
+    return smoothstep(-.30, .12, solarHeight);
+}
+float aerialPerspective(float distance, float haze) {
+    return 1. - exp(-distance * (.00028 + .00006 * haze + .00000009 * distance));
+}
 void main() {
-    vec4 projected = inverseProjection * vec4(position, 0., 1.);
+    float distance = length(surfacePosition);
+    vec3 direction = surfacePosition / max(distance, .0001);
     bool valid = false;
-    vec3 direction = normalize(unProject(projected.x, projected.y, valid).xyz);
+    vec3 ray = unProject(gl_FragCoord.x + terrainViewport.x, gl_FragCoord.y + terrainViewport.y, valid);
+    if (!valid || !(length(ray) > .00001) || dot(normalize(ray), direction) < .995) discard;
     float altitude = asin(clamp(direction.z, -1., 1.));
-    float pixelWidth = fwidth(altitude);
-    if (!valid || direction.z > .14 || direction.z < -.976) { FRAG_COLOR = vec4(0.); return; }
-    float twilight = (1. - smoothstep(.02, .24, abs(sunDirection.z))) * smoothstep(-.22, -.04, sunDirection.z);
-    float sunward = .4 + .6 * pow(max(0., dot(direction.xy, sunDirection.xy)), 2.);
-    vec3 farTint = mix(vec3(.055, .075, .125), vec3(.30, .39, .52), daylight);
-    farTint = mix(farTint, vec3(.37, .25, .27), twilight * sunward * .72);
-    vec3 nearTint = mix(vec3(.006, .010, .021), vec3(.085, .13, .21), daylight);
-    nearTint = mix(nearTint, vec3(.13, .075, .095), twilight * sunward * .45);
-    vec3 color = vec3(0.);
-    float coverage = 0.;
-    float ridgePosition = atan(direction.y, direction.x) / 6.28318530718 + .5 + .5 / 1024.;
-    for (int layer = 0; layer < 5; ++layer) {
-        float depth = float(layer);
-        float ridgeHeight = texture(ridgeTexture, vec2(ridgePosition, (depth + .5) / 5.)).r;
-        float height = .012 - depth * .032 - depth * depth * .008 + ridgeHeight * (1. + depth * .32);
-        float softness = max(pixelWidth * .85, .0008 + depth * .0007);
-        float density = (1. - smoothstep(height - softness, height + softness, altitude)) * .88;
-        float aerialFade = smoothstep(-.65, -.08, altitude);
-        density *= aerialFade;
-        vec3 tint = mix(farTint, nearTint, pow(depth / 4., .7));
-        color = tint * density + color * (1. - density);
-        coverage = density + coverage * (1. - density);
+    float lowerFade = mix(1., smoothstep(-1.32, -.30, altitude), flowAmount);
+    if (opacity * portal * lowerFade <= .00001) discard;
+    vec3 normal = normalize(surfaceNormal);
+    float illumination = terrainIllumination(sunDirection.z);
+    float twilight = smoothstep(-.30, -.06, sunDirection.z) * (1. - smoothstep(.02, .28, sunDirection.z));
+    vec2 horizontal = direction.xy / max(length(direction.xy), .0001);
+    float sunward = smoothstep(-.3, .85, dot(horizontal, sunDirection.xy));
+    vec3 skyTint = mix(vec3(.10, .12, .17), vec3(.37, .46, .58), daylight);
+    vec3 duskTint = vividAtmosphere ? mix(vec3(.27, .23, .34), vec3(.53, .34, .24), sunward)
+                                  : mix(vec3(.24, .25, .30), vec3(.39, .32, .28), sunward);
+    skyTint = mix(skyTint, duskTint, twilight * .75);
+    vec3 groundTint = mix(vec3(.052, .060, .075), vec3(.29, .34, .43), daylight);
+    groundTint = mix(groundTint, duskTint * .48, twilight * .45);
+    float ribbon = 1.;
+    if (flowAmount > .001) {
+        vec2 wind = vec2(clockTime * .09, -clockTime * .065);
+        float groundDistance = length(surfacePosition.xy);
+        vec2 groundDirection = surfacePosition.xy / max(groundDistance, .001);
+        vec2 edgePoint = groundDirection * 3.;
+        float billow = softNoise(edgePoint + wind);
+        float detail = softNoise(edgePoint * 2.3 - wind * .6);
+        float front = surfaceFlow;
+        float drift = .08 * (billow - .5) + .025 * (detail - .5);
+        float edge = front + drift;
+        float solid = smoothstep(.64, 1.08, edge);
+        float nearOffset = (edge - .53) / .18;
+        float nearWave = .35 * exp(-nearOffset * nearOffset);
+        float outerEdge = front + drift * .6 + .04 * (detail - .5);
+        float outerOffset = (outerEdge - .27) / .13;
+        float outerWave = .12 * exp(-outerOffset * outerOffset);
+        ribbon = (1. - (1. - solid) * (1. - nearWave) * (1. - outerWave)) * smoothstep(0., .12, surfaceFlow);
     }
-    vec2 wind = vec2(clockTime * .012, -clockTime * .007);
-    vec2 cloudPoint = direction.xy * 9. + vec2(altitude * 7., altitude * 11.);
-    float billow = softNoise(cloudPoint * .5 + wind);
-    float detail = softNoise(cloudPoint * 1.15 - wind * .35 + billow * .8);
-    float cloudField = billow * .72 + detail * .28;
-    float fogWindow = smoothstep(-.72, -.38, altitude) * (1. - smoothstep(-.19, -.045, altitude));
-    float fogDensity = smoothstep(.36, .72, cloudField) * fogWindow * (.20 + daylight * .12);
-    vec3 fogTint = mix(farTint, nearTint, .35) * (.9 + detail * .1);
-    color = fogTint * fogDensity + color * (1. - fogDensity);
-    coverage = fogDensity + coverage * (1. - fogDensity);
-    float lowerFade = smoothstep(-1.35, -.36, altitude);
+    float coverage = lowerFade * mix(1., ribbon, flowAmount);
+    float alpha = opacity * portal * coverage;
+    vec3 lightingNormal = normalize(vec3(normal.xy * 2., normal.z));
+    float sideLight = max(dot(lightingNormal, sunDirection), 0.);
+    vec3 surface = groundTint * (.50 + .50 * sideLight);
+    float fog = aerialPerspective(distance, .5);
+    vec3 color = mix(surface, skyTint, fog) * illumination;
     if (nightVision) color = vec3(dot(color, vec3(.3, .59, .11)), 0., 0.);
-    FRAG_COLOR = vec4(color / max(coverage, .001), coverage * opacity * lowerFade);
+    gl_FragDepth = distance / (distance + 128.);
+    FRAG_COLOR = vec4(color * alpha, alpha);
 }
 )");
-		if (!renderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShader) ||
-			!renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShader))
+		if (!resources.surfaceProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShader) ||
+		    !resources.surfaceProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShader))
 		{
-			qWarning() << "Mist horizon shader:" << renderProgram->log();
+			qWarning() << "Mist mesh shader:" << resources.surfaceProgram->log();
 			return;
 		}
-		renderProgram->bindAttributeLocation("vertex", SKY_VERTEX_ATTRIB_INDEX);
-		if (!StelPainter::linkProg(renderProgram.get(), "Mist horizon")) return;
+		resources.surfaceProgram->bindAttributeLocation("terrainPosition", 0);
+		resources.surfaceProgram->bindAttributeLocation("terrainNormal", 1);
+		resources.surfaceProgram->bindAttributeLocation("terrainFlow", 2);
+		if (!StelPainter::linkProg(resources.surfaceProgram.get(), "Mist mesh")) return;
 	}
-	if (!renderProgram->isLinked() || opacity <= 0.001f) return;
+	if (!renderProgram)
+	{
+		renderProgram.reset(new QOpenGLShaderProgram);
+		const auto vertexShader = StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) + QByteArray(R"(
+ATTRIBUTE highp vec2 vertex;
+VARYING highp vec2 terrainUv;
+void main() { terrainUv = vertex * .5 + .5; gl_Position = vec4(vertex, 0., 1.); }
+)");
+		const auto fragmentShader = StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) + QByteArray(R"(
+#ifdef GL_ES
+precision highp float;
+#endif
+VARYING highp vec2 terrainUv;
+uniform sampler2D terrainColor;
+void main() { FRAG_COLOR = texture(terrainColor, terrainUv); }
+)");
+		if (!renderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShader) ||
+		    !renderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShader)) return;
+		renderProgram->bindAttributeLocation("vertex", SKY_VERTEX_ATTRIB_INDEX);
+		if (!StelPainter::linkProg(renderProgram.get(), "Mist mesh composite")) return;
+	}
+	if (!renderProgram->isLinked() || !resources.surfaceProgram->isLinked()) return;
+	std::vector<double> signature;
+	const auto transform = projector->getModelViewTransform()->getApproximateLinearTransfo();
+	const auto projection = projector->getProjectionMatrix();
+	for (int index = 0; index < 16; ++index)
+	{
+		signature.push_back(transform[index]);
+		signature.push_back(projection[index]);
+	}
+	signature.push_back(projector->getPixelPerRadAtCenter());
+	signature.push_back(center[0]);
+	signature.push_back(center[1]);
+	const auto& projectorParams = core->getCurrentStelProjectorParams();
+	signature.push_back(projectorParams.flipHorz);
+	signature.push_back(projectorParams.flipVert);
+	signature.push_back(projectorParams.widthStretch);
+	signature.push_back(projectorParams.devicePixelsPerPixel);
+	signature.push_back(projectorParams.maskType);
+	for (int index = 0; index < 4; ++index) signature.push_back(viewport[index]);
+	const bool profileMist = resources.viewWorkspace.profileFrames++ % 60 == 0;
+	struct MistSubmissionProfile
+	{
+		QElapsedTimer timer;
+		bool enabled;
+		~MistSubmissionProfile()
+		{
+			if (enabled && timer.isValid()) qDebug() << "Mist mesh CPU draw-resolve-composite submission ms (not GPU time)" << timer.nsecsElapsed() / 1.e6;
+		}
+	};
+	MistSubmissionProfile submissionProfile{{}, profileMist};
+	double preparationMs = 0.;
+	double uploadMs = 0.;
+	const bool viewChanged = !MistTerrain::sameViewSignature(signature, resources.viewSignature);
+	double signatureDelta = 0.;
+	int signatureField = -1;
+	if (profileMist && signature.size() == resources.viewSignature.size())
+		for (std::size_t index = 0; index < signature.size(); ++index)
+		{
+			const double delta = std::abs(signature[index] - resources.viewSignature[index]);
+			if (delta > signatureDelta) { signatureDelta = delta; signatureField = static_cast<int>(index); }
+		}
+	const auto& cap = projector->getBoundingCap();
+	const auto projectionType = core->getCurrentProjectionType();
+	const bool coneEnabled = (projectionType == StelCore::ProjectionStereographic || projectionType == StelCore::ProjectionFisheye) &&
+		projector->getFov() <= 100. && projector->getViewportCenterOffset().normSquared() < 1.e-12 &&
+		std::abs(projectorParams.widthStretch - 1.) < 1.e-6 && cap.d > .06 && cap.d <= 1. &&
+		std::isfinite(cap.n[0]) && std::isfinite(cap.n[1]) && std::isfinite(cap.n[2]);
+	if (viewChanged)
+	{
+		QElapsedTimer viewTimer;
+		viewTimer.start();
+		const auto toPoint = [](const MistTerrain::Vertex& vertex) {
+			return Vec3d(vertex.position[0], vertex.position[1], vertex.position[2]);
+		};
+		const auto project = [&](const MistTerrain::Vertex& vertex) {
+			Vec3d window;
+			const bool valid = projector->project(toPoint(vertex), window);
+			const bool finite = std::isfinite(window[0]) && std::isfinite(window[1]) &&
+			                    std::abs(window[0]) < 1.e9 && std::abs(window[1]) < 1.e9;
+			return MistTerrain::ScreenPoint{finite ? window[0] - viewport[0] : -1.e9,
+			                                finite ? window[1] - viewport[1] : -1.e9, valid && finite};
+		};
+		const auto crossesSeam = [&](const MistTerrain::Vertex& first, const MistTerrain::Vertex& second) {
+			return projector->intersectViewportDiscontinuity(toPoint(first), toPoint(second));
+		};
+		MistTerrain::ViewCone viewCone;
+		if (coneEnabled)
+		{
+			viewCone.axis = MistTerrain::normalized({cap.n[0], cap.n[1], cap.n[2]});
+			viewCone.radius = std::acos(cap.d) + 3. * M_PI / 180.;
+		}
+		const auto& visible = MistTerrain::prepareVisibleMesh(resources.mesh, resources.viewWorkspace, project, crossesSeam, viewport[2], viewport[3], viewCone, true, coneEnabled);
+		preparationMs = viewTimer.nsecsElapsed() / 1.e6;
+		viewTimer.restart();
+		resources.meshVao->bind();
+		resources.vertices->bind();
+		const auto baseVertices = resources.mesh.vertices.size();
+		if (visible.vertices.size() > baseVertices)
+			resources.vertices->write(static_cast<int>(baseVertices * sizeof(MistTerrain::Vertex)), visible.vertices.data() + baseVertices,
+			                           static_cast<int>((visible.vertices.size() - baseVertices) * sizeof(MistTerrain::Vertex)));
+		resources.indices->bind();
+		const int indexBytes = static_cast<int>(visible.indices.size() * sizeof(std::uint32_t));
+		if (indexBytes > resources.indexCapacity)
+		{
+			resources.indexCapacity = std::max(indexBytes, resources.indexCapacity * 2);
+			resources.indices->allocate(resources.indexCapacity);
+		}
+		if (indexBytes > 0) resources.indices->write(0, visible.indices.data(), indexBytes);
+		gl.glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(MistTerrain::Vertex), nullptr);
+		gl.glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(MistTerrain::Vertex), reinterpret_cast<const void*>(3 * sizeof(float)));
+		gl.glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(MistTerrain::Vertex), reinterpret_cast<const void*>(6 * sizeof(float)));
+		gl.glEnableVertexAttribArray(0);
+		gl.glEnableVertexAttribArray(1);
+		gl.glEnableVertexAttribArray(2);
+		resources.meshVao->release();
+		resources.vertices->release();
+		resources.indexCount = static_cast<int>(visible.indices.size());
+		resources.viewSignature = signature;
+		uploadMs = viewTimer.nsecsElapsed() / 1.e6;
+	}
+	if (profileMist)
+		qDebug() << "Mist mesh profile changed/signatureDelta/field/type/fov/capD/offset/stretch/cone/fast/prepMs/uploadMs/projected/candidate/edges/midpoints/rounds/triangles/indexBytes/viewport/samples"
+		         << viewChanged << signatureDelta << signatureField << projectionType << projector->getFov() << cap.d
+		         << projector->getViewportCenterOffset().normSquared() << projectorParams.widthStretch << coneEnabled
+		         << resources.viewWorkspace.usedFastPath << preparationMs << uploadMs << (viewChanged ? resources.viewWorkspace.projectedCount : 0)
+		         << resources.viewWorkspace.candidateTriangles << (viewChanged ? resources.viewWorkspace.edgeChecks : 0) << (viewChanged ? resources.viewWorkspace.midpointProjections : 0)
+		         << (viewChanged ? resources.viewWorkspace.refinementRounds : 0) << resources.indexCount / 3 << resources.indexCount * sizeof(std::uint32_t)
+		         << viewport[2] << viewport[3] << resources.samples;
+	submissionProfile.timer.start();
+	if (resources.indexCount == 0) return;
+	const QSize size(viewport[2], viewport[3]);
+	if (!resources.target || resources.target->size() != size)
+	{
+		resources.target.reset();
+		resources.resolved.reset();
+		GLint maximumSamples = 0;
+		gl.glGetIntegerv(GL_MAX_SAMPLES, &maximumSamples);
+		QOpenGLFramebufferObjectFormat format;
+		format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+		format.setInternalTextureFormat(GL_RGBA8);
+		format.setSamples(maximumSamples >= 2 ? 2 : 0);
+		resources.target.reset(new QOpenGLFramebufferObject(size, format));
+		if (!resources.target->isValid())
+		{
+			format.setSamples(0);
+			resources.target.reset(new QOpenGLFramebufferObject(size, format));
+		}
+		resources.samples = resources.target->format().samples();
+		if (resources.samples > 0)
+		{
+			QOpenGLFramebufferObjectFormat resolveFormat;
+			resolveFormat.setInternalTextureFormat(GL_RGBA8);
+			resources.resolved.reset(new QOpenGLFramebufferObject(size, resolveFormat));
+		}
+		if (!resources.target->isValid() || (resources.resolved && !resources.resolved->isValid()))
+		{
+			qWarning() << "Mist mesh framebuffer allocation failed";
+			return;
+		}
+		if (resources.samples == 0) qWarning() << "Mist mesh: multisampling unavailable; using native-resolution depth rendering";
+	}
+	if (!resources.target->isValid() || (resources.resolved && !resources.resolved->isValid())) return;
+	resources.target->bind();
+	gl.glViewport(0, 0, size.width(), size.height());
+	gl.glDisable(GL_BLEND);
+	gl.glDisable(GL_CULL_FACE);
+	gl.glDisable(GL_SCISSOR_TEST);
+	gl.glDisable(GL_STENCIL_TEST);
+	gl.glDisable(GL_POLYGON_OFFSET_FILL);
+	gl.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	gl.glDepthMask(GL_TRUE);
+	gl.glEnable(GL_DEPTH_TEST);
+	gl.glDepthFunc(GL_LESS);
+	gl.glClearColor(0., 0., 0., 0.);
+	gl.glClearDepthf(1.);
+	gl.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	auto& program = *resources.surfaceProgram;
+	program.bind();
+	projector->setProjectUniforms(program);
+	projector->setUnProjectUniforms(program);
+	program.setUniformValue("terrainViewport", QVector4D(viewport[0], viewport[1], viewport[2], viewport[3]));
+	program.setUniformValue("clockTime", animationTime);
+	program.setUniformValue("opacity", opacity);
+	program.setUniformValue("portal", static_cast<float>(resources.portal + (1. - resources.portal) * wideField));
+	program.setUniformValue("flowAmount", static_cast<float>(resources.flow * (1. - wideField)));
+	program.setUniformValue("daylight", static_cast<float>(qBound(0.0, getBrightness(), 1.0)));
+	program.setUniformValue("nightVision", StelApp::getInstance().getVisionModeNight());
+	program.setUniformValue("vividAtmosphere", GETSTELMODULE(LandscapeMgr)->getFlagVividAtmosphere());
+	program.setUniformValue("sunDirection", sunDirection.toQVector());
+	program.setUniformValue("noiseTexture", 0);
+	resources.noise->bind(0);
+	resources.meshVao->bind();
+	gl.glDrawElements(GL_TRIANGLES, resources.indexCount, GL_UNSIGNED_INT, nullptr);
+	resources.meshVao->release();
+	program.release();
+	if (resources.samples > 0)
+		QOpenGLFramebufferObject::blitFramebuffer(resources.resolved.get(), resources.target.get(), GL_COLOR_BUFFER_BIT, GL_NEAREST);
+	gl.glBindFramebuffer(GL_FRAMEBUFFER, state.drawFramebuffer);
+	gl.glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+	if (state.scissor) gl.glEnable(GL_SCISSOR_TEST);
+	if (state.stencil) gl.glEnable(GL_STENCIL_TEST);
+	gl.glColorMask(state.colorMask[0], state.colorMask[1], state.colorMask[2], state.colorMask[3]);
+	gl.glDisable(GL_DEPTH_TEST);
+	gl.glDepthMask(GL_FALSE);
+	gl.glEnable(GL_BLEND);
+	gl.glBlendEquation(GL_FUNC_ADD);
+	gl.glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 	renderProgram->bind();
-	renderProgram->setUniformValue("inverseProjection", projector->getProjectionMatrix().toQMatrix().inverted());
-	renderProgram->setUniformValue("clockTime", animationTime);
-	renderProgram->setUniformValue("opacity", opacity);
-	renderProgram->setUniformValue("daylight", static_cast<float>(qBound(0.0, getBrightness(), 1.0)));
-	renderProgram->setUniformValue("nightVision", StelApp::getInstance().getVisionModeNight());
-	renderProgram->setUniformValue("sunDirection", sunDirection.toQVector());
-	renderProgram->setUniformValue("ridgeTexture", 0);
-	renderProgram->setUniformValue("noiseTexture", 1);
-	ridgeTexture->bind(0);
-	noiseTexture->bind(1);
-	projector->setUnProjectUniforms(*renderProgram);
-	auto& functions = *QOpenGLContext::currentContext()->functions();
-	functions.glEnable(GL_BLEND);
-	functions.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	renderProgram->setUniformValue("terrainColor", 0);
+	gl.glActiveTexture(GL_TEXTURE0);
+	gl.glBindTexture(GL_TEXTURE_2D, resources.samples > 0 ? resources.resolved->texture() : resources.target->texture());
 	bindVAO();
-	functions.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	releaseVAO();
-	noiseTexture->release(1);
-	ridgeTexture->release(0);
-	functions.glDisable(GL_BLEND);
 	renderProgram->release();
 }
 

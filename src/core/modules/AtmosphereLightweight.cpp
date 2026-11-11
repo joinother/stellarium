@@ -18,6 +18,8 @@
  */
 
 #include "AtmosphereLightweight.hpp"
+#include "AtmosphereVivid.hpp"
+#include "AtmosphereMist.hpp"
 #include "Planet.hpp"
 #include "StelApp.hpp"
 #include "StelCore.hpp"
@@ -342,14 +344,10 @@ uniform highp float colorScale;
 uniform sampler2D atmoTex;
 const highp float PI = 3.14159265;
 
-highp vec3 calcViewDir()
+highp vec3 calcViewDir(out bool valid)
 {
 	highp vec4 winPos = projectionMatrixInverse * vec4(ndcPos, 1);
-	bool ok = false;
-	highp vec3 modelPos = unProject(winPos.x, winPos.y, ok).xyz;
-
-//	if(!ok) return vec3(0);
-
+	highp vec3 modelPos = unProject(winPos.x, winPos.y, valid).xyz;
 	return normalize(modelPos);
 }
 
@@ -357,8 +355,11 @@ float sqr(vec2 v) { return dot(v, v); }
 
 void main()
 {
-	highp vec3 viewDir = calcViewDir();
-	float relAzimuth = acos(clamp(dot(viewDir.xy, sunDir.xy) / sqrt(sqr(viewDir.xy) * sqr(sunDir.xy)), -1., 1.));
+	bool valid = false;
+	highp vec3 viewDir = calcViewDir(valid);
+	if (!valid) { FRAG_COLOR = vec4(0.); return; }
+	float horizontalNorm = max(sqrt(sqr(viewDir.xy) * sqr(sunDir.xy)), 0.000001);
+	float relAzimuth = acos(clamp(dot(viewDir.xy, sunDir.xy) / horizontalNorm, -1., 1.));
 	float elev = asin(clamp(viewDir.z, -1., 1.));
 	float elevTC = abs(elev / (PI/2.));
 	elevTC = sqrt(elevTC); // elevation coordinate is stretched by squaring it
@@ -367,6 +368,8 @@ void main()
 	// Undo the sqrt
 	color_xyY.z *= color_xyY.z;
 	vec3 color_RGB = xyYToRGB(color_xyY.x, color_xyY.y, color_xyY.z * colorScale);
+	color_RGB = vividAtmosphereColor(color_RGB, viewDir, sunDir, vividStrength);
+	color_RGB *= mistAtmosphereTransmission(viewDir.z);
 	FRAG_COLOR = vec4(color_RGB, 1);
 }
 )";
@@ -387,7 +390,7 @@ void main()
 
 	QOpenGLShader fShader(QOpenGLShader::Fragment);
 	if (!fShader.compileSourceCode(StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
-	                               projector.getUnProjectShader() + toneRepro.readAll() + renderFragSrc))
+	                               projector.getUnProjectShader() + toneRepro.readAll() + AtmosphereVivid::shaderSource() + AtmosphereMist::shaderSource() + renderFragSrc))
 	{
 		qFatal("Error while compiling Lightweight atmosphere fragment shader: %s", fShader.log().toUtf8().constData());
 	}
@@ -413,6 +416,8 @@ void main()
 	GL(renderUniformLocations_.flagUseTmGamma          = renderShaderProgram_->uniformLocation("flagUseTmGamma"));
 
 	GL(renderUniformLocations_.sunDir                  = renderShaderProgram_->uniformLocation("sunDir"));
+	GL(renderUniformLocations_.vividStrength           = renderShaderProgram_->uniformLocation("vividStrength"));
+	GL(renderUniformLocations_.mistUndergroundStrength = renderShaderProgram_->uniformLocation("mistUndergroundStrength"));
 	GL(renderUniformLocations_.atmoTex                 = renderShaderProgram_->uniformLocation("atmoTex"));
 	GL(renderUniformLocations_.colorScale              = renderShaderProgram_->uniformLocation("colorScale"));
 	GL(renderUniformLocations_.projectionMatrixInverse = renderShaderProgram_->uniformLocation("projectionMatrixInverse"));
@@ -635,7 +640,7 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
                                          const float relativeHumidity, const float extinctionCoefficient, const bool noScatter)
 {
 	Q_UNUSED(JD)
-	Q_UNUSED(currentPlanet)
+	vividAtmosphereAllowed = currentPlanet.getEnglishName() == "Earth" && !noScatter;
 	Q_UNUSED(location)
 	Q_UNUSED(temperature)
 	Q_UNUSED(relativeHumidity)
@@ -756,6 +761,7 @@ void AtmosphereLightweight::draw(StelCore*const core)
 	renderShaderProgram_->bind();
 	applyToneReproducerParams(core, atmIntensity);
 	prj->setUnProjectUniforms(*renderShaderProgram_);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.mistUndergroundStrength, mistUndergroundStrength);
 
 	GL(gl.glActiveTexture(GL_TEXTURE0));
 	renderShaderProgram_->setUniformValue(renderUniformLocations_.atmoTex, 0);
@@ -774,6 +780,8 @@ void AtmosphereLightweight::draw(StelCore*const core)
 		                                layerValueMaxima_[p.layerToDrawB]);
 		GL(gl.glBindTexture(GL_TEXTURE_2D, p.fbo->texture()));
 		renderShaderProgram_->setUniformValue(renderUniformLocations_.sunDir, p.dir);
+		renderShaderProgram_->setUniformValue(renderUniformLocations_.vividStrength,
+			flagVividAtmosphere && vividAtmosphereAllowed && i == DRAW_PARAM_SUN ? p.eclipseFactor : 0.f);
 
 		float colorScale = p.fboColorScale * p.relativeBrightness * p.eclipseFactor;
 		colorScale *= maxValue; // restore the scale we used when creating the preparation FBO

@@ -94,6 +94,8 @@ private:
 
 		// Renderer attributes
 		int sunDir;
+		int vividStrength;
+		int mistUndergroundStrength;
 		int atmoTex;
 		int colorScale;
 		int projectionMatrixInverse;

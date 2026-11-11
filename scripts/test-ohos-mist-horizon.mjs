@@ -8,53 +8,30 @@ const renderer = landscape.slice(landscape.indexOf('void LandscapeMist::draw'), 
 const manager = read('src/core/modules/LandscapeMgr.cpp');
 const page = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
 
-test('mist is a cached world-space renderer without external image or network dependencies', () => {
+test('mist is a cached world-space mesh without external assets or network dependencies', () => {
   assert.match(renderer, /getAltAzModelViewTransform\(StelCore::RefractionOff\)/);
-  assert.match(renderer, /precision highp float/);
-  assert.match(renderer, /direction.z < -.976/);
-  assert.doesNotMatch(renderer, /createTexture|https?:|QNetwork/);
-  assert.match(renderer, /getVisionModeNight/);
-  assert.ok(renderer.indexOf('float pixelWidth = fwidth(altitude)') < renderer.indexOf('if (!valid'));
-  assert.doesNotMatch(renderer, /filament|altitude \* 23\./);
+  assert.ok(renderer.includes('getProjectShader()'));
+  assert.ok(renderer.includes('getUnProjectShader()'));
+  assert.ok(renderer.includes('getVisionModeNight()'));
+  assert.doesNotMatch(renderer, /https?:|QNetwork/);
 });
 
-test('stationary ridge is periodic at the panorama boundary', () => {
-  const fract = value => value - Math.floor(value);
-  const hash = (horizontal, vertical) => {
-    const seed = [horizontal, vertical, horizontal].map(value => fract(value * .1031));
-    const dot = seed[0] * (seed[1] + 33.33) + seed[1] * (seed[2] + 33.33) + seed[2] * (seed[0] + 33.33);
-    const mixed = seed.map(value => value + dot);
-    return fract((mixed[0] + mixed[1]) * mixed[2]);
-  };
-  const noise = (longitude, layer, count) => {
-    const position = (longitude / (2 * Math.PI) + .5) * count;
-    const cell = Math.floor(position);
-    const fraction = fract(position);
-    const blend = fraction * .65 + fraction * fraction * (3 - 2 * fraction) * .35;
-    const wrap = value => ((value % count) + count) % count;
-    return hash(wrap(cell), layer) * (1 - blend) + hash(wrap(cell + 1), layer) * blend - .5;
-  };
-  const ridge = (longitude, depth) => noise(longitude, depth + 7, 17) * .065 +
-    noise(longitude, depth + 19, 41) * .022 + noise(longitude, depth + 37, 83) * .007 +
-    Math.sin(longitude * 2 + depth * 2.1) * .016;
-  for (let depth = 0; depth < 5; depth++) {
-    assert.ok(Math.abs(ridge(-Math.PI, depth) - ridge(Math.PI, depth)) < 1e-12);
-    for (let angle = -Math.PI; angle <= Math.PI; angle += .01) assert.ok(Number.isFinite(ridge(angle, depth)));
-  }
-  assert.match(landscape, /const int next = \(first \+ 1\) % count/);
-  assert.match(renderer, /vec2 cloudPoint = direction.xy/);
-  assert.match(renderer, /height = .*ridgeHeight/);
-  assert.doesNotMatch(renderer, /height \+=.*cloud/);
-  assert.match(renderer, /uniform vec3 sunDirection/);
+test('stationary geometric normals and distance haze use actual surface positions', () => {
+  assert.match(renderer, /float groundDistance\s*=\s*length\(surfacePosition\.xy\);/);
+  assert.match(renderer, /surfaceFlow\s*=\s*terrainFlow;/);
+  assert.match(renderer, /float front\s*=\s*surfaceFlow;/);
+  assert.ok(renderer.includes('normalize(surfaceNormal)'));
+  assert.ok(renderer.includes('length(surfacePosition)'));
+  assert.ok(renderer.includes('uniform vec3 sunDirection'));
+  assert.ok(!renderer.includes('terrainTexture'));
 });
 
-test('expensive noise and ridge generation is cached, not run per fragment', () => {
-  assert.match(landscape, /if \(ridgeTexture && noiseTexture\) return/);
-  assert.match(landscape, /setFormat\(QOpenGLTexture::R16F\)/);
-  assert.match(renderer, /uniform highp sampler2D ridgeTexture/);
-  assert.doesNotMatch(renderer, /hashValue|ridgeNoise|\bsin\(/);
-  assert.match(renderer, /texture\(noiseTexture/);
-  assert.match(renderer, /opacity <= 0.001f\) return/);
+test('mesh and noise generation is cached outside draw', () => {
+  assert.ok(landscape.includes('if (mistResources) return'));
+  assert.ok(landscape.includes('resources.mesh = MistTerrain::generate()'));
+  assert.ok(!renderer.includes('MistTerrain::generate()'));
+  assert.ok(renderer.includes('texture(noiseTexture'));
+  assert.ok(renderer.includes('opacity <= .001f) return'));
 });
 
 test('fallback defaults on, but photo and 3D scenes suppress it', () => {

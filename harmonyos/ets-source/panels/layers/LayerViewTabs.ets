@@ -8,6 +8,7 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { LayerSwitchRow } from './LayerSwitchRow'
 import { ObservationAidBlock } from './ObservationAidBlock'
+import { AtmosphereGroundSection } from './AtmosphereGroundSection'
 import { LayerSpectralSection } from './LayerSpectralSection'
 import { SurveyStore } from '../../state/SurveyStore'
 import { ViewCoordinateSettings } from '../view/ViewCoordinateSettings'
@@ -57,6 +58,10 @@ export struct LayerSkyTab {
 
   build() {
     Column({ space: 0 }) {
+      AtmosphereGroundSection({
+        layerStore: this.layerStore,
+        onSetSkyDisplay: (setting: string, value: boolean | number) => { this.onSetSkyDisplay(setting, value) }
+      })
       // ── 恒星：恒星本体与其渲染特征 ──
       Text('恒星').fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 6 }).padding({ left: 2 })
       LayerSwitchRow({ label: I18n.t('s0530'), isOn: this.layerStore.stars, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Stars', '', value) } })

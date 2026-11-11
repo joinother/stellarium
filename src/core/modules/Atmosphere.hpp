@@ -73,6 +73,8 @@ public:
 	void setFlagShow(bool b){fader = b;}
 	//! Get whether atmosphere is displayed
 	bool getFlagShow() const {return fader;}
+	void setFlagVividAtmosphere(bool enabled) { flagVividAtmosphere = enabled; }
+	void setMistUndergroundStrength(float strength) { mistUndergroundStrength = strength; }
 
 	//! Get the actual atmosphere intensity due to eclipses + fader
 	//! @return the display intensity ranging from 0 to 1
@@ -110,6 +112,9 @@ public:
 	float getLightPollutionLuminance() const { return lightPollutionLuminance; }
 
 protected:
+	float mistUndergroundStrength = 0.f;
+	bool flagVividAtmosphere = false;
+	bool vividAtmosphereAllowed = false;
 	//! The average luminance of the atmosphere in cd/m2
 	float averageLuminance = 0;
 	bool overrideAverageLuminance = false; // if true, don't compute but keep value set via setAverageLuminance(float)

@@ -1190,7 +1190,8 @@ void StelMovementMgr::updateVisionVector(double deltaTime)
 		}
 		else // no targetObject:
 		{
-			move.startUp=getViewUpVectorJ2000();
+			if (move.mountMode != MountAltAzimuthal)
+				move.startUp=getViewUpVectorJ2000();
 			move.aimUp=mountFrameToJ2000(Vec3d(0., 0., 1.));
 		}
 		move.coef+=move.speed*static_cast<float>(deltaTime)*1000;
@@ -1270,6 +1271,25 @@ void StelMovementMgr::updateVisionVector(double deltaTime)
 		const double ra_now = ra_aim*c + ra_start*(1.-c);
 		Vec3d tmp;
 		StelUtils::spheToRect(ra_now, de_now, tmp);
+		if (move.mountMode == MountAltAzimuthal && move.targetObject.isNull())
+		{
+			const auto rollFor = [](const Vec3d& up, double azimuth, double altitude) {
+				const Vec3d vertical(-std::sin(altitude) * std::cos(azimuth), -std::sin(altitude) * std::sin(azimuth), std::cos(altitude));
+				const Vec3d lateral(-std::sin(azimuth), std::cos(azimuth), 0.);
+				const double verticalComponent = up.dot(vertical);
+				const double lateralComponent = up.dot(lateral);
+				return std::isfinite(verticalComponent) && std::isfinite(lateralComponent) &&
+				       std::hypot(verticalComponent, lateralComponent) >= 1.e-4
+				       ? std::atan2(lateralComponent, verticalComponent) : 0.;
+			};
+			const double startRoll = rollFor(move.startUp, ra_start, de_start);
+			const double targetRoll = rollFor(move.aimUpCopy, ra_aim, de_aim);
+			const double roll = startRoll + c * std::remainder(targetRoll - startRoll, 2. * M_PI);
+			const Vec3d vertical(-std::sin(de_now) * std::cos(ra_now), -std::sin(de_now) * std::sin(ra_now), std::cos(de_now));
+			const Vec3d lateral(-std::sin(ra_now), std::cos(ra_now), 0.);
+			const Vec3d frameUp = vertical * std::cos(roll) + lateral * std::sin(roll);
+			setViewUpVector(frameUp);
+		}
 		setViewDirectionJ2000(mountFrameToJ2000(tmp));
 	}
 	else // no autoMove
@@ -1539,7 +1559,7 @@ void StelMovementMgr::moveToAltAzi(const Vec3d& aim, const Vec3d &aimUp, float m
 	// The only way to come here would have been a previously programmed moveToAltAzi(zenith), and optional move around zenith/nadir by left/right keys.
 	// We decode view azimuth from the current up vector and set our move.start direction to the same azimuth, just off the zenith/nadir.
 	Vec3d currentUp=upVectorMountFrame; // j2000ToMountFrame(getViewUpVectorJ2000());
-	if (fabs(currentUp[2]) < 1.e-12)
+	if (fabs(move.start[2]) > 1. - 1.e-10 && fabs(currentUp[2]) < 1.e-12)
 	{
 		//qDebug() << "Start a programmed move out of the zenith! Decode azimuth from the up vector." << currentUp;
 		// CurrentUp reported as -1/0/0 when looking towards zenith/south
@@ -1563,7 +1583,7 @@ void StelMovementMgr::moveToAltAzi(const Vec3d& aim, const Vec3d &aimUp, float m
 		viewDirectionJ2000=core->altAzToJ2000(move.start, StelCore::RefractionOff);
 		upVectorMountFrame.set(0,0,1);
 	}
-	move.startUp=aimUp; // we must put this to the target up vector immediately.
+	move.startUp=currentUp;
 	move.speed=1.f/(moveDuration*1000);
 	move.coef=0.;
 	move.targetObject.clear();

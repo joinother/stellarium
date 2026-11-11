@@ -299,6 +299,8 @@ export class LayerController {
   // 星空显示设置写回（布尔项写 LayerStore，数值项写 LayerViewStore）。
   setSkyDisplaySetting(setting: string, value: boolean | number): void {
     if (setting === 'luminanceAdaptation') this.layerStore.luminanceAdaptation = value as boolean
+    else if (setting === 'realisticStarVisibility') this.layerStore.realisticStarVisibility = value as boolean
+    else if (setting === 'vividAtmosphere') this.layerStore.vividAtmosphere = value as boolean
     else if (setting === 'starTwinkle') this.layerStore.starTwinkle = value as boolean
     else if (setting === 'forcedStarTwinkle') this.layerStore.forcedStarTwinkle = value as boolean
     else if (setting === 'bigStarHalo') this.layerStore.bigStarHalo = value as boolean
@@ -310,7 +312,7 @@ export class LayerController {
     const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
     this.port.requestInteractive('setSkyDisplaySetting', payload, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        if (typeof value === 'boolean' || setting === 'bortleScale') this.hooks.refreshState()
+        if (typeof value === 'boolean' || setting === 'bortleScale' || setting === 'environmentMode') this.hooks.refreshState()
       } else {
         this.hooks.flashHint(r.error ?? I18n.t('msg_apply_failed'))
         this.hooks.refreshState()

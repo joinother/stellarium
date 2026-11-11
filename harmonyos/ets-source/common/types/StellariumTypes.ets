@@ -701,6 +701,9 @@ export interface StellariumBridgeResponse {
   decimalDegreesCoords?: boolean
   decimalDegreesOther?: boolean
   luminanceAdaptation?: boolean
+  realisticStarVisibility?: boolean
+  vividAtmosphere?: boolean
+  environmentMode?: number
   starTwinkle?: boolean
   forcedStarTwinkle?: boolean
   bigStarHalo?: boolean

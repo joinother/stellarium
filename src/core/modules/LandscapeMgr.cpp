@@ -21,6 +21,7 @@
  */
 
 #include "LandscapeMgr.hpp"
+#include "AtmosphereMist.hpp"
 #include "Landscape.hpp"
 #include "AtmospherePreetham.hpp"
 #include "AtmosphereLightweight.hpp"
@@ -703,6 +704,10 @@ void LandscapeMgr::draw(StelCore* core)
 	QFont font=QGuiApplication::font();
 
 	// Draw the atmosphere
+	const StelModule* scenery = StelApp::getInstance().getModuleMgr().getModule("Scenery3d", true);
+	const bool sceneActive = scenery && scenery->property("enableScene").toBool();
+	atmosphere->setMistUndergroundStrength(AtmosphereMist::displayStrength(
+		core->getCurrentPlanet()->getEnglishName() == "Earth", getFlagLandscape(), sceneActive, mistHorizon.opacity));
 	if (!getFlagAtmosphereNoScatter() && core->getFlagClearSky())
 	    atmosphere->draw(core);
 
@@ -827,6 +832,7 @@ void LandscapeMgr::createAtmosphere()
 		loadingAtmosphere.reset(new AtmospherePreetham(skylight));
 		needResetConfig=true;
 	}
+	loadingAtmosphere->setFlagVividAtmosphere(flagVividAtmosphere);
 	if(!atmosphere)
 	{
 		// We're just loading the first atmosphere in the run of Stellarium. The atmosphere is fully loaded by this point.
@@ -868,6 +874,7 @@ void LandscapeMgr::init()
 	qInfo() << "LandscapeMgr: initialized Cache for" << landscapeCache.maxCost() << "MB.";
 
 	// SET SIMPLE PROPERTIES FIRST, before loading the landscape (Loading may already make use of them! GH#1237)
+	flagVividAtmosphere = conf->value("landscape/flag_vivid_atmosphere", false).toBool();
 	setFlagLandscapeSetsLocation(conf->value("landscape/flag_landscape_sets_location",false).toBool());
 	setFlagLandscapeAutoSelection(conf->value("viewing/flag_landscape_autoselection", false).toBool());
 	setFlagEnvironmentAutoEnable(conf->value("viewing/flag_environment_auto_enable",true).toBool());
@@ -1769,6 +1776,19 @@ void LandscapeMgr::setFlagAtmosphere(const bool displayed)
 		// GZ This did not work as it may have been intended. Switch off fog, switch off atmosphere. Switch on atmosphere, and you have fog?
 		// --> Fog is only drawn in Landscape if atmosphere is switched on!
 	}
+}
+
+void LandscapeMgr::setFlagVividAtmosphere(bool enabled)
+{
+	if (flagVividAtmosphere == enabled)
+		return;
+	flagVividAtmosphere = enabled;
+	if (atmosphere)
+		atmosphere->setFlagVividAtmosphere(enabled);
+	if (loadingAtmosphere)
+		loadingAtmosphere->setFlagVividAtmosphere(enabled);
+	StelApp::immediateSave("landscape/flag_vivid_atmosphere", enabled);
+	emit flagVividAtmosphereChanged(enabled);
 }
 
 void LandscapeMgr::setAtmosphereModel(const QString& model)

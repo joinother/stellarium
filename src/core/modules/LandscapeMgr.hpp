@@ -149,6 +149,7 @@ class LandscapeMgr : public StelModule
 		   READ getAtmosphereModel
 		   WRITE setAtmosphereModel
 		   NOTIFY atmosphereModelChanged)
+	Q_PROPERTY(bool flagVividAtmosphere READ getFlagVividAtmosphere WRITE setFlagVividAtmosphere NOTIFY flagVividAtmosphereChanged)
 	Q_PROPERTY(QString atmosphereModelPath
 		   READ getAtmosphereModelPath
 		   WRITE setAtmosphereModelPath
@@ -553,6 +554,8 @@ public slots:
 	bool getFlagAtmosphere() const;
 	//! Set flag for displaying Atmosphere.
 	void setFlagAtmosphere(const bool displayed);
+	bool getFlagVividAtmosphere() const { return flagVividAtmosphere; }
+	void setFlagVividAtmosphere(bool enabled);
 
 	QString getAtmosphereModel() const;
 	void setAtmosphereModel(const QString& model);
@@ -725,6 +728,7 @@ public slots:
 signals:
 	void atmosphereDisplayedChanged(const bool displayed);
 	void atmosphereModelChanged(const QString& model);
+	void flagVividAtmosphereChanged(bool enabled);
 	void atmosphereModelPathChanged(const QString& model);
 	void atmosphereStoppedWithErrorChanged(bool error);
 	void atmosphereStatusTextChanged(const QString& status);
@@ -854,6 +858,7 @@ private:
 
 	bool flagLightPollutionFromDatabase;
 	bool atmosphereNoScatter; //!< true to suppress actual blue-sky rendering but keep refraction & extinction
+	bool flagVividAtmosphere = false;
 
 	//! control drawing of a Polygonal line, if one is defined.
 	bool flagPolyLineDisplayedOnly;

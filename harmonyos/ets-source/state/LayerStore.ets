@@ -13,6 +13,9 @@ export class LayerStore {
   starLabels: boolean = false
   atmosphere: boolean = true
   luminanceAdaptation: boolean = true
+  realisticStarVisibility: boolean = true
+  vividAtmosphere: boolean = false
+  environmentMode: number = 2
   starTwinkle: boolean = true
   forcedStarTwinkle: boolean = false
   bigStarHalo: boolean = true
