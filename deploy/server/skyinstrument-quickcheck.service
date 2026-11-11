@@ -1,0 +1,9 @@
+[Unit]
+Description=Skyinstrument lightweight file change watcher
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-quickcheck
+Nice=15

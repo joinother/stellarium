@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""A1：轻量哨兵——每 10 分钟比一次文件哈希，发现变化就触发完整内容巡检。
+
+设计要点：
+- 只算哈希，不做规则与 AI（约 0.3 秒）
+- 只监控 nginx 服务的目录；巡检自己的报告、备份、日志都不在范围内
+- 每 10 分钟一轮；同一轮多次变化只触发一次
+- 每小时最多触发 6 次完整巡检，避免批量发布打爆 AI 调用
+- 03:15–03:30 备份窗口内跳过
+- 发布进行中（/var/lib/skyinstrument/publish.lock 存在）时跳过
+"""
+import glob
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+NGINX_CONF = '/etc/skyinstrument-website/nginx.conf'
+SITE_DIR = '/srv/skyinstrument/website/current'
+STATE = '/var/lib/skyinstrument/file-hashes.json'
+PACE = '/var/lib/skyinstrument/quickcheck-pace.json'
+LOCK = '/var/lib/skyinstrument/publish.lock'
+AUDIT_BIN = '/usr/local/sbin/skyinstrument-content-audit'
+MAX_RUNS_PER_HOUR = 6
+SKIP_WINDOW = (3 * 60 + 15, 3 * 60 + 30)   # 03:15–03:30 备份窗口
+MAX_FILES = 20000
+
+
+def served_dirs():
+    dirs = []
+    if os.path.exists(NGINX_CONF):
+        for line in open(NGINX_CONF, encoding='utf-8', errors='replace'):
+            m = re.match(r'\s*(root|alias)\s+([^;]+);', line.strip())
+            if m and m.group(2).strip().startswith('/') and os.path.isdir(m.group(2).strip()):
+                dirs.append(os.path.normpath(m.group(2).strip()))
+    if os.path.isdir(SITE_DIR):
+        dirs.append(os.path.normpath(SITE_DIR))
+    uniq = sorted(set(dirs))
+    return [d for d in uniq if not any(d != k and d.startswith(k + os.sep) for k in uniq)]
+
+
+def snapshot():
+    result = {}
+    n = 0
+    for root in served_dirs():
+        for dp, _dn, fns in os.walk(root):
+            for fn in fns:
+                p = os.path.join(dp, fn)
+                if os.path.islink(p):
+                    continue
+                try:
+                    st = os.stat(p)
+                    result[p] = '%d:%d' % (st.st_size, int(st.st_mtime))
+                    n += 1
+                except Exception:  # noqa: BLE001
+                    continue
+                if n >= MAX_FILES:
+                    return result
+    return result
+
+
+def changed(prev, cur):
+    out = [p for p in cur if prev.get(p) != cur[p]]
+    out += [p for p in prev if p not in cur]
+    return out
+
+
+def pace_allow():
+    """每小时最多触发 N 次完整巡检。"""
+    try:
+        data = json.load(open(PACE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        data = {'runs': []}
+    now = time.time()
+    runs = [t for t in data.get('runs', []) if now - t < 3600]
+    if len(runs) >= MAX_RUNS_PER_HOUR:
+        return False, len(runs)
+    runs.append(now)
+    data['runs'] = runs
+    os.makedirs(os.path.dirname(PACE), exist_ok=True)
+    with open(PACE, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh)
+    return True, len(runs)
+
+
+def main():
+    now = datetime.now()
+    if os.path.exists(LOCK):
+        print('发布进行中，跳过')
+        return 0
+    minutes = now.hour * 60 + now.minute
+    if SKIP_WINDOW[0] <= minutes <= SKIP_WINDOW[1]:
+        print('备份窗口内，跳过')
+        return 0
+
+    cur = snapshot()
+    try:
+        prev = json.load(open(STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        prev = {}
+
+    diffs = changed(prev, cur)
+    if not diffs:
+        print('%s 无变化（%d 个文件）' % (now.strftime('%H:%M:%S'), len(cur)))
+        with open(STATE, 'w', encoding='utf-8') as fh:
+            json.dump(cur, fh)
+        return 0
+
+    print('%s 检测到 %d 个文件变化，示例：%s' % (now.strftime('%H:%M:%S'), len(diffs), ', '.join(diffs[:3])))
+    ok, count = pace_allow()
+    if not ok:
+        print('本小时已触发 %d 次巡检，达到上限，本次只记录变化' % count)
+    else:
+        r = subprocess.run([AUDIT_BIN], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True, timeout=300)
+        for line in (r.stdout or '').splitlines():
+            if any(k in line for k in ('问题数', '留给每日汇总', '告警邮件', '已由应急处置', '24 小时内告警过')):
+                print('  ' + line.strip())
+
+    with open(STATE, 'w', encoding='utf-8') as fh:
+        json.dump(cur, fh)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

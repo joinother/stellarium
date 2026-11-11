@@ -1,0 +1,16 @@
+#!/bin/bash
+# 回滚站点到指定发布版本：skyinstrument-rollback <版本目录名>
+set -euo pipefail
+TS=${1:-}
+ROOT=/srv/skyinstrument/website
+if [ -z "$TS" ] || [ ! -d "$ROOT/releases/$TS" ]; then
+    echo "可用的发布版本：" >&2
+    ls -1dt "$ROOT"/releases/*/ 2>/dev/null | xargs -r -n1 basename >&2
+    exit 2
+fi
+touch /var/lib/skyinstrument/publish.lock
+ln -sfn "releases/$TS" "$ROOT/.current.new"
+mv -Tf "$ROOT/.current.new" "$ROOT/current"
+rm -f /var/lib/skyinstrument/publish.lock
+echo "已回滚到 $TS"
+curl -s -o /dev/null -w '首页状态：%{http_code}\n' -H 'Host: skyinstrument.cn' https://127.0.0.1/ -k || true

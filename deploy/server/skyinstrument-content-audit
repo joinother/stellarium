@@ -39,6 +39,8 @@ API_DEFAULT = ['/healthz', '/v1/grid', '/v1/week', '/v1/world', '/v1/wx']
 API_MAX_BYTES = 8 * 1024 * 1024
 INCIDENT_BIN = '/usr/local/sbin/skyinstrument-incident'
 REMEDIATE_CONF = '/etc/skyinstrument/remediate.conf'   # APPLY=1 才真正拦截
+ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即时告警一次
+ALERT_COOLDOWN_H = 24
 BASELINE = os.path.join(RECORDS, '.content-baseline.json')
 
 # 外部域名白名单：只允许出现这些
@@ -472,10 +474,32 @@ def main():
     # 广告法用词、「未登记外链」等中等级问题只在日报里体现——模型判定 risk 也不升级，
     # 否则一句正常文案里的极限用词就会立刻发信，失去"仅紧急才打扰"的意义。
     critical = any(level == '高' for level, _k, _w, _d in issues)
-    if issues and critical:
-        send_mail(report, len(issues))
-    elif issues:
+    if not issues:
+        pass
+    elif not critical:
         print('存在 %d 项非紧急问题，留给每日汇总邮件' % len(issues))
+    else:
+        # 找出可即时告警的路径（24h 内未告警过）
+        fresh = []
+        for _lv, _kd, _w, _d in issues:
+            if _lv != '高':
+                continue
+            url = url_path_for(_w) if _w.startswith('skyinstrument/') else None
+            key = url or _w
+            if key and key not in fresh and not recently_alerted(key):
+                fresh.append(key)
+        applied = any('已拦截' in act for _r, act in actions)
+        delegated = applied and not any('演练' in act for _r, act in actions)
+        if not fresh:
+            print('紧急问题已在 24 小时内告警过，只在日报中提示')
+        elif delegated:
+            print('已由应急处置发送即时告警（含回滚命令），巡检不再重复发信')
+            for key in fresh:
+                mark_alerted(key)
+        else:
+            send_mail(report, len(issues))
+            for key in fresh:
+                mark_alerted(key)
     sys.exit(1 if issues else 0)
 
 
@@ -547,6 +571,32 @@ def judge(kind, page, payload):
         return None
 
 
+def recently_alerted(rel):
+    """同一路径 24 小时内是否已即时告警过。"""
+    try:
+        data = json.load(open(ALERT_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return False
+    ts = data.get(rel)
+    return bool(ts) and (time.time() - ts) < ALERT_COOLDOWN_H * 3600
+
+
+def mark_alerted(rel):
+    try:
+        os.makedirs(os.path.dirname(ALERT_STATE), exist_ok=True)
+        try:
+            data = json.load(open(ALERT_STATE, encoding='utf-8'))
+        except Exception:  # noqa: BLE001
+            data = {}
+        data[rel] = time.time()
+        # 清理超过 7 天的记录，避免无限增长
+        data = {k: v for k, v in data.items() if time.time() - v < 7 * 86400}
+        with open(ALERT_STATE, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def remediation_enabled():
     if not os.path.exists(REMEDIATE_CONF):
         return False
@@ -579,6 +629,10 @@ def remediate(ai_notes):
                '内容巡检：%s；模型判定 risk' % '；'.join(hits)[:60]]
         if apply:
             cmd.append('--apply')
+        # A3：邮件收口——生效处置时由 incident 独发一封（含回滚命令）；
+        # 演练模式或冷却期内，incident 不发信。
+        if not apply or recently_alerted(rel):
+            cmd.append('--no-mail')
         try:
             out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  universal_newlines=True, timeout=60)

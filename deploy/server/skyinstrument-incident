@@ -136,10 +136,11 @@ def send_mail(subject, body):
 
 args_reason = ''
 APPLY = False
+NO_MAIL = False
 
 
 def main():
-    global args_reason, APPLY
+    global args_reason, APPLY, NO_MAIL
     argv = sys.argv[1:]
     if not argv or argv[0] in ('-h', '--help'):
         print(__doc__)
@@ -167,6 +168,8 @@ def main():
             args_reason = argv[i + 1]; i += 2
         elif argv[i] == '--apply':
             APPLY = True; i += 1
+        elif argv[i] == '--no-mail':
+            NO_MAIL = True; i += 1
         else:
             i += 1
     if not path.startswith('/'):
@@ -200,7 +203,8 @@ def main():
         % (meta['time'], path, args_reason, action, payload_dir, meta.get('sha256', '-'), ts)
     )
     print(body)
-    send_mail('[星象仪应急] %s %s' % ('已处置' if APPLY else '演练', path), body)
+    if not NO_MAIL:
+        send_mail('[星象仪应急] %s %s' % ('已处置' if APPLY else '演练', path), body)
     return 0 if ok else 1
 
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Skyinstrument change watcher every 10 minutes
+
+[Timer]
+OnCalendar=*:0/10
+AccuracySec=30s
+Persistent=false
+Unit=skyinstrument-quickcheck.service
+
+[Install]
+WantedBy=timers.target

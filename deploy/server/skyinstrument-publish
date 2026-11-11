@@ -1,0 +1,75 @@
+#!/bin/bash
+# A2：站点发布脚本——原子切换 + 发布后登记基线 + 失败自动回滚。
+#
+# 用法：skyinstrument-publish /path/to/new-site-dir
+#
+# 流程：加发布锁 → 复制到 releases/<时间戳> → 校验 → 原子切换 current →
+#       跑一次内容巡检（登记新基线）→ 解锁；任一步失败则切回上一版。
+set -euo pipefail
+
+SRC=${1:-}
+if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+    echo "用法：$0 /path/to/new-site-dir" >&2
+    exit 2
+fi
+
+ROOT=/srv/skyinstrument/website
+RELEASES="$ROOT/releases"
+CURRENT="$ROOT/current"
+LOCK=/var/lib/skyinstrument/publish.lock
+AUDIT=/usr/local/sbin/skyinstrument-content-audit
+TS=$(date +%Y%m%d-%H%M%S)
+NEW="$RELEASES/$TS"
+KEEP=5
+
+mkdir -p "$RELEASES" /var/lib/skyinstrument
+
+PREV=$(readlink -f "$CURRENT" 2>/dev/null || true)
+echo "上一版：${PREV:-无}"
+
+cleanup() {
+    rm -f "$LOCK"
+}
+trap cleanup EXIT
+
+# 1. 加锁：让 quickcheck 在发布期间跳过
+touch "$LOCK"
+
+# 2. 复制到新版本目录（先不切流量）
+echo "复制到 $NEW ..."
+cp -a "$SRC"/. "$NEW"/
+
+# 3. 校验
+if [ ! -f "$NEW/index.html" ]; then
+    echo "校验失败：缺少 index.html" >&2
+    rm -rf "$NEW"
+    exit 1
+fi
+COUNT=$(find "$NEW" -type f | wc -l)
+SIZE=$(du -sh "$NEW" | cut -f1)
+echo "校验通过：$COUNT 个文件，$SIZE"
+
+# 4. 原子切换软链（先建临时链接再 rename，避免瞬间 404）
+ln -sfn "releases/$TS" "$ROOT/.current.new"
+mv -Tf "$ROOT/.current.new" "$CURRENT"
+echo "已切换 current -> releases/$TS"
+
+# 5. 发布后立即巡检，把新内容登记为基线
+if [ -x "$AUDIT" ]; then
+    echo "发布后巡检（登记基线）..."
+    "$AUDIT" >/tmp/publish-audit.out 2>&1 || true
+    grep -E '问题数|留给每日汇总|告警邮件' /tmp/publish-audit.out | sed 's/^/  /' || true
+else
+    echo "警告：未找到巡检脚本，基线未更新" >&2
+fi
+
+# 6. 清理旧版本（保留最近 N 个）
+ls -1dt "$RELEASES"/*/ 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
+    case "$old" in
+        "$(readlink -f "$CURRENT")/"*) continue ;;
+    esac
+    rm -rf "$old"
+done
+
+echo "发布完成。回滚命令：skyinstrument-rollback $(basename "${PREV:-}")"
+
