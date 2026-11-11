@@ -42,3 +42,30 @@ nginx -t -c /etc/skyinstrument-website/nginx.conf && nginx -s reload -c /etc/sky
 
 - 服务器上有两个 nginx 实例，站点那个必须带 `-c /etc/skyinstrument-website/nginx.conf`。
 - 备份包与生产同机存放，仍属"同介质"；异地兜底依赖阿里云 ECS 自动快照（控制台配置，按天，保留 7 天）。
+
+## 告警邮件配置（仅保存在服务器，不进入仓库）
+
+`/usr/local/sbin/skyinstrument-healthcheck` 发现异常时会读取
+`/etc/skyinstrument/mail.conf` 并发送邮件。该文件权限 600、属主 root，
+**包含 SMTP 授权码，绝不提交到仓库**。
+
+字段：
+
+```
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=<发件邮箱>
+SMTP_PASS=<SMTP 授权码，非登录密码>
+MAIL_TO=<收件邮箱>
+```
+
+新建或轮换后验证：
+
+```
+/usr/local/sbin/skyinstrument-healthcheck   # 全通过时不发信，退出码 0
+```
+
+如需验证告警链路，可临时把最新备份包改名使其"备份过期"，跑一次后改回。
+
+授权码泄露时的处置：登录邮箱后台撤销该授权码，重新生成并更新本文件，
+不需要改动任何脚本。
