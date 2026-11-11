@@ -11,6 +11,7 @@ on:
       - 'deploy/**'
       - 'docs/**'
       - 'scripts/**'
+      - '.github/workflows/gitee-mirror.yml'
   schedule:
     # 每周一 03:10 UTC（北京时间 11:10），兜底同步
     - cron: '10 3 * * 1'
