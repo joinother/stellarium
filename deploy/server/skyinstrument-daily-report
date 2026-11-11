@@ -16,6 +16,7 @@ os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 
 RECORDS = '/srv/skyinstrument/security-records'
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'
+AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
 NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
@@ -48,6 +49,22 @@ def summarize_audit(text):
 def summarize_hash(text):
     m = re.search(r'差异行数：(\d+)', text)
     return m.group(1) if m else '?'
+
+
+def ai_usage_line():
+    try:
+        import json as _j
+        import time as _t
+        data = _j.load(open(AI_USAGE, encoding='utf-8'))
+        day = data.get(_t.strftime('%Y-%m-%d')) or {}
+    except Exception:  # noqa: BLE001
+        return '无数据'
+    if not day.get('calls'):
+        return '今日未调用'
+    pt = day.get('prompt_tokens', 0)
+    ct = day.get('completion_tokens', 0)
+    return '调用 %d 次，token %d/%d，估算 %.3f 元' % (
+        day.get('calls', 0), pt, ct, pt / 1e6 * 2 + ct / 1e6 * 8)
 
 
 def active_blocks():
@@ -109,6 +126,7 @@ def main():
     ai_state, ai_notes = ai_status()
     blocks = active_blocks()
     rows = [
+        ('AI 用量', ai_usage_line(), []),
         ('当前生效拦截', '%d 条' % len(blocks),
          ['%s（自 %s）' % (p, t) for p, t in blocks[:5]]),
         ('AI 判定层', ai_state, ai_notes),

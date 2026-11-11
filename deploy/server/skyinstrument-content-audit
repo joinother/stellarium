@@ -46,6 +46,8 @@ LEXICON = '/var/lib/skyinstrument/lexicon/current/words.json'
 LEXICON_EXCLUDE = '/var/lib/skyinstrument/lexicon/local-exclude.txt'
 ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即时告警一次
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
+AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'     # 每日调用与 token 用量
+AI_MAX_CALLS_PER_DAY = 300                            # 每日调用上限，超出退回纯规则
 # 模型因内容过滤拒绝输出时的典型措辞（各家大同小异）
 REFUSAL_HINTS = ('抱歉', '无法协助', '不能协助', '无法提供', '不便提供', 'cannot help', 'I cannot')
 ALERT_COOLDOWN_H = 24
@@ -559,6 +561,13 @@ def main():
                 ai_notes.append((rel, ['词库未命中，AI 待人工确认'], verdict))
 
     # 自动处置（默认演练，需 REMEDIATE_CONF 中 APPLY=1 才真正拦截）
+    # AI 不可用（未配置 / 预算耗尽）时，非硬风险的高等级命中降为「中」待复核，
+    # 避免 AI 降级期间把"代理""网络"这类误报升级成即时告警。
+    ai_unavailable = (not load_audit_conf().get('LLM_KEY')) or budget_left() <= 0
+    if ai_unavailable:
+        issues[:] = [(('中' if lv == '高' and w not in hard_risk_pages else lv), kd, w, dt)
+                     for lv, kd, w, dt in issues]
+
     # 处置不依赖 AI：硬风险（隐藏元素内含违禁词）按规则直接处置。
     # AI 只对「非硬风险但被判 risk」的情形追加处置建议，模型不可用不影响兜底。
     actions, apply_on = ([], False)
@@ -604,7 +613,14 @@ def main():
     st = load_ai_state()
     ai_line = '正常' if st.get('last_ok') and not st.get('consecutive_fail') else (
         '降级（连续失败 %s 次）' % st.get('consecutive_fail') if st.get('consecutive_fail') else '未调用')
-    lines += ['', '## AI 判定层', '',
+    _all, _day = load_usage()
+    lines += ['', '## AI 用量（今日）', '',
+              '- 调用：%d / %d 次' % (_day.get('calls', 0), AI_MAX_CALLS_PER_DAY),
+              '- token：输入 %d，输出 %d' % (_day.get('prompt_tokens', 0), _day.get('completion_tokens', 0)),
+              '- 估算费用：%.3f 元' % price_of(_day),
+              '- 超预算拦截：%d 次，拒答：%d 次，失败：%d 次'
+              % (_day.get('budget_hit', 0), _day.get('refused', 0), _day.get('failed', 0)),
+              '', '## AI 判定层', '',
               '- 状态：%s' % ai_line,
               '- 最近成功：%s' % (time.strftime('%Y-%m-%d %H:%M', time.localtime(st['last_ok'])) if st.get('last_ok') else '无'),
               '- 最近失败：%s' % (st.get('last_reason', '') or '无'),
@@ -677,6 +693,11 @@ def judge_free(page, text):
     conf = load_audit_conf()
     if not conf.get('LLM_KEY'):
         return None
+    if budget_left() <= 0:
+        usage_add(budget_hit=1)
+        ai_record(False, '当日 AI 调用已达上限（%d 次）' % AI_MAX_CALLS_PER_DAY)
+        print('AI 当日预算已用尽，退回纯规则判定', file=sys.stderr)
+        return None
     prompt = (
         '你是网站内容合规审核员。下面是一个网站的页面中新增或修改的文字，'
         '词库没有命中，但仍可能存在词库覆盖不到的问题。\n'
@@ -720,6 +741,9 @@ def judge_free(page, text):
             ai_record(False, '自由审查输出无法解析')
             return None
         ai_record(True)
+        u = data.get('usage') or {}
+        usage_add(calls=1, prompt=int(u.get('prompt_tokens', 0)),
+                  completion=int(u.get('completion_tokens', 0)))
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '%s: %s' % (type(exc).__name__, exc))
@@ -798,6 +822,11 @@ def judge(kind, page, payload):
     conf = load_audit_conf()
     if not conf.get('LLM_KEY'):
         return None
+    if budget_left() <= 0:
+        usage_add(budget_hit=1)
+        ai_record(False, '当日 AI 调用已达上限（%d 次）' % AI_MAX_CALLS_PER_DAY)
+        print('AI 当日预算已用尽，退回纯规则判定', file=sys.stderr)
+        return None
     if kind == 'rule_hit':
         prompt = (
             '你是网站内容合规审核员。某文件触发了本地规则，请判断是否属于真实风险。\n'
@@ -844,16 +873,77 @@ def judge(kind, page, payload):
             low = content.lower()
             if any(h.lower() in low for h in REFUSAL_HINTS):
                 ai_record(True, '模型拒绝输出（内容过滤）', refused=True)
+                usage_add(calls=1, refused=1)
                 print('大模型拒绝输出（可能触发内容过滤），跳过判定', file=sys.stderr)
                 return {'verdict': 'refused', 'reason': '模型拒绝输出，未参与判定'}
             ai_record(False, '输出无法解析：' + content[:80])
             return {'verdict': 'needs_review', 'reason': '模型输出无法解析：' + content[:40]}
         ai_record(True)
+        u = data.get('usage') or {}
+        usage_add(calls=1, prompt=int(u.get('prompt_tokens', 0)),
+                  completion=int(u.get('completion_tokens', 0)))
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '%s: %s' % (type(exc).__name__, exc))
+        usage_add(calls=1, failed=1)
         print('大模型判定失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
         return None
+
+
+def _today():
+    return time.strftime('%Y-%m-%d')
+
+
+def load_usage():
+    try:
+        data = json.load(open(AI_USAGE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        data = {}
+    day = data.get(_today())
+    if not day:
+        day = {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0,
+               'refused': 0, 'failed': 0, 'budget_hit': 0}
+    return data, day
+
+
+def save_usage(data, day):
+    data[_today()] = day
+    # 只保留最近 90 天
+    keep = sorted(data.keys())[-90:]
+    data = {k: data[k] for k in keep}
+    try:
+        os.makedirs(os.path.dirname(AI_USAGE), exist_ok=True)
+        json.dump(data, open(AI_USAGE, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def usage_add(calls=0, prompt=0, completion=0, refused=0, failed=0, budget_hit=0):
+    data, day = load_usage()
+    day['calls'] += calls
+    day['prompt_tokens'] += prompt
+    day['completion_tokens'] += completion
+    day['refused'] += refused
+    day['failed'] += failed
+    day['budget_hit'] += budget_hit
+    save_usage(data, day)
+
+
+def budget_left():
+    _data, day = load_usage()
+    return max(0, AI_MAX_CALLS_PER_DAY - int(day.get('calls', 0)))
+
+
+def price_of(day):
+    """按可配置单价估算当天花费（元）。"""
+    conf = load_audit_conf()
+    try:
+        pin = float(conf.get('LLM_PRICE_IN_PER_M', '2'))
+        pout = float(conf.get('LLM_PRICE_OUT_PER_M', '8'))
+    except ValueError:
+        pin, pout = 2.0, 8.0
+    return (day.get('prompt_tokens', 0) / 1e6 * pin +
+            day.get('completion_tokens', 0) / 1e6 * pout)
 
 
 def load_ai_state():
