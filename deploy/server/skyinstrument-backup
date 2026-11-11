@@ -13,9 +13,14 @@ MANIFEST="$BACKUP_DIR/manifest-$DAY.sha256"
 mkdir -p "$BACKUP_DIR"
 
 # 打包：-h 解引用 current 软链，保证备份里是实际文件而非链接
+# 打包内容：站点 + nginx 配置（含 conf.d 拦截规则）+ systemd 单元 + 镜像源清单
+# 说明：邮件/LLM/令牌等密钥文件故意不打包，避免备份包泄露导致凭据外流
+UNIT_FILES=$(ls -1 /etc/systemd/system/skyinstrument-*.service /etc/systemd/system/skyinstrument-*.timer 2>/dev/null)
 tar czf "$PKG.tmp" -h \
     -C /srv/skyinstrument/website current \
     -C /etc skyinstrument-website/nginx.conf \
+    -C /etc/skyinstrument-website conf.d \
+    -C /etc/systemd/system $UNIT_FILES \
     -C /opt/tle-mirror sources.json
 mv "$PKG.tmp" "$PKG"
 

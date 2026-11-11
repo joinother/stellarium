@@ -49,6 +49,8 @@ AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
 # 模型因内容过滤拒绝输出时的典型措辞（各家大同小异）
 REFUSAL_HINTS = ('抱歉', '无法协助', '不能协助', '无法提供', '不便提供', 'cannot help', 'I cannot')
 ALERT_COOLDOWN_H = 24
+REMEDIATE_STATE = '/var/lib/skyinstrument/remediate-state.json'
+REMEDIATE_MAX_PER_DAY = 3   # 每天最多真实拦截 3 次，超出只告警
 BASELINE = os.path.join(RECORDS, '.content-baseline.json')
 
 # 外部域名白名单：只允许出现这些
@@ -974,6 +976,34 @@ def url_path_for(rel):
     return None
 
 
+def remediate_budget_left():
+    """当天还剩几次真实拦截额度。"""
+    try:
+        data = json.load(open(REMEDIATE_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return REMEDIATE_MAX_PER_DAY
+    today = time.strftime('%Y-%m-%d')
+    if data.get('day') != today:
+        return REMEDIATE_MAX_PER_DAY
+    return max(0, REMEDIATE_MAX_PER_DAY - int(data.get('count', 0)))
+
+
+def remediate_consume():
+    try:
+        os.makedirs(os.path.dirname(REMEDIATE_STATE), exist_ok=True)
+        today = time.strftime('%Y-%m-%d')
+        try:
+            data = json.load(open(REMEDIATE_STATE, encoding='utf-8'))
+        except Exception:  # noqa: BLE001
+            data = {}
+        if data.get('day') != today:
+            data = {'day': today, 'count': 0}
+        data['count'] = int(data.get('count', 0)) + 1
+        json.dump(data, open(REMEDIATE_STATE, 'w', encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def remediate(ai_notes):
     """仅对「模型判定 risk 且可映射为站点路径」的项处置；镜像不自动拦截。"""
     actions = []
@@ -994,10 +1024,14 @@ def remediate(ai_notes):
         if ('location = %s {' % url) in conf_text:
             actions.append((rel, '已处于拦截状态，无需重复处置'))
             continue
+        if apply and remediate_budget_left() <= 0:
+            actions.append((rel, '今日拦截额度已用尽（%d 次），仅告警' % REMEDIATE_MAX_PER_DAY))
+            continue
         cmd = [INCIDENT_BIN, '--path', url, '--reason',
                '内容巡检：%s；模型判定 risk' % '；'.join(hits)[:60]]
         if apply:
             cmd.append('--apply')
+            remediate_consume()
         # A3：邮件收口——生效处置时由 incident 独发一封（含回滚命令）；
         # 演练模式或冷却期内，incident 不发信。
         if not apply or recently_alerted(rel):

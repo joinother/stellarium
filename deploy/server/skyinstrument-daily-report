@@ -19,6 +19,7 @@ AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
 NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
+INCIDENT_CONF = '/etc/skyinstrument-website/conf.d/incident.conf'
 
 
 def read_latest(pattern):
@@ -47,6 +48,22 @@ def summarize_audit(text):
 def summarize_hash(text):
     m = re.search(r'差异行数：(\d+)', text)
     return m.group(1) if m else '?'
+
+
+def active_blocks():
+    """当前生效的拦截规则（nginx conf.d 里的 503）。"""
+    if not os.path.exists(INCIDENT_CONF):
+        return []
+    out = []
+    for line in open(INCIDENT_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line.startswith('location ='):
+            continue
+        m = re.search(r'location = (\S+)', line)
+        t = re.search(r'incident (\d{8}-\d{6})', line)
+        if m:
+            out.append((m.group(1), t.group(1) if t else '?'))
+    return out
 
 
 def ai_status():
@@ -90,7 +107,10 @@ def main():
              and ai_state in ('正常', '未知')
 
     ai_state, ai_notes = ai_status()
+    blocks = active_blocks()
     rows = [
+        ('当前生效拦截', '%d 条' % len(blocks),
+         ['%s（自 %s）' % (p, t) for p, t in blocks[:5]]),
         ('AI 判定层', ai_state, ai_notes),
         ('服务器自检', '%s 项，异常 %s' % (h_total, h_fail), h_fails),
         ('内容巡检', '%s 个文件，问题 %s' % (a_total, a_issues),
@@ -122,6 +142,12 @@ def main():
                          '<td style="padding:8px 10px;border:1px solid #d0d7de">%s%s</td></tr>'
                          % (name, result, extra))
     body_html.append('</tbody></table>')
+
+    if blocks:
+        body_txt.append('')
+        body_txt.append('当前生效拦截（这些路径返回 503）：')
+        body_txt.extend('  %s（自 %s）' % (p, t) for p, t in blocks)
+        body_txt.append('  解除：skyinstrument-incident --rollback <时间戳>')
 
     trows = timers()
     body_txt.append('')
