@@ -15,6 +15,7 @@ from datetime import datetime
 os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 RECORDS = '/srv/skyinstrument/security-records'
+AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
 
@@ -47,6 +48,25 @@ def summarize_hash(text):
     return m.group(1) if m else '?'
 
 
+def ai_status():
+    try:
+        import json as _json
+        st = _json.load(open(AI_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return '未知', []
+    fails = int(st.get('consecutive_fail', 0) or 0)
+    notes = []
+    if st.get('last_reason'):
+        notes.append('最近失败原因：%s' % st['last_reason'][:80])
+    if st.get('refused_today'):
+        notes.append('今日模型拒绝输出 %s 次（内容过滤）' % st['refused_today'])
+    if fails >= 3:
+        return '降级（连续失败 %s 次，仅规则层生效）' % fails, notes
+    if fails:
+        return '告警（连续失败 %s 次）' % fails, notes
+    return '正常', notes
+
+
 def timers():
     try:
         out = subprocess.run(['systemctl', 'list-timers', 'skyinstrument-*', '--no-pager'],
@@ -65,9 +85,12 @@ def main():
     a_total, a_issues, a_items = summarize_audit(atext)
     h_diff = summarize_hash(dtext)
 
-    all_ok = (h_fail in ('0', '?')) and (a_issues in ('0', '?')) and (h_diff in ('0', '?'))
+    all_ok = (h_fail in ('0', '?')) and (a_issues in ('0', '?')) and (h_diff in ('0', '?')) \
+             and ai_state in ('正常', '未知')
 
+    ai_state, ai_notes = ai_status()
     rows = [
+        ('AI 判定层', ai_state, ai_notes),
         ('服务器自检', '%s 项，异常 %s' % (h_total, h_fail), h_fails),
         ('内容巡检', '%s 个文件，问题 %s' % (a_total, a_issues),
          ['%s：%s（%s）' % (i[0], i[1].strip(), i[2].strip()) for i in a_items[:6]]),

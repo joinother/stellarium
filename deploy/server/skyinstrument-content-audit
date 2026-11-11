@@ -40,6 +40,9 @@ API_MAX_BYTES = 8 * 1024 * 1024
 INCIDENT_BIN = '/usr/local/sbin/skyinstrument-incident'
 REMEDIATE_CONF = '/etc/skyinstrument/remediate.conf'   # APPLY=1 才真正拦截
 ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即时告警一次
+AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
+# 模型因内容过滤拒绝输出时的典型措辞（各家大同小异）
+REFUSAL_HINTS = ('抱歉', '无法协助', '不能协助', '无法提供', '不便提供', 'cannot help', 'I cannot')
 ALERT_COOLDOWN_H = 24
 BASELINE = os.path.join(RECORDS, '.content-baseline.json')
 
@@ -421,9 +424,20 @@ def main():
                 ai_notes.append((rel, ['内容变更'], verdict))
 
     # 自动处置（默认演练，需 REMEDIATE_CONF 中 APPLY=1 才真正拦截）
+    # 处置不依赖 AI：硬风险（隐藏元素内含违禁词）按规则直接处置。
+    # AI 只对「非硬风险但被判 risk」的情形追加处置建议，模型不可用不影响兜底。
     actions, apply_on = ([], False)
-    if issues and ai_notes:
-        actions, apply_on = remediate(ai_notes)
+    if issues:
+        fallback_notes = []
+        for page in sorted(hard_risk_pages):
+            hit = [h for h in issues if h[2] == page][:3]
+            fallback_notes.append((page, ['%s/%s' % (h[1], h[3][:40]) for h in hit],
+                                  {'verdict': 'risk', 'reason': '隐藏元素含违禁词（规则判定）'}))
+        for note in ai_notes:
+            if note[0] not in hard_risk_pages and note[2].get('verdict') == 'risk':
+                fallback_notes.append(note)
+        if fallback_notes:
+            actions, apply_on = remediate(fallback_notes)
 
     # 报告
     today = datetime.now().strftime('%Y%m%d')
@@ -452,6 +466,14 @@ def main():
             lines.append('| %s | %s | %s | %s |' % (level, kind, where, detail.replace('|', '/')))
     else:
         lines += ['', '**结论：未发现风险内容。**']
+    st = load_ai_state()
+    ai_line = '正常' if st.get('last_ok') and not st.get('consecutive_fail') else (
+        '降级（连续失败 %s 次）' % st.get('consecutive_fail') if st.get('consecutive_fail') else '未调用')
+    lines += ['', '## AI 判定层', '',
+              '- 状态：%s' % ai_line,
+              '- 最近成功：%s' % (time.strftime('%Y-%m-%d %H:%M', time.localtime(st['last_ok'])) if st.get('last_ok') else '无'),
+              '- 最近失败：%s' % (st.get('last_reason', '') or '无'),
+              '- 今日拒绝输出：%s 次' % st.get('refused_today', 0)]
     if actions:
         lines += ['', '## 自动处置' + ('（已生效）' if apply_on else '（演练模式）'), '',
                   '| 文件 | 动作 |', '| --- | --- |']
@@ -561,14 +583,57 @@ def judge(kind, page, payload):
         with urllib.request.urlopen(req, timeout=40) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         content = data['choices'][0]['message']['content'].strip()
-        content = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
-        m = re.search(r'\{.*\}', content, re.S)
+        stripped = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
+        m = re.search(r'\{.*\}', stripped, re.S)
         if not m:
+            low = content.lower()
+            if any(h.lower() in low for h in REFUSAL_HINTS):
+                ai_record(True, '模型拒绝输出（内容过滤）', refused=True)
+                print('大模型拒绝输出（可能触发内容过滤），跳过判定', file=sys.stderr)
+                return {'verdict': 'refused', 'reason': '模型拒绝输出，未参与判定'}
+            ai_record(False, '输出无法解析：' + content[:80])
             return {'verdict': 'needs_review', 'reason': '模型输出无法解析：' + content[:40]}
+        ai_record(True)
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
+        ai_record(False, '%s: %s' % (type(exc).__name__, exc))
         print('大模型判定失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
         return None
+
+
+def load_ai_state():
+    try:
+        return json.load(open(AI_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return {'last_ok': 0, 'last_error': 0, 'last_reason': '', 'consecutive_fail': 0,
+                'refused_today': 0, 'today': ''}
+
+
+def save_ai_state(state):
+    try:
+        os.makedirs(os.path.dirname(AI_STATE), exist_ok=True)
+        with open(AI_STATE, 'w', encoding='utf-8') as fh:
+            json.dump(state, fh, ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def ai_record(ok, reason='', refused=False):
+    st = load_ai_state()
+    today = time.strftime('%Y-%m-%d')
+    if st.get('today') != today:
+        st['today'] = today
+        st['refused_today'] = 0
+    if ok:
+        st['last_ok'] = time.time()
+        st['consecutive_fail'] = 0
+    else:
+        st['last_error'] = time.time()
+        st['last_reason'] = reason[:200]
+        st['consecutive_fail'] = int(st.get('consecutive_fail', 0)) + 1
+    if refused:
+        st['refused_today'] = int(st.get('refused_today', 0)) + 1
+    save_ai_state(st)
 
 
 def recently_alerted(rel):
