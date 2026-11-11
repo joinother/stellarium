@@ -537,6 +537,30 @@ node scripts/stellarium-cli.mjs --command applyCollaborationSession --payload '<
 
 完整设计、配对、局域网和未来云端边界见 `research/COLLABORATION-AND-CONTINUATION-ROADMAP.md`。
 
+## 天象日历与触觉反馈（2026-11-11）
+
+以下 ArkUI 命令要求应用前台且当前隐私同意有效；调用不会自动启用振动或申请通知授权。
+
+| 命令 | payload | 返回语义 |
+| --- | --- | --- |
+| `getHapticState` | 空 | `state` 含 enabled/available/foreground/supportedEffects；会查询设备支持性但不振动 |
+| `setHapticEnabled` | `true/false`，兼容 `on/off/1/0` | `ok` 表示偏好保存结果，返回最新 state |
+| `playHapticFeedback` | `selection/menu/confirmation/error` | `played` 表示系统 API 接受，不证明实际有物理震感；关闭/不支持/后台不播放 |
+| `getAstronomyCalendarEvents` | `YYYY-MM` 或 `{year,month,startJD,endJD}` | 本地节气/月相/目录流星雨极大/行星合冲及大距；字符串为 UTC 月，JSON 可给本地月的 UT 边界，不改变星图时间 |
+| `setCalendarMonth` | `YYYY-MM` | 发起月历加载；随后查询 `getCalendarState` 的 loaded/loading/error 判定完成 |
+| `getCalendarState` | 空 | 当前月份、日期网格、事件、选择与提醒结果 |
+| `selectCalendarDay` | 1–当月天数 | 选择当天事件 |
+| `selectCalendarEvent` | 当前月事件 ID | 显示事件详情，不改变模拟时间 |
+| `remindCalendarEvent` | 当前月事件 ID | 返回真实系统排程结果；过去事件、静默时段、授权/权益问题为失败 |
+| `viewCalendarEvent` | 当前月事件 ID | 使用已有时间过渡前往事件时刻；命令接受不表示过渡已结束 |
+| `loadMoreCalendarEvents` | 空 | 追加下一月；查询 loadingMore/throughYear/throughMonth 验证完成 |
+| `closeCalendarEvent` | 空 | 返回已载入的图文事件时间线 |
+| `getNotificationSubscriptionState` | 空 | 读取偏好、分类状态、真实排程结果及错误 |
+| `setNotificationSubscription` | `astronomy|on/off` 或 `satellite|on/off` | 等待持久化及分类重排；失败回退/取消失败均返回 ok:false |
+| `setNotificationQuietHours` | JSON `{enabled,startMinutes,endMinutes}` | 分钟为 0–1439 整数；保存静默时段并返回实际结果，仅前台且隐私已同意可用 |
+
+`openUiPanel calendar` 打开图文时间线；`openUiPanel settingsPrivacy` 打开触觉/通知设置。日历未接入日月食与卫星过境，流星雨时间为目录模型估算。卫星订阅传显式真实历元 `startJD`；当前原生预测器尚不能无副作用处理它，明确返回 `explicit_epoch_prediction_unsupported`，分类会关闭，不回退到修改模拟时间的旧预测器。提醒 CLI 与界面共同读取本地偏好，保留系统 ID、事件时刻和返回路由；不可用时明确失败，不能把“请求已接收”当作提醒生效。详见 `specs/HAPTIC-FEEDBACK-TRIAL.md`、`specs/ASTRONOMY-CALENDAR.md`。
+
 ## PC 响应式布局与触控诊断
 
 ```bash

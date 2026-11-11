@@ -1,14 +1,16 @@
+import { I18n } from '../../capability/I18n'
+import { notificationText } from '../../capability/NotificationText'
 import { Theme } from '@kit.ArkUI'
-import BuildProfile from 'BuildProfile'
 import { panelFontSize } from '../../common/ui/UiTypography'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
+import { AstronomyReminderItem } from '../../qability/AstronomyReminderService'
 
-// 设置面板「通知」区块：按通知类别分卡片（天文事件 / 卫星通过 / 观测建议）。
-// 卫星卡片内嵌勿扰模式时段与提前提醒分钟数；自定义定时提醒收在最后一张卡片，
-// 供需要精确时刻的用户使用（倒计时 / 指定时间 / 每日）。
 @Component
 export struct NotificationSection {
+  @StorageProp('i18nLang') language: string = I18n.getLanguage()
+
+  private t(value: string): string { return notificationText(value, this.language) }
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @Prop notificationEnabled: boolean
   @Prop notificationBusy: boolean
@@ -21,6 +23,14 @@ export struct NotificationSection {
   @Prop dndStartMinutes: number
   @Prop dndEndMinutes: number
   @Prop passLeadMinutes: number
+  @Prop reminders: AstronomyReminderItem[] = []
+  @Prop reminderListLoaded: boolean = false
+  @Prop reminderListError: string = ''
+  @Prop preferencesBusy: boolean = false
+  @Prop preferencesError: string = ''
+  @Prop astronomySubscriptionStatus: string = ''
+  @Prop satelliteSubscriptionStatus: string = ''
+  @Prop pushTokenText: string
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onRequestAccess: () => void = () => {}
@@ -34,230 +44,104 @@ export struct NotificationSection {
   onScheduleNextSolarTerm: () => void = () => {}
   onScheduleNextMoonPhase: () => void = () => {}
   onScheduleNextMeteor: () => void = () => {}
+  onOpenCalendar: () => void = () => {}
+  onRefreshReminders: () => void = () => {}
+  onCancelReminder: (id: number) => void = () => {}
   onClearReminders: () => void = () => {}
   onScheduleCountdown: (minutes: number) => void = () => {}
   onScheduleCalendarAt: (timestamp: number) => void = () => {}
   onScheduleAlarm: (hour: number, minute: number) => void = () => {}
-  // 调试用：取 Push Token（实况窗远程更新需要），仅 debug 包显示
   onFetchPushToken: () => void = () => {}
-  @Prop pushTokenText: string
 
-  onWillApplyTheme(theme: Theme): void {
-    this.c = slotsFromTheme(theme)
-  }
+  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
   private hhmm(minutes: number): string {
-    const h = Math.floor(minutes / 60)
-    const m = minutes % 60
-    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0')
+    return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0')
   }
 
-  @Builder
-  cardTitle(title: string, on: boolean, onChange: (v: boolean) => void) {
-    Row() {
-      Text(title).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).fontWeight(FontWeight.Medium)
-        .layoutWeight(1)
-      Toggle({ type: ToggleType.Switch, isOn: on })
-        .width(44).height(24)
-        .selectedColor(this.c.accent)
-        .enabled(!this.notificationBusy)
-        .onChange((value: boolean) => { onChange(value) })
-    }.width('100%')
+  private chooseQuietTime(start: boolean): void {
+    const minutes = start ? this.dndStartMinutes : this.dndEndMinutes
+    this.getUIContext().showTimePickerDialog({
+      selected: new Date(2026, 0, 1, Math.floor(minutes / 60), minutes % 60),
+      useMilitaryTime: true,
+      onAccept: (value: TimePickerResult) => {
+        if (value.hour === undefined || value.minute === undefined) return
+        if (start) this.onDndStartChange(value.hour * 60 + value.minute)
+        else this.onDndEndChange(value.hour * 60 + value.minute)
+      }
+    })
   }
 
   @Builder
   hint(text: string) {
-    Text(text)
-      .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
+    Text(text).fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
       .width('100%').margin({ top: 6 })
   }
 
   @Builder
-  divider() {
-    Divider().color(this.c.dividerSoft).strokeWidth(1).width('100%').margin({ top: 10, bottom: 10 })
+  action(label: string, enabled: boolean, callback: () => void) {
+    Button(label, { type: ButtonType.Normal }).fontSize(panelFontSize(12, this.readableUi))
+      .fontColor(this.c.text).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL)
+      .constraintSize({ minHeight: 40 }).padding({ left: 12, right: 12 })
+      .enabled(enabled).onClick(() => { callback() })
   }
 
   build() {
-    Column({ space: 10 }) {
-      Row() {
-        Text(this.statusText).fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).layoutWeight(1)
-        Button(this.notificationEnabled ? '已开启' : '开启通知')
-          .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.dividerSoft)
-          .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 36 : 28).padding({ left: 12, right: 12 })
-          .enabled(!this.notificationBusy && !this.notificationEnabled)
-          .onClick(() => { this.onRequestAccess() })
-      }.width('100%').padding({ left: 10, right: 10 })
-
-      // —— 天文事件 ——
-      Column({ space: 0 }) {
-        this.cardTitle('天文事件', this.astronomyEventsEnabled, (v: boolean) => { this.onToggleAstronomyEvents(v) })
-        this.hint('绝不错过流星雨、日食或其它重要的天文奇观。')
-        this.divider()
+    Column({ space: 12 }) {
+      if (!this.notificationEnabled) {
         Row({ space: 8 }) {
-          Button('节气').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.dividerSoft).borderRadius(UI_RADIUS_CONTROL)
-            .height(this.readableUi ? 30 : 26).padding({ left: 10, right: 10 })
-            .enabled(!this.notificationBusy && this.notificationEnabled && this.astronomyEventsEnabled)
-            .onClick(() => { this.onScheduleNextSolarTerm() })
-          Button('满月').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.dividerSoft).borderRadius(UI_RADIUS_CONTROL)
-            .height(this.readableUi ? 30 : 26).padding({ left: 10, right: 10 })
-            .enabled(!this.notificationBusy && this.notificationEnabled && this.astronomyEventsEnabled)
-            .onClick(() => { this.onScheduleNextMoonPhase() })
-          Button('流星雨').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.dividerSoft).borderRadius(UI_RADIUS_CONTROL)
-            .height(this.readableUi ? 30 : 26).padding({ left: 10, right: 10 })
-            .enabled(!this.notificationBusy && this.notificationEnabled && this.astronomyEventsEnabled)
-            .onClick(() => { this.onScheduleNextMeteor() })
+          Text(this.t('开启系统通知以接收订阅提醒。')).fontSize(panelFontSize(12, this.readableUi))
+            .fontColor(this.c.sub).layoutWeight(1)
+          this.action(this.t('开启通知'), !this.notificationBusy, () => { this.onRequestAccess() })
         }.width('100%')
       }
-      .width('100%').padding(12)
-      .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-
-      // —— 卫星通过 ——
-      Column({ space: 0 }) {
-        this.cardTitle('卫星通过', this.satellitePassEnabled, (v: boolean) => { this.onToggleSatellitePass(v) })
-        this.hint('当国际空间站或其它明亮的卫星即将在天空中可见时，及时获得提醒。')
-        this.divider()
-
+      Column({ space: 8 }) {
         Row() {
-          Text('勿扰模式').fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.dndEnabled })
-            .width(44).height(24).selectedColor(this.c.accent)
-            .enabled(!this.notificationBusy && this.satellitePassEnabled)
-            .onChange((value: boolean) => { this.onToggleDnd(value) })
+          Text(this.t('天象事件')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.astronomyEventsEnabled }).width(44).height(24)
+            .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .onChange((enabled: boolean) => { this.onToggleAstronomyEvents(enabled) })
         }.width('100%')
-        this.hint('不显示 ' + this.hhmm(this.dndStartMinutes) + ' 到 ' + this.hhmm(this.dndEndMinutes) + ' 之间的卫星飞过事件通知。')
-
+        this.hint(this.t('订阅本地天象日历中的近期事件。'))
+        if (this.astronomySubscriptionStatus.length > 0) { this.hint(this.t(this.astronomySubscriptionStatus)) }
+      }.width('100%').padding(12).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+      Column({ space: 10 }) {
+        Row() {
+          Text(this.t('卫星通过')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.satellitePassEnabled }).width(44).height(24)
+            .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .onChange((enabled: boolean) => { this.onToggleSatellitePass(enabled) })
+        }.width('100%')
+        this.hint(this.t('按你选择的观测地点预测可见通过，无需定位权限。'))
         Row({ space: 8 }) {
-          Button(this.hhmm(this.dndStartMinutes))
-            .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.input)
-            .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 32 : 28).layoutWeight(1)
-            .enabled(!this.notificationBusy && this.satellitePassEnabled && this.dndEnabled)
-            .onClick(() => {
-              TimePickerDialog.show({
-                selected: new Date(2026, 0, 1, Math.floor(this.dndStartMinutes / 60), this.dndStartMinutes % 60),
-                useMilitaryTime: true,
-                onAccept: (value: TimePickerResult) => { this.onDndStartChange(value.hour * 60 + value.minute) }
-              })
-            })
-          Text('到').fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub)
-          Button(this.hhmm(this.dndEndMinutes))
-            .fontSize(this.readableUi ? 12 : 11).fontColor(this.c.text).backgroundColor(this.c.input)
-            .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 32 : 28).layoutWeight(1)
-            .enabled(!this.notificationBusy && this.satellitePassEnabled && this.dndEnabled)
-            .onClick(() => {
-              TimePickerDialog.show({
-                selected: new Date(2026, 0, 1, Math.floor(this.dndEndMinutes / 60), this.dndEndMinutes % 60),
-                useMilitaryTime: true,
-                onAccept: (value: TimePickerResult) => { this.onDndEndChange(value.hour * 60 + value.minute) }
-              })
-            })
-        }.width('100%').margin({ top: 8 })
-        .opacity(this.dndEnabled && this.satellitePassEnabled ? 1 : 0.45)
-
-        this.divider()
-
-        Row() {
-          Text('提醒时间').fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
-          Button('−').fontSize(16).fontColor(this.c.text).backgroundColor(this.c.input)
-            .width(40).height(this.readableUi ? 34 : 30).borderRadius(UI_RADIUS_CONTROL)
-            .enabled(!this.notificationBusy && this.satellitePassEnabled && this.passLeadMinutes > 1)
-            .onClick(() => { this.onLeadChange(-1) })
-          Text(this.passLeadMinutes + ' 分钟')
-            .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text)
-            .width(72).textAlign(TextAlign.Center)
-          Button('＋').fontSize(16).fontColor(this.c.text).backgroundColor(this.c.input)
-            .width(40).height(this.readableUi ? 34 : 30).borderRadius(UI_RADIUS_CONTROL)
-            .enabled(!this.notificationBusy && this.satellitePassEnabled && this.passLeadMinutes < 60)
-            .onClick(() => { this.onLeadChange(1) })
+          Text(this.t('提前提醒')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          this.action('−', !this.notificationBusy && !this.preferencesBusy && this.passLeadMinutes > 0, () => { this.onLeadChange(-1) })
+          Text(this.passLeadMinutes + this.t(' 分钟')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text)
+          this.action('＋', !this.notificationBusy && !this.preferencesBusy && this.passLeadMinutes < 60, () => { this.onLeadChange(1) })
         }.width('100%')
-        this.hint('过境前 ' + this.passLeadMinutes + ' 分钟提醒')
-      }
-      .width('100%').padding(12)
-      .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-
-      // —— 观测建议 ——
-      Column({ space: 0 }) {
-        this.cardTitle('观测建议', this.digestEnabled, (v: boolean) => { this.onToggleDigest(v) })
-        this.hint('每月一次，汇总当月值得关注的天象与观测建议。')
-      }
-      .width('100%').padding(12)
-      .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-
-      // —— 自定义提醒 ——
-      Column({ space: 0 }) {
-        Text('自定义提醒').fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text)
-          .width('100%').margin({ bottom: 8 })
-        Row({ space: 8 }) {
-          Button('15 分钟').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 30 : 26)
-            .layoutWeight(1)
-            .enabled(!this.notificationBusy && this.notificationEnabled)
-            .onClick(() => { this.onScheduleCountdown(15) })
-          Button('30 分钟').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 30 : 26)
-            .layoutWeight(1)
-            .enabled(!this.notificationBusy && this.notificationEnabled)
-            .onClick(() => { this.onScheduleCountdown(30) })
-          Button('选择时间').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 30 : 26)
-            .layoutWeight(1)
-            .enabled(!this.notificationBusy && this.notificationEnabled)
-            .onClick(() => {
-              TimePickerDialog.show({
-                selected: new Date(),
-                useMilitaryTime: true,
-                onAccept: (value: TimePickerResult) => {
-                  const now = new Date()
-                  this.onScheduleCalendarAt(new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-                    value.hour, value.minute).getTime())
-                }
-              })
-            })
-          Button('每日').fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text)
-            .backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 30 : 26)
-            .layoutWeight(1)
-            .enabled(!this.notificationBusy && this.notificationEnabled)
-            .onClick(() => {
-              TimePickerDialog.show({
-                selected: new Date(),
-                useMilitaryTime: true,
-                onAccept: (value: TimePickerResult) => { this.onScheduleAlarm(value.hour, value.minute) }
-              })
-            })
-        }.width('100%')
+        if (this.satelliteSubscriptionStatus.length > 0) { this.hint(this.t(this.satelliteSubscriptionStatus)) }
+      }.width('100%').padding(12).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+      Column({ space: 8 }) {
         Row() {
-          Text('当前已注册 ' + this.reminderCount.toString() + ' 条')
-            .fontSize(panelFontSize(10, this.readableUi)).fontColor(this.c.sub).layoutWeight(1)
-          Button('清除全部')
-            .fontSize(this.readableUi ? 11 : 10).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
-            .borderRadius(UI_RADIUS_CONTROL).height(this.readableUi ? 30 : 26).padding({ left: 12, right: 12 })
-            .enabled(!this.notificationBusy && this.reminderCount > 0)
-            .onClick(() => { this.onClearReminders() })
-        }.width('100%').margin({ top: 10 })
-      }
-      .width('100%').padding(12)
-      .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-
-      if (BuildProfile.DEBUG) {
-        Column({ space: 6 }) {
-          Row() {
-            Text('Push Token').fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).layoutWeight(1)
-            Button('获取')
-              .fontSize(this.readableUi ? 11 : 10).fontColor(this.c.text).backgroundColor(this.c.input)
-              .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 12, right: 12 })
-              .onClick(() => { this.onFetchPushToken() })
+          Text(this.t('静默时段')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.dndEnabled }).width(44).height(24)
+            .selectedColor(this.c.accent).enabled(!this.notificationBusy && !this.preferencesBusy)
+            .onChange((enabled: boolean) => { this.onToggleDnd(enabled) })
+        }.width('100%')
+        if (this.dndEnabled) {
+          Row({ space: 8 }) {
+            this.action(this.hhmm(this.dndStartMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(true) })
+            Text(this.t('至')).fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub)
+            this.action(this.hhmm(this.dndEndMinutes), !this.notificationBusy && !this.preferencesBusy, () => { this.chooseQuietTime(false) })
           }.width('100%')
-          if (this.pushTokenText.length > 0) {
-            Text(this.pushTokenText)
-              .fontSize(9).fontColor(this.c.sub).width('100%')
-              .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
+          this.hint(this.dndStartMinutes === this.dndEndMinutes ? this.t('起止时间相同表示全天静默。') :
+            this.t('所有本地订阅跳过静默时段，不延迟事件。'))
         }
-        .width('100%').padding(12)
-        .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
-      }
+      }.width('100%').padding(12).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+      this.hint(this.t('打开应用时更新近期提醒；关闭分类会取消该分类的订阅提醒。'))
+      if (this.statusText.length > 0) { this.hint(this.t(this.statusText)) }
+      if (this.preferencesError.length > 0) { this.hint(this.t(this.preferencesError)) }
+      if (this.reminderListError.length > 0) { this.hint(this.t(this.reminderListError)) }
     }.width('100%')
   }
 }

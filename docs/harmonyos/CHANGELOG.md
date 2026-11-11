@@ -1,5 +1,56 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-11] Codex - Sky Guide 新分析复核与代理提醒真机收尾
+
+- **文档复核：** `research/SKYGUIDE-763-REFERENCE-2026-11-11.md` 对照九份分析与当前源码，追踪至 23:13 的通知载荷/带参路由补充；修正“只到首页”、JD/MJD、事件计数及未找到缓存即推定算法等推断。建议复用自身流星小时率模型，分离事件窗口/当地情况与提醒触发时刻。仅借鉴产品和架构，不复制私有代码或素材。
+- **设备证据：** 新 Debug Profile 覆盖安装成功，timer 测试跨重启恢复、相同请求去重、force-stop 后到点通知及点击满月详情通过；系统勿扰保持开启，不声称声音/振动通过。calendar 秒字段被系统回读为零已用 37 秒与整分钟对照复现。
+- **修复与验证：** calendar 发布明确采用分钟精度，原事件时间不变，归属指纹仍严格；到点正文保留事件内容，timer 不注入 calendar 提前量。80/80 行为测试、reminder/UI 契约、最终 assembleHap 通过；最终包 calendar 真机回归另记 `testing/NOTIFICATION-CALENDAR-PAD-2026-11-11.md`。
+- **范围：** 未改 Release，未卸载、未取消旧 ID2–7、未提交或推送 Git、未部署服务。卫星独立日期预测、v2 服务与桌面 forms 不宣称完成；Profile 两份文档已补实际验收边界。
+
+## [2026-11-11] Codex - 卫星刷新安全与解析兼容修复最终验证
+
+- **修改文件：** `plugins/Satellites/src/Satellites.cpp`、`src/StelMainView.cpp` 的卫星显式 epoch 门禁、`scripts/test-ohos-satellite-refresh-safety.mjs`、`specs/SATELLITE-REFRESH-SAFETY.md`；本次收尾只更新规格与本记录，不再修改 native。
+- **最终行为：** 不完整下载/解析整批拒绝；`QSaveFile` 原子提交失败保留旧目录，不记录成功刷新；刷新保留缺失及手动对象。CSV 支持带逗号名称、双引号转义与带引号表头；无标题 2LE 状态明确为 Unknown；兼容空格补齐编号及 line1 第 34 列 `0`，保留原始 checksum 和数值门禁。
+- **验证结果：** 卫星专项 **20/20 通过**，执行提取解析逻辑并覆盖随包 **3134 对 TLE**（含 **166 对**第 34 列兼容数据）、CSV 字段映射和坏记录整批拒绝。父任务确认修复后 native **构建通过**、组合测试 **73/73 通过（已包含卫星 20 项）**；本子任务未构建或安装，不据此宣称 Pad 真机验收通过。
+- **范围边界：** 显式 `startJD` 仍返回 JSON object，`ok:false`、`reason:"explicit_epoch_prediction_unsupported"`；卫星订阅明确不可用，旧 UI 模拟时间语义不变，不改共享 simulation。本轮停止扩展，后续优先 Profile 整理。
+
+## [2026-11-11] Codex - 手动天象提醒服务、偏好与待处理列表
+
+- **calendar 分钟精度根因修复并冻结：** 父任务 ID10 诊断确认仅 second37→0，整分 ID11 对照成功。生产仅改 AstronomyNotificationPolicy.ts 一行，将 fireAt 向下取整到分钟再做原30秒 too-soon 校验；精确 eventAt/JD/路由保留、second 严格指纹不删、不迁移/认领/取消旧项。新增截秒回读、边界、重启去重、legacy 阻重回归，并保留旧非零秒 journal 拒绝测试；80/80 行为测试、reminder contract 通过。未构建/安装/操作设备，10由父任务显式取消，2–7保留。
+- **诊断版冻结：** `getAstronomyReminders` 支持 `diagnostics` / `{"diagnostics":true}`，前后隐私/前台门禁，返回允许字段中的原始请求、expected/actual fingerprint、journal 摘要；不输出任意参数/URI/token，不写 journal。保留系统 ID 或 notificationId 尚存的失配证据并阻止同事件再次发布，不自动取消、不猜 calendar 秒归一化。QAbility timer eventAt 默认 lead 修复包含在本轮。
+- **到点正文修复与验证：** `expiredContent = value.content`，其它通知字段不变，避免响铃结束被误解为天象结束。77/77 服务/控制器/feed/integration 行为测试及 reminder contract 通过；生产文件冻结，未构建/安装/提交或操作设备。父任务报告 timer9 重启元数据/重复 unchanged/force-stop 到点投递/点击满月详情均成功，随后自行取消9、恢复静默1350–395；calendar 等真实诊断，不触碰旧2–7。
+- **timer 日历路由兼容：** 仅调整 QAbility.scheduleAstronomyReminder 的默认 lead 注入条件：reminderType 未指定或 calendar 才使用 passLeadMinutes，timer/alarm 携带 eventAt 不注入。新增 1 个运行实际 QAbility 分支及 validateReminder 的行为测试，先复现拒绝再修复，覆盖 timer/alarm、默认/显式 calendar 及显式零提前量；8 项 integration 测试、reminder contract 和定向 diff 检查通过。其余生产文件未改，未构建或操作设备。
+- **真机 metadata 丢失修复：** 父任务实测发布成功但 getAllValidReminders 丢 parameters；重新核验完整官方 reminderAgentManager/Preferences 文档及 SDK。新增 `AstronomyReminderMetadata.ts` 与私有 journal，先持久化递增 notificationId/请求指纹，再发布并绑定系统 ID；重启恢复、去重与分类取消均核验 ID+指纹，取消前再读系统。保存/回读失败明确 partial 并保留旧项；旧无记录项只做精确等价阻重，不认领、不自动删除、不报告订阅成功。参数仍正常发布，URI 镜像路由作后备，点击实测交父任务。未操作设备、未取消父任务旧 ID1/2–7。
+- **静默语义 CLI 与最终回归：** `setNotificationQuietHours` JSON enabled/startMinutes/endMinutes，Controller 等待真实 flush 并回报回退失败，Main/QAbility 保留前台/隐私门禁，父任务 catalog 将两条通知 setter 标为 restricted。71 项行为 mock、reminder/UI contract 通过，覆盖剥离参数/URI、重启、ID 复用、持久化故障、计时器剩余秒变化、quietHours 真实结果及 cache/busy。父编译发现的 3 处错误仅改为 Error 实例与显式字段 bindReminderId，25 项服务测试重跑通过。生产文件已冻结；本任务未构建、签名、安装或提交，最终 ArkTS/真机验证由父任务负责。
+- **分类订阅改版：** 主设置改为天象/卫星开关、提前量和静默时段；新增 `AstronomySubscriptionFeed.ets`、`AstronomySubscriptionPolicy.ts`，通过真实月份日历/卫星预测滚动维护每类最多 6 项、应用 24 项预算，独立元数据去重与分类取消；旧手动偏好不自动转换为订阅。1700002 空列表回退关闭并保存；异步前台/修订检查阻止过期请求发布。纯远程通知门禁复用父任务 `OnlineContentContract`，不启用 Push。精确接线见 `specs/ASTRONOMY-NOTIFICATION-SUBSCRIPTIONS.md`。卫星显式 startJD 原生实现由 Dirac/父任务完成；本任务不改 Main/QAbility/SettingsPanel、不构建或提交。
+- **分类订阅验证：** 44 项服务/Controller/feed mock 测试、UI contract、reminder contract 通过。覆盖 async observer、默认双空间站缺失失败、分类取消失败/重试、前台失效、1700002、有限预算与远程消息门禁；不是 ArkTS/C++ 编译或设备投递验证。
+- **界面收尾：** 删除底部专题服务未接入说明及未使用翻译；未来 Push 设计仅留在文档，接口保持不变。Main/QAbility/catalog 的订阅语义 CLI 由父任务接入。
+- **重排与启动负载收尾：** 移除 Main calendar feedChanged 重排；loader 按年月/本地月份边界/语言缓存最多 6 项、TTL 6h，同键请求合并，失败不缓存，公开 invalidate 并阻止旧请求回填。busy 保留 subscriptionRequested，由状态/授权/手动排程/取消 finally 补排一次，后台不自旋。58 项 mock 行为测试通过；未构建。
+- **卫星安全更正：** 原生预测器会修改全局模拟状态，Dirac 已拒绝显式 epoch；loader 保留 startJD，识别 `explicit_epoch_prediction_unsupported`，绝不回退旧接口。卫星 feed 失败关闭并保存分类，取消已有分类提醒，取消失败明确提示。46 项 mock 测试通过；不构建、不修改父任务文件。
+- **获授权整合收尾：** 仅在 Main 通知控制器/CLI/路由/feedChanged/地点提交 hook 与 QAbility.routeCardWant 接线。通知参数合并直接/嵌套字段，按 eventAt 加载月份并核对稳定 ID 与时刻；未找到明确提示。CLI 使用 changeSubscription 实际结果，回退/取消/保存失败不返回成功；地点成功提交与日历数据变化触发重排，无轮询。修复 Main2624 不相容 satellitePasses 类型断言：专用 JSON 解码校验原生对象 envelope，保留拒绝原因，未使用 unknown cast。52 项 mock 测试及 UI/reminder contract 通过；未编译、签名、安装或提交，最终 ArkTS 编译由父任务完成。
+
+- **修改文件：** `qability/AstronomyReminderService.ets`、`AstronomyNotificationService.ets`、`AstronomyNotificationPolicy.ts`、`capability/NotificationController.ets`、`state/NotificationStore.ets`、`panels/settings/NotificationSection.ets`，以及两个通知专项 Node 测试和 `specs/MANUAL-ASTRONOMY-REMINDER-SERVICE.md`。
+- **修改内容：** 系统元数据查重与串行替换、配额失败保留旧项、部分清理失败可重试、ID 0/未知输入校验、真实 WantAgent 路由、异步取消、隐私/可选前台门禁；日历事件手动添加，独立 Preferences 静默时段/提前量，实际提醒列表/单条取消，日期与时间选择器。旧快捷方法只打开日历，不用模拟年份快照排程。父任务负责 SettingsPanel/Main/QAbility 接线。
+- **本地化与异常收尾：** 新增 `capability/NotificationText.ets`，使用 I18n 状态统一通知设置中文/英文文案，其它语言回退英文；requestAccess 前与偏好等待后校验 canInteract，捕获宿主提示/门禁及异步异常。两处 Want 参数已改为显式 `Record<string,Object> = {}` 后逐字段赋值。
+- **验证结果：** 27 项服务/Controller mock 测试通过（不等同 ArkTS 编译），reminder contract 已断言真实月份 `getAstronomyCalendarEvents` 并排除模拟 JD 路径。父集成后的共享 UI 契约通过（36 panels、53 id anchors）；whitespace 检查按已有 CRLF 行尾处理。
+- **构建结果：** 按要求未构建、签名、安装或提交；已查询完整官方 MCP API，设备验证与 ArkTS 编译交父任务。
+
+## [2026-11-11] Codex - 按月只读节气/月相原生端点
+
+- **修改文件：** `src/StelMainView.cpp`、`scripts/test-ohos-native-astronomy-calendar.mjs`、`specs/NATIVE-ASTRONOMY-CALENDAR.md`。
+- **修改内容：** 新增 `getAstronomyCalendarEvents`，支持 YYYY-MM 或 JSON 年月及设备本地月 UT 边界，范围 1–3000 年；复用节气底层求根，四月相通过指定历元局部坐标计算，不改模拟 JD、观察位置或选中状态。已与 Faraday 确认事件结构及太阳 tab8/月相 tab6。
+- **验证结果：** 8 项数值求根/源码契约测试通过；按要求未构建、安装、提交。真实星历精度与状态快照验证交父任务；catalog 由父任务修改。
+- **备注：** 不返回伪造流星雨极大、食相或当地可见性；详见专项说明。
+
+## [2026-11-11] Codex - 独立触觉反馈试验服务（宿主接入交父任务）
+
+- **修改文件：** `harmonyos/ets-source/capability/HapticFeedback.ets`、`HarmonyHapticFeedback.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。
+- **修改内容：** 原创、可注入测试的触觉服务；独立本地偏好默认关闭，能力探测、当前隐私/前台门禁、单次预置 touch 振动、全局/语义节流、选择去重、时间尺刻度边界、串行保存及异步失效取消。参考本地 SkyGuide 行为报告，不复制专有代码/资产。
+- **修改原因：** 提供轻柔触觉试验及明确的父任务接入接口；官方 MCP 完整 vibrator/Preferences/systemDateTime 文档和本机 SDK 签名已核对。
+- **构建结果：** 按用户要求未构建、未安装、未签名、未提交。
+- **验证结果：** 独立 Node 行为回归通过；宿主/设置/CLI/manifest 未由本子任务修改，实际系统触感开关、硬件强度与真机验收由父任务完成。
+- **备注：** 详见 `specs/HAPTIC-FEEDBACK-TRIAL.md`；父任务负责 VIBRATE 声明、生命周期、选中回包、时间尺、菜单/操作成功入口和语义 CLI。
+
 ## [2026-11-03] Claude Code - 关于页发行版定位定稿并清理旧 About 文案
 
 - **修改文件：** `harmonyos/ets-source/panels/settings/AboutSection.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/common/QtAppConstants.ets`、`harmonyos/ets-source/resources/*/element/string.json`、`harmonyos/resources/*/element/string.json`、`README.md`、`docs/harmonyos/release/STORE-LISTING-DRAFT.md`、`docs/harmonyos/release/APP-STORE-SUBMISSION.md`、`docs/harmonyos/policy/COMPLIANCE-GUIDE.md`、`docs/harmonyos/NETWORK-INVENTORY.md`

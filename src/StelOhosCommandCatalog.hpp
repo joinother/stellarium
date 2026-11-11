@@ -11,6 +11,7 @@ inline QStringList names()
 {
 	return QStringLiteral(
 		"copyTextToClipboard,getAppFilingInfo,getNotificationStatus,requestNotificationAuthorization,publishAstronomyNotification,cancelAstronomyNotification,getAstronomyReminderStatus,getAstronomyReminders,scheduleAstronomyReminder,scheduleNextSolarTermReminder,cancelAstronomyReminder,clearAstronomyReminders,getGuideState,startGuide,guideAction,beginGuidedSession,endGuidedSession,"
+		"getHapticState,setHapticEnabled,playHapticFeedback,getAstronomyCalendarEvents,getCalendarState,setCalendarMonth,selectCalendarDay,selectCalendarEvent,remindCalendarEvent,viewCalendarEvent,loadMoreCalendarEvents,closeCalendarEvent,getNotificationSubscriptionState,setNotificationSubscription,setNotificationQuietHours,"
 		"setAstroTab,setAstroGroup,setAstroFilter,setAstroScroll,getAstroPanelState,getUiPanelState,getFormSnapshot,refreshFormSnapshot,"
 		"addBookmark,addDay,addHour,addMinute,addMonth,addYear,advanceTime,angleMeasurePoint,applyCollaborationSession,applySessionState,"
 		"beginGyroViewTransition,beginSkyGesture,cancelGyroViewTransition,clearSelection,cycleCCD,cycleLens,cycleOcular,cycleTelescope,getViewAnchorState,setViewAnchorProbe,"
@@ -71,6 +72,8 @@ inline QString categoryFor(const QString& name)
 
 inline bool isRestricted(const QString& name)
 {
+	if (name == "remindCalendarEvent" || name == "setHapticEnabled" || name == "playHapticFeedback" ||
+		name == "setNotificationSubscription" || name == "setNotificationQuietHours") return true;
 	return name == "setConfigString" || name == "importConfig" || name == "importScript" || name == "importStarCatalog" || name == "exportConfig" || name == "applyCollaborationSession" || name == "importCollaborationSession" ||
 		name == "downloadStarCatalog" || name == "loadPlugin" || name == "unloadPlugin" || name == "setPluginLoadAtStartup" ||
 		name.startsWith("telescope") || name == "setTelescopeLivePosition" || name == "startVideoRecording" || name == "stopVideoRecording" ||
@@ -97,6 +100,14 @@ inline QJsonObject item(const QString& name)
 		value["offline"] = true;
 	}
 	value["payload"] = QJsonObject{{"type", "string"}, {"required", false}, {"encoding", "legacy-or-json"}};
+	if (name.contains("Haptic") || name == "getCalendarState" || name == "setCalendarMonth" ||
+		name == "selectCalendarDay" || name == "selectCalendarEvent" || name == "remindCalendarEvent" || name == "viewCalendarEvent" ||
+		name == "loadMoreCalendarEvents" || name == "closeCalendarEvent" || name == "getNotificationSubscriptionState" ||
+		name == "setNotificationSubscription" || name == "setNotificationQuietHours")
+	{
+		value["transport"] = QStringLiteral("ArkUI");
+		value["description"] = QStringLiteral("前台天象日历与可关闭的轻触反馈；查询返回实际状态，支持性由设备报告。");
+	}
 	if (name == "getFormSnapshot" || name == "refreshFormSnapshot")
 	{
 		value["transport"] = QStringLiteral("ArkUI");

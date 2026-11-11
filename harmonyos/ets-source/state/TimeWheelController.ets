@@ -16,6 +16,7 @@ export class TimeWheelController {
   private onSeek: (jd: number) => void
   private onStopSpeed: () => void
   private getUtcOffsetHours: () => number
+  private onTick: (index: number) => void
 
   private lastInputMs: number = 0
   private lastTouchX: number = 0
@@ -36,12 +37,14 @@ export class TimeWheelController {
     store: TimeWheelStore,
     onSeek: (jd: number) => void,
     onStopSpeed: () => void,
-    getUtcOffsetHours: () => number
+    getUtcOffsetHours: () => number,
+    onTick: (index: number) => void = () => {}
   ) {
     this.store = store
     this.onSeek = onSeek
     this.onStopSpeed = onStopSpeed
     this.getUtcOffsetHours = getUtcOffsetHours
+    this.onTick = onTick
   }
 
   // 生命周期收口：面板关闭 / 切后台 / 组件销毁时调用，确保惯性定时器不残留。
@@ -86,6 +89,7 @@ export class TimeWheelController {
       const effectiveDelta = -stepDelta * this.store.tickSpacing
       this.dragCarry += effectiveDelta
       this.gestureSteps += stepDelta
+      this.onTick(Math.round(this.gestureSteps))
       this.store.timeWheelVisualOffset = this.dragCarry
       this.lastVisualVelocity = effectiveDelta / elapsedMs
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)

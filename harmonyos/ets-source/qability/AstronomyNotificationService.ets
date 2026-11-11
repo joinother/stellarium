@@ -1,80 +1,106 @@
 import { notificationManager } from '@kit.NotificationKit'
-import { common } from '@kit.AbilityKit'
-import { BusinessError } from '@kit.BasicServicesKit'
-import hilog from '@ohos.hilog'
+import { common, wantAgent } from '@kit.AbilityKit'
+import { hasCurrentPrivacyConsent } from './PrivacyConsent'
+import { NotificationPolicyInput, AstronomyServiceResult, validateNotification, validServiceId, serviceFailure } from './AstronomyNotificationPolicy'
 
-export interface AstronomyNotificationPayload {
-  id: number
-  title: string
-  text: string
-  additionalText?: string
-  lines?: string[]
-}
+export { AstronomyRoute } from './AstronomyNotificationPolicy'
+
+export interface AstronomyNotificationPayload extends NotificationPolicyInput {}
 
 export class AstronomyNotificationService {
-  private static readonly DOMAIN = 0x0000
-  private static readonly TAG = 'StellariumNotification'
+  private static queue: Promise<void> = Promise.resolve()
+
+  private static serial<T>(operation: () => Promise<T>): Promise<T> {
+    const result = AstronomyNotificationService.queue.then(operation)
+    AstronomyNotificationService.queue = result.then(() => {}, () => {})
+    return result
+  }
+
+  public static async status(): Promise<AstronomyServiceResult> {
+    try {
+      return { ok: true, notificationEnabled: await notificationManager.isNotificationEnabled() }
+    } catch (error) {
+      return serviceFailure(error, '无法读取通知状态')
+    }
+  }
 
   public static async isEnabled(): Promise<boolean> {
-    try {
-      return await notificationManager.isNotificationEnabled()
-    } catch (error) {
-      const failure = error as BusinessError
-      hilog.error(AstronomyNotificationService.DOMAIN, AstronomyNotificationService.TAG, 'notification status failed: %{public}s', failure.message)
-      return false
-    }
+    return (await AstronomyNotificationService.status()).notificationEnabled === true
   }
 
   public static async requestAuthorization(context: common.UIAbilityContext): Promise<boolean> {
     try {
+      if (!hasCurrentPrivacyConsent()) return false
       await notificationManager.requestEnableNotification(context)
       return await AstronomyNotificationService.isEnabled()
     } catch (error) {
-      const failure = error as BusinessError
-      hilog.warn(AstronomyNotificationService.DOMAIN, AstronomyNotificationService.TAG, 'notification authorization not granted: %{public}d', failure.code)
       return false
     }
   }
 
-  public static async publish(payload: AstronomyNotificationPayload): Promise<boolean> {
-    if (!await AstronomyNotificationService.isEnabled()) return false
-    const request: notificationManager.NotificationRequest = payload.lines !== undefined
-      ? {
-          id: payload.id,
-          content: {
-            notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_MULTILINE,
-            multiLine: {
-              title: payload.title,
-              text: payload.text,
-              briefText: payload.additionalText ?? payload.text,
-              longTitle: payload.title,
-              lines: payload.lines
+  public static async publish(payload: AstronomyNotificationPayload, bundleName: string = ''): Promise<boolean> {
+    const validation = validateNotification(payload)
+    if (!validation.ok || validation.value === undefined) return false
+    const value = validation.value
+    if (value.route !== undefined && (typeof bundleName !== 'string' || !/^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/.test(bundleName))) return false
+    return AstronomyNotificationService.serial(async (): Promise<boolean> => {
+      try {
+        if (!hasCurrentPrivacyConsent()) return false
+        if (!await AstronomyNotificationService.isEnabled()) return false
+        const request: notificationManager.NotificationRequest = value.lines !== undefined
+          ? {
+              id: value.id,
+              content: {
+                notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_MULTILINE,
+                multiLine: {
+                  title: value.title, text: value.text, briefText: value.title,
+                  longTitle: value.title, lines: value.lines, additionalText: value.additionalText ?? ''
+                }
+              }
+            } : {
+              id: value.id,
+              content: {
+                notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+                normal: { title: value.title, text: value.text, additionalText: value.additionalText ?? '' }
+              }
             }
+        if (value.route !== undefined) {
+          const route = value.route
+          const parameters: Record<string, Object> = {}
+          parameters['panel'] = route.panel ?? 'astro'
+          parameters['tab'] = route.tab ?? 8
+          parameters['eventId'] = route.eventId ?? ''
+          parameters['kind'] = route.kind ?? 'astronomy'
+          parameters['target'] = route.target ?? ''
+          if (route.eventAt !== undefined) parameters['eventAt'] = route.eventAt
+          if (route.jd !== undefined) parameters['jd'] = route.jd
+          const info: wantAgent.WantAgentInfo = {
+            wants: [{ bundleName: bundleName, abilityName: 'QAbility',
+              uri: 'skyinstrument://astronomy/notification/' + value.id.toString(), parameters: parameters }],
+            actionType: wantAgent.OperationType.START_ABILITY, requestCode: value.id,
+            actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
           }
-        } : {
-          id: payload.id,
-          content: {
-            notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
-            normal: {
-              title: payload.title,
-              text: payload.text,
-              additionalText: payload.additionalText ?? ''
-            }
-          }
+          request.wantAgent = await wantAgent.getWantAgent(info)
+          if (request.wantAgent === undefined || request.wantAgent === null) return false
         }
-    return new Promise<boolean>((resolve) => {
-      notificationManager.publish(request, (error?: BusinessError) => {
-        if (error !== undefined) {
-          hilog.error(AstronomyNotificationService.DOMAIN, AstronomyNotificationService.TAG, 'notification publish failed: %{public}d', error.code)
-          resolve(false)
-          return
-        }
-        resolve(true)
-      })
+        if (!hasCurrentPrivacyConsent()) return false
+        await notificationManager.publish(request)
+        return true
+      } catch (error) {
+        return false
+      }
     })
   }
 
-  public static cancel(id: number): void {
-    notificationManager.cancel(id)
+  public static async cancel(id: number): Promise<boolean> {
+    if (!validServiceId(id)) return false
+    return AstronomyNotificationService.serial(async (): Promise<boolean> => {
+      try {
+        await notificationManager.cancel(id)
+        return true
+      } catch (error) {
+        return false
+      }
+    })
   }
 }

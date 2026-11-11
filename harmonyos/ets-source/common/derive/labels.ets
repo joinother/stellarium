@@ -415,6 +415,7 @@ export function quickLocationLabel(source: string, displayName: string, planetNa
 // 读宿主控制器状态（activePanel / configTab / isExpandedLayout）与时间面板实时钟文本，
 // 按 §14.8 规则 6 改为显式入参，其余逐字不变。
 export function panelTitleFor(activePanel: string, configTab: number, isExpandedLayout: boolean, timeText: string, locationLabel: string = ''): ResourceStr {
+  if (activePanel === 'calendar') return I18n.getLanguage().startsWith('zh') ? '天象日历' : 'Astronomy calendar'
   if (activePanel === 'more') {
     return I18n.t('c_more_functions')
   }

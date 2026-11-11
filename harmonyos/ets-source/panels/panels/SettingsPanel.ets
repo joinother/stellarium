@@ -19,6 +19,7 @@ import { EphemerisToggleRow, InformationModeButton, InformationSwitchRow, Naviga
 import { LanguageRow, DevicePrivacySection } from '../settings/DeviceAndLanguageRows'
 import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
+import { HapticSection } from '../settings/HapticSection'
 import { KeyboardShortcutSection } from '../settings/KeyboardShortcutSection'
 import { KeyboardShortcutStore } from '../../state/KeyboardShortcutStore'
 import { KeyboardShortcutItem } from '../../common/types/StellariumTypes'
@@ -111,6 +112,15 @@ export struct SettingsPanel {
   toggleGyroscope: (enabled: boolean) => void = () => {}
   confirmPrivacyRevocation: () => void = () => {}
   requestNotificationAccess: () => void = () => {}
+  openAstronomyCalendar: () => void = () => {}
+  refreshReminders: () => void = () => {}
+  cancelReminder: (id: number) => void = () => {}
+  @Prop hapticEnabled: boolean = false
+  @Prop hapticAvailable: boolean = false
+  @Prop hapticFailed: boolean = false
+  @Prop hapticBusy: boolean = false
+  setHapticEnabled: (enabled: boolean) => void = () => {}
+  previewHaptic: () => void = () => {}
   scheduleNextSolarTermReminder: () => void = () => {}
   scheduleNextMoonPhaseReminder: () => void = () => {}
   scheduleNextMeteorReminder: () => void = () => {}
@@ -184,11 +194,24 @@ export struct SettingsPanel {
         Column({ space: 0 }) {
           if (this.configTab === -1) {
             DevicePrivacySection({ gyroscopeEnabled: this.gyroStore.gyroscopeEnabled, sensitivityText: sensZh(this.gyroStore.gyroscopeSensitivityText), onToggleGyroscope: (v: boolean) => { this.toggleGyroscope(v); this.flashHint(v ? I18n.t('s0719') : I18n.t('s0720')) }, onRevoke: () => { this.confirmPrivacyRevocation() } })
+            HapticSection({
+              hapticEnabled: this.hapticEnabled, available: this.hapticAvailable, failed: this.hapticFailed, busy: this.hapticBusy,
+              onChange: (enabled: boolean) => this.setHapticEnabled(enabled),
+              onPreview: () => this.previewHaptic()
+            })
             NotificationSection({
               notificationEnabled: this.notificationStore.astronomyNotificationEnabled,
               notificationBusy: this.notificationStore.astronomyNotificationBusy,
               reminderCount: this.notificationStore.astronomyReminderCount,
               statusText: this.notificationStore.astronomyNotificationStatus,
+              reminders: this.notificationStore.astronomyReminders,
+              reminderListLoaded: this.notificationStore.astronomyReminderListLoaded,
+              reminderListError: this.notificationStore.astronomyReminderListError,
+              preferencesBusy: this.notificationStore.notificationPreferencesBusy,
+              preferencesError: this.notificationStore.notificationPreferencesError,
+              onOpenCalendar: () => this.openAstronomyCalendar(),
+              onRefreshReminders: () => this.refreshReminders(),
+              onCancelReminder: (id: number) => this.cancelReminder(id),
               onRequestAccess: () => { this.requestNotificationAccess() },
               onScheduleNextSolarTerm: () => { this.scheduleNextSolarTermReminder() },
               onScheduleNextMoonPhase: () => { this.scheduleNextMoonPhaseReminder() },

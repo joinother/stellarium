@@ -7,6 +7,7 @@
 // 前提：Profile 必须包含 push.base_service（调试 Profile 已有）。
 import { pushService } from '@kit.PushKit'
 import { BusinessError } from '@kit.BasicServicesKit'
+import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
 
 export interface PushTokenResult {
   ok: boolean
@@ -17,11 +18,10 @@ export interface PushTokenResult {
 
 export class PushTokenFetcher {
   public static async getToken(): Promise<PushTokenResult> {
+    if (!hasCurrentPrivacyConsent()) return { ok: false, error: 'privacy-consent-required' }
     try {
       const token: string = await pushService.getToken()
-      console.info('[Push] token acquired, length=' + token.length)
-      // 调试期输出完整 token，便于复制；正式版应删除此行。
-      console.info('[Push] token=' + token)
+      if (!hasCurrentPrivacyConsent()) return { ok: false, error: 'privacy-consent-required' }
       return { ok: true, token: token }
     } catch (error) {
       const err = error as BusinessError

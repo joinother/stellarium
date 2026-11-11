@@ -1,6 +1,8 @@
 # 通知内容扩展设计（2026-10-14）
 
 > **状态：** 设计稿（未实施）
+
+> **2026-11-11 更新：** 用户要求的简化订阅、图文天象日历，以及远端文章/资源更新方案以 `../server/CONTENT-NOTIFICATION-ARCHITECTURE-2026-11-11.md` 为准。本文“不接入 Push”已被新规划替代；这不代表 Push 投递已上线。实况窗仍受实际审批范围约束。
 > **关联文档：** `specs/NOTIFICATION-EVENT-CATALOG-DESIGN.md`（事件类型目录与文案模板，本文档消费其类型 ID）、`research/NOTIFICATION-AND-FORM-ROADMAP.md`（通知能力边界）、`docs/harmonyos/AGC-CAPABILITY-APPLICATION-PLAN.md` 相关章节（实况窗/优先通知权益申请）
 
 ---

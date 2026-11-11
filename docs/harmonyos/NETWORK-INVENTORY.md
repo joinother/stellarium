@@ -1,5 +1,15 @@
 # HarmonyOS 联网功能台账
 
+## 2026-11-11 通知、内容与镜像复核
+
+- 本次实测 `https://skyinstrument.cn/v1/manifest.json` 及抽样 TLE 返回 200。历史记录中的 404 是当时结果；本机 8080 的 `staging/publicService:false` 不代表独立 `/v1/` 静态镜像未上线。详情见 `server/SERVER-RESOURCE-AUDIT-2026-11-11.md`。
+- 现有镜像抓取器已在本地修正错误文本识别、下载上限、旧数据状态和原子清单写入；尚未部署。静态请求不附加 SN、UDID、Push token 或观测位置；服务端仍可见 IP/标准请求头。v1 尚无签名及跨文件事务，不冒充已验证的 v2 更新。
+- 新日历及天象订阅在本地计算。卫星订阅设计使用用户选择地点和实际时间，不上传经纬度；当前原生显式历元预测尚不可用，返回真实失败并关闭订阅，不能声称卫星提醒已通过。系统代理提醒是否可用由审批、签名和系统返回共同决定，不用远端 Push 冒充准点提醒。
+- Push token 仍仅由现有用户主动诊断入口获取，新增隐私同意复核并移除明文日志；本轮没有注册到自建服务器、没有发送远程通知。新专题入口在服务未接通时隐藏。
+- 预留 `/v2/resources/current.json`、`/v2/blobs/{sha256}`、`/v2/content/*`、`/v2/installations/*` 契约，未部署公网端点或打开客户端自动调用。未来订阅只发送随机安装身份、Push token、类别、语言、时区与静默时段；不收集 SN/UDID/精确位置。身份认证、限流、删除、授权及签名资源激活验收完成后才启用。
+- 今夜星 `https://skyinstrument.cn/nw` 是独立天气代理。其本地补丁增加输入校验、缓存边界和全局上游并发限制，未部署、未将天气接入星象仪。经纬度天气查询不能按“无个人信息静态镜像”处理。
+- 服务器方案与官方 Push/代理提醒边界见 `server/CONTENT-NOTIFICATION-ARCHITECTURE-2026-11-11.md`；本轮未新增公网端口、购买云服务或改动生产运行身份。
+
 ## 2026-11-02 设置-关于面板外链
 
 - 新增“设置 → 关于”标签页中的用户主动点击外链：Stellarium 上游官网、上游源代码、上游贡献者页面、星空文化目录、本发行版源代码与提交历史、开发者隐私政策入口（跳转华为应用市场详情页 `https://appgallery.huawei.com/app/detail?id=com.joinother.skyinstrument`）、GNU GPL v2、Qt LGPL、md4c、NLopt、fast_float 和论文 DOI。

@@ -8,6 +8,12 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { systemShare } from '@kit.ShareKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
+import { HapticFeedback } from '../capability/HapticFeedback'
+import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
+import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
+import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
+import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
+import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
 import { isEngineReady } from 'libentry.so'
 import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
@@ -60,6 +66,8 @@ import { speakSelectedObject } from '../common/SpeechService'
 import { StartupBridge, StartupHooks } from '../capability/StartupBridge'
 import { SensorController, GyroGuideLayout, SensorHostHooks } from '../capability/SensorController'
 import { NotificationController, NotificationHostHooks } from '../capability/NotificationController'
+import { AstronomyQuietHours } from '../qability/AstronomyNotificationPolicy'
+import { AstronomySubscriptionFeedLoader, SubscriptionNativeResponse, SubscriptionObserver, decodeSubscriptionNativeResponse } from '../capability/AstronomySubscriptionFeed'
 import { PushTokenFetcher, PushTokenResult } from '../capability/PushTokenFetcher'
 import { SurveyController, SurveyHostHooks } from '../capability/SurveyController'
 import { ARController, ARHostHooks } from '../capability/ARController'
@@ -1280,6 +1288,14 @@ export struct WindowNativeNode {
   // 新增面板控制
   @State private planetLabels: boolean = false
   private applicationInForeground: boolean = true
+  private hapticFeedback: HapticFeedback | undefined = undefined
+  @State private hapticEnabled: boolean = false
+  @State private hapticAvailable: boolean = false
+  @State private hapticFailed: boolean = false
+  @State private hapticBusy: boolean = false
+  @State private calendarStore: AstronomyCalendarStore = new AstronomyCalendarStore()
+  private calendarController: AstronomyCalendarController | undefined = undefined
+  private pendingCalendarEvent: string = ''
   // The gyro control itself becomes a live compass while it is enabled.
   @State private currentFovText: string = '--'
   // 4 个 @State 读数由宿主持有（类逐帧保留，，「高频字段不入 store」）；
@@ -1394,6 +1410,11 @@ export struct WindowNativeNode {
   }
   private handleApplicationLifecycle = (foreground: boolean): void => {
     this.applicationInForeground = foreground
+    if (foreground && this.engineReady && this.notificationControllerImpl !== null) void this.notificationControllerImpl.refreshSubscriptions()
+    if (this.hapticFeedback !== undefined) {
+      this.hapticFeedback.setForeground(foreground)
+      if (foreground) void this.hapticFeedback.initialize().then(() => this.refreshHapticState())
+    }
     if (!foreground && this.guideStore.guideState.phase === 'observing') this.guideCtl().pausePlayer()
     this.objectModelRendererCtl().setForeground(foreground)
     if (foreground) {
@@ -1929,6 +1950,10 @@ export struct WindowNativeNode {
       }
       this.lastCliUiEventId = requestId
       const commandName = event['commandName'] as string
+      if (this.isFeatureCliCommand(commandName)) {
+        void this.executeFeatureCli(commandName, String(event['payload'] ?? ''), requestId)
+        return
+      }
       const response = event['response'] as StellariumBridgeResponse
       if (commandName === 'setUiLayoutMode') {
         const mode = String(event['payload'] ?? '').trim().toLowerCase()
@@ -2205,6 +2230,10 @@ export struct WindowNativeNode {
       return
     }
     this.privacyPageStartupStarted = true
+    const feedback = this.haptics()
+    feedback.setForeground(this.applicationInForeground)
+    void feedback.initialize().then(() => this.refreshHapticState())
+    void this.notificationCtl().loadPreferences()
     this.startTwinkle()
     // Keep the old AppStorage value as a migration fallback while the durable
     // preferences store is opened asynchronously.
@@ -2297,6 +2326,8 @@ export struct WindowNativeNode {
 
   // 启动期自动定位（只触发一次）。GPS 可用时更新为真实位置，不可用时回退到已保存/默认位置。
   aboutToDisappear(): void {
+    this.calendarController?.dispose()
+    this.calendarController = undefined
     this.guideCtl().stopGuideTimer()
     this.guideCtl().resetJourneyFlags()
     this.guideCtl().stopPlayer()
@@ -2346,6 +2377,7 @@ export struct WindowNativeNode {
   }
 
   private unsubscribeApplicationLifecycle(): void {
+    this.hapticFeedback?.setForeground(false)
     setLifecycleListener(undefined)
   }
 
@@ -2371,6 +2403,7 @@ export struct WindowNativeNode {
 
   private revokePrivacyConsent(): void {
     try {
+      this.hapticFeedback?.suspend()
       this.gyroCtl().stopGyroscope(false)
       privacyManager.disableService()
       AppStorage.setOrCreate('stellariumPrivacyHostReady', false)
@@ -2520,7 +2553,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow() },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions() },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -2582,7 +2615,35 @@ export struct WindowNativeNode {
   // UI 提示、UIAbility 上下文、年历节气快照与加载触发经 hooks 回注。
   private notificationCtl(): NotificationController {
     if (this.notificationControllerImpl === null) {
+      const request = (command: string, payload: string): Promise<SubscriptionNativeResponse> => {
+        return new Promise((resolve, reject) => {
+          if (!this.engineReady || !this.applicationInForeground || !hasCurrentPrivacyConsent()) {
+            reject(new Error('foreground engine required'))
+            return
+          }
+          const receive = (response: StellariumBridgeResponse): void => {
+            try { resolve(decodeSubscriptionNativeResponse(JSON.stringify(response))) }
+            catch (error) { reject(new Error('invalid native subscription response')) }
+          }
+          this.commandPort().requestLongRunning(command, payload, receive, receive, undefined, 240)
+        })
+      }
+      const loader = new AstronomySubscriptionFeedLoader({
+        request: request,
+        observer: async (): Promise<SubscriptionObserver | undefined> => {
+          const response = await request('getObserverInfo', '')
+          const latitude = response.latitude
+          const longitude = response.longitude
+          const altitude = response.altitude
+          if (response.ok !== true || response.planet !== 'Earth' || typeof latitude !== 'number' || typeof longitude !== 'number' ||
+            typeof altitude !== 'number' || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(altitude)) return undefined
+          return { key: `${latitude.toFixed(5)}:${longitude.toFixed(5)}:${altitude.toFixed(0)}` }
+        }
+      })
       const hooks: NotificationHostHooks = {
+        loadSubscriptionEvents: (category, from, until) => loader.load(category, from, until),
+        canInteract: (): boolean => this.applicationInForeground && hasCurrentPrivacyConsent(),
+        openCalendar: (): void => this.openSubPanel('calendar'),
         flashHint: (text: ResourceStr): void => this.flashHint(text),
         hostContext: (): common.UIAbilityContext => this.getUIContext().getHostContext() as common.UIAbilityContext,
         almanacSolarTerms: (): SeasonEvent[] => this.astroStore.almanacSolarTerms,
@@ -2595,6 +2656,145 @@ export struct WindowNativeNode {
       this.notificationControllerImpl = new NotificationController(this.notificationStore, hooks)
     }
     return this.notificationControllerImpl
+  }
+
+  private haptics(): HapticFeedback {
+    if (this.hapticFeedback === undefined) {
+      this.hapticFeedback = createHapticFeedback(this.getUIContext().getHostContext() as common.UIAbilityContext)
+      this.hapticFeedback.setForeground(this.applicationInForeground)
+    }
+    return this.hapticFeedback
+  }
+
+  private refreshHapticState(): void {
+    const state = this.haptics().status()
+    this.hapticEnabled = state.enabled
+    this.hapticAvailable = state.available
+    this.hapticFailed = state.lastFailure.startsWith('vibration-')
+    this.hapticBusy = state.saving || state.probing
+  }
+
+  private async changeHapticEnabled(enabled: boolean): Promise<boolean> {
+    this.hapticBusy = true
+    const success = await this.haptics().setEnabled(enabled)
+    this.refreshHapticState()
+    if (!success) this.flashHint('触觉反馈设置未保存，请重试')
+    return success
+  }
+
+  private calendarCtl(): AstronomyCalendarController {
+    if (this.calendarController === undefined) {
+      const hooks: AstronomyCalendarHostHooks = {
+        viewSky: (event: AstronomyCalendarEvent): void => {
+          this.setPanel('', true, true)
+          this.timeTransitionCtl().animate(event.jd, event.title, () => {
+            if (event.target.length > 0) {
+              this.callInteractive('searchObject', event.target, (response: StellariumBridgeResponse) => {
+                this.applySelectedObject(response)
+                this.refreshState()
+              })
+            } else this.refreshState()
+          })
+        },
+        remind: (event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> => this.notificationCtl().scheduleEvent(event),
+        feedChanged: (events: AstronomyCalendarEvent[]): void => {
+          if (this.pendingCalendarEvent.length > 0 && this.calendarStore.loaded && !this.calendarStore.loading) {
+            const pending = JSON.parse(this.pendingCalendarEvent) as Record<string, Object>
+            const found = events.find((event: AstronomyCalendarEvent) => event.id === pending['eventId'] &&
+              typeof pending['eventAt'] === 'number' && Math.abs(event.at - Number(pending['eventAt'])) <= 1000)
+            this.calendarStore.selectedDay = 0
+            this.calendarStore.selectedEventId = found?.id ?? ''
+            if (found === undefined) this.calendarStore.actionMessage = I18n.getLanguage().startsWith('zh')
+              ? '未找到通知对应的天象事件，请查看事件列表。' : 'The event from this notification was not found. Please check the event list.'
+            this.pendingCalendarEvent = ''
+          }
+        }
+      }
+      this.calendarController = new AstronomyCalendarController(this.commandPort(), this.calendarStore, hooks)
+      this.calendarController.setLanguage(I18n.getLanguage())
+    }
+    return this.calendarController
+  }
+
+  private isFeatureCliCommand(name: string): boolean {
+    return ['getHapticState', 'setHapticEnabled', 'playHapticFeedback', 'getCalendarState',
+      'setCalendarMonth', 'selectCalendarDay', 'selectCalendarEvent', 'remindCalendarEvent', 'viewCalendarEvent',
+      'getNotificationSubscriptionState', 'setNotificationSubscription', 'setNotificationQuietHours', 'loadMoreCalendarEvents', 'closeCalendarEvent'].includes(name)
+  }
+
+  private async executeFeatureCli(name: string, payload: string, requestId: string): Promise<void> {
+    const result: Record<string, Object> = {}
+    result['ok'] = true
+    result['requestId'] = requestId
+    try {
+      if (!this.applicationInForeground || !hasCurrentPrivacyConsent()) throw new Error('privacy consent and foreground are required')
+      if (name === 'getNotificationSubscriptionState' || name === 'setNotificationSubscription' || name === 'setNotificationQuietHours') {
+        await this.notificationCtl().loadPreferences()
+        if (name === 'setNotificationSubscription') {
+          const parts = payload.split('|')
+          if (parts.length !== 2 || !['astronomy', 'satellite'].includes(parts[0]) || !['on', 'off'].includes(parts[1])) throw new Error('expected astronomy|on/off or satellite|on/off')
+          const outcome = await this.notificationCtl().changeSubscription(parts[0] === 'astronomy' ? 'astronomy' : 'satellite', parts[1] === 'on')
+          result['ok'] = outcome.ok
+          if (outcome.reason !== undefined) result['reason'] = outcome.reason
+          if (outcome.error !== undefined) result['error'] = outcome.error
+        } else if (name === 'setNotificationQuietHours') {
+          const hours: AstronomyQuietHours = JSON.parse(payload) as AstronomyQuietHours
+          const outcome = await this.notificationCtl().setQuietHours(hours)
+          result['ok'] = outcome.ok
+          if (outcome.reason !== undefined) result['reason'] = outcome.reason
+          if (outcome.error !== undefined) result['error'] = outcome.error
+        }
+        result['state'] = this.notificationStore
+      } else if (name.includes('Haptic')) {
+        const feedback = this.haptics()
+        await feedback.initialize()
+        if (name === 'setHapticEnabled') {
+          if (!['true', 'false', '1', '0', 'on', 'off'].includes(payload)) throw new Error('expected on or off')
+          result['ok'] = await this.changeHapticEnabled(['true', '1', 'on'].includes(payload))
+        } else if (name === 'playHapticFeedback') {
+          if (!['selection', 'menu', 'confirmation', 'error'].includes(payload)) throw new Error('unknown feedback kind')
+          result['played'] = payload === 'selection' ? await feedback.selection(requestId)
+            : payload === 'menu' ? await feedback.menu()
+            : payload === 'error' ? await feedback.error() : await feedback.confirmation()
+        }
+        this.refreshHapticState()
+        result['state'] = feedback.status()
+      } else {
+        const calendar = this.calendarCtl()
+        if (name === 'setCalendarMonth') {
+          if (!/^\d{4}-\d{2}$/.test(payload)) throw new Error('expected YYYY-MM')
+          calendar.loadMonth(Number(payload.substring(0, 4)), Number(payload.substring(5)))
+        } else if (name === 'loadMoreCalendarEvents') {
+          calendar.loadMore()
+        } else if (name === 'closeCalendarEvent') {
+          calendar.showMonthEvents()
+        } else if (name === 'selectCalendarDay') {
+          const day = Number(payload)
+          if (!Number.isInteger(day) || day < 1 || !this.calendarStore.days.some((cell) => cell.day === day)) throw new Error('invalid day')
+          calendar.selectDay(day)
+        } else if (name !== 'getCalendarState') {
+          if (!this.calendarStore.events.some((event) => event.id === payload)) throw new Error('unknown calendar event')
+          calendar.selectEvent(payload)
+          if (name === 'remindCalendarEvent') {
+            const reminder = await calendar.remind(payload)
+            result['ok'] = reminder.ok
+            result['reminder'] = reminder
+            if (!reminder.ok) {
+              result['error'] = reminder.error ?? reminder.message ?? 'Reminder could not be scheduled'
+              if (reminder.reason !== undefined) result['reason'] = reminder.reason
+              if (reminder.code !== undefined) result['code'] = reminder.code
+            }
+          }
+          if (name === 'viewCalendarEvent') calendar.viewSky(payload)
+        }
+        result['state'] = this.calendarStore
+      }
+    } catch (error) {
+      result['ok'] = false
+      result['error'] = String(error)
+    }
+    if (name === 'setNotificationSubscription' || name === 'setNotificationQuietHours') result['state'] = this.notificationStore
+    AppStorage.setOrCreate('stellariumFeatureCliResult', JSON.stringify(result))
   }
 
   // 巡天 / 多波段图层控制器惰性构造。状态已在 SurveyStore（只搬行为）；
@@ -2805,6 +3005,7 @@ export struct WindowNativeNode {
           this.locationText = location
           this.coordinateText = coordinate
           this.altitudeText = altitude
+          void this.notificationCtl().refreshSubscriptions()
         },
         privacyAllowed: (): boolean => this.privacyNativeStartupAllowed,
         inForeground: (): boolean => this.applicationInForeground,
@@ -3492,12 +3693,15 @@ export struct WindowNativeNode {
   private exitAppAfterRestore(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     setTimeout(() => {
-      this.settingsRepository.resetToDefaults().then(() => {
+      this.changeHapticEnabled(false).then((saved: boolean) => {
+        if (!saved) throw new Error('haptic preference reset failed')
+        return this.settingsRepository.resetToDefaults()
+      }).then(() => {
         return this.clearUiBehaviorPreferences()
       }).then(() => {
         context.terminateSelf().catch(() => {})
       }).catch(() => {
-        context.terminateSelf().catch(() => {})
+        this.flashHint('恢复默认设置未完成，请重试')
       })
     }, 800)
   }
@@ -3731,12 +3935,27 @@ export struct WindowNativeNode {
   }
 
   private consumeCardRoute(): void {
-    if (this.cardRoute.length === 0) return
+    if (this.cardRoute.length === 0 || !this.engineReady || !hasCurrentPrivacyConsent()) return
     try {
       const route = JSON.parse(this.cardRoute) as Record<string, Object>
       const panel = String(route['panel'] ?? '').trim()
       if (!isCliPanelName(panel)) return
-      const tab = Number(String(route['tab'] ?? ''))
+      const tab = route['tab'] === undefined ? NaN : Number(String(route['tab']))
+      this.pendingCalendarEvent = ''
+      if (panel === 'calendar') {
+        const at = new Date(String(route['eventAt'] ?? '')).getTime()
+        const id = typeof route['eventId'] === 'string' ? String(route['eventId']).trim() : ''
+        const calendar = this.calendarCtl()
+        calendar.showMonthEvents()
+        if (id.length > 0 && Number.isFinite(at)) {
+          const date = new Date(at)
+          this.pendingCalendarEvent = JSON.stringify({ eventId: id, eventAt: at })
+          calendar.loadMonth(date.getFullYear(), date.getMonth() + 1)
+        } else if (id.length > 0 || route['eventAt'] !== undefined) {
+          this.calendarStore.actionMessage = I18n.getLanguage().startsWith('zh')
+            ? '通知缺少有效事件信息，请查看天象列表。' : 'This notification has incomplete event details. Please check the event list.'
+        }
+      }
       this.openPanelFromCli(panel)
       if (panel === 'astro' && Number.isInteger(tab) && tab >= 0 && tab <= 9) {
         setTimeout(() => { this.astroCalcCtl().selectAstroTab(tab) }, 220)
@@ -3962,6 +4181,7 @@ export struct WindowNativeNode {
         this.pluginFeatureCtl().ensurePluginLoaded('EquationOfTime', () => { this.equationOfTimeStore.loadEquationOfTime() })
         this.timeCtl().startPanelTimers()
       }
+      if (panel === 'calendar' && !this.calendarStore.loaded && !this.calendarStore.loading) this.calendarCtl().reload()
       if (panel === 'astro') {
         this.publishAstroPanelState()
         this.astroCalcCtl().loadAstroTab(this.astroStore.astroTab)
@@ -4537,9 +4757,11 @@ export struct WindowNativeNode {
       hilog.info(0x0000, 'StellariumArkUI', 'selectAt result: ' + JSON.stringify(result))
       this.applySelectedObject(result, false, '', true)
       if (result.found === true) {
+        void this.haptics().selection(this.objectDetailStore.selectedName)
         // 轻量回包只有名称/类型；星等 / 方位 / 距离等动态值立刻单独补一次（见方法注释）。
         this.refreshSelectedDynamicValues()
       } else {
+        void this.haptics().selection('')
         // 「已选中 XX」是纯状态播报，观测时反复点选会刷屏（用户要求去掉）；点了空处仍提示一次。
         this.flashHint(I18n.t('i0075'))
       }
@@ -4547,6 +4769,7 @@ export struct WindowNativeNode {
   }
 
   private clearSkySelectionFromDoubleTap(x: number, y: number): void {
+    void this.haptics().selection('')
     const requestSerial = ++this.skySelectionRequestSerial
     this.skyInputCtl().resetSkyTapSequence()
     this.detailConnectorCtl().stop()
@@ -4761,6 +4984,7 @@ export struct WindowNativeNode {
     }
     this.lastDockActionPanel = item.panel
     this.lastDockActionAt = now
+    void this.haptics().menu()
     if (item.panel === 'more') {
       this.setPanel('more')
       return
@@ -6783,7 +7007,8 @@ export struct WindowNativeNode {
         this.timeWheelStore,
         (jd: number) => { this.callNativeFire('setTimeToJD', jd.toFixed(8)) },
         () => { this.timeCtl().stopTimeWheelSpeed() },
-        () => { return this.utcOffsetHours }
+        () => { return this.utcOffsetHours },
+        (index: number) => { void this.haptics().rulerTick(index) }
       )
     }
     return this.timeWheelController
@@ -6859,6 +7084,7 @@ export struct WindowNativeNode {
     this.languageStore.selectedLanguage = lang
     const languageSerial = ++this.languageStore.languageRefreshSerial
     this.languageStore.languageRevision++
+    this.calendarController?.setLanguage(I18n.getLanguage())
     this.panelContentKey++
     // 持久化语言选择
     try {
@@ -8273,7 +8499,11 @@ export struct WindowNativeNode {
         manualHour: this.timeStore.manualHour,
         manualMinute: this.timeStore.manualMinute,
         onSelectUnit: (unit: string) => { this.wheel().selectUnit(unit) },
-        onWheelTouch: (event: TouchEvent) => { this.wheel().handleTouch(event) },
+        onWheelTouch: (event: TouchEvent) => {
+          if (event.type === TouchType.Down) this.haptics().beginRuler(0)
+          this.wheel().handleTouch(event)
+          if (event.type === TouchType.Up || event.type === TouchType.Cancel) this.haptics().endRuler()
+        },
         onChip: (id: string) => { this.timeCtl().handleChip(id) },
         onEquationToggle: (setting: string, enabled: boolean) => { this.ocularCtl().setEquationOfTime(setting, enabled) },
         onAdjustJulian: (scale: string, direction: number) => { this.julianStore.adjustJulianDate(scale, direction) },
@@ -8575,6 +8805,22 @@ export struct WindowNativeNode {
         toggleGyroscope: (enabled: boolean) => { this.gyroCtl().toggleGyroscope(enabled) },
         confirmPrivacyRevocation: () => { this.confirmPrivacyRevocation() },
         requestNotificationAccess: () => { this.notificationCtl().requestAccess() },
+        openAstronomyCalendar: () => this.openSubPanel('calendar'),
+        refreshReminders: () => this.notificationCtl().refreshStatus(),
+        cancelReminder: (id: number) => this.notificationCtl().cancelReminder(id),
+        hapticEnabled: this.hapticEnabled,
+        hapticAvailable: this.hapticAvailable,
+        hapticFailed: this.hapticFailed,
+        hapticBusy: this.hapticBusy,
+        setHapticEnabled: (enabled: boolean) => { void this.changeHapticEnabled(enabled) },
+        previewHaptic: () => {
+          void this.haptics().confirmation().then((played: boolean) => {
+            this.refreshHapticState()
+            if (!played) this.flashHint(I18n.getLanguage().startsWith('zh')
+              ? '未能播放触觉反馈，请检查系统触感设置或设备支持情况。'
+              : 'Haptic feedback could not play. Check system haptics and device support.')
+          })
+        },
         scheduleNextSolarTermReminder: () => { this.notificationCtl().scheduleNextSolarTerm() },
         scheduleNextMoonPhaseReminder: () => { this.notificationCtl().scheduleNextMoonPhase() },
         scheduleNextMeteorReminder: () => { this.notificationCtl().scheduleNextMeteorShower() },
@@ -8587,15 +8833,16 @@ export struct WindowNativeNode {
             this.pushTokenText = r.ok ? (r.token ?? '') : ('失败 ' + (r.code ?? 0) + ' ' + (r.error ?? ''))
           })
         },
-        toggleAstronomyEvents: (v: boolean) => { this.notificationStore.astronomyEventsEnabled = v },
-        toggleSatellitePass: (v: boolean) => { this.notificationStore.satellitePassEnabled = v },
+        toggleAstronomyEvents: (v: boolean) => { this.notificationCtl().setAstronomyEventsEnabled(v) },
+        toggleSatellitePass: (v: boolean) => { this.notificationCtl().setSatellitePassEnabled(v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
-        toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v },
-        setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m },
-        setNotificationDndEnd: (m: number) => { this.notificationStore.dndEndMinutes = m },
+        toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v; this.notificationCtl().persistPreferences() },
+        setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m; this.notificationCtl().persistPreferences() },
+        setNotificationDndEnd: (m: number) => { this.notificationStore.dndEndMinutes = m; this.notificationCtl().persistPreferences() },
         changePassLead: (d: number) => {
           const next = this.notificationStore.passLeadMinutes + d
-          this.notificationStore.passLeadMinutes = Math.min(60, Math.max(1, next))
+          this.notificationStore.passLeadMinutes = Math.min(60, Math.max(0, next))
+          this.notificationCtl().persistPreferences()
         },
         clearAstronomyReminders: () => { this.notificationCtl().clearReminders() },
         keyboardShortcutQueryChange: (value: string) => { this.keyboardShortcutStore.keyboardShortcutQuery = value; this.keyboardShortcutCtl().load() },
@@ -8613,6 +8860,25 @@ export struct WindowNativeNode {
         onOpenLayersSky: () => { this.viewTab = 0; this.openSubPanel('layers') },
         onOpenTools: () => { this.openSubPanel('tools') },
         openExternalUrl: (url: string) => { this.openExternalUrl(url) }
+      })
+    } else if (this.activePanel === 'calendar') {
+      AstronomyCalendarPanel({
+        calendarStore: this.calendarStore,
+        language: this.i18nLang,
+        panelFontSize: this.isExpandedLayout ? 16 : 14,
+        textColor: this.hostSlots().text, secondaryColor: this.hostSlots().sub,
+        accentColor: this.hostSlots().accent, cardColor: this.hostSlots().softStrong,
+        host: {
+          previousMonth: () => this.calendarCtl().previousMonth(),
+          nextMonth: () => this.calendarCtl().nextMonth(),
+          selectDay: (day: number) => this.calendarCtl().selectDay(day),
+          selectEvent: (id: string) => this.calendarCtl().selectEvent(id),
+          showMonthEvents: () => this.calendarCtl().showMonthEvents(),
+          viewSky: (id: string) => this.calendarCtl().viewSky(id),
+          remind: (id: string) => this.calendarCtl().remind(id),
+          reload: () => this.calendarCtl().reload(),
+          loadMore: () => this.calendarCtl().loadMore()
+        }
       })
     } else if (this.activePanel === 'astro') {
       AstroPanel({

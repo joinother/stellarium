@@ -34,6 +34,7 @@
 #include "SolarEclipseComputer.hpp"
 #include "SpecificTimeMgr.hpp"
 #include "planetsephems/sidereal_time.h"
+#include "planetsephems/precession.h"
 #include "StelActionMgr.hpp"
 #include "StelOpenGL.hpp"
 #include "StelOpenGLArray.hpp"
@@ -4638,6 +4639,502 @@ static QJsonObject archiveVideoFrames()
 	return result;
 }
 
+static bool findOhosCalendarCrossings(double startJD, double endJD,
+	const std::function<double(double)>& phaseOffset, QList<double>& crossings)
+{
+	const double step = 0.25;
+	double leftJD = startJD - step;
+	double leftOffset = phaseOffset(leftJD);
+	if (!std::isfinite(leftOffset))
+		return false;
+	while (leftJD < endJD)
+	{
+		const double rightJD = std::min(leftJD + step, endJD);
+		const double rightOffset = phaseOffset(rightJD);
+		if (!std::isfinite(rightOffset))
+			return false;
+		if (rightOffset < leftOffset && leftOffset - rightOffset > 180.0)
+		{
+			double lower = leftJD;
+			double upper = rightJD;
+			for (int iteration = 0; iteration < 25; ++iteration)
+			{
+				const double middle = (lower + upper) * 0.5;
+				const double offset = phaseOffset(middle);
+				if (!std::isfinite(offset))
+					return false;
+				if (offset > 180.0)
+					lower = middle;
+				else
+					upper = middle;
+			}
+			double eventJD = (lower + upper) * 0.5;
+			if (std::abs(eventJD - startJD) < 1e-8) eventJD = startJD;
+			if (std::abs(eventJD - endJD) < 1e-8) eventJD = endJD;
+			if (eventJD >= startJD && eventJD < endJD)
+				crossings.append(eventJD);
+		}
+		leftJD = rightJD;
+		leftOffset = rightOffset;
+	}
+	return true;
+}
+
+static double ohosCalendarMoonElongation(StelCore* core, const PlanetP& earth, const PlanetP& moon, double jd)
+{
+	const double jde = jd + core->computeDeltaT(jd) / 86400.0;
+	Vec3d earthPosition, earthVelocity, moonPosition, moonVelocity;
+	earth->computePosition(jde, earthPosition, earthVelocity);
+	moon->computePosition(jde, moonPosition, moonVelocity);
+	if (!std::isfinite(earthPosition.norm()) || !std::isfinite(moonPosition.norm())
+		|| earthPosition.norm() <= 0.0 || moonPosition.norm() <= 0.0)
+		return std::numeric_limits<double>::quiet_NaN();
+	const double lightTime = moonPosition.norm() * (AU / (SPEED_OF_LIGHT * 86400.0));
+	moon->computePosition(jde - lightTime, moonPosition, moonVelocity);
+	double obliquity, chi, omega, psi;
+	getPrecessionAnglesVondrak(jde, &obliquity, &chi, &omega, &psi);
+	const Mat4d toDate = Mat4d::xrotation(-obliquity) * Mat4d::zrotation(-chi)
+		* Mat4d::xrotation(omega) * Mat4d::zrotation(psi);
+	const Vec3d moonOfDate = toDate * moonPosition;
+	const Vec3d earthOfDate = toDate * earthPosition;
+	const double moonLongitude = std::atan2(moonOfDate[1], moonOfDate[0]) * M_180_PI;
+	const double sunLongitude = std::atan2(-earthOfDate[1], -earthOfDate[0]) * M_180_PI
+		- 20.4898 / (3600.0 * earthPosition.norm());
+	return StelUtils::fmodpos(moonLongitude - sunLongitude, 360.0);
+}
+
+static Vec3d ohosCalendarDirection(StelCore* core, const PlanetP& earth, const PlanetP& body, double jd)
+{
+	const double jde = jd + core->computeDeltaT(jd) / 86400.0;
+	Vec3d earthPosition, earthVelocity, bodyPosition, bodyVelocity;
+	earth->computePosition(jde, earthPosition, earthVelocity);
+	body->computePosition(jde, bodyPosition, bodyVelocity);
+	Vec3d direction = bodyPosition - earthPosition;
+	for (int iteration = 0; iteration < 2; ++iteration)
+	{
+		const double lightTime = direction.norm() * (AU / (SPEED_OF_LIGHT * 86400.0));
+		if (!std::isfinite(lightTime)) return Vec3d(std::numeric_limits<double>::quiet_NaN());
+		body->computePosition(jde - lightTime, bodyPosition, bodyVelocity);
+		direction = bodyPosition - earthPosition + earthVelocity * lightTime;
+	}
+	return direction;
+}
+
+static double ohosCalendarLongitudeGap(StelCore* core, const PlanetP& earth,
+	const PlanetP& primary, const PlanetP& secondary, double jd)
+{
+	const Vec3d first = ohosCalendarDirection(core, earth, primary, jd);
+	const Vec3d second = ohosCalendarDirection(core, earth, secondary, jd);
+	if (!std::isfinite(first.norm()) || !std::isfinite(second.norm()) || first.norm() <= 0.0 || second.norm() <= 0.0)
+		return std::numeric_limits<double>::quiet_NaN();
+	const double jde = jd + core->computeDeltaT(jd) / 86400.0;
+	double obliquity, chi, omega, psi;
+	getPrecessionAnglesVondrak(jde, &obliquity, &chi, &omega, &psi);
+	const Mat4d toDate = Mat4d::xrotation(-obliquity) * Mat4d::zrotation(-chi)
+		* Mat4d::xrotation(omega) * Mat4d::zrotation(psi);
+	const Vec3d firstOfDate = toDate * first;
+	const Vec3d secondOfDate = toDate * second;
+	return StelUtils::fmodpos((std::atan2(firstOfDate[1], firstOfDate[0])
+		- std::atan2(secondOfDate[1], secondOfDate[0])) * M_180_PI, 360.0);
+}
+
+static bool findOhosCalendarAlignments(double startJD, double endJD,
+	const std::function<double(double)>& longitudeOffset, QList<double>& crossings)
+{
+	for (const double direction : {1.0, -1.0})
+	{
+		if (!findOhosCalendarCrossings(startJD, endJD, [&](double jd) {
+			return StelUtils::fmodpos(direction * longitudeOffset(jd), 360.0);
+		}, crossings)) return false;
+	}
+	std::sort(crossings.begin(), crossings.end());
+	return true;
+}
+
+static bool findOhosCalendarMaxima(double startJD, double endJD,
+	const std::function<double(double)>& separation, QList<double>& maxima)
+{
+	const double step = 0.5;
+	double leftJD = startJD - step;
+	double middleJD = startJD;
+	double leftValue = separation(leftJD);
+	double middleValue = separation(middleJD);
+	if (!std::isfinite(leftValue) || !std::isfinite(middleValue)) return false;
+	while (middleJD < endJD + step)
+	{
+		const double rightJD = middleJD + step;
+		const double rightValue = separation(rightJD);
+		if (!std::isfinite(rightValue)) return false;
+		if (middleValue > leftValue && middleValue >= rightValue)
+		{
+			double lower = leftJD;
+			double upper = rightJD;
+			for (int iteration = 0; iteration < 40; ++iteration)
+			{
+				const double firstJD = lower + (upper - lower) / 3.0;
+				const double secondJD = upper - (upper - lower) / 3.0;
+				const double firstValue = separation(firstJD);
+				const double secondValue = separation(secondJD);
+				if (!std::isfinite(firstValue) || !std::isfinite(secondValue)) return false;
+				if (firstValue < secondValue) lower = firstJD;
+				else upper = secondJD;
+			}
+			double eventJD = (lower + upper) * 0.5;
+			if (std::abs(eventJD - startJD) < 1e-7) eventJD = startJD;
+			if (std::abs(eventJD - endJD) < 1e-7) eventJD = endJD;
+			if (eventJD >= startJD && eventJD < endJD) maxima.append(eventJD);
+		}
+		leftJD = middleJD;
+		leftValue = middleValue;
+		middleJD = rightJD;
+		middleValue = rightValue;
+	}
+	return true;
+}
+
+static QJsonArray ohosCalendarMeteorActivities(const QJsonArray& activities, int year)
+{
+	QJsonObject generic;
+	QJsonArray annual;
+	for (const QJsonValue& value : activities)
+	{
+		const QJsonObject activity = value.toObject();
+		const QString activityYear = activity.value("year").toVariant().toString();
+		if (activityYear == "generic") generic = activity;
+		else if (activityYear == QString::number(year)) annual.append(activity);
+	}
+	if (annual.isEmpty())
+	{
+		if (!generic.isEmpty()) annual.append(generic);
+		return annual;
+	}
+	QJsonArray merged;
+	for (const QJsonValue& value : annual)
+	{
+		QJsonObject activity = generic;
+		const QJsonObject annualData = value.toObject();
+		for (auto field = annualData.begin(); field != annualData.end(); ++field)
+		{
+			if (field.key() == "peak" && field.value().toDouble() == 0.0 && generic.contains("peak")) continue;
+			activity[field.key()] = field.value();
+		}
+		merged.append(activity);
+	}
+	return merged;
+}
+
+static QJsonObject ohosAstronomyCalendarEvents(StelCore* core, const QString& payload)
+{
+	QJsonObject result;
+	result["ok"] = false;
+	QJsonObject options;
+	int year = 0;
+	int month = 0;
+	const QRegularExpression monthPattern(QStringLiteral("\\A[0-9]{4}-[0-9]{2}\\z"));
+	if (monthPattern.match(payload).hasMatch())
+	{
+		year = payload.left(4).toInt();
+		month = payload.mid(5, 2).toInt();
+	}
+	else
+	{
+		const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8());
+		if (!document.isObject())
+		{
+			result["error"] = "expected YYYY-MM or JSON {year,month,startJD?,endJD?}";
+			return result;
+		}
+		options = document.object();
+		const double requestedYear = options.value("year").toDouble(-1);
+		const double requestedMonth = options.value("month").toDouble(-1);
+		if (!std::isfinite(requestedYear) || !std::isfinite(requestedMonth)
+			|| requestedYear < 1 || requestedYear > 3000 || requestedMonth < 1 || requestedMonth > 12
+			|| std::floor(requestedYear) != requestedYear || std::floor(requestedMonth) != requestedMonth)
+		{
+			result["error"] = "year and month must be integers in 1..3000 and 1..12";
+			return result;
+		}
+		year = static_cast<int>(requestedYear);
+		month = static_cast<int>(requestedMonth);
+	}
+	if (year < 1 || year > 3000 || month < 1 || month > 12)
+	{
+		result["error"] = "year and month must be integers in 1..3000 and 1..12";
+		return result;
+	}
+	const QDate firstDay(year, month, 1);
+	const double monthStartJD = static_cast<double>(firstDay.toJulianDay()) - 0.5;
+	const double monthEndJD = static_cast<double>(firstDay.addMonths(1).toJulianDay()) - 0.5;
+	double startJD = monthStartJD;
+	double endJD = monthEndJD;
+	if (options.contains("startJD") || options.contains("endJD"))
+	{
+		if (!options.value("startJD").isDouble() || !options.value("endJD").isDouble())
+		{
+			result["error"] = "startJD and endJD must both be finite UT Julian dates";
+			return result;
+		}
+		startJD = options.value("startJD").toDouble();
+		endJD = options.value("endJD").toDouble();
+		if (!std::isfinite(startJD) || !std::isfinite(endJD)
+			|| std::abs(startJD - monthStartJD) > 2.0 || std::abs(endJD - monthEndJD) > 2.0
+			|| endJD - startJD < 27.0 || endJD - startJD > 33.0)
+		{
+			result["error"] = "range must describe the requested month (boundaries within 2 days, span 27..33 days)";
+			return result;
+		}
+	}
+	SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+	SpecificTimeMgr* specificTimeMgr = GETSTELMODULE(SpecificTimeMgr);
+	const PlanetP earth = solarSystem ? solarSystem->getEarth() : PlanetP();
+	const PlanetP moon = solarSystem ? solarSystem->getMoon() : PlanetP();
+	if (!core || !specificTimeMgr || !earth || !moon)
+	{
+		result["error"] = "calendar ephemeris unavailable";
+		return result;
+	}
+	const QStringList solarNames = {
+		QStringLiteral("小寒"), QStringLiteral("大寒"), QStringLiteral("立春"), QStringLiteral("雨水"),
+		QStringLiteral("惊蛰"), QStringLiteral("春分"), QStringLiteral("清明"), QStringLiteral("谷雨"),
+		QStringLiteral("立夏"), QStringLiteral("小满"), QStringLiteral("芒种"), QStringLiteral("夏至"),
+		QStringLiteral("小暑"), QStringLiteral("大暑"), QStringLiteral("立秋"), QStringLiteral("处暑"),
+		QStringLiteral("白露"), QStringLiteral("秋分"), QStringLiteral("寒露"), QStringLiteral("霜降"),
+		QStringLiteral("立冬"), QStringLiteral("小雪"), QStringLiteral("大雪"), QStringLiteral("冬至")
+	};
+	const QStringList solarNamesEn = {
+		"Minor Cold", "Major Cold", "Start of Spring", "Rain Water", "Awakening of Insects", "March Equinox",
+		"Pure Brightness", "Grain Rain", "Start of Summer", "Grain Buds", "Grain in Ear", "June Solstice",
+		"Minor Heat", "Major Heat", "Start of Autumn", "End of Heat", "White Dew", "September Equinox",
+		"Cold Dew", "Frost Descent", "Start of Winter", "Minor Snow", "Major Snow", "December Solstice"
+	};
+	QList<QJsonObject> events;
+	auto appendEvent = [&](const QString& id, const QString& kind, int index, const QString& title,
+		const QString& titleEn, double eventJD, const QString& phase) -> QJsonObject& {
+		QJsonObject event;
+		event["id"] = id;
+		event["kind"] = kind;
+		event["index"] = index;
+		event["title"] = title;
+		event["titleEn"] = titleEn;
+		event["jd"] = eventJD;
+		event["at"] = std::round((eventJD - 2440587.5) * 86400000.0);
+		event["timeScale"] = "UT";
+		event["body"] = QStringLiteral("全球天文事件时刻；不表示当前地点可见。");
+		event["target"] = phase.isEmpty() ? "Sun" : "Moon";
+		event["panel"] = "astro";
+		event["tab"] = phase.isEmpty() ? 8 : 6;
+		if (!phase.isEmpty()) event["phase"] = phase;
+		events.append(event);
+		return events.last();
+	};
+	const int firstYear = qMax(1, QDate::fromJulianDay(static_cast<qint64>(std::floor(startJD + 0.5))).year());
+	const int lastYear = qMin(3000, QDate::fromJulianDay(static_cast<qint64>(std::floor(endJD + 0.5))).year());
+	for (int eventYear = firstYear; eventYear <= lastYear; ++eventYear)
+	{
+		for (int index = 0; index < 24; ++index)
+		{
+			const double eventJD = specificTimeMgr->getSolarTerm(eventYear, index);
+			if (!std::isfinite(eventJD) || eventJD <= 0.0)
+			{
+				result["error"] = "solar term calculation failed";
+				return result;
+			}
+			if (eventJD >= startJD && eventJD < endJD)
+				appendEvent(QStringLiteral("solar-term-%1-%2").arg(eventYear).arg(index), "solar-term", index,
+					solarNames.at(index), solarNamesEn.at(index), eventJD, QString());
+		}
+	}
+	const QStringList phaseNames = {QStringLiteral("新月"), QStringLiteral("上弦"), QStringLiteral("满月"), QStringLiteral("下弦")};
+	const QStringList phaseNamesEn = {"New Moon", "First Quarter", "Full Moon", "Last Quarter"};
+	const QStringList phaseKeys = {"new-moon", "first-quarter", "full-moon", "last-quarter"};
+	for (int index = 0; index < 4; ++index)
+	{
+		QList<double> crossings;
+		const double target = index * 90.0;
+		if (!findOhosCalendarCrossings(startJD, endJD, [&](double jd) {
+			return StelUtils::fmodpos(ohosCalendarMoonElongation(core, earth, moon, jd) - target, 360.0);
+		}, crossings))
+		{
+			result["error"] = "moon phase calculation failed";
+			return result;
+		}
+		for (const double eventJD : crossings)
+			appendEvent(QStringLiteral("moon-phase-%1-%2").arg(qRound64((eventJD - 2440587.5) * 86400.0)).arg(index),
+				"moon-phase", index, phaseNames.at(index), phaseNamesEn.at(index), eventJD, phaseKeys.at(index));
+	}
+	QFile showerCatalog(":/MeteorShowers/MeteorShowers.json");
+	if (!showerCatalog.open(QIODevice::ReadOnly))
+	{
+		result["error"] = "meteor shower catalog unavailable";
+		return result;
+	}
+	const QJsonDocument showerDocument = QJsonDocument::fromJson(showerCatalog.readAll());
+	const QJsonObject showers = showerDocument.object().value("showers").toObject();
+	if (showers.isEmpty())
+	{
+		result["error"] = "meteor shower catalog invalid";
+		return result;
+	}
+	auto meteorSolarLongitude = [&](double jd) {
+		const double jde = jd + core->computeDeltaT(jd) / 86400.0;
+		Vec3d position, velocity;
+		earth->computePosition(jde, position, velocity);
+		if (!std::isfinite(position.norm()) || position.norm() <= 0.0)
+			return std::numeric_limits<double>::quiet_NaN();
+		return StelUtils::fmodpos(std::atan2(-position[1], -position[0]) * M_180_PI
+			- 20.4898 / (3600.0 * position.norm()), 360.0);
+	};
+	for (auto shower = showers.begin(); shower != showers.end(); ++shower)
+	{
+		if (shower.key() == "ANT") continue;
+		const QJsonObject data = shower.value().toObject();
+		for (int eventYear = firstYear; eventYear <= lastYear; ++eventYear)
+		{
+			const QJsonArray activities = ohosCalendarMeteorActivities(data.value("activity").toArray(), eventYear);
+			QList<double> emittedPeaks;
+			for (const QJsonValue& value : activities)
+			{
+				const QJsonObject activity = value.toObject();
+				const double peak = activity.value("peak").toDouble(std::numeric_limits<double>::quiet_NaN());
+				if (!std::isfinite(peak) || peak < 0.0 || peak >= 360.0 || emittedPeaks.contains(peak)) continue;
+				emittedPeaks.append(peak);
+				const double yearStart = static_cast<double>(QDate(eventYear, 1, 1).toJulianDay()) - 0.5;
+				const double yearEnd = static_cast<double>(QDate(eventYear + 1, 1, 1).toJulianDay()) - 0.5;
+				QList<double> peaks;
+				if (!findOhosCalendarCrossings(std::max(startJD, yearStart), std::min(endJD, yearEnd), [&](double jd) {
+					return StelUtils::fmodpos(meteorSolarLongitude(jd) - peak, 360.0);
+				}, peaks))
+				{
+					result["error"] = "meteor peak calculation failed";
+					return result;
+				}
+				for (const double eventJD : peaks)
+				{
+					const QString name = data.value("designation").toString(shower.key());
+					QJsonObject& event = appendEvent(QStringLiteral("meteor-peak-%1-%2-%3").arg(shower.key()).arg(eventYear).arg(peak, 0, 'f', 4),
+						"meteor-peak", 0, name + QStringLiteral("流星雨极大（目录估算）"), name + " meteor shower peak (catalog estimate)", eventJD, QString());
+					event["target"] = name;
+					event["panel"] = "meteorshowers";
+					event["tab"] = 0;
+					event["showerCode"] = shower.key();
+					event["solarLongitude"] = peak;
+					event["longitudeFrame"] = "J2000";
+					event["catalogYear"] = activity.value("year").toVariant().toInt();
+					event["timingQuality"] = "catalog-estimate";
+					event["body"] = QStringLiteral("按内置流星雨目录极大太阳黄经计算的估算时刻；不是当年爆发预报，不保证当前地点可见或实际流量。历史及远期年份仅表示目录模型外推。");
+				}
+			}
+		}
+	}
+	const PlanetP sun = solarSystem->getSun();
+	const QStringList planetNames = {"Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"};
+	const QStringList planetNamesZh = {QStringLiteral("水星"), QStringLiteral("金星"), QStringLiteral("火星"),
+		QStringLiteral("木星"), QStringLiteral("土星"), QStringLiteral("天王星"), QStringLiteral("海王星")};
+	QList<PlanetP> planets;
+	for (const QString& name : planetNames)
+	{
+		const PlanetP planet = solarSystem->searchByEnglishName(name);
+		if (!sun || !planet)
+		{
+			result["error"] = "planetary ephemeris unavailable";
+			return result;
+		}
+		planets.append(planet);
+	}
+	auto appendPlanetEvent = [&](const PlanetP& primary, const PlanetP& secondary, const QString& subtype,
+		const QString& title, const QString& titleEn, double eventJD) -> QJsonObject& {
+		const QString primaryName = primary->getEnglishName();
+		const QString secondaryName = secondary->getEnglishName();
+		QJsonObject& event = appendEvent(QStringLiteral("planetary-event-%1-%2-%3-%4").arg(primaryName, secondaryName, subtype)
+			.arg(qRound64((eventJD - 2440587.5) * 86400.0)), "planetary-event", 0, title, titleEn, eventJD, QString());
+		event["target"] = primaryName;
+		event["tab"] = 0;
+		event["subtype"] = subtype;
+		event["primary"] = primaryName;
+		event["secondary"] = secondaryName;
+		event["separationDegrees"] = ohosCalendarDirection(core, earth, primary, eventJD)
+			.angle(ohosCalendarDirection(core, earth, secondary, eventJD)) * M_180_PI;
+		event["timingQuality"] = "ephemeris";
+		event["body"] = QStringLiteral("地心视位置计算；合与冲按黄经差定义，大距按与太阳的角距极大定义。不表示当前地点可见；合日通常不适合观测。");
+		return event;
+	};
+	for (int planetIndex = 0; planetIndex < planets.size(); ++planetIndex)
+	{
+		const PlanetP planet = planets.at(planetIndex);
+		for (const int angle : {0, 180})
+		{
+			if (angle == 180 && planetIndex < 2) continue;
+			QList<double> crossings;
+			if (!findOhosCalendarAlignments(startJD, endJD, [&](double jd) {
+				return ohosCalendarLongitudeGap(core, earth, planet, sun, jd) - angle;
+			}, crossings))
+			{
+				result["error"] = "planetary alignment calculation failed";
+				return result;
+			}
+			for (const double eventJD : crossings)
+			{
+				QJsonObject& event = appendPlanetEvent(planet, sun, angle == 0 ? "conjunction" : "opposition",
+					planetNamesZh.at(planetIndex) + (angle == 0 ? QStringLiteral("合日") : QStringLiteral("冲日")),
+					planetNames.at(planetIndex) + (angle == 0 ? " solar conjunction" : " opposition"), eventJD);
+				if (angle == 0 && planetIndex < 2)
+					event["alignment"] = ohosCalendarDirection(core, earth, planet, eventJD).norm()
+						< ohosCalendarDirection(core, earth, sun, eventJD).norm() ? "inferior" : "superior";
+			}
+		}
+		if (planetIndex < 2)
+		{
+			QList<double> maxima;
+			if (!findOhosCalendarMaxima(startJD, endJD, [&](double jd) {
+				return ohosCalendarDirection(core, earth, planet, jd).angle(ohosCalendarDirection(core, earth, sun, jd));
+			}, maxima))
+			{
+				result["error"] = "greatest elongation calculation failed";
+				return result;
+			}
+			for (const double eventJD : maxima)
+			{
+				const bool east = ohosCalendarLongitudeGap(core, earth, planet, sun, eventJD) < 180.0;
+				QJsonObject& event = appendPlanetEvent(planet, sun, "greatest-elongation",
+					planetNamesZh.at(planetIndex) + (east ? QStringLiteral("东大距") : QStringLiteral("西大距")),
+					planetNames.at(planetIndex) + (east ? " greatest eastern elongation" : " greatest western elongation"), eventJD);
+				event["direction"] = east ? "east" : "west";
+			}
+		}
+		if (planetIndex >= 5) continue;
+		for (int otherIndex = planetIndex + 1; otherIndex < 5; ++otherIndex)
+		{
+			const PlanetP other = planets.at(otherIndex);
+			QList<double> crossings;
+			if (!findOhosCalendarAlignments(startJD, endJD, [&](double jd) {
+				return ohosCalendarLongitudeGap(core, earth, planet, other, jd);
+			}, crossings))
+			{
+				result["error"] = "planet conjunction calculation failed";
+				return result;
+			}
+			for (const double eventJD : crossings)
+				appendPlanetEvent(planet, other, "conjunction", planetNamesZh.at(planetIndex) + QStringLiteral("合") + planetNamesZh.at(otherIndex),
+					planetNames.at(planetIndex) + "–" + planetNames.at(otherIndex) + " conjunction", eventJD);
+		}
+	}
+	std::sort(events.begin(), events.end(), [](const QJsonObject& first, const QJsonObject& second) {
+		return first.value("jd").toDouble() < second.value("jd").toDouble();
+	});
+	QJsonArray items;
+	for (const QJsonObject& event : events) items.append(event);
+	result["ok"] = true;
+	result["year"] = year;
+	result["month"] = month;
+	result["startJD"] = startJD;
+	result["endJD"] = endJD;
+	result["timeScale"] = "UT";
+	result["events"] = items;
+	result["supportedKinds"] = QJsonArray{"solar-term", "moon-phase", "meteor-peak", "planetary-event"};
+	result["unsupportedKinds"] = QJsonArray{"eclipse", "satellite-pass"};
+	return result;
+}
+
 static bool parseOhosLocationCoordinates(const QStringList& parts, int offset, StelLocation& location, QJsonObject& result)
 {
 	bool latitudeOk = false;
@@ -7871,6 +8368,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 
 		// getRTS is implemented below (Phase 2r) using getRTSTime().
+
+		if (commandName == "getAstronomyCalendarEvents")
+			return ohosAstronomyCalendarEvents(core, arg);
 
 		// getAlmanac — sun/moon rise/set/transit
 		if (commandName == "getAlmanac")
@@ -13695,6 +14195,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (optionsDocument.isObject())
 			{
 				const QJsonObject options = optionsDocument.object();
+				if (options.contains("startJD"))
+				{
+					result["ok"] = false;
+					result["error"] = "Explicit satellite prediction epochs require a nonmutating predictor; satellite subscriptions are unavailable";
+					result["reason"] = "explicit_epoch_prediction_unsupported";
+					return result;
+				}
 				satelliteId = options.value("id").toString().trimmed();
 				hours = options.value("hours").toDouble(hours);
 				limit = options.value("limit").toInt(limit);
