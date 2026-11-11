@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Skyinstrument content audit daily at 07:45
+
+[Timer]
+OnCalendar=*-*-* 07:45:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=skyinstrument-content-audit.service
+
+[Install]
+WantedBy=timers.target

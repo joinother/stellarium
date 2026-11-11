@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyinstrument daily site content audit
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-content-audit
+Nice=10

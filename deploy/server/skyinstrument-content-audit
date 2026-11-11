@@ -1,0 +1,243 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""星象仪站点内容巡检（规则层）。
+
+每日扫描站点 HTML，覆盖四类风险：
+  1. 隐藏内容：display:none / visibility:hidden / font-size:0 / 大负缩进，常被用于 SEO 暗链
+  2. 违禁词：涉政、涉黄、涉赌、涉诈、涉毒、办证等
+  3. 广告法极限词：最好、第一、国家级、永久免费、100%、绝对、独家等
+  4. 外部链接白名单：出现未登记域名即标记
+另外检查个人信息泄露（手机号、非白名单邮箱）与脚本注入特征。
+
+产出：/srv/skyinstrument/security-records/content-audit-YYYYMMDD.txt
+异常时：读取 /etc/skyinstrument/mail.conf 发送 HTML 告警邮件
+退出码：无异常 0，有异常 1
+"""
+import glob
+import html as htmllib
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+SITE_DIR = '/srv/skyinstrument/website/current'
+RECORDS = '/srv/skyinstrument/security-records'
+MAIL_CONF = '/etc/skyinstrument/mail.conf'
+BASELINE = os.path.join(RECORDS, '.content-baseline.json')
+
+# 外部域名白名单：只允许出现这些
+ALLOWED_DOMAINS = {
+    'skyinstrument.cn',        # 本站
+    'beian.miit.gov.cn',       # 工信部备案
+    'beian.mps.gov.cn',        # 公安备案
+    'appgallery.huawei.com',   # 华为应用市场
+    'github.com',              # 项目仓库
+    'stellarium.org',          # 上游项目（credits 页致谢）
+    'qt.io',                   # 应用框架（隐私页说明）
+    'www.w3.org',              # 标准组织
+}
+
+# 违禁词（分类）
+BLOCK_WORDS = {
+    '涉政': ['颠覆国家', '推翻政府', '分裂国家', '煽动颠覆'],
+    '涉黄': ['色情', '裸聊', '约炮', '成人视频', '情色'],
+    '涉赌': ['赌博', '博彩', '百家乐', '六合彩', '时时彩', '赌球'],
+    '涉诈': ['刷单', '杀猪盘', '兼职日结', '代开发票', '办证', '代办信用卡', '高额贷款', '洗钱'],
+    '涉毒': ['毒品', '冰毒', '大麻交易', '摇头丸'],
+    '涉枪': ['枪支', '弹药', '仿真枪'],
+}
+
+# 广告法极限词（用短语降低误报）
+AD_WORDS = ['最好的', '最佳', '最高级', '国家级', '世界级', '第一品牌', '行业第一', '全国第一',
+            '永久免费', '终身免费', '100%', '绝对准确', '绝对精准', '独家代理', '唯一指定',
+            '领先全球', '顶级品质', '史无前例', '万能']
+
+PHONE_RE = re.compile(r'(?<!\d)1[3-9]\d{9}(?!\d)')
+EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
+EMAIL_ALLOW = {'1134873571@qq.com'}
+HIDDEN_RE = re.compile(
+    r'<(div|span|p|a|li|section)[^>]*(display\s*:\s*none|visibility\s*:\s*hidden|'
+    r'font-size\s*:\s*0(?:px|rpx|vw)?[;"\s]|text-indent\s*:\s*-\d{3,}|'
+    r'opacity\s*:\s*0(?:\.0+)?[;"\s])', re.I)
+SUSPICIOUS_RE = re.compile(r'<iframe|<object|<embed|\bonerror\s*=|javascript:\s*\w', re.I)
+LINK_RE = re.compile(r'href="(https?://[^"]+)"', re.I)
+
+issues = []   # (级别, 类别, 位置, 说明)
+stats = []
+
+
+def add(level, kind, where, detail):
+    issues.append((level, kind, where, detail))
+
+
+def visible_text(raw):
+    s = re.sub(r'<script.*?</script>', ' ', raw, flags=re.S | re.I)
+    s = re.sub(r'<style.*?</style>', ' ', s, flags=re.S | re.I)
+    s = re.sub(r'<[^>]+>', ' ', s)
+    s = htmllib.unescape(s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def scan_file(path):
+    name = os.path.basename(path)
+    raw = open(path, encoding='utf-8', errors='replace').read()
+    text = visible_text(raw)
+
+    # 1 隐藏内容
+    for m in HIDDEN_RE.finditer(raw):
+        add('高', '隐藏内容', name, '发现隐藏元素：%s' % m.group(0)[:120])
+
+    # 2 违禁词
+    for cat, words in BLOCK_WORDS.items():
+        for w in words:
+            if w in text:
+                idx = text.find(w)
+                add('高', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
+
+    # 3 广告法极限词
+    for w in AD_WORDS:
+        if w in text:
+            idx = text.find(w)
+            add('中', '广告法极限词', name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
+
+    # 4 外链白名单
+    for m in LINK_RE.finditer(raw):
+        url = m.group(1)
+        host = re.sub(r'^https?://', '', url).split('/')[0].split(':')[0].lower()
+        # 允许白名单域名及其子域（如 www.qt.io、docs.github.com）
+        ok = any(host == d or host.endswith('.' + d) for d in ALLOWED_DOMAINS)
+        if not ok:
+            add('中', '未登记外链', name, url[:120])
+
+    # 5 个人信息
+    for m in PHONE_RE.finditer(text):
+        add('高', '个人信息/手机号', name, m.group(0))
+    for m in EMAIL_RE.finditer(text):
+        if m.group(0) not in EMAIL_ALLOW:
+            add('中', '个人信息/邮箱', name, m.group(0))
+
+    # 6 脚本注入特征
+    for m in SUSPICIOUS_RE.finditer(raw):
+        add('中', '可疑标签', name, m.group(0)[:80])
+
+    stats.append((name, len(raw), len(text)))
+    return text
+
+
+def main():
+    files = sorted(glob.glob(os.path.join(SITE_DIR, '*.html')))
+    texts = {}
+    for f in files:
+        texts[os.path.basename(f)] = scan_file(f)
+
+    # 变更检测：与上次基线比较文本长度变化
+    changed = []
+    if os.path.exists(BASELINE):
+        try:
+            base = json.load(open(BASELINE, encoding='utf-8'))
+        except Exception:  # noqa: BLE001
+            base = {}
+        for name, t in texts.items():
+            old = base.get(name, '')
+            if old != t:
+                changed.append((name, len(old), len(t)))
+    os.makedirs(RECORDS, exist_ok=True)
+    with open(BASELINE, 'w', encoding='utf-8') as fh:
+        json.dump(texts, fh, ensure_ascii=False)
+
+    # 报告
+    today = datetime.now().strftime('%Y%m%d')
+    report_path = os.path.join(RECORDS, 'content-audit-%s.txt' % today)
+    lines = ['# 内容巡检报告', '',
+             '- 检查时间：%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+             '- 页面数：%d，问题数：%d' % (len(files), len(issues)), '',
+             '| 页面 | 原始字节 | 纯文本字符 |', '| --- | --- | --- |']
+    for name, raw_len, txt_len in stats:
+        lines.append('| %s | %d | %d |' % (name, raw_len, txt_len))
+    if changed:
+        lines += ['', '## 与上次基线相比有变化的页面', '',
+                  '| 页面 | 原字符数 | 现字符数 |', '| --- | --- | --- |']
+        for name, o, n in changed:
+            lines.append('| %s | %d | %d |' % (name, o, n))
+    if issues:
+        lines += ['', '## 发现问题', '', '| 级别 | 类别 | 位置 | 说明 |', '| --- | --- | --- | --- |']
+        for level, kind, where, detail in issues:
+            lines.append('| %s | %s | %s | %s |' % (level, kind, where, detail.replace('|', '/')))
+    else:
+        lines += ['', '**结论：未发现风险内容。**']
+    report = '\n'.join(lines) + '\n'
+    with open(report_path, 'w', encoding='utf-8') as fh:
+        fh.write(report)
+    print(report)
+
+    if issues:
+        send_mail(report, len(issues))
+    sys.exit(1 if issues else 0)
+
+
+def send_mail(report, count):
+    if not os.path.exists(MAIL_CONF):
+        print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
+        return
+    conf = {}
+    for line in open(MAIL_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    try:
+        import smtplib
+        from email.header import Header
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.utils import formataddr
+
+        rows = ''.join(
+            '<tr><td style="padding:6px 10px;border:1px solid #d0d7de">%s</td>'
+            '<td style="padding:6px 10px;border:1px solid #d0d7de">%s</td>'
+            '<td style="padding:6px 10px;border:1px solid #d0d7de">%s</td></tr>'
+            % (lvl, kind, detail.replace('&', '&amp;').replace('<', '&lt;'))
+            for lvl, kind, _where, detail in issues[:40])
+        html_body = (
+            '<div style="font-family:-apple-system,PingFang SC,Microsoft YaHei,sans-serif;'
+            'max-width:760px;margin:0 auto;font-size:14px;color:#1f2328">'
+            '<h2 style="margin:0 0 6px">星象仪 · 内容巡检告警</h2>'
+            '<p style="margin:0 0 14px;color:#57606a;font-size:13px">检查时间：%s ｜ 发现问题 %d 项</p>'
+            '<table style="border-collapse:collapse;width:100%%;font-size:13px">'
+            '<thead><tr style="background:#f6f8fa">'
+            '<th style="padding:8px 10px;border:1px solid #d0d7de;text-align:left">级别</th>'
+            '<th style="padding:8px 10px;border:1px solid #d0d7de;text-align:left">类别</th>'
+            '<th style="padding:8px 10px;border:1px solid #d0d7de;text-align:left">说明</th>'
+            '</tr></thead><tbody>%s</tbody></table>'
+            '<p style="margin:14px 0 0;color:#57606a;font-size:12px">'
+            '完整报告见服务器 %s</p></div>'
+            % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), count, rows,
+               os.path.join(RECORDS, 'content-audit-' + datetime.now().strftime('%Y%m%d') + '.txt'))
+        )
+        msg = MIMEMultipart('alternative')
+        msg.attach(MIMEText(report, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+        msg['Subject'] = Header('[星象仪告警] 内容巡检发现 %d 项问题' % count, 'utf-8')
+        msg['From'] = formataddr(('星象仪巡检', conf['SMTP_USER']))
+        msg['To'] = conf['MAIL_TO']
+        port = int(conf.get('SMTP_PORT', '465'))
+        if port == 465:
+            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
+        else:
+            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
+            server.starttls()
+        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
+        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
+        server.quit()
+        print('告警邮件已发送至 %s' % conf['MAIL_TO'])
+    except Exception as exc:  # noqa: BLE001
+        print('告警邮件发送失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
