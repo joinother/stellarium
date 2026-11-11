@@ -6,5 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/skyinstrument-lexicon-update
-Nice=15
+ExecStart=/usr/bin/flock -n /var/lib/skyinstrument/lexicon-update.lock /usr/local/sbin/skyinstrument-lexicon-update
+Nice=19
+CPUQuota=30%
+IOSchedulingClass=idle

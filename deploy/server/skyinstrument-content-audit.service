@@ -6,5 +6,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/skyinstrument-content-audit
-Nice=10
+ExecStart=/usr/bin/flock -n /var/lib/skyinstrument/content-audit.lock /usr/local/sbin/skyinstrument-content-audit
+Nice=19
+CPUQuota=40%
+IOSchedulingClass=idle

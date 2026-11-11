@@ -47,6 +47,7 @@ LEXICON_EXCLUDE = '/var/lib/skyinstrument/lexicon/local-exclude.txt'
 ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即时告警一次
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'     # 每日调用与 token 用量
+PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'  # 最近一次巡检耗时
 AI_MAX_CALLS_PER_DAY = 300                            # 每日调用上限，超出退回纯规则
 AI_TIME_BUDGET = 90                                   # 单次巡检用于模型调用的总时长（秒）
 AI_DEADLINE = [0.0]                                   # 本次巡检的模型调用截止时刻
@@ -517,6 +518,9 @@ def scan_html_rules(raw, name):
     return text
 
 
+_RUN_START = 0.0
+
+
 def _t(label, since):
     if os.environ.get('AUDIT_TIMING'):
         sys.stderr.write('[timing] %-22s %.1fs\n' % (label, time.time() - since))
@@ -524,6 +528,8 @@ def _t(label, since):
 
 
 def main():
+    global _RUN_START
+    _RUN_START = time.time()
     _t0 = time.time()
     served = discover_served_dirs()
     if not served:
@@ -774,6 +780,14 @@ def main():
             lines.append('| %s | %s | %s | %s |' % (
                 rel, '；'.join(hits)[:80], verdict.get('verdict', '?'),
                 str(verdict.get('reason', ''))[:80].replace('|', '/')))
+    elapsed = time.time() - _RUN_START
+    try:
+        json.dump({'time': time.time(), 'seconds': round(elapsed, 1), 'files': len(files),
+                   'issues': len(issues)},
+                  open(PERF_STATE, 'w', encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        pass
+    lines += ['', '- 本次耗时：%.1f 秒' % elapsed]
     report = '\n'.join(lines) + '\n'
     with open(report_path, 'w', encoding='utf-8') as fh:
         fh.write(report)

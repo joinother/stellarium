@@ -72,6 +72,23 @@ def reload_nginx():
     return rl.returncode == 0, rl.stdout[-400:]
 
 
+def site_ok(timeout=8):
+    """探测本机站点是否正常；用于处置后自检与失败回滚。"""
+    import ssl
+    import urllib.request
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        req = urllib.request.Request('https://127.0.0.1/',
+                                     headers={'Host': 'skyinstrument.cn',
+                                              'User-Agent': 'incident-check/1.0'})
+        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+            return resp.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def do_payload(path):
     """取证：复制被处置文件与其上下文，生成 meta.json。"""
     ts = time.strftime('%Y%m%d-%H%M%S')
@@ -182,6 +199,13 @@ def main():
             write_incident_conf((text.rstrip() + '\n' if text.strip() else '') + snippet + '\n')
         ok, out = reload_nginx()
         action = '拦截 503' if ok else '拦截失败:' + out
+        # reload 后自检：站点若被打挂，立即撤销本条规则并 reload，避免处置反而造成故障
+        if ok and not site_ok():
+            text_rollback = [ln for ln in read_incident_conf().splitlines()
+                             if ('# incident %s' % ts) not in ln]
+            write_incident_conf('\n'.join(text_rollback) + ('\n' if text_rollback else ''))
+            ok2, out2 = reload_nginx()
+            action = ('已撤销（reload 后站点异常，回滚%s）' % ('成功' if ok2 else '失败:' + out2))
     else:
         ok, action = True, '演练（未生效，加 --apply 才真正拦截）'
 

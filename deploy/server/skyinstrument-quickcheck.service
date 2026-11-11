@@ -5,5 +5,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/skyinstrument-quickcheck
-Nice=15
+ExecStart=/usr/bin/flock -n /var/lib/skyinstrument/quickcheck.lock /usr/local/sbin/skyinstrument-quickcheck
+Nice=19
+CPUQuota=20%
+IOSchedulingClass=idle

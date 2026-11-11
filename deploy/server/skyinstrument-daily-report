@@ -17,6 +17,7 @@ os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 RECORDS = '/srv/skyinstrument/security-records'
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
+PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
 NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
@@ -65,6 +66,18 @@ def ai_usage_line():
     ct = day.get('completion_tokens', 0)
     return '调用 %d 次，token %d/%d，估算 %.3f 元' % (
         day.get('calls', 0), pt, ct, pt / 1e6 * 2 + ct / 1e6 * 8)
+
+
+def audit_perf_line():
+    try:
+        import json as _j
+        d = _j.load(open(PERF_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return '无数据', []
+    sec = d.get('seconds', 0)
+    if sec >= 60:
+        return '%.1f 秒（偏慢，需检查）' % sec, ['巡检耗时超过 60 秒，可能影响服务器负载']
+    return '%.1f 秒' % sec, []
 
 
 def active_blocks():
@@ -125,7 +138,9 @@ def main():
 
     ai_state, ai_notes = ai_status()
     blocks = active_blocks()
+    perf, perf_notes = audit_perf_line()
     rows = [
+        ('巡检耗时', perf, perf_notes),
         ('AI 用量', ai_usage_line(), []),
         ('当前生效拦截', '%d 条' % len(blocks),
          ['%s（自 %s）' % (p, t) for p, t in blocks[:5]]),
