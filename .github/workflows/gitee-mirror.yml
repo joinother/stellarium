@@ -57,6 +57,10 @@ jobs:
       - name: Push to Gitee
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GIT_TERMINAL_PROMPT: '0'
+          GIT_HTTP_LOW_SPEED_LIMIT: '1000'
+          GIT_HTTP_LOW_SPEED_TIME: '30'
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           if [ -z "${GITEE_TOKEN:-}" ]; then
@@ -72,6 +76,18 @@ jobs:
           printf 'https://yang-jiexuan000:%s@gitee.com\n' "$GITEE_TOKEN" > .git-credentials
           chmod 600 .git-credentials
           git remote add origin https://gitee.com/yang-jiexuan000/stellarium-ohos-source.git
-          git -c credential.helper="store --file=$PWD/.git-credentials" push -f origin master
+          # 推送重试两次；网络停滞超过 30 秒或低于 1KB/s 则自动放弃，避免卡住
+          for attempt in 1 2; do
+            if timeout 240 git -c credential.helper="store --file=$PWD/.git-credentials" \
+                 push -f origin master; then
+              pushed=1; break
+            fi
+            echo "第 $attempt 次推送失败，10 秒后重试"
+            sleep 10
+          done
+          if [ "${pushed:-0}" != "1" ]; then
+            echo "::error::推送到 Gitee 失败（两次尝试）"
+            exit 1
+          fi
           rm -f .git-credentials
           echo "已推送：$(git log --oneline -1)"
