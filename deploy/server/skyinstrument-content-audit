@@ -978,6 +978,7 @@ def main():
               '- 估算费用：%.3f 元' % price_of(_day),
               '- 超预算拦截：%d 次，拒答：%d 次，失败：%d 次'
               % (_day.get('budget_hit', 0), _day.get('refused', 0), _day.get('failed', 0)),
+              '- 本月累计：%d 次，%.3f 元' % usage_monthly(),
               '', '## AI 判定层', '',
               '- 状态：%s' % ai_line,
               '- 最近成功：%s' % (time.strftime('%Y-%m-%d %H:%M', time.localtime(st['last_ok'])) if st.get('last_ok') else '无'),
@@ -1275,6 +1276,15 @@ def _today():
     return time.strftime('%Y-%m-%d')
 
 
+LIFETIME_KEY = 'lifetime'          # 终身累计，永不随按日记录清理
+USAGE_KEEP_DAYS = 90               # 按日记录只保留最近 90 天
+
+
+def _blank():
+    return {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0,
+            'refused': 0, 'failed': 0, 'budget_hit': 0}
+
+
 def load_usage():
     try:
         data = json.load(open(AI_USAGE, encoding='utf-8'))
@@ -1282,32 +1292,58 @@ def load_usage():
         data = {}
     day = data.get(_today())
     if not day:
-        day = {'calls': 0, 'prompt_tokens': 0, 'completion_tokens': 0,
-               'refused': 0, 'failed': 0, 'budget_hit': 0}
+        day = _blank()
     return data, day
 
 
 def save_usage(data, day):
     data[_today()] = day
-    # 只保留最近 90 天
-    keep = sorted(data.keys())[-90:]
-    data = {k: data[k] for k in keep}
+    # 只滚动保留最近 90 天的按日记录；lifetime 永不清理
+    dates = sorted(k for k in data if k != LIFETIME_KEY)
+    for k in dates[:-USAGE_KEEP_DAYS]:
+        data.pop(k, None)
     try:
         os.makedirs(os.path.dirname(AI_USAGE), exist_ok=True)
-        json.dump(data, open(AI_USAGE, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        tmp = AI_USAGE + '.tmp'
+        json.dump(data, open(tmp, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        os.replace(tmp, AI_USAGE)
     except Exception:  # noqa: BLE001
         pass
 
 
 def usage_add(calls=0, prompt=0, completion=0, refused=0, failed=0, budget_hit=0):
     data, day = load_usage()
-    day['calls'] += calls
-    day['prompt_tokens'] += prompt
-    day['completion_tokens'] += completion
-    day['refused'] += refused
-    day['failed'] += failed
-    day['budget_hit'] += budget_hit
+    delta = {'calls': calls, 'prompt_tokens': prompt, 'completion_tokens': completion,
+             'refused': refused, 'failed': failed, 'budget_hit': budget_hit}
+    for k, v in delta.items():
+        day[k] = day.get(k, 0) + v
+    life = data.get(LIFETIME_KEY)
+    if not isinstance(life, dict):
+        life = _blank()
+    for k, v in delta.items():
+        life[k] = life.get(k, 0) + v
+    data[LIFETIME_KEY] = life
     save_usage(data, day)
+
+
+def usage_monthly(month_prefix=None):
+    """返回本月累计（调用与估算费用），只统计按日记录。"""
+    data, _day = load_usage()
+    prefix = month_prefix or time.strftime('%Y-%m')
+    calls = pt = ct = 0
+    for k, v in data.items():
+        if k == LIFETIME_KEY or not isinstance(v, dict) or not k.startswith(prefix):
+            continue
+        calls += v.get('calls', 0)
+        pt += v.get('prompt_tokens', 0)
+        ct += v.get('completion_tokens', 0)
+    conf = load_audit_conf()
+    try:
+        pin = float(conf.get('LLM_PRICE_IN_PER_M', '2'))
+        pout = float(conf.get('LLM_PRICE_OUT_PER_M', '8'))
+    except ValueError:
+        pin, pout = 2.0, 8.0
+    return calls, pt / 1e6 * pin + ct / 1e6 * pout
 
 
 def budget_left():

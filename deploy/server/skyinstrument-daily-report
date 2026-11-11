@@ -56,20 +56,65 @@ def summarize_hash(text):
     return m.group(1) if m else '?'
 
 
-def ai_usage_line():
+def _usage_data():
+    import json as _j
     try:
-        import json as _j
-        import time as _t
-        data = _j.load(open(AI_USAGE, encoding='utf-8'))
-        day = data.get(_t.strftime('%Y-%m-%d')) or {}
+        return _j.load(open(AI_USAGE, encoding='utf-8'))
     except Exception:  # noqa: BLE001
-        return '无数据'
+        return {}
+
+
+def _cost(pt, ct):
+    return pt / 1e6 * 2 + ct / 1e6 * 8
+
+
+def ai_usage_line():
+    import time as _t
+    data = _usage_data()
+    day = data.get(_t.strftime('%Y-%m-%d')) or {}
     if not day.get('calls'):
         return '今日未调用'
-    pt = day.get('prompt_tokens', 0)
-    ct = day.get('completion_tokens', 0)
     return '调用 %d 次，token %d/%d，估算 %.3f 元' % (
-        day.get('calls', 0), pt, ct, pt / 1e6 * 2 + ct / 1e6 * 8)
+        day.get('calls', 0), day.get('prompt_tokens', 0),
+        day.get('completion_tokens', 0),
+        _cost(day.get('prompt_tokens', 0), day.get('completion_tokens', 0)))
+
+
+def ai_month_line():
+    """本月累计调用与费用。"""
+    import time as _t
+    data = _usage_data()
+    prefix = _t.strftime('%Y-%m')
+    calls = pt = ct = 0
+    for k, v in data.items():
+        if k == 'lifetime' or not isinstance(v, dict) or not k.startswith(prefix):
+            continue
+        calls += v.get('calls', 0)
+        pt += v.get('prompt_tokens', 0)
+        ct += v.get('completion_tokens', 0)
+    if not calls:
+        return '本月未调用'
+    return '%d 次，估算 %.3f 元' % (calls, _cost(pt, ct))
+
+
+def ai_anomaly():
+    """今日调用量是否超过本月日均 3 倍；返回提示文字或 None。"""
+    import time as _t
+    data = _usage_data()
+    today = _t.strftime('%Y-%m-%d')
+    prefix = _t.strftime('%Y-%m')
+    cur = (data.get(today) or {}).get('calls', 0)
+    prev = [v.get('calls', 0) for k, v in data.items()
+            if k != 'lifetime' and isinstance(v, dict) and k.startswith(prefix) and k != today]
+    if len(prev) < 2 or not cur:
+        return None
+    avg = sum(prev) / len(prev)
+    if avg <= 0:
+        return None
+    if cur >= max(avg * 3, 12):
+        return '今日调用 %d 次，为本月日均 %.1f 次的 %.1f 倍，请确认是否异常' % (
+            cur, avg, cur / avg)
+    return None
 
 
 def image_line():
@@ -184,11 +229,13 @@ def main():
     blocks = active_blocks()
     mirror, mirror_notes, _mirror_critical = mirror_status()
     perf, perf_notes = audit_perf_line()
+    _anom = ai_anomaly()
     rows = [
         ('镜像数据', mirror, mirror_notes),
         ('图片审查', image_line(), []),
         ('巡检耗时', perf, perf_notes),
-        ('AI 用量', ai_usage_line(), []),
+        ('AI 用量', ai_usage_line(), [_anom] if _anom else []),
+        ('AI 本月累计', ai_month_line(), []),
         ('当前生效拦截', '%d 条' % len(blocks),
          ['%s（自 %s）' % (p, t) for p, t in blocks[:5]]),
         ('AI 判定层', ai_state, ai_notes),
