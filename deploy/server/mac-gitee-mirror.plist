@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  在 Mac 上定时把源码快照推送到 Gitee。
+
+  安装：
+    cp deploy/server/mac-gitee-mirror.plist ~/Library/LaunchAgents/com.skyinstrument.gitee-mirror.plist
+    launchctl load ~/Library/LaunchAgents/com.skyinstrument.gitee-mirror.plist
+
+  令牌存放（600 权限，不要提交到仓库）：
+    mkdir -p ~/.config/skyinstrument
+    printf 'gitee-token=你的令牌\n' > ~/.config/skyinstrument/gitee.token
+    chmod 600 ~/.config/skyinstrument/gitee.token
+
+  手动触发一次：
+    launchctl start com.skyinstrument.gitee-mirror
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.skyinstrument.gitee-mirror</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jiexuanyang/stellarium-src/deploy/server/gitee-mirror-auto.sh</string>
+    </array>
+
+    <!-- 每周一 11:20 与每天 23:20 各跑一次；机器休眠错过的任务在唤醒后补跑 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>11</integer>
+            <key>Minute</key><integer>20</integer>
+        </dict>
+        <dict>
+            <key>Hour</key><integer>23</integer>
+            <key>Minute</key><integer>20</integer>
+        </dict>
+    </array>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jiexuanyang/Library/Logs/skyinstrument-gitee-mirror.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jiexuanyang/Library/Logs/skyinstrument-gitee-mirror.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>

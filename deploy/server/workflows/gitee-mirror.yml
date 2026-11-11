@@ -1,3 +1,13 @@
+# 注意：本文件是模板，未放在 .github/workflows/ 下。
+# 原因：当前 GitHub 令牌缺少 workflow 权限，无法推送该目录。
+#
+# 启用方式（需要时再执行）：
+#   1. gh auth refresh -s workflow        （授权 workflow 权限）
+#   2. mkdir -p .github/workflows && cp deploy/server/workflows/gitee-mirror.yml .github/workflows/
+#   3. git add .github && git commit -m "ci: 启用 Gitee 镜像自动同步" && git push
+#
+# 在此之前，源码快照由 Mac 上的 launchd 定时任务推送（见 deploy/server/mac-gitee-mirror.plist）。
+
 name: Mirror source snapshot to Gitee
 
 # 把 harmonyos / deploy / docs / scripts 四个目录做成快照推送到 Gitee。
