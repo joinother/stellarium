@@ -69,3 +69,15 @@ MAIL_TO=<收件邮箱>
 
 授权码泄露时的处置：登录邮箱后台撤销该授权码，重新生成并更新本文件，
 不需要改动任何脚本。
+
+## 灾备恢复
+
+整机丢失、系统盘损坏、迁移服务器的完整步骤见 [docs/ops/RECOVERY.md](../../docs/ops/RECOVERY.md)，
+含资产来源清单、9 步恢复流程、10 项验证与常见坑，实测口径约 75 分钟。
+
+日常的单点恢复走短路径：
+
+```bash
+skyinstrument-rollback <版本目录>              # 页面内容回滚
+skyinstrument-incident --rollback <时间戳>     # 解除页面拦截
+```
