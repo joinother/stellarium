@@ -1,0 +1,83 @@
+#!/bin/bash
+# 服务器侧安全记录同步：把备份清单、巡检报告、台账推到 Gitee 私有仓库。
+#
+# 设计要点：
+#   1. 只推「记录」，不推站点文件、不推任何密钥
+#   2. 提交前扫描敏感信息，命中即中止（防止密钥被误推）
+#   3. 用独立部署密钥（/root/.ssh/gitee_records），可单独吊销，不影响账号
+#   4. 失败不重试轰炸，写日志并返回非零，由日报与 systemd 反映
+set -uo pipefail
+
+CONF=/etc/skyinstrument/git-sync.conf
+REPO_DIR=/srv/skyinstrument/records-repo
+SRC_RECORDS=/srv/skyinstrument/security-records
+SRC_BACKUP=/srv/backup
+LOG=/var/log/skyinstrument-git-sync.log
+CRED_FILE=/etc/skyinstrument/git-credentials
+
+[ -f "$CONF" ] || { echo "缺少 $CONF" >&2; exit 2; }
+# shellcheck disable=SC1090
+. "$CONF"
+: "${REPO_URL:?配置里缺少 REPO_URL}"
+
+mkdir -p "$(dirname "$LOG")"
+log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
+
+# 1. 首次克隆
+if [ ! -d "$REPO_DIR/.git" ]; then
+    log "首次克隆 $REPO_URL"
+    git -c credential.helper="store --file=$CRED_FILE" \
+        clone "$REPO_URL" "$REPO_DIR" >>"$LOG" 2>&1 || { log "克隆失败"; exit 1; }
+fi
+
+cd "$REPO_DIR" || exit 1
+git config user.name "skyinstrument-server" >/dev/null
+git config user.email "server@skyinstrument.cn" >/dev/null
+
+# 2. 同步记录文件
+mkdir -p manifests records ledger
+# 清单：保留最近 10 份
+ls -1t "$SRC_BACKUP"/manifest-*.sha256 2>/dev/null | head -10 | while read -r f; do
+    cp -f "$f" manifests/
+done
+# 巡检/自检/日报/比对记录
+find "$SRC_RECORDS" -maxdepth 1 -type f \( -name '*.txt' -o -name '*.md' \) -mtime -120 \
+    -exec cp -f {} records/ \; 2>/dev/null
+# 处置台账
+[ -f "$SRC_RECORDS/incident-log.tsv" ] && cp -f "$SRC_RECORDS/incident-log.tsv" ledger/
+
+# 2b. 清理源端已不存在的旧副本（避免历史文件（如误放的密钥）永久阻塞同步）
+for f in records/*.txt records/*.md manifests/*.sha256; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f")
+    case "$f" in
+        records/*)   [ -f "$SRC_RECORDS/$b" ] || rm -f "$f" ;;
+        manifests/*) [ -f "$SRC_BACKUP/$b" ]  || rm -f "$f" ;;
+    esac
+done
+
+# 3. 敏感信息扫描（命中即中止）
+leaks=$(grep -rIlE 'sk-[a-zA-Z0-9]{20,}|SMTP_PASS=[^_*]|LTAI[0-9A-Za-z]{12,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY|bdjwyriplyzrjcae' \
+        manifests records ledger 2>/dev/null | head -10)
+if [ -n "$leaks" ]; then
+    log "中止：以下文件中发现疑似密钥，请清理后重试："
+    echo "$leaks" | while read -r f; do log "  - $f"; done
+    exit 3
+fi
+
+# 4. 提交与推送
+if git status --porcelain | grep -q .; then
+    git add -A
+    git commit -q -m "sync: $(date '+%F %T') 服务器记录同步" || true
+    git -c credential.helper="store --file=$CRED_FILE" \
+        push origin HEAD >>"$LOG" 2>&1
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        log "推送失败（rc=$rc）"
+        exit 1
+    fi
+    log "已推送：$(git log --oneline -1)"
+else
+    log "无变化，跳过"
+fi
+exit 0

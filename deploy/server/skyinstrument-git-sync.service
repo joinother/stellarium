@@ -1,0 +1,9 @@
+[Unit]
+Description=Skyinstrument sync security records to Gitee
+After=network-online.target skyinstrument-daily-report.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-git-sync
+Nice=15

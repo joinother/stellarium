@@ -1,0 +1,11 @@
+[Unit]
+Description=Sync security records to Gitee daily at 08:30
+
+[Timer]
+OnCalendar=*-*-* 08:30:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=skyinstrument-git-sync.service
+
+[Install]
+WantedBy=timers.target
