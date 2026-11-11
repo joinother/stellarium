@@ -669,12 +669,17 @@ def main():
                 elif v == 'false_positive':
                     issues[:] = [(('低' if lv != '低' else lv), kd, w, dt) if w == rel else (lv, kd, w, dt)
                                  for lv, kd, w, dt in issues]
-    elif conf.get('LLM_KEY') and changed and not issues:
-        # 词库未命中，但内容有变更：逐段交给模型自由审查（最多 3 段）
+    # 词库未命中、但内容有变更的页面，同样要送 AI 自由审查。
+    # 注意：这里不能用"整站没有命中"作为条件——别的页面命中时，
+    # 这一页的新内容就再也没人看了（实测踩到过）。
+    hit_pages = {w for _lv, _kd, w, _dt in issues}
+    if conf.get('LLM_KEY') and changed:
         calls = 0
         for rel, old_n, new_n in changed:
             if calls >= 3:
                 break
+            if rel in hit_pages:
+                continue      # 该页已有规则命中，走上面的复核分支
             added = changed_text.get(rel, '')
             if len(added.strip()) < 10:
                 continue
