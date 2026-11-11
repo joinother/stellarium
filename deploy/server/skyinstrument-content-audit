@@ -15,11 +15,14 @@
 """
 import glob
 import html as htmllib
+import difflib
 import json
 import os
 import re
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 
 os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
@@ -27,6 +30,7 @@ os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 SITE_DIR = '/srv/skyinstrument/website/current'
 RECORDS = '/srv/skyinstrument/security-records'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
+AUDIT_CONF = '/etc/skyinstrument/audit.conf'   # 大模型判定层配置（可选）
 BASELINE = os.path.join(RECORDS, '.content-baseline.json')
 
 # 外部域名白名单：只允许出现这些
@@ -66,7 +70,9 @@ HIDDEN_RE = re.compile(
 SUSPICIOUS_RE = re.compile(r'<iframe|<object|<embed|\bonerror\s*=|javascript:\s*\w', re.I)
 LINK_RE = re.compile(r'href="(https?://[^"]+)"', re.I)
 
-issues = []   # (级别, 类别, 位置, 说明)
+issues = []        # (级别, 类别, 位置, 说明)
+hidden_by_page = {}  # 页面 -> 隐藏元素文字列表
+hard_risk_pages = set()  # 隐藏元素内含违禁词的页面（规则优先级最高）
 stats = []
 
 
@@ -87,9 +93,18 @@ def scan_file(path):
     raw = open(path, encoding='utf-8', errors='replace').read()
     text = visible_text(raw)
 
-    # 1 隐藏内容
+    # 1 隐藏内容（同时抽取隐藏区域的文字，供 AI 与硬风险判定使用）
+    w = None
+    hidden_texts = []
     for m in HIDDEN_RE.finditer(raw):
+        tail = raw[m.start():m.start() + 600]
+        inner = re.sub(r'<[^>]+>', ' ', tail)
+        inner = htmllib.unescape(re.sub(r'\s+', ' ', inner)).strip()
+        if inner:
+            hidden_texts.append(inner[:200])
         add('高', '隐藏内容', name, '发现隐藏元素：%s' % m.group(0)[:120])
+    if hidden_texts:
+        hidden_by_page[name] = hidden_texts
 
     # 2 违禁词
     for cat, words in BLOCK_WORDS.items():
@@ -97,6 +112,8 @@ def scan_file(path):
             if w in text:
                 idx = text.find(w)
                 add('高', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
+                if any(w in ht for ht in hidden_texts):
+                    hard_risk_pages.add(name)
 
     # 3 广告法极限词
     for w in AD_WORDS:
@@ -136,6 +153,7 @@ def main():
 
     # 变更检测：与上次基线比较文本长度变化
     changed = []
+    changed_text = {}
     if os.path.exists(BASELINE):
         try:
             base = json.load(open(BASELINE, encoding='utf-8'))
@@ -145,9 +163,44 @@ def main():
             old = base.get(name, '')
             if old != t:
                 changed.append((name, len(old), len(t)))
+                sm = difflib.SequenceMatcher(None, old, t)
+                added = ''.join(t[j1:j2] for tag, _i1, _i2, j1, j2 in sm.get_opcodes()
+                                if tag in ('insert', 'replace'))
+                changed_text[name] = added[:800]
     os.makedirs(RECORDS, exist_ok=True)
     with open(BASELINE, 'w', encoding='utf-8') as fh:
         json.dump(texts, fh, ensure_ascii=False)
+
+    # AI 判定层（可选）：仅对命中的页面与发生变更的页面调用，控制成本
+    ai_notes = []
+    conf = load_audit_conf()
+    if conf.get('LLM_KEY'):
+        by_page = {}
+        for level, kind, where, detail in issues:
+            by_page.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
+        calls = 0
+        for page, hits in list(by_page.items())[:4]:
+            if calls >= 5:
+                break
+            hidden = ' / '.join(hidden_by_page.get(page, []))[:300]
+            verdict = judge('rule_hit', page, {'rules': '; '.join(hits[:5]),
+                                               'hidden': hidden,
+                                               'excerpt': '; '.join(hits[:5])[:600]})
+            calls += 1
+            if page in hard_risk_pages:
+                verdict = {'verdict': 'risk', 'reason': '隐藏元素内含违禁词，规则优先（未采纳模型判断）'}
+            if verdict:
+                ai_notes.append((page, hits[:3], verdict))
+        if not issues and changed and calls < 5:
+            page, old_n, new_n = changed[0]
+            added = changed_text.get(page, '')
+            if len(added.strip()) >= 10:      # 变化太小就不打扰模型
+                verdict = judge('change', page, {
+                    'excerpt': '新增文字：' + added + '（字符数 %d -> %d）' % (old_n, new_n)})
+            else:
+                verdict = None
+            if verdict and verdict.get('verdict') != 'ok':
+                ai_notes.append((page, ['内容变更'], verdict))
 
     # 报告
     today = datetime.now().strftime('%Y%m%d')
@@ -169,6 +222,12 @@ def main():
             lines.append('| %s | %s | %s | %s |' % (level, kind, where, detail.replace('|', '/')))
     else:
         lines += ['', '**结论：未发现风险内容。**']
+    if ai_notes:
+        lines += ['', '## 大模型判定', '', '| 页面 | 触发项 | 判定 | 理由 |', '| --- | --- | --- | --- |']
+        for page, hits, verdict in ai_notes:
+            lines.append('| %s | %s | %s | %s |' % (
+                page, '；'.join(hits)[:80], verdict.get('verdict', '?'),
+                str(verdict.get('reason', ''))[:80].replace('|', '/')))
     report = '\n'.join(lines) + '\n'
     with open(report_path, 'w', encoding='utf-8') as fh:
         fh.write(report)
@@ -177,6 +236,73 @@ def main():
     if issues:
         send_mail(report, len(issues))
     sys.exit(1 if issues else 0)
+
+
+def load_audit_conf():
+    conf = {}
+    if not os.path.exists(AUDIT_CONF):
+        return conf
+    for line in open(AUDIT_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    return conf
+
+
+def judge(kind, page, payload):
+    """调用大模型判断规则命中或内容变更的性质。失败返回 None，绝不阻塞巡检。"""
+    conf = load_audit_conf()
+    if not conf.get('LLM_KEY'):
+        return None
+    if kind == 'rule_hit':
+        prompt = (
+            '你是网站内容合规审核员。某页面触发了本地规则，请判断是否属于真实风险。\n'
+            '判定要点：\n'
+            '1. 出现在隐藏元素（display:none 等）中的推广文字、链接，几乎都是恶意注入，判 risk；\n'
+            '2. 页面正文中的合规提示语、免责声明、禁止性举例，不应视为违规；\n'
+            '3. 只依据给出的实际文本判断，不要假设页面性质。\n'
+            '页面：%s\n规则命中：%s\n隐藏元素内文本：%s\n命中片段：%s\n\n'
+            '请只输出一行 JSON，不要解释：'
+            '{"verdict":"risk|false_positive|needs_review","reason":"不超过40字的中文理由"}'
+            % (page, payload['rules'], payload.get('hidden', '（无）'), payload['excerpt'])
+        )
+    else:
+        prompt = (
+            '你是网站内容合规审核员。某页面内容相对上次发生了变化，请判断是否引入违规内容'
+            '（涉政、涉黄、涉赌、涉诈、夸大宣传、个人信息泄露等）。\n'
+            '页面：%s\n变更摘要：%s\n\n'
+            '请只输出一行 JSON，不要解释：'
+            '{"verdict":"ok|risk|needs_review","reason":"不超过40字的中文理由"}'
+            % (page, payload['excerpt'])
+        )
+    body = json.dumps({
+        'model': conf.get('LLM_MODEL', 'deepseek-chat'),
+        'messages': [
+            {'role': 'system', 'content': '你是严谨的网站内容合规审核员，只输出 JSON。'},
+            {'role': 'user', 'content': prompt},
+        ],
+        'temperature': 0.1,
+        'max_tokens': 200,
+        'stream': False,
+    }).encode('utf-8')
+    req = urllib.request.Request(conf.get('LLM_ENDPOINT', 'https://api.deepseek.com/chat/completions'),
+                                 data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
+    try:
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        content = data['choices'][0]['message']['content'].strip()
+        content = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
+        m = re.search(r'\{.*\}', content, re.S)
+        if not m:
+            return {'verdict': 'needs_review', 'reason': '模型输出无法解析：' + content[:40]}
+        return json.loads(m.group(0))
+    except Exception as exc:  # noqa: BLE001
+        print('大模型判定失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
+        return None
 
 
 def send_mail(report, count):
