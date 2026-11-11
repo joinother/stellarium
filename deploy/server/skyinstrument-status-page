@@ -200,6 +200,9 @@ def main():
         ent = tr.get('entries') or []
         if ent:
             parts.append(row('主要入口', '，'.join('%s %d' % (k, v) for k, v in ent[:3]), True))
+        crawl = tr.get('crawlers') or {}
+        if crawl:
+            parts.append(row('搜索引擎抓取', '，'.join('%s %d' % (k, v) for k, v in crawl.items()), True))
         api = tr.get('api') or {}
         if api:
             parts.append(row('接口请求', '，'.join('%s %d' % (k, v)

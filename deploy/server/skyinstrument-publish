@@ -43,6 +43,10 @@ cp -a "$SRC"/. "$NEW"/
 if [ -d /srv/skyinstrument/seo ]; then
     cp -f /srv/skyinstrument/seo/robots.txt /srv/skyinstrument/seo/sitemap.xml \
           /srv/skyinstrument/seo/favicon.ico "$NEW"/ 2>/dev/null || true
+    # 搜索引擎验证文件（百度 baidu_verify_*、必应 BingSiteAuth.xml 等）
+    if [ -d /srv/skyinstrument/seo/verify ]; then
+        cp -f /srv/skyinstrument/seo/verify/* "$NEW"/ 2>/dev/null || true
+    fi
 fi
 
 # 3. 校验

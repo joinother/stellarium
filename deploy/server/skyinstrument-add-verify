@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# 把搜索引擎给的验证文件放进站点根目录，并长期保留。
+# 用法：skyinstrument-add-verify <本地文件路径>
+set -euo pipefail
+SRC=${1:-}
+[ -f "$SRC" ] || { echo "用法：skyinstrument-add-verify <文件>"; exit 2; }
+NAME=$(basename "$SRC")
+case "$NAME" in
+    *.html|*.xml|*.txt) ;;
+    *) echo "只接受 html/xml/txt 验证文件"; exit 2 ;;
+esac
+KEEP=/srv/skyinstrument/seo/verify
+ROOT=/srv/skyinstrument/website/current
+mkdir -p "$KEEP"
+install -m 644 "$SRC" "$KEEP/$NAME"
+install -m 644 "$SRC" "$ROOT/$NAME"
+echo "已放置：/$NAME（站点根目录），并留存到 $KEEP/$NAME"
+echo "验证地址：https://skyinstrument.cn/$NAME"
