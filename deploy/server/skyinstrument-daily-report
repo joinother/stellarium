@@ -20,6 +20,7 @@ AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
 PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'
 MIRROR_MANIFEST = '/srv/tle-mirror/v1/manifest.json'
 IMAGE_HASHES = '/var/lib/skyinstrument/image-hashes.json'
+TRAFFIC = '/var/lib/skyinstrument/traffic-stats.json'
 MIRROR_STALE_HOURS = 24      # 星历每 3 小时更新，超过 24 小时视为停更
 MIRROR_CRITICAL_HOURS = 72   # 超过 72 小时视为重大异常
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
@@ -115,6 +116,23 @@ def ai_anomaly():
         return '今日调用 %d 次，为本月日均 %.1f 次的 %.1f 倍，请确认是否异常' % (
             cur, avg, cur / avg)
     return None
+
+
+def traffic_line():
+    try:
+        import json as _j
+        d = _j.load(open(TRAFFIC, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return '无数据', []
+    t = d.get('today') or {}
+    up = d.get('upstream') or {}
+    notes = []
+    if t.get('error_5xx'):
+        notes.append('今日出现 %d 次 5xx，需检查服务' % t['error_5xx'])
+    txt = 'PV %d，独立 IP %d，扫描 %d 次' % (t.get('total', 0), t.get('ips', 0), t.get('scan_hits', 0))
+    if up:
+        txt += '；和风 今日 %d 次 / 本月 %d 次' % (up.get('day', 0), up.get('month', 0))
+    return txt, notes
 
 
 def image_line():
@@ -233,6 +251,7 @@ def main():
     rows = [
         ('镜像数据', mirror, mirror_notes),
         ('图片审查', image_line(), []),
+        ('访问与接口',) + traffic_line(),
         ('巡检耗时', perf, perf_notes),
         ('AI 用量', ai_usage_line(), [_anom] if _anom else []),
         ('AI 本月累计', ai_month_line(), []),

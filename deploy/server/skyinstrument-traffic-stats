@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""从 nginx 访问日志汇总访问与接口概况，供状态页与日报使用。
+
+只做计数，不保存 IP。输出 /var/lib/skyinstrument/traffic-stats.json。
+"""
+import json
+import os
+import re
+import time
+from collections import Counter
+
+LOG = '/var/log/skyinstrument-website/access.log'
+OUT = '/var/lib/skyinstrument/traffic-stats.json'
+QW_USAGE = '/var/lib/nightwindow/qw-usage.json'
+# 日志格式：IP [时间] 方法 路径 状态 字节
+LINE = re.compile(r'^(\S+) \[([^\]]+)\] (\S+) (\S+) (\d{3}) (\S+)')
+
+
+def scan(path, since_ts):
+    total = 0
+    ips = set()
+    paths = Counter()
+    status = Counter()
+    api = Counter()
+    limit_hit = 0
+    try:
+        fh = open(path, encoding='utf-8', errors='replace')
+    except Exception:  # noqa: BLE001
+        return None
+    with fh:
+        for line in fh:
+            m = LINE.match(line)
+            if not m:
+                continue
+            ts = m.group(2)[:19]
+            try:
+                t = time.mktime(time.strptime(ts, '%Y-%m-%dT%H:%M:%S'))
+            except ValueError:
+                continue
+            if t < since_ts:
+                continue
+            total += 1
+            ips.add(m.group(1))
+            p = m.group(4).split('?')[0]
+            code = m.group(5)
+            paths[p] += 1
+            status[code] += 1
+            api_path = p[4:] if p.startswith('/nw/') else p
+            if api_path.startswith('/v1/') and not api_path.startswith('/v1/models'):
+                api[api_path] += 1
+            if code == '429':
+                limit_hit += 1
+    return {'total': total, 'ips': len(ips), 'paths': paths,
+            'status': status, 'api': api, 'limit': limit_hit}
+
+
+def main():
+    now = time.localtime()
+    today0 = time.mktime((now.tm_year, now.tm_mon, now.tm_mday, 0, 0, 0, 0, 0, -1))
+    day = scan(LOG, today0)
+    week = scan(LOG, today0 - 6 * 86400)
+    if day is None:
+        return
+
+    def brief(s):
+        if not s:
+            return {}
+        return {
+            'total': s['total'],
+            'ips': s['ips'],
+            'top': s['paths'].most_common(6),
+            'status': dict(s['status'].most_common(6)),
+            'api': dict(s['api'].most_common(8)),
+            'limit_hit': s['limit'],
+            'scan_hits': sum(v for k, v in s['status'].items() if k in ('444', '403')),
+            'error_4xx': sum(v for k, v in s['status'].items() if k.startswith('4')),
+            'error_5xx': sum(v for k, v in s['status'].items() if k.startswith('5')),
+        }
+
+    qw = {}
+    try:
+        qw = json.load(open(QW_USAGE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        pass
+
+    data = {
+        'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'today': brief(day),
+        'last7': brief(week),
+        'upstream': {'day': qw.get('dayCalls', 0), 'month': qw.get('monthCalls', 0),
+                     'source': '和风天气'},
+    }
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    tmp = OUT + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, OUT)
+    print('访问统计已更新：今日 %d 次，独立 IP %d' % (day['total'], day['ips']))
+
+
+if __name__ == '__main__':
+    main()

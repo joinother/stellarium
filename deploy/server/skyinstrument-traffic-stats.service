@@ -1,0 +1,9 @@
+[Unit]
+Description=Skyinstrument traffic statistics collector
+After=nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock -n /var/lib/skyinstrument/traffic.lock /usr/local/sbin/skyinstrument-traffic-stats
+Nice=19
+CPUQuota=20%

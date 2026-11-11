@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect traffic statistics every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+AccuracySec=60s
+Unit=skyinstrument-traffic-stats.service
+
+[Install]
+WantedBy=timers.target

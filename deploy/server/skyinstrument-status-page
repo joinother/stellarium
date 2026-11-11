@@ -19,6 +19,7 @@ RECORDS = '/srv/skyinstrument/security-records'
 MIRROR = '/srv/tle-mirror/v1/manifest.json'
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
 PERF = '/var/lib/skyinstrument/audit-perf.json'
+TRAFFIC = '/var/lib/skyinstrument/traffic-stats.json'
 INC_CONF = '/etc/skyinstrument-website/conf.d/incident.conf'
 UNITS = ['skyinstrument-website', 'nightwindow-api',
          'skyinstrument-content-audit.timer', 'skyinstrument-quickcheck.timer',
@@ -115,6 +116,14 @@ def blocks():
     return out
 
 
+def traffic():
+    try:
+        d = json.load(open(TRAFFIC, encoding='utf-8'))
+        return d.get('today', {}), d.get('upstream', {})
+    except Exception:  # noqa: BLE001
+        return {}, {}
+
+
 def backup_age():
     try:
         files = [f for f in os.listdir('/srv/backup') if f.startswith('site-') and f.endswith('.tar.gz')]
@@ -144,6 +153,7 @@ def main():
     calls, tokens = ai_today()
     bl = blocks()
     bage = backup_age()
+    tr, up = traffic()
 
     parts = [
         '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
@@ -176,6 +186,18 @@ def main():
     if sec is not None:
         parts.append(row('最近巡检', '%.1f 秒，%s 项问题（%s）' % (sec, issues, atime), sec < 60))
     parts.append(row('今日 AI 调用', '%d 次，%d token' % (calls, tokens), calls < 300))
+    if tr:
+        parts.append(row('今日访问', 'PV %d，独立 IP %d' % (tr.get('total', 0), tr.get('ips', 0)),
+                         True))
+        parts.append(row('扫描探测', '%d 次（444/403）' % tr.get('scan_hits', 0),
+                         tr.get('scan_hits', 0) < 500))
+        api = tr.get('api') or {}
+        if api:
+            parts.append(row('接口请求', '，'.join('%s %d' % (k, v)
+                             for k, v in list(api.items())[:4]), True))
+    if up:
+        parts.append(row('和风调用', '今日 %d 次，本月 %d 次' % (up.get('day', 0), up.get('month', 0)),
+                         up.get('day', 0) < 2000))
     # 拦截
     if bl:
         parts.append(row('当前拦截', '%d 条：%s' % (len(bl), '、'.join(x[0] for x in bl[:3])), False))
