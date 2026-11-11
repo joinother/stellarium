@@ -25,7 +25,7 @@
 | nginx 主配置 | 同上备份包（`nginx.conf`） | 也有一份在 git `deploy/server/nginx/` |
 | 拦截规则 | 同上备份包（`conf.d/incident.conf`） | 通常可为空 |
 | systemd 单元 | 同上备份包（`etc/systemd/system/`） | 也在 git `deploy/server/` |
-| 运维脚本 | git `deploy/server/` | 12 个脚本 |
+| 运维脚本 | git `deploy/server/` | 14 个脚本 |
 | 夜窗 API | git `deploy/server/nightwindow-api/server.js` | 原最大单点，已入库 |
 | 源码（我们的改动） | Gitee `yang-jiexuan000/stellarium-ohos-source` | 36 MB 快照 |
 | 安全记录 | Gitee `yang-jiexuan000/skyinstrument-ops-records`（私有） | 每日 08:30 自动推送 |
@@ -105,7 +105,7 @@ nginx -t -c /etc/skyinstrument-website/nginx.conf
 ## 5. 恢复脚本与服务
 
 ```bash
-# 5.1 运维脚本（12 个）
+# 5.1 运维脚本（14 个）
 cd /tmp && git clone https://github.com/joinother/stellarium.git repo
 install -m 755 repo/deploy/server/skyinstrument-* /usr/local/sbin/
 
