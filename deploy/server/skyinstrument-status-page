@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""生成只读状态页（静态 HTML，供 nginx 在 Basic Auth 后提供）。
+
+只读取系统状态，不执行任何写操作；页面本身不含任何操作按钮。
+"""
+import json
+import os
+import re
+import subprocess
+import time
+from datetime import datetime
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+OUT_DIR = '/srv/skyinstrument/status'
+OUT = os.path.join(OUT_DIR, 'index.html')
+RECORDS = '/srv/skyinstrument/security-records'
+MIRROR = '/srv/tle-mirror/v1/manifest.json'
+AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
+PERF = '/var/lib/skyinstrument/audit-perf.json'
+INC_CONF = '/etc/skyinstrument-website/conf.d/incident.conf'
+UNITS = ['skyinstrument-website', 'nightwindow-api',
+         'skyinstrument-content-audit.timer', 'skyinstrument-quickcheck.timer',
+         'skyinstrument-fullscan.timer', 'skyinstrument-daily-report.timer',
+         'skyinstrument-git-sync.timer', 'tle-mirror.timer']
+
+
+def run(cmd):
+    try:
+        return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              universal_newlines=True, timeout=10).stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ''
+
+
+def unit_state(name):
+    s = run(['systemctl', 'is-active', name])
+    return s or 'unknown'
+
+
+def disk():
+    try:
+        st = os.statvfs('/')
+        used = (st.f_blocks - st.f_bfree) * st.f_frsize
+        total = st.f_blocks * st.f_frsize
+        return int(used * 100 / total), round(total / 1024 ** 3, 1)
+    except Exception:  # noqa: BLE001
+        return -1, 0
+
+
+def mem():
+    try:
+        info = {}
+        for line in open('/proc/meminfo'):
+            k, v = line.split(':')
+            info[k] = int(v.strip().split()[0])
+        total = info['MemTotal']
+        avail = info.get('MemAvailable', info.get('MemFree', 0))
+        return int((total - avail) * 100 / total), round(total / 1024 ** 2)
+    except Exception:  # noqa: BLE001
+        return -1, 0
+
+
+def cert_days():
+    out = run(['bash', '-c',
+               "echo | openssl s_client -connect 127.0.0.1:443 -servername skyinstrument.cn "
+               "2>/dev/null | openssl x509 -noout -enddate"])
+    m = re.search(r'notAfter=(.+)', out)
+    if not m:
+        return None
+    try:
+        from email.utils import parsedate_to_datetime
+        exp = parsedate_to_datetime(m.group(1))
+        return (exp - datetime.now(exp.tzinfo)).days
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def mirror_age():
+    try:
+        d = json.load(open(MIRROR, encoding='utf-8'))
+        ts = datetime.strptime(d['generatedAt'].replace('Z', ''), '%Y-%m-%dT%H:%M:%S.%f')
+        return round((datetime.utcnow() - ts).total_seconds() / 3600, 1)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def last_audit():
+    try:
+        d = json.load(open(PERF, encoding='utf-8'))
+        return d.get('seconds'), d.get('issues'), time.strftime('%m-%d %H:%M', time.localtime(d.get('time', 0)))
+    except Exception:  # noqa: BLE001
+        return None, None, ''
+
+
+def ai_today():
+    try:
+        d = json.load(open(AI_USAGE, encoding='utf-8')).get(time.strftime('%Y-%m-%d'), {})
+        return d.get('calls', 0), d.get('prompt_tokens', 0) + d.get('completion_tokens', 0)
+    except Exception:  # noqa: BLE001
+        return 0, 0
+
+
+def blocks():
+    out = []
+    try:
+        for line in open(INC_CONF, encoding='utf-8'):
+            m = re.search(r'location = (\S+)', line)
+            t = re.search(r'incident (\d{8}-\d{6})', line)
+            if m:
+                out.append((m.group(1), t.group(1) if t else '?'))
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def backup_age():
+    try:
+        files = [f for f in os.listdir('/srv/backup') if f.startswith('site-') and f.endswith('.tar.gz')]
+        if not files:
+            return None
+        newest = max(files)
+        ts = os.path.getmtime(os.path.join('/srv/backup', newest))
+        return round((time.time() - ts) / 3600, 1), newest
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def row(label, value, ok=True):
+    color = '#0a7d32' if ok else '#b3261e'
+    return ('<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#57606a">%s</td>'
+            '<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:%s">%s</td></tr>'
+            % (label, color, value))
+
+
+def main():
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    disk_pct, disk_gb = disk()
+    mem_pct, mem_gb = mem()
+    days = cert_days()
+    mage = mirror_age()
+    sec, issues, atime = last_audit()
+    calls, tokens = ai_today()
+    bl = blocks()
+    bage = backup_age()
+
+    parts = [
+        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        '<meta name="robots" content="noindex,nofollow">',
+        '<title>星象仪 · 运行状态</title></head>',
+        '<body style="margin:0;background:#0b0d13;color:#e6e6e6;'
+        'font-family:-apple-system,PingFang SC,Microsoft YaHei,sans-serif">',
+        '<div style="max-width:680px;margin:0 auto;padding:20px 16px 48px">',
+        '<h1 style="font-size:20px;margin:8px 0 4px">星象仪 · 运行状态</h1>',
+        '<p style="color:#8b949e;font-size:13px;margin:0 0 18px">生成于 %s（每 5 分钟刷新，只读）</p>' % now,
+        '<table style="width:100%;border-collapse:collapse;background:#11141b;border-radius:8px;'
+        'overflow:hidden;font-size:14px">',
+    ]
+
+    # 服务
+    for u in UNITS:
+        st = unit_state(u)
+        parts.append(row(u, st, st == 'active'))
+    # 资源
+    parts.append(row('磁盘', '%d%%（共 %.0f GB）' % (disk_pct, disk_gb), 0 <= disk_pct < 85))
+    parts.append(row('内存', '%d%%（共 %.0f GB）' % (mem_pct, mem_gb), 0 <= mem_pct < 90))
+    if days is not None:
+        parts.append(row('证书剩余', '%d 天' % days, days > 14))
+    if mage is not None:
+        parts.append(row('镜像数据', '%.1f 小时前更新' % mage, mage < 24))
+    if bage:
+        parts.append(row('最近备份', '%.1f 小时前（%s）' % (bage[0], bage[1]), bage[0] < 26))
+    # 巡检
+    if sec is not None:
+        parts.append(row('最近巡检', '%.1f 秒，%s 项问题（%s）' % (sec, issues, atime), sec < 60))
+    parts.append(row('今日 AI 调用', '%d 次，%d token' % (calls, tokens), calls < 300))
+    # 拦截
+    if bl:
+        parts.append(row('当前拦截', '%d 条：%s' % (len(bl), '、'.join(x[0] for x in bl[:3])), False))
+    else:
+        parts.append(row('当前拦截', '无', True))
+
+    parts += [
+        '</table>',
+        '<p style="color:#3d4450;font-size:12px;margin-top:16px">'
+        '本页仅展示状态，不提供任何操作入口。</p>',
+        '</div></body></html>',
+    ]
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    tmp = OUT + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(parts))
+    os.replace(tmp, OUT)
+    os.chmod(OUT, 0o644)
+    print('已生成 %s' % OUT)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyinstrument read-only status page generator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock -n /var/lib/skyinstrument/status.lock /usr/local/sbin/skyinstrument-status-page
+Nice=19
+CPUQuota=20%

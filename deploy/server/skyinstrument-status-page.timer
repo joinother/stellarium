@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh status page every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+Unit=skyinstrument-status-page.service
+
+[Install]
+WantedBy=timers.target
