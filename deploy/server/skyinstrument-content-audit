@@ -27,6 +27,7 @@ from datetime import datetime
 
 os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
+NGINX_CONF = '/etc/skyinstrument-website/nginx.conf'
 SITE_DIR = '/srv/skyinstrument/website/current'
 RECORDS = '/srv/skyinstrument/security-records'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
@@ -60,6 +61,18 @@ AD_WORDS = ['最好的', '最佳', '最高级', '国家级', '世界级', '第�
             '永久免费', '终身免费', '100%', '绝对准确', '绝对精准', '独家代理', '唯一指定',
             '领先全球', '顶级品质', '史无前例', '万能']
 
+# 文本类扩展名（按内容扫描）
+TEXT_EXT = {'.html', '.htm', '.txt', '.json', '.csv', '.xml', '.js', '.css', '.md', '.3le', '.tle'}
+# 图片类扩展名（校验魔数与内嵌脚本）
+IMAGE_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico'}
+# 构建产物与字体：不做文本规则扫描（JS/CSS 里必然含 javascript:、100% 等字样），
+# 其完整性由每日备份哈希清单覆盖；仅做魔数/夹带检查
+CODE_EXT = {'.js', '.mjs', '.css', '.map'}
+OTHER_OK_EXT = {'.woff', '.woff2', '.ttf'}
+# 单文件扫描上限：超出只算哈希不读内容，避免大文件拖慢巡检
+MAX_SCAN_BYTES = 4 * 1024 * 1024
+MAX_FILES = 20000
+
 PHONE_RE = re.compile(r'(?<!\d)1[3-9]\d{9}(?!\d)')
 EMAIL_RE = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
 EMAIL_ALLOW = {'1134873571@qq.com'}
@@ -80,6 +93,89 @@ def add(level, kind, where, detail):
     issues.append((level, kind, where, detail))
 
 
+def discover_served_dirs():
+    """从 nginx 配置里解析 root / alias，自动覆盖现在与将来新增的被服务目录。"""
+    dirs = []
+    if os.path.exists(NGINX_CONF):
+        for line in open(NGINX_CONF, encoding='utf-8', errors='replace'):
+            line = line.strip()
+            m = re.match(r'(root|alias)\s+([^;]+);', line)
+            if not m:
+                continue
+            path = m.group(2).strip()
+            if not path.startswith('/'):
+                continue
+            # alias 指向 /x/y/ 时取其目录本身；root 同
+            if os.path.isdir(path):
+                dirs.append(os.path.normpath(path))
+    if os.path.isdir(SITE_DIR):
+        dirs.append(os.path.normpath(SITE_DIR))
+    # 去重，且去掉被其他目录包含的子目录（子目录会被递归覆盖）
+    uniq = sorted(set(dirs))
+    kept = []
+    for d in uniq:
+        if not any(d != k and d.startswith(k + os.sep) for k in uniq):
+            kept.append(d)
+    return kept
+
+
+def classify(path):
+    ext = os.path.splitext(path)[1].lower()
+    if ext in CODE_EXT:
+        return 'code'
+    if ext in TEXT_EXT:
+        return 'text'
+    if ext in IMAGE_EXT:
+        return 'image'
+    if ext in OTHER_OK_EXT:
+        return 'asset'
+    return 'unexpected'
+
+
+def check_binary(path, rel):
+    """图片与资产：校验魔数，检查是否夹带脚本或可执行内容。"""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        with open(path, 'rb') as fh:
+            head = fh.read(4096)
+    except Exception as exc:  # noqa: BLE001
+        add('中', '文件不可读', rel, str(exc)[:80])
+        return
+    magic = {
+        '.png': b'\x89PNG', '.jpg': b'\xff\xd8\xff', '.jpeg': b'\xff\xd8\xff',
+        '.gif': b'GIF8', '.webp': b'RIFF', '.ico': b'\x00\x00\x01\x00',
+        '.woff': b'wOFF', '.woff2': b'wOF2', '.ttf': b'\x00\x01\x00\x00',
+    }.get(ext)
+    if magic and not head.startswith(magic):
+        add('中', '文件魔数不符', rel, '扩展名 %s 但内容不是该格式' % ext)
+    low = head.lower()
+    for sig in (b'<script', b'<?php', b'#!/'):
+        if sig in low:
+            add('高', '资产夹带脚本', rel, '在 %s 文件中发现 %s' % (ext, sig.decode()))
+
+
+def scan_text_data(text, rel):
+    """对数据文件（JSON/CSV/3LE 等）执行与网页相同的规则检查。"""
+    for cat, words in BLOCK_WORDS.items():
+        for w in words:
+            if w in text:
+                idx = text.find(w)
+                add('高', '违禁词/%s' % cat, rel,
+                    '命中「%s」：…%s…' % (w, text[max(0, idx - 30):idx + 30]))
+    for w in AD_WORDS:
+        if w in text:
+            idx = text.find(w)
+            add('中', '广告法极限词', rel,
+                '命中「%s」：…%s…' % (w, text[max(0, idx - 30):idx + 30]))
+    for m in LINK_RE.finditer(text):
+        host = re.sub(r'^https?://', '', m.group(1)).split('/')[0].split(':')[0].lower()
+        if not any(host == d or host.endswith('.' + d) for d in ALLOWED_DOMAINS):
+            add('中', '未登记外链', rel, m.group(1)[:120])
+    # 数据文件里出现脚本标签属于异常
+    for m in re.finditer(r'<script|<iframe|javascript:', text, re.I):
+        add('高', '数据夹带脚本', rel, text[max(0, m.start() - 20):m.start() + 40])
+
+
 def visible_text(raw):
     s = re.sub(r'<script.*?</script>', ' ', raw, flags=re.S | re.I)
     s = re.sub(r'<style.*?</style>', ' ', s, flags=re.S | re.I)
@@ -88,9 +184,7 @@ def visible_text(raw):
     return re.sub(r'\s+', ' ', s).strip()
 
 
-def scan_file(path):
-    name = os.path.basename(path)
-    raw = open(path, encoding='utf-8', errors='replace').read()
+def scan_html_rules(raw, name):
     text = visible_text(raw)
 
     # 1 隐藏内容（同时抽取隐藏区域的文字，供 AI 与硬风险判定使用）
@@ -141,17 +235,64 @@ def scan_file(path):
     for m in SUSPICIOUS_RE.finditer(raw):
         add('中', '可疑标签', name, m.group(0)[:80])
 
-    stats.append((name, len(raw), len(text)))
     return text
 
 
 def main():
-    files = sorted(glob.glob(os.path.join(SITE_DIR, '*.html')))
-    texts = {}
-    for f in files:
-        texts[os.path.basename(f)] = scan_file(f)
+    served = discover_served_dirs()
+    if not served:
+        served = [SITE_DIR]
+    files = []
+    for root_dir in served:
+        for dirpath, _dirnames, filenames in os.walk(root_dir):
+            for fn in sorted(filenames):
+                p = os.path.join(dirpath, fn)
+                if os.path.islink(p):
+                    continue
+                files.append(p)
+                if len(files) >= MAX_FILES:
+                    break
+            if len(files) >= MAX_FILES:
+                break
+    files = sorted(set(files))
 
-    # 变更检测：与上次基线比较文本长度变化
+    texts = {}
+    type_stat = {}
+    hash_list = []
+    skipped_big = 0
+
+    for p in files:
+        rel = os.path.relpath(p, os.path.dirname(served[0]) if len(served) == 1 else '/srv')
+        kind = classify(p)
+        type_stat[kind] = type_stat.get(kind, 0) + 1
+        try:
+            size = os.path.getsize(p)
+        except Exception:  # noqa: BLE001
+            size = -1
+        if size > MAX_SCAN_BYTES:
+            skipped_big += 1
+            hash_list.append((rel, size, 'skipped-big'))
+            continue
+
+        if kind == 'text':
+            try:
+                raw = open(p, encoding='utf-8', errors='replace').read()
+            except Exception as exc:  # noqa: BLE001
+                add('中', '文件不可读', rel, str(exc)[:80])
+                continue
+            text = visible_text(raw) if rel.endswith(('.html', '.htm')) else raw
+            texts[rel] = text
+            if rel.endswith(('.html', '.htm')):
+                scan_html_rules(raw, rel)
+            else:
+                scan_text_data(text, rel)
+        elif kind in ('image', 'asset', 'code'):
+            if kind in ('image', 'asset'):
+                check_binary(p, rel)
+        else:
+            add('中', '非常规文件类型', rel, '被服务目录中出现 %s 类型文件' % (os.path.splitext(p)[1] or '无扩展名'))
+
+    # 变更检测：仅对文本类文件
     changed = []
     changed_text = {}
     if os.path.exists(BASELINE):
@@ -166,67 +307,71 @@ def main():
                 sm = difflib.SequenceMatcher(None, old, t)
                 added = ''.join(t[j1:j2] for tag, _i1, _i2, j1, j2 in sm.get_opcodes()
                                 if tag in ('insert', 'replace'))
-                changed_text[name] = added[:800]
+                if added:
+                    changed_text[name] = added[:800]
     os.makedirs(RECORDS, exist_ok=True)
     with open(BASELINE, 'w', encoding='utf-8') as fh:
         json.dump(texts, fh, ensure_ascii=False)
 
-    # AI 判定层（可选）：仅对命中的页面与发生变更的页面调用，控制成本
+    # AI 判定层
     ai_notes = []
     conf = load_audit_conf()
-    if conf.get('LLM_KEY'):
-        by_page = {}
+    if conf.get('LLM_KEY') and issues:
+        by_file = {}
         for level, kind, where, detail in issues:
-            by_page.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
+            by_file.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
         calls = 0
-        for page, hits in list(by_page.items())[:4]:
+        for rel, hits in list(by_file.items())[:4]:
             if calls >= 5:
                 break
-            hidden = ' / '.join(hidden_by_page.get(page, []))[:300]
-            verdict = judge('rule_hit', page, {'rules': '; '.join(hits[:5]),
-                                               'hidden': hidden,
-                                               'excerpt': '; '.join(hits[:5])[:600]})
+            verdict = judge('rule_hit', rel, {'rules': '; '.join(hits[:5]),
+                                              'hidden': ' / '.join(hidden_by_page.get(rel, []))[:300],
+                                              'excerpt': '; '.join(hits[:5])[:600]})
             calls += 1
-            if page in hard_risk_pages:
+            if rel in hard_risk_pages:
                 verdict = {'verdict': 'risk', 'reason': '隐藏元素内含违禁词，规则优先（未采纳模型判断）'}
             if verdict:
-                ai_notes.append((page, hits[:3], verdict))
-        if not issues and changed and calls < 5:
-            page, old_n, new_n = changed[0]
-            added = changed_text.get(page, '')
-            if len(added.strip()) >= 10:      # 变化太小就不打扰模型
-                verdict = judge('change', page, {
-                    'excerpt': '新增文字：' + added + '（字符数 %d -> %d）' % (old_n, new_n)})
-            else:
-                verdict = None
+                ai_notes.append((rel, hits[:3], verdict))
+    elif conf.get('LLM_KEY') and changed and not issues:
+        rel, old_n, new_n = changed[0]
+        added = changed_text.get(rel, '')
+        if len(added.strip()) >= 10:
+            verdict = judge('change', rel, {'excerpt': '新增文字：' + added + '（字符数 %d -> %d）' % (old_n, new_n)})
             if verdict and verdict.get('verdict') != 'ok':
-                ai_notes.append((page, ['内容变更'], verdict))
+                ai_notes.append((rel, ['内容变更'], verdict))
 
     # 报告
     today = datetime.now().strftime('%Y%m%d')
     report_path = os.path.join(RECORDS, 'content-audit-%s.txt' % today)
     lines = ['# 内容巡检报告', '',
              '- 检查时间：%s' % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-             '- 页面数：%d，问题数：%d' % (len(files), len(issues)), '',
-             '| 页面 | 原始字节 | 纯文本字符 |', '| --- | --- | --- |']
-    for name, raw_len, txt_len in stats:
-        lines.append('| %s | %d | %d |' % (name, raw_len, txt_len))
+             '- 巡检目录：%s' % '、'.join(served),
+             '- 文件总数：%d，问题数：%d' % (len(files), len(issues)), '',
+             '| 目录 | 文件数 |', '| --- | --- |']
+    for d in served:
+        n = sum(1 for f in files if f.startswith(d))
+        lines.append('| %s | %d |' % (d, n))
+    lines += ['', '| 文件类型 | 数量 |', '| --- | --- |']
+    for k, v in sorted(type_stat.items(), key=lambda x: -x[1]):
+        lines.append('| %s | %d |' % (k, v))
+    if skipped_big:
+        lines += ['', '说明：%d 个超过 %d MB 的文件仅记录大小，未做内容扫描。' % (skipped_big, MAX_SCAN_BYTES // 1024 // 1024)]
     if changed:
-        lines += ['', '## 与上次基线相比有变化的页面', '',
-                  '| 页面 | 原字符数 | 现字符数 |', '| --- | --- | --- |']
-        for name, o, n in changed:
+        lines += ['', '## 与上次基线相比有变化的文本文件', '',
+                  '| 文件 | 原字符数 | 现字符数 |', '| --- | --- | --- |']
+        for name, o, n in changed[:30]:
             lines.append('| %s | %d | %d |' % (name, o, n))
     if issues:
         lines += ['', '## 发现问题', '', '| 级别 | 类别 | 位置 | 说明 |', '| --- | --- | --- | --- |']
-        for level, kind, where, detail in issues:
+        for level, kind, where, detail in issues[:80]:
             lines.append('| %s | %s | %s | %s |' % (level, kind, where, detail.replace('|', '/')))
     else:
         lines += ['', '**结论：未发现风险内容。**']
     if ai_notes:
-        lines += ['', '## 大模型判定', '', '| 页面 | 触发项 | 判定 | 理由 |', '| --- | --- | --- | --- |']
-        for page, hits, verdict in ai_notes:
+        lines += ['', '## 大模型判定', '', '| 文件 | 触发项 | 判定 | 理由 |', '| --- | --- | --- | --- |']
+        for rel, hits, verdict in ai_notes:
             lines.append('| %s | %s | %s | %s |' % (
-                page, '；'.join(hits)[:80], verdict.get('verdict', '?'),
+                rel, '；'.join(hits)[:80], verdict.get('verdict', '?'),
                 str(verdict.get('reason', ''))[:80].replace('|', '/')))
     report = '\n'.join(lines) + '\n'
     with open(report_path, 'w', encoding='utf-8') as fh:
@@ -258,21 +403,22 @@ def judge(kind, page, payload):
         return None
     if kind == 'rule_hit':
         prompt = (
-            '你是网站内容合规审核员。某页面触发了本地规则，请判断是否属于真实风险。\n'
+            '你是网站内容合规审核员。某文件触发了本地规则，请判断是否属于真实风险。\n'
             '判定要点：\n'
             '1. 出现在隐藏元素（display:none 等）中的推广文字、链接，几乎都是恶意注入，判 risk；\n'
             '2. 页面正文中的合规提示语、免责声明、禁止性举例，不应视为违规；\n'
-            '3. 只依据给出的实际文本判断，不要假设页面性质。\n'
-            '页面：%s\n规则命中：%s\n隐藏元素内文本：%s\n命中片段：%s\n\n'
+            '3. 卫星轨道数据（JSON/CSV/3LE）中出现推广文案、外链，属于异常，判 risk；\n'
+            '4. 只依据给出的实际文本判断，不要假设文件性质。\n'
+            '文件：%s\n规则命中：%s\n隐藏元素内文本：%s\n命中片段：%s\n\n'
             '请只输出一行 JSON，不要解释：'
             '{"verdict":"risk|false_positive|needs_review","reason":"不超过40字的中文理由"}'
             % (page, payload['rules'], payload.get('hidden', '（无）'), payload['excerpt'])
         )
     else:
         prompt = (
-            '你是网站内容合规审核员。某页面内容相对上次发生了变化，请判断是否引入违规内容'
-            '（涉政、涉黄、涉赌、涉诈、夸大宣传、个人信息泄露等）。\n'
-            '页面：%s\n变更摘要：%s\n\n'
+            '你是网站内容合规审核员。某文件内容相对上次发生了变化，请判断是否引入违规内容'
+            '（涉政、涉黄、涉赌、涉诈、夸大宣传、个人信息泄露、异常外链等）。\n'
+            '文件：%s\n变更摘要：%s\n\n'
             '请只输出一行 JSON，不要解释：'
             '{"verdict":"ok|risk|needs_review","reason":"不超过40字的中文理由"}'
             % (page, payload['excerpt'])
