@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""星象仪每日安全汇总（固定 08:00 发送，无论有无异常）。
+
+内容：服务器自检、内容巡检、哈希比对、定时器状态、最近处置记录。
+无异常时也发一封"全部正常"，作为持续性证明与留档。
+"""
+import glob
+import os
+import re
+import subprocess
+import sys
+from datetime import datetime
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+RECORDS = '/srv/skyinstrument/security-records'
+MAIL_CONF = '/etc/skyinstrument/mail.conf'
+INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
+
+
+def read_latest(pattern):
+    files = sorted(glob.glob(os.path.join(RECORDS, pattern)))
+    if not files:
+        return None, ''
+    try:
+        return files[-1], open(files[-1], encoding='utf-8', errors='replace').read()
+    except Exception:  # noqa: BLE001
+        return files[-1], ''
+
+
+def summarize_health(text):
+    m = re.search(r'检查项：(\d+)，异常：(\d+)', text)
+    items = re.findall(r'\| ([^|]+?) \| (通过|\*\*异常\*\*) \|', text)
+    fails = [i[0].strip() for i in items if '异常' in i[1]]
+    return (m.group(1), m.group(2), fails) if m else ('?', '?', [])
+
+
+def summarize_audit(text):
+    m = re.search(r'文件总数：(\d+)，问题数：(\d+)', text)
+    items = re.findall(r'\| (高|中) \| ([^|]+?) \| ([^|]+?) \|', text)
+    return (m.group(1), m.group(2), items) if m else ('?', '?', [])
+
+
+def summarize_hash(text):
+    m = re.search(r'差异行数：(\d+)', text)
+    return m.group(1) if m else '?'
+
+
+def timers():
+    try:
+        out = subprocess.run(['systemctl', 'list-timers', 'skyinstrument-*', '--no-pager'],
+                             stdout=subprocess.PIPE, universal_newlines=True, timeout=15).stdout
+        return [l for l in out.splitlines() if 'skyinstrument' in l]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def main():
+    hf, htext = read_latest('healthcheck-*.txt')
+    af, atext = read_latest('content-audit-*.txt')
+    df, dtext = read_latest('hash-diff-*.txt')
+
+    h_total, h_fail, h_fails = summarize_health(htext)
+    a_total, a_issues, a_items = summarize_audit(atext)
+    h_diff = summarize_hash(dtext)
+
+    all_ok = (h_fail in ('0', '?')) and (a_issues in ('0', '?')) and (h_diff in ('0', '?'))
+
+    rows = [
+        ('服务器自检', '%s 项，异常 %s' % (h_total, h_fail), h_fails),
+        ('内容巡检', '%s 个文件，问题 %s' % (a_total, a_issues),
+         ['%s：%s（%s）' % (i[0], i[1].strip(), i[2].strip()) for i in a_items[:6]]),
+        ('文件哈希比对', '差异 %s 行' % h_diff, []),
+    ]
+
+    body_txt = ['星象仪每日安全汇总', '时间：' + datetime.now().strftime('%Y-%m-%d %H:%M:%S'), '']
+    body_html = ['<div style="font-family:-apple-system,PingFang SC,Microsoft YaHei,sans-serif;'
+                 'max-width:720px;margin:0 auto;font-size:14px;color:#1f2328">',
+                 '<h2 style="margin:0 0 4px">星象仪 · 每日安全汇总</h2>',
+                 '<p style="margin:0 0 14px;color:#57606a;font-size:13px">%s</p>'
+                 % datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                 '<p style="margin:0 0 16px;padding:10px 14px;border-radius:6px;'
+                 'background:%s;color:#fff;font-weight:600;display:inline-block">%s</p>'
+                 % (('#0a7d32', '全部正常') if all_ok else ('#b3261e', '存在需关注的问题')),
+                 '<table style="border-collapse:collapse;width:100%;font-size:13px">',
+                 '<thead><tr style="background:#f6f8fa">'
+                 '<th style="padding:8px 10px;border:1px solid #d0d7de;text-align:left">项目</th>'
+                 '<th style="padding:8px 10px;border:1px solid #d0d7de;text-align:left">结果</th>'
+                 '</tr></thead><tbody>']
+    for name, result, details in rows:
+        body_txt.append('%s：%s' % (name, result))
+        extra = ''
+        if details:
+            extra = '<div style="color:#b3261e;font-size:12px;margin-top:4px">' + '<br>'.join(details) + '</div>'
+            body_txt.extend('  - ' + d for d in details)
+        body_html.append('<tr><td style="padding:8px 10px;border:1px solid #d0d7de">%s</td>'
+                         '<td style="padding:8px 10px;border:1px solid #d0d7de">%s%s</td></tr>'
+                         % (name, result, extra))
+    body_html.append('</tbody></table>')
+
+    trows = timers()
+    body_txt.append('')
+    body_txt.append('定时任务：')
+    body_txt.extend('  ' + t.strip() for t in trows)
+    body_html.append('<h3 style="margin:18px 0 6px;font-size:14px">定时任务</h3>'
+                     '<pre style="background:#f6f8fa;padding:10px;border-radius:6px;'
+                     'font-size:12px;overflow:auto">%s</pre>' % '\n'.join(trows))
+
+    if os.path.exists(INCIDENT_LOG):
+        lines = open(INCIDENT_LOG, encoding='utf-8').read().splitlines()[-5:]
+        body_txt.append('')
+        body_txt.append('最近处置记录：')
+        body_txt.extend('  ' + l.replace('\t', ' | ') for l in lines)
+        body_html.append('<h3 style="margin:18px 0 6px;font-size:14px">最近处置记录</h3>'
+                         '<pre style="background:#f6f8fa;padding:10px;border-radius:6px;'
+                         'font-size:12px;overflow:auto">%s</pre>'
+                         % '\n'.join(l.replace('\t', ' | ') for l in lines))
+
+    body_html.append('<p style="margin:16px 0 0;color:#57606a;font-size:12px">'
+                     '本邮件每天 08:00 定时发送；紧急问题会单独即时告警。</p></div>')
+    text = '\n'.join(body_txt)
+    html = ''.join(body_html)
+
+    out = os.path.join(RECORDS, 'daily-report-%s.txt' % datetime.now().strftime('%Y%m%d'))
+    with open(out, 'w', encoding='utf-8') as fh:
+        fh.write(text + '\n')
+    print(text)
+
+    if not os.path.exists(MAIL_CONF):
+        print('未配置 mail.conf，跳过发信', file=sys.stderr)
+        return 0
+    conf = {}
+    for line in open(MAIL_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    try:
+        import smtplib
+        from email.header import Header
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.utils import formataddr
+
+        msg = MIMEMultipart('alternative')
+        msg.attach(MIMEText(text, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html, 'html', 'utf-8'))
+        msg['Subject'] = Header('[星象仪日报] %s %s' % (
+            datetime.now().strftime('%m-%d'), '全部正常' if all_ok else '有需关注问题'), 'utf-8')
+        msg['From'] = formataddr(('星象仪日报', conf['SMTP_USER']))
+        msg['To'] = conf['MAIL_TO']
+        port = int(conf.get('SMTP_PORT', '465'))
+        s = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20) if port == 465 else smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
+        if port != 465:
+            s.starttls()
+        s.login(conf['SMTP_USER'], conf['SMTP_PASS'])
+        s.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
+        s.quit()
+        print('日报已发送至 %s' % conf['MAIL_TO'])
+    except Exception as exc:  # noqa: BLE001
+        print('日报发送失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

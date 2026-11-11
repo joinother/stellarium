@@ -34,6 +34,10 @@ os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 
 results = []
 
+# 只有这些项目失败才即时发信；其余问题留到每日 08:00 的汇总邮件
+CRITICAL_ITEMS = ('磁盘使用率低于 85%', '证书剩余大于 14 天', '本机访问首页返回 200',
+                  'skyinstrument-website.service 处于活动状态', '备份在 26 小时内')
+
 
 def add(name, ok, detail):
     results.append((name, ok, detail))
@@ -176,7 +180,11 @@ def build_html(rows, failed_count):
 
 
 # 发信
-if failed and os.path.exists(MAIL_CONF):
+critical_failed = [r for r in failed if r[0] in CRITICAL_ITEMS]
+if failed and not critical_failed:
+    print('存在 %d 项非关键问题，留给每日汇总邮件' % len(failed))
+
+if critical_failed and os.path.exists(MAIL_CONF):
     conf = {}
     for line in open(MAIL_CONF, encoding='utf-8'):
         line = line.strip()
@@ -209,7 +217,7 @@ if failed and os.path.exists(MAIL_CONF):
         print('告警邮件已发送至 %s' % conf['MAIL_TO'])
     except Exception as exc:  # noqa: BLE001
         print('告警邮件发送失败：%s' % exc, file=sys.stderr)
-elif failed:
+elif critical_failed:
     print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
 
 if '--send-test' in sys.argv and not failed and os.path.exists(MAIL_CONF):

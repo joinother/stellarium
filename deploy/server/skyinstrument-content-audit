@@ -466,8 +466,16 @@ def main():
         fh.write(report)
     print(report)
 
-    if issues:
+    # 即时告警只用于紧急情况：出现高等级问题，或模型判定 risk。
+    # 其余（如未登记外链、广告法用词）留给每日 08:00 汇总，避免天天打扰。
+    # 即时告警的唯一标准：出现「高」等级问题（违禁词、隐藏内容、脚本夹带）。
+    # 广告法用词、「未登记外链」等中等级问题只在日报里体现——模型判定 risk 也不升级，
+    # 否则一句正常文案里的极限用词就会立刻发信，失去"仅紧急才打扰"的意义。
+    critical = any(level == '高' for level, _k, _w, _d in issues)
+    if issues and critical:
         send_mail(report, len(issues))
+    elif issues:
+        print('存在 %d 项非紧急问题，留给每日汇总邮件' % len(issues))
     sys.exit(1 if issues else 0)
 
 

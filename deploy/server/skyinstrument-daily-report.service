@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyinstrument daily security summary email
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target skyinstrument-content-audit.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-daily-report
+Nice=10
