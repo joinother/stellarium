@@ -103,6 +103,9 @@ export class LocationController {
   // 设备定位（GPS：隐私门禁 → 权限 → 定位 → setPickerLocation → applyPickerLocation）。
   // 4 处门禁（初始 + 权限后 + 定位后）经 hooks；权限/定位经 LocationPort。
   async useDeviceLocation(): Promise<void> {
+    // GPS fixes and GNSS altitude are Earth-only. Other bodies must use the
+    // offline place altitude (usually 0).
+    if (this.sessionToolStore.observerPlanet !== 'Earth') return
     if (this.deviceLocationRequestInProgress || !this.hooks.privacyAllowed() ||
       !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
     this.deviceLocationRequestInProgress = true
@@ -195,10 +198,13 @@ export class LocationController {
   }
 
   // 切换观测星球（本 store 只读 observerPlanet，写经 hooks）。
+  // GPS/海拔只在地球有效；切到其他天体时不沿用地球海拔，默认 0。
+  // 若用户随后选择带海拔的离线地点，selectSearchLocation 会写入该地点的 alt。
   setObserverPlanet(name: string): void {
     if (name === this.sessionToolStore.observerPlanet) return
+    const altitude = name === 'Earth' ? this.pickerStore.locationPickerAltitude : 0
     this.setLocation(I18n.t('custom_location'), this.pickerStore.locationPickerLatitude,
-      this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, name, false, 'map')
+      this.pickerStore.locationPickerLongitude, altitude, name, false, 'map')
   }
 
   syncObserverFromNative(): void {
@@ -250,7 +256,9 @@ export class LocationController {
     const altitude = Number.isFinite(rec.altitude) ? rec.altitude : 0
     // 来源随观测点持久化；旧记录没有该字段时回落 named（按名称显示）。
     const source = typeof rec.source === 'string' && rec.source.length > 0 ? rec.source : 'named'
+    // GPS altitude is Earth-only; discard old non-Earth GPS records.
+    const restoredAltitude = planet !== 'Earth' && source === 'gps' ? 0 : altitude
     hilog.info(0x0000, 'StellariumArkUI', '[location] restoring persisted observer location')
-    this.setLocation(name, rec.latitude, rec.longitude, altitude, planet, true, source)
+    this.setLocation(name, rec.latitude, rec.longitude, restoredAltitude, planet, true, source)
   }
 }

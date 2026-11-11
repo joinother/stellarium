@@ -8366,9 +8366,28 @@ export struct WindowNativeNode {
           longitude: this.locationPickerStore.locationPickerLongitude,
           mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
           mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
-          onPick: (latitude: number, longitude: number) => {
+          // The local globe needs no native engine or online map service; it
+          // still follows the app's privacy consent, but not the native startup
+          // gate that the online Petal map requires.
+          localGlobeAllowed: this.applicationInForeground && hasCurrentPrivacyConsent(),
+          expandedLayout: this.isExpandedLayout,
+          skyWidth: this.skyWidth,
+          skyHeight: this.skyHeight,
+          altitude: this.locationPickerStore.locationPickerAltitude,
+          altitudeSource: this.locationPickerStore.locationSource,
+          locationName: this.locationPickerStore.locationPickerName,
+          locationPort: this.hostLocationPort,
+          planetLabel: (en: string) => planetZh(en),
+          contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
+          onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {
+            this.locationPickerStore.locationPickerName = name
+            this.locationPickerStore.locationPickerAltitude = Math.round(altitude)
+            this.locationPickerStore.locationSource = source
             this.locationPickerStore.applyPickedCoordinates(latitude, longitude)
             this.locationMapFullscreen = false
+            // "选此点" now applies the observer immediately; previously it
+            // only filled the draft and the user had to press Apply again.
+            this.locationCtl().applyPickerLocation()
           },
           onClose: () => { this.locationMapFullscreen = false }
         })
@@ -8652,7 +8671,6 @@ export struct WindowNativeNode {
         altitudeText: this.altitudeText,
         expandedLayout: this.isExpandedLayout,
         skyWidth: this.skyWidth,
-        mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
         fixedObserverPoint: this.sessionToolStore.isObserverOverviewPoint(),
         onOpenFullMap: () => { this.locationMapFullscreen = true },
         planetLabel: (en: string) => planetZh(en),
@@ -8663,9 +8681,6 @@ export struct WindowNativeNode {
         onInputBlur: () => { this.keyboardTextInputFocused = false },
         onPickSearchItem: (item: LocSearchItem) => { this.locationStore.selectSearchLocation(item) },
         onApply: () => { this.locationCtl().applyPickerLocation() },
-        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider) },
-        onPickMap: (latitude: number, longitude: number) => { this.locationPickerStore.applyPickedCoordinates(latitude, longitude) },
-        onMapFallback: () => { this.locationCtl().setLocationMapProvider('offline') },
         onSelectContinent: (c: string) => { this.locationCtl().selectContinent(c) },
         onSelectCountry: (c: string) => { this.locationCtl().selectCountry(c) },
         onSelectRegion: (r: string) => { this.locationCtl().selectRegion(r) },

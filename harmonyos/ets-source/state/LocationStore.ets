@@ -15,6 +15,22 @@ const LOCATION_SEARCH_CHUNK_MS: number = 32
 const LOCATION_SEARCH_CHUNK_DELAY_MS: number = 0
 const LOCATION_SEARCH_PUBLISH_MS: number = 120
 
+// 离线地点反查结果：全屏地图在在线底图上点选时，用城市离线表补海拔。
+export interface OfflinePlaceAltitude {
+  found: boolean
+  altitude: number
+  name: string
+}
+
+// 反查距离上限（约 150 km）：避免把大洋/无人区点选匹配到很远的内陆城市。
+const OFFLINE_ALTITUDE_MAX_DISTANCE_DEG: number = 1.5
+
+function normalizeOfflinePlaceName(value: string): string {
+  return value.trim().toLowerCase()
+    .replace(/特别行政区|自治区|自治州|地区|城市|市|县|区|盟|旗$/g, '')
+    .replace(/\s+/g, '')
+}
+
 // 位置域（「位置」面板）状态：离线地点搜索簇 + 已保存位置簇。
 //
 // 持有搜索框字段（locSearchQuery/Results/Searching/Debounce）与 savedLocations，以及离线分块
@@ -60,6 +76,69 @@ export class LocationStore {
   formatDegrees(value: number, positive: string, negative: string): string {
     const direction = value >= 0 ? positive : negative
     return Math.abs(value).toFixed(2) + '°' + direction
+  }
+
+  // 按城市名反查离线海拔。在线地图 reverseGeocode 返回的 locality/adminLevel2
+  // 可能是“拉萨市”“阿里地区”等行政区名，先去掉常见后缀再比对；同名城市取
+  // 距离当前点最近的一个。
+  altitudeForCityName(name: string, planet: string, latitude: number, longitude: number): OfflinePlaceAltitude {
+    const hooks = this.hooks
+    const query = normalizeOfflinePlaceName(name)
+    if (hooks === null || query.length === 0) return { found: false, altitude: 0, name: '' }
+    const cosLat = Math.cos(latitude * Math.PI / 180)
+    let bestDistance = Number.MAX_VALUE
+    let best: HierCity | null = null
+    for (const continent of Object.keys(LOCATION_HIERARCHY)) {
+      for (const region of Object.keys(LOCATION_HIERARCHY[continent])) {
+        for (const city of LOCATION_HIERARCHY[continent][region]) {
+          const cityPlanet = hooks.locationPlanet(city)
+          if (cityPlanet !== planet && cityPlanet.toLowerCase() !== planet.toLowerCase()) continue
+          const english = normalizeOfflinePlaceName(city.n)
+          const chinese = normalizeOfflinePlaceName(LOCATION_ZH_NAMES[city.n] ?? '')
+          if (english !== query && chinese !== query) continue
+          const distance = this.offlineCityDistance(city, latitude, longitude, cosLat)
+          if (distance < bestDistance) {
+            bestDistance = distance
+            best = city
+          }
+        }
+      }
+    }
+    if (best === null) return { found: false, altitude: 0, name: '' }
+    return { found: true, altitude: best.al, name: best.n }
+  }
+
+  // 按坐标反查最近离线地点。限制 1.5°（约 150 km），避免海洋/无人区
+  // 点选被匹配到很远的内陆城市；超出范围返回 found=false。
+  altitudeForPoint(latitude: number, longitude: number, planet: string): OfflinePlaceAltitude {
+    const hooks = this.hooks
+    if (hooks === null) return { found: false, altitude: 0, name: '' }
+    const cosLat = Math.cos(latitude * Math.PI / 180)
+    let bestDistance = OFFLINE_ALTITUDE_MAX_DISTANCE_DEG * OFFLINE_ALTITUDE_MAX_DISTANCE_DEG
+    let best: HierCity | null = null
+    for (const continent of Object.keys(LOCATION_HIERARCHY)) {
+      for (const region of Object.keys(LOCATION_HIERARCHY[continent])) {
+        for (const city of LOCATION_HIERARCHY[continent][region]) {
+          const cityPlanet = hooks.locationPlanet(city)
+          if (cityPlanet !== planet && cityPlanet.toLowerCase() !== planet.toLowerCase()) continue
+          const distance = this.offlineCityDistance(city, latitude, longitude, cosLat)
+          if (distance <= bestDistance) {
+            bestDistance = distance
+            best = city
+          }
+        }
+      }
+    }
+    if (best === null) return { found: false, altitude: 0, name: '' }
+    return { found: true, altitude: best.al, name: best.n }
+  }
+
+  private offlineCityDistance(city: HierCity, latitude: number, longitude: number, cosLat: number): number {
+    let deltaLongitude = city.lo - longitude
+    while (deltaLongitude > 180) deltaLongitude -= 360
+    while (deltaLongitude < -180) deltaLongitude += 360
+    const deltaLatitude = city.la - latitude
+    return deltaLatitude * deltaLatitude + (deltaLongitude * cosLat) * (deltaLongitude * cosLat)
   }
 
   // —— 桥注入 ——
@@ -109,8 +188,9 @@ export class LocationStore {
     }
   }
 
-  // 离线搜索入口；跨域助手经 hooks。
-  searchLocations(query: string): void {
+  // 离线搜索入口；跨域助手经 hooks。planetOverride 供全屏地图使用：
+  // 地图的 observerPlanet prop 是当前选择，不依赖 hook 的更新时间。
+  searchLocations(query: string, planetOverride?: string): void {
     const hooks = this.hooks
     if (hooks === null) return
     const q = query.trim()
@@ -124,7 +204,8 @@ export class LocationStore {
       this.locSearching = false
       return
     }
-    const planet = hooks.observerPlanet()
+    const planet = planetOverride !== undefined && planetOverride.length > 0
+      ? planetOverride : hooks.observerPlanet()
     const quickResults = hooks.quickLocationSearch(q, planet)
     if (quickResults.length > 0) {
       this.locSearchResults = quickResults.slice(0, 20)

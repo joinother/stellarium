@@ -122,6 +122,7 @@
 - 当前鸿蒙 `module.json5` 未声明 `ohos.permission.INTERNET`，因此已生成 HAP 没有系统授予的公网访问权限；这属于运行时权限边界，不等同于源码中所有网络请求代码都已移除。
 - 严格“整个应用绝对不联网”尚未完成代码级封口：HiPS/TOAST、OnlineQueries、NebulaTextures Plate Solver、Planes、MPC 导入和 RemoteSync 的网络实现仍编译保留，必须在提交未备案版本前禁用入口并增加统一离线构建门禁；本台账不会把“未声明 INTERNET 权限”冒充为所有网络代码已经删除。
 - 地图 SDK 已接入 HarmonyOS Map Kit 位置选点/全屏地图：默认离线底图；在线地图与 `site.searchByText` 地点搜索仅在用户主动打开全屏地图并输入查询时触发；离线回退本地城市/任务地点；非地球禁用花瓣在线搜索。
+- 2026-11-11：全屏地图在离线时把 `earth_cmap.png` 贴到 Map Kit 球体（`MapType.NONE`，与 Moon 同一路径），仍使用 Map Kit 的 `mapClick` 拾取。新增 `ohos.permission.GET_NETWORK_INFO` 仅用于判断“在线 Petal / 本地地球球体”，不读取 SSID、网络内容或账号信息，也不产生额外外发数据。
 - 本轮复核新增 `docs/harmonyos/specs/OFFLINE-FEATURE-MATRIX.md`：明确区分“可随包内置”“只能构建机更新”“需要用户主动联网/设备连接”，并补齐六类静态目录的构建机更新命令；不能因为存在镜像路径就宣称客户端已完成本地化。
 - 本轮再次核对网络类调用后，补登记星表下载页、帮助页检查更新、卫星自定义 TLE 导入和 Vts 本机连接；“打开外部网页”“局域网控制”和“公网数据请求”分开记录，不能只用“无 INTERNET 权限”作为唯一结论。
 - `NebulaTextures` 的 HarmonyOS 入口只接受本地文件并复制到应用用户目录，纹理配置、映射和解码均在本机完成；`importNebulaTexture`、`refreshNebulaTextures` 和 `validateNebulaTexture` 不发起网络请求。上游 Plate Solver 仍保留在桌面插件代码中，但鸿蒙 ArkUI 与 CLI 均明确禁用图像上传，不能把它描述为已本地化。

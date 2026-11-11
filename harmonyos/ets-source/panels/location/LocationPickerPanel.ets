@@ -69,6 +69,7 @@ export struct LocationPickerPanel {
   onSelectCountry: (c: string) => void = () => {}
   onSelectRegion: (r: string) => void = () => {}
   onSelectCity: (c: string) => void = () => {}
+  onOpenFullMap: () => void = () => {}
 
   private columnScrollers: Array<Scroller> = [new Scroller(), new Scroller(), new Scroller(), new Scroller()]
 
@@ -99,7 +100,15 @@ export struct LocationPickerPanel {
     const height = this.pickerStore.mapRenderHeight
     const latitude = 90 - clamp(y, 0, height) / height * 180
     const longitude = clamp(x, 0, width) / width * 360 - 180
-    this.pickerStore.setPickerLocation(I18n.t('custom_location'), latitude, longitude, this.pickerStore.locationPickerAltitude, I18n.t('m_map_selected'))
+    // Earth: fill altitude from the nearest offline city (150 km cap).
+    // Other bodies: always 0; their offline places carry their own altitude
+    // when selected from the hierarchy/search instead of the preview map.
+    let altitude = 0
+    if (this.observerPlanet === 'Earth') {
+      const resolved = this.locationStore.altitudeForPoint(latitude, longitude, 'Earth')
+      altitude = resolved.found ? resolved.altitude : 0
+    }
+    this.pickerStore.setPickerLocation(I18n.t('custom_location'), latitude, longitude, altitude, I18n.t('m_map_selected'))
     this.pickerStore.locationSource = 'map'
     this.locationStore.locSearchQuery = ''
   }
@@ -191,6 +200,19 @@ export struct LocationPickerPanel {
             .fontColor(this.c.tertiary)
             .textShadow({ radius: 8, color: this.c.iconSecondary, offsetX: 0, offsetY: 0 })
             .position({ x: this.pickerStore.pickerPinX(), y: this.pickerStore.pickerPinY() })
+          Row() {
+            Image($r('app.media.ic_fullscreen')).width(15).height(15)
+              .supportSvg2(true).colorFilter(tintMatrixFor(this.c.text))
+          }
+            .width(30).height(30)
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor(this.c.panelGlassStrong)
+            .border({ width: 1, color: this.c.border })
+            .borderRadius(UI_RADIUS_CONTROL)
+            .position({ x: this.locationMapWidth() - 38, y: 8 })
+            .zIndex(3)
+            .onClick(() => { this.onOpenFullMap() })
+            .accessibilityText(I18n.t('map_open_fullscreen'))
         }
           .width(this.locationMapWidth())
           .height(this.locationMapHeight())

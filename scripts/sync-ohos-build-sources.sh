@@ -69,6 +69,21 @@ mirror_files() {
 mirror_ets_sources() {
   local src_dir="$REPO_ROOT/harmonyos/ets-source"
   local dst_dir="$MODULE_ROOT/ets"
+  # Remove ArkTS files deleted from the source tree. DevEco does not generate
+  # .ets/.ts under entry/src/main/ets, so anything absent from ets-source is a
+  # stale copy that would otherwise keep compiling and mask renames/deletions.
+  if [ -d "$dst_dir" ]; then
+    while IFS= read -r dst; do
+      local rel="${dst#"$dst_dir"/}"
+      case "$rel" in
+        resources/*) continue ;;
+      esac
+      if [ ! -f "$src_dir/$rel" ]; then
+        rm -f "$dst"
+        echo "  removed stale: $rel"
+      fi
+    done < <(find "$dst_dir" -type f \( -name '*.ets' -o -name '*.ts' \) -print | sort)
+  fi
   while IFS= read -r src; do
     local rel="${src#"$src_dir"/}"
     case "$rel" in

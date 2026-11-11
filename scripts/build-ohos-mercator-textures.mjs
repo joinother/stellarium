@@ -59,6 +59,9 @@ const DEFAULT_SIZE = 1024
 // source and the 4096 px Moon source benefit from 1024 px. Every output is
 // square (Web Mercator); `--size` overrides this for one-off tests.
 const TEXTURES = [
+  // Earth is only used by the offline local globe (MapType.NONE + coverageImage);
+  // the online Petal base map draws its own 2D tiles.
+  { source: 'earth_cmap.png', output: 'earth_cmap_mercator.jpg', size: 1024 },
   { source: 'moon_4k.jpg', output: 'moon_4k_mercator.jpg', size: 1024 },
   { source: 'mars.png', output: 'mars_mercator.jpg', size: 512 },
   { source: 'mercury.png', output: 'mercury_mercator.jpg', size: 512 },

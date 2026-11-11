@@ -86,8 +86,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build-ohos-hap-windows.ps1 `
 powershell -ExecutionPolicy Bypass -File scripts\sync-ohos-resources-windows.ps1
 ```
 
-资源同步阶段还会从 PC 原始纹理生成 8 张 Web Mercator 2D 底图
-（`textures/*_mercator.jpg`：Moon 1024×1024，其余 512×512），供全屏选点在
+资源同步阶段还会从 PC 原始纹理生成 9 张 Web Mercator 2D 底图
+（`textures/*_mercator.jpg`：Earth/Moon/Mars 1024×1024，其余 512×512），供全屏选点在
 zoom ≥4 时使用。该步骤依赖 ffmpeg（解析顺序见 §5 第 2 条）；缺失时同步会直接
 失败，不再静默产出缺少 2D 底图的包。`-SkipResources` 会跳过生成并保留上一次的
 产物；如果这是首次构建且 rawfile 里没有这批文件，请先去掉 `-SkipResources` 跑
@@ -179,7 +179,7 @@ Move-Item "$work\fast_float-*" build\_deps\fastfloat-src
    同步日志会打印本次走的是哪条路径（`binary: ffmpeg (...)` 或 `binary: System.Drawing (ffmpeg not found)`）。
    待确认 ffmpeg 未装时，可显式 `$env:FFMPEG = 'C:\...\ffmpeg.exe'` 再跑脚本。
    ⚠️ 侧车由资源同步阶段生成，因此 `build-ohos-hap-windows.ps1 -SkipResources` 会跳过它。
-   ⚠️ 自 2026-11-11 起，资源同步还要求 ffmpeg 生成 8 张 Web Mercator 2D 底图；
+   ⚠️ 自 2026-11-11 起，资源同步还要求 ffmpeg 生成 9 张 Web Mercator 2D 底图；
    三者皆无时同步会在该步骤直接失败（不再静默产出缺少 2D 底图的包），因此当前
    路径下不会走到 System.Drawing 侧车回退。macOS 的 ffmpeg 由根目录 `Brewfile`
    提供。

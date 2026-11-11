@@ -6,9 +6,9 @@ import { LocSearchItem } from '../../pages/StellariumTypes'
 import { LocationStore } from '../../state/LocationStore'
 import { LocationPickerStore } from '../../state/LocationPickerStore'
 import { SessionToolStore } from '../../state/SessionToolStore'
+import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { CityChipsRow } from '../location/CityChipsRow'
 import { LocationPickerPanel } from '../location/LocationPickerPanel'
-import { LocationMapSection } from '../location/LocationMapSection'
 import { ContinuationSection } from '../astro/ContinuationSection'
 import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEventsSection } from '../astro/SessionToolSections'
 
@@ -27,9 +27,9 @@ export struct PlacePanel {
   @Prop expandedLayout: boolean
   // 地图几何由 LocationPickerPanel 自算，这里只传它依赖的布局态
   @Prop skyWidth: number
-  @Prop mapAllowed: boolean
   @Prop fixedObserverPoint: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private fixedMapFailed: boolean = false
   planetLabel: (en: string) => string = (en: string) => en
   onOpenFullMap: () => void = () => {}
   contextOf: (item: LocSearchItem) => string = () => ''
@@ -37,11 +37,8 @@ export struct PlacePanel {
   onSearchLocations: (query: string) => void = () => {}
   onPickSearchItem: (item: LocSearchItem) => void = () => {}
   onApply: () => void = () => {}
-  onSelectMapProvider: (provider: string) => void = () => {}
   onInputFocus: () => void = () => {}
   onInputBlur: () => void = () => {}
-  onPickMap: (latitude: number, longitude: number) => void = () => {}
-  onMapFallback: () => void = () => {}
   onSelectContinent: (c: string) => void = () => {}
   onSelectCountry: (c: string) => void = () => {}
   onSelectRegion: (r: string) => void = () => {}
@@ -63,6 +60,48 @@ export struct PlacePanel {
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
+  private fixedPreviewWidth(): number {
+    if (this.expandedLayout) return 292
+    return Math.max(276, Math.min(620, this.skyWidth * 0.92 - 32))
+  }
+
+  // Fixed observer points ("Earth Observer" etc.) keep the overview image
+  // (`obs_earth.jpg`, `obs_mars.jpg`, ...) but disable every picking
+  // interaction: the preview is inert and the full-screen entry is not mounted.
+  @Builder
+  fixedObserverPreview() {
+    Stack() {
+      if (this.sessionToolStore.observerPlanetMapTexture().length > 0) {
+        Image($rawfile('stellarium/textures/' + this.sessionToolStore.observerPlanetMapTexture()))
+          .width('100%').height('100%').objectFit(ImageFit.Fill)
+          .sourceSize({ width: 1240, height: 620 })
+          .onError(() => { this.fixedMapFailed = true })
+          .onComplete(() => { this.fixedMapFailed = false })
+      }
+      if (this.sessionToolStore.observerPlanetMapTexture().length === 0 || this.fixedMapFailed) {
+        Text(I18n.t('m_planet_map_unavailable')).fontSize(12).fontColor(this.c.sub)
+          .width('76%').textAlign(TextAlign.Center)
+      }
+      Row()
+        .width('100%').height('100%')
+        .backgroundColor(this.c.nightMask)
+        .hitTestBehavior(HitTestMode.None)
+      Text(I18n.t('map_fixed_overview_badge')).fontSize(10).fontColor(this.c.text)
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor(this.c.panelGlassStrong)
+        .borderRadius(UI_RADIUS_PILL)
+        .position({ x: 8, y: 8 })
+    }
+      .width(this.fixedPreviewWidth())
+      .height(this.fixedPreviewWidth() / 2)
+      .alignSelf(ItemAlign.Center)
+      .clip(true)
+      .backgroundColor(this.c.mediaCard)
+      .borderRadius(UI_RADIUS_CONTROL)
+      .margin({ top: 6 })
+      .hitTestBehavior(HitTestMode.None)
+  }
+
   build() {
     Column() {
       Row() {
@@ -79,6 +118,7 @@ export struct PlacePanel {
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       if (this.fixedObserverPoint) {
+        this.fixedObserverPreview()
         Text(I18n.t('map_fixed_overview_point')).fontSize(11).fontColor(this.c.sub)
           .width('100%').padding({ left: 10, right: 10, top: 6, bottom: 6 })
       } else {
@@ -99,24 +139,9 @@ export struct PlacePanel {
         onSelectContinent: (c: string) => { this.onSelectContinent(c) },
         onSelectCountry: (c: string) => { this.onSelectCountry(c) },
         onSelectRegion: (r: string) => { this.onSelectRegion(r) },
-        onSelectCity: (c: string) => { this.onSelectCity(c) }
+        onSelectCity: (c: string) => { this.onSelectCity(c) },
+        onOpenFullMap: () => { this.onOpenFullMap() }
       })
-      if (this.sessionToolStore.observerPlanet === 'Earth') {
-        LocationMapSection({
-          provider: this.locationStore.locationMapProvider,
-          latitude: this.locationPickerStore.locationPickerLatitude,
-          longitude: this.locationPickerStore.locationPickerLongitude,
-          mapAllowed: this.mapAllowed,
-          onSelectProvider: (provider: string) => { this.onSelectMapProvider(provider) },
-          onPick: (latitude: number, longitude: number) => { this.onPickMap(latitude, longitude) },
-          onFallback: () => { this.onMapFallback() }
-        })
-      }
-      Row() {
-        Button(I18n.t('map_open_fullscreen')).fontSize(12).layoutWeight(1)
-          .backgroundColor(this.c.soft).fontColor(this.c.text)
-          .onClick(() => { this.onOpenFullMap() })
-      }.width('100%').padding({ left: 4, right: 4, top: 6 })
 
       CityChipsRow({
         store: this.locationStore,

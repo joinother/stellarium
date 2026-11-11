@@ -389,6 +389,7 @@ $required = @(
     'skycultures/modern/illustrations/andromeda.png',
     'scripts/constellations_tour.ssc',
     'data/default_cfg.ini',
+    'textures/earth_cmap_mercator.jpg',
     'textures/moon_4k_mercator.jpg',
     'textures/mars_mercator.jpg',
     'textures/mercury_mercator.jpg',

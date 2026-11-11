@@ -143,7 +143,8 @@ await controller.setSphereMapEnabled(true, {
 
 | 天体 | 首选 | 备选 |
 |---|---|---|
-| Earth | 花瓣在线标准地图（`MapType.STANDARD`） | `miscWorldMap.jpg` 5400×2700（raster fallback） |
+| Earth（在线） | 花瓣在线标准地图（`MapType.STANDARD`） | 本地地球球体（`earth_cmap.png` + `MapType.NONE`） |
+| Earth（离线） | 本地地球球体（`earth_cmap.png`，Moon 同路径） | 错误态 + 重试（无 raster 兜底） |
 | Moon | `stellarium/textures/moon_4k.jpg`（4096×2048） | `moon.png` 1024×512 |
 | Mars | `stellarium/textures/mars.png`（512×256） | — |
 | Venus/Mercury/Jupiter/Saturn/Uranus/Neptune | `textures/<tex_map>.png` 512×256 | — |
@@ -155,15 +156,32 @@ await controller.setSphereMapEnabled(true, {
 
 - 5400×2700 纹理在 GPU 上约 58MB（RGBA）；面板用 2048×1024，全屏用 4096×2048 降采样版本，避免内存峰值。
 - `coverageImage` 是整张球面纹理，没有 LOD；全屏高缩放会像素化，后续可按缩放分级加载不同尺寸纹理。
-- Map Kit 在 zoom ≥4 会切到 2D Mercator；此时 `coverageImage` 只画球体，必须由 `cameraIdle` 监听追加/移除 **Web Mercator 预扭曲**的 `ImageOverlay`，否则 2D 底图会显示绿色空背景且与球体位置不一致。当前已实现：≥4 加 Mercator `ImageOverlay`，<4 移除并回到球体；8 张 `<name>_mercator.jpg` 由 `scripts/build-ohos-mercator-textures.mjs` **在资源同步时从 PC 原图生成**（Moon 1024²，其余 512²），不再提交 `map_mercator/` 资源目录；未知天体不再回退 Earth 的 `worldmap.jpg`；同时只对 Earth/Moon/Mars/Venus/Mercury/Jupiter/Saturn/Uranus/Neptune 开放 2D，Eris 等小天体固定 maxZoom=3 的 3D 全球视图，完全移除其 2D 效果；`* Observer` 全览点为固定点位，直接隐藏位置编辑器和全屏选点入口。
-- 2D Mercator 不能显示极区；月球/行星在 <4 使用 3D 球体，极区地点仍可见；≥4 的极区选点以 raster fallback 保底。
+- Map Kit 在 zoom ≥4 会切到 2D Mercator；此时 `coverageImage` 只画球体，必须由 `cameraIdle` 监听追加/移除 **Web Mercator 预扭曲**的 `ImageOverlay`，否则 2D 底图会显示绿色空背景且与球体位置不一致。当前已实现：≥4 加 Mercator `ImageOverlay`，<4 移除并回到球体；9 张 `<name>_mercator.jpg` 由 `scripts/build-ohos-mercator-textures.mjs` **在资源同步时从 PC 原图生成**（Earth/Moon/Mars 1024²，其余 512²），不再提交 `map_mercator/` 资源目录；未知天体不再回退 Earth 的 `worldmap.jpg`；同时只对 Earth/Moon/Mars/Venus/Mercury/Jupiter/Saturn/Uranus/Neptune 开放 2D，Eris 等小天体固定 maxZoom=3 的 3D 全球视图，完全移除其 2D 效果；`* Observer` 全览点为固定点位，直接隐藏位置编辑器和全屏选点入口。
+- 2D Mercator 不能显示极区；月球/行星在 <4 使用 3D 球体，极区地点仍可见；≥4 的极区需要缩回 3D 球体后选取，不再用 raster 保底。
 
-### 4.4 FallbackRasterSurface（ArkUI 自绘）
+### 4.4 错误态（无 raster 兜底）
 
-- `Image`/`Canvas` 等距圆柱图，复用现有 `LocationPickerPanel` 的经纬度 ↔ 像素映射。
-- 不依赖 Map Kit/网络；保证离线可用。
-- 支持拖拽/缩放（可选）、点击布点、Marker。
-- 非地球若 `coverageImage` 球体不可用，用此层作为正式回退，而不是 2D Mercator。
+- 全屏地图只使用 Map Kit：在线 Earth 用花瓣底图，离线 Earth 与非地球用 `coverageImage` 球体。
+- 隐私/前台门禁、纹理缺失、Map Kit 初始化失败、15s 超时或运行时缺少 `setSphereMapEnabled` 时，显示可重试的错误卡片（标题、原因、提示、重试按钮），不切换到等距圆柱 raster。
+- 错误原因按 I18n key 区分：`map_unavailable_privacy`、`map_unavailable_texture`、`map_unavailable_sdk`、`map_unavailable_timeout`、`map_unavailable_hint`。
+- `setSphereMapEnabled` 是 Map Kit 26.0.0 的 API；必须用 `typeof controller.setSphereMapEnabled === 'function'` 在运行时判断，因为模拟器镜像可能仍安装旧版 `com.huawei.hms.mapservice`。
+
+### 4.5 全屏地图交互（2026-11-11）
+
+- 面板不再渲染“离线坐标 / 华为地图”切换；全屏入口改为面板地图预览右上角的展开按钮。`locationMapProvider` 状态与 CLI 保留兼容，但不再驱动面板 UI。
+- 全屏地图保持 Map Kit 全屏挂载，手机使用顶部栏 + 浮动搜索 + 底部操作卡，平板（`expandedLayout`）使用左侧 320–360vp 侧栏；安全区取 `stellariumScreenSafeTopPixels/BottomPixels`，并至少保留 24vp 顶部/底部设计边距，再用 `MapComponentController.setPadding` 让相机中心避开搜索栏、操作卡和侧栏。搜索结果用可滚动列表。
+- 进入即显示当前选点：`mapLoad` 后把 WGS84 draft 转成地图坐标系（在线 Earth 为 GCJ02），落 Marker、移动相机。点击/搜索更新的 Marker 也必须使用地图坐标系，不能直接使用 WGS84 draft。
+- **Earth 离线**：用与 Moon 相同的 `MapType.NONE + sphereEnabled + setSphereMapEnabled({ coverageImage: earth_cmap.png })`，保留 Map Kit 相机/手势/`mapClick`/Marker；此时坐标就是 WGS84，不做 GCJ02 纠偏。`GET_NETWORK_INFO`（仅判断联网，不发数据）决定在线 Petal 还是本地地球；Map Kit `error` 或 15s 超时也会切到本地地球。本地地球在 zoom ≥4 使用 `earth_cmap_mercator.jpg` 作为 2D 覆盖图。
+- **无 raster 兜底**：球体纹理或 Map Kit 不可用时显示可重试错误卡片；`setSphereMapEnabled` 缺失（旧版 HMS 地图服务）单独提示 `map_unavailable_sdk`，不再展示 2D 平面地球。
+- 搜索框对所有天体常驻：Earth 并行 Petal 与离线搜索，结果分“在线结果 / 离线地点”；非地球仅离线搜索，按当前 `observerPlanet` 过滤。选中结果后落点并放大。
+- 底部主按钮文案为“选此点”；回传 `latitude/longitude/altitude/name/source` 后**立即应用到当前观测点**并关闭全屏（不再需要在位置面板再按一次“应用”）；面板的“应用”按钮保留给手动输入/层级选点。
+- **右下侧栏（2026-11-12）**：移除右侧 `+ / − / 回中` 竖排控件，改为右下角竖排三个 40×40 小按钮：“查看当前选点”（两段式回中/放大到 zoom 15）、“GPS 定位”（仅地球）、“地图图层”（仅在线地球）。操作卡保持四个 `UI_RADIUS_CONTROL` 圆角。
+- **GPS 蓝点**：经 `LocationPort` 申请精确位置并单次定位；成功后 `setMyLocationStyle({ displayType: TRACK_ROTATE })` + `setMyLocationEnabled(true)`，蓝色定位点随设备方向旋转，不自动移动相机；关闭 Map Kit 自带右下角定位图标。监听 `myLocationClick`，点击蓝点即把当前位置设为草稿点；草稿图钉从红色切换为蓝色（`ic_map_pin_blue.svg`），地图/搜索选点仍用红色图钉。
+- **地图类型**：图层按钮展开“地形地图 / 卫星地图”，调用 `setMapType(MapType.TERRAIN|SATELLITE)`；地形层仅在 5<zoom<14 可见，选择地形时 zoom≤5 会移到 6。离线地球和非地球不提供该按钮。
+- **海拔来源**：Map Kit 点击不带垂直分量。在线地球先 `site.reverseGeocode` 取 locality/adminLevel2，再查离线城市海拔；失败或离线时用最近离线地点（上限约 150 km）。来源标记为 `GPS / 城市离线 / 离线地点 / 海拔未知`；底部操作卡把经纬度、海拔、来源放在同一行。非地球一律 0，除非离线地点数据自带数值。
+- **全览点**：`PlacePanel` 保留 `obs_*.jpg` 概览图，仅禁用所有拾取交互；全屏地图不挂载。
+- **标题栏**：返回键为独立 44×44 圆形玻璃按钮；标题为独立 44vp 长药丸，主标题天体名、副标题底图来源，与搜索栏同圆角/底衬。
+- 现在共生成 **9** 张 Mercator 底图：Earth/Moon/Mars 1024²，其余 512²。
 
 ## 5. 搜索设计
 
