@@ -18,6 +18,9 @@ RECORDS = '/srv/skyinstrument/security-records'
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'
 PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'
+MIRROR_MANIFEST = '/srv/tle-mirror/v1/manifest.json'
+MIRROR_STALE_HOURS = 24      # 星历每 3 小时更新，超过 24 小时视为停更
+MIRROR_CRITICAL_HOURS = 72   # 超过 72 小时视为重大异常
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
 NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
@@ -66,6 +69,37 @@ def ai_usage_line():
     ct = day.get('completion_tokens', 0)
     return '调用 %d 次，token %d/%d，估算 %.3f 元' % (
         day.get('calls', 0), pt, ct, pt / 1e6 * 2 + ct / 1e6 * 8)
+
+
+def mirror_status():
+    """镜像数据新鲜度：manifest 的生成时间 + 各源 ok 状态。"""
+    import json as _j
+    from datetime import datetime as _dt
+    try:
+        d = _j.load(open(MIRROR_MANIFEST, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return '清单不可读', ['镜像 manifest.json 无法解析，需检查 tle-mirror 任务'], False
+    gen = d.get('generatedAt', '')
+    try:
+        ts = _dt.strptime(gen.replace('Z', ''), '%Y-%m-%dT%H:%M:%S.%f')
+    except Exception:  # noqa: BLE001
+        return '时间格式异常', ['镜像 manifest 的 generatedAt 无法解析'], True
+    hours = (_dt.utcnow() - ts).total_seconds() / 3600.0
+    srcs = d.get('sources', [])
+    bad = [x.get('id') for x in srcs if not x.get('ok', True)]
+    notes = []
+    critical = False
+    if bad:
+        notes.append('拉取失败的源：%s' % '、'.join(bad[:5]))
+    if hours >= MIRROR_CRITICAL_HOURS:
+        notes.append('镜像已 %.0f 小时未更新，可能导致卫星数据过期' % hours)
+        critical = True
+    elif hours >= MIRROR_STALE_HOURS:
+        notes.append('镜像已 %.0f 小时未更新（正常应每 3 小时一次）' % hours)
+    label = '%.1f 小时前更新' % hours
+    if hours >= MIRROR_STALE_HOURS:
+        label += '（停更）'
+    return label, notes, critical
 
 
 def audit_perf_line():
@@ -138,8 +172,10 @@ def main():
 
     ai_state, ai_notes = ai_status()
     blocks = active_blocks()
+    mirror, mirror_notes, _mirror_critical = mirror_status()
     perf, perf_notes = audit_perf_line()
     rows = [
+        ('镜像数据', mirror, mirror_notes),
         ('巡检耗时', perf, perf_notes),
         ('AI 用量', ai_usage_line(), []),
         ('当前生效拦截', '%d 条' % len(blocks),
