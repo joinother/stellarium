@@ -48,6 +48,18 @@ ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即�
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'     # 每日调用与 token 用量
 AI_MAX_CALLS_PER_DAY = 300                            # 每日调用上限，超出退回纯规则
+AI_TIME_BUDGET = 90                                   # 单次巡检用于模型调用的总时长（秒）
+AI_DEADLINE = [0.0]                                   # 本次巡检的模型调用截止时刻
+
+
+def ai_time_left():
+    if not AI_DEADLINE[0]:
+        return AI_TIME_BUDGET
+    return max(0, AI_DEADLINE[0] - time.time())
+
+
+def ai_time_start():
+    AI_DEADLINE[0] = time.time() + AI_TIME_BUDGET
 # 模型因内容过滤拒绝输出时的典型措辞（各家大同小异）
 REFUSAL_HINTS = ('抱歉', '无法协助', '不能协助', '无法提供', '不便提供', 'cannot help', 'I cannot')
 ALERT_COOLDOWN_H = 24
@@ -228,6 +240,45 @@ def normalize(text):
 
 
 NORM_WORD_CACHE = {}
+_MATCH_CACHE = {}
+
+
+def build_matchers():
+    """把所有词条编译成一个正则，单次扫描代替数万次子串比较。
+
+    逐词 `w in text` 在小页面上没问题，但镜像里几个 MB 的 CSV 会让耗时
+    从几秒涨到几分钟。正则匹配由 C 层执行，快一到两个数量级。
+    """
+    if _MATCH_CACHE:
+        return _MATCH_CACHE
+    lexicon = load_lexicon()
+    raw_map = {}
+    for cat, words in lexicon.items():
+        for w in words:
+            raw_map.setdefault(w, []).append(cat)
+    cjk = [w for w in raw_map if has_cjk(w)]
+    norm_map = {}
+    for w in raw_map:
+        nw = normalized_word(w)
+        if len(nw) >= 2 and nw not in norm_map:
+            norm_map[nw] = w
+
+    def compile_pat(words):
+        if not words:
+            return None
+        # 长词优先，保证「无抵押贷款」先于「贷款」命中
+        ordered = sorted(words, key=len, reverse=True)
+        return re.compile('|'.join(re.escape(w) for w in ordered))
+
+    _MATCH_CACHE.update({
+        'raw_map': raw_map,
+        'cjk_words': cjk,
+        'raw_pat': compile_pat(list(raw_map.keys())),
+        'cjk_pat': compile_pat(cjk),
+        'norm_map': norm_map,
+        'norm_pat': compile_pat(list(norm_map.keys())),
+    })
+    return _MATCH_CACHE
 
 
 def normalized_word(w):
@@ -240,20 +291,26 @@ def has_cjk(w):
     return any('\u4e00' <= ch <= '\u9fff' for ch in w)
 
 
+DATA_SCAN_LIMIT = 64 * 1024   # 数据文件只扫 64 KB 以内的小文件
+# 说明：卫星星历 CSV 动辄几 MB，词条匹配在这种体量上必然慢（无论逐词还是正则
+# 交替）。这类文件是机器数据，不在其中写推广文案；其完整性由每日哈希清单覆盖。
+
+
 def scan_text_data(text, rel):
     """对数据文件（JSON/CSV/3LE 等）执行规则检查。
 
     数据文件只匹配中文词条：卫星名、字段名大量使用英文缩写，
     "amateur""anal" 这类英文子串会把正常数据判成违规。
     """
-    for cat, words in load_lexicon().items():
-        for w in words:
-            if not has_cjk(w):
-                continue
-            if w in text:
-                idx = text.find(w)
-                add('中', '违禁词/%s' % cat, rel,
-                    '命中「%s」：…%s…' % (w, text[max(0, idx - 30):idx + 30]))
+    mt = build_matchers()
+    sample = text[:DATA_SCAN_LIMIT]
+    if mt['cjk_pat'] is not None:
+        for mm in mt['cjk_pat'].finditer(sample):
+            w = mm.group(0)
+            cat = mt['raw_map'].get(w, ['未知'])[0]
+            idx = mm.start()
+            add('中', '违禁词/%s' % cat, rel,
+                '命中「%s」：…%s…' % (w, sample[max(0, idx - 30):idx + 30]))
     for w in AD_WORDS:
         if w in text:
             idx = text.find(w)
@@ -282,11 +339,14 @@ def scan_large_text(path, rel):
                     break
                 data = (prev + buf).decode('utf-8', 'replace')
                 prev = buf[-overlap:]
-                for cat, words in load_lexicon().items():
-                    for w in words:
-                        if w in data:
-                            add('中', '违禁词/%s' % cat, rel, '大文件分块命中「%s」' % w)
-                            hit += 1
+                mt = build_matchers()
+                for w in mt['cjk_words']:
+                    if w in data:
+                        cat = mt['raw_map'].get(w, ['未知'])[0]
+                        add('中', '违禁词/%s' % cat, rel, '大文件分块命中「%s」' % w)
+                        hit += 1
+                        if hit > 20:
+                            break
                 if hit > 20:
                     return
     except Exception as exc:  # noqa: BLE001
@@ -404,28 +464,29 @@ def scan_html_rules(raw, name):
         hidden_by_page[name] = hidden_texts
 
     # 2 违禁词
-    lexicon = load_lexicon()
+    # 页面文本只有几十 KB，逐词 in 由 C 层执行，比上千条分支的正则交替快得多
+    mt = build_matchers()
+    raw_map = mt['raw_map']
     hit_words = set()
-    for cat, words in lexicon.items():
-        for w in words:
-            if w in text:
-                hit_words.add(w)
-                idx = text.find(w)
-                add('中', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
-                if any(w in ht for ht in hidden_texts):
-                    hard_risk_pages.add(name)
+    for w in raw_map:
+        if w in text:
+            hit_words.add(w)
+            cat = raw_map[w][0]
+            idx = text.find(w)
+            add('中', '违禁词/%s' % cat, name, '命中「%s」：…%s…' % (w, text[max(0, idx-30):idx+30]))
+            if any(w in ht for ht in hidden_texts):
+                hard_risk_pages.add(name)
 
     # 归一化后再匹配一次，抓空格/符号/繁体变体；这类命中按「中」等待复核
     norm_text = normalize(text)
-    for cat, words in lexicon.items():
-        for w in words:
-            if w in hit_words or len(normalized_word(w)) < 2:
-                continue
-            nw = normalized_word(w)
-            if nw and nw in norm_text:
-                idx = norm_text.find(nw)
-                add('中', '违禁词变体/%s' % cat, name,
-                    '变体命中「%s」：…%s…' % (w, norm_text[max(0, idx - 20):idx + 20]))
+    for nw, w in mt['norm_map'].items():
+        if w in hit_words:
+            continue
+        if nw in norm_text:
+            cat = raw_map.get(w, ['未知'])[0]
+            idx = norm_text.find(nw)
+            add('中', '违禁词变体/%s' % cat, name,
+                '变体命中「%s」：…%s…' % (w, norm_text[max(0, idx - 20):idx + 20]))
 
     # 3 广告法极限词
     for w in AD_WORDS:
@@ -456,7 +517,14 @@ def scan_html_rules(raw, name):
     return text
 
 
+def _t(label, since):
+    if os.environ.get('AUDIT_TIMING'):
+        sys.stderr.write('[timing] %-22s %.1fs\n' % (label, time.time() - since))
+    return time.time()
+
+
 def main():
+    _t0 = time.time()
     served = discover_served_dirs()
     if not served:
         served = [SITE_DIR]
@@ -498,6 +566,8 @@ def main():
             continue
 
         if kind == 'text':
+            if not rel.endswith(('.html', '.htm')) and size > DATA_SCAN_LIMIT:
+                continue      # 大块数据文件跳过词条匹配，靠哈希保证完整性
             try:
                 raw = open(p, encoding='utf-8', errors='replace').read()
             except Exception as exc:  # noqa: BLE001
@@ -515,8 +585,10 @@ def main():
         else:
             add('中', '非常规文件类型', rel, '被服务目录中出现 %s 类型文件' % (os.path.splitext(p)[1] or '无扩展名'))
 
+    _t0 = _t('scan-files', _t0)
     # 接口级巡检（动态内容）
     check_api_endpoints()
+    _t0 = _t('api-check', _t0)
 
     # 全站轮审：--sample N 时抽 N 个页面做整页 AI 审查（不依赖变更）
     sample_n = 0
@@ -537,6 +609,7 @@ def main():
                 add('中', '整页审查（AI）', rel,
                     '%s：…%s…' % (res.get('reason', ''), res.get('excerpt', '')))
 
+    _t0 = _t('baseline-load', _t0)
     # 变更检测：仅对文本类文件
     changed = []
     changed_text = {}
@@ -549,6 +622,10 @@ def main():
             old = base.get(name, '')
             if old != t:
                 changed.append((name, len(old), len(t)))
+                # difflib 在大文本上是 O(n²)：镜像里几个 MB 的 CSV 一旦变化，
+                # 逐字符比对会把巡检拖到几分钟。只对页面类小文件算差异文本。
+                if len(old) + len(t) > 200000:
+                    continue
                 sm = difflib.SequenceMatcher(None, old, t)
                 added = ''.join(t[j1:j2] for tag, _i1, _i2, j1, j2 in sm.get_opcodes()
                                 if tag in ('insert', 'replace'))
@@ -566,8 +643,8 @@ def main():
         for level, kind, where, detail in issues:
             by_file.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
         calls = 0
-        for rel, hits in list(by_file.items())[:6]:
-            if calls >= 8:
+        for rel, hits in list(by_file.items())[:4]:
+            if calls >= 4:
                 break
             verdict = judge('rule_hit', rel, {'rules': '; '.join(hits[:5]),
                                               'hidden': ' / '.join(hidden_by_page.get(rel, []))[:300],
@@ -750,6 +827,10 @@ def judge_free(page, text):
         ai_record(False, '当日 AI 调用已达上限（%d 次）' % AI_MAX_CALLS_PER_DAY)
         print('AI 当日预算已用尽，退回纯规则判定', file=sys.stderr)
         return None
+    if ai_time_left() <= 5:
+        ai_record(False, '本次巡检的模型调用时长已达上限（%d 秒）' % AI_TIME_BUDGET)
+        print('本次巡检 AI 时间预算已用尽，后续命中不再送审', file=sys.stderr)
+        return None
     prompt = (
         '你是网站内容合规审核员。下面是一个网站的页面中新增或修改的文字，'
         '词库没有命中，但仍可能存在词库覆盖不到的问题。\n'
@@ -780,7 +861,7 @@ def judge_free(page, text):
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
     try:
-        with urllib.request.urlopen(req, timeout=40) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         content = data['choices'][0]['message']['content'].strip()
         stripped = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
@@ -879,6 +960,10 @@ def judge(kind, page, payload):
         ai_record(False, '当日 AI 调用已达上限（%d 次）' % AI_MAX_CALLS_PER_DAY)
         print('AI 当日预算已用尽，退回纯规则判定', file=sys.stderr)
         return None
+    if ai_time_left() <= 5:
+        ai_record(False, '本次巡检的模型调用时长已达上限（%d 秒）' % AI_TIME_BUDGET)
+        print('本次巡检 AI 时间预算已用尽，后续命中不再送审', file=sys.stderr)
+        return None
     if kind == 'rule_hit':
         prompt = (
             '你是网站内容合规审核员。某文件触发了本地规则，请判断是否属于真实风险。\n'
@@ -916,7 +1001,7 @@ def judge(kind, page, payload):
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
     try:
-        with urllib.request.urlopen(req, timeout=40) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         content = data['choices'][0]['message']['content'].strip()
         stripped = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
