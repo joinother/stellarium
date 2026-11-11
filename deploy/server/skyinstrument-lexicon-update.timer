@@ -1,0 +1,11 @@
+[Unit]
+Description=Update sensitive lexicon weekly (Monday 04:30)
+
+[Timer]
+OnCalendar=Mon *-*-* 04:30:00
+RandomizedDelaySec=900
+Persistent=true
+Unit=skyinstrument-lexicon-update.service
+
+[Install]
+WantedBy=timers.target

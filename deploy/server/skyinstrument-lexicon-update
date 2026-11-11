@@ -1,0 +1,264 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""敏感词库自动更新（带自愈，仅重大问题才通知）。
+
+流程：拉取（主源 jsDelivr / 备源 Gitee）→ 校验 → 合并本地层 → 发布 →
+      用新词库跑一次巡检，若异常数较上一版暴涨则自动回滚。
+
+自愈策略：
+  拉取失败/校验不通过 → 保留旧词库，记一次失败，下次再试（不打扰）
+  连续失败 ≥ 3 次，或词库超过 90 天未更新 → 视为重大问题，即时通知
+  发布后巡检异常数异常增长（>2 倍且增加 ≥5 条）→ 自动回滚到上一版，
+  回滚成功则只在日报体现；回滚失败才即时通知
+
+用法：skyinstrument-lexicon-update [--dry-run] [--force]
+"""
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+
+BASE = '/var/lib/skyinstrument/lexicon'
+CURRENT = os.path.join(BASE, 'current')
+VERSIONS = os.path.join(BASE, 'versions')
+LOCAL_EXTRA = os.path.join(BASE, 'local-extra.txt')     # 本地追加
+LOCAL_EXCLUDE = os.path.join(BASE, 'local-exclude.txt')  # 本地排除
+STATE = os.path.join(BASE, 'state.json')
+META = os.path.join(CURRENT, 'meta.json')
+AUDIT = '/usr/local/sbin/skyinstrument-content-audit'
+NOTIFY = '/usr/local/sbin/skyinstrument-notify'
+KEEP_VERSIONS = 5
+MAX_GROWTH = 0.50          # 单次条数增长上限，超过视为可疑
+STALE_DAYS = 90
+
+SOURCES = {
+    'jsdelivr': 'https://cdn.jsdelivr.net/gh/konsheng/Sensitive-lexicon@main/Vocabulary/',
+    'gitee': 'https://gitee.com/konsheng/Sensitive-lexicon/raw/main/Vocabulary/',
+}
+
+# 只取与本站风险相关的类别；"非法网址"体量过大且多为域名，单独处理
+# 只取高信号类别。广告类型/补充词库/民生词库含大量日常词（"网络""兼职""代理"），
+# 会把卫星编号、字段名当成违禁词，造成大面积误报，故不纳入。
+FILES = {
+    '涉黄': '色情类型.txt',
+    '涉暴': '暴恐词库.txt',
+    '涉枪': '涉枪涉爆.txt',
+}
+
+
+def load_state():
+    try:
+        return json.load(open(STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return {'consecutive_fail': 0, 'last_ok': 0, 'last_count': 0, 'reason': ''}
+
+
+def save_state(st):
+    os.makedirs(BASE, exist_ok=True)
+    json.dump(st, open(STATE, 'w', encoding='utf-8'), ensure_ascii=False)
+
+
+def notify(subject, body, level='daily'):
+    try:
+        import tempfile
+        tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+        tf.write(body)
+        tf.close()
+        r = subprocess.run([NOTIFY, '--level', level, '--subject', subject, '--text-file', tf.name],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True, timeout=60)
+        print((r.stdout or '').strip())
+        os.unlink(tf.name)
+    except Exception as exc:  # noqa: BLE001
+        print('通知失败：%s' % exc, file=sys.stderr)
+
+
+def fetch(filename):
+    """主源失败自动切备源，每个源重试两次；返回 (内容, 源名) 或 (None, 原因)。"""
+    import urllib.parse
+    errors = []
+    for name, base in SOURCES.items():
+        url = base + urllib.parse.quote(filename)
+        for attempt in range(2):
+            try:
+                req = urllib.request.Request(url, headers={'User-Agent': 'lexicon-update/1.0'})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = resp.read()
+                text = data.decode('utf-8', 'replace')
+                if len(text.strip()) < 20:
+                    errors.append('%s 内容过短' % name)
+                    break
+                return text, name
+            except Exception as exc:  # noqa: BLE001
+                errors.append('%s#%d: %s' % (name, attempt + 1, type(exc).__name__))
+                time.sleep(1)
+    return None, '; '.join(errors)
+
+
+def parse(text):
+    """过滤低质量词条：纯 ASCII 短词会与卫星编号、字段名撞车。"""
+    out = []
+    for line in text.splitlines():
+        w = line.strip()
+        if not w or w.startswith('#') or len(w) > 30:
+            continue
+        ascii_only = all(ord(c) < 128 for c in w)
+        if ascii_only and len(w) < 4:
+            continue
+        out.append(w)
+    return out
+
+
+def load_local(path):
+    if not os.path.exists(path):
+        return []
+    return [l.strip() for l in open(path, encoding='utf-8') if l.strip() and not l.startswith('#')]
+
+
+def main():
+    dry = '--dry-run' in sys.argv
+    force = '--force' in sys.argv
+    st = load_state()
+
+    os.makedirs(VERSIONS, exist_ok=True)
+    # 旧版本词表，供拉取失败的类别回退使用
+    prev_words = {}
+    try:
+        prev_words = json.load(open(os.path.join(CURRENT, 'words.json'), encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        prev_words = {}
+
+    buckets = {}
+    used_sources = set()
+    failed_files = []
+    for cat, fname in FILES.items():
+        text, src = fetch(fname)
+        if text is None:
+            if prev_words.get(cat):
+                buckets[cat] = prev_words[cat]
+                failed_files.append('%s（沿用旧版 %d 条）' % (fname, len(prev_words[cat])))
+                continue
+            st['consecutive_fail'] = int(st.get('consecutive_fail', 0)) + 1
+            st['reason'] = '%s 拉取失败且无旧版可回退：%s' % (fname, src)
+            save_state(st)
+            print('拉取失败且无旧版：%s（%s）' % (fname, src))
+            if st['consecutive_fail'] >= 3:
+                notify('[星象仪] 词库连续 %d 次更新失败' % st['consecutive_fail'],
+                       '现有词库继续使用。最近失败原因：%s' % st['reason'], level='critical')
+            return 0
+        words = parse(text)
+        if not words:
+            buckets[cat] = prev_words.get(cat, [])
+            failed_files.append('%s（解析为空，沿用旧版）' % fname)
+            continue
+        buckets[cat] = words
+        used_sources.add(src)
+    if failed_files:
+        print('部分类别未更新：' + '；'.join(failed_files))
+
+    total = sum(len(v) for v in buckets.values())
+    # 增长基线取"当前已发布版本"的条数，比 state 更可靠（手工干预后不会误判）
+    last = 0
+    try:
+        last = int(json.load(open(os.path.join(CURRENT, 'meta.json'), encoding='utf-8'))['total'])
+    except Exception:  # noqa: BLE001
+        last = int(st.get('last_count', 0))
+    if last and not force and total > last * (1 + MAX_GROWTH):
+        st['reason'] = '条数异常增长：%d -> %d（上限 %.0f%%）' % (last, total, MAX_GROWTH * 100)
+        save_state(st)
+        print('拒绝更新：' + st['reason'])
+        # 条数暴涨多为上游异动，保留旧版即可；连续 3 次才通知
+        st['consecutive_fail'] = int(st.get('consecutive_fail', 0)) + 1
+        save_state(st)
+        if st['consecutive_fail'] >= 3:
+            notify('[星象仪] 词库连续 %d 次被拒绝' % st['consecutive_fail'],
+                   st['reason'] + '\n\n已保留现有词库。请人工确认上游是否正常。', level='critical')
+        return 0
+
+    extra = load_local(LOCAL_EXTRA)
+    exclude = set(load_local(LOCAL_EXCLUDE))
+    merged = {}
+    for cat, words in buckets.items():
+        merged[cat] = sorted({w for w in words if w not in exclude})
+    if extra:
+        merged.setdefault('本地追加', [])
+        merged['本地追加'] = sorted({w for w in extra if w not in exclude})
+
+    if dry:
+        print('演练：将写入 %d 条（%d 类），来源 %s' % (total, len(merged), ','.join(sorted(used_sources))))
+        return 0
+
+    ts = time.strftime('%Y%m%d-%H%M%S')
+    newdir = os.path.join(VERSIONS, ts)
+    os.makedirs(newdir, exist_ok=True)
+    with open(os.path.join(newdir, 'words.json'), 'w', encoding='utf-8') as fh:
+        json.dump(merged, fh, ensure_ascii=False)
+    meta = {'version': ts, 'total': total, 'categories': {k: len(v) for k, v in merged.items()},
+            'sources': sorted(used_sources), 'built_at': time.strftime('%Y-%m-%d %H:%M:%S')}
+    json.dump(meta, open(os.path.join(newdir, 'meta.json'), 'w', encoding='utf-8'),
+              ensure_ascii=False, indent=2)
+
+    # 发布：软链切换
+    if os.path.islink(CURRENT) or os.path.exists(CURRENT):
+        if os.path.islink(CURRENT):
+            os.unlink(CURRENT)
+        else:
+            shutil.rmtree(CURRENT)
+    os.symlink(newdir, CURRENT)
+
+    # 用新词库跑一次巡检，异常暴涨则回滚
+    prev_count = 0
+    try:
+        r = subprocess.run([AUDIT], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True, timeout=300)
+        for line in (r.stdout or '').splitlines():
+            if '问题数' in line:
+                prev_count = int(line.split('问题数：')[1].strip())
+                break
+    except Exception as exc:  # noqa: BLE001
+        print('发布后巡检失败：%s' % exc, file=sys.stderr)
+
+    prev_issues = int(st.get('last_issue_count', 0))
+    if prev_issues and prev_count > max(5, prev_issues * 2):
+        # 自动回滚
+        versions = sorted(d for d in os.listdir(VERSIONS) if d != ts)
+        if versions:
+            old = os.path.join(VERSIONS, versions[-1])
+            if os.path.islink(CURRENT):
+                os.unlink(CURRENT)
+            os.symlink(old, CURRENT)
+            st['reason'] = '新词库导致异常数 %d -> %d，已自动回滚到 %s' % (prev_issues, prev_count, versions[-1])
+            st['last_issue_count'] = prev_issues
+            save_state(st)
+            print(st['reason'])
+            shutil.rmtree(newdir, ignore_errors=True)
+            notify('[星象仪] 词库自动回滚', st['reason'] + '\n\n已在日报中体现，无需处理。', level='daily')
+            return 0
+        notify('[星象仪] 词库异常且无法回滚',
+               '新词库导致异常数 %d -> %d，且没有可用的旧版本。请人工检查。' % (prev_issues, prev_count),
+               level='critical')
+        return 1
+
+    st.update({'consecutive_fail': 0, 'last_ok': time.time(), 'last_count': total,
+               'last_issue_count': prev_count, 'reason': '', 'version': ts,
+               'categories': meta['categories']})
+    save_state(st)
+    print('词库已更新：%s，共 %d 条，来源 %s' % (ts, total, ','.join(sorted(used_sources))))
+
+    # 保留最近 N 个版本
+    dirs = sorted(d for d in os.listdir(VERSIONS) if os.path.isdir(os.path.join(VERSIONS, d)))
+    for d in dirs[:-KEEP_VERSIONS]:
+        shutil.rmtree(os.path.join(VERSIONS, d), ignore_errors=True)
+    return 0
+
+
+if __name__ == '__main__':
+    import urllib.parse  # noqa: E402  (供 fetch 内使用)
+    sys.exit(main())

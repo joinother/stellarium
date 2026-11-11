@@ -38,8 +38,12 @@ API_CONF = '/etc/skyinstrument/audit-endpoints.conf'  # 需巡检的接口，每
 API_BASE = 'http://127.0.0.1:8090'
 API_DEFAULT = ['/healthz', '/v1/grid', '/v1/week', '/v1/world', '/v1/wx']
 API_MAX_BYTES = 8 * 1024 * 1024
+API_BUDGET_STATE = '/var/lib/skyinstrument/api-budget.json'
+API_BUDGET_PER_HOUR = 40   # 接口自身限 120 次/小时/IP，我们只用三分之一，留出余量
 INCIDENT_BIN = '/usr/local/sbin/skyinstrument-incident'
 REMEDIATE_CONF = '/etc/skyinstrument/remediate.conf'   # APPLY=1 才真正拦截
+LEXICON = '/var/lib/skyinstrument/lexicon/current/words.json'
+LEXICON_EXCLUDE = '/var/lib/skyinstrument/lexicon/local-exclude.txt'
 ALERT_STATE = '/var/lib/skyinstrument/alerted.json'   # 同路径 24h 内只即时告警一次
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
 # 模型因内容过滤拒绝输出时的典型措辞（各家大同小异）
@@ -68,6 +72,34 @@ BLOCK_WORDS = {
     '涉毒': ['毒品', '冰毒', '大麻交易', '摇头丸'],
     '涉枪': ['枪支', '弹药', '仿真枪'],
 }
+
+def load_lexicon():
+    """合并外部词库与内置兜底词表；排除层优先。
+
+    返回 {类别: [词条...]}。外部词库缺失或损坏时退回内置词表，
+    保证巡检永远有一份可用的规则。
+    """
+    merged = {k: list(v) for k, v in BLOCK_WORDS.items()}
+    exclude = set()
+    if os.path.exists(LEXICON_EXCLUDE):
+        exclude = {l.strip() for l in open(LEXICON_EXCLUDE, encoding='utf-8')
+                   if l.strip() and not l.startswith('#')}
+    try:
+        data = json.load(open(LEXICON, encoding='utf-8'))
+        for cat, words in data.items():
+            merged.setdefault(cat, [])
+            keep = []
+            for w in words:
+                if w in exclude or len(w) > 30:
+                    continue
+                if all(ord(c) < 128 for c in w) and len(w) < 4:
+                    continue      # 纯 ASCII 短词会与卫星编号撞车
+                keep.append(w)
+            merged[cat] = sorted(set(merged[cat]) | set(keep))
+    except Exception:  # noqa: BLE001
+        pass
+    return merged
+
 
 # 广告法极限词（用短语降低误报）
 AD_WORDS = ['最好的', '最佳', '最高级', '国家级', '世界级', '第一品牌', '行业第一', '全国第一',
@@ -169,7 +201,7 @@ def check_binary(path, rel):
 
 def scan_text_data(text, rel):
     """对数据文件（JSON/CSV/3LE 等）执行与网页相同的规则检查。"""
-    for cat, words in BLOCK_WORDS.items():
+    for cat, words in load_lexicon().items():
         for w in words:
             if w in text:
                 idx = text.find(w)
@@ -203,7 +235,7 @@ def scan_large_text(path, rel):
                     break
                 data = (prev + buf).decode('utf-8', 'replace')
                 prev = buf[-overlap:]
-                for cat, words in BLOCK_WORDS.items():
+                for cat, words in load_lexicon().items():
                     for w in words:
                         if w in data:
                             add('高', '违禁词/%s' % cat, rel, '大文件分块命中「%s」' % w)
@@ -212,6 +244,31 @@ def scan_large_text(path, rel):
                     return
     except Exception as exc:  # noqa: BLE001
         add('中', '文件不可读', rel, str(exc)[:80])
+
+
+def api_budget_used():
+    try:
+        data = json.load(open(API_BUDGET_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        return 0
+    now = time.time()
+    return len([t for t in data.get('hits', []) if now - t < 3600])
+
+
+def api_budget_consume():
+    try:
+        try:
+            data = json.load(open(API_BUDGET_STATE, encoding='utf-8'))
+        except Exception:  # noqa: BLE001
+            data = {'hits': []}
+        now = time.time()
+        hits = [t for t in data.get('hits', []) if now - t < 3600]
+        hits.append(now)
+        data['hits'] = hits
+        os.makedirs(os.path.dirname(API_BUDGET_STATE), exist_ok=True)
+        json.dump(data, open(API_BUDGET_STATE, 'w', encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def api_endpoints():
@@ -227,8 +284,19 @@ def api_endpoints():
 
 
 def check_api_endpoints():
-    """接口级巡检：动态内容不在磁盘上，只能抓响应来查。"""
-    for path in api_endpoints():
+    """接口级巡检：动态内容不在磁盘上，只能抓响应来查。
+
+    接口自身有频率限制（429），所以逐个请求并留间隔；遇到 429 先退避重试，
+    仍失败则记为「接口限流」（低等级，不进即时告警），不当作内容问题。
+    """
+    used = api_budget_used()
+    for idx, path in enumerate(api_endpoints()):
+        # 预算不足时只探活 /healthz，其余留到下一轮，避免触发接口限流
+        if used >= API_BUDGET_PER_HOUR and path != '/healthz':
+            continue
+        if idx:
+            time.sleep(1.5)
+        api_budget_consume()
         url = API_BASE + path
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'content-audit/1.0'})
@@ -236,6 +304,17 @@ def check_api_endpoints():
                 status = resp.status
                 body = resp.read(API_MAX_BYTES)
         except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                time.sleep(3)
+                try:
+                    req2 = urllib.request.Request(url, headers={'User-Agent': 'content-audit/1.0'})
+                    with urllib.request.urlopen(req2, timeout=10) as resp2:
+                        body2 = resp2.read(API_MAX_BYTES)
+                    scan_text_data(body2.decode('utf-8', 'replace'), path)
+                    continue
+                except Exception:  # noqa: BLE001
+                    add('低', '接口限流', path, 'HTTP 429（退避重试仍失败，非内容问题）')
+                    continue
             add('中', '接口异常', path, 'HTTP %s' % exc.code)
             continue
         except Exception as exc:  # noqa: BLE001
@@ -278,7 +357,8 @@ def scan_html_rules(raw, name):
         hidden_by_page[name] = hidden_texts
 
     # 2 违禁词
-    for cat, words in BLOCK_WORDS.items():
+    lexicon = load_lexicon()
+    for cat, words in lexicon.items():
         for w in words:
             if w in text:
                 idx = text.find(w)

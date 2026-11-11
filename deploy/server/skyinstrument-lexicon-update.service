@@ -1,0 +1,10 @@
+[Unit]
+Description=Skyinstrument sensitive lexicon auto update
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-lexicon-update
+Nice=15
