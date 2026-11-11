@@ -1,0 +1,48 @@
+#!/bin/bash
+# 每周一次：把线上站点重新算哈希，与最近一次备份清单比对，检出非预期改动
+# 产出：security-records/hash-diff-YYYYMMDD.txt（无差异也会留一份记录）
+set -euo pipefail
+
+BACKUP_DIR=/srv/backup
+RECORDS=/srv/skyinstrument/security-records
+DAY=$(date +%Y%m%d)
+OUT="$RECORDS/hash-diff-$DAY.txt"
+
+mkdir -p "$RECORDS"
+LATEST=$(ls -1t "$BACKUP_DIR"/manifest-*.sha256 2>/dev/null | head -1 || true)
+if [ -z "$LATEST" ]; then
+    echo "$(date '+%F %T') 尚未生成任何备份清单，跳过比对" | tee "$OUT"
+    exit 0
+fi
+
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/current" "$WORK/skyinstrument-website"
+cp -a /srv/skyinstrument/website/current/. "$WORK/current/"
+cp -a /etc/skyinstrument-website/nginx.conf "$WORK/skyinstrument-website/"
+cp -a /opt/tle-mirror/sources.json "$WORK/sources.json"
+LIVE=$(mktemp)
+( cd "$WORK" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$LIVE"
+
+CHANGED=$(diff -u "$LATEST" "$LIVE" | grep -cE '^[+-][^+-]' || true)
+
+{
+    echo "# 文件哈希比对记录"
+    echo ""
+    echo "- 比对时间：$(date '+%F %T')"
+    echo "- 基准清单：$LATEST"
+    echo "- 线上文件数：$(wc -l < "$LIVE")"
+    echo "- 差异行数：$CHANGED"
+    echo ""
+    if [ "$CHANGED" -eq 0 ]; then
+        echo "结论：线上文件与最近一次备份完全一致，未发现非预期改动。"
+    else
+        echo "结论：发现差异，需人工确认是否为本人正常发布。差异明细如下："
+        echo ""
+        echo '```diff'
+        diff -u "$LATEST" "$LIVE" || true
+        echo '```'
+    fi
+} > "$OUT"
+
+echo "$(date '+%F %T') verify done changed=$CHANGED -> $OUT"

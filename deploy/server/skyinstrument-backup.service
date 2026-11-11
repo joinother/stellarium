@@ -1,0 +1,12 @@
+[Unit]
+Description=Skyinstrument daily site backup with hash manifest
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

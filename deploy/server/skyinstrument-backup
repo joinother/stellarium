@@ -1,0 +1,37 @@
+#!/bin/bash
+# 星象仪站点每日备份：站点发布目录 + nginx 配置 + TLE 镜像源清单
+# 产出：site-YYYYMMDD.tar.gz、manifest-YYYYMMDD.sha256、packages.sha256 追加记录
+set -euo pipefail
+
+BACKUP_DIR=/srv/backup
+KEEP_DAYS=14
+DAY=$(date +%Y%m%d)
+PKG="$BACKUP_DIR/site-$DAY.tar.gz"
+MANIFEST="$BACKUP_DIR/manifest-$DAY.sha256"
+
+mkdir -p "$BACKUP_DIR"
+
+# 打包：-h 解引用 current 软链，保证备份里是实际文件而非链接
+tar czf "$PKG.tmp" -h \
+    -C /srv/skyinstrument/website current \
+    -C /etc skyinstrument-website/nginx.conf \
+    -C /opt/tle-mirror sources.json
+mv "$PKG.tmp" "$PKG"
+
+# 逐文件哈希清单（从备份包内解出后计算，保证清单与包一致）
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+tar xzf "$PKG" -C "$WORK"
+( cd "$WORK" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$MANIFEST"
+rm -rf "$WORK"
+
+# 包本身的校验和（长期累积，便于回溯任意一天的包是否被改动）
+sha256sum "$PKG" >> "$BACKUP_DIR/packages.sha256"
+
+# 清理过期备份与清单
+find "$BACKUP_DIR" -name 'site-*.tar.gz' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -name 'manifest-*.sha256' -mtime +"$KEEP_DAYS" -delete
+
+SIZE=$(du -h "$PKG" | cut -f1)
+COUNT=$(wc -l < "$MANIFEST")
+echo "$(date '+%F %T') backup ok pkg=$PKG size=$SIZE files=$COUNT"

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Skyinstrument site backup daily at 03:20
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=300
+Persistent=true
+Unit=skyinstrument-backup.service
+
+[Install]
+WantedBy=timers.target

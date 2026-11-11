@@ -1,0 +1,8 @@
+[Unit]
+Description=Skyinstrument weekly file hash verification
+Documentation=file:/srv/skyinstrument/security-records/00-README.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/skyinstrument-verify
+Nice=10
