@@ -4,7 +4,8 @@
 set -euo pipefail
 
 BACKUP_DIR=/srv/backup
-KEEP_DAYS=14
+KEEP_DAYS_PKG=14        # 备份包：容量较大，保留 14 天
+KEEP_DAYS_MANIFEST=365  # 哈希清单：仅数 KB，保留一年，避免本地同步滞后导致断档
 DAY=$(date +%Y%m%d)
 PKG="$BACKUP_DIR/site-$DAY.tar.gz"
 MANIFEST="$BACKUP_DIR/manifest-$DAY.sha256"
@@ -29,8 +30,8 @@ rm -rf "$WORK"
 sha256sum "$PKG" >> "$BACKUP_DIR/packages.sha256"
 
 # 清理过期备份与清单
-find "$BACKUP_DIR" -name 'site-*.tar.gz' -mtime +"$KEEP_DAYS" -delete
-find "$BACKUP_DIR" -name 'manifest-*.sha256' -mtime +"$KEEP_DAYS" -delete
+find "$BACKUP_DIR" -name 'site-*.tar.gz' -mtime +"$KEEP_DAYS_PKG" -delete
+find "$BACKUP_DIR" -name 'manifest-*.sha256' -mtime +"$KEEP_DAYS_MANIFEST" -delete
 
 SIZE=$(du -h "$PKG" | cut -f1)
 COUNT=$(wc -l < "$MANIFEST")
