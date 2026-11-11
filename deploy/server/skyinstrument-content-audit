@@ -690,6 +690,15 @@ def remediate(ai_notes):
         if not url:
             actions.append((rel, '跳过自动处置（非站点路径）'))
             continue
+        # 已在拦截状态就不再重复加规则，避免 nginx 片段堆积
+        try:
+            conf_text = open('/etc/skyinstrument-website/conf.d/incident.conf',
+                             encoding='utf-8').read()
+        except Exception:  # noqa: BLE001
+            conf_text = ''
+        if ('location = %s {' % url) in conf_text:
+            actions.append((rel, '已处于拦截状态，无需重复处置'))
+            continue
         cmd = [INCIDENT_BIN, '--path', url, '--reason',
                '内容巡检：%s；模型判定 risk' % '；'.join(hits)[:60]]
         if apply:
