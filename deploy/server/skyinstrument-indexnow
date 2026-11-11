@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""IndexNow 主动提交 URL 给必应、Yandex 等搜索引擎。
+
+不需要账号，靠根目录下的 key 文件证明站点归属。
+用法：skyinstrument-indexnow            （提交 sitemap 里的全部页面）
+      skyinstrument-indexnow <url> ...  （只提交指定页面）
+"""
+import json
+import os
+import sys
+import urllib.request
+
+KEY = '00451c94337c9dba03347364098eaa74'
+SITE = 'https://skyinstrument.cn'
+KEY_LOCATION = '%s/%s.txt' % (SITE, KEY)
+ENDPOINT = 'https://api.indexnow.org/indexnow'
+DEFAULT_URLS = [SITE + '/', SITE + '/privacy.html', SITE + '/credits.html']
+
+
+def main():
+    urls = sys.argv[1:] or DEFAULT_URLS
+    payload = {
+        'host': 'skyinstrument.cn',
+        'key': KEY,
+        'keyLocation': KEY_LOCATION,
+        'urlList': urls,
+    }
+    body = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(ENDPOINT, data=body, method='POST')
+    req.add_header('Content-Type', 'application/json; charset=utf-8')
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            code = resp.status
+            print('IndexNow 提交成功：HTTP %d，%d 个 URL' % (code, len(urls)))
+            return 0
+    except urllib.error.HTTPError as exc:
+        # 200/202 之外都是失败；403 多为 key 文件不可访问
+        print('IndexNow 提交失败：HTTP %d %s' % (exc.code, exc.reason))
+        return 1
+    except Exception as exc:  # noqa: BLE001
+        print('IndexNow 提交异常：%s: %s' % (type(exc).__name__, exc))
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

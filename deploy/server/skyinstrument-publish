@@ -61,6 +61,9 @@ echo "校验通过：$COUNT 个文件，$SIZE"
 
 # 4. 原子切换软链（先建临时链接再 rename，避免瞬间 404）
 ln -sfn "releases/$TS" "$ROOT/.current.new"
+
+# 发布后主动通知搜索引擎（失败不影响发布）
+/usr/local/sbin/skyinstrument-indexnow >/dev/null 2>&1 || true
 mv -Tf "$ROOT/.current.new" "$CURRENT"
 echo "已切换 current -> releases/$TS"
 
