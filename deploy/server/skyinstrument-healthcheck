@@ -130,6 +130,51 @@ with open(report_path, 'w', encoding='utf-8') as fh:
     fh.write(report)
 print(report)
 
+def build_html(rows, failed_count):
+    """生成告警邮件正文（HTML）。表格逐行高亮异常项，避免纯文本 Markdown 在
+    邮件客户端里挤成一团。"""
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    if failed_count == 0:
+        head_color, head_text = '#0a7d32', '全部通过'
+    else:
+        head_color, head_text = '#b3261e', '%d 项异常' % failed_count
+    parts = [
+        '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,'
+        '\'Helvetica Neue\',Arial,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;'
+        'max-width:720px;margin:0 auto;color:#1f2328;font-size:14px;line-height:1.6">',
+        '<h2 style="margin:0 0 4px;font-size:18px">星象仪 · 服务器自检告警</h2>',
+        '<p style="margin:0 0 16px;color:#57606a;font-size:13px">检查时间：%s</p>' % now,
+        '<p style="margin:0 0 16px;padding:10px 14px;border-radius:6px;'
+        'background:%s;color:#fff;font-weight:600;display:inline-block">%s</p>'
+        % (head_color, head_text),
+        '<table style="border-collapse:collapse;width:100%%;font-size:13px">',
+        '<thead><tr style="background:#f6f8fa">'
+        '<th style="text-align:left;padding:8px 10px;border:1px solid #d0d7de">检查项</th>'
+        '<th style="text-align:left;padding:8px 10px;border:1px solid #d0d7de;width:70px">结果</th>'
+        '<th style="text-align:left;padding:8px 10px;border:1px solid #d0d7de">说明</th>'
+        '</tr></thead><tbody>',
+    ]
+    for name, ok, detail in rows:
+        bg = '#fff' if ok else '#fff5f5'
+        color = '#0a7d32' if ok else '#b3261e'
+        label = '通过' if ok else '异常'
+        parts.append(
+            '<tr style="background:%s">'
+            '<td style="padding:8px 10px;border:1px solid #d0d7de">%s</td>'
+            '<td style="padding:8px 10px;border:1px solid #d0d7de;color:%s;font-weight:600">%s</td>'
+            '<td style="padding:8px 10px;border:1px solid #d0d7de;color:#57606a">%s</td>'
+            '</tr>' % (bg, name, color, label, detail)
+        )
+    parts += [
+        '</tbody></table>',
+        '<p style="margin:16px 0 0;color:#57606a;font-size:12px">'
+        '本邮件由服务器每日自检自动发送，无需回复。完整记录见 '
+        '/srv/skyinstrument/security-records/。</p>',
+        '</div>',
+    ]
+    return ''.join(parts)
+
+
 # 发信
 if failed and os.path.exists(MAIL_CONF):
     conf = {}
@@ -143,9 +188,12 @@ if failed and os.path.exists(MAIL_CONF):
         import smtplib
         from email.header import Header
         from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
         from email.utils import formataddr
 
-        msg = MIMEText(report, 'plain', 'utf-8')
+        msg = MIMEMultipart('alternative')
+        msg.attach(MIMEText(report, 'plain', 'utf-8'))
+        msg.attach(MIMEText(build_html(results, len(failed)), 'html', 'utf-8'))
         msg['Subject'] = Header('[星象仪告警] %d 项自检异常' % len(failed), 'utf-8')
         msg['From'] = formataddr(('星象仪自检', conf['SMTP_USER']))
         msg['To'] = conf['MAIL_TO']
@@ -163,5 +211,40 @@ if failed and os.path.exists(MAIL_CONF):
         print('告警邮件发送失败：%s' % exc, file=sys.stderr)
 elif failed:
     print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
+
+if '--send-test' in sys.argv and not failed and os.path.exists(MAIL_CONF):
+    # 仅用于验证邮件排版：把当前结果当作告警内容发出，不影响报告与退出码
+    conf = {}
+    for line in open(MAIL_CONF, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        conf[k.strip()] = v.strip()
+    try:
+        import smtplib
+        from email.header import Header
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        from email.utils import formataddr
+
+        msg = MIMEMultipart('alternative')
+        msg.attach(MIMEText(report, 'plain', 'utf-8'))
+        msg.attach(MIMEText(build_html(results, 0), 'html', 'utf-8'))
+        msg['Subject'] = Header('[星象仪] 自检报告排版测试', 'utf-8')
+        msg['From'] = formataddr(('星象仪自检', conf['SMTP_USER']))
+        msg['To'] = conf['MAIL_TO']
+        port = int(conf.get('SMTP_PORT', '465'))
+        if port == 465:
+            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
+        else:
+            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
+            server.starttls()
+        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
+        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
+        server.quit()
+        print('排版测试邮件已发送至 %s' % conf['MAIL_TO'])
+    except Exception as exc:  # noqa: BLE001
+        print('排版测试邮件发送失败：%s' % exc, file=sys.stderr)
 
 sys.exit(1 if failed else 0)
