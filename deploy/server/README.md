@@ -81,3 +81,8 @@ MAIL_TO=<收件邮箱>
 skyinstrument-rollback <版本目录>              # 页面内容回滚
 skyinstrument-incident --rollback <时间戳>     # 解除页面拦截
 ```
+
+## 内容安全
+
+完整流程（检测 / 判定 / 处置 / 通知 / 留档 / 降级）见
+[docs/ops/CONTENT-SECURITY.md](../../docs/ops/CONTENT-SECURITY.md)。
