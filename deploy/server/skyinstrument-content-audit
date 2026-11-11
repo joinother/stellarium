@@ -498,12 +498,25 @@ def main():
             if verdict:
                 ai_notes.append((rel, hits[:3], verdict))
     elif conf.get('LLM_KEY') and changed and not issues:
-        rel, old_n, new_n = changed[0]
-        added = changed_text.get(rel, '')
-        if len(added.strip()) >= 10:
-            verdict = judge('change', rel, {'excerpt': '新增文字：' + added + '（字符数 %d -> %d）' % (old_n, new_n)})
-            if verdict and verdict.get('verdict') != 'ok':
-                ai_notes.append((rel, ['内容变更'], verdict))
+        # 词库未命中，但内容有变更：逐段交给模型自由审查（最多 3 段）
+        calls = 0
+        for rel, old_n, new_n in changed:
+            if calls >= 3:
+                break
+            added = changed_text.get(rel, '')
+            if len(added.strip()) < 10:
+                continue
+            verdict = judge_free(rel, added)
+            calls += 1
+            if not verdict:
+                continue
+            if verdict.get('verdict') == 'risk':
+                issue_level = '高' if rel in hard_risk_pages else '中'
+                add(issue_level, '疑似风险（AI 自由审查）', rel,
+                    '%s：…%s…' % (verdict.get('reason', ''), added[:80]))
+                ai_notes.append((rel, ['词库未命中，AI 自由审查'], verdict))
+            elif verdict.get('verdict') == 'needs_review':
+                ai_notes.append((rel, ['词库未命中，AI 待人工确认'], verdict))
 
     # 自动处置（默认演练，需 REMEDIATE_CONF 中 APPLY=1 才真正拦截）
     # 处置不依赖 AI：硬风险（隐藏元素内含违禁词）按规则直接处置。
@@ -605,6 +618,63 @@ def main():
             for key in fresh:
                 mark_alerted(key)
     sys.exit(1 if issues else 0)
+
+
+def judge_free(page, text):
+    """词库未命中时的兜底审查：把变更文本交给模型判断是否引入风险。
+
+    只在内容确有变更时调用，且每次巡检最多 3 段，控制成本。
+    """
+    conf = load_audit_conf()
+    if not conf.get('LLM_KEY'):
+        return None
+    prompt = (
+        '你是网站内容合规审核员。下面是一个网站的页面中新增或修改的文字，'
+        '词库没有命中，但仍可能存在词库覆盖不到的问题。\n'
+        '请判断是否引入以下风险（任一即可判 risk）：\n'
+        '1. 诱导下载、加微信/QQ 领福利、刷单返利等推广导流；\n'
+        '2. 夸大或绝对化宣传（最准、第一、100%% 有效、包治等）；\n'
+        '3. 隐藏的推广文案、赌博、色情、诈骗、办证贷款类内容；\n'
+        '4. 泄露个人信息（手机号、身份证、住址、账号密钥）；\n'
+        '5. 与本站（天文观测工具）定位明显不符的商业或垃圾内容。\n'
+        '若属于正常的功能说明、隐私政策、开源致谢、天文科普，判 ok。\n'
+        '文件：%s\n新增文字：%s\n\n'
+        '请只输出一行 JSON，不要解释：'
+        '{"verdict":"ok|risk|needs_review","reason":"不超过40字的中文理由"}'
+        % (page, text[:1200])
+    )
+    body = json.dumps({
+        'model': conf.get('LLM_MODEL', 'deepseek-chat'),
+        'messages': [
+            {'role': 'system', 'content': '你是严谨的网站内容合规审核员，只输出 JSON。'},
+            {'role': 'user', 'content': prompt},
+        ],
+        'temperature': 0.1,
+        'max_tokens': 200,
+        'stream': False,
+    }).encode('utf-8')
+    req = urllib.request.Request(conf.get('LLM_ENDPOINT', 'https://api.deepseek.com/chat/completions'),
+                                 data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
+    try:
+        with urllib.request.urlopen(req, timeout=40) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        content = data['choices'][0]['message']['content'].strip()
+        stripped = re.sub(r'^```(?:json)?|```$', '', content, flags=re.M).strip()
+        m = re.search(r'\{.*\}', stripped, re.S)
+        if not m:
+            low = content.lower()
+            if any(h.lower() in low for h in REFUSAL_HINTS):
+                ai_record(True, '模型拒绝输出（内容过滤）', refused=True)
+                return {'verdict': 'refused', 'reason': '模型拒绝输出'}
+            ai_record(False, '自由审查输出无法解析')
+            return None
+        ai_record(True)
+        return json.loads(m.group(0))
+    except Exception as exc:  # noqa: BLE001
+        ai_record(False, '%s: %s' % (type(exc).__name__, exc))
+        return None
 
 
 def load_audit_conf():
