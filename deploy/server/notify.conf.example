@@ -1,0 +1,22 @@
+# 统一发信配置。CHANNELS 决定同时走哪些通道，逗号分隔。
+# 支持的通道：email（邮件）、webhook（钉钉/企业微信/飞书等 HTTP 接口）、
+#             push（应用推送网关，由网关调用华为/荣耀/小米等厂商接口）
+CHANNELS=email
+# critical 级别冷却分钟数（0 表示不去重，由调用方自行控制）
+CRITICAL_COOLDOWN_MIN=0
+
+[email]
+SMTP_HOST=smtp.qq.com
+SMTP_PORT=465
+SMTP_USER=1134873571@qq.com
+SMTP_PASS=__FILL_ON_SERVER__
+MAIL_TO=1134873571@qq.com
+FROM_NAME=星象仪
+
+# 以下为示例，按需启用并把通道名加入 CHANNELS
+#[webhook]
+#URL=https://oapi.dingtalk.com/robot/send?access_token=xxx
+
+#[push]
+#GATEWAY_URL=http://127.0.0.1:8090/internal/push
+#GATEWAY_TOKEN=xxx

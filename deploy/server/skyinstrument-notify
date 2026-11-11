@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""统一发信入口：所有告警与日报都通过这里出去。
+
+调用方只提供「级别 + 主题 + 正文」，不关心具体通道：
+
+    skyinstrument-notify --level critical \
+        --subject "[星象仪告警] 内容巡检发现 3 项问题" \
+        --text-file /tmp/body.txt [--html-file /tmp/body.html]
+
+通道由 /etc/skyinstrument/notify.conf 的 CHANNELS 决定，当前支持：
+    email     邮件（SMTP）
+    webhook   任意 HTTP 接口（钉钉/企业微信/飞书/自建）
+    push      应用推送网关（POST 到本地或远端服务，由其分发给华为/荣耀/小米等）
+
+级别：
+    critical  即时告警（可配冷却，防同一主题刷屏）
+    daily     日报（每天一次，不做去重）
+    info      仅记录，不发
+"""
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+
+CONF = '/etc/skyinstrument/notify.conf'
+STATE = '/var/lib/skyinstrument/notify-state.json'
+
+
+def load_conf(path=CONF):
+    """极简 INI：支持 [section] 与 key=value；无 section 的键归入 default。"""
+    conf = {'default': {}}
+    section = 'default'
+    if not os.path.exists(path):
+        return conf
+    for raw in open(path, encoding='utf-8'):
+        line = raw.strip()
+        if not line or line.startswith('#') or line.startswith(';'):
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            section = line[1:-1].strip().lower()
+            conf.setdefault(section, {})
+            continue
+        if '=' in line:
+            k, v = line.split('=', 1)
+            conf.setdefault(section, {})[k.strip().upper()] = v.strip()
+    return conf
+
+
+def channels(conf):
+    raw = conf['default'].get('CHANNELS', 'email')
+    return [c.strip().lower() for c in raw.split(',') if c.strip()]
+
+
+def suppressed(conf, level, key):
+    """critical 级别可配置冷却时间，避免同一问题反复打扰。"""
+    if level != 'critical':
+        return False
+    minutes = int(conf['default'].get('CRITICAL_COOLDOWN_MIN', '0') or 0)
+    if minutes <= 0:
+        return False
+    try:
+        st = json.load(open(STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        st = {}
+    last = st.get(key, 0)
+    if time.time() - last < minutes * 60:
+        return True
+    st[key] = time.time()
+    st = {k: v for k, v in st.items() if time.time() - v < 30 * 86400}
+    try:
+        os.makedirs(os.path.dirname(STATE), exist_ok=True)
+        json.dump(st, open(STATE, 'w', encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+def send_email(conf, subject, text, html):
+    sec = conf.get('email', {})
+    host = sec.get('SMTP_HOST')
+    if not host:
+        return False, 'email 通道未配置 SMTP_HOST'
+    import smtplib
+    from email.header import Header
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from email.utils import formataddr
+
+    msg = MIMEMultipart('alternative')
+    msg.attach(MIMEText(text or '', 'plain', 'utf-8'))
+    if html:
+        msg.attach(MIMEText(html, 'html', 'utf-8'))
+    msg['Subject'] = Header(subject, 'utf-8')
+    msg['From'] = formataddr((sec.get('FROM_NAME', '星象仪'), sec['SMTP_USER']))
+    msg['To'] = sec.get('MAIL_TO', sec['SMTP_USER'])
+    port = int(sec.get('SMTP_PORT', '465'))
+    try:
+        if port == 465:
+            s = smtplib.SMTP_SSL(host, port, timeout=25)
+        else:
+            s = smtplib.SMTP(host, port, timeout=25)
+            s.starttls()
+        s.login(sec['SMTP_USER'], sec['SMTP_PASS'])
+        s.sendmail(sec['SMTP_USER'], [msg['To']], msg.as_string())
+        s.quit()
+        return True, 'email 已发送至 %s' % msg['To']
+    except Exception as exc:  # noqa: BLE001
+        return False, 'email 失败：%s: %s' % (type(exc).__name__, exc)
+
+
+def post_json(url, payload, headers=None, timeout=20):
+    body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(url, data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    for k, v in (headers or {}).items():
+        req.add_header(k, v)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.status, resp.read(500).decode('utf-8', 'replace')
+
+
+def send_webhook(conf, subject, text):
+    sec = conf.get('webhook', {})
+    url = sec.get('URL')
+    if not url:
+        return False, 'webhook 未配置 URL'
+    payload = {'msgtype': 'text', 'text': {'content': '%s\n\n%s' % (subject, (text or '')[:1500])}}
+    try:
+        status, _ = post_json(url, payload)
+        return status < 400, 'webhook 返回 %s' % status
+    except Exception as exc:  # noqa: BLE001
+        return False, 'webhook 失败：%s' % exc
+
+
+def send_push(conf, subject, text, level):
+    """应用推送网关：由网关负责调华为/荣耀/小米等厂商接口。
+
+    本入口只负责把「标题 + 正文 + 级别」交给网关，不持有任何厂商密钥。
+    """
+    sec = conf.get('push', {})
+    url = sec.get('GATEWAY_URL')
+    if not url:
+        return False, 'push 未配置 GATEWAY_URL'
+    headers = {}
+    if sec.get('GATEWAY_TOKEN'):
+        headers['Authorization'] = 'Bearer ' + sec['GATEWAY_TOKEN']
+    payload = {'title': subject, 'body': (text or '')[:1000], 'level': level}
+    try:
+        status, _ = post_json(url, payload, headers)
+        return status < 400, 'push 网关返回 %s' % status
+    except Exception as exc:  # noqa: BLE001
+        return False, 'push 失败：%s' % exc
+
+
+def main():
+    ap = argparse.ArgumentParser(description='统一发信入口')
+    ap.add_argument('--level', default='critical', choices=['critical', 'daily', 'info'])
+    ap.add_argument('--subject', required=True)
+    ap.add_argument('--text', default='')
+    ap.add_argument('--text-file')
+    ap.add_argument('--html-file')
+    ap.add_argument('--dedupe-key', help='默认用主题做冷却键')
+    args = ap.parse_args()
+
+    text = args.text
+    if args.text_file and os.path.exists(args.text_file):
+        text = open(args.text_file, encoding='utf-8').read()
+    html = None
+    if args.html_file and os.path.exists(args.html_file):
+        html = open(args.html_file, encoding='utf-8').read()
+
+    conf = load_conf()
+    if args.level == 'info':
+        print('info 级别仅记录，不发送')
+        return 0
+
+    key = args.dedupe_key or hashlib.sha1(args.subject.encode('utf-8')).hexdigest()[:16]
+    if suppressed(conf, args.level, key):
+        print('冷却中，跳过发送：%s' % args.subject)
+        return 0
+
+    results = []
+    ok_any = False
+    for ch in channels(conf):
+        if ch == 'email':
+            ok, info = send_email(conf, args.subject, text, html)
+        elif ch == 'webhook':
+            ok, info = send_webhook(conf, args.subject, text)
+        elif ch == 'push':
+            ok, info = send_push(conf, args.subject, text, args.level)
+        else:
+            ok, info = False, '未知通道 %s' % ch
+        results.append((ch, ok, info))
+        ok_any = ok_any or ok
+
+    for ch, ok, info in results:
+        print('[%s] %s %s' % (ch, 'OK' if ok else 'FAIL', info))
+    if not results:
+        print('未配置任何通道', file=sys.stderr)
+    return 0 if ok_any else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

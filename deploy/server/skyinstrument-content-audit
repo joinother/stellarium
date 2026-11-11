@@ -32,6 +32,7 @@ NGINX_CONF = '/etc/skyinstrument-website/nginx.conf'
 SITE_DIR = '/srv/skyinstrument/website/current'
 RECORDS = '/srv/skyinstrument/security-records'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
+NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 AUDIT_CONF = '/etc/skyinstrument/audit.conf'   # 大模型判定层配置（可选）
 API_CONF = '/etc/skyinstrument/audit-endpoints.conf'  # 需巡检的接口，每行一个路径
 API_BASE = 'http://127.0.0.1:8090'
@@ -339,6 +340,7 @@ def main():
 
     for p in files:
         rel = os.path.relpath(p, os.path.dirname(served[0]) if len(served) == 1 else '/srv')
+        ABS_BY_REL[rel] = p
         kind = classify(p)
         type_stat[kind] = type_stat.get(kind, 0) + 1
         try:
@@ -672,10 +674,52 @@ def remediation_enabled():
     return False
 
 
+def served_url_map():
+    """从 nginx 配置解析「目录 -> URL 前缀」。
+
+    支持 root 与 alias 两种写法：alias 记在 location 内的前缀上，
+    root 一律以 / 为前缀。以后新增 location/alias 无需改代码即可纳入处置。
+    """
+    mapping = []
+    if not os.path.exists(NGINX_CONF):
+        return mapping
+    prefix = '/'
+    for raw in open(NGINX_CONF, encoding='utf-8', errors='replace'):
+        line = raw.strip()
+        m = re.match(r'location\s+(?:[=~^*\s]*)(\S+)\s*\{', line)
+        if m and m.group(1).startswith('/'):
+            prefix = m.group(1)
+            if not prefix.endswith('/'):
+                prefix += '/'
+            continue
+        m = re.match(r'alias\s+([^;]+);', line)
+        if m:
+            d = os.path.normpath(m.group(1).strip()) + '/'
+            mapping.append((d, prefix))
+            continue
+        m = re.match(r'root\s+([^;]+);', line)
+        if m:
+            d = os.path.normpath(m.group(1).strip()) + '/'
+            mapping.append((d, '/'))
+            continue
+        if line == '}':
+            prefix = '/'
+    # 长目录优先，避免 /srv/a 抢先匹配 /srv/a/b
+    mapping.sort(key=lambda x: -len(x[0]))
+    return mapping
+
+
+ABS_BY_REL = {}
+
+
 def url_path_for(rel):
-    """把相对路径映射为可拦截的 URL 路径；镜像数据不自动处置。"""
-    if rel.startswith('skyinstrument/website/current/'):
-        return '/' + rel[len('skyinstrument/website/current/'):]
+    """把巡检里的相对路径映射为可拦截的 URL；未在 nginx 暴露的资源返回 None。"""
+    abs_path = ABS_BY_REL.get(rel)
+    if not abs_path:
+        return None
+    for d, prefix in served_url_map():
+        if abs_path.startswith(d):
+            return prefix + abs_path[len(d):]
     return None
 
 
@@ -719,23 +763,7 @@ def remediate(ai_notes):
 
 
 def send_mail(report, count):
-    if not os.path.exists(MAIL_CONF):
-        print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
-        return
-    conf = {}
-    for line in open(MAIL_CONF, encoding='utf-8'):
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        conf[k.strip()] = v.strip()
     try:
-        import smtplib
-        from email.header import Header
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.utils import formataddr
-
         rows = ''.join(
             '<tr><td style="padding:6px 10px;border:1px solid #d0d7de">%s</td>'
             '<td style="padding:6px 10px;border:1px solid #d0d7de">%s</td>'
@@ -758,24 +786,26 @@ def send_mail(report, count):
             % (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), count, rows,
                os.path.join(RECORDS, 'content-audit-' + datetime.now().strftime('%Y%m%d') + '.txt'))
         )
-        msg = MIMEMultipart('alternative')
-        msg.attach(MIMEText(report, 'plain', 'utf-8'))
-        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-        msg['Subject'] = Header('[星象仪告警] 内容巡检发现 %d 项问题' % count, 'utf-8')
-        msg['From'] = formataddr(('星象仪巡检', conf['SMTP_USER']))
-        msg['To'] = conf['MAIL_TO']
-        port = int(conf.get('SMTP_PORT', '465'))
-        if port == 465:
-            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
-        else:
-            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
-            server.starttls()
-        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
-        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
-        server.quit()
-        print('告警邮件已发送至 %s' % conf['MAIL_TO'])
+        import tempfile
+        import subprocess as _sp
+        tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+        tf.write(report or '')
+        tf.close()
+        hf = tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8')
+        hf.write(html_body or '')
+        hf.close()
+        try:
+            r = _sp.run([NOTIFY, '--level', 'critical',
+                         '--subject', '[星象仪告警] 内容巡检发现 %d 项问题' % count,
+                         '--text-file', tf.name, '--html-file', hf.name],
+                        stdout=_sp.PIPE, stderr=_sp.STDOUT, universal_newlines=True, timeout=60)
+            print((r.stdout or '').strip())
+        finally:
+            for _p in (tf.name, hf.name):
+                if os.path.exists(_p):
+                    os.unlink(_p)
     except Exception as exc:  # noqa: BLE001
-        print('告警邮件发送失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
+        print('告警发送失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
 
 
 if __name__ == '__main__':

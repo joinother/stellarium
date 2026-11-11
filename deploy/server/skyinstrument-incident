@@ -29,6 +29,7 @@ SITE_DIR = '/srv/skyinstrument/website/current'
 INCIDENT_DIR = '/srv/skyinstrument/incidents'
 LOG = '/srv/skyinstrument/security-records/incident-log.tsv'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
+NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 
 
 def sha256_of(path):
@@ -104,34 +105,22 @@ def append_log(row):
 
 
 def send_mail(subject, body):
-    if not os.path.exists(MAIL_CONF):
-        return
-    conf = {}
-    for line in open(MAIL_CONF, encoding='utf-8'):
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        conf[k.strip()] = v.strip()
+    """统一走 skyinstrument-notify；本脚本不再持有任何 SMTP 配置。"""
     try:
-        import smtplib
-        from email.header import Header
-        from email.mime.text import MIMEText
-        from email.utils import formataddr
-
-        msg = MIMEText(body, 'plain', 'utf-8')
-        msg['Subject'] = Header(subject, 'utf-8')
-        msg['From'] = formataddr(('星象仪应急', conf['SMTP_USER']))
-        msg['To'] = conf['MAIL_TO']
-        port = int(conf.get('SMTP_PORT', '465'))
-        s = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20) if port == 465 else smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
-        if port != 465:
-            s.starttls()
-        s.login(conf['SMTP_USER'], conf['SMTP_PASS'])
-        s.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
-        s.quit()
+        import subprocess as _sp
+        import tempfile
+        tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+        tf.write(body or '')
+        tf.close()
+        try:
+            r = _sp.run([NOTIFY, '--level', 'critical', '--subject', subject, '--text-file', tf.name],
+                        stdout=_sp.PIPE, stderr=_sp.STDOUT, universal_newlines=True, timeout=60)
+            print((r.stdout or '').strip())
+        finally:
+            if os.path.exists(tf.name):
+                os.unlink(tf.name)
     except Exception as exc:  # noqa: BLE001
-        sys.stderr.write('告警邮件发送失败：%s: %s\n' % (type(exc).__name__, exc))
+        sys.stderr.write('告警发送失败：%s: %s\n' % (type(exc).__name__, exc))
 
 
 args_reason = ''

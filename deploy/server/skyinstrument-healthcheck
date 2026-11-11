@@ -26,6 +26,7 @@ from datetime import datetime
 RECORDS = '/srv/skyinstrument/security-records'
 BACKUP_DIR = '/srv/backup'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
+NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 SITE_HOST = 'skyinstrument.cn'
 
 # 统一 PATH：通过云助手/不同入口执行时环境变量可能不完整，
@@ -184,75 +185,37 @@ critical_failed = [r for r in failed if r[0] in CRITICAL_ITEMS]
 if failed and not critical_failed:
     print('存在 %d 项非关键问题，留给每日汇总邮件' % len(failed))
 
-if critical_failed and os.path.exists(MAIL_CONF):
-    conf = {}
-    for line in open(MAIL_CONF, encoding='utf-8'):
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        conf[k.strip()] = v.strip()
+if critical_failed:
+    import tempfile
+    import subprocess as _sp
+    tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+    tf.write(report)
+    tf.close()
     try:
-        import smtplib
-        from email.header import Header
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.utils import formataddr
+        r = _sp.run([NOTIFY, '--level', 'critical',
+                     '--subject', '[星象仪告警] %d 项自检异常' % len(critical_failed),
+                     '--text-file', tf.name],
+                    stdout=_sp.PIPE, stderr=_sp.STDOUT, universal_newlines=True, timeout=60)
+        print((r.stdout or '').strip())
+    finally:
+        if os.path.exists(tf.name):
+            os.unlink(tf.name)
+elif failed:
+    print('存在 %d 项非关键问题，留给每日汇总邮件' % len(failed))
 
-        msg = MIMEMultipart('alternative')
-        msg.attach(MIMEText(report, 'plain', 'utf-8'))
-        msg.attach(MIMEText(build_html(results, len(failed)), 'html', 'utf-8'))
-        msg['Subject'] = Header('[星象仪告警] %d 项自检异常' % len(failed), 'utf-8')
-        msg['From'] = formataddr(('星象仪自检', conf['SMTP_USER']))
-        msg['To'] = conf['MAIL_TO']
-        port = int(conf.get('SMTP_PORT', '465'))
-        if port == 465:
-            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
-        else:
-            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
-            server.starttls()
-        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
-        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
-        server.quit()
-        print('告警邮件已发送至 %s' % conf['MAIL_TO'])
-    except Exception as exc:  # noqa: BLE001
-        print('告警邮件发送失败：%s' % exc, file=sys.stderr)
-elif critical_failed:
-    print('未配置 %s，跳过发信' % MAIL_CONF, file=sys.stderr)
-
-if '--send-test' in sys.argv and not failed and os.path.exists(MAIL_CONF):
-    # 仅用于验证邮件排版：把当前结果当作告警内容发出，不影响报告与退出码
-    conf = {}
-    for line in open(MAIL_CONF, encoding='utf-8'):
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        conf[k.strip()] = v.strip()
+if '--send-test' in sys.argv and not failed:
+    import tempfile
+    import subprocess as _sp
+    tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+    tf.write(report)
+    tf.close()
     try:
-        import smtplib
-        from email.header import Header
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.utils import formataddr
-
-        msg = MIMEMultipart('alternative')
-        msg.attach(MIMEText(report, 'plain', 'utf-8'))
-        msg.attach(MIMEText(build_html(results, 0), 'html', 'utf-8'))
-        msg['Subject'] = Header('[星象仪] 自检报告排版测试', 'utf-8')
-        msg['From'] = formataddr(('星象仪自检', conf['SMTP_USER']))
-        msg['To'] = conf['MAIL_TO']
-        port = int(conf.get('SMTP_PORT', '465'))
-        if port == 465:
-            server = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20)
-        else:
-            server = smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
-            server.starttls()
-        server.login(conf['SMTP_USER'], conf['SMTP_PASS'])
-        server.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
-        server.quit()
-        print('排版测试邮件已发送至 %s' % conf['MAIL_TO'])
-    except Exception as exc:  # noqa: BLE001
-        print('排版测试邮件发送失败：%s' % exc, file=sys.stderr)
+        r = _sp.run([NOTIFY, '--level', 'daily', '--subject', '[星象仪] 自检报告排版测试',
+                     '--text-file', tf.name],
+                    stdout=_sp.PIPE, stderr=_sp.STDOUT, universal_newlines=True, timeout=60)
+        print((r.stdout or '').strip())
+    finally:
+        if os.path.exists(tf.name):
+            os.unlink(tf.name)
 
 sys.exit(1 if failed else 0)

@@ -17,6 +17,7 @@ os.environ['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/b
 RECORDS = '/srv/skyinstrument/security-records'
 AI_STATE = '/var/lib/skyinstrument/ai-status.json'
 MAIL_CONF = '/etc/skyinstrument/mail.conf'
+NOTIFY = '/usr/local/sbin/skyinstrument-notify'
 INCIDENT_LOG = os.path.join(RECORDS, 'incident-log.tsv')
 
 
@@ -150,41 +151,25 @@ def main():
         fh.write(text + '\n')
     print(text)
 
-    if not os.path.exists(MAIL_CONF):
-        print('未配置 mail.conf，跳过发信', file=sys.stderr)
-        return 0
-    conf = {}
-    for line in open(MAIL_CONF, encoding='utf-8'):
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        k, v = line.split('=', 1)
-        conf[k.strip()] = v.strip()
+    import tempfile
+    import subprocess as _sp
+    tf = tempfile.NamedTemporaryFile('w', suffix='.txt', delete=False, encoding='utf-8')
+    tf.write(text)
+    tf.close()
+    hf = tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8')
+    hf.write(html)
+    hf.close()
     try:
-        import smtplib
-        from email.header import Header
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        from email.utils import formataddr
-
-        msg = MIMEMultipart('alternative')
-        msg.attach(MIMEText(text, 'plain', 'utf-8'))
-        msg.attach(MIMEText(html, 'html', 'utf-8'))
-        msg['Subject'] = Header('[星象仪日报] %s %s' % (
-            datetime.now().strftime('%m-%d'), '全部正常' if all_ok else '有需关注问题'), 'utf-8')
-        msg['From'] = formataddr(('星象仪日报', conf['SMTP_USER']))
-        msg['To'] = conf['MAIL_TO']
-        port = int(conf.get('SMTP_PORT', '465'))
-        s = smtplib.SMTP_SSL(conf['SMTP_HOST'], port, timeout=20) if port == 465 else smtplib.SMTP(conf['SMTP_HOST'], port, timeout=20)
-        if port != 465:
-            s.starttls()
-        s.login(conf['SMTP_USER'], conf['SMTP_PASS'])
-        s.sendmail(conf['SMTP_USER'], [conf['MAIL_TO']], msg.as_string())
-        s.quit()
-        print('日报已发送至 %s' % conf['MAIL_TO'])
-    except Exception as exc:  # noqa: BLE001
-        print('日报发送失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
-        return 1
+        r = _sp.run([NOTIFY, '--level', 'daily',
+                     '--subject', '[星象仪日报] %s %s' % (
+                         datetime.now().strftime('%m-%d'), '全部正常' if all_ok else '有需关注问题'),
+                     '--text-file', tf.name, '--html-file', hf.name],
+                    stdout=_sp.PIPE, stderr=_sp.STDOUT, universal_newlines=True, timeout=60)
+        print((r.stdout or '').strip())
+    finally:
+        for _p in (tf.name, hf.name):
+            if os.path.exists(_p):
+                os.unlink(_p)
     return 0
 
 
