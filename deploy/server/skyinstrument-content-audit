@@ -199,10 +199,20 @@ def check_binary(path, rel):
             add('高', '资产夹带脚本', rel, '在 %s 文件中发现 %s' % (ext, sig.decode()))
 
 
+def has_cjk(w):
+    return any('\u4e00' <= ch <= '\u9fff' for ch in w)
+
+
 def scan_text_data(text, rel):
-    """对数据文件（JSON/CSV/3LE 等）执行与网页相同的规则检查。"""
+    """对数据文件（JSON/CSV/3LE 等）执行规则检查。
+
+    数据文件只匹配中文词条：卫星名、字段名大量使用英文缩写，
+    "amateur""anal" 这类英文子串会把正常数据判成违规。
+    """
     for cat, words in load_lexicon().items():
         for w in words:
+            if not has_cjk(w):
+                continue
             if w in text:
                 idx = text.find(w)
                 add('高', '违禁词/%s' % cat, rel,
@@ -457,6 +467,25 @@ def main():
     # 接口级巡检（动态内容）
     check_api_endpoints()
 
+    # 全站轮审：--sample N 时抽 N 个页面做整页 AI 审查（不依赖变更）
+    sample_n = 0
+    for i, a in enumerate(sys.argv):
+        if a == '--sample' and i + 1 < len(sys.argv):
+            try:
+                sample_n = int(sys.argv[i + 1])
+            except ValueError:
+                sample_n = 0
+    sampled = []
+    if sample_n > 0 and load_audit_conf().get('LLM_KEY'):
+        for p in sample_pages(served, sample_n):
+            rel = os.path.relpath(p, os.path.dirname(served[0]) if len(served) == 1 else '/srv')
+            ABS_BY_REL[rel] = p
+            res = review_full_page(p, rel)
+            sampled.append((rel, res))
+            if res and res.get('verdict') == 'risk':
+                add('中', '整页审查（AI）', rel,
+                    '%s：…%s…' % (res.get('reason', ''), res.get('excerpt', '')))
+
     # 变更检测：仅对文本类文件
     changed = []
     changed_text = {}
@@ -486,8 +515,8 @@ def main():
         for level, kind, where, detail in issues:
             by_file.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
         calls = 0
-        for rel, hits in list(by_file.items())[:4]:
-            if calls >= 5:
+        for rel, hits in list(by_file.items())[:6]:
+            if calls >= 8:
                 break
             verdict = judge('rule_hit', rel, {'rules': '; '.join(hits[:5]),
                                               'hidden': ' / '.join(hidden_by_page.get(rel, []))[:300],
@@ -497,6 +526,15 @@ def main():
                 verdict = {'verdict': 'risk', 'reason': '隐藏元素内含违禁词，规则优先（未采纳模型判断）'}
             if verdict:
                 ai_notes.append((rel, hits[:3], verdict))
+                # 由 AI 决定严重度：确认为风险则升为「高」（可即时告警/处置），
+                # 判定为误报则降为「低」（只留档，不告警）
+                v = verdict.get('verdict')
+                if v == 'risk':
+                    issues[:] = [(('高' if lv != '高' else lv), kd, w, dt) if w == rel else (lv, kd, w, dt)
+                                 for lv, kd, w, dt in issues]
+                elif v == 'false_positive':
+                    issues[:] = [(('低' if lv != '低' else lv), kd, w, dt) if w == rel else (lv, kd, w, dt)
+                                 for lv, kd, w, dt in issues]
     elif conf.get('LLM_KEY') and changed and not issues:
         # 词库未命中，但内容有变更：逐段交给模型自由审查（最多 3 段）
         calls = 0
@@ -569,6 +607,15 @@ def main():
               '- 最近成功：%s' % (time.strftime('%Y-%m-%d %H:%M', time.localtime(st['last_ok'])) if st.get('last_ok') else '无'),
               '- 最近失败：%s' % (st.get('last_reason', '') or '无'),
               '- 今日拒绝输出：%s 次' % st.get('refused_today', 0)]
+    if sampled:
+        lines += ['', '## 全站轮审（本次抽样 %d 页）' % len(sampled), '',
+                  '| 页面 | 结论 | 理由 |', '| --- | --- | --- |']
+        for rel, res in sampled:
+            if not res:
+                lines.append('| %s | 跳过 | 内容过短或不可读 |' % rel)
+            else:
+                lines.append('| %s | %s | %s |' % (rel, res.get('verdict'),
+                                                   str(res.get('reason', ''))[:60]))
     if actions:
         lines += ['', '## 自动处置' + ('（已生效）' if apply_on else '（演练模式）'), '',
                   '| 文件 | 动作 |', '| --- | --- |']
@@ -675,6 +722,60 @@ def judge_free(page, text):
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '%s: %s' % (type(exc).__name__, exc))
         return None
+
+
+SAMPLE_STATE = '/var/lib/skyinstrument/fullscan-state.json'
+
+
+def sample_pages(served, count):
+    """轮转选取待审页面，保证多天内覆盖全站。"""
+    pages = []
+    for root in served:
+        for dp, _dn, fns in os.walk(root):
+            for fn in sorted(fns):
+                if fn.endswith(('.html', '.htm')):
+                    pages.append(os.path.join(dp, fn))
+    pages = sorted(set(pages))
+    if not pages:
+        return []
+    try:
+        data = json.load(open(SAMPLE_STATE, encoding='utf-8'))
+    except Exception:  # noqa: BLE001
+        data = {'cursor': 0, 'reviewed': {}}
+    cursor = int(data.get('cursor', 0)) % len(pages)
+    picked = pages[cursor:cursor + count]
+    if len(picked) < count:
+        picked += pages[:count - len(picked)]
+    data['cursor'] = (cursor + count) % len(pages)
+    data['reviewed'] = data.get('reviewed', {})
+    for p in picked:
+        data['reviewed'][p] = time.strftime('%Y-%m-%d')
+    try:
+        os.makedirs(os.path.dirname(SAMPLE_STATE), exist_ok=True)
+        json.dump(data, open(SAMPLE_STATE, 'w', encoding='utf-8'), ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        pass
+    return picked
+
+
+def review_full_page(abs_path, rel):
+    """整页 AI 审查：分段送审，每页最多 3 段。返回 (verdict, reason, excerpt)。"""
+    try:
+        raw = open(abs_path, encoding='utf-8', errors='replace').read()
+    except Exception:  # noqa: BLE001
+        return None
+    text = visible_text(raw)
+    if len(text) < 40:
+        return None
+    chunk = 1200
+    segments = [text[i:i + chunk] for i in range(0, min(len(text), chunk * 3), chunk)]
+    for seg in segments:
+        verdict = judge_free(rel, seg)
+        if verdict and verdict.get('verdict') == 'risk':
+            out = dict(verdict)
+            out['excerpt'] = seg[:80]
+            return out
+    return {'verdict': 'ok', 'reason': '整页未发现风险'}
 
 
 def load_audit_conf():

@@ -1,0 +1,11 @@
+[Unit]
+Description=Review 2 site pages daily at 03:00
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=skyinstrument-fullscan.service
+
+[Install]
+WantedBy=timers.target
