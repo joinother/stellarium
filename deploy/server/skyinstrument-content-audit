@@ -49,7 +49,7 @@ AI_STATE = '/var/lib/skyinstrument/ai-status.json'    # AI 层可用性状态
 AI_USAGE = '/var/lib/skyinstrument/ai-usage.json'     # 每日调用与 token 用量
 PERF_STATE = '/var/lib/skyinstrument/audit-perf.json'  # 最近一次巡检耗时
 AI_MAX_CALLS_PER_DAY = 300                            # 每日调用上限，超出退回纯规则
-AI_TIME_BUDGET = 90                                   # 单次巡检用于模型调用的总时长（秒）
+AI_TIME_BUDGET = 150                                  # 单次巡检用于模型调用的总时长（秒）
 AI_DEADLINE = [0.0]                                   # 本次巡检的模型调用截止时刻
 
 
@@ -598,15 +598,20 @@ def main():
 
     # 全站轮审：--sample N 时抽 N 个页面做整页 AI 审查（不依赖变更）
     sample_n = 0
+    sample_all = False
     for i, a in enumerate(sys.argv):
         if a == '--sample' and i + 1 < len(sys.argv):
-            try:
-                sample_n = int(sys.argv[i + 1])
-            except ValueError:
-                sample_n = 0
+            val = sys.argv[i + 1]
+            if val == 'all':
+                sample_all = True
+            else:
+                try:
+                    sample_n = int(val)
+                except ValueError:
+                    sample_n = 0
     sampled = []
-    if sample_n > 0 and load_audit_conf().get('LLM_KEY'):
-        for p in sample_pages(served, sample_n):
+    if (sample_n > 0 or sample_all) and load_audit_conf().get('LLM_KEY'):
+        for p in sample_pages(served, sample_n or 9999, all_pages=sample_all):
             rel = os.path.relpath(p, os.path.dirname(served[0]) if len(served) == 1 else '/srv')
             ABS_BY_REL[rel] = p
             res = review_full_page(p, rel)
@@ -905,7 +910,7 @@ def judge_free(page, text):
 SAMPLE_STATE = '/var/lib/skyinstrument/fullscan-state.json'
 
 
-def sample_pages(served, count):
+def sample_pages(served, count, all_pages=False):
     """轮转选取待审页面，保证多天内覆盖全站。"""
     pages = []
     for root in served:
@@ -916,6 +921,8 @@ def sample_pages(served, count):
     pages = sorted(set(pages))
     if not pages:
         return []
+    if all_pages:
+        return pages
     try:
         data = json.load(open(SAMPLE_STATE, encoding='utf-8'))
     except Exception:  # noqa: BLE001
