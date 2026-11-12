@@ -59,6 +59,23 @@ test('SatNOGS requires a nonempty array with matching NORAD ids and complete val
   }
 })
 
+test('checksum-correct invalid TLE propagation fields are rejected', () => {
+  for (const [start, end, value] of [[33, 43, 'ABCDEFGHIJ'], [44, 52, 'ABCDEFGH'], [53, 61, 'ABCDEFGH']]) {
+    const line = tle1.slice(0, start) + value + tle1.slice(end, 68)
+    const sum = [...line].reduce((total, character) => total + (/\d/.test(character) ? Number(character) : character === '-' ? 1 : 0), 0)
+    assert.throws(() => validatePayload(tle.replace(tle1, line + sum % 10), { format: 'tle-3le' }), /invalid_payload/)
+  }
+})
+
+test('batch deadline publishes explicit fallback without starting more upstream requests', async (context) => {
+  const root = await workspace(context)
+  await run(root)
+  const result = await run(root, { batchBudgetMs: 0, fetchImpl: async () => assert.fail('budget exceeded') })
+  assert.equal(result.manifest.sources[0].status, 'stale')
+  assert.equal(result.manifest.sources[0].error, 'batch_timeout')
+  assert.equal(result.exitCode, 1)
+})
+
 test('JSON validates known catalogue schemas and minimum counts; unsupported formats fail closed', () => {
   assert.equal(validatePayload(json, jsonSource), 1)
   for (const body of ['null', '[]', '{}', '{"error":"failure"}', '{"version":1,"nova":{}}',
@@ -204,7 +221,25 @@ test('corrupt or hash-mismatched retained files are not advertised as last-good'
     const result = await run(root, { fetchImpl: async () => new Response('bad', { status: 403 }) })
     assert.equal(result.manifest.sources[0].available, false)
     assert.equal('sha256' in result.manifest.sources[0], false)
+    await assert.rejects(readFile(join(root, csvSource.mirrorPath)), { code: 'ENOENT' })
   }
+  const quarantined = await readdir(join(root, '.quarantine'))
+  assert.equal(quarantined.length, 2)
+})
+
+test('validation-only migration isolates bad files without any upstream requests', async (context) => {
+  const root = await workspace(context)
+  await run(root, { sources: [csvSource, jsonSource] })
+  await writeFile(join(root, csvSource.mirrorPath), 'Invalid query')
+  const result = await run(root, { sources: [csvSource, jsonSource], validateOnly: true,
+    fetchImpl: async () => assert.fail('validation must be offline') })
+  assert.equal(result.exitCode, 1)
+  assert.equal(result.manifest.sources[0].status, 'unavailable')
+  assert.equal(result.manifest.sources[1].status, 'fresh')
+  await assert.rejects(readFile(join(root, csvSource.mirrorPath)), { code: 'ENOENT' })
+  const files = await readdir(join(root, '.quarantine'))
+  assert.equal(files.length, 1)
+  assert.equal(await readFile(join(root, '.quarantine', files[0]), 'utf8'), 'Invalid query')
 })
 
 test('partial failure publishes other valid sources and returns a failing exit code', async (context) => {

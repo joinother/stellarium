@@ -1,0 +1,21 @@
+[Unit]
+Description=Publish read-only astronomy mirror health without upstream requests
+
+[Service]
+Type=oneshot
+User=tle-mirror
+Group=tle-mirror
+ExecStart=/usr/bin/node /opt/tle-mirror/publish-status.mjs
+TimeoutStartSec=30
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ReadWritePaths=/srv/tle-mirror
+MemoryMax=96M
+CPUQuota=25%
+TasksMax=16
+UMask=0022

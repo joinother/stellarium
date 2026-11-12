@@ -633,6 +633,12 @@ export interface SatelliteSourceInput {
   addNew: boolean
 }
 export interface SatelliteUpdateSettings {
+	lastCheckedAt?: string
+	lastCheckResult?: number
+  mirrorStatus?: string
+  mirrorCheckedAt?: string
+  mirrorStaleSources?: string[]
+  mirrorUnavailableSources?: string[]
   updatesEnabled: boolean
   autoAddEnabled: boolean
   autoRemoveEnabled: boolean

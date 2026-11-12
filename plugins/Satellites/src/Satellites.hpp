@@ -120,6 +120,9 @@ struct TleSource
 	//! Flag indicating whether new satellites in this list should be added.
 	//! See Satellites::autoAddEnabled.
 	bool addNew;
+	QString mirrorStatus;
+	QByteArray mirrorSha256;
+	qint64 mirrorBytes = 0;
 };
 
 //! @ingroup satellites
@@ -209,7 +212,8 @@ public:
 		CompleteNoUpdates,	//!< Update completed, there we no updates
 		CompleteUpdates,	//!< Update completed, there were updates
 		DownloadError,		//!< Error during download phase
-		OtherError		//!< Other error
+		OtherError,		//!< Other error
+		CompletePartial
 	};
 
 	//! Flags used to filter the satellites list according to their status.
@@ -336,6 +340,7 @@ public:
 
 	//! get the date and time the TLE elements were updated
 	QPair<QDateTime, double> getLastUpdate(void) const {return lastUpdate;}
+	QString getCatalogPath() const {return catalogPath;}
 	//! Returns whether the supplied simulation date is inside the catalogue range.
 	bool isDateInValidRange(const StelCore* core) const {return isValidRangeDates(core);}
 	//! set the date and time the TLE elements were updated
@@ -394,7 +399,7 @@ public:
 	//! complex. :) --BM
 	//! @param[in,out] newTleSets a hash with satellite IDs as keys; it's
 	//! modified by the method!
-	void updateSatellites(TleDataHash& newTleSets);
+	void updateSatellites(TleDataHash& newTleSets, bool complete = true);
 	
 	//! Depending on file contents, calls either #parseTleFile or #parseCsvFile,
 	//! forwarding the arguments to the callee.
@@ -927,6 +932,9 @@ private:
 	//! As a side effect it prevents problems if the user calls
 	//! setTleSources() while an update is in progress.
 	TleSourceList updateSources;
+	void startSourceDownloads();
+	void finishDownloadBatch();
+	void saveMirrorSummary();
 	class StelProgressController* progressBar;
 	int numberDownloadsComplete;
 	QTimer* updateTimer;
@@ -941,6 +949,8 @@ private:
 	//! This will apply only for the selected update sources.
 	bool autoDisplayEnabled;
 	QPair<QDateTime, double> lastUpdate; // Combines previous QDateTime (slow!) with efficient JD (to be checked each frame in isValidRangeDates()) of the same time.
+	QDateTime nextAutomaticUpdateAttempt;
+	bool scheduledUpdate = false;
 	int updateFrequencyHours;
 	//@}
 

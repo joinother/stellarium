@@ -1,5 +1,13 @@
 # AI Agent 服务器运维安全基线
 
+## 2026-11-12 公开镜像低权限迁移
+
+按用户授权，`/opt/tle-mirror` 新校验器和 `/srv/tle-mirror` 数据隔离方案已部署，抓取服务使用独立 `tle-mirror` 身份，移出原通知凭据 hook；公开 `/v1/status.json` 由无网络权限任务每 5 分钟生成。根维护会话已关闭，新 skyops 会话实际身份校验及例行诊断通过。
+
+使用 `bash scripts/resource-server-cli.sh mirror` 查看当前公开镜像服务身份、最近结果、timer 与 HTTPS 状态。原 `status/health` 仍针对本机 8080 staging 服务，不能据其 `publicService:false` 判断独立 `/v1/` 镜像未上线。部署备份、边界和验证见 `TLE-DEPLOYMENT-2026-11-12.md`。
+
+抓取账号无权读取通知/天气环境文件或改写脚本、网站配置；这不等于 Workbench 云维护凭据已限制到该用户，也不等于完成独立签名、异机备份或全面渗透测试。
+
 ## 2026-09-23 官网公开部署补充
 
 按用户授权新增公网 TCP 80/443、两个域名 A 记录和免费 Let's Encrypt 证书，未扩大 RAM、SSH 来源或购买服务。官网备案编号在控制台核实为 `新ICP备2026008516号-1`。网站与资源服务分离：静态网站 nginx 普通用户运行，原资源服务仍仅 `127.0.0.1:8080`、staging，不是公开镜像。

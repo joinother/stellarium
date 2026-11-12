@@ -14019,6 +14019,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				value["updateFrequencyHours"] = sats->getUpdateFrequencyHours();
 				value["secondsToUpdate"] = sats->getSecondsToUpdate();
 				value["updateState"] = static_cast<int>(sats->getUpdateState());
+				QSettings* preferences = StelApp::getInstance().getSettings();
+				value["lastCheckedAt"] = preferences->value("Satellites/last_check_at").toString();
+				value["lastCheckResult"] = preferences->value("Satellites/last_check_result", -1).toInt();
+				value["mirrorStatus"] = preferences->value("Satellites/mirror_status").toString();
+				value["mirrorCheckedAt"] = preferences->value("Satellites/mirror_checked_at").toString();
+				value["mirrorStaleSources"] = QJsonDocument::fromJson(preferences->value("Satellites/mirror_stale_sources").toString().toUtf8()).array();
+				value["mirrorUnavailableSources"] = QJsonDocument::fromJson(preferences->value("Satellites/mirror_unavailable_sources").toString().toUtf8()).array();
 				return value;
 			};
 			auto boolValue = [](const QJsonValue& value) {
@@ -14045,10 +14052,32 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 
+			if (commandName != "getSatelliteSources" && sats->getUpdateState() == Satellites::Updating)
+			{
+				result["ok"] = false;
+				result["reason"] = "satellite_update_busy";
+				result["error"] = "satellite update in progress; retry after completion";
+				return result;
+			}
+			if (commandName == "restoreSatelliteSources")
+			{
+				sats->restoreDefaultTleSources();
+				sats->loadSettings();
+				result["ok"] = true;
+				result["sourcesRestored"] = true;
+				return result;
+			}
+
 				if (commandName == "setSatelliteSources")
 				{
 				QJsonDocument document = QJsonDocument::fromJson(arg.toUtf8());
 				QJsonArray input;
+				if ((document.isObject() && !document.object().value("sources").isArray()) || arg.trimmed().isEmpty())
+				{
+					result["ok"] = false;
+					result["error"] = "expected a satellite source array or URL list";
+					return result;
+				}
 				if (document.isObject()) input = document.object().value("sources").toArray();
 				else if (document.isArray()) input = document.array();
 				if (document.isNull() && !arg.trimmed().isEmpty())
@@ -14085,7 +14114,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					unique.insert(canonical);
 					normalized.append((addNew ? QStringLiteral("1,") : QString()) + canonical);
 				}
-				if (normalized.isEmpty() && !input.isEmpty())
+				if (!rejected.isEmpty() || (normalized.isEmpty() && !input.isEmpty()))
 				{
 					result["ok"] = false;
 					result["error"] = "no valid satellite sources";
@@ -14093,14 +14122,6 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return result;
 				}
 
-				if (commandName == "restoreSatelliteSources")
-				{
-					sats->restoreDefaultTleSources();
-					sats->loadSettings();
-					result["ok"] = true;
-					result["sourcesRestored"] = true;
-					return result;
-				}
 				sats->setTleSources(normalized);
 				QJsonArray acceptedSources;
 				for (int index = 0; index < normalized.size(); ++index)
@@ -14142,7 +14163,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				}
 				if (!changed) { result["ok"] = false; result["error"] = "no satellite update setting supplied"; return result; }
 				sats->saveSettingsToConfig();
-				result["ok"] = true;
+				result["ok"] = StelApp::getInstance().getSettings()->status() == QSettings::NoError;
+				if (!result["ok"].toBool()) result["error"] = "satellite settings could not be saved";
 #ifdef STELLARIUM_OHOS_OFFLINE
 				result["offline"] = true;
 #else
@@ -14168,7 +14190,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (!info.exists() || !info.isFile() || !info.isReadable()) rejected.append(path);
 					else validPaths.append(info.absoluteFilePath());
 				}
-				if (validPaths.isEmpty())
+				if (validPaths.isEmpty() || !rejected.isEmpty())
 				{
 					result["ok"] = false;
 					result["error"] = "no readable local TLE files";
@@ -14178,8 +14200,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const int before = sats->listAllIds().size();
 				sats->updateFromFiles(validPaths, options.value("deleteFiles").toBool(false));
 				const int after = sats->listAllIds().size();
-				result["ok"] = true;
-				result["importedFiles"] = validPaths.size();
+				const bool succeeded = sats->getUpdateState() == Satellites::CompleteUpdates || sats->getUpdateState() == Satellites::CompleteNoUpdates;
+				result["ok"] = succeeded;
+				if (!succeeded)
+				{
+					result["reason"] = "satellite_import_rejected";
+					result["error"] = "satellite import rejected; previous catalog retained";
+				}
+				result["importedFiles"] = succeeded ? validPaths.size() : 0;
 				result["rejected"] = rejected;
 				result["catalogCountBefore"] = before;
 				result["catalogCountAfter"] = after;
@@ -14211,7 +14239,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					return result;
 				}
 				sats->updateFromOnlineSources();
-				result["ok"] = true;
+				result["ok"] = sats->getUpdateState() == Satellites::Updating;
+				result["updateState"] = static_cast<int>(sats->getUpdateState());
+				if (sats->getUpdateState() != Satellites::Updating) result["error"] = "satellite update could not start";
 				result["offline"] = false;
 				result["sourcesRestored"] = restoredDefaultSources;
 				result["sourceCount"] = sources.size();
@@ -14255,7 +14285,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s["newestUpdate"] = catalog.value("newestUpdate").toString();
 			s["outdatedCount"] = catalog.value("outdatedCount").toInt();
 			s["matchedCount"] = catalog.value("matchedCount").toInt();
-			s["catalogSource"] = "plugins/Satellites/resources/satellites.json";
+			s["catalogSource"] = sats->getCatalogPath();
 			static const QJsonObject bundledCatalogMetadata = []() {
 				QJsonObject metadata;
 				QFile bundledCatalog(":/satellites/satellites.json");

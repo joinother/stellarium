@@ -187,12 +187,20 @@ def main():
     except Exception:  # noqa: BLE001
         pass
 
+    if qw.get('timezone') == 'Asia/Shanghai':
+        current_day = time.strftime('%Y-%m-%d', time.gmtime(time.time() + 8 * 3600))
+        if qw.get('day') != current_day:
+            qw['dayCalls'] = 0
+        if qw.get('month') != current_day[:7]:
+            qw['monthCalls'] = 0
+
     data = {
         'generated': time.strftime('%Y-%m-%d %H:%M:%S'),
         'today': brief(day),
         'last7': brief(week),
         'upstream': {'day': qw.get('dayCalls', 0), 'month': qw.get('monthCalls', 0),
-                     'source': '和风天气'},
+                     'source': '和风天气', 'timezone': qw.get('timezone', 'UTC'),
+                     'recordDay': qw.get('day'), 'transitionDay': qw.get('transitionDay')},
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     tmp = OUT + '.tmp'

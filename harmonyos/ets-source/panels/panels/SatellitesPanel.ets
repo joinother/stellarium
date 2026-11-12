@@ -50,6 +50,9 @@ export struct SatellitesPanel {
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
+  aboutToAppear(): void { this.satelliteStore.observePanel(true) }
+  aboutToDisappear(): void { this.satelliteStore.observePanel(false) }
+
   // 倒计时文本（mm:ss / h:mm:ss）
   private countdownText(): string {
     const total = this.satelliteStore.countdownRemainingSeconds
@@ -61,9 +64,8 @@ export struct SatellitesPanel {
     return h > 0 ? h.toString() + ':' + mm + ':' + ss : mm + ':' + ss
   }
 
-  build() {
-    Scroll(this.panelScroller) {
-      Column({ space: 10 }) {
+  @Builder
+  countdownContent() {
         // —— 卫星倒计时：用户选目标、设定时长、主动开始 ——
         Column({ space: 8 }) {
           Text('卫星倒计时').fontSize(13).fontColor(this.c.text).width('100%').fontWeight(FontWeight.Medium)
@@ -111,41 +113,65 @@ export struct SatellitesPanel {
         .width('100%').padding(12)
         .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
         .margin({ bottom: 4 })
+  }
+
+  @Builder
+  diagnosticContent() {
         Column({ space: 3 }) {
-          Text(this.satelliteStore.satOffline ? '离线内置轨道数据' : '在线轨道数据')
-            .fontSize(13).fontColor(this.satelliteStore.satOffline ? this.c.chipInactiveText : this.c.warning).fontWeight(FontWeight.Medium)
-          if (this.satelliteStore.satNewestUpdate.length > 0) {
-            Text('目录更新时间：' + this.satelliteStore.satNewestUpdate.replace('T', ' ').replace('Z', ' UTC'))
-              .fontSize(11).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(I18n.t('sat_orbital_data') + ' · ' + this.satelliteStore.satCount.toString())
+            .fontSize(15).fontColor(this.c.text).fontWeight(FontWeight.Medium)
+          Text(this.satelliteStore.lastCheckResultText()).fontSize(13).fontColor(this.c.sub).width('100%')
+          if ((this.satelliteStore.satUpdateSettings.mirrorCheckedAt ?? '').length > 0) {
+            Text(this.satelliteStore.mirrorStatusText()).fontSize(12).fontColor(this.c.sub).width('100%')
           }
+          if ((this.satelliteStore.satUpdateSettings.lastCheckedAt ?? '').length > 0) {
+            Text(I18n.t('sat_last_checked') + ': ' + (this.satelliteStore.satUpdateSettings.lastCheckedAt ?? '').replace('T', ' ').replace('Z', ' UTC'))
+              .fontSize(12).fontColor(this.c.sub).width('100%')
+          }
+          if (this.satelliteStore.satNewestUpdate.length > 0) {
+            Text(I18n.t('sat_last_changed') + ': ' + this.satelliteStore.satNewestUpdate.replace('T', ' ').replace('Z', ' UTC'))
+              .fontSize(12).fontColor(this.c.sub).width('100%')
+          }
+          Text(I18n.t('sat_checked_hint')).fontSize(12).fontColor(this.c.sub).width('100%')
           if (this.satelliteStore.satCatalogCreator.length > 0) {
-            Text('原版目录：' + this.satelliteStore.satCatalogCreator).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('内置目录版本：' + this.satelliteStore.satCatalogCreator).fontSize(11).fontColor(this.c.sub).width('100%')
           }
           if (this.satelliteStore.satCatalogSnapshot.length > 0) {
             Text('内置快照：' + this.satelliteStore.satCatalogSnapshot.replace('T', ' ').replace('Z', ' UTC')).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
           }
-          if (this.satelliteStore.satCatalogSource.length > 0) {
-            Text(I18n.t('resource_source') + ': ' + this.satelliteStore.satCatalogSource).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-          }
-          Text(this.catalogHealthTextOf('卫星目录', this.satelliteStore.satelliteCatalogHealth))
-            .fontSize(11).fontColor(this.catalogHealthColorOf(this.satelliteStore.satelliteCatalogHealth)).maxLines(2)
           if (this.satelliteStore.satOutdatedCount > 0 || !this.satelliteStore.satDateInRange || !this.satelliteStore.satObserverIsEarth) {
             Text(!this.satelliteStore.satObserverIsEarth ? '人造卫星仅支持地球观测位置' : (!this.satelliteStore.satDateInRange ? '当前模拟日期超出内置轨道数据范围' : '部分轨道历元可能已过期'))
               .fontSize(11).fontColor(this.c.warning).maxLines(2)
           }
         }.width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 }).backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL)
+  }
+
+  @Builder
+  sourceContent() {
         Column({ space: 7 }) {
           Row() {
             Text(I18n.t('sat_sources_title')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
             Text(this.satelliteStore.satSources.length.toString()).fontSize(11).fontColor(this.c.sub)
           }.width('100%')
-          Text(I18n.t('sat_sources_offline_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
+          Text(I18n.t('sat_merge_policy')).fontSize(12).fontColor(this.c.sub).width('100%')
+          if (!OFFLINE_APPGALLERY_BUILD) {
+            TextInput({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
+              .height(36).fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).width('100%')
+              .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
+              .onChange((value: string) => { this.onSourceInput(value) })
+            Row({ space: 6 }) {
+              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew }).width(42).height(24)
+                .onChange((value: boolean) => { this.onSourceAddNew(value) })
+              Text(I18n.t('sat_source_add_new')).fontSize(10).fontColor(this.c.chipInactiveText).layoutWeight(1)
+              Button(this.satelliteStore.editingSatelliteSourceIndex >= 0 ? I18n.t('sat_source_save') : I18n.t('sat_source_add')).fontSize(11).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onAddSource() })
+            }.width('100%')
+          }
           if (!OFFLINE_APPGALLERY_BUILD && this.satelliteStore.satSources.length > 0) {
-            // 镜像分组一键开关：47 个源逐个点太折磨，这里给一个总闸。
             Row({ space: 8 }) {
               Column({ space: 2 }) {
-                Text('镜像数据源').fontSize(12).fontColor(this.c.text)
-                Text('已启用 ' + this.satelliteStore.satSourceEnabledCount() + ' / ' + this.satelliteStore.satSources.length + ' 组')
+                Text(I18n.t('sat_add_from_sources')).fontSize(12).fontColor(this.c.text)
+                Text(this.satelliteStore.satSourceEnabledCount() + ' / ' + this.satelliteStore.satSources.length)
                   .fontSize(10).fontColor(this.c.sub)
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
               Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceEnabledCount() === this.satelliteStore.satSources.length })
@@ -171,7 +197,10 @@ export struct SatellitesPanel {
                     .onChange((value: boolean) => { this.onToggleSourceEnabled(sourceIndex, value) })
                   Button(I18n.t('sat_source_edit')).fontSize(10).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
                     .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
-                    .onClick(() => { this.onEditSource(sourceIndex) })
+                    .onClick(() => {
+                      this.onEditSource(sourceIndex)
+                      this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+                    })
                   Button(I18n.t('sat_source_delete')).fontSize(10).fontColor(this.c.warning).backgroundColor(this.c.errorBg)
                     .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 })
                     .onClick(() => { this.onDeleteSource(sourceIndex) })
@@ -181,32 +210,6 @@ export struct SatellitesPanel {
               }.width('100%').padding({ left: 8, right: 8, top: 6, bottom: 6 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
             }, (source: SatelliteSource) => source.index.toString() + ':' + source.url)
           }
-          if (!OFFLINE_APPGALLERY_BUILD) {
-            TextInput({ text: this.satelliteStore.satSourceInput, placeholder: I18n.t('sat_source_placeholder') })
-              .height(36).fontSize(11).fontColor(this.c.text).placeholderColor(this.c.sub).width('100%')
-              .backgroundColor(this.c.input).border({ width: 1, color: this.c.inputBorder }).borderRadius(UI_RADIUS_CONTROL)
-              .onChange((value: string) => { this.onSourceInput(value) })
-            Row({ space: 6 }) {
-              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satSourceAddNew }).width(42).height(24)
-                .onChange((value: boolean) => { this.onSourceAddNew(value) })
-              Text(I18n.t('sat_source_add_new')).fontSize(10).fontColor(this.c.chipInactiveText).layoutWeight(1)
-              Button(this.satelliteStore.editingSatelliteSourceIndex >= 0 ? I18n.t('sat_source_save') : I18n.t('sat_source_add')).fontSize(11).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
-                .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 10, right: 10 }).onClick(() => { this.onAddSource() })
-            }.width('100%')
-          }
-          Row({ space: 6 }) {
-            Button(I18n.t('sat_refresh')).fontSize(10).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
-              .borderRadius(UI_RADIUS_CONTROL).height(30).layoutWeight(1).onClick(() => { this.onRefreshCatalog() })
-            TextInput({ text: this.satelliteStore.satTleFileInput, placeholder: I18n.t('sat_tle_path_placeholder') }).height(30).fontSize(10)
-              .fontColor(this.c.text).placeholderColor(this.c.sub).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).layoutWeight(2)
-              .onChange((value: string) => { this.onTleFileInput(value) })
-            Button(I18n.t('sat_tle_import')).fontSize(10).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
-              .borderRadius(UI_RADIUS_CONTROL).height(30).padding({ left: 8, right: 8 }).onClick(() => {
-                // 输入框里没有路径时（平板/手机基本不会手输沙箱路径）直接开系统文件选择器。
-                if (this.satelliteStore.satTleFileInput.trim().length === 0) this.onPickTleFile()
-                else this.onImportTle()
-              })
-          }.width('100%')
           Row({ space: 6 }) {
             Button(I18n.t('sat_source_restore')).fontSize(10).fontColor(this.c.warning).backgroundColor(this.c.errorBg)
               .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 8, right: 8 }).onClick(() => { this.onRestoreSources() })
@@ -217,11 +220,6 @@ export struct SatellitesPanel {
             Text(I18n.t('sat_auto_add')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.autoAddEnabled }).width(42).height(24)
               .onChange((value: boolean) => { this.onSetUpdateSetting('autoAddEnabled', value) })
-          }.width('100%')
-          Row() {
-            Text(I18n.t('sat_auto_remove')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
-            Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.autoRemoveEnabled }).width(42).height(24)
-              .onChange((value: boolean) => { this.onSetUpdateSetting('autoRemoveEnabled', value) })
           }.width('100%')
           Row() {
             Text(I18n.t('sat_auto_display')).fontSize(11).fontColor(this.c.text).layoutWeight(1)
@@ -244,6 +242,35 @@ export struct SatellitesPanel {
           }.width('100%')
           if (this.satelliteStore.satSourceStatus.length > 0) Text(this.satelliteStore.satSourceStatus).fontSize(10).fontColor(this.c.fourth).width('100%').maxLines(3)
         }.width('100%').padding({ left: 10, right: 10, top: 9, bottom: 9 }).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
+  }
+
+  @Builder
+  importContent() {
+    Column({ space: 12 }) {
+      Text(I18n.t('sat_import_settings')).fontSize(16).fontColor(this.c.text).width('100%')
+      Text(I18n.t('sat_merge_policy')).fontSize(13).fontColor(this.c.sub).width('100%')
+          Column({ space: 10 }) {
+            Button(I18n.t('sat_choose_orbit_file')).fontSize(14).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+              .borderRadius(UI_RADIUS_CONTROL).height(44).width('100%')
+              .enabled(this.satelliteStore.satUpdateSettings.updateState !== 0)
+              .onClick(() => { this.onPickTleFile() })
+            TextInput({ text: this.satelliteStore.satTleFileInput, placeholder: I18n.t('sat_tle_path_placeholder') }).height(44).fontSize(14)
+              .fontColor(this.c.text).placeholderColor(this.c.sub).backgroundColor(this.c.input).borderRadius(UI_RADIUS_CONTROL).width('100%')
+              .onChange((value: string) => { this.onTleFileInput(value) })
+            Button(I18n.t('sat_tle_import')).fontSize(14).fontColor(this.c.fourth).backgroundColor(this.c.softStrong)
+              .borderRadius(UI_RADIUS_CONTROL).height(44).width('100%').padding({ left: 8, right: 8 })
+              .enabled(this.satelliteStore.satTleFileInput.trim().length > 0 && this.satelliteStore.satUpdateSettings.updateState !== 0)
+              .onClick(() => { this.onImportTle() })
+          }.width('100%')
+
+      if (this.satelliteStore.satSourceStatus.length > 0) {
+        Text(this.satelliteStore.satSourceStatus).fontSize(13).fontColor(this.c.fourth).width('100%')
+      }
+    }.width('100%')
+  }
+
+  @Builder
+  displayContent() {
         Row() {
           Text(I18n.t('c_total_count')).fontSize(13).fontColor(this.c.text).layoutWeight(1)
           Text(this.satelliteStore.satCount.toString()).fontSize(13).fontColor(this.c.sub)
@@ -279,6 +306,10 @@ export struct SatellitesPanel {
 
             .onChange((isOn: boolean) => { this.onSetFlag('hideInvisible', isOn) })
         }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
+  }
+
+  @Builder
+  catalogContent() {
         SatelliteGroupSelector({
           groups: this.satelliteStore.satGroups,
           activeGroup: this.satelliteStore.activeSatGroup,
@@ -316,8 +347,82 @@ export struct SatellitesPanel {
         } else if (this.satelliteStore.satQuery.length > 0) {
           Text('未找到匹配的内置卫星').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 4, top: 4, bottom: 4 })
         }
-      }.width('100%').padding({ left: 8, right: 8, top: 8, bottom: 8 })
+  }
+
+  private openSection(section: string): void {
+    this.satelliteStore.satPanelSection = section
+    if (section === 'diagnostics') this.satelliteStore.loadSatellites(true)
+    this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+    this.onPublishState()
+  }
+
+  @Builder
+  sectionButton(title: string, section: string) {
+    Button(I18n.t(title) + '  ›')
+      .id('satellites-' + section).fontSize(15).fontColor(this.c.text)
+      .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
+      .width('100%').height(46)
+      .onClick(() => { this.openSection(section) })
+  }
+
+  build() {
+    Scroll(this.panelScroller) {
+      Column({ space: 12 }) {
+        if (this.satelliteStore.satPanelSection !== 'main') {
+          Button(I18n.t('sat_back'))
+            .id('satellites-back').fontSize(14).fontColor(this.c.fourth)
+            .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).height(40)
+            .onClick(() => { this.openSection(this.satelliteStore.satPanelSection === 'settings' ? 'main' : 'settings') })
+        }
+        if (this.satelliteStore.satPanelSection === 'main') {
+          Column({ space: 8 }) {
+            Row() {
+              Text(I18n.t('sat_orbital_data')).fontSize(16).fontColor(this.c.text).layoutWeight(1)
+              Text(this.satelliteStore.satCount.toString()).fontSize(14).fontColor(this.c.sub)
+            }.width('100%')
+            Text(this.satelliteStore.satelliteUpdateStatusText()).fontSize(13).fontColor(this.c.sub).width('100%')
+            if (this.satelliteStore.satOutdatedCount > 0) {
+              Text(I18n.t('sat_old_orbits')).fontSize(13).fontColor(this.c.warning).width('100%')
+            }
+            Button(I18n.t('sat_refresh'))
+              .id('satellites-refresh').fontSize(15).fontColor(this.c.text)
+              .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).height(44).width('100%')
+              .enabled(!this.satelliteStore.satOffline && this.satelliteStore.satUpdateSettings.updateState !== 0)
+              .onClick(() => { this.onRefreshCatalog() })
+            Row() {
+              Text(I18n.t('sat_auto_updates')).fontSize(14).fontColor(this.c.text).layoutWeight(1)
+              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.updatesEnabled })
+                .enabled(!this.satelliteStore.satOffline && this.satelliteStore.satUpdateSettings.updateState !== 0)
+                .onChange((value: boolean) => { this.onSetUpdateSetting('updatesEnabled', value) })
+            }.width('100%')
+            Text(I18n.t('sat_auto_update_hint')).fontSize(12).fontColor(this.c.sub).width('100%')
+          }.width('100%').padding(12).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
+          if (this.satelliteStore.satSourceStatus.length > 0 && this.satelliteStore.satSourceStatus !== this.satelliteStore.satelliteUpdateStatusText()) {
+            Text(this.satelliteStore.satSourceStatus).fontSize(13).fontColor(this.c.fourth).width('100%')
+          }
+          this.sectionButton('sat_advanced', 'settings')
+          this.catalogContent()
+        } else if (this.satelliteStore.satPanelSection === 'settings') {
+          Text(I18n.t('sat_advanced')).fontSize(16).fontColor(this.c.text).width('100%')
+          this.sectionButton('sat_import_settings', 'imports')
+          this.sectionButton('sat_sources_title', 'sources')
+          this.sectionButton('sat_display_settings', 'display')
+          this.sectionButton('sat_timer_settings', 'countdown')
+          this.sectionButton('sat_data_details', 'diagnostics')
+        } else if (this.satelliteStore.satPanelSection === 'sources') {
+          this.sourceContent()
+        } else if (this.satelliteStore.satPanelSection === 'imports') {
+          this.importContent()
+        } else if (this.satelliteStore.satPanelSection === 'display') {
+          this.displayContent()
+        } else if (this.satelliteStore.satPanelSection === 'countdown') {
+          this.countdownContent()
+        } else if (this.satelliteStore.satPanelSection === 'diagnostics') {
+          this.diagnosticContent()
+        }
+      }.width('100%').padding(10).alignItems(HorizontalAlign.Start)
     }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
+      .align(Alignment.TopStart)
       .onScroll(() => { this.onPublishState() })
   }
 }

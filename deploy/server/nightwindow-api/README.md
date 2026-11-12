@@ -1,5 +1,12 @@
 # 夜窗 API（/nw/ 代理目标）
 
+> 2026-11-12：本目录 `server.js` 是历史副本，**不得按本文旧步骤重新部署**。
+> 正式源码与测试维护在本机 `/Users/jiexuanyang/Documents/nightwindow/server/`。
+> 当前生产通过 `nightwindow-api.service` 运行，必须一起部署 `server.js`、`limits.js`、
+> `quota.js` 及对应 unit，并配套 nginx 覆盖 XFF、可信 loopback 和预算配置。
+> 详细迁移与回退见该项目 `server/README.md` 和本仓库 `docs/ops/COST-SECURITY-REMEDIATION-2026-11-12.md`。
+> 下文仅保留旧架构记录，不能覆盖当前非 root、持久预算和并发保护实现。
+
 星象仪 App 使用的在线数据服务，监听 `127.0.0.1:8090`，由 nginx 通过 `/nw/` 反向代理。
 
 ## 部署位置

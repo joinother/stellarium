@@ -18,6 +18,7 @@ import { CommandPort } from '../bridge/CommandPort'
 // 或对象原地改属性。
 @Observed
 export class SatelliteStore {
+  satPanelSection: string = 'main'
   satGroups: string[] = []
   activeSatGroup: string = ''
   satLabels: boolean = false
@@ -40,7 +41,7 @@ export class SatelliteStore {
   satSources: SatelliteSource[] = []
   satUpdateSettings: SatelliteUpdateSettings = {
     updatesEnabled: false, autoAddEnabled: false, autoRemoveEnabled: false,
-    autoDisplayEnabled: true, updateFrequencyHours: 72, secondsToUpdate: 0, updateState: 0
+    autoDisplayEnabled: true, updateFrequencyHours: 72, secondsToUpdate: 0, updateState: 1
   }
   satSourceInput: string = ''
   satTleFileInput: string = ''
@@ -63,6 +64,12 @@ export class SatelliteStore {
   satelliteListElapsedMs: number = 0
   satelliteFlagMutationId: number = 0
   private satelliteLoadTimer: number = -1
+  private updatePollTimer: number = -1
+  private updatePollCount: number = 0
+  private observingUpdate: boolean = false
+  private panelPollTimer: number = -1
+  private panelVisible: boolean = false
+  private catalogLoaded: boolean = false
   private satelliteLoadIncludeSources: boolean = false
 
   // —— 桥注入 ——
@@ -102,13 +109,48 @@ export class SatelliteStore {
 
   // 更新状态文案：禁用 / 更新中 / 错误 / 倒计时（分/时）。
   satelliteUpdateStatusText(): string {
-    if (!this.satUpdateSettings.updatesEnabled) return I18n.t('sat_updates_disabled')
+    if (this.satUpdateSettings.lastCheckResult === undefined) return I18n.t('sat_reading_settings')
     if (this.satUpdateSettings.updateState === 0) return I18n.t('sat_updating')
+    if (this.satUpdateSettings.updateState === 5) return I18n.t('sat_refresh_partial')
     if (this.satUpdateSettings.updateState === 3 || this.satUpdateSettings.updateState === 4) return I18n.t('sat_update_error')
+    if (!this.satUpdateSettings.updatesEnabled) return I18n.t('sat_updates_disabled')
     const seconds = Math.max(0, this.satUpdateSettings.secondsToUpdate)
     if (seconds <= 60) return I18n.t('sat_update_less_minute')
-    if (seconds < 3600) return I18n.format('sat_update_minutes', [Math.floor(seconds / 60).toString()])
-    return I18n.format('sat_update_hours', [Math.floor(seconds / 3600).toString()])
+    if (seconds < 3600) return I18n.t('sat_update_minutes').replace('{0}', Math.floor(seconds / 60).toString())
+    return I18n.t('sat_update_hours').replace('{0}', Math.floor(seconds / 3600).toString())
+  }
+
+  lastCheckResultText(): string {
+    const state = this.satUpdateSettings.lastCheckResult ?? -1
+    if (state < 0) return I18n.t('sat_not_checked')
+    return I18n.t(state === 5 ? 'sat_refresh_partial' : state === 2 ? 'sat_refresh_complete' :
+      state === 1 ? 'sat_refresh_unchanged' : 'sat_refresh_retained')
+  }
+
+  mirrorStatusText(): string {
+    const stale = this.satUpdateSettings.mirrorStaleSources?.length ?? 0
+    const unavailable = this.satUpdateSettings.mirrorUnavailableSources?.length ?? 0
+    if (stale + unavailable === 0 && this.satUpdateSettings.mirrorStatus === 'fresh') {
+      return I18n.t('sat_mirror_verified')
+    }
+    return I18n.t('sat_mirror_partial').replace('{0}', stale.toString()).replace('{1}', unavailable.toString())
+  }
+
+  observePanel(visible: boolean): void {
+    this.panelVisible = visible
+    if (this.panelPollTimer >= 0) clearInterval(this.panelPollTimer)
+    this.panelPollTimer = -1
+    if (visible) {
+      this.loadSatelliteSources()
+      this.panelPollTimer = setInterval(() => {
+        this.loadSatelliteSources()
+        if (!this.catalogLoaded && !this.satelliteListLoading) this.loadSatellites()
+      }, 5000)
+    } else {
+      if (this.updatePollTimer >= 0) clearTimeout(this.updatePollTimer)
+      this.updatePollTimer = -1
+      this.updatePollCount = 0
+    }
   }
 
   // 卫星面板「数据源」：桥拉取 TLE 源列表与更新设置。
@@ -121,16 +163,41 @@ export class SatelliteStore {
     return n
   }
 
-  loadSatelliteSources(): void {    const port = this.ensurePort()
+  loadSatelliteSources(): void {
+    const port = this.ensurePort()
     if (port === null) {
       return
     }
     port.requestWhenReady('getSatelliteSources', '', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) { this.notifyChanged(r.error ?? 'satellite query failed'); return }
       const response = r as SatelliteSourcesResponse
+      if (this.satSourceStatus === 'pending') this.satSourceStatus = ''
       this.satSources = response.sources ?? []
       if (response.settings) {
+        const completedChanged = (response.settings.lastCheckedAt ?? '') !== (this.satUpdateSettings.lastCheckedAt ?? '')
+        if (this.satUpdateSettings.updateFrequencyHours !== response.settings.updateFrequencyHours) {
+          this.satUpdateFrequencyInput = response.settings.updateFrequencyHours.toString()
+        }
         this.satUpdateSettings = response.settings
-        this.satUpdateFrequencyInput = response.settings.updateFrequencyHours.toString()
+        if (response.settings.updateState === 0) {
+          this.observingUpdate = true
+          if (this.panelVisible && this.updatePollTimer < 0 && this.updatePollCount < 90) {
+            this.updatePollCount++
+            this.updatePollTimer = setTimeout(() => {
+              this.updatePollTimer = -1
+              this.loadSatelliteSources()
+            }, 1000)
+          }
+        } else {
+          if (this.updatePollTimer >= 0) clearTimeout(this.updatePollTimer)
+          this.updatePollTimer = -1
+          this.updatePollCount = 0
+          if (this.observingUpdate || completedChanged) {
+            this.observingUpdate = false
+            this.satSourceStatus = this.lastCheckResultText()
+            this.loadSatellites()
+          }
+        }
       }
       this.notifyChanged()
     })
@@ -164,7 +231,9 @@ export class SatelliteStore {
         this.satelliteListLoading = false
         const resp = r as SatellitesResponse
         const s = resp.satellites
-        if (!s) return
+        if (!s) { this.notifyChanged('satellite query failed'); return }
+        this.catalogLoaded = true
+        if (this.satSourceStatus === 'pending') this.satSourceStatus = ''
         if (this.satGroups.join('|') !== s.groups.join('|')) this.satGroups = s.groups
         if (flagMutationId === this.satelliteFlagMutationId) {
           this.satLabels = s.labels

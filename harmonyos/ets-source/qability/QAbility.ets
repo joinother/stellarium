@@ -254,7 +254,7 @@ export default class QAbility extends UIAbility {
     if (commandName === 'startGuide' || commandName === 'guideAction') return true;
     if (commandName === 'setSearchBrowserPage' || commandName === 'selectSearchCategory' || commandName === 'setSearchBrowserFilter') return true;
     if (commandName === 'setAstroTab' || commandName === 'setAstroGroup' || commandName === 'setAstroFilter' || commandName === 'setAstroScroll') return true;
-    if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll') return true;
+    if (commandName === 'setSatellitePanelGroup' || commandName === 'setSatellitePanelScroll' || commandName === 'setSatellitePanelSection') return true;
     if (commandName === 'setObjectDetailTab') return true;
     if (commandName === 'setObjectModelView') return true;
     return commandName === 'openUiPanel' || commandName === 'openPluginFeature' || commandName === 'closeUiPanel' || commandName === 'backUiPanel' ||
@@ -594,6 +594,11 @@ export default class QAbility extends UIAbility {
       if ((request.commandName === 'setAstroTab' && !/^[0-9]$/.test(value)) ||
         (request.commandName === 'setAstroGroup' && !/^[0-2]$/.test(value))) {
         this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'expected tab 0..9 or group 0..2' }));
+        return;
+      }
+      if (request.commandName === 'setSatellitePanelSection' &&
+        !['main', 'settings', 'sources', 'imports', 'display', 'countdown', 'diagnostics'].includes(value)) {
+        this.finishCliRequest(request, JSON.stringify({ ok: false, error: 'unknown satellite section' }));
         return;
       }
       if (request.commandName === 'setSatellitePanelScroll' &&

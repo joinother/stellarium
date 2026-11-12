@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
+import { chmod, lstat, mkdir, open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -43,6 +43,9 @@ function validTlePair(first, second) {
   }
   requireValid(checksumValid(first) && checksumValid(second))
   requireValid(/^1 [0-9A-HJ-NP-Z][0-9]{4}[UCS] /.test(first) && /^2 /.test(second))
+  requireValid(/^[ +\-]\.\d{8}$/.test(first.slice(33, 43)))
+  requireValid(/^[ +\-]\d{5}[+\-]\d$/.test(first.slice(44, 52)))
+  requireValid(/^[ +\-]\d{5}[+\-]\d$/.test(first.slice(53, 61)))
   requireValid(first.slice(2, 7) === second.slice(2, 7))
   requireValid(/^\d{2}\d{3}\.\d{8}$/.test(first.slice(18, 32)))
   const epochDay = Number(first.slice(20, 32))
@@ -233,7 +236,8 @@ async function retainedEntry(root, source, previous, previousGeneratedAt) {
 }
 
 export async function runMirror({ root, sources, only = '', dryRun = false, fetchImpl = fetch,
-  now = () => new Date().toISOString(), publish = atomicWrite, logger = console }) {
+  validateOnly = false, batchBudgetMs = 600000, now = () => new Date().toISOString(), publish = atomicWrite, logger = console }) {
+  const startedAt = performance.now()
   const mirrors = sources.filter((source) => !SKIP_PREFIX.some((prefix) => source.id.startsWith(prefix)))
   const ids = new Set()
   const paths = new Set()
@@ -264,16 +268,32 @@ export async function runMirror({ root, sources, only = '', dryRun = false, fetc
     for (const source of mirrors) {
       const old = previousEntries.get(source.id)
       let entry = await retainedEntry(root, source, old, previous?.generatedAt)
-      if (!source.id.startsWith(only)) {
-        if (entry.available && old?.ok === true && old.sha256 === entry.sha256) {
+      if (!dryRun && !entry.available) {
+        const destination = join(root, source.mirrorPath.slice(1))
+        let existing
+        try { existing = await lstat(destination) } catch (error) { if (error.code !== 'ENOENT') throw error }
+        if (existing) {
+          requireValid(existing.isFile() && !existing.isSymbolicLink(), 'unsafe_existing_file')
+          const quarantine = join(root, '.quarantine')
+          await mkdir(quarantine, { recursive: true, mode: 0o700 })
+          await chmod(quarantine, 0o700)
+          await rename(destination, join(quarantine, `${source.id}-${randomUUID()}`))
+          logger.log(`quarantined ${source.id}`)
+        }
+      }
+      if (validateOnly || !source.id.startsWith(only)) {
+        if (entry.available && old?.ok === true && old.sha256 === entry.sha256 && entry.lastSuccessAt &&
+            Date.parse(now()) - Date.parse(entry.lastSuccessAt) < 12 * 3600000) {
           entry = { ...entry, ok: true, stale: false, status: 'fresh' }
         }
         if (validDate(old?.lastAttemptAt)) entry.lastAttemptAt = old.lastAttemptAt
         if (!entry.ok) entry.error = 'not_refreshed'
+        if (validateOnly && !entry.ok) failed++
       } else {
         attempted++
         const attemptedAt = now()
         try {
+          requireValid(performance.now() - startedAt < batchBudgetMs, 'batch_timeout')
           const payload = await fetchOne(source, { fetchImpl })
           if (!dryRun) {
             try { await publish(join(root, source.mirrorPath.slice(1)), payload, { stagingDirectory: root }) }
@@ -291,7 +311,7 @@ export async function runMirror({ root, sources, only = '', dryRun = false, fetc
       logger.log(`${entry.ok ? 'ok' : 'FAIL'} ${entry.id}: ${entry.status}${entry.error ? ` (${entry.error})` : ''}`)
     }
     if (!dryRun) await publish(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { stagingDirectory: root })
-    logger.log(`${attempted - failed}/${attempted} sources refreshed`)
+    logger.log(validateOnly ? `${manifest.sources.filter(entry => entry.available).length}/${mirrors.length} retained sources validated` : `${attempted - failed}/${attempted} sources refreshed`)
     return { manifest, exitCode: failed > 0 ? 1 : 0 }
   } finally {
     if (!dryRun) await rm(lockPath, { recursive: true, force: true })
@@ -303,6 +323,7 @@ async function main(args) {
   for (let index = 0; index < args.length; index++) {
     const argument = args[index]
     if (argument === '--dry-run') options.dryRun = true
+    else if (argument === '--validate-only') options.validateOnly = true
     else if (['--root', '--sources', '--only'].includes(argument) && args[index + 1] && !args[index + 1].startsWith('--')) {
       const key = argument === '--sources' ? 'registryPath' : argument.slice(2)
       options[key] = args[++index]

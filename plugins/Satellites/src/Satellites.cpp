@@ -49,6 +49,10 @@
 
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QCryptographicHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QDebug>
 #include <QFileInfo>
@@ -63,6 +67,7 @@
 #include <QTemporaryFile>
 #include <QRegularExpression>
 #include <QBuffer>
+#include <cmath>
 #include <exception>
 #if (QT_VERSION>=QT_VERSION_CHECK(6,0,0))
 #include <QtConcurrent>
@@ -153,6 +158,82 @@ bool satelliteMatchesSearch(const Satellite& satellite, const QString& query)
 	return false;
 }
 
+static constexpr qint64 satelliteUpdateMaxBytes = 32 * 1024 * 1024;
+static constexpr qint64 satelliteManifestMaxBytes = 1024 * 1024;
+static constexpr qint64 satelliteManifestMaxAgeSeconds = 12 * 60 * 60;
+
+static bool isSatelliteMirror(const QUrl& url)
+{
+	return url.scheme() == QStringLiteral("https") && url.host() == QStringLiteral("skyinstrument.cn")
+		&& (url.path() == QStringLiteral("/v1/catalogs/satellites")
+			|| url.path().startsWith(QStringLiteral("/v1/catalogs/satellites/")));
+}
+
+static QDateTime satelliteManifestDate(const QJsonValue& value)
+{
+	const QString text = value.toString();
+	if (!text.endsWith(QLatin1Char('Z'))
+		&& !text.contains(QRegularExpression(QStringLiteral("[+-][0-9]{2}:[0-9]{2}$")))) return {};
+	return QDateTime::fromString(text, Qt::ISODateWithMs);
+}
+
+static void applySatelliteManifest(const QByteArray& payload, TleSourceList& sources, const QDateTime& now)
+{
+	for (TleSource& source : sources)
+	{
+		source.mirrorStatus = isSatelliteMirror(source.url) ? QStringLiteral("unavailable") : QString();
+		source.mirrorSha256.clear();
+		source.mirrorBytes = 0;
+	}
+	if (payload.isEmpty() || payload.size() > satelliteManifestMaxBytes) return;
+	const QJsonDocument document = QJsonDocument::fromJson(payload);
+	if (!document.isObject()) return;
+	const QJsonObject manifest = document.object();
+	const QDateTime generatedAt = satelliteManifestDate(manifest.value("generatedAt"));
+	if (!generatedAt.isValid() || generatedAt > now.addSecs(300)
+		|| generatedAt.secsTo(now) > satelliteManifestMaxAgeSeconds || !manifest.value("sources").isArray()) return;
+	QHash<QString, QJsonObject> entries;
+	QSet<QString> duplicatePaths;
+	for (const QJsonValue& value : manifest.value("sources").toArray())
+	{
+		if (!value.isObject()) continue;
+		const QJsonObject entry = value.toObject();
+		const QString path = entry.value("path").toString();
+		if (entries.contains(path)) duplicatePaths.insert(path);
+		entries.insert(path, entry);
+	}
+	for (TleSource& source : sources)
+	{
+		if (source.mirrorStatus.isEmpty() || !source.url.userInfo().isEmpty() || source.url.hasQuery()
+			|| source.url.hasFragment() || source.url.port(443) != 443
+			|| source.url.adjusted(QUrl::NormalizePathSegments).path() != source.url.path()
+			|| duplicatePaths.contains(source.url.path())) continue;
+		const QJsonObject entry = entries.value(source.url.path());
+		const QString status = entry.value("status").toString();
+		if ((status != QStringLiteral("fresh") && status != QStringLiteral("stale"))
+			|| !entry.value("available").isBool() || !entry.value("available").toBool()
+			|| !entry.value("ok").isBool() || entry.value("ok").toBool() != (status == QStringLiteral("fresh"))
+			|| !entry.value("stale").isBool() || entry.value("stale").toBool() != (status == QStringLiteral("stale"))) continue;
+		const double bytes = entry.value("bytes").toDouble(-1);
+		const QString digest = entry.value("sha256").toString();
+		if (!entry.value("bytes").isDouble() || bytes <= 0 || bytes > satelliteUpdateMaxBytes || std::floor(bytes) != bytes
+			|| !QRegularExpression(QStringLiteral("^[0-9a-fA-F]{64}$")).match(digest).hasMatch()) continue;
+		const QDateTime lastSuccessAt = satelliteManifestDate(entry.value("lastSuccessAt"));
+		if (status == QStringLiteral("fresh") && (!lastSuccessAt.isValid() || lastSuccessAt > now.addSecs(300))) continue;
+		source.mirrorStatus = status == QStringLiteral("fresh") && lastSuccessAt.secsTo(now) > satelliteManifestMaxAgeSeconds
+			? QStringLiteral("stale") : status;
+		source.mirrorBytes = static_cast<qint64>(bytes);
+		source.mirrorSha256 = digest.toLatin1().toLower();
+	}
+}
+
+static bool satelliteMirrorPayloadValid(const TleSource& source, const QByteArray& payload)
+{
+	return source.mirrorStatus.isEmpty() || ((source.mirrorStatus == QStringLiteral("fresh") || source.mirrorStatus == QStringLiteral("stale"))
+		&& payload.size() == source.mirrorBytes
+		&& QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex() == source.mirrorSha256);
+}
+
 QByteArray unzipData(const QByteArray& fd)
 {
 	QTemporaryFile zip;
@@ -183,7 +264,11 @@ QByteArray unzipData(const QByteArray& fd)
 	{
 		// qWarning() << "[Satellites] Processing:" << info.filePath;
 		if (info.isFile)
+		{
+			if (info.size < 0 || info.size > satelliteUpdateMaxBytes - data.size()) return {};
 			data.append(reader.fileData(info.filePath));
+			if (data.size() > satelliteUpdateMaxBytes) return {};
+		}
 	}
 	return data;
 }
@@ -290,6 +375,29 @@ bool tleLineValid(const QString& line, const QString& lineTemplate)
 	return true;
 }
 
+static double satelliteTleEpoch(const QString& first)
+{
+	bool yearOk = false, dayOk = false;
+	const int shortYear = first.mid(18, 2).toInt(&yearOk);
+	const double day = first.mid(20, 12).toDouble(&dayOk);
+	const int year = shortYear < 57 ? 2000 + shortYear : 1900 + shortYear;
+	if (!yearOk || !dayOk || !std::isfinite(day) || day < 1.0 || day >= (QDate::isLeapYear(year) ? 367.0 : 366.0)) return 0.0;
+	return QDate(year, 1, 1).toJulianDay() + day - 1.0;
+}
+
+static void mergeSatelliteTle(TleDataHash& records, const TleData& incoming)
+{
+	if (!records.contains(incoming.id))
+	{
+		records.insert(incoming.id, incoming);
+		return;
+	}
+	TleData& current = records[incoming.id];
+	const bool addThis = current.addThis || incoming.addThis;
+	if (satelliteTleEpoch(incoming.first) > satelliteTleEpoch(current.first)) current = incoming;
+	current.addThis = addThis;
+}
+
 bool tlePairValid(QString first, QString second)
 {
 	if (first.size() != 69 || second.size() != 69 || first.mid(2, 5) != second.mid(2, 5)) return false;
@@ -309,6 +417,13 @@ bool tlePairValid(QString first, QString second)
 	second.replace(2, 5, "00000");
 	if (first[33] == QLatin1Char('0')) first[33] = QLatin1Char(' ');
 	if (!tleLineValid(first, TLE_LINE1_TEMPLATE) || !tleLineValid(second, TLE_LINE2_TEMPLATE)) return false;
+	if (satelliteTleEpoch(first) == 0.0) return false;
+	for (int offset : {17, 34, 43})
+	{
+		bool angleOk = false;
+		const double angle = second.mid(offset, 8).toDouble(&angleOk);
+		if (!angleOk || !std::isfinite(angle) || angle < 0.0 || angle >= 360.0) return false;
+	}
 	bool epochOk = false, motionOk = false, inclinationOk = false, eccentricityOk = false;
 	const double epochDay = first.mid(20, 12).toDouble(&epochOk);
 	const double motion = second.mid(52, 11).toDouble(&motionOk);
@@ -678,17 +793,22 @@ void Satellites::init()
 	createSuperGroupsList();
 
 	updateState = CompleteNoUpdates;
+	connect(this, &Satellites::updateStateChanged, this, [](UpdateState state) {
+		if (state == Updating) return;
+		QSettings* settings = StelApp::getInstance().getSettings();
+		settings->setValue("Satellites/last_check_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+		settings->setValue("Satellites/last_check_result", static_cast<int>(state));
+		settings->sync();
+	});
 #ifndef STELLARIUM_OHOS_OFFLINE
 	// Set up download manager and the update schedule.
 	downloadMgr = new QNetworkAccessManager(this);
 	connect(downloadMgr, &QNetworkAccessManager::finished, this, &Satellites::saveDownloadedUpdate);
-#ifndef Q_OS_OHOS
 	updateTimer = new QTimer(this);
 	updateTimer->setSingleShot(false);   // recurring check for update
 	updateTimer->setInterval(13000);     // check once every 13 seconds to see if it is time for an update
 	connect(updateTimer, &QTimer::timeout, this, &Satellites::checkForUpdate);
 	updateTimer->start();
-#endif
 #else
 	qInfo() << "[Satellites] HarmonyOS offline build: online TLE updates are disabled.";
 #endif
@@ -1204,7 +1324,11 @@ void Satellites::restoreDefaultSettings()
 
 	conf->setValue("show_satellite_hints", true);
 	conf->setValue("show_satellite_labels", false);
+#if defined(Q_OS_OHOS)
+	conf->setValue("updates_enabled", false);
+#else
 	conf->setValue("updates_enabled", true);
+#endif
 	conf->setValue("auto_add_enabled", true);
 	conf->setValue("auto_remove_enabled", true);
 	conf->setValue("hint_color", "0.7,0.7,0.7");
@@ -1401,10 +1525,13 @@ void Satellites::loadSettings()
 	updateFrequencyHours = conf->value("update_frequency_hours", 72).toInt();
 	// last update default is the first Towel Day.  <3 DA
 	setLastUpdate(QDateTime::fromString(conf->value("last_update", "2001-05-25T12:00:00").toString(), Qt::ISODate));
+	nextAutomaticUpdateAttempt = QDateTime::fromString(conf->value("next_automatic_update_attempt").toString(), Qt::ISODate);
 	setFlagHintsVisible(conf->value("show_satellite_hints", true).toBool());
 	Satellite::showLabels = conf->value("show_satellite_labels", false).toBool();
-#if defined(STELLARIUM_OHOS_OFFLINE) || defined(Q_OS_OHOS)
+#if defined(STELLARIUM_OHOS_OFFLINE)
 	updatesEnabled = false;
+#elif defined(Q_OS_OHOS)
+	updatesEnabled = conf->value("updates_enabled", false).toBool();
 #else
 	updatesEnabled = conf->value("updates_enabled", true).toBool();
 #endif
@@ -1591,6 +1718,7 @@ void Satellites::saveSettingsToConfig()
 	
 	// Update sources...
 	saveTleSources(updateUrls);
+	conf->sync();
 }
 
 Vec3f Satellites::getInvisibleSatelliteColor()
@@ -2462,6 +2590,8 @@ void Satellites::removeWithoutModelReset(const QStringList& idList)
 int Satellites::getSecondsToUpdate(void)
 {
 	QDateTime nextUpdate = lastUpdate.first.addSecs(updateFrequencyHours * 3600);
+	if (nextAutomaticUpdateAttempt.isValid() && nextAutomaticUpdateAttempt > nextUpdate)
+		nextUpdate = nextAutomaticUpdateAttempt;
 	return QDateTime::currentDateTime().secsTo(nextUpdate);
 }
 
@@ -2940,9 +3070,12 @@ void Satellites::checkForUpdate(void)
 	return;
 #else
 	if (updatesEnabled && (updateState != Updating)
+	    && (!nextAutomaticUpdateAttempt.isValid() || nextAutomaticUpdateAttempt <= QDateTime::currentDateTime())
 	    && (lastUpdate.first.addSecs(updateFrequencyHours * 3600) <= QDateTime::currentDateTime()))
 	{
+		scheduledUpdate = true;
 		updateFromOnlineSources();
+		scheduledUpdate = false;
 	}
 #endif
 }
@@ -2954,9 +3087,20 @@ void Satellites::updateFromOnlineSources()
 	emit updateStateChanged(OtherError);
 	return;
 #else
+	if (updateState != Updating)
+	{
+		nextAutomaticUpdateAttempt = QDateTime::currentDateTime().addSecs(30 * 60);
+		QSettings* settings = StelApp::getInstance().getSettings();
+		settings->setValue("Satellites/next_automatic_update_attempt", nextAutomaticUpdateAttempt.toString(Qt::ISODate));
+		settings->sync();
+	}
 	// never update TLE's for any date before Oct 4, 1957, 19:28:34GMT ;-)
 	if (StelApp::getInstance().getCore()->getJD()<2436116.3115)
+	{
+		updateState = OtherError;
+		emit updateStateChanged(updateState);
 		return;
+	}
 
 	if (updateState==Satellites::Updating)
 	{
@@ -2987,13 +3131,14 @@ void Satellites::updateFromOnlineSources()
 	updateSources.clear();
 	numberDownloadsComplete = 0;
 
-	if (progressBar==nullptr)
-		progressBar = StelApp::getInstance().addProgressBar();
-
-	progressBar->setValue(0);
-	progressBar->setRange(0, updateUrls.size());
-	// TRANSLATORS: The full phrase is 'Loading TLE %VALUE%/%MAX%' in progress bar
-	progressBar->setFormat(QString("%1 %v/%m").arg(q_("Loading TLE")));
+	if (!scheduledUpdate)
+	{
+		if (progressBar==nullptr)
+			progressBar = StelApp::getInstance().addProgressBar();
+		progressBar->setValue(0);
+		progressBar->setRange(0, updateUrls.size());
+		progressBar->setFormat(QString("%1 %v/%m").arg(q_("Loading TLE")));
+	}
 
 	for (auto url : std::as_const(updateUrls))
 	{
@@ -3014,7 +3159,7 @@ void Satellites::updateFromOnlineSources()
 		if (!source.url.isValid() || source.url.isRelative() || source.url.isEmpty())
 		{
 			updateSources.clear();
-			StelApp::getInstance().removeProgressBar(progressBar);
+			if (progressBar) StelApp::getInstance().removeProgressBar(progressBar);
 			progressBar = nullptr;
 			updateState = OtherError;
 			emit updateStateChanged(updateState);
@@ -3022,16 +3167,119 @@ void Satellites::updateFromOnlineSources()
 		}
 		updateSources.append(source);
 	}
-	for (const auto& source : std::as_const(updateSources))
-		downloadMgr->get(QNetworkRequest(source.url));
+	bool needsManifest = false;
+	for (const TleSource& source : std::as_const(updateSources))
+		needsManifest = needsManifest || isSatelliteMirror(source.url);
+	if (needsManifest)
+	{
+		QNetworkRequest request(QUrl(QStringLiteral("https://skyinstrument.cn/v1/manifest.json")));
+		request.setTransferTimeout(15000);
+		request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+		request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+		request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+		request.setAttribute(QNetworkRequest::AuthenticationReuseAttribute, QNetworkRequest::Manual);
+		request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+		QNetworkReply* reply = downloadMgr->get(request);
+		reply->setProperty("satelliteManifest", true);
+		reply->setReadBufferSize(satelliteManifestMaxBytes + 1);
+		connect(reply, &QNetworkReply::readyRead, reply, [reply]() {
+			QByteArray payload = reply->property("manifestPayload").toByteArray();
+			payload.append(reply->read(satelliteManifestMaxBytes + 1 - payload.size()));
+			reply->setProperty("manifestPayload", payload);
+			if (payload.size() > satelliteManifestMaxBytes) reply->abort();
+		});
+		connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64 total) {
+			if (received > satelliteManifestMaxBytes || total > satelliteManifestMaxBytes) reply->abort();
+		});
+		QTimer::singleShot(15000, reply, [reply]() { if (!reply->isFinished()) reply->abort(); });
+	}
+	else
+	{
+		saveMirrorSummary();
+		startSourceDownloads();
+	}
 #endif
+}
+
+void Satellites::saveMirrorSummary()
+{
+	QString status;
+	QStringList staleSources, unavailableSources;
+	for (const TleSource& source : std::as_const(updateSources))
+	{
+		if (source.mirrorStatus.isEmpty()) continue;
+		if (status.isEmpty()) status = QStringLiteral("fresh");
+		if (source.mirrorStatus == QStringLiteral("stale")) staleSources.append(source.url.toString(QUrl::RemoveUserInfo));
+		if (source.mirrorStatus == QStringLiteral("unavailable")) unavailableSources.append(source.url.toString(QUrl::RemoveUserInfo));
+	}
+	staleSources.removeDuplicates();
+	unavailableSources.removeDuplicates();
+	if (!staleSources.isEmpty()) status = QStringLiteral("stale");
+	if (!unavailableSources.isEmpty()) status = QStringLiteral("unavailable");
+	QSettings* settings = StelApp::getInstance().getSettings();
+	settings->setValue("Satellites/mirror_status", status);
+	settings->setValue("Satellites/mirror_stale_sources", QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(staleSources)).toJson(QJsonDocument::Compact)).replace(QLatin1Char('#'), QStringLiteral("\\u0023")));
+	settings->setValue("Satellites/mirror_unavailable_sources", QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(unavailableSources)).toJson(QJsonDocument::Compact)).replace(QLatin1Char('#'), QStringLiteral("\\u0023")));
+	if (status.isEmpty()) settings->setValue("Satellites/mirror_checked_at", QString());
+	settings->sync();
+}
+
+void Satellites::startSourceDownloads()
+{
+	for (int index = 0; index < updateSources.size(); ++index)
+	{
+		const TleSource& source = updateSources.at(index);
+		if (source.mirrorStatus == QStringLiteral("unavailable"))
+		{
+			++numberDownloadsComplete;
+			continue;
+		}
+		QNetworkRequest request(source.url);
+		request.setTransferTimeout(30000);
+		if (!source.mirrorStatus.isEmpty())
+		{
+			request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+			request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+			request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+			request.setAttribute(QNetworkRequest::AuthenticationReuseAttribute, QNetworkRequest::Manual);
+		}
+		QNetworkReply* reply = downloadMgr->get(request);
+		reply->setProperty("satelliteSourceIndex", index);
+		connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64 total) {
+			if (received > satelliteUpdateMaxBytes || total > satelliteUpdateMaxBytes) reply->abort();
+		});
+		QTimer::singleShot(60000, reply, [reply]() { if (!reply->isFinished()) reply->abort(); });
+	}
+	finishDownloadBatch();
 }
 
 void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 {
 	reply->deleteLater();
+	if (reply->property("satelliteManifest").toBool())
+	{
+		QByteArray payload = reply->property("manifestPayload").toByteArray();
+		payload.append(reply->read(satelliteManifestMaxBytes + 1 - payload.size()));
+		if (reply->error() != QNetworkReply::NoError || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() != 200) payload.clear();
+		const QDateTime now = QDateTime::currentDateTimeUtc();
+		applySatelliteManifest(payload, updateSources, now);
+		StelApp::getInstance().getSettings()->setValue("Satellites/mirror_checked_at", now.toString(Qt::ISODateWithMs));
+		saveMirrorSummary();
+		startSourceDownloads();
+		return;
+	}
+	bool indexOk = false;
+	const int sourceIndex = reply->property("satelliteSourceIndex").toInt(&indexOk);
+	if (!indexOk || sourceIndex < 0 || sourceIndex >= updateSources.size()) return;
+	TleSource& source = updateSources[sourceIndex];
+	QByteArray fd;
+	if (reply->bytesAvailable() <= satelliteUpdateMaxBytes) fd = reply->readAll();
+	const bool mirrorValid = satelliteMirrorPayloadValid(source, fd)
+		&& (source.mirrorStatus.isEmpty() || reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200);
+	if (!mirrorValid && reply->error() == QNetworkReply::NoError)
+		qWarning() << "[Satellites] Mirror response rejected: HTTP status, byte count or SHA256 does not match the manifest.";
 	// check the download worked, and save the data to file if this is the case.
-	if (reply->error() == QNetworkReply::NoError && reply->bytesAvailable()>0)
+	if (reply->error() == QNetworkReply::NoError && !fd.isEmpty() && mirrorValid)
 	{
 		// download completed successfully.
 		QString name = QString("tle%1.txt").arg(numberDownloadsComplete);
@@ -3043,23 +3291,16 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 
 		if (tmpFile->open(QIODevice::WriteOnly | QIODevice::Text))
 		{
-			QByteArray fd = reply->readAll();
 			// qWarning() << "[Satellites] Processing an URL:" << reply->url().toString();
 			if (reply->url().toString().contains(".zip", Qt::CaseInsensitive))
 				fd = unzipData(fd);
 			const bool written = !fd.isEmpty() && tmpFile->write(fd) == fd.size() && tmpFile->flush();
 			tmpFile->close();
 			
-			// The reply URL can be different form the requested one...
-			QUrl url = reply->request().url();
-			for (int i = 0; i < updateSources.count(); i++)
+			if (written)
 			{
-				if (written && updateSources[i].url == url && updateSources[i].file == nullptr)
-				{
-					updateSources[i].file = tmpFile;
-					tmpFile = nullptr;
-					break;
-				}
+				source.file = tmpFile;
+				tmpFile = nullptr;
 			}
 			if (tmpFile) // Something strange just happened...
 				delete tmpFile; // ...so we have to clean.
@@ -3077,7 +3318,13 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 		qWarning().nospace() << "[Satellites] FAILED to download " << reply->url().toString(QUrl::RemoveUserInfo) << ". Error " << reply->error() << ": " << reply->errorString();
 	}
 
+	if (!source.file && !source.mirrorStatus.isEmpty()) source.mirrorStatus = QStringLiteral("unavailable");
 	numberDownloadsComplete++;
+	finishDownloadBatch();
+}
+
+void Satellites::finishDownloadBatch()
+{
 	if (progressBar)
 		progressBar->setValue(numberDownloadsComplete);
 
@@ -3097,6 +3344,7 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 	bool complete = !updateSources.isEmpty();
 	for (int i = 0; i < updateSources.count(); i++)
 	{
+		if (!updateSources[i].mirrorStatus.isEmpty() && updateSources[i].mirrorStatus != QStringLiteral("fresh")) complete = false;
 		if (!updateSources[i].file)
 		{
 			complete = false;
@@ -3106,16 +3354,25 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 		{
 			parseDataFile(*updateSources[i].file, newData, updateSources[i].addNew, updateSources[i].url.toString(QUrl::None));
 			complete = updateSources[i].file->property("tleParseComplete").toBool() && complete;
+			if (!updateSources[i].file->property("tleParseComplete").toBool() && !updateSources[i].mirrorStatus.isEmpty())
+				updateSources[i].mirrorStatus = QStringLiteral("unavailable");
 			updateSources[i].file->close();
 		}
-		else complete = false;
+		else
+		{
+			complete = false;
+			if (!updateSources[i].mirrorStatus.isEmpty()) updateSources[i].mirrorStatus = QStringLiteral("unavailable");
+		}
 		updateSources[i].file->remove();
 		delete updateSources[i].file;
 		updateSources[i].file = nullptr;
 	}
+	saveMirrorSummary();
 	updateSources.clear();
-	if (complete && !newData.isEmpty())
-		updateSatellites(newData);
+	if (!newData.isEmpty())
+	{
+		updateSatellites(newData, complete);
+	}
 	else
 	{
 		updateState = DownloadError;
@@ -3165,6 +3422,9 @@ void Satellites::saveCatalog(const QString &path)
 
 void Satellites::updateFromFiles(const QStringList &paths, bool deleteFiles)
 {
+	if (updateState == Updating) return;
+	updateState = Updating;
+	emit updateStateChanged(updateState);
 	// Container for the new data.
 	TleDataHash newTleSets;
 	bool complete = !paths.isEmpty();
@@ -3173,7 +3433,7 @@ void Satellites::updateFromFiles(const QStringList &paths, bool deleteFiles)
 		QFile tleFile(tleFilePath);
 		if (tleFile.open(QIODevice::ReadOnly|QIODevice::Text))
 		{
-			parseDataFile(tleFile, newTleSets, autoAddEnabled);
+			parseDataFile(tleFile, newTleSets, true);
 			complete = tleFile.property("tleParseComplete").toBool() && complete;
 			tleFile.close();
 		}
@@ -3190,7 +3450,7 @@ void Satellites::updateFromFiles(const QStringList &paths, bool deleteFiles)
 		for (const QString& path : paths) QFile::remove(path);
 }
 
-void Satellites::updateSatellites(TleDataHash& newTleSets)
+void Satellites::updateSatellites(TleDataHash& newTleSets, bool complete)
 {
 	if (newTleSets.isEmpty())
 	{
@@ -3220,6 +3480,7 @@ void Satellites::updateSatellites(TleDataHash& newTleSets)
 			emit updateStateChanged(updateState);
 			return;
 		}
+		if (existing && satelliteTleEpoch(data.first) <= satelliteTleEpoch(record.value("tle1").toString())) continue;
 		const bool changed = !existing || record.value("tle1").toString() != data.first
 			|| record.value("tle2").toString() != data.second || record.value("name").toString() != data.name
 			|| record.value("status", Satellite::StatusUnknown).toInt() != data.status;
@@ -3310,6 +3571,7 @@ void Satellites::updateSatellites(TleDataHash& newTleSets)
 	if (satelliteListModel) satelliteListModel->endSatellitesChange();
 	markLastUpdate();
 	updateState = updatedCount > 0 || addedCount > 0 ? CompleteUpdates : CompleteNoUpdates;
+	if (!complete) updateState = CompletePartial;
 	emit updateStateChanged(updateState);
 	emit tleUpdateComplete(updatedCount, satellites.count(), addedCount, missingCount);
 }
@@ -3366,9 +3628,10 @@ static bool parseSatelliteCsvLine(const QString& line, QStringList& fields)
 void Satellites::parseDataFile(QFile& openFile, TleDataHash& tleList, bool addFlagValue, const QString &tleURL)
 {
 	openFile.setProperty("tleParseComplete", false);
-	if (!openFile.isOpen() || !openFile.isReadable()) return;
+	if (!openFile.isOpen() || !openFile.isReadable() || openFile.size() > satelliteUpdateMaxBytes) return;
 	TleDataHash parsed;
-	const QString line = openFile.readLine();
+	QString line = QString::fromUtf8(openFile.readLine(4097));
+	if (line.startsWith(QChar(0xFEFF))) line.remove(0, 1);
 	if (line.contains("invalid query", Qt::CaseInsensitive) || line.contains("error", Qt::CaseInsensitive))
 		qWarning() << "[Satellites] Skipping parsing file" << openFile.fileName() << "due error:" << line;
 	else
@@ -3394,7 +3657,7 @@ void Satellites::parseDataFile(QFile& openFile, TleDataHash& tleList, bool addFl
 		openFile.setProperty("tleParseComplete", false);
 	if (!openFile.property("tleParseComplete").toBool()) return;
 	for (auto entry = parsed.constBegin(); entry != parsed.constEnd(); ++entry)
-		if (entry.value().addThis || !tleList.contains(entry.key())) tleList.insert(entry.key(), entry.value());
+		mergeSatelliteTle(tleList, entry.value());
 }
 
 void Satellites::parseTleFile(QFile& openFile, TleDataHash& tleList, bool addFlagValue, const QString &tleURL)
@@ -3421,7 +3684,9 @@ void Satellites::parseTleFile(QFile& openFile, TleDataHash& tleList, bool addFla
 	
 	while (!openFile.atEnd())
 	{
-		QString line = QString(openFile.readLine()).trimmed();
+		QString line = QString::fromUtf8(openFile.readLine(4097)).trimmed();
+		if (lineNumber == 0 && line.startsWith(QChar(0xFEFF))) line.remove(0, 1);
+		if (line.size() > 4096) { openFile.setProperty("tleParseComplete", false); return; }
 		++lineNumber;
 		if (line.isEmpty()) continue;
 		if (line.length() < 65) // this is title line
@@ -3491,14 +3756,7 @@ void Satellites::parseTleFile(QFile& openFile, TleDataHash& tleList, bool addFla
 				// so if everything is OK, save the elements.
 				if (!lastData.name.isEmpty() && !lastData.first.isEmpty())
 				{
-					// Some satellites can be listed in multiple files,
-					// and only some of those files may be marked for adding,
-					// so try to preserve the flag - if it's set,
-					// feel free to overwrite the existing value.
-					// If not, overwrite only if it's not in the list already.
-					// NOTE: Second case overwrite may need to check which TLE set is newer. 
-					if (lastData.addThis || !tleList.contains(id))
-						tleList.insert(id, lastData); // Overwrite if necessary
+					mergeSatelliteTle(tleList, lastData);
 				}
 				lastData = TleData();
 				lastData.status = Satellite::StatusUnknown;
@@ -3579,7 +3837,8 @@ void Satellites::parseCsvFile(QFile& openFile, const QStringList& headerEntries,
 
 	while (!openFile.atEnd())
 	{
-		const QString line = QString(openFile.readLine()).trimmed();
+		const QString line = QString::fromUtf8(openFile.readLine(4097)).trimmed();
+		if (line.size() > 4096) { openFile.setProperty("tleParseComplete", false); return; }
 		if (line.isEmpty()) continue;
 		QStringList lineEntries;
 		if (!parseSatelliteCsvLine(line, lineEntries))
@@ -3610,6 +3869,7 @@ void Satellites::parseCsvFile(QFile& openFile, const QStringList& headerEntries,
 			warnAboutLine("Bad CSV line", "failed to parse NORAD id of the object");
 			continue;
 		}
+		data.id = QString::number(noradId);
 
 		// Now generate a TLE from the CSV fields, except the NORAD id
 		// will be zeroed out, because it may be longer than 5 digits.
@@ -3636,6 +3896,15 @@ void Satellites::parseCsvFile(QFile& openFile, const QStringList& headerEntries,
 			warnAboutLine("Bad CSV line", "not all numbers are parsable");
 			continue;
 		}
+		if (!std::isfinite(entry.bstar) || !std::isfinite(entry.mean_motion_dot) || !std::isfinite(entry.mean_motion_ddot)
+			|| !std::isfinite(entry.mean_motion) || !std::isfinite(entry.eccentricity) || !std::isfinite(entry.inclination)
+			|| !std::isfinite(entry.ra_of_asc_node) || !std::isfinite(entry.arg_of_pericenter) || !std::isfinite(entry.mean_anomaly)
+			|| entry.ra_of_asc_node < 0 || entry.ra_of_asc_node >= 360 || entry.arg_of_pericenter < 0 || entry.arg_of_pericenter >= 360
+			|| entry.mean_anomaly < 0 || entry.mean_anomaly >= 360)
+		{
+			warnAboutLine("Bad CSV orbit", "non-finite or out-of-range elements");
+			continue;
+		}
 
 		data.first = generateTleLine1(entry, warnAboutLine);
 		if (data.first.isEmpty()) continue;
@@ -3648,14 +3917,7 @@ void Satellites::parseCsvFile(QFile& openFile, const QStringList& headerEntries,
 			continue;
 		}
 
-		// Some satellites can be listed in multiple files,
-		// and only some of those files may be marked for adding,
-		// so try to preserve the flag - if it's set,
-		// feel free to overwrite the existing value.
-		// If not, overwrite only if it's not in the list already.
-		// NOTE: Second case overwrite may need to check which TLE set is newer. 
-		if (data.addThis || !tleList.contains(data.id))
-			tleList.insert(data.id, data); // Overwrite if necessary
+		mergeSatelliteTle(tleList, data);
 	}
 }
 

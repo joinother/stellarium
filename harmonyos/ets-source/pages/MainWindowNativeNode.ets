@@ -1983,6 +1983,19 @@ export struct WindowNativeNode {
         this.satelliteCtl().selectSatelliteGroup(String(event['payload'] ?? '').trim())
         return
       }
+      if (commandName === 'setSatellitePanelSection') {
+        const section = String(event['payload'] ?? '').trim()
+        if (['main', 'settings', 'sources', 'imports', 'display', 'countdown', 'diagnostics'].includes(section)) {
+          this.satelliteStore.satPanelSection = section
+          if (section === 'diagnostics') this.satelliteStore.loadSatellites(true)
+          this.satellitePanelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+          this.publishSatellitePanelState()
+        } else this.publishSatellitePanelState('unknown satellite section')
+        return
+      }
+      if (commandName === 'refreshSatelliteCatalog' || commandName === 'importSatelliteTle') {
+        this.satelliteStore.loadSatellites(true, true)
+      }
       if (commandName === 'setLocationMapProvider') {
         this.locationCtl().setLocationMapProvider(String(event['payload'] ?? '').trim())
         return
@@ -3845,6 +3858,9 @@ export struct WindowNativeNode {
     AppStorage.setOrCreate('stellariumSatellitePanelState', JSON.stringify({
       ok: error.length === 0, error: error, panel: this.activePanel, group: this.satelliteStore.activeSatGroup,
       loading: this.satelliteStore.satelliteListLoading, matchedCount: this.satelliteStore.satMatchedCount,
+      section: this.satelliteStore.satPanelSection, updateStatus: this.satelliteStore.satSourceStatus,
+      updateSettings: this.satelliteStore.satUpdateSettings, newestUpdate: this.satelliteStore.satNewestUpdate,
+      count: this.satelliteStore.satCount,
       ids: this.satelliteStore.satItems.map((item: SatelliteListItem) => item.id),
       groups: this.satelliteStore.satGroups, requestId: this.satelliteStore.satelliteListRequestId,
       orbitLines: this.satelliteStore.satOrbitLines, hints: this.satelliteStore.satHints,

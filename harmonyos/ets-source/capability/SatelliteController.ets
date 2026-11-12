@@ -107,9 +107,11 @@ export class SatelliteController {
 
   // 单个更新设置写回 → 重载来源。
   setSatelliteUpdateSetting(key: string, value: boolean | number): void {
+    if (key === 'updatesEnabled' && value === this.satelliteStore.satUpdateSettings.updatesEnabled) return
     const payload: Record<string, boolean | number> = {}
     payload[key] = value
-    this.port.requestInteractive('setSatelliteUpdateSetting', JSON.stringify(payload), () => {
+    this.port.requestInteractive('setSatelliteUpdateSetting', JSON.stringify(payload), (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')
       this.satelliteStore.loadSatelliteSources()
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
   }
@@ -123,7 +125,7 @@ export class SatelliteController {
       const source = this.satelliteStore.satSources[sourceIndex]
       sources.push({
         url: sourceIndex === this.satelliteStore.editingSatelliteSourceIndex ? url : source.url,
-        addNew: source.addNew
+        addNew: sourceIndex === this.satelliteStore.editingSatelliteSourceIndex ? this.satelliteStore.satSourceAddNew : source.addNew
       })
     }
     if (this.satelliteStore.editingSatelliteSourceIndex < 0) sources.push({ url: url, addNew: this.satelliteStore.satSourceAddNew })
@@ -159,6 +161,7 @@ export class SatelliteController {
     if (source === undefined) return
     this.satelliteStore.editingSatelliteSourceIndex = index
     this.satelliteStore.satSourceInput = source.url
+    this.satelliteStore.satSourceAddNew = source.addNew
     this.satelliteStore.expandedSatelliteSourceIndex = index
   }
 
@@ -171,7 +174,7 @@ export class SatelliteController {
     }
     this.port.requestInteractive('setSatelliteSources', JSON.stringify({ sources: sources }), (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        this.satelliteStore.satSourceStatus = enabled ? I18n.t('sat_source_enabled') : I18n.t('sat_source_disabled')
+        this.satelliteStore.satSourceStatus = I18n.t(enabled ? 'sat_add_allowed' : 'sat_add_blocked')
         this.satelliteStore.loadSatelliteSources()
       } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')
     }, (failure: StellariumBridgeResponse) => { this.satelliteStore.satSourceStatus = failure.error ?? I18n.t('sat_source_invalid') })
@@ -186,9 +189,7 @@ export class SatelliteController {
     if (sources.length === 0) return
     this.port.requestInteractive('setSatelliteSources', JSON.stringify({ sources: sources }), (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        this.satelliteStore.satSourceStatus = enabled
-          ? '已全部开启（' + sources.length + ' 组）'
-          : '已全部关闭'
+        this.satelliteStore.satSourceStatus = I18n.t(enabled ? 'sat_add_allowed' : 'sat_add_blocked')
         this.satelliteStore.loadSatelliteSources()
         this.satelliteStore.loadSatellites(true, true)
       } else this.satelliteStore.satSourceStatus = r.error ?? I18n.t('sat_source_invalid')

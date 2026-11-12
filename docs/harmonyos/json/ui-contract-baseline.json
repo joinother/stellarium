@@ -368,6 +368,8 @@
     "polar-scope-flip-vertical",
     "screen-video-share",
     "scripts-list-scroll",
+    "satellites-back",
+    "satellites-refresh",
     "search-browser-back",
     "search-browser-scroll",
     "search-category-picker",
@@ -395,13 +397,14 @@
     "plugin-feature-",
     "quick-action-",
     "recording-share-",
+    "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 53,
+  "totalIdAnchors": 56,
   "count": {
     "panels": 36,
-    "staticIds": 32,
-    "dynamicIdPrefixes": 18,
-    "totalIdAnchors": 53
+    "staticIds": 34,
+    "dynamicIdPrefixes": 19,
+    "totalIdAnchors": 56
   }
 }

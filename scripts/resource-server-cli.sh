@@ -8,6 +8,9 @@ case ${1:-status} in
   health)
     remote_command='curl -fsS --max-time 5 http://127.0.0.1:8080/healthz'
     ;;
+  mirror)
+    remote_command='systemctl show tle-mirror.service -p User -p Group -p Result -p ExecMainStatus -p MainPID; systemctl is-active tle-mirror.timer tle-mirror-status.timer; curl -fsS --max-time 5 --resolve skyinstrument.cn:443:127.0.0.1 https://skyinstrument.cn/v1/status.json'
+    ;;
   capacity)
     remote_command='df -h /; free -m; uptime'
     ;;
@@ -15,7 +18,7 @@ case ${1:-status} in
     remote_command='ss -lntu'
     ;;
   *)
-    printf '%s\n' 'Usage: resource-server-cli.sh [status|health|capacity|ports]' >&2
+    printf '%s\n' 'Usage: resource-server-cli.sh [status|health|mirror|capacity|ports]' >&2
     exit 2
     ;;
 esac
