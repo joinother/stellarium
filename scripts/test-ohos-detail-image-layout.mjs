@@ -9,6 +9,8 @@ const card = mediaComponents.slice(mediaComponents.indexOf('export struct Tablet
 // 全屏大图叠层已下沉为 ObjectInspectorMediaPreviewOverlay 组件（Phase 5b），断言改读组件文件；
 // 组件保留 @ObjectLink `objectMediaStore` 与回调名 `closeObjectInspectorMediaPreview`，故下方断言逐字不变。
 const preview = readFileSync(new URL('../harmonyos/ets-source/panels/overlay/ObjectInspectorMediaPreviewOverlay.ets', import.meta.url), 'utf8');
+const modelOverlay = readFileSync(
+  new URL('../harmonyos/ets-source/panels/overlay/ObjectInspectorModelOverlay.ets', import.meta.url), 'utf8');
 // 天体详情分支已下沉为 ObjectPanel 组件（Phase 4e）：媒体卡片的调用点现在组件内，
 // 但视口高度仍由宿主按实时视口状态算好后以 @Prop 传入。
 const objectPanel = readFileSync(new URL('../harmonyos/ets-source/panels/panels/ObjectPanel.ets', import.meta.url), 'utf8');
@@ -46,4 +48,17 @@ test('preview shrinks to the available detail viewport without growing beyond 21
 test('full-screen image keeps aspect fit and a working close action', () => {
   assert.match(preview, /Image\(this\.objectMediaStore\.objectInspectorMediaPixelMap\)[\s\S]*?objectFit\(ImageFit\.Contain\)/);
   assert.match(preview, /onClick\(\(\) => \{ this\.closeObjectInspectorMediaPreview\(\) \}\)/);
+});
+
+test('detail illustrations and their full-screen views receive the night mask', () => {
+  // Inline image card, inline procedural/offline model and category schematic.
+  const inlineMasks = mediaComponents.match(/backgroundColor\(this\.c\.nightMask\)/g) ?? [];
+  assert.ok(inlineMasks.length >= 3, 'expected inline media/model/schematic masks');
+  assert.match(card, /backgroundColor\(this\.c\.nightMask\)/);
+  // Full-screen image and immersive model overlays.
+  assert.match(preview, /backgroundColor\(this\.c\.nightMask\)/);
+  assert.match(modelOverlay, /backgroundColor\(this\.c\.nightMask\)/);
+  // Masks must not swallow taps: close buttons and model gestures sit below.
+  assert.match(preview, /backgroundColor\(this\.c\.nightMask\)[\s\S]{0,120}HitTestMode\.None/);
+  assert.match(modelOverlay, /backgroundColor\(this\.c\.nightMask\)[\s\S]{0,120}HitTestMode\.None/);
 });

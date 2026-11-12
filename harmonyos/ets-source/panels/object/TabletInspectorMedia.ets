@@ -41,6 +41,11 @@ export struct TabletInspectorMediaCard {
               '[detail-media-card] image failed uri=%{public}s code=%{public}s message=%{public}s',
               this.store.objectInspectorMediaPath, code, err.message)
           })
+        // Night mode dims the decoded image itself; the theme supplies a
+        // transparent colour in day mode, so no branch is needed.
+        Row().width('100%').height('100%')
+          .backgroundColor(this.c.nightMask)
+          .hitTestBehavior(HitTestMode.None)
         if (this.store.objectInspectorMediaDecoding) {
           Row({ space: 8 }) {
             LoadingProgress().width(18).height(18).color(this.c.spinner)
@@ -150,6 +155,13 @@ export struct TabletInspectorModelBlock {
                 '[detail-media-card] sphere failed uri=%{public}s code=%{public}s message=%{public}s',
                 this.store.objectInspectorMediaPath, code, err.message)
             })
+        }
+        // The inline procedural/offline model is an image surface too. Keep the
+        // mask out of hit-testing so rotation/zoom still reaches the stage.
+        if (this.store.objectInspectorModelPixelMap !== undefined) {
+          Row().width('100%').height('100%')
+            .backgroundColor(this.c.nightMask)
+            .hitTestBehavior(HitTestMode.None)
         }
         if (this.store.objectInspectorMediaDecoding || (this.modelRendering && this.store.objectInspectorModelPixelMap === undefined)) {
           Row({ space: 8 }) {
@@ -265,6 +277,11 @@ export struct TabletInspectorFallbackVisual {
         } else {
           Image(getCatalogIcon(this.iconName, this.c.isNight)).width(92).height(92).fillColor(AstroColors.constellationIcon)
         }
+        // Category schematics use fixed astro-visual colours; wash them in night
+        // mode as well so the media block does not glow white/red-only.
+        Row().width('100%').height('100%')
+          .backgroundColor(this.c.nightMask)
+          .hitTestBehavior(HitTestMode.None)
       }
         .width('100%').height(this.kind === 'satellite' ? 104 : 194)
         .backgroundColor(this.kind === 'satellite' ? Color.Transparent : this.c.mediaCard)
