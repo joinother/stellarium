@@ -553,6 +553,7 @@ export interface StellariumBridgeResponse {
   zodiacThickness?: number
   lunarSystemThickness?: number
   constellationArtIntensity?: number
+  constellationArt3d?: boolean
   constellationLinesFadeDuration?: number
   constellationLabelsFadeDuration?: number
   constellationArtFadeDuration?: number

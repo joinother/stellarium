@@ -10,6 +10,7 @@
     "capability/ARController.ets",
     "capability/AstroCalcController.ets",
     "capability/AstronomyCalendarController.ets",
+    "capability/AstronomySubscriptionFeed.ets",
     "capability/AudioEngine.ets",
     "capability/ControllerHooks.ets",
     "capability/DetailConnectorController.ets",
@@ -27,6 +28,7 @@
     "capability/LocationController.ets",
     "capability/NebulaTextureController.ets",
     "capability/NotificationController.ets",
+    "capability/NotificationText.ets",
     "capability/ObjectInspectorMediaController.ets",
     "capability/ObjectModelRenderer.ets",
     "capability/OcularController.ets",
@@ -117,6 +119,7 @@
     "panels/astro/WutTargetCard.ets",
     "panels/guide/GuideButton.ets",
     "panels/guide/GuideLibrary.ets",
+    "panels/layers/AtmosphereGroundSection.ets",
     "panels/layers/LayerPresetBar.ets",
     "panels/layers/LayerSpectralSection.ets",
     "panels/layers/LayerSwitchRow.ets",
@@ -366,10 +369,10 @@
     "polar-scope-close",
     "polar-scope-flip-horizontal",
     "polar-scope-flip-vertical",
-    "screen-video-share",
-    "scripts-list-scroll",
     "satellites-back",
     "satellites-refresh",
+    "screen-video-share",
+    "scripts-list-scroll",
     "search-browser-back",
     "search-browser-scroll",
     "search-category-picker",
@@ -377,6 +380,7 @@
     "sky-keyboard-target",
     "skyZoomInButton",
     "skyZoomOutButton",
+    "skyculture-art-models-toggle",
     "video-frames-share"
   ],
   "dynamicIdPrefixes": [
@@ -400,11 +404,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 56,
+  "totalIdAnchors": 57,
   "count": {
     "panels": 36,
-    "staticIds": 34,
+    "staticIds": 35,
     "dynamicIdPrefixes": 19,
-    "totalIdAnchors": 56
+    "totalIdAnchors": 57
   }
 }

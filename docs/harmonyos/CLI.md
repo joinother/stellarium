@@ -471,6 +471,7 @@ hdc -t 7LZBB26323200303 shell uitest uiInput keyEvent 2050
 - 结果通过日志回传，超大结果可能受系统日志单行长度限制；查询类命令建议按范围或数量参数分批调用。
 - `getDeepSkyImageStatus` 默认检查重点图片；传入 `--payload 'all|偏移|数量'` 分页列出已复制 PNG，单页数量最多 64。`onDisk` 只代表资源已复制，`textureReady` 才代表当前惰性纹理树已经取得可绑定纹理；`textureLoading` 表示正在后台读取，`textureNotStarted` 表示尚未开始绑定。没有进入当前视场的图片可能保持未实例化，不应据此判定资源缺失。
 - `getConstellationArtStatus` 接受星座缩写或名称（例如 `Ori`），也可传 `all`；返回艺术文件是否落盘、纹理是否未启动/加载中/可绑定/失败，以及当前视口相交和有效亮度，用于区分资源、解码与绘制问题。
+- `setSkyCultureVisualSetting constellationArt3d|1/0` 持久化切换本地星座模型预览；`getSkyCultureVisualSettings` 回读 `constellationArt3d`。`getConstellationArtStatus` 的 `modelReady/modelVertices/modelTriangles/renderMode/renderReady/presentationWeight` 描述几何与实际模式；原 `ready/state/loadingCount` 仍只表示插画纹理，不代表模型加载状态。缺少模型或其他文化回退插画，模型随包离线提供。
 - 连续视图命令（如 `dragView`、`zoomBy`）返回“已入队”，不等待逐帧完成。
 - 这是开发者控制通道，不是面向普通用户的应用内命令行界面；Release 包也不会因此监听网络端口。
 

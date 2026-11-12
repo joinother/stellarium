@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "coordinateFrame": "image XY, front positive Z",
+  "source": "User Tripo archive/models_final; archive/_manifest.csv",
+  "models": [
+    {
+      "id": "And",
+      "source": "01_andromeda.glb",
+      "sourceSha256": "187b530229ebcec3b54e4d64362ceedf55bd8a6ecd9de2f13ad0d0c38c6051a6",
+      "mesh": "And.scm",
+      "sha256": "62ece089e3fd3c170c9292bb6e65d1d44c96fc829f5ccb519f0aee217797d0b0",
+      "vertices": 7336,
+      "triangles": 14530,
+      "illustration": "illustrations/andromeda.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Hya",
+      "source": "42_hydra.glb",
+      "sourceSha256": "20c5542a845cefa93cb0b0ca2692602f7af65f138ae4f26c2946290c2b157656",
+      "mesh": "Hya.scm",
+      "sha256": "fd34196dac17f926db989b4bbafa7e0259d67caaaddea28bc87f7249f291bb60",
+      "vertices": 7472,
+      "triangles": 14719,
+      "illustration": "illustrations/hydra.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Aps",
+      "source": "03_apus.glb",
+      "sourceSha256": "a2d31976560bda4c9b65e0ced0aebabaaa31e0653b9cd9433cd1f9be20939623",
+      "mesh": "Aps.scm",
+      "sha256": "17a6e48e8bc34689521cd4103173e725e6eea8f46adf77c3480be127cc53a8e0",
+      "vertices": 7312,
+      "triangles": 14413,
+      "illustration": "illustrations/apus.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Ant",
+      "source": "02_antlia.glb",
+      "sourceSha256": "02e1a0218496440935793ee9ef5d1608b1781ce6943c185e74e083914b47c769",
+      "mesh": "Ant.scm",
+      "sha256": "581488cdab08477efaef8567a9ca1c7f0fd3f7c6e4613c66d9d48271b351c9eb",
+      "vertices": 16416,
+      "triangles": 31545,
+      "illustration": "illustrations/antlia.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Aqr",
+      "source": "04_aquarius.glb",
+      "sourceSha256": "8d6f913c23b65f169aff1efb18a75fd0b14c4d36e53ecda051920813bb1d02a7",
+      "mesh": "Aqr.scm",
+      "sha256": "65460d02f6b6edc1df912aed4dc58e71a86a09573d4ba8230417baae8bf7e208",
+      "vertices": 16920,
+      "triangles": 32618,
+      "illustration": "illustrations/aquarius.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Aql",
+      "source": "05_aquila.glb",
+      "sourceSha256": "1bd23dba6b04d3b320d9f3c8dca828bdfa63e5dff5fee3c03d58b38a04725d0d",
+      "mesh": "Aql.scm",
+      "sha256": "822ff41f904bde853dd66cecdce6b6b6daacbb5f0448ebb5cbf3556452fcaad2",
+      "vertices": 7614,
+      "triangles": 14515,
+      "illustration": "illustrations/aquila.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Ara",
+      "source": "06_ara.glb",
+      "sourceSha256": "ebf9c16d0cd8effb1bf9f8b0dfc5795e64f306447783bbbce47ccb4c540c5a9c",
+      "mesh": "Ara.scm",
+      "sha256": "9d05e15419784a141d7d3285be736e860ee5e1a132b4b8179d54a8ef8b92aa03",
+      "vertices": 7387,
+      "triangles": 14511,
+      "illustration": "illustrations/ara.png",
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

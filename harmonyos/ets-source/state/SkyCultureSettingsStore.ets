@@ -84,6 +84,7 @@ export class SkyCultureSettingsStore {
   skyCultureZodiacThickness: number = 1
   skyCultureLunarSystemThickness: number = 1
   skyCultureConstellationArtIntensity: number = 0.5
+  skyCultureConstellationArt3d: boolean = false
   skyCultureConstellationLinesFadeDuration: number = 1
   skyCultureConstellationLabelsFadeDuration: number = 1
   skyCultureConstellationArtFadeDuration: number = 1
@@ -188,6 +189,7 @@ export class SkyCultureSettingsStore {
       this.skyCultureZodiacThickness = r.zodiacThickness !== undefined ? r.zodiacThickness : this.skyCultureZodiacThickness
       this.skyCultureLunarSystemThickness = r.lunarSystemThickness !== undefined ? r.lunarSystemThickness : this.skyCultureLunarSystemThickness
       this.skyCultureConstellationArtIntensity = r.constellationArtIntensity !== undefined ? r.constellationArtIntensity : this.skyCultureConstellationArtIntensity
+      this.skyCultureConstellationArt3d = r.constellationArt3d === true
       this.skyCultureConstellationLinesFadeDuration = r.constellationLinesFadeDuration !== undefined ? r.constellationLinesFadeDuration : this.skyCultureConstellationLinesFadeDuration
       this.skyCultureConstellationLabelsFadeDuration = r.constellationLabelsFadeDuration !== undefined ? r.constellationLabelsFadeDuration : this.skyCultureConstellationLabelsFadeDuration
       this.skyCultureConstellationArtFadeDuration = r.constellationArtFadeDuration !== undefined ? r.constellationArtFadeDuration : this.skyCultureConstellationArtFadeDuration
@@ -348,6 +350,7 @@ export class SkyCultureSettingsStore {
     else if (setting === 'zodiacThickness') this.skyCultureZodiacThickness = value
     else if (setting === 'lunarSystemThickness') this.skyCultureLunarSystemThickness = value
     else if (setting === 'constellationArtIntensity') this.skyCultureConstellationArtIntensity = value
+    else if (setting === 'constellationArt3d') this.skyCultureConstellationArt3d = value === 1
     else if (setting === 'constellationLinesFadeDuration') this.skyCultureConstellationLinesFadeDuration = value
     else if (setting === 'constellationLabelsFadeDuration') this.skyCultureConstellationLabelsFadeDuration = value
     else if (setting === 'constellationArtFadeDuration') this.skyCultureConstellationArtFadeDuration = value

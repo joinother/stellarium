@@ -187,8 +187,13 @@ inline QJsonObject item(const QString& name)
 	else if (name == "setActionChecked") value["examplePayload"] = "actionShow_Stars|1";
 	else if (name == "getConstellationArtStatus")
 	{
-		value["description"] = QStringLiteral("诊断当前星空文化的星座艺术文件、纹理加载和视口可见状态");
+		value["description"] = QStringLiteral("诊断当前星空文化的插画、3D 模型顶点/三角形数量、实际绘制模式和视口可见状态");
 		value["examplePayload"] = "Ori";
+	}
+	else if (name == "setSkyCultureVisualSetting")
+	{
+		value["description"] = QStringLiteral("设置星空文化视觉参数；constellationArt3d|1 启用本地 3D 模型预览，0 恢复插画；其余文化或缺少模型时回退插画");
+		value["examplePayload"] = "constellationArt3d|1";
 	}
 	else if (name == "getSatelliteDetail")
 	{

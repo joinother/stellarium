@@ -249,6 +249,14 @@ private:
 
 	StelTextureSP artTexture;
 	StelVertexArray artPolygon;
+	QVector<Vec3d> modelPositions;
+	QVector<Vec3f> modelColors;
+	QVector<quint32> modelIndices;
+	float artPresentation = 1.f;
+	float linePresentation = 1.f;
+	float labelPresentation = 1.f;
+	void loadArtModel(const QString& path, const Mat4d& transform, int width, int height);
+	void drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity) const;
 	SphericalCap boundingCap;
 	SphericalRegionP convexHull; //!< The convex hull formed by stars contained in the defined lines (constellation) plus extra stars (hullExtension).
 

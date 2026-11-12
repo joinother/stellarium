@@ -153,6 +153,8 @@ public:
 public slots:	
 	//! Set whether constellation art will be displayed
 	void setFlagArt(const bool displayed);
+	bool getFlagArt3d() const { return art3dDisplayed; }
+	void setFlagArt3d(bool displayed);
 	//! Get whether constellation art is displayed
 	bool getFlagArt(void) const;
 
@@ -541,6 +543,7 @@ private:
 	double artIntensityMinimumFov;
 	double artIntensityMaximumFov;
 	bool artDisplayed;
+	bool art3dDisplayed = false;
 	bool boundariesDisplayed;
 	float boundariesFadeDuration;
 	bool linesDisplayed;

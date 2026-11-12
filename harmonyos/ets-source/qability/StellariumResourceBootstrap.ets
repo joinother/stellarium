@@ -316,6 +316,23 @@ async function refreshSkyCultureEditorialResources(appContext: common.Applicatio
   hilog.info(LOG_DOMAIN, LOG_TAG, `[startup] sky-culture editorial resources refreshed: ${paths.length}`);
 }
 
+async function refreshConstellationModels(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
+  const relativeRoot = 'skycultures/modern/models';
+  const markerPath = `${installRoot}/${relativeRoot}/.bundled_v1`;
+  const files: string[] = ['And.scm', 'Ant.scm', 'Aps.scm', 'Aqr.scm', 'Aql.scm', 'Ara.scm', 'Hya.scm', 'manifest.json'];
+  if (exists(markerPath) && files.every((name: string) => fileSize(`${installRoot}/${relativeRoot}/${name}`) > 12)) {
+    return;
+  }
+  try {
+    for (const name of files) {
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/${relativeRoot}/${name}`, `${installRoot}/${relativeRoot}/${name}`);
+    }
+    writeMarker(markerPath);
+  } catch (err) {
+    hilog.warn(LOG_DOMAIN, LOG_TAG, `Optional constellation models unavailable; using illustrations: ${JSON.stringify(err)}`);
+  }
+}
+
 // 26.3 首次引入新的星空文化。旧安装的 one-time marker 仍在，异步准备原本会
 // 提前返回；这里只补抽这一个目录，避免为了 21 个文件重走整棵资源树。
 // 若补抽中断，三项哨兵仍缺失，下次启动重试；hasStartupResourceFiles 也把
@@ -966,6 +983,7 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
   }
 
   await refreshSkyCultureEditorialResources(appContext, installRoot);
+  await refreshConstellationModels(appContext, installRoot);
   await refreshObjectTypeTranslations(appContext, installRoot);
 
   // HAP updates preserve filesDir. Refresh these small, mandatory records on

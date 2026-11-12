@@ -110,6 +110,7 @@ void ConstellationMgr::init()
 	setArtIntensity(conf->value("viewing/constellation_art_intensity", 0.5f).toFloat());
 	setArtFadeDuration(conf->value("viewing/constellation_art_fade_duration",2.f).toFloat());
 	setFlagArt(conf->value("viewing/flag_constellation_art", false).toBool());
+	setFlagArt3d(conf->value("viewing/flag_constellation_art_3d", false).toBool());
 	setFlagIsolateSelected(conf->value("viewing/flag_constellation_isolate_selected", false).toBool());
 	setFlagConstellationPick(conf->value("viewing/flag_constellation_pick", false).toBool());
 	setConstellationLineThickness(conf->value("viewing/constellation_line_thickness", 1).toInt());
@@ -677,6 +678,8 @@ void ConstellationMgr::loadLinesNamesAndArt(const StelSkyCulture &culture)
 		tmp2.normalize();
 		cons->boundingCap.n=tmp;
 		cons->boundingCap.d=tmp*tmp2;
+		if (culture.id == "modern")
+			cons->loadArtModel(culture.path + "/models/" + cons->getShortName() + ".scm", X, texSizeX, texSizeY);
 	}
 
 	qInfo().noquote() << "Loaded" << readOk << "/" << constellations.size() << "constellation records successfully for culture" << culture.id;
@@ -718,6 +721,12 @@ void ConstellationMgr::draw(StelCore* core)
 }
 
 // Draw constellations art textures
+void ConstellationMgr::setFlagArt3d(bool displayed)
+{
+	art3dDisplayed = displayed;
+	StelApp::immediateSave("viewing/flag_constellation_art_3d", displayed);
+}
+
 void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) const
 {
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
@@ -762,9 +771,14 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 		item["name"] = constellation->getNameI18n();
 		item["englishName"] = constellation->getEnglishName();
 		item["polygonVertices"] = constellation->artPolygon.vertex.size();
+		item["modelVertices"] = constellation->modelPositions.size();
+		item["modelTriangles"] = constellation->modelIndices.size() / 3;
+		item["renderMode"] = art3dDisplayed && !constellation->modelIndices.isEmpty() ? "model3d" : "illustration";
+		item["modelReady"] = !constellation->modelIndices.isEmpty();
 		item["seasonallyVisible"] = constellation->isSeasonallyVisible();
 		item["fader"] = constellation->artFader.getInterstate();
-		item["effectiveIntensity"] = constellation->artFader.getInterstate() * constellation->artOpacity * Constellation::artIntensityFovScale;
+		item["effectiveIntensity"] = constellation->artFader.getInterstate() * constellation->artOpacity * Constellation::artIntensityFovScale * constellation->artPresentation;
+		item["presentationWeight"] = constellation->artPresentation;
 		item["intersectsViewport"] = region && region->intersects(constellation->boundingCap);
 
 		if (constellation->artTexture)
@@ -796,6 +810,7 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 			item["state"] = QStringLiteral("noMatch");
 		}
 
+		item["renderReady"] = item.value("renderMode").toString() == "model3d" || item.value("ready").toBool();
 		const bool visible = item.value("seasonallyVisible").toBool() &&
 		                     item.value("intersectsViewport").toBool() &&
 		                     item.value("effectiveIntensity").toDouble() > 0.0;
@@ -806,6 +821,7 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 
 	result["ok"] = true;
 	result["artDisplayed"] = artDisplayed;
+	result["art3dDisplayed"] = art3dDisplayed;
 	result["artIntensity"] = artIntensity;
 	result["artFovScale"] = Constellation::artIntensityFovScale;
 	result["matched"] = items.size();
@@ -1041,8 +1057,31 @@ void ConstellationMgr::update(double deltaTime)
 		recreateHulls();
 
 	const int delta = static_cast<int>(deltaTime*1000);
+	const auto& selection = GETSTELMODULE(StelObjectMgr)->getSelectedObject();
+	const Constellation* focus = nullptr;
+	if (!selection.isEmpty())
+	{
+		if (selection.first()->getType() == Constellation::CONSTELLATION_TYPE)
+			focus = static_cast<const Constellation*>(selection.first().data());
+		else if (selection.first()->getType() == "Star")
+			for (const auto* constellation : std::as_const(constellations))
+				if (constellation->isStarIn(selection.first().data()))
+				{
+					focus = constellation;
+					break;
+				}
+	}
+	const bool hasFocus = focus != nullptr;
+	const float blend = 1.f - std::exp(-float(qMax(0., deltaTime)) / 0.18f);
 	for (auto* constellation : std::as_const(constellations))
 	{
+		const bool focused = focus == constellation;
+		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.025f : 0.16f));
+		const float lineTarget = !art3dDisplayed ? 1.f : (focused ? 0.7f : (hasFocus ? 0.08f : 0.25f));
+		const float labelTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.4f : 0.65f));
+		constellation->artPresentation += (artTarget - constellation->artPresentation) * blend;
+		constellation->linePresentation += (lineTarget - constellation->linePresentation) * blend;
+		constellation->labelPresentation += (labelTarget - constellation->labelPresentation) * blend;
 		constellation->update(delta);
 	}
 	zodiacFader.update(delta);

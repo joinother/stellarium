@@ -12029,6 +12029,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["zodiacThickness"] = cmgr->getZodiacThickness();
 			result["lunarSystemThickness"] = cmgr->getLunarSystemThickness();
 			result["constellationArtIntensity"] = cmgr->getArtIntensity();
+			result["constellationArt3d"] = cmgr->getFlagArt3d();
 			result["constellationLinesFadeDuration"] = cmgr->getLinesFadeDuration();
 			result["constellationLabelsFadeDuration"] = cmgr->getLabelsFadeDuration();
 			result["constellationArtFadeDuration"] = cmgr->getArtFadeDuration();
@@ -12089,6 +12090,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				cmgr->setLunarSystemThickness(qRound(value));
 			else if (setting == "constellationArtIntensity" && value >= 0.0 && value <= 1.0)
 				cmgr->setArtIntensity(static_cast<float>(value));
+			else if (setting == "constellationArt3d" && (value == 0.0 || value == 1.0))
+				cmgr->setFlagArt3d(value == 1.0);
 			else if (setting == "constellationLinesFadeDuration" && value >= 0.1 && value <= 10.0)
 				cmgr->setLinesFadeDuration(static_cast<float>(value));
 			else if (setting == "constellationLabelsFadeDuration" && value >= 0.1 && value <= 10.0)

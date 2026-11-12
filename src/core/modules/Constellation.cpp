@@ -43,6 +43,11 @@
 #include <QDebug>
 #include <QFontMetrics>
 #include <QIODevice>
+#include <QFile>
+#include <QDataStream>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <cmath>
 
 const QString Constellation::CONSTELLATION_TYPE = QStringLiteral("Constellation");
 
@@ -386,7 +391,7 @@ void Constellation::drawOptim(StelPainter& sPainter, const StelCore* core, const
 
 	const bool isDarkConstellation = !(dark_constellation.empty());
 	const float darkFactor = (isDarkConstellation? 0.6667f : 1.0f);
-	sPainter.setColor(lineColor*darkFactor, lineFader.getInterstate());
+	sPainter.setColor(lineColor*darkFactor, lineFader.getInterstate() * linePresentation);
 
 	if (isDarkConstellation)
 		for (unsigned int i=0;i<numberOfSegments;++i)
@@ -411,7 +416,22 @@ void Constellation::drawOptim(StelPainter& sPainter, const StelCore* core, const
 				sPainter.drawSphericalRegion(&scCircle, StelPainter::SphericalPolygonDrawModeBoundary);
 			}
 			else
+			{
+				if (GETSTELMODULE(ConstellationMgr)->getFlagArt3d())
+				{
+					Vec3d screen1, screen2;
+					const auto projector = sPainter.getProjector();
+					if (projector->project(star1, screen1) && projector->project(star2, screen2))
+					{
+						const double length = std::hypot(screen2[0] - screen1[0], screen2[1] - screen1[1]);
+						const double fraction = qMin(0.2, 4.0 * projector->getScreenScale() / qMax(1., length));
+						const Vec3d original1 = star1;
+						star1 = normalize(star1 * (1.0 - fraction) + star2 * fraction);
+						star2 = normalize(star2 * (1.0 - fraction) + original1 * fraction);
+					}
+				}
 				sPainter.drawGreatCircleArc(star1, star2, &viewportHalfspace);
+			}
 		}
 }
 
@@ -443,7 +463,7 @@ void Constellation::drawName(const Vec3d &xyName, StelPainter& sPainter) const
 	if (isSeasonallyVisible())
 	{
 		QString name = getScreenLabel();
-		sPainter.setColor(labelColor, nameFader.getInterstate());
+		sPainter.setColor(labelColor, nameFader.getInterstate() * labelPresentation);
 		sPainter.drawText(static_cast<float>(xyName[0]), static_cast<float>(xyName[1]), name, 0., -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, false);
 	}
 }
@@ -452,7 +472,13 @@ void Constellation::drawArtOptim(StelPainter& sPainter, const SphericalRegion& r
 {
 	if (isSeasonallyVisible())
 	{
-		const float intensity = artFader.getInterstate() * artOpacity * artIntensityFovScale;
+		const float intensity = artFader.getInterstate() * artOpacity * artIntensityFovScale * artPresentation;
+		if (GETSTELMODULE(ConstellationMgr)->getFlagArt3d() && !modelIndices.isEmpty())
+		{
+			if (intensity > 0.0f && region.intersects(boundingCap))
+				drawArtModel(sPainter, intensity, obsVelocity);
+			return;
+		}
 		if (artTexture && intensity > 0.0f && region.intersects(boundingCap))
 		{
 			sPainter.setColor(intensity,intensity,intensity);
@@ -464,6 +490,123 @@ void Constellation::drawArtOptim(StelPainter& sPainter, const SphericalRegion& r
 			sPainter.drawStelVertexArray(artPolygon, false, obsVelocity);
 		}
 	}
+}
+
+void Constellation::loadArtModel(const QString& path, const Mat4d& transform, int width, int height)
+{
+	QFile file(path);
+	if (!file.open(QIODevice::ReadOnly)) return;
+	if (file.size() < 12 || file.size() > 4800012 || file.read(4) != "SCM1") return;
+	QDataStream stream(&file);
+	stream.setByteOrder(QDataStream::LittleEndian);
+	stream.setFloatingPointPrecision(QDataStream::SinglePrecision);
+	quint32 vertexCount = 0, indexCount = 0;
+	stream >> vertexCount >> indexCount;
+	if (!vertexCount || vertexCount > 100000 || !indexCount || indexCount > 600000 || indexCount % 3 ||
+	    file.size() != 12 + qint64(vertexCount) * 24 + qint64(indexCount) * 4) return;
+	QVector<Vec3d> positions;
+	QVector<Vec3f> colors;
+	QVector<quint32> indices;
+	positions.reserve(vertexCount);
+	colors.reserve(vertexCount);
+	indices.reserve(indexCount);
+	const double span = ((transform * Vec3d(width, height * 0.5, 0.)) -
+	                     (transform * Vec3d(0., height * 0.5, 0.))).norm();
+	const Vec3f light = normalize(Vec3f(-0.35f, 0.5f, 0.8f));
+	for (quint32 vertex = 0; vertex < vertexCount; ++vertex)
+	{
+		float horizontal, vertical, depth, normalX, normalY, normalZ;
+		stream >> horizontal >> vertical >> depth >> normalX >> normalY >> normalZ;
+		if (!std::isfinite(horizontal) || !std::isfinite(vertical) || !std::isfinite(depth) ||
+		    !std::isfinite(normalX) || !std::isfinite(normalY) || !std::isfinite(normalZ) ||
+		    horizontal < -0.1f || horizontal > 1.1f || vertical < -0.1f || vertical > 1.1f ||
+		    std::abs(depth) > 2.f) return;
+		Vec3d position = transform * Vec3d(horizontal * width, vertical * height, 0.);
+		position.normalize();
+		position *= 1.0 - qBound(-0.25, double(depth) * span * 0.25, 0.25);
+		positions.append(position);
+		Vec3f normal(normalX, normalY, normalZ);
+		if (normal.normSquared() < 0.1f || normal.normSquared() > 4.f) return;
+		normal.normalize();
+		const float rim = std::pow(1.f - qMin(1.f, std::abs(normal[2])), 3.f);
+		const float shade = 0.025f + 0.12f * qMax(0.f, normal * light) + 0.55f * rim;
+		colors.append(Vec3f(shade * 0.60f, shade * 0.75f, shade));
+	}
+	for (quint32 index = 0; index < indexCount; ++index)
+	{
+		quint32 value;
+		stream >> value;
+		if (value >= vertexCount) return;
+		indices.append(value);
+	}
+	if (stream.status() != QDataStream::Ok) return;
+	modelPositions.swap(positions);
+	modelColors.swap(colors);
+	modelIndices.swap(indices);
+	for (const Vec3d& position : modelPositions)
+		boundingCap.d = qMin(boundingCap.d, boundingCap.n * normalize(position));
+}
+
+void Constellation::drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity) const
+{
+	const auto projector = painter.getProjector();
+	QVector<Vec3f> projected(modelPositions.size());
+	QVector<bool> valid(modelPositions.size());
+	for (int index = 0; index < modelPositions.size(); ++index)
+	{
+		const Vec3d& position = modelPositions.at(index);
+		Vec3d direction = normalize(position) + velocity;
+		direction.normalize();
+		valid[index] = projector->project(direction, projected[index]);
+		projected[index][2] = float((1.0 - position.norm()) * 2.0);
+	}
+	QVector<Vec3f> vertices;
+	QVector<Vec4f> colors;
+	vertices.reserve(modelIndices.size());
+	colors.reserve(modelIndices.size());
+	for (int offset = 0; offset < modelIndices.size(); offset += 3)
+	{
+		const quint32 first = modelIndices.at(offset), second = modelIndices.at(offset + 1), third = modelIndices.at(offset + 2);
+		if (!valid.at(first) || !valid.at(second) || !valid.at(third)) continue;
+		if (projector->intersectViewportDiscontinuity(modelPositions.at(first), modelPositions.at(second)) ||
+		     projector->intersectViewportDiscontinuity(modelPositions.at(second), modelPositions.at(third)) ||
+		     projector->intersectViewportDiscontinuity(modelPositions.at(third), modelPositions.at(first))) continue;
+		for (int corner = 0; corner < 3; ++corner)
+		{
+			const quint32 index = modelIndices.at(offset + corner);
+			vertices.append(projected.at(index));
+			const Vec3f& color = modelColors.at(index);
+			colors.append(Vec4f(color[0], color[1], color[2], intensity));
+		}
+	}
+	if (vertices.isEmpty()) return;
+	auto* gl = QOpenGLContext::currentContext()->functions();
+	GLint oldDepthFunction;
+	GLboolean oldColorMask[4];
+	gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
+	gl->glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
+	painter.setCullFace(false);
+	painter.setDepthTest(true);
+	painter.setDepthMask(true);
+	gl->glClear(GL_DEPTH_BUFFER_BIT);
+	gl->glDepthFunc(GL_LEQUAL);
+	painter.setVertexPointer(3, GL_FLOAT, vertices.constData());
+	painter.setColorPointer(4, GL_FLOAT, colors.constData());
+	painter.enableClientStates(true, false, true);
+	gl->glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+	painter.drawFromArray(StelPainter::Triangles, vertices.size(), 0, false);
+	gl->glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
+	painter.setDepthMask(false);
+	painter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
+	painter.drawFromArray(StelPainter::Triangles, vertices.size(), 0, false);
+	painter.enableClientStates(false);
+	painter.setDepthMask(true);
+	gl->glClear(GL_DEPTH_BUFFER_BIT);
+	painter.setDepthMask(false);
+	painter.setDepthTest(false);
+	gl->glDepthFunc(oldDepthFunction);
+	painter.setBlending(true, GL_ONE, GL_ONE);
+	painter.setCullFace(true);
 }
 
 // Draw the art texture

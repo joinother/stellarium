@@ -117,6 +117,10 @@ export struct SkyCultureViewTab {
       LayerSwitchRow({ label: I18n.t('s0524'), isOn: this.layerStore.constellationBoundaries, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Constellation_Boundaries', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0539'), isOn: this.layerStore.constellationHulls, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Constellation_Hulls', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0525'), isOn: this.layerStore.constellationArt, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Constellation_Art', '', value) } })
+      LayerSwitchRow({ label: I18n.t('culture_models_preview'), isOn: this.settings.skyCultureConstellationArt3d, onToggle: (value: boolean) => { this.onSetVisualSetting('constellationArt3d', value ? 1 : 0) } })
+        .id('skyculture-art-models-toggle')
+      Text(I18n.t('culture_models_preview_hint'))
+        .fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 12, right: 12, bottom: 8 })
       LayerSwitchRow({ label: I18n.t('s0526'), isOn: this.layerStore.zodiac, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Zodiac', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0527'), isOn: this.layerStore.lunarSystem, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LunarSystem', '', value) } })
       if (this.settings.skyCultureHasAsterisms) {
