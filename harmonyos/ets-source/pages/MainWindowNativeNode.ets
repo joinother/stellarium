@@ -5465,8 +5465,22 @@ export struct WindowNativeNode {
       return this.quickPanelContentHeight()
     }
     const usable = this.compactPanelUsableHeight()
+    if (this.activePanel === 'time') {
+      // 与平板共用同一套时间面板高度：只展开到“时间轮 + 倒带/停止/实时”一行；
+      // 日出/中天/日落及以下内容留在面板内 Scroll，不再用 0.6/0.9 的通用吸附高度。
+      return this.timePanelSpeedHeight(usable, 12 + 16)
+    }
     const minH = Math.min(usable, 280)
     return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
+  }
+
+  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：顶部留白 + 抓手 + 标题栏 +
+  // 标题下间距 + 时间轮/速度栏内容高度。块高度未测得时按可用高度的 0.6 兜底。
+  private timePanelSpeedHeight(usable: number, verticalPadding: number): number {
+    const block = this.timeSpeedBlockHeight
+    if (block <= 0) return Math.min(usable * 0.6, usable)
+    const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
+    return Math.min(verticalPadding + 30 + header + 14 + block, usable)
   }
 
   // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
@@ -5761,10 +5775,7 @@ export struct WindowNativeNode {
       return Math.min(this.quickPanelContentHeight(), usable)
     }
     if (this.activePanel === 'time') {
-      const block = this.timeSpeedBlockHeight
-      if (block <= 0) return usable * 0.6
-      const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
-      return Math.min(18 + 30 + header + 14 + block + 18, usable)
+      return this.timePanelSpeedHeight(usable, 18 + 18)
     }
     return usable
   }
