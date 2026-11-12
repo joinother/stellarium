@@ -47,7 +47,7 @@ import { gyroRotateAboutAxis, gyroMultiplyQuaternions, gyroFilterDeviceVector, g
 import { jdToLocalTimeText, graphModeLabel, graphStartOptionLabel, planetMetricUnit, planetPairBodyName, phenomenonCaption, hecPointColor, hecLayoutPositions, hecPointLeft, hecPointTop, messierNumberOf, minorPlanetNumberOf, fmtDegMin, clamp, distance } from '../common/derive/astro'
 import { resourceText, describeDecodeError, zhNameOf, zhType, planetZh, sensZh, scriptZh, scriptDesc, pluginZh, pluginDesc, pluginHostName, pluginFeatureRoute, approximateTimeZoneDisplay, panelTitleFor, celestialTitle, quickLocationLabel } from '../common/derive/labels'
 import { isSafeSkyCultureArtPath, cleanSkyCultureDescription, cleanSkyCultureNarration, isCliPanelName, parseObservingList, formatRate, configDitheringLabel, isRecordable } from '../common/derive/skycult'
-import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
+import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, panelRouteRoot, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
 import { quickActionById, quickCandidateRowsFor } from '../common/derive/quickActions'
 import { pointInsideRect, pointOverlapsUiObstacle, touchScreenX, touchScreenY, touchWindowX, touchWindowY, azBarHeight, compactTopQuickY, baseCompactObjectPeekY, expandedDetailSummaryHeight, isPhoneDetailPeek, useTabletObjectInspector, useExpandedDetailSummary, railTop, expandedMainPanelLeft, panelLeft, panelRight, baseExpandedDetailSummaryX, baseExpandedDetailSummaryY, baseTabletInspectorX, baseTabletInspectorY, tabletInspectorHeight, baseBottomCardX, baseBottomCardY, expandedDockWidth, expandedDockLeft, dockWidthPixels, dockLeft, chromeRowPosXLeft, chromeRowPosXRight, guideCardHeight, guideCardX, guideCardY, scriptControlWidth, scriptControlX, scriptControlY, isPanelBackPoint, isDockPoint, isObjectDetailCardPoint, canShowExpandedDetailSummary, expandedDetailSummaryWidth } from '../common/derive/geometry'
 import { catalogIconForModule, catalogIconForObjectType, wutCategoryOptions, wutCategoryKey, wutDirectionLabel } from '../common/derive/catalog'
@@ -4166,9 +4166,16 @@ export struct WindowNativeNode {
     if (panel === 'quick' && nextVisible) {
       this.quickPanelStore.setExpanded(false)
     }
-    // 每次打开面板都回到默认高度（0.6），与手机一致。
+    // 手机端“更多功能”默认以加高高度打开；从它进入的子面板沿用当前高度，
+    // 其他入口仍回到标准 0.6。
+    const preserveMorePanelHeight = this.panelVisible && panelRouteRoot(currentPanel) === 'more' &&
+      panelRouteRoot(panel) === 'more'
     if (nextVisible) {
-      this.compactPanelSnapRatio = 0.6
+      if (panel === 'more') {
+        this.compactPanelSnapRatio = 0.9
+      } else if (!preserveMorePanelHeight) {
+        this.compactPanelSnapRatio = 0.6
+      }
       this.compactPanelDragOffsetY = 0
       this.expandedPanelDragOffsetY = 0
     }

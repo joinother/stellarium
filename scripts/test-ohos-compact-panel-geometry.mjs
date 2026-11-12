@@ -53,6 +53,12 @@ test('compact time sheet stops at the speed-chip row on phones', () => {
   assert.equal(host.timePanelSpeedHeight(600, 18 + 18), 18 + 30 + 56 + 14 + 240 + 18);
 });
 
+test('the More sheet opens raised and keeps its height for subpanels', () => {
+  assert.match(page, /const preserveMorePanelHeight = this\.panelVisible && panelRouteRoot\(currentPanel\) === 'more' &&[\s\S]{0,40}panelRouteRoot\(panel\) === 'more'/);
+  assert.match(page, /if \(panel === 'more'\) \{\s*this\.compactPanelSnapRatio = 0\.9/);
+  assert.match(page, /else if \(!preserveMorePanelHeight\) \{\s*this\.compactPanelSnapRatio = 0\.6/);
+});
+
 test('expanded object details and dragging cannot cover the compact Dock', () => {
   for (const height of [320, 400, 469, 600]) {
     for (const offset of [-1000, 0, 1000]) {
