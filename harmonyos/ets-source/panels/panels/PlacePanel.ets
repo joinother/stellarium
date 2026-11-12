@@ -9,11 +9,11 @@ import { SessionToolStore } from '../../state/SessionToolStore'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { CityChipsRow } from '../location/CityChipsRow'
 import { LocationPickerPanel } from '../location/LocationPickerPanel'
-import { ContinuationSection } from '../astro/ContinuationSection'
-import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEventsSection } from '../astro/SessionToolSections'
+import { ObserverPlanetSection, TonightEventsSection } from '../astro/SessionToolSections'
 
-// 位置面板，对应 `activePanel === 'place'`：三个顶部信息行 + 位置选择器 + 已保存城市行 +
-// 观测星球 +（非 appgallery 构建下的）指星笔 / 手表陀螺仪 / 会话延续 / 今晚天象。
+// 位置面板，对应 `activePanel === 'place'`：当前观测点卡 + 观测星球 + 位置选择器 +
+// 已保存/最近位置 +（非 appgallery 构建下的）今晚天象。指星笔、手表陀螺仪与
+// 会话延续分别位于「更多功能 → 开发与诊断」和天文面板「今晚」标签页。
 //
 // 三个 store 走 @ObjectLink，文本与颜色走 @Prop，native 桥/定时器/快捷键动作回调注入宿主。
 @Component
@@ -28,12 +28,16 @@ export struct PlacePanel {
   // 地图几何由 LocationPickerPanel 自算，这里只传它依赖的布局态
   @Prop skyWidth: number
   @Prop fixedObserverPoint: boolean = false
+  // Privacy/foreground gate for the online terrain preview. The card still
+  // falls back to the offline overview when this is false or the network is down.
+  @Prop previewMapAllowed: boolean = false
+  // True while the full-screen map is open; the mini-map is unmounted.
+  @Prop mapSuspended: boolean = false
   @State private c: ThemeSlots = DEFAULT_SLOTS
   @State private fixedMapFailed: boolean = false
   planetLabel: (en: string) => string = (en: string) => en
   onOpenFullMap: () => void = () => {}
   contextOf: (item: LocSearchItem) => string = () => ''
-  onUseDeviceLocation: () => void = () => {}
   onSearchLocations: (query: string) => void = () => {}
   onPickSearchItem: (item: LocSearchItem) => void = () => {}
   onApply: () => void = () => {}
@@ -45,20 +49,20 @@ export struct PlacePanel {
   onSelectCity: (c: string) => void = () => {}
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
-  onDeleteLocation: (name: string) => void = () => {}
-  onChip: (id: string) => void = () => {}
+  onDeleteLocation: (key: string) => void = () => {}
   onSelectPlanet: (name: string) => void = () => {}
-  onPoint: () => void = () => {}
-  onSend: () => void = () => {}
-  onStart: () => void = () => {}
-  onStop: () => void = () => {}
-  onExport: () => void = () => {}
-  onSessionApply: () => void = () => {}
-  onHandoff: () => void = () => {}
   onRefreshTonight: () => void = () => {}
   onJump: (jd: number, lock: string, title: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+
+  aboutToAppear(): void {
+    // The location panel always opens on the map tab; a search/region tab
+    // selected during the previous visit must not become the new default.
+    if (this.locationPickerStore.locationPickMode !== 'map') {
+      this.locationPickerStore.locationPickMode = 'map'
+    }
+  }
 
   private fixedPreviewWidth(): number {
     if (this.expandedLayout) return 292
@@ -104,17 +108,18 @@ export struct PlacePanel {
 
   build() {
     Column() {
+      // Two label/value rows: the old three-row layout with altitude folded
+      // into the coordinate line. GPS lives in the panel title bar.
       Row() {
         Text(I18n.t('i0014')).fontSize(12).fontColor(this.c.sub).width(72)
-        Text(this.locationText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.locationText).fontSize(14).fontColor(this.c.text).layoutWeight(1)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       Row() {
         Text(I18n.t('i0015')).fontSize(12).fontColor(this.c.sub).width(72)
-        Text(this.coordinateText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-      }.height(28).width('100%').padding({ left: 10, right: 10 })
-      Row() {
-        Text(I18n.t('i0016')).fontSize(12).fontColor(this.c.sub).width(72)
-        Text(this.altitudeText).fontSize(14).fontColor(this.c.text).layoutWeight(1).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(this.coordinateText + (this.altitudeText.length > 0 ? ' · ' + this.altitudeText : ''))
+          .fontSize(14).fontColor(this.c.text).layoutWeight(1)
+          .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.height(28).width('100%').padding({ left: 10, right: 10 })
       ObserverPlanetSection({ store: this.sessionToolStore, planetLabel: (en: string) => this.planetLabel(en), onSelectPlanet: (name: string) => { this.onSelectPlanet(name) } })
       if (this.fixedObserverPoint) {
@@ -127,9 +132,10 @@ export struct PlacePanel {
         locationStore: this.locationStore,
         observerPlanet: this.sessionToolStore.observerPlanet,
         mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
+        onlineAllowed: this.previewMapAllowed,
+        mapSuspended: this.mapSuspended,
         expandedLayout: this.expandedLayout,
         skyWidth: this.skyWidth,
-        onUseDeviceLocation: () => { this.onUseDeviceLocation() },
         onSearchLocations: (query: string) => { this.onSearchLocations(query) },
         onInputFocus: () => { this.onInputFocus() },
         onInputBlur: () => { this.onInputBlur() },
@@ -148,15 +154,13 @@ export struct PlacePanel {
         observerPlanet: this.sessionToolStore.observerPlanet,
         onSaveCurrent: () => { this.onSaveCurrent() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.onApplyLocation(name, lat, lon, alt, planet) },
-        onDeleteLocation: (name: string) => { this.onDeleteLocation(name) },
-        onChip: (id: string) => { this.onChip(id) }
+        onDeleteLocation: (key: string) => { this.onDeleteLocation(key) }
       })
       }
-      // These are developer scaffolding screens, not release-ready features.
+      // Tonight's events stay here; the virtual pointer test and watch gyro
+      // simulator moved to More → Development & diagnostics. Session
+      // continuation lives in the astro panel's "tonight" tab.
       if (!OFFLINE_APPGALLERY_BUILD) {
-        PointingTestSection({ store: this.sessionToolStore, onPoint: () => { this.onPoint() } })
-        WatchGyroSection({ store: this.sessionToolStore, onSend: () => { this.onSend() }, onStart: () => { this.onStart() }, onStop: () => { this.onStop() } })
-        ContinuationSection({ hint: this.sessionToolStore.sessionHint, json: this.sessionToolStore.sessionJson, onExport: () => { this.onExport() }, onApply: () => { this.onSessionApply() }, onHandoff: () => { this.onHandoff() } })
         TonightEventsSection({ store: this.sessionToolStore, onRefresh: () => { this.onRefreshTonight() }, onJump: (jd: number, lock: string, title: string) => { this.onJump(jd, lock, title) } })
       }
     }.width('100%')

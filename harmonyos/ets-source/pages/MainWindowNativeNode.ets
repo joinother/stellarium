@@ -19,10 +19,12 @@ import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
+import { map, mapCommon, site } from '@kit.MapKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from '../common/location/hierarchy'
+import { smallestAdminDivision } from '../common/location/ReverseGeocodeName'
 import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
 import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep } from '../common/derive/AstronomyGuide'
@@ -149,7 +151,6 @@ import { SkyCultureMakerStore } from '../state/SkyCultureMakerStore'
 import { SkyCultureViewStore } from '../state/SkyCultureViewStore'
 import { SkyCultureSettingsStore } from '../state/SkyCultureSettingsStore'
 import { AstroSelectionGuide, PhenomenonRelationMark } from '../panels/astro/AstroGuides'
-import { ContinuationSection } from '../panels/astro/ContinuationSection'
 import { WutTargetCard } from '../panels/astro/WutTargetCard'
 import { AstroPanel } from '../panels/astro/AstroPanel'
 import { InfoRow } from '../common/ui/InfoRow'
@@ -208,7 +209,6 @@ import { ToolsPanel } from '../panels/tools/ToolsPanel'
 import { RecordingControlBar } from '../panels/tools/RecordingControlBar'
 import { RecordingFocusShell } from '../panels/tools/RecordingFocusShell'
 import { SessionToolStore } from '../state/SessionToolStore'
-import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEventsSection } from '../panels/astro/SessionToolSections'
 import { GyroTargetGuide } from '../panels/astro/GyroTargetGuide'
 import { SkyCultureMakerPanel } from '../panels/skyculture/SkyCultureMakerPanel'
 import { SkyCultureViewTab } from '../panels/skyculture/SkyCultureViewTab'
@@ -232,6 +232,8 @@ import { NavStarsPanel } from '../panels/panels/NavStarsPanel'
 import { ArchaeoLinesPanel } from '../panels/panels/ArchaeoLinesPanel'
 import { MosaicCameraPanel } from '../panels/panels/MosaicCameraPanel'
 import { MorePanel } from '../panels/panels/MorePanel'
+import { DevToolsPanel } from '../panels/panels/DevToolsPanel'
+import { DEV_TOOLS_ENABLED } from '../common/config/OhosFeatureFlags'
 import { QuickPanel, QuickPanelStore } from '../panels/panels/QuickPanel'
 import { TimePanel } from '../panels/panels/TimePanel'
 import { HelpPanel } from '../panels/panels/HelpPanel'
@@ -952,7 +954,34 @@ class HostLocationPort implements LocationPort {
       latitude: current.latitude,
       longitude: current.longitude,
       altitude,
+      accuracy: current.accuracy,
       altitudeAccuracy: current.altitudeAccuracy
+    }
+  }
+
+  // GPS is WGS84; Map Kit reverse geocoding expects the map (GCJ02) coordinate
+  // in the mainland. Rectify first, then take only the smallest admin division.
+  async reverseGeocodePlaceName(latitude: number, longitude: number): Promise<string> {
+    try {
+      let mapPoint: mapCommon.LatLng = { latitude: latitude, longitude: longitude }
+      try {
+        const points = await map.rectifyCoordinate(this.context(), [{
+          coordinateType: mapCommon.CoordinateType.WGS84,
+          location: mapPoint
+        }])
+        if (points && points.length > 0) mapPoint = points[0].location
+      } catch (_error) {
+        // Overseas points are already WGS84-compatible; keep the raw point.
+      }
+      const reverse = await site.reverseGeocode({
+        location: mapPoint,
+        radius: 1000,
+        language: I18n.isChineseLanguage() ? 'zh' : 'en'
+      })
+      return smallestAdminDivision(reverse.addressComponent)
+    } catch (_error) {
+      hilog.warn(0x0000, 'StellariumArkUI', '[gps] reverse geocode failed')
+      return ''
     }
   }
 
@@ -972,6 +1001,26 @@ class HostLocationPort implements LocationPort {
       await store.flush()
     } catch (e) {
       hilog.warn(0xD002, 'Stellarium', 'save observer location failed: %{public}s', String(e))
+    }
+  }
+
+  async readSavedLocations(): Promise<string> {
+    try {
+      const store = await preferences.getPreferences(this.context(), LOCATION_STORE)
+      return (await store.get('savedLocations', '')) as string
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'read saved locations failed: %{public}s', String(e))
+      return ''
+    }
+  }
+
+  async writeSavedLocations(json: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context(), LOCATION_STORE)
+      await store.put('savedLocations', json)
+      await store.flush()
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'save saved locations failed: %{public}s', String(e))
     }
   }
 }
@@ -1841,6 +1890,8 @@ export struct WindowNativeNode {
     // 与跨 store 动作（setLocation / pickerMode）经具名 hooks 注入，store 不 import 他 store。
     this.locationStore.attachHooks({
       flashHint: (text: ResourceStr): void => { this.flashHint(text) },
+      readSavedLocations: (): Promise<string> => this.hostLocationPort.readSavedLocations(),
+      writeSavedLocations: (json: string): Promise<void> => this.hostLocationPort.writeSavedLocations(json),
       currentDraft: (): LocationDraft => {
         return {
           name: this.locationPickerStore.locationPickerName,
@@ -4730,8 +4781,6 @@ export struct WindowNativeNode {
         if (x >= 1175 && x < 1245) { this.telescopeCtl().lx200SyncSelected(); return true }
         if (x >= 1245 && x <= 1320) { this.telescopeCtl().lx200Abort(); return true }
       }
-    } else if (this.activePanel === 'place') {
-      if (y >= 455 && y <= 505 && x >= 1300 && x <= right) { this.locationCtl().useDeviceLocation(); return true }
     }
 
     return true
@@ -5333,6 +5382,11 @@ export struct WindowNativeNode {
   // 空串即不渲染该按钮（PanelHeader 既有约定）。
   private panelHeaderActionLabel(): string {
     if (this.activePanel === 'layers') return '清除坐标与标记'
+    // Location panel: one-tap GPS on the title bar, left of the close button.
+    // Earth-only; other bodies keep only the close button.
+    if (this.activePanel === 'place') {
+      return this.sessionToolStore.observerPlanet === 'Earth' ? I18n.t('i0052') : ''
+    }
     if (this.activePanel === 'quick') {
       return I18n.t(this.quickPanelStore.editable ? 'quick_customize_done' : 'quick_customize')
     }
@@ -5351,7 +5405,10 @@ export struct WindowNativeNode {
       this.publishUiPanelState()
       return
     }
-    if (this.activePanel === 'layers') { this.layerCtl().clearMarkingLayers() }
+    if (this.activePanel === 'layers') { this.layerCtl().clearMarkingLayers(); return }
+    if (this.activePanel === 'place' && this.sessionToolStore.observerPlanet === 'Earth') {
+      void this.locationCtl().useDeviceLocation()
+    }
   }
 
   // 快捷面板高度按内容算（标题栏 + 两行图标；编辑态再加候选带与操作条），只用于该面板（见 QUICK-ACTIONS-PANEL-PLAN §6/§13.5）。
@@ -7446,7 +7503,9 @@ export struct WindowNativeNode {
         // 位置名按来源 + 观测星球取值（GPS / 自定义位置 / 名称），与快捷面板标题栏同一规则；
         // 否则引擎回读的「自定义位置」会把自动定位结果冲掉。
         this.locationText = quickLocationLabel(this.locationPickerStore.locationSource,
-          this.locationPickerStore.locationDisplayName(result.locationName), planetName) + ' · ' + planetZh(planetName)
+          this.locationPickerStore.locationDisplayName(result.locationName), planetName,
+          this.locationPickerStore.locationSource === 'gps' ? this.locationPickerStore.gpsPlaceDetail : '') +
+          ' · ' + planetZh(planetName)
       }
       if (result.altitude !== undefined) {
         this.altitudeText = result.altitude.toFixed(0) + ' m'
@@ -7558,13 +7617,19 @@ export struct WindowNativeNode {
   }
 
   private flashHint(text: ResourceStr): void {
+    this.clearHint()
     this.actionHint = text
+    this.hintTimer = setTimeout(() => {
+      this.clearHint()
+    }, 1600) as number
+  }
+
+  private clearHint(): void {
     if (this.hintTimer !== 0) {
       clearTimeout(this.hintTimer)
+      this.hintTimer = 0
     }
-    this.hintTimer = setTimeout(() => {
-      this.actionHint = ''
-    }, 1600) as number
+    this.actionHint = ''
   }
 
   // 用系统浏览器打开外部链接（星表下载页等）。宿主持有 UI 上下文，面板只回调 URL。
@@ -8445,6 +8510,7 @@ export struct WindowNativeNode {
         routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
         headerActionLabel: this.panelHeaderActionLabel(),
         headerActionIcon: this.panelHeaderActionIcon(),
+        headerActionAccent: this.activePanel === 'place',
         titleAsButton: this.activePanel === 'quick',
         onBack: () => { this.handlePanelBackTap() },
         onClose: () => { this.closePanel(true); this.resetPanelIdle() },
@@ -8506,6 +8572,7 @@ export struct WindowNativeNode {
         routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
         headerActionLabel: this.panelHeaderActionLabel(),
         headerActionIcon: this.panelHeaderActionIcon(),
+        headerActionAccent: this.activePanel === 'place',
         titleAsButton: this.activePanel === 'quick',
         onBack: () => { this.handlePanelBackTap() },
         onClose: () => { this.closePanel(true); this.resetPanelIdle() },
@@ -8560,6 +8627,14 @@ export struct WindowNativeNode {
         languageRevision: this.languageStore.languageRevision,
         startsSection: (item: ShellAction, index: number) => this.moreActionStartsSection(item, index),
         onOpenPanel: (panel: string) => { this.openSubPanel(panel) }
+      })
+    } else if (DEV_TOOLS_ENABLED && this.activePanel === 'devTools') {
+      DevToolsPanel({
+        sessionToolStore: this.sessionToolStore,
+        onPoint: () => { this.pointAtSkyTest() },
+        onSend: () => { this.gyroCtl().watchGyroSend() },
+        onStart: () => { this.gyroCtl().watchGyroStart() },
+        onStop: () => { this.gyroCtl().watchGyroStop() }
       })
     } else if (this.activePanel === 'observeHub') {
       HubActionList({
@@ -8672,10 +8747,11 @@ export struct WindowNativeNode {
         expandedLayout: this.isExpandedLayout,
         skyWidth: this.skyWidth,
         fixedObserverPoint: this.sessionToolStore.isObserverOverviewPoint(),
+        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        mapSuspended: this.locationMapFullscreen,
         onOpenFullMap: () => { this.locationMapFullscreen = true },
         planetLabel: (en: string) => planetZh(en),
         contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
-        onUseDeviceLocation: () => { this.locationCtl().useDeviceLocation() },
         onSearchLocations: (query: string) => { this.locationStore.searchLocations(query) },
         onInputFocus: () => { this.keyboardTextInputFocused = true },
         onInputBlur: () => { this.keyboardTextInputFocused = false },
@@ -8687,16 +8763,8 @@ export struct WindowNativeNode {
         onSelectCity: (c: string) => { this.locationCtl().selectCityByName(c) },
         onSaveCurrent: () => { this.locationStore.saveCurrentLocation() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
-        onDeleteLocation: (name: string) => { this.locationStore.deleteSavedLocation(name) },
-        onChip: (id: string) => { this.timeCtl().handleChip(id) },
+        onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
-        onPoint: () => { this.pointAtSkyTest() },
-        onSend: () => { this.gyroCtl().watchGyroSend() },
-        onStart: () => { this.gyroCtl().watchGyroStart() },
-        onStop: () => { this.gyroCtl().watchGyroStop() },
-        onExport: () => { this.sessionToolStore.sessionExport() },
-        onSessionApply: () => { this.sessionToolStore.sessionApply() },
-        onHandoff: () => { this.sessionToolStore.sessionHandoff() },
         onRefreshTonight: () => { this.sessionToolStore.refreshTonight(true) },
         onJump: (jd: number, lock: string, title: string) => { this.gotoTonightEvent(jd, lock, title) }
       })
@@ -9036,6 +9104,7 @@ export struct WindowNativeNode {
         store: this.astroStore,
         wutStore: this.wutStore,
         objectDetailStore: this.objectDetailStore,
+        sessionToolStore: this.sessionToolStore,
         scroller: this.astroPanelScroller,
         host: {
           almanacHoursLabel: (key: string) => this.astroStore.almanacHoursLabel(key),
@@ -9125,6 +9194,9 @@ export struct WindowNativeNode {
           reloadEclipses: () => { this.astroCalcCtl().reloadEclipses() },
           rtsCalendarStartOptionLabel: (offsetDays: number) => this.astroStore.rtsCalendarStartOptionLabel(offsetDays),
           searchObject: (name: string, catalogModuleId?: string, exactSelectionPayload?: string, placement?: string) => { this.searchObject(name, catalogModuleId, exactSelectionPayload, placement) },
+          sessionExport: () => { this.sessionToolStore.sessionExport() },
+          sessionApply: () => { this.sessionToolStore.sessionApply() },
+          sessionHandoff: () => { this.sessionToolStore.sessionHandoff() },
           selectAstroFilter: (key: string, value: string) => { this.astroCalcCtl().selectAstroFilter(key, value) },
           selectAstroGroup: (group: number) => { this.astroCalcCtl().selectAstroGroup(group) },
           selectAstroTab: (tab: number) => { this.astroCalcCtl().selectAstroTab(tab) },

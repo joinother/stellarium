@@ -31,6 +31,8 @@ export struct PanelHeader {
   // 非空时动作按钮渲染为图标（走 getIcon 名称注册表），此时 ``headerActionLabel`` 只作无障碍文案。
   // 快捷操作面板要求「自定义=铅笔 / 完成=勾」不出现文字；图层面板仍用文字。
   @Prop headerActionIcon: string = ''
+  // Accent styling for primary actions (the location panel's Auto-locate).
+  @Prop headerActionAccent: boolean = false
   @Prop titleAsButton: boolean = false
   @State c: ThemeSlots = DEFAULT_SLOTS
   onBack: () => void = () => {}
@@ -117,16 +119,18 @@ export struct PanelHeader {
         Button() {
           if (this.headerActionIcon.length > 0) {
             // 图标态与右侧关闭按钮同尺寸（36×36 / 18px 图标），两个圆形按钮视觉齐平。
-            Image(getIcon(this.headerActionIcon, false)).width(18).height(18).supportSvg2(true).colorFilter(tintMatrixFor(this.c.text))
+            Image(getIcon(this.headerActionIcon, false)).width(18).height(18).supportSvg2(true)
+              .colorFilter(tintMatrixFor(this.headerActionAccent ? this.c.onAccent : this.c.text))
            } else {
-             Text(this.headerActionLabel).fontSize(11).fontColor(this.c.text)
+             Text(this.headerActionLabel).fontSize(11)
+               .fontColor(this.headerActionAccent ? this.c.onAccent : this.c.text)
           }
         }
           .id('panel-header-action')
           .constraintSize({ minWidth: 36 })
           .height(36)
           .padding(this.headerActionIcon.length > 0 ? 0 : { left: 10, right: 10 })
-          .backgroundColor(this.c.input)
+          .backgroundColor(this.headerActionAccent ? this.c.accent : this.c.input)
           .borderRadius(UI_RADIUS_PILL)
           .zIndex(10)
           .clickEffect({ level: ClickEffectLevel.LIGHT })

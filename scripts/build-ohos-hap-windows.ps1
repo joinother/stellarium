@@ -69,7 +69,14 @@ param(
     # '' = keep the existing CMake cache; 'online'/'offline' sets
     # STELLARIUM_OHOS_OFFLINE for the engine configure step.
     [ValidateSet('', 'offline', 'online')]
-    [string]$NetworkMode = ''
+    [string]$NetworkMode = '',
+    # Build without the metered Map Kit server APIs (static map image,
+    # site.searchByText, site.reverseGeocode). The online Petal basemap and
+    # its terrain/satellite layers are free and remain enabled either way.
+    [switch]$DisableMeteredMapApis,
+    # Hide the Development & testing panel and its More-menu entry in release
+    # packaging. Local builds keep it by default.
+    [switch]$DisableDevTools
 )
 
 $ErrorActionPreference = 'Stop'
@@ -292,6 +299,10 @@ if (-not $SkipResources) {
 
 # --- 4. mirror tracked sources --------------------------------------------
 Invoke-Step 'mirror the tracked sources into the generated project' {
+    $env:OHOS_METERED_MAP_APIS = if ($DisableMeteredMapApis) { '0' } else { '1' }
+    $env:OHOS_DEV_TOOLS = if ($DisableDevTools) { '0' } else { '1' }
+    Write-Host "    metered Map Kit APIs: $(if ($DisableMeteredMapApis) { 'disabled' } else { 'enabled' })"
+    Write-Host "    development panel: $(if ($DisableDevTools) { 'disabled' } else { 'enabled' })"
     $gitBash = @(
         'C:\Program Files\Git\bin\bash.exe',
         'C:\Program Files (x86)\Git\bin\bash.exe'

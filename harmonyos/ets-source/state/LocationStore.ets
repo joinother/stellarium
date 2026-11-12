@@ -45,7 +45,14 @@ export class LocationStore {
   locSearchResults: LocSearchItem[] = []
   locSearching: boolean = false
   locSearchDebounce: number = 0
+  // Online Petal POI results shown below the offline matches in the panel.
+  // Kept separate so the offline scan can finish or fail independently.
+  locSearchOnlineResults: LocSearchItem[] = []
+  // idle | loading | ok | empty | error
+  locSearchOnlineState: string = 'idle'
   savedLocations: SavedLocation[] = []
+  // Last five applied locations (newest first); persisted with savedLocations.
+  recentLocations: SavedLocation[] = []
   // 在线地图提供方：'offline' 使用内建坐标输入，'huawei' 使用 MapKit 在线选点。
   locationMapProvider: string = 'offline'
 
@@ -147,6 +154,10 @@ export class LocationStore {
   private port: CommandPort | null = null
   private seq: number = 0
   private onChanged: (() => void) | null = null
+  // Load saved locations from disk only once per session; later panel opens
+  // must not overwrite newer in-memory saves with a stale read.
+  private savedLocationsLoaded: boolean = false
+  private savedLocationsRevision: number = 0
   // 离线搜索 / 保存点的跨域读写回注。
   private hooks: LocationStoreHostHooks | null = null
 
@@ -165,13 +176,22 @@ export class LocationStore {
     }
   }
 
-  // 已保存位置（持久化在 AppStorage 的 `stellariumPrefs` 键）：把原始条目规整为 SavedLocation[]。
-  loadSavedLocations(): void {
+  // 已保存位置：从 @ohos.data.preferences（经 LocationPort）读取 JSON，规整为 SavedLocation[]。
+  // 旧实现只写 AppStorage，进程退出即丢失；现在必须走磁盘持久化。
+  async loadSavedLocations(): Promise<void> {
+    const hooks = this.hooks
+    if (hooks === null || this.savedLocationsLoaded) return
+    this.savedLocationsLoaded = true
+    const revision = this.savedLocationsRevision
     try {
-      const prefs = AppStorage.get<Record<string, Object>>('stellariumPrefs')
-      if (prefs && prefs['savedLocations']) {
-        const raw = prefs['savedLocations'] as Object[]
-        this.savedLocations = raw.map((item: Object): SavedLocation => {
+      const json = await hooks.readSavedLocations()
+      if (revision !== this.savedLocationsRevision) return
+      if (json.length === 0) return
+      const parsed = JSON.parse(json) as Record<string, Object>
+      const readList = (key: string): SavedLocation[] => {
+        const raw = parsed[key] as Object[] | undefined
+        if (!raw) return []
+        return raw.map((item: Object): SavedLocation => {
           const loc = item as Record<string, string | number>
           return {
             name: (loc['name'] as string) ?? '',
@@ -181,8 +201,10 @@ export class LocationStore {
             planet: (loc['planet'] as string) ?? 'Earth',
           } as SavedLocation
         })
-        this.notifyChanged()
       }
+      this.savedLocations = readList('savedLocations')
+      this.recentLocations = readList('recentLocations')
+      this.notifyChanged()
     } catch (e) {
       hilog.info(0x0000, 'StellariumArkUI', 'loadSavedLocations error: %{public}s', (e as Error).message ?? '')
     }
@@ -201,6 +223,8 @@ export class LocationStore {
     }
     if (q.length < 1) {
       this.locSearchResults = []
+      this.locSearchOnlineResults = []
+      this.locSearchOnlineState = 'idle'
       this.locSearching = false
       return
     }
@@ -393,7 +417,15 @@ export class LocationStore {
     hooks.applyLocation(item.name, item.lat, item.lon, item.alt, item.planet)
     this.locSearchQuery = ''
     this.locSearchResults = []
+    this.locSearchOnlineResults = []
+    this.locSearchOnlineState = 'idle'
     hooks.setPickerMode('map')
+  }
+
+  // Identity for saved/recent entries: name alone is not unique across planets
+  // or repeated city names, so include rounded coordinates and the body.
+  savedLocationKey(item: SavedLocation): string {
+    return item.name + '|' + item.lat.toFixed(4) + '|' + item.lon.toFixed(4) + '|' + item.planet
   }
 
   // 保存当前 picker 位置；picker 草稿与 flashHint 经 hooks。
@@ -401,43 +433,72 @@ export class LocationStore {
     const hooks = this.hooks
     if (hooks === null) return
     const draft = hooks.currentDraft()
-    const name = draft.name
-    // 检查是否已存在
-    const exists = this.savedLocations.some((s: SavedLocation) => s.name === name)
-    if (exists) {
-      hooks.flashHint(I18n.t('loc_already_saved'))
-      return
-    }
     const item: SavedLocation = {
-      name: name,
+      name: draft.name,
       lat: draft.latitude,
       lon: draft.longitude,
       alt: draft.altitude,
       planet: draft.planet,
     }
-    this.savedLocations = [...this.savedLocations, item]
+    const key = this.savedLocationKey(item)
+    if (this.savedLocations.some((s: SavedLocation) => this.savedLocationKey(s) === key)) {
+      hooks.flashHint(I18n.t('loc_already_saved'))
+      return
+    }
+    // Newest saved location first; persisted order carries across restarts.
+    this.savedLocations = [item, ...this.savedLocations]
     this.persistSavedLocations()
     hooks.flashHint(I18n.t('loc_saved_success'))
   }
 
-  // 删除已保存位置。
-  deleteSavedLocation(name: string): void {
-    this.savedLocations = this.savedLocations.filter((s: SavedLocation) => s.name !== name)
+  // 最近使用：成功应用观测点后记录，最多 5 条，重复项前置。
+  recordRecentLocation(name: string, latitude: number, longitude: number,
+    altitude: number, planet: string): void {
+    const item: SavedLocation = { name: name, lat: latitude, lon: longitude, alt: altitude, planet: planet }
+    const key = this.savedLocationKey(item)
+    this.recentLocations = [item,
+      ...this.recentLocations.filter((s: SavedLocation) => this.savedLocationKey(s) !== key)
+    ].slice(0, 5)
     this.persistSavedLocations()
   }
 
-  // 持久化已保存位置（存储方式保持 AppStorage 原样）。
-  persistSavedLocations(): void {
-    try {
-      let prefs = AppStorage.get<Record<string, Object>>('stellariumPrefs')
-      if (!prefs) {
-        prefs = {} as Record<string, Object>
-      }
-      prefs['savedLocations'] = this.savedLocations
-      AppStorage.setOrCreate<Record<string, Object>>('stellariumPrefs', prefs)
-    } catch (e) {
-      hilog.info(0x0000, 'StellariumArkUI', 'persistSavedLocations error: %{public}s', (e as Error).message ?? '')
+  // 删除已保存位置（按复合键，避免同名不同坐标误删）。
+  deleteSavedLocation(key: string): void {
+    this.savedLocations = this.savedLocations.filter((s: SavedLocation) => this.savedLocationKey(s) !== key)
+    this.persistSavedLocations()
+  }
+
+  // 重命名已保存位置；空名称或与另一条重复时返回 false。
+  renameSavedLocation(key: string, name: string): boolean {
+    const next = name.trim()
+    if (next.length === 0) return false
+    const target = this.savedLocations.find((s: SavedLocation) => this.savedLocationKey(s) === key)
+    if (target === undefined) return false
+    const renamed: SavedLocation = {
+      name: next, lat: target.lat, lon: target.lon, alt: target.alt, planet: target.planet
     }
+    const nextKey = this.savedLocationKey(renamed)
+    if (nextKey !== key && this.savedLocations.some((s: SavedLocation) => this.savedLocationKey(s) === nextKey)) {
+      return false
+    }
+    this.savedLocations = this.savedLocations.map((s: SavedLocation) =>
+      this.savedLocationKey(s) === key ? renamed : s)
+    this.persistSavedLocations()
+    return true
+  }
+
+  // 持久化已保存/最近位置到 @ohos.data.preferences（经 LocationPort）。
+  // AppStorage 只在进程内有效，不能作为退出后的存储。
+  persistSavedLocations(): void {
+    const hooks = this.hooks
+    if (hooks === null) return
+    this.savedLocationsLoaded = true
+    this.savedLocationsRevision += 1
+    const json = JSON.stringify({
+      savedLocations: this.savedLocations,
+      recentLocations: this.recentLocations
+    })
+    void hooks.writeSavedLocations(json)
   }
 }
 
@@ -454,6 +515,8 @@ export interface LocationDraft {
 
 export interface LocationStoreHostHooks {
   flashHint(text: ResourceStr): void
+  readSavedLocations(): Promise<string>
+  writeSavedLocations(json: string): Promise<void>
   // 当前 picker 草稿（LocationPickerStore 的名称/坐标 + SessionToolStore 的 observerPlanet）。
   currentDraft(): LocationDraft
   observerPlanet(): string

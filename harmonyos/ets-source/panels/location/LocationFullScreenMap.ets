@@ -9,7 +9,9 @@ import { LocationStore, OfflinePlaceAltitude } from '../../state/LocationStore'
 import { LocSearchItem } from '../../pages/StellariumTypes'
 import { LocationPort } from '../../bridge/LocationPort'
 import { inverseMapPoint, MapPoint } from '../../pages/MapCoordinate'
+import { smallestAdminDivision } from '../../common/location/ReverseGeocodeName'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
+import { METERED_MAP_APIS_ENABLED } from '../../common/config/OhosFeatureFlags'
 import { tintMatrixFor } from '../../common/ui/IconTint'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PANEL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 
@@ -85,6 +87,9 @@ export struct LocationFullScreenMap {
   @StorageLink('stellariumScreenSafeTopPixels') private screenSafeTopPixels: number = 0
   @StorageLink('stellariumScreenSafeBottomPixels') private screenSafeBottomPixels: number = 0
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  // Updated from onWillApplyTheme so the map style follows the same palette as
+  // the surrounding chrome, including a cold start in night mode.
+  private themeNight: boolean = false
   @State private mapStarted: boolean = false
   @State private mapReady: boolean = false
   @State private mapFailed: boolean = false
@@ -158,7 +163,33 @@ export struct LocationFullScreenMap {
   planetLabel: (en: string) => string = (en: string) => en
   contextOf: (item: LocSearchItem) => string = () => ''
 
-  onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
+  onWillApplyTheme(theme: Theme): void {
+    const next = slotsFromTheme(theme)
+    const nightChanged = next.isNight !== this.c.isNight
+    this.c = next
+    this.themeNight = next.isNight
+    // App day mode follows the system dark mode through DayNightMode.AUTO;
+    // the app's red night mode forces NIGHT and adds the red wash.
+    if (nightChanged) this.applyMapNightMode()
+  }
+
+  private effectiveDayNightMode(): mapCommon.DayNightMode {
+    return this.themeNight ? mapCommon.DayNightMode.NIGHT : mapCommon.DayNightMode.AUTO
+  }
+
+  private applyMapNightMode(): void {
+    const mode = this.effectiveDayNightMode()
+    this.options.dayNightMode = mode
+    const controller = this.controller
+    if (!controller) return
+    try {
+      // Older HMS map services in emulator images may not expose the setter.
+      if (typeof controller.setDayNightMode !== 'function') return
+      controller.setDayNightMode(mode)
+    } catch (_error) {
+      // Keep the current style; the red night wash still protects dark vision.
+    }
+  }
 
   aboutToAppear(): void {
     this.draftLat = this.latitude
@@ -199,6 +230,7 @@ export struct LocationFullScreenMap {
     this.localGlobe = this.observerPlanet === 'Earth' && !online
     this.options.mapType = (this.observerPlanet === 'Earth' && online)
       ? mapCommon.MapType.STANDARD : mapCommon.MapType.NONE
+    this.options.dayNightMode = this.effectiveDayNightMode()
     // Map Kit switches to 2D at zoom >= 4. Minor bodies without a reliable
     // global map stay on the 3D globe; they never enter the 2D renderer.
     this.options.maxZoom = this.maxZoom()
@@ -294,6 +326,7 @@ export struct LocationFullScreenMap {
     this.mapReady = true
     this.loading = false
     this.clearTimeout()
+    this.applyMapNightMode()
     if (this.observerPlanet !== 'Earth' || this.localGlobe) {
       const error = await this.applySphereTexture()
       hilog.info(0x0000, 'StellariumArkUI',
@@ -490,18 +523,26 @@ export struct LocationFullScreenMap {
     if (!this.mapReady) return
     const point = await this.toWgs84(position)
     this.selectedPointSource = 'map'
-    await this.setDraft(point.latitude, point.longitude, position, I18n.t('custom_location'))
+    // Let the reverse geocoder name the picked point (street/community/town)
+    // instead of leaving the generic "自定义位置" label.
+    await this.setDraft(point.latitude, point.longitude, position, undefined,
+      undefined, undefined, undefined, true)
   }
 
   private async setDraft(latitude: number, longitude: number,
     mapPoint?: mapCommon.LatLng, name?: string, altitude?: number,
-    altitudeSource?: string, preferredCity?: string): Promise<void> {
+    altitudeSource?: string, preferredCity?: string, resolveName: boolean = false): Promise<void> {
     this.recenterZoomed = false
     this.gpsMessage = ''
     this.draftLat = latitude
     this.draftLon = longitude
     this.hasDraft = true
-    if (name !== undefined && name.length > 0) this.selectedName = name
+    if (name !== undefined && name.length > 0) {
+      this.selectedName = name
+    } else if (resolveName) {
+      // Shown only until the reverse geocoder returns a local place name.
+      this.selectedName = I18n.t('custom_location')
+    }
     if (altitude !== undefined) {
       this.altitudeRequestId += 1
       this.altitudeResolving = false
@@ -511,7 +552,7 @@ export struct LocationFullScreenMap {
     } else if (this.observerPlanet === 'Earth') {
       const requestId = ++this.altitudeRequestId
       this.altitudeResolving = true
-      this.resolveAltitude(latitude, longitude, requestId, preferredCity)
+      this.resolveAltitude(latitude, longitude, requestId, preferredCity, resolveName)
     } else {
       // Other bodies always use 0 unless an offline place supplied a value.
       this.altitudeRequestId += 1
@@ -542,14 +583,17 @@ export struct LocationFullScreenMap {
   // nearest offline place. The map marker is updated immediately; altitude
   // arrives asynchronously and respects the latest pick via altitudeRequestId.
   private async resolveAltitude(latitude: number, longitude: number,
-    requestId: number, preferredCity?: string): Promise<void> {
+    requestId: number, preferredCity?: string, resolveName: boolean = false): Promise<void> {
     if (this.observerPlanet !== 'Earth') return
     let result: OfflinePlaceAltitude = { found: false, altitude: 0, name: '' }
     const cityName = preferredCity ?? ''
     if (cityName.length > 0) {
       result = this.locationStore.altitudeForCityName(cityName, 'Earth', latitude, longitude)
     }
-    if (!result.found && !this.localGlobe) {
+    let resolvedName = ''
+    // Reverse geocoding is a metered Map Kit API. When the build disables the
+    // metered APIs, skip it and fall through to the nearest offline place.
+    if (!result.found && !this.localGlobe && METERED_MAP_APIS_ENABLED) {
       try {
         const mapPoint = await this.toMapCoordinate(latitude, longitude)
         const reverse = await site.reverseGeocode({
@@ -563,6 +607,7 @@ export struct LocationFullScreenMap {
         if (name.length > 0) {
           result = this.locationStore.altitudeForCityName(name, 'Earth', latitude, longitude)
         }
+        resolvedName = smallestAdminDivision(component)
       } catch (_error) {
         // Site Kit unavailable; fall through to the offline nearest place.
       }
@@ -572,6 +617,11 @@ export struct LocationFullScreenMap {
     }
     if (requestId !== this.altitudeRequestId) return
     this.altitudeResolving = false
+    if (resolveName) {
+      const fallback = result.found && result.name.length > 0 ? result.name : ''
+      const nextName = resolvedName.length > 0 ? resolvedName : fallback
+      if (nextName.length > 0) this.selectedName = nextName
+    }
     if (result.found) {
       this.selectedAltitude = Math.round(result.altitude)
       this.selectedAltitudeSource = 'city'
@@ -596,8 +646,8 @@ export struct LocationFullScreenMap {
     try {
       const permission = await port.requestLocationPermissions()
       if (permission !== 'precise') {
-        this.gpsMessage = I18n.t(permission === 'approximate'
-          ? 'm_gps_precise_required' : 'm_gps_unavailable')
+        this.gpsMessage = permission === 'approximate'
+          ? I18n.t('m_gps_precise_required') : I18n.t('loc_gps_denied_settings')
         return
       }
       const fix = await port.getCurrentLocation()
@@ -609,6 +659,13 @@ export struct LocationFullScreenMap {
       this.gpsLat = fix.latitude
       this.gpsLon = fix.longitude
       this.gpsAlt = Number.isFinite(fix.altitude) ? fix.altitude : 0
+      if (fix.accuracy !== undefined && fix.accuracy > 0) {
+        this.gpsMessage = I18n.t('loc_gps_accuracy').replace('%s', Math.round(fix.accuracy).toString())
+      }
+      if (fix.altitudeAccuracy !== undefined && fix.altitudeAccuracy > 0) {
+        this.gpsMessage += (this.gpsMessage.length > 0 ? ' · ' : '') +
+          I18n.t('loc_gps_altitude_accuracy').replace('%s', Math.round(fix.altitudeAccuracy).toString())
+      }
       await this.enableMyLocationLayer()
       const point = await this.toMapCoordinate(fix.latitude, fix.longitude)
       this.focusMap(point)
@@ -779,6 +836,8 @@ export struct LocationFullScreenMap {
     try {
       controller.setMapType(type === 'satellite'
         ? mapCommon.MapType.SATELLITE : mapCommon.MapType.TERRAIN)
+      // A map-type switch can reset the style; re-apply the day/night mode.
+      this.applyMapNightMode()
       // The topographic layer is only rendered at zoom 5..14.
       if (type === 'terrain') {
         const camera = controller.getCameraPosition()
@@ -821,7 +880,11 @@ export struct LocationFullScreenMap {
   private async runSearch(query: string): Promise<void> {
     const requestId = ++this.searchRequestId
     this.searchOffline(query)
-    if (this.observerPlanet === 'Earth') await this.searchPetal(query, requestId)
+    // Petal text search is a metered Map Kit API; the build flag keeps the
+    // offline results visible without issuing the server call.
+    if (METERED_MAP_APIS_ENABLED && this.observerPlanet === 'Earth') {
+      await this.searchPetal(query, requestId)
+    }
   }
 
   private searchOffline(query: string): void {
@@ -1414,6 +1477,15 @@ export struct LocationFullScreenMap {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       this.mapLayer()
+      // Red night-mode wash over every map surface (Petal, local globe,
+      // non-Earth globe). Chrome is above it, so buttons keep their theme
+      // colors and the map still receives every gesture.
+      if (this.c.isNight && !this.mapFailed) {
+        Row()
+          .width('100%').height('100%')
+          .backgroundColor(this.c.mapNightTint)
+          .hitTestBehavior(HitTestMode.None)
+      }
       if (this.mapFailed) {
         this.mapUnavailableLayer()
       } else {
@@ -1428,7 +1500,7 @@ export struct LocationFullScreenMap {
       }
     }
       .width('100%').height('100%')
-      .backgroundColor('#FF0B0F14')
+      .backgroundColor(this.c.mediaCard)
       .onAreaChange(() => { this.applyMapPadding() })
   }
 }

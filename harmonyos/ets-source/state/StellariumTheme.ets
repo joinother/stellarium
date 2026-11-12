@@ -193,6 +193,9 @@ export interface ThemeSlots {
   thumbBg: ResourceColor
   accentSoft: ResourceColor
   nightMask: ResourceColor
+  // Red night-mode wash for online map surfaces. Lighter than nightMask so a
+  // static/dynamic map stays readable while the blue-light output is reduced.
+  mapNightTint: ResourceColor
   inputBorder: ResourceColor
   mediaCard: ResourceColor
   mediaOverlay: ResourceColor
@@ -255,6 +258,7 @@ export const DEFAULT_SLOTS: ThemeSlots = {
   thumbBg: 'rgba(0,0,0,0.22)',
   accentSoft: 'rgba(80,140,200,0.20)',
   nightMask: 'rgba(0,0,0,0)',
+  mapNightTint: 'rgba(0,0,0,0)',
   inputBorder: 'rgba(214,238,255,0.14)',
   mediaCard: '#07101B',
   mediaOverlay: 'rgba(2,6,12,0.72)',
@@ -318,6 +322,7 @@ function slotsFromColors(colors: CustomColors, night: boolean): ThemeSlots {
     thumbBg: colors.iconOnFourth ?? DEFAULT_SLOTS.thumbBg,
     accentSoft: colors.compEmphasizeTertiary ?? DEFAULT_SLOTS.accentSoft,
     nightMask: night ? 'rgba(60,12,8,0.62)' : 'rgba(0,0,0,0)',
+    mapNightTint: night ? 'rgba(165,0,0,0.42)' : 'rgba(0,0,0,0)',
     inputBorder: colors.interactiveFocus ?? DEFAULT_SLOTS.inputBorder,
     mediaCard: colors.backgroundPrimary ?? DEFAULT_SLOTS.mediaCard,
     mediaOverlay: colors.backgroundTertiary ?? DEFAULT_SLOTS.mediaOverlay,
@@ -329,11 +334,17 @@ function slotsFromColors(colors: CustomColors, night: boolean): ThemeSlots {
   }
 }
 
+// The night and day CustomColors palettes use deliberately distinct values.
+// A copied Theme keeps the color values (but not the class identity), so detect
+// the active palette from a stable sentinel instead of AppStorage: AppStorage
+// can lag behind the theme during cold start, which used to leave panels with
+// day colors while the rest of the shell was already in night mode.
+function themeIsNight(colors: CustomColors | undefined): boolean {
+  return colors?.fontPrimary === '#F00000' || colors?.backgroundPrimary === '#150505'
+}
+
 export function slotsFromTheme(theme: Theme): ThemeSlots {
-  // Theme carries a copy of CustomColors, so object/class identity is not a
-  // reliable night-mode signal. AppStorage is the app-wide night flag written
-  // by NightModeStore before WithTheme re-renders.
-  const night = AppStorage.get<boolean>('stellariumNightMode') === true
+  const night = themeIsNight(theme.colors)
   return slotsFromColors(theme.colors, night)
 }
 

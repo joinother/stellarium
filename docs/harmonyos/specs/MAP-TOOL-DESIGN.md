@@ -174,7 +174,7 @@ await controller.setSphereMapEnabled(true, {
 - **Earth 离线**：用与 Moon 相同的 `MapType.NONE + sphereEnabled + setSphereMapEnabled({ coverageImage: earth_cmap.png })`，保留 Map Kit 相机/手势/`mapClick`/Marker；此时坐标就是 WGS84，不做 GCJ02 纠偏。`GET_NETWORK_INFO`（仅判断联网，不发数据）决定在线 Petal 还是本地地球；Map Kit `error` 或 15s 超时也会切到本地地球。本地地球在 zoom ≥4 使用 `earth_cmap_mercator.jpg` 作为 2D 覆盖图。
 - **无 raster 兜底**：球体纹理或 Map Kit 不可用时显示可重试错误卡片；`setSphereMapEnabled` 缺失（旧版 HMS 地图服务）单独提示 `map_unavailable_sdk`，不再展示 2D 平面地球。
 - 搜索框对所有天体常驻：Earth 并行 Petal 与离线搜索，结果分“在线结果 / 离线地点”；非地球仅离线搜索，按当前 `observerPlanet` 过滤。选中结果后落点并放大。
-- 底部主按钮文案为“选此点”；回传 `latitude/longitude/altitude/name/source` 后**立即应用到当前观测点**并关闭全屏（不再需要在位置面板再按一次“应用”）；面板的“应用”按钮保留给手动输入/层级选点。
+- 底部主按钮文案为“选此点”；回传 `latitude/longitude/altitude/name/source` 后**立即应用到当前观测点**并关闭全屏；位置面板同样采用即时应用模型，海拔在失焦/键盘提交时应用，不再有“应用”按钮。
 - **右下侧栏（2026-11-12）**：移除右侧 `+ / − / 回中` 竖排控件，改为右下角竖排三个 40×40 小按钮：“查看当前选点”（两段式回中/放大到 zoom 15）、“GPS 定位”（仅地球）、“地图图层”（仅在线地球）。操作卡保持四个 `UI_RADIUS_CONTROL` 圆角。
 - **GPS 蓝点**：经 `LocationPort` 申请精确位置并单次定位；成功后 `setMyLocationStyle({ displayType: TRACK_ROTATE })` + `setMyLocationEnabled(true)`，蓝色定位点随设备方向旋转，不自动移动相机；关闭 Map Kit 自带右下角定位图标。监听 `myLocationClick`，点击蓝点即把当前位置设为草稿点；草稿图钉从红色切换为蓝色（`ic_map_pin_blue.svg`），地图/搜索选点仍用红色图钉。
 - **地图类型**：图层按钮展开“地形地图 / 卫星地图”，调用 `setMapType(MapType.TERRAIN|SATELLITE)`；地形层仅在 5<zoom<14 可见，选择地形时 zoom≤5 会移到 6。离线地球和非地球不提供该按钮。
@@ -182,6 +182,31 @@ await controller.setSphereMapEnabled(true, {
 - **全览点**：`PlacePanel` 保留 `obs_*.jpg` 概览图，仅禁用所有拾取交互；全屏地图不挂载。
 - **标题栏**：返回键为独立 44×44 圆形玻璃按钮；标题为独立 44vp 长药丸，主标题天体名、副标题底图来源，与搜索栏同圆角/底衬。
 - 现在共生成 **9** 张 Mercator 底图：Earth/Moon/Mars 1024²，其余 512²。
+
+### 4.6 位置概览卡与夜间模式（2026-11-12）
+
+- **概览仍在“观测位置”子面板内**（搜索/地图/地区三个 tab，下方为海拔、时区、已保存与最近使用），不搬到顶部信息卡。
+- 概览是**只读确认卡**：删除 `updatePickerFromMap` / `handleLocationMapClick`，整卡点击或右上角按钮都打开全屏地图。概览框选点精度不足的问题由此移除；精确选点只在全屏地图完成，不引入放大镜。
+- **在线地球使用静态地形小地图**：`MapComponent` + `MapType.TERRAIN`，固定 zoom 12（地形推荐 5–14），中心为当前选点，只放一个不可点击的 Marker。**所有手势关闭**（scroll/zoom/rotate/tilt）且 `hitTestBehavior(HitTestMode.None)`，面板滚动优先；地图只展示，不拖动、不缩放、不选点。全屏地图保留全部交互。
+- 离线/隐私未放行/地图失败 = `worldmap.jpg`；非地球 = 星球贴图；角标分别为 `地形图 / 离线概览 / 星球概览`。固定观测点仍是 `obs_*.jpg` + “全览点”，不可点击。
+- 图钉：地图/地点选点用红钉，GPS 选点用蓝钉；在线地图的 Marker 在 Map Kit 内绘制，离线/星球按等距圆柱投影定位。全屏地图打开时通过 `suspended` 卸载小地图，避免两个 `MapComponent` 同时存活。
+- **夜间模式**：App 日间模式使用 `DayNightMode.AUTO` 跟随系统深浅色；App 夜间模式强制 `NIGHT`。全屏与小地图在 `onWillApplyTheme` 检测主题切换后调用 `setDayNightMode`，图层切换后重新应用。全屏与小地图叠加 `mapNightTint`（夜间 `rgba(165,0,0,0.42)`）红色半透明遮罩，遮罩不拦截手势；离线/星球贴图继续用 `nightMask`。按钮全部走 ThemeSlots 红黑配色。
+- **计费开关**：`common/config/OhosFeatureFlags.ets` 的 `METERED_MAP_APIS_ENABLED` 只屏蔽两个按次计费的服务端接口——`site.searchByText`、`site.reverseGeocode`。在线花瓣底图、地形/卫星图层（包括面板内的小地图）、GPS 和离线数据不在开关范围内。打包时用 `-DisableMeteredMapApis`（Windows）或 `OHOS_METERED_MAP_APIS=0`（bash sync）把构建树里的常量改为 false；`scripts/apply-ohos-feature-flags.mjs` 找不到声明时直接构建失败，避免开关静默失效。
+
+### 4.7 位置面板 P0/P1 收敛（2026-11-12）
+
+- **两行位置信息**：恢复原三行标签/值样式，但只保留两行——位置一行；坐标与海拔合并为一行。选择器不再重复坐标。
+- **自动定位**：移到面板标题栏右侧、关闭按钮左侧（`panel-header-action`），仅地球显示，使用原有蓝色 accent 配色（`headerActionAccent`）；标题栏动作直接调用 `LocationController.useDeviceLocation()`。
+- **点选命名**：全屏在线地图点选调用一次 `site.reverseGeocode`，只取最小行政区名称（`adminLevel5` 起逐级回退到 `adminLevel1`/城市）替代“自定义位置”，不拼接街道、门牌或完整地址；搜索结果保留所选 POI 名称。Map Kit `mapClick` 的 `LatLng` 不含高程，海拔仍按离线城市/最近地点补全。
+- **已保存位置**：独立卡片，带“已保存位置”小标题、数量徽标、保存按钮；条目改为向下排列的纵向列表，限制约三行高度并启用纵向滚动条，便于识别可滑动区域；新保存的位置插入最前并保持持久化顺序。最近使用有独立小标题。
+- **GPS 名称**：GPS 定位成功后异步调用 `site.reverseGeocode`，把最小行政区名称追加到“GPS”标签后（如“GPS · 天河区”）；失败或计费开关关闭时只显示“GPS”。名称写入 `ObserverLocationRecord.detail` 随观测点持久化，重启后直接复用；旧记录缺少该字段时在恢复提交后补查一次。
+- **三个 tab**：搜索 / 地图 / 地区，一次只呈现一种选点方式；已保存与最近使用在下方独立区，不再把搜索、地图、层级、硬编码城市全部纵向堆叠。
+- **非地球海拔只读**：值来自离线地点数据（通常 0）；地球海拔输入夹在 -500..9000 m，控制器再次夹取，防止其他入口绕过。
+- **即时应用**：搜索、地区、GPS、全屏选点与海拔提交都立即应用；成功、失败与 GPS 权限提示都只用普通文字提示，不带“撤销/重试”按钮。GPS 权限被拒绝时提示到系统设置开启“位置”权限（应用没有公开接口直接打开权限页）。
+- **已保存位置**：每条显示名称 + 坐标·天体；长按进入重命名/删除（删除二次确认）；按“名称+坐标+天体”去重；成功应用后写入“最近使用”（最多 5 条，持久化）。
+- **持久化**：已保存位置与最近使用通过 `LocationPort.readSavedLocations/writeSavedLocations` 写入 `@ohos.data.preferences`（store `LOCATION_STORE`，key `savedLocations`，JSON）。`LocationStore` 启动时只加载一次，并用修订号丢弃过期的异步回写；不再使用非持久的 AppStorage，强制停止/重启后列表与删除结果保持。
+- **夜间下拉框**：观测星球 `Select` 跟随 `stellariumNightMode`：夜间菜单背景 `#150505`、日间 `#101E2C`，选中项 accent，`menuBackgroundBlurStyle(BlurStyle.NONE)`，与“主设置 → 界面语言”一致。
+- **开发工具归位**：虚拟指星笔测试与手表陀螺仪模拟器移到独立的“开发测试”面板（`devTools`），入口在“更多功能”菜单最后；`DEV_TOOLS_ENABLED` 编译开关可在正式发布时隐藏入口与面板。今晚天象保留在位置面板；会话延续保留在天文面板“今晚”页。
 
 ## 5. 搜索设计
 
@@ -192,6 +217,8 @@ await controller.setSphereMapEnabled(true, {
 - `site.geocode`：地址 → 经纬度。
 - 结果转换成统一 `MapSearchResult { name, address, lat, lon, source: 'petal' }`。
 - 坐标纠偏后再写入草稿；不直接提交观测位置。
+- 位置面板与全屏地图共用同一在线搜索口径：地球、隐私/前台允许、网络可用且 `METERED_MAP_APIS_ENABLED` 为真才发起；面板在停止输入 **400 ms** 后才请求，并用 `requestId` 丢弃过期响应；离线分块搜索仍先出结果，在线结果单独标注“在线”。
+- 面板在线结果选中后按城市名/最近离线地点补海拔，坐标先做 GCJ02→WGS84 逆转换；失败只保留离线结果。
 
 ### 5.2 离线（地球/月球/行星）
 
@@ -248,11 +275,12 @@ await controller.setSphereMapEnabled(true, {
 
 ### 7.1 位置面板（小地图）
 
-- 顶部：当前地点、坐标、海拔、观测星球选择。
-- 小地图：3D 地球/星球，或静态全球图 + 当前地点 Marker。
-- 状态徽标：`在线` / `离线` / `本地底图` / `花瓣离线包`。
-- 点击小地图 → 全屏地图；不在此处做精细选点。
-- 为性能考虑，小地图优先静态快照/图片；`MapComponent` 只在全屏创建（或面板打开时创建、关闭销毁）。
+- 顶部：两行位置信息（位置；坐标 · 海拔）；自动定位在标题栏右侧、关闭按钮左侧；观测星球选择保留在其下。
+- 选择器：搜索 / 地图 / 地区三个 tab；搜索 tab 含离线+在线结果，地图 tab 为只读概览，地区 tab 为四列层级。
+- 小地图（地图 tab）：在线地球用 `MapComponent` 地形图（`TERRAIN`，zoom 12），只读、无手势；离线用全球等距圆柱图 + 投影图钉；非地球用星球贴图 + 图钉。
+- 状态徽标：`地形图` / `离线概览` / `星球概览`；固定观测点为 `全览点`。
+- 小地图只读：点击整卡或右上角按钮 → 全屏地图；不在此处选点、不拖动、不缩放。地图加载失败静默回退离线概览，不显示错误态。
+- 为性能与滚动可靠，小地图的 `MapComponent` 关闭全部手势并设为 `HitTestMode.None`；全屏地图打开时卸载小地图。原生图层在玻璃面板中的圆角裁剪与合成成本仍需真机验证。
 
 ### 7.2 全屏地图
 
@@ -285,6 +313,7 @@ await controller.setSphereMapEnabled(true, {
 
 - 在线花瓣地图/搜索需要 AGC 开通地图服务、匹配签名/Profile、`ohos.permission.INTERNET` 和隐私同意。
 - 在线搜索会外发查询词；地图会外发视口/瓦片请求。更新隐私政策与 `NETWORK-INVENTORY.md`。
+- **按次计费接口**：`site.searchByText`、`site.reverseGeocode`。目前 HarmonyOS NEXT 官方口径为免费，但仍保留 `METERED_MAP_APIS_ENABLED` 编译开关；关闭后不发起这两个请求，全屏搜索仅离线、海拔仅离线，在线花瓣底图、地形/卫星图层与面板小地图保持可用。
 - 离线回退不应依赖网络；若 Map Kit 无网无法初始化，必须使用 ArkUI 自绘层。
 - 地图审图/行政范围：`miscWorldMap.jpg` 为 NASA Blue Marble 物理底图，无行政边界，但仍需按中国地图展示要求审核；文化地图仍使用本地资料，不能用在线底图替代。
 - 非地球使用花瓣 Map Kit 容器时，确认花瓣 Logo/版权/服务条款是否允许非地球自定义底图；如不允许，非地球改用自绘。

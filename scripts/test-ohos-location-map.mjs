@@ -7,6 +7,12 @@ const names = readFileSync(new URL('../harmonyos/ets-source/common/location/name
 const fullScreen = readFileSync(new URL('../harmonyos/ets-source/panels/location/LocationFullScreenMap.ets', import.meta.url), 'utf8')
 const place = readFileSync(new URL('../harmonyos/ets-source/panels/panels/PlacePanel.ets', import.meta.url), 'utf8')
 const picker = readFileSync(new URL('../harmonyos/ets-source/panels/location/LocationPickerPanel.ets', import.meta.url), 'utf8')
+const overview = readFileSync(new URL('../harmonyos/ets-source/panels/location/LocationOverviewCard.ets', import.meta.url), 'utf8')
+const searchPanel = readFileSync(new URL('../harmonyos/ets-source/panels/location/LocationSearchPanel.ets', import.meta.url), 'utf8')
+const featureFlags = readFileSync(new URL('../harmonyos/ets-source/common/config/OhosFeatureFlags.ets', import.meta.url), 'utf8')
+const theme = readFileSync(new URL('../harmonyos/ets-source/state/StellariumTheme.ets', import.meta.url), 'utf8')
+const flagApplier = readFileSync(new URL('../scripts/apply-ohos-feature-flags.mjs', import.meta.url), 'utf8')
+const buildPs = readFileSync(new URL('../scripts/build-ohos-hap-windows.ps1', import.meta.url), 'utf8')
 const host = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8')
 const locationStore = readFileSync(new URL('../harmonyos/ets-source/state/LocationStore.ets', import.meta.url), 'utf8')
 const sessionStore = readFileSync(new URL('../harmonyos/ets-source/state/SessionToolStore.ets', import.meta.url), 'utf8')
@@ -146,7 +152,8 @@ test('place panel exposes a full-screen overlay and globe preview', () => {
   assert.match(place, /onOpenFullMap/)
   assert.doesNotMatch(place, /LocationMapSection/)
   assert.match(picker, /onOpenFullMap/)
-  assert.match(picker, /ic_fullscreen/)
+  assert.match(picker, /LocationOverviewCard/)
+  assert.match(overview, /ic_fullscreen/)
   assert.match(host, /LocationFullScreenMap/)
   assert.match(host, /zIndex\(200\)/)
   assert.match(host, /fixedObserverPoint/)
@@ -155,6 +162,103 @@ test('place panel exposes a full-screen overlay and globe preview', () => {
   assert.match(place, /fixedObserverPreview/)
   assert.match(place, /map_fixed_overview_badge/)
   assert.match(place, /hitTestBehavior\(HitTestMode\.None\)/)
+})
+
+test('location overview card is a read-only static terrain preview', () => {
+  // The inline overview no longer picks a point; precision picking is the
+  // full-screen Map Kit picker. Only the full-screen entry remains.
+  assert.doesNotMatch(picker, /handleLocationMapClick/)
+  assert.doesNotMatch(picker, /updatePickerFromMap/)
+  assert.match(overview, /onOpen/)
+  assert.match(overview, /map_preview_terrain/)
+  assert.match(overview, /map_preview_offline/)
+  assert.match(overview, /map_preview_planet/)
+  assert.match(overview, /nightMask/)
+  assert.match(overview, /mapNightTint/)
+  // Free online terrain basemap, read-only: no static-map API, no pick click,
+  // no gestures, fixed zoom 12, and unmounted while the full-screen is open.
+  assert.match(overview, /MapComponent/)
+  assert.match(overview, /MapType\.TERRAIN/)
+  assert.match(overview, /zoom: PREVIEW_ZOOM/)
+  assert.match(overview, /scrollGesturesEnabled: false/)
+  assert.match(overview, /zoomGesturesEnabled: false/)
+  assert.match(overview, /hitTestBehavior\(HitTestMode\.None\)/)
+  assert.match(overview, /suspended/)
+  assert.doesNotMatch(overview, /mapClick/)
+  assert.doesNotMatch(overview, /staticMap/)
+  assert.doesNotMatch(overview, /getMapImage/)
+  assert.doesNotMatch(overview, /StaticMapPreviewClient/)
+  // The old inline picker is gone; the altitude field applies on blur/submit.
+  assert.doesNotMatch(picker, /I18n\.t\('i0053'\)/)
+  assert.match(picker, /\.onSubmit\(\(\) => \{ this\.commitAltitude\(\) \}\)/)
+  assert.match(picker, /\.onBlur\(\(\) => \{ this\.commitAltitude\(\) \}\)/)
+  assert.match(picker, /private commitAltitude\(\)/)
+})
+
+test('metered Map Kit APIs have a build-time switch', () => {
+  assert.match(featureFlags, /METERED_MAP_APIS_ENABLED/)
+  // Search and reverse geocoding are the only metered calls left; the panel's
+  // terrain preview and the online Petal basemap are free and stay enabled.
+  assert.ok((fullScreen.match(/METERED_MAP_APIS_ENABLED/g) ?? []).length >= 3)
+  assert.match(fullScreen, /if \(METERED_MAP_APIS_ENABLED && this\.observerPlanet === 'Earth'\)/)
+  assert.match(fullScreen, /!this\.localGlobe && METERED_MAP_APIS_ENABLED/)
+  assert.match(flagApplier, /metered-map-apis/)
+  assert.match(flagApplier, /METERED_MAP_APIS_ENABLED/)
+  assert.match(buildSourcesSh, /apply-ohos-feature-flags\.mjs/)
+  assert.match(buildSourcesSh, /OHOS_METERED_MAP_APIS/)
+  assert.match(buildPs, /DisableMeteredMapApis/)
+  assert.match(buildPs, /OHOS_METERED_MAP_APIS/)
+  // The free online Petal basemap and its layers are not part of the switch.
+  assert.match(fullScreen, /mapLayerAvailable/)
+  assert.doesNotMatch(fullScreen, /prepareMap\(\)[\s\S]{0,400}METERED_MAP_APIS_ENABLED/)
+  assert.doesNotMatch(overview, /METERED_MAP_APIS_ENABLED/)
+})
+
+test('full-screen map follows the app night mode with a red wash', () => {
+  assert.match(fullScreen, /DayNightMode\.NIGHT/)
+  assert.match(fullScreen, /DayNightMode\.AUTO/)
+  assert.match(fullScreen, /setDayNightMode/)
+  assert.match(fullScreen, /onWillApplyTheme[\s\S]{0,400}applyMapNightMode/)
+  assert.match(fullScreen, /mapNightTint/)
+  assert.match(theme, /mapNightTint/)
+  assert.match(theme, /rgba\(165,0,0,0\.42\)/)
+})
+
+test('tonight stays in the place panel, developer tools use a dedicated panel', () => {
+  assert.doesNotMatch(place, /PointingTestSection/)
+  assert.doesNotMatch(place, /WatchGyroSection/)
+  assert.match(place, /TonightEventsSection/)
+  assert.match(place, /OFFLINE_APPGALLERY_BUILD/)
+  const devTools = readFileSync(new URL('../harmonyos/ets-source/panels/panels/DevToolsPanel.ets',
+    import.meta.url), 'utf8')
+  assert.match(devTools, /PointingTestSection/)
+  assert.match(devTools, /WatchGyroSection/)
+  const actions = readFileSync(new URL('../harmonyos/ets-source/common/derive/actions.ets', import.meta.url), 'utf8')
+  assert.match(actions, /DEV_TOOLS_ENABLED/)
+  assert.match(actions, /panel: 'devTools'/)
+  // Session continuation now lives in the astro panel's "tonight" tab.
+  assert.doesNotMatch(place, /ContinuationSection/)
+  const astro = readFileSync(new URL('../harmonyos/ets-source/panels/astro/AstroPanel.ets', import.meta.url), 'utf8')
+  assert.match(astro, /ContinuationSection/)
+})
+
+test('panel search merges online Petal POI results with debounce', () => {
+  assert.match(searchPanel, /site\.searchByText/)
+  assert.match(searchPanel, /ONLINE_SEARCH_DEBOUNCE_MS: number = 400/)
+  assert.match(searchPanel, /scheduleOnlineSearch/)
+  assert.match(searchPanel, /onlineRequestId/)
+  assert.match(searchPanel, /locSearchOnlineResults/)
+  assert.match(searchPanel, /locSearchOnlineState/)
+  assert.match(searchPanel, /METERED_MAP_APIS_ENABLED/)
+  assert.match(searchPanel, /observerPlanet !== 'Earth'/)
+  assert.match(searchPanel, /onlineToWgs84/)
+  assert.match(searchPanel, /map_search_online_section/)
+  assert.match(searchPanel, /map_search_online_badge/)
+  assert.match(searchPanel, /map_search_local_hint/)
+  // The offline scan keeps its own faster debounce and still runs first.
+  assert.match(searchPanel, /setTimeout\(\(\) => \{ this\.onSearch\(value\) \}, 260\)/)
+  assert.match(picker, /observerPlanet: this\.observerPlanet/)
+  assert.match(picker, /onlineAllowed: this\.onlineAllowed/)
 })
 
 test('mercator overlays are generated from PC textures at build time', () => {

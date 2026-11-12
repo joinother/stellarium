@@ -6,6 +6,7 @@
 import { I18n } from '../../pages/I18n'
 import { ShellAction, StellariumBridgeResponse } from '../../pages/StellariumTypes'
 import { CityPreset, SkyCultureMakerValidation, TelescopeControlResponse } from '../../pages/MainWindowModels'
+import { DEV_TOOLS_ENABLED } from '../config/OhosFeatureFlags'
 
 // 所有设备共享同一动作模型。布局只决定面板如何呈现，不改变入口和语义。
 export function primaryDockActions(): ShellAction[] {
@@ -18,7 +19,7 @@ export function primaryDockActions(): ShellAction[] {
 }
 
 export function moreActions(): ShellAction[] {
-  return [
+  const actions: ShellAction[] = [
     { label: I18n.t('more_workspace_observing'), icon: 'observe', panel: 'observeHub', section: I18n.t('more_section_workspace') },
     // 「位置」自从 Dock 中间让位给快捷操作面板后，入口落在工作区组第 2 行（正值天体数据组标题之前）。
     { label: I18n.t('dock_place'), icon: 'location', panel: 'place', section: I18n.t('more_section_workspace') },
@@ -28,6 +29,16 @@ export function moreActions(): ShellAction[] {
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings', section: I18n.t('more_section_system') },
     { icon: 'help', label: I18n.t('c_help'), panel: 'help', section: I18n.t('more_section_system') }
   ]
+  // Development panel entry is always last and disappears from release builds.
+  if (DEV_TOOLS_ENABLED) {
+    actions.push({
+      label: I18n.t('more_dev_tools'),
+      icon: 'code',
+      panel: 'devTools',
+      section: I18n.t('more_dev_section')
+    })
+  }
+  return actions
 }
 
 export function observingHubActions(): ShellAction[] {

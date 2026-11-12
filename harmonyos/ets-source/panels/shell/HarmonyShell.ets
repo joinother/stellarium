@@ -69,7 +69,7 @@ export struct HarmonyShell {
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
-      // 点击反馈提示：置顶显示、不拦截触摸
+      // 点击反馈提示：置顶显示、不拦截触摸。
       if (this.actionHint !== '') {
         Row() {
           Text(this.actionHint)

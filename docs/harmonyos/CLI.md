@@ -379,7 +379,7 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command setGyroscopeEnable
 node scripts/stellarium-cli.mjs --device <设备ID> --command setGyroscopeEnabled --payload 0 --json
 ```
 
-`openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。
+`openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。开发测试面板可用 `openUiPanel devTools` 打开，仅在 `DEV_TOOLS_ENABLED` 为真的开发构建中可用；正式发布用 `-DisableDevTools`（Windows）或 `OHOS_DEV_TOOLS=0`（bash）隐藏入口并拒绝该面板名。
 
 `settingsInformation`、`settingsTime` 是设置子页语义入口，复用 `selectConfigTab` 的正常转场；不需要寻找标签坐标。打开后可用 `setInformationSetting`、`setDateFormat`、`setTimeFormat`、`setTimeSetting` 修改选项，以对应查询命令确认结果。`accepted` 仍只代表路由请求已接收，截图/布局树用于确认子页实际呈现，不能把该回执当成动画已完成。
 

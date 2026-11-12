@@ -51,6 +51,9 @@ export class LocationPickerStore {
   // 位置来源：'gps' 设备定位 / 'map' 地图点选 / 'named' 城市·搜索·预设。快捷操作面板标题按它取值，
   // 并随 ObserverLocationRecord.source 持久化（见 capability/LocationController.ets）。
   locationSource: string = 'named'
+  // GPS label suffix resolved asynchronously by reverse geocoding
+  // (smallest administrative division). Empty for non-GPS sources.
+  gpsPlaceDetail: string = ''
   locationPickMode: string = 'map'
   observerTimeZone: string = ''
   mapRenderWidth: number = 280
