@@ -44,6 +44,8 @@
 #include "StelMovementMgr.hpp"
 #include "StelObject.hpp"
 #include "OhosObjectDistance.hpp"
+#include "MousePicker.hpp"
+#include "TouchPicker.hpp"
 #include "StelObjectMgr.hpp"
 #include "StelObserver.hpp"
 #include "StelLocaleMgr.hpp"
@@ -3096,6 +3098,58 @@ QString selectedObjectInfoMode()
 	return QStringLiteral("custom");
 }
 
+QJsonObject pickCandidateJson(const PickCandidate& candidate)
+{
+	QJsonObject item;
+	item["name"] = candidate.name;
+	item["englishName"] = candidate.englishName;
+	item["type"] = candidate.type;
+	item["objectType"] = candidate.objectType;
+	item["id"] = candidate.id;
+	if (candidate.hasMagnitude)
+		item["magnitude"] = candidate.magnitude;
+	item["screenX"] = candidate.screenX;
+	item["screenY"] = candidate.screenY;
+	item["distanceVp"] = candidate.distanceVp;
+	item["visualRadiusVp"] = candidate.visualRadiusVp;
+	item["score"] = candidate.score;
+	item["directHit"] = candidate.directHit;
+	item["labelHit"] = candidate.labelHit;
+	item["lineHit"] = candidate.lineHit;
+	item["directRank"] = candidate.directRank;
+	if (candidate.satellite)
+	{
+		const SatellitePickDiagnostics& s = candidate.satelliteRender;
+		QJsonObject satellite;
+		satellite["displayed"] = s.displayed;
+		satellite["orbitValid"] = s.orbitValid;
+		satellite["dateRangeOk"] = s.dateRangeOk;
+		satellite["timeRateOk"] = s.timeRateOk;
+		satellite["afterLaunch"] = s.afterLaunch;
+		satellite["altitudeFilterPass"] = s.altitudeFilterPass;
+		satellite["magnitudeFilterPass"] = s.magnitudeFilterPass;
+		satellite["projectable"] = s.projectable;
+		satellite["landscapeVisible"] = s.landscapeVisible;
+		satellite["pointDrawn"] = s.pointDrawn;
+		satellite["labelDrawn"] = s.labelDrawn;
+		satellite["iconDrawn"] = s.iconDrawn;
+		satellite["pickable"] = s.pickable;
+		satellite["visibility"] = s.visibility;
+		satellite["magSat"] = s.magSat;
+		satellite["limitMag"] = s.limitMag;
+		item["satelliteRender"] = satellite;
+	}
+	return item;
+}
+
+QJsonArray pickCandidatesJson(const QList<PickCandidate>& candidates)
+{
+	QJsonArray items;
+	for (const PickCandidate& candidate : candidates)
+		items.append(pickCandidateJson(candidate));
+	return items;
+}
+
 QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = false, bool includeDynamic = true)
 {
 	QElapsedTimer infoTimer;
@@ -3141,6 +3195,19 @@ QJsonObject selectedObjectJson(StelCore* core = nullptr, bool includeDetails = f
 		const QString starId = object->getID().trimmed();
 		if (!starId.isEmpty())
 			result["catalogId"] = starId;
+	}
+	// Unnamed catalogue objects (e.g. LBN 908 HII regions) still need a stable
+	// display name; otherwise ArkUI's detail card suppresses itself because
+	// selectedName is empty.
+	if (result.value("name").toString().isEmpty())
+	{
+		const QString fallback = result.value("catalogId").toString().trimmed();
+		if (!fallback.isEmpty())
+		{
+			result["name"] = fallback;
+			if (result.value("englishName").toString().isEmpty())
+				result["englishName"] = fallback;
+		}
 	}
 	const QJsonObject detailMedia = constellationDetailMediaJson(object);
 	for (auto it = detailMedia.constBegin(); it != detailMedia.constEnd(); ++it)
@@ -6646,10 +6713,30 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		}
 		#endif
 
+		if (commandName == "getTouchPickRadius")
+		{
+			result["ok"] = true;
+			result["radiusVp"] = TouchPicker::getTouchRadiusVp();
+			return result;
+		}
+
+		if (commandName == "setTouchPickRadius")
+		{
+			bool ok = false;
+			const double radius = arg.trimmed().toDouble(&ok);
+			if (!ok || radius <= 0.0)
+			{
+				result["error"] = "setTouchPickRadius expects a positive vp value";
+				return result;
+			}
+			TouchPicker::setTouchRadiusVp(radius);
+			result["ok"] = true;
+			result["radiusVp"] = TouchPicker::getTouchRadiusVp();
+			return result;
+		}
+
 		if (commandName == "selectAt")
-	{
-			QElapsedTimer selectTimer;
-			selectTimer.start();
+		{
 			if (!objectMgr || !core)
 			{
 				result["error"] = "selection manager not ready";
@@ -6658,7 +6745,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			const QStringList parts = arg.split('|');
 			if (parts.size() < 2)
 			{
-				result["error"] = "selectAt expects x|y or x|y|height";
+				result["error"] = "selectAt expects x|y[|skyW|skyH[|touch|mouse]]";
 				return result;
 			}
 			bool okX = false;
@@ -6669,107 +6756,218 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			if (okX && okY)
 				StelMainView::getInstance().setOhosMousePos(x, y);
 			#endif
-			bool okW = false, okH = false;
-			int skyW = 1440, skyH = 960;
-			Vec4i selectionViewport(0, 0, 0, 0);
+			int skyW = 1440;
+			int skyH = 960;
 			if (parts.size() >= 4)
 			{
+				bool okW = false;
+				bool okH = false;
 				skyW = parts[2].toInt(&okW);
 				skyH = parts[3].toInt(&okH);
+				if (!okW || !okH || skyW <= 0 || skyH <= 0)
+				{
+					result["error"] = "selectAt expects x|y|skyW|skyH with positive sky size";
+					return result;
+				}
 			}
+			const QString inputMode = parts.size() >= 5 ? parts[4].trimmed().toLower() : QStringLiteral("touch");
+			const bool mouseInput = inputMode == QLatin1String("mouse");
+
+			PickResult pick;
 			bool found = false;
+			if (okX && okY)
+			{
+				if (mouseInput)
+				{
+					// Mouse/trackpad uses the shared picker with a 25-device-px
+					// base radius and a 2-degree angular cap. Candidate
+					// visibility, DSO render state and ranking are identical to
+					// touch; only the pointer geometry differs.
+					found = MousePicker::pickAndSelect(core, x, y, skyW, skyH, &pick);
+					if (!found)
+						objectMgr->unSelect();
+				}
+				else
+				{
+					pick = TouchPicker::pickAt(core, x, y, skyW, skyH);
+					if (pick.found && !pick.candidates.isEmpty() && pick.candidates.first().object)
+						found = objectMgr->setSelectedObject(pick.candidates.first().object);
+					if (!found)
+						objectMgr->unSelect();
+				}
+			}
+			else if (!mouseInput)
+			{
+				objectMgr->unSelect();
+			}
 
-		if (okX && okY)
-		{
-				const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
-				const Vec4i vp = prj->getViewport();
-				selectionViewport = vp;
-				const double scaleX = (okW && skyW > 0) ? (double)vp[2] / (double)skyW : (double)vp[2] / 1440.0;
-				const double scaleY = (okH && skyH > 0) ? (double)vp[3] / (double)skyH : (double)vp[3] / 960.0;
-				// The projector viewport can have a non-zero origin when the Qt
-				// surface is embedded below/alongside ArkUI controls. Touch input is
-				// relative to the sky surface, so restore that origin before unProject.
-				const int sx = vp[0] + qRound(x * scaleX);
-			// Touch Y comes from top-left (screen); Stellarium's projector unProject expects
-			// Y from bottom-left (GL convention). Desktop path flips via (height-1-y); do the same
-			// here, otherwise taps in the top half select objects in the bottom half and vice versa.
-			const int syTop = qRound(y * scaleY);
-				const int sy = vp[1] + vp[3] - 1 - syTop;
 			qInfo() << "[StellariumOhos][selectAt] tap" << x << y << "sky" << skyW << skyH
-					<< "viewport" << vp[2] << vp[3] << "->stel" << sx << sy;
+					<< "input" << inputMode << "mode" << pick.mode << "found" << found
+					<< "candidates" << pick.candidates.size()
+					<< "fov" << pick.fovDeg << "searchDeg" << pick.searchRadiusDeg
+					<< "stars" << pick.starSearchCount << "starCand" << pick.starCandidateCount
+					<< "magFiltered" << pick.starMagnitudeFiltered
+					<< "radiusFiltered" << pick.starRadiusFiltered
+					<< "distanceFiltered" << pick.starDistanceFiltered
+					<< "limit" << pick.starLimit << "custom" << pick.customStarLimit
+					<< "elapsedMs" << pick.elapsedMs;
 			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
-						 "selectAt tapX=%{public}d tapY=%{public}d skyW=%{public}d skyH=%{public}d vpW=%{public}d vpH=%{public}d sx=%{public}d syTop=%{public}d syGL=%{public}d",
-						 x, y, skyW, skyH, vp[2], vp[3], sx, syTop, sy);
-			// The desktop default is tuned for a mouse cursor. Give a one-shot
-			// touch pick a finger-sized target without changing desktop selection
-			// behavior or leaving a global radius behind for later operations.
-			Vec3d tapDirection;
-			StelObjectP constellationAtTap;
-			if (auto* constellationMgr = GETSTELMODULE(ConstellationMgr);
-				constellationMgr && prj->unProject(sx, sy, tapDirection))
-			{
-				tapDirection.normalize();
-				const QList<StelObjectP> candidates = constellationMgr->searchAround(tapDirection, 0.0, core);
-				double nearestDot = -2.0;
-				for (const StelObjectP& constellation : candidates)
-				{
-					Vec3d labelDirection = constellation->getJ2000EquatorialPos(core);
-					labelDirection.normalize();
-					const double dot = tapDirection.dot(labelDirection);
-					if (dot > nearestDot)
-					{
-						nearestDot = dot;
-						constellationAtTap = constellation;
-					}
-				}
-				if (!constellationAtTap)
-				{
-					const QString iauName = core->getIAUConstellation(tapDirection);
-					if (!iauName.isEmpty())
-						constellationAtTap = constellationMgr->searchByName(iauName);
-				}
-			qInfo() << "[StellariumOhos][selectAt] constellation candidate"
-						<< (constellationAtTap ? constellationAtTap->getID() : QStringLiteral("none"));
-			qInfo() << "[StellariumOhos][selectAt] candidate elapsedMs=" << selectTimer.elapsed();
-			}
+						 "selectAt tapX=%{public}d tapY=%{public}d skyW=%{public}d skyH=%{public}d found=%{public}d candidates=%{public}d elapsedMs=%{public}d",
+						 x, y, skyW, skyH, found ? 1 : 0, static_cast<int>(pick.candidates.size()),
+						 static_cast<int>(qRound(pick.elapsedMs)));
 
-			objectMgr->setObjectSearchRadius(60.0);
-			found = objectMgr->findAndSelect(core, sx, sy);
-			objectMgr->setObjectSearchRadius(25.0);
-			if (!found && constellationAtTap)
-			{
-				auto* constellationMgr = GETSTELMODULE(ConstellationMgr);
-				if (constellationMgr
-					&& (constellationMgr->getFlagLines() || constellationMgr->getFlagLabels()))
-				{
-					found = objectMgr->setSelectedObject(constellationAtTap);
-					qInfo() << "[StellariumOhos][selectAt] constellation fallback"
-							<< constellationAtTap->getID() << constellationAtTap->getNameI18n();
-				}
-			}
-			qInfo() << "[StellariumOhos][selectAt] found" << found;
-			qInfo() << "[StellariumOhos][selectAt] object-search elapsedMs=" << selectTimer.elapsed();
-			OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp",
-						 "selectAt found=%{public}d", found ? 1 : 0);
-		}
-
-		markOhosInteraction();
-				// Keep the tap response lightweight so the selected target can be drawn
-				// immediately. Satellite::getInfoMap() calculates telemetry and
-				// rise/set fields synchronously on the render thread; ArkTS requests
-				// the dynamic values after the selection has been drawn.
-				result = selectedObjectJson(core, false, false);
-				qInfo() << "[StellariumOhos][selectAt] response elapsedMs=" << selectTimer.elapsed();
+			markOhosInteraction();
+			// Keep the tap response lightweight so the selected target can be drawn
+			// immediately. Satellite::getInfoMap() calculates telemetry and
+			// rise/set fields synchronously on the render thread; ArkTS requests
+			// the dynamic values after the selection has been drawn.
+			result = selectedObjectJson(core, false, false);
 			result["ok"] = true;
 			result["found"] = found;
 			result["tapX"] = x;
 			result["tapY"] = y;
-			result["viewportX"] = selectionViewport[0];
-			result["viewportY"] = selectionViewport[1];
-			result["viewportWidth"] = selectionViewport[2];
-			result["viewportHeight"] = selectionViewport[3];
+			result["inputMode"] = inputMode;
+			result["viewportX"] = pick.viewportX;
+			result["viewportY"] = pick.viewportY;
+			result["viewportWidth"] = pick.viewportWidth;
+			result["viewportHeight"] = pick.viewportHeight;
+			result["pickMode"] = pick.mode;
+			result["directHit"] = pick.directHit;
+			result["ambiguous"] = pick.ambiguous;
+			result["baseRadiusVp"] = pick.baseRadiusVp;
+			result["effectiveRadiusVp"] = pick.effectiveRadiusVp;
+			result["fovDeg"] = pick.fovDeg;
+			result["degPerVp"] = pick.degPerVp;
+			result["searchRadiusDeg"] = pick.searchRadiusDeg;
+			result["starSearchCount"] = pick.starSearchCount;
+			result["starMagnitudeFiltered"] = pick.starMagnitudeFiltered;
+			result["starRadiusFiltered"] = pick.starRadiusFiltered;
+			result["starDistanceFiltered"] = pick.starDistanceFiltered;
+			result["starCandidateCount"] = pick.starCandidateCount;
+			result["starLimit"] = static_cast<double>(pick.starLimit);
+			result["customStarLimit"] = pick.customStarLimit;
+			result["elapsedMs"] = pick.elapsedMs;
+			result["pickCandidates"] = pickCandidatesJson(pick.candidates);
 			return result;
-	}
+		}
+
+		if (commandName == "probeSelectAt")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			if (parts.size() < 4)
+			{
+				result["error"] = "probeSelectAt expects x|y|skyW|skyH[|touch|mouse]";
+				return result;
+			}
+			bool okX = false;
+			bool okY = false;
+			bool okW = false;
+			bool okH = false;
+			const int x = parts[0].toInt(&okX);
+			const int y = parts[1].toInt(&okY);
+			const int skyW = parts[2].toInt(&okW);
+			const int skyH = parts[3].toInt(&okH);
+			if (!okX || !okY || !okW || !okH || skyW <= 0 || skyH <= 0)
+			{
+				result["error"] = "probeSelectAt expects x|y|skyW|skyH with positive sky size";
+				return result;
+			}
+			const QString inputMode = parts.size() >= 5 ? parts[4].trimmed().toLower() : QStringLiteral("touch");
+			const bool mouseInput = inputMode == QLatin1String("mouse");
+			const PickResult pick = mouseInput
+				? MousePicker::pickAt(core, x, y, skyW, skyH)
+				: TouchPicker::pickAt(core, x, y, skyW, skyH);
+			result["ok"] = true;
+			result["found"] = pick.found;
+			result["tapX"] = x;
+			result["tapY"] = y;
+			result["inputMode"] = inputMode;
+			result["pickMode"] = pick.mode;
+			result["directHit"] = pick.directHit;
+			result["ambiguous"] = pick.ambiguous;
+			result["baseRadiusVp"] = pick.baseRadiusVp;
+			result["effectiveRadiusVp"] = pick.effectiveRadiusVp;
+			result["fovDeg"] = pick.fovDeg;
+			result["degPerVp"] = pick.degPerVp;
+			result["searchRadiusDeg"] = pick.searchRadiusDeg;
+			result["starSearchCount"] = pick.starSearchCount;
+			result["starMagnitudeFiltered"] = pick.starMagnitudeFiltered;
+			result["starRadiusFiltered"] = pick.starRadiusFiltered;
+			result["starDistanceFiltered"] = pick.starDistanceFiltered;
+			result["starCandidateCount"] = pick.starCandidateCount;
+			result["starLimit"] = static_cast<double>(pick.starLimit);
+			result["customStarLimit"] = pick.customStarLimit;
+			result["elapsedMs"] = pick.elapsedMs;
+			result["viewportX"] = pick.viewportX;
+			result["viewportY"] = pick.viewportY;
+			result["viewportWidth"] = pick.viewportWidth;
+			result["viewportHeight"] = pick.viewportHeight;
+			result["pickCandidates"] = pickCandidatesJson(pick.candidates);
+			return result;
+		}
+
+		if (commandName == "getObjectScreenPosition")
+		{
+			if (!core)
+			{
+				result["error"] = "core not ready";
+				return result;
+			}
+			const QStringList parts = arg.split('|');
+			const QString name = parts.value(0).trimmed();
+			if (name.isEmpty())
+			{
+				result["error"] = "getObjectScreenPosition expects <name>[|skyW|skyH]";
+				return result;
+			}
+			int skyW = 0;
+			int skyH = 0;
+			if (parts.size() >= 3)
+			{
+				bool okW = false;
+				bool okH = false;
+				skyW = parts[1].toInt(&okW);
+				skyH = parts[2].toInt(&okH);
+				if (!okW || !okH || skyW <= 0 || skyH <= 0)
+				{
+					result["error"] = "getObjectScreenPosition sky size must be positive";
+					return result;
+				}
+			}
+			StelObjectMgr* objectMgrForLookup = GETSTELMODULE(StelObjectMgr);
+			StelObjectP object = objectMgrForLookup ? objectMgrForLookup->searchByName(name) : StelObjectP();
+			if (!object && objectMgrForLookup)
+				object = objectMgrForLookup->searchByNameI18n(name);
+			result["ok"] = true;
+			result["name"] = name;
+			if (!object)
+			{
+				result["found"] = false;
+				return result;
+			}
+			const ObjectScreenInfo info = TouchPicker::objectScreenInfo(core, object, skyW, skyH);
+			result["found"] = info.found;
+			result["visible"] = info.visible;
+			result["screenX"] = info.screenX;
+			result["screenY"] = info.screenY;
+			result["visualRadiusVp"] = info.visualRadiusVp;
+			result["hasMagnitude"] = info.hasMagnitude;
+			if (info.hasMagnitude)
+				result["magnitude"] = info.magnitude;
+			result["dpr"] = info.dpr;
+			result["viewportWidth"] = info.viewportWidth;
+			result["viewportHeight"] = info.viewportHeight;
+			result["englishName"] = object->getEnglishName();
+			result["localizedName"] = object->getNameI18n();
+			result["type"] = object->getType();
+			result["id"] = object->getID();
+			return result;
+		}
 
 		if (commandName == "dragView")
 		{
@@ -12309,11 +12507,37 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "getNebulaFlags")
 		{
 			NebulaMgr* nbmgr = GETSTELMODULE(NebulaMgr);
+			if (!nbmgr)
+			{
+				result["ok"] = false;
+				result["error"] = "NebulaMgr not ready";
+				return result;
+			}
+			StelSkyDrawer* drawer = core ? core->getSkyDrawer() : nullptr;
 			QJsonObject flags;
 			flags["show"] = nbmgr->getFlagShow();
 			flags["hints"] = nbmgr->getFlagHints();
+			flags["catalogFilters"] = nbmgr->getCatalogFilters();
 			flags["typeFilters"] = nbmgr->getTypeFilters();
+			flags["typeFilterUsage"] = nbmgr->getFlagUseTypeFilters();
 			flags["showOnlyNamed"] = nbmgr->getFlagShowOnlyNamedDSO();
+			flags["designations"] = nbmgr->getDesignationUsage();
+			flags["additionalNames"] = nbmgr->getFlagAdditionalNames();
+			flags["outlines"] = nbmgr->getFlagOutlines();
+			flags["hintsProportional"] = nbmgr->getHintsProportional();
+			flags["surfaceBrightness"] = nbmgr->getFlagSurfaceBrightnessUsage();
+			flags["sizeLimits"] = nbmgr->getFlagSizeLimitsUsage();
+			flags["minSizeLimit"] = nbmgr->getMinSizeLimit();
+			flags["maxSizeLimit"] = nbmgr->getMaxSizeLimit();
+			flags["labelsAmount"] = nbmgr->getLabelsAmount();
+			flags["hintsAmount"] = nbmgr->getHintsAmount();
+			flags["labelsBrightness"] = nbmgr->getLabelsBrightness();
+			flags["hintsBrightness"] = nbmgr->getHintsBrightness();
+			if (drawer)
+			{
+				flags["nebulaMagnitudeLimit"] = drawer->getFlagNebulaMagnitudeLimit();
+				flags["nebulaMagnitude"] = drawer->getCustomNebulaMagnitudeLimit();
+			}
 			result["ok"] = true;
 			result["flags"] = flags;
 			return result;
@@ -12322,23 +12546,129 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		if (commandName == "setNebulaFlag")
 		{
 			QStringList parts = arg.split('|');
-			if (parts.size() >= 2) {
-				QString flagName = parts[0];
-				bool state = parts[1] == "1" || parts[1] == "true";
-				NebulaMgr* nbmgr = GETSTELMODULE(NebulaMgr);
-				if (flagName == "show") nbmgr->setFlagShow(state);
-				else if (flagName == "hints") nbmgr->setFlagHints(state);
-				else if (flagName == "showOnlyNamed") nbmgr->setFlagShowOnlyNamedDSO(state);
-				else {
-					result["ok"] = false;
-					result["error"] = "unknown nebula flag: " + flagName;
-					return result;
-				}
-				result["ok"] = true;
-			} else {
+			if (parts.size() < 2)
+			{
 				result["ok"] = false;
-				result["error"] = "usage: flagName|state";
+				result["error"] = "usage: setting|value";
+				return result;
 			}
+			NebulaMgr* nbmgr = GETSTELMODULE(NebulaMgr);
+			StelSkyDrawer* drawer = core ? core->getSkyDrawer() : nullptr;
+			if (!nbmgr)
+			{
+				result["ok"] = false;
+				result["error"] = "NebulaMgr not ready";
+				return result;
+			}
+			const QString setting = parts[0].trimmed();
+			const QString rawValue = parts.mid(1).join('|').trimmed();
+			const bool boolValue = rawValue == "1" || rawValue.compare("true", Qt::CaseInsensitive) == 0;
+			bool handled = true;
+			QString configKey;
+			if (setting == "show") { nbmgr->setFlagShow(boolValue); configKey = "astro/flag_nebula"; }
+			else if (setting == "hints") { nbmgr->setFlagHints(boolValue); configKey = "astro/flag_nebula_name"; }
+			else if (setting == "showOnlyNamed") { nbmgr->setFlagShowOnlyNamedDSO(boolValue); configKey = "astro/flag_dso_show_only_named"; }
+			else if (setting == "designations") { nbmgr->setDesignationUsage(boolValue); configKey = "astro/flag_dso_designation_usage"; }
+			else if (setting == "additionalNames") { nbmgr->setFlagAdditionalNames(boolValue); configKey = "astro/flag_dso_additional_names"; }
+			else if (setting == "outlines") { nbmgr->setFlagOutlines(boolValue); configKey = "astro/flag_dso_outlines_usage"; }
+			else if (setting == "hintsProportional") { nbmgr->setHintsProportional(boolValue); configKey = "astro/flag_nebula_hints_proportional"; }
+			else if (setting == "surfaceBrightness") { nbmgr->setFlagSurfaceBrightnessUsage(boolValue); configKey = "astro/flag_surface_brightness_usage"; }
+			else if (setting == "sizeLimits") { nbmgr->setFlagSizeLimitsUsage(boolValue); configKey = "astro/flag_size_limits_usage"; }
+			else if (setting == "typeFilterUsage") { nbmgr->setFlagUseTypeFilters(boolValue); configKey = "astro/flag_use_type_filter"; }
+			else if (setting == "catalogFilters")
+			{
+				const QString value = rawValue.toLower();
+				if (value == "all") nbmgr->setCatalogFilters(static_cast<int>(Nebula::CatAll));
+				else if (value == "standard") nbmgr->setCatalogFilters(static_cast<int>(Nebula::CatNGC | Nebula::CatIC | Nebula::CatM | Nebula::CatPGC | Nebula::CatOther));
+				else if (value == "none") nbmgr->setCatalogFilters(0);
+				else
+				{
+					bool ok = false;
+					int mask = rawValue.toInt(&ok, 0);
+					if (!ok)
+					{
+						// ArkUI sends CatAll as the unsigned 0xFFFFFFFF mask.
+						// Accept it as well as the signed -1 form.
+						bool unsignedOk = false;
+						const uint unsignedMask = rawValue.toUInt(&unsignedOk, 0);
+						if (!unsignedOk)
+						{
+							result["ok"] = false;
+							result["error"] = "invalid catalogFilters mask";
+							return result;
+						}
+						mask = static_cast<int>(unsignedMask);
+					}
+					nbmgr->setCatalogFilters(mask);
+				}
+				nbmgr->storeCatalogFilters();
+				StelApp::flushSettings("dso catalog filters");
+				handled = true;
+			}
+			else if (setting == "typeFilters")
+			{
+				const QString value = rawValue.toLower();
+				int mask = 0;
+				if (value == "all") mask = static_cast<int>(Nebula::TypeAll);
+				else if (value == "none") mask = 0;
+				else
+				{
+					bool ok = false;
+					mask = rawValue.toInt(&ok, 0);
+					if (!ok) { result["ok"] = false; result["error"] = "invalid typeFilters mask"; return result; }
+				}
+				nbmgr->setTypeFilters(mask);
+				static const struct { int bit; const char* key; } typeKeys[] = {
+					{static_cast<int>(Nebula::TypeGalaxies), "flag_show_galaxies"},
+					{static_cast<int>(Nebula::TypeActiveGalaxies), "flag_show_active_galaxies"},
+					{static_cast<int>(Nebula::TypeInteractingGalaxies), "flag_show_interacting_galaxies"},
+					{static_cast<int>(Nebula::TypeOpenStarClusters), "flag_show_open_clusters"},
+					{static_cast<int>(Nebula::TypeGlobularStarClusters), "flag_show_globular_clusters"},
+					{static_cast<int>(Nebula::TypeHydrogenRegions), "flag_show_hydrogen_regions"},
+					{static_cast<int>(Nebula::TypeBrightNebulae), "flag_show_bright_nebulae"},
+					{static_cast<int>(Nebula::TypeDarkNebulae), "flag_show_dark_nebulae"},
+					{static_cast<int>(Nebula::TypePlanetaryNebulae), "flag_show_planetary_nebulae"},
+					{static_cast<int>(Nebula::TypeSupernovaRemnants), "flag_show_supernova_remnants"},
+					{static_cast<int>(Nebula::TypeGalaxyClusters), "flag_show_galaxy_clusters"},
+					{static_cast<int>(Nebula::TypeOther), "flag_show_other"}
+				};
+				for (const auto& item : typeKeys)
+					StelApp::immediateSaveNow(QString("dso_type_filters/%1").arg(item.key), (mask & item.bit) != 0);
+				handled = true;
+			}
+			else if (setting == "labelsAmount" || setting == "hintsAmount"
+				|| setting == "labelsBrightness" || setting == "hintsBrightness"
+				|| setting == "minSizeLimit" || setting == "maxSizeLimit"
+				|| setting == "nebulaMagnitude")
+			{
+				bool ok = false;
+				const double value = rawValue.toDouble(&ok);
+				if (!ok) { result["ok"] = false; result["error"] = "invalid numeric value"; return result; }
+				if (setting == "labelsAmount") { nbmgr->setLabelsAmount(qBound(0.0, value, 10.0)); configKey = "astro/nebula_labels_amount"; }
+				else if (setting == "hintsAmount") { nbmgr->setHintsAmount(qBound(0.0, value, 10.0)); configKey = "astro/nebula_hints_amount"; }
+				else if (setting == "labelsBrightness") { nbmgr->setLabelsBrightness(qBound(0.0, value, 1.0)); configKey = "astro/nebula_labels_brightness"; }
+				else if (setting == "hintsBrightness") { nbmgr->setHintsBrightness(qBound(0.0, value, 1.0)); configKey = "astro/nebula_hints_brightness"; }
+				else if (setting == "minSizeLimit") { nbmgr->setMinSizeLimit(qBound(0.0, value, 600.0)); configKey = "astro/size_limit_min"; }
+				else if (setting == "maxSizeLimit") { nbmgr->setMaxSizeLimit(qBound(0.0, value, 1200.0)); configKey = "astro/size_limit_max"; }
+				else if (setting == "nebulaMagnitude" && drawer) { drawer->setCustomNebulaMagnitudeLimit(qBound(3.0, value, 21.0)); configKey = "astro/nebula_magnitude_limit"; }
+				handled = true;
+			}
+			else if (setting == "nebulaMagnitudeLimit")
+			{
+				if (drawer) drawer->setFlagNebulaMagnitudeLimit(boolValue);
+				configKey = "astro/flag_nebula_magnitude_limit";
+			}
+			else handled = false;
+			if (!handled && configKey.isEmpty())
+			{
+				result["ok"] = false;
+				result["error"] = "unknown nebula setting: " + setting;
+				return result;
+			}
+			if (!configKey.isEmpty())
+				StelApp::immediateSaveNow(configKey, boolValue ? QVariant(true) : QVariant(rawValue));
+			markOhosInteraction();
+			result["ok"] = true;
 			return result;
 		}
 

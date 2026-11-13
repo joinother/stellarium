@@ -114,6 +114,9 @@
         "name": "ohos.permission.INTERNET"
       },
       {
+        "name": "ohos.permission.GET_NETWORK_INFO"
+      },
+      {
         "name": "ohos.permission.APPROXIMATELY_LOCATION",
         "reason": "$string:stellarium_permission_reason_location",
         "usedScene": {

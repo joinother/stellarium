@@ -10,6 +10,7 @@ import { LayerSwitchRow } from './LayerSwitchRow'
 import { ObservationAidBlock } from './ObservationAidBlock'
 import { AtmosphereGroundSection } from './AtmosphereGroundSection'
 import { LayerSpectralSection } from './LayerSpectralSection'
+import { DsoSettingsSection } from './DsoSettingsSection'
 import { SurveyStore } from '../../state/SurveyStore'
 import { ViewCoordinateSettings } from '../view/ViewCoordinateSettings'
 
@@ -361,8 +362,17 @@ export struct LayerSsoTab {
 @Component
 export struct LayerDsoTab {
   @ObjectLink layerStore: LayerStore
+  @ObjectLink layerViewStore: LayerViewStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
+  onLoadDsoSettings: () => void = () => {}
+  onSetDsoSetting: (setting: string, value: boolean | number) => void = () => {}
+  onSetDsoCatalogMask: (mask: number) => void = () => {}
+  onSetDsoTypeMask: (mask: number) => void = () => {}
+
+  aboutToAppear(): void {
+    this.onLoadDsoSettings()
+  }
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
@@ -370,8 +380,13 @@ export struct LayerDsoTab {
     Column({ space: 0 }) {
       Text('显示内容').fontSize(11).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 6 }).padding({ left: 2 })
       LayerSwitchRow({ label: I18n.t('s0320'), isOn: this.layerStore.nebulae, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Nebulas', '', value) } })
-      LayerSwitchRow({ label: I18n.t('s0321'), isOn: this.layerStore.dsoLabels, onToggle: (value: boolean) => { this.onToggleLayer('setDsoLabels', 'setDsoLabels', value) } })
       LayerSwitchRow({ label: I18n.t('s0322'), isOn: this.layerStore.dsoTextures, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_DSO_Textures', '', value) } })
+      DsoSettingsSection({
+        layerViewStore: this.layerViewStore,
+        onSetSetting: (setting: string, value: boolean | number) => { this.onSetDsoSetting(setting, value) },
+        onSetCatalogMask: (mask: number) => { this.onSetDsoCatalogMask(mask) },
+        onSetTypeMask: (mask: number) => { this.onSetDsoTypeMask(mask) }
+      })
     }.width('100%')
   }
 }

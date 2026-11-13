@@ -14,7 +14,7 @@ import { ObjectDetailStore } from '../state/ObjectDetailStore'
 import { ImagePort } from '../bridge/MediaPort'
 import { ObjectModelRenderer } from './ObjectModelRenderer'
 import { proceduralModelKind, proceduralParticles } from '../common/derive/ProceduralDetailModel'
-import { objectInspectorPlanetTexturePath, objectInspectorDeepSkyImageName, objectInspectorFallbackVisualKind, objectInspectorFallbackImageName, objectInspectorPlanetRingSpec } from '../common/derive/media'
+import { objectInspectorPlanetTexturePath, objectInspectorDeepSkyImageName, objectInspectorFallbackVisualKind, objectInspectorPlanetRingSpec } from '../common/derive/media'
 import { decodeLocalImage, releaseDecodedImage } from '../common/media/ImageDecoder'
 import { describeDecodeError } from '../common/derive/labels'
 
@@ -215,14 +215,11 @@ export class ObjectInspectorMediaController {
     const deepSkyImageName = planetTexturePath.length === 0 && this.detailStore.selectedDetailMediaPath.length === 0
       ? objectInspectorDeepSkyImageName(fallbackKind, this.detailStore.objectInspectorSearchText())
       : ''
-    const fallbackImageName = planetTexturePath.length === 0 && this.detailStore.selectedDetailMediaPath.length === 0 &&
-      deepSkyImageName.length === 0 ? objectInspectorFallbackImageName(fallbackKind) : ''
     const requestedPath = planetTexturePath.length > 0
       ? planetTexturePath
       : (this.detailStore.selectedDetailMediaPath.length > 0
         ? this.detailStore.selectedDetailMediaPath
-        : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName
-          : (fallbackImageName.length > 0 ? 'nebulae/default/' + fallbackImageName : '')))
+        : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName : ''))
     const proceduralKind = requestedPath.length === 0 || (planetTexturePath.length === 0 &&
       this.objectInspectorMediaResolutionComplete && this.objectInspectorMediaResolvedRequestPath === requestedPath &&
       this.objectInspectorMediaResolvedPath.length === 0)
@@ -243,7 +240,7 @@ export class ObjectInspectorMediaController {
     const kind = planetTexturePath.length > 0 || proceduralKind.length > 0
       ? 'model'
       : (this.detailStore.selectedDetailMediaPath.length > 0 ? 'constellation'
-        : (deepSkyImageName.length > 0 || fallbackImageName.length > 0 ? 'image' : 'visual'))
+        : (deepSkyImageName.length > 0 ? 'image' : 'visual'))
     const modelRawFilePath = kind === 'model' && resolvedPath.length > 0
       ? this.objectInspectorFilePath(resolvedPath + '.model.rgba')
       : ''

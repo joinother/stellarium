@@ -39,7 +39,7 @@ inline QStringList names()
 		"getViewportSize,getUiLayout,getWutTargets,gotoBookmark,gotoNebulaTexture,gotoRADec,gyroDiagnostic,importCollaborationSession,importConfig,importNebulaTexture,importScript,importStarCatalog,listMatchingObjects,listNebulaTextures,listObjects,"
 		"listRecordings,loadPlugin,loadRecording,moveToAltAz,moveToSelected,moveToSelectedAt,panBy,pauseScript,playScript,"
 		"pointAtSky,pointAtSkyStop,refreshNebulaTextures,reloadSkyCulture,removeNebulaTexture,resetAngleMeasure,retryDeepSkyImages,resumeScript,saveRecording,saveScreenShot,searchObject,"
-		"selectAt,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,setRemoteControl,getRemoteControlState,"
+		"selectAt,probeSelectAt,getObjectScreenPosition,getTouchPickRadius,setTouchPickRadius,setPointerPosition,selftestActions,setAbsoluteStarScale,setActionChecked,setActionStates,setApplicationForeground,setRemoteControl,getRemoteControlState,"
 		"setARMode,setARRevealProgress,setAtmosphereFlag,setAtmosphereParams,setAutoMoveDuration,setAutoZoom,setAutoZoomResets,setBortleScale,setCCD,"
 		"setConfigString,setConstellationFlag,setCrosshairs,setDate,setDateFormat,setDecimalDegrees,setDitheringMode,setDsoLabels,setFOV,"
 		"setFieldOfView,setFlagClearSky,setFlagGravityLabels,setFlatHorizon,setFovMarkerSetting,setGridFlag,setGyroView,"
@@ -178,7 +178,9 @@ inline QJsonObject item(const QString& name)
 		value["description"] = QStringLiteral("兼容旧客户端的插件启动命令；当前内置插件统一随应用启动加载，payload 中的 0 不再关闭插件");
 		value["examplePayload"] = "Satellites|1";
 	}
-	else if (name == "selectAt") value["examplePayload"] = "720|480|1440|960";
+	else if (name == "selectAt") value["examplePayload"] = "720|480|1440|960|touch";
+	else if (name == "probeSelectAt") value["examplePayload"] = "720|480|1440|960|touch";
+	else if (name == "setTouchPickRadius") value["examplePayload"] = "66";
 	else if (name == "setPointerPosition")
 	{
 		value["description"] = QStringLiteral("更新星图上的触摸/鼠标指针位置，供指针坐标插件实时投影；仅保存在本地，不读取设备标识");

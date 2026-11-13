@@ -69,6 +69,21 @@ mirror_files() {
 mirror_ets_sources() {
   local src_dir="$REPO_ROOT/harmonyos/ets-source"
   local dst_dir="$MODULE_ROOT/ets"
+  # Remove ArkTS files deleted from the source tree. DevEco does not generate
+  # .ets/.ts under entry/src/main/ets, so anything absent from ets-source is a
+  # stale copy that would otherwise keep compiling and mask renames/deletions.
+  if [ -d "$dst_dir" ]; then
+    while IFS= read -r dst; do
+      local rel="${dst#"$dst_dir"/}"
+      case "$rel" in
+        resources/*) continue ;;
+      esac
+      if [ ! -f "$src_dir/$rel" ]; then
+        rm -f "$dst"
+        echo "  removed stale: $rel"
+      fi
+    done < <(find "$dst_dir" -type f \( -name '*.ets' -o -name '*.ts' \) -print | sort)
+  fi
   while IFS= read -r src; do
     local rel="${src#"$src_dir"/}"
     case "$rel" in
@@ -103,6 +118,22 @@ echo "Synced:"
 
 # 1. ArkTS / TypeScript sources (harmonyos/ets-source/resources is handled separately).
 mirror_ets_sources
+
+# Apply build-time feature flags to the mirrored sources. The tracked source
+# value is authoritative unless the caller explicitly overrides it:
+# OHOS_METERED_MAP_APIS=0 produces a HAP that avoids the metered Map Kit server
+# APIs (static map, Petal search, reverse geocode); OHOS_DEV_TOOLS=0 hides the
+# development panel and its More-menu entry; =1 forces either flag on.
+# The online Petal basemap and its layers are free and stay enabled.
+FLAG_ARGS=()
+if [ -n "${OHOS_METERED_MAP_APIS:-}" ]; then
+  FLAG_ARGS+=("--metered-map-apis=$OHOS_METERED_MAP_APIS")
+fi
+if [ -n "${OHOS_DEV_TOOLS:-}" ]; then
+  FLAG_ARGS+=("--dev-tools=$OHOS_DEV_TOOLS")
+fi
+node "$SCRIPT_DIR/apply-ohos-feature-flags.mjs" \
+  --ets-root "$MODULE_ROOT/ets" ${FLAG_ARGS[@]+"${FLAG_ARGS[@]}"}
 
 # 2. Icons and locale tables shipped next to the ArkTS sources.
 mirror_files "$REPO_ROOT/harmonyos/ets-source/resources" "$MODULE_ROOT/resources"
@@ -152,6 +183,19 @@ fi
 node "$REPO_ROOT/scripts/check-ohos-resource-dirs.mjs"
 
 RAWFILE_ROOT="$REPO_ROOT/build/libstellarium-harmonyos/entry/src/main/resources/rawfile/stellarium"
+
+# Full-screen map 2D overlays are generated from the planet textures, not
+# tracked in Git. A rawfile tree produced before this step existed has none of
+# them, so treat a missing set as a resource change and trigger a full sync
+# below instead of silently shipping a picker without its 2D phase.
+MERCATOR_MISSING=0
+if [ -d "$RAWFILE_ROOT/textures" ]; then
+  node "$REPO_ROOT/scripts/build-ohos-mercator-textures.mjs" \
+    --dest "$RAWFILE_ROOT/textures" --check >/dev/null 2>&1 || MERCATOR_MISSING=1
+else
+  MERCATOR_MISSING=1
+fi
+
 if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
   # catalog-manifest.json 只覆盖星表/目录，反映不了“新增资源目录”。
   # 上游合并会带来新的 skyculture（例如 26.3 的 potawatomi）；这类目录没同步进
@@ -164,18 +208,52 @@ if [ "${OHOS_SYNC_RESOURCES:-auto}" != "0" ]; then
     [ -f "$RAWFILE_ROOT/skycultures/$_name/index.json" ] || MISSING_SKYCULTURES=$((MISSING_SKYCULTURES + 1))
   done
 
+  RESOURCE_SYNC_REQUIRED=0
   if [ "${OHOS_SYNC_RESOURCES:-auto}" = "1" ] || \
     ! cmp -s "$REPO_ROOT/data/ohos/catalog-manifest.json" "$RAWFILE_ROOT/data/ohos/catalog-manifest.json" || \
     ! cmp -s "$REPO_ROOT/skycultures/modern/models/manifest.json" "$RAWFILE_ROOT/skycultures/modern/models/manifest.json" || \
     [ "$MISSING_SKYCULTURES" -gt 0 ]; then
+    RESOURCE_SYNC_REQUIRED=1
+  fi
+
+  MERCATOR_TRIGGER=0
+  if [ "$MERCATOR_MISSING" -gt 0 ]; then
+    case "$(uname -s)" in
+      MINGW*|MSYS*|CYGWIN*)
+        # Windows fills rawfile with sync-ohos-resources-windows.ps1, which the
+        # build script runs before this one. Do not fall through to the
+        # rsync-based bash syncer on a Git Bash host that has no rsync.
+        echo "WARNING: Web Mercator map overlays are missing; rerun the Windows build without -SkipResources." >&2
+        ;;
+      *)
+        MERCATOR_TRIGGER=1
+        RESOURCE_SYNC_REQUIRED=1
+        ;;
+    esac
+  fi
+
+  if [ "$RESOURCE_SYNC_REQUIRED" = "1" ]; then
     if [ "$MISSING_SKYCULTURES" -gt 0 ]; then
       echo "HAP rawfile 缺少 $MISSING_SKYCULTURES 个 skyculture 目录；全量同步资源"
+    elif [ "$MERCATOR_TRIGGER" = "1" ]; then
+      echo "HAP rawfile is missing Web Mercator map overlays; synchronizing resources"
     else
       echo "Resource manifest changed; synchronizing HAP rawfile resources"
     fi
     "$SCRIPT_DIR/sync-ohos-resources.sh"
+    if ! node "$REPO_ROOT/scripts/build-ohos-mercator-textures.mjs" \
+      --dest "$RAWFILE_ROOT/textures" --check; then
+      echo "ERROR: Web Mercator map overlays are still missing after the resource sync" >&2
+      exit 1
+    fi
+  elif [ "$MERCATOR_MISSING" -gt 0 ]; then
+    echo "HAP rawfile resources match the manifest, but Web Mercator map overlays are missing (Windows: rerun without -SkipResources)" >&2
   else
     echo "HAP rawfile resources already match data/ohos/catalog-manifest.json (skycultures complete)"
+  fi
+else
+  if [ "$MERCATOR_MISSING" -gt 0 ]; then
+    echo "WARNING: Web Mercator map overlays are missing and resource sync is disabled (OHOS_SYNC_RESOURCES=0)" >&2
   fi
 fi
 

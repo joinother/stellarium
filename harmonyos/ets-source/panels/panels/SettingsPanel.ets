@@ -16,6 +16,7 @@ import { ViewSettingsStore } from '../../state/ViewSettingsStore'
 import { NotificationStore } from '../../state/NotificationStore'
 import { ToolsStore } from '../../state/ToolsStore'
 import { EphemerisToggleRow, InformationModeButton, InformationSwitchRow, NavigationSwitchRow } from '../settings/SettingsRows'
+import { SettingsChoiceButton } from '../../common/ui/SettingsChoiceButton'
 import { LanguageRow, DevicePrivacySection } from '../settings/DeviceAndLanguageRows'
 import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
@@ -95,6 +96,7 @@ export struct SettingsPanel {
   setConfigurationDithering: (value: string) => void = () => {}
   setDecimalDegreesCoords: (enabled: boolean) => void = () => {}
   setDecimalDegreesOther: (enabled: boolean) => void = () => {}
+  setTouchPickRadius: (radiusVp: number) => void = () => {}
   setProjection: (name: string) => void = () => {}
   saveAppSettings: () => void = () => {}
   flashHint: (text: ResourceStr) => void = () => {}
@@ -376,6 +378,14 @@ export struct SettingsPanel {
           } else if (this.configTab === 2) {
             Text('天空显示设置已统一到"图层 > 天空"').fontSize(11).fontColor(this.c.sub)
               .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).maxLines(2)
+            Column() {
+              Text(I18n.t('touch_pick_radius')).fontSize(12).fontColor(this.c.text).width('100%')
+              Text(I18n.t('touch_pick_radius_hint')).fontSize(10).fontColor(this.c.sub).width('100%').margin({ top: 2, bottom: 6 })
+              Row({ space: 6 }) {
+                SettingsChoiceButton({ label: '66 vp', active: this.viewSettingsStore.touchPickRadiusVp === 66, canPick: true, onPick: () => { this.setTouchPickRadius(66) } })
+                SettingsChoiceButton({ label: '48 vp', active: this.viewSettingsStore.touchPickRadiusVp === 48, canPick: true, onPick: () => { this.setTouchPickRadius(48) } })
+              }.width('100%')
+            }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
             Button('打开图层 > 天空').fontSize(11).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
               .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%')
               .onClick(() => { this.onOpenLayersSky() })

@@ -248,6 +248,7 @@ public:
 	//! @param eclipseFactor can be computed with SolarSystem::getSolarEclipseFactor(core)
 	virtual float getVMagnitude(const StelCore* core, double eclipseFactor) const;
 	float getSelectPriority(const StelCore* core) const override;
+	StelObjectPickState getPickState(const StelCore* core) const override;
 	Vec3f getInfoColor(void) const override;
 	//! @return "Planet". For technical reasons this is also returned by Comets and MinorPlanets and the Sun. A better type is returned by getObjectType()
 	QString getType(void) const override {return PLANET_TYPE;}

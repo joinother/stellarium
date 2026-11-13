@@ -31,6 +31,7 @@ export interface UiSettings {
   graphMode: number
   eclipseMonths: number
   moonPhaseDays: number
+  touchPickRadiusVp: number
 }
 
 export function defaultUiSettings(): UiSettings {
@@ -54,7 +55,8 @@ export function defaultUiSettings(): UiSettings {
     rtsCalendarDays: 14,
     graphMode: 0,
     eclipseMonths: 36,
-    moonPhaseDays: 30
+    moonPhaseDays: 30,
+    touchPickRadiusVp: 66
   }
 }
 
@@ -135,6 +137,7 @@ export function migrateUiSettings(raw: string): UiSettings {
   out.graphMode = clampInt(numOf(obj['graphMode'], defaults.graphMode), 0, 5, defaults.graphMode)
   out.eclipseMonths = numOf(obj['eclipseMonths'], defaults.eclipseMonths)
   out.moonPhaseDays = numOf(obj['moonPhaseDays'], defaults.moonPhaseDays)
+  out.touchPickRadiusVp = clampInt(numOf(obj['touchPickRadiusVp'], defaults.touchPickRadiusVp), 24, 96, defaults.touchPickRadiusVp)
   return out
 }
 

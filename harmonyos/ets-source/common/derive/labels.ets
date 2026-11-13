@@ -401,12 +401,16 @@ export function timezoneDisplayName(ianaTz: string): string {
 // 快捷操作面板标题栏的观测点文案（按来源取值，见 QUICK-ACTIONS-PANEL-PLAN.md §11.3）：
 // gps → `GPS`；map → 「自定义位置」；其余 → 名称本身。
 // 不能复用宿主的 locationText —— 它由引擎轮询覆写，会把 `GPS` 冲掉。
-export function quickLocationLabel(source: string, displayName: string, planetName: string = 'Earth'): string {
+export function quickLocationLabel(source: string, displayName: string,
+  planetName: string = 'Earth', detail: string = ''): string {
   if (source === 'gps' && planetName === 'Earth') {
-    return I18n.t('loc_source_gps')
+    return detail.length > 0 ? I18n.t('loc_source_gps') + ' · ' + detail : I18n.t('loc_source_gps')
   }
   if (source === 'map') {
-    return I18n.t('custom_location')
+    // Map picks now carry a reverse-geocoded local name; keep the generic
+    // label only when the name is empty or still the placeholder.
+    return displayName.length > 0 && displayName !== I18n.t('custom_location')
+      ? displayName : I18n.t('custom_location')
   }
   return displayName.length > 0 ? displayName : I18n.t('custom_location')
 }
@@ -439,6 +443,9 @@ export function panelTitleFor(activePanel: string, configTab: number, isExpanded
   }
   if (activePanel === 'place') {
     return I18n.t('i0014')
+  }
+  if (activePanel === 'devTools') {
+    return I18n.t('panel_dev_tools')
   }
   if (activePanel === 'layers') {
     return I18n.t('i0100')

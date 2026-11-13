@@ -213,7 +213,9 @@ export class TimeController {
   }
 
   applyManualTime(): void {
+    // The picker shows observation-local wall time; dateToJD works in UTC.
     const jd = dateToJD(this.timeStore.manualYear, this.timeStore.manualMonth, this.timeStore.manualDay, this.timeStore.manualHour, this.timeStore.manualMinute)
+      - this.hooks.utcOffsetHours() / 24.0
     this.port.requestInteractive('setJD', jd.toFixed(6), (r: StellariumBridgeResponse) => {
       this.hooks.refreshState()
       this.hooks.flashHint(String(this.timeStore.manualMonth).padStart(2, '0') + '-' + String(this.timeStore.manualDay).padStart(2, '0') + ' ' + String(this.timeStore.manualHour).padStart(2, '0') + ':' + String(this.timeStore.manualMinute).padStart(2, '0'))
@@ -222,31 +224,9 @@ export class TimeController {
 
   syncManualTimeFromState(): void {
     this.port.requestWhenReady('getState', '', (result) => {
-    if (result.jd !== undefined) {
-      const jd = result.jd as number
-      const z = Math.floor(jd + 0.5)
-      const f = jd + 0.5 - z
-      let A = z
-      if (z >= 2299161) {
-        const alpha = Math.floor((z - 1867216.25) / 36524.25)
-        A = z + 1 + alpha - Math.floor(alpha / 4)
+      if (result.jd !== undefined) {
+        this.timeStore.syncManualTimeFromJd(result.jd as number, this.hooks.utcOffsetHours())
       }
-      const B = A + 1524
-      const C = Math.floor((B - 122.1) / 365.25)
-      const D = Math.floor(365.25 * C)
-      const E = Math.floor((B - D) / 30.6001)
-      const day = B - D - Math.floor(30.6001 * E)
-      const month = E < 14 ? E - 1 : E - 13
-      const year = month > 2 ? C - 4716 : C - 4715
-      const dayFraction = f * 24
-      const hour = Math.floor(dayFraction)
-      const minute = Math.floor((dayFraction - hour) * 60)
-      this.timeStore.manualYear = year
-      this.timeStore.manualMonth = month
-      this.timeStore.manualDay = day
-      this.timeStore.manualHour = hour
-      this.timeStore.manualMinute = minute
-    }
     })
   }
 

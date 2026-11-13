@@ -244,11 +244,11 @@ void NebulaMgr::init()
 	texPointer = texMan.createTexture(StelFileMgr::getInstallationDir()+"/textures/pointeur5.png");
 
 	setFlagShow(conf->value("astro/flag_nebula",true).toBool());
-	setFlagHints(conf->value("astro/flag_nebula_name",false).toBool());
+	setFlagHints(conf->value("astro/flag_nebula_name",true).toBool());
 	setHintsAmount(conf->value("astro/nebula_hints_amount", 3.0).toDouble());
 	setLabelsAmount(conf->value("astro/nebula_labels_amount", 3.0).toDouble());
-	setHintsProportional(conf->value("astro/flag_nebula_hints_proportional", false).toBool());
-	setFlagOutlines(conf->value("astro/flag_dso_outlines_usage", false).toBool());
+	setHintsProportional(conf->value("astro/flag_nebula_hints_proportional", true).toBool());
+	setFlagOutlines(conf->value("astro/flag_dso_outlines_usage", true).toBool());
 	setFlagAdditionalNames(conf->value("astro/flag_dso_additional_names",true).toBool());
 	setDesignationUsage(conf->value("astro/flag_dso_designation_usage", false).toBool());
 	setFlagSurfaceBrightnessUsage(conf->value("astro/flag_surface_brightness_usage", false).toBool());
@@ -320,7 +320,7 @@ void NebulaMgr::init()
 
 	// Set colors for markers
 	setLabelsBrightness(conf->value("astro/nebula_labels_brightness", "1.0").toDouble());
-	setHintsBrightness(conf->value("astro/nebula_hints_brightness", "1.0").toDouble());
+	setHintsBrightness(conf->value("astro/nebula_hints_brightness", "0.5").toDouble());
 	setLabelsColor(Vec3f(conf->value("color/dso_label_color", "0.2,0.6,0.7").toString()));
 	setCirclesColor(Vec3f(conf->value("color/dso_circle_color", "1.0,0.7,0.2").toString()));
 	setRegionsColor(Vec3f(conf->value("color/dso_region_color", "0.7,0.7,0.2").toString()));
@@ -378,7 +378,7 @@ void NebulaMgr::init()
 	flagConverter = conf->value("devel/convert_dso_catalog", false).toBool();
 	flagDecimalCoordinates = conf->value("devel/convert_dso_decimal_coord", true).toBool();
 
-	setFlagUseTypeFilters(conf->value("astro/flag_use_type_filter", false).toBool());
+	setFlagUseTypeFilters(conf->value("astro/flag_use_type_filter", true).toBool());
 
 	loadCatalogFilters();
 
@@ -481,6 +481,8 @@ void NebulaMgr::selectStandardCatalogs()
 	catalogs |= Nebula::CatNGC;
 	catalogs |= Nebula::CatIC;
 	catalogs |= Nebula::CatM;
+	catalogs |= Nebula::CatPGC;
+	catalogs |= Nebula::CatOther;
 	setCatalogFilters(catalogs);
 }
 
@@ -521,7 +523,7 @@ void NebulaMgr::loadCatalogFilters()
 		catalogFilters	|= Nebula::CatCr;
 	if (conf->value("flag_show_mel", false).toBool())
 		catalogFilters	|= Nebula::CatMel;
-	if (conf->value("flag_show_pgc", false).toBool())
+	if (conf->value("flag_show_pgc", true).toBool())
 		catalogFilters	|= Nebula::CatPGC;
 	if (conf->value("flag_show_ced", false).toBool())
 		catalogFilters	|= Nebula::CatCed;

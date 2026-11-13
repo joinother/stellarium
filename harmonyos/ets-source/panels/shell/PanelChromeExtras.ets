@@ -251,6 +251,9 @@ export struct PanelHandle {
           .onActionEnd(() => {
             this.onDragFinish()
           })
+          .onActionCancel(() => {
+            this.onDragFinish()
+          })
       )
   }
 }

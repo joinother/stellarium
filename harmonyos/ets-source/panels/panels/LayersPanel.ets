@@ -58,6 +58,10 @@ export struct LayersPanel {
   onSetOrbitThickness: (value: number) => void = () => {}
   onSetOrbitColorStyle: (index: number) => void = () => {}
   onLoadOrbitSettings: () => void = () => {}
+  onLoadDsoSettings: () => void = () => {}
+  onSetDsoSetting: (setting: string, value: boolean | number) => void = () => {}
+  onSetDsoCatalogMask: (mask: number) => void = () => {}
+  onSetDsoTypeMask: (mask: number) => void = () => {}
   onSetTrailFlag: (setting: string, enabled: boolean) => void = () => {}
   onSetTrailNumber: (setting: string, value: number) => void = () => {}
   onLoadTrailSettings: () => void = () => {}
@@ -138,7 +142,12 @@ export struct LayersPanel {
           } else if (this.viewTab === 2) {
             LayerDsoTab({
               layerStore: this.layerStore,
-              onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) }
+              layerViewStore: this.layerViewStore,
+              onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
+              onLoadDsoSettings: () => { this.onLoadDsoSettings() },
+              onSetDsoSetting: (setting: string, value: boolean | number) => { this.onSetDsoSetting(setting, value) },
+              onSetDsoCatalogMask: (mask: number) => { this.onSetDsoCatalogMask(mask) },
+              onSetDsoTypeMask: (mask: number) => { this.onSetDsoTypeMask(mask) }
             })
           } else if (this.viewTab === 3) {
             LayerMarkingsTab({

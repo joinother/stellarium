@@ -30,6 +30,8 @@ export class ViewSettingsStore {
   configDitheringMode: string = 'Color888'
   liveMode: boolean = true
   uiLocked: boolean = false
+  // TouchPicker acceptance radius; UI offers 66/48 vp presets.
+  touchPickRadiusVp: number = 66
   // 与 StelApp.flagUseDecDegreesCoords / flagUseDecDegreesOther 同步。
   // coords/other 采用乐观更新：点击后立即改本地镜像，桥回执再校准；
   // 失败时回退到最后一次确认值，避免 Toggle 视觉状态与引擎状态脱节。

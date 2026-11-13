@@ -4,15 +4,18 @@
 // 宿主与 panels 直连本模块（§14.8 规则 6：不 import store）。
 
 import { I18n } from '../../pages/I18n'
+import { DEV_TOOLS_ENABLED } from '../config/OhosFeatureFlags'
 
 // CLI 允许的面板名白名单（openUiPanel 命令用）。
+// devTools 只在开发构建开放；正式发布时编译开关会把它一并隐藏。
 export function isCliPanelName(panel: string): boolean {
+  if (panel === 'devTools') return DEV_TOOLS_ENABLED
   return [
     'search', 'time', 'quick', 'place', 'layers', 'more', 'observeHub', 'dataHub', 'automationHub',
     'observing', 'bookmarks', 'oculars', 'angleMeasure', 'navStars', 'polarScope', 'telescope',
     'astro', 'calendar', 'satellites', 'meteorshowers', 'scenery3d', 'catalogs', 'settings', 'tools',
     'scripts', 'commands', 'audio', 'skyCultureMaker', 'mosaicCamera', 'nebulaTextures', 'help',
-    'settingsInformation', 'settingsTime', 'settingsPrivacy', 'ar'
+    'settingsInformation', 'settingsExtra', 'settingsTime', 'settingsPrivacy', 'ar'
   ].includes(panel)
 }
 

@@ -6,6 +6,7 @@
 import { I18n } from '../../pages/I18n'
 import { ShellAction, StellariumBridgeResponse } from '../../pages/StellariumTypes'
 import { CityPreset, SkyCultureMakerValidation, TelescopeControlResponse } from '../../pages/MainWindowModels'
+import { DEV_TOOLS_ENABLED } from '../config/OhosFeatureFlags'
 
 // 所有设备共享同一动作模型。布局只决定面板如何呈现，不改变入口和语义。
 export function primaryDockActions(): ShellAction[] {
@@ -18,7 +19,7 @@ export function primaryDockActions(): ShellAction[] {
 }
 
 export function moreActions(): ShellAction[] {
-  return [
+  const actions: ShellAction[] = [
     { label: I18n.t('more_workspace_observing'), icon: 'observe', panel: 'observeHub', section: I18n.t('more_section_workspace') },
     // 「位置」自从 Dock 中间让位给快捷操作面板后，入口落在工作区组第 2 行（正值天体数据组标题之前）。
     { label: I18n.t('dock_place'), icon: 'location', panel: 'place', section: I18n.t('more_section_workspace') },
@@ -28,6 +29,16 @@ export function moreActions(): ShellAction[] {
     { label: I18n.t('dock_settings'), icon: 'settings', panel: 'settings', section: I18n.t('more_section_system') },
     { icon: 'help', label: I18n.t('c_help'), panel: 'help', section: I18n.t('more_section_system') }
   ]
+  // Development panel entry is always last and disappears from release builds.
+  if (DEV_TOOLS_ENABLED) {
+    actions.push({
+      label: I18n.t('more_dev_tools'),
+      icon: 'code',
+      panel: 'devTools',
+      section: I18n.t('more_dev_section')
+    })
+  }
+  return actions
 }
 
 export function observingHubActions(): ShellAction[] {
@@ -129,13 +140,56 @@ export function validationFromResponse(response: StellariumBridgeResponse): SkyC
 // CJK or plain ASCII, where NFD is a no-op that still costs a full string pass,
 // and this runs once per name per location on the search hot path.
 const LOCATION_DECOMPOSE_RE = /[\u00c0-\u024f\u0300-\u036f]/
+const LOCATION_SEPARATOR_RE = /[\s._'\u2019`-]/
 
 export function normalizeLocationSearchText(value: string): string {
-  const lowered = value.toLocaleLowerCase()
+  // Search folding is not locale-sensitive for our location names (ASCII/CJK).
+  // Locale-aware lowercasing goes through ICU on ArkTS and was the dominant
+  // cost of the offline location index warm-up; plain lowercasing stays in the
+  // runtime's fast path.
+  const lowered = value.toLowerCase()
   const plain = LOCATION_DECOMPOSE_RE.test(lowered)
     ? lowered.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     : lowered
-  return plain.replace(/[\s._'’`-]+/g, '')
+  // Most names have no separators; skip the replace allocation in that case.
+  return LOCATION_SEPARATOR_RE.test(plain)
+    ? plain.replace(/[\s._'’`-]+/g, '')
+    : plain
+}
+
+// Search folding is a pure function, so its result can be reused across queries
+// and languages: a display name in a new language is simply a new raw key. The
+// old on-open index cached the whole dataset (8k entries + arrays + haystack);
+// this caches only the expensive part, which is what the scan actually needs.
+const LOCATION_FOLD_CACHE: Map<string, string> = new Map<string, string>()
+const LOCATION_FOLD_CACHE_LIMIT: number = 50000
+
+export function foldLocationSearchText(value: string): string {
+  if (value.length === 0) return ''
+  const cached = LOCATION_FOLD_CACHE.get(value)
+  if (cached !== undefined) return cached
+  const folded = normalizeLocationSearchText(value)
+  if (LOCATION_FOLD_CACHE.size >= LOCATION_FOLD_CACHE_LIMIT) {
+    LOCATION_FOLD_CACHE.clear()
+  }
+  LOCATION_FOLD_CACHE.set(value, folded)
+  return folded
+}
+
+export function locationFoldCacheSize(): number {
+  return LOCATION_FOLD_CACHE.size
+}
+
+// Scalar scoring over already-folded fields. It deliberately avoids building a
+// per-candidate name array or a concatenated haystack, so a scan only allocates
+// for entries that actually become results.
+export function locationFieldScore(folded: string, query: string, best: number): number {
+  if (query.length === 0) return 0
+  if (folded.length === 0) return best
+  if (folded === query) return 100
+  if (folded.startsWith(query)) return best > 85 ? best : 85
+  if (folded.includes(query)) return best > 70 ? best : 70
+  return best
 }
 
 export function officialLocationAliases(countryCode: string): string {
@@ -192,9 +246,9 @@ export function inferredPanelRouteDirection(fromPanel: string, toPanel: string):
 // 位置搜索文本匹配（原宿主 matchesLocationSearch / locationSearchMatchScore，A2-6）：零宿主读取，
 // 只依赖入参与 normalizeLocationSearchText，属 A1 残留，故并入本模块。函数体逐字搬入。
 export function matchesLocationSearch(text: string, query: string): boolean {
-  const rawQuery = query.trim().toLocaleLowerCase()
+  const rawQuery = query.trim().toLowerCase()
   if (!rawQuery) return false
-  const rawText = text.toLocaleLowerCase()
+  const rawText = text.toLowerCase()
   return rawText.includes(rawQuery) ||
     normalizeLocationSearchText(rawText).includes(normalizeLocationSearchText(rawQuery))
 }

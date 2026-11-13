@@ -2,32 +2,152 @@ import { Theme } from '@kit.ArkUI'
 import { I18n } from '../../pages/I18n'
 import { SavedLocation } from '../../pages/StellariumTypes'
 import { LocationStore } from '../../state/LocationStore'
-import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
-// 本组件职责：位置面板的「已保存位置」行 + 中国城市 / 世界城市快捷 chip 行。
+// 位置面板的「已保存位置 / 最近使用」区。
 //
-// 已保存位置列表走 @ObjectLink store 实时刷新；四个宿主方法以回调注入
-// （handleChip 是全局快捷键分发，setLocation 走原生桥，均由宿主提供）。
+// 已保存位置展示名称 + 坐标·天体，点击应用；长按进入重命名/删除管理。
+// 最近使用由 LocationController 在成功应用观测点后写入。旧的硬编码
+// “中国城市/世界城市”快捷 chip 已移除，推荐入口改为保存与最近使用。
 @Component
 export struct CityChipsRow {
   @ObjectLink store: LocationStore
   @Prop observerPlanet: string = 'Earth'
   @State c: ThemeSlots = DEFAULT_SLOTS
+  @State private actionKey: string = ''
+  @State private renamingKey: string = ''
+  @State private renameDraft: string = ''
+  @State private renameError: string = ''
   onSaveCurrent: () => void = () => {}
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
-  onDeleteLocation: (name: string) => void = () => {}
-  onChip: (id: string) => void = () => {}
+  onDeleteLocation: (key: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
   }
 
+  private coordinateLine(item: SavedLocation): string {
+    return item.lat.toFixed(2) + '° / ' + item.lon.toFixed(2) + '° · ' + item.planet
+  }
+
+  private openActions(key: string): void {
+    this.actionKey = key
+    this.renamingKey = ''
+    this.renameError = ''
+  }
+
+  private startRename(item: SavedLocation, key: string): void {
+    this.actionKey = key
+    this.renamingKey = key
+    this.renameDraft = item.name
+    this.renameError = ''
+  }
+
+  private confirmRename(key: string): void {
+    if (this.store.renameSavedLocation(key, this.renameDraft)) {
+      this.renamingKey = ''
+      this.actionKey = ''
+      this.renameError = ''
+    } else {
+      this.renameError = I18n.t('loc_rename_failed')
+    }
+  }
+
+  private confirmDelete(item: SavedLocation, key: string): void {
+    this.getUIContext().showAlertDialog({
+      title: I18n.t('loc_delete'),
+      message: I18n.t('loc_delete_confirm').replace('%s', item.name),
+      primaryButton: { value: I18n.t('loc_cancel'), action: () => {} },
+      secondaryButton: {
+        value: I18n.t('loc_delete'),
+        fontColor: this.c.errorText,
+        action: () => {
+          this.onDeleteLocation(key)
+          this.actionKey = ''
+          this.renamingKey = ''
+        }
+      }
+    })
+  }
+
+  @Builder
+  savedRow(item: SavedLocation) {
+    Row({ space: 8 }) {
+      Column({ space: 1 }) {
+        Text(item.name)
+          .fontSize(12)
+          .fontColor(this.c.text)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(this.coordinateLine(item))
+          .fontSize(9)
+          .fontColor(this.c.tertiary)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      Text('›')
+        .fontSize(16)
+        .fontColor(this.c.tertiary)
+    }
+      .width('100%')
+      .height(46)
+      .padding({ left: 10, right: 10 })
+      .backgroundColor(this.c.softStrong)
+      .border({ width: 1, color: this.c.softStrong })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .accessibilityText(I18n.t('loc_saved_locations') + ': ' + item.name)
+      .onClick(() => {
+        this.actionKey = ''
+        this.onApplyLocation(item.name, item.lat, item.lon, item.alt, item.planet)
+      })
+      .gesture(LongPressGesture().onAction(() => { this.openActions(this.store.savedLocationKey(item)) }))
+  }
+
+  @Builder
+  recentChip(item: SavedLocation) {
+    Column({ space: 1 }) {
+      Text(item.name)
+        .fontSize(10)
+        .fontColor(this.c.sub)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+      Text(this.coordinateLine(item))
+        .fontSize(9)
+        .fontColor(this.c.tertiary)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+    }
+      .height(38)
+      .padding({ left: 9, right: 9 })
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Start)
+      .backgroundColor(this.c.soft)
+      .border({ width: 1, color: this.c.soft })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .onClick(() => { this.onApplyLocation(item.name, item.lat, item.lon, item.alt, item.planet) })
+  }
+
   build() {
-    Column({ space: 4 }) {
-      // 已保存位置
-      Row() {
-        Text(I18n.t('loc_saved_locations')).fontSize(11).fontColor(this.c.sub).layoutWeight(1)
+    Column({ space: 6 }) {
+      Row({ space: 6 }) {
+        Text(I18n.t('loc_saved_locations'))
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.c.text)
+        Text(this.store.savedLocations.length.toString())
+          .fontSize(9)
+          .fontColor(this.c.sub)
+          .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+          .backgroundColor(this.c.softStrong)
+          .borderRadius(8)
+        Blank()
         Button(I18n.t('loc_save_current'))
           .fontSize(10).fontColor(this.c.tertiary)
           .height(26).padding({ left: 8, right: 8 })
@@ -37,28 +157,92 @@ export struct CityChipsRow {
           .onClick(() => { this.onSaveCurrent() })
       }
       .width('100%')
-      .margin({ top: 6 })
 
       if (this.store.savedLocations.length === 0) {
         Text(I18n.t('loc_no_saved')).fontSize(10).fontColor(this.c.tertiary).width('100%').padding({ left: 2 })
       } else {
         Scroll() {
-          Row({ space: 8 }) {
+          Column({ space: 6 }) {
             ForEach(this.store.savedLocations, (s: SavedLocation) => {
-              Row() {
-                Button(s.name)
-                  .fontSize(10).fontColor(this.c.tertiary)
-                  .height(28).padding({ left: 8, right: 8 })
-                  .backgroundColor(this.c.softStrong)
-                  .border({ width: 1, color: this.c.softStrong })
-                  .borderRadius(UI_RADIUS_CONTROL)
-                .onClick(() => { this.onApplyLocation(s.name, s.lat, s.lon, s.alt, s.planet) })
-                Text('x')
-                  .fontSize(10).fontColor(this.c.errorText)
-                  .margin({ left: 2 })
-                  .onClick(() => { this.onDeleteLocation(s.name) })
-              }
-            }, (s: SavedLocation) => s.name)
+              this.savedRow(s)
+            }, (s: SavedLocation) => this.store.savedLocationKey(s))
+          }
+          .width('100%')
+          .padding({ right: 2 })
+        }
+        .scrollable(ScrollDirection.Vertical)
+        .scrollBar(BarState.Auto)
+        .width('100%')
+        .height(Math.min(this.store.savedLocations.length * 52, 168))
+        .edgeEffect(EdgeEffect.Spring)
+      }
+
+      if (this.actionKey !== '') {
+        Column({ space: 4 }) {
+          if (this.renamingKey === this.actionKey) {
+            Row({ space: 6 }) {
+              TextInput({ text: this.renameDraft, placeholder: I18n.t('loc_rename_hint') })
+                .height(34).fontSize(12).layoutWeight(1)
+                .backgroundColor(this.c.input)
+                .fontColor(this.c.text)
+                .border({ width: 1, color: this.c.inputBorder })
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onChange((value: string) => { this.renameDraft = value })
+                .onSubmit(() => { this.confirmRename(this.actionKey) })
+              Button(I18n.t('loc_confirm'))
+                .fontSize(11).height(32).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.confirmRename(this.actionKey) })
+              Button(I18n.t('loc_cancel'))
+                .fontSize(11).height(32).fontColor(this.c.text).backgroundColor(this.c.bg)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.renamingKey = ''; this.renameError = '' })
+            }.width('100%')
+            if (this.renameError.length > 0) {
+              Text(this.renameError).fontSize(10).fontColor(this.c.errorText).width('100%')
+            }
+          } else {
+            Row({ space: 6 }) {
+              Text(I18n.t('loc_more_actions')).fontSize(10).fontColor(this.c.tertiary).layoutWeight(1)
+              Button(I18n.t('loc_rename'))
+                .fontSize(10).height(28).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => {
+                  const target = this.store.savedLocations.find((s: SavedLocation) =>
+                    this.store.savedLocationKey(s) === this.actionKey)
+                  if (target !== undefined) this.startRename(target, this.actionKey)
+                })
+              Button(I18n.t('loc_delete'))
+                .fontSize(10).height(28).fontColor(this.c.errorText).backgroundColor(this.c.softStrong)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => {
+                  const target = this.store.savedLocations.find((s: SavedLocation) =>
+                    this.store.savedLocationKey(s) === this.actionKey)
+                  if (target !== undefined) this.confirmDelete(target, this.actionKey)
+                })
+              Button(I18n.t('loc_cancel'))
+                .fontSize(10).height(28).fontColor(this.c.sub).backgroundColor(this.c.bg)
+                .borderRadius(UI_RADIUS_CONTROL)
+                .onClick(() => { this.actionKey = ''; this.renameError = '' })
+            }.width('100%')
+          }
+        }
+          .width('100%')
+          .padding({ left: 2, right: 2, top: 2, bottom: 2 })
+      }
+
+      if (this.store.recentLocations.length > 0) {
+        Row({ space: 6 }) {
+          Row().width(2).height(12).backgroundColor(this.c.accent).borderRadius(1)
+          Text(I18n.t('loc_recent')).fontSize(11).fontWeight(FontWeight.Medium).fontColor(this.c.sub)
+        }
+          .width('100%')
+          .margin({ top: 6 })
+        Scroll() {
+          Row({ space: 8 }) {
+            ForEach(this.store.recentLocations, (s: SavedLocation) => {
+              this.recentChip(s)
+            }, (s: SavedLocation) => 'recent|' + this.store.savedLocationKey(s))
           }
           .padding({ left: 2, right: 2 })
         }
@@ -66,72 +250,12 @@ export struct CityChipsRow {
         .scrollBar(BarState.Off)
         .width('100%')
       }
-
-      // 中国城市
-      if (this.observerPlanet === 'Earth') {
-      Text('中国城市').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 6 })
-      Scroll() {
-        Row({ space: 8 }) {
-          ForEach([
-            { label: '北京', id: 'city_Beijing' }, { label: '上海', id: 'city_Shanghai' },
-            { label: '广州', id: 'city_Guangzhou' }, { label: '深圳', id: 'city_Shenzhen' },
-            { label: '成都', id: 'city_Chengdu' }, { label: '杭州', id: 'city_Hangzhou' },
-            { label: '武汉', id: 'city_Wuhan' }, { label: '西安', id: 'city_Xian' },
-            { label: '南京', id: 'city_Nanjing' }, { label: '重庆', id: 'city_Chongqing' },
-            { label: '哈尔滨', id: 'city_Harbin' }, { label: '拉萨', id: 'city_Lhasa' },
-            { label: '乌鲁木齐', id: 'city_Urumqi' }, { label: '香港', id: 'city_HongKong' },
-          ], (c: Record<string, string>) => {
-            Button(c.label)
-              .fontSize(11).fontColor(this.c.tertiary).fontWeight(FontWeight.Medium)
-              .height(30).padding({ left: 10, right: 10 })
-              .backgroundColor(this.c.softStrong)
-              .border({ width: 1, color: this.c.softStrong })
-              .borderRadius(UI_RADIUS_PILL)
-              .shadow({ radius: 12, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-              .onClick(() => { this.onChip(c.id) })
-          }, (c: Record<string, string>) => c.id)
-        }
-        .padding({ left: 2, right: 2 })
-      }
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .width('100%')
-      // 世界城市
-      Text('世界城市').fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 }).margin({ top: 4 })
-      Scroll() {
-        Row({ space: 8 }) {
-          ForEach([
-            { label: '东京', id: 'city_Tokyo' }, { label: '首尔', id: 'city_Seoul' },
-            { label: '新加坡', id: 'city_Singapore' }, { label: '纽约', id: 'city_NewYork' },
-            { label: '伦敦', id: 'city_London' }, { label: '悉尼', id: 'city_Sydney' },
-            { label: '巴黎', id: 'city_Paris' }, { label: '柏林', id: 'city_Berlin' },
-            { label: '莫斯科', id: 'city_Moscow' }, { label: '迪拜', id: 'city_Dubai' },
-            { label: '孟买', id: 'city_Mumbai' }, { label: '开罗', id: 'city_Cairo' },
-            { label: '里约', id: 'city_Rio' }, { label: '洛杉矶', id: 'city_LosAngeles' },
-            { label: '多伦多', id: 'city_Toronto' }, { label: '墨西哥城', id: 'city_Mexico' },
-            { label: '曼谷', id: 'city_Bangkok' }, { label: '伊斯坦布尔', id: 'city_Istanbul' },
-            { label: '阿姆斯特丹', id: 'city_Amsterdam' }, { label: '斯德哥尔摩', id: 'city_Stockholm' },
-            { label: '雷克雅未克', id: 'city_Reykjavik' }, { label: '开普敦', id: 'city_CapeTown' },
-            { label: '布宜诺斯艾利斯', id: 'city_BuenosAires' }, { label: '檀香山', id: 'city_Honolulu' },
-          ], (c: Record<string, string>) => {
-            Button(c.label)
-              .fontSize(11).fontColor(this.c.tertiary).fontWeight(FontWeight.Medium)
-              .height(30).padding({ left: 10, right: 10 })
-              .backgroundColor(this.c.softStrong)
-              .border({ width: 1, color: this.c.softStrong })
-              .borderRadius(UI_RADIUS_PILL)
-              .shadow({ radius: 12, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-              .onClick(() => { this.onChip(c.id) })
-          }, (c: Record<string, string>) => c.id)
-        }
-        .padding({ left: 2, right: 2 })
-      }
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .width('100%')
-      }
     }
-    .width('100%')
-    .margin({ top: 12 })
+      .width('100%')
+      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+      .backgroundColor(this.c.soft)
+      .border({ width: 1, color: this.c.softStrong })
+      .borderRadius(UI_RADIUS_CONTROL)
+      .margin({ top: 2, bottom: 6 })
   }
 }

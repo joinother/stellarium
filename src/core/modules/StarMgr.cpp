@@ -1497,8 +1497,13 @@ QList<StelObjectP > StarMgr::searchAround(const Vec3d& vv, double limFov, const 
 	e1 *= f;
 	e2 *= f;
 	e3 *= f;
-	// Search the triangles
-	SphericalConvexPolygon c(e3, e2, e2, e0);
+	// Search the triangles. Use all four corners: repeating e2 here left e1
+	// unused and made the geodesic search intersect the half-spaces of a
+	// triangle that excludes one side of the square. At high zoom the geodesic
+	// zones are small enough that this could exclude every star inside the
+	// touch radius, producing intermittent "no object here" taps in dense
+	// fields even though the stars are visible.
+	SphericalConvexPolygon c(e3, e2, e1, e0);
 	const GeodesicSearchResult* geodesic_search_result = core->getGeodesicGrid(lastMaxSearchLevel)->search(c.getBoundingSphericalCaps(),lastMaxSearchLevel);
 
 	double withParallax = core->getUseParallax() * core->getParallaxFactor();

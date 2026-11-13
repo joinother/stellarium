@@ -30,6 +30,23 @@
 
 class StelCore;
 
+//! Generic render/pick state exposed by objects to screen-space pickers.
+//! The default implementation treats an object as pickable when it is inside
+//! the visible-sky area; type-specific classes override it to mirror their
+//! renderer (for example Nebula hint/label/outline or Satellite icon/label).
+struct StelObjectPickState
+{
+	bool pickable = true;
+	bool pointDrawn = true;
+	bool labelDrawn = false;
+	bool outlineDrawn = false;
+	bool iconDrawn = false;
+	bool landscapeVisible = true;
+	bool hasMagnitude = false;
+	float magnitude = 99.f;
+	double visualRadiusRad = 0.0;
+};
+
 //! The base abstract class for sky objects used in Stellarium like Stars, Planets, Constellations etc...
 //! Normally you should use StelObjectP instead of StelObject* which have by default the same behaviour,
 //! but which can be added reference counting if needed.
@@ -494,6 +511,13 @@ public:
 	//! Return a priority value which is used to discriminate objects by priority
 	//! As for magnitudes, the lower is the higher priority
 	virtual float getSelectPriority(const StelCore*) const;
+
+	//! Return the current screen/render state used by pickers.
+	//! The default is "pickable when inside the visible-sky area"; derived
+	//! classes override it when their renderer has additional gates.
+	//! @param core the current StelCore
+	//! @return pick state, including whether a footprint/label/icon is drawn
+	virtual StelObjectPickState getPickState(const StelCore* core) const;
 
 	//! Get a color used to display info about the object
 	virtual Vec3f getInfoColor() const {return Vec3f(1.f,1.f,1.f);}

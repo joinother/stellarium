@@ -69,7 +69,14 @@ param(
     # '' = keep the existing CMake cache; 'online'/'offline' sets
     # STELLARIUM_OHOS_OFFLINE for the engine configure step.
     [ValidateSet('', 'offline', 'online')]
-    [string]$NetworkMode = ''
+    [string]$NetworkMode = '',
+    # Build without the metered Map Kit server APIs (static map image,
+    # site.searchByText, site.reverseGeocode). The online Petal basemap and
+    # its terrain/satellite layers are free and remain enabled either way.
+    [switch]$DisableMeteredMapApis,
+    # Hide the Development & testing panel and its More-menu entry. Unset keeps
+    # the tracked source value, which is disabled for official release builds.
+    [switch]$DisableDevTools
 )
 
 $ErrorActionPreference = 'Stop'
@@ -292,6 +299,18 @@ if (-not $SkipResources) {
 
 # --- 4. mirror tracked sources --------------------------------------------
 Invoke-Step 'mirror the tracked sources into the generated project' {
+    # Only override the tracked source when a switch (or an inherited env value)
+    # asks for it; otherwise the copied OhosFeatureFlags.ets stays authoritative.
+    if ($DisableMeteredMapApis) { $env:OHOS_METERED_MAP_APIS = '0' }
+    if ($DisableDevTools) { $env:OHOS_DEV_TOOLS = '0' }
+    $meteredState = 'tracked source default'
+    if ($DisableMeteredMapApis) { $meteredState = 'disabled (forced)' }
+    elseif ($env:OHOS_METERED_MAP_APIS) { $meteredState = "override=$($env:OHOS_METERED_MAP_APIS)" }
+    $devToolsState = 'tracked source default'
+    if ($DisableDevTools) { $devToolsState = 'disabled (forced)' }
+    elseif ($env:OHOS_DEV_TOOLS) { $devToolsState = "override=$($env:OHOS_DEV_TOOLS)" }
+    Write-Host "    metered Map Kit APIs: $meteredState"
+    Write-Host "    development panel: $devToolsState"
     $gitBash = @(
         'C:\Program Files\Git\bin\bash.exe',
         'C:\Program Files (x86)\Git\bin\bash.exe'

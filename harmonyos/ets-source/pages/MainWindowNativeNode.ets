@@ -19,10 +19,12 @@ import { writeClipboardText } from '../qability/ClipboardService'
 import { fileIo, fileUri, picker } from '@kit.CoreFileKit'
 import { util } from '@kit.ArkTS'
 import { image } from '@kit.ImageKit'
+import { map, mapCommon, site } from '@kit.MapKit'
 import hilog from '@ohos.hilog'
 import display from '@ohos.display'
 import preferences from '@ohos.data.preferences'
 import { LOCATION_HIERARCHY } from '../common/location/hierarchy'
+import { smallestAdminDivision } from '../common/location/ReverseGeocodeName'
 import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
 import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep } from '../common/derive/AstronomyGuide'
@@ -45,7 +47,7 @@ import { gyroRotateAboutAxis, gyroMultiplyQuaternions, gyroFilterDeviceVector, g
 import { jdToLocalTimeText, graphModeLabel, graphStartOptionLabel, planetMetricUnit, planetPairBodyName, phenomenonCaption, hecPointColor, hecLayoutPositions, hecPointLeft, hecPointTop, messierNumberOf, minorPlanetNumberOf, fmtDegMin, clamp, distance } from '../common/derive/astro'
 import { resourceText, describeDecodeError, zhNameOf, zhType, planetZh, sensZh, scriptZh, scriptDesc, pluginZh, pluginDesc, pluginHostName, pluginFeatureRoute, approximateTimeZoneDisplay, panelTitleFor, celestialTitle, quickLocationLabel } from '../common/derive/labels'
 import { isSafeSkyCultureArtPath, cleanSkyCultureDescription, cleanSkyCultureNarration, isCliPanelName, parseObservingList, formatRate, configDitheringLabel, isRecordable } from '../common/derive/skycult'
-import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
+import { primaryDockActions, moreActions, observingHubActions, skyDataHubActions, automationHubActions, getCityPreset, validationFromResponse, officialLocationAliases, panelRouteParent, panelRouteRoot, inferredPanelRouteDirection, locationSearchMatchScore } from '../common/derive/actions'
 import { quickActionById, quickCandidateRowsFor } from '../common/derive/quickActions'
 import { pointInsideRect, pointOverlapsUiObstacle, touchScreenX, touchScreenY, touchWindowX, touchWindowY, azBarHeight, compactTopQuickY, baseCompactObjectPeekY, expandedDetailSummaryHeight, isPhoneDetailPeek, useTabletObjectInspector, useExpandedDetailSummary, railTop, expandedMainPanelLeft, panelLeft, panelRight, baseExpandedDetailSummaryX, baseExpandedDetailSummaryY, baseTabletInspectorX, baseTabletInspectorY, tabletInspectorHeight, baseBottomCardX, baseBottomCardY, expandedDockWidth, expandedDockLeft, dockWidthPixels, dockLeft, chromeRowPosXLeft, chromeRowPosXRight, guideCardHeight, guideCardX, guideCardY, scriptControlWidth, scriptControlX, scriptControlY, isPanelBackPoint, isDockPoint, isObjectDetailCardPoint, canShowExpandedDetailSummary, expandedDetailSummaryWidth } from '../common/derive/geometry'
 import { catalogIconForModule, catalogIconForObjectType, wutCategoryOptions, wutCategoryKey, wutDirectionLabel } from '../common/derive/catalog'
@@ -133,6 +135,7 @@ import { AstroStore } from '../state/AstroStore'
 import { LocationStore } from '../state/LocationStore'
 import { CityChipsRow } from '../panels/location/CityChipsRow'
 import { LocationPickerPanel } from '../panels/location/LocationPickerPanel'
+import { LocationFullScreenMap } from '../panels/location/LocationFullScreenMap'
 import { LocationPickerStore } from '../state/LocationPickerStore'
 import { LayerStore } from '../state/LayerStore'
 import { LayerPresetBar } from '../panels/layers/LayerPresetBar'
@@ -148,7 +151,6 @@ import { SkyCultureMakerStore } from '../state/SkyCultureMakerStore'
 import { SkyCultureViewStore } from '../state/SkyCultureViewStore'
 import { SkyCultureSettingsStore } from '../state/SkyCultureSettingsStore'
 import { AstroSelectionGuide, PhenomenonRelationMark } from '../panels/astro/AstroGuides'
-import { ContinuationSection } from '../panels/astro/ContinuationSection'
 import { WutTargetCard } from '../panels/astro/WutTargetCard'
 import { AstroPanel } from '../panels/astro/AstroPanel'
 import { InfoRow } from '../common/ui/InfoRow'
@@ -207,7 +209,6 @@ import { ToolsPanel } from '../panels/tools/ToolsPanel'
 import { RecordingControlBar } from '../panels/tools/RecordingControlBar'
 import { RecordingFocusShell } from '../panels/tools/RecordingFocusShell'
 import { SessionToolStore } from '../state/SessionToolStore'
-import { ObserverPlanetSection, PointingTestSection, WatchGyroSection, TonightEventsSection } from '../panels/astro/SessionToolSections'
 import { GyroTargetGuide } from '../panels/astro/GyroTargetGuide'
 import { SkyCultureMakerPanel } from '../panels/skyculture/SkyCultureMakerPanel'
 import { SkyCultureViewTab } from '../panels/skyculture/SkyCultureViewTab'
@@ -231,6 +232,8 @@ import { NavStarsPanel } from '../panels/panels/NavStarsPanel'
 import { ArchaeoLinesPanel } from '../panels/panels/ArchaeoLinesPanel'
 import { MosaicCameraPanel } from '../panels/panels/MosaicCameraPanel'
 import { MorePanel } from '../panels/panels/MorePanel'
+import { DevToolsPanel } from '../panels/panels/DevToolsPanel'
+import { DEV_TOOLS_ENABLED } from '../common/config/OhosFeatureFlags'
 import { QuickPanel, QuickPanelStore } from '../panels/panels/QuickPanel'
 import { TimePanel } from '../panels/panels/TimePanel'
 import { HelpPanel } from '../panels/panels/HelpPanel'
@@ -914,7 +917,7 @@ class HostLocationPort implements LocationPort {
     return factory()
   }
 
-  async requestLocationPermissions(): Promise<boolean> {
+  async requestLocationPermissions(): Promise<string> {
     const context = this.context()
     const atManager = abilityAccessCtrl.createAtManager()
     const permissions: Array<Permissions> = [
@@ -922,20 +925,63 @@ class HostLocationPort implements LocationPort {
       'ohos.permission.LOCATION'
     ]
     const permissionResult = await atManager.requestPermissionsFromUser(context, permissions)
-    return permissionResult.authResults.some((result: number) => result === 0)
+    const results = permissionResult.authResults
+    hilog.info(0x0000, 'StellariumArkUI', '[gps] permission results=%{public}s',
+      JSON.stringify(results))
+    // The second entry is precise LOCATION and is required for GNSS altitude.
+    if (results.length > 1 && results[1] === 0) return 'precise'
+    if (results.length > 0 && results[0] === 0) return 'approximate'
+    return 'denied'
   }
 
   async getCurrentLocation(): Promise<LocationFix> {
+    // Use the single-fix accuracy priority rather than the old
+    // DAILY_LIFE_SERVICE request: the low-power path may return a
+    // network-derived fix whose altitude is 0 or absent. GNSS is allowed to
+    // take a little longer here because the location panel waits explicitly.
     const current = await geoLocationManager.getCurrentLocation({
-      priority: geoLocationManager.LocationRequestPriority.ACCURACY,
-      scenario: geoLocationManager.LocationRequestScenario.DAILY_LIFE_SERVICE,
-      maxAccuracy: 2000,
-      timeoutMs: 5000
+      locatingPriority: geoLocationManager.LocatingPriority.PRIORITY_ACCURACY,
+      locatingTimeoutMs: 10000,
+      needPoi: false
     })
+    const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[gps] fix lat=%{public}s lon=%{public}s alt=%{public}s altAcc=%{public}s acc=%{public}s',
+      current.latitude.toString(), current.longitude.toString(), altitude.toString(),
+      current.altitudeAccuracy === undefined ? 'unknown' : current.altitudeAccuracy.toString(),
+      current.accuracy.toString())
     return {
       latitude: current.latitude,
       longitude: current.longitude,
-      altitude: Number.isFinite(current.altitude) ? current.altitude : 0
+      altitude,
+      accuracy: current.accuracy,
+      altitudeAccuracy: current.altitudeAccuracy
+    }
+  }
+
+  // GPS is WGS84; Map Kit reverse geocoding expects the map (GCJ02) coordinate
+  // in the mainland. Rectify first, then take only the smallest admin division.
+  async reverseGeocodePlaceName(latitude: number, longitude: number): Promise<string> {
+    try {
+      let mapPoint: mapCommon.LatLng = { latitude: latitude, longitude: longitude }
+      try {
+        const points = await map.rectifyCoordinate(this.context(), [{
+          coordinateType: mapCommon.CoordinateType.WGS84,
+          location: mapPoint
+        }])
+        if (points && points.length > 0) mapPoint = points[0].location
+      } catch (_error) {
+        // Overseas points are already WGS84-compatible; keep the raw point.
+      }
+      const reverse = await site.reverseGeocode({
+        location: mapPoint,
+        radius: 1000,
+        language: I18n.isChineseLanguage() ? 'zh' : 'en'
+      })
+      return smallestAdminDivision(reverse.addressComponent)
+    } catch (_error) {
+      hilog.warn(0x0000, 'StellariumArkUI', '[gps] reverse geocode failed')
+      return ''
     }
   }
 
@@ -955,6 +1001,26 @@ class HostLocationPort implements LocationPort {
       await store.flush()
     } catch (e) {
       hilog.warn(0xD002, 'Stellarium', 'save observer location failed: %{public}s', String(e))
+    }
+  }
+
+  async readSavedLocations(): Promise<string> {
+    try {
+      const store = await preferences.getPreferences(this.context(), LOCATION_STORE)
+      return (await store.get('savedLocations', '')) as string
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'read saved locations failed: %{public}s', String(e))
+      return ''
+    }
+  }
+
+  async writeSavedLocations(json: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context(), LOCATION_STORE)
+      await store.put('savedLocations', json)
+      await store.flush()
+    } catch (e) {
+      hilog.warn(0xD002, 'Stellarium', 'save saved locations failed: %{public}s', String(e))
     }
   }
 }
@@ -1161,6 +1227,17 @@ export struct WindowNativeNode {
   @State private fullInspectorRequested: boolean = false
   @State private compactPanelSnapRatio: number = 0.6
   @State private compactPanelDragOffsetY: number = 0
+  // 拖动/滚动期间关闭面板 backdropBlur/shadow：整块模糊区域每帧重绘会反复重建
+  // RSFilterCache，是位置面板拖动与内容滚动掉帧的主要来源。松手/滚动停止后恢复。
+  @State private panelDragging: boolean = false
+  // 面板内容 Scroll 正在滚动（拖拽或惯性）。与 panelDragging 分开：抓手拖动改变
+  // 面板高度，内容滚动只改 Scroll offset，但两者都会让大面积模糊每帧重算。
+  @State private panelScrolling: boolean = false
+  // 手指按在面板上。空闲玻璃态（5s 无操作后 opacity 0.88 / 模糊 45）在按下瞬间恢复；
+  // 若让它走 320ms 动画，会和滚动启动抢 UI 线程，首帧出现约 50ms 卡顿。
+  @State private panelTouching: boolean = false
+  // 全屏地图是页面级覆盖层；放在宿主根 Stack 才能盖住浮动面板和 Dock。
+  @State private locationMapFullscreen: boolean = false
   // 平板/展开布局的快捷面板同样可上拉展开，底部与 Dock 对齐。
   @State private expandedPanelDragOffsetY: number = 0
   // 时间面板“时间轮 + 倒带/实时”两块的自然高度（vp），用于平板紧凑高度。
@@ -1306,6 +1383,8 @@ export struct WindowNativeNode {
   @State private viewCoordinateOffsetY: number = 0
   /** 观测地 UTC 偏移（小时），由 getState 的 timeText-jd 差值校准，供轻量时间刷新使用 */
   private utcOffsetHours: number = 8
+  /** 最近一次引擎模拟 JD：打开时间面板时用它立即填充时间轮与手动时间。 */
+  private lastSimulationJd: number = 0
   @State private fovSliderValue: number = 60
   @State private currentProjection: string = 'ProjectionPerspective'
   @State private panelIdleOpacity: number = 1.0
@@ -1811,6 +1890,8 @@ export struct WindowNativeNode {
     // 与跨 store 动作（setLocation / pickerMode）经具名 hooks 注入，store 不 import 他 store。
     this.locationStore.attachHooks({
       flashHint: (text: ResourceStr): void => { this.flashHint(text) },
+      readSavedLocations: (): Promise<string> => this.hostLocationPort.readSavedLocations(),
+      writeSavedLocations: (json: string): Promise<void> => this.hostLocationPort.writeSavedLocations(json),
       currentDraft: (): LocationDraft => {
         return {
           name: this.locationPickerStore.locationPickerName,
@@ -1823,9 +1904,13 @@ export struct WindowNativeNode {
       observerPlanet: (): string => this.sessionToolStore.observerPlanet,
       quickLocationSearch: (query: string, observerPlanet: string): Array<LocSearchItem> => this.locationPickerStore.quickLocationSearch(query, observerPlanet),
       isCurrentObserverPlanet: (city: HierCity, observerPlanet: string): boolean => this.locationPickerStore.isCurrentObserverPlanet(city, observerPlanet),
-      locationDisplayName: (name: string): string => this.locationPickerStore.locationDisplayName(name),
-      locationSearchCountryName: (countryCode: string, observerPlanet: string): string => this.locationPickerStore.locationSearchCountryName(countryCode, observerPlanet),
-      translateProvince: (name: string): string => this.locationPickerStore.translateProvince(name),
+      locationDisplayName: (name: string, chinese: boolean, language: string): string =>
+        this.locationPickerStore.locationDisplayNameForSearch(name, chinese, language),
+      locationSearchCountryName: (countryCode: string, observerPlanet: string,
+        chinese: boolean, language: string): string =>
+        this.locationPickerStore.locationSearchCountryNameForSearch(countryCode, observerPlanet, chinese, language),
+      translateProvince: (name: string, chinese: boolean): string =>
+        this.locationPickerStore.translateProvinceForSearch(name, chinese),
       locationPlanet: (city: HierCity): string => this.locationPickerStore.locationPlanet(city),
       applyLocation: (name: string, lat: number, lon: number, alt: number, planet: string): void => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
       setPickerMode: (mode: string): void => { this.locationPickerStore.locationPickMode = mode }
@@ -2936,7 +3021,7 @@ export struct WindowNativeNode {
         stopGyroscope: (updateStatus: boolean): void => this.gyroCtl().stopGyroscope(updateStatus),
         angleMeasureEnabled: (): boolean => this.tools.angleMeasureEnabled,
         measureAngleAt: (x: number, y: number): void => this.measureAngleAt(x, y),
-        requestSkySelection: (x: number, y: number): void => this.requestSkySelection(x, y),
+        requestSkySelection: (x: number, y: number, source: string): void => this.requestSkySelection(x, y, source),
         clearSkySelectionFromDoubleTap: (x: number, y: number): void => this.clearSkySelectionFromDoubleTap(x, y),
         zoomStep: (factor: number): void => this.zoomStep(factor),
         setPanel: (panel: string): void => this.setPanel(panel),
@@ -3696,7 +3781,8 @@ export struct WindowNativeNode {
       rtsCalendarDays: this.astroStore.rtsCalendarDays,
       graphMode: this.astroStore.graphMode,
       eclipseMonths: this.astroStore.eclipseMonths,
-      moonPhaseDays: this.astroStore.moonPhaseDays
+      moonPhaseDays: this.astroStore.moonPhaseDays,
+      touchPickRadiusVp: this.viewSettingsStore.touchPickRadiusVp
     }
     return next
   }
@@ -3763,8 +3849,11 @@ export struct WindowNativeNode {
       rtsCalendarDays: settings.rtsCalendarDays.toString(),
       graphMode: settings.graphMode.toString(),
       eclipseMonths: settings.eclipseMonths.toString(),
-      moonPhaseDays: settings.moonPhaseDays.toString()
+      moonPhaseDays: settings.moonPhaseDays.toString(),
+      touchPickRadiusVp: settings.touchPickRadiusVp.toString()
     }))
+    this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
+    this.callInteractive('setTouchPickRadius', settings.touchPickRadiusVp.toString(), () => {})
     if (this.startupBridgeImpl !== null) {
       this.startupBridge().restoreStartupSettings()
     }
@@ -3920,9 +4009,10 @@ export struct WindowNativeNode {
 // ===== 面板路由与返回 =====
 
   private openPanelFromCli(panel: string): void {
-    if (panel === 'settingsInformation' || panel === 'settingsTime' || panel === 'settingsPrivacy') {
+    if (panel === 'settingsInformation' || panel === 'settingsExtra' || panel === 'settingsTime' || panel === 'settingsPrivacy') {
       this.openPanelFromCli('settings')
-      this.layerCtl().selectConfigTab(panel === 'settingsInformation' ? 1 : (panel === 'settingsTime' ? 3 : -1))
+      this.layerCtl().selectConfigTab(panel === 'settingsInformation' ? 1
+        : (panel === 'settingsExtra' ? 2 : (panel === 'settingsTime' ? 3 : -1)))
       return
     }
     const parent = panelRouteParent(panel)
@@ -4066,13 +4156,26 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true)
+    this.panelDragging = false
+    this.panelScrolling = false
+    this.panelTouching = false
+    // 时间面板首帧必须已经是当前模拟时间：用缓存的 JD 预填时间轮与手动时间，
+    // 不要等面板动画后的 125ms 轮询（否则会先闪一下旧日期/空刻度）。
+    if (panel === 'time' && nextVisible) this.prepareTimePanel()
     // 快捷面板每次打开都回到 6×2；“更多操作”的展开态只是临时 UI 状态。
     if (panel === 'quick' && nextVisible) {
       this.quickPanelStore.setExpanded(false)
     }
-    // 每次打开面板都回到默认高度（0.6），与手机一致。
+    // 手机端“更多功能”默认以加高高度打开；从它进入的子面板沿用当前高度，
+    // 其他入口仍回到标准 0.6。
+    const preserveMorePanelHeight = this.panelVisible && panelRouteRoot(currentPanel) === 'more' &&
+      panelRouteRoot(panel) === 'more'
     if (nextVisible) {
-      this.compactPanelSnapRatio = 0.6
+      if (panel === 'more') {
+        this.compactPanelSnapRatio = 0.9
+      } else if (!preserveMorePanelHeight) {
+        this.compactPanelSnapRatio = 0.6
+      }
       this.compactPanelDragOffsetY = 0
       this.expandedPanelDragOffsetY = 0
     }
@@ -4496,7 +4599,13 @@ export struct WindowNativeNode {
   }
 
   private notePanelTouch(event: TouchEvent): void {
-    if (event.type === TouchType.Down || event.type === TouchType.Up || event.type === TouchType.Cancel) {
+    if (event.type === TouchType.Down) {
+      // 先置位再恢复空闲态：这次 build 用 duration 0 直接切回 opacity 1 / 清晰背景，
+      // 不启动 320ms 过渡，避免与接下来的滚动争用 UI 线程。
+      this.panelTouching = true
+      this.resetPanelIdle()
+    } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.panelTouching = false
       this.resetPanelIdle()
     }
   }
@@ -4679,8 +4788,6 @@ export struct WindowNativeNode {
         if (x >= 1175 && x < 1245) { this.telescopeCtl().lx200SyncSelected(); return true }
         if (x >= 1245 && x <= 1320) { this.telescopeCtl().lx200Abort(); return true }
       }
-    } else if (this.activePanel === 'place') {
-      if (y >= 455 && y <= 505 && x >= 1300 && x <= right) { this.locationCtl().useDeviceLocation(); return true }
     }
 
     return true
@@ -4761,10 +4868,10 @@ export struct WindowNativeNode {
     return panelOnly ? this.keyboardShortcutCtl().handlePanelKey(event, hooks) : this.keyboardShortcutCtl().handleSkyKey(event, hooks)
   }
 
-  private requestSkySelection(x: number, y: number): void {
+  private requestSkySelection(x: number, y: number, source: string = 'touch'): void {
     const requestSerial = ++this.skySelectionRequestSerial
     const payload = Math.round(x).toString() + '|' + Math.round(y).toString() + '|' +
-      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString()
+      Math.round(this.skyWidth).toString() + '|' + Math.round(this.skyHeight).toString() + '|' + source
     this.callInteractive('selectAt', payload, (result) => {
       if (requestSerial !== this.skySelectionRequestSerial) {
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt result ignored after newer selection gesture')
@@ -5282,6 +5389,11 @@ export struct WindowNativeNode {
   // 空串即不渲染该按钮（PanelHeader 既有约定）。
   private panelHeaderActionLabel(): string {
     if (this.activePanel === 'layers') return '清除坐标与标记'
+    // Location panel: one-tap GPS on the title bar, left of the close button.
+    // Earth-only; other bodies keep only the close button.
+    if (this.activePanel === 'place') {
+      return this.sessionToolStore.observerPlanet === 'Earth' ? I18n.t('i0052') : ''
+    }
     if (this.activePanel === 'quick') {
       return I18n.t(this.quickPanelStore.editable ? 'quick_customize_done' : 'quick_customize')
     }
@@ -5300,7 +5412,10 @@ export struct WindowNativeNode {
       this.publishUiPanelState()
       return
     }
-    if (this.activePanel === 'layers') { this.layerCtl().clearMarkingLayers() }
+    if (this.activePanel === 'layers') { this.layerCtl().clearMarkingLayers(); return }
+    if (this.activePanel === 'place' && this.sessionToolStore.observerPlanet === 'Earth') {
+      void this.locationCtl().useDeviceLocation()
+    }
   }
 
   // 快捷面板高度按内容算（标题栏 + 两行图标；编辑态再加候选带与操作条），只用于该面板（见 QUICK-ACTIONS-PANEL-PLAN §6/§13.5）。
@@ -5357,11 +5472,32 @@ export struct WindowNativeNode {
       return this.quickPanelContentHeight()
     }
     const usable = this.compactPanelUsableHeight()
+    if (this.activePanel === 'time') {
+      // 与平板共用同一套时间面板高度：只展开到“时间轮 + 倒带/停止/实时”一行；
+      // 日出/中天/日落及以下内容留在面板内 Scroll，不再用 0.6/0.9 的通用吸附高度。
+      return this.timePanelSpeedHeight(usable, 12 + 16)
+    }
     const minH = Math.min(usable, 280)
     return clamp(usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY, minH, usable)
   }
 
+  // 时间面板（手机紧凑 / 平板展开）共用的展开高度：顶部留白 + 抓手 + 标题栏 +
+  // 标题下间距 + 时间轮/速度栏内容高度。块高度未测得时按可用高度的 0.6 兜底。
+  private timePanelSpeedHeight(usable: number, verticalPadding: number): number {
+    const block = this.timeSpeedBlockHeight
+    if (block <= 0) return Math.min(usable * 0.6, usable)
+    const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
+    return Math.min(verticalPadding + 30 + header + 14 + block, usable)
+  }
+
+  // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
+  // 两者都先关掉模糊/阴影，静止后再恢复（见下方 Scroll 的 onScrollStart/Stop）。
+  private panelChromeBusy(): boolean {
+    return this.panelDragging || this.panelScrolling
+  }
+
   private updateCompactPanelDrag(offsetY: number): void {
+    if (!this.panelDragging) this.panelDragging = true
     const usable = this.compactPanelUsableHeight()
     this.compactPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
     if (this.activePanel === 'quick') {
@@ -5378,7 +5514,10 @@ export struct WindowNativeNode {
     if (this.activePanel === 'quick') {
       const expand = this.compactPanelDragOffsetY < -24
       const collapse = this.compactPanelDragOffsetY > 24
-      this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+      this.getUIContext().animateTo({
+        duration: 320, curve: curves.springMotion(0.46, 0.86),
+        onFinish: () => { this.panelDragging = false }
+      }, () => {
         if (expand) this.quickPanelStore.setExpanded(true)
         if (collapse) this.quickPanelStore.setExpanded(false)
         this.compactPanelDragOffsetY = 0
@@ -5389,7 +5528,10 @@ export struct WindowNativeNode {
     const usable = this.compactPanelUsableHeight()
     const effectiveRatio = (usable * this.compactPanelSnapRatio - this.compactPanelDragOffsetY) / usable
     const nextRatio = this.compactPanelDragOffsetY > 32 ? 0.6 : (effectiveRatio >= 0.74 ? 0.9 : 0.6)
-    this.getUIContext().animateTo({ duration: 360, curve: curves.springMotion(0.46, 0.86) }, () => {
+    this.getUIContext().animateTo({
+      duration: 360, curve: curves.springMotion(0.46, 0.86),
+      onFinish: () => { this.panelDragging = false }
+    }, () => {
       this.compactPanelSnapRatio = nextRatio
       this.compactPanelDragOffsetY = 0
     })
@@ -5399,6 +5541,7 @@ export struct WindowNativeNode {
   private updateExpandedPanelDrag(offsetY: number): void {
     // 仅快捷面板需要拖拽展开；搜索/图层/设置沿用全高，不参与高度拖拽。
     if (this.activePanel !== 'quick') return
+    if (!this.panelDragging) this.panelDragging = true
     const usable = this.expandedPanelUsableHeight()
     this.expandedPanelDragOffsetY = clamp(offsetY, -usable * 0.34, usable * 0.12)
     if (this.expandedPanelDragOffsetY < -8 && !this.quickPanelStore.expanded) {
@@ -5412,7 +5555,10 @@ export struct WindowNativeNode {
     if (this.activePanel !== 'quick') return
     const expand = this.expandedPanelDragOffsetY < -24
     const collapse = this.expandedPanelDragOffsetY > 24
-    this.getUIContext().animateTo({ duration: 320, curve: curves.springMotion(0.46, 0.86) }, () => {
+    this.getUIContext().animateTo({
+      duration: 320, curve: curves.springMotion(0.46, 0.86),
+      onFinish: () => { this.panelDragging = false }
+    }, () => {
       if (expand) this.quickPanelStore.setExpanded(true)
       if (collapse) this.quickPanelStore.setExpanded(false)
       this.expandedPanelDragOffsetY = 0
@@ -5636,10 +5782,7 @@ export struct WindowNativeNode {
       return Math.min(this.quickPanelContentHeight(), usable)
     }
     if (this.activePanel === 'time') {
-      const block = this.timeSpeedBlockHeight
-      if (block <= 0) return usable * 0.6
-      const header = this.timeStore.panelSubtitle(this.activePanel).length > 0 ? 56 : 44
-      return Math.min(18 + 30 + header + 14 + block + 18, usable)
+      return this.timePanelSpeedHeight(usable, 18 + 18)
     }
     return usable
   }
@@ -6056,7 +6199,9 @@ export struct WindowNativeNode {
       return
     }
     if (result.found === true) {
-      const incomingName = result.name && result.name.length > 0 ? result.name : (result.englishName ? result.englishName : '')
+      const incomingName = result.name && result.name.length > 0 ? result.name
+        : (result.englishName && result.englishName.length > 0 ? result.englishName
+          : (result.catalogId && result.catalogId.length > 0 ? result.catalogId : ''))
       // 核心的 type 已经由 StelObject::getObjectTypeI18n() 按官方 .qm
       // 资源本地化。objectType 只保留给音频和旧桥接数据，不应覆盖显示文本。
       const incomingType = (result.type && result.type.length > 0)
@@ -6935,6 +7080,7 @@ export struct WindowNativeNode {
     this.callInteractive('getSimulationTime', '', (r: StellariumBridgeResponse) => {
       if (r.ok !== true || r.jd === undefined) { return }
       const jd: number = r.jd as number
+      this.lastSimulationJd = jd
       // 固定走本地 jd 格式化：jdToLocalTimeText 返回定长 'YYYY-MM-DD HH:mm:ss'，截取后 5 位为 HH:mm
       const text: string = jdToLocalTimeText(jd + this.utcOffsetHours / 24.0).substring(11, 16)
       if (text !== this.dockClockText) {
@@ -7028,6 +7174,15 @@ export struct WindowNativeNode {
       )
     }
     return this.timeWheelController
+  }
+
+  private prepareTimePanel(): void {
+    // 引擎尚未就绪时退回设备当前时刻，至少不显示硬编码旧日期。
+    const jd = this.lastSimulationJd > 0
+      ? this.lastSimulationJd
+      : (Date.now() / 86400000.0 + 2440587.5)
+    this.wheel().seedFromSimulation(jd)
+    this.timeStore.syncManualTimeFromJd(jd, this.utcOffsetHours)
   }
 
   private zoomStep(factor: number): void {
@@ -7342,6 +7497,9 @@ export struct WindowNativeNode {
     if (result.timeRate !== undefined) {
       this.timeCtl().syncTimeRateState(result.timeRate as number)
     }
+    if (result.jd !== undefined) {
+      this.lastSimulationJd = result.jd as number
+    }
     if (result.timeText !== undefined) {
       this.timeStore.observationTimeText = result.formattedTime ?? this.formatObservationTime(result.timeText)
       // 顺便校准 UTC 偏移（timeText 已含观测地偏移，jd 是纯 UTC；差值即偏移小时数）
@@ -7363,7 +7521,9 @@ export struct WindowNativeNode {
         // 位置名按来源 + 观测星球取值（GPS / 自定义位置 / 名称），与快捷面板标题栏同一规则；
         // 否则引擎回读的「自定义位置」会把自动定位结果冲掉。
         this.locationText = quickLocationLabel(this.locationPickerStore.locationSource,
-          this.locationPickerStore.locationDisplayName(result.locationName), planetName) + ' · ' + planetZh(planetName)
+          this.locationPickerStore.locationDisplayName(result.locationName), planetName,
+          this.locationPickerStore.locationSource === 'gps' ? this.locationPickerStore.gpsPlaceDetail : '') +
+          ' · ' + planetZh(planetName)
       }
       if (result.altitude !== undefined) {
         this.altitudeText = result.altitude.toFixed(0) + ' m'
@@ -7475,13 +7635,19 @@ export struct WindowNativeNode {
   }
 
   private flashHint(text: ResourceStr): void {
+    this.clearHint()
     this.actionHint = text
+    this.hintTimer = setTimeout(() => {
+      this.clearHint()
+    }, 1600) as number
+  }
+
+  private clearHint(): void {
     if (this.hintTimer !== 0) {
       clearTimeout(this.hintTimer)
+      this.hintTimer = 0
     }
-    this.hintTimer = setTimeout(() => {
-      this.actionHint = ''
-    }, 1600) as number
+    this.actionHint = ''
   }
 
   // 用系统浏览器打开外部链接（星表下载页等）。宿主持有 UI 上下文，面板只回调 URL。
@@ -8103,7 +8269,7 @@ export struct WindowNativeNode {
                 chromeRowY: this.chromeRowY(),
                 chromeRowWidth: dockWidthPixels(this.isExpandedLayout, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.EDGE_MARGIN, this.compactDockWidthPercent()),
                 chromeRowPosXLeft: chromeRowPosXLeft(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
-                chromeRowPosXRight: chromeRowPosXRight(this.isExpandedLayout, this.skyWidth, this.EDGE_MARGIN, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
+                chromeRowPosXRight: chromeRowPosXRight(this.isExpandedLayout, this.EDGE_MARGIN, this.skyWidth, this.panelVisible, this.panelWidth, this.panelOffsetX, this.compactDockWidthPercent()),
                 chromeZoomHorizontal: this.chromeZoomHorizontal(),
                 onGyro: () => {
                   hilog.info(0x0000, 'StellariumArkUI', '[DIAG] gyro button CLICKED gyroscopeEnabled=%{public}s', this.gyroStore.gyroscopeEnabled.toString())
@@ -8275,6 +8441,42 @@ export struct WindowNativeNode {
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
 
+      if (this.locationMapFullscreen && !this.sessionToolStore.isObserverOverviewPoint()) {
+        LocationFullScreenMap({
+          locationStore: this.locationStore,
+          observerPlanet: this.sessionToolStore.observerPlanet,
+          latitude: this.locationPickerStore.locationPickerLatitude,
+          longitude: this.locationPickerStore.locationPickerLongitude,
+          mapTexture: this.sessionToolStore.observerPlanetMapTexture(),
+          mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+          // The local globe needs no native engine or online map service; it
+          // still follows the app's privacy consent, but not the native startup
+          // gate that the online Petal map requires.
+          localGlobeAllowed: this.applicationInForeground && hasCurrentPrivacyConsent(),
+          expandedLayout: this.isExpandedLayout,
+          skyWidth: this.skyWidth,
+          skyHeight: this.skyHeight,
+          altitude: this.locationPickerStore.locationPickerAltitude,
+          altitudeSource: this.locationPickerStore.locationSource,
+          locationName: this.locationPickerStore.locationPickerName,
+          locationPort: this.hostLocationPort,
+          planetLabel: (en: string) => planetZh(en),
+          contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
+          onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {
+            this.locationPickerStore.locationPickerName = name
+            this.locationPickerStore.locationPickerAltitude = Math.round(altitude)
+            this.locationPickerStore.locationSource = source
+            this.locationPickerStore.applyPickedCoordinates(latitude, longitude)
+            this.locationMapFullscreen = false
+            // "选此点" now applies the observer immediately; previously it
+            // only filled the draft and the user had to press Apply again.
+            this.locationCtl().applyPickerLocation()
+          },
+          onClose: () => { this.locationMapFullscreen = false }
+        })
+          .width('100%').height('100%').zIndex(200)
+      }
+
     }
       .width('100%')
       .height('100%')
@@ -8326,6 +8528,7 @@ export struct WindowNativeNode {
         routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
         headerActionLabel: this.panelHeaderActionLabel(),
         headerActionIcon: this.panelHeaderActionIcon(),
+        headerActionAccent: this.activePanel === 'place',
         titleAsButton: this.activePanel === 'quick',
         onBack: () => { this.handlePanelBackTap() },
         onClose: () => { this.closePanel(true); this.resetPanelIdle() },
@@ -8352,6 +8555,8 @@ export struct WindowNativeNode {
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
+        .onScrollStop(() => { this.panelScrolling = false })
         .onAppear(() => { this.resetPanelScroll(this.widePanelScroller) })
     }
       .width(this.panelWidth)
@@ -8359,15 +8564,15 @@ export struct WindowNativeNode {
       .constraintSize({ maxHeight: this.activePanel === 'quick' ? this.quickPanelContentHeight() : this.expandedPanelHeight() })
       .padding({ top: 18, left: 18, right: 18, bottom: 18 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
-      .shadow({ radius: 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
+      .shadow({ radius: this.panelChromeBusy() ? 0 : 34, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 18 })
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
       .scale({ x: this.panelIdleOpacity < 1 ? 0.97 : 1.0, y: this.panelIdleOpacity < 1 ? 0.97 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
-      .animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })
+      .animation({ duration: (this.panelChromeBusy() || this.panelTouching) ? 0 : 320, curve: curves.springMotion(0.46, 0.86) })
       .transition(TransitionEffect.asymmetric(
         TransitionEffect.OPACITY.animation({ duration: 260, curve: curves.springMotion(0.46, 0.86) })
           .combine(TransitionEffect.translate({ x: -22, y: 0 }).animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })),
@@ -8385,6 +8590,7 @@ export struct WindowNativeNode {
         routeOpacity: this.panelRouteOpacity, routeOffsetX: this.panelRouteOffsetX,
         headerActionLabel: this.panelHeaderActionLabel(),
         headerActionIcon: this.panelHeaderActionIcon(),
+        headerActionAccent: this.activePanel === 'place',
         titleAsButton: this.activePanel === 'quick',
         onBack: () => { this.handlePanelBackTap() },
         onClose: () => { this.closePanel(true); this.resetPanelIdle() },
@@ -8409,16 +8615,18 @@ export struct WindowNativeNode {
         .id('panel-scroll-' + this.i18nLang)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
+        .onScrollStop(() => { this.panelScrolling = false })
         .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
     }
       .width(this.isFoldHoverLayout ? '64%' : '94%')
       .height(this.compactPanelHeight())
       .padding({ top: 12, left: this.compactPanelHorizontalPadding(), right: this.compactPanelHorizontalPadding(), bottom: 16 })
       .backgroundColor(this.panelIdleGlass ? this.hostSlots().panelGlass : this.hostSlots().panelGlassStrong)
-      .backdropBlur(this.panelIdleGlass ? 45 : 30)
+      .backdropBlur(this.panelChromeBusy() ? 0 : 30)
       .border({ width: 0.5, color: this.hostSlots().border })
       .borderRadius(UI_RADIUS_SHEET)
-      .shadow({ radius: 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
+      .shadow({ radius: this.panelChromeBusy() ? 0 : 30, color: this.hostSlots().shadowSoft, offsetX: 0, offsetY: 14 })
       .margin({ bottom: 10 })
       .hitTestBehavior(HitTestMode.Default)
       .onTouch((event: TouchEvent) => { this.notePanelTouch(event) })
@@ -8426,7 +8634,7 @@ export struct WindowNativeNode {
       .scale({ x: this.panelIdleOpacity < 1 ? 0.98 : 1.0, y: this.panelIdleOpacity < 1 ? 0.98 : 1.0 })
       .opacity(this.panelIdleOpacity * this.panelPresentationOpacity)
       .translate({ y: this.panelPresentationOffsetY })
-      .animation({ duration: 320, curve: curves.springMotion(0.46, 0.86) })
+      .animation({ duration: (this.panelChromeBusy() || this.panelTouching) ? 0 : 320, curve: curves.springMotion(0.46, 0.86) })
   }
 
   @Builder
@@ -8437,6 +8645,14 @@ export struct WindowNativeNode {
         languageRevision: this.languageStore.languageRevision,
         startsSection: (item: ShellAction, index: number) => this.moreActionStartsSection(item, index),
         onOpenPanel: (panel: string) => { this.openSubPanel(panel) }
+      })
+    } else if (DEV_TOOLS_ENABLED && this.activePanel === 'devTools') {
+      DevToolsPanel({
+        sessionToolStore: this.sessionToolStore,
+        onPoint: () => { this.pointAtSkyTest() },
+        onSend: () => { this.gyroCtl().watchGyroSend() },
+        onStart: () => { this.gyroCtl().watchGyroStart() },
+        onStop: () => { this.gyroCtl().watchGyroStop() }
       })
     } else if (this.activePanel === 'observeHub') {
       HubActionList({
@@ -8548,34 +8764,25 @@ export struct WindowNativeNode {
         altitudeText: this.altitudeText,
         expandedLayout: this.isExpandedLayout,
         skyWidth: this.skyWidth,
-        mapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        fixedObserverPoint: this.sessionToolStore.isObserverOverviewPoint(),
+        previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
+        mapSuspended: this.locationMapFullscreen,
+        onOpenFullMap: () => { this.locationMapFullscreen = true },
         planetLabel: (en: string) => planetZh(en),
         contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
-        onUseDeviceLocation: () => { this.locationCtl().useDeviceLocation() },
         onSearchLocations: (query: string) => { this.locationStore.searchLocations(query) },
         onInputFocus: () => { this.keyboardTextInputFocused = true },
         onInputBlur: () => { this.keyboardTextInputFocused = false },
         onPickSearchItem: (item: LocSearchItem) => { this.locationStore.selectSearchLocation(item) },
         onApply: () => { this.locationCtl().applyPickerLocation() },
-        onSelectMapProvider: (provider: string) => { this.locationCtl().setLocationMapProvider(provider) },
-        onPickMap: (latitude: number, longitude: number) => { this.locationPickerStore.applyPickedCoordinates(latitude, longitude) },
-        onMapFallback: () => { this.locationCtl().setLocationMapProvider('offline') },
         onSelectContinent: (c: string) => { this.locationCtl().selectContinent(c) },
         onSelectCountry: (c: string) => { this.locationCtl().selectCountry(c) },
         onSelectRegion: (r: string) => { this.locationCtl().selectRegion(r) },
         onSelectCity: (c: string) => { this.locationCtl().selectCityByName(c) },
         onSaveCurrent: () => { this.locationStore.saveCurrentLocation() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
-        onDeleteLocation: (name: string) => { this.locationStore.deleteSavedLocation(name) },
-        onChip: (id: string) => { this.timeCtl().handleChip(id) },
+        onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
-        onPoint: () => { this.pointAtSkyTest() },
-        onSend: () => { this.gyroCtl().watchGyroSend() },
-        onStart: () => { this.gyroCtl().watchGyroStart() },
-        onStop: () => { this.gyroCtl().watchGyroStop() },
-        onExport: () => { this.sessionToolStore.sessionExport() },
-        onSessionApply: () => { this.sessionToolStore.sessionApply() },
-        onHandoff: () => { this.sessionToolStore.sessionHandoff() },
         onRefreshTonight: () => { this.sessionToolStore.refreshTonight(true) },
         onJump: (jd: number, lock: string, title: string) => { this.gotoTonightEvent(jd, lock, title) }
       })
@@ -8612,6 +8819,10 @@ export struct WindowNativeNode {
         onSetOrbitThickness: (value: number) => { this.layerCtl().setOrbitDisplayThickness(value) },
         onSetOrbitColorStyle: (index: number) => { this.layerCtl().setOrbitColorStyle(index) },
         onLoadOrbitSettings: () => { this.layerViewStore.loadOrbitDisplaySettings() },
+        onLoadDsoSettings: () => { this.layerViewStore.loadNebulaDisplaySettings() },
+        onSetDsoSetting: (setting: string, value: boolean | number) => { this.layerCtl().setNebulaSetting(setting, value) },
+        onSetDsoCatalogMask: (mask: number) => { this.layerCtl().setNebulaCatalogMask(mask) },
+        onSetDsoTypeMask: (mask: number) => { this.layerCtl().setNebulaTypeMask(mask) },
         onSetTrailFlag: (setting: string, enabled: boolean) => { this.layerCtl().setTrailDisplayFlag(setting, enabled) },
         onSetTrailNumber: (setting: string, value: number) => { this.layerCtl().setTrailDisplayNumber(setting, value) },
         onLoadTrailSettings: () => { this.layerViewStore.loadTrailDisplaySettings() },
@@ -8808,6 +9019,13 @@ export struct WindowNativeNode {
         setConfigurationDithering: (value: string) => { this.viewSettingsStore.setConfigurationDithering(value) },
         setDecimalDegreesCoords: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(enabled, this.viewSettingsStore.decimalDegreesOther) },
         setDecimalDegreesOther: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(this.viewSettingsStore.decimalDegreesCoords, enabled) },
+        setTouchPickRadius: (radiusVp: number) => {
+          this.viewSettingsStore.touchPickRadiusVp = radiusVp
+          this.callInteractive('setTouchPickRadius', radiusVp.toString(), (r) => {
+            if (r.ok !== true) this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
+          })
+          this.saveAppSettings()
+        },
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },
@@ -8904,6 +9122,7 @@ export struct WindowNativeNode {
         store: this.astroStore,
         wutStore: this.wutStore,
         objectDetailStore: this.objectDetailStore,
+        sessionToolStore: this.sessionToolStore,
         scroller: this.astroPanelScroller,
         host: {
           almanacHoursLabel: (key: string) => this.astroStore.almanacHoursLabel(key),
@@ -8993,6 +9212,9 @@ export struct WindowNativeNode {
           reloadEclipses: () => { this.astroCalcCtl().reloadEclipses() },
           rtsCalendarStartOptionLabel: (offsetDays: number) => this.astroStore.rtsCalendarStartOptionLabel(offsetDays),
           searchObject: (name: string, catalogModuleId?: string, exactSelectionPayload?: string, placement?: string) => { this.searchObject(name, catalogModuleId, exactSelectionPayload, placement) },
+          sessionExport: () => { this.sessionToolStore.sessionExport() },
+          sessionApply: () => { this.sessionToolStore.sessionApply() },
+          sessionHandoff: () => { this.sessionToolStore.sessionHandoff() },
           selectAstroFilter: (key: string, value: string) => { this.astroCalcCtl().selectAstroFilter(key, value) },
           selectAstroGroup: (group: number) => { this.astroCalcCtl().selectAstroGroup(group) },
           selectAstroTab: (tab: number) => { this.astroCalcCtl().selectAstroTab(tab) },

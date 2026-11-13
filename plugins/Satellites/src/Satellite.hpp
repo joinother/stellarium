@@ -36,6 +36,7 @@
 
 class StelPainter;
 class StelLocation;
+class StelProjector;
 
 //! Radio communication channel properties.
 //! @ingroup satellites
@@ -110,6 +111,40 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(SatFlags)
 // Allows the type to be used by QVariant
 Q_DECLARE_METATYPE(GroupSet)
 Q_DECLARE_METATYPE(SatFlags)
+
+//! Shared satellite render/pick state. Both Satellite::draw() and
+//! screen-space pickers use this so a satellite is pickable exactly when at
+//! least one visible representation (point source, label, icon) was drawn.
+struct SatelliteRenderState
+{
+	bool displayed = false;
+	bool orbitValid = false;
+	bool dateRangeOk = false;
+	bool timeRateOk = false;
+	bool afterLaunch = false;
+	bool altitudeFilterPass = true;
+	bool magnitudeFilterPass = true;
+	bool projectable = false;
+	bool landscapeVisible = true;
+	bool transitSunMoon = false;
+	bool pointDrawn = false;
+	bool labelDrawn = false;
+	bool iconDrawn = false;
+	int spriteSize = 0;
+	float magSat = 99.f;
+	float txtMag = 99.f;
+	float limitMag = 0.f;
+	gSatWrapper::Visibility visibility = gSatWrapper::UNKNOWN;
+	Vec3d screenWin;
+
+	bool rendered() const { return pointDrawn || labelDrawn || iconDrawn; }
+	bool pickable() const
+	{
+		return displayed && orbitValid && dateRangeOk && timeRateOk && afterLaunch
+			&& altitudeFilterPass && magnitudeFilterPass && projectable
+			&& landscapeVisible && rendered();
+	}
+};
 
 //! @class Satellite
 //! A representation of a satellite in Earth orbit.
@@ -289,6 +324,15 @@ public:
 
 	//! Get operational status of satellite
 	QString getOperationalStatus() const;
+
+	//! Compute the current draw/pick state. draw() and the touch picker both
+	//! use this so "visible but not selectable" cannot drift.
+	SatelliteRenderState getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk) const;
+
+	StelObjectPickState getPickState(const StelCore* core) const override;
+
+	//! Time-rate gate used by draw() and the picker.
+	static double getTimeRateLimit() { return timeRateLimit; }
 
 	void recomputeSatData();
 

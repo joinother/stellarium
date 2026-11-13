@@ -30,6 +30,35 @@ test('compact sheets share the Dock baseline across short windows and safe inset
   assert.match(page, /\.position\(\{ x: 0, y: this\.compactPanelTop\(\) \}\)/);
 });
 
+test('compact time sheet stops at the speed-chip row on phones', () => {
+  const host = {
+    activePanel: 'time', compactPanelSnapRatio: 0.9, compactPanelDragOffsetY: -80,
+    timeSpeedBlockHeight: 240,
+    timeStore: { panelSubtitle: () => '2026-11-13 08:30' },
+    compactPanelUsableHeight: () => 600,
+    timePanelSpeedHeight: method('timePanelSpeedHeight', 'usable, verticalPadding'),
+    compactPanelHeight: method('compactPanelHeight')
+  };
+  // top padding + handle + header + header gap + measured content + bottom padding
+  assert.equal(host.compactPanelHeight(), 12 + 30 + 56 + 14 + 240 + 16);
+  // Before the first layout pass, keep the previous 0.6 fallback.
+  host.timeSpeedBlockHeight = 0;
+  assert.equal(host.compactPanelHeight(), 360);
+  // The row below the speed chips must not enlarge the sheet; content scrolls.
+  host.timeSpeedBlockHeight = 240;
+  host.compactPanelSnapRatio = 0.9;
+  host.compactPanelDragOffsetY = -1000;
+  assert.equal(host.compactPanelHeight(), 12 + 30 + 56 + 14 + 240 + 16);
+  // Tablet uses the same helper; only its outer vertical padding differs.
+  assert.equal(host.timePanelSpeedHeight(600, 18 + 18), 18 + 30 + 56 + 14 + 240 + 18);
+});
+
+test('the More sheet opens raised and keeps its height for subpanels', () => {
+  assert.match(page, /const preserveMorePanelHeight = this\.panelVisible && panelRouteRoot\(currentPanel\) === 'more' &&[\s\S]{0,40}panelRouteRoot\(panel\) === 'more'/);
+  assert.match(page, /if \(panel === 'more'\) \{\s*this\.compactPanelSnapRatio = 0\.9/);
+  assert.match(page, /else if \(!preserveMorePanelHeight\) \{\s*this\.compactPanelSnapRatio = 0\.6/);
+});
+
 test('expanded object details and dragging cannot cover the compact Dock', () => {
   for (const height of [320, 400, 469, 600]) {
     for (const offset of [-1000, 0, 1000]) {

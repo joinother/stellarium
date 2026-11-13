@@ -533,6 +533,7 @@ public slots:
 	//! Emits settingsChanged() if the value changes.
 	void setFlagHintsVisible(bool b);
 	bool getFlagHintsVisible() {return hintFader;}
+	float getHintFade() const {return hintFader.getInterstate();}
 
 	//! Set whether text labels should be displayed next to satellite hints.
 	//! Emits settingsChanged() if the value changes.

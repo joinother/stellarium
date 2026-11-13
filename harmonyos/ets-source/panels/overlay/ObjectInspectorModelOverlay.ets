@@ -58,6 +58,11 @@ export struct ObjectInspectorModelOverlay {
           if (this.objectMediaStore.objectInspectorModelPixelMap !== undefined) {
             Image(this.objectMediaStore.objectInspectorModelPixelMap).width('100%').height('100%').objectFit(ImageFit.Contain)
               .hitTestBehavior(HitTestMode.None)
+            // Red night wash over the immersive model; HitTestMode.None keeps
+            // rotation/zoom gestures on the stage underneath.
+            Row().width('100%').height('100%')
+              .backgroundColor(this.c.nightMask)
+              .hitTestBehavior(HitTestMode.None)
           }
         }.width('100%').layoutWeight(1).clip(true)
           .id('object-model-stage')

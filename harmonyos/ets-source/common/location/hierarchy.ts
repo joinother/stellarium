@@ -1,6 +1,4 @@
-// Auto-generated from Stellarium base_locations.txt (continent -> country -> region -> cities).
-// The mainland-China buckets are augmented from scripts/data/ohos-china-locations.json;
-// re-run scripts/import-ohos-china-locations.mjs after changing that file.
+// Auto-generated from Stellarium base_locations.txt (continent -> country -> region -> cities)
 export const LOCATION_HIERARCHY: Record<string, Record<string, Array<{n:string;la:number;lo:number;al:number;p:number;country:string;province?:string;planet?:string}>>> =
 {
  "亚洲": {
@@ -81896,6 +81894,602 @@ export const LOCATION_HIERARCHY: Record<string, Record<string, Array<{n:string;l
     "country": "ZZ",
     "province": "USA",
     "planet": "Moon"
+   },
+   {
+    "n": "Surveyor 7",
+    "la": -41.01,
+    "lo": -11.41,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Lunar Orbiter 1",
+    "la": 7,
+    "lo": 161,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Lunar Orbiter 2",
+    "la": 3,
+    "lo": 119.1,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Lunar Orbiter 3",
+    "la": 14.32,
+    "lo": -92.7,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Lunar Orbiter 5",
+    "la": -2.79,
+    "lo": -83,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Lunar Prospector",
+    "la": -87.7,
+    "lo": 42.1,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chang'e 1",
+    "la": -1.5,
+    "lo": 52.36,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chang'e 3",
+    "la": 44.12,
+    "lo": -19.51,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Yutu",
+    "la": 44.12,
+    "lo": -19.51,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chang'e 4",
+    "la": -45.5,
+    "lo": 177.6,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Yutu-2",
+    "la": -44.8,
+    "lo": 175.9,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chang'e 5",
+    "la": 43.0568,
+    "lo": -51.91648,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Kaguya",
+    "la": -65.5,
+    "lo": 80.4,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Japan",
+    "planet": "Moon"
+   },
+   {
+    "n": "Hiten",
+    "la": -34.3,
+    "lo": 55.6,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Japan",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chandrayaan-1",
+    "la": -89.76,
+    "lo": 39.4,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "India",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chandrayaan-2",
+    "la": -70.881,
+    "lo": 22.784,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "India",
+    "planet": "Moon"
+   },
+   {
+    "n": "Chandrayaan-3",
+    "la": -69.373,
+    "lo": 32.319,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "India",
+    "planet": "Moon"
+   },
+   {
+    "n": "Beresheet",
+    "la": 32.5956,
+    "lo": 19.3496,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Israel",
+    "planet": "Moon"
+   },
+   {
+    "n": "SMART-1",
+    "la": -34.262,
+    "lo": -46.193,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Europe",
+    "planet": "Moon"
+   },
+   {
+    "n": "LCROSS Shepherding Spacecraft",
+    "la": -84.729,
+    "lo": -49.36,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "LCROSS Centaur",
+    "la": -84.675,
+    "lo": -48.725,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "GRAIL",
+    "la": 75.62,
+    "lo": -26.63,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "LADEE",
+    "la": 10.8,
+    "lo": -91.6,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Moon"
+   },
+   {
+    "n": "Longjiang-2",
+    "la": 16.6956,
+    "lo": 159.517,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Moon"
+   },
+   {
+    "n": "Hakuto-R",
+    "la": 47.581,
+    "lo": 44.094,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Japan",
+    "planet": "Moon"
+   },
+   {
+    "n": "SLIM",
+    "la": -3.3,
+    "lo": 25.2,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Japan",
+    "planet": "Moon"
+   }
+  ]
+ },
+ "火星": {
+  "火星表面地点": [
+   {
+    "n": "Mars 2",
+    "la": -45,
+    "lo": -58,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Mars"
+   },
+   {
+    "n": "Mars 3",
+    "la": -45,
+    "lo": -158,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Mars"
+   },
+   {
+    "n": "Mars 6",
+    "la": -23.9,
+    "lo": -19.42,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Mars"
+   },
+   {
+    "n": "Viking 1",
+    "la": 22.27,
+    "lo": -47.95,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Viking 2",
+    "la": 47.967,
+    "lo": 134.263,
+    "al": 39,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Mars Pathfinder",
+    "la": 19.13,
+    "lo": -33.22,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Mars Polar Lander",
+    "la": -76,
+    "lo": 164,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Beagle 2",
+    "la": 11.5265,
+    "lo": 90.4295,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Europe",
+    "planet": "Mars"
+   },
+   {
+    "n": "Spirit",
+    "la": -14.5684,
+    "lo": 175.472636,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Opportunity",
+    "la": -1.9462,
+    "lo": -5.5265999999999735,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Phoenix",
+    "la": 68.22,
+    "lo": -125.7,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Curiosity",
+    "la": -4.5895,
+    "lo": 137.4417,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Schiaparelli EDM lander",
+    "la": -2.07,
+    "lo": -6.21,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "EU",
+    "planet": "Mars"
+   },
+   {
+    "n": "InSight",
+    "la": 4.5,
+    "lo": 135,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   },
+   {
+    "n": "Zhurong",
+    "la": 24.748,
+    "lo": 110.318,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "China",
+    "planet": "Mars"
+   },
+   {
+    "n": "Perseverance",
+    "la": 18.4457,
+    "lo": 77.4508,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Mars"
+   }
+  ]
+ },
+ "金星": {
+  "金星表面地点": [
+   {
+    "n": "Venera 3",
+    "la": 20,
+    "lo": 80,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 4",
+    "la": 19,
+    "lo": 38,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 5",
+    "la": -3,
+    "lo": 18,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 6",
+    "la": -5,
+    "lo": 23,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 7",
+    "la": -5,
+    "lo": -9,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 8",
+    "la": -10.7,
+    "lo": -24.75,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 9",
+    "la": 31.01,
+    "lo": -68.36000000000001,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 10",
+    "la": 15.42,
+    "lo": -68.49000000000001,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 11",
+    "la": -14,
+    "lo": -61,
+    "al": 237,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 12",
+    "la": -7,
+    "lo": -66,
+    "al": 104,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 13",
+    "la": -7.5,
+    "lo": -57,
+    "al": 256,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Venera 14",
+    "la": -13.25,
+    "lo": -50,
+    "al": 253,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Vega 1",
+    "la": 7.5,
+    "lo": 177.7,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   },
+   {
+    "n": "Vega 2",
+    "la": -8.5,
+    "lo": 164.5,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USSR",
+    "planet": "Venus"
+   }
+  ]
+ },
+ "土卫六": {
+  "土卫六表面地点": [
+   {
+    "n": "Huygens",
+    "la": -15,
+    "lo": 168,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "Europe",
+    "planet": "Titan"
+   }
+  ]
+ },
+ "小行星贝努": {
+  "贝努表面地点": [
+   {
+    "n": "OSIRIS-REx",
+    "la": 56,
+    "lo": 43,
+    "al": 0,
+    "p": 0,
+    "country": "ZZ",
+    "province": "USA",
+    "planet": "Bennu"
    }
   ]
  }

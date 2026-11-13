@@ -165,7 +165,25 @@ node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyIm
 node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyImageStatus --payload 'all|0|32' --json
 ```
 
-`--payload` 沿用 `StellariumOhos_command` 的原有字符串格式。例如 `selectAt` 使用 `x|y|skyW|skyH`，`setActionChecked` 使用 `actionId|1`。CLI 会自动处理 `aa --ps` 对负号开头字符串的限制，并对 payload 做 shell 转义，保证竖线分隔参数不会被 `hdc` 远端 shell 当成管道。命令名不在 CLI 中硬编码，桥接层已支持的命令均可直接调用；可执行 `--help` 查看工具参数。
+`--payload` 沿用 `StellariumOhos_command` 的原有字符串格式。例如 `selectAt` 使用 `x|y|skyW|skyH|touch` 或 `x|y|skyW|skyH|mouse`（第五段缺省为 `touch`），`setActionChecked` 使用 `actionId|1`。CLI 会自动处理 `aa --ps` 对负号开头字符串的限制，并对 payload 做 shell 转义，保证竖线分隔参数不会被 `hdc` 远端 shell 当成管道。命令名不在 CLI 中硬编码，桥接层已支持的命令均可直接调用；可执行 `--help` 查看工具参数。
+
+## 触控/鼠标拾取与 DSO 设置（2026-11-07）
+
+- `selectAt` 第五段为输入源：`touch` 使用触控 profile（默认 66 vp 基准，可切 48 vp，10° 角度上限）；`mouse` 使用共享引擎的鼠标 profile（25 device px ÷ DPR，2° 角度上限）。两者共享候选、渲染态过滤、DSO RenderState 与排序；未绘制的 DSO/卫星不会进入候选。
+- `probeSelectAt` 接受可选第五段 `touch|mouse`，返回与 `selectAt` 相同的候选排名，以及 `inputMode`、`baseRadiusVp`、`effectiveRadiusVp`；不改变选中、不打开详情卡。
+- `selectAt`/`probeSelectAt` 同时返回搜索诊断：`fovDeg`、`degPerVp`、`searchRadiusDeg`、`starSearchCount`、`starMagnitudeFiltered`、`starRadiusFiltered`、`starDistanceFiltered`、`starCandidateCount`、`starLimit`、`customStarLimit`。提示“这里没有天体”时先用 `probeSelectAt` 复现：`starSearchCount=0` 指向 `StarMgr::searchAround`/星表层问题；搜索数大于 0 但候选为 0 则看三个过滤计数。
+- `getTouchPickRadius` 返回触控基准半径；`setTouchPickRadius 66|48` 切换（设置 → 附加 → 触控拾取范围，默认 66 vp）。宽视场下实际半径可能因 10° 上限小于基准值，以 `effectiveRadiusVp` 为准。
+- `getNebulaFlags` / `setNebulaFlag` 扩展为完整 DSO 设置：`show`、`hints`、`catalogFilters`（掩码或 `all|standard|none`；`standard` = M/NGC/IC/PGC/Other）、`typeFilterUsage`、`typeFilters`（掩码或 `all|none`）、`labelsAmount`、`hintsAmount`、`labelsBrightness`、`hintsBrightness`、`designations`、`additionalNames`、`showOnlyNamed`、`outlines`、`hintsProportional`、`surfaceBrightness`、`sizeLimits`、`minSizeLimit`、`maxSizeLimit`、`nebulaMagnitudeLimit`、`nebulaMagnitude`。
+- 图层 → 深空面板提供星表/类型筛选、标签/提示数量与亮度、目录编号、附加名称、仅显示有名称、轮廓、比例提示、表面亮度、尺寸限制和 DSO 星等限制；本轮不提供 DSO 颜色自定义。
+
+```bash
+node scripts/stellarium-cli.mjs --device <设备ID> --command getTouchPickRadius --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command setTouchPickRadius --payload 48 --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command probeSelectAt --payload '183|404|366|809|touch' --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command probeSelectAt --payload '183|404|366|809|mouse' --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command getNebulaFlags --json
+node scripts/stellarium-cli.mjs --device <设备ID> --command setNebulaFlag --payload 'catalogFilters|7' --json
+```
 
 流星诊断使用与桌面端相同的理论流星率范围（`0–240000` ZHR）。鸿蒙设置页的滑杆前段对 `0–1000` 做精细调整，后段按对数映射到桌面端上限；显示值仍是真实 ZHR，不是滑杆位置。用以下命令可核对当前生成条件、预期速率、实际接受数量和绘制抑制原因：
 
@@ -361,7 +379,7 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command setGyroscopeEnable
 node scripts/stellarium-cli.mjs --device <设备ID> --command setGyroscopeEnabled --payload 0 --json
 ```
 
-`openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。
+`openUiPanel` 只接受应用内已登记的面板名；这些命令不进入 Stellarium C++ 命令目录，不监听端口，也不产生联网行为。开发测试面板可用 `openUiPanel devTools` 打开，仅在 `DEV_TOOLS_ENABLED` 为真的开发构建中可用；正式发布用 `-DisableDevTools`（Windows）或 `OHOS_DEV_TOOLS=0`（bash）隐藏入口并拒绝该面板名。
 
 `settingsInformation`、`settingsTime` 是设置子页语义入口，复用 `selectConfigTab` 的正常转场；不需要寻找标签坐标。打开后可用 `setInformationSetting`、`setDateFormat`、`setTimeFormat`、`setTimeSetting` 修改选项，以对应查询命令确认结果。`accepted` 仍只代表路由请求已接收，截图/布局树用于确认子页实际呈现，不能把该回执当成动画已完成。
 

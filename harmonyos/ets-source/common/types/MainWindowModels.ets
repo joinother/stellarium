@@ -429,6 +429,9 @@ export interface ObserverLocationRecord {
   planet: string
   // 位置来源（gps / map / named）：快捷操作面板标题据此显示 `GPS` 或名称；旧记录缺失时回落 named。
   source?: string
+  // GPS 逆地理编码得到的最小行政区名称（如“北滘镇”），用于重启后仍显示 `GPS · 北滘镇`；
+  // 旧记录缺失时为空，恢复提交后再补查一次。
+  detail?: string
 }
 
 export const BOOKMARK_STORE: string = 'stellarium_bookmarks'

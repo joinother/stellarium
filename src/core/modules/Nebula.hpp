@@ -268,6 +268,25 @@ public:
 
 	bool objectInAllowedSizeRangeLimits() const;
 
+	//! Shared draw/pick state, mirroring NebulaMgr's draw filters.
+	//! A picker must not select a DSO that has no drawn hint, label or outline.
+	struct RenderState
+	{
+		bool catalogVisible = false;
+		bool typeVisible = false;
+		bool sizeAllowed = false;
+		bool namedPass = true;
+		bool customMagnitudePass = true;
+		bool hintDrawn = false;
+		bool labelDrawn = false;
+		bool outlineDrawn = false;
+		bool pickable = false;
+		float visibilityLevel = 99.f;
+	};
+	RenderState getRenderState(float maxMagHints, float maxMagLabels) const;
+
+	StelObjectPickState getPickState(const StelCore* core) const override;
+
 	//! Return a narration text ready for synthesized speech output
 	QString getNarration(const StelCore *core, const InfoStringGroup& flags=StelObject::AllInfo) const override;
 

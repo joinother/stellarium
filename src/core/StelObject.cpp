@@ -40,6 +40,8 @@
 #include <QDebug>
 #include <QSettings>
 
+#include <cmath>
+
 int StelObject::stelObjectPMetaTypeID = qRegisterMetaType<StelObjectP>();
 
 Vec3d StelObject::getEquinoxEquatorialPos(const StelCore* core) const
@@ -314,6 +316,27 @@ Vec4d StelObject::getRTSTime(const StelCore *core, const double altitude) const
 float StelObject::getSelectPriority(const StelCore* core) const
 {
 	return qMin(getVMagnitudeWithExtinction(core), 15.0f);
+}
+
+StelObjectPickState StelObject::getPickState(const StelCore* core) const
+{
+	StelObjectPickState state;
+	if (!core)
+		return state;
+
+	Vec3d direction = getJ2000EquatorialPos(core);
+	if (direction.normSquared() <= 0.0)
+		return state;
+	direction.normalize();
+	state.landscapeVisible = core->getVisibleSkyArea().contains(direction);
+	state.visualRadiusRad = qMax(0.0, getAngularRadius(core) * M_PI / 180.0);
+	const float mag = getVMagnitudeWithExtinction(core);
+	state.hasMagnitude = std::isfinite(mag) && mag < 90.f;
+	if (state.hasMagnitude)
+		state.magnitude = mag;
+	state.pointDrawn = state.landscapeVisible;
+	state.pickable = state.landscapeVisible;
+	return state;
 }
 
 float StelObject::getVMagnitudeWithExtinction(const StelCore* core, const float knownVMag, const float& magoffset) const

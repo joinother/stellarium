@@ -64,6 +64,13 @@ export struct ObjectInspectorMediaPreviewOverlay {
               .onComplete(() => { this.onObjectInspectorMediaPreviewLoaded() })
               .onError(() => { this.onObjectInspectorMediaPreviewError() })
           }
+          // Red night wash over the full-screen image; transparent in day mode
+          // and non-blocking so the close/retry controls stay clickable.
+          if (this.objectMediaStore.objectInspectorMediaPixelMap !== undefined) {
+            Row().width('100%').height('100%')
+              .backgroundColor(this.c.nightMask)
+              .hitTestBehavior(HitTestMode.None)
+          }
           if (this.objectMediaStore.objectInspectorMediaPreviewLoading) {
             Column({ space: 12 }) {
               LoadingProgress().width(36).height(36).color(this.c.spinner)

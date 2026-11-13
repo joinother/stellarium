@@ -16,11 +16,18 @@ export struct ObserverPlanetSection {
   @ObjectLink store: SessionToolStore
   @StorageProp('stellariumReadableUi') readable: boolean = false
   @State c: ThemeSlots = DEFAULT_SLOTS
+  // Same night-mode treatment as Settings → Interface language: an opaque
+  // deep red-black menu with no extra blur material.
+  @StorageLink('stellariumNightMode') private nightMode: boolean = false
   planetLabel: (en: string) => string = (en: string) => en
   onSelectPlanet: (name: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  private menuBackground(): ResourceColor {
+    return this.nightMode ? '#150505' : '#101E2C'
   }
 
   build() {
@@ -31,7 +38,15 @@ export struct ObserverPlanetSection {
         .value(this.store.observerPlanetLabel(this.store.observerPlanet))
         .font({ size: panelFontSize(14, this.readable) })
         .fontColor(this.c.text)
+        .selectedOptionFontColor(this.c.onAccent)
+        .optionFontColor(this.c.text)
         .backgroundColor(this.c.input)
+        .selectedOptionBgColor(this.c.accent)
+        .optionBgColor(this.menuBackground())
+        .menuBackgroundColor(this.menuBackground())
+        // The default COMPONENT_ULTRA_THICK material adds a light layer on
+        // top of the opaque menu and breaks night mode.
+        .menuBackgroundBlurStyle(BlurStyle.NONE)
         .borderRadius(UI_RADIUS_CONTROL)
         .width('100%').height(44)
         .enabled(!this.store.observerPlanetPending)
@@ -39,7 +54,6 @@ export struct ObserverPlanetSection {
         .onSelect((index: number) => {
           if (index >= 0 && index < this.store.planetList.length) this.onSelectPlanet(this.store.planetList[index])
         })
-      Text(I18n.t('m_observer_map_hint')).fontSize(panelFontSize(11, this.readable)).fontColor(this.c.sub).width('100%')
       if (this.store.observerPlanet !== 'Earth') {
         Button(I18n.t('btn_back_to_earth'))
           .fontSize(panelFontSize(12, this.readable)).fontColor(this.c.text).backgroundColor(this.c.softStrong)

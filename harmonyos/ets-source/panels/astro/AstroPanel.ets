@@ -14,6 +14,8 @@ import { tintMatrixFor } from '../../common/ui/IconTint'
 import { AstroStore } from '../../state/AstroStore'
 import { WutStore } from '../../state/WutStore'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
+import { SessionToolStore } from '../../state/SessionToolStore'
+import { ContinuationSection } from './ContinuationSection'
 import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme, AstroColors } from '../../state/StellariumTheme'
 import { InfoRow } from '../../common/ui/InfoRow'
@@ -115,6 +117,10 @@ export interface AstroPanelHost {
   reloadEclipses: () => void
   rtsCalendarStartOptionLabel: (offsetDays: number) => string
   searchObject: (name: string, catalogModuleId?: string, exactSelectionPayload?: string, placement?: string) => void
+  // Session continuation lives in the tonight tab, not the location panel.
+  sessionExport: () => void
+  sessionApply: () => void
+  sessionHandoff: () => void
   selectAstroFilter: (key: string, value: string) => void
   selectAstroGroup: (group: number) => void
   selectAstroTab: (tab: number) => void
@@ -212,6 +218,9 @@ function noopAstroPanelHost(): AstroPanelHost {
     reloadEclipses: () => {},
     rtsCalendarStartOptionLabel: () => '',
     searchObject: () => {},
+    sessionExport: () => {},
+    sessionApply: () => {},
+    sessionHandoff: () => {},
     selectAstroFilter: () => {},
     selectAstroGroup: () => {},
     selectAstroTab: () => {},
@@ -226,6 +235,7 @@ export struct AstroPanel {
   @ObjectLink store: AstroStore
   @ObjectLink wutStore: WutStore
   @ObjectLink objectDetailStore: ObjectDetailStore
+  @ObjectLink sessionToolStore: SessionToolStore
   @State c: ThemeSlots = DEFAULT_SLOTS
   scroller: Scroller = new Scroller()
   host: AstroPanelHost = noopAstroPanelHost()
@@ -1690,6 +1700,13 @@ export struct AstroPanel {
                   }, (s: TonightShower, index: number) => index.toString())
                 }
               }
+              ContinuationSection({
+                hint: this.sessionToolStore.sessionHint,
+                json: this.sessionToolStore.sessionJson,
+                onExport: () => { this.host.sessionExport() },
+                onApply: () => { this.host.sessionApply() },
+                onHandoff: () => { this.host.sessionHandoff() }
+              })
             } else if (this.store.astroTab === 6) {
               Text(I18n.t('i0131')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 8 })
               Row({ space: 4 }) {

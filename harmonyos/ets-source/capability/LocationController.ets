@@ -8,6 +8,7 @@ import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse, HierCity } from '../pages/StellariumTypes'
 import { ObserverLocationRecord } from '../pages/MainWindowModels'
 import { approximateTimeZoneDisplay, planetZh, quickLocationLabel } from '../common/derive/labels'
+import { METERED_MAP_APIS_ENABLED } from '../common/config/OhosFeatureFlags'
 import { CommandPort } from '../bridge/CommandPort'
 import { LocationPort } from '../bridge/LocationPort'
 import { LocationPickerStore } from '../state/LocationPickerStore'
@@ -39,6 +40,17 @@ export class LocationController {
   private hooks: LocationHostHooks
   // 请求中标志：草稿字段随控制器走（不入 @Observed store）。
   private deviceLocationRequestInProgress: boolean = false
+  // 本次 GPS 定位没有可用的垂直分量；commitLocation 用它替换“已同步”状态。
+  private gpsAltitudeUnavailable: boolean = false
+  // GPS 定位后异步反查的最小行政区名称，追加在 “GPS” 标签后；过期请求序号。
+  private gpsNameRequestId: number = 0
+  // 旧持久化记录没有 GPS 行政区名称；待观测点恢复提交后补查一次，避免启动时反查与提交竞态。
+  private restoreDetailPending: boolean = false
+  private restoreDetailLatitude: number = 0
+  private restoreDetailLongitude: number = 0
+  // Earth altitude bounds; non-Earth sites keep the offline place value (often 0).
+  private static readonly EARTH_ALTITUDE_MIN: number = -500
+  private static readonly EARTH_ALTITUDE_MAX: number = 9000
 
   constructor(
     port: CommandPort,
@@ -101,25 +113,50 @@ export class LocationController {
   // 设备定位（GPS：隐私门禁 → 权限 → 定位 → setPickerLocation → applyPickerLocation）。
   // 4 处门禁（初始 + 权限后 + 定位后）经 hooks；权限/定位经 LocationPort。
   async useDeviceLocation(): Promise<void> {
+    // GPS fixes and GNSS altitude are Earth-only. Other bodies must use the
+    // offline place altitude (usually 0).
+    if (this.sessionToolStore.observerPlanet !== 'Earth') return
     if (this.deviceLocationRequestInProgress || !this.hooks.privacyAllowed() ||
       !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
     this.deviceLocationRequestInProgress = true
     hilog.info(0x0000, 'StellariumArkUI', 'useDeviceLocation() called')
     this.pickerStore.locationPickerStatus = I18n.t('m_req_location_perm')
     try {
-      const granted = await this.locationPort.requestLocationPermissions()
+      const permission = await this.locationPort.requestLocationPermissions()
       if (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
-      if (!granted) {
-        this.pickerStore.locationPickerStatus = I18n.t('m_gps_unavailable')
+      if (permission !== 'precise') {
+        this.pickerStore.locationPickerStatus = I18n.t(permission === 'approximate'
+          ? 'm_gps_precise_required' : 'm_gps_unavailable')
+        // There is no public API to open the app's permission page; show the
+        // system-settings instruction without adding a snackbar action.
+        this.hooks.flashHint(I18n.t('loc_gps_denied_settings'))
         return
       }
       this.pickerStore.locationPickerStatus = I18n.t('m_getting_location')
       const current = await this.locationPort.getCurrentLocation()
       if (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
       const altitude = Number.isFinite(current.altitude) ? current.altitude : 0
-      this.pickerStore.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude, altitude, I18n.t('m_device_loc_synced'))
+      // Wireless/indoor fixes often report altitude 0 with altitudeAccuracy 0.
+      // Keep the position but tell the user that the vertical component is absent.
+      // Undefined accuracy (older location stacks) is treated as usable.
+      this.gpsAltitudeUnavailable = current.altitudeAccuracy !== undefined && current.altitudeAccuracy <= 0
+      let status: string = this.gpsAltitudeUnavailable
+        ? I18n.t('m_gps_altitude_unavailable') : I18n.t('m_device_loc_synced')
+      if (current.accuracy !== undefined && current.accuracy > 0) {
+        status += ' · ' + I18n.t('loc_gps_accuracy').replace('%s', Math.round(current.accuracy).toString())
+      }
+      if (current.altitudeAccuracy !== undefined && current.altitudeAccuracy > 0) {
+        status += ' · ' + I18n.t('loc_gps_altitude_accuracy').replace('%s', Math.round(current.altitudeAccuracy).toString())
+      }
+      this.pickerStore.setPickerLocation(I18n.t('m_current_location'), current.latitude, current.longitude,
+        altitude, status)
       this.pickerStore.locationSource = 'gps'
+      // Name enrichment runs in parallel with the observer update; a slow or
+      // failed reverse-geocode must not delay the GPS fix.
+      const nameRequestId = ++this.gpsNameRequestId
+      this.pickerStore.gpsPlaceDetail = ''
       this.setLocation(this.pickerStore.locationPickerName, current.latitude, current.longitude, altitude, 'Earth', false, 'gps')
+      void this.resolveGpsPlaceName(current.latitude, current.longitude, nameRequestId)
       this.pickerStore.locationPickMode = 'map'
       this.pickerStore.hierContinent = ''
       this.pickerStore.hierCountry = ''
@@ -134,36 +171,93 @@ export class LocationController {
     }
   }
 
+  // GPS label enrichment: reverse-geocode the fix and append the smallest
+  // administrative division after "GPS". Runs asynchronously after the fix is
+  // applied; stale requests are dropped by gpsNameRequestId.
+  private async resolveGpsPlaceName(latitude: number, longitude: number, requestId: number): Promise<void> {
+    if (!METERED_MAP_APIS_ENABLED) return
+    if (!this.hooks.privacyAllowed() || !this.hooks.inForeground() || !this.hooks.hasPrivacyConsent()) return
+    try {
+      const detail = await this.locationPort.reverseGeocodePlaceName(latitude, longitude)
+      if (requestId !== this.gpsNameRequestId) return
+      if (detail.length === 0 || this.pickerStore.locationSource !== 'gps') return
+      // Only label/save when the picker still points at the fix that was queried;
+      // restoring old records resolves after the observer commit.
+      if (!this.pickerAtLocation(latitude, longitude)) return
+      this.pickerStore.gpsPlaceDetail = detail
+      // Persist the name with the observer record so restart keeps
+      // `GPS · <admin division>` without another metered reverse-geocode.
+      void this.saveObserverLocationToStorage()
+      this.hooks.setLocationTexts(
+        quickLocationLabel('gps',
+          this.pickerStore.locationDisplayName(this.pickerStore.locationPickerName), 'Earth', detail) + ' · ' + planetZh('Earth'),
+        this.locationStore.formatDegrees(this.pickerStore.locationPickerLatitude, 'N', 'S') + ' / ' +
+          this.locationStore.formatDegrees(this.pickerStore.locationPickerLongitude, 'E', 'W'),
+        this.pickerStore.locationPickerAltitude.toFixed(0) + ' m')
+    } catch (_error) {
+      // Keep the GPS-only label if the reverse geocoder is unavailable.
+    }
+  }
+
+  private pickerAtLocation(latitude: number, longitude: number): boolean {
+    return Math.abs(this.pickerStore.locationPickerLatitude - latitude) < 1e-6 &&
+      Math.abs(this.pickerStore.locationPickerLongitude - longitude) < 1e-6
+  }
+
   applyPickerLocation(): void {
     // 来源沿用 picker 暂存值（GPS / 地图点选各自设过）；其余经本路径应用的场景默认 named。
     this.setLocation(this.pickerStore.locationPickerName, this.pickerStore.locationPickerLatitude, this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, this.sessionToolStore.observerPlanet, false, this.pickerStore.locationSource)
   }
 
-  setLocation(name: string, latitude: number, longitude: number, altitude: number, planet: string = 'Earth', silent: boolean = false, source: string = 'named'): void {
+  setLocation(name: string, latitude: number, longitude: number, altitude: number,
+    planet: string = 'Earth', silent: boolean = false, source: string = 'named'): void {
     if (this.sessionToolStore.observerPlanetPending) return
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isFinite(altitude) ||
       latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return
     const targetPlanet = planet.length > 0 ? planet : 'Earth'
+    if (source !== 'gps') {
+      // A non-GPS apply invalidates any in-flight GPS name enrichment.
+      this.gpsNameRequestId += 1
+      this.pickerStore.gpsPlaceDetail = ''
+    }
+    // Earth altitude is editable in the panel; keep it in a sane range. Other
+    // bodies keep the offline place altitude (often 0).
+    const normalizedAltitude = targetPlanet === 'Earth'
+      ? Math.max(LocationController.EARTH_ALTITUDE_MIN,
+        Math.min(LocationController.EARTH_ALTITUDE_MAX, Math.round(altitude)))
+      : altitude
     this.sessionToolStore.observerPlanetPending = true
     const complete = (response: StellariumBridgeResponse): void => {
       this.sessionToolStore.observerPlanetPending = false
       if (response.ok !== true) {
-        this.hooks.flashHint(I18n.t('m_observer_switch_failed'))
+        this.hooks.flashHint(I18n.t('loc_apply_failed'))
         this.hooks.loadObserverInfo()
         return
       }
-      this.commitLocation(response.locationName ?? name, response.latitude ?? latitude,
-        response.longitude ?? longitude, response.altitude ?? Math.round(altitude), response.planetName ?? targetPlanet, source)
+      const appliedName = response.locationName ?? name
+      const appliedLat = response.latitude ?? latitude
+      const appliedLon = response.longitude ?? longitude
+      const appliedAlt = response.altitude ?? normalizedAltitude
+      const appliedPlanet = response.planetName ?? targetPlanet
+      this.commitLocation(appliedName, appliedLat, appliedLon, appliedAlt, appliedPlanet, source)
       this.hooks.refreshState()
       this.hooks.loadObserverInfo()
-      if (!silent) this.hooks.flashHint(I18n.t('i0073').replace('%s', this.pickerStore.locationDisplayName(name)))
+      if (!silent) {
+        this.locationStore.recordRecentLocation(appliedName, appliedLat, appliedLon, appliedAlt, appliedPlanet)
+        this.hooks.flashHint(I18n.t('i0073').replace('%s', this.pickerStore.locationDisplayName(appliedName)))
+      }
     }
-    this.port.requestWhenReady('setObserverPlanet', `${targetPlanet}|${latitude}|${longitude}|${Math.round(altitude)}|${name.replace(/\|/g, ' ')}`, complete, complete, 0, 100, 10)
+    this.port.requestWhenReady('setObserverPlanet',
+      `${targetPlanet}|${latitude}|${longitude}|${Math.round(normalizedAltitude)}|${name.replace(/\|/g, ' ')}`,
+      complete, complete, 0, 100, 10)
   }
 
   private commitLocation(name: string, latitude: number, longitude: number, altitude: number, targetPlanet: string, source: string): void {
     const planetChanged = targetPlanet !== this.sessionToolStore.observerPlanet
-    this.pickerStore.setPickerLocation(name, latitude, longitude, altitude, I18n.t('m_synced_to_sky'))
+    const status = source === 'gps' && this.gpsAltitudeUnavailable
+      ? I18n.t('m_gps_altitude_unavailable') : I18n.t('m_synced_to_sky')
+    this.pickerStore.setPickerLocation(name, latitude, longitude, altitude, status)
+    this.gpsAltitudeUnavailable = false
     this.pickerStore.locationSource = source
     this.hooks.setObserverPlanetCrossStore(targetPlanet)
     if (planetChanged) {
@@ -177,25 +271,43 @@ export class LocationController {
     }
     this.saveObserverLocationToStorage()
     this.hooks.setLocationTexts(
-        quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet) + ' · ' + planetZh(targetPlanet),
+        quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet,
+          source === 'gps' ? this.pickerStore.gpsPlaceDetail : '') + ' · ' + planetZh(targetPlanet),
       this.locationStore.formatDegrees(latitude, 'N', 'S') + ' / ' + this.locationStore.formatDegrees(longitude, 'E', 'W'),
       altitude.toFixed(0) + ' m')
     this.pickerStore.observerTimeZone = targetPlanet === 'Earth' ? approximateTimeZoneDisplay(longitude) : I18n.t('tz_system')
+    // Legacy records have no persisted GPS admin name: after the observer is
+    // actually committed, query it once. Doing it here avoids saving/updating
+    // the label against the picker's pre-restore default coordinates.
+    if (this.restoreDetailPending) {
+      const matches = source === 'gps' && targetPlanet === 'Earth' &&
+        this.pickerAtLocation(this.restoreDetailLatitude, this.restoreDetailLongitude)
+      this.restoreDetailPending = false
+      if (matches) {
+        const requestId = ++this.gpsNameRequestId
+        void this.resolveGpsPlaceName(latitude, longitude, requestId)
+      }
+    }
   }
 
   // 切换观测星球（本 store 只读 observerPlanet，写经 hooks）。
+  // GPS/海拔只在地球有效；切到其他天体时不沿用地球海拔，默认 0。
+  // 若用户随后选择带海拔的离线地点，selectSearchLocation 会写入该地点的 alt。
   setObserverPlanet(name: string): void {
     if (name === this.sessionToolStore.observerPlanet) return
+    const altitude = name === 'Earth' ? this.pickerStore.locationPickerAltitude : 0
     this.setLocation(I18n.t('custom_location'), this.pickerStore.locationPickerLatitude,
-      this.pickerStore.locationPickerLongitude, this.pickerStore.locationPickerAltitude, name, false, 'map')
+      this.pickerStore.locationPickerLongitude, altitude, name, false, 'map')
   }
 
   syncObserverFromNative(): void {
     this.port.requestInteractive('getObserverInfo', '', (response: StellariumBridgeResponse) => {
       if (response.ok !== true || response.latitude === undefined || response.longitude === undefined) return
       const planet: string = response.planet ?? 'Earth'
-      this.commitLocation(response.name ?? I18n.t('custom_location'), response.latitude, response.longitude,
-        response.altitude ?? 0, planet, planet === 'Earth' ? this.pickerStore.locationSource : 'map')
+      const source: string = planet === 'Earth' ? this.pickerStore.locationSource : 'map'
+      const name: string = response.name ?? I18n.t('custom_location')
+      const altitude: number = response.altitude ?? 0
+      this.commitLocation(name, response.latitude, response.longitude, altitude, planet, source)
       this.hooks.refreshState()
       this.hooks.loadObserverInfo()
     })
@@ -209,7 +321,8 @@ export class LocationController {
       longitude: this.pickerStore.locationPickerLongitude,
       altitude: this.pickerStore.locationPickerAltitude,
       planet: this.sessionToolStore.observerPlanet,
-      source: this.pickerStore.locationSource
+      source: this.pickerStore.locationSource,
+      detail: this.pickerStore.locationSource === 'gps' ? this.pickerStore.gpsPlaceDetail : ''
     }
     await this.locationPort.writeObserverLocation(JSON.stringify(rec))
   }
@@ -239,7 +352,16 @@ export class LocationController {
     const altitude = Number.isFinite(rec.altitude) ? rec.altitude : 0
     // 来源随观测点持久化；旧记录没有该字段时回落 named（按名称显示）。
     const source = typeof rec.source === 'string' && rec.source.length > 0 ? rec.source : 'named'
+    // GPS altitude is Earth-only; discard old non-Earth GPS records.
+    const restoredAltitude = planet !== 'Earth' && source === 'gps' ? 0 : altitude
+    // GPS admin name is persisted with the record. Older records lack it, so
+    // resolve it once after the commit instead of at every startup.
+    const detail = typeof rec.detail === 'string' ? rec.detail : ''
+    this.pickerStore.gpsPlaceDetail = source === 'gps' ? detail : ''
+    this.restoreDetailPending = source === 'gps' && planet === 'Earth' && detail.length === 0
+    this.restoreDetailLatitude = rec.latitude
+    this.restoreDetailLongitude = rec.longitude
     hilog.info(0x0000, 'StellariumArkUI', '[location] restoring persisted observer location')
-    this.setLocation(name, rec.latitude, rec.longitude, altitude, planet, true, source)
+    this.setLocation(name, rec.latitude, rec.longitude, restoredAltitude, planet, true, source)
   }
 }
