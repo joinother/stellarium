@@ -593,21 +593,26 @@ export struct LocationFullScreenMap {
     let resolvedName = ''
     // Reverse geocoding is a metered Map Kit API. When the build disables the
     // metered APIs, skip it and fall through to the nearest offline place.
-    if (!result.found && !this.localGlobe && METERED_MAP_APIS_ENABLED) {
+    if (!result.found && !this.localGlobe && this.onlineSearchAllowed()) {
       try {
         const mapPoint = await this.toMapCoordinate(latitude, longitude)
-        const reverse = await site.reverseGeocode({
-          location: mapPoint,
-          radius: 1000,
-          language: I18n.isChineseLanguage() ? 'zh' : 'en'
-        })
-        const component = reverse.addressComponent
-        const name = component.locality ?? component.adminLevel2 ??
-          component.adminLevel3 ?? component.adminLevel1 ?? ''
-        if (name.length > 0) {
-          result = this.locationStore.altitudeForCityName(name, 'Earth', latitude, longitude)
+        if (requestId !== this.altitudeRequestId) return
+        if (this.onlineSearchAllowed()) {
+          const reverse = await site.reverseGeocode({
+            location: mapPoint,
+            radius: 1000,
+            language: I18n.isChineseLanguage() ? 'zh' : 'en'
+          })
+          if (this.onlineSearchAllowed()) {
+            const component = reverse.addressComponent
+            const name = component.locality ?? component.adminLevel2 ??
+              component.adminLevel3 ?? component.adminLevel1 ?? ''
+            if (name.length > 0) {
+              result = this.locationStore.altitudeForCityName(name, 'Earth', latitude, longitude)
+            }
+            resolvedName = smallestAdminDivision(component)
+          }
         }
-        resolvedName = smallestAdminDivision(component)
       } catch (_error) {
         // Site Kit unavailable; fall through to the offline nearest place.
       }
@@ -882,9 +887,14 @@ export struct LocationFullScreenMap {
     this.searchOffline(query)
     // Petal text search is a metered Map Kit API; the build flag keeps the
     // offline results visible without issuing the server call.
-    if (METERED_MAP_APIS_ENABLED && this.observerPlanet === 'Earth') {
+    if (this.onlineSearchAllowed()) {
       await this.searchPetal(query, requestId)
     }
+  }
+
+  private onlineSearchAllowed(): boolean {
+    return METERED_MAP_APIS_ENABLED && this.mapAllowed &&
+      this.observerPlanet === 'Earth' && this.hasOnlineNetwork()
   }
 
   private searchOffline(query: string): void {
@@ -894,6 +904,7 @@ export struct LocationFullScreenMap {
   }
 
   private async searchPetal(query: string, requestId: number): Promise<void> {
+    if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
     this.petalState = 'loading'
     this.petalResults = []
     try {
@@ -901,7 +912,7 @@ export struct LocationFullScreenMap {
         query: query,
         language: I18n.isChineseLanguage() ? 'zh' : 'en'
       })
-      if (requestId !== this.searchRequestId) return
+      if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       const sites = result.sites === undefined ? [] : result.sites
       const mapped: Array<MapApiSearchResult> = []
       for (const item of sites) {
@@ -921,11 +932,11 @@ export struct LocationFullScreenMap {
         })
         if (mapped.length >= 20) break
       }
-      if (requestId !== this.searchRequestId) return
+      if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       this.petalResults = mapped
       this.petalState = mapped.length > 0 ? 'ok' : 'empty'
     } catch (_error) {
-      if (requestId !== this.searchRequestId) return
+      if (!this.onlineSearchAllowed() || requestId !== this.searchRequestId) return
       this.petalState = 'error'
     }
   }

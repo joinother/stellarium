@@ -9,3 +9,5 @@ harmonyos/ets-source/**  text=auto eol=crlf
 harmonyos/*.json5        text=auto eol=crlf
 docs/harmonyos/**        text=auto eol=crlf
 scripts/**               text=auto eol=crlf
+scripts/**/*.sh          text eol=lf
+scripts/*.sh            text eol=lf

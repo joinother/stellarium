@@ -1,6 +1,15 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
 
+## [2026-11-13] Codex - PR #9 集成检查与修复
+
+- **集成范围：** `joinother/stellarium#9`，头提交 `0a23b99ccb8b39da055afa085b9f44ad3798ef55`；共同祖先为当前主线 `03c8e3072c21a73908daa9656e02da950f089761`，不是九月旧版。保留已有星座模型及 PC Dock、键盘路由代码。
+- **修改文件：** `.gitattributes`、`LocationFullScreenMap.ets`、地图回归测试及联网台账。
+- **修改内容：** Shell 脚本明确使用 LF，修复 macOS 检出 CRLF 后构建失败；全屏地图在线搜索与反向地理编码增加隐私/前台、地球和网络检查，异步返回再次检查，门禁关闭时海拔使用本地回退。
+- **构建结果：** 原生引擎 CMake 构建及 debug `assembleHap` 均成功；原生构建完成后重新同步源码与库。
+- **验证结果：** 综合回归 97/98 通过，包含 Dock、紧凑面板、键盘、时间过渡及卫星数据安全；地图专项最终 14/14 通过；UI 契约 37 面板/57 锚点、命令目录 423 项、7 个星座模型校验通过。
+- **已知限制：** `test-ohos-search-input-routing.mjs` 的静态断言仍引用迁移前的 `SkyInputController` 键盘实现及旧搜索循环形状；键盘断言在合并前主线已不匹配，实际键盘路由测试通过。本轮按用户要求跳过 Pad 实机测试，不代表触控、地图渲染已完成设备验收。
+
 ## [2026-11-13] OHOS 开发记录 - 编译开关默认尊重源码值
 
 - **修改文件：** `scripts/apply-ohos-feature-flags.mjs`、`scripts/sync-ohos-build-sources.sh`、`scripts/build-ohos-hap-windows.ps1`、`harmonyos/ets-source/common/config/OhosFeatureFlags.ets`、`scripts/test-ohos-feature-flags.mjs`。

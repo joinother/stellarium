@@ -199,9 +199,8 @@ test('metered Map Kit APIs have a build-time switch', () => {
   assert.match(featureFlags, /METERED_MAP_APIS_ENABLED/)
   // Search and reverse geocoding are the only metered calls left; the panel's
   // terrain preview and the online Petal basemap are free and stay enabled.
-  assert.ok((fullScreen.match(/METERED_MAP_APIS_ENABLED/g) ?? []).length >= 3)
-  assert.match(fullScreen, /if \(METERED_MAP_APIS_ENABLED && this\.observerPlanet === 'Earth'\)/)
-  assert.match(fullScreen, /!this\.localGlobe && METERED_MAP_APIS_ENABLED/)
+  assert.match(fullScreen, /if \(this\.onlineSearchAllowed\(\)\)/)
+  assert.match(fullScreen, /!this\.localGlobe && this\.onlineSearchAllowed\(\)/)
   assert.match(flagApplier, /metered-map-apis/)
   assert.match(flagApplier, /METERED_MAP_APIS_ENABLED/)
   assert.match(buildSourcesSh, /apply-ohos-feature-flags\.mjs/)
