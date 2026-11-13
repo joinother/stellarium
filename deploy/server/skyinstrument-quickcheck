@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""A1：轻量哨兵——每 10 分钟比一次文件哈希，发现变化就触发完整内容巡检。
+"""A1：轻量哨兵——每 10 分钟比较站点文件元数据及控制文件哈希。
 
 设计要点：
-- 只算哈希，不做规则与 AI（约 0.3 秒）
-- 只监控 nginx 服务的目录；巡检自己的报告、备份、日志都不在范围内
+- 站点比较大小和修改时间，控制文件比较 SHA-256；不直接调用 AI
+- 动态状态页输出、巡检报告、备份、日志不触发内容巡检
 - 每 10 分钟一轮；同一轮多次变化只触发一次
 - 每小时最多触发 6 次完整巡检，避免批量发布打爆 AI 调用
 - 03:15–03:30 备份窗口内跳过
@@ -31,6 +31,12 @@ AUDIT_BIN = '/usr/local/sbin/skyinstrument-content-audit'
 MAX_RUNS_PER_HOUR = 6
 SKIP_WINDOW = (3 * 60 + 15, 3 * 60 + 30)   # 03:15–03:30 备份窗口
 MAX_FILES = 20000
+CONTROL_FILES = (
+    NGINX_CONF,
+    '/usr/local/sbin/skyinstrument-status-page',
+    '/etc/systemd/system/skyinstrument-status-page.service',
+    '/etc/systemd/system/skyinstrument-status-page.timer',
+)
 
 
 def served_dirs():
@@ -42,12 +48,18 @@ def served_dirs():
                 dirs.append(os.path.normpath(m.group(2).strip()))
     if os.path.isdir(SITE_DIR):
         dirs.append(os.path.normpath(SITE_DIR))
-    uniq = sorted(set(dirs))
+    uniq = sorted(d for d in set(dirs) if d != '/srv/skyinstrument/status')
     return [d for d in uniq if not any(d != k and d.startswith(k + os.sep) for k in uniq)]
 
 
 def snapshot():
     result = {}
+    for filename in CONTROL_FILES:
+        try:
+            with open(filename, 'rb') as source:
+                result[filename] = 'sha256:' + hashlib.sha256(source.read()).hexdigest()
+        except OSError:
+            result[filename] = 'unavailable'
     n = 0
     for root in served_dirs():
         for dp, _dn, fns in os.walk(root):
@@ -113,7 +125,21 @@ def main():
             json.dump(cur, fh)
         return 0
 
-    print('%s 检测到 %d 个文件变化，示例：%s' % (now.strftime('%H:%M:%S'), len(diffs), ', '.join(diffs[:3])))
+    site_diffs = [d for d in diffs if '/website/' in d]
+    mirror_diffs = [d for d in diffs if '/tle-mirror/' in d]
+    ctrl_diffs = [d for d in diffs if d not in site_diffs and d not in mirror_diffs]
+    print('%s 检测到 %d 个文件变化（页面 %d，镜像 %d，控制文件 %d）示例：%s'
+          % (now.strftime('%H:%M:%S'), len(diffs), len(site_diffs), len(mirror_diffs),
+             len(ctrl_diffs), ', '.join(diffs[:3])))
+
+    # 只有镜像或控制文件变化时不跑完整内容巡检：
+    # 镜像由每日全审的结构校验与新鲜度检查覆盖，控制文件由哈希记录留痕。
+    if not site_diffs:
+        print('  无页面变更，仅记录基线（镜像与控制文件交由每日巡检覆盖）')
+        with open(STATE, 'w', encoding='utf-8') as fh:
+            json.dump(cur, fh)
+        return 0
+
     ok, count = pace_allow()
     if not ok:
         # 关键：限流时不更新哈希基线，否则这次变更会被"吃掉"，
@@ -122,7 +148,7 @@ def main():
         return 0
     else:
         env = dict(os.environ)
-        env['AUDIT_AI_TIME_BUDGET'] = '60'   # 哨兵巡检只给模型 60 秒，避免拖成几分钟
+        env['AUDIT_AI_TIME_BUDGET'] = '60'   # 哨兵只给模型 60 秒，避免拖成几分钟
         try:
             r = subprocess.run([AUDIT_BIN], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                universal_newlines=True, timeout=600, env=env)
@@ -131,9 +157,7 @@ def main():
                                            '24 小时内告警过', 'AI 当日预算', '时间预算')):
                     print('  ' + line.strip())
         except subprocess.TimeoutExpired:
-            # 巡检被拖太久：写基线止损，避免同一批变更每 10 分钟反复触发；
-            # 当天 03:02 的全站全审会补上这一轮没看完的页面。
-            print('  巡检超时（600 秒），先记录基线，交由每日全站全审补查')
+            print('  巡检超时（600 秒），先记录基线，未看完的页面交由每日全站全审补查')
         except Exception as exc:  # noqa: BLE001
             print('  巡检异常：%s: %s' % (type(exc).__name__, exc))
 
