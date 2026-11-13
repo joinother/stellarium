@@ -120,14 +120,20 @@ echo "Synced:"
 mirror_ets_sources
 
 # Apply build-time feature flags to the mirrored sources. The tracked source
-# keeps the release default; OHOS_METERED_MAP_APIS=0 produces a HAP that avoids
-# the metered Map Kit server APIs (static map, Petal search, reverse geocode).
-# OHOS_DEV_TOOLS=0 hides the development panel and its More-menu entry.
+# value is authoritative unless the caller explicitly overrides it:
+# OHOS_METERED_MAP_APIS=0 produces a HAP that avoids the metered Map Kit server
+# APIs (static map, Petal search, reverse geocode); OHOS_DEV_TOOLS=0 hides the
+# development panel and its More-menu entry; =1 forces either flag on.
 # The online Petal basemap and its layers are free and stay enabled.
+FLAG_ARGS=()
+if [ -n "${OHOS_METERED_MAP_APIS:-}" ]; then
+  FLAG_ARGS+=("--metered-map-apis=$OHOS_METERED_MAP_APIS")
+fi
+if [ -n "${OHOS_DEV_TOOLS:-}" ]; then
+  FLAG_ARGS+=("--dev-tools=$OHOS_DEV_TOOLS")
+fi
 node "$SCRIPT_DIR/apply-ohos-feature-flags.mjs" \
-  --ets-root "$MODULE_ROOT/ets" \
-  --metered-map-apis="${OHOS_METERED_MAP_APIS:-1}" \
-  --dev-tools="${OHOS_DEV_TOOLS:-1}"
+  --ets-root "$MODULE_ROOT/ets" ${FLAG_ARGS[@]+"${FLAG_ARGS[@]}"}
 
 # 2. Icons and locale tables shipped next to the ArkTS sources.
 mirror_files "$REPO_ROOT/harmonyos/ets-source/resources" "$MODULE_ROOT/resources"

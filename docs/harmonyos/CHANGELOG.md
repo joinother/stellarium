@@ -1,6 +1,14 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
 
+## [2026-11-13] OHOS 开发记录 - 编译开关默认尊重源码值
+
+- **修改文件：** `scripts/apply-ohos-feature-flags.mjs`、`scripts/sync-ohos-build-sources.sh`、`scripts/build-ohos-hap-windows.ps1`、`harmonyos/ets-source/common/config/OhosFeatureFlags.ets`、`scripts/test-ohos-feature-flags.mjs`。
+- **修改内容：** flag 脚本不再把未显式传入的开关默认设为 `1`；`sync-ohos-build-sources.sh` 只在 `OHOS_METERED_MAP_APIS` / `OHOS_DEV_TOOLS` 有值时传递覆盖参数；Windows 构建脚本只在 `-DisableMeteredMapApis` / `-DisableDevTools` 时设置对应环境变量，否则保留源码值。
+- **修改原因：** 用户把 `DEV_TOOLS_ENABLED` 改为 `false` 后，普通构建仍会在生成工程中把它重写为 `true`，导致“更多功能”继续显示开发测试入口。
+- **构建结果：** ArkTS-only HAP `BUILD SUCCESSFUL` 并安装；生成工程 `DEV_TOOLS_ENABLED` 保持 `false`，构建日志显示 `development panel: tracked source default`。
+- **验证结果：** feature flag 测试 4/4 通过；真机“更多功能”菜单不再出现“开发与诊断 → 开发测试”。CLI `openUiPanel devTools` 仍会先被 QAbility 回 `accepted`，但宿主按 `isCliPanelName` 拒绝，`getUiPanelState` 显示当前面板未切换到 `devTools`。
+
 ## [2026-11-13] OHOS 开发记录 - 手机端“更多功能”默认以加高高度打开
 
 - **修改文件：** `harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-compact-panel-geometry.mjs`。

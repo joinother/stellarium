@@ -20,12 +20,12 @@ function makeRoot(source) {
   return root
 }
 
+function runArgs(root, args) {
+  return spawnSync(process.execPath, [applier, '--ets-root', root, ...args], { encoding: 'utf8' })
+}
+
 function run(root, metered, devTools) {
-  return spawnSync(process.execPath, [
-    applier, '--ets-root', root,
-    `--metered-map-apis=${metered}`,
-    `--dev-tools=${devTools}`
-  ], { encoding: 'utf8' })
+  return runArgs(root, [`--metered-map-apis=${metered}`, `--dev-tools=${devTools}`])
 }
 
 test('feature flag applier disables and re-enables both flags', () => {
@@ -41,6 +41,27 @@ test('feature flag applier disables and re-enables both flags', () => {
     const afterEnable = readFileSync(join(root, 'common', 'config', 'OhosFeatureFlags.ets'), 'utf8')
     assert.match(afterEnable, /METERED_MAP_APIS_ENABLED: boolean = true/)
     assert.match(afterEnable, /DEV_TOOLS_ENABLED: boolean = true/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('feature flag applier leaves unspecified flags at the tracked source value', () => {
+  const source = [
+    'export const METERED_MAP_APIS_ENABLED: boolean = true',
+    'export const DEV_TOOLS_ENABLED: boolean = false',
+    ''
+  ].join('\n')
+  const root = makeRoot(source)
+  try {
+    const noArgs = runArgs(root, [])
+    assert.equal(noArgs.status, 0, noArgs.stderr)
+    assert.equal(readFileSync(join(root, 'common', 'config', 'OhosFeatureFlags.ets'), 'utf8'), source)
+    const meteredOnly = runArgs(root, ['--metered-map-apis=0'])
+    assert.equal(meteredOnly.status, 0, meteredOnly.stderr)
+    const after = readFileSync(join(root, 'common', 'config', 'OhosFeatureFlags.ets'), 'utf8')
+    assert.match(after, /METERED_MAP_APIS_ENABLED: boolean = false/)
+    assert.match(after, /DEV_TOOLS_ENABLED: boolean = false/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

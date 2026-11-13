@@ -2,9 +2,9 @@
 // Rewrites the compile-time feature flags in the generated hvigor project.
 //
 // The tracked ArkTS source keeps the release default. A packaging run that
-// wants a build without the metered Map Kit server APIs or without the
-// development panel flips the constants in the build tree only, so the working
-// tree stays clean and the next sync restores the default automatically.
+// explicitly wants a different value flips the constant in the build tree only,
+// so the working tree stays clean. Flags that are not passed are left at the
+// value copied from the tracked source.
 //
 // Usage:
 //   node scripts/apply-ohos-feature-flags.mjs --ets-root <generated ets root> \
@@ -30,7 +30,6 @@ function fail(message) {
 function parseArgs(argv) {
   let etsRoot = ''
   const values = {}
-  for (const flag of FLAGS) values[flag.arg] = '1'
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--ets-root') {
@@ -56,7 +55,12 @@ const file = join(etsRoot, FLAG_FILE)
 if (!existsSync(file)) fail(`missing generated flag file: ${file}`)
 
 let source = readFileSync(file, 'utf8')
+let changed = false
 for (const flag of FLAGS) {
+  if (values[flag.arg] === undefined) {
+    console.log(`[feature-flags] ${flag.label} unchanged (${file})`)
+    continue
+  }
   const declaration = new RegExp(`export const ${flag.name}: boolean = (true|false)`, 'g')
   const matches = [...source.matchAll(declaration)]
   if (matches.length !== 1) {
@@ -65,6 +69,7 @@ for (const flag of FLAGS) {
   const desired = values[flag.arg] === '1' ? 'true' : 'false'
   declaration.lastIndex = 0
   source = source.replace(declaration, `export const ${flag.name}: boolean = ${desired}`)
+  changed = true
   console.log(`[feature-flags] ${flag.label} ${desired === 'true' ? 'enabled' : 'disabled'} (${file})`)
 }
-writeFileSync(file, source)
+if (changed) writeFileSync(file, source)
