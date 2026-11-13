@@ -8,6 +8,7 @@ const { HapticFeedback } = await import(`data:text/javascript,${encodeURICompone
 const soft = 'haptic.effect.soft';
 const success = 'haptic.notice.success';
 const failure = 'haptic.notice.fail';
+const clockTimer = 'haptic.clock.timer';
 const deferred = () => {
   let resolve;
   let reject;
@@ -15,8 +16,8 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-function fixture(effects = [soft, success, failure]) {
-  const state = { consent: true, now: 1000, stored: false, pulses: [], writes: [], queries: [], stops: 0 };
+function fixture(effects = [soft, success, failure, clockTimer]) {
+  const state = { consent: true, now: 1000, stored: false, intensity: 40, pulses: [], writes: [], intensityWrites: [], queries: [], stops: 0, consentChecks: 0 };
   const driver = {
     async supports(effect) { state.queries.push(effect); return effects.includes(effect); },
     async start(effect, intensity) { state.pulses.push({ effect, intensity }); },
@@ -24,9 +25,11 @@ function fixture(effects = [soft, success, failure]) {
   };
   const preferences = {
     async readEnabled() { return state.stored; },
-    async writeEnabled(value) { state.writes.push(value); state.stored = value; }
+    async writeEnabled(value) { state.writes.push(value); state.stored = value; },
+    async readIntensity() { return state.intensity; },
+    async writeIntensity(value) { state.intensityWrites.push(value); state.intensity = value; }
   };
-  const guard = { hasConsent: () => state.consent, now: () => state.now };
+  const guard = { hasConsent: () => { state.consentChecks += 1; return state.consent; }, now: () => state.now };
   const service = new HapticFeedback(driver, preferences, guard);
   const ready = async () => {
     service.setForeground(true);
@@ -108,7 +111,7 @@ test('host switch persists on/off, refreshes from the service and reports failed
   assert.equal(recreated.status().enabled, true);
   model.preferences.writeEnabled = async () => { throw new Error('disk'); };
   assert.equal(await host.changeHapticEnabled(false), false);
-  assert.equal(host.hapticEnabled, false);
+  assert.equal(host.hapticEnabled, true);
   assert.equal(host.hapticBusy, false);
   assert.equal(calls.hints.length, 1);
 });
@@ -242,6 +245,90 @@ test('semantic presets, gentle gains, duplicate selection and global throttle', 
   assert.equal(await service.selection('Moon'), true);
 });
 
+test('intensity setting persists, scales semantic gains and survives recreation', async () => {
+  const { service, state, driver, preferences, guard, ready } = fixture();
+  await ready();
+  assert.equal(service.status().intensity, 40);
+  assert.equal(await service.setIntensity(80), true);
+  assert.equal(service.status().intensity, 80);
+  assert.equal(state.intensity, 80);
+  state.now += 1000;
+  assert.equal(await service.confirmation(), true);
+  assert.equal(state.pulses.at(-1).intensity, 80);
+  state.now += 1000;
+  assert.equal(await service.menu(), true);
+  assert.equal(state.pulses.at(-1).intensity, 60);
+  state.now += 1000;
+  service.beginRuler(0);
+  assert.equal(await service.rulerTick(1), true);
+  assert.equal(state.pulses.at(-1).intensity, 40);
+  const recreated = new HapticFeedback(driver, preferences, guard);
+  recreated.setForeground(true);
+  await recreated.initialize();
+  assert.equal(recreated.status().intensity, 80);
+});
+
+test('ruler uses the system clock-timer preset and falls back to soft', async () => {
+  const timed = fixture();
+  await timed.ready();
+  timed.service.beginRuler(0);
+  assert.equal(await timed.service.rulerTick(1), true);
+  assert.deepEqual(timed.state.pulses.at(-1), { effect: clockTimer, intensity: 20 });
+
+  const fallback = fixture([soft]);
+  await fallback.ready();
+  fallback.service.beginRuler(0);
+  assert.equal(await fallback.service.rulerTick(1), true);
+  assert.deepEqual(fallback.state.pulses.at(-1), { effect: soft, intensity: 20 });
+});
+
+test('a drag preview after a pending intensity commit cannot strand the saving state', async () => {
+  const { service, preferences, ready } = fixture();
+  await ready();
+  const write = deferred();
+  preferences.writeIntensity = async () => { await write.promise; };
+  const commit = service.setIntensity(70, true);
+  assert.equal(service.status().saving, true);
+  assert.equal(await service.setIntensity(65, false), true);
+  write.resolve();
+  assert.equal(await commit, true);
+  assert.equal(service.status().saving, false);
+  assert.equal(service.status().intensity, 65);
+});
+
+test('throttled preview reports a skip, not a hardware failure', async () => {
+  const { service, state, ready } = fixture();
+  await ready();
+  assert.equal(await service.confirmation(), true);
+  assert.equal(service.status().lastOutcome, 'played');
+  assert.equal(await service.confirmation(), false);
+  assert.equal(service.status().lastOutcome, 'skipped-throttled');
+  assert.equal(service.status().lastFailure, '');
+  state.now += 400;
+  assert.equal(await service.confirmation(), true);
+  assert.equal(service.status().lastOutcome, 'played');
+});
+
+test('every pulse kind reads the cached consent and never queries privacy', async () => {
+  const { service, state, ready } = fixture();
+  await ready();
+  const baseline = state.consentChecks;
+  assert.equal(await service.selection('Moon'), true);
+  state.now += 1000;
+  assert.equal(await service.menu(), true);
+  state.now += 1000;
+  assert.equal(await service.confirmation(), true);
+  state.now += 1000;
+  assert.equal(await service.error(), true);
+  service.beginRuler(0);
+  for (let index = 1; index <= 20; index += 1) {
+    state.now += 100;
+    await service.rulerTick(index);
+  }
+  assert.equal(state.pulses.length, 24, 'all single and ruler pulses actually reached the driver');
+  assert.equal(state.consentChecks, baseline, 'no privacy query may run on the pulse path');
+});
+
 test('ruler only emits for changed detents in an active gesture, never replays skipped ticks', async () => {
   const { service, state, ready } = fixture();
   await ready();
@@ -272,7 +359,7 @@ test('unsupported hardware remains silent, semantic presets fall back only to su
   assert.equal(fallback.state.pulses[0].effect, soft);
 });
 
-test('foreground and current privacy guard stop feedback; guard exceptions fail closed', async () => {
+test('foreground revocation and privacy guard exceptions fail closed at refresh boundaries', async () => {
   const { service, state, guard, ready } = fixture();
   await ready();
   await service.menu();
@@ -281,9 +368,12 @@ test('foreground and current privacy guard stop feedback; guard exceptions fail 
   assert.equal(state.stops, 1);
   service.setForeground(true);
   state.consent = false;
+  await service.initialize();
   state.now += 1000;
   assert.equal(await service.error(), false);
+  assert.equal(service.status().lastOutcome, 'skipped-consent');
   guard.hasConsent = () => { throw new Error('privacy unavailable'); };
+  assert.equal(service.refreshConsent(), false);
   assert.equal(await service.selection('Mars'), false);
   assert.equal(state.pulses.length, 1);
 });
@@ -351,7 +441,7 @@ for (const rejected of [false, true]) {
     assert.equal(await service.menu(), false);
     fresh.resolve(true);
     await Promise.all([resumed, duplicate]);
-    assert.deepEqual(state.queries, [soft, soft, success, failure]);
+    assert.deepEqual(state.queries, [soft, soft, success, failure, clockTimer]);
     assert.equal(service.status().probing, false);
     assert.equal(service.status().available, true);
     assert.equal(state.pulses.length, 0, 'initialization never replays feedback');
@@ -371,7 +461,10 @@ test('queued probe restart rechecks foreground and consent when the stale probe 
     service.setForeground(true);
     const resumed = service.initialize();
     if (revoked === 'foreground') service.setForeground(false);
-    else state.consent = false;
+    else {
+      state.consent = false;
+      service.refreshConsent();
+    }
     stale.resolve(true);
     await Promise.all([initial, resumed]);
     assert.deepEqual(state.queries, [soft]);
@@ -397,14 +490,14 @@ test('rapid preference changes serialize and an old load cannot overwrite a newe
   assert.equal(service.status().enabled, false);
 });
 
-test('persistence failure fails closed and leaves an explicit error', async () => {
+test('persistence failure rolls the switch back and leaves an explicit error', async () => {
   const { service, preferences, ready } = fixture();
   await ready();
   preferences.writeEnabled = async () => { throw new Error('disk'); };
   assert.equal(await service.setEnabled(false), false);
-  assert.equal(service.status().enabled, false);
+  assert.equal(service.status().enabled, true);
   assert.equal(service.status().lastFailure, 'preferences-write');
-  assert.equal(await service.menu(), false);
+  assert.equal(await service.menu(), true);
 });
 
 test('native synchronous throws and rejections are contained without retry storms', async () => {
@@ -430,6 +523,7 @@ test('native error code remains observable without exposing the platform error b
   assert.equal(await service.menu(), false);
   assert.equal(service.status().lastErrorCode, 14600101);
   assert.equal(service.status().lastFailure, 'vibration-start');
+  assert.equal(service.status().lastOutcome, 'failed');
   assert.ok(!JSON.stringify(service.status()).includes('private platform text'));
 });
 
@@ -443,9 +537,9 @@ test('invalid or backward clock readings suppress feedback', async () => {
   assert.equal(await service.error(), false);
 });
 
-test('platform adapter persists a boolean, checks capability and uses one system-controlled touch preset', async () => {
+test('platform adapter persists enabled and intensity, checks capability and uses one touch preset', async () => {
   const calls = [];
-  let stored;
+  const stored = new Map();
   const vibrator = {
     VibratorStopMode: { VIBRATOR_STOP_MODE_PRESET: 'preset' },
     async isSupportEffect(effect) { calls.push(['support', effect]); return true; },
@@ -455,15 +549,15 @@ test('platform adapter persists a boolean, checks capability and uses one system
   const preferences = { getPreferencesSync(context, options) {
     assert.equal(options.name, 'stellarium_haptics');
     return {
-      getSync: (key, fallback) => stored ?? fallback,
-      putSync: (key, value) => { assert.equal(key, 'enabled_v1'); stored = value; },
+      getSync: (key, fallback) => stored.has(key) ? stored.get(key) : fallback,
+      putSync: (key, value) => { stored.set(key, value); },
       async flush() { calls.push(['flush']); }
     };
   } };
   const clock = { TimeType: { STARTUP: 0 }, getUptime: () => 1000 };
-  const source = stripTypeScriptTypes(read('HarmonyHapticFeedback').replace(/^import .*\n/gm, '').replaceAll('export ', ''));
-  const create = new Function('HapticFeedback', 'preferences', 'systemDateTime', 'vibrator', 'canIUse', 'hasCurrentPrivacyConsent', source + ';return createHapticFeedback;')(
-    HapticFeedback, preferences, clock, vibrator,
+  const source = stripTypeScriptTypes(read('HarmonyHapticFeedback').replace(/^import[^\n]*\r?\n/gm, '').replaceAll('export ', ''));
+  const create = new Function('HapticFeedback', 'DEFAULT_HAPTIC_INTENSITY', 'preferences', 'systemDateTime', 'vibrator', 'canIUse', 'hasCurrentPrivacyConsent', source + ';return createHapticFeedback;')(
+    HapticFeedback, 40, preferences, clock, vibrator,
     capability => { assert.equal(capability, 'SystemCapability.Sensors.MiscDevice'); return true; }, () => true
   );
   const service = create({});
@@ -474,7 +568,9 @@ test('platform adapter persists a boolean, checks capability and uses one system
   assert.deepEqual(calls.find(call => call[0] === 'start'), [
     'start', { type: 'preset', effectId: soft, count: 1, intensity: 30 }, { usage: 'touch' }
   ]);
+  assert.equal(await service.setIntensity(70), true);
   service.setForeground(false);
   assert.ok(calls.some(call => call[0] === 'stop' && call[1] === 'preset'));
-  assert.equal(stored, true);
+  assert.equal(stored.get('enabled_v1'), true);
+  assert.equal(stored.get('intensity_v1'), 70);
 });

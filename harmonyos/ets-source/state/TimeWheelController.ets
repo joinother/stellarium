@@ -32,6 +32,13 @@ export class TimeWheelController {
   private inertiaStartedAt: number = 0
   private inertiaActive: boolean = false
   private lastVisualVelocity: number = 0
+  // Haptic cadence is intentionally based on drag motion, not time-unit steps:
+  // hour/month dragging needs hundreds of pixels per unit, so step-based ticks
+  // were effectively inaudible. The service still throttles by the user's
+  // frequency setting.
+  private hapticTickCounter: number = 0
+  private lastDragHapticMs: number = 0
+  private lastInertiaHapticMs: number = 0
 
   constructor(
     store: TimeWheelStore,
@@ -74,6 +81,9 @@ export class TimeWheelController {
       this.gestureTickOffset = this.store.timeWheelAppliedSteps
       this.dragCarry = this.store.timeWheelVisualOffset
       this.lastVisualVelocity = 0
+      this.hapticTickCounter = 0
+      this.lastDragHapticMs = 0
+      this.lastInertiaHapticMs = 0
       this.rebaseTrackAtCenter()
       this.onStopSpeed()
       return
@@ -89,7 +99,13 @@ export class TimeWheelController {
       const effectiveDelta = -stepDelta * this.store.tickSpacing
       this.dragCarry += effectiveDelta
       this.gestureSteps += stepDelta
-      this.onTick(Math.round(this.gestureSteps))
+      // Slower movement gives denser detent feedback; faster movement spreads
+      // pulses out to avoid a continuous buzz and to keep the UI thread light.
+      const hapticGap = speed < 0.35 ? 70 : (speed < 0.8 ? 100 : 140)
+      if (delta !== 0 && now - this.lastDragHapticMs >= hapticGap) {
+        this.lastDragHapticMs = now
+        this.onTick(++this.hapticTickCounter)
+      }
       this.store.timeWheelVisualOffset = this.dragCarry
       this.lastVisualVelocity = effectiveDelta / elapsedMs
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
@@ -192,6 +208,7 @@ export class TimeWheelController {
     this.inertiaVelocity = initialVelocity
     this.inertiaLastMs = Date.now()
     this.inertiaStartedAt = this.inertiaLastMs
+    this.lastInertiaHapticMs = this.inertiaLastMs
     this.inertiaTimer = setInterval(() => {
       if (!this.inertiaActive || this.store.timeWheelDragging) {
         this.stopInertia()
@@ -205,6 +222,10 @@ export class TimeWheelController {
       this.store.timeWheelVisualOffset += visualDelta
       this.dragCarry = this.store.timeWheelVisualOffset
       this.gestureSteps -= visualDelta / this.store.tickSpacing
+      if (now - this.lastInertiaHapticMs >= 100) {
+        this.lastInertiaHapticMs = now
+        this.onTick(++this.hapticTickCounter)
+      }
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
       const sendNative = now - this.lastNativePushMs >= 64
       this.applyDate(local, false, sendNative)

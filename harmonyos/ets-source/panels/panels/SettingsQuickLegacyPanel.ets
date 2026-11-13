@@ -8,7 +8,7 @@ import { NightModeStore } from '../../state/NightModeStore'
 import { TelescopeStore } from '../../state/TelescopeStore'
 import { SkyCultureViewStore } from '../../state/SkyCultureViewStore'
 import { ViewSettingsStore } from '../../state/ViewSettingsStore'
-import { DevicePrivacySection } from '../settings/DeviceAndLanguageRows'
+import { DeviceSection } from '../settings/DeviceAndLanguageRows'
 import { LayerSwitchRow } from '../layers/LayerSwitchRow'
 
 // 「快捷设置（旧版）」面板，对应 activePanel === 'settings_quick_legacy'。
@@ -50,7 +50,7 @@ export struct SettingsQuickLegacyPanel {
   build() {
       Scroll() {
         Column({ space: 0 }) {
-          DevicePrivacySection({ gyroscopeEnabled: this.gyroStore.gyroscopeEnabled, sensitivityText: this.gyroSensitivityText, onToggleGyroscope: (v: boolean) => { this.onToggleGyroscope(v) }, onRevoke: () => { this.onRevoke() } })
+          DeviceSection({ gyroscopeEnabled: this.gyroStore.gyroscopeEnabled, sensitivityText: this.gyroSensitivityText, onToggleGyroscope: (v: boolean) => { this.onToggleGyroscope(v) } })
           Row()
             .width('100%').height(0.5)
             .backgroundColor(this.c.border)
@@ -198,6 +198,17 @@ export struct SettingsQuickLegacyPanel {
                 .onClick(() => { this.onSetUnits(false) })
             }
           }.height(34).width('100%').padding({ left: 10, right: 10 }).margin({ bottom: 4 })
+          Row()
+            .width('100%').height(0.5)
+            .backgroundColor(this.c.border)
+            .margin({ top: 6, bottom: 8 })
+          Text(I18n.t('settings_section_privacy')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 8 })
+          Button(I18n.t('privacy_revoke'))
+            .fontSize(13).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
+            .border({ width: 1, color: this.c.errorBg })
+            .borderRadius(UI_RADIUS_CONTROL).height(38).width('100%')
+            .margin({ bottom: 12 })
+            .onClick(() => { this.onRevoke() })
         }.width('100%')
       }
       .width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)

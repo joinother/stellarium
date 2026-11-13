@@ -565,11 +565,11 @@ node scripts/stellarium-cli.mjs --command applyCollaborationSession --payload '<
 
 ## 天象日历与触觉反馈（2026-11-11）
 
-以下 ArkUI 命令要求应用前台且当前隐私同意有效；调用不会自动启用振动或申请通知授权。
+以下 ArkUI 命令要求应用前台且隐私同意缓存有效；触觉服务只在回前台/初始化/隐私流程等低频边界刷新 `privacyManager`，震动脉冲路径不再同步查询隐私服务。调用不会自动启用振动或申请通知授权。
 
 | 命令 | payload | 返回语义 |
 | --- | --- | --- |
-| `getHapticState` | 空 | `state` 含 enabled/available/foreground/supportedEffects；会查询设备支持性但不振动 |
+| `getHapticState` | 空 | `state` 含 enabled/available/foreground/consent/supportedEffects；会查询设备支持性但不振动 |
 | `setHapticEnabled` | `true/false`，兼容 `on/off/1/0` | `ok` 表示偏好保存结果，返回最新 state |
 | `playHapticFeedback` | `selection/menu/confirmation/error` | `played` 表示系统 API 接受，不证明实际有物理震感；关闭/不支持/后台不播放 |
 | `getAstronomyCalendarEvents` | `YYYY-MM` 或 `{year,month,startJD,endJD}` | 本地节气/月相/目录流星雨极大/行星合冲及大距；字符串为 UTC 月，JSON 可给本地月的 UT 边界，不改变星图时间 |

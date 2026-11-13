@@ -3,10 +3,11 @@ import preferences from '@ohos.data.preferences'
 import systemDateTime from '@ohos.systemDateTime'
 import { vibrator } from '@kit.SensorServiceKit'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
-import { HapticFeedback, HapticDriver, HapticPreferences, HapticGuard } from './HapticFeedback'
+import { HapticFeedback, HapticDriver, HapticPreferences, HapticGuard, DEFAULT_HAPTIC_INTENSITY } from './HapticFeedback'
 
 export const HAPTIC_PREFERENCES_STORE: string = 'stellarium_haptics'
 export const HAPTIC_ENABLED_KEY: string = 'enabled_v1'
+export const HAPTIC_INTENSITY_KEY: string = 'intensity_v1'
 
 class HarmonyHapticDriver implements HapticDriver {
   async supports(effectId: string): Promise<boolean> {
@@ -48,6 +49,23 @@ class HarmonyHapticPreferences implements HapticPreferences {
       throw new Error(String(error))
     }
   }
+
+  async readIntensity(): Promise<number> {
+    return Number(this.store().getSync(HAPTIC_INTENSITY_KEY, DEFAULT_HAPTIC_INTENSITY))
+  }
+
+  async writeIntensity(intensity: number): Promise<void> {
+    const store = this.store()
+    const previous = Number(store.getSync(HAPTIC_INTENSITY_KEY, DEFAULT_HAPTIC_INTENSITY))
+    store.putSync(HAPTIC_INTENSITY_KEY, intensity)
+    try {
+      await store.flush()
+    } catch (error) {
+      store.putSync(HAPTIC_INTENSITY_KEY, previous)
+      throw new Error(String(error))
+    }
+  }
+
 }
 
 class HarmonyHapticGuard implements HapticGuard {
