@@ -14,6 +14,8 @@
 退出码：无异常 0，有异常 1
 """
 import glob
+import fcntl
+import hashlib
 import html as htmllib
 import difflib
 import json
@@ -52,8 +54,8 @@ IMAGE_STATE = '/var/lib/skyinstrument/image-hashes.json'  # 图片感知指纹�
 IMAGE_DIFF_BITS = 12          # 指纹差异超过这个位数就认为"图变了"
 IMAGE_CHECK_MAX = 20          # 单次巡检最多检查 20 张图
 IMAGE_MAX_BYTES = 2 * 1024 * 1024
-AI_MAX_CALLS_PER_DAY = 300                            # 每日调用上限，超出退回纯规则
-AI_TIME_BUDGET = int(os.environ.get('AUDIT_AI_TIME_BUDGET', '150'))  # 单次巡检模型调用总时长（秒）
+AI_MAX_CALLS_PER_DAY = 50
+AI_TIME_BUDGET = 150                                  # 单次巡检用于模型调用的总时长（秒）
 AI_DEADLINE = [0.0]                                   # 本次巡检的模型调用截止时刻
 
 
@@ -177,7 +179,7 @@ def discover_served_dirs():
     if os.path.isdir(SITE_DIR):
         dirs.append(os.path.normpath(SITE_DIR))
     # 去重，且去掉被其他目录包含的子目录（子目录会被递归覆盖）
-    uniq = sorted(set(dirs))
+    uniq = sorted(d for d in set(dirs) if d != '/srv/skyinstrument/status')
     kept = []
     for d in uniq:
         if not any(d != k and d.startswith(k + os.sep) for k in uniq):
@@ -311,6 +313,10 @@ def hamming(a, b):
 
 
 def judge_image(path, rel):
+    return cached_judgment('image', rel, {}, lambda: judge_image_uncached(path, rel), path)
+
+
+def judge_image_uncached(path, rel):
     """图片内容判定：把图交给支持图像输入的模型看一眼。"""
     conf = load_audit_conf()
     if not conf.get('LLM_KEY'):
@@ -344,11 +350,13 @@ def judge_image(path, rel):
                                  data=body, method='POST')
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
+    if not reserve_ai_call():
+        return None
     try:
         with urllib.request.urlopen(req, timeout=40) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         u = data.get('usage') or {}
-        usage_add(calls=1, prompt=int(u.get('prompt_tokens', 0)),
+        usage_add(prompt=int(u.get('prompt_tokens', 0)),
                   completion=int(u.get('completion_tokens', 0)))
         content = data['choices'][0]['message']['content'].strip()
         m = re.search(r'\{.*\}', content, re.S)
@@ -357,6 +365,7 @@ def judge_image(path, rel):
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '图片判定失败：%s' % type(exc).__name__)
+        usage_add(failed=1)
         return None
 
 
@@ -545,15 +554,7 @@ def api_budget_consume():
 
 
 def api_endpoints():
-    if os.path.exists(API_CONF):
-        out = []
-        for line in open(API_CONF, encoding='utf-8'):
-            line = line.strip()
-            if line and not line.startswith('#'):
-                out.append(line)
-        if out:
-            return out
-    return API_DEFAULT
+    return ['/healthz']
 
 
 def check_api_endpoints():
@@ -882,6 +883,8 @@ def main():
     if conf.get('LLM_KEY') and issues:
         by_file = {}
         for level, kind, where, detail in issues:
+            if where.startswith('/'):
+                continue
             by_file.setdefault(where, []).append('%s/%s' % (kind, detail[:60]))
         calls = 0
         for rel, hits in list(by_file.items())[:4]:
@@ -1075,6 +1078,10 @@ def main():
 
 
 def judge_free(page, text):
+    return cached_judgment('free', page, text, lambda: judge_free_uncached(page, text))
+
+
+def judge_free_uncached(page, text):
     """词库未命中时的兜底审查：把变更文本交给模型判断是否引入风险。
 
     只在内容确有变更时调用，且每次巡检最多 3 段，控制成本。
@@ -1120,6 +1127,8 @@ def judge_free(page, text):
                                  data=body, method='POST')
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
+    if not reserve_ai_call():
+        return None
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode('utf-8'))
@@ -1135,11 +1144,12 @@ def judge_free(page, text):
             return None
         ai_record(True)
         u = data.get('usage') or {}
-        usage_add(calls=1, prompt=int(u.get('prompt_tokens', 0)),
+        usage_add(prompt=int(u.get('prompt_tokens', 0)),
                   completion=int(u.get('completion_tokens', 0)))
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '%s: %s' % (type(exc).__name__, exc))
+        usage_add(failed=1)
         return None
 
 
@@ -1190,12 +1200,17 @@ def review_full_page(abs_path, rel):
         return None
     chunk = 1200
     segments = [text[i:i + chunk] for i in range(0, min(len(text), chunk * 3), chunk)]
+    incomplete = False
     for seg in segments:
         verdict = judge_free(rel, seg)
+        if not verdict or verdict.get('verdict') not in ('ok', 'risk', 'false_positive'):
+            incomplete = True
         if verdict and verdict.get('verdict') == 'risk':
             out = dict(verdict)
             out['excerpt'] = seg[:80]
             return out
+    if incomplete:
+        return None
     return {'verdict': 'ok', 'reason': '整页未发现风险'}
 
 
@@ -1213,6 +1228,10 @@ def load_audit_conf():
 
 
 def judge(kind, page, payload):
+    return cached_judgment(kind, page, payload, lambda: judge_uncached(kind, page, payload))
+
+
+def judge_uncached(kind, page, payload):
     """调用大模型判断规则命中或内容变更的性质。失败返回 None，绝不阻塞巡检。"""
     conf = load_audit_conf()
     if not conf.get('LLM_KEY'):
@@ -1262,6 +1281,8 @@ def judge(kind, page, payload):
                                  data=body, method='POST')
     req.add_header('Content-Type', 'application/json')
     req.add_header('Authorization', 'Bearer ' + conf['LLM_KEY'])
+    if not reserve_ai_call():
+        return None
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode('utf-8'))
@@ -1272,19 +1293,19 @@ def judge(kind, page, payload):
             low = content.lower()
             if any(h.lower() in low for h in REFUSAL_HINTS):
                 ai_record(True, '模型拒绝输出（内容过滤）', refused=True)
-                usage_add(calls=1, refused=1)
+                usage_add(refused=1)
                 print('大模型拒绝输出（可能触发内容过滤），跳过判定', file=sys.stderr)
                 return {'verdict': 'refused', 'reason': '模型拒绝输出，未参与判定'}
             ai_record(False, '输出无法解析：' + content[:80])
             return {'verdict': 'needs_review', 'reason': '模型输出无法解析：' + content[:40]}
         ai_record(True)
         u = data.get('usage') or {}
-        usage_add(calls=1, prompt=int(u.get('prompt_tokens', 0)),
+        usage_add(prompt=int(u.get('prompt_tokens', 0)),
                   completion=int(u.get('completion_tokens', 0)))
         return json.loads(m.group(0))
     except Exception as exc:  # noqa: BLE001
         ai_record(False, '%s: %s' % (type(exc).__name__, exc))
-        usage_add(calls=1, failed=1)
+        usage_add(failed=1)
         print('大模型判定失败：%s: %s' % (type(exc).__name__, exc), file=sys.stderr)
         return None
 
@@ -1322,10 +1343,14 @@ def save_usage(data, day):
     try:
         os.makedirs(os.path.dirname(AI_USAGE), exist_ok=True)
         tmp = AI_USAGE + '.tmp'
-        json.dump(data, open(tmp, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        with open(tmp, 'w', encoding='utf-8') as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(tmp, AI_USAGE)
+        return True
     except Exception:  # noqa: BLE001
-        pass
+        return False
 
 
 def usage_add(calls=0, prompt=0, completion=0, refused=0, failed=0, budget_hit=0):
@@ -1340,7 +1365,62 @@ def usage_add(calls=0, prompt=0, completion=0, refused=0, failed=0, budget_hit=0
     for k, v in delta.items():
         life[k] = life.get(k, 0) + v
     data[LIFETIME_KEY] = life
-    save_usage(data, day)
+    return save_usage(data, day)
+
+
+def reserve_ai_call():
+    try:
+        with open(AI_USAGE, encoding='utf-8') as stream:
+            records = json.load(stream)
+        calls = records.get(_today(), {}).get('calls', 0)
+        if type(calls) is not int or calls < 0:
+            return False
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError, TypeError, AttributeError):
+        return False
+    return budget_left() > 0 and usage_add(calls=1)
+
+
+JUDGMENT_CACHE = '/var/lib/skyinstrument/judgment-cache.json'
+
+
+def cached_judgment(kind, page, payload, invoke, source=None):
+    digest = hashlib.sha256()
+    digest.update(json.dumps([kind, page, payload, load_audit_conf()], sort_keys=True,
+                             ensure_ascii=False).encode('utf-8'))
+    for filename in [source or ABS_BY_REL.get(page), __file__, LEXICON, LEXICON_EXCLUDE]:
+        if filename:
+            try:
+                with open(filename, 'rb') as stream:
+                    for block in iter(lambda: stream.read(65536), b''):
+                        digest.update(block)
+            except OSError:
+                digest.update(b'missing')
+    key = digest.hexdigest()
+    now = time.time()
+    try:
+        entries = json.load(open(JUDGMENT_CACHE, encoding='utf-8'))
+        entries = {entry_key: entry for entry_key, entry in entries.items()
+                   if isinstance(entry, dict) and isinstance(entry.get('result'), dict)
+                   and 0 <= now - entry.get('time', 0) < 86400}
+    except (OSError, ValueError, TypeError, AttributeError):
+        entries = {}
+    if key in entries:
+        return entries[key]['result']
+    result = invoke()
+    if not isinstance(result, dict) or not (result.get('verdict') in ('ok', 'false_positive', 'risk')
+                                          or result.get('risk') in ('yes', 'no')):
+        return result
+    entries[key] = {'time': now, 'result': result}
+    entries = dict(sorted(entries.items(), key=lambda item: item[1]['time'])[-2048:])
+    try:
+        with open(JUDGMENT_CACHE + '.tmp', 'w', encoding='utf-8') as stream:
+            json.dump(entries, stream, ensure_ascii=False)
+        os.replace(JUDGMENT_CACHE + '.tmp', JUDGMENT_CACHE)
+    except OSError:
+        pass
+    return result
 
 
 def usage_monthly(month_prefix=None):
@@ -1618,4 +1698,11 @@ def send_mail(report, count):
 
 
 if __name__ == '__main__':
-    main()
+    os.makedirs('/var/lib/skyinstrument', exist_ok=True)
+    with open('/var/lib/skyinstrument/audit-execution.lock', 'a') as audit_lock:
+        try:
+            fcntl.flock(audit_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print('已有内容巡检运行，跳过重叠执行')
+            sys.exit(0)
+        main()

@@ -125,21 +125,7 @@ def main():
             json.dump(cur, fh)
         return 0
 
-    site_diffs = [d for d in diffs if '/website/' in d]
-    mirror_diffs = [d for d in diffs if '/tle-mirror/' in d]
-    ctrl_diffs = [d for d in diffs if d not in site_diffs and d not in mirror_diffs]
-    print('%s 检测到 %d 个文件变化（页面 %d，镜像 %d，控制文件 %d）示例：%s'
-          % (now.strftime('%H:%M:%S'), len(diffs), len(site_diffs), len(mirror_diffs),
-             len(ctrl_diffs), ', '.join(diffs[:3])))
-
-    # 只有镜像或控制文件变化时不跑完整内容巡检：
-    # 镜像由每日全审的结构校验与新鲜度检查覆盖，控制文件由哈希记录留痕。
-    if not site_diffs:
-        print('  无页面变更，仅记录基线（镜像与控制文件交由每日巡检覆盖）')
-        with open(STATE, 'w', encoding='utf-8') as fh:
-            json.dump(cur, fh)
-        return 0
-
+    print('%s 检测到 %d 个文件变化，示例：%s' % (now.strftime('%H:%M:%S'), len(diffs), ', '.join(diffs[:3])))
     ok, count = pace_allow()
     if not ok:
         # 关键：限流时不更新哈希基线，否则这次变更会被"吃掉"，
@@ -147,19 +133,11 @@ def main():
         print('本小时已触发 %d 次巡检，达到上限；保留基线不动，下一轮继续触发' % count)
         return 0
     else:
-        env = dict(os.environ)
-        env['AUDIT_AI_TIME_BUDGET'] = '60'   # 哨兵只给模型 60 秒，避免拖成几分钟
-        try:
-            r = subprocess.run([AUDIT_BIN], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               universal_newlines=True, timeout=600, env=env)
-            for line in (r.stdout or '').splitlines():
-                if any(k in line for k in ('问题数', '留给每日汇总', '告警邮件', '已由应急处置',
-                                           '24 小时内告警过', 'AI 当日预算', '时间预算')):
-                    print('  ' + line.strip())
-        except subprocess.TimeoutExpired:
-            print('  巡检超时（600 秒），先记录基线，未看完的页面交由每日全站全审补查')
-        except Exception as exc:  # noqa: BLE001
-            print('  巡检异常：%s: %s' % (type(exc).__name__, exc))
+        r = subprocess.run([AUDIT_BIN], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           universal_newlines=True, timeout=300)
+        for line in (r.stdout or '').splitlines():
+            if any(k in line for k in ('问题数', '留给每日汇总', '告警邮件', '已由应急处置', '24 小时内告警过')):
+                print('  ' + line.strip())
 
     with open(STATE, 'w', encoding='utf-8') as fh:
         json.dump(cur, fh)
