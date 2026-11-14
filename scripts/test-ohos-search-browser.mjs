@@ -9,7 +9,7 @@ const catalogStore = readFileSync(new URL('../harmonyos/ets-source/state/Catalog
 const read = name => readFileSync(new URL('../harmonyos/ets-source/panels/search/' + name + '.ets', import.meta.url), 'utf8');
 // 搜索面板已组件化：分类/筛选选择器在 SearchCategoryBrowse，筛选页切换在 SearchFilterMenu，目录行在 CatalogFilterRow。
 const searchPanels = ['SearchBar', 'SearchSuggestions', 'SearchFilterMenu', 'SearchFilterChips', 'CatalogFilterRow',
-  'SearchCategoryBrowse', 'SearchConstellationChips', 'SearchCoordinateInput'].map(read).join('\n');
+  'SearchCategoryBrowse', 'SearchCoordinateInput'].map(read).join('\n');
 // 搜索面板分支已下沉为 SearchPanel 组件（Phase 4e），浏览器 Scroll 的 id/align 现在组件内。
 const searchPanelFile = readFileSync(new URL('../harmonyos/ets-source/panels/panels/SearchPanel.ets', import.meta.url), 'utf8');
 // E4：搜索筛选行为（selectSearchFilterCategory 等）已自宿主下沉 capability/SearchController.ets。

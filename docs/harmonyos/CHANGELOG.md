@@ -1,6 +1,14 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
 
+## [2026-11-14] OHOS 开发记录 - 时间轮 Canvas 化，搜索面板移除星座导航
+
+- **修改文件：** `panels/time/TimeWheelCanvas.ets`（新增）、`panels/time/TimeWheelScrubber.ets`、`state/TimeWheelController.ets`、`state/TimeWheelStore.ets`、`panels/panels/SearchPanel.ets`、`panels/search/SearchCategoryBrowse.ets`、`panels/search/SearchConstellationChips.ets`（删除）、`pages/MainWindowNativeNode.ets`、`state/SearchStore.ets`、`state/LanguageStore.ets`、`common/types/MainWindowModels.ets`、`capability/I18n.ets`、`scripts/test-ohos-search-browser.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **修改内容：** 时间轮的刻度、数值与中央高亮合并到单个 `TimeWheelCanvas`（Canvas 2D）绘制，删除原 41 个 tick 组件；`displaySync` 静止 60fps，按下/拖动期间请求 120fps，触摸事件内同步重绘并用 `postFrameCallback` 提交最终帧，松手后 90 帧 settle 定时器兜底。高亮只以滚轮物理中心为唯一中心向两侧 smoothstep 渐变（约 ±4.8 格），亮度与上下伸长共用同一比例；主刻度与细分刻度不再分色，只有主刻度带完整标签。数值水平/垂直居中、标签中心与最高刻度中心对齐，时分秒去掉单位。取消整刻度吸附，转轮可停在任意位置。惯性改为约 420ms 时间常数、初速上限 4.0、最长 1800ms。`rebaseTrackAtCenter` 同步平移标签基准并重置 appliedSteps，修复长距离拖动后标签停在旧基准。搜索面板删除星座导航 chips、`SearchStore` 导航数据/加载器、`ConstellationNavigationItem`、宿主调用与 `constellation_chips_title` 文案；目录天体列表高度 222→320；内层 Scroll 配置 `nestedScroll` `SELF_FIRST`，滚动到列表边缘后同一手势继续带动外层搜索面板。
+- **修改原因：** 41 个 ArkUI tick 节点在 120Hz 拖动时每帧重算 opacity/scale/height/blur，单帧可达 9–14ms；Canvas 将整条刻度带合成一次绘制，拖动时只重画不重建组件。搜索面板星座导航占用垂直空间且与目录天体重复，移除以扩大目录天体区域，并修复嵌套滚动吞掉外层手势、无法滚到坐标输入区的问题。
+- **构建结果：** ArkTS-only debug HAP `BUILD SUCCESSFUL`，793.2 MB，已安装并启动到 `192.168.1.4:36717`。
+- **验证结果：** 时间轮/触觉/搜索测试 31/31 通过；UI 契约检查 37 面板 / 57 锚点 / 311 文件；i18n 检查通过。真机手感与 120Hz 帧率由用户复测。
+
 ## [2026-11-13] OHOS 开发记录 - 触觉隐私同意改为生命周期缓存，消除脉冲路径卡顿
 
 - **修改文件：** `harmonyos/ets-source/capability/HapticFeedback.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。

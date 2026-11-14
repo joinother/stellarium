@@ -25,11 +25,6 @@ export interface HeliocentricPositionOptions {
   cometMagnitudeLimit: number
 }
 
-export interface ConstellationNavigationItem {
-  englishName: string
-  localizedName: string
-}
-
 export interface PluginFeatureRoute {
   panel: string
   kind: string

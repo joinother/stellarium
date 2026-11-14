@@ -2,13 +2,11 @@ import { Theme } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { CatOption, NameItem, SearchSug } from '../../pages/StellariumTypes'
-import { ConstellationNavigationItem } from '../../pages/MainWindowModels'
 import { SearchStore } from '../../state/SearchStore'
 import { SearchBar } from '../search/SearchBar'
 import { SearchSuggestions } from '../search/SearchSuggestions'
 import { SearchFilterMenu } from '../search/SearchFilterMenu'
 import { SearchCategoryBrowse } from '../search/SearchCategoryBrowse'
-import { SearchConstellationChips } from '../search/SearchConstellationChips'
 import { SearchCoordinateInput } from '../search/SearchCoordinateInput'
 
 // 搜索面板，对应 `activePanel === 'search'`。
@@ -47,7 +45,6 @@ export struct SearchPanel {
   onSelectCategoryObject: (item: NameItem) => void = () => {}
   onClearVisibility: () => void = () => {}
   onClearInstrument: () => void = () => {}
-  onOpenConstellation: (item: ConstellationNavigationItem) => void = () => {}
   onGoCoordinates: () => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
@@ -106,12 +103,7 @@ export struct SearchPanel {
         }
 
         if (this.store.searchFilterPage.length === 0) {
-          // 常见星座快速导航 + RA/Dec 坐标跳转（均为独立组件）
-          SearchConstellationChips({
-            store: this.store,
-            languageRevision: this.languageRevision,
-            onOpen: (item: ConstellationNavigationItem) => { this.onOpenConstellation(item) }
-          })
+          // 星座快速导航已移除；腾出的高度给上方“目录天体”列表。
           SearchCoordinateInput({
             store: this.store,
             onGo: () => { this.onGoCoordinates() }

@@ -176,7 +176,6 @@ import { SearchSuggestions } from '../panels/search/SearchSuggestions'
 import { SearchFilterMenu } from '../panels/search/SearchFilterMenu'
 import { SearchFilterChips } from '../panels/search/SearchFilterChips'
 import { SearchCategoryBrowse } from '../panels/search/SearchCategoryBrowse'
-import { SearchConstellationChips } from '../panels/search/SearchConstellationChips'
 import { SearchCoordinateInput } from '../panels/search/SearchCoordinateInput'
 import { TimeJumpActions } from '../panels/time/TimeJumpActions'
 import { ManualTimeBlock } from '../panels/time/ManualTimeBlock'
@@ -253,7 +252,7 @@ import { ConfigFallbackPanel } from '../panels/panels/ConfigFallbackPanel'
 import { SkyCultureSectionHeader, SkyCultureMetaItem, SkyCultureLabelSettingCard, SkyCultureFilterPicker } from '../panels/skyculture/SkyCultureViewParts'
 import { SatelliteGroupSelector } from '../panels/satellite/SatelliteGroupSelector'
 import {
-  ImageDecodeSize, HeliocentricPositionOptions, ConstellationNavigationItem, PluginFeatureRoute,
+  ImageDecodeSize, HeliocentricPositionOptions, PluginFeatureRoute,
   NebulaTextureItem, NebulaTextureStatus, NebulaTextureRefreshResponse, SkyCultureMakerArtworkAnchor, SkyCultureMakerArtwork, SkyCultureMakerConstellation,
   SkyCultureMakerDraft, SkyCultureMakerIssue,
   HeliocentricOrbit, ConfigurationOption, SkyCultureVisualColors, CelestialPositionOptions,
@@ -1967,17 +1966,13 @@ export struct WindowNativeNode {
     // 设置「配置回读」加载在 settingsCtl()：TimeSettingsStore 为纯数据，
     // 8 连发桥读归 SettingsController；跨域 setter 作为 TimeSettingsHostHooks 在该控制器惰性构造处注入。
     // 航海星 / 流星雨 / 搜索三域分别自持加载器（loadNavStars / loadMeteorShowers /
-    // loadConstellationNavigation）与其配对写方；三者复用同一 HostCommandPort 实例，消费方均为
+    // loadCategoryObjects）与其配对写方；三者复用同一 HostCommandPort 实例，消费方均为
     // @ObjectLink（字段赋值即刷新），无 publish* 发布点，故 onChanged 传空实现。
-    // SearchStore 的 loadConstellationNavigation 经 SearchHostHooks.languageSerial 只读 LanguageStore
-    // 的语言刷新代际（单一持有者，宿主不留副本）。
     this.navStarsStore.attachPort(hostPort, () => {})
     this.meteorStore.attachPort(hostPort, () => {})
     this.searchStore.attachPort(hostPort, () => {})
-    // 插件加载器与搜索历史 Preferences 读写经 SearchHostHooks 具名注入（store 不 import 桥/UI/
-    // NAPI）；语言刷新代际仍只读 LanguageStore。
+    // 插件加载器与搜索历史 Preferences 读写经 SearchHostHooks 具名注入（store 不 import 桥/UI/NAPI）。
     this.searchStore.attachHooks({
-      languageSerial: (): number => this.languageStore.languageRefreshSerial,
       publishSearchBrowserState: (): void => { this.publishSearchBrowserState() },
       categoryModuleIdFor: (category: string): string => this.catalogStore.categoryModuleIdFor(category),
       ensurePluginLoaded: (pluginName: string, callback: () => void, failureCallback?: () => void): void => this.pluginFeatureCtl().ensurePluginLoaded(pluginName, callback, failureCallback),
@@ -4328,7 +4323,6 @@ export struct WindowNativeNode {
       }
       if (panel === 'search') {
         this.catalogStore.loadObjectCatalogCategories(this.languageStore.languageRefreshSerial)
-        this.searchStore.loadConstellationNavigation(this.languageStore.languageRefreshSerial)
         if (this.searchStore.categoryObjects.length === 0) this.searchStore.loadCategoryObjects(this.searchStore.searchCategory)
       }
       if (panel === 'time') {
@@ -7322,9 +7316,7 @@ export struct WindowNativeNode {
         this.catalogStore.objectCatalogCategories = []
         this.searchStore.categoryObjects = []
         this.searchStore.searchSuggestions = []
-        this.searchStore.constellationNavigationItems = []
         this.catalogStore.loadObjectCatalogCategories(languageSerial)
-        this.searchStore.loadConstellationNavigation(languageSerial)
         this.searchStore.loadCategoryObjects(this.searchStore.searchCategory, selectedCategoryModuleId)
         const query = this.searchStore.searchText.trim()
         if (query.length > 0) this.searchCtl().fetchSuggestions(query, languageSerial)
@@ -9004,7 +8996,6 @@ export struct WindowNativeNode {
         },
         onClearVisibility: () => { this.searchCtl().selectSearchVisibilityFilter('all') },
         onClearInstrument: () => { this.searchCtl().selectSearchInstrumentFilter('all') },
-        onOpenConstellation: (item: ConstellationNavigationItem) => { this.openConstellationGuide(item.englishName, 'ConstellationMgr', item.localizedName) },
         onGoCoordinates: () => { this.goToCoordinates() }
       })
     } else if (this.activePanel === 'settings') {

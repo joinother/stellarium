@@ -1,5 +1,14 @@
 import { TimeWheelStore } from './TimeWheelStore'
 
+// 惯性参数：原实现 0.90/16ms 的衰减只相当于约 152ms 时间常数，
+// 快速甩动时约 0.7 秒就停；现在改为约 420ms 时间常数，并提高
+// 初速度和最长持续时间，让快速甩动滑得更远、更自然。
+const INERTIA_VELOCITY_SCALE: number = 0.68
+const INERTIA_MAX_VELOCITY: number = 4.0
+const INERTIA_TIME_CONSTANT_MS: number = 420
+const INERTIA_STOP_VELOCITY: number = 0.03
+const INERTIA_MAX_DURATION_MS: number = 1800
+
 // 时间轮的**交互控制器**：拖动 / 惯性 / 轨道重基准 / 引擎推送。
 //
 // 为什么是普通类而不是 @Observed store：这里的字段是**每个触摸采样都在变**的手势草稿量
@@ -195,14 +204,17 @@ export class TimeWheelController {
     this.inertiaActive = false
     this.inertiaVelocity = 0
     if (shouldApply) {
+      // 不做整刻度吸附：当前时间可以停在轴的任意位置，转轮中央是一条
+      // 由时间决定的虚拟中心线，而不是某个刻度的中心。
       this.applyDate(this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps), false, true)
     }
   }
 
   private startInertia(): void {
     this.stopInertia()
-    const rawVelocity = this.lastVisualVelocity * 0.58
-    const initialVelocity = Math.max(-2.8, Math.min(2.8, rawVelocity))
+    const rawVelocity = this.lastVisualVelocity * INERTIA_VELOCITY_SCALE
+    const initialVelocity = Math.max(-INERTIA_MAX_VELOCITY,
+      Math.min(INERTIA_MAX_VELOCITY, rawVelocity))
     if (Math.abs(initialVelocity) < 0.06 || this.gestureBaseMs <= 0) { return }
     this.inertiaActive = true
     this.inertiaVelocity = initialVelocity
@@ -232,8 +244,10 @@ export class TimeWheelController {
       if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
         this.rebaseTrackAtCenter()
       }
-      this.inertiaVelocity *= Math.pow(0.90, frameMs / 16.0)
-      if (now - this.inertiaStartedAt >= 900 || Math.abs(this.inertiaVelocity) < 0.025) {
+      // 时间常数衰减：与帧间隔无关，快速甩动不会被 16ms 定时器粒度影响。
+      this.inertiaVelocity *= Math.exp(-frameMs / INERTIA_TIME_CONSTANT_MS)
+      if (now - this.inertiaStartedAt >= INERTIA_MAX_DURATION_MS ||
+        Math.abs(this.inertiaVelocity) < INERTIA_STOP_VELOCITY) {
         this.stopInertia(true)
       }
     }, 16) as number
@@ -265,9 +279,16 @@ export class TimeWheelController {
   private rebaseTrackAtCenter(): void {
     const tickShift = Math.round(this.store.timeWheelVisualOffset / this.store.tickSpacing)
     if (tickShift === 0) { return }
+    // 标签基准随轨道一起平移。旧实现只回写 appliedSteps，长距离拖动后
+    // 预计算的标签（以及 Canvas）仍停在旧基准：字段已读 09:14，转轮中心
+    // 却还是 09:04。
+    const base = new Date(this.store.timeWheelTrackBaseMs)
+    this.store.shiftDate(base, -tickShift)
+    this.store.timeWheelTrackBaseMs = base.getTime()
     this.store.timeWheelVisualOffset -= tickShift * this.store.tickSpacing
     this.dragCarry = this.store.timeWheelVisualOffset
-    this.store.timeWheelAppliedSteps -= tickShift
-    this.gestureTickOffset -= tickShift
+    this.store.timeWheelAppliedSteps = 0
+    this.gestureTickOffset = 0
+    this.store.refreshTicks()
   }
 }
