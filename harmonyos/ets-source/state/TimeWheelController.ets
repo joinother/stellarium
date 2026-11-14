@@ -1,5 +1,14 @@
 import { TimeWheelStore } from './TimeWheelStore'
 
+// 惯性参数：原实现 0.90/16ms 的衰减只相当于约 152ms 时间常数，
+// 快速甩动时约 0.7 秒就停；现在改为约 420ms 时间常数，并提高
+// 初速度和最长持续时间，让快速甩动滑得更远、更自然。
+const INERTIA_VELOCITY_SCALE: number = 0.68
+const INERTIA_MAX_VELOCITY: number = 4.0
+const INERTIA_TIME_CONSTANT_MS: number = 420
+const INERTIA_STOP_VELOCITY: number = 0.03
+const INERTIA_MAX_DURATION_MS: number = 1800
+
 // 时间轮的**交互控制器**：拖动 / 惯性 / 轨道重基准 / 引擎推送。
 //
 // 为什么是普通类而不是 @Observed store：这里的字段是**每个触摸采样都在变**的手势草稿量
@@ -32,6 +41,13 @@ export class TimeWheelController {
   private inertiaStartedAt: number = 0
   private inertiaActive: boolean = false
   private lastVisualVelocity: number = 0
+  // Haptic cadence is intentionally based on drag motion, not time-unit steps:
+  // hour/month dragging needs hundreds of pixels per unit, so step-based ticks
+  // were effectively inaudible. The service still throttles by the user's
+  // frequency setting.
+  private hapticTickCounter: number = 0
+  private lastDragHapticMs: number = 0
+  private lastInertiaHapticMs: number = 0
 
   constructor(
     store: TimeWheelStore,
@@ -74,6 +90,9 @@ export class TimeWheelController {
       this.gestureTickOffset = this.store.timeWheelAppliedSteps
       this.dragCarry = this.store.timeWheelVisualOffset
       this.lastVisualVelocity = 0
+      this.hapticTickCounter = 0
+      this.lastDragHapticMs = 0
+      this.lastInertiaHapticMs = 0
       this.rebaseTrackAtCenter()
       this.onStopSpeed()
       return
@@ -89,7 +108,13 @@ export class TimeWheelController {
       const effectiveDelta = -stepDelta * this.store.tickSpacing
       this.dragCarry += effectiveDelta
       this.gestureSteps += stepDelta
-      this.onTick(Math.round(this.gestureSteps))
+      // Slower movement gives denser detent feedback; faster movement spreads
+      // pulses out to avoid a continuous buzz and to keep the UI thread light.
+      const hapticGap = speed < 0.35 ? 70 : (speed < 0.8 ? 100 : 140)
+      if (delta !== 0 && now - this.lastDragHapticMs >= hapticGap) {
+        this.lastDragHapticMs = now
+        this.onTick(++this.hapticTickCounter)
+      }
       this.store.timeWheelVisualOffset = this.dragCarry
       this.lastVisualVelocity = effectiveDelta / elapsedMs
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
@@ -179,19 +204,23 @@ export class TimeWheelController {
     this.inertiaActive = false
     this.inertiaVelocity = 0
     if (shouldApply) {
+      // 不做整刻度吸附：当前时间可以停在轴的任意位置，转轮中央是一条
+      // 由时间决定的虚拟中心线，而不是某个刻度的中心。
       this.applyDate(this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps), false, true)
     }
   }
 
   private startInertia(): void {
     this.stopInertia()
-    const rawVelocity = this.lastVisualVelocity * 0.58
-    const initialVelocity = Math.max(-2.8, Math.min(2.8, rawVelocity))
+    const rawVelocity = this.lastVisualVelocity * INERTIA_VELOCITY_SCALE
+    const initialVelocity = Math.max(-INERTIA_MAX_VELOCITY,
+      Math.min(INERTIA_MAX_VELOCITY, rawVelocity))
     if (Math.abs(initialVelocity) < 0.06 || this.gestureBaseMs <= 0) { return }
     this.inertiaActive = true
     this.inertiaVelocity = initialVelocity
     this.inertiaLastMs = Date.now()
     this.inertiaStartedAt = this.inertiaLastMs
+    this.lastInertiaHapticMs = this.inertiaLastMs
     this.inertiaTimer = setInterval(() => {
       if (!this.inertiaActive || this.store.timeWheelDragging) {
         this.stopInertia()
@@ -205,14 +234,20 @@ export class TimeWheelController {
       this.store.timeWheelVisualOffset += visualDelta
       this.dragCarry = this.store.timeWheelVisualOffset
       this.gestureSteps -= visualDelta / this.store.tickSpacing
+      if (now - this.lastInertiaHapticMs >= 100) {
+        this.lastInertiaHapticMs = now
+        this.onTick(++this.hapticTickCounter)
+      }
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
       const sendNative = now - this.lastNativePushMs >= 64
       this.applyDate(local, false, sendNative)
       if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
         this.rebaseTrackAtCenter()
       }
-      this.inertiaVelocity *= Math.pow(0.90, frameMs / 16.0)
-      if (now - this.inertiaStartedAt >= 900 || Math.abs(this.inertiaVelocity) < 0.025) {
+      // 时间常数衰减：与帧间隔无关，快速甩动不会被 16ms 定时器粒度影响。
+      this.inertiaVelocity *= Math.exp(-frameMs / INERTIA_TIME_CONSTANT_MS)
+      if (now - this.inertiaStartedAt >= INERTIA_MAX_DURATION_MS ||
+        Math.abs(this.inertiaVelocity) < INERTIA_STOP_VELOCITY) {
         this.stopInertia(true)
       }
     }, 16) as number
@@ -244,9 +279,16 @@ export class TimeWheelController {
   private rebaseTrackAtCenter(): void {
     const tickShift = Math.round(this.store.timeWheelVisualOffset / this.store.tickSpacing)
     if (tickShift === 0) { return }
+    // 标签基准随轨道一起平移。旧实现只回写 appliedSteps，长距离拖动后
+    // 预计算的标签（以及 Canvas）仍停在旧基准：字段已读 09:14，转轮中心
+    // 却还是 09:04。
+    const base = new Date(this.store.timeWheelTrackBaseMs)
+    this.store.shiftDate(base, -tickShift)
+    this.store.timeWheelTrackBaseMs = base.getTime()
     this.store.timeWheelVisualOffset -= tickShift * this.store.tickSpacing
     this.dragCarry = this.store.timeWheelVisualOffset
-    this.store.timeWheelAppliedSteps -= tickShift
-    this.gestureTickOffset -= tickShift
+    this.store.timeWheelAppliedSteps = 0
+    this.gestureTickOffset = 0
+    this.store.refreshTicks()
   }
 }

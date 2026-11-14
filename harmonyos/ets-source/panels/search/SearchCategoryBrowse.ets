@@ -120,7 +120,10 @@ export struct SearchCategoryBrowse {
             Text(I18n.t('search_load_more')).fontSize(11).fontColor(this.c.sub).padding({ left: 12, right: 12, top: 8, bottom: 8 })
           }
         }.width('100%').padding({ left: 2, right: 6 })
-      }.width('100%').height(222).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
+      }.width('100%').height(320).scrollable(ScrollDirection.Vertical).scrollBar(BarState.Auto)
+        // 默认 SELF_ONLY 会把滚动手势完全留在内层，外层搜索面板因此滚不到底（坐标输入区）。
+        // SELF_FIRST：内层列表先滚，到达边缘后同一手势继续带动外层，两级滚动自然衔接。
+        .nestedScroll({ scrollForward: NestedScrollMode.SELF_FIRST, scrollBackward: NestedScrollMode.SELF_FIRST })
         // 同 SearchSuggestions：设高后内容少时默认居中，固定顶部对齐。
         .align(Alignment.TopStart)
         .onReachEnd(() => { this.onLoadMore() })

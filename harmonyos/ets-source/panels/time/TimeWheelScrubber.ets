@@ -1,5 +1,6 @@
 import { Theme } from '@kit.ArkUI'
 import { TimeWheelStore } from '../../state/TimeWheelStore'
+import { TimeWheelCanvas } from './TimeWheelCanvas'
 import { UI_RADIUS_PILL, UI_RADIUS_SHEET } from '../../common/ui/UiTokens'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
@@ -19,42 +20,6 @@ export struct TimeWheelScrubber {
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
-  }
-
-  private tickDistance(index: number): number {
-    return Math.abs((index - this.store.centerTick) * this.store.tickSpacing + this.store.timeWheelVisualOffset)
-  }
-
-  private visibleTickLabel(index: number): string {
-    const offset = this.store.visibleTickOffset(index)
-    if (!this.store.isVisibleMajorTick(index) &&
-      this.tickDistance(index) > this.store.tickSpacing * 4.5) {
-      return ''
-    }
-    return this.store.tickValue(offset)
-  }
-
-  private tickScale(index: number): number {
-    const focus = Math.max(0, 1 - this.tickDistance(index) / (this.store.tickSpacing * 3))
-    return 1 + focus * 0.22
-  }
-
-  private tickOpacity(index: number): number {
-    const focus = Math.max(0, 1 - this.tickDistance(index) / (this.store.tickSpacing * 4.5))
-    const baseOpacity = this.store.isVisibleMajorTick(index) ? 0.12 : 0.04
-    return focus * (baseOpacity + (1 - baseOpacity) * focus)
-  }
-
-  private tickBlur(index: number): number {
-    const distance = this.tickDistance(index)
-    if (distance <= this.store.tickSpacing / 2) { return 0 }
-    return Math.min(1.2, (distance / this.store.tickSpacing - 0.5) * 0.42)
-  }
-
-  private tickHeight(index: number): number {
-    const focus = Math.max(0, 1 - this.tickDistance(index) / (this.store.tickSpacing * 3))
-    const baseHeight = this.store.isVisibleMajorTick(index) ? 17 : 8
-    return baseHeight + (31 - baseHeight) * focus
   }
 
   build() {
@@ -125,43 +90,12 @@ export struct TimeWheelScrubber {
       .borderRadius(UI_RADIUS_PILL)
 
       Stack({ alignContent: Alignment.Center }) {
-        Row() {
-          ForEach(this.store.timeWheelTickLabels, (_label: string, index: number) => {
-            Column({ space: 2 }) {
-              Text(this.visibleTickLabel(index)).maxLines(1).minFontSize(10)
-                .fontSize(this.store.timeWheelUnit === 'year' ? 10 : 12)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.c.text)
-                .textAlign(TextAlign.Center).width(42).height(16)
-                .opacity(this.tickOpacity(index))
-                .scale({ x: this.tickScale(index), y: this.tickScale(index) })
-              Stack({ alignContent: Alignment.Bottom }) {
-                Column()
-                  .width(1)
-                  .height(this.tickHeight(index))
-                  .backgroundColor(this.c.text)
-                  .opacity(this.tickOpacity(index))
-              }
-                .width(2)
-                .height(31)
-            }
-              .width(this.store.tickSpacing)
-              .height(56)
-              .justifyContent(FlexAlign.Center)
-              .alignItems(HorizontalAlign.Center)
-              .blur(this.tickBlur(index))
-          }, (_label: string, index: number) => 'time-wheel-tick-' + index.toString())
-        }
-        .width(this.store.tickSpacing * (this.store.centerTick * 2 + 1))
-        .translate({ x: this.store.timeWheelVisualOffset, y: 0 })
-        .align(Alignment.Center)
-        .hitTestBehavior(HitTestMode.None)
-
-        Column()
+        TimeWheelCanvas({
+          store: this.store,
+          onWheelTouch: (event: TouchEvent) => { this.onWheelTouch(event) }
+        })
           .width('100%')
-          .height(56)
-          .backgroundColor(Color.Transparent)
-          .onTouch((event: TouchEvent) => { this.onWheelTouch(event) })
+          .height('100%')
       }
       .width('100%')
       .height(56)

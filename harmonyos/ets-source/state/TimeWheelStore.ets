@@ -18,6 +18,8 @@ export class TimeWheelStore {
   timeWheelMinute: number = INITIAL_WHEEL_TIME.getMinutes()
   timeWheelSecond: number = INITIAL_WHEEL_TIME.getSeconds()
   timeWheelTickLabels: string[] = []
+  // 每个刻度的完整数值（含非主刻度），供 Canvas 在中心附近绘制小号标签。
+  timeWheelAllLabels: string[] = []
   timeWheelVisualOffset: number = 0
   timeWheelDragging: boolean = false
   timeWheelAppliedSteps: number = 0
@@ -84,29 +86,23 @@ export class TimeWheelStore {
     if (this.timeWheelUnit === 'year') { return local.getUTCFullYear().toString() }
     if (this.timeWheelUnit === 'month') { return (local.getUTCMonth() + 1).toString().padStart(2, '0') + '月' }
     if (this.timeWheelUnit === 'day') { return local.getUTCDate().toString().padStart(2, '0') + '日' }
-    if (this.timeWheelUnit === 'hour') { return local.getUTCHours().toString().padStart(2, '0') + '时' }
-    if (this.timeWheelUnit === 'minute') { return local.getUTCMinutes().toString().padStart(2, '0') + '分' }
-    return local.getUTCSeconds().toString().padStart(2, '0') + '秒'
-  }
-
-  tickLabel(offset: number): string {
-    if (offset % this.majorInterval() !== 0) { return '' }
-    return this.tickValue(offset)
+    // 时分秒只显示数字：滚轮宽度固定，带单位会在部分语言/字号下撑破布局。
+    if (this.timeWheelUnit === 'hour') { return local.getUTCHours().toString().padStart(2, '0') }
+    if (this.timeWheelUnit === 'minute') { return local.getUTCMinutes().toString().padStart(2, '0') }
+    return local.getUTCSeconds().toString().padStart(2, '0')
   }
 
   refreshTicks(): void {
     const labels: string[] = []
+    const all: string[] = []
+    const interval = this.majorInterval()
     for (let index = 0; index <= this.centerTick * 2; index++) {
-      labels.push(this.tickLabel(index - this.centerTick))
+      const offset = index - this.centerTick
+      const value = this.tickValue(offset)
+      all.push(value)
+      labels.push(offset % interval === 0 ? value : '')
     }
     this.timeWheelTickLabels = labels
-  }
-
-  visibleTickOffset(index: number): number {
-    return index - this.centerTick + this.timeWheelAppliedSteps
-  }
-
-  isVisibleMajorTick(index: number): boolean {
-    return this.visibleTickOffset(index) % this.majorInterval() === 0
+    this.timeWheelAllLabels = all
   }
 }

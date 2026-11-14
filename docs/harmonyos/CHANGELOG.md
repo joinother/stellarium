@@ -1,6 +1,90 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
 
+## [2026-11-14] OHOS 开发记录 - 时间轮 Canvas 化，搜索面板移除星座导航
+
+- **修改文件：** `panels/time/TimeWheelCanvas.ets`（新增）、`panels/time/TimeWheelScrubber.ets`、`state/TimeWheelController.ets`、`state/TimeWheelStore.ets`、`panels/panels/SearchPanel.ets`、`panels/search/SearchCategoryBrowse.ets`、`panels/search/SearchConstellationChips.ets`（删除）、`pages/MainWindowNativeNode.ets`、`state/SearchStore.ets`、`state/LanguageStore.ets`、`common/types/MainWindowModels.ets`、`capability/I18n.ets`、`scripts/test-ohos-search-browser.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **修改内容：** 时间轮的刻度、数值与中央高亮合并到单个 `TimeWheelCanvas`（Canvas 2D）绘制，删除原 41 个 tick 组件；`displaySync` 静止 60fps，按下/拖动期间请求 120fps，触摸事件内同步重绘并用 `postFrameCallback` 提交最终帧，松手后 90 帧 settle 定时器兜底。高亮只以滚轮物理中心为唯一中心向两侧 smoothstep 渐变（约 ±4.8 格），亮度与上下伸长共用同一比例；主刻度与细分刻度不再分色，只有主刻度带完整标签。数值水平/垂直居中、标签中心与最高刻度中心对齐，时分秒去掉单位。取消整刻度吸附，转轮可停在任意位置。惯性改为约 420ms 时间常数、初速上限 4.0、最长 1800ms。`rebaseTrackAtCenter` 同步平移标签基准并重置 appliedSteps，修复长距离拖动后标签停在旧基准。搜索面板删除星座导航 chips、`SearchStore` 导航数据/加载器、`ConstellationNavigationItem`、宿主调用与 `constellation_chips_title` 文案；目录天体列表高度 222→320；内层 Scroll 配置 `nestedScroll` `SELF_FIRST`，滚动到列表边缘后同一手势继续带动外层搜索面板。
+- **修改原因：** 41 个 ArkUI tick 节点在 120Hz 拖动时每帧重算 opacity/scale/height/blur，单帧可达 9–14ms；Canvas 将整条刻度带合成一次绘制，拖动时只重画不重建组件。搜索面板星座导航占用垂直空间且与目录天体重复，移除以扩大目录天体区域，并修复嵌套滚动吞掉外层手势、无法滚到坐标输入区的问题。
+- **构建结果：** ArkTS-only debug HAP `BUILD SUCCESSFUL`，793.2 MB，已安装并启动到 `192.168.1.4:36717`。
+- **验证结果：** 时间轮/触觉/搜索测试 31/31 通过；UI 契约检查 37 面板 / 57 锚点 / 311 文件；i18n 检查通过。真机手感与 120Hz 帧率由用户复测。
+
+## [2026-11-13] OHOS 开发记录 - 触觉隐私同意改为生命周期缓存，消除脉冲路径卡顿
+
+- **修改文件：** `harmonyos/ets-source/capability/HapticFeedback.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。
+- **修改内容：** `HapticFeedback` 新增 `consentOk` / `consentDirty` 生命周期缓存与公开 `refreshConsent()`；`setForeground(true)` 只标记待刷新，`initialize()` 在回前台/隐私流程/首次初始化时查询一次；`emit()` 的 `selection` / `menu` / `confirmation` / `error` / `ruler` 全部只读缓存，删除脉冲前 `hasConsent()` 和脉冲后 `allowed()` 中的同步隐私查询；`setEnabled(true)` 在缓存未知时兜底刷新一次；`HapticStatus` 增加 `consent`，新增 `skipped-consent` 结果；`loadAndProbe()` 的多次隐私检查合并为缓存读取。测试新增“全部脉冲类型不查询隐私”用例，覆盖 24 次单次+刻度脉冲。
+- **修改原因：** DevEco Frame/CPU profile（`.deveco/profile/Frame_SGT-AL00_com.joinother.skyinstrument_Main Process_20261113T233247.insight`）显示，拖动时间轮 22.4s 内主线程有 7.25s（32.4%）耗在 `privacyManager.getAppPrivacyMgmtInfo/getAppPrivacyResult`，每次完整检查约 70ms；52 次脉冲 × 2 次检查 = 104 次，正好对应 104 对 NAPI 调用。帧内隐私重叠 ≥20ms 的 35 帧 100% 卡顿（平均 79.6ms，最长 91.7ms）；`startVibration` 本身仅 0.09ms。单次点选/快捷开关/试听同样走 `emit()`，此前每次也阻塞约 140ms。
+- **构建结果：** ArkTS-only debug HAP `BUILD SUCCESSFUL`，793.2 MB，已安装并启动到 `192.168.1.4:36717`；`getHapticState` 返回 `consent:true`，`supportedEffects` 含 `haptic.clock.timer`。
+- **验证结果：** 触觉单测 25/25 通过（新增全脉冲类型零隐私查询用例），时间轮测试 3/3 通过，UI 契约检查通过。真机 Frame/手感复测待用户完成。
+- **备注：** 同意缓存只在回前台/初始化/隐私流程/未知状态启用时刷新；应用前台期间从系统设置撤回同意的极端场景会延迟到下次刷新。地图、通知、剪贴板等敏感能力仍保留实时隐私检查，不受影响。
+
+## [2026-11-13] OHOS 开发记录 - 时间轮改用 clock.timer 预置震动
+
+- **修改文件：** `capability/HapticFeedback.ets`、`HarmonyHapticFeedback.ets`、`panels/settings/HapticSection.ets`、`panels/panels/SettingsPanel.ets`、`pages/MainWindowNativeNode.ets`、`state/TimeWheelController.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`scripts/test-ohos-time-transition.mjs`。
+- **修改内容：** 删除频率滑杆及 `frequency` 偏好/状态/设置接口，触觉设置只保留震动力度；删除自定义 Pattern 启动/停止与 `VibrateFromPattern` 构建代码；时间轮改用系统预置 `haptic.clock.timer`（`vibrator.EffectId.EFFECT_CLOCK_TIMER`），不支持时回退 `haptic.effect.soft`；时间轮按速度自适应刻度反馈节奏：慢速 70ms 尝试、中速 100ms、快速 140ms，惯性阶段 100ms，服务层 ruler 最小间隔 80ms。
+- **修改原因：** Pattern 方案在真机上仍然卡顿；行业最佳实践是滚轮使用系统语义化预置效果，并按离散刻度/速度限频，而不是自定义 Pattern 或高频 `startVibration`。
+- **构建结果：** ArkTS-only release HAP `BUILD SUCCESSFUL`，约 783.4 MB，安装成功；自动启动被锁屏拦截（`10106102`，需用户解锁手机后启动）。
+- **验证结果：** 触觉单测 25/25 通过（新增 clock.timer 使用与 soft 回退用例），时间轮测试 3/3 通过，UI 契约检查通过。按用户要求未做真机手感/性能测试。
+- **备注：** 旧的 `frequency_v1` preference 已不再读取；后续清理偏好时可删除。频率概念今后只用于描述反馈节奏，不再作为单次预置振动的参数。
+
+## [2026-11-13] OHOS 开发记录 - 时间轮改用 Pattern 震动
+
+- **修改文件：** `capability/HapticFeedback.ets`、`HarmonyHapticFeedback.ets`、`pages/MainWindowNativeNode.ets`、`scripts/test-ohos-haptic-feedback.mjs`。
+- **修改内容：** 恢复时间轮震动并改为一次启动的自定义 Pattern：`HapticDriver` 新增 `startPattern/stopPattern`，`HarmonyHapticDriver` 用 `VibratorPatternBuilder` 生成 30 秒瞬态事件序列；`HapticFeedback.startRulerPattern()` 每次移动突发只启动一次，`stopRulerPattern()` 在空闲/结束/后台时停止；时间轮宿主在首次刻度时启动 Pattern，每次刻度重置 160ms 空闲计时器，停止移动后自动结束；频率同时控制 Pattern 事件间隔（80–160ms）和马达频率，Pattern 启动失败时回退到原有逐脉冲节流路径。
+- **修改原因：** A/B 测试确认移除时间轮震动后卡顿基本消失，根因是每个刻度一次 `vibrator.startVibration` 的 NAPI/系统调用；改为一次 Pattern 启动可保留反馈并避开高频跨进程调用。
+- **构建结果：** ArkTS-only release HAP `BUILD SUCCESSFUL`，约 783.4 MB，已安装到 `192.168.1.4:36717`。
+- **验证结果：** 触觉单测 28/28 通过（新增 Pattern 单次启动、Pattern 不支持回退、启动中被停止三个用例）；按用户要求未做真机手感/性能测试。
+- **备注：** 若设备不支持 `VibrateFromPattern`，会自动回退到逐脉冲模式；此时仍可能重新出现卡顿，需要改为更低频的定时脉冲或保持关闭。
+
+## [2026-11-13] OHOS 开发记录 - 临时关闭时间轮震动用于 A/B
+
+- **修改文件：** `pages/MainWindowNativeNode.ets`。
+- **修改内容：** 新增 `timeWheelHapticEnabled` 临时开关并设为 `false`；时间轮拖动/惯性回调、`beginRuler`/`endRuler` 全部跳过，其它触觉反馈保持不变。
+- **修改原因：** P0 优化后用户仍感觉拖动时间轮卡顿，先完全屏蔽滚轮震动，用于判断掉帧是否来自震动链路。
+- **构建结果：** ArkTS-only release HAP `BUILD SUCCESSFUL`，约 783.4 MB，已安装到 `192.168.1.4:36717`。
+- **验证结果：** 按用户要求未做真机测试；开关恢复为 `true` 即可重新启用时间轮震动。
+
+## [2026-11-13] OHOS 开发记录 - 时间轮拖动 P0 性能优化
+
+- **修改文件：** `capability/HapticFeedback.ets`、`state/TimeWheelController.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`scripts/test-ohos-time-transition.mjs`。
+- **修改内容：** `HapticFeedback.emit()` 先做前台/开关/保存中/占用等廉价检查与节流，只有真正准备发起脉冲时才查询隐私同意，避免时间轮每个触摸样本都同步调用 privacyManager；`TimeWheelController` 拖动阶段最多每 40ms 尝试一次刻度反馈；ruler 基础间隔从 70ms 调为 100ms、最小 80ms（频率 100% 时约 12.5 次/秒），ruler 全局最小间隔 60ms。
+- **修改原因：** 时间轮改为按触摸移动触发反馈后，拖动时每个 Move 都会先做一次同步隐私校验，且频率 100% 时震动发起频率可达 25 次/秒，与原生时间更新和轮盘重绘叠加，造成主线程卡顿。
+- **构建结果：** ArkTS-only release HAP `BUILD SUCCESSFUL`，HAP 约 783.4 MB，已安装到 `192.168.1.4:36717`。
+- **验证结果：** 触觉单测 25/25 通过（新增“被节流时不查询隐私同意”用例），时间轮测试 3/3 通过。按用户要求未做真机手感/性能测试。
+- **备注：** 本轮只做 P0；原生 `setTimeToJD` 的 64ms 节流、时间轮 41 个刻度节点的 `blur` 重绘、日期字段逐帧写入仍未调整。若真机仍卡顿，下一步再处理这些 P1 项。
+
+## [2026-11-13] OHOS 开发记录 - 震动力度/频率、快捷开关与时间轮反馈
+
+- **修改文件：** `capability/HapticFeedback.ets`、`HarmonyHapticFeedback.ets`、`panels/settings/HapticSection.ets`、`NotificationSection.ets`、`panels/panels/SettingsPanel.ets`、`pages/MainWindowNativeNode.ets`、`state/TimeWheelController.ets`、`scripts/test-ohos-haptic-feedback.mjs`。
+- **修改内容：** 触觉反馈折叠面板增加“震动力度”（10–100，默认 40）和“震动频率”（0–100，默认 50）两条滑杆，均持久化到 `stellarium_haptics`；“试一下”移入展开区，并增加 360ms 本地防连点。`HapticFeedback` 用 `lastOutcome` 区分 `played` / `skipped-*` / `failed`，试听只在真实 `vibration-start` 失败时提示，节流或占用不再误报“未能播放”。频率按连续反馈 cadence 实现：缩放全局脉冲间隔和同类脉冲间隔，时间轮拖动时按实际触摸移动递增反馈计数，惯性阶段每 50ms 尝试一次；时间轮抬起后不再立即结束 ruler，保证惯性刻度继续反馈。快捷操作面板的所有开关在分发动作前播放 `menu()` 脉搏。反馈与通知卡片改为与图层条目一致的边框、背景、圆角和行高。
+- **修改原因：** 用户要求增加震动力度/频率控制，修复连续点击“试一下”误报，并让快捷面板开关和时间滚动轮具备触觉反馈；同时反馈/通知区域原有大圆角软色卡片与其它设置行风格不一致。
+- **构建结果：** ArkTS-only release HAP `BUILD SUCCESSFUL`，HAP 约 783.4 MB，已安装到 `192.168.1.4:36717`。
+- **验证结果：** 触觉单测 24/24 通过，时间过渡测试 2/2 通过，UI 契约检查通过（37 面板 / 57 锚点）。按用户要求未做真机手感测试，由用户实测。
+- **备注：** “震动频率”控制的是时间刻度等连续反馈的触发间隔，单次选中/确认反馈的波形不变；实际手感受系统触感设置与设备马达支持影响。
+
+## [2026-11-13] OHOS 开发记录 - 设备与隐私页分区与条目样式统一
+
+- **修改文件：** `harmonyos/ets-source/panels/settings/DeviceAndLanguageRows.ets`、`panels/panels/SettingsPanel.ets`、`panels/panels/SettingsQuickLegacyPanel.ets`、`capability/I18n.ets`。
+- **修改内容：** 陀螺仪开关与灵敏度拆成两个条目，统一使用 `LayerSwitchRow` 的卡片行样式；设备与隐私页按“陀螺仪 / 反馈 / 通知 / 隐私”增加小标题和 0.5px 分割线；撤回隐私同意按钮移到页末，删除按钮下方与确认弹窗重复的说明文字；旧版快捷设置页同步使用新的设备条目，并把撤回按钮放到页末。新增 `settings_section_feedback`、`settings_section_notifications`、`settings_section_privacy` 文案。
+- **修改原因：** 原有“设备与隐私”块在页首重复标题、条目与说明层级混杂，隐私入口夹在页面中部；用户要求让各小功能分区和行样式与图层设置面板一致。
+- **构建结果：** ArkTS-only HAP 打包 `BUILD SUCCESSFUL`，HAP 约 793.2 MB；未重新编译引擎。
+- **验证结果：** `check-ohos-ui-contract.mjs` 通过（37 面板 / 57 锚点），`check-ohos-i18n.mjs` 通过；尚未安装到真机做视觉验收。
+
+## [2026-11-13] OHOS 开发记录 - 设置开关回弹与订阅错误提示
+
+- **修改文件：** `harmonyos/ets-source/panels/settings/HapticSection.ets`、`NotificationSection.ets`、`pages/MainWindowNativeNode.ets`、`capability/HapticFeedback.ets`。
+- **修改内容：** 触觉反馈和通知订阅开关改用组件内 `@State` 承接用户操作，`@Prop` 通过 `@Watch` 单向同步，并用值相等判断忽略程序化 `onChange` 回声；`HapticFeedback.setEnabled` 先同步更新内存中的 `enabled`，再在后台写 preferences，写失败才回退，宿主立即刷新状态，不再等本地落盘后才让开关生效；通知开关改走 `NotificationController.changeSubscription()`，把代理提醒权益/系统通知/订阅数据的真实失败原因通过提示条和状态文字显示出来。
+- **修改原因：** 真机日志显示一次点击会连续触发 `onChange(true)` 和约 60ms 后的 `onChange(false)`，父层回写 `@Prop` 时开关被第二个回调弹回，表现为“新增开关都无法打开”。通知订阅失败时旧路径只回滚状态，没有把真实原因显示给用户。
+- **构建结果：** ArkTS-only HAP 打包安装 `BUILD SUCCESSFUL`，HAP 约 793.2 MB。
+- **验证结果：** 真机（`192.168.1.4:36717`）触觉反馈开关单次点击只发一次请求，可正常 off→on / on→off；通知订阅开关单次点击只发一次 `changeSubscription`，当前签名未获 `com.huawei.service.notification.agentreminder` 时回滚并显示“提醒数量已达系统上限，或当前签名未获代理提醒权益”。
+- **备注：** 订阅开关真正启用仍需 AGC 代理提醒权益与包含该能力的签名 Profile；本次修复只保证开关交互不再被回声弹回，并诚实显示失败原因。
+
+## [2026-11-13] OHOS 开发记录 - b1169ba 起 rebase 修订核查
+
+- **核查范围：** 原始提交序列 `541eef332e..4efb53a31d` 与 rebase 后 `b1169ba2ea..0a23b99ccb` 的逐提交 `range-diff`（仅代码/脚本路径）。
+- **核查结果：** 12 个提交逐字一致（`=`）；`b1169ba` 仅有目标分支新增 `AtmosphereGroundSection` 导入与 `StelObjectMgr` 现实星等 + `getPickState` 合并的预期上下文差异；`5d70dd17` 仅有 `sync-ohos-build-sources.sh` 中目标分支新增模型 manifest 比对行的预期差异。未发现 rebase 丢失新功能代码。
+- **结论：** 设置开关无法打开不是 rebase 损坏，而是 Toggle 的 `@Prop` 回写触发第二次 `onChange` 的组件交互问题；通知订阅还受当前签名缺少代理提醒权益限制。
+
 ## [2026-11-13] Codex - PR #9 集成检查与修复
 
 - **集成范围：** `joinother/stellarium#9`，头提交 `0a23b99ccb8b39da055afa085b9f44ad3798ef55`；共同祖先为当前主线 `03c8e3072c21a73908daa9656e02da950f089761`，不是九月旧版。保留已有星座模型及 PC Dock、键盘路由代码。

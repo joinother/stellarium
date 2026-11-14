@@ -8,7 +8,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { systemShare } from '@kit.ShareKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
-import { HapticFeedback } from '../capability/HapticFeedback'
+import { HapticFeedback, DEFAULT_HAPTIC_INTENSITY } from '../capability/HapticFeedback'
 import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
 import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
@@ -176,7 +176,6 @@ import { SearchSuggestions } from '../panels/search/SearchSuggestions'
 import { SearchFilterMenu } from '../panels/search/SearchFilterMenu'
 import { SearchFilterChips } from '../panels/search/SearchFilterChips'
 import { SearchCategoryBrowse } from '../panels/search/SearchCategoryBrowse'
-import { SearchConstellationChips } from '../panels/search/SearchConstellationChips'
 import { SearchCoordinateInput } from '../panels/search/SearchCoordinateInput'
 import { TimeJumpActions } from '../panels/time/TimeJumpActions'
 import { ManualTimeBlock } from '../panels/time/ManualTimeBlock'
@@ -253,7 +252,7 @@ import { ConfigFallbackPanel } from '../panels/panels/ConfigFallbackPanel'
 import { SkyCultureSectionHeader, SkyCultureMetaItem, SkyCultureLabelSettingCard, SkyCultureFilterPicker } from '../panels/skyculture/SkyCultureViewParts'
 import { SatelliteGroupSelector } from '../panels/satellite/SatelliteGroupSelector'
 import {
-  ImageDecodeSize, HeliocentricPositionOptions, ConstellationNavigationItem, PluginFeatureRoute,
+  ImageDecodeSize, HeliocentricPositionOptions, PluginFeatureRoute,
   NebulaTextureItem, NebulaTextureStatus, NebulaTextureRefreshResponse, SkyCultureMakerArtworkAnchor, SkyCultureMakerArtwork, SkyCultureMakerConstellation,
   SkyCultureMakerDraft, SkyCultureMakerIssue,
   HeliocentricOrbit, ConfigurationOption, SkyCultureVisualColors, CelestialPositionOptions,
@@ -1370,6 +1369,7 @@ export struct WindowNativeNode {
   @State private hapticAvailable: boolean = false
   @State private hapticFailed: boolean = false
   @State private hapticBusy: boolean = false
+  @State private hapticIntensity: number = DEFAULT_HAPTIC_INTENSITY
   @State private calendarStore: AstronomyCalendarStore = new AstronomyCalendarStore()
   private calendarController: AstronomyCalendarController | undefined = undefined
   private pendingCalendarEvent: string = ''
@@ -1542,6 +1542,9 @@ export struct WindowNativeNode {
   // 时间轮交互控制器（普通类，非可观测）：拖动/惯性/轨道重基准/引擎推送。
   // 跨域依赖以回调注入：引擎推送、暂停速度、UTC 偏移。
   private timeWheelController: TimeWheelController | undefined = undefined
+  // Time-wheel haptics use the system clock-timer preset, rate-limited by
+  // HapticFeedback and by the wheel's speed-adaptive tick cadence.
+  private timeWheelHapticEnabled: boolean = true
 
 // ===== 生命周期与启动 =====
 
@@ -1963,17 +1966,13 @@ export struct WindowNativeNode {
     // 设置「配置回读」加载在 settingsCtl()：TimeSettingsStore 为纯数据，
     // 8 连发桥读归 SettingsController；跨域 setter 作为 TimeSettingsHostHooks 在该控制器惰性构造处注入。
     // 航海星 / 流星雨 / 搜索三域分别自持加载器（loadNavStars / loadMeteorShowers /
-    // loadConstellationNavigation）与其配对写方；三者复用同一 HostCommandPort 实例，消费方均为
+    // loadCategoryObjects）与其配对写方；三者复用同一 HostCommandPort 实例，消费方均为
     // @ObjectLink（字段赋值即刷新），无 publish* 发布点，故 onChanged 传空实现。
-    // SearchStore 的 loadConstellationNavigation 经 SearchHostHooks.languageSerial 只读 LanguageStore
-    // 的语言刷新代际（单一持有者，宿主不留副本）。
     this.navStarsStore.attachPort(hostPort, () => {})
     this.meteorStore.attachPort(hostPort, () => {})
     this.searchStore.attachPort(hostPort, () => {})
-    // 插件加载器与搜索历史 Preferences 读写经 SearchHostHooks 具名注入（store 不 import 桥/UI/
-    // NAPI）；语言刷新代际仍只读 LanguageStore。
+    // 插件加载器与搜索历史 Preferences 读写经 SearchHostHooks 具名注入（store 不 import 桥/UI/NAPI）。
     this.searchStore.attachHooks({
-      languageSerial: (): number => this.languageStore.languageRefreshSerial,
       publishSearchBrowserState: (): void => { this.publishSearchBrowserState() },
       categoryModuleIdFor: (category: string): string => this.catalogStore.categoryModuleIdFor(category),
       ensurePluginLoaded: (pluginName: string, callback: () => void, failureCallback?: () => void): void => this.pluginFeatureCtl().ensurePluginLoaded(pluginName, callback, failureCallback),
@@ -2770,14 +2769,46 @@ export struct WindowNativeNode {
     this.hapticAvailable = state.available
     this.hapticFailed = state.lastFailure.startsWith('vibration-')
     this.hapticBusy = state.saving || state.probing
+    this.hapticIntensity = state.intensity
   }
 
   private async changeHapticEnabled(enabled: boolean): Promise<boolean> {
+    hilog.info(0x0000, 'StellariumArkUI', '[haptic] change requested enabled=%{public}s', enabled ? 'true' : 'false')
     this.hapticBusy = true
-    const success = await this.haptics().setEnabled(enabled)
+    const pending = this.haptics().setEnabled(enabled)
+    // setEnabled reflects the app-local state before its first await; publish it
+    // now so the controlled Toggle prop is already in sync with the tap.
     this.refreshHapticState()
+    const success = await pending
+    this.refreshHapticState()
+    hilog.info(0x0000, 'StellariumArkUI', '[haptic] change result enabled=%{public}s success=%{public}s',
+      this.hapticEnabled ? 'true' : 'false', success ? 'true' : 'false')
     if (!success) this.flashHint('触觉反馈设置未保存，请重试')
     return success
+  }
+
+  private async changeHapticIntensity(value: number, commit: boolean): Promise<void> {
+    const pending = this.haptics().setIntensity(value, commit)
+    // The in-memory value is authoritative during a drag; publish it before
+    // the optional preferences flush so the Slider and preview stay in sync.
+    this.refreshHapticState()
+    if (!commit) return
+    const success = await pending
+    this.refreshHapticState()
+    if (!success) this.flashHint('震动力度设置未保存，请重试')
+  }
+
+  // 通知订阅开关需要等待 reconcile 的最终结果：代理提醒权益缺失、系统通知
+  // 未开启或订阅数据不可用时，控制器会回滚开关。这里把真实原因提示出来，
+  // 避免开关看起来“自己弹回去”。
+  private async changeSubscriptionFromUi(category: string, enabled: boolean): Promise<void> {
+    hilog.info(0x0000, 'StellariumArkUI', '[subscription] change requested category=%{public}s enabled=%{public}s',
+      category, enabled ? 'true' : 'false')
+    const outcome = await this.notificationCtl().changeSubscription(
+      category === 'satellite' ? 'satellite' : 'astronomy', enabled)
+    if (!outcome.ok && outcome.error !== undefined && outcome.error.length > 0) {
+      this.flashHint(outcome.error)
+    }
   }
 
   private calendarCtl(): AstronomyCalendarController {
@@ -4292,7 +4323,6 @@ export struct WindowNativeNode {
       }
       if (panel === 'search') {
         this.catalogStore.loadObjectCatalogCategories(this.languageStore.languageRefreshSerial)
-        this.searchStore.loadConstellationNavigation(this.languageStore.languageRefreshSerial)
         if (this.searchStore.categoryObjects.length === 0) this.searchStore.loadCategoryObjects(this.searchStore.searchCategory)
       }
       if (panel === 'time') {
@@ -5630,6 +5660,9 @@ export struct WindowNativeNode {
       this.openSubPanel(item.openPanel)
       return
     }
+    // Quick-panel switches are user-visible toggles; give them the same menu
+    // pulse as other panel controls before dispatching the actual action.
+    void this.haptics().menu()
     if (id === 'satellites') {
       this.satelliteCtl().setSatelliteFlag('hints', value)
       return
@@ -7170,7 +7203,9 @@ export struct WindowNativeNode {
         (jd: number) => { this.callNativeFire('setTimeToJD', jd.toFixed(8)) },
         () => { this.timeCtl().stopTimeWheelSpeed() },
         () => { return this.utcOffsetHours },
-        (index: number) => { void this.haptics().rulerTick(index) }
+        (index: number) => {
+          if (this.timeWheelHapticEnabled) void this.haptics().rulerTick(index)
+        }
       )
     }
     return this.timeWheelController
@@ -7281,9 +7316,7 @@ export struct WindowNativeNode {
         this.catalogStore.objectCatalogCategories = []
         this.searchStore.categoryObjects = []
         this.searchStore.searchSuggestions = []
-        this.searchStore.constellationNavigationItems = []
         this.catalogStore.loadObjectCatalogCategories(languageSerial)
-        this.searchStore.loadConstellationNavigation(languageSerial)
         this.searchStore.loadCategoryObjects(this.searchStore.searchCategory, selectedCategoryModuleId)
         const query = this.searchStore.searchText.trim()
         if (query.length > 0) this.searchCtl().fetchSuggestions(query, languageSerial)
@@ -8735,9 +8768,11 @@ export struct WindowNativeNode {
         manualMinute: this.timeStore.manualMinute,
         onSelectUnit: (unit: string) => { this.wheel().selectUnit(unit) },
         onWheelTouch: (event: TouchEvent) => {
-          if (event.type === TouchType.Down) this.haptics().beginRuler(0)
+          if (this.timeWheelHapticEnabled && event.type === TouchType.Down) this.haptics().beginRuler(0)
           this.wheel().handleTouch(event)
-          if (event.type === TouchType.Up || event.type === TouchType.Cancel) this.haptics().endRuler()
+          // Keep the ruler active after Up so inertia detents can still tick;
+          // the next Down starts a fresh ruler gesture, and Cancel ends it.
+          if (this.timeWheelHapticEnabled && event.type === TouchType.Cancel) this.haptics().endRuler()
         },
         onChip: (id: string) => { this.timeCtl().handleChip(id) },
         onEquationToggle: (setting: string, enabled: boolean) => { this.ocularCtl().setEquationOfTime(setting, enabled) },
@@ -8961,7 +8996,6 @@ export struct WindowNativeNode {
         },
         onClearVisibility: () => { this.searchCtl().selectSearchVisibilityFilter('all') },
         onClearInstrument: () => { this.searchCtl().selectSearchInstrumentFilter('all') },
-        onOpenConstellation: (item: ConstellationNavigationItem) => { this.openConstellationGuide(item.englishName, 'ConstellationMgr', item.localizedName) },
         onGoCoordinates: () => { this.goToCoordinates() }
       })
     } else if (this.activePanel === 'settings') {
@@ -9049,11 +9083,16 @@ export struct WindowNativeNode {
         hapticAvailable: this.hapticAvailable,
         hapticFailed: this.hapticFailed,
         hapticBusy: this.hapticBusy,
+        hapticIntensity: this.hapticIntensity,
         setHapticEnabled: (enabled: boolean) => { void this.changeHapticEnabled(enabled) },
+        setHapticIntensity: (value: number, commit: boolean) => { void this.changeHapticIntensity(value, commit) },
         previewHaptic: () => {
           void this.haptics().confirmation().then((played: boolean) => {
+            const state = this.haptics().status()
             this.refreshHapticState()
-            if (!played) this.flashHint(I18n.getLanguage().startsWith('zh')
+            // A throttled or in-flight pulse is not a hardware failure. Only
+            // report the explicit start failure so rapid preview taps stay quiet.
+            if (!played && state.lastOutcome === 'failed') this.flashHint(I18n.getLanguage().startsWith('zh')
               ? '未能播放触觉反馈，请检查系统触感设置或设备支持情况。'
               : 'Haptic feedback could not play. Check system haptics and device support.')
           })
@@ -9070,8 +9109,8 @@ export struct WindowNativeNode {
             this.pushTokenText = r.ok ? (r.token ?? '') : ('失败 ' + (r.code ?? 0) + ' ' + (r.error ?? ''))
           })
         },
-        toggleAstronomyEvents: (v: boolean) => { this.notificationCtl().setAstronomyEventsEnabled(v) },
-        toggleSatellitePass: (v: boolean) => { this.notificationCtl().setSatellitePassEnabled(v) },
+        toggleAstronomyEvents: (v: boolean) => { void this.changeSubscriptionFromUi('astronomy', v) },
+        toggleSatellitePass: (v: boolean) => { void this.changeSubscriptionFromUi('satellite', v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
         toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v; this.notificationCtl().persistPreferences() },
         setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m; this.notificationCtl().persistPreferences() },

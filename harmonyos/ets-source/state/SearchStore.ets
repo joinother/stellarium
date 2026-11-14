@@ -1,18 +1,14 @@
 import hilog from '@ohos.hilog'
 import { NameItem, SearchSug, StellariumBridgeResponse, WutTarget } from '../pages/StellariumTypes'
-import { ConstellationNavigationItem } from '../pages/MainWindowModels'
 import { I18n } from '../pages/I18n'
 import { messierNumberOf, minorPlanetNumberOf } from '../common/derive/astro'
 import { celestialTitle } from '../common/derive/labels'
 import { CommandPort } from '../bridge/CommandPort'
 
-// 宿主 → SearchStore 的跨域只读 / 助手 / 存储注入（store 不 import 他 store / NAPI / UI）。
-// loadConstellationNavigation 需在回包时比对语言刷新代际以丢弃过期请求；该代际的单一持有者
-// 是 LanguageStore，本 store 只经 hooks 只读获取，不另存副本。
+// 宿主 → SearchStore 的助手 / 存储注入（store 不 import 他 store / NAPI / UI）。
 // 分类浏览调用的宿主助手 / CLI 发布点 / 插件加载器，以及搜索历史 Preferences 读写，
-// 同样经下列 hooks 具名回注。
+// 均经下列 hooks 具名回注。
 export interface SearchHostHooks {
-  languageSerial(): number
   // CLI 发布点。
   publishSearchBrowserState(): void
   // 分类 code → 目录 moduleId。
@@ -26,10 +22,10 @@ export interface SearchHostHooks {
   writeSearchHistoryStorage(json: string): Promise<void>
 }
 
-// 搜索域 store：持有输入文本与候选建议、分类浏览（列表 / 分页游标 / 加载态）、搜索历史、
-// 星座快捷导航与 RA/Dec 坐标输入，面板经 @ObjectLink 观察。桥经 attachPort 注入 CommandPort，
-// 本 store 自持 loadConstellationNavigation / loadCategoryObjects / loadMoreCategoryObjects 等；
-// 语言代际、CLI 发布、插件加载与 Preferences 读写经 SearchHostHooks 回注。
+// 搜索域 store：持有输入文本与候选建议、分类浏览（列表 / 分页游标 / 加载态）、搜索历史
+// 与 RA/Dec 坐标输入，面板经 @ObjectLink 观察。桥经 attachPort 注入 CommandPort，
+// 本 store 自持 loadCategoryObjects / loadMoreCategoryObjects 等；CLI 发布、插件加载与
+// Preferences 读写经 SearchHostHooks 回注。
 //
 // searchHistory 为单一持有者，仅 searchObject() 写入并持久化，不参与渲染读取。
 @Observed
@@ -64,8 +60,7 @@ export class SearchStore {
   searchHistory: string[] = []
   // 分类浏览分页大小。
   private readonly CATEGORY_PAGE_SIZE: number = 60
-  // ==== 星座快捷导航与 RA/Dec 坐标输入 ====
-  constellationNavigationItems: ConstellationNavigationItem[] = []
+  // ==== RA/Dec 坐标输入 ====
   coordInputRA: string = ''
   coordInputDec: string = ''
 
@@ -95,41 +90,6 @@ export class SearchStore {
     if (this.onChanged !== null) {
       this.onChanged()
     }
-  }
-
-  // 星座快捷导航：桥拉取星座名并按当前语言本地化；调用方显式传入当次 languageSerial，
-  // 回包经 hooks.languageSerial() 比对以丢弃过期请求。
-  loadConstellationNavigation(languageSerial: number): void {
-    const hooks = this.hooks
-    const port = this.ensurePort()
-    if (hooks === null || port === null) {
-      return
-    }
-    port.requestWhenReady('getConstellationList', '', (result: StellariumBridgeResponse) => {
-      if (hooks.languageSerial() !== languageSerial) return
-      if (result.ok !== true || !Array.isArray(result.items)) return
-      const rawItems = result.items as Array<Record<string, Object>>
-      const localizedByEnglish: Record<string, string> = {}
-      for (let index = 0; index < rawItems.length; index++) {
-        const rawItem = rawItems[index]
-        const englishName = rawItem['englishName'] !== undefined ? String(rawItem['englishName']) : ''
-        const localizedName = rawItem['localizedName'] !== undefined ? String(rawItem['localizedName']) : englishName
-        if (englishName.length > 0) localizedByEnglish[englishName] = localizedName
-      }
-      const navigationItems: ConstellationNavigationItem[] = []
-      const seen: Record<string, boolean> = {}
-      for (const rawItem of rawItems) {
-        const englishName = rawItem['englishName'] !== undefined ? String(rawItem['englishName']) : ''
-        const localizedName = localizedByEnglish[englishName] ?? englishName
-        if (englishName.length > 0 && localizedName.length > 0 && !seen[englishName]) {
-          seen[englishName] = true
-          navigationItems.push({ englishName: englishName, localizedName: localizedName })
-        }
-      }
-      navigationItems.sort((left: ConstellationNavigationItem, right: ConstellationNavigationItem) =>
-        left.localizedName.localeCompare(right.localizedName))
-      this.constellationNavigationItems = navigationItems
-    })
   }
 
   // 分类浏览首页：重置游标与列表状态后发起首屏加载。

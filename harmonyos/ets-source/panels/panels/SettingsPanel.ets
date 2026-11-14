@@ -17,7 +17,7 @@ import { NotificationStore } from '../../state/NotificationStore'
 import { ToolsStore } from '../../state/ToolsStore'
 import { EphemerisToggleRow, InformationModeButton, InformationSwitchRow, NavigationSwitchRow } from '../settings/SettingsRows'
 import { SettingsChoiceButton } from '../../common/ui/SettingsChoiceButton'
-import { LanguageRow, DevicePrivacySection } from '../settings/DeviceAndLanguageRows'
+import { LanguageRow, DeviceSection } from '../settings/DeviceAndLanguageRows'
 import { AboutSection } from '../settings/AboutSection'
 import { NotificationSection } from '../settings/NotificationSection'
 import { HapticSection } from '../settings/HapticSection'
@@ -121,7 +121,9 @@ export struct SettingsPanel {
   @Prop hapticAvailable: boolean = false
   @Prop hapticFailed: boolean = false
   @Prop hapticBusy: boolean = false
+  @Prop hapticIntensity: number = 40
   setHapticEnabled: (enabled: boolean) => void = () => {}
+  setHapticIntensity: (value: number, commit: boolean) => void = () => {}
   previewHaptic: () => void = () => {}
   scheduleNextSolarTermReminder: () => void = () => {}
   scheduleNextMoonPhaseReminder: () => void = () => {}
@@ -195,12 +197,32 @@ export struct SettingsPanel {
           .margin({ top: 4, bottom: 8 }).id('config-tabs-' + this.i18nLang)
         Column({ space: 0 }) {
           if (this.configTab === -1) {
-            DevicePrivacySection({ gyroscopeEnabled: this.gyroStore.gyroscopeEnabled, sensitivityText: sensZh(this.gyroStore.gyroscopeSensitivityText), onToggleGyroscope: (v: boolean) => { this.toggleGyroscope(v); this.flashHint(v ? I18n.t('s0719') : I18n.t('s0720')) }, onRevoke: () => { this.confirmPrivacyRevocation() } })
+            Text(I18n.t('i0060'))
+              .fontSize(11).fontColor(this.c.sub).width('100%')
+              .margin({ top: 2, bottom: 6 }).padding({ left: 2 })
+            DeviceSection({
+              gyroscopeEnabled: this.gyroStore.gyroscopeEnabled,
+              sensitivityText: sensZh(this.gyroStore.gyroscopeSensitivityText),
+              onToggleGyroscope: (v: boolean) => {
+                this.toggleGyroscope(v)
+                this.flashHint(v ? I18n.t('s0719') : I18n.t('s0720'))
+              }
+            })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })
+            Text(I18n.t('settings_section_feedback'))
+              .fontSize(11).fontColor(this.c.sub).width('100%')
+              .margin({ top: 2, bottom: 6 }).padding({ left: 2 })
             HapticSection({
               hapticEnabled: this.hapticEnabled, available: this.hapticAvailable, failed: this.hapticFailed, busy: this.hapticBusy,
+              intensity: this.hapticIntensity,
               onChange: (enabled: boolean) => this.setHapticEnabled(enabled),
+              onIntensityChange: (value: number, commit: boolean) => this.setHapticIntensity(value, commit),
               onPreview: () => this.previewHaptic()
             })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })
+            Text(I18n.t('settings_section_notifications'))
+              .fontSize(11).fontColor(this.c.sub).width('100%')
+              .margin({ top: 2, bottom: 6 }).padding({ left: 2 })
             NotificationSection({
               notificationEnabled: this.notificationStore.astronomyNotificationEnabled,
               notificationBusy: this.notificationStore.astronomyNotificationBusy,
@@ -239,6 +261,16 @@ export struct SettingsPanel {
               onFetchPushToken: () => { this.fetchPushToken() },
               onClearReminders: () => { this.clearAstronomyReminders() }
             })
+            Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })
+            Text(I18n.t('settings_section_privacy'))
+              .fontSize(11).fontColor(this.c.sub).width('100%')
+              .margin({ top: 2, bottom: 6 }).padding({ left: 2 })
+            Button(I18n.t('privacy_revoke'))
+              .fontSize(13).fontColor(this.c.errorText).backgroundColor(this.c.errorBg)
+              .border({ width: 1, color: this.c.errorBg })
+              .borderRadius(UI_RADIUS_CONTROL).height(38).width('100%')
+              .margin({ bottom: 12 })
+              .onClick(() => { this.confirmPrivacyRevocation() })
           } else if (this.configTab === 0) {
             Row() {
               Column() {

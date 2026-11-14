@@ -28,3 +28,8 @@ test('the time wheel advances through gesture steps with a bounded velocity mult
   assert.match(wheel, /this\.store\.timeWheelUnit = unit/);
   assert.match(wheel, /dateAtFraction\(/);
 });
+
+test('time wheel haptic attempts are gated by speed and inertia cadence', () => {
+  assert.match(wheel, /const hapticGap = speed < 0\.35 \? 70 : \(speed < 0\.8 \? 100 : 140\)/);
+  assert.match(wheel, /now - this\.lastInertiaHapticMs >= 100/);
+});
