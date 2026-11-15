@@ -520,6 +520,7 @@ void LandscapeMgr::update(double deltaTime)
 	}
 
 	atmosphere->update(deltaTime);
+	atmosphere->setVisualStrength(drawer->getAtmosphereVisualStrength());
 
 	if (oldLandscape)
 	{
@@ -1948,7 +1949,7 @@ int LandscapeMgr::getAtmosphereEclipseSimulationQuality() const
 
 float LandscapeMgr::getAtmosphereFadeIntensity() const
 {
-	return atmosphere->getFadeIntensity();
+	return atmosphere->getVisualFadeIntensity();
 }
 
 //! Set atmosphere fade duration in s

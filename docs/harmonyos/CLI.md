@@ -1,5 +1,11 @@
 # Stellarium 鸿蒙 CLI
 
+## 选星调时与绚丽夜间诊断（2026-11-15）
+
+`getViewAnchorState` 增加 `jd/timeRate/gyroActive/tracking/autoMove`、`viewMount/upMount/viewAltAz/upAltAz` 三维向量、`horizonRollDefined/horizonRollDeg` 与选中对象投影信息；`rollErrorDeg` 仍表示相对当前 mount 规范向上的误差。非地平坐标架的自然极轴倾斜不能当成地平线 bug。极点附近地平滚转可能无定义，应先检查 `horizonRollDefined`。
+
+`getLandscapeInfo` 增加 `atmosphereVisualStrength`、`starLimitMagnitude`、`limitMagnitude`、`extinctionCoefficient`（用户配置的物理系数）。绚丽模式下太阳−6°至−18°间视觉大气权重平滑降至0；夜间与关闭大气使用相同曝光/平均亮度基线，保留折射。普通模式不变。
+
 ## 大气表现与白天恒星（2026-11-12）
 
 `setSkyDisplaySetting` 增加 `environmentMode|0/1/2`（无/仅地面/大气和地面）、`vividAtmosphere|0/1`（原始/绚丽大气）、`realisticStarVisibility|0/1`（教学显示/现实星等）。`getState` 回读同名字段与恒星专用 `starLimitingMagnitude`；`environmentMode=3` 是单独操作其他开关产生的“仅大气层”状态。环境组合兼容雾山、照片及当前三维场景，详细恢复规则见 [大气表现规格](specs/ATMOSPHERE-PRESENTATION.md)。两个新布尔开关保存偏好，无联网或权限申请。
@@ -88,7 +94,7 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command getARState --json
 
 - `setActionChecked actionShow_MistHorizon|1` 开雾山同时关地面/三维场景，`|0` 关闭雾山；`actionShow_Ground|1` 开地面同时关雾山。两项都关为无地景。首次没有照片地景与保存偏好时雾山默认开，保留用户之后的明确关闭。
 - `setLandscape <id>` 在地面关闭时只预选资源，不启用地面、不随资源移动观测位置；相同 ID 幂等成功，实际失败才返回 false。
-- `getLandscapeInfo` 新增 `mistHorizonEnabled`、`mistHorizonOpacity`、`mistHorizonDecorative`，区分开关偏好、渐变状态与装饰用途；opacity 不替代 GPU 视觉验收。
+- `getLandscapeInfo` 新增 `mistHorizonEnabled`、`mistHorizonOpacity`、`mistHorizonDecorative`，区分开关偏好、渐变状态与装饰用途；opacity 不替代 GPU 视觉验收。`atmosphereModel` 返回实际大气模型，`atmosphereAverageLuminance` 返回当前平均亮度（cd/m²），用于识别实际渲染路径和昼夜跳转回归。
 - `openUiPanel layers` 后 `setLayerTab 4` 打开同一设置入口。实现和测试见 `MIST-HORIZON.md`。
 
 ## 启动呈现诊断（2026-09-08）
@@ -489,6 +495,10 @@ hdc -t 7LZBB26323200303 shell uitest uiInput keyEvent 2050
 - 结果通过日志回传，超大结果可能受系统日志单行长度限制；查询类命令建议按范围或数量参数分批调用。
 - `getDeepSkyImageStatus` 默认检查重点图片；传入 `--payload 'all|偏移|数量'` 分页列出已复制 PNG，单页数量最多 64。`onDisk` 只代表资源已复制，`textureReady` 才代表当前惰性纹理树已经取得可绑定纹理；`textureLoading` 表示正在后台读取，`textureNotStarted` 表示尚未开始绑定。没有进入当前视场的图片可能保持未实例化，不应据此判定资源缺失。
 - `getConstellationArtStatus` 接受星座缩写或名称（例如 `Ori`），也可传 `all`；返回艺术文件是否落盘、纹理是否未启动/加载中/可绑定/失败，以及当前视口相交和有效亮度，用于区分资源、解码与绘制问题。
+- 模型诊断另含 `modelSpanDegrees/modelZoomOpacity/modelYawDegrees/modelPitchDegrees/modelRollDegrees`、`centerArrivalActive`、`emphasized`；`modelCenterAzimuth/modelCenterAltitude` 为无折射模型锚点方向，使用与 `moveToAltAz` 相同的坐标约定。`probeSelectAt/selectAt` 候选的 `modelHit` 表示可见模型三角网格命中。测试触摸时用 `getUiLayout` 的 ArkUI 画布尺寸，不能把物理屏幕像素直接当 vp，否则候选容差不同。
+- `getFPS` 返回真实帧间隔 `frameTimeMs`、当前帧绘制 `renderTimeMs`，以及非重叠 120 帧窗口的 `windowFps/frameTimeP50Ms/frameTimeP95Ms/windowSamples/windowSequence/pendingSamples`。窗口尚未攒满时不能把 0 当实际帧率；停留与连续交互需分别测试。
+- `getNebulaFlags.drawing` 提供上一绘制帧的 `visited/eligible/projected/maxMagHints/maxMagLabels/layerOpacity`；`hints/labels/outlines` 各含候选数、避让接受数、实际绘制数与 `alphaSum/alphaMax`。淡出期间 drawn 可能暂时大于 accepted，轮廓不参与矩形避让。
+- `getNebulaFlags.skyLabelGroups` 返回同一原生帧中各标签组的 `group/candidates/accepted/visible`；visible 以实际 alpha >0.05 统计，包含恒星、星座、深空、卫星及当前行星名称。此接口只读，不触发下载。跨组按绘制顺序占位，选中对象可例外；不可把 accepted 理解成全局亮度最优解。
 - `setSkyCultureVisualSetting constellationArt3d|1/0` 持久化切换本地星座模型预览；`getSkyCultureVisualSettings` 回读 `constellationArt3d`。`getConstellationArtStatus` 的 `modelReady/modelVertices/modelTriangles/renderMode/renderReady/presentationWeight` 描述几何与实际模式；原 `ready/state/loadingCount` 仍只表示插画纹理，不代表模型加载状态。缺少模型或其他文化回退插画，模型随包离线提供。
 - 连续视图命令（如 `dragView`、`zoomBy`）返回“已入队”，不等待逐帧完成。
 - 这是开发者控制通道，不是面向普通用户的应用内命令行界面；Release 包也不会因此监听网络端口。

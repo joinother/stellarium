@@ -507,6 +507,7 @@ public:
 	//! If you already know vMag, it is wise to provide it in the optional @param knownVMag.
 	//! Else it is called from getVMagnitude() which may be costly.
 	float getVMagnitudeWithExtinction(const StelCore* core, const float knownVMag=-1000.f, const float& magOffset=0.f) const;
+	float getVMagnitudeWithVisualExtinction(const StelCore* core, const float knownVMag=-1000.f, const float& magOffset=0.f) const;
 
 	//! Return a priority value which is used to discriminate objects by priority
 	//! As for magnitudes, the lower is the higher priority

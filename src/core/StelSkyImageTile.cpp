@@ -326,7 +326,7 @@ bool StelSkyImageTile::drawTile(StelCore* core, StelPainter& sPainter, const Vec
 		color.set(ad_lum,ad_lum,ad_lum, 1.f);
 	}
 
-	const bool withExtinction=(getFrameType()!=StelCore::FrameAltAz && core->getSkyDrawer()->getFlagHasAtmosphere() && core->getSkyDrawer()->getExtinction().getExtinctionCoefficient()>=0.01f);
+	const bool withExtinction=(getFrameType()!=StelCore::FrameAltAz && core->getSkyDrawer()->getFlagHasAtmosphere() && core->getSkyDrawer()->getVisualExtinction().getExtinctionCoefficient()>=0.01f);
 
 	for (const auto& poly : std::as_const(skyConvexPolygons))
 	{
@@ -381,7 +381,7 @@ bool StelSkyImageTile::drawTile(StelCore* core, StelPainter& sPainter, const Vec
 			Vec3d altAz = core->j2000ToAltAz(baryJ2000, StelCore::RefractionOff);
 			float extinctionMagnitude=0.0f;
 			altAz.normalize();
-			core->getSkyDrawer()->getExtinction().forward(altAz, &extinctionMagnitude);
+			core->getSkyDrawer()->getVisualExtinction().forward(altAz, &extinctionMagnitude);
 			// compute a simple factor from magnitude loss.
 			float extinctionFactor=std::pow(0.4f , extinctionMagnitude); // drop of one magnitude: factor 2.5 or 40%
 			extinctedColor[0]*=fabs(extinctionFactor);

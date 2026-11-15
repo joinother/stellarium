@@ -313,7 +313,7 @@ void Nova::draw(StelCore* core, StelPainter* painter)
 {
 	StelSkyDrawer* sd = core->getSkyDrawer();
 	const float mlimit = sd->getLimitMagnitude();
-	float mag = getVMagnitudeWithExtinction(core);
+	float mag = getVMagnitudeWithVisualExtinction(core);
 	const float shift = 8.f;
 
 	if (mag <= mlimit)

@@ -1345,7 +1345,10 @@ void StarMgr::draw(StelCore* core)
 	// If stars are turned off don't waste time below
 	// projecting all stars just to draw disembodied labels
 	if (!static_cast<bool>(starsFader.getInterstate()))
+	{
+		StelPainter::clearSkyLabels("stars");
 		return;
+	}
 
 	static StelSkyCultureMgr* scMgr = GETSTELMODULE(StelSkyCultureMgr);
 	const bool currentSkycultureUsesCommonStarnames=scMgr->getFlagOverrideUseCommonNames() ||
@@ -1380,6 +1383,8 @@ void StarMgr::draw(StelCore* core)
 	font.setPixelSize(fontSize);
 	sPainter.setFont(font);
 
+	const auto selectedLabels = objectMgr->getSelectedObject("Star");
+	sPainter.beginSkyLabels("stars", selectedLabels.isEmpty() ? QString() : selectedLabels.first()->getID());
 	skyDrawer->preDrawPointSource(&sPainter);
 
 	// Prepare a table for storing precomputed RCMag for all ZoneArrays
@@ -1417,14 +1422,12 @@ void StarMgr::draw(StelCore* core)
 		}
 		lastMaxSearchLevel = z->level;
 
-		int maxMagStarName = 0;
+		float maxMagStarName = 0.f;
 		if (labelsFader.getInterstate()>0.f)
 		{
 			// Adapt magnitude limit of the stars labels according to FOV and labelsAmount
 			float maxMag = (skyDrawer->getStarLimitMagnitude()-6.5f)*0.7f+(static_cast<float>(labelsAmount)*1.2f)-2.f;
-			int x = static_cast<int>((maxMag-mag_min)/0.05);  // 0.05 mag MagStepIncrement
-			if (x > 0)
-				maxMagStarName = x;
+			maxMagStarName = qMax(0.f, (maxMag - mag_min) / 0.05f);
 		}
 		int zone;
 		double withParallax = core->getUseParallax() * core->getParallaxFactor();
@@ -1443,6 +1446,7 @@ void StarMgr::draw(StelCore* core)
 
 	// Finish drawing many stars
 	skyDrawer->postDrawPointSource(&sPainter);
+	sPainter.flushSkyLabels();
 
 	if (objectMgr->getFlagSelectedObjectPointer())
 		drawPointer(sPainter, core);

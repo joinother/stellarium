@@ -1,0 +1,117 @@
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <iostream>
+#include <initializer_list>
+#include <string>
+
+template<typename Scalar> struct TestVector
+{
+	Scalar altitude;
+	Scalar operator[](int) const { return altitude; }
+	void normalize() {}
+};
+using Vec3d = TestVector<double>;
+using Vec3f = TestVector<float>;
+class QByteArray;
+class QOpenGLShaderProgram;
+
+@EXTINCTION@
+
+struct StelApp
+{
+	static inline double saved = -1.;
+	static void immediateSave(const char* key, double value)
+	{
+		assert(std::string(key) == "landscape/atmospheric_extinction_coefficient");
+		saved = value;
+	}
+};
+#define emit
+struct StelSkyDrawer
+{
+	Extinction extinction, visualExtinction;
+	float atmosphereVisualStrength = 1.f;
+	bool atmosphere = true;
+	double notified = -1.;
+	bool getFlagHasAtmosphere() const { return atmosphere; }
+	void extinctionCoefficientChanged(double value) { notified = value; }
+	void setExtinctionCoefficient(double value);
+	@ACCESSORS@
+	void updateVisual()
+	{
+		@SCALING@
+	}
+};
+@SETTER@
+
+struct StelCore
+{
+	StelSkyDrawer* drawer;
+	StelSkyDrawer* getSkyDrawer() const { return drawer; }
+};
+struct StelObject
+{
+	double altitude = 1.;
+	mutable int magnitudeCalls = 0;
+	Vec3d getAltAzPosGeometric(const StelCore*) const { return {altitude}; }
+	float getVMagnitude(const StelCore*) const { ++magnitudeCalls; return 5.f; }
+	@DECLARATIONS@
+};
+@METHODS@
+
+void close(float actual, float expected)
+{
+	assert(std::isfinite(actual) && std::abs(actual - expected) < 0.00002f);
+}
+
+int main()
+{
+	StelSkyDrawer drawer;
+	StelCore core{&drawer};
+	StelObject object;
+	int cases = 0;
+	for (auto mode : {Extinction::UndergroundExtinctionZero, Extinction::UndergroundExtinctionMax,
+	                  Extinction::UndergroundExtinctionMirror})
+	for (double coefficient : {0., 0.13, 0.5})
+	for (float strength : {1.f, 0.5f, 0.f, 1.f})
+	{
+		drawer.extinction.setUndergroundExtinctionMode(mode);
+		drawer.atmosphereVisualStrength = strength;
+		drawer.setExtinctionCoefficient(coefficient);
+		assert(StelApp::saved == coefficient);
+		assert(drawer.notified == static_cast<double>(static_cast<float>(coefficient)));
+		for (int frame = 0; frame < 3; ++frame)
+		{
+			drawer.updateVisual();
+			assert(&drawer.getExtinction() != &drawer.getVisualExtinction());
+			assert(drawer.getExtinction().getExtinctionCoefficient() == static_cast<float>(coefficient));
+			close(drawer.getVisualExtinction().getExtinctionCoefficient(), static_cast<float>(coefficient) * strength);
+			assert(drawer.getVisualExtinction().getUndergroundExtinctionMode() == mode);
+			assert(StelApp::saved == coefficient);
+		}
+		drawer.atmosphereVisualStrength = 0.f;
+		drawer.updateVisual();
+		assert(drawer.getVisualExtinction().getExtinctionCoefficient() == 0.f);
+		drawer.atmosphereVisualStrength = 1.f;
+		drawer.updateVisual();
+		assert(drawer.getVisualExtinction().getExtinctionCoefficient() == static_cast<float>(coefficient));
+		drawer.atmosphereVisualStrength = strength;
+		drawer.updateVisual();
+		for (double altitude : {1., 0.5, 0.01, 0., -0.03, -0.5})
+		for (bool atmosphere : {false, true})
+		for (float known : {-1000.f, 7.f})
+		{
+			object.altitude = altitude;
+			drawer.atmosphere = atmosphere;
+			object.magnitudeCalls = 0;
+			const float base = (known > -1000.f ? known : 5.f) + 0.3f;
+			const float reduction = atmosphere ? drawer.extinction.airmass(static_cast<float>(altitude), false) * static_cast<float>(coefficient) : 0.f;
+			close(object.getVMagnitudeWithExtinction(&core, known, 0.3f), base + reduction);
+			close(object.getVMagnitudeWithVisualExtinction(&core, known, 0.3f), base + reduction * strength);
+			assert(object.magnitudeCalls == (known > -1000.f ? 0 : 2));
+			++cases;
+		}
+	}
+	std::cout << "PASS: " << cases << " magnitude cases; settings, mode copy, repeated frame scaling, daytime restoration\n";
+}

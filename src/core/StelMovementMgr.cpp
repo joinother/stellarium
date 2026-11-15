@@ -1323,8 +1323,8 @@ void StelMovementMgr::updateVisionVector(double deltaTime)
 			lat+=latOffset;
 			StelUtils::spheToRect(lon, lat, v);
 
+			setViewUpVector(Vec3d(-std::cos(lon) * std::sin(lat), -std::sin(lon) * std::sin(lat), std::cos(lat)));
 			setViewDirectionJ2000(mountFrameToJ2000(v));
-			setViewUpVectorJ2000(mountFrameToJ2000(Vec3d(0., 0., 1.))); // Does not disturb to reassure this former default.
 		}
 		else // not tracking or no selection
 		{
@@ -1637,6 +1637,64 @@ void StelMovementMgr::setViewDirectionJ2000(const Vec3d& v)
 	viewDirectionMountFrame = j2000ToMountFrame(v);
 }
 
+bool StelMovementMgr::solveMountFrameAnchor(const Vec3d& desiredDirection, const Vec3d& targetDirection,
+										  Vec3d& view, Vec3d& up)
+{
+	const auto valid = [](const Vec3d& value) {
+		return std::isfinite(value[0]) && std::isfinite(value[1]) && std::isfinite(value[2]) &&
+			value.normSquared() > 1e-18 && std::isfinite(value.normSquared());
+	};
+	if (!valid(desiredDirection) || !valid(targetDirection) || !valid(view) || !valid(up))
+		return false;
+	Vec3d forward = view;
+	forward.normalize();
+	Vec3d vertical = up - forward * up.dot(forward);
+	if (!valid(vertical))
+		return false;
+	vertical.normalize();
+	const Vec3d side = vertical ^ forward;
+	Vec3d desired = desiredDirection;
+	Vec3d target = targetDirection;
+	desired.normalize();
+	target.normalize();
+	const double rayForward = desired.dot(forward);
+	const double rayUp = desired.dot(vertical);
+	const double raySide = desired.dot(side);
+	const double radius = std::hypot(rayForward, rayUp);
+	if (radius < 1e-9)
+		return false;
+	const double phase = std::atan2(rayUp, rayForward);
+	const double latitudeRoot = std::asin(qBound(-1.0, target[2] / radius, 1.0));
+	const double latitudeLimit = M_PI_2 - 1e-6;
+	const double previousLongitude = std::atan2(forward[1], forward[0]);
+	double bestError = 10.0;
+	double bestAlignment = -2.0;
+	Vec3d bestView, bestUp;
+	for (const double root : {latitudeRoot - phase, M_PI - latitudeRoot - phase})
+	{
+		const double latitude = qBound(-latitudeLimit, std::remainder(root, 2.0 * M_PI), latitudeLimit);
+		const double sine = std::sin(latitude);
+		const double cosine = std::cos(latitude);
+		const double horizontal = rayForward * cosine - rayUp * sine;
+		double longitude = previousLongitude;
+		if (std::hypot(target[0], target[1]) > 1e-9 && std::hypot(horizontal, raySide) > 1e-9)
+			longitude = std::atan2(target[1], target[0]) - std::atan2(raySide, horizontal);
+		const Vec3d candidate(std::cos(longitude) * cosine, std::sin(longitude) * cosine, sine);
+		const double error = std::abs(rayForward * sine + rayUp * cosine - target[2]);
+		const double alignment = candidate.dot(forward);
+		if (error < bestError - 1e-12 || (std::abs(error - bestError) <= 1e-12 && alignment > bestAlignment))
+		{
+			bestError = error;
+			bestAlignment = alignment;
+			bestView = candidate;
+			bestUp = Vec3d(-std::cos(longitude) * sine, -std::sin(longitude) * sine, cosine);
+		}
+	}
+	view = bestView;
+	up = bestUp;
+	return true;
+}
+
 void StelMovementMgr::restoreViewState(const Vec3d& directionJ2000, const Vec3d& upJ2000,
 										const Vec3d& directionMountFrame, const Vec3d& upMountFrame)
 {
@@ -1818,8 +1876,8 @@ void StelMovementMgr::updateAutoZoom(double deltaTime)
 			}
 			else
 			{
-				setViewDirectionJ2000(mountFrameToJ2000(v));
 				setViewUpVectorJ2000(mountFrameToJ2000(vUp));
+				setViewDirectionJ2000(mountFrameToJ2000(v));
 			}
 		}
 	}

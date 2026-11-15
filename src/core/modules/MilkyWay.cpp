@@ -213,7 +213,7 @@ void MilkyWay::draw(StelCore* core)
 	const auto modelView = core->getJ2000ModelViewTransform();
 	const auto projector = core->getProjection(modelView);
 	const auto drawer=core->getSkyDrawer();
-	const auto& extinction=drawer->getExtinction();
+	const auto& extinction=drawer->getVisualExtinction();
 
 	if(!renderProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
 	{

@@ -18,6 +18,7 @@
  */
 
 #include "ZoneArray.hpp"
+#include "MarkerVisibility.hpp"
 #include "StelGeodesicGrid.hpp"
 #include "StelObject.hpp"
 #include "StelPainter.hpp"
@@ -26,6 +27,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QDir>
+#include <type_traits>
 #ifdef Q_OS_WIN
 #include <io.h>
 #include <Windows.h>
@@ -430,7 +432,7 @@ SpecialZoneArray<Star>::~SpecialZoneArray(void)
 
 template<class Star>
 void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsideViewport, const RCMag* rcmag_table,
-				  int limitMagIndex, StelCore* core, int maxMagStarName, float names_brightness,
+				  int limitMagIndex, StelCore* core, float maxMagStarName, float names_brightness,
 				  const QVector<SphericalCap> &boundingCaps,
 				  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos,
 				  const bool withCommonNameI18n) const
@@ -439,7 +441,7 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 	Vec3d v;
 	const float dyrs = static_cast<float>(core->getJDE()-STAR_CATALOG_JDEPOCH)/365.25;
 
-	const Extinction& extinction=core->getSkyDrawer()->getExtinction();
+	const Extinction& extinction=core->getSkyDrawer()->getVisualExtinction();
 	const bool withExtinction=drawer->getFlagHasAtmosphere() && extinction.getExtinctionCoefficient()>=0.01f;
 	
 	// Allow artificial cutoff:
@@ -563,8 +565,22 @@ void SpecialZoneArray<Star>::draw(StelPainter* sPainter, int index, bool isInsid
 		{
 			const float offset = tmpRcmag->radius*0.7f;
 			const Vec3f color = StelSkyDrawer::indexToColor(s->getBVIndex())*0.75f;
-			sPainter->setColor(color, names_brightness);
-			sPainter->drawText(v, s->getScreenNameI18n(withCommonNameI18n), 0, offset, offset, false);
+			sPainter->setColor(color, names_brightness * MarkerVisibility::magnitudeOpacity(
+				extinctedMagIndex * 0.05f, maxMagStarName * 0.05f));
+			const QString label = s->getScreenNameI18n(withCommonNameI18n);
+			if (label.isEmpty()) continue;
+			QString labelId = QString("Gaia DR3 %1").arg(s->getGaia());
+			if constexpr (std::is_same_v<Star, Star1>)
+			{
+				if (s->getHip())
+				{
+					labelId = QString("HIP %1").arg(s->getHip());
+					if (s->hasComponentID())
+						labelId += QString(" %1").arg(StarMgr::convertToComponentIds(s->getComponentIds()));
+				}
+			}
+			sPainter->queueSkyLabel(labelId, v, label, starMag * 0.001f + (extinctedMagIndex - magIndex) * 0.05f,
+			                        0, offset, offset);
 		}
 	}
 }

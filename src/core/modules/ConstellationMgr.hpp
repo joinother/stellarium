@@ -530,6 +530,7 @@ public:
 private:
 	Constellation* findFromAbbreviation(const QString& abbreviation) const;
 	QList<Constellation*> constellations; //!< Constellations in the current SkyCulture
+	QString emphasizedModelId;
 	StarMgr* hipStarMgr;
 
 	bool isolateSelected; //!< true to pick individual constellations.

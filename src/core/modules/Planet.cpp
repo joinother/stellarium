@@ -39,6 +39,7 @@
 #include "sidereal_time.h"
 #include "StelTextureMgr.hpp"
 #include "StelModuleMgr.hpp"
+#include "StelObjectMgr.hpp"
 #include "StelMovementMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelTranslator.hpp"
@@ -2430,11 +2431,11 @@ float Planet::getSelectPriority(const StelCore* core) const
 	if( ss->getFlagHints() )
 	{
 		// easy to select, especially Pluto
-		return getVMagnitudeWithExtinction(core)-15.f;
+		return getVMagnitudeWithVisualExtinction(core)-15.f;
 	}
 	else
 	{
-		return getVMagnitudeWithExtinction(core) - 8.f;
+		return getVMagnitudeWithVisualExtinction(core) - 8.f;
 	}
 }
 
@@ -3862,7 +3863,7 @@ void Planet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFon
 			const float angleFactor=sunAlt>0 ? 1.f : 0.5f*(cosf(180.f*sunAlt)+1.f);
 
 			// Find extinction settings to change colors. The method is rather ad-hoc.
-			const float extinctedMag=getVMagnitudeWithExtinction(core)-getVMagnitude(core); // this is net value of extinction, in mag.
+			const float extinctedMag=getVMagnitudeWithVisualExtinction(core)-getVMagnitude(core); // this is net value of extinction, in mag.
 			//Vec3f color(haloColor[0], powf(0.75f, extinctedMag) * haloColor[1], powf(0.42f, 0.9f*extinctedMag) * haloColor[2]);
 			Vec3f color(haloColor[0], powf(0.80f, extinctedMag) * haloColor[1], powf(0.25f, extinctedMag) * haloColor[2]);
 
@@ -3944,7 +3945,7 @@ void Planet::draw(StelCore* core, float maxMagLabels, const QFont& planetNameFon
 		// by putting here, only draw orbit if Planet is visible for clarity
 		drawOrbit(core);  // TODO - fade in here also...
 
-		if (flagLabels && ang_dist>0.25f && maxMagLabels>getVMagnitudeWithExtinction(core, vMagnitude) && core->getFlagClearSky())
+		if (flagLabels && ang_dist>0.25f && maxMagLabels>getVMagnitudeWithVisualExtinction(core, vMagnitude) && core->getFlagClearSky())
 			labelsFader=true;
 		else
 			labelsFader=false;
@@ -4463,7 +4464,7 @@ void Planet::draw3dModel(StelCore* core, StelProjector::ModelViewTranformP trans
 	// drawOnlyRing is only ever used when observing the own planet's rings. In this case extinction of the own planet's mag is set to zero. (#4619)
 	// (In a more complete solution we should treat the ring as extended object and compute extinction per vertex.)
 	const float vMagnitude=getVMagnitude(core, solarEclipseFactor);
-	const float vMagnitudeWithExtinction=(drawOnlyRing ? vMagnitude : getVMagnitudeWithExtinction(core, vMagnitude));
+	const float vMagnitudeWithExtinction=(drawOnlyRing ? vMagnitude : getVMagnitudeWithVisualExtinction(core, vMagnitude));
 
 	const float extinctedMag=vMagnitudeWithExtinction-vMagnitude; // this is net value of extinction, in mag.
 	const float magFactorGreen=powf(0.85f, 0.6f*extinctedMag);
@@ -6003,7 +6004,13 @@ void Planet::drawHints(const StelCore* core, StelPainter &sPainter, const QFont&
 	sPainter.setColor(labelColor,labelsFader.getInterstate());
 	const QString label = sphereScale != 1. ? QString(u8"%1 (\u00d7%2)").arg(getPlanetLabel(), QString::number(sphereScale, 'f', 2))
 	                                        : getPlanetLabel();
-	sPainter.drawText(static_cast<float>(screenPos[0]),static_cast<float>(screenPos[1]), label, 0, tmp, tmp, false);
+	const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject();
+	const bool isSelected = !selected.isEmpty() && selected.first().data() == this;
+	const QString labelGroup = QStringLiteral("planet:") + getID();
+	sPainter.beginSkyLabels(labelGroup, isSelected ? getID() : QString());
+	sPainter.queueSkyLabel(getID(), static_cast<float>(screenPos[0]), static_cast<float>(screenPos[1]),
+		label, getVMagnitudeWithVisualExtinction(core), 0, tmp, tmp);
+	sPainter.flushSkyLabels();
 
 	// hint disappears smoothly on close view
 	if (hintFader.getInterstate()<=0)

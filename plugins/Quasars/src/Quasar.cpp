@@ -177,7 +177,7 @@ float Quasar::getVMagnitude(const StelCore* core) const
 
 float Quasar::getSelectPriority(const StelCore* core) const
 {
-	float mag = getVMagnitudeWithExtinction(core);
+	float mag = getVMagnitudeWithVisualExtinction(core);
 	if (useMarkers)
 		mag -= shiftVisibility;
 
@@ -197,7 +197,7 @@ void Quasar::draw(StelCore* core, StelPainter& painter)
 	StelSkyDrawer* sd = core->getSkyDrawer();
 	const float mlimit = sd->getLimitMagnitude();
 	const float shift = 8.f;
-	float mag = getVMagnitudeWithExtinction(core);
+	float mag = getVMagnitudeWithVisualExtinction(core);
 	if (useMarkers)
 		mag -= shiftVisibility;
 

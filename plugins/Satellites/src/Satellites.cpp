@@ -4064,13 +4064,22 @@ void Satellites::draw(StelCore* core)
 {
 	// Separated because first test should be very fast.
 	if (!hintFader && hintFader.getInterstate() <= 0.f)
+	{
+		StelPainter::clearSkyLabels("satellites");
 		return;
+	}
 
 	if (qAbs(core->getTimeRate())>=Satellite::timeRateLimit) // Do not show satellites when time rate is over limit
+	{
+		StelPainter::clearSkyLabels("satellites");
 		return;
+	}
 
 	if (core->getCurrentPlanet()!=earth || !isValidRangeDates(core))
+	{
+		StelPainter::clearSkyLabels("satellites");
 		return;
+	}
 
 	StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
 	StelPainter painter(prj);
@@ -4078,6 +4087,8 @@ void Satellites::draw(StelCore* core)
 	font.setPixelSize(labelFontSize);
 	painter.setFont(font);
 	Satellite::hintBrightness = hintFader.getInterstate();
+	const auto selectedLabels = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
+	painter.beginSkyLabels("satellites", selectedLabels.isEmpty() ? QString() : selectedLabels.first()->getID());
 
 	painter.setBlending(true);
 	Satellite::hintTexture->bind();
@@ -4087,6 +4098,7 @@ void Satellites::draw(StelCore* core)
 		if (sat && sat->initialized && sat->displayed)
 			sat->draw(core, painter);
 	}
+	painter.flushSkyLabels();
 
 	// In screen accumulation mode (star trails), circles or pointer should be suppressed.
 	if (!core->getFlagClearSky())

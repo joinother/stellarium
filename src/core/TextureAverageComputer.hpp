@@ -22,6 +22,8 @@
 
 #include <string>
 #include <memory>
+#include <array>
+#include <cstdint>
 #include "VecMath.hpp"
 #include <QOpenGLContext>
 #include <QOpenGLShaderProgram>
@@ -45,15 +47,30 @@ class TextureAverageComputer
 	bool isGLES = false;
 	static inline bool needForWorkaroundChecked = false;
 	static inline bool npotWorkaroundNeeded = false;
+	struct ReadbackSlot
+	{
+		GLuint buffer = 0;
+		GLsync fence = nullptr;
+		std::uint64_t token = 0;
+	};
+	std::array<ReadbackSlot, 3> readbacks{};
+	unsigned readbackHead = 0;
+	unsigned readbackCount = 0;
+	bool readbackFailed = false;
 
 	void bindVAO();
 	void releaseVAO();
 	void setupCurrentVAO();
 	void checkNeedForWorkaround();
 	Vec4f getTextureAverageWithWorkaround(GLuint texture);
-	Vec4f getCurrentTextureDeepestMipLevelPixelGL(const int width, const int height);
-	Vec4f getCurrentTextureDeepestMipLevelPixelGLES(const int width, const int height);
+	Vec4f getCurrentTextureDeepestMipLevelPixelGL(const int width, const int height, bool intoBuffer = false);
+	Vec4f getCurrentTextureDeepestMipLevelPixelGLES(const int width, const int height, bool intoBuffer = false);
 public:
+	struct AsyncResult { Vec4f value; std::uint64_t token = 0; };
+	bool supportsAsyncReadback() const;
+	bool enqueueTextureAverageSimple(GLuint texture, int width, int height, std::uint64_t token);
+	bool pollTextureAverage(AsyncResult& result);
+	void resetAsyncReadback();
 	//!< The function to use for arbitrary NPOT textures
 	Vec4f getTextureAverage(GLuint texture);
 	//!< Can be used for power-of-two textures

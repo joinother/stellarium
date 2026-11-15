@@ -603,7 +603,7 @@ bool AtmosphereShowMySky::dynamicResolution(StelProjectorP prj, Vec3d &currPos, 
 	// perhaps 50 frames per second depending on the hardware's capabilities.
 	// We draw about 10 atmospheres per second in reduced resolution.
 
-	const auto currFov=prj->getFov(), currFad=fader.getInterstate();
+	const auto currFov=prj->getFov(), currFad=getVisualFadeIntensity();
 	Vec3d currSun;
 	prj->project(currPos,currSun);
 	const auto dFad=1e3*(currFad-prevFad);                          // per thousand of the fader
@@ -719,11 +719,11 @@ void AtmosphereShowMySky::computeColor(StelCore* core, const double JD, const Pl
 		// TODO: compute eclipse factor also for Lunar eclipses! (lp:#1471546)
 
 		// No need to calculate if not visible
-		if (!fader.getInterstate() || !core->getFlagClearSky())
+		if (!getVisualFadeIntensity() || !core->getFlagClearSky())
 		{
 			// GZ 20180114: Why did we add light pollution if atmosphere was not visible?????
 			// And what is the meaning of 0.001? Approximate contribution of stellar background? Then why is it 0.0001 below???
-			averageLuminance = 0.001f;
+			if (!overrideAverageLuminance) averageLuminance = 0.001f;
 			return;
 		}
 
@@ -768,7 +768,7 @@ void AtmosphereShowMySky::draw(StelCore* core)
 
 	StelToneReproducer* eye = core->getToneReproducer();
 
-	const float atm_intensity = fader.getInterstate();
+	const float atm_intensity = getVisualFadeIntensity();
 	if (!atm_intensity)
 		return;
 

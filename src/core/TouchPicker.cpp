@@ -24,6 +24,7 @@
 #include "StelModuleMgr.hpp"
 #include "StelObjectModule.hpp"
 #include "StelProjector.hpp"
+#include "StelPainter.hpp"
 #include "StelSkyDrawer.hpp"
 #include "StelUtils.hpp"
 
@@ -71,6 +72,7 @@ struct LabelTarget
 {
 	bool present = false;
 	bool lineHit = false;
+	bool modelHit = false;
 	QRectF rect;
 };
 
@@ -242,7 +244,7 @@ void addCandidate(QList<PickCandidate>& candidates, const ViewContext& ctx, cons
 {
 	if (!object)
 		return;
-	if (!visibleSkyContains(core, object->getJ2000EquatorialPos(core)))
+	if (!label.modelHit && !visibleSkyContains(core, object->getJ2000EquatorialPos(core)))
 		return;
 
 	PickCandidate candidate;
@@ -271,14 +273,17 @@ void addCandidate(QList<PickCandidate>& candidates, const ViewContext& ctx, cons
 	const bool isConstellation = candidate.type == QLatin1String("Constellation")
 		|| candidate.type == QLatin1String("Asterism");
 	candidate.lineHit = label.lineHit;
+	candidate.modelHit = label.modelHit;
 	candidate.labelHit = label.lineHit || labelTextHit;
-	candidate.directHit = candidate.labelHit || footprintHit;
+	candidate.directHit = candidate.labelHit || footprintHit || label.modelHit;
 	if (footprintHit)
 		candidate.directRank = 0;
 	else if (labelTextHit)
 		candidate.directRank = isConstellation ? 2 : 1;
 	else if (label.lineHit)
 		candidate.directRank = 3;
+	else if (label.modelHit)
+		candidate.directRank = 4;
 	candidate.satellite = satellite;
 	candidate.satelliteRender = satelliteRender;
 
@@ -448,7 +453,8 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				}
 
 				LabelTarget label;
-				if (starLabels && core->getFlagClearSky() && mag < labelLimitMag)
+				if (starLabels && core->getFlagClearSky() && mag < labelLimitMag
+					&& StelPainter::skyLabelVisibility(QStringLiteral("stars"), star->getID()) > 0.05f)
 				{
 					const QString text = objectName(star);
 					if (!text.isEmpty())
@@ -509,7 +515,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 			for (const StelObjectP& nebula : nebulae)
 			{
 				const NebulaP nebulaObject = qSharedPointerCast<Nebula>(nebula);
-				const Nebula::RenderState render = nebulaObject->getRenderState(maxMagHints, maxMagLabels);
+				Nebula::RenderState render = nebulaObject->getRenderState(maxMagHints, maxMagLabels);
+				const auto drawn = nebulaObject->getDrawVisibility();
+				render.hintDrawn = render.hintDrawn && drawn.hintAlpha > 0.05f;
+				render.labelDrawn = render.labelDrawn && drawn.labelAlpha > 0.05f;
+				render.outlineDrawn = render.outlineDrawn && drawn.outlineAlpha > 0.05f;
+				render.pickable = render.hintDrawn || render.labelDrawn || render.outlineDrawn;
 				if (!render.pickable)
 					continue;
 
@@ -545,7 +556,9 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 	{
 		const bool constellationLabels = constellationMgr->getFlagLabels();
 		const bool constellationLines = constellationMgr->getFlagLines();
-		if (constellationLabels || constellationLines)
+		const bool constellationModels = constellationMgr->getFlagArt() && constellationMgr->getFlagArt3d();
+		const Vec3d velocity = core->getUseAberration() ? core->getAberrationVec(core->getJDE()) : Vec3d(0.);
+		if (constellationLabels || constellationLines || constellationModels)
 		{
 			const QStringList names = constellationMgr->getConstellationsEnglishNames();
 			for (const QString& name : names)
@@ -559,8 +572,15 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 
 				QPointF screenVp;
 				Vec3d screenDevice;
-				if (!projectToVp(ctx, constellation->getJ2000EquatorialPos(core), screenVp, screenDevice))
-					continue;
+				const bool anchorVisible = projectToVp(ctx, constellation->getJ2000EquatorialPos(core), screenVp, screenDevice);
+				bool anchorProjected = anchorVisible;
+				if (!anchorVisible)
+				{
+					anchorProjected = ctx.prj->project(constellation->getJ2000EquatorialPos(core), screenDevice);
+					if (anchorProjected)
+						screenVp = QPointF((screenDevice[0] - ctx.viewport[0]) / ctx.scaleX,
+							(ctx.viewport[1] + ctx.viewport[3] - 1 - screenDevice[1]) / ctx.scaleY);
+				}
 
 				LabelTarget label;
 				if (constellationLabels)
@@ -568,11 +588,28 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 					const QString text = constellation->getScreenLabel();
 					if (!text.isEmpty())
 					{
-						const QRectF rect = labelRectCentered(labelMetrics, text, screenVp, ctx.dpr);
-						if (rect.contains(ctx.tapVp))
+						for (int anchorIndex = 0; anchorIndex < constellation->getLabelPositions().size(); ++anchorIndex)
 						{
-							label.present = true;
-							label.rect = rect;
+							if (StelPainter::skyLabelVisibility(QStringLiteral("constellations"),
+								constellation->getLabelLayoutId(anchorIndex)) <= 0.05f)
+								continue;
+							Vec3d direction = constellation->getLabelPositions().at(anchorIndex);
+							direction.normalize();
+							direction += velocity;
+							direction.normalize();
+							QPointF labelVp;
+							Vec3d labelDevice;
+							if (!projectToVp(ctx, direction, labelVp, labelDevice))
+								continue;
+							const QRectF rect = labelRectCentered(labelMetrics, text, labelVp, ctx.dpr);
+							if (rect.contains(ctx.tapVp))
+							{
+								label.present = true;
+								label.rect = rect;
+								screenVp = labelVp;
+								anchorProjected = true;
+								break;
+							}
 						}
 					}
 				}
@@ -600,8 +637,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 						}
 					}
 				}
-				if (!label.present && !lineHit)
+				label.modelHit = constellationModels && visibleSkyContains(core, tapDirection) && constellation->modelContainsPoint(ctx.prj, velocity,
+					Vec3d(tapXDev, tapYDev, 0.), (profile.touch ? 7. : 3.) * qMax(ctx.scaleX, ctx.scaleY));
+				if (!label.present && !lineHit && !label.modelHit)
 					continue;
+				if (!anchorProjected)
+					screenVp = ctx.tapVp;
 				label.lineHit = lineHit;
 				addCandidate(candidates, ctx, core, object, screenVp, 0.0, 99.0, false,
 					typePriorForObject(object, false), label, false, SatellitePickDiagnostics());
@@ -717,7 +758,8 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				}
 
 				LabelTarget label;
-				if (state.labelDrawn)
+				if (state.labelDrawn
+					&& StelPainter::skyLabelVisibility(QStringLiteral("satellites"), object->getID()) > 0.05f)
 				{
 					const QString text = objectName(object);
 					if (!text.isEmpty())

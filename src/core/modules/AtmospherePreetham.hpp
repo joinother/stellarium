@@ -59,11 +59,21 @@ private:
 	Vec4i viewport;
 	Skylight& sky;
 	Skybright skyb;
+	Skybright cachedSkyBrightness;
+	Vec3f cachedSunDirection;
+	Vec3f cachedMoonDirection;
+	float cachedEclipseFactor = -1.f;
+	float cachedPollution = -1.f;
+	bool cachedPlanetsVisible = false;
+	bool cachedNoScatter = false;
+	bool luminanceCacheValid = false;
 	unsigned int skyResolutionY,skyResolutionX;
 
 	QVarLengthArray<Vec2f> posGrid;
 	QOpenGLBuffer posGridBuffer;
 	QOpenGLBuffer indicesBuffer;
+	int gridIndexCount = 0;
+	unsigned int gridIndexType = GL_UNSIGNED_SHORT;
 	QVarLengthArray<Vec4f> colorGrid;
 	QOpenGLBuffer colorGridBuffer;
 	QOpenGLVertexArrayObject vao;

@@ -1,8 +1,19 @@
 #ifndef ATMOSPHERE_VIVID_HPP
 #define ATMOSPHERE_VIVID_HPP
 
+#include <algorithm>
+#include <cmath>
+
 namespace AtmosphereVivid
 {
+inline float visualStrength(bool enabled, bool earth, bool noScatter, double solarElevationDegrees)
+{
+	if (!enabled || !earth || noScatter || !std::isfinite(solarElevationDegrees))
+		return 1.f;
+	const double progress = std::max(0., std::min(1., (solarElevationDegrees + 18.) / 12.));
+	return static_cast<float>(progress * progress * (3. - 2. * progress));
+}
+
 inline const char* shaderSource()
 {
 	return R"(

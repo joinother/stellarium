@@ -28,6 +28,8 @@
 #include "SaturationShader.hpp"
 
 #include <QDebug>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QString>
 #include <QSettings>
 #include <QPainter>
@@ -736,6 +738,149 @@ void StelPainter::drawText(const Vec3d& v, const QString& str, float angleDeg, f
 	Vec3d win;
 	if (prj->project(v, win))
 		drawText(static_cast<float>(win[0]), static_cast<float>(win[1]), str, angleDeg, xshift, yshift, noGravity);
+}
+
+static std::unordered_map<std::string, ScreenLabelLayout>& skyLabelLayouts()
+{
+	static std::unordered_map<std::string, ScreenLabelLayout> layouts;
+	return layouts;
+}
+
+static ScreenLabelLayout::Occupancy& skyLabelOccupancy()
+{
+	static ScreenLabelLayout::Occupancy occupancy;
+	return occupancy;
+}
+
+QJsonArray StelPainter::skyLabelStatistics()
+{
+	QJsonArray result;
+	for (const auto& entry : skyLabelLayouts())
+	{
+		const auto stats = entry.second.statistics();
+		if (!stats.candidates || !entry.second.isRecent()) continue;
+		QJsonObject group;
+		group["group"] = QString::fromStdString(entry.first);
+		group["candidates"] = stats.candidates;
+		group["accepted"] = stats.accepted;
+		group["visible"] = stats.visible;
+		result.append(group);
+	}
+	return result;
+}
+
+void StelPainter::beginSkyLabelFrame()
+{
+	skyLabelOccupancy().clear();
+	for (auto entry = skyLabelLayouts().begin(); entry != skyLabelLayouts().end();)
+	{
+		if (entry->second.isDormant()) entry = skyLabelLayouts().erase(entry);
+		else { entry->second.beginFrame(); ++entry; }
+	}
+}
+
+std::vector<float> StelPainter::resolveSkyLabelLayout(const QString& group)
+{
+	return skyLabelLayoutForGroup(group).resolve(&skyLabelOccupancy(), group.toStdString());
+}
+
+void StelPainter::beginSkyLabels(const QString& group, const QString& selectedId)
+{
+	Q_ASSERT(!skyLabelLayout);
+	skyLabelLayout = &skyLabelLayoutForGroup(group);
+	skyLabelGroup = group;
+	selectedSkyLabelId = selectedId;
+	skyLabels.clear();
+}
+
+ScreenLabelLayout& StelPainter::skyLabelLayoutForGroup(const QString& group)
+{
+	auto inserted = skyLabelLayouts().try_emplace(group.toStdString());
+	if (inserted.second) inserted.first->second.beginFrame();
+	return inserted.first->second;
+}
+
+float StelPainter::skyLabelVisibility(const QString& group, const QString& id)
+{
+	const auto& layouts = skyLabelLayouts();
+	const auto found = layouts.find(group.toStdString());
+	return found != layouts.end() && found->second.isRecent() ? found->second.visibility(id.toStdString()) : 0.f;
+}
+
+void StelPainter::clearSkyLabels(const QString& group)
+{
+	const auto found = skyLabelLayouts().find(group.toStdString());
+	if (found != skyLabelLayouts().end()) found->second.clear();
+}
+
+void StelPainter::queueSkyLabel(const QString& id, const Vec3d& position, const QString& text,
+                               float magnitude, int priority, float xshift, float yshift, const QString& selectionId)
+{
+	if (text.isEmpty() || currentColor[3] <= 0.f) return;
+	Vec3d screen;
+	if (prj->project(position, screen))
+		queueSkyLabel(id, screen[0], screen[1], text, magnitude, priority, xshift, yshift, selectionId);
+}
+
+ScreenLabelLayout::Rect StelPainter::skyLabelRect(float x, float y, const QString& text, float xshift, float yshift) const
+{
+	QFont font = currentFont;
+	font.setPixelSize(currentFont.pixelSize() * prj->getDevicePixelsPerPixel());
+	font.setStyleStrategy(QFont::NoSubpixelAntialias);
+	const QRect bounds = QFontMetrics(font).boundingRect(text);
+	const float width = bounds.width() + 1 + static_cast<int>(0.02f * bounds.width());
+	const float height = bounds.height();
+	const float left = xshift + bounds.x();
+	const float bottom = yshift - bounds.y() - height;
+	const float angle = prj->defaultAngleForGravityText * M_PI_180f;
+	const float cosine = std::cos(angle), sine = std::sin(angle);
+	const float centerX = x + (left + width * 0.5f) * cosine - (bottom + height * 0.5f) * sine;
+	const float centerY = y + (left + width * 0.5f) * sine + (bottom + height * 0.5f) * cosine;
+	const float padding = std::max(2.f, static_cast<float>(3.f * prj->getDevicePixelsPerPixel()));
+	const float halfWidth = (std::abs(cosine) * width + std::abs(sine) * height) * 0.5f + padding;
+	const float halfHeight = (std::abs(sine) * width + std::abs(cosine) * height) * 0.5f + padding;
+	ScreenLabelLayout::Rect rect{centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight};
+	if (prj->gravityLabels)
+	{
+		const float radius = width + height + std::abs(xshift) + std::abs(yshift) + padding;
+		rect = {x - radius, y - radius, x + radius, y + radius};
+	}
+	return rect;
+}
+
+void StelPainter::queueSkyLabel(const QString& id, float x, float y, const QString& text,
+                               float magnitude, int priority, float xshift, float yshift, const QString& selectionId)
+{
+	Q_ASSERT(skyLabelLayout);
+	if (!skyLabelLayout || text.isEmpty() || currentColor[3] <= 0.f || !std::isfinite(x) || !std::isfinite(y)) return;
+	const auto rect = skyLabelRect(x, y, text, xshift, yshift);
+	const ScreenLabelLayout::Rect viewport{static_cast<float>(prj->getViewportPosX()), static_cast<float>(prj->getViewportPosY()),
+		static_cast<float>(prj->getViewportPosX() + prj->getViewportWidth()), static_cast<float>(prj->getViewportPosY() + prj->getViewportHeight())};
+	if (!rect.intersects(viewport)) return;
+	const bool selected = !selectedSkyLabelId.isEmpty() && (selectionId.isEmpty() ? id : selectionId) == selectedSkyLabelId;
+	skyLabelLayout->add({id.toStdString(), rect, selected ? std::numeric_limits<int>::max() : priority,
+	                     magnitude, currentColor[3], id.toStdString(), selected});
+	skyLabels.push_back({x, y, xshift, yshift, text, currentFont, currentColor});
+}
+
+void StelPainter::flushSkyLabels()
+{
+	if (!skyLabelLayout) return;
+	const auto opacity = resolveSkyLabelLayout(skyLabelGroup);
+	const auto savedColor = currentColor;
+	const auto savedFont = currentFont;
+	for (std::size_t index = 0; index < skyLabels.size(); ++index)
+	{
+		if (opacity[index] <= 0.f) continue;
+		const auto& label = skyLabels[index];
+		currentFont = label.font;
+		setColor(label.color[0], label.color[1], label.color[2], label.color[3] * opacity[index]);
+		drawText(label.x, label.y, label.text, 0.f, label.xshift, label.yshift, false);
+	}
+	currentFont = savedFont;
+	setColor(savedColor[0], savedColor[1], savedColor[2], savedColor[3]);
+	skyLabels.clear();
+	skyLabelLayout = nullptr;
 }
 
 /*************************************************************************
@@ -2718,11 +2863,9 @@ void StelPainter::drawFixedColorWideLinesAsQuads(const ArrayDesc& vertexArray, i
 	const auto viewportSize = Vec2f(viewport[2], viewport[3]);
 
 	std::vector<Vec4f> newVertices;
-	if(mode == LineStrip)
-		newVertices.reserve((count-1)*6);
-	else
-		newVertices.reserve(count*6);
-	newVertices.resize((count-1)*6);
+	const int segmentCount = mode == Lines ? count / 2 : count - 1;
+	newVertices.reserve((mode == LineLoop ? count : segmentCount) * 6);
+	newVertices.resize(segmentCount * 6);
 	Q_ASSERT(vertexArray.type == GL_FLOAT);
 	const auto lineVertData = static_cast<const float*>(vertexArray.pointer) + vertexArray.size*offset;
 	const int step = mode==Lines ? 2 : 1;
@@ -2830,13 +2973,14 @@ void StelPainter::drawFixedColorWideLinesAsQuads(const ArrayDesc& vertexArray, i
 		const auto v1a = Vec4f(v1a_xy[0], v1a_xy[1], clip1[2], clip1[3]);
 		const auto v1b = Vec4f(v1b_xy[0], v1b_xy[1], clip1[2], clip1[3]);
 
-		newVertices[6*n+0] = v0a;
-		newVertices[6*n+1] = v0b;
-		newVertices[6*n+2] = v1a;
+		const int vertexOffset = 6 * (n / step);
+		newVertices[vertexOffset+0] = v0a;
+		newVertices[vertexOffset+1] = v0b;
+		newVertices[vertexOffset+2] = v1a;
 
-		newVertices[6*n+3] = v1a;
-		newVertices[6*n+4] = v0b;
-		newVertices[6*n+5] = v1b;
+		newVertices[vertexOffset+3] = v1a;
+		newVertices[vertexOffset+4] = v0b;
+		newVertices[vertexOffset+5] = v1b;
 	}
 	if(mode == LineLoop)
 	{
@@ -2884,6 +3028,19 @@ void StelPainter::drawFixedColorWideLinesAsQuads(const ArrayDesc& vertexArray, i
 }
 
 void StelPainter::drawFromArray(DrawingMode mode, int count, int offset, bool doProj, const unsigned short* indices)
+{
+	drawFromArrayImpl(mode, count, offset, doProj, indices, false);
+}
+
+void StelPainter::drawTrianglesWithDepthPrepass(int count, const unsigned short* indices)
+{
+	if (count <= 0) return;
+	Q_ASSERT(indices && vertexArray.enabled && colorArray.enabled && !texCoordArray.enabled && !normalArray.enabled);
+	if (!indices || !vertexArray.enabled || !colorArray.enabled || texCoordArray.enabled || normalArray.enabled) return;
+	drawFromArrayImpl(Triangles, count, 0, false, indices, true);
+}
+
+void StelPainter::drawFromArrayImpl(DrawingMode mode, int count, int offset, bool doProj, const unsigned short* indices, bool depthPrepass)
 {
 	if(!count) return;
 
@@ -3079,6 +3236,17 @@ void StelPainter::drawFromArray(DrawingMode mode, int count, int offset, bool do
 		return;
 	}
 	
+	if (depthPrepass)
+	{
+		GLboolean oldColorMask[4];
+		glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
+		setDepthMask(true);
+		glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+		glDrawElements(mode, count, GL_UNSIGNED_SHORT, 0);
+		glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
+		setDepthMask(false);
+		setBlending(true, GL_SRC_ALPHA, GL_ONE);
+	}
 	if (indices)
 		glDrawElements(mode, count, GL_UNSIGNED_SHORT, 0);
 	else

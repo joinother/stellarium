@@ -74,6 +74,8 @@ public:
 	//! Get whether atmosphere is displayed
 	bool getFlagShow() const {return fader;}
 	void setFlagVividAtmosphere(bool enabled) { flagVividAtmosphere = enabled; }
+	void setVisualStrength(float strength) { visualStrength = strength; }
+	float getVisualFadeIntensity() const { return fader.getInterstate() * visualStrength; }
 	void setMistUndergroundStrength(float strength) { mistUndergroundStrength = strength; }
 
 	//! Get the actual atmosphere intensity due to eclipses + fader
@@ -88,7 +90,7 @@ public:
 	// TODO: Find reference for this value? Why 1 mcd/m2 without atmosphere and 0.1 mcd/m2 inside? Absorption?
 	//! Otherwise it includes the (atmosphere + background starlight (0.0001cd/m2) * eclipse factor + light pollution.
 	//! @return the last computed average luminance of the atmosphere in cd/m2.
-	float getAverageLuminance() const {return averageLuminance;}
+	float getAverageLuminance() const {return overrideAverageLuminance || visualStrength == 1.f ? averageLuminance : 0.001f + visualStrength * (averageLuminance - 0.001f);}
 
 	//! override computable luminance. This is for special operations only, e.g. for scripting of brightness-balanced image export.
 	//! To return to auto-computed values, set any negative value at the end of the script.
@@ -112,6 +114,7 @@ public:
 	float getLightPollutionLuminance() const { return lightPollutionLuminance; }
 
 protected:
+	float visualStrength = 1.f;
 	float mistUndergroundStrength = 0.f;
 	bool flagVividAtmosphere = false;
 	bool vividAtmosphereAllowed = false;

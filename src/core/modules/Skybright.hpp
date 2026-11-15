@@ -68,6 +68,12 @@ public:
 	//! @param cosDistSun cos(angular distance between sun  and the position)
 	//! @param cosDistZenith cos(angular distance between zenith and the position)
 	float getLuminance(float cosDistMoon, const float cosDistSun, const float cosDistZenith) const;
+	bool hasSameLuminanceParameters(const Skybright& other) const
+	{
+		return K == other.K && C3 == other.C3 && C4 == other.C4
+			&& bNightTerm == other.bNightTerm && bMoonTerm1 == other.bMoonTerm1
+			&& bTwilightTerm == other.bTwilightTerm;
+	}
 
 private:
 	float airMassMoon;  // Air mass for the Moon

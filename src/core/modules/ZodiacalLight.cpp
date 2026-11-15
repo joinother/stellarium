@@ -255,7 +255,7 @@ void ZodiacalLight::draw(StelCore* core)
 
 	const StelProjectorP projector = core->getProjection(transfo);
 	const auto drawer=core->getSkyDrawer();
-	const auto& extinction=drawer->getExtinction();
+	const auto& extinction=drawer->getVisualExtinction();
 
 	if(!renderProgram || !prevProjector || !projector->isSameProjection(*prevProjector))
 	{
@@ -348,7 +348,9 @@ void main(void)
 
 	const float nelm = StelCore::luminanceToNELM(drawer->getLightPollutionLuminance());
 	// Test for light pollution, return if too bad.
-	if (drawer->getFlagHasAtmosphere() && nelm < 5.5) return;
+	const float pollutionVisibility = drawer->getFlagHasAtmosphere() && nelm < 5.5
+		? 1.f - drawer->getAtmosphereVisualStrength() : 1.f;
+	if (pollutionVisibility <= 0.f) return;
 
 	static LandscapeMgr *lMgr=GETSTELMODULE(LandscapeMgr);
 	const float atmFadeIntensity = lMgr->getAtmosphereFadeIntensity();
@@ -359,7 +361,7 @@ void main(void)
 	Q_ASSERT(mainTex);	// A texture must be loaded before calling this
 
 	// Default ZL color is white (sunlight), or whatever has been set e.g. by script.
-	Vec3f c = color;
+	Vec3f c = color * pollutionVisibility;
 
 	// ZL is quite sensitive to light pollution. I scale to make it less visible.
 	const float lum = drawer->surfaceBrightnessToLuminance(13.5f + 0.5f*bortleIntensity); // (8.0f + 0.5*bortle);
@@ -395,7 +397,7 @@ void main(void)
 
 	renderProgram->bind();
 
-	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getExtinction().getExtinctionCoefficient()>=0.01f);
+	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getVisualExtinction().getExtinctionCoefficient()>=0.01f);
 
 	renderProgram->setUniformValue(shaderVars.extinctionEnabled, withExtinction);
 	renderProgram->setUniformValue(shaderVars.bortleIntensity, bortleIntensity);

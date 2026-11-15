@@ -1,35 +1,121 @@
 {
   "schemaVersion": 1,
   "coordinateFrame": "image XY, front positive Z",
+  "mapping": "foreground-pixel-contain-v1; depth normalized by image width",
   "source": "User Tripo archive/models_final; archive/_manifest.csv",
+  "triangleBudget": 8000,
+  "excluded": [
+    {
+      "source": "23_circinus.glb",
+      "status": "done_shaky"
+    },
+    {
+      "source": "24_columba_dove.glb",
+      "status": "done_part"
+    },
+    {
+      "source": "24_columba_branch.glb",
+      "status": "done_part"
+    }
+  ],
   "models": [
     {
       "id": "And",
       "source": "01_andromeda.glb",
       "sourceSha256": "187b530229ebcec3b54e4d64362ceedf55bd8a6ecd9de2f13ad0d0c38c6051a6",
       "mesh": "And.scm",
-      "sha256": "62ece089e3fd3c170c9292bb6e65d1d44c96fc829f5ccb519f0aee217797d0b0",
-      "vertices": 7336,
-      "triangles": 14530,
+      "sha256": "caba9206713b11b81ce9736dfed38494153e1613ba406f1cade8f872f4ed31e5",
+      "vertices": 4067,
+      "triangles": 7998,
+      "sourceTriangles": 14530,
+      "bytes": 193596,
       "illustration": "illustrations/andromeda.png",
+      "illustrationSha256": "1e631fa6846b3805b9708b03089cf38df160b51a2ca50b7ec17dcd1e8e55eefb",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        63,
+        6,
+        479,
+        512
+      ],
+      "fitBoundsPixels": [
+        62,
+        5,
+        480,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4184974431991577,
+          -0.000270579825155437,
+          -0.14356137812137604
+        ],
+        [
+          0.4189753532409668,
+          0.9984635710716248,
+          0.14710228145122528
+        ]
+      ],
       "imageBounds": [
-        0.0,
-        0.0,
-        1.0,
+        0.12109375,
+        0.009765625,
+        0.9375,
         1.0
       ]
     },
     {
-      "id": "Hya",
-      "source": "42_hydra.glb",
-      "sourceSha256": "20c5542a845cefa93cb0b0ca2692602f7af65f138ae4f26c2946290c2b157656",
-      "mesh": "Hya.scm",
-      "sha256": "fd34196dac17f926db989b4bbafa7e0259d67caaaddea28bc87f7249f291bb60",
-      "vertices": 7472,
-      "triangles": 14719,
-      "illustration": "illustrations/hydra.png",
+      "id": "Ant",
+      "source": "02_antlia.glb",
+      "sourceSha256": "02e1a0218496440935793ee9ef5d1608b1781ce6943c185e74e083914b47c769",
+      "mesh": "Ant.scm",
+      "sha256": "1e03b6b54964fa32d7f0a8ffc77e3ab383deb4eaf5ce360769c5010070bfa9d5",
+      "vertices": 4425,
+      "triangles": 7999,
+      "sourceTriangles": 31545,
+      "bytes": 202200,
+      "illustration": "illustrations/antlia.png",
+      "illustrationSha256": "54d70b95614ef0f3a937e6ae49eadb798eb58b0cddd2db6c346849a1e3eed41d",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        1,
+        127,
+        127
+      ],
+      "fitBoundsPixels": [
+        1,
+        0,
+        128,
+        128
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.2298479974269867,
+          -9.725397831061855e-06,
+          -0.21176432073116302
+        ],
+        [
+          0.22959505021572113,
+          0.9996652007102966,
+          0.2116725742816925
+        ]
+      ],
       "imageBounds": [
-        0.0,
+        0.0078125,
         0.0,
         1.0,
         1.0
@@ -40,46 +126,49 @@
       "source": "03_apus.glb",
       "sourceSha256": "a2d31976560bda4c9b65e0ced0aebabaaa31e0653b9cd9433cd1f9be20939623",
       "mesh": "Aps.scm",
-      "sha256": "17a6e48e8bc34689521cd4103173e725e6eea8f46adf77c3480be127cc53a8e0",
-      "vertices": 7312,
-      "triangles": 14413,
+      "sha256": "83060b7fb7d5e312424e4e3cc00ce7e226e176d86e7b9899982726e357314631",
+      "vertices": 4098,
+      "triangles": 7999,
+      "sourceTriangles": 14413,
+      "bytes": 194352,
       "illustration": "illustrations/apus.png",
+      "illustrationSha256": "521a9258b2e067b722ffbe19b6b4947bea03fa52175be9c127d96261cf0cc5e0",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        9,
+        2,
+        243,
+        255
+      ],
+      "fitBoundsPixels": [
+        8,
+        1,
+        244,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.47720223665237427,
+          -0.0003994982980657369,
+          -0.1669921875
+        ],
+        [
+          0.4776124954223633,
+          0.9982407689094543,
+          0.16625672578811646
+        ]
+      ],
       "imageBounds": [
-        0.0,
-        0.0,
-        1.0,
-        1.0
-      ]
-    },
-    {
-      "id": "Ant",
-      "source": "02_antlia.glb",
-      "sourceSha256": "02e1a0218496440935793ee9ef5d1608b1781ce6943c185e74e083914b47c769",
-      "mesh": "Ant.scm",
-      "sha256": "581488cdab08477efaef8567a9ca1c7f0fd3f7c6e4613c66d9d48271b351c9eb",
-      "vertices": 16416,
-      "triangles": 31545,
-      "illustration": "illustrations/antlia.png",
-      "imageBounds": [
-        0.0,
-        0.0,
-        1.0,
-        1.0
-      ]
-    },
-    {
-      "id": "Aqr",
-      "source": "04_aquarius.glb",
-      "sourceSha256": "8d6f913c23b65f169aff1efb18a75fd0b14c4d36e53ecda051920813bb1d02a7",
-      "mesh": "Aqr.scm",
-      "sha256": "65460d02f6b6edc1df912aed4dc58e71a86a09573d4ba8230417baae8bf7e208",
-      "vertices": 16920,
-      "triangles": 32618,
-      "illustration": "illustrations/aquarius.png",
-      "imageBounds": [
-        0.0,
-        0.0,
-        1.0,
+        0.03125,
+        0.00390625,
+        0.953125,
         1.0
       ]
     },
@@ -88,10 +177,2646 @@
       "source": "05_aquila.glb",
       "sourceSha256": "1bd23dba6b04d3b320d9f3c8dca828bdfa63e5dff5fee3c03d58b38a04725d0d",
       "mesh": "Aql.scm",
-      "sha256": "822ff41f904bde853dd66cecdce6b6b6daacbb5f0448ebb5cbf3556452fcaad2",
-      "vertices": 7614,
-      "triangles": 14515,
+      "sha256": "e92b396d8abe8bf4b87360774befa281ecf74a4049ca92b8b9d7999c51760068",
+      "vertices": 4333,
+      "triangles": 7999,
+      "sourceTriangles": 14515,
+      "bytes": 199992,
       "illustration": "illustrations/aquila.png",
+      "illustrationSha256": "c627aca0719e0e771114661289ce8b651df891f8aa8c6ebe338d13b986eae7db",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        20,
+        5,
+        476,
+        507
+      ],
+      "fitBoundsPixels": [
+        19,
+        4,
+        477,
+        508
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.499105840921402,
+          0.0,
+          -0.4560547471046448
+        ],
+        [
+          0.4990624189376831,
+          0.814846932888031,
+          0.45605432987213135
+        ]
+      ],
+      "imageBounds": [
+        0.037109375,
+        0.0078125,
+        0.931640625,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Aqr",
+      "source": "04_aquarius.glb",
+      "sourceSha256": "8d6f913c23b65f169aff1efb18a75fd0b14c4d36e53ecda051920813bb1d02a7",
+      "mesh": "Aqr.scm",
+      "sha256": "239bddab61de5d932075419b87be8947e15183df9fb4c03694c1704e2c1a8c9e",
+      "vertices": 4318,
+      "triangles": 8000,
+      "sourceTriangles": 32618,
+      "bytes": 199644,
+      "illustration": "illustrations/aquarius.png",
+      "illustrationSha256": "775c2a9b2758e6b2dd4b9aee9c67ea9666021107f55f19eb58d4a49f66f81e6d",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        17,
+        1,
+        492,
+        508
+      ],
+      "fitBoundsPixels": [
+        16,
+        0,
+        493,
+        509
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.41719672083854675,
+          0.0007562288665212691,
+          -0.3618561327457428
+        ],
+        [
+          0.41741544008255005,
+          0.9856328368186951,
+          0.36249828338623047
+        ]
+      ],
+      "imageBounds": [
+        0.03125,
+        0.0,
+        0.962890625,
+        0.994140625
+      ]
+    },
+    {
+      "id": "Ara",
+      "source": "06_ara.glb",
+      "sourceSha256": "ebf9c16d0cd8effb1bf9f8b0dfc5795e64f306447783bbbce47ccb4c540c5a9c",
+      "mesh": "Ara.scm",
+      "sha256": "653891d4e9e7c10224c4cee55179afec2a90387c52162f18bb63f66269c1006d",
+      "vertices": 4130,
+      "triangles": 8000,
+      "sourceTriangles": 14511,
+      "bytes": 195132,
+      "illustration": "illustrations/ara.png",
+      "illustrationSha256": "47abcf063c4e35e4c0938bb8c56ca42f9ffdb696e206913b46d74a4ee35ce766",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        3,
+        241,
+        255
+      ],
+      "fitBoundsPixels": [
+        0,
+        2,
+        242,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.2767987847328186,
+          -0.0002611415402498096,
+          -0.2886960506439209
+        ],
+        [
+          0.2767540216445923,
+          0.998046875,
+          0.2877790629863739
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.0078125,
+        0.9453125,
+        1.0
+      ]
+    },
+    {
+      "id": "Ari",
+      "source": "08_aries.glb",
+      "sourceSha256": "98f51b42a067ad4707a3bd45fde5826a594ad47973de588ecfba565188907488",
+      "mesh": "Ari.scm",
+      "sha256": "7380b1b3cb895e8fcfc177beb8be35e469313bb38b5b6230b92c65d4232c95de",
+      "vertices": 4045,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 193092,
+      "illustration": "illustrations/aries.png",
+      "illustrationSha256": "70158bca8ab737c5529707be030a77d99ec0f0a0cec00c640396a1ebbdf26d5e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        6,
+        253,
+        245
+      ],
+      "fitBoundsPixels": [
+        1,
+        5,
+        254,
+        246
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4895939826965332,
+          0.00010098711209138855,
+          -0.2456853985786438
+        ],
+        [
+          0.48942282795906067,
+          0.9702157974243164,
+          0.2452622354030609
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.01953125,
+        0.9921875,
+        0.9609375
+      ]
+    },
+    {
+      "id": "Aur",
+      "source": "09_auriga.glb",
+      "sourceSha256": "de0b25c3220289c4489170bd9c60e2c675d4157ba2b108535d87d06935749dcb",
+      "mesh": "Aur.scm",
+      "sha256": "19007e4adf48e0dabc635f5cac580fee0bfc67e12c3b62b8b5d1989c10a6d4c7",
+      "vertices": 3972,
+      "triangles": 8000,
+      "sourceTriangles": 28906,
+      "bytes": 191340,
+      "illustration": "illustrations/auriga.png",
+      "illustrationSha256": "059dfbbce1388bab8f9ad3ccf86bcd3b060f3eb9e0d09ca1b96d13b064ef2c8e",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        8,
+        0,
+        507,
+        509
+      ],
+      "fitBoundsPixels": [
+        7,
+        0,
+        508,
+        510
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.490823894739151,
+          0.00043130607809871435,
+          -0.20089216530323029
+        ],
+        [
+          0.48960307240486145,
+          0.9790115356445312,
+          0.20100758969783783
+        ]
+      ],
+      "imageBounds": [
+        0.013671875,
+        0.0,
+        0.9921875,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Boo",
+      "source": "10_bootes.glb",
+      "sourceSha256": "afade47b838ce614056584a3636901bc45b4226477d2b53f6762e7b1868da982",
+      "mesh": "Boo.scm",
+      "sha256": "116438aac16fc8933f763b91c8d47a0244a8b09733dd944123c8daba8acfba29",
+      "vertices": 3976,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 191424,
+      "illustration": "illustrations/bootes.png",
+      "illustrationSha256": "dc958bf2f6e4779302df7a890e24c028fb037d7bb6d5963f820abaae8fee0a78",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        9,
+        503,
+        511
+      ],
+      "fitBoundsPixels": [
+        3,
+        8,
+        504,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4862043261528015,
+          0.0003887155035044998,
+          -0.19255127012729645
+        ],
+        [
+          0.48617929220199585,
+          0.9798485040664673,
+          0.19303308427333832
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.015625,
+        0.984375,
+        1.0
+      ]
+    },
+    {
+      "id": "CMa",
+      "source": "15_canis-major.glb",
+      "sourceSha256": "295cb1ce1fa54c0a25cea47dae6af45d14a796a688a57da5490e38695b7e210d",
+      "mesh": "CMa.scm",
+      "sha256": "55729eaaa4f508b90d681f8d4df9bc67dcacd7772d3dbf9937bd2dc33449f3a6",
+      "vertices": 3998,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191964,
+      "illustration": "illustrations/canis-major.png",
+      "illustrationSha256": "802bd40c4e93c540e2fa601f1363fff4d6145575b91e441846ae8959bc238298",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        1,
+        11,
+        507,
+        504
+      ],
+      "fitBoundsPixels": [
+        0,
+        10,
+        508,
+        505
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48986250162124634,
+          3.2970463053061394e-06,
+          -0.13378404080867767
+        ],
+        [
+          0.4897041320800781,
+          0.8632616996765137,
+          0.13378381729125977
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.01953125,
+        0.9921875,
+        0.986328125
+      ]
+    },
+    {
+      "id": "CMi",
+      "source": "16_canis-minor.glb",
+      "sourceSha256": "b5d3c4905cc3817b5e4ba4b97c1e530655f3a40b23ff3a056dd086b17ec4659d",
+      "mesh": "CMi.scm",
+      "sha256": "8026dbfca776407beb1c2e9d9c40fc15a7dc59e2f0ad2ed1c3c2eb1a291ca2f2",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/canis-minor.png",
+      "illustrationSha256": "198114abce3010a74f7804dcdfb0004b3ba1a2aa2e805463b23be373c8c3dd96",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        23,
+        3,
+        254,
+        255
+      ],
+      "fitBoundsPixels": [
+        22,
+        2,
+        255,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.49049803614616394,
+          -0.0001130349119193852,
+          -0.12188573181629181
+        ],
+        [
+          0.49017333984375,
+          0.8552210330963135,
+          0.12172439694404602
+        ]
+      ],
+      "imageBounds": [
+        0.0859375,
+        0.0078125,
+        0.99609375,
+        1.0
+      ]
+    },
+    {
+      "id": "CVn",
+      "source": "14_canes-venatici.glb",
+      "sourceSha256": "82f7181acf5b987b17bc9689520f45b12f03fb8ef21aac9ba88b740e433d34b8",
+      "mesh": "CVn.scm",
+      "sha256": "0199f5403e9fa7d83f6a7c82cd4ed839103487e516b5ae7605940db49255b0db",
+      "vertices": 3996,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191916,
+      "illustration": "illustrations/canes-venatici.png",
+      "illustrationSha256": "4cefc086d9500502b2172e3aae15800233a62c86203f4ef17c57dea024289d1c",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        4,
+        255,
+        248
+      ],
+      "fitBoundsPixels": [
+        3,
+        3,
+        256,
+        249
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4901971220970154,
+          -0.0002485651639290154,
+          -0.2276044636964798
+        ],
+        [
+          0.4900377690792084,
+          0.769343912601471,
+          0.22701866924762726
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.01171875,
+        1.0,
+        0.97265625
+      ]
+    },
+    {
+      "id": "Cae",
+      "source": "11_caelum.glb",
+      "sourceSha256": "7f0fd73f29a2beefd61b1ec8473489d55037a65818a58644ec18197e5503047b",
+      "mesh": "Cae.scm",
+      "sha256": "bceb3d648f57e39aaec06df5c391ca47106bcdd595c477df49ef3ccd73952d62",
+      "vertices": 3980,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191532,
+      "illustration": "illustrations/caelum.png",
+      "illustrationSha256": "e5a7dc7a01770e98ee15b7b8065952b460eb53b68967e5b21414893db40fed60",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        12,
+        244,
+        248
+      ],
+      "fitBoundsPixels": [
+        3,
+        11,
+        245,
+        249
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48964083194732666,
+          -3.354493310325779e-05,
+          -0.23077459633350372
+        ],
+        [
+          0.4900023341178894,
+          0.9743401408195496,
+          0.23053322732448578
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.04296875,
+        0.95703125,
+        0.97265625
+      ]
+    },
+    {
+      "id": "Cam",
+      "source": "12_camelopardalis.glb",
+      "sourceSha256": "700b0ff1b66846248e6bb8941ab4cb9099a4e6fbc317a76c175db3b342a5d902",
+      "mesh": "Cam.scm",
+      "sha256": "6e2b8ef635e08c549a9ad40c06f7345a0dc95b38367c706749018833a40c3c90",
+      "vertices": 4004,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 192096,
+      "illustration": "illustrations/camelopardalis.png",
+      "illustrationSha256": "18490202bf130ba4bfbeda97e20c3ab841b153d12e7c59a08cc3131230a273a8",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        16,
+        253,
+        254
+      ],
+      "fitBoundsPixels": [
+        1,
+        15,
+        254,
+        255
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.3419417440891266,
+          0.0001487183035351336,
+          -0.10702494531869888
+        ],
+        [
+          0.3420448303222656,
+          0.9807462096214294,
+          0.10685944557189941
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.05859375,
+        0.9921875,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Cap",
+      "source": "17_capricornus.glb",
+      "sourceSha256": "9bb7017d537488cba4348d1dd232281baa6c4e1c42bdde3a78b967fe0036022c",
+      "mesh": "Cap.scm",
+      "sha256": "346f23b06368e08a5fc8405c606607186ed7bd13431a216ffec1b0a47d0dd541",
+      "vertices": 3998,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191964,
+      "illustration": "illustrations/capricornus.png",
+      "illustrationSha256": "7135358cd50bbc2717a8f7e3ce3fa47431261e7cee01d21d26688b2aca8424f7",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        20,
+        509,
+        506
+      ],
+      "fitBoundsPixels": [
+        3,
+        19,
+        510,
+        507
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.47857287526130676,
+          -0.00025826753699220717,
+          -0.18141648173332214
+        ],
+        [
+          0.4775051772594452,
+          0.9795918464660645,
+          0.18093241751194
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.037109375,
+        0.99609375,
+        0.990234375
+      ]
+    },
+    {
+      "id": "Cas",
+      "source": "18_cassiopeia.glb",
+      "sourceSha256": "4d6c3528601781309c0bc9619021c62931df5d7fd7c44481ef152a877c453663",
+      "mesh": "Cas.scm",
+      "sha256": "30817ed4f2e6fce40955fe060a4aa3cf376f9c092a1073a4dfca319497d2b5b3",
+      "vertices": 3940,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 190560,
+      "illustration": "illustrations/cassiopeia.png",
+      "illustrationSha256": "e0cf5e4d328b0105a44aea2001a9fc9a5e6cb99f041a29242d9d4e331410f004",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        29,
+        496,
+        500
+      ],
+      "fitBoundsPixels": [
+        5,
+        28,
+        497,
+        501
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.35344117879867554,
+          0.0005346069810912013,
+          -0.16636152565479279
+        ],
+        [
+          0.3529380261898041,
+          0.9801425337791443,
+          0.16556447744369507
+        ]
+      ],
+      "imageBounds": [
+        0.009765625,
+        0.0546875,
+        0.970703125,
+        0.978515625
+      ]
+    },
+    {
+      "id": "Cen",
+      "source": "19_centaurus.glb",
+      "sourceSha256": "82a418af200cdb6d2572c7ddd0475a64fba67b79317315078162619cbca437e1",
+      "mesh": "Cen.scm",
+      "sha256": "ee38e6b425e7a11ea09d480c8ebb47f571cb09f4bd2f49c7225510b65d191690",
+      "vertices": 3946,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 190716,
+      "illustration": "illustrations/centaurus.png",
+      "illustrationSha256": "76c4e6b98f224ad7e4853e46be5c7b897dfb344f7e495a321a9a711ddd5cc232",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        8,
+        508,
+        488
+      ],
+      "fitBoundsPixels": [
+        0,
+        7,
+        509,
+        489
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48809102177619934,
+          0.0001354222622467205,
+          -0.1350671350955963
+        ],
+        [
+          0.48846420645713806,
+          0.9787408113479614,
+          0.13429595530033112
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.013671875,
+        0.994140625,
+        0.955078125
+      ]
+    },
+    {
+      "id": "Cep",
+      "source": "20_cepheus.glb",
+      "sourceSha256": "806f8092072a87075c52bd9775ba5bdcb5aa581b5ea773e459e3d54f22678c81",
+      "mesh": "Cep.scm",
+      "sha256": "8fab010c0b0ed529a4acc6c19869144cacf629767761878dbf7ef77658fa0d58",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/cepheus.png",
+      "illustrationSha256": "3efd152711397e3424e220f6a2ead2e590ce9782a7de9eac8f009100457198b6",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        1,
+        0,
+        512,
+        505
+      ],
+      "fitBoundsPixels": [
+        0,
+        0,
+        512,
+        506
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.2768256962299347,
+          -4.270724457455799e-05,
+          -0.1462055891752243
+        ],
+        [
+          0.2766432464122772,
+          0.9802623987197876,
+          0.14659327268600464
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.0,
+        1.0,
+        0.98828125
+      ]
+    },
+    {
+      "id": "Cet",
+      "source": "21_cetus.glb",
+      "sourceSha256": "b81e7f791271dc8c4e712ef2367553b3480a87b3c9b545ba58d93fccefa6fd77",
+      "mesh": "Cet.scm",
+      "sha256": "b5913736b122b2ee9b0843b4757c583fd93d8648ca5bf5721ee2e56a51414511",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/cetus.png",
+      "illustrationSha256": "794eef84ea06637886179d5384b0b1446b91978f3215f28ddf272b5b91a8e3d2",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        7,
+        506,
+        507
+      ],
+      "fitBoundsPixels": [
+        3,
+        6,
+        507,
+        508
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4881226718425751,
+          9.967735968530178e-05,
+          -0.31324443221092224
+        ],
+        [
+          0.48769330978393555,
+          0.9795256853103638,
+          0.3133546710014343
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.01171875,
+        0.990234375,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Cha",
+      "source": "22_chamaeleon.glb",
+      "sourceSha256": "d9386d03e89dc18885acab673d76577a2b77b4081245069d602946b7cccc9913",
+      "mesh": "Cha.scm",
+      "sha256": "2a5fdb38f38314f23589aa889c4eca3d5adc2326f10a4ae5d812f23d08516b9f",
+      "vertices": 3990,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191772,
+      "illustration": "illustrations/chamaeleon.png",
+      "illustrationSha256": "07d3f1dc0b38a295729f7116e1cbbf97b1d3c8b530b41f0fc162ca9c95f7153a",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        20,
+        13,
+        236,
+        241
+      ],
+      "fitBoundsPixels": [
+        19,
+        12,
+        237,
+        242
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48986688256263733,
+          0.0001328339276369661,
+          -0.1287735551595688
+        ],
+        [
+          0.48942601680755615,
+          0.815496027469635,
+          0.12854614853858948
+        ]
+      ],
+      "imageBounds": [
+        0.07421875,
+        0.046875,
+        0.92578125,
+        0.9453125
+      ]
+    },
+    {
+      "id": "Cnc",
+      "source": "13_cancer.glb",
+      "sourceSha256": "d6973b67b3ab2be4ca5a5d22be72cf48f9bf74c5031c432630b0ec2a69397f51",
+      "mesh": "Cnc.scm",
+      "sha256": "2332e35e4e00375ee4447a6355cb3084170a9630f219f2aa2b94d2511a841250",
+      "vertices": 3992,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191820,
+      "illustration": "illustrations/cancer.png",
+      "illustrationSha256": "4d8b1123815f81fa99ceab520141e2225c466f5e48ca5e82ab9742ef8902d7ef",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        4,
+        230,
+        253
+      ],
+      "fitBoundsPixels": [
+        5,
+        3,
+        231,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.49021273851394653,
+          0.00039138764259405434,
+          -0.1225510910153389
+        ],
+        [
+          0.49011632800102234,
+          0.9137304425239563,
+          0.12274570018053055
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.01171875,
+        0.90234375,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Com",
+      "source": "25_coma-berenices.glb",
+      "sourceSha256": "4b43df583a7819a713c64a4d5fd079eaf0c8c5534453d83254489e99d9866cc7",
+      "mesh": "Com.scm",
+      "sha256": "861885e0ea7dd9b4f33166b48292d691a4520b6c4205c79cbce2b7b6f790a4ee",
+      "vertices": 3996,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191916,
+      "illustration": "illustrations/coma-berenices.png",
+      "illustrationSha256": "0a9c1b6e7b3e2041ec29aa1df42f92504f3f77efbd5cd3416612a6615eb85a57",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        5,
+        43,
+        256,
+        247
+      ],
+      "fitBoundsPixels": [
+        4,
+        42,
+        256,
+        248
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.46913012862205505,
+          2.385054722253699e-05,
+          -0.1916145235300064
+        ],
+        [
+          0.4691629707813263,
+          0.9801027178764343,
+          0.19185692071914673
+        ]
+      ],
+      "imageBounds": [
+        0.015625,
+        0.1640625,
+        1.0,
+        0.96875
+      ]
+    },
+    {
+      "id": "CrA",
+      "source": "26_corona-australis.glb",
+      "sourceSha256": "7f8e18f32407d89e76942af6102eeabdaba6424bc559d50952db13ff91fdbcc2",
+      "mesh": "CrA.scm",
+      "sha256": "8eb689a2ccdcfae182f822d48205653e87ec85e11301f0eca241651525a03d59",
+      "vertices": 3998,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191964,
+      "illustration": "illustrations/corona-australis.png",
+      "illustrationSha256": "2c91843c5326cf5a5952f942ea83327a233376afddc95cd6804f166f6142572e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        1,
+        252,
+        249
+      ],
+      "fitBoundsPixels": [
+        3,
+        0,
+        253,
+        250
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4602349102497101,
+          -0.000525368785019964,
+          -0.08968698978424072
+        ],
+        [
+          0.4599894881248474,
+          0.98248291015625,
+          0.08937471359968185
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.0,
+        0.98828125,
+        0.9765625
+      ]
+    },
+    {
+      "id": "CrB",
+      "source": "27_corona-borealis.glb",
+      "sourceSha256": "169bb35b481d15d43f1c155f41422174abec6a86cd2accaa132187c208ed06cc",
+      "mesh": "CrB.scm",
+      "sha256": "0dfce82769f95340e789ca959bfa22ed6d9bc82fc7620fdc26fcf54237a3708c",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/corona-borealis.png",
+      "illustrationSha256": "090649da2d64f53ed7f8f593c4642e242addffaded11a4887e7a590cbfa664e2",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        1,
+        3,
+        244,
+        253
+      ],
+      "fitBoundsPixels": [
+        0,
+        2,
+        245,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48951083421707153,
+          4.195989095023833e-05,
+          -0.4902065396308899
+        ],
+        [
+          0.48939043283462524,
+          0.4503810405731201,
+          0.4900665283203125
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.0078125,
+        0.95703125,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Crt",
+      "source": "29_crater.glb",
+      "sourceSha256": "69de5de91e5bb32f25027f9a13661e105a9a56d717d8da33a878e8105abbc575",
+      "mesh": "Crt.scm",
+      "sha256": "64490b5169ab961366a54fb3692cc41c11bda05938f94dc2d42b835a5f2745ec",
+      "vertices": 4127,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 195048,
+      "illustration": "illustrations/crater.png",
+      "illustrationSha256": "78521af72845d29eb707e07435a927247411b8d89472d131b5fa9d2f297f80b7",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        25,
+        2,
+        230,
+        255
+      ],
+      "fitBoundsPixels": [
+        24,
+        1,
+        231,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4897342324256897,
+          -0.00022859821910969913,
+          -0.38144317269325256
+        ],
+        [
+          0.48946914076805115,
+          0.6094908118247986,
+          0.38151755928993225
+        ]
+      ],
+      "imageBounds": [
+        0.09375,
+        0.00390625,
+        0.90234375,
+        1.0
+      ]
+    },
+    {
+      "id": "Cru",
+      "source": "30_crux.glb",
+      "sourceSha256": "1659cf650e8498bae21cf613fb824a382f1f6ce3127c4101b145abf3807cbc31",
+      "mesh": "Cru.scm",
+      "sha256": "1751a1eb67fc5d7002fefe5857984356a86b74c642060678b23cab4e3541050a",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/crux.png",
+      "illustrationSha256": "228b444d397b904c5f470e28014a53d63505d46fbaff36029ecd439a39c76225",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        2,
+        127,
+        128
+      ],
+      "fitBoundsPixels": [
+        1,
+        1,
+        128,
+        128
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4879003167152405,
+          -1.634960062801838e-05,
+          -0.10262548178434372
+        ],
+        [
+          0.4876948297023773,
+          0.9801316261291504,
+          0.10266381502151489
+        ]
+      ],
+      "imageBounds": [
+        0.0078125,
+        0.0078125,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Crv",
+      "source": "28_corvus.glb",
+      "sourceSha256": "22767209a5d42e330227d5a1f6bd94d8639fca629708eeff8166352ff68365fa",
+      "mesh": "Crv.scm",
+      "sha256": "38d6d5a8a676c63680b123ee00cb7dc050c1c9b15e70e41c9dc97cd3d35234b4",
+      "vertices": 3998,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191964,
+      "illustration": "illustrations/corvus.png",
+      "illustrationSha256": "c0e7f48acaa272c44a4f9e63dc508577851f1bb184e36a31b4b2ba6219e2e5d7",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        1,
+        246,
+        253
+      ],
+      "fitBoundsPixels": [
+        0,
+        0,
+        247,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48297497630119324,
+          0.0,
+          -0.48958203196525574
+        ],
+        [
+          0.48247694969177246,
+          0.7497482299804688,
+          0.4897238314151764
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.0,
+        0.96484375,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Cyg",
+      "source": "31_cygnus.glb",
+      "sourceSha256": "60d24d254ce0d3efc415de64091d882fb0e3694815020c2faef65e0633eaec82",
+      "mesh": "Cyg.scm",
+      "sha256": "067f8208671ecb46017655d22184357f1f4e2247665cdae48d750be82952254c",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/cygnus.png",
+      "illustrationSha256": "d9ad9d2ffea6fb50eedf1ace1353efcca35bedf7fe4c45c6b67b8b01ec5e87a0",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        47,
+        510,
+        497
+      ],
+      "fitBoundsPixels": [
+        2,
+        46,
+        511,
+        498
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48956188559532166,
+          -7.7353062806651e-05,
+          -0.10871513932943344
+        ],
+        [
+          0.4897593557834625,
+          0.8180758953094482,
+          0.10839724540710449
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.08984375,
+        0.998046875,
+        0.97265625
+      ]
+    },
+    {
+      "id": "Del",
+      "source": "32_delphinus.glb",
+      "sourceSha256": "8b7b83371cc191b816d9a8b734317aa5a5d1585da5b6623c4a6dd1a8f379fba1",
+      "mesh": "Del.scm",
+      "sha256": "f7fd8eeef2ef70458d71eeb9bf9271030cabd5a21a80e3316f17f81fc1ce8704",
+      "vertices": 4008,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192204,
+      "illustration": "illustrations/delphinus.png",
+      "illustrationSha256": "109625afb21447ae6b8d03d06bab84695009141b682ac5978b19e0404fbb40f0",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        1,
+        243,
+        255
+      ],
+      "fitBoundsPixels": [
+        1,
+        0,
+        244,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4825223982334137,
+          8.20085042505525e-05,
+          -0.21263708174228668
+        ],
+        [
+          0.4824262261390686,
+          0.9789113402366638,
+          0.21266131103038788
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0,
+        0.953125,
+        1.0
+      ]
+    },
+    {
+      "id": "Dor",
+      "source": "33_dorado.glb",
+      "sourceSha256": "2a610d8b3b6207b2769336dd9241020a4db3b79052c8ffe71f7194693b8684f8",
+      "mesh": "Dor.scm",
+      "sha256": "f8a65d625b68b10f516d27903a2457ffd379dd38400d0b88bf34ad32c548d31a",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/dorado.png",
+      "illustrationSha256": "465d2e1d9b171aa22190ce1f4b854acebf11bd61aaa56819b6fd6f29a5b26dcc",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        11,
+        3,
+        244,
+        255
+      ],
+      "fitBoundsPixels": [
+        10,
+        2,
+        245,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4655962884426117,
+          0.00025516372988931835,
+          -0.24631163477897644
+        ],
+        [
+          0.4655533730983734,
+          0.9785217046737671,
+          0.24627579748630524
+        ]
+      ],
+      "imageBounds": [
+        0.0390625,
+        0.0078125,
+        0.95703125,
+        1.0
+      ]
+    },
+    {
+      "id": "Dra",
+      "source": "34_draco.glb",
+      "sourceSha256": "c812d13a2e09042683c6f02c9ccfe6a192520da93f7b38d0925ea5497598074d",
+      "mesh": "Dra.scm",
+      "sha256": "7c4e90b1a0dc2824a369c4513f906442007f61515afdd139d3c3356f8813e454",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/draco.png",
+      "illustrationSha256": "624e24404ad3139806c898f2495638ec0bceedcb15daf4bfc9850e6c34da3367",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        7,
+        18,
+        508,
+        466
+      ],
+      "fitBoundsPixels": [
+        6,
+        17,
+        509,
+        467
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4899246394634247,
+          0.0007836908334866166,
+          -0.3909675180912018
+        ],
+        [
+          0.4898652732372284,
+          0.9197461009025574,
+          0.3913916349411011
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.033203125,
+        0.994140625,
+        0.912109375
+      ]
+    },
+    {
+      "id": "Equ",
+      "source": "35_equuleus.glb",
+      "sourceSha256": "44139acc55c37edb019f64637190818f658fe537ff5f0433ffe932bcbfbde520",
+      "mesh": "Equ.scm",
+      "sha256": "7936ff38d6d097e0f99af84c927e4215886534d227c8c0408953128b6e86ec4f",
+      "vertices": 3980,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191532,
+      "illustration": "illustrations/equuleus.png",
+      "illustrationSha256": "0a44f2bb4e0b0bb2750c04f18f1f5a56bdd26406b7c9d56bf3f51ca45a67a09e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        3,
+        253,
+        244
+      ],
+      "fitBoundsPixels": [
+        1,
+        2,
+        254,
+        245
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48974159359931946,
+          -1.3082207260595169e-05,
+          -0.2217133343219757
+        ],
+        [
+          0.49006369709968567,
+          0.9756931662559509,
+          0.22166067361831665
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0078125,
+        0.9921875,
+        0.95703125
+      ]
+    },
+    {
+      "id": "Eri",
+      "source": "36_eridanus.glb",
+      "sourceSha256": "759e53f1e368a5e905189eae6c3716de56bf66803ee64ad44a3b718b81afc518",
+      "mesh": "Eri.scm",
+      "sha256": "9b9cea3b06a61f817ceb9c51797af23e6a5a29647ca73fbe1fe6d4e872eadc1a",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/eridanus.png",
+      "illustrationSha256": "21d5ecce9bd6b998fbf597fb575b849995fb64ac8566146a99b0d5746db63691",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        10,
+        505,
+        477
+      ],
+      "fitBoundsPixels": [
+        3,
+        9,
+        506,
+        478
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4258514940738678,
+          0.00011737487511709332,
+          -0.4899710714817047
+        ],
+        [
+          0.4260634779930115,
+          0.7058272361755371,
+          0.49023884534835815
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.017578125,
+        0.98828125,
+        0.93359375
+      ]
+    },
+    {
+      "id": "For",
+      "source": "37_fornax.glb",
+      "sourceSha256": "1d54f8215e872363dca3ee8036178e273c4646ce9aeef8cfd056630a5ff42cd4",
+      "mesh": "For.scm",
+      "sha256": "e086dbf4b65242e334c269f58899a9db7261abe06c251f5c9f855f09f682ee09",
+      "vertices": 4087,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 194100,
+      "illustration": "illustrations/fornax.png",
+      "illustrationSha256": "8911514ed7bb414e3d4299c70bb7dd48a7c874ae7dec533f39ee07bb518867b0",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        14,
+        4,
+        242,
+        251
+      ],
+      "fitBoundsPixels": [
+        13,
+        3,
+        243,
+        252
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.32646995782852173,
+          -0.00013919024786446244,
+          -0.3035544157028198
+        ],
+        [
+          0.326651394367218,
+          0.9838770627975464,
+          0.303519070148468
+        ]
+      ],
+      "imageBounds": [
+        0.05078125,
+        0.01171875,
+        0.94921875,
+        0.984375
+      ]
+    },
+    {
+      "id": "Gem",
+      "source": "38_gemini.glb",
+      "sourceSha256": "13687c1c35b0b7023576cad0686f84a32c38e4e778fa5f37838da65c004724e9",
+      "mesh": "Gem.scm",
+      "sha256": "48d6067800100ac2536cfe584f2d03de11479e825cdc61525a8bce542b7da594",
+      "vertices": 3990,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191772,
+      "illustration": "illustrations/gemini.png",
+      "illustrationSha256": "fb481f6bb73c44a7b0009a20fc7b17d574dac1d425a13b48b75a8bb6b2e5511a",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        2,
+        256,
+        256
+      ],
+      "fitBoundsPixels": [
+        1,
+        1,
+        256,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48605838418006897,
+          0.0003679082146845758,
+          -0.1124047264456749
+        ],
+        [
+          0.4863431453704834,
+          0.9799478650093079,
+          0.11178410053253174
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.00390625,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "Gru",
+      "source": "39_grus.glb",
+      "sourceSha256": "0c8571bb0600f4918eb646b3a295c0de3b6260370e6a76aa5954ee76f708ceb0",
+      "mesh": "Gru.scm",
+      "sha256": "4ee9a4cdc3c7510a263ff234a8a311d6f2c07f286739371611ec63820dab4791",
+      "vertices": 3978,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191484,
+      "illustration": "illustrations/grus.png",
+      "illustrationSha256": "f2c137013291ddc88e30ae6a702b163895b3714cfaa3c5598eaa4215f995b36a",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        8,
+        0,
+        252,
+        231
+      ],
+      "fitBoundsPixels": [
+        7,
+        0,
+        253,
+        232
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4910394251346588,
+          0.0,
+          -0.28103315830230713
+        ],
+        [
+          0.49063414335250854,
+          0.6028872728347778,
+          0.2802127003669739
+        ]
+      ],
+      "imageBounds": [
+        0.02734375,
+        0.0,
+        0.98828125,
+        0.90625
+      ]
+    },
+    {
+      "id": "Her",
+      "source": "40_hercules.glb",
+      "sourceSha256": "21b90dc3fe7c81c5cd80dc53159ea8a484ab9e57a5e2c8333866e17aca6e7317",
+      "mesh": "Her.scm",
+      "sha256": "b9520811de28afaa5e4085375b34062285a8422a67321f84a6029a229c13c984",
+      "vertices": 3973,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191364,
+      "illustration": "illustrations/hercules.png",
+      "illustrationSha256": "b67337cc651db0bcfe1a332d2f735b81e468c2fd6db0df6b0a835323d225ba29",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        12,
+        13,
+        511,
+        507
+      ],
+      "fitBoundsPixels": [
+        11,
+        12,
+        512,
+        508
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4128067195415497,
+          -0.00045026608859188855,
+          -0.16209763288497925
+        ],
+        [
+          0.4126327335834503,
+          0.980834424495697,
+          0.16054366528987885
+        ]
+      ],
+      "imageBounds": [
+        0.021484375,
+        0.0234375,
+        1.0,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Hor",
+      "source": "41_horologium.glb",
+      "sourceSha256": "bad72e06249ff2c033694fc10886f80049884166527157140fadf898ab1a3cb6",
+      "mesh": "Hor.scm",
+      "sha256": "5c7ca7b984b8a797b98d74a3c97e5e84b7c220c81562133cb369ffc4dd8d95b8",
+      "vertices": 3968,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191244,
+      "illustration": "illustrations/horlogium.png",
+      "illustrationSha256": "be97b257a0af2995ee29f53edc39170a7040dfa9730f1b6903cd9e3ed7d4a29b",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        1,
+        253,
+        252
+      ],
+      "fitBoundsPixels": [
+        1,
+        0,
+        254,
+        253
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4901966154575348,
+          0.0001506108237663284,
+          -0.2991010248661041
+        ],
+        [
+          0.4899640679359436,
+          0.8950724601745605,
+          0.29896998405456543
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0,
+        0.9921875,
+        0.98828125
+      ]
+    },
+    {
+      "id": "Hya",
+      "source": "42_hydra.glb",
+      "sourceSha256": "20c5542a845cefa93cb0b0ca2692602f7af65f138ae4f26c2946290c2b157656",
+      "mesh": "Hya.scm",
+      "sha256": "859b1cc0f36fb860bf995e581359dfc122beba7676c9c11db7eaa05b48fdeaee",
+      "vertices": 4082,
+      "triangles": 8000,
+      "sourceTriangles": 14719,
+      "bytes": 193980,
+      "illustration": "illustrations/hydra.png",
+      "illustrationSha256": "10b18b023fe61877c476054587534d98762c8dee26729a7ef3781a2d0a031aa8",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        12,
+        0,
+        508,
+        506
+      ],
+      "fitBoundsPixels": [
+        11,
+        0,
+        509,
+        507
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.49694907665252686,
+          -4.759323473990662e-06,
+          -0.16481395065784454
+        ],
+        [
+          0.49675458669662476,
+          0.9995117783546448,
+          0.1647144854068756
+        ]
+      ],
+      "imageBounds": [
+        0.021484375,
+        0.0,
+        0.994140625,
+        0.990234375
+      ]
+    },
+    {
+      "id": "Hyi",
+      "source": "43_hydrus.glb",
+      "sourceSha256": "cf70482233b7547ef4bd3b28519a0a2cc5104d024d5c2d528c1f56075a420fed",
+      "mesh": "Hyi.scm",
+      "sha256": "c00c3d9e2463e780ab6331f40411155ade13041544f2b4e19db4dfe16c30ca4e",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/hydrus.png",
+      "illustrationSha256": "168c2062f5f2d824d0470cc528c7b83dab72b42b8ea1dada601973686ada38b7",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        1,
+        251,
+        255
+      ],
+      "fitBoundsPixels": [
+        5,
+        0,
+        252,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48987847566604614,
+          -0.00010448215471114963,
+          -0.26952993869781494
+        ],
+        [
+          0.4895201027393341,
+          0.865340530872345,
+          0.2693344056606293
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.0,
+        0.984375,
+        1.0
+      ]
+    },
+    {
+      "id": "Ind",
+      "source": "44_indus.glb",
+      "sourceSha256": "f35bbeb55b0e5a5b5d3a6fd883af76dfae7b84bca9f0762b817d2e26cb07904b",
+      "mesh": "Ind.scm",
+      "sha256": "dcea8347505b51afa8cfe99b8838360fafca99b48a2fcf8daf03364b2849113c",
+      "vertices": 3929,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 190308,
+      "illustration": "illustrations/indus.png",
+      "illustrationSha256": "1f9830b780d4619fd76eeee8fcbcd73db44f982e9f091bc3054fc46bbf08e6f9",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        7,
+        241,
+        249
+      ],
+      "fitBoundsPixels": [
+        1,
+        6,
+        242,
+        250
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.20084623992443085,
+          0.00026727450313046575,
+          -0.19809848070144653
+        ],
+        [
+          0.20099322497844696,
+          0.9798954725265503,
+          0.19907265901565552
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0234375,
+        0.9453125,
+        0.9765625
+      ]
+    },
+    {
+      "id": "LMi",
+      "source": "46_leo-minor.glb",
+      "sourceSha256": "32b1588bd7f099871cffd619cf1521b3de30d7268c81d2016dad7b333c9fd334",
+      "mesh": "LMi.scm",
+      "sha256": "302f380d70eb50da82669c18e658aeacdcfe8eb5431143ca38afacc04851807d",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/leo-minor.png",
+      "illustrationSha256": "c78cf7d582b7e54ada517b9db387af91ec85ae2624a26142c6bede3de9ebf7cc",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        4,
+        248,
+        251
+      ],
+      "fitBoundsPixels": [
+        2,
+        3,
+        249,
+        252
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.3765917718410492,
+          -0.0003328382153995335,
+          -0.4905732572078705
+        ],
+        [
+          0.3767247498035431,
+          0.6985979080200195,
+          0.49036428332328796
+        ]
+      ],
+      "imageBounds": [
+        0.0078125,
+        0.01171875,
+        0.97265625,
+        0.984375
+      ]
+    },
+    {
+      "id": "Lac",
+      "source": "45_lacerta.glb",
+      "sourceSha256": "a710252ce30465556951171199f4a1acc459358e649ac689d7ac5903404bc146",
+      "mesh": "Lac.scm",
+      "sha256": "5ac31e035073a21b3cd0d00c6fc98fdebf56eb41a8b5ae02c188438f77c633bd",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/lacerta.png",
+      "illustrationSha256": "90b6b685d82a494fa5b798bbbf2a4742e0466924759af8da32ab5dbd6e256da8",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        9,
+        253,
+        248
+      ],
+      "fitBoundsPixels": [
+        1,
+        8,
+        254,
+        249
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4896863102912903,
+          -0.00015736620116513222,
+          -0.28314208984375
+        ],
+        [
+          0.49005115032196045,
+          0.3841935694217682,
+          0.2833574712276459
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.03125,
+        0.9921875,
+        0.97265625
+      ]
+    },
+    {
+      "id": "Leo",
+      "source": "47_leo.glb",
+      "sourceSha256": "c7f15013edc12455c1576febd78a66816a0b16231acf5a01f5c84f0d46310e69",
+      "mesh": "Leo.scm",
+      "sha256": "491028f8f2ab054c8f51bfeaed11106bb718db665e1e676bcd027bbc860b1673",
+      "vertices": 4034,
+      "triangles": 7999,
+      "sourceTriangles": 29998,
+      "bytes": 192816,
+      "illustration": "illustrations/leo.png",
+      "illustrationSha256": "1e12035d808d63f4dbc9e4a195fce32ef69281d38efea2ea2242c38cf0fec2ba",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        71,
+        508,
+        500
+      ],
+      "fitBoundsPixels": [
+        0,
+        70,
+        509,
+        501
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.21764667332172394,
+          -0.0005207958165556192,
+          -0.4894821345806122
+        ],
+        [
+          0.21893933415412903,
+          0.6200697422027588,
+          0.490071564912796
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.13671875,
+        0.994140625,
+        0.978515625
+      ]
+    },
+    {
+      "id": "Lep",
+      "source": "48_lepus.glb",
+      "sourceSha256": "5a38d07c12ffd0cc4dbf5f895c916623c364614b0d6f63e2381480f176fc94c6",
+      "mesh": "Lep.scm",
+      "sha256": "523f7ddf5263251eb160715cb2434b83dbdb46a6d59547715d4110e26af88174",
+      "vertices": 4005,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192132,
+      "illustration": "illustrations/lepus.png",
+      "illustrationSha256": "4b8f15f5485c0114360fee3dd0f28ed4a92ec58bb997a8e089e185b9ab7794c0",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        15,
+        256,
+        229
+      ],
+      "fitBoundsPixels": [
+        1,
+        14,
+        256,
+        230
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4902544915676117,
+          -0.00016519588825758547,
+          -0.26589155197143555
+        ],
+        [
+          0.49028438329696655,
+          0.884110689163208,
+          0.26608675718307495
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0546875,
+        1.0,
+        0.8984375
+      ]
+    },
+    {
+      "id": "Lib",
+      "source": "49_libra.glb",
+      "sourceSha256": "f37eed041b96752139132bff106cc7bab99c2ec8f16d43f04931c5248330695d",
+      "mesh": "Lib.scm",
+      "sha256": "8dddaa53d776f76c8062cc1a2ddfeed217f5fd6b8aeaae479c0e263b37bbd960",
+      "vertices": 3776,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 186636,
+      "illustration": "illustrations/libra.png",
+      "illustrationSha256": "b62452cb1273f425cf54be07c95ff5efc759cea23761f31a63bb3c5ca6095681",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        27,
+        253,
+        255
+      ],
+      "fitBoundsPixels": [
+        1,
+        26,
+        254,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4906444251537323,
+          2.8833630494773388e-05,
+          -0.20334351062774658
+        ],
+        [
+          0.48929956555366516,
+          0.8607500195503235,
+          0.20382434129714966
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.1015625,
+        0.9921875,
+        1.0
+      ]
+    },
+    {
+      "id": "Lup",
+      "source": "50_lupus.glb",
+      "sourceSha256": "8f112ceaceb5a0bddbc114656a4889f32f9280db3c011dc04db11ac650541e2d",
+      "mesh": "Lup.scm",
+      "sha256": "56de76d61bcd95ca689fa1bf6a52bfe403f584bc7a774bfade549686ba240196",
+      "vertices": 4007,
+      "triangles": 7998,
+      "sourceTriangles": 29997,
+      "bytes": 192156,
+      "illustration": "illustrations/lupus.png",
+      "illustrationSha256": "849acf9d6fe5c61485fbeccbe92eda91ec3017808d8724034e2282110716d3fd",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        12,
+        492,
+        499
+      ],
+      "fitBoundsPixels": [
+        3,
+        11,
+        493,
+        500
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4913233816623688,
+          0.00017374573508277535,
+          -0.13941018283367157
+        ],
+        [
+          0.4909604787826538,
+          0.8779840469360352,
+          0.13916213810443878
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.021484375,
+        0.962890625,
+        0.9765625
+      ]
+    },
+    {
+      "id": "Lyn",
+      "source": "51_lynx.glb",
+      "sourceSha256": "02f2b7e991fcfa6e33b8f5666b2a607eedb0789284d57daaee35738492de5cd1",
+      "mesh": "Lyn.scm",
+      "sha256": "99bdf09dda3269d14a29ae43fef99c89ab1808202a200bfcfdb0eb7111d88617",
+      "vertices": 4002,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 192048,
+      "illustration": "illustrations/lynx.png",
+      "illustrationSha256": "1be70d1645d9d936c0b93f6dbfde116e69ed962a03c3929502a0d14aca01154e",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        57,
+        505,
+        484
+      ],
+      "fitBoundsPixels": [
+        5,
+        56,
+        506,
+        485
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4901229441165924,
+          -0.0001484799140598625,
+          -0.16338615119457245
+        ],
+        [
+          0.48984235525131226,
+          0.8609603047370911,
+          0.16358591616153717
+        ]
+      ],
+      "imageBounds": [
+        0.009765625,
+        0.109375,
+        0.98828125,
+        0.947265625
+      ]
+    },
+    {
+      "id": "Lyr",
+      "source": "52_lyra.glb",
+      "sourceSha256": "6e6c6e078f72822bde314c6fc98ad50b6437cc16fd19245e653f582731ceca76",
+      "mesh": "Lyr.scm",
+      "sha256": "fb2bee8d48cb3df65012716754ba6bdf161b4782c3afc5c3cc8757d18b2191e6",
+      "vertices": 4009,
+      "triangles": 8000,
+      "sourceTriangles": 29998,
+      "bytes": 192228,
+      "illustration": "illustrations/lyra.png",
+      "illustrationSha256": "53604076248c70ef79ae7e98e6661613d65d22ebdf39a423398c06d71ccb13c1",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        32,
+        2,
+        204,
+        252
+      ],
+      "fitBoundsPixels": [
+        31,
+        1,
+        205,
+        253
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4106184244155884,
+          -1.1064679711125791e-05,
+          -0.1072567030787468
+        ],
+        [
+          0.4106364846229553,
+          0.9800522327423096,
+          0.10726729780435562
+        ]
+      ],
+      "imageBounds": [
+        0.12109375,
+        0.00390625,
+        0.80078125,
+        0.98828125
+      ]
+    },
+    {
+      "id": "Men",
+      "source": "53_mensa.glb",
+      "sourceSha256": "e9afbda0297ef1145231457d9182d6ee29a847da85f5cd4a2e5072a8e33e978e",
+      "mesh": "Men.scm",
+      "sha256": "bc3fd9cd1c3d9f18b6c62908d869717bf7f2bb301dad5365ffe6ed6a5b57c26a",
+      "vertices": 4275,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 198600,
+      "illustration": "illustrations/mensa.png",
+      "illustrationSha256": "3ee8230728c0ce50e8f6467ab07fc913aa647e9a2b910f65f0d31464f0b95a1c",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        6,
+        254,
+        251
+      ],
+      "fitBoundsPixels": [
+        2,
+        5,
+        255,
+        252
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48981723189353943,
+          -4.9826863687485456e-05,
+          -0.4053293764591217
+        ],
+        [
+          0.4901573359966278,
+          0.3801659047603607,
+          0.40518882870674133
+        ]
+      ],
+      "imageBounds": [
+        0.0078125,
+        0.01953125,
+        0.99609375,
+        0.984375
+      ]
+    },
+    {
+      "id": "Mic",
+      "source": "54_microscopium.glb",
+      "sourceSha256": "c5f2fe4824ba01997aef9b31088b6f9037b268850d1b2a7aff80fa93cd601ce6",
+      "mesh": "Mic.scm",
+      "sha256": "5abdde73cec0e1bbcaffb73f97e08953f3a9976cc442ce95321e02cff97470b0",
+      "vertices": 4182,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 196380,
+      "illustration": "illustrations/microscopium.png",
+      "illustrationSha256": "29b51be3623aaf12d88562198c42d373cf18aa0b848872f65714aab9bfd24320",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        70,
+        4,
+        221,
+        250
+      ],
+      "fitBoundsPixels": [
+        69,
+        3,
+        222,
+        251
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.2800990641117096,
+          -2.393910472164862e-05,
+          -0.215007022023201
+        ],
+        [
+          0.2797897160053253,
+          0.980126678943634,
+          0.2149038016796112
+        ]
+      ],
+      "imageBounds": [
+        0.26953125,
+        0.01171875,
+        0.8671875,
+        0.98046875
+      ]
+    },
+    {
+      "id": "Mon",
+      "source": "55_monoceros.glb",
+      "sourceSha256": "3cbf1f1774bab05250769ded5b8946c36683a48e51527893334f7bd5c6c8cb3c",
+      "mesh": "Mon.scm",
+      "sha256": "dddc6759d52a858c886e4b899ff98ab37e278d3881b1425f2c3354c0f25ca9f8",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/monoceros.png",
+      "illustrationSha256": "b17d0febbba11ee0985d12241a46f7f1383c8a5380fa209b8c51b74e621a84bc",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        20,
+        506,
+        503
+      ],
+      "fitBoundsPixels": [
+        3,
+        19,
+        507,
+        504
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4908989667892456,
+          0.00014437068603001535,
+          -0.1369027942419052
+        ],
+        [
+          0.49106621742248535,
+          0.8955315351486206,
+          0.13646695017814636
+        ]
+      ],
+      "imageBounds": [
+        0.005859375,
+        0.037109375,
+        0.990234375,
+        0.984375
+      ]
+    },
+    {
+      "id": "Mus",
+      "source": "56_musca.glb",
+      "sourceSha256": "0337a2d1cd09879af9c7ca6925e340eb8abf95a9f950e5eeb98483d630c78227",
+      "mesh": "Mus.scm",
+      "sha256": "52e790898805bf91545d2a7e70e1703e00e92abc3215a094b3b191f89f4cd930",
+      "vertices": 3820,
+      "triangles": 8000,
+      "sourceTriangles": 29998,
+      "bytes": 187692,
+      "illustration": "illustrations/musca.png",
+      "illustrationSha256": "88ac34def295358256ef5f7ced1291c7534d60e1aeb33c680c5dccbc316ede9e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        38,
+        1,
+        227,
+        253
+      ],
+      "fitBoundsPixels": [
+        37,
+        0,
+        228,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4766292870044708,
+          -8.085909212240949e-05,
+          -0.3758024573326111
+        ],
+        [
+          0.4923248887062073,
+          0.5858137607574463,
+          0.37457039952278137
+        ]
+      ],
+      "imageBounds": [
+        0.14453125,
+        0.0,
+        0.890625,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Nor",
+      "source": "57_norma.glb",
+      "sourceSha256": "68c618e7ab4d639b8f1d63ca26499408b5eb4cb73f275e09556b5cfaf26fc37b",
+      "mesh": "Nor.scm",
+      "sha256": "fb6845387352076db7770a7d70ea2f659e0661b1f8993b9eaa6854e14c7b5b3d",
+      "vertices": 3979,
+      "triangles": 8000,
+      "sourceTriangles": 29999,
+      "bytes": 191508,
+      "illustration": "illustrations/norma.png",
+      "illustrationSha256": "c3fbac8305a0d3f871661e46697961828e389f02662cb82c6f8215318d80c6e4",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        1,
+        4,
+        127,
+        122
+      ],
+      "fitBoundsPixels": [
+        0,
+        3,
+        128,
+        123
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.42170554399490356,
+          0.00010975552868330851,
+          -0.13006038963794708
+        ],
+        [
+          0.4221661388874054,
+          0.9794010519981384,
+          0.1297687441110611
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.0234375,
+        1.0,
+        0.9609375
+      ]
+    },
+    {
+      "id": "Oct",
+      "source": "58_octans.glb",
+      "sourceSha256": "92cac9130d9d7cee91475de807d65894125cf83f0b63331e89136741e8b931e2",
+      "mesh": "Oct.scm",
+      "sha256": "19b61723cc39188c76d577074befa6df5c98f18693a71cf642665d0604f317a6",
+      "vertices": 3987,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191700,
+      "illustration": "illustrations/octans.png",
+      "illustrationSha256": "a3bb68ac580dc35b23eaf950af007c0d9d076eec6e35c9b0ebba83525cc66d10",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        1,
+        256,
+        255
+      ],
+      "fitBoundsPixels": [
+        0,
+        0,
+        256,
+        256
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4902631938457489,
+          -0.00042842666152864695,
+          -0.47343188524246216
+        ],
+        [
+          0.4894292950630188,
+          0.5572254061698914,
+          0.47326791286468506
+        ]
+      ],
       "imageBounds": [
         0.0,
         0.0,
@@ -100,19 +2825,1380 @@
       ]
     },
     {
-      "id": "Ara",
-      "source": "06_ara.glb",
-      "sourceSha256": "ebf9c16d0cd8effb1bf9f8b0dfc5795e64f306447783bbbce47ccb4c540c5a9c",
-      "mesh": "Ara.scm",
-      "sha256": "9d05e15419784a141d7d3285be736e860ee5e1a132b4b8179d54a8ef8b92aa03",
-      "vertices": 7387,
-      "triangles": 14511,
-      "illustration": "illustrations/ara.png",
+      "id": "Oph",
+      "source": "59_ophiuchus.glb",
+      "sourceSha256": "c2ef26313a2404ace74efbd19f36ed0ce8121f6d442201d279ec1c71eff5d865",
+      "mesh": "Oph.scm",
+      "sha256": "63867cf560e1ede09cee967332e02f92757f83a9b09598cfdecac8abc956612c",
+      "vertices": 3996,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191916,
+      "illustration": "illustrations/ophiuchus.png",
+      "illustrationSha256": "09967fbed6f14e768da00d492b7ba2daa2165406690014d0f00b711d372a0079",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        5,
+        495,
+        510
+      ],
+      "fitBoundsPixels": [
+        2,
+        4,
+        496,
+        511
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4696364104747772,
+          -0.0002710217668209225,
+          -0.12259228527545929
+        ],
+        [
+          0.4700171649456024,
+          0.9798635244369507,
+          0.12244025617837906
+        ]
+      ],
       "imageBounds": [
+        0.00390625,
+        0.0078125,
+        0.96875,
+        0.998046875
+      ]
+    },
+    {
+      "id": "Ori",
+      "source": "60_orion.glb",
+      "sourceSha256": "6e6239111d085180dfbcc1d13ea0147e1d46365f081b251fb4f0b6f954744d90",
+      "mesh": "Ori.scm",
+      "sha256": "eb5ca3a4ffd36e6cb9d0c04af8276b3d200d3fd11116cd256f8e403750a22d33",
+      "vertices": 3998,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191964,
+      "illustration": "illustrations/orion.png",
+      "illustrationSha256": "3edea0a3275ce25e084642f55111e07d8e7fc16cfeb8a04844719f45523744ae",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        0,
+        502,
+        509
+      ],
+      "fitBoundsPixels": [
+        5,
+        0,
+        503,
+        510
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48870205879211426,
+          -0.0010870208498090506,
+          -0.19608035683631897
+        ],
+        [
+          0.48844000697135925,
+          0.9809277057647705,
+          0.19656053185462952
+        ]
+      ],
+      "imageBounds": [
+        0.009765625,
         0.0,
-        0.0,
+        0.982421875,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Pav",
+      "source": "61_pavo.glb",
+      "sourceSha256": "a7bb449af3a53f834a0f51936ad763a5d44afb0762b4aeb0f60cea297ac16203",
+      "mesh": "Pav.scm",
+      "sha256": "979875ddf29ebef6175ad70a69667403234ffb3af31d94974f6a4728d466e7cf",
+      "vertices": 3912,
+      "triangles": 8000,
+      "sourceTriangles": 29999,
+      "bytes": 189900,
+      "illustration": "illustrations/pavo.png",
+      "illustrationSha256": "b6dfec3495d646920f76b4bbd0233553a88cb5b0290ab8e4b24209fcc303fa02",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        8,
+        3,
+        252,
+        252
+      ],
+      "fitBoundsPixels": [
+        7,
+        2,
+        253,
+        253
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4892968237400055,
+          0.001979453256353736,
+          -0.15539118647575378
+        ],
+        [
+          0.4901112914085388,
+          0.8381254076957703,
+          0.15495799481868744
+        ]
+      ],
+      "imageBounds": [
+        0.02734375,
+        0.0078125,
+        0.98828125,
+        0.98828125
+      ]
+    },
+    {
+      "id": "Peg",
+      "source": "62_pegasus.glb",
+      "sourceSha256": "ebdea8a703e1c03f9bf70203c6258bed1212a938fbee75dd1135b77cd467bfcc",
+      "mesh": "Peg.scm",
+      "sha256": "b7ed4492273a706841dbb57c23788545a08b328bb028fd85622e1bbbd44b7f55",
+      "vertices": 3910,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 189852,
+      "illustration": "illustrations/pegasus.png",
+      "illustrationSha256": "ad4a6926b939cd113aa78c06418513bc6b0e2342cca6df9d4fa0c9bd20743148",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        2,
+        80,
+        512,
+        512
+      ],
+      "fitBoundsPixels": [
+        1,
+        79,
+        512,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4707796275615692,
+          0.0006315493956208229,
+          -0.4907280206680298
+        ],
+        [
+          0.4686140716075897,
+          0.9797608256340027,
+          0.48917341232299805
+        ]
+      ],
+      "imageBounds": [
+        0.001953125,
+        0.154296875,
         1.0,
         1.0
+      ]
+    },
+    {
+      "id": "Per",
+      "source": "63_perseus.glb",
+      "sourceSha256": "e9141630ea8082585c0782e154fcba80c4d98be5d3b53bf740786ab134402d0c",
+      "mesh": "Per.scm",
+      "sha256": "c514bfed480252522761c5c11c7e09c5be8b358ad5644e618a414a364c25a595",
+      "vertices": 4065,
+      "triangles": 8000,
+      "sourceTriangles": 29998,
+      "bytes": 193572,
+      "illustration": "illustrations/perseus.png",
+      "illustrationSha256": "fe9278ddf3dd52f1e1cfbc9f29b14739ebd146656b1d0b39e91309ba5983802e",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        55,
+        12,
+        508,
+        511
+      ],
+      "fitBoundsPixels": [
+        54,
+        11,
+        509,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4383681118488312,
+          -5.2641953516285866e-05,
+          -0.23340532183647156
+        ],
+        [
+          0.4380039572715759,
+          0.9797279238700867,
+          0.23190075159072876
+        ]
+      ],
+      "imageBounds": [
+        0.10546875,
+        0.021484375,
+        0.994140625,
+        1.0
+      ]
+    },
+    {
+      "id": "Phe",
+      "source": "64_phoenix.glb",
+      "sourceSha256": "88428d8e014ce09947595e195f3728eb0c1c19a520a30842b97e0054614b0a72",
+      "mesh": "Phe.scm",
+      "sha256": "cd25e81f88b0cac676983bfa278004f9f0a2a8252c38cc2c84bb4a6acdcd9650",
+      "vertices": 3980,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191532,
+      "illustration": "illustrations/phoenix.png",
+      "illustrationSha256": "a2b7e18c1f854f33cbe1779010bb4fff59e84107c938facbf8b881e8d38ca10e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        38,
+        2,
+        247,
+        253
+      ],
+      "fitBoundsPixels": [
+        37,
+        1,
+        248,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48684683442115784,
+          -0.0014507286250591278,
+          -0.2790739834308624
+        ],
+        [
+          0.48809173703193665,
+          0.9808043837547302,
+          0.27879610657691956
+        ]
+      ],
+      "imageBounds": [
+        0.14453125,
+        0.00390625,
+        0.96875,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Pic",
+      "source": "65_pictor.glb",
+      "sourceSha256": "a17d012d698d40e79f95397f730b27a221e5764fd0e7038923bfe2c0096898c2",
+      "mesh": "Pic.scm",
+      "sha256": "21e572e9463790b514b5bb53d96ea4e9ab1ef3c1b6084516f450da5ef8046115",
+      "vertices": 3984,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191628,
+      "illustration": "illustrations/pictor.png",
+      "illustrationSha256": "355e4e3e3f2c0e657259e5fea4e1124a667babae0efc98bda62fc16fa08de92b",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        6,
+        225,
+        254
+      ],
+      "fitBoundsPixels": [
+        2,
+        5,
+        226,
+        255
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.1860528290271759,
+          8.446905121672899e-05,
+          -0.28344210982322693
+        ],
+        [
+          0.185928076505661,
+          0.981157660484314,
+          0.2832798361778259
+        ]
+      ],
+      "imageBounds": [
+        0.0078125,
+        0.01953125,
+        0.8828125,
+        0.99609375
+      ]
+    },
+    {
+      "id": "PsA",
+      "source": "67_piscis-austrinus.glb",
+      "sourceSha256": "20d4e1236ce6b67a8dc6949235fb89566532d9fccca7056dad7a11bd7929718d",
+      "mesh": "PsA.scm",
+      "sha256": "4e287e157056412ba6141a990491ad0ad18e0ced3e07e1c4066cf24269368338",
+      "vertices": 3992,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191820,
+      "illustration": "illustrations/piscis-austrinus.png",
+      "illustrationSha256": "32697eddefcdada4cd27e234178265f63db9d185a99bcd14e9beae6703161a07",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        16,
+        0,
+        253,
+        254
+      ],
+      "fitBoundsPixels": [
+        15,
+        0,
+        254,
+        255
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48971232771873474,
+          0.00021412780915852636,
+          -0.18199580907821655
+        ],
+        [
+          0.4899432957172394,
+          0.8443276882171631,
+          0.18213076889514923
+        ]
+      ],
+      "imageBounds": [
+        0.05859375,
+        0.0,
+        0.9921875,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Psc",
+      "source": "66_pisces.glb",
+      "sourceSha256": "c58edba9df05683cc9776d7f81230c0aa660adc245005315f909912d3b77bd90",
+      "mesh": "Psc.scm",
+      "sha256": "8c07a10b4e7bb229fc6848f0ba31c19ccc41ec6656494d5a4db44fc99f3f5d97",
+      "vertices": 4003,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 192072,
+      "illustration": "illustrations/pisces.png",
+      "illustrationSha256": "82a011c9d022af1dd651ef35deef0075c21e0e6ad900f38ef48d8c367d26dab2",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        21,
+        508,
+        404
+      ],
+      "fitBoundsPixels": [
+        2,
+        20,
+        509,
+        405
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.489972323179245,
+          9.61222976911813e-05,
+          -0.11675280332565308
+        ],
+        [
+          0.4898938238620758,
+          0.8422629833221436,
+          0.1166795864701271
+        ]
+      ],
+      "imageBounds": [
+        0.00390625,
+        0.0390625,
+        0.994140625,
+        0.791015625
+      ]
+    },
+    {
+      "id": "Pyx",
+      "source": "68_pyxis.glb",
+      "sourceSha256": "4e0ca59c53d3f85241553284fc552a5348c367d2918cdf052ba165a4052338bb",
+      "mesh": "Pyx.scm",
+      "sha256": "01a58c40145c1217f233751756912016e63c47beaeafc290447fccfacb1ad347",
+      "vertices": 4018,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 192432,
+      "illustration": "illustrations/pyxis.png",
+      "illustrationSha256": "c73023861e4c310ff1f5e5c821f4561856dc3aa1c4eb89cf61d0f8f6d6c8f1e8",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        19,
+        11,
+        240,
+        235
+      ],
+      "fitBoundsPixels": [
+        18,
+        10,
+        241,
+        236
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.47768765687942505,
+          0.00014125528105068952,
+          -0.4900829792022705
+        ],
+        [
+          0.47792625427246094,
+          0.8984391689300537,
+          0.4897371530532837
+        ]
+      ],
+      "imageBounds": [
+        0.0703125,
+        0.0390625,
+        0.94140625,
+        0.921875
+      ]
+    },
+    {
+      "id": "Ret",
+      "source": "69_reticulum.glb",
+      "sourceSha256": "dc243af22dd26d66042da4a740279823e84c9f0a40013c90e19785c206918ccd",
+      "mesh": "Ret.scm",
+      "sha256": "00b60c39abfea9e2f9c1fddab71006f3dbed84f43f32604b56b8cbf22b33d6df",
+      "vertices": 4002,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 192048,
+      "illustration": "illustrations/reticulum.png",
+      "illustrationSha256": "1f5c49e4ecb09046d731bad34af80b5d575430525a427cc3cea40284f51606b9",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        11,
+        2,
+        123,
+        127
+      ],
+      "fitBoundsPixels": [
+        10,
+        1,
+        124,
+        128
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48970744013786316,
+          -6.529037636937574e-05,
+          -0.2517032027244568
+        ],
+        [
+          0.48977920413017273,
+          0.9791708588600159,
+          0.25175750255584717
+        ]
+      ],
+      "imageBounds": [
+        0.078125,
+        0.0078125,
+        0.96875,
+        1.0
+      ]
+    },
+    {
+      "id": "Scl",
+      "source": "73_sculptor.glb",
+      "sourceSha256": "6913c0c3f0685489c4a7cb037b009d831e562f2cec09e664b72b2fa6165416df",
+      "mesh": "Scl.scm",
+      "sha256": "e0d5453e73a6aab9fb7c6d2709c5e67964ea6e897aac11925842035f4b05f7b2",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192012,
+      "illustration": "illustrations/sculptor.png",
+      "illustrationSha256": "4ed0ffcb6e88868b8d91421fed1666d1500f82f07b322bcf7a87effbad58926f",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        4,
+        255,
+        254
+      ],
+      "fitBoundsPixels": [
+        0,
+        3,
+        256,
+        255
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.3601641058921814,
+          0.00010256959649268538,
+          -0.24022968113422394
+        ],
+        [
+          0.3620079755783081,
+          0.9796482920646667,
+          0.24006280303001404
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.01171875,
+        1.0,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Sco",
+      "source": "72_scorpius.glb",
+      "sourceSha256": "7c55d24d1e2dc026ee27e47a315bed838fdfeea45c60882df89855c036cb337a",
+      "mesh": "Sco.scm",
+      "sha256": "a0a3906b9d446653433d73a3522bb13e6dac0a09cf04242595f55cbc0f360fad",
+      "vertices": 3994,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191868,
+      "illustration": "illustrations/scorpius.png",
+      "illustrationSha256": "e681573f0d51cc934bf170fa4136396a78d234d5d0db3f778cc16ea0df6f2d64",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        7,
+        6,
+        493,
+        511
+      ],
+      "fitBoundsPixels": [
+        6,
+        5,
+        494,
+        512
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4899293780326843,
+          0.00014393098535947502,
+          -0.41642963886260986
+        ],
+        [
+          0.49115222692489624,
+          0.798676609992981,
+          0.4159766435623169
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.009765625,
+        0.96484375,
+        1.0
+      ]
+    },
+    {
+      "id": "Sct",
+      "source": "74_scutum.glb",
+      "sourceSha256": "21b07b2830f4bf59a7d980f32f318c0efe87a07ab4127053e480778ff5df121b",
+      "mesh": "Sct.scm",
+      "sha256": "bd9f5d3cad43a676be12c628e99da17cc44970e7731a7891bea061b6b9b49f20",
+      "vertices": 4004,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 192096,
+      "illustration": "illustrations/scutum.png",
+      "illustrationSha256": "252312723d04a799482e61eecd7e357a74bbba16d58259a2eef3cfd017b06b53",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        2,
+        251,
+        253
+      ],
+      "fitBoundsPixels": [
+        5,
+        1,
+        252,
+        254
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.488783597946167,
+          -0.0004296471015550196,
+          -0.16917066276073456
+        ],
+        [
+          0.4890928566455841,
+          0.9798162579536438,
+          0.16949744522571564
+        ]
+      ],
+      "imageBounds": [
+        0.01953125,
+        0.00390625,
+        0.984375,
+        0.9921875
+      ]
+    },
+    {
+      "id": "Sex",
+      "source": "75_sextans.glb",
+      "sourceSha256": "2af6e23a4c4d21b5a31cb4f00d14da5a20a5f9c2fd53b4644dde848df3322a83",
+      "mesh": "Sex.scm",
+      "sha256": "5752dbe362f5f319ebc86954844a9264a97e194edfdcf1566e6d83be279f38ac",
+      "vertices": 3949,
+      "triangles": 8000,
+      "sourceTriangles": 29999,
+      "bytes": 190788,
+      "illustration": "illustrations/sextans.png",
+      "illustrationSha256": "095c0747d7988485e544242bfbe6cdf8642e01e41ba88d2dd57a804b21ca450c",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        6,
+        128,
+        123
+      ],
+      "fitBoundsPixels": [
+        5,
+        5,
+        128,
+        124
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4899030029773712,
+          0.000282440276350826,
+          -0.4480673670768738
+        ],
+        [
+          0.48933646082878113,
+          0.5021542310714722,
+          0.4479289650917053
+        ]
+      ],
+      "imageBounds": [
+        0.0390625,
+        0.0390625,
+        1.0,
+        0.96875
+      ]
+    },
+    {
+      "id": "Sge",
+      "source": "70_sagitta.glb",
+      "sourceSha256": "4f198e2681f54365024b18ad957cd6c65ca3910bbb9ab5cf8e812a2e9f649896",
+      "mesh": "Sge.scm",
+      "sha256": "0cb6f488d425f1038d55b61c61f759f92c93fdeb87ec33e428354de9687cca7a",
+      "vertices": 3997,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 191928,
+      "illustration": "illustrations/sagitta.png",
+      "illustrationSha256": "5dd90e4c916e947f496560c7e8b87e2b61631c09db6412dc0c83823f0bf87227",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        3,
+        8,
+        255,
+        249
+      ],
+      "fitBoundsPixels": [
+        2,
+        7,
+        256,
+        250
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4929909408092499,
+          -7.805056520737708e-05,
+          -0.3536413013935089
+        ],
+        [
+          0.49304527044296265,
+          0.9817180037498474,
+          0.353456974029541
+        ]
+      ],
+      "imageBounds": [
+        0.0078125,
+        0.02734375,
+        1.0,
+        0.9765625
+      ]
+    },
+    {
+      "id": "Sgr",
+      "source": "71_sagittarius.glb",
+      "sourceSha256": "613a24c3e0df6e4417b0a3fcb688d92d9032f70ec1de76c0ee456f3a618c86af",
+      "mesh": "Sgr.scm",
+      "sha256": "c3fbdffee0fd6554a09bfca06dac461beac13161e1a22e6bc6ca48caf45d7707",
+      "vertices": 3988,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191724,
+      "illustration": "illustrations/sagittarius.png",
+      "illustrationSha256": "0ee208629e5edf87be38fb008b41b5dd0fc4fc67ba49cbe6c57356e5182e9317",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        7,
+        0,
+        504,
+        506
+      ],
+      "fitBoundsPixels": [
+        6,
+        0,
+        505,
+        507
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.49027058482170105,
+          0.0002497427922207862,
+          -0.11443948745727539
+        ],
+        [
+          0.49073970317840576,
+          0.939124345779419,
+          0.11450181901454926
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.0,
+        0.986328125,
+        0.990234375
+      ]
+    },
+    {
+      "id": "Tau",
+      "source": "76_taurus.glb",
+      "sourceSha256": "352e42434202e679ff9fe9e37823227f6c480f7b3e8e0e57edeb74a0df23c3d6",
+      "mesh": "Tau.scm",
+      "sha256": "011246cf54dc9f55b74c24808b223691f9cd5514810987258a239d00bdd312fc",
+      "vertices": 4002,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192060,
+      "illustration": "illustrations/taurus.png",
+      "illustrationSha256": "019f267b9fee7fe3188944c2fe265c58c216119a919fd72475a8cd3c1676162a",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        6,
+        41,
+        510,
+        509
+      ],
+      "fitBoundsPixels": [
+        5,
+        40,
+        511,
+        510
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.1725374311208725,
+          0.00014003243995830417,
+          -0.48958924412727356
+        ],
+        [
+          0.17227143049240112,
+          0.533912718296051,
+          0.4895949959754944
+        ]
+      ],
+      "imageBounds": [
+        0.009765625,
+        0.078125,
+        0.998046875,
+        0.99609375
+      ]
+    },
+    {
+      "id": "Tel",
+      "source": "77_telescopium.glb",
+      "sourceSha256": "c49284ba6244ced9c0f7e3a0f5bf3e07157f1a9fa664f17fa47b32cce7dc7351",
+      "mesh": "Tel.scm",
+      "sha256": "bac1431e6591c726b093a5e48b7a4e633c081ca5180b7a7f82c06b0c49ee73c6",
+      "vertices": 3957,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 190980,
+      "illustration": "illustrations/telescopium.png",
+      "illustrationSha256": "0a5410aebe16156f68ff6fe547abed74753301a0c3bbf9502078e93aa07e6ab7",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        8,
+        6,
+        119,
+        120
+      ],
+      "fitBoundsPixels": [
+        7,
+        5,
+        120,
+        121
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.30113452672958374,
+          9.893975220620632e-05,
+          -0.2546970248222351
+        ],
+        [
+          0.301580548286438,
+          0.9788124561309814,
+          0.2550179362297058
+        ]
+      ],
+      "imageBounds": [
+        0.0546875,
+        0.0390625,
+        0.9375,
+        0.9453125
+      ]
+    },
+    {
+      "id": "TrA",
+      "source": "78_triangulum-australe.glb",
+      "sourceSha256": "4f5b58a2851f2c4b5fd35f35a2fcfa62252cb0c18e3d109f968cead3920b3cc4",
+      "mesh": "TrA.scm",
+      "sha256": "1e548d144ffe84782b3e4b811ad2f527ba086cf191da83a8c3d3d1745076098f",
+      "vertices": 3994,
+      "triangles": 7999,
+      "sourceTriangles": 30000,
+      "bytes": 191856,
+      "illustration": "illustrations/triangulum-australe.png",
+      "illustrationSha256": "c283ccbe27b730d65a0ba0092c45668fba9d17452eaf4ffa19d43366fb94d7fd",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        5,
+        0,
+        126,
+        127
+      ],
+      "fitBoundsPixels": [
+        4,
+        0,
+        127,
+        128
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.48876953125,
+          0.0,
+          -0.09174682945013046
+        ],
+        [
+          0.4887363612651825,
+          0.9041584134101868,
+          0.091607965528965
+        ]
+      ],
+      "imageBounds": [
+        0.03125,
+        0.0,
+        0.9921875,
+        1.0
+      ]
+    },
+    {
+      "id": "Tri",
+      "source": "79_triangulum.glb",
+      "sourceSha256": "8a520454459dd7d22d256810bd794e28c4c7ae81123e79fa2105f3e8222e3ea2",
+      "mesh": "Tri.scm",
+      "sha256": "39aefaabb930f30456ca67de14a5fd0cc121a2299c9d39747d984b3c0273c3b4",
+      "vertices": 4031,
+      "triangles": 7999,
+      "sourceTriangles": 14271,
+      "bytes": 192744,
+      "illustration": "illustrations/triangulum.png",
+      "illustrationSha256": "ae9ccd84362146b52a6f90764165d22a32dacb8cadec026d230ae05c7dc77448",
+      "imageSize": [
+        128,
+        128
+      ],
+      "foregroundBoundsPixels": [
+        0,
+        41,
+        128,
+        112
+      ],
+      "fitBoundsPixels": [
+        0,
+        40,
+        128,
+        113
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4990234375,
+          -1.6389148718709556e-11,
+          -0.0380859375
+        ],
+        [
+          0.4990234375,
+          0.583961009979248,
+          0.03819945454597473
+        ]
+      ],
+      "imageBounds": [
+        0.0,
+        0.3125,
+        1.0,
+        0.8828125
+      ]
+    },
+    {
+      "id": "Tuc",
+      "source": "80_tucana.glb",
+      "sourceSha256": "08c8d1eae87221d551a134b418b3b831ec64ee955c772cebd589905941843702",
+      "mesh": "Tuc.scm",
+      "sha256": "468a16702e5e119f244a162ff11b2016963d526768e9c2e3b33e501eb96fb6d2",
+      "vertices": 3994,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191868,
+      "illustration": "illustrations/tucana.png",
+      "illustrationSha256": "a5beec5ec85b19a5aad8a1e89da51c23c18b6200c4fb101bc8d9e68b3f224d2e",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        9,
+        58,
+        256,
+        180
+      ],
+      "fitBoundsPixels": [
+        8,
+        57,
+        256,
+        181
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.3908543586730957,
+          -0.0006263761315494776,
+          -0.48993736505508423
+        ],
+        [
+          0.39070573449134827,
+          0.9172988533973694,
+          0.48990878462791443
+        ]
+      ],
+      "imageBounds": [
+        0.03125,
+        0.22265625,
+        1.0,
+        0.70703125
+      ]
+    },
+    {
+      "id": "UMa",
+      "source": "81_ursa-major.glb",
+      "sourceSha256": "2f781db3962fa9b6b8c18dcf25efb2d11c3fe7c1ea2252f3e24d36dcd7e2d744",
+      "mesh": "UMa.scm",
+      "sha256": "57d09a27833febf74de30da515114e9de0737059e804cd71932d65283a2f8f4d",
+      "vertices": 4009,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 192228,
+      "illustration": "illustrations/ursa-major.png",
+      "illustrationSha256": "da2a2a5c5024bd850ccd97924d18aab8b9ac45f32d168a8ee32c31dd2679ec4c",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        10,
+        45,
+        506,
+        461
+      ],
+      "fitBoundsPixels": [
+        9,
+        44,
+        507,
+        462
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.20501644909381866,
+          -0.000283984059933573,
+          -0.4885695278644562
+        ],
+        [
+          0.20156069099903107,
+          0.5039445161819458,
+          0.48939183354377747
+        ]
+      ],
+      "imageBounds": [
+        0.017578125,
+        0.0859375,
+        0.990234375,
+        0.90234375
+      ]
+    },
+    {
+      "id": "UMi",
+      "source": "82_ursa-minor.glb",
+      "sourceSha256": "235d41a4904ec9aaba6f95141568b546badf3a5141ecb4f8f07f63bec97b1fc9",
+      "mesh": "UMi.scm",
+      "sha256": "cd17b75a7e434bf74b650ea93e102ef454bc638be4648b61361a2c15094356ab",
+      "vertices": 4000,
+      "triangles": 8000,
+      "sourceTriangles": 29998,
+      "bytes": 192012,
+      "illustration": "illustrations/ursa-minor.png",
+      "illustrationSha256": "e95cd699568b7b8877086d746d86b79f78863634904e8388291983e31265b1b5",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        4,
+        2,
+        251,
+        251
+      ],
+      "fitBoundsPixels": [
+        3,
+        1,
+        252,
+        252
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4899252951145172,
+          9.808234608499333e-05,
+          -0.2575976848602295
+        ],
+        [
+          0.48986026644706726,
+          0.5282589197158813,
+          0.25758373737335205
+        ]
+      ],
+      "imageBounds": [
+        0.01171875,
+        0.00390625,
+        0.984375,
+        0.984375
+      ]
+    },
+    {
+      "id": "Vir",
+      "source": "83_virgo.glb",
+      "sourceSha256": "d36d5fd55a057319e1d35b73edb0e270804f63a4bf270856d7410affc78dd266",
+      "mesh": "Vir.scm",
+      "sha256": "95ee3e4efd06a82f4fbe4b03ff32b4f0454ba8bfec9caecabb7b4399f4dbf020",
+      "vertices": 3970,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 191292,
+      "illustration": "illustrations/virgo.png",
+      "illustrationSha256": "7f59ab17b11794e708cd30e0e638ec65ceb926842d0d6461ebfd2bb5b25c8353",
+      "imageSize": [
+        512,
+        512
+      ],
+      "foregroundBoundsPixels": [
+        9,
+        6,
+        470,
+        505
+      ],
+      "fitBoundsPixels": [
+        8,
+        5,
+        471,
+        506
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.2470308393239975,
+          0.00035961956018581986,
+          -0.1324569433927536
+        ],
+        [
+          0.245731920003891,
+          0.9805194139480591,
+          0.13166522979736328
+        ]
+      ],
+      "imageBounds": [
+        0.015625,
+        0.009765625,
+        0.919921875,
+        0.98828125
+      ]
+    },
+    {
+      "id": "Vol",
+      "source": "84_volans.glb",
+      "sourceSha256": "30456ff9cebd820367923a4603efc2566f7503f9f15c9a88f2611108d4a2ced7",
+      "mesh": "Vol.scm",
+      "sha256": "0d8daed1dd64eb4baee16fee214109c134bb920481aacd490b6de3b3e71a1764",
+      "vertices": 3923,
+      "triangles": 8000,
+      "sourceTriangles": 30000,
+      "bytes": 190164,
+      "illustration": "illustrations/volans.png",
+      "illustrationSha256": "86971bc380c10c441f11b4590239043bb54a229c7c3eef96a9f770948e70bcaf",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        13,
+        49,
+        235,
+        184
+      ],
+      "fitBoundsPixels": [
+        12,
+        48,
+        236,
+        185
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4899980425834656,
+          0.0009864676976576447,
+          -0.2876688539981842
+        ],
+        [
+          0.4898916184902191,
+          0.5892415642738342,
+          0.28758466243743896
+        ]
+      ],
+      "imageBounds": [
+        0.046875,
+        0.1875,
+        0.921875,
+        0.72265625
+      ]
+    },
+    {
+      "id": "Vul",
+      "source": "85_vulpecula.glb",
+      "sourceSha256": "c785f7ac9524c2d202ddf11c9383b10f6c1d8edc6c4589c7b74b2bb588007b55",
+      "mesh": "Vul.scm",
+      "sha256": "20e83b64e75cd7e980659be6e0df4b589c15cc44f645f244ef0542ac2bfb1ed2",
+      "vertices": 4044,
+      "triangles": 7999,
+      "sourceTriangles": 29999,
+      "bytes": 193056,
+      "illustration": "illustrations/vulpecula.png",
+      "illustrationSha256": "16980e83243f003d5a4f665e902e0e62fa3eee50ab21b68a17c09e8eea9d6672",
+      "imageSize": [
+        256,
+        256
+      ],
+      "foregroundBoundsPixels": [
+        7,
+        10,
+        249,
+        209
+      ],
+      "fitBoundsPixels": [
+        6,
+        9,
+        250,
+        210
+      ],
+      "foregroundMask": "rgb-positive-black-background",
+      "foregroundThreshold": 0,
+      "foregroundPaddingPixels": 1,
+      "boundsConvention": "bottom-left, exclusive right/top",
+      "sourceMeshBounds": [
+        [
+          -0.4432176947593689,
+          -0.00030778636573813856,
+          -0.40611082315444946
+        ],
+        [
+          0.44284698367118835,
+          0.980637788772583,
+          0.40643924474716187
+        ]
+      ],
+      "imageBounds": [
+        0.0234375,
+        0.03515625,
+        0.9765625,
+        0.8203125
       ]
     }
   ]

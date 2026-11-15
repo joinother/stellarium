@@ -294,6 +294,7 @@ public slots:
 	void setFlagHasAtmosphere(bool b) {flagHasAtmosphere=b;}
 	//! This is used to decide whether to apply refraction/extinction before rendering point sources et al.
 	bool getFlagHasAtmosphere() const {return flagHasAtmosphere;}
+	float getAtmosphereVisualStrength() const {return atmosphereVisualStrength;}
 
 	//! Set extinction coefficient, mag/airmass (for extinction).
 	void setExtinctionCoefficient(double extCoeff);
@@ -310,6 +311,7 @@ public slots:
 
 	//! Get the current valid extinction computation object.
 	const Extinction& getExtinction() const {return extinction;}
+	const Extinction& getVisualExtinction() const {return visualExtinction;}
 	//! Get the current valid refraction computation object.
 	const Refraction& getRefraction() const {return refraction;}
 
@@ -444,6 +446,8 @@ private:
 	std::unique_ptr<QOpenGLBuffer> vbo;
 
 	Extinction extinction;
+	Extinction visualExtinction;
+	float atmosphereVisualStrength = 1.f;
 	Refraction refraction;
 
 	float maxAdaptFov, minAdaptFov, lnfovFactor;

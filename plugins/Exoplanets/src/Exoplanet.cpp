@@ -636,7 +636,7 @@ void Exoplanet::draw(StelCore* core, StelPainter *painter)
 
 	StelSkyDrawer* sd = core->getSkyDrawer();
 	const float mlimit = sd->getLimitMagnitude();
-	const float mag = (distributionMode ? 4.f : getVMagnitudeWithExtinction(core));
+	const float mag = (distributionMode ? 4.f : getVMagnitudeWithVisualExtinction(core));
 	const float shift = 8.f;
 
 	if (mag <= mlimit)

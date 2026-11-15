@@ -18,6 +18,7 @@
 
 #include <stdexcept>
 #include <QDebug>
+#include <QScopedValueRollback>
 #include <QStyleOptionGraphicsItem>
 #include <QPainter>
 #include <QFont>
@@ -317,13 +318,34 @@ void Calendars::init()
 #endif
 		connect(cal, SIGNAL(jdChanged(double)), StelApp::getInstance().getCore(), SLOT(setJD(double)));
 		connect(&StelApp::getInstance(), SIGNAL(languageChanged()), cal, SLOT(retranslate()));
+		connect(cal, &Calendar::jdChanged, this, [this]() { conversionInputsValid = false; });
 	}
+	const auto invalidateConversions = [this]() { conversionInputsValid = false; };
+	const auto* core = StelApp::getInstance().getCore();
+	connect(core, &StelCore::locationChanged, this, invalidateConversions);
+	connect(core, &StelCore::currentTimeZoneChanged, this, invalidateConversions);
+	connect(core, &StelCore::useCustomTimeZoneChanged, this, invalidateConversions);
+	connect(core, &StelCore::flagUseDSTChanged, this, invalidateConversions);
+	connect(core, &StelCore::ephemAlgorithmChanged, this, invalidateConversions);
+	connect(&StelApp::getInstance(), &StelApp::languageChanged, this, invalidateConversions);
+	connect(this, &Calendars::mayaCorrelationJDChanged, this, invalidateConversions);
+#ifndef NO_GUI
+	connect(configDialog, &CalendarsDialog::visibleChanged, this, [this](bool visible) {
+		conversionInputsValid = false;
+		if (visible) update(0.0);
+	});
+#endif
 }
 
 #ifdef ENABLE_SCRIPTING
 // Add calendar as scriptable object! Some scripting functions won't work though, as they use object types unknown to the scripting engine.
 void Calendars::makeCalendarsScriptable(StelScriptMgr *ssm)
 {
+	connect(ssm, &StelScriptMgr::scriptRunning, this, [this]() {
+		refreshConversionInputs();
+		for (Calendar* calendar : calendars)
+			updateCalendar(calendar);
+	});
 	foreach (Calendar* cal, calendars)
 	{
 		cal->setObjectName(cal->metaObject()->className());
@@ -509,21 +531,60 @@ void Calendars::exportCalendars()
 // Get a pointer to the respective calendar
 Calendar* Calendars::getCal(const QString &name)
 {
-	return calendars.value(name, nullptr);
+	Calendar* calendar = calendars.value(name, nullptr);
+	if (calendar && !updatingCalendar)
+	{
+		refreshConversionInputs();
+		updateCalendar(calendar);
+	}
+	return calendar;
+}
+
+void Calendars::refreshConversionInputs()
+{
+	const auto* core = StelApp::getInstance().getCore();
+	const double jd = core->getJD();
+	const Vec3d coefficients = core->getDeltaTCustomEquationCoefficients();
+	const std::array<double, 10> conversionInputs{{jd, core->getUTCOffset(jd),
+		static_cast<double>(core->getCurrentDeltaTAlgorithm()), core->getDeltaT(),
+		core->getDeltaTCustomYear(), core->getDeltaTCustomNDot(), core->getDeltaTnDot(),
+		coefficients[0], coefficients[1], coefficients[2]}};
+	if (!conversionInputsValid || conversionInputs != lastConversionInputs)
+	{
+		currentCalendars.clear();
+		lastConversionInputs = conversionInputs;
+		conversionInputsValid = true;
+	}
+}
+
+void Calendars::updateCalendar(Calendar* calendar)
+{
+	const double jd = lastConversionInputs[0];
+	if (currentCalendars.contains(calendar) &&
+		(calendar == calendars.value(QStringLiteral("Calendar")) || calendar->getJD() == jd))
+		return;
+	currentCalendars.insert(calendar);
+	QScopedValueRollback<bool> guard(updatingCalendar, true);
+	calendar->setJD(jd);
 }
 
 void Calendars::update(double)
 {
-	if (!enabled
-#ifndef NO_GUI
-			&& (configDialog && !configDialog->visible())
-#endif
-			) // allow playing in dialog while main display is off! (#4917)
+	if (updatingCalendar)
 		return;
-	const double jd=StelApp::getInstance().getCore()->getJD();
-	foreach (Calendar* cal, calendars)
+	bool liveConsumer = false;
+#ifndef NO_GUI
+	liveConsumer = configDialog && configDialog->visible();
+#endif
+#ifdef ENABLE_SCRIPTING
+	liveConsumer = liveConsumer || StelApp::getInstance().getScriptMgr().scriptIsRunning();
+#endif
+	if (!liveConsumer)
+		return;
+	refreshConversionInputs();
+	for (Calendar* calendar : calendars)
 	{
-		cal->setJD(jd);
+		updateCalendar(calendar);
 	}
 }
 

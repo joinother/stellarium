@@ -22,6 +22,10 @@
 
 #include "Atmosphere.hpp"
 #include <memory>
+#include <array>
+#include <chrono>
+#include <cstdint>
+#include <deque>
 #include <QVector3D>
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
@@ -72,11 +76,37 @@ private:
 		unsigned layerToDrawA = 0;
 		unsigned layerToDrawB = 0;
 		float layerAlpha = 0; //!< alpha-blending coefficient between #layerToDrawA_ and #layerToDrawB_
+		bool prepCached = false;
+		unsigned prepCachedLayerA = 0;
+		unsigned prepCachedLayerB = 0;
+		float prepCachedAlpha = 0;
 		//! Coefficient by which the image in #sunPrepFBO_/#moonPrepFBO_ must be multiplied to get final brightness Y
 		float fboColorScale = 0;
 		float relativeBrightness = 0;
 		float eclipseFactor = 0;
 	} drawParams[DRAW_PARAM_COUNT];
+	struct LuminanceReadbackSample
+	{
+		std::uint64_t token = 0;
+		std::array<Vec4f, DRAW_PARAM_COUNT> weights;
+		std::chrono::steady_clock::time_point sampledAt;
+		double julianDay = 0.;
+		double timeRate = 0.;
+		double syncJulianDay = 0.;
+		qint64 syncMilliseconds = 0;
+		std::array<Vec3f, DRAW_PARAM_COUNT> lightDirections;
+		std::array<unsigned, DRAW_PARAM_COUNT> layersA, layersB;
+		std::array<float, DRAW_PARAM_COUNT> layerAlphas;
+		Vec3d viewDirection;
+		float fov = 0.f;
+		Vec3f location;
+		QString planet;
+	};
+	std::deque<LuminanceReadbackSample> pendingLuminanceSamples_;
+	LuminanceReadbackSample completedLuminanceSample_;
+	std::uint64_t luminanceSampleToken_ = 0;
+	float completedMeanLuminance_ = 0.f;
+	bool completedMeanLuminanceValid_ = false;
 
 	std::unique_ptr<class QOpenGLShaderProgram> preparationShaderProgram_;
 	std::unique_ptr<class QOpenGLShaderProgram> luminanceProbeProgram_;

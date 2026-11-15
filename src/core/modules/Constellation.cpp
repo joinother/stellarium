@@ -48,6 +48,10 @@
 #include <QOpenGLContext>
 #include <QOpenGLFunctions>
 #include <cmath>
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <hilog/log.h>
+#endif
 
 const QString Constellation::CONSTELLATION_TYPE = QStringLiteral("Constellation");
 
@@ -454,7 +458,7 @@ Vec3d Constellation::getJ2000EquatorialPos(const StelCore*) const
 	}
 }
 
-void Constellation::drawName(const Vec3d &xyName, StelPainter& sPainter) const
+void Constellation::drawName(const Vec3d &xyName, StelPainter& sPainter, int anchorIndex) const
 {
 	if (nameFader.getInterstate()==0.0f)
 		return;
@@ -464,7 +468,8 @@ void Constellation::drawName(const Vec3d &xyName, StelPainter& sPainter) const
 	{
 		QString name = getScreenLabel();
 		sPainter.setColor(labelColor, nameFader.getInterstate() * labelPresentation);
-		sPainter.drawText(static_cast<float>(xyName[0]), static_cast<float>(xyName[1]), name, 0., -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, false);
+		sPainter.queueSkyLabel(getLabelLayoutId(anchorIndex), static_cast<float>(xyName[0]), static_cast<float>(xyName[1]),
+			name, 99.f, 0, -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, getID());
 	}
 }
 
@@ -475,8 +480,8 @@ void Constellation::drawArtOptim(StelPainter& sPainter, const SphericalRegion& r
 		const float intensity = artFader.getInterstate() * artOpacity * artIntensityFovScale * artPresentation;
 		if (GETSTELMODULE(ConstellationMgr)->getFlagArt3d() && !modelIndices.isEmpty())
 		{
-			if (intensity > 0.0f && region.intersects(boundingCap))
-				drawArtModel(sPainter, intensity, obsVelocity);
+			if (modelIntensity() > 0.003f && region.intersects(boundingCap))
+				drawArtModel(sPainter, modelIntensity(), obsVelocity);
 			return;
 		}
 		if (artTexture && intensity > 0.0f && region.intersects(boundingCap))
@@ -502,17 +507,19 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 	stream.setFloatingPointPrecision(QDataStream::SinglePrecision);
 	quint32 vertexCount = 0, indexCount = 0;
 	stream >> vertexCount >> indexCount;
-	if (!vertexCount || vertexCount > 100000 || !indexCount || indexCount > 600000 || indexCount % 3 ||
+	if (!vertexCount || vertexCount > 65535 || !indexCount || indexCount > 600000 || indexCount % 3 ||
 	    file.size() != 12 + qint64(vertexCount) * 24 + qint64(indexCount) * 4) return;
 	QVector<Vec3d> positions;
 	QVector<Vec3f> colors;
-	QVector<quint32> indices;
+	QVector<unsigned short> indices;
 	positions.reserve(vertexCount);
 	colors.reserve(vertexCount);
 	indices.reserve(indexCount);
 	const double span = ((transform * Vec3d(width, height * 0.5, 0.)) -
 	                     (transform * Vec3d(0., height * 0.5, 0.))).norm();
 	const Vec3f light = normalize(Vec3f(-0.35f, 0.5f, 0.8f));
+	float minimumHorizontal = 1.f, maximumHorizontal = 0.f;
+	float minimumVertical = 1.f, maximumVertical = 0.f;
 	for (quint32 vertex = 0; vertex < vertexCount; ++vertex)
 	{
 		float horizontal, vertical, depth, normalX, normalY, normalZ;
@@ -521,6 +528,10 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 		    !std::isfinite(normalX) || !std::isfinite(normalY) || !std::isfinite(normalZ) ||
 		    horizontal < -0.1f || horizontal > 1.1f || vertical < -0.1f || vertical > 1.1f ||
 		    std::abs(depth) > 2.f) return;
+		minimumHorizontal = qMin(minimumHorizontal, horizontal);
+		maximumHorizontal = qMax(maximumHorizontal, horizontal);
+		minimumVertical = qMin(minimumVertical, vertical);
+		maximumVertical = qMax(maximumVertical, vertical);
 		Vec3d position = transform * Vec3d(horizontal * width, vertical * height, 0.);
 		position.normalize();
 		position *= 1.0 - qBound(-0.25, double(depth) * span * 0.25, 0.25);
@@ -543,62 +554,111 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 	modelPositions.swap(positions);
 	modelColors.swap(colors);
 	modelIndices.swap(indices);
+	modelCenter = normalize(transform * Vec3d(width * (minimumHorizontal + maximumHorizontal) * 0.5,
+	                                        height * (minimumVertical + maximumVertical) * 0.5, 0.));
+	modelRight = normalize(transform * Vec3d(width, height * 0.5, 0.) - transform * Vec3d(0., height * 0.5, 0.));
+	modelRight = normalize(modelRight - modelCenter * (modelRight * modelCenter));
+	modelUp = normalize(modelCenter ^ modelRight);
+	double minimumCosine = 1.;
+	double poseMargin = 0.;
 	for (const Vec3d& position : modelPositions)
+	{
 		boundingCap.d = qMin(boundingCap.d, boundingCap.n * normalize(position));
+		minimumCosine = qMin(minimumCosine, modelCenter * normalize(position));
+		poseMargin = qMax(poseMargin, std::asin(qMin(1., 2. * std::sin(0.40 * 0.5) * (position - modelCenter).norm() / position.norm())));
+	}
+	modelSpanDegrees = 2. * std::acos(qBound(-1., minimumCosine, 1.)) * 180. / M_PI;
+	boundingCap.d = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + poseMargin));
+	modelCachedYaw = 100.f;
+	modelCachedIntensity = -1.f;
+	modelProjected.resize(modelPositions.size());
+	modelValid.resize(modelPositions.size());
+	modelDrawColors.resize(modelPositions.size());
+	modelVisibleIndices.reserve(modelIndices.size());
+}
+
+float Constellation::modelIntensity() const
+{
+	return artFader.getInterstate() * artOpacity * artPresentation * modelZoomOpacity;
+}
+
+void Constellation::prepareModelPose() const
+{
+	if (modelCachedYaw == modelYaw && modelCachedPitch == modelPitch && modelCachedRoll == modelRoll) return;
+	const Mat4d rotation = Mat4d::rotation(modelCenter, modelRoll) * Mat4d::rotation(modelUp, modelYaw) * Mat4d::rotation(modelRight, modelPitch);
+	modelDirections.resize(modelPositions.size());
+	modelDepths.resize(modelPositions.size());
+	for (int index = 0; index < modelPositions.size(); ++index)
+	{
+		const Vec3d position = modelCenter + rotation * (modelPositions.at(index) - modelCenter);
+		modelDirections[index] = normalize(position);
+		modelDepths[index] = float((1. - position.norm()) * 2.);
+	}
+	modelCachedYaw = modelYaw;
+	modelCachedPitch = modelPitch;
+	modelCachedRoll = modelRoll;
 }
 
 void Constellation::drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity) const
 {
+#if defined(__OHOS__)
+	QElapsedTimer timing;
+	timing.start();
+#endif
 	const auto projector = painter.getProjector();
-	QVector<Vec3f> projected(modelPositions.size());
-	QVector<bool> valid(modelPositions.size());
+	prepareModelPose();
+	bool allValid = true;
 	for (int index = 0; index < modelPositions.size(); ++index)
 	{
-		const Vec3d& position = modelPositions.at(index);
-		Vec3d direction = normalize(position) + velocity;
+		Vec3d direction = modelDirections.at(index) + velocity;
 		direction.normalize();
-		valid[index] = projector->project(direction, projected[index]);
-		projected[index][2] = float((1.0 - position.norm()) * 2.0);
+		modelValid[index] = projector->project(direction, modelProjected[index]);
+		allValid = allValid && modelValid.at(index);
+		modelProjected[index][2] = modelDepths.at(index);
 	}
-	QVector<Vec3f> vertices;
-	QVector<Vec4f> colors;
-	vertices.reserve(modelIndices.size());
-	colors.reserve(modelIndices.size());
-	for (int offset = 0; offset < modelIndices.size(); offset += 3)
+	const bool seam = projector->hasProjectionDiscontinuity();
+	const QVector<unsigned short>* indices = &modelIndices;
+	if (!allValid || seam)
 	{
-		const quint32 first = modelIndices.at(offset), second = modelIndices.at(offset + 1), third = modelIndices.at(offset + 2);
-		if (!valid.at(first) || !valid.at(second) || !valid.at(third)) continue;
-		if (projector->intersectViewportDiscontinuity(modelPositions.at(first), modelPositions.at(second)) ||
-		     projector->intersectViewportDiscontinuity(modelPositions.at(second), modelPositions.at(third)) ||
-		     projector->intersectViewportDiscontinuity(modelPositions.at(third), modelPositions.at(first))) continue;
-		for (int corner = 0; corner < 3; ++corner)
+		modelVisibleIndices.clear();
+		for (int offset = 0; offset < modelIndices.size(); offset += 3)
 		{
-			const quint32 index = modelIndices.at(offset + corner);
-			vertices.append(projected.at(index));
-			const Vec3f& color = modelColors.at(index);
-			colors.append(Vec4f(color[0], color[1], color[2], intensity));
+			const auto first = modelIndices.at(offset), second = modelIndices.at(offset + 1), third = modelIndices.at(offset + 2);
+			if (!modelValid.at(first) || !modelValid.at(second) || !modelValid.at(third)) continue;
+			if (seam && (projector->intersectViewportDiscontinuity(modelDirections.at(first), modelDirections.at(second)) ||
+			    projector->intersectViewportDiscontinuity(modelDirections.at(second), modelDirections.at(third)) ||
+			    projector->intersectViewportDiscontinuity(modelDirections.at(third), modelDirections.at(first)))) continue;
+			modelVisibleIndices.append(first);
+			modelVisibleIndices.append(second);
+			modelVisibleIndices.append(third);
 		}
+		indices = &modelVisibleIndices;
 	}
-	if (vertices.isEmpty()) return;
+	if (indices->isEmpty()) return;
+	if (modelCachedIntensity != intensity)
+	{
+		for (int index = 0; index < modelColors.size(); ++index)
+		{
+			const Vec3f& color = modelColors.at(index);
+			modelDrawColors[index] = Vec4f(color[0], color[1], color[2], intensity);
+		}
+		modelCachedIntensity = intensity;
+	}
+#if defined(__OHOS__)
+	const qint64 projectionNs = timing.nsecsElapsed();
+#endif
 	auto* gl = QOpenGLContext::currentContext()->functions();
 	GLint oldDepthFunction;
-	GLboolean oldColorMask[4];
 	gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
-	gl->glGetBooleanv(GL_COLOR_WRITEMASK, oldColorMask);
 	painter.setCullFace(false);
 	painter.setDepthTest(true);
 	painter.setDepthMask(true);
 	gl->glClear(GL_DEPTH_BUFFER_BIT);
 	gl->glDepthFunc(GL_LEQUAL);
-	painter.setVertexPointer(3, GL_FLOAT, vertices.constData());
-	painter.setColorPointer(4, GL_FLOAT, colors.constData());
+	painter.setVertexPointer(3, GL_FLOAT, modelProjected.constData());
+	painter.setColorPointer(4, GL_FLOAT, modelDrawColors.constData());
 	painter.enableClientStates(true, false, true);
-	gl->glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	painter.drawFromArray(StelPainter::Triangles, vertices.size(), 0, false);
-	gl->glColorMask(oldColorMask[0], oldColorMask[1], oldColorMask[2], oldColorMask[3]);
-	painter.setDepthMask(false);
-	painter.setBlending(true, GL_SRC_ALPHA, GL_ONE);
-	painter.drawFromArray(StelPainter::Triangles, vertices.size(), 0, false);
+	painter.drawTrianglesWithDepthPrepass(indices->size(), indices->constData());
 	painter.enableClientStates(false);
 	painter.setDepthMask(true);
 	gl->glClear(GL_DEPTH_BUFFER_BIT);
@@ -607,6 +667,79 @@ void Constellation::drawArtModel(StelPainter& painter, float intensity, const Ve
 	gl->glDepthFunc(oldDepthFunction);
 	painter.setBlending(true, GL_ONE, GL_ONE);
 	painter.setCullFace(true);
+#if defined(__OHOS__)
+	static qint64 projectionTotal = 0, drawingTotal = 0;
+	static int draws = 0;
+	projectionTotal += projectionNs;
+	drawingTotal += timing.nsecsElapsed() - projectionNs;
+	if (++draws == 600)
+	{
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelModelPerf",
+			"draws=600 projectionAvg=%{public}.3fms drawingAvg=%{public}.3fms",
+			projectionTotal / 6.e8, drawingTotal / 6.e8);
+		projectionTotal = drawingTotal = 0;
+		draws = 0;
+	}
+#endif
+}
+
+bool Constellation::modelContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const
+{
+	if (modelIndices.isEmpty() || modelIntensity() <= 0.015f || !isSeasonallyVisible()) return false;
+	Vec3d direction;
+	if (!projector->unProject(point[0], point[1], direction)) return false;
+	double margin = 0.;
+	for (const Vec3d offset : {Vec3d(tolerance, tolerance, 0.), Vec3d(tolerance, -tolerance, 0.),
+	                         Vec3d(-tolerance, tolerance, 0.), Vec3d(-tolerance, -tolerance, 0.)})
+	{
+		Vec3d edge;
+		if (!projector->unProject(point[0] + offset[0], point[1] + offset[1], edge))
+		{
+			margin = M_PI;
+			break;
+		}
+		margin = qMax(margin, std::acos(qBound(-1., normalize(direction) * normalize(edge), 1.)));
+	}
+	const double expanded = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + margin));
+	if (normalize(direction - velocity) * boundingCap.n < expanded) return false;
+	prepareModelPose();
+	QVector<Vec3f> projected(modelDirections.size());
+	QVector<bool> valid(modelDirections.size());
+	for (int index = 0; index < modelDirections.size(); ++index)
+		valid[index] = projector->project(normalize(modelDirections.at(index) + velocity), projected[index]);
+	const bool seam = projector->hasProjectionDiscontinuity();
+	const auto edgeDistance = [&point](const Vec3f& start, const Vec3f& end)
+	{
+		const double horizontal = end[0] - start[0], vertical = end[1] - start[1];
+		const double length = horizontal * horizontal + vertical * vertical;
+		const double fraction = length > 0. ? qBound(0., ((point[0] - start[0]) * horizontal + (point[1] - start[1]) * vertical) / length, 1.) : 0.;
+		return std::hypot(point[0] - start[0] - fraction * horizontal, point[1] - start[1] - fraction * vertical);
+	};
+	const auto side = [&point](const Vec3f& start, const Vec3f& end)
+	{
+		return (end[0] - start[0]) * (point[1] - start[1]) - (end[1] - start[1]) * (point[0] - start[0]);
+	};
+	for (int offset = 0; offset < modelIndices.size(); offset += 3)
+	{
+		const auto first = modelIndices.at(offset), second = modelIndices.at(offset + 1), third = modelIndices.at(offset + 2);
+		if (!valid.at(first) || !valid.at(second) || !valid.at(third)) continue;
+		const Vec3f& firstPoint = projected.at(first);
+		const Vec3f& secondPoint = projected.at(second);
+		const Vec3f& thirdPoint = projected.at(third);
+		if (point[0] < std::min({firstPoint[0], secondPoint[0], thirdPoint[0]}) - tolerance ||
+		    point[0] > std::max({firstPoint[0], secondPoint[0], thirdPoint[0]}) + tolerance ||
+		    point[1] < std::min({firstPoint[1], secondPoint[1], thirdPoint[1]}) - tolerance ||
+		    point[1] > std::max({firstPoint[1], secondPoint[1], thirdPoint[1]}) + tolerance) continue;
+		if (seam && (projector->intersectViewportDiscontinuity(modelDirections.at(first), modelDirections.at(second)) ||
+		    projector->intersectViewportDiscontinuity(modelDirections.at(second), modelDirections.at(third)) ||
+		    projector->intersectViewportDiscontinuity(modelDirections.at(third), modelDirections.at(first)))) continue;
+		const double firstSide = side(firstPoint, secondPoint), secondSide = side(secondPoint, thirdPoint), thirdSide = side(thirdPoint, firstPoint);
+		if ((firstSide > 0. && secondSide > 0. && thirdSide > 0.) ||
+		    (firstSide < 0. && secondSide < 0. && thirdSide < 0.)) return true;
+		if (edgeDistance(firstPoint, secondPoint) <= tolerance || edgeDistance(secondPoint, thirdPoint) <= tolerance ||
+		    edgeDistance(thirdPoint, firstPoint) <= tolerance) return true;
+	}
+	return false;
 }
 
 // Draw the art texture

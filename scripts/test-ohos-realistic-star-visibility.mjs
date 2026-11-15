@@ -54,7 +54,17 @@ const setter = new Function('enabled', `with (this) ${body(drawerSource, 'void S
   .replace('StelApp::immediateSave', 'save')
   .replace('emit flagRealisticStarVisibilityChanged', 'notify')}`);
 
-function makeDrawer({ world = 40000, realistic = true, fov = 60, display = 50, maxDisplay = 100, nelm = 6.3 } = {}) {
+const updateBody = body(drawerSource, 'void StelSkyDrawer::update(');
+const photometryStart = updateBody.indexOf('float fov = static_cast<float>(core->getMovementMgr()->getCurrentFov());');
+assert.ok(photometryStart > 0, 'update photometry boundary must exist');
+const contextSetup = updateBody.slice(0, photometryStart);
+assert.match(contextSetup, /atmosphereVisualStrength = AtmosphereVivid::visualStrength\(/);
+assert.match(contextSetup, /visualExtinction\.setExtinctionCoefficient\(extinction\.getExtinctionCoefficient\(\) \* atmosphereVisualStrength\);/);
+const updatePhotometry = new Function(`with (this) { ${translate(updateBody.slice(photometryStart))}`);
+
+function makeDrawer({ world = 40000, realistic = true, fov = 60, display = 50, maxDisplay = 100, nelm = 6.3,
+  atmosphereVisualStrength = 1, hasAtmosphere = true } = {}) {
+  assert.ok(Number.isFinite(atmosphereVisualStrength) && atmosphereVisualStrength >= 0 && atmosphereVisualStrength <= 1);
   const displayLog = Math.log10(display);
   const tone = {
     Lwa: world, Lda: display, alphaWa: 0, betaWa: 0,
@@ -75,13 +85,13 @@ function makeDrawer({ world = 40000, realistic = true, fov = 60, display = 50, m
   };
   setWorld.call(tone, world);
   const state = {
-    eye: tone, flagRealisticStarVisibility: realistic,
+    eye: tone, flagRealisticStarVisibility: realistic, atmosphereVisualStrength,
     core: { getMovementMgr: () => ({ getCurrentFov: () => fov }), getJD: () => 2461356 },
     maxAdaptFov: 70, minAdaptFov: 0.1, lightPollutionLuminance: 0.001,
     inScale: 1, lnfovFactor: 0, starRelativeScale: 1, starAbsoluteScaleF: 1,
     starLinearScale: 0, limitMagnitude: 0, starLimitMagnitude: 0, limitLuminance: 0,
     screenScale: 1, MAX_LINEAR_RADIUS: 8, EYE_RESOLUTION: 0.25,
-    getFlagHasAtmosphere: () => true, luminanceToNELM: () => nelm,
+    getFlagHasAtmosphere: () => hasAtmosphere, luminanceToNELM: () => nelm,
     setInputScale(value) { this.inScale = value; },
     computeRCMag: method(drawerSource, 'bool StelSkyDrawer::computeRCMag(', 'mag', 'rcMag'),
     computeStarRCMag: method(drawerSource, 'bool StelSkyDrawer::computeStarRCMag(', 'mag', 'rcMag'),
@@ -89,7 +99,7 @@ function makeDrawer({ world = 40000, realistic = true, fov = 60, display = 50, m
     pointSourceMagToLnLuminance: method(drawerSource, 'float StelSkyDrawer::pointSourceMagToLnLuminance(', 'mag'),
     computeLimitMagnitude: method(drawerSource, 'float StelSkyDrawer::computeLimitMagnitude(', 'forStars'),
     computeLimitLuminance: method(drawerSource, 'float StelSkyDrawer::computeLimitLuminance('),
-    update: method(drawerSource, 'void StelSkyDrawer::update('),
+    update: updatePhotometry,
     getStarLimitMagnitude: method(drawerHeader, 'float getStarLimitMagnitude('),
     save: () => {}, notify: () => {}, setFlagRealisticStarVisibility: setter
   };
@@ -114,6 +124,44 @@ test('realistic mode retains the original point-source result across lighting an
       }
       assert.equal(drawer.getStarLimitMagnitude(), drawer.limitMagnitude);
     }
+  }
+});
+test('full vivid-night strength uses atmosphere-off photometry at the same eye adaptation', () => {
+  for (const realistic of [true, false]) {
+    for (const fov of [5, 60, 120]) {
+      for (const nelm of [3, 6.3, 8]) {
+        const options = { world: 0.001, realistic, fov, nelm };
+        const night = makeDrawer({ ...options, atmosphereVisualStrength: 0 });
+        const atmosphereOff = makeDrawer({ ...options, hasAtmosphere: false });
+        assert.equal(night.inScale, 2.45);
+        assert.equal(night.eye.inputScale, atmosphereOff.eye.inputScale);
+        assert.equal(night.limitMagnitude, atmosphereOff.limitMagnitude);
+        assert.equal(night.starLimitMagnitude, atmosphereOff.starLimitMagnitude);
+        assert.equal(night.limitLuminance, atmosphereOff.limitLuminance);
+        for (const stars of [true, false]) {
+          for (const magnitude of [-6, 0, 2, 6, 10, 15]) {
+            assert.deepEqual(sample(night, magnitude, stars), sample(atmosphereOff, magnitude, stars));
+          }
+        }
+      }
+    }
+  }
+});
+test('twilight strength blends input scale and repeated updates restore daytime photometry', () => {
+  for (const nelm of [3, 6.3, 8]) {
+    const drawer = makeDrawer({ nelm });
+    const atmosphericScale = 3.3541 * Math.exp(-0.404 * (16.5 - 2 * nelm));
+    const daytime = sample(drawer, 2);
+    const initialEye = { ...drawer.eye };
+    for (const strength of [1, 0.75, 0.5, 0.25, 0, 0, 0.5, 1]) {
+      drawer.atmosphereVisualStrength = strength;
+      drawer.update();
+      close(drawer.inScale, 2.45 + strength * (atmosphericScale - 2.45));
+      close(drawer.eye.inputScale, drawer.inScale);
+      assert.equal(drawer.eye.Lwa, initialEye.Lwa);
+    }
+    assert.deepEqual(drawer.eye, initialEye);
+    assert.deepEqual(sample(drawer, 2), daytime);
   }
 });
 test('teaching mode shows daytime stars using the existing night tone model', () => {
@@ -225,7 +273,9 @@ const filterCandidates = new Function('core', 'candidates', translate(objectMana
   .replace('QList<StelObjectP> tmp;', 'const tmp = [];')
   .replaceAll('tmp.append', 'tmp.push')
   .replaceAll('QLatin1String', 'String')) + '\nreturn tmp;');
-const candidate = (type, priority) => ({ getType: () => type, getSelectPriority: () => priority });
+const candidate = (type, priority, pickable = true) => ({
+  getType: () => type, getSelectPriority: () => priority, getPickState: () => ({ pickable })
+});
 function pick(drawer, candidates, customLimit) {
   drawer.getFlagStarMagnitudeLimit = () => customLimit !== undefined;
   drawer.getCustomStarMagnitudeLimit = () => customLimit;
@@ -250,6 +300,17 @@ test('stellar picking respects both user cutoff and the teaching visibility cuto
   const extincted = candidate('Star', drawer.getStarLimitMagnitude() + 1);
   assert.deepEqual(pick(drawer, [bright, faint, extincted], 2), [bright]);
   assert.deepEqual(pick(drawer, [bright, faint, extincted], 20), [bright, faint]);
+});
+
+test('render-hidden candidates remain unpickable even when their magnitude passes', () => {
+  for (const realistic of [true, false]) {
+    const drawer = makeDrawer({ realistic });
+    for (const type of ['Star', 'Planet', 'Nebula', 'Satellite']) {
+      const visible = candidate(type, -10);
+      const hidden = candidate(type, -10, false);
+      assert.deepEqual(pick(drawer, [visible, hidden]), [visible]);
+    }
+  }
 });
 
 test('nonstellar thresholds and realistic-mode selection retain the original filter exactly', () => {

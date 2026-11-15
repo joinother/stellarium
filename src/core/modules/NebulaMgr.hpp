@@ -32,6 +32,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <string>
 
 class StelTranslator;
 class StelSkyCulture;
@@ -341,6 +342,29 @@ class NebulaMgr : public StelObjectModule
 		   )
 
 public:
+	struct PassDrawStats
+	{
+		unsigned int candidates = 0;
+		unsigned int accepted = 0;
+		unsigned int drawn = 0;
+		float alphaSum = 0.f;
+		float alphaMax = 0.f;
+	};
+	struct DrawStats
+	{
+		unsigned int visited = 0;
+		unsigned int eligible = 0;
+		unsigned int projected = 0;
+		float maxMagHints = 0.f;
+		float maxMagLabels = 0.f;
+		float angularSizeLimit = 0.f;
+		float layerOpacity = 0.f;
+		PassDrawStats hints;
+		PassDrawStats labels;
+		PassDrawStats outlines;
+	};
+	const DrawStats& getDrawStats() const { return drawStats; }
+
 	NebulaMgr();
 	~NebulaMgr() override;
 
@@ -1017,6 +1041,21 @@ private slots:
 	void setFontSizeFromApp(int size){fontSize = size;}
 
 private:
+	friend struct DrawNebulaFuncObject;
+	struct DrawCandidate
+	{
+		Nebula* nebula = nullptr;
+		Vec3d direction;
+		float labelAlpha = 0.f;
+		float hintAlpha = 0.f;
+		float outlineAlpha = 0.f;
+		float labelShift = 0.f;
+		QString label;
+		std::string labelKey;
+		std::string hintKey;
+	};
+	std::vector<DrawCandidate> drawCandidates;
+	DrawStats drawStats;
 	//! Search for a nebula object by name, e.g. M83, NGC 1123, IC 1234.
 	NebulaP searchForCommonName(const QString& name);
 

@@ -315,7 +315,7 @@ Vec4d StelObject::getRTSTime(const StelCore *core, const double altitude) const
 
 float StelObject::getSelectPriority(const StelCore* core) const
 {
-	return qMin(getVMagnitudeWithExtinction(core), 15.0f);
+	return qMin(getVMagnitudeWithVisualExtinction(core), 15.0f);
 }
 
 StelObjectPickState StelObject::getPickState(const StelCore* core) const
@@ -330,7 +330,7 @@ StelObjectPickState StelObject::getPickState(const StelCore* core) const
 	direction.normalize();
 	state.landscapeVisible = core->getVisibleSkyArea().contains(direction);
 	state.visualRadiusRad = qMax(0.0, getAngularRadius(core) * M_PI / 180.0);
-	const float mag = getVMagnitudeWithExtinction(core);
+	const float mag = getVMagnitudeWithVisualExtinction(core);
 	state.hasMagnitude = std::isfinite(mag) && mag < 90.f;
 	if (state.hasMagnitude)
 		state.magnitude = mag;
@@ -347,6 +347,16 @@ float StelObject::getVMagnitudeWithExtinction(const StelCore* core, const float 
 	// without the test, planets flicker stupidly in fullsky atmosphere-less view.
 	if (core->getSkyDrawer()->getFlagHasAtmosphere())
 		core->getSkyDrawer()->getExtinction().forward(altAzPos, &vMag);
+	return vMag;
+}
+
+float StelObject::getVMagnitudeWithVisualExtinction(const StelCore* core, const float knownVMag, const float& magOffset) const
+{
+	Vec3d altAzPos = getAltAzPosGeometric(core);
+	altAzPos.normalize();
+	float vMag = (knownVMag>-1000.f ? knownVMag + magOffset : getVMagnitude(core) + magOffset);
+	if (core->getSkyDrawer()->getFlagHasAtmosphere())
+		core->getSkyDrawer()->getVisualExtinction().forward(altAzPos, &vMag);
 	return vMag;
 }
 

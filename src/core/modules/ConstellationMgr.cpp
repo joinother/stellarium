@@ -21,6 +21,7 @@
 
 #include "ConstellationMgr.hpp"
 #include "Constellation.hpp"
+#include "ConstellationPresentation.hpp"
 #include "StarMgr.hpp"
 #include "StelUtils.hpp"
 #include "StelApp.hpp"
@@ -47,6 +48,10 @@
 #include <QStringList>
 #include <QDir>
 #include <QFont>
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <hilog/log.h>
+#endif
 
 // constructor which loads all data from appropriate files
 ConstellationMgr::ConstellationMgr(StarMgr *_hip_stars)
@@ -703,14 +708,27 @@ void ConstellationMgr::draw(StelCore* core)
 	QFont font=QGuiApplication::font();
 	font.setPixelSize(fontSize);
 	sPainter.setFont(font);
+#if defined(__OHOS__)
+	QElapsedTimer phaseTimer;
+	phaseTimer.start();
+#endif
 	drawLines(sPainter, core);
+#if defined(__OHOS__)
+	const qint64 lineNs = phaseTimer.nsecsElapsed();
+#endif
 	Vec3d vel(0.);
 	if (core->getUseAberration())
 	{
 		vel = core->getAberrationVec(core->getJDE());
 	}
 	drawNames(sPainter, vel);
+#if defined(__OHOS__)
+	const qint64 nameNs = phaseTimer.nsecsElapsed();
+#endif
 	drawArt(sPainter, vel);
+#if defined(__OHOS__)
+	const qint64 artNs = phaseTimer.nsecsElapsed();
+#endif
 	drawBoundaries(sPainter, vel);
 	drawHulls(sPainter, vel);
 	if (core->getCurrentPlanet()->getEnglishName()=="Earth")
@@ -718,6 +736,22 @@ void ConstellationMgr::draw(StelCore* core)
 		drawZodiac(sPainter, vel);
 		drawLunarSystem(sPainter, vel);
 	}
+#if defined(__OHOS__)
+	static qint64 lineTotal = 0, nameTotal = 0, artTotal = 0, otherTotal = 0;
+	static int frames = 0;
+	lineTotal += lineNs;
+	nameTotal += nameNs - lineNs;
+	artTotal += artNs - nameNs;
+	otherTotal += phaseTimer.nsecsElapsed() - artNs;
+	if (++frames == 120)
+	{
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelConstellationPerf",
+			"frames=120 lines=%{public}.3fms names=%{public}.3fms art=%{public}.3fms other=%{public}.3fms",
+			lineTotal / 1.2e8, nameTotal / 1.2e8, artTotal / 1.2e8, otherTotal / 1.2e8);
+		lineTotal = nameTotal = artTotal = otherTotal = 0;
+		frames = 0;
+	}
+#endif
 }
 
 // Draw constellations art textures
@@ -777,7 +811,21 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 		item["modelReady"] = !constellation->modelIndices.isEmpty();
 		item["seasonallyVisible"] = constellation->isSeasonallyVisible();
 		item["fader"] = constellation->artFader.getInterstate();
-		item["effectiveIntensity"] = constellation->artFader.getInterstate() * constellation->artOpacity * Constellation::artIntensityFovScale * constellation->artPresentation;
+		item["effectiveIntensity"] = art3dDisplayed && !constellation->modelIndices.isEmpty() ? constellation->modelIntensity() :
+			constellation->artFader.getInterstate() * constellation->artOpacity * Constellation::artIntensityFovScale * constellation->artPresentation;
+		item["modelZoomOpacity"] = constellation->modelZoomOpacity;
+		item["modelSpanDegrees"] = constellation->modelSpanDegrees;
+		item["modelYawDegrees"] = constellation->modelYaw * 180. / M_PI;
+		item["modelPitchDegrees"] = constellation->modelPitch * 180. / M_PI;
+		item["modelRollDegrees"] = constellation->modelRoll * 180. / M_PI;
+		item["centerArrivalActive"] = constellation->modelArrivalElapsed < 1.6;
+		item["emphasized"] = constellation->getShortName() == emphasizedModelId;
+		if (core && !constellation->modelIndices.isEmpty())
+		{
+			const Vec3d direction = core->j2000ToAltAz(constellation->modelCenter, StelCore::RefractionOff);
+			item["modelCenterAzimuth"] = StelUtils::fmodpos(std::atan2(direction[1], direction[0]) * 180. / M_PI, 360.);
+			item["modelCenterAltitude"] = std::asin(qBound(-1., direction[2], 1.)) * 180. / M_PI;
+		}
 		item["presentationWeight"] = constellation->artPresentation;
 		item["intersectsViewport"] = region && region->intersects(constellation->boundingCap);
 
@@ -813,7 +861,7 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 		item["renderReady"] = item.value("renderMode").toString() == "model3d" || item.value("ready").toBool();
 		const bool visible = item.value("seasonallyVisible").toBool() &&
 		                     item.value("intersectsViewport").toBool() &&
-		                     item.value("effectiveIntensity").toDouble() > 0.0;
+		                     item.value("effectiveIntensity").toDouble() > (item.value("renderMode").toString() == "model3d" ? 0.003 : 0.0);
 		item["visible"] = visible;
 		if (visible) ++visibleCount;
 		items.append(item);
@@ -862,6 +910,8 @@ void ConstellationMgr::drawLines(StelPainter& sPainter, const StelCore* core) co
 void ConstellationMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity) const
 {
 	sPainter.setBlending(true);
+	const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Constellation");
+	sPainter.beginSkyLabels(QStringLiteral("constellations"), selected.isEmpty() ? QString() : selected.first()->getID());
 	for (auto* constellation : constellations)
 	{
 		for (int i=0; i<constellation->XYZname.size(); ++i)
@@ -874,9 +924,10 @@ void ConstellationMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity
 			Vec3d xyName;
 			// Check if in the field of view
 			if (sPainter.getProjector()->projectCheck(XYZname, xyName))
-				constellation->drawName(xyName, sPainter);
+				constellation->drawName(xyName, sPainter, i);
 		}
 	}
+	sPainter.flushSkyLabels();
 }
 
 Constellation* ConstellationMgr::findFromAbbreviation(const QString& abbreviation) const
@@ -1073,15 +1124,67 @@ void ConstellationMgr::update(double deltaTime)
 	}
 	const bool hasFocus = focus != nullptr;
 	const float blend = 1.f - std::exp(-float(qMax(0., deltaTime)) / 0.18f);
+	const Vec3d viewDirection = normalize(core->getMovementMgr()->getViewDirectionJ2000());
+	const Constellation* emphasized = nullptr;
+	const Constellation* previousEmphasis = nullptr;
+	double bestAngle = M_PI;
+	double previousAngle = M_PI;
+	if (art3dDisplayed)
+		for (const auto* constellation : std::as_const(constellations))
+		{
+			if (constellation->modelIndices.isEmpty() || !constellation->isSeasonallyVisible() ||
+			    constellation->artFader.getInterstate() <= 0.f ||
+			    ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) <= 0.02)
+				continue;
+			const double cosine = qBound(-1., constellation->modelCenter * viewDirection, 1.);
+			if (ConstellationPresentation::centerWeight(cosine, fov) <= 0.1) continue;
+			const double angle = std::acos(cosine);
+			if (angle < bestAngle)
+			{
+				bestAngle = angle;
+				emphasized = constellation;
+			}
+			if (constellation->getShortName() == emphasizedModelId)
+			{
+				previousEmphasis = constellation;
+				previousAngle = angle;
+			}
+		}
+	if (previousEmphasis && previousAngle <= bestAngle + 2. * M_PI / 180.) emphasized = previousEmphasis;
+	if (hasFocus) emphasized = focus;
+	emphasizedModelId = emphasized ? emphasized->getShortName() : QString();
+	const auto approach = [blend](float& value, float target)
+	{
+		value += (target - value) * blend;
+		if (std::abs(target - value) < 0.00001f) value = target;
+	};
 	for (auto* constellation : std::as_const(constellations))
 	{
 		const bool focused = focus == constellation;
-		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.025f : 0.16f));
-		const float lineTarget = !art3dDisplayed ? 1.f : (focused ? 0.7f : (hasFocus ? 0.08f : 0.25f));
-		const float labelTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.4f : 0.65f));
-		constellation->artPresentation += (artTarget - constellation->artPresentation) * blend;
-		constellation->linePresentation += (lineTarget - constellation->linePresentation) * blend;
-		constellation->labelPresentation += (labelTarget - constellation->labelPresentation) * blend;
+		const bool hasModel = !constellation->modelIndices.isEmpty();
+		const Vec3d center = hasModel ? constellation->modelCenter : normalize(constellation->getJ2000EquatorialPos(core));
+		const float central = float(ConstellationPresentation::centerWeight(center * viewDirection, fov));
+		const bool leading = emphasized == constellation;
+		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : central * (hasFocus ? 0.06f : leading ? 0.85f : 0.14f));
+		const float lineTarget = !art3dDisplayed ? 1.f : (focused ? 0.7f : (hasFocus ? 0.08f : 0.12f + central * 0.5f));
+		const float labelTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.4f : 0.4f + central * 0.6f));
+		approach(constellation->artPresentation, artTarget);
+		approach(constellation->linePresentation, lineTarget);
+		approach(constellation->labelPresentation, labelTarget);
+		if (hasModel)
+		{
+			ConstellationPresentation::CenterArrival arrival{constellation->modelArrivalArmed, constellation->modelArrivalElapsed};
+			const bool canPresent = art3dDisplayed && artDisplayed && leading && constellation->isSeasonallyVisible() &&
+				constellation->artFader.getInterstate() > 0.f &&
+				ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) > 0.02;
+			const float turn = float(arrival.update(deltaTime, central, canPresent));
+			constellation->modelArrivalArmed = arrival.armed;
+			constellation->modelArrivalElapsed = arrival.elapsed;
+			approach(constellation->modelZoomOpacity, float(ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees)));
+			approach(constellation->modelYaw, float(qBound(-0.06, (viewDirection * constellation->modelRight) * 0.12, 0.06)) + turn * 0.18f);
+			approach(constellation->modelPitch, float(qBound(-0.045, -(viewDirection * constellation->modelUp) * 0.10, 0.045)) - turn * 0.065f);
+			approach(constellation->modelRoll, turn * 0.04f);
+		}
 		constellation->update(delta);
 	}
 	zodiacFader.update(delta);

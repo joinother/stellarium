@@ -112,7 +112,7 @@ public:
 	//! Pure virtual method. See subclass implementation.
 	virtual void draw(StelPainter* sPainter, int index,bool is_inside,
 					  const RCMag* rcmag_table, int limitMagIndex, StelCore* core,
-					  int maxMagStarName, float names_brightness,
+					  float maxMagStarName, float names_brightness,
 					  const QVector<SphericalCap>& boundingCaps,
 					  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n) const = 0;
 
@@ -185,7 +185,7 @@ protected:
 	//! @param withCommonNameI18n Use commonNameI18n when there is no cultural name
 	void draw(StelPainter* sPainter, int index, bool isInsideViewport,
 		  const RCMag *rcmag_table, int limitMagIndex, StelCore* core,
-		  int maxMagStarName, float names_brightness,
+		  float maxMagStarName, float names_brightness,
 		  const QVector<SphericalCap>& boundingCaps,
 		  const bool withAberration, const Vec3d vel, const double withParallax, const Vec3d diffPos, const bool withCommonNameI18n) const override;
 

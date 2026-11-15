@@ -25,11 +25,41 @@
 #include "StelObject.hpp"
 #include "StelTranslator.hpp"
 #include "StelTextureTypes.hpp"
+#include "MarkerVisibility.hpp"
 
 #include <QString>
 
 class StelPainter;
 class QDataStream;
+
+namespace NebulaDrawing
+{
+struct Opacity
+{
+	float hints;
+	float labels;
+	float outlines;
+};
+
+inline Opacity opacity(float magnitude, float maxHints, float maxLabels,
+                      float majorAxis, float angularSizeLimit, bool useOutlines)
+{
+	const float hintOpacity = MarkerVisibility::magnitudeOpacity(magnitude, maxHints);
+	const float sizeOpacity = majorAxis == 0.f ? 1.f
+		: MarkerVisibility::magnitudeOpacity(angularSizeLimit, majorAxis, angularSizeLimit * 0.25f);
+	const float candidateOpacity = std::max(sizeOpacity, hintOpacity);
+	return {useOutlines ? 0.f : hintOpacity,
+	        std::min(candidateOpacity, MarkerVisibility::magnitudeOpacity(magnitude, maxLabels)),
+	        useOutlines ? std::min(candidateOpacity, MarkerVisibility::magnitudeOpacity(magnitude - 3.f, maxHints)) : 0.f};
+}
+
+inline bool canBatchArc(float startX, float startY, float endX, float endY)
+{
+	const float distance = std::sqrt((startX * startX + startY * startY) * (endX * endX + endY * endY));
+	const float cosine = (startX * endX + startY * endY) / distance;
+	return distance > 0.f && distance <= 50.f * 50.f && cosine <= -0.999f;
+}
+}
 
 // This only draws nebula icons. For the DSO images, see StelSkylayerMgr and StelSkyImageTile.
 class Nebula : public StelObject
@@ -284,6 +314,16 @@ public:
 		float visibilityLevel = 99.f;
 	};
 	RenderState getRenderState(float maxMagHints, float maxMagLabels) const;
+	struct DrawVisibility
+	{
+		float labelAlpha = 0.f;
+		float hintAlpha = 0.f;
+		float outlineAlpha = 0.f;
+	};
+	DrawVisibility getDrawVisibility() const
+	{
+		return visibilityFrame == drawFrame ? drawVisibility : DrawVisibility{};
+	}
 
 	StelObjectPickState getPickState(const StelCore* core) const override;
 
@@ -298,6 +338,9 @@ protected:
 
 private:
 	friend struct DrawNebulaFuncObject;
+	static quint64 drawFrame;
+	quint64 visibilityFrame = 0;
+	DrawVisibility drawVisibility;
 
 	//! Translate nebula name using the passed translator
 	void translateName(const StelTranslator& trans)
@@ -316,14 +359,14 @@ private:
 
 	void readDSO(QDataStream& in);
 
-	void drawLabel(StelPainter& sPainter, float maxMagLabel) const;
-	void drawHints(StelPainter& sPainter, float maxMagHints, StelCore *core) const;
-	void drawOutlines(StelPainter& sPainter, float maxMagHints) const;
-	void renderDarkNebulaMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color) const;
-	void renderRoundMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool crossed) const;
-	void renderEllipticMarker(StelPainter& sPainter, float x, float y, float size, float aspectRatio, float angle, Vec3f color) const;
-	void renderMarkerRoundedRect(StelPainter& sPainter, float x, float y, float size, Vec3f color) const;
-	void renderMarkerPointedCircle(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool insideRect) const;
+	void drawLabel(StelPainter& sPainter, float alpha, const QString& text, float shift) const;
+	void drawHints(StelPainter& sPainter, float alpha, const Vec3d& direction) const;
+	void drawOutlines(StelPainter& sPainter, float alpha, const Vec3d& aberration, bool useAberration) const;
+	void renderDarkNebulaMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color, float alpha) const;
+	void renderRoundMarker(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool crossed, float alpha) const;
+	void renderEllipticMarker(StelPainter& sPainter, float x, float y, float size, float aspectRatio, float angle, Vec3f color, float alpha) const;
+	void renderMarkerRoundedRect(StelPainter& sPainter, float x, float y, float size, Vec3f color, float alpha) const;
+	void renderMarkerPointedCircle(StelPainter& sPainter, float x, float y, float size, Vec3f color, bool insideRect, float alpha) const;
 
 	bool objectInDisplayedType() const;
 

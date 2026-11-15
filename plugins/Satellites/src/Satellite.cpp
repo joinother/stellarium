@@ -18,6 +18,7 @@
  */
 
 #include "Satellite.hpp"
+#include "MarkerVisibility.hpp"
 
 #include "StelApp.hpp"
 #include "StelCore.hpp"
@@ -1418,7 +1419,7 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 	if (!st.altitudeFilterPass)
 		return st;
 
-	st.magSat = getVMagnitudeWithExtinction(core);
+	st.magSat = getVMagnitudeWithVisualExtinction(core);
 	st.limitMag = core->getSkyDrawer() ? core->getSkyDrawer()->getLimitMagnitude() : 0.f;
 	st.magnitudeFilterPass = !flagVFMagnitude
 		|| ((stdMag < 99. || RCS > 0.) && (maxVFMagnitude <= st.magSat && st.magSat <= minVFMagnitude));
@@ -1508,7 +1509,7 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 				{
 					if (!core->isBrightDaylight()) // crossing of the Moon
 						painter.setColor(color, hintBrightness);
-					painter.drawText(XYZ, name, 0, 10, 10, false);
+					painter.queueSkyLabel(id, XYZ, name, st.magSat, 0, 10, 10);
 				}
 			}
 			else
@@ -1530,14 +1531,15 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 
 				if (st.labelDrawn)
 				{
+					const float labelOpacity = hintBrightness * MarkerVisibility::magnitudeOpacity(st.txtMag, st.limitMag);
 					if (visibility == gSatWrapper::VISIBLE)
-						painter.setColor(hintColor, hintBrightness);
+						painter.setColor(hintColor, labelOpacity);
 					else if (visibility == gSatWrapper::PENUMBRAL)
-						painter.setColor(0.5f*hintColor, hintBrightness);
+						painter.setColor(0.5f*hintColor, labelOpacity);
 					else
-						painter.setColor(invisibleSatelliteColor, hintBrightness);
+						painter.setColor(invisibleSatelliteColor, labelOpacity);
 
-					painter.drawText(XYZ, name, 0, 10, 10, false);
+					painter.queueSkyLabel(id, XYZ, name, st.magSat, 0, 10, 10);
 				}
 			}
 		}
@@ -1551,7 +1553,7 @@ void Satellite::draw(StelCore* core, StelPainter& painter)
 				painter.setColor(transitSatelliteColor, 1.f);
 
 			if (st.labelDrawn)
-				painter.drawText(XYZ, name, 0, 10, 10, false);
+				painter.queueSkyLabel(id, XYZ, name, st.magSat, 0, 10, 10);
 
 			painter.drawSprite2dMode(XYZ, 11);
 		}

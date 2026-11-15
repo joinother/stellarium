@@ -102,6 +102,95 @@
 #include <QRegularExpression>
 #include <QRandomGenerator>
 #include <QFontDatabase>
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <QHash>
+#include <hilog/log.h>
+
+namespace
+{
+struct OhosTimingAggregate
+{
+	qint64 totalNs = 0;
+	qint64 maxNs = 0;
+	int calls = 0;
+
+	void add(qint64 elapsedNs)
+	{
+		totalNs += elapsedNs;
+		maxNs = qMax(maxNs, elapsedNs);
+		++calls;
+	}
+};
+
+struct OhosPhaseProfile
+{
+	QElapsedTimer frameTimer;
+	OhosTimingAggregate total;
+	OhosTimingAggregate core;
+	QHash<QString, OhosTimingAggregate> modules;
+	qint64 coreFrameNs = 0;
+
+	void beginFrame()
+	{
+		coreFrameNs = 0;
+		frameTimer.start();
+	}
+
+	template<typename Function>
+	void measureCore(Function&& function)
+	{
+		QElapsedTimer timer;
+		timer.start();
+		function();
+		coreFrameNs += timer.nsecsElapsed();
+	}
+
+	template<typename Function>
+	void measureModule(StelModule* module, Function&& function)
+	{
+		QElapsedTimer timer;
+		timer.start();
+		function();
+		const qint64 elapsedNs = timer.nsecsElapsed();
+		modules[module->objectName()].add(elapsedNs);
+	}
+
+	void endFrame(const char* phase)
+	{
+		total.add(frameTimer.nsecsElapsed());
+		core.add(coreFrameNs);
+		if (total.calls != 120)
+			return;
+
+		QString slowestName = QStringLiteral("none");
+		OhosTimingAggregate slowest;
+		for (auto module = modules.cbegin(); module != modules.cend(); ++module)
+		{
+			if (module.value().totalNs > slowest.totalNs)
+			{
+				slowestName = module.key();
+				slowest = module.value();
+			}
+		}
+		const QByteArray moduleName = slowestName.toUtf8();
+		const double windowScale = 1.e6 * total.calls;
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelModulePerf",
+			"phase=%{public}s frames=%{public}d clock=cpuWall totalAvg=%{public}.3fms totalMax=%{public}.3fms coreAvg=%{public}.3fms coreMax=%{public}.3fms slowest=%{public}s moduleAvg=%{public}.3fms moduleMax=%{public}.3fms moduleCalls=%{public}d",
+			phase, total.calls, total.totalNs / windowScale, total.maxNs / 1.e6,
+			core.totalNs / windowScale, core.maxNs / 1.e6, moduleName.constData(),
+			slowest.totalNs / windowScale, slowest.maxNs / 1.e6, slowest.calls);
+		total = {};
+		core = {};
+		for (auto module = modules.begin(); module != modules.end(); ++module)
+			module.value() = {};
+	}
+};
+
+OhosPhaseProfile s_ohosUpdateProfile;
+OhosPhaseProfile s_ohosDrawProfile;
+}
+#endif
 #if !QT_CONFIG(opengles2)
 # include <QOpenGLFunctions_3_3_Core>
 #endif
@@ -844,6 +933,9 @@ void StelApp::update(double deltaTime)
 	if (!initialized)
 		return;
 
+#if defined(__OHOS__)
+	s_ohosUpdateProfile.beginFrame();
+#endif
 	++frame;
 	frameTimeAccum+=deltaTime;
 	if (frameTimeAccum > 1.)
@@ -854,17 +946,30 @@ void StelApp::update(double deltaTime)
 		frameTimeAccum=0.;
 	}
 		
+#if defined(__OHOS__)
+	s_ohosUpdateProfile.measureCore([&]() { core->update(deltaTime); });
+#else
 	core->update(deltaTime);
+#endif
 
 	moduleMgr->update();
 
 	// Send the event to every StelModule
-	for (auto* i : moduleMgr->getCallOrders(StelModule::ActionUpdate))
+	for (auto* module : moduleMgr->getCallOrders(StelModule::ActionUpdate))
 	{
-		i->update(deltaTime);
+#if defined(__OHOS__)
+		s_ohosUpdateProfile.measureModule(module, [&]() { module->update(deltaTime); });
+#else
+		module->update(deltaTime);
+#endif
 	}
 
+#if defined(__OHOS__)
+	s_ohosUpdateProfile.measureModule(stelObjectMgr, [&]() { stelObjectMgr->update(deltaTime); });
+	s_ohosUpdateProfile.endFrame("update");
+#else
 	stelObjectMgr->update(deltaTime);
+#endif
 }
 
 void StelApp::prepareRenderBuffer()
@@ -1083,7 +1188,11 @@ void StelApp::highGraphicsModeDraw()
 
 	for(auto* module : modules)
 	{
+#if defined(__OHOS__)
+		s_ohosDrawProfile.measureModule(module, [&]() { module->draw(core); });
+#else
 		module->draw(core);
+#endif
 	}
 
 	if(sceneMultisampledFBO)
@@ -1135,6 +1244,10 @@ void StelApp::draw()
 {
 	if (!initialized)
 		return;
+#if defined(__OHOS__)
+	s_ohosDrawProfile.beginFrame();
+#endif
+	StelPainter::beginSkyLabelFrame();
 	textureMgr->beginFrame();
 
 	//find out which framebuffer is the current one
@@ -1145,7 +1258,11 @@ void StelApp::draw()
 	prepareRenderBuffer();
 	currentFbo = renderBuffer ? renderBuffer->handle() : static_cast<GLuint>(drawFbo);
 
+#if defined(__OHOS__)
+	s_ohosDrawProfile.measureCore([&]() { core->preDraw(); });
+#else
 	core->preDraw();
+#endif
 
 	if(StelMainView::getInstance().getGLInformation().isHighGraphicsMode)
 	{
@@ -1156,17 +1273,28 @@ void StelApp::draw()
 		const QList<StelModule*> modules = moduleMgr->getCallOrders(StelModule::ActionDraw);
 		for (auto* module : modules)
 		{
+#if defined(__OHOS__)
+			s_ohosDrawProfile.measureModule(module, [&]() { module->draw(core); });
+#else
 			module->draw(core);
+#endif
 		}
 	}
 
+#if defined(__OHOS__)
+	s_ohosDrawProfile.measureCore([&]() { core->postDraw(); });
+#else
 	core->postDraw();
+#endif
 #ifdef ENABLE_SPOUT
 	// At this point, the sky scene has been drawn, but no GUI panels.
 	if(spoutSender)
 		spoutSender->captureAndSendFrame(static_cast<GLuint>(drawFbo));
 #endif
 	applyRenderBuffer(static_cast<GLuint>(drawFbo));
+#if defined(__OHOS__)
+	s_ohosDrawProfile.endFrame("draw");
+#endif
 }
 
 /*************************************************************************

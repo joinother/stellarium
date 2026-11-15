@@ -34,6 +34,9 @@
 #include "StelModuleMgr.hpp"
 #include "LandscapeMgr.hpp"
 #include "Landscape.hpp"
+#include "AtmosphereVivid.hpp"
+#include "SolarSystem.hpp"
+#include "Planet.hpp"
 
 #include <QOpenGLContext>
 #include <QOpenGLVertexArrayObject>
@@ -273,6 +276,19 @@ void StelSkyDrawer::releaseVAO()
 
 void StelSkyDrawer::update(double)
 {
+	const auto landscape = GETSTELMODULE(LandscapeMgr);
+	const auto solarSystem = GETSTELMODULE(SolarSystem);
+	atmosphereVisualStrength = 1.f;
+	if (landscape && solarSystem && core->getCurrentPlanet())
+	{
+		Vec3d solarDirection = solarSystem->getSun()->getAltAzPosGeometric(core);
+		solarDirection.normalize();
+		atmosphereVisualStrength = AtmosphereVivid::visualStrength(
+			landscape->getFlagVividAtmosphere(), core->getCurrentPlanet()->getEnglishName() == "Earth",
+			landscape->getFlagAtmosphereNoScatter(), std::asin(qBound(-1., solarDirection[2], 1.)) * 180. / M_PI);
+	}
+	visualExtinction = extinction;
+	visualExtinction.setExtinctionCoefficient(extinction.getExtinctionCoefficient() * atmosphereVisualStrength);
 	float fov = static_cast<float>(core->getMovementMgr()->getCurrentFov());
 	if (fov > maxAdaptFov)
 	{
@@ -291,7 +307,8 @@ void StelSkyDrawer::update(double)
         // This formula is a fit to a set of values calibrated by hand, looking at the faintest star in stellarium at around 40 deg FOV.
         // It should roughly match the scale described at http://en.wikipedia.org/wiki/Bortle_Dark-Sky_Scale
 		const auto nelm = StelCore::luminanceToNELM(lightPollutionLuminance);
-		setInputScale(3.3541f*std::exp(-0.404f*(16.5f-2*nelm)));
+		const float atmosphericScale = 3.3541f*std::exp(-0.404f*(16.5f-2*nelm));
+		setInputScale(2.45f + atmosphereVisualStrength * (atmosphericScale - 2.45f));
 	}
 	else
 	    setInputScale(2.45f);
@@ -530,7 +547,8 @@ bool StelSkyDrawer::drawPointSource(StelPainter* sPainter, const Vec3d& v, const
 	const float frand=StelApp::getInstance().getRandF();
 
 	// Random coef for star twinkling. twinkleFactor can introduce height-dependent twinkling.
-	const float tw = ((flagStarTwinkle && (flagHasAtmosphere || flagForcedTwinkle))) ? (1.f-twinkleFactor*static_cast<float>(twinkleAmount)*frand)*rcMag.luminance : rcMag.luminance;
+	const float twinkleStrength = flagForcedTwinkle ? 1.f : (flagHasAtmosphere ? atmosphereVisualStrength : 0.f);
+	const float tw = flagStarTwinkle ? (1.f-twinkleStrength*twinkleFactor*static_cast<float>(twinkleAmount)*frand)*rcMag.luminance : rcMag.luminance;
 
 	const float scale = StelApp::getInstance().getScreenScale();
 	// If the rmag is big, draw a big halo
@@ -1162,6 +1180,8 @@ void StelSkyDrawer::setDaylightLabelThreshold(double t)
 void StelSkyDrawer::setExtinctionCoefficient(double extCoeff)
 {
 	extinction.setExtinctionCoefficient(static_cast<float>(extCoeff));
+	visualExtinction = extinction;
+	visualExtinction.setExtinctionCoefficient(static_cast<float>(extCoeff) * atmosphereVisualStrength);
 	StelApp::immediateSave("landscape/atmospheric_extinction_coefficient", extCoeff);
 	emit extinctionCoefficientChanged(static_cast<double>(extinction.getExtinctionCoefficient()));
 }

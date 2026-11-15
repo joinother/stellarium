@@ -4,6 +4,7 @@ import hilog from '@ohos.hilog';
 import i18n from '@ohos.i18n';
 import { setEnv } from 'libentry.so';
 import { LOG_DOMAIN, LOG_TAG } from '../common/QtAppConstants';
+import { CONSTELLATION_MODEL_ASSETS, CONSTELLATION_MODEL_REVISION, ConstellationModelAsset } from '../common/config/ConstellationModelAssets';
 
 const RAW_ROOT = 'stellarium';
 const MARKER = 'stars/hip_gaia3/defaultStarsConfig.json';
@@ -318,14 +319,14 @@ async function refreshSkyCultureEditorialResources(appContext: common.Applicatio
 
 async function refreshConstellationModels(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
   const relativeRoot = 'skycultures/modern/models';
-  const markerPath = `${installRoot}/${relativeRoot}/.bundled_v1`;
-  const files: string[] = ['And.scm', 'Ant.scm', 'Aps.scm', 'Aqr.scm', 'Aql.scm', 'Ara.scm', 'Hya.scm', 'manifest.json'];
-  if (exists(markerPath) && files.every((name: string) => fileSize(`${installRoot}/${relativeRoot}/${name}`) > 12)) {
+  const markerPath = `${installRoot}/${relativeRoot}/.bundled_${CONSTELLATION_MODEL_REVISION}`;
+  if (exists(markerPath) && CONSTELLATION_MODEL_ASSETS.every((asset: ConstellationModelAsset) =>
+    fileSize(`${installRoot}/${relativeRoot}/${asset.name}`) === asset.bytes)) {
     return;
   }
   try {
-    for (const name of files) {
-      await writeRawFileAsync(appContext, `${RAW_ROOT}/${relativeRoot}/${name}`, `${installRoot}/${relativeRoot}/${name}`);
+    for (const asset of CONSTELLATION_MODEL_ASSETS) {
+      await writeRawFileAsync(appContext, `${RAW_ROOT}/${relativeRoot}/${asset.name}`, `${installRoot}/${relativeRoot}/${asset.name}`);
     }
     writeMarker(markerPath);
   } catch (err) {

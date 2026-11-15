@@ -481,7 +481,7 @@ void Comet::update(int deltaTime)
 
 	if (withAtmosphere)
 	{
-		Extinction extinction=core->getSkyDrawer()->getExtinction();
+		Extinction extinction=core->getSkyDrawer()->getVisualExtinction();
 
 		// Not only correct the color values for extinction, but for twilight conditions, also make tail end less visible.
 		// I consider sky brightness over 1cd/m^2 as reason to shorten tail.
@@ -653,7 +653,7 @@ void Comet::drawComa(StelCore* core, StelProjector::ModelViewTranformP transfo)
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
 
 	StelToneReproducer* eye = core->getToneReproducer();
-	float lum = core->getSkyDrawer()->surfaceBrightnessToLuminance(getVMagnitudeWithExtinction(core)+11.0f); // How to calibrate?
+	float lum = core->getSkyDrawer()->surfaceBrightnessToLuminance(getVMagnitudeWithVisualExtinction(core)+11.0f); // How to calibrate?
 	// Get the luminance scaled between 0 and 1
 	const float aLum =eye->adaptLuminanceScaled(lum);
 	const float magFactor=qBound(0.25f*intensityFovScale, aLum*intensityFovScale, 2.0f);

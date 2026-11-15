@@ -18,6 +18,9 @@
  */
 
 #include "AtmospherePreetham.hpp"
+#include "AtmosphereGridStrip.hpp"
+#include "SolarSystem.hpp"
+#include "StelModuleMgr.hpp"
 #include "AtmosphereVivid.hpp"
 #include "AtmosphereMist.hpp"
 #include "StelUtils.hpp"
@@ -33,6 +36,77 @@
 #include <QDebug>
 #include <QSettings>
 #include <QOpenGLShaderProgram>
+
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <hilog/log.h>
+
+namespace
+{
+struct PreethamTimingSample
+{
+	QElapsedTimer timer;
+	qint64 prepNs = 0;
+	qint64 gridNs = 0;
+	qint64 uploadNs = 0;
+	quint64 gridCount = 0;
+	quint64 cacheHits = 0;
+	bool active = false;
+	bool resized = false;
+	bool uploaded = false;
+	bool cacheEligible = false;
+	bool cacheReusable = false;
+
+	PreethamTimingSample() { timer.start(); }
+	~PreethamTimingSample()
+	{
+		const qint64 totalNs = timer.nsecsElapsed();
+		if (!active)
+			prepNs = totalNs;
+		struct Aggregate
+		{
+			int calls = 0, active = 0, resizes = 0, uploads = 0;
+			int cacheEligible = 0, cacheReusable = 0;
+			quint64 gridCount = 0, cacheHits = 0;
+			qint64 totalNs = 0, prepNs = 0, gridNs = 0, uploadNs = 0;
+			qint64 prepMaxNs = 0, gridMaxNs = 0, uploadMaxNs = 0;
+		};
+		static Aggregate aggregate;
+		++aggregate.calls;
+		aggregate.active += active;
+		aggregate.resizes += resized;
+		aggregate.uploads += uploaded;
+		aggregate.cacheEligible += cacheEligible;
+		aggregate.cacheReusable += cacheReusable;
+		aggregate.gridCount += gridCount;
+		aggregate.cacheHits += cacheHits;
+		aggregate.totalNs += totalNs;
+		aggregate.prepNs += prepNs;
+		aggregate.gridNs += gridNs;
+		aggregate.uploadNs += uploadNs;
+		aggregate.prepMaxNs = qMax(aggregate.prepMaxNs, prepNs);
+		aggregate.gridMaxNs = qMax(aggregate.gridMaxNs, gridNs);
+		aggregate.uploadMaxNs = qMax(aggregate.uploadMaxNs, uploadNs);
+		if (aggregate.calls != 120)
+			return;
+		const double averageMs = 1.0 / (aggregate.calls * 1e6);
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelAtmoPerf",
+			"phase=computeColor calls=%{public}d clock=cpuWall "
+			"prepAvg=%{public}.3fms gridAvg=%{public}.3fms uploadAvg=%{public}.3fms totalAvg=%{public}.3fms "
+			"prepMax=%{public}.3fms gridMax=%{public}.3fms uploadMax=%{public}.3fms",
+			aggregate.calls, aggregate.prepNs * averageMs, aggregate.gridNs * averageMs,
+			aggregate.uploadNs * averageMs, aggregate.totalNs * averageMs,
+			aggregate.prepMaxNs / 1e6, aggregate.gridMaxNs / 1e6, aggregate.uploadMaxNs / 1e6);
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelAtmoPerf",
+			"phase=cache calls=%{public}d active=%{public}d gridCount=%{public}.0f cacheHits=%{public}.0f "
+			"cacheEligible=%{public}d cacheReusable=%{public}d uploads=%{public}d resizes=%{public}d",
+			aggregate.calls, aggregate.active, double(aggregate.gridCount), double(aggregate.cacheHits),
+			aggregate.cacheEligible, aggregate.cacheReusable, aggregate.uploads, aggregate.resizes);
+		aggregate = Aggregate{};
+	}
+};
+}
+#endif
 
 Q_LOGGING_CATEGORY(Atmo,"stel.Atmosphere", QtInfoMsg)
 
@@ -180,10 +254,17 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 				      const Planet*const moon, const StelLocation& location, const float temperature,
 				      const float relativeHumidity, const float extinctionCoefficient, const bool noScatter)
 {
+#if defined(__OHOS__)
+	PreethamTimingSample timing;
+#endif
 	const StelProjectorP prj = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
 	vividAtmosphereAllowed = currentPlanet.getEnglishName() == "Earth" && !noScatter;
 	if (viewport != prj->getViewport())
 	{
+#if defined(__OHOS__)
+		timing.resized = true;
+#endif
+		luminanceCacheValid = false;
 		// The viewport changed: update the number of point of the grid
 		viewport = prj->getViewport();
 		skyResolutionY = StelApp::getInstance().getSettings()->value("landscape/atmosphereybin", 44).toUInt();
@@ -214,28 +295,27 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 		posGridBuffer.release();
 		
 		// Generate the indices used to draw the quads
-		unsigned short* indices = new unsigned short[static_cast<size_t>((skyResolutionX+1)*skyResolutionY*2)];
-		int i=0;
-		for (unsigned int y2=0; y2<skyResolutionY; ++y2)
-		{
-			unsigned short g0 = static_cast<unsigned short>(y2*(1+skyResolutionX));
-			unsigned short g1 = static_cast<unsigned short>((y2+1)*(1+skyResolutionX));
-			for (unsigned int x2=0; x2<=skyResolutionX; ++x2)
-			{
-				indices[i++]=g0++;
-				indices[i++]=g1++;
-			}
-		}
 		indicesBuffer.destroy();
 		//indicesBuffer = QOpenGLBuffer(QOpenGLBuffer::IndexBuffer);
 		Q_ASSERT(indicesBuffer.type()==QOpenGLBuffer::IndexBuffer);
 		indicesBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
 		indicesBuffer.create();
 		indicesBuffer.bind();
-		indicesBuffer.allocate(indices, static_cast<int>((skyResolutionX+1)*skyResolutionY*2*2));
+		if (AtmosphereGridStrip::fitsUnsignedShort(skyResolutionX, skyResolutionY))
+		{
+			const auto indices = AtmosphereGridStrip::build<std::uint16_t>(skyResolutionX, skyResolutionY);
+			gridIndexCount = static_cast<int>(indices.size());
+			gridIndexType = GL_UNSIGNED_SHORT;
+			indicesBuffer.allocate(indices.data(), static_cast<int>(indices.size() * sizeof(indices[0])));
+		}
+		else
+		{
+			const auto indices = AtmosphereGridStrip::build<std::uint32_t>(skyResolutionX, skyResolutionY);
+			gridIndexCount = static_cast<int>(indices.size());
+			gridIndexType = GL_UNSIGNED_INT;
+			indicesBuffer.allocate(indices.data(), static_cast<int>(indices.size() * sizeof(indices[0])));
+		}
 		indicesBuffer.release();
-		delete[] indices;
-		indices=Q_NULLPTR;
 		
 		colorGridBuffer.destroy();
 		colorGridBuffer.setUsagePattern(QOpenGLBuffer::DynamicDraw);
@@ -306,11 +386,12 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 	// TODO: compute eclipse factor also for Lunar eclipses! (lp:#1471546)
 
 	// No need to calculate if not visible
-	if (!fader.getInterstate())
+	if (!getVisualFadeIntensity())
 	{
+		luminanceCacheValid = false;
 		// GZ 20180114: Why did we add light pollution if atmosphere was not visible?????
 		// And what is the meaning of 0.001? Approximate contribution of stellar background? Then why is it 0.0001 below???
-		averageLuminance = 0.001f;
+		if (!overrideAverageLuminance) averageLuminance = 0.001f;
 		return;
 	}
 
@@ -342,6 +423,15 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 	const auto moonPhase = moon ? moon->getPhaseAngle(currentPlanet.getHeliocentricEclipticPos()) : 0.;
 	const auto moonMagnitude = moon ? moon->getVMagnitudeWithExtinction(core) : 100.f;
 	skyb.setDate(year, month, static_cast<float>(moonPhase), moonMagnitude);
+	const float pollution = fader.getInterstate() * lightPollutionLuminance;
+	const bool planetsVisible = GETSTELMODULE(SolarSystem)->getFlagPlanets();
+	const bool cacheSupported = core->getFlagClearSky() && sky.getFlagSchaefer() && !noScatter;
+	const bool reuseLuminance = luminanceCacheValid && cacheSupported
+		&& cachedSkyBrightness.hasSameLuminanceParameters(skyb)
+		&& cachedSunDirection == sunPosF && cachedMoonDirection == moonPosF
+		&& cachedEclipseFactor == eclipseFactor && cachedPollution == pollution
+		&& cachedPlanetsVisible == planetsVisible && cachedNoScatter == noScatter;
+	bool gridChanged = !reuseLuminance;
 
 	// Variables used to compute the average sky luminance
 	float sum_lum = 0.f;
@@ -349,6 +439,13 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 	Vec3d point(1., 0., 0.);
 	float lumi=0.f;
 
+#if defined(__OHOS__)
+	timing.active = true;
+	timing.cacheEligible = cacheSupported;
+	timing.cacheReusable = reuseLuminance;
+	timing.gridCount = core->getFlagClearSky() ? colorGrid.size() : 0;
+	timing.prepNs = timing.timer.nsecsElapsed();
+#endif
 	// Compute the sky color for every point above the ground
 	if (core->getFlagClearSky())
 	for (unsigned int i=0; i<(1+skyResolutionX)*(1+skyResolutionY); ++i)
@@ -359,16 +456,20 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 		Q_ASSERT(fabs(point.normSquared()-1.0) < 1e-10);
 
 		Vec3f pointF=point.toVec3f();
+		if (!noScatter && pointF[2] <= 0.f)
+			pointF[2] *= -1.f;
+		if (reuseLuminance && colorGrid[i][0] == pointF[0]
+			&& colorGrid[i][1] == pointF[1] && colorGrid[i][2] == pointF[2])
+		{
+#if defined(__OHOS__)
+			++timing.cacheHits;
+#endif
+			sum_lum += colorGrid[i][3];
+			continue;
+		}
+		gridChanged = true;
 		if (!noScatter)
 		{
-			// Use mirroring for sun only
-			if (pointF[2]<=0.f)
-			{
-				pointF[2] *= -1.f;
-				// The sky below the ground is the symmetric of the one above :
-				// it looks nice and gives proper values for brightness estimation
-				// Use the Skybright.cpp 's models for brightness which gives better results.
-			}
 			if (sky.getFlagSchaefer())
 			{
 				lumi = skyb.getLuminance(moonPosF[0]*pointF[0]+moonPosF[1]*pointF[1]+moonPosF[2]*pointF[2],
@@ -394,7 +495,7 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 
 		// Add the light pollution luminance AFTER the scaling to avoid scaling it because it is the cause
 		// of the scaling itself
-		lumi += fader.getInterstate()*lightPollutionLuminance;
+		lumi += pollution;
 
 		// Store for later statistics
 		sum_lum+=lumi;
@@ -405,9 +506,30 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 		colorGrid[i].set(pointF[0], pointF[1], pointF[2], lumi);
 	}
 	
-	colorGridBuffer.bind();
-	colorGridBuffer.write(0, colorGrid.constData(), static_cast<int>((1+skyResolutionX)*(1+skyResolutionY)*4*4));
-	colorGridBuffer.release();
+#if defined(__OHOS__)
+	timing.gridNs = timing.timer.nsecsElapsed() - timing.prepNs;
+#endif
+	if (gridChanged)
+	{
+#if defined(__OHOS__)
+		const qint64 uploadStartNs = timing.timer.nsecsElapsed();
+#endif
+		colorGridBuffer.bind();
+		colorGridBuffer.allocate(colorGrid.constData(), static_cast<int>((1+skyResolutionX)*(1+skyResolutionY)*4*4));
+		colorGridBuffer.release();
+#if defined(__OHOS__)
+		timing.uploadNs = timing.timer.nsecsElapsed() - uploadStartNs;
+		timing.uploaded = true;
+#endif
+	}
+	cachedSkyBrightness = skyb;
+	cachedSunDirection = sunPosF;
+	cachedMoonDirection = moonPosF;
+	cachedEclipseFactor = eclipseFactor;
+	cachedPollution = pollution;
+	cachedPlanetsVisible = planetsVisible;
+	cachedNoScatter = noScatter;
+	luminanceCacheValid = cacheSupported;
 	
 	// Update average luminance
 	if (!overrideAverageLuminance)
@@ -422,7 +544,7 @@ void AtmospherePreetham::draw(StelCore* core)
 	if (StelApp::getInstance().getVisionModeNight())
 		return;
 
-	const float atm_intensity = fader.getInterstate();
+	const float atm_intensity = getVisualFadeIntensity();
 	if (atm_intensity==0.f)
 	    return;
 
@@ -479,12 +601,7 @@ void AtmospherePreetham::draw(StelCore* core)
 	// And draw everything at once
 	bindVAO();
 	GL(indicesBuffer.bind());
-	std::size_t shift=0;
-	for (unsigned int y=0;y<skyResolutionY;++y)
-	{
-		sPainter.glFuncs()->glDrawElements(GL_TRIANGLE_STRIP, static_cast<int>((skyResolutionX+1)*2), GL_UNSIGNED_SHORT, reinterpret_cast<void*>(shift));
-		shift += static_cast<size_t>((skyResolutionX+1)*2*2);
-	}
+	sPainter.glFuncs()->glDrawElements(GL_TRIANGLE_STRIP, gridIndexCount, gridIndexType, nullptr);
 	GL(indicesBuffer.release());
 	releaseVAO();
 	

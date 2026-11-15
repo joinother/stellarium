@@ -53,7 +53,7 @@ test('native rotation preserves off-center coordinates across rapid extreme zoom
     context.skip('Qt host headers are required for the native numerical test');
     return;
   }
-  const rotate = source.match(/const auto rotate = \[&rotationAxis, cosine\]\(const Vec3d& vector\) \{[\s\S]*?\n\t\};/)[0];
+  const rotate = source.match(/const auto rotate = \[&rotationAxis, cosine\]\(const Vec3d& vector\) \{[\s\S]*?\n\t+\};/)[0];
   const directory = mkdtempSync(join(tmpdir(), 'stellarium-anchor-test-'));
   try {
     writeFileSync(join(directory, 'anchor.cpp'), `

@@ -20,6 +20,8 @@
 #define CALENDARS_HPP
 
 #include <QMap>
+#include <QSet>
+#include <array>
 
 #include "StelModule.hpp"
 #include "StelScriptMgr.hpp"
@@ -304,6 +306,8 @@ public slots:
 	void setMayaCorrelationJD(const int jd);        //!< Set correlation constant. RD's default is 584283, but there are others.
 
 private:
+	void refreshConversionInputs();
+	void updateCalendar(Calendar* calendar);
 	//! Create an HTML table which can be displayed or exported
 	QString createTableToDraw();
 	CalendarsInfoPanel *infoPanel;
@@ -316,9 +320,10 @@ private:
 	// a QMap of pointers to calendars. The Names are identical to the respective Calendar subclass names, minus "Calendar".
 	QMap<QString, Calendar*> calendars;
 
-	// This is used to buffer JD for all known subcalendars.
-	// Maybe we don't need it in the end...
-	//double JD;
+	std::array<double, 10> lastConversionInputs{};
+	bool conversionInputsValid = false;
+	QSet<Calendar*> currentCalendars;
+	bool updatingCalendar = false;
 
 	// StelProperties:
 	bool enabled;

@@ -40,6 +40,7 @@
 #include "StelPainter.hpp"
 
 #include <vector>
+#include <limits>
 #include <QDebug>
 #include <QFile>
 #include <QFont>
@@ -49,6 +50,10 @@
 #include <QRegularExpression>
 #include <QDir>
 #include <QMessageBox>
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <hilog/log.h>
+#endif
 
 // Define version of valid Stellarium DSO Catalog
 // This number must be incremented each time the content or file format of the stars catalogs change
@@ -609,20 +614,35 @@ void NebulaMgr::storeCatalogFilters()
 
 struct DrawNebulaFuncObject
 {
-	DrawNebulaFuncObject(float amaxMagHints, float amaxMagLabels, StelPainter* p, StelCore* aCore, bool acheckMaxMagHints)
+	DrawNebulaFuncObject(float amaxMagHints, float amaxMagLabels, StelPainter* p, StelCore* core,
+		NebulaMgr::DrawStats& drawStats, std::vector<NebulaMgr::DrawCandidate>& drawCandidates,
+		ScreenLabelLayout& screenLayout, const StelObject* selectedObject)
 		: maxMagHints(amaxMagHints)
 		, maxMagLabels(amaxMagLabels)
 		, sPainter(p)
-		, core(aCore)
-		, checkMaxMagHints(acheckMaxMagHints)
+		, useMagnitudeLimit(core->getSkyDrawer()->getFlagNebulaMagnitudeLimit())
+		, magnitudeLimit(static_cast<float>(core->getSkyDrawer()->getCustomNebulaMagnitudeLimit()))
+		, useAberration(core->getUseAberration() && core->getCurrentPlanet())
+		, aberration(useAberration ? core->getAberrationVec(core->getJDE()) : Vec3d(0.))
+		, stats(drawStats)
+		, candidates(drawCandidates)
+		, layout(screenLayout)
+		, selected(selectedObject)
 	{
 		angularSizeLimit = 5.f/sPainter->getProjector()->getPixelPerRadAtCenter()*M_180_PIf;
+		stats.maxMagHints = maxMagHints;
+		stats.maxMagLabels = maxMagLabels;
+		stats.angularSizeLimit = angularSizeLimit;
+	}
+	static void recordDraw(NebulaMgr::PassDrawStats& pass, float alpha)
+	{
+		++pass.drawn;
+		pass.alphaSum += alpha;
+		pass.alphaMax = std::max(pass.alphaMax, alpha);
 	}
 	void operator()(StelRegionObject* obj)
 	{
-		if (checkMaxMagHints)
-			return;
-
+		++stats.visited;
 		Nebula* n = static_cast<Nebula*>(obj);
 		if (!n->objectInDisplayedCatalog())
 			return;
@@ -630,29 +650,127 @@ struct DrawNebulaFuncObject
 		if (n->flagShowOnlyNamedDSO && n->getEnglishName().isEmpty() && n->culturalNames.isEmpty())
 			return;
 
-		if (!n->objectInAllowedSizeRangeLimits())
+		if (!n->objectInAllowedSizeRangeLimits() || !n->objectInDisplayedType())
 			return;
 
-		float mag=n->getVisibilityLevelByMagnitude();
-		StelSkyDrawer *drawer = core->getSkyDrawer();
+		const float mag=n->getVisibilityLevelByMagnitude();
 		// filter out DSOs which are too dim to be seen (e.g. for bino observers)
-		if ((drawer->getFlagNebulaMagnitudeLimit()) && (mag > static_cast<float>(drawer->getCustomNebulaMagnitudeLimit())))
+		if (useMagnitudeLimit && mag > magnitudeLimit)
 			return;
 
-		if (n->majorAxisSize>angularSizeLimit || n->majorAxisSize==0.f || mag <= maxMagHints)
+		const auto opacity = NebulaDrawing::opacity(mag, maxMagHints, maxMagLabels,
+			n->majorAxisSize, angularSizeLimit, !n->outlineSegments.empty() && n->flagUseOutlines);
+		const float labelAlpha = n->labelsBrightness * opacity.labels;
+		const float hintAlpha = n->hintsBrightness * opacity.hints;
+		const float outlineAlpha = n->hintsBrightness * opacity.outlines;
+		if (labelAlpha <= 0.f && hintAlpha <= 0.f && outlineAlpha <= 0.f)
+			return;
+		++stats.eligible;
+		n->visibilityFrame = Nebula::drawFrame;
+		n->drawVisibility = Nebula::DrawVisibility{};
+		NebulaMgr::DrawCandidate candidate;
+		candidate.nebula = n;
+		candidate.outlineAlpha = outlineAlpha;
+
+		if ((labelAlpha > 0.f || hintAlpha > 0.f) && sPainter->getProjector()->projectCheck(n->XYZ, n->XY))
 		{
-			sPainter->getProjector()->project(n->getJ2000EquatorialPos(core),n->XY);
-			n->drawLabel(*sPainter, maxMagLabels);
-			n->drawHints(*sPainter, maxMagHints, core);
-			n->drawOutlines(*sPainter, maxMagHints);
+			++stats.projected;
+			Vec3d direction = n->XYZ;
+			if (useAberration)
+			{
+				direction += aberration;
+				direction.normalize();
+				sPainter->getProjector()->project(direction, n->XY);
+			}
+			candidate.direction = direction;
+			const bool isSelected = selected == n;
+			const bool named = !n->getEnglishName().isEmpty() || !n->culturalNames.isEmpty();
+			const int priority = isSelected ? std::numeric_limits<int>::max() : (named ? 1 : 0);
+			const std::string owner = "dso:" + std::to_string(n->DSO_nb);
+			const auto& projector = sPainter->getProjector();
+			const ScreenLabelLayout::Rect viewport{static_cast<float>(projector->getViewportPosX()),
+				static_cast<float>(projector->getViewportPosY()),
+				static_cast<float>(projector->getViewportPosX() + projector->getViewportWidth()),
+				static_cast<float>(projector->getViewportPosY() + projector->getViewportHeight())};
+			if (labelAlpha > 0.f)
+			{
+				candidate.label = n->getScreenLabel();
+				if (candidate.label.isEmpty() || n->designationUsage)
+					candidate.label = n->getDSODesignation();
+				candidate.labelShift = 15.f + (n->drawHintProportional ? n->getHintSize(*sPainter) : 0.f);
+				const auto rect = sPainter->skyLabelRect(n->XY[0], n->XY[1], candidate.label,
+					candidate.labelShift, candidate.labelShift);
+				if (!candidate.label.isEmpty() && rect.intersects(viewport))
+				{
+					++stats.labels.candidates;
+					candidate.labelKey = owner + ":label";
+					candidate.labelAlpha = labelAlpha;
+					layout.add({candidate.labelKey, rect, priority, mag, labelAlpha, owner, isSelected});
+				}
+			}
+			if (hintAlpha > 0.f)
+			{
+				++stats.hints.candidates;
+				candidate.hintKey = owner + ":hint";
+				candidate.hintAlpha = hintAlpha;
+				const float scale = std::max(projector->getScreenScale(),
+					static_cast<float>(projector->getDevicePixelsPerPixel()));
+				const float radius = (n->getHintSize(*sPainter) + 5.f) * scale;
+				const ScreenLabelLayout::Rect rect{
+					std::max(viewport.left, static_cast<float>(n->XY[0]) - radius),
+					std::max(viewport.bottom, static_cast<float>(n->XY[1]) - radius),
+					std::min(viewport.right, static_cast<float>(n->XY[0]) + radius),
+					std::min(viewport.top, static_cast<float>(n->XY[1]) + radius)};
+				layout.add({candidate.hintKey, rect, priority, mag, hintAlpha, owner, isSelected});
+			}
+		}
+		if (outlineAlpha > 0.f)
+			++stats.outlines.candidates;
+		candidates.push_back(std::move(candidate));
+	}
+	void draw()
+	{
+		StelPainter::resolveSkyLabelLayout(QStringLiteral("nebulae"));
+		for (const auto& candidate : candidates)
+		{
+			Nebula* n = candidate.nebula;
+			stats.labels.accepted += layout.accepted(candidate.labelKey);
+			stats.hints.accepted += layout.accepted(candidate.hintKey);
+			const float labelAlpha = layout.visibility(candidate.labelKey);
+			const float hintAlpha = layout.visibility(candidate.hintKey);
+			if (labelAlpha > 0.f)
+			{
+				recordDraw(stats.labels, labelAlpha);
+				n->drawVisibility.labelAlpha = labelAlpha;
+				n->drawLabel(*sPainter, labelAlpha, candidate.label, candidate.labelShift);
+			}
+			if (hintAlpha > 0.f)
+			{
+				recordDraw(stats.hints, hintAlpha);
+				n->drawVisibility.hintAlpha = hintAlpha;
+				n->drawHints(*sPainter, hintAlpha, candidate.direction);
+			}
+			if (candidate.outlineAlpha > 0.f)
+			{
+				++stats.outlines.accepted;
+				recordDraw(stats.outlines, candidate.outlineAlpha);
+				n->drawVisibility.outlineAlpha = candidate.outlineAlpha;
+				n->drawOutlines(*sPainter, candidate.outlineAlpha, aberration, useAberration);
+			}
 		}
 	}
 	float maxMagHints;
 	float maxMagLabels;
 	StelPainter* sPainter;
-	StelCore* core;
 	float angularSizeLimit;
-	bool checkMaxMagHints;
+	bool useMagnitudeLimit;
+	float magnitudeLimit;
+	bool useAberration;
+	Vec3d aberration;
+	NebulaMgr::DrawStats& stats;
+	std::vector<NebulaMgr::DrawCandidate>& candidates;
+	ScreenLabelLayout& layout;
+	const StelObject* selected;
 };
 
 void NebulaMgr::setCatalogFilters(int cflags)
@@ -847,8 +965,16 @@ float NebulaMgr::computeMaxMagHint(const StelSkyDrawer* skyDrawer) const
 // Draw all the Nebulae and call drawing the pointer if needed
 void NebulaMgr::draw(StelCore* core)
 {
+	++Nebula::drawFrame;
+	drawStats = DrawStats{};
+	drawStats.layerOpacity = hintsFader.getInterstate() * flagShow.getInterstate();
+	drawCandidates.clear();
+	auto& layout = StelPainter::skyLabelLayoutForGroup(QStringLiteral("nebulae"));
 	if (!core->getFlagClearSky())
+	{
+		layout.clear();
 		return;
+	}
 
 	const StelProjectorP prj = core->getProjection(StelCore::FrameJ2000);
 	StelPainter sPainter(prj);
@@ -856,9 +982,10 @@ void NebulaMgr::draw(StelCore* core)
 	font.setPixelSize(fontSize);
 	sPainter.setFont(font);
 
-	if(hintsFader.getInterstate()>0.f)
+	if(hintsFader.getInterstate()>0.f && flagShow.getInterstate()>0.f
+		&& (hintsBrightness>0. || labelsBrightness>0.))
 	{
-		static StelSkyDrawer* skyDrawer = core->getSkyDrawer();
+		const StelSkyDrawer* skyDrawer = core->getSkyDrawer();
 
 		Nebula::hintsBrightness  = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(hintsBrightness);
 		Nebula::labelsBrightness = hintsFader.getInterstate()*flagShow.getInterstate()*static_cast<float>(labelsBrightness);
@@ -870,9 +997,35 @@ void NebulaMgr::draw(StelCore* core)
 		// Print all the nebulae of all the selected zones
 		float maxMagHints  = computeMaxMagHint(skyDrawer);
 		float maxMagLabels = skyDrawer->getLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f;
-		DrawNebulaFuncObject func(maxMagHints, maxMagLabels, &sPainter, core, hintsFader.getInterstate()<=0.f);
+		const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Nebula");
+		DrawNebulaFuncObject func(maxMagHints, maxMagLabels, &sPainter, core, drawStats, drawCandidates,
+			layout, selected.isEmpty() ? nullptr : selected.constFirst().data());
+#if defined(__OHOS__)
+		QElapsedTimer timing;
+		timing.start();
+#endif
 		nebGrid.processIntersectingPointInRegions(p.data(), func);
+#if defined(__OHOS__)
+		const qint64 collectionNs = timing.nsecsElapsed();
+#endif
+		func.draw();
+#if defined(__OHOS__)
+		static qint64 collectionTotal = 0, drawingTotal = 0;
+		static int frames = 0;
+		collectionTotal += collectionNs;
+		drawingTotal += timing.nsecsElapsed() - collectionNs;
+		if (++frames == 120)
+		{
+			OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelNebulaPerf",
+				"frames=120 collectionAvg=%{public}.3fms drawingAvg=%{public}.3fms",
+				collectionTotal / 1.2e8, drawingTotal / 1.2e8);
+			collectionTotal = drawingTotal = 0;
+			frames = 0;
+		}
+#endif
 	}
+	else
+		layout.clear();
 
 	static StelObjectMgr *som=GETSTELMODULE(StelObjectMgr);
 	if (som->getFlagSelectedObjectPointer())

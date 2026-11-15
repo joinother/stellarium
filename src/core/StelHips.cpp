@@ -434,7 +434,7 @@ void HipsSurvey::draw(StelPainter* sPainter, double angle, HipsSurvey::DrawCallb
 	StelSkyDrawer* drawer = core->getSkyDrawer();
 	withAtmosphericExtinction = withAtmosphericExtinction && !planetarySurvey &&
 	                            drawer->getFlagHasAtmosphere() &&
-	                            drawer->getExtinction().getExtinctionCoefficient() >= 0.01f;
+	                            drawer->getVisualExtinction().getExtinctionCoefficient() >= 0.01f;
 
 	Vec3f extinctionColor(1.0f);
 	if (withAtmosphericExtinction)
@@ -888,7 +888,7 @@ int HipsSurvey::fillArrays(int order, int pix, int drawOrder, int splitOrder,
 	if (withAtmosphericExtinction)
 	{
 		core = StelApp::getInstance().getCore();
-		extinction = &core->getSkyDrawer()->getExtinction();
+		extinction = &core->getSkyDrawer()->getVisualExtinction();
 	}
 	// First of all, min() limits gridSize to <256, because otherwise squaring it will overflow index type, uint16_t.
 	// But in practice 32 points per side seems already good enough, and getting to 128 points noticeably affects

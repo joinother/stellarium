@@ -113,7 +113,7 @@ void ToastTile::prepareDraw(Vec3f color)
 
 	StelCore *core=StelApp::getInstance().getCore();
 	StelSkyDrawer *drawer=StelApp::getInstance().getCore()->getSkyDrawer();
-	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getExtinction().getExtinctionCoefficient()>=0.01f);
+	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getVisualExtinction().getExtinctionCoefficient()>=0.01f);
 
 	if (texture.isNull())
 	{
@@ -165,7 +165,7 @@ void ToastTile::prepareDraw(Vec3f color)
 	if (withExtinction)
 	{
 		// We must process the vertices to find geometric altitudes in order to compute vertex colors.
-		const Extinction& extinction=drawer->getExtinction();
+		const Extinction& extinction=drawer->getVisualExtinction();
 		colorArray.clear();
 
 		for (int i=0; i<vertexArray.size(); ++i)
@@ -313,7 +313,7 @@ void ToastSurvey::draw(StelPainter* sPainter)
 	// Compute global brightness depending on sky/atmosphere. (taken from MilkyWay, but without extra Bortle stuff)
 	StelCore *core=StelApp::getInstance().getCore();
 	StelSkyDrawer *drawer=core->getSkyDrawer();
-	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getExtinction().getExtinctionCoefficient()>=0.01f);
+	const bool withExtinction=(drawer->getFlagHasAtmosphere() && drawer->getVisualExtinction().getExtinctionCoefficient()>=0.01f);
 	Vec3f color(1.0f);
 
 	if (withExtinction)

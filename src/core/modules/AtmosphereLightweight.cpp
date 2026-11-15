@@ -23,6 +23,7 @@
 #include "Planet.hpp"
 #include "StelApp.hpp"
 #include "StelCore.hpp"
+#include "StelLocation.hpp"
 #include "StelPainter.hpp"
 #include "StelFileMgr.hpp"
 #include "StelMainView.hpp"
@@ -38,6 +39,11 @@
 #include <QDebug>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFramebufferObject>
+
+#if defined(__OHOS__)
+#include <QElapsedTimer>
+#include <hilog/log.h>
+#endif
 
 namespace
 {
@@ -448,7 +454,8 @@ float sqr(vec2 v) { return dot(v, v); }
 void main()
 {
 	vec3 viewDir = calcViewDir();
-	float relAzimuth = acos(clamp(dot(viewDir.xy, sunDir.xy) / sqrt(sqr(viewDir.xy) * sqr(sunDir.xy)), -1., 1.));
+	float horizontalNorm = max(sqrt(sqr(viewDir.xy) * sqr(sunDir.xy)), 0.000001);
+	float relAzimuth = acos(clamp(dot(viewDir.xy, sunDir.xy) / horizontalNorm, -1., 1.));
 	float elev = asin(clamp(viewDir.z, -1., 1.));
 	float elevTC = abs(elev / (PI/2.));
 	elevTC = sqrt(elevTC); // elevation coordinate is stretched by squaring it
@@ -539,19 +546,121 @@ float AtmosphereLightweight::computeAverageLuminance(const StelCore* core)
 	GL(gl.glBlendFunc(GL_ONE, GL_ZERO));
 	luminanceProbeProgram_->release();
 
-	const auto texAvg = textureAverager_->getTextureAverageSimple(luminanceProbeFBO_->texture(),
-	                                                              LUM_PROBE_FBO_WIDTH, LUM_PROBE_FBO_HEIGHT);
-	float lum = 0;
+	LuminanceReadbackSample sample;
+	sample.token = ++luminanceSampleToken_;
+	sample.sampledAt = std::chrono::steady_clock::now();
+	sample.julianDay = core->getJD();
+	sample.timeRate = core->getTimeRate();
+	sample.syncJulianDay = core->getJDOfLastJDUpdate();
+	sample.syncMilliseconds = core->getMilliSecondsOfLastJDUpdate();
+	sample.fov = prj->getFov();
+	const auto viewportCenter = prj->getViewportCenter();
+	const bool directionValid = prj->unProject(viewportCenter[0], viewportCenter[1], sample.viewDirection);
+	const double directionLength = sample.viewDirection.norm();
+	if (directionValid && std::isfinite(directionLength) && directionLength > 0.) sample.viewDirection /= directionLength;
+	else sample.viewDirection = Vec3d(NAN);
+	const auto& location = core->getCurrentLocation();
+	sample.location = Vec3f(location.getLatitude(), location.getLongitude(), location.altitude);
+	sample.planet = location.planetName;
 	for (int i = 0; i < DRAW_PARAM_COUNT; ++i)
 	{
 		const auto& p = drawParams[i];
-		auto currLum = texAvg[i] * p.relativeBrightness * p.eclipseFactor * p.fboColorScale;
 		const float maxValue = std::max(layerValueMaxima_[p.layerToDrawA],
 		                                layerValueMaxima_[p.layerToDrawB]);
-		currLum *= maxValue; // restore the scale we used when creating the preparation FBO
-		lum += currLum;
+		sample.weights[i] = Vec4f(p.relativeBrightness, p.eclipseFactor, p.fboColorScale, maxValue);
+		sample.lightDirections[i] = Vec3f(p.dir[0], p.dir[1], p.dir[2]);
+		sample.layersA[i] = p.layerToDrawA;
+		sample.layersB[i] = p.layerToDrawB;
+		sample.layerAlphas[i] = p.layerAlpha;
 	}
-	return lum;
+	const auto restoreLuminance = [](const Vec4f& texAvg, const LuminanceReadbackSample& captured)
+	{
+		float luminance = 0.f;
+		for (int index = 0; index < DRAW_PARAM_COUNT; ++index)
+		{
+			const auto& weights = captured.weights[index];
+			auto contribution = texAvg[index] * weights[0] * weights[1] * weights[2];
+			contribution *= weights[3];
+			luminance += contribution;
+		}
+		return luminance;
+	};
+#if defined(__OHOS__)
+	const auto compatible = [&sample](const LuminanceReadbackSample& captured)
+	{
+		const double elapsed = std::chrono::duration<double>(sample.sampledAt - captured.sampledAt).count();
+		const double elapsedDays = sample.julianDay - captured.julianDay;
+		if (!std::isfinite(elapsedDays) || !std::isfinite(sample.timeRate)
+			|| !std::isfinite(sample.syncJulianDay) || elapsed < 0. || elapsed >= 0.250
+			|| sample.timeRate != captured.timeRate || sample.syncJulianDay != captured.syncJulianDay
+			|| sample.syncMilliseconds != captured.syncMilliseconds
+			|| std::abs(elapsedDays) > 600. / 86400.
+			|| std::abs(elapsedDays - sample.timeRate * elapsed) > 1. / 86400. + std::abs(sample.timeRate) * 0.100
+			|| sample.location != captured.location || sample.planet != captured.planet) return false;
+		const float minimumFov = std::min(sample.fov, captured.fov);
+		const double viewCosine = sample.viewDirection * captured.viewDirection;
+		if (!std::isfinite(sample.fov) || !std::isfinite(captured.fov) || minimumFov <= 0.f
+			|| std::abs(sample.fov - captured.fov) > 0.25f * minimumFov
+			|| !std::isfinite(viewCosine)
+			|| viewCosine < std::cos(std::min(10., 0.25 * minimumFov) * M_PI / 180.)) return false;
+		for (int index = 0; index < DRAW_PARAM_COUNT; ++index)
+		{
+			const auto& currentDirection = sample.lightDirections[index];
+			const auto& previousDirection = captured.lightDirections[index];
+			const float directionLengths = currentDirection.norm() * previousDirection.norm();
+			const float lightCosine = (currentDirection * previousDirection) / directionLengths;
+			if (!(directionLengths > 0.f) || !std::isfinite(lightCosine)
+				|| lightCosine < std::cos(M_PI / 180.)
+				|| sample.layersA[index] != captured.layersA[index] || sample.layersB[index] != captured.layersB[index]
+				|| !std::isfinite(sample.layerAlphas[index]) || !std::isfinite(captured.layerAlphas[index])
+				|| std::abs(sample.layerAlphas[index] - captured.layerAlphas[index]) > 0.25f) return false;
+			for (int component = 0; component < 4; ++component)
+			{
+				const float current = sample.weights[index][component];
+				const float previous = captured.weights[index][component];
+				if (!std::isfinite(current) || !std::isfinite(previous)
+					|| std::abs(current - previous) > 0.25f * std::max(std::abs(current), std::abs(previous))) return false;
+			}
+		}
+		return true;
+	};
+	const auto* context = QOpenGLContext::currentContext();
+	if (context->isOpenGLES() && context->format().majorVersion() >= 3 && textureAverager_->supportsAsyncReadback())
+	{
+		TextureAverageComputer::AsyncResult result;
+		while (textureAverager_->pollTextureAverage(result))
+		{
+			while (!pendingLuminanceSamples_.empty() && pendingLuminanceSamples_.front().token < result.token)
+				pendingLuminanceSamples_.pop_front();
+			if (!pendingLuminanceSamples_.empty() && pendingLuminanceSamples_.front().token == result.token)
+			{
+				completedLuminanceSample_ = pendingLuminanceSamples_.front();
+				completedMeanLuminance_ = restoreLuminance(result.value, completedLuminanceSample_);
+				completedMeanLuminanceValid_ = std::isfinite(completedMeanLuminance_);
+				pendingLuminanceSamples_.pop_front();
+			}
+		}
+		const bool fresh = completedMeanLuminanceValid_ && compatible(completedLuminanceSample_)
+			&& sample.token - completedLuminanceSample_.token < 4
+			&& sample.sampledAt - completedLuminanceSample_.sampledAt < std::chrono::milliseconds(250);
+		if (fresh && textureAverager_->supportsAsyncReadback())
+		{
+			if (textureAverager_->enqueueTextureAverageSimple(luminanceProbeFBO_->texture(),
+				LUM_PROBE_FBO_WIDTH, LUM_PROBE_FBO_HEIGHT, sample.token))
+				pendingLuminanceSamples_.push_back(sample);
+			if (textureAverager_->supportsAsyncReadback()) return completedMeanLuminance_;
+		}
+	}
+#endif
+	textureAverager_->resetAsyncReadback();
+	pendingLuminanceSamples_.clear();
+	const auto texAvg = textureAverager_->getTextureAverageSimple(luminanceProbeFBO_->texture(),
+	                                                              LUM_PROBE_FBO_WIDTH, LUM_PROBE_FBO_HEIGHT);
+	completedLuminanceSample_ = sample;
+	completedMeanLuminance_ = restoreLuminance(texAvg, sample);
+	completedMeanLuminanceValid_ = std::isfinite(completedMeanLuminance_);
+	if (!completedMeanLuminanceValid_) completedMeanLuminance_ = 0.f;
+	return completedMeanLuminance_;
 }
 
 void AtmosphereLightweight::computeDrawParams(const StelCore* core, const Planet* lightSource, const Planet* moon,
@@ -584,7 +693,7 @@ void AtmosphereLightweight::computeDrawParams(const StelCore* core, const Planet
 	const auto highIt = lowIt == layerSolarElevations_.begin() ? lowIt : lowIt - 1;
 	const float highElev = *highIt;
 	const float lowElev = *lowIt;
-	p.layerAlpha = (elevation - lowElev) / (highElev - lowElev);
+	p.layerAlpha = highIt == lowIt ? 0.f : (elevation - lowElev) / (highElev - lowElev);
 	p.layerToDrawA = lowIt - layerSolarElevations_.begin();
 	p.layerToDrawB = highIt - layerSolarElevations_.begin();
 	if (p.layerToDrawB >= layerSolarElevations_.size())
@@ -646,11 +755,11 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
 	Q_UNUSED(relativeHumidity)
 	Q_UNUSED(extinctionCoefficient)
 	// No need to calculate if not visible
-	if (!fader.getInterstate())
+	if (!getVisualFadeIntensity())
 	{
 		// GZ 20180114: Why did we add light pollution if atmosphere was not visible?????
 		// And what is the meaning of 0.001? Approximate contribution of stellar background? Then why is it 0.0001 below???
-		averageLuminance = 0.001f;
+		if (!overrideAverageLuminance) averageLuminance = 0.001f;
 		return;
 	}
 
@@ -663,26 +772,50 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
 
 	auto& gl = *StelOpenGL::mainContext->functions();
 
+#if defined(__OHOS__)
+	QElapsedTimer timing;
+	timing.start();
+	int prepRendered = 0;
+	int prepReused = 0;
+#endif
 	computeDrawParams(core, &sun, moon, DRAW_PARAM_SUN, noScatter);
 	computeDrawParams(core, moon, moon, DRAW_PARAM_MOON, noScatter);
 
+#if defined(__OHOS__)
+	const qint64 paramsNs = timing.nsecsElapsed();
+#endif
 	GLint origFBO=-1;
 	GL(gl.glGetIntegerv(GL_FRAMEBUFFER_BINDING, &origFBO));
-	preparationShaderProgram_->bind();
 
 	GLint origViewport[4];
 	GL(gl.glGetIntegerv(GL_VIEWPORT, origViewport));
-	GL(gl.glViewport(0, 0, PREP_FBO_WIDTH, PREP_FBO_HEIGHT));
 
+	bool preparedAny = false;
 	for (int i = 0; i < DRAW_PARAM_COUNT; ++i)
 	{
-		const auto& p = drawParams[i];
+		auto& p = drawParams[i];
+		if (p.prepCached && p.prepCachedLayerA == p.layerToDrawA
+		    && p.prepCachedLayerB == p.layerToDrawB && p.prepCachedAlpha == p.layerAlpha)
+		{
+#if defined(__OHOS__)
+			++prepReused;
+#endif
+			continue;
+		}
+		if (!preparedAny)
+		{
+			preparationShaderProgram_->bind();
+			GL(gl.glViewport(0, 0, PREP_FBO_WIDTH, PREP_FBO_HEIGHT));
+			preparedAny = true;
+		}
 		p.fbo->bind();
 		const float maxValue = std::max(layerValueMaxima_[p.layerToDrawA],
 		                                layerValueMaxima_[p.layerToDrawB]);
-		for (const auto layer : {p.layerToDrawA, p.layerToDrawB})
+		const int passes = p.layerToDrawA == p.layerToDrawB ? 1 : 2;
+		for (int pass = 0; pass < passes; ++pass)
 		{
-			if (layer == p.layerToDrawB)
+			const auto layer = pass == 0 ? p.layerToDrawA : p.layerToDrawB;
+			if (pass == 1)
 			{
 				GL(gl.glEnable(GL_BLEND));
 				GL(gl.glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA));
@@ -702,13 +835,26 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
 			const auto numIndices = (indicesEnd - indicesOffset) / sizeof(IndexType);
 			GL(gl.glDrawElements(GL_TRIANGLES, numIndices, INDEX_GL_TYPE, reinterpret_cast<void*>(indicesOffset)));
 		}
+		p.prepCachedLayerA = p.layerToDrawA;
+		p.prepCachedLayerB = p.layerToDrawB;
+		p.prepCachedAlpha = p.layerAlpha;
+		p.prepCached = true;
+#if defined(__OHOS__)
+		++prepRendered;
+#endif
 	}
-	GL(releaseVAO(0));
-	GL(indexBuffer_.release());
+	if (preparedAny)
+	{
+		GL(releaseVAO(0));
+		GL(indexBuffer_.release());
+	}
 	GL(gl.glDisable(GL_BLEND));
 	GL(gl.glBlendFunc(GL_ONE, GL_ZERO));
 	GL(gl.glBlendColor(0,0,0,0));
 
+#if defined(__OHOS__)
+	const qint64 prepEndNs = timing.nsecsElapsed();
+#endif
 	if (!overrideAverageLuminance)
 	{
 		const auto meanY = computeAverageLuminance(core);
@@ -718,8 +864,36 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
 		averageLuminance = bgLum + (meanY + lightPollutionLuminance) * fader.getInterstate();
 	}
 
+#if defined(__OHOS__)
+	const qint64 luminanceEndNs = timing.nsecsElapsed();
+#endif
 	GL(gl.glBindFramebuffer(GL_FRAMEBUFFER, origFBO));
 	GL(gl.glViewport(origViewport[0], origViewport[1], origViewport[2], origViewport[3]));
+#if defined(__OHOS__)
+	struct TimingWindow
+	{
+		int calls = 0, rendered = 0, reused = 0;
+		qint64 paramsNs = 0, prepNs = 0, luminanceNs = 0, totalNs = 0;
+	};
+	static TimingWindow window;
+	++window.calls;
+	window.rendered += prepRendered;
+	window.reused += prepReused;
+	window.paramsNs += paramsNs;
+	window.prepNs += prepEndNs - paramsNs;
+	window.luminanceNs += luminanceEndNs - prepEndNs;
+	window.totalNs += timing.nsecsElapsed();
+	if (window.calls == 120)
+	{
+		const double scale = 1. / (window.calls * 1e6);
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelLightAtmoPerf",
+			"calls=%{public}d clock=cpuWall paramsAvg=%{public}.3fms prepAvg=%{public}.3fms lumAvg=%{public}.3fms totalAvg=%{public}.3fms",
+			window.calls, window.paramsNs * scale, window.prepNs * scale, window.luminanceNs * scale, window.totalNs * scale);
+		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StelLightAtmoPerf",
+			"calls=%{public}d prepRendered=%{public}d prepReused=%{public}d", window.calls, window.rendered, window.reused);
+		window = {};
+	}
+#endif
 }
 
 void AtmosphereLightweight::applyToneReproducerParams(StelCore* core, const float atmosphereIntensity)
@@ -745,7 +919,7 @@ void AtmosphereLightweight::draw(StelCore*const core)
 	if (layerIndexOffsetsInBuffer_.empty()) return;
 	if (StelApp::getInstance().getVisionModeNight()) return;
 
-	const float atmIntensity = fader.getInterstate();
+	const float atmIntensity = getVisualFadeIntensity();
 	if (atmIntensity==0) return;
 
 	const auto prj = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);

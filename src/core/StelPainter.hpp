@@ -27,11 +27,13 @@
 #include "StelProjectorType.hpp"
 #include "StelTextureTypes.hpp"
 #include "StelUtils.hpp"
+#include "ScreenLabelLayout.hpp"
 #include <QString>
 #include <QVarLengthArray>
 #include <QFontMetrics>
 
 class QOpenGLBuffer;
+class QJsonArray;
 class QOpenGLShaderProgram;
 class QOpenGLVertexArrayObject;
 
@@ -101,6 +103,22 @@ public:
 	//! @param noGravity don't take into account the fact that the text should be written with gravity.
 	void drawText(const Vec3d& v, const QString& str, float angleDeg=0.f,
               float xshift=0.f, float yshift=0.f, bool noGravity=true);
+	static void beginSkyLabelFrame();
+	static QJsonArray skyLabelStatistics();
+	static std::vector<float> resolveSkyLabelLayout(const QString& group);
+	void beginSkyLabels(const QString& group, const QString& selectedId = QString());
+	void queueSkyLabel(const QString& id, const Vec3d& position, const QString& text,
+	                   float magnitude, int priority = 0, float xshift = 0.f, float yshift = 0.f,
+	                   const QString& selectionId = QString());
+	void queueSkyLabel(const QString& id, float x, float y, const QString& text,
+	                   float magnitude, int priority = 0, float xshift = 0.f, float yshift = 0.f,
+	                   const QString& selectionId = QString());
+	void flushSkyLabels();
+	static float skyLabelVisibility(const QString& group, const QString& id);
+	static void clearSkyLabels(const QString& group);
+	static ScreenLabelLayout& skyLabelLayoutForGroup(const QString& group);
+	ScreenLabelLayout::Rect skyLabelRect(float x, float y, const QString& text,
+	                                    float xshift = 0.f, float yshift = 0.f) const;
 
 	//! Draw the given SphericalRegion.
 	//! @param region The SphericalRegion to draw. If observerVelocity is given, it will be modified.
@@ -341,6 +359,7 @@ public:
 	//! enabled arrays.
 	//! NOTE: Prefer to use drawStelVertexArray, else there are wrap-around rendering artifacts in a few projections.
 	void drawFromArray(DrawingMode mode, int count, int offset=0, bool doProj=true, const unsigned short *indices=Q_NULLPTR);
+	void drawTrianglesWithDepthPrepass(int count, const unsigned short* indices);
 
 	//! Draws the primitives defined in the StelVertexArray.
 	//! @param checkDiscontinuity will check and suppress discontinuities if necessary.
@@ -352,6 +371,7 @@ public:
 	static bool linkProg(class QOpenGLShaderProgram* prog, const QString& name);
 
 private:
+	void drawFromArrayImpl(DrawingMode mode, int count, int offset, bool doProj, const unsigned short* indices, bool depthPrepass);
 	friend class StelTextureMgr;
 	friend class StelTexture;
 
@@ -440,6 +460,17 @@ private:
 
 	//! The used for text drawing
 	QFont currentFont;
+	struct SkyLabel
+	{
+		float x, y, xshift, yshift;
+		QString text;
+		QFont font;
+		Vec4f color;
+	};
+	ScreenLabelLayout* skyLabelLayout = nullptr;
+	QString skyLabelGroup;
+	QString selectedSkyLabelId;
+	std::vector<SkyLabel> skyLabels;
 
 	Vec4f currentColor;
 	//! Saturation effect adjustment.

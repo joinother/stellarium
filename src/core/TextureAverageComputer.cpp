@@ -21,6 +21,7 @@
 #include "StelMainView.hpp"
 #include "StelUtils.hpp"
 #include <array>
+#include <cstring>
 #include <QOpenGLExtraFunctions>
 
 namespace
@@ -32,6 +33,7 @@ class FBORestorer
 {
 	QOpenGLExtraFunctions& gl;
 	GLint oldFBO=-1;
+	GLint oldReadFBO=-1;
 public:
 	FBORestorer(QOpenGLExtraFunctions& gl)
 		: gl(gl)
@@ -39,17 +41,70 @@ public:
 	}
 	void capture()
 	{
+		if (oldFBO >= 0) return;
 		GL(gl.glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldFBO));
+		if (QOpenGLContext::currentContext()->format().majorVersion() >= 3)
+			GL(gl.glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &oldReadFBO));
 	}
 	~FBORestorer()
 	{
 		if (oldFBO >= 0)
 			GL(gl.glBindFramebuffer(GL_FRAMEBUFFER, oldFBO));
+		if (oldReadFBO >= 0)
+			GL(gl.glBindFramebuffer(GL_READ_FRAMEBUFFER, oldReadFBO));
+	}
+};
+
+class PixelPackRestorer
+{
+	QOpenGLExtraFunctions& gl;
+	GLint buffer = 0, alignment = 4, rowLength = 0, skipRows = 0, skipPixels = 0, swapBytes = 0;
+	bool extended = false;
+	bool desktop = false;
+public:
+	PixelPackRestorer(QOpenGLExtraFunctions& functions, GLuint target) : gl(functions)
+	{
+		extended = QOpenGLContext::currentContext()->format().majorVersion() >= 3;
+		desktop = !QOpenGLContext::currentContext()->isOpenGLES();
+		gl.glGetIntegerv(GL_PACK_ALIGNMENT, &alignment);
+		gl.glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		if (extended)
+		{
+			gl.glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &buffer);
+			gl.glGetIntegerv(GL_PACK_ROW_LENGTH, &rowLength);
+			gl.glGetIntegerv(GL_PACK_SKIP_ROWS, &skipRows);
+			gl.glGetIntegerv(GL_PACK_SKIP_PIXELS, &skipPixels);
+			gl.glBindBuffer(GL_PIXEL_PACK_BUFFER, target);
+			gl.glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+			gl.glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+			gl.glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+		}
+#if !QT_CONFIG(opengles2)
+		if (desktop)
+		{
+			gl.glGetIntegerv(GL_PACK_SWAP_BYTES, &swapBytes);
+			gl.glPixelStorei(GL_PACK_SWAP_BYTES, 0);
+		}
+#endif
+	}
+	~PixelPackRestorer()
+	{
+		gl.glPixelStorei(GL_PACK_ALIGNMENT, alignment);
+		if (extended)
+		{
+			gl.glBindBuffer(GL_PIXEL_PACK_BUFFER, buffer);
+			gl.glPixelStorei(GL_PACK_ROW_LENGTH, rowLength);
+			gl.glPixelStorei(GL_PACK_SKIP_ROWS, skipRows);
+			gl.glPixelStorei(GL_PACK_SKIP_PIXELS, skipPixels);
+		}
+#if !QT_CONFIG(opengles2)
+		if (desktop) gl.glPixelStorei(GL_PACK_SWAP_BYTES, swapBytes);
+#endif
 	}
 };
 }
 
-Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGLES(const int width, const int height)
+Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGLES(const int width, const int height, const bool intoBuffer)
 {
 	Q_UNUSED(width) Q_UNUSED(height)
 	GL(gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
@@ -58,8 +113,8 @@ Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGLES(const in
 
 	GLint oldViewport[4];
 	GL(gl.glGetIntegerv(GL_VIEWPORT, oldViewport));
-	GLint oldFBO=-1;
-	GL(gl.glGetIntegerv(GL_FRAMEBUFFER_BINDING, &oldFBO));
+	FBORestorer fboRestorer(gl);
+	fboRestorer.capture();
 
 	glesFBO->bind();
 	GL(gl.glViewport(0,0,1,1));
@@ -72,22 +127,31 @@ Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGLES(const in
 	Vec4f pixel(NAN,NAN,NAN,NAN);
 	if (textureIsFloat)
 	{
-		GL(gl.glReadPixels(0,0,1,1,GL_RGBA,GL_FLOAT,&pixel[0]));
+		if (intoBuffer)
+		{
+			gl.glReadPixels(0,0,1,1,GL_RGBA,GL_FLOAT,nullptr);
+			if (gl.glGetError() != GL_NO_ERROR) readbackFailed = true;
+		}
+		else GL(gl.glReadPixels(0,0,1,1,GL_RGBA,GL_FLOAT,&pixel[0]));
 	}
 	else
 	{
 		std::array<uint8_t, 4> data{};
-		GL(gl.glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,&data[0]));
+		if (intoBuffer)
+		{
+			gl.glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+			if (gl.glGetError() != GL_NO_ERROR) readbackFailed = true;
+		}
+		else GL(gl.glReadPixels(0,0,1,1,GL_RGBA,GL_UNSIGNED_BYTE,&data[0]));
 		pixel = {data[0] / 255.f, data[1] / 255.f, data[2] / 255.f, data[3] / 255.f};
 	}
 
 	GL(gl.glViewport(oldViewport[0], oldViewport[1], oldViewport[2], oldViewport[3]));
-	GL(gl.glBindFramebuffer(GL_FRAMEBUFFER, oldFBO));
 
 	return pixel;
 }
 
-Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGL(const int width, const int height)
+Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGL(const int width, const int height, const bool intoBuffer)
 {
 #if !QT_CONFIG(opengles2)
 	using namespace std;
@@ -105,7 +169,12 @@ Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGL(const int 
 #endif
 
 	Vec4f pixel;
-	GL(hiGL->glGetTexImage(GL_TEXTURE_2D, deepestLevel, GL_RGBA, GL_FLOAT, &pixel[0]));
+	if (intoBuffer)
+	{
+		hiGL->glGetTexImage(GL_TEXTURE_2D, deepestLevel, GL_RGBA, GL_FLOAT, nullptr);
+		if (gl.glGetError() != GL_NO_ERROR) readbackFailed = true;
+	}
+	else GL(hiGL->glGetTexImage(GL_TEXTURE_2D, deepestLevel, GL_RGBA, GL_FLOAT, &pixel[0]));
 	return pixel;
 #else
 	return {NAN, NAN, NAN, NAN};
@@ -114,6 +183,7 @@ Vec4f TextureAverageComputer::getCurrentTextureDeepestMipLevelPixelGL(const int 
 
 Vec4f TextureAverageComputer::getTextureAverageSimple(const GLuint texture, const int width, const int height)
 {
+	PixelPackRestorer packRestorer(gl, 0);
 	// Get average value of the pixels as the value of the deepest mipmap level
 	GL(gl.glActiveTexture(GL_TEXTURE0));
 	GL(gl.glBindTexture(GL_TEXTURE_2D, texture));
@@ -338,7 +408,85 @@ void TextureAverageComputer::releaseVAO()
 
 TextureAverageComputer::~TextureAverageComputer()
 {
+	resetAsyncReadback();
 	GL(gl.glDeleteTextures(1, &potTex));
 	GL(gl.glDeleteFramebuffers(1, &potFBO));
 	GL(gl.glDeleteBuffers(1, &vbo));
+}
+
+bool TextureAverageComputer::supportsAsyncReadback() const
+{
+	const auto* context = QOpenGLContext::currentContext();
+	if (readbackFailed || !context) return false;
+	const auto format = context->format();
+	return context->isOpenGLES() ? format.majorVersion() >= 3
+		: format.majorVersion() > 3 || (format.majorVersion() == 3 && format.minorVersion() >= 2);
+}
+
+bool TextureAverageComputer::enqueueTextureAverageSimple(GLuint texture, int width, int height, std::uint64_t token)
+{
+	if (!supportsAsyncReadback() || readbackCount == readbacks.size()) return false;
+	auto& slot = readbacks[(readbackHead + readbackCount) % readbacks.size()];
+	if (!slot.buffer) gl.glGenBuffers(1, &slot.buffer);
+	if (!slot.buffer) { readbackFailed = true; return false; }
+	PixelPackRestorer packRestorer(gl, slot.buffer);
+	const int bytes = !isGLES || textureIsFloat ? sizeof(float) * 4 : 4;
+	gl.glBufferData(GL_PIXEL_PACK_BUFFER, bytes, nullptr, GL_STREAM_READ);
+	GLint allocated = 0;
+	gl.glGetBufferParameteriv(GL_PIXEL_PACK_BUFFER, GL_BUFFER_SIZE, &allocated);
+	if (allocated != bytes) { readbackFailed = true; return false; }
+	gl.glActiveTexture(GL_TEXTURE0);
+	gl.glBindTexture(GL_TEXTURE_2D, texture);
+	gl.glGenerateMipmap(GL_TEXTURE_2D);
+	if (isGLES) getCurrentTextureDeepestMipLevelPixelGLES(width, height, true);
+	else getCurrentTextureDeepestMipLevelPixelGL(width, height, true);
+	if (readbackFailed || gl.glGetError() != GL_NO_ERROR) { readbackFailed = true; return false; }
+	slot.fence = gl.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+	if (!slot.fence) { readbackFailed = true; return false; }
+	slot.token = token;
+	++readbackCount;
+	gl.glFlush();
+	return true;
+}
+
+bool TextureAverageComputer::pollTextureAverage(AsyncResult& result)
+{
+	if (!supportsAsyncReadback() || !readbackCount) return false;
+	auto& slot = readbacks[readbackHead];
+	const auto status = gl.glClientWaitSync(slot.fence, 0, 0);
+	if (status == GL_TIMEOUT_EXPIRED) return false;
+	if (status != GL_ALREADY_SIGNALED && status != GL_CONDITION_SATISFIED)
+	{
+		readbackFailed = true;
+		return false;
+	}
+	PixelPackRestorer packRestorer(gl, slot.buffer);
+	const bool floats = !isGLES || textureIsFloat;
+	const auto* data = gl.glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, floats ? sizeof(float) * 4 : 4, GL_MAP_READ_BIT);
+	if (!data) { readbackFailed = true; return false; }
+	Vec4f value;
+	if (floats) std::memcpy(&value[0], data, sizeof(float) * 4);
+	else
+	{
+		const auto* bytes = static_cast<const unsigned char*>(data);
+		value = {bytes[0] / 255.f, bytes[1] / 255.f, bytes[2] / 255.f, bytes[3] / 255.f};
+	}
+	if (!gl.glUnmapBuffer(GL_PIXEL_PACK_BUFFER)) { readbackFailed = true; return false; }
+	result = {value, slot.token};
+	gl.glDeleteSync(slot.fence);
+	slot.fence = nullptr;
+	readbackHead = (readbackHead + 1) % readbacks.size();
+	--readbackCount;
+	return true;
+}
+
+void TextureAverageComputer::resetAsyncReadback()
+{
+	for (auto& slot : readbacks)
+	{
+		if (slot.fence) gl.glDeleteSync(slot.fence);
+		if (slot.buffer) gl.glDeleteBuffers(1, &slot.buffer);
+		slot = {};
+	}
+	readbackHead = readbackCount = 0;
 }

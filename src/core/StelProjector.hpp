@@ -179,6 +179,7 @@ public:
 	//! cylindrical projection it will return true if the line cuts the wrap-around line (i.e. at lon=180 if the observer look at lon=0).
 	bool intersectViewportDiscontinuity(const Vec3d& p1, const Vec3d& p2) const;
 	bool intersectViewportDiscontinuity(const SphericalCap& cap) const;
+	bool hasProjectionDiscontinuity() const { return hasDiscontinuity(); }
 
 	//! Convert a Field Of View radius value in radians in ViewScalingFactor (used internally)
 	virtual float fovToViewScalingFactor(float fov) const {return fov;}

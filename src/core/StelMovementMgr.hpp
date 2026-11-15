@@ -176,6 +176,8 @@ public:
 
 	Vec3d j2000ToMountFrame(const Vec3d& v) const;
 	Vec3d mountFrameToJ2000(const Vec3d& v) const;
+	static bool solveMountFrameAnchor(const Vec3d& desiredDirection, const Vec3d& targetDirection,
+									 Vec3d& view, Vec3d& up);
 
 	void moveToObject(const StelObjectP& target, float moveDuration = 1., ZoomingMode zooming = ZoomNone);
 

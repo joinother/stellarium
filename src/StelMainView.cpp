@@ -168,6 +168,7 @@ Q_LOGGING_CATEGORY(mainview, "stel.MainView")
 #include <limits>
 #include <clocale>
 #if defined(__OHOS__)
+#include <array>
 #include <dlfcn.h>
 #include <EGL/egl.h>
 #include <hilog/log.h>
@@ -211,9 +212,59 @@ static std::atomic<bool> s_ohosScriptRenderHeartbeat{false};
 static std::atomic<bool> s_gyroViewActive{false};
 static std::atomic<quint64> s_ohosSkippedGraphicsPaints{0};
 
-// Lock-free FPS counter: updated by renderOhosFrameNow() on Qt thread,
-// read by StellariumOhos_command("getFPS") on ArkUI thread.
-static std::atomic<float> s_ohosRenderFps{0.0f};
+constexpr int OHOS_FPS_WINDOW_FRAMES = 120;
+struct OhosFrameStatistics
+{
+	double fps = 0.0;
+	double frameTimeMs = 0.0;
+	double renderTimeMs = 0.0;
+	double windowFps = 0.0;
+	double frameTimeP50Ms = 0.0;
+	double frameTimeP95Ms = 0.0;
+	int windowSamples = 0;
+	int pendingSamples = 0;
+	int windowSequence = 0;
+};
+static QMutex s_ohosFrameStatisticsMutex;
+static OhosFrameStatistics s_ohosFrameStatistics;
+static std::array<double, OHOS_FPS_WINDOW_FRAMES> s_ohosFrameIntervals{};
+static double s_ohosPreviousFrameStartSec = 0.0;
+
+void resetOhosFrameStatistics()
+{
+	QMutexLocker locker(&s_ohosFrameStatisticsMutex);
+	s_ohosFrameStatistics = {};
+	s_ohosPreviousFrameStartSec = 0.0;
+}
+
+OhosFrameStatistics recordOhosFrameStatistics(double startSec, double endSec)
+{
+	QMutexLocker locker(&s_ohosFrameStatisticsMutex);
+	auto& stats = s_ohosFrameStatistics;
+	stats.renderTimeMs = (endSec - startSec) * 1000.0;
+	const double elapsedSec = startSec - s_ohosPreviousFrameStartSec;
+	if (s_ohosPreviousFrameStartSec > 0.0 && elapsedSec > 0.0 && std::isfinite(elapsedSec))
+	{
+		stats.frameTimeMs = elapsedSec * 1000.0;
+		stats.fps = 1.0 / elapsedSec;
+		s_ohosFrameIntervals[stats.pendingSamples++] = stats.frameTimeMs;
+		if (stats.pendingSamples == OHOS_FPS_WINDOW_FRAMES)
+		{
+			double totalMs = 0.0;
+			for (double intervalMs : s_ohosFrameIntervals)
+				totalMs += intervalMs;
+			std::sort(s_ohosFrameIntervals.begin(), s_ohosFrameIntervals.end());
+			stats.windowFps = OHOS_FPS_WINDOW_FRAMES * 1000.0 / totalMs;
+			stats.frameTimeP50Ms = s_ohosFrameIntervals[(OHOS_FPS_WINDOW_FRAMES * 50 + 99) / 100 - 1];
+			stats.frameTimeP95Ms = s_ohosFrameIntervals[(OHOS_FPS_WINDOW_FRAMES * 95 + 99) / 100 - 1];
+			stats.windowSamples = OHOS_FPS_WINDOW_FRAMES;
+			stats.pendingSamples = 0;
+			++stats.windowSequence;
+		}
+	}
+	s_ohosPreviousFrameStartSec = startSec;
+	return stats;
+}
 // Updated on the Qt render thread and read by ArkTS without crossing the
 // command queue. The edge guide must use the same projector as the star map:
 // altitude/azimuth deltas are not a screen-space direction in wide fields.
@@ -2592,28 +2643,36 @@ static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, d
 	const double pixelsPerRad = static_cast<double>(projector->getPixelPerRadAtCenter());
 	if (pixelsPerRad > 1e-9 && std::acos(cosine) * pixelsPerRad < 0.5)
 		return;
-	const Vec3d rotationAxis = desiredDirection ^ targetDirection;
-	if (cosine < -0.999999 || rotationAxis.normSquared() < 1e-24)
-		return;
-	const auto rotate = [&rotationAxis, cosine](const Vec3d& vector) {
-		return vector + (rotationAxis ^ vector) + (rotationAxis ^ (rotationAxis ^ vector)) / (1.0 + cosine);
-	};
-	Vec3d view = rotate(core->j2000ToAltAz(movementMgr->getViewDirectionJ2000(), StelCore::RefractionOff));
-	if (view.normSquared() < 1e-18)
-		return;
-	view.normalize();
-	// Same split as StelMovementMgr::panView(): resolve the view and its up in the
-	// mount frame, then write both through the movement manager. This keeps the
-	// camera's roll convention identical to the kernel's, so an equatorial mount
-	// keeps its polar tilt instead of being levelled to the local zenith.
-	Vec3d viewMount = movementMgr->j2000ToMountFrame(core->altAzToJ2000(view, StelCore::RefractionOff));
-	viewMount.normalize();
+	Vec3d viewMount = movementMgr->j2000ToMountFrame(movementMgr->getViewDirectionJ2000());
 	const Vec3d previousUpMount = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
 	// Zooming must never rotate the camera. While a pinch (or its settle tail)
 	// owns the view, keep the stored roll and only transport it, so the 1/sin
 	// sensitivity of the canonical up near a pole/zenith cannot shake the image.
 	const bool freezeRoll = s_ohosPinchActive || s_ohosPinchSettleActive;
-	const Vec3d upMount = ohosMountCanonicalUp(viewMount, previousUpMount, freezeRoll);
+	Vec3d upMount = previousUpMount;
+	if (!freezeRoll)
+	{
+		const Vec3d desiredMount = movementMgr->j2000ToMountFrame(core->altAzToJ2000(desiredDirection, StelCore::RefractionOff));
+		const Vec3d targetMount = movementMgr->j2000ToMountFrame(core->altAzToJ2000(targetDirection, StelCore::RefractionOff));
+		if (!StelMovementMgr::solveMountFrameAnchor(desiredMount, targetMount, viewMount, upMount))
+			return;
+	}
+	else
+	{
+		const Vec3d rotationAxis = desiredDirection ^ targetDirection;
+		if (cosine < -0.999999 || rotationAxis.normSquared() < 1e-24)
+			return;
+		const auto rotate = [&rotationAxis, cosine](const Vec3d& vector) {
+			return vector + (rotationAxis ^ vector) + (rotationAxis ^ (rotationAxis ^ vector)) / (1.0 + cosine);
+		};
+		Vec3d view = rotate(core->j2000ToAltAz(movementMgr->getViewDirectionJ2000(), StelCore::RefractionOff));
+		if (view.normSquared() < 1e-18)
+			return;
+		view.normalize();
+		viewMount = movementMgr->j2000ToMountFrame(core->altAzToJ2000(view, StelCore::RefractionOff));
+		viewMount.normalize();
+		upMount = ohosMountCanonicalUp(viewMount, previousUpMount, true);
+	}
 	// Order matters: setViewDirectionJ2000() re-reads the current up vector.
 	movementMgr->setViewUpVector(upMount);
 	movementMgr->setViewDirectionJ2000(movementMgr->mountFrameToJ2000(viewMount));
@@ -3116,6 +3175,7 @@ QJsonObject pickCandidateJson(const PickCandidate& candidate)
 	item["directHit"] = candidate.directHit;
 	item["labelHit"] = candidate.labelHit;
 	item["lineHit"] = candidate.lineHit;
+	item["modelHit"] = candidate.modelHit;
 	item["directRank"] = candidate.directRank;
 	if (candidate.satellite)
 	{
@@ -5285,14 +5345,25 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
-	// getFPS: read from a lock-free atomic updated by renderOhosFrameNow().
-	// Avoids calling StelApp::getInstance().getFps() from the ArkUI thread
-	// (not thread-safe) and avoids the async queue (which returns pending forever).
 	if (commandName == "getFPS")
 	{
+		OhosFrameStatistics stats;
+		{
+			QMutexLocker locker(&s_ohosFrameStatisticsMutex);
+			stats = s_ohosFrameStatistics;
+		}
 		QJsonObject fpsResult;
 		fpsResult["ok"] = true;
-		fpsResult["fps"] = s_ohosRenderFps.load();
+		fpsResult["fps"] = stats.fps;
+		fpsResult["frameTimeMs"] = stats.frameTimeMs;
+		fpsResult["renderTimeMs"] = stats.renderTimeMs;
+		fpsResult["windowFps"] = stats.windowFps;
+		fpsResult["frameTimeP50Ms"] = stats.frameTimeP50Ms;
+		fpsResult["frameTimeP95Ms"] = stats.frameTimeP95Ms;
+		fpsResult["windowSamples"] = stats.windowSamples;
+		fpsResult["pendingSamples"] = stats.pendingSamples;
+		fpsResult["windowSequence"] = stats.windowSequence;
+		fpsResult["windowCapacity"] = OHOS_FPS_WINDOW_FRAMES;
 		response = QString::fromUtf8(QJsonDocument(fpsResult).toJson(QJsonDocument::Compact)).toUtf8();
 		return response.constData();
 	}
@@ -7508,6 +7579,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["maxErrorPixels"] = s_ohosAnchorProbeMaxErrorPixels;
 			result["maxSolveMs"] = s_ohosAnchorProbeMaxSolveMs;
 			result["fov"] = movementMgr ? movementMgr->getCurrentFov() : 0.0;
+			result["jd"] = core->getJD();
+			result["timeRate"] = core->getTimeRate();
+			result["gyroActive"] = s_gyroViewActive.load();
+			result["tracking"] = movementMgr && movementMgr->getFlagTracking();
+			result["autoMove"] = movementMgr && movementMgr->getFlagAutoMove();
 			if (movementMgr)
 			{
 				// Roll error against the mount frame's canonical up. 0 means the camera
@@ -7519,12 +7595,49 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				viewJ2000.normalize();
 				mountUpJ2000 -= viewJ2000 * mountUpJ2000.dot(viewJ2000);
 				cameraUpJ2000 -= viewJ2000 * cameraUpJ2000.dot(viewJ2000);
+				if (cameraUpJ2000.normSquared() > 1e-18)
+				{
+					cameraUpJ2000.normalize();
+					const Vec3d viewMount = movementMgr->j2000ToMountFrame(viewJ2000);
+					const Vec3d upMount = movementMgr->j2000ToMountFrame(cameraUpJ2000);
+					const Vec3d viewAltAz = core->j2000ToAltAz(viewJ2000, StelCore::RefractionOff);
+					const Vec3d upAltAz = core->j2000ToAltAz(cameraUpJ2000, StelCore::RefractionOff);
+					result["viewMount"] = QJsonArray{viewMount[0], viewMount[1], viewMount[2]};
+					result["upMount"] = QJsonArray{upMount[0], upMount[1], upMount[2]};
+					result["viewAltAz"] = QJsonArray{viewAltAz[0], viewAltAz[1], viewAltAz[2]};
+					result["upAltAz"] = QJsonArray{upAltAz[0], upAltAz[1], upAltAz[2]};
+					Vec3d horizonUp = Vec3d(0., 0., 1.) - viewAltAz * viewAltAz[2];
+					const bool horizonDefined = horizonUp.normSquared() > 1e-12;
+					result["horizonRollDefined"] = horizonDefined;
+					if (horizonDefined)
+					{
+						horizonUp.normalize();
+						result["horizonRollDeg"] = std::atan2(viewAltAz.dot(horizonUp ^ upAltAz),
+							horizonUp.dot(upAltAz)) * 180.0 / M_PI;
+					}
+				}
 				if (mountUpJ2000.normSquared() > 1e-18 && cameraUpJ2000.normSquared() > 1e-18)
 				{
 					mountUpJ2000.normalize();
 					cameraUpJ2000.normalize();
 					result["rollErrorDeg"] =
 						std::acos(qBound(-1.0, mountUpJ2000.dot(cameraUpJ2000), 1.0)) * 180.0 / M_PI;
+				}
+			}
+			result["selectedProjectable"] = false;
+			result["selectedVisible"] = false;
+			if (objectMgr && !objectMgr->getSelectedObject().isEmpty())
+			{
+				const StelProjectorP projector = core->getProjection(StelCore::FrameJ2000);
+				const Vec4i viewport = projector->getViewport();
+				Vec3d screen;
+				if (viewport[2] > 1 && viewport[3] > 1 &&
+					projector->project(objectMgr->getSelectedObject().constFirst()->getJ2000EquatorialPos(core), screen))
+				{
+					result["selectedProjectable"] = true;
+					result["selectedVisible"] = projector->checkInViewport(screen);
+					result["selectedXRatio"] = (screen[0] - viewport[0]) / viewport[2];
+					result["selectedYRatio"] = (viewport[1] + viewport[3] - 1 - screen[1]) / viewport[3];
 				}
 			}
 			return result;
@@ -7614,15 +7727,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "advanceTime expects hours";
 				return result;
 			}
-			StelMovementMgr* movementMgr = core->getMovementMgr();
-			const Vec3d viewDirection = movementMgr->getViewDirectionJ2000();
-			const Vec3d viewUp = movementMgr->getViewUpVectorJ2000();
-			const bool preserveDirection = !movementMgr->getFlagTracking();
 			core->setJD(core->getJD() + hours / 24.0);
-			// Up first: setViewDirectionJ2000() re-reads the up vector.
-			movementMgr->setViewUpVectorJ2000(viewUp);
-			if (preserveDirection)
-				movementMgr->setViewDirectionJ2000(viewDirection);
 			markOhosInteraction();
 			result["ok"] = true;
 			result["jd"] = core->getJD();
@@ -10124,15 +10229,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			StelCore* core = StelApp::getInstance().getCore();
-			StelMovementMgr* movementMgr = core->getMovementMgr();
-			const Vec3d viewDirection = movementMgr->getViewDirectionJ2000();
-			const Vec3d viewUp = movementMgr->getViewUpVectorJ2000();
-			const bool preserveDirection = !movementMgr->getFlagTracking();
 			core->setJD(jd);
-			// Up first: setViewDirectionJ2000() re-reads the up vector.
-			movementMgr->setViewUpVectorJ2000(viewUp);
-			if (preserveDirection)
-				movementMgr->setViewDirectionJ2000(viewDirection);
 			core->setTimeRate(0.0);
 			result["ok"] = true;
 			result["jd"] = jd;
@@ -11675,6 +11772,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["timezone"] = location.ianaTimeZone;
 			}
 			result["atmosphere"] = lmgr->getFlagAtmosphere();
+			result["atmosphereModel"] = lmgr->getAtmosphereModel();
+			result["atmosphereAverageLuminance"] = lmgr->getAtmosphereAverageLuminance();
+			const StelSkyDrawer* drawer = core->getSkyDrawer();
+			result["atmosphereVisualStrength"] = drawer->getAtmosphereVisualStrength();
+			result["starLimitMagnitude"] = drawer->getStarLimitMagnitude();
+			result["limitMagnitude"] = drawer->getLimitMagnitude();
+			result["extinctionCoefficient"] = drawer->getExtinctionCoefficient();
 			result["fog"] = lmgr->getFlagFog();
 			result["ground"] = lmgr->getFlagLandscape();
 			result["polyAngle"] = 0.0;
@@ -12540,6 +12644,29 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			result["ok"] = true;
 			result["flags"] = flags;
+			const auto& stats = nbmgr->getDrawStats();
+			const auto passJson = [](const NebulaMgr::PassDrawStats& pass)
+			{
+				QJsonObject item;
+				item["candidates"] = static_cast<int>(pass.candidates);
+				item["accepted"] = static_cast<int>(pass.accepted);
+				item["drawn"] = static_cast<int>(pass.drawn);
+				item["alphaSum"] = pass.alphaSum;
+				item["alphaMax"] = pass.alphaMax;
+				return item;
+			};
+			QJsonObject drawing;
+			drawing["visited"] = static_cast<int>(stats.visited);
+			drawing["eligible"] = static_cast<int>(stats.eligible);
+			drawing["projected"] = static_cast<int>(stats.projected);
+			drawing["maxMagHints"] = stats.maxMagHints;
+			drawing["maxMagLabels"] = stats.maxMagLabels;
+			drawing["layerOpacity"] = stats.layerOpacity;
+			drawing["hints"] = passJson(stats.hints);
+			drawing["labels"] = passJson(stats.labels);
+			drawing["outlines"] = passJson(stats.outlines);
+			result["drawing"] = drawing;
+			result["skyLabelGroups"] = StelPainter::skyLabelStatistics();
 			return result;
 		}
 
@@ -19472,7 +19599,7 @@ void StelMainView::setOhosApplicationForeground(bool foreground)
 		// The app has no background task. Stop every continuous render activity
 		// while retaining the OpenGL scene so returning to the foreground is fast.
 		fpsTimer->stop();
-		s_ohosRenderFps.store(0.0f);
+		resetOhosFrameStatistics();
 		s_ohosPanInertiaActive = false;
 		s_gyroTransitionActive = false;
 		if (g_videoRecorder.timer)
@@ -19482,6 +19609,7 @@ void StelMainView::setOhosApplicationForeground(bool foreground)
 	}
 
 	lastOhosRenderTimeSec = 0.0;
+	resetOhosFrameStatistics();
 	startOhosRenderPump();
 	requestOhosSceneRepaint();
 	ohosMark("OpenHarmony rendering resumed in foreground");
@@ -19643,6 +19771,7 @@ void StelMainView::renderOhosFrameNow()
 	emit frameFinished();
 
 	const double t5 = StelApp::getTotalRunTime();
+	const OhosFrameStatistics frameStats = recordOhosFrameStatistics(t0, t5);
 
 	const int intervalMs = currentOhosRenderIntervalMs();
 	const bool maxFps = needsMaxFPS();
@@ -19658,15 +19787,8 @@ void StelMainView::renderOhosFrameNow()
 		OH_LOG_Print(LOG_APP, LOG_INFO, 0x0000, "StellariumFps",
 			"frame: total=%{public}.1fms cmd=%{public}.1fms setup=%{public}.1fms update=%{public}.1fms draw=%{public}.1fms submit=%{public}.1fms interval=%{public}dms maxFps=%{public}d fps=%{public}.1f",
 			totalMs, cmdMs, setupMs, updateMs, drawMs, submitMs, intervalMs, maxFps ? 1 : 0,
-			static_cast<double>(app.getFps()));
+			frameStats.fps);
 	}
-
-	// Update lock-free FPS counter every frame for getFPS command.
-	// Compute from actual frame time delta for accuracy.
-#if defined(__OHOS__)
-	if (dt > 0.001 && dt < 0.25)
-		s_ohosRenderFps.store(1.0f / static_cast<float>(dt));
-#endif
 }
 
 void StelMainView::requestOhosSceneRepaint()
@@ -19824,8 +19946,6 @@ void StelMainView::thereWasAnEvent()
 	const int interactiveInterval = currentOhosRenderIntervalMs();
 	if (fpsTimer && fpsTimer->interval() != interactiveInterval)
 		fpsTimer->setInterval(interactiveInterval);
-	// Update lock-free FPS counter for getFPS command
-	s_ohosRenderFps.store(StelApp::getInstance().getFps());
 #endif
 }
 
@@ -19841,7 +19961,10 @@ bool StelMainView::needsMaxFPS() const
 	// The fps is also kept to max if the timerate is higher than normal speed.
 	const double timeRate = stelApp->getCore()->getTimeRate();
 #if defined(__OHOS__)
-	return (now - lastEventTimeSec < 0.8) || ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;
+	return (now - lastEventTimeSec < 0.8) || s_ohosPanInertiaActive || s_ohosPinchActive ||
+		s_ohosPinchSettleActive || s_gyroTransitionActive ||
+		stelApp->getCore()->getMovementMgr()->getFlagAutoMove() ||
+		ohosTelescopeMarkerAnimating() || fabs(timeRate) > StelCore::JD_SECOND;
 #else
 	return (now - lastEventTimeSec < 4.0) || fabs(timeRate) > StelCore::JD_SECOND;
 #endif

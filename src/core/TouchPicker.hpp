@@ -70,6 +70,7 @@ struct PickCandidate
 	bool directHit = false;
 	bool labelHit = false;
 	bool lineHit = false;
+	bool modelHit = false;
 	int directRank = 99;
 	bool satellite = false;
 	SatellitePickDiagnostics satelliteRender;

@@ -27,6 +27,7 @@
 #include "StelTranslator.hpp"
 #include "StelFader.hpp"
 #include "StelTextureTypes.hpp"
+#include "StelProjectorType.hpp"
 #include "StelSphereGeometry.hpp"
 #include "ConstellationMgr.hpp"
 
@@ -88,7 +89,8 @@ public:
 	bool read(const QJsonObject& data, StarMgr *starMgr);
 
 	//! Draw the constellation name. Depending on completeness of names and data, there may be a rich set of options to display.
-	void drawName(const Vec3d &xyName, StelPainter& sPainter) const;
+	void drawName(const Vec3d &xyName, StelPainter& sPainter, int anchorIndex) const;
+	QString getLabelLayoutId(int anchorIndex) const { return getID() + ":anchor:" + QString::number(anchorIndex); }
 	//! Draw the constellation art
 	void drawArt(StelPainter& sPainter) const;
 	//! Draw the constellation boundary. obsVelocity used for aberration
@@ -127,6 +129,7 @@ public:
 
 	//! Combine screen label from various components, depending on settings in SkyCultureMgr
 	QString getScreenLabel() const override;
+	const QList<Vec3d>& getLabelPositions() const { return XYZname; }
 	//! Combine InfoString label from various components, depending on settings in SkyCultureMgr
 	QString getInfoLabel() const override;
 	//! set narration text. narration may contain Markdown syntax.
@@ -141,6 +144,7 @@ public:
 	const std::vector<StelObjectP>& getConstellationLines() const { return constellation; }
 	//! Returns the dark-constellation line-point array.
 	const std::vector<StelObjectP>& getDarkConstellationLines() const { return dark_constellation; }
+	bool modelContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const;
 private:
 	//! Underlying worker
 	QString getCultureLabel(StelObject::CulturalDisplayStyle style) const;
@@ -251,7 +255,29 @@ private:
 	StelVertexArray artPolygon;
 	QVector<Vec3d> modelPositions;
 	QVector<Vec3f> modelColors;
-	QVector<quint32> modelIndices;
+	QVector<unsigned short> modelIndices;
+	Vec3d modelCenter = Vec3d(0., 0., 1.);
+	Vec3d modelRight = Vec3d(1., 0., 0.);
+	Vec3d modelUp = Vec3d(0., 1., 0.);
+	double modelSpanDegrees = 1.;
+	float modelZoomOpacity = 1.f;
+	float modelYaw = 0.f;
+	float modelPitch = 0.f;
+	float modelRoll = 0.f;
+	bool modelArrivalArmed = true;
+	double modelArrivalElapsed = 1.6;
+	mutable float modelCachedYaw = 100.f;
+	mutable float modelCachedPitch = 100.f;
+	mutable float modelCachedRoll = 100.f;
+	mutable float modelCachedIntensity = -1.f;
+	mutable QVector<Vec3d> modelDirections;
+	mutable QVector<float> modelDepths;
+	mutable QVector<Vec3f> modelProjected;
+	mutable QVector<Vec4f> modelDrawColors;
+	mutable QVector<bool> modelValid;
+	mutable QVector<unsigned short> modelVisibleIndices;
+	void prepareModelPose() const;
+	float modelIntensity() const;
 	float artPresentation = 1.f;
 	float linePresentation = 1.f;
 	float labelPresentation = 1.f;
