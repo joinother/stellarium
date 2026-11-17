@@ -278,9 +278,15 @@ export class SessionToolStore {
     }
   }
 
+  // 观测点变化后让缓存的今晚天象失效；面板打开或用户手动刷新时再重算。
+  invalidateTonight(): void {
+    this.tonightFetchedAt = 0
+  }
+
   // 「位置」面板今晚天象：桥拉取并本地化各卡片文案。
   // force=false（面板打开时的自动刷新）10 分钟内复用缓存；force=true（用户点「刷新」）强制重算。
-  refreshTonight(force: boolean = false): void {
+  // silent=true 用于定位变化后的自动重算，不弹“已刷新”提示。
+  refreshTonight(force: boolean = false, silent: boolean = false): void {
     const port = this.ensurePort()
     const hooks = this.hooks
     if (port === null || hooks === null) {
@@ -322,8 +328,8 @@ export class SessionToolStore {
       this.tonightSunJd = t.sun?.astroTwilightEndJd ?? 0
       this.tonightShowerJd = (t.meteorShowers && t.meteorShowers.length > 0) ? (t.meteorShowers[0].primeJd ?? this.tonightSunJd) : this.tonightSunJd
       this.tonightHint = I18n.t('tn_updated') + ' · ' + this.fmtIso(t.date ?? '')
-      // 只有用户主动点「刷新」才弹提示；面板打开时的自动刷新静默完成。
-      if (force) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
+      // 只有用户主动点「刷新」才弹提示；面板打开或定位变化后的自动刷新静默完成。
+      if (force && !silent) hooks.flashHint('已刷新今晚天象 · 点击卡片可跳转')
     }, (): void => { this.tonightInFlight = false })
   }
 

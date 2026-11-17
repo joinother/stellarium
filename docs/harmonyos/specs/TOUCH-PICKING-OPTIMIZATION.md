@@ -376,7 +376,7 @@ getObjectScreenPosition <name>[|skyW|skyH]
 
 ### 5.6 持久化
 
-拾取算法只暴露触控基准半径设置（设置 → 附加 → 触控拾取范围，66/48 vp，默认 66）；角度上限固定为触控 10°、鼠标 2°，不增加第二组用户参数。需要持久化的是可见性：恒星/深空/行星/卫星/星座线/名称/艺术图层、卫星 `hints/labels/orbitLines/iconicMode/hideInvisible`/高度星等过滤/单星 `displayed`，以及可选的“严格可见卫星”模式（默认关闭）。用 `getState`/`getSatellites`/`probeSelectAt` 做重启前后对照。
+触控基准半径固定为 66 vp（`setTouchPickRadius` 仅保留为诊断/回归命令）；设置页原先的“触控拾取范围 66/48 vp”选项已移除（2026-11-17），不再持久化该偏好。角度上限固定为触控 10°、鼠标 2°，不增加第二组用户参数。需要持久化的是可见性：恒星/深空/行星/卫星/星座线/名称/艺术图层、卫星 `hints/labels/orbitLines/iconicMode/hideInvisible`/高度星等过滤/单星 `displayed`，以及可选的“严格可见卫星”模式（默认关闭）。用 `getState`/`getSatellites`/`probeSelectAt` 做重启前后对照。
 
 ### 5.7 性能与线程
 

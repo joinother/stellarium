@@ -3299,6 +3299,19 @@ export struct WindowNativeNode {
         refreshState: (): void => { this.refreshState() },
         loadObserverInfo: (): void => { this.locationPickerStore.loadObserverInfo(true) },
         setObserverPlanetCrossStore: (name: string): void => { this.sessionToolStore.observerPlanet = name },
+        refreshTonightData: (): void => {
+          // 位置变化会让月出/日落/行星可见性全部失效；先清缓存，面板可见时再静默重算。
+          this.sessionToolStore.invalidateTonight()
+          this.astroStore.tonightAstro = null
+          setTimeout(() => {
+            if (this.activePanel === 'place' && this.panelVisible) {
+              this.sessionToolStore.refreshTonight(true, true)
+            }
+            if (this.activePanel === 'astro' && this.panelVisible && this.astroStore.astroTab === 5) {
+              this.astroCalcCtl().loadTonightAstro()
+            }
+          }, 200)
+        },
         setLocationTexts: (location: string, coordinate: string, altitude: string): void => {
           this.locationText = location
           this.coordinateText = coordinate
@@ -4131,8 +4144,7 @@ export struct WindowNativeNode {
       rtsCalendarDays: settings.rtsCalendarDays.toString(),
       graphMode: settings.graphMode.toString(),
       eclipseMonths: settings.eclipseMonths.toString(),
-      moonPhaseDays: settings.moonPhaseDays.toString(),
-      touchPickRadiusVp: settings.touchPickRadiusVp.toString()
+      moonPhaseDays: settings.moonPhaseDays.toString()
     }))
     this.viewSettingsStore.touchPickRadiusVp = settings.touchPickRadiusVp
     this.uiFontScaleMode = settings.uiFontScaleMode
@@ -9207,6 +9219,7 @@ export struct WindowNativeNode {
             this.panelContent()
           }
             .width('100%')
+            .height('100%')
             .opacity(this.panelRouteOpacity)
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
@@ -9312,6 +9325,7 @@ export struct WindowNativeNode {
             this.panelContent()
           }
             .width('100%')
+            .height('100%')
             .opacity(this.panelRouteOpacity)
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
@@ -9323,6 +9337,30 @@ export struct WindowNativeNode {
             bottom: this.activePanel === 'quick' ? 16 : 50
           })
           .id('panel-content-' + this.i18nLang)
+      } else {
+        Scroll(this.compactPanelScroller) {
+          Column() {
+            Column() {
+              this.panelContent()
+            }
+              .width('100%')
+              .opacity(this.panelRouteOpacity)
+              .translate({ x: this.panelRouteOffsetX, y: 0 })
+          }
+            .width('100%')
+            .padding({ bottom: this.activePanel === 'quick' ? 0 : 34 })
+            .id('panel-content-' + this.i18nLang)
+        }
+          .width('100%')
+          .layoutWeight(1)
+          // 同宽屏：短内容页面固定顶部对齐，避免被 Scroll 垂直居中。
+          .align(Alignment.TopStart)
+          .id('panel-scroll-' + this.i18nLang)
+          .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
+          .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
+          .onScrollStop(() => { this.panelScrolling = false })
+          .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
       }
         .width('100%')
         .height('100%')
@@ -9812,13 +9850,6 @@ export struct WindowNativeNode {
         setConfigurationDithering: (value: string) => { this.viewSettingsStore.setConfigurationDithering(value) },
         setDecimalDegreesCoords: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(enabled, this.viewSettingsStore.decimalDegreesOther) },
         setDecimalDegreesOther: (enabled: boolean) => { this.viewSettingsStore.setDecimalDegrees(this.viewSettingsStore.decimalDegreesCoords, enabled) },
-        setTouchPickRadius: (radiusVp: number) => {
-          this.viewSettingsStore.touchPickRadiusVp = radiusVp
-          this.callInteractive('setTouchPickRadius', radiusVp.toString(), (r) => {
-            if (r.ok !== true) this.flashHint(r.error ?? I18n.t('msg_apply_failed'))
-          })
-          this.saveAppSettings()
-        },
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },

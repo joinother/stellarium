@@ -730,6 +730,24 @@
 - **构建结果：** debug `assembleHap` BUILD SUCCESSFUL，逐一解包核验 82 个 SCM 的 SHA-256 及 manifest 完全一致。versionCode 保持 1000054，本轮未提升版本号。
 - **限制：** 按用户要求跳过 Pad 实机测试，未安装；前视网格预览不是星图截图，未宣称本轮已完成设备投影、缩放与帧率验收。
 
+## [2026-11-17] OHOS 开发记录 - 星等默认 21、定位刷新今晚天象、面板短页顶部对齐
+
+- **修改文件：** `state/LayerViewStore.ets`、`cmake/default_cfg.ini.cmake`、`src/core/StelSkyDrawer.cpp`、`state/SessionToolStore.ets`、`capability/LocationController.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/SettingsPanel.ets`、`scripts/test-ohos-observer-location.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
+- **修改内容：** 恒星“星等限制”默认改为 21.0：`LayerViewStore.starMagLimit`、`default_cfg.ini` 的 `star_magnitude_limit` 与 `flag_star_magnitude_limit`、`StelSkyDrawer` 的兜底值同步改为 21.0/开启，避免滑块显示 21 但自定义限制未生效。观测点提交成功后新增 `refreshTonightData()`：让 `SessionToolStore` 的今晚天象缓存与 `AstroStore.tonightAstro` 失效；位置面板可见时 200ms 后按新坐标静默重算（不弹“已刷新”提示），天文计算面板的“今晚”页可见时同样重载。宽屏与手机面板的外层 `Scroll` 增加 `align(Alignment.TopStart)`，修复设置等短内容页面被 Scroll 垂直居中、标签栏被推到面板中部并留下大块空白的问题。设置面板顶部标签条改为与「图层」面板 `LayerTabs` 同一套尺寸：字号 12（大字模式 +2）、最小 60/76×36/40 vp、左右内边距 10/13、上下 6、标签条高 42/46、标签间距 6，颜色与选中态也一致。标签顺序调整为“工具”位于倒数第二、最后为“关于”。设置页不再由面板外壳 `Scroll` 包裹：外壳为 `settings` 提供有界高度，`SettingsPanel` 自己管理内容滚动；脚本页与扩展管理页改为头部固定、列表 `layoutWeight(1)` 填满剩余面板高度并在内部滚动，切换标签时列表与内容都回到顶部。
+- **修改原因：** 用户要求星等限制默认 21 等；定位变化后旧的月出/日落/行星可见性会继续显示，必须按新坐标更新；真机截图确认“工具/管理扩展”等短设置页内容垂直居中，属于面板绘制区域未从顶部开始；设置顶部的标签文字过小，需与图层面板标签条统一。
+- **构建结果：** 完整引擎 + 资源 + ArkTS HAP `BUILD SUCCESSFUL`（805.4 MB）；随后两次 ArkTS-only 构建分别安装标签条与“工具页/全高列表”改动，均覆盖安装到 `192.168.3.95:36717`。安装后的自动启动均被锁屏 `10106102` 拦截，解锁后需手动打开应用。
+- **验证结果：** 位置/触觉/时间轮/搜索测试合计 43/43 通过；UI 契约 37 面板 / 59 锚点（`settings` 分支与通用分支各有一个 `panel-content-` 动态锚点，基线已更新）；构建通过。真机界面与星等默认值待解锁后复测。
+- **备注：** 已保存过 6.5/关闭状态的 config.ini 不会被覆盖；需要恢复默认设置或清除配置后才会采用新的 21 等默认。旧设置页的 `touchPickRadiusVp` 解析时忽略。
+
+## [2026-11-17] OHOS 开发记录 - 移除附加设置中的触控拾取范围
+
+- **修改文件：** `panels/panels/SettingsPanel.ets`、`pages/MainWindowNativeNode.ets`、`state/SettingsRepository.ets`、`state/ViewSettingsStore.ets`、`capability/I18n.ets`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/TOUCH-PICKING-OPTIMIZATION.md`。
+- **修改内容：** 删除“设置 → 附加 → 触控拾取范围”的 66/48 vp 选项、`setTouchPickRadius` 宿主回调、`UiSettings.touchPickRadiusVp` 持久化、启动恢复时的 `setTouchPickRadius` 调用与 `ViewSettingsStore.touchPickRadiusVp` 字段；移除仅该设置使用的两条 i18n 文案。触控拾取固定使用 `TouchPicker` 默认 66 vp；原生 `getTouchPickRadius`/`setTouchPickRadius` 保留为诊断/回归命令，不再由 UI 修改。
+- **修改原因：** 该设置项已不再需要。由于原实现仍把持久化的 48 vp 传给原生拾取器，只删 UI 会让曾选 48 vp 的用户被静默固定在 48 vp 且无法改回；因此同时移除持久化与恢复调用，让所有设备回到默认 66 vp。
+- **构建结果：** 随 2026-11-17 的完整引擎/资源构建一并打包，并已覆盖安装到 `192.168.3.95:36717`（805.4 MB）。
+- **验证结果：** 相关测试合计 43/43 通过；UI 契约 37 面板 / 57 锚点。
+- **备注：** 旧版设置 JSON 中的 `touchPickRadiusVp` 键会被解析器忽略，下次保存时自然丢弃；无需迁移。
+
 ## [2026-11-16] OHOS 开发记录 - 触觉反馈默认开启并修复一次失败后永久不可用
 
 - **修改文件：** `capability/HapticFeedback.ets`、`capability/HarmonyHapticFeedback.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/SettingsPanel.ets`、`panels/settings/HapticSection.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。

@@ -106,8 +106,8 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	setFlagLuminanceAdaptation(conf->value("viewing/use_luminance_adaptation",true).toBool());
 	setFlagRealisticStarVisibility(conf->value("viewing/flag_realistic_star_visibility", true).toBool());
 	setDaylightLabelThreshold(conf->value("viewing/sky_brightness_label_threshold", 250.0).toDouble());
-	setFlagStarMagnitudeLimit(conf->value("astro/flag_star_magnitude_limit", false).toBool());
-	setCustomStarMagnitudeLimit(conf->value("astro/star_magnitude_limit", 6.5).toDouble());
+	setFlagStarMagnitudeLimit(conf->value("astro/flag_star_magnitude_limit", true).toBool());
+	setCustomStarMagnitudeLimit(conf->value("astro/star_magnitude_limit", 21.0).toDouble());
 	setFlagPlanetMagnitudeLimit(conf->value("astro/flag_planet_magnitude_limit", false).toBool());
 	setCustomPlanetMagnitudeLimit(conf->value("astro/planet_magnitude_limit", 6.5).toDouble());
 	setFlagNebulaMagnitudeLimit(conf->value("astro/flag_nebula_magnitude_limit", false).toBool());

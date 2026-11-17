@@ -27,23 +27,29 @@ function fixture(planet = 'Moon') {
     },
     locationDisplayName: name => name
   };
+  const recent = [];
   const locations = { locationMapProvider: 'huawei', locSearchQuery: 'Earth city',
-    searchLocations(query) { this.locSearchQuery = query; }, formatDegrees: value => String(value) };
+    searchLocations(query) { this.locSearchQuery = query; }, formatDegrees: value => String(value),
+    recordRecentLocation(name, latitude, longitude, altitude, planet) {
+      recent.push({ name, latitude, longitude, altitude, planet });
+    } };
   const session = { observerPlanet: planet, observerPlanetPending: false };
   const port = {
     requestWhenReady: (name, payload, success, failure) => requests.push({ name, payload, success, failure }),
     requestInteractive: (name, payload, success) => requests.push({ name, payload, success })
   };
   let persisted = '';
+  const tonightRefreshes = [];
   const controller = new Controller(port, {
     writeObserverLocation: async json => writes.push(JSON.parse(json)),
     readObserverLocation: async () => persisted
   }, picker, locations, session, {
     flashHint: text => hints.push(text), refreshState() {}, loadObserverInfo() {},
+    refreshTonightData: () => { tonightRefreshes.push(session.observerPlanet); },
     setObserverPlanetCrossStore: name => { session.observerPlanet = name; }, setLocationTexts() {},
     privacyAllowed: () => true, inForeground: () => true, hasPrivacyConsent: () => true
   });
-  return { controller, picker, locations, session, requests, writes, hints,
+  return { controller, picker, locations, recent, session, requests, writes, hints, tonightRefreshes,
     persist: record => { persisted = JSON.stringify(record); } };
 }
 
@@ -82,7 +88,7 @@ test('success uses actual native coordinates and clears Earth-only state when le
   context.requests[0].success({ ok: true, planetName: 'Mars', locationName: 'Landing site', latitude: 11,
     longitude: 22, altitude: 33 });
   assert.deepEqual(context.writes[0], { name: 'Landing site', planet: 'Mars', latitude: 11,
-    longitude: 22, altitude: 33, source: 'map' });
+    longitude: 22, altitude: 33, source: 'map', detail: '' });
   assert.equal(context.locations.locationMapProvider, 'offline');
   assert.equal(context.locations.locSearchQuery, '');
   assert.equal(context.picker.hierCity, '');
@@ -95,6 +101,7 @@ test('floating GPS altitude is normalized to native integer meters and site sepa
   context.requests[0].success({ ok: true });
   assert.equal(context.writes[0].altitude, 16);
   assert.equal(context.writes[0].source, 'gps');
+  assert.deepEqual(context.tonightRefreshes, ['Earth'], 'a committed location invalidates and refreshes tonight data');
 });
 
 test('invalid coordinates cannot reach the native bridge or persistence', () => {

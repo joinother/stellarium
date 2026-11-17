@@ -25,6 +25,8 @@ export interface LocationHostHooks {
   setObserverPlanetCrossStore(name: string): void
   // 位置头部三 @State（locationText / coordinateText / altitudeText）回注。
   setLocationTexts(location: string, coordinate: string, altitude: string): void
+  // 观测点变化后让今晚天象缓存失效，并在可见时按新坐标重算。
+  refreshTonightData(): void
   // GPS 门禁（宿主保留：privacyNativeStartupAllowed / applicationInForeground / hasCurrentPrivacyConsent）。
   privacyAllowed(): boolean
   inForeground(): boolean
@@ -273,6 +275,8 @@ export class LocationController {
     const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'
       ? this.sessionToolStore.observerPlanetLabel(targetPlanet)
       : planetZh(targetPlanet)
+    // 位置变了，位置面板的今晚天象（月出/日落/行星可见性）必须按新坐标重算。
+    this.hooks.refreshTonightData()
     this.hooks.setLocationTexts(
         quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet,
           source === 'gps' ? this.pickerStore.gpsPlaceDetail : '') + ' · ' + planetDisplay,

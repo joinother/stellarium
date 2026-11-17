@@ -178,7 +178,7 @@ node scripts/stellarium-cli.mjs --device 7LZBB26323200303 --command getDeepSkyIm
 - `selectAt` 第五段为输入源：`touch` 使用触控 profile（默认 66 vp 基准，可切 48 vp，10° 角度上限）；`mouse` 使用共享引擎的鼠标 profile（25 device px ÷ DPR，2° 角度上限）。两者共享候选、渲染态过滤、DSO RenderState 与排序；未绘制的 DSO/卫星不会进入候选。
 - `probeSelectAt` 接受可选第五段 `touch|mouse`，返回与 `selectAt` 相同的候选排名，以及 `inputMode`、`baseRadiusVp`、`effectiveRadiusVp`；不改变选中、不打开详情卡。
 - `selectAt`/`probeSelectAt` 同时返回搜索诊断：`fovDeg`、`degPerVp`、`searchRadiusDeg`、`starSearchCount`、`starMagnitudeFiltered`、`starRadiusFiltered`、`starDistanceFiltered`、`starCandidateCount`、`starLimit`、`customStarLimit`。提示“这里没有天体”时先用 `probeSelectAt` 复现：`starSearchCount=0` 指向 `StarMgr::searchAround`/星表层问题；搜索数大于 0 但候选为 0 则看三个过滤计数。
-- `getTouchPickRadius` 返回触控基准半径；`setTouchPickRadius 66|48` 切换（设置 → 附加 → 触控拾取范围，默认 66 vp）。宽视场下实际半径可能因 10° 上限小于基准值，以 `effectiveRadiusVp` 为准。
+- `getTouchPickRadius` 返回触控基准半径；`setTouchPickRadius 66|48` 仅保留为诊断/回归命令。设置页已移除“触控拾取范围”，应用固定使用默认 66 vp。宽视场下实际半径可能因 10° 上限小于基准值，以 `effectiveRadiusVp` 为准。
 - `getNebulaFlags` / `setNebulaFlag` 扩展为完整 DSO 设置：`show`、`hints`、`catalogFilters`（掩码或 `all|standard|none`；`standard` = M/NGC/IC/PGC/Other）、`typeFilterUsage`、`typeFilters`（掩码或 `all|none`）、`labelsAmount`、`hintsAmount`、`labelsBrightness`、`hintsBrightness`、`designations`、`additionalNames`、`showOnlyNamed`、`outlines`、`hintsProportional`、`surfaceBrightness`、`sizeLimits`、`minSizeLimit`、`maxSizeLimit`、`nebulaMagnitudeLimit`、`nebulaMagnitude`。
 - 图层 → 深空面板提供星表/类型筛选、标签/提示数量与亮度、目录编号、附加名称、仅显示有名称、轮廓、比例提示、表面亮度、尺寸限制和 DSO 星等限制；本轮不提供 DSO 颜色自定义。
 
