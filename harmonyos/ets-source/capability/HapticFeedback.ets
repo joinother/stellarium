@@ -4,6 +4,9 @@ export interface HapticDriver {
   supports(effectId: string): Promise<boolean>
   start(effectId: string, intensity: number): Promise<void>
   stop(): Promise<void>
+  // 系统“触感反馈”总开关。OpenHarmony 在它为 0 时会对 usage=touch
+  // 返回 IGNORE_FEEDBACK（startVibration 14600101）；undefined 表示读取不到。
+  feedbackMode(): Promise<boolean | undefined>
 }
 
 export interface HapticPreferences {
@@ -31,13 +34,15 @@ export interface HapticStatus {
   intensity: number
   consent: boolean
   lastOutcome: string
+  systemFeedback?: boolean
 }
 
 const SOFT: string = 'haptic.effect.soft'
 const SUCCESS: string = 'haptic.notice.success'
 const FAILURE: string = 'haptic.notice.fail'
 const CLOCK_TIMER: string = 'haptic.clock.timer'
-export const DEFAULT_HAPTIC_INTENSITY: number = 40
+export const DEFAULT_HAPTIC_ENABLED: boolean = true
+export const DEFAULT_HAPTIC_INTENSITY: number = 100
 export const MIN_HAPTIC_INTENSITY: number = 10
 export const MAX_HAPTIC_INTENSITY: number = 100
 
@@ -45,7 +50,7 @@ export class HapticFeedback {
   private driver: HapticDriver
   private preferences: HapticPreferences
   private guard: HapticGuard
-  private enabled: boolean = false
+  private enabled: boolean = DEFAULT_HAPTIC_ENABLED
   private intensity: number = DEFAULT_HAPTIC_INTENSITY
   private loaded: boolean = false
   private foreground: boolean = false
@@ -64,10 +69,14 @@ export class HapticFeedback {
   private lastFailure: string = ''
   private lastErrorCode: number = 0
   private lastOutcome: string = ''
+  private systemFeedback: boolean | undefined = undefined
   private epoch: number = 0
   private settingRevision: number = 0
   private lastPulse: number = -Infinity
   private lastByKind: Map<HapticKind, number> = new Map<HapticKind, number>()
+  // 平台拒绝（例如系统触感反馈关闭时的 14600101）后，时间轮刻度在短时间内
+  // 不再反复发起必然失败的请求；用户显式预览不受此冷却限制。
+  private rulerRetryAfter: number = 0
   private selectionId: string = ''
   private rulerIndex: number | undefined = undefined
   private inFlight: boolean = false
@@ -89,7 +98,7 @@ export class HapticFeedback {
       foreground: this.foreground, available: this.supported.length > 0,
       probing: this.probing, supportedEffects: this.supported.slice(), lastFailure: this.lastFailure,
       lastErrorCode: this.lastErrorCode, intensity: this.intensity,
-      consent: this.consentOk, lastOutcome: this.lastOutcome
+      consent: this.consentOk, lastOutcome: this.lastOutcome, systemFeedback: this.systemFeedback
     }
   }
 
@@ -132,6 +141,17 @@ export class HapticFeedback {
     return this.consentOk
   }
 
+  // 低频读取系统触感反馈总开关。打开应用内开关前调用一次，避免用陈旧的
+  // 初始化快照决定是否跳转系统设置页。
+  async refreshSystemFeedback(): Promise<boolean | undefined> {
+    try {
+      this.systemFeedback = await this.driver.feedbackMode()
+    } catch (_) {
+      this.systemFeedback = undefined
+    }
+    return this.systemFeedback
+  }
+
   initialize(): Promise<void> {
     if (!this.foreground) return Promise.resolve()
     if (this.consentDirty || !this.consentOk) {
@@ -172,6 +192,14 @@ export class HapticFeedback {
       }
     }
     if (epoch !== this.epoch || !this.foreground || !this.consentOk) return
+    let feedbackMode: boolean | undefined = undefined
+    try {
+      feedbackMode = await this.driver.feedbackMode()
+    } catch (_) {
+      feedbackMode = undefined
+    }
+    if (epoch !== this.epoch || !this.foreground || !this.consentOk) return
+    this.systemFeedback = feedbackMode
     this.probing = true
     const supported: string[] = []
     for (const effect of [SOFT, SUCCESS, FAILURE, CLOCK_TIMER]) {
@@ -339,6 +367,7 @@ export class HapticFeedback {
     if (!Number.isFinite(now) || now < this.lastPulse || now - this.lastPulse < pulseGap || now - previous < interval) {
       return this.skip('skipped-throttled')
     }
+    if (kind === 'ruler' && now < this.rulerRetryAfter) return this.skip('skipped-retry')
     this.lastPulse = now
     this.lastByKind.set(kind, now)
     const epoch = this.epoch
@@ -356,13 +385,17 @@ export class HapticFeedback {
         return this.skip('skipped-interrupted')
       }
       this.lastOutcome = 'played'
+      this.rulerRetryAfter = 0
       return true
     } catch (error) {
       this.lastOutcome = 'failed'
       this.lastFailure = 'vibration-start'
       const failure = error as HapticPlatformError
       this.lastErrorCode = typeof failure?.code === 'number' ? failure.code : 0
-      this.supported = []
+      // 保留 supported：能力探测本身仍然有效。之前清空它会把一次平台拒绝
+      // （例如系统触感反馈关闭时的 14600101）变成永久“设备不支持”，
+      // 预览按钮随之禁用，用户在系统里打开触感反馈后也无法直接重试。
+      this.rulerRetryAfter = now + 1500
       await this.stopActive()
       return false
     } finally {

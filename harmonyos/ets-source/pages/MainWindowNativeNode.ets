@@ -8,7 +8,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit'
 import { systemShare } from '@kit.ShareKit'
 import { privacyManager } from '@kit.AppGalleryKit'
 import { hasCurrentPrivacyConsent } from '../qability/PrivacyConsent'
-import { HapticFeedback, DEFAULT_HAPTIC_INTENSITY } from '../capability/HapticFeedback'
+import { HapticFeedback, DEFAULT_HAPTIC_ENABLED, DEFAULT_HAPTIC_INTENSITY } from '../capability/HapticFeedback'
 import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
 import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
@@ -1415,6 +1415,9 @@ export struct WindowNativeNode {
   @State private hapticAvailable: boolean = false
   @State private hapticFailed: boolean = false
   @State private hapticBusy: boolean = false
+  @State private hapticErrorCode: number = 0
+  // -1 未知 / 0 系统触感反馈关闭 / 1 开启。
+  @State private hapticSystemFeedback: number = -1
   @State private hapticIntensity: number = DEFAULT_HAPTIC_INTENSITY
   @State private calendarStore: AstronomyCalendarStore = new AstronomyCalendarStore()
   private calendarController: AstronomyCalendarController | undefined = undefined
@@ -2828,6 +2831,8 @@ export struct WindowNativeNode {
     this.hapticAvailable = state.available
     this.hapticFailed = state.lastFailure.startsWith('vibration-')
     this.hapticBusy = state.saving || state.probing
+    this.hapticErrorCode = state.lastErrorCode
+    this.hapticSystemFeedback = state.systemFeedback === undefined ? -1 : (state.systemFeedback ? 1 : 0)
     this.hapticIntensity = state.intensity
   }
 
@@ -2842,8 +2847,85 @@ export struct WindowNativeNode {
     this.refreshHapticState()
     hilog.info(0x0000, 'StellariumArkUI', '[haptic] change result enabled=%{public}s success=%{public}s',
       this.hapticEnabled ? 'true' : 'false', success ? 'true' : 'false')
-    if (!success) this.flashHint('触觉反馈设置未保存，请重试')
+    if (!success) {
+      this.flashHint('触觉反馈设置未保存，请重试')
+      return false
+    }
+    if (enabled) {
+      // 应用内开关只控制本应用。OpenHarmony 另有一个系统级“系统触感反馈”
+      // 总开关；它为关闭时，平台会丢弃所有 usage=touch 的请求。这里只提示，
+      // 不自动跳转：用弹窗让用户决定是否前往系统设置。
+      const systemFeedback = await this.haptics().refreshSystemFeedback()
+      this.refreshHapticState()
+      if (systemFeedback === false) {
+        this.showSystemHapticDialog()
+      }
+    }
     return success
+  }
+
+  // “试一下”失败：弹窗提示，并提供前往系统设置的按钮；比一闪而过的
+  // log 条更不容易漏看。14600101 使用系统触感反馈的专门文案。
+  private previewHaptic(): void {
+    void this.haptics().confirmation().then((played: boolean) => {
+      const state = this.haptics().status()
+      this.refreshHapticState()
+      if (played || state.lastOutcome !== 'failed') return
+      if (state.lastErrorCode === 14600101) this.showSystemHapticDialog()
+      else this.showHapticFailureDialog()
+    })
+  }
+
+  private showSystemHapticDialog(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    this.getUIContext().showAlertDialog({
+      title: zh ? '系统触感反馈未开启' : 'System touch feedback is off',
+      message: zh
+        ? '应用内触觉反馈已开启，但系统“系统触感反馈”开关关闭，平台会丢弃应用的振动请求。请前往系统设置开启后重试。'
+        : 'The app haptic switch is on, but the system touch feedback switch is off, so the platform discards vibration requests. Enable it in system settings and retry.',
+      primaryButton: {
+        value: zh ? '取消' : 'Cancel',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: zh ? '去开启' : 'Open settings',
+        action: () => { this.openSystemHapticSettings() }
+      }
+    })
+  }
+
+  private showHapticFailureDialog(): void {
+    const zh = I18n.getLanguage().startsWith('zh')
+    this.getUIContext().showAlertDialog({
+      title: zh ? '未能播放触觉反馈' : 'Haptic feedback could not play',
+      message: zh
+        ? '请检查系统触感设置、静音/振动模式或设备支持情况。也可以在系统设置中确认“系统触感反馈”已开启。'
+        : 'Check system haptics, silent/vibration mode or device support. You can also confirm that system touch feedback is enabled in settings.',
+      primaryButton: {
+        value: zh ? '知道了' : 'OK',
+        action: () => {}
+      },
+      secondaryButton: {
+        value: zh ? '打开系统设置' : 'Open settings',
+        action: () => { this.openSystemHapticSettings() }
+      }
+    })
+  }
+
+  // 打开系统“声音和振动”页（含“系统触感反馈”开关）。该页面 URI 与
+  // 华为设置应用对应；非华为/不支持时回退为手动路径提示。
+  private openSystemHapticSettings(): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const want: Want = {
+      bundleName: 'com.huawei.hmos.settings',
+      abilityName: 'com.huawei.hmos.settings.MainAbility',
+      uri: 'volume_settings'
+    }
+    context.startAbility(want).then((): void => {
+      hilog.info(0x0000, 'StellariumArkUI', '[haptic] opened system touch feedback settings')
+    }).catch((): void => {
+      this.flashHint('未能打开系统设置，请手动前往：设置 → 声音和振动 → 系统触感反馈')
+    })
   }
 
   private async changeHapticIntensity(value: number, commit: boolean): Promise<void> {
@@ -3987,8 +4069,13 @@ export struct WindowNativeNode {
   private exitAppAfterRestore(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext
     setTimeout(() => {
-      this.changeHapticEnabled(false).then((saved: boolean) => {
+      // 触觉偏好存在独立的 stellarium_haptics 存储，SettingsRepository.resetToDefaults()
+      // 不会清它；恢复默认时要显式写回默认值（开启 + 默认力度），而不是写关闭。
+      this.changeHapticEnabled(DEFAULT_HAPTIC_ENABLED).then((saved: boolean) => {
         if (!saved) throw new Error('haptic preference reset failed')
+        return this.haptics().setIntensity(DEFAULT_HAPTIC_INTENSITY)
+      }).then((saved: boolean) => {
+        if (!saved) throw new Error('haptic intensity reset failed')
         return this.settingsRepository.resetToDefaults()
       }).then(() => {
         return this.clearUiBehaviorPreferences()
@@ -9756,20 +9843,13 @@ export struct WindowNativeNode {
         hapticAvailable: this.hapticAvailable,
         hapticFailed: this.hapticFailed,
         hapticBusy: this.hapticBusy,
+        hapticErrorCode: this.hapticErrorCode,
+        hapticSystemFeedback: this.hapticSystemFeedback,
         hapticIntensity: this.hapticIntensity,
         setHapticEnabled: (enabled: boolean) => { void this.changeHapticEnabled(enabled) },
         setHapticIntensity: (value: number, commit: boolean) => { void this.changeHapticIntensity(value, commit) },
-        previewHaptic: () => {
-          void this.haptics().confirmation().then((played: boolean) => {
-            const state = this.haptics().status()
-            this.refreshHapticState()
-            // A throttled or in-flight pulse is not a hardware failure. Only
-            // report the explicit start failure so rapid preview taps stay quiet.
-            if (!played && state.lastOutcome === 'failed') this.flashHint(I18n.getLanguage().startsWith('zh')
-              ? '未能播放触觉反馈，请检查系统触感设置或设备支持情况。'
-              : 'Haptic feedback could not play. Check system haptics and device support.')
-          })
-        },
+        openSystemHapticSettings: () => { this.openSystemHapticSettings() },
+        previewHaptic: () => { this.previewHaptic() },
         scheduleNextSolarTermReminder: () => { this.notificationCtl().scheduleNextSolarTerm() },
         scheduleNextMoonPhaseReminder: () => { this.notificationCtl().scheduleNextMoonPhase() },
         scheduleNextMeteorReminder: () => { this.notificationCtl().scheduleNextMeteorShower() },

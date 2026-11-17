@@ -2,6 +2,7 @@
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { curves } from '@kit.ArkUI'
 import { I18n, PROJECTION_KEYS } from '../../pages/I18n'
+import { DEFAULT_HAPTIC_INTENSITY } from '../../capability/HapticFeedback'
 import { TabItem, PluginItem } from '../../pages/StellariumTypes'
 import { ConfigurationOption } from '../../pages/MainWindowModels'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL, UI_RADIUS_PANEL } from '../../common/ui/UiTokens'
@@ -151,9 +152,12 @@ export struct SettingsPanel {
   @Prop hapticAvailable: boolean = false
   @Prop hapticFailed: boolean = false
   @Prop hapticBusy: boolean = false
-  @Prop hapticIntensity: number = 40
+  @Prop hapticErrorCode: number = 0
+  @Prop hapticSystemFeedback: number = -1
+  @Prop hapticIntensity: number = DEFAULT_HAPTIC_INTENSITY
   setHapticEnabled: (enabled: boolean) => void = () => {}
   setHapticIntensity: (value: number, commit: boolean) => void = () => {}
+  openSystemHapticSettings: () => void = () => {}
   previewHaptic: () => void = () => {}
   scheduleNextSolarTermReminder: () => void = () => {}
   scheduleNextMoonPhaseReminder: () => void = () => {}
@@ -248,9 +252,11 @@ export struct SettingsPanel {
               .margin({ top: 2, bottom: 6 }).padding({ left: 2 })
             HapticSection({
               hapticEnabled: this.hapticEnabled, available: this.hapticAvailable, failed: this.hapticFailed, busy: this.hapticBusy,
+              errorCode: this.hapticErrorCode, systemFeedback: this.hapticSystemFeedback,
               intensity: this.hapticIntensity,
               onChange: (enabled: boolean) => this.setHapticEnabled(enabled),
               onIntensityChange: (value: number, commit: boolean) => this.setHapticIntensity(value, commit),
+              onOpenSystemSettings: () => this.openSystemHapticSettings(),
               onPreview: () => this.previewHaptic()
             })
             Row().width('100%').height(0.5).backgroundColor(this.c.border).margin({ top: 5, bottom: 8 })

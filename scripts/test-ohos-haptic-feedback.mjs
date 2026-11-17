@@ -17,11 +17,12 @@ const deferred = () => {
 };
 
 function fixture(effects = [soft, success, failure, clockTimer]) {
-  const state = { consent: true, now: 1000, stored: false, intensity: 40, pulses: [], writes: [], intensityWrites: [], queries: [], stops: 0, consentChecks: 0 };
+  const state = { consent: true, now: 1000, stored: false, intensity: 40, pulses: [], writes: [], intensityWrites: [], queries: [], stops: 0, consentChecks: 0, systemFeedback: undefined };
   const driver = {
     async supports(effect) { state.queries.push(effect); return effects.includes(effect); },
     async start(effect, intensity) { state.pulses.push({ effect, intensity }); },
-    async stop() { state.stops++; }
+    async stop() { state.stops++; },
+    async feedbackMode() { return state.systemFeedback; }
   };
   const preferences = {
     async readEnabled() { return state.stored; },
@@ -41,7 +42,8 @@ function fixture(effects = [soft, success, failure, clockTimer]) {
 
 function hostFixture(model) {
   const source = readFileSync(new URL('../harmonyos/ets-source/pages/MainWindowNativeNode.ets', import.meta.url), 'utf8');
-  const names = ['refreshHapticState', 'changeHapticEnabled', 'clearUiBehaviorPreferences',
+  const names = ['refreshHapticState', 'changeHapticEnabled', 'previewHaptic', 'showSystemHapticDialog',
+    'showHapticFailureDialog', 'openSystemHapticSettings', 'clearUiBehaviorPreferences',
     'exitAppAfterRestore', 'requestSkySelection', 'activateDockAction'];
   const methods = names.map(name => {
     const match = new RegExp(`^  private (?:async )?${name}\\(`, 'm').exec(source);
@@ -57,18 +59,25 @@ function hostFixture(model) {
   } };
   const Host = new Function('preferences', 'hilog', 'AppStorage', 'I18n', 'Date', 'setTimeout',
     'NIGHT_MODE_STORE', 'QUICK_PANEL_STORE', 'INFO_WINDOW_STORE',
+    'DEFAULT_HAPTIC_ENABLED', 'DEFAULT_HAPTIC_INTENSITY',
     stripTypeScriptTypes(`class Host { ${methods} };`) + 'return Host;')(
-    preferences, { info() {}, warn() {} }, { setOrCreate() {} }, { t: key => key },
+    preferences, { info() {}, warn() {} }, { setOrCreate() {} }, { t: key => key, getLanguage: () => 'zh_CN' },
     { now: () => model.state.now }, callback => { timers.push(callback); return timers.length; },
-    'night', 'quick', 'info'
+    'night', 'quick', 'info', true, 100
   );
   const host = new Host();
-  const calls = { hints: [], panels: [], selections: [], resets: 0, terminations: 0 };
-  const context = { async terminateSelf() { calls.terminations++; } };
+  const calls = { hints: [], panels: [], selections: [], resets: 0, terminations: 0, systemSettings: [], dialogs: [] };
+  const context = {
+    async terminateSelf() { calls.terminations++; },
+    startAbility(want) { calls.systemSettings.push(want); return Promise.resolve(); }
+  };
   Object.assign(host, {
     hapticFeedback: model.service,
     haptics: () => model.service,
-    getUIContext: () => ({ getHostContext: () => context }),
+    getUIContext: () => ({
+      getHostContext: () => context,
+      showAlertDialog: options => { calls.dialogs.push(options); }
+    }),
     settingsRepository: { async resetToDefaults() { calls.resets++; } },
     nightModeStore: { nightMode: true },
     flashHint: text => calls.hints.push(text),
@@ -116,9 +125,49 @@ test('host switch persists on/off, refreshes from the service and reports failed
   assert.equal(calls.hints.length, 1);
 });
 
-test('host restore-defaults awaits durable haptic disable before terminating', async () => {
+test('enabling the app switch opens system touch feedback settings only when the system switch is off', async () => {
+  for (const systemFeedback of [false, true]) {
+    const model = fixture();
+    model.state.systemFeedback = systemFeedback;
+    await model.ready();
+    const { host, calls } = hostFixture(model);
+    assert.equal(await host.changeHapticEnabled(false), true);
+    assert.equal(calls.systemSettings.length, 0, 'turning the app switch off never opens system settings');
+    assert.equal(await host.changeHapticEnabled(true), true);
+    assert.equal(host.hapticEnabled, true, 'the app switch stays on regardless of the system switch');
+    assert.equal(calls.systemSettings.length, 0, 'enabling never jumps to system settings automatically');
+    assert.equal(calls.dialogs.length, systemFeedback ? 0 : 1);
+    if (!systemFeedback) {
+      assert.match(calls.dialogs[0].title, /系统触感反馈/);
+      calls.dialogs[0].secondaryButton.action();
+      assert.equal(calls.systemSettings.length, 1);
+      assert.equal(calls.systemSettings[0].bundleName, 'com.huawei.hmos.settings');
+      assert.equal(calls.systemSettings[0].abilityName, 'com.huawei.hmos.settings.MainAbility');
+      assert.equal(calls.systemSettings[0].uri, 'volume_settings');
+    }
+  }
+});
+
+test('a failed preview shows a dialog with a system-settings jump instead of a transient hint', async () => {
   const model = fixture();
   await model.ready();
+  model.driver.start = async () => { throw { code: 14600101 }; };
+  const { host, calls } = hostFixture(model);
+  host.previewHaptic();
+  await settle();
+  await settle();
+  assert.equal(calls.dialogs.length, 1);
+  assert.match(calls.dialogs[0].title, /系统触感反馈/);
+  assert.equal(calls.hints.length, 0, 'a real failure is not reduced to a transient log bar');
+  calls.dialogs[0].secondaryButton.action();
+  assert.equal(calls.systemSettings.length, 1);
+  assert.equal(calls.systemSettings[0].uri, 'volume_settings');
+});
+
+test('host restore-defaults awaits durable haptic defaults before terminating', async () => {
+  const model = fixture();
+  await model.ready();
+  model.state.intensity = 90;
   const { host, calls, timers } = hostFixture(model);
   const write = deferred();
   model.preferences.writeEnabled = async value => {
@@ -130,18 +179,19 @@ test('host restore-defaults awaits durable haptic disable before terminating', a
   assert.equal(timers.length, 1);
   timers.shift()();
   await settle();
-  assert.ok(model.state.writes.includes(false), 'reset reaches the independent haptic preferences');
-  assert.equal(model.service.status().enabled, false);
-  assert.equal(calls.terminations, 0, 'do not exit while disable is still being flushed');
+  assert.ok(model.state.writes.includes(true), 'reset restores the enabled default in the independent haptic preferences');
+  assert.equal(model.service.status().enabled, true);
+  assert.equal(calls.terminations, 0, 'do not exit while the default is still being flushed');
   write.resolve();
   await settle();
   assert.equal(calls.resets, 1);
   assert.equal(calls.terminations, 1);
-  assert.equal(model.state.stored, false);
+  assert.equal(model.state.stored, true);
+  assert.equal(model.state.intensity, 100, 'reset also restores the default maximum strength');
   const recreated = new HapticFeedback(model.driver, model.preferences, model.guard);
   recreated.setForeground(true);
   await recreated.initialize();
-  assert.equal(recreated.status().enabled, false);
+  assert.equal(recreated.status().enabled, true);
 });
 
 test('host empty-sky selection resets deduplication and stale replies cannot change it', async () => {
@@ -199,8 +249,9 @@ test('host duplicate Dock action is silent beyond service throttle but inside Do
   assert.equal(model.state.pulses.length, 3);
 });
 
-test('default off; initialization needs foreground and consent; setting survives recreation', async () => {
+test('initialization needs foreground and consent; setting survives recreation', async () => {
   const { service, state, driver, preferences, guard } = fixture();
+  assert.equal(service.status().enabled, true, 'enabled is the default before stored preferences load');
   await service.initialize();
   assert.equal(service.status().loaded, false);
   service.setForeground(true);
@@ -510,10 +561,49 @@ test('native synchronous throws and rejections are contained without retry storm
     };
     driver.stop = () => { throw new Error('stop unavailable'); };
     assert.equal(await service.menu(), false);
-    assert.equal(service.status().available, false);
+    // 能力探测仍然有效：一次平台拒绝不应把 supported 清空成永久“不支持”。
+    assert.equal(service.status().available, true);
     state.now += 1000;
     assert.equal(await service.error(), false);
   }
+});
+
+test('feedback-mode rejection keeps capability and recovers after the system setting is enabled', async () => {
+  const { service, driver, state, ready } = fixture();
+  state.systemFeedback = false;
+  await ready();
+  assert.equal(service.status().systemFeedback, false, 'the system feedback switch is exposed for the settings hint');
+  let reject = true;
+  driver.start = async () => {
+    if (reject) throw { code: 14600101, message: 'device operation failed' };
+  };
+  assert.equal(await service.confirmation(), false);
+  assert.equal(service.status().lastErrorCode, 14600101);
+  assert.equal(service.status().available, true, 'IGNORE_FEEDBACK is a system gate, not a missing capability');
+  state.now += 400;
+  reject = false;
+  assert.equal(await service.confirmation(), true, 'the next explicit preview retries without a restart');
+  assert.equal(service.status().lastFailure, '');
+  assert.equal(service.status().lastOutcome, 'played');
+});
+
+test('ruler pulses cool down after a platform rejection while previews stay immediate', async () => {
+  const { service, driver, state, ready } = fixture();
+  await ready();
+  let reject = true;
+  driver.start = async () => {
+    if (reject) throw { code: 14600101 };
+  };
+  service.beginRuler(0);
+  assert.equal(await service.rulerTick(1), false);
+  state.now += 100;
+  assert.equal(await service.rulerTick(2), false);
+  assert.equal(service.status().lastOutcome, 'skipped-retry', 'failed ruler ticks do not hammer the service');
+  state.now += 100;
+  assert.equal(await service.confirmation(), false, 'an explicit preview still reaches the platform');
+  reject = false;
+  state.now += 1600;
+  assert.equal(await service.rulerTick(3), true);
 });
 
 test('native error code remains observable without exposing the platform error body', async () => {
@@ -555,18 +645,29 @@ test('platform adapter persists enabled and intensity, checks capability and use
     };
   } };
   const clock = { TimeType: { STARTUP: 0 }, getUptime: () => 1000 };
+  const settings = {
+    domainName: { DEVICE_SHARED: 'deviceShared' },
+    getValueSync: (context, name, fallback, domain) => {
+      calls.push(['setting', name, domain ?? 'general']);
+      return '1';
+    }
+  };
   const source = stripTypeScriptTypes(read('HarmonyHapticFeedback').replace(/^import[^\n]*\r?\n/gm, '').replaceAll('export ', ''));
-  const create = new Function('HapticFeedback', 'DEFAULT_HAPTIC_INTENSITY', 'preferences', 'systemDateTime', 'vibrator', 'canIUse', 'hasCurrentPrivacyConsent', source + ';return createHapticFeedback;')(
-    HapticFeedback, 40, preferences, clock, vibrator,
+  const create = new Function('HapticFeedback', 'DEFAULT_HAPTIC_ENABLED', 'DEFAULT_HAPTIC_INTENSITY', 'preferences', 'systemDateTime', 'settings', 'vibrator', 'canIUse', 'hasCurrentPrivacyConsent', source + ';return createHapticFeedback;')(
+    HapticFeedback, true, 100, preferences, clock, settings, vibrator,
     capability => { assert.equal(capability, 'SystemCapability.Sensors.MiscDevice'); return true; }, () => true
   );
   const service = create({});
   service.setForeground(true);
   await service.initialize();
+  assert.equal(service.status().enabled, true, 'an empty preference store defaults to enabled');
+  assert.equal(service.status().intensity, 100, 'an empty preference store defaults to maximum strength');
+  assert.equal(service.status().systemFeedback, true, 'the system feedback switch is read from settingsdata');
+  assert.deepEqual(calls.find(call => call[0] === 'setting'), ['setting', 'physic_navi_haptic_feedback_enabled', 'general']);
   await service.setEnabled(true);
   await service.menu();
   assert.deepEqual(calls.find(call => call[0] === 'start'), [
-    'start', { type: 'preset', effectId: soft, count: 1, intensity: 30 }, { usage: 'touch' }
+    'start', { type: 'preset', effectId: soft, count: 1, intensity: 75 }, { usage: 'touch' }
   ]);
   assert.equal(await service.setIntensity(70), true);
   service.setForeground(false);

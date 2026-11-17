@@ -579,9 +579,9 @@ node scripts/stellarium-cli.mjs --command applyCollaborationSession --payload '<
 
 | 命令 | payload | 返回语义 |
 | --- | --- | --- |
-| `getHapticState` | 空 | `state` 含 enabled/available/foreground/consent/supportedEffects；会查询设备支持性但不振动 |
-| `setHapticEnabled` | `true/false`，兼容 `on/off/1/0` | `ok` 表示偏好保存结果，返回最新 state |
-| `playHapticFeedback` | `selection/menu/confirmation/error` | `played` 表示系统 API 接受，不证明实际有物理震感；关闭/不支持/后台不播放 |
+| `getHapticState` | 空 | `state` 含 enabled/available/foreground/consent/supportedEffects/lastFailure/lastErrorCode/lastOutcome/systemFeedback；`systemFeedback` 直接读取系统 `physic_navi_haptic_feedback_enabled`（false 时平台会以 `IGNORE_FEEDBACK` 丢弃 touch 振动）；会查询设备支持性但不振动 |
+| `setHapticEnabled` | `true/false`，兼容 `on/off/1/0` | `ok` 表示偏好保存结果，返回最新 state；未保存过时默认开启 |
+| `playHapticFeedback` | `selection/menu/confirmation/error` | `played` 表示系统 API 接受，不证明实际有物理震感；关闭/不支持/后台不播放。`14600101` 表示系统触感反馈关闭或振动服务忙，预览可直接重试 |
 | `getAstronomyCalendarEvents` | `YYYY-MM` 或 `{year,month,startJD,endJD}` | 本地节气/月相/目录流星雨极大/行星合冲及大距；字符串为 UTC 月，JSON 可给本地月的 UT 边界，不改变星图时间 |
 | `setCalendarMonth` | `YYYY-MM` | 发起月历加载；随后查询 `getCalendarState` 的 loaded/loading/error 判定完成 |
 | `getCalendarState` | 空 | 当前月份、日期网格、事件、选择与提醒结果 |

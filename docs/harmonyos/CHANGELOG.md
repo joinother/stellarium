@@ -730,6 +730,15 @@
 - **构建结果：** debug `assembleHap` BUILD SUCCESSFUL，逐一解包核验 82 个 SCM 的 SHA-256 及 manifest 完全一致。versionCode 保持 1000054，本轮未提升版本号。
 - **限制：** 按用户要求跳过 Pad 实机测试，未安装；前视网格预览不是星图截图，未宣称本轮已完成设备投影、缩放与帧率验收。
 
+## [2026-11-16] OHOS 开发记录 - 触觉反馈默认开启并修复一次失败后永久不可用
+
+- **修改文件：** `capability/HapticFeedback.ets`、`capability/HarmonyHapticFeedback.ets`、`pages/MainWindowNativeNode.ets`、`panels/panels/SettingsPanel.ets`、`panels/settings/HapticSection.ets`、`scripts/test-ohos-haptic-feedback.mjs`、`docs/harmonyos/CLI.md`、`docs/harmonyos/specs/HAPTIC-FEEDBACK-TRIAL.md`。
+- **修改内容：** 新增 `DEFAULT_HAPTIC_ENABLED=true`，首次安装与「恢复默认设置」都回到开启状态；震动力度默认拉满为 100，恢复默认也写回 100。`setEnabled` 的写入失败回滚改为恢复写入前的值，而不是无条件写 false。平台开始振动失败时不再清空 `supported`，只记录 `vibration-start` 与错误码；时间轮刻度失败后冷却 1.5s，用户点「试一下」仍可立即重试。`HapticDriver` 新增 `feedbackMode()`，经 `@ohos.settings` 读取系统 `physic_navi_haptic_feedback_enabled` 并写入 `HapticStatus.systemFeedback`；设置页据此区分“系统触感反馈已关闭”“已开启但服务拒绝”“读取不到”三种提示。应用内开关仅控制本应用：打开开关时若系统触感反馈关闭，保存后弹出提示对话框（不自动跳转），对话框提供“去开启”按钮跳转华为设置 `volume_settings`（“声音和振动”，内含“系统触感反馈”）；应用开关保持开启。点击“试一下”真实失败时同样弹窗提示（`14600101` 用系统开关文案，其它失败用通用文案），替代原先一闪而过的 log 条。
+- **修改原因：** 真机日志显示 `MiscdeviceService: ShouldIgnoreVibrate ... ret:9`，即 OpenHarmony 的 `IGNORE_FEEDBACK`：当系统触感反馈开关（`physic_navi_haptic_feedback_enabled`）关闭时，`usage='touch'` 的振动会被服务层直接丢弃，`startVibration` 返回 `14600101 DEVICE_OPERATION_FAILED`。旧逻辑在此失败后清空能力列表，`available` 变为 false，预览按钮被禁用且只能重启应用才恢复；同时默认值为关闭、恢复默认也显式写关闭，与用户预期相反。
+- **构建结果：** 完整引擎 + 资源 + ArkTS HAP `BUILD SUCCESSFUL`（805.4 MB）；力度默认改为 100、系统触感开关读取、失败弹窗与系统设置跳转后，ArkTS-only 构建覆盖安装到 `192.168.3.95:36717`（首次自动启动遇锁屏 10106102，解锁后重试启动成功）。
+- **验证结果：** 触觉单测 29/29 通过（默认开启/最大力度、`14600101` 后保留能力并可重试、时间轮失败冷却、系统开关读取、关闭时弹窗且不自动跳转、失败预览弹窗用例）；时间轮/搜索测试 6/6 通过（合计 35/35）；UI 契约 37 面板 / 57 锚点。真机 CLI（`192.168.3.95:36717`）：系统关闭时 `systemFeedback:false`、`played:false`、`lastErrorCode:14600101`；用户开启“系统触感反馈”后 `systemFeedback:true`、`playHapticFeedback confirmation` 返回 `played:true`。`volume_settings` URI 实测打开“声音和振动”页，页面包含“系统触感反馈”开关。系统日志 `MiscdeviceService: ShouldIgnoreVibrate ... ret:9`（`IGNORE_FEEDBACK`）与开关状态一致。
+- **备注：** 若设备系统触感反馈确实关闭，应用侧无法绕过该平台过滤（OpenHarmony 对 touch/media/unknown/physicalFeedback/simulateReality 一律返回 `IGNORE_FEEDBACK`）；需在系统设置中开启触感反馈后，再点「试一下」，无需重启应用。
+
 ## [2026-11-14] OHOS 开发记录 - 时间轮 Canvas 化，搜索面板移除星座导航
 
 - **修改文件：** `panels/time/TimeWheelCanvas.ets`（新增）、`panels/time/TimeWheelScrubber.ets`、`state/TimeWheelController.ets`、`state/TimeWheelStore.ets`、`panels/panels/SearchPanel.ets`、`panels/search/SearchCategoryBrowse.ets`、`panels/search/SearchConstellationChips.ets`（删除）、`pages/MainWindowNativeNode.ets`、`state/SearchStore.ets`、`state/LanguageStore.ets`、`common/types/MainWindowModels.ets`、`capability/I18n.ets`、`scripts/test-ohos-search-browser.mjs`、`docs/harmonyos/json/ui-contract-baseline.json`。
