@@ -9886,7 +9886,6 @@ export struct WindowNativeNode {
         setProjection: (name: string) => { this.viewSettingsStore.setProjection(name) },
         saveAppSettings: () => { this.saveAppSettings() },
         flashHint: (text: ResourceStr) => { this.flashHint(text) },
-        saveAllCoreSettings: () => { this.tools.saveAllCoreSettings() },
         restoreCoreDefaults: () => { this.tools.restoreCoreDefaults() },
         saveCurrentViewAsStartup: () => { this.startupBridge().saveCurrentViewAsStartup() },
         setViewLockState: (enabled: boolean) => { this.layerCtl().setViewLockState(enabled) },

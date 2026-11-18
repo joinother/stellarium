@@ -131,7 +131,6 @@ export struct SettingsPanel {
   setProjection: (name: string) => void = () => {}
   saveAppSettings: () => void = () => {}
   flashHint: (text: ResourceStr) => void = () => {}
-  saveAllCoreSettings: () => void = () => {}
   restoreCoreDefaults: () => void = () => {}
   saveCurrentViewAsStartup: () => void = () => {}
   setViewLockState: (enabled: boolean) => void = () => {}
@@ -929,6 +928,18 @@ export struct SettingsPanel {
               .borderRadius(UI_RADIUS_CONTROL).height(34).width('100%').margin({ bottom: 8 })
               .onClick(() => { this.saveCurrentViewAsStartup() })
 
+            Text(I18n.t('settings_view_max_fov')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ top: 4, bottom: 4 })
+            Row() {
+              Text(this.maxFovDraft.toFixed(0) + '°').fontSize(14).fontColor(this.c.text).width(48)
+              Slider({ value: this.maxFovDraft, min: 30, max: 360, step: 1, style: SliderStyle.OutSet })
+                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+                .layoutWeight(1).trackColor(this.c.bg)
+                .showSteps(false).onChange((value: number) => { this.maxFovDraft = Math.round(value) })
+              Button(I18n.t('settings_view_apply')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
+                .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
+                .onClick(() => { this.setNavigationMaxFov(this.maxFovDraft) })
+            }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
+
             Text(I18n.t('settings_view_navigation_controls')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ bottom: 5 })
             NavigationSwitchRow({ label: I18n.t('settings_view_mouse_navigation'), isOn: this.navigationStore.navigationMouseEnabled, onToggle: (v: boolean) => { this.setNavigationBoolean('mouseNavigation', v) } })
             NavigationSwitchRow({ label: I18n.t('settings_view_mouse_zoom'), isOn: this.navigationStore.navigationMouseZoomEnabled, onToggle: (v: boolean) => { this.setNavigationBoolean('mouseZooming', v) } })
@@ -948,24 +959,10 @@ export struct SettingsPanel {
               onResetAll: () => { this.keyboardShortcutResetAllChange() }
             })
 
-            Text(I18n.t('settings_view_max_fov')).fontSize(12).fontColor(this.c.sub).width('100%').margin({ top: 4, bottom: 4 })
-            Row() {
-              Text(this.maxFovDraft.toFixed(0) + '°').fontSize(14).fontColor(this.c.text).width(48)
-              Slider({ value: this.maxFovDraft, min: 30, max: 360, step: 1, style: SliderStyle.OutSet })
-                .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-                .layoutWeight(1).trackColor(this.c.bg)
-                .showSteps(false).onChange((value: number) => { this.maxFovDraft = Math.round(value) })
-              Button(I18n.t('settings_view_apply')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
-                .onClick(() => { this.setNavigationMaxFov(this.maxFovDraft) })
-            }.width('100%').padding({ left: 8, right: 8, top: 5, bottom: 5 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 8 })
-
-            Row({ space: 6 }) {
-              Button(I18n.t('settings_save_all')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(32).layoutWeight(1).onClick(() => { this.saveAllCoreSettings() })
-              Button(I18n.t('settings_restore_defaults')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(32).layoutWeight(1).onClick(() => { this.restoreCoreDefaults() })
-            }.width('100%').margin({ top: 2, bottom: 8 })
+            Button(I18n.t('settings_restore_defaults')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
+              .borderRadius(UI_RADIUS_CONTROL).height(32).width('100%')
+              .onClick(() => { this.restoreCoreDefaults() })
+              .margin({ top: 2, bottom: 8 })
           } else if (this.configTab === 8) {
             AboutSection({
               tools: this.toolsStore,
