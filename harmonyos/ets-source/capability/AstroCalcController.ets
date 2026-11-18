@@ -6,6 +6,7 @@
 // SearchStore；DatePicker、animateTo、Scroller、壳层路由与保留宿主方法经 AstroCalcHostHooks 回注。
 // 定时器 astroContextTimer 由控制器自持；纯格式化工具（fmtDateTime/fmtClock/fmtEphemerisDate/fmtNum）
 // 留此供本控制器与 AstroHostHooks.fmtDateTime 复用同一实现。
+import hilog from '@ohos.hilog'
 import { StellariumBridgeResponse, EphemerisRow, RtsCalendarDay, ObservabilityDay, PhenomenonItem, WutTarget, MoonPhaseItem, SeasonEvent, PlanetPosition, TabItem, TonightEvents, AstroCalcContext, AltAzPoint, AnnualElevationPoint, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, EclipseItem, PlanetaryTransitItem, HeliocentricPosition, CelestialPosition } from '../pages/StellariumTypes'
 import { CommandPort } from '../bridge/CommandPort'
 import { FileExportPort, MediaSaveResult } from '../bridge/MediaPort'
@@ -279,8 +280,25 @@ export class AstroCalcController {
 
   // 大气参数写回（回包交给保留宿主实现 applyAtmosphereResponse）。
   applyAtmosphere(pressure: number, temperature: number, extinction: number): void {
-    this.hooks.applyAtmosphereResponse(this.port.request('setAtmosphereParams',
-      JSON.stringify({ pressure: pressure, temperature: temperature, extinction: extinction })))
+    const payload = JSON.stringify({ pressure: pressure, temperature: temperature, extinction: extinction })
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[atmo] request p=%{public}s t=%{public}s e=%{public}s',
+      pressure.toFixed(1), temperature.toFixed(1), extinction.toFixed(2))
+    // setAtmosphereParams runs on the native render pump and returns
+    // {ok:false, error:'pending'} on the first synchronous read. Using
+    // request() made the UI read that pending response and never update the
+    // AtmosphereStore; requestInteractive polls until the real result arrives.
+    this.port.requestInteractive('setAtmosphereParams', payload, (response: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[atmo] result ok=%{public}s p=%{public}s t=%{public}s e=%{public}s',
+        response.ok === true ? '1' : '0', String(response.pressure),
+        String(response.temperature), String(response.extinction))
+      this.hooks.applyAtmosphereResponse(response)
+    }, (failure: StellariumBridgeResponse) => {
+      hilog.info(0x0000, 'StellariumArkUI',
+        '[atmo] failed err=%{public}s', failure.error ?? '')
+      this.hooks.flashHint(failure.error ?? 'setAtmosphereParams failed')
+    })
   }
 
   // ---- 通用格式化：把 ISO 时间截成 "MM-DD HH:MM" / "HH:MM" ----

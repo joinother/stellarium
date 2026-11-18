@@ -18157,6 +18157,13 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				drawer->setAtmosphereTemperature(qBound(-60.0, jo.value("temperature").toDouble(), 60.0));
 			if (jo.contains("extinction"))
 				drawer->setExtinctionCoefficient(qBound(0.0, jo.value("extinction").toDouble(), 1.0));
+			// Persist the atmosphere model: StelSkyDrawer reads these three keys on
+			// startup (landscape/pressure_mbar, temperature_C, extinction). The
+			// setters only update the live drawer, so without this the values are
+			// lost when the OHOS process is killed and restarted.
+			StelApp::immediateSaveNow("landscape/pressure_mbar", drawer->getAtmospherePressure());
+			StelApp::immediateSaveNow("landscape/temperature_C", drawer->getAtmosphereTemperature());
+			StelApp::immediateSaveNow("landscape/atmospheric_extinction_coefficient", drawer->getExtinctionCoefficient());
 			result["ok"] = true;
 			result["pressure"] = drawer->getAtmospherePressure();
 			result["temperature"] = drawer->getAtmosphereTemperature();

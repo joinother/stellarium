@@ -115,6 +115,17 @@ export class LayerController {
     })
   }
 
+  // 返回地球时由位置域调用：大气层是地球观感的一部分，但用户可能在外星
+  // 观测时关掉了它。只在当前为关闭时写一次，避免每次定位都闪提示。
+  enableAtmosphereLayer(): void {
+    if (this.layerStore.atmosphere) return
+    this.layerStore.atmosphere = true
+    this.port.requestInteractive('setActionChecked', 'actionShow_Atmosphere|1', (r: StellariumBridgeResponse) => {
+      if (r.ok !== true) this.layerStore.atmosphere = false
+      this.hooks.refreshState()
+    })
+  }
+
   // 图层开关的统一写回。
   applyLayerSwitch(actionId: string, cmd: string, value: boolean): void {
     if (cmd.length === 0 && actionId === 'actionShow_Night_Mode') {
@@ -336,7 +347,11 @@ export class LayerController {
     const payload = setting + '|' + (typeof value === 'boolean' ? (value ? '1' : '0') : value.toString())
     this.port.requestInteractive('setSkyDisplaySetting', payload, (r: StellariumBridgeResponse) => {
       if (r.ok === true) {
-        if (typeof value === 'boolean' || setting === 'bortleScale' || setting === 'environmentMode') this.hooks.refreshState()
+        // Do not refresh the whole state for bortleScale while the slider is
+        // being dragged: an older native reply can arrive after a newer value
+        // and reset the thumb, which made the slider feel undraggable. The
+        // local LayerViewStore already holds the value the user selected.
+        if (typeof value === 'boolean' || setting === 'environmentMode') this.hooks.refreshState()
       } else {
         this.hooks.flashHint(r.error ?? I18n.t('msg_apply_failed'))
         this.hooks.refreshState()

@@ -3,12 +3,14 @@ import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/Stellariu
 import { I18n } from '../../pages/I18n'
 import { OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
 import { LocSearchItem } from '../../pages/StellariumTypes'
+import { AtmosphereStore } from '../../state/AtmosphereStore'
 import { LocationStore } from '../../state/LocationStore'
 import { LocationPickerStore } from '../../state/LocationPickerStore'
 import { SessionToolStore } from '../../state/SessionToolStore'
 import { UI_RADIUS_CONTROL, UI_RADIUS_PILL } from '../../common/ui/UiTokens'
 import { CityChipsRow } from '../location/CityChipsRow'
 import { LocationPickerPanel } from '../location/LocationPickerPanel'
+import { PlaceEnvironmentSection } from '../location/PlaceEnvironmentSection'
 import { ObserverPlanetSection, TonightEventsSection } from '../astro/SessionToolSections'
 
 // 位置面板，对应 `activePanel === 'place'`：当前观测点卡 + 观测星球 + 位置选择器 +
@@ -21,6 +23,7 @@ export struct PlacePanel {
   @ObjectLink locationPickerStore: LocationPickerStore
   @ObjectLink locationStore: LocationStore
   @ObjectLink sessionToolStore: SessionToolStore
+  @ObjectLink atmosphereStore: AtmosphereStore
   @Prop locationText: string
   @Prop coordinateText: string
   @Prop altitudeText: string
@@ -51,12 +54,16 @@ export struct PlacePanel {
   onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => void = () => {}
   onDeleteLocation: (key: string) => void = () => {}
   onSelectPlanet: (name: string) => void = () => {}
+  onApplyEnvironment: (pressure: number, temperature: number) => void = () => {}
+  // 进入位置面板时从引擎回读已持久化的大气参数，避免显示 store 默认值。
+  onLoadAtmosphere: () => void = () => {}
   onRefreshTonight: () => void = () => {}
   onJump: (jd: number, lock: string, title: string) => void = () => {}
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
   aboutToAppear(): void {
+    this.onLoadAtmosphere()
     // The location panel always opens on the map tab; a search/region tab
     // selected during the previous visit must not become the new default.
     if (this.locationPickerStore.locationPickMode !== 'map') {
@@ -148,6 +155,19 @@ export struct PlacePanel {
         onSelectCity: (c: string) => { this.onSelectCity(c) },
         onOpenFullMap: () => { this.onOpenFullMap() }
       })
+
+      // Earth-only: station pressure / reference temperature derived from the
+      // staged altitude, or a direct barometer reading.
+      if (this.sessionToolStore.observerPlanet === 'Earth') {
+        PlaceEnvironmentSection({
+          altitude: this.locationPickerStore.locationPickerAltitude,
+          currentPressure: this.atmosphereStore.atmoPressure,
+          currentTemperature: this.atmosphereStore.atmoTemperature,
+          onApply: (pressure: number, temperature: number) => {
+            this.onApplyEnvironment(pressure, temperature)
+          }
+        })
+      }
 
       CityChipsRow({
         store: this.locationStore,

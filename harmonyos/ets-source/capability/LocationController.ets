@@ -27,6 +27,8 @@ export interface LocationHostHooks {
   setLocationTexts(location: string, coordinate: string, altitude: string): void
   // 观测点变化后让今晚天象缓存失效，并在可见时按新坐标重算。
   refreshTonightData(): void
+  // 从外星观测点返回地球时自动打开大气层，恢复地球天空的地平线观感。
+  enableAtmosphereOnEarth(): void
   // GPS 门禁（宿主保留：privacyNativeStartupAllowed / applicationInForeground / hasCurrentPrivacyConsent）。
   privacyAllowed(): boolean
   inForeground(): boolean
@@ -270,6 +272,7 @@ export class LocationController {
       this.locationStore.locSearchQuery = ''
       this.locationStore.searchLocations('')
       if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
+      else this.hooks.enableAtmosphereOnEarth()
     }
     this.saveObserverLocationToStorage()
     const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'

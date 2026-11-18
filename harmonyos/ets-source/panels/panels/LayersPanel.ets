@@ -33,6 +33,8 @@ export struct LayersPanel {
   @ObjectLink atmosphereStore: AtmosphereStore
   @ObjectLink surveyStore: SurveyStore
   @Prop nightModeOn: boolean
+  @Prop observerAltitude: number = 0
+  @Prop earthObserver: boolean = true
   @Prop viewTab: number
   @Prop expandedLayout: boolean
   @Prop foldTablet: boolean
@@ -51,6 +53,8 @@ export struct LayersPanel {
   onSelectSpectral: (id: string) => void = () => {}
   onCloseSpectral: () => void = () => {}
   onSetSkyDisplay: (setting: string, value: boolean | number) => void = () => {}
+  // 进入图层面板时从引擎回读已持久化的大气参数。
+  onLoadAtmosphere: () => void = () => {}
   onStarMagLimit: (value: number) => void = () => {}
   onMilkyWayBright: (value: number) => void = () => {}
   onAtmosphere: (pressure: number, temperature: number, extinction: number) => void = () => {}
@@ -101,6 +105,10 @@ export struct LayersPanel {
 
   onWillApplyTheme(theme: Theme): void { this.c = slotsFromTheme(theme) }
 
+  aboutToAppear(): void {
+    this.onLoadAtmosphere()
+  }
+
   build() {
       Column() {
         LayerPresetBar({ onPreset: (preset: string) => { this.onPreset(preset) } })
@@ -113,6 +121,8 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               nightModeOn: this.nightModeOn,
+              observerAltitude: this.observerAltitude,
+              earthObserver: this.earthObserver,
               refractionOn: this.atmosphereStore.refractionOn,
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,
@@ -217,6 +227,8 @@ export struct LayersPanel {
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
               nightModeOn: this.nightModeOn,
+              observerAltitude: this.observerAltitude,
+              earthObserver: this.earthObserver,
               refractionOn: this.atmosphereStore.refractionOn,
               atmoPressure: this.atmosphereStore.atmoPressure,
               atmoTemperature: this.atmosphereStore.atmoTemperature,

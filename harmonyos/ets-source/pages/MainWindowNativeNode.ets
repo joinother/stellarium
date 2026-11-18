@@ -3290,6 +3290,16 @@ export struct WindowNativeNode {
     return this.skyInputControllerImpl
   }
 
+  // 从引擎回读已持久化的大气参数；进入位置/图层页时调用，避免面板显示
+  // AtmosphereStore 的初始默认值（引擎 config.ini 中其实已经是用户值）。
+  // 启动时面板可能先于 Qt 引擎就绪挂载（上次面板被恢复），首次请求会失败，
+  // 故用 requestWhenReady 重试；回包只在 ok 时写入 store。
+  private loadAtmosphereParams(): void {
+    this.commandPort().requestWhenReady('getAtmosphereParams', '', (response: StellariumBridgeResponse) => {
+      this.atmosphereStore.applyAtmosphereResponse(response)
+    }, undefined, 0, 200, 30)
+  }
+
   // 位置域控制器惰性构造。NAPI（权限/定位/preferences）经 HostLocationPort；跨域写
   // （SessionToolStore.observerPlanet、位置头部三 @State）与 GPS 门禁经 LocationHostHooks 注入。
   private locationCtl(): LocationController {
@@ -3319,6 +3329,7 @@ export struct WindowNativeNode {
           void this.notificationCtl().refreshSubscriptions()
           this.scheduleCardSnapshotSync(600)
         },
+        enableAtmosphereOnEarth: (): void => { this.layerCtl().enableAtmosphereLayer() },
         privacyAllowed: (): boolean => this.privacyNativeStartupAllowed,
         inForeground: (): boolean => this.applicationInForeground,
         hasPrivacyConsent: (): boolean => hasCurrentPrivacyConsent()
@@ -3697,7 +3708,9 @@ export struct WindowNativeNode {
           this.applySelectedObject(result, fromRefresh, placement, userReselect)
         },
         setPanel: (panel: string): void => { this.setPanel(panel) },
-        applyAtmosphereResponse: (result: StellariumBridgeResponse): void => { this.atmosphereStore.applyAtmosphereResponse(result) },
+        applyAtmosphereResponse: (result: StellariumBridgeResponse): void => {
+          this.atmosphereStore.applyAtmosphereResponse(result)
+        },
         hasSelectedObject: (): boolean => this.objectDetailStore.hasSelectedObject(),
         selectedObjectName: (): string => this.objectDetailStore.selectedName,
         hecLayoutPositions: (positions: Array<HeliocentricPosition>): Array<HeliocentricPosition> => hecLayoutPositions(positions),
@@ -4655,6 +4668,9 @@ export struct WindowNativeNode {
       : (routeDirection < 0 ? -1 : 1)
     hilog.info(0x0000, 'StellariumArkUI', 'setPanel ' + panel)
     const nextVisible = panel.length === 0 ? false : (forceVisible ? true : (this.activePanel === panel ? !this.panelVisible : true))
+    // 面板可能在上次会话结束时保持挂载，aboutToAppear 不会再触发；每次打开
+    // 位置/图层页都重新回读引擎中的大气参数，确保手动行与“当前大气模型”一致。
+    if (nextVisible && (panel === 'place' || panel === 'layers')) this.loadAtmosphereParams()
     this.panelDragging = false
     this.panelScrolling = false
     this.panelTouching = false
@@ -9572,6 +9588,7 @@ export struct WindowNativeNode {
         locationPickerStore: this.locationPickerStore,
         locationStore: this.locationStore,
         sessionToolStore: this.sessionToolStore,
+        atmosphereStore: this.atmosphereStore,
         locationText: this.locationText,
         coordinateText: this.coordinateText,
         altitudeText: this.altitudeText,
@@ -9596,6 +9613,10 @@ export struct WindowNativeNode {
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.locationCtl().setLocation(name, lat, lon, alt, planet) },
         onDeleteLocation: (key: string) => { this.locationStore.deleteSavedLocation(key) },
         onSelectPlanet: (name: string) => { this.locationCtl().setObserverPlanet(name) },
+        onApplyEnvironment: (pressure: number, temperature: number) => {
+          this.astroCalcCtl().applyAtmosphere(pressure, temperature, this.atmosphereStore.atmoExtinction)
+        },
+        onLoadAtmosphere: () => { this.loadAtmosphereParams() },
         onRefreshTonight: () => { this.sessionToolStore.refreshTonight(true) },
         onJump: (jd: number, lock: string, title: string) => { this.gotoTonightEvent(jd, lock, title) }
       })
@@ -9609,6 +9630,8 @@ export struct WindowNativeNode {
         overlayStore: this.overlayStore,
         surveyStore: this.surveyStore,
         nightModeOn: this.nightModeStore.nightMode,
+        observerAltitude: this.locationPickerStore.locationPickerAltitude,
+        earthObserver: this.sessionToolStore.observerPlanet === 'Earth',
         viewTab: this.viewTab,
         expandedLayout: this.isExpandedLayout,
         foldTablet: this.isFoldTabletLayout,
@@ -9625,6 +9648,7 @@ export struct WindowNativeNode {
         onSelectSpectral: (id: string) => { this.surveyCtl().setSpectralDataset(id) },
         onCloseSpectral: () => { this.surveyCtl().closeSpectralView() },
         onSetSkyDisplay: (setting: string, value: boolean | number) => { this.layerCtl().setSkyDisplaySetting(setting, value) },
+        onLoadAtmosphere: () => { this.loadAtmosphereParams() },
         onStarMagLimit: (value: number) => { this.layerCtl().applyStarMagLimit(value) },
         onMilkyWayBright: (value: number) => { this.layerCtl().applyMilkyWayBright(value) },
         onAtmosphere: (pressure: number, temperature: number, extinction: number) => { this.astroCalcCtl().applyAtmosphere(pressure, temperature, extinction) },
