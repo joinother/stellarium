@@ -75,6 +75,17 @@ test('applying the map retains the selected extraterrestrial observer', () => {
   }
 });
 
+test('place location row uses the same localized body name as the observer dropdown', () => {
+  const context = fixture('Mars');
+  context.controller.setLocation('Site', 12, 34, 15, 'Phobos');
+  assert.equal(context.requests[0].name, 'setObserverPlanet');
+  context.requests[0].success({ ok: true, planetName: 'Phobos', locationName: 'Site',
+    latitude: 12, longitude: 34, altitude: 15 });
+  assert.equal(context.texts.length, 1);
+  assert.match(context.texts[0].location, /火卫一$/);
+  assert.doesNotMatch(context.texts[0].location, /Phobos/);
+});
+
 test('switches are serialized and only native success commits or persists a destination', () => {
   for (const callback of ['success', 'failure']) {
     const context = fixture('Earth');
@@ -168,4 +179,33 @@ test('engine enumeration retains Mercury, Venus and moons, using localized names
   assert.equal(store.observerPlanetMapTexture(), 'io.png');
   store.observerPlanet = 'Venus';
   assert.equal(store.observerPlanetMapTexture(), '');
+});
+
+test('observer planets sort Earth trio first, then Sun and major planets with moons, then minor bodies', () => {
+  // Mirrors the engine order: getAllPlanets() is catalogue order, not observing order.
+  const planets = ['1P/Halley', 'Io', '(1) Ceres', 'Charon', 'Jupiter', 'Mars Observer',
+    'Moon', 'Sun', 'Earth', 'Pluto', 'Mars', 'Phobos', 'Earth Observer'];
+  const observerPlanets = [
+    { name: '1P/Halley', displayName: '哈雷彗星', mapTexture: 'halley.png', type: 'comet', parent: '' },
+    { name: 'Io', displayName: '木卫一', mapTexture: 'io.png', type: 'moon', parent: 'Jupiter' },
+    { name: '(1) Ceres', displayName: '谷神星', mapTexture: 'ceres.png', type: 'asteroid', parent: '' },
+    { name: 'Charon', displayName: '冥卫一', mapTexture: 'charon.png', type: 'moon', parent: 'Pluto' },
+    { name: 'Jupiter', displayName: '木星', mapTexture: 'jupiter.png', type: 'planet', parent: '' },
+    { name: 'Mars Observer', displayName: '火星全览点', mapTexture: 'mars.png', type: 'observer', parent: '' },
+    { name: 'Moon', displayName: '月球', mapTexture: 'moon.png', type: 'moon', parent: 'Earth' },
+    { name: 'Sun', displayName: '太阳', mapTexture: 'sun.png', type: 'star', parent: '' },
+    { name: 'Earth', displayName: '地球', mapTexture: '', type: 'planet', parent: '' },
+    { name: 'Pluto', displayName: '冥王星', mapTexture: 'pluto.png', type: 'plutino', parent: '' },
+    { name: 'Mars', displayName: '火星', mapTexture: 'mars.png', type: 'planet', parent: '' },
+    { name: 'Phobos', displayName: '火卫一', mapTexture: 'phobos.png', type: 'moon', parent: 'Mars' },
+    { name: 'Earth Observer', displayName: '地球全览点', mapTexture: '', type: 'observer', parent: '' }
+  ];
+  const store = new Store();
+  store.attachPort({ requestInteractive: (command, payload, success) => success({ ok: true,
+    planets, observerPlanets }) }, () => {});
+  store.loadPlanetList();
+  const expected = ['Earth', 'Moon', 'Earth Observer', 'Sun', 'Mars', 'Phobos', 'Mars Observer',
+    'Jupiter', 'Io', 'Pluto', 'Charon', '(1) Ceres', '1P/Halley'];
+  assert.deepEqual(store.planetList, expected);
+  assert.deepEqual(store.observerPlanets.map(item => item.name), expected);
 });

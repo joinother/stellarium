@@ -7,7 +7,7 @@ import hilog from '@ohos.hilog'
 import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse, HierCity } from '../pages/StellariumTypes'
 import { ObserverLocationRecord } from '../pages/MainWindowModels'
-import { approximateTimeZoneDisplay, planetZh, quickLocationLabel } from '../common/derive/labels'
+import { approximateTimeZoneDisplay, quickLocationLabel } from '../common/derive/labels'
 import { METERED_MAP_APIS_ENABLED } from '../common/config/OhosFeatureFlags'
 import { CommandPort } from '../bridge/CommandPort'
 import { LocationPort } from '../bridge/LocationPort'
@@ -194,7 +194,7 @@ export class LocationController {
       void this.saveObserverLocationToStorage()
       this.hooks.setLocationTexts(
         quickLocationLabel('gps',
-          this.pickerStore.locationDisplayName(this.pickerStore.locationPickerName), 'Earth', detail) + ' · ' + planetZh('Earth'),
+          this.pickerStore.locationDisplayName(this.pickerStore.locationPickerName), 'Earth', detail) + ' · ' + this.sessionToolStore.observerPlanetLabel('Earth'),
         this.locationStore.formatDegrees(this.pickerStore.locationPickerLatitude, 'N', 'S') + ' / ' +
           this.locationStore.formatDegrees(this.pickerStore.locationPickerLongitude, 'E', 'W'),
         this.pickerStore.locationPickerAltitude.toFixed(0) + ' m')

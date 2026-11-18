@@ -8108,6 +8108,8 @@ export struct WindowNativeNode {
         this.locationText = quickLocationLabel(this.locationPickerStore.locationSource,
           this.locationPickerStore.locationDisplayName(result.locationName), planetName,
           this.locationPickerStore.locationSource === 'gps' ? this.locationPickerStore.gpsPlaceDetail : '') +
+          // 与「观测星球」下拉使用同一标签：木卫、地球全览点等引擎本地化名称
+          // 不能只走 planetZh 的十大天体表，否则位置条目会退回英文。
           ' · ' + this.sessionToolStore.observerPlanetLabel(planetName)
       }
       if (result.altitude !== undefined) {
@@ -9174,6 +9176,7 @@ export struct WindowNativeNode {
             ? [] : this.locationPickerStore.planetPlaces(this.sessionToolStore.observerPlanet),
           placeLabel: (name: string) => this.locationPickerStore.hierarchyItemLabel(
             'city', name, this.sessionToolStore.observerPlanet),
+          // 全屏选点标题/搜索占位/离线分区与「观测星球」下拉共用同一中文标签。
           planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
           contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
           onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {

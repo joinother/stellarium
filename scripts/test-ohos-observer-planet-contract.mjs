@@ -8,6 +8,9 @@ const dialog = read('src/gui/LocationDialog.cpp');
 const core = read('src/core/StelCore.cpp');
 const landscape = read('src/core/modules/LandscapeMgr.cpp');
 const catalog = read('src/StelOhosCommandCatalog.hpp');
+const host = read('harmonyos/ets-source/pages/MainWindowNativeNode.ets');
+const locationController = read('harmonyos/ets-source/capability/LocationController.ets');
+const sessionStore = read('harmonyos/ets-source/state/SessionToolStore.ets');
 
 function block(source, marker) {
   const markerIndex = source.indexOf(marker);
@@ -46,6 +49,15 @@ test('localized names and raw texture names preserve the agreed UI schema', () =
   assert.doesNotMatch(switchPlanet, /" surface"|"garching"|"jupiter"|"mars"/);
 });
 
+test('observer picker metadata exposes stable planet types and moon parents', () => {
+  assert.match(planetList, /const PlanetP parent = planet->getParent\(\)/)
+  assert.match(planetList, /entry\["type"\] = planetTypeName\(planet->getPlanetType\(\)\)/)
+  assert.match(planetList, /entry\["parent"\] = parent \? parent->getEnglishName\(\) : QString\(\)/)
+  for (const type of ['star', 'planet', 'moon', 'observer', 'asteroid', 'dwarfPlanet', 'comet', 'interstellar']) {
+    assert.match(planetList, new RegExp(`return QStringLiteral\\("${type}"\\)`))
+  }
+})
+
 test('planet changes delegate the English name to the upstream automatic landscape route', () => {
   assert.match(switchPlanet, /core->moveObserverTo\(loc, 0\.0, 0\.0, landscapeHint\)/);
   assert.match(switchPlanet, /const QString landscapeHint = planetChanged && landscapeMgr && landscapeMgr->getFlagLandscapeAutoSelection\(\) \? loc\.planetName : QString\(\)/);
@@ -55,6 +67,17 @@ test('planet changes delegate the English name to the upstream automatic landsca
   assert.match(targetChanged, /setCurrentLandscapeID\("zero"\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(false\)/);
   assert.match(targetChanged, /setFlagLandscapeSetsLocation\(landscapeSetsLocation\)/);
+});
+
+test('place panel location rows reuse the observer picker localized label', () => {
+  // 位置条目与下拉列表必须同源：引擎本地化的卫星/全览点名称不能只靠 planetZh。
+  assert.match(sessionStore, /observerPlanetLabel\(name: string\): string/)
+  assert.match(locationController, /observerPlanetLabel\(targetPlanet\)/)
+  assert.match(host, /' · ' \+ this\.sessionToolStore\.observerPlanetLabel\(planetName\)/)
+  // 全屏选点顶部标题（以及搜索占位、离线分区）复用同一标签。
+  assert.match(host, /planetLabel: \(en: string\) => this\.sessionToolStore\.observerPlanetLabel\(en\)/)
+  assert.match(read('harmonyos/ets-source/panels/location/LocationFullScreenMap.ets'),
+    /Text\(this\.planetLabel\(this\.observerPlanet\)\)/)
 });
 
 test('the bridge leaves atmosphere, fog and custom landscape preferences to the engine', () => {

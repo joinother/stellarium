@@ -7,6 +7,11 @@ export interface ObserverPlanetItem {
   name: string
   displayName: string
   mapTexture: string
+  // Engine Planet::PlanetType as a stable string ("star", "planet", "moon",
+  // "dwarfPlanet", "asteroid", "comet", ...). Older engines omit it.
+  type?: string
+  // English name of the parent planet for moons; empty for non-moons.
+  parent?: string
 }
 
 export interface HierCity {

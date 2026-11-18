@@ -11847,16 +11847,43 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "solar system not ready";
 				return result;
 			}
+			// Stable type names for the ArkUI observer picker ordering: the UI groups
+			// Earth/Moon/Earth Observer first, then the Sun and major planets with
+			// their moons, then minor bodies. Keep the enumeration itself unfiltered.
+			const auto planetTypeName = [](Planet::PlanetType type) -> QString
+			{
+				switch (type)
+				{
+				case Planet::isStar: return QStringLiteral("star");
+				case Planet::isPlanet: return QStringLiteral("planet");
+				case Planet::isMoon: return QStringLiteral("moon");
+				case Planet::isObserver: return QStringLiteral("observer");
+				case Planet::isArtificial: return QStringLiteral("artificial");
+				case Planet::isAsteroid: return QStringLiteral("asteroid");
+				case Planet::isPlutino: return QStringLiteral("plutino");
+				case Planet::isComet: return QStringLiteral("comet");
+				case Planet::isDwarfPlanet: return QStringLiteral("dwarfPlanet");
+				case Planet::isCubewano: return QStringLiteral("cubewano");
+				case Planet::isSDO: return QStringLiteral("sdo");
+				case Planet::isOCO: return QStringLiteral("oco");
+				case Planet::isSednoid: return QStringLiteral("sednoid");
+				case Planet::isInterstellar: return QStringLiteral("interstellar");
+				default: return QStringLiteral("undefined");
+				}
+			};
 			QJsonArray list;
 			QJsonArray observerPlanets;
 			for (const auto& planet : ssys->getAllPlanets())
 			{
 				const QString name = planet->getEnglishName();
+				const PlanetP parent = planet->getParent();
 				list.append(name);
 				QJsonObject entry;
 				entry["name"] = name;
 				entry["displayName"] = planet->getNameI18n();
 				entry["mapTexture"] = name == "Earth" ? QString() : planet->getTextMapName();
+				entry["type"] = planetTypeName(planet->getPlanetType());
+				entry["parent"] = parent ? parent->getEnglishName() : QString();
 				observerPlanets.append(entry);
 			}
 			result["ok"] = true;
