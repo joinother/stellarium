@@ -9168,6 +9168,12 @@ export struct WindowNativeNode {
           altitudeSource: this.locationPickerStore.locationSource,
           locationName: this.locationPickerStore.locationPickerName,
           locationPort: this.hostLocationPort,
+          // Named surface sites for non-Earth bodies: show every offline place
+          // as a labelled marker so it can be picked without the hierarchy tab.
+          namedPlaces: this.sessionToolStore.observerPlanet === 'Earth'
+            ? [] : this.locationPickerStore.planetPlaces(this.sessionToolStore.observerPlanet),
+          placeLabel: (name: string) => this.locationPickerStore.hierarchyItemLabel(
+            'city', name, this.sessionToolStore.observerPlanet),
           planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
           contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
           onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {
