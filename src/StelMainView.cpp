@@ -69,6 +69,7 @@
 #include "../plugins/RemoteControl/src/RemoteControl.hpp"
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QNetworkInterface>
+#include <QRandomGenerator>
 #endif
 #include "../plugins/NebulaTextures/src/NebulaTextures.hpp"
 #include "../plugins/MeteorShowers/src/MeteorShowersMgr.hpp"
@@ -10792,13 +10793,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
-		// loadPlugin / unloadPlugin
+		// setRemoteControl / getRemoteControlState
 		if (commandName == "setRemoteControl" || commandName == "getRemoteControlState")
 		{
-			// 「无线控制」：把 RemoteControl 插件的 HTTP/WebSocket 服务暴露到局域网，
-			// 内网设备用浏览器打开 http://<平板IP>:8090 就能操作星图。
-			// arg 形如 "1|0.0.0.0|8090|password"（enable|host|port|password）。
-			auto lanAddress = []() -> QString {
+			// 「无线控制」：把 RemoteControl 插件的 HTTP REST 服务暴露到局域网，
+			// 内网设备用浏览器或脚本访问 http://<平板IP>:8090 即可操作星图。
+			// arg 形如 "enable|host|port|password|enableCors|corsOrigin|regeneratePassword"（兼容旧 4 段格式）。
+			auto collectLanAddresses = []() -> QStringList {
+				QStringList privateIps;
+				QStringList otherIps;
 				const QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
 				for (const QNetworkInterface& iface : interfaces)
 				{
@@ -10808,15 +10811,40 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					for (const QNetworkAddressEntry& entry : iface.addressEntries())
 					{
 						const QHostAddress address = entry.ip();
-						if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback())
-							return address.toString();
+						if (address.protocol() != QAbstractSocket::IPv4Protocol || address.isLoopback())
+							continue;
+						const QString ip = address.toString();
+						if (ip.startsWith(QLatin1String("192.168.")) ||
+							ip.startsWith(QLatin1String("10.")) ||
+							(ip.startsWith(QLatin1String("172.")) && ip.section('.', 1, 1).toInt() >= 16 && ip.section('.', 1, 1).toInt() <= 31))
+						{
+							if (!privateIps.contains(ip)) privateIps.append(ip);
+						}
+						else if (!ip.startsWith(QLatin1String("169.254.")))
+						{
+							if (!otherIps.contains(ip)) otherIps.append(ip);
+						}
 					}
 				}
-				return QString();
+				return privateIps + otherIps;
 			};
 
+			auto generateAccessToken = []() -> QString {
+				static const char kAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+				constexpr int kLen = 8;
+				QString token;
+				token.reserve(kLen);
+				auto* rng = QRandomGenerator::system();
+				for (int i = 0; i < kLen; ++i)
+					token.append(QLatin1Char(kAlphabet[rng->bounded(static_cast<int>(sizeof(kAlphabet) - 1))]));
+				return token;
+			};
+
+			auto& moduleMgr = StelApp::getInstance().getModuleMgr();
 			auto* remote = qobject_cast<RemoteControl*>(
-				StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("RemoteControl"), true));
+				moduleMgr.getModule(QStringLiteral("RemoteControl"), true));
+			if (!remote)
+				remote = qobject_cast<RemoteControl*>(moduleMgr.loadPlugin(QStringLiteral("RemoteControl")));
 			if (!remote)
 			{
 				result["ok"] = false;
@@ -10830,23 +10858,87 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				const QString host = parts.value(1).trimmed().isEmpty() ? QStringLiteral("0.0.0.0") : parts.value(1).trimmed();
 				bool portOk = false;
 				const int port = parts.value(2).trimmed().toInt(&portOk);
-				const QString password = parts.value(3);
+				const QString rawPassword = parts.size() >= 4 ? parts.value(3).trimmed() : QString();
+				const bool hasCorsFlag = parts.size() >= 5 && !parts.value(4).trimmed().isEmpty();
+				const bool enableCors = hasCorsFlag
+					? (parts.value(4).trimmed() == "1" || parts.value(4).trimmed().compare("true", Qt::CaseInsensitive) == 0)
+					: remote->getFlagEnableCors();
+				const QString corsOrigin = parts.size() >= 6 && !parts.value(5).trimmed().isEmpty()
+					? parts.value(5).trimmed()
+					: (remote->getCorsOrigin().trimmed().isEmpty() ? QStringLiteral("*") : remote->getCorsOrigin());
+				const bool regeneratePassword = parts.size() >= 7 &&
+					(parts.value(6).trimmed() == "1" || parts.value(6).trimmed().compare("true", Qt::CaseInsensitive) == 0);
+
+				QHostAddress bindAddress;
+				const bool isLoopback = host.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) == 0 ||
+					(bindAddress.setAddress(host) && bindAddress.isLoopback());
+
+				QString effectivePassword = rawPassword;
+				if (regeneratePassword)
+					effectivePassword = generateAccessToken();
+				else if (effectivePassword.isEmpty())
+					effectivePassword = remote->getPassword().trimmed();
+				if (enable && !isLoopback && effectivePassword.isEmpty())
+					effectivePassword = generateAccessToken();
+
+				const bool wasEnabled = remote->getFlagEnabled();
 				remote->setHost(host);
-				if (portOk && port > 0 && port < 65536) remote->setPort(port);
-				remote->setPassword(password);
-				remote->setFlagUsePassword(!password.isEmpty());
+				if (portOk && port > 0 && port < 65536)
+					remote->setPort(port);
+				remote->setPassword(effectivePassword);
+				remote->setFlagUsePassword(!effectivePassword.isEmpty());
+				remote->setFlagEnableCors(enableCors);
+				remote->setCorsOrigin(corsOrigin);
 				remote->setFlagAutoStart(enable);
-				remote->setFlagEnabled(enable);
+
+				bool okState = true;
+				if (enable)
+				{
+					if (wasEnabled)
+						okState = remote->restartServer();
+					else
+					{
+						remote->setFlagEnabled(true);
+						okState = remote->getFlagEnabled();
+					}
+				}
+				else
+				{
+					remote->setFlagEnabled(false);
+				}
 				remote->saveSettings();
+
+				if (enable && !okState)
+				{
+					result["ok"] = false;
+					result["enabled"] = false;
+					result["error"] = remote->getLastError().isEmpty()
+						? QStringLiteral("无法启动无线控制服务，请检查端口或密钥设置")
+						: remote->getLastError();
+					return result;
+				}
 			}
-			const QString lan = lanAddress();
+
+			const QStringList lanIps = collectLanAddresses();
+			const QString lan = lanIps.isEmpty() ? QString() : lanIps.first();
+			QJsonArray ipArray;
+			for (const QString& ip : lanIps) ipArray.append(ip);
+			const QString baseUrl = lan.isEmpty()
+				? QString()
+				: QStringLiteral("http://%1:%2").arg(lan).arg(remote->getPort());
+
 			result["ok"] = true;
 			result["enabled"] = remote->getFlagEnabled();
 			result["host"] = remote->getHost();
 			result["port"] = remote->getPort();
 			result["lanIp"] = lan;
-			result["url"] = lan.isEmpty() ? QString() : QStringLiteral("http://%1:%2").arg(lan).arg(remote->getPort());
+			result["allLanIps"] = ipArray;
+			result["url"] = baseUrl;
+			result["apiInfoUrl"] = baseUrl.isEmpty() ? QString() : (baseUrl + QStringLiteral("/api/info"));
 			result["usePassword"] = remote->getFlagUsePassword();
+			result["password"] = remote->getPassword();
+			result["enableCors"] = remote->getFlagEnableCors();
+			result["corsOrigin"] = remote->getCorsOrigin().isEmpty() ? QStringLiteral("*") : remote->getCorsOrigin();
 			return result;
 		}
 

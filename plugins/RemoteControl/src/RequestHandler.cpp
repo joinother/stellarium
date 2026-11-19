@@ -39,8 +39,22 @@
 #include <QDir>
 #include <QFile>
 #include <QPluginLoader>
+#include <QMutexLocker>
 
-const QByteArray RequestHandler::AUTH_REALM = "Basic realm=\"Stellarium remote control\"";
+namespace
+{
+bool constantTimeEquals(const QByteArray& a, const QByteArray& b)
+{
+	if (a.size() != b.size() || a.isEmpty())
+		return false;
+	unsigned char diff = 0;
+	for (int i = 0; i < a.size(); ++i)
+		diff |= static_cast<unsigned char>(a.at(i) ^ b.at(i));
+	return diff == 0;
+}
+}
+
+const QByteArray RequestHandler::AUTH_REALM = "Basic realm=\"Stellarium Remote Control\"";
 
 class HtmlTranslationProvider : public ITemplateTranslationProvider
 {
@@ -141,8 +155,22 @@ void RequestHandler::service(HttpRequest &request, HttpResponse &response)
 #define SERVER_HEADER "Stellarium RemoteControl " REMOTECONTROL_PLUGIN_VERSION
 	response.setHeader("Server",SERVER_HEADER);
 
+	bool reqUsePassword = false;
+	bool reqEnableCors = false;
+	QByteArray reqCorsOrigin;
+	QByteArray reqPasswordUtf8;
+	QByteArray reqPasswordReply;
+	{
+		QMutexLocker locker(&authMutex);
+		reqUsePassword = usePassword;
+		reqEnableCors = enableCors;
+		reqCorsOrigin = corsOrigin.trimmed().isEmpty() ? QByteArray("*") : corsOrigin.toUtf8();
+		reqPasswordUtf8 = passwordUtf8;
+		reqPasswordReply = passwordReply;
+	}
+
 	if(QString::compare(request.getMethod(),"OPTIONS",Qt::CaseInsensitive)==0) {
-		handleCorsPreflightRequest(request,response);
+		handleCorsPreflightRequest(request, response, reqEnableCors, reqCorsOrigin);
 		return;
 	}
 
@@ -152,28 +180,37 @@ void RequestHandler::service(HttpRequest &request, HttpResponse &response)
 	else
 		response.setHeader("Connection","close");
 
-	if(enableCors)
+	if(reqEnableCors)
 	{
-		response.setHeader("Access-Control-Allow-Origin",corsOrigin.toUtf8());
+		response.setHeader("Access-Control-Allow-Origin", reqCorsOrigin);
 		response.setHeader("Access-Control-Allow-Methods","GET, PUT, POST, HEAD, OPTIONS");
+		response.setHeader("Access-Control-Allow-Headers","Authorization, X-API-Key, X-Stellarium-Token, Content-Type");
+		if (reqCorsOrigin != "*")
+			response.setHeader("Access-Control-Allow-Credentials", "true");
 		response.setHeader("Vary","Origin");
 	}
 
-	if(usePassword)
+	QByteArray path = request.getPath();
+
+	if(reqUsePassword)
 	{
-		//Check if the browser provided correct password, else reject request
-		if(request.getHeader("Authorization") != passwordReply)
+		//Check Basic Auth (:password or user:password), Bearer token, or X-API-Key header
+		if(!isAuthorized(request, reqPasswordUtf8, reqPasswordReply))
 		{
 			response.setStatus(401,"Not Authorized");
 			response.setHeader("WWW-Authenticate",AUTH_REALM);
-			response.write("HTTP 401 Not Authorized",true);
+			if (path.startsWith("/api/"))
+			{
+				response.setHeader("Content-Type", "application/json; charset=utf-8");
+				response.write("{\"ok\":false,\"error\":\"unauthorized\",\"auth\":[\"Basic (:password or user:password)\",\"Authorization: Bearer <token>\",\"X-API-Key: <token>\"]}", true);
+			}
+			else
+			{
+				response.write("HTTP 401 Not Authorized",true);
+			}
 			return;
 		}
 	}
-
-	//QByteArray rawPath = request.getRawPath();
-	QByteArray path = request.getPath();
-	//qDebug()<<"Request path:"<<rawPath<<" decoded:"<<path;
 
 	if(path.startsWith("/api/"))
 	{
@@ -211,34 +248,91 @@ void RequestHandler::service(HttpRequest &request, HttpResponse &response)
 		else
 		{
 			templateMutex.unlock();
+			if (path == "/index.html" && !QFile::exists(QDir(staticFiles->getDocRoot()).absoluteFilePath("index.html")))
+			{
+				QFile fallback(QStringLiteral(":/RemoteControl/resources/ohos_console.html"));
+				if (fallback.open(QIODevice::ReadOnly))
+				{
+					response.setHeader("Content-Type", "text/html; charset=utf-8");
+					response.setHeader("Cache-Control", "no-cache");
+					response.write(fallback.readAll(), true);
+					return;
+				}
+			}
 			//let the static file controller handle the request
 			staticFiles->service(request,response);
 		}
 	}
 }
 
+bool RequestHandler::isAuthorized(HttpRequest &request, const QByteArray &expectedPassword, const QByteArray &expectedBasicReply) const
+{
+	if (expectedPassword.isEmpty())
+		return false;
+
+	const QByteArray authHeader = request.getHeader("Authorization").trimmed();
+	if (!authHeader.isEmpty())
+	{
+		// 1. Exact upstream Basic (empty username ":password")
+		if (constantTimeEquals(authHeader, expectedBasicReply))
+			return true;
+
+		// 2. Standard Basic with any username ("user:password")
+		if (authHeader.size() > 6 && qstrnicmp(authHeader.constData(), "Basic ", 6) == 0)
+		{
+			const QByteArray decoded = QByteArray::fromBase64(authHeader.mid(6).trimmed());
+			const int colon = decoded.indexOf(':');
+			if (colon >= 0 && constantTimeEquals(decoded.mid(colon + 1), expectedPassword))
+				return true;
+		}
+
+		// 3. Bearer token ("Authorization: Bearer <password>")
+		if (authHeader.size() > 7 && qstrnicmp(authHeader.constData(), "Bearer ", 7) == 0)
+		{
+			if (constantTimeEquals(authHeader.mid(7).trimmed(), expectedPassword))
+				return true;
+		}
+	}
+
+	// 4. API key header ("X-API-Key" or "X-Stellarium-Token")
+	const QByteArray apiKey = request.getHeader("X-API-Key").trimmed();
+	if (!apiKey.isEmpty() && constantTimeEquals(apiKey, expectedPassword))
+		return true;
+
+	const QByteArray stelToken = request.getHeader("X-Stellarium-Token").trimmed();
+	if (!stelToken.isEmpty() && constantTimeEquals(stelToken, expectedPassword))
+		return true;
+
+	return false;
+}
+
 void RequestHandler::setUsePassword(bool v)
 {
+	QMutexLocker locker(&authMutex);
 	usePassword = v;
 }
 
 void RequestHandler::setPassword(const QString &pw)
 {
+	QMutexLocker locker(&authMutex);
 	password = pw;
+	passwordUtf8 = password.toUtf8();
 
 	//pre-create the expected response string
-	QByteArray arr = password.toUtf8();
+	QByteArray arr = passwordUtf8;
 	arr.prepend(':');
 	passwordReply = "Basic " + arr.toBase64();
 }
 
 void RequestHandler::setEnableCors(bool v)
 {
+	QMutexLocker locker(&authMutex);
 	enableCors = v;
 }
 
 void RequestHandler::setCorsOrigin(const QString &origin)
 {
+	QMutexLocker locker(&authMutex);
 	corsOrigin = origin;
 }
 
@@ -297,11 +391,17 @@ void RequestHandler::refreshTemplates()
 	}
 }
 
-void RequestHandler::handleCorsPreflightRequest(HttpRequest &request, HttpResponse &response) {
+void RequestHandler::handleCorsPreflightRequest(HttpRequest &request, HttpResponse &response, bool corsEnabled, const QByteArray &origin) {
 	response.setStatus(204,"No Content");
-	response.setHeader("Access-Control-Allow-Origin",corsOrigin.toUtf8());
-	response.setHeader("Access-Control-Allow-Methods","GET, POST");
-	response.setHeader("Access-Control-Allow-Headers",request.getHeader("Access-Control-Request-Headers"));
-	response.setHeader("Access-Control-Max-Age","0");
+	if (!corsEnabled)
+		return;
+	response.setHeader("Access-Control-Allow-Origin", origin);
+	response.setHeader("Access-Control-Allow-Methods","GET, POST, PUT, HEAD, OPTIONS");
+	const QByteArray reqHeaders = request.getHeader("Access-Control-Request-Headers").trimmed();
+	response.setHeader("Access-Control-Allow-Headers",
+		reqHeaders.isEmpty() ? QByteArray("Authorization, X-API-Key, X-Stellarium-Token, Content-Type") : reqHeaders);
+	if (origin != "*")
+		response.setHeader("Access-Control-Allow-Credentials", "true");
+	response.setHeader("Access-Control-Max-Age","600");
 	response.setHeader("Vary","Origin");
 }

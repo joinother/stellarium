@@ -72,8 +72,8 @@ void HttpRequest::readHeader(QTcpSocket* socket)
 	int colon=newData.indexOf(':');
 	if (colon>0)
 	{
-		// Received a line with a colon - a header
-		currentHeader=newData.left(colon);
+		// Received a line with a colon - a header (RFC 9110: field names are case-insensitive)
+		currentHeader=newData.left(colon).trimmed().toLower();
 		QByteArray value=newData.mid(colon+1).trimmed();
 		headers.insert(currentHeader,value);
 #ifdef SUPERVERBOSE
@@ -99,8 +99,8 @@ void HttpRequest::readHeader(QTcpSocket* socket)
 #endif
 		// Empty line received, that means all headers have been received
 		// Check for multipart/form-data
-		QByteArray contentType=headers.value("Content-Type");
-		if (contentType.startsWith("multipart/form-data"))
+		QByteArray contentType=getHeader("content-type");
+		if (contentType.toLower().startsWith("multipart/form-data"))
 		{
 			int posi=contentType.indexOf("boundary=");
 			if (posi>=0) {
@@ -111,7 +111,7 @@ void HttpRequest::readHeader(QTcpSocket* socket)
 				}
 			}
 		}
-		QByteArray contentLength=getHeader("Content-Length");
+		QByteArray contentLength=getHeader("content-length");
 		if (!contentLength.isEmpty())
 		{
 			expectedBodySize=contentLength.toInt();
@@ -218,7 +218,7 @@ void HttpRequest::decodeRequestParams()
 	decodedPath = urlDecode(path);
 
 	// Get request body parameters
-	QByteArray contentType=headers.value("Content-Type");
+	QByteArray contentType=getHeader("content-type").toLower();
 	if (!bodyData.isEmpty() && (contentType.isEmpty() || contentType.startsWith("application/x-www-form-urlencoded")))
 	{
 		if (!rawParameters.isEmpty())
@@ -255,7 +255,7 @@ void HttpRequest::extractCookies()
 #ifdef SUPERVERBOSE
 	qDebug("HttpRequest: extract cookies");
 #endif
-	for (auto cookieStr : headers.values("Cookie"))
+	for (auto cookieStr : getHeaders("cookie"))
 	{
 		QList<QByteArray> list=HttpCookie::splitCSV(cookieStr);
 		for (auto part : list)
@@ -279,7 +279,7 @@ void HttpRequest::extractCookies()
 			cookies.insert(name,value);
 		}
 	}
-	headers.remove("Cookie");
+	headers.remove("cookie");
 }
 
 void HttpRequest::readFromSocket(QTcpSocket* socket)
@@ -344,12 +344,12 @@ QByteArray HttpRequest::getVersion() const
 
 QByteArray HttpRequest::getHeader(const QByteArray& name) const
 {
-	return headers.value(name);
+	return headers.value(name.toLower());
 }
 
 QList<QByteArray> HttpRequest::getHeaders(const QByteArray& name) const
 {
-	return headers.values(name);
+	return headers.values(name.toLower());
 }
 
 QMultiMap<QByteArray,QByteArray> HttpRequest::getHeaderMap() const

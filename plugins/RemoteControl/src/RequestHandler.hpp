@@ -89,11 +89,13 @@ private:
 	//Contains the translated templates loaded from the file "translate_files" in the webroot folder
 	QMap<QByteArray,QString> templateMap;
 
+	QMutex authMutex;
 	bool usePassword;
 	QString password;
 	bool enableCors;
 	QString corsOrigin;
 	QByteArray passwordReply;
+	QByteArray passwordUtf8;
 	APIController* apiController;
 	StaticFileController* staticFiles;
 #if (QT_VERSION>=QT_VERSION_CHECK(5,14,0))
@@ -104,7 +106,8 @@ private:
 
 	static const QByteArray AUTH_REALM;
 
-	void handleCorsPreflightRequest(HttpRequest &request, HttpResponse &response);
+	bool isAuthorized(HttpRequest &request, const QByteArray &expectedPassword, const QByteArray &expectedBasicReply) const;
+	void handleCorsPreflightRequest(HttpRequest &request, HttpResponse &response, bool corsEnabled, const QByteArray &origin);
 };
 
 #endif

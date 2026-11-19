@@ -19,7 +19,9 @@
 
 #include "APIController.hpp"
 #include "StelApp.hpp"
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QThread>
 
 int APIServiceResponse::metaTypeId = qRegisterMetaType<APIServiceResponse>();
@@ -85,6 +87,51 @@ void APIController::service(HttpRequest &request, HttpResponse &response)
 	{
 		serviceString = pathWithoutPrefix.mid(0,slashIdx);
 		operation = pathWithoutPrefix.mid(slashIdx+1);
+	}
+
+	if ((serviceString.isEmpty() || serviceString == "info") && request.getMethod() == "GET")
+	{
+		QJsonArray services;
+		for (auto sit = m_serviceMap.cbegin(); sit != m_serviceMap.cend(); ++sit)
+			services.append(QString::fromUtf8(sit.key()));
+
+		QJsonObject endpoints;
+		endpoints.insert("GET /api/info", "API catalog and auth info");
+		endpoints.insert("GET /api/main/status", "Time, location, FOV, selected object, action/property deltas");
+		endpoints.insert("GET /api/main/view", "Current view direction (j2000, jNow, altAz)");
+		endpoints.insert("GET /api/main/plugins", "Installed plugins and load status");
+		endpoints.insert("POST /api/main/focus", "Focus object (target=<name>&mode=center|zoom|mark)");
+		endpoints.insert("POST /api/main/fov", "Set field of view in degrees (fov=<deg>)");
+		endpoints.insert("POST /api/main/time", "Set Julian Day / rate (time=<jd>&timerate=<daysPerSec>)");
+		endpoints.insert("POST /api/main/move", "Pan camera (x=<-1..1>&y=<-1..1>)");
+		endpoints.insert("POST /api/main/view", "Set view direction (az=<rad>&alt=<rad> or j2000/jNow/altAz)");
+		endpoints.insert("GET /api/objects/find", "Search objects (str=<query>)");
+		endpoints.insert("GET /api/objects/info", "Detailed object info (name=<name>&format=json|html)");
+		endpoints.insert("GET /api/stelaction/list", "List all toggleable actions");
+		endpoints.insert("POST /api/stelaction/do", "Trigger or toggle action (id=<actionId>)");
+		endpoints.insert("GET /api/stelproperty/list", "List all properties");
+		endpoints.insert("POST /api/stelproperty/set", "Set property (id=<propId>&value=<val>)");
+		endpoints.insert("GET /api/location/planetlist", "List observer planets");
+		endpoints.insert("POST /api/location/setlocationfields", "Set observer location (latitude, longitude, altitude, name, planet)");
+		endpoints.insert("GET /api/view/listskyculture", "List sky cultures");
+		endpoints.insert("GET /api/view/listlandscape", "List landscapes");
+		endpoints.insert("GET /api/view/listprojection", "List projections");
+
+		QJsonObject info;
+		info.insert("ok", true);
+		info.insert("server", QStringLiteral("Stellarium RemoteControl"));
+		info.insert("version", QStringLiteral(REMOTECONTROL_PLUGIN_VERSION));
+		info.insert("services", services);
+		info.insert("auth", QJsonArray{
+			QStringLiteral("Authorization: Basic base64(':password' or 'user:password')"),
+			QStringLiteral("Authorization: Bearer <password>"),
+			QStringLiteral("X-API-Key: <password>")
+		});
+		info.insert("endpoints", endpoints);
+
+		response.setHeader("Content-Type", "application/json; charset=utf-8");
+		response.write(QJsonDocument(info).toJson(QJsonDocument::Compact), true);
+		return;
 	}
 
 	//try to find service

@@ -98,6 +98,7 @@ public:
 	QString getHost() const { return host; }
 	QString getCorsOrigin() const { return corsOrigin; }
 	int getPort() const {return port; }
+	QString getLastError() const { return lastError; }
 
 public slots:
 	//property setters
@@ -149,6 +150,8 @@ public slots:
 	bool startServer();
 	//! Stops the HTTP server gracefully
 	void stopServer();
+	//! Restarts the HTTP server cleanly to apply updated host/port/password/CORS settings.
+	bool restartServer();
 
 	int getMaxRequestSize() const { return maxRequestSize; }
 	int getMaxMultipartSize() const { return maxMultipartSize; }
@@ -182,6 +185,7 @@ private:
 	QString host;
 	bool enableCors;
 	QString corsOrigin;
+	QString lastError;
 
 	int port;
 	int minThreads;

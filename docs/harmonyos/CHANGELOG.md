@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 无线控制（RemoteControl HTTP REST API / 网页遥控）全面联调与鉴权加固
+
+- **修改文件：** `plugins/RemoteControl/resources/ohos_console.html`（新增）、`plugins/RemoteControl/RemoteControl.qrc`、`plugins/RemoteControl/src/RequestHandler.hpp`、`plugins/RemoteControl/src/RequestHandler.cpp`、`plugins/RemoteControl/src/APIController.cpp`、`plugins/RemoteControl/src/RemoteControl.hpp`、`plugins/RemoteControl/src/RemoteControl.cpp`、`plugins/RemoteControl/src/qtwebapp/httpserver/httprequest.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-remote-control.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **局域网启动与安全鉴权加固：**
+     - 原 HarmonyOS 侧开启无线控制传入空密钥，但 `RemoteControl::startServer()` 拒绝非回环无密码绑定，导致开关始终静默失败；同时上游 `RequestHandler` 仅接受 `Basic :password` 空用户名格式且无 JSON 401 提示。
+     - 现于 `StelMainView.cpp` 自动按需加载 `RemoteControl` 插件，优选局域网私网 IP，在非回环监听且未手动填写密钥时自动通过 `QRandomGenerator::system()` 生成 8 位高熵访问密钥；支持运行中热重启（`RemoteControl::restartServer()`）与真实错误信息回传。
+     - `RequestHandler` 新增线程安全 `authMutex` 与常量时间比较（`constantTimeEquals()`），兼容 5 种标准鉴权方式：`Basic (:password)`、`Basic (user:password)`、`Authorization: Bearer <token>`、`X-API-Key: <token>`、`X-Stellarium-Token: <token>`；`/api/*` 未鉴权统一返回结构化 JSON 401，完整支持 CORS 响应头与 `OPTIONS` 204 预检。
+  2. **修复 QtWebApp HTTP 请求头大小写敏感缺陷（RFC 9110）：**
+     - 真机局域网实测发现 `qtwebapp/httpserver/httprequest.cpp` 按原始大小写存储并精确查找 `Content-Length` / `Content-Type` / `Cookie`，导致 Node.js `fetch`（Undici）、Python `httpx`、Go 与现代浏览器发送小写 `content-length` / `content-type` 时 `POST` 请求体被完整丢弃。
+     - 现于 `readHeader()` 统一将头名小写归一化，并在 `getHeader()` / `getHeaders()` 大小写无关查找，确保各类客户端 `POST` 调用一次通过。
+  3. **内嵌离线网页控制台与 API 自发现端点：**
+     - 新增零外链离线响应式暗黑天文控制台 `:/RemoteControl/resources/ohos_console.html`（~18.5 KB），在 `webroot/index.html` 未随包分发时作为 `/` 默认页面提供实时状态、目标搜索定位、视场/时间/图层快捷控制与内置 API Explorer。
+     - `APIController` 新增 `GET /api/info`（及 `GET /api/`）返回服务版本、已注册 10 个子服务、鉴权格式与 20 个常用端点清单。
+  4. **鸿蒙「设置 → 无线控制」完整面板与异步桥修复：**
+     - `MainWindowNativeNode.ets` 改用 `callLongRunningInteractive`（带请求序号防并发覆盖）同步与下发 `getRemoteControlState` / `setRemoteControl`，修复此前同步 `callNative` 收到 `{pending: true}` 导致界面误报「开启失败：pending」且状态不同步的问题。
+     - `SettingsPanel.ets` 补齐访问地址与「复制地址」、端口输入、带原生显隐图标的访问密钥输入、「换新密钥」「复制密钥」「复制 curl」、CORS 开关、「应用端口/密钥并重启服务」按钮，并对 `Toggle.onChange` 加编程同步回弹保护。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`node --test scripts/test-ohos-remote-control.mjs`（6/6）、`node scripts/check-ohos-ui-contract.mjs` 全通过。
+  - 真机局域网实测（`http://192.168.31.234:8090`）：11 项全通过——自动生成 8 位密钥、未鉴权 401 JSON、错密钥 401、5 种鉴权头（含小写头名）200、内嵌离线网页控制台 200（18,474 字节）、`/api/info` 200（10 服务 / 20 端点）、`/api/objects/find`、`POST /api/main/focus`（木星）与 `POST /api/main/fov`（`25°`）通过 Node `fetch` 小写请求头实机生效、CORS `OPTIONS` 204、运行中热换密钥（旧密钥 401 / 新密钥 200）、关闭服务连接拒绝；实机「设置 → 无线控制」截图核验状态自动同步、排版齐整无裁切、开启后局域网 `GET /api/main/status` 返回 HTTP 200。
+
 ## [2026-11-20] 交互式数字化导览大幅扩充（11 条路线 / 71 站 + 发光星桥虚线叠层 + 分类导览库）
 
 - **修改文件：** `src/core/modules/ConstellationMgr.hpp`、`src/core/modules/ConstellationMgr.cpp`、`src/scripting/StelScriptMgr.hpp`、`src/scripting/StelScriptMgr.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/derive/AstronomyGuide.ts`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/guide/GuideLibrary.ets`、`harmonyos/ets-source/panels/shell/InteractiveGuideShell.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-guide.mjs`、`docs/harmonyos/CHANGELOG.md`。

@@ -310,12 +310,14 @@ void RemoteControl::setMaxMultipartSize(const int size)
 bool RemoteControl::startServer()
 {
 	Q_ASSERT(httpListener == nullptr);
+	lastError.clear();
 	const QString bindHost = host.trimmed().isEmpty() ? QStringLiteral("127.0.0.1") : host.trimmed();
 	QHostAddress bindAddress;
 	const bool isLoopback = bindHost.compare(QStringLiteral("localhost"), Qt::CaseInsensitive) == 0 ||
 		(bindAddress.setAddress(bindHost) && bindAddress.isLoopback());
-	if (!isLoopback && !usePassword)
+	if (!isLoopback && (!usePassword || password.trimmed().isEmpty()))
 	{
+		lastError = QStringLiteral("非本机监听地址必须设置访问密钥");
 		qWarning() << "[RemoteControl] Refusing non-loopback bind without password:" << bindHost;
 		return false;
 	}
@@ -336,6 +338,7 @@ bool RemoteControl::startServer()
 	httpListener = new HttpListener(settings,requestHandler);
 	if (!httpListener->isListening())
 	{
+		lastError = QStringLiteral("无法监听端口 %1（可能已被占用或权限受限）").arg(port);
 		delete httpListener;
 		httpListener = nullptr;
 		return false;
@@ -350,6 +353,14 @@ void RemoteControl::stopServer()
 		delete httpListener;
 		httpListener = nullptr;
 	}
+}
+
+bool RemoteControl::restartServer()
+{
+	stopServer();
+	enabled = startServer();
+	emit flagEnabledChanged(enabled);
+	return enabled;
 }
 
 void RemoteControl::restoreDefaultSettings()

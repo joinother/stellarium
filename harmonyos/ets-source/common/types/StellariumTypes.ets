@@ -442,8 +442,13 @@ export interface StellariumBridgeResponse {
   longitude?: number
   altitude?: number
   url?: string
+  apiInfoUrl?: string
   lanIp?: string
+  port?: number
   usePassword?: boolean
+  password?: string
+  enableCors?: boolean
+  corsOrigin?: string
   planet?: string
   equatorialOfDate?: string
   equatorialJ2000?: string

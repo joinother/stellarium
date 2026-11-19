@@ -1157,10 +1157,14 @@ export struct WindowNativeNode {
   private lastHomeBackAt: number = 0
   @State private searchStore: SearchStore = new SearchStore()
   @State private objectDetailStore: ObjectDetailStore = new ObjectDetailStore()
-  // 无线控制（RemoteControl 插件对内网暴露 HTTP/WebSocket）
+  // 无线控制（RemoteControl 插件对内网暴露 HTTP REST API / 网页遥控）
   @State private remoteControlEnabled: boolean = false
   @State private remoteControlPort: string = '8090'
+  @State private remoteControlUrl: string = ''
+  @State private remoteControlPassword: string = ''
+  @State private remoteControlCors: boolean = false
   @State private remoteControlStatus: string = ''
+  private remoteControlRequestSerial: number = 0
   @State private gyroStore: GyroStore = new GyroStore()
   @State private pushTokenText: string = ''
   @State private notificationStore: NotificationStore = new NotificationStore()
@@ -4389,25 +4393,72 @@ export struct WindowNativeNode {
     this.finishPanelRouteTransition(routeSerial)
   }
 
-  // 无线控制：把 RemoteControl 插件暴露到局域网（http://<平板IP>:8090）。
-  private applyRemoteControl(enabled: boolean): void {
-    const port = Number(this.remoteControlPort.trim())
-    const portText = Number.isFinite(port) && port > 0 && port < 65536 ? String(Math.round(port)) : '8090'
-    const reply = this.callNative('setRemoteControl', (enabled ? '1' : '0') + '|0.0.0.0|' + portText + '|')
-    if (reply.ok !== true) {
-      this.remoteControlEnabled = false
-      this.remoteControlStatus = '开启失败：' + (reply.error ?? '未知错误')
-      return
-    }
+  // 无线控制：同步或应用 RemoteControl 插件状态（http://<平板IP>:<端口>，强制密钥鉴权）。
+  private updateRemoteControlFromReply(reply: StellariumBridgeResponse): void {
     this.remoteControlEnabled = reply.enabled === true
+    if (typeof reply.port === 'number' && reply.port > 0 && reply.port < 65536) {
+      this.remoteControlPort = String(Math.round(reply.port))
+    }
+    if (typeof reply.password === 'string') {
+      this.remoteControlPassword = reply.password
+    }
+    this.remoteControlCors = reply.enableCors === true
     const url = typeof reply.url === 'string' ? reply.url : ''
+    this.remoteControlUrl = url
     if (this.remoteControlEnabled) {
       this.remoteControlStatus = url.length > 0
-        ? '控制地址：' + url + '（同一 Wi-Fi 下的电脑/手机用浏览器打开）'
-        : '服务已开启，但没拿到局域网 IP，请连上 Wi-Fi 后再试'
+        ? '浏览器访问 ' + url + '（登录密码填访问密钥，用户名留空或任意填写）；API 清单：' + url + '/api/info'
+        : '服务已开启，但暂未获取到 Wi-Fi 局域网 IP，请连接 Wi-Fi 后重试'
     } else {
       this.remoteControlStatus = '服务已关闭'
     }
+  }
+
+  private syncRemoteControlState(): void {
+    const serial = ++this.remoteControlRequestSerial
+    this.callLongRunningInteractive(
+      'getRemoteControlState',
+      '',
+      (reply: StellariumBridgeResponse) => {
+        if (serial !== this.remoteControlRequestSerial) return
+        this.updateRemoteControlFromReply(reply)
+      },
+      undefined,
+      undefined,
+      25,
+      (): boolean => serial !== this.remoteControlRequestSerial
+    )
+  }
+
+  private applyRemoteControl(enabled: boolean, regeneratePassword: boolean = false, successHint: string = ''): void {
+    const port = Number(this.remoteControlPort.trim())
+    const portText = Number.isFinite(port) && port > 0 && port < 65536 ? String(Math.round(port)) : '8090'
+    const passwordText = this.remoteControlPassword.replace(/\|/g, '').trim()
+    const payload = (enabled ? '1' : '0') + '|0.0.0.0|' + portText + '|' + passwordText + '|' +
+      (this.remoteControlCors ? '1' : '0') + '|*|' + (regeneratePassword ? '1' : '0')
+    const serial = ++this.remoteControlRequestSerial
+    this.remoteControlStatus = enabled ? '正在启动无线控制服务…' : '正在关闭无线控制服务…'
+    this.callLongRunningInteractive(
+      'setRemoteControl',
+      payload,
+      (reply: StellariumBridgeResponse) => {
+        if (serial !== this.remoteControlRequestSerial) return
+        this.updateRemoteControlFromReply(reply)
+        if (regeneratePassword) {
+          this.flashHint('已生成新的访问密钥')
+        } else if (successHint.length > 0) {
+          this.flashHint(successHint)
+        }
+      },
+      (reply: StellariumBridgeResponse) => {
+        if (serial !== this.remoteControlRequestSerial) return
+        this.remoteControlEnabled = false
+        this.remoteControlStatus = '开启失败：' + (reply.error ?? '未知错误')
+      },
+      undefined,
+      30,
+      (): boolean => serial !== this.remoteControlRequestSerial
+    )
   }
 
   private schedulePanelDataLoad(panel: string, visible: boolean): void {
@@ -4432,6 +4483,9 @@ export struct WindowNativeNode {
       if (panel === 'search') {
         this.catalogStore.loadObjectCatalogCategories(this.languageStore.languageRefreshSerial)
         if (this.searchStore.categoryObjects.length === 0) this.searchStore.loadCategoryObjects(this.searchStore.searchCategory)
+      }
+      if (panel === 'settings') {
+        this.syncRemoteControlState()
       }
       if (panel === 'time') {
         this.timeStore.loadTimeExtras()
@@ -9175,11 +9229,28 @@ export struct WindowNativeNode {
         remoteControlEnabled: this.remoteControlEnabled,
         remoteControlStatus: this.remoteControlStatus,
         remoteControlPort: this.remoteControlPort,
+        remoteControlUrl: this.remoteControlUrl,
+        remoteControlPassword: this.remoteControlPassword,
+        remoteControlCors: this.remoteControlCors,
         onToggleRemoteControl: (enabled: boolean, port: string) => {
           this.remoteControlPort = port.length > 0 ? port : '8090'
           this.applyRemoteControl(enabled)
         },
         onRemotePortInput: (port: string) => { this.remoteControlPort = port },
+        onRemotePasswordInput: (password: string) => { this.remoteControlPassword = password },
+        onToggleRemoteCors: (enabled: boolean) => {
+          this.remoteControlCors = enabled
+          if (this.remoteControlEnabled) this.applyRemoteControl(true)
+        },
+        onRegenerateRemotePassword: () => {
+          this.applyRemoteControl(this.remoteControlEnabled, true)
+        },
+        onApplyRemoteControl: () => {
+          this.applyRemoteControl(true, false, '无线控制配置已生效')
+        },
+        onCopyRemoteText: (text: string, hint: string) => {
+          copyTextToClipboard(this.hostPlatformPort, text, hint, { flashHint: (msg: ResourceStr): void => this.flashHint(msg) })
+        },
         configTab: this.configTab,
         configTabContentOpacity: this.configTabContentOpacity,
         configTabContentOffsetX: this.configTabContentOffsetX,

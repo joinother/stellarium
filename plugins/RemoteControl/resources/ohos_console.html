@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>星象仪 · 无线控制台 / Remote Control</title>
+<style>
+:root {
+  --bg: #0b101b;
+  --panel: #131b2c;
+  --card: #1a253b;
+  --border: #2a3956;
+  --text: #e8eef9;
+  --sub: #95a7c6;
+  --accent: #5fa8ff;
+  --accent-bg: rgba(95, 168, 255, 0.16);
+  --ok: #4cd98b;
+  --warn: #ffbe5c;
+  --err: #ff6b7a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(11, 16, 27, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+header h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--sub);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sub);
+}
+.dot.ok { background: var(--ok); }
+.dot.err { background: var(--err); }
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 14px;
+}
+section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+section.wide {
+  grid-column: 1 / -1;
+}
+h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.kv {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.kv .k { font-size: 11px; color: var(--sub); }
+.kv .v { font-size: 13px; font-weight: 600; word-break: break-word; margin-top: 2px; }
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+input[type="text"], input[type="number"], select, textarea {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  min-width: 0;
+}
+input[type="text"]:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+input.grow { flex: 1; }
+button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+button:hover { border-color: var(--accent); }
+button.primary {
+  background: var(--accent);
+  color: #081222;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chips button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(3, 42px);
+  gap: 6px;
+  justify-content: center;
+}
+.dpad button { padding: 0; font-size: 15px; font-weight: 600; }
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+input[type="range"] { flex: 1; accent-color: var(--accent); }
+.results {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+pre {
+  margin: 0;
+  background: #070b14;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: auto;
+  max-height: 240px;
+  color: #cde0ff;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.selection-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
+  max-height: 130px;
+  overflow-y: auto;
+  color: var(--sub);
+}
+.selection-box h2, .selection-box h3 { color: var(--text); font-size: 13px; margin: 0 0 4px 0; }
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(18, 29, 48, 0.96);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  z-index: 99;
+}
+.toast.show { opacity: 1; }
+.sub { font-size: 12px; color: var(--sub); }
+</style>
+</head>
+<body>
+<header>
+  <h1>星象仪 · 无线控制台 <span class="sub">Remote Control</span></h1>
+  <div class="row">
+    <span class="badge"><span id="connDot" class="dot"></span><span id="connText">连接中…</span></span>
+    <button onclick="refreshAll()">刷新状态</button>
+  </div>
+</header>
+
+<main>
+  <section class="wide">
+    <h2>实时状态 <span id="serverVer" class="sub"></span></h2>
+    <div class="kv-grid">
+      <div class="kv"><div class="k">观测位置 / 星球</div><div class="v" id="stLoc">-</div></div>
+      <div class="kv"><div class="k">本地模拟时间</div><div class="v" id="stLocal">-</div></div>
+      <div class="kv"><div class="k">时间速率</div><div class="v" id="stRate">-</div></div>
+      <div class="kv"><div class="k">当前视场 (FOV)</div><div class="v" id="stFov">-</div></div>
+    </div>
+    <div class="selection-box" id="stSel">未选中天体</div>
+  </section>
+
+  <section>
+    <h2>目标搜索与定位</h2>
+    <div class="row">
+      <input id="searchInput" class="grow" type="text" placeholder="输入天体名，如 Jupiter / M31 / Polaris / 织女一" onkeydown="if(event.key==='Enter')searchObj()">
+      <button class="primary" onclick="searchObj()">搜索</button>
+      <button onclick="focusTarget(document.getElementById('searchInput').value, 'zoom')">直达</button>
+    </div>
+    <div class="chips">
+      <button onclick="focusTarget('Sun','zoom')">太阳</button>
+      <button onclick="focusTarget('Moon','zoom')">月球</button>
+      <button onclick="focusTarget('Venus','zoom')">金星</button>
+      <button onclick="focusTarget('Mars','zoom')">火星</button>
+      <button onclick="focusTarget('Jupiter','zoom')">木星</button>
+      <button onclick="focusTarget('Saturn','zoom')">土星</button>
+      <button onclick="focusTarget('M31','zoom')">M31 仙女座星系</button>
+      <button onclick="focusTarget('M42','zoom')">M42 猎户座大星云</button>
+      <button onclick="focusTarget('M45','zoom')">M45 昴星团</button>
+      <button onclick="focusTarget('Polaris','center')">北极星</button>
+      <button onclick="focusTarget('','center')">取消选中</button>
+    </div>
+    <div id="searchResults" class="results"></div>
+  </section>
+
+  <section>
+    <h2>视角控制与缩放</h2>
+    <div class="dpad">
+      <div></div>
+      <button onpointerdown="startMove(0, 1)" onpointerup="stopMove()" onpointerleave="stopMove()">↑</button>
+      <div></div>
+      <button onpointerdown="startMove(-1, 0)" onpointerup="stopMove()" onpointerleave="stopMove()">←</button>
+      <button onclick="doAction('actionAuto_Track_Selection')">追踪</button>
+      <button onpointerdown="startMove(1, 0)" onpointerup="stopMove()" onpointerleave="stopMove()">→</button>
+      <div></div>
+      <button onpointerdown="startMove(0, -1)" onpointerup="stopMove()" onpointerleave="stopMove()">↓</button>
+      <div></div>
+    </div>
+    <div class="slider-row">
+      <span class="sub">FOV</span>
+      <input id="fovRange" type="range" min="0.5" max="180" step="0.5" value="60" oninput="document.getElementById('fovVal').textContent=this.value+'°'" onchange="setFov(this.value)">
+      <span id="fovVal" style="min-width:46px;text-align:right;font-size:12px;">60°</span>
+    </div>
+    <div class="chips">
+      <button onclick="setFov(120)">广角 120°</button>
+      <button onclick="setFov(60)">标准 60°</button>
+      <button onclick="setFov(20)">双筒 20°</button>
+      <button onclick="setFov(5)">望远镜 5°</button>
+      <button onclick="setFov(1)">特写 1°</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>时间控制</h2>
+    <div class="chips">
+      <button onclick="setTimeRate(-100/86400)">倒退 100×</button>
+      <button onclick="setTimeRate(-10/86400)">倒退 10×</button>
+      <button onclick="setTimeRate(0)">暂停</button>
+      <button class="primary" onclick="setTimeRate(1/86400)">实时 1×</button>
+      <button onclick="setTimeRate(10/86400)">10×</button>
+      <button onclick="setTimeRate(100/86400)">100×</button>
+      <button onclick="setTimeRate(1000/86400)">1000×</button>
+      <button onclick="doAction('actionReturn_To_Current_Time')">回到当前时间</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>图层与显示开关</h2>
+    <div id="layerButtons" class="chips"></div>
+  </section>
+
+  <section class="wide">
+    <h2>开放 API 调试器与调用示例 <span class="sub">支持 Basic 认证 / Authorization: Bearer &lt;密钥&gt; / X-API-Key</span></h2>
+    <div class="row">
+      <select id="apiMethod">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+      </select>
+      <input id="apiPath" class="grow" type="text" value="/api/info" placeholder="/api/main/status">
+      <button class="primary" onclick="runApiCall()">发送请求</button>
+      <button onclick="copyCurl()">复制 curl</button>
+    </div>
+    <div class="row">
+      <input id="apiBody" class="grow" type="text" placeholder="POST 表单参数（如 target=Jupiter&mode=zoom 或 fov=30 或 id=actionShow_Atmosphere）">
+    </div>
+    <div class="chips">
+      <button onclick="presetApi('GET','/api/info','')">API 清单</button>
+      <button onclick="presetApi('GET','/api/main/status','')">主状态</button>
+      <button onclick="presetApi('GET','/api/objects/find?str=Orion','')">搜索天体</button>
+      <button onclick="presetApi('POST','/api/main/focus','target=Saturn&mode=zoom')">聚焦土星</button>
+      <button onclick="presetApi('POST','/api/main/fov','fov=45')">设视场 45°</button>
+      <button onclick="presetApi('GET','/api/stelaction/list','')">全部动作</button>
+      <button onclick="presetApi('GET','/api/stelproperty/list','')">全部属性</button>
+      <button onclick="presetApi('GET','/api/view/listskyculture','')">星空文化列表</button>
+    </div>
+    <pre id="apiOut">点击“发送请求”实时查看返回结果。</pre>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const LAYERS = [
+  ['actionShow_Atmosphere', '大气层'],
+  ['actionShow_Ground', '地景'],
+  ['actionShow_Cardinal_Points', '方位点'],
+  ['actionShow_Constellation_Lines', '星座连线'],
+  ['actionShow_Constellation_Labels', '星座名称'],
+  ['actionShow_Constellation_Art', '星座艺术'],
+  ['actionShow_Equatorial_Grid', '赤道网格'],
+  ['actionShow_Azimuthal_Grid', '地平网格'],
+  ['actionShow_Nebulas', '深空标记'],
+  ['actionShow_DSO_Textures', '深空贴图'],
+  ['actionShow_MilkyWay', '银河'],
+  ['actionShow_Planets_Labels', '行星标签'],
+  ['actionShow_Night_Mode', '夜间红光']
+];
+let actionStates = {};
+let moveTimer = null;
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+async function apiFetch(path, method = 'GET', body = '') {
+  const opts = { method, credentials: 'same-origin' };
+  if (method === 'POST') {
+    opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+    opts.body = body;
+  }
+  const res = await fetch(path, opts);
+  const text = await res.text();
+  if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + text);
+  return text;
+}
+
+function renderLayers() {
+  const box = document.getElementById('layerButtons');
+  box.innerHTML = '';
+  for (const [id, label] of LAYERS) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    if (actionStates[id]) btn.className = 'active';
+    btn.onclick = () => doAction(id);
+    box.appendChild(btn);
+  }
+}
+
+async function refreshActions() {
+  try {
+    const raw = await apiFetch('/api/stelaction/list');
+    const data = JSON.parse(raw);
+    const next = {};
+    for (const group of Object.values(data)) {
+      if (!Array.isArray(group)) continue;
+      for (const item of group) {
+        if (item && item.id) next[item.id] = item.isChecked === true;
+      }
+    }
+    actionStates = next;
+    renderLayers();
+  } catch (_) {}
+}
+
+async function refreshStatus() {
+  try {
+    const raw = await apiFetch('/api/main/status');
+    const d = JSON.parse(raw);
+    document.getElementById('connDot').className = 'dot ok';
+    document.getElementById('connText').textContent = '已连接';
+    const loc = d.location || {};
+    document.getElementById('stLoc').textContent = (loc.name || '-') + (loc.planet ? ' · ' + loc.planet : '');
+    const t = d.time || {};
+    document.getElementById('stLocal').textContent = (t.local || '-').replace('T', ' ').slice(0, 19);
+    const secRate = Math.round((t.timerate || 0) * 86400 * 10) / 10;
+    document.getElementById('stRate').textContent = secRate === 0 ? '已暂停 (0×)' : secRate + '×';
+    const fov = d.view && typeof d.view.fov === 'number' ? d.view.fov : 60;
+    document.getElementById('stFov').textContent = fov.toFixed(2) + '°';
+    document.getElementById('fovRange').value = Math.max(0.5, Math.min(180, fov));
+    document.getElementById('fovVal').textContent = fov.toFixed(1) + '°';
+    const sel = document.getElementById('stSel');
+    sel.innerHTML = d.selectioninfo && d.selectioninfo.trim() ? d.selectioninfo : '未选中天体';
+  } catch (err) {
+    document.getElementById('connDot').className = 'dot err';
+    document.getElementById('connText').textContent = '连接异常';
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([refreshStatus(), refreshActions()]);
+}
+
+async function searchObj() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  try {
+    const raw = await apiFetch('/api/objects/find?str=' + encodeURIComponent(q));
+    const list = JSON.parse(raw);
+    const box = document.getElementById('searchResults');
+    box.innerHTML = '';
+    if (!Array.isArray(list) || list.length === 0) {
+      box.innerHTML = '<div class="sub">未找到匹配天体</div>';
+      return;
+    }
+    for (const name of list.slice(0, 12)) {
+      const row = document.createElement('div');
+      row.className = 'result-item';
+      const label = document.createElement('span');
+      label.textContent = name;
+      const acts = document.createElement('div');
+      acts.className = 'row';
+      const b1 = document.createElement('button');
+      b1.textContent = '居中';
+      b1.onclick = () => focusTarget(name, 'center');
+      const b2 = document.createElement('button');
+      b2.className = 'primary';
+      b2.textContent = '拉近';
+      b2.onclick = () => focusTarget(name, 'zoom');
+      acts.appendChild(b1);
+      acts.appendChild(b2);
+      row.appendChild(label);
+      row.appendChild(acts);
+      box.appendChild(row);
+    }
+  } catch (err) {
+    toast('搜索失败：' + err.message);
+  }
+}
+
+async function focusTarget(target, mode) {
+  try {
+    const body = target
+      ? 'target=' + encodeURIComponent(target) + '&mode=' + encodeURIComponent(mode || 'center')
+      : '';
+    await apiFetch('/api/main/focus', 'POST', body);
+    toast(target ? '已定位：' + target : '已取消选中');
+    setTimeout(refreshStatus, 350);
+  } catch (err) {
+    toast('定位失败：' + err.message);
+  }
+}
+
+async function setFov(val) {
+  try {
+    await apiFetch('/api/main/fov', 'POST', 'fov=' + encodeURIComponent(val));
+    setTimeout(refreshStatus, 250);
+  } catch (err) {
+    toast('缩放失败：' + err.message);
+  }
+}
+
+async function setTimeRate(rate) {
+  try {
+    await apiFetch('/api/main/time', 'POST', 'timerate=' + encodeURIComponent(rate));
+    setTimeout(refreshStatus, 200);
+  } catch (err) {
+    toast('时间设置失败：' + err.message);
+  }
+}
+
+async function doAction(id) {
+  try {
+    const res = await apiFetch('/api/stelaction/do', 'POST', 'id=' + encodeURIComponent(id));
+    if (res === 'true' || res === 'false') {
+      actionStates[id] = (res === 'true');
+      renderLayers();
+    }
+    setTimeout(refreshStatus, 250);
+  } catch (err) {
+    toast('操作失败：' + err.message);
+  }
+}
+
+function sendMove(x, y) {
+  apiFetch('/api/main/move', 'POST', 'x=' + x + '&y=' + y).catch(() => {});
+}
+function startMove(x, y) {
+  stopMove();
+  sendMove(x, y);
+  moveTimer = setInterval(() => sendMove(x, y), 250);
+}
+function stopMove() {
+  if (moveTimer) {
+    clearInterval(moveTimer);
+    moveTimer = null;
+    sendMove(0, 0);
+  }
+}
+
+function presetApi(method, path, body) {
+  document.getElementById('apiMethod').value = method;
+  document.getElementById('apiPath').value = path;
+  document.getElementById('apiBody').value = body;
+  runApiCall();
+}
+
+async function runApiCall() {
+  const method = document.getElementById('apiMethod').value;
+  const path = document.getElementById('apiPath').value.trim() || '/api/info';
+  const body = document.getElementById('apiBody').value.trim();
+  const out = document.getElementById('apiOut');
+  out.textContent = '请求中…';
+  try {
+    const text = await apiFetch(path, method, body);
+    try {
+      out.textContent = JSON.stringify(JSON.parse(text), null, 2);
+    } catch (_) {
+      out.textContent = text;
+    }
+  } catch (err) {
+    out.textContent = err.message;
+  }
+}
+
+function copyCurl() {
+  const method = document.getElementById('apiMethod').value;
+  const path = document.getElementById('apiPath').value.trim() || '/api/main/status';
+  const body = document.getElementById('apiBody').value.trim();
+  const url = location.origin + path;
+  const cmd = method === 'POST'
+    ? `curl -X POST -H "Authorization: Bearer <访问密钥>" -d "${body}" "${url}"`
+    : `curl -H "Authorization: Bearer <访问密钥>" "${url}"`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(() => toast('已复制 curl 示例')).catch(() => prompt('复制 curl 命令：', cmd));
+  } else {
+    prompt('复制 curl 命令：', cmd);
+  }
+}
+
+renderLayers();
+refreshAll();
+apiFetch('/api/info').then(t => {
+  const d = JSON.parse(t);
+  if (d.version) document.getElementById('serverVer').textContent = 'RemoteControl ' + d.version;
+}).catch(() => {});
+setInterval(refreshStatus, 2500);
+</script>
+</body>
+</html>
