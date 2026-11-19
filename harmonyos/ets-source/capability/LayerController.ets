@@ -7,7 +7,7 @@
 import hilog from '@ohos.hilog'
 import { I18n } from '../pages/I18n'
 import { StellariumBridgeResponse, TabItem } from '../pages/StellariumTypes'
-import { LayerPresetState, MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, OFFLINE_APPGALLERY_BUILD } from '../pages/MainWindowModels'
+import { LayerPresetState, MARKING_LAYER_ACTION_IDS, OFFLINE_APPGALLERY_BUILD } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
 import { DocumentImportPort, MediaImportResult } from '../bridge/MediaPort'
 import { LayerViewStore } from '../state/LayerViewStore'
@@ -33,6 +33,8 @@ export interface LayerHostHooks extends BehaviorHostHooks {
   persistNightMode(): void
   // 夜间模式开关：走 store（写 AppStorage + 通知引擎），不能走普通图层命令。
   applyNightMode(enabled: boolean): void
+  // 用户手动修改图层/天空设置：锁定预设时标脏，否则清除所选预设。
+  noteLayerPresetManualChange(): void
   // 星空文化「时间跟随」定时器收口（宿主保留）。
   syncSkyCultureTimeFollowTimer(): void
   // 脚本列表 / 录制列表 / 视频状态桥加载（ScriptPlaybackController 持有）。
@@ -117,6 +119,7 @@ export class LayerController {
 
   // 图层开关的统一写回。
   applyLayerSwitch(actionId: string, cmd: string, value: boolean): void {
+    this.hooks.noteLayerPresetManualChange()
     if (cmd.length === 0 && actionId === 'actionShow_Night_Mode') {
       this.hooks.applyNightMode(value)
       this.hooks.flashHint(I18n.t(value ? 'msg_shown' : 'msg_hidden'))
@@ -153,6 +156,7 @@ export class LayerController {
     if (!OFFLINE_APPGALLERY_BUILD) {
       tabs.push({ label: I18n.t('v0006'), id: 6 })
     }
+    tabs.push({ label: I18n.t('layer_presets_tab'), id: 7 })
     return tabs
   }
 
@@ -164,15 +168,8 @@ export class LayerController {
     return states
   }
 
-  private layerPresetStates(enabled: boolean): Array<LayerPresetState> {
-    const states = this.markingLayerStates(enabled)
-    for (const actionId of CONTENT_LAYER_ACTION_IDS) {
-      states.push({ id: actionId, enabled: enabled })
-    }
-    return states
-  }
-
   private applyLayerStates(states: Array<LayerPresetState>, successMessage: string): void {
+    this.hooks.noteLayerPresetManualChange()
     this.port.requestInteractive('setActionStates', JSON.stringify(states), (response: StellariumBridgeResponse) => {
       if (response.ok === true) {
         this.hooks.refreshState()
@@ -186,53 +183,6 @@ export class LayerController {
   // 清空全部坐标与标记图层。
   clearMarkingLayers(): void {
     this.applyLayerStates(this.markingLayerStates(false), '已清除全部坐标与标记。')
-  }
-
-  // 三种预设（纯净 / 观测 / 摄影）的图层组合。
-  applyLayerPreset(preset: string): void {
-    let states: Array<LayerPresetState> = this.layerPresetStates(false)
-    if (preset === 'clean') {
-      states.push(
-        { id: 'actionShow_Stars', enabled: true }, { id: 'actionShow_Stars_Labels', enabled: false },
-        { id: 'actionShow_Planets', enabled: true }, { id: 'actionShow_Planets_Labels', enabled: false },
-        { id: 'actionShow_Planets_Hints', enabled: false },
-        { id: 'actionShow_Nebulas', enabled: true }, { id: 'actionShow_DSO_Textures', enabled: true },
-        { id: 'actionShow_MilkyWay', enabled: true },
-        { id: 'actionShow_Constellation_Lines', enabled: false }, { id: 'actionShow_Constellation_Labels', enabled: false },
-        { id: 'actionShow_Constellation_Boundaries', enabled: false }, { id: 'actionShow_Constellation_Art', enabled: false },
-        { id: 'actionShow_Atmosphere', enabled: true }, { id: 'actionShow_Ground', enabled: true }
-      )
-    } else if (preset === 'observe') {
-      states.push(
-        { id: 'actionShow_Stars', enabled: true }, { id: 'actionShow_Stars_Labels', enabled: true },
-        { id: 'actionShow_Planets', enabled: true }, { id: 'actionShow_Planets_Labels', enabled: true },
-        { id: 'actionShow_Planets_Hints', enabled: true }, { id: 'actionShow_Planets_Orbits', enabled: true },
-        { id: 'actionShow_Nebulas', enabled: true }, { id: 'actionShow_DSO_Textures', enabled: true },
-        { id: 'actionShow_MilkyWay', enabled: true }, { id: 'actionShow_Constellation_Lines', enabled: true },
-        { id: 'actionShow_Constellation_Labels', enabled: true }, { id: 'actionShow_Constellation_Boundaries', enabled: false },
-        { id: 'actionShow_Constellation_Art', enabled: false }, { id: 'actionShow_Atmosphere', enabled: false },
-        { id: 'actionShow_Ground', enabled: false }, { id: 'actionShow_Fog', enabled: false },
-        // actionShow_Gridlines 对应 GridLinesMgr::gridlinesDisplayed，是网格与线的**总闸**
-        // （引擎 draw() 里 `if (!gridlinesDisplayed)` 直接返回，单个网格开关全部失效）。
-        // 预设基础表把它置 false，所以这里必须先打开总闸，下面几个网格/线开关才有效。
-        { id: 'actionShow_Cardinal_Points', enabled: true }, { id: 'actionShow_Gridlines', enabled: true },
-        { id: 'actionShow_Equatorial_Grid', enabled: true },
-        { id: 'actionShow_Ecliptic_Line', enabled: true }, { id: 'actionShow_Meridian_Line', enabled: true },
-        { id: 'actionShow_Horizon_Line', enabled: true }, { id: 'actionShow_FOV_Center_Marker', enabled: true }
-      )
-    } else {
-      states.push(
-        { id: 'actionShow_Stars', enabled: true }, { id: 'actionShow_Stars_Labels', enabled: false },
-        { id: 'actionShow_Planets', enabled: false }, { id: 'actionShow_Planets_Labels', enabled: false },
-        { id: 'actionShow_Planets_Hints', enabled: false },
-        { id: 'actionShow_Nebulas', enabled: true }, { id: 'actionShow_DSO_Textures', enabled: true },
-        { id: 'actionShow_MilkyWay', enabled: true },
-        { id: 'actionShow_Constellation_Lines', enabled: false }, { id: 'actionShow_Constellation_Labels', enabled: false },
-        { id: 'actionShow_Constellation_Boundaries', enabled: false }, { id: 'actionShow_Constellation_Art', enabled: false },
-        { id: 'actionShow_Atmosphere', enabled: false }, { id: 'actionShow_Ground', enabled: false }
-      )
-    }
-    this.applyLayerStates(states, preset === 'clean' ? '已应用纯净星空图层。' : (preset === 'observe' ? '已应用观测辅助图层。' : '已应用摄影构图图层。'))
   }
 
   // 视图标签切换（两段 animateTo 时序保留；动画本体归宿主）。
@@ -321,6 +271,7 @@ export class LayerController {
 
   // 星空显示设置写回（布尔项写 LayerStore，数值项写 LayerViewStore）。
   setSkyDisplaySetting(setting: string, value: boolean | number): void {
+    this.hooks.noteLayerPresetManualChange()
     if (setting === 'luminanceAdaptation') this.layerStore.luminanceAdaptation = value as boolean
     else if (setting === 'realisticStarVisibility') this.layerStore.realisticStarVisibility = value as boolean
     else if (setting === 'vividAtmosphere') this.layerStore.vividAtmosphere = value as boolean
@@ -350,6 +301,7 @@ export class LayerController {
 
   // 命名桥命令的通用写回（本地 @State 同步 + viewLock 分支）。
   setBridgeFlag(cmd: string, enabled: boolean): void {
+    this.hooks.noteLayerPresetManualChange()
     hilog.info(0x0000, 'StellariumArkUI', 'setBridgeFlag send %{public}s|%{public}s', cmd, enabled ? '1' : '0')
     if (cmd === 'setViewLock') {
       this.setViewLockState(enabled)
@@ -401,14 +353,16 @@ export class LayerController {
     this.setViewLockState(!this.viewSettingsStore.viewLock)
   }
 
-  // 极限星等写 store 并写桥。
+  // 极限星等写 store 并写桥。手动拖动滑块也应把当前预设标记为已修改。
   applyStarMagLimit(value: number): void {
+    this.hooks.noteLayerPresetManualChange()
     this.layerViewStore.starMagLimit = value
     this.port.requestInteractive('setLimitMagnitude', value.toFixed(1), () => {})
   }
 
   // 银河亮度写 store 并写桥。
   applyMilkyWayBright(value: number): void {
+    this.hooks.noteLayerPresetManualChange()
     this.layerViewStore.milkyWayBright = value
     this.port.requestInteractive('setMilkyWayIntensity', (value / 3).toFixed(2), () => {})
   }
@@ -476,6 +430,7 @@ export class LayerController {
 
   // 应用地景包（成功写当前地景 / 关闭详情浮层 / 刷新状态）。
   selectLandscape(id: string, name: string): void {
+    this.hooks.noteLayerPresetManualChange()
     this.port.requestInteractive('setLandscape', id, (response: StellariumBridgeResponse) => {
       if (response.ok !== true) {
         this.hooks.flashHint(I18n.t('msg_apply_failed'))

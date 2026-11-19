@@ -142,6 +142,7 @@ import { LocationPickerPanel } from '../panels/location/LocationPickerPanel'
 import { LocationFullScreenMap } from '../panels/location/LocationFullScreenMap'
 import { LocationPickerStore } from '../state/LocationPickerStore'
 import { LayerStore } from '../state/LayerStore'
+import { LayerPresetStore } from '../state/LayerPresetStore'
 import { LayerPresetBar } from '../panels/layers/LayerPresetBar'
 import { LayerTabs } from '../panels/layers/LayerTabs'
 import { LayerViewStore } from '../state/LayerViewStore'
@@ -261,7 +262,8 @@ import {
   SkyCultureMakerDraft, SkyCultureMakerIssue,
   HeliocentricOrbit, ConfigurationOption, SkyCultureVisualColors, CelestialPositionOptions,
   CelestialPositionCategory, PhenomenaOptions, PhenomenaStartOption, EphemerisOptions, RtsCalendarOptions, EclipseOptions,
-  LayerPresetState, MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, AstroCsvExport, CELESTIAL_POSITION_CATEGORIES, HELIOCENTRIC_PLANET_ORBITS,
+  LayerPresetState, LayerPresetDefinition, LayerPresetSnapshot, LAYER_PRESET_STORE,
+  MARKING_LAYER_ACTION_IDS, CONTENT_LAYER_ACTION_IDS, AstroCsvExport, CELESTIAL_POSITION_CATEGORIES, HELIOCENTRIC_PLANET_ORBITS,
   HELIOCENTRIC_DISTANCE_GUIDES, PHENOMENA_START_OPTIONS,
   GyroGuideProjection, SkyUiObstacle, BookmarkItem,
   BookmarkRaw, BookmarksResponse, BOOKMARK_STORE, SEARCH_HISTORY_STORE, OBSERVING_STORE, LOCATION_STORE, QUICK_PANEL_STORE, INFO_WINDOW_STORE, NIGHT_MODE_STORE, ObserverLocationRecord, OFFLINE_APPGALLERY_BUILD,
@@ -1363,6 +1365,7 @@ export struct WindowNativeNode {
   @State private locationStore: LocationStore = new LocationStore()
   @State private layerStore: LayerStore = new LayerStore()
   @State private layerViewStore: LayerViewStore = new LayerViewStore()
+  @State private layerPresetStore: LayerPresetStore = new LayerPresetStore()
   @State private fovText: string = '--'
   @State private trackingText: string = 'Off'
   @State private trackingRequestPending: boolean = false
@@ -1835,6 +1838,16 @@ export struct WindowNativeNode {
     // 图层视图域（地景列表 / 行星轨道 / 行星轨迹）复用同一实例；消费方均为
     // @ObjectLink，字段赋值即刷新，该域无 publish* 发布点，onChanged 传空实现。
     this.layerViewStore.attachPort(hostPort, () => {})
+    // 图层预设：快照读写/应用与 Preferences 持久化留在宿主，store 只做状态与差异计算。
+    this.layerPresetStore.attachHooks({
+      loadPresetJson: (done: (json: string) => void): void => { this.loadLayerPresetJson(done) },
+      persistPresetJson: (json: string): void => { this.persistLayerPresetJson(json) },
+      captureSnapshot: (done: (snapshot: LayerPresetSnapshot) => void): void => { this.captureLayerPresetSnapshot(done) },
+      applySnapshot: (snapshot: LayerPresetSnapshot, done: () => void): void => { this.applyLayerPresetSnapshot(snapshot, done) },
+      flashHint: (text: string): void => { this.flashHint(text) },
+      refreshState: (): void => { this.refreshState() }
+    })
+    this.layerPresetStore.load()
     // 星表下载域复用同一 HostCommandPort 实例。其消费方（CatalogsPanel）为
     // @ObjectLink，字段赋值即刷新，该域无 publish* 发布点，故 onChanged 传空实现。
     this.catalogStore.attachPort(hostPort, () => {})
@@ -2276,7 +2289,7 @@ export struct WindowNativeNode {
       }
       if (commandName === 'setLayerTab') {
         const tabId = Number(String(event['payload'] ?? '').trim())
-        if (this.activePanel === 'layers' && this.panelVisible && Number.isInteger(tabId) && tabId >= 0 && tabId <= 6) {
+        if (this.activePanel === 'layers' && this.panelVisible && Number.isInteger(tabId) && tabId >= 0 && tabId <= 7) {
           this.layerCtl().selectViewTab(tabId)
           hilog.info(0x0000, 'StellariumArkUI', '[cli-ui] layer tab=%{public}d', tabId)
         } else {
@@ -2443,6 +2456,7 @@ export struct WindowNativeNode {
 
   // 观测模式开关（快捷面板格子与设置页 Toggle 的同一入口）：只切呈现轴，并给一次提示。
   private applyObserveMode(enabled: boolean): void {
+    this.layerPresetStore.noteManualChange()
     const target = enabled ? 'observe' : 'planetarium'
     const changed = this.infoWindowStore.detailDisplayMode !== target
     this.infoWindowStore.setDetailDisplayMode(target)
@@ -3431,6 +3445,7 @@ export struct WindowNativeNode {
         persistEquatorialMount: (): void => { this.telescopeStore.persistEquatorialMount() },
         persistNightMode: (): void => { this.nightModeStore.persistNightMode() },
         applyNightMode: (enabled: boolean): void => { this.nightModeStore.applyNightMode(enabled, true) },
+        noteLayerPresetManualChange: (): void => { this.layerPresetStore.noteManualChange() },
         syncSkyCultureTimeFollowTimer: (): void => { this.skyCultureCtl().syncSkyCultureTimeFollowTimer() },
         loadScriptList: (): void => { this.scriptPlaybackCtl().loadScriptList() },
         loadRecordings: (): void => { this.scriptPlaybackCtl().loadRecordings() },
@@ -6157,6 +6172,115 @@ export struct WindowNativeNode {
 
   // 快捷操作面板各项当前值（一律读既有 store，与池中 id 一一对应）。
   // 入口类（type === 'entry'）**刻意不入表**：查不到即恒为 false，格子永远不会显示成「永久点亮」。
+  // ---- 图层预设：Preferences / 快照读写 ----
+
+  // 读取失败（UIAbility 上下文尚未就绪）不能当成“没有预设”：否则 store 会回退到
+  // 出厂预设，下一次手动变更再把出厂列表写回 Preferences，导致自定义预设丢失。
+  // 读取抛错时交给 loadLayerPresetJson 重试；只有键确实不存在时才返回空串。
+  private async readLayerPresetStorage(): Promise<string> {
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+    const store = await preferences.getPreferences(ctx, LAYER_PRESET_STORE)
+    return (await store.get('presets', '')) as string
+  }
+
+  private async writeLayerPresetStorage(json: string): Promise<void> {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const store = await preferences.getPreferences(ctx, LAYER_PRESET_STORE)
+      await store.put('presets', json)
+      await store.flush()
+    } catch (error) {
+      hilog.warn(0x0000, 'StellariumArkUI', 'save layer presets failed')
+    }
+  }
+
+  private loadLayerPresetJson(done: (json: string) => void, attempt: number = 0): void {
+    this.readLayerPresetStorage().then((json: string) => done(json)).catch(() => {
+      // 启动早期 getHostContext 可能尚未可用；最多重试约 2 秒，避免误判为空数据。
+      if (attempt < 12) {
+        setTimeout(() => { this.loadLayerPresetJson(done, attempt + 1) }, 150)
+        return
+      }
+      hilog.warn(0x0000, 'StellariumArkUI', 'read layer presets failed')
+      done('')
+    })
+  }
+
+  private persistLayerPresetJson(json: string): void {
+    void this.writeLayerPresetStorage(json)
+  }
+
+  private captureLayerPresetSnapshot(done: (snapshot: LayerPresetSnapshot) => void): void {
+    this.commandPort().requestInteractive('getState', '', (response: StellariumBridgeResponse): void => {
+      const raw = response as Record<string, Object>
+      const actions: Record<string, boolean> = {}
+      const actionIds = MARKING_LAYER_ACTION_IDS.concat(CONTENT_LAYER_ACTION_IDS)
+      for (const id of actionIds) actions[id] = raw[id] === true
+      const intensity = typeof raw['milkyWayIntensity'] === 'number' ? raw['milkyWayIntensity'] as number : 1
+      const finish = (constellationArt3d: boolean): void => {
+        done({
+          actions: actions,
+          vividAtmosphere: response.vividAtmosphere === true,
+          milkyWayBright: Math.max(0, Math.min(6, Math.round(intensity * 3))),
+          realisticStarVisibility: response.realisticStarVisibility === true,
+          nightMode: this.nightModeStore.nightMode,
+          observeMode: this.infoWindowStore.observeModeEnabled(),
+          equatorialMount: this.telescopeStore.equatorialMount,
+          telrad: this.telescopeStore.telradOn,
+          ccd: this.telescopeStore.ccdOn,
+          dsoLabels: response.dsoLabels === true,
+          constellationArt3d: constellationArt3d,
+          starMagLimit: this.layerViewStore.starMagLimit
+        })
+      }
+      this.commandPort().requestInteractive('getSkyCultureVisualSettings', '',
+        (visual: StellariumBridgeResponse): void => {
+          const visualRaw = visual as Record<string, Object>
+          finish(visualRaw['constellationArt3d'] === true)
+        }, (): void => { finish(this.skyCultureSettingsStore.skyCultureConstellationArt3d) })
+    })
+  }
+
+  private applyLayerPresetSnapshot(snapshot: LayerPresetSnapshot, done: () => void): void {
+    const states: Array<LayerPresetState> = []
+    const actionIds = MARKING_LAYER_ACTION_IDS.concat(CONTENT_LAYER_ACTION_IDS)
+    for (const id of actionIds) states.push({ id: id, enabled: snapshot.actions[id] === true })
+    this.commandPort().requestInteractive('setActionStates', JSON.stringify(states), (response: StellariumBridgeResponse): void => {
+      if (response.ok !== true) {
+        this.flashHint(I18n.t('msg_apply_failed'))
+        done()
+        return
+      }
+      this.layerCtl().setSkyDisplaySetting('vividAtmosphere', snapshot.vividAtmosphere)
+      this.layerCtl().setSkyDisplaySetting('realisticStarVisibility', snapshot.realisticStarVisibility)
+      if (snapshot.starMagLimit !== undefined) this.layerCtl().applyStarMagLimit(snapshot.starMagLimit)
+      this.layerCtl().applyMilkyWayBright(snapshot.milkyWayBright)
+      this.commandPort().requestInteractive('setDsoLabels', snapshot.dsoLabels ? '1' : '0', (): void => {})
+      this.layerStore.dsoLabels = snapshot.dsoLabels
+      this.skyCultureCtl().setSkyCultureVisualSetting('constellationArt3d', snapshot.constellationArt3d ? 1 : 0)
+      this.nightModeStore.applyNightMode(snapshot.nightMode, true)
+      this.infoWindowStore.setDetailDisplayMode(snapshot.observeMode ? 'observe' : 'planetarium')
+      this.telescopeStore.equatorialMount = snapshot.equatorialMount
+      this.commandPort().requestInteractive('setActionChecked',
+        'actionSwitch_Equatorial_Mount|' + (snapshot.equatorialMount ? '1' : '0'), (): void => {
+          this.telescopeStore.persistEquatorialMount()
+        })
+      const applyOculars = (): void => {
+        this.ocularCtl().setTelrad(snapshot.telrad)
+        this.ocularCtl().setCCD(snapshot.ccd)
+        done()
+      }
+      if (snapshot.telrad || snapshot.ccd) {
+        this.pluginFeatureCtl().ensurePluginLoaded('Oculars', applyOculars, () => done())
+      } else {
+        applyOculars()
+      }
+    }, () => {
+      this.flashHint(I18n.t('msg_apply_failed'))
+      done()
+    })
+  }
+
   private async persistNightModePreference(night: boolean): Promise<void> {
     try {
       const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext
@@ -6201,6 +6325,7 @@ export struct WindowNativeNode {
   private quickToggle(id: string, value: boolean): void {
     const item = quickActionById(id)
     if (item === undefined) return
+    if (item.type !== 'entry') this.layerPresetStore.noteManualChange()
     if (item.type === 'entry') {
       // 入口类不切换开关态，只跳面板（格子恒不高亮，见 quickActionValues 注释）。
       this.openSubPanel(item.openPanel)
@@ -9588,7 +9713,7 @@ export struct WindowNativeNode {
         onEquationToggle: (setting: string, enabled: boolean) => { this.ocularCtl().setEquationOfTime(setting, enabled) },
         onAdjustJulian: (scale: string, direction: number) => { this.julianStore.adjustJulianDate(scale, direction) },
         onApplyJulian: (scale: string) => { this.julianStore.applyJulianDateInput(scale) },
-        onNightMode: (enabled: boolean) => { this.nightModeStore.applyNightMode(enabled, true) },
+        onNightMode: (enabled: boolean) => { this.layerPresetStore.noteManualChange(); this.nightModeStore.applyNightMode(enabled, true) },
         onPickDate: (year: number, monthIndex: number, day: number) => {
           this.timeStore.manualYear = year; this.timeStore.manualMonth = monthIndex + 1; this.timeStore.manualDay = day
         },
@@ -9640,6 +9765,7 @@ export struct WindowNativeNode {
       LayersPanel({
         layerStore: this.layerStore,
         layerViewStore: this.layerViewStore,
+        presetStore: this.layerPresetStore,
         skyCultureViewStore: this.skyCultureViewStore,
         skyCultureSettingsStore: this.skyCultureSettingsStore,
         atmosphereStore: this.atmosphereStore,
@@ -9657,7 +9783,6 @@ export struct WindowNativeNode {
         skyCultureArtStates: this.skyCultureArtStates,
         narrationParagraphs: this.skyCultureViewStore.skyCultureNarrationParagraphs(),
         mapContext: this.skyCultureMapContext,
-        onPreset: (preset: string) => { this.layerCtl().applyLayerPreset(preset) },
         onSelectTab: (id: number) => { this.switchViewTab(id) },
         onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.layerCtl().applyLayerSwitch(actionId, cmd, value) },
         onRefreshSurvey: () => { this.surveyCtl().loadSurveyState() },
@@ -10116,9 +10241,9 @@ export struct WindowNativeNode {
         store: this.telescopeStore,
         onOpenSubPanel: (name: string) => { this.openSubPanel(name) },
         onSetOcularMode: (isOn: boolean) => { this.ocularCtl().setOcularMode(isOn) },
-        onSetTelrad: (isOn: boolean) => { this.ocularCtl().setTelrad(isOn) },
+        onSetTelrad: (isOn: boolean) => { this.layerPresetStore.noteManualChange(); this.ocularCtl().setTelrad(isOn) },
         onSetCrosshairs: (isOn: boolean) => { this.ocularCtl().setCrosshairs(isOn) },
-        onSetCcd: (isOn: boolean) => { this.ocularCtl().setCCD(isOn) },
+        onSetCcd: (isOn: boolean) => { this.layerPresetStore.noteManualChange(); this.ocularCtl().setCCD(isOn) },
         onSelectInstrument: (kind: string, index: number) => { this.ocularCtl().selectOcularInstrument(kind, index) },
         onChangeCcdRotation: (value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularCcdRotation(value, mode) },
         onChangePrismRotation: (value: number, mode: SliderChangeMode) => { this.ocularCtl().changeOcularPrismRotation(value, mode) },

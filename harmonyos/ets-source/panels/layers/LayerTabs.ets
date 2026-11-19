@@ -16,12 +16,13 @@ export struct LayerTabs {
   @Prop activeTab: number
   @Prop foldTablet: boolean
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  private tabsScroller: Scroller = new Scroller()
   onSelectTab: (id: number) => void = () => {}
 
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
-    Scroll() {
+    Scroll(this.tabsScroller) {
       Row({ space: this.foldTablet ? 5 : 6 }) {
         ForEach(this.tabs, (tab: TabItem) => {
           Text(tab.label)
@@ -49,6 +50,11 @@ export struct LayerTabs {
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
+    // 窄屏下末尾页签（巡天/图层预设）默认在可视区外；打开面板时滚到末端，
+    // 让当前管理页签可见，避免“内容已切换但标签看不到”。
+    .onAppear(() => {
+      if (this.activeTab >= 5) this.tabsScroller.scrollEdge(Edge.End)
+    })
     .margin({ top: 4, bottom: 10 })
   }
 }

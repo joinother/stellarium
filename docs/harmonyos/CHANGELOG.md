@@ -692,6 +692,28 @@
   - **冷启动重进阻塞：** 3 个月 `getAstronomyCalendarEvents` 由 ~14.7s 降至 `sky-revealed` 后约 **1.0s** 完成（总计 ~1.6s，月 1/2/3 分别约 0.48s/0.32s/0.38s），`sky-revealed` 后零 `QtWatchdog` 告警，立即拖动响应正常；退后台再切前台 `onForeground` 仅 **140ms**，零阻塞。
 - **边界与未覆盖项：** 未改签名或构建 Release 包；剩余常规画面单帧 draw 耗时（约 18–23ms @ 2560×1600）主要在 `ConstellationMgr`（7–11ms）和 `NebulaMgr`（4–5ms），与时间倍率无关，仍记录于 `KNOWN-ISSUES.md`；未提交、未推送。
 
+## [2026-11-19] OHOS 开发记录 - 目镜“选择天体”夜间配色
+
+- **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`。
+- **问题与修复：** 夜间主题下“选择天体”按钮使用 `textStrong`（夜间 `#FF2222`）叠在 `accent`（夜间 `#F00000`）红底上，文字与背景几乎同色。改为主题的 `onAccent`（夜间 `#1A0505`、日间浅色），红底深色字，保持可读。
+- **验证：** 夜间模式打开「目镜模拟」，未选择目标时的提示卡按钮显示深色“选择天体”文字，确认可读。
+
+
+## [2026-11-19] OHOS 开发记录 - 图层预设系统
+
+- **修改文件：** `harmonyos/ets-source/common/types/MainWindowModels.ets`、`harmonyos/ets-source/state/LayerPresetStore.ets`、`harmonyos/ets-source/panels/layers/LayerPresetBar.ets`、`harmonyos/ets-source/panels/layers/LayerPresetTab.ets`、`harmonyos/ets-source/panels/layers/LayerTabs.ets`、`harmonyos/ets-source/panels/panels/LayersPanel.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/I18n.ets`、`scripts/test-ohos-layer-presets.mjs`、`scripts/test-ohos-pointer-surveys-ui.mjs`。
+- **预设定义：** 5 个内置预设（纯净星空、观测辅助、摄影构图、星图研习、绚丽星空）+ 最多 3 个完全自定义预设。每个预设保存完整场景快照：全部标记/内容图层 action、绚丽大气、现实星等、银河亮度、夜间模式、观测模式、赤道仪、寻星镜、CCD、深空标签、3D 星座艺术；星等限制为可选字段，只有明确设置时才在应用时改写。
+- **纯净星空：** 星空/行星/深空/银河/大气/地面开启，银河亮度 6，非绚丽大气、现实星等。**观测辅助：** 保留大气与地面，非绚丽大气、现实星等，星座标签、赤道坐标、天体详情观测模式、夜间模式、寻星镜、赤道仪；星等限制设为最高 21 等。**摄影构图：** 保留大气与地面，非绚丽大气、现实星等，星座/星群标签、赤道坐标、CCD 取景框；星等限制同样设为最高 21 等。其余预设不改变当前星等限制。**星图研习：** 只清除大气、地面、动态雾山等遮挡，保留当前投影与视场。**绚丽星空：** 放在末尾，基于纯净星空，绚丽大气、动态雾山、3D 星座艺术，关闭现实星等，打开星座连线与星座标签，银河亮度 6。
+- **选中语义：** 手动修改图层/大气/银河/地景后预设保持选中，并以 `*` 标记（不再提供独立“保持”开关）；选中态与 `*` 随重启保留。应用预设期间通过 `busy/applying` 抑制手动变更标记。
+- **管理页：** 图层面板新增「图层预设」页签。保存当前场景到所选预设、把所选预设另存为自定义、自定义预设改名、每行启停、详情（对比出厂快照）、每行还原初始状态、删除自定义。保存类按钮置于页面顶部；点击行名称即应用该预设，高亮行代表当前生效的预设，不再提供独立“应用”按钮；详情/改名/还原/删除折叠在行内 `⋯` 展开区，行高保持 42/50 vp 标准功能行；顺序用长按 `≡` 拖动调整。重命名使用独立居中浮层（`bindContentCover`），避免行位于面板底部时输入框和确认按钮被面板边界/键盘遮挡。自定义上限 3 个，命名空白时回退为“自定义”。
+- **预设条：** 面板顶部保留“图层预设”小字标题与可横向滚动的预设 chip，点击即应用；移除旧“保持”开关。自定义预设改名后 chip 立即刷新（名称纳入 `ForEach` key）；打开图层面板时若选中项不在可视区，自动滚动露出一次（末项选中时滚到最右）；之后手动横向滚动完全由用户控制，松手不会被弹回选中项。窄屏标签条在打开面板时自动滚到末端，避免「巡天/图层预设」页签不可见。
+- **状态与持久化：** `LayerPresetStore` 只做状态、差异与顺序；Preferences 读写、引擎快照捕获/应用留在宿主。快照应用走 `setActionStates`、`setSkyDisplaySetting`、星等限制、银河亮度、深空标签、3D 星座艺术、夜间模式、观测模式、赤道仪与 Oculars 插件（寻星镜/CCD）。手动拖动星等滑杆现在也会把当前预设标记为已修改。持久化键 `stellarium_layer_presets`，版本 1，保存 `selectedId/selectedDirty/presets`；内置出厂快照不落盘，重启后仍可还原。启动期 `getHostContext` 尚未就绪时读取失败会重试（最多约 2 秒），不再把失败误判为“没有预设”而回退出厂列表、继而覆盖自定义预设。
+- **CLI：** `setLayerTab` 允许 `0..7`，可用 `openUiPanel layers` + `setLayerTab 7` 打开预设管理页。
+- **构建与安装：** ArkTS HAP `BUILD SUCCESSFUL`（806.4 MB），覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **真机验证：** 5 个预设 chip 与高亮正常；展开行显示详情/还原，点击行名称即应用并保持高亮；`摄影构图` 修改详情显示“银河亮度 3 → 6、夜间模式 关 → 开”，还原后 `*`、还原按钮与修改项消失并提示“预设已还原到初始状态”；自定义预设展开显示应用/重命名/删除，输入 `TestSky` 后行名与顶部 chip 同步更新；长按 `≡` 拖动把自定义预设从末位移动到摄影构图之后；`纯净星空` 应用后手动打开绚丽模式，选中保持并出现 `*`；重启后自定义名称、拖动顺序与“摄影构图已还原”状态保持。
+- **回归：** `test-ohos-layer-presets.mjs` 5/5；UI 契约（37 面板 / 61 锚点）、i18n、命令目录检查通过。重启后自定义预设、名称与顺序保持；选中末项时顶部预设条自动滚动露出选中 chip；重命名改为居中浮层后输入框与确认按钮不再被面板边缘遮挡。
+
+
 ## [2026-11-19] OHOS 开发记录 - 自动大气/雾偏好修复与地景自动选择
 
 - **修改文件：** `src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/StelCore.cpp`、`src/gui/LocationDialog.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`docs/harmonyos/CLI.md`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-observer-location.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。
