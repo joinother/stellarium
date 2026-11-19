@@ -1,5 +1,24 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 白天银河与深空天体可见性联调（统一接入「现实星等」昼夜光度体系）
+
+- **修改文件：** `src/core/StelSkyDrawer.hpp`、`src/core/StelSkyDrawer.cpp`、`src/core/modules/MilkyWay.cpp`、`src/core/StelSkyImageTile.cpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/modules/Nebula.cpp`、`src/core/TouchPicker.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/layers/AtmosphereGroundSection.ets`、`scripts/test-ohos-realistic-star-visibility.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与实现：**
+  1. **补全「现实星等（`realisticStarVisibility`）」对银河与深空天体的统一联动：**
+     - 原 `realisticStarVisibility = false` 仅对恒星（`computeStarRCMag` / `starLimitMagnitude`）封顶适应亮度至 `3.75 cd/m²`；银河（`MilkyWay::draw`）仍使用真实白昼适应亮度与 `atmFactor = 0.35`（`0.35² = 0.1225`）双重压暗，深空背景纹理（`StelSkyImageTile`）因白昼 `limitLuminance` 飙升至数千 `cd/m²` 被全量剔除并压黑，深空标记/标签/轮廓/点选（`NebulaMgr` / `Nebula` / `TouchPicker`）仍按白昼负星等门限全部隐藏。
+     - 现于 `StelSkyDrawer` 新增无副作用的 `adaptSkyObjectLuminanceScaled()`、`getSkyObjectLimitLuminance()` 与 `getSkyObjectLimitMagnitude()`（不修改共享 `StelToneReproducer` 状态）：
+       - **现实星等关闭（学习星空模式）且白昼高亮天空（`Lwa > 3.75`）**：银河、深空纹理、深空标记/标签/轮廓及触控点选统一采用 `3.75 cd/m²` 晨昏基线光度，同时完整保留地平线大气消光（`getVisualExtinction()`）、光污染（Bortle）、图层开关与亮度/密度滑块控制；银河在白昼模式下将 `atmFactor` 下限抬升至 `0.85`（`0.85² = 0.72`），与蓝天叠加呈现自然通透的星带而不发白溢出。
+       - **现实星等开启或夜间/关闭大气（`Lwa ≤ 3.75`）**：行为与原物理模型完全一致，零回归。
+  2. **诊断字段与设置说明同步：**
+     - `StelMainView.cpp` 的 `getLandscapeInfo` 增报 `limitLuminance` 与 `skyObjectLimitLuminance`。
+     - `AtmosphereGroundSection.ets` 同步更新「现实星等」中英文说明，明确包含恒星、银河与深空天体。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-realistic-star-visibility.mjs`（15/15）、`test-nebula-rendering.mjs`（18/18）、`test-ohos-vivid-atmosphere.mjs`（8/8）、`test-visual-extinction.py`、`test-ohos-deep-sky-status.mjs`（10/10）全通过。
+  - 真机 12:00 正午实测（大气开启 + 绚丽模式开启）：
+    - `realisticStarVisibility = false`：正午银河（`FOV = 85°`）与深空轮廓在太阳旁蓝天中清晰可读且近地平线自然消光；`M 31`（`FOV = 5°`，`m31.png` 就绪，绘制 4 标记 / 3 标签）、`M 42`（`FOV = 4°`，`m42.png` 就绪）、`M 45`（`FOV = 5°`，`pleiades.png` 就绪）纹理与标签均清晰可见；`probeSelectAt` 正午点选命中 `仙女座星系 (M 31)`，关闭深空纹理开关立即响应为 `disabled`。
+    - `realisticStarVisibility = true`：同一正午场景下银河、深空纹理、标记/标签与点选均按真实白昼光度隐藏（`hintsDrawn = 0`、`readyCount = 0`、`found = false`）。
+    - 夜间 00:00 对照（`M 31`，`FOV = 5°`）：`limitLuminance == skyObjectLimitLuminance == 0.0391`，画面与原版一致无回归。
+
 ## [2026-11-20] 缩放流畅度专项优化（消除 ArkUI 高频重排与高斯模糊卡顿 + C++ `zoomBy` 合并与标签包围盒缓存）
 
 - **修改文件：** `harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`、`src/core/StelPainter.cpp`、`scripts/test-ohos-sky-input.mjs`、`docs/harmonyos/CHANGELOG.md`。

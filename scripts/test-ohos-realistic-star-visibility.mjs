@@ -10,6 +10,11 @@ const toneHeader = read('src/core/StelToneReproducer.hpp');
 const managerSource = read('src/core/modules/StarMgr.cpp');
 const zonesSource = read('src/core/modules/ZoneArray.cpp');
 const objectManagerSource = read('src/core/StelObjectMgr.cpp');
+const milkyWaySource = read('src/core/modules/MilkyWay.cpp');
+const skyTileSource = read('src/core/StelSkyImageTile.cpp');
+const nebulaMgrSource = read('src/core/modules/NebulaMgr.cpp');
+const nebulaSource = read('src/core/modules/Nebula.cpp');
+const touchPickerSource = read('src/core/TouchPicker.cpp');
 
 function body(source, marker) {
   const declaration = source.indexOf(marker);
@@ -89,18 +94,22 @@ function makeDrawer({ world = 40000, realistic = true, fov = 60, display = 50, m
     core: { getMovementMgr: () => ({ getCurrentFov: () => fov }), getJD: () => 2461356 },
     maxAdaptFov: 70, minAdaptFov: 0.1, lightPollutionLuminance: 0.001,
     inScale: 1, lnfovFactor: 0, starRelativeScale: 1, starAbsoluteScaleF: 1,
-    starLinearScale: 0, limitMagnitude: 0, starLimitMagnitude: 0, limitLuminance: 0,
+    starLinearScale: 0, limitMagnitude: 0, starLimitMagnitude: 0, limitLuminance: 0, skyObjectLimitLuminance: 0,
     screenScale: 1, MAX_LINEAR_RADIUS: 8, EYE_RESOLUTION: 0.25,
     getFlagHasAtmosphere: () => hasAtmosphere, luminanceToNELM: () => nelm,
     setInputScale(value) { this.inScale = value; },
+    pow10: value => 10 ** value,
     computeRCMag: method(drawerSource, 'bool StelSkyDrawer::computeRCMag(', 'mag', 'rcMag'),
     computeStarRCMag: method(drawerSource, 'bool StelSkyDrawer::computeStarRCMag(', 'mag', 'rcMag'),
+    adaptSkyObjectLuminanceScaled: method(drawerSource, 'float StelSkyDrawer::adaptSkyObjectLuminanceScaled(', 'worldLuminance'),
     computeRCMagFromRadius: method(drawerSource, 'bool StelSkyDrawer::computeRCMagFromRadius(', 'radius', 'rcMag'),
     pointSourceMagToLnLuminance: method(drawerSource, 'float StelSkyDrawer::pointSourceMagToLnLuminance(', 'mag'),
     computeLimitMagnitude: method(drawerSource, 'float StelSkyDrawer::computeLimitMagnitude(', 'forStars'),
-    computeLimitLuminance: method(drawerSource, 'float StelSkyDrawer::computeLimitLuminance('),
+    computeLimitLuminance: method(drawerSource, 'float StelSkyDrawer::computeLimitLuminance(', 'forSkyObjects'),
     update: updatePhotometry,
     getStarLimitMagnitude: method(drawerHeader, 'float getStarLimitMagnitude('),
+    getSkyObjectLimitMagnitude: method(drawerHeader, 'float getSkyObjectLimitMagnitude('),
+    getSkyObjectLimitLuminance: method(drawerHeader, 'float getSkyObjectLimitLuminance('),
     save: () => {}, notify: () => {}, setFlagRealisticStarVisibility: setter
   };
   state.update();
@@ -326,4 +335,49 @@ test('nonstellar thresholds and realistic-mode selection retain the original fil
       }
     }
   }
+});
+
+test('non-realistic mode preserves daytime Milky Way and deep-sky luminance without mutating the shared eye', () => {
+  for (const display of [30, 50, 100]) {
+    const realistic = makeDrawer({ realistic: true, world: 40000, display });
+    const teaching = makeDrawer({ realistic: false, world: 40000, display });
+    const reference = makeDrawer({ realistic: true, world: 3.75, display });
+    const beforeEye = { ...teaching.eye };
+
+    assert.equal(realistic.getSkyObjectLimitLuminance(), realistic.limitLuminance);
+    assert.equal(realistic.getSkyObjectLimitMagnitude(), realistic.limitMagnitude);
+    assert.ok(teaching.getSkyObjectLimitLuminance() < realistic.limitLuminance / 100);
+    close(teaching.getSkyObjectLimitLuminance(), reference.limitLuminance);
+    close(teaching.getSkyObjectLimitMagnitude(), reference.limitMagnitude);
+
+    for (const lum of [0, 0.05, 0.82, 2.06]) {
+      close(realistic.adaptSkyObjectLuminanceScaled(lum), lum > 0 ? realistic.eye.adaptLuminanceScaled(lum) : 0);
+      close(teaching.adaptSkyObjectLuminanceScaled(lum), lum > 0 ? reference.eye.adaptLuminanceScaled(lum) : 0);
+    }
+    assert.deepEqual(teaching.eye, beforeEye);
+  }
+
+  for (const world of [0.001, 0.1, 3.75]) {
+    const teaching = makeDrawer({ realistic: false, world });
+    const realistic = makeDrawer({ realistic: true, world });
+    close(teaching.getSkyObjectLimitLuminance(), realistic.limitLuminance);
+    close(teaching.adaptSkyObjectLuminanceScaled(1.9), realistic.eye.adaptLuminanceScaled(1.9));
+  }
+});
+
+test('Milky Way, DSO tiles, DSO hints/labels, and touch picking consume unified sky-object daylight limits', () => {
+  const mwDraw = body(milkyWaySource, 'void MilkyWay::draw(');
+  assert.match(mwDraw, /drawer->adaptSkyObjectLuminanceScaled\(/);
+  assert.match(mwDraw, /if \(!drawer->getFlagRealisticStarVisibility\(\)\)/);
+  assert.match(mwDraw, /atmFactor = qMax\(atmFactor,\s*0\.85f\);/);
+
+  const tileDraw = body(skyTileSource, 'void StelSkyImageTile::draw(');
+  const tilePaint = body(skyTileSource, 'bool StelSkyImageTile::drawTile(');
+  assert.match(tileDraw, /core->getSkyDrawer\(\)->getSkyObjectLimitLuminance\(\)/);
+  assert.match(tilePaint, /core->getSkyDrawer\(\)->adaptSkyObjectLuminanceScaled\(luminance\)/);
+
+  assert.match(body(nebulaMgrSource, 'float NebulaMgr::computeMaxMagHint('), /skyDrawer->getSkyObjectLimitMagnitude\(\)/);
+  assert.match(body(nebulaMgrSource, 'void NebulaMgr::draw('), /skyDrawer->getSkyObjectLimitMagnitude\(\)/);
+  assert.match(body(nebulaSource, 'StelObjectPickState Nebula::getPickState('), /core->getSkyDrawer\(\)->getSkyObjectLimitMagnitude\(\)/);
+  assert.match(touchPickerSource, /core->getSkyDrawer\(\)->getSkyObjectLimitMagnitude\(\)/);
 });

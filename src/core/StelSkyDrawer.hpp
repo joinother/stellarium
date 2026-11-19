@@ -149,6 +149,10 @@ public:
 	//! @return false if the object is too faint to be displayed
 	bool computeRCMag(float mag, RCMag*) const;
 	bool computeStarRCMag(float mag, RCMag*) const;
+	//! Adapt a sky-object luminance into scaled display units without mutating the shared eye.
+	//! When realistic visibility is disabled in bright daylight, caps world adaptation luminance
+	//! to the twilight baseline so the Milky Way and deep-sky textures remain readable.
+	float adaptSkyObjectLuminanceScaled(float worldLuminance) const;
 
 	//! Report that an object of luminance lum with an on-screen area of area pixels is currently displayed
 	//! This information is used to determine the world adaptation luminance
@@ -233,6 +237,7 @@ public slots:
 	//! @return the limit V mag at which a point source will be displayed
 	float getLimitMagnitude() const {return limitMagnitude;}
 	float getStarLimitMagnitude() const {return flagRealisticStarVisibility ? limitMagnitude : starLimitMagnitude;}
+	float getSkyObjectLimitMagnitude() const {return getStarLimitMagnitude();}
 
 	//! Toggle the application of user-defined star magnitude limit.
 	//! If enabled, stars fainter than the magnitude set with
@@ -273,6 +278,7 @@ public slots:
 	//! It depends on the zoom level, on the eye adaptation and on the point source rendering parameters
 	//! @return the limit V luminance at which an object will be visible
 	float getLimitLuminance() const {return limitLuminance;}
+	float getSkyObjectLimitLuminance() const {return flagRealisticStarVisibility ? limitLuminance : skyObjectLimitLuminance;}
 
 	//! Set the value of the eye adaptation flag
 	void setFlagLuminanceAdaptation(bool b);
@@ -390,7 +396,7 @@ private:
 	bool computeRCMagFromRadius(float radius, RCMag* rcMag) const;
 
 	//! Compute the current limit luminance by dichotomy
-	float computeLimitLuminance() const;
+	float computeLimitLuminance(bool forSkyObjects=false) const;
 
 	//! Get StelSkyDrawer maximum FOV.
 	float getMaxAdaptFov(void) const {return maxAdaptFov;}
@@ -482,6 +488,7 @@ private:
 
 	//! Current magnitude luminance
 	float limitLuminance;
+	float skyObjectLimitLuminance;
 
 	//! User-defined magnitude limit for stars.
 	//! Interpreted as a lower limit - stars fainter than this value will not be displayed.

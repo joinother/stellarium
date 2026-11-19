@@ -70,8 +70,8 @@ export struct AtmosphereGroundSection {
           label: this.text('现实星等', 'Realistic star visibility'), isOn: this.layerStore.realisticStarVisibility,
           onToggle: (enabled: boolean) => { this.onSetSkyDisplay('realisticStarVisibility', enabled) }
         })
-        Text(this.text('开启时，明亮天空会淹没暗星；关闭后，白天也能辨认恒星，适合学习星空。',
-          'On: bright skies hide faint stars. Off: keep stars visible in daylight for exploring the sky.'))
+        Text(this.text('开启时，明亮天空会淹没暗星、银河与深空天体；关闭后，白天也能辨认恒星、银河与深空天体，适合学习星空。',
+          'On: bright skies hide faint stars, the Milky Way, and deep-sky objects. Off: keep them visible in daylight for exploring the sky.'))
           .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.sub).width('100%')
       }.width('100%')
     }.width('100%').padding(12).backgroundColor(this.c.soft)

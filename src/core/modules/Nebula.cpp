@@ -1472,7 +1472,7 @@ StelObjectPickState Nebula::getPickState(const StelCore* core) const
 		return state;
 
 	const float maxMagHints = nebulaMgr->computeMaxMagHint(core->getSkyDrawer());
-	const float maxMagLabels = core->getSkyDrawer()->getLimitMagnitude() - 2.f
+	const float maxMagLabels = core->getSkyDrawer()->getSkyObjectLimitMagnitude() - 2.f
 		+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f;
 	const RenderState render = getRenderState(maxMagHints, maxMagLabels);
 	Vec3d direction = getJ2000EquatorialPos(core);

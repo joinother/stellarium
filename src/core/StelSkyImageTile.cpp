@@ -98,7 +98,7 @@ void StelSkyImageTile::draw(StelCore* core, StelPainter& sPainter, float opacity
 		vel = core->getAberrationVec(core->getJDE());
 	}
 
-	const float limitLuminance = core->getSkyDrawer()->getLimitLuminance();
+	const float limitLuminance = core->getSkyDrawer()->getSkyObjectLimitLuminance();
 	QMultiMap<double, StelSkyImageTile*> result;
 	resetViewportCandidates();
 	// TODO: adjust that viewportconvexpolygon by aberration to select the right tiles.
@@ -310,7 +310,7 @@ bool StelSkyImageTile::drawTile(StelCore* core, StelPainter& sPainter, const Vec
 	}
 
 	// Draw the real texture for this image
-	float ad_lum = (luminance>0) ? qMin(1.0f, core->getToneReproducer()->adaptLuminanceScaled(luminance)) : 1.f;
+	float ad_lum = (luminance>0) ? qMin(1.0f, core->getSkyDrawer()->adaptSkyObjectLuminanceScaled(luminance)) : 1.f;
 	Vec4f color;
 	if (alphaBlend || texFader->state()==QTimeLine::Running)
 	{

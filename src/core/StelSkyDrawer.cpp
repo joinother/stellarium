@@ -73,6 +73,7 @@ StelSkyDrawer::StelSkyDrawer(StelCore* acore) :
 	limitMagnitude(-100.f),
 	starLimitMagnitude(-100.f),
 	limitLuminance(0.f),
+	skyObjectLimitLuminance(0.f),
 	customStarMagLimit(0.0),
 	customNebulaMagLimit(0.0),
 	customPlanetMagLimit(0.0),
@@ -332,6 +333,7 @@ void StelSkyDrawer::update(double)
 
 	// update limit luminance
 	limitLuminance = computeLimitLuminance();
+	skyObjectLimitLuminance = flagRealisticStarVisibility ? limitLuminance : computeLimitLuminance(true);
 }
 
 // Compute the current limit magnitude by dichotomy
@@ -368,7 +370,7 @@ float StelSkyDrawer::computeLimitMagnitude(bool forStars) const
 }
 
 // Compute the current limit luminance by dichotomy
-float StelSkyDrawer::computeLimitLuminance() const
+float StelSkyDrawer::computeLimitLuminance(bool forSkyObjects) const
 {
 	float a=0.f;
 	float b=500000.f;
@@ -376,7 +378,7 @@ float StelSkyDrawer::computeLimitLuminance() const
 	int safety=0;
 	while (std::fabs(lim-a)>0.05f)
 	{
-		float adaptL = eye->adaptLuminanceScaled(lim);
+		float adaptL = forSkyObjects ? adaptSkyObjectLuminanceScaled(lim) : eye->adaptLuminanceScaled(lim);
 		if (adaptL<=0.05f) // Object considered not visible if its adapted scaled luminance<0.05
 		{
 			float tmp = lim;
@@ -445,6 +447,25 @@ bool StelSkyDrawer::computeStarRCMag(float mag, RCMag* rcMag) const
 		* alphaWorld / alphaDisplay + lnTerm - std::log(eye->getMaxDisplayLuminance());
 	const float radius = std::exp(lnLuminance * static_cast<float>(starRelativeScale) * 1.40f * 0.5f);
 	return computeRCMagFromRadius(radius, rcMag);
+}
+
+float StelSkyDrawer::adaptSkyObjectLuminanceScaled(float worldLuminance) const
+{
+	if (worldLuminance <= 0.f)
+		return 0.f;
+	const float baselineLuminance = 3.75f;
+	if (flagRealisticStarVisibility || eye->getWorldAdaptationLuminance() <= baselineLuminance)
+		return eye->adaptLuminanceScaled(worldLuminance);
+	const float logWorld = std::log10(baselineLuminance);
+	const float logDisplay = std::log10(eye->getDisplayAdaptationLuminance());
+	const float alphaWorld = 0.4f * logWorld + 1.619f;
+	const float alphaDisplay = 0.4f * logDisplay + 1.619f;
+	const float betaWorld = -0.4f * logWorld * logWorld + 0.218f * logWorld + 6.1642f;
+	const float betaDisplay = -0.4f * logDisplay * logDisplay + 0.218f * logDisplay + 6.1642f;
+	const float conversion = M_PIf * 0.0001f;
+	const float term2 = stelpow10f((betaWorld - betaDisplay) / alphaDisplay) / conversion;
+	return std::pow(eye->getInputScale() * worldLuminance * conversion, alphaWorld / alphaDisplay)
+		* term2 / eye->getMaxDisplayLuminance();
 }
 
 bool StelSkyDrawer::computeRCMagFromRadius(float radius, RCMag* rcMag) const

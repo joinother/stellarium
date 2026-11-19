@@ -309,8 +309,6 @@ void main(void)
 	if(!renderProgram || !renderProgram->isLinked())
 		return;
 
-	StelToneReproducer* eye = core->getToneReproducer();
-
 	Q_ASSERT(mainTex);	// A texture must be loaded before calling this
 
 	// This RGB color corresponds to the night blue scotopic color = 0.25, 0.25 in xyY mode.
@@ -333,7 +331,7 @@ void main(void)
 	const float lum = drawer->surfaceBrightnessToLuminance(12.f+0.15f*bortleIntensity); // was 11.5; Source? How to calibrate the new texture?
 
 	// Get the luminance scaled between 0 and 1
-	float aLum =eye->adaptLuminanceScaled(lum*fader->getInterstate());
+	float aLum = drawer->adaptSkyObjectLuminanceScaled(lum*fader->getInterstate());
 
 	// Bound a maximum luminance. GZ: Is there any reference/reason, or just trial and error?
 	aLum = qMin(0.38f, aLum*2.f);
@@ -358,6 +356,12 @@ void main(void)
 	else
 	{
 		atmFactor=qMax(0.35f, 50.0f*(0.02f-atmLum)); // keep visible in twilight, but this is enough for some effect with the moon.
+	}
+	if (!drawer->getFlagRealisticStarVisibility())
+	{
+		// In non-realistic daytime visibility mode, keep the Milky Way readable
+		// over bright blue sky while moderating additive brightness slightly.
+		atmFactor = qMax(atmFactor, 0.85f);
 	}
 	//omgr->addToExtraInfoString(StelObject::DebugAid, QString("AtmFactor: %1<br/>").arg(QString::number(atmFactor, 'f', 4)));
 	c*=atmFactor*atmFactor;

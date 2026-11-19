@@ -12595,6 +12595,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["atmosphereVisualStrength"] = drawer->getAtmosphereVisualStrength();
 			result["starLimitMagnitude"] = drawer->getStarLimitMagnitude();
 			result["limitMagnitude"] = drawer->getLimitMagnitude();
+			result["skyObjectLimitLuminance"] = drawer->getSkyObjectLimitLuminance();
+			result["limitLuminance"] = drawer->getLimitLuminance();
 			result["extinctionCoefficient"] = drawer->getExtinctionCoefficient();
 			result["fog"] = lmgr->getFlagFog();
 			result["ground"] = lmgr->getFlagLandscape();

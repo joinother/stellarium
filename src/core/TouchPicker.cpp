@@ -546,7 +546,7 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 			const float wideFovLabelPenalty = (ctx.fov > 75.0)
 				? static_cast<float>(qMin(2.4, 5.0 * std::log10(ctx.fov / 75.0)))
 				: 0.f;
-			const float maxMagLabels = core->getSkyDrawer()->getLimitMagnitude() - 2.f
+			const float maxMagLabels = core->getSkyDrawer()->getSkyObjectLimitMagnitude() - 2.f
 				+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f - wideFovLabelPenalty;
 			const QList<StelObjectP> nebulae = nebulaMgr->searchAround(tapDirection, fovRadiusDeg, core);
 			for (const StelObjectP& nebula : nebulae)

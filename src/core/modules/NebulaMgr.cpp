@@ -959,7 +959,7 @@ double NebulaMgr::getMaxSizeLimit() const
 
 float NebulaMgr::computeMaxMagHint(const StelSkyDrawer* skyDrawer) const
 {
-	return skyDrawer->getLimitMagnitude()*1.2f-2.f+static_cast<float>(hintsAmount *1.)-2.f;
+	return skyDrawer->getSkyObjectLimitMagnitude()*1.2f-2.f+static_cast<float>(hintsAmount *1.)-2.f;
 }
 
 // Draw all the Nebulae and call drawing the pointer if needed
@@ -1000,7 +1000,7 @@ void NebulaMgr::draw(StelCore* core)
 		const float wideFovLabelPenalty = (fovDeg > 75.f)
 			? std::min(2.4f, 5.0f * std::log10(fovDeg / 75.f))
 			: 0.f;
-		float maxMagLabels = skyDrawer->getLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f - wideFovLabelPenalty;
+		float maxMagLabels = skyDrawer->getSkyObjectLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f - wideFovLabelPenalty;
 		const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Nebula");
 		DrawNebulaFuncObject func(maxMagHints, maxMagLabels, &sPainter, core, drawStats, drawCandidates,
 			layout, selected.isEmpty() ? nullptr : selected.constFirst().data());
