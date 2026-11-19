@@ -68,6 +68,10 @@ export class TimeWheelController {
     this.stopInertia()
   }
 
+  isInteracting(): boolean {
+    return this.store.timeWheelDragging || this.inertiaActive
+  }
+
   selectUnit(unit: string): void {
     this.store.timeWheelUnit = unit
     this.store.timeWheelDragging = false
@@ -116,9 +120,10 @@ export class TimeWheelController {
         this.onTick(++this.hapticTickCounter)
       }
       this.store.timeWheelVisualOffset = this.dragCarry
-      this.lastVisualVelocity = effectiveDelta / elapsedMs
+      const instantVelocity = effectiveDelta / elapsedMs
+      this.lastVisualVelocity = this.lastVisualVelocity * 0.45 + instantVelocity * 0.55
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
-      const sendNative = now - this.lastNativePushMs >= 64
+      const sendNative = now - this.lastNativePushMs >= 16
       this.applyDate(local, false, sendNative)
       if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
         this.rebaseTrackAtCenter()
@@ -181,12 +186,18 @@ export class TimeWheelController {
 
   private applyDate(local: Date, refreshTicks: boolean, sendNative: boolean): void {
     this.lastInputMs = Date.now()
-    this.store.timeWheelYear = local.getUTCFullYear()
-    this.store.timeWheelMonth = local.getUTCMonth() + 1
-    this.store.timeWheelDay = local.getUTCDate()
-    this.store.timeWheelHour = local.getUTCHours()
-    this.store.timeWheelMinute = local.getUTCMinutes()
-    this.store.timeWheelSecond = local.getUTCSeconds()
+    const year = local.getUTCFullYear()
+    const month = local.getUTCMonth() + 1
+    const day = local.getUTCDate()
+    const hour = local.getUTCHours()
+    const minute = local.getUTCMinutes()
+    const second = local.getUTCSeconds()
+    if (this.store.timeWheelYear !== year) { this.store.timeWheelYear = year }
+    if (this.store.timeWheelMonth !== month) { this.store.timeWheelMonth = month }
+    if (this.store.timeWheelDay !== day) { this.store.timeWheelDay = day }
+    if (this.store.timeWheelHour !== hour) { this.store.timeWheelHour = hour }
+    if (this.store.timeWheelMinute !== minute) { this.store.timeWheelMinute = minute }
+    if (this.store.timeWheelSecond !== second) { this.store.timeWheelSecond = second }
     if (refreshTicks) { this.store.refreshTicks() }
     if (sendNative) {
       const targetJd = local.getTime() / 86400000.0 + 2440587.5 - this.getUtcOffsetHours() / 24.0
@@ -239,7 +250,7 @@ export class TimeWheelController {
         this.onTick(++this.hapticTickCounter)
       }
       const local = this.store.dateAtFraction(this.gestureBaseMs, this.gestureSteps)
-      const sendNative = now - this.lastNativePushMs >= 64
+      const sendNative = now - this.lastNativePushMs >= 16
       this.applyDate(local, false, sendNative)
       if (Math.abs(this.store.timeWheelVisualOffset) >= this.store.tickSpacing * 8) {
         this.rebaseTrackAtCenter()
@@ -255,15 +266,14 @@ export class TimeWheelController {
 
   private velocityMultiplier(speed: number): number {
     let baseMultiplier = 1.0
-    if (this.store.timeWheelUnit === 'year') { baseMultiplier = 0.07 }
-    else if (this.store.timeWheelUnit === 'month') { baseMultiplier = 0.08 }
-    else if (this.store.timeWheelUnit === 'day') { baseMultiplier = 0.2 }
-    else if (this.store.timeWheelUnit === 'hour') { baseMultiplier = 0.06 }
-    else if (this.store.timeWheelUnit === 'minute') { baseMultiplier = 0.25 }
-    if (speed < 0.35) { return baseMultiplier }
-    if (speed < 0.8) { return baseMultiplier * 2.0 }
-    if (speed < 1.4) { return baseMultiplier * 4.0 }
-    return baseMultiplier * 8.0
+    if (this.store.timeWheelUnit === 'year') { baseMultiplier = 0.55 }
+    else if (this.store.timeWheelUnit === 'month') { baseMultiplier = 0.65 }
+    else if (this.store.timeWheelUnit === 'day') { baseMultiplier = 0.85 }
+    else if (this.store.timeWheelUnit === 'hour') { baseMultiplier = 0.85 }
+    else if (this.store.timeWheelUnit === 'minute') { baseMultiplier = 0.95 }
+    // 连续平滑加速曲线（取代 0.06x 极低阻尼与 2x/4x/8x 阶跃突变），保证慢拖跟手、快甩顺滑。
+    const boost = 1.0 + Math.min(2.6, Math.max(0, speed - 0.35) * 1.8)
+    return baseMultiplier * boost
   }
 
   private rebaseTrack(): void {

@@ -139,6 +139,30 @@ void Comet::translateName(const StelTranslator &translator)
 		nameI18 = QString("%1(%2)").arg(matchCometName.captured(1),translator.qtranslate(matchCometName.captured(2), "comet"));
 	else
 		nameI18 = translator.qtranslate(englishName, "comet");
+
+	if (nameI18 == englishName && translator.getTrueLocaleName().startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
+	{
+		static const QHash<QString, QString> zhComets = {
+			{QStringLiteral("1P/Halley (1986)"), QStringLiteral("哈雷彗星 (1P/Halley)")},
+			{QStringLiteral("1P/Halley"), QStringLiteral("哈雷彗星")},
+			{QStringLiteral("1I/2017 U1 (`Oumuamua)"), QStringLiteral("奥陌陌 (1I/2017 U1)")},
+			{QStringLiteral("2I/2019 Q4 (Borisov)"), QStringLiteral("鲍里索夫星际彗星 (2I/2019 Q4)")},
+			{QStringLiteral("C/1995 O1 (Hale-Bopp)"), QStringLiteral("海尔-波普彗星 (C/1995 O1)")},
+			{QStringLiteral("C/1996 B2 (Hyakutake)"), QStringLiteral("百武彗星 (C/1996 B2)")},
+			{QStringLiteral("C/2020 F3 (NEOWISE)"), QStringLiteral("新智彗星 (C/2020 F3)")},
+			{QStringLiteral("C/2006 P1 (McNaught)"), QStringLiteral("麦克诺特彗星 (C/2006 P1)")},
+			{QStringLiteral("C/2011 W3 (Lovejoy)"), QStringLiteral("洛夫乔伊彗星 (C/2011 W3)")},
+			{QStringLiteral("C/1965 S1-A (Ikeya-Seki)"), QStringLiteral("池谷-关彗星 (C/1965 S1-A)")},
+			{QStringLiteral("C/1975 V1 (West)"), QStringLiteral("威斯特彗星 (C/1975 V1)")},
+			{QStringLiteral("C/1956 R1 (Arend-Roland)"), QStringLiteral("阿伦德-罗兰彗星 (C/1956 R1)")},
+			{QStringLiteral("C/1969 Y1 (Bennett)"), QStringLiteral("贝内特彗星 (C/1969 Y1)")},
+			{QStringLiteral("C/2023 A3 (Tsuchinshan-ATLAS)"), QStringLiteral("紫金山-阿特拉斯彗星 (C/2023 A3)")},
+			{QStringLiteral("C/2026 C1 (Tsuchinshan)"), QStringLiteral("紫金山彗星 (C/2026 C1)")},
+		};
+		auto it = zhComets.constFind(englishName);
+		if (it != zhComets.constEnd())
+			nameI18 = it.value();
+	}
 }
 
 QString Comet::getInfoStringName(const StelCore *core, const InfoStringGroup& flags) const

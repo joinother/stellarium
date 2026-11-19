@@ -913,6 +913,9 @@ private:
 	QSharedPointer<Planet> earth, sun;
 	Vec3f defaultHintColor;
 	int labelFontSize;
+	quint32 updateFrameCounter = 0;
+	double lastUpdateJD = 0.0;
+	bool forceFullUpdate = true;
 	
 	//! @name Updater module
 	//@{

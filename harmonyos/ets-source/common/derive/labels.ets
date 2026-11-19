@@ -35,16 +35,16 @@ export function satelliteLocalizedName(raw: string): string {
     return traditional ? '國際太空站（科學號艙段）' : '国际空间站（科学号舱段）'
   }
   if (key === 'CSSTIANHE' || key === 'TIANGONGTIANHE' || key === 'TIANHE') {
-    return traditional ? '中國空間站（天和核心艙）' : '中国空间站（天和核心舱）'
+    return traditional ? '天宮空間站（天和核心艙）' : '天宫空间站（天和核心舱）'
   }
   if (key === 'CSSWENTIAN' || key === 'WENTIAN') {
-    return traditional ? '中國空間站（問天實驗艙）' : '中国空间站（问天实验舱）'
+    return traditional ? '天宮空間站（問天實驗艙）' : '天宫空间站（问天实验舱）'
   }
   if (key === 'CSSMENGTIAN' || key === 'MENGTIAN') {
-    return traditional ? '中國空間站（夢天實驗艙）' : '中国空间站（梦天实验舱）'
+    return traditional ? '天宮空間站（夢天實驗艙）' : '天宫空间站（梦天实验舱）'
   }
   if (key === 'CSS' || key === 'TIANGONG') {
-    return traditional ? '中國空間站' : '中国空间站'
+    return traditional ? '天宮空間站' : '天宫空间站'
   }
   if (/^JILIN[-_ ]*1/i.test(value)) {
     const suffix = value.replace(/^JILIN[-_ ]*1/i, '').trim()
@@ -54,20 +54,29 @@ export function satelliteLocalizedName(raw: string): string {
   const prefixes: SatelliteNamePrefix[] = [
     { token: 'STARLINK', label: traditional ? '星鏈' : '星链' },
     { token: 'BEIDOU', label: '北斗' },
+    { token: 'QIANFAN', label: '千帆' },
+    { token: 'HULIANWANG DIGUI', label: traditional ? '互聯低軌' : '互联低轨' },
+    { token: 'HULIANWANG', label: traditional ? '互聯衛星' : '互联卫星' },
     { token: 'TIANLIAN', label: traditional ? '天鏈' : '天链' },
     { token: 'TIANTONG', label: '天通' },
+    { token: 'TIANHUI', label: traditional ? '天繪' : '天绘' },
+    { token: 'TIANQI', label: traditional ? '天啟' : '天启' },
     { token: 'FENGYUN', label: traditional ? '風雲' : '风云' },
     { token: 'YAOGAN', label: traditional ? '遙感' : '遥感' },
     { token: 'GAOFEN', label: '高分' },
     { token: 'SHIJIAN', label: traditional ? '實踐' : '实践' },
-    { token: 'SHIYAN', label: traditional ? '實驗' : '实验' },
+    { token: 'SHIYAN', label: traditional ? '試驗' : '试验' },
     { token: 'ZIYUAN', label: traditional ? '資源' : '资源' },
+    { token: 'HAIYANG', label: '海洋' },
+    { token: 'YUNHAI', label: traditional ? '雲海' : '云海' },
+    { token: 'CHUANGXIN', label: traditional ? '創新' : '创新' },
     { token: 'JILIN', label: '吉林' },
+    { token: 'ONEWEB', label: traditional ? '一網' : '一网' },
     { token: 'GLONASS', label: traditional ? '格洛納斯' : '格洛纳斯' },
     { token: 'GALILEO', label: '伽利略' },
     { token: 'IRIDIUM', label: traditional ? '銥星' : '铱星' },
     { token: 'GLOBALSTAR', label: '全球星' },
-    { token: 'INTELSAT', label: traditional ? '國際通信衛星' : '国际通信卫星' },
+    { token: 'INTELSAT', label: traditional ? '國際通信' : '国际通信' },
     { token: 'GONETS', label: '戈涅斯' },
     { token: 'COSMOS', label: traditional ? '宇宙號' : '宇宙号' },
     { token: 'QZSS', label: traditional ? '準天頂' : '准天顶' }

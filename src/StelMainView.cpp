@@ -2023,6 +2023,10 @@ static std::atomic_uint64_t s_ohosScriptStartGeneration{0};
 // Device pose samples supersede one another. Keeping a dedicated latest-value
 // slot prevents the render thread from replaying stale gyro positions.
 static std::function<void()> s_pendingGyroCommand;
+// Time-wheel scrub seeks also supersede one another: keeping a single
+// latest-value slot eliminates command-queue backlog and cache churn during
+// high-frequency time scrubbing.
+static std::function<void()> s_pendingTimeCommand;
 // View-altitude-based landscape auto-fade (port feature). When the observer
 // TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
 // ground texture gradually becomes transparent so the lower-hemisphere sky is
@@ -2274,9 +2278,14 @@ static void ohosDrainCommandQueue()
 	QList<std::function<void()>> batch;
 	{
 		QMutexLocker lock(&s_ohosCmdQueueMutex);
-		if (s_ohosCmdQueue.isEmpty() && !s_pendingGyroCommand)
+		if (s_ohosCmdQueue.isEmpty() && !s_pendingGyroCommand && !s_pendingTimeCommand)
 			return;
 		batch.swap(s_ohosCmdQueue);
+		if (s_pendingTimeCommand)
+		{
+			batch.append(std::move(s_pendingTimeCommand));
+			s_pendingTimeCommand = {};
+		}
 		if (s_pendingGyroCommand)
 		{
 			batch.append(std::move(s_pendingGyroCommand));
@@ -2884,6 +2893,15 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
 			s_pendingGyroCommand = [command]() { command(); };
+			result["ok"] = false;
+			result["error"] = "pending";
+			result["pending"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		if (cmdName == "setTimeToJD")
+		{
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			s_pendingTimeCommand = [command]() { command(); };
 			result["ok"] = false;
 			result["error"] = "pending";
 			result["pending"] = true;
@@ -5612,8 +5630,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	static QByteArray response;
 	const QString commandName = QString::fromUtf8(command ? command : "");
 	const QString arg = QString::fromUtf8(payload ? payload : "");
-	// 高频命令（dragView/zoomBy/panBy）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
-	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition")
+	// 高频命令（dragView/zoomBy/panBy/setTimeToJD）不打日志，避免每秒数十条 qInfo 造成 CPU/IO 开销
+	if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition" && commandName != "setTimeToJD")
 		qInfo() << "[StellariumOhos] command received:" << commandName << arg;
 
 	if (commandName == "getFPS")
@@ -5702,7 +5720,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 	const QString json = runOhosCommandOnQtThread(commandName + "|" + arg, [commandName, arg]() -> QJsonObject {
 		QJsonObject result;
 		result["ok"] = false;
-		if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition")
+		if (commandName != "dragView" && commandName != "zoomBy" && commandName != "panBy" && commandName != "setGyroView" && commandName != "getGyroGuidePosition" && commandName != "setTimeToJD")
 			qInfo() << "[StellariumOhos] command on Qt thread:" << commandName;
 
 		StelActionMgr* actionMgr = StelApp::getInstance().getStelActionManager();
@@ -6418,6 +6436,11 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 					if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
 						objects += satellites->listAllObjectsForCatalog(true);
 				}
+				else if (moduleId == QLatin1String("Satellites"))
+				{
+					if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+						objects = satellites->listAllObjectsForCatalog(true);
+				}
 				else
 					objects = objectMgr->listAllModuleObjects(moduleId, true);
 				qInfo() << "[StellariumOhos][catalog-select] module=" << moduleId
@@ -6512,6 +6535,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			const SatelliteP selectedSatellite = found && !objectMgr->getSelectedObject().isEmpty()
 				? qSharedPointerDynamicCast<Satellite>(objectMgr->getSelectedObject().constFirst()) : SatelliteP();
+			if (selectedSatellite && !selectOnly)
+			{
+				if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+				{
+					if (!satellites->getFlagHintsVisible())
+						satellites->setFlagHintsVisible(true);
+				}
+			}
 			const bool selectedInvalidOrbit = selectedSatellite && !selectedSatellite->isOrbitValid();
 			if (found && !selectOnly && movementMgr && !objectMgr->getSelectedObject().isEmpty() && !selectedObserverPlanet && !selectedInvalidOrbit)
 			{
@@ -6883,6 +6914,37 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			list = objectMgr->listAllModuleObjects(QStringLiteral("SolarSystem:artificial"), inEnglish);
 			if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
 				list += satellites->listAllObjectsForCatalog(inEnglish);
+		}
+		else if (moduleId == QLatin1String("Satellites"))
+		{
+			if (auto* satellites = static_cast<Satellites*>(StelApp::getInstance().getModuleMgr().getModule(QStringLiteral("Satellites"), true)))
+			{
+				list = satellites->listAllObjectsForCatalog(inEnglish);
+				// Deterministic priority sort so iconic space stations and bright satellites
+				// appear at the top of the Search -> Satellites catalog instead of raw debris IDs.
+				auto satRank = [](const QPair<QString, StelObjectP>& pair) -> int {
+					const StelObjectP& obj = pair.second;
+					if (!obj) return 99;
+					const QString id = obj->getID();
+					if (id == QLatin1String("48274")) return 0; // Tiangong (Tianhe)
+					if (id == QLatin1String("25544")) return 1; // ISS (Zarya)
+					if (id == QLatin1String("20580")) return 2; // Hubble Space Telescope
+					const QString en = obj->getEnglishName().toUpper();
+					if (en.startsWith(QLatin1String("CSS (")) || en.startsWith(QLatin1String("ISS "))
+						|| en.startsWith(QLatin1String("TIANGONG"))) return 3;
+					if (en.startsWith(QLatin1String("BEIDOU")) || en.startsWith(QLatin1String("FENGYUN"))
+						|| en.startsWith(QLatin1String("NOAA")) || en.startsWith(QLatin1String("GPS "))
+						|| en.startsWith(QLatin1String("GALILEO"))) return 4;
+					if (en.startsWith(QLatin1String("STARLINK"))) return 6;
+					return 5;
+				};
+				std::stable_sort(list.begin(), list.end(), [&](const QPair<QString, StelObjectP>& a, const QPair<QString, StelObjectP>& b) {
+					const int ra = satRank(a);
+					const int rb = satRank(b);
+					if (ra != rb) return ra < rb;
+					return a.first.compare(b.first, Qt::CaseInsensitive) < 0;
+				});
+			}
 		}
 		else
 			list = objectMgr->listAllModuleObjects(moduleId, inEnglish);
@@ -7820,6 +7882,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				s_ohosZoomAnchorObject.clear();
 				s_ohosCaptureSelectedAnchorAfterPan = false;
+				if (movementMgr)
+					movementMgr->setFlagLockEquPos(false);
 			}
 			result["ok"] = true;
 			result["viewLock"] = s_viewLock;
@@ -10502,6 +10566,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelCore* core = StelApp::getInstance().getCore();
 			core->setJD(jd);
 			core->setTimeRate(0.0);
+			markOhosInteraction();
 			result["ok"] = true;
 			result["jd"] = jd;
 			result["mjd"] = jd - 2400000.5;

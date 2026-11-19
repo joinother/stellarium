@@ -40,6 +40,9 @@
 #include "StelProgressController.hpp"
 #include "StelUtils.hpp"
 #include "StelActionMgr.hpp"
+#include "StelSkyDrawer.hpp"
+#include "MarkerVisibility.hpp"
+#include <algorithm>
 
 #if USE_BUNDLED_QTCOMPRESS
 #include "external/qtcompress/qzipreader.h"
@@ -3397,6 +3400,7 @@ void Satellites::finishDownloadBatch()
 void Satellites::updateObserverLocation(const StelLocation &loc)
 {
 	Q_UNUSED(loc)
+	forceFullUpdate = true;
 	recalculateOrbitLines();
 }
 
@@ -4039,23 +4043,79 @@ void Satellites::update(double deltaTime)
 {
 	// Separated because first test should be very fast.
 	if (!hintFader && hintFader.getInterstate() <= 0.f)
+	{
+		forceFullUpdate = true;
 		return;
+	}
 
 	static const StelCore *core = StelApp::getInstance().getCore();
 
 	if (qAbs(core->getTimeRate())>=Satellite::timeRateLimit) // Do not show satellites when time rate is over limit
+	{
+		forceFullUpdate = true;
 		return;
+	}
 
 	if (core->getCurrentPlanet()!=earth || !isValidRangeDates(core))
 		return;
 
 	hintFader.update(static_cast<int>(deltaTime*1000));
 	const double JD=core->getJD();
-#ifdef Q_OS_OHOS
 	const QList<StelObjectP> selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
+	const Satellite* selectedSat = selected.isEmpty() ? nullptr : static_cast<const Satellite*>(selected.first().data());
+#ifdef Q_OS_OHOS
 	for (const auto& sat : std::as_const(satellites))
 		sat->orbitPreview = !selected.isEmpty() && selected.first().data() == sat.data();
 #endif
+
+	// Precompute unit Sun direction once per frame for all Satellite::update() calls.
+	if (sun)
+	{
+		Vec3d sunDir = sun->getJ2000EquatorialPos(core);
+		const double sunNorm = sunDir.norm();
+		if (sunNorm > 0.)
+		{
+			Satellite::frameSunUnitJ2000 = sunDir / sunNorm;
+			Satellite::frameSunUnitValid = true;
+		}
+		else
+		{
+			Satellite::frameSunUnitValid = false;
+		}
+	}
+	else
+	{
+		Satellite::frameSunUnitValid = false;
+	}
+
+	const quint32 tick = updateFrameCounter++;
+	const bool timeScrubJump = std::abs(JD - lastUpdateJD) > (5.0 / 86400.0)
+		|| qAbs(core->getTimeRate()) > 10.0;
+#ifdef Q_OS_OHOS
+	static quint32 s_lastTimeJumpTick = 0;
+	static bool s_pendingSettleFullRefresh = false;
+	bool fullRefresh = forceFullUpdate || satellites.size() <= 500;
+	if (timeScrubJump)
+	{
+		s_lastTimeJumpTick = tick;
+		s_pendingSettleFullRefresh = true;
+		// During continuous time scrubbing / fast-forward on mobile, keep SGP4
+		// inside the compact single-threaded tiered budget instead of blocking
+		// every frame with an 18k-satellite QtConcurrent full pass.
+	}
+	else if (s_pendingSettleFullRefresh && (tick - s_lastTimeJumpTick) >= 4u)
+	{
+		s_pendingSettleFullRefresh = false;
+		fullRefresh = true;
+	}
+#else
+	const bool fullRefresh = forceFullUpdate
+		|| satellites.size() <= 500
+		|| timeScrubJump;
+#endif
+	lastUpdateJD = JD;
+	forceFullUpdate = false;
+
 #if (QT_VERSION<QT_VERSION_CHECK(6,0,0))
 	for (const auto& sat : std::as_const(satellites))
 	{
@@ -4063,14 +4123,71 @@ void Satellites::update(double deltaTime)
 			sat->update(core, JD);
 	}
 #else
-	const auto updateSat = [JD](QSharedPointer<Satellite>& sat){
-		if (sat->initialized && sat->displayed)
+	if (fullRefresh)
+	{
+		const auto updateSat = [JD](QSharedPointer<Satellite>& sat){
+			if (sat->initialized && sat->displayed)
+				sat->update(core, JD, false);
+		};
+		QtConcurrent::blockingMap(QThreadPool::globalInstance(), satellites, updateSat);
+	}
+	else
+	{
+		// Tiered staggered SGP4 propagation for large catalogs (18k+ satellites):
+		// - Tier 0 (every frame): uninitialized, selected, ISS/stations, active orbit.
+		// - Tier 1 (every 3 frames, ~100ms): visibly drawn on-screen above horizon.
+		// - Tier 2 (every 16 frames, ~500ms): above horizon band but off-screen / faint.
+		// - Tier 3 (every 64 frames, ~2.0s): below horizon (altitude < -2 deg).
+		// On HarmonyOS mobile big.LITTLE SoCs, running the compact staggered batch
+		// on the active render thread avoids waking all worker cores every frame
+		// (which otherwise triggers thermal throttling and starves GL draw calls).
+		static const QString grpStations = QStringLiteral("space stations");
+		QVector<Satellite*> batch;
+		batch.reserve(1024);
+		for (int i = 0; i < satellites.size(); ++i)
+		{
+			Satellite* sat = satellites.at(i).data();
+			if (!sat || !sat->initialized || !sat->displayed)
+				continue;
+			const bool tier0 = !sat->hasUpdatedOnce
+				|| sat == selectedSat
+				|| sat->isISS
+				|| sat->orbitDisplayed
+				|| sat->groups.contains(grpStations);
+			if (tier0)
+			{
+				batch.append(sat);
+				continue;
+			}
+			quint32 stride = 64u;
+			if (sat->lastFrameOnScreen)
+				stride = 3u;
+			else if (sat->elAzPosition[2] >= -0.035)
+				stride = 16u;
+			if (((static_cast<quint32>(i) + tick) % stride) == 0u)
+				batch.append(sat);
+		}
+#ifdef Q_OS_OHOS
+		for (Satellite* sat : batch)
 			sat->update(core, JD, false);
-	};
-	QtConcurrent::blockingMap(QThreadPool::globalInstance(), satellites, updateSat);
+#else
+		if (batch.size() >= 512)
+		{
+			const auto updatePtr = [JD](Satellite* sat){ sat->update(core, JD, false); };
+			QtConcurrent::blockingMap(QThreadPool::globalInstance(), batch, updatePtr);
+		}
+		else
+		{
+			for (Satellite* sat : batch)
+				sat->update(core, JD, false);
+		}
+#endif
+	}
+	Satellite::frameSunUnitValid = false;
 	if (getFlagOrbitLines())
 		for (const auto& sat : std::as_const(satellites))
-			sat->updateOrbitLines();
+			if (sat->shouldDisplayOrbit())
+				sat->updateOrbitLines();
 #endif
 }
 
@@ -4102,16 +4219,195 @@ void Satellites::draw(StelCore* core)
 	painter.setFont(font);
 	Satellite::hintBrightness = hintFader.getInterstate();
 	const auto selectedLabels = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Satellite");
-	painter.beginSkyLabels("satellites", selectedLabels.isEmpty() ? QString() : selectedLabels.first()->getID());
+	const QString selectedId = selectedLabels.isEmpty() ? QString() : selectedLabels.first()->getID();
+	painter.beginSkyLabels("satellites", selectedId);
 
 	painter.setBlending(true);
 	Satellite::hintTexture->bind();
 	Satellite::viewportHalfspace = painter.getProjector()->getBoundingCap();
+
+	StelSkyDrawer* sd = core->getSkyDrawer();
+	Satellite::FrameDrawContext frameCtx;
+	frameCtx.limitMag = sd ? sd->getLimitMagnitude() : 0.f;
+	frameCtx.currentJD = core->getJD();
+	frameCtx.timeRateOk = true;
+	frameCtx.checkLandscape = false;
+	const PlanetP moonObj = GETSTELMODULE(SolarSystem)->getMoon();
+	if (sun)
+	{
+		frameCtx.sunPos = sun->getJ2000EquatorialPos(core);
+		frameCtx.sunAngRad = sun->getSpheroidAngularRadius(core);
+		frameCtx.hasSun = true;
+	}
+	if (moonObj)
+	{
+		frameCtx.moonPos = moonObj->getJ2000EquatorialPos(core);
+		frameCtx.moonAngRad = moonObj->getSpheroidAngularRadius(core);
+		frameCtx.hasMoon = true;
+	}
+
+	struct SatLabelCandidate
+	{
+		const Satellite* sat;
+		float magSat;
+		float txtMag;
+		Vec3f color;
+		float opacity;
+		int rank; // higher is more important (selected > station/ISS > visible > others)
+	};
+	struct SatTransitDraw
+	{
+		const Satellite* sat;
+		int spriteSize;
+	};
+	QVector<SatLabelCandidate> labelCandidates;
+	labelCandidates.reserve(128);
+	QVector<SatTransitDraw> transitDraws;
+	QVector<Satellite*> orbitDraws;
+
+	static const Vec3f whiteColor(1.f, 1.f, 1.f);
+	static const QString grpStations = QStringLiteral("space stations");
+	const bool drawOrbits = Satellite::orbitLinesFlag && core->getFlagClearSky();
+	const bool iconic = Satellite::iconicModeFlag;
+	const bool brightDaylight = core->isBrightDaylight();
+	const bool groundOccludes = core->getVisibleSkyArea().d > -0.99;
+
+	if (!iconic && sd)
+		sd->preDrawPointSource(&painter);
+
 	for (const auto& sat : std::as_const(satellites))
 	{
-		if (sat && sat->initialized && sat->displayed)
-			sat->draw(core, painter);
+		if (!sat || !sat->initialized || !sat->displayed || !sat->orbitValid)
+			continue;
+
+		const bool needsOrbit = drawOrbits && sat->shouldDisplayOrbit();
+		if (groundOccludes && sat->elAzPosition[2] < -0.025 && !needsOrbit)
+		{
+			sat->lastFrameOnScreen = false;
+			continue;
+		}
+
+		const SatelliteRenderState st = sat->getRenderState(core, prj.data(), true, &frameCtx);
+		sat->lastFrameOnScreen = st.projectable
+			&& (st.pointDrawn || (iconic && st.iconDrawn && sat->visibility == gSatWrapper::VISIBLE))
+			&& (sat->elAzPosition[2] >= -0.035);
+
+		if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch
+			|| !st.altitudeFilterPass || !st.magnitudeFilterPass)
+			continue;
+
+		if (st.projectable)
+		{
+			const bool isSelected = !selectedId.isEmpty() && sat->id == selectedId;
+			if (!iconic)
+			{
+				if (st.transitSunMoon)
+				{
+					if (st.pointDrawn)
+						transitDraws.append({sat.data(), st.spriteSize});
+					if (st.labelDrawn)
+					{
+						const Vec3f lblCol = brightDaylight ? Satellite::transitSatelliteColor : whiteColor;
+						const float lblAlpha = brightDaylight ? 1.f : Satellite::hintBrightness;
+						labelCandidates.append({sat.data(), st.magSat, st.txtMag, lblCol, lblAlpha, isSelected ? 4 : 3});
+					}
+				}
+				else
+				{
+					if (st.pointDrawn && sd)
+					{
+						RCMag rcMag;
+						Vec3f vf(sat->XYZ.toVec3f());
+						Vec3f altAz(vf);
+						altAz.normalize();
+						core->j2000ToAltAzInPlaceNoRefraction(&altAz);
+						sd->computeRCMag(st.magSat, &rcMag);
+						sd->drawPointSource(&painter, vf.toVec3d(), rcMag, whiteColor * Satellite::hintBrightness,
+							true, qMin(1.0f, 1.0f - 0.9f * altAz[2]));
+					}
+					if (st.labelDrawn)
+					{
+						const float labelOpacity = Satellite::hintBrightness * MarkerVisibility::magnitudeOpacity(st.txtMag, st.limitMag);
+						if (labelOpacity > 0.01f)
+						{
+							Vec3f lblCol = Satellite::invisibleSatelliteColor;
+							if (sat->visibility == gSatWrapper::VISIBLE)
+								lblCol = sat->hintColor;
+							else if (sat->visibility == gSatWrapper::PENUMBRAL)
+								lblCol = 0.5f * sat->hintColor;
+							int rank = 0;
+							if (isSelected) rank = 4;
+							else if (sat->isISS || sat->groups.contains(grpStations)) rank = 3;
+							else if (sat->visibility == gSatWrapper::VISIBLE) rank = 2;
+							else if (sat->visibility == gSatWrapper::PENUMBRAL) rank = 1;
+							labelCandidates.append({sat.data(), st.magSat, st.txtMag, lblCol, labelOpacity, rank});
+						}
+					}
+				}
+			}
+			else if (st.iconDrawn)
+			{
+				Vec3f drawColor = (Satellite::coloredInvisibleSatellitesFlag && sat->visibility != gSatWrapper::VISIBLE)
+					? Satellite::invisibleSatelliteColor : sat->hintColor;
+				if (sat->visibility == gSatWrapper::PENUMBRAL)
+					drawColor = (Satellite::invisibleSatelliteColor + sat->hintColor) * 0.5f;
+				if (st.transitSunMoon)
+					drawColor = Satellite::transitSatelliteColor;
+				painter.setColor(drawColor, st.transitSunMoon ? 1.f : Satellite::hintBrightness);
+				painter.drawSprite2dMode(sat->XYZ, 11);
+
+				if (st.labelDrawn)
+				{
+					int rank = 0;
+					if (isSelected) rank = 4;
+					else if (sat->isISS || sat->groups.contains(grpStations)) rank = 3;
+					else if (sat->visibility == gSatWrapper::VISIBLE) rank = 2;
+					else if (sat->visibility == gSatWrapper::PENUMBRAL) rank = 1;
+					labelCandidates.append({sat.data(), st.magSat, st.txtMag, drawColor,
+						st.transitSunMoon ? 1.f : Satellite::hintBrightness, rank});
+				}
+			}
+		}
+
+		if (drawOrbits && sat->shouldDisplayOrbit() && sat->orbitValid)
+			orbitDraws.append(sat.data());
 	}
+
+	if (!iconic && sd)
+		sd->postDrawPointSource(&painter);
+
+	if (!transitDraws.isEmpty())
+	{
+		painter.setBlending(true);
+		Satellite::hintTexture->bind();
+		painter.setColor(Satellite::transitSatelliteColor, 1.f);
+		for (const SatTransitDraw& td : transitDraws)
+			painter.drawSprite2dMode(td.sat->XYZ, td.spriteSize);
+	}
+
+	// Cap queued labels to the top 64 highest-priority / brightest satellites so
+	// QFontMetrics and ScreenLabelLayout never choke on 5,000+ Starlink labels.
+	constexpr int kMaxSatelliteLabels = 64;
+	if (labelCandidates.size() > kMaxSatelliteLabels)
+	{
+		std::partial_sort(labelCandidates.begin(), labelCandidates.begin() + kMaxSatelliteLabels, labelCandidates.end(),
+			[](const SatLabelCandidate& a, const SatLabelCandidate& b) {
+				if (a.rank != b.rank) return a.rank > b.rank;
+				if (a.magSat != b.magSat) return a.magSat < b.magSat;
+				return a.sat->id < b.sat->id;
+			});
+		labelCandidates.resize(kMaxSatelliteLabels);
+	}
+	for (const SatLabelCandidate& lc : labelCandidates)
+	{
+		lc.sat->lastFrameOnScreen = true;
+		painter.setColor(lc.color, lc.opacity);
+		painter.queueSkyLabel(lc.sat->id, lc.sat->XYZ, lc.sat->getNameI18n(), lc.magSat, lc.rank, 10, 10);
+	}
+
+	for (Satellite* orbitSat : orbitDraws)
+		orbitSat->drawOrbit(core, painter);
+
 	painter.flushSkyLabels();
 
 	// In screen accumulation mode (star trails), circles or pointer should be suppressed.

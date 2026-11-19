@@ -309,3 +309,37 @@ test('supermoon full moon preserves distanceKm and formats bilingual title and n
   assert.equal(en[0].title, 'Supermoon');
   assert.match(en[0].body, /perigee/i);
 });
+
+test('dynamic astronomy calendar copy adapts to hemisphere, moon phase, micromoon, Bortle tier, shower profile and planetary separation', () => {
+  const juneSolstice = event(2026, 6, 21, 11, 'solar-term');
+  const north = calendarNativeEvents(response(2026, 6, [juneSolstice]), calendarMonth(2026, 6), 'zh_CN', { latitude: 39.9 });
+  const south = calendarNativeEvents(response(2026, 6, [juneSolstice]), calendarMonth(2026, 6), 'zh_CN', { latitude: -33.8 });
+  assert.match(north[0].body, /夏至/);
+  assert.match(south[0].body, /南半球迎来入冬至点/);
+
+  const micromoon = {
+    id: 'moon-phase-micro-2', kind: 'moon-phase', index: 2, phase: 'full-moon',
+    title: '满月', titleEn: 'Full Moon', jd: calendarJd(Date.UTC(2026, 5, 30, 0, 0)),
+    at: Date.UTC(2026, 5, 30, 0, 0), timeScale: 'UT', target: 'Moon', distanceKm: 405800, isSupermoon: false
+  };
+  const microZh = calendarNativeEvents(response(2026, 6, [micromoon]), calendarMonth(2026, 6), 'zh_CN');
+  assert.match(microZh[0].body, /微满月.*405,800 km/);
+
+  const shower = { ...event(2026, 8, 13), id: 'meteor-per', kind: 'meteor-peak', title: 'Perseids', titleEn: 'Perseids peak', target: 'Perseids', showerCode: 'PER' };
+  const darkSite = calendarNativeEvents(response(2026, 8, [shower]), calendarMonth(2026, 8), 'zh_CN', { bortleScale: 1 });
+  const citySite = calendarNativeEvents(response(2026, 8, [shower]), calendarMonth(2026, 8), 'zh_CN', { bortleScale: 8 });
+  assert.match(darkSite[0].body, /英仙座流星雨极大/);
+  assert.match(darkSite[0].body, /ZHR 约 100/);
+  assert.match(darkSite[0].body, /不受人造光污染/);
+  assert.match(citySite[0].body, /光污染严重/);
+
+  const planets = [
+    { ...event(2026, 11, 5), id: 'p-opp', kind: 'planetary-event', title: '木星冲日', titleEn: 'Jupiter opposition', target: 'Jupiter', primary: 'Jupiter', secondary: 'Sun', subtype: 'opposition' },
+    { ...event(2026, 11, 10), id: 'p-east', kind: 'planetary-event', title: '水星东大距', titleEn: 'Mercury greatest eastern elongation', target: 'Mercury', primary: 'Mercury', secondary: 'Sun', subtype: 'greatest-elongation', direction: 'east' },
+    { ...event(2026, 11, 15), id: 'p-conj', kind: 'planetary-event', title: '金星合木星', titleEn: 'Venus–Jupiter conjunction', target: 'Venus', primary: 'Venus', secondary: 'Jupiter', subtype: 'conjunction', separationDegrees: 0.75 }
+  ];
+  const pZh = calendarNativeEvents(response(2026, 11, planets), calendarMonth(2026, 11), 'zh_CN');
+  assert.match(pZh[0].body, /木星迎来冲日/);
+  assert.match(pZh[1].body, /日落后不久面向西方低空/);
+  assert.match(pZh[2].body, /金星与木星上演行星相合（最近角距约 0\.8°）/);
+});

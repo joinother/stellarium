@@ -1,5 +1,83 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-19] 时间调节“天不转地平线转”根因修复与全单位时间轮流畅度专项优化
+
+- **修改文件：** `src/StelMainView.cpp`、`plugins/Satellites/src/Satellites.cpp`、`harmonyos/ets-source/state/TimeWheelStore.ets`、`harmonyos/ets-source/state/TimeWheelController.ets`、`harmonyos/ets-source/panels/time/TimeWheelCanvas.ets`、`harmonyos/ets-source/capability/TimeController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **修复调时间时偶尔“天不转地平线转”：** 选中任意天体后原生自动开启静默视角锁 `s_viewLock = true`，调时间时 `ohosMaintainSelectedZoomAnchor()` 会强行锁住该天体的 J2000 方向导致星空定格、地平线翻滚。现于 `TimeController`（时间轮按下、快进/倒带、`±12h`）在用户未主动开启“跟踪”时自动静默下发 `setViewLock('0')`，且 `StelMainView.cpp` 在解除 `s_viewLock` 时同步清除 `flagLockEquPos`，确保地平线始终水平稳定、星空自然转动。
+  2. **修复年/月/日/时/分/秒全单位调时卡顿（7 项叠加瓶颈）：**
+     - **唤醒高刷渲染泵**：`setTimeToJD` 补齐 `markOhosInteraction()`，使 OHOS 渲染泵由 `33ms` 空闲态切入 `8ms` 交互高刷态。
+     - **最新值覆盖式命令槽**：在 `StelMainView.cpp` 为 `setTimeToJD` 新增独立覆盖槽 `s_pendingTimeCommand`（与 `s_pendingGyroCommand` 同级），彻底消除队列堆积与 `s_ohosCmdCache`/`s_ohosCmdInflight` JSON 抖动，并免去每秒上百条 `qInfo` 刷屏。
+     - **60Hz 推送 + 连续跟手灵敏度**：`TimeWheelController.ets` 原生推送间隔由 `64ms`（15.6 Hz）提升至 `16ms`（60 Hz）；移除原 `0.06×–0.25×` 极重阻尼与 `2×/4×/8×` 阶跃突变，改为平滑连续加速曲线（`year 0.55 / month 0.65 / day 0.85 / hour 0.85 / minute 0.95 / second 1.0`）并引入速度 EMA 平滑惯性；`TimeWheelStore.dateAtFraction()` 将“日”单位改为按小时连续插值（不再整 24h 跳变），同时保留年/月的同钟点防昼夜频闪逻辑。
+     - **消除 ArkUI 与卫星线程抖动**：`TimeWheelController.applyDate()` 仅在整数日期字段实际变化时写 `@Observed`；`TimeWheelCanvas` 触摸同步绘制后同步 `lastOffset`/`lastLabels` 消除单帧重复重绘；拖动期间暂停 `TimeController` 的 125ms/3s 后台轮询与面板 `backdropBlur`；`Satellites::update()` 在 OHOS 连续调时期间改走单线程轻量分片，待时间稳定后再执行一次全量收尾，避免每帧触发 18k 卫星 `QtConcurrent` 全量重算。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机验证：`test-ohos-time-panel.mjs`（3/3）、`test-ohos-time-transition.mjs`（3/3）、`test-ohos-screen-anchor.mjs`（5/5）、`test-selected-time-camera.py`（675 锚点 + 187,500 帧）、`check-ohos-ui-contract.mjs`、`check-ohos-command-catalog.mjs` 全通过。
+  - 真机实测：选中织女星（`viewLock=true`）后连续 4 次拖动时间轮，`viewLock` 自动解除为 `false`，`viewAltAz` 漂移 `< 0.01°`（地平线纹丝不动）；渲染泵由 `interval=33ms / maxFps=0 / 27 FPS` 提升至 `interval=8ms / maxFps=1 / total=20ms / 38.5+ FPS`。
+
+## [2026-11-19] 银河贴图切换为用户上传全景版（v2）+ 天象日历与通知系统原创双语动态文案升级
+
+- **修改文件：** `textures/milkyway.png`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/state/AstronomyCalendarText.ts`、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/capability/AstronomyCalendarController.ets`、`harmonyos/ets-source/capability/NotificationText.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-astronomy-calendar.mjs`、`scripts/test-ohos-notification-controller.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **更新内容：**
+  1. **银河贴图替换为新上传全景版：** 使用对应的无损母版 `最终_去麦哲伦云_2739x1024.png`，经 J2000 球面重投影自动寻优对齐（`lSign=-1, bSign=-1, lOff=120°, bSpan=60°`，相关性 `r = 0.7915`，平均亮度 `9.88` 精确匹配原版 `9.91`，外缘平滑余弦衰减至纯黑无极冠边、首尾 36px 融合无接缝）生成 `4096×2048` PNG（1.4 MB），并将 `MILKYWAY_TEXTURE_MARKER` 升级至 `.ohos_milkyway_ai_4k_v2` 确保覆盖安装自动刷新。
+  2. **天象日历原创中英双语动态文案与天文细节补全：**
+     - **月相 / 超级满月 / 微满月**：全月相附精确当地时刻；除近地点超级满月（≤ 360,000 km）外，补充远地点**微满月**（≥ 404,000 km）自动识别与地月距离说明。
+     - **流星雨三段式动态观测评估**：结合常见活跃流星雨 ZHR 与特征档案（象限仪、天琴、宝瓶座η、宝瓶座δ南、英仙、猎户、金牛座南/北、狮子、双子、小熊、天龙等 12 群），与「9 级月相干扰评估（解析太阳–月球距角）+ 7 级 Bortle 光污染与月光组合建议」动态拼接。
+     - **二十四节气与南北半球二分二至**：按观测者南北半球纬度自动切换季节与当地精确时刻，并为全部 24 节气补充应季星空观测看点（银河中心、冬季大三角、春季星系团等）。
+     - **行星天象精确化**：行星合补充实测角距（`separationDegrees`）与观测建议；区分内行星下合、外行星合日与上合的安全/不可见提示，完善冲日与东/西大距观星指引。
+  3. **通知系统原创双语情境推送文案：**
+     - `NotificationController.ets` 与 `NotificationText.ets` 升级 `eventReminderContent()`，覆盖新月、满月、超级满月、微满月、上下弦、二分二至与通用二十四节气、流星雨（按月光与 Bortle 城市/暗空光污染分级提示）、行星冲日、东西大距、行星合（附精确角距与今晚/明早窗口）、合日与卫星过境全部通知推送文案，并由 `MainWindowNativeNode.ets` 实时注入当前观测纬度与 Bortle 光污染等级。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机检查：`test-ohos-astronomy-calendar.mjs`、`test-ohos-notification-controller.mjs`（含双语翻译全覆盖校验）、`test-ohos-notification-services.mjs`（32/32）、`test-ohos-notification-integration.mjs`（10/10）、`test-ohos-reminder-contract.mjs`、`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs` 全部通过。
+
+## [2026-11-19] 4K AI 银河全景贴图重投影替换与双指上下滑调整星点亮度
+
+- **修改文件：** `textures/milkyway.png`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/panels/shell/HarmonyShell.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-sky-input.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **更新内容：**
+  1. **4K AI 银河全景贴图重投影替换：**
+     - 将用户 AI 生成的银道等距柱状图（`B_你的AI银河_2896x1448.jpg`）按 Stellarium 原生 `StelCore::matJ2000ToGalactic` 矩阵与 `MilkyWay.cpp` J2000 赤道投影（含 `l=180°` 24px 循环余弦接缝融合）重投影为 `4096×2048` PNG（2.6 MB），与原版 `textures/milkyway.png` 相关性达 `r = 0.8921`，平均亮度 `9.52`（原版 `9.86`），无缝替换 `textures/milkyway.png` 与 HAP `rawfile`。
+     - 在 `StellariumResourceBootstrap.ets` 增加一次性版本标记刷新 `refreshMilkyWayTexture()`（`.ohos_milkyway_ai_4k_v1`），确保已安装老版本覆盖升级时也能将新 4K 银河自动同步至 `filesDir`。
+  2. **双指上下滑调整星点亮度：**
+     - 在 `SkyInputController.ets` 中引入双指手势歧义消解状态机（`TWO_FINGER_UNDECIDED → PINCH / BRIGHTNESS`）：双指同向竖向平行滑动（竖向位移显著大于横向和间距变化）锁定亮度调节，双指张合锁定捏合缩放，互不冲突；抬起单指时抑制残留单指平移跳动。
+     - 通过真机实拍对比验证，锁定对数感知曲线仅驱动 `setAbsoluteStarScale`（0%→`0.12`，默认 50%→`1.00`，100%→`4.00`，32ms 节流并在松手时刷终值），保持 `relativeStarScale` 不变以避免压平星等层次或产生暗星雪花；启动时由 `getAbsoluteStarScale` 自动反算同步当前滑条值。
+     - 在 `HarmonyShell.ets` 新增顶部悬浮胶囊 HUD（`✦ 星点亮度 XX%` + 进度条，`HitTestMode.None`，松手后 1.2s 自动淡出），并在 `I18n.ets` 补充多语言文案。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机检查：`test-ohos-sky-input.mjs`（含双指亮度上下滑/钳制/单指抬起防跳/捏合不误触发）、`test-ohos-touchpad-contract.mjs`（15/15）、`test-ohos-location-panel.mjs`（17/17）、`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs`、`check-ohos-command-catalog.mjs`（423 命令）全部通过。
+  - 真机实测：升级覆盖安装后启动日志确认 `[startup] refreshed 4K AI Milky Way texture (2760526 bytes) in 35 ms`；南北半球实拍截图目视验证天鹅座恒星云、大暗隙、盾牌座/人马座恒星云、船底座星云与大麦哲伦云均精准对齐无接缝；`setAbsoluteStarScale(0.12)` 至 `4.00` 亮度极值切换星等层次自然流畅。
+
+## [2026-11-19] 搜索「人造卫星」为空修复、卫星星图/名称中文化统一、观测星球列表排序与译名补齐
+
+- **修改文件：** `plugins/Satellites/src/Satellite.cpp`、`plugins/Satellites/src/Satellites.cpp`、`src/StelMainView.cpp`、`src/core/modules/Planet.cpp`、`src/core/modules/Comet.cpp`、`src/core/modules/MinorPlanet.cpp`、`harmonyos/ets-source/common/derive/labels.ets`、`harmonyos/ets-source/state/SessionToolStore.ets`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **修复内容：**
+  1. **搜索「人造卫星」分类为空修复：** `src/StelMainView.cpp` 的 `listObjects` 与 `searchObject(catalog|...)` 补齐 `moduleId == "Satellites"` 分支，改走绕过 `hintFader` 的 `satellites->listAllObjectsForCatalog()`（与「人造天体」保持一致），并按「天宫/国际空间站/哈勃 → 空间站舱段 → 北斗/风云/NOAA/GPS/伽利略 → 常规卫星 → 星链」稳定排序；从搜索选中卫星时若星图卫星开关关闭则自动开启显示。
+  2. **天宫空间站译名统一 + 卫星星图/列表批量中文化：** `Satellite::getNameI18n()` 与 `labels.ets` 将 `CSS (TIANHE)` 统一显示为「天宫空间站（天和核心舱）」，修正 `SHIYAN` 为「试验」，并在中文环境下为星链/北斗/千帆/互联低轨/风云/高分/遥感/试验/实践/天绘/天链/天通/资源/吉林/海洋/云海/长征火箭残骸/一网/铱星/全球星/格洛纳斯/伽利略/GPS导航/NOAA气象/宇宙号/戈涅斯/准天顶等 30+ 高频家族自动转译；同时修正 `Satellites::draw()` 原先传原始英文 `sat->name` 给 `queueSkyLabel()` 的问题，改为 `sat->getNameI18n()`，星图标签直接显示中文。
+  3. **地理位置切换星球中文化与层级排序：**
+     - `Planet.cpp` / `Comet.cpp` / `MinorPlanet.cpp` 的 `translateName()` 为上游 `zh_CN.po` 缺失的知名天体补充中文译名（共工星、瑞华星、女娲星、哈雷彗星、海尔-波普彗星、百武彗星、新智彗星、紫金山彗星、特斯拉跑车等，已译天体由 160 增至 175）。
+     - `SessionToolStore.ets` 的 `loadPlanetList()` 按「地球/月球/太阳 → 八大行星/冥王星 → 全览点 → 已译卫星/矮行星/名彗星 → 其余临时编号小天体与彗星」排序，彻底避免 400 条英文临时编号排在下拉列表最前。
+     - `MainWindowNativeNode.ets` 与 `LocationController.ets` 将地图/地点页的星球显示名切换为 `sessionToolStore.observerPlanetLabel(...)`，覆盖全部 175 个已译天体（不再局限于 10 个硬编码行星）。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机测试：`test-ohos-observer-planet-contract.mjs`（13/13）、`test-ohos-satellite-panel.mjs`（7/7）、`test-ohos-satellite-refresh-safety.mjs`（12/12 含原生 Qt）、`check-ohos-ui-contract.mjs`（37 面板 / 57 锚点）全部通过。
+  - 真机实测：卫星图层关闭（`hints=0`）时 `listObjects("Satellites")` 返回正常列表，首位依次为「天宫空间站（天和核心舱）」「国际空间站（曙光号）」「哈勃空间望远镜」；`searchObject("catalog|Satellites|48274")` 成功选中并自动开启显示；截屏目视确认详情卡标题与星图标签（星链-37717 等）均正常显示中文；`getObserverPlanetList` 已译天体增至 175 个（共工星、哈雷彗星、海尔-波普彗星、新智彗星、紫金山彗星等均生效）。
+
+## [2026-11-19] 全量卫星与标签卡顿优化（3.2× 提速）及 Device Security Kit 恶意网址检测接入
+
+- **修改文件：** `plugins/Satellites/src/Satellite.hpp`、`plugins/Satellites/src/Satellite.cpp`、`plugins/Satellites/src/Satellites.hpp`、`plugins/Satellites/src/Satellites.cpp`、`harmonyos/ets-source/capability/UrlSafetyGuard.ets`（新增）、`harmonyos/ets-source/capability/SatelliteController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **问题与修复：**
+  1. **打开全部 18,228 颗卫星 + 标签卡顿至 6.6–7.8 FPS 的四项根因修复：**
+     - **合批绘制**：将 `StelSkyDrawer::preDrawPointSource()` / `postDrawPointSource()` 提到 `Satellites::draw()` 循环外，把每帧数千次独立 `glDrawArrays` + 着色器/VBO 上传合批为单批绘制；凌日/凌月与轨道线延迟在合批后绘制。
+     - **视锥与地平快速剔除**：`Satellite::getRenderState()` 改为先做 `prj->projectCheck()` 与地平遮挡快速剔除，再算大气消光星等与预计算的帧级日月角距（零每星重复 `getJ2000EquatorialPos`），并让 `hideInvisibleSatellitesFlag` 在点源模式下同步生效。
+     - **Top-64 智能标签预算**：对视锥内标签候选按「选中 > 空间站/ISS > 日照可见 > 视星等」`partial_sort` 取前 64 颗再送 `painter.queueSkyLabel()`，消除数千颗星链逐帧 `QFontMetrics` 测字与避让布局卡顿。
+     - **分层分片 SGP4 更新 + 避免移动端线程池风暴**：`Satellite::update()` 改用帧级单位太阳向量点积计算相位角；`Satellites::update()` 在平稳实时渲染时按 4 级分层分片传播（选中/空间站每帧、屏上可见每 3 帧、地平以上屏外每 16 帧、地平以下每 64 帧），并在 OHOS 移动端单线程顺序执行紧凑分片（避免 `QtConcurrent::blockingMap` 每帧唤醒全部核心导致 SoC 降频拖慢 `ConstellationMgr` 等渲染模块）；大时间跳转/换地点自动触发全量刷新。
+  2. **外部自定义链接恶意网址安全检测（Device Security Kit）：**
+     - 新增 `UrlSafetyGuard.ets` 封装 `@kit.DeviceSecurityKit` `safetyDetect.checkUrlThreat()`：内置镜像/官方白名单零延迟直通，用户手动添加自定义 TLE `http/https` 来源及非白名单外链跳转前异步校验，命中 `MALWARE`/`PHISHING`/`OTHERS` 时拦截并给出双语提示；离线、2.5s 超时或设备/Profile 未开通能力时自动降级放行，不阻塞核心功能。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机验证：`test-visual-extinction.py`（864 例）、`test-ohos-satellite-panel.mjs`（7/7）、`test-ohos-satellite-store.mjs`（4/4）、`test-ohos-satellite-sources-ui.mjs`（4/4）、`test-ohos-satellite-refresh-safety.mjs`（12/12，含原生 Qt）、`check-ohos-ui-contract.mjs`（37 面板 / 57 锚点）、`check-ohos-i18n.mjs` 全部通过。
+  - **真机实测（18,228 颗卫星）：**
+    - 基线（卫星关闭）：`total 27–32 ms`（`update 1.7ms`、`draw 26.4ms`），`30.3 FPS`。
+    - **全部卫星 + 标签开启（点源，`hideInvisible=0`）**：由优化前 `108–126 ms`（`update 27–33ms`、`draw 77–89ms`、**6.6–7.8 FPS**）降至 `36–40 ms`（`update 5.56ms` 均耗 / 峰值 `9.5ms`、`draw 26–32ms`、**23.8–25.0 FPS**，提速 **3.2×**）。
+    - **仅可见卫星 + 标签开启（`hideInvisible=1`）**：由 `126 ms`（6.6 FPS）降至 `update 4.76ms`、`draw 26.97ms`（几乎贴平基线 `26.4ms`）、**21–23 FPS**。
+    - **图标模式 + 全部卫星 + 标签开启**：`update 5.01ms`、`draw 31.95ms`、**16.1–16.4 FPS**（较优化前 6.6–7.8 FPS 提升 >2×）。
+  - 提示：当前 Debug Profile 已含 `safety_detect`，后续构建正式 Release 包前需从 AGC 重新签发带 `safety_detect` 与 `agentreminder` 的 Release Profile。
+
 ## [2026-11-19] 第二批增强：超级满月/情境文案/四路落地页、月历网格与日历/卫星过渡动画、卫星 TLE 服务端与客户端审计修复
 
 - **修改文件：** `src/StelMainView.cpp`、`plugins/Satellites/src/Satellites.hpp`、`plugins/Satellites/src/Satellites.cpp`、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/capability/NotificationText.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/state/SatelliteStore.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/panels/object/SatellitePassDetails.ets`、`deploy/tle-mirror/sources.json`、`deploy/tle-mirror/fetch-mirror.mjs`、`deploy/tle-mirror/test/fetch-mirror.test.mjs`、`scripts/test-ohos-astronomy-calendar.mjs`、`scripts/test-ohos-notification-integration.mjs`、`scripts/test-ohos-satellite-refresh-safety.mjs`、`docs/harmonyos/CHANGELOG.md`。

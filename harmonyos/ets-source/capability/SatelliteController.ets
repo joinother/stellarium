@@ -11,11 +11,19 @@ import { SatelliteSourceInput } from '../pages/MainWindowModels'
 import { CommandPort } from '../bridge/CommandPort'
 import { SatelliteStore } from '../state/SatelliteStore'
 
+export interface SatelliteUrlSafetyOutcome {
+  allowed: boolean
+  threat: string
+  message?: string
+}
+
 export interface SatelliteHostHooks {
   // CLI 发布点（宿主 publishSatellitePanelState，写 AppStorage）。
   publishSatellitePanelState(error: string): void
   // 分组切换的 180ms EaseOut 过渡（宿主 getUIContext().animateTo，控制器不 import UI）。
   animateSatelliteGroupChange(action: () => void): void
+  // 可选的华为 Device Security Kit 外部 URL 恶意检测钩子（离线/不支持时自动降级放行）。
+  checkSourceUrlSafety?: (url: string) => Promise<SatelliteUrlSafetyOutcome>
 }
 
 export class SatelliteController {
@@ -117,9 +125,31 @@ export class SatelliteController {
   }
 
   // 把输入框 URL 追加为来源写回；编辑态下替换对应来源而非追加。
+  // 自定义 http/https 来源会先经可选的 Device Security Kit 恶意网址检测（离线自动降级放行）。
   addSatelliteSource(): void {
     const url = this.satelliteStore.satSourceInput.trim()
     if (url.length === 0) { this.satelliteStore.satSourceStatus = I18n.t('sat_source_empty'); return }
+    const checker = this.hooks.checkSourceUrlSafety
+    if (checker !== undefined && /^https?:\/\//i.test(url)) {
+      const isZh = I18n.getLanguage().startsWith('zh')
+      this.satelliteStore.satSourceStatus = isZh ? '正在检测来源链接安全性…' : 'Checking source URL safety…'
+      checker(url).then((outcome: SatelliteUrlSafetyOutcome) => {
+        if (!outcome.allowed) {
+          this.satelliteStore.satSourceStatus = outcome.message ?? (isZh
+            ? '安全检测拦截：该链接存在风险，未添加到轨道来源。'
+            : 'Blocked by Device Security: unsafe URL was not added.')
+          return
+        }
+        this.commitSatelliteSource(url)
+      }).catch(() => {
+        this.commitSatelliteSource(url)
+      })
+      return
+    }
+    this.commitSatelliteSource(url)
+  }
+
+  private commitSatelliteSource(url: string): void {
     const sources: SatelliteSourceInput[] = []
     for (let sourceIndex = 0; sourceIndex < this.satelliteStore.satSources.length; sourceIndex++) {
       const source = this.satelliteStore.satSources[sourceIndex]

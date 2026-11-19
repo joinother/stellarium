@@ -13,6 +13,7 @@ import { createHapticFeedback } from '../capability/HarmonyHapticFeedback'
 import { AstronomyCalendarController, AstronomyCalendarHostHooks, AstronomyCalendarReminderResult } from '../capability/AstronomyCalendarController'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent } from '../state/AstronomyCalendarEvent'
+import { CalendarObserverContext } from '../state/AstronomyCalendarText'
 import { AstronomyCalendarPanel } from '../panels/panels/AstronomyCalendarPanel'
 import { isEngineReady } from 'libentry.so'
 import { writeClipboardText } from '../qability/ClipboardService'
@@ -79,7 +80,7 @@ import { publishAstronomyCard } from '../qability/AstronomyCardService'
 import { CardTonightData } from '../form/AstronomyCardData'
 import { RecordingController, RecordingHostHooks } from '../capability/RecordingController'
 import { ObjectModelRenderer, ObjectModelRendererHostHooks } from '../capability/ObjectModelRenderer'
-import { SkyInputController, SkyInputHostHooks } from '../capability/SkyInputController'
+import { SkyInputController, SkyInputHostHooks, absoluteScaleToStarBrightness } from '../capability/SkyInputController'
 import { DetailConnectorController, DetailConnectorHostHooks } from '../capability/DetailConnectorController'
 import { LayerController, LayerHostHooks } from '../capability/LayerController'
 import { SkyTextureStatusController, SkyTextureStatusHostHooks } from '../capability/SkyTextureStatusController'
@@ -88,7 +89,8 @@ import { OcularController } from '../capability/OcularController'
 import { TelescopeController, TelescopeHostHooks } from '../capability/TelescopeController'
 import { PolarScopeController, PolarScopeHostHooks, PolarScopeSessionFlags } from '../capability/PolarScopeController'
 import { ViewCoordinateController, ViewCoordinateHostHooks } from '../capability/ViewCoordinateController'
-import { SatelliteController, SatelliteHostHooks } from '../capability/SatelliteController'
+import { SatelliteController, SatelliteHostHooks, SatelliteUrlSafetyOutcome } from '../capability/SatelliteController'
+import { checkExternalUrlSafety, urlThreatMessage, UrlSafetyCheckResult } from '../capability/UrlSafetyGuard'
 import { AstroCalcController, AstroCalcHostHooks } from '../capability/AstroCalcController'
 import { PluginFeatureController, PluginFeatureHostHooks } from '../capability/PluginFeatureController'
 import { ObjectInspectorMediaController, ObjectInspectorMediaHostHooks } from '../capability/ObjectInspectorMediaController'
@@ -1436,10 +1438,14 @@ export struct WindowNativeNode {
   @State private skyTouchX2: number = 0
   @State private skyTouchY2: number = 0
   @State private actionHint: ResourceStr = ''
+  @State private starBrightnessValue: number = 0.5
+  @State private starBrightnessHudVisible: boolean = false
   // ===== 脚本录制 / 回放（39）=====
   @State private recordBuffer: Array<RecordCmd> = []
   @State private guideStore: GuideStore = new GuideStore()
   private hintTimer: number = 0
+  private starBrightnessHudTimer: number = 0
+  private observerLatitude: number = 39.9
   // 离线搜索分块扫描草稿（locSearchRequestId / locationSearchScan* / locationSearchLastPublishMs）
   private panelIdleTimer: number = -1
   private lastOverlayActivityMs: number = 0
@@ -1535,6 +1541,7 @@ export struct WindowNativeNode {
     this.telescopeCtl().stopTelescopeLivePosition(false)
     this.detailConnectorCtl().stopDetailAutoRefresh()
     this.skyInputCtl().stop()
+    this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
     void AudioEngine.getInstance().stop()
     this.gyroCtl().pauseForBackground()
@@ -2436,6 +2443,7 @@ export struct WindowNativeNode {
     this.searchCtl().stop()
     this.saveAppSettings()
     this.skyInputCtl().stop()
+    this.clearStarBrightnessHudTimer()
     this.keyboardShortcutCtl().setSkyFocused(false)
     this.gyroCtl().stopGyroscope(false)
     this.detailConnectorCtl().stop()
@@ -2654,7 +2662,7 @@ export struct WindowNativeNode {
           setScriptMetadata: (raw: Object | undefined): void => { this.scriptPlaybackCtl().setScriptMetadata(raw) },
           reloadConfigurationSettings: (): void => { this.settingsCtl().loadConfigurationSettings() },
           // 引擎启动确认后由 StartupBridge 调用；立即读引擎状态，不排队、不延时。
-          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions() },
+          refreshRuntimeState: (): void => { this.engineReady = true; this.refreshStateNow(); this.syncStarBrightnessFromEngine(); this.consumeCardRoute(); void this.notificationCtl().refreshSubscriptions() },
           // Startbridge 的「引擎就绪」以 StelApp::isInitialized() 为准：
           // 出帧就绪可能早于 init 完成，提前投放查询会在 init 期间堆积重试链。
           enginePresentationReady: (): boolean => isEngineReady()
@@ -2752,7 +2760,9 @@ export struct WindowNativeNode {
         moonPhases: (): MoonPhaseItem[] => this.astroStore.moonPhaseData,
         loadMoonPhases: (): void => { this.astroCalcCtl().loadMoonPhases() },
         meteorShowers: (): MeteorShowerItem[] => this.meteorStore.msShowerList,
-        loadMeteorShowers: (): void => { this.meteorStore.loadMeteorShowers() }
+        loadMeteorShowers: (): void => { this.meteorStore.loadMeteorShowers() },
+        observerLatitude: (): number => this.observerLatitude,
+        bortleScale: (): number => this.layerViewStore.bortleScale
       }
       this.notificationControllerImpl = new NotificationController(this.notificationStore, hooks)
     }
@@ -2841,7 +2851,11 @@ export struct WindowNativeNode {
               ? '未找到通知对应的天象事件，请查看事件列表。' : 'The event from this notification was not found. Please check the event list.'
             this.pendingCalendarEvent = ''
           }
-        }
+        },
+        observerContext: (): CalendarObserverContext => ({
+          latitude: this.observerLatitude,
+          bortleScale: this.layerViewStore.bortleScale
+        })
       }
       this.calendarController = new AstronomyCalendarController(this.commandPort(), this.calendarStore, hooks)
       this.calendarController.setLanguage(I18n.getLanguage())
@@ -3118,6 +3132,10 @@ export struct WindowNativeNode {
           this.callInteractive('getFieldOfView', '', (r: StellariumBridgeResponse) => {
             if (r.ok === true && r.fov !== undefined) { onResult(r.fov) }
           })
+        },
+        starBrightnessValue: (): number => this.starBrightnessValue,
+        onStarBrightnessChange: (normalized: number, dragging: boolean): void => {
+          this.handleStarBrightnessChange(normalized, dragging)
         }
       }
       this.skyInputControllerImpl = new SkyInputController(this.commandPort(), this.nightModeStore, hooks)
@@ -3459,6 +3477,17 @@ export struct WindowNativeNode {
         publishSatellitePanelState: (error: string): void => { this.publishSatellitePanelState(error) },
         animateSatelliteGroupChange: (action: () => void): void => {
           this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, action)
+        },
+        checkSourceUrlSafety: async (url: string): Promise<SatelliteUrlSafetyOutcome> => {
+          const res: UrlSafetyCheckResult = await checkExternalUrlSafety(url)
+          if (!res.allowed) {
+            return {
+              allowed: false,
+              threat: res.threat,
+              message: urlThreatMessage(res.threat, I18n.getLanguage().startsWith('zh'))
+            }
+          }
+          return { allowed: true, threat: res.threat }
         }
       }
       this.satelliteControllerImpl = new SatelliteController(this.commandPort(), this.satelliteStore, hooks)
@@ -3723,7 +3752,17 @@ export struct WindowNativeNode {
         triggerAction: (actionId: string): void => { this.triggerAction(actionId) },
         searchObject: (name: string): void => { this.searchObject(name) },
         stopTracking: (): void => { this.stopTracking() },
-        setLocation: (name: string, lat: number, lon: number, alt: number): void => { this.locationCtl().setLocation(name, lat, lon, alt) }
+        setLocation: (name: string, lat: number, lon: number, alt: number): void => { this.locationCtl().setLocation(name, lat, lon, alt) },
+        isTimeWheelInteracting: (): boolean => this.timeWheelStore.timeWheelDragging ||
+          (this.timeWheelController !== undefined && this.timeWheelController.isInteracting()),
+        releaseSilentViewLockForTime: (): void => {
+          if (this.trackingText !== 'On' && this.viewSettingsStore.viewLock) {
+            this.viewSettingsStore.viewLock = false
+            this.callNativeFire('setViewLock', '0')
+          } else if (this.trackingText !== 'On') {
+            this.callNativeFire('setViewLock', '0')
+          }
+        }
       }
       this.timeControllerImpl = new TimeController(
         this.timeStore, this.timeSettingsStore, this.deltaTStore, this.commandPort(), hooks)
@@ -5573,7 +5612,7 @@ export struct WindowNativeNode {
   // 抓手拖动或面板内容滚动时，整块 backdropBlur 每帧都要重算滤镜缓存；
   // 两者都先关掉模糊/阴影，静止后再恢复（见下方 Scroll 的 onScrollStart/Stop）。
   private panelChromeBusy(): boolean {
-    return this.panelDragging || this.panelScrolling
+    return this.panelDragging || this.panelScrolling || this.timeWheelStore.timeWheelDragging
   }
 
   private updateCompactPanelDrag(offsetY: number): void {
@@ -7598,6 +7637,7 @@ export struct WindowNativeNode {
     // 只有当原生确实返回了观测者经纬度时，才用原生值刷新头部位置字段，
     // 否则保留 setLocation 已应用到头部的值（避免被 planetName 等字段清成“未命名”或空值）。
     if (result.latitude !== undefined && result.longitude !== undefined) {
+      this.observerLatitude = result.latitude
       this.coordinateText = this.locationStore.formatDegrees(result.latitude, 'N', 'S') + ' / ' + this.locationStore.formatDegrees(result.longitude, 'E', 'W')
       if (result.locationName !== undefined && result.locationName.length > 0) {
         const planetName = result.planetName && result.planetName.length > 0 ? result.planetName : 'Earth'
@@ -7606,7 +7646,7 @@ export struct WindowNativeNode {
         this.locationText = quickLocationLabel(this.locationPickerStore.locationSource,
           this.locationPickerStore.locationDisplayName(result.locationName), planetName,
           this.locationPickerStore.locationSource === 'gps' ? this.locationPickerStore.gpsPlaceDetail : '') +
-          ' · ' + planetZh(planetName)
+          ' · ' + this.sessionToolStore.observerPlanetLabel(planetName)
       }
       if (result.altitude !== undefined) {
         this.altitudeText = result.altitude.toFixed(0) + ' m'
@@ -7733,21 +7773,59 @@ export struct WindowNativeNode {
     this.actionHint = ''
   }
 
+  private clearStarBrightnessHudTimer(): void {
+    if (this.starBrightnessHudTimer !== 0) {
+      clearTimeout(this.starBrightnessHudTimer)
+      this.starBrightnessHudTimer = 0
+    }
+  }
+
+  private handleStarBrightnessChange(normalized: number, dragging: boolean): void {
+    this.starBrightnessValue = Math.max(0, Math.min(1, normalized))
+    this.starBrightnessHudVisible = true
+    this.clearStarBrightnessHudTimer()
+    if (!dragging) {
+      this.starBrightnessHudTimer = setTimeout(() => {
+        this.starBrightnessHudTimer = 0
+        this.starBrightnessHudVisible = false
+      }, 1200) as number
+    }
+  }
+
+  private syncStarBrightnessFromEngine(): void {
+    this.callInteractive('getAbsoluteStarScale', '', (r: StellariumBridgeResponse) => {
+      if (r.ok === true && r.scale !== undefined) {
+        this.starBrightnessValue = absoluteScaleToStarBrightness(r.scale)
+      }
+    })
+  }
+
   // 用系统浏览器打开外部链接（星表下载页等）。宿主持有 UI 上下文，面板只回调 URL。
   private openExternalUrl(url: string): void {
     if (url.length === 0) {
       return
     }
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext
-    const want: Want = {
-      action: 'ohos.want.action.viewData',
-      entities: ['entity.system.browsable'],
-      uri: url
+    const launch = (): void => {
+      const context = this.getUIContext().getHostContext() as common.UIAbilityContext
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      }
+      context.startAbility(want).then((): void => {
+        hilog.info(0x0000, 'StellariumArkUI', 'opened external url %{public}s', url)
+      }).catch((): void => {
+        this.flashHint(I18n.t('catalog_open_source_failed'))
+      })
     }
-    context.startAbility(want).then((): void => {
-      hilog.info(0x0000, 'StellariumArkUI', 'opened external url %{public}s', url)
+    checkExternalUrlSafety(url).then((res: UrlSafetyCheckResult): void => {
+      if (!res.allowed) {
+        this.flashHint(urlThreatMessage(res.threat, I18n.getLanguage().startsWith('zh')))
+        return
+      }
+      launch()
     }).catch((): void => {
-      this.flashHint(I18n.t('catalog_open_source_failed'))
+      launch()
     })
   }
 
@@ -8431,6 +8509,8 @@ export struct WindowNativeNode {
             overlayTop: this.viewCoordinateOverlayTop(),
             hintTop: (this.isExpandedLayout || this.isFoldHoverLayout) ? 16 : 58,
             actionHint: this.actionHint,
+            starBrightnessHudVisible: this.starBrightnessHudVisible,
+            starBrightnessValue: this.starBrightnessValue,
             onHandleViewCoordinateTouch: (event: TouchEvent) => { this.viewCoordinateCtl().handleViewCoordinateTouch(event) }
           })
         }
@@ -8543,7 +8623,7 @@ export struct WindowNativeNode {
           altitudeSource: this.locationPickerStore.locationSource,
           locationName: this.locationPickerStore.locationPickerName,
           locationPort: this.hostLocationPort,
-          planetLabel: (en: string) => planetZh(en),
+          planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
           contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
           onPick: (latitude: number, longitude: number, altitude: number, name: string, source: string) => {
             this.locationPickerStore.locationPickerName = name
@@ -8853,7 +8933,7 @@ export struct WindowNativeNode {
         previewMapAllowed: this.privacyNativeStartupAllowed && this.applicationInForeground && hasCurrentPrivacyConsent(),
         mapSuspended: this.locationMapFullscreen,
         onOpenFullMap: () => { this.locationMapFullscreen = true },
-        planetLabel: (en: string) => planetZh(en),
+        planetLabel: (en: string) => this.sessionToolStore.observerPlanetLabel(en),
         contextOf: (item: LocSearchItem) => this.locationPickerStore.locationResultContext(item, this.sessionToolStore.observerPlanet),
         onSearchLocations: (query: string) => { this.locationStore.searchLocations(query) },
         onInputFocus: () => { this.keyboardTextInputFocused = true },

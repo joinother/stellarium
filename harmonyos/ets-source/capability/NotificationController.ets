@@ -24,6 +24,8 @@ export interface NotificationHostHooks {
   loadMoonPhases(): void
   meteorShowers(): MeteorShowerItem[]
   loadMeteorShowers(): void
+  observerLatitude?(): number
+  bortleScale?(): number
 }
 
 export class NotificationController {
@@ -495,6 +497,32 @@ export class NotificationController {
     return localized
   }
 
+  private clockText(atMs: number): string {
+    const date = new Date(atMs)
+    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0')
+  }
+
+  private moonElongationDeg(jd: number): number {
+    if (!Number.isFinite(jd) || jd <= 0) return -1
+    const t = (jd - 2451545.0) / 36525.0
+    const rad = Math.PI / 180.0
+    const d = 297.8501921 + 445267.1114034 * t
+    const m = 357.5291092 + 35999.0502909 * t
+    const mp = 134.9633964 + 477198.8675055 * t
+    const elong = d
+      + 6.289 * Math.sin(mp * rad)
+      - 1.274 * Math.sin((mp - 2 * d) * rad)
+      + 0.658 * Math.sin(2 * d * rad)
+      - 0.214 * Math.sin(2 * mp * rad)
+      - 1.856 * Math.sin(m * rad)
+    return ((elong % 360) + 360) % 360
+  }
+
+  private localizedPlanet(englishName: string | undefined): string {
+    if (!englishName) return ''
+    return notificationText(englishName)
+  }
+
   private eventReminderContent(event: AstronomyCalendarEvent, category: string, leadMinutes: number): string {
     if (category === 'satellite' || event.kind === 'satellite-pass') {
       return leadMinutes > 0
@@ -502,13 +530,94 @@ export class NotificationController {
         : event.title + notificationText(' 即将达到过境最高点，抬头观测！')
     }
     if (event.kind === 'moon-phase') {
-      if (event.isSupermoon === true) return notificationText('今晚迎来超级满月，月球接近近地点，打开星象仪查看月相与观测时刻。')
+      if (event.isSupermoon === true) {
+        return leadMinutes > 0
+          ? notificationText('今晚迎来超级满月，将在 ') + String(leadMinutes) + notificationText(' 分钟后到达近地点满月时刻，抬头赏月！')
+          : notificationText('今晚迎来超级满月，月球接近近地点，打开星象仪查看月相与观测时刻。')
+      }
+      if (event.phaseIndex === 0) {
+        return notificationText('今晚迎来新月，整夜几乎无月光干扰，是观银河与深空天体的绝佳暗夜。')
+      }
+      if (event.phaseIndex === 2) {
+        if (event.distanceKm !== undefined && event.distanceKm >= 404000) {
+          return notificationText('今晚迎来微满月（月球临近远地点），日落后自东方升起。')
+        }
+        return leadMinutes > 0
+          ? notificationText('满月将在 ') + String(leadMinutes) + notificationText(' 分钟后到达满月时刻，抬头赏月。')
+          : notificationText('今晚迎来满月，日落后即可向东方地平线赏月。')
+      }
+      if (event.phaseIndex === 1 || event.phaseIndex === 3) {
+        return event.title + notificationText(' 即将到来，月面晨昏线环形山立体清晰，适合举镜赏月。')
+      }
       return event.title + notificationText(' 即将到来，打开星象仪查看月相与观测时刻。')
     }
+    if (event.kind === 'solar-term') {
+      const lat = this.hooks.observerLatitude ? this.hooks.observerLatitude() : 39.9
+      const southern = Number.isFinite(lat) && lat < 0
+      const clock = this.clockText(event.at)
+      if (event.phaseIndex === 5) {
+        return notificationText('今日 ') + clock + notificationText(southern ? ' 迎来二分点（南半球入秋），全球昼夜几乎等长，夜空窗口渐长。' : ' 迎来春分（北半球入春），全球昼夜几乎等长。')
+      }
+      if (event.phaseIndex === 11) {
+        return notificationText('今日 ') + clock + notificationText(southern ? ' 迎来至点（南半球入冬），迎来全年最长观星暗夜。' : ' 迎来夏至（北半球入夏），白昼达到全年最长。')
+      }
+      if (event.phaseIndex === 17) {
+        return notificationText('今日 ') + clock + notificationText(southern ? ' 迎来二分点（南半球入春），全球昼夜几乎等长。' : ' 迎来秋分（北半球入秋），全球昼夜几乎等长，秋季观星季开启。')
+      }
+      if (event.phaseIndex === 23) {
+        return notificationText('今日 ') + clock + notificationText(southern ? ' 迎来至点（南半球入夏），白昼达到全年最长。' : ' 迎来冬至（北半球入冬），迎来全年最长观星暗夜。')
+      }
+      return notificationText('今日 ') + clock + notificationText(' 步入') + event.title + notificationText(' 节气，打开星象仪查看当季星空。')
+    }
     if (event.kind === 'meteor-peak') {
-      return event.title + notificationText(' 预计迎来活跃高峰，选择开阔暗空观测，打开星象仪查看辐射点。')
+      const elong = this.moonElongationDeg(event.jd)
+      const bortle = this.hooks.bortleScale ? this.hooks.bortleScale() : undefined
+      const urbanSky = bortle !== undefined && Number.isFinite(bortle) && bortle >= 6
+      let moonTail = notificationText('：选择开阔暗空处，打开星象仪定位辐射点。')
+      if (elong >= 0) {
+        if (elong < 22 || elong >= 338) {
+          moonTail = urbanSky
+            ? notificationText('：无月干扰，建议远离城区灯火以捕捉更多暗弱流星。')
+            : notificationText('：无月干扰，暗空通透，非常适合守候流星！')
+        } else if (elong < 95) {
+          moonTail = notificationText('：月光仅影响上半夜，午夜月落后迎来暗空窗口。')
+        } else if (elong >= 275) {
+          moonTail = notificationText('：残月黎明前才升起，深夜核心时段几乎不受月光干扰。')
+        } else {
+          moonTail = notificationText('：当晚月光较强，建议背向月亮重点守候明亮火流星。')
+        }
+      }
+      return notificationText('今夜迎来') + event.title + moonTail
     }
     if (event.kind === 'planetary-event') {
+      const pName = this.localizedPlanet(event.primary ?? event.target)
+      if (event.subtype === 'opposition' && pName.length > 0) {
+        return notificationText('今夜 ') + pName + notificationText(' 冲日，整夜可见且亮度与视直径均处全年高位！')
+      }
+      if (event.subtype === 'greatest-elongation' && pName.length > 0) {
+        if (event.direction === 'east') {
+          return notificationText('今夜日落后不久面向西方低空，即可寻觅 ') + pName + notificationText('（东大距，傍晚观测窗口）！')
+        }
+        if (event.direction === 'west') {
+          return notificationText('明晨日出前的一小段时间面向东方低空，即可寻觅 ') + pName + notificationText('（西大距，清晨观测窗口）！')
+        }
+      }
+      if (event.subtype === 'conjunction') {
+        if (event.secondary && event.secondary !== 'Sun' && pName.length > 0) {
+          const sName = this.localizedPlanet(event.secondary)
+          const hour = new Date(event.at).getHours()
+          const morning = hour >= 2 && hour < 10
+          const sepText = event.separationDegrees !== undefined && Number.isFinite(event.separationDegrees)
+            ? notificationText('（约 ') + event.separationDegrees.toFixed(1) + notificationText('°）')
+            : ''
+          return pName + notificationText(' 与 ') + sName + notificationText(' 近距离相合') + sepText +
+            notificationText(morning ? '，留意明晨 ' : '，留意今晚 ') +
+            this.clockText(event.at) + notificationText(' 前后同框观测。')
+        }
+        if (event.secondary === 'Sun') {
+          return event.title + notificationText(' 即将合日（贴近太阳耀眼日光，严禁举镜直视）。')
+        }
+      }
       return event.title + notificationText(' 即将发生，打开星象仪查看行星位置与观测窗口。')
     }
     return event.title + notificationText(' 即将到来，打开星象仪查看事件与观测信息。')

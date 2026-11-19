@@ -106,8 +106,10 @@ export struct TimeWheelCanvas {
       this.setRate(120)
     }
     this.onWheelTouch(event)
-    // 触摸事件本身已经是 120Hz；同步重画一次，避免显示管线把拖动态
-    // 延后到下一次 displaySync 回调。
+    // 触摸事件本身已经是 120Hz；同步重画一次并记录已绘状态，避免同一帧内
+    // displaySync.onFrame() + postFrameCallback 对相同偏移重复绘制三次。
+    this.lastOffset = this.store.timeWheelVisualOffset
+    this.lastLabels = this.store.timeWheelAllLabels
     this.draw()
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.idleFrames = 0

@@ -71,7 +71,7 @@ export class TimeWheelStore {
     if (fractionalSteps === 0) { return local }
     const next = new Date(local.getTime())
     this.shiftDate(next, fractionalSteps > 0 ? 1 : -1)
-    if (this.isCalendar()) {
+    if (this.timeWheelUnit === 'year' || this.timeWheelUnit === 'month') {
       const localDateMs = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())
       const nextDateMs = Date.UTC(next.getUTCFullYear(), next.getUTCMonth(), next.getUTCDate())
       const dayOffset = Math.round((nextDateMs - localDateMs) * Math.abs(fractionalSteps) / 86400000.0)

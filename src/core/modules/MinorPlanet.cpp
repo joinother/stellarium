@@ -321,6 +321,17 @@ float MinorPlanet::getVMagnitude(const StelCore* core, const double eclipseFacto
 void MinorPlanet::translateName(const StelTranslator &translator)
 {
 	nameI18 = translator.qtranslate(properName, "minor planet");
+	if (nameI18 == properName && translator.getTrueLocaleName().startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
+	{
+		static const QHash<QString, QString> zhMinorPlanets = {
+			{QStringLiteral("Gonggong"), QStringLiteral("共工星")},
+			{QStringLiteral("Juewa"), QStringLiteral("瑞华星")},
+			{QStringLiteral("Nuwa"), QStringLiteral("女娲星")},
+		};
+		auto it = zhMinorPlanets.constFind(properName);
+		if (it != zhMinorPlanets.constEnd())
+			nameI18 = it.value();
+	}
 	if (englishName.endsWith('*'))
 		nameI18.append('*');
 }

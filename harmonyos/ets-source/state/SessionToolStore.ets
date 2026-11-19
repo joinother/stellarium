@@ -110,11 +110,44 @@ export class SessionToolStore {
     }
     port.requestInteractive('getObserverPlanetList', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.planets) {
-        this.planetList = r.planets
         this.observerPlanets = r.observerPlanets ?? []
+        this.planetList = this.sortObserverPlanetNames(r.planets, this.observerPlanets)
         this.notifyChanged()
       }
     })
+  }
+
+  // 把观测星球列表按常用天文层级排序（地球/月球/太阳 → 八大行星 → 冥王星与全览点 →
+  // 已有中文译名的卫星/矮行星/名彗星 → 其余临时编号小天体与彗星），避免 400 条英文临时编号排在最前。
+  private sortObserverPlanetNames(names: string[], items: ObserverPlanetItem[]): string[] {
+    const priorityOrder: string[] = [
+      'Earth', 'Moon', 'Sun',
+      'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto',
+      'Solar System Observer', 'Earth Observer', 'Mars Observer', 'Jupiter Observer', 'Saturn Observer'
+    ]
+    const displayByName: Record<string, string> = {}
+    for (let i = 0; i < items.length; i++) {
+      displayByName[items[i].name] = items[i].displayName
+    }
+    const rankOf = (name: string): number => {
+      const idx = priorityOrder.indexOf(name)
+      if (idx >= 0) return idx
+      if (name.endsWith(' Observer')) return 100
+      const display = displayByName[name] ?? name
+      const translated = display !== name || planetZh(name) !== name
+      if (translated) return 200
+      return 300
+    }
+    const copy = names.slice()
+    copy.sort((a: string, b: string): number => {
+      const ra = rankOf(a)
+      const rb = rankOf(b)
+      if (ra !== rb) return ra - rb
+      const da = displayByName[a] ?? a
+      const db = displayByName[b] ?? b
+      return da.localeCompare(db)
+    })
+    return copy
   }
 
   observerPlanetLabel(name: string): string {

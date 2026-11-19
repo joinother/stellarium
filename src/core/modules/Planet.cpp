@@ -436,6 +436,37 @@ void Planet::translateName(const StelTranslator& trans)
 	if (nameI18.isEmpty())
 		nameI18 = qc_(englishName, getContextString());
 
+	// Supplement well-known Chinese names missing from upstream zh_CN.po
+	// (e.g. Gonggong, Halley, Oumuamua, Hale-Bopp, NEOWISE, Tsuchinshan-ATLAS).
+	if (nameI18 == englishName && trans.getTrueLocaleName().startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
+	{
+		static const QHash<QString, QString> zhSupplements = {
+			{QStringLiteral("(225088) Gonggong"), QStringLiteral("(225088) 共工星")},
+			{QStringLiteral("(139) Juewa"), QStringLiteral("(139) 瑞华星")},
+			{QStringLiteral("(150) Nuwa"), QStringLiteral("(150) 女娲星")},
+			{QStringLiteral("1P/Halley (1986)"), QStringLiteral("哈雷彗星 (1P/Halley)")},
+			{QStringLiteral("1P/Halley"), QStringLiteral("哈雷彗星")},
+			{QStringLiteral("1I/2017 U1 (`Oumuamua)"), QStringLiteral("奥陌陌 (1I/2017 U1)")},
+			{QStringLiteral("2I/2019 Q4 (Borisov)"), QStringLiteral("鲍里索夫星际彗星 (2I/2019 Q4)")},
+			{QStringLiteral("C/1995 O1 (Hale-Bopp)"), QStringLiteral("海尔-波普彗星 (C/1995 O1)")},
+			{QStringLiteral("C/1996 B2 (Hyakutake)"), QStringLiteral("百武彗星 (C/1996 B2)")},
+			{QStringLiteral("C/2020 F3 (NEOWISE)"), QStringLiteral("新智彗星 (C/2020 F3)")},
+			{QStringLiteral("C/2006 P1 (McNaught)"), QStringLiteral("麦克诺特彗星 (C/2006 P1)")},
+			{QStringLiteral("C/2011 W3 (Lovejoy)"), QStringLiteral("洛夫乔伊彗星 (C/2011 W3)")},
+			{QStringLiteral("C/1965 S1-A (Ikeya-Seki)"), QStringLiteral("池谷-关彗星 (C/1965 S1-A)")},
+			{QStringLiteral("C/1975 V1 (West)"), QStringLiteral("威斯特彗星 (C/1975 V1)")},
+			{QStringLiteral("C/1956 R1 (Arend-Roland)"), QStringLiteral("阿伦德-罗兰彗星 (C/1956 R1)")},
+			{QStringLiteral("C/1969 Y1 (Bennett)"), QStringLiteral("贝内特彗星 (C/1969 Y1)")},
+			{QStringLiteral("C/2023 A3 (Tsuchinshan-ATLAS)"), QStringLiteral("紫金山-阿特拉斯彗星 (C/2023 A3)")},
+			{QStringLiteral("C/2026 C1 (Tsuchinshan)"), QStringLiteral("紫金山彗星 (C/2026 C1)")},
+			{QStringLiteral("Earth-Moon Barycenter"), QStringLiteral("地月质心")},
+			{QStringLiteral("Tesla Roadster (Starman)"), QStringLiteral("特斯拉跑车（星际漫游者）")},
+		};
+		auto it = zhSupplements.constFind(englishName);
+		if (it != zhSupplements.constEnd())
+			nameI18 = it.value();
+	}
+
 	if (!culturalNames.isEmpty())
 	{
 		for (CulturalName &cname: culturalNames )

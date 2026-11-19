@@ -270,9 +270,12 @@ export class LocationController {
       if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
     }
     this.saveObserverLocationToStorage()
+    const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'
+      ? this.sessionToolStore.observerPlanetLabel(targetPlanet)
+      : planetZh(targetPlanet)
     this.hooks.setLocationTexts(
         quickLocationLabel(source, this.pickerStore.locationDisplayName(name), targetPlanet,
-          source === 'gps' ? this.pickerStore.gpsPlaceDetail : '') + ' · ' + planetZh(targetPlanet),
+          source === 'gps' ? this.pickerStore.gpsPlaceDetail : '') + ' · ' + planetDisplay,
       this.locationStore.formatDegrees(latitude, 'N', 'S') + ' / ' + this.locationStore.formatDegrees(longitude, 'E', 'W'),
       altitude.toFixed(0) + ' m')
     this.pickerStore.observerTimeZone = targetPlanet === 'Earth' ? approximateTimeZoneDisplay(longitude) : I18n.t('tz_system')

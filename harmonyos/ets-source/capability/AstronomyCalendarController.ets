@@ -2,7 +2,7 @@ import { CommandPort } from '../bridge/CommandPort'
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarNativeResponse, calendarMonth, calendarDays, calendarQuery, calendarNativeEvents } from '../state/AstronomyCalendarEvent'
-import { calendarText } from '../state/AstronomyCalendarText'
+import { CalendarObserverContext, calendarText } from '../state/AstronomyCalendarText'
 import { AstronomyReminderResult } from '../qability/AstronomyReminderService'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
@@ -13,6 +13,7 @@ export interface AstronomyCalendarHostHooks {
   viewSky(event: AstronomyCalendarEvent): void
   remind(event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult>
   feedChanged(events: AstronomyCalendarEvent[]): void
+  observerContext?(): CalendarObserverContext
 }
 
 export class AstronomyCalendarController {
@@ -63,7 +64,7 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language)
+          const events = calendarNativeEvents(native, range, this.language, this.hooks.observerContext?.())
           this.response = native
           this.store.sourceYear = year
           this.store.events = events
@@ -105,7 +106,7 @@ export class AstronomyCalendarController {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
-          const events = calendarNativeEvents(native, range, this.language)
+          const events = calendarNativeEvents(native, range, this.language, this.hooks.observerContext?.())
           this.extraResponses.push(native)
           this.store.events = this.store.events.concat(events)
           this.store.throughYear = year
@@ -126,10 +127,11 @@ export class AstronomyCalendarController {
     if (this.response !== undefined) {
       try {
         const range = calendarMonth(this.store.year, this.store.month)
-        this.store.events = calendarNativeEvents(this.response, range, language)
+        const ctx = this.hooks.observerContext?.()
+        this.store.events = calendarNativeEvents(this.response, range, language, ctx)
         for (const response of this.extraResponses) {
           this.store.events = this.store.events.concat(calendarNativeEvents(response,
-            calendarMonth(response.year as number, response.month as number), language))
+            calendarMonth(response.year as number, response.month as number), language, ctx))
         }
         this.updateCoverage()
         this.hooks.feedChanged(this.store.events.slice())

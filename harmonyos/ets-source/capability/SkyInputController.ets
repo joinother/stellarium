@@ -96,6 +96,27 @@ export interface SkyInputHostHooks {
   dockActionAt(x: number, y: number): ShellAction | null
   activateDockAction(item: ShellAction): void
   requestFieldOfView(onResult: (fov: number) => void): void
+  // 双指上下滑调整星点亮度（可选钩子，兼容旧单测桩）
+  starBrightnessValue?: () => number
+  onStarBrightnessChange?: (normalized: number, dragging: boolean) => void
+}
+
+// 星点亮度归一化值 b ∈ [0, 1]（默认 0.5 对应 Stellarium 默认 absoluteStarScale=1.0）
+// 与 StelSkyDrawer 绝对星等缩放之间的对数可逆映射（星等呈对数感知；不改 relativeStarScale 以保持星等层次）。
+export function starBrightnessToAbsoluteScale(normalized: number): number {
+  const b = clamp(normalized, 0, 1)
+  return b <= 0.5
+    ? Math.pow(0.12, (0.5 - b) / 0.5)
+    : Math.pow(4.0, (b - 0.5) / 0.5)
+}
+
+export function absoluteScaleToStarBrightness(scale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) {
+    return 0.5
+  }
+  return scale <= 1.0
+    ? clamp(0.5 - 0.5 * (Math.log(Math.max(0.01, scale)) / Math.log(0.12)), 0, 0.5)
+    : clamp(0.5 + 0.5 * (Math.log(scale) / Math.log(4.0)), 0.5, 1)
 }
 
 // 手势归属：Down 时由几何一次判定，Up/Cancel 时复位。取代会跨手势残留的
@@ -103,6 +124,11 @@ export interface SkyInputHostHooks {
 enum SkyGestureOwner { None, Sky, Ui, PanelDrag }
 
 export class SkyInputController {
+  private static readonly TWO_FINGER_NONE: number = 0
+  private static readonly TWO_FINGER_UNDECIDED: number = 1
+  private static readonly TWO_FINGER_PINCH: number = 2
+  private static readonly TWO_FINGER_BRIGHTNESS: number = 3
+
   private commandPort: CommandPort
   private hooks: SkyInputHostHooks
 
@@ -134,6 +160,19 @@ export class SkyInputController {
   private pinchStartFov: number = 60
   private pinchLastNativePushMs: number = 0
   private pinchNativePushPending: boolean = false
+  // 双指手势歧义消解：捏合缩放 vs 双指上下滑调整星点亮度（满屏行程 1.5x 增益）
+  private twoFingerMode: number = 0
+  private twoFingerStartX0: number = 0
+  private twoFingerStartY0: number = 0
+  private twoFingerStartX1: number = 0
+  private twoFingerStartY1: number = 0
+  private twoFingerStartDist: number = 0
+  private twoFingerStartCenterX: number = 0
+  private twoFingerStartCenterY: number = 0
+  private twoFingerBrightnessStart: number = 0.5
+  private starBrightnessCached: number = 0.5
+  private brightnessLastNativePushMs: number = 0
+  private brightnessNativePushPending: boolean = false
   /** 缩放 FOV 胶囊提示的节流时间戳 */
   private lastFovHintMs: number = 0
   private nativeDragActive: boolean = false
@@ -175,6 +214,8 @@ export class SkyInputController {
   stop(): void {
     this.finishSkyAxis(true)
     this.finishSkyMouse(true)
+    this.finishTwoFingerBrightness()
+    this.twoFingerMode = SkyInputController.TWO_FINGER_NONE
     this.stopSkyInertia()
   }
 
@@ -493,6 +534,82 @@ export class SkyInputController {
     this.touchLastY = nextY
   }
 
+  private currentStarBrightness(): number {
+    if (this.hooks.starBrightnessValue) {
+      this.starBrightnessCached = clamp(this.hooks.starBrightnessValue(), 0, 1)
+    }
+    return this.starBrightnessCached
+  }
+
+  private beginTwoFingerGesture(x0: number, y0: number, x1: number, y1: number): void {
+    this.resetSkyTapSequence()
+    this.nativeDragActive = false
+    this.stopSkyInertia()
+    this.twoFingerMode = SkyInputController.TWO_FINGER_UNDECIDED
+    this.twoFingerStartX0 = x0
+    this.twoFingerStartY0 = y0
+    this.twoFingerStartX1 = x1
+    this.twoFingerStartY1 = y1
+    this.twoFingerStartDist = distance(x0, y0, x1, y1)
+    this.twoFingerStartCenterX = (x0 + x1) / 2
+    this.twoFingerStartCenterY = (y0 + y1) / 2
+    this.twoFingerBrightnessStart = this.currentStarBrightness()
+    this.brightnessNativePushPending = false
+    this.pinchCenterX = this.twoFingerStartCenterX
+    this.pinchCenterY = this.twoFingerStartCenterY
+  }
+
+  private startPinchFrom(centerX: number, centerY: number, startDist: number): void {
+    this.twoFingerMode = SkyInputController.TWO_FINGER_PINCH
+    this.pinchCenterX = centerX
+    this.pinchCenterY = centerY
+    this.pinchStartDistance = Math.max(1, startDist)
+    this.pinchStartFov = clamp(this.hooks.fovSliderValue() > 0 ? this.hooks.fovSliderValue() : 60, 4, 180)
+    this.pinchActive = true
+    this.pinchLastScale = 1
+    this.pinchLastNativePushMs = Date.now()
+    this.pinchNativePushPending = false
+    this.commandPort.fire('zoomBy', '1|1|' + this.pinchCenterX.toFixed(2) + '|' +
+      this.pinchCenterY.toFixed(2) + '|' + Math.round(this.hooks.skyWidth()).toString() + '|' +
+      Math.round(this.hooks.skyHeight()).toString())
+  }
+
+  private pushStarBrightnessToNative(normalized: number): void {
+    const absScale = starBrightnessToAbsoluteScale(normalized)
+    this.commandPort.fire('setAbsoluteStarScale', absScale.toFixed(3))
+  }
+
+  private applyTwoFingerBrightness(centerY: number, forceFlush: boolean): void {
+    const travelHeight = Math.max(320, this.hooks.skyHeight())
+    // 双指竖向平行滑动：满屏行程对应 1.5x 亮度增益（上滑增亮、下滑变暗）
+    const delta = ((this.twoFingerStartCenterY - centerY) / travelHeight) * 1.5
+    const next = clamp(this.twoFingerBrightnessStart + delta, 0, 1)
+    this.starBrightnessCached = next
+    if (this.hooks.onStarBrightnessChange) {
+      this.hooks.onStarBrightnessChange(next, true)
+    }
+    this.brightnessNativePushPending = true
+    const now = Date.now()
+    if (forceFlush || now - this.brightnessLastNativePushMs >= 32) {
+      this.pushStarBrightnessToNative(next)
+      this.brightnessLastNativePushMs = now
+      this.brightnessNativePushPending = false
+    }
+  }
+
+  private finishTwoFingerBrightness(): void {
+    if (this.twoFingerMode !== SkyInputController.TWO_FINGER_BRIGHTNESS) {
+      return
+    }
+    if (this.brightnessNativePushPending) {
+      this.pushStarBrightnessToNative(this.starBrightnessCached)
+      this.brightnessNativePushPending = false
+    }
+    if (this.hooks.onStarBrightnessChange) {
+      this.hooks.onStarBrightnessChange(this.starBrightnessCached, false)
+    }
+  }
+
   handleSkyTouch(event: TouchEvent): void {
     if (event.source === SourceType.Mouse) { return }
     const points = event.touches.length > 0 ? event.touches : event.changedTouches
@@ -501,6 +618,21 @@ export class SkyInputController {
     }
 
     if (event.type === TouchType.Down) {
+      // 单指已在天空按下后第二指紧接着落屏：保留天空归属，无缝转入双指手势歧义消解。
+      if (this.gestureOwner === SkyGestureOwner.Sky && points.length >= 2) {
+        this.touchMoved = true
+        const x0 = touchWindowX(points[0])
+        const y0 = touchWindowY(points[0])
+        const x1 = touchWindowX(points[1])
+        const y1 = touchWindowY(points[1])
+        this.hooks.setSkyTouchFeedbackMulti(this.hooks.skyTouchFeedback())
+        this.hooks.setSkyTouchPoint(x0, y0)
+        this.hooks.setSkyTouchPoint2(x1, y1)
+        if (this.twoFingerMode === SkyInputController.TWO_FINGER_NONE) {
+          this.beginTwoFingerGesture(x0, y0, x1, y1)
+        }
+        return
+      }
       this.finishSkyAxis(true)
       this.finishSkyMouse(true)
       this.stopSkyInertia()
@@ -602,9 +734,11 @@ export class SkyInputController {
       this.touchLastX = this.touchStartX
       this.touchLastY = this.touchStartY
       this.touchMoved = false
-        this.pinchActive = false
-        this.commandPort.fire('endPinch')
-        this.nativeDragActive = false
+      this.pinchActive = false
+      this.twoFingerMode = SkyInputController.TWO_FINGER_NONE
+      this.brightnessNativePushPending = false
+      this.commandPort.fire('endPinch')
+      this.nativeDragActive = false
       this.lastDragCommandMs = 0
       this.dragFilteredX = downX
       this.dragFilteredY = downY
@@ -620,21 +754,10 @@ export class SkyInputController {
       this.hooks.setSkyTouchFeedbackMulti(allowTouchFeedback && points.length >= 2)
       hilog.info(0x0000, 'StellariumArkUI', 'sky touch down at ' + Math.round(this.touchStartX).toString() + ',' + Math.round(this.touchStartY).toString() + ' sky=' + this.hooks.skyWidth().toString() + 'x' + this.hooks.skyHeight().toString())
       if (points.length >= 2) {
-        this.resetSkyTapSequence()
-        this.hooks.setSkyTouchPoint2(touchWindowX(points[1]), touchWindowY(points[1]))
-        this.pinchCenterX = (touchWindowX(points[0]) + this.hooks.skyTouchX2()) / 2
-        this.pinchCenterY = (touchWindowY(points[0]) + this.hooks.skyTouchY2()) / 2
-        this.pinchStartDistance = distance(
-          touchWindowX(points[0]), touchWindowY(points[0]),
-          touchWindowX(points[1]), touchWindowY(points[1]))
-        this.pinchStartFov = clamp(this.hooks.fovSliderValue() > 0 ? this.hooks.fovSliderValue() : 60, 4, 180)
-        this.pinchLastScale = 1
-        this.pinchLastNativePushMs = Date.now()
-        this.pinchNativePushPending = false
-        this.pinchActive = true
-        this.commandPort.fire('zoomBy', '1|1|' + this.pinchCenterX.toFixed(2) + '|' +
-          this.pinchCenterY.toFixed(2) + '|' + Math.round(this.hooks.skyWidth()).toString() + '|' +
-          Math.round(this.hooks.skyHeight()).toString())
+        const x1 = touchWindowX(points[1])
+        const y1 = touchWindowY(points[1])
+        this.hooks.setSkyTouchPoint2(x1, y1)
+        this.beginTwoFingerGesture(downX, downY, x1, y1)
       }
       return
     }
@@ -679,24 +802,50 @@ export class SkyInputController {
         this.hooks.setSkyTouchPoint(x, y)
       }
       if (points.length >= 2) {
+        const x1 = touchWindowX(points[1])
+        const y1 = touchWindowY(points[1])
         this.hooks.setSkyTouchFeedbackMulti(this.hooks.skyTouchFeedback())
-        this.hooks.setSkyTouchPoint2(touchWindowX(points[1]), touchWindowY(points[1]))
-        this.pinchCenterX = (x + this.hooks.skyTouchX2()) / 2
-        this.pinchCenterY = (y + this.hooks.skyTouchY2()) / 2
+        this.hooks.setSkyTouchPoint2(x1, y1)
+        const centerX = (x + x1) / 2
+        const centerY = (y + y1) / 2
+        this.pinchCenterX = centerX
+        this.pinchCenterY = centerY
         this.nativeDragActive = false
         this.stopSkyInertia()
-        const currentDistance = distance(
-          x, y, touchWindowX(points[1]), touchWindowY(points[1]))
+        this.touchMoved = true
+        const currentDistance = distance(x, y, x1, y1)
+        if (this.twoFingerMode === SkyInputController.TWO_FINGER_NONE) {
+          this.beginTwoFingerGesture(x, y, x1, y1)
+          return
+        }
+        if (this.twoFingerMode === SkyInputController.TWO_FINGER_UNDECIDED) {
+          const dy0 = y - this.twoFingerStartY0
+          const dy1 = y1 - this.twoFingerStartY1
+          const centerDx = centerX - this.twoFingerStartCenterX
+          const centerDy = centerY - this.twoFingerStartCenterY
+          const distDelta = Math.abs(currentDistance - this.twoFingerStartDist)
+          const evidence = Math.max(distDelta, Math.abs(centerDy), Math.abs(centerDx))
+          if (evidence < 14) {
+            return
+          }
+          // 双指同向竖向平行滑动（且竖向位移显著大于横向与间距变化）→ 锁定亮度调节；否则锁定捏合缩放。
+          const sameVerticalDir = (dy0 * dy1) > 0 && Math.abs(dy0) >= 8 && Math.abs(dy1) >= 8
+          if (sameVerticalDir &&
+              Math.abs(centerDy) >= Math.abs(centerDx) * 1.15 &&
+              Math.abs(centerDy) >= distDelta * 1.15) {
+            this.twoFingerMode = SkyInputController.TWO_FINGER_BRIGHTNESS
+            this.applyTwoFingerBrightness(centerY, true)
+            return
+          }
+          this.startPinchFrom(centerX, centerY, Math.max(1, this.twoFingerStartDist))
+          // 进入捏合分支后顺延更新当前帧缩放比，避免首帧顿挫
+        }
+        if (this.twoFingerMode === SkyInputController.TWO_FINGER_BRIGHTNESS) {
+          this.applyTwoFingerBrightness(centerY, false)
+          return
+        }
         if (!this.pinchActive || this.pinchStartDistance <= 1) {
-          this.pinchStartDistance = currentDistance
-          this.pinchStartFov = clamp(this.hooks.fovSliderValue() > 0 ? this.hooks.fovSliderValue() : 60, 4, 180)
-          this.pinchActive = true
-          this.pinchLastScale = 1
-          this.pinchLastNativePushMs = Date.now()
-          this.pinchNativePushPending = false
-          this.commandPort.fire('zoomBy', '1|1|' + this.pinchCenterX.toFixed(2) + '|' +
-            this.pinchCenterY.toFixed(2) + '|' + Math.round(this.hooks.skyWidth()).toString() + '|' +
-            Math.round(this.hooks.skyHeight()).toString())
+          this.startPinchFrom(centerX, centerY, currentDistance)
         } else {
           const scale = currentDistance / this.pinchStartDistance
           this.pinchLastScale = scale
@@ -721,10 +870,13 @@ export class SkyInputController {
             })
           }
         }
-        this.touchMoved = true
         return
       }
       this.hooks.setSkyTouchFeedbackMulti(false)
+      // 双指手势中若先抬起一指，抑制残留单指移动，避免星图跳动。
+      if (this.twoFingerMode !== SkyInputController.TWO_FINGER_NONE) {
+        return
+      }
 
       const totalMove = distance(x, y, this.touchStartX, this.touchStartY)
       // 阈值放宽到 16vp:uitest/mock 注入的触摸常有几像素位移,
@@ -765,19 +917,23 @@ export class SkyInputController {
       const x = touchWindowX(points[0])
       const y = touchWindowY(points[0])
       const endedOnUi = this.hooks.isUiPoint(x, y)
-      const recordingViewChanged = this.touchMoved || this.pinchActive
+      const wasTwoFinger = this.twoFingerMode !== SkyInputController.TWO_FINGER_NONE
+      const wasTwoFingerBrightness = this.twoFingerMode === SkyInputController.TWO_FINGER_BRIGHTNESS
+      const recordingViewChanged = (this.touchMoved && !wasTwoFingerBrightness) || this.pinchActive
       if (owner === SkyGestureOwner.PanelDrag) {
         this.panelDragging = false
         this.hooks.scheduleSelectedObjectForUiChange(160)
         return
       }
-      // owner === Sky：天空手势的抬起收尾（惯性 / 点选 / 结束捏合 / 尾部清理 / 检查点）。
-      if (this.nativeDragActive && event.type === TouchType.Up) {
+      // owner === Sky：天空手势的抬起收尾（惯性 / 点选 / 结束捏合 / 亮度收尾 / 尾部清理 / 检查点）。
+      if (wasTwoFingerBrightness) {
+        this.finishTwoFingerBrightness()
+      } else if (this.nativeDragActive && event.type === TouchType.Up) {
         this.emitFluidDrag(x, y, Date.now(), false)
         this.startSkyInertia()
       } else if (event.type === TouchType.Cancel) {
         this.stopSkyInertia()
-      } else if (!this.touchMoved && !this.pinchActive && !endedOnUi && Date.now() - this.hooks.lastInfoWinCloseMs() > 320) {
+      } else if (!this.touchMoved && !this.pinchActive && !wasTwoFinger && !endedOnUi && Date.now() - this.hooks.lastInfoWinCloseMs() > 320) {
         hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' +
           Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' +
           Math.round(this.hooks.skyWidth()).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
@@ -792,6 +948,8 @@ export class SkyInputController {
         this.commandPort.fire('endPinch')
         this.hooks.scheduleSkyTextureStatusCheck()
       }
+      this.twoFingerMode = SkyInputController.TWO_FINGER_NONE
+      this.brightnessNativePushPending = false
       this.pinchActive = false
       this.pinchNativePushPending = false
       this.nativeDragActive = false

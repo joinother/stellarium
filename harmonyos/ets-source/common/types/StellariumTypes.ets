@@ -414,6 +414,7 @@ export interface StellariumBridgeResponse {
   info?: string
   query?: string
   timeRate?: number
+  scale?: number
   value?: string
   altitudes?: number[]
   magnitudes?: number[]

@@ -607,3 +607,28 @@ test('foreground loss after preference wait prevents scheduling and host excepti
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(store.astronomyNotificationBusy, false);
 });
+
+test('tailored astronomy notification copy formats moon phases, micromoon, solstices/equinoxes, meteors and planetary alignments', async () => {
+  const model = fixture(preferenceValue());
+  let lat = 39.9;
+  model.hooks.observerLatitude = () => lat;
+  const future = Date.now() + 86400000;
+  const jd = future / 86400000 + 2440587.5;
+  await model.instance.scheduleEvent({ id: 'nm', kind: 'moon-phase', phaseIndex: 0, title: '新月', at: future, jd, body: '', target: 'Moon', panel: 'astro', tab: 6 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /今晚迎来新月/);
+  await model.instance.scheduleEvent({ id: 'sm', kind: 'moon-phase', phaseIndex: 2, isSupermoon: true, title: '超级满月', at: future, jd, body: '', target: 'Moon', panel: 'astro', tab: 6 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /超级满月.*15 分钟/);
+  await model.instance.scheduleEvent({ id: 'mm', kind: 'moon-phase', phaseIndex: 2, distanceKm: 405500, title: '满月', at: future, jd, body: '', target: 'Moon', panel: 'astro', tab: 6 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /微满月/);
+  await model.instance.scheduleEvent({ id: 'eq-n', kind: 'solar-term', phaseIndex: 5, title: '春分', at: future, jd, body: '', target: 'Sun', panel: 'astro', tab: 8 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /北半球入春/);
+  lat = -33.8;
+  await model.instance.scheduleEvent({ id: 'eq-s', kind: 'solar-term', phaseIndex: 5, title: '春分', at: future, jd, body: '', target: 'Sun', panel: 'astro', tab: 8 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /南半球入秋/);
+  await model.instance.scheduleEvent({ id: 'opp', kind: 'planetary-event', subtype: 'opposition', primary: 'Saturn', secondary: 'Sun', title: '土星冲日', at: future, jd, body: '', target: 'Saturn', panel: 'astro', tab: 0 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /土星 冲日/);
+  await model.instance.scheduleEvent({ id: 'elo-w', kind: 'planetary-event', subtype: 'greatest-elongation', direction: 'west', primary: 'Mercury', secondary: 'Sun', title: '水星西大距', at: future, jd, body: '', target: 'Mercury', panel: 'astro', tab: 0 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /面向东方低空.*水星/);
+  await model.instance.scheduleEvent({ id: 'conj', kind: 'planetary-event', subtype: 'conjunction', primary: 'Venus', secondary: 'Jupiter', separationDegrees: 0.6, title: '金星合木星', at: future, jd, body: '', target: 'Venus', panel: 'astro', tab: 0 });
+  assert.match(model.state.scheduled.at(-1).payload.content, /金星 与 木星 近距离相合（约 0\.6°）/);
+});

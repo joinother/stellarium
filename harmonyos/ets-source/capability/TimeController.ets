@@ -35,6 +35,10 @@ export interface TimeHostHooks extends BehaviorHostHooks {
   searchObject(name: string): void
   stopTracking(): void
   setLocation(name: string, lat: number, lon: number, alt: number): void
+  // 时间轮拖动/惯性期间暂停后台轮询，避免与 60Hz 设时抢桥与重排。
+  isTimeWheelInteracting?(): boolean
+  // 未主动开启“跟踪”时，调时间前解除静默选中锚点（s_viewLock），避免出现“天不转地平线转”。
+  releaseSilentViewLockForTime?(): void
 }
 
 // ===== 时间速率档位系统 =====
@@ -91,8 +95,12 @@ export class TimeController {
   // ── 时间面板定时器（自持 start/stop，宿主面板路由/生命周期调用）──
   startPanelTimers(): void {
     this.stopPanelTimers()
-    this.timePanelTimer = setInterval(() => { this.refreshSimTimeLight() }, 125) as number
+    this.timePanelTimer = setInterval(() => {
+      if (this.hooks.isTimeWheelInteracting?.() === true) { return }
+      this.refreshSimTimeLight()
+    }, 125) as number
     this.timePanelFullTimer = setInterval(() => {
+      if (this.hooks.isTimeWheelInteracting?.() === true) { return }
       this.hooks.refreshState()
       this.timeStore.loadTimeExtras()
     }, 3000) as number
@@ -119,8 +127,9 @@ export class TimeController {
     this.port.fire('setTimeRate', rate.toString())
   }
 
-  // 时间轮按下即暂停（跨域写收在宿主）。
+  // 时间轮按下即暂停（跨域写收在宿主），同时解除未主动开启跟踪时的静默视角锁，确保地平线稳住、星空转动。
   stopTimeWheelSpeed(): void {
+    this.hooks.releaseSilentViewLockForTime?.()
     this.timeStore.timeSpeedIndex = TIME_SPEED_IDX_STOP
     this.timeStore.beginRateChange(0, 500)
     this.timeStore.timeRateText = formatRate(0)
@@ -130,6 +139,9 @@ export class TimeController {
   applySpeedStep(index: number): void {
     const idx: number = Math.max(0, Math.min(TIME_SPEED_STEPS.length - 1, index))
     const rate: number = TIME_SPEED_STEPS[idx]
+    if (idx !== TIME_SPEED_IDX_STOP && idx !== TIME_SPEED_IDX_REALTIME) {
+      this.hooks.releaseSilentViewLockForTime?.()
+    }
     this.timeStore.timeSpeedIndex = idx
     this.timeStore.beginRateChange(rate, 500)
     this.setTimeRate(rate)
@@ -180,6 +192,7 @@ export class TimeController {
   }
 
   advanceTime(hours: number): void {
+    this.hooks.releaseSilentViewLockForTime?.()
     this.port.requestInteractive('advanceTime', hours.toString(), () => { this.refreshTimeNow() })
     this.hooks.flashHint((hours > 0 ? I18n.t('i0044') : '') + hours.toString() + ' h')
   }

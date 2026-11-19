@@ -12,18 +12,24 @@ const MouseButton = { None: 0, Left: 1, Right: 2 };
 const AxisAction = { NONE: 0, BEGIN: 1, UPDATE: 2, END: 3, CANCEL: 4 };
 const SourceTool = { Unknown: 0, Finger: 1, MOUSE: 7, TOUCHPAD: 9 };
 const SourceType = { TouchScreen: 1, Mouse: 2 };
+const TouchType = { Down: 0, Up: 1, Move: 2, Cancel: 3 };
 const logs = [];
 const Controller = new Function('MouseAction', 'MouseButton', 'AxisAction', 'SourceTool', 'SourceType',
-  'distance', 'hilog', plain + '\nreturn SkyInputController;')(
-  MouseAction, MouseButton, AxisAction, SourceTool, SourceType,
+  'TouchType', 'clamp', 'distance', 'touchWindowX', 'touchWindowY', 'isDockPoint', 'hilog',
+  plain + '\nreturn SkyInputController;')(
+  MouseAction, MouseButton, AxisAction, SourceTool, SourceType, TouchType,
+  (v, min, max) => Math.max(min, Math.min(max, v)),
   (firstX, firstY, secondX, secondY) => Math.hypot(firstX - secondX, firstY - secondY),
+  p => p.windowX ?? p.x,
+  p => p.windowY ?? p.y,
+  () => false,
   { info: (...args) => logs.push(args) });
 
 function fixture() {
   const commands = [];
   const taps = [];
   const wheels = [];
-  const state = { fov: 60, startFov: 60, pinch: false, navigation: true, zoom: true, pauses: 0, resumes: 0, checkpoints: 0 };
+  const state = { fov: 60, startFov: 60, pinch: false, navigation: true, zoom: true, pauses: 0, resumes: 0, checkpoints: 0, brightness: 0.5, brightnessEvents: [], touchX2: 0, touchY2: 0, touchFeedback: false };
   const port = { fire(name, payload = '') {
     commands.push({ name, payload });
     const parts = payload.split('|').map(Number);
@@ -54,7 +60,39 @@ function fixture() {
     zoomStep: factor => { wheels.push(factor); state.fov *= factor; },
     angleMeasureEnabled: () => false,
     requestSkySelection: (x, y) => taps.push([x, y]),
-    clearSkySelectionFromDoubleTap: (x, y) => taps.push(['double', x, y])
+    clearSkySelectionFromDoubleTap: (x, y) => taps.push(['double', x, y]),
+    panelVisible: () => false,
+    isExpandedLayout: () => true,
+    polarScopeVisible: () => false,
+    panelWidth: () => 0,
+    panelOffsetX: () => 0,
+    panelOffsetY: () => 0,
+    edgeMargin: () => 16,
+    fovSliderValue: () => state.fov,
+    compactDockWidthPercent: () => 80,
+    dockTop: () => 740,
+    dockHeight: () => 60,
+    lastInfoWinCloseMs: () => 0,
+    touchStartedOnUi: () => false,
+    setTouchStartedOnUi() {},
+    skyTouchActive: () => true,
+    setSkyTouchActive() {},
+    setSkyDragging() {},
+    dockTouchActive: () => false,
+    setDockTouchActive() {},
+    skyTouchFeedback: () => state.touchFeedback,
+    setSkyTouchFeedback: v => { state.touchFeedback = v; },
+    setSkyTouchPoint() {},
+    setSkyTouchPoint2: (x, y) => { state.touchX2 = x; state.touchY2 = y; },
+    skyTouchX2: () => state.touchX2,
+    skyTouchY2: () => state.touchY2,
+    setSkyTouchFeedbackMulti() {},
+    skyZoomButtonAt: () => '',
+    starBrightnessValue: () => state.brightness,
+    onStarBrightnessChange: (value, dragging) => {
+      state.brightness = value;
+      state.brightnessEvents.push({ value, dragging });
+    }
   };
   const controller = new Controller(port, {}, hooks);
   return { controller, commands, taps, wheels, state, hooks,
@@ -212,4 +250,55 @@ function mouse(action, overrides = {}) {
   assert.equal(logs[0][4], AxisAction.BEGIN);
 }
 
-console.log('HarmonyOS sky input behavior passed: official enums, source classification, local coordinates, pinch lifecycle, mouse ownership, cancellation and bounded diagnostics.');
+// Two-finger vertical drag adjusts star brightness without triggering pinch zoom.
+{
+  const test = fixture();
+  const touch = (type, pts) => ({
+    type, source: SourceType.TouchScreen,
+    touches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+    changedTouches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+  });
+  // Drag both fingers UP by 160vp (on 800vp height with 1.5x gain => +0.30 brightness: 0.50 -> 0.80)
+  test.controller.handleSkyTouch(touch(TouchType.Down, [[400, 400], [560, 400]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 360], [560, 360]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 240], [560, 240]]));
+  // Lifting one finger mid-gesture must not cause a single-finger sky pan
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 120]]));
+  test.controller.handleSkyTouch(touch(TouchType.Up, [[400, 240]]));
+  assert.equal(test.calls('zoomBy').length, 0);
+  assert.equal(test.calls('dragView').length, 0);
+  assert.equal(test.calls('setStarScale').length, 0, 'must not flatten relativeStarScale contrast');
+  assert.ok(test.calls('setAbsoluteStarScale').length >= 1, 'setAbsoluteStarScale should fire');
+  assert.ok(Math.abs(test.state.brightness - 0.8) < 0.01, `expected ~0.8, got ${test.state.brightness}`);
+  assert.equal(test.state.brightnessEvents.at(-1).dragging, false);
+  // Final flushed scale at b=0.80: 4.0^(0.3/0.5) = 4.0^0.6 = 2.297
+  assert.equal(test.calls('setAbsoluteStarScale').at(-1).payload, '2.297');
+
+  // Drag both fingers DOWN far enough to clamp to 0.0 (staggered 2-finger landing)
+  test.controller.handleSkyTouch(touch(TouchType.Down, [[400, 200]]));
+  test.controller.handleSkyTouch(touch(TouchType.Down, [[400, 200], [560, 200]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[400, 750], [560, 750]]));
+  test.controller.handleSkyTouch(touch(TouchType.Up, [[400, 750]]));
+  assert.equal(test.state.brightness, 0);
+  assert.equal(test.calls('setAbsoluteStarScale').at(-1).payload, '0.120');
+}
+
+// Two-finger spread triggers pinch zoom and leaves star brightness untouched.
+{
+  const test = fixture();
+  const touch = (type, pts) => ({
+    type, source: SourceType.TouchScreen,
+    touches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+    changedTouches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+  });
+  test.controller.handleSkyTouch(touch(TouchType.Down, [[450, 400], [550, 400]]));
+  test.controller.handleSkyTouch(touch(TouchType.Move, [[350, 400], [650, 400]]));
+  test.controller.handleSkyTouch(touch(TouchType.Up, [[350, 400]]));
+  assert.ok(test.calls('zoomBy').length >= 1, 'pinch spread must fire zoomBy');
+  assert.equal(test.calls('endPinch').length, 2); // 1 reset on Down + 1 on pinch Up
+  assert.equal(test.calls('setAbsoluteStarScale').length, 0);
+  assert.equal(test.state.brightness, 0.5);
+  assert.equal(test.state.brightnessEvents.length, 0);
+}
+
+console.log('HarmonyOS sky input behavior passed: official enums, source classification, local coordinates, pinch lifecycle, two-finger brightness, mouse ownership, cancellation and bounded diagnostics.');

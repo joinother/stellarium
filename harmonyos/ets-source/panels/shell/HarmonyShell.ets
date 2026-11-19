@@ -1,5 +1,6 @@
 import { Theme } from '@kit.ArkUI'
 import { UI_RADIUS_PILL } from '../../common/ui/UiTokens'
+import { I18n } from '../../capability/I18n'
 import { ViewCenterCoordinateOverlay } from '../overlay/ViewCenterCoordinateOverlay'
 import { GyroTargetGuide } from '../astro/GyroTargetGuide'
 import { OverlayStore } from '../../state/OverlayStore'
@@ -29,6 +30,8 @@ export struct HarmonyShell {
   @Prop overlayTop: number
   @Prop hintTop: number
   @Prop actionHint: ResourceStr
+  @Prop starBrightnessHudVisible: boolean = false
+  @Prop starBrightnessValue: number = 0.5
   @State c: ThemeSlots = DEFAULT_SLOTS
 
   onHandleViewCoordinateTouch: (event: TouchEvent) => void = () => {}
@@ -92,6 +95,57 @@ export struct HarmonyShell {
               .combine(TransitionEffect.translate({ x: 0, y: -12 }).animation({ duration: 220, curve: Curve.Friction })),
             TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseIn })
               .combine(TransitionEffect.translate({ x: 0, y: -8 }).animation({ duration: 220, curve: Curve.EaseIn }))
+          ))
+      }
+
+      // 双指上下滑调整星点亮度 HUD 胶囊（置顶、不拦截触摸、松手自动淡出）
+      if (this.starBrightnessHudVisible) {
+        Row() {
+          Row({ space: 10 }) {
+            Text('✦')
+              .fontSize(14)
+              .fontColor(this.c.accent)
+            Text(I18n.t('star_brightness_hud'))
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.c.sub)
+            Stack({ alignContent: Alignment.Start }) {
+              Row()
+                .width(88)
+                .height(5)
+                .borderRadius(3)
+                .backgroundColor(this.c.chipInactiveBg)
+              Row()
+                .width(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 88))
+                .height(5)
+                .borderRadius(3)
+                .backgroundColor(this.c.accent)
+            }
+              .width(88)
+              .height(5)
+            Text(Math.round(Math.max(0, Math.min(1, this.starBrightnessValue)) * 100).toString() + '%')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.c.text)
+              .width(38)
+              .textAlign(TextAlign.End)
+          }
+            .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+            .backgroundColor(this.c.hintPillBg)
+            .borderRadius(UI_RADIUS_PILL)
+            .border({ width: 1, color: this.c.border })
+            .shadow({ radius: 20, color: this.c.shadowSoft, offsetX: 0, offsetY: 8 })
+        }
+          .hitTestBehavior(HitTestMode.None)
+          .position({ x: 0, y: this.hintTop + (this.actionHint !== '' ? 44 : 0) })
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .zIndex(21)
+          .transition(TransitionEffect.asymmetric(
+            TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: 0, y: -8 }).animation({ duration: 180, curve: Curve.Friction })),
+            TransitionEffect.OPACITY.animation({ duration: 240, curve: Curve.EaseIn })
+              .combine(TransitionEffect.translate({ x: 0, y: -6 }).animation({ duration: 240, curve: Curve.EaseIn }))
           ))
       }
     }

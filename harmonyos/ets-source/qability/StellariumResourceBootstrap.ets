@@ -37,6 +37,7 @@ const DETAIL_MEDIA_NEBULA_PATH = /^nebulae\/default\/[a-z][a-z0-9_-]*\.png$/i;
 const DETAIL_MEDIA_IMAGE_EXTENSION = /\.(?:png|jpe?g|webp)$/i;
 const TEXTURE_COMPAT_MARKER = '.ohos_texture_compat_v1';
 const TEXTURE_COMPAT_FILES: Array<string> = ['charon.png', 'neptune.png', 'sedna.png', 'uranus.png'];
+const MILKYWAY_TEXTURE_MARKER = '.ohos_milkyway_ai_4k_v2';
 const DETAIL_MODEL_TEXTURE_MARKER = '.ohos_detail_model_rgba_v2';
 const DETAIL_MODEL_TEXTURE_FILES: Array<string> = [
   'sun.png', 'mercury.png', 'venus.png', 'earth_cmap.png', 'moon.png', 'mars.png', 'jupiter.png', 'saturn.png',
@@ -269,6 +270,23 @@ async function refreshTextureCompatibility(
   writeMarker(markerPath);
   hilog.info(LOG_DOMAIN, LOG_TAG,
     `[startup] normalized planet textures ready in ${Date.now() - startedAt} ms`);
+}
+
+async function refreshMilkyWayTexture(
+  appContext: common.ApplicationContext,
+  installRoot: string,
+): Promise<void> {
+  const textureRoot = `${installRoot}/textures`;
+  const markerPath = `${textureRoot}/${MILKYWAY_TEXTURE_MARKER}`;
+  const targetPath = `${textureRoot}/milkyway.png`;
+  if (exists(markerPath) && fileSize(targetPath) > 0) {
+    return;
+  }
+  const startedAt = Date.now();
+  await writeRawFileAsync(appContext, `${RAW_ROOT}/textures/milkyway.png`, targetPath);
+  writeMarker(markerPath);
+  hilog.info(LOG_DOMAIN, LOG_TAG,
+    `[startup] refreshed 4K AI Milky Way texture (${fileSize(targetPath)} bytes) in ${Date.now() - startedAt} ms`);
 }
 
 async function refreshObjectTypeTranslations(appContext: common.ApplicationContext, installRoot: string): Promise<void> {
@@ -1019,6 +1037,12 @@ export async function prepareStellariumResources(appContext: common.ApplicationC
     await refreshTextureCompatibility(appContext, installRoot);
   } catch (err) {
     hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh normalized planet textures: ${JSON.stringify(err)}`);
+  }
+
+  try {
+    await refreshMilkyWayTexture(appContext, installRoot);
+  } catch (err) {
+    hilog.error(LOG_DOMAIN, LOG_TAG, `Failed to refresh Milky Way texture: ${JSON.stringify(err)}`);
   }
 
   try {

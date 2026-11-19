@@ -52,6 +52,8 @@ bool Satellite::showLabels = true;
 float Satellite::hintBrightness = 0.f;
 float Satellite::hintScale = 1.f;
 SphericalCap Satellite::viewportHalfspace = SphericalCap();
+Vec3d Satellite::frameSunUnitJ2000 = Vec3d(1., 0., 0.);
+bool Satellite::frameSunUnitValid = false;
 int Satellite::orbitLineSegments = 90;
 int Satellite::orbitLineFadeSegments = 4;
 int Satellite::orbitLineSegmentDuration = 20;
@@ -256,6 +258,89 @@ double Satellite::roundToDp(float n, int dp)
 
 QString Satellite::getNameI18n() const
 {
+	const QString appLang = StelApp::getInstance().getLocaleMgr().getAppLanguage();
+	if (appLang.startsWith(QLatin1String("zh"), Qt::CaseInsensitive))
+	{
+		const bool traditional = (appLang.compare(QStringLiteral("zh_TW"), Qt::CaseInsensitive) == 0
+			|| appLang.compare(QStringLiteral("zh_HK"), Qt::CaseInsensitive) == 0
+			|| appLang.compare(QStringLiteral("zh_MO"), Qt::CaseInsensitive) == 0);
+		const QString trimmed = name.trimmed();
+		const QString upper = trimmed.toUpper();
+
+		// Unified names for space stations and iconic observatories.
+		if (upper == QLatin1String("CSS (TIANHE)") || upper == QLatin1String("TIANGONG (TIANHE)") || upper == QLatin1String("TIANHE"))
+			return traditional ? QStringLiteral("天宮空間站（天和核心艙）") : QStringLiteral("天宫空间站（天和核心舱）");
+		if (upper == QLatin1String("CSS (WENTIAN)"))
+			return traditional ? QStringLiteral("天宮空間站（問天實驗艙）") : QStringLiteral("天宫空间站（问天实验舱）");
+		if (upper == QLatin1String("CSS (MENGTIAN)"))
+			return traditional ? QStringLiteral("天宮空間站（夢天實驗艙）") : QStringLiteral("天宫空间站（梦天实验舱）");
+		if (upper == QLatin1String("ISS (ZARYA)") || upper == QLatin1String("ISS"))
+			return traditional ? QStringLiteral("國際空間站（曙光號）") : QStringLiteral("国际空间站（曙光号）");
+		if (upper == QLatin1String("ISS (NAUKA)"))
+			return traditional ? QStringLiteral("國際空間站（科學號）") : QStringLiteral("国际空间站（科学号）");
+		if (upper == QLatin1String("HST"))
+			return traditional ? QStringLiteral("哈伯太空望遠鏡") : QStringLiteral("哈勃空间望远镜");
+		if (upper == QLatin1String("TIANGONG 1") || upper == QLatin1String("TIANGONG-1"))
+			return traditional ? QStringLiteral("天宮一號") : QStringLiteral("天宫一号");
+		if (upper == QLatin1String("TIANGONG 2") || upper == QLatin1String("TIANGONG-2"))
+			return traditional ? QStringLiteral("天宮二號") : QStringLiteral("天宫二号");
+
+		struct SatPrefixRule { const char* token; const char* zhCN; const char* zhTW; };
+		static const SatPrefixRule rules[] = {
+			{"STARLINK",        "星链",     "星鏈"},
+			{"BEIDOU",          "北斗",     "北斗"},
+			{"QIANFAN",         "千帆",     "千帆"},
+			{"HULIANWANG DIGUI","互联低轨", "互聯低軌"},
+			{"HULIANWANG",      "互联卫星", "互聯衛星"},
+			{"FENGYUN",         "风云",     "風雲"},
+			{"GAOFEN",          "高分",     "高分"},
+			{"YAOGAN",          "遥感",     "遙感"},
+			{"SHIYAN",          "试验",     "試驗"},
+			{"SHIJIAN",         "实践",     "實踐"},
+			{"TIANHUI",         "天绘",     "天繪"},
+			{"TIANLIAN",        "天链",     "天鏈"},
+			{"TIANTONG",        "天通",     "天通"},
+			{"TIANQI",          "天启",     "天啟"},
+			{"ZIYUAN",          "资源",     "資源"},
+			{"JILIN",           "吉林",     "吉林"},
+			{"HAIYANG",         "海洋",     "海洋"},
+			{"YUNHAI",          "云海",     "雲海"},
+			{"CHUANGXIN",       "创新",     "創新"},
+			{"CZ-",             "长征-",    "長征-"},
+			{"ONEWEB",          "一网",     "一網"},
+			{"IRIDIUM",         "铱星",     "銥星"},
+			{"GLOBALSTAR",      "全球星",   "全球星"},
+			{"GLONASS",         "格洛纳斯", "格洛納斯"},
+			{"GALILEO",         "伽利略",   "伽利略"},
+			{"GPS ",            "GPS导航 ", "GPS導航 "},
+			{"NOAA",            "NOAA气象", "NOAA氣象"},
+			{"METEOR-M",        "流星气象-M","流星氣象-M"},
+			{"COSMOS",          "宇宙号",   "宇宙號"},
+			{"GONETS",          "戈涅斯",   "戈涅斯"},
+			{"INTELSAT",        "国际通信", "國際通信"},
+			{"QZSS",            "准天顶",   "準天頂"},
+		};
+		for (const auto& rule : rules)
+		{
+			const QLatin1String tok(rule.token);
+			if (upper.startsWith(tok))
+			{
+				const int len = tok.size();
+				// Ensure boundary for alphabetic tokens (unless token ends with '-' or ' ').
+				const bool hasDelim = (rule.token[len - 1] == '-' || rule.token[len - 1] == ' ');
+				if (hasDelim || upper.size() == len || !upper.at(len).isLetter())
+				{
+					QString rest = trimmed.mid(len);
+					if (rest.endsWith(QLatin1String(" R/B"), Qt::CaseInsensitive))
+						rest.replace(rest.size() - 4, 4, traditional ? QStringLiteral(" 火箭殘骸") : QStringLiteral(" 火箭残骸"));
+					else if (rest.endsWith(QLatin1String(" DEB"), Qt::CaseInsensitive))
+						rest.replace(rest.size() - 4, 4, traditional ? QStringLiteral(" 碎片") : QStringLiteral(" 碎片"));
+					return QString::fromUtf8(traditional ? rule.zhTW : rule.zhCN) + rest;
+				}
+			}
+		}
+	}
+
 	if (name.compare(QStringLiteral("CSS (TIANHE)"), Qt::CaseInsensitive) == 0)
 	{
 		const QString translated = q_("TIANGONG (TIANHE)");
@@ -1451,12 +1536,24 @@ void Satellite::update(const StelCore *core, const double JD, bool updateOrbit)
 
 		pSatWrapper->getSlantRange(range, rangeRate);
 		visibility = pSatWrapper->getVisibilityPredict();
+		hasUpdatedOnce = true;
 
-		// Compute phase angle
-		double raSun, decSun, raSat, decSat;
-		StelUtils::rectToSphe(&raSun, &decSun, sun->getJ2000EquatorialPos(core));
-		StelUtils::rectToSphe(&raSat, &decSat, XYZ);
-		phaseAngle = std::acos(-1.0*(std::sin(decSun)*std::sin(decSat) + std::cos(decSun)*std::cos(decSat)*std::cos(raSun - raSat)));
+		// Compute phase angle via dot product (algebraically identical to spherical law of cosines,
+		// using the frame-precomputed Sun unit vector when called from Satellites::update()).
+		Vec3d satDir = XYZ;
+		const double satNorm = satDir.norm();
+		if (satNorm > 0.)
+		{
+			satDir /= satNorm;
+			Vec3d sunDir = frameSunUnitValid ? frameSunUnitJ2000 : sun->getJ2000EquatorialPos(core);
+			if (!frameSunUnitValid)
+				sunDir.normalize();
+			phaseAngle = std::acos(qBound(-1.0, -sunDir.dot(satDir), 1.0));
+		}
+		else
+		{
+			phaseAngle = 0.0;
+		}
 
 		// Compute orbit points to draw orbit line.
 		// We suppress computing so that no lines are computed in parallel as long as this uses static variables.
@@ -1749,7 +1846,8 @@ StelObjectPickState Satellite::getPickState(const StelCore* core) const
 	return state;
 }
 
-SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk) const
+SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk,
+	const FrameDrawContext* ctx) const
 {
 	SatelliteRenderState st;
 	if (!core)
@@ -1758,8 +1856,8 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 	st.displayed = displayed;
 	st.orbitValid = initialized && orbitValid;
 	st.dateRangeOk = dateRangeOk;
-	st.timeRateOk = qAbs(core->getTimeRate()) < timeRateLimit;
-	st.afterLaunch = core->getJD() >= jdLaunchYearJan1;
+	st.timeRateOk = ctx ? ctx->timeRateOk : (qAbs(core->getTimeRate()) < timeRateLimit);
+	st.afterLaunch = (ctx ? ctx->currentJD : core->getJD()) >= jdLaunchYearJan1;
 	st.visibility = visibility;
 	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch)
 		return st;
@@ -1768,43 +1866,69 @@ SatelliteRenderState Satellite::getRenderState(const StelCore* core, const StelP
 	if (!st.altitudeFilterPass)
 		return st;
 
+	// Frustum-cull BEFORE expensive atmospheric extinction, landscape polygon check, and Sun/Moon transit angle.
+	// When an orbit must be drawn for this satellite, continue computing magnitudeFilterPass even if off-screen.
+	const bool needsOrbitCheck = shouldDisplayOrbit() && orbitLinesFlag;
+	if (prj)
+	{
+		st.projectable = prj->projectCheck(XYZ, st.screenWin);
+		if (!st.projectable && !needsOrbitCheck)
+			return st;
+	}
+
+	if (hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE && !needsOrbitCheck)
+		return st;
+
 	st.magSat = getVMagnitudeWithVisualExtinction(core);
-	st.limitMag = core->getSkyDrawer() ? core->getSkyDrawer()->getLimitMagnitude() : 0.f;
+	st.limitMag = ctx ? ctx->limitMag : (core->getSkyDrawer() ? core->getSkyDrawer()->getLimitMagnitude() : 0.f);
 	st.magnitudeFilterPass = !flagVFMagnitude
 		|| ((stdMag < 99. || RCS > 0.) && (maxVFMagnitude <= st.magSat && st.magSat <= minVFMagnitude));
 	if (!st.magnitudeFilterPass)
 		return st;
 
-	Vec3d dir = XYZ;
-	if (dir.normSquared() > 0.)
-	{
-		dir.normalize();
-		st.landscapeVisible = core->getVisibleSkyArea().contains(dir);
-	}
+	if (!st.projectable)
+		return st;
 
-	if (prj)
-		st.projectable = prj->projectCheck(XYZ, st.screenWin);
-
-	if (prj && moon && sun)
+	if (!ctx || ctx->checkLandscape)
 	{
-		st.transitSunMoon =
-			(XYZ.angle(moon->getJ2000EquatorialPos(core)) * M_180_PI <= moon->getSpheroidAngularRadius(core))
-			|| (XYZ.angle(sun->getJ2000EquatorialPos(core)) * M_180_PI <= sun->getSpheroidAngularRadius(core));
-		if (st.transitSunMoon)
+		Vec3d dir = XYZ;
+		if (dir.normSquared() > 0.)
 		{
-			const int screenSizeSat = static_cast<int>(
-				getAngularRadius(core) * (2. * M_PI_180) * static_cast<double>(prj->getPixelPerRadAtCenter()));
-			st.spriteSize = qMin(screenSizeSat, 15);
+			dir.normalize();
+			st.landscapeVisible = core->getVisibleSkyArea().contains(dir);
 		}
 	}
 
-	if (!st.displayed || !st.orbitValid || !st.dateRangeOk || !st.timeRateOk || !st.afterLaunch
-		|| !st.altitudeFilterPass || !st.magnitudeFilterPass || !st.projectable)
-		return st;
+	if (prj)
+	{
+		const bool hasMoon = ctx ? ctx->hasMoon : !moon.isNull();
+		const bool hasSun = ctx ? ctx->hasSun : !sun.isNull();
+		if (hasMoon && hasSun)
+		{
+			const Vec3d moonPos = ctx ? ctx->moonPos : moon->getJ2000EquatorialPos(core);
+			const double moonAng = ctx ? ctx->moonAngRad : moon->getSpheroidAngularRadius(core);
+			const Vec3d sunPos = ctx ? ctx->sunPos : sun->getJ2000EquatorialPos(core);
+			const double sunAng = ctx ? ctx->sunAngRad : sun->getSpheroidAngularRadius(core);
+			st.transitSunMoon = (XYZ.angle(moonPos) * M_180_PI <= moonAng)
+				|| (XYZ.angle(sunPos) * M_180_PI <= sunAng);
+			if (st.transitSunMoon)
+			{
+				const int screenSizeSat = static_cast<int>(
+					getAngularRadius(core) * (2. * M_PI_180) * static_cast<double>(prj->getPixelPerRadAtCenter()));
+				st.spriteSize = qMin(screenSizeSat, 15);
+			}
+		}
+	}
 
 	if (!iconicModeFlag)
 	{
-		if (st.transitSunMoon)
+		if (hideInvisibleSatellitesFlag && visibility != gSatWrapper::VISIBLE)
+		{
+			st.pointDrawn = false;
+			st.labelDrawn = false;
+			st.txtMag = st.magSat;
+		}
+		else if (st.transitSunMoon)
 		{
 			st.pointDrawn = st.spriteSize > 0;
 			st.labelDrawn = showLabels;

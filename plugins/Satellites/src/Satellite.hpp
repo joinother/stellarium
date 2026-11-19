@@ -335,9 +335,26 @@ public:
 	//! Get operational status of satellite
 	QString getOperationalStatus() const;
 
+	//! Frame-precomputed fast path used by Satellites::draw() to avoid
+	//! recomputing Sun/Moon positions and extinction for off-screen satellites.
+	struct FrameDrawContext
+	{
+		Vec3d sunPos;
+		double sunAngRad = 0.0;
+		bool hasSun = false;
+		Vec3d moonPos;
+		double moonAngRad = 0.0;
+		bool hasMoon = false;
+		float limitMag = 0.f;
+		double currentJD = 0.0;
+		bool timeRateOk = true;
+		bool checkLandscape = false;
+	};
+
 	//! Compute the current draw/pick state. draw() and the touch picker both
 	//! use this so "visible but not selectable" cannot drift.
-	SatelliteRenderState getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk) const;
+	SatelliteRenderState getRenderState(const StelCore* core, const StelProjector* prj, bool dateRangeOk,
+		const FrameDrawContext* ctx = nullptr) const;
 
 	StelObjectPickState getPickState(const StelCore* core) const override;
 
@@ -370,6 +387,9 @@ private:
 	//! Flag indicating whether an orbit section should be displayed.
 	bool orbitDisplayed;  // draw orbit enabled/disabled
 	bool orbitPreview = false;
+	//! Runtime hints for staggered SGP4 propagation in Satellites::update().
+	mutable bool lastFrameOnScreen = false;
+	bool hasUpdatedOnce = false;
 	int orbitDrawCount = 0;
 	double orbitLastDrawJD = 0.;
 	//! Flag indicating that the satellite is user-defined.
@@ -437,6 +457,8 @@ private:
 
 	static StelTextureSP hintTexture;
 	static SphericalCap  viewportHalfspace;
+	static Vec3d frameSunUnitJ2000;
+	static bool  frameSunUnitValid;
 	static float hintBrightness;
 	static float hintScale;
 	static int   orbitLineSegments;
