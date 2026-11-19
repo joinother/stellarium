@@ -152,6 +152,14 @@ test('saved locations carry coordinates and support rename, delete and recent us
   assert.match(chips, /savedRow/);
   assert.match(chips, /ScrollDirection\.Vertical/);
   assert.match(chips, /this\.store\.savedLocations\.length \* 52/);
+  // 已保存/最近条目的星球名与观测星球下拉同源本地化；磁盘仍按英文名保存。
+  // CityChipsRow 必须直接观察 SessionToolStore：星球列表在面板打开后才异步到达。
+  assert.match(chips, /@ObjectLink sessionToolStore: SessionToolStore/)
+  assert.match(chips, /this\.sessionToolStore\.observerPlanetLabel\(item\.planet\)/)
+  assert.match(chips, /private rowKey\(item: SavedLocation\): string/)
+  assert.match(chips, /this\.rowKey\(s\)/)
+  assert.doesNotMatch(chips, /° · ' \+ item\.planet/)
+  assert.match(place, /CityChipsRow\(\{[\s\S]{0,160}sessionToolStore: this\.sessionToolStore/);
   assert.match(store, /this\.savedLocations = \[item, \.\.\.this\.savedLocations\]/);
   // The hardcoded China/world city chips are gone.
   assert.doesNotMatch(chips, /Text\('中国城市'\)/);

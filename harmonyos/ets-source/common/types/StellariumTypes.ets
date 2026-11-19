@@ -530,6 +530,7 @@ export interface StellariumBridgeResponse {
   galacticLongitudeDegrees?: number
   galacticLatitudeDegrees?: number
   enabled?: boolean
+  landscapeAutoSelection?: boolean
   minutes?: number
   mosaicCamera?: Object
   msFormat?: boolean

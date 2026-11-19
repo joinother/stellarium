@@ -692,6 +692,19 @@
   - **冷启动重进阻塞：** 3 个月 `getAstronomyCalendarEvents` 由 ~14.7s 降至 `sky-revealed` 后约 **1.0s** 完成（总计 ~1.6s，月 1/2/3 分别约 0.48s/0.32s/0.38s），`sky-revealed` 后零 `QtWatchdog` 告警，立即拖动响应正常；退后台再切前台 `onForeground` 仅 **140ms**，零阻塞。
 - **边界与未覆盖项：** 未改签名或构建 Release 包；剩余常规画面单帧 draw 耗时（约 18–23ms @ 2560×1600）主要在 `ConstellationMgr`（7–11ms）和 `NebulaMgr`（4–5ms），与时间倍率无关，仍记录于 `KNOWN-ISSUES.md`；未提交、未推送。
 
+## [2026-11-19] OHOS 开发记录 - 自动大气/雾偏好修复与地景自动选择
+
+- **修改文件：** `src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/StelCore.cpp`、`src/gui/LocationDialog.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/capability/LocationController.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/layers/LayerViewTabs.ets`、`harmonyos/ets-source/panels/location/CityChipsRow.ets`、`harmonyos/ets-source/panels/panels/PlacePanel.ets`、`docs/harmonyos/CLI.md`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-location-panel.mjs`、`scripts/test-ohos-observer-location.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。
+- **自动大气/雾根因：** `LandscapeMgr::onTargetLocationChanged()` 在自动环境切换时调用 `setFlagAtmosphere()` / `setFlagFog()`，而这两个 setter 会把运行时结果立即写回 `landscape/flag_atmosphere` / `landscape/flag_fog`。切到无大气天体时“自动关闭”被误存为用户偏好，返回地球时读取到的仍是 false。观测点角色、`returnToHome()` 与 PC 位置对话框预览也走同一路径。
+- **核心修复（单独 commit `418811695c`）：** 新增 `LandscapeMgr::setFlagAtmosphereAndFogForEnvironment()`，自动切换只改运行时状态、不写配置；用户主动切换仍由原 setter 持久化。`StelCore::returnToHome()` 与 `LocationDialog` 预览改用同一入口。
+- **OHOS 固定自动开启：** 新增 `getEnvironmentAutoEnable` / `setEnvironmentAutoEnable` / `applyEnvironmentDefaults`；启动时强制 `viewing/flag_environment_auto_enable=true` 并落盘（OHOS 无 PC 位置对话框中的对应开关）。
+- **联动钩子：** `LocationController` 中“返回地球强制开大气”的旧钩子已移除；真机验证仅靠核心修复即可按用户偏好恢复大气。
+- **已保存地点：** `CityChipsRow` 的已保存/最近条目不再直接显示英文 `planet`，改经 `SessionToolStore.observerPlanetLabel()` 本地化（地球、月球、火卫一等与观测星球下拉一致）；持久化数据仍保存英文名，不影响地点身份键。组件直接 `@ObjectLink SessionToolStore`，并把本地化标签纳入 `ForEach` key，确保面板打开后才异步到达的星球列表能刷新已渲染行（真机验证曾出现 `Atlas` 保持英文的旧行）。
+- **地景面板排版：** “随观测星球自动选择地景”“动态雾山”“俯视时地景淡出”统一使用 `LayerSwitchRow`，说明文字移到开关行外并统一为 11 号次级文字；俯视淡出不再使用自定义行。地景透明度控件从页尾移到地景列表之前。自动地景与雾山说明同步精简。
+- **自动地景（Phase 1）：** 默认开启“随观测星球自动选择地景”，Earth 保留用户地景并在离开时记忆，无匹配天体回落 `zero`；手动选择不改自动开关。非地球观测点的动态雾山行置灰并提示“动态雾山仅在地球可用”，保留原偏好。
+- **构建与安装：** 引擎 + ArkTS HAP `BUILD SUCCESSFUL`（806.2 MB），覆盖安装到 `192.168.3.95:36717` 并启动成功。
+- **真机验证：** 地球大气/雾开启（配置均 true）→ 切月球后运行时大气/雾关闭、两份配置仍为 true → 返回地球后大气/雾恢复 true；先在地球手动关闭大气（配置 false）再往返月球，返回地球保持关闭，证明自动切换不再覆盖用户偏好。启动后 `getEnvironmentAutoEnable.enabled=true`。已保存位置现有条目“土卫十五的日出”的星球行由 `· Atlas` 刷新为 `· 土卫十五`，与观测星球下拉一致。钩子移除后的最终 HAP 再次往返月球，返回地球大气/雾恢复 true。地景面板截图确认自动地景与俯视淡出说明位于开关行外，俯视淡出复用统一开关行，透明度位于“地景列表”之前。验证后已恢复地球、大气开启、自动环境开启。
+
 ## [2026-11-18] OHOS 开发记录 - 观测星球排序、位置标签共用与步进按钮右对齐
 
 - **修改文件：** `state/SessionToolStore.ets`、`common/types/StellariumTypes.ets`、`capability/LocationController.ets`、`pages/MainWindowNativeNode.ets`、`panels/layers/LayerViewTabs.ets`、`src/StelMainView.cpp`、`scripts/test-ohos-observer-location.mjs`、`scripts/test-ohos-observer-planet-contract.mjs`、`scripts/test-ohos-place-atmosphere.mjs`。

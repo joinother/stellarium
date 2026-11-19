@@ -27,8 +27,6 @@ export interface LocationHostHooks {
   setLocationTexts(location: string, coordinate: string, altitude: string): void
   // 观测点变化后让今晚天象缓存失效，并在可见时按新坐标重算。
   refreshTonightData(): void
-  // 从外星观测点返回地球时自动打开大气层，恢复地球天空的地平线观感。
-  enableAtmosphereOnEarth(): void
   // GPS 门禁（宿主保留：privacyNativeStartupAllowed / applicationInForeground / hasCurrentPrivacyConsent）。
   privacyAllowed(): boolean
   inForeground(): boolean
@@ -272,7 +270,6 @@ export class LocationController {
       this.locationStore.locSearchQuery = ''
       this.locationStore.searchLocations('')
       if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
-      else this.hooks.enableAtmosphereOnEarth()
     }
     this.saveObserverLocationToStorage()
     const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'
@@ -373,5 +370,8 @@ export class LocationController {
     this.restoreDetailLongitude = rec.longitude
     hilog.info(0x0000, 'StellariumArkUI', '[location] restoring persisted observer location')
     this.setLocation(name, rec.latitude, rec.longitude, restoredAltitude, planet, true, source)
+    // 自动选择开启且启动落在地球时，若引擎仍停在 zero，则恢复上次记住的地球地景。
+    // 非地球记录会在随后的 setObserverPlanet 中由自动匹配覆盖，这里无需判断 planet。
+    this.port.requestWhenReady('restoreSavedEarthLandscape', '', () => {})
   }
 }

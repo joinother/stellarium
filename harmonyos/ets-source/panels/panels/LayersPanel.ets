@@ -75,6 +75,7 @@ export struct LayersPanel {
   onToggleViewCoordinates: (visible: boolean) => void = () => {}
   onSelectViewCoordinateFamily: (family: string) => void = () => {}
   onSelectViewEquatorialEpoch: (epoch: string) => void = () => {}
+  onToggleLandscapeAutoSelection: (enabled: boolean) => void = () => {}
   onSetLandscapeFadeWithZoom: (isOn: boolean) => void = () => {}
   onImportLandscape: () => void = () => {}
   onSelectLandscape: (id: string, name: string) => void = () => {}
@@ -174,7 +175,9 @@ export struct LayersPanel {
             LayerLandscapeTab({
               layerStore: this.layerStore,
               layerViewStore: this.layerViewStore,
+              earthObserver: this.earthObserver,
               onToggleLayer: (actionId: string, cmd: string, value: boolean) => { this.onToggleLayer(actionId, cmd, value) },
+              onToggleLandscapeAutoSelection: (enabled: boolean) => { this.onToggleLandscapeAutoSelection(enabled) },
               onSetLandscapeFadeWithZoom: (isOn: boolean) => { this.onSetLandscapeFadeWithZoom(isOn) },
               onImportLandscape: () => { this.onImportLandscape() },
               onSelectLandscape: (id: string, name: string) => { this.onSelectLandscape(id, name) },

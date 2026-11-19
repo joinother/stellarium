@@ -2012,6 +2012,11 @@ export struct WindowNativeNode {
       setSkyCultureObserverLatitude: (value: number): void => { this.skyCultureSettingsStore.skyCultureObserverLatitude = value },
       setObserverPlanet: (value: string): void => { this.sessionToolStore.observerPlanet = value }
     })
+    // OHOS 首次运行默认开启“随观测星球自动选择地景”；已显式保存过的偏好保持不变。
+    this.commandPort().requestWhenReady('applyLandscapeDefaults', '', () => { this.refreshState() })
+    // OHOS 没有 PC 位置对话框中的“自动启用大气”选项：固定开启，返回地球时由核心
+    // 恢复用户保存的大气/雾偏好。
+    this.commandPort().requestWhenReady('applyEnvironmentDefaults', '', () => { this.refreshState() })
     // 启动恢复上次观测点（含 GPS 定点）：不再每次重启回退引擎默认北京。引擎未就绪由
     // setLocation 内的 callNativeWhenReady 重试兜底（起经位置控制器）。
     this.locationCtl().restoreObserverLocation()
@@ -3329,7 +3334,6 @@ export struct WindowNativeNode {
           void this.notificationCtl().refreshSubscriptions()
           this.scheduleCardSnapshotSync(600)
         },
-        enableAtmosphereOnEarth: (): void => { this.layerCtl().enableAtmosphereLayer() },
         privacyAllowed: (): boolean => this.privacyNativeStartupAllowed,
         inForeground: (): boolean => this.applicationInForeground,
         hasPrivacyConsent: (): boolean => hasCurrentPrivacyConsent()
@@ -7959,6 +7963,9 @@ export struct WindowNativeNode {
     this.layerStore.milkyWay = result.actionShow_MilkyWay === true
     this.layerStore.ground = result.actionShow_Ground === true
     this.layerStore.mistHorizon = result.actionShow_MistHorizon === true
+    if (result.landscapeAutoSelection !== undefined) {
+      this.layerStore.landscapeAutoSelection = result.landscapeAutoSelection === true
+    }
     this.layerStore.constellationLines = result.actionShow_Constellation_Lines === true
     this.layerStore.constellationLabels = result.actionShow_Constellation_Labels === true
     this.layerStore.constellationBoundaries = result.actionShow_Constellation_Boundaries === true
@@ -9678,6 +9685,7 @@ export struct WindowNativeNode {
         onToggleViewCoordinates: (visible: boolean) => { this.viewCoordinateCtl().setViewCoordinatesVisible(visible) },
         onSelectViewCoordinateFamily: (family: string) => { this.viewCoordinateCtl().setViewCoordinateFamily(family) },
         onSelectViewEquatorialEpoch: (epoch: string) => { this.viewCoordinateCtl().setViewEquatorialEpoch(epoch) },
+        onToggleLandscapeAutoSelection: (enabled: boolean) => { this.layerCtl().setLandscapeAutoSelection(enabled) },
         onSetLandscapeFadeWithZoom: (isOn: boolean) => { this.layerCtl().setLandscapeFadeWithZoom(isOn) },
         onImportLandscape: () => { this.layerCtl().importLandscapeFile() },
         onSelectLandscape: (id: string, name: string) => { this.layerCtl().selectLandscape(id, name) },

@@ -42,6 +42,7 @@ export class LayerStore {
 
   // —— 地平与景观 ——
   ground: boolean = true
+  landscapeAutoSelection: boolean = false
   mistHorizon: boolean = true
   fogEffect: boolean = false
   landscapeIllum: boolean = false

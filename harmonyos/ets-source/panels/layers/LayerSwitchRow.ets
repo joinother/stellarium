@@ -16,6 +16,10 @@ export struct LayerSwitchRow {
   // Optional secondary line. When present the row grows to fit it.
   @Prop hint: ResourceStr = ''
   @Prop isOn: boolean
+  // Disabled rows keep their preference visible but cannot be changed (e.g.
+  // the Earth-only mist horizon while observing another body).
+  // Named rowEnabled because CustomComponent already exposes enabled().
+  @Prop rowEnabled: boolean = true
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggle: (value: boolean) => void = () => {}
 
@@ -48,8 +52,9 @@ export struct LayerSwitchRow {
         .height(28)
         .selectedColor(this.c.accent)
         .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .enabled(this.rowEnabled)
         .onChange((value: boolean) => {
-          if (value === this.isOn) return
+          if (!this.rowEnabled || value === this.isOn) return
           this.onToggle(value)
         })
     }
@@ -60,6 +65,7 @@ export struct LayerSwitchRow {
       .border({ width: 1, color: this.isOn ? this.c.soft : this.c.dividerSoft })
       .borderRadius(UI_RADIUS_CONTROL)
       .margin({ bottom: 6 })
+      .opacity(this.rowEnabled ? 1 : 0.55)
       .animation({ duration: 200, curve: curves.springMotion(0.45, 0.9) })
   }
 }

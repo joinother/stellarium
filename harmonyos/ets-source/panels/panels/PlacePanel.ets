@@ -171,6 +171,7 @@ export struct PlacePanel {
 
       CityChipsRow({
         store: this.locationStore,
+        sessionToolStore: this.sessionToolStore,
         observerPlanet: this.sessionToolStore.observerPlanet,
         onSaveCurrent: () => { this.onSaveCurrent() },
         onApplyLocation: (name: string, lat: number, lon: number, alt: number, planet: string) => { this.onApplyLocation(name, lat, lon, alt, planet) },

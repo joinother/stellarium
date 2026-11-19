@@ -46,20 +46,18 @@ function fixture(planet = 'Moon') {
   };
   let persisted = '';
   const tonightRefreshes = [];
-  const atmosphereEnables = [];
   const controller = new Controller(port, {
     writeObserverLocation: async json => writes.push(JSON.parse(json)),
     readObserverLocation: async () => persisted
   }, picker, locations, session, {
     flashHint: text => hints.push(text), refreshState() {}, loadObserverInfo() {},
     refreshTonightData: () => { tonightRefreshes.push(session.observerPlanet); },
-    enableAtmosphereOnEarth: () => { atmosphereEnables.push(session.observerPlanet); },
     setObserverPlanetCrossStore: name => { session.observerPlanet = name; },
     setLocationTexts: (location, coordinate, altitude) => texts.push({ location, coordinate, altitude }),
     privacyAllowed: () => true, inForeground: () => true, hasPrivacyConsent: () => true
   });
   return { controller, picker, locations, recent, session, requests, writes, hints, tonightRefreshes,
-    atmosphereEnables, texts, persist: record => { persisted = JSON.stringify(record); } };
+    texts, persist: record => { persisted = JSON.stringify(record); } };
 }
 
 test('applying the map retains the selected extraterrestrial observer', () => {
@@ -122,18 +120,6 @@ test('floating GPS altitude is normalized to native integer meters and site sepa
   assert.equal(context.writes[0].altitude, 16);
   assert.equal(context.writes[0].source, 'gps');
   assert.deepEqual(context.tonightRefreshes, ['Earth'], 'a committed location invalidates and refreshes tonight data');
-});
-
-test('returning to Earth re-enables the atmosphere layer only on a planet change', () => {
-  const fromMoon = fixture('Moon');
-  fromMoon.controller.setLocation('Home', 12, 34, 15, 'Earth', false, 'map');
-  fromMoon.requests[0].success({ ok: true });
-  assert.deepEqual(fromMoon.atmosphereEnables, ['Earth']);
-
-  const onEarth = fixture('Earth');
-  onEarth.controller.setLocation('Home', 12, 34, 15, 'Earth', false, 'map');
-  onEarth.requests[0].success({ ok: true });
-  assert.deepEqual(onEarth.atmosphereEnables, [], 'a plain Earth location change must not force the layer on');
 });
 
 test('invalid coordinates cannot reach the native bridge or persistence', () => {

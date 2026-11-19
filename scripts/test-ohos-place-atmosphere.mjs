@@ -19,6 +19,12 @@ const layerTabs = readFileSync(new URL(
   '../harmonyos/ets-source/panels/layers/LayerViewTabs.ets', import.meta.url), 'utf8')
 const layerController = readFileSync(new URL(
   '../harmonyos/ets-source/capability/LayerController.ets', import.meta.url), 'utf8')
+const layerSwitchRow = readFileSync(new URL(
+  '../harmonyos/ets-source/panels/layers/LayerSwitchRow.ets', import.meta.url), 'utf8')
+const layerStore = readFileSync(new URL(
+  '../harmonyos/ets-source/state/LayerStore.ets', import.meta.url), 'utf8')
+const layersPanel = readFileSync(new URL(
+  '../harmonyos/ets-source/panels/panels/LayersPanel.ets', import.meta.url), 'utf8')
 
 function numberConstant(name) {
   const match = new RegExp(`${name}: number = ([0-9.eE-]+)`).exec(atmosphere)
@@ -234,6 +240,37 @@ test('layer controls share the toggle-row backing and Bortle uses +/− buttons'
   assert.doesNotMatch(layerTabs, /Slider\(\{ value: this\.layerViewStore\.bortleScale/)
   assert.match(layerController, /Do not refresh the whole state for bortleScale/)
   assert.match(layerController, /if \(typeof value === 'boolean' \|\| setting === 'environmentMode'\) this\.hooks\.refreshState\(\)/)
-  assert.match(layerController, /enableAtmosphereLayer\(\): void/)
-  assert.match(layerController, /this\.port\.requestInteractive\('setActionChecked', 'actionShow_Atmosphere\|1'/)
+})
+
+test('landscape auto-selection is exposed with Earth-safe fallback and Earth-only mist', () => {
+  assert.match(layerStore, /landscapeAutoSelection: boolean = false/)
+  assert.match(layerController, /setLandscapeAutoSelection\(enabled: boolean\): void/)
+  assert.match(layerController, /requestInteractive\('setLandscapeAutoSelection'/)
+  // 手动选择与自动切换独立：selectLandscape 不改自动开关。
+  assert.doesNotMatch(layerController, /selectLandscape[\s\S]{0,500}setLandscapeAutoSelection\(false\)/)
+  assert.match(layerSwitchRow, /@Prop rowEnabled: boolean = true/)
+  assert.match(layerSwitchRow, /\.enabled\(this\.rowEnabled\)/)
+  assert.match(layerTabs, /onToggleLandscapeAutoSelection/)
+  assert.match(layerTabs, /I18n\.t\('landscape_auto_selection'\)/)
+  assert.match(layerTabs, /@Prop earthObserver: boolean = true/)
+  assert.match(layerTabs, /rowEnabled: this\.earthObserver/)
+  assert.match(layerTabs, /I18n\.t\('mist_horizon_earth_only'\)/)
+  assert.match(layersPanel, /onToggleLandscapeAutoSelection/)
+  assert.match(layersPanel, /earthObserver: this\.earthObserver/)
+  assert.match(host, /onToggleLandscapeAutoSelection: \(enabled: boolean\) => \{ this\.layerCtl\(\)\.setLandscapeAutoSelection\(enabled\) \}/)
+  // 说明文字统一放在开关行外；自动地景、雾山、俯视淡出复用同一行组件与注释样式。
+  assert.doesNotMatch(layerTabs, /hint: I18n\.t\('landscape_auto_selection_hint'\)/)
+  assert.doesNotMatch(layerTabs, /hint: this\.earthObserver/)
+  assert.match(layerTabs, /Text\(I18n\.t\('landscape_auto_selection_hint'\)\)/)
+  assert.match(layerTabs, /Text\(this\.earthObserver \? I18n\.t\('mist_horizon_hint'\) : I18n\.t\('mist_horizon_earth_only'\)\)/)
+  assert.match(layerTabs, /label: I18n\.t\('landscape_fade_with_zoom'\)/)
+  assert.match(layerTabs, /Text\(I18n\.t\('landscape_fade_with_zoom_hint'\)\)/)
+  // 透明度控件位于地景列表之前，不再挂在页尾。
+  const transparencyIndex = layerTabs.indexOf("I18n.t('i0289')")
+  const listIndex = layerTabs.indexOf('ForEach(this.layerViewStore.landscapeList')
+  assert.ok(transparencyIndex >= 0 && listIndex > transparencyIndex, 'landscape transparency must precede the landscape list')
+  for (const key of ['landscape_auto_selection', 'landscape_auto_selection_hint', 'mist_horizon_earth_only',
+    'landscape_fade_with_zoom', 'landscape_fade_with_zoom_hint']) {
+    assert.match(i18n, new RegExp(`'${key}'\\s*:\\s*\\{`))
+  }
 })

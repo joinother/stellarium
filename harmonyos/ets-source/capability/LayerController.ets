@@ -115,17 +115,6 @@ export class LayerController {
     })
   }
 
-  // 返回地球时由位置域调用：大气层是地球观感的一部分，但用户可能在外星
-  // 观测时关掉了它。只在当前为关闭时写一次，避免每次定位都闪提示。
-  enableAtmosphereLayer(): void {
-    if (this.layerStore.atmosphere) return
-    this.layerStore.atmosphere = true
-    this.port.requestInteractive('setActionChecked', 'actionShow_Atmosphere|1', (r: StellariumBridgeResponse) => {
-      if (r.ok !== true) this.layerStore.atmosphere = false
-      this.hooks.refreshState()
-    })
-  }
-
   // 图层开关的统一写回。
   applyLayerSwitch(actionId: string, cmd: string, value: boolean): void {
     if (cmd.length === 0 && actionId === 'actionShow_Night_Mode') {
@@ -494,9 +483,26 @@ export class LayerController {
       }
       this.layerViewStore.currentLandscapeId = id
       this.objectDetailStore.selectedLandscapeName = name
+      // 手动选择与自动切换互相独立：这里只应用本次选择，不改自动开关；
+      // 下一次切换观测星球时仍按自动开关的规则处理。
       this.hooks.setLandscapeDetailOpen(false)
       this.hooks.refreshState()
     })
+  }
+
+  // 观测星球切换时是否按天体名自动匹配地景。Earth 保留当前地景；无匹配回落 zero。
+  setLandscapeAutoSelection(enabled: boolean): void {
+    this.layerStore.landscapeAutoSelection = enabled
+    this.port.requestInteractive('setLandscapeAutoSelection', enabled ? '1' : '0',
+      (response: StellariumBridgeResponse) => {
+        if (response.ok !== true) {
+          this.layerStore.landscapeAutoSelection = !enabled
+          this.hooks.flashHint(I18n.t('msg_apply_failed'))
+        } else {
+          this.layerStore.landscapeAutoSelection = response.enabled === true
+        }
+        this.hooks.refreshState()
+      })
   }
 
   // 随缩放淡出地景开关写回。

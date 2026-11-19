@@ -90,6 +90,23 @@ node scripts/stellarium-cli.mjs --device <设备ID> --command getARState --json
 - 完成返回 `{ok:true,characters:字符数}`，失败返回通用错误；不返回被复制内容。会覆盖系统当前剪贴板，测试只使用无敏感信息的固定文本。
 - 配合 Qt 原生 `[clipboard-probe] ... contentRead=false` 验证变化通知不再同步读取；响应成功不代表未来任意原生 Qt 粘贴功能已验收。
 
+## 地景自动选择（2026-11-19）
+
+- `getLandscapeAutoSelection` 返回 `{ok, enabled}`；`setLandscapeAutoSelection` 接受 `0|1|true|false`，写回 `viewing/flag_landscape_autoselection`（上游同名键），无新增权限或联网。
+- `applyLandscapeDefaults` 为 OHOS 首次运行迁移：配置中不存在 `viewing/flag_landscape_autoselection` 时写为开启；用户已显式保存的 true/false 不会被覆盖。
+- 开启后，`setObserverPlanet` 仅在观测星球变化时触发自动匹配：非地球天体按英文名匹配同名地景，无匹配回落 `zero`；Earth 不参与名称匹配。
+- OHOS 桥在离开地球时把当前地景 ID 记到 `landscape/saved_earth_landscape_id`，返回地球时作为显式地景 ID 传入，避免上游按 `"Earth"` 匹配失败而回落到 zero。`getAllLandscapeNames().indexOf(...) > 0` 的上游边界 bug 已在单独 commit 中修为 `>= 0`；其余自动选择行为与 PC 一致。
+- `restoreSavedEarthLandscape` 为启动恢复辅助命令：自动选择开启、当前落在地球且引擎仍为 `zero` 时，重新应用记住的地球地景；已有非零地球地景则不覆盖。`LocationController.restoreObserverLocation()` 在恢复持久化观测点后调用一次。
+- 手动 `setLandscape` 与自动选择互相独立：手动选择只应用本次资源，不修改自动开关；下一次观测星球变化仍按自动开关处理。
+- 「图层 → 地景」新增「随观测星球自动选择地景」行；非地球观测点时「动态雾山地景」行置灰并提示“动态雾山仅在地球可用”，但保留原开关偏好，返回地球后继续生效。
+
+## 自动大气与雾（2026-11-19）
+
+- PC「位置」对话框的“自动启用大气”（`viewing/flag_environment_auto_enable`）在 OHOS 没有对应 UI，固定开启：启动时 `applyEnvironmentDefaults` 写为 true；`getEnvironmentAutoEnable` 返回 `{ok, enabled}`，`setEnvironmentAutoEnable` 接受 `0|1|true|false`，仅用于诊断/回归（下次启动仍会恢复 true）。
+- 核心修复：`LandscapeMgr::setFlagAtmosphereAndFogForEnvironment` 专供自动环境切换，只改运行时状态，不写 `landscape/flag_atmosphere` / `landscape/flag_fog`。用户主动切换（工具栏、`setActionChecked`、脚本）仍由原 setter 持久化。
+- 因此切到无大气天体时大气/雾自动关闭，返回有大气天体时按保存的用户偏好恢复，不会再把“外星自动关闭”误存为偏好。`StelCore::returnToHome()` 与 PC 位置对话框的预览路径也使用同一非持久化入口。
+- `LocationController` 旧的“返回地球强制开大气”钩子已移除；返回地球的运行时状态只由核心自动切换按用户偏好恢复。已保存/最近地点列表中的星球名与观测星球下拉共用 `observerPlanetLabel` 本地化标签，持久化数据仍保留英文名。
+
 ## 动态雾山地景（2026-09-08）
 
 - `setActionChecked actionShow_MistHorizon|1` 开雾山同时关地面/三维场景，`|0` 关闭雾山；`actionShow_Ground|1` 开地面同时关雾山。两项都关为无地景。首次没有照片地景与保存偏好时雾山默认开，保留用户之后的明确关闭。

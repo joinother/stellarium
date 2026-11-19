@@ -620,8 +620,10 @@ export struct LayerLandscapeTab {
   @ObjectLink layerStore: LayerStore
   @ObjectLink layerViewStore: LayerViewStore
   @StorageProp('stellariumReadableUi') readableUi: boolean = false
+  @Prop earthObserver: boolean = true
   @State private c: ThemeSlots = DEFAULT_SLOTS
   onToggleLayer: (actionId: string, cmd: string, value: boolean) => void = () => {}
+  onToggleLandscapeAutoSelection: (enabled: boolean) => void = () => {}
   onSetLandscapeFadeWithZoom: (isOn: boolean) => void = () => {}
   onImportLandscape: () => void = () => {}
   onSelectLandscape: (id: string, name: string) => void = () => {}
@@ -636,22 +638,52 @@ export struct LayerLandscapeTab {
   build() {
     Column({ space: 0 }) {
       LayerSwitchRow({ label: I18n.t('s0306'), isOn: this.layerStore.ground, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Ground', '', value) } })
-      LayerSwitchRow({ label: I18n.t('mist_horizon'), isOn: this.layerStore.mistHorizon, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MistHorizon', '', value) } })
-      Text(I18n.t('mist_horizon_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+      LayerSwitchRow({
+        label: I18n.t('landscape_auto_selection'),
+        isOn: this.layerStore.landscapeAutoSelection,
+        onToggle: (value: boolean) => { this.onToggleLandscapeAutoSelection(value) }
+      })
+      Text(I18n.t('landscape_auto_selection_hint'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
+      LayerSwitchRow({
+        label: I18n.t('mist_horizon'),
+        isOn: this.layerStore.mistHorizon,
+        rowEnabled: this.earthObserver,
+        onToggle: (value: boolean) => { this.onToggleLayer('actionShow_MistHorizon', '', value) }
+      })
+      Text(this.earthObserver ? I18n.t('mist_horizon_hint') : I18n.t('mist_horizon_earth_only'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
       if (!this.layerStore.ground) {
-        Text(I18n.t('landscape_preselect_hint')).fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 10, right: 10, bottom: 8 })
+        Text(I18n.t('landscape_preselect_hint'))
+          .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+          .padding({ left: 10, right: 10, bottom: 8 })
       }
       LayerSwitchRow({ label: I18n.t('s0520'), isOn: this.layerStore.landscapeIllum, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeIllumination', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0521'), isOn: this.layerStore.landscapeLabels, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LandscapeLabels', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0307'), isOn: this.layerStore.fogEffect, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Fog', '', value) } })
+      LayerSwitchRow({
+        label: I18n.t('landscape_fade_with_zoom'),
+        isOn: this.layerViewStore.landscapeFadeWithZoom,
+        onToggle: (value: boolean) => { this.onSetLandscapeFadeWithZoom(value) }
+      })
+      Text(I18n.t('landscape_fade_with_zoom_hint'))
+        .fontSize(panelFontSize(11, this.readableUi)).fontColor(this.c.sub).width('100%')
+        .padding({ left: 10, right: 10, bottom: 8 })
       Row() {
-        Column() {
-          Text('俯视时地景淡出').fontSize(13).fontColor(this.c.text)
-          Text('视角压低看地面时地面渐隐，露出地平线下的星空（仍可见）').fontSize(11).fontColor(this.c.sub).margin({ top: 2 })
-        }.layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.layerViewStore.landscapeFadeWithZoom })
-          .onChange((isOn: boolean) => { this.onSetLandscapeFadeWithZoom(isOn) })
-      }.width('100%').padding({ left: 10, right: 10 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL).margin({ top: 6 })
+        Text(I18n.t('i0289')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
+        Text(this.layerViewStore.landscapeTransp + '%')
+          .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(44).textAlign(TextAlign.End)
+        Slider({ value: this.layerViewStore.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
+          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
+          .layoutWeight(1)
+          .trackColor(this.c.softStrong)
+          .showSteps(false)
+          .onChange((val: number) => { this.layerViewStore.landscapeTransp = Math.round(val); this.onChangeLandscapeTransparency(val) })
+      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
+        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
+        .borderRadius(UI_RADIUS_CONTROL).margin({ top: 6, bottom: 6 })
       Row() {
         Text(I18n.t('i0288')).fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 2 })
       }.height(18).width('100%').margin({ top: 6 })
@@ -707,19 +739,6 @@ export struct LayerLandscapeTab {
         }, (item: LandscapeItem, index: number) => item.id)
       }
       .width('100%')
-      Row() {
-        Text(I18n.t('i0289')).fontSize(panelFontSize(14, this.readableUi)).fontColor(this.c.text).width(86)
-        Text(this.layerViewStore.landscapeTransp + '%')
-          .fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width(44).textAlign(TextAlign.End)
-        Slider({ value: this.layerViewStore.landscapeTransp, min: 0, max: 100, step: 5, style: SliderStyle.OutSet })
-          .sliderInteractionMode(SliderInteraction.SLIDE_ONLY).minResponsiveDistance(8)
-          .layoutWeight(1)
-          .trackColor(this.c.softStrong)
-          .showSteps(false)
-          .onChange((val: number) => { this.layerViewStore.landscapeTransp = Math.round(val); this.onChangeLandscapeTransparency(val) })
-      }.height(this.readableUi ? 50 : 42).width('100%').padding({ left: 10, right: 8 })
-        .backgroundColor(this.c.bg).border({ width: 1, color: this.c.dividerSoft })
-        .borderRadius(UI_RADIUS_CONTROL).margin({ bottom: 6 })
     }.width('100%')
   }
 }
