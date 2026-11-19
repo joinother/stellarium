@@ -282,7 +282,7 @@ private:
 	float linePresentation = 1.f;
 	float labelPresentation = 1.f;
 	void loadArtModel(const QString& path, const Mat4d& transform, int width, int height);
-	void drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity) const;
+	void drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity, bool managedDepthState = false) const;
 	SphericalCap boundingCap;
 	SphericalRegionP convexHull; //!< The convex hull formed by stars contained in the defined lines (constellation) plus extra stars (hullExtension).
 

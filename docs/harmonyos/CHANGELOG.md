@@ -1,5 +1,56 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-19] 大 FOV 天顶↔天底切换视角卡顿专项优化（整帧绘制提速 2.6×，深空索引提速 28.6×）
+
+- **修改文件：** `src/core/modules/NebulaMgr.hpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/modules/Constellation.hpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/ConstellationMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **`NebulaMgr` 大 FOV 遍历全天 95,000+ 深空天体（17.05 ms → 0.60 ms，28.6× 提速）：**
+     - 大视场下 `getViewportConvexPolygon()` 覆盖全天球，`nebGrid` 每帧对 95,000+ 条深空目标执行 35 项星表/类型/星等判定，而实际大 FOV 下仅几百个亮目标满足 `opacity > 0`。
+     - 新增按 `sortMag` 升序排列的扁平索引 `dsoDrawIndex`（轮廓目标按 `lim - 3.0` 保守下界对齐 `NebulaDrawing::opacity`），常规星等模式下遇到 `sortMag >= max(maxMagHints, maxMagLabels)` 立即提前终止，**100% 像素等价**，极深缩放大极限星等或面亮度模式仍走 `nebGrid`。
+  2. **`ConstellationMgr` 3D 星座合批深度状态 + 大 FOV 3D 预算（20.79 ms → 7.99 ms，峰值 47.10 ms → 15.68 ms）：**
+     - 将每星座 2 次全屏 `glClear(GL_DEPTH_BUFFER_BIT)` + `glGetIntegerv(GL_DEPTH_FUNC)`（大 FOV 下每帧可达 120 次全屏深度清空，打断移动端瓦片 GPU 流水线）合并为 `ConstellationMgr::drawArt()` 单帧 1 次统一深度设置与清理。
+     - `Constellation::prepareModelPose()` 增加 `0.004 rad` 姿态缓存死区并展开 3×3 标量矩阵乘法；`drawArtModel()` 跳过装饰性星座网格每顶点 20″ 光行差 `normalize()`；将不可见阈值由 `0.003` 提升至 `0.015`。
+     - OHOS 大视场（`> 95°` / `> 130°`）按 `modelIntensity()` 选出中心最亮的 Top-12 / Top-8 绘制完整 3D 网格，其余边缘淡出星座以同透明度轻量 2D 星座图无缝衔接。
+- **真机实测（MatePad Mini `192.168.31.234:42713`，`180° FOV` 天顶↔天底快速扫动 + 地景 + 大气 + 3D 星座）：**
+  - `NebulaMgr` `collectionAvg`：`17.049 ms → 0.597 ms`（**28.6×**）。
+  - `ConstellationMgr` 平均/峰值：`20.788 / 47.102 ms → 7.988 / 15.684 ms`（**2.6×–3.0×**）。
+  - 整帧 `draw` 平均/峰值：`50.549 / 90.302 ms → 19.793 / 34.749 ms`（**2.6×**），扫动实测帧率由 **11.9–16.1 FPS** 提升至 **31.2–37.0 FPS**。
+
+## [2026-11-19] 82 星座详情 3D 雕塑模型上线 + 详情 3D 模型原生 C++ 加速（10×–20× 提速）+ 星座连线/3D 区域点选星星优化
+
+- **修改文件：** `harmonyos/cpp-source/DetailModelNative.h`（新增）、`harmonyos/cpp-source/DetailModelNative.cpp`（新增）、`harmonyos/cpp-source/hello.cpp`、`harmonyos/cpp-source/CMakeLists.txt`、`src/StelMainView.cpp`、`src/core/TouchPicker.hpp`、`src/core/TouchPicker.cpp`、`harmonyos/ets-source/bridge/MediaPort.ets`、`harmonyos/ets-source/capability/DetailModelRenderTypes.ets`、`harmonyos/ets-source/capability/DetailModelWorker.ets`、`harmonyos/ets-source/capability/ObjectModelRenderer.ets`、`harmonyos/ets-source/capability/ObjectInspectorMediaController.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/state/ObjectMediaStore.ets`、`harmonyos/ets-source/panels/object/TabletInspectorMedia.ets`、`harmonyos/ets-source/panels/overlay/ObjectInspectorModelOverlay.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与新增内容：**
+  1. **星座详情卡全量接入离线 3D 模型（含鹿豹座等 82 个现代星座）：**
+     - `StelMainView.cpp` 的 `objectDetailModelJson()` 自动检测本地 `skycultures/modern/models/<abbr>.scm`（支持 `modern` 与 `modern_iau` 星空文化），存在时输出 `state="available"`、`format="scm1"` 与 `assetPath`（其余暂无模型的星座或非现代文化继续回退 2D 星座插画）。
+     - `ObjectInspectorMediaController` / `ObjectModelRenderer` 新增 `readBinaryFile()` 与 `commitObjectInspectorMeshData()`，加载 82 个 `.scm` 网格后在详情卡与「沉浸查看」全屏页展示可 360° 自由旋转、双指缩放的蓝银星光菲涅尔 3D 星座雕塑（默认 3/4 立体视角）。
+  2. **详情卡 3D 模型转动卡顿根治（原生 C++ `-O3` 光栅化 + 去 18ms 人为防抖，提速 10×–20×）：**
+     - 原 ArkTS Worker 纯 JS 光栅化在真机 `320×320` 需 `80–201 ms/帧`（且每次拖动额外附加 18ms `setTimeout` 防抖，仅约 7 FPS）。
+     - 新增 `DetailModelNative.cpp`（CMake 强制 `-O3` 编译）导出 `renderDetailModelSphere`（含预计算 1D 行星环查找表与紧包围盒）、`renderDetailModelProcedural`（恒星/类星体/脉冲星/星团）及 `renderDetailModelConstellation`（带线程局部网格缓存与 Z-buffer 的 `SCM1` 8,000 面片光栅化器），由 `DetailModelWorker.ets` 在后台线程直接调用（保留 JS 光栅器兜底，原有 SHA-256 像素测试全兼容）。
+     - 移除 `ObjectModelRenderer.requestObjectInspectorModelRender()` 中拖动路径的 18ms 人为防抖，空闲时 0ms 直发、在途合帧完结即刻续冲。
+  3. **修复选中星座上的星星容易误触星座：**
+     - 原 `TouchPicker.cpp` 中星座连线命中（`lineHit`）与 3D 星座网格命中（`modelHit`）均被标为 `directHit=true`，无条件压过所有未精确落在 `visualRadius + 3vp` 内的恒星。
+     - 现将 `nearObjectPriority` 置入星座标签（Tier 2）之后、星座连线/3D 区域（Tier 4/5）之前（Tier 3）：手指在行星/卫星/深空（26vp）、亮星或当前星座连线端点星（24vp）及暗星（12vp）舒适半径内时优先选中天体；点击星座名称标签或星座空旷区域/3D 身体仍稳定选中星座。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机验证：`test-ohos-model-worker.mjs`（6/6 含 9 项 SHA-256 像素基线）、`test-ohos-detail-media.mjs`（2/2）、`test-ohos-detail-model-geometry.mjs`（7/7）、`test-ohos-procedural-model.mjs`（12/12）、`test-ohos-screen-anchor.mjs`（6/6）、`test-selected-time-camera.py`、`test-constellation-models.py`、`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs` 全通过。
+  - **真机实测 3D 渲染耗时对比（`320×320`）：**
+    - 土星（含星环）：`computeMs` 由 `129 ms → 10 ms`（`totalMs 153 ms → 15 ms`，**10× 提速**）。
+    - 木星：`computeMs` 由 `201 ms → 9–15 ms`（`totalMs 231 ms → 18 ms`，**13× 提速**）。
+    - 织女星：`computeMs` 由 `80 ms → 4–8 ms`（`totalMs 113 ms → 12 ms`，**9.4× 提速**）。
+    - 鹿豹座 `Cam.scm`（7,999 面）：`320×320` 耗时 `12–14 ms`（`total 15 ms`）；沉浸模式 `640×640` 仅 `14 ms`（`total 20 ms`，50 FPS）。
+    - 猎户座 `Ori.scm`（8,000 面）：`320×320` 耗时 `5–9 ms`（`total 11 ms`）。
+  - **真机点选实测（开启星座连线 + 标签 + 3D 星座模型）：** 在鹿豹座 `β Cam`（4.02 等）、`α Cam`（4.29 等）与大熊座 `天枢 Dubhe` 偏移 `0 / 11.7 / 18.9 / 21.5 vp` 点选均 100% 稳定命中恒星，不再被星座误抢；点选星座名称/主体仍稳定命中星座。
+
+## [2026-11-19] 双指缩放保持地平线倾角 + 单指拖动平滑回正地平线过渡动画
+
+- **修改文件：** `src/StelMainView.cpp`、`scripts/test-ohos-screen-anchor.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **问题与修复：**
+  1. **消除单指移动时地平线单帧跳变：** 原 `ohosApplyPanDelta()` 在离开天顶区后直接以 `horizonBlend = 1.0` 将 `upVector` 瞬时拉齐至 `horizonUp`，导致双指离轴放大后保留的倾角在单指刚动第一像素时突兀跳平。现新增 `ohosComputeHorizonRoll()` / `ohosRotateAroundAxis()`，拖动单步内先**保留当前地平线滚转角**（已水平时继续严格 0° 防漂移，倾斜时零跳变），同时触发渲染线程过渡动画 `ohosUpdateHorizonLeveling(dt)`。
+  2. **双指缩放与离手保持地平线角度：** 双指捏合（`zoomBy`）及收尾保持 `freezeRoll = true` 并取消回正动画；若捏合结束时残留明显倾角（`> 0.23°`），置位 `s_ohosPinchRollHeld = true`，防止已选天体锚点维护在用户单指移动前把地平线拉平。
+  3. **单指移动触发丝滑回正动画：** `ohosUpdateHorizonLeveling(dt)` 在 `renderOhosFrameNow()` 中按指数缓出（`τ = 0.12s`，角速度 `14°–240°/s`，天顶区按 `poleWeight` 平滑衰减）绕当前视线轴将地平线平滑转回正向水平（即使倾角 `> 90°` 也不会锁死倒置），并在完成时无缝回捕选中天体锚点；若中途再次双指捏合、进入陀螺仪、自动飞行或跟踪则立即让位。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机验证：`test-ohos-screen-anchor.mjs`（6/6，含新增 225 组原生 C++ 滚转/单调收敛数值测试）、`test-selected-time-camera.py`（675 锚点 + 187,500 帧）全通过。
+  - 真机实测：`test-ohos-screen-anchor-pad.mjs` 全通过（锚点最大误差 `0.00017 px`）；离轴双指放大至 `11.88° FOV` 后地平线倾角稳定保持在 `-72.39°`（`pinchRollHeld=true`），单指拖动后不再单帧跳变，而是经 `horizonLevelActive=true` 平滑过渡回 `0.0°`，随后常规单指平移维持严格 `0.0°` 水平。
+
 ## [2026-11-19] 时间调节“天不转地平线转”根因修复与全单位时间轮流畅度专项优化
 
 - **修改文件：** `src/StelMainView.cpp`、`plugins/Satellites/src/Satellites.cpp`、`harmonyos/ets-source/state/TimeWheelStore.ets`、`harmonyos/ets-source/state/TimeWheelController.ets`、`harmonyos/ets-source/panels/time/TimeWheelCanvas.ets`、`harmonyos/ets-source/capability/TimeController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。

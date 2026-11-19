@@ -2119,6 +2119,63 @@ static double s_ohosPinchSettleVelocity = 0.0; // log scale per second
 static double s_ohosPinchSettleElapsedSec = 0.0;
 static double s_ohosPinchLastLogScale = 0.0;
 static double s_ohosPinchLastSampleSec = 0.0;
+// Horizon roll leveling state:
+// - Two-finger pinch zoom keeps the current horizon angle (freezeRoll = true).
+// - If pinch ends with a visible tilt, s_ohosPinchRollHeld keeps selected-object
+//   anchoring from snapping the horizon back before the user drags.
+// - Once single-finger panning moves the sky (ohosApplyPanDelta), the pan step
+//   preserves the current roll instead of snapping in 1 frame, and arms
+//   s_ohosHorizonLevelActive so ohosUpdateHorizonLeveling(dt) smoothly rotates
+//   the horizon back to level on the render thread.
+static bool s_ohosHorizonLevelActive = false;
+static bool s_ohosPinchRollHeld = false;
+
+static bool ohosComputeHorizonRoll(const Vec3d& viewMount, const Vec3d& upMount,
+	Vec3d& outHorizonUp, double& outStrength, double& outRollRad)
+{
+	Vec3d horizonUp(0., 0., 1.);
+	horizonUp -= viewMount * horizonUp.dot(viewMount);
+	const double strength = std::sqrt(horizonUp.normSquared());
+	outStrength = strength;
+	if (strength <= 1e-6)
+		return false;
+	horizonUp /= strength;
+	outHorizonUp = horizonUp;
+	const double sinRoll = viewMount.dot(upMount ^ horizonUp);
+	const double cosRoll = qBound(-1.0, upMount.dot(horizonUp), 1.0);
+	outRollRad = std::atan2(sinRoll, cosRoll);
+	return true;
+}
+
+static Vec3d ohosRotateAroundAxis(const Vec3d& vec, const Vec3d& axis, double angleRad)
+{
+	Vec3d rotated = vec * std::cos(angleRad) + (axis ^ vec) * std::sin(angleRad);
+	rotated -= axis * rotated.dot(axis);
+	if (rotated.normSquared() > 1e-18)
+		rotated.normalize();
+	return rotated;
+}
+
+static double ohosCurrentMountHorizonRollAbsRad(StelMovementMgr* movementMgr)
+{
+	if (!movementMgr)
+		return 0.0;
+	Vec3d view = movementMgr->j2000ToMountFrame(movementMgr->getViewDirectionJ2000());
+	Vec3d up = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
+	if (view.normSquared() < 1e-12)
+		return 0.0;
+	view.normalize();
+	up -= view * up.dot(view);
+	if (up.normSquared() < 1e-12)
+		return 0.0;
+	up.normalize();
+	Vec3d horizonUp;
+	double strength = 0.0;
+	double rollRad = 0.0;
+	if (!ohosComputeHorizonRoll(view, up, horizonUp, strength, rollRad) || strength <= 0.05)
+		return 0.0;
+	return std::abs(rollRad);
+}
 
 static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 {
@@ -2159,18 +2216,34 @@ static void ohosApplyPanDelta(StelCore* core, double dx, double dy)
 			return;
 		transportedUp.normalize();
 
-		Vec3d horizonUp(0., 0., 1.);
-		horizonUp -= nextView * horizonUp.dot(nextView);
 		Vec3d nextUp = transportedUp;
-		const double horizonStrength = std::sqrt(horizonUp.normSquared());
-		if (horizonStrength > 1e-9)
+		Vec3d prevHorizonUp;
+		Vec3d nextHorizonUp;
+		double prevStrength = 0.0;
+		double nextStrength = 0.0;
+		double prevRollRad = 0.0;
+		double transportedRollRad = 0.0;
+		const bool hasPrevRoll = ohosComputeHorizonRoll(view, up, prevHorizonUp, prevStrength, prevRollRad);
+		const bool hasNextRoll = ohosComputeHorizonRoll(nextView, transportedUp, nextHorizonUp, nextStrength, transportedRollRad);
+		if (hasNextRoll)
 		{
-			horizonUp /= horizonStrength;
-			if (horizonUp.dot(transportedUp) < 0.)
-				horizonUp *= -1.;
-			const double horizonBlend = qBound(0.0, (horizonStrength - 0.05) / 0.20, 1.0);
-			nextUp = transportedUp * (1.0 - horizonBlend) + horizonUp * horizonBlend;
+			// Preserve the current roll angle across this pan step so already-level
+			// panning stays flat without holonomy lag, while a tilted post-pinch
+			// horizon never snaps in 1 frame — ohosUpdateHorizonLeveling(dt) glides
+			// it smoothly to horizontal instead.
+			const double collarStrength = hasPrevRoll ? qMin(prevStrength, nextStrength) : 0.0;
+			const double collarBlend = qBound(0.0, (collarStrength - 0.05) / 0.20, 1.0);
+			double targetRollRad = transportedRollRad;
+			if (collarBlend > 0.0)
+			{
+				const double rollDiff = std::remainder(prevRollRad - transportedRollRad, 2.0 * M_PI);
+				targetRollRad = std::remainder(transportedRollRad + rollDiff * collarBlend, 2.0 * M_PI);
+				nextUp = ohosRotateAroundAxis(nextHorizonUp, nextView, -targetRollRad);
+			}
+			if (nextStrength > 0.05 && std::abs(targetRollRad) > 0.002)
+				s_ohosHorizonLevelActive = true;
 		}
+		s_ohosPinchRollHeld = false;
 		if (nextUp.normSquared() < 1e-9)
 			return;
 		nextUp.normalize();
@@ -2260,6 +2333,8 @@ static void ohosUpdatePinchSettle(double dtSec)
 		s_ohosPinchSettleVelocity = 0.0;
 		s_ohosPinchSettleElapsedSec = 0.0;
 		s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+		if (ohosCurrentMountHorizonRollAbsRad(movementMgr) > 0.004)
+			s_ohosPinchRollHeld = true;
 		return;
 	}
 	movementMgr->setFov(nextFov);
@@ -2655,9 +2730,10 @@ static void ohosAnchorSkyDirection(const Vec3d& directionJ2000, double xRatio, d
 	Vec3d viewMount = movementMgr->j2000ToMountFrame(movementMgr->getViewDirectionJ2000());
 	const Vec3d previousUpMount = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
 	// Zooming must never rotate the camera. While a pinch (or its settle tail)
-	// owns the view, keep the stored roll and only transport it, so the 1/sin
-	// sensitivity of the canonical up near a pole/zenith cannot shake the image.
-	const bool freezeRoll = s_ohosPinchActive || s_ohosPinchSettleActive;
+	// owns the view — or while post-pinch roll is held until the user pans —
+	// keep the stored roll and only transport it, so the 1/sin sensitivity of
+	// the canonical up near a pole/zenith cannot shake or snap the image.
+	const bool freezeRoll = s_ohosPinchActive || s_ohosPinchSettleActive || s_ohosPinchRollHeld;
 	Vec3d upMount = previousUpMount;
 	if (!freezeRoll)
 	{
@@ -2781,6 +2857,8 @@ static void ohosMaintainSelectedZoomAnchor()
 		return;
 	if (s_gyroViewActive)
 		return;
+	if (s_ohosHorizonLevelActive)
+		return;
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
 		return;
@@ -2812,6 +2890,97 @@ static void ohosMaintainSelectedZoomAnchor()
 	}
 	ohosAnchorSkyDirection(selectedObject->getJ2000EquatorialPos(core),
 		s_ohosZoomAnchorXRatio, s_ohosZoomAnchorYRatio);
+}
+
+static void ohosUpdateHorizonLeveling(double dtSec)
+{
+	if (!s_ohosHorizonLevelActive)
+		return;
+	StelApp* app = &StelApp::getInstance();
+	if (!app || !app->isInitialized() || app->getScriptMgr().scriptIsRunning() ||
+		s_gyroViewActive || s_ohosPinchActive || s_ohosPinchSettleActive)
+	{
+		s_ohosHorizonLevelActive = false;
+		return;
+	}
+	StelCore* core = app->getCore();
+	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : nullptr;
+	if (!movementMgr || movementMgr->getFlagAutoMove() || movementMgr->getFlagTracking())
+	{
+		s_ohosHorizonLevelActive = false;
+		return;
+	}
+	Vec3d view = movementMgr->j2000ToMountFrame(movementMgr->getViewDirectionJ2000());
+	Vec3d up = movementMgr->j2000ToMountFrame(movementMgr->getViewUpVectorJ2000());
+	if (view.normSquared() < 1e-12)
+	{
+		s_ohosHorizonLevelActive = false;
+		return;
+	}
+	view.normalize();
+	up -= view * up.dot(view);
+	if (up.normSquared() < 1e-12)
+	{
+		s_ohosHorizonLevelActive = false;
+		return;
+	}
+	up.normalize();
+
+	Vec3d horizonUp;
+	double strength = 0.0;
+	double rollRad = 0.0;
+	if (!ohosComputeHorizonRoll(view, up, horizonUp, strength, rollRad) || strength <= 0.05)
+	{
+		if (!s_ohosPanInertiaActive)
+			s_ohosHorizonLevelActive = false;
+		return;
+	}
+
+	const double absRoll = std::abs(rollRad);
+	const double snapThresholdRad = 0.0008; // ~0.046 deg
+	if (absRoll <= snapThresholdRad)
+	{
+		movementMgr->setViewUpVector(horizonUp);
+		movementMgr->setViewDirectionJ2000(movementMgr->mountFrameToJ2000(view));
+		s_ohosHorizonLevelActive = false;
+		if (s_viewLock)
+			ohosCaptureSelectedZoomAnchor();
+		return;
+	}
+
+	const double safeDt = qBound(0.001, dtSec, 0.080);
+	const double poleWeight = qBound(0.0, (strength - 0.05) / 0.20, 1.0);
+	// Smooth exponential ease-out (tau = 0.12s) with bounded angular velocity
+	// (14..240 deg/s) so post-pinch horizon tilts glide back to level in ~0.35-0.5s.
+	const double tau = 0.12;
+	const double expStep = absRoll * (1.0 - std::exp(-safeDt / tau));
+	const double minStep = (14.0 * M_PI / 180.0) * safeDt;
+	const double maxStep = (240.0 * M_PI / 180.0) * safeDt;
+	const double stepMag = qBound(minStep, expStep, maxStep) * poleWeight;
+	Vec3d nextUp;
+	bool finished = false;
+	if (stepMag >= absRoll)
+	{
+		nextUp = horizonUp;
+		finished = true;
+	}
+	else
+	{
+		const double signedStep = (rollRad >= 0.0) ? stepMag : -stepMag;
+		nextUp = ohosRotateAroundAxis(up, view, signedStep);
+	}
+	movementMgr->setViewUpVector(nextUp);
+	movementMgr->setViewDirectionJ2000(movementMgr->mountFrameToJ2000(view));
+	if (finished)
+	{
+		s_ohosHorizonLevelActive = false;
+		if (s_viewLock)
+			ohosCaptureSelectedZoomAnchor();
+	}
+	else
+	{
+		markOhosInteraction();
+	}
 }
 
 static void markQtLoopRunning()
@@ -3130,25 +3299,29 @@ QJsonObject objectDetailModelJson(const StelObjectP& object, const QJsonObject& 
 	if (!object || object->getType() != Constellation::CONSTELLATION_TYPE)
 		return result;
 
-	// Stable contract for a future local 3D constellation asset loader. Until a
-	// licensed model is bundled, the UI must use the original artwork and must
-	// never present that artwork as a 3D model.
 	const QString cultureId = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
 	QString constellationId = object->getID().trimmed();
 	constellationId.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_-]")), QStringLiteral("_"));
 	if (cultureId.isEmpty() || constellationId.isEmpty())
 		return result;
+	const bool supportsModernModels = (cultureId == QLatin1String("modern") || cultureId == QLatin1String("modern_iau"));
+	const QString scmRelPath = QStringLiteral("skycultures/modern/models/%1.scm").arg(constellationId);
+	const bool hasLocalScm = supportsModernModels && !StelFileMgr::findFile(scmRelPath).isEmpty();
 	result[QStringLiteral("schemaVersion")] = 1;
-	result[QStringLiteral("state")] = QStringLiteral("planned");
-	result[QStringLiteral("format")] = QStringLiteral("glTF 2.0");
-	result[QStringLiteral("assetKey")] = QStringLiteral("constellations/%1/%2.glb").arg(cultureId, constellationId);
-	result[QStringLiteral("assetPath")] = QString();
+	result[QStringLiteral("state")] = hasLocalScm ? QStringLiteral("available") : QStringLiteral("planned");
+	result[QStringLiteral("format")] = hasLocalScm ? QStringLiteral("scm1") : QStringLiteral("glTF 2.0");
+	result[QStringLiteral("assetKey")] = hasLocalScm
+		? QStringLiteral("constellations/modern/%1.scm").arg(constellationId)
+		: QStringLiteral("constellations/%1/%2.glb").arg(cultureId, constellationId);
+	result[QStringLiteral("assetPath")] = hasLocalScm ? scmRelPath : QString();
 	result[QStringLiteral("registryPath")] = QStringLiteral("data/ohos/detail-model-registry.json");
 	result[QStringLiteral("fallbackMediaPath")] = fallbackMedia.value(QStringLiteral("detailMediaPath"));
 	result[QStringLiteral("coordinateFrame")] = QStringLiteral("J2000");
 	result[QStringLiteral("interactions")] = QJsonArray({QStringLiteral("rotate"), QStringLiteral("zoom"), QStringLiteral("pan"), QStringLiteral("reset")});
 	result[QStringLiteral("offline")] = true;
-	result[QStringLiteral("source")] = QStringLiteral("Stellarium sky-culture artwork; future local model registry");
+	result[QStringLiteral("source")] = hasLocalScm
+		? QStringLiteral("Stellarium local 3D constellation mesh")
+		: QStringLiteral("Stellarium sky-culture artwork; future local model registry");
 	return result;
 }
 
@@ -7417,6 +7590,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			++s_ohosNavigationSerial;
 			movementMgr->cancelAutoMove();
 			movementMgr->cancelAutoZoom();
+			if ((s_ohosPinchActive || s_ohosPinchSettleActive) &&
+				ohosCurrentMountHorizonRollAbsRad(movementMgr) > 0.004)
+				s_ohosPinchRollHeld = true;
 			s_ohosPinchActive = false;
 			s_ohosPinchEndPending = false;
 			s_ohosPinchSettleActive = false;
@@ -7544,6 +7720,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				s_ohosPinchSettleActive = false;
 				s_ohosPinchEndPending = false;
+				s_ohosHorizonLevelActive = false;
+				s_ohosPinchRollHeld = false;
 				s_ohosCaptureSelectedAnchorAfterPan = false;
 				s_ohosPanInertiaActive = false;
 				movementMgr->cancelAutoZoom();
@@ -7802,6 +7980,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			if (objectMgr && movementMgr && !objectMgr->getSelectedObject().isEmpty())
 			{
+				s_ohosHorizonLevelActive = false;
+				s_ohosPinchRollHeld = false;
 				ohosDeferSelectedAnchor(movementMgr->getAutoMoveDuration() + 0.15);
 				movementMgr->moveToObject(objectMgr->getSelectedObject().constFirst(), movementMgr->getAutoMoveDuration());
 				movementMgr->setFlagTracking(false);
@@ -7839,6 +8019,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				// separate fixed-screen-position maintainer so the two camera
 				// controllers cannot fight each other.
 				s_viewLock = false;
+				s_ohosHorizonLevelActive = false;
+				s_ohosPinchRollHeld = false;
 				s_ohosZoomAnchorObject.clear();
 			}
 			movementMgr->setFlagTracking(enabled);
@@ -7882,6 +8064,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			{
 				s_ohosZoomAnchorObject.clear();
 				s_ohosCaptureSelectedAnchorAfterPan = false;
+				s_ohosPinchRollHeld = false;
 				if (movementMgr)
 					movementMgr->setFlagLockEquPos(false);
 			}
@@ -7909,6 +8092,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				(s_ohosPinchAnchorMode == OhosPinchAnchorMode::SelectedObject ? "selectedObject" : "none");
 			result["pinchActive"] = s_ohosPinchActive;
 			result["settling"] = s_ohosPinchSettleActive;
+			result["horizonLevelActive"] = s_ohosHorizonLevelActive;
+			result["pinchRollHeld"] = s_ohosPinchRollHeld;
 			result["probeEnabled"] = s_ohosAnchorProbeEnabled;
 			result["samples"] = s_ohosAnchorProbeSamples;
 			result["maxErrorPixels"] = s_ohosAnchorProbeMaxErrorPixels;
@@ -11321,6 +11506,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setMountMode")
 		{
+			s_ohosHorizonLevelActive = false;
+			s_ohosPinchRollHeld = false;
 			StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
 			if (arg == "equatorial" || arg == "1") {
 				mvmgr->setMountMode(StelMovementMgr::MountEquinoxEquatorial);
@@ -11355,6 +11542,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				double alt = parts[1].toDouble(&ok2);
 				if (ok1 && ok2 && std::isfinite(az) && std::isfinite(alt)) {
 					float duration = parts.size() > 2 ? parts[2].toFloat() : 1.0f;
+					s_ohosHorizonLevelActive = false;
+					s_ohosPinchRollHeld = false;
 					StelMovementMgr* mvmgr = StelApp::getInstance().getCore()->getMovementMgr();
 					Vec3d aim;
 					aim[0] = cos(alt * M_PI/180.) * cos(az * M_PI/180.);
@@ -11487,6 +11676,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			StelCore* core = StelApp::getInstance().getCore();
 			StelMovementMgr* mvmgr = core->getMovementMgr();
 			s_gyroViewActive = true;
+			s_ohosHorizonLevelActive = false;
+			s_ohosPinchRollHeld = false;
 			mvmgr->cancelAutoMove();
 			// Sensor pose is continuous interaction, not an occasional command.
 			// Keep the render pump at its high-refresh cadence while it is active.
@@ -20085,6 +20276,7 @@ void StelMainView::renderOhosFrameNow()
 	ohosUpdatePointTracking();
 	ohosUpdateGyroTransition();
 	ohosUpdatePanInertia(dt);
+	ohosUpdateHorizonLeveling(dt);
 		if (s_ohosCaptureSelectedAnchorAfterPan)
 		{
 			s_ohosCaptureSelectedAnchorAfterPan = false;
@@ -20110,7 +20302,11 @@ void StelMainView::renderOhosFrameNow()
 				StelApp::getTotalRunTime() - s_ohosPinchLastSampleSec < 0.12;
 			s_ohosPinchSettleElapsedSec = 0.0;
 			if (!s_ohosPinchSettleActive)
+			{
 				s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
+				if (ohosCurrentMountHorizonRollAbsRad(app.getCore() ? app.getCore()->getMovementMgr() : nullptr) > 0.004)
+					s_ohosPinchRollHeld = true;
+			}
 		}
 		ohosProcessPendingPointSelect();
 		ohosUpdateSelectedScreenProjection();

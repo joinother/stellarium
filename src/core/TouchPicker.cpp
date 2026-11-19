@@ -42,6 +42,7 @@
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QRectF>
+#include <QSet>
 
 #include <algorithm>
 #include <cmath>
@@ -303,30 +304,44 @@ bool differs(double a, double b)
 	return std::abs(a - b) > 1e-9;
 }
 
+int candidateTier(const PickCandidate& c)
+{
+	if (c.directHit && c.directRank <= 2)
+		return c.directRank;
+	if (c.nearObjectPriority)
+		return 3;
+	if (c.directHit)
+		return c.directRank + 1; // lineHit (3) -> 4, modelHit (4) -> 5
+	return 6;
+}
+
 bool candidateLess(const PickCandidate& a, const PickCandidate& b)
 {
-	if (a.directHit != b.directHit)
-		return a.directHit;
-	if (a.directHit)
+	const int tierA = candidateTier(a);
+	const int tierB = candidateTier(b);
+	if (tierA != tierB)
+		return tierA < tierB;
+	if (tierA == 0)
 	{
-		if (a.directRank != b.directRank)
-			return a.directRank < b.directRank;
 		// Footprint hits use a PC-style distance + k(FOV)*magnitude score.
-		// Label and constellation hits still compare anchor distance so text
-		// is not stolen by a nearby bright star.
-		if (a.directRank == 0)
-		{
-			if (differs(a.directScore, b.directScore))
-				return a.directScore < b.directScore;
-		}
-		else if (differs(a.distanceVp, b.distanceVp))
-			return a.distanceVp < b.distanceVp;
+		if (differs(a.directScore, b.directScore))
+			return a.directScore < b.directScore;
 		if (differs(a.typePrior, b.typePrior))
 			return a.typePrior > b.typePrior;
 		if (differs(a.salience, b.salience))
 			return a.salience > b.salience;
 		if (differs(a.distanceVp, b.distanceVp))
 			return a.distanceVp < b.distanceVp;
+	}
+	else if (tierA == 1 || tierA == 2 || tierA == 4 || tierA == 5)
+	{
+		// Label, line, and model hits compare anchor distance.
+		if (differs(a.distanceVp, b.distanceVp))
+			return a.distanceVp < b.distanceVp;
+		if (differs(a.typePrior, b.typePrior))
+			return a.typePrior > b.typePrior;
+		if (differs(a.salience, b.salience))
+			return a.salience > b.salience;
 	}
 	else
 	{
@@ -783,6 +798,50 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 					state.hasMagnitude, typePriorForObject(object, false), label, true, diagnostics);
 			}
 		}
+	}
+
+	// Promote nearby stars, planets, satellites and DSOs above passive
+	// constellation line/3D-model area hits so tapping a star sitting on a
+	// constellation stick-figure or artwork selects the star reliably, while
+	// tapping the constellation name label or open body still selects the
+	// constellation.
+	QSet<QString> constellationVertexStarIds;
+	for (const PickCandidate& candidate : std::as_const(candidates))
+	{
+		if (candidate.type == QLatin1String("Constellation") && (candidate.lineHit || candidate.modelHit))
+		{
+			if (const Constellation* constellation = dynamic_cast<const Constellation*>(candidate.object.data()))
+			{
+				const std::vector<StelObjectP>& lines = constellation->isDarkConstellation()
+					? constellation->getDarkConstellationLines()
+					: constellation->getConstellationLines();
+				for (const StelObjectP& endpoint : lines)
+				{
+					if (endpoint)
+						constellationVertexStarIds.insert(endpoint->getID());
+				}
+			}
+		}
+	}
+	for (PickCandidate& candidate : candidates)
+	{
+		if (candidate.directHit)
+			continue;
+		if (candidate.type == QLatin1String("Constellation") || candidate.type == QLatin1String("Asterism"))
+			continue;
+		const double dEff = qMax(0.0, candidate.distanceVp - candidate.visualRadiusVp);
+		double priorityRadiusVp = profile.touch ? 26.0 : 10.0;
+		if (candidate.type == QLatin1String("Star"))
+		{
+			const bool prominent = constellationVertexStarIds.contains(candidate.id)
+				|| (candidate.hasMagnitude && candidate.magnitude <= 4.5)
+				|| candidate.visualRadiusVp >= 1.2;
+			priorityRadiusVp = prominent
+				? (profile.touch ? 24.0 : 9.0)
+				: (profile.touch ? 12.0 : 5.0);
+		}
+		if (dEff <= priorityRadiusVp && candidate.distanceVp <= effectiveRadiusVp + candidate.visualRadiusVp)
+			candidate.nearObjectPriority = true;
 	}
 
 	std::sort(candidates.begin(), candidates.end(), candidateLess);

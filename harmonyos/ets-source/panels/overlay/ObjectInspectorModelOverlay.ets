@@ -43,7 +43,9 @@ export struct ObjectInspectorModelOverlay {
           Column({ space: 4 }) {
             Text(this.titleText).fontSize(20).fontColor(this.c.textStrong).maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
-            Text(this.objectMediaStore.objectInspectorProceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline'))
+            Text(this.objectMediaStore.objectInspectorProceduralKind === 'constellation-mesh'
+              ? I18n.t('model_constellation_3d')
+              : (this.objectMediaStore.objectInspectorProceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline')))
               .fontSize(12).fontColor(this.c.sub).width('100%')
           }.layoutWeight(1).alignItems(HorizontalAlign.Start)
           Button() {

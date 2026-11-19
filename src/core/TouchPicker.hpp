@@ -71,6 +71,7 @@ struct PickCandidate
 	bool labelHit = false;
 	bool lineHit = false;
 	bool modelHit = false;
+	bool nearObjectPriority = false;
 	int directRank = 99;
 	bool satellite = false;
 	SatellitePickDiagnostics satelliteRender;

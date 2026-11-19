@@ -212,18 +212,31 @@ export class ObjectInspectorMediaController {
   refreshObjectInspectorMedia(): void {
     const planetTexturePath = objectInspectorPlanetTexturePath(this.detailStore.selectedEnglishName)
     const fallbackKind = objectInspectorFallbackVisualKind(this.detailStore.selectedObjectType, this.detailStore.selectedType)
-    const deepSkyImageName = planetTexturePath.length === 0 && this.detailStore.selectedDetailMediaPath.length === 0
+    const detailModel = this.detailStore.selectedDetailModel
+    const constellationScmRelPath = planetTexturePath.length === 0 &&
+      detailModel !== undefined && detailModel.state === 'available' &&
+      detailModel.format === 'scm1' && detailModel.assetPath !== undefined && detailModel.assetPath.length > 0
+      ? detailModel.assetPath : ''
+    const constellationScmFilePath = constellationScmRelPath.length > 0
+      ? this.objectInspectorFilePath(constellationScmRelPath) : ''
+    const hasConstellationMesh = constellationScmFilePath.length > 0 && this.mediaPort.readBinaryFile !== undefined
+    const deepSkyImageName = planetTexturePath.length === 0 && !hasConstellationMesh &&
+      this.detailStore.selectedDetailMediaPath.length === 0
       ? objectInspectorDeepSkyImageName(fallbackKind, this.detailStore.objectInspectorSearchText())
       : ''
     const requestedPath = planetTexturePath.length > 0
       ? planetTexturePath
-      : (this.detailStore.selectedDetailMediaPath.length > 0
-        ? this.detailStore.selectedDetailMediaPath
-        : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName : ''))
-    const proceduralKind = requestedPath.length === 0 || (planetTexturePath.length === 0 &&
-      this.objectInspectorMediaResolutionComplete && this.objectInspectorMediaResolvedRequestPath === requestedPath &&
-      this.objectInspectorMediaResolvedPath.length === 0)
-      ? proceduralModelKind(this.detailStore.selectedObjectType + ' ' + this.detailStore.selectedType) : ''
+      : (hasConstellationMesh
+        ? constellationScmRelPath
+        : (this.detailStore.selectedDetailMediaPath.length > 0
+          ? this.detailStore.selectedDetailMediaPath
+          : (deepSkyImageName.length > 0 ? 'nebulae/default/' + deepSkyImageName : '')))
+    const proceduralKind = hasConstellationMesh
+      ? 'constellation-mesh'
+      : (requestedPath.length === 0 || (planetTexturePath.length === 0 &&
+        this.objectInspectorMediaResolutionComplete && this.objectInspectorMediaResolvedRequestPath === requestedPath &&
+        this.objectInspectorMediaResolvedPath.length === 0)
+        ? proceduralModelKind(this.detailStore.selectedObjectType + ' ' + this.detailStore.selectedType) : '')
     const proceduralKey = proceduralKind.length > 0
       ? [proceduralKind, this.detailStore.selectedCatalogId, this.detailStore.selectedEnglishName, this.detailStore.selectedTemperatureK.toString()].join('|') : ''
     if (this.objectInspectorMediaResolvedRequestPath !== requestedPath) {
@@ -241,10 +254,10 @@ export class ObjectInspectorMediaController {
       ? 'model'
       : (this.detailStore.selectedDetailMediaPath.length > 0 ? 'constellation'
         : (deepSkyImageName.length > 0 ? 'image' : 'visual'))
-    const modelRawFilePath = kind === 'model' && resolvedPath.length > 0
+    const modelRawFilePath = kind === 'model' && !hasConstellationMesh && resolvedPath.length > 0
       ? this.objectInspectorFilePath(resolvedPath + '.model.rgba')
       : ''
-    const ringSpec = kind === 'model' ? objectInspectorPlanetRingSpec(this.detailStore.selectedEnglishName) : undefined
+    const ringSpec = kind === 'model' && !hasConstellationMesh ? objectInspectorPlanetRingSpec(this.detailStore.selectedEnglishName) : undefined
     const ringRawFilePath = ringSpec === undefined
       ? ''
       : this.objectInspectorFilePath(ringSpec.texturePath + '.model.rgba')
@@ -273,9 +286,9 @@ export class ObjectInspectorMediaController {
     this.mediaStore.objectInspectorMediaKind = kind
     this.mediaStore.objectInspectorProceduralKind = proceduralKind
     this.objectInspectorProceduralKey = proceduralKey
-    this.objectInspectorProceduralParticles = proceduralParticles(proceduralKind, proceduralKey)
+    this.objectInspectorProceduralParticles = hasConstellationMesh ? [] : proceduralParticles(proceduralKind, proceduralKey)
     this.mediaStore.objectInspectorMediaLabel = kind === 'model'
-      ? (proceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline'))
+      ? (hasConstellationMesh ? I18n.t('model_constellation_3d') : (proceduralKind.length > 0 ? I18n.t('model_schematic') : I18n.t('model_offline')))
       : (kind === 'constellation' ? this.detailStore.selectedDetailMediaLabel : (kind === 'image' ? '离线深空资料图像' : '本地天体类别示意'))
     this.mediaStore.objectInspectorMediaFullscreen = false
     this.mediaStore.objectInspectorMediaPreviewPath = ''
@@ -290,6 +303,17 @@ export class ObjectInspectorMediaController {
     this.mediaStore.objectInspectorMediaNoMatch = false
     this.updateObjectInspectorMediaWarmup(kind)
     this.objectInspectorMediaRequestPath = this.mediaStore.objectInspectorMediaLoading ? requestedPath : ''
+    if (hasConstellationMesh) {
+      const expectedSelection = this.detailStore.selectedName + '\n' + this.detailStore.selectedEnglishName + '\n' + this.detailStore.selectedCatalogId
+      const generation = this.objectInspectorMediaDecodeGeneration
+      try {
+        const meshBytes = this.mediaPort.readBinaryFile!(constellationScmFilePath, 4800012, 'constellation 3D mesh')
+        this.hooks.objectModelRenderer().commitObjectInspectorMeshData(meshBytes, generation, expectedSelection, path)
+      } catch (err) {
+        this.hooks.objectModelRenderer().failObjectInspectorModelTexture(generation, describeDecodeError(err as Error))
+      }
+      return
+    }
     if (proceduralKind.length > 0) {
       this.hooks.objectModelRenderer().requestObjectInspectorModelRender(true)
       return

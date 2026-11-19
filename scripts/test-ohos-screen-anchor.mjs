@@ -106,3 +106,98 @@ int main() {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('pinch preserves horizon roll while single-finger pan levels smoothly without snapping', (context) => {
+  const pan = section('static void ohosApplyPanDelta(', 'static void ohosUpdatePanInertia(');
+  assert.match(pan, /ohosComputeHorizonRoll/);
+  assert.match(pan, /s_ohosHorizonLevelActive = true/);
+  assert.match(pan, /s_ohosPinchRollHeld = false/);
+  const zoom = section('if (commandName == "zoomBy")', 'if (commandName == "endPinch")');
+  assert.match(zoom, /s_ohosHorizonLevelActive = false/);
+  const frame = section('void StelMainView::renderOhosFrameNow()', 'void StelMainView::initTitleI18n()');
+  assert.ok(frame.indexOf('ohosUpdatePanInertia(dt)') < frame.indexOf('ohosUpdateHorizonLeveling(dt)'));
+  assert.ok(frame.indexOf('ohosUpdateHorizonLeveling(dt)') < frame.indexOf('app.update(dt)'));
+  const maintain = section('static void ohosMaintainSelectedZoomAnchor()', 'static void ohosUpdateHorizonLeveling(');
+  assert.match(maintain, /if \(s_ohosHorizonLevelActive\)\s*return;/);
+
+  const qt = process.env.QT_HOST_PATH ?? '/Users/jiexuanyang/Qt/6.12.0/macos';
+  if (!existsSync(join(qt, 'lib/QtCore.framework/Headers/QtGlobal'))) {
+    context.skip('Qt host headers are required for the native horizon-leveling test');
+    return;
+  }
+  const helpers = section('static bool ohosComputeHorizonRoll(', 'static double ohosCurrentMountHorizonRollAbsRad(');
+  const directory = mkdtempSync(join(tmpdir(), 'stellarium-horizon-level-test-'));
+  try {
+    writeFileSync(join(directory, 'horizon.cpp'), `
+#include "VecMath.hpp"
+#include <QtGlobal>
+#include <cassert>
+#include <cmath>
+#include <iostream>
+${helpers}
+int main() {
+  int roundtripCases = 0;
+  for (double azDeg : {0., 45., 135., 210., 315.}) {
+    for (double altDeg : {-65., -20., 0., 25., 65.}) {
+      const double az = azDeg * M_PI / 180.0;
+      const double alt = altDeg * M_PI / 180.0;
+      Vec3d view(std::cos(alt) * std::cos(az), std::cos(alt) * std::sin(az), std::sin(alt));
+      Vec3d hUp(0., 0., 1.);
+      hUp -= view * hUp.dot(view);
+      hUp.normalize();
+      for (double rollDeg : {-150., -95., -45., -15., 0., 15., 45., 95., 150.}) {
+        const double rollRad = rollDeg * M_PI / 180.0;
+        Vec3d up = ohosRotateAroundAxis(hUp, view, -rollRad);
+        Vec3d outHUp;
+        double strength = 0., measured = 0.;
+        assert(ohosComputeHorizonRoll(view, up, outHUp, strength, measured));
+        assert(std::abs(std::remainder(measured - rollRad, 2.0 * M_PI)) < 1e-10);
+        // Simulate smooth leveling at 60 FPS and verify monotonic convergence to 0 deg (right-side up).
+        Vec3d curUp = up;
+        double prevAbs = std::abs(measured);
+        int frames = 0;
+        const double dt = 1.0 / 60.0;
+        const double poleWeight = qBound(0.0, (strength - 0.05) / 0.20, 1.0);
+        while (prevAbs > 0.0008 && frames < 120) {
+          Vec3d curHUp;
+          double curS = 0., curR = 0.;
+          assert(ohosComputeHorizonRoll(view, curUp, curHUp, curS, curR));
+          const double absR = std::abs(curR);
+          const double expStep = absR * (1.0 - std::exp(-dt / 0.12));
+          const double minStep = (14.0 * M_PI / 180.0) * dt;
+          const double maxStep = (240.0 * M_PI / 180.0) * dt;
+          const double stepMag = qBound(minStep, expStep, maxStep) * poleWeight;
+          if (stepMag >= absR) {
+            curUp = curHUp;
+            prevAbs = 0.;
+          } else {
+            curUp = ohosRotateAroundAxis(curUp, view, curR >= 0. ? stepMag : -stepMag);
+            Vec3d checkHUp;
+            double checkS = 0., checkR = 0.;
+            assert(ohosComputeHorizonRoll(view, curUp, checkHUp, checkS, checkR));
+            assert(std::abs(checkR) < prevAbs);
+            assert(prevAbs - std::abs(checkR) <= maxStep + 1e-9);
+            prevAbs = std::abs(checkR);
+          }
+          ++frames;
+        }
+        assert(prevAbs <= 0.0008);
+        assert(curUp.dot(hUp) > 0.9999);
+        if (std::abs(rollDeg) >= 15.0)
+          assert(frames >= 5); // Must animate smoothly across multiple frames, never 1-frame snap.
+        ++roundtripCases;
+      }
+    }
+  }
+  std::cout << roundtripCases << " horizon leveling cases passed\\n";
+}
+`);
+    execFileSync('clang++', ['-std=c++17', '-I', join(root, 'src/core'), '-F', join(qt, 'lib'),
+      '-I', join(qt, 'lib/QtCore.framework/Headers'), '-I', join(qt, 'lib/QtGui.framework/Headers'),
+      '-framework', 'QtCore', '-framework', 'QtGui', '-Wl,-rpath,' + join(qt, 'lib'),
+      join(directory, 'horizon.cpp'), '-o', join(directory, 'horizon')], { encoding: 'utf8' });
+    assert.match(execFileSync(join(directory, 'horizon'), { encoding: 'utf8' }), /225 horizon leveling cases passed/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

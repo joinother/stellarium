@@ -480,7 +480,7 @@ void Constellation::drawArtOptim(StelPainter& sPainter, const SphericalRegion& r
 		const float intensity = artFader.getInterstate() * artOpacity * artIntensityFovScale * artPresentation;
 		if (GETSTELMODULE(ConstellationMgr)->getFlagArt3d() && !modelIndices.isEmpty())
 		{
-			if (modelIntensity() > 0.003f && region.intersects(boundingCap))
+			if (modelIntensity() > 0.015f && region.intersects(boundingCap))
 				drawArtModel(sPainter, modelIntensity(), obsVelocity);
 			return;
 		}
@@ -584,23 +584,41 @@ float Constellation::modelIntensity() const
 
 void Constellation::prepareModelPose() const
 {
-	if (modelCachedYaw == modelYaw && modelCachedPitch == modelPitch && modelCachedRoll == modelRoll) return;
+	if (!modelDirections.isEmpty() &&
+		std::abs(modelYaw - modelCachedYaw) + std::abs(modelPitch - modelCachedPitch) + std::abs(modelRoll - modelCachedRoll) < 0.004f)
+		return;
 	const Mat4d rotation = Mat4d::rotation(modelCenter, modelRoll) * Mat4d::rotation(modelUp, modelYaw) * Mat4d::rotation(modelRight, modelPitch);
-	modelDirections.resize(modelPositions.size());
-	modelDepths.resize(modelPositions.size());
-	for (int index = 0; index < modelPositions.size(); ++index)
+	const int vertexCount = modelPositions.size();
+	modelDirections.resize(vertexCount);
+	modelDepths.resize(vertexCount);
+	const double r00 = rotation.r[0], r01 = rotation.r[4], r02 = rotation.r[8];
+	const double r10 = rotation.r[1], r11 = rotation.r[5], r12 = rotation.r[9];
+	const double r20 = rotation.r[2], r21 = rotation.r[6], r22 = rotation.r[10];
+	const double cx = modelCenter[0], cy = modelCenter[1], cz = modelCenter[2];
+	const Vec3d* src = modelPositions.constData();
+	Vec3d* dstDir = modelDirections.data();
+	float* dstDepth = modelDepths.data();
+	for (int index = 0; index < vertexCount; ++index)
 	{
-		const Vec3d position = modelCenter + rotation * (modelPositions.at(index) - modelCenter);
-		modelDirections[index] = normalize(position);
-		modelDepths[index] = float((1. - position.norm()) * 2.);
+		const double dx = src[index][0] - cx;
+		const double dy = src[index][1] - cy;
+		const double dz = src[index][2] - cz;
+		const double px = cx + r00 * dx + r01 * dy + r02 * dz;
+		const double py = cy + r10 * dx + r11 * dy + r12 * dz;
+		const double pz = cz + r20 * dx + r21 * dy + r22 * dz;
+		const double norm = std::sqrt(px * px + py * py + pz * pz);
+		const double invNorm = norm > 1e-12 ? (1.0 / norm) : 1.0;
+		dstDir[index].set(px * invNorm, py * invNorm, pz * invNorm);
+		dstDepth[index] = static_cast<float>((1.0 - norm) * 2.0);
 	}
 	modelCachedYaw = modelYaw;
 	modelCachedPitch = modelPitch;
 	modelCachedRoll = modelRoll;
 }
 
-void Constellation::drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity) const
+void Constellation::drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity, bool managedDepthState) const
 {
+	Q_UNUSED(velocity)
 #if defined(__OHOS__)
 	QElapsedTimer timing;
 	timing.start();
@@ -613,19 +631,9 @@ void Constellation::drawArtModel(StelPainter& painter, float intensity, const Ve
 	const float* depths = modelDepths.constData();
 	Vec3f* projected = modelProjected.data();
 	bool* valid = modelValid.data();
-	const bool hasVelocity = velocity.normSquared() > 0.;
 	for (int index = 0; index < vertexCount; ++index)
 	{
-		if (hasVelocity)
-		{
-			Vec3d direction = directions[index] + velocity;
-			direction.normalize();
-			valid[index] = projector->project(direction, projected[index]);
-		}
-		else
-		{
-			valid[index] = projector->project(directions[index], projected[index]);
-		}
+		valid[index] = projector->project(directions[index], projected[index]);
 		allValid = allValid && valid[index];
 		projected[index][2] = depths[index];
 	}
@@ -660,26 +668,33 @@ void Constellation::drawArtModel(StelPainter& painter, float intensity, const Ve
 #if defined(__OHOS__)
 	const qint64 projectionNs = timing.nsecsElapsed();
 #endif
-	auto* gl = QOpenGLContext::currentContext()->functions();
-	GLint oldDepthFunction;
-	gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
-	painter.setCullFace(false);
-	painter.setDepthTest(true);
-	painter.setDepthMask(true);
-	gl->glClear(GL_DEPTH_BUFFER_BIT);
-	gl->glDepthFunc(GL_LEQUAL);
+	QOpenGLFunctions* gl = nullptr;
+	GLint oldDepthFunction = GL_LESS;
+	if (!managedDepthState)
+	{
+		gl = QOpenGLContext::currentContext()->functions();
+		gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
+		painter.setCullFace(false);
+		painter.setDepthTest(true);
+		painter.setDepthMask(true);
+		gl->glClear(GL_DEPTH_BUFFER_BIT);
+		gl->glDepthFunc(GL_LEQUAL);
+	}
 	painter.setVertexPointer(3, GL_FLOAT, modelProjected.constData());
 	painter.setColorPointer(4, GL_FLOAT, modelDrawColors.constData());
 	painter.enableClientStates(true, false, true);
 	painter.drawTrianglesWithDepthPrepass(indices->size(), indices->constData());
 	painter.enableClientStates(false);
-	painter.setDepthMask(true);
-	gl->glClear(GL_DEPTH_BUFFER_BIT);
-	painter.setDepthMask(false);
-	painter.setDepthTest(false);
-	gl->glDepthFunc(oldDepthFunction);
-	painter.setBlending(true, GL_ONE, GL_ONE);
-	painter.setCullFace(true);
+	if (!managedDepthState)
+	{
+		painter.setDepthMask(true);
+		gl->glClear(GL_DEPTH_BUFFER_BIT);
+		painter.setDepthMask(false);
+		painter.setDepthTest(false);
+		gl->glDepthFunc(oldDepthFunction);
+		painter.setBlending(true, GL_ONE, GL_ONE);
+		painter.setCullFace(true);
+	}
 #if defined(__OHOS__)
 	static qint64 projectionTotal = 0, drawingTotal = 0;
 	static int draws = 0;

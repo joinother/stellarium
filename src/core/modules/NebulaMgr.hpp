@@ -1128,6 +1128,14 @@ private:
 	QStringList unwantedReferences;
 
 	QVector<NebulaP> dsoArray;		// The DSO list
+	struct DrawMagEntry
+	{
+		Nebula* nebula;
+		Vec3d xyz;
+		float sortMag;
+	};
+	std::vector<DrawMagEntry> dsoDrawIndex; // Magnitude-sorted flat index for O(visible) wide-FOV culling
+	void rebuildDrawIndex();
 	QHash<unsigned int, NebulaP> dsoIndex;
 	// A struct that holds a NebulaP and user-accepted references from the loaded nebulaSet (usually nebulae/default/names.dat)
 	struct NebulaWithReferences {

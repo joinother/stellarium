@@ -1004,7 +1004,24 @@ void NebulaMgr::draw(StelCore* core)
 		QElapsedTimer timing;
 		timing.start();
 #endif
-		nebGrid.processIntersectingPointInRegions(p.data(), func);
+		const float magCutoff = std::max(maxMagHints, maxMagLabels);
+		if (!Nebula::surfaceBrightnessUsage && !dsoDrawIndex.empty() && magCutoff < 12.5f)
+		{
+			// At medium/wide FOV the viewport covers tens of thousands of faint DSOs
+			// whose opacity is strictly zero. Scanning the magnitude-sorted flat index
+			// visits only the few hundred DSOs that can actually pass opacity > 0.
+			for (const auto& entry : dsoDrawIndex)
+			{
+				if (entry.sortMag >= magCutoff)
+					break;
+				if (p->contains(entry.xyz))
+					func(entry.nebula);
+			}
+		}
+		else
+		{
+			nebGrid.processIntersectingPointInRegions(p.data(), func);
+		}
 #if defined(__OHOS__)
 		const qint64 collectionNs = timing.nsecsElapsed();
 #endif
@@ -1090,6 +1107,7 @@ void NebulaMgr::loadNebulaSet(const QString& setName)
 	QString dsoNamesPath = StelFileMgr::findFile("nebulae/" + setName + "/names.dat");
 
 	dsoArray.clear();
+	dsoDrawIndex.clear();
 	dsoIndex.clear();
 	nebGrid.clear();
 
@@ -1123,6 +1141,41 @@ void NebulaMgr::loadNebulaSet(const QString& setName)
 
 	if (!dsoDiscoveryPath.isEmpty())
 		loadDSODiscoveryData(dsoDiscoveryPath);
+
+	rebuildDrawIndex();
+}
+
+void NebulaMgr::rebuildDrawIndex()
+{
+	dsoDrawIndex.clear();
+	dsoDrawIndex.reserve(static_cast<size_t>(dsoArray.size()));
+	for (const auto& n : std::as_const(dsoArray))
+	{
+		if (!n)
+			continue;
+		float lim = qMin(n->vMag, n->bMag);
+		if (lim > 90.f)
+			lim = 15.0f;
+		if (n->nType == Nebula::NebDn)
+		{
+			const float mag = n->vMag;
+			if (n->majorAxisSize > 0.f && mag < 90.f)
+				lim = 15.0f - mag - 2.0f * qMin(n->majorAxisSize, 1.5f);
+			else
+				lim = (n->B_nb > 0 ? 9.0f : 12.0f);
+		}
+		else if (n->nType == Nebula::NebHII)
+		{
+			lim = qMin(lim, 10.0f);
+		}
+		if (n->nType == Nebula::NebRegion)
+			lim = 3.0f;
+		// Outline DSOs test (magnitude - 3.f) against maxMagHints in NebulaDrawing::opacity.
+		const float sortMag = n->outlineSegments.empty() ? lim : (lim - 3.0f);
+		dsoDrawIndex.push_back(DrawMagEntry{n.data(), n->XYZ, sortMag});
+	}
+	std::sort(dsoDrawIndex.begin(), dsoDrawIndex.end(),
+		[](const DrawMagEntry& a, const DrawMagEntry& b) { return a.sortMag < b.sortMag; });
 }
 
 // Look for a nebula by XYZ coords

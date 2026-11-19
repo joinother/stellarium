@@ -670,6 +670,32 @@ class HostMediaPort implements MediaPort {
     }
   }
 
+  readBinaryFile(path: string, maxBytes: number, label: string): ArrayBuffer {
+    let file: fileIo.File | undefined = undefined
+    try {
+      const stat = fileIo.statSync(path)
+      if (stat.size <= 0 || stat.size > maxBytes) {
+        throw new Error(label + ' has invalid size: ' + stat.size.toString())
+      }
+      const buffer = new ArrayBuffer(stat.size)
+      file = fileIo.openSync(path, fileIo.OpenMode.READ_ONLY)
+      const bytesRead = fileIo.readSync(file.fd, buffer)
+      fileIo.closeSync(file)
+      file = undefined
+      if (bytesRead !== stat.size) {
+        throw new Error(label + ' short read: ' + bytesRead.toString() + '/' + stat.size.toString())
+      }
+      return buffer
+    } catch (err) {
+      if (file !== undefined) {
+        try {
+          fileIo.closeSync(file)
+        } catch (_closeErr) { }
+      }
+      throw err as Error
+    }
+  }
+
   // ── 屏幕录制：NAPI 细节收在本具名适配器，控制器只依赖端口。 ──
   private screenCapture?: media.AVScreenCaptureRecorder
   private screenCaptureFile?: fileIo.File

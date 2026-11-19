@@ -32,6 +32,8 @@ export enum ScreenCaptureState {
 export interface ImagePort {
   // 文件是否存在（对应 fileIo.accessSync）。
   fileExists(path: string): boolean
+  // 读取不超过 maxBytes 的二进制文件（如 .scm 三维星座网格；失败或超限抛 Error）。
+  readBinaryFile?(path: string, maxBytes: number, label: string): ArrayBuffer
   // 以只读方式打开文件并返回文件描述符 fd（对应 fileIo.openSync(path, READ_ONLY).fd）。
   openReadOnlyFile(path: string, label: string): number
   // 关闭文件描述符（对应 fileIo.closeSync(fd)，内部吞异常并记日志）。

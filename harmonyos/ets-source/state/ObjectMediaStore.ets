@@ -134,7 +134,13 @@ export class ObjectMediaStore {
 
   // 模型默认视角。
   defaultObjectInspectorModelRotation(): number[] {
-    return this.objectInspectorProceduralKind === 'quasar' ? modelDrag(modelIdentity(), 0, -100) : modelIdentity()
+    if (this.objectInspectorProceduralKind === 'quasar') {
+      return modelDrag(modelIdentity(), 0, -100)
+    }
+    if (this.objectInspectorProceduralKind === 'constellation-mesh') {
+      return modelDrag(modelIdentity(), -28, -12)
+    }
+    return modelIdentity()
   }
 
   // 详情卡内嵌图片高度。

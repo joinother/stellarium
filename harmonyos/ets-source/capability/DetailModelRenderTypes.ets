@@ -22,6 +22,7 @@ export interface DetailModelResources {
   kind: string
   temperature: number
   particles: number[][]
+  meshData?: ArrayBuffer
 }
 
 export interface DetailModelFrame {

@@ -61,6 +61,7 @@ export class ObjectModelRenderer {
   private objectInspectorModelRingTextureWidth: number = 0
   private objectInspectorModelRingTextureHeight: number = 0
   private objectInspectorModelRingTextureStride: number = 0
+  private objectInspectorModelMeshData: ArrayBuffer | undefined = undefined
   private objectInspectorModelLastX: number = 0
   private objectInspectorModelLastY: number = 0
   private objectInspectorModelLastPinchDistance: number = 0
@@ -105,11 +106,11 @@ export class ObjectModelRenderer {
   }
 
   hasTexture(): boolean {
-    return this.objectInspectorModelTexturePixels !== undefined
+    return this.objectInspectorModelTexturePixels !== undefined || this.objectInspectorModelMeshData !== undefined
   }
 
   modelReady(): boolean {
-    return this.mediaStore.objectInspectorModelReady(
+    return this.objectInspectorModelMeshData !== undefined || this.mediaStore.objectInspectorModelReady(
       this.objectInspectorModelTexturePixels, this.objectInspectorModelTextureWidth, this.objectInspectorModelTextureHeight)
   }
 
@@ -156,6 +157,7 @@ export class ObjectModelRenderer {
     this.objectInspectorModelRingTextureWidth = 0
     this.objectInspectorModelRingTextureHeight = 0
     this.objectInspectorModelRingTextureStride = 0
+    this.objectInspectorModelMeshData = undefined
     this.objectInspectorModelRendering = false
     this.objectInspectorModelRenderPending = false
     this.objectInspectorModelRenderHighQuality = false
@@ -212,6 +214,28 @@ export class ObjectModelRenderer {
     hilog.info(0x0000, 'StellariumArkUI',
       '[detail-model] CPU texture ready uri=%{public}s bytes=%{public}s source=%{public}s phase=%{public}s',
       expectedPath, texture.byteLength.toString(), sourceLabel, this.detailStore.selectedPhase)
+    this.requestObjectInspectorModelRender(true)
+  }
+
+  // 提交离线三维星座网格（SCM1 二进制缓冲）并触发首帧高画质渲染。
+  commitObjectInspectorMeshData(
+    meshData: ArrayBuffer,
+    mediaGeneration: number,
+    expectedSelection: string,
+    expectedPath: string,
+  ): void {
+    const currentSelection = this.selectionKey()
+    if (currentSelection !== expectedSelection || this.mediaStore.objectInspectorMediaPath !== expectedPath ||
+      mediaGeneration !== this.hooks.mediaDecodeGeneration()) {
+      return
+    }
+    this.objectInspectorModelMeshData = meshData
+    this.mediaStore.objectInspectorMediaLoading = false
+    this.mediaStore.objectInspectorMediaDecoding = true
+    this.mediaStore.objectInspectorMediaLoadFailed = false
+    hilog.info(0x0000, 'StellariumArkUI',
+      '[detail-model] SCM1 constellation mesh ready uri=%{public}s bytes=%{public}s',
+      expectedPath, meshData.byteLength.toString())
     this.requestObjectInspectorModelRender(true)
   }
 
@@ -282,7 +306,7 @@ export class ObjectModelRenderer {
     this.requestObjectInspectorModelRender(false)
   }
 
-  // 请求渲染：低画质经 18ms 防抖合帧，高画质立即冲刷。
+  // 请求渲染：空闲时立即冲刷（零防抖延迟，原生光栅化约 2-4ms 可跑满 60 FPS），在途时合帧等待。
   requestObjectInspectorModelRender(highQuality: boolean): void {
     if (!this.modelReady()) {
       return
@@ -290,16 +314,6 @@ export class ObjectModelRenderer {
     this.objectInspectorModelRenderHighQuality = this.objectInspectorModelRenderHighQuality || highQuality
     this.objectInspectorModelRenderPending = true
     if (this.objectInspectorModelRendering) {
-      return
-    }
-    if (!highQuality) {
-      if (this.objectInspectorModelRenderTimer !== 0) {
-        return
-      }
-      this.objectInspectorModelRenderTimer = setTimeout(() => {
-        this.objectInspectorModelRenderTimer = 0
-        this.flushObjectInspectorModelRender()
-      }, 18)
       return
     }
     if (this.objectInspectorModelRenderTimer !== 0) {
@@ -361,7 +375,8 @@ export class ObjectModelRenderer {
       ringSpec: renderRing,
       kind: this.mediaStore.objectInspectorProceduralKind,
       temperature: this.detailStore.selectedTemperatureK,
-      particles: this.hooks.proceduralParticles()
+      particles: this.hooks.proceduralParticles(),
+      meshData: this.objectInspectorModelMeshData
     }
     const frame: DetailModelFrame = {
       renderSize: renderSize, scale: this.mediaStore.objectInspectorModelScale, transform: transform, lighting: renderLighting
@@ -396,7 +411,8 @@ export class ObjectModelRenderer {
         rotation: inspectionRotation, viewToBody: transform,
         lighting: lighting, renderSize: renderSize, renderedAt: this.objectInspectorModelLastRenderTime,
         kind: this.mediaStore.objectInspectorProceduralKind || 'textured-sphere',
-        schematic: this.mediaStore.objectInspectorProceduralKind.length > 0,
+        schematic: this.mediaStore.objectInspectorProceduralKind.length > 0 &&
+          this.mediaStore.objectInspectorProceduralKind !== 'constellation-mesh',
         temperatureK: this.detailStore.selectedTemperatureK > 0 ? this.detailStore.selectedTemperatureK : null,
         immersive: immersive, renderer: 'worker', computeMs: computeMs,
         uiPulseCount: uiPulseCount, uiMaxDelayMs: uiMaxDelayMs,
@@ -406,12 +422,8 @@ export class ObjectModelRenderer {
       this.objectInspectorModelRendering = false
       this.mediaStore.objectInspectorMediaDecoding = false
       this.mediaStore.objectInspectorMediaLoadFailed = false
-      const renderAgain = this.objectInspectorModelRenderPending
-      const renderAgainHighQuality = this.objectInspectorModelRenderHighQuality
-      this.objectInspectorModelRenderPending = false
-      this.objectInspectorModelRenderHighQuality = false
-      if (renderAgain) {
-        this.requestObjectInspectorModelRender(renderAgainHighQuality)
+      if (this.objectInspectorModelRenderPending) {
+        this.flushObjectInspectorModelRender()
       }
     }).catch((err: Error) => {
       if (generation !== this.objectInspectorModelRenderGeneration) {

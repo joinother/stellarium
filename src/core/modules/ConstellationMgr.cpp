@@ -48,6 +48,8 @@
 #include <QStringList>
 #include <QDir>
 #include <QFont>
+#include <QOpenGLContext>
+#include <QOpenGLFunctions>
 #if defined(__OHOS__)
 #include <QElapsedTimer>
 #include <hilog/log.h>
@@ -767,9 +769,89 @@ void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) 
 	sPainter.setCullFace(true);
 
 	SphericalRegionP region = sPainter.getProjector()->getViewportConvexPolygon();
+	if (!art3dDisplayed)
+	{
+		for (auto* constellation : constellations)
+		{
+			constellation->drawArtOptim(sPainter, *region, obsVelocity);
+		}
+		sPainter.setCullFace(false);
+		return;
+	}
+
+	// Collect visible 3D constellation meshes so we set up and clear GL depth
+	// state ONCE per frame (instead of 2 full-screen depth clears + glGetIntegerv
+	// per constellation), and cap simultaneous 3D meshes at wide FOV while
+	// gracefully falling back to lightweight 2D art for faint peripheral ones.
+	struct ModelCandidate
+	{
+		const Constellation* constellation;
+		float intensity;
+	};
+	QVector<ModelCandidate> models3d;
+	models3d.reserve(32);
 	for (auto* constellation : constellations)
 	{
+		if (!constellation->isSeasonallyVisible())
+			continue;
+		if (!constellation->modelIndices.isEmpty())
+		{
+			const float intensity = constellation->modelIntensity();
+			if (intensity > 0.015f && region->intersects(constellation->boundingCap))
+				models3d.append({constellation, intensity});
+			continue;
+		}
 		constellation->drawArtOptim(sPainter, *region, obsVelocity);
+	}
+
+	const double fov = sPainter.getProjector()->getFov();
+	int active3dCount = models3d.size();
+#if defined(__OHOS__)
+	const int wideFovCap = fov > 130.0 ? 8 : (fov > 95.0 ? 12 : 24);
+	if (active3dCount > wideFovCap)
+	{
+		std::nth_element(models3d.begin(), models3d.begin() + wideFovCap, models3d.end(),
+			[](const ModelCandidate& a, const ModelCandidate& b) { return a.intensity > b.intensity; });
+		// Peripheral constellations beyond the 3D budget render as lightweight
+		// 2D artwork at matching opacity so there is zero pop when sweeping.
+		for (int i = wideFovCap; i < active3dCount; ++i)
+		{
+			const Constellation* c = models3d[i].constellation;
+			const float intensity = models3d[i].intensity;
+			if (c->artTexture && intensity > 0.015f && c->artTexture->bind(0, true))
+			{
+				sPainter.setColor(intensity, intensity, intensity);
+				sPainter.drawStelVertexArray(c->artPolygon, false, obsVelocity);
+			}
+		}
+		active3dCount = wideFovCap;
+	}
+#else
+	Q_UNUSED(fov)
+#endif
+
+	if (active3dCount > 0)
+	{
+		auto* gl = QOpenGLContext::currentContext()->functions();
+		GLint oldDepthFunction = GL_LESS;
+		gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
+		sPainter.setCullFace(false);
+		sPainter.setDepthTest(true);
+		sPainter.setDepthMask(true);
+		gl->glClear(GL_DEPTH_BUFFER_BIT);
+		gl->glDepthFunc(GL_LEQUAL);
+		for (int i = 0; i < active3dCount; ++i)
+		{
+			models3d[i].constellation->drawArtModel(sPainter, models3d[i].intensity, obsVelocity, true);
+			// Restore additive blending after drawTrianglesWithDepthPrepass
+			sPainter.setBlending(true, GL_ONE, GL_ONE);
+		}
+		sPainter.setDepthMask(true);
+		gl->glClear(GL_DEPTH_BUFFER_BIT);
+		sPainter.setDepthMask(false);
+		sPainter.setDepthTest(false);
+		gl->glDepthFunc(oldDepthFunction);
+		sPainter.setBlending(true, GL_ONE, GL_ONE);
 	}
 
 	sPainter.setCullFace(false);
