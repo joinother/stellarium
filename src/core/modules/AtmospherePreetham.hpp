@@ -22,6 +22,7 @@
 #define ATMOSPHERE_PREETHAM_HPP
 
 #include "Atmosphere.hpp"
+#include "AtmospherePlanetary.hpp"
 #include "VecMath.hpp"
 
 #include "Skybright.hpp"
@@ -64,9 +65,11 @@ private:
 	Vec3f cachedMoonDirection;
 	float cachedEclipseFactor = -1.f;
 	float cachedPollution = -1.f;
+	float cachedPlanetaryLuminanceScale = 1.f;
 	bool cachedPlanetsVisible = false;
 	bool cachedNoScatter = false;
 	bool luminanceCacheValid = false;
+	AtmospherePlanetary::Profile planetaryProfile_ = AtmospherePlanetary::earthProfile();
 	unsigned int skyResolutionY,skyResolutionX;
 
 	QVarLengthArray<Vec2f> posGrid;
@@ -92,6 +95,12 @@ private:
 		int sunPos;
 		int vividStrength;
 		int mistUndergroundStrength;
+		int planetZenithColor;
+		int planetHorizonColor;
+		int planetTwilightZenith;
+		int planetTwilightHorizon;
+		int planetSunHaloColor;
+		int planetAtmoParams;
 		int term_x, Ax, Bx, Cx, Dx, Ex;
 		int term_y, Ay, By, Cy, Dy, Ey;
 		int projectionMatrix;

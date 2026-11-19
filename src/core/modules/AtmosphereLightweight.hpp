@@ -21,6 +21,7 @@
 #define ATMOSPHERE_LIGHTWEIGHT_HPP
 
 #include "Atmosphere.hpp"
+#include "AtmospherePlanetary.hpp"
 #include <memory>
 #include <array>
 #include <chrono>
@@ -126,10 +127,17 @@ private:
 		int sunDir;
 		int vividStrength;
 		int mistUndergroundStrength;
+		int planetZenithColor;
+		int planetHorizonColor;
+		int planetTwilightZenith;
+		int planetTwilightHorizon;
+		int planetSunHaloColor;
+		int planetAtmoParams;
 		int atmoTex;
 		int colorScale;
 		int projectionMatrixInverse;
 	} renderUniformLocations_;
+	AtmospherePlanetary::Profile planetaryProfile_ = AtmospherePlanetary::earthProfile();
 
 	struct
 	{

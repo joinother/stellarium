@@ -1896,6 +1896,11 @@ QString LandscapeMgr::getAtmosphereModel() const
 	return conf->value(ATMOSPHERE_MODEL_CONFIG_KEY, ATMOSPHERE_MODEL_CONF_VAL_DEFAULT).toString();
 }
 
+QString LandscapeMgr::getAtmosphereProfile() const
+{
+	return atmosphere ? atmosphere->getPlanetaryProfileId() : QStringLiteral("earth");
+}
+
 QString LandscapeMgr::getAtmosphereModelPath() const
 {
 	const auto conf=StelApp::getInstance().getSettings();

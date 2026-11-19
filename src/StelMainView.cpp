@@ -12734,6 +12734,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			result["atmosphere"] = lmgr->getFlagAtmosphere();
 			result["atmosphereModel"] = lmgr->getAtmosphereModel();
+			result["atmosphereProfile"] = lmgr->getAtmosphereProfile();
 			result["atmosphereAverageLuminance"] = lmgr->getAtmosphereAverageLuminance();
 			const StelSkyDrawer* drawer = core->getSkyDrawer();
 			result["atmosphereVisualStrength"] = drawer->getAtmosphereVisualStrength();

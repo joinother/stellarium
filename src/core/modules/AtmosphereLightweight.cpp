@@ -375,6 +375,7 @@ void main()
 	color_xyY.z *= color_xyY.z;
 	vec3 color_RGB = xyYToRGB(color_xyY.x, color_xyY.y, color_xyY.z * colorScale);
 	color_RGB = vividAtmosphereColor(color_RGB, viewDir, sunDir, vividStrength);
+	color_RGB = planetaryAtmosphereColor(color_RGB, viewDir, sunDir);
 	color_RGB *= mistAtmosphereTransmission(viewDir.z);
 	FRAG_COLOR = vec4(color_RGB, 1);
 }
@@ -396,7 +397,7 @@ void main()
 
 	QOpenGLShader fShader(QOpenGLShader::Fragment);
 	if (!fShader.compileSourceCode(StelOpenGL::globalShaderPrefix(StelOpenGL::FRAGMENT_SHADER) +
-	                               projector.getUnProjectShader() + toneRepro.readAll() + AtmosphereVivid::shaderSource() + AtmosphereMist::shaderSource() + renderFragSrc))
+	                               projector.getUnProjectShader() + toneRepro.readAll() + AtmosphereVivid::shaderSource() + AtmospherePlanetary::shaderSource() + AtmosphereMist::shaderSource() + renderFragSrc))
 	{
 		qFatal("Error while compiling Lightweight atmosphere fragment shader: %s", fShader.log().toUtf8().constData());
 	}
@@ -424,6 +425,12 @@ void main()
 	GL(renderUniformLocations_.sunDir                  = renderShaderProgram_->uniformLocation("sunDir"));
 	GL(renderUniformLocations_.vividStrength           = renderShaderProgram_->uniformLocation("vividStrength"));
 	GL(renderUniformLocations_.mistUndergroundStrength = renderShaderProgram_->uniformLocation("mistUndergroundStrength"));
+	GL(renderUniformLocations_.planetZenithColor       = renderShaderProgram_->uniformLocation("planetZenithColor"));
+	GL(renderUniformLocations_.planetHorizonColor      = renderShaderProgram_->uniformLocation("planetHorizonColor"));
+	GL(renderUniformLocations_.planetTwilightZenith    = renderShaderProgram_->uniformLocation("planetTwilightZenith"));
+	GL(renderUniformLocations_.planetTwilightHorizon   = renderShaderProgram_->uniformLocation("planetTwilightHorizon"));
+	GL(renderUniformLocations_.planetSunHaloColor      = renderShaderProgram_->uniformLocation("planetSunHaloColor"));
+	GL(renderUniformLocations_.planetAtmoParams        = renderShaderProgram_->uniformLocation("planetAtmoParams"));
 	GL(renderUniformLocations_.atmoTex                 = renderShaderProgram_->uniformLocation("atmoTex"));
 	GL(renderUniformLocations_.colorScale              = renderShaderProgram_->uniformLocation("colorScale"));
 	GL(renderUniformLocations_.projectionMatrixInverse = renderShaderProgram_->uniformLocation("projectionMatrixInverse"));
@@ -738,7 +745,7 @@ void AtmosphereLightweight::computeDrawParams(const StelCore* core, const Planet
 	{
 	case DRAW_PARAM_SUN:
 	{
-		p.relativeBrightness = noScatter ? 0 : 1;
+		p.relativeBrightness = noScatter ? 0.f : planetaryProfile_.luminanceScale;
 		p.fbo = sunPrepFBO_.get();
 
 		p.eclipseFactor = 1; // default value for the case when there's no moon or when we get a NaN
@@ -765,7 +772,7 @@ void AtmosphereLightweight::computeDrawParams(const StelCore* core, const Planet
 	case DRAW_PARAM_MOON:
 	{
 		const auto nonExtLunarMagnitude = lightSource ? lightSource->getVMagnitude(core) : 100.f;
-		p.relativeBrightness = noScatter ? 0.f : std::pow(10.f, 0.4f*(nonExtinctedSolarMagnitude-nonExtLunarMagnitude));
+		p.relativeBrightness = noScatter ? 0.f : planetaryProfile_.luminanceScale * std::pow(10.f, 0.4f*(nonExtinctedSolarMagnitude-nonExtLunarMagnitude));
 		p.fbo = moonPrepFBO_.get();
 		p.eclipseFactor = 1;
 		break;
@@ -782,6 +789,10 @@ void AtmosphereLightweight::computeColor(StelCore* core, const double JD, const 
 {
 	Q_UNUSED(JD)
 	vividAtmosphereAllowed = currentPlanet.getEnglishName() == "Earth" && !noScatter;
+	planetaryProfile_ = noScatter
+		? AtmospherePlanetary::earthProfile()
+		: AtmospherePlanetary::profileForPlanet(currentPlanet.getEnglishName().toStdString());
+	planetaryProfileId = QString::fromLatin1(planetaryProfile_.id);
 	Q_UNUSED(location)
 	Q_UNUSED(temperature)
 	Q_UNUSED(relativeHumidity)
@@ -968,6 +979,16 @@ void AtmosphereLightweight::draw(StelCore*const core)
 	applyToneReproducerParams(core, atmIntensity);
 	prj->setUnProjectUniforms(*renderShaderProgram_);
 	renderShaderProgram_->setUniformValue(renderUniformLocations_.mistUndergroundStrength, mistUndergroundStrength);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.planetZenithColor,
+		planetaryProfile_.zenithColor.r, planetaryProfile_.zenithColor.g, planetaryProfile_.zenithColor.b);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.planetHorizonColor,
+		planetaryProfile_.horizonColor.r, planetaryProfile_.horizonColor.g, planetaryProfile_.horizonColor.b);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.planetTwilightZenith,
+		planetaryProfile_.twilightZenith.r, planetaryProfile_.twilightZenith.g, planetaryProfile_.twilightZenith.b);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.planetTwilightHorizon,
+		planetaryProfile_.twilightHorizon.r, planetaryProfile_.twilightHorizon.g, planetaryProfile_.twilightHorizon.b);
+	renderShaderProgram_->setUniformValue(renderUniformLocations_.planetSunHaloColor,
+		planetaryProfile_.sunHaloColor.r, planetaryProfile_.sunHaloColor.g, planetaryProfile_.sunHaloColor.b);
 
 	GL(gl.glActiveTexture(GL_TEXTURE0));
 	renderShaderProgram_->setUniformValue(renderUniformLocations_.atmoTex, 0);
@@ -988,6 +1009,11 @@ void AtmosphereLightweight::draw(StelCore*const core)
 		renderShaderProgram_->setUniformValue(renderUniformLocations_.sunDir, p.dir);
 		renderShaderProgram_->setUniformValue(renderUniformLocations_.vividStrength,
 			flagVividAtmosphere && vividAtmosphereAllowed && i == DRAW_PARAM_SUN ? p.eclipseFactor : 0.f);
+		renderShaderProgram_->setUniformValue(renderUniformLocations_.planetAtmoParams,
+			planetaryProfile_.mixStrength,
+			planetaryProfile_.hazeExponent,
+			i == DRAW_PARAM_SUN ? planetaryProfile_.sunHaloStrength : 0.f,
+			planetaryProfile_.zenithAttenuation);
 
 		float colorScale = p.fboColorScale * p.relativeBrightness * p.eclipseFactor;
 		colorScale *= maxValue; // restore the scale we used when creating the preparation FBO

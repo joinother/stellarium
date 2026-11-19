@@ -558,6 +558,7 @@ public slots:
 	void setFlagVividAtmosphere(bool enabled);
 
 	QString getAtmosphereModel() const;
+	QString getAtmosphereProfile() const;
 	void setAtmosphereModel(const QString& model);
 
 	QString getAtmosphereModelPath() const;

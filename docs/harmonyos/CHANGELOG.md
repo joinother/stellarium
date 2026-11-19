@@ -1,5 +1,27 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 太阳系多星球与卫星本地大气光学渲染
+
+- **修改文件：** `src/core/modules/AtmospherePlanetary.hpp`（新增）、`src/core/modules/Atmosphere.hpp`、`src/core/modules/AtmosphereLightweight.hpp`、`src/core/modules/AtmosphereLightweight.cpp`、`src/core/modules/AtmospherePreetham.hpp`、`src/core/modules/AtmospherePreetham.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/StelMainView.cpp`、`scripts/test-planetary-atmosphere.cpp`（新增）、`scripts/test-ohos-planetary-atmosphere.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **太阳系多天体本地大气模型（`AtmospherePlanetary.hpp`）：**
+     - 此前切换观测地点至其他有大气的行星或卫星时，`AtmosphereLightweight` 与 `AtmospherePreetham` 仍按 1 AU 地球蓝天色度与亮度渲染。现为太阳系内含大气的天体设计独立本地大气配置（色度梯度、暮光过渡、霾层高度指数、太阳前向散射光晕、天顶衰减与日距亮度缩放），并保持地球走 `mixStrength == 0` 零开销直通路径（100% 不改变地球既有蓝天与鲜艳大气效果）：
+       - **火星（`mars`）：** 白天氧化铁沙尘暖赭/奶油糖色调；日出日落太阳低仰角时在太阳方向地平线呈现标志性的**火星蓝色日落**（尘埃米氏前向散射）。
+       - **金星（`venus`）：** 高密度硫酸云层漫射暖金琥珀色阴天天穹。
+       - **土卫六（`titan`）：** 浓密托林有机霾层呈现炽热橙褐/橘红低垂光晕与更低日照亮度。
+       - **木星（`jupiter`）：** 高空深蓝宝石瑞利散射向下过渡至温暖乳金氨云地平雾带。
+       - **土星（`saturn`）：** 柔和板岩蓝高空与淡金奶油色地平霾带，映衬横贯天际的土星环。
+       - **天王星（`uranus`）：** 甲烷红光吸收形成的清冷青绿/水蓝天穹。
+       - **海王星（`neptune`）：** 远日低照度深钴蓝/电光蔚蓝甲烷天空。
+       - **冥王星（`pluto`）与海卫一（`triton`）：** 极稀薄氮/甲烷临边霾层（`zenithAttenuation = 0.06`），保留漆黑繁星天顶并在地平线勾勒冰蓝/淡紫临边薄雾。
+     - GLSL 着色器函数 `planetaryAtmosphereColor()` 对移动端 GPU `pow()` 基数做非零保护，杜绝天顶与背日侧出现 `NaN` 黑点；同时采用高保真色度映射避免高饱和度天空被泛白漂浅。
+  2. **双渲染管线同步接入与光度一致（`AtmosphereLightweight` / `AtmospherePreetham`）：**
+     - 同步缩放主光源亮度与 `averageLuminance` 探针读数（并在 Preetham 缓存键中纳入 `cachedPlanetaryLuminanceScale`），使 `StelToneReproducer` 人眼适应与星等可见度随日距自然变化；月亮散射通道自动关闭太阳光晕，避免夜间伪影。
+     - `Atmosphere`、`LandscapeMgr::getAtmosphereProfile()` 与 `getLandscapeInfo` 新增 `atmosphereProfile` 字段上报当前生效的星球大气配置 ID。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`scripts/test-planetary-atmosphere.cpp`（10 天体日/落日/夜/天顶/地平全通过，`-Wall -Wextra -Werror`）、`test-ohos-planetary-atmosphere.mjs`、`test-ohos-vivid-atmosphere.mjs`、`test-ohos-observer-planet-contract.mjs`、`test-ohos-realistic-star-visibility.mjs`（40/40 通过）。
+  - 真机实测（`FOV 78°` 全景截图 + `getLandscapeInfo` 实测）：地球（`5114 cd/m²`，原貌不变）、金星（`2294 cd/m²`，金琥珀云雾）、火星白天（`1780 cd/m²`，沙尘奶油赭色）与火星日落（太阳仰角 `2.0°`，`582 cd/m²`，地平线清晰蓝色日落光晕）、木星（`448 cd/m²`，蓝宝石高空配乳金地平）、土卫六（`337 cd/m²`，炽热橙色托林霾）、土星（`277 cd/m²`，土星环配淡金霾带）、天王星（`164 cd/m²`，青绿水蓝）、海王星（`123 cd/m²`，深钴蔚蓝）及冥王星（`64 cd/m²`，深黑繁星天顶配冰蓝临边薄雾）全部生效且无闪烁、裁切或色块伪影。
+
 ## [2026-11-20] 贴天 3D 星座模型防穿模、姿态对齐、整体触控拾取与居中连线动画开关
 
 - **修改文件：** `src/core/modules/ConstellationPresentation.hpp`、`src/core/modules/Constellation.hpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/ConstellationMgr.hpp`、`src/core/modules/ConstellationMgr.cpp`、`src/core/TouchPicker.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/SkyCultureSettingsStore.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`、`scripts/test-constellation-presentation.cpp`、`scripts/test-ohos-constellation-3d-polish.mjs`（新增）、`scripts/check-ohos-ui-contract.mjs`（更新静态锚点基线）、`docs/harmonyos/CHANGELOG.md`。

@@ -136,8 +136,8 @@ void AtmospherePreetham::compileShaders(const StelProjector* projector)
 			qFatal("Failed to open ToneReproducer shader source");
 		if (!vShader.compileSourceCode(StelOpenGL::globalShaderPrefix(StelOpenGL::VERTEX_SHADER) +
 									   "#define main originalAtmosphereMain\n" + vert.readAll() +
-									   "\n#undef main\n" + toneRepro.readAll() + AtmosphereVivid::shaderSource() +
-									   "\nvoid main() { originalAtmosphereMain(); resultSkyColor = vividAtmosphereColor(resultSkyColor, skyColor.xyz, sunPos, vividStrength); }\n"))
+									   "\n#undef main\n" + toneRepro.readAll() + AtmosphereVivid::shaderSource() + AtmospherePlanetary::shaderSource() +
+									   "\nvoid main() { originalAtmosphereMain(); resultSkyColor = vividAtmosphereColor(resultSkyColor, skyColor.xyz, sunPos, vividStrength); resultSkyColor = planetaryAtmosphereColor(resultSkyColor, skyColor.xyz, sunPos); }\n"))
 			qFatal("Error while compiling atmosphere vertex shader: %s", vShader.log().toLatin1().constData());
 	}
 	if (!vShader.log().isEmpty())
@@ -190,6 +190,12 @@ void main()
 	GL(shaderAttribLocations.sunPos = atmoShaderProgram->uniformLocation("sunPos"));
 	GL(shaderAttribLocations.vividStrength = atmoShaderProgram->uniformLocation("vividStrength"));
 	GL(shaderAttribLocations.mistUndergroundStrength = atmoShaderProgram->uniformLocation("mistUndergroundStrength"));
+	GL(shaderAttribLocations.planetZenithColor = atmoShaderProgram->uniformLocation("planetZenithColor"));
+	GL(shaderAttribLocations.planetHorizonColor = atmoShaderProgram->uniformLocation("planetHorizonColor"));
+	GL(shaderAttribLocations.planetTwilightZenith = atmoShaderProgram->uniformLocation("planetTwilightZenith"));
+	GL(shaderAttribLocations.planetTwilightHorizon = atmoShaderProgram->uniformLocation("planetTwilightHorizon"));
+	GL(shaderAttribLocations.planetSunHaloColor = atmoShaderProgram->uniformLocation("planetSunHaloColor"));
+	GL(shaderAttribLocations.planetAtmoParams = atmoShaderProgram->uniformLocation("planetAtmoParams"));
 	GL(shaderAttribLocations.term_x = atmoShaderProgram->uniformLocation("term_x"));
 	GL(shaderAttribLocations.Ax = atmoShaderProgram->uniformLocation("Ax"));
 	GL(shaderAttribLocations.Bx = atmoShaderProgram->uniformLocation("Bx"));
@@ -259,6 +265,10 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 #endif
 	const StelProjectorP prj = core->getProjection(StelCore::FrameAltAz, StelCore::RefractionOff);
 	vividAtmosphereAllowed = currentPlanet.getEnglishName() == "Earth" && !noScatter;
+	planetaryProfile_ = noScatter
+		? AtmospherePlanetary::earthProfile()
+		: AtmospherePlanetary::profileForPlanet(currentPlanet.getEnglishName().toStdString());
+	planetaryProfileId = QString::fromLatin1(planetaryProfile_.id);
 	if (viewport != prj->getViewport())
 	{
 #if defined(__OHOS__)
@@ -430,6 +440,7 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 		&& cachedSkyBrightness.hasSameLuminanceParameters(skyb)
 		&& cachedSunDirection == sunPosF && cachedMoonDirection == moonPosF
 		&& cachedEclipseFactor == eclipseFactor && cachedPollution == pollution
+		&& cachedPlanetaryLuminanceScale == planetaryProfile_.luminanceScale
 		&& cachedPlanetsVisible == planetsVisible && cachedNoScatter == noScatter;
 	bool gridChanged = !reuseLuminance;
 
@@ -487,7 +498,7 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 			}
 		}
 
-		lumi *= eclipseFactor;
+		lumi *= eclipseFactor * planetaryProfile_.luminanceScale;
 		// Add star background luminance
 		lumi += 0.0001f;
 		// Multiply by the input scale of the ToneConverter (is not done automatically by the xyYtoRGB method called later)
@@ -527,6 +538,7 @@ void AtmospherePreetham::computeColor(StelCore* core, const double JD, const Pla
 	cachedMoonDirection = moonPosF;
 	cachedEclipseFactor = eclipseFactor;
 	cachedPollution = pollution;
+	cachedPlanetaryLuminanceScale = planetaryProfile_.luminanceScale;
 	cachedPlanetsVisible = planetsVisible;
 	cachedNoScatter = noScatter;
 	luminanceCacheValid = cacheSupported;
@@ -580,6 +592,19 @@ void AtmospherePreetham::draw(StelCore* core)
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.sunPos, sunPos[0], sunPos[1], sunPos[2]));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.vividStrength,
 		flagVividAtmosphere && vividAtmosphereAllowed ? eclipseFactor : 0.f));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetZenithColor,
+		planetaryProfile_.zenithColor.r, planetaryProfile_.zenithColor.g, planetaryProfile_.zenithColor.b));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetHorizonColor,
+		planetaryProfile_.horizonColor.r, planetaryProfile_.horizonColor.g, planetaryProfile_.horizonColor.b));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetTwilightZenith,
+		planetaryProfile_.twilightZenith.r, planetaryProfile_.twilightZenith.g, planetaryProfile_.twilightZenith.b));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetTwilightHorizon,
+		planetaryProfile_.twilightHorizon.r, planetaryProfile_.twilightHorizon.g, planetaryProfile_.twilightHorizon.b));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetSunHaloColor,
+		planetaryProfile_.sunHaloColor.r, planetaryProfile_.sunHaloColor.g, planetaryProfile_.sunHaloColor.b));
+	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.planetAtmoParams,
+		planetaryProfile_.mixStrength, planetaryProfile_.hazeExponent,
+		planetaryProfile_.sunHaloStrength, planetaryProfile_.zenithAttenuation));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.term_x, term_x));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.Ax, Ax));
 	GL(atmoShaderProgram->setUniformValue(shaderAttribLocations.Bx, Bx));

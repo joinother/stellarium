@@ -77,6 +77,7 @@ public:
 	void setVisualStrength(float strength) { visualStrength = strength; }
 	float getVisualFadeIntensity() const { return fader.getInterstate() * visualStrength; }
 	void setMistUndergroundStrength(float strength) { mistUndergroundStrength = strength; }
+	QString getPlanetaryProfileId() const { return planetaryProfileId; }
 
 	//! Get the actual atmosphere intensity due to eclipses + fader
 	//! @return the display intensity ranging from 0 to 1
@@ -118,6 +119,7 @@ protected:
 	float mistUndergroundStrength = 0.f;
 	bool flagVividAtmosphere = false;
 	bool vividAtmosphereAllowed = false;
+	QString planetaryProfileId = QStringLiteral("earth");
 	//! The average luminance of the atmosphere in cd/m2
 	float averageLuminance = 0;
 	bool overrideAverageLuminance = false; // if true, don't compute but keep value set via setAverageLuminance(float)
