@@ -1298,7 +1298,8 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 		// If we have a landscape for selected planet then set it, otherwise use zero horizon landscape
 		const bool landscapeSetsLocation = getFlagLandscapeSetsLocation();
 		setFlagLandscapeSetsLocation(false);
-		if (getAllLandscapeNames().indexOf(loc.planetName)>0)
+		// indexOf()==0 is a valid match; >0 wrongly falls back to the zero horizon.
+		if (getAllLandscapeNames().indexOf(loc.planetName) >= 0)
 			setCurrentLandscapeName(loc.planetName);
 		else
 			setCurrentLandscapeID("zero");
