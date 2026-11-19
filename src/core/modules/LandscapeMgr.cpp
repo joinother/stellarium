@@ -1310,8 +1310,7 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 	{
 		if (flagEnvironmentAutoEnabling)
 		{
-			setFlagAtmosphere(false);
-			setFlagFog(false);
+			setFlagAtmosphereAndFogForEnvironment(false, false);
 			setFlagLandscape(false);
 			setFlagCardinalPoints(false); // suppresses all
 		}
@@ -1323,8 +1322,10 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 		if (pl && flagEnvironmentAutoEnabling && currentPlanetName!=loc.planetName)
 		{
 			QSettings* conf = StelApp::getInstance().getSettings();
-			setFlagAtmosphere(pl->hasAtmosphere() && conf->value("landscape/flag_atmosphere", true).toBool());
-			setFlagFog(pl->hasAtmosphere() && conf->value("landscape/flag_fog", true).toBool());
+			const bool hasAtmosphere = pl->hasAtmosphere();
+			setFlagAtmosphereAndFogForEnvironment(
+				hasAtmosphere && conf->value("landscape/flag_atmosphere", true).toBool(),
+				hasAtmosphere && conf->value("landscape/flag_fog", true).toBool());
 			setFlagLandscape(conf->value("landscape/flag_landscape", true).toBool());
 			setFlagCardinalPoints(conf->value("viewing/flag_cardinal_points", true).toBool());
 			setFlagOrdinalPoints(conf->value("viewing/flag_ordinal_points", true).toBool());
@@ -1338,9 +1339,15 @@ void LandscapeMgr::onTargetLocationChanged(const StelLocation &loc, const QStrin
 
 void LandscapeMgr::setFlagFog(const bool displayed)
 {
+	setFlagFogInternal(displayed, true);
+}
+
+void LandscapeMgr::setFlagFogInternal(const bool displayed, const bool saveToConfig)
+{
 	if (landscape->getFlagShowFog() != displayed) {
 		landscape->setFlagShowFog(displayed);
-		StelApp::immediateSave("landscape/flag_fog", displayed);
+		if (saveToConfig)
+			StelApp::immediateSave("landscape/flag_fog", displayed);
 		emit fogDisplayedChanged(displayed);
 	}
 }
@@ -1777,10 +1784,22 @@ Vec3f LandscapeMgr::getColorCardinalPoints() const
 //! Set flag for displaying Atmosphere
 void LandscapeMgr::setFlagAtmosphere(const bool displayed)
 {
+	setFlagAtmosphereInternal(displayed, true);
+}
+
+void LandscapeMgr::setFlagAtmosphereAndFogForEnvironment(const bool showAtmosphere, const bool showFog)
+{
+	setFlagAtmosphereInternal(showAtmosphere, false);
+	setFlagFogInternal(showFog, false);
+}
+
+void LandscapeMgr::setFlagAtmosphereInternal(const bool displayed, const bool saveToConfig)
+{
 	if (atmosphere->getFlagShow() != displayed) {
 		atmosphere->setFlagShow(displayed);
 		StelApp::getInstance().getCore()->getSkyDrawer()->setFlagHasAtmosphere(displayed);
-		StelApp::immediateSave("landscape/flag_atmosphere", displayed);
+		if (saveToConfig)
+			StelApp::immediateSave("landscape/flag_atmosphere", displayed);
 		emit atmosphereDisplayedChanged(displayed);
 		//if (StelApp::getInstance().getSettings()->value("landscape/flag_fog", true).toBool())
 		//	setFlagFog(displayed); // sync of visibility of fog because this is atmospheric phenomena
