@@ -942,31 +942,41 @@ QString StelSkyCultureMgr::descriptionMarkdownToNarration(const QString& markdow
 	static const QRegularExpression sectionNamePat("^## +(.+)$", QRegularExpression::MultilineOption);
 	QString prevSectionName;
 	qsizetype prevBodyStartPos = -1;
+	bool hasNarrativeSection = false;
+	const auto isAuxiliaryNarrationSection = [](const QString& section) {
+		const QString trimmed = section.trimmed();
+		return trimmed == QLatin1String("References") ||
+		       trimmed == QLatin1String("Authors") ||
+		       trimmed == QLatin1String("License") ||
+		       trimmed == QLatin1String("External links");
+	};
 	for (auto it = sectionNamePat.globalMatch(markdown); it.hasNext(); )
 	{
 		const auto match = it.next();
 		const auto sectionName = match.captured(1);
 		const auto nameStartPos = match.capturedStart(0);
 		const auto bodyStartPos = match.capturedEnd(0);
-		if (!prevSectionName.isEmpty())
+		if (!prevSectionName.isEmpty() && !isAuxiliaryNarrationSection(prevSectionName))
 		{
 			const auto sectionText = convertMarkdownLevel2SectionNarration(markdown, prevSectionName, prevBodyStartPos, nameStartPos, trans);
-			if(prevSectionName != "Introduction" && prevSectionName != "Description")
-				//text +=  qc_(prevSectionName, "Name of a section in sky culture description") + " . . . ";
 			if (!sectionText.isEmpty())
 			{
-				text += sectionText + " ";
+				if (prevSectionName != QLatin1String("Introduction") && prevSectionName != QLatin1String("Description"))
+					text += qc_(prevSectionName, "Name of a section in sky culture description") + " . . . ";
+				text += sectionText + " . . . ";
+				hasNarrativeSection = true;
 			}
 		}
 		prevBodyStartPos = bodyStartPos;
 		prevSectionName = sectionName;
 	}
-	if (prevBodyStartPos >= 0)
+	if (prevBodyStartPos >= 0 && (!isAuxiliaryNarrationSection(prevSectionName) || !hasNarrativeSection) && prevSectionName.trimmed() != QLatin1String("License"))
 	{
 		const auto sectionText = convertMarkdownLevel2SectionNarration(markdown, prevSectionName, prevBodyStartPos, markdown.size(), trans);
 		if (!sectionText.isEmpty())
 		{
-			text += " . . " + qc_(prevSectionName, "Name of a section in sky culture description") + ". . . ";
+			if (prevSectionName != QLatin1String("Introduction") && prevSectionName != QLatin1String("Description"))
+				text += qc_(prevSectionName, "Name of a section in sky culture description") + " . . . ";
 			text += sectionText;
 		}
 	}

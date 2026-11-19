@@ -88,14 +88,46 @@ export function csvCell(value: string | number | boolean | undefined): string {
   return '"' + text.replace(/"/g, '""') + '"'
 }
 
-// 星空文化解说文本清洗：去 BOM/替换字符、把省略号行归一为换行、压缩多余空行。
+// 星空文化解说文本清洗：去 BOM/替换字符/制表符与残留 Markdown 标记、把省略号行归一为换行、压缩多余空行。
 export function cleanSkyCultureNarration(text: string): string {
-  return text.replace(/[\uFEFF\uFFFD\uFFFC]/g, '').replace(/\s*\.\s*\.\s*\.\s*/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return text
+    .replace(/[\uFEFF\uFFFD\uFFFC]/g, '')
+    .replace(/\t+/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/<\/?notr\b[^>]*>/gi, '')
+    .replace(/\[#([0-9]+)\]/g, '[$1]')
+    .replace(/^[ \t]*#{1,6}[ \t]+/gm, '')
+    .replace(/\*\*([^*\n]{1,140}?)\*\*/g, '$1')
+    .replace(/__([^_\n]{1,140}?)__/g, '$1')
+    .replace(/\*\*/g, '')
+    .replace(/(^|[^A-Za-z0-9])_([^_\n]{1,100}?)_(?![A-Za-z0-9])/g, '$1$2')
+    .replace(/_([^_\n]{0,100}[\u3000-\u9FFF\uFF00-\uFFEF][^_\n]{0,100})_/g, '$1')
+    .replace(/([\u3000-\u9FFF\uFF00-\uFFEF])_(?=\S)/g, '$1')
+    .replace(/\*([^*\n]{1,100}?)\*/g, '$1')
+    .replace(/\s*\.\s*\.\s*\.\s*/g, '\n')
+    .replace(/[ ]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
-// 星空文化描述文本清洗：去 BOM/替换字符、去行尾空白、压缩多余空行。
+// 星空文化描述文本清洗：去 BOM/替换字符/制表符与残留 Markdown 强调符、去行尾空白、压缩多余空行。
 export function cleanSkyCultureDescription(text: string): string {
-  return text.replace(/[\uFEFF\uFFFD\uFFFC]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return text
+    .replace(/[\uFEFF\uFFFD\uFFFC]/g, '')
+    .replace(/\t+/g, ' ')
+    .replace(/<\/?notr\b[^>]*>/gi, '')
+    .replace(/\[#([0-9]+)\]/g, '[$1]')
+    .replace(/\*\*([^*\n]{1,140}?)\*\*/g, '$1')
+    .replace(/__([^_\n]{1,140}?)__/g, '$1')
+    .replace(/\*\*/g, '')
+    .replace(/(^|[^A-Za-z0-9])_([^_\n]{1,100}?)_(?![A-Za-z0-9])/g, '$1$2')
+    .replace(/_([^_\n]{0,100}[\u3000-\u9FFF\uFF00-\uFFEF][^_\n]{0,100})_/g, '$1')
+    .replace(/([\u3000-\u9FFF\uFF00-\uFFEF])_(?=\S)/g, '$1')
+    .replace(/\*([^*\n]{1,100}?)\*/g, '$1')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 // 星空文化插图相对路径安全校验（防目录穿越、限定图片扩展名）。

@@ -1,5 +1,36 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 星空文化介绍与星座资料清理残留制表符/Markdown 标记 + 表格结构化渲染
+
+- **修改文件：** `src/StelMainView.cpp`、`src/core/StelSkyCultureMgr.cpp`、`harmonyos/ets-source/common/derive/skycult.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/common/ui/SkyCultureDescriptionBlockView.ets`、`harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`、`harmonyos/ets-source/panels/object/ConstellationCultureView.ets`、`scripts/test-ohos-skyculture-text.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **HTML/Markdown 表格被拆碎为单单元格竖排：** `skyCultureDescriptionBlocks()` 原按 `QTextBlock` 逐格遍历，将 `<table>` 的每个 `<td>`/`<th>` 拆成独立 `tableRow` 块（如「中国」拆成 2,001 条、「希腊 (天文学大成)」拆成 255 条）。现改为基于 `QTextTable` 按行聚合，输出 `tableHeader` / `tableRow` 与 `cells[]`（单有效格自动收拢，跳过纯图空行与跨行/跨列重复格），`SkyCultureDescriptionBlockView` 对 2–4 列表格横向分列对齐、5 列以上宽表转为「首列标题 + 详情卡片行」，`descriptionFormatVersion` 升级为 `2`。
+  2. **星座介绍残留 `_` / `*` / `\t` / `<notr>` / `[#N]` 等 Markdown 标记：** 因 CommonMark 词内下划线规则不支持无空格中文，现代等文化的 84 条中文星座介绍与 HTML 单元格内残留大量 `_仙女座_`、`_猎户座_`、`狐狸座_星座..._Vulpecula`、`**...**`、`\t` 等。`cleanSkyCultureDescriptionText()` 与 `skycult.ets` 现保护 URL、ASCII 编号（如 `S_Sco`）、单星号脚注（如 `天稷*`）与 Unicode 排版控制符（`\u200B`/`\u200C`/`\u200D`/`\u2060`），彻底清除所有残留制表符与强调标记。
+  3. **文化解说卡片（`narration`）正文误跳过与原始 Markdown 泄露：** 修复 `StelSkyCultureMgr::descriptionMarkdownToNarration()` 因注释行缺少大括号导致「中国」「希腊 (天文学大成)」「藏族」「阿努塔」「波荣」等文化的 `Introduction` / `Description` 被跳过而直接显示参考文献的缺陷；新增 `cleanSkyCultureNarrationText()` 清洗标题 `###`、链接 `[文](url)`、引用 `[#N]`、Markdown 管道表、HTML 标签与 `\t`。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-skyculture-text.mjs`（8/8）、`test-ohos-screen-anchor.mjs`（6/6）、`test-ohos-time-panel.mjs`（3/3）、`test-ohos-time-transition.mjs`（3/3）、`test-selected-time-camera.py`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机抽测 8 套文化（`modern`、`chinese`、`greek_almagest`、`tibetan`、`anutan`、`boorong`、`seri`、`arabic_al-sufi`）：残留标记与制表符块数全部归零（`badBlockCount = 0`、`narHasBad = false`）；`chinese` 块数 `2,081 → 470`、`greek_almagest` `290 → 84`（1 表头 + 48 星座行）、`tibetan` `234 → 84`、`anutan` `86 → 40`、`boorong` `138 → 56`，解说卡片全部恢复正常文化引言开头。
+
+## [2026-11-20] 修复选中天体在快速切换/拖动时间时偶发脱锚与地平线倾斜
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/capability/TimeController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **移除时间交互对 `viewLock` 的静默解除：** `TimeController.ets` / `MainWindowNativeNode.ets` 原 `releaseSilentViewLockForTime()` 会在时间轮按下、快进/倒带及 `±12h` 步进时主动下发 `setViewLock('0')`，直接关闭选中天体屏幕锚定；现已移除，改为保留锁定状态。
+  2. **取消打开时间面板后的延迟重定位竞争：** 打开时间面板时 `scheduleSelectedObjectForUiChange(380)` 会在 380 ms 后触发 `moveToSelectedAt(mode="layout")` 并调用 `ohosDeferSelectedAnchor(0.45..1.15)` 清空锚点。现所有时间轮按下、速率切换、`±12h`、日出日落跳转、手动设时及「现在/实时」按钮均先调用 `cancelSelectedObjectUiChange()`，防止延迟布局动画在中途打断锚定。
+  3. **时间变更前统一收口锚点与地平线水平状态（`ohosPrepareSelectedAnchorForTimeChange`）：**
+     - 在 `setTimeToJD` / `setJulianDate` / `setJD` / `advanceTime` / `setTimeRate` / `setDate` / `addDay` / `addHour` / `addMinute` / `addYear` / `addMonth` 及时间类 `triggerAction`（含 `actionReturn_To_Current_Time`）改动 `core->setJD()` 之前统一调用 `ohosPrepareSelectedAnchorForTimeChange(core)`。
+     - 清除双指缩放遗留的 `s_ohosPinchRollHeld` 与单指回正动画 `s_ohosHorizonLevelActive`，确保时间推进始终走 `StelMovementMgr::solveMountFrameAnchor()`（目标固定原屏幕坐标且地平线严格水平 `up[2] > 0`），避免多小时跳时后地平线倾斜/翻转或前 0.4 s 漏锚。
+     - 清除过期的 `s_ohosSelectedAnchorHoldUntilSec`，并在 `setJD()` 移动天空前先冲刷待采集的 `s_ohosCaptureSelectedAnchorAfterPan`，消除「拖动后立刻切时间先跳时再采锚导致离屏清空」的帧内时序竞争。
+  4. **同天体短暂越界保锚：** `ohosCaptureSelectedZoomAnchor(preserveSameObjectIfOffscreen=true)` 在目标天体未变但恰好位于视口边缘外时保留原有合法 `(xRatio, yRatio)` 锚点，不再将其抹空。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug）：**
+  - 主机验证：`test-ohos-screen-anchor.mjs`（6/6）、`test-ohos-time-panel.mjs`（3/3）、`test-ohos-time-transition.mjs`（3/3）、`test-selected-time-camera.py`（675 精确锚点 + 187,500 正反向时间帧 + 合约）、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机 `test-ohos-screen-anchor-pad.mjs`：4/4 全通过（`maxErrorPixels = 0.0085 px` / `0.00017 px`）。
+  - 真机时间锚定专项验证：
+    - 双指缩放倾斜地平线（`pinchRollHeld=true`、`horizonRollDeg=2.51°`、`FOV=0.75°`）后直接 `setJD(+6h)` / `addHour(+6h)` / `actionReturn_To_Current_Time`：`viewLock` 全程 `true`，`pinchRollHeld` 自动清零，地平线回正 `0.0000°`，最大误差 `0.44 px`。
+    - 织女星偏心 +2h/+5h/+9h/+12h/+17h/+22h/+24h/+30天连续跳时：`viewLock=true`、最大误差 `0.0003 px`、`horizonRollDeg=0°`。
+    - 土星 `panBy` 后零延迟立刻 `+6h/+12h`、`±12h`、`±3600×` 快进/倒带：`viewLock=true`、误差 `≤ 0.0007 px`、`horizonRollDeg=0°`。
+    - 真机 `uitest` 真实操作时间面板（打开面板 180 ms 内直接滑动小时轮 `-9.34h`、日期轮 `+9.29d`、连点快进至 `60×`、点击「实时」）：`viewLock` 全程 `true`，土星锚定误差 `0.0000–0.1045 px`，`horizonRollDeg=0°`。
+
 ## [2026-11-19] 大 FOV 天顶↔天底切换视角卡顿专项优化（整帧绘制提速 2.6×，深空索引提速 28.6×）
 
 - **修改文件：** `src/core/modules/NebulaMgr.hpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/modules/Constellation.hpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/ConstellationMgr.cpp`、`docs/harmonyos/CHANGELOG.md`。

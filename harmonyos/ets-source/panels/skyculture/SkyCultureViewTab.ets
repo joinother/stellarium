@@ -252,7 +252,12 @@ export struct SkyCultureViewTab {
             if (this.skyCultureViewStore.descriptionBlocks.length > 0) {
               Column({ space: 4 }) {
                 ForEach(this.skyCultureViewStore.descriptionExpanded ? this.skyCultureViewStore.descriptionBlocks : this.skyCultureViewStore.descriptionBlocks.slice(0, 6), (block: SkyCultureDescriptionBlock) => {
-                  SkyCultureDescriptionBlockView({ kind: block.kind, headingLarge: block.level !== undefined && block.level <= 1, text: block.text })
+                  SkyCultureDescriptionBlockView({
+                    kind: block.kind,
+                    headingLarge: block.level !== undefined && block.level <= 1,
+                    text: block.text,
+                    cells: block.cells !== undefined ? block.cells : []
+                  })
                 }, (block: SkyCultureDescriptionBlock) => 'description-' + block.index)
               }.width('100%')
             } else {

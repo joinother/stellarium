@@ -137,6 +137,7 @@
 #include <QTextDocument>
 #include <QTextCursor>
 #include <QTextList>
+#include <QTextTable>
 #include <QtPlugin>
 #include <QThread>
 #include <QTimer>
@@ -305,15 +306,135 @@ static QSet<int> s_ohosKeyboardPanKeys;
 static Vec3d s_gyroPreviousUp(0., 0., 1.);
 static bool s_gyroHasPreviousUp = false;
 
+QString cleanSkyCultureInlineMarkup(QString text)
+{
+	// Protect URLs so underscores / asterisks inside links are never modified.
+	static const QRegularExpression urlRe(QStringLiteral("https?://[^\\s\\)\\]>\"']+"));
+	QStringList protectedUrls;
+	int offset = 0;
+	QString masked;
+	masked.reserve(text.size());
+	for (auto it = urlRe.globalMatch(text); it.hasNext(); )
+	{
+		const auto m = it.next();
+		masked.append(text.mid(offset, m.capturedStart() - offset));
+		const int idx = protectedUrls.size();
+		protectedUrls.append(m.captured(0));
+		masked.append(QStringLiteral("\uE000URL%1\uE001").arg(idx));
+		offset = m.capturedEnd();
+	}
+	if (offset == 0)
+		masked = text;
+	else
+		masked.append(text.mid(offset));
+
+	// Strip residual HTML helper tags and normalize citation brackets.
+	static const QRegularExpression notrTagRe(QStringLiteral("</?notr\\b[^>]*>"), QRegularExpression::CaseInsensitiveOption);
+	masked.remove(notrTagRe);
+	static const QRegularExpression citeRe(QStringLiteral("\\[#([0-9]+)\\]"));
+	masked.replace(citeRe, QStringLiteral("[\\1]"));
+
+	// Strip unparsed Markdown emphasis (e.g. CJK intraword _仙女座_, broken
+	// unpaired underscores in translations, or emphasis inside HTML table cells).
+	// Single footnote asterisks like "天稷*" and ASCII snake_case like "S_Sco"
+	// are preserved.
+	static const QRegularExpression boldStarRe(QStringLiteral("\\*\\*([^*\\n]{1,140}?)\\*\\*"));
+	static const QRegularExpression boldUnderRe(QStringLiteral("__([^_\\n]{1,140}?)__"));
+	static const QRegularExpression italicUnderBoundaryRe(QStringLiteral("(^|[^A-Za-z0-9])_([^_\\n]{1,100}?)_(?![A-Za-z0-9])"));
+	static const QRegularExpression italicUnderCjkRe(QStringLiteral("_([^_\\n]{0,100}[\\x{3000}-\\x{9FFF}\\x{FF00}-\\x{FFEF}][^_\\n]{0,100})_"));
+	static const QRegularExpression strayUnderAfterCjkRe(QStringLiteral("([\\x{3000}-\\x{9FFF}\\x{FF00}-\\x{FFEF}])_(?=\\S)"));
+	static const QRegularExpression strayUnderBeforeCjkRe(QStringLiteral("(?<=\\S)_([\\x{3000}-\\x{9FFF}\\x{FF00}-\\x{FFEF}])"));
+	static const QRegularExpression strayUnderStartCjkRe(QStringLiteral("(^|\\s)_([\\x{3000}-\\x{9FFF}\\x{FF00}-\\x{FFEF}])"));
+	static const QRegularExpression strayUnderEndCjkRe(QStringLiteral("([\\x{3000}-\\x{9FFF}\\x{FF00}-\\x{FFEF}])_(?=\\s|$)"));
+	static const QRegularExpression strayUnderBeforeLatinAfterCjkRe(QStringLiteral("([\\x{3000}-\\x{9FFF}：:（(])_([A-Za-z])"));
+	static const QRegularExpression italicStarRe(QStringLiteral("\\*([^*\\n]{1,100}?)\\*"));
+
+	masked.replace(boldStarRe, QStringLiteral("\\1"));
+	masked.replace(boldUnderRe, QStringLiteral("\\1"));
+	masked.remove(QStringLiteral("**"));
+	masked.replace(italicUnderBoundaryRe, QStringLiteral("\\1\\2"));
+	masked.replace(italicUnderCjkRe, QStringLiteral("\\1"));
+	masked.replace(strayUnderAfterCjkRe, QStringLiteral("\\1"));
+	masked.replace(strayUnderBeforeCjkRe, QStringLiteral("\\1"));
+	masked.replace(strayUnderStartCjkRe, QStringLiteral("\\1\\2"));
+	masked.replace(strayUnderEndCjkRe, QStringLiteral("\\1"));
+	masked.replace(strayUnderBeforeLatinAfterCjkRe, QStringLiteral("\\1\\2"));
+	masked.replace(italicStarRe, QStringLiteral("\\1"));
+
+	for (int i = 0; i < protectedUrls.size(); ++i)
+		masked.replace(QStringLiteral("\uE000URL%1\uE001").arg(i), protectedUrls.at(i));
+	return masked;
+}
+
 QString cleanSkyCultureDescriptionText(QString text)
 {
 	text.replace(QChar(0x00A0), QChar(' '));
 	text.remove(QChar::ReplacementCharacter);
 	text.remove(QChar(0xFFFC));
 	text.remove(QChar(0xFEFF));
-	text.remove(QRegularExpression(QStringLiteral("[\\x{0000}-\\x{0008}\\x{000B}\\x{000C}\\x{000E}-\\x{001F}\\x{007F}]")));
-	text.replace(QRegularExpression(QStringLiteral("[ \\t]+")), QStringLiteral(" "));
+	static const QRegularExpression ctrlRe(QStringLiteral("[\\x{0000}-\\x{0008}\\x{000B}\\x{000C}\\x{000E}-\\x{001F}\\x{007F}]"));
+	text.remove(ctrlRe);
+	text = cleanSkyCultureInlineMarkup(text);
+	static const QRegularExpression spaceRe(QStringLiteral("[ \\t]+"));
+	text.replace(spaceRe, QStringLiteral(" "));
 	return text.trimmed();
+}
+
+QString cleanSkyCultureNarrationText(QString text)
+{
+	text.replace(QChar('\r'), QString());
+	text.replace(QChar(0x00A0), QChar(' '));
+	text.remove(QChar::ReplacementCharacter);
+	text.remove(QChar(0xFFFC));
+	text.remove(QChar(0xFEFF));
+	static const QRegularExpression commentRe(QStringLiteral("<!--.*?-->"), QRegularExpression::DotMatchesEverythingOption);
+	static const QRegularExpression mdImageRe(QStringLiteral("!\\[[^\\]]*\\]\\([^)]*\\)"));
+	static const QRegularExpression mdLinkRe(QStringLiteral("\\[([^\\]]+)\\]\\([^)]+\\)"));
+	static const QRegularExpression brTagRe(QStringLiteral("<br\\s*/?>"), QRegularExpression::CaseInsensitiveOption);
+	static const QRegularExpression htmlTagRe(QStringLiteral("</?[A-Za-z][^>]*>"));
+	static const QRegularExpression pauseRe(QStringLiteral("\\s*\\.\\s*\\.\\s*\\.\\s*"));
+	static const QRegularExpression doublePauseRe(QStringLiteral("\\s+\\.\\s*\\.\\s+"));
+	static const QRegularExpression tableSepRe(QStringLiteral("^[ \\t]*\\|?[ \\t]*:?-{2,}:?(?:[ \\t]*\\|[ \\t]*:?-{2,}:?)+[ \\t]*\\|?[ \\t]*$"));
+	static const QRegularExpression hrRe(QStringLiteral("^[ \\t]*[-*_]{3,}[ \\t]*$"));
+	static const QRegularExpression headingPrefixRe(QStringLiteral("^[ \\t]*#{1,6}[ \\t]+"));
+	static const QRegularExpression bulletPrefixRe(QStringLiteral("^[ \\t]*[-*+][ \\t]+"));
+
+	text.remove(commentRe);
+	text.remove(mdImageRe);
+	text.replace(mdLinkRe, QStringLiteral("\\1"));
+	text.replace(brTagRe, QStringLiteral("\n"));
+	text.remove(htmlTagRe);
+	text.replace(pauseRe, QStringLiteral("\n\n"));
+	text.replace(doublePauseRe, QStringLiteral("\n\n"));
+
+	QStringList outLines;
+	const QStringList rawLines = text.split(QChar('\n'));
+	for (QString line : rawLines)
+	{
+		if (tableSepRe.match(line).hasMatch() || hrRe.match(line).hasMatch())
+			continue;
+		line.remove(headingPrefixRe);
+		line.remove(bulletPrefixRe);
+		const QString trimmed = line.trimmed();
+		if (trimmed.contains(QChar('|')) && (trimmed.startsWith(QChar('|')) || trimmed.endsWith(QChar('|')) || trimmed.count(QChar('|')) >= 2))
+		{
+			QStringList parts = trimmed.split(QChar('|'));
+			QStringList cleanedCells;
+			for (const QString& cell : parts)
+			{
+				const QString c = cleanSkyCultureDescriptionText(cell);
+				if (!c.isEmpty())
+					cleanedCells.append(c);
+			}
+			if (!cleanedCells.isEmpty())
+				outLines.append(cleanedCells.join(QStringLiteral(" · ")));
+			continue;
+		}
+		const QString cleaned = cleanSkyCultureDescriptionText(line);
+		if (!cleaned.isEmpty())
+			outLines.append(cleaned);
+	}
+	return outLines.join(QStringLiteral("\n\n"));
 }
 
 QJsonArray skyCultureDescriptionBlocks(const QString& html)
@@ -321,9 +442,79 @@ QJsonArray skyCultureDescriptionBlocks(const QString& html)
 	QTextDocument document;
 	document.setHtml(html);
 	QJsonArray blocks;
+	QSet<QTextTable*> emittedTables;
 	int index = 0;
 	for (QTextBlock block = document.begin(); block.isValid(); block = block.next())
 	{
+		QTextTable* table = QTextCursor(block).currentTable();
+		if (table)
+		{
+			if (emittedTables.contains(table))
+				continue;
+			emittedTables.insert(table);
+			for (int row = 0; row < table->rows(); ++row)
+			{
+				QJsonArray cells;
+				QStringList rowTexts;
+				bool isHeader = (row == 0 && table->format().headerRowCount() > 0);
+				for (int col = 0; col < table->columns(); ++col)
+				{
+					const QTextTableCell cell = table->cellAt(row, col);
+					if (cell.row() != row || cell.column() != col)
+						continue;
+					QStringList cellParts;
+					bool cellHasBold = false;
+					for (auto it = cell.begin(); !it.atEnd(); ++it)
+					{
+						const QTextBlock cellBlock = it.currentBlock();
+						if (!cellBlock.isValid()) continue;
+						if (row == 0 && !cellHasBold)
+						{
+							for (auto fragIt = cellBlock.begin(); !fragIt.atEnd(); ++fragIt)
+							{
+								const QTextFragment frag = fragIt.fragment();
+								if (frag.isValid() && !frag.text().trimmed().isEmpty() && frag.charFormat().fontWeight() >= QFont::Bold)
+								{
+									cellHasBold = true;
+									break;
+								}
+							}
+						}
+						const QString cleaned = cleanSkyCultureDescriptionText(cellBlock.text());
+						if (!cleaned.isEmpty())
+							cellParts.append(cleaned);
+					}
+					if (row == 0 && (cell.format().fontWeight() >= QFont::Bold || cellHasBold))
+						isHeader = true;
+					const QString cellText = cellParts.join(QStringLiteral(" "));
+					cells.append(cellText);
+					if (!cellText.isEmpty())
+						rowTexts.append(cellText);
+				}
+				if (rowTexts.isEmpty())
+					continue;
+				// If a row only carries one non-empty cell (e.g. an image cell plus a
+				// text cell), collapse to a single-column block so the UI doesn't render
+				// an empty placeholder column beside the text.
+				if (rowTexts.size() == 1)
+					cells = QJsonArray{rowTexts.first()};
+				else
+				{
+					// Trim trailing empty placeholder cells while keeping leading alignment intact.
+					while (!cells.isEmpty() && cells.last().toString().isEmpty())
+						cells.removeLast();
+				}
+				QJsonObject item;
+				item[QStringLiteral("index")] = index++;
+				item[QStringLiteral("kind")] = isHeader ? QStringLiteral("tableHeader") : QStringLiteral("tableRow");
+				item[QStringLiteral("level")] = 0;
+				item[QStringLiteral("text")] = rowTexts.join(QStringLiteral(" · "));
+				item[QStringLiteral("cells")] = cells;
+				blocks.append(item);
+			}
+			continue;
+		}
+
 		const QString text = cleanSkyCultureDescriptionText(block.text());
 		if (text.isEmpty()) continue;
 
@@ -333,8 +524,6 @@ QJsonArray skyCultureDescriptionBlocks(const QString& html)
 			kind = QStringLiteral("heading");
 		else if (block.textList())
 			kind = QStringLiteral("bullet");
-		else if (QTextCursor(block).currentTable())
-			kind = QStringLiteral("tableRow");
 
 		QJsonObject item;
 		item[QStringLiteral("index")] = index++;
@@ -344,6 +533,19 @@ QJsonArray skyCultureDescriptionBlocks(const QString& html)
 		blocks.append(item);
 	}
 	return blocks;
+}
+
+QString skyCultureBlocksToPlainText(const QJsonArray& blocks)
+{
+	QStringList parts;
+	parts.reserve(blocks.size());
+	for (const QJsonValue& value : blocks)
+	{
+		const QString text = value.toObject().value(QStringLiteral("text")).toString().trimmed();
+		if (!text.isEmpty())
+			parts.append(text);
+	}
+	return parts.join(QStringLiteral("\n"));
 }
 
 void ohosMark(const char* message)
@@ -2607,11 +2809,13 @@ static void ohosUpdateSelectedScreenProjection()
 	s_ohosSelectedScreenValid.store(true);
 }
 
-static void ohosCaptureSelectedZoomAnchor()
+static void ohosCaptureSelectedZoomAnchor(bool preserveSameObjectIfOffscreen = false)
 {
 	// A selection change or an interrupted gesture must never reuse the
-	// previous object's screen anchor. Clear first so every early return also
-	// leaves no stale target for the render-loop maintainer.
+	// previous object's screen anchor. Clear first unless explicitly preserving
+	// the same selected object's last valid anchor while it momentarily sits
+	// near/outside the viewport edge.
+	const QString previousAnchorObject = s_ohosZoomAnchorObject;
 	s_ohosZoomAnchorObject.clear();
 	StelApp* app = &StelApp::getInstance();
 	if (!app || !app->isInitialized())
@@ -2627,12 +2831,16 @@ static void ohosCaptureSelectedZoomAnchor()
 	if (viewport[2] <= 1 || viewport[3] <= 1)
 		return;
 	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+	const QString selectedKey = selectedObject->getType() + '/' + selectedObject->getID() + '/' + selectedObject->getEnglishName();
 	Vec3d projected;
-	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected))
+	if (!projector->project(selectedObject->getJ2000EquatorialPos(core), projected)
+		|| !projector->checkInViewport(projected))
+	{
+		if (preserveSameObjectIfOffscreen && selectedKey == previousAnchorObject)
+			s_ohosZoomAnchorObject = previousAnchorObject;
 		return;
-	if (!projector->checkInViewport(projected))
-		return;
-	s_ohosZoomAnchorObject = selectedObject->getType() + '/' + selectedObject->getID() + '/' + selectedObject->getEnglishName();
+	}
+	s_ohosZoomAnchorObject = selectedKey;
 	s_ohosZoomAnchorXRatio = (projected[0] - viewport[0]) / viewport[2];
 	s_ohosZoomAnchorYRatio = (viewport[1] + viewport[3] - 1 - projected[1]) / viewport[3];
 }
@@ -2890,6 +3098,34 @@ static void ohosMaintainSelectedZoomAnchor()
 	}
 	ohosAnchorSkyDirection(selectedObject->getJ2000EquatorialPos(core),
 		s_ohosZoomAnchorXRatio, s_ohosZoomAnchorYRatio);
+}
+
+static void ohosPrepareSelectedAnchorForTimeChange(StelCore* core)
+{
+	// Time scrubbing/fast-forwarding must solve with a level horizon via
+	// solveMountFrameAnchor() rather than a frozen post-pinch roll angle.
+	s_ohosPinchRollHeld = false;
+	s_ohosHorizonLevelActive = false;
+	if (!s_viewLock || !core)
+		return;
+	StelMovementMgr* movementMgr = core->getMovementMgr();
+	StelObjectMgr* objectMgr = GETSTELMODULE(StelObjectMgr);
+	if (!movementMgr || !objectMgr || objectMgr->getSelectedObject().isEmpty())
+		return;
+	if (movementMgr->getFlagTracking() || movementMgr->getFlagAutoMove())
+		return;
+	// End any lingering post-layout defer window so time changes immediately
+	// anchor the selected object from the very first frame.
+	s_ohosSelectedAnchorHoldUntilSec = 0.0;
+	const StelObjectP selectedObject = objectMgr->getSelectedObject().constFirst();
+	const QString selectedKey = selectedObject->getType() + '/' + selectedObject->getID() + '/' + selectedObject->getEnglishName();
+	// Capture BEFORE setJD() moves the sky if a pan just ended or a layout defer
+	// had cleared the anchor.
+	if (s_ohosCaptureSelectedAnchorAfterPan || selectedKey != s_ohosZoomAnchorObject)
+	{
+		s_ohosCaptureSelectedAnchorAfterPan = false;
+		ohosCaptureSelectedZoomAnchor(true);
+	}
 }
 
 static void ohosUpdateHorizonLeveling(double dtSec)
@@ -3226,9 +3462,8 @@ QJsonObject constellationCultureDescriptionJson(const StelObjectP& object, StelC
 		return result;
 
 	const QString html = StelSkyCultureMgr::markdownToHTML(markdown);
-	QTextDocument document;
-	document.setHtml(html);
-	const QString plainText = cleanSkyCultureDescriptionText(document.toPlainText());
+	const QJsonArray blocks = skyCultureDescriptionBlocks(html);
+	const QString plainText = skyCultureBlocksToPlainText(blocks);
 	if (plainText.isEmpty())
 		return result;
 
@@ -3237,7 +3472,7 @@ QJsonObject constellationCultureDescriptionJson(const StelObjectP& object, StelC
 	result[QStringLiteral("constellationCultureName")] = skyCultureMgr.getCurrentSkyCultureNameI18();
 	result[QStringLiteral("constellationCultureEnglishName")] = skyCultureMgr.getCurrentSkyCultureEnglishName();
 	result[QStringLiteral("constellationCultureDescription")] = plainText;
-	result[QStringLiteral("constellationCultureDescriptionBlocks")] = skyCultureDescriptionBlocks(html);
+	result[QStringLiteral("constellationCultureDescriptionBlocks")] = blocks;
 	result[QStringLiteral("constellationCultureDescriptionSource")] = QStringLiteral("Stellarium 天空文化 description.md");
 	return result;
 }
@@ -6240,6 +6475,14 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 			if (commandName == "triggerAction")
 			{
+				const QString actionId = action->getId();
+				if (actionId == "actionReturn_To_Current_Time" ||
+				    actionId.startsWith("actionAdd_") ||
+				    actionId.startsWith("actionSubtract_") ||
+				    actionId.contains("Time_Speed"))
+				{
+					ohosPrepareSelectedAnchorForTimeChange(core);
+				}
 				action->trigger();
 				markOhosInteraction();
 			}
@@ -7599,7 +7842,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			s_ohosPinchAnchorMode = OhosPinchAnchorMode::None;
 			s_ohosPanInertiaActive = false;
 			s_ohosSelectedAnchorHoldUntilSec = 0.0;
-			ohosCaptureSelectedZoomAnchor();
+			ohosCaptureSelectedZoomAnchor(true);
 			markOhosInteraction();
 			result["ok"] = true;
 			return result;
@@ -8226,6 +8469,8 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "invalid time rate";
 				return result;
 			}
+			if (std::abs(rate) > 1e-12)
+				ohosPrepareSelectedAnchorForTimeChange(core);
 			core->setTimeRate(rate);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -8247,6 +8492,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "advanceTime expects hours";
 				return result;
 			}
+			ohosPrepareSelectedAnchorForTimeChange(core);
 			core->setJD(core->getJD() + hours / 24.0);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -8268,6 +8514,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				result["error"] = "setJD expects a Julian Day number";
 				return result;
 			}
+			ohosPrepareSelectedAnchorForTimeChange(core);
 			core->setJD(jd);
 			markOhosInteraction();
 			result["ok"] = true;
@@ -10052,16 +10299,15 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			result["overrideCommonNames"] = skyCultureMgr.getFlagOverrideUseCommonNames();
 			result["defaultId"] = skyCultureMgr.getDefaultSkyCultureID();
 			result["usesCommonNames"] = skyCultureMgr.currentSkycultureUsesCommonNames();
-			result["narration"] = skyCultureMgr.getCurrentSkyCultureNarration();
+			result["narration"] = cleanSkyCultureNarrationText(skyCultureMgr.getCurrentSkyCultureNarration());
 			const QString descriptionHtml = skyCultureMgr.getCurrentSkyCultureHtmlDescription();
-			QTextDocument descriptionDocument;
-			descriptionDocument.setHtml(descriptionHtml);
-			QString plainDescription = cleanSkyCultureDescriptionText(descriptionDocument.toPlainText());
+			const QJsonArray descriptionBlocks = skyCultureDescriptionBlocks(descriptionHtml);
+			QString plainDescription = skyCultureBlocksToPlainText(descriptionBlocks);
 			plainDescription.replace(QRegularExpression(QStringLiteral("[ \\t]+\\n")), QStringLiteral("\n"));
 			plainDescription.replace(QRegularExpression(QStringLiteral("\\n{3,}")), QStringLiteral("\n\n"));
 			result["description"] = plainDescription.trimmed();
-			result["descriptionBlocks"] = skyCultureDescriptionBlocks(descriptionHtml);
-			result["descriptionFormatVersion"] = 1;
+			result["descriptionBlocks"] = descriptionBlocks;
+			result["descriptionFormatVersion"] = 2;
 
 			// The desktop culture map renders GeoJSON boundaries. Mobile exposes only
 			// the associated period metadata, never the boundary coordinates.
@@ -10749,6 +10995,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 				return result;
 			}
 			StelCore* core = StelApp::getInstance().getCore();
+			ohosPrepareSelectedAnchorForTimeChange(core);
 			core->setJD(jd);
 			core->setTimeRate(0.0);
 			markOhosInteraction();
@@ -14171,7 +14418,9 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 		{
 			bool jdOk = false; double jd = StelUtils::getJulianDayFromISO8601String(arg, &jdOk);
 			if (jdOk && jd > 0) {
-				StelApp::getInstance().getCore()->setJD(jd);
+				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
+				core->setJD(jd);
 				result["ok"] = true;
 				result["jd"] = jd;
 			} else {
@@ -14188,6 +14437,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double days = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
 				core->setJD(core->getJD() + days);
 				result["ok"] = true;
 				result["jd"] = core->getJD();
@@ -14205,6 +14455,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double hours = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
 				core->setJD(core->getJD() + hours / 24.0);
 				result["ok"] = true;
 				result["jd"] = core->getJD();
@@ -14222,6 +14473,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double minutes = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
 				core->setJD(core->getJD() + minutes / 1440.0);
 				result["ok"] = true;
 				result["jd"] = core->getJD();
@@ -14239,6 +14491,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double years = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
 				core->setJD(core->getJD() + years * 365.25);
 				result["ok"] = true;
 				result["jd"] = core->getJD();
@@ -14256,6 +14509,7 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			double months = arg.toDouble(&ok);
 			if (ok) {
 				StelCore* core = StelApp::getInstance().getCore();
+				ohosPrepareSelectedAnchorForTimeChange(core);
 				core->setJD(core->getJD() + months * 30.4375);
 				result["ok"] = true;
 				result["jd"] = core->getJD();

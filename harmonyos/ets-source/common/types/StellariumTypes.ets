@@ -235,6 +235,7 @@ export interface SkyCultureDescriptionBlock {
   kind: string
   level?: number
   text: string
+  cells?: string[]
 }
 
 export interface SkyCultureTerritoryEntry {

@@ -47,7 +47,8 @@ export struct ConstellationCultureView {
                   SkyCultureDescriptionBlockView({
                     kind: block.kind,
                     headingLarge: block.level !== undefined && block.level <= 1,
-                    text: block.text
+                    text: block.text,
+                    cells: block.cells !== undefined ? block.cells : []
                   })
                 },
                 (block: SkyCultureDescriptionBlock) => 'selected-culture-' + block.index
