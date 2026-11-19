@@ -351,9 +351,14 @@ void AsterismMgr::drawRayHelpers(StelPainter& sPainter, const StelCore* core) co
 void AsterismMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity) const
 {
 	if (!hasAsterism)
+	{
+		StelPainter::clearSkyLabels(QStringLiteral("asterisms"));
 		return;
+	}
 
 	sPainter.setBlending(true);
+	const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Asterism");
+	sPainter.beginSkyLabels(QStringLiteral("asterisms"), selected.isEmpty() ? QString() : selected.first()->getID());
 	for (auto* asterism : asterisms)
 	{
 		if (!asterism->flagAsterism) continue;
@@ -371,6 +376,7 @@ void AsterismMgr::drawNames(StelPainter& sPainter, const Vec3d &obsVelocity) con
 				asterism->drawName(xyName, sPainter);
 		}
 	}
+	sPainter.flushSkyLabels();
 }
 
 Asterism* AsterismMgr::findFromAbbreviation(const QString& abbreviation) const

@@ -17,6 +17,8 @@
  * Foundation, Inc., 51 Franklin Street, Suite 500, Boston, MA  02110-1335, USA.
  */
 
+#include <cmath>
+#include <memory>
 #include <QtMath>
 #include <QFont>
 
@@ -26,6 +28,7 @@
 #include "StelApp.hpp"
 #include "StelCore.hpp"
 #include "StelModuleMgr.hpp"
+#include "StelObjectMgr.hpp"
 #include "StelPainter.hpp"
 #include "StelTexture.hpp"
 #include "StelUtils.hpp"
@@ -335,13 +338,23 @@ void MeteorShower::draw(StelCore* core)
 	{
 		return;
 	}
-	drawRadiant(core);
+	drawRadiant(core, nullptr);
 	drawMeteors(core);
 }
 
-void MeteorShower::drawRadiant(StelCore *core)
+void MeteorShower::drawRadiant(StelCore *core, StelPainter* radiantPainter)
 {
-	StelPainter painter(core->getProjection(StelCore::FrameJ2000));
+	if (!enabled())
+	{
+		return;
+	}
+	std::unique_ptr<StelPainter> ownedPainter;
+	if (!radiantPainter)
+	{
+		ownedPainter.reset(new StelPainter(core->getProjection(StelCore::FrameJ2000)));
+		radiantPainter = ownedPainter.get();
+	}
+	StelPainter& painter = *radiantPainter;
 
 	Vec3d XY;
 	StelUtils::spheToRect(m_radiantAlpha, m_radiantDelta, m_position);
@@ -384,7 +397,27 @@ void MeteorShower::drawRadiant(StelCore *core)
 			painter.setFont(font);
 			const float shift = 8.f * scale;
 			if ((mag+1.f)<mlimit)
-				painter.drawText(static_cast<float>(XY[0])+shift, static_cast<float>(XY[1])+shift, getNameI18n(), 0, 0, 0, false);
+			{
+				if (ownedPainter)
+				{
+					painter.drawText(static_cast<float>(XY[0])+shift, static_cast<float>(XY[1])+shift, getNameI18n(), 0, 0, 0, false);
+				}
+				else
+				{
+					const float fov = static_cast<float>(painter.getProjector()->getFov());
+					const bool majorShower = (m_status == ACTIVE_CONFIRMED && m_activity.zhr >= 10);
+					const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("MeteorShower");
+					const bool isSelected = !selected.isEmpty() && selected.first()->getID() == m_showerID;
+					if (isSelected || fov <= 105.f || majorShower)
+					{
+						const int priority = (m_status == ACTIVE_CONFIRMED) ? 2 : (m_status == ACTIVE_GENERIC ? 1 : 0);
+						const float zhrVal = static_cast<float>(qMax(1, m_activity.zhr));
+						const float rankMag = -static_cast<float>(std::log10(zhrVal));
+						painter.queueSkyLabel(m_showerID, static_cast<float>(XY[0]), static_cast<float>(XY[1]),
+							getNameI18n(), rankMag, priority, shift, shift, m_showerID);
+					}
+				}
+			}
 		}
 	}
 }

@@ -200,6 +200,8 @@ void NavStars::draw(StelCore* core)
 	float mlimit = core->getSkyDrawer()->getLimitMagnitude();
 
 	Vec3d pos;
+	const auto selectedStars = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Star");
+	painter.beginSkyLabels(QStringLiteral("navStars"), selectedStars.isEmpty() ? QString() : selectedStars.first()->getID());
 	for (int i = 0; i < sn.size(); ++i)
 	{
 		if (stars[i].isNull())
@@ -227,9 +229,11 @@ void NavStars::draw(StelCore* core)
 				label = QString("%1").arg(i+1);
 			else
 				label = QString("%1 (%2)").arg(label).arg(i+1);
-			painter.drawText(static_cast<float>(pos[0]), static_cast<float>(pos[1]), label, 0, 15.f, 15.f, false);
+			painter.queueSkyLabel(stars[i]->getID(), static_cast<float>(pos[0]), static_cast<float>(pos[1]),
+				label, stars[i]->getVMagnitude(core), 1, 15.f, 15.f, stars[i]->getID());
 		}
 	}
+	painter.flushSkyLabels();
 
 	addExtraInfo(core);
 }

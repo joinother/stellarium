@@ -996,7 +996,11 @@ void NebulaMgr::draw(StelCore* core)
 
 		// Print all the nebulae of all the selected zones
 		float maxMagHints  = computeMaxMagHint(skyDrawer);
-		float maxMagLabels = skyDrawer->getLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f;
+		const float fovDeg = static_cast<float>(prj->getFov());
+		const float wideFovLabelPenalty = (fovDeg > 75.f)
+			? std::min(2.4f, 5.0f * std::log10(fovDeg / 75.f))
+			: 0.f;
+		float maxMagLabels = skyDrawer->getLimitMagnitude()-2.f+static_cast<float>(labelsAmount*1.2)-2.f - wideFovLabelPenalty;
 		const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("Nebula");
 		DrawNebulaFuncObject func(maxMagHints, maxMagLabels, &sPainter, core, drawStats, drawCandidates,
 			layout, selected.isEmpty() ? nullptr : selected.constFirst().data());

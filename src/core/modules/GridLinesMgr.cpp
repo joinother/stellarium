@@ -1668,6 +1668,12 @@ void SkyPoint::draw(StelCore *core) const
 	const float shift = pointSize + size/1.8f;
 
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
+	const QString labelGroup = QStringLiteral("skyPoint:%1").arg(static_cast<int>(point_type));
+	sPainter.beginSkyLabels(labelGroup);
+	auto queuePointLabel = [&](const QString& suffix, const Vec3d& pos, const QString& label) {
+		if (!label.isEmpty())
+			sPainter.queueSkyLabel(labelGroup + suffix, pos, label, -10.f, 10, shift, shift);
+	};
 
 	switch (point_type)
 	{
@@ -1681,11 +1687,11 @@ void SkyPoint::draw(StelCore *core) const
 		{
 			// North Pole
 			sPainter.drawSprite2dMode(Vec3d(0,0,1), pointSize);
-			sPainter.drawText(Vec3d(0,0,1), northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), Vec3d(0,0,1), northernLabel);
 
 			// South Pole
 			sPainter.drawSprite2dMode(Vec3d(0,0,-1), pointSize);
-			sPainter.drawText(Vec3d(0,0,-1), southernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":s"), Vec3d(0,0,-1), southernLabel);
 			break;
 		}
 		case EQUINOXES_J2000:
@@ -1693,11 +1699,11 @@ void SkyPoint::draw(StelCore *core) const
 		{
 			// Vernal equinox
 			sPainter.drawSprite2dMode(Vec3d(1,0,0), pointSize);
-			sPainter.drawText(Vec3d(1,0,0), northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), Vec3d(1,0,0), northernLabel);
 
 			// Autumnal equinox
 			sPainter.drawSprite2dMode(Vec3d(-1,0,0), pointSize);
-			sPainter.drawText(Vec3d(-1,0,0), southernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":s"), Vec3d(-1,0,0), southernLabel);
 			break;
 		}
 		case SOLSTICES_J2000:
@@ -1705,22 +1711,22 @@ void SkyPoint::draw(StelCore *core) const
 		{
 			// Summer solstice
 			sPainter.drawSprite2dMode(Vec3d(0,1,0), pointSize);
-			sPainter.drawText(Vec3d(0,1,0), northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), Vec3d(0,1,0), northernLabel);
 
 			// Winter solstice
 			sPainter.drawSprite2dMode(Vec3d(0,-1,0), pointSize);
-			sPainter.drawText(Vec3d(0,-1,0), southernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":s"), Vec3d(0,-1,0), southernLabel);
 			break;
 		}
 		case GALACTICCENTER:
 		{
 			// Galactic Center point
 			sPainter.drawSprite2dMode(Vec3d(1,0,0), pointSize);
-			sPainter.drawText(Vec3d(1,0,0), northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), Vec3d(1,0,0), northernLabel);
 
 			// Galactic Anticenter point
 			sPainter.drawSprite2dMode(Vec3d(-1,0,0), pointSize);
-			sPainter.drawText(Vec3d(-1,0,0), southernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":s"), Vec3d(-1,0,0), southernLabel);
 			break;
 		}
 		case ANTISOLAR:
@@ -1728,7 +1734,7 @@ void SkyPoint::draw(StelCore *core) const
 			// Antisolar Point
 			Vec3d coord=core->getCurrentObserver()->getHomePlanet()->getHeliocentricEclipticPos();
 			sPainter.drawSprite2dMode(coord, pointSize);
-			sPainter.drawText(coord, northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), coord, northernLabel);
 			break;
 		}
 		case EARTH_UMBRA_CENTER:
@@ -1745,7 +1751,7 @@ void SkyPoint::draw(StelCore *core) const
 			rot.transfo(point);
 			Vec3d coord = pos+point;
 			sPainter.drawSprite2dMode(coord, pointSize);
-			sPainter.drawText(coord, northernLabel, 0, shift, shift, false);
+			queuePointLabel(QStringLiteral(":n"), coord, northernLabel);
 			break;
 		}
 		case APEX:
@@ -1758,15 +1764,16 @@ void SkyPoint::draw(StelCore *core) const
 			if (dir.normSquared()>0.)
 			{
 				sPainter.drawSprite2dMode(dir, pointSize);
-				sPainter.drawText(dir, northernLabel, 0, shift, shift, false);
+				queuePointLabel(QStringLiteral(":n"), dir, northernLabel);
 				sPainter.drawSprite2dMode(-dir, pointSize);
-				sPainter.drawText(-dir, southernLabel, 0, shift, shift, false);
+				queuePointLabel(QStringLiteral(":s"), -dir, southernLabel);
 			}
 			break;
 		}		
 		default:
 			Q_ASSERT(0);
 	}
+	sPainter.flushSkyLabels();
 }
 
 

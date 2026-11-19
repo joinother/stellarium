@@ -553,11 +553,13 @@ void ohosMark(const char* message)
 	OH_LOG_Print(LOG_APP, LOG_WARN, 0x0000, "StellariumCpp", "%{public}s", message);
 }
 
+static bool ohosHasActiveGestureMotion();
+
 int currentOhosRenderIntervalMs()
 {
 	if (!StelApp::isInitialized())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
-	if (!s_gyroViewActive.load() && !StelMainView::getInstance().needsMaxFPS())
+	if (!s_gyroViewActive.load() && !ohosHasActiveGestureMotion() && !StelMainView::getInstance().needsMaxFPS())
 		return OHOS_IDLE_RENDER_INTERVAL_MS;
 	return s_ohosZeroCopyActive
 		? OHOS_ZERO_COPY_INTERACTIVE_RENDER_INTERVAL_MS
@@ -2229,6 +2231,9 @@ static std::function<void()> s_pendingGyroCommand;
 // latest-value slot eliminates command-queue backlog and cache churn during
 // high-frequency time scrubbing.
 static std::function<void()> s_pendingTimeCommand;
+// Continuous pinch zoomBy (started == 0) updates carry absolute scale from the
+// pinch start, so newer samples supersede older ones within the same frame.
+static std::function<void()> s_pendingZoomCommand;
 // View-altitude-based landscape auto-fade (port feature). When the observer
 // TILTS THE VIEW DOWN toward the ground (lower view-center altitude), the
 // ground texture gradually becomes transparent so the lower-hemisphere sky is
@@ -2546,6 +2551,11 @@ static void ohosUpdatePinchSettle(double dtSec)
 }
 static void markQtLoopRunning();
 
+static bool ohosHasActiveGestureMotion()
+{
+	return s_ohosPinchActive || s_ohosPinchSettleActive || s_ohosPanInertiaActive || s_ohosHorizonLevelActive;
+}
+
 static void ohosDrainCommandQueue()
 {
 	if (!StelApp::isInitialized())
@@ -2555,9 +2565,14 @@ static void ohosDrainCommandQueue()
 	QList<std::function<void()>> batch;
 	{
 		QMutexLocker lock(&s_ohosCmdQueueMutex);
-		if (s_ohosCmdQueue.isEmpty() && !s_pendingGyroCommand && !s_pendingTimeCommand)
+		if (s_ohosCmdQueue.isEmpty() && !s_pendingZoomCommand && !s_pendingGyroCommand && !s_pendingTimeCommand)
 			return;
 		batch.swap(s_ohosCmdQueue);
+		if (s_pendingZoomCommand)
+		{
+			batch.append(std::move(s_pendingZoomCommand));
+			s_pendingZoomCommand = {};
+		}
 		if (s_pendingTimeCommand)
 		{
 			batch.append(std::move(s_pendingTimeCommand));
@@ -3312,9 +3327,37 @@ QString runOhosCommandOnQtThread(const QString& key, const std::function<QJsonOb
 			result["pending"] = true;
 			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 		}
-		if (cmdName == "zoomBy" || cmdName == "zoomStep" || cmdName == "endPinch" || cmdName == "beginSkyGesture" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
+		if (cmdName == "zoomBy")
+		{
+			const QString startedFlag = key.section('|', 2, 2).trimmed().toLower();
+			const bool isStart = (startedFlag == "1" || startedFlag == "true");
+			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			if (isStart)
+			{
+				s_pendingZoomCommand = {};
+				s_ohosCmdQueue.append([command]() { command(); });
+			}
+			else
+			{
+				s_pendingZoomCommand = [command]() { command(); };
+			}
+			result["ok"] = false;
+			result["error"] = "pending";
+			result["pending"] = true;
+			return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+		}
+		if (cmdName == "zoomStep" || cmdName == "endPinch" || cmdName == "beginSkyGesture" || cmdName == "dragView" || cmdName == "panBy" || cmdName == "moveToAltAz" || cmdName == "gyroDiagnostic" || cmdName == "startPanInertia" || cmdName == "stopPanInertia")
 		{
 			QMutexLocker qlock(&s_ohosCmdQueueMutex);
+			if (cmdName == "endPinch" && s_pendingZoomCommand)
+			{
+				s_ohosCmdQueue.append(std::move(s_pendingZoomCommand));
+				s_pendingZoomCommand = {};
+			}
+			else if (cmdName == "beginSkyGesture")
+			{
+				s_pendingZoomCommand = {};
+			}
 			s_ohosCmdQueue.append([command]() { command(); });
 			result["ok"] = false;
 			result["error"] = "pending";

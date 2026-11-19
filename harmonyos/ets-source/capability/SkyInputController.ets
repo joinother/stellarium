@@ -128,6 +128,11 @@ export class SkyInputController {
   private static readonly TWO_FINGER_UNDECIDED: number = 1
   private static readonly TWO_FINGER_PINCH: number = 2
   private static readonly TWO_FINGER_BRIGHTNESS: number = 3
+  // 点击防误触阈值：超长停驻、多指松手尾指回弹、屏幕边缘掌托误触均不触发点选。
+  private static readonly MAX_TAP_DURATION_MS: number = 420
+  private static readonly MULTI_TOUCH_TAP_COOLDOWN_MS: number = 180
+  private static readonly EDGE_PALM_GUARD_VP: number = 12
+  private static readonly TAP_SLOP_VP: number = 16
 
   private commandPort: CommandPort
   private hooks: SkyInputHostHooks
@@ -152,6 +157,8 @@ export class SkyInputController {
   private touchStartY: number = 0
   private touchLastX: number = 0
   private touchLastY: number = 0
+  private touchDownMs: number = 0
+  private lastMultiTouchEndMs: number = 0
   private touchMoved: boolean = false
   private pinchStartDistance: number = 0
   private pinchLastScale: number = 1
@@ -173,8 +180,12 @@ export class SkyInputController {
   private starBrightnessCached: number = 0.5
   private brightnessLastNativePushMs: number = 0
   private brightnessNativePushPending: boolean = false
-  /** 缩放 FOV 胶囊提示的节流时间戳 */
+  /** 缩放 FOV 读数与触摸反馈圈的 UI 节流时间戳，避免 120Hz 触控触发宿主根组件高频重排 */
   private lastFovHintMs: number = 0
+  private lastFovUiPushMs: number = 0
+  private lastFovUiText: string = ''
+  private lastTouchFeedbackPushMs: number = 0
+  private touchFeedbackMultiShown: boolean = false
   private nativeDragActive: boolean = false
   private lastDragCommandMs: number = 0
   private dragFilteredX: number = 0
@@ -733,6 +744,7 @@ export class SkyInputController {
       this.touchStartY = downY
       this.touchLastX = this.touchStartX
       this.touchLastY = this.touchStartY
+      this.touchDownMs = Date.now()
       this.touchMoved = false
       this.pinchActive = false
       this.twoFingerMode = SkyInputController.TWO_FINGER_NONE
@@ -798,14 +810,25 @@ export class SkyInputController {
           this.panelDragStartOffsetY + (y - this.panelDragStartY))
         return
       }
-      if (this.hooks.skyTouchFeedback()) {
-        this.hooks.setSkyTouchPoint(x, y)
-      }
+      const feedbackOn = this.hooks.skyTouchFeedback()
+      const moveNow = Date.now()
+      const shouldPushFeedback = feedbackOn && (moveNow - this.lastTouchFeedbackPushMs >= 33)
       if (points.length >= 2) {
         const x1 = touchWindowX(points[1])
         const y1 = touchWindowY(points[1])
-        this.hooks.setSkyTouchFeedbackMulti(this.hooks.skyTouchFeedback())
-        this.hooks.setSkyTouchPoint2(x1, y1)
+        if (feedbackOn) {
+          if (!this.touchFeedbackMultiShown) {
+            this.touchFeedbackMultiShown = true
+            this.hooks.setSkyTouchFeedbackMulti(true)
+            this.hooks.setSkyTouchPoint(x, y)
+            this.hooks.setSkyTouchPoint2(x1, y1)
+            this.lastTouchFeedbackPushMs = moveNow
+          } else if (shouldPushFeedback) {
+            this.hooks.setSkyTouchPoint(x, y)
+            this.hooks.setSkyTouchPoint2(x1, y1)
+            this.lastTouchFeedbackPushMs = moveNow
+          }
+        }
         const centerX = (x + x1) / 2
         const centerY = (y + y1) / 2
         this.pinchCenterX = centerX
@@ -849,30 +872,37 @@ export class SkyInputController {
         } else {
           const scale = currentDistance / this.pinchStartDistance
           this.pinchLastScale = scale
-          const estimatedFov = clamp(this.pinchStartFov / Math.max(0.25, scale), 4, 180)
-          this.hooks.setFovSliderValue(estimatedFov)
-          this.hooks.setCurrentFovText(estimatedFov.toFixed(1) + '°')
           this.pinchNativePushPending = true
-          const now = Date.now()
-          if (now - this.pinchLastNativePushMs >= 16) {
+          // 8ms 推送节流配合 C++ s_pendingZoomCommand 最新值合并，保证 60-120fps 跟手无积压。
+          if (moveNow - this.pinchLastNativePushMs >= 8) {
             this.commandPort.fire('zoomBy', scale.toString() + '|0|' + this.pinchCenterX.toFixed(2) + '|' +
               this.pinchCenterY.toFixed(2) + '|' + Math.round(this.hooks.skyWidth()).toString() + '|' +
               Math.round(this.hooks.skyHeight()).toString())
-            this.pinchLastNativePushMs = now
+            this.pinchLastNativePushMs = moveNow
             this.pinchNativePushPending = false
           }
-          // 缩放时弹小蓝胶囊实时显示 FOV（节流 150ms，避免桥接风暴）
-          const nowMs = Date.now()
-          if (nowMs - this.lastFovHintMs >= 150) {
-            this.lastFovHintMs = nowMs
-            this.hooks.requestFieldOfView((fovDeg: number): void => {
-              this.hooks.setCurrentFovText(fovDeg.toFixed(1) + '°')
-            })
+          // FOV 文本与滑块 @State 按 80ms 节流刷新，避免 120Hz 触控触发宿主全树重排。
+          if (moveNow - this.lastFovUiPushMs >= 80) {
+            const estimatedFov = clamp(this.pinchStartFov / Math.max(0.25, scale), 4, 180)
+            const nextText = estimatedFov.toFixed(1) + '°'
+            if (nextText !== this.lastFovUiText) {
+              this.lastFovUiText = nextText
+              this.hooks.setFovSliderValue(estimatedFov)
+              this.hooks.setCurrentFovText(nextText)
+            }
+            this.lastFovUiPushMs = moveNow
           }
         }
         return
       }
-      this.hooks.setSkyTouchFeedbackMulti(false)
+      if (shouldPushFeedback) {
+        this.hooks.setSkyTouchPoint(x, y)
+        this.lastTouchFeedbackPushMs = moveNow
+      }
+      if (this.touchFeedbackMultiShown) {
+        this.touchFeedbackMultiShown = false
+        this.hooks.setSkyTouchFeedbackMulti(false)
+      }
       // 双指手势中若先抬起一指，抑制残留单指移动，避免星图跳动。
       if (this.twoFingerMode !== SkyInputController.TWO_FINGER_NONE) {
         return
@@ -926,18 +956,38 @@ export class SkyInputController {
         return
       }
       // owner === Sky：天空手势的抬起收尾（惯性 / 点选 / 结束捏合 / 亮度收尾 / 尾部清理 / 检查点）。
+      const upNowMs = Date.now()
+      if (wasTwoFinger || this.pinchActive) {
+        this.lastMultiTouchEndMs = upNowMs
+      }
       if (wasTwoFingerBrightness) {
         this.finishTwoFingerBrightness()
       } else if (this.nativeDragActive && event.type === TouchType.Up) {
-        this.emitFluidDrag(x, y, Date.now(), false)
+        this.emitFluidDrag(x, y, upNowMs, false)
         this.startSkyInertia()
       } else if (event.type === TouchType.Cancel) {
         this.stopSkyInertia()
-      } else if (!this.touchMoved && !this.pinchActive && !wasTwoFinger && !endedOnUi && Date.now() - this.hooks.lastInfoWinCloseMs() > 320) {
-        hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' +
-          Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' +
-          Math.round(this.hooks.skyWidth()).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
-        this.handleSkyTap(this.touchStartX, this.touchStartY, 'touch')
+      } else if (!this.touchMoved && !this.pinchActive && !wasTwoFinger && !endedOnUi &&
+          upNowMs - this.hooks.lastInfoWinCloseMs() > 320) {
+        const tapDurationMs = this.touchDownMs > 0 ? upNowMs - this.touchDownMs : 0
+        const upDrift = distance(x, y, this.touchStartX, this.touchStartY)
+        const afterMultiTouchCooldown = this.lastMultiTouchEndMs === 0 ||
+          (this.touchDownMs - this.lastMultiTouchEndMs) >= SkyInputController.MULTI_TOUCH_TAP_COOLDOWN_MS
+        const skyW = this.hooks.skyWidth()
+        const inPalmEdgeGuard = skyW > 64 && (
+          this.touchStartX < SkyInputController.EDGE_PALM_GUARD_VP ||
+          this.touchStartX > skyW - SkyInputController.EDGE_PALM_GUARD_VP ||
+          this.touchStartY < SkyInputController.EDGE_PALM_GUARD_VP
+        )
+        if (tapDurationMs <= SkyInputController.MAX_TAP_DURATION_MS &&
+            upDrift <= SkyInputController.TAP_SLOP_VP &&
+            afterMultiTouchCooldown &&
+            !inPalmEdgeGuard) {
+          hilog.info(0x0000, 'StellariumArkUI', 'selectAt payload: ' +
+            Math.round(this.touchStartX).toString() + '|' + Math.round(this.touchStartY).toString() + '|' +
+            Math.round(skyW).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
+          this.handleSkyTap(this.touchStartX, this.touchStartY, 'touch')
+        }
       }
       if (this.pinchActive) {
         if (this.pinchNativePushPending) {
@@ -946,6 +996,17 @@ export class SkyInputController {
             Math.round(this.hooks.skyWidth()).toString() + '|' + Math.round(this.hooks.skyHeight()).toString())
         }
         this.commandPort.fire('endPinch')
+        const finalFov = clamp(this.pinchStartFov / Math.max(0.25, this.pinchLastScale), 4, 180)
+        const finalText = finalFov.toFixed(1) + '°'
+        this.lastFovUiText = finalText
+        this.hooks.setFovSliderValue(finalFov)
+        this.hooks.setCurrentFovText(finalText)
+        this.hooks.requestFieldOfView((fovDeg: number): void => {
+          const synced = fovDeg.toFixed(1) + '°'
+          this.lastFovUiText = synced
+          this.hooks.setFovSliderValue(clamp(fovDeg, 4, 180))
+          this.hooks.setCurrentFovText(synced)
+        })
         this.hooks.scheduleSkyTextureStatusCheck()
       }
       this.twoFingerMode = SkyInputController.TWO_FINGER_NONE
@@ -953,6 +1014,8 @@ export class SkyInputController {
       this.pinchActive = false
       this.pinchNativePushPending = false
       this.nativeDragActive = false
+      this.touchFeedbackMultiShown = false
+      this.lastTouchFeedbackPushMs = 0
       this.hooks.setSkyTouchActive(false)
       this.hooks.setSkyTouchFeedback(false)
       this.hooks.setSkyTouchFeedbackMulti(false)

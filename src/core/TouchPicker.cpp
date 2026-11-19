@@ -394,7 +394,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 	const double degPerVp = ctx.fov / minViewportVp;
 	const double cappedRadiusVp = (profile.maxAngleDeg > 0.0 && degPerVp > 0.0)
 		? profile.maxAngleDeg / degPerVp : profile.baseRadiusVp;
-	const double effectiveRadiusVp = qMax(1.0, qMin(profile.baseRadiusVp, cappedRadiusVp));
+	// Tighten touch hit tolerance smoothly at wide FOV (>80 deg) so tapping empty
+	// sky in a wide-angle dome doesn't accidentally grab distant stars or DSOs.
+	const double wideFovRadiusVp = (ctx.fov > 80.0 && profile.baseRadiusVp >= 36.0)
+		? qMax(24.0, profile.baseRadiusVp * (80.0 / ctx.fov))
+		: profile.baseRadiusVp;
+	const double effectiveRadiusVp = qMax(1.0, qMin(wideFovRadiusVp, cappedRadiusVp));
 	result.effectiveRadiusVp = effectiveRadiusVp;
 	result.fovDeg = ctx.fov;
 	result.degPerVp = degPerVp;
@@ -430,8 +435,11 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				? static_cast<float>(drawer->getCustomStarMagnitudeLimit())
 				: drawer->getLimitMagnitude();
 			result.starLimit = starLimit;
+			const double wideFovStarPenalty = (ctx.fov > 80.0)
+				? qMin(1.6, 3.0 * std::log10(ctx.fov / 80.0))
+				: 0.0;
 			const double labelLimitMag = (drawer->getLimitMagnitude() - 6.5) * 0.7
-				+ starMgr->getLabelsAmount() * 1.2 - 2.0;
+				+ starMgr->getLabelsAmount() * 1.2 - 2.0 - wideFovStarPenalty;
 
 			for (const StelObjectP& star : std::as_const(stars))
 			{
@@ -506,10 +514,21 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				if (!projectToVp(ctx, planet->getJ2000EquatorialPos(core), screenVp, screenDevice))
 					continue;
 				const double rVp = visualRadiusForObject(core, ctx, planet);
+				LabelTarget label;
+				if (solarSystem->getFlagLabels()
+					&& StelPainter::skyLabelVisibility(QStringLiteral("planet:") + planet->getID(), planet->getID()) > 0.05f)
+				{
+					const QString text = objectName(planet);
+					if (!text.isEmpty())
+					{
+						label.present = true;
+						label.rect = labelRectUpRight(labelMetrics, text, screenVp, qMax(7.0, rVp * 0.7), ctx.dpr);
+					}
+				}
 				bool hasMagnitude = false;
 				const double magnitude = magnitudeForObject(core, planet, hasMagnitude);
 				addCandidate(candidates, ctx, core, planet, screenVp, rVp, magnitude, hasMagnitude,
-					typePriorForObject(planet, false), LabelTarget(), false, SatellitePickDiagnostics());
+					typePriorForObject(planet, false), label, false, SatellitePickDiagnostics());
 			}
 		}
 	}
@@ -524,8 +543,11 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 		if (nebulaMgr->getFlagShow() && nebulaHints && core->getFlagClearSky())
 		{
 			const float maxMagHints = nebulaMgr->computeMaxMagHint(core->getSkyDrawer());
+			const float wideFovLabelPenalty = (ctx.fov > 75.0)
+				? static_cast<float>(qMin(2.4, 5.0 * std::log10(ctx.fov / 75.0)))
+				: 0.f;
 			const float maxMagLabels = core->getSkyDrawer()->getLimitMagnitude() - 2.f
-				+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f;
+				+ static_cast<float>(nebulaMgr->getLabelsAmount() * 1.2) - 2.f - wideFovLabelPenalty;
 			const QList<StelObjectP> nebulae = nebulaMgr->searchAround(tapDirection, fovRadiusDeg, core);
 			for (const StelObjectP& nebula : nebulae)
 			{

@@ -301,4 +301,95 @@ function mouse(action, overrides = {}) {
   assert.equal(test.state.brightnessEvents.length, 0);
 }
 
-console.log('HarmonyOS sky input behavior passed: official enums, source classification, local coordinates, pinch lifecycle, two-finger brightness, mouse ownership, cancellation and bounded diagnostics.');
+// Anti-mistouch guards: post-pinch tail tap, palm-edge tap, coalesced flick drift, and long hold.
+{
+  const realNow = Date.now;
+  let fakeNow = 100000;
+  Date.now = () => fakeNow;
+  try {
+    const test = fixture();
+    const touch = (type, pts) => ({
+      type, source: SourceType.TouchScreen,
+      touches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+      changedTouches: pts.map(([x, y]) => ({ windowX: x, windowY: y })),
+    });
+    // 1. Normal quick tap inside safe interior succeeds
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[500, 400]]));
+    fakeNow += 80;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[503, 402]]));
+    assert.equal(test.taps.length, 1, 'normal quick tap should select');
+
+    // 2. Long hold (>420ms) without moving is rejected as hesitation/palm rest
+    fakeNow += 1000;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[600, 400]]));
+    fakeNow += 500;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[600, 400]]));
+    assert.equal(test.taps.length, 1, 'long hold must not fire sky tap');
+
+    // 3. Coalesced flick (Down -> Up with >16vp drift and no Move) is rejected
+    fakeNow += 500;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[600, 400]]));
+    fakeNow += 50;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[630, 400]]));
+    assert.equal(test.taps.length, 1, 'coalesced flick drift must not fire sky tap');
+
+    // 4. Right screen-edge palm touch (<12vp from right edge) is rejected as tap
+    fakeNow += 500;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[1194, 400]]));
+    fakeNow += 60;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[1194, 400]]));
+    assert.equal(test.taps.length, 1, 'edge palm touch must not fire sky tap');
+
+    // 5. Stray single-finger tap within 180ms after a two-finger pinch release is rejected
+    fakeNow += 500;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[450, 400], [550, 400]]));
+    fakeNow += 30;
+    test.controller.handleSkyTouch(touch(TouchType.Move, [[350, 400], [650, 400]]));
+    fakeNow += 30;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[350, 400]]));
+    fakeNow += 80; // inside 180ms cooldown
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[520, 420]]));
+    fakeNow += 40;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[520, 420]]));
+    assert.equal(test.taps.length, 1, 'post-pinch tail tap within cooldown must be rejected');
+
+    // After cooldown expires (>180ms), normal tap works again
+    fakeNow += 250;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[520, 420]]));
+    fakeNow += 60;
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[520, 420]]));
+    assert.equal(test.taps.length, 2, 'tap after cooldown should work normally');
+
+    // 6. High-frequency 120Hz pinch throttles root @State updates & avoids mid-pinch FOV polling
+    let fovTextWrites = 0, fovSliderWrites = 0, touchPtWrites = 0, fovPolls = 0;
+    const origSetFovText = test.hooks.setCurrentFovText;
+    const origSetFovSlider = test.hooks.setFovSliderValue;
+    const origSetTouchPt = test.hooks.setSkyTouchPoint;
+    const origReqFov = test.hooks.requestFieldOfView;
+    test.hooks.setCurrentFovText = () => { fovTextWrites++; };
+    test.hooks.setFovSliderValue = () => { fovSliderWrites++; };
+    test.hooks.setSkyTouchPoint = () => { touchPtWrites++; };
+    test.hooks.requestFieldOfView = cb => { fovPolls++; origReqFov(cb); };
+    fakeNow += 500;
+    test.controller.handleSkyTouch(touch(TouchType.Down, [[450, 400], [550, 400]]));
+    touchPtWrites = 0;
+    for (let i = 1; i <= 20; i++) {
+      fakeNow += 5; // 200Hz touch move stream over 100ms
+      test.controller.handleSkyTouch(touch(TouchType.Move, [[450 - i * 4, 400], [550 + i * 4, 400]]));
+    }
+    assert.equal(fovPolls, 0, 'must not poll requestFieldOfView mid-pinch');
+    assert.ok(fovTextWrites <= 2, `expected throttled FOV text writes <= 2, got ${fovTextWrites}`);
+    assert.ok(fovSliderWrites <= 2, `expected throttled FOV slider writes <= 2, got ${fovSliderWrites}`);
+    assert.ok(touchPtWrites <= 5, `expected throttled touch-point writes <= 5, got ${touchPtWrites}`);
+    test.controller.handleSkyTouch(touch(TouchType.Up, [[370, 400]]));
+    assert.equal(fovPolls, 1, 'should sync exact FOV once on pinch release');
+    test.hooks.setCurrentFovText = origSetFovText;
+    test.hooks.setFovSliderValue = origSetFovSlider;
+    test.hooks.setSkyTouchPoint = origSetTouchPt;
+    test.hooks.requestFieldOfView = origReqFov;
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+console.log('HarmonyOS sky input behavior passed: official enums, source classification, local coordinates, pinch lifecycle, two-finger brightness, anti-mistouch guards, mouse ownership, cancellation and bounded diagnostics.');

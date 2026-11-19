@@ -32,6 +32,8 @@
 //! a map of data from the json file.
 //! @ingroup meteorShowers
 
+class StelPainter;
+
 class MeteorShower : public StelObject
 {
 public:
@@ -73,6 +75,12 @@ public:
 
 	//! Draw
 	void draw(StelCore *core);
+
+	//! Draw radiant sprite and queue label on a shared J2000 painter (no nested StelPainter).
+	void drawRadiant(StelCore* core, StelPainter* radiantPainter = nullptr);
+
+	//! Draws all active meteors
+	void drawMeteors(StelCore* core);
 
 	//! Checks if we have generic data for a given date
 	//! @param solLong the Solar longitude (J2000)
@@ -154,12 +162,6 @@ private:
 	QList<MeteorObj*> m_activeMeteors; //! List with all the active meteors
 
 	double eclJ2000;                   //! Ecliptic on J2000.0 epoch
-
-	//! Draws the radiant
-	void drawRadiant(StelCore* core);
-
-	//! Draws all active meteors
-	void drawMeteors(StelCore* core);
 
 	//! Calculates the ZHR using two types of distribution function
 	int calculateZHR(StelCore* core);

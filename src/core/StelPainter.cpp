@@ -824,10 +824,50 @@ void StelPainter::queueSkyLabel(const QString& id, const Vec3d& position, const 
 
 ScreenLabelLayout::Rect StelPainter::skyLabelRect(float x, float y, const QString& text, float xshift, float yshift) const
 {
-	QFont font = currentFont;
-	font.setPixelSize(currentFont.pixelSize() * prj->getDevicePixelsPerPixel());
-	font.setStyleStrategy(QFont::NoSubpixelAntialias);
-	const QRect bounds = QFontMetrics(font).boundingRect(text);
+	const float dpr = static_cast<float>(prj->getDevicePixelsPerPixel());
+	const int scaledPx = qMax(1, static_cast<int>(currentFont.pixelSize() * dpr));
+	struct BoundsKey
+	{
+		QString text;
+		QString family;
+		int pixelSize;
+		int weight;
+		bool italic;
+		bool operator==(const BoundsKey& other) const
+		{
+			return pixelSize == other.pixelSize && weight == other.weight && italic == other.italic
+				&& text == other.text && family == other.family;
+		}
+	};
+	struct BoundsKeyHash
+	{
+		std::size_t operator()(const BoundsKey& k) const
+		{
+			std::size_t h = qHash(k.text);
+			h ^= qHash(k.family) + 0x9e3779b9u + (h << 6) + (h >> 2);
+			h ^= static_cast<std::size_t>(k.pixelSize * 31 + k.weight * 7 + (k.italic ? 1 : 0))
+				+ 0x9e3779b9u + (h << 6) + (h >> 2);
+			return h;
+		}
+	};
+	static std::unordered_map<BoundsKey, QRect, BoundsKeyHash> s_boundsCache;
+	BoundsKey key{text, currentFont.family(), scaledPx, currentFont.weight(), currentFont.italic()};
+	QRect bounds;
+	auto it = s_boundsCache.find(key);
+	if (it != s_boundsCache.end())
+	{
+		bounds = it->second;
+	}
+	else
+	{
+		if (s_boundsCache.size() >= 4096)
+			s_boundsCache.clear();
+		QFont font = currentFont;
+		font.setPixelSize(scaledPx);
+		font.setStyleStrategy(QFont::NoSubpixelAntialias);
+		bounds = QFontMetrics(font).boundingRect(text);
+		s_boundsCache.emplace(std::move(key), bounds);
+	}
 	const float width = bounds.width() + 1 + static_cast<int>(0.02f * bounds.width());
 	const float height = bounds.height();
 	const float left = xshift + bounds.x();
@@ -836,13 +876,18 @@ ScreenLabelLayout::Rect StelPainter::skyLabelRect(float x, float y, const QStrin
 	const float cosine = std::cos(angle), sine = std::sin(angle);
 	const float centerX = x + (left + width * 0.5f) * cosine - (bottom + height * 0.5f) * sine;
 	const float centerY = y + (left + width * 0.5f) * sine + (bottom + height * 0.5f) * cosine;
-	const float padding = std::max(2.f, static_cast<float>(3.f * prj->getDevicePixelsPerPixel()));
-	const float halfWidth = (std::abs(cosine) * width + std::abs(sine) * height) * 0.5f + padding;
-	const float halfHeight = (std::abs(sine) * width + std::abs(cosine) * height) * 0.5f + padding;
+	const float fov = static_cast<float>(prj->getFov());
+	// Widen label collision breathing room smoothly at wide FOV (>60 deg) so
+	// labels clustered around the zenith/fisheye dome stay separated and legible.
+	const float wideT = std::clamp((fov - 60.f) / 120.f, 0.f, 1.f);
+	const float paddingX = std::max(2.f, (4.f + 8.f * wideT) * dpr);
+	const float paddingY = std::max(2.f, (3.5f + 5.5f * wideT) * dpr);
+	const float halfWidth = (std::abs(cosine) * width + std::abs(sine) * height) * 0.5f + paddingX;
+	const float halfHeight = (std::abs(sine) * width + std::abs(cosine) * height) * 0.5f + paddingY;
 	ScreenLabelLayout::Rect rect{centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight};
 	if (prj->gravityLabels)
 	{
-		const float radius = width + height + std::abs(xshift) + std::abs(yshift) + padding;
+		const float radius = width + height + std::abs(xshift) + std::abs(yshift) + std::max(paddingX, paddingY);
 		rect = {x - radius, y - radius, x + radius, y + radius};
 	}
 	return rect;

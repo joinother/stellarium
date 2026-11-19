@@ -422,7 +422,8 @@ void Asterism::drawName(const Vec3d &xyName, StelPainter& sPainter) const
 
 	QString name = getScreenLabel();
 	sPainter.setColor(labelColor, nameFader.getInterstate());
-	sPainter.drawText(static_cast<float>(xyName[0]), static_cast<float>(xyName[1]), name, 0., -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, false);
+	sPainter.queueSkyLabel(getID(), static_cast<float>(xyName[0]), static_cast<float>(xyName[1]),
+		name, 99.f, 0, -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, getID());
 }
 
 void Asterism::update(int deltaTime)

@@ -468,8 +468,11 @@ void Constellation::drawName(const Vec3d &xyName, StelPainter& sPainter, int anc
 	{
 		QString name = getScreenLabel();
 		sPainter.setColor(labelColor, nameFader.getInterstate() * labelPresentation);
+		// Smaller boundingCap.d (= cos(radius)) means a larger angular constellation;
+		// using it as the layout sort key lets major constellations win crowded wide-FOV slots.
+		const float sizeRank = std::isfinite(boundingCap.d) ? static_cast<float>(boundingCap.d) : 1.f;
 		sPainter.queueSkyLabel(getLabelLayoutId(anchorIndex), static_cast<float>(xyName[0]), static_cast<float>(xyName[1]),
-			name, 99.f, 0, -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, getID());
+			name, sizeRank, 0, -sPainter.getFontMetrics().boundingRect(name).width()/2, 0, getID());
 	}
 }
 

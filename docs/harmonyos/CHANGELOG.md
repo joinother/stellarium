@@ -1,5 +1,40 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 缩放流畅度专项优化（消除 ArkUI 高频重排与高斯模糊卡顿 + C++ `zoomBy` 合并与标签包围盒缓存）
+
+- **修改文件：** `harmonyos/ets-source/capability/SkyInputController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`src/StelMainView.cpp`、`src/core/StelPainter.cpp`、`scripts/test-ohos-sky-input.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **根因与修复：**
+  1. **消除 120–240 Hz 触控引发的 ArkUI 根组件全树重排与离屏高斯模糊：**
+     - 原 `SkyInputController.handleSkyTouch` 在每帧 `TouchType.Move` 上无节流改写 6 个宿主根 `@State`（`skyTouchX/Y/X2/Y2`、`skyTouchFeedbackMulti`、`fovSliderValue`、`currentFovText`），且 `MainWindowNativeNode.ets` 两个 `120×120` 触摸反馈圆带有 `shadow({ radius: 42 })` 重度 GPU 高斯模糊，同时每 150 ms 跨桥轮询 `requestFieldOfView`。
+     - 现将两处触摸反馈圆改为零离屏模糊的 `radialGradient` 柔光晕；触摸反馈点 `@State` 节流至 `33 ms` 且仅在状态变化时写 `skyTouchFeedbackMulti`；缩放中 FOV 文本与滑块 `@State` 节流至 `80 ms`（仅文本变化时写入），移除缩放中途的 `requestFieldOfView` 轮询，改为抬手 `endPinch` 时一次性精准回读。
+  2. **原生 `zoomBy` 最新值合并 + 8 ms 推送节奏 + 交互态帧率保持：**
+     - `StelMainView.cpp` 新增 `s_pendingZoomCommand` 槽位，对连续缩放事件（`started == 0`）执行同帧最新值合并（`started == 1`、`endPinch`、`beginSkyGesture` 严格保序），配合 ArkTS 端 `8 ms` 推送节流消除 16 ms 与 60/120 Hz 渲染拍频抖动。
+     - `currentOhosRenderIntervalMs()` 在 `s_ohosPinchActive || s_ohosPinchSettleActive || s_ohosPanInertiaActive || s_ohosHorizonLevelActive` 期间持续保持 `8 ms` 交互帧间隔，防止缩放/缓停中跌落 33 ms（30 FPS）。
+  3. **缓存标签包围盒消除逐帧 HarfBuzz 排版开销：**
+     - `StelPainter::skyLabelRect()` 增加 4,096 项有界缓存，命中率 `> 99%`，避免缩放每帧对数百个天体标签重复构造 `QFont` / `QFontMetrics` 与 `boundingRect()`。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-sky-input.mjs`（含 200 Hz 捏合节流单测）、`test-ohos-screen-anchor.mjs`（6/6）、`test-nebula-rendering.mjs`（18/18）、`test-ohos-touchpad-contract.mjs`（15/15）、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机 `test-ohos-screen-anchor-pad.mjs`：4/4 全通过（`maxErrorPixels = 0.0085 px` / `0.00017 px`）。
+  - 真机全视场段缩放帧率实测对比：
+    - 广角 `180°→90°→180°`：`30.3 → 40.0 FPS`，P95 `52.0 → 37.0 ms`。
+    - 中焦 `90°→20°→90°`：`38.5 → 40.0 FPS`，渲染 `21.0 → 17.0 ms`，P50 `25.0 → 21.0 ms`。
+    - 深焦 `20°→1°→20°`：`40.0 → 47.6 FPS`（窗口均帧 `34.3 → 45.8 FPS`），P50 `29.0 → 20.0 ms`，P95 `41.0 → 34.0 ms`。
+    - 极深 `2°→0.1°→2°`：`38.5 → 55.6 FPS`，渲染 `31.0 → 22.0 ms`，P95 `50.0 → 33.0 ms`。
+
+## [2026-11-20] 大 FOV / 天顶标签防重叠与密度自适应优化 + 四层点击防误触升级
+
+- **修改文件：** `src/core/StelPainter.cpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/modules/StarMgr.cpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/GridLinesMgr.cpp`、`src/core/modules/AsterismMgr.cpp`、`src/core/modules/Asterism.cpp`、`plugins/MeteorShowers/src/MeteorShower.hpp`、`plugins/MeteorShowers/src/MeteorShower.cpp`、`plugins/MeteorShowers/src/MeteorShowers.cpp`、`plugins/NavStars/src/NavStars.cpp`、`src/core/TouchPicker.cpp`、`harmonyos/ets-source/capability/SkyInputController.ets`、`scripts/test-ohos-sky-input.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **一、大视场 / 天顶标签防重叠与密度自适应：**
+  1. **补全全图层 `ScreenLabelLayout` 共享碰撞避让：** 原先流星雨辐射点（`MeteorShowers`）、天顶/天底/天极点（`GridLinesMgr::SkyPoint`）、星群（`AsterismMgr`）与导航星（`NavStars`）均直接调用裸 `drawText()`，在大视场与天顶区域直接压在星座、深空与彼此之上。现全部接入 `beginSkyLabels` / `queueSkyLabel` / `flushSkyLabels` 共享占用网格；其中 `MeteorShowers::draw()` 拆分为非嵌套的两阶段绘制（先辐射点与标签，后流星轨迹）确保 `GL_BLEND` 状态洁净，并按活跃级别与 ZHR 排序、`FOV > 105°` 时自动收起弱/通用背景辐射点标签。
+  2. **`StelPainter::skyLabelRect()` 视场自适应留白：** `FOV` 从 `60°` 增至 `180°` 时，水平/竖直避让边距由 `4 / 3.5 dp` 平滑放宽至 `12 / 9 dp`，消除宽视场穹顶中心标签黏连。
+  3. **大视场对数星等门控 + 星座面积优先级：** `NebulaMgr`（`FOV > 75°` 按 `5·log10(fov/75°)` 最多收紧 `2.4` 等）与 `StarMgr`（`FOV > 80°` 按 `3·log10(fov/80°)` 最多收紧 `1.6` 等）平滑收拢暗弱标签，放大即恢复；`Constellation::drawName()` 改用 `boundingCap.d` 作为排序键，使大星座在拥挤视场优先保留。
+- **二、点击命中与四层防误触升级：**
+  1. **`SkyInputController.ets` 四重点击门禁：** 新增停驻时长上限（`MAX_TAP_DURATION_MS = 420 ms`，长按/犹豫不误选）、多指松手冷却（`MULTI_TOUCH_TAP_COOLDOWN_MS = 180 ms`，防双指缩放/调亮度尾指回弹误触）、屏幕边缘掌托保护带（`12 vp`，仍允许边缘起手拖动）及合并帧 `Up` 位移复检（`> 16 vp` 不触发点选）。
+  2. **`TouchPicker.cpp` 宽视场精准容差与可见标签对齐：** `FOV > 80°` 时触摸搜索半径按 `max(24 vp, base × 80 / fov)` 平滑收紧，同步大视场恒星/深空标签星等阈值（隐藏标签不产生幽灵命中），并补齐行星可见标签盒命中。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机测试：`test-ohos-sky-input.mjs`（含 5 项防误触单测）、`test-nebula-rendering.mjs`（18/18）、`test-ohos-touchpad-contract.mjs`（15/15）、`test-screen-label-layout`（6 套件）、`test-cross-group-label-layout`（4 套件）、`test-nebula-layout`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机视觉截图验证（`FOV = 180°` 与 `FOV = 100°` 仰望天顶）：流星雨辐射点、天顶、星座、恒星、深空标签零重叠、留白舒展，辐射点发光贴图与文字混合完全正常；真机 `uitest` 长按（`longClick`）与左边缘误触（`x = 10 px`）均被正确拦截（`selected = ""`）。
+
 ## [2026-11-20] 星空文化介绍与星座资料清理残留制表符/Markdown 标记 + 表格结构化渲染
 
 - **修改文件：** `src/StelMainView.cpp`、`src/core/StelSkyCultureMgr.cpp`、`harmonyos/ets-source/common/derive/skycult.ets`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/common/ui/SkyCultureDescriptionBlockView.ets`、`harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`、`harmonyos/ets-source/panels/object/ConstellationCultureView.ets`、`scripts/test-ohos-skyculture-text.mjs`、`docs/harmonyos/CHANGELOG.md`。

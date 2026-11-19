@@ -8036,9 +8036,12 @@ export struct WindowNativeNode {
           .width(120)
           .height(120)
           .borderRadius(60)
-          .backgroundColor(this.hostSlots().chipInactiveBg)
+          .radialGradient({
+            center: [60, 60],
+            radius: 60,
+            colors: [[this.hostSlots().accentSoft, 0.0], [this.hostSlots().chipInactiveBg, 0.55], [Color.Transparent, 1.0]]
+          })
           .border({ width: 1, color: this.hostSlots().border })
-          .shadow({ radius: 42, color: this.hostSlots().accentSoft, offsetX: 0, offsetY: 0 })
           .align(Alignment.Center)
           .offset({ x: this.skyTouchX - this.skyWidth / 2, y: this.skyTouchY - this.skyHeight / 2 })
           .hitTestBehavior(HitTestMode.None)
@@ -8050,9 +8053,12 @@ export struct WindowNativeNode {
           .width(120)
           .height(120)
           .borderRadius(60)
-          .backgroundColor(this.hostSlots().chipInactiveBg)
+          .radialGradient({
+            center: [60, 60],
+            radius: 60,
+            colors: [[this.hostSlots().accentSoft, 0.0], [this.hostSlots().chipInactiveBg, 0.55], [Color.Transparent, 1.0]]
+          })
           .border({ width: 1, color: this.hostSlots().border })
-          .shadow({ radius: 42, color: this.hostSlots().accentSoft, offsetX: 0, offsetY: 0 })
           .align(Alignment.Center)
           .offset({ x: this.skyTouchX2 - this.skyWidth / 2, y: this.skyTouchY2 - this.skyHeight / 2 })
           .hitTestBehavior(HitTestMode.None)

@@ -51,11 +51,30 @@ void MeteorShowers::update(double deltaTime)
 void MeteorShowers::draw(StelCore* core)
 {
 	if(!core->getFlagClearSky())
+	{
+		StelPainter::clearSkyLabels(QStringLiteral("meteorShowers"));
 		return;
+	}
 
+	{
+		// Pass 1: draw all radiants and flush decluttered labels on a single J2000
+		// painter without nesting another StelPainter (which would mutate GL_BLEND).
+		StelPainter radiantPainter(core->getProjection(StelCore::FrameJ2000));
+		const auto selected = GETSTELMODULE(StelObjectMgr)->getSelectedObject("MeteorShower");
+		radiantPainter.beginSkyLabels(QStringLiteral("meteorShowers"),
+			selected.isEmpty() ? QString() : selected.first()->getID());
+		for (const auto& ms : std::as_const(m_meteorShowers))
+		{
+			ms->drawRadiant(core, &radiantPainter);
+		}
+		radiantPainter.flushSkyLabels();
+	}
+
+	// Pass 2: draw active meteors (uses its own AltAz StelPainter).
 	for (const auto& ms : std::as_const(m_meteorShowers))
 	{
-		ms->draw(core);
+		if (ms->enabled())
+			ms->drawMeteors(core);
 	}
 
 	if (GETSTELMODULE(StelObjectMgr)->getFlagSelectedObjectPointer())

@@ -1426,7 +1426,11 @@ void StarMgr::draw(StelCore* core)
 		if (labelsFader.getInterstate()>0.f)
 		{
 			// Adapt magnitude limit of the stars labels according to FOV and labelsAmount
-			float maxMag = (skyDrawer->getStarLimitMagnitude()-6.5f)*0.7f+(static_cast<float>(labelsAmount)*1.2f)-2.f;
+			const float fovDeg = static_cast<float>(prj->getFov());
+			const float wideFovStarPenalty = (fovDeg > 80.f)
+				? std::min(1.6f, 3.0f * std::log10(fovDeg / 80.f))
+				: 0.f;
+			float maxMag = (skyDrawer->getStarLimitMagnitude()-6.5f)*0.7f+(static_cast<float>(labelsAmount)*1.2f)-2.f - wideFovStarPenalty;
 			maxMagStarName = qMax(0.f, (maxMag - mag_min) / 0.05f);
 		}
 		int zone;
