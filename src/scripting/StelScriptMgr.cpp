@@ -41,8 +41,10 @@
 #include "StelPropertyMgr.hpp"
 #include "StelObserver.hpp"
 
+#include "StelSkyCultureMgr.hpp"
 #include "StelSkyDrawer.hpp"
 #include "StelSkyLayerMgr.hpp"
+#include "ConstellationMgr.hpp"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -1075,6 +1077,8 @@ void StelScriptMgr::captureSessionState()
 		}
 	}
 
+	sessionState.skyCultureID = StelApp::getInstance().getSkyCultureMgr().getCurrentSkyCultureID();
+
 	const QList<StelObjectP>& selectedObjects = StelApp::getInstance().getStelObjectMgr().getSelectedObject();
 	for (const StelObjectP& object : selectedObjects)
 	{
@@ -1096,6 +1100,16 @@ void StelScriptMgr::restoreSessionState(bool deferred)
 	StelMovementMgr* movementMgr = core ? core->getMovementMgr() : Q_NULLPTR;
 	if (!core || !movementMgr)
 		return;
+
+	if (ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr))
+		cmgr->clearGuideOverlayLines();
+
+	StelSkyCultureMgr& skyCultureMgr = StelApp::getInstance().getSkyCultureMgr();
+	if (!sessionState.skyCultureID.isEmpty() &&
+		skyCultureMgr.getCurrentSkyCultureID() != sessionState.skyCultureID)
+	{
+		skyCultureMgr.setCurrentSkyCultureID(sessionState.skyCultureID);
+	}
 
 	StelPropertyMgr* propertyMgr = StelApp::getInstance().getStelPropertyManager();
 	if (propertyMgr)

@@ -527,7 +527,13 @@ public:
 	//! In case of IAU constellations, the list is guaranteed to be of length 1.
 	//! @param useHull Prefer to use constellation hull, not IAU borders
 	QList<Constellation*> isObjectIn(const StelObject *s, bool useHull) const;
+	//! Set temporary J2000 spherical guide polylines (e.g. star-hopping paths) drawn during guided tours.
+	void setGuideOverlayLines(const QVector<QVector<Vec3d>>& polylines);
+	//! Clear any active guided-tour overlay polylines.
+	void clearGuideOverlayLines();
+	int getGuideOverlayLineCount() const { return guideOverlayLines.size(); }
 private:
+	void drawGuideOverlayLines(StelPainter& sPainter, const Vec3d& obsVelocity) const;
 	Constellation* findFromAbbreviation(const QString& abbreviation) const;
 	QList<Constellation*> constellations; //!< Constellations in the current SkyCulture
 	QString emphasizedModelId;
@@ -573,6 +579,8 @@ private:
 	StelSkyCultureSkyPartitionP zodiac;
 	//! optional lunarSystem description from index.json
 	StelSkyCultureSkyPartitionP lunarSystem;
+	//! Temporary star-hopping polylines displayed during interactive guides
+	QVector<QVector<Vec3d>> guideOverlayLines;
 };
 
 #endif // CONSTELLATIONMGR_HPP

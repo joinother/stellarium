@@ -26,6 +26,7 @@ export struct InteractiveGuideShell {
   @Prop guideStepTitle: string
   @Prop guideStepText: string
   @Prop guideStepKey: string
+  @Prop guideSimulationHint: string = 'guide_simulation'
   @Prop cardWidth: number
   @Prop cardHeight: number
   @Prop cardX: number
@@ -67,14 +68,21 @@ export struct InteractiveGuideShell {
             .accessibilityText(I18n.t('guide_exit')).enabled(this.guidePhase !== 'restoring')
             .onClick(() => { this.onAction('stop') })
         }.width('100%').constraintSize({ minHeight: 52 }).hitTestBehavior(HitTestMode.Default)
+        Row() {
+          Row()
+            .width(this.guideCount > 0 ? Math.min(100, Math.round(((this.guideIndex + 1) / this.guideCount) * 100)).toString() + '%' : '0%')
+            .height(3)
+            .backgroundColor(this.c.accent)
+            .borderRadius(2)
+        }.width('100%').height(3).backgroundColor(this.c.border).borderRadius(2)
         Scroll() {
-          Column({ space: 12 }) {
+          Column({ space: 8 }) {
             Text(I18n.t('guide_phase_' + this.guidePhase)).fontSize(12).fontColor(this.c.detailSub).width('100%')
             ForEach([this.guideStepText], (step: string) => {
-              Text(I18n.t(step)).fontSize(15).lineHeight(23).fontColor(this.c.textStrong).width('100%')
+              Text(I18n.t(step)).fontSize(15).lineHeight(22).fontColor(this.c.textStrong).width('100%')
                 .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseInOut }))
             }, (step: string) => this.guideStepKey)
-            Text(I18n.t('guide_simulation')).fontSize(12).fontColor(this.c.iconTertiary).width('100%')
+            Text(I18n.t(this.guideSimulationHint)).fontSize(12).fontColor(this.c.iconTertiary).width('100%')
             if (this.guidePhase === 'error') {
               Text(I18n.t('guide_error')).fontSize(13).fontColor(this.c.warning).width('100%')
             } else if (this.guidePhase === 'exploring') {
@@ -97,7 +105,7 @@ export struct InteractiveGuideShell {
               }.width('100%')
             }
             Text(I18n.t(this.guideCredit)).fontSize(11).fontColor(this.c.iconTertiary).width('100%')
-          }.width('100%').padding({ bottom: 8 })
+          }.width('100%').padding({ bottom: 4 })
         }.id('guide-content').width('100%').layoutWeight(1).scrollBar(BarState.Auto).hitTestBehavior(HitTestMode.Default)
         Row({ space: 8 }) {
           if (this.guidePhase === 'exploring') {

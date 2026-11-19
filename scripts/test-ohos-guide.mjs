@@ -151,4 +151,65 @@ test('UI and CLI share semantic player, scrollable text and actual result', () =
   const core = readFileSync(new URL('../src/scripting/StelScriptMgr.cpp', import.meta.url), 'utf8');
   assert.match(core, /restoreSessionState\(false\)/);
   assert.match(core, /if \(guidedSession\)\s*return false/);
+  assert.match(core, /clearGuideOverlayLines\(\)/);
+  assert.match(core, /sessionState\.skyCultureID/);
+});
+
+test('all curated guides emit valid core commands, complete i18n keys, and deterministic step scenes', async () => {
+  assert.ok(ASTRONOMY_GUIDES.length >= 11, `expected >= 11 guides, got ${ASTRONOMY_GUIDES.length}`);
+  const i18n = readFileSync(new URL('../harmonyos/ets-source/capability/I18n.ets', import.meta.url), 'utf8');
+  const core = readFileSync(new URL('../src/StelMainView.cpp', import.meta.url), 'utf8');
+  const names = new Set([...core.matchAll(/commandName\s*==\s*"([A-Za-z][A-Za-z0-9_]*)"/g)].map(match => match[1]));
+  const categories = new Set(['stargazing', 'solar_system', 'deep_sky', 'events', 'sky_culture']);
+
+  for (const guide of ASTRONOMY_GUIDES) {
+    assert.ok(categories.has(guide.category), `invalid category on ${guide.id}: ${guide.category}`);
+    assert.ok(i18n.includes(`'${guide.title}':`), `missing i18n title ${guide.title}`);
+    assert.ok(i18n.includes(`'${guide.summary}':`), `missing i18n summary ${guide.summary}`);
+    assert.ok(i18n.includes(`'${guide.credit}':`), `missing i18n credit ${guide.credit}`);
+    for (const step of guide.steps) {
+      assert.ok(i18n.includes(`'${step.text}':`), `missing i18n text ${step.text}`);
+      if (step.title.startsWith('guide_')) {
+        assert.ok(i18n.includes(`'${step.title}':`), `missing i18n step title ${step.title}`);
+      }
+    }
+    const { player, calls } = setup();
+    assert.equal((await player.start(guide.id)).ok, true, guide.id);
+    for (let i = 1; i < guide.steps.length; ++i) {
+      assert.equal((await player.action('next')).ok, true, `${guide.id}[${i}]`);
+    }
+    assert.equal((await player.stop()).ok, true, `${guide.id} stop`);
+    for (const [command] of calls) {
+      assert.ok(names.has(command), `unknown command ${command} in ${guide.id}`);
+    }
+  }
+});
+
+test('star-hopping, eclipses, sky-cultures, and planetary Sun guides emit scene overrides and overlay arcs', async () => {
+  // Star-hopping: stop 0 has no lines (clears overlay), stop 1 emits Merak|Dubhe|Polaris, stop 5 closes Summer Triangle
+  const summer = setup();
+  await summer.player.start('summer-star-hopping');
+  assert.ok(summer.calls.some(([c, p]) => c === 'setLocation' && p.startsWith('Taipei|')));
+  assert.ok(summer.calls.some(([c, p]) => c === 'setAtmosphereFlag' && p === 'atmosphere|1'));
+  assert.ok(summer.calls.some(([c, p]) => c === 'setGuideOverlayLines' && p === ''));
+  await summer.player.go(1);
+  assert.ok(summer.calls.some(([c, p]) => c === 'setGuideOverlayLines' && p === 'Merak|Dubhe|Polaris'));
+  await summer.player.go(5);
+  assert.ok(summer.calls.some(([c, p]) => c === 'setGuideOverlayLines' && p === 'Vega|Deneb|Altair|Vega'));
+  await summer.player.stop();
+
+  // Sky cultures: switches sky culture per stop
+  const cultures = setup();
+  await cultures.player.start('world-sky-cultures');
+  await cultures.player.go(1);
+  assert.ok(cultures.calls.some(([c, p]) => c === 'setSkyCulture' && p === 'chinese'));
+  await cultures.player.stop();
+
+  // Sun across planets: teleports observer planet per stop
+  const sun = setup();
+  await sun.player.start('sun-across-planets');
+  assert.ok(sun.calls.some(([c, p]) => c === 'setObserverPlanet' && p === 'Mercury'));
+  await sun.player.go(6);
+  assert.ok(sun.calls.some(([c, p]) => c === 'setObserverPlanet' && p === 'Pluto'));
+  await sun.player.stop();
 });

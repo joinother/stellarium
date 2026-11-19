@@ -406,6 +406,7 @@ private:
 		int mountMode = 0;
 		float movementSpeedFactor = 1.0f;
 		QMap<QString, QVariant> properties;
+		QString skyCultureID;
 		QList<QPair<QString, QString>> selectedObjects;
 		QStringList selectedObjectNames;
 	} sessionState;

@@ -1,5 +1,24 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 交互式数字化导览大幅扩充（11 条路线 / 71 站 + 发光星桥虚线叠层 + 分类导览库）
+
+- **修改文件：** `src/core/modules/ConstellationMgr.hpp`、`src/core/modules/ConstellationMgr.cpp`、`src/scripting/StelScriptMgr.hpp`、`src/scripting/StelScriptMgr.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/derive/AstronomyGuide.ts`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/guide/GuideLibrary.ets`、`harmonyos/ets-source/panels/shell/InteractiveGuideShell.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-guide.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **核心进展：**
+  1. **声明式导览引擎升级（`initState` + 逐站 `scene` 补丁 + 无损快照恢复）：**
+     - `AstronomyGuide.ts` 扩展 `GuideCategory`、`GuideScenePatch`（支持 `atmosphere`、`landscape`、`jd`、`timeRate`、`location`、`observerPlanet`、`skyCulture`、`actions`）与逐站 `guideLines` 星桥路径，`GuidePlayer.applyStep()` 按站确定性下发场景补丁（前进、后退、自由探索返回、重试均一致）。
+     - `StelScriptMgr::ScriptSessionState` 补齐 `skyCultureID` 捕获与恢复，并在 `restoreSessionState()` 自动清空导览星桥叠层，确保切换星空文化、历史时刻或跨行星观测后退出导览零残留还原。
+  2. **原生天球发光星桥虚线叠层（`setGuideOverlayLines`）：**
+     - `ConstellationMgr` 新增临时 J2000 球面大圆虚线绘制（双通道暖金光晕 + 端点留白避免压星，仅在导览激活且配置 `guideLines` 时渲染，退出自动清空），`StelMainView.cpp` 新增 `setGuideOverlayLines` 桥接命令并在 `StelOhosCommandCatalog.hpp` 注册。
+  3. **将 18+ 个上游经典 `.ssc` 脚本主题推进为 11 条离线交互导览（共 71 个观测站点）：**
+     - 保留原有 `solar-neighbours`（太阳系邻居 5 站）与 `deep-sky-discovery`（走进深空 3 站）完全向后兼容。
+     - 新增 9 条交互路线：`summer-star-hopping`（夏季星空认星之旅 8 站，含北斗→北极星/仙后/大角角宿一/天津四/夏季大三角发光星桥）、`winter-star-hopping`（冬季亮星与大六边形 6 站，含猎户腰带→天狼星/冬季大三角/昴星团/冬季大六边形星桥）、`zodiac-ecliptic`（黄道十二星座巡礼 12 站，配黄道线与星座艺术图）、`jupiter-galilean-moons`（木星与伽利略卫星 6 站，含 2015 三星影凌木）、`messier-highlights`（梅西耶经典深空巡礼 8 站）、`double-and-giant-stars`（双星与宇宙巨星巡礼 6 站）、`classic-eclipses-transits`（百年经典天象重现 4 站：2009 长江日全食 / 2004 月全食 / 2012 金星凌日 / 2019 水星凌日）、`world-sky-cultures`（世界星空文化巡游 6 站：现代/中国/古希腊/古埃及/北欧/因纽特）、`sun-across-planets`（从各大行星看太阳 7 站，锁定 `2.2°` 同视场对比水星至冥王星的太阳视直径）。
+  4. **导览库与交互卡片升级：**
+     - `GuideLibrary.ets` 新增横向主题分类筛选条（全部 / 认星入门 / 太阳系 / 深空双星 / 经典天象 / 星空文化）、路线摘要与「含星桥指引」标识。
+     - `InteractiveGuideShell.ets` 新增顶部步骤进度条、按场景类型自适应提示文案（模拟望远镜视图 vs 模拟天象场景）、完整多语言站点标题与唯一步序动画键。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-guide.mjs`（11/11，覆盖 11 条路线命令白名单、全部中英 I18n 键与场景补丁断言）、`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs` 全通过。
+  - 真机验证：58 个路线目标 `searchObject` 命中率 100%；`test-ohos-guide-pad.mjs` 全绿通过（触摸暂停/继续/自由探索/返回与完整会话恢复）；逐条实机截图核验导览库分类卡片、夏季北极星/夏季大三角发光金虚线、2009 上海日全食日冕、2012 悉尼金星凌日、中国三垣二十八宿切换及退出还原 `modern`、水星观日及退出还原 `Earth` 均准确无误。
+
 ## [2026-11-20] 白天银河与深空天体可见性联调（统一接入「现实星等」昼夜光度体系）
 
 - **修改文件：** `src/core/StelSkyDrawer.hpp`、`src/core/StelSkyDrawer.cpp`、`src/core/modules/MilkyWay.cpp`、`src/core/StelSkyImageTile.cpp`、`src/core/modules/NebulaMgr.cpp`、`src/core/modules/Nebula.cpp`、`src/core/TouchPicker.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/panels/layers/AtmosphereGroundSection.ets`、`scripts/test-ohos-realistic-star-visibility.mjs`、`docs/harmonyos/CHANGELOG.md`。

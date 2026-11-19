@@ -28,7 +28,7 @@ import { LOCATION_HIERARCHY } from '../common/location/hierarchy'
 import { smallestAdminDivision } from '../common/location/ReverseGeocodeName'
 import { LOCATION_COUNTRY_NAMES } from '../common/location/countries'
 import { LOCATION_ZH_NAMES } from '../common/location/names_zh'
-import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep } from '../common/derive/AstronomyGuide'
+import { ASTRONOMY_GUIDES, AstronomyGuide, GuideState, GuideStep, guideHasSkyAtmosphere } from '../common/derive/AstronomyGuide'
 
 import { StellariumBridgeResponse, SessionSnapshot, TonightPlanet, TonightShower, TonightEvents, WutTarget, EphemerisRow, AstroCalcContext, RtsCalendarDay, AltAzPoint, AnnualElevationPoint, ObservabilityDay, LunarElongationPoint, PlanetTimeSeriesPoint, PlanetPairDistancePoint, PlanetCalcItem, PhenomenonItem, EclipseItem, PlanetaryTransitItem, MoonPhaseItem, SeasonEvent, LangOption, HierCity, NameItem, SearchSug, WindowNativeNodeCreateInfo, ChipItem, LandscapeItem, ScriptMetadata, HeliocentricPosition, CelestialPosition, ObjectInfo, SkyCultureItem, SkyCultureRawItem, SkyCultureArtItem, SkyCultureDescriptionBlock, SkyCultureTerritoryEntry, SkyCultureTerritoryPolygon, PluginItem, Scenery3dItem, ShellAction, LocSearchItem, SavedLocation, ObjectDetailField, ObjectDetailModel, SatellitePass, KeyboardShortcutItem } from './StellariumTypes'
 import { setLifecycleListener } from '../common/StellariumLifecycle'
@@ -7969,6 +7969,11 @@ export struct WindowNativeNode {
 
   private currentGuideStep(): GuideStep { return this.currentGuide().steps[this.guideStore.guideState.index] }
 
+  private currentGuideStepTitle(): string {
+    const raw = this.currentGuideStep().title
+    return raw.startsWith('guide_') ? I18n.t(raw) : planetZh(raw)
+  }
+
   // 夜间模式颜色方案
 
   private selectedStatusZh(en: string): string {
@@ -8089,9 +8094,10 @@ export struct WindowNativeNode {
             guideRemaining: this.guideStore.guideState.remaining,
             guideTitle: I18n.t(this.currentGuide().title),
             guideCredit: I18n.t(this.currentGuide().credit),
-            guideStepTitle: planetZh(this.currentGuideStep().title),
+            guideStepTitle: this.currentGuideStepTitle(),
             guideStepText: this.currentGuideStep().text,
-            guideStepKey: this.currentGuideStep().target,
+            guideStepKey: this.guideStore.guideState.guideId + ':' + this.guideStore.guideState.index.toString(),
+            guideSimulationHint: guideHasSkyAtmosphere(this.currentGuide(), this.guideStore.guideState.index) ? 'guide_simulation_sky' : 'guide_simulation',
             cardWidth: this.guideCardWidth(),
             cardHeight: guideCardHeight(this.skyHeight, this.scriptControlSafeTop()),
             cardX: guideCardX(this.isExpandedLayout, this.skyWidth, this.guideCardWidth(), this.scriptStore.scriptControlOffsetX),

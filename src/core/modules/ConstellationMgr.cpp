@@ -738,6 +738,10 @@ void ConstellationMgr::draw(StelCore* core)
 		drawZodiac(sPainter, vel);
 		drawLunarSystem(sPainter, vel);
 	}
+	if (!guideOverlayLines.isEmpty())
+	{
+		drawGuideOverlayLines(sPainter, vel);
+	}
 #if defined(__OHOS__)
 	static qint64 lineTotal = 0, nameTotal = 0, artTotal = 0, otherTotal = 0;
 	static int frames = 0;
@@ -985,6 +989,93 @@ void ConstellationMgr::drawLines(StelPainter& sPainter, const StelCore* core) co
 	}
 	if (constellationLineThickness>1 || scale>1.f)
 		sPainter.setLineWidth(1); // restore line thickness
+	sPainter.setLineSmooth(false);
+}
+
+void ConstellationMgr::setGuideOverlayLines(const QVector<QVector<Vec3d>>& polylines)
+{
+	guideOverlayLines = polylines;
+}
+
+void ConstellationMgr::clearGuideOverlayLines()
+{
+	guideOverlayLines.clear();
+}
+
+void ConstellationMgr::drawGuideOverlayLines(StelPainter& sPainter, const Vec3d& obsVelocity) const
+{
+	if (guideOverlayLines.isEmpty())
+		return;
+	const float scale = sPainter.getProjector()->getScreenScale();
+	const SphericalCap& viewportHalfspace = sPainter.getProjector()->getBoundingCap();
+	const float oldLineWidth = sPainter.getLineWidth();
+	sPainter.setBlending(true);
+	sPainter.setLineSmooth(true);
+
+	auto slerpUnit = [](const Vec3d& a, const Vec3d& b, double omega, double sinOmega, double t) -> Vec3d {
+		if (sinOmega < 1e-6)
+		{
+			Vec3d p = a * (1.0 - t) + b * t;
+			p.normalize();
+			return p;
+		}
+		const double w0 = std::sin((1.0 - t) * omega) / sinOmega;
+		const double w1 = std::sin(t * omega) / sinOmega;
+		Vec3d p = a * w0 + b * w1;
+		p.normalize();
+		return p;
+	};
+
+	const auto drawPass = [&](float width, float alpha)
+	{
+		sPainter.setColor(1.0f, 0.86f, 0.35f, alpha);
+		sPainter.setLineWidth(width * scale);
+		for (const auto& polyline : guideOverlayLines)
+		{
+			for (int i = 0; i + 1 < polyline.size(); ++i)
+			{
+				Vec3d a = polyline[i];
+				Vec3d b = polyline[i + 1];
+				if (a.normSquared() <= 0.0 || b.normSquared() <= 0.0)
+					continue;
+				a.normalize();
+				b.normalize();
+				if (obsVelocity.normSquared() > 0.0)
+				{
+					a += obsVelocity;
+					b += obsVelocity;
+					a.normalize();
+					b.normalize();
+				}
+				const double cosOmega = qBound(-1.0, a.dot(b), 1.0);
+				const double omega = std::acos(cosOmega);
+				if (omega < 1e-4)
+					continue;
+				const double sinOmega = std::sin(omega);
+				const double trimRad = qMin(omega * 0.12, 0.55 * M_PI / 180.0);
+				const double startRad = trimRad;
+				const double endRad = omega - trimRad;
+				if (endRad <= startRad)
+					continue;
+				const double dashRad = 1.35 * M_PI / 180.0;
+				const double gapRad = 0.75 * M_PI / 180.0;
+				const double stepRad = dashRad + gapRad;
+				for (double cursor = startRad; cursor < endRad; cursor += stepRad)
+				{
+					const double segEnd = qMin(cursor + dashRad, endRad);
+					const Vec3d p0 = slerpUnit(a, b, omega, sinOmega, cursor / omega);
+					const Vec3d p1 = slerpUnit(a, b, omega, sinOmega, segEnd / omega);
+					sPainter.drawGreatCircleArc(p0, p1, &viewportHalfspace);
+				}
+			}
+		}
+	};
+
+	// Two-pass warm-gold dashed star-hopping arc: soft outer glow + crisp inner stroke
+	drawPass(4.2f, 0.28f);
+	drawPass(1.8f, 0.92f);
+
+	sPainter.setLineWidth(oldLineWidth);
 	sPainter.setLineSmooth(false);
 }
 

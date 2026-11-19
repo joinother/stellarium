@@ -9131,6 +9131,58 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			return result;
 		}
 
+		if (commandName == "setGuideOverlayLines")
+		{
+			ConstellationMgr* cmgr = GETSTELMODULE(ConstellationMgr);
+			if (!cmgr || !core)
+			{
+				result["ok"] = false;
+				result["error"] = "constellation manager not ready";
+				return result;
+			}
+			const QString trimmed = arg.trimmed();
+			if (trimmed.isEmpty())
+			{
+				cmgr->clearGuideOverlayLines();
+				markOhosInteraction();
+				result["ok"] = true;
+				result["count"] = 0;
+				return result;
+			}
+			StelObjectMgr& objMgr = StelApp::getInstance().getStelObjectMgr();
+			QVector<QVector<Vec3d>> polylines;
+			const QStringList groups = trimmed.split(';', Qt::SkipEmptyParts);
+			for (const QString& group : groups)
+			{
+				QVector<Vec3d> line;
+				const QStringList names = group.split('|', Qt::SkipEmptyParts);
+				for (const QString& rawName : names)
+				{
+					const QString name = rawName.trimmed();
+					if (name.isEmpty())
+						continue;
+					StelObjectP obj = objMgr.searchByName(name);
+					if (!obj)
+						obj = objMgr.searchByNameI18n(name);
+					if (!obj)
+						continue;
+					Vec3d pos = obj->getJ2000EquatorialPos(core);
+					if (pos.normSquared() > 0.0)
+					{
+						pos.normalize();
+						line.append(pos);
+					}
+				}
+				if (line.size() >= 2)
+					polylines.append(line);
+			}
+			cmgr->setGuideOverlayLines(polylines);
+			markOhosInteraction();
+			result["ok"] = true;
+			result["count"] = polylines.size();
+			return result;
+		}
+
 		// playScript
 		if (commandName == "playScript")
 		{
