@@ -272,9 +272,7 @@ export class LocationController {
       if (targetPlanet !== 'Earth') this.setLocationMapProvider('offline')
     }
     this.saveObserverLocationToStorage()
-    const planetDisplay = typeof this.sessionToolStore.observerPlanetLabel === 'function'
-      ? this.sessionToolStore.observerPlanetLabel(targetPlanet)
-      : planetZh(targetPlanet)
+    const planetDisplay = this.sessionToolStore.observerPlanetLabel(targetPlanet)
     // 位置变了，位置面板的今晚天象（月出/日落/行星可见性）必须按新坐标重算。
     this.hooks.refreshTonightData()
     this.hooks.setLocationTexts(
