@@ -51,11 +51,13 @@
     "capability/TelescopeController.ets",
     "capability/TimeController.ets",
     "capability/TimeTransitionController.ets",
+    "capability/UrlSafetyGuard.ets",
     "capability/ViewCoordinateController.ets",
     "common/PrivacyStartup.ets",
     "common/QtAppConstants.ets",
     "common/SpeechService.ets",
     "common/StellariumLifecycle.ets",
+    "common/config/ConstellationModelAssets.ets",
     "common/config/OhosFeatureFlags.ets",
     "common/derive/DetailModelGeometry.ets",
     "common/derive/ProceduralDetailModel.ets",
@@ -387,6 +389,7 @@
     "skyZoomInButton",
     "skyZoomOutButton",
     "skyculture-art-models-toggle",
+    "skyculture-line-center-anim-toggle",
     "video-frames-share"
   ],
   "dynamicIdPrefixes": [
@@ -410,11 +413,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 57,
+  "totalIdAnchors": 58,
   "count": {
     "panels": 37,
-    "staticIds": 35,
+    "staticIds": 36,
     "dynamicIdPrefixes": 19,
-    "totalIdAnchors": 57
+    "totalIdAnchors": 58
   }
 }

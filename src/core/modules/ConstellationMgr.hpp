@@ -155,6 +155,8 @@ public slots:
 	void setFlagArt(const bool displayed);
 	bool getFlagArt3d() const { return art3dDisplayed; }
 	void setFlagArt3d(bool displayed);
+	bool getFlagLineCenterAnim() const { return lineCenterAnimDisplayed; }
+	void setFlagLineCenterAnim(bool enabled);
 	//! Get whether constellation art is displayed
 	bool getFlagArt(void) const;
 
@@ -551,6 +553,7 @@ private:
 	double artIntensityMaximumFov;
 	bool artDisplayed;
 	bool art3dDisplayed = false;
+	bool lineCenterAnimDisplayed = false;
 	bool boundariesDisplayed;
 	float boundariesFadeDuration;
 	bool linesDisplayed;

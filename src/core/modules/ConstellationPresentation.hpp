@@ -49,6 +49,53 @@ inline double centerWeight(double cosine, double fovDegrees)
 	const double inner = outer * 0.25;
 	return smooth((cosine - std::cos(outer)) / (std::cos(inner) - std::cos(outer)));
 }
+
+struct CenterLineAnimation
+{
+	static constexpr double kDuration = 1.05;
+	bool active = false;
+	double rawProgress = 1.0;
+
+	double update(double deltaTime, bool featureEnabled, bool eligible, double currentLinePresentation)
+	{
+		if (!featureEnabled)
+		{
+			active = false;
+			rawProgress = 1.0;
+			return 1.0;
+		}
+		if (eligible)
+		{
+			if (!active)
+			{
+				active = true;
+				if (currentLinePresentation < 0.08)
+					rawProgress = 0.0;
+			}
+			rawProgress = std::min(1.0, rawProgress + std::max(0.0, deltaTime) / kDuration);
+			return smooth(rawProgress);
+		}
+		active = false;
+		if (currentLinePresentation <= 0.02)
+			rawProgress = 0.0;
+		return smooth(rawProgress);
+	}
+};
+
+inline double segmentDrawFraction(double overallProgress, int segmentIndex, int segmentCount)
+{
+	if (segmentCount <= 0 || overallProgress >= 0.999)
+		return 1.0;
+	if (overallProgress <= 0.001)
+		return 0.0;
+	if (segmentCount == 1)
+		return smooth(overallProgress);
+	const double staggerSpan = 0.62;
+	const double segDuration = 1.0 - staggerSpan;
+	const double start = (static_cast<double>(std::clamp(segmentIndex, 0, segmentCount - 1)) /
+	                      static_cast<double>(segmentCount - 1)) * staggerSpan;
+	return smooth((overallProgress - start) / segDuration);
+}
 }
 
 #endif

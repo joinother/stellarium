@@ -145,6 +145,11 @@ public:
 	//! Returns the dark-constellation line-point array.
 	const std::vector<StelObjectP>& getDarkConstellationLines() const { return dark_constellation; }
 	bool modelContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const;
+	bool artPolygonContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const;
+	bool hasArtModel() const { return !modelIndices.isEmpty(); }
+	float getModelIntensity() const { return modelIntensity(); }
+	float getLineAnimProgress() const { return lineAnimProgress; }
+	float getLinePresentation() const { return linePresentation; }
 private:
 	//! Underlying worker
 	QString getCultureLabel(StelObject::CulturalDisplayStyle style) const;
@@ -281,6 +286,9 @@ private:
 	float artPresentation = 1.f;
 	float linePresentation = 1.f;
 	float labelPresentation = 1.f;
+	float lineAnimProgress = 1.f;
+	bool lineAnimActive = false;
+	double lineAnimRawProgress = 1.0;
 	void loadArtModel(const QString& path, const Mat4d& transform, int width, int height);
 	void drawArtModel(StelPainter& painter, float intensity, const Vec3d& velocity, bool managedDepthState = false) const;
 	SphericalCap boundingCap;

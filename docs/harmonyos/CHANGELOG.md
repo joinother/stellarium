@@ -1,5 +1,25 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 贴天 3D 星座模型防穿模、姿态对齐、整体触控拾取与居中连线动画开关
+
+- **修改文件：** `src/core/modules/ConstellationPresentation.hpp`、`src/core/modules/Constellation.hpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/ConstellationMgr.hpp`、`src/core/modules/ConstellationMgr.cpp`、`src/core/TouchPicker.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/SkyCultureSettingsStore.ets`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/panels/skyculture/SkyCultureViewTab.ets`、`scripts/test-constellation-presentation.cpp`、`scripts/test-ohos-constellation-3d-polish.mjs`（新增）、`scripts/check-ohos-ui-contract.mjs`（更新静态锚点基线）、`docs/harmonyos/CHANGELOG.md`。
+- **根因与实现：**
+  1. **消除相邻贴天 3D 星座模型重合穿模：**
+     - 原 `ConstellationMgr::drawArt()` 清一次深度缓冲后让同屏 12–24 个处于同一天球壳层的 3D 星座模型共用 `[0, 1]` 深度范围，且未按视觉层级排序，导致翼尖、四肢等重叠区域互相写入并裁切深度，出现明显 3D 穿模与破面。
+     - 现将同屏活跃 3D 模型按「外围淡显 → 中心强调/选中」从后到前排序，并通过 `glDepthRangef(sliceNear, sliceFar)` 为每个模型分配互不相交的独立深度切片（结束恢复 `[0, 1]`），在保持单次清屏零额外开销和各自背面自遮挡的前提下彻底杜绝跨模型穿模；同时在 `Constellation::prepareModelPose()` 对深度做 `[-0.95, 0.95]` 钳位避免视锥近远面裁切。
+  2. **修复 3D 模型整体触摸选中失效：**
+     - 排查出四处根因：背景暗星（`mag > 4.5`）及不可见暗弱小行星/彗星（`mag > 6.5`，如 17 等彗星）仍进入 `nearObjectPriority`（Tier 3）直接压过 `modelHit`（Tier 5）；`modelContainsPoint()` 透明度门槛 `0.015f` 过高导致非居中或切换选中时邻居模型不可点；触控容差仅 `7 vp` 对细长翼/肢偏窄；多模型重叠时未优先选中前排高亮模型。
+     - 现调整 `TouchPicker` 优先级：亮星、星座顶点星、可见行星与卫星仍保持点选优先，但背景暗星与暗弱小天体不再抢占显式 `modelHit`；`modelContainsPoint()` 门槛降至 `0.003f` 且与渲染共用投影路径，触控容差放宽至 `13 vp`，并为无 3D 网格的回退插画补齐 `artPolygonContainsPoint()` 拾取；重叠 `modelHit` 优先命中前排高亮模型。
+  3. **29 个贴天 3D 模型姿态与星座连线对齐校准：**
+     - 全量核查 82 个 3D `.scm` 模型与对应星锚 2D 插画，定位出 29 个因原始资产默认朝向不同导致的错位（如 `Leo`/`UMa`/`Tau`/`Tuc`/`LMi` 正面朝向镜头、`Sco`/`Lac`/`Mus`/`Pyx`/`Oct`/`Sex` 侧躺贴边、`Sge` 垂直偏差 90°、`Cyg` 航向偏差 135°、`Cam`/`Cap`/`Cen`/`Boo`/`Vul` 左右反向及 `Ant`/`CrB`/`Ind`/`Men`/`Nor`/`Scl`/`Tel`/`Vir` 倾角未对齐）。
+     - 现于 `Constellation::loadArtModel()` 加载阶段应用纯刚体 `SO(3)` 旋转校准（同步旋转法线并紧密回填前景包围盒），零新增二进制包体、零每帧开销，使 3D 模型与星点/星座连线精准贴合。
+  4. **新增「居中播放连线动画」开关（`constellationLineCenterAnim`）：**
+     - 在 `ConstellationPresentation.hpp` 新增 `CenterLineAnimation` 与交错波次大圆弧绘制函数 `segmentDrawFraction()`；`ConstellationMgr` 新增持久化属性 `viewing/flag_constellation_line_center_anim`。
+     - 开启开关后，非居中星座不显示连线，仅当星座连同其模型/绘图一起出现在画面中心（或被显式选中）时渐次播放大圆弧连线绘制动画；移出中心淡出后自动复位，关闭绘图或模型不可见时同步隐藏；「图层 → 文化」面板新增 `居中播放连线动画` 开关及 11 语种文案。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-constellation-presentation.cpp`、`test-constellation-models.py`（2/2）、`test-constellation-model-mapping.py`（6/6）、`test-ohos-constellation-3d-polish.mjs`（4/4）、`check-ohos-ui-contract.mjs`、`check-ohos-i18n.mjs` 全通过。
+  - 真机实测：狮子座、大熊座、天蝎座实机截图核验 3D 侧身/俯视姿态与星座连线精准贴合、邻近模型无穿模；狮子座 3D 身体 7 点触控网格 6/7 稳定选中整个星座（不再被 12–18 等小行星/暗星抢占）；开启「居中播放连线动画」后仅中心星座连线渐次绘制（`lineAnimProgress: 0 → 1`，其余外围星座可见连线数 `0`），关闭星座绘图后中心连线同步归零；「图层 → 文化」截图核验新开关排版与文案清晰无裁切。
+
 ## [2026-11-20] 无线控制（RemoteControl HTTP REST API / 网页遥控）全面联调与鉴权加固
 
 - **修改文件：** `plugins/RemoteControl/resources/ohos_console.html`（新增）、`plugins/RemoteControl/RemoteControl.qrc`、`plugins/RemoteControl/src/RequestHandler.hpp`、`plugins/RemoteControl/src/RequestHandler.cpp`、`plugins/RemoteControl/src/APIController.cpp`、`plugins/RemoteControl/src/RemoteControl.hpp`、`plugins/RemoteControl/src/RemoteControl.cpp`、`plugins/RemoteControl/src/qtwebapp/httpserver/httprequest.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-remote-control.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。

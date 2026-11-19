@@ -53,5 +53,30 @@ int main()
 		assert(arrival.update(.8, 1., true) > .99);
 		assert(arrival.update(.1, 1., false) == 0.);
 	}
-	std::cout << "Zoom fade, center emphasis and single arrival turn across 15–120 Hz passed\n";
+	// Center line-drawing animation & staggered segment waves
+	{
+		CenterLineAnimation lineAnim;
+		assert(lineAnim.update(0.016, false, false, 0.0) == 1.0);
+		assert(lineAnim.update(0.016, true, false, 0.0) == 0.0);
+		double prev = 0.0;
+		for (int step = 0; step < 90; ++step)
+		{
+			const double p = lineAnim.update(1.0 / 60.0, true, true, 0.5);
+			assert(std::isfinite(p) && p >= prev && p <= 1.0);
+			prev = p;
+		}
+		assert(prev == 1.0);
+		// Leaving center keeps drawn lines while fading, then resets once invisible
+		assert(lineAnim.update(0.016, true, false, 0.4) == 1.0);
+		assert(lineAnim.update(0.016, true, false, 0.01) == 0.0);
+		// Re-entering center replays from 0
+		const double firstFrame = lineAnim.update(0.05, true, true, 0.01);
+		assert(firstFrame > 0.0 && firstFrame < 0.1);
+		// Staggered segments wave: early segments lead later segments, all finish at 1.0
+		assert(segmentDrawFraction(0.0, 0, 6) == 0.0);
+		assert(segmentDrawFraction(1.0, 5, 6) == 1.0);
+		assert(segmentDrawFraction(0.35, 0, 6) > segmentDrawFraction(0.35, 5, 6));
+		assert(segmentDrawFraction(0.5, 0, 1) == 0.5);
+	}
+	std::cout << "Zoom fade, center emphasis, single arrival turn and center line animation across 15–120 Hz passed\n";
 }

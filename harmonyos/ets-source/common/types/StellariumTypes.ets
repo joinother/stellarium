@@ -584,6 +584,7 @@ export interface StellariumBridgeResponse {
   lunarSystemThickness?: number
   constellationArtIntensity?: number
   constellationArt3d?: boolean
+  constellationLineCenterAnim?: boolean
   constellationLinesFadeDuration?: number
   constellationLabelsFadeDuration?: number
   constellationArtFadeDuration?: number

@@ -118,6 +118,7 @@ void ConstellationMgr::init()
 	setArtFadeDuration(conf->value("viewing/constellation_art_fade_duration",2.f).toFloat());
 	setFlagArt(conf->value("viewing/flag_constellation_art", false).toBool());
 	setFlagArt3d(conf->value("viewing/flag_constellation_art_3d", false).toBool());
+	setFlagLineCenterAnim(conf->value("viewing/flag_constellation_line_center_anim", false).toBool());
 	setFlagIsolateSelected(conf->value("viewing/flag_constellation_isolate_selected", false).toBool());
 	setFlagConstellationPick(conf->value("viewing/flag_constellation_pick", false).toBool());
 	setConstellationLineThickness(conf->value("viewing/constellation_line_thickness", 1).toInt());
@@ -767,6 +768,28 @@ void ConstellationMgr::setFlagArt3d(bool displayed)
 	StelApp::immediateSave("viewing/flag_constellation_art_3d", displayed);
 }
 
+void ConstellationMgr::setFlagLineCenterAnim(bool enabled)
+{
+	lineCenterAnimDisplayed = enabled;
+	StelApp::immediateSave("viewing/flag_constellation_line_center_anim", enabled);
+	for (auto* constellation : std::as_const(constellations))
+	{
+		if (!enabled)
+		{
+			constellation->lineAnimProgress = 1.f;
+			constellation->lineAnimActive = false;
+			constellation->lineAnimRawProgress = 1.0;
+		}
+		else
+		{
+			// Reset animations so constellations start cleanly when entering center
+			constellation->lineAnimProgress = 0.f;
+			constellation->lineAnimActive = false;
+			constellation->lineAnimRawProgress = 0.0;
+		}
+	}
+}
+
 void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) const
 {
 	sPainter.setBlending(true, GL_ONE, GL_ONE);
@@ -836,6 +859,23 @@ void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) 
 
 	if (active3dCount > 0)
 	{
+		// Draw faint peripheral 3D models first and the emphasized/selected
+		// constellation last, assigning each model its own strictly disjoint
+		// back-to-front depth slice via glDepthRangef. This eliminates
+		// inter-constellation Z-buffer interpenetration while preserving each
+		// model's own depth-prepass self-occlusion with a single depth clear.
+		std::sort(models3d.begin(), models3d.begin() + active3dCount,
+			[this](const ModelCandidate& a, const ModelCandidate& b)
+			{
+				const bool aEmph = !emphasizedModelId.isEmpty() && a.constellation->getShortName() == emphasizedModelId;
+				const bool bEmph = !emphasizedModelId.isEmpty() && b.constellation->getShortName() == emphasizedModelId;
+				if (aEmph != bEmph)
+					return !aEmph;
+				if (std::abs(a.intensity - b.intensity) > 1e-4f)
+					return a.intensity < b.intensity;
+				return a.constellation->getShortName() < b.constellation->getShortName();
+			});
+
 		auto* gl = QOpenGLContext::currentContext()->functions();
 		GLint oldDepthFunction = GL_LESS;
 		gl->glGetIntegerv(GL_DEPTH_FUNC, &oldDepthFunction);
@@ -844,12 +884,18 @@ void ConstellationMgr::drawArt(StelPainter& sPainter, const Vec3d &obsVelocity) 
 		sPainter.setDepthMask(true);
 		gl->glClear(GL_DEPTH_BUFFER_BIT);
 		gl->glDepthFunc(GL_LEQUAL);
+		const float sliceSpan = 1.0f / static_cast<float>(active3dCount);
+		const float slicePad = sliceSpan * 0.04f;
 		for (int i = 0; i < active3dCount; ++i)
 		{
+			const float sliceNear = static_cast<float>(active3dCount - 1 - i) * sliceSpan + slicePad;
+			const float sliceFar = static_cast<float>(active3dCount - i) * sliceSpan - slicePad;
+			gl->glDepthRangef(sliceNear, sliceFar);
 			models3d[i].constellation->drawArtModel(sPainter, models3d[i].intensity, obsVelocity, true);
 			// Restore additive blending after drawTrianglesWithDepthPrepass
 			sPainter.setBlending(true, GL_ONE, GL_ONE);
 		}
+		gl->glDepthRangef(0.0f, 1.0f);
 		sPainter.setDepthMask(true);
 		gl->glClear(GL_DEPTH_BUFFER_BIT);
 		sPainter.setDepthMask(false);
@@ -913,6 +959,8 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 			item["modelCenterAltitude"] = std::asin(qBound(-1., direction[2], 1.)) * 180. / M_PI;
 		}
 		item["presentationWeight"] = constellation->artPresentation;
+		item["linePresentation"] = constellation->linePresentation;
+		item["lineAnimProgress"] = constellation->lineAnimProgress;
 		item["intersectsViewport"] = region && region->intersects(constellation->boundingCap);
 
 		if (constellation->artTexture)
@@ -956,6 +1004,7 @@ QJsonObject ConstellationMgr::getArtStatus(const QString& abbreviation) const
 	result["ok"] = true;
 	result["artDisplayed"] = artDisplayed;
 	result["art3dDisplayed"] = art3dDisplayed;
+	result["lineCenterAnimDisplayed"] = lineCenterAnimDisplayed;
 	result["artIntensity"] = artIntensity;
 	result["artFovScale"] = Constellation::artIntensityFovScale;
 	result["matched"] = items.size();
@@ -1302,14 +1351,18 @@ void ConstellationMgr::update(double deltaTime)
 	const Constellation* previousEmphasis = nullptr;
 	double bestAngle = M_PI;
 	double previousAngle = M_PI;
-	if (art3dDisplayed)
+	if (art3dDisplayed || lineCenterAnimDisplayed)
 		for (const auto* constellation : std::as_const(constellations))
 		{
-			if (constellation->modelIndices.isEmpty() || !constellation->isSeasonallyVisible() ||
-			    constellation->artFader.getInterstate() <= 0.f ||
-			    ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) <= 0.02)
+			const bool hasModel = !constellation->modelIndices.isEmpty();
+			if (!constellation->isSeasonallyVisible() || constellation->artFader.getInterstate() <= 0.f)
 				continue;
-			const double cosine = qBound(-1., constellation->modelCenter * viewDirection, 1.);
+			if (art3dDisplayed && hasModel && ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) <= 0.02)
+				continue;
+			if (!hasModel && !lineCenterAnimDisplayed)
+				continue;
+			const Vec3d center = hasModel ? constellation->modelCenter : normalize(constellation->getJ2000EquatorialPos(core));
+			const double cosine = qBound(-1., center * viewDirection, 1.);
 			if (ConstellationPresentation::centerWeight(cosine, fov) <= 0.1) continue;
 			const double angle = std::acos(cosine);
 			if (angle < bestAngle)
@@ -1338,8 +1391,27 @@ void ConstellationMgr::update(double deltaTime)
 		const Vec3d center = hasModel ? constellation->modelCenter : normalize(constellation->getJ2000EquatorialPos(core));
 		const float central = float(ConstellationPresentation::centerWeight(center * viewDirection, fov));
 		const bool leading = emphasized == constellation;
-		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : central * (hasFocus ? 0.06f : leading ? 0.85f : 0.14f));
-		const float lineTarget = !art3dDisplayed ? 1.f : (focused ? 0.7f : (hasFocus ? 0.08f : 0.12f + central * 0.5f));
+		const float artTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : central * (hasFocus ? 0.05f : leading ? 0.85f : 0.10f));
+		const bool modelOrArtPresent = artDisplayed && constellation->isSeasonallyVisible() &&
+			constellation->artFader.getInterstate() > 0.01f &&
+			(!art3dDisplayed || !hasModel || ConstellationPresentation::zoomOpacity(fov, constellation->modelSpanDegrees) > 0.02);
+		float lineTarget = 1.f;
+		if (lineCenterAnimDisplayed)
+		{
+			const bool lineEligible = modelOrArtPresent && (focused || (leading && central > 0.45f));
+			lineTarget = lineEligible ? (focused ? 0.85f : 0.72f) : 0.f;
+			ConstellationPresentation::CenterLineAnimation lineAnim{constellation->lineAnimActive, constellation->lineAnimRawProgress};
+			constellation->lineAnimProgress = static_cast<float>(lineAnim.update(deltaTime, true, lineEligible, constellation->linePresentation));
+			constellation->lineAnimActive = lineAnim.active;
+			constellation->lineAnimRawProgress = lineAnim.rawProgress;
+		}
+		else
+		{
+			lineTarget = !art3dDisplayed ? 1.f : (focused ? 0.7f : (hasFocus ? 0.08f : 0.12f + central * 0.5f));
+			constellation->lineAnimProgress = 1.f;
+			constellation->lineAnimActive = false;
+			constellation->lineAnimRawProgress = 1.0;
+		}
 		const float labelTarget = !art3dDisplayed ? 1.f : (focused ? 1.f : (hasFocus ? 0.4f : 0.4f + central * 0.6f));
 		approach(constellation->artPresentation, artTarget);
 		approach(constellation->linePresentation, lineTarget);

@@ -121,6 +121,10 @@ export struct SkyCultureViewTab {
         .id('skyculture-art-models-toggle')
       Text(I18n.t('culture_models_preview_hint'))
         .fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 12, right: 12, bottom: 8 })
+      LayerSwitchRow({ label: I18n.t('culture_line_center_anim'), isOn: this.settings.skyCultureConstellationLineCenterAnim, onToggle: (value: boolean) => { this.onSetVisualSetting('constellationLineCenterAnim', value ? 1 : 0) } })
+        .id('skyculture-line-center-anim-toggle')
+      Text(I18n.t('culture_line_center_anim_hint'))
+        .fontSize(11).fontColor(this.c.sub).width('100%').padding({ left: 12, right: 12, bottom: 8 })
       LayerSwitchRow({ label: I18n.t('s0526'), isOn: this.layerStore.zodiac, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_Zodiac', '', value) } })
       LayerSwitchRow({ label: I18n.t('s0527'), isOn: this.layerStore.lunarSystem, onToggle: (value: boolean) => { this.onToggleLayer('actionShow_LunarSystem', '', value) } })
       if (this.settings.skyCultureHasAsterisms) {

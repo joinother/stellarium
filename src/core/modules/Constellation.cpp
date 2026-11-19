@@ -21,6 +21,7 @@
 #include "StelLocaleMgr.hpp"
 #include "StelProjector.hpp"
 #include "Constellation.hpp"
+#include "ConstellationPresentation.hpp"
 #include "StarMgr.hpp"
 #include "StelModuleMgr.hpp"
 #include "NebulaMgr.hpp"
@@ -390,25 +391,59 @@ void Constellation::drawOptim(StelPainter& sPainter, const StelCore* core, const
 {
 	if (lineFader.getInterstate()<=0.0001f)
 		return;
+	if (linePresentation <= 0.001f || lineAnimProgress <= 0.001f)
+		return;
 	if (!isSeasonallyVisible())
 		return;
 
 	const bool isDarkConstellation = !(dark_constellation.empty());
 	const float darkFactor = (isDarkConstellation? 0.6667f : 1.0f);
-	sPainter.setColor(lineColor*darkFactor, lineFader.getInterstate() * linePresentation);
+	const float baseAlpha = lineFader.getInterstate() * linePresentation;
+	const bool animating = lineAnimProgress < 0.999f;
+	sPainter.setColor(lineColor*darkFactor, baseAlpha);
+
+	auto slerpEndpoint = [](const Vec3d& a, const Vec3d& b, double t) -> Vec3d {
+		const double cosOmega = qBound(-1.0, a.dot(b), 1.0);
+		const double omega = std::acos(cosOmega);
+		const double sinOmega = std::sin(omega);
+		if (sinOmega < 1e-6)
+			return normalize(a * (1.0 - t) + b * t);
+		const double w0 = std::sin((1.0 - t) * omega) / sinOmega;
+		const double w1 = std::sin(t * omega) / sinOmega;
+		return normalize(a * w0 + b * w1);
+	};
 
 	if (isDarkConstellation)
 		for (unsigned int i=0;i<numberOfSegments;++i)
 		{
+			const double segT = animating
+				? ConstellationPresentation::segmentDrawFraction(lineAnimProgress, static_cast<int>(i), static_cast<int>(numberOfSegments))
+				: 1.0;
+			if (segT <= 0.001)
+				continue;
 			Vec3d pos1=dark_constellation[2*i]->getJ2000EquatorialPos(core);
 			Vec3d pos2=dark_constellation[2*i+1]->getJ2000EquatorialPos(core);
-			//pos1.normalize();
-			//pos2.normalize();
+			if (segT < 0.999)
+			{
+				pos1.normalize();
+				pos2.normalize();
+				pos2 = slerpEndpoint(pos1, pos2, segT);
+				sPainter.setColor(lineColor*darkFactor, baseAlpha * qMin(1.f, static_cast<float>(segT * 2.2)));
+			}
+			else if (animating)
+			{
+				sPainter.setColor(lineColor*darkFactor, baseAlpha);
+			}
 			sPainter.drawGreatCircleArc(pos1, pos2, &viewportHalfspace);
 		}
 	else
 		for (unsigned int i=0;i<numberOfSegments;++i)
 		{
+			const double segT = animating
+				? ConstellationPresentation::segmentDrawFraction(lineAnimProgress, static_cast<int>(i), static_cast<int>(numberOfSegments))
+				: 1.0;
+			if (segT <= 0.001)
+				continue;
 			Vec3d star1=constellation[2*i]->getJ2000EquatorialPos(core);
 			Vec3d star2=constellation[2*i+1]->getJ2000EquatorialPos(core);
 			star1.normalize();
@@ -416,6 +451,8 @@ void Constellation::drawOptim(StelPainter& sPainter, const StelCore* core, const
 			if (star1.fuzzyEquals(star2))
 			{
 				// draw single-star segment as circle
+				if (animating)
+					sPainter.setColor(lineColor*darkFactor, baseAlpha * static_cast<float>(segT));
 				SphericalCap scCircle(star1, singleStarConstellationRadius);
 				sPainter.drawSphericalRegion(&scCircle, StelPainter::SphericalPolygonDrawModeBoundary);
 			}
@@ -433,6 +470,15 @@ void Constellation::drawOptim(StelPainter& sPainter, const StelCore* core, const
 						star1 = normalize(star1 * (1.0 - fraction) + star2 * fraction);
 						star2 = normalize(star2 * (1.0 - fraction) + original1 * fraction);
 					}
+				}
+				if (segT < 0.999)
+				{
+					star2 = slerpEndpoint(star1, star2, segT);
+					sPainter.setColor(lineColor*darkFactor, baseAlpha * qMin(1.f, static_cast<float>(segT * 2.2)));
+				}
+				else if (animating)
+				{
+					sPainter.setColor(lineColor*darkFactor, baseAlpha);
 				}
 				sPainter.drawGreatCircleArc(star1, star2, &viewportHalfspace);
 			}
@@ -521,26 +567,158 @@ void Constellation::loadArtModel(const QString& path, const Mat4d& transform, in
 	const double span = ((transform * Vec3d(width, height * 0.5, 0.)) -
 	                     (transform * Vec3d(0., height * 0.5, 0.))).norm();
 	const Vec3f light = normalize(Vec3f(-0.35f, 0.5f, 0.8f));
+
+	struct RawModelVertex
+	{
+		float u, v, d, nx, ny, nz;
+	};
+	QVector<RawModelVertex> rawVertices;
+	rawVertices.reserve(vertexCount);
 	float minimumHorizontal = 1.f, maximumHorizontal = 0.f;
 	float minimumVertical = 1.f, maximumVertical = 0.f;
 	for (quint32 vertex = 0; vertex < vertexCount; ++vertex)
 	{
-		float horizontal, vertical, depth, normalX, normalY, normalZ;
-		stream >> horizontal >> vertical >> depth >> normalX >> normalY >> normalZ;
-		if (!std::isfinite(horizontal) || !std::isfinite(vertical) || !std::isfinite(depth) ||
-		    !std::isfinite(normalX) || !std::isfinite(normalY) || !std::isfinite(normalZ) ||
-		    horizontal < -0.1f || horizontal > 1.1f || vertical < -0.1f || vertical > 1.1f ||
-		    std::abs(depth) > 2.f) return;
-		minimumHorizontal = qMin(minimumHorizontal, horizontal);
-		maximumHorizontal = qMax(maximumHorizontal, horizontal);
-		minimumVertical = qMin(minimumVertical, vertical);
-		maximumVertical = qMax(maximumVertical, vertical);
-		Vec3d position = transform * Vec3d(horizontal * width, vertical * height, 0.);
+		RawModelVertex rv;
+		stream >> rv.u >> rv.v >> rv.d >> rv.nx >> rv.ny >> rv.nz;
+		if (!std::isfinite(rv.u) || !std::isfinite(rv.v) || !std::isfinite(rv.d) ||
+		    !std::isfinite(rv.nx) || !std::isfinite(rv.ny) || !std::isfinite(rv.nz) ||
+		    rv.u < -0.1f || rv.u > 1.1f || rv.v < -0.1f || rv.v > 1.1f ||
+		    std::abs(rv.d) > 2.f) return;
+		const float normSq = rv.nx * rv.nx + rv.ny * rv.ny + rv.nz * rv.nz;
+		if (normSq < 0.1f || normSq > 4.f) return;
+		minimumHorizontal = qMin(minimumHorizontal, rv.u);
+		maximumHorizontal = qMax(maximumHorizontal, rv.u);
+		minimumVertical = qMin(minimumVertical, rv.v);
+		maximumVertical = qMax(maximumVertical, rv.v);
+		rawVertices.append(rv);
+	}
+
+	// Rigid SO(3) pose calibration (yawDeg, pitchDeg, rollDeg) applied in
+	// yaw(Y) -> pitch(X) -> roll(Z) order so each 3D constellation model faces
+	// the same viewing direction and orientation as its star-anchored artwork
+	// and constellation stick-figure lines, then refits cleanly inside the
+	// foreground bounds. Pure rotation preserves triangle winding and normals.
+	static const QHash<QString, Vec3f> kModelPoseAlignments = {
+		{ QStringLiteral("Ant"), Vec3f(   0.f,   0.f,  -50.f) },
+		{ QStringLiteral("Boo"), Vec3f( 180.f,   0.f,  -10.f) },
+		{ QStringLiteral("Cam"), Vec3f( 180.f,   0.f,   20.f) },
+		{ QStringLiteral("Cap"), Vec3f( 180.f,   0.f,  -15.f) },
+		{ QStringLiteral("Cen"), Vec3f( 180.f,   0.f,   30.f) },
+		{ QStringLiteral("CrB"), Vec3f(   0.f,   0.f,   42.f) },
+		{ QStringLiteral("Cyg"), Vec3f(   0.f,   0.f, -135.f) },
+		{ QStringLiteral("Eri"), Vec3f( 180.f,   0.f,   10.f) },
+		{ QStringLiteral("Gru"), Vec3f(   0.f,   0.f,  140.f) },
+		{ QStringLiteral("Ind"), Vec3f(   0.f,   0.f,  -38.f) },
+		{ QStringLiteral("LMi"), Vec3f(  65.f,   0.f,  -50.f) },
+		{ QStringLiteral("Lac"), Vec3f(   0.f, -90.f, -120.f) },
+		{ QStringLiteral("Leo"), Vec3f(  90.f,   0.f,   32.f) },
+		{ QStringLiteral("Men"), Vec3f(   0.f,   0.f,  -47.f) },
+		{ QStringLiteral("Mus"), Vec3f(   0.f,  90.f,   80.f) },
+		{ QStringLiteral("Nor"), Vec3f( 180.f,   0.f,  135.f) },
+		{ QStringLiteral("Oct"), Vec3f(   0.f, -90.f, -140.f) },
+		{ QStringLiteral("Pic"), Vec3f(  45.f,   0.f,  -20.f) },
+		{ QStringLiteral("Pyx"), Vec3f(   0.f, -90.f, -150.f) },
+		{ QStringLiteral("Scl"), Vec3f(   0.f,   0.f,  -67.f) },
+		{ QStringLiteral("Sco"), Vec3f(   0.f,  90.f, -120.f) },
+		{ QStringLiteral("Sex"), Vec3f(   0.f, -90.f,  -20.f) },
+		{ QStringLiteral("Sge"), Vec3f(   0.f,   0.f,  -85.f) },
+		{ QStringLiteral("Tau"), Vec3f( -75.f,   0.f,   10.f) },
+		{ QStringLiteral("Tel"), Vec3f(   0.f,   0.f,  -58.f) },
+		{ QStringLiteral("Tuc"), Vec3f(  90.f,   0.f,  -40.f) },
+		{ QStringLiteral("UMa"), Vec3f( -90.f,   0.f,  -10.f) },
+		{ QStringLiteral("Vir"), Vec3f(   0.f,   0.f,  -43.f) },
+		{ QStringLiteral("Vul"), Vec3f( 180.f,   0.f,  -20.f) }
+	};
+	const auto alignIt = kModelPoseAlignments.constFind(abbreviation);
+	if (alignIt != kModelPoseAlignments.constEnd() && width > 0 && height > 0)
+	{
+		const double yawRad = static_cast<double>(alignIt.value()[0]) * M_PI / 180.0;
+		const double pitchRad = static_cast<double>(alignIt.value()[1]) * M_PI / 180.0;
+		const double rollRad = static_cast<double>(alignIt.value()[2]) * M_PI / 180.0;
+		const double cy = std::cos(yawRad), sy = std::sin(yawRad);
+		const double cp = std::cos(pitchRad), sp = std::sin(pitchRad);
+		const double cr = std::cos(rollRad), sr = std::sin(rollRad);
+		auto rotateVec = [&](double& x, double& y, double& z) {
+			if (yawRad != 0.0)
+			{
+				const double nx = cy * x + sy * z;
+				const double nz = -sy * x + cy * z;
+				x = nx;
+				z = nz;
+			}
+			if (pitchRad != 0.0)
+			{
+				const double ny = cp * y - sp * z;
+				const double nz = sp * y + cp * z;
+				y = ny;
+				z = nz;
+			}
+			if (rollRad != 0.0)
+			{
+				const double nx = cr * x - sr * y;
+				const double ny = sr * x + cr * y;
+				x = nx;
+				y = ny;
+			}
+		};
+
+		const double boxLeft = static_cast<double>(minimumHorizontal) * width;
+		const double boxRight = static_cast<double>(maximumHorizontal) * width;
+		const double boxBottom = static_cast<double>(minimumVertical) * height;
+		const double boxTop = static_cast<double>(maximumVertical) * height;
+		const double boxW = qMax(1.0, boxRight - boxLeft);
+		const double boxH = qMax(1.0, boxTop - boxBottom);
+		const double boxCx = (boxLeft + boxRight) * 0.5;
+		const double boxCy = (boxBottom + boxTop) * 0.5;
+
+		double rMinX = 1e30, rMaxX = -1e30, rMinY = 1e30, rMaxY = -1e30, rMinZ = 1e30, rMaxZ = -1e30;
+		QVector<Vec3d> rotatedPos;
+		rotatedPos.reserve(rawVertices.size());
+		for (RawModelVertex& rv : rawVertices)
+		{
+			double x = static_cast<double>(rv.u) * width;
+			double y = static_cast<double>(rv.v) * height;
+			double z = static_cast<double>(rv.d) * width;
+			rotateVec(x, y, z);
+			rotatedPos.append(Vec3d(x, y, z));
+			rMinX = qMin(rMinX, x); rMaxX = qMax(rMaxX, x);
+			rMinY = qMin(rMinY, y); rMaxY = qMax(rMaxY, y);
+			rMinZ = qMin(rMinZ, z); rMaxZ = qMax(rMaxZ, z);
+
+			double nx = rv.nx, ny = rv.ny, nz = rv.nz;
+			rotateVec(nx, ny, nz);
+			rv.nx = static_cast<float>(nx);
+			rv.ny = static_cast<float>(ny);
+			rv.nz = static_cast<float>(nz);
+		}
+		const double rExX = qMax(1e-6, rMaxX - rMinX);
+		const double rExY = qMax(1e-6, rMaxY - rMinY);
+		const double rCx = (rMinX + rMaxX) * 0.5;
+		const double rCy = (rMinY + rMaxY) * 0.5;
+		const double rCz = (rMinZ + rMaxZ) * 0.5;
+		const double fitScale = qMin(boxW / rExX, boxH / rExY);
+		minimumHorizontal = 1.f; maximumHorizontal = 0.f;
+		minimumVertical = 1.f; maximumVertical = 0.f;
+		for (int i = 0; i < rawVertices.size(); ++i)
+		{
+			const Vec3d& rp = rotatedPos.at(i);
+			rawVertices[i].u = static_cast<float>(((rp[0] - rCx) * fitScale + boxCx) / width);
+			rawVertices[i].v = static_cast<float>(((rp[1] - rCy) * fitScale + boxCy) / height);
+			rawVertices[i].d = static_cast<float>(((rp[2] - rCz) * fitScale) / width);
+			minimumHorizontal = qMin(minimumHorizontal, rawVertices[i].u);
+			maximumHorizontal = qMax(maximumHorizontal, rawVertices[i].u);
+			minimumVertical = qMin(minimumVertical, rawVertices[i].v);
+			maximumVertical = qMax(maximumVertical, rawVertices[i].v);
+		}
+	}
+
+	for (const RawModelVertex& rv : std::as_const(rawVertices))
+	{
+		Vec3d position = transform * Vec3d(rv.u * width, rv.v * height, 0.);
 		position.normalize();
-		position *= 1.0 - qBound(-0.25, double(depth) * span * 0.25, 0.25);
+		position *= 1.0 - qBound(-0.25, double(rv.d) * span * 0.25, 0.25);
 		positions.append(position);
-		Vec3f normal(normalX, normalY, normalZ);
-		if (normal.normSquared() < 0.1f || normal.normSquared() > 4.f) return;
+		Vec3f normal(rv.nx, rv.ny, rv.nz);
 		normal.normalize();
 		const float rim = std::pow(1.f - qMin(1.f, std::abs(normal[2])), 3.f);
 		const float shade = 0.025f + 0.12f * qMax(0.f, normal * light) + 0.55f * rim;
@@ -612,7 +790,7 @@ void Constellation::prepareModelPose() const
 		const double norm = std::sqrt(px * px + py * py + pz * pz);
 		const double invNorm = norm > 1e-12 ? (1.0 / norm) : 1.0;
 		dstDir[index].set(px * invNorm, py * invNorm, pz * invNorm);
-		dstDepth[index] = static_cast<float>((1.0 - norm) * 2.0);
+		dstDepth[index] = qBound(-0.95f, static_cast<float>((1.0 - norm) * 2.0), 0.95f);
 	}
 	modelCachedYaw = modelYaw;
 	modelCachedPitch = modelPitch;
@@ -716,7 +894,8 @@ void Constellation::drawArtModel(StelPainter& painter, float intensity, const Ve
 
 bool Constellation::modelContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const
 {
-	if (modelIndices.isEmpty() || modelIntensity() <= 0.015f || !isSeasonallyVisible()) return false;
+	Q_UNUSED(velocity)
+	if (modelIndices.isEmpty() || modelIntensity() <= 0.003f || !isSeasonallyVisible()) return false;
 	Vec3d direction;
 	if (!projector->unProject(point[0], point[1], direction)) return false;
 	double margin = 0.;
@@ -732,12 +911,12 @@ bool Constellation::modelContainsPoint(const StelProjectorP& projector, const Ve
 		margin = qMax(margin, std::acos(qBound(-1., normalize(direction) * normalize(edge), 1.)));
 	}
 	const double expanded = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + margin));
-	if (normalize(direction - velocity) * boundingCap.n < expanded) return false;
+	if (normalize(direction) * boundingCap.n < expanded) return false;
 	prepareModelPose();
 	QVector<Vec3f> projected(modelDirections.size());
 	QVector<bool> valid(modelDirections.size());
 	for (int index = 0; index < modelDirections.size(); ++index)
-		valid[index] = projector->project(normalize(modelDirections.at(index) + velocity), projected[index]);
+		valid[index] = projector->project(modelDirections.at(index), projected[index]);
 	const bool seam = projector->hasProjectionDiscontinuity();
 	const auto edgeDistance = [&point](const Vec3f& start, const Vec3f& end)
 	{
@@ -769,6 +948,41 @@ bool Constellation::modelContainsPoint(const StelProjectorP& projector, const Ve
 		    (firstSide < 0. && secondSide < 0. && thirdSide < 0.)) return true;
 		if (edgeDistance(firstPoint, secondPoint) <= tolerance || edgeDistance(secondPoint, thirdPoint) <= tolerance ||
 		    edgeDistance(thirdPoint, firstPoint) <= tolerance) return true;
+	}
+	return false;
+}
+
+bool Constellation::artPolygonContainsPoint(const StelProjectorP& projector, const Vec3d& velocity, const Vec3d& point, double tolerance) const
+{
+	const float intensity = artFader.getInterstate() * artOpacity * artIntensityFovScale * artPresentation;
+	if (!artTexture || artPolygon.vertex.size() < 3 || intensity <= 0.003f || !isSeasonallyVisible())
+		return false;
+	Vec3d direction;
+	if (!projector->unProject(point[0], point[1], direction))
+		return false;
+	const double expanded = std::cos(qMin(M_PI, std::acos(qBound(-1., boundingCap.d, 1.)) + 0.05));
+	if (normalize(direction - velocity) * boundingCap.n < expanded)
+		return false;
+	const auto side = [&point](const Vec3d& a, const Vec3d& b) {
+		return (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+	};
+	const int n = artPolygon.vertex.size();
+	for (int i = 0; i + 2 < n; i += 3)
+	{
+		Vec3d p0, p1, p2;
+		const Vec3d v0 = normalize(artPolygon.vertex.at(i) + velocity);
+		const Vec3d v1 = normalize(artPolygon.vertex.at(i + 1) + velocity);
+		const Vec3d v2 = normalize(artPolygon.vertex.at(i + 2) + velocity);
+		if (!projector->project(v0, p0) || !projector->project(v1, p1) || !projector->project(v2, p2))
+			continue;
+		if (point[0] < std::min({p0[0], p1[0], p2[0]}) - tolerance ||
+		    point[0] > std::max({p0[0], p1[0], p2[0]}) + tolerance ||
+		    point[1] < std::min({p0[1], p1[1], p2[1]}) - tolerance ||
+		    point[1] > std::max({p0[1], p1[1], p2[1]}) + tolerance)
+			continue;
+		const double s0 = side(p0, p1), s1 = side(p1, p2), s2 = side(p2, p0);
+		if ((s0 >= 0. && s1 >= 0. && s2 >= 0.) || (s0 <= 0. && s1 <= 0. && s2 <= 0.))
+			return true;
 	}
 	return false;
 }

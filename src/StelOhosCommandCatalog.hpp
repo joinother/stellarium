@@ -194,7 +194,7 @@ inline QJsonObject item(const QString& name)
 	}
 	else if (name == "setSkyCultureVisualSetting")
 	{
-		value["description"] = QStringLiteral("设置星空文化视觉参数；constellationArt3d|1 启用本地 3D 模型预览，0 恢复插画；其余文化或缺少模型时回退插画");
+		value["description"] = QStringLiteral("设置星空文化视觉参数；constellationArt3d|1 启用本地 3D 模型预览，constellationLineCenterAnim|1 启用居中连线动画（仅在星座与模型同现画面中心时播放）");
 		value["examplePayload"] = "constellationArt3d|1";
 	}
 	else if (name == "getSatelliteDetail")

@@ -333,9 +333,20 @@ bool candidateLess(const PickCandidate& a, const PickCandidate& b)
 		if (differs(a.distanceVp, b.distanceVp))
 			return a.distanceVp < b.distanceVp;
 	}
-	else if (tierA == 1 || tierA == 2 || tierA == 4 || tierA == 5)
+	else if (tierA == 5)
 	{
-		// Label, line, and model hits compare anchor distance.
+		// Overlapping 3D/2D constellation artwork hits: prefer the visually
+		// brighter (front-most depth-sliced) model before anchor distance.
+		if (std::abs(a.salience - b.salience) > 0.05)
+			return a.salience > b.salience;
+		if (differs(a.distanceVp, b.distanceVp))
+			return a.distanceVp < b.distanceVp;
+		if (differs(a.typePrior, b.typePrior))
+			return a.typePrior > b.typePrior;
+	}
+	else if (tierA == 1 || tierA == 2 || tierA == 4)
+	{
+		// Label and line hits compare anchor distance.
 		if (differs(a.distanceVp, b.distanceVp))
 			return a.distanceVp < b.distanceVp;
 		if (differs(a.typePrior, b.typePrior))
@@ -588,15 +599,17 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 		}
 	}
 
-	// --- Constellations (explicit labels / lines only) -------------------
+	// --- Constellations (labels, visible lines, and 3D/2D artwork) -------
 	if (ConstellationMgr* constellationMgr = GETSTELMODULE(ConstellationMgr))
 	{
 		const bool constellationLabels = constellationMgr->getFlagLabels();
 		const bool constellationLines = constellationMgr->getFlagLines();
-		const bool constellationModels = constellationMgr->getFlagArt() && constellationMgr->getFlagArt3d();
+		const bool constellationArt = constellationMgr->getFlagArt();
+		const bool constellationModels = constellationArt && constellationMgr->getFlagArt3d();
 		const Vec3d velocity = core->getUseAberration() ? core->getAberrationVec(core->getJDE()) : Vec3d(0.);
 		if (constellationLabels || constellationLines || constellationModels)
 		{
+			const double modelTolDev = (profile.touch ? 13. : 4.) * qMax(ctx.scaleX, ctx.scaleY);
 			const QStringList names = constellationMgr->getConstellationsEnglishNames();
 			for (const QString& name : names)
 			{
@@ -652,8 +665,11 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				}
 
 				bool lineHit = false;
+				const bool lineDrawn = constellationLines
+					&& constellation->getLinePresentation() > 0.05f
+					&& constellation->getLineAnimProgress() > 0.05f;
 				const SphericalRegionP region = constellation->getRegion();
-				if (constellationLines && region && region->contains(tapDirection))
+				if (lineDrawn && region && region->contains(tapDirection))
 				{
 					const std::vector<StelObjectP>& lines = constellation->isDarkConstellation()
 						? constellation->getDarkConstellationLines()
@@ -674,8 +690,19 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 						}
 					}
 				}
-				label.modelHit = constellationModels && visibleSkyContains(core, tapDirection) && constellation->modelContainsPoint(ctx.prj, velocity,
-					Vec3d(tapXDev, tapYDev, 0.), (profile.touch ? 7. : 3.) * qMax(ctx.scaleX, ctx.scaleY));
+				if (constellationModels && visibleSkyContains(core, tapDirection))
+				{
+					if (constellation->hasArtModel())
+					{
+						label.modelHit = constellation->modelContainsPoint(ctx.prj, velocity,
+							Vec3d(tapXDev, tapYDev, 0.), modelTolDev);
+					}
+					else
+					{
+						label.modelHit = constellation->artPolygonContainsPoint(ctx.prj, velocity,
+							Vec3d(tapXDev, tapYDev, 0.), modelTolDev * 0.5);
+					}
+				}
 				if (!label.present && !lineHit && !label.modelHit)
 					continue;
 				if (!anchorProjected)
@@ -683,6 +710,12 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 				label.lineHit = lineHit;
 				addCandidate(candidates, ctx, core, object, screenVp, 0.0, 99.0, false,
 					typePriorForObject(object, false), label, false, SatellitePickDiagnostics());
+				if (label.modelHit && !candidates.isEmpty())
+				{
+					candidates.last().salience = constellation->hasArtModel()
+						? static_cast<double>(constellation->getModelIntensity())
+						: 0.25;
+				}
 			}
 		}
 	}
@@ -822,16 +855,19 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 		}
 	}
 
-	// Promote nearby stars, planets, satellites and DSOs above passive
-	// constellation line/3D-model area hits so tapping a star sitting on a
-	// constellation stick-figure or artwork selects the star reliably, while
-	// tapping the constellation name label or open body still selects the
-	// constellation.
+	// Promote nearby bright/constellation-vertex stars, planets, satellites and
+	// close DSOs above passive constellation line/3D-model area hits so tapping
+	// a star sitting on a constellation stick-figure selects the star reliably,
+	// while tapping the open body of a 3D constellation model still selects the
+	// whole constellation instead of getting stolen by faint background stars.
 	QSet<QString> constellationVertexStarIds;
+	bool hasConstellationModelHit = false;
 	for (const PickCandidate& candidate : std::as_const(candidates))
 	{
 		if (candidate.type == QLatin1String("Constellation") && (candidate.lineHit || candidate.modelHit))
 		{
+			if (candidate.modelHit)
+				hasConstellationModelHit = true;
 			if (const Constellation* constellation = dynamic_cast<const Constellation*>(candidate.object.data()))
 			{
 				const std::vector<StelObjectP>& lines = constellation->isDarkConstellation()
@@ -852,17 +888,38 @@ PickResult TouchPicker::pickAt(const StelCore* core, int xVp, int yVp, int skyW,
 		if (candidate.type == QLatin1String("Constellation") || candidate.type == QLatin1String("Asterism"))
 			continue;
 		const double dEff = qMax(0.0, candidate.distanceVp - candidate.visualRadiusVp);
-		double priorityRadiusVp = profile.touch ? 26.0 : 10.0;
-		if (candidate.type == QLatin1String("Star"))
+		double priorityRadiusVp = profile.touch ? 18.0 : 8.0;
+		if (candidate.type == QLatin1String("Planet"))
 		{
-			const bool prominent = constellationVertexStarIds.contains(candidate.id)
-				|| (candidate.hasMagnitude && candidate.magnitude <= 4.5)
-				|| candidate.visualRadiusVp >= 1.2;
-			priorityRadiusVp = prominent
-				? (profile.touch ? 24.0 : 9.0)
-				: (profile.touch ? 12.0 : 5.0);
+			// Visible planets/Moon/Sun keep priority; faint minor bodies
+			// (asteroids/comets fainter than mag 6.5) must not steal taps from
+			// an explicit 3D constellation model hit.
+			const bool faintMinorBody = candidate.hasMagnitude && candidate.magnitude > 6.5 && candidate.visualRadiusVp <= 4.5;
+			if (faintMinorBody && hasConstellationModelHit)
+				priorityRadiusVp = -1.0;
+			else if (faintMinorBody)
+				priorityRadiusVp = profile.touch ? 8.0 : 4.0;
 		}
-		if (dEff <= priorityRadiusVp && candidate.distanceVp <= effectiveRadiusVp + candidate.visualRadiusVp)
+		else if (candidate.type == QLatin1String("Nebula"))
+		{
+			priorityRadiusVp = profile.touch ? 12.0 : 6.0;
+		}
+		else if (candidate.type == QLatin1String("Star"))
+		{
+			const bool isVertexOrBright = constellationVertexStarIds.contains(candidate.id)
+				|| (candidate.hasMagnitude && candidate.magnitude <= 3.5)
+				|| candidate.visualRadiusVp >= 1.8;
+			const bool isMedium = candidate.hasMagnitude && candidate.magnitude <= 4.5;
+			if (isVertexOrBright)
+				priorityRadiusVp = profile.touch ? 16.0 : 7.0;
+			else if (isMedium)
+				priorityRadiusVp = profile.touch ? 9.0 : 4.0;
+			else if (hasConstellationModelHit)
+				priorityRadiusVp = -1.0; // Never let faint field stars steal 3D model taps
+			else
+				priorityRadiusVp = profile.touch ? 10.0 : 5.0;
+		}
+		if (priorityRadiusVp >= 0.0 && dEff <= priorityRadiusVp && candidate.distanceVp <= effectiveRadiusVp + candidate.visualRadiusVp)
 			candidate.nearObjectPriority = true;
 	}
 
