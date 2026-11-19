@@ -51,6 +51,7 @@ export class NotificationController {
   private snapshot(): NotificationPreferenceSnapshot {
     return {
       astronomyEventsEnabled: this.store.astronomyEventsEnabled, dndEnabled: this.store.dndEnabled,
+      dndSatelliteOnly: this.store.dndSatelliteOnly,
       satellitePassEnabled: this.store.satellitePassEnabled, digestEnabled: this.store.digestEnabled,
       subscriptionsVersion: 1,
       dndStartMinutes: this.store.dndStartMinutes, dndEndMinutes: this.store.dndEndMinutes,
@@ -63,6 +64,7 @@ export class NotificationController {
     this.store.satellitePassEnabled = value.satellitePassEnabled === true
     this.store.digestEnabled = value.digestEnabled === true
     this.store.dndEnabled = value.dndEnabled
+    this.store.dndSatelliteOnly = value.dndSatelliteOnly !== false
     this.store.dndStartMinutes = value.dndStartMinutes
     this.store.dndEndMinutes = value.dndEndMinutes
     this.store.passLeadMinutes = value.passLeadMinutes
@@ -302,12 +304,14 @@ export class NotificationController {
       let scheduled = 0
       for (const event of candidates) {
         if (!current()) return
+        const leadMinutes = category === 'satellite' ? snapshot.passLeadMinutes : 0
         const payload: AstronomyReminderRequest = {
           subscription: category, eventAt: new Date(event.at).toISOString(), jd: event.jd,
-          title: notificationText('星象仪 · ') + event.title, content: event.title + notificationText(' 即将到来，打开星象仪查看事件与观测信息。'),
+          title: notificationText('星象仪 · ') + event.title,
+          content: this.eventReminderContent(event, category, leadMinutes),
           eventId: event.id, kind: event.kind, target: event.target,
           panel: category === 'astronomy' ? 'calendar' : event.panel, tab: event.tab,
-          leadMinutes: category === 'satellite' ? snapshot.passLeadMinutes : 0
+          leadMinutes: leadMinutes
         }
         const result = await AstronomyReminderService.schedule(payload, this.hooks.hostContext().abilityInfo.bundleName,
           this.reminderPreferences(), current, 24)
@@ -345,6 +349,7 @@ export class NotificationController {
   }
 
   setDndEnabled(enabled: boolean): void { this.store.dndEnabled = enabled; this.persistPreferences() }
+  setDndSatelliteOnly(enabled: boolean): void { this.store.dndSatelliteOnly = enabled; this.persistPreferences() }
 
   public async setQuietHours(value: AstronomyQuietHours): Promise<AstronomyReminderResult> {
     if (value === null || typeof value !== 'object' || Array.isArray(value) || typeof value.enabled !== 'boolean' ||
@@ -388,7 +393,8 @@ export class NotificationController {
     return {
       astronomyEventsEnabled: this.store.astronomyEventsEnabled,
       satellitePassEnabled: this.store.satellitePassEnabled, digestEnabled: this.store.digestEnabled,
-      dndEnabled: this.store.dndEnabled, dndStartMinutes: this.store.dndStartMinutes, dndEndMinutes: this.store.dndEndMinutes
+      dndEnabled: this.store.dndEnabled, dndSatelliteOnly: this.store.dndSatelliteOnly,
+      dndStartMinutes: this.store.dndStartMinutes, dndEndMinutes: this.store.dndEndMinutes
     }
   }
 
@@ -489,6 +495,25 @@ export class NotificationController {
     return localized
   }
 
+  private eventReminderContent(event: AstronomyCalendarEvent, category: string, leadMinutes: number): string {
+    if (category === 'satellite' || event.kind === 'satellite-pass') {
+      return leadMinutes > 0
+        ? event.title + notificationText(' 将在 ') + String(leadMinutes) + notificationText(' 分钟后达到过境最高点，抬头观测！')
+        : event.title + notificationText(' 即将达到过境最高点，抬头观测！')
+    }
+    if (event.kind === 'moon-phase') {
+      if (event.isSupermoon === true) return notificationText('今晚迎来超级满月，月球接近近地点，打开星象仪查看月相与观测时刻。')
+      return event.title + notificationText(' 即将到来，打开星象仪查看月相与观测时刻。')
+    }
+    if (event.kind === 'meteor-peak') {
+      return event.title + notificationText(' 预计迎来活跃高峰，选择开阔暗空观测，打开星象仪查看辐射点。')
+    }
+    if (event.kind === 'planetary-event') {
+      return event.title + notificationText(' 即将发生，打开星象仪查看行星位置与观测窗口。')
+    }
+    return event.title + notificationText(' 即将到来，打开星象仪查看事件与观测信息。')
+  }
+
   async scheduleEvent(event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> {
     if (event === undefined || event === null || typeof event.id !== 'string' || event.id.trim().length === 0 ||
       typeof event.title !== 'string' || event.title.trim().length === 0 ||
@@ -497,7 +522,7 @@ export class NotificationController {
     }
     return this.scheduleOne({
       eventAt: new Date(event.at).toISOString(), title: notificationText('星象仪 · ') + event.title,
-      content: event.title + notificationText(' 即将到来，打开星象仪查看事件与观测信息。'),
+      content: this.eventReminderContent(event, event.kind === 'satellite-pass' ? 'satellite' : 'astronomy', this.store.passLeadMinutes),
       eventId: event.id, kind: event.kind, jd: event.jd, target: event.target, panel: 'calendar', tab: event.tab
     }, true)
   }

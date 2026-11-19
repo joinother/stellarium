@@ -34,6 +34,15 @@ function finiteNumber(value) {
   return typeof value === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value))
 }
 
+function decodeAlpha5NoradId(field) {
+  if (typeof field !== 'string' || field.length !== 5) return NaN
+  if (/^\d{5}$/.test(field)) return Number(field)
+  const alphabet = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const lead = alphabet.indexOf(field[0])
+  if (lead < 10 || !/^\d{4}$/.test(field.slice(1))) return NaN
+  return lead * 10000 + Number(field.slice(1))
+}
+
 function validTlePair(first, second) {
   const checksumValid = (line) => {
     if (typeof line !== 'string' || line.length !== 69 || !/\d$/.test(line)) return false
@@ -137,7 +146,12 @@ export function validatePayload(body, source) {
       for (const record of value) {
         requireValid(object(record) && /^\d+$/.test(String(record.norad_cat_id)) && Number(record.norad_cat_id) > 0)
         validTlePair(record.tle1, record.tle2)
-        requireValid(Number(record.tle1.slice(2, 7)) === Number(record.norad_cat_id))
+        const recordNorad = Number(record.norad_cat_id)
+        const tleNorad = decodeAlpha5NoradId(record.tle1.slice(2, 7))
+        // Accept exact NORAD match (including Alpha-5 >= 100000) or SatNOGS temporary IDs (98000-99999)
+        // linked to a valid assigned Space-Track TLE.
+        const isSatnogsTempId = recordNorad >= 98000 && recordNorad <= 99999 && Number.isFinite(tleNorad) && tleNorad > 0
+        requireValid(tleNorad === recordNorad || isSatnogsTempId)
       }
       return value.length
     }
@@ -236,7 +250,8 @@ async function retainedEntry(root, source, previous, previousGeneratedAt) {
 }
 
 export async function runMirror({ root, sources, only = '', dryRun = false, fetchImpl = fetch,
-  validateOnly = false, batchBudgetMs = 600000, now = () => new Date().toISOString(), publish = atomicWrite, logger = console }) {
+  validateOnly = false, batchBudgetMs = 600000, interRequestDelayMs = (fetchImpl === fetch ? 350 : 0),
+  now = () => new Date().toISOString(), publish = atomicWrite, logger = console }) {
   const startedAt = performance.now()
   const mirrors = sources.filter((source) => !SKIP_PREFIX.some((prefix) => source.id.startsWith(prefix)))
   const ids = new Set()
@@ -294,7 +309,22 @@ export async function runMirror({ root, sources, only = '', dryRun = false, fetc
         const attemptedAt = now()
         try {
           requireValid(performance.now() - startedAt < batchBudgetMs, 'batch_timeout')
-          const payload = await fetchOne(source, { fetchImpl })
+          if (attempted > 1 && interRequestDelayMs > 0) {
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, interRequestDelayMs))
+          }
+          let payload
+          try {
+            payload = await fetchOne(source, { fetchImpl })
+          } catch (firstError) {
+            if (interRequestDelayMs > 0 && firstError instanceof MirrorError &&
+              (firstError.message === 'http_403' || firstError.message === 'http_429') &&
+              performance.now() - startedAt + 2000 < batchBudgetMs) {
+              await new Promise((resolveDelay) => setTimeout(resolveDelay, 2000))
+              payload = await fetchOne(source, { fetchImpl })
+            } else {
+              throw firstError
+            }
+          }
           if (!dryRun) {
             try { await publish(join(root, source.mirrorPath.slice(1)), payload, { stagingDirectory: root }) }
             catch { throw new MirrorError('publish_failed') }

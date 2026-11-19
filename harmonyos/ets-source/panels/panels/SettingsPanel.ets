@@ -135,6 +135,7 @@ export struct SettingsPanel {
   toggleSatellitePass: (enabled: boolean) => void = () => {}
   toggleDigest: (enabled: boolean) => void = () => {}
   toggleNotificationDnd: (enabled: boolean) => void = () => {}
+  toggleNotificationDndSatelliteOnly: (enabled: boolean) => void = () => {}
   setNotificationDndStart: (minutes: number) => void = () => {}
   setNotificationDndEnd: (minutes: number) => void = () => {}
   changePassLead: (delta: number) => void = () => {}
@@ -233,6 +234,8 @@ export struct SettingsPanel {
               reminderListError: this.notificationStore.astronomyReminderListError,
               preferencesBusy: this.notificationStore.notificationPreferencesBusy,
               preferencesError: this.notificationStore.notificationPreferencesError,
+              astronomySubscriptionStatus: this.notificationStore.astronomySubscriptionStatus,
+              satelliteSubscriptionStatus: this.notificationStore.satelliteSubscriptionStatus,
               onOpenCalendar: () => this.openAstronomyCalendar(),
               onRefreshReminders: () => this.refreshReminders(),
               onCancelReminder: (id: number) => this.cancelReminder(id),
@@ -247,6 +250,7 @@ export struct SettingsPanel {
               satellitePassEnabled: this.notificationStore.satellitePassEnabled,
               digestEnabled: this.notificationStore.digestEnabled,
               dndEnabled: this.notificationStore.dndEnabled,
+              dndSatelliteOnly: this.notificationStore.dndSatelliteOnly,
               dndStartMinutes: this.notificationStore.dndStartMinutes,
               dndEndMinutes: this.notificationStore.dndEndMinutes,
               passLeadMinutes: this.notificationStore.passLeadMinutes,
@@ -254,6 +258,7 @@ export struct SettingsPanel {
               onToggleSatellitePass: (v: boolean) => { this.toggleSatellitePass(v) },
               onToggleDigest: (v: boolean) => { this.toggleDigest(v) },
               onToggleDnd: (v: boolean) => { this.toggleNotificationDnd(v) },
+              onToggleDndSatelliteOnly: (v: boolean) => { this.toggleNotificationDndSatelliteOnly(v) },
               onDndStartChange: (m: number) => { this.setNotificationDndStart(m) },
               onDndEndChange: (m: number) => { this.setNotificationDndEnd(m) },
               onLeadChange: (d: number) => { this.changePassLead(d) },

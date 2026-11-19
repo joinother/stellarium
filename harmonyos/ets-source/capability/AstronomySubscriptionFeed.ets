@@ -9,6 +9,7 @@ export interface SubscriptionObserver {
 
 export interface SubscriptionSatellitePass {
   startJD: number
+  peakJD?: number
   visible: boolean
   ongoing: boolean
 }
@@ -147,11 +148,12 @@ export class AstronomySubscriptionFeedLoader {
       for (const pass of data.passes) {
         if (!pass || pass.visible !== true || pass.ongoing === true) continue
         if (!Number.isFinite(pass.startJD)) throw new Error('Invalid satellite pass time')
-        const at = Math.round((pass.startJD - 2440587.5) * 86400000)
+        const targetJD = (typeof pass.peakJD === 'number' && Number.isFinite(pass.peakJD)) ? pass.peakJD : pass.startJD
+        const at = Math.round((targetJD - 2440587.5) * 86400000)
         if (at <= from || at >= until) continue
         events.push({
           id: 'pass:' + id + ':' + observer.key + ':' + Math.floor(at / 1000), kind: 'satellite-pass',
-          title: data.name || data.englishName || id, body: '', at: at, jd: pass.startJD,
+          title: data.name || data.englishName || id, body: '', at: at, jd: targetJD,
           target: data.englishName || id, panel: 'satellites', tab: 0
         })
       }

@@ -1,4 +1,4 @@
-﻿import { Theme } from '@kit.ArkUI'
+﻿import { Theme, curves } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 import { I18n } from '../../pages/I18n'
 import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHealthEntry, OFFLINE_APPGALLERY_BUILD } from '../../pages/MainWindowModels'
@@ -16,6 +16,7 @@ import { SatelliteStore } from '../../state/SatelliteStore'
 export struct SatellitesPanel {
   @ObjectLink satelliteStore: SatelliteStore
   @State private c: ThemeSlots = DEFAULT_SLOTS
+  @State private sectionDirection: number = 1
   panelScroller: Scroller = new Scroller()
   groupScroller: Scroller = new Scroller()
   onPublishState: () => void = () => {}
@@ -349,10 +350,32 @@ export struct SatellitesPanel {
         }
   }
 
+  private sectionDepth(section: string): number {
+    if (section === 'main') return 0
+    if (section === 'settings') return 1
+    return 2
+  }
+
+  private sectionTransition(): TransitionEffect {
+    const enterX = this.sectionDirection >= 0 ? 22 : -22
+    const exitX = this.sectionDirection >= 0 ? -16 : 16
+    return TransitionEffect.asymmetric(
+      TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut })
+        .combine(TransitionEffect.translate({ x: enterX, y: 0 }).animation({ duration: 260, curve: curves.springMotion(0.55, 0.88) })),
+      TransitionEffect.OPACITY.animation({ duration: 140, curve: Curve.EaseIn })
+        .combine(TransitionEffect.translate({ x: exitX, y: 0 }).animation({ duration: 180, curve: Curve.EaseIn }))
+    )
+  }
+
   private openSection(section: string): void {
-    this.satelliteStore.satPanelSection = section
+    const prevDepth = this.sectionDepth(this.satelliteStore.satPanelSection)
+    const nextDepth = this.sectionDepth(section)
+    this.sectionDirection = nextDepth >= prevDepth ? 1 : -1
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+      this.satelliteStore.satPanelSection = section
+    })
     if (section === 'diagnostics') this.satelliteStore.loadSatellites(true)
-    this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: false })
+    this.panelScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true })
     this.onPublishState()
   }
 
@@ -372,53 +395,75 @@ export struct SatellitesPanel {
           Button(I18n.t('sat_back'))
             .id('satellites-back').fontSize(14).fontColor(this.c.fourth)
             .backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL).height(40)
+            .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ x: -10, y: 0 }).animation({ duration: 200, curve: Curve.EaseOut })))
             .onClick(() => { this.openSection(this.satelliteStore.satPanelSection === 'settings' ? 'main' : 'settings') })
         }
         if (this.satelliteStore.satPanelSection === 'main') {
-          Column({ space: 8 }) {
-            Row() {
-              Text(I18n.t('sat_orbital_data')).fontSize(16).fontColor(this.c.text).layoutWeight(1)
-              Text(this.satelliteStore.satCount.toString()).fontSize(14).fontColor(this.c.sub)
-            }.width('100%')
-            Text(this.satelliteStore.satelliteUpdateStatusText()).fontSize(13).fontColor(this.c.sub).width('100%')
-            if (this.satelliteStore.satOutdatedCount > 0) {
-              Text(I18n.t('sat_old_orbits')).fontSize(13).fontColor(this.c.warning).width('100%')
-            }
-            Button(I18n.t('sat_refresh'))
-              .id('satellites-refresh').fontSize(15).fontColor(this.c.text)
-              .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).height(44).width('100%')
-              .enabled(!this.satelliteStore.satOffline && this.satelliteStore.satUpdateSettings.updateState !== 0)
-              .onClick(() => { this.onRefreshCatalog() })
-            Row() {
-              Text(I18n.t('sat_auto_updates')).fontSize(14).fontColor(this.c.text).layoutWeight(1)
-              Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.updatesEnabled })
+          Column({ space: 12 }) {
+            Column({ space: 8 }) {
+              Row() {
+                Text(I18n.t('sat_orbital_data')).fontSize(16).fontColor(this.c.text).layoutWeight(1)
+                Text(this.satelliteStore.satCount.toString()).fontSize(14).fontColor(this.c.sub)
+              }.width('100%')
+              Row({ space: 6 }) {
+                if (this.satelliteStore.satUpdateSettings.updateState === 0) {
+                  LoadingProgress().width(16).height(16).color(this.c.accent)
+                }
+                Text(this.satelliteStore.satelliteUpdateStatusText()).fontSize(13).fontColor(this.c.sub).layoutWeight(1)
+              }.width('100%').alignItems(VerticalAlign.Center)
+              if (this.satelliteStore.satOutdatedCount > 0) {
+                Text(I18n.t('sat_old_orbits')).fontSize(13).fontColor(this.c.warning).width('100%')
+              }
+              Button(I18n.t('sat_refresh'))
+                .id('satellites-refresh').fontSize(15).fontColor(this.c.text)
+                .backgroundColor(this.c.softStrong).borderRadius(UI_RADIUS_CONTROL).height(44).width('100%')
                 .enabled(!this.satelliteStore.satOffline && this.satelliteStore.satUpdateSettings.updateState !== 0)
-                .onChange((value: boolean) => { this.onSetUpdateSetting('updatesEnabled', value) })
-            }.width('100%')
-            Text(I18n.t('sat_auto_update_hint')).fontSize(12).fontColor(this.c.sub).width('100%')
-          }.width('100%').padding(12).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
-          if (this.satelliteStore.satSourceStatus.length > 0 && this.satelliteStore.satSourceStatus !== this.satelliteStore.satelliteUpdateStatusText()) {
-            Text(this.satelliteStore.satSourceStatus).fontSize(13).fontColor(this.c.fourth).width('100%')
-          }
-          this.sectionButton('sat_advanced', 'settings')
-          this.catalogContent()
+                .onClick(() => { this.onRefreshCatalog() })
+              Row() {
+                Text(I18n.t('sat_auto_updates')).fontSize(14).fontColor(this.c.text).layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.satelliteStore.satUpdateSettings.updatesEnabled })
+                  .enabled(!this.satelliteStore.satOffline && this.satelliteStore.satUpdateSettings.updateState !== 0)
+                  .onChange((value: boolean) => { this.onSetUpdateSetting('updatesEnabled', value) })
+              }.width('100%')
+              Text(I18n.t('sat_auto_update_hint')).fontSize(12).fontColor(this.c.sub).width('100%')
+            }.width('100%').padding(12).backgroundColor(this.c.soft).borderRadius(UI_RADIUS_CONTROL)
+            if (this.satelliteStore.satSourceStatus.length > 0 && this.satelliteStore.satSourceStatus !== this.satelliteStore.satelliteUpdateStatusText()) {
+              Text(this.satelliteStore.satSourceStatus).fontSize(13).fontColor(this.c.fourth).width('100%')
+                .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+            }
+            this.sectionButton('sat_advanced', 'settings')
+            this.catalogContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'settings') {
-          Text(I18n.t('sat_advanced')).fontSize(16).fontColor(this.c.text).width('100%')
-          this.sectionButton('sat_import_settings', 'imports')
-          this.sectionButton('sat_sources_title', 'sources')
-          this.sectionButton('sat_display_settings', 'display')
-          this.sectionButton('sat_timer_settings', 'countdown')
-          this.sectionButton('sat_data_details', 'diagnostics')
+          Column({ space: 12 }) {
+            Text(I18n.t('sat_advanced')).fontSize(16).fontColor(this.c.text).width('100%')
+            this.sectionButton('sat_import_settings', 'imports')
+            this.sectionButton('sat_sources_title', 'sources')
+            this.sectionButton('sat_display_settings', 'display')
+            this.sectionButton('sat_timer_settings', 'countdown')
+            this.sectionButton('sat_data_details', 'diagnostics')
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'sources') {
-          this.sourceContent()
+          Column({ space: 10 }) {
+            this.sourceContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'imports') {
-          this.importContent()
+          Column({ space: 10 }) {
+            this.importContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'display') {
-          this.displayContent()
+          Column({ space: 10 }) {
+            this.displayContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'countdown') {
-          this.countdownContent()
+          Column({ space: 10 }) {
+            this.countdownContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         } else if (this.satelliteStore.satPanelSection === 'diagnostics') {
-          this.diagnosticContent()
+          Column({ space: 10 }) {
+            this.diagnosticContent()
+          }.width('100%').alignItems(HorizontalAlign.Start).transition(this.sectionTransition())
         }
       }.width('100%').padding(10).alignItems(HorizontalAlign.Start)
     }.width('100%').layoutWeight(1).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)

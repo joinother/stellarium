@@ -591,12 +591,32 @@ float AtmosphereLightweight::computeAverageLuminance(const StelCore* core)
 		const double elapsed = std::chrono::duration<double>(sample.sampledAt - captured.sampledAt).count();
 		const double elapsedDays = sample.julianDay - captured.julianDay;
 		if (!std::isfinite(elapsedDays) || !std::isfinite(sample.timeRate)
-			|| !std::isfinite(sample.syncJulianDay) || elapsed < 0. || elapsed >= 0.250
-			|| sample.timeRate != captured.timeRate || sample.syncJulianDay != captured.syncJulianDay
-			|| sample.syncMilliseconds != captured.syncMilliseconds
-			|| std::abs(elapsedDays) > 600. / 86400.
-			|| std::abs(elapsedDays - sample.timeRate * elapsed) > 1. / 86400. + std::abs(sample.timeRate) * 0.100
+			|| !std::isfinite(sample.syncJulianDay) || elapsed < 0. || elapsed >= 0.500
 			|| sample.location != captured.location || sample.planet != captured.planet) return false;
+		const bool fastFlow = std::abs(sample.timeRate) > (1. / 86400.) * 1.01;
+		const bool sameSync = sample.timeRate == captured.timeRate
+			&& sample.syncJulianDay == captured.syncJulianDay
+			&& sample.syncMilliseconds == captured.syncMilliseconds;
+		if (sameSync)
+		{
+			const double driftLimit = 1. / 86400. + std::abs(sample.timeRate) * 0.250;
+			if (std::abs(elapsedDays - sample.timeRate * elapsed) > driftLimit) return false;
+			if (std::abs(elapsedDays) >= 0.95) return false;
+			if (!fastFlow && std::abs(elapsedDays) > 600. / 86400.) return false;
+		}
+		else if (sample.timeRate != captured.timeRate)
+		{
+			// Smooth time-rate adjustment (e.g. user pressing fast-forward/rewind) calls resetSync()
+			// at the current JD without teleporting. Keep async readback unless JD jumped.
+			const double maxRate = std::max(std::abs(sample.timeRate), std::abs(captured.timeRate));
+			const double rateChangeLimit = std::max(600. / 86400., maxRate * std::max(elapsed, 0.250) * 2.0);
+			if (std::abs(elapsedDays) > rateChangeLimit) return false;
+		}
+		else
+		{
+			// Explicit setJD jump while rate is unchanged: force sync refresh so brightness matches.
+			return false;
+		}
 		const float minimumFov = std::min(sample.fov, captured.fov);
 		const double viewCosine = sample.viewDirection * captured.viewDirection;
 		if (!std::isfinite(sample.fov) || !std::isfinite(captured.fov) || minimumFov <= 0.f
@@ -610,16 +630,25 @@ float AtmosphereLightweight::computeAverageLuminance(const StelCore* core)
 			const float directionLengths = currentDirection.norm() * previousDirection.norm();
 			const float lightCosine = (currentDirection * previousDirection) / directionLengths;
 			if (!(directionLengths > 0.f) || !std::isfinite(lightCosine)
-				|| lightCosine < std::cos(M_PI / 180.)
-				|| sample.layersA[index] != captured.layersA[index] || sample.layersB[index] != captured.layersB[index]
-				|| !std::isfinite(sample.layerAlphas[index]) || !std::isfinite(captured.layerAlphas[index])
-				|| std::abs(sample.layerAlphas[index] - captured.layerAlphas[index]) > 0.25f) return false;
+				|| !std::isfinite(sample.layerAlphas[index]) || !std::isfinite(captured.layerAlphas[index]))
+				return false;
 			for (int component = 0; component < 4; ++component)
 			{
 				const float current = sample.weights[index][component];
 				const float previous = captured.weights[index][component];
-				if (!std::isfinite(current) || !std::isfinite(previous)
-					|| std::abs(current - previous) > 0.25f * std::max(std::abs(current), std::abs(previous))) return false;
+				if (!std::isfinite(current) || !std::isfinite(previous)) return false;
+				if (!fastFlow && std::abs(current - previous) > 0.25f * std::max(std::abs(current), std::abs(previous)))
+					return false;
+			}
+			// During high-speed time flow (3600x, 1 day/s, 10 days/s), the sun/moon naturally
+			// moves > 1 deg and crosses mesh layers every frame; stalling with sync glReadPixels
+			// drops frame rate by half. Only enforce tight angle/layer guards at normal/paused rates.
+			if (!fastFlow)
+			{
+				if (lightCosine < std::cos(M_PI / 180.)
+					|| sample.layersA[index] != captured.layersA[index] || sample.layersB[index] != captured.layersB[index]
+					|| std::abs(sample.layerAlphas[index] - captured.layerAlphas[index]) > 0.25f)
+					return false;
 			}
 		}
 		return true;
@@ -640,9 +669,12 @@ float AtmosphereLightweight::computeAverageLuminance(const StelCore* core)
 				pendingLuminanceSamples_.pop_front();
 			}
 		}
+		const bool fastFlow = std::abs(sample.timeRate) > (1. / 86400.) * 1.01;
+		const std::uint64_t maxTokenLag = fastFlow ? 12 : 4;
+		const auto maxRealAge = fastFlow ? std::chrono::milliseconds(500) : std::chrono::milliseconds(250);
 		const bool fresh = completedMeanLuminanceValid_ && compatible(completedLuminanceSample_)
-			&& sample.token - completedLuminanceSample_.token < 4
-			&& sample.sampledAt - completedLuminanceSample_.sampledAt < std::chrono::milliseconds(250);
+			&& sample.token - completedLuminanceSample_.token < maxTokenLag
+			&& sample.sampledAt - completedLuminanceSample_.sampledAt < maxRealAge;
 		if (fresh && textureAverager_->supportsAsyncReadback())
 		{
 			if (textureAverager_->enqueueTextureAverageSimple(luminanceProbeFBO_->texture(),

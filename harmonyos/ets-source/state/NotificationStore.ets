@@ -22,6 +22,7 @@ export class NotificationStore {
   astronomySubscriptionOk: boolean = false
   satelliteSubscriptionOk: boolean = false
   dndEnabled: boolean = true
+  dndSatelliteOnly: boolean = true
   dndStartMinutes: number = 22 * 60 + 30
   dndEndMinutes: number = 6 * 60 + 35
   passLeadMinutes: number = 5

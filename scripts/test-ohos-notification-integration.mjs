@@ -266,3 +266,48 @@ test('native adapter checks object envelope rather than asserting incompatible b
   assert.doesNotMatch(block(main, '  private notificationCtl(', '  private haptics('), /as SubscriptionNativeResponse|as unknown/);
   assert.match(readFileSync(new URL('../src/StelMainView.cpp', import.meta.url), 'utf8'), /result\["satellitePasses"\] = response/);
 });
+
+test('notification landing routes dispatch notification-settings, satellite pass sky jump, and gyro star-finding mode', () => {
+  const host = routeFixture([]);
+  const calls = [];
+  host.openPanelFromCli = panel => { calls.push(['panel', panel]); };
+  host.setPanel = (panel, immediate, silent) => { calls.push(['setPanel', panel, immediate, silent]); };
+  host.timeTransitionCtl = () => ({
+    animate: (jd, label, onDone) => { calls.push(['animate', jd, label]); onDone(); }
+  });
+  host.callInteractive = (cmd, arg, onOk) => { calls.push(['call', cmd, arg]); onOk({ ok: true, target: arg }); };
+  host.applySelectedObject = resp => { calls.push(['applySelected', resp.target]); };
+  host.refreshState = () => { calls.push(['refreshState']); };
+  host.gyroCtl = () => ({ toggleGyroscope: on => { calls.push(['gyro', on]); } });
+  host.satelliteCtl = () => ({ setSatelliteFlag: (name, on) => { calls.push(['satFlag', name, on]); } });
+
+  host.cardRoute = JSON.stringify({ panel: 'notification-settings' });
+  host.consumeCardRoute();
+  assert.equal(host.configTab, -1);
+  assert.deepEqual(calls.splice(0), [['panel', 'settings']]);
+
+  const passAt = Date.parse('2030-11-20T12:30:00Z');
+  host.cardRoute = JSON.stringify({
+    panel: 'satellites', kind: 'satellite-pass', eventId: 'satellite-pass-25544-1234',
+    target: 'ISS (ZARYA)', eventAt: new Date(passAt).toISOString()
+  });
+  host.consumeCardRoute();
+  assert.deepEqual(calls[0], ['setPanel', '', true, true]);
+  assert.deepEqual(calls[1], ['satFlag', 'hints', true]);
+  assert.equal(calls[2][0], 'animate');
+  assert.equal(calls[2][2], 'ISS (ZARYA)');
+  assert.deepEqual(calls[3], ['call', 'searchObject', 'object|Satellite|25544']);
+  assert.deepEqual(calls[4], ['applySelected', 'object|Satellite|25544']);
+  assert.deepEqual(calls[5], ['refreshState']);
+  calls.splice(0);
+
+  host.cardRoute = JSON.stringify({ panel: 'sky', kind: 'find', target: 'Moon' });
+  host.consumeCardRoute();
+  assert.deepEqual(calls, [
+    ['setPanel', '', true, true],
+    ['call', 'searchObject', 'Moon'],
+    ['applySelected', 'Moon'],
+    ['gyro', true],
+    ['refreshState']
+  ]);
+});

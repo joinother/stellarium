@@ -1886,7 +1886,11 @@ export struct WindowNativeNode {
     })
     // 卫星域有 publish* CLI 发布点（publishSatellitePanelState），
     // 故 onChanged 用它，保持 CLI 侧 satellitePanelState 与 store 同步。
-    this.satelliteStore.attachPort(hostPort, (error: string) => { this.publishSatellitePanelState(error) })
+    this.satelliteStore.attachPort(hostPort, (error: string) => { this.publishSatellitePanelState(error) }, () => {
+      if (this.notificationStore.satellitePassEnabled) {
+        void this.notificationCtl().refreshSubscriptions()
+      }
+    })
     // 位置域的 loadSavedLocations 读 AppStorage 而非桥，port 暂未使用（预留）。
     this.locationStore.attachPort(hostPort, () => {})
     // 离线搜索 / 保存点的跨域读（LocationPickerStore 助手 + SessionToolStore.observerPlanet）
@@ -4076,11 +4080,57 @@ export struct WindowNativeNode {
     try {
       const route = JSON.parse(this.cardRoute) as Record<string, Object>
       const panel = String(route['panel'] ?? '').trim()
+      const kind = typeof route['kind'] === 'string' ? String(route['kind']).trim() : ''
+      const target = typeof route['target'] === 'string' ? String(route['target']).trim() : ''
+      const rawJd = route['jd'] === undefined ? NaN : Number(route['jd'])
+      const eventAtMs = new Date(String(route['eventAt'] ?? '')).getTime()
+      const targetJd = Number.isFinite(rawJd) && rawJd > 0 ? rawJd
+        : (Number.isFinite(eventAtMs) ? eventAtMs / 86400000 + 2440587.5 : NaN)
+
+      // 扩展落地页：通知设置直达、星图直飞 / 找星（陀螺仪）、卫星过境直达目标卫星与过境时刻。
+      if (panel === 'notification-settings') {
+        this.pendingCalendarEvent = ''
+        this.configTab = -1
+        this.openPanelFromCli('settings')
+        AppStorage.setOrCreate('stellariumCardRoute', '')
+        return
+      }
+      if (panel === 'sky' || (panel === 'satellites' && kind === 'satellite-pass' && target.length > 0)) {
+        this.pendingCalendarEvent = ''
+        this.setPanel('', true, true)
+        const eventId = typeof route['eventId'] === 'string' ? String(route['eventId']).trim() : ''
+        const satMatch = /^satellite-pass-(\d+)-/.exec(eventId)
+        const satId = satMatch ? satMatch[1] : (/^\d+$/.test(target) ? target : '')
+        const searchArg = (panel === 'satellites' && satId.length > 0) ? `object|Satellite|${satId}` : target
+        if (panel === 'satellites') {
+          this.satelliteCtl().setSatelliteFlag('hints', true)
+        }
+        const focusTarget = (): void => {
+          if (searchArg.length > 0) {
+            this.callInteractive('searchObject', searchArg, (response: StellariumBridgeResponse) => {
+              this.applySelectedObject(response)
+              if (kind === 'find') this.gyroCtl().toggleGyroscope(true)
+              this.refreshState()
+            })
+          } else {
+            if (kind === 'find') this.gyroCtl().toggleGyroscope(true)
+            this.refreshState()
+          }
+        }
+        if (Number.isFinite(targetJd)) {
+          this.timeTransitionCtl().animate(targetJd, target.length > 0 ? target : panel, focusTarget)
+        } else {
+          focusTarget()
+        }
+        AppStorage.setOrCreate('stellariumCardRoute', '')
+        return
+      }
+
       if (!isCliPanelName(panel)) return
       const tab = route['tab'] === undefined ? NaN : Number(String(route['tab']))
       this.pendingCalendarEvent = ''
       if (panel === 'calendar') {
-        const at = new Date(String(route['eventAt'] ?? '')).getTime()
+        const at = eventAtMs
         const id = typeof route['eventId'] === 'string' ? String(route['eventId']).trim() : ''
         const calendar = this.calendarCtl()
         calendar.showMonthEvents()
@@ -9113,6 +9163,7 @@ export struct WindowNativeNode {
         toggleSatellitePass: (v: boolean) => { void this.changeSubscriptionFromUi('satellite', v) },
         toggleDigest: (v: boolean) => { this.notificationStore.digestEnabled = v },
         toggleNotificationDnd: (v: boolean) => { this.notificationStore.dndEnabled = v; this.notificationCtl().persistPreferences() },
+        toggleNotificationDndSatelliteOnly: (v: boolean) => { this.notificationCtl().setDndSatelliteOnly(v) },
         setNotificationDndStart: (m: number) => { this.notificationStore.dndStartMinutes = m; this.notificationCtl().persistPreferences() },
         setNotificationDndEnd: (m: number) => { this.notificationStore.dndEndMinutes = m; this.notificationCtl().persistPreferences() },
         changePassLead: (d: number) => {

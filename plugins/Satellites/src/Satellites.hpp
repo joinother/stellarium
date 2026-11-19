@@ -934,10 +934,13 @@ private:
 	//! setTleSources() while an update is in progress.
 	TleSourceList updateSources;
 	void startSourceDownloads();
+	void pumpSourceDownloads();
 	void finishDownloadBatch();
 	void saveMirrorSummary();
 	class StelProgressController* progressBar;
 	int numberDownloadsComplete;
+	int nextDownloadIndex = 0;
+	int activeDownloadCount = 0;
 	QTimer* updateTimer;
 	//! Flag enabling automatic Internet updates.
 	bool updatesEnabled;

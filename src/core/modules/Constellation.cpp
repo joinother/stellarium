@@ -608,13 +608,26 @@ void Constellation::drawArtModel(StelPainter& painter, float intensity, const Ve
 	const auto projector = painter.getProjector();
 	prepareModelPose();
 	bool allValid = true;
-	for (int index = 0; index < modelPositions.size(); ++index)
+	const int vertexCount = modelPositions.size();
+	const Vec3d* directions = modelDirections.constData();
+	const float* depths = modelDepths.constData();
+	Vec3f* projected = modelProjected.data();
+	bool* valid = modelValid.data();
+	const bool hasVelocity = velocity.normSquared() > 0.;
+	for (int index = 0; index < vertexCount; ++index)
 	{
-		Vec3d direction = modelDirections.at(index) + velocity;
-		direction.normalize();
-		modelValid[index] = projector->project(direction, modelProjected[index]);
-		allValid = allValid && modelValid.at(index);
-		modelProjected[index][2] = modelDepths.at(index);
+		if (hasVelocity)
+		{
+			Vec3d direction = directions[index] + velocity;
+			direction.normalize();
+			valid[index] = projector->project(direction, projected[index]);
+		}
+		else
+		{
+			valid[index] = projector->project(directions[index], projected[index]);
+		}
+		allValid = allValid && valid[index];
+		projected[index][2] = depths[index];
 	}
 	const bool seam = projector->hasProjectionDiscontinuity();
 	const QVector<unsigned short>* indices = &modelIndices;

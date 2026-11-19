@@ -2,7 +2,7 @@ import { I18n } from '../../pages/I18n'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { ObjectDetailStore } from '../../state/ObjectDetailStore'
 import { SatellitePass } from '../../pages/StellariumTypes'
-import { Theme } from '@kit.ArkUI'
+import { Theme, curves } from '@kit.ArkUI'
 import { DEFAULT_SLOTS, ThemeSlots, slotsFromTheme } from '../../state/StellariumTheme'
 
 // 卫星过境段：过境卡片、时间线与加载 / 空 / 未请求态。
@@ -136,21 +136,32 @@ export struct SatellitePassDetails {
               .backgroundColor(this.c.softStrong)
               .borderRadius(UI_RADIUS_CONTROL)
               .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-              .onClick(() => { this.onLoad() })
+              .onClick(() => {
+                this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+                  this.onLoad()
+                })
+              })
           }.width('100%').alignItems(VerticalAlign.Center).padding({ top: 6, bottom: 6 })
+            .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
         } else if (!this.store.selectedSatellitePassesLoaded) {
           Row({ space: 7 }) {
             LoadingProgress().width(16).height(16).color(this.c.spinner)
             Text(I18n.t('satellite_pass_preparing')).fontSize(11).fontColor(this.c.tertiary)
           }.width('100%').justifyContent(FlexAlign.Center).padding({ top: 8, bottom: 8 })
+            .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
         } else if (this.store.selectedSatellitePasses.length === 0) {
           Text(I18n.t('satellite_pass_no_data')).fontSize(11).fontColor(this.c.tertiary)
             .lineHeight(17).width('100%').padding({ top: 6, bottom: 6 })
+            .transition(TransitionEffect.OPACITY.animation({ duration: 200, curve: Curve.EaseOut }))
         } else {
-          Text(I18n.t('satellite_next_pass')).fontSize(10).fontColor(this.c.tertiary).width('100%')
-          ForEach(this.store.selectedSatellitePasses.slice(0, 3), (pass: SatellitePass) => {
-            SatellitePassCard({ pass: pass, tablet: this.tablet })
-          }, (pass: SatellitePass, index: number) => 'satellite-pass-' + index.toString() + '-' + satellitePassTime(pass.start))
+          Column({ space: 6 }) {
+            Text(I18n.t('satellite_next_pass')).fontSize(10).fontColor(this.c.tertiary).width('100%')
+            ForEach(this.store.selectedSatellitePasses.slice(0, 3), (pass: SatellitePass) => {
+              SatellitePassCard({ pass: pass, tablet: this.tablet })
+            }, (pass: SatellitePass, index: number) => 'satellite-pass-' + index.toString() + '-' + satellitePassTime(pass.start))
+          }.width('100%')
+            .transition(TransitionEffect.OPACITY.animation({ duration: 220, curve: Curve.EaseOut })
+              .combine(TransitionEffect.translate({ y: 8 }).animation({ duration: 260, curve: curves.springMotion(0.55, 0.88) })))
         }
         if (this.store.selectedSatellitePassesLoaded && this.tleEpoch.length > 0) {
           Text(I18n.format('satellite_pass_offline_source', [this.tleEpoch])).fontSize(10).fontColor(this.c.detailSub)

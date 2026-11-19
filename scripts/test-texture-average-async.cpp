@@ -380,7 +380,7 @@ static void testViewChanges()
 
 static void testContinuousFastTime()
 {
-	for (double multiplier : {3600., -3600., 0., 1.})
+	for (double multiplier : {864000., -864000., 86400., -86400., 3600., -3600., 0., 1.})
 	{
 		TestCore core;
 		core.rate = multiplier / 86400.;
@@ -402,16 +402,19 @@ static void testContinuousFastTime()
 			assert(helper.syncCalls == 1);
 		}
 		assert(helper.queued.size() == 120);
+		// Explicit sync reset at unchanged rate forces sync refresh.
 		++core.syncMilliseconds;
 		model.computeAverageLuminance(&core);
 		assert(helper.syncCalls == 2 && helper.queued.empty());
 		model.computeAverageLuminance(&core);
 		assert(helper.syncCalls == 2 && !helper.queued.empty());
+		// Smooth rate change (setTimeRate calls resetSync at current JD) stays async without stalling.
 		core.rate = -core.rate + 1. / 86400.;
+		++core.syncMilliseconds;
 		model.computeAverageLuminance(&core);
-		assert(helper.syncCalls == 3 && helper.queued.empty());
+		assert(helper.syncCalls == 2 && !helper.queued.empty());
 	}
-	std::cout << "Continuous time: 120 frames each at +3600x/-3600x/paused/realtime; only initial sync, explicit reset and rate change refresh passed\n";
+	std::cout << "Continuous time: 120 frames each at +-864000x/+-86400x/+-3600x/paused/realtime; smooth rate change stays async, explicit jump refreshes passed\n";
 }
 
 static void testPhysicalDiscontinuities()

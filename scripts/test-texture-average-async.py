@@ -63,12 +63,12 @@ def main():
         print('Delayed-error-check mutation rejected with OHOS-style draining GL macros')
         (temporary / 'texture-average-source.inc').write_text(header + '\n' + source)
         mutations = {
-            'fixed sixty-second fast-forward rejection': ('std::abs(elapsedDays) > 600. / 86400.', 'std::abs(elapsedDays) > 60. / 86400.'),
-            'ignored explicit time synchronization': ('|| sample.syncMilliseconds != captured.syncMilliseconds', ''),
-            'ignored light direction discontinuity': ('|| lightCosine < std::cos(M_PI / 180.)', ''),
+            'fixed sixty-second fast-forward rejection': ('if (std::abs(elapsedDays) >= 0.95) return false;', 'if (std::abs(elapsedDays) > 60. / 86400.) return false;'),
+            'ignored explicit time synchronization': ('&& sample.syncMilliseconds == captured.syncMilliseconds', ''),
+            'ignored light direction discontinuity': ('lightCosine < std::cos(M_PI / 180.)', 'false'),
             'ignored layer blend discontinuity': ('|| std::abs(sample.layerAlphas[index] - captured.layerAlphas[index]) > 0.25f', ''),
-            'ignored elapsed-time discontinuity': ('|| std::abs(elapsedDays - sample.timeRate * elapsed) > 1. / 86400. + std::abs(sample.timeRate) * 0.100', ''),
-            'accepted whole-day direction alias': ('|| std::abs(elapsedDays) > 600. / 86400.', ''),
+            'ignored elapsed-time discontinuity': ('if (std::abs(elapsedDays - sample.timeRate * elapsed) > driftLimit) return false;', ''),
+            'accepted whole-day direction alias': ('if (std::abs(elapsedDays) >= 0.95) return false;', ''),
         }
         for name, (before, after) in mutations.items():
             assert before in tail, name

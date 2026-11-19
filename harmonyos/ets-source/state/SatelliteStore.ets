@@ -77,12 +77,15 @@ export class SatelliteStore {
   // 本加载器无并发抑制需求，seq 预留未用。
   private seq: number = 0
   private onChanged: ((error: string) => void) | null = null
+  private onCatalogUpdated: (() => void) | null = null
 
   // 宿主在 aboutToAppear 注入端口与发布回调；重复注入覆盖旧值（幂等）。
   // onChanged 带 error 形参：发布端据它区分成功（空串）与失败（'satellite query failed'）。
-  attachPort(port: CommandPort, onChanged: (error: string) => void): void {
+  // onCatalogUpdated 在轨道刷新完成并写入新历元时触发（用于刷新卫星过境通知订阅）。
+  attachPort(port: CommandPort, onChanged: (error: string) => void, onCatalogUpdated?: () => void): void {
     this.port = port
     this.onChanged = onChanged
+    this.onCatalogUpdated = onCatalogUpdated ?? null
   }
 
   // 加载器统一守卫：未注入端口时静默跳过（不 crash，也不 import 桥）。
@@ -196,6 +199,9 @@ export class SatelliteStore {
             this.observingUpdate = false
             this.satSourceStatus = this.lastCheckResultText()
             this.loadSatellites()
+            if (this.onCatalogUpdated !== null && (response.settings.updateState === 2 || response.settings.updateState === 5)) {
+              this.onCatalogUpdated()
+            }
           }
         }
       }

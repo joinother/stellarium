@@ -299,17 +299,27 @@ test('foreground loss after native fetch blocks all publication and cancellation
   assert.equal(model.state.items.length, 0);
 });
 
-test('failed feed preserves active reminders; quiet hours remove only subscriptions; list failure never publishes', async () => {
-  const model = subscriptionFixture();
+test('failed feed preserves active reminders; quiet hours respect satellite-only scope and remove matching subscriptions; list failure never publishes', async () => {
+  const model = subscriptionFixture({ satellitePassEnabled: true });
   await model.instance.refreshSubscriptions();
+  assert.equal(model.state.items.length, 2);
   model.state.feedError = true;
   await model.instance.refreshSubscriptions();
-  assert.equal(model.state.items.length, 1);
+  assert.equal(model.state.items.some(item => item.subscription === 'astronomy'), true);
   assert.match(model.store.astronomySubscriptionStatus, /不可用/);
   model.state.feedError = false;
+  model.store.satellitePassEnabled = true;
   model.store.dndEnabled = true;
+  model.store.dndSatelliteOnly = true;
   model.store.dndEndMinutes = model.store.dndStartMinutes;
   model.instance.persistPreferences();
+  await model.instance.preferenceQueue;
+  await model.instance.refreshSubscriptions();
+  // Satellite-only quiet hours silence satellite passes while keeping nighttime astronomy events.
+  assert.equal(model.state.items.some(item => item.subscription === 'astronomy'), true);
+  assert.equal(model.state.items.some(item => item.subscription === 'satellite'), false);
+  // Disabling satellite-only applies quiet hours to all subscriptions.
+  model.instance.setDndSatelliteOnly(false);
   await model.instance.preferenceQueue;
   await model.instance.refreshSubscriptions();
   assert.equal(model.state.items.length, 0);
@@ -541,12 +551,16 @@ test('list refresh failure cannot replace a completed scheduling outcome', async
   }
 });
 
-test('notification UI exposes simple categories and no manual manager or dead digest switch', () => {
+test('notification UI exposes categories, quiet-hours scope and registered reminder management without dead digest/custom controls', () => {
   const section = read('panels/settings/NotificationSection.ets');
   const ui = section.slice(section.indexOf('  build() {'));
   assert.match(ui, /onToggleAstronomyEvents\(enabled\)/);
   assert.match(ui, /onToggleSatellitePass\(enabled\)/);
-  assert.doesNotMatch(ui, /onOpenCalendar|onCancelReminder|chooseDateTime|onToggleDigest|onScheduleCountdown/);
+  assert.match(ui, /onToggleDndSatelliteOnly\(enabled\)/);
+  assert.match(ui, /onRefreshReminders\(\)/);
+  assert.match(ui, /onCancelReminder\(item\.reminderId\)/);
+  assert.match(ui, /onClearReminders\(\)/);
+  assert.doesNotMatch(ui, /onOpenCalendar|chooseDateTime|onToggleDigest|onScheduleCountdown/);
   assert.match(section, /reminderListError/);
 });
 

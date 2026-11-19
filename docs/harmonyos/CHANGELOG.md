@@ -1,5 +1,52 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-19] 第二批增强：超级满月/情境文案/四路落地页、月历网格与日历/卫星过渡动画、卫星 TLE 服务端与客户端审计修复
+
+- **修改文件：** `src/StelMainView.cpp`、`plugins/Satellites/src/Satellites.hpp`、`plugins/Satellites/src/Satellites.cpp`、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/capability/NotificationText.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/state/SatelliteStore.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/ets-source/panels/object/SatellitePassDetails.ets`、`deploy/tle-mirror/sources.json`、`deploy/tle-mirror/fetch-mirror.mjs`、`deploy/tle-mirror/test/fetch-mirror.test.mjs`、`scripts/test-ohos-astronomy-calendar.mjs`、`scripts/test-ohos-notification-integration.mjs`、`scripts/test-ohos-satellite-refresh-safety.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **修复与新增内容：**
+  1. **天象日历增强与 ArkUI 过渡动画：**
+     - 原生 `ohosAstronomyCalendarEvents` 新增只读辅助函数 `ohosCalendarMoonDistanceKm()`，为所有月相输出 `distanceKm` 并按近地点 ≤ 360,000 km 标记满月 `isSupermoon`；`AstronomyCalendarEvent.ts` 格式化为「超级满月」/ `Supermoon` 并附地月距离说明。
+     - `AstronomyCalendarPanel.ets` 新增「列表 / 月历」分段切换与固定 7×6 月历网格（含事件彩色圆点、多事件 `+N` 溢出角标、点选单日筛选与「显示整月」复位）；月切换、列表↔月历、单日筛选与列表↔详情均接入方向性 `TransitionEffect.asymmetric` + `curves.springMotion(0.55, 0.88)` + `getUIContext().animateTo(...)`。
+  2. **通知情境文案与四路落地页：**
+     - `NotificationController.ets` / `NotificationText.ets` 按事件类型生成双语情境文案（卫星过境峰值倒计时、超级满月、主要月相、流星雨极大、行星天象、二十四节气）。
+     - `MainWindowNativeNode.ets` 的 `consumeCardRoute()` 扩展支持四类落地页：`notification-settings`（直达设置-设备与隐私通知区）、`satellites` + `satellite-pass`（自动开启卫星显示、平滑飞向过境时刻并按 NORAD ID 精准锁定目标卫星）、`sky` + `find`（关闭面板定位目标并拉起陀螺仪找星），保留原有 `calendar` 详情与 `astro` 路由。
+  3. **卫星页面过渡动画：**
+     - `SatellitesPanel.ets` 按层级深度（`main` ↔ `settings` ↔ `sources/imports/display/countdown/diagnostics`）接入前进/返回方向性推入弹出转场、`返回` 按钮转场与更新中 `LoadingProgress` 指示；`SatellitePassDetails.ets` 补齐按需计算、加载中、空状态与过境卡片切换动画。
+  4. **卫星轨道更新（服务端 + 客户端）审计与修复：**
+     - **客户端：** `Satellites::startSourceDownloads()` 改为 `pumpSourceDownloads()` 6 路并发节流调度（避免 46 路同时发出在排队时耗尽 60s 单请求超时），并移除下载临时文件 `QIODevice::Text` 标志防止破坏 `.zip` 二进制；`SatelliteStore.attachPort()` 新增 `onCatalogUpdated` 回调，在 TLE 更新完成后自动刷新卫星过境通知订阅。
+     - **服务端镜像仓库（本地已修、待确认后部署至 ECS `i-uf68vk358s8l58afzswt`）：** 修正 `deploy/tle-mirror/sources.json` 中 `gpz.csv`/`gpz-plus.csv` 错误参数 `GROUP=` → `SPECIAL=`（实测 CelesTrak 返回 HTTP 200）；`fetch-mirror.mjs` 补齐 Alpha-5 NORAD ID（如 `A0885` ↔ `100885`）与 SatNOGS `98xxx/99xxx` 临时编号校验兼容（解决 1,767 条 SatNOGS TLE 整包被拒），并增加 350ms 请求间隔与 `403/429` 单次退避重试防止 CelesTrak 限流导致 `active.csv` 过期。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机全套测试通过：天象日历 17/17、原生内核 14/14、通知控制器 30/30、通知集成 10/10、提醒服务 32/32、提醒契约、订阅馈送 10/10、卫星面板/存储/来源/安全（12/12，含原生 Qt `test-satellite-ingestion.py`）、日历配图 3/3、命令目录 423 项、UI 契约（37 面板 / 57 锚点）、i18n 校验、服务端 TLE 镜像 30/30。
+  - 真机实测：`2026-11` 满月 `360,765 km`（`isSupermoon: false`）、`2026-12` 满月 `356,739 km`（`isSupermoon: true`）；截图目视确认 7×6 月历网格、12 月 9 日 `+1` 角标、12 月 24 日金色超级满月圆点与「超级满月」详情卡片（显示 `356,739 km`）以及卫星高级设置子页面切换正常；四路落地页（`notification-settings`、`satellites/satellite-pass` 锁定 `CSS (TIANHE)`、`sky/find` 定位月球并启动 `getGyroGuidePosition`、`calendar`）真机全通；真机 `refreshSatelliteCatalog` 6 路并发下载 46 源约 5 秒完成（18,228 颗卫星，`newestUpdate` 更新至最新时间）。未部署生产 ECS、未提交、未推送。
+
+## [2026-11-19] 深空贴图预设丢失、卫星通过订阅打通、提醒管理与静默范围修复
+
+- **修改文件：** `harmonyos/ets-source/capability/LayerController.ets`、`plugins/Satellites/src/Satellite.hpp`、`plugins/Satellites/src/Satellite.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/AstronomySubscriptionFeed.ets`、`harmonyos/ets-source/qability/AstronomyNotificationPolicy.ts`、`harmonyos/ets-source/qability/AstronomySubscriptionPolicy.ts`、`harmonyos/ets-source/state/NotificationStore.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/capability/NotificationText.ets`、`harmonyos/ets-source/panels/settings/NotificationSection.ets`、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`scripts/test-ohos-notification-controller.mjs`、`scripts/test-ohos-subscription-feed.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **修复内容：**
+  1. **深空天体图像丢失根因修复：** `LayerController.applyLayerPreset()` 中「纯净星空」(`clean`) 与「摄影构图」(`photo`) 预设在 `layerPresetStates(false)` 后漏开 `actionShow_DSO_Textures`，导致 `astro/flag_nebula_display_no_texture=true` 持久落盘；现已为全部三组预设统一开启 `actionShow_DSO_Textures: true`。
+  2. **卫星通过订阅打通（无副作用预测 + 峰值提醒）：** 新增 `Satellite::getPassPredictionsAtEpoch()`（使用局部 `gSatTEME` 与只读 `earth->computePosition` + Vondrak 岁差 + 三分峰值精算，零修改 `StelCore`/模拟时钟/静态缓存），解除 `getSatellitePasses(startJD)` 的 `explicit_epoch_prediction_unsupported` 拦截；`AstronomySubscriptionFeed` 优先按 `peakJD` 排程（缺省回退 `startJD`），在过境最高最亮前 N 分钟提醒。
+  3. **已注册提醒管理与日历单事件提醒入口：** `NotificationSection` 渲染「已注册提醒（N）」卡片（含刷新、单项取消与清除全部）并透传分类订阅状态，彻底解决历史孤立提醒阻断订阅且界面无处清理的问题；`AstronomyCalendarPanel` 详情页新增「添加提醒」胶囊按钮。
+  4. **静默时段范围细化（默认仅限卫星）：** 新增 `dndSatelliteOnly` 偏好（默认 `true`），静默时段默认仅跳过卫星通过而不误杀深夜天象事件（如 22:54 满月、深夜流星雨极大），并支持用户在静默时段卡片内自由切换。
+- **验证与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 主机 10 套测试（天象日历 16/16、原生内核 14/14、通知控制器 30/30、通知集成、提醒服务 32/32、提醒契约、订阅馈送 10/10、日历配图 3/3、423 项命令目录、37 面板 / 57 锚点 UI 契约）全部通过。
+  - 原生 `libstellarium.so` 与 Debug `assembleHap` 构建成功并覆盖安装（未改签名与 `versionCode`）。
+  - 真机实测：`getSatellitePasses(startJD)` 48h 预测耗时 ISS 15ms / 天宫 21ms，`dataStatus: "local"` 且模拟时钟零改动；清理旧孤立提醒后「天象事件」成功排入 6 条带完整 `eventId`/`kind` 的本地化提醒，「卫星通过」首次在真机成功排入天宫可见过境；开启 22:30–06:35 静默时段（`dndSatelliteOnly=true`）后自动取消 05:07 卫星过境提醒，同时保留 06:43/07:21 卫星过境与全部 6 条天象提醒（含 22:54 满月、22:49 流星雨）；截屏目视确认日历详情页「添加提醒」按钮、设置页已注册提醒列表及深空星云贴图（加利福尼亚星云/船底座星云）显示正常。未提交、未推送。
+
+## [2026-11-19] 调时流逝卡顿与重进应用假死双项修复
+
+- **修改文件：** `src/core/modules/AtmosphereLightweight.cpp`、`src/StelMainView.cpp`、`src/core/modules/Constellation.cpp`、`src/core/modules/SolarSystem.cpp`、`scripts/test-texture-average-async.cpp`、`scripts/test-texture-average-async.py`、`docs/harmonyos/CHANGELOG.md`、`docs/harmonyos/KNOWN-ISSUES.md`。
+- **问题 1（调整时间流逝速度卡顿）：**
+  - **根因：** `AtmosphereLightweight::computeAverageLuminance()` 的异步 PBO 读回复用校验 `compatible()` 对高速时间流逝（≥ 3600x / 1 天/秒 / 10 天/秒）及平滑变倍过严（太阳/月球移角 >1°、大气网格层切换、权重变化 >25%、帧间时间差 >600s、速率变化等均触发 `resetAsyncReadback()`），导致几乎每帧回退同步 `glReadPixels`，拖垮整条 GPU 管线（`lumAvg` 从 0.84ms 飙升至 12.56ms，`LandscapeMgr` 均耗 9.24ms、峰值 30–50ms）。
+  - **修复：** 在 `AtmosphereLightweight::computeAverageLuminance()` 区分「高速连续流逝（`|timeRate| > 1.01x`）与平滑变倍」和「离散跳转（`setJD` 瞬移、位置/行星切换、视角/FOV 瞬移、整日采样混叠 ≥0.95 天/帧）」。连续高速流逝和平滑变倍时保持异步 PBO 读回流水线不断流（放宽角度/层数/权重/12 帧/500ms 延迟保护），正常/暂停速率仍保留全部物理突变保护；另在 `Constellation::drawArtModel()` 跳过零速度每顶点归一化并改用裸指针访问；经真机实测 `SolarSystem` 多线程在移动端唤醒开销反增 `coreAvg`（1.18ms → 5.76ms），维持默认单线程（`extraThreads=0`），仅保留小层级保护。
+- **问题 2（退出重进应用星图卡死约 15 秒无法拖动）：**
+  - **根因：** 冷启动/强退重进后 `NotificationController.refreshSubscriptions()` 立即连续发起 3 个月的 `getAstronomyCalendarEvents`，在 Qt 主渲染线程同步执行；原生实现按 0.25 天步长对几百场流星雨、4 组月相、46 组行星天象及全年 24 节气各自独立重算 VSOP87/岁差（单月 ~8.4 万次星历计算），单月阻塞 ~4.9 秒、3 个月累计阻塞 ~14.7 秒，触发两次 `QtWatchdog: AppMainThread is not alive`，星图显示后约 15 秒完全无法响应触控拖动。
+  - **修复：** 在 `src/StelMainView.cpp` 为 `ohosAstronomyCalendarEvents` 增加月度 0.25 天共享粗采样表（共享地球位置与 Vondrak 岁差矩阵，仅在候选区间做二分/三分精算）、静态缓存 `MeteorShowers.json`、按年缓存 24 节气（上限 16 年）及 16 条月度结果 LRU 缓存。
+- **主机验证：** `test-texture-average-async.py`（ASan/UBSan + 新增 ±86400x/±864000x/平滑变倍断言 + 8 项变异全拦截）、`test-painter-depth-prepass.py`（36 例）、`test-calendars-demand.py`、`test-selected-time-camera.py`、`test-visual-extinction.py`、`test-ohos-native-astronomy-calendar.mjs`（14/14）、`test-ohos-astronomy-calendar.mjs`（16/16）、`test-ohos-subscription-feed.mjs`（9/9）、`test-ohos-reminder-contract.mjs`、`check-ohos-command-catalog.mjs`（423 项）、`check-ohos-ui-contract.mjs`（37 面板 / 57 锚点）全部通过。注：`test-lightweight-preparation.py` 存在既有上游编译问题（`f494e83fa9` 遗留 `getVisualFadeIntensity` 未声明），本次未触碰。
+- **构建与真机验收（MatePad Mini `192.168.31.234:42713`，`com.joinother.skyinstrument` Debug 1000054）：**
+  - 原生 `libstellarium.so` 与 Debug `assembleHap` 构建通过并覆盖安装，签名配置、`versionCode` 与隐私门禁均未改动。
+  - **调时帧率（同白天午间场景 `JD 2461363.6667`）：** 60x 30.8 → **34.5 FPS**（P95 42→37ms）；3600x（1 时/秒）28.0（瞬时 14.7）→ **38.0 FPS**（P95 71→30ms，`lumAvg` 3.39→0.28ms）；86400x（1 天/秒）18.4 → **29.5 FPS**（P50 53→32ms，P95 78→45ms，`lumAvg` 12.4→0.35ms）；864000x（10 天/秒最高档）~17–18 → **27.0 FPS**（P50 57→32ms，`update` 16.06→4.29ms）；打开时间面板 3600x 21.8 → **31.0 FPS**（P95 76→40ms）。
+  - **冷启动重进阻塞：** 3 个月 `getAstronomyCalendarEvents` 由 ~14.7s 降至 `sky-revealed` 后约 **1.0s** 完成（总计 ~1.6s，月 1/2/3 分别约 0.48s/0.32s/0.38s），`sky-revealed` 后零 `QtWatchdog` 告警，立即拖动响应正常；退后台再切前台 `onForeground` 仅 **140ms**，零阻塞。
+- **边界与未覆盖项：** 未改签名或构建 Release 包；剩余常规画面单帧 draw 耗时（约 18–23ms @ 2560×1600）主要在 `ConstellationMgr`（7–11ms）和 `NebulaMgr`（4–5ms），与时间倍率无关，仍记录于 `KNOWN-ISSUES.md`；未提交、未推送。
 
 ## [2026-11-15] Codex - 选星调时稳定与绚丽夜空；继续排查调时卡顿
 

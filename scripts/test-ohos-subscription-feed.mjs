@@ -189,3 +189,16 @@ test('unsupported explicit epoch never falls back to the mutating legacy predict
   assert.equal(state.calls.length, 1);
   assert.equal(state.calls[0].payload.startJD, from / 86400000 + 2440587.5);
 });
+
+test('satellite loader schedules notifications around peakJD when available and falls back to startJD', async () => {
+  const { feed, state, from } = satelliteFixture();
+  const startAt = from + 3600000;
+  const peakAt = startAt + 180000;
+  state.response.satellitePasses.passes = [
+    { startJD: startAt / 86400000 + 2440587.5, peakJD: peakAt / 86400000 + 2440587.5, visible: true, ongoing: false }
+  ];
+  const result = await feed.load('satellite', from, from + 2 * 86400000);
+  assert.equal(result.events.length, 1);
+  assert.equal(result.events[0].at, peakAt);
+  assert.equal(result.events[0].jd, peakAt / 86400000 + 2440587.5);
+});

@@ -12,6 +12,10 @@ export interface AstronomyCalendarEvent {
   tab: number
   timeScale?: string
   phaseIndex?: number
+  distanceKm?: number
+  isSupermoon?: boolean
+  subtype?: string
+  direction?: string
 }
 
 export interface CalendarNativeEvent {
@@ -29,6 +33,8 @@ export interface CalendarNativeEvent {
   subtype?: string
   direction?: string
   alignment?: string
+  distanceKm?: number
+  isSupermoon?: boolean
 }
 
 export interface CalendarNativeResponse {
@@ -153,7 +159,8 @@ export function calendarNativeEvents(response: CalendarNativeResponse, month: Ca
         'Computed from geocentric apparent planetary positions. Conjunction and opposition use ecliptic longitude; greatest elongation uses angular separation from the Sun. Check local rise and set times. Solar conjunction is generally unsuitable for observing; never point an unfiltered telescope near the Sun.'
       events.push({ id: item.id, kind: item.kind, title: calendarText(language, titleZh, item.titleEn),
         at: at, jd: item.jd, body: calendarText(language, bodyZh, bodyEn), target: item.target,
-        panel: meteor ? 'meteorshowers' : 'astro', tab: 0, timeScale: 'UT' })
+        panel: meteor ? 'meteorshowers' : 'astro', tab: 0, timeScale: 'UT',
+        subtype: item.subtype, direction: item.direction })
       continue
     }
     if (!solar && item.kind !== 'moon-phase') continue
@@ -165,14 +172,25 @@ export function calendarNativeEvents(response: CalendarNativeResponse, month: Ca
     const at = calendarAt(jd)
     if (seen.has(item.id) || at < month.start || at >= month.end) continue
     seen.add(item.id)
-    const title = solar ? calendarSolarTermTitle(language, item.index) : calendarMoonPhaseTitle(language, item.index)
+    const distKm = typeof item.distanceKm === 'number' && Number.isFinite(item.distanceKm) && item.distanceKm > 0
+      ? item.distanceKm : undefined
+    const supermoon = !solar && item.index === 2 &&
+      (item.isSupermoon === true || (distKm !== undefined && distKm <= 360000))
+    const title = solar ? calendarSolarTermTitle(language, item.index) :
+      (supermoon ? calendarText(language, '超级满月', 'Supermoon') : calendarMoonPhaseTitle(language, item.index))
+    const distNoteZh = distKm !== undefined ? ` 此时地月距离约 ${Math.round(distKm).toLocaleString('en-US')} km。` : ''
+    const distNoteEn = distKm !== undefined ? ` Earth–Moon distance is about ${Math.round(distKm).toLocaleString('en-US')} km.` : ''
     const body = solar ? calendarText(language,
       '太阳到达该节气的黄经。本地 Stellarium 引擎计算；时刻按设备时区显示，不代表当地可见性。',
       'The Sun reaches this solar term’s longitude. Calculated locally by Stellarium; times use the device time zone and do not imply local visibility.') :
-      calendarText(language, '月球到达主要月相。本地 Stellarium 引擎计算全球发生时刻；时刻按设备时区显示，不代表月球在当地已经升起。',
-        'The Moon reaches a principal phase. Stellarium calculates the global instant locally; device-local times do not imply the Moon is above your horizon.')
+      (supermoon ? calendarText(language,
+        '本次满月发生时月球接近近地点（≤ 360,000 km），视直径与亮度高于平均满月。' + distNoteZh + ' 时刻按设备时区显示，是否可见取决于当地月升与天气。',
+        'This full moon occurs near perigee (≤ 360,000 km), appearing slightly larger and brighter than average.' + distNoteEn + ' Times use the device time zone; visibility depends on local moonrise and weather.') :
+        calendarText(language, '月球到达主要月相。本地 Stellarium 引擎计算全球发生时刻；时刻按设备时区显示，不代表月球在当地已经升起。',
+          'The Moon reaches a principal phase. Stellarium calculates the global instant locally; device-local times do not imply the Moon is above your horizon.'))
     events.push({ id: item.id, kind: item.kind, title: title, at: at, jd: jd, body: body,
-      target: solar ? 'Sun' : 'Moon', panel: 'astro', tab: solar ? 8 : 6, timeScale: 'UT', phaseIndex: item.index })
+      target: solar ? 'Sun' : 'Moon', panel: 'astro', tab: solar ? 8 : 6, timeScale: 'UT',
+      phaseIndex: item.index, distanceKm: distKm, isSupermoon: supermoon || undefined })
   }
   return calendarMonthEvents(events, month)
 }

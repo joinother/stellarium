@@ -49,11 +49,21 @@ test('TLE requires complete triples, matching catalogue ids, checksums and valid
   }
 })
 
-test('SatNOGS requires a nonempty array with matching NORAD ids and complete valid TLE pairs', () => {
+test('SatNOGS requires a nonempty array with matching NORAD ids (including Alpha-5 and 98xxx/99xxx temp ids) and complete valid TLE pairs', () => {
   const source = { format: 'satnogs-json' }
   assert.equal(validatePayload(satnogs, source), 1)
+  const alpha5Tle1 = '1 A0885U 26227C   26322.97941572  .00006202  00000-0  30901-3 0  999'
+  const sum = (line) => [...line].reduce((total, ch) => total + (/\d/.test(ch) ? Number(ch) : ch === '-' ? 1 : 0), 0) % 10
+  const alpha5Line1 = alpha5Tle1 + sum(alpha5Tle1)
+  const alpha5Tle2 = '2 A0885  97.6790 116.8672 0010268 303.6137  56.4147 15.7655383912423'
+  const alpha5Line2 = alpha5Tle2 + sum(alpha5Tle2)
+  assert.equal(validatePayload(JSON.stringify([
+    { norad_cat_id: 100885, tle1: alpha5Line1, tle2: alpha5Line2 },
+    { norad_cat_id: 99004, tle1, tle2 }
+  ]), source), 2)
   for (const body of ['[]', '{}', '{"error":"denied"}', '[null]',
     JSON.stringify([{ norad_cat_id: 25545, tle1, tle2 }]),
+    JSON.stringify([{ norad_cat_id: 100886, tle1: alpha5Line1, tle2: alpha5Line2 }]),
     JSON.stringify([{ norad_cat_id: 25544, tle1 }])]) {
     assert.throws(() => validatePayload(body, source), /invalid_payload/)
   }

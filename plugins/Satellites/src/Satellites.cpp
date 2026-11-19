@@ -3226,8 +3226,20 @@ void Satellites::saveMirrorSummary()
 
 void Satellites::startSourceDownloads()
 {
-	for (int index = 0; index < updateSources.size(); ++index)
+	nextDownloadIndex = 0;
+	activeDownloadCount = 0;
+	pumpSourceDownloads();
+	finishDownloadBatch();
+}
+
+void Satellites::pumpSourceDownloads()
+{
+	// Keep at most 6 concurrent HTTP requests in flight so per-request
+	// timeouts do not burn down while queued behind 40+ mirror files.
+	static constexpr int maxConcurrentDownloads = 6;
+	while (activeDownloadCount < maxConcurrentDownloads && nextDownloadIndex < updateSources.size())
 	{
+		const int index = nextDownloadIndex++;
 		const TleSource& source = updateSources.at(index);
 		if (source.mirrorStatus == QStringLiteral("unavailable"))
 		{
@@ -3245,12 +3257,12 @@ void Satellites::startSourceDownloads()
 		}
 		QNetworkReply* reply = downloadMgr->get(request);
 		reply->setProperty("satelliteSourceIndex", index);
+		++activeDownloadCount;
 		connect(reply, &QNetworkReply::downloadProgress, reply, [reply](qint64 received, qint64 total) {
 			if (received > satelliteUpdateMaxBytes || total > satelliteUpdateMaxBytes) reply->abort();
 		});
 		QTimer::singleShot(60000, reply, [reply]() { if (!reply->isFinished()) reply->abort(); });
 	}
-	finishDownloadBatch();
 }
 
 void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
@@ -3289,7 +3301,7 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 		if (tmpFile->exists())
 			tmpFile->remove();
 
-		if (tmpFile->open(QIODevice::WriteOnly | QIODevice::Text))
+		if (tmpFile->open(QIODevice::WriteOnly))
 		{
 			// qWarning() << "[Satellites] Processing an URL:" << reply->url().toString();
 			if (reply->url().toString().contains(".zip", Qt::CaseInsensitive))
@@ -3319,7 +3331,9 @@ void Satellites::saveDownloadedUpdate(QNetworkReply* reply)
 	}
 
 	if (!source.file && !source.mirrorStatus.isEmpty()) source.mirrorStatus = QStringLiteral("unavailable");
+	if (activeDownloadCount > 0) --activeDownloadCount;
 	numberDownloadsComplete++;
+	pumpSourceDownloads();
 	finishDownloadBatch();
 }
 

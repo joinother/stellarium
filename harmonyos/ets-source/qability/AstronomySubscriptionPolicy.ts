@@ -14,7 +14,7 @@ export function acceptsRemoteAstronomyMessage(message: ContentNotice, preference
   consent: boolean, notificationsEnabled: boolean, now: number): boolean {
   if (!consent || !notificationsEnabled || preferences.subscriptionsVersion !== 1 || !validContentNotice(message, now)) return false
   const date = new Date(now)
-  if (preferences.dndEnabled && isQuietMinute(date.getHours() * 60 + date.getMinutes(),
+  if (preferences.dndEnabled && preferences.dndSatelliteOnly !== true && isQuietMinute(date.getHours() * 60 + date.getMinutes(),
     preferences.dndStartMinutes, preferences.dndEndMinutes)) return false
   return message.category === 'astronomy' ? preferences.astronomyEventsEnabled :
     message.category === 'digest' && preferences.digestEnabled === true
@@ -40,7 +40,8 @@ export function subscriptionCandidates(feed: AstronomySubscriptionFeed, category
     const fireAt = event.at - lead * 60000
     if (fireAt <= now + 30000 || event.at >= until) continue
     const date = new Date(fireAt)
-    if (preferences.dndEnabled && isQuietMinute(date.getHours() * 60 + date.getMinutes(),
+    const applyQuietHours = preferences.dndEnabled && (category === 'satellite' || preferences.dndSatelliteOnly !== true)
+    if (applyQuietHours && isQuietMinute(date.getHours() * 60 + date.getMinutes(),
       preferences.dndStartMinutes, preferences.dndEndMinutes)) continue
     const key = event.kind + ':' + event.id + ':' + Math.floor(event.at / 1000)
     if (seen.has(key)) continue

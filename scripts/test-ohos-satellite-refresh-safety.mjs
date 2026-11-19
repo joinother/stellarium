@@ -112,15 +112,27 @@ test('refresh commits before live mutation, success and timestamp; retains absen
   assert.match(update, /\(updatedCount > 0 \|\| addedCount > 0\) && !saveDataMap/);
   assert.match(body('void Satellites::saveCatalog('), /if \(!saveDataMap[^]*OtherError[^]*emit updateStateChanged/);
 });
-test('explicit satellite epochs return an error object before calling mutable legacy predictor', () => {
+test('explicit satellite epochs validate startJD and route through non-mutating getPassPredictionsAtEpoch', () => {
   const handler = body('if (commandName == "getSatellitePasses" || commandName == "getSatelliteDetail")', native);
   const guard = body('if (options.contains("startJD"))', handler);
-  assert.match(guard, /result\["ok"\] = false/);
-  assert.match(guard, /result\["reason"\] = "explicit_epoch_prediction_unsupported"/);
-  assert.match(guard, /return result;/);
-  assert.doesNotMatch(guard, /setJD|->update|getPassPredictions/);
-  assert.ok(handler.indexOf('return result;', handler.indexOf('options.contains("startJD")')) < handler.indexOf('satellite->getPassPredictions'));
+  assert.match(guard, /!startVal\.isDouble\(\)/);
+  assert.match(guard, /!std::isfinite\(explicitStartJD\) \|\| explicitStartJD <= 0\.0/);
+  assert.match(guard, /hasExplicitStartJD = true;/);
+  assert.doesNotMatch(guard, /setJD|->update/);
+  assert.match(handler, /hasExplicitStartJD[\s\S]*satellite->getPassPredictionsAtEpoch\(core, explicitStartJD, hours, qBound\(1, limit, 32\), minimumElevation/);
   assert.match(handler, /satellite->getPassPredictions\(core, hours, qBound\(1, limit, 32\), minimumElevation\)/);
+  const satSource = read('plugins/Satellites/src/Satellite.cpp');
+  const epochPredictor = body('QVariantList Satellite::getPassPredictionsAtEpoch(', satSource);
+  assert.doesNotMatch(epochPredictor, /core->setJD|core->setJDE|->update\(/);
+});
+
+test('download batch throttles concurrent HTTP requests and preserves binary downloads', () => {
+  const start = body('void Satellites::startSourceDownloads(', source);
+  const pump = body('void Satellites::pumpSourceDownloads(', source);
+  const download = body('void Satellites::saveDownloadedUpdate(', source);
+  assert.match(start, /pumpSourceDownloads\(\)/);
+  assert.match(pump, /maxConcurrentDownloads/);
+  assert.doesNotMatch(download, /QIODevice::WriteOnly\s*\|\s*QIODevice::Text/);
 });
 
 test('native Qt parsers accept ordinary data and reject corrupt sources atomically', () => {

@@ -1656,6 +1656,12 @@ void SolarSystem::computePositions(StelCore *core, double dateJDE, PlanetP obser
 				(const QVector<PlanetP>& level, auto bodyOp)
 			{
 				if (level.isEmpty()) return;
+				if (extras <= 0 || level.size() < 24)
+				{
+					for (const auto& p : level)
+						bodyOp(p);
+					return;
+				}
 				const auto stripe = [&level, totalThreads, &bodyOp](int offset)
 				{
 					for (int i = offset; i < level.size(); i += totalThreads)
@@ -1717,6 +1723,12 @@ void SolarSystem::computePositions(StelCore *core, double dateJDE, PlanetP obser
 				(const QVector<PlanetP>& level, auto bodyOp)
 			{
 				if (level.isEmpty()) return;
+				if (extras <= 0 || level.size() < 24)
+				{
+					for (const auto& p : level)
+						bodyOp(p);
+					return;
+				}
 				const auto stripe = [&level, totalThreads, &bodyOp](int offset)
 				{
 					for (int i = offset; i < level.size(); i += totalThreads)

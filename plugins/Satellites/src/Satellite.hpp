@@ -263,12 +263,22 @@ public:
 	QDateTime getLastUpdated() const {return lastUpdated;}
 	//! Returns the parsed TLE epoch shown in object information.
 	QString getTleEpoch() const {return tleEpoch;}
+	//! Returns the parsed TLE epoch as Julian Day (UTC).
+	double getTleEpochJD() const {return tleEpochJD;}
+	//! Returns the maximum TLE epoch age in days before marking stale.
+	static int getTleEpochAge() {return tleEpochAge;}
 	//! Returns locally propagated passes above the requested elevation.
 	//! The result contains local and UTC timestamps, azimuth/elevation at the
 	//! three pass milestones, visibility state and the TLE provenance. It never
 	//! performs a network request.
 	QVariantList getPassPredictions(StelCore* core, double hours = 48.0,
 		int limit = 8, double minimumElevation = 10.0) const;
+	//! Non-mutating pass predictor anchored at an explicit UTC Julian Day.
+	//! Uses a local SGP4 propagator and stateless Earth/Sun ephemeris so
+	//! StelCore, SolarSystem and Satellite runtime state remain untouched.
+	QVariantList getPassPredictionsAtEpoch(StelCore* core, double startJD, double hours = 48.0,
+		int limit = 8, double minimumElevation = 10.0,
+		bool* epochOrbitValidOut = nullptr, QString* propagationStatusOut = nullptr) const;
 
 	//! Set new tleElements.  This assumes the designation is already set, populates
 	//! the tleElements values and configures internal orbit parameters.

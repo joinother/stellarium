@@ -233,14 +233,14 @@
     },
     {
       "id": "satellites.csv.gpz",
-      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gpz&FORMAT=CSV",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=gpz&FORMAT=CSV",
       "mirrorPath": "/v1/catalogs/satellites/gpz.csv",
       "format": "csv",
       "autoAdd": false
     },
     {
       "id": "satellites.csv.gpz-plus",
-      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?GROUP=gpz-plus&FORMAT=CSV",
+      "upstreamUrl": "https://celestrak.org/NORAD/elements/gp.php?SPECIAL=gpz-plus&FORMAT=CSV",
       "mirrorPath": "/v1/catalogs/satellites/gpz-plus.csv",
       "format": "csv",
       "autoAdd": false

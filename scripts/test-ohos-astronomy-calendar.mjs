@@ -285,3 +285,27 @@ test('language refresh after timezone change requeries the new local boundaries'
     if (original === undefined) delete process.env.TZ; else process.env.TZ = original;
   }
 });
+
+test('supermoon full moon preserves distanceKm and formats bilingual title and note', () => {
+  const at = Date.UTC(2026, 11, 24, 1, 28);
+  const res = response(2026, 12, [{
+    id: 'moon-phase-super-2', kind: 'moon-phase', index: 2, phase: 'full-moon',
+    title: '满月', titleEn: 'Full Moon', jd: calendarJd(at), at, timeScale: 'UT',
+    target: 'Moon', distanceKm: 356649, isSupermoon: true
+  }, {
+    id: 'moon-phase-regular-2', kind: 'moon-phase', index: 2, phase: 'full-moon',
+    title: '满月', titleEn: 'Full Moon', jd: calendarJd(at + 86400000), at: at + 86400000, timeScale: 'UT',
+    target: 'Moon', distanceKm: 384400, isSupermoon: false
+  }]);
+  const zh = calendarNativeEvents(res, calendarMonth(2026, 12), 'zh_CN');
+  assert.equal(zh.length, 2);
+  assert.equal(zh[0].isSupermoon, true);
+  assert.equal(zh[0].distanceKm, 356649);
+  assert.equal(zh[0].title, '超级满月');
+  assert.match(zh[0].body, /356,649 km/);
+  assert.equal(zh[1].isSupermoon, undefined);
+  assert.equal(zh[1].title, '满月');
+  const en = calendarNativeEvents(res, calendarMonth(2026, 12), 'en');
+  assert.equal(en[0].title, 'Supermoon');
+  assert.match(en[0].body, /perigee/i);
+});

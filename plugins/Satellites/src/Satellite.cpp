@@ -31,12 +31,14 @@
 #include "StelTranslator.hpp"
 #include "StelUtils.hpp"
 #include "VecMath.hpp"
+#include "SolarSystem.hpp"
+#include "precession.h"
 
 #include <QVector3D>
 #include <QMatrix4x4>
 
 #include "gsatellite/gTime.hpp"
-//#include "gsatellite/stdsat.h"
+#include "gsatellite/stdsat.h"
 
 #include <cmath>
 
@@ -838,6 +840,353 @@ QVariantList Satellite::getPassPredictions(StelCore* core, double hours, int lim
 	satellite->orbitLinesFlag = originalOrbitLinesFlag;
 	satellite->orbitDisplayed = originalOrbitDisplayed;
 	if (predictionFailed) passes.clear();
+	return passes;
+}
+
+QVariantList Satellite::getPassPredictionsAtEpoch(StelCore* core, double startJD, double hours,
+	int limit, double minimumElevation, bool* epochOrbitValidOut, QString* propagationStatusOut) const
+{
+	QVariantList passes;
+	if (epochOrbitValidOut) *epochOrbitValidOut = false;
+	if (propagationStatusOut) *propagationStatusOut = QStringLiteral("uninitialized");
+	if (!core || !initialized || !std::isfinite(startJD) || startJD <= 0.0
+		|| tleElements.first.isEmpty() || tleElements.second.isEmpty())
+		return passes;
+
+	const PlanetP currentPlanet = core->getCurrentPlanet();
+	if (currentPlanet.isNull() || currentPlanet->getEnglishName() != QLatin1String("Earth"))
+		return passes;
+
+	SolarSystem* solarSystem = GETSTELMODULE(SolarSystem);
+	const PlanetP earth = solarSystem ? solarSystem->getEarth() : PlanetP();
+	if (earth.isNull())
+		return passes;
+
+	QByteArray idBytes = id.toLatin1();
+	QByteArray t1 = tleElements.first.toLatin1();
+	QByteArray t2 = tleElements.second.toLatin1();
+	t1.truncate(130);
+	t2.truncate(130);
+	gSatTEME localSat(idBytes.data(), t1.data(), t2.data());
+
+	const StelLocation loc = core->getCurrentLocation();
+	const double radLatitude = loc.getLatitude() * M_PI_180;
+	const double radLongitude = loc.getLongitude() * M_PI_180;
+	const double sinLat = std::sin(radLatitude);
+	const double cosLat = std::cos(radLatitude);
+	const double altKm = loc.altitude / 1000.0;
+	const double C = 1.0 / std::sqrt(1.0 + __f * (__f - 2.0) * sinLat * sinLat);
+	const double S = (1.0 - __f) * (1.0 - __f) * C;
+	const double rEq = (EARTH_RADIUS * C + altKm) * cosLat;
+	const double zObs = (EARTH_RADIUS * S + altKm) * sinLat;
+
+	const double searchHours = qBound(1.0, hours, 24.0 * 7.0);
+	const int maximumPasses = qBound(1, limit, 32);
+	const double elevationLimit = qBound(-5.0, minimumElevation, 89.0);
+	const double sampleStep = qMax(30.0, searchHours * 3600.0 / 720.0) / 86400.0;
+	const double stopJD = startJD + searchHours / 24.0;
+	const double sunUpdateStep = 300.0 / 86400.0;
+
+	double cachedSunJD = startJD - sunUpdateStep * 2.0;
+	Vec3d cachedSunEqKm(0.0);
+	bool predictionFailed = false;
+	bool initialValid = false;
+	QString initialStatus = QStringLiteral("uninitialized");
+
+	auto sunGeocentricKmAt = [&](double jd) -> Vec3d {
+		if (std::abs(jd - cachedSunJD) >= sunUpdateStep)
+		{
+			const double jde = jd + core->computeDeltaT(jd) / 86400.0;
+			Vec3d earthPos, earthVel;
+			earth->computePosition(jde, earthPos, earthVel);
+			double obliquity = 0.0, chi = 0.0, omega = 0.0, psi = 0.0;
+			getPrecessionAnglesVondrak(jde, &obliquity, &chi, &omega, &psi);
+			const Mat4d toEqOfDate = Mat4d::zrotation(-chi) * Mat4d::xrotation(omega) * Mat4d::zrotation(psi);
+			cachedSunEqKm = (toEqOfDate * (-earthPos)) * AU;
+			cachedSunJD = jd;
+		}
+		return cachedSunEqKm;
+	};
+
+	struct PassSample
+	{
+		double jd = 0.0;
+		double altitude = -90.0;
+		double azimuth = 0.0;
+		double magnitude = 99.0;
+		double range = 0.0;
+		gSatWrapper::Visibility visibility = gSatWrapper::UNKNOWN;
+		double sunAltitude = -90.0;
+		bool valid = false;
+		QString status;
+	};
+
+	auto sampleAt = [&](double jd) -> PassSample {
+		PassSample sample;
+		sample.jd = jd;
+		const gTime epoch(jd);
+		localSat.setEpoch(epoch);
+		QString status = QString::fromLatin1(localSat.getPropagationStatus());
+		const Vec3d subPoint = localSat.getSubPoint();
+		if (status == QLatin1String("valid") && subPoint[2] < 80.0)
+			status = QStringLiteral("below_atmosphere_limit");
+		sample.status = status;
+		sample.valid = (status == QLatin1String("valid"));
+		if (!sample.valid)
+		{
+			predictionFailed = true;
+			return sample;
+		}
+
+		const double theta = epoch.toThetaLMST(radLongitude);
+		const double sinTheta = std::sin(theta);
+		const double cosTheta = std::cos(theta);
+		const Vec3d obsPos(rEq * cosTheta, rEq * sinTheta, zObs);
+		const Vec3d satPos = localSat.getPos();
+		const Vec3d slant = satPos - obsPos;
+		const double rangeKm = slant.norm();
+		if (!std::isfinite(rangeKm) || rangeKm <= 0.0)
+		{
+			sample.valid = false;
+			predictionFailed = true;
+			return sample;
+		}
+
+		auto toTopo = [&](const Vec3d& d) -> Vec3d {
+			return Vec3d(
+				sinLat * cosTheta * d[0] + sinLat * sinTheta * d[1] - cosLat * d[2],
+				-sinTheta * d[0] + cosTheta * d[1],
+				cosLat * cosTheta * d[0] + cosLat * sinTheta * d[1] + sinLat * d[2]);
+		};
+
+		Vec3d topoSat = toTopo(slant);
+		topoSat.normalize();
+		StelUtils::rectToSphe(&sample.azimuth, &sample.altitude, topoSat);
+		sample.azimuth *= M_180_PI;
+		sample.altitude *= M_180_PI;
+		if (sample.azimuth < 0.0)
+			sample.azimuth += 360.0;
+		sample.range = rangeKm;
+
+		const Vec3d sunGeoKm = sunGeocentricKmAt(jd);
+		const Vec3d sunRel = sunGeoKm - obsPos;
+		const double sunRelNorm = sunRel.norm();
+		const Vec3d topoSun = toTopo(sunRel);
+		sample.sunAltitude = sunRelNorm > 0.0
+			? std::asin(qBound(-1.0, topoSun[2] / sunRelNorm, 1.0)) * M_180_PI
+			: -90.0;
+
+		gSatWrapper::Visibility vis = gSatWrapper::BELOW_HORIZON;
+		if (topoSat[2] > 0.0)
+		{
+			if (topoSun[2] > 0.0)
+			{
+				vis = gSatWrapper::RADAR_SUN;
+			}
+			else
+			{
+				vis = gSatWrapper::VISIBLE;
+				const Vec3d satToSun = sunGeoKm - satPos;
+				const double psun = satToSun.norm();
+				const double pearth = satPos.norm();
+				if (psun > 0.0 && pearth > 6371.0)
+				{
+					const double thetaE = std::asin(qBound(-1.0, (12742.0 / 2.0) / pearth, 1.0));
+					const double thetaS = std::asin(qBound(-1.0, (1391000.0 / 2.0) / psun, 1.0));
+					const double cosAngle = qBound(-1.0, ((-satPos).dot(satToSun)) / (pearth * psun), 1.0);
+					const double angle = std::acos(cosAngle);
+					if (thetaE > thetaS && angle < (thetaE - thetaS))
+						vis = gSatWrapper::RADAR_NIGHT;
+					else if (std::abs(thetaE - thetaS) < angle && angle < (thetaE + thetaS))
+						vis = gSatWrapper::PENUMBRAL;
+					else if (thetaS > thetaE && angle < (thetaS - thetaE))
+						vis = gSatWrapper::ANNULAR;
+				}
+			}
+		}
+		sample.visibility = vis;
+
+		double vmag = 7.0;
+		if (vis != gSatWrapper::VISIBLE)
+			vmag = (vis == gSatWrapper::PENUMBRAL ? 8.0 : 17.0);
+		if (vis == gSatWrapper::VISIBLE || vis == gSatWrapper::PENUMBRAL)
+		{
+			if (isStarlink)
+			{
+				vmag = 5.93 + 5.0 * std::log10(rangeKm / 1000.0);
+				if (name.contains("DARKSAT", Qt::CaseInsensitive))
+					vmag *= 0.78;
+			}
+			else if (stdMag < 99.0)
+			{
+				Vec3d satToSunDir = sunGeoKm - satPos;
+				Vec3d satToObsDir = obsPos - satPos;
+				const double sNorm = satToSunDir.norm();
+				const double oNorm = satToObsDir.norm();
+				double phase = 0.0;
+				if (sNorm > 0.0 && oNorm > 0.0)
+					phase = std::acos(qBound(-1.0, satToSunDir.dot(satToObsDir) / (sNorm * oNorm), 1.0));
+				const double fracil = qMax(0.000001, (1.0 + std::cos(phase)) * 0.5);
+				vmag = stdMag - 15.75 + 2.5 * std::log10(rangeKm * rangeKm / fracil);
+			}
+		}
+		sample.magnitude = vmag;
+		return sample;
+	};
+
+	auto refineBoundary = [&](double low, double high, bool entering) -> double {
+		for (int iteration = 0; iteration < 22; ++iteration)
+		{
+			const double middle = (low + high) * 0.5;
+			const bool above = sampleAt(middle).altitude >= elevationLimit;
+			if (entering)
+			{
+				if (above) high = middle;
+				else low = middle;
+			}
+			else
+			{
+				if (above) low = middle;
+				else high = middle;
+			}
+		}
+		return entering ? high : low;
+	};
+
+	auto refinePeak = [&](double leftJD, double rightJD, PassSample bestSample) -> PassSample {
+		double a = leftJD;
+		double b = rightJD;
+		for (int iteration = 0; iteration < 18 && (b - a) > (0.5 / 86400.0); ++iteration)
+		{
+			const double m1 = a + (b - a) / 3.0;
+			const double m2 = b - (b - a) / 3.0;
+			const PassSample s1 = sampleAt(m1);
+			const PassSample s2 = sampleAt(m2);
+			if (s1.altitude > bestSample.altitude) bestSample = s1;
+			if (s2.altitude > bestSample.altitude) bestSample = s2;
+			if (s1.altitude < s2.altitude) a = m1;
+			else b = m2;
+		}
+		return bestSample;
+	};
+
+	auto utcString = [](double jd) {
+		return StelUtils::julianDayToISO8601String(jd);
+	};
+	auto localString = [&](double jd) {
+		return StelUtils::julianDayToISO8601String(jd + core->getUTCOffset(jd) / 24.0);
+	};
+	auto visibilityReason = [](gSatWrapper::Visibility visibility) {
+		switch (visibility)
+		{
+		case gSatWrapper::VISIBLE: return QStringLiteral("sunlit_and_observer_dark");
+		case gSatWrapper::PENUMBRAL: return QStringLiteral("penumbra");
+		case gSatWrapper::RADAR_SUN: return QStringLiteral("observer_in_daylight");
+		case gSatWrapper::RADAR_NIGHT: return QStringLiteral("satellite_in_earth_shadow");
+		case gSatWrapper::ANNULAR: return QStringLiteral("satellite_eclipsed");
+		case gSatWrapper::BELOW_HORIZON: return QStringLiteral("below_horizon");
+		default: return QStringLiteral("unknown");
+		}
+	};
+
+	PassSample previous = sampleAt(startJD);
+	initialValid = previous.valid;
+	initialStatus = previous.status;
+	if (epochOrbitValidOut) *epochOrbitValidOut = initialValid;
+	if (propagationStatusOut) *propagationStatusOut = initialStatus;
+	if (!initialValid)
+		return passes;
+
+	bool inPass = previous.altitude >= elevationLimit;
+	double passStartJD = inPass ? startJD : 0.0;
+	PassSample best = previous;
+	bool visibleSeen = previous.visibility == gSatWrapper::VISIBLE && previous.altitude >= elevationLimit;
+	QString bestVisibilityReason = visibilityReason(previous.visibility);
+	int completedPasses = 0;
+
+	auto appendPass = [&](double passBeginJD, double passFinishJD, PassSample peak, bool ongoing) {
+		if (passFinishJD <= passBeginJD)
+			return;
+		peak = refinePeak(passBeginJD, passFinishJD, peak);
+		if (peak.visibility == gSatWrapper::VISIBLE && peak.altitude >= elevationLimit)
+			visibleSeen = true;
+		const PassSample start = sampleAt(passBeginJD);
+		const PassSample end = sampleAt(passFinishJD);
+		QVariantMap pass;
+		pass.insert("start", localString(passBeginJD));
+		pass.insert("peak", localString(peak.jd));
+		pass.insert("end", localString(passFinishJD));
+		pass.insert("startJD", passBeginJD);
+		pass.insert("peakJD", peak.jd);
+		pass.insert("endJD", passFinishJD);
+		pass.insert("startUtc", utcString(passBeginJD));
+		pass.insert("peakUtc", utcString(peak.jd));
+		pass.insert("endUtc", utcString(passFinishJD));
+		pass.insert("appearance", localString(passBeginJD));
+		pass.insert("disappearance", localString(passFinishJD));
+		pass.insert("startAzimuth", start.azimuth);
+		pass.insert("peakAzimuth", peak.azimuth);
+		pass.insert("endAzimuth", end.azimuth);
+		pass.insert("maxAltitude", peak.altitude);
+		pass.insert("maxMagnitude", peak.magnitude);
+		pass.insert("peakRangeKm", peak.range);
+		pass.insert("durationSeconds", (passFinishJD - passBeginJD) * 86400.0);
+		pass.insert("elevationLimit", elevationLimit);
+		pass.insert("visible", visibleSeen);
+		pass.insert("peakVisible", peak.visibility == gSatWrapper::VISIBLE);
+		pass.insert("visibilityReason", visibleSeen ? QStringLiteral("sunlit_and_observer_dark") : bestVisibilityReason);
+		pass.insert("peakSunAltitude", peak.sunAltitude);
+		pass.insert("ongoing", ongoing);
+		pass.insert("offline", true);
+		pass.insert("source", QStringLiteral("local TLE propagation"));
+		pass.insert("tleEpoch", tleEpoch);
+		passes.append(pass);
+	};
+
+	for (double jd = startJD + sampleStep; jd <= stopJD && completedPasses < maximumPasses; jd += sampleStep)
+	{
+		const PassSample current = sampleAt(qMin(jd, stopJD));
+		if (predictionFailed)
+			break;
+		const bool previousAbove = previous.altitude >= elevationLimit;
+		const bool currentAbove = current.altitude >= elevationLimit;
+		if (!inPass && !previousAbove && currentAbove)
+		{
+			passStartJD = refineBoundary(previous.jd, current.jd, true);
+			inPass = true;
+			best = current;
+			visibleSeen = current.visibility == gSatWrapper::VISIBLE;
+			bestVisibilityReason = visibilityReason(current.visibility);
+		}
+		if (inPass)
+		{
+			if (current.altitude > best.altitude)
+				best = current;
+			if (current.visibility == gSatWrapper::VISIBLE && current.altitude >= elevationLimit)
+				visibleSeen = true;
+			if (current.visibility != gSatWrapper::VISIBLE && bestVisibilityReason == QStringLiteral("unknown"))
+				bestVisibilityReason = visibilityReason(current.visibility);
+		}
+		if (inPass && previousAbove && !currentAbove)
+		{
+			const double passEndJD = refineBoundary(previous.jd, current.jd, false);
+			appendPass(passStartJD, passEndJD, best, false);
+			++completedPasses;
+			inPass = false;
+			passStartJD = 0.0;
+			visibleSeen = false;
+			bestVisibilityReason = QStringLiteral("unknown");
+		}
+		previous = current;
+	}
+	if (!predictionFailed && inPass && completedPasses < maximumPasses)
+		appendPass(passStartJD, stopJD, best, true);
+
+	if (predictionFailed)
+	{
+		passes.clear();
+		if (epochOrbitValidOut) *epochOrbitValidOut = false;
+	}
 	return passes;
 }
 

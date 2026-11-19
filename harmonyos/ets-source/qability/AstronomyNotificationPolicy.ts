@@ -22,6 +22,7 @@ export interface AstronomyReminderPreferences {
   satellitePassEnabled?: boolean
   digestEnabled?: boolean
   dndEnabled?: boolean
+  dndSatelliteOnly?: boolean
   dndStartMinutes?: number
   dndEndMinutes?: number
 }
@@ -32,6 +33,7 @@ export interface NotificationPreferenceSnapshot {
   digestEnabled?: boolean
   subscriptionsVersion?: number
   dndEnabled: boolean
+  dndSatelliteOnly?: boolean
   dndStartMinutes: number
   dndEndMinutes: number
   passLeadMinutes: number
@@ -41,6 +43,7 @@ export function validNotificationPreferences(value: unknown): value is Notificat
   return record(value) && typeof value.astronomyEventsEnabled === 'boolean' && typeof value.dndEnabled === 'boolean' &&
     (value.satellitePassEnabled === undefined || typeof value.satellitePassEnabled === 'boolean') &&
     (value.digestEnabled === undefined || typeof value.digestEnabled === 'boolean') &&
+    (value.dndSatelliteOnly === undefined || typeof value.dndSatelliteOnly === 'boolean') &&
     (value.subscriptionsVersion === undefined || value.subscriptionsVersion === 1) &&
     integer(value.dndStartMinutes, 0, 1439) && integer(value.dndEndMinutes, 0, 1439) && integer(value.passLeadMinutes, 0, 60)
 }
@@ -225,7 +228,7 @@ export function validateReminder(input: unknown, now: number, preferences?: Astr
   }
   if (preferences !== undefined) {
     if (!record(preferences)) return invalid('preferences must be an object')
-    for (const key of ['astronomyEventsEnabled', 'satellitePassEnabled', 'digestEnabled', 'dndEnabled']) {
+    for (const key of ['astronomyEventsEnabled', 'satellitePassEnabled', 'digestEnabled', 'dndEnabled', 'dndSatelliteOnly']) {
       if (preferences[key] !== undefined && typeof preferences[key] !== 'boolean') return invalid(`${key} must be boolean`)
     }
     const enabled = route.kind === 'satellite-pass' ? preferences.satellitePassEnabled :
@@ -235,7 +238,8 @@ export function validateReminder(input: unknown, now: number, preferences?: Astr
   let quiet = payload.quietHours
   if (quiet !== undefined && (!record(quiet) || typeof quiet.enabled !== 'boolean' ||
     !integer(quiet.startMinutes, 0, 1439) || !integer(quiet.endMinutes, 0, 1439))) return invalid('quietHours requires enabled and minute values from 0 to 1439')
-  if (preferences?.dndEnabled === true) {
+  const isSatelliteReminder = route.kind === 'satellite-pass' || route.subscription === 'satellite'
+  if (preferences?.dndEnabled === true && !(preferences.dndSatelliteOnly === true && !isSatelliteReminder)) {
     if (!integer(preferences.dndStartMinutes, 0, 1439) || !integer(preferences.dndEndMinutes, 0, 1439)) return invalid('enabled quiet hours require valid start/end minutes')
     const preferenceQuiet: AstronomyQuietHours = { enabled: true, startMinutes: preferences.dndStartMinutes, endMinutes: preferences.dndEndMinutes }
     const triggerMinute = type === 'alarm' ? hour * 60 + minute : new Date(fireAt).getHours() * 60 + new Date(fireAt).getMinutes()
