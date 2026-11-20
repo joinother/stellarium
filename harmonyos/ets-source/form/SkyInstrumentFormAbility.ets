@@ -2,10 +2,11 @@ import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@
 import { common, Want } from '@kit.AbilityKit'
 import preferences from '@ohos.data.preferences'
 import hilog from '@ohos.hilog'
-import { defaultAstronomyCard, normalizeAstronomyCard } from './AstronomyCardData'
+import { defaultAstronomyCard, normalizeAstronomyCard, applyTimeline48hToCard } from './AstronomyCardData'
 
 const CARD_STORE = 'sky_instrument_card'
 const CARD_SNAPSHOT_KEY = 'almanacSnapshot'
+const CARD_TIMELINE_KEY = 'timeline48hSnapshot'
 const DOMAIN = 0xD003
 const TAG = 'SkyInstrumentForm'
 
@@ -19,7 +20,10 @@ async function readCardData(context: common.FormExtensionContext): Promise<Recor
     const store = await preferences.getPreferences(context, CARD_STORE)
     const raw = await store.get(CARD_SNAPSHOT_KEY, '')
     if (typeof raw !== 'string' || raw.length === 0) return fallback
-    return normalizeAstronomyCard(raw, Date.now())
+    const timelineRaw = await store.get(CARD_TIMELINE_KEY, '')
+    const now = Date.now()
+    const card = normalizeAstronomyCard(raw, now)
+    return applyTimeline48hToCard(card, typeof timelineRaw === 'string' ? timelineRaw : '', now)
   } catch (error) {
     hilog.warn(DOMAIN, TAG, 'read card snapshot failed: %{public}s', String(error))
     return fallback

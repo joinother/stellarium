@@ -1,5 +1,28 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 非地球观测点天象日历、双轨通知与 48 小时轻量星历快照（阶段 1）
+
+- **修改文件：** `src/core/modules/PlanetaryCalendarHelper.hpp`（新增）、`src/StelMainView.cpp`、`harmonyos/ets-source/state/AstronomyCalendarText.ts`、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/state/AstronomyCalendarStore.ets`、`harmonyos/ets-source/capability/AstronomyCalendarController.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/qability/AstronomyNotificationPolicy.ts`、`harmonyos/ets-source/qability/AstronomyNotificationService.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/qability/AstronomyCardService.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-planetary-calendar-helper.cpp`（新增）、`scripts/test-ohos-off-earth-calendar-and-snapshot.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **太阳系多天体非地球天象日历（Planetocentric Calendar Solver）：**
+     - 新增纯 C++ 辅助头 `PlanetaryCalendarHelper.hpp`（20 个行星/卫星半长轴、主伴星/母行星角色、火星春分日心黄经、相位照明率公式与太阳高度→本地大气十六进制天空色板映射）。
+     - `ohosAstronomyCalendarEvents` 新增显式 `planet` 参数与分星球缓存键（默认/地球路径 100% 不变、不读写共享模拟态）；当观测点为非地球行星或卫星时，调用无副作用 `ohosOffEarthCalendarEvents()` 实时求解：
+       - **行星视角**（火星/金星/木星/土星/天王/海王/水星/冥王）：以当前星球为中心的其他行星冲日/合日与内行星东/西大距（含火星看**地球东/西大距**）、近距离行星合、慢速主卫星相位（如土星看土卫六）及火星四季分至点（`Ls = 0°/90°/180°/270°`）。
+       - **卫星视角**（月球/土卫六/伽利略卫星/海卫一等）：宿主母行星相位（月球见**上弦地/满地/下弦地/新地**、土卫六见**土星四相**）、母行星食日（`companion-eclipse`，如月球见地球食日）及当地太阳系行星事件。
+     - `AstronomyCalendarController` / `AstronomyCalendarPanel` / `MainWindowNativeNode` 同步适配非地球事件类型与覆盖提示，支持切星后自动刷新日历并在「查看星空」时自动切回对应观测星球再飞向目标时刻。
+  2. **双轨通知与异星深链路由：**
+     - **轨道 1（常驻自动订阅）**：`AstronomySubscriptionFeedLoader` 始终锚定地球观测地计算常驻月相/流星雨/近地卫星订阅，用户临时漫游到其他星球不会清空或污染原有地球提醒。
+     - **轨道 2（手动单次天象预约）**：`AstronomyRoute`、`AstronomyNotificationPolicy`、`AstronomyNotificationService` 与 `NotificationController.scheduleEvent()` 完整透传 `observerPlanet` 并在独立 `eventKey` 中隔离不同星球事件；异星提醒标题自动带星球徽标（如 `星象仪 · 【火星】地球东大距`），点击通知深链回跳时 `consumeCardRoute()` 自动切回对应观测星球。
+  3. **48 小时轻量星历时间片快照（为下一阶段新卡片打底）：**
+     - `getTonightEvents` 在保持全部地球字段兼容的同时，增量输出 `observer`、`companion`（地球→月球、月球→地相、火星→火卫一、土卫六→土星等）、基于星球实际太阳日长度前向 48h 扫描的 `sunCycle`，以及 25 采样点（每 2 小时一点，覆盖未来 48 小时）的 `timeline48h`（含实时太阳高度、本地大气天顶/地平色值 `skyHexTop`/`skyHexHorizon` 与伴星仰角/照明率）。
+     - `AstronomyCardData.ts`、`AstronomyCardService.ets` 与 `SkyInstrumentFormAbility.ets` 持久化并离线线性插值 `timeline48hSnapshot`，让桌面卡片在 48 小时内无需拉起 C++ 进程即可实时推演天色与伴星状态。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`scripts/test-planetary-calendar-helper.cpp`（`-Wall -Wextra -Werror`）、`test-ohos-off-earth-calendar-and-snapshot.mjs` 及原有日历/通知/提醒/卡片回归共 **111/111 项全通过**，`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实测：
+    - 2026 年 11 月实测：地球 `16` 条事件不变；火星实时算得 `地球东大距` 与 `水星合日`；月球实时算得 `上弦地/满地/下弦地（月球视角）`、`火星合木星` 等 `8` 条；土卫六实时算得 `新/上弦/满/下弦土星（土卫六视角）` 等 `9` 条。
+    - `getTonightEvents` 实测：火星（太阳日 `24.66h`、火卫一 `蛾眉火卫一`、`timeline48h` 含火星蓝色暮光 `#5694E2`）、月球（太阳日 `708.73h`、`残地`、无大气深空 `#05070D`）、土卫六（太阳日 `383.26h`、`蛾眉土星`）、地球（`24.0h`、`盈凸月`、`darkWindowHours 10.88h`）全部精确输出 25 点 48h 快照且外星零泄露地球流星雨/人造卫星。
+    - 真机 UI 截图核验：月球与火星视角下打开「天象日历」面板卡片列表清晰无裁切，切星后自动同步刷新。
+
 ## [2026-11-20] 高倍缩放双层环境淡出（雾山默认淡出 + 大气与实景地景可选开关）
 
 - **修改文件：** `src/core/modules/EnvironmentZoomFade.hpp`（新增）、`src/core/modules/Landscape.hpp`、`src/core/modules/Landscape.cpp`、`src/core/modules/LandscapeMgr.hpp`、`src/core/modules/LandscapeMgr.cpp`、`src/core/StelSkyDrawer.cpp`、`src/StelMainView.cpp`、`src/StelOhosCommandCatalog.hpp`、`harmonyos/ets-source/common/types/StellariumTypes.ets`、`harmonyos/ets-source/state/LayerStore.ets`、`harmonyos/ets-source/capability/LayerController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/layers/AtmosphereGroundSection.ets`、`scripts/test-environment-zoom-fade.cpp`（新增）、`scripts/test-ohos-environment-zoom-fade.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。

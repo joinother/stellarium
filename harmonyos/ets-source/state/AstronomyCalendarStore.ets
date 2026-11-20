@@ -18,6 +18,7 @@ export class AstronomyCalendarStore {
   throughYear: number = this.year
   throughMonth: number = this.month
   loadingMore: boolean = false
+  observerPlanet: string = 'Earth'
 
   visibleEvents(): AstronomyCalendarEvent[] {
     return calendarDayEvents(this.events, this.selectedDay)

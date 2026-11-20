@@ -629,11 +629,29 @@ export class NotificationController {
       typeof event.at !== 'number' || !Number.isFinite(event.at) || !Number.isFinite(new Date(event.at).getTime())) {
       return this.reportReminderResult({ ok: false, reason: 'validation', error: notificationText('天象事件数据无效。') })
     }
-    return this.scheduleOne({
-      eventAt: new Date(event.at).toISOString(), title: notificationText('星象仪 · ') + event.title,
+    const rawPlanet = typeof event.observerPlanet === 'string' ? event.observerPlanet.trim() : ''
+    const isOffEarth = rawPlanet.length > 0 && rawPlanet.toLowerCase() !== 'earth'
+    let planetLabel = rawPlanet
+    if (rawPlanet === 'Moon') planetLabel = '月球'
+    else if (rawPlanet === 'Mercury') planetLabel = '水星'
+    else if (rawPlanet === 'Venus') planetLabel = '金星'
+    else if (rawPlanet === 'Mars') planetLabel = '火星'
+    else if (rawPlanet === 'Jupiter') planetLabel = '木星'
+    else if (rawPlanet === 'Saturn') planetLabel = '土星'
+    else if (rawPlanet === 'Titan') planetLabel = '土卫六'
+    else if (rawPlanet === 'Uranus') planetLabel = '天王星'
+    else if (rawPlanet === 'Neptune') planetLabel = '海王星'
+    else if (rawPlanet === 'Pluto') planetLabel = '冥王星'
+    const titlePrefix = isOffEarth
+      ? notificationText('星象仪 · 【' + planetLabel + '】')
+      : notificationText('星象仪 · ')
+    const req: AstronomyReminderRequest = {
+      eventAt: new Date(event.at).toISOString(), title: titlePrefix + event.title,
       content: this.eventReminderContent(event, event.kind === 'satellite-pass' ? 'satellite' : 'astronomy', this.store.passLeadMinutes),
       eventId: event.id, kind: event.kind, jd: event.jd, target: event.target, panel: 'calendar', tab: event.tab
-    }, true)
+    }
+    if (isOffEarth) req.observerPlanet = rawPlanet
+    return this.scheduleOne(req, true)
   }
 
   private openCalendarPicker(): void {

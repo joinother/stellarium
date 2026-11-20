@@ -9,6 +9,7 @@ export interface AstronomyRoute {
   eventAt?: string
   jd?: number
   target?: string
+  observerPlanet?: string
 }
 
 export interface AstronomyQuietHours {
@@ -154,6 +155,7 @@ export function routeError(value: unknown): string {
   for (const key of ['panel', 'eventId', 'kind', 'target']) {
     if (value[key] !== undefined && !text(value[key], 512, key !== 'panel')) return `${key} must be text (at most 512 UTF-8 bytes)`
   }
+  if (value.observerPlanet !== undefined && !text(value.observerPlanet, 128, true)) return 'observerPlanet must be text (at most 128 UTF-8 bytes)'
   if (value.tab !== undefined && !integer(value.tab, 0, 100)) return 'tab must be an integer from 0 to 100'
   if (value.eventAt !== undefined && !Number.isFinite(parseEventTime(value.eventAt))) return 'eventAt must be an ISO date-time'
   if (value.jd !== undefined && (!Number.isFinite(jdTime(value.jd)) || !Number.isFinite(new Date(jdTime(value.jd)).getTime()))) return 'jd must be a finite representable Julian date'
@@ -163,7 +165,8 @@ export function routeError(value: unknown): string {
 
 export function normalizeRoute(route: AstronomyRoute): AstronomyRoute {
   const eventTime = route.eventAt !== undefined ? parseEventTime(route.eventAt) : jdTime(route.jd)
-  return {
+  const rawPlanet = route.observerPlanet?.trim() ?? ''
+  const normalized: AstronomyRoute = {
     subscription: route.subscription,
     panel: route.panel ?? 'astro', tab: route.tab ?? 8,
     eventId: route.eventId?.trim() ?? '', kind: route.kind?.trim() || 'astronomy',
@@ -171,10 +174,18 @@ export function normalizeRoute(route: AstronomyRoute): AstronomyRoute {
     eventAt: Number.isFinite(eventTime) ? new Date(Math.round(eventTime)).toISOString() : undefined,
     jd: Number.isFinite(eventTime) ? eventTime / 86400000 + 2440587.5 : undefined
   }
+  if (rawPlanet.length > 0 && rawPlanet.toLowerCase() !== 'earth') {
+    normalized.observerPlanet = rawPlanet
+  }
+  return normalized
 }
 
-export function reminderEventKey(type: string, kind: string, eventId: string, eventTime: number, target: string = ''): string {
+export function reminderEventKey(type: string, kind: string, eventId: string, eventTime: number, target: string = '', observerPlanet: string = ''): string {
   if (!eventId && type !== 'calendar') return ''
+  const planet = observerPlanet.trim()
+  if (planet.length > 0 && planet.toLowerCase() !== 'earth') {
+    return JSON.stringify([type, kind, eventId || target, type === 'calendar' ? Math.floor(eventTime / 1000) : 0, planet])
+  }
   return JSON.stringify([type, kind, eventId || target, type === 'calendar' ? Math.floor(eventTime / 1000) : 0])
 }
 
@@ -254,7 +265,7 @@ export function validateReminder(input: unknown, now: number, preferences?: Astr
     fireAt: fireAt, triggerSeconds: seconds, hour: hour, minute: minute,
     daysOfWeek: days.slice().sort((left, right) => left - right), leadMinutes: leadMinutes,
     route: route, eventKey: (route.subscription === undefined ? '' : 'subscription:' + route.subscription + ':') +
-      reminderEventKey(type, route.kind ?? 'astronomy', route.eventId ?? '', eventTime, route.target)
+      reminderEventKey(type, route.kind ?? 'astronomy', route.eventId ?? '', eventTime, route.target, route.observerPlanet)
   } }
 }
 

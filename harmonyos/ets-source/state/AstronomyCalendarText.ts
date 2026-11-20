@@ -1,6 +1,7 @@
 export interface CalendarObserverContext {
   latitude?: number
   bortleScale?: number
+  observerPlanet?: string
 }
 
 export function calendarText(language: string, chinese: string, english: string): string {
@@ -34,8 +35,13 @@ export function calendarMoonPhaseTitle(language: string, index: number): string 
 
 export function calendarPlanetName(language: string, englishName: string): string {
   const map: Record<string, string> = {
-    Sun: '太阳', Moon: '月球', Mercury: '水星', Venus: '金星',
-    Mars: '火星', Jupiter: '木星', Saturn: '土星', Uranus: '天王星', Neptune: '海王星'
+    Sun: '太阳', Moon: '月球', Earth: '地球', Mercury: '水星', Venus: '金星',
+    Mars: '火星', Phobos: '火卫一', Deimos: '火卫二',
+    Jupiter: '木星', Io: '木卫一', Europa: '木卫二', Ganymede: '木卫三', Callisto: '木卫四',
+    Saturn: '土星', Titan: '土卫六', Enceladus: '土卫二', Rhea: '土卫五',
+    Uranus: '天王星', Titania: '天卫三',
+    Neptune: '海王星', Triton: '海卫一',
+    Pluto: '冥王星', Charon: '冥卫一'
   }
   return language.toLowerCase().startsWith('zh') ? (map[englishName] ?? englishName) : englishName
 }

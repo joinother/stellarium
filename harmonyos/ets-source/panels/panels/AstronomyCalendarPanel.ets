@@ -86,9 +86,9 @@ export struct AstronomyCalendarPanel {
   }
 
   private eventPriority(event: AstronomyCalendarEvent): number {
-    if (event.kind === 'meteor-peak') return 0
+    if (event.kind === 'meteor-peak' || event.kind === 'companion-eclipse') return 0
     if (event.kind === 'planetary-event') return 1
-    if (event.kind === 'moon-phase') return event.isSupermoon === true ? 0 : 2
+    if (event.kind === 'moon-phase' || event.kind === 'companion-phase') return event.isSupermoon === true ? 0 : 2
     return 3
   }
 
@@ -104,9 +104,10 @@ export struct AstronomyCalendarPanel {
 
   private eventDotColor(event: AstronomyCalendarEvent): ResourceColor {
     if (this.c.isNight) return this.c.accent
+    if (event.kind === 'companion-eclipse') return '#FF8A65'
     if (event.kind === 'meteor-peak') return '#64B5F6'
     if (event.kind === 'planetary-event') return '#FFB74D'
-    if (event.kind === 'moon-phase') return event.isSupermoon === true ? '#FFE082' : '#E0E6F2'
+    if (event.kind === 'moon-phase' || event.kind === 'companion-phase') return event.isSupermoon === true ? '#FFE082' : '#E0E6F2'
     return '#81C784'
   }
 
@@ -184,7 +185,9 @@ export struct AstronomyCalendarPanel {
       return detail ? $r('app.media.calendar_moon_2_detail') : $r('app.media.calendar_moon_2')
     }
     if (event.kind === 'meteor-peak') return detail ? $r('app.media.calendar_meteor_detail') : $r('app.media.calendar_meteor')
-    if (event.kind === 'solar-term') return detail ? $r('app.media.calendar_solar_detail') : $r('app.media.calendar_solar')
+    if (event.kind === 'solar-term' || event.kind === 'planetary-season' || event.kind === 'companion-eclipse') {
+      return detail ? $r('app.media.calendar_solar_detail') : $r('app.media.calendar_solar')
+    }
     if (event.target === 'Mercury') return detail ? $r('app.media.calendar_mercury_detail') : $r('app.media.calendar_mercury')
     if (event.target === 'Venus') return detail ? $r('app.media.calendar_venus_detail') : $r('app.media.calendar_venus')
     if (event.target === 'Mars') return detail ? $r('app.media.calendar_mars_detail') : $r('app.media.calendar_mars')

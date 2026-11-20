@@ -2860,14 +2860,26 @@ export struct WindowNativeNode {
       const hooks: AstronomyCalendarHostHooks = {
         viewSky: (event: AstronomyCalendarEvent): void => {
           this.setPanel('', true, true)
-          this.timeTransitionCtl().animate(event.jd, event.title, () => {
-            if (event.target.length > 0) {
-              this.callInteractive('searchObject', event.target, (response: StellariumBridgeResponse) => {
-                this.applySelectedObject(response)
-                this.refreshState()
-              })
-            } else this.refreshState()
-          })
+          const runJump = (): void => {
+            this.timeTransitionCtl().animate(event.jd, event.title, () => {
+              if (event.target.length > 0) {
+                this.callInteractive('searchObject', event.target, (response: StellariumBridgeResponse) => {
+                  this.applySelectedObject(response)
+                  this.refreshState()
+                })
+              } else this.refreshState()
+            })
+          }
+          const targetPlanet = event.observerPlanet?.trim() ?? ''
+          const currentPlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
+          if (targetPlanet.length > 0 && targetPlanet.toLowerCase() !== currentPlanet.toLowerCase()) {
+            this.callInteractive('setObserverPlanet', targetPlanet, () => {
+              this.sessionToolStore.observerPlanet = targetPlanet
+              runJump()
+            })
+          } else {
+            runJump()
+          }
         },
         remind: (event: AstronomyCalendarEvent): Promise<AstronomyCalendarReminderResult> => this.notificationCtl().scheduleEvent(event),
         feedChanged: (events: AstronomyCalendarEvent[]): void => {
@@ -2884,7 +2896,8 @@ export struct WindowNativeNode {
         },
         observerContext: (): CalendarObserverContext => ({
           latitude: this.observerLatitude,
-          bortleScale: this.layerViewStore.bortleScale
+          bortleScale: this.layerViewStore.bortleScale,
+          observerPlanet: this.sessionToolStore.observerPlanet
         })
       }
       this.calendarController = new AstronomyCalendarController(this.commandPort(), this.calendarStore, hooks)
@@ -2940,6 +2953,13 @@ export struct WindowNativeNode {
         const calendar = this.calendarCtl()
         if (name === 'setCalendarMonth') {
           if (!/^\d{4}-\d{2}$/.test(payload)) throw new Error('expected YYYY-MM')
+          const syncedPlanet = await new Promise<string>((resolve) => {
+            this.callInteractive('getObserverInfo', '', (info: StellariumBridgeResponse) => {
+              const p = typeof info.planet === 'string' && info.planet.trim().length > 0 ? info.planet.trim() : ''
+              resolve(p)
+            })
+          })
+          if (syncedPlanet.length > 0) this.sessionToolStore.observerPlanet = syncedPlanet
           calendar.loadMonth(Number(payload.substring(0, 4)), Number(payload.substring(5)))
         } else if (name === 'loadMoreCalendarEvents') {
           calendar.loadMore()
@@ -4144,6 +4164,14 @@ export struct WindowNativeNode {
       const panel = String(route['panel'] ?? '').trim()
       const kind = typeof route['kind'] === 'string' ? String(route['kind']).trim() : ''
       const target = typeof route['target'] === 'string' ? String(route['target']).trim() : ''
+      const routePlanet = typeof route['observerPlanet'] === 'string' ? String(route['observerPlanet']).trim() : ''
+      const currentPlanet = this.sessionToolStore?.observerPlanet?.trim() || 'Earth'
+      if (routePlanet.length > 0 && routePlanet.toLowerCase() !== currentPlanet.toLowerCase()) {
+        this.callInteractive('setObserverPlanet', routePlanet, () => {
+          if (this.sessionToolStore) this.sessionToolStore.observerPlanet = routePlanet
+          this.refreshState()
+        })
+      }
       const rawJd = route['jd'] === undefined ? NaN : Number(route['jd'])
       const eventAtMs = new Date(String(route['eventAt'] ?? '')).getTime()
       const targetJd = Number.isFinite(rawJd) && rawJd > 0 ? rawJd
@@ -4492,7 +4520,13 @@ export struct WindowNativeNode {
         this.pluginFeatureCtl().ensurePluginLoaded('EquationOfTime', () => { this.equationOfTimeStore.loadEquationOfTime() })
         this.timeCtl().startPanelTimers()
       }
-      if (panel === 'calendar' && !this.calendarStore.loaded && !this.calendarStore.loading) this.calendarCtl().reload()
+      if (panel === 'calendar' && !this.calendarStore.loading) {
+        this.refreshState()
+        const activePlanet = this.sessionToolStore.observerPlanet?.trim() || 'Earth'
+        if (!this.calendarStore.loaded || this.calendarStore.observerPlanet.toLowerCase() !== activePlanet.toLowerCase()) {
+          this.calendarCtl().reload()
+        }
+      }
       if (panel === 'astro') {
         this.publishAstroPanelState()
         this.astroCalcCtl().loadAstroTab(this.astroStore.astroTab)
@@ -7726,7 +7760,13 @@ export struct WindowNativeNode {
         this.altitudeText = result.altitude.toFixed(0) + ' m'
       }
       if (result.planetName !== undefined && result.planetName.length > 0) {
+        const previousPlanet = this.sessionToolStore.observerPlanet
         this.sessionToolStore.observerPlanet = result.planetName
+        if (this.activePanel === 'calendar' && !this.calendarStore.loading &&
+          previousPlanet.toLowerCase() !== result.planetName.toLowerCase() &&
+          this.calendarStore.observerPlanet.toLowerCase() !== result.planetName.toLowerCase()) {
+          this.calendarCtl().reload()
+        }
       }
     }
     if (result.fov !== undefined) {

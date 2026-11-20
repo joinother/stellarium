@@ -2,7 +2,7 @@ import { CommandPort } from '../bridge/CommandPort'
 import { StellariumBridgeResponse } from '../pages/StellariumTypes'
 import { AstronomyCalendarStore } from '../state/AstronomyCalendarStore'
 import { AstronomyCalendarEvent, CalendarNativeResponse, calendarMonth, calendarDays, calendarQuery, calendarNativeEvents } from '../state/AstronomyCalendarEvent'
-import { CalendarObserverContext, calendarText } from '../state/AstronomyCalendarText'
+import { CalendarObserverContext, calendarPlanetName, calendarText } from '../state/AstronomyCalendarText'
 import { AstronomyReminderResult } from '../qability/AstronomyReminderService'
 
 export interface AstronomyCalendarReminderResult extends AstronomyReminderResult {
@@ -32,14 +32,21 @@ export class AstronomyCalendarController {
     this.hooks = hooks
   }
 
+  private currentObserverPlanet(): string {
+    const raw = this.hooks.observerContext?.()?.observerPlanet?.trim() ?? ''
+    return raw.length > 0 ? raw : 'Earth'
+  }
+
   loadMonth(year: number, month: number): void {
     if (this.disposed) return
     const range = calendarMonth(year, month)
+    const planet = this.currentObserverPlanet()
     const sequence = ++this.sequence
     this.store.year = year
     this.store.month = month
     this.store.throughYear = year
     this.store.throughMonth = month
+    this.store.observerPlanet = planet
     this.store.loadingMore = false
     this.extraResponses = []
     this.store.selectedDay = 0
@@ -60,7 +67,7 @@ export class AstronomyCalendarController {
       this.store.error = calendarText(this.language, '本地天象数据读取失败，请重试。', 'Could not load local events. Please retry.')
     }
     try {
-      this.port.requestLongRunning('getAstronomyCalendarEvents', JSON.stringify(calendarQuery(range)), (response: StellariumBridgeResponse): void => {
+      this.port.requestLongRunning('getAstronomyCalendarEvents', JSON.stringify(calendarQuery(range, planet)), (response: StellariumBridgeResponse): void => {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse
@@ -83,6 +90,14 @@ export class AstronomyCalendarController {
   }
 
   private updateCoverage(): void {
+    const planet = this.store.observerPlanet || 'Earth'
+    if (planet.toLowerCase() !== 'earth') {
+      const label = calendarPlanetName(this.language, planet)
+      this.store.coverage = calendarText(this.language,
+        `已按「${label}」视角载入当地行星冲合、大距、伴星相位与季节事件；按设备时区显示（不含地球流星雨与近地卫星）。`,
+        `Loaded local planetary alignments, companion phases, and seasonal events from ${label}; times use the device time zone (Earth meteors & satellites excluded).`)
+      return
+    }
     this.store.coverage = calendarText(this.language, '已载入节气、主要月相、流星雨预计极大及行星事件；按设备时区显示。',
       'Solar terms, principal lunar phases, estimated meteor peaks and planetary events loaded; times use the device time zone.')
   }
@@ -93,6 +108,7 @@ export class AstronomyCalendarController {
     const year = this.store.throughMonth === 12 ? this.store.throughYear + 1 : this.store.throughYear
     const month = this.store.throughMonth === 12 ? 1 : this.store.throughMonth + 1
     const range = calendarMonth(year, month)
+    const planet = this.store.observerPlanet || 'Earth'
     const sequence = this.sequence
     this.store.loadingMore = true
     this.store.error = ''
@@ -102,7 +118,7 @@ export class AstronomyCalendarController {
       this.store.error = calendarText(this.language, '后续天象读取失败，已载入的内容仍可查看。', 'Could not load more events. Your loaded events are still available.')
     }
     try {
-      this.port.requestLongRunning('getAstronomyCalendarEvents', JSON.stringify(calendarQuery(range)), (response: StellariumBridgeResponse): void => {
+      this.port.requestLongRunning('getAstronomyCalendarEvents', JSON.stringify(calendarQuery(range, planet)), (response: StellariumBridgeResponse): void => {
         if (this.disposed || sequence !== this.sequence) return
         try {
           const native = response as CalendarNativeResponse

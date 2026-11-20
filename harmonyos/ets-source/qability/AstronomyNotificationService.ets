@@ -74,6 +74,7 @@ export class AstronomyNotificationService {
           parameters['target'] = route.target ?? ''
           if (route.eventAt !== undefined) parameters['eventAt'] = route.eventAt
           if (route.jd !== undefined) parameters['jd'] = route.jd
+          if (route.observerPlanet !== undefined && route.observerPlanet.length > 0) parameters['observerPlanet'] = route.observerPlanet
           const info: wantAgent.WantAgentInfo = {
             wants: [{ bundleName: bundleName, abilityName: 'QAbility',
               uri: 'skyinstrument://astronomy/notification/' + value.id.toString(), parameters: parameters }],

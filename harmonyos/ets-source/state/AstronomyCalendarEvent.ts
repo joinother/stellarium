@@ -20,6 +20,7 @@ export interface AstronomyCalendarEvent {
   secondary?: string
   alignment?: string
   separationDegrees?: number
+  observerPlanet?: string
 }
 
 export interface CalendarNativeEvent {
@@ -40,6 +41,7 @@ export interface CalendarNativeEvent {
   separationDegrees?: number
   distanceKm?: number
   isSupermoon?: boolean
+  observerPlanet?: string
 }
 
 export interface CalendarNativeResponse {
@@ -49,6 +51,7 @@ export interface CalendarNativeResponse {
   startJD?: number
   endJD?: number
   timeScale?: string
+  observerPlanet?: string
   events?: CalendarNativeEvent[]
   error?: string
 }
@@ -58,6 +61,7 @@ export interface CalendarQuery {
   month: number
   startJD: number
   endJD: number
+  planet?: string
 }
 
 export interface CalendarMonth {
@@ -127,8 +131,15 @@ export function calendarDays(month: CalendarMonth, events: AstronomyCalendarEven
   return cells
 }
 
-export function calendarQuery(month: CalendarMonth): CalendarQuery {
-  return { year: month.year, month: month.month, startJD: calendarJd(month.start), endJD: calendarJd(month.end) }
+export function calendarQuery(month: CalendarMonth, observerPlanet?: string): CalendarQuery {
+  const query: CalendarQuery = {
+    year: month.year, month: month.month, startJD: calendarJd(month.start), endJD: calendarJd(month.end)
+  }
+  const trimmed = observerPlanet?.trim() ?? ''
+  if (trimmed.length > 0 && trimmed.toLowerCase() !== 'earth') {
+    query.planet = trimmed
+  }
+  return query
 }
 
 export function calendarNativeEvents(
@@ -149,7 +160,13 @@ export function calendarNativeEvents(
   for (const item of response.events) {
     if (item === null || typeof item !== 'object') throw new Error('Invalid calendar event')
     const solar = item.kind === 'solar-term'
-    if (item.kind === 'meteor-peak' || item.kind === 'planetary-event') {
+    const responsePlanet = typeof response.observerPlanet === 'string' && response.observerPlanet.trim().length > 0
+      ? response.observerPlanet.trim() : undefined
+    const eventPlanet = typeof item.observerPlanet === 'string' && item.observerPlanet.trim().length > 0
+      ? item.observerPlanet.trim() : responsePlanet
+    const isOffEarth = eventPlanet !== undefined && eventPlanet.toLowerCase() !== 'earth'
+    if (item.kind === 'meteor-peak' || item.kind === 'planetary-event' ||
+      item.kind === 'companion-phase' || item.kind === 'companion-eclipse' || item.kind === 'planetary-season') {
       if (!Number.isFinite(item.jd) || typeof item.id !== 'string' || !item.id.trim() ||
         typeof item.title !== 'string' || !item.title.trim() || typeof item.titleEn !== 'string' ||
         typeof item.target !== 'string') throw new Error('Invalid calendar event')
@@ -165,15 +182,23 @@ export function calendarNativeEvents(
         meteorNames[item.showerCode ?? ''] + '流星雨极大' : item.title
       const sepDeg = typeof item.separationDegrees === 'number' && Number.isFinite(item.separationDegrees) && item.separationDegrees >= 0
         ? item.separationDegrees : undefined
+      const nativeBody = typeof item.body === 'string' && item.body.trim().length > 0 ? item.body.trim() : ''
       const body = meteor
         ? calendarMeteorShowerBody(language, titleZh, item.titleEn, item.jd, item.showerCode, context)
-        : calendarPlanetaryBody(language, item.primary, item.secondary, item.subtype, item.direction, item.alignment, sepDeg)
-      events.push({ id: item.id, kind: item.kind, title: calendarText(language, titleZh, item.titleEn),
+        : (isOffEarth || item.kind !== 'planetary-event')
+          ? (language.toLowerCase().startsWith('zh') && nativeBody.length > 0
+            ? nativeBody
+            : calendarText(language, nativeBody || titleZh, `${item.titleEn} (observed from ${eventPlanet ?? 'Earth'}; times use device time zone).`))
+          : calendarPlanetaryBody(language, item.primary, item.secondary, item.subtype, item.direction, item.alignment, sepDeg)
+      const parsed: AstronomyCalendarEvent = { id: item.id, kind: item.kind, title: calendarText(language, titleZh, item.titleEn),
         at: at, jd: item.jd, body: body, target: item.target,
         panel: meteor ? 'meteorshowers' : 'astro', tab: 0, timeScale: 'UT',
+        phaseIndex: item.kind === 'companion-phase' && Number.isInteger(item.index) ? item.index : undefined,
         subtype: item.subtype, direction: item.direction,
         primary: item.primary, secondary: item.secondary, alignment: item.alignment,
-        separationDegrees: sepDeg })
+        separationDegrees: sepDeg }
+      if (isOffEarth) parsed.observerPlanet = eventPlanet
+      events.push(parsed)
       continue
     }
     if (!solar && item.kind !== 'moon-phase') continue
