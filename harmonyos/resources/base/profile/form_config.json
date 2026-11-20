@@ -44,6 +44,27 @@
       }
     },
     {
+      "name": "solar_arc_card",
+      "displayName": "太阳天光",
+      "description": "实时 3D 太阳光球、日出中天日落轨弧、黄金时刻、昼长与二十四节气，支持破框动效",
+      "src": "./ets/form/SolarArcCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": [
+        "2*2",
+        "2*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
+    },
+    {
       "name": "celestial_events_card",
       "displayName": "天象预告",
       "description": "地球与太阳系异星天象倒计时、近期事件时间轴与直达星图入口",

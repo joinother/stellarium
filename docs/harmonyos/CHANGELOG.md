@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 桌面卡片全面接入太阳体系（3D 太阳光球、独立「太阳天光」卡、日出中天日落轨弧与黄金时刻）
+
+- **修改文件：** `scripts/build-ohos-widget-orbs.py`、`harmonyos/resources/base/media/widget_orb_sun.png`（新增 3D 太阳光球）、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/ets-source/form/SolarArcCard.ets`（新增第 5 款桌面卡片「太阳天光」）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/FloatingOrbCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **高拟真 3D 太阳光球（`widget_orb_sun.png`）：**
+     - 在 `scripts/build-ohos-widget-orbs.py` 新增 `render_sun()`，基于上游太阳光球贴图与各向同性 3D fBM 米粒对流纹理、物理临边昏暗（炽白金核心→橙红边缘）与 C1 连续衰减金色日冕光晕渲染 `widget_orb_sun.png`（边缘 `alpha=0`，透明悬浮零方框截断）。
+  2. **太阳星历与节气引擎（`AstronomyCardData.ts`、`FormStoreHelper.ets`）：**
+     - 承接 C++ `getTonightEvents` 的真实 `sun.rise`/`sun.transit`/`sun.set`/`sunCycle.sunAltitude`，新增纯 TS 光照阶段判定（`白昼晴光 / 黄金时刻 / 蓝调暮光 / 航海暮光 / 天文暮光 / 天文暗夜`）、昼长计算（`computeDaylightDuration`）、傍晚黄金时刻（`computeGoldenHourClock`）、基于真实日出→中天→日落时间进度的 `computeSolarArcProgress()` 以及 Jean Meeus 太阳黄经二十四节气推算（`estimateSolarTermZh`）。
+     - 将 `'Sun'` 纳入 `SUPPORTED_EDIT_PLANETS` 与 `QUICK_CYCLE_PLANETS`；`FormStoreHelper` 遇到 `Sun` 模式时自动复用地球真实 C++ 太阳星历与 48h 时间片并执行 `applySolarShowcaseProjection()`；路由辅助函数 `routePlanetForCard`/`routeTargetForCard` 与 `MainWindowNativeNode.consumeCardRoute()` 确保从任何太阳卡片进入星图均保持地球视角并自动锁定聚焦太阳（`target: 'Sun'`）。
+  3. **新增第 5 款桌面卡片「太阳天光」（`SolarArcCard.ets`，支持 `2×2`、`2×4` 缩放与 API 20 破框）：**
+     - `2×2` 展示 3D 太阳、实时高度角、光照阶段与金色 Canvas 太阳地平轨弧（按真实日间时刻精准落点）；
+     - `2×4` 展示 3D 太阳、昼长、二十四节气、带中天刻度的太阳轨弧（`升 / 中天 / 落`）以及可桌面直点的四段天光条（`日出 / 中天 / 黄金 / 暗夜`，轻触高亮查看明细、零拉起主进程）；
+     - 在 `SkyLiveFormPage.ets` 1:1 补齐 `solar_arc_card` 静息底图与 API 20 太阳破框动效。
+  4. **既有四款桌面卡片全线融通太阳信息：**
+     - **悬浮天体（`FloatingOrbCard`）：** `↻ 换星` 新增「太阳」，可在壁纸上无边框悬浮 3D 太阳光球（`太阳 · 白昼晴光 +26°`），破框后轻触 `✦ 星图` 直达星图并选中太阳。
+     - **星历弧盘（`CompanionArcCard`）：** 切换至 `☀ 太阳` 时自动切换金色轨弧、`+XX°` 仰角、`2×4` 下自动呈现四段天光条（`日出 / 中天 / 黄金 / 暗夜`）。
+     - **天穹之窗（`SkyWindowCard`）：** 地球视角 `2×4`/`4×4` 副标题同步展示日出日落与暗夜窗口（`☀ 07:30–17:33 · 暗夜 19:05–05:58`）。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（更新为 5 款卡片、12 颗 3D 天体球及太阳星历/节气/路由单测）、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实测：`hidumper -s 403` 确认全部 5 款卡片（含 `solar_arc_card`）注册成功；桌面实拍核验透明悬浮 3D 太阳（`太阳 · 白昼晴光 +26°`）零方框悬浮与平滑破框、星历弧盘 `2×2`/`2×4` 太阳模式（`升 07:30 · 中天 12:00 · 落 17:33` + 四段天光条）、天穹之窗日出日落融合显示，以及点击 `✦ 星图` 后在地球视角精准聚焦锁定太阳（`日 · 恒星 · -26.77 等 · 高度 27°06′`）。
+
 ## [2026-11-20] 切换语言全链路防卡顿优化（单次 GL 线程阻塞 392ms → 1ms + 14~16ms 帧内完成）
 
 - **修改文件：** `src/core/modules/NebulaMgr.cpp`、`src/core/modules/NomenclatureMgr.cpp`、`plugins/Satellites/src/Satellites.cpp`、`plugins/Oculars/src/Oculars.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。

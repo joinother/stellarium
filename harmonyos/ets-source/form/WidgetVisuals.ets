@@ -6,6 +6,7 @@ import {
 
 export function orbResource(orbBody: string): Resource {
   const key = orbBody.trim().toLowerCase()
+  if (key === 'sun') return $r('app.media.widget_orb_sun')
   if (key === 'earth') return $r('app.media.widget_orb_earth')
   if (key === 'mars') return $r('app.media.widget_orb_mars')
   if (key === 'saturn') return $r('app.media.widget_orb_saturn')
@@ -54,6 +55,7 @@ export function phaseMaskResource(illumination: number, phaseAge: number): Resou
 
 export function orbGlowColor(orbBody: string): string {
   const key = orbBody.trim().toLowerCase()
+  if (key === 'sun') return '#77FFB84D'
   if (key === 'earth') return '#6650A8FF'
   if (key === 'mars') return '#66E88854'
   if (key === 'saturn') return '#55F0CC88'
@@ -173,6 +175,8 @@ export struct HorizonArcView {
   @Prop @Watch('redraw') altitudeDeg: number = 32
   @Prop riseText: string = '—'
   @Prop setText: string = '—'
+  @Prop midFooterText: string = ''
+  @Prop @Watch('redraw') customProgress: number = -1
   @Prop @Watch('redraw') accentColor: string = '#9EC5FF'
 
   private canvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
@@ -197,6 +201,9 @@ export struct HorizonArcView {
   }
 
   private arcProgress(): number {
+    if (Number.isFinite(this.customProgress) && this.customProgress >= 0.0 && this.customProgress <= 1.0) {
+      return Math.max(0.05, Math.min(0.95, this.customProgress))
+    }
     // Map altitude (-15..90 deg) cleanly onto sine curve [0.06 .. 0.50] (ascending)
     const alt = Number.isFinite(this.altitudeDeg) ? this.altitudeDeg : 0
     if (alt <= 0) return 0.06
@@ -329,6 +336,14 @@ export struct HorizonArcView {
           .fontColor('#B8D0E8FF')
           .maxLines(1)
         Blank()
+        if (this.midFooterText.length > 0) {
+          Text(this.midFooterText)
+            .fontSize(10)
+            .fontWeight(FontWeight.Regular)
+            .fontColor('#D6E8FAFF')
+            .maxLines(1)
+          Blank()
+        }
         Text(this.rightFooter())
           .fontSize(10)
           .fontWeight(FontWeight.Regular)

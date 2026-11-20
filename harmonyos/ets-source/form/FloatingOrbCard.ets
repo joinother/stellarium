@@ -1,4 +1,9 @@
-import { isLightTextColor } from './AstronomyCardData'
+import {
+  isLightTextColor,
+  routePlanetForCard,
+  routeTargetForCard,
+  solarStageFromAltitude
+} from './AstronomyCardData'
 import { CelestialOrbView } from './WidgetVisuals'
 
 const floatingOrbStorage: LocalStorage = new LocalStorage()
@@ -19,6 +24,10 @@ struct FloatingOrbCard {
   @LocalStorageProp('moonAge') moonAge: string = '11'
   @LocalStorageProp('moonSummary') moonSummary: string = '76% 照明'
   @LocalStorageProp('observationSummary') observationSummary: string = '暗夜观测'
+  @LocalStorageProp('sunAlt') sunAlt: string = '-18.0'
+  @LocalStorageProp('sunRise') sunRise: string = '—'
+  @LocalStorageProp('sunSet') sunSet: string = '—'
+  @LocalStorageProp('solarStage') solarStage: string = ''
   @LocalStorageProp('cardOverflowMode') cardOverflowMode: string = 'auto'
   @LocalStorageProp('textColor') textColor: string = '#F5F9FF'
 
@@ -47,6 +56,15 @@ struct FloatingOrbCard {
 
   private captionText(): string {
     const body = this.orbBody.trim().toLowerCase()
+    if (body === 'sun') {
+      const alt = Number(this.sunAlt)
+      const stage = this.solarStage.length > 0 ? this.solarStage : solarStageFromAltitude(alt)
+      if (Number.isFinite(alt)) {
+        const sign = alt >= 0 ? '+' : ''
+        return '太阳 · ' + stage + ' ' + sign + String(Math.round(alt)) + '°'
+      }
+      return '太阳 · 升 ' + this.sunRise + ' 落 ' + this.sunSet
+    }
     if (body === 'moon') {
       const pct = this.numericIllum() >= 0 ? (' · ' + String(Math.round(this.numericIllum())) + '%') : ''
       return this.moonPhase + pct
@@ -67,7 +85,8 @@ struct FloatingOrbCard {
       abilityName: 'QAbility',
       params: {
         panel: 'sky',
-        observerPlanet: this.observerPlanet
+        observerPlanet: routePlanetForCard(this.observerPlanet),
+        target: routeTargetForCard(this.observerPlanet)
       }
     })
   }

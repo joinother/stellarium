@@ -5,6 +5,7 @@ import {
   CardInstanceConfig,
   applyAnalyticalTimePreview,
   applyCardConfigToSnapshot,
+  applySolarShowcaseProjection,
   applyTimeline48hToCard,
   buildFallbackCardForPlanet,
   clampTimeOffsetHours,
@@ -242,16 +243,18 @@ export function resolveCardDataForConfig(
   try {
     let raw: string = ''
     let timelineRaw: string = ''
+    const isSunMode = config.planetMode.trim().toLowerCase() === 'sun'
+    const lookupPlanet = isSunMode ? 'Earth' : config.planetMode
     if (config.planetMode !== 'follow') {
-      const pRaw = store.getSync(planetSnapshotKey(config.planetMode), '')
-      const pTl = store.getSync(planetTimelineKey(config.planetMode), '')
+      const pRaw = store.getSync(planetSnapshotKey(lookupPlanet), '')
+      const pTl = store.getSync(planetTimelineKey(lookupPlanet), '')
       raw = typeof pRaw === 'string' ? pRaw : ''
       timelineRaw = typeof pTl === 'string' ? pTl : ''
       if (raw.length === 0) {
         const latestRaw = store.getSync(CARD_SNAPSHOT_KEY, '')
         if (typeof latestRaw === 'string' && latestRaw.length > 0) {
           const probe = normalizeAstronomyCard(latestRaw, now)
-          if ((probe['observerPlanet'] ?? '').toLowerCase() === config.planetMode.toLowerCase()) {
+          if ((probe['observerPlanet'] ?? '').toLowerCase() === lookupPlanet.toLowerCase()) {
             raw = latestRaw
             const latestTl = store.getSync(CARD_TIMELINE_KEY, '')
             timelineRaw = typeof latestTl === 'string' ? latestTl : ''
@@ -262,6 +265,7 @@ export function resolveCardDataForConfig(
         const fb = applyCardConfigToSnapshot(buildFallbackCardForPlanet(config.planetMode, evalMs), config, now)
         if (safeOffset > 0) {
           applyAnalyticalTimePreview(fb, config.planetMode, evalMs, safeOffset)
+          if (isSunMode) applySolarShowcaseProjection(fb, evalMs)
         }
         fb['timeOffsetHours'] = String(safeOffset)
         fb['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)
@@ -289,6 +293,9 @@ export function resolveCardDataForConfig(
     const styled = applyCardConfigToSnapshot(liveCard, config, now)
     if (safeOffset > 0 && liveCard['dataStatus'] !== '48h 离线星历') {
       applyAnalyticalTimePreview(styled, styled['observerPlanet'] ?? config.planetMode, evalMs, safeOffset)
+    }
+    if (isSunMode) {
+      applySolarShowcaseProjection(styled, evalMs)
     }
     styled['timeOffsetHours'] = String(safeOffset)
     styled['timePreviewLabel'] = formatPreviewTimeBadge(safeOffset, evalMs)

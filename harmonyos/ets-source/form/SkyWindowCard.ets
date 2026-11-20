@@ -1,7 +1,9 @@
 import {
   CompactPlanetItem,
   formatPlanetDisplayList,
-  parseVisiblePlanets
+  parseVisiblePlanets,
+  routePlanetForCard,
+  routeTargetForCard
 } from './AstronomyCardData'
 import {
   CelestialOrbView,
@@ -27,6 +29,9 @@ struct SkyWindowCard {
   @LocalStorageProp('observationSummary') observationSummary: string = '暗夜观测'
   @LocalStorageProp('darkStart') darkStart: string = '—'
   @LocalStorageProp('darkEnd') darkEnd: string = '—'
+  @LocalStorageProp('sunRise') sunRise: string = '—'
+  @LocalStorageProp('sunSet') sunSet: string = '—'
+  @LocalStorageProp('solarStage') solarStage: string = ''
   @LocalStorageProp('planetNames') planetNames: string = '打开星图同步星历'
   @LocalStorageProp('visiblePlanetsJson') visiblePlanetsJson: string = '[]'
   @LocalStorageProp('skyHexTop') skyHexTop: string = '#070E22'
@@ -103,12 +108,14 @@ struct SkyWindowCard {
   }
 
   private openSky(): void {
+    const focusTarget = routeTargetForCard(this.observerPlanet)
     postCardAction(this, {
       action: 'router',
       abilityName: 'QAbility',
       params: {
         panel: 'sky',
-        observerPlanet: this.observerPlanet
+        observerPlanet: routePlanetForCard(this.observerPlanet),
+        target: focusTarget
       }
     })
   }
@@ -343,8 +350,10 @@ struct SkyWindowCard {
                 .margin({ top: 1 })
 
               Text(this.observerPlanet === 'Earth'
-                ? ('天文暗夜 ' + this.darkStart + ' – ' + this.darkEnd)
-                : (this.moonPhase.startsWith(this.companionName) ? this.moonPhase : (this.companionName + ' · ' + this.moonPhase)))
+                ? ('☀ ' + this.sunRise + '–' + this.sunSet + ' · 暗夜 ' + this.darkStart + '–' + this.darkEnd)
+                : this.observerPlanet === 'Sun'
+                  ? ('日出 ' + this.sunRise + ' · 日落 ' + this.sunSet + ' · 暗夜 ' + this.darkStart)
+                  : (this.moonPhase.startsWith(this.companionName) ? this.moonPhase : (this.companionName + ' · ' + this.moonPhase)))
                 .fontSize(11)
                 .fontWeight(FontWeight.Regular)
                 .fontColor('#CCE4F7FF')

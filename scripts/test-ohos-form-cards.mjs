@@ -5,16 +5,21 @@ import {
   SUPPORTED_EDIT_PLANETS,
   applyAnalyticalTimePreview,
   applyCardConfigToSnapshot,
+  applySolarShowcaseProjection,
   applyTimeline48hToCard,
   buildAstronomyCard,
   buildFallbackCardForPlanet,
   buildMiniPhaseStrip,
   buildTimeline48hSnapshot,
   clampTimeOffsetHours,
+  computeDaylightDuration,
+  computeGoldenHourClock,
   computeOverflowArea,
   computePreviewPhaseForDay,
+  computeSolarArcProgress,
   defaultCardConfig,
   estimateMoonPhaseAt,
+  estimateSolarTermZh,
   extractInverseTextColor,
   formatCountdownZh,
   formatPlanetDisplayList,
@@ -27,7 +32,10 @@ import {
   orbKeyForBody,
   parseRemindedEventIds,
   planetSymbol,
-  planetZhName
+  planetZhName,
+  routePlanetForCard,
+  routeTargetForCard,
+  solarStageFromAltitude
 } from '../harmonyos/ets-source/form/AstronomyCardData.ts'
 
 const root = process.cwd()
@@ -45,12 +53,13 @@ const formConfig = JSON.parse(fs.readFileSync(formConfigPath, 'utf8'))
 const forms = Array.isArray(formConfig.forms) ? formConfig.forms : []
 const expectedForms = [
   { name: 'sky_window_card', source: 'SkyWindowCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: true, transparent: false },
-  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'astro'", resizable: true, transparent: false },
+  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: this.isSunMode() ? 'sky' : 'astro'", resizable: true, transparent: false },
+  { name: 'solar_arc_card', source: 'SolarArcCard.ets', defaultDim: '2*4', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
   { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true }
 ]
 
-assert.equal(forms.length, expectedForms.length, 'must expose the 4 redesigned astronomical widget cards (3+1 transparent)')
+assert.equal(forms.length, expectedForms.length, 'must expose the 5 redesigned astronomical widget cards (4+1 transparent)')
 assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
@@ -74,7 +83,10 @@ for (const expected of expectedForms) {
   assert.ok(fs.existsSync(cardPath), `missing card source: ${cardPath}`)
   const cardSource = fs.readFileSync(cardPath, 'utf8')
   assert.ok(cardSource.includes(expected.panel), `${expected.name} must deep-link to ${expected.panel}`)
-  assert.ok(cardSource.includes('observerPlanet: this.observerPlanet'), `${expected.name} must carry observerPlanet on router action`)
+  assert.ok(
+    cardSource.includes('observerPlanet: this.observerPlanet') || cardSource.includes('observerPlanet: routePlanetForCard(this.observerPlanet)'),
+    `${expected.name} must carry observerPlanet on router action`
+  )
   assert.ok(cardSource.includes("message: 'requestOverflow'"), `${expected.name} must support API 20 overflow trigger`)
   assert.ok(cardSource.includes('@LocalStorageProp('), `${expected.name} must bind form data via @LocalStorageProp`)
   assert.ok(!cardSource.includes('AstronomyCardSurface'), `${expected.name} must not reference deprecated AstronomyCardSurface`)
@@ -124,7 +136,7 @@ const liveFormSrc = fs.readFileSync(liveFormAbilityPath, 'utf8')
 assert.ok(liveFormSrc.includes('LiveFormExtensionAbility'), 'must extend LiveFormExtensionAbility')
 assert.ok(liveFormSrc.includes('onLiveFormCreate'), 'must implement onLiveFormCreate')
 
-for (const orb of ['moon', 'earth', 'mars', 'saturn', 'jupiter', 'titan', 'venus', 'neptune', 'uranus', 'mercury', 'pluto']) {
+for (const orb of ['sun', 'moon', 'earth', 'mars', 'saturn', 'jupiter', 'titan', 'venus', 'neptune', 'uranus', 'mercury', 'pluto']) {
   const orbFile = path.join(mediaDir, `widget_orb_${orb}.png`)
   assert.ok(fs.existsSync(orbFile) && fs.statSync(orbFile).size > 4096, `missing or empty 3D orb texture: widget_orb_${orb}.png`)
 }
@@ -243,7 +255,13 @@ for (const c of overflowCases) {
 }
 
 // Misc helpers
-assert.equal(SUPPORTED_EDIT_PLANETS.length, 8)
+assert.equal(SUPPORTED_EDIT_PLANETS.length, 9)
+assert.equal(planetSymbol('Sun'), '☀')
+assert.equal(planetZhName('Sun'), '太阳')
+assert.equal(orbKeyForBody('Sun'), 'sun')
+assert.equal(routePlanetForCard('Sun'), 'Earth')
+assert.equal(routeTargetForCard('Sun'), 'Sun')
+assert.equal(routePlanetForCard('Mars'), 'Mars')
 assert.equal(planetSymbol('Saturn'), '♄')
 assert.equal(planetZhName('Titan'), '土卫六')
 assert.equal(orbKeyForBody('Phobos'), 'mars')
@@ -259,6 +277,24 @@ for (const illumination of [0, 25, 50, 75, 100]) {
   assert.ok(!moonSilhouette(112, illumination, 20).includes('NaN'))
 }
 
+// Solar telemetry, 24 solar terms, diurnal arc & Sun card projection tests
+assert.equal(solarStageFromAltitude(28), '白昼晴光')
+assert.equal(solarStageFromAltitude(3), '黄金时刻')
+assert.equal(solarStageFromAltitude(-3), '蓝调暮光')
+assert.equal(solarStageFromAltitude(-15), '天文暮光')
+assert.equal(solarStageFromAltitude(-22), '天文暗夜')
+assert.equal(computeDaylightDuration('06:58', '16:59'), '10h 01m')
+assert.equal(computeGoldenHourClock('16:59'), '16:21')
+const middayProg = computeSolarArcProgress('06:00', '18:00', new Date(2026, 10, 20, 12, 0).getTime(), 35)
+assert.ok(middayProg > 0.48 && middayProg < 0.52, `solar noon progress expected ~0.50, got ${middayProg}`)
+const termStr = estimateSolarTermZh(now)
+assert.ok(termStr.includes('立冬') || termStr.includes('小雪'), `expected late-Nov solar term, got ${termStr}`)
+const sunCard = applySolarShowcaseProjection(buildFallbackCardForPlanet('Earth', now), now)
+assert.equal(sunCard.observerPlanet, 'Sun')
+assert.equal(sunCard.orbBody, 'sun')
+assert.ok(sunCard.daylightDuration.includes('h '))
+assert.ok(sunCard.solarTermText.length > 0)
+
 // Transparent backplate inverse color parsing & luminance check
 assert.equal(extractInverseTextColor({ mTextColor: '#FF181818', mWallpaperType: 1 }), '#FF181818')
 assert.equal(extractInverseTextColor('{"mTextColor":"#FFFFFF"}'), '#FFFFFF')
@@ -267,7 +303,8 @@ assert.equal(isLightTextColor('#F5F9FF'), true)
 assert.equal(isLightTextColor('#FF181818'), false)
 
 // Interactive widget helpers: planet cycle, 48h time dial, 5-day phase scrubber, reminder state
-assert.equal(nextCyclePlanet('Earth'), 'Mars')
+assert.equal(nextCyclePlanet('Earth'), 'Sun')
+assert.equal(nextCyclePlanet('Sun'), 'Mars')
 assert.equal(nextCyclePlanet('Mars'), 'Moon')
 assert.equal(nextCyclePlanet('Neptune'), 'Earth')
 assert.equal(clampTimeOffsetHours(-4), 0)
@@ -288,4 +325,4 @@ const jup8h = applyAnalyticalTimePreview(buildFallbackCardForPlanet('Jupiter', n
 assert.notEqual(jup4h.sunAlt, jup8h.sunAlt, 'Jupiter +4h and +8h analytical sunAlt must advance with solar rotation')
 assert.ok(JSON.parse(jup4h.visiblePlanetsJson).length >= 2, 'Jupiter preset must provide fallback visible planets')
 
-console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 11 3D orbs, ${overflowCases.length} overflow specs`)
+console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, ${overflowCases.length} overflow specs`)

@@ -4179,8 +4179,11 @@ export struct WindowNativeNode {
       const route = JSON.parse(this.cardRoute) as Record<string, Object>
       const panel = String(route['panel'] ?? '').trim()
       const kind = typeof route['kind'] === 'string' ? String(route['kind']).trim() : ''
-      const target = typeof route['target'] === 'string' ? String(route['target']).trim() : ''
-      const routePlanet = typeof route['observerPlanet'] === 'string' ? String(route['observerPlanet']).trim() : ''
+      const rawTarget = typeof route['target'] === 'string' ? String(route['target']).trim() : ''
+      const rawRoutePlanet = typeof route['observerPlanet'] === 'string' ? String(route['observerPlanet']).trim() : ''
+      const isSunFocusRoute = rawRoutePlanet.toLowerCase() === 'sun'
+      const target = rawTarget.length > 0 ? rawTarget : (isSunFocusRoute ? 'Sun' : '')
+      const routePlanet = isSunFocusRoute ? 'Earth' : rawRoutePlanet
       if (routePlanet.length > 0) {
         // 卡片显式携带星球视角时始终切换并立即同步刷新该星球桌面卡片缓存
         this.callInteractive('setObserverPlanet', routePlanet, () => {

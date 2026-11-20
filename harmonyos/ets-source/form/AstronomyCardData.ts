@@ -92,6 +92,7 @@ export interface CardTonightData {
 
 export interface CardSunData {
   rise?: string
+  transit?: string
   set?: string
   astroTwilightEnd?: string
   astroTwilightStart?: string
@@ -169,11 +170,11 @@ export interface InterpolatedTimelineState {
 }
 
 export const SUPPORTED_EDIT_PLANETS: string[] = [
-  'follow', 'Earth', 'Mars', 'Moon', 'Titan', 'Jupiter', 'Saturn', 'Neptune'
+  'follow', 'Earth', 'Sun', 'Mars', 'Moon', 'Titan', 'Jupiter', 'Saturn', 'Neptune'
 ]
 
 export const QUICK_CYCLE_PLANETS: string[] = [
-  'Earth', 'Mars', 'Moon', 'Titan', 'Saturn', 'Jupiter', 'Neptune'
+  'Earth', 'Sun', 'Mars', 'Moon', 'Titan', 'Saturn', 'Jupiter', 'Neptune'
 ]
 
 export function nextCyclePlanet(currentPlanet: string): string {
@@ -270,6 +271,7 @@ export function cardClock(value: string | undefined): string {
 
 export function planetSymbol(body: string): string {
   const key = body.trim().toLowerCase()
+  if (key === 'sun' || key === '太阳') return '☀'
   if (key === 'mercury' || key === '水星') return '☿'
   if (key === 'venus' || key === '金星') return '♀'
   if (key === 'earth' || key === '地球') return '⊕'
@@ -287,6 +289,7 @@ export function planetSymbol(body: string): string {
 export function planetZhName(planetId: string): string {
   const key = planetId.trim().toLowerCase()
   if (key === 'follow' || key === '') return '跟随星图'
+  if (key === 'sun') return '太阳'
   if (key === 'earth') return '地球'
   if (key === 'mars') return '火星'
   if (key === 'moon') return '月球'
@@ -303,6 +306,7 @@ export function planetZhName(planetId: string): string {
 
 export function orbKeyForBody(body: string): string {
   const key = body.trim().toLowerCase()
+  if (key === 'sun' || key === '太阳') return 'sun'
   if (key === 'moon' || key === '月球') return 'moon'
   if (key === 'earth' || key === '地球') return 'earth'
   if (key === 'mars' || key === '火星' || key === 'phobos' || key === '火卫一') return 'mars'
@@ -315,6 +319,216 @@ export function orbKeyForBody(body: string): string {
   if (key === 'mercury' || key === '水星') return 'mercury'
   if (key === 'pluto' || key === '冥王星') return 'pluto'
   return 'moon'
+}
+
+export function routePlanetForCard(observerPlanet: string): string {
+  return observerPlanet.trim().toLowerCase() === 'sun' ? 'Earth' : (observerPlanet.trim().length > 0 ? observerPlanet.trim() : 'Earth')
+}
+
+export function routeTargetForCard(observerPlanet: string, explicitTarget: string = ''): string {
+  if (explicitTarget.trim().length > 0) return explicitTarget.trim()
+  return observerPlanet.trim().toLowerCase() === 'sun' ? 'Sun' : ''
+}
+
+export interface EstimatedSolarTimes {
+  rise: string
+  transit: string
+  set: string
+  golden: string
+  darkStart: string
+  darkEnd: string
+  daylight: string
+  sunAlt: number
+  skyHexTop: string
+  skyHexHorizon: string
+}
+
+const SOLAR_TERM_NAMES_ZH: string[] = [
+  '春分', '清明', '谷雨', '立夏', '小满', '芒种',
+  '夏至', '小暑', '大暑', '立秋', '处暑', '白露',
+  '秋分', '寒露', '霜降', '立冬', '小雪', '大雪',
+  '冬至', '小寒', '大寒', '立春', '雨水', '惊蛰'
+]
+
+function parseClockMinutes(clock: string): number {
+  const m = clock.trim().match(/^(\d{1,2}):(\d{2})$/)
+  if (m === null) return -1
+  const hh = Number(m[1])
+  const mm = Number(m[2])
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return -1
+  return hh * 60 + mm
+}
+
+function formatMinutesClock(totalMinutes: number): string {
+  const wrapped = ((Math.round(totalMinutes) % 1440) + 1440) % 1440
+  const hh = Math.floor(wrapped / 60)
+  const mm = wrapped % 60
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0')
+}
+
+export function solarStageFromAltitude(sunAlt: number): string {
+  const alt = Number.isFinite(sunAlt) ? sunAlt : -18
+  if (alt > 6.0) return '白昼晴光'
+  if (alt > 0.0) return '黄金时刻'
+  if (alt > -6.0) return '蓝调暮光'
+  if (alt > -12.0) return '航海暮光'
+  if (alt > -18.0) return '天文暮光'
+  return '天文暗夜'
+}
+
+export function computeDaylightDuration(sunRise: string, sunSet: string): string {
+  const rMin = parseClockMinutes(sunRise)
+  const sMin = parseClockMinutes(sunSet)
+  if (rMin < 0 || sMin < 0) return '—'
+  let span = sMin - rMin
+  if (span <= 0) span += 1440
+  const h = Math.floor(span / 60)
+  const m = span % 60
+  return String(h) + 'h ' + String(m).padStart(2, '0') + 'm'
+}
+
+export function computeGoldenHourClock(sunSet: string): string {
+  const sMin = parseClockMinutes(sunSet)
+  if (sMin < 0) return '—'
+  return formatMinutesClock(sMin - 38)
+}
+
+export function computeSolarArcProgress(sunRise: string, sunSet: string, nowMs: number, sunAlt: number): number {
+  const rMin = parseClockMinutes(sunRise)
+  const sMin = parseClockMinutes(sunSet)
+  const d = new Date(nowMs)
+  const curMin = d.getHours() * 60 + d.getMinutes()
+  if (rMin >= 0 && sMin > rMin) {
+    if (curMin >= rMin && curMin <= sMin) {
+      const frac = (curMin - rMin) / Math.max(1, sMin - rMin)
+      return Math.max(0.05, Math.min(0.95, 0.05 + frac * 0.90))
+    }
+    return curMin < rMin ? 0.05 : 0.95
+  }
+  const alt = Number.isFinite(sunAlt) ? sunAlt : -18
+  if (alt <= 0) return 0.06
+  return 0.14 + Math.min(1.0, alt / 78.0) * 0.36
+}
+
+// Accurate low-precision Jean Meeus solar ecliptic longitude -> 24 Chinese Solar Terms
+export function estimateSolarTermZh(nowMs: number): string {
+  const jd = nowMs / 86400000.0 + 2440587.5
+  const n = jd - 2451545.0
+  const L = (((280.460 + 0.9856474 * n) % 360) + 360) % 360
+  const gRad = (((357.528 + 0.9856003 * n) % 360) + 360) % 360 * Math.PI / 180.0
+  const lambda = (((L + 1.915 * Math.sin(gRad) + 0.020 * Math.sin(2.0 * gRad)) % 360) + 360) % 360
+  const idx = Math.floor(lambda / 15.0) % 24
+  const nextIdx = (idx + 1) % 24
+  const remDeg = ((idx + 1) * 15.0) - lambda
+  const daysToNext = Math.max(0, Math.round(remDeg / 0.9856))
+  if (daysToNext <= 0) return '今日' + SOLAR_TERM_NAMES_ZH[nextIdx]
+  if (remDeg > 14.2) return '今日' + SOLAR_TERM_NAMES_ZH[idx]
+  return SOLAR_TERM_NAMES_ZH[idx] + ' · ' + String(daysToNext) + '天后' + SOLAR_TERM_NAMES_ZH[nextIdx]
+}
+
+// Pure-TS offline Earth solar ephemeris estimate (mid-latitude default until C++ exact location syncs)
+export function estimateEarthSolarSummary(nowMs: number, latDeg: number = 35.0): EstimatedSolarTimes {
+  const jd = nowMs / 86400000.0 + 2440587.5
+  const n = jd - 2451545.0
+  const L = (((280.460 + 0.9856474 * n) % 360) + 360) % 360
+  const gRad = (((357.528 + 0.9856003 * n) % 360) + 360) % 360 * Math.PI / 180.0
+  const lambdaRad = (L + 1.915 * Math.sin(gRad) + 0.020 * Math.sin(2.0 * gRad)) * Math.PI / 180.0
+  const obliqRad = 23.439 * Math.PI / 180.0
+  const sinDec = Math.sin(obliqRad) * Math.sin(lambdaRad)
+  const decRad = Math.asin(Math.max(-1, Math.min(1, sinDec)))
+  const latRad = latDeg * Math.PI / 180.0
+
+  const hourAngleForAlt = (altDeg: number): number => {
+    const cosH = (Math.sin(altDeg * Math.PI / 180.0) - Math.sin(latRad) * Math.sin(decRad)) /
+      Math.max(1e-5, Math.cos(latRad) * Math.cos(decRad))
+    if (cosH >= 1.0) return 0
+    if (cosH <= -1.0) return 12.0
+    return (Math.acos(cosH) * 180.0 / Math.PI) / 15.0
+  }
+
+  const halfDayHours = hourAngleForAlt(-0.833)
+  const halfAstroHours = hourAngleForAlt(-18.0)
+  const noonMin = 12 * 60
+  const riseMin = noonMin - halfDayHours * 60
+  const setMin = noonMin + halfDayHours * 60
+  const darkStartMin = noonMin + halfAstroHours * 60
+  const darkEndMin = noonMin - halfAstroHours * 60
+
+  const d = new Date(nowMs)
+  const localHours = d.getHours() + d.getMinutes() / 60.0
+  const haRad = (localHours - 12.0) * 15.0 * Math.PI / 180.0
+  const sinAlt = Math.sin(latRad) * Math.sin(decRad) + Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad)
+  const sunAlt = Math.round((Math.asin(Math.max(-1, Math.min(1, sinAlt))) * 180.0 / Math.PI) * 10) / 10
+
+  let skyHexTop = '#070E22'
+  let skyHexHorizon = '#172C52'
+  if (sunAlt > 8.0) {
+    skyHexTop = '#17488E'
+    skyHexHorizon = '#5B9AD6'
+  } else if (sunAlt > 0.0) {
+    skyHexTop = '#2D3A68'
+    skyHexHorizon = '#C77844'
+  } else if (sunAlt > -6.0) {
+    skyHexTop = '#16244C'
+    skyHexHorizon = '#6A4C6E'
+  } else if (sunAlt > -12.0) {
+    skyHexTop = '#0B1633'
+    skyHexHorizon = '#2A3E6A'
+  }
+
+  const riseStr = formatMinutesClock(riseMin)
+  const transitStr = formatMinutesClock(noonMin)
+  const setStr = formatMinutesClock(setMin)
+  return {
+    rise: riseStr,
+    transit: transitStr,
+    set: setStr,
+    golden: computeGoldenHourClock(setStr),
+    darkStart: formatMinutesClock(darkStartMin),
+    darkEnd: formatMinutesClock(darkEndMin),
+    daylight: computeDaylightDuration(riseStr, setStr),
+    sunAlt: sunAlt,
+    skyHexTop: skyHexTop,
+    skyHexHorizon: skyHexHorizon
+  }
+}
+
+export function applySolarShowcaseProjection(card: Record<string, string>, nowMs: number): Record<string, string> {
+  const est = estimateEarthSolarSummary(nowMs)
+  if ((card['sunRise'] ?? '—') === '—') card['sunRise'] = est.rise
+  if ((card['sunTransit'] ?? '—') === '—') card['sunTransit'] = est.transit
+  if ((card['sunSet'] ?? '—') === '—') card['sunSet'] = est.set
+  if ((card['darkStart'] ?? '—') === '—') card['darkStart'] = est.darkStart
+  if ((card['darkEnd'] ?? '—') === '—') card['darkEnd'] = est.darkEnd
+  const parsedAlt = Number(card['sunAlt'])
+  const alt = Number.isFinite(parsedAlt) ? parsedAlt : est.sunAlt
+  const stage = solarStageFromAltitude(alt)
+  const daylight = computeDaylightDuration(card['sunRise'], card['sunSet'])
+  const golden = computeGoldenHourClock(card['sunSet'])
+  const term = estimateSolarTermZh(nowMs)
+  const altSign = alt >= 0 ? '+' : ''
+
+  card['observerPlanet'] = 'Sun'
+  card['observerPlanetName'] = '太阳'
+  card['companionName'] = '太阳'
+  card['companionEnglish'] = 'Sun'
+  card['companionRole'] = 'star'
+  card['orbBody'] = 'sun'
+  card['sunAlt'] = alt.toFixed(1)
+  card['companionAlt'] = alt.toFixed(1)
+  card['solarStage'] = stage
+  card['daylightDuration'] = daylight
+  card['goldenHourText'] = golden
+  card['solarTermText'] = term
+  card['moonPhase'] = stage
+  card['moonIllumination'] = '100'
+  card['moonSummary'] = '昼长 ' + daylight
+  card['moonRise'] = card['sunRise']
+  card['moonSet'] = card['sunSet']
+  card['observationSummary'] = stage + ' · ' + altSign + String(Math.round(alt)) + '°'
+  card['subtitle'] = '太阳天光 · ' + term
+  card['summary'] = '升 ' + card['sunRise'] + ' · 落 ' + card['sunSet'] + ' · ' + stage
+  return card
 }
 
 export function moonPhaseNameFromAge(age: number): string {
@@ -499,7 +713,9 @@ export function isLightTextColor(hexColor: string): boolean {
 }
 
 export function defaultAstronomyCard(): Record<string, string> {
-  const phase = estimateMoonPhaseAt(Date.now())
+  const now = Date.now()
+  const phase = estimateMoonPhaseAt(now)
+  const solar = estimateEarthSolarSummary(now)
   const card: Record<string, string> = {}
   card['schemaVersion'] = '4'
   card['title'] = '星象仪'
@@ -515,12 +731,17 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['meteorRate'] = '—'
   card['satelliteSummary'] = '卫星目录已就绪'
   card['observationSummary'] = '暗夜观测'
-  card['darkStart'] = '—'
-  card['darkEnd'] = '—'
+  card['darkStart'] = solar.darkStart
+  card['darkEnd'] = solar.darkEnd
   card['moonRise'] = '—'
   card['moonSet'] = '—'
-  card['sunRise'] = '—'
-  card['sunSet'] = '—'
+  card['sunRise'] = solar.rise
+  card['sunTransit'] = solar.transit
+  card['sunSet'] = solar.set
+  card['daylightDuration'] = solar.daylight
+  card['solarStage'] = solarStageFromAltitude(solar.sunAlt)
+  card['goldenHourText'] = solar.golden
+  card['solarTermText'] = estimateSolarTermZh(now)
   card['updatedAt'] = '离线推演'
   card['calculatedAt'] = '0'
   card['dataDate'] = ''
@@ -533,9 +754,9 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['companionRole'] = 'moon'
   card['companionAlt'] = '28.0'
   card['orbBody'] = 'moon'
-  card['skyHexTop'] = '#070E22'
-  card['skyHexHorizon'] = '#172C52'
-  card['sunAlt'] = '-18.0'
+  card['skyHexTop'] = solar.skyHexTop
+  card['skyHexHorizon'] = solar.skyHexHorizon
+  card['sunAlt'] = solar.sunAlt.toFixed(1)
   card['nextSunEventType'] = ''
   card['nextSunEventText'] = '—'
   card['visiblePlanetsJson'] = '[]'
@@ -570,6 +791,29 @@ export function buildFallbackCardForPlanet(planetId: string, now: number): Recor
   card['dataStatus'] = '行星预设'
   card['updatedAt'] = '轻触同步实时星历'
 
+  if (key === 'sun') {
+    const est = estimateEarthSolarSummary(now)
+    card['skyHexTop'] = est.skyHexTop
+    card['skyHexHorizon'] = est.skyHexHorizon
+    card['sunRise'] = est.rise
+    card['sunTransit'] = est.transit
+    card['sunSet'] = est.set
+    card['darkStart'] = est.darkStart
+    card['darkEnd'] = est.darkEnd
+    card['sunAlt'] = est.sunAlt.toFixed(1)
+    card['planetSummary'] = '地球视角 · 实时太阳'
+    card['planetNames'] = '水星 · 金星 · 火星'
+    card['visiblePlanetsJson'] = JSON.stringify([
+      { n: '金星', e: 'Venus', s: '♀', v: true, r: '05:10', t: '15:20', a: 26, m: -4.1 },
+      { n: '木星', e: 'Jupiter', s: '♃', v: true, r: '19:10', t: '07:40', a: 42, m: -2.4 },
+      { n: '土星', e: 'Saturn', s: '♄', v: true, r: '13:40', t: '01:05', a: 28, m: 0.7 }
+    ])
+    card['nextEventTitle'] = '太阳节气 · ' + estimateSolarTermZh(now)
+    card['nextEventKind'] = 'season'
+    card['nextEventTarget'] = 'Sun'
+    card['nextEventCountdown'] = '查看星图'
+    return applySolarShowcaseProjection(card, now)
+  }
   if (key === 'mars') {
     card['observerPlanet'] = 'Mars'
     card['observerPlanetName'] = '火星'
@@ -812,12 +1056,13 @@ export function applyAnalyticalTimePreview(
   const sunAlt = Math.round((-4 + 46 * Math.sin(phaseRad)) * 10) / 10
   const dayFactor = Math.max(0, Math.min(1, (sunAlt + 12) / 28))
   card['sunAlt'] = sunAlt.toFixed(1)
+  card['solarStage'] = solarStageFromAltitude(sunAlt)
   if (card['cardThemeStyle'] !== 'deep') {
     card['skyHexTop'] = lerpHex(nightTop, dayTop, dayFactor)
     card['skyHexHorizon'] = lerpHex(nightHorizon, dayHorizon, dayFactor)
   }
   const compAlt = Math.round((12 + 44 * Math.sin(phaseRad * 0.7 + 0.9)) * 10) / 10
-  card['companionAlt'] = compAlt.toFixed(1)
+  card['companionAlt'] = key === 'sun' ? sunAlt.toFixed(1) : compAlt.toFixed(1)
   card['dataStatus'] = '离线推演'
   return card
 }
@@ -901,6 +1146,7 @@ export function buildAstronomyCard(tonight: CardTonightData, now: number): Recor
   data['darkStart'] = cardClock(sun?.astroTwilightEnd)
   data['darkEnd'] = cardClock(sun?.astroTwilightStart)
   data['sunRise'] = cardClock(sun?.rise)
+  data['sunTransit'] = cardClock(sun?.transit)
   data['sunSet'] = cardClock(sun?.set)
   data['moonRise'] = cardClock(moon?.rise ?? companion?.rise)
   data['moonSet'] = cardClock(moon?.set ?? companion?.set)
@@ -913,6 +1159,17 @@ export function buildAstronomyCard(tonight: CardTonightData, now: number): Recor
     data['nextSunEventType'] = sunCycle.nextSunEventType ?? ''
     data['nextSunEventText'] = cardClock(sunCycle.nextSunEventText)
   }
+  const earthEst = estimateEarthSolarSummary(now)
+  if (!isOffEarth) {
+    if (data['sunRise'] === '—') data['sunRise'] = earthEst.rise
+    if (data['sunTransit'] === '—') data['sunTransit'] = earthEst.transit
+    if (data['sunSet'] === '—') data['sunSet'] = earthEst.set
+  }
+  const resolvedSunAlt = Number(data['sunAlt'])
+  data['solarStage'] = solarStageFromAltitude(Number.isFinite(resolvedSunAlt) ? resolvedSunAlt : earthEst.sunAlt)
+  data['daylightDuration'] = computeDaylightDuration(data['sunRise'], data['sunSet'])
+  data['goldenHourText'] = computeGoldenHourClock(data['sunSet'])
+  data['solarTermText'] = estimateSolarTermZh(now)
 
   const firstSample = tonight.timeline48h !== undefined && tonight.timeline48h.length > 0 ? tonight.timeline48h[0] : undefined
   if (firstSample !== undefined) {
@@ -1128,6 +1385,7 @@ export function applyTimeline48hToCard(card: Record<string, string>, timelineRaw
   const live = interpolateTimeline48h(timelineRaw, now)
   if (live === undefined || !live.valid) return card
   card['sunAlt'] = live.sunAlt.toFixed(1)
+  card['solarStage'] = solarStageFromAltitude(live.sunAlt)
   card['skyHexTop'] = live.skyHexTop
   card['skyHexHorizon'] = live.skyHexHorizon
   card['companionAlt'] = live.companionAlt.toFixed(1)

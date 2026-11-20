@@ -5,6 +5,10 @@ import { hilog } from '@kit.PerformanceAnalysisKit'
 import {
   CompactEventItem,
   CompactPlanetItem,
+  computeDaylightDuration,
+  computeGoldenHourClock,
+  computeSolarArcProgress,
+  estimateSolarTermZh,
   formatCountdownZh,
   formatPlanetDisplayList,
   formatShortDateZh,
@@ -12,7 +16,10 @@ import {
   nextCyclePlanet,
   parseRemindedEventIds,
   parseUpcomingEvents,
-  parseVisiblePlanets
+  parseVisiblePlanets,
+  routePlanetForCard,
+  routeTargetForCard,
+  solarStageFromAltitude
 } from './AstronomyCardData'
 import {
   readFormConfig,
@@ -71,6 +78,13 @@ struct SkyLiveFormPage {
   @State moonSet: string = '—'
   @State companionAlt: number = 28
   @State sunAlt: number = -18
+  @State sunRise: string = '06:58'
+  @State sunTransit: string = '11:58'
+  @State sunSet: string = '16:59'
+  @State solarStage: string = '白昼晴光'
+  @State daylightDuration: string = '10h 01m'
+  @State goldenHourText: string = '16:21'
+  @State solarTermText: string = ''
   @State darkStart: string = '—'
   @State darkEnd: string = '—'
   @State observationSummary: string = '暗夜观测'
@@ -134,6 +148,13 @@ struct SkyLiveFormPage {
     this.companionAlt = Number.isFinite(cAlt) ? cAlt : 28
     const sAlt = Number(snap['sunAlt'] ?? '-18')
     this.sunAlt = Number.isFinite(sAlt) ? sAlt : -18
+    this.sunRise = snap['sunRise'] ?? '06:58'
+    this.sunTransit = snap['sunTransit'] ?? '11:58'
+    this.sunSet = snap['sunSet'] ?? '16:59'
+    this.solarStage = snap['solarStage'] ?? solarStageFromAltitude(this.sunAlt)
+    this.daylightDuration = snap['daylightDuration'] ?? computeDaylightDuration(this.sunRise, this.sunSet)
+    this.goldenHourText = snap['goldenHourText'] ?? computeGoldenHourClock(this.sunSet)
+    this.solarTermText = snap['solarTermText'] ?? estimateSolarTermZh(Date.now())
     this.darkStart = snap['darkStart'] ?? '—'
     this.darkEnd = snap['darkEnd'] ?? '—'
     this.observationSummary = snap['observationSummary'] ?? '暗夜观测'
@@ -161,6 +182,7 @@ struct SkyLiveFormPage {
   // Exact resting orb diameter in vp (1:1 match with the inactive card!)
   private restingOrbSize(): number {
     if (this.formKind === 'floating_orb_card') return 110
+    if (this.formKind === 'solar_arc_card') return this.isWide() ? 86 : 66
     if (this.formKind === 'companion_arc_card') return this.isWide() ? 86 : 64
     if (this.formKind === 'celestial_events_card') return this.isTall() ? 50 : 36
     // sky_window_card
@@ -171,6 +193,7 @@ struct SkyLiveFormPage {
   // Native-resolution peak orb diameter in vp (orb renders at peakSize and scales down to startScale at rest -> zero upscaling blur!)
   private peakOrbSize(): number {
     if (this.formKind === 'floating_orb_card') return 130
+    if (this.formKind === 'solar_arc_card') return this.isWide() ? 114 : 108
     if (this.formKind === 'companion_arc_card') return this.isWide() ? 112 : 106
     if (this.formKind === 'celestial_events_card') return this.isTall() ? 124 : 96
     // sky_window_card
@@ -192,6 +215,14 @@ struct SkyLiveFormPage {
     if (this.formKind === 'floating_orb_card') {
       this.slotCenterX = l + w * 0.5
       this.slotCenterY = t + (h - 132) * 0.5 + 56
+    } else if (this.formKind === 'solar_arc_card') {
+      if (this.isWide()) {
+        this.slotCenterX = l + 13 + 48
+        this.slotCenterY = t + (h - 104) * 0.5 + s * 0.5
+      } else {
+        this.slotCenterX = l + w * 0.5
+        this.slotCenterY = t + 40.5 + s * 0.5
+      }
     } else if (this.formKind === 'companion_arc_card') {
       if (this.isWide()) {
         this.slotCenterX = l + 14 + 50
@@ -398,15 +429,18 @@ struct SkyLiveFormPage {
 
   private launchAppDirect(): void {
     if (this.liveFormContext === undefined) return
+    const isSolarFlow = this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun'
     const targetPanel = this.formKind === 'celestial_events_card'
-      ? 'calendar' : (this.formKind === 'companion_arc_card' ? 'astro' : 'sky')
+      ? 'calendar' : (this.formKind === 'companion_arc_card' && !isSolarFlow ? 'astro' : 'sky')
+    const focusTarget = isSolarFlow ? 'Sun' : routeTargetForCard(this.observerPlanet)
     try {
       this.liveFormContext.startAbilityByLiveForm({
         bundleName: 'com.joinother.skyinstrument',
         abilityName: 'QAbility',
         parameters: {
           panel: targetPanel,
-          observerPlanet: this.observerPlanet
+          observerPlanet: routePlanetForCard(this.observerPlanet),
+          target: focusTarget
         }
       }).catch((error: BusinessError) => {
         hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm failed: code=%{public}d msg=%{public}s', error.code, error.message)
@@ -419,7 +453,7 @@ struct SkyLiveFormPage {
   // ---- Helper methods mirroring the exact resting cards ----
 
   private shouldShowPhaseShadow(): boolean {
-    if (this.formKind === 'celestial_events_card') return false
+    if (this.formKind === 'celestial_events_card' || this.formKind === 'solar_arc_card') return false
     const body = this.orbBody.trim().toLowerCase()
     return body === 'moon' || body === 'earth'
   }
@@ -434,6 +468,11 @@ struct SkyLiveFormPage {
 
   private floatingCaptionText(): string {
     const body = this.orbBody.trim().toLowerCase()
+    if (body === 'sun') {
+      const stage = this.solarStage.length > 0 ? this.solarStage : solarStageFromAltitude(this.sunAlt)
+      const sign = this.sunAlt >= 0 ? '+' : ''
+      return '太阳 · ' + stage + ' ' + sign + String(Math.round(this.sunAlt)) + '°'
+    }
     if (body === 'moon' || this.observerPlanet === 'Moon') {
       const pct = this.moonIllumination >= 0 ? (' · ' + String(Math.round(this.moonIllumination)) + '%') : ''
       return this.moonPhase + pct
@@ -446,6 +485,7 @@ struct SkyLiveFormPage {
 
   private companionAccentColor(): string {
     const body = this.orbBody.trim().toLowerCase()
+    if (body === 'sun') return '#FFD166'
     if (body === 'earth') return '#74BFFF'
     if (body === 'saturn' || body === 'titan') return '#F6CE88'
     if (body === 'mars') return '#F09B6B'
@@ -516,7 +556,33 @@ struct SkyLiveFormPage {
     return parseRemindedEventIds(this.remindedEventIds).includes(eventId)
   }
 
+  private solarAltLabel(): string {
+    const alt = Math.round(this.sunAlt)
+    return (alt >= 0 ? '+' : '') + String(alt) + '°'
+  }
+
+  private solarStageLabel(): string {
+    return this.solarStage.length > 0 ? this.solarStage : solarStageFromAltitude(this.sunAlt)
+  }
+
+  private solarDaylightLabel(): string {
+    return this.daylightDuration.length > 0 && this.daylightDuration !== '—'
+      ? this.daylightDuration : computeDaylightDuration(this.sunRise, this.sunSet)
+  }
+
+  private solarGoldenLabel(): string {
+    return this.goldenHourText.length > 0 && this.goldenHourText !== '—'
+      ? this.goldenHourText : computeGoldenHourClock(this.sunSet)
+  }
+
+  private solarTermLabel(): string {
+    return this.solarTermText.length > 0 ? this.solarTermText : estimateSolarTermZh(Date.now())
+  }
+
   private showcaseHeading(): string {
+    if (this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun') {
+      return '太阳 · ' + this.solarStageLabel() + ' ' + this.solarAltLabel()
+    }
     if (this.formKind === 'celestial_events_card') {
       return this.heroTitle()
     }
@@ -527,6 +593,9 @@ struct SkyLiveFormPage {
   }
 
   private showcaseSubline(): string {
+    if (this.formKind === 'solar_arc_card' || this.orbBody.trim().toLowerCase() === 'sun') {
+      return '升 ' + this.sunRise + ' · 中天 ' + this.sunTransit + ' · 落 ' + this.sunSet + ' · 昼长 ' + this.solarDaylightLabel()
+    }
     if (this.formKind === 'celestial_events_card') {
       const cd = this.heroCountdown()
       return (cd.length > 0 ? ('倒计时 ' + cd) : '点击进入天象日历') +
@@ -542,6 +611,189 @@ struct SkyLiveFormPage {
   // ---- Pixel-matched resting card backdrops (orb replaced by measured invisible socket!) ----
 
   @Builder
+  buildSolarRestingCard() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      StarfieldLayer({ sunAlt: this.sunAlt, themeStyle: this.cardThemeStyle })
+
+      if (this.sunAlt > -6 && this.cardThemeStyle !== 'deep') {
+        Column()
+          .width('100%')
+          .height('100%')
+          .linearGradient({
+            angle: 165,
+            colors: [
+              ['#34080E1E', 0.0],
+              ['#66090E1D', 1.0]
+            ]
+          })
+          .hitTestBehavior(HitTestMode.None)
+      }
+
+      Column() {
+        if (!this.isWide()) {
+          // 2x2 SolarArcCard mirror
+          Column() {
+            Row() {
+              Text(this.observerPlanet === 'Earth' || this.observerPlanet === 'Sun' ? '☀ 太阳 ↻' : ('☀ ' + this.observerPlanetName + ' ↻'))
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFF4D6')
+                .maxLines(1)
+                .height(26)
+                .padding({ left: 8, right: 9 })
+                .backgroundColor('#38140C04')
+                .borderRadius(13)
+              Blank()
+              Text(this.solarAltLabel())
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFD166')
+            }
+            .width('100%')
+
+            Column({ space: 2 }) {
+              Column()
+                .width(66)
+                .height(66)
+                .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+              Text(this.solarStageLabel())
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+            }
+            .alignItems(HorizontalAlign.Center)
+            .layoutWeight(1)
+            .justifyContent(FlexAlign.Center)
+
+            HorizonArcView({
+              arcWidth: 122,
+              arcHeight: 28,
+              altitudeDeg: this.sunAlt,
+              riseText: this.sunRise,
+              setText: this.sunSet,
+              customProgress: computeSolarArcProgress(this.sunRise, this.sunSet, Date.now(), this.sunAlt),
+              accentColor: '#FFD166'
+            })
+          }
+          .width('100%')
+          .height('100%')
+          .padding({ left: 13, right: 13, top: 10, bottom: 9 })
+        } else {
+          // 2x4 SolarArcCard mirror
+          Row({ space: 12 }) {
+            Column({ space: 4 }) {
+              Column()
+                .width(86)
+                .height(86)
+                .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+              Text('昼长 ' + this.solarDaylightLabel())
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFE8B0')
+                .maxLines(1)
+            }
+            .alignItems(HorizontalAlign.Center)
+            .justifyContent(FlexAlign.Center)
+            .width(96)
+            .height('100%')
+
+            Column({ space: 5 }) {
+              Row() {
+                Column({ space: 2 }) {
+                  Text(this.observerPlanet === 'Earth' || this.observerPlanet === 'Sun' ? '☀ 太阳 · 地球 ↻' : ('☀ ' + this.observerPlanetName + ' ↻'))
+                    .fontSize(11)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#FFF3D2')
+                    .height(24)
+                    .padding({ left: 8, right: 9 })
+                    .backgroundColor('#38140C04')
+                    .borderRadius(12)
+                    .maxLines(1)
+                  Text(this.solarStageLabel() + ' · ' + this.solarTermLabel())
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#FFFFFF')
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                Text(this.solarAltLabel())
+                  .fontSize(19)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#FFD166')
+                  .margin({ left: 4 })
+              }
+              .width('100%')
+
+              HorizonArcView({
+                arcWidth: 176,
+                arcHeight: 32,
+                altitudeDeg: this.sunAlt,
+                riseText: this.sunRise,
+                midFooterText: this.sunTransit !== '—' ? ('中天 ' + this.sunTransit) : '',
+                setText: this.sunSet,
+                customProgress: computeSolarArcProgress(this.sunRise, this.sunSet, Date.now(), this.sunAlt),
+                accentColor: '#FFD166'
+              })
+
+              Row({ space: 5 }) {
+                ForEach([
+                  ['日出', this.sunRise],
+                  ['中天', this.sunTransit],
+                  ['黄金', this.solarGoldenLabel()],
+                  ['暗夜', this.darkStart]
+                ], (pair: string[], idx: number) => {
+                  Column({ space: 1 }) {
+                    Text(pair[0]).fontSize(9).fontWeight(FontWeight.Medium).fontColor('#DDE8F8').maxLines(1)
+                    Text(pair[1]).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE09A').maxLines(1)
+                  }
+                  .layoutWeight(1)
+                  .height(34)
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                  .backgroundColor('#32090F1E')
+                  .borderRadius(10)
+                  .border({ width: 0.5, color: '#2AFFE09A' })
+                }, (pair: string[], idx: number) => pair[0] + '_' + String(idx))
+              }
+              .width('100%')
+            }
+            .layoutWeight(1)
+            .height('100%')
+            .justifyContent(FlexAlign.SpaceBetween)
+          }
+          .width('100%')
+          .height('100%')
+          .padding({ left: 13, right: 14, top: 11, bottom: 10 })
+        }
+      }
+      .width('100%')
+      .height('100%')
+      .opacity(this.restingContentOpacity)
+
+      this.buildFramedShowcaseOverlay()
+    }
+    .width(this.formRect.width)
+    .height(this.formRect.height)
+    .position({ x: this.formRect.left, y: this.formRect.top })
+    .borderRadius(this.formBorderRadius)
+    .clip(true)
+    .linearGradient({
+      angle: 165,
+      colors: [
+        [this.cardThemeStyle === 'deep' ? '#0B0912' : this.skyTopGradient(), 0.0],
+        [this.cardThemeStyle === 'deep' ? '#221710' : this.skyBottomGradient(), 1.0]
+      ]
+    })
+    .border({ width: 0.6, color: '#30FFD166' })
+    .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
+    .onClick(() => this.launchAppDirect())
+  }
+
+  @Builder
   buildCompanionRestingCard() {
     Stack({ alignContent: Alignment.TopStart }) {
       StarfieldLayer({ sunAlt: -24, themeStyle: 'deep' })
@@ -551,7 +803,9 @@ struct SkyLiveFormPage {
           // 2x2 CompanionArcCard mirror
           Column() {
             Row() {
-              Text((this.observerPlanet === 'Earth' ? this.companionName : (this.observerPlanetName + '·' + this.companionName)) + ' ↻')
+              Text((this.observerPlanet === 'Earth' || this.observerPlanet === 'Sun'
+                ? (this.orbBody.trim().toLowerCase() === 'sun' ? '☀ 太阳' : this.companionName)
+                : (this.observerPlanetName + '·' + this.companionName)) + ' ↻')
                 .fontSize(11)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#E4F0FF')
@@ -833,8 +1087,10 @@ struct SkyLiveFormPage {
                   .margin({ top: 1 })
 
                 Text(this.observerPlanet === 'Earth'
-                  ? ('天文暗夜 ' + this.darkStart + ' – ' + this.darkEnd)
-                  : (this.moonPhase.startsWith(this.companionName) ? this.moonPhase : (this.companionName + ' · ' + this.moonPhase)))
+                  ? ('☀ ' + this.sunRise + '–' + this.sunSet + ' · 暗夜 ' + this.darkStart + '–' + this.darkEnd)
+                  : this.observerPlanet === 'Sun'
+                    ? ('日出 ' + this.sunRise + ' · 日落 ' + this.sunSet + ' · 暗夜 ' + this.darkStart)
+                    : (this.moonPhase.startsWith(this.companionName) ? this.moonPhase : (this.companionName + ' · ' + this.moonPhase)))
                   .fontSize(11)
                   .fontColor('#CCE4F7FF')
                   .maxLines(1)
@@ -1284,6 +1540,8 @@ struct SkyLiveFormPage {
         .backgroundColor(Color.Transparent)
         .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
         .onClick(() => this.launchAppDirect())
+      } else if (this.formKind === 'solar_arc_card') {
+        this.buildSolarRestingCard()
       } else if (this.formKind === 'companion_arc_card') {
         this.buildCompanionRestingCard()
       } else if (this.formKind === 'celestial_events_card') {
@@ -1297,7 +1555,7 @@ struct SkyLiveFormPage {
       Stack({ alignContent: Alignment.Center }) {
         Stack({ alignContent: Alignment.Center }) {
           CelestialOrbView({
-            orbBody: this.orbBody,
+            orbBody: this.formKind === 'solar_arc_card' ? 'sun' : this.orbBody,
             orbSize: this.peakOrbSize(),
             showPhase: this.shouldShowPhaseShadow(),
             illumination: this.moonIllumination,

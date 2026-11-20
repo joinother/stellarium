@@ -1,4 +1,10 @@
-import { computePreviewPhaseForDay } from './AstronomyCardData'
+import {
+  computeGoldenHourClock,
+  computePreviewPhaseForDay,
+  computeSolarArcProgress,
+  routePlanetForCard,
+  routeTargetForCard
+} from './AstronomyCardData'
 import {
   CelestialOrbView,
   HorizonArcView,
@@ -22,6 +28,12 @@ struct CompanionArcCard {
   @LocalStorageProp('moonSummary') moonSummary: string = '72% 照明'
   @LocalStorageProp('moonRise') moonRise: string = '—'
   @LocalStorageProp('moonSet') moonSet: string = '—'
+  @LocalStorageProp('sunRise') sunRise: string = '—'
+  @LocalStorageProp('sunTransit') sunTransit: string = '—'
+  @LocalStorageProp('sunSet') sunSet: string = '—'
+  @LocalStorageProp('sunAlt') sunAlt: string = '-18.0'
+  @LocalStorageProp('darkStart') darkStart: string = '—'
+  @LocalStorageProp('goldenHourText') goldenHourText: string = '—'
   @LocalStorageProp('companionAlt') companionAlt: string = '28.0'
   @LocalStorageProp('skyHexHorizon') skyHexHorizon: string = '#142442'
   @LocalStorageProp('dataStatus') dataStatus: string = '本地快照'
@@ -67,12 +79,31 @@ struct CompanionArcCard {
     return Number.isFinite(v) ? v : 28
   }
 
+  private isSunMode(): boolean {
+    return this.orbBody.trim().toLowerCase() === 'sun'
+  }
+
   private accentColor(): string {
     const body = this.orbBody.trim().toLowerCase()
+    if (body === 'sun') return '#FFD166'
     if (body === 'earth') return '#74BFFF'
     if (body === 'saturn' || body === 'titan') return '#F6CE88'
     if (body === 'mars') return '#F09B6B'
     return '#C8DCFF'
+  }
+
+  private arcProgressOverride(): number {
+    if (!this.isSunMode()) return -1
+    const alt = Number(this.sunAlt)
+    return computeSolarArcProgress(this.sunRise, this.sunSet, Date.now(), Number.isFinite(alt) ? alt : 0)
+  }
+
+  private rightStatLabel(): string {
+    if (this.isSunMode()) {
+      const alt = Math.round(this.numericAlt())
+      return (alt >= 0 ? '+' : '') + String(alt) + '°'
+    }
+    return this.displayIllum() >= 0 ? (String(Math.round(this.displayIllum())) + '%') : '—'
   }
 
   private bottomTint(): string {
@@ -90,8 +121,9 @@ struct CompanionArcCard {
       action: 'router',
       abilityName: 'QAbility',
       params: {
-        panel: 'astro',
-        observerPlanet: this.observerPlanet
+        panel: this.isSunMode() ? 'sky' : 'astro',
+        observerPlanet: routePlanetForCard(this.observerPlanet),
+        target: routeTargetForCard(this.observerPlanet)
       }
     })
   }
@@ -138,7 +170,9 @@ struct CompanionArcCard {
         // 2x2 Compact Celestial Arc Instrument
         Column() {
           Row() {
-            Text((this.observerPlanet === 'Earth' ? this.companionName : (this.observerPlanetName + '·' + this.companionName)) + ' ↻')
+            Text((this.observerPlanet === 'Earth' || this.observerPlanet === 'Sun'
+              ? (this.isSunMode() ? '☀ 太阳' : this.companionName)
+              : (this.observerPlanetName + '·' + this.companionName)) + ' ↻')
               .fontSize(11)
               .fontWeight(FontWeight.Medium)
               .fontColor('#E4F0FF')
@@ -150,7 +184,7 @@ struct CompanionArcCard {
               .borderRadius(13)
               .onClick(() => this.cyclePlanet())
             Blank()
-            Text(this.displayIllum() >= 0 ? (String(Math.round(this.displayIllum())) + '%') : '—')
+            Text(this.rightStatLabel())
               .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.accentColor())
@@ -181,8 +215,9 @@ struct CompanionArcCard {
             arcWidth: 122,
             arcHeight: 28,
             altitudeDeg: this.numericAlt(),
-            riseText: this.moonRise,
-            setText: this.moonSet,
+            riseText: this.isSunMode() ? this.sunRise : this.moonRise,
+            setText: this.isSunMode() ? this.sunSet : this.moonSet,
+            customProgress: this.arcProgressOverride(),
             accentColor: this.accentColor()
           })
         }
@@ -236,7 +271,7 @@ struct CompanionArcCard {
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
 
-              Text(this.displayIllum() >= 0 ? (String(Math.round(this.displayIllum())) + '%') : '—')
+              Text(this.rightStatLabel())
                 .fontSize(20)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.accentColor())
@@ -247,17 +282,43 @@ struct CompanionArcCard {
               arcWidth: 172,
               arcHeight: 32,
               altitudeDeg: this.numericAlt(),
-              riseText: this.moonRise,
-              setText: this.moonSet,
+              riseText: this.isSunMode() ? this.sunRise : this.moonRise,
+              midFooterText: this.isSunMode() && this.sunTransit !== '—' ? ('中天 ' + this.sunTransit) : '',
+              setText: this.isSunMode() ? this.sunSet : this.moonSet,
+              customProgress: this.arcProgressOverride(),
               accentColor: this.accentColor()
             })
 
-            MiniPhaseStripView({
-              phaseAge: this.baseAge(),
-              nowMs: Date.now(),
-              selectedIndex: this.selectedDayOffset,
-              onSelectDay: (idx: number) => this.selectPreviewDay(idx)
-            })
+            if (this.isSunMode()) {
+              Row({ space: 5 }) {
+                ForEach([
+                  ['日出', this.sunRise],
+                  ['中天', this.sunTransit],
+                  ['黄金', this.goldenHourText !== '—' ? this.goldenHourText : computeGoldenHourClock(this.sunSet)],
+                  ['暗夜', this.darkStart]
+                ], (pair: string[], idx: number) => {
+                  Column({ space: 1 }) {
+                    Text(pair[0]).fontSize(9).fontWeight(FontWeight.Medium).fontColor('#DDE8F8').maxLines(1)
+                    Text(pair[1]).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE09A').maxLines(1)
+                  }
+                  .layoutWeight(1)
+                  .height(34)
+                  .justifyContent(FlexAlign.Center)
+                  .alignItems(HorizontalAlign.Center)
+                  .backgroundColor('#32090F1E')
+                  .borderRadius(10)
+                  .border({ width: 0.5, color: '#2AFFE09A' })
+                }, (pair: string[], idx: number) => pair[0] + '_' + String(idx))
+              }
+              .width('100%')
+            } else {
+              MiniPhaseStripView({
+                phaseAge: this.baseAge(),
+                nowMs: Date.now(),
+                selectedIndex: this.selectedDayOffset,
+                onSelectDay: (idx: number) => this.selectPreviewDay(idx)
+              })
+            }
           }
           .layoutWeight(1)
           .height('100%')

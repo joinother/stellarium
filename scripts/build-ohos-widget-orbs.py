@@ -274,6 +274,166 @@ def render_sphere(
     print(f"generated {out_path.name} ({out_path.stat().st_size // 1024} KB)")
 
 
+def render_sun(
+    tex_name: str = "sun.png",
+    out_name: str = "widget_orb_sun.png",
+    size: int = 192,
+    lon_offset_deg: float = 25.0,
+    radius_ratio: float = 0.39,
+):
+    """
+    Generate an orthographically ray-traced 3D self-luminous Sun PNG icon from
+    Stellarium's solar photosphere texture (textures/sun.png) enhanced with
+    multi-scale solar granulation/convection cells, physical Eddington limb
+    darkening, and a seamless C1-tapered fiery golden corona (zero dark seam,
+    zero rectangular edge).
+    """
+    tex_path = TEX_DIR / tex_name
+    tex = Image.open(tex_path).convert("RGB")
+    tw, th = tex.size
+    tpix = tex.load()
+
+    ss = 2
+    W = size * ss
+    H = size * ss
+    cx = W * 0.5
+    cy = H * 0.5
+    R = W * radius_ratio
+    lon_off = lon_offset_deg / 360.0
+
+    # True isotropic 3D value-noise fBM for organic solar granulation & supergranulation (zero stripes!)
+    def hash3(ix: int, iy: int, iz: int) -> float:
+        h = (ix * 374761393 + iy * 668265263 + iz * 2147483647) & 0xFFFFFFFF
+        h = ((h ^ (h >> 13)) * 1274126177) & 0xFFFFFFFF
+        h = h ^ (h >> 16)
+        return (h & 0xFFFF) / 65535.0
+
+    def vnoise3(x: float, y: float, z: float) -> float:
+        ix = int(math.floor(x))
+        iy = int(math.floor(y))
+        iz = int(math.floor(z))
+        fx = x - ix
+        fy = y - iy
+        fz = z - iz
+        ux = fx * fx * (3.0 - 2.0 * fx)
+        uy = fy * fy * (3.0 - 2.0 * fy)
+        uz = fz * fz * (3.0 - 2.0 * fz)
+        c000 = hash3(ix, iy, iz)
+        c100 = hash3(ix + 1, iy, iz)
+        c010 = hash3(ix, iy + 1, iz)
+        c110 = hash3(ix + 1, iy + 1, iz)
+        c001 = hash3(ix, iy, iz + 1)
+        c101 = hash3(ix + 1, iy, iz + 1)
+        c011 = hash3(ix, iy + 1, iz + 1)
+        c111 = hash3(ix + 1, iy + 1, iz + 1)
+        x00 = c000 + (c100 - c000) * ux
+        x10 = c010 + (c110 - c010) * ux
+        x01 = c001 + (c101 - c001) * ux
+        x11 = c011 + (c111 - c011) * ux
+        y0 = x00 + (x10 - x00) * uy
+        y1 = x01 + (x11 - x01) * uy
+        return y0 + (y1 - y0) * uz
+
+    def plasma_detail(sx: float, sy: float, sz: float) -> float:
+        # Domain-warped 4-octave isotropic fBM resembling real SDO solar granulation
+        wx = vnoise3(sx * 4.5 + 1.3, sy * 4.5 - 2.1, sz * 4.5 + 0.7) - 0.5
+        wy = vnoise3(sx * 4.5 - 3.7, sy * 4.5 + 1.9, sz * 4.5 - 1.4) - 0.5
+        px_ = sx + wx * 0.22
+        py_ = sy + wy * 0.22
+        pz_ = sz
+        n = (
+            0.46 * vnoise3(px_ * 5.2, py_ * 5.2, pz_ * 5.2)
+            + 0.28 * vnoise3(px_ * 11.4 + 7.1, py_ * 11.4 - 3.2, pz_ * 11.4 + 5.5)
+            + 0.16 * vnoise3(px_ * 23.0 - 4.3, py_ * 23.0 + 9.1, pz_ * 23.0 - 6.2)
+            + 0.10 * vnoise3(px_ * 46.0 + 2.7, py_ * 46.0 - 8.4, pz_ * 46.0 + 3.9)
+        )
+        # Subtle bright faculae/active regions in solar mid-latitude belts
+        band = math.exp(-((abs(sy) - 0.23) ** 2) / 0.030)
+        facula = band * max(0.0, vnoise3(sx * 6.5 + 11.0, sy * 6.5 - 5.0, sz * 6.5 + 2.0) - 0.58) * 1.45
+        return clamp((n - 0.22) * 1.42 + facula, 0.0, 1.0)
+
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    px = img.load()
+
+    for y in range(H):
+        dy = (y - cy) / R
+        for x in range(W):
+            dx = (x - cx) / R
+            r2 = dx * dx + dy * dy
+            r = math.sqrt(r2)
+
+            # Seamless corona glow starts right beneath the limb so anti-aliased edge has ZERO dark ring
+            dist_out = max(0.0, r - 1.0)
+            max_corona = 0.27
+            corona_r, corona_g, corona_b, corona_a = 255.0, 168.0, 48.0, 0.0
+            if dist_out < max_corona:
+                t_edge = 1.0 - (dist_out / max_corona)
+                taper = t_edge * t_edge * (3.0 - 2.0 * t_edge)
+                ang = math.atan2(dy, dx)
+                streamer = 0.86 + 0.14 * math.sin(ang * 6.0 + 0.8) * math.cos(ang * 4.0 - 0.5)
+                corona_a = math.exp(-dist_out * 11.5) * taper * streamer * 0.88
+                corona_r = 255.0
+                corona_g = 135.0 + 82.0 * (t_edge ** 1.3)
+                corona_b = 26.0 + 88.0 * (t_edge ** 2.2)
+
+            if r2 <= 1.0:
+                nz = math.sqrt(max(0.0, 1.0 - r2))
+                lon = math.atan2(dx, nz) / (2.0 * math.pi) + 0.5 + lon_off
+                lat = math.asin(clamp(dy, -1.0, 1.0)) / math.pi + 0.5
+                tr, tg, tb = sample_bilinear(tpix, tw, th, lon, lat)
+
+                # Combine real sun.png sunspots/features with rich solar convective granulation
+                tex_lum = (0.299 * tr + 0.587 * tg + 0.114 * tb) / 255.0
+                # sun.png has subtle dark sunspots around tex_lum < 0.78
+                spot_factor = clamp((tex_lum - 0.45) / 0.42, 0.25, 1.0)
+                cell = plasma_detail(dx, dy, nz)
+                energy = clamp((0.35 + 0.65 * cell) * (0.55 + 0.45 * spot_factor), 0.12, 1.0)
+
+                # Rich solar thermal ramp: white-gold incandescent center -> fiery amber-orange limb
+                mu = nz
+                limb_r = 0.86 + 0.14 * (mu ** 0.35)
+                limb_g = 0.34 + 0.64 * (mu ** 0.58)
+                limb_b = 0.04 + 0.78 * (mu ** 1.25)
+
+                sr = 255.0 * limb_r * (0.86 + 0.16 * energy)
+                sg = 242.0 * limb_g * (0.64 + 0.44 * energy)
+                sb = 178.0 * limb_b * (0.38 + 0.72 * energy)
+
+                # Fiery chromospheric flare rim
+                chromo = ((1.0 - mu) ** 2.6) * 0.45
+                sr = sr + 255.0 * chromo * 0.25
+                sg = sg + 115.0 * chromo * 0.22
+
+                edge_dist = 1.0 - r
+                sphere_a = clamp(edge_dist * R * 1.1, 0.0, 1.0)
+                # Composite fiery sphere OVER corona (eliminates any dark fringe!)
+                inv_sa = 1.0 - sphere_a
+                out_a = sphere_a + corona_a * inv_sa
+                if out_a > 1e-4:
+                    out_r = (sr * sphere_a + corona_r * corona_a * inv_sa) / out_a
+                    out_g = (sg * sphere_a + corona_g * corona_a * inv_sa) / out_a
+                    out_b = (sb * sphere_a + corona_b * corona_a * inv_sa) / out_a
+                    px[x, y] = (
+                        int(clamp(out_r, 0, 255)),
+                        int(clamp(out_g, 0, 255)),
+                        int(clamp(out_b, 0, 255)),
+                        int(clamp(out_a * 255.0, 0, 255)),
+                    )
+            elif corona_a > 0.004:
+                px[x, y] = (
+                    int(clamp(corona_r, 0, 255)),
+                    int(clamp(corona_g, 0, 255)),
+                    int(clamp(corona_b, 0, 255)),
+                    int(clamp(corona_a * 255.0, 0, 255)),
+                )
+
+    final_img = img.resize((size, size), Image.Resampling.LANCZOS)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUT_DIR / out_name
+    final_img.save(out_path, optimize=True)
+    print(f"generated {out_path.name} ({out_path.stat().st_size // 1024} KB)")
+
+
 def render_phase_masks(size: int = 192, radius_ratio: float = 0.43):
     """
     Generate 16 ray-traced 3D spherical phase shadow masks (widget_phase_00..15.png).
@@ -337,6 +497,8 @@ def render_phase_masks(size: int = 192, radius_ratio: float = 0.43):
 
 
 def main():
+    # Sun: Self-luminous photosphere with Eddington limb darkening & smooth golden corona
+    render_sun("sun.png", "widget_orb_sun.png", size=192, lon_offset_deg=25.0, radius_ratio=0.39)
     # Moon: front-lit full lunar disk (3D spherical phase mask is overlaid in ArkUI!)
     render_sphere(
         "moon.png", "widget_orb_moon.png",
@@ -419,6 +581,7 @@ def main():
 
     # Also build a scratch preview contact sheet to inspect visually
     names = [
+        "widget_orb_sun.png",
         "widget_orb_moon.png", "widget_orb_earth.png", "widget_orb_mars.png",
         "widget_orb_saturn.png", "widget_orb_jupiter.png", "widget_orb_titan.png",
         "widget_orb_venus.png", "widget_orb_neptune.png", "widget_orb_uranus.png",
