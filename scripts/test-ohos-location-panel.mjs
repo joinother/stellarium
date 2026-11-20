@@ -52,7 +52,7 @@ test('panel dragging and scrolling disable the expensive backdrop blur and shado
   assert.match(host, /@State private panelDragging: boolean = false/);
   assert.match(host, /@State private panelScrolling: boolean = false/);
   assert.match(host, /@State private panelTouching: boolean = false/);
-  assert.match(host, /private panelChromeBusy\(\): boolean \{\s*return this\.panelDragging \|\| this\.panelScrolling\s*\}/);
+  assert.match(host, /private panelChromeBusy\(\): boolean \{\s*return this\.panelDragging \|\| this\.panelScrolling \|\| this\.timeWheelStore\.timeWheelDragging\s*\}/);
   assert.match(host, /backdropBlur\(this\.panelChromeBusy\(\) \? 0 : 30\)/);
   assert.match(host, /shadow\(\{ radius: this\.panelChromeBusy\(\) \? 0 : 30/);
   assert.match(host, /shadow\(\{ radius: this\.panelChromeBusy\(\) \? 0 : 34/);

@@ -14,7 +14,7 @@ import { panelFontSize } from '../../common/ui/UiTypography'
 @Component
 export struct ObserverPlanetSection {
   @ObjectLink store: SessionToolStore
-  @StorageProp('stellariumReadableUi') readable: boolean = false
+  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   @State c: ThemeSlots = DEFAULT_SLOTS
   // Same night-mode treatment as Settings → Interface language: an opaque
   // deep red-black menu with no extra blur material.
@@ -32,11 +32,11 @@ export struct ObserverPlanetSection {
 
   build() {
     Column({ space: 8 }) {
-      Text(I18n.t('c_observing_planet')).fontSize(panelFontSize(13, this.readable)).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
+      Text(I18n.t('c_observing_planet')).fontSize(panelFontSize(13, this.readableUi)).fontColor(this.c.text).width('100%').margin({ top: 10, bottom: 2 })
       Select(this.store.observerPlanetOptions())
         .selected(Math.max(0, this.store.planetList.indexOf(this.store.observerPlanet)))
         .value(this.store.observerPlanetLabel(this.store.observerPlanet))
-        .font({ size: panelFontSize(14, this.readable) })
+        .font({ size: panelFontSize(14, this.readableUi) })
         .fontColor(this.c.text)
         .selectedOptionFontColor(this.c.onAccent)
         .optionFontColor(this.c.text)
@@ -56,7 +56,7 @@ export struct ObserverPlanetSection {
         })
       if (this.store.observerPlanet !== 'Earth') {
         Button(I18n.t('btn_back_to_earth'))
-          .fontSize(panelFontSize(12, this.readable)).fontColor(this.c.text).backgroundColor(this.c.softStrong)
+          .fontSize(panelFontSize(12, this.readableUi)).fontColor(this.c.text).backgroundColor(this.c.softStrong)
           .borderRadius(UI_RADIUS_CONTROL).height(36).width('100%')
           .enabled(!this.store.observerPlanetPending)
           .onClick(() => { this.onSelectPlanet('Earth') })

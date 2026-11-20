@@ -65,9 +65,9 @@ assert.match(panel('telescope/OcularMetric.ets'), /panelFontSize\(15, this.reada
 const tabs = panel('layers/LayerTabs.ets');
 assert.match(tabs, /minWidth: this.readableUi \? 76 : 60, minHeight: this.readableUi \? 40 : 36/);
 assert.match(tabs, /\.height\(this.readableUi \? 46 : 42\)/);
-assert.match(panel('layers/LayerSwitchRow.ets'), /\.height\(this.readableUi \? 50 : 42\)/);
+assert.match(panel('layers/LayerSwitchRow.ets'), /\.height\(this\.hasHint\(\) \? \(this\.readableUi \? 64 : 56\) : \(this\.readableUi \? 50 : 42\)\)/);
 assert.match(panel('shell/PanelHeader.ets'), /fontSize\(panelFontSize\(18, this.readableUi\)\)/);
-assert.match(panel('settings/NotificationSection.ets'), /height\(this.readableUi \? 36 : 30\)/);
+assert.match(panel('settings/NotificationSection.ets'), /height\(this\.readableUi \? 50 : 42\)/);
 assert.match(panel('layers/LayerSpectralSection.ets'), /height\(this.readableUi \? 34 : 28\)/);
 for (const name of ['InfoRow', 'NavStarsToggleRow', 'SettingsChoiceButton', 'SettingsSwitchRow']) {
   const source = read(`harmonyos/ets-source/common/ui/${name}.ets`);
