@@ -17,6 +17,7 @@ import {
   computeDaylightDuration,
   computeGoldenHourClock,
   computeOverflowArea,
+  computePlanetViewingInsight,
   computePreviewPhaseForDay,
   computeSolarArcProgress,
   defaultCardConfig,
@@ -28,8 +29,10 @@ import {
   formatCountdownZh,
   formatOrreryOffsetBadge,
   formatPlanetDisplayList,
+  formatPreviewDayCaptionZh,
   formatPreviewTimeBadge,
   isLightTextColor,
+  lunarNextMilestoneZh,
   moonSilhouette,
   nextCyclePlanet,
   normalizeAstronomyCard,
@@ -434,5 +437,14 @@ assert.equal(satelliteBrightnessGradeZh(1.2, false), '地影过境')
 const fallbackPasses = parseSatellitePasses('[]', now)
 assert.equal(fallbackPasses.length, 3, 'fallback satellite passes must include ISS, Tiangong, and HST')
 assert.match(satellitePassReminderId(fallbackPasses[0]), /^satellite-pass-25544-\d+$/)
+
+// Lunar milestone, preview day caption, and heliocentric viewing insight tests
+assert.equal(lunarNextMilestoneZh(14.8, false), '今日满月')
+assert.equal(lunarNextMilestoneZh(11.5, false), '距满月 3 天')
+assert.equal(lunarNextMilestoneZh(24.5, false), '距新月 5 天')
+assert.equal(formatPreviewDayCaptionZh(0, now), '今日实况')
+assert.ok(formatPreviewDayCaptionZh(1, now).startsWith('预演 明日 (+1天)'))
+assert.ok(computePlanetViewingInsight(helioNow, 'Earth').includes('逆时针绕日'))
+assert.ok(computePlanetViewingInsight(helioNow, 'Jupiter').length > 4)
 
 console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, 6 spacecraft icons, ${overflowCases.length} overflow specs`)

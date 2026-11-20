@@ -22,93 +22,101 @@ export struct TimeSpeedChips {
   }
 
   build() {
-    Scroll() {
-      Row({ space: 5 }) {
-        // 倒带 — 单按钮循环升档：-1x → -2x → -10x → -1分/秒 → -1时/秒 → -10天/秒 → 回到-1x
+    Column({ space: 8 }) {
+      // 第一层主控（等宽铺满 38vp 大按钮）：最常用的「暂停/继续」与「回到实时」居于视觉焦点，左右配「倒带 / 快进」
+      Row({ space: 6 }) {
+        // 倒带
         Row({ space: 4 }) {
           Image($r('app.media.ic_time_rewind'))
-            .width(14).height(14)
+            .width(15).height(15)
             .fillColor(this.store.timeSpeedIndex < 6 ? this.c.textStrong : this.c.iconTertiary)
           Text(I18n.t('s0763_rewind'))
-            .fontSize(11.5)
+            .fontSize(12)
             .fontWeight(this.store.timeSpeedIndex < 6 ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.store.timeSpeedIndex < 6 ? this.c.textStrong : this.c.chipInactiveText)
-        }.height(32).padding({ left: 7, right: 7 }).borderRadius(UI_RADIUS_PILL)
-          .backgroundColor(this.store.timeSpeedIndex < 6 ? this.c.chipActiveBg : this.c.chipInactiveBg)
-          .border({ width: this.store.timeSpeedIndex < 6 ? 1.2 : 0.6, color: this.store.timeSpeedIndex < 6 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
-          .shadow(this.store.timeSpeedIndex < 6 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 8, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
-          .onClick(() => { this.onChip('rewind') })
+            .maxLines(1)
+        }
+        .layoutWeight(1).height(38).justifyContent(FlexAlign.Center).borderRadius(UI_RADIUS_PILL)
+        .backgroundColor(this.store.timeSpeedIndex < 6 ? this.c.chipActiveBg : this.c.chipInactiveBg)
+        .border({ width: this.store.timeSpeedIndex < 6 ? 1.2 : 0.6, color: this.store.timeSpeedIndex < 6 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+        .onClick(() => { this.onChip('rewind') })
 
-        // 停止/继续 — 停止后同一按钮变成继续，避免"停止"和播放状态混淆
+        // 停止/继续（核心主按钮）
         Row({ space: 4 }) {
           Image($r('app.media.' + (this.store.timeSpeedIndex === 6 ? 'ic_time_resume' : 'ic_time_stop')))
-            .width(14).height(14)
-            .fillColor(this.store.timeSpeedIndex === 6 ? this.c.textStrong : this.c.iconTertiary)
+            .width(15).height(15)
+            .fillColor(this.store.timeSpeedIndex === 6 ? this.c.textStrong : this.c.text)
           Text(this.store.timeSpeedIndex === 6 ? I18n.t('btn_resume') : I18n.t('s0761_stop'))
-            .fontSize(11.5)
-            .fontWeight(this.store.timeSpeedIndex === 6 ? FontWeight.Medium : FontWeight.Normal)
-            .fontColor(this.store.timeSpeedIndex === 6 ? this.c.textStrong : this.c.chipInactiveText)
-        }.height(32).padding({ left: 7, right: 7 }).borderRadius(UI_RADIUS_PILL)
-          .backgroundColor(this.store.timeSpeedIndex === 6 ? this.c.chipActiveBg : this.c.chipInactiveBg)
-          .border({ width: this.store.timeSpeedIndex === 6 ? 1.2 : 0.6, color: this.store.timeSpeedIndex === 6 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
-          .shadow(this.store.timeSpeedIndex === 6 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 8, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
-          .onClick(() => { this.onChip('stop') })
+            .fontSize(12.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.store.timeSpeedIndex === 6 ? this.c.textStrong : this.c.text)
+            .maxLines(1)
+        }
+        .layoutWeight(1.15).height(38).justifyContent(FlexAlign.Center).borderRadius(UI_RADIUS_PILL)
+        .backgroundColor(this.store.timeSpeedIndex === 6 ? this.c.chipActiveBg : this.c.softStrong)
+        .border({ width: this.store.timeSpeedIndex === 6 ? 1.3 : 0.8, color: this.store.timeSpeedIndex === 6 ? this.c.chipActiveBorder : this.c.border })
+        .shadow(this.store.timeSpeedIndex === 6 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 6, color: this.c.shadowSoft, offsetX: 0, offsetY: 2 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+        .onClick(() => { this.onChip('stop') })
 
-        // 实时 — 回到当前时刻 + 1x
+        // 实时（核心主按钮）
         Row({ space: 4 }) {
-          Image($r('app.media.ic_time_realtime')).width(14).height(14)
-            .fillColor(this.store.timeSpeedIndex === 7 ? this.c.textStrong : this.c.iconTertiary)
-          Text(I18n.t('s0764_realtime')).fontSize(11.5)
-            .fontWeight(this.store.timeSpeedIndex === 7 ? FontWeight.Medium : FontWeight.Normal)
-            .fontColor(this.store.timeSpeedIndex === 7 ? this.c.textStrong : this.c.chipInactiveText)
-        }.height(32).padding({ left: 7, right: 7 }).borderRadius(UI_RADIUS_PILL)
-          .backgroundColor(this.store.timeSpeedIndex === 7 ? this.c.chipActiveBg : this.c.chipInactiveBg)
-          .border({ width: this.store.timeSpeedIndex === 7 ? 1.2 : 0.6, color: this.store.timeSpeedIndex === 7 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
-          .shadow(this.store.timeSpeedIndex === 7 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 8, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
-          .onClick(() => { this.onChip('realtime') })
+          Image($r('app.media.ic_time_realtime')).width(15).height(15)
+            .fillColor(this.store.timeSpeedIndex === 7 ? this.c.textStrong : this.c.text)
+          Text(I18n.t('s0764_realtime'))
+            .fontSize(12.5)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.store.timeSpeedIndex === 7 ? this.c.textStrong : this.c.text)
+            .maxLines(1)
+        }
+        .layoutWeight(1.15).height(38).justifyContent(FlexAlign.Center).borderRadius(UI_RADIUS_PILL)
+        .backgroundColor(this.store.timeSpeedIndex === 7 ? this.c.chipActiveBg : this.c.softStrong)
+        .border({ width: this.store.timeSpeedIndex === 7 ? 1.3 : 0.8, color: this.store.timeSpeedIndex === 7 ? this.c.chipActiveBorder : this.c.border })
+        .shadow(this.store.timeSpeedIndex === 7 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 6, color: this.c.shadowSoft, offsetX: 0, offsetY: 2 })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+        .onClick(() => { this.onChip('realtime') })
 
-        // 减速 — 每点降一档；降到1x再点=停止
+        // 快进
         Row({ space: 4 }) {
-          Image($r('app.media.ic_time_slower')).width(14).height(14).fillColor(this.c.iconTertiary)
-          Text(I18n.t('s0759_slower'))
-            .fontSize(11.5).fontColor(this.c.chipInactiveText)
-        }.height(32).padding({ left: 7, right: 7 }).borderRadius(UI_RADIUS_PILL)
-          .backgroundColor(this.c.chipInactiveBg)
-          .border({ width: 0.6, color: this.c.chipInactiveBorder })
-          .shadow({ radius: 8, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
-          .onClick(() => { this.onChip('slower') })
-
-        // 快进 — 单按钮循环升档：1x → 2x → 10x → 1分/秒 → 1时/秒 → 1天/秒 → 10天/秒 → 回到1x
-        // 激活时标签直接显示当前档位速度
-        Row({ space: 4 }) {
-          Image($r('app.media.ic_time_fast')).width(14).height(14)
+          Image($r('app.media.ic_time_fast')).width(15).height(15)
             .fillColor(this.store.timeSpeedIndex > 7 ? this.c.textStrong : this.c.iconTertiary)
           Text(I18n.t('s0765_fast'))
-            .fontSize(11.5)
+            .fontSize(12)
             .fontWeight(this.store.timeSpeedIndex > 7 ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.store.timeSpeedIndex > 7 ? this.c.textStrong : this.c.chipInactiveText)
-        }.height(32).padding({ left: 7, right: 7 }).borderRadius(UI_RADIUS_PILL)
-          .backgroundColor(this.store.timeSpeedIndex > 7 ? this.c.chipActiveBg : this.c.chipInactiveBg)
-          .border({ width: this.store.timeSpeedIndex > 7 ? 1.2 : 0.6, color: this.store.timeSpeedIndex > 7 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
-          .shadow(this.store.timeSpeedIndex > 7 ? { radius: 10, color: this.c.accent, offsetX: 0, offsetY: 3 } : { radius: 8, color: this.c.shadowSoft, offsetX: 0, offsetY: 4 })
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
-          .onClick(() => { this.onChip('fast') })
+            .maxLines(1)
+        }
+        .layoutWeight(1).height(38).justifyContent(FlexAlign.Center).borderRadius(UI_RADIUS_PILL)
+        .backgroundColor(this.store.timeSpeedIndex > 7 ? this.c.chipActiveBg : this.c.chipInactiveBg)
+        .border({ width: this.store.timeSpeedIndex > 7 ? 1.2 : 0.6, color: this.store.timeSpeedIndex > 7 ? this.c.chipActiveBorder : this.c.chipInactiveBorder })
+        .clickEffect({ level: ClickEffectLevel.LIGHT })
+        .animation({ duration: 180, curve: curves.springMotion(0.42, 0.86) })
+        .onClick(() => { this.onChip('fast') })
       }
-      .padding({ left: 2, right: 10, top: 2, bottom: 12 })
-    }
       .width('100%')
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .margin({ top: 8 })
+
+      // 第二层次级微调：仅在快进/倒带状态下出现「逐档降速」，实时/停止态不占用界面空间
+      if (this.store.timeSpeedIndex !== 6 && this.store.timeSpeedIndex !== 7) {
+        Row({ space: 8 }) {
+          Row({ space: 5 }) {
+            Image($r('app.media.ic_time_slower')).width(14).height(14).fillColor(this.c.iconSecondary)
+            Text(I18n.t('s0759_slower') + '（逐档降速）')
+              .fontSize(11.5).fontColor(this.c.sub).maxLines(1)
+          }
+          .height(34).padding({ left: 12, right: 14 }).borderRadius(UI_RADIUS_PILL)
+          .backgroundColor(this.c.chipInactiveBg)
+          .border({ width: 0.6, color: this.c.chipInactiveBorder })
+          .clickEffect({ level: ClickEffectLevel.LIGHT })
+          .onClick(() => { this.onChip('slower') })
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .margin({ top: 8, bottom: 2 })
   }
 }

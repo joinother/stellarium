@@ -21,8 +21,8 @@ export struct RtsSelectionGuide {
     Column({ space: 5 }) {
       Text('先选择一个天体，才能按当前观测地点计算它的升起、中天和落下时间。')
         .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 8 })
-      Button('选择天体').fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-        .borderRadius(UI_RADIUS_PILL).height(28).padding({ left: 10, right: 10 })
+      Button('选择天体').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+        .borderRadius(UI_RADIUS_PILL).height(36).padding({ left: 16, right: 16 })
         .onClick(() => { this.onPick() })
     }.width('100%').padding({ left: 4 }).margin({ top: 5, bottom: 6 }).alignItems(HorizontalAlign.Start)
   }
@@ -43,8 +43,8 @@ export struct GraphSelectionGuide {
     Column({ space: 5 }) {
       Text(this.error.indexOf('超时') >= 0 ? '若尚未选择天体，先选择一个；已选择时可点刷新重试。' : '先选择一个天体，才能按当前观测地点生成曲线。')
         .fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 8 })
-      Button('去选择天体').fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-        .borderRadius(UI_RADIUS_PILL).height(28).padding({ left: 10, right: 10 })
+      Button('去选择天体').fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+        .borderRadius(UI_RADIUS_PILL).height(36).padding({ left: 16, right: 16 })
         .onClick(() => { this.onPick() })
     }.width('100%').padding({ left: 4 }).margin({ top: 5, bottom: 6 }).alignItems(HorizontalAlign.Start)
   }

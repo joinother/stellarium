@@ -211,20 +211,20 @@ export struct TargetTransitArcView {
           this.redraw()
         })
 
-      Row({ space: 6 }) {
+      Row({ space: 8 }) {
         Button('跳至升起')
-          .fontSize(this.fs(10)).fontColor(this.c.text).backgroundColor(this.c.soft)
-          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(26) }).layoutWeight(1)
+          .fontSize(this.fs(11)).fontWeight(FontWeight.Medium).fontColor(this.c.text).backgroundColor(this.c.soft)
+          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(34) }).layoutWeight(1)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => this.onJumpRise())
         Button('跳至中天')
-          .fontSize(this.fs(10)).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
-          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(26) }).layoutWeight(1)
+          .fontSize(this.fs(11)).fontWeight(FontWeight.Medium).fontColor(this.c.onAccent).backgroundColor(this.c.accent)
+          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(34) }).layoutWeight(1)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => this.onJumpTransit())
         Button('跳至落下')
-          .fontSize(this.fs(10)).fontColor(this.c.text).backgroundColor(this.c.soft)
-          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(26) }).layoutWeight(1)
+          .fontSize(this.fs(11)).fontWeight(FontWeight.Medium).fontColor(this.c.text).backgroundColor(this.c.soft)
+          .borderRadius(UI_RADIUS_PILL).constraintSize({ minHeight: this.ch(34) }).layoutWeight(1)
           .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => this.onJumpSet())
       }

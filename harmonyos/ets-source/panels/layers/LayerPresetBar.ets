@@ -14,19 +14,28 @@ export struct LayerPresetBar {
   onWillApplyTheme(theme: Theme) { this.c = slotsFromTheme(theme) }
 
   build() {
-    Column({ space: 4 }) {
-      Text('图层预设').fontSize(10).fontColor(this.c.sub).width('100%').padding({ left: 2 })
-      Row({ space: 5 }) {
-        Button('纯净星空').fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-          .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
+    Column({ space: 6 }) {
+      Text('快捷场景预设').fontSize(11).fontWeight(FontWeight.Medium).fontColor(this.c.sub).width('100%').padding({ left: 2 })
+      Row({ space: 8 }) {
+        Button('纯净星空')
+          .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.text).backgroundColor(this.c.bg)
+          .border({ width: 0.6, color: this.c.border })
+          .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => { this.onPreset('clean') })
-        Button('观测辅助').fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-          .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
+        Button('观测辅助')
+          .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.text).backgroundColor(this.c.bg)
+          .border({ width: 0.6, color: this.c.border })
+          .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => { this.onPreset('observe') })
-        Button('摄影构图').fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-          .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 9, right: 9 })
+        Button('摄影构图')
+          .fontSize(12).fontWeight(FontWeight.Medium).fontColor(this.c.text).backgroundColor(this.c.bg)
+          .border({ width: 0.6, color: this.c.border })
+          .borderRadius(UI_RADIUS_CONTROL).height(36).layoutWeight(1)
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
           .onClick(() => { this.onPreset('photo') })
       }.width('100%').padding({ left: 2, right: 2 })
-    }.width('100%').margin({ bottom: 4 })
+    }.width('100%').margin({ bottom: 6 })
   }
 }

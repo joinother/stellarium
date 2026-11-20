@@ -692,6 +692,30 @@ export function buildMiniPhaseStrip(age: number, nowMs: number): MiniPhaseDay[] 
   return out
 }
 
+export function lunarNextMilestoneZh(age: number, isEarthPhase: boolean = false): string {
+  const synodic = 29.530588853
+  const a = ((Number.isFinite(age) ? age : 10) % synodic + synodic) % synodic
+  const fullAge = synodic * 0.5
+  const targetFull = isEarthPhase ? '满地' : '满月'
+  const targetNew = isEarthPhase ? '新地' : '新月'
+  if (Math.abs(a - fullAge) < 0.7) return '今日' + targetFull
+  if (a < 0.7 || a > synodic - 0.7) return '今日' + targetNew
+  if (a < fullAge) {
+    const d = Math.max(1, Math.round(fullAge - a))
+    return '距' + targetFull + ' ' + String(d) + ' 天'
+  }
+  const d = Math.max(1, Math.round(synodic - a))
+  return '距' + targetNew + ' ' + String(d) + ' 天'
+}
+
+export function formatPreviewDayCaptionZh(dayOffset: number, nowMs: number): string {
+  if (dayOffset <= 0) return '今日实况'
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+  const d = new Date(nowMs + dayOffset * 86400000)
+  const dayWord = dayOffset === 1 ? '明日' : ('周' + weekdays[d.getDay()])
+  return '预演 ' + dayWord + ' (+' + String(dayOffset) + '天)'
+}
+
 export function parseVisiblePlanets(rawJson: string): CompactPlanetItem[] {
   if (typeof rawJson !== 'string' || rawJson.length === 0) return []
   try {
@@ -1767,11 +1791,11 @@ export function projectSolarSystemOrrery(
   const maxRx = Math.min(maxRxByW, maxRxByH)
   const centerX = safeW * 0.5
   const centerY = safeH * 0.5
-  const sizeScale = Math.max(0.62, Math.min(1.22, maxRx / 108.0))
-  const sunSize = Math.round(Math.max(18, Math.min(34, (innerOnly ? 28 : 24) * sizeScale)))
+  const sizeScale = Math.max(0.68, Math.min(1.28, maxRx / 102.0))
+  const sunSize = Math.round(Math.max(20, Math.min(36, (innerOnly ? 30 : 25) * sizeScale)))
 
-  const fullFractions: number[] = [0.22, 0.31, 0.41, 0.51, 0.64, 0.77, 0.88, 0.98]
-  const innerFractions: number[] = [0.31, 0.52, 0.74, 0.96]
+  const fullFractions: number[] = [0.20, 0.30, 0.42, 0.54, 0.67, 0.79, 0.90, 0.99]
+  const innerFractions: number[] = [0.30, 0.51, 0.73, 0.96]
   const fractions = innerOnly ? innerFractions : fullFractions
 
   const orbits: OrreryOrbitRing[] = []
@@ -1805,12 +1829,12 @@ export function projectSolarSystemOrrery(
     const nx = Math.cos(rad)
     const ny = -Math.sin(rad) // top (-Y) is farther from camera; bottom (+Y) is nearer
     const depthZ = ny // [-1 far .. +1 near]
-    const persp = 1.0 + depthZ * (0.14 * sinTilt)
+    const persp = 1.0 + depthZ * (0.16 * sinTilt)
     const px = Math.round((centerX + rx * nx) * 10) / 10
     const py = Math.round((centerY + ry * ny) * 10) / 10
-    const rawSize = (innerOnly ? p.baseSize * 1.15 : p.baseSize) * sizeScale * persp
-    const size = Math.round(Math.max(8, Math.min(30, rawSize)) * 10) / 10
-    const opacity = Math.round(Math.max(0.76, Math.min(1.0, 0.90 + depthZ * 0.12 * sinTilt)) * 100) / 100
+    const rawSize = (innerOnly ? p.baseSize * 1.24 : p.baseSize * 1.12) * sizeScale * persp
+    const size = Math.round(Math.max(9.5, Math.min(32, rawSize)) * 10) / 10
+    const opacity = Math.round(Math.max(0.78, Math.min(1.0, 0.92 + depthZ * 0.10 * sinTilt)) * 100) / 100
 
     if (isEarth) {
       earthX = px
@@ -1875,4 +1899,42 @@ export function projectSolarSystemOrrery(
     vernalY: Math.round(centerY * 10) / 10,
     summaryLine: summaryLine
   }
+}
+
+// Plain-Chinese heliocentric sky-viewing insight for any planet relative to Earth.
+export function computePlanetViewingInsight(planets: OrreryPlanetState[], selectedId: string): string {
+  const earth = planets.find((p: OrreryPlanetState) => p.id === 'Earth')
+  const target = planets.find((p: OrreryPlanetState) => p.id.toLowerCase() === selectedId.trim().toLowerCase())
+  if (earth === undefined || target === undefined) return '点击行星查看公转与观测建议'
+  if (target.id === 'Earth') {
+    return '地球公转基准 · 逆时针绕日运行（周期 365 天）'
+  }
+  const ex = earth.distAU * Math.cos(earth.lonDeg * Math.PI / 180.0)
+  const ey = earth.distAU * Math.sin(earth.lonDeg * Math.PI / 180.0)
+  const tx = target.distAU * Math.cos(target.lonDeg * Math.PI / 180.0)
+  const ty = target.distAU * Math.sin(target.lonDeg * Math.PI / 180.0)
+  // Vector from Earth -> Sun = (-ex, -ey), Earth -> Target = (tx - ex, ty - ey)
+  const sx = -ex
+  const sy = -ey
+  const vx = tx - ex
+  const vy = ty - ey
+  const sLen = Math.hypot(sx, sy)
+  const vLen = Math.hypot(vx, vy)
+  if (sLen < 1e-6 || vLen < 1e-6) return '地心距 ' + vLen.toFixed(2) + ' AU'
+  const cosElong = Math.max(-1, Math.min(1, (sx * vx + sy * vy) / (sLen * vLen)))
+  const elongDeg = Math.round(Math.acos(cosElong) * 180.0 / Math.PI)
+  const cross = sx * vy - sy * vx // >0 evening east of Sun, <0 morning west of Sun
+  const sideZh = cross >= 0 ? '傍晚西天可见' : '清晨东天可见'
+  const distText = '距地 ' + vLen.toFixed(2) + ' AU'
+  if (elongDeg >= 150) {
+    return '近冲日 · 整夜观测佳 · ' + distText
+  }
+  if (elongDeg <= 15) {
+    return '近太阳（距角 ' + String(elongDeg) + '°）· 暂隐日辉'
+  }
+  if (target.id === 'Mercury' || target.id === 'Venus') {
+    const isNearMax = (target.id === 'Venus' && elongDeg >= 36) || (target.id === 'Mercury' && elongDeg >= 18)
+    return (isNearMax ? '大距附近 · ' : '') + sideZh + '（距角 ' + String(elongDeg) + '°）'
+  }
+  return sideZh + '（距角 ' + String(elongDeg) + '° · ' + distText + '）'
 }

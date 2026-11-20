@@ -153,210 +153,17 @@ struct SolarSystemCard {
         Column() {
           Row() {
             Text('✦ 太阳系')
-              .fontSize(11)
+              .fontSize(12)
               .fontWeight(FontWeight.Medium)
               .fontColor('#EAF4FF')
               .maxLines(1)
             Blank()
             Text(this.isInnerOnly() ? '内系' : '全系')
-              .fontSize(10)
+              .fontSize(11)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#9CD4FF')
-              .height(22)
-              .padding({ left: 8, right: 8 })
-              .backgroundColor('#2E4678C4')
-              .borderRadius(11)
-              .onClick(() => this.toggleZoom())
-          }
-          .width('100%')
-
-          Stack({ alignContent: Alignment.Center }) {
-            SolarSystemOrreryStage({
-              stageWidth: Math.max(122, Math.round(this.cardWidth - 18)),
-              stageHeight: Math.max(76, Math.round(this.cardHeight - 62)),
-              heliocentricPlanetsJson: this.heliocentricPlanetsJson,
-              dayOffset: this.numericDayOffset(),
-              innerOnly: this.isInnerOnly(),
-              tiltDeg: 56,
-              showLabels: false
-            })
-          }
-          .layoutWeight(1)
-          .width('100%')
-          .onClick(() => this.triggerOverflowOrOpen())
-
-          Row({ space: 4 }) {
-            Text('‹30天')
-              .fontSize(10)
-              .fontColor('#CFE4FF')
-              .height(22)
-              .padding({ left: 6, right: 6 })
-              .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
-              .onClick(() => this.stepDays(-30))
-
-            Text(this.numericDayOffset() === 0 ? '此刻' : (this.numericDayOffset() > 0 ? '+' + String(this.numericDayOffset()) + 'd' : String(this.numericDayOffset()) + 'd'))
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.numericDayOffset() === 0 ? '#FFE29A' : '#8AD4FF')
-              .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(22)
-              .backgroundColor('#1EFFFFFF')
-              .borderRadius(11)
-              .maxLines(1)
-              .onClick(() => this.resetDays())
-
-            Text('30天›')
-              .fontSize(10)
-              .fontColor('#CFE4FF')
-              .height(22)
-              .padding({ left: 6, right: 6 })
-              .backgroundColor('#22FFFFFF')
-              .borderRadius(11)
-              .onClick(() => this.stepDays(30))
-          }
-          .width('100%')
-        }
-        .width('100%')
-        .height('100%')
-        .padding({ left: 11, right: 11, top: 9, bottom: 9 })
-      } else if (!this.isTall()) {
-        // 2x4 Wide 3D Solar System Orrery + Telemetry/Time Rail
-        Row({ space: 8 }) {
-          Stack({ alignContent: Alignment.Center }) {
-            SolarSystemOrreryStage({
-              stageWidth: Math.max(176, Math.round(this.cardWidth - 128)),
-              stageHeight: Math.max(118, Math.round(this.cardHeight - 18)),
-              heliocentricPlanetsJson: this.heliocentricPlanetsJson,
-              dayOffset: this.numericDayOffset(),
-              innerOnly: this.isInnerOnly(),
-              tiltDeg: 55,
-              showLabels: this.isInnerOnly()
-            })
-          }
-          .layoutWeight(1)
-          .height('100%')
-          .onClick(() => this.triggerOverflowOrOpen())
-
-          Column({ space: 6 }) {
-            Row() {
-              Text('太阳系仪')
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#FFFFFF')
-                .maxLines(1)
-              Blank()
-              Text('↗')
-                .fontSize(12)
-                .fontColor('#9CD4FF')
-            }
-            .width('100%')
-            .onClick(() => this.openOrreryInAstro())
-
-            Text(this.epochLabel())
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(this.numericDayOffset() === 0 ? '#FFE29A' : '#8AD4FF')
-              .width('100%')
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .onClick(() => this.resetDays())
-
-            Row({ space: 4 }) {
-              Text(this.isInnerOnly() ? '内太阳系' : '全太阳系')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#EAF4FF')
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .height(24)
-                .backgroundColor('#344678C4')
-                .borderRadius(12)
-                .onClick(() => this.toggleZoom())
-
-              Text('+1年')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#CFE4FF')
-                .textAlign(TextAlign.Center)
-                .width(38)
-                .height(24)
-                .backgroundColor('#22FFFFFF')
-                .borderRadius(12)
-                .onClick(() => this.stepDays(365))
-            }
-            .width('100%')
-
-            Blank()
-
-            Row({ space: 4 }) {
-              Text('-30d')
-                .fontSize(10)
-                .fontColor('#CFE4FF')
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .height(26)
-                .backgroundColor('#22FFFFFF')
-                .borderRadius(13)
-                .onClick(() => this.stepDays(-30))
-
-              Text('今')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#FFE29A')
-                .textAlign(TextAlign.Center)
-                .width(26)
-                .height(26)
-                .backgroundColor('#2E4678C4')
-                .borderRadius(13)
-                .onClick(() => this.resetDays())
-
-              Text('+30d')
-                .fontSize(10)
-                .fontColor('#CFE4FF')
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .height(26)
-                .backgroundColor('#22FFFFFF')
-                .borderRadius(13)
-                .onClick(() => this.stepDays(30))
-            }
-            .width('100%')
-          }
-          .width(106)
-          .height('100%')
-          .padding({ top: 3, bottom: 2 })
-        }
-        .width('100%')
-        .height('100%')
-        .padding({ left: 10, right: 12, top: 9, bottom: 9 })
-      } else {
-        // 4x4 Flagship 3D Solar System Orrery + Telemetry + Time Scrubber
-        Column({ space: 6 }) {
-          Row() {
-            Column({ space: 2 }) {
-              Text('✦ 太阳系仪 · ' + this.epochLabel())
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#FFFFFF')
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(this.summaryText())
-                .fontSize(10)
-                .fontColor('#B8D3F2')
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            Text(this.isInnerOnly() ? '切至全系' : '切至内系')
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#EAF4FF')
+              .fontColor('#B8E0FF')
               .height(26)
-              .padding({ left: 10, right: 10 })
+              .padding({ left: 9, right: 9 })
               .backgroundColor('#364678C4')
               .borderRadius(13)
               .onClick(() => this.toggleZoom())
@@ -365,12 +172,198 @@ struct SolarSystemCard {
 
           Stack({ alignContent: Alignment.Center }) {
             SolarSystemOrreryStage({
-              stageWidth: Math.max(250, Math.round(this.cardWidth - 22)),
-              stageHeight: Math.max(150, Math.round(this.cardHeight - 122)),
+              stageWidth: Math.max(126, Math.round(this.cardWidth - 16)),
+              stageHeight: Math.max(76, Math.round(this.cardHeight - 66)),
               heliocentricPlanetsJson: this.heliocentricPlanetsJson,
               dayOffset: this.numericDayOffset(),
               innerOnly: this.isInnerOnly(),
-              tiltDeg: 50,
+              tiltDeg: 54,
+              showLabels: false
+            })
+          }
+          .layoutWeight(1)
+          .width('100%')
+          .onClick(() => this.triggerOverflowOrOpen())
+
+          Row({ space: 5 }) {
+            Text('‹1月')
+              .fontSize(10.5)
+              .fontColor('#D4E8FF')
+              .textAlign(TextAlign.Center)
+              .height(28)
+              .padding({ left: 7, right: 7 })
+              .backgroundColor('#24FFFFFF')
+              .borderRadius(14)
+              .onClick(() => this.stepDays(-30))
+
+            Text(this.numericDayOffset() === 0 ? '此刻' : (this.numericDayOffset() > 0 ? '+' + String(this.numericDayOffset()) + '天' : String(this.numericDayOffset()) + '天'))
+              .fontSize(10.5)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.numericDayOffset() === 0 ? '#FFE29A' : '#8AD4FF')
+              .textAlign(TextAlign.Center)
+              .layoutWeight(1)
+              .height(28)
+              .backgroundColor('#2C4678C4')
+              .borderRadius(14)
+              .maxLines(1)
+              .onClick(() => this.resetDays())
+
+            Text('1月›')
+              .fontSize(10.5)
+              .fontColor('#D4E8FF')
+              .textAlign(TextAlign.Center)
+              .height(28)
+              .padding({ left: 7, right: 7 })
+              .backgroundColor('#24FFFFFF')
+              .borderRadius(14)
+              .onClick(() => this.stepDays(30))
+          }
+          .width('100%')
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 11, right: 11, top: 9, bottom: 9 })
+      } else if (!this.isTall()) {
+        // 2x4 Wide 3D Solar System Orrery: generous stage + clear 2-tier controls (zero cramped micro-buttons)
+        Row({ space: 10 }) {
+          Stack({ alignContent: Alignment.Center }) {
+            SolarSystemOrreryStage({
+              stageWidth: Math.max(176, Math.round(this.cardWidth - 134)),
+              stageHeight: Math.max(118, Math.round(this.cardHeight - 16)),
+              heliocentricPlanetsJson: this.heliocentricPlanetsJson,
+              dayOffset: this.numericDayOffset(),
+              innerOnly: this.isInnerOnly(),
+              tiltDeg: 52,
+              showLabels: this.isInnerOnly()
+            })
+          }
+          .layoutWeight(1)
+          .height('100%')
+          .onClick(() => this.triggerOverflowOrOpen())
+
+          Column({ space: 6 }) {
+            // Tier 1: Identity + Epoch status + Scale toggle
+            Row() {
+              Text('太阳系仪')
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+              Blank()
+              Text('↗')
+                .fontSize(13)
+                .fontColor('#9CD4FF')
+            }
+            .width('100%')
+            .onClick(() => this.openOrreryInAstro())
+
+            Text(this.epochLabel())
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.numericDayOffset() === 0 ? '#FFE29A' : '#8AD4FF')
+              .width('100%')
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .onClick(() => this.resetDays())
+
+            Text(this.isInnerOnly() ? '内太阳系 · 切全系 ↻' : '全太阳系 · 切内系 ↻')
+              .fontSize(10.5)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .height(30)
+              .backgroundColor('#384678C4')
+              .borderRadius(15)
+              .maxLines(1)
+              .onClick(() => this.toggleZoom())
+
+            Blank()
+
+            // Tier 2: Spacious 3-button time scrubber (32vp tall, easy thumb hit)
+            Row({ space: 4 }) {
+              Text('-1月')
+                .fontSize(10.5)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#D8ECFF')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(32)
+                .backgroundColor('#24FFFFFF')
+                .borderRadius(16)
+                .onClick(() => this.stepDays(-30))
+
+              Text('今')
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFE29A')
+                .textAlign(TextAlign.Center)
+                .width(30)
+                .height(32)
+                .backgroundColor('#344678C4')
+                .borderRadius(16)
+                .onClick(() => this.resetDays())
+
+              Text('+1月')
+                .fontSize(10.5)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#D8ECFF')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(32)
+                .backgroundColor('#24FFFFFF')
+                .borderRadius(16)
+                .onClick(() => this.stepDays(30))
+            }
+            .width('100%')
+          }
+          .width(114)
+          .height('100%')
+          .padding({ top: 3, bottom: 2 })
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 10, right: 12, top: 9, bottom: 9 })
+      } else {
+        // 4x4 Flagship 3D Solar System Orrery + Telemetry + Clean 2-Group Action Bar
+        Column({ space: 7 }) {
+          Row({ space: 8 }) {
+            Column({ space: 2 }) {
+              Text('✦ 太阳系仪 · ' + this.epochLabel())
+                .fontSize(14)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFFFFF')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(this.summaryText())
+                .fontSize(10.5)
+                .fontColor('#B8D3F2')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+
+            Text(this.isInnerOnly() ? '切至全系' : '切至内系')
+              .fontSize(11)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .height(30)
+              .padding({ left: 12, right: 12 })
+              .backgroundColor('#384678C4')
+              .borderRadius(15)
+              .onClick(() => this.toggleZoom())
+          }
+          .width('100%')
+
+          Stack({ alignContent: Alignment.Center }) {
+            SolarSystemOrreryStage({
+              stageWidth: Math.max(250, Math.round(this.cardWidth - 22)),
+              stageHeight: Math.max(150, Math.round(this.cardHeight - 134)),
+              heliocentricPlanetsJson: this.heliocentricPlanetsJson,
+              dayOffset: this.numericDayOffset(),
+              innerOnly: this.isInnerOnly(),
+              tiltDeg: 48,
               showLabels: true
             })
           }
@@ -380,79 +373,85 @@ struct SolarSystemCard {
 
           Row({ space: 6 }) {
             ForEach(this.featuredTelemetry(), (p: OrreryPlanetState) => {
-              Column({ space: 1 }) {
-                Row({ space: 3 }) {
-                  Circle().width(5).height(5).fill(p.color)
+              Column({ space: 2 }) {
+                Row({ space: 4 }) {
+                  Circle().width(5.5).height(5.5).fill(p.color)
                   Text(p.nameZh)
-                    .fontSize(10)
+                    .fontSize(10.5)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#EAF4FF')
                 }
                 Text(String(Math.round(p.lonDeg)) + '° · ' + p.distAU.toFixed(1) + 'AU')
-                  .fontSize(9)
-                  .fontColor('#9FBAD8')
+                  .fontSize(9.5)
+                  .fontColor('#A4C0E0')
                   .maxLines(1)
               }
               .layoutWeight(1)
-              .padding({ top: 4, bottom: 4 })
-              .backgroundColor('#1AFFFFFF')
-              .borderRadius(9)
+              .padding({ top: 5, bottom: 5 })
+              .backgroundColor('#1EFFFFFF')
+              .borderRadius(10)
               .alignItems(HorizontalAlign.Center)
             }, (p: OrreryPlanetState) => p.id)
           }
           .width('100%')
 
+          // Clean 2-group bottom bar: Time Scrubber group + Primary Enter CTA (34vp tall)
           Row({ space: 6 }) {
-            Text('-30天')
-              .fontSize(10)
-              .fontColor('#DCEBFF')
-              .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(28)
-              .backgroundColor('#22FFFFFF')
-              .borderRadius(14)
-              .onClick(() => this.stepDays(-30))
+            Row({ space: 3 }) {
+              Text('-1月')
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#DCEBFF')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(34)
+                .backgroundColor('#22FFFFFF')
+                .borderRadius(17)
+                .onClick(() => this.stepDays(-30))
 
-            Text('此刻')
-              .fontSize(10)
-              .fontWeight(FontWeight.Medium)
-              .fontColor('#FFE29A')
-              .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(28)
-              .backgroundColor('#324678C4')
-              .borderRadius(14)
-              .onClick(() => this.resetDays())
+              Text('此刻')
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#FFE29A')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(34)
+                .backgroundColor('#324678C4')
+                .borderRadius(17)
+                .onClick(() => this.resetDays())
 
-            Text('+30天')
-              .fontSize(10)
-              .fontColor('#DCEBFF')
-              .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(28)
-              .backgroundColor('#22FFFFFF')
-              .borderRadius(14)
-              .onClick(() => this.stepDays(30))
+              Text('+1月')
+                .fontSize(11)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#DCEBFF')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(1)
+                .height(34)
+                .backgroundColor('#22FFFFFF')
+                .borderRadius(17)
+                .onClick(() => this.stepDays(30))
 
-            Text('+1年')
-              .fontSize(10)
-              .fontColor('#DCEBFF')
-              .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(28)
-              .backgroundColor('#22FFFFFF')
-              .borderRadius(14)
-              .onClick(() => this.stepDays(365))
+              Text('+1年')
+                .fontSize(11)
+                .fontColor('#B8D4F4')
+                .textAlign(TextAlign.Center)
+                .layoutWeight(0.9)
+                .height(34)
+                .backgroundColor('#18FFFFFF')
+                .borderRadius(17)
+                .onClick(() => this.stepDays(365))
+            }
+            .layoutWeight(1)
 
             Text('轨盘 ↗')
-              .fontSize(10)
+              .fontSize(11.5)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#8AD4FF')
+              .fontColor('#FFFFFF')
               .textAlign(TextAlign.Center)
-              .layoutWeight(1)
-              .height(28)
-              .backgroundColor('#2C1C3C6E')
-              .borderRadius(14)
+              .width(68)
+              .height(34)
+              .backgroundColor('#D82B64B8')
+              .borderRadius(17)
               .onClick(() => this.openOrreryInAstro())
           }
           .width('100%')

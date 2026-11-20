@@ -4,7 +4,9 @@ import {
   OrreryPlanetState,
   OrreryProjectedNode,
   OrreryRenderPlan,
+  computePlanetViewingInsight,
   estimateHeliocentricLongitudes,
+  formatOrreryOffsetBadge,
   projectSolarSystemOrrery
 } from '../../form/AstronomyCardData'
 import { orbResource } from '../../form/WidgetVisuals'
@@ -48,13 +50,61 @@ export struct SolarSystemOrreryView {
   @State innerOnly: boolean = false
   @State selectedId: string = 'Earth'
   @State stageWidth: number = 296
+  @State simDayOffset: number = 0
+  @State isPlaying: boolean = false
 
   private canvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.canvasSettings)
   private canvasReady: boolean = false
+  private playTimer: number = -1
 
   onWillApplyTheme(theme: Theme): void {
     this.c = slotsFromTheme(theme)
+  }
+
+  aboutToDisappear(): void {
+    this.stopPlayback()
+  }
+
+  private stopPlayback(): void {
+    if (this.playTimer !== -1) {
+      clearInterval(this.playTimer)
+      this.playTimer = -1
+    }
+    this.isPlaying = false
+  }
+
+  private togglePlayback(): void {
+    if (this.isPlaying) {
+      this.stopPlayback()
+      return
+    }
+    this.isPlaying = true
+    this.playTimer = setInterval(() => {
+      const step = this.innerOnly ? 1.8 : 4.5
+      let next = this.simDayOffset + step
+      if (next > 3650) next = 0
+      this.simDayOffset = Math.round(next * 10) / 10
+      this.redrawBackdrop()
+    }, 55) as number
+  }
+
+  private stepSimDays(delta: number): void {
+    this.stopPlayback()
+    const next = Math.max(-3650, Math.min(3650, Math.round(this.simDayOffset + delta)))
+    this.simDayOffset = next
+    this.redrawBackdrop()
+  }
+
+  private resetSimDays(): void {
+    this.stopPlayback()
+    this.simDayOffset = 0
+    this.redrawBackdrop()
+  }
+
+  private simBadgeText(): string {
+    if (Math.abs(this.simDayOffset) < 0.5) return '此刻实况'
+    return formatOrreryOffsetBadge(Math.round(this.simDayOffset), Date.now() + this.simDayOffset * 86400000)
   }
 
   private fs(base: number): number {
@@ -78,8 +128,9 @@ export struct SolarSystemOrreryView {
   }
 
   private mergedPlanets(): OrreryPlanetState[] {
-    const base = estimateHeliocentricLongitudes(Date.now())
-    if (this.positions.length === 0) return base
+    const evalMs = Date.now() + this.simDayOffset * 86400000
+    const base = estimateHeliocentricLongitudes(evalMs)
+    if (this.positions.length === 0 || Math.abs(this.simDayOffset) >= 0.5) return base
     const byName = new Map<string, HeliocentricPosition>()
     for (let i = 0; i < this.positions.length; i++) {
       const p = this.positions[i]
@@ -221,43 +272,40 @@ export struct SolarSystemOrreryView {
     const h = this.ctx.height > 0 ? this.ctx.height : plan.height
     this.ctx.clearRect(0, 0, w, h)
 
-    // 1. Subtle deep-space backdrop radial glow
-    const bgGrad = this.ctx.createRadialGradient(plan.centerX, plan.centerY, 4, plan.centerX, plan.centerY, Math.max(w, h) * 0.56)
+    // 1. Subtle deep-space backdrop + soft radial solar corona glow (zero hard concentric rings!)
+    const bgGrad = this.ctx.createRadialGradient(plan.centerX, plan.centerY, 3, plan.centerX, plan.centerY, Math.max(w, h) * 0.56)
     if (this.nightMode) {
-      bgGrad.addColorStop(0.0, '#364A1212')
-      bgGrad.addColorStop(0.55, '#18240A0A')
+      bgGrad.addColorStop(0.0, '#58FF4848')
+      bgGrad.addColorStop(0.18, '#2E982020')
+      bgGrad.addColorStop(0.55, '#14240A0A')
       bgGrad.addColorStop(1.0, '#00000000')
     } else {
-      bgGrad.addColorStop(0.0, '#2CFFB84D')
-      bgGrad.addColorStop(0.35, '#162856A8')
+      bgGrad.addColorStop(0.0, '#62FFD26A')
+      bgGrad.addColorStop(0.16, '#2EFFA83A')
+      bgGrad.addColorStop(0.45, '#182A5CA8')
       bgGrad.addColorStop(1.0, '#00050A18')
     }
     this.ctx.fillStyle = bgGrad
     this.ctx.fillRect(0, 0, w, h)
 
-    // 2. Vernal Equinox 0° axis & subtle ecliptic crosshairs
+    // 2. Subtle vernal equinox 0° reference tick on right edge (no noisy full crosshair grid!)
     const outerRx = plan.orbits.length > 0 ? plan.orbits[plan.orbits.length - 1].rx : w * 0.42
-    const outerRy = plan.orbits.length > 0 ? plan.orbits[plan.orbits.length - 1].ry : h * 0.40
     this.ctx.save()
-    this.ctx.strokeStyle = this.nightMode ? '#33C04040' : '#2E8EC4FF'
+    this.ctx.strokeStyle = this.nightMode ? '#44C04040' : '#3C8EC4FF'
     this.ctx.lineWidth = 0.8
-    this.ctx.setLineDash([3, 4])
+    this.ctx.setLineDash([2, 3])
     this.ctx.beginPath()
-    this.ctx.moveTo(plan.centerX - outerRx, plan.centerY)
-    this.ctx.lineTo(plan.centerX + outerRx, plan.centerY)
-    this.ctx.moveTo(plan.centerX, plan.centerY - outerRy)
-    this.ctx.lineTo(plan.centerX, plan.centerY + outerRy)
+    this.ctx.moveTo(plan.centerX + outerRx * 0.86, plan.centerY)
+    this.ctx.lineTo(plan.centerX + outerRx + 6, plan.centerY)
     this.ctx.stroke()
     this.ctx.setLineDash([])
-
-    // Vernal equinox direction label (monochrome text, no color emoji)
     this.ctx.font = '9vp sans-serif'
-    this.ctx.fillStyle = this.nightMode ? '#B85050' : '#6E9AC8'
+    this.ctx.fillStyle = this.nightMode ? '#B85050' : '#78A6D8'
     this.ctx.textAlign = 'right'
-    this.ctx.fillText('春分 0°', w - 6, 13)
+    this.ctx.fillText('春分 0° · 逆时针公转', w - 8, 14)
     this.ctx.restore()
 
-    // 3. Anti-aliased elliptical orbit tracks
+    // 3. Ultra-delicate silk elliptical orbit tracks (minimal visual clutter)
     for (let i = 0; i < plan.orbits.length; i++) {
       const orbit: OrreryOrbitRing = plan.orbits[i]
       const isSel = orbit.id.toLowerCase() === this.selectedId.toLowerCase()
@@ -265,33 +313,69 @@ export struct SolarSystemOrreryView {
       this.ctx.beginPath()
       this.ctx.ellipse(plan.centerX, plan.centerY, orbit.rx, orbit.ry, 0, 0, Math.PI * 2)
       if (isSel) {
-        this.ctx.strokeStyle = this.nightMode ? '#FF6B6B' : '#8AD4FF'
-        this.ctx.lineWidth = 1.45
+        this.ctx.strokeStyle = this.nightMode ? '#FF6B6B' : '#96FFD166'
+        this.ctx.lineWidth = 1.4
       } else if (orbit.id === 'Earth') {
-        this.ctx.strokeStyle = this.nightMode ? '#99C84848' : '#785CB8FF'
+        this.ctx.strokeStyle = this.nightMode ? '#7CC84848' : '#646BC4FF'
         this.ctx.lineWidth = 1.05
       } else {
-        this.ctx.strokeStyle = this.nightMode ? '#44B84040' : ('#48' + orbit.color.replace('#', ''))
-        this.ctx.lineWidth = 0.8
+        this.ctx.strokeStyle = this.nightMode ? '#2BB84040' : '#26B4D4FA'
+        this.ctx.lineWidth = 0.7
       }
       this.ctx.stroke()
       this.ctx.restore()
     }
 
-    // 4. Sun -> Earth reference sightline & Sun -> Selected Planet vector
+    // 4. Luminous counterclockwise orbital motion trails behind each planet
+    for (let i = 0; i < plan.allNodes.length; i++) {
+      const node: OrreryProjectedNode = plan.allNodes[i]
+      let orbitRing: OrreryOrbitRing | undefined = undefined
+      for (let k = 0; k < plan.orbits.length; k++) {
+        if (plan.orbits[k].id === node.id) {
+          orbitRing = plan.orbits[k]
+          break
+        }
+      }
+      if (orbitRing === undefined) continue
+      const hex = this.nightMode ? 'E06060' : (/^#[0-9A-Fa-f]{6}$/.test(node.color) ? node.color.slice(1) : '8AD4FF')
+      const trailDeg = node.isInner ? 44 : 28
+      const segs = 10
+      this.ctx.save()
+      this.ctx.lineCap = 'round'
+      for (let s = 0; s < segs; s++) {
+        const f0 = s / segs
+        const f1 = (s + 1) / segs
+        const r0 = (node.lonDeg - trailDeg * (1.0 - f0)) * Math.PI / 180.0
+        const r1 = (node.lonDeg - trailDeg * (1.0 - f1)) * Math.PI / 180.0
+        const x0 = plan.centerX + orbitRing.rx * Math.cos(r0)
+        const y0 = plan.centerY - orbitRing.ry * Math.sin(r0)
+        const x1 = plan.centerX + orbitRing.rx * Math.cos(r1)
+        const y1 = plan.centerY - orbitRing.ry * Math.sin(r1)
+        const alphaByte = Math.max(8, Math.min(195, Math.round((0.06 + f1 * f1 * 0.66) * 255)))
+        this.ctx.strokeStyle = '#' + alphaByte.toString(16).padStart(2, '0') + hex
+        this.ctx.lineWidth = 0.7 + f1 * (node.id.toLowerCase() === this.selectedId.toLowerCase() ? 1.85 : 1.35)
+        this.ctx.beginPath()
+        this.ctx.moveTo(x0, y0)
+        this.ctx.lineTo(x1, y1)
+        this.ctx.stroke()
+      }
+      this.ctx.restore()
+    }
+
+    // 5. Sun -> Earth reference sightline & Earth -> Selected Planet viewing vector
     const sel = this.selectedNode(plan)
     this.ctx.save()
-    this.ctx.strokeStyle = this.nightMode ? '#66D85050' : '#585CB8FF'
-    this.ctx.lineWidth = 1.0
-    this.ctx.setLineDash([2, 3])
+    this.ctx.strokeStyle = this.nightMode ? '#55D85050' : '#4C6BC4FF'
+    this.ctx.lineWidth = 0.95
+    this.ctx.setLineDash([2.5, 3.5])
     this.ctx.beginPath()
     this.ctx.moveTo(plan.centerX, plan.centerY)
     this.ctx.lineTo(plan.earthX, plan.earthY)
     this.ctx.stroke()
 
     if (sel !== undefined && !sel.isEarth) {
-      this.ctx.strokeStyle = this.nightMode ? '#99FF7070' : '#78FFD166'
-      this.ctx.lineWidth = 1.1
+      this.ctx.strokeStyle = this.nightMode ? '#99FF7070' : '#88FFD166'
+      this.ctx.lineWidth = 1.15
       this.ctx.beginPath()
       this.ctx.moveTo(plan.earthX, plan.earthY)
       this.ctx.lineTo(sel.x, sel.y)
@@ -302,14 +386,16 @@ export struct SolarSystemOrreryView {
 
   build() {
     Column({ space: 6 }) {
-      // View & Scale control strip
+      // View & Scale control strip (generous 32-34vp touch targets)
       Row({ space: 6 }) {
         Row({ space: 2 }) {
           Text('3D 立体')
-            .fontSize(this.fs(10))
+            .fontSize(this.fs(11))
             .fontWeight(this.is3DView ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.is3DView ? this.c.onAccent : this.c.sub)
-            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+            .textAlign(TextAlign.Center)
+            .constraintSize({ minHeight: this.ch(32) })
+            .padding({ left: 11, right: 11 })
             .backgroundColor(this.is3DView ? this.c.accent : Color.Transparent)
             .borderRadius(UI_RADIUS_CONTROL)
             .onClick(() => {
@@ -319,10 +405,12 @@ export struct SolarSystemOrreryView {
               setTimeout(() => this.redrawBackdrop(), 40)
             })
           Text('正俯视')
-            .fontSize(this.fs(10))
+            .fontSize(this.fs(11))
             .fontWeight(!this.is3DView ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(!this.is3DView ? this.c.onAccent : this.c.sub)
-            .padding({ left: 9, right: 9, top: 4, bottom: 4 })
+            .textAlign(TextAlign.Center)
+            .constraintSize({ minHeight: this.ch(32) })
+            .padding({ left: 11, right: 11 })
             .backgroundColor(!this.is3DView ? this.c.accent : Color.Transparent)
             .borderRadius(UI_RADIUS_CONTROL)
             .onClick(() => {
@@ -340,10 +428,12 @@ export struct SolarSystemOrreryView {
 
         Row({ space: 2 }) {
           Text('全太阳系')
-            .fontSize(this.fs(10))
+            .fontSize(this.fs(11))
             .fontWeight(!this.innerOnly ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(!this.innerOnly ? this.c.onAccent : this.c.sub)
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .textAlign(TextAlign.Center)
+            .constraintSize({ minHeight: this.ch(32) })
+            .padding({ left: 10, right: 10 })
             .backgroundColor(!this.innerOnly ? this.c.accent : Color.Transparent)
             .borderRadius(UI_RADIUS_CONTROL)
             .onClick(() => {
@@ -351,10 +441,12 @@ export struct SolarSystemOrreryView {
               setTimeout(() => this.redrawBackdrop(), 30)
             })
           Text('内太阳系')
-            .fontSize(this.fs(10))
+            .fontSize(this.fs(11))
             .fontWeight(this.innerOnly ? FontWeight.Medium : FontWeight.Normal)
             .fontColor(this.innerOnly ? this.c.onAccent : this.c.sub)
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+            .textAlign(TextAlign.Center)
+            .constraintSize({ minHeight: this.ch(32) })
+            .padding({ left: 10, right: 10 })
             .backgroundColor(this.innerOnly ? this.c.accent : Color.Transparent)
             .borderRadius(UI_RADIUS_CONTROL)
             .onClick(() => {
@@ -409,31 +501,19 @@ export struct SolarSystemOrreryView {
           })
         }, (node: OrreryProjectedNode) => 'ap_b_' + node.id + '_' + String(this.is3DView) + '_' + String(this.innerOnly) + '_' + String(Math.round(node.lonDeg)))
 
-        // Central Sun with luminous corona
-        Stack({ alignContent: Alignment.Center }) {
-          Circle()
-            .width(this.currentPlan().sunSize * 1.9)
-            .height(this.currentPlan().sunSize * 1.9)
-            .fill(this.nightMode ? '#28FF4040' : '#28FFA836')
-          Circle()
-            .width(this.currentPlan().sunSize * 1.36)
-            .height(this.currentPlan().sunSize * 1.36)
-            .fill(this.nightMode ? '#40FF5C5C' : '#44FFD066')
-          Image($r('app.media.widget_orb_sun'))
-            .width(this.currentPlan().sunSize)
-            .height(this.currentPlan().sunSize)
-            .objectFit(ImageFit.Contain)
-            .draggable(false)
-        }
-        .width(this.currentPlan().sunSize * 2)
-        .height(this.currentPlan().sunSize * 2)
-        .position({
-          x: this.currentPlan().centerX - this.currentPlan().sunSize,
-          y: this.currentPlan().centerY - this.currentPlan().sunSize
-        })
-        .onClick(() => {
-          this.onFocusPlanet('Sun')
-        })
+        // Central Sun (soft radial corona painted seamlessly on Canvas behind it)
+        Image($r('app.media.widget_orb_sun'))
+          .width(this.currentPlan().sunSize)
+          .height(this.currentPlan().sunSize)
+          .objectFit(ImageFit.Contain)
+          .draggable(false)
+          .position({
+            x: this.currentPlan().centerX - this.currentPlan().sunSize * 0.5,
+            y: this.currentPlan().centerY - this.currentPlan().sunSize * 0.5
+          })
+          .onClick(() => {
+            this.onFocusPlanet('Sun')
+          })
 
         // Front-hemisphere planets (in front of Sun corona)
         ForEach(this.currentPlan().frontNodes, (node: OrreryProjectedNode) => {
@@ -500,43 +580,91 @@ export struct SolarSystemOrreryView {
         }
       })
 
-      // Selected planet telemetry strip + one-tap focus in Star Map
+      // Interactive Orbital Time-Lapse & Step Bar (34vp tall finger-friendly controls, monochrome text — zero color emoji)
+      Row({ space: 6 }) {
+        Button(this.isPlaying ? '暂停演示' : '演示公转')
+          .fontSize(this.fs(11))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.isPlaying ? this.c.onAccent : this.c.text)
+          .backgroundColor(this.isPlaying ? this.c.accent : this.c.softStrong)
+          .borderRadius(UI_RADIUS_PILL)
+          .constraintSize({ minHeight: this.ch(34) })
+          .padding({ left: 12, right: 12 })
+          .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
+          .onClick(() => this.togglePlayback())
+
+        Button('-30天')
+          .fontSize(this.fs(11))
+          .fontColor(this.c.text)
+          .backgroundColor(this.c.bg)
+          .border({ width: 0.6, color: this.c.border })
+          .borderRadius(UI_RADIUS_PILL)
+          .constraintSize({ minHeight: this.ch(34) })
+          .padding({ left: 10, right: 10 })
+          .onClick(() => this.stepSimDays(-30))
+
+        Text(this.simBadgeText())
+          .fontSize(this.fs(10.5))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Math.abs(this.simDayOffset) >= 0.5 ? this.c.accent : this.c.sub)
+          .textAlign(TextAlign.Center)
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .onClick(() => this.resetSimDays())
+
+        Button('+30天')
+          .fontSize(this.fs(11))
+          .fontColor(this.c.text)
+          .backgroundColor(this.c.bg)
+          .border({ width: 0.6, color: this.c.border })
+          .borderRadius(UI_RADIUS_PILL)
+          .constraintSize({ minHeight: this.ch(34) })
+          .padding({ left: 10, right: 10 })
+          .onClick(() => this.stepSimDays(30))
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      // Selected planet plain-Chinese viewing insight + one-tap focus in Star Map
       if (this.selectedNode(this.currentPlan()) !== undefined) {
-        Row({ space: 8 }) {
+        Row({ space: 10 }) {
           Image(orbResource(this.selectedNode(this.currentPlan())!.orbKey))
-            .width(24)
-            .height(24)
+            .width(28)
+            .height(28)
             .objectFit(ImageFit.Contain)
             .draggable(false)
-          Column({ space: 1 }) {
-            Text(this.selectedNode(this.currentPlan())!.nameZh + ' · 日心黄经 ' + this.selectedNode(this.currentPlan())!.lonDeg.toFixed(1) + '°')
-              .fontSize(this.fs(11))
+          Column({ space: 2 }) {
+            Text(this.selectedNode(this.currentPlan())!.nameZh + ' · ' + this.selectedNode(this.currentPlan())!.distAU.toFixed(2) + ' AU · ' + this.selectedNode(this.currentPlan())!.lonDeg.toFixed(0) + '°')
+              .fontSize(this.fs(11.5))
               .fontWeight(FontWeight.Medium)
               .fontColor(this.c.text)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('黄纬 ' + this.liveLatitudeFor(this.selectedNode(this.currentPlan())!.id).toFixed(1) + '° · 距日 ' + this.selectedNode(this.currentPlan())!.distAU.toFixed(2) + ' AU')
-              .fontSize(this.fs(10))
+            Text(computePlanetViewingInsight(this.mergedPlanets(), this.selectedNode(this.currentPlan())!.id))
+              .fontSize(this.fs(10.5))
               .fontColor(this.c.sub)
               .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
 
           Button('定位星图')
-            .fontSize(this.fs(10))
+            .fontSize(this.fs(11))
+            .fontWeight(FontWeight.Medium)
             .fontColor(this.c.onAccent)
             .backgroundColor(this.c.accent)
             .borderRadius(UI_RADIUS_PILL)
-            .constraintSize({ minHeight: this.ch(26) })
-            .padding({ left: 10, right: 10 })
+            .constraintSize({ minHeight: this.ch(34) })
+            .padding({ left: 13, right: 13 })
             .clickEffect({ level: ClickEffectLevel.LIGHT, scale: 0.97 })
             .onClick(() => {
               this.onFocusPlanet(this.selectedNode(this.currentPlan())!.id)
             })
         }
         .width('100%')
-        .padding({ left: 9, right: 9, top: 6, bottom: 6 })
+        .padding({ left: 10, right: 10, top: 8, bottom: 8 })
         .backgroundColor(this.c.bg)
         .border({ width: 0.6, color: this.c.border })
         .borderRadius(UI_RADIUS_CONTROL)

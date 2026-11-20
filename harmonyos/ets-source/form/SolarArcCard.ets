@@ -268,10 +268,10 @@ struct SolarArcCard {
                   .fontSize(11)
                   .fontWeight(FontWeight.Medium)
                   .fontColor('#FFF3D2')
-                  .height(24)
-                  .padding({ left: 8, right: 9 })
+                  .height(28)
+                  .padding({ left: 10, right: 10 })
                   .backgroundColor('#38140C04')
-                  .borderRadius(12)
+                  .borderRadius(14)
                   .maxLines(1)
                   .onClick(() => this.cyclePlanet())
                 Text(this.selectedStageIndex >= 0
@@ -321,11 +321,11 @@ struct SolarArcCard {
                     .maxLines(1)
                 }
                 .layoutWeight(1)
-                .height(34)
+                .height(39)
                 .justifyContent(FlexAlign.Center)
                 .alignItems(HorizontalAlign.Center)
                 .backgroundColor(this.selectedStageIndex === idx ? '#FFD166' : '#32090F1E')
-                .borderRadius(10)
+                .borderRadius(11)
                 .border({
                   width: this.selectedStageIndex === idx ? 0 : 0.5,
                   color: '#2AFFE09A'

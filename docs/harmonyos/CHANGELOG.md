@@ -1,5 +1,26 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 月相/星历卡片逻辑重塑、全链路丝滑月影过渡、太阳系仪美学与公转演示升级及全局按钮防误触分层
+
+- **修改文件：** `harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/SolarSystemCard.ets`、`harmonyos/ets-source/form/SatellitePassCard.ets`、`harmonyos/ets-source/form/SolarArcCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/panels/astro/SolarSystemOrreryView.ets`、`harmonyos/ets-source/panels/astro/TargetTransitArcView.ets`、`harmonyos/ets-source/panels/astro/GraphGuides.ets`、`harmonyos/ets-source/panels/astro/AstroPanel.ets`、`harmonyos/ets-source/panels/layers/LayerPresetBar.ets`、`harmonyos/ets-source/panels/time/TimeSpeedChips.ets`、`harmonyos/ets-source/common/ui/QuickChipRow.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **四大核心用户体验重构：**
+  1. **星历弧盘（`CompanionArcCard.ets`）逻辑与理解成本彻底重塑：**
+     - 取消晦涩的「星历弧盘」称呼，按观测场景直出明确中文标识（「月球 · 月相 ↻」「月球 · 地相 ↻」「☀ 太阳 · 日轨 ↻」「火星 · 火卫一 ↻」）；
+     - 为底部 5 日条补齐清晰情境提示（默认「未来 5 日月相预览 · 点日期查看」，选中后切为「预演 周一 (+3天) · 点回今日」）；选中非今日时，将冻结的今日升落弧切换为「月龄 XX 天 · 轻触直飞当日星图 ↗」预演提示，左侧球下改为展示有信息增量的「距满月 / 距新月 X 天」（`lunarNextMilestoneZh`）；
+     - 根治火星/木星/土星等非月相星球错误渲染 5 颗地球小月亮的问题，改为展示该星球真实的 4 格观测要点（升起/落下/仰角/暗夜）。
+  2. **月球/地相阴影全链路丝滑过渡动画（`WidgetVisuals.ets` `CelestialOrbView`）：**
+     - 根治「满月 → 带阴影顺滑，但带阴影 A → 带阴影 B 硬切」的底层根因：由单层 `Image` 硬换 `src` 升级为**双槽位乒乓无缝叠化 + `animateTo(..., onFinish)` 链式步进扫掠**（零 `setTimeout` 依赖，100% 适配 FormKit 沙箱引擎），相邻相位柔和叠化、跨多日跳跃时晨昏阴影线连续扫过球面。
+  3. **太阳系仪美学减噪、动态公转演示与清晰互动（`WidgetVisuals.ets`、`SolarSystemCard.ets`、`SolarSystemOrreryView.ets`）：**
+     - **美学升级：** 废弃密集平铺的高对比椭圆线与硬圆日冕贴纸，改用抗锯齿 `Canvas` 绘制柔光径向太阳日冕、极清透丝绸轨道（仅高亮地球蓝轨与焦点轨）、以及每颗行星身后的**逆时针渐隐公转光弧尾迹**与收紧的地球标示环，线条密度锐减、公转方向与纵深感一眼秒懂；
+     - **桌面卡片重构：** `SolarSystemCard` `2×4` 精简为清晰两层控制（顶部视角切换 + 底部大号 `-1月 / 今 / +1月` 32vp 按钮），`4×4` 划分「时间推演组」与主蓝「轨盘 ↗」入口，API 20 破框同步复用新版丝绸光弧太阳系盘；
+     - **应用内互动升级：** `SolarSystemOrreryView` 新增一键 **「演示公转 / 暂停演示」** 实时公转动画、`-30天 / +30天` 步进，并新增白话观测建议 `computePlanetViewingInsight`（如「近冲日 · 整夜观测佳」「傍晚西天可见 · 距角 42°」）。
+  4. **全局按钮防误触加大与主次层级整理：**
+     - 桌面 6 张交互卡片全部淘汰 `20–26vp` 过小按钮，主操作（`预约提醒` / 焦点 `提醒` / `轨盘 ↗`）采用主蓝强调色、次操作（`追踪 ↗` / 后续列表 `提醒` / 翻页 `‹ ›`）采用低对比描边并抬升至 `28–39vp`；`SkyWindowCard` 居中按钮由「48h」改为直白的「时间预演 / 回此刻」；
+     - 应用内 `LayerPresetBar` 升级为等宽铺满 `36vp` 三栏大按钮；`TimeSpeedChips` 顶部主控重构为等宽 `38vp` 四大键（「倒带 / 停止 / 实时 / 快进」），并将低频「减速（逐档降速）」改为仅在变速状态下出现；`QuickChipRow`、`TargetTransitArcView`、`GraphGuides` 及 `AstroPanel` 全部过小按钮统一升至 `34–36vp`。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机自动化测试全通过（5 套套件全绿，新增月相里程碑、预演日文案与白话观测建议单测）；
+  - 真机实拍核验：新版丝绸光弧太阳系仪与 API 20 悬浮破框、月相/地相卡片 `今 ↔ 周六 ↔ 周一` 丝滑叠化切换与 0 报错日志、火星卡片真实 4 格遥测、`LayersPanel` 36vp 满宽预设、`TimePanel` 38vp 简洁主控与 `AstroPanel` 新版 3D 太阳系仪公转演示。
+
 ## [2026-11-20] 新增桌面「卫星过境」旗舰卡片、6 类定制航天器 SVG 图标体系及 3D 模型接入预留架构
 
 - **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/form/SatelliteVisualRegistry.ts`、`harmonyos/ets-source/form/SatellitePassCard.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/panels/panels/SatellitesPanel.ets`、`harmonyos/resources/base/media/sat_icon_{iss,tiangong,telescope,comms,earth_obs,constellation}.svg`、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/{base,zh_CN,zh_HK,zh_TW,en_US}/element/string.json`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

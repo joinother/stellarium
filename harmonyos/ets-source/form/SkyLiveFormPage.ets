@@ -1116,7 +1116,7 @@ struct SkyLiveFormPage {
         .height('100%')
         .padding({ left: 11, right: 11, top: 9, bottom: 9 })
       } else if (!this.isTall()) {
-        Row({ space: 8 }) {
+        Row({ space: 10 }) {
           Stack({ alignContent: Alignment.Center }) {
             Column()
               .width(this.orreryRestingWidth())
@@ -1129,56 +1129,45 @@ struct SkyLiveFormPage {
           Column({ space: 6 }) {
             Row() {
               Text('太阳系仪')
-                .fontSize(13)
+                .fontSize(14)
                 .fontWeight(FontWeight.Medium)
                 .fontColor('#FFFFFF')
                 .maxLines(1)
               Blank()
               Text('↗')
-                .fontSize(12)
+                .fontSize(13)
                 .fontColor('#9CD4FF')
             }
             .width('100%')
 
             Text(this.orreryEpochLabel())
-              .fontSize(10)
+              .fontSize(11)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.orreryDayOffset === 0 ? '#FFE29A' : '#8AD4FF')
               .width('100%')
               .maxLines(1)
 
-            Row({ space: 4 }) {
-              Text(this.orreryInnerOnly ? '内太阳系' : '全太阳系')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#EAF4FF')
-                .textAlign(TextAlign.Center)
-                .layoutWeight(1)
-                .height(24)
-                .backgroundColor('#344678C4')
-                .borderRadius(12)
-              Text('+1年')
-                .fontSize(10)
-                .fontWeight(FontWeight.Medium)
-                .fontColor('#CFE4FF')
-                .textAlign(TextAlign.Center)
-                .width(38)
-                .height(24)
-                .backgroundColor('#22FFFFFF')
-                .borderRadius(12)
-            }
-            .width('100%')
+            Text(this.orreryInnerOnly ? '内太阳系 · 切全系 ↻' : '全太阳系 · 切内系 ↻')
+              .fontSize(10.5)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#EAF4FF')
+              .textAlign(TextAlign.Center)
+              .width('100%')
+              .height(30)
+              .backgroundColor('#384678C4')
+              .borderRadius(15)
+              .maxLines(1)
 
             Blank()
 
             Row({ space: 4 }) {
-              Text('-30d').fontSize(10).fontColor('#CFE4FF').textAlign(TextAlign.Center).layoutWeight(1).height(26).backgroundColor('#22FFFFFF').borderRadius(13)
-              Text('今').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).width(26).height(26).backgroundColor('#2E4678C4').borderRadius(13)
-              Text('+30d').fontSize(10).fontColor('#CFE4FF').textAlign(TextAlign.Center).layoutWeight(1).height(26).backgroundColor('#22FFFFFF').borderRadius(13)
+              Text('-1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(16)
+              Text('今').fontSize(11).fontWeight(FontWeight.Medium).fontColor('#FFE29A').textAlign(TextAlign.Center).width(30).height(32).backgroundColor('#344678C4').borderRadius(16)
+              Text('+1月').fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#D8ECFF').textAlign(TextAlign.Center).layoutWeight(1).height(32).backgroundColor('#24FFFFFF').borderRadius(16)
             }
             .width('100%')
           }
-          .width(106)
+          .width(114)
           .height('100%')
           .padding({ top: 3, bottom: 2 })
           .opacity(this.restingContentOpacity)
@@ -1517,38 +1506,38 @@ struct SkyLiveFormPage {
           .padding({ left: 13, right: 13, top: 10, bottom: 9 })
         } else {
           // 2x4 CompanionArcCard mirror
-          Row({ space: 14 }) {
+          Row({ space: 12 }) {
             Column({ space: 4 }) {
               Column()
-                .width(86)
-                .height(86)
+                .width(84)
+                .height(84)
                 .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
               Text((this.companionRole === 'parent-planet' || this.companionRole === 'host')
                 ? ('宿主 · ' + this.companionName) : this.moonPhase)
-                .fontSize(11)
+                .fontSize(10.5)
                 .fontWeight(FontWeight.Medium)
-                .fontColor('#E8F2FF')
+                .fontColor('#CFE6FF')
                 .maxLines(1)
             }
             .alignItems(HorizontalAlign.Center)
             .justifyContent(FlexAlign.Center)
-            .width(100)
+            .width(96)
             .height('100%')
 
-            Column({ space: 5 }) {
+            Column({ space: 4 }) {
               Row() {
-                Column({ space: 1 }) {
-                  Text(this.observerPlanetName + ' · 星历弧盘 ↻')
+                Column({ space: 2 }) {
+                  Text(this.observerPlanet === 'Earth' ? '月球 · 月相 ↻' : (this.observerPlanetName + ' · ' + this.companionName + ' ↻'))
                     .fontSize(11)
                     .fontWeight(FontWeight.Medium)
-                    .fontColor('#CBE4FF')
-                    .height(24)
-                    .padding({ left: 8, right: 9 })
-                    .backgroundColor('#26FFFFFF')
-                    .borderRadius(12)
+                    .fontColor('#E4F1FF')
+                    .height(28)
+                    .padding({ left: 10, right: 10 })
+                    .backgroundColor('#2CFFFFFF')
+                    .borderRadius(14)
                     .maxLines(1)
                   Text(this.moonPhase)
-                    .fontSize(16)
+                    .fontSize(15)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#FFFFFF')
                     .maxLines(1)
@@ -1557,26 +1546,28 @@ struct SkyLiveFormPage {
                 .layoutWeight(1)
 
                 Text(this.moonIllumination >= 0 ? (String(Math.round(this.moonIllumination)) + '%') : '—')
-                  .fontSize(20)
+                  .fontSize(19)
                   .fontWeight(FontWeight.Medium)
                   .fontColor(this.companionAccentColor())
               }
               .width('100%')
 
               HorizonArcView({
-                arcWidth: 172,
-                arcHeight: 32,
+                arcWidth: 176,
+                arcHeight: 28,
                 altitudeDeg: this.companionAlt,
                 riseText: this.moonRise,
                 setText: this.moonSet,
                 accentColor: this.companionAccentColor()
               })
 
-              MiniPhaseStripView({
-                phaseAge: this.moonAge,
-                nowMs: Date.now(),
-                selectedIndex: 0
-              })
+              if (this.orbBody.trim().toLowerCase() === 'moon' || this.orbBody.trim().toLowerCase() === 'earth') {
+                MiniPhaseStripView({
+                  phaseAge: this.moonAge,
+                  nowMs: Date.now(),
+                  selectedIndex: 0
+                })
+              }
             }
             .layoutWeight(1)
             .height('100%')
@@ -1584,7 +1575,7 @@ struct SkyLiveFormPage {
           }
           .width('100%')
           .height('100%')
-          .padding({ left: 14, right: 15, top: 11, bottom: 10 })
+          .padding({ left: 13, right: 14, top: 10, bottom: 9 })
         }
       }
       .width('100%')

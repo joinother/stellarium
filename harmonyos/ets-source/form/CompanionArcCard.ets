@@ -3,6 +3,8 @@ import {
   computePreviewPhaseForDay,
   computeSolarArcProgress,
   focusTargetForCard,
+  formatPreviewDayCaptionZh,
+  lunarNextMilestoneZh,
   offsetDaysToJd,
   routePlanetForCard
 } from './AstronomyCardData'
@@ -118,6 +120,32 @@ struct CompanionArcCard {
     return body === 'moon' || body === 'earth'
   }
 
+  private worldSwitcherLabel(): string {
+    if (this.isSunMode()) return '☀ 太阳 · 日轨 ↻'
+    if (this.observerPlanet === 'Earth') return '月球 · 月相 ↻'
+    if (this.observerPlanet === 'Moon') return '月球 · 地相 ↻'
+    return this.observerPlanetName + ' · ' + this.companionName + ' ↻'
+  }
+
+  private milestoneCaption(): string {
+    if (this.isSunMode()) return '今日太阳轨迹'
+    if (this.showPhaseShadow()) {
+      return lunarNextMilestoneZh(this.displayAge(), this.observerPlanet === 'Moon')
+    }
+    if (this.companionRole === 'parent-planet' || this.companionRole === 'host') {
+      return '宿主 · ' + this.companionName
+    }
+    return this.displayPhaseName()
+  }
+
+  private previewHeaderHint(): string {
+    const noun = this.observerPlanet === 'Moon' ? '地相' : '月相'
+    if (this.selectedDayOffset === 0) {
+      return '未来 5 日' + noun + '预览 · 点日期查看'
+    }
+    return formatPreviewDayCaptionZh(this.selectedDayOffset, Date.now()) + ' · 点回今日'
+  }
+
   private openDetail(): void {
     const focusTarget = focusTargetForCard(this.observerPlanet, this.companionEnglish, this.orbBody)
     const previewJd = this.isSunMode() ? 0 : offsetDaysToJd(Date.now(), this.selectedDayOffset)
@@ -182,22 +210,22 @@ struct CompanionArcCard {
         // 2x2 Compact Celestial Arc Instrument
         Column() {
           Row() {
-            Text((this.observerPlanet === 'Earth' || this.observerPlanet === 'Sun'
-              ? (this.isSunMode() ? '☀ 太阳' : this.companionName)
-              : (this.observerPlanetName + '·' + this.companionName)) + ' ↻')
+            Text((this.observerPlanet === 'Earth'
+              ? '月球 ↻'
+              : (this.isSunMode() ? '☀ 太阳 ↻' : (this.observerPlanetName + '·' + this.companionName + ' ↻'))))
               .fontSize(11)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#E4F0FF')
+              .fontColor('#EBF4FF')
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .height(26)
-              .padding({ left: 8, right: 9 })
-              .backgroundColor('#28FFFFFF')
-              .borderRadius(13)
+              .height(28)
+              .padding({ left: 9, right: 10 })
+              .backgroundColor('#2CFFFFFF')
+              .borderRadius(14)
               .onClick(() => this.cyclePlanet())
             Blank()
             Text(this.rightStatLabel())
-              .fontSize(12)
+              .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.accentColor())
           }
@@ -235,47 +263,47 @@ struct CompanionArcCard {
         }
         .width('100%')
         .height('100%')
-        .padding({ left: 13, right: 13, top: 10, bottom: 9 })
+        .padding({ left: 12, right: 12, top: 10, bottom: 9 })
       } else {
-        // 2x4 Wide Companion Arc + Interactive 5-Day Mini Phase Scrubber
-        Row({ space: 14 }) {
+        // 2x4 Wide Lunar/Companion Phase Card: crystal-clear hierarchy & interactive 5-day phase preview
+        Row({ space: 12 }) {
           Column({ space: 4 }) {
             CelestialOrbView({
               orbBody: this.orbBody,
-              orbSize: 86,
+              orbSize: 84,
               showPhase: this.showPhaseShadow(),
               illumination: this.displayIllum(),
               phaseAge: this.displayAge()
             })
-            Text(this.selectedDayOffset > 0
-              ? ('+' + String(this.selectedDayOffset) + '日 预演')
-              : ((this.companionRole === 'parent-planet' || this.companionRole === 'host') ? ('宿主 · ' + this.companionName) : this.displayPhaseName()))
-              .fontSize(11)
+            Text(this.milestoneCaption())
+              .fontSize(10.5)
               .fontWeight(FontWeight.Medium)
-              .fontColor(this.selectedDayOffset > 0 ? '#FFE09A' : '#E8F2FF')
+              .fontColor(this.selectedDayOffset > 0 ? '#FFE09A' : '#CFE6FF')
               .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           .alignItems(HorizontalAlign.Center)
           .justifyContent(FlexAlign.Center)
-          .width(100)
+          .width(96)
           .height('100%')
           .onClick(() => this.triggerOverflowOrOpen())
 
-          Column({ space: 5 }) {
-            Row() {
-              Column({ space: 1 }) {
-                Text(this.observerPlanetName + ' · 星历弧盘 ↻')
+          Column({ space: 4 }) {
+            // Top bar: clear world switcher + current/preview phase title + crisp percentage
+            Row({ space: 6 }) {
+              Column({ space: 2 }) {
+                Text(this.worldSwitcherLabel())
                   .fontSize(11)
                   .fontWeight(FontWeight.Medium)
-                  .fontColor('#CBE4FF')
-                  .height(24)
-                  .padding({ left: 8, right: 9 })
-                  .backgroundColor('#26FFFFFF')
-                  .borderRadius(12)
+                  .fontColor('#E4F1FF')
+                  .height(28)
+                  .padding({ left: 10, right: 10 })
+                  .backgroundColor('#2CFFFFFF')
+                  .borderRadius(14)
                   .maxLines(1)
                   .onClick(() => this.cyclePlanet())
                 Text(this.displayPhaseName())
-                  .fontSize(16)
+                  .fontSize(15)
                   .fontWeight(FontWeight.Medium)
                   .fontColor('#FFFFFF')
                   .maxLines(1)
@@ -283,38 +311,95 @@ struct CompanionArcCard {
               .alignItems(HorizontalAlign.Start)
               .layoutWeight(1)
 
-              Text(this.rightStatLabel())
-                .fontSize(20)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.accentColor())
+              Column({ space: 1 }) {
+                Text(this.rightStatLabel())
+                  .fontSize(19)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.accentColor())
+                if (this.showPhaseShadow()) {
+                  Text(this.selectedDayOffset > 0 ? ('+' + String(this.selectedDayOffset) + '日') : '照明度')
+                    .fontSize(9.5)
+                    .fontColor(this.selectedDayOffset > 0 ? '#FFE09A' : '#8FB6DC')
+                }
+              }
+              .alignItems(HorizontalAlign.End)
             }
             .width('100%')
 
-            HorizonArcView({
-              arcWidth: 172,
-              arcHeight: 32,
-              altitudeDeg: this.numericAlt(),
-              riseText: this.isSunMode() ? this.sunRise : this.moonRise,
-              midFooterText: this.isSunMode() && this.sunTransit !== '—' ? ('中天 ' + this.sunTransit) : '',
-              setText: this.isSunMode() ? this.sunSet : this.moonSet,
-              customProgress: this.arcProgressOverride(),
-              accentColor: this.accentColor()
-            })
+            // Middle: live horizon arc on Today, or clear future-day preview banner when scrubbing
+            if (this.showPhaseShadow() && this.selectedDayOffset > 0) {
+              Row({ space: 6 }) {
+                Text('月龄 ' + this.displayAge().toFixed(1) + ' 天 · 轻触直飞当日星图 ↗')
+                  .fontSize(10.5)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor('#FFE5A8')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+              }
+              .width('100%')
+              .height(32)
+              .padding({ left: 10, right: 10 })
+              .backgroundColor('#2E221604')
+              .borderRadius(10)
+              .border({ width: 0.6, color: '#44FFE09A' })
+              .alignItems(VerticalAlign.Center)
+            } else {
+              HorizonArcView({
+                arcWidth: 176,
+                arcHeight: 28,
+                altitudeDeg: this.numericAlt(),
+                riseText: this.isSunMode() ? this.sunRise : this.moonRise,
+                midFooterText: this.isSunMode() && this.sunTransit !== '—' ? ('中天 ' + this.sunTransit) : '',
+                setText: this.isSunMode() ? this.sunSet : this.moonSet,
+                customProgress: this.arcProgressOverride(),
+                accentColor: this.accentColor()
+              })
+            }
 
-            if (this.isSunMode()) {
+            // Bottom: 5-day phase preview (ONLY for real phase worlds: Moon/Earth) or 4-milestone bar for Sun/Planets
+            if (this.showPhaseShadow()) {
+              Column({ space: 3 }) {
+                Row() {
+                  Text(this.previewHeaderHint())
+                    .fontSize(9.5)
+                    .fontWeight(this.selectedDayOffset > 0 ? FontWeight.Medium : FontWeight.Regular)
+                    .fontColor(this.selectedDayOffset > 0 ? '#FFE09A' : '#96BBE0')
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .width('100%')
+                .onClick(() => {
+                  if (this.selectedDayOffset > 0) this.selectPreviewDay(0)
+                })
+
+                MiniPhaseStripView({
+                  phaseAge: this.baseAge(),
+                  nowMs: Date.now(),
+                  selectedIndex: this.selectedDayOffset,
+                  onSelectDay: (idx: number) => this.selectPreviewDay(idx)
+                })
+              }
+              .width('100%')
+            } else {
               Row({ space: 5 }) {
-                ForEach([
+                ForEach(this.isSunMode() ? [
                   ['日出', this.sunRise],
                   ['中天', this.sunTransit],
                   ['黄金', this.goldenHourText !== '—' ? this.goldenHourText : computeGoldenHourClock(this.sunSet)],
                   ['暗夜', this.darkStart]
+                ] : [
+                  ['升起', this.moonRise],
+                  ['落下', this.moonSet],
+                  ['仰角', (Math.round(this.numericAlt()) >= 0 ? '+' : '') + String(Math.round(this.numericAlt())) + '°'],
+                  ['暗夜', this.darkStart]
                 ], (pair: string[], idx: number) => {
-                  Column({ space: 1 }) {
-                    Text(pair[0]).fontSize(9).fontWeight(FontWeight.Medium).fontColor('#DDE8F8').maxLines(1)
-                    Text(pair[1]).fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFE09A').maxLines(1)
+                  Column({ space: 2 }) {
+                    Text(pair[0]).fontSize(9.5).fontWeight(FontWeight.Medium).fontColor('#CFE2F8').maxLines(1)
+                    Text(pair[1]).fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#FFE09A').maxLines(1)
                   }
                   .layoutWeight(1)
-                  .height(34)
+                  .height(40)
                   .justifyContent(FlexAlign.Center)
                   .alignItems(HorizontalAlign.Center)
                   .backgroundColor('#32090F1E')
@@ -323,13 +408,6 @@ struct CompanionArcCard {
                 }, (pair: string[], idx: number) => pair[0] + '_' + String(idx))
               }
               .width('100%')
-            } else {
-              MiniPhaseStripView({
-                phaseAge: this.baseAge(),
-                nowMs: Date.now(),
-                selectedIndex: this.selectedDayOffset,
-                onSelectDay: (idx: number) => this.selectPreviewDay(idx)
-              })
             }
           }
           .layoutWeight(1)
@@ -338,7 +416,7 @@ struct CompanionArcCard {
         }
         .width('100%')
         .height('100%')
-        .padding({ left: 14, right: 15, top: 11, bottom: 10 })
+        .padding({ left: 13, right: 14, top: 10, bottom: 9 })
       }
     }
     .width('100%')

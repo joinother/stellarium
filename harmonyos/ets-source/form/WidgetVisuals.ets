@@ -53,24 +53,28 @@ export function phaseMaskIndex(illumination: number, phaseAge: number): number {
   return Math.round((fullAngle / (2.0 * Math.PI)) * 16.0) % 16
 }
 
-export function phaseMaskResource(illumination: number, phaseAge: number): Resource {
-  const idx = phaseMaskIndex(illumination, phaseAge)
-  if (idx === 0) return $r('app.media.widget_phase_00')
-  if (idx === 1) return $r('app.media.widget_phase_01')
-  if (idx === 2) return $r('app.media.widget_phase_02')
-  if (idx === 3) return $r('app.media.widget_phase_03')
-  if (idx === 4) return $r('app.media.widget_phase_04')
-  if (idx === 5) return $r('app.media.widget_phase_05')
-  if (idx === 6) return $r('app.media.widget_phase_06')
-  if (idx === 7) return $r('app.media.widget_phase_07')
-  if (idx === 8) return $r('app.media.widget_phase_08')
-  if (idx === 9) return $r('app.media.widget_phase_09')
-  if (idx === 10) return $r('app.media.widget_phase_10')
-  if (idx === 11) return $r('app.media.widget_phase_11')
-  if (idx === 12) return $r('app.media.widget_phase_12')
-  if (idx === 13) return $r('app.media.widget_phase_13')
-  if (idx === 14) return $r('app.media.widget_phase_14')
+export function phaseMaskByIndex(idx: number): Resource {
+  const safe = ((Math.round(idx) % 16) + 16) % 16
+  if (safe === 0) return $r('app.media.widget_phase_00')
+  if (safe === 1) return $r('app.media.widget_phase_01')
+  if (safe === 2) return $r('app.media.widget_phase_02')
+  if (safe === 3) return $r('app.media.widget_phase_03')
+  if (safe === 4) return $r('app.media.widget_phase_04')
+  if (safe === 5) return $r('app.media.widget_phase_05')
+  if (safe === 6) return $r('app.media.widget_phase_06')
+  if (safe === 7) return $r('app.media.widget_phase_07')
+  if (safe === 8) return $r('app.media.widget_phase_08')
+  if (safe === 9) return $r('app.media.widget_phase_09')
+  if (safe === 10) return $r('app.media.widget_phase_10')
+  if (safe === 11) return $r('app.media.widget_phase_11')
+  if (safe === 12) return $r('app.media.widget_phase_12')
+  if (safe === 13) return $r('app.media.widget_phase_13')
+  if (safe === 14) return $r('app.media.widget_phase_14')
   return $r('app.media.widget_phase_15')
+}
+
+export function phaseMaskResource(illumination: number, phaseAge: number): Resource {
+  return phaseMaskByIndex(phaseMaskIndex(illumination, phaseAge))
 }
 
 export function orbGlowColor(orbBody: string): string {
@@ -108,24 +112,109 @@ export function eventBadgeText(kind: string): string {
 }
 
 // High-craft 3D textured celestial globe with true 3D ray-traced spherical phase shading
-// (smooth twilight terminator + natural earthshine; zero rectangular radialGradient boxes!).
+// AND dual-slot ping-pong crossfade + intermediate phase stepping so EVERY shadow transition
+// (Full -> Shadowed, Shadowed -> Full, and Shadowed A -> Shadowed B) glides smoothly with zero snap.
 @Component
 export struct CelestialOrbView {
-  @Prop orbBody: string = 'moon'
+  @Prop @Watch('onPhaseInputChanged') orbBody: string = 'moon'
   @Prop orbSize: number = 68
-  @Prop showPhase: boolean = true
-  @Prop illumination: number = 78
-  @Prop phaseAge: number = 11
+  @Prop @Watch('onPhaseInputChanged') showPhase: boolean = true
+  @Prop @Watch('onPhaseInputChanged') illumination: number = 78
+  @Prop @Watch('onPhaseInputChanged') phaseAge: number = 11
   @Prop glowIntensity: number = 1.0
+
+  @State private slotAIdx: number = 8
+  @State private slotBIdx: number = 8
+  @State private slotAOpacity: number = 0
+  @State private slotBOpacity: number = 0
+  private activeSlot: number = 0
+  private currentIdx: number = 8
+  private pendingTargetIdx: number = 8
+  private stepping: boolean = false
 
   private isRinged(): boolean {
     return this.orbBody.trim().toLowerCase() === 'saturn'
   }
 
-  private shouldOverlayPhase(): boolean {
-    if (!this.showPhase || this.isRinged()) return false
-    if (!Number.isFinite(this.illumination) || this.illumination < 0) return false
-    return phaseMaskIndex(this.illumination, this.phaseAge) !== 8
+  private targetMaskIdx(): number {
+    if (!this.showPhase || this.isRinged()) return 8
+    if (!Number.isFinite(this.illumination) || this.illumination < 0) return 8
+    return phaseMaskIndex(this.illumination, this.phaseAge)
+  }
+
+  aboutToAppear(): void {
+    const idx = this.targetMaskIdx()
+    this.currentIdx = idx
+    this.pendingTargetIdx = idx
+    this.stepping = false
+    this.activeSlot = 0
+    this.slotAIdx = idx
+    this.slotBIdx = idx
+    this.slotAOpacity = idx === 8 ? 0 : 1
+    this.slotBOpacity = 0
+  }
+
+  aboutToDisappear(): void {
+    this.stepping = false
+    this.pendingTargetIdx = this.currentIdx
+  }
+
+  private stepTowardTarget(): void {
+    const target = this.pendingTargetIdx
+    if (target === this.currentIdx) {
+      this.stepping = false
+      return
+    }
+    this.stepping = true
+    const cw = ((target - this.currentIdx) % 16 + 16) % 16
+    const ccw = ((this.currentIdx - target) % 16 + 16) % 16
+    const dist = Math.min(cw, ccw)
+    const dir = cw <= ccw ? 1 : -1
+    const isFinal = dist <= 1
+    const nextIdx = isFinal ? target : ((this.currentIdx + dir) % 16 + 16) % 16
+    const durationMs = isFinal ? 340 : 145
+    const curve = isFinal ? Curve.EaseInOut : Curve.Linear
+    this.currentIdx = nextIdx
+
+    const onStepDone = (): void => {
+      if (this.currentIdx !== this.pendingTargetIdx) {
+        this.stepTowardTarget()
+      } else {
+        this.stepping = false
+      }
+    }
+
+    if (nextIdx === 8) {
+      animateTo({ duration: durationMs, curve: curve, onFinish: onStepDone }, () => {
+        this.slotAOpacity = 0
+        this.slotBOpacity = 0
+      })
+      return
+    }
+    if (this.activeSlot === 0) {
+      this.slotBIdx = nextIdx
+      this.activeSlot = 1
+      animateTo({ duration: durationMs, curve: curve, onFinish: onStepDone }, () => {
+        this.slotAOpacity = 0
+        this.slotBOpacity = 1
+      })
+    } else {
+      this.slotAIdx = nextIdx
+      this.activeSlot = 0
+      animateTo({ duration: durationMs, curve: curve, onFinish: onStepDone }, () => {
+        this.slotBOpacity = 0
+        this.slotAOpacity = 1
+      })
+    }
+  }
+
+  private onPhaseInputChanged(): void {
+    const target = this.targetMaskIdx()
+    this.pendingTargetIdx = target
+    if (target === this.currentIdx) return
+    if (!this.stepping) {
+      this.stepTowardTarget()
+    }
   }
 
   build() {
@@ -137,12 +226,20 @@ export struct CelestialOrbView {
         .objectFit(ImageFit.Contain)
         .draggable(false)
 
-      // True 3D Lambertian spherical phase mask pixel-aligned over the globe
-      if (this.shouldOverlayPhase()) {
-        Image(phaseMaskResource(this.illumination, this.phaseAge))
+      // Dual ping-pong 3D spherical phase shadow slots for seamless crossfade across all shadowed phases
+      if (this.showPhase && !this.isRinged()) {
+        Image(phaseMaskByIndex(this.slotAIdx))
           .width(this.orbSize)
           .height(this.orbSize)
           .objectFit(ImageFit.Contain)
+          .opacity(this.slotAOpacity)
+          .draggable(false)
+
+        Image(phaseMaskByIndex(this.slotBIdx))
+          .width(this.orbSize)
+          .height(this.orbSize)
+          .objectFit(ImageFit.Contain)
+          .opacity(this.slotBOpacity)
           .draggable(false)
       }
     }
@@ -503,18 +600,23 @@ export function fallbackPlanetRows(items: CompactPlanetItem[]): CompactPlanetIte
   return items.slice(0, 5)
 }
 
-// Pure-declarative 3D perspective Solar System Orrery stage shared 1:1 between SolarSystemCard & SkyLiveFormPage.
-// Uses real Ellipse tracks + Painter's-algorithm Z-ordering (far planets behind Sun corona, near planets in front).
+// High-craft 3D perspective Solar System Orrery stage shared 1:1 between SolarSystemCard & SkyLiveFormPage.
+// Anti-aliased Canvas renders ultra-delicate silk orbits, radial solar corona, counterclockwise orbital motion trails,
+// and Earth's reference ring — eliminating dense clutter while making orbital direction and depth instantly intuitive.
 @Component
 export struct SolarSystemOrreryStage {
-  @Prop stageWidth: number = 220
-  @Prop stageHeight: number = 112
-  @Prop heliocentricPlanetsJson: string = '[]'
-  @Prop dayOffset: number = 0
-  @Prop innerOnly: boolean = false
-  @Prop tiltDeg: number = 56
+  @Prop @Watch('redraw') stageWidth: number = 220
+  @Prop @Watch('redraw') stageHeight: number = 112
+  @Prop @Watch('redraw') heliocentricPlanetsJson: string = '[]'
+  @Prop @Watch('redraw') dayOffset: number = 0
+  @Prop @Watch('redraw') innerOnly: boolean = false
+  @Prop @Watch('redraw') tiltDeg: number = 56
   @Prop showLabels: boolean = false
-  @Prop selectedId: string = ''
+  @Prop @Watch('redraw') selectedId: string = ''
+
+  private canvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
+  private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.canvasSettings)
+  private canvasReady: boolean = false
 
   private renderPlan(): OrreryRenderPlan {
     const planets = parseHeliocentricPlanets(this.heliocentricPlanetsJson, Date.now(), this.dayOffset)
@@ -522,125 +624,177 @@ export struct SolarSystemOrreryStage {
   }
 
   private renderSizeFor(node: OrreryProjectedNode): number {
-    return node.isSaturn ? Math.round(node.size * 1.48 * 10) / 10 : node.size
+    return node.isSaturn ? Math.round(node.size * 1.54 * 10) / 10 : node.size
+  }
+
+  private redraw(): void {
+    if (!this.canvasReady) return
+    const plan = this.renderPlan()
+    const w = this.ctx.width > 0 ? this.ctx.width : this.stageWidth
+    const h = this.ctx.height > 0 ? this.ctx.height : this.stageHeight
+    this.ctx.clearRect(0, 0, w, h)
+
+    // 1. Soft ecliptic nebula + radial solar corona glow (zero hard concentric circle borders!)
+    const maxGlowR = Math.max(w, h) * 0.52
+    const spaceGlow = this.ctx.createRadialGradient(plan.centerX, plan.centerY, 2, plan.centerX, plan.centerY, maxGlowR)
+    spaceGlow.addColorStop(0.0, '#66FFD26A')
+    spaceGlow.addColorStop(0.16, '#30FFA63A')
+    spaceGlow.addColorStop(0.45, '#182A5CA8')
+    spaceGlow.addColorStop(1.0, '#00050A18')
+    this.ctx.fillStyle = spaceGlow
+    this.ctx.fillRect(0, 0, w, h)
+
+    // 2. Ultra-delicate silk elliptical orbits (low visual noise; highlight Earth & selected only)
+    for (let i = 0; i < plan.orbits.length; i++) {
+      const orbit: OrreryOrbitRing = plan.orbits[i]
+      const isEarth = orbit.id === 'Earth'
+      const isSel = this.selectedId.length > 0 && orbit.id.toLowerCase() === this.selectedId.toLowerCase()
+      this.ctx.save()
+      this.ctx.beginPath()
+      this.ctx.ellipse(plan.centerX, plan.centerY, orbit.rx, orbit.ry, 0, 0, Math.PI * 2)
+      if (isSel) {
+        this.ctx.strokeStyle = '#88FFD166'
+        this.ctx.lineWidth = 1.25
+      } else if (isEarth) {
+        this.ctx.strokeStyle = '#566BC4FF'
+        this.ctx.lineWidth = 1.0
+      } else {
+        this.ctx.strokeStyle = '#24B4D4FA'
+        this.ctx.lineWidth = 0.65
+      }
+      this.ctx.stroke()
+      this.ctx.restore()
+    }
+
+    // 3. Luminous counterclockwise orbital motion trails behind each planet (instant motion & depth cue!)
+    for (let i = 0; i < plan.allNodes.length; i++) {
+      const node: OrreryProjectedNode = plan.allNodes[i]
+      let orbitRing: OrreryOrbitRing | undefined = undefined
+      for (let k = 0; k < plan.orbits.length; k++) {
+        if (plan.orbits[k].id === node.id) {
+          orbitRing = plan.orbits[k]
+          break
+        }
+      }
+      if (orbitRing === undefined) continue
+      const hex = /^#[0-9A-Fa-f]{6}$/.test(node.color) ? node.color.slice(1) : '8AD4FF'
+      const trailDeg = node.isInner ? 44 : 28
+      const segs = 10
+      this.ctx.save()
+      this.ctx.lineCap = 'round'
+      for (let s = 0; s < segs; s++) {
+        const f0 = s / segs
+        const f1 = (s + 1) / segs
+        const deg0 = node.lonDeg - trailDeg * (1.0 - f0)
+        const deg1 = node.lonDeg - trailDeg * (1.0 - f1)
+        const r0 = deg0 * Math.PI / 180.0
+        const r1 = deg1 * Math.PI / 180.0
+        const x0 = plan.centerX + orbitRing.rx * Math.cos(r0)
+        const y0 = plan.centerY - orbitRing.ry * Math.sin(r0)
+        const x1 = plan.centerX + orbitRing.rx * Math.cos(r1)
+        const y1 = plan.centerY - orbitRing.ry * Math.sin(r1)
+        const alphaByte = Math.max(8, Math.min(185, Math.round((0.06 + f1 * f1 * 0.62) * 255)))
+        const alphaHex = alphaByte.toString(16).padStart(2, '0')
+        this.ctx.strokeStyle = '#' + alphaHex + hex
+        this.ctx.lineWidth = 0.6 + f1 * (node.isEarth ? 1.5 : 1.15)
+        this.ctx.beginPath()
+        this.ctx.moveTo(x0, y0)
+        this.ctx.lineTo(x1, y1)
+        this.ctx.stroke()
+      }
+      this.ctx.restore()
+    }
+
+    // 4. Subtle Sun -> Earth reference ray so Earth's position in the solar system is unmistakable
+    this.ctx.save()
+    this.ctx.strokeStyle = '#4278C8FF'
+    this.ctx.lineWidth = 0.85
+    this.ctx.setLineDash([2.5, 3.5])
+    this.ctx.beginPath()
+    this.ctx.moveTo(plan.centerX, plan.centerY)
+    this.ctx.lineTo(plan.earthX, plan.earthY)
+    this.ctx.stroke()
+    this.ctx.setLineDash([])
+    this.ctx.restore()
+
+    // 5. Soft Earth beacon ring painted anti-aliased on Canvas (tightly hugging Earth's limb)
+    const earthNode = plan.allNodes.find((n: OrreryProjectedNode) => n.isEarth)
+    if (earthNode !== undefined) {
+      const haloR = this.renderSizeFor(earthNode) * 0.52 + 1.5
+      this.ctx.save()
+      this.ctx.strokeStyle = '#787AD4FF'
+      this.ctx.lineWidth = 0.95
+      this.ctx.beginPath()
+      this.ctx.arc(earthNode.x, earthNode.y, haloR, 0, Math.PI * 2)
+      this.ctx.stroke()
+      this.ctx.restore()
+    }
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // Subtle ecliptic plane ambient glow behind the disc
-      Ellipse()
-        .width(this.stageWidth * 0.92)
-        .height(this.stageHeight * 0.84)
-        .fill('#164A88D6')
-        .position({ x: this.stageWidth * 0.04, y: this.stageHeight * 0.08 })
+      // 1. Anti-aliased Canvas backdrop (corona + silk orbits + motion trails + Earth reference)
+      Canvas(this.ctx)
+        .width(this.stageWidth)
+        .height(this.stageHeight)
+        .onReady(() => {
+          this.canvasReady = true
+          this.redraw()
+        })
         .hitTestBehavior(HitTestMode.None)
 
-      // 1. Perspective elliptical orbits (true Ellipse geometry!)
-      ForEach(this.renderPlan().orbits, (orbit: OrreryOrbitRing) => {
-        Ellipse()
-          .width(orbit.rx * 2)
-          .height(orbit.ry * 2)
-          .fill(Color.Transparent)
-          .stroke(orbit.highlight ? '#7CC8FF' : orbit.color)
-          .strokeWidth(orbit.highlight ? 1.1 : 0.65)
-          .opacity(orbit.highlight ? 0.62 : 0.30)
+      // 2. Back-hemisphere planets (behind Sun)
+      ForEach(this.renderPlan().backNodes, (node: OrreryProjectedNode) => {
+        Image(orbResource(node.orbKey))
+          .width(this.renderSizeFor(node))
+          .height(this.renderSizeFor(node))
+          .objectFit(ImageFit.Contain)
+          .opacity(node.opacity)
+          .draggable(false)
           .position({
-            x: this.renderPlan().centerX - orbit.rx,
-            y: this.renderPlan().centerY - orbit.ry
+            x: node.x - this.renderSizeFor(node) * 0.5,
+            y: node.y - this.renderSizeFor(node) * 0.5
           })
           .hitTestBehavior(HitTestMode.None)
-      }, (orbit: OrreryOrbitRing) => orbit.id + '_' + String(this.innerOnly) + '_' + String(Math.round(this.tiltDeg)))
-
-      // 2. Back-hemisphere planets (behind Sun corona)
-      ForEach(this.renderPlan().backNodes, (node: OrreryProjectedNode) => {
-        Stack({ alignContent: Alignment.Center }) {
-          if (node.isEarth) {
-            Circle()
-              .width(this.renderSizeFor(node) + 5)
-              .height(this.renderSizeFor(node) + 5)
-              .fill(Color.Transparent)
-              .stroke('#6BC4FF')
-              .strokeWidth(1)
-              .opacity(0.75)
-          }
-          Image(orbResource(node.orbKey))
-            .width(this.renderSizeFor(node))
-            .height(this.renderSizeFor(node))
-            .objectFit(ImageFit.Contain)
-            .draggable(false)
-        }
-        .width(this.renderSizeFor(node) + 6)
-        .height(this.renderSizeFor(node) + 6)
-        .opacity(node.opacity)
-        .position({
-          x: node.x - (this.renderSizeFor(node) + 6) * 0.5,
-          y: node.y - (this.renderSizeFor(node) + 6) * 0.5
-        })
-        .hitTestBehavior(HitTestMode.None)
       }, (node: OrreryProjectedNode) => 'b_' + node.id + '_' + String(Math.round(node.lonDeg)))
 
-      // 3. Central Sun + multi-layer warm corona
-      Stack({ alignContent: Alignment.Center }) {
-        Circle()
-          .width(this.renderPlan().sunSize * 1.95)
-          .height(this.renderPlan().sunSize * 1.95)
-          .fill('#28FFA836')
-        Circle()
-          .width(this.renderPlan().sunSize * 1.38)
-          .height(this.renderPlan().sunSize * 1.38)
-          .fill('#48FFD066')
-        Image($r('app.media.widget_orb_sun'))
-          .width(this.renderPlan().sunSize)
-          .height(this.renderPlan().sunSize)
-          .objectFit(ImageFit.Contain)
-          .draggable(false)
-      }
-      .width(this.renderPlan().sunSize * 2)
-      .height(this.renderPlan().sunSize * 2)
-      .position({
-        x: this.renderPlan().centerX - this.renderPlan().sunSize,
-        y: this.renderPlan().centerY - this.renderPlan().sunSize
-      })
-      .hitTestBehavior(HitTestMode.None)
-
-      // 4. Front-hemisphere planets (in front of Sun corona)
-      ForEach(this.renderPlan().frontNodes, (node: OrreryProjectedNode) => {
-        Stack({ alignContent: Alignment.Center }) {
-          if (node.isEarth) {
-            Circle()
-              .width(this.renderSizeFor(node) + 5)
-              .height(this.renderSizeFor(node) + 5)
-              .fill(Color.Transparent)
-              .stroke('#7AD0FF')
-              .strokeWidth(1.1)
-              .opacity(0.88)
-          }
-          Image(orbResource(node.orbKey))
-            .width(this.renderSizeFor(node))
-            .height(this.renderSizeFor(node))
-            .objectFit(ImageFit.Contain)
-            .draggable(false)
-        }
-        .width(this.renderSizeFor(node) + 6)
-        .height(this.renderSizeFor(node) + 6)
-        .opacity(node.opacity)
+      // 3. Central Sun (soft corona already painted seamlessly on Canvas behind it!)
+      Image($r('app.media.widget_orb_sun'))
+        .width(this.renderPlan().sunSize)
+        .height(this.renderPlan().sunSize)
+        .objectFit(ImageFit.Contain)
+        .draggable(false)
         .position({
-          x: node.x - (this.renderSizeFor(node) + 6) * 0.5,
-          y: node.y - (this.renderSizeFor(node) + 6) * 0.5
+          x: this.renderPlan().centerX - this.renderPlan().sunSize * 0.5,
+          y: this.renderPlan().centerY - this.renderPlan().sunSize * 0.5
         })
         .hitTestBehavior(HitTestMode.None)
+
+      // 4. Front-hemisphere planets (in front of Sun)
+      ForEach(this.renderPlan().frontNodes, (node: OrreryProjectedNode) => {
+        Image(orbResource(node.orbKey))
+          .width(this.renderSizeFor(node))
+          .height(this.renderSizeFor(node))
+          .objectFit(ImageFit.Contain)
+          .opacity(node.opacity)
+          .draggable(false)
+          .position({
+            x: node.x - this.renderSizeFor(node) * 0.5,
+            y: node.y - this.renderSizeFor(node) * 0.5
+          })
+          .hitTestBehavior(HitTestMode.None)
       }, (node: OrreryProjectedNode) => 'f_' + node.id + '_' + String(Math.round(node.lonDeg)))
 
-      // 5. Optional crisp micro-labels on larger surfaces (4x4 or inner-system zoom)
+      // 5. Optional crisp labels (Earth always accented in ice-blue; others clean & legible)
       if (this.showLabels) {
         ForEach(this.renderPlan().allNodes, (node: OrreryProjectedNode) => {
           Text(node.nameZh)
-            .fontSize(9)
+            .fontSize(9.5)
             .fontWeight(node.isEarth ? FontWeight.Medium : FontWeight.Regular)
-            .fontColor(node.isEarth ? '#8DD4FF' : '#D8E7FA')
-            .textShadow({ radius: 3, color: '#CC030712', offsetX: 0, offsetY: 1 })
+            .fontColor(node.isEarth ? '#8DD4FF' : '#DCEAFF')
+            .textShadow({ radius: 3, color: '#DD030712', offsetX: 0, offsetY: 1 })
             .position({
-              x: Math.max(2, Math.min(this.stageWidth - 28, node.x - 10)),
+              x: Math.max(2, Math.min(this.stageWidth - 28, node.x - 11)),
               y: Math.max(2, Math.min(this.stageHeight - 13, node.y + this.renderSizeFor(node) * 0.48 + 2))
             })
             .hitTestBehavior(HitTestMode.None)
