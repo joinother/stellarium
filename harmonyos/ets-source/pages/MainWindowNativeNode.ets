@@ -3709,6 +3709,22 @@ export struct WindowNativeNode {
           if (this.activePanel === 'search') this.catalogStore.loadObjectCatalogCategories(this.languageStore.languageRefreshSerial)
         },
         setViewTab: (value: number): void => { this.viewTab = value },
+        openAstroTab: (tab: number, graphMode?: number): void => {
+          const targetGroup = (tab === 0 || tab === 1 || tab === 6) ? 1 : ((tab === 3 || tab === 7 || tab === 8) ? 2 : 0)
+          if (graphMode !== undefined) this.astroStore.graphMode = graphMode
+          this.astroStore.astroGroup = targetGroup
+          this.astroStore.astroTab = tab
+          this.openSubPanel('astro')
+          setTimeout(() => {
+            this.astroStore.astroGroup = targetGroup
+            this.astroCalcCtl().selectAstroTab(tab)
+          }, 160)
+        },
+        openRemoteControlSettings: (): void => {
+          this.configTab = 0
+          this.openSubPanel('settings')
+          this.flashHint(I18n.getLanguage().startsWith('zh') ? '已定位主设置 · 下滑即可开启无线控制' : 'Opened Main Settings for Remote Control')
+        },
         openSubPanel: (panel: string): void => { this.openSubPanel(panel) }
       }
       this.pluginFeatureControllerImpl = new PluginFeatureController(

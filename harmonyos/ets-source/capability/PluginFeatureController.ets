@@ -21,6 +21,10 @@ export interface PluginFeatureHostHooks extends BehaviorHostHooks {
   refreshCatalogCategoriesIfSearchVisible(): void
   // 视图标签页宿主 @State（组件 @Prop 消费，控制器经 hooks 写）。
   setViewTab(value: number): void
+  // 天文计算直达指定标签页（同步一级分组 astroGroup 并触发数据加载）。
+  openAstroTab(tab: number, graphMode?: number): void
+  // 无线控制直达「设置 → 主设置」。
+  openRemoteControlSettings(): void
   // 壳层路由：打开路由 panel。
   openSubPanel(panel: string): void
 }
@@ -180,8 +184,14 @@ export class PluginFeatureController {
 
   // 插件已加载后按路由写 astro / search / 视图标签状态并打开面板。
   openPluginFeatureAfterLoad(id: string, route: PluginFeatureRoute): void {
-    if (route.astroTab !== undefined) this.astroStore.astroTab = route.astroTab
-    if (route.graphMode !== undefined) this.astroStore.graphMode = route.graphMode
+    if (route.panel === 'astro' && route.astroTab !== undefined) {
+      this.hooks.openAstroTab(route.astroTab, route.graphMode)
+      return
+    }
+    if (id === 'RemoteControl') {
+      this.hooks.openRemoteControlSettings()
+      return
+    }
     if (route.layerTab !== undefined) this.hooks.setViewTab(route.layerTab)
     if (route.catalogModuleId !== undefined) {
       this.searchStore.searchText = ''
@@ -190,5 +200,10 @@ export class PluginFeatureController {
       this.searchStore.pendingPluginCatalogId = route.catalogModuleId
     }
     this.hooks.openSubPanel(route.panel)
+    if (id === 'EquationOfTime') {
+      this.hooks.flashHint(I18n.getLanguage().startsWith('zh') ? '已打开时间面板 · 可查看均时差' : 'Opened Time panel for Equation of Time')
+    } else if (id === 'TimeNavigator') {
+      this.hooks.flashHint(I18n.getLanguage().startsWith('zh') ? '已打开时间面板 · 可拖动时间转轴' : 'Opened Time panel for Time Navigation')
+    }
   }
 }

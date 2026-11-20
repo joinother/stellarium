@@ -46,7 +46,10 @@ export function observingHubActions(): ShellAction[] {
     { label: I18n.t('more_observe_list'), icon: 'observe', panel: 'observing' },
     { label: I18n.t('panel_bookmarks'), icon: 'bookmarks', panel: 'bookmarks' },
     { label: I18n.t('panel_oculars'), icon: 'oculars', panel: 'oculars' },
+    { label: I18n.t('p_mosaic_camera'), icon: 'projection', panel: 'mosaicCamera' },
     { label: I18n.t('panel_angle_measure'), icon: 'angle', panel: 'angleMeasure' },
+    { label: I18n.t('p_pointer_coordinates'), icon: 'grid', panel: 'pointerCoordinates' },
+    { label: I18n.t('p_archaeo_lines'), icon: 'orbit', panel: 'archaeoLines' },
     { label: I18n.t('panel_nav_stars'), icon: 'nav_stars', panel: 'navStars' },
     { label: I18n.t('polar_scope_title'), icon: 'polar_scope', panel: 'polarScope' },
     { label: I18n.t('panel_telescope_control'), icon: 'telescope', panel: 'telescope' }
@@ -60,6 +63,7 @@ export function skyDataHubActions(): ShellAction[] {
     { label: I18n.t('panel_satellites'), icon: 'satellite', panel: 'satellites' },
     { label: I18n.t('panel_meteorshowers'), icon: 'meteor', panel: 'meteorshowers' },
     { label: I18n.pluginName('Scenery3d'), icon: 'scenery3d', panel: 'scenery3d' },
+    { label: I18n.t('nebula_texture_title'), icon: 'catalog_nebula', panel: 'nebulaTextures' },
     // 「AR 预研」入口暂时下线（2026-11）：面板与 ARStore/ARController 代码保留，需要时把下面这行放回来即可。
     // { label: 'AR 预研', icon: 'gyro', panel: 'ar' },
     { label: I18n.t('panel_catalogs'), icon: 'catalogs', panel: 'catalogs' },
@@ -70,6 +74,7 @@ export function skyDataHubActions(): ShellAction[] {
 export function automationHubActions(): ShellAction[] {
   return [
     { icon: 'script', label: I18n.t('panel_scripts'), panel: 'scripts' },
+    { icon: 'catalog_constellation', label: I18n.t('sky_culture_maker_title'), panel: 'skyCultureMaker' },
     { icon: 'code', label: I18n.t('panel_commands'), panel: 'commands' },
     { icon: 'audio', label: I18n.t('panel_audio_ctrl'), panel: 'audio' }
   ]

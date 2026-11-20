@@ -27,8 +27,9 @@ import { KeyboardShortcutSection } from '../settings/KeyboardShortcutSection'
 import { KeyboardShortcutStore } from '../../state/KeyboardShortcutStore'
 import { KeyboardShortcutItem } from '../../common/types/StellariumTypes'
 import { TimeSettingsSection } from '../settings/TimeSettingsSection'
+import { PluginCenterSection } from '../settings/PluginCenterSection'
 import { DeltaTSettingsBlock } from '../time/DeltaTSettingsBlock'
-import { sensZh, pluginZh, pluginDesc, pluginFeatureRoute, resourceText, scriptZh, scriptDesc } from '../../common/derive/labels'
+import { sensZh, scriptZh, scriptDesc } from '../../common/derive/labels'
 import { configDitheringLabel } from '../../common/derive/skycult'
 
 // 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 天空 /
@@ -213,18 +214,21 @@ export struct SettingsPanel {
             { label: I18n.t('c_about'), id: 8 },
           ] as TabItem[], (tab: TabItem) => {
             Text(tab.label)
-              .fontSize(10)
-              .fontColor(this.configTab === tab.id ? this.c.onAccent : this.c.tertiary)
-              .padding({ left: 9, right: 9, top: 5, bottom: 5 })
+              .fontSize(panelFontSize(12, this.readableUi))
+              .fontWeight(this.configTab === tab.id ? FontWeight.Medium : FontWeight.Normal)
+              .fontColor(this.configTab === tab.id ? this.c.onAccent : this.c.sub)
+              .textAlign(TextAlign.Center)
+              .constraintSize({ minHeight: uiControlHeight(34, this.readableUi, this.controlScale) })
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
               .backgroundColor(this.configTab === tab.id ? this.c.accent : this.c.input)
               .borderRadius(UI_RADIUS_CONTROL)
               .clickEffect({ level: ClickEffectLevel.LIGHT })
               .animation({ duration: 180, curve: curves.springMotion(0.5, 1.0) })
               .onClick(() => { this.selectConfigTab(tab.id) })
           }, (tab: TabItem, index: number) => tab.id.toString() + '-' + this.i18nLang)
-          }.padding({ left: 2, right: 2 })
-        }.width('100%').height(34).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-          .margin({ top: 4, bottom: 8 }).id('config-tabs-' + this.i18nLang)
+          }.padding({ left: 2, right: 8 })
+        }.width('100%').height(uiControlHeight(42, this.readableUi, this.controlScale)).scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+          .margin({ top: 4, bottom: 10 }).id('config-tabs-' + this.i18nLang)
         Column({ space: 0 }) {
           if (this.configTab === -1) {
             Text(I18n.t('i0060'))
@@ -707,82 +711,15 @@ export struct SettingsPanel {
               .edgeEffect(EdgeEffect.Spring)
               .hitTestBehavior(HitTestMode.Default)
           } else if (this.configTab === 6) {
-            Row() {
-              Column({ space: 3 }) {
-                Text(I18n.t('i0124')).fontSize(13).fontWeight(FontWeight.Medium).fontColor(this.c.text).width('100%')
-                Text(I18n.t('plugin_management_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3)
-              }.layoutWeight(1).alignItems(HorizontalAlign.Start)
-              Button(I18n.t('act_refresh')).fontSize(10).fontColor(this.c.text).backgroundColor(this.c.bg)
-                .borderRadius(UI_RADIUS_CONTROL).height(28).padding({ left: 10, right: 10 })
-                .onClick(() => { this.loadPluginList() })
-            }.width('100%').padding({ left: 8, right: 8, top: 4, bottom: 8 })
-            if (this.pluginStore.pluginListLoading && this.pluginStore.pluginList.length === 0) {
-              Row({ space: 8 }) {
-                LoadingProgress().width(18).height(18).color(this.c.accent)
-                Text(I18n.t('msg_loading')).fontSize(11).fontColor(this.c.sub)
-              }.width('100%').justifyContent(FlexAlign.Center).margin({ top: 10 })
-            }
-            Scroll() {
-              Column({ space: 6 }) {
-                ForEach(this.pluginStore.pluginList, (pl: PluginItem) => {
-                  Column({ space: 5 }) {
-                    Row() {
-                      Text(pluginZh(pl.name)).fontSize(12).fontColor(this.c.text)
-                        .fontWeight(FontWeight.Medium).layoutWeight(1)
-                      Text(pl.loaded ? I18n.t('plugin_runtime_loaded') : I18n.t('plugin_runtime_unloaded'))
-                        .fontSize(10).fontColor(pl.loaded ? this.c.success : this.c.sub)
-                        .padding({ left: 7, right: 7, top: 3, bottom: 3 })
-                        .backgroundColor(pl.loaded ? this.c.accentSoft : this.c.bg)
-                        .borderRadius(UI_RADIUS_PILL)
-                    }
-                    .height(28)
-                    if (resourceText(pl.description, pluginDesc(pl.name)).length > 0) {
-                      Text(resourceText(pl.description, pluginDesc(pl.name)))
-                        .fontSize(10).fontColor(this.c.sub).width('100%')
-                        .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    Text(I18n.t('resource_author') + ': ' + resourceText(pl.authors, I18n.t('resource_not_provided')) + ' · ' + I18n.t('resource_license') + ': ' + resourceText(pl.license, I18n.t('resource_not_provided')))
-                      .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    if (this.pluginMetaLine(pl).length > 0) {
-                      Text(this.pluginMetaLine(pl))
-                        .fontSize(10).fontColor(this.c.tertiary).width('100%').maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    }
-                    Row({ space: 8 }) {
-                      Text(I18n.t('plugin_all_loaded_policy')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
-                    }.width('100%').height(24)
-                    Text(this.pluginFeatureDestination(pl.id)).fontSize(10).fontColor(this.c.sub).width('100%')
-                      .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
-                    if (this.pluginFeatureIsActionable(pl.id)) {
-                      Button() {
-                        Text(this.pluginFeatureActionLabel(pl.id))
-                          .fontSize(11)
-                          .fontColor(this.c.onAccent)
-                          .maxLines(1)
-                          .textOverflow({ overflow: TextOverflow.Ellipsis })
-                      }
-                        .id('plugin-feature-' + pl.id)
-                        .backgroundColor(this.c.accent)
-                        .borderRadius(UI_RADIUS_CONTROL).height(30).width('100%')
-                        .padding({ left: 10, right: 10 })
-                        .hitTestBehavior(HitTestMode.Block)
-                        .zIndex(2)
-                        .onClick(() => { this.openPluginFeature(pl.id) })
-                    } else {
-                      Text(pluginFeatureRoute(pl.id).kind === 'offline' || pluginFeatureRoute(pl.id).kind === 'network'
-                        ? pluginFeatureRoute(pl.id).kind === 'network'
-                          ? I18n.t('plugin_network_disabled')
-                          : I18n.t('plugin_offline_disabled')
-                        : I18n.t('plugin_background_only'))
-                        .fontSize(10).fontColor(this.c.sub).width('100%').maxLines(2)
-                    }
-                  }
-                  .width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 })
-                  .backgroundColor(this.c.bg)
-                  .borderRadius(UI_RADIUS_PANEL)
-                }, (pl: PluginItem) => pl.id)
-              }
-            }
-            .width('100%').height(260).scrollBar(BarState.Auto).scrollBarWidth(4).scrollBarColor(this.c.scrollbar)
+            PluginCenterSection({
+              pluginStore: this.pluginStore,
+              pluginMetaLine: (pl: PluginItem) => this.pluginMetaLine(pl),
+              pluginFeatureDestination: (id: string) => this.pluginFeatureDestination(id),
+              pluginFeatureIsActionable: (id: string) => this.pluginFeatureIsActionable(id),
+              pluginFeatureActionLabel: (id: string) => this.pluginFeatureActionLabel(id),
+              onRefresh: () => { this.loadPluginList() },
+              onOpenFeature: (id: string) => { this.openPluginFeature(id) }
+            })
           } else if (this.configTab === 7) {
             Text(I18n.t('settings_view_navigation')).fontSize(13).fontColor(this.c.text).width('100%').margin({ top: 4, bottom: 3 })
             Text(I18n.t('settings_view_navigation_hint')).fontSize(10).fontColor(this.c.sub).width('100%').maxLines(3).margin({ bottom: 8 })

@@ -310,12 +310,78 @@ export function pluginHostName(panel: string): string {
   if (panel === 'tools') return I18n.t('panel_tools_data')
   if (panel === 'commands') return I18n.t('panel_commands')
   if (panel === 'oculars') return I18n.t('panel_oculars')
+  if (panel === 'mosaicCamera') return I18n.t('p_mosaic_camera')
+  if (panel === 'archaeoLines') return I18n.t('p_archaeo_lines')
+  if (panel === 'navStars') return I18n.t('panel_nav_stars')
+  if (panel === 'pointerCoordinates') return I18n.t('p_pointer_coordinates')
+  if (panel === 'scenery3d') return I18n.pluginName('Scenery3d')
+  if (panel === 'telescope') return I18n.t('panel_telescope_control')
+  if (panel === 'settings') return I18n.t('dock_settings')
   if (panel === 'satellites') return I18n.t('panel_satellites')
   if (panel === 'meteorshowers') return I18n.t('plugin_meteor_showers')
   if (panel === 'angleMeasure') return I18n.t('panel_angle_measure')
   if (panel === 'nebulaTextures') return I18n.t('nebula_texture_title')
   if (panel === 'skyCultureMaker') return I18n.t('sky_culture_maker_title')
   return panel
+}
+
+// 插件中心功能分类：观测工具 / 深空数据 / 高级创作 / 未启用与桌面专用。
+export function pluginCategoryFor(id: string): string {
+  const route = pluginFeatureRoute(id)
+  if (route.kind === 'offline' || route.kind === 'network' || route.kind === 'unavailable') {
+    return 'inactive'
+  }
+  if (id === 'Oculars' || id === 'MosaicCamera' || id === 'AngleMeasure' ||
+    id === 'NavStars' || id === 'PointerCoordinates' || id === 'ArchaeoLines' ||
+    id === 'TelescopeControl') {
+    return 'observe'
+  }
+  if (id === 'Satellites' || id === 'MeteorShowers' || id === 'Scenery3d' ||
+    id === 'Exoplanets' || id === 'Pulsars' || id === 'Quasars' ||
+    id === 'Novae' || id === 'Supernovae' || id === 'Calendars' ||
+    id === 'Observability' || id === 'ObjectVisibility') {
+    return 'data'
+  }
+  return 'advanced'
+}
+
+// 插件中心一句话白话用途（避免大段英文或开发术语污染主卡片）。
+export function pluginConciseSummary(id: string, fallbackDesc: string): string {
+  const isZh = I18n.getLanguage().startsWith('zh')
+  if (!isZh) return fallbackDesc
+  switch (id) {
+    case 'Oculars': return '模拟望远镜目镜、相机画幅与寻星镜视野，辅助器材选配与构图。'
+    case 'MosaicCamera': return '叠加多片深空相机视场网格，规划大天区马赛克拼接拍摄。'
+    case 'AngleMeasure': return '在星图上直接拉线测量任意两颗天体之间的角距离与方位角。'
+    case 'NavStars': return '高亮全球经典天文航海定位星表，辅助认星与航海天文练习。'
+    case 'PointerCoordinates': return '在屏幕叠加实时指针赤道/地平/黄道坐标读数。'
+    case 'ArchaeoLines': return '绘制冬至/夏至日出、月球停滞点等古天文方位参考线。'
+    case 'TelescopeControl': return '通过局域网 LX200 协议连接并控制实体赤道仪自动寻星。'
+    case 'Satellites': return '实时追踪空间站与万颗人造卫星轨道，计算可见过境预报。'
+    case 'MeteorShowers': return '标注全年活跃流星雨辐射点、极大时刻与天顶每时出现率。'
+    case 'Scenery3d': return '加载三维建筑与地貌场景，在真实立体环境中预览日月星辰。'
+    case 'Exoplanets': return '检索并定位已发现的系外行星母恒星，查看宜居带与轨道参数。'
+    case 'Pulsars': return '浏览银河系脉冲星目录，查看自转周期、色散量与位置标记。'
+    case 'Quasars': return '探索遥远高红移类星体星表，快速跳转至星图对应深空区域。'
+    case 'Novae': return '查阅历史明亮新星记录与爆发位置，重现历史天象。'
+    case 'Supernovae': return '定位历史上著名超新星爆发位置与星等演化信息。'
+    case 'Calendars': return '对照公历、农历干支及多种历法节令，结合历表推演日期。'
+    case 'Observability':
+    case 'ObjectVisibility': return '分析目标全年的最佳观测窗口、中天高度与可观测时长曲线。'
+    case 'SkyCultureMaker': return '绘制与导出自定义星座连线、边界与星官文化资源包。'
+    case 'NebulaTextures': return '导入自定义深空星云贴图与角坐标，叠加呈现至星图背景。'
+    case 'EquationOfTime': return '显示真太阳时与平太阳时的均时差数值，辅助日晷与太阳观测。'
+    case 'TimeNavigator': return '通过时间转轴与快捷时刻快速穿梭日出、中天与历史星空。'
+    case 'RemoteControl': return '开启局域网 Web 远程控制台，用电脑浏览器或脚本遥控星图。'
+    case 'TextUserInterface':
+    case 'Text User Interface': return '通过快捷命令列表一键触发高级星图开关与专业指令。'
+    case 'SolarSystemEditor': return '管理小行星与彗星轨道根数（桌面配置模块，移动端规划接入中）。'
+    case 'RemoteSync': return '局域网多设备星图视角同步模块（当前离线模式未启用）。'
+    case 'OnlineQueries': return '在线天文数据库检索模块（离线版为保护隐私已停用）。'
+    case 'Planes': return '实时民航航班叠加模块（需在线航班源，离线版已停用）。'
+    case 'LensDistortionEstimator': return '桌面端鱼眼/广角镜头畸变标定工具，移动端暂未开放界面。'
+    default: return fallbackDesc
+  }
 }
 
 // 插件 id → 面板路由（panel / kind / 附带 tab）。

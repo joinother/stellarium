@@ -1,5 +1,27 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 插件体系整改阶段 1：全新鸿蒙风格「插件中心」、补齐三大 Hub 缺失入口与修复全量插件落地路由
+
+- **修改文件：** `harmonyos/ets-source/panels/settings/PluginCenterSection.ets`（新增）、`harmonyos/ets-source/panels/panels/SettingsPanel.ets`、`harmonyos/ets-source/common/derive/labels.ets`、`harmonyos/ets-source/common/derive/actions.ets`、`harmonyos/ets-source/capability/PluginFeatureController.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **核心改动：**
+  1. **全新「插件中心」（`PluginCenterSection.ets`）：**
+     - 彻底移除旧版 `height(260)` 死窗嵌套滚动，融入设置面板流畅单滚动并自然联动华为顶部滚动渐进模糊；
+     - 顶部新增 4 档等宽分类分段（`全部可用 | 观测工具 | 深空数据 | 高级创作`），全部按钮与字号接入全局动态字体/按钮缩放（`uiFontSize / uiControlHeight`）；同时将设置面板顶部标签条从 `34vp/10fp` 抬升至 `42vp/12fp`；
+     - 卡片全面瘦身：仅保留中文名 + 分类/状态胶囊 + 一句话白话用途（`pluginConciseSummary`）+ 主蓝 `36vp` 直达按钮（保持 `.id('plugin-feature-' + pl.id)` 契约锚点）与次级 `详情 ▾` 按钮（作者、许可证、版本、来源等开发信息默认折叠）；
+     - 离线停用与桌面专用模块（`Planes / OnlineQueries / RemoteSync / LensDistortionEstimator / SolarSystemEditor` 等）统一收进底部默认折叠的「未启用与桌面专用模块（N）」，不再污染主列表。
+  2. **补齐三大工作区 Hub 缺失入口（`actions.ets`）：**
+     - **观测工作区 (`observeHub`)** 补齐：`相机拼接视场 (mosaicCamera)`、`指针坐标 (pointerCoordinates)`、`古天文辅助线 (archaeoLines)`；
+     - **天体数据与扩展 (`dataHub`)** 补齐：`星云纹理 (nebulaTextures)`；
+     - **脚本与自动化 (`automationHub`)** 补齐：`星空文化制作器 (skyCultureMaker)`；
+     - 同步自动继承 `panelRouteParent()` 父级返回路径与转场方向。
+  3. **修复全量插件落地路由与中文映射（`labels.ets`、`PluginFeatureController.ets`、`MainWindowNativeNode.ets`）：**
+     - 补全 `pluginHostName()` 全部缺失中文映射（`mosaicCamera / archaeoLines / navStars / pointerCoordinates / scenery3d / telescope / settings`），消灭英文原始面板名泄露；
+     - 修复 `Calendars`、`Observability`、`ObjectVisibility` 跳转天文计算时未同步一级分组 `astroGroup` 与未触发 `selectAstroTab()` 加载数据的问题；
+     - 修复 `RemoteControl` 跳转主设置时自动切回 `configTab = 0` 并给出明确引导提示；为 `EquationOfTime` / `TimeNavigator` 补齐直达提示。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：5 套自动化测试全部通过（`check-ohos-ui-contract.mjs` 37 面板 / 58 锚点全通过）。
+  - 真机实拍核验：全新「插件中心」顶屏/单滚动渐进模糊/卡片 `详情 ▾` 展开/底部折叠区、三大 Hub 新增 5 项插件入口、`Calendars` 精准落地「天文计算 → 事件与历法 → 年历（2026 四季节点）」、`RemoteControl` 精准落地「设置 → 主设置」并弹出指引提示。
+
 ## [2026-11-20] 月相/星历卡片逻辑重塑、全链路丝滑月影过渡、太阳系仪美学与公转演示升级及全局按钮防误触分层
 
 - **修改文件：** `harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/WidgetVisuals.ets`、`harmonyos/ets-source/form/CompanionArcCard.ets`、`harmonyos/ets-source/form/SolarSystemCard.ets`、`harmonyos/ets-source/form/SatellitePassCard.ets`、`harmonyos/ets-source/form/SolarArcCard.ets`、`harmonyos/ets-source/form/CelestialEventsCard.ets`、`harmonyos/ets-source/form/SkyWindowCard.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/panels/astro/SolarSystemOrreryView.ets`、`harmonyos/ets-source/panels/astro/TargetTransitArcView.ets`、`harmonyos/ets-source/panels/astro/GraphGuides.ets`、`harmonyos/ets-source/panels/astro/AstroPanel.ets`、`harmonyos/ets-source/panels/layers/LayerPresetBar.ets`、`harmonyos/ets-source/panels/time/TimeSpeedChips.ets`、`harmonyos/ets-source/common/ui/QuickChipRow.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
