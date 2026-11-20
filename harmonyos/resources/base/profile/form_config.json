@@ -1,112 +1,68 @@
 {
   "forms": [
     {
-      "name": "sky_instrument_card",
-      "displayName": "星象仪",
-      "description": "今晚观测摘要：月相、暗夜、行星与流星雨",
-      "src": "./ets/form/SkyInstrumentCard.ets",
+      "name": "sky_window_card",
+      "displayName": "天穹之窗",
+      "description": "实时大气天穹、暗夜窗口、3D天体球与今夜行星可见性，支持多星球绑定与破框动效",
+      "src": "./ets/form/SkyWindowCard.ets",
       "uiSyntax": "arkts",
-      "window": {
-        "designWidth": 720,
-        "autoDesignWidth": true
-      },
-      "colorMode": "auto",
       "isDynamic": true,
       "isDefault": true,
       "updateEnabled": true,
       "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2",
+        "2*4",
+        "4*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
+    },
+    {
+      "name": "companion_arc_card",
+      "displayName": "星历弧盘",
+      "description": "实时月相、月球地相与土卫六土星环轨道弧盘，附五日相位演进条",
+      "src": "./ets/form/CompanionArcCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2",
+        "2*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
+    },
+    {
+      "name": "celestial_events_card",
+      "displayName": "天象预告",
+      "description": "地球与太阳系异星天象倒计时、近期事件时间轴与直达星图入口",
+      "src": "./ets/form/CelestialEventsCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 2,
       "defaultDimension": "2*4",
       "supportDimensions": [
         "2*4",
         "4*4"
-      ]
-    },
-    {
-      "name": "sky_instrument_tonight_card",
-      "displayName": "今晚天象",
-      "description": "暗夜窗口、日出日落与可见行星",
-      "src": "./ets/form/SkyInstrumentTonightCard.ets",
-      "uiSyntax": "arkts",
-      "window": {
-        "designWidth": 720,
-        "autoDesignWidth": true
-      },
-      "colorMode": "auto",
-      "isDynamic": true,
-      "isDefault": false,
-      "updateEnabled": true,
-      "updateDuration": 2,
-      "defaultDimension": "2*4",
-      "supportDimensions": [
-        "2*4",
-        "4*4"
-      ]
-    },
-    {
-      "name": "sky_instrument_satellite_card",
-      "displayName": "卫星观测",
-      "description": "本地卫星目录与观测入口",
-      "src": "./ets/form/SkyInstrumentSatelliteCard.ets",
-      "uiSyntax": "arkts",
-      "window": {
-        "designWidth": 720,
-        "autoDesignWidth": true
-      },
-      "colorMode": "auto",
-      "isDynamic": true,
-      "isDefault": false,
-      "updateEnabled": true,
-      "updateDuration": 2,
-      "defaultDimension": "2*4",
-      "supportDimensions": [
-        "2*4",
-        "4*4"
-      ]
-    },
-    {
-      "name": "sky_instrument_moon_card",
-      "displayName": "月相与升落",
-      "description": "月相照明率、月出与月落时间",
-      "src": "./ets/form/SkyInstrumentMoonCard.ets",
-      "uiSyntax": "arkts",
-      "window": { "designWidth": 720, "autoDesignWidth": true },
-      "colorMode": "auto",
-      "isDynamic": true,
-      "isDefault": false,
-      "updateEnabled": true,
-      "updateDuration": 2,
-      "defaultDimension": "2*2",
-      "supportDimensions": ["2*2", "2*4", "4*4"]
-    },
-    {
-      "name": "sky_instrument_meteor_card",
-      "displayName": "流星雨",
-      "description": "活动流星雨、理论小时率与观测提示",
-      "src": "./ets/form/SkyInstrumentMeteorCard.ets",
-      "uiSyntax": "arkts",
-      "window": { "designWidth": 720, "autoDesignWidth": true },
-      "colorMode": "auto",
-      "isDynamic": true,
-      "isDefault": false,
-      "updateEnabled": true,
-      "updateDuration": 2,
-      "defaultDimension": "2*2",
-      "supportDimensions": ["2*2", "2*4", "4*4"]
-    },
-    {
-      "name": "sky_instrument_compact_card",
-      "displayName": "今晚速览",
-      "description": "小尺寸桌面上的暗夜与月相速览",
-      "src": "./ets/form/SkyInstrumentCompactCard.ets",
-      "uiSyntax": "arkts",
-      "window": { "designWidth": 720, "autoDesignWidth": true },
-      "colorMode": "auto",
-      "isDynamic": true,
-      "isDefault": false,
-      "updateEnabled": true,
-      "updateDuration": 2,
-      "defaultDimension": "2*2",
-      "supportDimensions": ["2*2"]
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
     }
   ]
 }

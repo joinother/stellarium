@@ -3,6 +3,8 @@
     "pages/ApplicationRoot",
     "pages/FloatWindowNativeNode",
     "pages/SubWindowNativeNode",
-    "pages/UiExtensionNativeNode"
+    "pages/UiExtensionNativeNode",
+    "form/SkyFormEditPage",
+    "form/SkyLiveFormPage"
   ]
 }

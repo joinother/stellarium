@@ -1,59 +1,95 @@
 import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@kit.FormKit'
-import { common, Want } from '@kit.AbilityKit'
-import preferences from '@ohos.data.preferences'
-import hilog from '@ohos.hilog'
-import { defaultAstronomyCard, normalizeAstronomyCard, applyTimeline48hToCard } from './AstronomyCardData'
+import { Want } from '@kit.AbilityKit'
+import { BusinessError } from '@kit.BasicServicesKit'
+import { hilog } from '@kit.PerformanceAnalysisKit'
+import { computeOverflowArea, defaultAstronomyCard } from './AstronomyCardData'
+import {
+  readFormConfig,
+  removeFormMetadata,
+  resolveCardDataForForm,
+  writeFormKind
+} from './FormStoreHelper'
 
-const CARD_STORE = 'sky_instrument_card'
-const CARD_SNAPSHOT_KEY = 'almanacSnapshot'
-const CARD_TIMELINE_KEY = 'timeline48hSnapshot'
-const DOMAIN = 0xD003
-const TAG = 'SkyInstrumentForm'
-
-function defaultCardData(): Record<string, string> {
-  return defaultAstronomyCard()
-}
-
-async function readCardData(context: common.FormExtensionContext): Promise<Record<string, string>> {
-  const fallback = defaultCardData()
-  try {
-    const store = await preferences.getPreferences(context, CARD_STORE)
-    const raw = await store.get(CARD_SNAPSHOT_KEY, '')
-    if (typeof raw !== 'string' || raw.length === 0) return fallback
-    const timelineRaw = await store.get(CARD_TIMELINE_KEY, '')
-    const now = Date.now()
-    const card = normalizeAstronomyCard(raw, now)
-    return applyTimeline48hToCard(card, typeof timelineRaw === 'string' ? timelineRaw : '', now)
-  } catch (error) {
-    hilog.warn(DOMAIN, TAG, 'read card snapshot failed: %{public}s', String(error))
-    return fallback
-  }
-}
+const DOMAIN: number = 0xD003
+const TAG: string = 'SkyInstrumentForm'
 
 export default class SkyInstrumentFormAbility extends FormExtensionAbility {
   onAddForm(want: Want): formBindingData.FormBindingData {
-    const formId = String(want.parameters?.[formInfo.FormParam.IDENTITY_KEY] ?? '')
-    if (formId.length > 0) {
-      void readCardData(this.context).then((data: Record<string, string>) => {
-        return formProvider.updateForm(formId, formBindingData.createFormBindingData(data))
-      }).catch((error: Error) => {
-        hilog.warn(DOMAIN, TAG, 'initial card update failed: %{public}s', error.message)
-      })
+    const params = want.parameters as Record<string, Object> | undefined
+    const formId = params !== undefined && params[formInfo.FormParam.IDENTITY_KEY] !== undefined
+      ? String(params[formInfo.FormParam.IDENTITY_KEY]) : ''
+    const formName = params !== undefined && params[formInfo.FormParam.NAME_KEY] !== undefined
+      ? String(params[formInfo.FormParam.NAME_KEY]) : 'sky_window_card'
+    const editFormId = params !== undefined && params['ohos.extra.param.key.edit_form_id'] !== undefined
+      ? String(params['ohos.extra.param.key.edit_form_id']) : ''
+
+    if (formId.length > 0 && formName.length > 0) {
+      writeFormKind(this.context, formId, formName)
     }
-    return formBindingData.createFormBindingData(defaultCardData())
+
+    // If this is a preview card created by FormEditExtensionAbility, mirror the target card's config!
+    const sourceFormId = editFormId.length > 0 ? editFormId : formId
+    const data = sourceFormId.length > 0
+      ? resolveCardDataForForm(this.context, sourceFormId, Date.now())
+      : defaultAstronomyCard()
+    return formBindingData.createFormBindingData(data)
   }
 
   onUpdateForm(formId: string): void {
-    void readCardData(this.context).then((data: Record<string, string>) => {
-      const bindingData = formBindingData.createFormBindingData(data)
-      return formProvider.updateForm(formId, bindingData)
-    }).catch((error: Error) => {
-      hilog.warn(DOMAIN, TAG, 'update card failed: %{public}s', error.message)
+    const data = resolveCardDataForForm(this.context, formId, Date.now())
+    const bindingData = formBindingData.createFormBindingData(data)
+    formProvider.updateForm(formId, bindingData).catch((error: BusinessError) => {
+      hilog.warn(DOMAIN, TAG, 'update card failed: code=%{public}d msg=%{public}s', error.code, error.message)
     })
   }
 
-  onRemoveForm(_formId: string): void {
-    // No external resource or subscription is created by the card.
+  onFormEvent(formId: string, message: string): void {
+    if (formId.length === 0 || message.length === 0) return
+    try {
+      const parsed = JSON.parse(message) as Record<string, Object>
+      const eventType = typeof parsed['message'] === 'string' ? String(parsed['message']) : ''
+      const formName = typeof parsed['formName'] === 'string' ? String(parsed['formName']) : ''
+      if (formName.length > 0) {
+        writeFormKind(this.context, formId, formName)
+      }
+      if (eventType === 'requestOverflow') {
+        const config = readFormConfig(this.context, formId)
+        if (config.overflowMode === 'off') return
+        void this.triggerOverflow(formId)
+      }
+    } catch (error) {
+      hilog.warn(DOMAIN, TAG, 'onFormEvent parse failed: %{public}s', String(error))
+    }
+  }
+
+  private async triggerOverflow(formId: string): Promise<void> {
+    try {
+      const rect: formInfo.Rect = await formProvider.getFormRect(formId)
+      if (rect.width <= 0 || rect.height <= 0) {
+        hilog.warn(DOMAIN, TAG, 'requestOverflow skipped: invalid rect')
+        return
+      }
+      const spec = computeOverflowArea(rect.width, rect.height)
+      await formProvider.requestOverflow(formId, {
+        area: {
+          left: spec.left,
+          top: spec.top,
+          width: spec.width,
+          height: spec.height
+        },
+        duration: spec.duration,
+        useDefaultAnimation: true
+      })
+      hilog.info(DOMAIN, TAG, 'requestOverflow started: formId=%{public}s dim=%{public}s', formId, spec.dimensionClass)
+    } catch (error) {
+      const err = error as BusinessError
+      // Error 801 means the device does not support scene-animation overflow; fail silently and keep static card intact.
+      hilog.info(DOMAIN, TAG, 'requestOverflow fallback: code=%{public}d msg=%{public}s', err?.code ?? -1, err?.message ?? String(error))
+    }
+  }
+
+  onRemoveForm(formId: string): void {
+    removeFormMetadata(this.context, formId)
   }
 
   onAcquireFormState(_want: Want): formInfo.FormState {

@@ -16853,6 +16853,54 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			out["satellites"] = satObj;
 
+			// 未来 4 场天象预告（当前观测星球视角，跨本月与次月，供「天象预告」与「天穹之窗」卡片倒计时）
+			QJsonArray upcomingEvents;
+			{
+				const double localJD = nowJD + core->getUTCOffset(nowJD) / 24.0;
+				const QDate baseDate = QDate::fromJulianDay(static_cast<qint64>(std::floor(localJD + 0.5)));
+				QList<QJsonObject> candidates;
+				for (int mOff = 0; mOff <= 1; ++mOff)
+				{
+					const QDate md = baseDate.addMonths(mOff);
+					QJsonObject req;
+					req["year"] = md.year();
+					req["month"] = md.month();
+					req["planet"] = obsPlanetEn;
+					const QJsonObject calRes = ohosAstronomyCalendarEvents(core, QString::fromUtf8(QJsonDocument(req).toJson(QJsonDocument::Compact)));
+					if (!calRes.value("ok").toBool()) continue;
+					const QJsonArray evs = calRes.value("events").toArray();
+					for (const QJsonValue& v : evs)
+					{
+						if (!v.isObject()) continue;
+						const QJsonObject ev = v.toObject();
+						const double ejd = ev.value("jd").toDouble(0.0);
+						if (!std::isfinite(ejd) || ejd < nowJD - 0.04) continue;
+						QJsonObject slim;
+						slim["id"] = ev.value("id").toString();
+						slim["title"] = ev.value("title").toString();
+						slim["kind"] = ev.value("kind").toString();
+						slim["target"] = ev.value("target").toString();
+						slim["jd"] = ejd;
+						slim["at"] = std::round((ejd - 2440587.5) * 86400000.0);
+						slim["detail"] = ev.value("detail").toString();
+						candidates.append(slim);
+					}
+				}
+				std::sort(candidates.begin(), candidates.end(), [](const QJsonObject& a, const QJsonObject& b) {
+					return a.value("jd").toDouble() < b.value("jd").toDouble();
+				});
+				QSet<QString> seenIds;
+				for (const QJsonObject& ev : candidates)
+				{
+					const QString id = ev.value("id").toString();
+					if (!id.isEmpty() && seenIds.contains(id)) continue;
+					if (!id.isEmpty()) seenIds.insert(id);
+					upcomingEvents.append(ev);
+					if (upcomingEvents.size() >= 4) break;
+				}
+			}
+			out["upcomingEvents"] = upcomingEvents;
+
 			out["date"] = fmtLocal(core->getJD());
 
 			result["ok"] = true;

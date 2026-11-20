@@ -1,104 +1,236 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import process from 'node:process'
 import assert from 'node:assert/strict'
-import { buildAstronomyCard, normalizeAstronomyCard, moonSilhouette } from '../harmonyos/ets-source/form/AstronomyCardData.ts'
+import {
+  SUPPORTED_EDIT_PLANETS,
+  applyCardConfigToSnapshot,
+  applyTimeline48hToCard,
+  buildAstronomyCard,
+  buildFallbackCardForPlanet,
+  buildMiniPhaseStrip,
+  buildTimeline48hSnapshot,
+  computeOverflowArea,
+  defaultCardConfig,
+  estimateMoonPhaseAt,
+  formatCountdownZh,
+  formatPlanetDisplayList,
+  moonSilhouette,
+  normalizeAstronomyCard,
+  normalizeCardConfig,
+  orbKeyForBody,
+  planetSymbol,
+  planetZhName
+} from '../harmonyos/ets-source/form/AstronomyCardData.ts'
 
 const root = process.cwd()
 const formConfigPath = path.join(root, 'harmonyos/resources/base/profile/form_config.json')
+const mainPagesPath = path.join(root, 'harmonyos/resources/base/profile/main_pages.json')
+const moduleJsonPath = path.join(root, 'harmonyos/module.json5')
 const syncScriptPath = path.join(root, 'scripts/sync-ohos-build-sources.sh')
 const formAbilityPath = path.join(root, 'harmonyos/ets-source/form/SkyInstrumentFormAbility.ets')
-const cardDataPath = path.join(root, 'harmonyos/ets-source/form/AstronomyCardData.ts')
+const formEditAbilityPath = path.join(root, 'harmonyos/ets-source/form/SkyInstrumentFormEditAbility.ets')
+const liveFormAbilityPath = path.join(root, 'harmonyos/ets-source/form/SkyInstrumentLiveFormAbility.ets')
+const mediaDir = path.join(root, 'harmonyos/resources/base/media')
 
+// 1. Validate form_config.json & new 3-card family
 const formConfig = JSON.parse(fs.readFileSync(formConfigPath, 'utf8'))
 const forms = Array.isArray(formConfig.forms) ? formConfig.forms : []
 const expectedForms = [
-  { name: 'sky_instrument_card', source: 'SkyInstrumentCard.ets', route: "kind: 'overview'" },
-  { name: 'sky_instrument_tonight_card', source: 'SkyInstrumentTonightCard.ets', route: "kind: 'tonight'" },
-  { name: 'sky_instrument_satellite_card', source: 'SkyInstrumentSatelliteCard.ets', route: "kind: 'satellite'" },
-  { name: 'sky_instrument_moon_card', source: 'SkyInstrumentMoonCard.ets', route: "kind: 'moon'" },
-  { name: 'sky_instrument_meteor_card', source: 'SkyInstrumentMeteorCard.ets', route: "kind: 'meteor'" },
-  { name: 'sky_instrument_compact_card', source: 'SkyInstrumentCompactCard.ets', route: "kind: 'compact'" }
+  { name: 'sky_window_card', source: 'SkyWindowCard.ets', defaultDim: '2*2', panel: "panel: 'sky'" },
+  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'astro'" },
+  { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'" }
 ]
 
-if (forms.filter((form) => form.isDefault === true).length !== 1) {
-  throw new Error('service card configuration must have exactly one default form')
-}
+assert.equal(forms.length, expectedForms.length, 'must expose exactly the 3 redesigned astronomical widget cards')
+assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
-const formAbility = fs.readFileSync(formAbilityPath, 'utf8')
-const cardData = fs.readFileSync(cardDataPath, 'utf8')
+assert.ok(syncScript.includes('harmonyos/ets-source'), 'sync script must mirror ets-source tree')
+
 for (const expected of expectedForms) {
-  const form = forms.find((candidate) => candidate.name === expected.name)
-  if (!form || form.src !== `./ets/form/${expected.source}`) {
-    throw new Error(`missing or mismatched form configuration: ${expected.name}`)
-  }
-  const sourcePath = path.join(root, 'harmonyos/ets-source/form', expected.source)
-  if (!fs.existsSync(sourcePath)) throw new Error(`missing form source: ${sourcePath}`)
-  if (!syncScript.includes('harmonyos/ets-source')) throw new Error(`sync script does not mirror the ets-source tree (needed for ${expected.source})`)
-  const cardSource = fs.readFileSync(sourcePath, 'utf8')
-  if (!cardSource.includes(expected.route)) throw new Error(`missing card route: ${expected.name}`)
-  for (const key of ['moonSummary', 'planetSummary', 'observationSummary', 'satelliteSummary', 'updatedAt']) {
-    assert.ok(cardSource.includes(`@Provider() ${key}:`), `missing entry data provider: ${expected.name}/${key}`)
-  }
+  const form = forms.find((f) => f.name === expected.name)
+  assert.ok(form, `missing form config: ${expected.name}`)
+  assert.equal(form.src, `./ets/form/${expected.source}`, `mismatched src for ${expected.name}`)
+  assert.equal(form.defaultDimension, expected.defaultDim, `mismatched defaultDimension for ${expected.name}`)
+  assert.equal(form.resizable, true, `${expected.name} must support API 20 drag resize`)
+  assert.equal(form.formConfigAbility, 'ability://SkyInstrumentFormEditAbility', `${expected.name} must wire API 18 semi-modal edit`)
+  assert.equal(form.sceneAnimationParams?.abilityName, 'SkyInstrumentLiveFormAbility', `${expected.name} must wire API 20 overflow liveForm`)
+
+  const cardPath = path.join(root, 'harmonyos/ets-source/form', expected.source)
+  assert.ok(fs.existsSync(cardPath), `missing card source: ${cardPath}`)
+  const cardSource = fs.readFileSync(cardPath, 'utf8')
+  assert.ok(cardSource.includes(expected.panel), `${expected.name} must deep-link to ${expected.panel}`)
+  assert.ok(cardSource.includes('observerPlanet: this.observerPlanet'), `${expected.name} must carry observerPlanet on router action`)
+  assert.ok(cardSource.includes("message: 'requestOverflow'"), `${expected.name} must support API 20 overflow trigger`)
+  assert.ok(cardSource.includes('@LocalStorageProp('), `${expected.name} must bind form data via @LocalStorageProp`)
+  assert.ok(!cardSource.includes('AstronomyCardSurface'), `${expected.name} must not reference deprecated AstronomyCardSurface`)
 }
 
-for (const key of ['moonSummary', 'planetSummary', 'meteorSummary', 'satelliteSummary', 'observationSummary', 'updatedAt']) {
-  if (!cardData.includes(`${key}:`) && !cardData.includes(`${key}'`)) throw new Error(`snapshot field is not bound: ${key}`)
-}
-for (const token of ['defaultAstronomyCard', 'normalizeAstronomyCard']) {
-  if (!formAbility.includes(token)) throw new Error(`shared card snapshot normalization is missing: ${token}`)
+// Legacy grey-box form files must stay removed
+for (const legacy of ['AstronomyCardSurface.ets', 'SkyInstrumentCard.ets', 'SkyInstrumentCompactCard.ets']) {
+  assert.ok(!fs.existsSync(path.join(root, 'harmonyos/ets-source/form', legacy)), `deprecated legacy file still exists: ${legacy}`)
 }
 
-const primaryForm = forms.find((form) => form.name === 'sky_instrument_card')
-if (!primaryForm || primaryForm.defaultDimension !== '2*4' || primaryForm.description.includes('二十四节气')) {
-  throw new Error('primary form must be an astronomy summary card, not a solar-term-only card')
+// 2. Validate module.json5 extensionAbilities & main_pages.json
+const moduleJson = fs.readFileSync(moduleJsonPath, 'utf8')
+for (const token of [
+  '"name": "SkyInstrumentFormAbility"',
+  '"type": "form"',
+  '"name": "SkyInstrumentFormEditAbility"',
+  '"type": "formEdit"',
+  '"name": "SkyInstrumentLiveFormAbility"',
+  '"type": "liveForm"'
+]) {
+  assert.ok(moduleJson.includes(token), `module.json5 missing extension declaration: ${token}`)
 }
-const primarySource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/form/SkyInstrumentCard.ets'), 'utf8')
-const surfaceSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/form/AstronomyCardSurface.ets'), 'utf8')
-assert.ok(surfaceSource.includes('@Consumer() observationSummary:'), 'shared surface must receive provider updates')
-for (const token of ['月相', '行星', '流星雨', '卫星', '观测', 'AstronomyCardSurface', 'borderRadius', '@ComponentV2', '@Local']) {
-  if (!primarySource.includes(token) && !surfaceSource.includes(token)) throw new Error(`primary form is missing visual/content token: ${token}`)
+
+const mainPages = JSON.parse(fs.readFileSync(mainPagesPath, 'utf8'))
+assert.ok(mainPages.src.includes('form/SkyFormEditPage'), 'main_pages.json must register form/SkyFormEditPage')
+assert.ok(mainPages.src.includes('form/SkyLiveFormPage'), 'main_pages.json must register form/SkyLiveFormPage')
+
+// 3. Validate abilities & 3D planet/moon orb assets
+const formAbilitySrc = fs.readFileSync(formAbilityPath, 'utf8')
+assert.ok(formAbilitySrc.includes('ohos.extra.param.key.edit_form_id'), 'onAddForm must sync preview card from edit_form_id')
+assert.ok(formAbilitySrc.includes('formProvider.requestOverflow'), 'onFormEvent must invoke formProvider.requestOverflow')
+assert.ok(formAbilitySrc.includes('formProvider.getFormRect'), 'onFormEvent must query formProvider.getFormRect')
+
+const formEditSrc = fs.readFileSync(formEditAbilityPath, 'utf8')
+assert.ok(formEditSrc.includes('FormEditExtensionAbility'), 'must extend FormEditExtensionAbility')
+assert.ok(formEditSrc.includes('previewCardId'), 'must forward previewCardId to edit page')
+
+const liveFormSrc = fs.readFileSync(liveFormAbilityPath, 'utf8')
+assert.ok(liveFormSrc.includes('LiveFormExtensionAbility'), 'must extend LiveFormExtensionAbility')
+assert.ok(liveFormSrc.includes('onLiveFormCreate'), 'must implement onLiveFormCreate')
+
+for (const orb of ['moon', 'earth', 'mars', 'saturn', 'jupiter', 'titan', 'venus', 'neptune', 'uranus', 'mercury', 'pluto']) {
+  const orbFile = path.join(mediaDir, `widget_orb_${orb}.png`)
+  assert.ok(fs.existsSync(orbFile) && fs.statSync(orbFile).size > 4096, `missing or empty 3D orb texture: widget_orb_${orb}.png`)
 }
-for (const token of ['cardWidth', 'compact()', 'factGrid()', 'linearGradient', 'onSizeChange']) {
-  if (!surfaceSource.includes(token)) throw new Error(`responsive card visual contract is missing: ${token}`)
-}
-for (const token of ['struct AstronomyFact', '@Param value:', 'AstronomyFact({ label:']) {
-  if (!surfaceSource.includes(token)) throw new Error(`reactive fact component contract is missing: ${token}`)
-}
-if (surfaceSource.includes('private fact(label: string, value: string)')) {
-  throw new Error('facts must not use a multi-parameter by-value Builder, which freezes snapshot updates')
-}
-if (primarySource.includes('二十四节气')) throw new Error('primary form still hard-codes a solar-term-only subtitle')
-const mainWindowSource = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/MainWindowNativeNode.ets'), 'utf8')
-if (mainWindowSource.includes("'summary': '今夜观测摘要已准备 · 下一节气：")) {
-  throw new Error('primary snapshot still gives the next solar term the main summary slot')
-}
+
+// 4. Validate QAbility & MainWindowNativeNode card route & publisher wiring
+const qAbilitySrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/qability/QAbility.ets'), 'utf8')
+assert.ok(qAbilitySrc.includes("'observerPlanet'"), 'QAbility card route must whitelist observerPlanet')
+const mainWindowSrc = fs.readFileSync(path.join(root, 'harmonyos/ets-source/pages/MainWindowNativeNode.ets'), 'utf8')
 for (const token of ['publishAstronomyCard', 'persistAlmanacCardSnapshot']) {
-  if (!mainWindowSource.includes(token)) throw new Error(`primary snapshot builder is not wired: ${token}`)
+  assert.ok(mainWindowSrc.includes(token), `MainWindowNativeNode missing card hook: ${token}`)
 }
 
-const now = Date.UTC(2026, 9, 1, 12)
-const snapshot = buildAstronomyCard({
-  date: '2026-10-01',
-  moon: { phaseName: '亏凸月', illumination: 77, age: 20, rise: '2026-10-01T21:15', set: '2026-10-02T10:05' },
-  sun: { darkWindowHours: 9.5, astroTwilightEnd: '2026-10-01T19:05', astroTwilightStart: '2026-10-02T04:33' },
-  planets: [{ name: '木星', visible: true }, { name: '金星', visible: false }],
-  meteorShowers: [{ name: '弱流星雨', zhr: 2 }, { name: '主流星雨', zhr: 20 }],
-  satellites: { enabled: true, count: 2915 }
+// 5. Data model, multi-instance config, 48h timeline, and overflow bounds unit tests
+const now = Date.UTC(2026, 10, 20, 12, 0, 0)
+const earthSnapshot = buildAstronomyCard({
+  date: '2026-11-20',
+  observer: { planet: 'Earth', planetZh: '地球', isEarth: true, atmosphereProfile: 'earth' },
+  moon: { phaseName: '盈凸月', illumination: 79, age: 11.2, rise: '2026-11-20T14:25', set: '2026-11-21T03:18' },
+  sun: { darkWindowHours: 10.2, astroTwilightEnd: '2026-11-20T18:32', astroTwilightStart: '2026-11-21T04:44' },
+  planets: [
+    { name: '木星', englishName: 'Jupiter', visible: true, altitude: 44.5, magnitude: -2.4, rise: '2026-11-20T19:10', set: '2026-11-21T08:15' },
+    { name: '土星', englishName: 'Saturn', visible: true, altitude: 28.0, magnitude: 0.7, rise: '2026-11-20T13:40', set: '2026-11-21T01:05' },
+    { name: '金星', englishName: 'Venus', visible: false, altitude: -12.0, magnitude: -4.1, rise: '2026-11-21T05:10', set: '2026-11-21T15:20' }
+  ],
+  meteorShowers: [{ name: '狮子座流星雨', zhr: 15 }],
+  satellites: { enabled: true, count: 2915 },
+  upcomingEvents: [
+    { id: 'ev-full-moon', title: '满月 · 望', kind: 'moon-phase', target: 'Moon', jd: 2461369.0, at: now + 4 * 86400000 },
+    { id: 'ev-geminids', title: '双子座流星雨极大', kind: 'meteor', target: 'Gemini', jd: 2461389.0, at: now + 24 * 86400000 }
+  ]
 }, now)
-assert.equal(snapshot.planetSummary, '1 颗在地平线上')
-assert.equal(snapshot.planetNames, '木星')
-assert.equal(snapshot.observationSummary, '9.5 小时暗夜')
-assert.equal(snapshot.moonRise, '21:15')
-assert.equal(snapshot.meteorSummary, '主流星雨')
-assert.equal(snapshot.satelliteSummary, '2915 颗本地卫星')
-assert.deepEqual(normalizeAstronomyCard(JSON.stringify(snapshot), now), snapshot)
-assert.equal(normalizeAstronomyCard(JSON.stringify(snapshot), now + 7 * 3600000).dataStatus, '旧快照')
-assert.equal(normalizeAstronomyCard('{bad', now).moonIllumination, '-1')
-assert.equal(normalizeAstronomyCard('{"schemaVersion":"2"}', now).dataStatus, '本地快照')
-assert.equal(buildAstronomyCard({}, now).satelliteSummary, '目录未启用')
+
+assert.equal(earthSnapshot.schemaVersion, '4')
+assert.equal(earthSnapshot.orbBody, 'moon')
+assert.equal(earthSnapshot.planetSummary, '2 颗在地平线上')
+assert.equal(earthSnapshot.observationSummary, '10.2 小时暗夜')
+assert.equal(earthSnapshot.nextEventTitle, '满月 · 望')
+assert.equal(earthSnapshot.nextEventCountdown, '4 天后')
+assert.equal(formatPlanetDisplayList(earthSnapshot.visiblePlanetsJson, '', 'name'), '木星 · 土星')
+assert.equal(formatPlanetDisplayList(earthSnapshot.visiblePlanetsJson, '', 'symbol'), '♃  ♄')
+assert.deepEqual(normalizeAstronomyCard(JSON.stringify(earthSnapshot), now), earthSnapshot)
+assert.equal(normalizeAstronomyCard(JSON.stringify(earthSnapshot), now + 7 * 3600000).dataStatus, '旧快照')
+assert.equal(normalizeAstronomyCard('{bad', now).schemaVersion, '4')
+
+// Multi-instance config normalization & deep theme override
+const parsedCfg = normalizeCardConfig(JSON.stringify({ planetMode: 'Mars', themeStyle: 'deep', labelStyle: 'symbol', overflowMode: 'tap' }))
+assert.equal(parsedCfg.planetMode, 'Mars')
+assert.equal(parsedCfg.themeStyle, 'deep')
+assert.equal(parsedCfg.labelStyle, 'symbol')
+assert.equal(parsedCfg.overflowMode, 'tap')
+assert.equal(normalizeCardConfig('{"planetMode":"InvalidWorld"}').planetMode, 'follow')
+
+const marsFallback = buildFallbackCardForPlanet('Mars', now)
+assert.equal(marsFallback.observerPlanet, 'Mars')
+assert.equal(marsFallback.orbBody, 'mars')
+assert.equal(marsFallback.skyHexHorizon, '#8F5638')
+const marsDeep = applyCardConfigToSnapshot(marsFallback, parsedCfg, now)
+assert.equal(marsDeep.skyHexTop, '#050811')
+assert.equal(marsDeep.cardLabelStyle, 'symbol')
+
+const moonFallback = buildFallbackCardForPlanet('Moon', now)
+assert.equal(moonFallback.orbBody, 'earth')
+const titanFallback = buildFallbackCardForPlanet('Titan', now)
+assert.equal(titanFallback.orbBody, 'saturn')
+const moonNativeSnap = buildAstronomyCard({
+  date: '2026-11-20',
+  observer: { planet: 'Moon', planetZh: '月球', isEarth: false },
+  companion: { name: '地球', englishName: 'Earth', role: 'parent-planet', phaseName: '残地', illumination: 25 }
+}, now)
+assert.equal(moonNativeSnap.orbBody, 'earth')
+const titanNativeSnap = buildAstronomyCard({
+  date: '2026-11-20',
+  observer: { planet: 'Titan', planetZh: '土卫六', isEarth: false },
+  companion: { name: '土星', englishName: 'Saturn', role: 'parent-planet', phaseName: '蛾眉土星', illumination: 30 }
+}, now)
+assert.equal(titanNativeSnap.orbBody, 'saturn')
+
+// 48h timeline offline interpolation
+const tlRaw = buildTimeline48hSnapshot({
+  observer: { planet: 'Mars' },
+  timeline48h: [
+    { at: now, sunAlt: 10, skyHexTop: '#3A231D', skyHexHorizon: '#9C5C38', companionAlt: 20, companionIllum: 50 },
+    { at: now + 7200000, sunAlt: -2, skyHexTop: '#161B2E', skyHexHorizon: '#3B5884', companionAlt: 40, companionIllum: 60 }
+  ]
+}, now)
+const liveMars = applyTimeline48hToCard(buildFallbackCardForPlanet('Mars', now), tlRaw, now + 3600000)
+assert.equal(liveMars.dataStatus, '48h 离线星历')
+assert.equal(liveMars.sunAlt, '4.0')
+assert.equal(liveMars.companionAlt, '30.0')
+
+// API 20 Overflow Rect Compliance across every official Form Kit size
+const overflowCases = [
+  { w: 158, h: 158, maxWRatio: 1.50, maxHRatio: 1.50, label: '2*2' },
+  { w: 332, h: 158, maxWRatio: 1.50, maxHRatio: 1.25, label: '2*4' },
+  { w: 332, h: 332, maxWRatio: 1.25, maxHRatio: 1.25, label: '4*4' },
+  { w: 158, h: 74, maxWRatio: 2.00, maxHRatio: 1.50, label: '1*2' },
+  { w: 332, h: 498, maxWRatio: 1.10, maxHRatio: 1.25, label: '6*4' }
+]
+for (const c of overflowCases) {
+  const area = computeOverflowArea(c.w, c.h)
+  assert.ok(area.duration > 0 && area.duration <= 3500, `${c.label} duration exceeds 3500ms`)
+  assert.ok(area.left <= 0 && area.top <= 0, `${c.label} overflow must cover card origin`)
+  assert.ok(area.left + area.width >= c.w && area.top + area.height >= c.h, `${c.label} overflow must contain full card rect`)
+  const maxW = c.w * c.maxWRatio
+  const maxH = c.h * c.maxHRatio
+  const minLeft = -(maxW - c.w) / 2
+  const minTop = -(maxH - c.h) / 2
+  assert.ok(area.width <= maxW + 1, `${c.label} width ${area.width} exceeds max ${maxW}`)
+  assert.ok(area.height <= maxH + 1, `${c.label} height ${area.height} exceeds max ${maxH}`)
+  assert.ok(area.left >= minLeft - 1 && area.left + area.width <= c.w - minLeft + 1, `${c.label} horizontal rect exceeds centered IJKL`)
+  assert.ok(area.top >= minTop - 1 && area.top + area.height <= c.h - minTop + 1, `${c.label} vertical rect exceeds centered IJKL`)
+}
+
+// Misc helpers
+assert.equal(SUPPORTED_EDIT_PLANETS.length, 8)
+assert.equal(planetSymbol('Saturn'), '♄')
+assert.equal(planetZhName('Titan'), '土卫六')
+assert.equal(orbKeyForBody('Phobos'), 'mars')
+assert.equal(formatCountdownZh(now + 45 * 60000, now), '45 分钟后')
+assert.equal(formatCountdownZh(now + 5 * 3600000, now), '5 小时后')
+assert.equal(formatCountdownZh(now + 3 * 86400000, now), '3 天后')
+const strip = buildMiniPhaseStrip(11, now)
+assert.equal(strip.length, 5)
+assert.equal(strip[0].isToday, true)
+const est = estimateMoonPhaseAt(now)
+assert.ok(est.illumination >= 0 && est.illumination <= 100)
 for (const illumination of [0, 25, 50, 75, 100]) {
   assert.ok(!moonSilhouette(112, illumination, 20).includes('NaN'))
 }
-console.log(`HarmonyOS form card contract and data tests passed: ${expectedForms.length} forms`)
+
+console.log(`HarmonyOS Stage 2 widget contract, overflow & data tests passed: ${expectedForms.length} redesigned cards, 11 3D orbs, ${overflowCases.length} overflow specs`)

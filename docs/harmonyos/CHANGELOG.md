@@ -1,5 +1,27 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 全新鸿蒙桌面服务卡片家族、API 18 半模态多星球编辑与 API 20 破框互动动效（阶段 2）
+
+- **修改文件：** `src/StelMainView.cpp`、`harmonyos/module.json5`、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/profile/main_pages.json`、`harmonyos/resources/base/media/widget_orb_*.png`（新增 11 张 3D 球体纹理资源）、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/qability/AstronomyCardService.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`（新增）、`harmonyos/ets-source/form/WidgetVisuals.ets`（新增）、`harmonyos/ets-source/form/SkyWindowCard.ets`（新增）、`harmonyos/ets-source/form/CompanionArcCard.ets`（新增）、`harmonyos/ets-source/form/CelestialEventsCard.ets`（新增）、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyInstrumentFormEditAbility.ets`（新增）、`harmonyos/ets-source/form/SkyFormEditPage.ets`（新增）、`harmonyos/ets-source/form/SkyInstrumentLiveFormAbility.ets`（新增）、`harmonyos/ets-source/form/SkyLiveFormPage.ets`（新增）、`scripts/build-ohos-widget-orbs.py`（新增）、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`；移除旧版 6 张表单式卡片与 `AstronomyCardSurface.ets`。
+- **设计与实现：**
+  1. **彻底弃用旧版 6 张灰框表单卡片，上线 3 款高辨识度天文仪表卡片家族：**
+     - 新增 `scripts/build-ohos-widget-orbs.py`，直接基于 Stellarium 自有太阳系贴图正交光线投影生成 11 张高精细 3D 球体透明 PNG（月球、地球含云层与瑞利蓝边、火星、带卡西尼缝与环影的 3D 土星、木星、土卫六、金星、海王星、天王星、水星、冥王星），搭配实时动态地照阴影遮罩与微星场背景。
+     - **天穹之窗（`sky_window_card`，默认卡，`2×2`/`2×4`/`4×4`，支持拖拽调尺寸 `resizable: true`）**：沉浸式实时大气天穹渐变（48h 离线时间片插值 + 白昼高对比度可读性渐变遮罩）+ 3D 天体球 + `4×4` 今夜行星可见性高度条与下一场天象直达热区。
+     - **星历弧盘（`companion_arc_card`，`2×2`/`2×4`，`resizable: true`）**：聚焦当前星球主伴星/宿主母星（地球→月球、月球→地球地相、土卫六→带环土星、火星→火卫一），配备 `vp` 原生自适应升落轨道弧盘与 `2×4` 五日相位演进条。
+     - **天象预告（`celestial_events_card`，`2×4`/`4×4`，`resizable: true`）**：`getTonightEvents` 增量聚合当前观测星球未来 4 场天象 `upcomingEvents`，大字号倒计时 Hero + 独立可点击事件时间轴（携带 `observerPlanet`、`jd`、`target` 直达日历与对应星球星图）。
+  2. **API 18 半模态卡片编辑与同款多实例独立星球绑定（`FormEditExtensionAbility`）：**
+     - 注册 `SkyInstrumentFormEditAbility`（`type: "formEdit"`）与 `form/SkyFormEditPage`，支持长按卡片→系统「编辑」一步配置每张卡片独立的 **观测天体**（跟随星图 / 地球 / 火星 / 月球 / 土卫六 / 木星 / 土星 / 海王星）、**视觉风格**（实时天穹 / 深空极简）、**行星标识样式**（中文名称 / 天文符号 `☿♀♂♃♄`）与 **破框动效策略**。
+     - `FormStoreHelper.ets` 通过 `removePreferencesFromCacheSync` 解决跨扩展进程首选项缓存同步问题，并按星球维度持久化多份 48h 快照与离线兜底预设；`onAddForm` 处理 `ohos.extra.param.key.edit_form_id` 保证半模态预览与桌面实卡实时联动。
+  3. **API 20 场景动效破框互动卡片（`LiveFormExtensionAbility`）：**
+     - 注册 `SkyInstrumentLiveFormAbility`（`type: "liveForm"`）与 `form/SkyLiveFormPage`，点击卡片 3D 天体球触发 `formProvider.requestOverflow`；`computeOverflowArea()` 严格按官方各尺寸中心对齐比例上限与 `3200ms ≤ 3500ms` 约束计算 `vp` 破框区域，并在不支持设备（错误码 `801`）自动静默回退静态态。
+     - 激活态下 3D 行星/土星环与发光流星轨迹跃出卡片顶边进入桌面壁纸破框区，点击卡片本体通过 `startAbilityByLiveForm` 直达应用对应面板与观测星球。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（3 款新卡片契约、11 张 3D 球体资产、5 组破框尺寸边界、多星球配置与 48h 离线插值）、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`check-ohos-ui-contract.mjs` 全通过。
+  - 真机实测与截图核验：
+    - `FormMgr` 与 `bm dump` 确认 3 个新卡片与 3 个扩展（`form` / `formEdit` / `liveForm`）完整注册，旧版 6 张表单卡已彻底移除。
+    - 真机系统「卡片」画廊逐张截取全部 7 个尺寸预览（`天穹之窗 2×2/2×4/4×4`、`星历弧盘 2×2/2×4`、`天象预告 2×4/4×4`），验证弧盘比例、5 行行星可见性条、五日相位条与天象倒计时排版清晰无裁切。
+    - 真机桌面实测 API 18 半模态编辑：长按「天象预告」卡片进入编辑，点击 `♄ 土卫六` 后预览与桌面实卡即时切换为带环土星与土卫六视角土星相位事件；点击 3D 土星触发 API 20 `requestOverflow`（`onLiveFormCreate` `rect=412×412`），真机截图核验土星光环与发光流星实景破出卡片顶边并覆盖桌面壁纸。
+
 ## [2026-11-20] 非地球观测点天象日历、双轨通知与 48 小时轻量星历快照（阶段 1）
 
 - **修改文件：** `src/core/modules/PlanetaryCalendarHelper.hpp`（新增）、`src/StelMainView.cpp`、`harmonyos/ets-source/state/AstronomyCalendarText.ts`、`harmonyos/ets-source/state/AstronomyCalendarEvent.ts`、`harmonyos/ets-source/state/AstronomyCalendarStore.ets`、`harmonyos/ets-source/capability/AstronomyCalendarController.ets`、`harmonyos/ets-source/panels/panels/AstronomyCalendarPanel.ets`、`harmonyos/ets-source/qability/AstronomyNotificationPolicy.ts`、`harmonyos/ets-source/qability/AstronomyNotificationService.ets`、`harmonyos/ets-source/capability/NotificationController.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/qability/AstronomyCardService.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`scripts/test-planetary-calendar-helper.cpp`（新增）、`scripts/test-ohos-off-earth-calendar-and-snapshot.mjs`（新增）、`docs/harmonyos/CHANGELOG.md`。
