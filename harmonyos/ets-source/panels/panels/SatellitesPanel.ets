@@ -5,6 +5,8 @@ import { SatelliteListItem, SatelliteSource, SatelliteUpdateSettings, CatalogHea
 import { SatelliteGroupSelector } from '../satellite/SatelliteGroupSelector'
 import { UI_RADIUS_CONTROL } from '../../common/ui/UiTokens'
 import { SatelliteStore } from '../../state/SatelliteStore'
+import { classifySatelliteArchetype, satelliteVisualProfile } from '../../form/SatelliteVisualRegistry'
+import { satelliteIconResource } from '../../form/WidgetVisuals'
 
 // 卫星面板，对应 `activePanel === 'satellites'`。
 //
@@ -328,20 +330,38 @@ export struct SatellitesPanel {
         if (this.satelliteStore.satItems.length > 0) {
           Text('匹配卫星 ' + this.satelliteStore.satMatchedCount.toString() + ' 颗').fontSize(12).fontColor(this.c.sub).width('100%').padding({ left: 2 })
           ForEach(this.satelliteStore.satItems, (item: SatelliteListItem) => {
-            Column({ space: 3 }) {
-              Row({ space: 8 }) {
-                Column({ space: 1 }) {
-                  Text(item.name).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                  if (item.englishName !== item.name) {
-                    Text(item.englishName).fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Row({ space: 10 }) {
+              Stack({ alignContent: Alignment.Center }) {
+                Circle()
+                  .width(34)
+                  .height(34)
+                  .fill(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).glowHex)
+                  .opacity(0.28)
+                Image(satelliteIconResource(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)))
+                  .width(26)
+                  .height(26)
+                  .objectFit(ImageFit.Contain)
+                  .draggable(false)
+              }
+              .width(34)
+              .height(34)
+
+              Column({ space: 3 }) {
+                Row({ space: 6 }) {
+                  Text(item.name).fontSize(13).fontColor(this.c.text).fontWeight(FontWeight.Medium).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                  Text(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).categoryLabelZh)
+                    .fontSize(9.5)
+                    .fontColor(satelliteVisualProfile(classifySatelliteArchetype(item.englishName + ' ' + item.name, item.id, this.satelliteStore.activeSatGroup)).accentHex)
+                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                    .backgroundColor(this.c.input)
+                    .borderRadius(8)
+                  if (item.outdated) {
+                    Text('历元过期').fontSize(10).fontColor(this.c.warning)
                   }
-                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                if (item.outdated) {
-                  Text('历元过期').fontSize(10).fontColor(this.c.warning)
-                }
-              }.width('100%')
-              Text('NORAD ' + item.id + (item.heightKm > 0 ? ' · 高度 ' + item.heightKm.toFixed(0) + ' km' : ''))
-                .fontSize(10).fontColor(this.c.sub).maxLines(1)
+                }.width('100%')
+                Text('NORAD ' + item.id + (item.heightKm > 0 ? ' · 高度 ' + item.heightKm.toFixed(0) + ' km' : '') + (item.englishName !== item.name ? (' · ' + item.englishName) : ''))
+                  .fontSize(10).fontColor(this.c.sub).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             }.width('100%').padding({ left: 10, right: 10, top: 8, bottom: 8 }).backgroundColor(this.c.bg).borderRadius(UI_RADIUS_CONTROL)
               .onClick(() => { this.onSearchObject(item) })
           }, (item: SatelliteListItem) => item.id)

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <linearGradient id="telTube" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F2ECFF"/>
+      <stop offset="55%" stop-color="#B9A6FF"/>
+      <stop offset="100%" stop-color="#6F63D8"/>
+    </linearGradient>
+    <linearGradient id="telWing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#76F4FF"/>
+      <stop offset="100%" stop-color="#3B7BFF"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-34 48 48)">
+    <!-- Twin Solar Panels -->
+    <rect x="10" y="40" width="24" height="14" rx="2.5" fill="url(#telWing)" stroke="#D9FAFF" stroke-width="1.1"/>
+    <rect x="62" y="40" width="24" height="14" rx="2.5" fill="url(#telWing)" stroke="#D9FAFF" stroke-width="1.1"/>
+    <path d="M18 41v12M26 41v12M70 41v12M78 41v12M11 47h22M63 47h22" stroke="#133A80" stroke-width="0.9" opacity="0.5"/>
+    <!-- Support Struts -->
+    <rect x="34" y="45.5" width="5" height="3" fill="#DDE8FF"/>
+    <rect x="57" y="45.5" width="5" height="3" fill="#DDE8FF"/>
+    <!-- Main Cylindrical Optical Tube -->
+    <rect x="38" y="21" width="20" height="46" rx="5" fill="url(#telTube)" stroke="#FFFFFF" stroke-width="1.3"/>
+    <!-- Aft Instrument Bay -->
+    <rect x="35.5" y="54" width="25" height="18" rx="4" fill="#7D72E0" stroke="#EDE7FF" stroke-width="1.1"/>
+    <!-- Open Aperture Door & Mirror Rim -->
+    <path d="M38 22 L44 12 L56 14 L58 22 Z" fill="#D5C8FF" stroke="#FFFFFF" stroke-width="1"/>
+    <ellipse cx="48" cy="22" rx="9" ry="2.8" fill="#1C2754" stroke="#9EEAFF" stroke-width="1"/>
+    <!-- Optical Star Glint -->
+    <path d="M48 8 L49.5 12.5 L54 14 L49.5 15.5 L48 20 L46.5 15.5 L42 14 L46.5 12.5 Z" fill="#FFF3B0"/>
+  </g>
+</svg>

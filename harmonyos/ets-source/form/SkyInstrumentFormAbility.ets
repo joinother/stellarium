@@ -21,6 +21,7 @@ import {
   readFormConfig,
   readFormOrreryDays,
   readFormOrreryInner,
+  readFormSatPassIndex,
   readFormTimeOffset,
   readRemindedEntries,
   removeFormMetadata,
@@ -29,6 +30,7 @@ import {
   writeFormKind,
   writeFormOrreryDays,
   writeFormOrreryInner,
+  writeFormSatPassIndex,
   writeFormTextColor,
   writeFormTimeOffset,
   writeRemindedEntries
@@ -145,6 +147,19 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
         return
       }
 
+      if (eventType === 'stepSatPassIndex') {
+        const delta = Number(parsed['delta'] ?? 1)
+        const count = Math.max(1, Number(parsed['count'] ?? 3))
+        const current = readFormSatPassIndex(this.context, formId)
+        const step = Number.isFinite(delta) ? Math.trunc(delta) : 1
+        const next = ((current + step) % count + count) % count
+        writeFormSatPassIndex(this.context, formId, next)
+        const data = resolveCardDataForForm(this.context, formId, Date.now())
+        this.pushFormUpdate(formId, data)
+        hilog.info(DOMAIN, TAG, 'stepSatPassIndex formId=%{public}s idx=%{public}d/%{public}d', formId, next, count)
+        return
+      }
+
       if (eventType === 'cyclePlanet') {
         const config = readFormConfig(this.context, formId)
         const currentDisplayed = typeof parsed['currentPlanet'] === 'string' && String(parsed['currentPlanet']).length > 0
@@ -211,23 +226,27 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     } else {
       try {
         const now = Date.now()
-        const triggerMs = Number.isFinite(eventAt) && eventAt > now + 35 * 60000
-          ? eventAt - 30 * 60000
+        const eventKind = typeof params['kind'] === 'string' && String(params['kind']).trim().length > 0
+          ? String(params['kind']).trim() : 'astronomy'
+        const isSatPass = eventKind === 'satellite-pass'
+        const leadMinutes = isSatPass ? 10 : 30
+        const triggerMs = Number.isFinite(eventAt) && eventAt > now + (leadMinutes + 3) * 60000
+          ? eventAt - leadMinutes * 60000
           : Math.max(now + 90000, Number.isFinite(eventAt) ? eventAt : now + 90000)
         const triggerDate = new Date(triggerMs)
         const isOffEarth = observerPlanet.toLowerCase() !== 'earth'
-        const badgeTitle = isOffEarth
-          ? ('星象仪 · 【' + planetZhName(observerPlanet) + '】' + title)
-          : ('星象仪 · ' + title)
+        const badgeTitle = isSatPass
+          ? ('卫星过境 · ' + title)
+          : (isOffEarth
+            ? ('星象仪 · 【' + planetZhName(observerPlanet) + '】' + title)
+            : ('星象仪 · ' + title))
         const obsPlanet = routePlanetForCard(observerPlanet)
-        const eventKind = typeof params['kind'] === 'string' && String(params['kind']).trim().length > 0
-          ? String(params['kind']).trim() : 'astronomy'
         const eventAtIso = Number.isFinite(eventAt) && eventAt > 0
           ? new Date(Math.round(eventAt)).toISOString()
           : triggerDate.toISOString()
         const safeJd = Number.isFinite(jd) && jd > 0 ? jd : Math.round((eventAt / 86400000 + 2440587.5) * 10000) / 10000
         const route: AstronomyRoute = {
-          panel: target.length > 0 ? 'sky' : 'calendar',
+          panel: isSatPass ? 'satellites' : (target.length > 0 ? 'sky' : 'calendar'),
           eventId: eventId,
           kind: eventKind,
           target: target,
@@ -259,9 +278,11 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
             second: 0
           },
           title: badgeTitle,
-          content: isOffEarth
-            ? (planetZhName(obsPlanet) + '观测视角 · 轻触直达星图并定位该天象')
-            : '天象临近 · 轻触直达星图并定位观测时机',
+          content: isSatPass
+            ? '10 分钟后过境 · 抬头追踪飞行轨迹，轻触直达星图定位'
+            : (isOffEarth
+              ? (planetZhName(obsPlanet) + '观测视角 · 轻触直达星图并定位该天象')
+              : '天象临近 · 轻触直达星图并定位观测时机'),
           slotType: notificationManager.SlotType.CONTENT_INFORMATION,
           wantAgent: {
             pkgName: 'com.joinother.skyinstrument',

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <linearGradient id="leoWing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9BE7FF"/>
+      <stop offset="55%" stop-color="#539BFF"/>
+      <stop offset="100%" stop-color="#345CEB"/>
+    </linearGradient>
+    <linearGradient id="leoBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#A6CCFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Orbital Glint Trail -->
+  <path d="M12 76 Q46 52 84 22" fill="none" stroke="#6CC8FF" stroke-width="1.8" stroke-dasharray="3 4" opacity="0.6"/>
+  <!-- Sleek LEO / Navigation / Flare Satellite -->
+  <g transform="rotate(-32 48 48)">
+    <!-- Long Narrow Solar Wing Array -->
+    <rect x="8" y="42" width="28" height="12" rx="2.5" fill="url(#leoWing)" stroke="#E3F6FF" stroke-width="1.1"/>
+    <rect x="60" y="42" width="28" height="12" rx="2.5" fill="url(#leoWing)" stroke="#E3F6FF" stroke-width="1.1"/>
+    <path d="M17 43v10M26 43v10M70 43v10M79 43v10M9 48h26M61 48h26" stroke="#133478" stroke-width="0.9" opacity="0.5"/>
+    <!-- Faceted Diamond Bus -->
+    <polygon points="48,30 61,48 48,66 35,48" fill="url(#leoBody)" stroke="#FFFFFF" stroke-width="1.4"/>
+    <polygon points="48,36 55,48 48,60 41,48" fill="#4B8BFF" opacity="0.85"/>
+    <!-- Flare Specular Starburst -->
+    <path d="M48 16 L50 24 L58 26 L50 28 L48 36 L46 28 L38 26 L46 24 Z" fill="#FFF4B8"/>
+  </g>
+</svg>

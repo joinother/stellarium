@@ -74,7 +74,7 @@ struct SkyFormEditPage {
   }
 
   private showPlanetSection(): boolean {
-    return this.formKind !== 'solar_system_card'
+    return this.formKind !== 'solar_system_card' && this.formKind !== 'satellite_pass_card'
   }
 
   private showThemeSection(): boolean {
@@ -122,7 +122,9 @@ struct SkyFormEditPage {
     pushUpdate(this.previewFormId)
     this.statusTip = this.formKind === 'solar_system_card'
       ? '已应用 · 太阳系仪'
-      : ('已应用 · ' + planetZhName(this.planetMode))
+      : (this.formKind === 'satellite_pass_card'
+        ? '已应用 · 卫星过境'
+        : ('已应用 · ' + planetZhName(this.planetMode)))
   }
 
   private planetDisplayName(id: string): string {

@@ -126,6 +126,28 @@
       "sceneAnimationParams": {
         "abilityName": "SkyInstrumentLiveFormAbility"
       }
+    },
+    {
+      "name": "satellite_pass_card",
+      "displayName": "$string:form_satellite_pass_name",
+      "description": "$string:form_satellite_pass_desc",
+      "src": "./ets/form/SatellitePassCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": [
+        "2*2",
+        "2*4",
+        "4*4"
+      ],
+      "resizable": true,
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
     }
   ]
 }

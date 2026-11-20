@@ -16941,6 +16941,80 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 			}
 			out["satellites"] = satObj;
 
+			// 未来 48 小时重点人造卫星过境预报（供桌面「卫星过境」卡片与提醒复用，最多扫描 6 颗代表航天器）
+			QJsonArray satellitePasses;
+			if (sats && isEarthObserver)
+			{
+				const QStringList flagshipIds = QStringList()
+					<< "25544" // ISS (ZARYA)
+					<< "48274" // CSS (TIANHE)
+					<< "20580" // HST
+					<< "33591" // NOAA 19
+					<< "43013" // NOAA 20
+					<< "39084" // LANDSAT 8
+					<< "27424" // AQUA
+					<< "25994" // TERRA
+					<< "40697"; // SENTINEL-2A
+				QList<QJsonObject> visiblePassList;
+				QList<QJsonObject> fallbackPassList;
+				int scanned = 0;
+				for (const QString& sid : flagshipIds)
+				{
+					if (scanned >= 6) break;
+					SatelliteP sp = sats->getById(sid);
+					if (sp.isNull() || !sp->isOrbitValid()) continue;
+					++scanned;
+					const QVariantList plist = sp->getPassPredictions(core, 48.0, 2, 15.0);
+					for (const QVariant& pv : plist)
+					{
+						const QJsonObject pm = QJsonObject::fromVariantMap(pv.toMap());
+						const double startJD = pm.value("startJD").toDouble(0.0);
+						const double peakJD = pm.value("peakJD").toDouble(0.0);
+						const double endJD = pm.value("endJD").toDouble(0.0);
+						if (!std::isfinite(startJD) || startJD <= 0.0 || !std::isfinite(peakJD) || peakJD <= 0.0) continue;
+						QJsonObject po;
+						po["id"] = sp->getCatalogNumberString();
+						po["name"] = sp->getNameI18n();
+						po["englishName"] = sp->getEnglishName();
+						po["startAt"] = std::round((startJD - 2440587.5) * 86400000.0);
+						po["peakAt"] = std::round((peakJD - 2440587.5) * 86400000.0);
+						po["endAt"] = std::round((endJD - 2440587.5) * 86400000.0);
+						po["peakJd"] = std::round(peakJD * 100000.0) / 100000.0;
+						po["maxAlt"] = std::round(pm.value("maxAltitude").toDouble(20.0) * 10.0) / 10.0;
+						po["startAz"] = std::round(pm.value("startAzimuth").toDouble(240.0));
+						po["peakAz"] = std::round(pm.value("peakAzimuth").toDouble(315.0));
+						po["endAz"] = std::round(pm.value("endAzimuth").toDouble(50.0));
+						const double rawMag = pm.value("maxMagnitude").toDouble(99.0);
+						po["mag"] = std::isfinite(rawMag) && rawMag < 30.0 ? (std::round(rawMag * 10.0) / 10.0) : 99.0;
+						po["rangeKm"] = std::round(pm.value("peakRangeKm").toDouble(500.0));
+						po["durationSec"] = std::round(pm.value("durationSeconds").toDouble(300.0));
+						const bool vis = pm.value("visible").toBool(false);
+						po["visible"] = vis;
+						if (vis) visiblePassList.append(po);
+						else fallbackPassList.append(po);
+					}
+				}
+				auto byStart = [](const QJsonObject& a, const QJsonObject& b) {
+					return a.value("startAt").toDouble() < b.value("startAt").toDouble();
+				};
+				std::sort(visiblePassList.begin(), visiblePassList.end(), byStart);
+				std::sort(fallbackPassList.begin(), fallbackPassList.end(), byStart);
+				for (const QJsonObject& item : visiblePassList)
+				{
+					satellitePasses.append(item);
+					if (satellitePasses.size() >= 6) break;
+				}
+				if (satellitePasses.size() < 3)
+				{
+					for (const QJsonObject& item : fallbackPassList)
+					{
+						satellitePasses.append(item);
+						if (satellitePasses.size() >= 6) break;
+					}
+				}
+			}
+			out["satellitePasses"] = satellitePasses;
+
 			// 未来最多 8 场天象预告（当前观测星球视角，跨未来 3 个月，供「天象预告」翻页列表与「天穹之窗」倒计时）
 			QJsonArray upcomingEvents;
 			{

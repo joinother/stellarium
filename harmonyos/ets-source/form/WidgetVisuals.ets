@@ -8,6 +8,21 @@ import {
   parseHeliocentricPlanets,
   projectSolarSystemOrrery
 } from './AstronomyCardData'
+import {
+  SatelliteArchetype,
+  compassDirectionZh,
+  satelliteVisualProfile
+} from './SatelliteVisualRegistry'
+
+export function satelliteIconResource(archetype: SatelliteArchetype | string): Resource {
+  const key = String(archetype).trim().toLowerCase()
+  if (key === 'iss') return $r('app.media.sat_icon_iss')
+  if (key === 'tiangong') return $r('app.media.sat_icon_tiangong')
+  if (key === 'telescope') return $r('app.media.sat_icon_telescope')
+  if (key === 'comms') return $r('app.media.sat_icon_comms')
+  if (key === 'earth_obs') return $r('app.media.sat_icon_earth_obs')
+  return $r('app.media.sat_icon_constellation')
+}
 
 export function orbResource(orbBody: string): Resource {
   const key = orbBody.trim().toLowerCase()
@@ -630,6 +645,191 @@ export struct SolarSystemOrreryStage {
             })
             .hitTestBehavior(HitTestMode.None)
         }, (node: OrreryProjectedNode) => 'lbl_' + node.id + '_' + String(Math.round(node.lonDeg)))
+      }
+    }
+    .width(this.stageWidth)
+    .height(this.stageHeight)
+    .backgroundColor(Color.Transparent)
+  }
+}
+
+// Curved Earth-Limb Orbital Pass Trajectory visual shared between SatellitePassCard & SkyLiveFormPage.
+// Inspired by glowing cyan-blue Earth atmospheric limb + sunlit pass arc + custom archetype spacecraft silhouette.
+@Component
+export struct SatellitePassArcView {
+  @Prop stageWidth: number = 148
+  @Prop stageHeight: number = 96
+  @Prop @Watch('redraw') maxAlt: number = 68
+  @Prop @Watch('redraw') startAz: number = 238
+  @Prop @Watch('redraw') endAz: number = 52
+  @Prop @Watch('redraw') archetype: SatelliteArchetype = 'iss'
+  @Prop @Watch('redraw') visible: boolean = true
+  @Prop showCraft: boolean = true
+  @Prop craftSize: number = 42
+
+  private canvasSettings: RenderingContextSettings = new RenderingContextSettings(true)
+  private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.canvasSettings)
+  private canvasReady: boolean = false
+
+  private accentColor(): string {
+    return satelliteVisualProfile(this.archetype).accentHex
+  }
+
+  private secondaryColor(): string {
+    return satelliteVisualProfile(this.archetype).secondaryHex
+  }
+
+  private apexY(h: number): number {
+    const clampedAlt = Math.max(15, Math.min(90, Number.isFinite(this.maxAlt) ? this.maxAlt : 50))
+    const norm = (clampedAlt - 10) / 80.0
+    const horizonY = h - 22
+    const topMargin = Math.max(16, Math.round(this.craftSize * 0.48))
+    const maxAmp = Math.max(18, horizonY - topMargin)
+    return horizonY - maxAmp * (0.42 + norm * 0.58)
+  }
+
+  private redraw(): void {
+    if (!this.canvasReady) return
+    const w = this.ctx.width > 0 ? this.ctx.width : this.stageWidth
+    const h = this.ctx.height > 0 ? this.ctx.height : this.stageHeight
+    this.ctx.clearRect(0, 0, w, h)
+
+    const padX = 12
+    const spanX = Math.max(40, w - padX * 2)
+    const horizonY = h - 20
+    const peakY = this.apexY(h)
+    const ampY = Math.max(14, horizonY - peakY)
+    const accent = this.accentColor()
+    const secondary = this.secondaryColor()
+
+    const ptX = (t: number): number => padX + spanX * t
+    const ptY = (t: number): number => horizonY - ampY * Math.sin(Math.PI * t)
+
+    // 1. Curved glowing Earth atmospheric limb across bottom
+    this.ctx.save()
+    this.ctx.beginPath()
+    this.ctx.moveTo(0, h)
+    this.ctx.lineTo(0, horizonY + 5)
+    this.ctx.quadraticCurveTo(w * 0.5, horizonY - 9, w, horizonY + 5)
+    this.ctx.lineTo(w, h)
+    this.ctx.closePath()
+    const earthGrad = this.ctx.createLinearGradient(0, horizonY - 8, 0, h)
+    earthGrad.addColorStop(0.0, '#442A8BFF')
+    earthGrad.addColorStop(0.45, '#26143E7A')
+    earthGrad.addColorStop(1.0, '#08061428')
+    this.ctx.fillStyle = earthGrad
+    this.ctx.fill()
+
+    // Crisp luminous cyan-blue Earth limb arc stroke
+    const limbGrad = this.ctx.createLinearGradient(0, horizonY, w, horizonY)
+    limbGrad.addColorStop(0.0, '#10266BFF')
+    limbGrad.addColorStop(0.28, '#AA38B6FF')
+    limbGrad.addColorStop(0.5, '#E86DF5F5')
+    limbGrad.addColorStop(0.72, '#AA38B6FF')
+    limbGrad.addColorStop(1.0, '#10266BFF')
+    this.ctx.strokeStyle = limbGrad
+    this.ctx.lineWidth = 1.6
+    this.ctx.beginPath()
+    this.ctx.moveTo(4, horizonY + 4)
+    this.ctx.quadraticCurveTo(w * 0.5, horizonY - 9, w - 4, horizonY + 4)
+    this.ctx.stroke()
+    this.ctx.restore()
+
+    // 2. Soft translucent orbital sweep dome under the pass trajectory
+    const steps = 44
+    this.ctx.save()
+    this.ctx.beginPath()
+    this.ctx.moveTo(ptX(0), horizonY)
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps
+      this.ctx.lineTo(ptX(t), ptY(t))
+    }
+    this.ctx.lineTo(ptX(1), horizonY)
+    this.ctx.closePath()
+    const domeGrad = this.ctx.createLinearGradient(0, peakY, 0, horizonY)
+    domeGrad.addColorStop(0.0, '#2C' + accent.slice(1))
+    domeGrad.addColorStop(1.0, '#02' + secondary.slice(1))
+    this.ctx.fillStyle = domeGrad
+    this.ctx.fill()
+    this.ctx.restore()
+
+    // 3. Ascending solid sunlit pass track (0 -> 0.52) + descending dashed track (0.52 -> 1.0)
+    this.ctx.save()
+    this.ctx.lineCap = 'round'
+    const trackGrad = this.ctx.createLinearGradient(ptX(0), horizonY, ptX(0.55), peakY)
+    trackGrad.addColorStop(0.0, '#55' + secondary.slice(1))
+    trackGrad.addColorStop(1.0, '#FF' + accent.slice(1))
+    this.ctx.strokeStyle = trackGrad
+    this.ctx.lineWidth = 2.0
+    this.ctx.beginPath()
+    for (let i = 0; i <= 24; i++) {
+      const t = (i / 24) * 0.52
+      if (i === 0) this.ctx.moveTo(ptX(t), ptY(t))
+      else this.ctx.lineTo(ptX(t), ptY(t))
+    }
+    this.ctx.stroke()
+
+    this.ctx.strokeStyle = '#99' + secondary.slice(1)
+    this.ctx.lineWidth = 1.4
+    this.ctx.setLineDash([3, 3.5])
+    this.ctx.beginPath()
+    for (let i = 0; i <= 20; i++) {
+      const t = 0.52 + (i / 20) * 0.48
+      if (i === 0) this.ctx.moveTo(ptX(t), ptY(t))
+      else this.ctx.lineTo(ptX(t), ptY(t))
+    }
+    this.ctx.stroke()
+    this.ctx.setLineDash([])
+
+    // Rise & set horizon endpoint ticks
+    this.ctx.fillStyle = secondary
+    this.ctx.beginPath()
+    this.ctx.arc(ptX(0), horizonY, 2.5, 0, Math.PI * 2)
+    this.ctx.arc(ptX(1), horizonY, 2.5, 0, Math.PI * 2)
+    this.ctx.fill()
+    this.ctx.restore()
+
+    // 4. Compass direction footer labels along Earth limb
+    this.ctx.save()
+    this.ctx.font = '8.5vp sans-serif'
+    this.ctx.fillStyle = '#B8D8F8'
+    this.ctx.textAlign = 'left'
+    this.ctx.fillText(compassDirectionZh(this.startAz) + '升', 6, h - 5)
+    this.ctx.textAlign = 'center'
+    this.ctx.fillStyle = this.visible ? accent : '#98B4D4'
+    this.ctx.fillText('最高 ' + String(Math.round(this.maxAlt)) + '°', w * 0.5, h - 5)
+    this.ctx.textAlign = 'right'
+    this.ctx.fillStyle = '#B8D8F8'
+    this.ctx.fillText(compassDirectionZh(this.endAz) + '落', w - 6, h - 5)
+    this.ctx.restore()
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Canvas(this.ctx)
+        .width(this.stageWidth)
+        .height(this.stageHeight)
+        .onReady(() => {
+          this.canvasReady = true
+          this.redraw()
+        })
+        .hitTestBehavior(HitTestMode.None)
+
+      if (this.showCraft) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image(satelliteIconResource(this.archetype))
+            .width(this.craftSize)
+            .height(this.craftSize)
+            .objectFit(ImageFit.Contain)
+            .draggable(false)
+        }
+        .width(this.craftSize)
+        .height(this.craftSize)
+        .position({
+          x: this.stageWidth * 0.5 - this.craftSize * 0.5,
+          y: Math.max(0, this.apexY(this.stageHeight) - this.craftSize * 0.52)
+        })
+        .hitTestBehavior(HitTestMode.None)
       }
     }
     .width(this.stageWidth)

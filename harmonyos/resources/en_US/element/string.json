@@ -499,6 +499,14 @@
     {
       "name": "form_solar_system_desc",
       "value": "Live 3D Solar System orrery with planet orbit time-scrubbing"
+    },
+    {
+      "name": "form_satellite_pass_name",
+      "value": "Satellite Pass"
+    },
+    {
+      "name": "form_satellite_pass_desc",
+      "value": "ISS, Tiangong & bright satellite flyover arcs with 1-tap alerts"
     }
   ]
 }

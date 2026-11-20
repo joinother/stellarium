@@ -1587,6 +1587,14 @@
     {
       "name": "form_solar_system_desc",
       "value": "3D立体太阳系八大行星实时轨盘与推演"
+    },
+    {
+      "name": "form_satellite_pass_name",
+      "value": "卫星过境"
+    },
+    {
+      "name": "form_satellite_pass_desc",
+      "value": "空间站与亮卫星实时过境轨迹及一键提醒"
     }
   ]
 }

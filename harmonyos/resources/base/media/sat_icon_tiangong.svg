@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <linearGradient id="cssWing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6DF5F5"/>
+      <stop offset="55%" stop-color="#3B9EFF"/>
+      <stop offset="100%" stop-color="#2255D6"/>
+    </linearGradient>
+    <linearGradient id="cssGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE599"/>
+      <stop offset="100%" stop-color="#FF9F43"/>
+    </linearGradient>
+    <linearGradient id="cssHull" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#C8E1FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-24 48 48)">
+    <!-- Large Flexible Lab Solar Wings (Wentian & Mengtian outer tips) -->
+    <rect x="9" y="14" width="12" height="29" rx="2.2" fill="url(#cssWing)" stroke="#D8F8FF" stroke-width="1.1"/>
+    <rect x="9" y="53" width="12" height="29" rx="2.2" fill="url(#cssWing)" stroke="#D8F8FF" stroke-width="1.1"/>
+    <rect x="75" y="14" width="12" height="29" rx="2.2" fill="url(#cssWing)" stroke="#D8F8FF" stroke-width="1.1"/>
+    <rect x="75" y="53" width="12" height="29" rx="2.2" fill="url(#cssWing)" stroke="#D8F8FF" stroke-width="1.1"/>
+    <!-- Solar Grid Lines -->
+    <path d="M15 15v27M15 54v27M81 15v27M81 54v27M10 24h10M10 34h10M10 63h10M10 73h10M76 24h10M76 34h10M76 63h10M76 73h10" stroke="#0B2E6B" stroke-width="0.9" opacity="0.5"/>
+    <!-- T-Shaped Wentian + Mengtian Horizontal Lab Modules -->
+    <rect x="21" y="42.5" width="54" height="11" rx="4.5" fill="url(#cssHull)" stroke="#FFFFFF" stroke-width="1.2"/>
+    <!-- Tianhe Core Module Vertical Spine -->
+    <rect x="42.5" y="26" width="11" height="44" rx="5" fill="url(#cssHull)" stroke="#FFFFFF" stroke-width="1.2"/>
+    <!-- Core Module Auxiliary Golden Wings -->
+    <rect x="29" y="61" width="12" height="5.5" rx="1.5" fill="url(#cssGold)"/>
+    <rect x="55" y="61" width="12" height="5.5" rx="1.5" fill="url(#cssGold)"/>
+    <!-- Docked Shenzhou Crew Spacecraft Nose -->
+    <circle cx="48" cy="23.5" r="4.2" fill="#FFE082" stroke="#FFFFFF" stroke-width="1"/>
+    <!-- Central Docking Hub Accent -->
+    <circle cx="48" cy="48" r="3.4" fill="#FF6B5B"/>
+  </g>
+</svg>

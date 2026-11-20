@@ -31,6 +31,15 @@ import {
   solarStageFromAltitude
 } from './AstronomyCardData'
 import {
+  CompactSatellitePass,
+  compassDirectionZh,
+  formatPassDurationZh,
+  parseSatellitePasses,
+  satelliteBrightnessGradeZh,
+  satellitePassReminderId,
+  satelliteVisualProfile
+} from './SatelliteVisualRegistry'
+import {
   readFormConfig,
   resolveCardDataForForm,
   writeFormConfig,
@@ -41,11 +50,13 @@ import {
   HorizonArcView,
   MiniPhaseStripView,
   PlanetVisibilityRow,
+  SatellitePassArcView,
   SolarSystemOrreryStage,
   StarfieldLayer,
   eventAccentColor,
   eventBadgeText,
-  fallbackPlanetRows
+  fallbackPlanetRows,
+  satelliteIconResource
 } from './WidgetVisuals'
 
 const DOMAIN: number = 0xD003
@@ -119,6 +130,8 @@ struct SkyLiveFormPage {
   @State heliocentricPlanetsJson: string = '[]'
   @State orreryDayOffset: number = 0
   @State orreryInnerOnly: boolean = false
+  @State satellitePassesJson: string = '[]'
+  @State satPassIndex: number = 0
 
   private uiContext: UIContext | undefined = undefined
   private liveFormContext: common.LiveFormExtensionContext | undefined = undefined
@@ -195,6 +208,56 @@ struct SkyLiveFormPage {
     this.heliocentricPlanetsJson = snap['heliocentricPlanetsJson'] ?? '[]'
     this.orreryDayOffset = clampOrreryDayOffset(Number(snap['orreryDayOffset'] ?? '0'))
     this.orreryInnerOnly = (snap['orreryInnerOnly'] ?? '0') === '1'
+    this.satellitePassesJson = snap['satellitePassesJson'] ?? '[]'
+    const spi = Math.floor(Number(snap['satPassIndex'] ?? '0'))
+    this.satPassIndex = Number.isFinite(spi) && spi >= 0 ? spi : 0
+  }
+
+  private satPasses(): CompactSatellitePass[] {
+    return parseSatellitePasses(this.satellitePassesJson, Date.now())
+  }
+
+  private activeSatPass(): CompactSatellitePass {
+    const list = this.satPasses()
+    const idx = list.length > 0 ? (this.satPassIndex % list.length) : 0
+    return list[idx]
+  }
+
+  private satArcStageWidth(): number {
+    if (!this.isWide() && !this.isTall()) return Math.max(124, Math.round(this.formRect.width - 18))
+    if (!this.isTall()) return Math.max(134, Math.round(this.formRect.width * 0.44))
+    return Math.max(250, Math.round(this.formRect.width - 26))
+  }
+
+  private satArcStageHeight(): number {
+    if (!this.isWide() && !this.isTall()) return Math.max(76, Math.round(this.formRect.height - 62))
+    if (!this.isTall()) return Math.max(114, Math.round(this.formRect.height - 20))
+    return Math.max(106, Math.round(this.formRect.height - 186))
+  }
+
+  private satCraftRestingSize(): number {
+    if (this.isTall()) return 52
+    return this.isWide() ? 46 : 38
+  }
+
+  private satCraftApexY(h: number): number {
+    const clampedAlt = Math.max(15, Math.min(90, this.activeSatPass().maxAlt))
+    const norm = (clampedAlt - 10) / 80.0
+    const horizonY = h - 22
+    const topMargin = Math.max(16, Math.round(this.satCraftRestingSize() * 0.48))
+    const maxAmp = Math.max(18, horizonY - topMargin)
+    return horizonY - maxAmp * (0.42 + norm * 0.58)
+  }
+
+  private satMagBadge(pass: CompactSatellitePass): string {
+    if (!Number.isFinite(pass.mag) || pass.mag > 15) return pass.visible ? '日照可见' : '地影'
+    return (pass.mag > 0 ? '+' : '') + pass.mag.toFixed(1) + '等'
+  }
+
+  private satClockOnly(ms: number): string {
+    if (!Number.isFinite(ms) || ms <= 0) return '—'
+    const d = new Date(ms)
+    return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
   }
 
   private orreryRestingWidth(): number {
@@ -250,6 +313,7 @@ struct SkyLiveFormPage {
 
   // Exact resting orb diameter in vp (1:1 match with the inactive card!)
   private restingOrbSize(): number {
+    if (this.formKind === 'satellite_pass_card') return this.satCraftRestingSize()
     if (this.formKind === 'floating_orb_card') return 110
     if (this.formKind === 'solar_arc_card') return this.isWide() ? 86 : 66
     if (this.formKind === 'companion_arc_card') return this.isWide() ? 86 : 64
@@ -261,6 +325,7 @@ struct SkyLiveFormPage {
 
   // Native-resolution peak orb diameter in vp (orb renders at peakSize and scales down to startScale at rest -> zero upscaling blur!)
   private peakOrbSize(): number {
+    if (this.formKind === 'satellite_pass_card') return this.isTall() ? 114 : 98
     if (this.formKind === 'floating_orb_card') return 130
     if (this.formKind === 'solar_arc_card') return this.isWide() ? 114 : 108
     if (this.formKind === 'companion_arc_card') return this.isWide() ? 112 : 106
@@ -294,6 +359,24 @@ struct SkyLiveFormPage {
       } else {
         this.slotCenterX = l + w * 0.5
         this.slotCenterY = t + 46 + (h - 122) * 0.5
+      }
+      this.orbScale = this.startOrbScale()
+      return
+    }
+
+    if (this.formKind === 'satellite_pass_card') {
+      const stageW = this.satArcStageWidth()
+      const stageH = this.satArcStageHeight()
+      const ay = this.satCraftApexY(stageH)
+      if (!this.isWide() && !this.isTall()) {
+        this.slotCenterX = l + w * 0.5
+        this.slotCenterY = t + 31 + ay
+      } else if (!this.isTall()) {
+        this.slotCenterX = l + 10 + stageW * 0.5
+        this.slotCenterY = t + 10 + ay
+      } else {
+        this.slotCenterX = l + w * 0.5
+        this.slotCenterY = t + 50 + ay
       }
       this.orbScale = this.startOrbScale()
       return
@@ -522,6 +605,31 @@ struct SkyLiveFormPage {
 
   private launchAppDirect(): void {
     if (this.liveFormContext === undefined) return
+    if (this.formKind === 'satellite_pass_card') {
+      const p = this.activeSatPass()
+      try {
+        this.liveFormContext.startAbilityByLiveForm({
+          bundleName: 'com.joinother.skyinstrument',
+          abilityName: 'QAbility',
+          parameters: {
+            panel: 'satellites',
+            kind: 'satellite-pass',
+            eventId: satellitePassReminderId(p),
+            target: p.id,
+            jd: p.peakJd,
+            eventAt: new Date(p.peakAt).toISOString(),
+            observerPlanet: 'Earth',
+            landingTitle: p.name + ' · 最高 ' + String(Math.round(p.maxAlt)) + '°',
+            landingSource: 'card'
+          }
+        }).catch((error: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm failed: code=%{public}d msg=%{public}s', error.code, error.message)
+        })
+      } catch (error) {
+        hilog.warn(DOMAIN, TAG, 'startAbilityByLiveForm err: %{public}s', String(error))
+      }
+      return
+    }
     if (this.formKind === 'solar_system_card') {
       const targetJd = this.orreryDayOffset !== 0
         ? Math.round(((Date.now() + this.orreryDayOffset * 86400000) / 86400000.0 + 2440587.5) * 100000) / 100000
@@ -711,6 +819,10 @@ struct SkyLiveFormPage {
   }
 
   private showcaseHeading(): string {
+    if (this.formKind === 'satellite_pass_card') {
+      const p = this.activeSatPass()
+      return p.name + ' · ' + formatCountdownZh(p.startAt, Date.now())
+    }
     if (this.formKind === 'solar_system_card') {
       return '太阳系仪 · ' + this.orreryEpochLabel()
     }
@@ -727,6 +839,12 @@ struct SkyLiveFormPage {
   }
 
   private showcaseSubline(): string {
+    if (this.formKind === 'satellite_pass_card') {
+      const p = this.activeSatPass()
+      return compassDirectionZh(p.startAz) + ' → ' + compassDirectionZh(p.endAz) +
+        ' · 最高 ' + String(Math.round(p.maxAlt)) + '° · ' +
+        satelliteBrightnessGradeZh(p.mag, p.visible)
+    }
     if (this.formKind === 'solar_system_card') {
       return this.orrerySummaryText() + ' · 轻触进入日心轨盘'
     }
@@ -746,6 +864,190 @@ struct SkyLiveFormPage {
   }
 
   // ---- Pixel-matched resting card backdrops (orb replaced by measured invisible socket!) ----
+
+  @Builder
+  buildSatellitePassRestingCard() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      StarfieldLayer({ sunAlt: -24, themeStyle: 'deep' })
+
+      if (!this.isWide() && !this.isTall()) {
+        Column() {
+          Row({ space: 4 }) {
+            Text(this.activeSatPass().name)
+              .fontSize(11).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').layoutWeight(1).maxLines(1)
+            Text(this.satMagBadge(this.activeSatPass()))
+              .fontSize(9.5).fontWeight(FontWeight.Medium)
+              .fontColor(satelliteVisualProfile(this.activeSatPass().archetype).accentHex)
+              .padding({ left: 5, right: 5, top: 2, bottom: 2 }).backgroundColor('#280B1830').borderRadius(8)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+
+          Stack({ alignContent: Alignment.TopStart }) {
+            SatellitePassArcView({
+              stageWidth: this.satArcStageWidth(),
+              stageHeight: this.satArcStageHeight(),
+              maxAlt: this.activeSatPass().maxAlt,
+              startAz: this.activeSatPass().startAz,
+              endAz: this.activeSatPass().endAz,
+              archetype: this.activeSatPass().archetype,
+              visible: this.activeSatPass().visible,
+              showCraft: false,
+              craftSize: this.satCraftRestingSize()
+            })
+            Column()
+              .width(this.satCraftRestingSize())
+              .height(this.satCraftRestingSize())
+              .position({
+                x: this.satArcStageWidth() * 0.5 - this.satCraftRestingSize() * 0.5,
+                y: Math.max(0, this.satCraftApexY(this.satArcStageHeight()) - this.satCraftRestingSize() * 0.5)
+              })
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .width(this.satArcStageWidth())
+          .height(this.satArcStageHeight())
+          .opacity(this.restingContentOpacity)
+
+          Row({ space: 5 }) {
+            Text(formatCountdownZh(this.activeSatPass().startAt, Date.now()))
+              .fontSize(10.5).fontWeight(FontWeight.Medium).fontColor('#7CEEFF').layoutWeight(1).maxLines(1)
+            Text('提醒')
+              .fontSize(9.5).fontWeight(FontWeight.Medium).fontColor('#EAF4FF').height(22)
+              .padding({ left: 8, right: 8 }).backgroundColor('#2E3B6DB8').borderRadius(11)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 11, right: 11, top: 9, bottom: 9 })
+      } else if (!this.isTall()) {
+        Row({ space: 10 }) {
+          Stack({ alignContent: Alignment.TopStart }) {
+            SatellitePassArcView({
+              stageWidth: this.satArcStageWidth(),
+              stageHeight: this.satArcStageHeight(),
+              maxAlt: this.activeSatPass().maxAlt,
+              startAz: this.activeSatPass().startAz,
+              endAz: this.activeSatPass().endAz,
+              archetype: this.activeSatPass().archetype,
+              visible: this.activeSatPass().visible,
+              showCraft: false,
+              craftSize: this.satCraftRestingSize()
+            })
+            Column()
+              .width(this.satCraftRestingSize())
+              .height(this.satCraftRestingSize())
+              .position({
+                x: this.satArcStageWidth() * 0.5 - this.satCraftRestingSize() * 0.5,
+                y: Math.max(0, this.satCraftApexY(this.satArcStageHeight()) - this.satCraftRestingSize() * 0.5)
+              })
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .width(this.satArcStageWidth())
+          .height(this.satArcStageHeight())
+          .opacity(this.restingContentOpacity)
+
+          Column({ space: 4 }) {
+            Row({ space: 4 }) {
+              Text(satelliteVisualProfile(this.activeSatPass().archetype).categoryLabelZh)
+                .fontSize(9.5).fontWeight(FontWeight.Medium)
+                .fontColor(satelliteVisualProfile(this.activeSatPass().archetype).accentHex)
+                .padding({ left: 6, right: 6, top: 2, bottom: 2 }).backgroundColor('#2C13294E').borderRadius(8)
+              Text(this.satMagBadge(this.activeSatPass())).fontSize(9.5).fontColor('#CFE4FF')
+            }.width('100%')
+
+            Text(this.activeSatPass().name)
+              .fontSize(14).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').width('100%').maxLines(1)
+
+            Row({ space: 6 }) {
+              Text(formatCountdownZh(this.activeSatPass().startAt, Date.now()))
+                .fontSize(15).fontWeight(FontWeight.Bold).fontColor('#6DF5F5')
+              Text(this.satClockOnly(this.activeSatPass().startAt) + ' · ' + formatPassDurationZh(this.activeSatPass().durationSec))
+                .fontSize(10.5).fontColor('#B8D6F5').layoutWeight(1).maxLines(1)
+            }.width('100%').alignItems(VerticalAlign.Bottom)
+
+            Text(satelliteBrightnessGradeZh(this.activeSatPass().mag, this.activeSatPass().visible) + ' · 距 ' + String(Math.round(this.activeSatPass().rangeKm)) + ' km')
+              .fontSize(10).fontColor('#9ABCE0').width('100%').maxLines(1)
+
+            Blank()
+
+            Row({ space: 6 }) {
+              Text('预约提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').textAlign(TextAlign.Center).layoutWeight(1).height(27).backgroundColor('#323F76C8').borderRadius(13.5)
+              Text('追踪 ↗').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#8CEEFF').textAlign(TextAlign.Center).width(52).height(27).backgroundColor('#28163A6E').borderRadius(13.5)
+            }.width('100%')
+          }
+          .layoutWeight(1)
+          .height('100%')
+          .padding({ top: 2, bottom: 2 })
+          .opacity(this.restingContentOpacity)
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 10, right: 12, top: 9, bottom: 9 })
+      } else {
+        Column({ space: 6 }) {
+          Row({ space: 6 }) {
+            Column({ space: 2 }) {
+              Text(this.activeSatPass().name).fontSize(14).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').maxLines(1)
+              Text(formatCountdownZh(this.activeSatPass().startAt, Date.now()) + ' · ' + this.satMagBadge(this.activeSatPass()))
+                .fontSize(10).fontColor('#9CD4FF').maxLines(1)
+            }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+            Text('提醒').fontSize(10).fontWeight(FontWeight.Medium).fontColor('#FFFFFF').height(26).padding({ left: 10, right: 10 }).backgroundColor('#363F76C8').borderRadius(13)
+          }
+          .width('100%')
+          .opacity(this.restingContentOpacity)
+
+          Stack({ alignContent: Alignment.TopStart }) {
+            SatellitePassArcView({
+              stageWidth: this.satArcStageWidth(),
+              stageHeight: this.satArcStageHeight(),
+              maxAlt: this.activeSatPass().maxAlt,
+              startAz: this.activeSatPass().startAz,
+              endAz: this.activeSatPass().endAz,
+              archetype: this.activeSatPass().archetype,
+              visible: this.activeSatPass().visible,
+              showCraft: false,
+              craftSize: this.satCraftRestingSize()
+            })
+            Column()
+              .width(this.satCraftRestingSize())
+              .height(this.satCraftRestingSize())
+              .position({
+                x: this.satArcStageWidth() * 0.5 - this.satCraftRestingSize() * 0.5,
+                y: Math.max(0, this.satCraftApexY(this.satArcStageHeight()) - this.satCraftRestingSize() * 0.5)
+              })
+              .onAreaChange((_oldArea: Area, newArea: Area) => this.captureSlotArea(newArea))
+          }
+          .width(this.satArcStageWidth())
+          .height(this.satArcStageHeight())
+          .opacity(this.restingContentOpacity)
+
+          Blank()
+        }
+        .width('100%')
+        .height('100%')
+        .padding({ left: 13, right: 13, top: 11, bottom: 10 })
+      }
+
+      this.buildFramedShowcaseOverlay()
+    }
+    .width(this.formRect.width)
+    .height(this.formRect.height)
+    .position({ x: this.formRect.left, y: this.formRect.top })
+    .borderRadius(this.formBorderRadius)
+    .clip(true)
+    .linearGradient({
+      angle: 162,
+      colors: [
+        [this.cardThemeStyle === 'deep' ? '#040710' : '#060E24', 0.0],
+        [this.cardThemeStyle === 'deep' ? '#0A1224' : '#0E2448', 1.0]
+      ]
+    })
+    .border({ width: 0.6, color: '#2C6DF5F5' })
+    .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
+    .onClick(() => this.launchAppDirect())
+  }
 
   @Builder
   buildSolarSystemRestingCard() {
@@ -1785,7 +2087,11 @@ struct SkyLiveFormPage {
     Column({ space: 5 }) {
       Blank()
       Row({ space: 6 }) {
-        Text(this.formKind === 'solar_system_card' ? '太阳系' : this.observerPlanetName)
+        Text(this.formKind === 'solar_system_card'
+          ? '太阳系'
+          : (this.formKind === 'satellite_pass_card'
+            ? satelliteVisualProfile(this.activeSatPass().archetype).categoryLabelZh
+            : this.observerPlanetName))
           .fontSize(10)
           .fontWeight(FontWeight.Medium)
           .fontColor('#D8ECFF')
@@ -1925,6 +2231,8 @@ struct SkyLiveFormPage {
         .backgroundColor(Color.Transparent)
         .onAreaChange((_oldArea: Area, newArea: Area) => this.captureCardArea(newArea))
         .onClick(() => this.launchAppDirect())
+      } else if (this.formKind === 'satellite_pass_card') {
+        this.buildSatellitePassRestingCard()
       } else if (this.formKind === 'solar_system_card') {
         this.buildSolarSystemRestingCard()
       } else if (this.formKind === 'solar_arc_card') {
@@ -1937,8 +2245,32 @@ struct SkyLiveFormPage {
         this.buildSkyWindowRestingCard()
       }
 
-      // 2. Overflow Layer: Either soaring 3D Solar System Orrery disc OR borderless native-resolution 3D Orb!
-      if (this.formKind === 'solar_system_card') {
+      // 2. Overflow Layer: Spacecraft Flyby / 3D Solar System Orrery / 3D Celestial Orb!
+      if (this.formKind === 'satellite_pass_card') {
+        Stack({ alignContent: Alignment.Center }) {
+          Stack({ alignContent: Alignment.Center }) {
+            Image(satelliteIconResource(this.activeSatPass().archetype))
+              .width(this.peakOrbSize())
+              .height(this.peakOrbSize())
+              .objectFit(ImageFit.Contain)
+              .draggable(false)
+          }
+          .width(this.peakOrbSize())
+          .height(this.peakOrbSize())
+          .scale({ x: this.orbScale, y: this.orbScale })
+          .rotate({ angle: this.orbTilt * 2 })
+        }
+        .width(this.peakOrbSize())
+        .height(this.peakOrbSize())
+        .position({
+          x: this.slotCenterX - this.peakOrbSize() * 0.5,
+          y: this.slotCenterY - this.peakOrbSize() * 0.5
+        })
+        .translate({ x: this.orbDx, y: this.orbDy })
+        .backgroundColor(Color.Transparent)
+        .hitTestBehavior(HitTestMode.None)
+        .onAppear(() => this.scheduleOverflowShowcase())
+      } else if (this.formKind === 'solar_system_card') {
         Stack({ alignContent: Alignment.Center }) {
           Stack({ alignContent: Alignment.Center }) {
             SolarSystemOrreryStage({

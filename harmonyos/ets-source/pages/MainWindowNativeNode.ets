@@ -4278,6 +4278,10 @@ export struct WindowNativeNode {
     const evId = this.landingBannerEventId
     const evAt = this.landingBannerEventAt
     this.landingBannerVisible = false
+    if (evId.startsWith('satellite-pass-')) {
+      this.openSubPanel('satellites')
+      return
+    }
     if (evId.length > 0 && evAt.length > 0) {
       const route: Record<string, Object> = {
         'panel': 'calendar',
@@ -4379,9 +4383,9 @@ export struct WindowNativeNode {
           focusTarget()
         }
         if (this.showLandingBanner !== undefined) {
-          const fallbackTitle = panel === 'satellites'
-            ? ('卫星过境 · ' + target)
-            : (landingTitle.length > 0 ? landingTitle : target)
+          const fallbackTitle = landingTitle.length > 0
+            ? landingTitle
+            : (panel === 'satellites' ? ('卫星过境 · ' + target) : target)
           this.showLandingBanner(
             fallbackTitle,
             landingSource.length > 0 ? landingSource : (panel === 'satellites' ? 'reminder' : 'card'),

@@ -82,6 +82,24 @@ export interface CardHeliocentricPlanet {
   distAU?: number
 }
 
+export interface CardSatellitePassData {
+  id?: string
+  name?: string
+  englishName?: string
+  startAt?: number
+  peakAt?: number
+  endAt?: number
+  peakJd?: number
+  maxAlt?: number
+  startAz?: number
+  peakAz?: number
+  endAz?: number
+  mag?: number
+  rangeKm?: number
+  durationSec?: number
+  visible?: boolean
+}
+
 export interface CardTonightData {
   date?: string
   observer?: CardObserverData
@@ -90,6 +108,7 @@ export interface CardTonightData {
   timeline48h?: CardTimelineSample[]
   upcomingEvents?: CardUpcomingEvent[]
   heliocentricPlanets?: CardHeliocentricPlanet[]
+  satellitePasses?: CardSatellitePassData[]
   moon?: CardMoonData
   sun?: CardSunData
   planets?: CardPlanetData[]
@@ -852,6 +871,8 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['heliocentricPlanetsJson'] = '[]'
   card['orreryDayOffset'] = '0'
   card['orreryInnerOnly'] = '0'
+  card['satellitePassesJson'] = '[]'
+  card['satPassIndex'] = '0'
   return card
 }
 
@@ -1226,6 +1247,35 @@ export function buildAstronomyCard(tonight: CardTonightData, now: number): Recor
   }
   data['heliocentricPlanetsJson'] = JSON.stringify(compactHelio)
 
+  const compactSatPasses: CardSatellitePassData[] = []
+  const rawSatPasses = tonight.satellitePasses ?? []
+  for (let i = 0; i < rawSatPasses.length && compactSatPasses.length < 6; i++) {
+    const sp = rawSatPasses[i]
+    const sid = (sp.id ?? '').trim()
+    const startAt = Number.isFinite(sp.startAt) ? Math.round(sp.startAt ?? 0) : 0
+    if (sid.length === 0 || startAt <= 0) continue
+    const rawName = (sp.name ?? sp.englishName ?? '').trim()
+    const engName = (sp.englishName ?? rawName).trim()
+    compactSatPasses.push({
+      id: sid.slice(0, 16),
+      name: rawName.slice(0, 24),
+      englishName: engName.slice(0, 32),
+      startAt: startAt,
+      peakAt: Number.isFinite(sp.peakAt) && (sp.peakAt ?? 0) > 0 ? Math.round(sp.peakAt ?? startAt) : startAt + 180000,
+      endAt: Number.isFinite(sp.endAt) && (sp.endAt ?? 0) > 0 ? Math.round(sp.endAt ?? startAt) : startAt + 360000,
+      peakJd: Number.isFinite(sp.peakJd) ? Math.round((sp.peakJd ?? 0) * 100000) / 100000 : 0,
+      maxAlt: Number.isFinite(sp.maxAlt) ? Math.round((sp.maxAlt ?? 20) * 10) / 10 : 25,
+      startAz: Number.isFinite(sp.startAz) ? Math.round(sp.startAz ?? 240) : 240,
+      peakAz: Number.isFinite(sp.peakAz) ? Math.round(sp.peakAz ?? 315) : 315,
+      endAz: Number.isFinite(sp.endAz) ? Math.round(sp.endAz ?? 50) : 50,
+      mag: Number.isFinite(sp.mag) ? Math.round((sp.mag ?? 99) * 10) / 10 : 99,
+      rangeKm: Number.isFinite(sp.rangeKm) ? Math.round(sp.rangeKm ?? 500) : 500,
+      durationSec: Number.isFinite(sp.durationSec) ? Math.round(sp.durationSec ?? 300) : 300,
+      visible: sp.visible === true
+    })
+  }
+  data['satellitePassesJson'] = JSON.stringify(compactSatPasses)
+
   data['planetSummary'] = planets.length > 0 ? String(visible.length) + ' 颗在地平线上' : '待计算'
   data['planetNames'] = visible.map((planet: CardPlanetData) => planet.name ?? '').filter((name: string) => name.length > 0).join(' · ') || '当前无行星在地平线上'
   data['meteorSummary'] = isOffEarth ? '仅地球适用' : (showers.length > 0 ? showers[0].name ?? '活动流星雨' : '无活动数据')
@@ -1331,7 +1381,7 @@ export function normalizeAstronomyCard(raw: string, now: number): Record<string,
   try {
     const parsed = JSON.parse(raw) as Record<string, string>
     if (parsed === null || (parsed['schemaVersion'] !== '4' && parsed['schemaVersion'] !== '3')) return fallback
-    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson', 'remindedEventIds', 'heliocentricPlanetsJson']
+    const longKeys = ['visiblePlanetsJson', 'upcomingEventsJson', 'remindedEventIds', 'heliocentricPlanetsJson', 'satellitePassesJson']
     const keys = Object.keys(fallback)
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i]

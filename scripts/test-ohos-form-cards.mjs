@@ -47,6 +47,14 @@ import {
   sliceUpcomingEventPage,
   solarStageFromAltitude
 } from '../harmonyos/ets-source/form/AstronomyCardData.ts'
+import {
+  classifySatelliteArchetype,
+  compassDirectionZh,
+  parseSatellitePasses,
+  satelliteBrightnessGradeZh,
+  satellitePassReminderId,
+  satelliteVisualProfile
+} from '../harmonyos/ets-source/form/SatelliteVisualRegistry.ts'
 
 const root = process.cwd()
 const formConfigPath = path.join(root, 'harmonyos/resources/base/profile/form_config.json')
@@ -67,10 +75,11 @@ const expectedForms = [
   { name: 'solar_arc_card', source: 'SolarArcCard.ets', defaultDim: '2*4', panel: "panel: 'sky'", resizable: true, transparent: false },
   { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
   { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true },
-  { name: 'solar_system_card', source: 'SolarSystemCard.ets', defaultDim: '2*4', panel: "panel: 'astro'", resizable: true, transparent: false }
+  { name: 'solar_system_card', source: 'SolarSystemCard.ets', defaultDim: '2*4', panel: "panel: 'astro'", resizable: true, transparent: false },
+  { name: 'satellite_pass_card', source: 'SatellitePassCard.ets', defaultDim: '2*4', panel: "panel: 'satellites'", resizable: true, transparent: false }
 ]
 
-assert.equal(forms.length, expectedForms.length, 'must expose the 6 redesigned astronomical widget cards (5+1 transparent)')
+assert.equal(forms.length, expectedForms.length, 'must expose the 7 redesigned astronomical widget cards (6+1 transparent)')
 assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
@@ -147,6 +156,7 @@ assert.ok(formAbilitySrc.includes('formProvider.getFormRect'), 'onFormEvent must
 assert.ok(formAbilitySrc.includes("eventType === 'stepTimeOffset'"), 'FormAbility must handle 48h time-scrubbing dial')
 assert.ok(formAbilitySrc.includes("eventType === 'stepOrreryDays'"), 'FormAbility must handle Solar System orrery day scrubbing')
 assert.ok(formAbilitySrc.includes("eventType === 'toggleOrreryZoom'"), 'FormAbility must handle Solar System inner/full zoom toggle')
+assert.ok(formAbilitySrc.includes("eventType === 'stepSatPassIndex'"), 'FormAbility must handle SatellitePassCard pass switching')
 assert.ok(formAbilitySrc.includes("eventType === 'cyclePlanet'"), 'FormAbility must handle quick planet carousel')
 assert.ok(formAbilitySrc.includes("eventType === 'toggleEventReminder'"), 'FormAbility must handle desktop reminder bell')
 assert.ok(formAbilitySrc.includes('reminderAgentManager.publishReminder'), 'FormAbility must schedule background agent reminders')
@@ -170,6 +180,10 @@ for (const orb of ['sun', 'moon', 'earth', 'mars', 'saturn', 'jupiter', 'titan',
 for (let i = 0; i < 16; i++) {
   const maskFile = path.join(mediaDir, `widget_phase_${String(i).padStart(2, '0')}.png`)
   assert.ok(fs.existsSync(maskFile) && fs.statSync(maskFile).size > 100, `missing 3D phase mask: ${maskFile}`)
+}
+for (const arch of ['iss', 'tiangong', 'telescope', 'comms', 'earth_obs', 'constellation']) {
+  const svgFile = path.join(mediaDir, `sat_icon_${arch}.svg`)
+  assert.ok(fs.existsSync(svgFile) && fs.statSync(svgFile).size > 500, `missing spacecraft SVG icon: sat_icon_${arch}.svg`)
 }
 
 // 4. Validate QAbility & MainWindowNativeNode card route & publisher wiring
@@ -403,4 +417,22 @@ const planInner = projectSolarSystemOrrery(helioNow, 260, 148, true, 0, 'Mars')
 assert.equal(planInner.orbits.length, 4, 'inner-only mode must show Mercury..Mars')
 assert.ok(Math.abs(planInner.orbits[3].ry - planInner.orbits[3].rx) < 0.5, 'top-down 0° tilt must be circular')
 
-console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, ${overflowCases.length} overflow specs`)
+// Satellite archetype classification, future 3D model registry & pass parsing tests
+assert.equal(classifySatelliteArchetype('ISS (ZARYA)', '25544'), 'iss')
+assert.equal(classifySatelliteArchetype('CSS (TIANHE)', '48274'), 'tiangong')
+assert.equal(classifySatelliteArchetype('HST', '20580'), 'telescope')
+assert.equal(classifySatelliteArchetype('INTELSAT 19', '38356'), 'comms')
+assert.equal(classifySatelliteArchetype('NOAA 20', '43013'), 'earth_obs')
+assert.equal(classifySatelliteArchetype('STARLINK-3120', '51234'), 'constellation')
+const issProf = satelliteVisualProfile('iss')
+assert.equal(issProf.model3d.modelId, 'iss_v1')
+assert.equal(issProf.model3d.supportsSunGlint, true)
+assert.equal(compassDirectionZh(235), '西南')
+assert.equal(compassDirectionZh(45), '东北')
+assert.equal(satelliteBrightnessGradeZh(-3.4, true), '肉眼极亮')
+assert.equal(satelliteBrightnessGradeZh(1.2, false), '地影过境')
+const fallbackPasses = parseSatellitePasses('[]', now)
+assert.equal(fallbackPasses.length, 3, 'fallback satellite passes must include ISS, Tiangong, and HST')
+assert.match(satellitePassReminderId(fallbackPasses[0]), /^satellite-pass-25544-\d+$/)
+
+console.log(`HarmonyOS interactive widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 12 3D orbs, 6 spacecraft icons, ${overflowCases.length} overflow specs`)

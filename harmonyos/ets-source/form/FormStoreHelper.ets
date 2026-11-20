@@ -26,6 +26,7 @@ const FORM_TEXT_COLOR_PREFIX: string = 'formTextColor_'
 const FORM_TIME_OFFSET_PREFIX: string = 'formOffset_'
 const FORM_ORRERY_DAYS_PREFIX: string = 'formOrreryDays_'
 const FORM_ORRERY_INNER_PREFIX: string = 'formOrreryInner_'
+const FORM_SAT_PASS_IDX_PREFIX: string = 'formSatPassIdx_'
 const REMINDED_EVENTS_KEY: string = 'widgetRemindedEvents'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
@@ -92,6 +93,7 @@ export function removeFormMetadata(context: common.Context, formId: string): voi
     if (store.hasSync(FORM_TIME_OFFSET_PREFIX + formId)) store.deleteSync(FORM_TIME_OFFSET_PREFIX + formId)
     if (store.hasSync(FORM_ORRERY_DAYS_PREFIX + formId)) store.deleteSync(FORM_ORRERY_DAYS_PREFIX + formId)
     if (store.hasSync(FORM_ORRERY_INNER_PREFIX + formId)) store.deleteSync(FORM_ORRERY_INNER_PREFIX + formId)
+    if (store.hasSync(FORM_SAT_PASS_IDX_PREFIX + formId)) store.deleteSync(FORM_SAT_PASS_IDX_PREFIX + formId)
     store.flushSync()
   } catch (_) {
   }
@@ -184,6 +186,31 @@ export function writeFormOrreryInner(context: common.Context, formId: string, in
   if (store === undefined) return
   try {
     store.putSync(FORM_ORRERY_INNER_PREFIX + formId, innerOnly ? '1' : '0')
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readFormSatPassIndex(context: common.Context, formId: string): number {
+  if (formId.length === 0) return 0
+  const store = openFreshCardStore(context)
+  if (store === undefined) return 0
+  try {
+    const raw = store.getSync(FORM_SAT_PASS_IDX_PREFIX + formId, '0')
+    const n = Math.floor(Number(raw))
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  } catch (_) {
+    return 0
+  }
+}
+
+export function writeFormSatPassIndex(context: common.Context, formId: string, idx: number): void {
+  if (formId.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    const safe = Number.isFinite(idx) && idx >= 0 ? Math.floor(idx) : 0
+    store.putSync(FORM_SAT_PASS_IDX_PREFIX + formId, String(safe))
     store.flushSync()
   } catch (_) {
   }
@@ -371,6 +398,7 @@ export function resolveCardDataForForm(context: common.Context, formId: string, 
   const card = resolveCardDataForConfig(context, config, now, offsetHours)
   card['orreryDayOffset'] = String(readFormOrreryDays(context, formId))
   card['orreryInnerOnly'] = readFormOrreryInner(context, formId) ? '1' : '0'
+  card['satPassIndex'] = String(readFormSatPassIndex(context, formId))
   const savedColor = readFormTextColor(context, formId)
   if (savedColor.length > 0) {
     card['textColor'] = savedColor
