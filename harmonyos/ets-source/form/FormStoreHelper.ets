@@ -17,6 +17,7 @@ export const CARD_SNAPSHOT_KEY: string = 'almanacSnapshot'
 export const CARD_TIMELINE_KEY: string = 'timeline48hSnapshot'
 const FORM_CONFIG_PREFIX: string = 'formConfig_'
 const FORM_KIND_PREFIX: string = 'formKind_'
+const FORM_TEXT_COLOR_PREFIX: string = 'formTextColor_'
 const DOMAIN: number = 0xD003
 const TAG: string = 'SkyFormStore'
 
@@ -73,8 +74,32 @@ export function removeFormMetadata(context: common.Context, formId: string): voi
   try {
     if (store.hasSync(FORM_CONFIG_PREFIX + formId)) store.deleteSync(FORM_CONFIG_PREFIX + formId)
     if (store.hasSync(FORM_KIND_PREFIX + formId)) store.deleteSync(FORM_KIND_PREFIX + formId)
+    if (store.hasSync(FORM_TEXT_COLOR_PREFIX + formId)) store.deleteSync(FORM_TEXT_COLOR_PREFIX + formId)
     store.flushSync()
   } catch (_) {
+  }
+}
+
+export function writeFormTextColor(context: common.Context, formId: string, color: string): void {
+  if (formId.length === 0 || color.length === 0) return
+  const store = openFreshCardStore(context)
+  if (store === undefined) return
+  try {
+    store.putSync(FORM_TEXT_COLOR_PREFIX + formId, color)
+    store.flushSync()
+  } catch (_) {
+  }
+}
+
+export function readFormTextColor(context: common.Context, formId: string): string {
+  if (formId.length === 0) return ''
+  const store = openFreshCardStore(context)
+  if (store === undefined) return ''
+  try {
+    const raw = store.getSync(FORM_TEXT_COLOR_PREFIX + formId, '')
+    return typeof raw === 'string' ? raw : ''
+  } catch (_) {
+    return ''
   }
 }
 
@@ -185,5 +210,10 @@ export function resolveCardDataForConfig(
 
 export function resolveCardDataForForm(context: common.Context, formId: string, now: number = Date.now()): Record<string, string> {
   const config = readFormConfig(context, formId)
-  return resolveCardDataForConfig(context, config, now)
+  const card = resolveCardDataForConfig(context, config, now)
+  const savedColor = readFormTextColor(context, formId)
+  if (savedColor.length > 0) {
+    card['textColor'] = savedColor
+  }
+  return card
 }

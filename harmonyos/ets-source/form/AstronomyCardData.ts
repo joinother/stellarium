@@ -402,6 +402,40 @@ export function computeOverflowArea(formWidth: number, formHeight: number): Over
   }
 }
 
+export function extractInverseTextColor(rawParam: Object | undefined): string {
+  if (rawParam === undefined || rawParam === null) return ''
+  let candidate = ''
+  if (typeof rawParam === 'string') {
+    const trimmed = rawParam.trim()
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, Object>
+        if (typeof parsed['mTextColor'] === 'string') candidate = String(parsed['mTextColor']).trim()
+      } catch (_) {
+        return ''
+      }
+    } else {
+      candidate = trimmed
+    }
+  } else if (typeof rawParam === 'object') {
+    const obj = rawParam as Record<string, Object>
+    if (typeof obj['mTextColor'] === 'string') candidate = String(obj['mTextColor']).trim()
+  }
+  if (/^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(candidate)) return candidate
+  return ''
+}
+
+export function isLightTextColor(hexColor: string): boolean {
+  const cleaned = hexColor.replace('#', '')
+  if (cleaned.length !== 6 && cleaned.length !== 8) return true
+  const offset = cleaned.length === 8 ? 2 : 0
+  const r = parseInt(cleaned.slice(offset, offset + 2), 16)
+  const g = parseInt(cleaned.slice(offset + 2, offset + 4), 16)
+  const b = parseInt(cleaned.slice(offset + 4, offset + 6), 16)
+  if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return true
+  return (0.299 * r + 0.587 * g + 0.114 * b) >= 140
+}
+
 export function defaultAstronomyCard(): Record<string, string> {
   const phase = estimateMoonPhaseAt(Date.now())
   const card: Record<string, string> = {}
@@ -454,6 +488,7 @@ export function defaultAstronomyCard(): Record<string, string> {
   card['cardThemeStyle'] = 'sky'
   card['cardLabelStyle'] = 'name'
   card['cardOverflowMode'] = 'auto'
+  card['textColor'] = '#F5F9FF'
   return card
 }
 

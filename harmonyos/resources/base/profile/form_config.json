@@ -63,6 +63,26 @@
       "sceneAnimationParams": {
         "abilityName": "SkyInstrumentLiveFormAbility"
       }
+    },
+    {
+      "name": "floating_orb_card",
+      "displayName": "悬浮天体",
+      "description": "无边框悬浮于桌面壁纸的 3D 太阳系天体与实时月相，支持自选星球与破框动效",
+      "src": "./ets/form/FloatingOrbCard.ets",
+      "uiSyntax": "arkts",
+      "isDynamic": true,
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "transparencyEnabled": true,
+      "supportDimensions": [
+        "2*2"
+      ],
+      "formConfigAbility": "ability://SkyInstrumentFormEditAbility",
+      "sceneAnimationParams": {
+        "abilityName": "SkyInstrumentLiveFormAbility"
+      }
     }
   ]
 }

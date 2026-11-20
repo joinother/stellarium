@@ -12,8 +12,10 @@ import {
   computeOverflowArea,
   defaultCardConfig,
   estimateMoonPhaseAt,
+  extractInverseTextColor,
   formatCountdownZh,
   formatPlanetDisplayList,
+  isLightTextColor,
   moonSilhouette,
   normalizeAstronomyCard,
   normalizeCardConfig,
@@ -36,12 +38,13 @@ const mediaDir = path.join(root, 'harmonyos/resources/base/media')
 const formConfig = JSON.parse(fs.readFileSync(formConfigPath, 'utf8'))
 const forms = Array.isArray(formConfig.forms) ? formConfig.forms : []
 const expectedForms = [
-  { name: 'sky_window_card', source: 'SkyWindowCard.ets', defaultDim: '2*2', panel: "panel: 'sky'" },
-  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'astro'" },
-  { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'" }
+  { name: 'sky_window_card', source: 'SkyWindowCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: true, transparent: false },
+  { name: 'companion_arc_card', source: 'CompanionArcCard.ets', defaultDim: '2*2', panel: "panel: 'astro'", resizable: true, transparent: false },
+  { name: 'celestial_events_card', source: 'CelestialEventsCard.ets', defaultDim: '2*4', panel: "panel: 'calendar'", resizable: true, transparent: false },
+  { name: 'floating_orb_card', source: 'FloatingOrbCard.ets', defaultDim: '2*2', panel: "panel: 'sky'", resizable: false, transparent: true }
 ]
 
-assert.equal(forms.length, expectedForms.length, 'must expose exactly the 3 redesigned astronomical widget cards')
+assert.equal(forms.length, expectedForms.length, 'must expose the 4 redesigned astronomical widget cards (3+1 transparent)')
 assert.equal(forms.filter((f) => f.isDefault === true).length, 1, 'must have exactly one default card')
 
 const syncScript = fs.readFileSync(syncScriptPath, 'utf8')
@@ -52,7 +55,12 @@ for (const expected of expectedForms) {
   assert.ok(form, `missing form config: ${expected.name}`)
   assert.equal(form.src, `./ets/form/${expected.source}`, `mismatched src for ${expected.name}`)
   assert.equal(form.defaultDimension, expected.defaultDim, `mismatched defaultDimension for ${expected.name}`)
-  assert.equal(form.resizable, true, `${expected.name} must support API 20 drag resize`)
+  if (expected.resizable) {
+    assert.equal(form.resizable, true, `${expected.name} must support API 20 drag resize`)
+  }
+  if (expected.transparent) {
+    assert.equal(form.transparencyEnabled, true, `${expected.name} must enable API 22 transparent backplate`)
+  }
   assert.equal(form.formConfigAbility, 'ability://SkyInstrumentFormEditAbility', `${expected.name} must wire API 18 semi-modal edit`)
   assert.equal(form.sceneAnimationParams?.abilityName, 'SkyInstrumentLiveFormAbility', `${expected.name} must wire API 20 overflow liveForm`)
 
@@ -91,6 +99,7 @@ assert.ok(mainPages.src.includes('form/SkyLiveFormPage'), 'main_pages.json must 
 // 3. Validate abilities & 3D planet/moon orb assets
 const formAbilitySrc = fs.readFileSync(formAbilityPath, 'utf8')
 assert.ok(formAbilitySrc.includes('ohos.extra.param.key.edit_form_id'), 'onAddForm must sync preview card from edit_form_id')
+assert.ok(formAbilitySrc.includes('HOST_BG_INVERSE_COLOR_KEY'), 'FormAbility must read HOST_BG_INVERSE_COLOR_KEY for transparent backplate text color')
 assert.ok(formAbilitySrc.includes('formProvider.requestOverflow'), 'onFormEvent must invoke formProvider.requestOverflow')
 assert.ok(formAbilitySrc.includes('formProvider.getFormRect'), 'onFormEvent must query formProvider.getFormRect')
 
@@ -233,4 +242,11 @@ for (const illumination of [0, 25, 50, 75, 100]) {
   assert.ok(!moonSilhouette(112, illumination, 20).includes('NaN'))
 }
 
-console.log(`HarmonyOS Stage 2 widget contract, overflow & data tests passed: ${expectedForms.length} redesigned cards, 11 3D orbs, ${overflowCases.length} overflow specs`)
+// Transparent backplate inverse color parsing & luminance check
+assert.equal(extractInverseTextColor({ mTextColor: '#FF181818', mWallpaperType: 1 }), '#FF181818')
+assert.equal(extractInverseTextColor('{"mTextColor":"#FFFFFF"}'), '#FFFFFF')
+assert.equal(extractInverseTextColor('bad-color'), '')
+assert.equal(isLightTextColor('#F5F9FF'), true)
+assert.equal(isLightTextColor('#FF181818'), false)
+
+console.log(`HarmonyOS Stage 2+3 widget contract, transparent backplate, overflow & data tests passed: ${expectedForms.length} cards, 11 3D orbs, ${overflowCases.length} overflow specs`)

@@ -2,12 +2,13 @@ import { formBindingData, FormExtensionAbility, formInfo, formProvider } from '@
 import { Want } from '@kit.AbilityKit'
 import { BusinessError } from '@kit.BasicServicesKit'
 import { hilog } from '@kit.PerformanceAnalysisKit'
-import { computeOverflowArea, defaultAstronomyCard } from './AstronomyCardData'
+import { computeOverflowArea, defaultAstronomyCard, extractInverseTextColor } from './AstronomyCardData'
 import {
   readFormConfig,
   removeFormMetadata,
   resolveCardDataForForm,
-  writeFormKind
+  writeFormKind,
+  writeFormTextColor
 } from './FormStoreHelper'
 
 const DOMAIN: number = 0xD003
@@ -22,9 +23,13 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
       ? String(params[formInfo.FormParam.NAME_KEY]) : 'sky_window_card'
     const editFormId = params !== undefined && params['ohos.extra.param.key.edit_form_id'] !== undefined
       ? String(params['ohos.extra.param.key.edit_form_id']) : ''
+    const inverseColor = extractInverseTextColor(params?.[formInfo.FormParam.HOST_BG_INVERSE_COLOR_KEY])
 
     if (formId.length > 0 && formName.length > 0) {
       writeFormKind(this.context, formId, formName)
+    }
+    if (formId.length > 0 && inverseColor.length > 0) {
+      writeFormTextColor(this.context, formId, inverseColor)
     }
 
     // If this is a preview card created by FormEditExtensionAbility, mirror the target card's config!
@@ -32,11 +37,21 @@ export default class SkyInstrumentFormAbility extends FormExtensionAbility {
     const data = sourceFormId.length > 0
       ? resolveCardDataForForm(this.context, sourceFormId, Date.now())
       : defaultAstronomyCard()
+    if (inverseColor.length > 0) {
+      data['textColor'] = inverseColor
+    }
     return formBindingData.createFormBindingData(data)
   }
 
-  onUpdateForm(formId: string): void {
+  onUpdateForm(formId: string, wantParams?: Record<string, Object>): void {
+    const inverseColor = extractInverseTextColor(wantParams?.[formInfo.FormParam.HOST_BG_INVERSE_COLOR_KEY])
+    if (formId.length > 0 && inverseColor.length > 0) {
+      writeFormTextColor(this.context, formId, inverseColor)
+    }
     const data = resolveCardDataForForm(this.context, formId, Date.now())
+    if (inverseColor.length > 0) {
+      data['textColor'] = inverseColor
+    }
     const bindingData = formBindingData.createFormBindingData(data)
     formProvider.updateForm(formId, bindingData).catch((error: BusinessError) => {
       hilog.warn(DOMAIN, TAG, 'update card failed: code=%{public}d msg=%{public}s', error.code, error.message)

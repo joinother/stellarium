@@ -160,7 +160,12 @@ struct SkyLiveFormPage {
     return this.observerPlanetName + ' · ' + this.observationSummary
   }
 
+  private isBorderlessFloating(): boolean {
+    return this.formKind === 'floating_orb_card'
+  }
+
   private baseOrbSize(): number {
+    if (this.isBorderlessFloating()) return 112
     const minSide = Math.min(this.formRect.width, this.formRect.height)
     return Math.max(62, Math.min(96, Math.round(minSide * 0.52)))
   }
@@ -168,46 +173,76 @@ struct SkyLiveFormPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       // 1. Card backdrop aligned pixel-for-pixel with inactive card rect & corner radius
-      Stack({ alignContent: Alignment.TopStart }) {
-        StarfieldLayer({ sunAlt: -20, themeStyle: 'deep' })
-
-        // Bottom caption inside card body
+      //    (For API 22 transparent backplate 'floating_orb_card', keep backdrop completely transparent!)
+      if (this.isBorderlessFloating()) {
         Column() {
           Blank()
           Row({ space: 6 }) {
             Circle()
               .width(6)
               .height(6)
-              .fill(this.formKind === 'celestial_events_card' ? eventAccentColor(this.nextEventKind) : '#8AD4FF')
+              .fill('#8AD4FF')
             Text(this.showcaseCaption())
-              .fontSize(12)
+              .fontSize(11)
               .fontWeight(FontWeight.Medium)
-              .fontColor('#F4F8FF')
+              .fontColor('#F5F9FF')
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
           }
-          .width('100%')
-          .padding({ left: 12, right: 12, top: 6, bottom: 10 })
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .backgroundColor('#AA081124')
+          .borderRadius(12)
+          .margin({ bottom: 4 })
           .opacity(this.badgeOpacity)
         }
-        .width('100%')
-        .height('100%')
+        .width(this.formRect.width)
+        .height(this.formRect.height)
+        .offset({ x: this.formRect.left, y: this.formRect.top })
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => this.launchAppDirect())
+      } else {
+        Stack({ alignContent: Alignment.TopStart }) {
+          StarfieldLayer({ sunAlt: -20, themeStyle: 'deep' })
+
+          // Bottom caption inside card body
+          Column() {
+            Blank()
+            Row({ space: 6 }) {
+              Circle()
+                .width(6)
+                .height(6)
+                .fill(this.formKind === 'celestial_events_card' ? eventAccentColor(this.nextEventKind) : '#8AD4FF')
+              Text(this.showcaseCaption())
+                .fontSize(12)
+                .fontWeight(FontWeight.Medium)
+                .fontColor('#F4F8FF')
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .padding({ left: 12, right: 12, top: 6, bottom: 10 })
+            .opacity(this.badgeOpacity)
+          }
+          .width('100%')
+          .height('100%')
+        }
+        .width(this.formRect.width)
+        .height(this.formRect.height)
+        .offset({ x: this.formRect.left, y: this.formRect.top })
+        .borderRadius(this.formBorderRadius)
+        .clip(true)
+        .linearGradient({
+          angle: 170,
+          colors: [
+            [this.skyHexTop, 0.0],
+            [this.skyHexHorizon, 1.0]
+          ]
+        })
+        .border({ width: 0.8, color: '#38FFFFFF' })
+        .onClick(() => this.launchAppDirect())
       }
-      .width(this.formRect.width)
-      .height(this.formRect.height)
-      .offset({ x: this.formRect.left, y: this.formRect.top })
-      .borderRadius(this.formBorderRadius)
-      .clip(true)
-      .linearGradient({
-        angle: 170,
-        colors: [
-          [this.skyHexTop, 0.0],
-          [this.skyHexHorizon, 1.0]
-        ]
-      })
-      .border({ width: 0.8, color: '#38FFFFFF' })
-      .onClick(() => this.launchAppDirect())
 
       // 2. Overflow Layer: 3D Celestial Orb rising ABOVE the card's top border!
       Stack({ alignContent: Alignment.Center }) {

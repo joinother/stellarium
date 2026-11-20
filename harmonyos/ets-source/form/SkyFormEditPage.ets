@@ -11,6 +11,7 @@ import {
 } from './AstronomyCardData'
 import {
   readFormConfig,
+  readFormTextColor,
   resolveCardDataForConfig,
   writeFormConfig
 } from './FormStoreHelper'
@@ -84,6 +85,10 @@ struct SkyFormEditPage {
       writeFormConfig(this.editContext, this.formId, cfg)
     }
     const cardData = resolveCardDataForConfig(this.editContext, cfg, Date.now())
+    const savedColor = readFormTextColor(this.editContext, this.formId)
+    if (savedColor.length > 0) {
+      cardData['textColor'] = savedColor
+    }
     const binding = formBindingData.createFormBindingData(cardData)
 
     const pushUpdate = (targetId: string): void => {

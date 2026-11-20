@@ -1,5 +1,19 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] API 22 背板透明无边框卡片「悬浮天体」（阶段 3）
+
+- **修改文件：** `harmonyos/ets-source/form/FloatingOrbCard.ets`（新增）、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyFormEditPage.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/resources/base/profile/form_config.json`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。
+- **设计与实现：**
+  1. **API 22 背板透明无边框卡片（`floating_orb_card`，`2×2`，`transparencyEnabled: true`）：**
+     - 彻底关闭默认矩形背板，在用户桌面壁纸上直接悬浮一颗 118vp 高精细 3D 太阳系天体球（月球动态月相 / 月球视角地球地相 / 3D 带环土星 / 火星 / 木星 / 金星 / 海王星等，非透明渲染面积约 42% 远超官方 ≥10% 约束，且无任何方形投影边框）。
+     - 在 `SkyInstrumentFormAbility.onAddForm` 与 `onUpdateForm` 中接入 `formInfo.FormParam.HOST_BG_INVERSE_COLOR_KEY` 系统壁纸反色推荐值，并按 `formId` 持久化至 `FormStoreHelper`，在半模态编辑与后续快照更新时完整保留壁纸推荐字色，同时依据推荐色亮度自动切换浅/深对比文字投影，确保任意壁纸下清晰可读。
+  2. **无缝融合 API 18 多星球编辑 + API 20 无边框破框浮升：**
+     - 支持通过系统长按→「编辑」在桌面同时摆放多颗不同星球（例如一颗悬浮月球 + 一颗悬浮带环土星）。
+     - `SkyLiveFormPage.ets` 针对 `floating_orb_card` 保持全透明背板，点击悬浮天体球后球体直接在壁纸上空放大 1.48 倍无边框破框浮升，并在下方浮现半透胶囊信息条。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`（4 款卡片、透明背板配置、`HOST_BG_INVERSE_COLOR_KEY` 反色解析与亮度判定、破框边界）与 `check-ohos-ui-contract.mjs` 全通过。
+  - 真机实测：`FormMgr` 确认 `floating_orb_card` 的 `transparencyEnabled [1]` 生效；真机桌面添加后实拍核验 3D 金星与半模态切换后的 3D 带环土星在壁纸上完全无边框悬浮，轻触土星触发无边框 API 20 破框浮升动画与半透胶囊提示。
+
 ## [2026-11-20] 全新鸿蒙桌面服务卡片家族、API 18 半模态多星球编辑与 API 20 破框互动动效（阶段 2）
 
 - **修改文件：** `src/StelMainView.cpp`、`harmonyos/module.json5`、`harmonyos/resources/base/profile/form_config.json`、`harmonyos/resources/base/profile/main_pages.json`、`harmonyos/resources/base/media/widget_orb_*.png`（新增 11 张 3D 球体纹理资源）、`harmonyos/ets-source/qability/QAbility.ets`、`harmonyos/ets-source/qability/AstronomyCardService.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`（新增）、`harmonyos/ets-source/form/WidgetVisuals.ets`（新增）、`harmonyos/ets-source/form/SkyWindowCard.ets`（新增）、`harmonyos/ets-source/form/CompanionArcCard.ets`（新增）、`harmonyos/ets-source/form/CelestialEventsCard.ets`（新增）、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`harmonyos/ets-source/form/SkyInstrumentFormEditAbility.ets`（新增）、`harmonyos/ets-source/form/SkyFormEditPage.ets`（新增）、`harmonyos/ets-source/form/SkyInstrumentLiveFormAbility.ets`（新增）、`harmonyos/ets-source/form/SkyLiveFormPage.ets`（新增）、`scripts/build-ohos-widget-orbs.py`（新增）、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`；移除旧版 6 张表单式卡片与 `AstronomyCardSurface.ets`。

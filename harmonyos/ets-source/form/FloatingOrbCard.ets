@@ -1,0 +1,127 @@
+import { isLightTextColor } from './AstronomyCardData'
+import { CelestialOrbView } from './WidgetVisuals'
+
+const floatingOrbStorage: LocalStorage = new LocalStorage()
+
+// API 22 Transparent Backplate Card:
+// A photorealistic 3D celestial globe (real lunar phase / Earthphase / ringed Saturn / Mars / Jupiter / Neptune)
+// floats directly over the user's desktop wallpaper with zero rectangular frame.
+// Non-transparent visual area is ~44% of the 2*2 slot (well above the 10% platform minimum).
+@Entry(floatingOrbStorage)
+@Component
+struct FloatingOrbCard {
+  @LocalStorageProp('observerPlanet') observerPlanet: string = 'Earth'
+  @LocalStorageProp('observerPlanetName') observerPlanetName: string = '地球'
+  @LocalStorageProp('companionName') companionName: string = '月球'
+  @LocalStorageProp('orbBody') orbBody: string = 'moon'
+  @LocalStorageProp('moonPhase') moonPhase: string = '今夜月相'
+  @LocalStorageProp('moonIllumination') moonIllumination: string = '76'
+  @LocalStorageProp('moonAge') moonAge: string = '11'
+  @LocalStorageProp('moonSummary') moonSummary: string = '76% 照明'
+  @LocalStorageProp('observationSummary') observationSummary: string = '暗夜观测'
+  @LocalStorageProp('cardOverflowMode') cardOverflowMode: string = 'auto'
+  @LocalStorageProp('textColor') textColor: string = '#F5F9FF'
+
+  private numericIllum(): number {
+    const v = Number(this.moonIllumination)
+    return Number.isFinite(v) ? v : -1
+  }
+
+  private numericAge(): number {
+    const v = Number(this.moonAge)
+    return Number.isFinite(v) ? v : 11
+  }
+
+  private showPhaseShadow(): boolean {
+    const body = this.orbBody.trim().toLowerCase()
+    return body === 'moon' || body === 'earth'
+  }
+
+  private safeTextColor(): string {
+    return /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(this.textColor) ? this.textColor : '#F5F9FF'
+  }
+
+  private contrastShadowColor(): string {
+    return isLightTextColor(this.safeTextColor()) ? '#8C000000' : '#70FFFFFF'
+  }
+
+  private captionText(): string {
+    const body = this.orbBody.trim().toLowerCase()
+    if (body === 'moon') {
+      const pct = this.numericIllum() >= 0 ? (' · ' + String(Math.round(this.numericIllum())) + '%') : ''
+      return this.moonPhase + pct
+    }
+    if (this.observerPlanet === 'Moon') {
+      const pct = this.numericIllum() >= 0 ? (' · ' + String(Math.round(this.numericIllum())) + '%') : ''
+      return this.moonPhase + pct
+    }
+    if (this.observerPlanet === 'Titan') {
+      return '土星 · ' + this.moonPhase
+    }
+    return this.observerPlanetName + ' · ' + this.observationSummary
+  }
+
+  private openSky(): void {
+    postCardAction(this, {
+      action: 'router',
+      abilityName: 'QAbility',
+      params: {
+        panel: 'sky',
+        observerPlanet: this.observerPlanet
+      }
+    })
+  }
+
+  private triggerOverflowOrOpen(): void {
+    if (this.cardOverflowMode === 'off') {
+      this.openSky()
+      return
+    }
+    postCardAction(this, {
+      action: 'message',
+      abilityName: 'SkyInstrumentFormAbility',
+      params: {
+        message: 'requestOverflow',
+        formName: 'floating_orb_card'
+      }
+    })
+  }
+
+  build() {
+    Column({ space: 4 }) {
+      // Generous 3D celestial orb floating freely over wallpaper (~42% non-transparent coverage)
+      // Do NOT apply rectangular .shadow() on the container — keep the orb silhouette 100% borderless.
+      Stack({ alignContent: Alignment.Center }) {
+        CelestialOrbView({
+          orbBody: this.orbBody,
+          orbSize: 118,
+          showPhase: this.showPhaseShadow(),
+          illumination: this.numericIllum(),
+          phaseAge: this.numericAge(),
+          glowIntensity: 0.9
+        })
+      }
+      .width(120)
+      .height(120)
+      .backgroundColor(Color.Transparent)
+      .onClick(() => this.triggerOverflowOrOpen())
+
+      // Single crisp adaptive-color floating telemetry caption (follows HOST_BG_INVERSE_COLOR_KEY)
+      Text(this.captionText())
+        .fontSize(11)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.safeTextColor())
+        .textShadow({ radius: 5, color: this.contrastShadowColor(), offsetX: 0, offsetY: 1 })
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .padding({ left: 6, right: 6 })
+        .onClick(() => this.openSky())
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .backgroundColor(Color.Transparent)
+    .onClick(() => this.openSky())
+  }
+}
