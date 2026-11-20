@@ -9098,12 +9098,38 @@ extern "C" __attribute__((visibility("default"))) const char* StellariumOhos_com
 
 		if (commandName == "setLanguage")
 		{
+			QElapsedTimer langTimer;
+			langTimer.start();
 			StelLocaleMgr& localeMgr = StelApp::getInstance().getLocaleMgr();
-			// Language is an engine behavior: persist it as the authoritative
-			// localization/app_locale entry, not only in the ArkUI mirror.
-			StelApp::immediateSaveNow("localization/app_locale", arg);
-			localeMgr.setAppLanguage(arg);
-			markOhosInteraction();
+			const bool alreadyActive = !arg.isEmpty() &&
+				localeMgr.getAppLanguage().compare(arg, Qt::CaseInsensitive) == 0 &&
+				localeMgr.getSkyLanguage().compare(arg, Qt::CaseInsensitive) == 0;
+			if (!alreadyActive)
+			{
+				// Persist asynchronously so disk fsync never stalls the GL render frame.
+				if (QSettings* conf = StelApp::getInstance().getSettings())
+				{
+					conf->setValue("localization/app_locale", arg);
+					QTimer::singleShot(300, &StelMainView::getInstance(), []() {
+						StelApp::flushSettings(QStringLiteral("setLanguage"));
+					});
+				}
+				localeMgr.setAppLanguage(arg, false);
+				// Run updateI18n() on the next tick so setLanguage replies immediately (~14ms, zero ArkUI retry storm).
+				static quint64 s_langRefreshEpoch = 0;
+				const quint64 refreshEpoch = ++s_langRefreshEpoch;
+				QTimer::singleShot(16, &StelMainView::getInstance(), [refreshEpoch]() {
+					if (refreshEpoch != s_langRefreshEpoch)
+						return;
+					QElapsedTimer i18nTimer;
+					i18nTimer.start();
+					StelApp::getInstance().updateI18n();
+					markOhosInteraction();
+					qInfo() << "[StellariumOhos] deferred updateI18n tookMs=" << i18nTimer.elapsed();
+				});
+				markOhosInteraction();
+			}
+			qInfo() << "[StellariumOhos] setLanguage" << arg << "skipped=" << alreadyActive << "tookMs=" << langTimer.elapsed();
 			result["ok"] = true;
 			result["saved"] = true;
 			result["appLanguage"] = localeMgr.getAppLanguage();

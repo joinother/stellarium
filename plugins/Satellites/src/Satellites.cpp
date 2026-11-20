@@ -63,6 +63,7 @@
 #include <QSaveFile>
 #include <QFont>
 #include <QTimer>
+#include <memory>
 #include <QTimeZone>
 #include <QVariantMap>
 #include <QVariant>
@@ -846,11 +847,46 @@ void Satellites::setLastUpdate(double last)
 void Satellites::translateData()
 {
 	bindingGroups();
+#if defined(__OHOS__)
+	// Chunk 3,000+ satellite locale recomputations across frames to avoid stalling the star map on language switch.
+	static quint64 s_satTranslateEpoch = 0;
+	const quint64 epoch = ++s_satTranslateEpoch;
+	if (satellites.isEmpty())
+		return;
+	auto satCopy = std::make_shared<QList<SatelliteP>>(satellites);
+	auto cursor = std::make_shared<qsizetype>(0);
+	auto timer = new QTimer(this);
+	timer->setInterval(16);
+	connect(timer, &QTimer::timeout, this, [satCopy, cursor, timer, epoch]() {
+		if (epoch != s_satTranslateEpoch)
+		{
+			timer->stop();
+			timer->deleteLater();
+			return;
+		}
+		const qsizetype total = satCopy->size();
+		const qsizetype end = qMin(total, *cursor + static_cast<qsizetype>(250));
+		for (qsizetype idx = *cursor; idx < end; ++idx)
+		{
+			const SatelliteP& sat = satCopy->at(idx);
+			if (sat && sat->initialized)
+				sat->recomputeSatData();
+		}
+		*cursor = end;
+		if (*cursor >= total)
+		{
+			timer->stop();
+			timer->deleteLater();
+		}
+	});
+	timer->start();
+#else
 	for (const auto& sat : std::as_const(satellites))
 	{
 		if (sat->initialized)
 			sat->recomputeSatData();
 	}
+#endif
 }
 
 void Satellites::updateSatellitesVisibility()

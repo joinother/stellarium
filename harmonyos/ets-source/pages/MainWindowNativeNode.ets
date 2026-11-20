@@ -7496,6 +7496,10 @@ export struct WindowNativeNode {
   private setLanguage(lang: string): void {
     // Map to I18n code (handle codes like pt_BR, zh_HK that C++ may not support)
     const i18nCode = I18n.fromStellariumCode(lang)
+    // 幂等短路：避免 CLI 回执或重复点击触发二次整页重建与 C++ 重复翻译
+    if (this.languageStore.selectedLanguage === lang && this.i18nLang === i18nCode) {
+      return
+    }
     // 同步 I18n 模块（触发 AppStorage 变更 → UI 重渲染）
     I18n.setLanguage(i18nCode)
     // The panel contains many static text nodes. Updating this local storage
@@ -7505,20 +7509,21 @@ export struct WindowNativeNode {
     this.languageStore.selectedLanguage = lang
     const languageSerial = ++this.languageStore.languageRefreshSerial
     this.languageStore.languageRevision++
-    this.calendarController?.setLanguage(I18n.getLanguage())
     this.panelContentKey++
-    // 持久化语言选择
-    try {
-      const settings = AppStorage.get<string>('stellariumSettings')
-      const s: Record<string, Object> = settings ? JSON.parse(settings) as Record<string, Object> : {} as Record<string, Object>
-      s.selectedLanguage = lang
-      AppStorage.setOrCreate('stellariumSettings', JSON.stringify(s))
-    } catch (e) { }
     // 立即提示，不等 C++ 确认（避免阻塞触摸和星图交互）
     this.flashHint(I18n.t('msg_lang_switched_done') + ': ' + (LANGUAGE_DISPLAY[lang] ?? LANGUAGE_DISPLAY[i18nCode] ?? lang))
-    // 延迟同步 C++ 侧语言，避免同步 N-API 调用阻塞 UI 线程导致星图无响应。
-    // 这里不能 refreshState：该全量状态刷新会与选中对象的安全居中动画竞争，
-    // 表现为星图先上移又下移。
+    // 将设置持久化与日历文本重译移出点击主帧，降低单帧 ArkUI 峰值耗时
+    setTimeout(() => {
+      if (this.languageStore.languageRefreshSerial !== languageSerial) return
+      this.calendarController?.setLanguage(I18n.getLanguage())
+      try {
+        const settings = AppStorage.get<string>('stellariumSettings')
+        const s: Record<string, Object> = settings ? JSON.parse(settings) as Record<string, Object> : {} as Record<string, Object>
+        s.selectedLanguage = lang
+        AppStorage.setOrCreate('stellariumSettings', JSON.stringify(s))
+      } catch (e) { }
+    }, 16)
+    // 防抖异步同步 C++ 侧语言，避免快速连切或同步 N-API 调用阻塞星图渲染。
     if (this.languageSwitchTimer >= 0) {
       clearTimeout(this.languageSwitchTimer)
       this.languageSwitchTimer = -1
@@ -7531,12 +7536,15 @@ export struct WindowNativeNode {
         this.catalogStore.objectCatalogCategories = []
         this.searchStore.categoryObjects = []
         this.searchStore.searchSuggestions = []
-        this.catalogStore.loadObjectCatalogCategories(languageSerial)
-        this.searchStore.loadCategoryObjects(this.searchStore.searchCategory, selectedCategoryModuleId)
-        const query = this.searchStore.searchText.trim()
-        if (query.length > 0) this.searchCtl().fetchSuggestions(query, languageSerial)
+        // 仅在搜索面板处于打开状态时立即重拉目录，避免在设置页切语言时额外触发重查询
+        if (this.activePanel === 'search') {
+          this.catalogStore.loadObjectCatalogCategories(languageSerial)
+          this.searchStore.loadCategoryObjects(this.searchStore.searchCategory, selectedCategoryModuleId)
+          const query = this.searchStore.searchText.trim()
+          if (query.length > 0) this.searchCtl().fetchSuggestions(query, languageSerial)
+        }
       }, 0, 300, 3)
-    }, 50)
+    }, 80)
   }
 
 // ----- 杂项 -----

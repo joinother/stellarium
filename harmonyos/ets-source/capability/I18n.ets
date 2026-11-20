@@ -2607,14 +2607,17 @@ export class I18n {
     return stored ?? 'zh_CN'
   }
 
-  // 设置当前语言（同时通知 AppStorage 触发 UI 重渲染）
+  // 设置当前语言（先同步刷新 AppStorage 驱动 UI 即时切换，系统偏好持久化异步执行避免阻塞点击帧）
   static setLanguage(lang: LangCode): void {
-    try {
-      i18n.System.setAppPreferredLanguage(I18n.systemLanguageTag(lang))
-    } catch (_err) {
-      // Older HarmonyOS releases may not expose app language persistence.
-    }
     AppStorage.setOrCreate('i18nLang', lang)
+    const tag = I18n.systemLanguageTag(lang)
+    setTimeout(() => {
+      try {
+        i18n.System.setAppPreferredLanguage(tag)
+      } catch (_err) {
+        // Older HarmonyOS releases may not expose app language persistence.
+      }
+    }, 0)
   }
 
   // 获取当前语言

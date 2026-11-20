@@ -2268,7 +2268,13 @@ void NebulaMgr::updateI18n()
 {
 	const StelTranslator& trans = StelApp::getInstance().getLocaleMgr().getSkyTranslator();
 	for (const auto& n : std::as_const(dsoArray))
+	{
+		// Skip the ~93k unnamed DSOs that have no common name, alias, or cultural name to translate
+		if (n->englishName.isEmpty() && n->englishAliases.isEmpty() &&
+		    n->nameI18Aliases.isEmpty() && n->culturalNames.isEmpty())
+			continue;
 		n->translateName(trans);
+	}
 	Nebula::updateI18n();
 }
 

@@ -940,7 +940,7 @@ void Oculars::enableGuiPanel(bool enable)
 
 void Oculars::retranslateGui()
 {
-#ifndef NO_GUI
+#if !defined(NO_GUI) && !defined(__OHOS__)
 	if (guiPanel)
 	{
 		// TODO: Fix this hack!

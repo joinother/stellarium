@@ -1,5 +1,28 @@
 > **身份图例**：本文件真机记录中出现的 `com.cnchensh.stellarium` 是**本机调试签名身份**（本机 DevEco 自动生成，非发布身份）；发布身份为 `com.joinother.skyinstrument`。构建脚本 `build-ohos-hap-windows.ps1 -Install` 从产物 `pack.info` 读取实际包名，仓库不写死任何签名身份（见 `docs/harmonyos/release/BUNDLE-IDENTITY-CLEANUP.md`）。
 
+## [2026-11-20] 切换语言全链路防卡顿优化（单次 GL 线程阻塞 392ms → 1ms + 14~16ms 帧内完成）
+
+- **修改文件：** `src/core/modules/NebulaMgr.cpp`、`src/core/modules/NomenclatureMgr.cpp`、`plugins/Satellites/src/Satellites.cpp`、`plugins/Oculars/src/Oculars.cpp`、`src/StelMainView.cpp`、`harmonyos/ets-source/capability/I18n.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`docs/harmonyos/CHANGELOG.md`。
+- **根因排查与优化：**
+  1. **跳过约 9.35 万个无名深空天体无效翻译（`src/core/modules/NebulaMgr.cpp`）：**
+     - `NebulaMgr::updateI18n()` 原先同步遍历 94,000+ 深空天体并执行翻译查找，但其中约 93,500 个天体 `englishName`/`englishAliases`/`nameI18Aliases`/`culturalNames` 均为空；新增空名称短路判断直接跳过，大幅压缩单帧耗时。
+  2. **行星地名与人造卫星翻译分片异步执行（`src/core/modules/NomenclatureMgr.cpp`、`plugins/Satellites/src/Satellites.cpp`）：**
+     - 在 `#if defined(__OHOS__)` 下将 16,085 条行星地名（32,170 次 `QTranslator` 调用）按每帧 `1500` 条、3,000+ 人造卫星 `recomputeSatData()` 按每帧 `250` 条通过 `16ms` `QTimer` 分片执行，并配合静态递增 epoch 代际取消保护，快速连切语言时自动作废旧批次。
+  3. **屏蔽鸿蒙端隐藏桌面目镜 UI 销毁重建（`plugins/Oculars/src/Oculars.cpp`）：**
+     - `Oculars::retranslateGui()` 在 `#if !defined(NO_GUI) && !defined(__OHOS__)` 下跳过对不可见桌面 Qt `OcularsGuiPanel` 的删除与重建。
+  4. **C++ `setLanguage` 幂等短路、异步落盘与两段式非阻塞刷新（`src/StelMainView.cpp`）：**
+     - 新增目标语言幂等判定（重复切换直接返回 `skipped=true tookMs=0`）；
+     - 将 GL 线程同步 `conf->sync()` 磁盘 fsync 替换为 `300ms` 延迟合并的 `StelApp::flushSettings("setLanguage")`；
+     - 命令处理阶段仅执行 `localeMgr.setAppLanguage(arg, false)` 立即应答桥接（消除 300ms 超时重试风暴），再通过带代际保护的 `QTimer::singleShot(16, ...)` 在下一帧执行 `StelApp::getInstance().updateI18n()`。
+  5. **ArkTS 主线程零阻塞与按需刷新（`I18n.ets`、`MainWindowNativeNode.ets`）：**
+     - `I18n.setLanguage()` 同步更新 `AppStorage('i18nLang')` 实现界面文案瞬切，将同步系统 IPC `i18n.System.setAppPreferredLanguage()` 延至 `setTimeout(..., 0)`；
+     - `MainWindowNativeNode.setLanguage()` 增加幂等保护防回声重复触发、将日历语言同步与配置持久化移出点击当帧（`setTimeout(..., 16)`）、对原生调用增加 `80ms` 防抖，且仅当搜索面板处于打开态时才立即重建 `getObjectCatalogCategories`/`listObjects`，关闭态仅清空缓存按需懒加载。
+- **验证与真机实测（MatePad Mini `192.168.31.234:42713`）：**
+  - 主机验证：`test-ohos-form-cards.mjs`、`test-ohos-off-earth-calendar-and-snapshot.mjs`、`test-ohos-notification-integration.mjs`、`test-ohos-native-astronomy-calendar.mjs`、`check-ohos-ui-contract.mjs` 与 `git diff --check` 全通过。
+  - 真机实测（25 个插件全部就绪稳态）：
+    - **优化前：** 单次 `setLanguage` 阻塞 Qt/GL 线程 `288–392ms`，且叠加 `300ms` 桥接重试导致多次连环卡顿（总停顿 ~1.5s），同时在未打开搜索面板时额外触发目录/天体查询；
+    - **优化后：** `zh_CN → en` 同步应答 `tookMs=1` + 延迟 `deferred updateI18n tookMs=14`；`en → zh_CN` 同步应答 `tookMs=1` + `deferred updateI18n tookMs=16`（均落入单个 60fps 帧预算内，GL 线程峰值阻塞下降 ~95%）；重复 `zh_CN` 直接 `skipped=true tookMs=0`；未开搜索时 0 次目录查询；帧率稳定保持 `58.8–62.5 fps`（静止节能态 `30.3 fps`）。
+
 ## [2026-11-20] 应用冷启动提速近 50%、桌面卡片全按钮同步缓存完善与破框入场过渡优化
 
 - **修改文件：** `src/StelMainView.cpp`、`harmonyos/ets-source/qability/StellariumResourceBootstrap.ets`、`harmonyos/ets-source/pages/MainWindowNativeNode.ets`、`harmonyos/ets-source/form/AstronomyCardData.ts`、`harmonyos/ets-source/form/FormStoreHelper.ets`、`harmonyos/ets-source/form/SkyLiveFormPage.ets`、`harmonyos/ets-source/form/SkyInstrumentFormAbility.ets`、`scripts/test-ohos-form-cards.mjs`、`docs/harmonyos/CHANGELOG.md`。

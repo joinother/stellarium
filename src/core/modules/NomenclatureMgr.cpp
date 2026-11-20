@@ -37,6 +37,8 @@
 #include <QDir>
 #include <QBuffer>
 #include <QRegularExpression>
+#include <QTimer>
+#include <memory>
 
 NomenclatureMgr::NomenclatureMgr() : StelObjectModule()
 {
@@ -629,6 +631,44 @@ bool NomenclatureMgr::getFlagShowSpecialNomenclatureOnly() const
 void NomenclatureMgr::updateI18n()
 {
 	NomenclatureItem::createNameLists();
+#if defined(__OHOS__)
+	// Chunk 16,000+ planetary feature translations across frames (~1-2ms/tick) to prevent GL frame drops on language switch.
+	static quint64 s_i18nEpoch = 0;
+	const quint64 epoch = ++s_i18nEpoch;
+	if (nomenclatureItems.isEmpty())
+		return;
+	auto items = std::make_shared<QList<NomenclatureItemP>>(nomenclatureItems.values());
+	auto cursor = std::make_shared<qsizetype>(0);
+	auto timer = new QTimer(this);
+	timer->setInterval(16);
+	connect(timer, &QTimer::timeout, this, [items, cursor, timer, epoch]() {
+		if (epoch != s_i18nEpoch)
+		{
+			timer->stop();
+			timer->deleteLater();
+			return;
+		}
+		const StelTranslator& trans = StelApp::getInstance().getLocaleMgr().getPlanetaryFeaturesTranslator();
+		const StelTranslator& transSpecial = StelApp::getInstance().getLocaleMgr().getAppStelTranslator();
+		const qsizetype total = items->size();
+		const qsizetype end = qMin(total, *cursor + static_cast<qsizetype>(1500));
+		for (qsizetype idx = *cursor; idx < end; ++idx)
+		{
+			const NomenclatureItemP& item = items->at(idx);
+			if (item->getNomenclatureType() >= NomenclatureItem::niSpecialPointPole)
+				item->translateName(transSpecial);
+			else
+				item->translateName(trans);
+		}
+		*cursor = end;
+		if (*cursor >= total)
+		{
+			timer->stop();
+			timer->deleteLater();
+		}
+	});
+	timer->start();
+#else
 	const StelTranslator& trans = StelApp::getInstance().getLocaleMgr().getPlanetaryFeaturesTranslator();
 	const StelTranslator& transSpecial = StelApp::getInstance().getLocaleMgr().getAppStelTranslator();
 	for (const auto& i : std::as_const(nomenclatureItems))
@@ -639,4 +679,5 @@ void NomenclatureMgr::updateI18n()
 		else
 			i->translateName(trans);
 	}
+#endif
 }
