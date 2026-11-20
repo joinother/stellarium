@@ -30,7 +30,7 @@ import { KeyboardShortcutItem } from '../../common/types/StellariumTypes'
 import { TimeSettingsSection } from '../settings/TimeSettingsSection'
 import { PluginCenterSection } from '../settings/PluginCenterSection'
 import { DeltaTSettingsBlock } from '../time/DeltaTSettingsBlock'
-import { sensZh, scriptZh, scriptDesc } from '../../common/derive/labels'
+import { sensZh, scriptZh, scriptDesc, pluginZh, pluginDesc, resourceText, pluginFeatureRoute } from '../../common/derive/labels'
 import { configDitheringLabel } from '../../common/derive/skycult'
 
 // 「设置」面板，对应 activePanel === 'settings'：设备与隐私 / 主设置 / 信息 / 天空 /
@@ -91,7 +91,6 @@ export struct SettingsPanel {
   @Prop @Watch('onConfigTabChanged') configTab: number
   @Prop configTabContentOpacity: number
   @Prop configTabContentOffsetX: number
-  @StorageProp('stellariumReadableUi') readableUi: boolean = false
   private contentScroller: Scroller = new Scroller()
   @Prop i18nLang: string
   @Prop selectedLanguage: string

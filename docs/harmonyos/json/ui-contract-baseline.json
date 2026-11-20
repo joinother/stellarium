@@ -430,11 +430,11 @@
     "satellites-",
     "search-category-"
   ],
-  "totalIdAnchors": 63,
+  "totalIdAnchors": 61,
   "count": {
     "panels": 37,
     "staticIds": 38,
     "dynamicIdPrefixes": 19,
-    "totalIdAnchors": 63
+    "totalIdAnchors": 61
   }
 }

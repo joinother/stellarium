@@ -9486,7 +9486,6 @@ export struct WindowNativeNode {
             this.panelContent()
           }
             .width('100%')
-            .height('100%')
             .opacity(this.panelRouteOpacity)
             .translate({ x: this.panelRouteOffsetX, y: 0 })
         }
@@ -9498,30 +9497,6 @@ export struct WindowNativeNode {
             bottom: this.activePanel === 'quick' ? 16 : 50
           })
           .id('panel-content-' + this.i18nLang)
-      } else {
-        Scroll(this.compactPanelScroller) {
-          Column() {
-            Column() {
-              this.panelContent()
-            }
-              .width('100%')
-              .opacity(this.panelRouteOpacity)
-              .translate({ x: this.panelRouteOffsetX, y: 0 })
-          }
-            .width('100%')
-            .padding({ bottom: this.activePanel === 'quick' ? 0 : 34 })
-            .id('panel-content-' + this.i18nLang)
-        }
-          .width('100%')
-          .layoutWeight(1)
-          // 同宽屏：短内容页面固定顶部对齐，避免被 Scroll 垂直居中。
-          .align(Alignment.TopStart)
-          .id('panel-scroll-' + this.i18nLang)
-          .scrollBar(BarState.Off)
-          .edgeEffect(EdgeEffect.Spring)
-          .onScrollStart(() => { if (!this.panelScrolling) this.panelScrolling = true })
-          .onScrollStop(() => { this.panelScrolling = false })
-          .onAppear(() => { this.resetPanelScroll(this.compactPanelScroller) })
       }
         .width('100%')
         .height('100%')
