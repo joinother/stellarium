@@ -477,11 +477,13 @@ export class LayerPresetStore {
   detailsId: string = ''
   detailsItems: Array<LayerPresetDiffItem> = []
   detailsVersion: number = 0
+  detailsLoading: boolean = false
   busy: boolean = false
   loaded: boolean = false
 
   private applying: boolean = false
   private hooks: LayerPresetHostHooks | null = null
+  private detailsRequestSerial: number = 0
 
   attachHooks(hooks: LayerPresetHostHooks): void {
     this.hooks = hooks
@@ -544,6 +546,7 @@ export class LayerPresetStore {
       this.busy = false
       this.selectedDirty = false
       this.persist()
+      if (this.detailsId === id) this.refreshDetails()
       hooks.refreshState()
       hooks.flashHint(I18n.t('preset_applied'))
     })
@@ -556,6 +559,8 @@ export class LayerPresetStore {
     if (!this.selectedDirty) {
       this.selectedDirty = true
       this.persist()
+      // 详情已打开时立即刷新为“当前场景与预设的差异”，避免星号出现但列表仍为空。
+      if (this.detailsId === this.selectedId) this.refreshDetails()
     }
   }
 
@@ -714,13 +719,41 @@ export class LayerPresetStore {
     }
     const preset = this.presets.find((item: LayerPresetDefinition) => item.id === id)
     if (preset === undefined) return
-    const baseline = preset.factory !== undefined ? preset.factory : neutralSnapshot()
     this.detailsId = id
+    this.setDetails([])
+    this.loadDetails(preset)
+  }
+
+  // 星号可能来自两种修改：
+  //   1) 预设定义本身被“保存当前设置”改过 → 对比出厂快照；
+  //   2) 当前场景被手动改过但尚未保存（selectedDirty）→ 对比当前场景。
+  // 第 2 种必须捕获实时快照，否则会出现“有星号但修改项为空”。
+  private loadDetails(preset: LayerPresetDefinition): void {
+    const serial = ++this.detailsRequestSerial
+    if (preset.id === this.selectedId && this.selectedDirty && this.hooks !== null) {
+      this.detailsLoading = true
+      this.hooks.captureSnapshot((current: LayerPresetSnapshot): void => {
+        if (serial !== this.detailsRequestSerial || this.detailsId !== preset.id) return
+        this.detailsLoading = false
+        const items = diffSnapshots(preset.snapshot, current)
+        // 手动改回与预设完全一致时，星号也应消失。
+        if (items.length === 0 && this.selectedDirty) {
+          this.selectedDirty = false
+          this.persist()
+        }
+        this.setDetails(items)
+      })
+      return
+    }
+    this.detailsLoading = false
+    const baseline = preset.factory !== undefined ? preset.factory : neutralSnapshot()
     this.setDetails(diffSnapshots(baseline, preset.snapshot))
   }
 
   clearDetails(): void {
+    this.detailsRequestSerial++
     this.detailsId = ''
+    this.detailsLoading = false
     this.setDetails([])
   }
 
@@ -740,12 +773,10 @@ export class LayerPresetStore {
     if (this.detailsId.length === 0) return
     const preset = this.presets.find((item: LayerPresetDefinition) => item.id === this.detailsId)
     if (preset === undefined) {
-      this.detailsId = ''
-      this.setDetails([])
+      this.clearDetails()
       return
     }
-    const baseline = preset.factory !== undefined ? preset.factory : neutralSnapshot()
-    this.setDetails(diffSnapshots(baseline, preset.snapshot))
+    this.loadDetails(preset)
   }
 
   private persist(): void {

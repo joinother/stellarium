@@ -143,6 +143,21 @@ test('manual edits keep the selected preset marked with an asterisk', () => {
   assert.equal(JSON.parse(context.persisted()).selectedDirty, true)
 })
 
+test('dirty selected preset details compare the live scene with the preset snapshot', () => {
+  const context = fixture()
+  const { store } = context
+  store.applyPreset('observe')
+  assert.equal(store.selectedDirty, false)
+  context.current(makeSnapshot({ nightMode: false }))
+  store.noteManualChange()
+  assert.equal(store.selectedDirty, true)
+  store.showDetails('observe')
+  assert.equal(store.detailsLoading, false)
+  assert.ok(store.detailsItems.some(item =>
+    (item.label.includes('夜间模式') || item.label.includes('Night mode')) &&
+    item.before === '开' && item.after === '关'))
+})
+
 test('saving current settings updates a preset, details list the delta, and restore resets it', () => {
   const context = fixture()
   const { store } = context

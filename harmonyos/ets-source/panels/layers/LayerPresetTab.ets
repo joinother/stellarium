@@ -216,7 +216,9 @@ export struct LayerPresetTab {
   @Builder
   private detailsList() {
     Column({ space: 4 }) {
-      if (this.presetStore.detailsItems.length === 0) {
+      if (this.presetStore.detailsLoading) {
+        Text(I18n.t('preset_loading_changes')).fontSize(10).fontColor(this.c.sub).width('100%')
+      } else if (this.presetStore.detailsItems.length === 0) {
         Text(I18n.t('preset_no_changes')).fontSize(10).fontColor(this.c.sub).width('100%')
       } else {
         ForEach(this.presetStore.detailsItems, (item: LayerPresetDiffItem) => {

@@ -2607,6 +2607,7 @@ const UI_STRINGS: Record<string, Record<string, string>> = {
   'preset_applied': { 'en': 'Preset applied', 'zh_CN': '已应用预设', 'zh_TW': '已套用預設', 'zh_HK': '已套用預設' },
   'preset_custom_limit': { 'en': 'Up to 3 custom presets', 'zh_CN': '最多 3 个自定义预设', 'zh_TW': '最多 3 個自訂預設', 'zh_HK': '最多 3 個自訂預設' },
   'preset_no_changes': { 'en': 'No changed settings', 'zh_CN': '没有修改项', 'zh_TW': '沒有修改項', 'zh_HK': '沒有修改項' },
+  'preset_loading_changes': { 'en': 'Reading current settings…', 'zh_CN': '正在读取当前设置…', 'zh_TW': '正在讀取目前設定…', 'zh_HK': '正在讀取目前設定…' },
   'preset_saved_snapshot': { 'en': 'Saved snapshot', 'zh_CN': '已保存的快照', 'zh_TW': '已儲存的快照', 'zh_HK': '已儲存的快照' },
   'search_plugin_catalogs': { 'en': 'Plugin catalogs', 'zh_CN': '扩展目录', 'zh_HK': '擴充目錄', 'zh_TW': '擴充目錄', 'ja': 'プラグインカタログ', 'ko': '플러그인 목록', 'fr': 'Catalogues des extensions', 'de': 'Plugin-Kataloge', 'es': 'Catálogos de plugins', 'ru': 'Каталоги плагинов' },
 }
