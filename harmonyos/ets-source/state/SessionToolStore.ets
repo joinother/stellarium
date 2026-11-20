@@ -122,6 +122,9 @@ export class SessionToolStore {
     }
     port.requestInteractive('getObserverPlanetList', '', (r: StellariumBridgeResponse) => {
       if (r.ok === true && r.planets) {
+        // 必须先保存引擎返回的 planetList，sortObserverPlanets() 才能据此生成
+        // 下拉框项；rebase 时这里漏掉赋值会让 Select 变空、无法选择天体。
+        this.planetList = r.planets
         this.observerPlanets = r.observerPlanets ?? []
         this.sortObserverPlanets()
         this.notifyChanged()

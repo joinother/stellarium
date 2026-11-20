@@ -692,6 +692,15 @@
   - **冷启动重进阻塞：** 3 个月 `getAstronomyCalendarEvents` 由 ~14.7s 降至 `sky-revealed` 后约 **1.0s** 完成（总计 ~1.6s，月 1/2/3 分别约 0.48s/0.32s/0.38s），`sky-revealed` 后零 `QtWatchdog` 告警，立即拖动响应正常；退后台再切前台 `onForeground` 仅 **140ms**，零阻塞。
 - **边界与未覆盖项：** 未改签名或构建 Release 包；剩余常规画面单帧 draw 耗时（约 18–23ms @ 2560×1600）主要在 `ConstellationMgr`（7–11ms）和 `NebulaMgr`（4–5ms），与时间倍率无关，仍记录于 `KNOWN-ISSUES.md`；未提交、未推送。
 
+## [2026-11-20] OHOS 开发记录 - 修复观测星球下拉框为空
+
+- **修改文件：** `harmonyos/ets-source/state/SessionToolStore.ets`。
+- **原因：** rebase 到 `90513` 时 `loadPlanetList()` 丢掉了 `this.planetList = r.planets` 赋值；新的 `sortObserverPlanets()` 只从空 `planetList` 生成条目，导致位置面板“观测星球”下拉框没有选项、无法切换天体。
+- **修复：** 恢复引擎返回列表的赋值后再排序；`planetList` 与 `observerPlanets` 重新保持同名同序。
+- **测试覆盖：** `scripts/test-ohos-observer-location.mjs` 已覆盖 `loadPlanetList` 的枚举与排序（修复前 2 项失败，修复后 10/10）；ArkUI `Select` 本体仍属真机视觉/交互验证，不在该单测范围内。
+- **回归：** 观测点 10/10、观测星球契约 16/16、大气 14/14、图层预设 8/8、巡天 UI 5/5；UI 契约、430 项命令目录通过。
+
+
 ## [2026-11-19] OHOS 开发记录 - 目镜“选择天体”夜间配色
 
 - **修改文件：** `harmonyos/ets-source/panels/panels/OcularsPanel.ets`。
